@@ -32,6 +32,7 @@
  *                  (copy_{to,from}_user)
  *   0.2  21.11.96  various small changes
  *   0.3  03.03.97  fixed (hopefully) IP not working with ax.25 as a module
+ *   0.4  16.04.97  init code/data tagged
  */
 
 /*****************************************************************************/
@@ -115,6 +116,23 @@ extern __inline__ void dev_init_buffers(struct device *dev)
                 skb_queue_head_init(&dev->buffs[i]);
         }
 }
+#endif
+
+/* --------------------------------------------------------------------- */
+
+#if LINUX_VERSION_CODE >= 0x20123
+#include <linux/init.h>
+#else
+#define __init
+#define __initdata
+#define __initfunc(x) x
+#endif
+
+/* --------------------------------------------------------------------- */
+
+#if LINUX_VERSION_CODE < 0x20125
+#define test_and_set_bit set_bit
+#define test_and_clear_bit clear_bit
 #endif
 
 /* --------------------------------------------------------------------- */
@@ -998,10 +1016,10 @@ MODULE_DESCRIPTION("Packet Radio network interface HDLC encoder/decoder");
 
 /* --------------------------------------------------------------------- */
 
-int init_module(void)
+__initfunc(int init_module(void))
 {
 	printk(KERN_INFO "hdlcdrv: (C) 1996 Thomas Sailer HB9JNX/AE4WA\n");
-	printk(KERN_INFO "hdlcdrv: version 0.3 compiled " __TIME__ " " __DATE__ "\n");
+	printk(KERN_INFO "hdlcdrv: version 0.4 compiled " __TIME__ " " __DATE__ "\n");
 #if LINUX_VERSION_CODE < 0x20115
         register_symtab(&hdlcdrv_syms);
 #endif

@@ -8,7 +8,7 @@
  *
  * Copyright (C) 1996  Eddie C. Dost  (ecd@skynet.be)
  *
- * $Id: ufs_super.c,v 1.23 1997/04/16 04:53:39 tdyas Exp $
+ * $Id: ufs_super.c,v 1.24 1997/06/04 08:28:29 davem Exp $
  *
  */
 
@@ -49,7 +49,10 @@ static struct super_operations ufs_super_ops = {
 };
 
 static struct file_system_type ufs_fs_type = {
-	ufs_read_super, "ufs", 1, NULL
+	"ufs",
+	FS_REQUIRES_DEV,
+	ufs_read_super,
+	NULL
 };
 
 __initfunc(int init_ufs_fs(void))

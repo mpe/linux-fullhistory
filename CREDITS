@@ -508,6 +508,13 @@ S: 906-1001 Bay St.
 S: Toronto, Ontario, M5S 3A6 
 S: Canada
 
+N: Richard Günther
+E: richard.guenther@student.uni-tuebingen.de
+D: binfmt_misc
+S: Fichtenweg 3/511
+S: 72076 Tübingen
+S: Germany
+
 N: Danny ter Haar
 E: dth@cistron.nl
 D: /proc/procinfo, reboot on panic , kernel pre-patch tester ;)
@@ -1556,6 +1563,11 @@ S: Roger Maris Cancer Center
 S: 820 4th St. N.
 S: Fargo, North Dakota  58122
 S: USA
+
+N: Steven Whitehouse
+E: SteveW@ACM.org
+D: Linux DECnet project: http://eeshack3.swan.ac.uk/~gw7rrm/DECnet/index.html
+D: Minor debugging of other networking protocols.
 
 N: Hans-Joachim Widmaier
 E: hjw@zvw.de

@@ -502,7 +502,7 @@ extern int ext2_symlink (struct inode *, const char *, int, const char *);
 extern int ext2_link (struct inode *, struct inode *, const char *, int);
 extern int ext2_mknod (struct inode *, const char *, int, int, int);
 extern int ext2_rename (struct inode *, const char *, int,
-			struct inode *, const char *, int, int);
+			struct inode *, const char *, int);
 
 /* super.c */
 extern void ext2_error (struct super_block *, const char *, const char *, ...)

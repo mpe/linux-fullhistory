@@ -160,7 +160,7 @@ static int packet_sendmsg(struct sock *sk, struct msghdr *msg, int len)
 	if(len>dev->mtu+dev->hard_header_len)
   		return -EMSGSIZE;
 
-	skb = sock_wmalloc(sk, len, 0, GFP_KERNEL);
+	skb = sock_wmalloc(sk, len+dev->hard_header_len, 0, GFP_KERNEL);
 
 	/*
 	 *	If the write buffer is full, then tough. At this level the user gets to
@@ -177,6 +177,11 @@ static int packet_sendmsg(struct sock *sk, struct msghdr *msg, int len)
 	 *	Fill it in 
 	 */
 	 
+	/* FIXME: Save some space for broken drivers that write a
+	 * hard header at transmission time by themselves. PPP is the
+	 * notable one here. This should really be fixed at the driver level.
+	 */
+	skb_reserve(skb,dev->hard_header_len);
 	err = memcpy_fromiovec(skb_put(skb,len), msg->msg_iov, len);
 	skb->arp = 1;	/* No ARP needs doing on this (complete) frame */
 	skb->protocol = proto;

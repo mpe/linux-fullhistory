@@ -1,4 +1,4 @@
-/* $Id: etrap.S,v 1.18 1997/05/19 05:58:51 davem Exp $
+/* $Id: etrap.S,v 1.21 1997/06/02 06:33:28 davem Exp $
  * etrap.S: Preparing for entry into the kernel on Sparc V9.
  *
  * Copyright (C) 1996, 1997 David S. Miller (davem@caip.rutgers.edu)
@@ -22,7 +22,7 @@
 
 	.text
 	.align	32
-	.globl	etrap, etrap_irq
+	.globl	etrap, etrap_irq, etraptl1
 etrap:
 	rdpr		%pil, %g2
 etrap_irq:
@@ -45,13 +45,14 @@ etrap_irq:
 
 	stx		%g3, [%g2 + REGWIN_SZ + PT_V9_TNPC]
 	stx		%g1, [%g2 + REGWIN_SZ + PT_V9_Y]
-	rdpr		%pstate, %g1
-	save		%g2, -STACK_BIAS, %sp
-	bne,pn		%xcc, 1f
+	save		%g2, -STACK_BIAS, %sp	! The ordering of these two instructions
+	rdpr		%pstate, %g1		! is critical, see winfixup.S for details
+	bne,pn		%xcc, 2f
 	 rdpr		%canrestore, %g3
 	rdpr		%wstate, %g6
-	wrpr		%g0, 0, %canrestore
+	wrpr		%g0, 7, %cleanwin
 
+	wrpr		%g0, 0, %canrestore
 	sll		%g6, 3, %g6
 	wrpr		%g3, 0, %otherwin
 	wrpr		%g6, %wstate
@@ -59,17 +60,17 @@ etrap_irq:
 	sllx		%g3, 32, %g3
 	mov		PRIMARY_CONTEXT, %g2
 	stxa		%g0, [%g2] ASI_DMMU
+
 	flush		%g3
-1:
-	wrpr		%g0, 0x0, %tl
+2:	wrpr		%g0, 0x0, %tl
 	mov		%g1, %l1
 	mov		%g4, %l4
 	mov		%g5, %l5
 	mov		%g7, %l2
 	wrpr		%l1, PSTATE_AG, %pstate
 	stx		%g1, [%sp + STACK_BIAS + REGWIN_SZ + PT_V9_G1]
-	stx		%g2, [%sp + STACK_BIAS + REGWIN_SZ + PT_V9_G2]
 
+	stx		%g2, [%sp + STACK_BIAS + REGWIN_SZ + PT_V9_G2]
 	stx		%g3, [%sp + STACK_BIAS + REGWIN_SZ + PT_V9_G3]
 	stx		%g4, [%sp + STACK_BIAS + REGWIN_SZ + PT_V9_G4]
 	stx		%g5, [%sp + STACK_BIAS + REGWIN_SZ + PT_V9_G5]
@@ -77,8 +78,8 @@ etrap_irq:
 	stx		%g7, [%sp + STACK_BIAS + REGWIN_SZ + PT_V9_G7]
 	stx		%i0, [%sp + STACK_BIAS + REGWIN_SZ + PT_V9_I0]
 	stx		%i1, [%sp + STACK_BIAS + REGWIN_SZ + PT_V9_I1]
-	stx		%i2, [%sp + STACK_BIAS + REGWIN_SZ + PT_V9_I2]
 
+	stx		%i2, [%sp + STACK_BIAS + REGWIN_SZ + PT_V9_I2]
 	stx		%i3, [%sp + STACK_BIAS + REGWIN_SZ + PT_V9_I3]
 	stx		%i4, [%sp + STACK_BIAS + REGWIN_SZ + PT_V9_I4]
 	stx		%i5, [%sp + STACK_BIAS + REGWIN_SZ + PT_V9_I5]
@@ -86,16 +87,13 @@ etrap_irq:
 	stx		%i7, [%sp + STACK_BIAS + REGWIN_SZ + PT_V9_I7]
 	wrpr		%l1, (PSTATE_IE | PSTATE_AG), %pstate
 	sethi		%uhi(KERNBASE), %g4
-	rd		%pic, %g6
 
+	rd		%pic, %g6
 	jmpl		%l2 + 0x4, %g0
 	 sllx		%g4, 32, %g4
-
-	.globl	etraptl1
 etraptl1:
 	rdpr	%tstate, %g1
+	sub	%sp, REGWIN_SZ + TRACEREG_SZ - STACK_BIAS, %g2
 	ba,pt	%xcc, 1b
-	 sub	%sp, REGWIN_SZ + TRACEREG_SZ - STACK_BIAS, %g2
-	nop
-	nop
+	 andcc	%g1, TSTATE_PRIV, %g0
 	nop

@@ -1,4 +1,4 @@
-/* $Id: uaccess.h,v 1.12 1997/04/10 23:32:50 davem Exp $ */
+/* $Id: uaccess.h,v 1.13 1997/05/29 12:45:04 jj Exp $ */
 #ifndef _ASM_UACCESS_H
 #define _ASM_UACCESS_H
 
@@ -151,8 +151,8 @@ __asm__ __volatile__(							\
 	" mov	%3, %0\n\n\t"						\
 	".previous\n\t"							\
 	".section __ex_table,#alloc\n\t"				\
-	".align	4\n\t"							\
-	".word	1b, 3b\n\t"						\
+	".align	8\n\t"							\
+	".xword	1b, 3b\n\t"						\
 	".previous\n\n\t"						\
        : "=r" (ret) : "r" (x), "r" (__m(addr)),				\
 	 "i" (-EFAULT), "i" (ASI_S))
@@ -163,8 +163,8 @@ __asm__ __volatile__(							\
 	"/* Put user asm ret, inline. */\n"				\
 "1:\t"	"st"#size "a %1, [%2] %3\n\n\t"					\
 	".section __ex_table,#alloc\n\t"				\
-	".align	4\n\t"							\
-	".word	1b, __ret_efault\n\n\t"					\
+	".align	8\n\t"							\
+	".xword	1b, __ret_efault\n\n\t"					\
 	".previous\n\n\t"						\
        : "=r" (foo) : "r" (x), "r" (__m(addr)), "i" (ASI_S));		\
 else									\
@@ -178,8 +178,8 @@ __asm__ __volatile(							\
 	" restore %%g0, %3, %%o0\n\n\t"					\
 	".previous\n\t"							\
 	".section __ex_table,#alloc\n\t"				\
-	".align	4\n\t"							\
-	".word	1b, 3b\n\n\t"						\
+	".align	8\n\t"							\
+	".xword	1b, 3b\n\n\t"						\
 	".previous\n\n\t"						\
        : "=r" (foo) : "r" (x), "r" (__m(addr)),				\
          "i" (ret), "i" (ASI_S))
@@ -221,8 +221,8 @@ __asm__ __volatile__(							\
 	" mov	%3, %0\n\n\t"						\
 	".previous\n\t"							\
 	".section __ex_table,#alloc\n\t"				\
-	".align	4\n\t"							\
-	".word	1b, 3b\n\n\t"						\
+	".align	8\n\t"							\
+	".xword	1b, 3b\n\n\t"						\
 	".previous\n\t"							\
        : "=r" (ret), "=r" (x) : "r" (__m(addr)),			\
 	 "i" (-EFAULT), "i" (ASI_S))
@@ -233,8 +233,8 @@ __asm__ __volatile__(							\
 	"/* Get user asm ret, inline. */\n"				\
 "1:\t"	"ld"#size "a [%1] %2, %0\n\n\t"					\
 	".section __ex_table,#alloc\n\t"				\
-	".align	4\n\t"							\
-	".word	1b,__ret_efault\n\n\t"					\
+	".align	8\n\t"							\
+	".xword	1b,__ret_efault\n\n\t"					\
 	".previous\n\t"							\
        : "=r" (x) : "r" (__m(addr)), "i" (ASI_S));			\
 else									\
@@ -248,8 +248,8 @@ __asm__ __volatile__(							\
 	" restore %%g0, %3, %%o0\n\n\t"					\
 	".previous\n\t"							\
 	".section __ex_table,#alloc\n\t"				\
-	".align	4\n\t"							\
-	".word	1b, 3b\n\n\t"						\
+	".align	8\n\t"							\
+	".xword	1b, 3b\n\n\t"						\
 	".previous\n\t"							\
        : "=r" (x) : "r" (__m(addr)), "i" (retval), "i" (ASI_S))
 
@@ -291,8 +291,8 @@ extern __inline__ __kernel_size_t __clear_user(void *addr, __kernel_size_t size)
   __kernel_size_t ret;
   __asm__ __volatile__ ("
 	.section __ex_table,#alloc
-	.align 4
-	.word 1f,3
+	.align 8
+	.xword 1f,3
 	.previous
 1:
 	wr %%g0, %3, %%asi

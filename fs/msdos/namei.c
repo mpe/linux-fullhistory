@@ -219,14 +219,6 @@ int msdos_lookup(struct inode *dir,const char *name,int len,
 		if (!(*result = iget(dir->i_sb,ino))) return -EACCES;
 		return 0;
 	}
-#if 0
-	if (dcache_lookup(dir, name, len, (unsigned long *) &ino)) {
-		iput(dir);
-		if (!(*result = iget(dir->i_sb, ino)))
-			return -EACCES;
-		return 0;
-	}
-#endif
 	PRINTK (("msdos_lookup 3\n"));
 	if ((res = msdos_find(dir,name,len,&bh,&de,&ino)) < 0) {
 		iput(dir);
@@ -304,7 +296,6 @@ static int msdos_create_entry(struct inode *dir, const char *name,int len,
 	(*result)->i_mtime = (*result)->i_atime = (*result)->i_ctime =
 	    CURRENT_TIME;
 	(*result)->i_dirt = 1;
-	dcache_add(dir, name, len, ino);
 	return 0;
 }
 
@@ -378,7 +369,7 @@ static int msdos_empty(struct inode *dir)
 	struct buffer_head *bh;
 	struct msdos_dir_entry *de;
 
-	if (dir->i_count > 1)
+	if (atomic_read(&dir->i_count) > 1)
 		return -EBUSY;
 	if (MSDOS_I(dir)->i_start) { /* may be zero in mkdir */
 		pos = 0;
@@ -596,7 +587,6 @@ static int rename_same_dir(struct inode *old_dir,char *old_name,int old_len,
 		new_inode->i_dirt = 1;
 		new_de->name[0] = DELETED_FLAG;
 		fat_mark_buffer_dirty(sb, new_bh, 1);
-		dcache_add(new_dir, new_name, new_len, new_ino);
 		iput(new_inode);
 		fat_brelse(sb, new_bh);
 	}
@@ -721,10 +711,9 @@ static int rename_diff_dir(struct inode *old_dir,char *old_name,int old_len,
 		MSDOS_I(new_inode)->i_depend = free_inode;
 		MSDOS_I(free_inode)->i_old = new_inode;
 		/* Two references now exist to free_inode so increase count */
-		free_inode->i_count++;
+		atomic_inc(&free_inode->i_count);
 		/* free_inode is put after putting new_inode and old_inode */
 		iput(new_inode);
-		dcache_add(new_dir, new_name, new_len, new_ino);
 		fat_brelse(sb, new_bh);
 	}
 	if (S_ISDIR(old_inode->i_mode)) {
@@ -755,8 +744,7 @@ rename_done:
 
 /***** Rename, a wrapper for rename_same_dir & rename_diff_dir */
 int msdos_rename(struct inode *old_dir,const char *old_name,int old_len,
-	struct inode *new_dir,const char *new_name,int new_len,
-	int must_be_dir)
+		 struct inode *new_dir,const char *new_name,int new_len)
 {
 	struct super_block *sb = old_dir->i_sb;
 	char old_msdos_name[MSDOS_NAME],new_msdos_name[MSDOS_NAME];
@@ -805,7 +793,6 @@ struct inode_operations msdos_dir_inode_operations = {
 	NULL,			/* mknod */
 	msdos_rename,		/* rename */
 	NULL,			/* readlink */
-	NULL,			/* follow_link */
 	NULL,			/* readpage */
 	NULL,			/* writepage */
 	fat_bmap,		/* bmap */

@@ -44,6 +44,9 @@ endif
 ifneq ($(ARCH),m68k)
 L_OBJS += pc_keyb.o defkeymap.o
 endif
+ifdef CONFIG_MAGIC_SYSRQ
+L_OBJS += sysrq.o
+endif
 endif
 
 ifeq ($(CONFIG_ATARI_DSP56K),y)

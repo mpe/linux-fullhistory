@@ -8,6 +8,7 @@
 
 #include <linux/config.h>
 #include <linux/fs.h>
+#include <linux/nametrans.h>
 
 #include <linux/minix_fs.h>
 #include <linux/ext2_fs.h>
@@ -43,6 +44,10 @@ __initfunc(static void do_sys_setup(void))
 	device_setup();
 
 	binfmt_setup();
+
+#ifdef CONFIG_TRANS_NAMES
+	init_nametrans();
+#endif
 
 #ifdef CONFIG_EXT2_FS
 	init_ext2_fs();

@@ -68,6 +68,8 @@ enum
 	KERN_SPARC_REBOOT,	/* reboot command on Sparc */
 	KERN_CTLALTDEL,		/* int: allow ctl-alt-del to reboot */
 	KERN_PRINTK,            /* sturct: control printk logging parameters */
+	KERN_NAMETRANS,		/* Name translation */
+	KERN_STATINODE
 };
 
 
@@ -75,7 +77,6 @@ enum
 enum
 {
 	VM_SWAPCTL=1,		/* struct: Set vm swapping control */
-	VM_KSWAPD,		/* struct: control background pageout */
 	VM_SWAPOUT,		/* int: Background pageout interval */
 	VM_FREEPG,		/* struct: Set free page thresholds */
 	VM_BDFLUSH,		/* struct: Control buffer cache flushing */
@@ -100,6 +101,7 @@ enum
 	NET_ROSE,
 	NET_X25,
 	NET_TR,
+	NET_DECNET
 };
 
 
@@ -110,6 +112,7 @@ enum
 	NET_CORE_RMEM_MAX,
 	NET_CORE_WMEM_DEFAULT,
 	NET_CORE_RMEM_DEFAULT,
+	NET_CORE_DESTROY_DELAY,
 };
 
 /* /proc/sys/net/ethernet */
@@ -118,12 +121,19 @@ enum
 
 /* /proc/sys/net/unix */
 
+enum
+{
+	NET_UNIX_DESTROY_DELAY=1,
+	NET_UNIX_DELETE_DELAY,
+};
+
 /* /proc/sys/net/ipv4 */
 enum
 {
 	NET_IPV4_ARP_RES_TIME=1,
 	NET_IPV4_ARP_DEAD_RES_TIME,
 	NET_IPV4_ARP_MAX_TRIES,
+	NET_IPV4_ARP_MAX_PINGS,
 	NET_IPV4_ARP_TIMEOUT,
 	NET_IPV4_ARP_CHECK_INTERVAL,
 	NET_IPV4_ARP_CONFIRM_INTERVAL,
@@ -147,9 +157,22 @@ enum
 	NET_IPV4_ACCEPT_REDIRECTS,
 	NET_IPV4_SECURE_REDIRECTS,
 	NET_IPV4_RFC1620_REDIRECTS,
-	NET_TCP_SYN_RETRIES,
-	NET_IPFRAG_HIGH_THRESH,
-	NET_IPFRAG_LOW_THRESH,
+	NET_IPV4_TCP_SYN_RETRIES,
+	NET_IPV4_IPFRAG_HIGH_THRESH,
+	NET_IPV4_IPFRAG_LOW_THRESH,
+	NET_IPV4_IPFRAG_TIME,
+	NET_IPV4_TCP_MAX_KA_PROBES,
+	NET_IPV4_TCP_KEEPALIVE_TIME,
+	NET_IPV4_TCP_KEEPALIVE_PROBES,
+	NET_IPV4_TCP_RETRIES1,
+	NET_IPV4_TCP_RETRIES2,
+	NET_IPV4_TCP_MAX_DELAY_ACKS,
+	NET_IPV4_TCP_FIN_TIMEOUT,
+	NET_IPV4_IGMP_MAX_HOST_REPORT_DELAY,
+	NET_IPV4_IGMP_TIMER_SCALE,
+	NET_IPV4_IGMP_AGE_THRESHOLD,
+	NET_TCP_SYNCOOKIES,
+	NET_TCP_ALWAYS_SYNCOOKIE,
 };
 
 
@@ -176,7 +199,15 @@ enum {
 
 /* /proc/sys/net/ipx */
 
+
 /* /proc/sys/net/appletalk */
+enum {
+	NET_ATALK_AARP_EXPIRY_TIME = 1,
+	NET_ATALK_AARP_TICK_TIME,
+	NET_ATALK_AARP_RETRANSMIT_LIMIT,
+	NET_ATALK_AARP_RESOLVE_TIME,
+};
+
 
 /* /proc/sys/net/netrom */
 enum {
@@ -240,6 +271,16 @@ enum
 	NET_TR_RIF_TIMEOUT=1
 };
 
+/* /proc/sys/net/decnet */
+enum {
+	NET_DECNET_DEF_T3_BROADCAST = 1,
+	NET_DECNET_DEF_T3_POINTTOPOINT,
+	NET_DECNET_DEF_T1,
+	NET_DECNET_DEF_BCT1,
+	NET_DECNET_CACHETIMEOUT,
+	NET_DECNET_DEBUG_LEVEL
+};
+
 /* CTL_PROC names: */
 
 /* CTL_FS names: */
@@ -269,6 +310,8 @@ extern int proc_dointvec(ctl_table *, int, struct file *,
 			 void *, size_t *);
 extern int proc_dointvec_minmax(ctl_table *, int, struct file *,
 				void *, size_t *);
+extern int proc_dointvec_jiffies(ctl_table *, int, struct file *,
+				 void *, size_t *);
 
 extern int do_sysctl (int *name, int nlen,
 		      void *oldval, size_t *oldlenp,

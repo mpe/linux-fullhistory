@@ -69,8 +69,8 @@
 #include <asm/system.h>
 #include <asm/uaccess.h>
 
-#include "../../../drivers/char/vt_kern.h"   /* vt_cons and vc_resize_con() */
-#include "../../../drivers/char/console_struct.h"
+#include <linux/vt_kern.h>
+#include <linux/console_struct.h>
 
 /* Import console_blanked from console.c */
 

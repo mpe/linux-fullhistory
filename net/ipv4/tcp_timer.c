@@ -22,7 +22,11 @@
 
 #include <net/tcp.h>
 
-int sysctl_syn_retries = TCP_SYN_RETRIES; 
+int sysctl_tcp_syn_retries = TCP_SYN_RETRIES; 
+int sysctl_tcp_keepalive_time = TCP_KEEPALIVE_TIME;
+int sysctl_tcp_keepalive_probes = TCP_KEEPALIVE_PROBES;
+int sysctl_tcp_retries1 = TCP_RETR1;
+int sysctl_tcp_retries2 = TCP_RETR2;
 
 static void tcp_sltimer_handler(unsigned long);
 static void tcp_syn_recv_timer(unsigned long);
@@ -172,7 +176,7 @@ static int tcp_write_timeout(struct sock *sk)
 	     /* Eric, what the heck is this doing?!?! */
 	     tp->retransmits && !(tp->retransmits & 7)) ||
 
-	    (sk->state != TCP_ESTABLISHED && tp->retransmits > TCP_RETR1)) {
+	    (sk->state != TCP_ESTABLISHED && tp->retransmits > sysctl_tcp_retries1)) {
 		/*	Attempt to recover if arp has changed (unlikely!) or
 		 *	a route has shifted (not supported prior to 1.3).
 		 */
@@ -180,7 +184,7 @@ static int tcp_write_timeout(struct sock *sk)
 	}
 	
 	/* Have we tried to SYN too many times (repent repent 8)) */
-	if(tp->retransmits > sysctl_syn_retries && sk->state==TCP_SYN_SENT) {
+	if(tp->retransmits > sysctl_tcp_syn_retries && sk->state==TCP_SYN_SENT) {
 		if(sk->err_soft)
 			sk->err=sk->err_soft;
 		else
@@ -198,7 +202,7 @@ static int tcp_write_timeout(struct sock *sk)
 	}
 
 	/* Has it gone just too far? */
-	if (tp->retransmits > TCP_RETR2) {
+	if (tp->retransmits > sysctl_tcp_retries2) {
 		if(sk->err_soft)
 			sk->err = sk->err_soft;
 		else
@@ -251,7 +255,7 @@ void tcp_probe_timer(unsigned long data) {
 	 *	FIXME: We ought not to do it, Solaris 2.5 actually has fixing
 	 *	this behaviour in Solaris down as a bug fix. [AC]
 	 */
-	if (tp->probes_out > TCP_RETR2) {
+	if (tp->probes_out > sysctl_tcp_retries2) {
 		if(sk->err_soft)
 			sk->err = sk->err_soft;
 		else
@@ -281,8 +285,8 @@ static __inline__ int tcp_keepopen_proc(struct sock *sk)
 		struct tcp_opt *tp = &sk->tp_pinfo.af_tcp;
 		__u32 elapsed = jiffies - tp->rcv_tstamp;
 
-		if (elapsed >= TCP_KEEPALIVE_TIME) {
-			if (tp->probes_out > TCP_KEEPALIVE_PROBES) {
+		if (elapsed >= sysctl_tcp_keepalive_time) {
+			if (tp->probes_out > sysctl_tcp_keepalive_probes) {
 				if(sk->err_soft)
 					sk->err = sk->err_soft;
 				else
@@ -316,6 +320,8 @@ static __inline__ int tcp_keepopen_proc(struct sock *sk)
  */
 #define MAX_KA_PROBES	5
 
+int sysctl_tcp_max_ka_probes = MAX_KA_PROBES;
+
 /* Keepopen's are only valid for "established" TCP's, nicely our listener
  * hash gets rid of most of the useless testing, so we run through a couple
  * of the established hash chains each clock tick.  -DaveM
@@ -341,7 +347,7 @@ static void tcp_keepalive(unsigned long data)
 		while(sk) {
 			if(sk->keepopen) {
 				count += tcp_keepopen_proc(sk);
-				if(count == MAX_KA_PROBES)
+				if(count == sysctl_tcp_max_ka_probes)
 					goto out;
 			}
 			sk = sk->next;
@@ -455,7 +461,7 @@ static void tcp_syn_recv_timer(unsigned long data)
 						break;
 
 					tcp_synq_unlink(tp, conn);
-					if (conn->retrans >= TCP_RETR1) {
+					if (conn->retrans >= sysctl_tcp_retries1) {
 #ifdef TCP_DEBUG
 						printk(KERN_DEBUG "syn_recv: "
 						       "too many retransmits\n");

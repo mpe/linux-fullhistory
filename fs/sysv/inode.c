@@ -975,9 +975,9 @@ int sysv_sync_inode(struct inode * inode)
 /* Every kernel module contains stuff like this. */
 
 static struct file_system_type sysv_fs_type[3] = {
-	{sysv_read_super, "xenix", 1, NULL},
-	{sysv_read_super, "sysv", 1, NULL},
-	{sysv_read_super, "coherent", 1, NULL}
+	{"xenix",    FS_REQUIRES_DEV, sysv_read_super, NULL},
+	{"sysv",     FS_REQUIRES_DEV, sysv_read_super, NULL},
+	{"coherent", FS_REQUIRES_DEV, sysv_read_super, NULL}
 };
 
 __initfunc(int init_sysv_fs(void))

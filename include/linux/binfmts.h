@@ -53,6 +53,7 @@ extern int init_aout_binfmt(void);
 extern int init_script_binfmt(void);
 extern int init_java_binfmt(void);
 extern int init_em86_binfmt(void);
+extern int init_misc_binfmt(void);
 
 extern int prepare_binprm(struct linux_binprm *);
 extern void remove_arg_zero(struct linux_binprm *);

@@ -14,10 +14,9 @@
 #include <linux/mm.h>
 #include <linux/proc_fs.h>
 #include <linux/stat.h>
+#include <linux/dalloc.h>
 
 static int proc_readlink(struct inode *, char *, int);
-static int proc_follow_link(struct inode *, struct inode *, int, int,
-			    struct inode **);
 
 /*
  * PLAN9_SEMANTICS won't work any more: it used an ugly hack that broke 
@@ -53,7 +52,6 @@ struct inode_operations proc_link_inode_operations = {
 	NULL,			/* mknod */
 	NULL,			/* rename */
 	proc_readlink,		/* readlink */
-	proc_follow_link,	/* follow_link */
 	NULL,			/* readpage */
 	NULL,			/* writepage */
 	NULL,			/* bmap */
@@ -61,7 +59,11 @@ struct inode_operations proc_link_inode_operations = {
 	NULL			/* permission */
 };
 
-
+/* [Feb-1997 T. Schoebel-Theuer] This is no longer called from the
+ * VFS, but only from proc_readlink(). All the functionality
+ * should the moved there (without using temporary inodes any more)
+ * and then it could be eliminated.
+ */
 static int proc_follow_link(struct inode * dir, struct inode * inode,
 	int flag, int mode, struct inode ** res_inode)
 {
@@ -130,33 +132,35 @@ static int proc_follow_link(struct inode * dir, struct inode * inode,
 	if (!new_inode)
 		return -ENOENT;
 	*res_inode = new_inode;
-	new_inode->i_count++;
+	atomic_inc(&new_inode->i_count);
 	return 0;
 }
 
 static int proc_readlink(struct inode * inode, char * buffer, int buflen)
 {
-	int i;
-	unsigned int dev,ino;
-	char buf[64];
+	int error = proc_follow_link(NULL, inode, 0, 0, &inode);
 
-	if (!S_ISLNK(inode->i_mode)) {
-		iput(inode);
-		return -EINVAL;
-	}
-	i = proc_follow_link(NULL, inode, 0, 0, &inode);
-	if (i)
-		return i;
+	if (error)
+		return error;
 	if (!inode)
 		return -EIO;
-	dev = kdev_t_to_nr(inode->i_dev);
-	ino = inode->i_ino;
+
+	/* This will return *one* of the alias names (which is not quite
+	 * correct). I have to rethink the problem, so this is only a
+	 * quick hack...
+	 */
+	if(inode->i_dentry) {
+		char * tmp = (char*)__get_free_page(GFP_KERNEL);
+		int len = d_path(inode->i_dentry, current->fs->root, tmp);
+		int min = buflen<PAGE_SIZE ? buflen : PAGE_SIZE;
+		if(len <= min)
+			min = len+1;
+		copy_to_user(buffer, tmp, min);
+		free_page((unsigned long)tmp);
+		error = len;
+	} else {
+		error= -ENOENT;
+	}
 	iput(inode);
-	i = sprintf(buf,"[%04x]:%u", dev, ino);
-	if (buflen > i)
-		buflen = i;
-	i = 0;
-	while (i < buflen)
-		put_user(buf[i++],buffer++);
-	return i;
+	return error;
 }

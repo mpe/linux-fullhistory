@@ -136,8 +136,6 @@ int rosecmpm(rose_address *addr1, rose_address *addr2, unsigned short mask)
 
 static void rose_free_sock(struct sock *sk)
 {
-	kfree(sk->protinfo.rose);
-
 	sk_free(sk);
 
 	MOD_DEC_USE_COUNT;

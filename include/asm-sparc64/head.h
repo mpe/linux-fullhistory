@@ -1,4 +1,4 @@
-/* $Id: head.h,v 1.21 1997/05/27 06:28:17 davem Exp $ */
+/* $Id: head.h,v 1.22 1997/06/02 06:33:40 davem Exp $ */
 #ifndef _SPARC64_HEAD_H
 #define _SPARC64_HEAD_H
 
@@ -9,12 +9,13 @@
 
 /* We need a "cleaned" instruction... */
 #define CLEAN_WINDOW							\
+	rdpr	%cleanwin, %l0;		add	%l0, 1, %l0;		\
+	wrpr	%l0, 0x0, %cleanwin;					\
 	clr	%o0;	clr	%o1;	clr	%o2;	clr	%o3;	\
 	clr	%o4;	clr	%o5;	clr	%o6;	clr	%o7;	\
 	clr	%l0;	clr	%l1;	clr	%l2;	clr	%l3;	\
 	clr	%l4;	clr	%l5;	clr	%l6;	clr	%l7;	\
-	rdpr %cleanwin, %g1; 		add %g1, 1, %g1;		\
-	wrpr %g1, 0x0, %cleanwin;	retry;				\
+	retry;								\
 	nop;nop;nop;nop;nop;nop;nop;nop;nop;nop;nop;nop;
 
 #define TRAP(routine)					\
@@ -23,7 +24,7 @@
 	call	routine;				\
 	 add	%sp, STACK_BIAS + REGWIN_SZ, %o0;	\
 	ba,pt	%xcc, rtrap;				\
-	 nop;						\
+	 clr	%l6;					\
 	nop;						\
 	nop;
 
@@ -38,7 +39,7 @@
 	call	routine;				\
 	 add	%sp, STACK_BIAS + REGWIN_SZ, %o0;	\
 	ba,pt	%xcc, rtrap;				\
-	 nop;						\
+	 clr	%l6;					\
 	nop;						\
 	nop;
 	
@@ -60,7 +61,7 @@
 	call	routine;				\
 	 mov	arg, %o1;				\
 	ba,pt	%xcc, rtrap;				\
-	 nop;						\
+	 clr	%l6;					\
 	nop;
 	
 #define TRAPTL1_ARG(routine, arg)			\
@@ -70,7 +71,7 @@
 	call	routine;				\
 	 mov	arg, %o1;				\
 	ba,pt	%xcc, rtrap;				\
-	 nop;						\
+	 clr	%l6;					\
 	nop;
 	
 #define SYSCALL_TRAP(routine, systbl)			\
@@ -89,7 +90,7 @@
 	call	routine;				\
 	 add	%sp, STACK_BIAS + REGWIN_SZ, %o0;	\
 	ba,pt	%xcc, rtrap;				\
-	 nop;
+	 clr	%l6;
 
 #define ACCESS_EXCEPTION_TRAPTL1(routine)		\
 	rdpr	%pstate, %g1;				\
@@ -99,7 +100,7 @@
 	call	routine;				\
 	 add	%sp, STACK_BIAS + REGWIN_SZ, %o0;	\
 	ba,pt	%xcc, rtrap;				\
-	 nop;
+	 clr	%l6;
 
 #define SUNOS_SYSCALL_TRAP SYSCALL_TRAP(linux_sparc_syscall, sunos_sys_table)
 #define	LINUX_32BIT_SYSCALL_TRAP SYSCALL_TRAP(linux_sparc_syscall, sys_call_table32)
@@ -120,7 +121,7 @@
 	mov	level, %o0;				\
 	call	routine;				\
 	 add	%sp, STACK_BIAS + REGWIN_SZ, %o1;	\
-	ba,a,pt	%xcc, rtrap;
+	ba,a,pt	%xcc, rtrap_clr_l6;
 
 /* On UP this is ok, and worth the effort, for SMP we need
  * a different mechanism and thus cannot do it all in trap table. -DaveM
@@ -150,7 +151,7 @@
 	ldx	[%sp + STACK_BIAS + REGWIN_SZ + PT_V9_TNPC], %l1;	\
 	add	%l1, 4, %l2;						\
 	stx	%l1, [%sp + STACK_BIAS + REGWIN_SZ + PT_V9_TPC];	\
-	ba,pt	%xcc, rtrap;						\
+	ba,pt	%xcc, rtrap_clr_l6;					\
 	 stx	%l2, [%sp + STACK_BIAS + REGWIN_SZ + PT_V9_TNPC];
 	        
 /* Before touching these macros, you owe it to yourself to go and
@@ -198,7 +199,8 @@
 	stxa	%i6, [%sp + STACK_BIAS + 0x70] %asi;	\
 	stxa	%i7, [%sp + STACK_BIAS + 0x78] %asi;	\
 	saved; retry; nop; nop; nop; nop; nop; nop;	\
-	nop; nop; nop; nop; nop; nop;			\
+	nop; nop; nop; nop; nop;			\
+	b,a,pt	%xcc, spill_fixup_mna;			\
 	b,a,pt	%xcc, spill_fixup;
 
 /* Normal 32bit spill */
@@ -215,7 +217,8 @@
 	stda	%i6, [%sp + 0x38] %asi;			\
 	saved; retry; nop; nop; nop; nop;		\
 	nop; nop; nop; nop; nop; nop; nop; nop;		\
-	nop; nop; nop; nop; nop; nop; nop;		\
+	nop; nop; nop; nop; nop; nop;			\
+	b,a,pt	%xcc, spill_fixup_mna;			\
 	b,a,pt	%xcc, spill_fixup;
 
 #define SPILL_1_NORMAL SPILL_1_GENERIC(ASI_AIUP)
@@ -276,7 +279,8 @@
 	ldxa	[%sp + STACK_BIAS + 0x70] %asi, %i6;	\
 	ldxa	[%sp + STACK_BIAS + 0x78] %asi, %i7;	\
 	restored; retry; nop; nop; nop; nop; nop; nop;	\
-	nop; nop; nop; nop; nop; nop;			\
+	nop; nop; nop; nop; nop;			\
+	b,a,pt	%xcc, fill_fixup_mna;			\
 	b,a,pt	%xcc, fill_fixup;
 
 /* Normal 32bit fill */
@@ -293,7 +297,8 @@
 	ldda	[%sp + 0x38] %asi, %i6;			\
 	restored; retry; nop; nop; nop; nop;		\
 	nop; nop; nop; nop; nop; nop; nop; nop;		\
-	nop; nop; nop; nop; nop; nop; nop;		\
+	nop; nop; nop; nop; nop; nop;			\
+	b,a,pt	%xcc, fill_fixup_mna;			\
 	b,a,pt	%xcc, fill_fixup;
 
 #define FILL_1_NORMAL FILL_1_GENERIC(ASI_AIUP)

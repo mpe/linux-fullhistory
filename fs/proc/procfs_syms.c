@@ -37,7 +37,10 @@ EXPORT_SYMBOL(proc_openprom_deregister);
 #endif
 
 static struct file_system_type proc_fs_type = {
-	proc_read_super, "proc", 0, NULL
+	"proc", 
+	FS_NO_DCACHE,
+	proc_read_super, 
+	NULL
 };
 
 int init_proc_fs(void)

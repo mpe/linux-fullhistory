@@ -79,6 +79,11 @@
 #define DPRINT(x)
 #endif
 
+#ifdef CONFIG_SYSCTL
+extern inline void atalk_register_sysctl(void);
+extern inline void atalk_unregister_sysctl(void);
+#endif
+
 struct datalink_proto *ddp_dl, *aarp_dl;
 static struct proto_ops atalk_dgram_ops;
 
@@ -262,7 +267,6 @@ static void atif_drop_device(struct device *dev)
 		else
 			iface = &tmp->next;
 	}
-	MOD_DEC_USE_COUNT;
 }
 
 static struct atalk_iface *atif_add_device(struct device *dev, struct at_addr *sa)
@@ -281,7 +285,6 @@ static struct atalk_iface *atif_add_device(struct device *dev, struct at_addr *s
 	iface->next=atalk_iface_list;
 	atalk_iface_list=iface;
 	restore_flags(flags);
-	MOD_INC_USE_COUNT;
 	return iface;
 }
 
@@ -399,9 +402,21 @@ struct at_addr *atalk_find_dev_addr(struct device *dev)
 static struct at_addr *atalk_find_primary(void)
 {
 	struct atalk_iface *iface;
+	struct atalk_iface *fiface;
+	/*
+	 *	Return a point-to-point interface only if
+	 *	there is no non-ptp interface available.
+	 */
+	fiface=NULL;
 	for(iface=atalk_iface_list;iface!=NULL;iface=iface->next)
-		if(!(iface->dev->flags&IFF_LOOPBACK))
+	{
+		if(!fiface && !(iface->dev->flags&IFF_LOOPBACK))
+			fiface=iface;
+		if(!(iface->dev->flags&(IFF_LOOPBACK|IFF_POINTOPOINT)))
 			return &iface->address;
+	}
+	if (fiface)
+		return &fiface->address;
 	if ( atalk_iface_list != NULL )
 		return &atalk_iface_list->address;
 	else
@@ -779,6 +794,16 @@ int atif_ioctl(int cmd, void *arg)
 			((struct sockaddr_at *)(&atreq.ifr_addr))->sat_addr.s_net=atif->address.s_net;
 			((struct sockaddr_at *)(&atreq.ifr_addr))->sat_addr.s_node=ATADDR_BCAST;
 			break;
+	        case SIOCATALKDIFADDR:
+			if(!suser())
+				return -EPERM;
+			if(sa->sat_family!=AF_APPLETALK)
+				return -EINVAL;
+			if(atif==NULL)
+				return -EADDRNOTAVAIL;
+			atrtr_device_down(atif->dev);
+			atif_drop_device(atif->dev);
+			break;			
 	}
 	err = copy_to_user(arg,&atreq,sizeof(atreq));
 
@@ -951,7 +976,8 @@ static int atalk_create(struct socket *sock, int protocol)
 	MOD_INC_USE_COUNT;
 
 	sock_init_data(sock,sk);
-	
+
+	sk->destruct=NULL;
 	/* Checksums on by default */
 	sk->mtu=DDP_MAXSZ;
 	sk->zapped=1;
@@ -1928,6 +1954,7 @@ static int atalk_ioctl(struct socket *sock,unsigned int cmd, unsigned long arg)
 		case SIOCGIFADDR:
 		case SIOCSIFADDR:
 		case SIOCGIFBRDADDR:
+		case SIOCATALKDIFADDR:
 			return atif_ioctl(cmd,(void *)arg);
 		/*
 		 *	Physical layer ioctl calls
@@ -2056,6 +2083,10 @@ __initfunc(void atalk_proto_init(struct net_proto *pro))
 	proc_net_register(&proc_atalk_iface);
 #endif	
 
+#ifdef CONFIG_SYSCTL
+	atalk_register_sysctl();
+#endif
+
 #ifdef CONFIG_IPDDP
 	register_netdev(&dev_ipddp);
 #endif /* CONFIG_IPDDP */
@@ -2098,6 +2129,7 @@ extern inline void free_interface_list(void)
 	while (list != NULL)
 	{
 		tmp = list->next;
+		list->dev->atalk_ptr = NULL;
 		kfree_s(list, sizeof(struct atalk_iface));
 		list = tmp;
 	}
@@ -2111,6 +2143,10 @@ void cleanup_module(void)
 	cli();
 
 	aarp_cleanup_module();
+
+#ifdef CONFIG_SYSCTL
+	atalk_unregister_sysctl();
+#endif
 
 #ifdef CONFIG_PROC_FS
 	proc_net_unregister(PROC_NET_ATALK);

@@ -21,6 +21,12 @@ endif
 ifeq ($(CONFIG_SOUNDMODEM_AFSK1200),y)
 O_OBJS		+= sm_afsk1200.o
 endif
+ifeq ($(CONFIG_SOUNDMODEM_AFSK2400_7),y)
+O_OBJS		+= sm_afsk2400_7.o
+endif
+ifeq ($(CONFIG_SOUNDMODEM_AFSK2400_8),y)
+O_OBJS		+= sm_afsk2400_8.o
+endif
 ifeq ($(CONFIG_SOUNDMODEM_AFSK2666),y)
 O_OBJS		+= sm_afsk2666.o
 endif
@@ -39,7 +45,8 @@ M_OBJS		:= $(O_TARGET)
 gentbl:		gentbl.c
 		$(HOSTCC) -Wall $< -o $@ -lm
 
-TBLHDR		:= sm_tbl_afsk1200.h sm_tbl_afsk2666.h sm_tbl_psk4800.h
+TBLHDR		:= sm_tbl_afsk1200.h sm_tbl_afsk2400_8.h 
+TBLHDR		+= sm_tbl_afsk2666.h sm_tbl_psk4800.h
 TBLHDR		+= sm_tbl_hapn4800.h sm_tbl_fsk9600.h
 
 $(TBLHDR):	gentbl

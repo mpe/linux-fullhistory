@@ -338,7 +338,7 @@ create_write_request(struct inode *inode, struct page *page,
 	wreq->wb_page   = page;
 	wreq->wb_offset = offset;
 	wreq->wb_bytes  = bytes;
-	inode->i_count++;
+	atomic_inc(&inode->i_count);
 	atomic_inc(&page->count);
 
 	append_write_request(&NFS_WRITEBACK(inode), wreq);
@@ -788,7 +788,7 @@ nfs_wback_result(struct rpc_task *task)
 			dprintk("NFS: %4d saving write failure code\n",
 						task->tk_pid);
 			append_write_request(&nfs_failed_requests, req);
-			inode->i_count++;
+			atomic_inc(&inode->i_count);
 		}
 		clear_bit(PG_uptodate, &page->flags);
 	} else if (!WB_CANCELLED(req)) {

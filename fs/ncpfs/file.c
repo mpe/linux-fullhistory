@@ -232,7 +232,6 @@ struct inode_operations ncp_file_inode_operations =
 	NULL,			/* mknod */
 	NULL,			/* rename */
 	NULL,			/* readlink */
-	NULL,			/* follow_link */
 	NULL,			/* bmap */
 	NULL			/* truncate */
 };

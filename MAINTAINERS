@@ -125,6 +125,12 @@ M:	net-patches@lxorguk.ukuu.org.uk
 L:	netatalk@umich.edu
 S:	Maintained
 
+DECnet NETWORK LAYER
+P:	Steven Whitehouse
+M:	SteveW@ACM.org
+L:	netdev@roxanne.nuclecu.unam.mx
+S:	Maintained
+
 AX.25 NETWORK LAYER
 P:	Jon Naylor
 M:	jsn@cs.nott.ac.uk

@@ -289,6 +289,7 @@ void generate_if(struct kconfig * item,
       break;
     case tok_int:
     case tok_hex:
+    case tok_string:
       printf("} then { ");
       printf(".menu%d.config.f.x%d.x configure -state normal -fore [ cget .ref -foreground ]; ", menu_num, line_num);
       printf(".menu%d.config.f.x%d.l configure -state normal; ", menu_num, line_num);
@@ -487,6 +488,10 @@ void generate_if_for_outfile(struct kconfig * item,
       printf("} then { write_hex $cfg $autocfg %s $%s $notmod }\n",
              item->optionname, item->optionname);
       break;
+    case tok_string:
+      printf("} then { write_string $cfg $autocfg %s $%s $notmod }\n",
+             item->optionname, item->optionname);
+      break;
     case tok_make:
       printf("} then { do_make {%s} }\n",item->value);
       break;
@@ -646,6 +651,7 @@ static void find_menu_size(struct kconfig *cfg,
       case tok_dep_tristate:
       case tok_int:
       case tok_hex:
+      case tok_string:
       case tok_choose:
 	tot++;
 	break;
@@ -702,6 +708,7 @@ void dump_tk_script(struct kconfig *scfg)
 	case tok_dep_tristate:
 	case tok_int:
 	case tok_hex:
+	case tok_string:
 	case tok_choose:
 	  /*
 	   * If we have overfilled the menu, then go to the next one.
@@ -862,6 +869,19 @@ void dump_tk_script(struct kconfig *scfg)
 		 cfg->label,
 		 cfg->optionname);
 	  break;
+	case tok_string:
+	  if( cfg->menu_number != menu_num )
+	    {
+	      end_proc(menu_num);
+	      start_proc(menulabel, cfg->menu_number, FALSE);
+	      menu_num = cfg->menu_number;
+	    }
+	  printf("\tistring $w.config.f %d %d \"%s\" %s\n",
+		 cfg->menu_number,
+		 cfg->menu_line,
+		 cfg->label,
+		 cfg->optionname);
+	  break;
 	default:
 	  break;
 	}
@@ -951,6 +971,7 @@ void dump_tk_script(struct kconfig *scfg)
 	  break;
 	case tok_int:
 	case tok_hex:
+	case tok_string:
 	  printf("set %s %s\n", cfg->optionname, cfg->value);
 	  break;
 	case tok_choose:
@@ -985,6 +1006,7 @@ void dump_tk_script(struct kconfig *scfg)
 	{
 	case tok_int:
 	case tok_hex:
+	case tok_string:
 	case tok_bool:
 	case tok_tristate:
 	case tok_dep_tristate:
@@ -1047,6 +1069,12 @@ void dump_tk_script(struct kconfig *scfg)
 	      else if (cfg->tok == tok_hex )
 	        {
 		  printf("\twrite_hex $cfg $autocfg %s $%s $notmod\n",
+			 cfg->optionname,
+			 cfg->optionname);
+	        }
+	      else if (cfg->tok == tok_string )
+	        {
+		  printf("\twrite_string $cfg $autocfg %s $%s $notmod\n",
 			 cfg->optionname,
 			 cfg->optionname);
 	        }

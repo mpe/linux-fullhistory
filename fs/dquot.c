@@ -237,9 +237,12 @@ static void write_dquot(struct dquot *dquot)
 		filp->f_pos = dqoff(dquot->dq_id);
 	fs = get_fs();
 	set_fs(KERNEL_DS);
+
 	if (filp->f_op->write(filp->f_inode, filp,
 	   (char *)&dquot->dq_dqb, sizeof(struct dqblk)) == sizeof(struct dqblk))
 		dquot->dq_flags &= ~DQ_MOD;
+	/* inode->i_status |= ST_MODIFIED is willingly *not* done here */
+
 	up(&dquot->dq_mnt->mnt_sem);
 	set_fs(fs);
 	unlock_dquot(dquot);
@@ -1035,7 +1038,8 @@ asmlinkage int sys_quotactl(int cmd, const char *special, int id, caddr_t addr)
 	if (special == (char *)NULL && (cmds == Q_SYNC || cmds == Q_GETSTATS))
 		dev = 0;
 	else {
-		if (namei(special, &ino))
+		int error = namei(NAM_FOLLOW_LINK, special, &ino);
+		if(error)
 			goto out;
 		dev = ino->i_rdev;
 		ret = -ENOTBLK;

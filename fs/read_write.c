@@ -168,6 +168,7 @@ asmlinkage long sys_write(unsigned int fd, const char * buf, unsigned long count
 		goto out;
 	down(&inode->i_sem);
 	error = write(inode,file,buf,count);
+	inode->i_status |= ST_MODIFIED;
 	up(&inode->i_sem);
 out:
 	fput(file, inode);
@@ -248,6 +249,10 @@ static long do_readv_writev(int type, struct inode * inode, struct file * file,
 		len = vector->iov_len;
 		vector++;
 		count--;
+
+		/* Any particular reason why we do not grab the inode semaphore
+		 * when doing writes here? -DaveM
+		 */
 		nr = fn(inode, file, base, len);
 		if (nr < 0) {
 			if (retval)
@@ -259,6 +264,8 @@ static long do_readv_writev(int type, struct inode * inode, struct file * file,
 		if (nr != len)
 			break;
 	}
+	if(fn == (IO_fn_t) file->f_op->write)
+		inode->i_status |= ST_MODIFIED;
 	if (iov != iovstack)
 		kfree(iov);
 	return retval;

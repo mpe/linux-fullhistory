@@ -30,15 +30,10 @@
 
 /* ---------------------------------------------------------------------- */
 
-#include <linux/config.h>
 #include <linux/hdlcdrv.h>
 #include <linux/soundmodem.h>
 
 #define SM_DEBUG
-
-/* --------------------------------------------------------------------- */
-
-#define DMA_MODE_AUTOINIT      0x10
 
 /* ---------------------------------------------------------------------- */
 /*
@@ -56,6 +51,18 @@ struct sm_state {
 	/*
 	 * Hardware (soundcard) access routines state
 	 */
+	struct {
+		void *ibuf;
+		unsigned int ifragsz;
+		unsigned int ifragptr;
+		unsigned int i16bit;
+		void *obuf;
+		unsigned int ofragsz;
+		unsigned int ofragptr;
+		unsigned int o16bit;
+		int ptt_cnt;
+	} dma;
+
 	union {
 		long hw[32/sizeof(long)];
 	} hw;
@@ -101,9 +108,9 @@ struct modem_tx_info {
 	unsigned int loc_storage;
 	int srate;
 	int bitrate;
-	unsigned int dmabuflenmodulo;
-	void (*modulator)(struct sm_state *, unsigned char *, int);
-	void (*init)(struct sm_state *);
+        void (*modulator_u8)(struct sm_state *, unsigned char *, unsigned int);
+        void (*modulator_s16)(struct sm_state *, short *, unsigned int);
+        void (*init)(struct sm_state *);
 };
 
 struct modem_rx_info {
@@ -111,10 +118,11 @@ struct modem_rx_info {
 	unsigned int loc_storage;
 	int srate;
 	int bitrate;
-	unsigned int dmabuflenmodulo;
+	unsigned int overlap;
 	unsigned int sperbit;
-	void (*demodulator)(struct sm_state *, unsigned char *, int);
-	void (*init)(struct sm_state *);
+        void (*demodulator_u8)(struct sm_state *, const unsigned char *, unsigned int);
+        void (*demodulator_s16)(struct sm_state *, const short *, unsigned int);
+        void (*init)(struct sm_state *);
 };
 
 /* ---------------------------------------------------------------------- */
@@ -281,30 +289,41 @@ extern inline unsigned int lcm(unsigned int x, unsigned int y)
  */
 
 
-#if defined(SM_DEBUG) && (defined(CONFIG_M586) || defined(CONFIG_M686))
+#ifdef __i386__
+
+extern int sm_x86_capability;
+
+#define HAS_RDTSC (sm_x86_capability & 0x10)
 
 /*
  * only do 32bit cycle counter arithmetic; we hope we won't overflow :-)
  * in fact, overflowing modems would require over 2THz clock speeds :-)
  */
 
-#define time_exec(var,cmd)                                      \
-({                                                              \
-	unsigned int cnt1, cnt2, cnt3;                          \
-	__asm__(".byte 0x0f,0x31" : "=a" (cnt1), "=d" (cnt3));  \
-	cmd;                                                    \
-	__asm__(".byte 0x0f,0x31" : "=a" (cnt2), "=d" (cnt3));  \
-	var = cnt2-cnt1;                                        \
+#define time_exec(var,cmd)                                              \
+({                                                                      \
+	if (HAS_RDTSC) {                                                \
+		unsigned int cnt1, cnt2, cnt3;                          \
+		__asm__(".byte 0x0f,0x31" : "=a" (cnt1), "=d" (cnt3));  \
+		cmd;                                                    \
+		__asm__(".byte 0x0f,0x31" : "=a" (cnt2), "=d" (cnt3));  \
+		var = cnt2-cnt1;                                        \
+	} else {                                                        \
+		cmd;                                                    \
+	}                                                               \
 })
-#else /* defined(SM_DEBUG) && (defined(CONFIG_M586) || defined(CONFIG_M686)) */
+
+#else /* __i386__ */
 
 #define time_exec(var,cmd) cmd
 
-#endif /* defined(SM_DEBUG) && (defined(CONFIG_M586) || defined(CONFIG_M686)) */
+#endif /* __i386__ */
 
 /* --------------------------------------------------------------------- */
 
 extern const struct modem_tx_info sm_afsk1200_tx;
+extern const struct modem_tx_info sm_afsk2400_7_tx;
+extern const struct modem_tx_info sm_afsk2400_8_tx;
 extern const struct modem_tx_info sm_afsk2666_tx;
 extern const struct modem_tx_info sm_psk4800_tx;
 extern const struct modem_tx_info sm_hapn4800_8_tx;
@@ -315,6 +334,8 @@ extern const struct modem_tx_info sm_fsk9600_4_tx;
 extern const struct modem_tx_info sm_fsk9600_5_tx;
 
 extern const struct modem_rx_info sm_afsk1200_rx;
+extern const struct modem_rx_info sm_afsk2400_7_rx;
+extern const struct modem_rx_info sm_afsk2400_8_rx;
 extern const struct modem_rx_info sm_afsk2666_rx;
 extern const struct modem_rx_info sm_psk4800_rx;
 extern const struct modem_rx_info sm_hapn4800_8_rx;

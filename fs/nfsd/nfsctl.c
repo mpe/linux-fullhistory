@@ -35,8 +35,8 @@
 # define copy_to_user		memcpy_tofs
 # define access_ok		!verify_area
 #endif
-#include <asm/smp.h>
-#include <asm/smp_lock.h>
+#include <linux/smp.h>
+#include <linux/smp_lock.h>
 
 extern long sys_call_table[];
 
@@ -213,8 +213,6 @@ done:
 EXPORT_NO_SYMBOLS;
 MODULE_AUTHOR("Olaf Kirch <okir@monad.swb.de>");
 #endif
-
-static unsigned long	old_syscallvec;
 
 extern int (*do_nfsservctl)(int, void *, void *);
 

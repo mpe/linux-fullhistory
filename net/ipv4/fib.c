@@ -1896,8 +1896,8 @@ static void ip_rt_add_broadcasts(struct device *dev, u32 brd, u32 mask)
 void ip_rt_change_broadcast(struct device *dev, u32 new_brd)
 {
 	fib_lock();
-	printk(KERN_DEBUG "%s changes brd %08lX -> %08X\n",
-	       dev->name, dev->pa_brdaddr, new_brd);
+	printk(KERN_DEBUG "%s changes brd %08X -> %08X\n",
+	       dev->name, (u32)dev->pa_brdaddr, new_brd);
 	if (!ZERONET(dev->pa_addr) && dev->flags&IFF_BROADCAST) {
 		fib_magic(RTMSG_DELROUTE, RTF_IFBRD, dev->pa_brdaddr, ~0, dev);
 		rtmsg_dev(RTMSG_DELDEVICE, dev, NULL);
@@ -1911,8 +1911,8 @@ void ip_rt_change_dstaddr(struct device *dev, u32 dstaddr)
 {
 	fib_lock();
 	if (!ZERONET(dev->pa_addr) && (dev->flags&IFF_POINTOPOINT) && dev->type != ARPHRD_TUNNEL) {
-		printk(KERN_DEBUG "%s changes dst %08lX -> %08X\n",
-		       dev->name, dev->pa_dstaddr, dstaddr);
+		printk(KERN_DEBUG "%s changes dst %08X -> %08X\n",
+		       dev->name, (u32)dev->pa_dstaddr, dstaddr);
 		fib_magic(RTMSG_DELROUTE, RTF_IFPREFIX, dev->pa_dstaddr, ~0, dev);
 		rtmsg_dev(RTMSG_DELDEVICE, dev, NULL);
 		rtmsg_dev(RTMSG_NEWDEVICE, dev, NULL);
@@ -1927,8 +1927,8 @@ void ip_rt_change_netmask(struct device *dev, u32 mask)
 	u32 net;
 
 	fib_lock();
-	printk(KERN_DEBUG "%s changes netmask %08lX -> %08X\n",
-	       dev->name, dev->pa_mask, mask);
+	printk(KERN_DEBUG "%s changes netmask %08X -> %08X\n",
+	       dev->name, (u32)dev->pa_mask, mask);
 	if (ZERONET(dev->pa_addr)) {
 		fib_unlock();
 		return;
@@ -1961,9 +1961,9 @@ int ip_rt_event(int event, struct device *dev)
 		return NOTIFY_DONE;
 	}
 	if (event == NETDEV_CHANGE) {
-		printk(KERN_DEBUG "%s(%s) changes state fl=%08x pa=%08lX/%08lX brd=%08lX dst=%08lX\n",
-		       dev->name, current->comm, dev->flags, dev->pa_addr, dev->pa_mask,
-		       dev->pa_brdaddr, dev->pa_dstaddr);
+		printk(KERN_DEBUG "%s(%s) changes state fl=%08x pa=%08X/%08X brd=%08X dst=%08X\n",
+		       dev->name, current->comm, dev->flags, (u32)dev->pa_addr, (u32)dev->pa_mask,
+		       (u32)dev->pa_brdaddr, (u32)dev->pa_dstaddr);
 		if (!(dev->flags&IFF_BROADCAST))
 			fib_magic(RTMSG_DELROUTE, RTF_IFBRD, dev->pa_brdaddr, ~0, dev);
 		if (!(dev->flags&IFF_POINTOPOINT))
@@ -1985,9 +1985,9 @@ int ip_rt_event(int event, struct device *dev)
 		}
 
 		if (event == NETDEV_UP)
-			printk(KERN_DEBUG "%s UP fl=%08x pa=%08lX/%08lX brd=%08lX dst=%08lX\n",
-			       dev->name, dev->flags, dev->pa_addr,
-			       dev->pa_mask, dev->pa_brdaddr, dev->pa_dstaddr);
+			printk(KERN_DEBUG "%s UP fl=%08x pa=%08X/%08X brd=%08X dst=%08X\n",
+			       dev->name, dev->flags, (u32)dev->pa_addr,
+			       (u32)dev->pa_mask, (u32)dev->pa_brdaddr, (u32)dev->pa_dstaddr);
 
 		rtmsg_dev(RTMSG_NEWDEVICE, dev, NULL);
 

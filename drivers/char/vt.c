@@ -26,10 +26,10 @@
 #include <asm/io.h>
 #include <asm/uaccess.h>
 
-#include "kbd_kern.h"
-#include "vt_kern.h"
-#include "diacr.h"
-#include "selection.h"
+#include <linux/kbd_kern.h>
+#include <linux/vt_kern.h>
+#include <linux/kbd_diacr.h>
+#include <linux/selection.h>
 
 char vt_dont_switch = 0;
 extern struct tty_driver console_driver;

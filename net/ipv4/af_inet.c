@@ -114,6 +114,7 @@
 
 #define min(a,b)	((a)<(b)?(a):(b))
 
+extern int sysctl_core_destroy_delay;
 extern struct proto packet_prot;
 extern int raw_get_info(char *, char **, off_t, int, int);
 extern int snmp_get_info(char *, char **, off_t, int, int);
@@ -190,7 +191,7 @@ static __inline__ void kill_sk_later(struct sock *sk)
 	sk->destroy = 1;
 	sk->ack_backlog = 0;
 	release_sock(sk);
-	net_reset_timer(sk, TIME_DESTROY, SOCK_DESTROY_TIME);
+	net_reset_timer(sk, TIME_DESTROY, sysctl_core_destroy_delay);
 }
 
 void destroy_sock(struct sock *sk)
@@ -366,7 +367,8 @@ static int inet_create(struct socket *sock, int protocol)
 	}
 
 	sock_init_data(sock,sk);
-	
+	sk->destruct = NULL;
+
 	sk->zapped=0;
 #ifdef CONFIG_TCP_NAGLE_OFF
 	sk->nonagle = 1;

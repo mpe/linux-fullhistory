@@ -619,7 +619,10 @@ int generic_NCR5380_proc_info(char* buffer, char** start, off_t offset, int leng
     struct Scsi_Host *scsi_ptr;
     Scsi_Cmnd *ptr;
     struct NCR5380_hostdata *hostdata;
-    
+#ifdef NCR5380_STATS
+    Scsi_Device *dev;
+    extern const char *const scsi_device_types[MAX_SCSI_DEVICE_CODE];
+#endif    
     cli();
 
     for (scsi_ptr = first_instance; scsi_ptr; scsi_ptr=scsi_ptr->next)

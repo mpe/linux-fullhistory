@@ -57,7 +57,6 @@ struct inode_operations sysv_dir_inode_operations = {
 	sysv_mknod,		/* mknod */
 	sysv_rename,		/* rename */
 	NULL,			/* readlink */
-	NULL,			/* follow_link */
 	NULL,			/* readpage */
 	NULL,			/* writepage */
 	NULL,			/* bmap */

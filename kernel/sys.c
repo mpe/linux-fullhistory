@@ -4,6 +4,7 @@
  *  Copyright (C) 1991, 1992  Linus Torvalds
  */
 
+#include <linux/config.h>
 #include <linux/errno.h>
 #include <linux/sched.h>
 #include <linux/kernel.h>
@@ -20,6 +21,7 @@
 #include <linux/fcntl.h>
 #include <linux/acct.h>
 #include <linux/tty.h>
+#include <linux/nametrans.h>
 #include <linux/smp.h>
 #include <linux/smp_lock.h>
 #include <linux/notifier.h>
@@ -397,6 +399,7 @@ int acct_process(long exitcode)
 
       acct_file.f_op->write(acct_file.f_inode, &acct_file,
                              (char *)&ac, sizeof(struct acct));
+      /* inode->i_status |= ST_MODIFIED is willingly *not* done here */
 
       set_fs(fs);
    }
@@ -940,6 +943,9 @@ asmlinkage int sys_sethostname(char *name, int len)
 	if(copy_from_user(system_utsname.nodename, name, len))
 		return -EFAULT;
 	system_utsname.nodename[len] = 0;
+#ifdef CONFIG_TRANS_NAMES
+	translations_dirty = 1;
+#endif
 	return 0;
 }
 
@@ -968,6 +974,9 @@ asmlinkage int sys_setdomainname(char *name, int len)
 	if(copy_from_user(system_utsname.domainname, name, len))
 		return -EFAULT;
 	system_utsname.domainname[len] = 0;
+#ifdef CONFIG_TRANS_NAMES
+	translations_dirty = 1;
+#endif
 	return 0;
 }
 

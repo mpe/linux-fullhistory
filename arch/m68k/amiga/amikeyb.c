@@ -23,18 +23,17 @@
 #include <linux/random.h>
 #include <linux/kernel.h>
 #include <linux/init.h>
+#include <linux/kbd_ll.h>
 
 #include <asm/amigaints.h>
 #include <asm/amigahw.h>
 #include <asm/irq.h>
 
-extern void handle_scancode(unsigned char);
-
 #define AMIKEY_CAPS	(0x62)
 #define BREAK_MASK	(0x80)
 #define RESET_WARNING	(0xf0)	/* before rotation */
 
-static u_short amiplain_map[NR_KEYS] = {
+static u_short amiplain_map[NR_KEYS] __initdata = {
 	0xf060, 0xf031, 0xf032, 0xf033, 0xf034, 0xf035, 0xf036, 0xf037,
 	0xf038, 0xf039, 0xf030, 0xf02d, 0xf03d, 0xf05c, 0xf200, 0xf300,
 	0xfb71, 0xfb77, 0xfb65, 0xfb72, 0xfb74, 0xfb79, 0xfb75, 0xfb69,
@@ -178,15 +177,13 @@ static unsigned char rep_scancode;
 static void amikeyb_rep(unsigned long ignore);
 static struct timer_list amikeyb_rep_timer = {NULL, NULL, 0, 0, amikeyb_rep};
 
-extern struct pt_regs *pt_regs;
-
 static void amikeyb_rep(unsigned long ignore)
 {
     unsigned long flags;
     save_flags(flags);
     cli();
 
-    pt_regs = NULL;
+    kbd_pt_regs = NULL;
 
     amikeyb_rep_timer.expires = jiffies + key_repeat_rate;
     amikeyb_rep_timer.prev = amikeyb_rep_timer.next = NULL;
@@ -202,7 +199,7 @@ static void keyboard_interrupt(int irq, void *dummy, struct pt_regs *fp)
     static int reset_warning = 0;
 
     /* save frame for register dump */
-    pt_regs = (struct pt_regs *)fp;
+    kbd_pt_regs = fp;
 
     /* get and invert scancode (keyboard is active low) */
     scancode = ~ciaa.sdr;
@@ -302,14 +299,13 @@ __initfunc(int amiga_keyb_init(void))
         return -EIO;
 
     /* setup key map */
-    key_maps[0]  = amiplain_map;
+    memcpy(plain_map, amiplain_map, sizeof(plain_map));
     key_maps[1]  = amishift_map;
     key_maps[2]  = amialtgr_map;
     key_maps[4]  = amictrl_map;
     key_maps[5]  = amishift_ctrl_map;
     key_maps[8]  = amialt_map;
     key_maps[12] = amictrl_alt_map;
-    memcpy(plain_map, amiplain_map, sizeof(plain_map));
 
     /*
      * Initialize serial data direction.

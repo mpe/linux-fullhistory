@@ -47,8 +47,7 @@ static int
 
 static int
  smb_rename(struct inode *old_dir, const char *old_name, int old_len,
-	    struct inode *new_dir, const char *new_name, int new_len,
-	    int must_be_dir);
+	    struct inode *new_dir, const char *new_name, int new_len);
 
 static struct file_operations smb_dir_operations =
 {
@@ -77,7 +76,6 @@ struct inode_operations smb_dir_inode_operations =
 	NULL,			/* mknod */
 	smb_rename,		/* rename */
 	NULL,			/* readlink */
-	NULL,			/* follow_link */
 	NULL,			/* readpage */
 	NULL,			/* writepage */
 	NULL,			/* bmap */
@@ -798,8 +796,7 @@ smb_unlink(struct inode *dir, const char *name, int len)
 
 static int
 smb_rename(struct inode *old_dir, const char *old_name, int old_len,
-	   struct inode *new_dir, const char *new_name, int new_len,
-	   int must_be_dir)
+	   struct inode *new_dir, const char *new_name, int new_len)
 {
 	int res;
 

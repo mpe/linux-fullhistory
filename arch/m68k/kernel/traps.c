@@ -201,7 +201,7 @@ static inline void access_error060 (struct frame *fp)
 		if ((!(fslw & MMU060_ERR_BITS)) && !(fslw & MMU060_SEE))
 			return;
 	}
-	
+
 	if (fslw & (MMU060_DESC_ERR | MMU060_WP)) {
 		unsigned long errorcode;
 		unsigned long addr = fp->un.fmt4.effaddr;

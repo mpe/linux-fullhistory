@@ -171,9 +171,9 @@ void ext2_free_inode (struct inode * inode)
 		printk ("ext2_free_inode: inode has no device\n");
 		return;
 	}
-	if (inode->i_count > 1) {
+	if (atomic_read(&inode->i_count) > 1) {
 		printk ("ext2_free_inode: inode has count=%d\n",
-			inode->i_count);
+			atomic_read(&inode->i_count));
 		return;
 	}
 	if (inode->i_nlink) {
@@ -404,7 +404,7 @@ repeat:
 	sb->s_dirt = 1;
 	inode->i_mode = mode;
 	inode->i_sb = sb;
-	inode->i_count = 1;
+	atomic_set(&inode->i_count, 1);
 	inode->i_nlink = 1;
 	inode->i_dev = sb->s_dev;
 	inode->i_uid = current->fsuid;

@@ -1,4 +1,4 @@
-/* $Id: checksum.h,v 1.7 1997/05/14 07:02:44 davem Exp $ */
+/* $Id: checksum.h,v 1.8 1997/05/29 12:45:03 jj Exp $ */
 #ifndef __SPARC64_CHECKSUM_H
 #define __SPARC64_CHECKSUM_H
 
@@ -41,7 +41,7 @@ extern unsigned int csum_partial(unsigned char * buff, int len, unsigned int sum
 #define csum_partial_copy(src, dst, len, sum) \
 			csum_partial_copy_nocheck(src,dst,len,sum)
 #define csum_partial_copy_fromuser(s, d, l, w)  \
-			csum_partial_copy((char *) (s), (d), (l), (w))
+			csum_partial_copy_from_user((char *) (s), (d), (l), (w), NULL)
 			
 extern __inline__ unsigned int 
 csum_partial_copy_nocheck (const char *src, char *dst, int len, 
@@ -50,12 +50,13 @@ csum_partial_copy_nocheck (const char *src, char *dst, int len,
 	register unsigned long ret asm("o0") = (unsigned long)src;
 	register char *d asm("o1") = dst;
 	register unsigned long l asm("g1") = len;
-	
+
 	__asm__ __volatile__ ("
+		wr	%%g0, %5, %%asi
 		call __csum_partial_copy_sparc_generic
 		 mov %4, %%g7
 		srl	%%o0, 0, %%o0
-	" : "=r" (ret) : "0" (ret), "r" (d), "r" (l), "r" (sum) :
+	" : "=r" (ret) : "0" (ret), "r" (d), "r" (l), "r" (sum), "i" (ASI_P) :
 	"o1", "o2", "o3", "o4", "o5", "o7", "g1", "g2", "g3", "g5", "g7");
 	return (unsigned int)ret;
 }
@@ -64,58 +65,35 @@ extern __inline__ unsigned int
 csum_partial_copy_from_user(const char *src, char *dst, int len, 
 			    unsigned int sum, int *err)
 {
-	if (!access_ok (VERIFY_READ, src, len)) {
-		*err = -EFAULT;
-		memset (dst, 0, len);
-		return sum;
-	} else {
-		register unsigned long ret asm("o0") = (unsigned long)src;
-		register char *d asm("o1") = dst;
-		register unsigned long l asm("g1") = len;
-		register unsigned long s asm("g7") = sum;
+	register unsigned long ret asm("o0") = (unsigned long)src;
+	register char *d asm("o1") = dst;
+	register unsigned long l asm("g1") = len;
+	register unsigned long s asm("g7") = sum;
 
-		__asm__ __volatile__ ("
-		.section __ex_table,#alloc
-		.align 4
-		.word 1f,2
-		.previous
+	__asm__ __volatile__ ("
+	.section __ex_table,#alloc
+	.align 8
+	.xword 1f,2
+	.previous
+	wr	%%g0, %6, %%asi
 1:
-		call __csum_partial_copy_sparc_generic
-		 stx %5, [%%sp + 0x7ff + 128]
-		srl	%%o0, 0, %%o0
-		" : "=r" (ret) : "0" (ret), "r" (d), "r" (l), "r" (s), "r" (err) :
-		"o1", "o2", "o3", "o4", "o5", "o7", "g1", "g2", "g3", "g5", "g7");
-		return (unsigned int)ret;
-	}
+	call __csum_partial_copy_sparc_generic
+	 stx %5, [%%sp + 0x7ff + 128]
+	srl	%%o0, 0, %%o0
+	" : "=r" (ret) : "0" (ret), "r" (d), "r" (l), "r" (s), "r" (err), "i" (ASI_S) :
+	"o1", "o2", "o3", "o4", "o5", "o7", "g1", "g2", "g3", "g5", "g7");
+	return (unsigned int)ret;
 }
-  
+
+#if 0
+/* Not implemented, but nobody uses it yet... */
 extern __inline__ unsigned int 
 csum_partial_copy_to_user(const char *src, char *dst, int len, 
 			  unsigned int sum, int *err)
 {
-	if (!access_ok (VERIFY_WRITE, dst, len)) {
-		*err = -EFAULT;
-		return sum;
-	} else {
-		register unsigned long ret asm("o0") = (unsigned long)src;
-		register char *d asm("o1") = dst;
-		register unsigned long l asm("g1") = len;
-		register unsigned long s asm("g7") = sum;
-
-		__asm__ __volatile__ ("
-		.section __ex_table,#alloc
-		.align 4
-		.word 1f,1
-		.previous
-1:
-		call __csum_partial_copy_sparc_generic
-		 stx %5, [%%sp + 0x7ff + 128]
-		srl	%%o0, 0, %%o0
-		" : "=r" (ret) : "0" (ret), "r" (d), "r" (l), "r" (s), "r" (err) :
-		"o1", "o2", "o3", "o4", "o5", "o7", "g1", "g2", "g3", "g5", "g7");
-		return (unsigned int)ret;
-	}
+	return 0;
 }
+#endif
   
 /* ihl is always 5 or greater, almost always is 5, and iph is word aligned
  * the majority of the time.

@@ -341,7 +341,6 @@ void x25_destroy_socket(struct sock *sk)	/* Not static as it's used by the timer
 		sk->timer.data     = (unsigned long)sk;
 		add_timer(&sk->timer);
 	} else {
-		kfree(sk->protinfo.x25);
 		sk_free(sk);
 		MOD_DEC_USE_COUNT;
 	}

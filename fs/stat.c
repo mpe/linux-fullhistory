@@ -127,7 +127,7 @@ asmlinkage int sys_stat(char * filename, struct __old_kernel_stat * statbuf)
 	int error;
 
 	lock_kernel();
-	error = namei(filename,&inode);
+	error = namei(NAM_FOLLOW_LINK, filename, &inode);
 	if (error)
 		goto out;
 	if ((error = do_revalidate(inode)) == 0)
@@ -145,7 +145,7 @@ asmlinkage int sys_newstat(char * filename, struct stat * statbuf)
 	int error;
 
 	lock_kernel();
-	error = namei(filename,&inode);
+	error = namei(NAM_FOLLOW_LINK, filename, &inode);
 	if (error)
 		goto out;
 	if ((error = do_revalidate(inode)) == 0)
@@ -168,7 +168,7 @@ asmlinkage int sys_lstat(char * filename, struct __old_kernel_stat * statbuf)
 	int error;
 
 	lock_kernel();
-	error = lnamei(filename,&inode);
+	error = namei(NAM_FOLLOW_TRAILSLASH, filename, &inode);
 	if (error)
 		goto out;
 	if ((error = do_revalidate(inode)) == 0)
@@ -187,7 +187,7 @@ asmlinkage int sys_newlstat(char * filename, struct stat * statbuf)
 	int error;
 
 	lock_kernel();
-	error = lnamei(filename,&inode);
+	error = namei(NAM_FOLLOW_TRAILSLASH, filename, &inode);
 	if (error)
 		goto out;
 	if ((error = do_revalidate(inode)) == 0)
@@ -249,14 +249,18 @@ asmlinkage int sys_readlink(const char * path, char * buf, int bufsiz)
 	error = verify_area(VERIFY_WRITE,buf,bufsiz);
 	if (error)
 		goto out;
-	error = lnamei(path,&inode);
+	error = namei(NAM_FOLLOW_TRAILSLASH, path, &inode);
 	if (error)
 		goto out;
 	error = -EINVAL;
-	if (!inode->i_op || !inode->i_op->readlink
-	 || (error = do_revalidate(inode)) < 0) {
+	if (!inode->i_op || !inode->i_op->readlink ||
+	    !S_ISLNK(inode->i_mode) || (error = do_revalidate(inode)) < 0) {
 		iput(inode);
 		goto out;
+	}
+	if (!IS_RDONLY(inode)) {
+		inode->i_atime = CURRENT_TIME;
+		inode->i_dirt = 1;
 	}
 	error = inode->i_op->readlink(inode,buf,bufsiz);
 out:

@@ -12,6 +12,7 @@ enum token {
   tok_fi, 
   tok_int,
   tok_hex,
+  tok_string,
   tok_make,
   tok_define,
   tok_choose,

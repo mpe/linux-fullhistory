@@ -88,6 +88,9 @@
 #include <linux/igmp.h>
 #include <net/checksum.h>
 
+int sysctl_igmp_max_host_report_delay = IGMP_MAX_HOST_REPORT_DELAY;
+int sysctl_igmp_timer_scale = IGMP_TIMER_SCALE;
+int sysctl_igmp_age_threshold = IGMP_AGE_THRESHOLD;
 
 /*
  *	If time expired, change the router type to IGMP_NEW_ROUTER.
@@ -133,7 +136,7 @@ static	struct	ip_router_info	*igmp_get_mrouter_info(struct device *dev)
 		return NULL;
 	i->dev = dev;
 	i->type = IGMP_NEW_ROUTER;
-	i->time = IGMP_AGE_THRESHOLD;
+	i->time = sysctl_igmp_age_threshold;
 	i->next = ip_router_info_head;
 	ip_router_info_head = i;
 
@@ -229,7 +232,7 @@ static void igmp_start_timer(struct ip_mc_list *im,unsigned char max_resp_time)
 	int tv;
 	if(im->tm_running)
 		return;
-	tv=random()%(max_resp_time*HZ/IGMP_TIMER_SCALE); /* Pick a number any number 8) */
+	tv=random()%(max_resp_time*HZ/sysctl_igmp_timer_scale); /* Pick a number any number 8) */
 	im->timer.expires=jiffies+tv;
 	im->tm_running=1;
 	add_timer(&im->timer);
@@ -363,7 +366,7 @@ static void igmp_heard_query(struct device *dev, unsigned char max_resp_time,
 			if (group && group != im->multiaddr)
 				continue;
 			if(im->tm_running) {
-				if(im->timer.expires>jiffies+max_resp_time*HZ/IGMP_TIMER_SCALE) {
+				if(im->timer.expires>jiffies+max_resp_time*HZ/sysctl_igmp_timer_scale) {
 					igmp_stop_timer(im);
 					igmp_start_timer(im,max_resp_time);
 				}
@@ -372,9 +375,9 @@ static void igmp_heard_query(struct device *dev, unsigned char max_resp_time,
 		}
 	} else {
 		mrouter_type=IGMP_OLD_ROUTER;
-		max_resp_time=IGMP_MAX_HOST_REPORT_DELAY*IGMP_TIMER_SCALE;
+		max_resp_time=sysctl_igmp_max_host_report_delay*sysctl_igmp_timer_scale;
 
-		if(igmp_set_mrouter_info(dev,mrouter_type,IGMP_AGE_THRESHOLD)==NULL)
+		if(igmp_set_mrouter_info(dev,mrouter_type,sysctl_igmp_age_threshold)==NULL)
 			return;
 
 		/*

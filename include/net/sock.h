@@ -70,6 +70,10 @@
 #include <linux/atalk.h>
 #endif
 
+#if defined(CONFIG_DECNET) || defined(CONFIG_DECNET_MODULE)
+#include <net/dn.h>
+#endif
+
 #include <linux/igmp.h>
 
 #include <asm/atomic.h>
@@ -447,6 +451,7 @@ struct sock
 
 	union
 	{
+		void *destruct_hook;
 	  	struct unix_opt	af_unix;
 #if defined(CONFIG_ATALK) || defined(CONFIG_ATALK_MODULE)
 		struct atalk_sock	af_at;
@@ -471,6 +476,9 @@ struct sock
 #if defined(CONFIG_ROSE) || defined(CONFIG_ROSE_MODULE)
 		rose_cb			*rose;
 #endif
+#endif
+#if defined(CONFIG_DECNET) || defined(CONFIG_DECNET_MODULE)
+	        dn_cb                    *dn;
 #endif
 	} protinfo;  		
 
@@ -523,6 +531,7 @@ struct sock
 
   	int			(*backlog_rcv) (struct sock *sk,
 						struct sk_buff *skb);  
+	void                    (*destruct)(struct sock *sk);
 };
 
 /*

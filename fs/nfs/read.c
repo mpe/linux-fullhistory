@@ -188,7 +188,7 @@ nfs_readpage_async(struct inode *inode, struct page *page)
 				nfs_readpage_result, req);
 
 	if (result >= 0) {
-		inode->i_count++;
+		atomic_inc(&inode->i_count);
 		atomic_inc(&page->count);
 		return 0;
 	}

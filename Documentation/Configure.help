@@ -795,6 +795,20 @@ CONFIG_BINFMT_JAVA
   will be called binfmt_java.o. If you don't know what to answer at
   this point then answer Y.
 
+Kernel support for MISC binaries
+CONFIG_BINFMT_MISC
+  This enables the possibility to plug wrapper-driven binary formats
+  into the kernel. You will like this especially when you use programs
+  that need an interpreter to run like Java, Python or Emacs-Lisp. And
+  you don't need CONFIG_BINFMT_JAVA or CONFIG_BINFMT_EM86, as this is
+  a more general feature.
+  You can do other nice things, too. Read Documentation/binfmt_misc.txt
+  to learn how to use this feature.
+  You must enable CONFIG_PROC_FS to use this part of the kernel.
+  You may answer M for module support and later load the module when
+  you have use for it.
+  If you don't know what to answer at this point, say Y.
+
 Processor type
 CONFIG_M386
   This is the processor type of your CPU. This information is used for
@@ -1623,20 +1637,67 @@ CONFIG_SCSI_AHA1740
   want to compile it as a module, say M here and read
   Documentation/modules.txt.
 
-Adaptec AHA274X/284X/294X support
+Adaptec AIC7xxx support (includes 274x/284x/294x)
 CONFIG_SCSI_AIC7XXX
   Information about this SCSI host adapter is contained in
   drivers/scsi/README.aic7xxx and in the SCSI-HOWTO, available via ftp
-  (user: anonymous) at sunsite.unc.edu:/pub/Linux/docs/HOWTO. If it
-  doesn't work out of the box, you may have to change some settings in
-  drivers/scsi/aic7xxx.h. It has been reported that the "wide
-  negotiation" on these cards is not quite working and should be
-  disabled. Note that the AHA2920 SCSI host adapter is *not* supported
-  by this driver; choose "Future Domain 16xx SCSI support" instead. If
-  you want to compile this driver a module ( = code which can be
-  inserted in and removed from the running kernel whenever you want),
-  say M here and read Documentation/modules.txt. The module will be
-  called aic7xxx.o.
+  (user: anonymous) at sunsite.unc.edu:/pub/Linux/docs/HOWTO. Note that
+  the AHA2920 SCSI host adapter is *not* supported by this driver; choose
+  "Future Domain 16xx SCSI support" instead. If you want to compile this
+  driver a module ( = code which can be inserted in and removed from the
+  running kernel whenever you want), say M here and read Documentation/
+  modules.txt. The module will be called aic7xxx.o.
+
+Enable tagged command queueing
+CONFIG_AIC7XXX_TAGGED_QUEUEING
+  This option allows you to enable tagged command queueing for this
+  driver.  Some scsi devices do not properly support this
+  feature.  Tagged command queueing will improve performance.
+
+Maximum number of commands per LUN
+  CONFIG_AIC7XXX_CMDS_PER_LUN
+  This option allows you to set the maximum number of commands queued
+  per LUN.  If tagged queueing is enabled, then you may want to try
+  increasing AIC7XXX_CMDS_PER_LUN to more than 2.  By default, we limit
+  the SCBs per LUN to 2 with or without tagged queueing enabled.  If
+  tagged queueing is disabled, the sequencer will keep the 2nd SCB in
+  the input queue until the first one completes - so it is OK to to have
+  more than 1 SCB queued.  If tagged queueing is enabled, then the
+  sequencer will attempt to send the 2nd SCB to the device while the
+  first SCB is executing and the device is disconnected.  For adapters
+  limited to 4 SCBs, you may want to actually decrease the commands per
+  LUN to 1, if you often have more than 2 devices active at the same
+  time.  This will allocate 1 SCB for each device and ensure that there
+  will always be a free SCB for up to 4 devices active at the same time.
+  When SCB paging is enabled, set the commands per LUN to 8 or higher
+  (see SCB paging support below).  Note that if AIC7XXX_CMDS_PER_LUN is
+  not defined and tagged queueing is enabled, the driver will attempt to
+  set the commands per LUN using its own heuristic based on the number
+  of available SCBs.
+
+Enable SCB paging
+CONFIG_AIC7XXX_PAGE_ENABLE
+  This option enables SCB paging.  This will increase performance when
+  tagged queueing is enabled.  Note that you should increase the
+  AIC7XXX_CMDS_PER_LUN to 8 as most tagged queueing devices allow at
+  least this many
+
+Use external SCB bank
+CONFIG_AIC7XXX_USE_EXT_SCBRAM
+  This option enables use of the external bank of 255 SCBs.  For 3985
+  adapters, this will also enable sharing of the SCB array across all
+  three controllers.
+
+Collect statistics to report in /proc
+CONFIG_AIC7XXX_PROC_STATS
+  This option enables collection of SCSI transfer statistics for the
+  /proc filesystem.  Do NOT enable this when running on kernels version
+  1.2.x and below.  This does affect performance since it has to
+  maintain statistics.
+
+Delay in seconds after SCSI bus reset
+CONFIG_AIC7XXX_RESET_DELAY
+  This option sets the delay in seconds after a SCSI bus reset.
 
 BusLogic SCSI support
 CONFIG_SCSI_BUSLOGIC
@@ -2371,7 +2432,8 @@ CONFIG_SOUNDMODEM_SBC
   compatible cards. If you have a dual mode card (i.e. a WSS cards
   with a SoundBlaster emulation) you should say N here and Y to
   "Soundcard modem support for WSS and Crystal cards", below, because
-  this usually results in better performance.
+  this usually results in better performance. This option also supports
+  SB16/32/64 in full duplex mode.
 
 Soundcard modem support for WSS and Crystal cards
 CONFIG_SOUNDMODEM_WSS
@@ -2389,26 +2451,27 @@ CONFIG_SOUNDMODEM_AFSK1200
   compatible to popular modems using TCM3105 or AM7911. The demodulator
   requires about 12% of the CPU power of a Pentium 75 CPU per channel.
 
-Soundmodem 1200 baud AFSK using floating point
-CONFIG_SOUNDMODEM_AFSK1200_FP
-  This option enables floating point calculations to be used for the
-  AFSK1200 baud modem. The Intel Pentium is a perverted chip because
-  integer multiplications are, although easier to implement in silicon,
-  an order of magnitude slower than floating point calculations.
-  Enabling this option uses a highly optimized assembler routine for
-  correlations, modeled after the one published by Phil Karn, KA9Q.
-  This reduces the computing power needed on Intel Pentium chips to
-  about 50%. On the other hand, Pentium clones with faster integer
-  multiply and slower floating point multiply will probably take
-  longer with this option turned on. As a rule of thumb, enable it for
-  Intel Pentium and Pentium Pro processors, and disable it for
-  anything else.
-  I (sailer@ife.ee.ethz.ch) am very interested in figures. If you are
-  willing to give me a feedback, please compile the driver once with
-  this option enabled and once with it disabled, and send me the cycle
-  counter numbers obtained with both compilations, and your exact
-  chip. The cycle counter numbers can be obtained with a recent
-  sethdlc utility.
+Soundcard modem support for 2400 baud AFSK modulation (7.3728MHz crystal)
+CONFIG_SOUNDMODEM_AFSK2400_7
+  This option enables the soundmodem driver 2400 baud AFSK modem,
+  compatible to TCM3105 modems (over-)clocked with a 7.3728MHz crystal.
+  Note that the availability of this driver does _not_ imply that I
+  recommend building such links. It is only here since users especially
+  in eastern europe have asked me to do so. In fact this modulation scheme
+  has many disadvantages, mainly its incompatibility with many transceiver
+  designs and the fact that the TCM3105 (if used) is operated widely outside
+  its specifications.
+
+Soundcard modem support for 2400 baud AFSK modulation (8MHz crystal)
+CONFIG_SOUNDMODEM_AFSK2400_8
+  This option enables the soundmodem driver 2400 baud AFSK modem,
+  compatible to TCM3105 modems (over-)clocked with an 8MHz crystal.
+  Note that the availability of this driver does _not_ imply that I
+  recommend building such links. It is only here since users especially
+  in eastern europe have asked me to do so. In fact this modulation scheme
+  has many disadvantages, mainly its incompatibility with many transceiver
+  designs and the fact that the TCM3105 (if used) is operated widely outside
+  its specifications.
 
 Soundcard modem support for 4800 baud HAPN-1 modulation
 CONFIG_SOUNDMODEM_HAPN4800
@@ -2425,27 +2488,6 @@ CONFIG_SOUNDMODEM_FSK9600
   both 1200 baud AFSK and 9600 baud FSK if you want (but obviously you
   can only use one protocol at a time, depending on what the other end
   can understand).
-
-Soundcard modem support using floating point arithmetic
-CONFIG_SOUNDMODEM_FLOAT
-  This option enables floating point calculations to be used for the
-  AFSK1200 baud modem. The Intel Pentium is a perverted chip because
-  integer multiplications are, although easier to implement in silicon,
-  an order of a magnitude slower than floating point calculations.
-  Enabling this option uses a highly optimized assembler routine for
-  correlations, modeled after the one published by Phil Karn, KA9Q.
-  This reduces the computing power needed on Intel Pentium chips to
-  about 50%. On the other hand, Pentium clones with faster integer
-  multiply and slower floating point multiply will probably take
-  longer with this option turned on. As a rule of thumb, enable it for
-  Intel Pentium and Pentium Pro processors, and disable it for
-  anything else.
-  I (sailer@ife.ee.ethz.ch) am very interested in figures. If you are
-  willing to give me a feedback, please compile the driver once with
-  this option enabled and once with it disabled, and send me the cycle
-  counter numbers obtained with both compilations, and your exact
-  chip. The cycle counter numbers can be obtained by a recent sethdlc
-  utility.
 
 Serial port KISS driver for AX.25
 CONFIG_MKISS
@@ -3617,6 +3659,41 @@ CONFIG_ISP16_CDI
   be called isp16.o. If you want to compile it as a module, say M here
   and read Documentation/modules.txt.
 
+New inode implementation
+CONFIG_NEW_INODE
+  This option should disappear in future when the new inode cache
+  becomes standard. For the meantime, you may switch back to the old
+  code if you have trouble with the new one.
+
+New dcache implementation
+CONFIG_NEW_DCACHE
+  The new dcache is a generic one. In contrast to the old dcache,
+  it operates on the VFS level, independently from the concrete
+  filesystems. One benefit of this option is that all symlinks
+  in /proc/<pid>/fd now point to the real file location, with
+  full absolute path.
+  The main benefit of this option is the *basket*:
+  Any deleted file "foo" will be automatically renamed to
+  ".deleted-<some-number>.foo" in a non-permanent way, so that it remains
+  accessible as long as the machine is not rebooted. Currently, a
+  maximum number of 100 files can be kept in the basket (the limit
+  is because it eats up inodes). If space gets low on the filesystem,
+  the basket will (should) be automatically cleared until enough
+  space is available. This currently works only with ext2, but other
+  filesystems need only little modification to support this also.
+  Please check whether (and in which cases) you get
+  speedups by the new code. Before making measurements, be sure that
+  all debugging code is #undef'ed from fs/ndcache.c, fs/ninode.c,
+  and fs/namei.c . 
+
+Preload dcache
+CONFIG_DCACHE_PRELOAD
+  Preloading will create dcache entries when a directory is scanned
+  (e.g. with ls) the *first* time. This should speed up successive
+  inode lookups, but also can consume large amounts of memory.
+  Please report speedups (or slowdowns due to the memory usage if they
+  occur) to schoebel@informatik.uni-stuttgart.de .
+
 Quota support
 CONFIG_QUOTA
   If you say Y here, you will be able to set per user limits for disk
@@ -3626,6 +3703,138 @@ CONFIG_QUOTA
   ftp.funet.fi/pub/Linux/kernel/src/subsystems/quota/. Probably the
   quota support is only useful for multi user systems. If unsure, say
   N.
+
+Online mirror support
+CONFIG_OMIRR
+  omirr is a package for _symmetric_ mirroring of files over the
+  internet. In contrast to rdist, the online mirror daemon (omirrd)
+  is running all the time and transfers any changes on the file system
+  as soon as possible to all other servers. Symmetric means that all
+  servers have equal rights in changing a file: the last changer of a
+  file will win. This is the same behaviour as multiple processes
+  operating on a global file system. In effect, omirr can do the same
+  as nfs mounts, but will have better performance since the data is
+  stored on local disks. In contrast to a cache filesystem which has a
+  dedicated master copy, broken connections and/or servers are no problem
+  for continuing work on the remaining ones, because there is no master
+  copy. You must say Y if you want to use omirrd, but you should (but
+  need not) say N if you don't (for performance reasons).
+
+Filename translation support
+CONFIG_TRANS_NAMES
+  Normally used only when you want diskless clients to mount the root
+  filesystem of the server. If unsure, or if you don't have clients, select N.
+  When selected, filenames, directory names etc become context-sensitive.
+  If you have a file named "/etc/config#host=banana#", it will appear
+  (by default) as hardlinked to "/etc/config" on host "banana", while on host
+  "mango" another file "/etc/config#host=mango#" will appear as been
+  hardlinked to "/etc/config". The default behaviour can be changed
+  by setting the _first_ environment variable NAMETRANS to a colon-separated
+  list of suffixes which are tried in the specified order. For example,
+  in 'env - NAMETRANS=#host=mango#:#ktype=diskless# "`env`" command ...' the
+  command will see the same files as if it had been executed on host "mango"
+  with a diskless kernel. Using NAMETRANS supersedes _all_ default
+  translations. Thus translations can be generally switched off by an
+  empty list, e.g. 'env - NAMETRANS= "`env`" command ...'.
+  Note that some system utililies like tar, dump, restore should
+  be used with translation switched off, in order to avoid doubled
+  space in archive files and when extracting from them. Also, make sure
+  that nfsd, mountd (and similar ones like samba daemons) run without
+  translation, in order to avoid doubled (or even wrong) translation
+  at the server and at the client. You can automatically force the creation
+  of context-dependent filenames if there exists a template filename like
+  "/etc/mtab#host=CREATE#". As soon as a process running on "mango" tries
+  to create a file "/etc/mtab", the version "/etc/mtab#host=mango#" is
+  created instead (which appears in turn as hardlinked to "/etc/mtab").
+  Note that if you want to make "/etc/fstab" context-dependend, you should
+  execute "touch /etc/mtab#host=CREATE#" and
+  "touch /etc/mtab.tmp#host=CREATE#", because mount, umount and others
+  running on different hosts would otherwise try to create one shared
+  /etc/mtab which would result in a clash. Also one should execute
+  "touch /etc/nologin#host=CREATE#" to prevent global side effects from
+  shutdown resp. runlevel.
+
+Restrict translation to gid
+CONFIG_TRANS_RESTRICT
+  When selected, default translations are carried out only if the parent
+  directory of the context-sensitive file belongs to a specific group id
+  (gid). Trying to translate names everywhere will decrease performance of
+  file openings. Normally translations are used only in system configuration
+  files but not in ordinary user filespace. So you should change the gid of
+  directories containing context-dependent files to some special group like
+  "adm" (group id 4) and enable this option. As a result, users will not
+  notice any performance degradation resulting from filename translation.
+  Note that translations resulting from the first environment variable
+  "NAMETRANS=..." are always carried out regardless of the gid of directories.
+  Beware, before turning on this option make sure all directories containing
+  context-dependent files belong to the special group, or system
+  initialization may fail. In unsure, select N.
+
+Group id (gid) for translation restriction
+CONFIG_TRANS_GID
+  Default name translations will be carried out only inside directories
+  belonging to the group id (gid) you can specify here.
+  Default is 4 (group "adm").
+
+Nodename (hostname) translation
+CONFIG_TR_NODENAME
+  Enables translation of name suffixes like in "/etc/config#host=banana#".
+  The syntax is <filename>#host=<hostname>#. The hostname can be queried
+  with the command "uname -n". Normally this option is used heavily when
+  translation is enabled. If unsure, say Y.
+
+Kernelname translation
+CONFIG_TR_KERNNAME
+  Enables translation of name suffixes like in "/etc/config#kname=default#".
+  The string is hard compiled into the kernel by the following option.
+  Useful if your kernel does not know the hostname at boot time, and there
+  is no way to tell the hostname by lilo or bootp. Please avoid using this
+  option and prefer CONFIG_TR_NODENAME wherever possible. When mounting
+  the root over nfs, the own hostname must be known at boot time anyway;
+  this option is just for special use.
+  Note that the default translations are tried in the order as occuring
+  in the configuration, that is 1) host 2) kname 3) ktype 4) machine
+  5) system. If unsure, say Y.
+
+String for kernelname translation
+CONFIG_KERNNAME
+  Enter the string you want to compile into the kernel. The string
+  will be used as context in context-depenant file like
+  "/etc/config#kname=<hostname>#".
+
+Kerneltype translation
+CONFIG_TR_KERNTYPE
+  Enables translation of name suffixes like in "/etc/config#ktype=default#".
+  The syntax is <filename>#ktype=<string>#. The string is hard compiled
+  in the kernel by the following option. Use if you want to create
+  different kernels with different behaviour. For example, use the string
+  "default" on your server, and use "diskless" on all your diskless clients
+  (and perhaps "dataless" on dataless clients). This way you can avoid
+  dozens of "config#host=<something># with same contents and you have no
+  effort when new machines are added. If unsure, say Y.
+
+String for kerneltype translation
+CONFIG_KERNTYPE
+  Enter the string you want to compile into the kernel. The string
+  will be used as context in context-depenant file like
+  "/etc/config#ktype=default#". If your kernel is to be used on a server,
+  you probably can use "default" here. If your kernel is intended for
+  a diskless client, you probably should enter "diskless" here.
+
+Machine type translation
+CONFIG_TR_MACHINE
+  Enables translation of name suffixes like in "/etc/config#machine=i486#".
+  The syntax is <filename>#machine=<id>#. The machine types can be queried
+  with the command "uname -m". Normally used only on multi-architecture
+  installations. If unsure, say Y.
+
+System name translation
+CONFIG_TR_SYSNAME
+  Enables translation of name suffixes like in "/etc/config#system=Linux#".
+  The syntax is <filename>#system=<id>#. The system name can be queried
+  with the command "uname -s". Currently only supportet by Linux, but
+  hopefully other operating systems will pick up the idea of context-dependent
+  translations. If unsure, say Y.
 
 Minix fs support
 CONFIG_MINIX_FS
@@ -4702,6 +4911,17 @@ CONFIG_PROFILE_SHIFT
   said Y to "Kernel profiling support", you must be a kernel hacker and
   hence you know what this is about :-)
 
+Magic System Request Key support
+CONFIG_MAGIC_SYSRQ
+  This is for kernel hackers who want to have some control over the
+  system even if the system crashes during kernel debugging (e.g., to
+  flush the disks, reboot the system immediately or dump some status
+  information). This is accomplished by pressing various keys while
+  holding SysRq (Alt+PrintScreen). As you are expected to be a kernel
+  hacker to use this, the simple rule about learning what do the keys
+  mean is "Use the source, Luke!" -- read drivers/char/sysrq.c.
+  Don't say Y unless you really know what does this hack do.
+ 
 ISDN subsystem
 CONFIG_ISDN
   ISDN ("Integrated Services Digital Networks", called RNIS in France)

@@ -49,6 +49,12 @@
 #include <linux/atalk.h>
 #include <linux/init.h>
 
+ 
+int sysctl_aarp_expiry_time = AARP_EXPIRY_TIME;
+int sysctl_aarp_tick_time = AARP_TICK_TIME;
+int sysctl_aarp_retransmit_limit = AARP_RETRANSMIT_LIMIT;
+int sysctl_aarp_resolve_time = AARP_RESOLVE_TIME;
+
 /*
  *	Lists of aarp entries
  */
@@ -309,7 +315,7 @@ static void aarp_kick(struct aarp_entry **n)
 	{
 		/* Expired - if this will be the 11th transmit, we delete
 		   instead */
-		if((*n)->xmit_count>=AARP_RETRANSMIT_LIMIT)
+		if((*n)->xmit_count>=sysctl_aarp_retransmit_limit)
 		{
 			t= *n;
 			*n=(*n)->next;
@@ -359,9 +365,9 @@ static void aarp_expire_timeout(unsigned long unused)
 	}
 	del_timer(&aarp_timer);
 	if(unresolved_count==0)
-		aarp_timer.expires=jiffies+AARP_EXPIRY_TIME;
+		aarp_timer.expires=jiffies+sysctl_aarp_expiry_time;
 	else
-		aarp_timer.expires=jiffies+AARP_TICK_TIME;
+		aarp_timer.expires=jiffies+sysctl_aarp_tick_time;
 	add_timer(&aarp_timer);
 }
 
@@ -475,6 +481,21 @@ int aarp_send_ddp(struct device *dev,struct sk_buff *skb, struct at_addr *sa, vo
 		dev_queue_xmit(skb);
 		return 1;
 	}	
+
+	/*
+	 *	On a PPP link we neither compress nor aarp.
+	 */
+	if(dev->type==ARPHRD_PPP)
+	{
+		skb->protocol = htons(ETH_P_PPPTALK);
+		if(skb->sk==NULL)
+			skb->priority = SOPRI_NORMAL;
+		else
+			skb->priority = skb->sk->priority;
+		skb->dev = dev;
+		dev_queue_xmit(skb);
+		return 1;
+	}
 	 
 	/*
 	 *	Non ELAP we cannot do.
@@ -514,7 +535,7 @@ int aarp_send_ddp(struct device *dev,struct sk_buff *skb, struct at_addr *sa, vo
 		 *	Return 1 and fill in the address
 		 */
 
-		a->expires_at=jiffies+AARP_EXPIRY_TIME*10;
+		a->expires_at=jiffies+sysctl_aarp_expiry_time*10;
 		ddp_dl->datalink_header(ddp_dl, skb, a->hwaddr);
 		if(skb->sk==NULL)
 			skb->priority = SOPRI_NORMAL;
@@ -561,7 +582,7 @@ int aarp_send_ddp(struct device *dev,struct sk_buff *skb, struct at_addr *sa, vo
 	 */
 
 	skb_queue_tail(&a->packet_queue, skb);
-	a->expires_at=jiffies+AARP_RESOLVE_TIME;
+	a->expires_at=jiffies+sysctl_aarp_resolve_time;
 	a->dev=dev;
 	a->next=unresolved[hash];
 	a->target_addr= *sa;
@@ -584,7 +605,7 @@ int aarp_send_ddp(struct device *dev,struct sk_buff *skb, struct at_addr *sa, vo
 	if(unresolved_count==1)
 	{
 		del_timer(&aarp_timer);
-		aarp_timer.expires=jiffies+AARP_TICK_TIME;
+		aarp_timer.expires=jiffies+sysctl_aarp_tick_time;
 		add_timer(&aarp_timer);
 	}
 
@@ -623,7 +644,7 @@ static void aarp_resolved(struct aarp_entry **list, struct aarp_entry *a, int ha
 			 
 			while((skb=skb_dequeue(&a->packet_queue))!=NULL)
 			{
-				a->expires_at=jiffies+AARP_EXPIRY_TIME*10;
+				a->expires_at=jiffies+sysctl_aarp_expiry_time*10;
 				ddp_dl->datalink_header(ddp_dl,skb,a->hwaddr);
 				if(skb->sk==NULL)
 					skb->priority = SOPRI_NORMAL;
@@ -751,7 +772,7 @@ static int aarp_rcv(struct sk_buff *skb, struct device *dev, struct packet_type 
 			if(unresolved_count==0)
 			{
 				del_timer(&aarp_timer);
-				aarp_timer.expires=jiffies+AARP_EXPIRY_TIME;
+				aarp_timer.expires=jiffies+sysctl_aarp_expiry_time;
 				add_timer(&aarp_timer);
 			}
 			break;
@@ -804,7 +825,7 @@ __initfunc(void aarp_proto_init(void))
 	init_timer(&aarp_timer);
 	aarp_timer.function=aarp_expire_timeout;
 	aarp_timer.data=0;
-	aarp_timer.expires=jiffies+AARP_EXPIRY_TIME;
+	aarp_timer.expires=jiffies+sysctl_aarp_expiry_time;
 	add_timer(&aarp_timer);
 	register_netdevice_notifier(&aarp_notifier);
 }

@@ -261,8 +261,7 @@ extern int msdos_mkdir(struct inode *dir,const char *name,int len,int mode);
 extern int msdos_unlink(struct inode *dir,const char *name,int len);
 extern int msdos_unlink_umsdos(struct inode *dir,const char *name,int len);
 extern int msdos_rename(struct inode *old_dir,const char *old_name,int old_len,
-			struct inode *new_dir,const char *new_name,int new_len,
-			int must_be_dir);
+			struct inode *new_dir,const char *new_name,int new_len);
 
 /* fatfs_syms.c */
 extern int init_fat_fs(void);
@@ -274,8 +273,7 @@ extern int vfat_unlink(struct inode *dir,const char *name,int len);
 extern int vfat_mkdir(struct inode *dir,const char *name,int len,int mode);
 extern int vfat_rmdir(struct inode *dir,const char *name,int len);
 extern int vfat_rename(struct inode *old_dir,const char *old_name,int old_len,
-		       struct inode *new_dir,const char *new_name,int new_len,
-		       int must_be_dir);
+		       struct inode *new_dir,const char *new_name,int new_len);
 extern void vfat_put_super(struct super_block *sb);
 extern struct super_block *vfat_read_super(struct super_block *sb,void *data,
 					   int silent);

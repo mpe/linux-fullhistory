@@ -295,7 +295,7 @@ asmlinkage int osf_statfs(char *path, struct osf_statfs *buffer, unsigned long b
 	retval = verify_area(VERIFY_WRITE, buffer, bufsiz);
 	if (retval)
 		goto out;
-	retval = namei(path, &inode);
+	retval = namei(NAM_FOLLOW_LINK, path, &inode);
 	if (retval)
 		goto out;
 	retval = -ENOSYS;
@@ -376,7 +376,7 @@ static int getdev(const char *name, int rdonly, struct inode **ino)
 	struct file_operations *fops;
 	int retval;
 
-	retval = namei(name, &inode);
+	retval = namei(NAM_FOLLOW_LINK, name, &inode);
 	if (retval)
 		return retval;
 	if (!S_ISBLK(inode->i_mode)) {
@@ -845,14 +845,12 @@ asmlinkage unsigned long osf_getsysinfo(unsigned long op, void *buffer,
 					unsigned long nbytes,
 					int *start, void *arg)
 {
-	extern unsigned long rdfpcr(void);
 	unsigned long w;
 
 	switch (op) {
 	case GSI_IEEE_FP_CONTROL:
-		/* build and return current fp control word: */
-		w = current->tss.flags & IEEE_TRAP_ENABLE_MASK;
-		w |= ((rdfpcr() >> 52) << 17) & IEEE_STATUS_MASK;
+		/* Return current software fp control & status bits.  */
+		w = current->tss.flags & IEEE_SW_MASK;
 		if (put_user(w, (unsigned long *) buffer))
 			return -EFAULT;
 		return 0;
@@ -883,16 +881,32 @@ asmlinkage unsigned long osf_setsysinfo(unsigned long op, void *buffer,
 					unsigned long nbytes,
 					int *start, void *arg)
 {
-	unsigned long v, w, i;
-
 	switch (op) {
-	case SSI_IEEE_FP_CONTROL:
-		/* update trap enable bits: */
-		if (get_user(w, (unsigned long *) buffer))
+	case SSI_IEEE_FP_CONTROL: {
+		unsigned long swcr, fpcr;
+
+		/* 
+		 * Alpha Architecture Handbook 4.7.7.3:
+		 * To be fully IEEE compiant, we must track the current IEEE
+		 * exception state in software, because spurrious bits can be
+		 * set in the trap shadow of a software-complete insn.
+		 */
+
+		/* Update softare trap enable bits.  */
+		if (get_user(swcr, (unsigned long *)buffer))
 			return -EFAULT;
-		current->tss.flags &= ~IEEE_TRAP_ENABLE_MASK;
-		current->tss.flags |= (w & IEEE_TRAP_ENABLE_MASK);
+		current->tss.flags &= ~IEEE_SW_MASK;
+		current->tss.flags |= swcr & IEEE_SW_MASK;
+
+		/* Update the real fpcr.  For exceptions that are disabled in
+		   software but have not been seen, enable the exception in
+		   hardware so that we can update our software status mask.  */
+		fpcr = rdfpcr() & (~FPCR_MASK | FPCR_DYN_MASK);
+		fpcr = ieee_swcr_to_fpcr(swcr | (~swcr & IEEE_STATUS_MASK)>>16);
+		wrfpcr(fpcr);
+		   
 		return 0;
+	}
 
 	case SSI_IEEE_STATE_AT_SIGNAL:
 	case SSI_IEEE_IGNORE_STATE_AT_SIGNAL:
@@ -903,7 +917,9 @@ asmlinkage unsigned long osf_setsysinfo(unsigned long op, void *buffer,
 		 */
 		break;
 
- 	case SSI_NVPAIRS:
+ 	case SSI_NVPAIRS: {
+		unsigned long v, w, i;
+		
  		for (i = 0; i < nbytes; ++i) {
  			if (get_user(v, 2*i + (unsigned int *)buffer))
  				return -EFAULT;
@@ -922,6 +938,7 @@ asmlinkage unsigned long osf_setsysinfo(unsigned long op, void *buffer,
  			}
  		}
  		return 0;
+	}
  
 	default:
 		break;

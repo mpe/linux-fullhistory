@@ -96,7 +96,7 @@ int umsdos_rlookup_x(
 		&& dir == dir->i_sb->s_mounted
 		&& dir == pseudo_root->i_sb->s_mounted){
 		*result = pseudo_root;
-		pseudo_root->i_count++;
+		atomic_inc(&pseudo_root->i_count);
 		ret = 0;
 		/* #Specification: pseudo root / DOS/..
 			In the real root directory (c:\), the directory ..
@@ -165,17 +165,18 @@ static int UMSDOS_rrmdir (
 		ret = -EPERM;
 	}else{
 		umsdos_lockcreate (dir);
-		dir->i_count++;
+		atomic_inc(&dir->i_count);
 		ret = msdos_rmdir (dir,name,len);
 		if (ret == -ENOTEMPTY){
 			struct inode *sdir;
-			dir->i_count++;
+			atomic_inc(&dir->i_count);
 			ret = UMSDOS_rlookup (dir,name,len,&sdir);
 			PRINTK (("rrmdir lookup %d ",ret));
 			if (ret == 0){
 				int empty;
 				if ((empty = umsdos_isempty (sdir)) != 0){
-					PRINTK (("isempty %d i_count %d ",empty,sdir->i_count));
+					PRINTK (("isempty %d i_count %d ",empty,
+						 atomic_read(&sdir->i_count)));
 					if (empty == 2){
 						/*
 							Not a Umsdos directory, so the previous msdos_rmdir
@@ -188,7 +189,7 @@ static int UMSDOS_rrmdir (
 							,UMSDOS_EMD_NAMELEN);
 						sdir = NULL;
 						if (ret == 0){
-							dir->i_count++;
+							atomic_inc(&dir->i_count);
 							ret = msdos_rmdir (dir,name,len);
 						}
 					}
@@ -260,7 +261,6 @@ struct inode_operations umsdos_rdir_inode_operations = {
 	NULL,				/* mknod */
 	msdos_rename,		/* rename */
 	NULL,				/* readlink */
-	NULL,				/* follow_link */
 	NULL,				/* readpage */
 	NULL,				/* writepage */
 	NULL,				/* bmap */

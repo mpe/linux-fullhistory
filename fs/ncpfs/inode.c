@@ -406,9 +406,11 @@ int ncp_malloced;
 int ncp_current_malloced;
 #endif
 
-static struct file_system_type ncp_fs_type =
-{
-	ncp_read_super, "ncpfs", 0, NULL
+static struct file_system_type ncp_fs_type = {
+	"ncpfs",
+	FS_NO_DCACHE,
+        ncp_read_super,
+	NULL
 };
 
 __initfunc(int init_ncp_fs(void))

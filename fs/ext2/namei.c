@@ -172,27 +172,12 @@ int ext2_lookup (struct inode * dir, const char * name, int len,
 		iput (dir);
 		return -ENAMETOOLONG;
 	}
-	if (dcache_lookup(dir, name, len, &ino)) {
-		if (!ino) {
-			iput(dir);
-			return -ENOENT;
-		}
-		if (!(*result = iget (dir->i_sb, ino))) {
-			iput (dir);
-			return -EACCES;
-		}
-		iput (dir);
-		return 0;
-	}
 	ino = dir->i_version;
 	if (!(bh = ext2_find_entry (dir, name, len, &de))) {
-		if (ino == dir->i_version)
-			dcache_add(dir, name, len, 0);
 		iput (dir);
 		return -ENOENT;
 	}
 	ino = le32_to_cpu(de->inode);
-	dcache_add(dir, name, len, ino);
 	brelse (bh);
 	if (!(*result = iget (dir->i_sb, ino))) {
 		iput (dir);
@@ -391,7 +376,6 @@ int ext2_create (struct inode * dir,const char * name, int len, int mode,
 	}
 	de->inode = cpu_to_le32(inode->i_ino);
 	dir->i_version = ++event;
-	dcache_add(dir, de->name, le16_to_cpu(de->name_len), le32_to_cpu(de->inode));
 	mark_buffer_dirty(bh, 1);
 	if (IS_SYNC(dir)) {
 		ll_rw_block (WRITE, 1, &bh);
@@ -460,7 +444,6 @@ int ext2_mknod (struct inode * dir, const char * name, int len, int mode,
 	}
 	de->inode = cpu_to_le32(inode->i_ino);
 	dir->i_version = ++event;
-	dcache_add(dir, de->name, le16_to_cpu(de->name_len), le32_to_cpu(de->inode));
 	mark_buffer_dirty(bh, 1);
 	if (IS_SYNC(dir)) {
 		ll_rw_block (WRITE, 1, &bh);
@@ -538,7 +521,6 @@ int ext2_mkdir (struct inode * dir, const char * name, int len, int mode)
 	}
 	de->inode = cpu_to_le32(inode->i_ino);
 	dir->i_version = ++event;
-	dcache_add(dir, de->name, le16_to_cpu(de->name_len), le32_to_cpu(de->inode));
 	mark_buffer_dirty(bh, 1);
 	if (IS_SYNC(dir)) {
 		ll_rw_block (WRITE, 1, &bh);
@@ -662,7 +644,7 @@ repeat:
 	else if (le32_to_cpu(de->inode) != inode->i_ino)
 		retval = -ENOENT;
 	else {
-		if (inode->i_count > 1) {
+		if (atomic_read(&inode->i_count) > 1) {
 		/*
 		 * Are we deleting the last instance of a busy directory?
 		 * Better clean up if so.
@@ -836,7 +818,6 @@ int ext2_symlink (struct inode * dir, const char * name, int len,
 	}
 	de->inode = cpu_to_le32(inode->i_ino);
 	dir->i_version = ++event;
-	dcache_add(dir, de->name, le16_to_cpu(de->name_len), le32_to_cpu(de->inode));
 	mark_buffer_dirty(bh, 1);
 	if (IS_SYNC(dir)) {
 		ll_rw_block (WRITE, 1, &bh);
@@ -885,7 +866,6 @@ int ext2_link (struct inode * oldinode, struct inode * dir,
 	}
 	de->inode = cpu_to_le32(oldinode->i_ino);
 	dir->i_version = ++event;
-	dcache_add(dir, de->name, le16_to_cpu(de->name_len), le32_to_cpu(de->inode));
 	mark_buffer_dirty(bh, 1);
 	if (IS_SYNC(dir)) {
 		ll_rw_block (WRITE, 1, &bh);
@@ -905,7 +885,7 @@ static int subdir (struct inode * new_inode, struct inode * old_inode)
 	int ino;
 	int result;
 
-	new_inode->i_count++;
+	atomic_inc(&new_inode->i_count);
 	result = 0;
 	for (;;) {
 		if (new_inode == old_inode) {
@@ -945,8 +925,7 @@ static int subdir (struct inode * new_inode, struct inode * old_inode)
  */
 static int do_ext2_rename (struct inode * old_dir, const char * old_name,
 			   int old_len, struct inode * new_dir,
-			   const char * new_name, int new_len,
-			   int must_be_dir)
+			   const char * new_name, int new_len)
 {
 	struct inode * old_inode, * new_inode;
 	struct buffer_head * old_bh, * new_bh, * dir_bh;
@@ -981,8 +960,6 @@ start_up:
 	old_inode = __iget (old_dir->i_sb, le32_to_cpu(old_de->inode), 0); /* don't cross mnt-points */
 	if (!old_inode)
 		goto end_rename;
-	if (must_be_dir && !S_ISDIR(old_inode->i_mode))
-		goto end_rename;
 	retval = -EPERM;
 	if ((old_dir->i_mode & S_ISVTX) && 
 	    current->fsuid != old_inode->i_uid &&
@@ -1016,7 +993,7 @@ start_up:
 		if (!empty_dir (new_inode))
 			goto end_rename;
 		retval = -EBUSY;
-		if (new_inode->i_count > 1)
+		if (atomic_read(&new_inode->i_count) > 1)
 			goto end_rename;
 	}
 	retval = -EPERM;
@@ -1059,7 +1036,6 @@ start_up:
 	 * ok, that's it
 	 */
 	new_de->inode = le32_to_cpu(old_inode->i_ino);
-	dcache_add(new_dir, new_de->name, le16_to_cpu(new_de->name_len), le32_to_cpu(new_de->inode));
 	retval = ext2_delete_entry (old_de, old_bh);
 	if (retval == -ENOENT)
 		goto try_again;
@@ -1075,7 +1051,6 @@ start_up:
 	old_dir->i_dirt = 1;
 	if (dir_bh) {
 		PARENT_INO(dir_bh->b_data) = le32_to_cpu(new_dir->i_ino);
-		dcache_add(old_inode, "..", 2, new_dir->i_ino);
 		mark_buffer_dirty(dir_bh, 1);
 		old_dir->i_nlink--;
 		old_dir->i_dirt = 1;
@@ -1123,8 +1098,7 @@ end_rename:
  * on the same file system
  */
 int ext2_rename (struct inode * old_dir, const char * old_name, int old_len,
-		 struct inode * new_dir, const char * new_name, int new_len,
-		 int must_be_dir)
+		 struct inode * new_dir, const char * new_name, int new_len)
 {
 	int result;
 
@@ -1132,7 +1106,7 @@ int ext2_rename (struct inode * old_dir, const char * old_name, int old_len,
 		sleep_on (&old_dir->i_sb->u.ext2_sb.s_rename_wait);
 	old_dir->i_sb->u.ext2_sb.s_rename_lock = 1;
 	result = do_ext2_rename (old_dir, old_name, old_len, new_dir,
-				 new_name, new_len, must_be_dir);
+				 new_name, new_len);
 	old_dir->i_sb->u.ext2_sb.s_rename_lock = 0;
 	wake_up (&old_dir->i_sb->u.ext2_sb.s_rename_wait);
 	return result;

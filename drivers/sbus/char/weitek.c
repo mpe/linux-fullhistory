@@ -1,4 +1,4 @@
-/* $Id: weitek.c,v 1.9 1997/04/14 17:04:57 jj Exp $
+/* $Id: weitek.c,v 1.12 1997/06/04 08:27:34 davem Exp $
  * weitek.c: Tadpole P9100/P9000 console driver
  *
  * Copyright (C) 1996 David Redman (djhr@tadpole.co.uk)
@@ -15,9 +15,10 @@
 #include <asm/fbio.h>
 #include <asm/pgtable.h>
 
-#include "../../char/vt_kern.h"
-#include "../../char/selection.h"
-#include "../../char/console_struct.h"
+/* These must be included after asm/fbio.h */
+#include <linux/vt_kern.h>
+#include <linux/selection.h>
+#include <linux/console_struct.h>
 #include "fb.h"
 #include "cg_common.h"
 
@@ -82,7 +83,7 @@ weitek_mmap(struct inode *inode, struct file *file, struct vm_area_struct *vma,
 		page += map_size;
 	}
 	vma->vm_inode = inode;
-	inode->i_count++;
+	atomic_inc(&inode->i_count);
 	return 0;
 }
 #endif

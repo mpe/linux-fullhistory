@@ -1,4 +1,4 @@
-/*  $Id: signal32.c,v 1.10 1997/05/27 06:28:07 davem Exp $
+/*  $Id: signal32.c,v 1.13 1997/06/01 05:46:09 davem Exp $
  *  arch/sparc64/kernel/signal32.c
  *
  *  Copyright (C) 1991, 1992  Linus Torvalds
@@ -139,35 +139,51 @@ restore_fpu_state32(struct pt_regs *regs, __siginfo_fpu32_t *fpu)
 void do_new_sigreturn32(struct pt_regs *regs)
 {
 	struct new_signal_frame32 *sf;
-	unsigned int psr, i;
+	unsigned int psr;
 	unsigned pc, npc, fpu_save, mask;
 	
 	sf = (struct new_signal_frame32 *) regs->u_regs [UREG_FP];
+
 	/* 1. Make sure we are not getting garbage from the user */
-	if (verify_area (VERIFY_READ, sf, sizeof (*sf))){
+	if (verify_area (VERIFY_READ, sf, sizeof (*sf))	||
+	    (((unsigned long) sf) & 3))
 		goto segv;
-	}
-	if (((unsigned long) sf) & 3){
-		goto segv;
-	}
+
 	get_user(pc, &sf->info.si_regs.pc);
 	__get_user(npc, &sf->info.si_regs.npc);
-	if ((pc | npc) & 3){
+
+	if ((pc | npc) & 3)
 		goto segv;
-	}
+
 	regs->tpc = pc;
 	regs->tnpc = npc;
 
 	/* 2. Restore the state */
 	__get_user(regs->y, &sf->info.si_regs.y);
 	__get_user(psr, &sf->info.si_regs.psr);
-	for (i = 0; i < 16; i++)
-		__get_user(regs->u_regs[i], &sf->info.si_regs.u_regs[i]);
+
+	__get_user(regs->u_regs[UREG_G1], &sf->info.si_regs.u_regs[UREG_G1]);
+	__get_user(regs->u_regs[UREG_G2], &sf->info.si_regs.u_regs[UREG_G2]);
+	__get_user(regs->u_regs[UREG_G3], &sf->info.si_regs.u_regs[UREG_G3]);
+	__get_user(regs->u_regs[UREG_G4], &sf->info.si_regs.u_regs[UREG_G4]);
+	__get_user(regs->u_regs[UREG_G5], &sf->info.si_regs.u_regs[UREG_G5]);
+	__get_user(regs->u_regs[UREG_G6], &sf->info.si_regs.u_regs[UREG_G6]);
+	__get_user(regs->u_regs[UREG_G7], &sf->info.si_regs.u_regs[UREG_G7]);
+	__get_user(regs->u_regs[UREG_I0], &sf->info.si_regs.u_regs[UREG_I0]);
+	__get_user(regs->u_regs[UREG_I1], &sf->info.si_regs.u_regs[UREG_I1]);
+	__get_user(regs->u_regs[UREG_I2], &sf->info.si_regs.u_regs[UREG_I2]);
+	__get_user(regs->u_regs[UREG_I3], &sf->info.si_regs.u_regs[UREG_I3]);
+	__get_user(regs->u_regs[UREG_I4], &sf->info.si_regs.u_regs[UREG_I4]);
+	__get_user(regs->u_regs[UREG_I5], &sf->info.si_regs.u_regs[UREG_I5]);
+	__get_user(regs->u_regs[UREG_I6], &sf->info.si_regs.u_regs[UREG_I6]);
+	__get_user(regs->u_regs[UREG_I7], &sf->info.si_regs.u_regs[UREG_I7]);
 
 	/* User can only change condition codes and FPU enabling in %tstate. */
 	regs->tstate &= ~(TSTATE_ICC | TSTATE_PEF);
 	regs->tstate |= psr_to_tstate_icc(psr);
-	if (psr & PSR_EF) regs->tstate |= TSTATE_PEF;
+
+	if (psr & PSR_EF)
+		regs->tstate |= TSTATE_PEF;
 
 	__get_user(fpu_save, &sf->fpu_save);
 	if (fpu_save)
@@ -193,11 +209,12 @@ asmlinkage void do_sigreturn32(struct pt_regs *regs)
 	scptr = (struct sigcontext32 *) regs->u_regs[UREG_I0];
 	/* Check sanity of the user arg. */
 	if(verify_area(VERIFY_READ, scptr, sizeof(struct sigcontext32)) ||
-	   (((unsigned long) scptr) & 3)) {
+	   (((unsigned long) scptr) & 3))
 		goto segv;
-	}
+
 	__get_user(pc, &scptr->sigc_pc);
 	__get_user(npc, &scptr->sigc_npc);
+
 	if((pc | npc) & 3)
 		goto segv; /* Nice try. */
 
@@ -241,7 +258,6 @@ setup_frame32(struct sigaction *sa, unsigned long pc, unsigned long npc,
 	int old_status = current->tss.sstk_info.cur_status;
 	unsigned psr;
 	int i;
-	u32 temp;
 
 	synchronize_user_stack();
 	sframep = (struct signal_sframe32 *) regs->u_regs[UREG_FP];
@@ -285,7 +301,10 @@ setup_frame32(struct sigaction *sa, unsigned long pc, unsigned long npc,
 		}
 	else
 #endif	
+		/* XXX Perhaps we need a copy_in_user()? -DaveM */
 		for (i = 0; i < 16; i++) {
+			u32 temp;
+
 			get_user (temp, (((u32 *)(regs->u_regs[UREG_FP]))+i));
 			put_user (temp, (((u32 *)sframep)+i));
 		}
@@ -315,13 +334,17 @@ save_fpu_state32(struct pt_regs *regs, __siginfo_fpu32_t *fpu)
 {
 #ifdef __SMP__
 	if (current->flags & PF_USEDFPU) {
-		fpsave32(&current->tss.float_regs[0], &current->tss.fsr);
+		fprs_write(FPRS_FEF);
+		fpsave32((unsigned long *)&current->tss.float_regs[0],
+			 &current->tss.fsr);
 		regs->tstate &= ~(TSTATE_PEF);
 		current->flags &= ~(PF_USEDFPU);
 	}
 #else
 	if (current == last_task_used_math) {
-		fpsave32((unsigned long *)&current->tss.float_regs[0], &current->tss.fsr);
+		fprs_write(FPRS_FEF);
+		fpsave32((unsigned long *)&current->tss.float_regs[0],
+			 &current->tss.fsr);
 		last_task_used_math = 0;
 		regs->tstate &= ~(TSTATE_PEF);
 	}
@@ -338,7 +361,7 @@ new_setup_frame32(struct sigaction *sa, struct pt_regs *regs,
 {
 	struct new_signal_frame32 *sf;
 	int sigframe_size;
-	u32 psr, tmp;
+	u32 psr;
 	int i;
 
 	/* 1. Make sure everything is clean */
@@ -349,12 +372,12 @@ new_setup_frame32(struct sigaction *sa, struct pt_regs *regs,
 
 	sf = (struct new_signal_frame32 *)(regs->u_regs[UREG_FP] - sigframe_size);
 	
-	if (invalid_frame_pointer (sf, sigframe_size)){
+	if (invalid_frame_pointer (sf, sigframe_size)) {
 		lock_kernel ();
 		do_exit(SIGILL);
 	}
 
-	if (current->tss.w_saved != 0){
+	if (current->tss.w_saved != 0) {
 		printk ("%s[%d]: Invalid user stack frame for "
 			"signal delivery.\n", current->comm, current->pid);
 		lock_kernel ();
@@ -378,7 +401,11 @@ new_setup_frame32(struct sigaction *sa, struct pt_regs *regs,
 	}
 
 	__put_user(oldmask, &sf->info.si_mask);
+
+	/* XXX Perhaps we need a copy_in_user()? -DaveM */
 	for (i = 0; i < sizeof(struct reg_window32)/4; i++) {
+		u32 tmp;
+
 		__get_user(tmp, (((u32 *)regs->u_regs[UREG_FP])+i));
 		__put_user(tmp, (((u32 *)sf)+i));
 	}

@@ -105,7 +105,7 @@ int fat_mmap(struct inode * inode, struct file * file, struct vm_area_struct * v
 	}
 
 	vma->vm_inode = inode;
-	inode->i_count++;
+	atomic_inc(&inode->i_count);
 	vma->vm_ops = &fat_file_mmap;
 	return 0;
 }

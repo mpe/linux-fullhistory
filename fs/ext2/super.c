@@ -319,6 +319,13 @@ static void ext2_setup_super (struct super_block * sb,
 			ext2_check_inodes_bitmap (sb);
 		}
 	}
+#if 0 /* ibasket's still have unresolved bugs... -DaveM */
+
+	/* [T. Schoebel-Theuer] This limit should be maintained on disk.
+	 * This is just provisionary.
+	 */
+	sb->s_ibasket_max = 100;
+#endif
 }
 
 static int ext2_check_descriptors (struct super_block * sb)
@@ -728,7 +735,10 @@ int ext2_remount (struct super_block * sb, int * flags, char * data)
 }
 
 static struct file_system_type ext2_fs_type = {
-        ext2_read_super, "ext2", 1, NULL
+	"ext2", 
+	FS_REQUIRES_DEV /* | FS_IBASKET */,	/* ibaskets have unresolved bugs */
+        ext2_read_super, 
+	NULL
 };
 
 __initfunc(int init_ext2_fs(void))

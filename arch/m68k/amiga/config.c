@@ -78,6 +78,7 @@ static void amiga_wait_key(void);
 extern struct consw fb_con;
 extern struct fb_info *amiga_fb_init(long *);
 extern void zorro_init(void);
+extern void amiga_init_sound(void);
 static void amiga_savekmsg_init(void);
 static void amiga_mem_console_write(const char *b, unsigned int count);
 static void amiga_serial_console_write(const char *s, unsigned int count);

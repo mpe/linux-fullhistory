@@ -17,6 +17,8 @@
 #define ATADDR_BCAST	(__u8)255
 #define DDP_MAXSZ	587
 
+#define SIOCATALKDIFADDR       (SIOCPROTOPRIVATE + 0)
+
 struct at_addr 
 {
 	__u16	s_net;

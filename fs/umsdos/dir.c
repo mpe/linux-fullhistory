@@ -565,7 +565,7 @@ int umsdos_locate_path (
 				}
 			}
 		}else{
-			dir->i_count++;
+			atomic_inc(&dir->i_count);
 		}
 		if (ret == 0){
 			while (dir != dir->i_sb->s_mounted){
@@ -628,7 +628,7 @@ static int umsdos_lookup_x (
 	umsdos_startlookup(dir);	
 	if (len == 1 && name[0] == '.'){
 		*result = dir;
-		dir->i_count++;
+		atomic_inc(&dir->i_count);
 		ret = 0;
 	}else if (len == 2 && name[0] == '.' && name[1] == '.'){
 		if (pseudo_root != NULL && dir == pseudo_root->i_sb->s_mounted){
@@ -639,7 +639,7 @@ static int umsdos_lookup_x (
 			*/
 			ret = 0;
 			*result = pseudo_root;
-			pseudo_root->i_count++;
+			atomic_inc(&pseudo_root->i_count);
 		}else{
 			/* #Specification: locating .. / strategy
 				We use the msdos filesystem to locate the parent directory.
@@ -668,7 +668,7 @@ static int umsdos_lookup_x (
 			and return the inode of the real root.
 		*/
 		*result = dir->i_sb->s_mounted;
-		(*result)->i_count++;
+		atomic_inc(&((*result)->i_count));
 		ret = 0;
 	}else{
 		struct umsdos_info info;
@@ -757,7 +757,7 @@ int umsdos_hlink2inode (struct inode *hlink, struct inode **result)
 			dir = hlink->i_sb->s_mounted;
 			path[hlink->i_size] = '\0';
 			iput (hlink);
-			dir->i_count++;
+			atomic_inc(&dir->i_count);
 			while (1){
 				char *start = pt;
 				int len;
@@ -811,7 +811,6 @@ struct inode_operations umsdos_dir_inode_operations = {
 	UMSDOS_mknod,		/* mknod */
 	UMSDOS_rename,		/* rename */
 	NULL,			/* readlink */
-	NULL,			/* follow_link */
 	NULL,			/* readpage */
 	NULL,			/* writepage */
 	NULL,			/* bmap */

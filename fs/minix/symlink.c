@@ -15,7 +15,6 @@
 #include <asm/uaccess.h>
 
 static int minix_readlink(struct inode *, char *, int);
-static int minix_follow_link(struct inode *, struct inode *, int, int, struct inode **);
 
 /*
  * symlinks can't do much...
@@ -32,7 +31,6 @@ struct inode_operations minix_symlink_inode_operations = {
 	NULL,			/* mknod */
 	NULL,			/* rename */
 	minix_readlink,		/* readlink */
-	minix_follow_link,	/* follow_link */
 	NULL,			/* readpage */
 	NULL,			/* writepage */
 	NULL,			/* bmap */
@@ -40,54 +38,12 @@ struct inode_operations minix_symlink_inode_operations = {
 	NULL			/* permission */
 };
 
-static int minix_follow_link(struct inode * dir, struct inode * inode,
-	int flag, int mode, struct inode ** res_inode)
-{
-	int error;
-	struct buffer_head * bh;
-
-	*res_inode = NULL;
-	if (!dir) {
-		dir = current->fs->root;
-		dir->i_count++;
-	}
-	if (!inode) {
-		iput(dir);
-		return -ENOENT;
-	}
-	if (!S_ISLNK(inode->i_mode)) {
-		iput(dir);
-		*res_inode = inode;
-		return 0;
-	}
-	if (current->link_count > 5) {
-		iput(inode);
-		iput(dir);
-		return -ELOOP;
-	}
-	if (!(bh = minix_bread(inode, 0, 0))) {
-		iput(inode);
-		iput(dir);
-		return -EIO;
-	}
-	iput(inode);
-	current->link_count++;
-	error = open_namei(bh->b_data,flag,mode,res_inode,dir);
-	current->link_count--;
-	brelse(bh);
-	return error;
-}
-
 static int minix_readlink(struct inode * inode, char * buffer, int buflen)
 {
 	struct buffer_head * bh;
 	int i;
 	char c;
 
-	if (!S_ISLNK(inode->i_mode)) {
-		iput(inode);
-		return -EINVAL;
-	}
 	if (buflen > 1023)
 		buflen = 1023;
 	bh = minix_bread(inode, 0, 0);

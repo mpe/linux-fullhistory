@@ -912,7 +912,10 @@ void leak_check_brelse(struct buffer_head * bh){
 #endif
 
 static struct file_system_type iso9660_fs_type = {
-	isofs_read_super, "iso9660", 1, NULL
+	"iso9660",
+	FS_REQUIRES_DEV,
+	isofs_read_super, 
+	NULL
 };
 
 __initfunc(int init_iso9660_fs(void))

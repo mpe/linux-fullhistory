@@ -35,7 +35,7 @@ static void copro_timeout(void)
 	fpu_error = 1;
 	timer_table[COPRO_TIMER].expires = jiffies+100;
 	timer_active |= 1<<COPRO_TIMER;
-	printk("387 failed: trying to reset\n");
+	printk(KERN_ERR "387 failed: trying to reset\n");
 	send_sig(SIGFPE, last_task_used_math, 1);
 	outb_p(0,0xf1);
 	outb_p(0,0xf0);
@@ -49,8 +49,8 @@ static void check_fpu(void)
 
 	if (!hard_math) {
 #ifndef CONFIG_MATH_EMULATION
-		printk("No coprocessor found and no math emulation present.\n");
-		printk("Giving up.\n");
+		printk(KERN_EMERG "No coprocessor found and no math emulation present.\n");
+		printk(KERN_EMERG "Giving up.\n");
 		for (;;) ;
 #endif
 		return;
@@ -64,7 +64,7 @@ static void check_fpu(void)
 	 * So the irq13 will happen eventually, but the exception 16
 	 * should get there first..
 	 */
-	printk("Checking 386/387 coupling... ");
+	printk(KERN_INFO "Checking 386/387 coupling... ");
 	timer_table[COPRO_TIMER].expires = jiffies+50;
 	timer_table[COPRO_TIMER].fn = copro_timeout;
 	timer_active |= 1<<COPRO_TIMER;
@@ -101,7 +101,7 @@ static void check_fpu(void)
 
 static void check_hlt(void)
 {
-	printk("Checking 'hlt' instruction... ");
+	printk(KERN_INFO "Checking 'hlt' instruction... ");
 	if (!hlt_works_ok) {
 		printk("disabled\n");
 		return;
@@ -118,7 +118,7 @@ static void check_tlb(void)
 	 * They will fault when they hit an invlpg instruction.
 	 */
 	if (x86 == 3) {
-		printk("CPU is a 386 and this kernel was compiled for 486 or better.\n");
+		printk(KERN_EMERG "CPU is a 386 and this kernel was compiled for 486 or better.\n");
 		printk("Giving up.\n");
 		for (;;) ;
 	}

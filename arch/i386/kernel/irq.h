@@ -9,24 +9,10 @@
 
 #ifdef __SMP__
 
-#undef INIT_STUCK
-#define INIT_STUCK 200000000
-
-#undef STUCK
-#define STUCK \
-if (!--stuck) {printk("irq_enter stuck (irq=%d, cpu=%d, global=%d)\n",irq,cpu,global_irq_holder); stuck = INIT_STUCK;}
-
 static inline void irq_enter(int cpu, int irq)
 {
-	int stuck = INIT_STUCK;
-
 	hardirq_enter(cpu);
 	while (test_bit(0,&global_irq_lock)) {
-		if ((unsigned char) cpu == global_irq_holder) {
-			printk("BAD! Local interrupts enabled, global disabled\n");
-			break;
-		}
-		STUCK;
 		/* nothing */;
 	}
 }

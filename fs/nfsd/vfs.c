@@ -39,9 +39,6 @@
 
 #define NFSDDBG_FACILITY		NFSDDBG_FILEOP
 
-/* Symbol not exported */
-static struct super_block *get_super(dev_t dev);
-
 /* Open mode for nfsd_open */
 #define OPEN_READ	0
 #define OPEN_WRITE	1
@@ -123,13 +120,13 @@ nfsd_lookup(struct svc_rqst *rqstp, struct svc_fh *fhp, const char *name,
 	dotdot = (len == 2 && name[0] == '.' && name[1] == '.');
 	if (dotdot) {
 		if (dirp == current->fs->root) {
-			dirp->i_count++;
+			atomic_inc(&dirp->i_count);
 			*resfh = *fhp;
 			return 0;
 		}
 
 		if (dirp->i_dev == exp->ex_dev && dirp->i_ino == exp->ex_ino) {
-			dirp->i_count++;
+			atomic_inc(&dirp->i_count);
 			*resfh = *fhp;
 			return 0;
 		}
@@ -147,12 +144,12 @@ nfsd_lookup(struct svc_rqst *rqstp, struct svc_fh *fhp, const char *name,
  	if (perm != 0)
 		return perm;
 	if (!len) {
-		dirp->i_count++;
+		atomic_inc(&dirp->i_count);
 		*resfh = *fhp;
 		return 0;
 	}
 
-	dirp->i_count++;		/* lookup eats the dirp inode */
+	atomic_inc(&dirp->i_count);		/* lookup eats the dirp inode */
 	err = dirp->i_op->lookup(dirp, name, len, &inode);
 
 	if (err)
@@ -165,7 +162,7 @@ nfsd_lookup(struct svc_rqst *rqstp, struct svc_fh *fhp, const char *name,
 	if (!dotdot && (sb = inode->i_sb) && (inode == sb->s_mounted)) {
 		iput(inode);
 		inode = sb->s_covered;
-		inode->i_count++;
+		atomic_inc(&inode->i_count);
 	}
 
 	fh_compose(resfh, exp, inode);
@@ -294,7 +291,7 @@ nfsd_open(struct svc_rqst *rqstp, struct svc_fh *fhp, int type,
 		}
 	}
 
-	inode->i_count++;
+	atomic_inc(&inode->i_count);
 	return 0;
 }
 
@@ -307,7 +304,7 @@ nfsd_close(struct file *filp)
 	struct inode	*inode;
 
 	inode = filp->f_inode;
-	if (!inode->i_count)
+	if (!atomic_read(&inode->i_count))
 		printk(KERN_WARNING "nfsd: inode count == 0!\n");
 	if (filp->f_op && filp->f_op->release)
 		filp->f_op->release(inode, filp);
@@ -536,7 +533,7 @@ nfsd_create(struct svc_rqst *rqstp, struct svc_fh *fhp,
 
 	fh_lock(fhp);			/* lock directory */
 	dirp = fhp->fh_inode;
-	dirp->i_count++;		/* dirop eats the inode */
+	atomic_inc(&dirp->i_count);	/* dirop eats the inode */
 
 	switch (type) {
 	case S_IFREG:
@@ -571,7 +568,7 @@ nfsd_create(struct svc_rqst *rqstp, struct svc_fh *fhp,
 	 * If the VFS call doesn't return the inode, look it up now.
 	 */
 	if (inode == NULL) {
-		dirp->i_count++;
+		atomic_inc(&dirp->i_count);
 		err = dirp->i_op->lookup(dirp, fname, flen, &inode);
 		if (err < 0)
 			return -nfserrno(err);	/* Huh?! */
@@ -646,7 +643,7 @@ nfsd_readlink(struct svc_rqst *rqstp, struct svc_fh *fhp, char *buf, int *lenp)
 	if (!inode->i_op || !inode->i_op->readlink)
 		return nfserr_io;
 
-	inode->i_count++;
+	atomic_inc(&inode->i_count);
 	oldfs = get_fs(); set_fs(KERNEL_DS);
 	err = inode->i_op->readlink(inode, buf, *lenp);
 	set_fs(oldfs);
@@ -683,7 +680,7 @@ nfsd_symlink(struct svc_rqst *rqstp, struct svc_fh *fhp,
 		return nfserr_perm;
 
 	fh_lock(fhp);			/* lock inode */
-	dirp->i_count++;
+	atomic_inc(&dirp->i_count);
 	err = dirp->i_op->symlink(dirp, fname, flen, path);
 	fh_unlock(fhp);			/* unlock inode */
 
@@ -696,7 +693,7 @@ nfsd_symlink(struct svc_rqst *rqstp, struct svc_fh *fhp,
 	/*
 	 * Okay, now look up the inode of the new symlink.
 	 */
-	dirp->i_count++;		/* lookup eats the dirp inode */
+	atomic_inc(&dirp->i_count);	/* lookup eats the dirp inode */
 	err = dirp->i_op->lookup(dirp, fname, flen, &inode);
 	if (err)
 		return nfserrno(-err);
@@ -733,7 +730,7 @@ nfsd_link(struct svc_rqst *rqstp, struct svc_fh *ffhp,
 		return nfserr_perm;
 
 	fh_lock(ffhp);			/* lock directory inode */
-	dirp->i_count++;
+	atomic_inc(&dirp->i_count);
 	err = dirp->i_op->link(dest, dirp, fname, len);
 	fh_unlock(ffhp);		/* unlock inode */
 
@@ -773,9 +770,9 @@ nfsd_rename(struct svc_rqst *rqstp, struct svc_fh *ffhp, char *fname, int flen,
 		return nfserr_perm;
 
 	fh_lock(tfhp);			/* lock destination directory */
-	tdir->i_count++;
-	fdir->i_count++;
-	err = fdir->i_op->rename(fdir, fname, flen, tdir, tname, tlen, 0);
+	atomic_inc(&tdir->i_count);
+	atomic_inc(&fdir->i_count);
+	err = fdir->i_op->rename(fdir, fname, flen, tdir, tname, tlen);
 	fh_unlock(tfhp);		/* unlock inode */
 
 	if (!err && EX_ISSYNC(tfhp->fh_export)) {
@@ -808,12 +805,12 @@ nfsd_unlink(struct svc_rqst *rqstp, struct svc_fh *fhp, int type,
 	if (type == S_IFDIR) {
 		if (!dirp->i_op || !dirp->i_op->rmdir)
 			return nfserr_notdir;
-		dirp->i_count++;
+		atomic_inc(&dirp->i_count);
 		err = dirp->i_op->rmdir(dirp, fname, flen);
 	} else {	/* other than S_IFDIR */
 		if (!dirp->i_op || !dirp->i_op->unlink)
 			return nfserr_perm;
-		dirp->i_count++;
+		atomic_inc(&dirp->i_count);
 		err = dirp->i_op->unlink(dirp, fname, flen);
 	}
 
@@ -1039,26 +1036,6 @@ nfsd_parentdev(dev_t* devp)
 		return 0;
 	*devp = sb->s_covered->i_dev;
 	return 1;
-}
-
-/* Duplicated here from fs/super.c because it's not exported */
-static struct super_block *
-get_super(dev_t dev)
-{
-	struct super_block *s;
-
-	if (!dev)
-		return NULL;
-	s = 0 + super_blocks;
-	while (s < NR_SUPER + super_blocks)
-		if (s->s_dev == dev) {
-			wait_on_super(s);
-			if (s->s_dev == dev)
-				return s;
-			s = 0 + super_blocks;
-		} else
-			s++;
-	return NULL;
 }
 
 /*

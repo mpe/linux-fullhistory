@@ -57,8 +57,28 @@
 				 IEEE_STATUS_OVF | IEEE_STATUS_UNF |	\
 				 IEEE_STATUS_INE)
 
+#define IEEE_SW_MASK		(IEEE_TRAP_ENABLE_MASK | IEEE_STATUS_MASK)
+
 #define IEEE_STATUS_TO_EXCSUM_SHIFT	16
 
 #define IEEE_INHERIT    (1UL<<63)	/* inherit on thread create? */
+
+/*
+ * Convert the spftware IEEE trap enable and status bits into the
+ * hardware fpcr format.
+ */
+
+static inline unsigned long
+ieee_swcr_to_fpcr(unsigned long sw)
+{
+	unsigned long fp;
+	fp = (sw & IEEE_STATUS_MASK) << 35;
+	fp |= sw & IEEE_STATUS_MASK ? FPCR_SUM : 0;
+	fp |= (~sw & (IEEE_TRAP_ENABLE_INV
+		      | IEEE_TRAP_ENABLE_DZE
+		      | IEEE_TRAP_ENABLE_OVF)) << 48;
+	fp |= (~sw & (IEEE_TRAP_ENABLE_UNF | IEEE_TRAP_ENABLE_INE)) << 57;
+	return fp;
+}
 
 #endif /* __ASM_ALPHA_FPU_H */

@@ -1,4 +1,4 @@
-/* $Id: head.S,v 1.30 1997/05/18 22:52:12 davem Exp $
+/* $Id: head.S,v 1.31 1997/05/30 22:35:28 davem Exp $
  * head.S: Initial boot code for the Sparc64 port of Linux.
  *
  * Copyright (C) 1996,1997 David S. Miller (davem@caip.rutgers.edu)
@@ -55,7 +55,7 @@ ramdisk_image:
         .word   0
 ramdisk_size:
         .word   0
-        .word   reboot_command
+        .xword   reboot_command
 
 	/* We must be careful, 32-bit OpenBOOT will get confused if it
 	 * tries to save away a register window to a 64-bit kernel

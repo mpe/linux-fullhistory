@@ -56,7 +56,7 @@ typedef struct { } rwlock_t;
 #include <asm/psr.h>
 
 /* Define this to use the verbose/debugging versions in arch/sparc/lib/debuglocks.c */
-#define SPIN_LOCK_DEBUG
+/* #define SPIN_LOCK_DEBUG */
 
 #ifdef SPIN_LOCK_DEBUG
 struct _spinlock_debug {

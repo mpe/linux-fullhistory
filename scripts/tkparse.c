@@ -370,6 +370,11 @@ void parse(char * pnt) {
       tok = tok_hex;
       pnt += 3;
     }
+  else if (strncmp(pnt, "string", 6) == 0) 
+    {
+      tok = tok_string;
+      pnt += 6;
+    }
   else if (strncmp(pnt, "if", 2) == 0) 
     {
       tok = tok_if;
@@ -457,6 +462,7 @@ void parse(char * pnt) {
       break;
     case tok_int:
     case tok_hex:
+    case tok_string:
       pnt = get_qstring(pnt, &kcfg->label);
       pnt = get_string(pnt, &kcfg->optionname);
       pnt = get_string(pnt, &kcfg->value);
@@ -702,6 +708,9 @@ int main(int argc, char * argv[])
 	case tok_hex:
 	  printf("hex ");
 	  break;
+	case tok_string:
+	  printf("istring ");
+	  break;
 	case tok_comment:
 	  printf("comment ");
 	  break;
@@ -732,6 +741,7 @@ int main(int argc, char * argv[])
 	case tok_dep_tristate:
 	case tok_int:
 	case tok_hex:
+	case tok_string:
 	  printf("%s %s\n", cfg->label, cfg->optionname);
 	  break;
 	case tok_if:

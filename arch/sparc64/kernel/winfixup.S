@@ -1,4 +1,4 @@
-/* $Id: winfixup.S,v 1.3 1997/05/18 22:52:26 davem Exp $
+/* $Id: winfixup.S,v 1.8 1997/06/02 06:33:35 davem Exp $
  *
  * winfixup.S: Handle cases where user stack pointer is found to be bogus.
  *
@@ -10,6 +10,7 @@
 #include <asm/page.h>
 #include <asm/ptrace.h>
 #include <asm/processor.h>
+#include <asm/spitfire.h>
 #include <asm/asm_offsets.h>
 
 	.text
@@ -28,74 +29,223 @@
 	 */
 	.globl	winfix_trampoline, fill_fixup, spill_fixup
 fill_fixup:
-	ba,pt	%xcc, etrap
-	 rd	%pc, %g7
-	mov	%l5, %o4
-	mov	%l4, %o5
-	srlx	%l5, PAGE_SHIFT, %o3
-	clr	%o1
-	sllx	%o3, PAGE_SHIFT, %o3
-	and	%l4, 0x4, %o2
+	rdpr		%tstate, %g1
+	andcc		%g1, TSTATE_PRIV, %g0
+	be,pt		%xcc, window_scheisse_from_user_common
+	 and		%g1, TSTATE_CWP, %g1
 
-	call	do_sparc64_fault
-	 add	%sp, STACK_BIAS + REGWIN_SZ, %o0
-	ba,a,pt	%xcc, rtrap
+	/* This is the extremely complex case, but it does happen from
+	 * time to time if things are just right.  Essentially the restore
+	 * done in rtrap right before going back to user mode, with tl=1
+	 * and that levels trap stack registers all setup, took a fill trap,
+	 * the user stack was not mapped in the tlb, and tlb miss occurred,
+	 * the pte found was not valid, and a simple ref bit watch update
+	 * could not satisfy the miss, so we got here.
+	 *
+	 * We must carefully unwind the state so we get back to tl=0, preserve
+	 * all the register values we were going to give to the user.  Luckily
+	 * most things are where they need to be, we also have the address
+	 * which triggered the fault handy as well.
+	 *
+	 * First, get into the window where the original restore was executed.
+	 */
+
+	rdpr		%wstate, %g2			! Grab user mode wstate.
+	wrpr		%g1, %cwp			! Get into the right window.
+	sll		%g2, 3, %g2			! NORMAL-->OTHER
+	wrpr		%g0, 0x0, %canrestore		! Standard etrap stuff.
+
+	wrpr		%g2, 0x0, %wstate		! This must be consistant.
+	wrpr		%g0, 0x0, %otherwin		! We know this.
+	sethi		%uhi(KERNBASE), %g2		! Set this up
+	sllx		%g2, 32, %g2			! for the iflush
+	mov		PRIMARY_CONTEXT, %g1		! Change contexts...
+	stxa		%g0, [%g1] ASI_DMMU		! Back into the nucleus.
+	flush		%g2				! Flush instruction buffers
+	rdpr		%pstate, %l1			! Prepare to change globals.
+	mov		%g4, %o5			! Setup args for
+	mov		%g5, %o4			! final call to do_sparc64_fault.
+
+	wrpr		%g0, 0x0, %tl			! Out of trap levels.
+	wrpr		%l1, (PSTATE_IE | PSTATE_AG), %pstate
+	sethi		%uhi(KERNBASE), %g4		! Restore med-any global reg.
+	rd		%pic, %g6			! Get current as well.
+	b,pt		%xcc, window_scheisse_merge	! And merge.
+	 sllx		%g4, 32, %g4			! Finish med-any reg setup.
+
+	/* Be very careful about usage of the alternate globals here.
+	 * You cannot touch %g4/%g5 as that has the fault information
+	 * should this be from usermode.  Also be careful for the case
+	 * where we get here from the save instruction in etrap.S when
+	 * coming from either user or kernel (does not matter which, it
+	 * is the same problem in both cases).  Essentially this means
+	 * do not touch %g7 or %g2 so we handle the two cases fine.
+	 */
+spill_fixup:
+	rd		%pic, %g1
+	ldx		[%g1 + AOFF_task_tss + AOFF_thread_flags], %g6
+	andcc		%g6, SPARC_FLAG_32BIT, %g0
+	ldx		[%g1 + AOFF_task_tss + AOFF_thread_w_saved], %g6
+	sll		%g6, 3, %g3
+	add		%g1, %g3, %g3
+	stx		%sp, [%g3 + AOFF_task_tss + AOFF_thread_rwbuf_stkptrs]
+	sll		%g6, 7, %g3
+
+	bne,pt		%xcc, 1f
+	 add		%g1, %g3, %g3
+	stx		%l0, [%g3 + AOFF_task_tss + AOFF_thread_reg_window + 0x00]
+	stx		%l1, [%g3 + AOFF_task_tss + AOFF_thread_reg_window + 0x08]
+	stx		%l2, [%g3 + AOFF_task_tss + AOFF_thread_reg_window + 0x10]
+	stx		%l3, [%g3 + AOFF_task_tss + AOFF_thread_reg_window + 0x18]
+	stx		%l4, [%g3 + AOFF_task_tss + AOFF_thread_reg_window + 0x20]
+	stx		%l5, [%g3 + AOFF_task_tss + AOFF_thread_reg_window + 0x28]
+
+	stx		%l6, [%g3 + AOFF_task_tss + AOFF_thread_reg_window + 0x30]
+	stx		%l7, [%g3 + AOFF_task_tss + AOFF_thread_reg_window + 0x38]
+	stx		%i0, [%g3 + AOFF_task_tss + AOFF_thread_reg_window + 0x40]
+	stx		%i1, [%g3 + AOFF_task_tss + AOFF_thread_reg_window + 0x48]
+	stx		%i2, [%g3 + AOFF_task_tss + AOFF_thread_reg_window + 0x50]
+	stx		%i3, [%g3 + AOFF_task_tss + AOFF_thread_reg_window + 0x58]
+	stx		%i4, [%g3 + AOFF_task_tss + AOFF_thread_reg_window + 0x60]
+	stx		%i5, [%g3 + AOFF_task_tss + AOFF_thread_reg_window + 0x68]
+
+	stx		%i6, [%g3 + AOFF_task_tss + AOFF_thread_reg_window + 0x70]
+	stx		%i7, [%g3 + AOFF_task_tss + AOFF_thread_reg_window + 0x78]
+	b,pt		%xcc, 2f
+	 add		%g6, 1, %g6
+1:	std		%l0, [%g3 + AOFF_task_tss + AOFF_thread_reg_window + 0x00]
+	std		%l2, [%g3 + AOFF_task_tss + AOFF_thread_reg_window + 0x08]
+	std		%l4, [%g3 + AOFF_task_tss + AOFF_thread_reg_window + 0x10]
+	std		%l6, [%g3 + AOFF_task_tss + AOFF_thread_reg_window + 0x18]
+
+	std		%i0, [%g3 + AOFF_task_tss + AOFF_thread_reg_window + 0x20]
+	std		%i2, [%g3 + AOFF_task_tss + AOFF_thread_reg_window + 0x28]
+	std		%i4, [%g3 + AOFF_task_tss + AOFF_thread_reg_window + 0x30]
+	std		%i6, [%g3 + AOFF_task_tss + AOFF_thread_reg_window + 0x38]
+	add		%g6, 1, %g6
+2:	stx		%g6, [%g1 + AOFF_task_tss + AOFF_thread_w_saved]
+	rdpr		%tstate, %g1
 	nop
+
+	andcc		%g1, TSTATE_PRIV, %g0
+	saved
+	and		%g1, TSTATE_CWP, %g1
+	be,a,pn		%xcc, window_scheisse_from_user_common
+	 or		%g4, 0x4, %g4			! we know it was a write
+	retry
+window_scheisse_from_user_common:
+	nop
+	wrpr		%g1, %cwp
+
+	ba,pt		%xcc, etrap
+	 rd		%pc, %g7
+	mov		%l5, %o4
+	mov		%l4, %o5
+window_scheisse_merge:
+	srlx		%o4, PAGE_SHIFT, %o3
+	clr		%o1
+	sllx		%o3, PAGE_SHIFT, %o3
+	and		%o5, 0x4, %o2
+
+	call		do_sparc64_fault
+	 add		%sp, STACK_BIAS + REGWIN_SZ, %o0
+	ba,pt		%xcc, rtrap
+	 clr		%l6
 winfix_trampoline:
-	andn		%g5, 0x7f, %g5
-	add		%g5, 0x7c, %g5
-	wrpr		%g5, %tnpc
+	andn		%g3, 0x7f, %g3
+	add		%g3, 0x7c, %g3
+	wrpr		%g3, %tnpc
 	done
 
-spill_fixup:
-	rd	%pic, %g1
-	ldx	[%g1 + AOFF_task_tss + AOFF_thread_w_saved], %g2
-	sll	%g2, 3, %g5
-	ldx	[%g1 + AOFF_task_tss + AOFF_thread_flags], %g7
-	add	%g1, %g5, %g5
-	andcc	%g7, SPARC_FLAG_32BIT, %g0
-	stx	%sp, [%g5 + AOFF_task_tss + AOFF_thread_rwbuf_stkptrs]
-	sll	%g2, 5, %g5
+	.globl		winfix_mna, fill_fixup_mna, spill_fixup_mna
+winfix_mna:
+	andn		%g3, 0x7f, %g3
+	add		%g3, 0x78, %g3
+	wrpr		%g3, %tnpc
+	done
+fill_fixup_mna:
+	rdpr		%tstate, %g1
+	andcc		%g1, TSTATE_PRIV, %g0
+	be,pt		%xcc, window_mna_from_user_common
+	 and		%g1, TSTATE_CWP, %g1
+	rdpr		%wstate, %g2			! Grab user mode wstate.
+	wrpr		%g1, %cwp			! Get into the right window.
+	sll		%g2, 3, %g2			! NORMAL-->OTHER
+	wrpr		%g0, 0x0, %canrestore		! Standard etrap stuff.
+	wrpr		%g2, 0x0, %wstate		! This must be consistant.
+	wrpr		%g0, 0x0, %otherwin		! We know this.
+	sethi		%uhi(KERNBASE), %g2		! Set this up
+	sllx		%g2, 32, %g2			! for the iflush
+	mov		PRIMARY_CONTEXT, %g1		! Change contexts...
+	stxa		%g0, [%g1] ASI_DMMU		! Back into the nucleus.
+	flush		%g2				! Flush instruction buffers
+	rdpr		%pstate, %l1			! Prepare to change globals.
+	mov		%g4, %o5			! Setup args for
+	mov		%g5, %o4			! final call to do_sparc64_fault.
+	wrpr		%g0, 0x0, %tl			! Out of trap levels.
+	wrpr		%l1, (PSTATE_IE | PSTATE_AG), %pstate
+	sethi		%uhi(KERNBASE), %g4		! Restore med-any global reg.
+	rd		%pic, %g6			! Get current as well.
+	b,pt		%xcc, window_mna_merge		! And merge.
+	 sllx		%g4, 32, %g4			! Finish med-any reg setup.
+spill_fixup_mna:
+	rd		%pic, %g1
+	ldx		[%g1 + AOFF_task_tss + AOFF_thread_flags], %g6
+	andcc		%g6, SPARC_FLAG_32BIT, %g0
+	ldx		[%g1 + AOFF_task_tss + AOFF_thread_w_saved], %g6
+	sll		%g6, 3, %g3
+	add		%g1, %g3, %g3
+	stx		%sp, [%g3 + AOFF_task_tss + AOFF_thread_rwbuf_stkptrs]
+	sll		%g6, 7, %g3
 
-	bne,pt	%xcc, 1f
-	 add	%g1, %g5, %g5
-	stx	%l0, [%g5 + AOFF_task_tss + AOFF_thread_reg_window + 0x00]
-	stx	%l1, [%g5 + AOFF_task_tss + AOFF_thread_reg_window + 0x08]
-	stx	%l2, [%g5 + AOFF_task_tss + AOFF_thread_reg_window + 0x10]
-	stx	%l3, [%g5 + AOFF_task_tss + AOFF_thread_reg_window + 0x18]
-	stx	%l4, [%g5 + AOFF_task_tss + AOFF_thread_reg_window + 0x20]
-	stx	%l5, [%g5 + AOFF_task_tss + AOFF_thread_reg_window + 0x28]
+	bne,pt		%xcc, 1f
+	 add		%g1, %g3, %g3
+	stx		%l0, [%g3 + AOFF_task_tss + AOFF_thread_reg_window + 0x00]
+	stx		%l1, [%g3 + AOFF_task_tss + AOFF_thread_reg_window + 0x08]
+	stx		%l2, [%g3 + AOFF_task_tss + AOFF_thread_reg_window + 0x10]
+	stx		%l3, [%g3 + AOFF_task_tss + AOFF_thread_reg_window + 0x18]
+	stx		%l4, [%g3 + AOFF_task_tss + AOFF_thread_reg_window + 0x20]
+	stx		%l5, [%g3 + AOFF_task_tss + AOFF_thread_reg_window + 0x28]
 
-	stx	%l6, [%g5 + AOFF_task_tss + AOFF_thread_reg_window + 0x30]
-	stx	%l7, [%g5 + AOFF_task_tss + AOFF_thread_reg_window + 0x38]
-	stx	%i0, [%g5 + AOFF_task_tss + AOFF_thread_reg_window + 0x40]
-	stx	%i1, [%g5 + AOFF_task_tss + AOFF_thread_reg_window + 0x48]
-	stx	%i2, [%g5 + AOFF_task_tss + AOFF_thread_reg_window + 0x50]
-	stx	%i3, [%g5 + AOFF_task_tss + AOFF_thread_reg_window + 0x58]
-	stx	%i4, [%g5 + AOFF_task_tss + AOFF_thread_reg_window + 0x60]
-	stx	%i5, [%g5 + AOFF_task_tss + AOFF_thread_reg_window + 0x68]
+	stx		%l6, [%g3 + AOFF_task_tss + AOFF_thread_reg_window + 0x30]
+	stx		%l7, [%g3 + AOFF_task_tss + AOFF_thread_reg_window + 0x38]
+	stx		%i0, [%g3 + AOFF_task_tss + AOFF_thread_reg_window + 0x40]
+	stx		%i1, [%g3 + AOFF_task_tss + AOFF_thread_reg_window + 0x48]
+	stx		%i2, [%g3 + AOFF_task_tss + AOFF_thread_reg_window + 0x50]
+	stx		%i3, [%g3 + AOFF_task_tss + AOFF_thread_reg_window + 0x58]
+	stx		%i4, [%g3 + AOFF_task_tss + AOFF_thread_reg_window + 0x60]
+	stx		%i5, [%g3 + AOFF_task_tss + AOFF_thread_reg_window + 0x68]
 
-	stx	%i6, [%g5 + AOFF_task_tss + AOFF_thread_reg_window + 0x70]
-	stx	%i7, [%g5 + AOFF_task_tss + AOFF_thread_reg_window + 0x78]
-	b,a,pt	%xcc, 2f
-	 add	%g2, 1, %g2
-1:
-	std	%l0, [%g5 + AOFF_task_tss + AOFF_thread_reg_window + 0x00]
-	std	%l2, [%g5 + AOFF_task_tss + AOFF_thread_reg_window + 0x08]
-	std	%l4, [%g5 + AOFF_task_tss + AOFF_thread_reg_window + 0x10]
-	std	%l6, [%g5 + AOFF_task_tss + AOFF_thread_reg_window + 0x18]
+	stx		%i6, [%g3 + AOFF_task_tss + AOFF_thread_reg_window + 0x70]
+	stx		%i7, [%g3 + AOFF_task_tss + AOFF_thread_reg_window + 0x78]
+	b,pt		%xcc, 2f
+	 add		%g6, 1, %g6
+1:	std		%l0, [%g3 + AOFF_task_tss + AOFF_thread_reg_window + 0x00]
+	std		%l2, [%g3 + AOFF_task_tss + AOFF_thread_reg_window + 0x08]
+	std		%l4, [%g3 + AOFF_task_tss + AOFF_thread_reg_window + 0x10]
+	std		%l6, [%g3 + AOFF_task_tss + AOFF_thread_reg_window + 0x18]
 
-	std	%i0, [%g5 + AOFF_task_tss + AOFF_thread_reg_window + 0x20]
-	std	%i2, [%g5 + AOFF_task_tss + AOFF_thread_reg_window + 0x28]
-	std	%i4, [%g5 + AOFF_task_tss + AOFF_thread_reg_window + 0x30]
-	std	%i6, [%g5 + AOFF_task_tss + AOFF_thread_reg_window + 0x38]
-	add	%g2, 1, %g2
-2:
-	stx	%g2, [%g1 + AOFF_task_tss + AOFF_thread_w_saved]
-	rdpr	%tstate, %g1
+	std		%i0, [%g3 + AOFF_task_tss + AOFF_thread_reg_window + 0x20]
+	std		%i2, [%g3 + AOFF_task_tss + AOFF_thread_reg_window + 0x28]
+	std		%i4, [%g3 + AOFF_task_tss + AOFF_thread_reg_window + 0x30]
+	std		%i6, [%g3 + AOFF_task_tss + AOFF_thread_reg_window + 0x38]
+	add		%g6, 1, %g6
+2:	stx		%g6, [%g1 + AOFF_task_tss + AOFF_thread_w_saved]
+	rdpr		%tstate, %g1
 	nop
 
-	andcc	%g1, TSTATE_PRIV, %g0
-	be,pn	%xcc, fill_fixup
-	 saved
+	andcc		%g1, TSTATE_PRIV, %g0
+	saved
+	be,pn		%xcc, window_mna_from_user_common
+	 and		%g1, TSTATE_CWP, %g1
 	retry
+window_mna_from_user_common:
+	wrpr		%g1, %cwp
+	ba,pt		%xcc, etrap
+	 rd		%pc, %g7
+window_mna_merge:
+	call		mem_address_unaligned
+	 add		%sp, STACK_BIAS + REGWIN_SZ, %o0
+	ba,pt		%xcc, rtrap
+	 clr		%l6
+	

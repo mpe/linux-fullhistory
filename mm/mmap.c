@@ -409,7 +409,7 @@ static void unmap_fixup(struct vm_area_struct *area,
 		mpnt->vm_offset += (end - area->vm_start);
 		mpnt->vm_start = end;
 		if (mpnt->vm_inode)
-			mpnt->vm_inode->i_count++;
+			atomic_inc(&mpnt->vm_inode->i_count);
 		if (mpnt->vm_ops && mpnt->vm_ops->open)
 			mpnt->vm_ops->open(mpnt);
 		area->vm_end = addr;	/* Truncate area */
@@ -646,7 +646,7 @@ void merge_segments (struct mm_struct * mm, unsigned long start_addr, unsigned l
 		}
 		remove_shared_vm_struct(mpnt);
 		if (mpnt->vm_inode)
-			mpnt->vm_inode->i_count--;
+			atomic_dec(&mpnt->vm_inode->i_count);
 		kmem_cache_free(vm_area_cachep, mpnt);
 		mpnt = prev;
 	}

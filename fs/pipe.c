@@ -385,7 +385,6 @@ struct inode_operations pipe_inode_operations = {
 	NULL,			/* mknod */
 	NULL,			/* rename */
 	NULL,			/* readlink */
-	NULL,			/* follow_link */
 	NULL,			/* readpage */
 	NULL,			/* writepage */
 	NULL,			/* bmap */
@@ -442,7 +441,7 @@ int do_pipe(int *fd)
 close_f12_inode_i:
 	put_unused_fd(i);
 close_f12_inode:
-	inode->i_count--;
+	atomic_dec(&inode->i_count);
 	iput(inode);
 close_f12:
 	put_filp(f2);

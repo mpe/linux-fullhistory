@@ -937,12 +937,6 @@ int vfat_lookup(struct inode *dir,const char *name,int len,
 		if (!(*result = iget(dir->i_sb,ino))) return -EACCES;
 		return 0;
 	}
-	if (dcache_lookup(dir, name, len, (unsigned long *) &ino) && ino) {
-		iput(dir);
-		if (!(*result = iget(dir->i_sb, ino)))
-			return -EACCES;
-		return 0;
-	}
 	PRINTK (("vfat_lookup 3\n"));
 	if ((res = vfat_find(dir,name,len,1,0,0,&sinfo)) < 0) {
 		iput(dir);
@@ -1019,7 +1013,6 @@ static int vfat_create_entry(struct inode *dir,const char *name,int len,
 	(*result)->i_dirt = 1;
 	(*result)->i_version = ++event;
 	dir->i_version = event;
-	dcache_add(dir, name, len, ino);
 
 	return 0;
 }
@@ -1132,7 +1125,7 @@ static int vfat_empty(struct inode *dir)
 	struct buffer_head *bh;
 	struct msdos_dir_entry *de;
 
-	if (dir->i_count > 1)
+	if (atomic_read(&dir->i_count) > 1)
 		return -EBUSY;
 	if (MSDOS_I(dir)->i_start) { /* may be zero in mkdir */
 		pos = 0;
@@ -1356,7 +1349,7 @@ int vfat_unlink(struct inode *dir,const char *name,int len)
 
 
 int vfat_rename(struct inode *old_dir,const char *old_name,int old_len,
-	struct inode *new_dir,const char *new_name,int new_len,int must_be_dir)
+		struct inode *new_dir,const char *new_name,int new_len)
 {
 	struct super_block *sb = old_dir->i_sb;
 	struct buffer_head *old_bh,*new_bh,*dotdot_bh;
@@ -1391,8 +1384,6 @@ int vfat_rename(struct inode *old_dir,const char *old_name,int old_len,
 	if (!(old_inode = iget(old_dir->i_sb,old_ino)))
 		goto rename_done;
 	is_dir = S_ISDIR(old_inode->i_mode);
-	if (must_be_dir && !is_dir)
-		goto rename_done;
 	if (is_dir) {
 		if ((old_dir->i_dev != new_dir->i_dev) ||
 		    (old_ino == new_dir->i_ino)) {
@@ -1504,7 +1495,6 @@ int vfat_rename(struct inode *old_dir,const char *old_name,int old_len,
 	PRINTK(("vfat_rename 15b\n"));
 
 	fat_mark_buffer_dirty(sb, new_bh, 1);
-	dcache_add(new_dir, new_name, new_len, new_ino);
 
 	/* XXX: There is some code in the original MSDOS rename that
 	 * is not duplicated here and it might cause a problem in
@@ -1562,7 +1552,6 @@ struct inode_operations vfat_dir_inode_operations = {
 	NULL,			/* mknod */
 	vfat_rename,		/* rename */
 	NULL,			/* readlink */
-	NULL,			/* follow_link */
 	NULL,			/* readpage */
 	NULL,			/* writepage */
 	fat_bmap,		/* bmap */
@@ -1577,7 +1566,10 @@ void vfat_read_inode(struct inode *inode)
 }
 
 static struct file_system_type vfat_fs_type = {
-	vfat_read_super, "vfat", 1, NULL
+	"vfat",
+	FS_REQUIRES_DEV,
+	vfat_read_super,
+	NULL
 };
 
 EXPORT_SYMBOL(vfat_create);

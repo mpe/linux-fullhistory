@@ -248,7 +248,7 @@ void fddi_setup(struct device *dev)
 
 #endif
 
-#ifdef CONFIG_ATALK
+#if defined(CONFIG_ATALK) || defined(CONFIG_ATALK_MODULE)
 
 static int ltalk_change_mtu(struct device *dev, int mtu)
 {

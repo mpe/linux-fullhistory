@@ -142,8 +142,8 @@ __initfunc(static void m68k_parse_bootinfo(const struct bi_record *record))
     }
 }
 
- __initfunc(void setup_arch(char **cmdline_p, unsigned long * memory_start_p,
-		unsigned long * memory_end_p))
+__initfunc(void setup_arch(char **cmdline_p, unsigned long * memory_start_p,
+			   unsigned long * memory_end_p))
 {
 	unsigned long memory_start, memory_end;
 	extern int _etext, _edata, _end;

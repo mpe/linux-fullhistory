@@ -67,8 +67,7 @@ static int
 
 static int
  ncp_rename(struct inode *old_dir, const char *old_name, int old_len,
-	    struct inode *new_dir, const char *new_name, int new_len,
-	    int must_be_dir);
+	    struct inode *new_dir, const char *new_name, int new_len);
 
 static inline void str_upper(char *name)
 {
@@ -129,7 +128,6 @@ struct inode_operations ncp_dir_inode_operations =
 	NULL,			/* mknod */
 	ncp_rename,		/* rename */
 	NULL,			/* readlink */
-	NULL,			/* follow_link */
 	NULL,			/* bmap */
 	NULL,			/* truncate */
 	NULL,			/* permission */
@@ -965,8 +963,7 @@ static int ncp_unlink(struct inode *dir, const char *name, int len)
 }
 
 static int ncp_rename(struct inode *old_dir, const char *old_name, int old_len,
-		struct inode *new_dir, const char *new_name, int new_len,
-		      int must_be_dir)
+		      struct inode *new_dir, const char *new_name, int new_len)
 {
 	int res;
 	char _old_name[old_len + 1];

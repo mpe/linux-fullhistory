@@ -69,7 +69,6 @@ struct inode_operations nfs_file_inode_operations = {
 	NULL,			/* mknod */
 	NULL,			/* rename */
 	NULL,			/* readlink */
-	NULL,			/* follow_link */
 	nfs_readpage,		/* readpage */
 	nfs_writepage,		/* writepage */
 	NULL,			/* bmap */
@@ -143,7 +142,7 @@ nfs_file_write(struct inode *inode, struct file *file,
 	int	result;
 
 	dfprintk(VFS, "nfs: write(%x/%ld (%d), %lu@%lu)\n",
-			inode->i_dev, inode->i_ino, inode->i_count,
+			inode->i_dev, inode->i_ino, atomic_read(&inode->i_count),
 			count, (unsigned long) file->f_pos);
 
 	if (!inode) {

@@ -26,12 +26,14 @@
  */
 
 #include <linux/ptrace.h>
+#include <linux/sched.h>
 #include <linux/interrupt.h>
 #include <asm/io.h>
 #include <asm/dma.h>
 #include <linux/ioport.h>
 #include <linux/soundmodem.h>
 #include "sm.h"
+#include "smdma.h"
 
 /* --------------------------------------------------------------------- */
 
@@ -81,12 +83,6 @@ struct sc_state_wss {
 	unsigned char revwss, revid, revv, revcid;
 	unsigned char fmt[2];
 	unsigned char crystal;
-	unsigned int dmabuflen;
-	unsigned char *dmabuf;
-	unsigned char dmabufidx;
-	unsigned char ptt;
-	/* Full Duplex extensions */
-	unsigned char *dmabuf2;
 };
 
 #define SCSTATE ((struct sc_state_wss *)(&sm->hw))
@@ -156,8 +152,8 @@ static int wss_srate_index(int srate)
 
 /* --------------------------------------------------------------------- */
 
-static int wss_set_codec_fmt(struct device *dev, struct sm_state *sm, 
-			     unsigned char fmt, char fdx, char fullcalib)
+static int wss_set_codec_fmt(struct device *dev, struct sm_state *sm, unsigned char fmt, 
+			     unsigned char fmt2, char fdx, char fullcalib)
 {
 	unsigned long time;
 	unsigned long flags;
@@ -167,7 +163,7 @@ static int wss_set_codec_fmt(struct device *dev, struct sm_state *sm,
 	/* Clock and data format register */
 	write_codec(dev, 0x48, fmt);
 	if (SCSTATE->crystal) {
-		write_codec(dev, 0x5c, fmt & 0xf0);
+		write_codec(dev, 0x5c, fmt2 & 0xf0);
 		/* MCE and interface config reg */	
 		write_codec(dev, 0x49, (fdx ? 0 : 0x4) | (fullcalib ? 0x18 : 0));
 	} else 
@@ -306,7 +302,7 @@ static int wss_init_codec(struct device *dev, struct sm_state *sm, char fdx,
 		write_codec(dev, 0x1d, 0x00); /* right out no att */
 	}
 
-	if (wss_set_codec_fmt(dev, sm, SCSTATE->fmt[0], fdx, 1))
+	if (wss_set_codec_fmt(dev, sm, SCSTATE->fmt[0], SCSTATE->fmt[0], fdx, 1))
 		goto codec_err;
 
         write_codec(dev, 0, reg0); /* left input control */
@@ -345,18 +341,14 @@ static void setup_dma_wss(struct device *dev, struct sm_state *sm, int send)
 {
         unsigned long flags;
         static const unsigned char codecmode[2] = { 0x0e, 0x0d };
-        static const unsigned char dmamode[2] = { 
-		DMA_MODE_READ | DMA_MODE_AUTOINIT, 
-		DMA_MODE_WRITE  | DMA_MODE_AUTOINIT
-	};
 	unsigned char oldcodecmode;
 	long abrt;
-	unsigned long dmabufaddr = virt_to_bus(SCSTATE->dmabuf);
+	unsigned char fmt;
+	unsigned int numsamps;
 
-        if ((dmabufaddr & 0xffffu) + SCSTATE->dmabuflen > 0x10000)
-                panic("%s: DMA buffer violates DMA boundary!", sm_drvname);
 	send = !!send;
-        save_flags(flags);
+	fmt = SCSTATE->fmt[send];
+	save_flags(flags);
         cli();
 	/*
 	 * perform the final DMA sequence to disable the codec request
@@ -365,28 +357,18 @@ static void setup_dma_wss(struct device *dev, struct sm_state *sm, int send)
         write_codec(dev, 9, 0xc); /* disable codec */
 	wss_ack_int(dev);
 	if (read_codec(dev, 11) & 0x10) {
-		disable_dma(dev->dma);
-		clear_dma_ff(dev->dma);
-		set_dma_mode(dev->dma, dmamode[oldcodecmode & 1]);
-		set_dma_addr(dev->dma, dmabufaddr);
-		set_dma_count(dev->dma, SCSTATE->dmabuflen);
-		enable_dma(dev->dma);
+		dma_setup(sm, oldcodecmode & 1, dev->dma);
 		abrt = 0;
 		while ((read_codec(dev, 11) & 0x10) || ((++abrt) >= 0x10000));
 	}
-        disable_dma(dev->dma);
-	if (read_codec(dev, 0x8) != SCSTATE->fmt[send])
-		wss_set_codec_fmt(dev, sm, SCSTATE->fmt[send], 0, 0);
-        clear_dma_ff(dev->dma);
-        set_dma_mode(dev->dma, dmamode[send]);
-        set_dma_addr(dev->dma, dmabufaddr);
-        set_dma_count(dev->dma, SCSTATE->dmabuflen);
-        enable_dma(dev->dma);
-	write_codec(dev, 15, ((SCSTATE->dmabuflen >> 1) - 1) & 0xff);
-	write_codec(dev, 14, ((SCSTATE->dmabuflen >> 1) - 1) >> 8);
+	if (read_codec(dev, 0x8) != fmt)
+		wss_set_codec_fmt(dev, sm, fmt, fmt, 0, 0);
+	numsamps = dma_setup(sm, send, dev->dma) - 1;
+	write_codec(dev, 15, numsamps & 0xff);
+	write_codec(dev, 14, numsamps >> 8);
 	if (SCSTATE->crystal) {
-		write_codec(dev, 31, ((SCSTATE->dmabuflen >> 1) - 1) & 0xff);
-		write_codec(dev, 30, ((SCSTATE->dmabuflen >> 1) - 1) >> 8);
+		write_codec(dev, 31, numsamps & 0xff);
+		write_codec(dev, 30, numsamps >> 8);
 	}
 	write_codec(dev, 9, codecmode[send]);
         restore_flags(flags);
@@ -398,74 +380,45 @@ static void wss_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 {
 	struct device *dev = (struct device *)dev_id;
 	struct sm_state *sm = (struct sm_state *)dev->priv;
-	unsigned char new_ptt;
-	unsigned char *buf;
-	int dmares;
+	unsigned int curfrag;
+	unsigned int nums;
 
 	if (!dev || !sm || !sm->mode_rx || !sm->mode_tx || 
 	    sm->hdrv.magic != HDLCDRV_MAGIC)
 		return;
-	new_ptt = hdlcdrv_ptt(&sm->hdrv);
 	cli();
 	wss_ack_int(dev);
 	disable_dma(dev->dma);
 	clear_dma_ff(dev->dma);
-	dmares = get_dma_residue(dev->dma);
-	if (dmares <= 0)
-		dmares = SCSTATE->dmabuflen;
-	buf = SCSTATE->dmabuf;
-	if (dmares > SCSTATE->dmabuflen/2) {
-		buf += SCSTATE->dmabuflen/2;
-		dmares -= SCSTATE->dmabuflen/2;
-	}
-#ifdef SM_DEBUG
-	if (!sm->debug_vals.dma_residue || 
-	    dmares < sm->debug_vals.dma_residue)
-		sm->debug_vals.dma_residue = dmares;
-#endif /* SM_DEBUG */
-	dmares--;
-	write_codec(dev, 15, dmares & 0xff);
-	write_codec(dev, 14, dmares >> 8);
+	nums = dma_ptr(sm, sm->dma.ptt_cnt > 0, dev->dma, &curfrag) - 1;
+	write_codec(dev, 15, nums  & 0xff);
+	write_codec(dev, 14, nums >> 8);
 	if (SCSTATE->crystal) {
-		write_codec(dev, 31, dmares & 0xff);
-		write_codec(dev, 30, dmares >> 8);
+		write_codec(dev, 31, nums & 0xff);
+		write_codec(dev, 30, nums >> 8);
 	}
 	enable_dma(dev->dma);
 	sm_int_freq(sm);
 	sti();
-	if (new_ptt && !SCSTATE->ptt) {
-		/* starting to transmit */
-		disable_dma(dev->dma);
-		sti();
- 		SCSTATE->dmabufidx = 0;
-		time_exec(sm->debug_vals.demod_cyc, 
-			  sm->mode_rx->demodulator(sm, buf, SCSTATE->dmabuflen/2));
-		time_exec(sm->debug_vals.mod_cyc, 
-			  sm->mode_tx->modulator(sm, SCSTATE->dmabuf, 
-						 SCSTATE->dmabuflen/2));
- 		setup_dma_wss(dev, sm, 1);
-		time_exec(sm->debug_vals.mod_cyc, 
-			  sm->mode_tx->modulator(sm, SCSTATE->dmabuf + 
-						 SCSTATE->dmabuflen/2,
-						 SCSTATE->dmabuflen/2));
-	} else if (SCSTATE->ptt == 1 && !new_ptt) {
+	if (sm->dma.ptt_cnt <= 0) {
+		dma_receive(sm, curfrag);
+		if (hdlcdrv_ptt(&sm->hdrv)) {
+			/* starting to transmit */
+			disable_dma(dev->dma);
+			dma_start_transmit(sm);
+			setup_dma_wss(dev, sm, 1);
+			dma_transmit(sm);
+		}
+	} else if (dma_end_transmit(sm, curfrag)) {
 		/* stopping transmission */
 		disable_dma(dev->dma);
 		sti();
- 		SCSTATE->dmabufidx = 0;
+		dma_init_receive(sm);
 		setup_dma_wss(dev, sm, 0);
-		SCSTATE->ptt = 0;
-	} else if (SCSTATE->ptt) {
-                SCSTATE->ptt--;
-		time_exec(sm->debug_vals.mod_cyc, 
-			  sm->mode_tx->modulator(sm, buf, SCSTATE->dmabuflen/2));
         } else {
-		time_exec(sm->debug_vals.demod_cyc, 
-			  sm->mode_rx->demodulator(sm, buf, SCSTATE->dmabuflen/2));
+		dma_transmit(sm);
 		hdlcdrv_arbitrate(dev, &sm->hdrv);
         }
-        if (new_ptt)
-                SCSTATE->ptt = 2;
 	sm_output_status(sm);
 	hdlcdrv_transmitter(dev, &sm->hdrv);
 	hdlcdrv_receiver(dev, &sm->hdrv);
@@ -475,6 +428,8 @@ static void wss_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 
 static int wss_open(struct device *dev, struct sm_state *sm) 
 {
+	unsigned int dmasz, u;
+
 	if (sizeof(sm->m) < sizeof(struct sc_state_wss)) {
 		printk(KERN_ERR "sm wss: wss state too big: %d > %d\n", 
 		       sizeof(struct sc_state_wss), sizeof(sm->m));
@@ -495,9 +450,19 @@ static int wss_open(struct device *dev, struct sm_state *sm)
 	/*
 	 * initialize some variables
 	 */
-	if (!(SCSTATE->dmabuf = kmalloc(SCSTATE->dmabuflen, GFP_KERNEL | GFP_DMA)))
+	dma_init_receive(sm);
+	dmasz = (NUM_FRAGMENTS + 1) * sm->dma.ifragsz;
+	if (sm->dma.i16bit)
+		dmasz <<= 1;
+	u = NUM_FRAGMENTS * sm->dma.ofragsz;
+	if (sm->dma.o16bit)
+		u <<= 1;
+	if (u > dmasz)
+		dmasz = u;
+	if (!(sm->dma.ibuf = sm->dma.obuf = kmalloc(dmasz, GFP_KERNEL | GFP_DMA)))
 		return -ENOMEM;
-	SCSTATE->dmabufidx = SCSTATE->ptt = 0;
+	dma_init_transmit(sm);
+	dma_init_receive(sm);
 
 	memset(&sm->m, 0, sizeof(sm->m));
 	memset(&sm->d, 0, sizeof(sm->d));
@@ -507,13 +472,13 @@ static int wss_open(struct device *dev, struct sm_state *sm)
 		sm->mode_rx->init(sm);
 
 	if (request_dma(dev->dma, sm->hwdrv->hw_name)) {
-		kfree_s(SCSTATE->dmabuf, SCSTATE->dmabuflen);
+		kfree_s(sm->dma.obuf, dmasz);
 		return -EBUSY;
 	}
 	if (request_irq(dev->irq, wss_interrupt, SA_INTERRUPT, 
 			sm->hwdrv->hw_name, dev)) {
 		free_dma(dev->dma);
-		kfree_s(SCSTATE->dmabuf, SCSTATE->dmabuflen);
+		kfree_s(sm->dma.obuf, dmasz);
 		return -EBUSY;
 	}
 	request_region(dev->base_addr, WSS_EXTENT, sm->hwdrv->hw_name);
@@ -535,7 +500,7 @@ static int wss_close(struct device *dev, struct sm_state *sm)
 	free_irq(dev->irq, dev);	
 	free_dma(dev->dma);	
 	release_region(dev->base_addr, WSS_EXTENT);
-	kfree_s(SCSTATE->dmabuf, SCSTATE->dmabuflen);
+	kfree(sm->dma.obuf);
 	return 0;
 }
 
@@ -546,7 +511,7 @@ static int wss_sethw(struct device *dev, struct sm_state *sm, char *mode)
 	char *cp = strchr(mode, '.');
 	const struct modem_tx_info **mtp = sm_modem_tx_table;
 	const struct modem_rx_info **mrp;
-	int i, j, dv;
+	int i, j;
 
 	if (!strcmp(mode, "off")) {
 		sm->mode_tx = NULL;
@@ -579,11 +544,57 @@ static int wss_sethw(struct device *dev, struct sm_state *sm, char *mode)
 				sm->mode_rx = *mrp;
 				SCSTATE->fmt[0] = j;
 				SCSTATE->fmt[1] = i;
-				dv = lcm(sm->mode_tx->dmabuflenmodulo, 
-					 sm->mode_rx->dmabuflenmodulo);
-				SCSTATE->dmabuflen = sm->mode_rx->srate/100+dv-1;
-				SCSTATE->dmabuflen /= dv;
-				SCSTATE->dmabuflen *= 2*dv; /* make sure DMA buf is even */
+				sm->dma.ifragsz = (sm->mode_rx->srate + 50)/100;
+				sm->dma.ofragsz = (sm->mode_tx->srate + 50)/100;
+				if (sm->dma.ifragsz < sm->mode_rx->overlap)
+					sm->dma.ifragsz = sm->mode_rx->overlap;
+				/* prefer same data format if possible to minimize switching times */
+				sm->dma.i16bit = sm->dma.o16bit = 2;
+				if (sm->mode_rx->srate == sm->mode_tx->srate) {
+					if (sm->mode_rx->demodulator_s16 && sm->mode_tx->modulator_s16)
+						sm->dma.i16bit = sm->dma.o16bit = 1;
+					else if (sm->mode_rx->demodulator_u8 && sm->mode_tx->modulator_u8)
+						sm->dma.i16bit = sm->dma.o16bit = 0;
+				}
+				if (sm->dma.i16bit == 2) {
+					if (sm->mode_rx->demodulator_s16)
+						sm->dma.i16bit = 1;
+					else if (sm->mode_rx->demodulator_u8)
+						sm->dma.i16bit = 0;
+				}
+				if (sm->dma.o16bit == 2) {
+					if (sm->mode_tx->modulator_s16)
+						sm->dma.o16bit = 1;
+					else if (sm->mode_tx->modulator_u8)
+						sm->dma.o16bit = 0;
+				}
+				if (sm->dma.i16bit == 2 ||  sm->dma.o16bit == 2) {
+					printk(KERN_INFO "%s: mode %s or %s unusable\n", sm_drvname, 
+					       sm->mode_rx->name, sm->mode_tx->name);
+					sm->mode_tx = NULL;
+					sm->mode_rx = NULL;
+					return -EINVAL;
+				}
+#ifdef __BIG_ENDIAN
+				/* big endian 16bit only works on crystal cards... */
+				if (sm->dma.i16bit) {
+					SCSTATE->fmt[0] |= 0xc0;
+					sm->dma.ifragsz <<= 1;
+				}
+				if (sm->dma.o16bit) {
+					SCSTATE->fmt[1] |= 0xc0;
+					sm->dma.ofragsz <<= 1;
+				}
+#else /* __BIG_ENDIAN */
+				if (sm->dma.i16bit) {
+					SCSTATE->fmt[0] |= 0x40;
+					sm->dma.ifragsz <<= 1;
+				}
+				if (sm->dma.o16bit) {
+					SCSTATE->fmt[1] |= 0x40;
+					sm->dma.ofragsz <<= 1;
+				}
+#endif /* __BIG_ENDIAN */
 				return 0;
 			}
 		}
@@ -663,12 +674,8 @@ static void setup_fdx_dma_wss(struct device *dev, struct sm_state *sm)
         unsigned long flags;
 	unsigned char oldcodecmode, codecdma;
 	long abrt;
-	unsigned long dmabufaddr1 = virt_to_bus(SCSTATE->dmabuf);
-	unsigned long dmabufaddr2 = virt_to_bus(SCSTATE->dmabuf2);
-
-        if (((dmabufaddr1 & 0xffffu) + SCSTATE->dmabuflen > 0x10000) ||
-	    ((dmabufaddr2 & 0xffffu) + SCSTATE->dmabuflen > 0x10000))
-                panic("%s: DMA buffer violates DMA boundary!", sm_drvname);
+	unsigned int osamps, isamps;
+	
         save_flags(flags);
         cli();
 	/*
@@ -678,39 +685,19 @@ static void setup_fdx_dma_wss(struct device *dev, struct sm_state *sm)
         write_codec(dev, 9, 0); /* disable codec DMA */
 	wss_ack_int(dev);
 	if ((codecdma = read_codec(dev, 11)) & 0x10) {
-		disable_dma(dev->dma);
-		disable_dma(sm->hdrv.ptt_out.dma2);
-		clear_dma_ff(dev->dma);
-		set_dma_mode(dev->dma, DMA_MODE_WRITE  | DMA_MODE_AUTOINIT);
-		set_dma_addr(dev->dma, dmabufaddr1);
-		set_dma_count(dev->dma, SCSTATE->dmabuflen);
-		clear_dma_ff(sm->hdrv.ptt_out.dma2);
-		set_dma_mode(sm->hdrv.ptt_out.dma2, DMA_MODE_READ  | DMA_MODE_AUTOINIT);
-		set_dma_addr(sm->hdrv.ptt_out.dma2, dmabufaddr2);
-		set_dma_count(sm->hdrv.ptt_out.dma2, SCSTATE->dmabuflen);
-		enable_dma(dev->dma);
-		enable_dma(sm->hdrv.ptt_out.dma2);
+		dma_setup(sm, 1, dev->dma);
+		dma_setup(sm, 0, sm->hdrv.ptt_out.dma2);
 		abrt = 0;
-		while (((codecdma = read_codec(dev, 11)) & 0x10) ||
-		       ((++abrt) >= 0x10000));
+		while (((codecdma = read_codec(dev, 11)) & 0x10) || ((++abrt) >= 0x10000));
 	}
-        disable_dma(dev->dma);
-        disable_dma(sm->hdrv.ptt_out.dma2);
-	clear_dma_ff(dev->dma);
-	set_dma_mode(dev->dma, DMA_MODE_WRITE  | DMA_MODE_AUTOINIT);
-	set_dma_addr(dev->dma, dmabufaddr1);
-	set_dma_count(dev->dma, SCSTATE->dmabuflen);
-	clear_dma_ff(sm->hdrv.ptt_out.dma2);
-	set_dma_mode(sm->hdrv.ptt_out.dma2, DMA_MODE_READ  | DMA_MODE_AUTOINIT);
-	set_dma_addr(sm->hdrv.ptt_out.dma2, dmabufaddr2);
-	set_dma_count(sm->hdrv.ptt_out.dma2, SCSTATE->dmabuflen);
-        enable_dma(dev->dma);
-        enable_dma(sm->hdrv.ptt_out.dma2);
-	write_codec(dev, 15, ((SCSTATE->dmabuflen >> 1) - 1) & 0xff);
-	write_codec(dev, 14, ((SCSTATE->dmabuflen >> 1) - 1) >> 8);
+       	wss_set_codec_fmt(dev, sm, SCSTATE->fmt[1], SCSTATE->fmt[0], 1, 1);
+	osamps = dma_setup(sm, 1, dev->dma) - 1;
+	isamps = dma_setup(sm, 0, sm->hdrv.ptt_out.dma2) - 1;
+	write_codec(dev, 15, osamps & 0xff);
+	write_codec(dev, 14, osamps >> 8);
 	if (SCSTATE->crystal) {
-		write_codec(dev, 31, ((SCSTATE->dmabuflen >> 1) - 1) & 0xff);
-		write_codec(dev, 30, ((SCSTATE->dmabuflen >> 1) - 1) >> 8);
+		write_codec(dev, 31, isamps & 0xff);
+		write_codec(dev, 30, isamps >> 8);
 	}
 	write_codec(dev, 9, 3);
         restore_flags(flags);
@@ -722,68 +709,74 @@ static void wssfdx_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 {
 	struct device *dev = (struct device *)dev_id;
 	struct sm_state *sm = (struct sm_state *)dev->priv;
-	unsigned char *buf1;
-	unsigned char *buf2;
 	unsigned long flags;
-	int dmares1, dmares2;
+	unsigned char cry_int_src;
+	unsigned icfrag, ocfrag, isamps, osamps;
 
 	if (!dev || !sm || !sm->mode_rx || !sm->mode_tx || 
 	    sm->hdrv.magic != HDLCDRV_MAGIC)
 		return;
 	save_flags(flags);
 	cli();
-	if (SCSTATE->crystal && (!(read_codec(dev, 0x18) & 0x20))) {
-		/* only regard Crystal Playback interrupts! */
+	if (SCSTATE->crystal) { 
+		/* Crystal has an essentially different interrupt handler! */
+		cry_int_src = read_codec(dev, 0x18);
 		wss_ack_int(dev);
+		if (cry_int_src & 0x10) {       /* playback interrupt */
+			disable_dma(dev->dma);
+			clear_dma_ff(dev->dma);
+			osamps = dma_ptr(sm, 1, dev->dma, &ocfrag)-1;
+			write_codec(dev, 15, osamps & 0xff);
+			write_codec(dev, 14, osamps >> 8);
+			enable_dma(dev->dma);
+		}
+		if (cry_int_src & 0x20) {       /* capture interrupt */
+			disable_dma(sm->hdrv.ptt_out.dma2);
+			clear_dma_ff(sm->hdrv.ptt_out.dma2);
+			isamps = dma_ptr(sm, 0, sm->hdrv.ptt_out.dma2, &icfrag)-1;
+			write_codec(dev, 31, isamps & 0xff);
+			write_codec(dev, 30, isamps >> 8);
+			enable_dma(sm->hdrv.ptt_out.dma2);
+		}
+		restore_flags(flags);
+		sm_int_freq(sm);
+		sti();
+		if (cry_int_src & 0x10) {
+			if (dma_end_transmit(sm, ocfrag))
+				dma_clear_transmit(sm);
+			dma_transmit(sm);
+		}
+		if (cry_int_src & 0x20) { 
+			dma_receive(sm, icfrag);
+			hdlcdrv_arbitrate(dev, &sm->hdrv);
+		}
+		sm_output_status(sm);
+		hdlcdrv_transmitter(dev, &sm->hdrv);
+		hdlcdrv_receiver(dev, &sm->hdrv);
 		return;
 	}
 	wss_ack_int(dev);
 	disable_dma(dev->dma);
 	disable_dma(sm->hdrv.ptt_out.dma2);
 	clear_dma_ff(dev->dma);
-	dmares1 = get_dma_residue(dev->dma);
 	clear_dma_ff(sm->hdrv.ptt_out.dma2);
-	dmares2 = get_dma_residue(sm->hdrv.ptt_out.dma2);
-	if (dmares1 <= 0)
-		dmares1 = SCSTATE->dmabuflen;
-	buf1 = SCSTATE->dmabuf;
-	if (dmares1 > SCSTATE->dmabuflen/2) {
-		buf1 += SCSTATE->dmabuflen/2;
-		dmares1 -= SCSTATE->dmabuflen/2;
-	}
-	if (dmares2 <= 0)
-		dmares2 = SCSTATE->dmabuflen;
-	buf2 = SCSTATE->dmabuf2;
-	if (dmares2 > SCSTATE->dmabuflen/2) {
-		buf2 += SCSTATE->dmabuflen/2;
-		dmares2 -= SCSTATE->dmabuflen/2;
-	}
-#ifdef SM_DEBUG
-	if (!sm->debug_vals.dma_residue || 
-	    dmares1 < sm->debug_vals.dma_residue)
-		sm->debug_vals.dma_residue = dmares1;
-#endif /* SM_DEBUG */
-	dmares1--;
-	dmares2--;
-	write_codec(dev, 15, dmares1 & 0xff);
-	write_codec(dev, 14, dmares1 >> 8);
+	osamps = dma_ptr(sm, 1, dev->dma, &ocfrag)-1;
+	isamps = dma_ptr(sm, 0, sm->hdrv.ptt_out.dma2, &icfrag)-1;
+	write_codec(dev, 15, osamps & 0xff);
+	write_codec(dev, 14, osamps >> 8);
 	if (SCSTATE->crystal) {
-		write_codec(dev, 31, dmares2 & 0xff);
-		write_codec(dev, 30, dmares2 >> 8);
+		write_codec(dev, 31, isamps & 0xff);
+		write_codec(dev, 30, isamps >> 8);
 	}
 	enable_dma(dev->dma);
 	enable_dma(sm->hdrv.ptt_out.dma2);
 	restore_flags(flags);
 	sm_int_freq(sm);
 	sti();
-	if ((SCSTATE->ptt = hdlcdrv_ptt(&sm->hdrv))) 
-		time_exec(sm->debug_vals.mod_cyc, 
-			  sm->mode_tx->modulator(sm, buf1, SCSTATE->dmabuflen/2));
-	else
-		time_exec(sm->debug_vals.mod_cyc, 
-			  memset(buf1, 0x80, SCSTATE->dmabuflen/2));
-	time_exec(sm->debug_vals.demod_cyc, 
-		  sm->mode_rx->demodulator(sm, buf2, SCSTATE->dmabuflen/2));
+	if (dma_end_transmit(sm, ocfrag))
+		dma_clear_transmit(sm);
+	dma_transmit(sm);
+	dma_receive(sm, icfrag);
 	hdlcdrv_arbitrate(dev, &sm->hdrv);
 	sm_output_status(sm);
 	hdlcdrv_transmitter(dev, &sm->hdrv);
@@ -809,13 +802,14 @@ static int wssfdx_open(struct device *dev, struct sm_state *sm)
 	/*
 	 * initialize some variables
 	 */
-	if (!(SCSTATE->dmabuf = kmalloc(SCSTATE->dmabuflen, GFP_KERNEL | GFP_DMA)))
+	if (!(sm->dma.ibuf = kmalloc(sm->dma.ifragsz * (NUM_FRAGMENTS+1), GFP_KERNEL | GFP_DMA)))
 		return -ENOMEM;
-	if (!(SCSTATE->dmabuf2 = kmalloc(SCSTATE->dmabuflen, GFP_KERNEL | GFP_DMA))) {
-		kfree_s(SCSTATE->dmabuf, SCSTATE->dmabuflen);
+	if (!(sm->dma.obuf = kmalloc(sm->dma.ofragsz * NUM_FRAGMENTS, GFP_KERNEL | GFP_DMA))) {
+		kfree(sm->dma.ibuf);
 		return -ENOMEM;
 	}
-	SCSTATE->dmabufidx = SCSTATE->ptt = 0;
+	dma_init_transmit(sm);
+	dma_init_receive(sm);
 
 	memset(&sm->m, 0, sizeof(sm->m));
 	memset(&sm->d, 0, sizeof(sm->d));
@@ -825,20 +819,20 @@ static int wssfdx_open(struct device *dev, struct sm_state *sm)
 		sm->mode_rx->init(sm);
 
 	if (request_dma(dev->dma, sm->hwdrv->hw_name)) {
-		kfree_s(SCSTATE->dmabuf, SCSTATE->dmabuflen);
-		kfree_s(SCSTATE->dmabuf2, SCSTATE->dmabuflen);
+		kfree(sm->dma.ibuf);
+		kfree(sm->dma.obuf);
 		return -EBUSY;
 	}
 	if (request_dma(sm->hdrv.ptt_out.dma2, sm->hwdrv->hw_name)) {
-		kfree_s(SCSTATE->dmabuf, SCSTATE->dmabuflen);
-		kfree_s(SCSTATE->dmabuf2, SCSTATE->dmabuflen);
+		kfree(sm->dma.ibuf);
+		kfree(sm->dma.obuf);
 		free_dma(dev->dma);
 		return -EBUSY;
 	}
 	if (request_irq(dev->irq, wssfdx_interrupt, SA_INTERRUPT, 
 			sm->hwdrv->hw_name, dev)) {
-		kfree_s(SCSTATE->dmabuf, SCSTATE->dmabuflen);
-		kfree_s(SCSTATE->dmabuf2, SCSTATE->dmabuflen);
+		kfree(sm->dma.ibuf);
+		kfree(sm->dma.obuf);
 		free_dma(dev->dma);
 		free_dma(sm->hdrv.ptt_out.dma2);
 		return -EBUSY;
@@ -858,13 +852,14 @@ static int wssfdx_close(struct device *dev, struct sm_state *sm)
 	 * disable interrupts
 	 */
 	disable_dma(dev->dma);
+	disable_dma(sm->hdrv.ptt_out.dma2);
         write_codec(dev, 9, 0xc); /* disable codec */
 	free_irq(dev->irq, dev);	
 	free_dma(dev->dma);	
 	free_dma(sm->hdrv.ptt_out.dma2);	
 	release_region(dev->base_addr, WSS_EXTENT);
-	kfree_s(SCSTATE->dmabuf, SCSTATE->dmabuflen);
-	kfree_s(SCSTATE->dmabuf2, SCSTATE->dmabuflen);
+	kfree(sm->dma.ibuf);
+	kfree(sm->dma.obuf);
 	return 0;
 }
 
@@ -875,7 +870,7 @@ static int wssfdx_sethw(struct device *dev, struct sm_state *sm, char *mode)
 	char *cp = strchr(mode, '.');
 	const struct modem_tx_info **mtp = sm_modem_tx_table;
 	const struct modem_rx_info **mrp;
-	int i, dv;
+	int i;
 
 	if (!strcmp(mode, "off")) {
 		sm->mode_tx = NULL;
@@ -907,11 +902,37 @@ static int wssfdx_sethw(struct device *dev, struct sm_state *sm, char *mode)
 				sm->mode_tx = *mtp;
 				sm->mode_rx = *mrp;
 				SCSTATE->fmt[0] = SCSTATE->fmt[1] = i;
-				dv = lcm(sm->mode_tx->dmabuflenmodulo, 
-					 sm->mode_rx->dmabuflenmodulo);
-				SCSTATE->dmabuflen = sm->mode_rx->srate/100+dv-1;
-				SCSTATE->dmabuflen /= dv;
-				SCSTATE->dmabuflen *= 2*dv; /* make sure DMA buf is even */
+				sm->dma.ifragsz = sm->dma.ofragsz = (sm->mode_rx->srate + 50)/100;
+				if (sm->dma.ifragsz < sm->mode_rx->overlap)
+					sm->dma.ifragsz = sm->mode_rx->overlap;
+				sm->dma.i16bit = sm->dma.o16bit = 2;
+				if (sm->mode_rx->demodulator_s16) {
+					sm->dma.i16bit = 1;
+					sm->dma.ifragsz <<= 1;
+#ifdef __BIG_ENDIAN    /* big endian 16bit only works on crystal cards... */
+					SCSTATE->fmt[0] |= 0xc0;
+#else /* __BIG_ENDIAN */
+					SCSTATE->fmt[0] |= 0x40;
+#endif /* __BIG_ENDIAN */
+				} else if (sm->mode_rx->demodulator_u8)
+					sm->dma.i16bit = 0;
+				if (sm->mode_tx->modulator_s16) {
+					sm->dma.o16bit = 1;
+					sm->dma.ofragsz <<= 1;
+#ifdef __BIG_ENDIAN    /* big endian 16bit only works on crystal cards... */
+					SCSTATE->fmt[1] |= 0xc0;
+#else /* __BIG_ENDIAN */
+					SCSTATE->fmt[1] |= 0x40;
+#endif /* __BIG_ENDIAN */
+				} else if (sm->mode_tx->modulator_u8)
+					sm->dma.o16bit = 0;
+				if (sm->dma.i16bit == 2 ||  sm->dma.o16bit == 2) {
+					printk(KERN_INFO "%s: mode %s or %s unusable\n", sm_drvname, 
+					       sm->mode_rx->name, sm->mode_tx->name);
+					sm->mode_tx = NULL;
+					sm->mode_rx = NULL;
+					return -EINVAL;
+				}
 				return 0;
 			}
 		}

@@ -7,7 +7,7 @@
  *
  *	Adapted from linux/net/ipv4/af_inet.c
  *
- *	$Id: af_inet6.c,v 1.18 1997/05/07 09:40:12 davem Exp $
+ *	$Id: af_inet6.c,v 1.19 1997/06/02 14:40:40 alan Exp $
  *
  *	This program is free software; you can redistribute it and/or
  *      modify it under the terms of the GNU General Public License
@@ -105,6 +105,7 @@ static int inet6_create(struct socket *sock, int protocol)
 	
 	sock_init_data(sock, sk);
 
+	sk->destruct            = NULL;
 	sk->zapped		= 0;
 	sk->family		= AF_INET6;
 	sk->protocol		= protocol;

@@ -1,4 +1,4 @@
-/* $Id: fault.c,v 1.9 1997/05/19 05:58:54 davem Exp $
+/* $Id: fault.c,v 1.11 1997/06/01 05:46:15 davem Exp $
  * arch/sparc64/mm/fault.c: Page fault handlers for the 64-bit Sparc.
  *
  * Copyright (C) 1996 David S. Miller (davem@caip.rutgers.edu)
@@ -135,6 +135,7 @@ asmlinkage int lookup_fault(unsigned long pc, unsigned long ret_pc,
 }
 
 /* #define FAULT_TRACER */
+/* #define FAULT_TRACER_VERBOSE */
 
 asmlinkage void do_sparc64_fault(struct pt_regs *regs, int text_fault, int write,
 				 unsigned long address, unsigned long tag,
@@ -150,12 +151,23 @@ asmlinkage void do_sparc64_fault(struct pt_regs *regs, int text_fault, int write
 	static unsigned long last_addr = 0;
 	static int rcnt = 0;
 
-	printk("FAULT(PC[%016lx],t[%d],w[%d],addr[%016lx])\n",
+#ifdef FAULT_TRACER_VERBOSE
+	printk("FAULT(PC[%016lx],t[%d],w[%d],addr[%016lx])...",
 	       regs->tpc, text_fault, write, address);
-	if(address == last_addr && rcnt++ > 5) {
-		printk("Wheee lotsa bogus faults, something wrong, spinning\n");
-		while(1)
-			barrier();
+#else
+	printk("F[%016lx:%016lx:w(%d)", regs->tpc, address, write);
+#endif
+	if(address == last_addr) {
+		if(rcnt++ > 15) {
+			printk("Wheee lotsa bogus faults, something wrong, spinning\n");
+			__asm__ __volatile__("flushw");
+			printk("o7[%016lx] i7[%016lx]\n",
+			       regs->u_regs[UREG_I7],
+		    ((struct reg_window *)(regs->u_regs[UREG_FP]+STACK_BIAS))->ins[7]);
+			sti();
+			while(1)
+				barrier();
+		}
 	} else rcnt = 0;
 	last_addr = address;
 #endif
@@ -205,6 +217,13 @@ bad_area:
 		goto out;
 	}
 	if(from_user) {
+#if 1
+		unsigned long cpc;
+		__asm__ __volatile__("mov %%i7, %0" : "=r" (cpc));
+		printk("[%s:%d] SIGSEGV pc[%016lx] addr[%016lx] w[%d] sfsr[%016lx] "
+		       "caller[%016lx]\n", current->comm, current->pid, regs->tpc,
+		       address, write, sfsr, cpc);
+#endif
 		tsk->tss.sig_address = address;
 		tsk->tss.sig_desc = SUBSIG_NOMAPPING;
 		send_sig(SIGSEGV, tsk, 1);
@@ -213,4 +232,12 @@ bad_area:
 	unhandled_fault (address, tsk, regs);
 out:
 	unlock_kernel();
+#ifdef FAULT_TRACER
+#ifdef FAULT_TRACER_VERBOSE
+	printk(" done\n");
+#else
+	printk("]");
+#endif
+#endif
 }
+

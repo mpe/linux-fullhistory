@@ -44,8 +44,8 @@
 #include <linux/apm_bios.h>
 #endif
 
-#include <linux/tty.h> /* needed by selection.h */
-#include "selection.h" /* export its symbols */
+#include <linux/tty.h>
+#include <linux/selection.h>
 #ifdef CONFIG_KERNELD
 #include <linux/kerneld.h>
 #endif

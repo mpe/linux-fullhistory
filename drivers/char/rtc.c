@@ -43,6 +43,7 @@
  *	this driver.)
  */
 
+#include <linux/config.h>
 #include <linux/types.h>
 #include <linux/errno.h>
 #include <linux/miscdevice.h>
@@ -156,10 +157,6 @@ static long rtc_read(struct inode *inode, struct file *file, char *buf,
 	if (count < sizeof(unsigned long))
 		return -EINVAL;
 
-	retval = verify_area(VERIFY_WRITE, buf, sizeof(unsigned long));
-	if (retval)
-		return retval;
-
 	add_wait_queue(&rtc_wait, &wait);
 
 	current->state = TASK_INTERRUPTIBLE;
@@ -183,8 +180,7 @@ static long rtc_read(struct inode *inode, struct file *file, char *buf,
 		data = rtc_irq_data;
 		rtc_irq_data = 0;
 		restore_flags(flags);
-		copy_to_user(buf, &data, sizeof(unsigned long));
-		retval = sizeof(unsigned long);
+		retval = put_user(data, (unsigned long *)buf)) ?: sizeof(unsigned long);
 	}
 
 	current->state = TASK_RUNNING;
@@ -198,6 +194,7 @@ static int rtc_ioctl(struct inode *inode, struct file *file, unsigned int cmd,
 {
 
 	unsigned long flags;
+	struct rtc_time wtime; 
 
 	switch (cmd) {
 		case RTC_AIE_OFF:	/* Mask alarm int. enab. bit	*/
@@ -254,18 +251,9 @@ static int rtc_ioctl(struct inode *inode, struct file *file, unsigned int cmd,
 			 * means "don't care" or "match all". Only the tm_hour,
 			 * tm_min, and tm_sec values are filled in.
 			 */
-			int retval;
-			struct rtc_time alm_tm;
 
-			retval = verify_area(VERIFY_WRITE, (struct rtc_time*)arg, sizeof(struct rtc_time));
-			if (retval != 0 )
-				return retval;
-
-			get_rtc_alm_time(&alm_tm);
-
-			copy_to_user((struct rtc_time*)arg, &alm_tm, sizeof(struct rtc_time));
-			
-			return 0;
+			get_rtc_alm_time(&wtime);
+			break; 
 		}
 		case RTC_ALM_SET:	/* Store a time into the alarm */
 		{
@@ -278,11 +266,8 @@ static int rtc_ioctl(struct inode *inode, struct file *file, unsigned int cmd,
 			unsigned char hrs, min, sec;
 			struct rtc_time alm_tm;
 
-			retval = verify_area(VERIFY_READ, (struct rtc_time*)arg, sizeof(struct rtc_time));
-			if (retval != 0 )
-				return retval;
-
-			copy_from_user(&alm_tm, (struct rtc_time*)arg, sizeof(struct rtc_time));
+			if (copy_from_user(&alm_tm, (struct rtc_time*)arg, sizeof(struct rtc_time)))
+				return -EFAULT;
 
 			hrs = alm_tm.tm_hour;
 			min = alm_tm.tm_min;
@@ -315,16 +300,8 @@ static int rtc_ioctl(struct inode *inode, struct file *file, unsigned int cmd,
 		}
 		case RTC_RD_TIME:	/* Read the time/date from RTC	*/
 		{
-			int retval;
-			struct rtc_time rtc_tm;
-			
-			retval = verify_area(VERIFY_WRITE, (struct rtc_time*)arg, sizeof(struct rtc_time));
-			if (retval !=0 )
-				return retval;
-
-			get_rtc_time(&rtc_tm);
-			copy_to_user((struct rtc_time*)arg, &rtc_tm, sizeof(struct rtc_time));
-			return 0;
+			get_rtc_time(&wtime);
+			break;
 		}
 		case RTC_SET_TIME:	/* Set the RTC */
 		{
@@ -338,11 +315,8 @@ static int rtc_ioctl(struct inode *inode, struct file *file, unsigned int cmd,
 			if (!suser())
 				return -EACCES;
 
-			retval = verify_area(VERIFY_READ, (struct rtc_time*)arg, sizeof(struct rtc_time));
-			if (retval !=0 )
-				return retval;
-
-			copy_from_user(&rtc_tm, (struct rtc_time*)arg, sizeof(struct rtc_time));
+			if (copy_from_user(&rtc_tm, (struct rtc_time*)arg, sizeof(struct rtc_time)))
+				return -EFAULT;
 
 			yrs = rtc_tm.tm_year + 1900 + ARCFUDGE;
 			mon = rtc_tm.tm_mon + 1;   /* tm_mon starts at zero */
@@ -403,14 +377,7 @@ static int rtc_ioctl(struct inode *inode, struct file *file, unsigned int cmd,
 		}
 		case RTC_IRQP_READ:	/* Read the periodic IRQ rate.	*/
 		{
-			int retval;
-
-			retval = verify_area(VERIFY_WRITE, (unsigned long*)arg, sizeof(unsigned long));
-			if (retval != 0)
-				return retval;
-
-			copy_to_user((unsigned long*)arg, &rtc_freq, sizeof(unsigned long));
-			return 0;
+			return put_user(rtc_freq, (unsigned long *)arg);
 		}
 		case RTC_IRQP_SET:	/* Set periodic IRQ rate.	*/
 		{
@@ -451,6 +418,7 @@ static int rtc_ioctl(struct inode *inode, struct file *file, unsigned int cmd,
 		default:
 			return -EINVAL;
 	}
+	return copy_to_user(arg, &wtime, sizeof wtime) ? -EFAULT : 0;
 }
 
 /*
@@ -536,11 +504,11 @@ __initfunc(int rtc_init(void))
 {
 	unsigned long flags;
 
-	printk("Real Time Clock Driver v%s\n", RTC_VERSION);
+	printk(KERN_INFO "Real Time Clock Driver v%s\n", RTC_VERSION);
 	if(request_irq(RTC_IRQ, rtc_interrupt, SA_INTERRUPT, "rtc", NULL))
 	{
 		/* Yeah right, seeing as irq 8 doesn't even hit the bus. */
-		printk("rtc: IRQ %d is not free.\n", RTC_IRQ);
+		printk(KERN_ERR "rtc: IRQ %d is not free.\n", RTC_IRQ);
 		return -EIO;
 	}
 	misc_register(&rtc_dev);

@@ -6,7 +6,7 @@
  * Laboratory for Computer Science Research Computing Facility
  * Rutgers, The State University of New Jersey
  *
- * $Id: ufs_file.c,v 1.7 1997/01/26 07:14:28 davem Exp $
+ * $Id: ufs_file.c,v 1.8 1997/06/05 01:29:09 davem Exp $
  *
  */
 
@@ -41,7 +41,6 @@ struct inode_operations ufs_file_inode_operations = {
 	NULL,			/* mknod */
 	NULL,			/* rename */
 	NULL,			/* readlink */
-	NULL,			/* follow_link */
 	generic_readpage,	/* readpage */
 	NULL,			/* writepage */
 	ufs_bmap,		/* bmap */

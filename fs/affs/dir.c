@@ -55,7 +55,6 @@ struct inode_operations affs_dir_inode_operations = {
 	NULL,			/* mknod */
 	affs_rename,		/* rename */
 	NULL,			/* readlink */
-	NULL,			/* follow_link */
 	NULL,			/* readpage */
 	NULL,			/* writepage */
 	NULL,			/* bmap */

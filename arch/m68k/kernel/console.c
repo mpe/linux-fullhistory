@@ -109,7 +109,6 @@
 #include <linux/interrupt.h>
 #include <linux/tty.h>
 #include <linux/tty_flip.h>
-#include <linux/console.h>
 #include <linux/kernel.h>
 #include <linux/string.h>
 #include <linux/errno.h>
@@ -119,17 +118,18 @@
 #include <linux/major.h>
 #include <linux/mm.h>
 #include <linux/ioport.h>
+#include <linux/init.h>
 
 #include <asm/io.h>
 #include <asm/uaccess.h>
 #include <asm/system.h>
 #include <asm/bitops.h>
 
-#include "../../../drivers/char/kbd_kern.h"
-#include "../../../drivers/char/vt_kern.h"
-#include "../../../drivers/char/consolemap.h"
-#include "../../../drivers/char/selection.h"
-#include "../../../drivers/char/console_struct.h"
+#include <linux/kbd_kern.h>
+#include <linux/vt_kern.h>
+#include <linux/consolemap.h>
+#include <linux/selection.h>
+#include <linux/console_struct.h>
 
 
 #ifndef MIN
@@ -159,6 +159,8 @@ static void set_vesa_blanking(unsigned long arg);
 extern void vesa_blank(void);
 extern void vesa_unblank(void);
 extern void compute_shiftstate(void);
+extern void reset_palette(int currcons);
+extern void set_palette(void);
 void poke_blanked_console(void);
 void do_blank_screen(int);
 
@@ -257,6 +259,7 @@ struct consw *conswitchp;
 #define	ulcolor		(vc_cons[currcons].d->vc_ulcolor)
 #define	halfcolor	(vc_cons[currcons].d->vc_halfcolor)
 #define tab_stop	(vc_cons[currcons].d->vc_tab_stop)
+#define palette		(vc_cons[currcons].d->vc_palette)
 #define bell_pitch	(vc_cons[currcons].d->vc_bell_pitch)
 #define bell_duration	(vc_cons[currcons].d->vc_bell_duration)
 #define sw		(vc_cons[currcons].d->vc_sw)
@@ -538,6 +541,14 @@ void vc_disallocate(unsigned int currcons)
 
 static unsigned char color_table[] = { 0, 4, 2, 6, 1, 5, 3, 7,
 				       8,12,10,14, 9,13,11,15 };
+
+/* the default colour table, for VGA+ colour systems */
+int default_red[] = {0x00,0xaa,0x00,0xaa,0x00,0xaa,0x00,0xaa,
+    0x55,0xff,0x55,0xff,0x55,0xff,0x55,0xff};
+int default_grn[] = {0x00,0x00,0xaa,0x55,0x00,0x00,0xaa,0xaa,
+    0x55,0x55,0xff,0xff,0x55,0x55,0xff,0xff};
+int default_blu[] = {0x00,0x00,0x00,0x00,0xaa,0xaa,0xaa,0xaa,
+    0x55,0x55,0x55,0x55,0xff,0xff,0xff,0xff};
 
 /*
  * gotoxy() must verify all boundaries, because the arguments
@@ -1655,7 +1666,7 @@ static int do_con_write(struct tty_struct * tty, int from_user,
 				if (nextx == cols) {
 					sw->con_putc(vc_cons[currcons].d,
 						     *putcs_buf, y, x);
-					((unsigned short *)pos)--;
+					pos--;
 					need_wrap = decawm;
 					continue;
 				}
@@ -1837,9 +1848,7 @@ static int do_con_write(struct tty_struct * tty, int from_user,
 			    vc_state = ESpalette;
 			    continue;
 			} else if (c=='R') {   /* reset palette */
-#if 0
 			    reset_palette (currcons);
-#endif
 			    vc_state = ESnormal;
 			} else
 			    vc_state = ESnormal;
@@ -1848,7 +1857,6 @@ static int do_con_write(struct tty_struct * tty, int from_user,
 			if ( (c>='0'&&c<='9') || (c>='A'&&c<='F') || (c>='a'&&c<='f') ) {
 			    par[npar++] = (c>'9' ? (c&0xDF)-'A'+10 : c-'0') ;
 			    if (npar==7) {
-#if 0
 				int i = par[0]*3, j = 1;
 				palette[i] = 16*par[j++];
 				palette[i++] += par[j++];
@@ -1857,7 +1865,6 @@ static int do_con_write(struct tty_struct * tty, int from_user,
 				palette[i] = 16*par[j++];
 				palette[i] += par[j];
 				set_palette() ;
-#endif
 				vc_state = ESnormal;
 			    }
 			} else
@@ -2283,7 +2290,7 @@ static void console_bh(void)
  * Reads the information preserved by setup.s to determine the current display
  * type and sets everything accordingly.
  */
-unsigned long con_init(unsigned long kmem_start)
+__initfunc(unsigned long con_init(unsigned long kmem_start))
 {
 	const char *display_desc = "????";
 	unsigned int currcons = 0;
@@ -2617,22 +2624,61 @@ static int set_get_font(char * arg, int set, int ch512)
  * map, 3 bytes per colour, 16 colours, range from 0 to 255.
  */
 
+static int set_get_cmap(unsigned char *arg, int set)
+{
+	int i, j, k;
+
+	for (i = 0; i < 16; i++)
+		if (set) {
+			get_user(default_red[i], arg++);
+			get_user(default_grn[i], arg++);
+			get_user(default_blu[i], arg++);
+		} else {
+			put_user(default_red[i], arg++);
+			put_user(default_grn[i], arg++);
+			put_user(default_blu[i], arg++);
+		}
+	if (set) {
+		for (i = 0; i < MAX_NR_CONSOLES; i++)
+			if (vc_cons_allocated(i))
+				for (j = k = 0; j < 16; j++) {
+					vc_cons[i].d->vc_palette[k++] =
+						default_red[j];
+					vc_cons[i].d->vc_palette[k++] =
+						default_grn[j];
+					vc_cons[i].d->vc_palette[k++] =
+						default_blu[j];
+				}
+		set_palette();
+	}
+	return 0;
+}
+
 int con_set_cmap (unsigned char *arg)
 {
-	return -EINVAL;
+	return set_get_cmap (arg, 1);
 }
 
 int con_get_cmap (unsigned char *arg)
 {
-	return -EINVAL;
+	return set_get_cmap (arg, 0);
 }
 
 void reset_palette(int currcons)
 {
+	int j, k;
+	for (j = k = 0; j < 16; j++) {
+		palette[k++] = default_red[j];
+		palette[k++] = default_grn[j];
+		palette[k++] = default_blu[j];
+	}
+	set_palette() ;
 }
 
 void set_palette(void)
 {
+	if (vt_cons[fg_console]->vc_mode != KD_GRAPHICS)
+		conswitchp->con_set_palette(vc_cons[fg_console].d, color_table);
 }
 
 /*

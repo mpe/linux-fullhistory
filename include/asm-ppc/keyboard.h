@@ -16,10 +16,6 @@
 #define KEYBOARD_IRQ			1
 #define DISABLE_KBD_DURING_INTERRUPTS	0
 
-#define KBD_REPORT_ERR
-#define KBD_REPORT_UNKN
-/* #define KBD_IS_FOCUS_9000 */
-
 extern int pckbd_setkeycode(unsigned int scancode, unsigned int keycode);
 extern int pckbd_getkeycode(unsigned int scancode);
 extern int pckbd_pretranslate(unsigned char scancode, char raw_mode);

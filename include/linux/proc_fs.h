@@ -48,8 +48,10 @@ enum root_directory_inos {
 	PROC_RTC,
 	PROC_LOCKS,
 	PROC_ZORRO,
+	PROC_HARDWARE,
 	PROC_SLABINFO,
-	PROC_PARPORT
+	PROC_PARPORT,
+	PROC_OMIRR /* whether enabled or not */
 };
 
 enum pid_directory_inos {
@@ -133,6 +135,11 @@ enum net_directory_inos {
 	PROC_NET_X25_ROUTES,
 	PROC_NET_X25,
 	PROC_NET_TR_RIF,
+	PROC_NET_DN_DEV,
+	PROC_NET_DN_ADJ,
+	PROC_NET_DN_L1,
+	PROC_NET_DN_L2,
+	PROC_NET_DN_SKT,
 	PROC_NET_LAST
 };
 
@@ -353,6 +360,11 @@ extern struct inode_operations proc_fd_inode_operations;
 #if CONFIG_AP1000
 extern struct inode_operations proc_ringbuf_inode_operations;
 #endif
+extern struct inode_operations proc_omirr_inode_operations;
+
+/* Not sure whether this belongs here */
+int proc_arbitrary_lookup(struct inode * dir, const char * name,
+			  int len, struct inode ** result);
 #endif
 
 /*

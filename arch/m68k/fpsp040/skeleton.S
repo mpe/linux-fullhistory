@@ -39,6 +39,7 @@
 |
 
 #include <linux/linkage.h>
+#include <asm/entry.h>
 
 |SKELETON	idnt    2,1 | Motorola 040 Floating Point Software Package
 
@@ -50,24 +51,6 @@
 	|section 8
  
 	.include "fpsp.h"
-
-/*
- * This has to match entry.S
- */
-LOFF_ORIG_D0	= 0x24
-
-#define curptr a2
-
-#define SAVE_ALL				\
-	clrl	%sp@-;     /* stk_adj */	\
-	movel	%d0,%sp@-; /* orig d0 */	\
-	movel	%d0,%sp@-; /* d0 */		\
-	moveml	%d1-%d5/%a0-%a1/%curptr,%sp@-;
-
-#define GET_CURRENT(tmp) \
-	movel	%sp,tmp; \
-	andw	&-8192,tmp; \
-	movel	tmp,%curptr;
 
 	|xref	b1238_fix
 
@@ -86,11 +69,7 @@ real_dz:
 	frestore	(%sp)+
 	unlk		%a6
 
-	SAVE_ALL
-	moveq	#-1,%d0
-	movel	%d0,%sp@(LOFF_ORIG_D0)    | a -1 in the ORIG_D0 field
-					| signifies that the stack frame
-					| is NOT for syscall
+	SAVE_ALL_INT
 	GET_CURRENT(%d0)
 	movel	%sp,%sp@- 		| stack frame pointer argument
 	bsrl	SYMBOL_NAME(trap_c)
@@ -181,11 +160,7 @@ inex_done:
 	frestore	(%sp)+
 	unlk		%a6
 
-	SAVE_ALL
-	moveq	#-1,%d0
-	movel	%d0,%sp@(LOFF_ORIG_D0)    | a -1 in the ORIG_D0 field
-					| signifies that the stack frame
-					| is NOT for syscall
+	SAVE_ALL_INT
 	GET_CURRENT(%d0)
 	movel	%sp,%sp@- 		| stack frame pointer argument
 	bsrl	SYMBOL_NAME(trap_c)
@@ -211,11 +186,7 @@ ovfl_done:
 	frestore	(%sp)+
 	unlk		%a6
 
-	SAVE_ALL
-	moveq	#-1,%d0
-	movel	%d0,%sp@(LOFF_ORIG_D0)    | a -1 in the ORIG_D0 field
-					| signifies that the stack frame
-					| is NOT for syscall
+	SAVE_ALL_INT
 	GET_CURRENT(%d0)
 	movel	%sp,%sp@- 		| stack frame pointer argument
 	bsrl	SYMBOL_NAME(trap_c)
@@ -241,11 +212,7 @@ unfl_done:
 	frestore	(%sp)+
 	unlk		%a6
 
-	SAVE_ALL
-	moveq	#-1,%d0
-	movel	%d0,%sp@(LOFF_ORIG_D0)    | a -1 in the ORIG_D0 field
-					| signifies that the stack frame
-					| is NOT for syscall
+	SAVE_ALL_INT
 	GET_CURRENT(%d0)
 	movel	%sp,%sp@- 		| stack frame pointer argument
 	bsrl	SYMBOL_NAME(trap_c)
@@ -267,11 +234,7 @@ real_snan:
 	frestore	(%sp)+
 	unlk		%a6
 
-	SAVE_ALL
-	moveq	#-1,%d0
-	movel	%d0,%sp@(LOFF_ORIG_D0)    | a -1 in the ORIG_D0 field
-					| signifies that the stack frame
-					| is NOT for syscall
+	SAVE_ALL_INT
 	GET_CURRENT(%d0)
 	movel	%sp,%sp@- 		| stack frame pointer argument
 	bsrl	SYMBOL_NAME(trap_c)
@@ -293,11 +256,7 @@ real_operr:
 	frestore	(%sp)+
 	unlk		%a6
 
-	SAVE_ALL
-	moveq	#-1,%d0
-	movel	%d0,%sp@(LOFF_ORIG_D0)    | a -1 in the ORIG_D0 field
-					| signifies that the stack frame
-					| is NOT for syscall
+	SAVE_ALL_INT
 	GET_CURRENT(%d0)
 	movel	%sp,%sp@- 		| stack frame pointer argument
 	bsrl	SYMBOL_NAME(trap_c)
@@ -325,11 +284,7 @@ real_bsun:
 	frestore	(%sp)+
 	unlk		%a6
 
-	SAVE_ALL
-	moveq	#-1,%d0
-	movel	%d0,%sp@(LOFF_ORIG_D0)    | a -1 in the ORIG_D0 field
-					| signifies that the stack frame
-					| is NOT for syscall
+	SAVE_ALL_INT
 	GET_CURRENT(%d0)
 	movel	%sp,%sp@- 		| stack frame pointer argument
 	bsrl	SYMBOL_NAME(trap_c)
@@ -350,11 +305,7 @@ fline:
 	jmp	fpsp_fline
 real_fline:
 
-	SAVE_ALL
-	moveq	#-1,%d0
-	movel	%d0,%sp@(LOFF_ORIG_D0)    | a -1 in the ORIG_D0 field
-					| signifies that the stack frame
-					| is NOT for syscall
+	SAVE_ALL_INT
 	GET_CURRENT(%d0)
 	movel	%sp,%sp@- 		| stack frame pointer argument
 	bsrl	SYMBOL_NAME(trap_c)
@@ -376,11 +327,7 @@ real_unsupp:
 	frestore	(%sp)+
 	unlk		%a6
 
-	SAVE_ALL
-	moveq	#-1,%d0
-	movel	%d0,%sp@(LOFF_ORIG_D0)    | a -1 in the ORIG_D0 field
-					| signifies that the stack frame
-					| is NOT for syscall
+	SAVE_ALL_INT
 	GET_CURRENT(%d0)
 	movel	%sp,%sp@- 		| stack frame pointer argument
 	bsrl	SYMBOL_NAME(trap_c)
@@ -435,9 +382,7 @@ Lnotkern:
 	bne	Lmustsched
 	rte
 Lmustsched:
-	SAVE_ALL
-	moveq	#-1,%d0
-	movel	%d0,%sp@(LOFF_ORIG_D0)    | indicate stack frame not for syscall
+	SAVE_ALL_INT
 	GET_CURRENT(%d0)
 	bral	SYMBOL_NAME(ret_from_exception)	| deliver signals, reschedule etc..
 

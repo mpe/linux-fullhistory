@@ -31,27 +31,44 @@
 
 /* -------------------------------------------------------------------- */
 
-#define OFFSCOSTABBITS 6
-#define OFFSCOSTABSIZE (1<<OFFSCOSTABBITS)
-
-static void gentbl_offscostab(FILE *f)
+static void gentbl_offscostab(FILE *f, unsigned int nbits)
 {
 	int i;
 
 	fprintf(f, "\n/*\n * small cosine table in U8 format\n */\n"
 		"#define OFFSCOSTABBITS %u\n"
 		"#define OFFSCOSTABSIZE (1<<OFFSCOSTABBITS)\n\n", 
-		OFFSCOSTABBITS);
+		nbits);
 	fprintf(f, "static unsigned char offscostab[OFFSCOSTABSIZE] = {\n\t");
-	for (i = 0; i < OFFSCOSTABSIZE; i++) {
+	for (i = 0; i < (1<<nbits); i++) {
 		fprintf(f, "%4u", (int)
-			(128+127.0*cos(i*2.0*M_PI/OFFSCOSTABSIZE)));
-		if (i < OFFSCOSTABSIZE-1) 
+			(128+127.0*cos(i*2.0*M_PI/(1<<nbits))));
+		if (i < (1<<nbits)-1) 
 			fprintf(f, "%s", (i & 7) == 7 ? ",\n\t" : ",");
 	}
 	fprintf(f, "\n};\n\n"
 		"#define OFFSCOS(x) offscostab[((x)>>%d)&0x%x]\n\n",
-		16-OFFSCOSTABBITS, OFFSCOSTABSIZE-1);
+		16-nbits, (1<<nbits)-1);
+}
+
+/* -------------------------------------------------------------------- */
+
+static void gentbl_costab(FILE *f, unsigned int nbits)
+{
+        int i;
+
+	fprintf(f, "\n/*\n * more accurate cosine table\n */\n\n"
+		"static const short costab[%d] = {", (1<<nbits));
+        for (i = 0; i < (1<<nbits); i++) {
+                if (!(i & 7))
+                        fprintf(f, "\n\t");
+                fprintf(f, "%6d", (int)(32767.0*cos(i*2.0*M_PI/(1<<nbits))));
+                if (i != ((1<<nbits)-1))
+                        fprintf(f, ", ");
+        }
+        fprintf(f, "\n};\n\n#define COS(x) costab[((x)>>%d)&0x%x]\n"
+		"#define SIN(x) COS((x)+0xc000)\n\n", 16-nbits,
+		(1<<nbits)-1);
 }
 
 /* -------------------------------------------------------------------- */
@@ -63,7 +80,8 @@ static void gentbl_offscostab(FILE *f)
 
 static void gentbl_afsk1200(FILE *f)
 {
-        int i;
+        int i, v, sum;
+	float fv, fsum;
 
 #define ARGLO(x) 2.0*M_PI*(double)x*(double)AFSK12_TX_FREQ_LO/(double)AFSK12_SAMPLE_RATE
 #define ARGHI(x) 2.0*M_PI*(double)x*(double)AFSK12_TX_FREQ_HI/(double)AFSK12_SAMPLE_RATE
@@ -75,42 +93,58 @@ static void gentbl_afsk1200(FILE *f)
 		"#define AFSK12_CORRLEN %u\n\n",
 		AFSK12_SAMPLE_RATE, AFSK12_TX_FREQ_LO, 
 		AFSK12_TX_FREQ_HI, AFSK12_CORRLEN);
-	fprintf(f, "#if defined (CONFIG_SOUNDMODEM__AFSK1200_FP) && "
+	fprintf(f, "#if defined(CONFIG_SOUNDMODEM_FLOAT) && "
 		"(defined(CONFIG_M586) || defined(CONFIG_M686))\n\n"
 		"static const float afsk12_tx_lo_i_f[] = {\n\t");
-        for(i = 0; i < AFSK12_CORRLEN; i++) 
-                fprintf(f, " %7f%c", cos(ARGLO(i)),
-                        (i < AFSK12_CORRLEN-1) ? ',' : ' ');
-        fprintf(f, "\n};\n\nstatic const float afsk12_tx_lo_q_f[] = {\n\t");
-        for(i = 0; i < AFSK12_CORRLEN; i++) 
-                fprintf(f, " %7f%c", sin(ARGLO(i)),
-                        (i < AFSK12_CORRLEN-1) ? ',' : ' ');
-        fprintf(f, "\n};\n\nstatic const float afsk12_tx_hi_i_f[] = {\n\t");
-        for(i = 0; i < AFSK12_CORRLEN; i++) 
-                fprintf(f, " %7f%c", cos(ARGHI(i)),
-                        (i < AFSK12_CORRLEN-1) ? ',' : ' ');
-        fprintf(f, "\n};\n\nstatic const float afsk12_tx_hi_q_f[] = {\n\t");
-        for(i = 0; i < AFSK12_CORRLEN; i++) 
-                fprintf(f, " %7f%c", sin(ARGHI(i)), 
-                        (i < AFSK12_CORRLEN-1) ? ',' : ' ');
-	fprintf(f, "\n};\n\n#else /* CONFIG_SOUNDMODEM_AFSK1200_FP */\n\n"
-		"static const signed char afsk12_tx_lo_i[] = {\n\t");
-        for(i = 0; i < AFSK12_CORRLEN; i++) 
-                fprintf(f, " %4i%c", (int)(127.0*cos(ARGLO(i))),
-                        (i < AFSK12_CORRLEN-1) ? ',' : ' ');
-        fprintf(f, "\n};\n\nstatic const signed char afsk12_tx_lo_q[] = {\n\t");
-        for(i = 0; i < AFSK12_CORRLEN; i++) 
-                fprintf(f, " %4i%c", (int)(127.0*sin(ARGLO(i))),
-                        (i < AFSK12_CORRLEN-1) ? ',' : ' ');
-        fprintf(f, "\n};\n\nstatic const signed char afsk12_tx_hi_i[] = {\n\t");
-        for(i = 0; i < AFSK12_CORRLEN; i++) 
-                fprintf(f, " %4i%c", (int)(127.0*cos(ARGHI(i))),
-                        (i < AFSK12_CORRLEN-1) ? ',' : ' ');
-        fprintf(f, "\n};\n\nstatic const signed char afsk12_tx_hi_q[] = {\n\t");
-        for(i = 0; i < AFSK12_CORRLEN; i++) 
-                fprintf(f, " %4i%c", (int)(127.0*sin(ARGHI(i))), 
-                        (i < AFSK12_CORRLEN-1) ? ',' : ' ');
-	fprintf(f, "\n};\n\n#endif /* CONFIG_SOUNDMODEM_AFSK1200_FP */\n\n");
+        for(fsum = i = 0; i < AFSK12_CORRLEN; i++) {
+		fsum += (fv = cos(ARGLO(i)));
+                fprintf(f, " %7f%c", fv, (i < AFSK12_CORRLEN-1) ? ',' : ' ');
+	}
+        fprintf(f, "\n};\n#define SUM_AFSK12_TX_LO_Q %7f\n\n"
+		"static const float afsk12_tx_lo_q_f[] = {\n\t", fsum);
+        for(fsum = i = 0; i < AFSK12_CORRLEN; i++) {
+		fsum += (fv = sin(ARGLO(i)));
+                fprintf(f, " %7f%c", fv, (i < AFSK12_CORRLEN-1) ? ',' : ' ');
+	}
+        fprintf(f, "\n};\n#define SUM_AFSK12_TX_LO_Q %7f\n\n"
+		"static const float afsk12_tx_hi_i_f[] = {\n\t", fsum);
+        for(fsum = i = 0; i < AFSK12_CORRLEN; i++) {
+		fsum += (fv = cos(ARGHI(i)));
+                fprintf(f, " %7f%c", fv, (i < AFSK12_CORRLEN-1) ? ',' : ' ');
+	}
+        fprintf(f, "\n};\n#define SUM_AFSK12_TX_HI_I %7f\n\n"
+		"static const float afsk12_tx_hi_q_f[] = {\n\t", fsum);
+        for(fsum = i = 0; i < AFSK12_CORRLEN; i++) {
+		fsum += (fv = sin(ARGHI(i)));
+                fprintf(f, " %7f%c", fv, (i < AFSK12_CORRLEN-1) ? ',' : ' ');
+	}
+	fprintf(f, "\n};\n#define SUM_AFSK12_TX_HI_Q %7f\n\n"
+		"#else /* CONFIG_SOUNDMODEM_FLOAT */\n\n"
+		"static const int afsk12_tx_lo_i[] = {\n\t", fsum);
+        for(sum = i = 0; i < AFSK12_CORRLEN; i++) {
+		sum += (v = 127.0*cos(ARGLO(i)));
+                fprintf(f, " %4i%c", v, (i < AFSK12_CORRLEN-1) ? ',' : ' ');
+	}
+        fprintf(f, "\n};\n#define SUM_AFSK12_TX_LO_I %d\n\n"
+		"static const int afsk12_tx_lo_q[] = {\n\t", sum);
+        for(sum = i = 0; i < AFSK12_CORRLEN; i++) {
+		sum += (v = 127.0*sin(ARGLO(i))); 
+                fprintf(f, " %4i%c", v, (i < AFSK12_CORRLEN-1) ? ',' : ' ');
+	}
+        fprintf(f, "\n};\n#define SUM_AFSK12_TX_LO_Q %d\n\n"
+		"static const int afsk12_tx_hi_i[] = {\n\t", sum);
+        for(sum = i = 0; i < AFSK12_CORRLEN; i++) {
+		sum += (v = 127.0*cos(ARGHI(i))); 
+                fprintf(f, " %4i%c", v, (i < AFSK12_CORRLEN-1) ? ',' : ' ');
+	}
+        fprintf(f, "\n};\n#define SUM_AFSK12_TX_HI_I %d\n\n"
+		"static const int afsk12_tx_hi_q[] = {\n\t", sum);
+        for(sum = i = 0; i < AFSK12_CORRLEN; i++)  {
+		sum += (v = 127.0*sin(ARGHI(i)));
+                fprintf(f, " %4i%c", v, (i < AFSK12_CORRLEN-1) ? ',' : ' ');
+	}
+	fprintf(f, "\n};\n#define SUM_AFSK12_TX_HI_Q %d\n\n"
+		"#endif /* CONFIG_SOUNDMODEM_FLOAT */\n\n", sum);
 #undef ARGLO
 #undef ARGHI
 }
@@ -252,7 +286,7 @@ static void gentbl_fsk9600(FILE *f)
 
 static void gentbl_afsk2666(FILE *f)
 {
-        int i, j, k, l, o;
+        int i, j, k, l, o, v, sumi, sumq;
         float window[AFSK26_DEMCORRLEN*AFSK26_RXOVER];
 	int cfreq[AFSK26_NUMCAR];
 
@@ -274,58 +308,34 @@ static void gentbl_afsk2666(FILE *f)
                 window[i] = AFSK26_WINDOW(((float)i)/(AFSK26_DEMCORRLEN*
 						      AFSK26_RXOVER)) * 127.0;
         fprintf(f, "\nstatic const struct {\n\t"
-               "signed char i[%d];\n\tsigned char q[%d];\n} afsk26_dem_tables[%d][2] = {\n", 
-               AFSK26_DEMCORRLEN, AFSK26_DEMCORRLEN, AFSK26_RXOVER);
+               "int i[%d];\n\tint q[%d];\n} afsk26_dem_tables[%d][%d] = {\n", 
+               AFSK26_DEMCORRLEN, AFSK26_DEMCORRLEN, AFSK26_RXOVER, AFSK26_NUMCAR);
         for (o = AFSK26_RXOVER-1; o >= 0; o--) {
                 fprintf(f, "\t{\n");
                 for (i = 0; i < AFSK26_NUMCAR; i++) {
                         j = cfreq[i];
                         fprintf(f, "\t\t{{ ");
-                        for (l = AFSK26_DEMCORRLEN-1, 
-				     k = (j * o)/AFSK26_RXOVER; l >= 0; 
-                             l--, k = (k+j)&0xffffu)
-                                fprintf(f, "%6d%s", (int)
-					(AFSK26_AMPL(i)*
-					 window[l*AFSK26_RXOVER+o]*
-					 cos(M_PI*k/32768.0)),
-					l ? ", " : " }, { ");
-                        for (l = AFSK26_DEMCORRLEN-1, 
-				     k = (j * o)/AFSK26_RXOVER; l >= 0; 
-                             l--, k = (k+j)&0xffffu)
-                                fprintf(f, "%6d%s", (int)
-					(AFSK26_AMPL(i)*
-					 window[l*AFSK26_RXOVER+o]*
-					 sin(M_PI*k/32768.0)),
-					l ? ", " : " }}");
+                        for (l = AFSK26_DEMCORRLEN-1, k = (j * o)/AFSK26_RXOVER, sumi = 0; l >= 0; 
+                             l--, k = (k+j)&0xffffu) {
+				sumi += (v = AFSK26_AMPL(i)*window[l*AFSK26_RXOVER+o]*
+					 cos(M_PI*k/32768.0));
+                                fprintf(f, "%6d%s", v, l ? ", " : " }, { ");
+			}
+                        for (l = AFSK26_DEMCORRLEN-1, k = (j * o)/AFSK26_RXOVER, sumq = 0; l >= 0; 
+                             l--, k = (k+j)&0xffffu) {
+				sumq += (v = AFSK26_AMPL(i)*window[l*AFSK26_RXOVER+o]*
+					 sin(M_PI*k/32768.0));
+                                fprintf(f, "%6d%s", v, l ? ", " : " }}");
+			}
                         if (i < 1)
                                 fprintf(f, ",");
-                        fprintf(f, "\n");
+                        fprintf(f, "\n#define AFSK26_DEM_SUM_I_%d_%d %d\n"
+				"#define AFSK26_DEM_SUM_Q_%d_%d %d\n", 
+				AFSK26_RXOVER-1-o, i, sumi, AFSK26_RXOVER-1-o, i, sumq);
                 }
                 fprintf(f, "\t}%s\n", o ? "," : "");
         }
         fprintf(f, "};\n\n");
-}
-
-/* -------------------------------------------------------------------- */
-
-#define COSTABBITS 8
-
-static void gentbl_costab(FILE *f)
-{
-        int i;
-
-	fprintf(f, "\n/*\n * more accurate cosine table\n */\n\n"
-		"static const short costab[%d] = {", (1<<COSTABBITS));
-        for (i = 0; i < (1<<COSTABBITS); i++) {
-                if (!(i & 7))
-                        fprintf(f, "\n\t");
-                fprintf(f, "%6d", (int)(32767.0*cos(i*2.0*M_PI/(1<<COSTABBITS))));
-                if (i != ((1<<COSTABBITS)-1))
-                        fprintf(f, ", ");
-        }
-        fprintf(f, "\n};\n\n#define COS(x) costab[((x)>>%d)&0x%x]\n"
-		"#define SIN(x) COS((x)+0xc000)\n\n", 16-COSTABBITS,
-		(1<<COSTABBITS)-1);
 }
 
 /* -------------------------------------------------------------------- */
@@ -578,12 +588,96 @@ static void gentbl_hapn4800(FILE *f)
 
 /* -------------------------------------------------------------------- */
 
+#define AFSK24_SAMPLERATE  16000
+#define AFSK24_CORRLEN     14
+
+static void gentbl_afsk2400(FILE *f, float tcm3105clk)
+{
+	int i, sum, v;
+	float fsum, fv;
+
+	fprintf(f, "\n/*\n * afsk2400 specific tables (tcm3105 clk %7fHz)\n */\n"
+		"#define AFSK24_TX_FREQ_LO %d\n"
+		"#define AFSK24_TX_FREQ_HI %d\n"
+		"#define AFSK24_BITPLL_INC %d\n"
+		"#define AFSK24_SAMPLERATE %d\n\n", tcm3105clk, 
+		(int)(tcm3105clk/3694.0), (int)(tcm3105clk/2015.0), 
+		0x10000*2400/AFSK24_SAMPLERATE, AFSK24_SAMPLERATE);
+
+#define ARGLO(x) 2.0*M_PI*(double)x*(tcm3105clk/3694.0)/(double)AFSK24_SAMPLERATE
+#define ARGHI(x) 2.0*M_PI*(double)x*(tcm3105clk/2015.0)/(double)AFSK24_SAMPLERATE
+#define WINDOW(x) hamming((float)(x)/(AFSK24_CORRLEN-1.0))
+
+	fprintf(f, "#if defined(CONFIG_SOUNDMODEM_FLOAT) && "
+		"(defined(CONFIG_M586) || defined(CONFIG_M686))\n\n"
+		"static const float afsk24_tx_lo_i_f[] = {\n\t");
+        for(fsum = i = 0; i < AFSK24_CORRLEN; i++) {
+		fsum += (fv = cos(ARGLO(i))*WINDOW(i));
+                fprintf(f, " %7f%c", fv, (i < AFSK24_CORRLEN-1) ? ',' : ' ');
+	}
+        fprintf(f, "\n};\n#define SUM_AFSK24_TX_LO_Q %7f\n\n"
+		"static const float afsk24_tx_lo_q_f[] = {\n\t", fsum);
+        for(fsum = i = 0; i < AFSK24_CORRLEN; i++) {
+		fsum += (fv = sin(ARGLO(i))*WINDOW(i));
+                fprintf(f, " %7f%c", fv, (i < AFSK24_CORRLEN-1) ? ',' : ' ');
+	}
+        fprintf(f, "\n};\n#define SUM_AFSK24_TX_LO_Q %7f\n\n"
+		"static const float afsk24_tx_hi_i_f[] = {\n\t", fsum);
+        for(fsum = i = 0; i < AFSK24_CORRLEN; i++) {
+		fsum += (fv = cos(ARGHI(i))*WINDOW(i));
+                fprintf(f, " %7f%c", fv, (i < AFSK24_CORRLEN-1) ? ',' : ' ');
+	}
+        fprintf(f, "\n};\n#define SUM_AFSK24_TX_HI_I %7f\n\n"
+		"static const float afsk24_tx_hi_q_f[] = {\n\t", fsum);
+        for(fsum = i = 0; i < AFSK24_CORRLEN; i++) {
+		fsum += (fv = sin(ARGHI(i))*WINDOW(i));
+                fprintf(f, " %7f%c", fv, (i < AFSK24_CORRLEN-1) ? ',' : ' ');
+	}
+	fprintf(f, "\n};\n#define SUM_AFSK24_TX_HI_Q %7f\n\n"
+		"#else /* CONFIG_SOUNDMODEM_FLOAT */\n\n"
+		"static const int afsk24_tx_lo_i[] = {\n\t", fsum);
+        for(sum = i = 0; i < AFSK24_CORRLEN; i++) {
+		sum += (v = 127.0*cos(ARGLO(i))*WINDOW(i));
+                fprintf(f, " %4i%c", v, (i < AFSK24_CORRLEN-1) ? ',' : ' ');
+	}
+        fprintf(f, "\n};\n#define SUM_AFSK24_TX_LO_I %d\n\n"
+		"static const int afsk24_tx_lo_q[] = {\n\t", sum);
+        for(sum = i = 0; i < AFSK24_CORRLEN; i++) {
+		sum += (v = 127.0*sin(ARGLO(i))*WINDOW(i)); 
+                fprintf(f, " %4i%c", v, (i < AFSK24_CORRLEN-1) ? ',' : ' ');
+	}
+        fprintf(f, "\n};\n#define SUM_AFSK24_TX_LO_Q %d\n\n"
+		"static const int afsk24_tx_hi_i[] = {\n\t", sum);
+        for(sum = i = 0; i < AFSK24_CORRLEN; i++) {
+		sum += (v = 127.0*cos(ARGHI(i))*WINDOW(i)); 
+                fprintf(f, " %4i%c", v, (i < AFSK24_CORRLEN-1) ? ',' : ' ');
+	}
+        fprintf(f, "\n};\n#define SUM_AFSK24_TX_HI_I %d\n\n"
+		"static const int afsk24_tx_hi_q[] = {\n\t", sum);
+        for(sum = i = 0; i < AFSK24_CORRLEN; i++)  {
+		sum += (v = 127.0*sin(ARGHI(i))*WINDOW(i));
+                fprintf(f, " %4i%c", v, (i < AFSK24_CORRLEN-1) ? ',' : ' ');
+	}
+	fprintf(f, "\n};\n#define SUM_AFSK24_TX_HI_Q %d\n\n"
+		"#endif /* CONFIG_SOUNDMODEM_FLOAT */\n\n", sum);
+#undef ARGLO
+#undef ARGHI
+#undef WINDOW
+}
+
+/* -------------------------------------------------------------------- */
+
 static char *progname;
 
 static void gentbl_banner(FILE *f)
 {
 	fprintf(f, "/*\n * THIS FILE IS GENERATED AUTOMATICALLY BY %s, "
 		"DO NOT EDIT!\n */\n\n", progname);
+}
+
+static void gentbl_needs_config(FILE *f)
+{
+	fprintf(f, "\n#include <linux/config.h>\n\n");
 }
 
 /* -------------------------------------------------------------------- */
@@ -596,20 +690,23 @@ void main(int argc, char *argv[])
 	if (!(f = fopen("sm_tbl_afsk1200.h", "w")))
 		exit(1);
 	gentbl_banner(f);
-	gentbl_offscostab(f);
+	gentbl_needs_config(f);
+	gentbl_offscostab(f, 6);
+	gentbl_costab(f, 6);
 	gentbl_afsk1200(f);
 	fclose(f);
 	if (!(f = fopen("sm_tbl_afsk2666.h", "w")))
 		exit(1);
 	gentbl_banner(f);
-	gentbl_offscostab(f);
+	gentbl_offscostab(f, 6);
+	gentbl_costab(f, 6);
 	gentbl_afsk2666(f);
 	fclose(f);
 	if (!(f = fopen("sm_tbl_psk4800.h", "w")))
 		exit(1);
 	gentbl_banner(f);
 	gentbl_psk4800(f);
-	gentbl_costab(f);
+	gentbl_costab(f, 8);
 	gentbl_atantab(f);
 	fclose(f);
 	if (!(f = fopen("sm_tbl_hapn4800.h", "w")))
@@ -621,6 +718,22 @@ void main(int argc, char *argv[])
 		exit(1);
 	gentbl_banner(f);
 	gentbl_fsk9600(f);
+	fclose(f);
+	if (!(f = fopen("sm_tbl_afsk2400_8.h", "w")))
+		exit(1);
+	gentbl_banner(f);
+	gentbl_needs_config(f);
+	gentbl_offscostab(f, 6);
+	gentbl_costab(f, 6);
+	gentbl_afsk2400(f, 8000000);
+	fclose(f);
+	if (!(f = fopen("sm_tbl_afsk2400_7.h", "w")))
+		exit(1);
+	gentbl_banner(f);
+	gentbl_needs_config(f);
+	gentbl_offscostab(f, 6);
+	gentbl_costab(f, 6);
+	gentbl_afsk2400(f, 7372800);
 	fclose(f);
 	exit(0);
 }

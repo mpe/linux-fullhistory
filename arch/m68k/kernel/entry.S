@@ -22,24 +22,6 @@
  * NOTE: This code handles signal-recognition, which happens every time
  * after a timer-interrupt and after each system call.
  *
- * Stack layout in 'ret_from_exception':
- *
- *	This allows access to the syscall arguments in registers d1-d5
- *
- *	 0(sp) - d1
- *	 4(sp) - d2
- *	 8(sp) - d3
- *	 C(sp) - d4
- *	10(sp) - d5
- *	14(sp) - a0
- *	18(sp) - a1
- *	1C(sp) - a2
- *	20(sp) - d0
- *	24(sp) - orig_d0
- *	28(sp) - stack adjustment
- *	2C(sp) - sr
- *	2E(sp) - pc
- *	32(sp) - format & vector
  */
 
 /*
@@ -48,94 +30,12 @@
  *               number 0 in the 'current_set' list.
  */
 
-/*
- * 97/05/14 Andreas: Register %a2 is now set to the current task throughout
- *		     the whole kernel.
- */
-
 #include <linux/sys.h>
 #include <linux/config.h>
 #include <linux/linkage.h>
+#include <asm/entry.h>
 #include <asm/setup.h>
 #include <asm/segment.h>
-#ifdef CONFIG_KGDB
-#include <asm/kgdb.h>
-.globl SYMBOL_NAME(kgdb_registers)
-#endif
-
-#define curptr a2
-
-LENOSYS = 38
-
-/*
- * these are offsets into the task-struct
- */
-LTASK_STATE	=  0
-LTASK_COUNTER	=  4
-LTASK_PRIORITY	=  8
-LTASK_SIGNAL	= 12
-LTASK_BLOCKED	= 16
-LTASK_FLAGS	= 20
-
-/* the following macro is used when enabling interrupts */
-#if defined(MACH_ATARI_ONLY)
-	/* block out HSYNC on the atari */
-#define ALLOWINT 0xfbff
-#define	MAX_NOINT_IPL	3
-#else
-	/* portable version */
-#define ALLOWINT 0xf8ff
-#define	MAX_NOINT_IPL	0
-#endif /* machine compilation types */ 
-
-LD0		= 0x20
-LORIG_D0	= 0x24
-LSR		= 0x2C
-LFORMATVEC	= 0x32
-
-/*
- * This defines the normal kernel pt-regs layout.
- *
- * regs a3-a6 and d6-d7 are preserved by C code
- * the kernel doesn't mess with usp unless it needs to
- */
-#ifndef CONFIG_KGDB
-#define SAVE_ALL			\
-	clrl	%sp@-;    /* stk_adj */	\
-	movel	%d0,%sp@-; /* orig d0 */	\
-	movel	%d0,%sp@-; /* d0 */	\
-	moveml	%d1-%d5/%a0-%a1/%curptr,%sp@-;
-#else
-/* Need to save the "missing" registers for kgdb...
- */
-#define SAVE_ALL						\
-	clrl	%sp@-;    /* stk_adj */				\
-	movel	%d0,%sp@-; /* orig d0 */			\
-	movel	%d0,%sp@-; /* d0 */				\
-	moveml	%d1-%d5/%a0-%a1/%curptr,%sp@-;			\
-	moveml	%d6-%d7,SYMBOL_NAME(kgdb_registers)+GDBOFFA_D6;	\
-	moveml	%a3-%a6,SYMBOL_NAME(kgdb_registers)+GDBOFFA_A3;
-#endif
-
-#define RESTORE_ALL			\
-	moveml	%sp@+,%a0-%a1/%curptr/%d1-%d5;	\
-	movel	%sp@+,%d0;		\
-	addql	#4,%sp;	 /* orig d0 */	\
-	addl	%sp@+,%sp; /* stk adj */	\
-	rte
-
-#define SWITCH_STACK_SIZE (6*4+4)	/* includes return address */
-
-#define SAVE_SWITCH_STACK \
-	moveml	%a3-%a6/%d6-%d7,%sp@-
-
-#define RESTORE_SWITCH_STACK \
-	moveml	%sp@+,%a3-%a6/%d6-%d7
-
-#define GET_CURRENT(tmp) \
-	movel	%sp,tmp; \
-	andw	&-8192,tmp; \
-	movel	tmp,%curptr;
 
 .globl SYMBOL_NAME(system_call), SYMBOL_NAME(buserr), SYMBOL_NAME(trap)
 .globl SYMBOL_NAME(resume), SYMBOL_NAME(ret_from_exception)
@@ -146,12 +46,7 @@ LFORMATVEC	= 0x32
 
 .text
 ENTRY(buserr)
-	SAVE_ALL
-	moveq	#-1,%d0
-	movel	%d0,%sp@(LORIG_D0)	| a -1 in the ORIG_D0 field
-					| signifies that the stack frame
-					| is NOT for syscall
-
+	SAVE_ALL_INT
 	GET_CURRENT(%d0)
 	movel	%sp,%sp@- 		| stack frame pointer argument
 	bsrl	SYMBOL_NAME(buserr_c)
@@ -159,11 +54,7 @@ ENTRY(buserr)
 	jra	SYMBOL_NAME(ret_from_exception)
 
 ENTRY(trap)
-	SAVE_ALL
-	moveq	#-1,%d0
-	movel	%d0,%sp@(LORIG_D0)	| a -1 in the ORIG_D0 field
-					| signifies that the stack frame
-					| is NOT for syscall
+	SAVE_ALL_INT
 	GET_CURRENT(%d0)
 	movel	%sp,%sp@- 		| stack frame pointer argument
 	bsrl	SYMBOL_NAME(trap_c)
@@ -180,18 +71,18 @@ ENTRY(reschedule)
 	jmp	SYMBOL_NAME(schedule)
 
 badsys:
-	movel	#-LENOSYS,LD0(%sp)
+	movel	#-LENOSYS,LPT_OFF_D0(%sp)
 	jra	SYMBOL_NAME(ret_from_exception)
 
 do_trace:
-	movel	#-LENOSYS,LD0(%sp)	| needed for strace
+	movel	#-LENOSYS,LPT_OFF_D0(%sp)	| needed for strace
 	subql	#4,%sp
 	SAVE_SWITCH_STACK
 	jbsr	SYMBOL_NAME(syscall_trace)
 	RESTORE_SWITCH_STACK
 	addql	#4,%sp
 	jbsr	@(SYMBOL_NAME(sys_call_table),%d2:l:4)@(0)
-	movel	%d0,%sp@(LD0)		| save the return value
+	movel	%d0,%sp@(LPT_OFF_D0)	| save the return value
 	subql	#4,%sp			| dummy return address
 	SAVE_SWITCH_STACK
 	jbsr	SYMBOL_NAME(syscall_trace)
@@ -202,7 +93,7 @@ SYMBOL_NAME_LABEL(ret_from_signal)
 	jra	SYMBOL_NAME(ret_from_exception)
 
 ENTRY(system_call)
-	SAVE_ALL
+	SAVE_ALL_SYS
 	movel	%d0,%d2
 
 	GET_CURRENT(%d0)
@@ -213,19 +104,20 @@ ENTRY(system_call)
 
 	cmpl	#NR_syscalls,%d2
 	jcc	badsys
-	btst	#5,%curptr@(LTASK_FLAGS+3)	| PF_TRACESYS
+	btst	#LPF_TRACESYS_BIT,%curptr@(LTASK_FLAGS+LPF_TRACESYS_OFF)
 	jne	do_trace
 	jbsr	@(SYMBOL_NAME(sys_call_table),%d2:l:4)@(0)
-	movel	%d0,%sp@(LD0)		| save the return value
+	movel	%d0,%sp@(LPT_OFF_D0)	| save the return value
 
 SYMBOL_NAME_LABEL(ret_from_exception)
-	btst	#5,%sp@(LSR)		| check if returning to kernel
+	btst	#5,%sp@(LPT_OFF_SR)	| check if returning to kernel
 	bnes	2f			| if so, skip resched, signals
 	tstl	SYMBOL_NAME(need_resched)
 	jne	SYMBOL_NAME(reschedule)
 	cmpl	#SYMBOL_NAME(task),%curptr	| task[0] cannot have signals
 	jeq	2f
-	bclr	#5,%curptr@(LTASK_FLAGS+1)	| check for delayed trace
+					| check for delayed trace
+	bclr	#LPF_DTRACE_BIT,%curptr@(LTASK_FLAGS+LPF_DTRACE_OFF)
 	jne	do_delayed_trace
 5:
 	tstl	%curptr@(LTASK_STATE)	| state
@@ -236,7 +128,7 @@ SYMBOL_NAME_LABEL(ret_from_exception)
 	movel	%curptr@(LTASK_BLOCKED),%d0
 	movel	%d0,%d1			| save blocked in d1 for sig handling
 	notl	%d0
-	btst	#4,%curptr@(LTASK_FLAGS+3)	| PF_PTRACED
+	btst	#LPF_PTRACED_BIT,%curptr@(LTASK_FLAGS+LPF_PTRACED_OFF)
 	jeq	1f
 	moveq	#-1,%d0			| let the debugger see all signals
 1:	andl	%curptr@(LTASK_SIGNAL),%d0
@@ -255,10 +147,10 @@ Lsignal_return:
 	RESTORE_ALL
 
 do_delayed_trace:
-	bclr	#7,%sp@(LSR)		| clear trace bit in SR
+	bclr	#7,%sp@(LPT_OFF_SR)	| clear trace bit in SR
 	pea	1			| send SIGTRAP
-	movel	%a0,%sp@-
-	pea	5
+	movel	%curptr,%sp@-
+	pea	LSIGTRAP
 	jbsr	SYMBOL_NAME(send_sig)
 	addql	#8,%sp
 	addql	#4,%sp
@@ -268,15 +160,11 @@ do_delayed_trace:
 ** This is the main interrupt handler, responsible for calling process_int()
 */
 SYMBOL_NAME_LABEL(inthandler)
-	SAVE_ALL
-	moveq	#-1,%d0
-	movel	%d0,%sp@(LORIG_D0)	| a -1 in the ORIG_D0 field
-					| signifies that the stack frame
-					| is NOT for syscall
+	SAVE_ALL_INT
 	GET_CURRENT(%d0)
 	addql	#1,SYMBOL_NAME(local_irq_count)
 					|  put exception # in d0
-	bfextu %sp@(LFORMATVEC){#4,#10},%d0
+	bfextu %sp@(LPT_OFF_FORMATVEC){#4,#10},%d0
 
 	movel	%sp,%sp@-
 	movel	%d0,%sp@- 		|  put vector # on stack
@@ -290,7 +178,7 @@ SYMBOL_NAME_LABEL(ret_from_interrupt)
 	RESTORE_ALL
 1:
 #if 1
-	bfextu  %sp@(LSR){#5,#3},%d0    | Check for nested interrupt.
+	bfextu  %sp@(LPT_OFF_SR){#5,#3},%d0	| Check for nested interrupt.
 #if MAX_NOINT_IPL > 0
 	cmpiw	#MAX_NOINT_IPL,%d0
 #endif
@@ -346,14 +234,6 @@ ENTRY(sys_sigreturn)
 	jbsr	SYMBOL_NAME(do_sigreturn)
 	RESTORE_SWITCH_STACK
 	rts
-
-LFLUSH_I_AND_D = 0x00000808
-LTSS_KSP	= 0
-LTSS_USP	= 4
-LTSS_SR		= 8
-LTSS_FS		= 10
-LTSS_CRP	= 12
-LTSS_FPCTXT	= 24
 
 SYMBOL_NAME_LABEL(resume)
 	/*
@@ -460,8 +340,10 @@ SYMBOL_NAME_LABEL(resume)
 
 #if defined (CONFIG_M68060)
 	/* is it a '060 ? */
+#if !defined(CPU_M68060_ONLY)
 	btst	#3,SYMBOL_NAME(m68k_cputype)+3
 	beqs	2f
+#endif
 	/* clear user entries in the branch cache */
 	movec	%cacr,%d0
 	orl	#0x00200000,%d0

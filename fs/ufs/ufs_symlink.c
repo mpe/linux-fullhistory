@@ -6,7 +6,7 @@
  * Laboratory for Computer Science Research Computing Facility
  * Rutgers, The State University of New Jersey
  *
- * $Id: ufs_symlink.c,v 1.7 1997/01/26 07:14:29 davem Exp $
+ * $Id: ufs_symlink.c,v 1.9 1997/06/05 01:29:11 davem Exp $
  *
  */
 
@@ -30,10 +30,6 @@ ufs_readlink(struct inode * inode, char * buffer, int buflen)
 	               inode->i_ino, MAJOR(inode->i_dev), MINOR(inode->i_dev));
 	}
 
-	if (!S_ISLNK(inode->i_mode)) {
-		iput (inode);
-		return -EINVAL;
-	}
 	if (buflen > inode->i_sb->s_blocksize - 1)
 		buflen = inode->i_sb->s_blocksize - 1;
 	if (inode->i_blocks) {
@@ -67,73 +63,6 @@ ufs_readlink(struct inode * inode, char * buffer, int buflen)
 	return i;
 }
 
-/*
- * XXX - blatantly stolen from ext2fs
- */
-static int
-ufs_follow_link(struct inode * dir, struct inode * inode,
-	        int flag, int mode, struct inode ** res_inode)
-{
-	unsigned long int block;
-	int error;
-	struct buffer_head * bh;
-	char * link;
-
-	bh = NULL;
-
-	if (inode->i_sb->u.ufs_sb.s_flags & (UFS_DEBUG|UFS_DEBUG_LINKS)) {
-	        printk("ufs_follow_link: called on ino %lu dev %u/%u\n",
-	               dir->i_ino, MAJOR(dir->i_dev), MINOR(dir->i_dev));
-	}
-
-	*res_inode = NULL;
-	if (!dir) {
-	        dir = current->fs->root;
-	        dir->i_count++;
-	}
-	if (!inode) {
-		iput (dir);
-		return -ENOENT;
-	}
-	if (!S_ISLNK(inode->i_mode)) {
-		iput (dir);
-		*res_inode = inode;
-		return 0;
-	}
-	if (current->link_count > 5) {
-		iput (dir);
-		iput (inode);
-		return -ELOOP;
-	}
-	if (inode->i_blocks) {
-	        /* read the link from disk */
-	        /* XXX - error checking */
-	        block = ufs_bmap(inode, 0);
-	        bh = bread(inode->i_dev, block, BLOCK_SIZE);
-	        if (bh == NULL) {
-	                printk("ufs_follow_link: can't read block 0 for ino %lu on dev %u/%u\n",
-	                       inode->i_ino, MAJOR(inode->i_dev),
-	                       MINOR(inode->i_dev));
-	                iput(dir);
-	                iput(inode);
-	                return(-EIO);
-	        }
-	        link = bh->b_data;
-	} else {
-	        /* fast symlink */
-	        link = (char *)&(inode->u.ufs_i.i_data[0]);
-	}
-	current->link_count++;
-	error = open_namei (link, flag, mode, res_inode, dir);
-	current->link_count--;
-	iput (inode);
-	if (bh) {
-		brelse (bh);
-	}
-	return(error);
-}
-
-
 static struct file_operations ufs_symlink_operations = {
 	NULL,			/* lseek */
 	NULL,			/* read */
@@ -161,8 +90,7 @@ struct inode_operations ufs_symlink_inode_operations = {
 	NULL,			/* rmdir */
 	NULL,			/* mknod */
 	NULL,			/* rename */
-	&ufs_readlink,		/* readlink */
-	&ufs_follow_link,	/* follow_link */
+	ufs_readlink,		/* readlink */
 	NULL,			/* readpage */
 	NULL,			/* writepage */
 	NULL,			/* bmap */

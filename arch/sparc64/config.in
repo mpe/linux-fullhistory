@@ -59,6 +59,9 @@ fi
 if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
   tristate 'Kernel support for JAVA binaries' CONFIG_BINFMT_JAVA
 fi
+if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
+  tristate 'Kernel support for MISC binaries' CONFIG_BINFMT_MISC
+fi
 endmenu
 
 mainmenu_option next_comment

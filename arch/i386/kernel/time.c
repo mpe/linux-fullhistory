@@ -515,7 +515,7 @@ unsigned long get_cmos_time(void)
 	return mktime(year, mon, day, hour, min, sec);
 }
 
-static struct irqaction irq0  = { timer_interrupt, 0, 0, "timer", NULL, NULL};
+static struct irqaction irq0  = { timer_interrupt, SA_INTERRUPT, 0, "timer", NULL, NULL};
 
 
 __initfunc(void time_init(void))

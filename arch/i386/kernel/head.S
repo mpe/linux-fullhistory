@@ -532,8 +532,8 @@ ENTRY(gdt)
 	.quad 0x0000000000000000	/* not used */
 	.quad 0x00cf9a000000ffff	/* 0x10 kernel 4GB code at 0x00000000 */
 	.quad 0x00cf92000000ffff	/* 0x18 kernel 4GB data at 0x00000000 */
-	.quad 0x00cbfa000000ffff	/* 0x23 user   3GB code at 0x00000000 */
-	.quad 0x00cbf2000000ffff	/* 0x2b user   3GB data at 0x00000000 */
+	.quad 0x00cffa000000ffff	/* 0x23 user   4GB code at 0x00000000 */
+	.quad 0x00cff2000000ffff	/* 0x2b user   4GB data at 0x00000000 */
 	.quad 0x0000000000000000	/* not used */
 	.quad 0x0000000000000000	/* not used */
 	.fill 2*NR_TASKS,8,0		/* space for LDT's and TSS's etc */

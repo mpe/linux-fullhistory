@@ -1,7 +1,7 @@
-/* $Id: traps.c,v 1.13 1997/05/27 19:30:08 jj Exp $
+/* $Id: traps.c,v 1.19 1997/06/05 06:22:49 davem Exp $
  * arch/sparc/kernel/traps.c
  *
- * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
+ * Copyright (C) 1995,1997 David S. Miller (davem@caip.rutgers.edu)
  * Copyright (C) 1997 Jakub Jelinek (jj@sunsite.mff.cuni.cz)
  */
 
@@ -23,6 +23,7 @@
 #include <asm/pgtable.h>
 #include <asm/unistd.h>
 #include <asm/uaccess.h>
+#include <asm/fpumacro.h>
 
 /* #define SYSCALL_TRACING */
 /* #define VERBOSE_SYSCALL_TRACING */
@@ -122,7 +123,8 @@ void syscall_trace_entry(unsigned long g1, struct pt_regs *regs)
 	int i;
 #endif
 
-	printk("SYS[%s:%d]: <%d> ", current->comm, current->pid, (int)g1);
+	printk("SYS[%s:%d]: PC(%016lx) <%3d> ",
+	       current->comm, current->pid, regs->tpc, (int)g1);
 #ifdef VERBOSE_SYSCALL_TRACING
 	sdp = NULL;
 	for(i = 0; i < NUM_SDESC_ENTRIES; i++)
@@ -151,7 +153,7 @@ void syscall_trace_entry(unsigned long g1, struct pt_regs *regs)
 
 unsigned long syscall_trace_exit(unsigned long retval, struct pt_regs *regs)
 {
-	printk("ret[%08x]\n", (unsigned int) retval);
+	printk("ret[%016lx]\n", retval);
 	return retval;
 }
 #endif /* SYSCALL_TRACING */
@@ -254,25 +256,143 @@ void do_iae(struct pt_regs *regs)
 		barrier();
 }
 
+static unsigned long init_fsr = 0x0UL;
+static unsigned int init_fregs[64] __attribute__ ((aligned (64))) =
+                { ~0U, ~0U, ~0U, ~0U, ~0U, ~0U, ~0U, ~0U,
+		  ~0U, ~0U, ~0U, ~0U, ~0U, ~0U, ~0U, ~0U,
+		  ~0U, ~0U, ~0U, ~0U, ~0U, ~0U, ~0U, ~0U,
+		  ~0U, ~0U, ~0U, ~0U, ~0U, ~0U, ~0U, ~0U,
+		  ~0U, ~0U, ~0U, ~0U, ~0U, ~0U, ~0U, ~0U,
+		  ~0U, ~0U, ~0U, ~0U, ~0U, ~0U, ~0U, ~0U,
+		  ~0U, ~0U, ~0U, ~0U, ~0U, ~0U, ~0U, ~0U,
+		  ~0U, ~0U, ~0U, ~0U, ~0U, ~0U, ~0U, ~0U };
+
 void do_fpdis(struct pt_regs *regs)
 {
-	printk("FPDIS: at %016lx\n", regs->tpc);
-	while(1)
-		barrier();
+	lock_kernel();
+
+	regs->tstate |= TSTATE_PEF;
+	fprs_write(FPRS_FEF);
+
+	/* This is allowed now because the V9 ABI varargs passes floating
+	 * point args in floating point registers, so vsprintf() and sprintf()
+	 * cause problems.  Luckily we never actually pass floating point values
+	 * to those routines in the kernel and the code generated just does
+	 * stores of them to the stack.  Therefore, for the moment this fix
+	 * is sufficient. -DaveM
+	 */
+	if(regs->tstate & TSTATE_PRIV)
+		goto out;
+
+#ifndef __SMP__
+	if(last_task_used_math == current)
+		goto out;
+	if(last_task_used_math) {
+		struct task_struct *fptask = last_task_used_math;
+
+		if(fptask->tss.flags & SPARC_FLAG_32BIT)
+			fpsave32((unsigned long *)&fptask->tss.float_regs[0],
+				 &fptask->tss.fsr);
+		else
+			fpsave((unsigned long *)&fptask->tss.float_regs[0],
+			       &fptask->tss.fsr);
+	}
+	last_task_used_math = current;
+	if(current->used_math) {
+		if(current->tss.flags & SPARC_FLAG_32BIT)
+			fpload32(&current->tss.float_regs[0],
+				 &current->tss.fsr);
+		else
+			fpload(&current->tss.float_regs[0],
+			       &current->tss.fsr);
+	} else {
+		/* Set inital sane state. */
+		fpload(&init_fregs[0], &init_fsr);
+		current->used_math = 1;
+	}
+#else
+	if(!current->used_math) {
+		fpload(&init_fregs[0], &init_fsr);
+		current->used_math = 1;
+	} else {
+		if(current->tss.flags & SPARC_FLAG_32BIT)
+			fpload32(&current->tss.float_regs[0],
+				 &current->tss.fsr);
+		else
+			fpload(&current->tss.float_regs[0],
+			       &current->tss.fsr);
+	}
+	current->flags |= PF_USEDFPU;
+#endif
+#ifndef __SMP__
+out:
+#endif
+	unlock_kernel();
+}
+
+static unsigned long fake_regs[32] __attribute__ ((aligned (8)));
+static unsigned long fake_fsr;
+
+void do_fpe_common(struct pt_regs *regs)
+{
+	static int calls = 0;
+#ifndef __SMP__
+	struct task_struct *fpt = last_task_used_math;
+#else
+	struct task_struct *fpt = current;
+#endif
+
+	lock_kernel();
+	fprs_write(FPRS_FEF);
+
+#ifndef __SMP__
+	if(!fpt) {
+#else
+	if(!(fpt->flags & PF_USEDFPU)) {
+#endif
+		fpsave(&fake_regs[0], &fake_fsr);
+		regs->tstate &= ~(TSTATE_PEF);
+		goto out;
+	}
+	if(fpt->tss.flags & SPARC_FLAG_32BIT)
+		fpsave32((unsigned long *)&fpt->tss.float_regs[0], &fpt->tss.fsr);
+	else
+		fpsave((unsigned long *)&fpt->tss.float_regs[0], &fpt->tss.fsr);
+	fpt->tss.sig_address = regs->tpc;
+	fpt->tss.sig_desc = SUBSIG_FPERROR;
+#ifdef __SMP__
+	fpt->flags &= ~PF_USEDFPU;
+#endif
+	if(regs->tstate & TSTATE_PRIV) {
+		printk("WARNING: FPU exception from kernel mode. at pc=%016lx\n",
+		       regs->tpc);
+		regs->tpc = regs->tnpc;
+		regs->tnpc += 4;
+		calls++;
+		if(calls > 2)
+			die_if_kernel("Too many Penguin-FPU traps from kernel mode",
+				      regs);
+		goto out;
+	}
+	send_sig(SIGFPE, fpt, 1);
+#ifndef __SMP__
+	last_task_used_math = NULL;
+#endif
+	regs->tstate &= ~TSTATE_PEF;
+	if(calls > 0)
+		calls = 0;
+out:
+	unlock_kernel();
 }
 
 void do_fpieee(struct pt_regs *regs)
 {
-	printk("FPIEEE: at %016lx\n", regs->tpc);
-	while(1)
-		barrier();
+	do_fpe_common(regs);
 }
 
 void do_fpother(struct pt_regs *regs)
 {
-	printk("FPOTHER: at %016lx\n", regs->tpc);
-	while(1)
-		barrier();
+	do_fpe_common(regs);
 }
 
 void do_tof(struct pt_regs *regs)
@@ -352,23 +472,29 @@ void do_illegal_instruction(struct pt_regs *regs)
 		printk("Ill instr. at pc=%016lx ", pc);
 		get_user(insn, ((unsigned int *)pc));
 		printk("insn=[%08x]\n", insn);
+		show_regs(regs);
 	}
 #endif
 	current->tss.sig_address = pc;
 	current->tss.sig_desc = SUBSIG_ILLINST;
 	send_sig(SIGILL, current, 1);
 	unlock_kernel();
-
-	while(1)
-		barrier();
 }
 
-void do_mna(struct pt_regs *regs)
+void mem_address_unaligned(struct pt_regs *regs)
 {
 	printk("AIEEE: do_mna at %016lx\n", regs->tpc);
 	show_regs(regs);
-	while(1)
-		barrier();
+	if(regs->tstate & TSTATE_PRIV) {
+		printk("MNA from kernel, spinning\n");
+		sti();
+		while(1)
+			barrier();
+	} else {
+		current->tss.sig_address = regs->tpc;
+		current->tss.sig_desc = SUBSIG_PRIVINST;
+		send_sig(SIGBUS, current, 1);
+	}
 }
 
 void do_privop(struct pt_regs *regs)

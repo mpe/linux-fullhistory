@@ -326,6 +326,17 @@ EXPORT_SYMBOL(tty_register_ldisc);
 EXPORT_SYMBOL(kill_fasync);
 EXPORT_SYMBOL(ip_rcv);
 EXPORT_SYMBOL(arp_rcv);
+
+#if defined(CONFIG_ATALK) || defined(CONFIG_ATALK_MODULE) 
+#include<linux/if_ltalk.h>
+EXPORT_SYMBOL(ltalk_setup);
+#endif
+
+#ifdef CONFIG_DLCI_MODULE
+extern int (*dlci_ioctl_hook)(unsigned int, void *);
+EXPORT_SYMBOL(dlci_ioctl_hook);
+#endif
+
 #endif  /* CONFIG_NET */
 
 #ifdef CONFIG_NETLINK

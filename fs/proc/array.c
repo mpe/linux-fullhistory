@@ -154,8 +154,6 @@ static long read_profile(struct inode *inode, struct file *file,
 	return read;
 }
 
-
-
 /*
  * Writing to /proc/profile resets the counters
  *
@@ -1021,6 +1019,9 @@ extern int get_smp_prof_list(char *);
 #ifdef CONFIG_ZORRO
 extern int zorro_get_list(char *);
 #endif
+#if defined (CONFIG_AMIGA) || defined (CONFIG_ATARI)
+extern int get_hardware_list(char *);
+#endif
 
 static long get_root_array(char * page, int type, char **start,
 	off_t offset, unsigned long length)
@@ -1104,6 +1105,10 @@ static long get_root_array(char * page, int type, char **start,
 #ifdef CONFIG_ZORRO
 		case PROC_ZORRO:
 			return zorro_get_list(page);
+#endif
+#if defined (CONFIG_AMIGA) || defined (CONFIG_ATARI)
+		case PROC_HARDWARE:
+			return get_hardware_list(page);
 #endif
 	}
 	return -EBADF;
@@ -1211,7 +1216,6 @@ struct inode_operations proc_array_inode_operations = {
 	NULL,			/* mknod */
 	NULL,			/* rename */
 	NULL,			/* readlink */
-	NULL,			/* follow_link */
 	NULL,			/* readpage */
 	NULL,			/* writepage */
 	NULL,			/* bmap */
@@ -1257,7 +1261,6 @@ struct inode_operations proc_arraylong_inode_operations = {
 	NULL,			/* mknod */
 	NULL,			/* rename */
 	NULL,			/* readlink */
-	NULL,			/* follow_link */
 	NULL,			/* readpage */
 	NULL,			/* writepage */
 	NULL,			/* bmap */

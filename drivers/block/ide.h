@@ -134,7 +134,7 @@ typedef unsigned char	byte;	/* used everywhere */
 #define BAD_W_STAT		(BAD_R_STAT  | WRERR_STAT)
 #define BAD_STAT		(BAD_R_STAT  | DRQ_STAT)
 #define DRIVE_READY		(READY_STAT  | SEEK_STAT)
-#define DATA_READY		(DRIVE_READY | DRQ_STAT)
+#define DATA_READY		(DRQ_STAT)
 
 /*
  * Some more useful definitions

@@ -296,7 +296,8 @@ extern pgd_t swapper_pg_dir[PTRS_PER_PGD];
  * The parameters are pointers to where to stick the starting and ending
  * addresses  of available kernel virtual memory.
  */
-__initfunc(unsigned long paging_init(unsigned long start_mem, unsigned long end_mem))
+__initfunc(unsigned long paging_init(unsigned long start_mem,
+				     unsigned long end_mem))
 {
 	int chunk;
 	unsigned long mem_avail = 0;

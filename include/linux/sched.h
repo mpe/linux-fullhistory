@@ -500,13 +500,8 @@ extern inline struct file *file_from_fd(const unsigned int fd)
  */
 extern inline void __add_wait_queue(struct wait_queue ** p, struct wait_queue * wait)
 {
-	struct wait_queue *head = *p;
-	struct wait_queue *next = WAIT_QUEUE_HEAD(p);
-
-	if (head)
-		next = head;
+	wait->next = *p ? : WAIT_QUEUE_HEAD(p);
 	*p = wait;
-	wait->next = next;
 }
 
 extern rwlock_t waitqueue_lock;

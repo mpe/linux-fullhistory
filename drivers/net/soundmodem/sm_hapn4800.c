@@ -49,133 +49,225 @@ struct demod_state_hapn48 {
 	unsigned int dcd_shreg;
 	int dcd_sum0, dcd_sum1, dcd_sum2;
 	unsigned int dcd_time;
-	int inphist[5];
 	int lvlhi, lvllo;
 };
 
 struct mod_state_hapn48 {
 	unsigned int shreg;
 	unsigned char tx_bit;
+	unsigned int tx_seq;
+	const unsigned char *tbl;
 };
 
 /* --------------------------------------------------------------------- */
 
-static void modulator_hapn4800_10(struct sm_state *sm, unsigned char *buf, int buflen)
+static void modulator_hapn4800_10_u8(struct sm_state *sm, unsigned char *buf, unsigned int buflen)
 {
 	struct mod_state_hapn48 *st = (struct mod_state_hapn48 *)(&sm->m);
-	int j;
-	const unsigned char *cp;
 
-	for (; buflen >= 10; buflen -= 10) {
-		if (st->shreg <= 1)
-			st->shreg = hdlcdrv_getbits(&sm->hdrv) | 0x10000;
-		st->tx_bit = ((st->tx_bit << 1) |
-				     (st->tx_bit & 1));
-		st->tx_bit ^= (!(st->shreg & 1));
-		st->shreg >>= 1;
-		cp = hapn48_txfilt_10 + (st->tx_bit & 0xf);
-		for (j = 0; j < 10; j++, cp += 0x10)
-			*buf++ = *cp;
+	for (; buflen > 0; buflen--, buf++) {
+		if (!st->tx_seq++) { 
+			if (st->shreg <= 1)
+				st->shreg = hdlcdrv_getbits(&sm->hdrv) | 0x10000;
+			st->tx_bit = ((st->tx_bit << 1) |
+				      (st->tx_bit & 1));
+			st->tx_bit ^= (!(st->shreg & 1));
+			st->shreg >>= 1;
+			st->tbl = hapn48_txfilt_10 + (st->tx_bit & 0xf);
+		}
+		if (st->tx_seq >= 10)
+			st->tx_seq = 0;
+		*buf = *st->tbl;
+		st->tbl += 0x10;
 	}
 }
 
 /* --------------------------------------------------------------------- */
 
-static void modulator_hapn4800_8(struct sm_state *sm, unsigned char *buf, int buflen)
+static void modulator_hapn4800_10_s16(struct sm_state *sm, short *buf, unsigned int buflen)
 {
 	struct mod_state_hapn48 *st = (struct mod_state_hapn48 *)(&sm->m);
-	int j;
-	const unsigned char *cp;
 
-	for (; buflen >= 8; buflen -= 8) {
-		if (st->shreg <= 1)
-			st->shreg = hdlcdrv_getbits(&sm->hdrv) | 0x10000;
-		st->tx_bit = (st->tx_bit << 1) | (st->tx_bit & 1);
-		st->tx_bit ^= !(st->shreg & 1);
-		st->shreg >>= 1;
-		cp = hapn48_txfilt_8 + (st->tx_bit & 0xf);
-		for (j = 0; j < 8; j++, cp += 0x10)
-			*buf++ = *cp;
+	for (; buflen > 0; buflen--, buf++) {
+		if (!st->tx_seq++) { 
+			if (st->shreg <= 1)
+				st->shreg = hdlcdrv_getbits(&sm->hdrv) | 0x10000;
+			st->tx_bit = ((st->tx_bit << 1) |
+				      (st->tx_bit & 1));
+			st->tx_bit ^= (!(st->shreg & 1));
+			st->shreg >>= 1;
+			st->tbl = hapn48_txfilt_10 + (st->tx_bit & 0xf);
+		}
+		if (st->tx_seq >= 10)
+			st->tx_seq = 0;
+		*buf = ((*st->tbl)-0x80)<<8;
+		st->tbl += 0x10;
 	}
 }
 
 /* --------------------------------------------------------------------- */
 
-static void modulator_hapn4800_pm10(struct sm_state *sm, unsigned char *buf, int buflen)
+static void modulator_hapn4800_8_u8(struct sm_state *sm, unsigned char *buf, unsigned int buflen)
 {
 	struct mod_state_hapn48 *st = (struct mod_state_hapn48 *)(&sm->m);
-	int j;
-	const unsigned char *cp;
 
-	for (; buflen >= 10; buflen -= 10) {
-		if (st->shreg <= 1)
-			st->shreg = hdlcdrv_getbits(&sm->hdrv) | 0x10000;
-		st->tx_bit = ((st->tx_bit << 1) |
-				     (st->tx_bit & 1));
-		st->tx_bit ^= (!(st->shreg & 1));
-		st->shreg >>= 1;
-		cp = hapn48_txfilt_pm10 + (st->tx_bit & 0xf);
-		for (j = 0; j < 10; j++, cp += 0x10)
-			*buf++ = *cp;
+	for (; buflen > 0; buflen--, buf++) {
+		if (!st->tx_seq++) {
+			if (st->shreg <= 1)
+				st->shreg = hdlcdrv_getbits(&sm->hdrv) | 0x10000;
+			st->tx_bit = (st->tx_bit << 1) | (st->tx_bit & 1);
+			st->tx_bit ^= !(st->shreg & 1);
+			st->shreg >>= 1;
+			st->tbl = hapn48_txfilt_8 + (st->tx_bit & 0xf);
+		}
+		if (st->tx_seq >= 8)
+			st->tx_seq = 0;
+		*buf = *st->tbl;
+		st->tbl += 0x10;
 	}
 }
 
 /* --------------------------------------------------------------------- */
 
-static void modulator_hapn4800_pm8(struct sm_state *sm, unsigned char *buf, int buflen)
+static void modulator_hapn4800_8_s16(struct sm_state *sm, short *buf, unsigned int buflen)
 {
 	struct mod_state_hapn48 *st = (struct mod_state_hapn48 *)(&sm->m);
-	int j;
-	const unsigned char *cp;
 
-	for (; buflen >= 8; buflen -= 8) {
-		if (st->shreg <= 1)
-			st->shreg = hdlcdrv_getbits(&sm->hdrv) | 0x10000;
-		st->tx_bit = (st->tx_bit << 1) | (st->tx_bit & 1);
-		st->tx_bit ^= !(st->shreg & 1);
-		st->shreg >>= 1;
-		cp = hapn48_txfilt_pm8 + (st->tx_bit & 0xf);
-		for (j = 0; j < 8; j++, cp += 0x10)
-			*buf++ = *cp;
+	for (; buflen > 0; buflen--, buf++) {
+		if (!st->tx_seq++) {
+			if (st->shreg <= 1)
+				st->shreg = hdlcdrv_getbits(&sm->hdrv) | 0x10000;
+			st->tx_bit = (st->tx_bit << 1) | (st->tx_bit & 1);
+			st->tx_bit ^= !(st->shreg & 1);
+			st->shreg >>= 1;
+			st->tbl = hapn48_txfilt_8 + (st->tx_bit & 0xf);
+		}
+		if (st->tx_seq >= 8)
+			st->tx_seq = 0;
+		*buf = ((*st->tbl)-0x80)<<8;
+		st->tbl += 0x10;
 	}
 }
 
 /* --------------------------------------------------------------------- */
 
-static void demodulator_hapn4800_10(struct sm_state *sm, unsigned char *buf, int buflen)
+static void modulator_hapn4800_pm10_u8(struct sm_state *sm, unsigned char *buf, unsigned int buflen)
+{
+	struct mod_state_hapn48 *st = (struct mod_state_hapn48 *)(&sm->m);
+
+	for (; buflen > 0; buflen--, buf++) {
+		if (!st->tx_seq++) { 
+			if (st->shreg <= 1)
+				st->shreg = hdlcdrv_getbits(&sm->hdrv) | 0x10000;
+			st->tx_bit = ((st->tx_bit << 1) |
+				      (st->tx_bit & 1));
+			st->tx_bit ^= (!(st->shreg & 1));
+			st->shreg >>= 1;
+			st->tbl = hapn48_txfilt_pm10 + (st->tx_bit & 0xf);
+		}
+		if (st->tx_seq >= 10)
+			st->tx_seq = 0;
+		*buf = *st->tbl;
+		st->tbl += 0x10;
+	}
+}
+
+/* --------------------------------------------------------------------- */
+
+static void modulator_hapn4800_pm10_s16(struct sm_state *sm, short *buf, unsigned int buflen)
+{
+	struct mod_state_hapn48 *st = (struct mod_state_hapn48 *)(&sm->m);
+
+	for (; buflen > 0; buflen--, buf++) {
+		if (!st->tx_seq++) { 
+			if (st->shreg <= 1)
+				st->shreg = hdlcdrv_getbits(&sm->hdrv) | 0x10000;
+			st->tx_bit = ((st->tx_bit << 1) |
+				      (st->tx_bit & 1));
+			st->tx_bit ^= (!(st->shreg & 1));
+			st->shreg >>= 1;
+			st->tbl = hapn48_txfilt_pm10 + (st->tx_bit & 0xf);
+		}
+		if (st->tx_seq >= 10)
+			st->tx_seq = 0;
+		*buf = ((*st->tbl)-0x80)<<8;
+		st->tbl += 0x10;
+	}
+}
+
+/* --------------------------------------------------------------------- */
+
+static void modulator_hapn4800_pm8_u8(struct sm_state *sm, unsigned char *buf, unsigned int buflen)
+{
+	struct mod_state_hapn48 *st = (struct mod_state_hapn48 *)(&sm->m);
+
+	for (; buflen > 0; buflen--, buf++) {
+		if (!st->tx_seq++) {
+			if (st->shreg <= 1)
+				st->shreg = hdlcdrv_getbits(&sm->hdrv) | 0x10000;
+			st->tx_bit = (st->tx_bit << 1) | (st->tx_bit & 1);
+			st->tx_bit ^= !(st->shreg & 1);
+			st->shreg >>= 1;
+			st->tbl = hapn48_txfilt_pm8 + (st->tx_bit & 0xf);
+		}
+		if (st->tx_seq >= 8)
+			st->tx_seq = 0;
+		*buf = *st->tbl;
+		st->tbl += 0x10;
+	}
+}
+
+/* --------------------------------------------------------------------- */
+
+static void modulator_hapn4800_pm8_s16(struct sm_state *sm, short *buf, unsigned int buflen)
+{
+	struct mod_state_hapn48 *st = (struct mod_state_hapn48 *)(&sm->m);
+
+	for (; buflen > 0; buflen--, buf++) {
+		if (!st->tx_seq++) {
+			if (st->shreg <= 1)
+				st->shreg = hdlcdrv_getbits(&sm->hdrv) | 0x10000;
+			st->tx_bit = (st->tx_bit << 1) | (st->tx_bit & 1);
+			st->tx_bit ^= !(st->shreg & 1);
+			st->shreg >>= 1;
+			st->tbl = hapn48_txfilt_pm8 + (st->tx_bit & 0xf);
+		}
+		if (st->tx_seq >= 8)
+			st->tx_seq = 0;
+		*buf = ((*st->tbl)-0x80)<<8;
+		st->tbl += 0x10;
+	}
+}
+
+/* --------------------------------------------------------------------- */
+
+static void demodulator_hapn4800_10_u8(struct sm_state *sm, const unsigned char *buf, unsigned int buflen)
 {
 	struct demod_state_hapn48 *st = (struct demod_state_hapn48 *)(&sm->d);
 	static const int pll_corr[2] = { -0x800, 0x800 };
 	int curst, cursync;
+	int inv;
 
 	for (; buflen > 0; buflen--, buf++) {
-		st->inphist[4] = st->inphist[3];
-		st->inphist[3] = st->inphist[2];
-		st->inphist[2] = st->inphist[1];
-		st->inphist[1] = st->inphist[0];
-		st->inphist[0] = ((int)(*buf)-0x80) << 8;
+		inv = ((int)(buf[-2])-0x80) << 8;
 		st->lvlhi = (st->lvlhi * 65309) >> 16; /* decay */
 		st->lvllo = (st->lvllo * 65309) >> 16; /* decay */
-		if (st->inphist[2] > st->lvlhi)
-			st->lvlhi = st->inphist[2];
-		if (st->inphist[2] < st->lvllo)
-			st->lvllo = st->inphist[2];
+		if (inv > st->lvlhi)
+			st->lvlhi = inv;
+		if (inv < st->lvllo)
+			st->lvllo = inv;
 		if (buflen & 1)
 			st->dcd_shreg <<= 1;
 		st->bit_pll += 0x199a;
 		curst = cursync = 0;
-		if (st->inphist[2] > st->lvlhi >> 1) {
+		if (inv > st->lvlhi >> 1) {
 			curst = 1;
-			cursync = (st->inphist[2] > st->inphist[1] &&
-				   st->inphist[2] > st->inphist[3] &&
-				   st->inphist[2] > st->inphist[0] &&
-				   st->inphist[2] > st->inphist[4]);
-		} else if (st->inphist[2] < st->lvllo >> 1) {
+			cursync = (buf[-2] > buf[-1] && buf[-2] > buf[-3] &&
+				   buf[-2] > buf[-0] && buf[-2] > buf[-4]);
+		} else if (inv < st->lvllo >> 1) {
 			curst = -1;
-			cursync = (st->inphist[2] < st->inphist[1] &&
-				   st->inphist[2] < st->inphist[3] &&
-				   st->inphist[2] < st->inphist[0] &&
-				   st->inphist[2] < st->inphist[4]);
+			cursync = (buf[-2] < buf[-1] && buf[-2] < buf[-3] &&
+				   buf[-2] < buf[-0] && buf[-2] < buf[-4]);
 		}
 		if (cursync) {
 			st->dcd_shreg |= cursync;
@@ -208,46 +300,104 @@ static void demodulator_hapn4800_10(struct sm_state *sm, unsigned char *buf, int
 			}
 			diag_trigger(sm);
 		}
-		diag_add_one(sm, st->inphist[2]);
+		diag_add_one(sm, inv);
 	}
 }
 
 /* --------------------------------------------------------------------- */
 
-static void demodulator_hapn4800_8(struct sm_state *sm, unsigned char *buf, int buflen)
+static void demodulator_hapn4800_10_s16(struct sm_state *sm, const short *buf, unsigned int buflen)
 {
 	struct demod_state_hapn48 *st = (struct demod_state_hapn48 *)(&sm->d);
 	static const int pll_corr[2] = { -0x800, 0x800 };
 	int curst, cursync;
+	int inv;
 
 	for (; buflen > 0; buflen--, buf++) {
-		st->inphist[4] = st->inphist[3];
-		st->inphist[3] = st->inphist[2];
-		st->inphist[2] = st->inphist[1];
-		st->inphist[1] = st->inphist[0];
-		st->inphist[0] = ((int)(*buf)-0x80) << 8;
+		inv = buf[-2];
 		st->lvlhi = (st->lvlhi * 65309) >> 16; /* decay */
 		st->lvllo = (st->lvllo * 65309) >> 16; /* decay */
-		if (st->inphist[2] > st->lvlhi)
-			st->lvlhi = st->inphist[2];
-		if (st->inphist[2] < st->lvllo)
-			st->lvllo = st->inphist[2];
+		if (inv > st->lvlhi)
+			st->lvlhi = inv;
+		if (inv < st->lvllo)
+			st->lvllo = inv;
+		if (buflen & 1)
+			st->dcd_shreg <<= 1;
+		st->bit_pll += 0x199a;
+		curst = cursync = 0;
+		if (inv > st->lvlhi >> 1) {
+			curst = 1;
+			cursync = (buf[-2] > buf[-1] && buf[-2] > buf[-3] &&
+				   buf[-2] > buf[-0] && buf[-2] > buf[-4]);
+		} else if (inv < st->lvllo >> 1) {
+			curst = -1;
+			cursync = (buf[-2] < buf[-1] && buf[-2] < buf[-3] &&
+				   buf[-2] < buf[-0] && buf[-2] < buf[-4]);
+		}
+		if (cursync) {
+			st->dcd_shreg |= cursync;
+			st->bit_pll += pll_corr[((st->bit_pll - 0x8000u) & 0xffffu) < 0x8ccdu];
+			st->dcd_sum0 += 16 * hweight32(st->dcd_shreg & 0x18c6318c) - 
+				hweight32(st->dcd_shreg & 0xe739ce70);
+		}
+		hdlcdrv_channelbit(&sm->hdrv, cursync);
+		if ((--st->dcd_time) <= 0) {
+			hdlcdrv_setdcd(&sm->hdrv, (st->dcd_sum0 + 
+						   st->dcd_sum1 + 
+						   st->dcd_sum2) < 0);
+			st->dcd_sum2 = st->dcd_sum1;
+			st->dcd_sum1 = st->dcd_sum0;
+			st->dcd_sum0 = 2; /* slight bias */
+			st->dcd_time = 240;
+		}
+		if (st->bit_pll >= 0x10000) {
+			st->bit_pll &= 0xffff;
+			st->last_bit2 = st->last_bit;
+			if (curst < 0)
+				st->last_bit = 0;
+			else if (curst > 0)
+				st->last_bit = 1;
+			st->shreg >>= 1;
+			st->shreg |= ((st->last_bit ^ st->last_bit2 ^ 1) & 1) << 16;
+			if (st->shreg & 1) {
+				hdlcdrv_putbits(&sm->hdrv, st->shreg >> 1);
+				st->shreg = 0x10000;
+			}
+			diag_trigger(sm);
+		}
+		diag_add_one(sm, inv);
+	}
+}
+
+/* --------------------------------------------------------------------- */
+
+static void demodulator_hapn4800_8_u8(struct sm_state *sm, const unsigned char *buf, unsigned int buflen)
+{
+	struct demod_state_hapn48 *st = (struct demod_state_hapn48 *)(&sm->d);
+	static const int pll_corr[2] = { -0x800, 0x800 };
+	int curst, cursync;
+	int inv;
+
+	for (; buflen > 0; buflen--, buf++) {
+		inv = ((int)(buf[-2])-0x80) << 8;
+		st->lvlhi = (st->lvlhi * 65309) >> 16; /* decay */
+		st->lvllo = (st->lvllo * 65309) >> 16; /* decay */
+		if (inv > st->lvlhi)
+			st->lvlhi = inv;
+		if (inv < st->lvllo)
+			st->lvllo = inv;
 		if (buflen & 1)
 			st->dcd_shreg <<= 1;
 		st->bit_pll += 0x2000;
 		curst = cursync = 0;
-		if (st->inphist[2] > st->lvlhi >> 1) {
+		if (inv > st->lvlhi >> 1) {
 			curst = 1;
-			cursync = (st->inphist[2] > st->inphist[1] &&
-				   st->inphist[2] > st->inphist[3] &&
-				   st->inphist[2] > st->inphist[0] &&
-				   st->inphist[2] > st->inphist[4]);
-		} else if (st->inphist[2] < st->lvllo >> 1) {
+			cursync = (buf[-2] > buf[-1] && buf[-2] > buf[-3] &&
+				   buf[-2] > buf[-0] && buf[-2] > buf[-4]);
+		} else if (inv < st->lvllo >> 1) {
 			curst = -1;
-			cursync = (st->inphist[2] < st->inphist[1] &&
-				   st->inphist[2] < st->inphist[3] &&
-				   st->inphist[2] < st->inphist[0] &&
-				   st->inphist[2] < st->inphist[4]);
+			cursync = (buf[-2] < buf[-1] && buf[-2] < buf[-3] &&
+				   buf[-2] < buf[-0] && buf[-2] < buf[-4]);
 		}
 		if (cursync) {
 			st->dcd_shreg |= cursync;
@@ -280,7 +430,72 @@ static void demodulator_hapn4800_8(struct sm_state *sm, unsigned char *buf, int 
 			}
 			diag_trigger(sm);
 		}
-		diag_add_one(sm, st->inphist[2]);
+		diag_add_one(sm, inv);
+	}
+}
+
+/* --------------------------------------------------------------------- */
+
+static void demodulator_hapn4800_8_s16(struct sm_state *sm, const short *buf, unsigned int buflen)
+{
+	struct demod_state_hapn48 *st = (struct demod_state_hapn48 *)(&sm->d);
+	static const int pll_corr[2] = { -0x800, 0x800 };
+	int curst, cursync;
+	int inv;
+
+	for (; buflen > 0; buflen--, buf++) {
+		inv = buf[-2];
+		st->lvlhi = (st->lvlhi * 65309) >> 16; /* decay */
+		st->lvllo = (st->lvllo * 65309) >> 16; /* decay */
+		if (inv > st->lvlhi)
+			st->lvlhi = inv;
+		if (inv < st->lvllo)
+			st->lvllo = inv;
+		if (buflen & 1)
+			st->dcd_shreg <<= 1;
+		st->bit_pll += 0x2000;
+		curst = cursync = 0;
+		if (inv > st->lvlhi >> 1) {
+			curst = 1;
+			cursync = (buf[-2] > buf[-1] && buf[-2] > buf[-3] &&
+				   buf[-2] > buf[-0] && buf[-2] > buf[-4]);
+		} else if (inv < st->lvllo >> 1) {
+			curst = -1;
+			cursync = (buf[-2] < buf[-1] && buf[-2] < buf[-3] &&
+				   buf[-2] < buf[-0] && buf[-2] < buf[-4]);
+		}
+		if (cursync) {
+			st->dcd_shreg |= cursync;
+			st->bit_pll += pll_corr[((st->bit_pll - 0x8000u) & 0xffffu) < 0x9000u];
+			st->dcd_sum0 += 16 * hweight32(st->dcd_shreg & 0x44444444) - 
+				hweight32(st->dcd_shreg & 0xbbbbbbbb);
+		}
+		hdlcdrv_channelbit(&sm->hdrv, cursync);
+		if ((--st->dcd_time) <= 0) {
+			hdlcdrv_setdcd(&sm->hdrv, (st->dcd_sum0 + 
+						   st->dcd_sum1 + 
+						   st->dcd_sum2) < 0);
+			st->dcd_sum2 = st->dcd_sum1;
+			st->dcd_sum1 = st->dcd_sum0;
+			st->dcd_sum0 = 2; /* slight bias */
+			st->dcd_time = 240;
+		}
+		if (st->bit_pll >= 0x10000) {
+			st->bit_pll &= 0xffff;
+			st->last_bit2 = st->last_bit;
+			if (curst < 0)
+				st->last_bit = 0;
+			else if (curst > 0)
+				st->last_bit = 1;
+			st->shreg >>= 1;
+			st->shreg |= ((st->last_bit ^ st->last_bit2 ^ 1) & 1) << 16;
+			if (st->shreg & 1) {
+				hdlcdrv_putbits(&sm->hdrv, st->shreg >> 1);
+				st->shreg = 0x10000;
+			}
+			diag_trigger(sm);
+		}
+		diag_add_one(sm, inv);
 	}
 }
 
@@ -297,51 +512,49 @@ static void demod_init_hapn4800(struct sm_state *sm)
 /* --------------------------------------------------------------------- */
 
 const struct modem_tx_info sm_hapn4800_8_tx = {
-	"hapn4800", sizeof(struct mod_state_hapn48), 
-	38400, 4800, 8, modulator_hapn4800_8, NULL
+	"hapn4800", sizeof(struct mod_state_hapn48), 38400, 4800, 
+	modulator_hapn4800_8_u8, modulator_hapn4800_8_s16, NULL
 };
 
 const struct modem_rx_info sm_hapn4800_8_rx = {
-	"hapn4800", sizeof(struct demod_state_hapn48), 
-	38400, 4800, 8, 8, demodulator_hapn4800_8, demod_init_hapn4800
+	"hapn4800", sizeof(struct demod_state_hapn48), 38400, 4800, 5, 8, 
+	demodulator_hapn4800_8_u8, demodulator_hapn4800_8_s16, demod_init_hapn4800
 };
 
 /* --------------------------------------------------------------------- */
 
 const struct modem_tx_info sm_hapn4800_10_tx = {
-	"hapn4800", sizeof(struct mod_state_hapn48), 
-	48000, 4800, 10, 
-	modulator_hapn4800_10, NULL
+	"hapn4800", sizeof(struct mod_state_hapn48), 48000, 4800,
+	modulator_hapn4800_10_u8, modulator_hapn4800_10_s16, NULL
 };
 
 const struct modem_rx_info sm_hapn4800_10_rx = {
-	"hapn4800", sizeof(struct demod_state_hapn48), 
-	48000, 4800, 10, 10, demodulator_hapn4800_10, demod_init_hapn4800
+	"hapn4800", sizeof(struct demod_state_hapn48), 48000, 4800, 5, 10, 
+	demodulator_hapn4800_10_u8, demodulator_hapn4800_10_s16, demod_init_hapn4800
 };
 
 /* --------------------------------------------------------------------- */
 
 const struct modem_tx_info sm_hapn4800_pm8_tx = {
-	"hapn4800pm", sizeof(struct mod_state_hapn48), 
-	38400, 4800, 8, modulator_hapn4800_pm8, NULL
+	"hapn4800pm", sizeof(struct mod_state_hapn48), 38400, 4800, 
+	modulator_hapn4800_pm8_u8, modulator_hapn4800_pm8_s16, NULL
 };
 
 const struct modem_rx_info sm_hapn4800_pm8_rx = {
-	"hapn4800pm", sizeof(struct demod_state_hapn48), 
-	38400, 4800, 8, 8, demodulator_hapn4800_8, demod_init_hapn4800
+	"hapn4800pm", sizeof(struct demod_state_hapn48), 38400, 4800, 5, 8, 
+	demodulator_hapn4800_8_u8, demodulator_hapn4800_8_s16, demod_init_hapn4800
 };
 
 /* --------------------------------------------------------------------- */
 
 const struct modem_tx_info sm_hapn4800_pm10_tx = {
-	"hapn4800pm", sizeof(struct mod_state_hapn48), 
-	48000, 4800, 10, 
-	modulator_hapn4800_pm10, NULL
+	"hapn4800pm", sizeof(struct mod_state_hapn48), 48000, 4800,
+	modulator_hapn4800_pm10_u8, modulator_hapn4800_pm10_s16, NULL
 };
 
 const struct modem_rx_info sm_hapn4800_pm10_rx = {
-	"hapn4800pm", sizeof(struct demod_state_hapn48), 
-	48000, 4800, 10, 10, demodulator_hapn4800_10, demod_init_hapn4800
+	"hapn4800pm", sizeof(struct demod_state_hapn48), 48000, 4800, 5, 10,
+	demodulator_hapn4800_10_u8, demodulator_hapn4800_10_s16, demod_init_hapn4800
 };
 
 /* --------------------------------------------------------------------- */

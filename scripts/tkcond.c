@@ -195,6 +195,7 @@ struct condition * get_token_cond(struct condition ** cond, int depth)
 		      if( cfg->tok != tok_bool
 		         && cfg->tok != tok_int
 		         && cfg->tok != tok_hex
+		         && cfg->tok != tok_string
 			 && cfg->tok != tok_tristate 
 			 && cfg->tok != tok_choice
 			 && cfg->tok != tok_dep_tristate)
@@ -358,6 +359,7 @@ void fix_conditionals(struct kconfig * scfg)
 	case tok_tristate:
 	case tok_int:
 	case tok_hex:
+	case tok_string:
 	case tok_choice:
 	case tok_make:
 	  /*
@@ -402,6 +404,7 @@ void fix_conditionals(struct kconfig * scfg)
 	case tok_dep_tristate:
 	case tok_int:
 	case tok_hex:
+	case tok_string:
 	  for(cfg1=cfg;cfg1 != NULL; cfg1 = cfg1->next)
 	    {
 	      switch(cfg1->tok)
@@ -412,6 +415,7 @@ void fix_conditionals(struct kconfig * scfg)
 		case tok_dep_tristate:
 		case tok_int:
 		case tok_hex:
+		case tok_string:
 		  if( strcmp(cfg->optionname, cfg1->optionname) == 0)
 		    {
 		      cfg->flags |= CFG_DUP;

@@ -47,6 +47,10 @@ extern void inet6_proto_init(struct net_proto *pro);
 #endif
 #endif
 
+#if defined(CONFIG_DECNET)
+#include <net/decnet_call.h>
+#endif
+
 #if defined(CONFIG_ATALK) || defined(CONFIG_ATALK_MODULE)
 #define NEED_802
 #include <net/atalkcall.h>
@@ -107,9 +111,11 @@ struct net_proto protocols[] = {
   { "Rose",	rose_proto_init },			/* Amateur Radio X.25 PLP */
 #endif
 #endif  
-
+#ifdef CONFIG_DECNET
+  { "DECnet",   decnet_proto_init },                    /* DECnet */
+#endif
 #ifdef	CONFIG_INET
-  { "INET",	inet_proto_init	},			/* TCP/IP			*/
+  { "INET",	inet_proto_init	},			/* TCP/IP */
 #ifdef	CONFIG_IPV6
   { "INET6",	inet6_proto_init},			/* IPv6	*/
 #endif

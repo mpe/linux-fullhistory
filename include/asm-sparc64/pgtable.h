@@ -1,4 +1,4 @@
-/* $Id: pgtable.h,v 1.32 1997/05/26 23:39:20 davem Exp $
+/* $Id: pgtable.h,v 1.34 1997/06/02 06:33:41 davem Exp $
  * pgtable.h: SpitFire page table operations.
  *
  * Copyright 1996,1997 David S. Miller (davem@caip.rutgers.edu)
@@ -160,45 +160,6 @@ extern void *sparc_init_alloc(unsigned long *kbrk, unsigned long size);
 
 /* Cache and TLB flush operations. */
 
-/* This is a bit tricky to do most efficiently.  The I-CACHE on the
- * SpitFire will snoop stores from _other_ processors and changes done
- * by DMA, but it does _not_ snoop stores on the local processor.
- * Also, even if the I-CACHE snoops the store from someone else correctly,
- * you can still lose if the instructions are in the pipeline already.
- * A big issue is that this cache is only 16K in size, using a pseudo
- * 2-set associative scheme.  A full flush of the cache is far too much
- * for me to accept, especially since most of the time when we get to
- * running this code the icache data we want to flush is not even in
- * the cache.  Thus the following seems to be the best method.
- */
-extern __inline__ void spitfire_flush_icache_page(unsigned long page)
-{
-	unsigned long temp;
-
-	/* Commit all potential local stores to the instruction space
-	 * on this processor before the flush.
-	 */
-	membar("#StoreStore");
-
-	/* Actually perform the flush. */
-	__asm__ __volatile__("
-1:
-	flush		%0 + 0x00
-	flush		%0 + 0x08
-	flush		%0 + 0x10
-	flush		%0 + 0x18
-	flush		%0 + 0x20
-	flush		%0 + 0x28
-	flush		%0 + 0x30
-	flush		%0 + 0x38
-	subcc		%1, 0x40, %1
-	bge,pt		%%icc, 1b
-	 add		%2, %1, %0
-"	: "=&r" (page), "=&r" (temp)
-	: "r" (page), "0" (page + PAGE_SIZE - 0x40), "1" (PAGE_SIZE - 0x40)
-	: "cc");
-}
-
 extern __inline__ void flush_cache_all(void)
 {
 	unsigned long addr;
@@ -283,13 +244,14 @@ extern __inline__ void flush_tlb_mm(struct mm_struct *mm)
 1:
 	stxa		%%g0, [%%g3] %3
 	stxa		%%g0, [%%g3] %4
-	bne,a,pn	%%icc, 1f
-	 stxa		%%g2, [%%g7] %2
+	be,a,pt		%%icc, 1f
+	 nop
+	stxa		%%g2, [%%g7] %2
 1:
 	flush		%%g4
 	wrpr		%%g1, 0x0, %%pil
 "	: /* no outputs */
-	: "r" (mm->context), "i" (SECONDARY_CONTEXT), "i" (ASI_DMMU),
+	: "r" (mm->context & 0x1fff), "i" (SECONDARY_CONTEXT), "i" (ASI_DMMU),
 	  "i" (ASI_DMMU_DEMAP), "i" (ASI_IMMU_DEMAP)
 	: "g1", "g2", "g3", "g7", "cc");
 	}
@@ -300,7 +262,7 @@ extern __inline__ void flush_tlb_range(struct mm_struct *mm, unsigned long start
 {
 	if(mm->context != NO_CONTEXT) {
 		unsigned long old_ctx = spitfire_get_secondary_context();
-		unsigned long new_ctx = mm->context;
+		unsigned long new_ctx = (mm->context & 0x1fff);
 		unsigned long flags;
 
 		start &= PAGE_MASK;
@@ -332,22 +294,20 @@ extern __inline__ void flush_tlb_page(struct vm_area_struct *vma, unsigned long 
 	ldxa		[%%g7] %2, %%g2
 	cmp		%%g2, %0
 	be,pt		%%icc, 1f
-	 or		%5, 0x10, %5
+	 or		%5, 0x10, %%g3
 	stxa		%0, [%%g7] %2
 1:
-	stxa		%%g0, [%5] %3
-	brnz,a		%6, 1f
-	 stxa		%%g0, [%5] %4
-1:
-	bne,a,pn	%%icc, 1f
-	 stxa		%%g2, [%%g7] %2
+	stxa		%%g0, [%%g3] %3
+	stxa		%%g0, [%%g3] %4
+	be,a,pt		%%icc, 1f
+	 nop
+	stxa		%%g2, [%%g7] %2
 1:
 	flush		%%g4
 	wrpr		%%g1, 0x0, %%pil
 "	: /* no outputs */
-	: "r" (mm->context), "i" (SECONDARY_CONTEXT), "i" (ASI_DMMU),
-	  "i" (ASI_DMMU_DEMAP), "i" (ASI_IMMU_DEMAP), "r" (page & PAGE_MASK),
-	  "r" (vma->vm_flags & VM_EXEC)
+	: "r" (mm->context & 0x1fff), "i" (SECONDARY_CONTEXT), "i" (ASI_DMMU),
+	  "i" (ASI_DMMU_DEMAP), "i" (ASI_IMMU_DEMAP), "r" (page & PAGE_MASK)
 	: "g1", "g2", "g3", "g7", "cc");
 	}
 }

@@ -77,9 +77,9 @@
 #include <asm/system.h>
 #include <asm/bitops.h>
 
-#include "kbd_kern.h"
-#include "vt_kern.h"
-#include "selection.h"
+#include <linux/kbd_kern.h>
+#include <linux/vt_kern.h>
+#include <linux/selection.h>
 
 #ifdef CONFIG_KERNELD
 #include <linux/kerneld.h>

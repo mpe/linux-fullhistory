@@ -7,15 +7,12 @@
 #ifndef __I386_NAMEI_H
 #define __I386_NAMEI_H
 
-/* These dummy routines maybe changed to something useful
+/* This dummy routine maybe changed to something useful
  * for /usr/gnemul/ emulation stuff.
  * Look at asm-sparc/namei.h for details.
  */
 
-#define translate_namei(pathname, base, follow_links, res_inode)	\
-	do { } while (0)
-
-#define translate_open_namei(pathname, flag, mode, res_inode, base) \
-	do { } while (0)
+#define __prefix_namei(retrieve_mode, name, base, buf, res_dir, res_inode, \
+		       last_name, last_entry, last_error) 1
 
 #endif /* __I386_NAMEI_H */

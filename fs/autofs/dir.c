@@ -80,7 +80,6 @@ struct inode_operations autofs_dir_inode_operations = {
 	NULL,			/* mknod */
 	NULL,			/* rename */
 	NULL,			/* readlink */
-	NULL,			/* follow_link */
 	NULL,			/* read_page */
 	NULL,			/* writepage */
 	NULL,			/* bmap */

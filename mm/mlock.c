@@ -39,7 +39,7 @@ static inline int mlock_fixup_start(struct vm_area_struct * vma,
 	vma->vm_offset += vma->vm_start - n->vm_start;
 	n->vm_flags = newflags;
 	if (n->vm_inode)
-		n->vm_inode->i_count++;
+		atomic_inc(&n->vm_inode->i_count);
 	if (n->vm_ops && n->vm_ops->open)
 		n->vm_ops->open(n);
 	insert_vm_struct(current->mm, n);
@@ -60,7 +60,7 @@ static inline int mlock_fixup_end(struct vm_area_struct * vma,
 	n->vm_offset += n->vm_start - vma->vm_start;
 	n->vm_flags = newflags;
 	if (n->vm_inode)
-		n->vm_inode->i_count++;
+		atomic_inc(&n->vm_inode->i_count);
 	if (n->vm_ops && n->vm_ops->open)
 		n->vm_ops->open(n);
 	insert_vm_struct(current->mm, n);
@@ -90,7 +90,7 @@ static inline int mlock_fixup_middle(struct vm_area_struct * vma,
 	right->vm_offset += right->vm_start - left->vm_start;
 	vma->vm_flags = newflags;
 	if (vma->vm_inode)
-		vma->vm_inode->i_count += 2;
+		atomic_add(2, &vma->vm_inode->i_count);
 	if (vma->vm_ops && vma->vm_ops->open) {
 		vma->vm_ops->open(left);
 		vma->vm_ops->open(right);

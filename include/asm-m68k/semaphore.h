@@ -20,8 +20,8 @@ struct semaphore {
 	struct wait_queue * wait;
 };
 
-#define MUTEX ((struct semaphore) { { 1 }, { 0 }, NULL })
-#define MUTEX_LOCKED ((struct semaphore) { { 0 }, { 0 }, NULL })
+#define MUTEX ((struct semaphore) { ATOMIC_INIT(1), ATOMIC_INIT(0), NULL })
+#define MUTEX_LOCKED ((struct semaphore) { ATOMIC_INIT(0), ATOMIC_INIT(0), NULL })
 
 asmlinkage void __down_failed(void /* special register calling convention */);
 asmlinkage int  __down_failed_interruptible(void  /* params in registers */);
@@ -73,7 +73,7 @@ static inline int waking_non_zero(struct semaphore *sem)
  * "down_failed" is a special asm handler that calls the C
  * routine that actually waits. See arch/m68k/lib/semaphore.S
  */
-extern inline void do_down(struct semaphore * sem, void (*failed)(void))
+extern inline void down(struct semaphore * sem)
 {
 	register struct semaphore *sem1 __asm__ ("%a1") = sem;
 	__asm__ __volatile__(
@@ -84,15 +84,34 @@ extern inline void do_down(struct semaphore * sem, void (*failed)(void))
 		".section .text.lock,\"ax\"\n"
 		".even\n"
 		"2:\tpea 1b\n\t"
-		"jbra %1\n"
+		"jbra __down_failed\n"
 		".previous"
 		: /* no outputs */
-		: "a" (sem1), "m" (*(unsigned char *)failed)
+		: "a" (sem1)
 		: "memory");
 }
 
-#define down(sem) do_down((sem),__down_failed)
-#define down_interruptible(sem) do_down((sem),__down_failed_interruptible)
+extern inline int down_interruptible(struct semaphore * sem)
+{
+	register struct semaphore *sem1 __asm__ ("%a1") = sem;
+	register int result __asm__ ("%d0");
+
+	__asm__ __volatile__(
+		"| atomic interruptible down operation\n\t"
+		"subql #1,%1@\n\t"
+		"jmi 2f\n\t"
+		"clrl %0\n"
+		"1:\n"
+		".section .text.lock,\"ax\"\n"
+		".even\n"
+		"2:\tpea 1b\n\t"
+		"jbra __down_failed_interruptible\n"
+		".previous"
+		: "=d" (result)
+		: "a" (sem1)
+		: "%d0", "memory");
+	return result;
+}
 
 /*
  * Note! This is subtle. We jump to wake people up only if
@@ -111,10 +130,10 @@ extern inline void up(struct semaphore * sem)
 		".section .text.lock,\"ax\"\n"
 		".even\n"
 		"2:\tpea 1b\n\t"
-		"jbra %1\n"
+		"jbra __up_wakeup\n"
 		".previous"
 		: /* no outputs */
-		: "a" (sem1), "m" (*(unsigned char *)__up_wakeup)
+		: "a" (sem1)
 		: "memory");
 }
 

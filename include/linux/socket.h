@@ -140,7 +140,7 @@ struct ucred
 #define AF_X25		9	/* Reserved for X.25 project 	*/
 #define AF_INET6	10	/* IP version 6			*/
 #define AF_ROSE		11	/* Amateur Radio X.25 PLP	*/
-#define AF_DECNET	12	/* Reserved for DECnet project	*/
+#define AF_DECnet	12	/* Reserved for DECnet project	*/
 #define AF_NETBEUI	13	/* Reserved for 802.2LLC project*/
 #define AF_SECURITY	14	/* Security callback pseudo AF */
 #define pseudo_AF_KEY   15      /* PF_KEY key management API */
@@ -160,7 +160,7 @@ struct ucred
 #define PF_X25		AF_X25
 #define PF_INET6	AF_INET6
 #define PF_ROSE		AF_ROSE
-#define PF_DECNET	AF_DECNET
+#define PF_DECnet	AF_DECnet
 #define PF_NETBEUI	AF_NETBEUI
 #define PF_SECURITY	AF_SECURITY
 #define PF_KEY          pseudo_AF_KEY

@@ -751,8 +751,8 @@ __initfunc(int arcnet_probe(struct device *dev))
  * FIXME: grab all devices in one shot and eliminate the big static array.
  */
 
-static int ports[(0x3f0 - 0x200) / 16 + 1] __initdata;
-static u_long shmems[(0xFF800 - 0xA0000) / 2048 + 1] __initdata;
+static int ports[(0x3f0 - 0x200) / 16 + 1] __initdata = { 0 };
+static u_long shmems[(0xFF800 - 0xA0000) / 2048 + 1] __initdata = { 0 };
 
 __initfunc(int arcnet_probe(struct device *dev))
 {

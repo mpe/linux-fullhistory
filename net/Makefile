@@ -105,6 +105,14 @@ else
   endif
 endif
 
+ifeq ($(CONFIG_DECNET),y)
+SUB_DIRS += decnet
+else
+  ifeq ($(CONFIG_DECNET),m)
+  MOD_SUB_DIRS += decnet
+  endif
+endif
+
 # We must attach netsyms.o to socket.o, as otherwise there is nothing
 # to pull the object file from the archive.
 

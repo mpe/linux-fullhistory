@@ -45,6 +45,8 @@ struct mod_state_fsk96 {
 	unsigned int shreg;
 	unsigned long scram;
 	unsigned char tx_bit;
+	unsigned char *txtbl;
+	unsigned int txphase;
 };
 
 /* --------------------------------------------------------------------- */
@@ -62,30 +64,57 @@ struct mod_state_fsk96 {
 
 /* --------------------------------------------------------------------- */
 
-static void modulator_9600_4(struct sm_state *sm, unsigned char *buf, int buflen)
+static void modulator_9600_4_u8(struct sm_state *sm, unsigned char *buf, unsigned int buflen)
 {
 	struct mod_state_fsk96 *st = (struct mod_state_fsk96 *)(&sm->m);
-	int j;
-	const unsigned char *cp;
 
-	for (; buflen >= 4; buflen -= 4) {
-		if (st->shreg <= 1)
-			st->shreg = hdlcdrv_getbits(&sm->hdrv) | 0x10000;
-		st->scram = (st->scram << 1) | (st->scram & 1);
-		st->scram ^= !(st->shreg & 1);
-		st->shreg >>= 1;
-		if (st->scram & (SCRAM_TAP1 << 1))
-			st->scram ^= SCRAM_TAPN << 1;
-		st->tx_bit = (st->tx_bit << 1) | (!!(st->scram & (SCRAM_TAP1 << 2)));
-		cp = fsk96_txfilt_4 + (st->tx_bit & 0xff);
-		for (j = 0; j < 4; j++, cp += 0x100)
-			*buf++ = *cp;
+	for (; buflen > 0; buflen--) {
+		if (!st->txphase++) {
+			if (st->shreg <= 1)
+				st->shreg = hdlcdrv_getbits(&sm->hdrv) | 0x10000;
+			st->scram = (st->scram << 1) | (st->scram & 1);
+			st->scram ^= !(st->shreg & 1);
+			st->shreg >>= 1;
+			if (st->scram & (SCRAM_TAP1 << 1))
+				st->scram ^= SCRAM_TAPN << 1;
+			st->tx_bit = (st->tx_bit << 1) | (!!(st->scram & (SCRAM_TAP1 << 2)));
+			st->txtbl = fsk96_txfilt_4 + (st->tx_bit & 0xff);
+		}
+		if (st->txphase >= 4)
+			st->txphase = 0;
+		*buf++ = *st->txtbl;
+		st->txtbl += 0x100;
 	}
 }
 
 /* --------------------------------------------------------------------- */
 
-static void demodulator_9600_4(struct sm_state *sm, unsigned char *buf, int buflen)
+static void modulator_9600_4_s16(struct sm_state *sm, short *buf, unsigned int buflen)
+{
+	struct mod_state_fsk96 *st = (struct mod_state_fsk96 *)(&sm->m);
+
+	for (; buflen > 0; buflen--) {
+		if (!st->txphase++) {
+			if (st->shreg <= 1)
+				st->shreg = hdlcdrv_getbits(&sm->hdrv) | 0x10000;
+			st->scram = (st->scram << 1) | (st->scram & 1);
+			st->scram ^= !(st->shreg & 1);
+			st->shreg >>= 1;
+			if (st->scram & (SCRAM_TAP1 << 1))
+				st->scram ^= SCRAM_TAPN << 1;
+			st->tx_bit = (st->tx_bit << 1) | (!!(st->scram & (SCRAM_TAP1 << 2)));
+			st->txtbl = fsk96_txfilt_4 + (st->tx_bit & 0xff);
+		}
+		if (st->txphase >= 4)
+			st->txphase = 0;
+		*buf++ = ((*st->txtbl)-0x80) << 8;
+		st->txtbl += 0x100;
+	}
+}
+
+/* --------------------------------------------------------------------- */
+
+static void demodulator_9600_4_u8(struct sm_state *sm, const unsigned char *buf, unsigned int buflen)
 {
 	struct demod_state_fsk96 *st = (struct demod_state_fsk96 *)(&sm->d);
 	static const int pll_corr[2] = { -0x1000, 0x1000 };
@@ -133,30 +162,105 @@ static void demodulator_9600_4(struct sm_state *sm, unsigned char *buf, int bufl
 
 /* --------------------------------------------------------------------- */
 
-static void modulator_9600_5(struct sm_state *sm, unsigned char *buf, int buflen)
+static void demodulator_9600_4_s16(struct sm_state *sm, const short *buf, unsigned int buflen)
 {
-	struct mod_state_fsk96 *st = (struct mod_state_fsk96 *)(&sm->m);
-	int j;
-	const unsigned char *cp;
+	struct demod_state_fsk96 *st = (struct demod_state_fsk96 *)(&sm->d);
+	static const int pll_corr[2] = { -0x1000, 0x1000 };
+	unsigned char curbit;
+	unsigned int descx;
 
-	for (; buflen >= 5; buflen -= 5) {
-		if (st->shreg <= 1)
-			st->shreg = hdlcdrv_getbits(&sm->hdrv) | 0x10000;
-		st->scram = (st->scram << 1) | (st->scram & 1);
-		st->scram ^= !(st->shreg & 1);
-		st->shreg >>= 1;
-		if (st->scram & (SCRAM_TAP1 << 1))
-			st->scram ^= SCRAM_TAPN << 1;
-		st->tx_bit = (st->tx_bit << 1) | (!!(st->scram & (SCRAM_TAP1 << 2)));
-		cp = fsk96_txfilt_5 + (st->tx_bit & 0xff);
-		for (j = 0; j < 5; j++, cp += 0x100)
-			*buf++ = *cp;
+	for (; buflen > 0; buflen--, buf++) {
+		st->dcd_shreg <<= 1;
+		st->bit_pll += 0x4000;
+		curbit = (*buf >= 0);
+		if (st->last_sample ^ curbit) {
+			st->dcd_shreg |= 1;
+			st->bit_pll += pll_corr[st->bit_pll < 0xa000];
+			st->dcd_sum0 += 8 * hweight8(st->dcd_shreg & 0x0c) - 
+				!!(st->dcd_shreg & 0x10);
+		}
+		st->last_sample = curbit;
+		hdlcdrv_channelbit(&sm->hdrv, st->last_sample);
+		if ((--st->dcd_time) <= 0) {
+			hdlcdrv_setdcd(&sm->hdrv, (st->dcd_sum0 + 
+						   st->dcd_sum1 + 
+						   st->dcd_sum2) < 0);
+			st->dcd_sum2 = st->dcd_sum1;
+			st->dcd_sum1 = st->dcd_sum0;
+			st->dcd_sum0 = 2; /* slight bias */
+			st->dcd_time = 240;
+		}
+		if (st->bit_pll >= 0x10000) {
+			st->bit_pll &= 0xffff;
+			st->descram = (st->descram << 1) | curbit;
+			descx = st->descram ^ (st->descram >> 1);
+			descx ^= ((descx >> DESCRAM_TAPSH1) ^
+				  (descx >> DESCRAM_TAPSH2));
+			st->shreg >>= 1;
+			st->shreg |= (!(descx & 1)) << 16;
+			if (st->shreg & 1) {
+				hdlcdrv_putbits(&sm->hdrv, st->shreg >> 1);
+				st->shreg = 0x10000;
+			}
+			diag_trigger(sm);
+		}
+		diag_add_one(sm, *buf);
 	}
 }
 
 /* --------------------------------------------------------------------- */
 
-static void demodulator_9600_5(struct sm_state *sm, unsigned char *buf, int buflen)
+static void modulator_9600_5_u8(struct sm_state *sm, unsigned char *buf, unsigned int buflen)
+{
+	struct mod_state_fsk96 *st = (struct mod_state_fsk96 *)(&sm->m);
+
+	for (; buflen > 0; buflen--) {
+		if (!st->txphase++) {
+			if (st->shreg <= 1)
+				st->shreg = hdlcdrv_getbits(&sm->hdrv) | 0x10000;
+			st->scram = (st->scram << 1) | (st->scram & 1);
+			st->scram ^= !(st->shreg & 1);
+			st->shreg >>= 1;
+			if (st->scram & (SCRAM_TAP1 << 1))
+				st->scram ^= SCRAM_TAPN << 1;
+			st->tx_bit = (st->tx_bit << 1) | (!!(st->scram & (SCRAM_TAP1 << 2)));
+			st->txtbl = fsk96_txfilt_5 + (st->tx_bit & 0xff);
+		}
+		if (st->txphase >= 5)
+			st->txphase = 0;
+		*buf++ = *st->txtbl;
+		st->txtbl += 0x100;
+	}
+}
+
+/* --------------------------------------------------------------------- */
+
+static void modulator_9600_5_s16(struct sm_state *sm, short *buf, unsigned int buflen)
+{
+	struct mod_state_fsk96 *st = (struct mod_state_fsk96 *)(&sm->m);
+
+	for (; buflen > 0; buflen--) {
+		if (!st->txphase++) {
+			if (st->shreg <= 1)
+				st->shreg = hdlcdrv_getbits(&sm->hdrv) | 0x10000;
+			st->scram = (st->scram << 1) | (st->scram & 1);
+			st->scram ^= !(st->shreg & 1);
+			st->shreg >>= 1;
+			if (st->scram & (SCRAM_TAP1 << 1))
+				st->scram ^= SCRAM_TAPN << 1;
+			st->tx_bit = (st->tx_bit << 1) | (!!(st->scram & (SCRAM_TAP1 << 2)));
+			st->txtbl = fsk96_txfilt_5 + (st->tx_bit & 0xff);
+		}
+		if (st->txphase >= 5)
+			st->txphase = 0;
+		*buf++ = ((*st->txtbl)-0x80)<<8;
+		st->txtbl += 0x100;
+	}
+}
+
+/* --------------------------------------------------------------------- */
+
+static void demodulator_9600_5_u8(struct sm_state *sm, const unsigned char *buf, unsigned int buflen)
 {
 	struct demod_state_fsk96 *st = (struct demod_state_fsk96 *)(&sm->d);
 	static const int pll_corr[2] = { -0x1000, 0x1000 };
@@ -204,6 +308,54 @@ static void demodulator_9600_5(struct sm_state *sm, unsigned char *buf, int bufl
 
 /* --------------------------------------------------------------------- */
 
+static void demodulator_9600_5_s16(struct sm_state *sm, const short *buf, unsigned int buflen)
+{
+	struct demod_state_fsk96 *st = (struct demod_state_fsk96 *)(&sm->d);
+	static const int pll_corr[2] = { -0x1000, 0x1000 };
+	unsigned char curbit;
+	unsigned int descx;
+
+	for (; buflen > 0; buflen--, buf++) {
+		st->dcd_shreg <<= 1;
+		st->bit_pll += 0x3333;
+		curbit = (*buf >= 0);
+		if (st->last_sample ^ curbit) {
+			st->dcd_shreg |= 1;
+			st->bit_pll += pll_corr[st->bit_pll < 0x9999];
+			st->dcd_sum0 += 16 * hweight8(st->dcd_shreg & 0x0c) - 
+				hweight8(st->dcd_shreg & 0x70);
+		}
+		st->last_sample = curbit;
+		hdlcdrv_channelbit(&sm->hdrv, st->last_sample);
+		if ((--st->dcd_time) <= 0) {
+			hdlcdrv_setdcd(&sm->hdrv, (st->dcd_sum0 + 
+						   st->dcd_sum1 + 
+						   st->dcd_sum2) < 0);
+			st->dcd_sum2 = st->dcd_sum1;
+			st->dcd_sum1 = st->dcd_sum0;
+			st->dcd_sum0 = 2; /* slight bias */
+			st->dcd_time = 240;
+		}
+		if (st->bit_pll >= 0x10000) {
+			st->bit_pll &= 0xffff;
+			st->descram = (st->descram << 1) | curbit;
+			descx = st->descram ^ (st->descram >> 1);
+			descx ^= ((descx >> DESCRAM_TAPSH1) ^
+				  (descx >> DESCRAM_TAPSH2));
+			st->shreg >>= 1;
+			st->shreg |= (!(descx & 1)) << 16;
+			if (st->shreg & 1) {
+				hdlcdrv_putbits(&sm->hdrv, st->shreg >> 1);
+				st->shreg = 0x10000;
+			}
+			diag_trigger(sm);
+		}
+		diag_add_one(sm, *buf);
+	}
+}
+
+/* --------------------------------------------------------------------- */
+
 static void demod_init_9600(struct sm_state *sm)
 {
 	struct demod_state_fsk96 *st = (struct demod_state_fsk96 *)(&sm->d);
@@ -215,25 +367,25 @@ static void demod_init_9600(struct sm_state *sm)
 /* --------------------------------------------------------------------- */
 
 const struct modem_tx_info sm_fsk9600_4_tx = {
-	"fsk9600", sizeof(struct mod_state_fsk96), 38400, 9600, 4,
-	modulator_9600_4, NULL
+	"fsk9600", sizeof(struct mod_state_fsk96), 38400, 9600,
+	modulator_9600_4_u8, modulator_9600_4_s16, NULL
 };
 
 const struct modem_rx_info sm_fsk9600_4_rx = {
-	"fsk9600", sizeof(struct demod_state_fsk96), 38400, 9600, 4, 4,
-	demodulator_9600_4, demod_init_9600
+	"fsk9600", sizeof(struct demod_state_fsk96), 38400, 9600, 1, 4,
+	demodulator_9600_4_u8, demodulator_9600_4_s16, demod_init_9600
 };
 
 /* --------------------------------------------------------------------- */
 
 const struct modem_tx_info sm_fsk9600_5_tx = {
-	"fsk9600", sizeof(struct mod_state_fsk96), 48000, 9600, 5, 
-	modulator_9600_5, NULL
+	"fsk9600", sizeof(struct mod_state_fsk96), 48000, 9600,
+	modulator_9600_5_u8, modulator_9600_5_s16, NULL
 };
 
 const struct modem_rx_info sm_fsk9600_5_rx = {
-	"fsk9600", sizeof(struct demod_state_fsk96), 48000, 9600, 5, 5, 
-	demodulator_9600_5, demod_init_9600
+	"fsk9600", sizeof(struct demod_state_fsk96), 48000, 9600, 1, 5, 
+	demodulator_9600_5_u8, demodulator_9600_5_s16, demod_init_9600
 };
 
 /* --------------------------------------------------------------------- */

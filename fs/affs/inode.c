@@ -899,7 +899,7 @@ affs_new_inode(const struct inode *dir)
 		return NULL;
 	}
 
-	inode->i_count   = 1;
+	atomic_set(&inode->i_count, 1);
 	inode->i_nlink   = 1;
 	inode->i_dev     = sb->s_dev;
 	inode->i_uid     = current->fsuid;
@@ -1031,9 +1031,9 @@ addentry_done:
 }
 
 static struct file_system_type affs_fs_type = {
-	affs_read_super,
 	"affs",
-	1,
+	FS_REQUIRES_DEV,
+	affs_read_super,
 	NULL
 };
 

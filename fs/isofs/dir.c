@@ -54,7 +54,6 @@ struct inode_operations isofs_dir_inode_operations =
 	NULL,			/* mknod */
 	NULL,			/* rename */
 	NULL,			/* readlink */
-	NULL,			/* follow_link */
 	NULL,			/* readpage */
 	NULL,			/* writepage */
 	isofs_bmap,		/* bmap */
@@ -226,7 +225,6 @@ static int do_isofs_readdir(struct inode *inode, struct file *filp,
 			/* rrflag == 1 means that we have a new name (kmalloced) */
 			if (rrflag == 1) {
 				rrflag = filldir(dirent, name, len, filp->f_pos, inode_number);
-				dcache_add(inode, name, len, inode_number);
 				kfree(name); /* this was allocated in get_r_r_filename.. */
 				if (rrflag < 0)
 					break;
@@ -239,7 +237,6 @@ static int do_isofs_readdir(struct inode *inode, struct file *filp,
 			len = isofs_name_translate(name, len, tmpname);
 			if (filldir(dirent, tmpname, len, filp->f_pos, inode_number) < 0)
 				break;
-			dcache_add(inode, tmpname, len, inode_number);
 			filp->f_pos += de_len;
 			continue;
 		}
@@ -247,7 +244,6 @@ static int do_isofs_readdir(struct inode *inode, struct file *filp,
 		if (filldir(dirent, name, len, filp->f_pos, inode_number) < 0)
 			break;
 
-		dcache_add(inode, name, len, inode_number);
 		filp->f_pos += de_len;
 		continue;
 	}

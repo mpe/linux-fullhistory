@@ -24,10 +24,6 @@ extern ctl_table ipv4_table[];
 extern ctl_table ipx_table[];
 #endif
 
-#ifdef CONFIG_ATALK
-extern ctl_table atalk_table[];
-#endif
-
 extern ctl_table core_table[], unix_table[];
 
 #ifdef CONFIG_NET
@@ -58,9 +54,6 @@ ctl_table net_table[] = {
 #endif
 #ifdef CONFIG_IPX
         {NET_IPX,    "ipx",       NULL, 0, 0555, ipx_table},
-#endif
-#ifdef CONFIG_ATALK
-        {NET_ATALK,  "appletalk", NULL, 0, 0555, atalk_table},
 #endif
 #ifdef CONFIG_BRIDGE
         {NET_BRIDGE, "bridge",    NULL, 0, 0555, bridge_table},

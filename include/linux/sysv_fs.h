@@ -373,7 +373,7 @@ extern int sysv_symlink(struct inode * inode, const char * name, int len,
 extern int sysv_link(struct inode * oldinode, struct inode * dir, const char * name, int len);
 extern int sysv_mknod(struct inode * dir, const char * name, int len, int mode, int rdev);
 extern int sysv_rename(struct inode * old_dir, const char * old_name, int old_len,
-	struct inode * new_dir, const char * new_name, int new_len, int must_be_dir);
+		       struct inode * new_dir, const char * new_name, int new_len);
 extern struct inode * sysv_new_inode(const struct inode * dir);
 extern void sysv_free_inode(struct inode * inode);
 extern unsigned long sysv_count_free_inodes(struct super_block *sb);

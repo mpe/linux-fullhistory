@@ -1,4 +1,4 @@
-/* $Id: bitops.h,v 1.13 1997/05/27 06:47:16 davem Exp $
+/* $Id: bitops.h,v 1.16 1997/05/28 13:48:56 jj Exp $
  * bitops.h: Bit string operations on the V9.
  *
  * Copyright 1996 David S. Miller (davem@caip.rutgers.edu)
@@ -121,11 +121,33 @@ extern __inline__ unsigned long ffz(unsigned long word)
 	  : "0" (word)
 	  : "g1", "g2");
 #else
+#ifdef EASY_CHEESE_VERSION
 	result = 0;
 	while(word & 1) {
 		result++;
 		word >>= 1;
 	}
+#else
+	unsigned long tmp;
+
+	result = 0;	
+	tmp = ~word & -~word;
+	if (!(unsigned)tmp) {
+		tmp >>= 32;
+		result = 32;
+	}
+	if (!(unsigned short)tmp) {
+		tmp >>= 16;
+		result += 16;
+	}
+	if (!(unsigned char)tmp) {
+		tmp >>= 8;
+		result += 8;
+	}
+	if (tmp & 0xf0) result += 4;
+	if (tmp & 0xcc) result += 2;
+	if (tmp & 0xaa) result ++;
+#endif
 #endif
 	return result;
 }
@@ -137,29 +159,31 @@ extern __inline__ unsigned long ffz(unsigned long word)
 
 extern __inline__ unsigned long find_next_zero_bit(void *addr, unsigned long size, unsigned long offset)
 {
-	unsigned long *p = ((unsigned long *) addr) + (offset >> 5);
-	unsigned long result = offset & ~31UL;
+	unsigned long *p = ((unsigned long *) addr) + (offset >> 6);
+	unsigned long result = offset & ~63UL;
 	unsigned long tmp;
 
 	if (offset >= size)
 		return size;
 	size -= result;
-	offset &= 31UL;
+	offset &= 63UL;
 	if (offset) {
 		tmp = *(p++);
-		tmp |= ~0UL >> (32-offset);
-		if (size < 32)
+		tmp |= ~0UL >> (64-offset);
+		if (size < 64)
 			goto found_first;
 		if (~tmp)
 			goto found_middle;
-		size -= 32;
-		result += 32;
+		size -= 64;
+		result += 64;
 	}
-	while (size & ~31UL) {
+	offset = size >> 6;
+	size &= 63UL;
+	while (offset) {
 		if (~(tmp = *(p++)))
 			goto found_middle;
-		result += 32;
-		size -= 32;
+		result += 64;
+		offset--;
 	}
 	if (!size)
 		return result;
@@ -248,9 +272,16 @@ extern __inline__ unsigned long __swab64(unsigned long value)
 		((value<<56) & 0xff00000000000000));
 }     
 
+extern __inline__ unsigned long __swab64p(unsigned long *addr)
+{
+	unsigned long ret;
+	__asm__ __volatile__ ("ldxa [%1] %2, %0" : "=r" (ret) : "r" (addr), "i" (ASI_PL));
+	return ret;
+}
+
 extern __inline__ unsigned long find_next_zero_le_bit(void *addr, unsigned long size, unsigned long offset)
 {
-	unsigned long *p = ((unsigned long *) addr) + (offset >> 5);
+	unsigned long *p = ((unsigned long *) addr) + (offset >> 6);
 	unsigned long result = offset & ~63UL;
 	unsigned long tmp;
 
@@ -259,8 +290,8 @@ extern __inline__ unsigned long find_next_zero_le_bit(void *addr, unsigned long 
 	size -= result;
 	offset &= 63UL;
 	if(offset) {
-		tmp = *(p++);
-		tmp |= __swab64((~0UL >> (64-offset)));
+		tmp = __swab64p(p++);
+		tmp |= (~0UL >> (64-offset));
 		if(size < 64)
 			goto found_first;
 		if(~tmp)
@@ -268,20 +299,21 @@ extern __inline__ unsigned long find_next_zero_le_bit(void *addr, unsigned long 
 		size -= 64;
 		result += 64;
 	}
-	while(size & ~63UL) {
-		if(~(tmp = *(p++)))
+	offset = size >> 6;
+	size &= 63UL;
+	while(offset) {
+		if(~(tmp = __swab64p(p++)))
 			goto found_middle;
 		result += 64;
-		size -= 64;
+		offset--;
 	}
 	if(!size)
 		return result;
-	tmp = *p;
-
+	tmp = __swab64p(p);
 found_first:
-	return result + ffz(__swab64(tmp) | (~0UL << size));
+	tmp |= (~0UL << size);
 found_middle:
-	return result + ffz(__swab64(tmp));
+	return result + ffz(tmp);
 }
 
 #ifdef __KERNEL__

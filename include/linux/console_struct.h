@@ -49,6 +49,7 @@ struct vc_data {
 	/* misc */
 	unsigned long	vc_ques		: 1;
 	unsigned long	vc_need_wrap	: 1;
+	unsigned long	vc_can_do_color	: 1;
 	unsigned long	vc_has_scrolled : 1;	/* Info for unblank_screen */
 	unsigned long	vc_kmalloced	: 1;	/* kfree_s() needed */
 	unsigned long	vc_report_mouse : 2;

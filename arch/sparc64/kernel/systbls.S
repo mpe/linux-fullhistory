@@ -1,4 +1,4 @@
-/* $Id: systbls.S,v 1.11 1997/05/27 19:30:20 jj Exp $
+/* $Id: systbls.S,v 1.13 1997/06/04 13:05:29 jj Exp $
  * systbls.S: System call entry point tables for OS compatibility.
  *            The native Linux system call table lives here also.
  *
@@ -53,20 +53,20 @@ sys_call_table32:
 	.xword sys32_quotactl, sys_nis_syscall, sys32_mount, sys32_ustat, sys_nis_syscall
 /*170*/	.xword sys_nis_syscall, sys_nis_syscall, sys_nis_syscall, sys_nis_syscall, sys32_getdents
 	.xword sys_setsid, sys_fchdir, sys_nis_syscall, sys_nis_syscall, sys_nis_syscall
-/*180*/	.xword sys_nis_syscall, sys_nis_syscall, sys_nis_syscall, sys32_sigpending, sys_nis_syscall
+/*180*/	.xword sys_nis_syscall, sys_nis_syscall, sys_nis_syscall, sys32_sigpending, sys32_no_modules
 	.xword sys_setpgid, sys_nis_syscall, sys_nis_syscall, sys_nis_syscall, sys32_newuname
-/*190*/	.xword sys_nis_syscall, sys32_personality, sys_prof, sys_break, sys_lock
+/*190*/	.xword sys32_no_modules, sys32_personality, sys_prof, sys_break, sys_lock
 	.xword sys_mpx, sys_ulimit, sys_getppid, sparc32_sigaction, sys_sgetmask
 /*200*/	.xword sys_ssetmask, sys_sigsuspend, sys32_newlstat, sys32_uselib, old32_readdir
 	.xword sys_nis_syscall, sys32_socketcall, sys32_syslog, sys32_olduname, sys_nis_syscall
 /*210*/	.xword sys_idle, sys_nis_syscall, sys32_waitpid, sys32_swapoff, sys32_sysinfo
 	.xword sys32_ipc, sys_sigreturn, sys_clone, sys_nis_syscall, sys32_adjtimex
-/*220*/	.xword sys32_sigprocmask, sys_nis_syscall, sys_nis_syscall, sys_nis_syscall, sys_getpgid
+/*220*/	.xword sys32_sigprocmask, sys32_no_modules, sys32_no_modules, sys32_no_modules, sys_getpgid
 	.xword sys32_bdflush, sys32_sysfs, sys_nis_syscall, sys_setfsuid, sys_setfsgid
 /*230*/	.xword sys32_llseek, sys32_time, sys_nis_syscall, sys_stime, sys_nis_syscall
 	.xword sys_nis_syscall, sys32_llseek, sys32_mlock, sys32_munlock, sys_mlockall
 /*240*/	.xword sys_munlockall, sys32_sched_setparam, sys32_sched_getparam, sys_nis_syscall, sys_nis_syscall
-	.xword sys_nis_syscall, sys_sched_get_priority_max, sys_sched_get_priority_min, sys32_sched_rr_get_interval, sys_nanosleep
+	.xword sys_nis_syscall, sys_sched_get_priority_max, sys_sched_get_priority_min, sys32_sched_rr_get_interval, sys32_nanosleep
 /*250*/	.xword sys32_mremap, sys_sysctl, sys_getsid, sys_fdatasync, sys32_nfsservctl
 	.xword sys_aplib, sys_nis_syscall
 

@@ -24,16 +24,12 @@ do_fpother_tl1:	retl;nop
 do_iae_tl1:	retl;nop
 	.globl	do_ill_tl1
 do_ill_tl1:	retl;nop
-	.globl	do_irq
-do_irq:	retl;nop
 	.globl	do_irq_tl1
 do_irq_tl1:	retl;nop
 	.globl	do_lddfmna
 do_lddfmna:	retl;nop
 	.globl	do_lddfmna_tl1
 do_lddfmna_tl1:	retl;nop
-	.globl	do_mna_tl1
-do_mna_tl1:	retl;nop
 	.globl	do_paw
 do_paw:	retl;nop
 	.globl	do_paw_tl1
@@ -51,7 +47,7 @@ do_vaw_tl1:	retl;nop
 	.globl	floppy_hardint
 floppy_hardint:	retl;nop
 	.globl	get_cpuid
-get_cpuid:	retl;nop
+get_cpuid:	retl;mov 0, %o0
 	.globl	getcc
 getcc:	retl;nop
 	.globl	halt

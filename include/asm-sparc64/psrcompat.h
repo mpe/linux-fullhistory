@@ -1,4 +1,4 @@
-/* $Id: psrcompat.h,v 1.2 1997/04/07 18:57:17 jj Exp $ */
+/* $Id: psrcompat.h,v 1.3 1997/06/05 06:22:54 davem Exp $ */
 #ifndef _SPARC64_PSRCOMPAT_H
 #define _SPARC64_PSRCOMPAT_H
 
@@ -47,7 +47,7 @@ extern inline unsigned long psr_to_tstate_icc(unsigned int psr)
 {
 	unsigned long tstate;
 
-	tstate = (psr & PSR_ICC) << 12;
+	tstate = ((unsigned long)(psr & PSR_ICC)) << 12;
 
 	return tstate;
 }

@@ -751,7 +751,7 @@ static int ipxitf_rcv(ipx_interface *intrfc, struct sk_buff *skb)
 	}
 
 #ifdef CONFIG_IPX_PPROP_ROUTING
-	if( ipx->ipx_type == IPX_TYPE_PPROP && ipx->ipx_tctrl < 8 ) 
+	if( ipx->ipx_type == IPX_TYPE_PPROP && ipx->ipx_tctrl < 8 && skb->pkt_type == PACKET_HOST ) 
 	{
 		int i;
         	ipx_interface *ifcs;
@@ -759,35 +759,10 @@ static int ipxitf_rcv(ipx_interface *intrfc, struct sk_buff *skb)
   		long *l;
 		char *c;
 		
-		if(skb->pkt_type!=PACKET_HOST)
-		{
-			kfree_skb(skb, FREE_READ);
-			return 0;
-		}
-
-#ifdef DEBUG_IPX_PPROP_ROUTING
-		printk(KERN_INFO "IPX: PPROP packet received\n"
-			" Src: %8x:%02x:%02x:%02x:%02x:%02x:%02x:%d/%d\n",
-			htonl(ipx->ipx_source.net),
-			ipx->ipx_source.node[0], ipx->ipx_source.node[1],
-			ipx->ipx_source.node[2], ipx->ipx_source.node[3],
-			ipx->ipx_source.node[4], ipx->ipx_source.node[5],
-			htons(ipx->ipx_source.sock),
-			htons(ipx->ipx_dest.sock)
-			);
-#endif
-
 		c = (char *) skb->data;
 		c += sizeof( struct ipxhdr );
-
 		l = (long *) c;
 
-#ifdef DEBUG_IPX_PPROP_ROUTING
-		printk( "IPX: Routing PPROP from net num %08x\n", (unsigned int) htonl(intrfc->if_netnum) );
-		for( i = 0 ; i < ipx->ipx_tctrl ; i++ )
-			printk( "IPX: Routing PPROP seen net num %08x\n", (unsigned int) htonl(*l++) );
-		l = (long *) c;
-#endif
 		i = 0;
 		/* 
 		 *	Dump packet if too many hops or already seen this net 
@@ -812,25 +787,13 @@ static int ipxitf_rcv(ipx_interface *intrfc, struct sk_buff *skb)
 				if( i - 1 == ipx->ipx_tctrl ) 
 				{
 					ipx->ipx_dest.net = ifcs->if_netnum;
-#ifdef DEBUG_IPX_PPROP_ROUTING
-					printk( "IPX: Forward PPROP onto net num %08x\n", (unsigned int) htonl(ifcs->if_netnum) );
-#endif
-					skb2 = skb_clone(skb, GFP_ATOMIC);
-
-					/*
-					 *	See if we are allowed to firewall forward
-					 */
-					if (call_fw_firewall(PF_IPX, skb2->dev, ipx, NULL, &skb)!=FW_ACCEPT)
+					/* See if we are allowed to firewall forward */
+					if (call_fw_firewall(PF_IPX, skb->dev, ipx, NULL, &skb)==FW_ACCEPT)
 					{
-						kfree_skb(skb, FREE_READ);
-						return 0;
-					}
+					        skb2 = skb_clone(skb, GFP_ATOMIC);
 					ipxrtr_route_skb(skb2);
 				}
-#ifdef DEBUG_IPX_PPROP_ROUTING
-				else
-					printk( "IPX: Ignoring PPROP for net num %08x\n", (unsigned int) htonl(ifcs->if_netnum) );
-#endif
+				}
 			}
 			/*
 			 *	Reset network number in packet 
@@ -1793,6 +1756,7 @@ static int ipx_create(struct socket *sock, int protocol)
 			return(-ESOCKTNOSUPPORT);
 	}
 	sock_init_data(sock,sk);
+	sk->destruct=NULL;
 	sk->mtu=IPX_MTU;
 	sk->no_check = 1;		/* Checksum off by default */
 	MOD_INC_USE_COUNT;

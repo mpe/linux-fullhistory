@@ -944,7 +944,10 @@ int minix_sync_inode(struct inode * inode)
 }
 
 static struct file_system_type minix_fs_type = {
-	minix_read_super, "minix", 1, NULL
+	"minix",
+	FS_REQUIRES_DEV,
+	minix_read_super,
+	NULL
 };
 
 __initfunc(int init_minix_fs(void))

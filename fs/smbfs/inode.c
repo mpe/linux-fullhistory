@@ -429,9 +429,11 @@ int smb_current_kmalloced;
 int smb_current_vmalloced;
 #endif
 
-static struct file_system_type smb_fs_type =
-{
-	smb_read_super, "smbfs", 0, NULL
+static struct file_system_type smb_fs_type = {
+	"smbfs",
+	FS_NO_DCACHE,
+	smb_read_super,
+	NULL
 };
 
 __initfunc(int init_smb_fs(void))

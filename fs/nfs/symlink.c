@@ -19,8 +19,6 @@
 #include <asm/uaccess.h>
 
 static int nfs_readlink(struct inode *, char *, int);
-static int nfs_follow_link(struct inode *, struct inode *, int, int,
-			   struct inode **);
 
 /*
  * symlinks can't do much...
@@ -37,62 +35,12 @@ struct inode_operations nfs_symlink_inode_operations = {
 	NULL,			/* mknod */
 	NULL,			/* rename */
 	nfs_readlink,		/* readlink */
-	nfs_follow_link,	/* follow_link */
 	NULL,			/* readpage */
 	NULL,			/* writepage */
 	NULL,			/* bmap */
 	NULL,			/* truncate */
 	NULL			/* permission */
 };
-
-static int nfs_follow_link(struct inode *dir, struct inode *inode,
-			   int flag, int mode, struct inode **res_inode)
-{
-	int error;
-	unsigned int len;
-	char *res, *res2;
-	void *mem;
-
-	*res_inode = NULL;
-	if (!dir) {
-		dir = current->fs->root;
-		dir->i_count++;
-	}
-	if (!inode) {
-		iput(dir);
-		return -ENOENT;
-	}
-	if (!S_ISLNK(inode->i_mode)) {
-		iput(dir);
-		*res_inode = inode;
-		return 0;
-	}
-	if (current->link_count > 5) {
-		iput(inode);
-		iput(dir);
-		return -ELOOP;
-	}
-	error = nfs_proc_readlink(NFS_SERVER(inode), NFS_FH(inode), &mem,
-		&res, &len, NFS_MAXPATHLEN);
-	if (error) {
-		iput(inode);
-		iput(dir);
-		kfree(mem);
-		return error;
-	}
-	while ((res2 = (char *) kmalloc(NFS_MAXPATHLEN + 1, GFP_NFS)) == NULL) {
-		schedule();
-	}
-	memcpy(res2, res, len);
-	res2[len] = '\0';
-	kfree(mem);
-	iput(inode);
-	current->link_count++;
-	error = open_namei(res2, flag, mode, res_inode, dir);
-	current->link_count--;
-	kfree_s(res2, NFS_MAXPATHLEN + 1);
-	return error;
-}
 
 static int nfs_readlink(struct inode *inode, char *buffer, int buflen)
 {
@@ -103,10 +51,6 @@ static int nfs_readlink(struct inode *inode, char *buffer, int buflen)
 
 	dfprintk(VFS, "nfs: readlink(%x/%ld)\n", inode->i_dev, inode->i_ino);
 
-	if (!S_ISLNK(inode->i_mode)) {
-		iput(inode);
-		return -EINVAL;
-	}
 	if (buflen > NFS_MAXPATHLEN)
 		buflen = NFS_MAXPATHLEN;
 	error = nfs_proc_readlink(NFS_SERVER(inode), NFS_FH(inode), &mem,

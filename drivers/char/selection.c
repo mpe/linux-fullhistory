@@ -21,9 +21,9 @@
 
 #include <asm/uaccess.h>
 
-#include "vt_kern.h"
-#include "consolemap.h"
-#include "selection.h"
+#include <linux/vt_kern.h>
+#include <linux/consolemap.h>
+#include <linux/selection.h>
 
 #ifndef MIN
 #define MIN(a,b)	((a) < (b) ? (a) : (b))
@@ -101,9 +101,9 @@ int sel_loadlut(const unsigned long arg)
 }
 
 /* does screen address p correspond to character at LH/RH edge of screen? */
-static inline int atedge(const int p)
+static inline int atedge(const int p, int size_row)
 {
-	return (!(p % video_size_row) || !((p + 2) % video_size_row));
+	return (!(p % size_row)	|| !((p + 2) % size_row));
 }
 
 /* constrain v such that v <= u */
@@ -227,9 +227,9 @@ int set_selection(const unsigned long arg, struct tty_struct *tty, int user)
 
 	/* select to end of line if on trailing space */
 	if (new_sel_end > new_sel_start &&
-		!atedge(new_sel_end) && isspace(sel_pos(new_sel_end))) {
+		!atedge(new_sel_end, size_row) && isspace(sel_pos(new_sel_end))) {
 		for (pe = new_sel_end + 2; ; pe += 2)
-			if (!isspace(sel_pos(pe)) || atedge(pe))
+			if (!isspace(sel_pos(pe)) || atedge(pe, size_row))
 				break;
 		if (isspace(sel_pos(pe)))
 			new_sel_end = pe;

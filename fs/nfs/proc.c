@@ -177,8 +177,8 @@ nfs_proc_remove(struct nfs_server *server, struct nfs_fh *dir, const char *name)
 
 int
 nfs_proc_rename(struct nfs_server *server,
-			struct nfs_fh *old_dir, const char *old_name,
-			struct nfs_fh *new_dir, const char *new_name)
+		struct nfs_fh *old_dir, const char *old_name,
+		struct nfs_fh *new_dir, const char *new_name)
 {
 	struct nfs_renameargs	arg = { old_dir, old_name, new_dir, new_name };
 	int			status;

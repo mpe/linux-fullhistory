@@ -139,10 +139,15 @@ if [ "$CONFIG_NET_RADIO" != "n" ]; then
       bool 'Soundmodem support for Soundblaster and compatible cards' CONFIG_SOUNDMODEM_SBC
       bool 'Soundmodem support for WSS and Crystal cards' CONFIG_SOUNDMODEM_WSS
       bool 'Soundmodem support for 1200 baud AFSK modulation' CONFIG_SOUNDMODEM_AFSK1200
+      bool 'Soundmodem support for 2400 baud AFSK modulation (7.3728MHz crystal)' CONFIG_SOUNDMODEM_AFSK2400_7
+      bool 'Soundmodem support for 2400 baud AFSK modulation (8MHz crystal)' CONFIG_SOUNDMODEM_AFSK2400_8
       bool 'Soundmodem support for 4800 baud HAPN-1 modulation' CONFIG_SOUNDMODEM_HAPN4800
       bool 'Soundmodem support for 9600 baud FSK G3RUH modulation' CONFIG_SOUNDMODEM_FSK9600
-      if [ "$CONFIG_M586" = "y" -o "$CONFIG_M686" = "y" ]; then
-        bool 'Soundmodem using floating point' CONFIG_SOUNDMODEM_FLOAT
+      if [ -f drivers/net/soundmodem/sm_afsk2666.c ]; then
+        bool 'Soundmodem support for 2666 baud AFSK modulation' CONFIG_SOUNDMODEM_AFSK2666
+      fi
+      if [ -f drivers/net/soundmodem/sm_psk4800.c ]; then
+        bool 'Soundmodem support for 4800 baud PSK modulation' CONFIG_SOUNDMODEM_PSK4800
       fi
     fi
   fi

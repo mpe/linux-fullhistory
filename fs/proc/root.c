@@ -64,7 +64,6 @@ struct inode_operations proc_dir_inode_operations = {
 	NULL,			/* mknod */
 	NULL,			/* rename */
 	NULL,			/* readlink */
-	NULL,			/* follow_link */
 	NULL,			/* readpage */
 	NULL,			/* writepage */
 	NULL,			/* bmap */
@@ -105,7 +104,6 @@ static struct inode_operations proc_root_inode_operations = {
 	NULL,			/* mknod */
 	NULL,			/* rename */
 	NULL,			/* readlink */
-	NULL,			/* follow_link */
 	NULL,			/* readpage */
 	NULL,			/* writepage */
 	NULL,			/* bmap */
@@ -266,7 +264,6 @@ struct inode_operations proc_openprom_inode_operations = {
 	NULL,			/* mknod */
 	NULL,			/* rename */
 	NULL,			/* readlink */
-	NULL,			/* follow_link */
 	NULL,			/* readpage */
 	NULL,			/* writepage */
 	NULL,			/* bmap */
@@ -348,17 +345,6 @@ int proc_unregister(struct proc_dir_entry * dir, int ino)
 /*
  * /proc/self:
  */
-static int proc_self_followlink(struct inode * dir, struct inode * inode,
-			int flag, int mode, struct inode ** res_inode)
-{
-	iput(dir);
-	*res_inode = proc_get_inode(inode->i_sb, (current->pid << 16) + PROC_PID_INO, &proc_pid);
-	iput(inode);
-	if (!*res_inode)
-		return -ENOENT;
-	return 0;
-}
-
 static int proc_self_readlink(struct inode * inode, char * buffer, int buflen)
 {
 	int len;
@@ -384,7 +370,6 @@ static struct inode_operations proc_self_inode_operations = {
 	NULL,			/* mknod */
 	NULL,			/* rename */
 	proc_self_readlink,	/* readlink */
-	proc_self_followlink,	/* follow_link */
 	NULL,			/* readpage */
 	NULL,			/* writepage */
 	NULL,			/* bmap */
@@ -436,6 +421,13 @@ static struct proc_dir_entry proc_root_cpuinfo = {
 	S_IFREG | S_IRUGO, 1, 0, 0,
 	0, &proc_array_inode_operations
 };
+#if defined (CONFIG_AMIGA) || defined (CONFIG_ATARI)
+static struct proc_dir_entry proc_root_hardware = {
+	PROC_HARDWARE, 8, "hardware",
+	S_IFREG | S_IRUGO, 1, 0, 0,
+	0, &proc_array_inode_operations
+};
+#endif
 static struct proc_dir_entry proc_root_self = {
 	PROC_SELF, 4, "self",
 	S_IFLNK | S_IRUGO | S_IWUGO | S_IXUGO, 1, 0, 0,
@@ -539,6 +531,13 @@ static struct proc_dir_entry proc_root_slab = {
 	S_IFREG | S_IRUGO, 1, 0, 0,
 	0, &proc_array_inode_operations
 };
+#ifdef CONFIG_OMIRR
+static struct proc_dir_entry proc_root_omirr = {
+	PROC_OMIRR, 5, "omirr",
+	S_IFREG | S_IRUSR, 1, 0, 0,
+	0, &proc_omirr_inode_operations
+};
+#endif
 
 void proc_root_init(void)
 {
@@ -599,7 +598,9 @@ void proc_root_init(void)
 #endif
 	proc_register(&proc_root, &proc_openprom);
 #endif
-		   
+#if defined (CONFIG_AMIGA) || defined (CONFIG_ATARI)
+	proc_register(&proc_root, &proc_root_hardware);
+#endif
 	proc_register(&proc_root, &proc_root_slab);
 
 	if (prof_shift) {
@@ -640,6 +641,16 @@ int proc_lookup(struct inode * dir,const char * name, int len,
 		iput(dir);
 		return -EINVAL;
 	}
+
+	/* Either remove this as soon as possible due to security problems,
+	 * or uncomment the root-only usage.
+	 */
+
+	/* Allow generic inode lookups everywhere.
+	 * No other name in /proc must begin with a '['.
+	 */
+	if(/*!current->uid &&*/ name[0] == '[')
+		return proc_arbitrary_lookup(dir,name,len,result);
 
 	/* Special case "." and "..": they aren't on the directory list */
 	*result = dir;
@@ -686,7 +697,7 @@ static int proc_root_lookup(struct inode * dir,const char * name, int len,
 	int ino, retval;
 	struct task_struct *p;
 
-	dir->i_count++;
+	atomic_inc(&dir->i_count);
 
 	if (dir->i_ino == PROC_ROOT_INO) { /* check for safety... */
 		dir->i_nlink = proc_root.nlink;

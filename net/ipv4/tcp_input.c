@@ -5,7 +5,7 @@
  *
  *		Implementation of the Transmission Control Protocol(TCP).
  *
- * Version:	$Id: tcp_input.c,v 1.51 1997/04/27 19:24:40 schenk Exp $
+ * Version:	$Id: tcp_input.c,v 1.52 1997/05/31 12:36:42 freitag Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -56,13 +56,15 @@ static void tcp_cong_avoid_vanj(struct sock *sk, u32 seq, u32 ack,
 static void tcp_cong_avoid_vegas(struct sock *sk, u32 seq, u32 ack,
 				 u32 seq_rtt);
 
-int sysctl_tcp_cong_avoidance = 0;
-int sysctl_tcp_hoe_retransmits = 0;
-int sysctl_tcp_sack = 0;
-int sysctl_tcp_tsack = 0;
-int sysctl_tcp_timestamps = 0;
-int sysctl_tcp_window_scaling = 0;
- 
+int sysctl_tcp_cong_avoidance;
+int sysctl_tcp_hoe_retransmits;
+int sysctl_tcp_sack;
+int sysctl_tcp_tsack;
+int sysctl_tcp_timestamps;
+int sysctl_tcp_window_scaling;
+int sysctl_tcp_syncookies; 
+int sysctl_tcp_always_syncookie;
+int sysctl_tcp_max_delay_acks = MAX_DELAY_ACK;
 
 static tcp_sys_cong_ctl_t tcp_sys_cong_ctl_f = &tcp_cong_avoid_vanj;
 
@@ -1080,7 +1082,7 @@ queue_and_out:
 		/* A retransmit, 2nd most common case.  Force an imediate ack. */
 		SOCK_DEBUG(sk, "retransmit received: seq %X\n", skb->seq);
 
-		tp->delayed_acks = MAX_DELAY_ACK;
+		tp->delayed_acks = sysctl_tcp_max_delay_acks;
 		kfree_skb(skb, FREE_READ);
 		return;
 	}
@@ -1094,7 +1096,7 @@ queue_and_out:
 	}
 
 	/* Ok. This is an out_of_order segment, force an ack. */
-	tp->delayed_acks = MAX_DELAY_ACK;
+	tp->delayed_acks = sysctl_tcp_max_delay_acks;
 
 	/* Disable header predition. */
 	tp->pred_flags = 0;
@@ -1218,7 +1220,7 @@ static __inline__ void tcp_ack_snd_check(struct sock *sk)
 		return;
 	}
 
-	if (tp->delayed_acks >= MAX_DELAY_ACK || tcp_raise_window(sk))
+	if (tp->delayed_acks >= sysctl_tcp_max_delay_acks || tcp_raise_window(sk))
 		tcp_send_ack(sk);
 	else
 		tcp_send_delayed_ack(sk, HZ/2);

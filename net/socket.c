@@ -212,7 +212,7 @@ static int get_fd(struct inode *inode)
 		file->f_flags = O_RDWR;
 		file->f_inode = inode;
 		if (inode) 
-			inode->i_count++;
+			atomic_inc(&inode->i_count);
 		file->f_pos = 0;
 	}
 	return fd;
@@ -797,6 +797,7 @@ asmlinkage int sys_accept(int fd, struct sockaddr *upeer_sockaddr, int *upeer_ad
 	int len;
 
 	lock_kernel();
+restart:
   	if ((sock = sockfd_lookup(fd, &err))!=NULL)
   	{
 		if (!(newsock = sock_alloc())) 
@@ -834,7 +835,13 @@ asmlinkage int sys_accept(int fd, struct sockaddr *upeer_sockaddr, int *upeer_ad
 	
 		if (upeer_sockaddr)
 		{
-			newsock->ops->getname(newsock, (struct sockaddr *)address, &len, 1);
+			/* Handle the race where the accept works and we
+			   then getname after it has closed again */
+			if(newsock->ops->getname(newsock, (struct sockaddr *)address, &len, 1)<0)
+			{
+				sys_close(err);
+				goto restart;
+			}
 			move_addr_to_user(address,len, upeer_sockaddr, upeer_addrlen);
 		}
 out:

@@ -97,7 +97,9 @@ static inline void remove_mem_queue(struct page * entry)
  *
  * Hint: -mask = 1+~mask
  */
+#ifdef __SMP__
 static spinlock_t page_alloc_lock;
+#endif
 
 static inline void free_pages_ok(unsigned long map_nr, unsigned long order)
 {

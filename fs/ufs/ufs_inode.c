@@ -6,7 +6,7 @@
  * Laboratory for Computer Science Research Computing Facility
  * Rutgers, The State University of New Jersey
  *
- * $Id: ufs_inode.c,v 1.7 1996/06/01 14:56:46 ecd Exp $
+ * $Id: ufs_inode.c,v 1.8 1997/06/04 08:28:28 davem Exp $
  *
  */
 
@@ -18,8 +18,9 @@ void ufs_print_inode(struct inode * inode)
 {
 	printk("ino %lu  mode 0%6.6o  lk %d  uid %d  gid %d"
 	       "  sz %lu  blks %lu  cnt %u\n",
-		inode->i_ino, inode->i_mode, inode->i_nlink, inode->i_uid,
-		inode->i_gid, inode->i_size, inode->i_blocks, inode->i_count);
+	       inode->i_ino, inode->i_mode, inode->i_nlink, inode->i_uid,
+	       inode->i_gid, inode->i_size, inode->i_blocks,
+	       atomic_read(&inode->i_count));
 	printk("  db <0x%x 0x%x 0x%x 0x%x 0x%x 0x%x 0x%x 0x%x"
 	       " 0x%x 0x%x 0x%x 0x%x>\n",
 		inode->u.ufs_i.i_data[0], inode->u.ufs_i.i_data[1],

@@ -49,6 +49,6 @@ __strncpy_from_user:
 	 mov	-EFAULT, %o0
 
 	.section __ex_table,#alloc
-	.align	4
-	.word	10b, 4b
-	.word	11b, 4b
+	.align	8
+	.xword	10b, 4b
+	.xword	11b, 4b

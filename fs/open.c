@@ -4,6 +4,7 @@
  *  Copyright (C) 1991, 1992  Linus Torvalds
  */
 
+#include <linux/config.h>
 #include <linux/vfs.h>
 #include <linux/types.h>
 #include <linux/utime.h>
@@ -20,6 +21,7 @@
 #include <linux/file.h>
 #include <linux/smp.h>
 #include <linux/smp_lock.h>
+#include <linux/omirr.h>
 
 #include <asm/uaccess.h>
 #include <asm/bitops.h>
@@ -33,7 +35,7 @@ asmlinkage int sys_statfs(const char * path, struct statfs * buf)
 	error = verify_area(VERIFY_WRITE, buf, sizeof(struct statfs));
 	if (error)
 		goto out;
-	error = namei(path,&inode);
+	error = namei(NAM_FOLLOW_LINK, path, &inode);
 	if (error)
 		goto out;
 	error = -ENOSYS;
@@ -88,6 +90,7 @@ int do_truncate(struct inode *inode, unsigned long length)
 		vmtruncate(inode, length);
 		if (inode->i_op && inode->i_op->truncate)
 			inode->i_op->truncate(inode);
+		inode->i_status |= ST_MODIFIED;
 	}
 	up(&inode->i_sem);
 	return error;
@@ -99,7 +102,7 @@ asmlinkage int sys_truncate(const char * path, unsigned long length)
 	int error;
 
 	lock_kernel();
-	error = namei(path,&inode);
+	error = namei(NAM_FOLLOW_LINK, path, &inode);
 	if (error)
 		goto out;
 
@@ -185,33 +188,36 @@ asmlinkage int sys_utime(char * filename, struct utimbuf * times)
 	struct iattr newattrs;
 
 	lock_kernel();
-	error = namei(filename,&inode);
+	/* Hmm, should I always follow symlinks or not ? */
+	error = namei(NAM_FOLLOW_LINK, filename, &inode);
 	if (error)
 		goto out;
 	error = -EROFS;
-	if (IS_RDONLY(inode)) {
-		iput(inode);
-		goto out;
-	}
+	if (IS_RDONLY(inode))
+		goto iput_and_out;
+
 	/* Don't worry, the checks are done in inode_change_ok() */
 	newattrs.ia_valid = ATTR_CTIME | ATTR_MTIME | ATTR_ATIME;
 	if (times) {
 		error = get_user(newattrs.ia_atime, &times->actime);
 		if (!error) 
 			error = get_user(newattrs.ia_mtime, &times->modtime);
-		if (error) {
-			iput(inode);
-			goto out;
-		}
+		if (error)
+			goto iput_and_out;
+
 		newattrs.ia_valid |= ATTR_ATIME_SET | ATTR_MTIME_SET;
 	} else {
 		if (current->fsuid != inode->i_uid &&
-		    (error = permission(inode,MAY_WRITE)) != 0) {
-			iput(inode);
-			goto out;
-		}
+		    (error = permission(inode,MAY_WRITE)) != 0)
+			goto iput_and_out;
 	}
 	error = notify_change(inode, &newattrs);
+#ifdef CONFIG_OMIRR
+	if(!error)
+		omirr_printall(inode, " U %ld %ld %ld ", CURRENT_TIME,
+				newattrs.ia_atime, newattrs.ia_mtime);
+#endif
+iput_and_out:
 	iput(inode);
 out:
 	unlock_kernel();
@@ -231,7 +237,7 @@ asmlinkage int sys_utimes(char * filename, struct timeval * utimes)
 	struct iattr newattrs;
 
 	lock_kernel();
-	error = namei(filename,&inode);
+	error = namei(NAM_FOLLOW_LINK, filename, &inode);
 	if (error)
 		goto out;
 	error = -EROFS;
@@ -252,6 +258,11 @@ asmlinkage int sys_utimes(char * filename, struct timeval * utimes)
 			goto iput_and_out;
 	}
 	error = notify_change(inode, &newattrs);
+#ifdef CONFIG_OMIRR
+	if(!error)
+		omirr_printall(inode, " U %ld %ld %ld ", CURRENT_TIME,
+				newattrs.ia_atime, newattrs.ia_mtime);
+#endif
 iput_and_out:
 	iput(inode);
 out:
@@ -276,7 +287,7 @@ asmlinkage int sys_access(const char * filename, int mode)
 	old_fsgid = current->fsgid;
 	current->fsuid = current->uid;
 	current->fsgid = current->gid;
-	res = namei(filename,&inode);
+	res = namei(NAM_FOLLOW_LINK, filename, &inode);
 	if (!res) {
 		res = permission(inode, mode);
 		iput(inode);
@@ -291,24 +302,23 @@ out:
 asmlinkage int sys_chdir(const char * filename)
 {
 	struct inode * inode;
+	struct inode * tmpi;
 	int error;
 
 	lock_kernel();
-	error = namei(filename,&inode);
+	error = namei(NAM_FOLLOW_LINK, filename, &inode);
 	if (error)
 		goto out;
 	error = -ENOTDIR;
-	if (!S_ISDIR(inode->i_mode)) {
-		iput(inode);
-		goto out;
-	}
-	if ((error = permission(inode,MAY_EXEC)) != 0) {
-		iput(inode);
-		goto out;
-	}
-	iput(current->fs->pwd);
-	current->fs->pwd = inode;
-	error = 0;
+	if (!S_ISDIR(inode->i_mode))
+		goto iput_and_out;
+	if ((error = permission(inode,MAY_EXEC)) != 0)
+		goto iput_and_out;
+
+	/* exchange inodes */
+	tmpi = current->fs->pwd; current->fs->pwd = inode; inode = tmpi;
+iput_and_out:
+	iput(inode);
 out:
 	unlock_kernel();
 	return error;
@@ -333,8 +343,7 @@ asmlinkage int sys_fchdir(unsigned int fd)
 		goto out;
 	iput(current->fs->pwd);
 	current->fs->pwd = inode;
-	inode->i_count++;
-	error = 0;
+	atomic_inc(&inode->i_count);
 out:
 	unlock_kernel();
 	return error;
@@ -343,25 +352,23 @@ out:
 asmlinkage int sys_chroot(const char * filename)
 {
 	struct inode * inode;
+	struct inode * tmpi;
 	int error;
 
 	lock_kernel();
-	error = namei(filename,&inode);
+	error = namei(NAM_FOLLOW_LINK, filename, &inode);
 	if (error)
 		goto out;
 	error = -ENOTDIR;
-	if (!S_ISDIR(inode->i_mode)) {
-		iput(inode);
-		goto out;
-	}
+	if (!S_ISDIR(inode->i_mode))
+		goto iput_and_out;
 	error = -EPERM;
-	if (!fsuser()) {
-		iput(inode);
-		goto out;
-	}
-	iput(current->fs->root);
-	current->fs->root = inode;
+	if (!fsuser())
+		goto iput_and_out;
+	tmpi = current->fs->root; current->fs->root = inode; inode = tmpi;
 	error = 0;
+iput_and_out:
+	iput(inode);
 out:
 	unlock_kernel();
 	return error;
@@ -392,6 +399,10 @@ asmlinkage int sys_fchmod(unsigned int fd, mode_t mode)
 	newattrs.ia_valid = ATTR_MODE | ATTR_CTIME;
 	inode->i_dirt = 1;
 	err = notify_change(inode, &newattrs);
+#ifdef CONFIG_OMIRR
+	if(!err)
+		omirr_printall(inode, " M %ld %ld ", CURRENT_TIME, newattrs.ia_mode);
+#endif
 out:
 	unlock_kernel();
 	return err;
@@ -404,7 +415,11 @@ asmlinkage int sys_chmod(const char * filename, mode_t mode)
 	struct iattr newattrs;
 
 	lock_kernel();
-	error = namei(filename,&inode);
+	/* I'm not sure whether to use NAM_FOLLOW_TRAILSLASH instead,
+	 * because permissions on symlinks now can never be changed,
+	 * but on the other hand they are never needed.
+	 */
+	error = namei(NAM_FOLLOW_LINK, filename, &inode);
 	if (error)
 		goto out;
 	error = -EROFS;
@@ -419,6 +434,10 @@ asmlinkage int sys_chmod(const char * filename, mode_t mode)
 	newattrs.ia_valid = ATTR_MODE | ATTR_CTIME;
 	inode->i_dirt = 1;
 	error = notify_change(inode, &newattrs);
+#ifdef CONFIG_OMIRR
+	if(!error)
+		omirr_printall(inode, " M %ld %ld ", CURRENT_TIME, newattrs.ia_mode);
+#endif
 iput_and_out:
 	iput(inode);
 out:
@@ -481,6 +500,11 @@ asmlinkage int sys_fchown(unsigned int fd, uid_t user, gid_t group)
 			inode->i_sb->dq_op->transfer(inode, &newattrs, 1);
 	} else
 		error = notify_change(inode, &newattrs);
+#ifdef CONFIG_OMIRR
+	if(!error)
+		omirr_printall(inode, " O %d %d ", CURRENT_TIME,
+				newattrs.ia_uid, newattrs.ia_gid);
+#endif
 out:
 	unlock_kernel();
 	return error;
@@ -493,7 +517,7 @@ asmlinkage int sys_chown(const char * filename, uid_t user, gid_t group)
 	struct iattr newattrs;
 
 	lock_kernel();
-	error = lnamei(filename,&inode);
+	error = namei(NAM_FOLLOW_TRAILSLASH, filename, &inode);
 	if (error)
 		goto out;
 	error = -EROFS;
@@ -532,12 +556,17 @@ asmlinkage int sys_chown(const char * filename, uid_t user, gid_t group)
 		inode->i_sb->dq_op->initialize(inode, -1);
 		error = -EDQUOT;
 		if (inode->i_sb->dq_op->transfer(inode, &newattrs, 0))
-			goto out;
+			goto iput_and_out;
 		error = notify_change(inode, &newattrs);
 		if (error)
 			inode->i_sb->dq_op->transfer(inode, &newattrs, 1);
 	} else
 		error = notify_change(inode, &newattrs);
+#ifdef CONFIG_OMIRR
+	if(!error)
+		omirr_printall(inode, " O %d %d ", CURRENT_TIME,
+				newattrs.ia_uid, newattrs.ia_gid);
+#endif
 iput_and_out:
 	iput(inode);
 out:

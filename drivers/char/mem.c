@@ -35,6 +35,33 @@ void isdn_init(void);
 void pcwatchdog_init(void);
 #endif
 
+static long do_write_mem(struct file * file,
+	void *p, unsigned long realp, 					 
+	const char * buf, unsigned long count)
+{
+	unsigned long written;
+
+	written = 0;
+#if defined(__sparc__) || defined(__mc68000__)
+	/* we don't have page 0 mapped on sparc and m68k.. */
+	if (realp < PAGE_SIZE) {
+		unsigned long sz = PAGE_SIZE-realp;
+		if (sz > count) sz = count; 
+		/* Hmm. Do something? */
+		buf+=sz;
+		p+=sz;
+		count-=sz;
+		written+=sz;
+	}
+#endif
+	if (copy_from_user(p, buf, count) < 0) 
+		return -EFAULT;
+	written += count;
+	file->f_pos += written;
+	return count;
+}
+
+
 /*
  * This funcion reads the *physical* memory. The f_pos points directly to the 
  * memory location. 
@@ -45,7 +72,7 @@ static long read_mem(struct inode * inode, struct file * file,
 	unsigned long p = file->f_pos;
 	unsigned long end_mem;
 	unsigned long read;
-
+	
 	end_mem = __pa(high_memory);
 	if (p >= end_mem)
 		return 0;
@@ -54,15 +81,22 @@ static long read_mem(struct inode * inode, struct file * file,
 	read = 0;
 #if defined(__sparc__) || defined(__mc68000__)
 	/* we don't have page 0 mapped on sparc and m68k.. */
-	while (p < PAGE_SIZE && count > 0) {
-		put_user(0,buf);
-		buf++;
-		p++;
-		count--;
-		read++;
+	if (p < PAGE_SIZE) {
+		unsigned long sz = PAGE_SIZE-p;
+		if (sz > count) 
+			sz = count; 
+		if (sz > 0) {
+			if (clear_user(buf, sz))
+				return -EFAULT;
+			buf += sz; 
+			p += sz; 
+			count -= sz; 
+			read += sz; 
+		}
 	}
 #endif
-	copy_to_user(buf, __va(p), count);
+	if (copy_to_user(buf, __va(p), count) < 0)
+		return -EFAULT;
 	read += count;
 	file->f_pos += read;
 	return read;
@@ -73,35 +107,19 @@ static long write_mem(struct inode * inode, struct file * file,
 {
 	unsigned long p = file->f_pos;
 	unsigned long end_mem;
-	unsigned long written;
 
 	end_mem = __pa(high_memory);
 	if (p >= end_mem)
 		return 0;
 	if (count > end_mem - p)
 		count = end_mem - p;
-	written = 0;
-#if defined(__sparc__) || defined(__mc68000__)
-	/* we don't have page 0 mapped on sparc and m68k.. */
-	while (p < PAGE_SIZE && count > 0) {
-		/* Hmm. Do something? */
-		buf++;
-		p++;
-		count--;
-		written++;
-	}
-#endif
-	copy_from_user(__va(p), buf, count);
-	written += count;
-	file->f_pos += written;
-	return count;
+	return do_write_mem(file,__va(p),p,buf,count);
 }
 
 static int mmap_mem(struct inode * inode, struct file * file, struct vm_area_struct * vma)
 {
 	unsigned long offset = vma->vm_offset;
 
-	
 	if (offset & ~PAGE_MASK)
 		return -ENXIO;
 #if defined(__i386__)
@@ -117,7 +135,7 @@ static int mmap_mem(struct inode * inode, struct file * file, struct vm_area_str
 	if (remap_page_range(vma->vm_start, offset, vma->vm_end - vma->vm_start, vma->vm_page_prot))
 		return -EAGAIN;
 	vma->vm_inode = inode;
-	inode->i_count++;
+	atomic_inc(&inode->i_count);
 	return 0;
 }
 
@@ -166,27 +184,12 @@ static long write_kmem(struct inode * inode, struct file * file,
 	const char * buf, unsigned long count)
 {
 	unsigned long p = file->f_pos;
-	unsigned long written;
 
 	if (p >= (unsigned long) high_memory)
 		return 0;
 	if (count > (unsigned long) high_memory - p)
 		count = (unsigned long) high_memory - p;
-	written = 0;
-#if defined(__sparc__) || defined(__mc68000__)
-	/* we don't have page 0 mapped on sparc and m68k.. */
-	while (p < PAGE_SIZE && count > 0) {
-		/* Hmm. Do something? */
-		buf++;
-		p++;
-		count--;
-		written++;
-	}
-#endif
-	copy_from_user((char *) p, buf, count);
-	written += count;
-	file->f_pos += written;
-	return count;
+	return do_write_mem(file,(void*)p,p,buf,count);
 }
 
 static long read_port(struct inode * inode, struct file * file,
@@ -195,8 +198,11 @@ static long read_port(struct inode * inode, struct file * file,
 	unsigned int i = file->f_pos;
 	char * tmp = buf;
 
+	if (verify_area(VERIFY_WRITE,buf,count))
+		return -EFAULT; 
 	while (count-- > 0 && i < 65536) {
-		put_user(inb(i),tmp);
+		if (__put_user(inb(i),tmp) < 0) 
+			return -EFAULT;  
 		i++;
 		tmp++;
 	}
@@ -210,9 +216,12 @@ static long write_port(struct inode * inode, struct file * file,
 	unsigned int i = file->f_pos;
 	const char * tmp = buf;
 
+	if (verify_area(VERIFY_READ,buf,count))
+		return -EFAULT;
 	while (count-- > 0 && i < 65536) {
 		char c;
-		get_user(c, tmp);
+		if (__get_user(c, tmp)) 
+			return -EFAULT; 
 		outb(c,i);
 		i++;
 		tmp++;

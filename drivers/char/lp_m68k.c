@@ -462,7 +462,6 @@ static struct file_operations lp_fops = {
 EXPORT_SYMBOL(lp_table);
 EXPORT_SYMBOL(lp_irq);
 EXPORT_SYMBOL(lp_interrupt);
-EXPORT_SYMBOL(lp_init);
 EXPORT_SYMBOL(register_parallel);
 EXPORT_SYMBOL(unregister_parallel);
 

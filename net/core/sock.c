@@ -71,6 +71,8 @@
  *		Alan Cox	: 	Generic socket allocation to make hooks
  *					easier (suggested by Craig Metz).
  *		Michael Pall	:	SO_ERROR returns positive errno again
+ *             Steve Whitehouse:       Added default destructor to free
+ *                                     protocol private data.
  *
  * To Fix:
  *
@@ -123,6 +125,8 @@ __u32 sysctl_wmem_max = SK_WMEM_MAX;
 __u32 sysctl_rmem_max = SK_RMEM_MAX;
 __u32 sysctl_wmem_default = SK_WMEM_MAX;
 __u32 sysctl_rmem_default = SK_RMEM_MAX;
+
+int sysctl_core_destroy_delay = SOCK_DESTROY_TIME;
 
 /*
  *	This is meant for all protocols to use and covers goings on
@@ -465,6 +469,9 @@ struct sock *sk_alloc(int priority)
 
 void sk_free(struct sock *sk)
 {
+	if (sk->destruct)
+		sk->destruct(sk);
+
 	kmem_cache_free(sk_cachep, sk);
 }
 
@@ -787,7 +794,7 @@ void sklist_destroy_socket(struct sock **list,struct sock *sk)
 		 *	Someone is using our buffers still.. defer
 		 */
 		init_timer(&sk->timer);
-		sk->timer.expires=jiffies+10*HZ;
+		sk->timer.expires=jiffies+sysctl_core_destroy_delay;
 		sk->timer.function=sklist_destroy_timer;
 		sk->timer.data = (unsigned long)sk;
 		add_timer(&sk->timer);
@@ -874,6 +881,12 @@ void sock_def_callback3(struct sock *sk)
 	}
 }
 
+void sock_def_destruct(struct sock *sk)
+{
+	if (sk->protinfo.destruct_hook)
+		kfree(sk->protinfo.destruct_hook);
+}
+
 void sock_init_data(struct socket *sock, struct sock *sk)
 {
 	skb_queue_head_init(&sk->receive_queue);
@@ -901,6 +914,7 @@ void sock_init_data(struct socket *sock, struct sock *sk)
 	sk->data_ready		=	sock_def_callback2;
 	sk->write_space		=	sock_def_callback3;
 	sk->error_report	=	sock_def_callback1;
+	sk->destruct            =       sock_def_destruct;
 
 	sk->peercred.pid 	=	0;
 	sk->peercred.uid	=	-1;

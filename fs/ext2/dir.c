@@ -65,7 +65,6 @@ struct inode_operations ext2_dir_inode_operations = {
 	ext2_mknod,		/* mknod */
 	ext2_rename,		/* rename */
 	NULL,			/* readlink */
-	NULL,			/* follow_link */
 	NULL,			/* readpage */
 	NULL,			/* writepage */
 	NULL,			/* bmap */
@@ -194,12 +193,13 @@ revalidate:
 				 * currently swapped out.  So, use a
 				 * version stamp to detect whether or
 				 * not the directory has been modified
-				 * during the copy operation. */
-				unsigned long version;
-				dcache_add(inode, de->name, le16_to_cpu(de->name_len),
-					   le32_to_cpu(de->inode));
-				version = inode->i_version;
-				error = filldir(dirent, de->name, le16_to_cpu(de->name_len), filp->f_pos, le32_to_cpu(de->inode));
+				 * during the copy operation.
+				 */
+				unsigned long version = inode->i_version;
+
+				error = filldir(dirent, de->name,
+						le16_to_cpu(de->name_len),
+						filp->f_pos, le32_to_cpu(de->inode));
 				if (error)
 					break;
 				if (version != inode->i_version)

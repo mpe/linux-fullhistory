@@ -15,9 +15,10 @@
 #include <asm/pgtable.h>
 #include <asm/uaccess.h>
 
-#include "../../char/vt_kern.h"
-#include "../../char/selection.h"
-#include "../../char/console_struct.h"
+/* These must be included after asm/fbio.h */
+#include <linux/vt_kern.h>
+#include <linux/selection.h>
+#include <linux/console_struct.h>
 #include "fb.h"
 
 __initfunc(void creator_setup (fbinfo_t *fb, int slot, int con_node, unsigned long creator, int creator_io))

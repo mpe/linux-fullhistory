@@ -5,7 +5,7 @@
  *
  *		Implementation of the Transmission Control Protocol(TCP).
  *
- * Version:	$Id: tcp.c,v 1.65 1997/05/06 09:31:43 davem Exp $
+ * Version:	$Id: tcp.c,v 1.66 1997/05/31 12:36:39 freitag Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -430,6 +430,8 @@
 #include <net/tcp.h>
 
 #include <asm/uaccess.h>
+
+int sysctl_tcp_fin_timeout = TCP_FIN_TIMEOUT;
 
 unsigned long seq_offset;
 struct tcp_mib	tcp_statistics;
@@ -1385,7 +1387,7 @@ static int tcp_close_state(struct sock *sk, int dead)
 		if(timer_active)
 			add_timer(&sk->timer);
 		else
-			tcp_reset_msl_timer(sk, TIME_CLOSE, TCP_FIN_TIMEOUT);
+			tcp_reset_msl_timer(sk, TIME_CLOSE, sysctl_tcp_fin_timeout);
 	}
 
 	return send_fin;
@@ -1499,7 +1501,7 @@ void tcp_close(struct sock *sk, unsigned long timeout)
 		if(timer_active)
 			add_timer(&sk->timer);
 		else
-			tcp_reset_msl_timer(sk, TIME_CLOSE, TCP_FIN_TIMEOUT);
+			tcp_reset_msl_timer(sk, TIME_CLOSE, sysctl_tcp_fin_timeout);
 	}
 
 	sk->dead = 1;

@@ -34,10 +34,17 @@ extern int sysctl_arp_timeout;
 extern int sysctl_arp_check_interval;
 extern int sysctl_arp_confirm_interval;
 extern int sysctl_arp_confirm_timeout;
+extern int sysctl_arp_max_pings;
 
 /* From ip_fragment.c */
 extern int sysctl_ipfrag_low_thresh;
 extern int sysctl_ipfrag_high_thresh; 
+extern int sysctl_ipfrag_time;
+
+/* From igmp.c */
+extern int sysctl_igmp_max_host_report_delay;
+extern int sysctl_igmp_timer_scale;
+extern int sysctl_igmp_age_threshold;
 
 extern int sysctl_tcp_cong_avoidance;
 extern int sysctl_tcp_hoe_retransmits;
@@ -45,7 +52,16 @@ extern int sysctl_tcp_sack;
 extern int sysctl_tcp_tsack;
 extern int sysctl_tcp_timestamps;
 extern int sysctl_tcp_window_scaling;
-extern int sysctl_syn_retries;
+extern int sysctl_tcp_keepalive_time;
+extern int sysctl_tcp_keepalive_probes;
+extern int sysctl_tcp_max_ka_probes;
+extern int sysctl_tcp_retries1;
+extern int sysctl_tcp_retries2;
+extern int sysctl_tcp_max_delay_acks;
+extern int sysctl_tcp_fin_timeout;
+extern int sysctl_tcp_syncookies;
+extern int sysctl_tcp_always_syncookie;
+extern int sysctl_tcp_syn_retries;
 
 extern int tcp_sysctl_congavoid(ctl_table *ctl, int write, struct file * filp,
 				void *buffer, size_t *lenp);
@@ -82,6 +98,8 @@ ctl_table ipv4_table[] = {
          &sysctl_arp_dead_res_time, sizeof(int), 0644, NULL, &proc_dointvec},
         {NET_IPV4_ARP_MAX_TRIES, "arp_max_tries",
          &sysctl_arp_max_tries, sizeof(int), 0644, NULL, &proc_dointvec},
+        {NET_IPV4_ARP_MAX_PINGS, "arp_max_pings",
+         &sysctl_arp_max_pings, sizeof(int), 0644, NULL, &proc_dointvec},
         {NET_IPV4_ARP_TIMEOUT, "arp_timeout",
          &sysctl_arp_timeout, sizeof(int), 0644, NULL, &proc_dointvec},
         {NET_IPV4_ARP_CHECK_INTERVAL, "arp_check_interval",
@@ -149,12 +167,46 @@ ctl_table ipv4_table[] = {
         {NET_IPV4_RFC1620_REDIRECTS, "ip_rfc1620_redirects",
          &ipv4_config.rfc1620_redirects, sizeof(int), 0644, NULL,
          &proc_dointvec},
-	{NET_TCP_SYN_RETRIES, "tcp_syn_retries",
-	&sysctl_syn_retries, sizeof(int), 0644, NULL, &proc_dointvec},
-	{NET_IPFRAG_HIGH_THRESH, "ipfrag_high_thresh",
-	&sysctl_ipfrag_high_thresh, sizeof(int), 0644, NULL, &proc_dointvec},
-	{NET_IPFRAG_LOW_THRESH, "ipfrag_low_thresh",
-	&sysctl_ipfrag_low_thresh, sizeof(int), 0644, NULL, &proc_dointvec},
+	{NET_IPV4_TCP_SYN_RETRIES, "tcp_syn_retries",
+	 &sysctl_tcp_syn_retries, sizeof(int), 0644, NULL, &proc_dointvec},
+	{NET_IPV4_IPFRAG_HIGH_THRESH, "ipfrag_high_thresh",
+	 &sysctl_ipfrag_high_thresh, sizeof(int), 0644, NULL, &proc_dointvec},
+	{NET_IPV4_IPFRAG_LOW_THRESH, "ipfrag_low_thresh",
+	 &sysctl_ipfrag_low_thresh, sizeof(int), 0644, NULL, &proc_dointvec},
+	{NET_IPV4_IPFRAG_TIME, "ipfrag_time",
+	 &sysctl_ipfrag_time, sizeof(int), 0644, NULL, &proc_dointvec_jiffies},
+	{NET_IPV4_TCP_MAX_KA_PROBES, "tcp_max_ka_probes",
+	 &sysctl_tcp_max_ka_probes, sizeof(int), 0644, NULL, &proc_dointvec},
+	{NET_IPV4_TCP_KEEPALIVE_TIME, "tcp_keepalive_time",
+	 &sysctl_tcp_keepalive_time, sizeof(int), 0644, NULL, 
+	 &proc_dointvec_jiffies},
+	{NET_IPV4_TCP_KEEPALIVE_PROBES, "tcp_keepalive_probes",
+	 &sysctl_tcp_keepalive_probes, sizeof(int), 0644, NULL, 
+	 &proc_dointvec},
+	{NET_IPV4_TCP_RETRIES1, "tcp_retries1",
+	 &sysctl_tcp_retries1, sizeof(int), 0644, NULL, &proc_dointvec},
+	{NET_IPV4_TCP_RETRIES2, "tcp_retries2",
+	 &sysctl_tcp_retries2, sizeof(int), 0644, NULL, &proc_dointvec},
+	{NET_IPV4_TCP_MAX_DELAY_ACKS, "tcp_max_delay_acks",
+	 &sysctl_tcp_max_delay_acks, sizeof(int), 0644, NULL, &proc_dointvec},
+	{NET_IPV4_TCP_FIN_TIMEOUT, "tcp_fin_timeout",
+	 &sysctl_tcp_fin_timeout, sizeof(int), 0644, NULL, 
+	 &proc_dointvec_jiffies},
+	{NET_IPV4_IGMP_MAX_HOST_REPORT_DELAY, "igmp_max_host_report_delay",
+	 &sysctl_igmp_max_host_report_delay, sizeof(int), 0644, NULL, 
+	 &proc_dointvec},
+	{NET_IPV4_IGMP_TIMER_SCALE, "igmp_timer_scale",
+	 &sysctl_igmp_timer_scale, sizeof(int), 0644, NULL, &proc_dointvec},
+#if 0
+	/* This one shouldn't be exposed to the user (too implementation
+	   specific): */
+	{NET_IPV4_IGMP_AGE_THRESHOLD, "igmp_age_threshold",
+	 &sysctl_igmp_age_threshold, sizeof(int), 0644, NULL, &proc_dointvec},
+#endif
+	{NET_TCP_SYNCOOKIES, "tcp_syncookies",
+	 &sysctl_tcp_syncookies, sizeof(int), 0644, NULL, &proc_dointvec},
+	{NET_TCP_ALWAYS_SYNCOOKIE, "tcp_always_syncookie",
+	 &sysctl_tcp_always_syncookie, sizeof(int), 0644, NULL, &proc_dointvec},
 	{0}
 };
 

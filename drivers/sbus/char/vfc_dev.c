@@ -581,7 +581,7 @@ static int vfc_mmap(struct inode *inode, struct file *file,
 				vma->vm_page_prot, dev->which_io);
 	if(ret) return -EAGAIN;
 	vma->vm_inode=inode;
-	inode->i_count++;
+	atomic_inc(&inode->i_count);
 	return 0;
 }
 

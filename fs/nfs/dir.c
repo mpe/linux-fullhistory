@@ -51,7 +51,7 @@ static int nfs_symlink(struct inode *, const char *, int, const char *);
 static int nfs_link(struct inode *, struct inode *, const char *, int);
 static int nfs_mknod(struct inode *, const char *, int, int, int);
 static int nfs_rename(struct inode *, const char *, int,
-		      struct inode *, const char *, int, int);
+		      struct inode *, const char *, int);
 
 static struct file_operations nfs_dir_operations = {
 	NULL,			/* lseek - default */
@@ -78,7 +78,6 @@ struct inode_operations nfs_dir_inode_operations = {
 	nfs_mknod,		/* mknod */
 	nfs_rename,		/* rename */
 	NULL,			/* readlink */
-	NULL,			/* follow_link */
 	NULL,			/* readpage */
 	NULL,			/* writepage */
 	NULL,			/* bmap */
@@ -351,7 +350,7 @@ static struct nfs_lookup_cache_entry {
 	char		filename[NFS_MAXNAMLEN + 1];
 	struct nfs_fh	fhandle;
 	struct nfs_fattr fattr;
-	int		expiration_date;
+	unsigned long	expiration_date;
 } nfs_lookup_cache[NFS_LOOKUP_CACHE_SIZE];
 
 static struct nfs_lookup_cache_entry *nfs_lookup_cache_index(struct inode *dir,
@@ -492,7 +491,7 @@ static int nfs_lookup(struct inode *dir, const char *__name, int len,
 	}
 	memcpy(name,__name,len);
 	name[len] = '\0';
-	if (len == 1 && name[0] == '.') { /* cheat for "." */
+	if (len == 0 || (len == 1 && name[0] == '.')) { /* cheat for "" and "." */
 		*result = dir;
 		return 0;
 	}
@@ -649,11 +648,11 @@ static int nfs_sillyrename(struct inode *dir, const char *name, int len)
 	char		silly[16];
 	int		slen, ret;
 
-	dir->i_count++;
+	atomic_inc(&dir->i_count);
 	if (nfs_lookup(dir, name, len, &inode) < 0)
 		return -EIO;		/* arbitrary */
 
-	if (inode->i_count == 1) {
+	if (atomic_read(&inode->i_count) == 1) {
 		iput(inode);
 		return -EIO;
 	}
@@ -679,7 +678,7 @@ static int nfs_sillyrename(struct inode *dir, const char *name, int len)
 		nfs_lookup_cache_remove(dir, NULL, name);
 		nfs_lookup_cache_remove(dir, NULL, silly);
 		NFS_RENAMED_DIR(inode) = dir;
-		dir->i_count++;
+		atomic_inc(&dir->i_count);
 	}
 	nfs_invalidate_dircache(dir);
 	iput(inode);
@@ -823,8 +822,7 @@ static int nfs_link(struct inode *oldinode, struct inode *dir,
  * file in old_dir will go away when the last process iput()s the inode.
  */
 static int nfs_rename(struct inode *old_dir, const char *old_name, int old_len,
-		      struct inode *new_dir, const char *new_name, int new_len,
-		      int must_be_dir)
+		      struct inode *new_dir, const char *new_name, int new_len)
 {
 	int error;
 
@@ -849,10 +847,6 @@ static int nfs_rename(struct inode *old_dir, const char *old_name, int old_len,
 		iput(new_dir);
 		return -ENAMETOOLONG;
 	}
-
-	/* We don't do rename() with trailing slashes over NFS now. Hmm. */
-	if (must_be_dir)
-		return -EINVAL;
 
 	error = nfs_proc_rename(NFS_SERVER(old_dir),
 		NFS_FH(old_dir), old_name,
@@ -879,7 +873,8 @@ void nfs_refresh_inode(struct inode *inode, struct nfs_fattr *fattr)
 	int was_empty;
 
 	dfprintk(VFS, "NFS: refresh_inode(%x/%ld ct=%d)\n",
-				inode->i_dev, inode->i_ino, inode->i_count);
+		 inode->i_dev, inode->i_ino,
+		 atomic_read(&inode->i_count));
 
 	if (!inode || !fattr) {
 		printk("nfs_refresh_inode: inode or fattr is NULL\n");

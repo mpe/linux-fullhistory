@@ -87,6 +87,8 @@
 
 #define min(a,b)	(((a)<(b))?(a):(b))
 
+int sysctl_unix_delete_delay = HZ;
+int sysctl_unix_destroy_delay = 10*HZ;
 
 unix_socket *unix_socket_table[UNIX_HASH_SIZE+1];
 
@@ -138,6 +140,12 @@ extern __inline__ void unix_release_addr(struct unix_address *addr)
 	}
 }
 
+static void unix_destruct_addr(struct sock *sk)
+{
+	struct unix_address *addr = sk->protinfo.af_unix.addr;
+
+	unix_release_addr(addr);
+}
 
 /*
  *	Check unix socket name:
@@ -231,7 +239,6 @@ static void unix_destroy_timer(unsigned long data)
 	unix_socket *sk=(unix_socket *)data;
 	if(!unix_locked(sk) && atomic_read(&sk->wmem_alloc) == 0)
 	{
-		unix_release_addr(sk->protinfo.af_unix.addr);
 		sk_free(sk);
 		return;
 	}
@@ -240,7 +247,7 @@ static void unix_destroy_timer(unsigned long data)
 	 *	Retry;
 	 */
 	 
-	sk->timer.expires=jiffies+10*HZ;	/* No real hurry try it every 10 seconds or so */
+	sk->timer.expires=jiffies+sysctl_unix_destroy_delay;	/* No real hurry try it every 10 seconds or so */
 	add_timer(&sk->timer);
 }
 	 
@@ -248,7 +255,7 @@ static void unix_destroy_timer(unsigned long data)
 static void unix_delayed_delete(unix_socket *sk)
 {
 	sk->timer.data=(unsigned long)sk;
-	sk->timer.expires=jiffies+HZ;		/* Normally 1 second after will clean up. After that we try every 10 */
+	sk->timer.expires=jiffies+sysctl_unix_delete_delay;		/* Normally 1 second after will clean up. After that we try every 10 */
 	sk->timer.function=unix_destroy_timer;
 	add_timer(&sk->timer);
 }
@@ -284,7 +291,6 @@ static void unix_destroy_socket(unix_socket *sk)
 	
 	if(!unix_unlock(sk) && atomic_read(&sk->wmem_alloc) == 0)
 	{
-		unix_release_addr(sk->protinfo.af_unix.addr);
 		sk_free(sk);
 	}
 	else
@@ -346,7 +352,8 @@ static int unix_create(struct socket *sock, int protocol)
 		return -ENOMEM;
 
 	sock_init_data(sock,sk);
-	
+
+	sk->destruct = unix_destruct_addr;
 	sk->protinfo.af_unix.family=AF_UNIX;
 	sk->protinfo.af_unix.inode=NULL;
 	sk->sock_readers=1;			/* Us */
@@ -792,7 +799,7 @@ static int unix_accept(struct socket *sock, struct socket *newsock, int flags)
 	}
 	if (sk->protinfo.af_unix.inode)
 	{
-		sk->protinfo.af_unix.inode->i_count++;
+		atomic_inc(&sk->protinfo.af_unix.inode->i_count);
 		newsk->protinfo.af_unix.inode=sk->protinfo.af_unix.inode;
 	}
 		

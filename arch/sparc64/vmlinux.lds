@@ -26,6 +26,7 @@ SECTIONS
   _edata  =  .;
   PROVIDE (edata = .);
   .fixup   : { *(.fixup) }
+  . = ALIGN(16);
   __start___ex_table = .;
   __ex_table : { *(__ex_table) }
   __stop___ex_table = .;

@@ -681,7 +681,7 @@ do_load_elf_binary(struct linux_binprm * bprm, struct pt_regs * regs)
 
 #ifndef VM_STACK_FLAGS
 	current->executable = bprm->inode;
-	bprm->inode->i_count++;
+	atomic_inc(&bprm->inode->i_count);
 #endif
 #ifdef LOW_ELF_STACK
 	current->start_stack = bprm->p = elf_stack - 4;
@@ -887,6 +887,7 @@ static int load_elf_library(int fd)
  */
 static int dump_write(struct file *file, const void *addr, int nr)
 {
+	file->f_inode->i_status |= ST_MODIFIED;
 	return file->f_op->write(file->f_inode, file, addr, nr) == nr;
 }
 

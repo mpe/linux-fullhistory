@@ -5,7 +5,7 @@
  *
  *		The IP fragmentation functionality.
  *		
- * Version:	$Id: ip_fragment.c,v 1.22 1997/05/17 05:21:56 freitag Exp $
+ * Version:	$Id: ip_fragment.c,v 1.23 1997/05/31 12:36:35 freitag Exp $
  *
  * Authors:	Fred N. van Kempen <waltje@uWalt.NL.Mugnet.ORG>
  *		Alan Cox <Alan.Cox@linux.org>
@@ -40,6 +40,8 @@
  */
 int sysctl_ipfrag_high_thresh = 256*1024;
 int sysctl_ipfrag_low_thresh = 192*1024;
+
+int sysctl_ipfrag_time = IP_FRAG_TIME;
 
 /* Describe an IP fragment. */
 struct ipfrag {
@@ -251,7 +253,7 @@ static struct ipq *ip_create(struct sk_buff *skb, struct iphdr *iph)
 	qp->dev = skb->dev;
 
 	/* Start a timer for this entry. */
-	qp->timer.expires = jiffies + IP_FRAG_TIME;	/* about 30 seconds	*/
+	qp->timer.expires = jiffies + sysctl_ipfrag_time;	/* about 30 seconds	*/
 	qp->timer.data = (unsigned long) qp;		/* pointer to queue	*/
 	qp->timer.function = ip_expire;			/* expire function	*/
 	add_timer(&qp->timer);
@@ -417,7 +419,7 @@ struct sk_buff *ip_defrag(struct sk_buff *skb)
 			memcpy(qp->iph, iph, ihl+8);
 		}
 		del_timer(&qp->timer);
-		qp->timer.expires = jiffies + IP_FRAG_TIME;	/* about 30 seconds */
+		qp->timer.expires = jiffies + sysctl_ipfrag_time;	/* about 30 seconds */
 		qp->timer.data = (unsigned long) qp;	/* pointer to queue */
 		qp->timer.function = ip_expire;		/* expire function */
 		add_timer(&qp->timer);

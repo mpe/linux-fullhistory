@@ -316,7 +316,8 @@ nfs_fhget(struct super_block *sb, struct nfs_fh *fhandle,
 		nfs_refresh_inode(inode, fattr);
 	}
 	dprintk("NFS: fhget(%x/%ld ct=%d)\n",
-				inode->i_dev, inode->i_ino, inode->i_count);
+		inode->i_dev, inode->i_ino,
+		atomic_read(&inode->i_count));
 
 	return inode;
 }
@@ -433,7 +434,10 @@ done:
  * File system information
  */
 static struct file_system_type nfs_fs_type = {
-	nfs_read_super, "nfs", 0, NULL
+	"nfs",
+	FS_NO_DCACHE,
+	nfs_read_super,
+	NULL
 };
 
 /*

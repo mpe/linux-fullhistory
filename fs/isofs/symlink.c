@@ -19,7 +19,6 @@
 #include <asm/uaccess.h>
 
 static int isofs_readlink(struct inode *, char *, int);
-static int isofs_follow_link(struct inode *, struct inode *, int, int, struct inode **);
 
 /*
  * symlinks can't do much...
@@ -36,7 +35,6 @@ struct inode_operations isofs_symlink_inode_operations = {
 	NULL,			/* mknod */
 	NULL,			/* rename */
 	isofs_readlink,		/* readlink */
-	isofs_follow_link,	/* follow_link */
 	NULL,			/* readpage */
 	NULL,			/* writepage */
 	NULL,			/* bmap */
@@ -44,50 +42,10 @@ struct inode_operations isofs_symlink_inode_operations = {
 	NULL			/* permission */
 };
 
-static int isofs_follow_link(struct inode * dir, struct inode * inode,
-	int flag, int mode, struct inode ** res_inode)
-{
-	int error;
-	char * pnt;
-
-	if (!dir) {
-		dir = current->fs->root;
-		dir->i_count++;
-	}
-	if (!inode) {
-		iput(dir);
-		*res_inode = NULL;
-		return -ENOENT;
-	}
-	if (!S_ISLNK(inode->i_mode)) {
-		iput(dir);
-		*res_inode = inode;
-		return 0;
-	}
-	if ((current->link_count > 5) ||
-	   !(pnt = get_rock_ridge_symlink(inode))) {
-		iput(dir);
-		iput(inode);
-		*res_inode = NULL;
-		return -ELOOP;
-	}
-	iput(inode);
-	current->link_count++;
-	error = open_namei(pnt,flag,mode,res_inode,dir);
-	current->link_count--;
-	kfree(pnt);
-	return error;
-}
-
 static int isofs_readlink(struct inode * inode, char * buffer, int buflen)
 {
         char * pnt;
 	int i;
-
-	if (!S_ISLNK(inode->i_mode)) {
-		iput(inode);
-		return -EINVAL;
-	}
 
 	if (buflen > 1023)
 		buflen = 1023;

@@ -5,6 +5,27 @@ mainmenu_option next_comment
 comment 'Filesystems'
 
 bool	 'Quota support' CONFIG_QUOTA
+bool     'Preload dcache entries in readdir() [ALPHA, currently dangerous!]' CONFIG_DCACHE_PRELOAD
+bool     'Include support for omirr online mirror' CONFIG_OMIRR
+bool     'Translate filename suffixes' CONFIG_TRANS_NAMES
+if [ "$CONFIG_TRANS_NAMES" = "y" ]; then
+  bool '  Restrict translation to specific gid' CONFIG_TRANS_RESTRICT
+  if [ "$CONFIG_TRANS_RESTRICT" = "y" ]; then
+    int '    Enter gid to compile in' CONFIG_TRANS_GID 4
+  fi
+  bool '  Translate nodename' CONFIG_TR_NODENAME
+  bool '  Translate compiled-in kernelname' CONFIG_TR_KERNNAME
+  if [ "$CONFIG_TR_KERNNAME" = "y" ]; then
+    string '    Enter kernelname string to compile in' CONFIG_KERNNAME banana
+  fi
+  bool '  Translate compiled-in kerneltype' CONFIG_TR_KERNTYPE
+  if [ "$CONFIG_TR_KERNTYPE" = "y" ]; then
+    string '    Enter kerneltype string to compile in' CONFIG_KERNTYPE default
+  fi
+  bool '  Translate machine type' CONFIG_TR_MACHINE
+  bool '  Translate sysname' CONFIG_TR_SYSNAME
+fi
+
 tristate 'Minix fs support' CONFIG_MINIX_FS
 tristate 'Second extended fs support' CONFIG_EXT2_FS
 

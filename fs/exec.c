@@ -68,6 +68,10 @@ static struct linux_binfmt *formats = (struct linux_binfmt *) NULL;
 
 __initfunc(void binfmt_setup(void))
 {
+#ifdef CONFIG_BINFMT_MISC
+	init_misc_binfmt();
+#endif
+
 #ifdef CONFIG_BINFMT_ELF
 	init_elf_binfmt();
 #endif
@@ -154,7 +158,7 @@ int open_inode(struct inode * inode, int mode)
 			}
 		}
 		current->files->fd[fd] = f;
-		inode->i_count++;
+		atomic_inc(&inode->i_count);
 	}
 	return fd;
 }

@@ -40,7 +40,7 @@ u_short amiga_audio_period = MAX_PERIOD;
 
 static u_long clock_constant;
 
-__initfunc(static void init_sound(void))
+__initfunc(void amiga_init_sound(void))
 {
 	snd_data = amiga_chip_alloc(sizeof(sine_data));
 	if (!snd_data) {
@@ -58,13 +58,7 @@ static struct timer_list sound_timer = { NULL, NULL, 0, 0, nosound };
 
 void amiga_mksound( unsigned int hz, unsigned int ticks )
 {
-	static int inited = 0;
 	unsigned long flags;
-
-	if (!inited) {
-		init_sound();
-		inited = 1;
-	}
 
 	if (!snd_data)
 		return;

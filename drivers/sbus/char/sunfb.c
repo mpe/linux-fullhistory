@@ -1,4 +1,4 @@
-/* $Id: sunfb.c,v 1.22 1997/04/03 08:47:56 davem Exp $
+/* $Id: sunfb.c,v 1.23 1997/05/31 18:33:26 mj Exp $
  * sunfb.c: Sun generic frame buffer support.
  *
  * Copyright (C) 1995, 1996 Miguel de Icaza (miguel@nuclecu.unam.mx)
@@ -33,11 +33,11 @@
 #include <asm/fbio.h>
 #include <asm/io.h>
 
-#include "../../char/kbd_kern.h"
-#include "../../char/vt_kern.h"
-#include "../../char/consolemap.h"
-#include "../../char/selection.h"
-#include "../../char/console_struct.h"
+#include <linux/kbd_kern.h>
+#include <linux/vt_kern.h>
+#include <linux/consolemap.h>
+#include <linux/selection.h>
+#include <linux/console_struct.h>
 
 #include "fb.h"
 

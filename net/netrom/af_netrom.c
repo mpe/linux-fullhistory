@@ -86,8 +86,6 @@ static struct proto_ops nr_proto_ops;
 
 static void nr_free_sock(struct sock *sk)
 {
-	kfree(sk->protinfo.nr);
-
 	sk_free(sk);
 
 	MOD_DEC_USE_COUNT;

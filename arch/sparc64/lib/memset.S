@@ -17,15 +17,15 @@
 99:	ba,pt	%xcc, 30f;			\
 	 a, b, %o0;				\
 	.section __ex_table,z##alloc;		\
-	.align	4;				\
-	.word	98b, 99b;			\
+	.align	8;				\
+	.xword	98b, 99b;			\
 	.text;					\
 	.align	4
 
 #define EXT(start,end,handler,z) 		\
 	.section __ex_table,z##alloc;		\
-	.align	4;				\
-	.word	start, 0, end, handler;		\
+	.align	8;				\
+	.xword	start, 0, end, handler;		\
 	.text;					\
 	.align	4
 

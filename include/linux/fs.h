@@ -15,6 +15,12 @@
 #include <linux/net.h>
 #include <linux/kdev_t.h>
 #include <linux/ioctl.h>
+#include <asm/atomic.h>
+
+/* Prefixes for routines (having no effect), but indicate what
+ * the routine may do. This can greatly ease reasoning about routines...
+ */
+#define blocking /*routine may schedule()*/
 
 /*
  * It's silly to have NR_OPEN bigger than NR_FILE, but I'll fix
@@ -34,7 +40,7 @@
 #define BLOCK_SIZE_BITS 10
 
 /* And dynamically-tunable limits and defaults: */
-extern int max_inodes, nr_inodes;
+extern int max_inodes;
 extern int max_files, nr_files;
 #define NR_INODE 4096	/* this should be bigger than NR_FILE */
 #define NR_FILE 1024	/* this can well be larger on a larger system */
@@ -59,6 +65,17 @@ extern int max_files, nr_files;
 #define SEL_IN		1
 #define SEL_OUT		2
 #define SEL_EX		4
+
+/* public flags for file_system_type */
+#define FS_REQUIRES_DEV 1 
+#define FS_NO_DCACHE    2 /* Only dcache the necessary things. */
+#define FS_NO_PRELIM    4 /* prevent preloading of dentries, even if
+			   * FS_NO_DCACHE is not set.
+			   */
+#define FS_IBASKET      8 /* FS does callback to free_ibasket() if space gets low. */
+
+/* public flags for i_status */
+#define ST_MODIFIED 1024
 
 /*
  * These are the fs-independent mount-flags: up to 16 flags are supported
@@ -85,6 +102,13 @@ extern int max_files, nr_files;
  */
 #define MS_MGC_VAL 0xC0ED0000	/* magic flag number to indicate "new" flags */
 #define MS_MGC_MSK 0xffff0000	/* magic flag number mask */
+
+/*
+ * Public flags for namei()
+ */
+#define NAM_PLAIN		0 /* Retrieve last component of pathname as is. */
+#define NAM_FOLLOW_LINK		2 /* If last component of path is a symlink, follow it */
+#define NAM_FOLLOW_TRAILSLASH	4 /* Follow last symlink only if trailed by slash. */
 
 /*
  * Note that read-only etc flags are inode-specific: setting some file-system
@@ -281,58 +305,75 @@ struct iattr {
 #include <linux/quota.h>
 
 struct inode {
-	struct inode 	*i_hash_next;
-	struct inode	**i_hash_pprev;
-	struct inode	*i_next;
-	struct inode	**i_pprev;
-	unsigned long	i_ino;
-	kdev_t		i_dev;
-	unsigned short	i_count;
-	umode_t		i_mode;
-	nlink_t		i_nlink;
-	uid_t		i_uid;
-	gid_t		i_gid;
-	kdev_t		i_rdev;
-	off_t		i_size;
-	time_t		i_atime;
-	time_t		i_mtime;
-	time_t		i_ctime;
-	unsigned long	i_blksize;
-	unsigned long	i_blocks;
-	unsigned long	i_version;
-	unsigned long	i_nrpages;
-	struct semaphore i_sem;
-	struct inode_operations *i_op;
-	struct super_block *i_sb;
-	struct wait_queue *i_wait;
-	struct file_lock *i_flock;
-	struct vm_area_struct *i_mmap;
-	struct page *i_pages;
-	struct dquot *i_dquot[MAXQUOTAS];
-	struct inode *i_bound_to, *i_bound_by;
-	struct inode *i_mount;
-	unsigned short i_flags;
-	unsigned char i_lock;
-	unsigned char i_dirt;
-	unsigned char i_pipe;
-	unsigned char i_sock;
-	int i_writecount;
-	unsigned int i_attr_flags;
+	struct inode 		*i_hash_next;
+	struct inode		*i_hash_prev;
+	struct inode		*i_next;
+	struct inode		*i_prev;
+
+	unsigned long		i_ino;
+	kdev_t			i_dev;
+	atomic_t		i_count;
+	umode_t			i_mode;
+	nlink_t			i_nlink;
+	uid_t			i_uid;
+	gid_t			i_gid;
+	kdev_t			i_rdev;
+	off_t			i_size;
+	time_t			i_atime;
+	time_t			i_mtime;
+	time_t			i_ctime;
+	unsigned long		i_blksize;
+	unsigned long		i_blocks;
+	unsigned long		i_version;
+	unsigned long		i_nrpages;
+	struct semaphore	i_sem;
+	struct inode_operations	*i_op;
+	struct super_block	*i_sb;
+	struct wait_queue	*i_wait;
+	struct file_lock	*i_flock;
+	struct vm_area_struct	*i_mmap;
+	struct page		*i_pages;
+	struct dquot		*i_dquot[MAXQUOTAS];
+
+	struct inode		*i_lru_next;
+	struct inode		*i_lru_prev;
+
+	struct inode		*i_basket_next;
+	struct inode		*i_basket_prev;
+	struct dentry		*i_dentry;
+
+	short			i_ddir_count;
+	short			i_dent_count;
+	unsigned short		i_status;
+	unsigned short		i_reuse_count;
+
+	struct inode		*i_mount;
+	unsigned int		i_flags;
+	unsigned char		i_lock;
+	unsigned char		i_dirt;
+	unsigned char		i_pipe;
+	unsigned char		i_sock;
+
+	unsigned char		i_level;
+	unsigned short		i_fill;
+
+	int			i_writecount;
+	unsigned int		i_attr_flags;
 	union {
-		struct pipe_inode_info pipe_i;
-		struct minix_inode_info minix_i;
-		struct ext2_inode_info ext2_i;
-		struct hpfs_inode_info hpfs_i;
-		struct msdos_inode_info msdos_i;
-		struct umsdos_inode_info umsdos_i;
-		struct iso_inode_info isofs_i;
-		struct nfs_inode_info nfs_i;
-		struct sysv_inode_info sysv_i;
-		struct affs_inode_info affs_i;
-		struct ufs_inode_info ufs_i;
-		struct romfs_inode_info romfs_i;
-		struct socket socket_i;
-		void * generic_ip;
+		struct pipe_inode_info		pipe_i;
+		struct minix_inode_info		minix_i;
+		struct ext2_inode_info		ext2_i;
+		struct hpfs_inode_info		hpfs_i;
+		struct msdos_inode_info		msdos_i;
+		struct umsdos_inode_info	umsdos_i;
+		struct iso_inode_info		isofs_i;
+		struct nfs_inode_info		nfs_i;
+		struct sysv_inode_info		sysv_i;
+		struct affs_inode_info		affs_i;
+		struct ufs_inode_info		ufs_i;
+		struct romfs_inode_info		romfs_i;
+		struct socket			socket_i;
+		void				*generic_ip;
 	} u;
 };
 
@@ -450,33 +491,38 @@ extern int fasync_helper(struct inode *, struct file *, int, struct fasync_struc
 #include <linux/romfs_fs_sb.h>
 
 struct super_block {
-	kdev_t s_dev;
-	unsigned long s_blocksize;
-	unsigned char s_blocksize_bits;
-	unsigned char s_lock;
-	unsigned char s_rd_only;
-	unsigned char s_dirt;
-	struct file_system_type *s_type;
-	struct super_operations *s_op;
-	struct dquot_operations *dq_op;
-	unsigned long s_flags;
-	unsigned long s_magic;
-	unsigned long s_time;
-	struct inode * s_covered;
-	struct inode * s_mounted;
-	struct wait_queue * s_wait;
+	kdev_t			s_dev;
+	unsigned long		s_blocksize;
+	unsigned char		s_blocksize_bits;
+	unsigned char		s_lock;
+	unsigned char		s_rd_only;
+	unsigned char		s_dirt;
+	struct file_system_type	*s_type;
+	struct super_operations	*s_op;
+	struct dquot_operations	*dq_op;
+	unsigned long		s_flags;
+	unsigned long		s_magic;
+	unsigned long		s_time;
+	struct inode		*s_covered;
+	struct inode		*s_mounted;
+	struct wait_queue	*s_wait;
+
+	struct inode		*s_ibasket;
+	short int		s_ibasket_count;
+	short int		s_ibasket_max;
+
 	union {
-		struct minix_sb_info minix_sb;
-		struct ext2_sb_info ext2_sb;
-		struct hpfs_sb_info hpfs_sb;
-		struct msdos_sb_info msdos_sb;
-		struct isofs_sb_info isofs_sb;
-		struct nfs_sb_info nfs_sb;
-		struct sysv_sb_info sysv_sb;
-		struct affs_sb_info affs_sb;
-		struct ufs_sb_info ufs_sb;
-		struct romfs_sb_info romfs_sb;
-		void *generic_sbp;
+		struct minix_sb_info	minix_sb;
+		struct ext2_sb_info	ext2_sb;
+		struct hpfs_sb_info	hpfs_sb;
+		struct msdos_sb_info	msdos_sb;
+		struct isofs_sb_info	isofs_sb;
+		struct nfs_sb_info	nfs_sb;
+		struct sysv_sb_info	sysv_sb;
+		struct affs_sb_info	affs_sb;
+		struct ufs_sb_info	ufs_sb;
+		struct romfs_sb_info	romfs_sb;
+		void			*generic_sbp;
 	} u;
 };
 
@@ -515,9 +561,8 @@ struct inode_operations {
 	int (*mkdir) (struct inode *,const char *,int,int);
 	int (*rmdir) (struct inode *,const char *,int);
 	int (*mknod) (struct inode *,const char *,int,int,int);
-	int (*rename) (struct inode *,const char *,int,struct inode *,const char *,int, int);
+	int (*rename) (struct inode *,const char *,int,struct inode *,const char *,int);
 	int (*readlink) (struct inode *,char *,int);
-	int (*follow_link) (struct inode *,struct inode *,int,int,struct inode **);
 	int (*readpage) (struct inode *, struct page *);
 	int (*writepage) (struct inode *, struct page *);
 	int (*bmap) (struct inode *,int);
@@ -551,9 +596,9 @@ struct dquot_operations {
 };
 
 struct file_system_type {
-	struct super_block *(*read_super) (struct super_block *, void *, int);
 	const char *name;
-	int requires_dev;
+	int fs_flags;
+	struct super_block *(*read_super) (struct super_block *, void *, int);
 	struct file_system_type * next;
 };
 
@@ -644,8 +689,7 @@ extern int fsync_dev(kdev_t dev);
 extern void sync_supers(kdev_t dev);
 extern int bmap(struct inode * inode,int block);
 extern int notify_change(struct inode *, struct iattr *);
-extern int namei(const char * pathname, struct inode ** res_inode);
-extern int lnamei(const char * pathname, struct inode ** res_inode);
+extern int namei(int retr_mode, const char *pathname, struct inode **res_inode);
 extern int permission(struct inode * inode,int mask);
 extern int get_write_access(struct inode *inode);
 extern void put_write_access(struct inode *inode);
@@ -653,12 +697,116 @@ extern int open_namei(const char * pathname, int flag, int mode,
 	struct inode ** res_inode, struct inode * base);
 extern int do_mknod(const char * filename, int mode, dev_t dev);
 extern int do_pipe(int *);
-extern void iput(struct inode * inode);
-extern struct inode * __iget(struct super_block * sb,int nr,int crsmnt);
-extern struct inode * get_empty_inode(void);
+
+#include <asm/semaphore.h>
+
+/* Intended for short locks of the global data structures in inode.c.
+ * Could be replaced with spinlocks completely, since there is
+ * no blocking during manipulation of the static data; however the
+ * lock in invalidate_inodes() may last relatively long.
+ */
+extern struct semaphore vfs_sem;
+extern inline void vfs_lock(void)
+{
+#if 0
+#ifdef __SMP__
+	down(&vfs_sem);
+#endif
+#endif
+}
+
+extern inline void vfs_unlock(void)
+{
+#if 0
+#ifdef __SMP__
+	up(&vfs_sem);
+#endif
+#endif
+}
+
+/* Not to be used by ordinary vfs users */
+extern void _get_inode(struct inode * inode);
+extern blocking void __iput(struct inode * inode);
+
+/* This must not be called if the inode is not in use (i.e. given
+ * back with iput(). The atomic inc assumes that the inode is
+ * already in use, and just has to be incremented higher. 
+ * Please do not directly manipulate i_count any more.
+ * Use iget, iinc and iput.
+ * You may test i_count for zero if you are aware that it
+ * might change under you.
+ */
+extern inline void iinc(struct inode * inode)
+{
+	atomic_inc(&inode->i_count);
+}
+
+/* The same, but the inode may not be in use. This must be called
+ * with vfslock() held, and be asure that the inode argument is
+ * valid (i.e. not out of cache). So the vfs_lock() must span the
+ * retrieval method of the inode.
+ */
+extern inline void iinc_zero(struct inode * inode)
+{
+	if(!atomic_read(&inode->i_count)) {
+		atomic_inc(&inode->i_count);
+		_get_inode(inode);
+	} else
+		atomic_inc(&inode->i_count);
+}
+
+extern blocking void _iput(struct inode * inode);
+extern inline blocking void iput(struct inode * inode)
+{
+	if(inode) {
+		extern void wake_up_interruptible(struct wait_queue **q);
+
+		if(inode->i_pipe)
+			wake_up_interruptible(&inode->u.pipe_i.wait);
+
+		/* It does not matter if somebody re-increments it in between,
+		 * only the _last_ user needs to call _iput().
+		 */
+		if(atomic_dec_and_test(&inode->i_count) && inode->i_ddir_count <= 0)
+			_iput(inode);
+	}
+}
+
+extern blocking struct inode * __iget(struct super_block * sb, unsigned long nr, int crsmnt);
+extern blocking void _clear_inode(struct inode * inode, int external, int verbose);
+extern blocking inline void clear_inode(struct inode * inode)
+{
+	vfs_lock();
+	_clear_inode(inode, 1, 1);
+	vfs_unlock();
+}
+extern blocking struct inode * _get_empty_inode(void);
+extern inline blocking struct inode * get_empty_inode(void)
+{
+	struct inode * inode;
+	vfs_lock();
+	inode = _get_empty_inode();
+	vfs_unlock();
+	return inode;
+}
+/* Please prefer to use this function in future, instead of using
+ * a get_empty_inode()/insert_inode_hash() combination.
+ * It allows for better checking and less race conditions.
+ */
+blocking struct inode * get_empty_inode_hashed(dev_t i_dev, unsigned long i_ino);
+
+extern inline blocking int free_ibasket(struct super_block * sb)
+{
+	extern blocking int _free_ibasket(struct super_block * sb);
+	int res;
+	vfs_lock();
+	res = _free_ibasket(sb);
+	vfs_unlock();
+	return res;
+}
+
 extern void insert_inode_hash(struct inode *);
-extern void clear_inode(struct inode *);
-extern struct inode * get_pipe_inode(void);
+extern blocking struct inode * get_pipe_inode(void);
 extern int get_unused_fd(void);
 extern void put_unused_fd(int);
 extern struct file * get_empty_filp(void);
@@ -694,6 +842,7 @@ extern int generic_file_mmap(struct inode *, struct file *, struct vm_area_struc
 extern long generic_file_read(struct inode *, struct file *, char *, unsigned long);
 extern long generic_file_write(struct inode *, struct file *, const char *, unsigned long);
 
+extern struct super_block *get_super(kdev_t dev);
 extern void put_super(kdev_t dev);
 unsigned long generate_cluster(kdev_t dev, int b[], int size);
 unsigned long generate_cluster_swab32(kdev_t dev, int b[], int size);
@@ -723,7 +872,8 @@ extern int dcache_lookup(struct inode *, const char *, int, unsigned long *);
 extern int inode_change_ok(struct inode *, struct iattr *);
 extern void inode_setattr(struct inode *, struct iattr *);
 
-extern inline struct inode * iget(struct super_block * sb,int nr)
+extern inline blocking 
+struct inode * iget(struct super_block * sb, unsigned long nr)
 {
 	return __iget(sb, nr, 1);
 }

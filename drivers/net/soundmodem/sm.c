@@ -38,6 +38,7 @@
  *        18.10.96  Changed to new user space access routines (copy_{to,from}_user)
  *   0.4  21.01.97  Separately compileable soundcard/modem modules
  *   0.5  03.03.97  fixed LPT probing (check_lpt result was interpreted the wrong way round)
+ *   0.6  16.04.97  init code/data tagged
  */
 
 /*****************************************************************************/
@@ -56,7 +57,6 @@
 #include <asm/bitops.h>
 #include <linux/delay.h>
 #include <linux/errno.h>
-#include <linux/init.h>
 #include "sm.h"
 
 /* --------------------------------------------------------------------- */
@@ -101,18 +101,32 @@ extern inline int copy_to_user(void *to, const void *from, unsigned long n)
 }
 #endif
 
+#if LINUX_VERSION_CODE >= 0x20123
+#include <linux/init.h>
+#else
+#define __init
+#define __initdata
+#define __initfunc(x) x
+#endif
+
 /* --------------------------------------------------------------------- */
 
-const char sm_drvname[] = "soundmodem";
-static const char sm_drvinfo[] = KERN_INFO "soundmodem: (C) 1996 Thomas Sailer, HB9JNX/AE4WA\n"
-KERN_INFO "soundmodem: version 0.5 compiled " __TIME__ " " __DATE__ "\n";
+/*static*/ const char sm_drvname[] = "soundmodem";
+static const char sm_drvinfo[] = KERN_INFO "soundmodem: (C) 1996-1997 Thomas Sailer, HB9JNX/AE4WA\n"
+KERN_INFO "soundmodem: version 0.6 compiled " __TIME__ " " __DATE__ "\n";
 
 /* --------------------------------------------------------------------- */
 
-const struct modem_tx_info *sm_modem_tx_table[] = {
+/*static*/ const struct modem_tx_info *sm_modem_tx_table[] = {
 #ifdef CONFIG_SOUNDMODEM_AFSK1200
 	&sm_afsk1200_tx,
 #endif /* CONFIG_SOUNDMODEM_AFSK1200 */
+#ifdef CONFIG_SOUNDMODEM_AFSK2400_7
+	&sm_afsk2400_7_tx,
+#endif /* CONFIG_SOUNDMODEM_AFSK2400_7 */
+#ifdef CONFIG_SOUNDMODEM_AFSK2400_8
+	&sm_afsk2400_8_tx,
+#endif /* CONFIG_SOUNDMODEM_AFSK2400_8 */
 #ifdef CONFIG_SOUNDMODEM_AFSK2666
 	&sm_afsk2666_tx,
 #endif /* CONFIG_SOUNDMODEM_AFSK2666 */
@@ -132,10 +146,16 @@ const struct modem_tx_info *sm_modem_tx_table[] = {
 	NULL
 };
 
-const struct modem_rx_info *sm_modem_rx_table[] = {
+/*static*/ const struct modem_rx_info *sm_modem_rx_table[] = {
 #ifdef CONFIG_SOUNDMODEM_AFSK1200
 	&sm_afsk1200_rx,
 #endif /* CONFIG_SOUNDMODEM_AFSK1200 */
+#ifdef CONFIG_SOUNDMODEM_AFSK2400_7
+	&sm_afsk2400_7_rx,
+#endif /* CONFIG_SOUNDMODEM_AFSK2400_7 */
+#ifdef CONFIG_SOUNDMODEM_AFSK2400_8
+	&sm_afsk2400_8_rx,
+#endif /* CONFIG_SOUNDMODEM_AFSK2400_8 */
 #ifdef CONFIG_SOUNDMODEM_AFSK2666
 	&sm_afsk2666_rx,
 #endif /* CONFIG_SOUNDMODEM_AFSK2666 */
@@ -344,7 +364,7 @@ void sm_output_status(struct sm_state *sm)
 	int invert_dcd = 0;
 	int invert_ptt = 0;
 
-	int ptt = hdlcdrv_ptt(&sm->hdrv) ^ invert_ptt;
+	int ptt = /*hdlcdrv_ptt(&sm->hdrv)*/(sm->dma.ptt_cnt > 0) ^ invert_ptt;
 	int dcd = (!!sm->hdrv.hdlcrx.dcd) ^ invert_dcd;
 
 	if (sm->hdrv.ptt_out.flags & SP_SER) {
@@ -457,9 +477,9 @@ static int sm_open(struct device *dev)
 		return err;
 	sm_output_open(sm);
 	MOD_INC_USE_COUNT;
-	printk(KERN_INFO "%s: %s mode %s.%s at iobase 0x%lx irq %u dma %u\n",
+	printk(KERN_INFO "%s: %s mode %s.%s at iobase 0x%lx irq %u dma %u dma2 %u\n",
 	       sm_drvname, sm->hwdrv->hw_name, sm->mode_tx->name,
-	       sm->mode_rx->name, dev->base_addr, dev->irq, dev->dma);
+	       sm->mode_rx->name, dev->base_addr, dev->irq, dev->dma, sm->hdrv.ptt_out.dma2);
 	return 0;
 }
 
@@ -664,7 +684,56 @@ static int sm_ioctl(struct device *dev, struct ifreq *ifr,
 
 /* --------------------------------------------------------------------- */
 
+#ifdef __i386__
+
+int sm_x86_capability = 0;
+
+__initfunc(static void i386_capability(void))
+{
+	unsigned long flags;
+	unsigned long fl1;
+	union {
+		struct {
+			unsigned int ebx, edx, ecx;
+		} r;
+		unsigned char s[13];
+	} id;
+	unsigned int eax;
+
+	save_flags(flags);
+	flags |= 0x200000;
+	restore_flags(flags);
+	save_flags(flags);
+	fl1 = flags;
+	flags &= ~0x200000;
+	restore_flags(flags);
+	save_flags(flags);
+	if (!(fl1 & 0x200000) || (flags & 0x200000)) {
+		printk(KERN_WARNING "%s: cpu does not support CPUID\n", sm_drvname);
+		return;
+	}
+	__asm__ ("cpuid" : "=a" (eax), "=b" (id.r.ebx), "=c" (id.r.ecx), "=d" (id.r.edx) :
+		 "0" (0));
+	id.s[12] = 0;
+	if (eax < 1) {
+		printk(KERN_WARNING "%s: cpu (vendor string %s) does not support capability "
+		       "list\n", sm_drvname, id.s);
+		return;
+	}
+	printk(KERN_INFO "%s: cpu: vendor string %s ", sm_drvname, id.s);
+	__asm__ ("cpuid" : "=a" (eax), "=d" (sm_x86_capability) : "0" (1) : "ebx", "ecx");
+	printk("fam %d mdl %d step %d cap 0x%x\n", (eax >> 8) & 15, (eax >> 4) & 15,
+	       eax & 15, sm_x86_capability);
+}	
+#endif /* __i386__ */	
+
+/* --------------------------------------------------------------------- */
+
+#ifdef MODULE
+__initfunc(static int sm_init(void))
+#else /* MODULE */
 __initfunc(int sm_init(void))
+#endif /* MODULE */
 {
 	int i, j, found = 0;
 	char set_hw = 1;
@@ -672,6 +741,9 @@ __initfunc(int sm_init(void))
 	char ifname[HDLCDRV_IFNAMELEN];
 
 	printk(sm_drvinfo);
+#ifdef __i386__
+	i386_capability();
+#endif /* __i386__ */	
 	/*
 	 * register net devices
 	 */
@@ -745,7 +817,7 @@ MODULE_DESCRIPTION("Soundcard amateur radio modem driver");
 
 #endif
 
-int init_module(void)
+__initfunc(int init_module(void))
 {
 	if (mode) {
 		if (iobase == -1)

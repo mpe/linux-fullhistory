@@ -1,4 +1,4 @@
-/* $Id: cgfourteen.c,v 1.19 1997/04/14 17:04:57 jj Exp $
+/* $Id: cgfourteen.c,v 1.22 1997/06/04 08:27:27 davem Exp $
  * cgfourteen.c: Sun SparcStation console support.
  *
  * Copyright (C) 1995 Miguel de Icaza (miguel@nuclecu.unam.mx)
@@ -23,9 +23,10 @@
 #include <asm/pgtable.h>
 #include <asm/uaccess.h>
 
-#include "../../char/vt_kern.h"
-#include "../../char/selection.h"
-#include "../../char/console_struct.h"
+/* These must be included after asm/fbio.h */
+#include <linux/vt_kern.h>
+#include <linux/selection.h>
+#include <linux/console_struct.h>
 #include "fb.h"
 
 #define CG14_MCR_INTENABLE_SHIFT	7
@@ -272,7 +273,7 @@ cg14_mmap (struct inode *inode, struct file *file,
 		page += map_size;
 	}
         vma->vm_inode = inode;
-        inode->i_count++;
+        atomic_inc(&inode->i_count);
         return 0;
 }
 

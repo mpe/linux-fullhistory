@@ -1,4 +1,4 @@
-/* $Id: leo.c,v 1.15 1997/04/14 17:04:54 jj Exp $
+/* $Id: leo.c,v 1.18 1997/06/04 08:27:30 davem Exp $
  * leo.c: SUNW,leo 24/8bit frame buffer driver
  *
  * Copyright (C) 1996 Jakub Jelinek (jj@sunsite.mff.cuni.cz)
@@ -17,9 +17,10 @@
 #include <asm/delay.h>
 #include <asm/uaccess.h>
 
-#include "../../char/vt_kern.h"
-#include "../../char/selection.h"
-#include "../../char/console_struct.h"
+/* These must be included after asm/fbio.h */
+#include <linux/vt_kern.h>
+#include <linux/selection.h>
+#include <linux/console_struct.h>
 #include "fb.h"
 #include "cg_common.h"
 
@@ -221,7 +222,7 @@ leo_mmap (struct inode *inode, struct file *file, struct vm_area_struct *vma,
 		page += map_size;
 	}
         vma->vm_inode = inode;
-        inode->i_count++;
+        atomic_inc(&inode->i_count);
         return 0;
 }
 

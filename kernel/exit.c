@@ -19,6 +19,7 @@
 #include <linux/smp.h>
 #include <linux/smp_lock.h>
 #include <linux/module.h>
+#include <linux/slab.h>
 
 #include <asm/uaccess.h>
 #include <asm/pgtable.h>
@@ -366,13 +367,17 @@ static inline void close_files(struct files_struct * files)
 		if (i >= NR_OPEN)
 			break;
 		while (set) {
-			if (set & 1)
+			if (set & 1) {
 				close_fp(files->fd[i]);
+				files->fd[i] = NULL;
+			}
 			i++;
 			set >>= 1;
 		}
 	}
 }
+
+extern kmem_cache_t *files_cachep;  
 
 static inline void __exit_files(struct task_struct *tsk)
 {
@@ -382,7 +387,7 @@ static inline void __exit_files(struct task_struct *tsk)
 		tsk->files = NULL;
 		if (!--files->count) {
 			close_files(files);
-			kfree(files);
+			kmem_cache_free(files_cachep, files);
 		}
 	}
 }

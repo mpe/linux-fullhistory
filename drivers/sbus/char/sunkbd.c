@@ -25,9 +25,9 @@
 #include <asm/oplib.h>
 #include <asm/uaccess.h>
 
-#include "../../char/kbd_kern.h"
-#include "../../char/diacr.h"
-#include "../../char/vt_kern.h"
+#include <linux/kbd_kern.h>
+#include <linux/kbd_diacr.h>
+#include <linux/vt_kern.h>
 
 #define SIZE(x) (sizeof(x)/sizeof((x)[0]))
 

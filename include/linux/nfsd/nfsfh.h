@@ -151,7 +151,7 @@ __fh_put(struct svc_fh *fhp, char *file, int line)
 	if (!(inode = fhp->fh_inode))
 		return;
 
-	if (!inode->i_count) {
+	if (!atomic_read(&inode->i_count)) {
 		printk("nfsd: trying to free free inode in %s:%d\n"
 		       "      dev %04x ino %ld, mode %07o\n",
 		       file, line, inode->i_dev,

@@ -73,7 +73,7 @@ int umsdos_real_lookup (
 	struct inode **result)	/* Will hold inode of the file, if successful */
 {
 	int ret;
-	dir->i_count++;
+	atomic_inc(&dir->i_count);
 	ret = msdos_lookup (dir,name,len,result);
 	return ret;
 }
@@ -120,7 +120,7 @@ int umsdos_isinit (struct inode *inode)
 #elif 0
 	return inode->i_atime != 0;
 #else
-	return inode->i_count > 1;
+	return atomic_read(&inode->i_count) > 1;
 #endif
 }
 /*
@@ -224,7 +224,7 @@ void UMSDOS_read_inode(struct inode *inode)
 {
 	PRINTK (("read inode %x ino = %d ",inode,inode->i_ino));
 	msdos_read_inode(inode);
-	PRINTK (("ino = %d %d\n",inode->i_ino,inode->i_count));
+	PRINTK (("ino = %d %d\n",inode->i_ino,atomic_read(&inode->i_count)));
 	if (S_ISDIR(inode->i_mode)
 		&& (inode->u.umsdos_i.u.dir_info.creating != 0
 			|| inode->u.umsdos_i.u.dir_info.looking != 0
@@ -480,7 +480,7 @@ struct super_block *UMSDOS_read_super(
 					umsdos_setup_dir_inode (pseudo);
 					Printk (("Activating pseudo root /%s\n",UMSDOS_PSDROOT_NAME));
 					pseudo_root = pseudo;
-					pseudo->i_count++;
+					atomic_inc(&pseudo->i_count);
 					pseudo = NULL;
 				}
 				iput (sbin);
@@ -497,7 +497,10 @@ struct super_block *UMSDOS_read_super(
 
 
 static struct file_system_type umsdos_fs_type = {
-	UMSDOS_read_super, "umsdos", 1, NULL
+	"umsdos",
+	FS_REQUIRES_DEV,
+	UMSDOS_read_super,
+	NULL
 };
 
 __initfunc(int init_umsdos_fs(void))

@@ -32,6 +32,7 @@
 #include <linux/slab.h>
 #include <linux/major.h>
 #include <linux/blk.h>
+#include <linux/nametrans.h>
 #include <linux/init.h>
 #ifdef CONFIG_ROOT_NFS
 #include <linux/nfs_fs.h>
@@ -72,6 +73,7 @@ extern unsigned long pci_init(unsigned long, unsigned long);
 extern long mca_init(long, long);
 extern long sbus_init(long, long);
 extern void sysctl_init(void);
+extern void filescache_init(void);
 
 extern void smp_setup(char *str, int *ints);
 extern void no_scroll(char *str, int *ints);
@@ -84,6 +86,9 @@ extern void msmouse_setup(char *str, int *ints);
 extern void lp_setup(char *str, int *ints);
 #endif
 extern void eth_setup(char *str, int *ints);
+#ifdef CONFIG_DECNET
+extern void decnet_setup(char *str, int *ints);
+#endif
 extern void xd_setup(char *str, int *ints);
 #ifdef CONFIG_BLK_DEV_EZ
 extern void ez_setup(char *str, int *ints);
@@ -324,6 +329,9 @@ struct {
 #ifdef CONFIG_INET
 	{ "ether=", eth_setup },
 #endif
+#ifdef CONFIG_DECNET
+	{ "decnet=", decnet_setup },
+#endif
 #ifdef CONFIG_PRINTER
         { "lp=", lp_setup },
 #endif
@@ -548,6 +556,12 @@ __initfunc(static int checksetup(char *line))
 	/* ide driver needs the basic string, rather than pre-processed values */
 	if (!strncmp(line,"ide",3) || (!strncmp(line,"hd",2) && line[2] != '=')) {
 		ide_setup(line);
+		return 1;
+	}
+#endif
+#ifdef CONFIG_TRANS_NAMES
+	if(!strncmp(line,"nametrans=",10)) {
+		nametrans_setup(line+10);
 		return 1;
 	}
 #endif
@@ -886,6 +900,7 @@ __initfunc(asmlinkage void start_kernel(void))
 	proc_root_init();
 #endif
 	uidcache_init();
+	filescache_init();
 	vma_init();
 	buffer_init();
 	inode_init();

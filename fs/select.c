@@ -208,17 +208,18 @@ out:
  * We do a VERIFY_WRITE here even though we are only reading this time:
  * we'll write to it eventually..
  *
- * Use "int" accesses to let user-mode fd_set's be int-aligned.
+ * Use "unsigned long" accesses to let user-mode fd_set's be long-aligned.
  */
-static int __get_fd_set(unsigned long nr, int * fs_pointer, int * fdset)
+static int __get_fd_set(unsigned long nr, unsigned long * fs_pointer, unsigned long * fdset)
 {
-	/* round up nr to nearest "int" */
-	nr = (nr + 8*sizeof(int)-1) / (8*sizeof(int));
+	/* round up nr to nearest "unsigned long" */
+	nr = (nr + 8*sizeof(unsigned long)-1) / (8*sizeof(unsigned long));
 	if (fs_pointer) {
-		int error = verify_area(VERIFY_WRITE,fs_pointer,nr*sizeof(int));
+		int error = verify_area(VERIFY_WRITE,fs_pointer,
+					nr*sizeof(unsigned long));
 		if (!error) {
 			while (nr) {
-				get_user(*fdset, fs_pointer);
+				__get_user(*fdset, fs_pointer);
 				nr--;
 				fs_pointer++;
 				fdset++;
@@ -234,13 +235,13 @@ static int __get_fd_set(unsigned long nr, int * fs_pointer, int * fdset)
 	return 0;
 }
 
-static void __set_fd_set(long nr, int * fs_pointer, int * fdset)
+static void __set_fd_set(long nr, unsigned long * fs_pointer, unsigned long * fdset)
 {
 	if (!fs_pointer)
 		return;
 	while (nr >= 0) {
-		put_user(*fdset, fs_pointer);
-		nr -= 8 * sizeof(int);
+		__put_user(*fdset, fs_pointer);
+		nr -= 8 * sizeof(unsigned long);
 		fdset++;
 		fs_pointer++;
 	}
@@ -261,13 +262,16 @@ static inline void __zero_fd_set(long nr, unsigned long * fdset)
  * subtract by 1 on the nr of file descriptors. The former is better for
  * machines with long > int, and the latter allows us to test the bit count
  * against "zero or positive", which can mostly be just a sign bit test..
+ *
+ * Unfortunately this scheme falls apart on big endian machines where
+ * sizeof(long) > sizeof(int) (ie. V9 Sparc). -DaveM
  */
 
 #define get_fd_set(nr,fsp,fdp) \
-__get_fd_set(nr, (int *) (fsp), (int *) (fdp))
+__get_fd_set(nr, (unsigned long *) (fsp), (unsigned long *) (fdp))
 
 #define set_fd_set(nr,fsp,fdp) \
-__set_fd_set((nr)-1, (int *) (fsp), (int *) (fdp))
+__set_fd_set((nr)-1, (unsigned long *) (fsp), (unsigned long *) (fdp))
 
 #define zero_fd_set(nr,fdp) \
 __zero_fd_set((nr)-1, (unsigned long *) (fdp))
@@ -302,11 +306,11 @@ asmlinkage int sys_select(int n, fd_set *inp, fd_set *outp, fd_set *exp, struct 
 		error = verify_area(VERIFY_WRITE, tvp, sizeof(*tvp));
 		if (error)
 			goto out;
-		get_user(timeout, &tvp->tv_usec);
+		__get_user(timeout, &tvp->tv_usec);
 		timeout = ROUND_UP(timeout,(1000000/HZ));
 		{
 			unsigned long tmp;
-			get_user(tmp, &tvp->tv_sec);
+			__get_user(tmp, &tvp->tv_sec);
 			timeout += tmp * (unsigned long) HZ;
 		}
 		if (timeout)
@@ -322,10 +326,10 @@ asmlinkage int sys_select(int n, fd_set *inp, fd_set *outp, fd_set *exp, struct 
 	if ((long) timeout < 0)
 		timeout = 0;
 	if (tvp && !(current->personality & STICKY_TIMEOUTS)) {
-		put_user(timeout/HZ, &tvp->tv_sec);
+		__put_user(timeout/HZ, &tvp->tv_sec);
 		timeout %= HZ;
 		timeout *= (1000000/HZ);
-		put_user(timeout, &tvp->tv_usec);
+		__put_user(timeout, &tvp->tv_usec);
 	}
 	if (error < 0)
 		goto out;

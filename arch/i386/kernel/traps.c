@@ -191,8 +191,6 @@ spinlock_t die_lock;
 	spin_lock_irq(&die_lock);
 	printk("%s: %04lx\n", str, err & 0xffff);
 	show_registers(regs);
-do { int i=2000000000; while (i) i--; } while (0);
-do { int i=2000000000; while (i) i--; } while (0);
 	spin_unlock_irq(&die_lock);
 	do_exit(SIGSEGV);
 }

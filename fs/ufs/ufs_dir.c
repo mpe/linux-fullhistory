@@ -6,7 +6,7 @@
  * Laboratory for Computer Science Research Computing Facility
  * Rutgers, The State University of New Jersey
  *
- * $Id: ufs_dir.c,v 1.8 1997/01/26 07:14:28 davem Exp $
+ * $Id: ufs_dir.c,v 1.10 1997/06/05 01:29:06 davem Exp $
  *
  */
 
@@ -108,11 +108,8 @@ revalidate:
 				 * version stamp to detect whether or
 				 * not the directory has been modified
 				 * during the copy operation. */
-				unsigned long version;
-				dcache_add(inode, de->d_name,
-					   ufs_swab16(de->d_namlen),
-	                                   ufs_swab32(de->d_ino));
-				version = inode->i_version;
+				unsigned long version = inode->i_version;
+
 	                        if (inode->i_sb->u.ufs_sb.s_flags & UFS_DEBUG) {
 	                                printk("ufs_readdir: filldir(%s,%u)\n",
 	                                       de->d_name, ufs_swab32(de->d_ino));
@@ -166,7 +163,6 @@ struct inode_operations ufs_dir_inode_operations = {
 	NULL,			/* mknod */
 	NULL,			/* rename */
 	NULL,			/* readlink */
-	NULL,			/* follow_link */
 	NULL,			/* readpage */
 	NULL,			/* writepage */
 	NULL,			/* bmap */
@@ -174,13 +170,3 @@ struct inode_operations ufs_dir_inode_operations = {
 	NULL,			/* permission */
 	NULL,			/* smap */
 };
-
-/*
- * Local Variables: ***
- * c-indent-level: 8 ***
- * c-continued-statement-offset: 8 ***
- * c-brace-offset: -8 ***
- * c-argdecl-indent: 0 ***
- * c-label-offset: -8 ***
- * End: ***
- */

@@ -31,9 +31,9 @@
 #include <linux/interrupt.h>
 #include <linux/mm.h>
 #include <linux/init.h>
+#include <linux/vt_kern.h>
+#include <linux/selection.h>
 #include <asm/uaccess.h>
-#include "vt_kern.h"
-#include "selection.h"
 
 #undef attr
 #undef org

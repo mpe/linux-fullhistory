@@ -20,9 +20,9 @@
 #define module_unregister_blkdev unregister_blkdev
 
 #define inode_get_rdev(i) i->i_rdev
-#define inode_get_count(i) i->i_count
-#define inode_inc_count(i) i->i_count++
-#define inode_dec_count(i) i->i_count--
+#define inode_get_count(i) atomic_read(&((i)->i_count))
+#define inode_inc_count(i) atomic_inc(&((i)->i_count))
+#define inode_dec_count(i) atomic_dec(&((i)->i_count))
 
 #define file_get_flags(f) f->f_flags
 
@@ -35,6 +35,6 @@
 
 #define mem_map_reserve(p) set_bit(PG_reserved, &mem_map[p].flags)
 #define mem_map_unreserve(p) clear_bit(PG_reserved, &mem_map[p].flags)
-#define mem_map_inc_count(p) mem_map[p].count++
-#define mem_map_dec_count(p) mem_map[p].count--
+#define mem_map_inc_count(p) atomic_inc(&(mem_map[p].count))
+#define mem_map_dec_count(p) atomic_dec(&(mem_map[p].count))
 #endif

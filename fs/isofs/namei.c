@@ -206,6 +206,7 @@ int isofs_lookup(struct inode * dir,const char * name, int len,
 {
 	unsigned long ino, ino_back;
 	struct buffer_head * bh;
+	char *lcname;
 
 #ifdef DEBUG
 	printk("lookup: %x %d\n",dir->i_ino, len);
@@ -219,38 +220,29 @@ int isofs_lookup(struct inode * dir,const char * name, int len,
 		return -ENOENT;
 	}
 
-	ino = 0;
+	/* If mounted with check=relaxed (and most likely norock),
+	 * then first convert this name to lower case.
+	 */
+	if (dir->i_sb->u.isofs_sb.s_name_check == 'r' &&
+	    (lcname = kmalloc(len, GFP_KERNEL)) != NULL) {
+		int i;
+		char c;
 
-	if (dcache_lookup(dir, name, len, &ino)) ino_back = dir->i_ino;
-
-	if (!ino) {
-		char *lcname;
-
-		/* If mounted with check=relaxed (and most likely norock),
-		   then first convert this name to lower case. */
-		if (dir->i_sb->u.isofs_sb.s_name_check == 'r'
-		    && (lcname = kmalloc(len, GFP_KERNEL)) != NULL) {
-			int i;
-			char c;
-
-			for (i=0; i<len; i++) {
-				c = name[i];
-				if (c >= 'A' && c <= 'Z') c |= 0x20;
-				lcname[i] = c;
-			}
-			bh = isofs_find_entry(dir,lcname,len, &ino, &ino_back);
-			kfree(lcname);
-		} else
-			bh = isofs_find_entry(dir,name,len, &ino, &ino_back);
-
-		if (!bh) {
-			iput(dir);
-	  		return -ENOENT;
+		for (i=0; i<len; i++) {
+			c = name[i];
+			if (c >= 'A' && c <= 'Z') c |= 0x20;
+			lcname[i] = c;
 		}
-		if (ino_back == dir->i_ino)
-			dcache_add(dir, name, len, ino);
-		brelse(bh);
+		bh = isofs_find_entry(dir,lcname,len, &ino, &ino_back);
+		kfree(lcname);
+	} else
+		bh = isofs_find_entry(dir,name,len, &ino, &ino_back);
+
+	if (!bh) {
+		iput(dir);
+		return -ENOENT;
 	}
+	brelse(bh);
 
 	if (!(*result = iget(dir->i_sb,ino))) {
 		iput(dir);
@@ -258,14 +250,12 @@ int isofs_lookup(struct inode * dir,const char * name, int len,
 	}
 
 	/* We need this backlink for the ".." entry unless the name that we
-	   are looking up traversed a mount point (in which case the inode
-	   may not even be on an iso9660 filesystem, and writing to
-	   u.isofs_i would only cause memory corruption).
-	*/
-	
-	if (ino_back && !(*result)->i_pipe && (*result)->i_sb == dir->i_sb) {
-	  (*result)->u.isofs_i.i_backlink = ino_back; 
-	}
+	 * are looking up traversed a mount point (in which case the inode
+	 * may not even be on an iso9660 filesystem, and writing to
+	 * u.isofs_i would only cause memory corruption).
+	 */
+	if (ino_back && !(*result)->i_pipe && (*result)->i_sb == dir->i_sb)
+		(*result)->u.isofs_i.i_backlink = ino_back; 
 	
 	iput(dir);
 	return 0;

@@ -142,21 +142,6 @@ void enable_irq(unsigned int irq_nr)
  * the operations that are needed to keep the AT interrupt-controller
  * happy. They are also written to be fast - and to disable interrupts
  * as little as humanly possible.
- *
- * NOTE! These macros expand to three different handlers for each line: one
- * complete handler that does all the fancy stuff (including signal handling),
- * and one fast handler that is meant for simple IRQ's that want to be
- * atomic. The specific handler is chosen depending on the SA_INTERRUPT
- * flag when installing a handler. Finally, one "bad interrupt" handler, that
- * is used when no handler is present.
- *
- * The timer interrupt is handled specially to insure that the jiffies
- * variable is updated at all times.  Specifically, the timer interrupt is
- * just like the complete handlers except that it is invoked with interrupts
- * disabled and should never re-enable them.  If other interrupts were
- * allowed to be processed while the timer interrupt is active, then the
- * other interrupts would have to avoid using the jiffies variable for delay
- * and interval timing operations to avoid hanging the system.
  */
 
 #if NR_IRQS != 16
@@ -539,6 +524,9 @@ asmlinkage void do_IRQ(struct pt_regs regs)
 	status = 0;
 	action = *(irq + irq_action);
 	if (action) {
+		if (!(action->flags & SA_INTERRUPT))
+			__sti();
+
 		do {
 			status |= action->flags;
 			action->handler(irq, action->dev_id, &regs);
@@ -546,7 +534,6 @@ asmlinkage void do_IRQ(struct pt_regs regs)
 		} while (action);
 		if (status & SA_SAMPLE_RANDOM)
 			add_interrupt_randomness(irq);
-
 		__cli();
 		spin_lock(&irq_controller_lock);
 		unmask_irq(irq);

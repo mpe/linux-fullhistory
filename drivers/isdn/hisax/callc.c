@@ -1,4 +1,4 @@
-/* $Id: callc.c,v 1.29 1997/04/23 20:09:49 fritz Exp $
+/* $Id: callc.c,v 1.30 1997/05/29 10:40:43 keil Exp $
 
  * Author       Karsten Keil (keil@temic-ech.spacenet.de)
  *              based on the teles driver from Jan den Ouden
@@ -7,6 +7,9 @@
  *              Fritz Elfert
  *
  * $Log: callc.c,v $
+ * Revision 1.30  1997/05/29 10:40:43  keil
+ * chanp->impair was uninitialised
+ *
  * Revision 1.29  1997/04/23 20:09:49  fritz
  * Removed tmp, used by removed debugging code.
  *
@@ -109,7 +112,7 @@ extern long mod_use_count_;
 #endif
 #endif				/* MODULE */
 
-const char *l4_revision = "$Revision: 1.29 $";
+const char *l4_revision = "$Revision: 1.30 $";
 
 extern struct IsdnCard cards[];
 extern int nrcards;
@@ -1504,6 +1507,7 @@ init_chan(int chan, struct IsdnCardState *csta, int hscx,
 	chanp->debug = 0;
 	chanp->Flags = 0;
 	chanp->leased = 0;
+	chanp->impair = 0;
 	init_is(chanp, ces);
 
 	chanp->fi.fsm = &callcfsm;

@@ -1,5 +1,5 @@
 /*
- *  $Id: nfsroot.c,v 1.36 1997/05/27 15:57:47 mj Exp $
+ *  $Id: nfsroot.c,v 1.37 1997/06/04 08:28:10 davem Exp $
  *
  *  Copyright (C) 1995, 1996  Gero Kuhlmann <gero@gkminix.han.de>
  *
@@ -78,6 +78,7 @@
 
 #include <asm/param.h>
 #include <linux/utsname.h>
+#include <linux/nametrans.h>
 #include <linux/in.h>
 #include <linux/if.h>
 #include <linux/inet.h>
@@ -832,6 +833,9 @@ __initfunc(static void root_do_bootp_ext(u8 *ext))
 			root_bootp_string(nfs_path, ext+1, *ext, NFS_MAXPATHLEN);
 			break;
 	}
+#ifdef CONFIG_TRANS_NAMES
+	translations_dirty = 1;
+#endif
 }
 
 
@@ -1254,6 +1258,9 @@ __initfunc(static void root_nfs_addrs(char *addrs))
 	system_utsname.domainname[0] = '\0';
 	user_dev_name[0] = '\0';
 	bootp_flag = rarp_flag = 1;
+#ifdef CONFIG_TRANS_NAMES
+	translations_dirty = 1;
+#endif
 
 	/* The following is just a shortcut for automatic IP configuration */
 	if (!strcmp(addrs, "bootp")) {
@@ -1299,6 +1306,9 @@ __initfunc(static void root_nfs_addrs(char *addrs))
 				}
 				strncpy(system_utsname.nodename, ip, __NEW_UTS_LEN);
 				system_utsname.nodename[__NEW_UTS_LEN] = '\0';
+#ifdef CONFIG_TRANS_NAMES
+				translations_dirty = 1;
+#endif
 				break;
 			case 5:
 				strncpy(user_dev_name, ip, IFNAMSIZ);
@@ -1332,6 +1342,9 @@ __initfunc(static int root_nfs_setup(void))
 	if (!system_utsname.nodename[0]) {
 		strncpy(system_utsname.nodename, in_ntoa(myaddr), __NEW_UTS_LEN);
 		system_utsname.nodename[__NEW_UTS_LEN] = '\0';
+#ifdef CONFIG_TRANS_NAMES
+		translations_dirty = 1;
+#endif
 	}
 
 	/* Set the correct netmask */

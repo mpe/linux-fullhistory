@@ -20,7 +20,10 @@
 #endif
 
 static struct file_system_type autofs_fs_type = {
-	autofs_read_super, "autofs", 0, NULL
+	"autofs",
+	FS_NO_DCACHE,
+	autofs_read_super,
+	NULL
 };
 
 #ifdef MODULE

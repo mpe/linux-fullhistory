@@ -17,13 +17,6 @@
  * byte-order-dependent filesystems etc.
  */
 
-#define le16_to_cpu(__val) __swab16(__val)
-#define cpu_to_le16(__val) __swab16(__val)
-#define le32_to_cpu(x) \
-(__builtin_constant_p(x) ? __constant_swab32(x) : __swab32(x))
-#define cpu_to_le32(x) \
-(__builtin_constant_p(x) ? __constant_swab32(x) : __swab32(x))
-
 extern __inline__ __u16 __swab16 (__u16 val)
 {
 	return (val << 8) | (val >> 8);
@@ -41,10 +34,63 @@ extern __inline__ __u32 __swab32 (__u32 val)
 	return val;
 }
 
-#define cpu_to_be32(x) (x)
-#define be32_to_cpu(x) (x)
-#define cpu_to_be16(x) (x)
-#define be16_to_cpu(x) (x)
+/* Convert from CPU byte order, to specified byte order. */
+#define cpu_to_le16(__val) __swab16(__val)
+#define cpu_to_le32(__val) \
+(__builtin_constant_p(__val) ? __constant_swab32(__val) : __swab32(__val))
+#define cpu_to_be16(x)  (x)
+#define cpu_to_be32(x)  (x)
+
+/* The same, but returns converted value from the location pointer by addr. */
+extern __inline__ __u16 cpu_to_le16p(__u16 *addr)
+{
+	return cpu_to_le16(*addr);
+}
+
+extern __inline__ __u32 cpu_to_le32p(__u32 *addr)
+{
+	return cpu_to_le32(*addr);
+}
+
+extern __inline__ __u16 cpu_to_be16p(__u16 *addr)
+{
+	return cpu_to_be16(*addr);
+}
+
+extern __inline__ __u32 cpu_to_be32p(__u32 *addr)
+{
+	return cpu_to_be32(*addr);
+}
+
+/* The same, but do the conversion in situ, ie. put the value back to addr. */
+extern __inline__ void cpu_to_le16s(__u16 *addr)
+{
+	*addr = cpu_to_le16(*addr);
+}
+
+extern __inline__ void cpu_to_le32s(__u32 *addr)
+{
+	*addr = cpu_to_le32(*addr);
+}
+
+#define cpu_to_be16s(x) do { } while (0)
+#define cpu_to_be32s(x) do { } while (0)
+
+/* Convert from specified byte order, to CPU byte order. */
+#define le16_to_cpu(x)  cpu_to_le16(x)
+#define le32_to_cpu(x)  cpu_to_le32(x)
+#define be16_to_cpu(x)  cpu_to_be16(x)
+#define be32_to_cpu(x)  cpu_to_be32(x)
+
+#define le16_to_cpup(x) cpu_to_le16p(x)
+#define le32_to_cpup(x) cpu_to_le32p(x)
+#define be16_to_cpup(x) cpu_to_be16p(x)
+#define be32_to_cpup(x) cpu_to_be32p(x)
+
+#define le16_to_cpus(x) cpu_to_le16s(x)
+#define le32_to_cpus(x) cpu_to_le32s(x)
+#define be16_to_cpus(x) cpu_to_be16s(x)
+#define be32_to_cpus(x) cpu_to_be32s(x)
 
 #endif
 

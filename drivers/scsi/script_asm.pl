@@ -1,4 +1,4 @@
-#! /usr/local/bin/perl
+#!/usr/bin/perl -s
 
 # NCR 53c810 script assembler
 # Sponsored by 
@@ -9,6 +9,9 @@
 #      (Unix and Linux consulting and custom programming)
 #      drew@Colorado.EDU
 #      +1 (303) 786-7975 
+#
+#   Support for 53c710 (via -ncr7x0_family switch) added by Richard
+#   Hirst <richard@sleepie.demon.co.uk> - 15th March 1997
 #
 #   This program is free software; you can redistribute it and/or modify
 #   it under the terms of the GNU General Public License as published by
@@ -74,7 +77,15 @@ $prefix = '';		# define all arrays having this prefix so we
 # 	and = 0x04_00_00_00
 # 	add = 0x06_00_00_00
 
-%operators_810 = (
+if ($ncr7x0_family) {
+  %operators = (
+    '|', 0x02_00_00_00, 'OR', 0x02_00_00_00,
+    '&', 0x04_00_00_00, 'AND', 0x04_00_00_00,
+    '+', 0x06_00_00_00
+  );
+}
+else {
+  %operators = (
     'SHL',  0x01_00_00_00, 
     '|', 0x02_00_00_00, 'OR', 0x02_00_00_00, 
     'XOR', 0x03_00_00_00, 
@@ -83,11 +94,33 @@ $prefix = '';		# define all arrays having this prefix so we
     # Note : low bit of the operator bit should be set for add with 
     # carry.
     '+', 0x06_00_00_00 
-);
-
+  );
+}
 
 # Table of register addresses
-%registers_810 = (
+
+if ($ncr7x0_family) {
+  %registers = (
+    'SCNTL0', 0, 'SCNTL1', 1, 'SDID', 2, 'SIEN', 3,
+    'SCID', 4, 'SXFER', 5, 'SODL', 6, 'SOCL', 7,
+    'SFBR', 8, 'SIDL', 9, 'SBDL', 10, 'SBCL', 11,
+    'DSTAT', 12, 'SSTAT0', 13, 'SSTAT1', 14, 'SSTAT2', 15,
+    'DSA0', 16, 'DSA1', 17, 'DSA2', 18, 'DSA3', 19,
+    'CTEST0', 20, 'CTEST1', 21, 'CTEST2', 22, 'CTEST3', 23,
+    'CTEST4', 24, 'CTEST5', 25, 'CTEST6', 26, 'CTEST7', 27,
+    'TEMP0', 28, 'TEMP1', 29, 'TEMP2', 30, 'TEMP3', 31,
+    'DFIFO', 32, 'ISTAT', 33, 'CTEST8', 34, 'LCRC', 35,
+    'DBC0', 36, 'DBC1', 37, 'DBC2', 38, 'DCMD', 39,
+    'DNAD0', 40, 'DNAD1', 41, 'DNAD2', 42, 'DNAD3', 43,
+    'DSP0', 44, 'DSP1', 45, 'DSP2', 46, 'DSP3', 47,
+    'DSPS0', 48, 'DSPS1', 49, 'DSPS2', 50, 'DSPS3', 51,
+    'SCRATCH0', 52, 'SCRATCH1', 53, 'SCRATCH2', 54, 'SCRATCH3', 55,
+    'DMODE', 56, 'DIEN', 57, 'DWT', 58, 'DCNTL', 59,
+    'ADDER0', 60, 'ADDER1', 61, 'ADDER2', 62, 'ADDER3', 63,
+  );
+}
+else {
+  %registers = (
     'SCNTL0', 0, 'SCNTL1', 1, 'SCNTL2', 2, 'SCNTL3', 3,
     'SCID', 4, 'SXFER', 5, 'SDID', 6, 'GPREG', 7,
     'SFBR', 8, 'SOCL', 9, 'SSID', 10, 'SBCL', 11,
@@ -113,7 +146,8 @@ $prefix = '';		# define all arrays having this prefix so we
     'SODL', 84,
     'SBDL', 88,
     'SCRATCHB0', 92, 'SCRATCHB1', 93, 'SCRATCHB2', 94, 'SCRATCHB3', 95
-);
+  );
+}
 
 # Parsing regular expressions
 $identifier = '[A-Za-z_][A-Za-z_0-9]*';		
@@ -131,17 +165,22 @@ print STDERR "value regex = $value\n" if ($debug);
 
 $phase = join ('|', keys %scsi_phases);
 print STDERR "phase regex = $phase\n" if ($debug);
-$register = join ('|', keys %registers_810);
+$register = join ('|', keys %registers);
 
-# yucky - since %operators_810 includes meta-characters which must
+# yucky - since %operators includes meta-characters which must
 # be escaped, I can't use the join() trick I used for the register
 # regex
 
-$operator = '\||OR|AND|XOR|\&|\+';
+if ($ncr7x0_family) {
+  $operator = '\||OR|AND|\&|\+';
+}
+else {
+  $operator = '\||OR|AND|XOR|\&|\+';
+}
 
 # Global variables
 
-%symbol_values = (%registers_810) ;	# Traditional symbol table
+%symbol_values = (%registers) ;		# Traditional symbol table
 
 %symbol_references = () ;		# Table of symbol references, where
 					# the index is the symbol name, 
@@ -421,6 +460,7 @@ print STDERR "defined external $1 to $external\n" if ($debug_external);
 	if ($1 =~ /^($identifier)\s*$/) {
 	    push (@entry, $1);
 	} else {
+	    die
 "$0 : syntax error in line $lineno : $_
 	expected ENTRY <identifier>
 ";
@@ -558,13 +598,13 @@ print STDERR "data8 source\n" if ($debug);
 	    # instruction.
 	    if (($src_reg eq undef) || ($src_reg eq $dst_reg)) {
 		$code[$address] |= 0x38_00_00_00 | 
-		    ($registers_810{$dst_reg} << 16);
+		    ($registers{$dst_reg} << 16);
 	    } elsif ($dst_reg =~ /SFBR/i) {
 		$code[$address] |= 0x30_00_00_00 |
-		    ($registers_810{$src_reg} << 16);
+		    ($registers{$src_reg} << 16);
 	    } elsif ($src_reg =~ /SFBR/i) {
 		$code[$address] |= 0x28_00_00_00 |
-		    ($registers_810{$dst_reg} << 16);
+		    ($registers{$dst_reg} << 16);
 	    } else {
 		die
 "$0 : Illegal combination of registers in line $lineno : $_
@@ -573,10 +613,10 @@ print STDERR "data8 source\n" if ($debug);
 ";
 	    }
 
-	    $code[$address] |= $operators_810{$op};
+	    $code[$address] |= $operators{$op};
 	    
 	    &parse_value ($data8, 0, 1, 1);
-	    $code[$address] |= $operators_810{$op};
+	    $code[$address] |= $operators{$op};
 	    $code[$address + 1] = 0x00_00_00_00;# Reserved
 	    $address += 2;
 	} else {

@@ -488,7 +488,7 @@ static int dsp56k_open(struct inode *inode, struct file *file)
 	return 0;
 }
 
-static void dsp56k_release(struct inode *inode, struct file *file)
+static int dsp56k_release(struct inode *inode, struct file *file)
 {
 	int dev = MINOR(inode->i_rdev) & 0x0f;
 
@@ -501,12 +501,13 @@ static void dsp56k_release(struct inode *inode, struct file *file)
 		break;
 	default:
 		printk("DSP56k driver: Unknown minor device: %d\n", dev);
-		return;
+		return -ENXIO;
 	}
 
 #ifdef MODULE
 	MOD_DEC_USE_COUNT;
-#endif /* MODULE */
+#endif
+	return 0;
 }
 
 static struct file_operations dsp56k_fops = {

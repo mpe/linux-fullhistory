@@ -919,6 +919,7 @@ static inline int do_write_page(struct inode * inode, struct file * file,
 	retval = -EIO;
 	if (size == file->f_op->write(inode, file, (const char *) page, size))
 		retval = 0;
+	/* inode->i_status |= ST_MODIFIED is willingly *not* done here */
 	set_fs(old_fs);
 	return retval;
 }
@@ -1193,7 +1194,7 @@ int generic_file_mmap(struct inode * inode, struct file * file, struct vm_area_s
 		inode->i_dirt = 1;
 	}
 	vma->vm_inode = inode;
-	inode->i_count++;
+	atomic_inc(&inode->i_count);
 	vma->vm_ops = ops;
 	return 0;
 }

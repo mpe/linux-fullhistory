@@ -81,7 +81,7 @@ static unsigned long ip_get_mask(unsigned long addr)
  *	This checks bitmasks for the ioctl calls for devices.
  */
  
-static inline int bad_mask(unsigned long mask, unsigned long addr)
+static inline int bad_mask(__u32 mask, __u32 addr)
 {
 	if (addr & (mask = ~mask))
 		return 1;

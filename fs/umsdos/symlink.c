@@ -42,69 +42,12 @@ static int umsdos_readlink_x (
 	}
 	return ret;
 }
-/*
-	Follow a symbolic link chain by calling open_namei recursively
-	until an inode is found.
-
-	Return 0 if ok, or a negative error code if not.
-*/
-static int UMSDOS_follow_link(
-	struct inode * dir,
-	struct inode * inode,
-	int flag,
-	int mode,
-	struct inode ** res_inode)
-{
-	int ret = -ELOOP;
-	*res_inode = NULL;
-	if (current->link_count < 5) {
-		char *path = (char*)kmalloc(PATH_MAX,GFP_KERNEL);
-		if (path == NULL){
-			ret = -ENOMEM;
-		}else{
-			if (!dir) {
-				dir = current->fs[1].root;
-				dir->i_count++;
-			}
-			if (!inode){
-				PRINTK (("symlink: inode = NULL\n"));
-				ret = -ENOENT;
-			}else if (!S_ISLNK(inode->i_mode)){
-				PRINTK (("symlink: Not ISLNK\n"));
-				*res_inode = inode;
-				inode = NULL;
-				ret = 0;
-			}else{
-				ret = umsdos_readlink_x (inode,path
-					,umsdos_file_read_kmem,PATH_MAX-1);
-				if (ret > 0){
-					path[ret] = '\0';
-					PRINTK (("follow :%s: %d ",path,ret));
-					iput(inode);
-					inode = NULL;
-					current->link_count++;
-					ret = open_namei(path,flag,mode,res_inode,dir);
-					current->link_count--;
-					dir = NULL;
-				}else{
-					ret = -EIO;
-				}
-			}
-			kfree (path);
-		}
-	}	
-	iput(inode);
-	iput(dir);
-	PRINTK (("follow_link ret %d\n",ret));
-	return ret;
-}
 
 static int UMSDOS_readlink(struct inode * inode, char * buffer, int buflen)
 {
-	int ret = -EINVAL;
-	if (S_ISLNK(inode->i_mode)) {
-		ret = umsdos_readlink_x (inode,buffer,fat_file_read,buflen);
-	}
+	int ret;
+
+	ret = umsdos_readlink_x (inode,buffer,fat_file_read,buflen);
 	PRINTK (("readlink %d %x bufsiz %d\n",ret,inode->i_mode,buflen));
 	iput(inode);
 	return ret;
@@ -136,7 +79,6 @@ struct inode_operations umsdos_symlink_inode_operations = {
 	NULL,			/* mknod */
 	NULL,			/* rename */
 	UMSDOS_readlink,	/* readlink */
-	UMSDOS_follow_link,	/* follow_link */
 	NULL,			/* readpage */
 	NULL,			/* writepage */
 	NULL,			/* bmap */

@@ -215,11 +215,11 @@ int UMSDOS_ioctl_dir (
 					This ioctl allows umssync to rename a mangle file
 					name before syncing it back in the EMD.
 				*/
-				dir->i_count += 2;
+				atomic_add(2, &dir->i_count);
 				ret = msdos_rename (dir
 					,data.dos_dirent.d_name,data.dos_dirent.d_reclen
 					,dir
-					,data.umsdos_dirent.name,data.umsdos_dirent.name_len,0);
+					,data.umsdos_dirent.name,data.umsdos_dirent.name_len);
 			}else if (cmd == UMSDOS_UNLINK_EMD){
 				/* #Specification: ioctl / UMSDOS_UNLINK_EMD
 					The umsdos_dirent field of the struct umsdos_ioctl is used
@@ -246,7 +246,7 @@ int UMSDOS_ioctl_dir (
 
 					Return 0 if success.
 				*/
-				dir->i_count++;
+				atomic_inc(&dir->i_count);
 				ret = msdos_unlink (dir,data.dos_dirent.d_name
 					,data.dos_dirent.d_reclen);
 			}else if (cmd == UMSDOS_RMDIR_DOS){
@@ -257,7 +257,7 @@ int UMSDOS_ioctl_dir (
 
 					Return 0 if success.
 				*/
-				dir->i_count++;
+				atomic_inc(&dir->i_count);
 				ret = msdos_rmdir (dir,data.dos_dirent.d_name
 					,data.dos_dirent.d_reclen);
 			}else if (cmd == UMSDOS_STAT_DOS){

@@ -327,7 +327,7 @@ sound_mmap (struct inode *inode, struct file *file, struct vm_area_struct *vma)
     return -EAGAIN;
 
   vma->vm_inode = inode;
-  inode->i_count++;
+  atomic_inc(&inode->i_count);
 
   dmap->mapping_flags |= DMA_MAP_MAPPED;
 

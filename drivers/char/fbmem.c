@@ -222,7 +222,7 @@ fb_mmap(struct inode *inode, struct file *file, struct vm_area_struct * vma)
 			     vma->vm_end - vma->vm_start, vma->vm_page_prot))
 		return -EAGAIN;
 	vma->vm_inode = inode;
-	inode->i_count++;
+	atomic_inc(&inode->i_count);
 	return 0;
 }
 

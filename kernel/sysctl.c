@@ -16,6 +16,7 @@
 #include <linux/mm.h>
 #include <linux/sysctl.h>
 #include <linux/swapctl.h>
+#include <linux/nametrans.h>
 #include <linux/proc_fs.h>
 #include <linux/malloc.h>
 #include <linux/stat.h>
@@ -37,9 +38,7 @@
 
 /* External variables not in a header file. */
 extern int panic_timeout;
-extern int console_loglevel, default_message_loglevel;
-extern int minimum_console_loglevel, default_console_loglevel;
-extern int C_A_D, swapout_interval;
+extern int console_loglevel, C_A_D, swapout_interval;
 extern int bdf_prm[], bdflush_min[], bdflush_max[];
 extern char binfmt_java_interpreter[], binfmt_java_appletviewer[];
 extern int sysctl_overcommit_memory;
@@ -104,7 +103,6 @@ struct inode_operations proc_sys_inode_operations =
 	NULL,		/* mknod */
 	NULL,		/* rename */
 	NULL,		/* readlink */
-	NULL,		/* follow_link */
 	NULL,		/* readpage */
 	NULL,		/* writepage */
 	NULL,		/* bmap */
@@ -114,6 +112,7 @@ struct inode_operations proc_sys_inode_operations =
 
 extern struct proc_dir_entry proc_sys_root;
 
+extern int inodes_stat[];
 static void register_proc_table(ctl_table *, struct proc_dir_entry *);
 static void unregister_proc_table(ctl_table *, struct proc_dir_entry *);
 #endif
@@ -142,7 +141,9 @@ static ctl_table kern_table[] = {
 	 0644, NULL, &proc_dostring, &sysctl_string},
 	{KERN_DOMAINNAME, "domainname", system_utsname.domainname, 64,
 	 0644, NULL, &proc_dostring, &sysctl_string},
-	{KERN_NRINODE, "inode-nr", &nr_inodes, 2*sizeof(int),
+	{KERN_NRINODE, "inode-nr", &inodes_stat, 2*sizeof(int),
+	 0444, NULL, &proc_dointvec},
+	{KERN_STATINODE, "inode-state", &inodes_stat, 7*sizeof(int),
 	 0444, NULL, &proc_dointvec},
 	{KERN_MAXINODE, "inode-max", &max_inodes, sizeof(int),
 	 0644, NULL, &proc_dointvec},
@@ -170,6 +171,10 @@ static ctl_table kern_table[] = {
 	{KERN_JAVA_APPLETVIEWER, "java-appletviewer", binfmt_java_appletviewer,
 	 64, 0644, NULL, &proc_dostring, &sysctl_string },
 #endif
+#ifdef CONFIG_TRANS_NAMES
+	{KERN_NAMETRANS, "nametrans", nametrans_txt, MAX_DEFAULT_TRANSLEN,
+	 0644, NULL, &nametrans_dostring, &nametrans_string},
+#endif
 #ifdef __sparc__
 	{KERN_SPARC_REBOOT, "reboot-cmd", reboot_command,
 	 256, 0644, NULL, &proc_dostring, &sysctl_string },
@@ -184,6 +189,8 @@ static ctl_table kern_table[] = {
 static ctl_table vm_table[] = {
 	{VM_SWAPCTL, "swapctl", 
 	 &swap_control, sizeof(swap_control_t), 0600, NULL, &proc_dointvec},
+	{VM_SWAPOUT, "swapout_interval",
+	 &swapout_interval, sizeof(int), 0600, NULL, &proc_dointvec_jiffies},
 	{VM_FREEPG, "freepages", 
 	 &min_free_pages, 3*sizeof(int), 0600, NULL, &proc_dointvec},
 	{VM_BDFLUSH, "bdflush", &bdf_prm, 9*sizeof(int), 0600, NULL,
@@ -611,8 +618,8 @@ int proc_dostring(ctl_table *table, int write, struct file *filp,
 	return 0;
 }
 
-int proc_dointvec(ctl_table *table, int write, struct file *filp,
-		  void *buffer, size_t *lenp)
+static int do_proc_dointvec(ctl_table *table, int write, struct file *filp,
+		  void *buffer, size_t *lenp, int conv)
 {
 	int *i, vleft, first=1, len, left, neg, val;
 	#define TMPBUFLEN 20
@@ -655,7 +662,7 @@ int proc_dointvec(ctl_table *table, int write, struct file *filp,
 			}
 			if (*p < '0' || *p > '9')
 				break;
-			val = simple_strtoul(p, &p, 0);
+			val = simple_strtoul(p, &p, 0) * conv;
 			len = p-buf;
 			if ((len < left) && *p && !isspace(*p))
 				break;
@@ -668,7 +675,7 @@ int proc_dointvec(ctl_table *table, int write, struct file *filp,
 			p = buf;
 			if (!first)
 				*p++ = '\t';
-			sprintf(p, "%d", *i);
+			sprintf(p, "%d", (*i) / conv);
 			len = strlen(buf);
 			if (len > left)
 				len = left;
@@ -700,6 +707,12 @@ int proc_dointvec(ctl_table *table, int write, struct file *filp,
 	*lenp -= left;
 	filp->f_pos += *lenp;
 	return 0;
+}
+
+int proc_dointvec(ctl_table *table, int write, struct file *filp,
+		     void *buffer, size_t *lenp)
+{
+    return do_proc_dointvec(table,write,filp,buffer,lenp,1);
 }
 
 int proc_dointvec_minmax(ctl_table *table, int write, struct file *filp,
@@ -800,6 +813,13 @@ int proc_dointvec_minmax(ctl_table *table, int write, struct file *filp,
 	return 0;
 }
 
+/* Like proc_dointvec, but converts seconds to jiffies */
+int proc_dointvec_jiffies(ctl_table *table, int write, struct file *filp,
+			  void *buffer, size_t *lenp)
+{
+    return do_proc_dointvec(table,write,filp,buffer,lenp,HZ);
+}
+
 #else /* CONFIG_PROC_FS */
 
 int proc_dostring(ctl_table *table, int write, struct file *filp,
@@ -862,6 +882,9 @@ int sysctl_string(ctl_table *table, int *name, int nlen,
 		if (len == table->maxlen)
 			len--;
 		((char *) table->data)[len] = 0;
+#ifdef CONFIG_TRANS_NAMES
+		translations_dirty = 1;
+#endif
 	}
 	return 0;
 }

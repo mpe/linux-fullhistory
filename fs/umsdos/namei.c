@@ -225,13 +225,14 @@ static int umsdos_create_any (
 			umsdos_lockcreate(dir);
 			ret = umsdos_newentry (dir,&info);
 			if (ret == 0){
-				dir->i_count++;
+				atomic_inc(&dir->i_count);
 				ret = msdos_create (dir,info.fake.fname,info.fake.len
 					,S_IFREG|0777,result);
 				if (ret == 0){
 					struct inode *inode = *result;
 					umsdos_lookup_patch (dir,inode,&info.entry,info.f_pos);
-					PRINTK (("inode %p[%d] ",inode,inode->i_count));
+					PRINTK (("inode %p[%d] ",inode,
+						 atomic_read(&inode->i_count)));
 					PRINTK (("Creation OK: [%d] %s %d pos %d\n",dir->i_ino
 						,info.fake.fname,current->pid,info.f_pos));
 				}else{
@@ -351,13 +352,12 @@ chkstk();
 					PRINTK (("ret %d %d ",ret,new_info.fake.len));
 					if (ret == 0){
 						PRINTK (("msdos_rename "));
-						old_dir->i_count++;
-						new_dir->i_count++;	/* Both inode are needed later */
+						atomic_inc(&old_dir->i_count);
+						atomic_inc(&new_dir->i_count);	/* Both inode are needed later */
 						ret = msdos_rename (old_dir
 								    ,old_info.fake.fname,old_info.fake.len
 								    ,new_dir
-								    ,new_info.fake.fname,new_info.fake.len
-								    ,0);
+								    ,new_info.fake.fname,new_info.fake.len);
 chkstk();
 						PRINTK (("after m_rename ret %d ",ret));
 						if (ret != 0){
@@ -378,7 +378,7 @@ chkstk();
 								   Not very efficient ...
 								   */
 								struct inode *inode;
-								new_dir->i_count++;
+								atomic_inc(&new_dir->i_count);
 								PRINTK (("rename lookup len %d %d -- ",new_len,new_info.entry.flags));
 								ret = UMSDOS_lookup (new_dir,new_name,new_len
 										     ,&inode);
@@ -441,7 +441,7 @@ static int umsdos_symlink_x(
 	*/
 	struct inode *inode;
 	int ret;
-	dir->i_count++;		/* We keep the inode in case we need it */
+	atomic_inc(&dir->i_count);/* We keep the inode in case we need it */
 						/* later */
 	ret = umsdos_create_any (dir,name,len,mode,0,flags,&inode);
 	PRINTK (("umsdos_symlink ret %d ",ret));
@@ -572,7 +572,8 @@ int UMSDOS_link (
 		struct inode *olddir;
 		ret = umsdos_get_dirowner(oldinode,&olddir);
 		PRINTK (("umsdos_link dir_owner = %d -> %p [%d] "
-			,oldinode->u.umsdos_i.i_dir_owner,olddir,olddir->i_count));
+			,oldinode->u.umsdos_i.i_dir_owner,olddir,
+			 atomic_read(&olddir->i_count)));
 		if (ret == 0){
 			struct umsdos_dirent entry;
 			umsdos_lockcreate2(dir,olddir);
@@ -596,8 +597,9 @@ int UMSDOS_link (
 					struct umsdos_info info;
 					ret = umsdos_newhidden (olddir,&info);
 					if (ret == 0){
-						olddir->i_count+=2;
-						PRINTK (("olddir[%d] ",olddir->i_count));
+						atomic_add(2, &olddir->i_count);
+						PRINTK (("olddir[%d] ",
+							 atomic_read(&olddir->i_count)));
 						ret = umsdos_rename_f (olddir,entry.name
 							,entry.name_len
 							,olddir,info.entry.name,info.entry.name_len
@@ -607,17 +609,19 @@ int UMSDOS_link (
 							if (path == NULL){
 								ret = -ENOMEM;
 							}else{
-								PRINTK (("olddir[%d] ",olddir->i_count));
+								PRINTK (("olddir[%d] ",
+									 atomic_read(&olddir->i_count)));
 								ret = umsdos_locate_path (oldinode,path);
-								PRINTK (("olddir[%d] ",olddir->i_count));
+								PRINTK (("olddir[%d] ",
+									 atomic_read(&olddir->i_count)));
 								if (ret == 0){
-									olddir->i_count++;
+									atomic_inc(&olddir->i_count);
 									ret = umsdos_symlink_x (olddir
 										,entry.name
 										,entry.name_len,path
 										,S_IFREG|0777,UMSDOS_HLINK);
 									if (ret == 0){
-										dir->i_count++;
+										atomic_inc(&dir->i_count);
 										ret = umsdos_symlink_x (dir,name,len
 											,path
 											,S_IFREG|0777,UMSDOS_HLINK);
@@ -634,7 +638,7 @@ int UMSDOS_link (
 					}else{
 						ret = umsdos_locate_path (oldinode,path);
 						if (ret == 0){
-							dir->i_count++;
+							atomic_inc(&dir->i_count);
 							ret = umsdos_symlink_x (dir,name,len,path
 											,S_IFREG|0777,UMSDOS_HLINK);
 						}
@@ -703,7 +707,7 @@ int UMSDOS_mkdir(
 			ret = umsdos_newentry (dir,&info);
 			PRINTK (("newentry %d ",ret));
 			if (ret == 0){
-				dir->i_count++;
+				atomic_inc(&dir->i_count);
 				ret = msdos_mkdir (dir,info.fake.fname,info.fake.len,mode);
 				if (ret != 0){
 					umsdos_delentry (dir,&info,1);
@@ -869,16 +873,17 @@ int UMSDOS_rmdir(
 	int ret = umsdos_nevercreat(dir,name,len,-EPERM);
 	if (ret == 0){
 		struct inode *sdir;
-		dir->i_count++;
+		atomic_inc(&dir->i_count);
 		ret = UMSDOS_lookup (dir,name,len,&sdir);
 		PRINTK (("rmdir lookup %d ",ret));
 		if (ret == 0){
 			int empty;
 			umsdos_lockcreate(dir);
-			if (sdir->i_count > 1){
+			if (atomic_read(&sdir->i_count) > 1){
 				ret = -EBUSY;
 			}else if ((empty = umsdos_isempty (sdir)) != 0){
-				PRINTK (("isempty %d i_count %d ",empty,sdir->i_count));
+				PRINTK (("isempty %d i_count %d ",empty,
+					 atomic_read(&sdir->i_count)));
 				/* check sticky bit */
 				if ( !(dir->i_mode & S_ISVTX) || fsuser() ||
 				    current->fsuid == sdir->i_uid ||
@@ -895,7 +900,7 @@ int UMSDOS_rmdir(
 					PRINTK (("isempty ret %d nlink %d ",ret,dir->i_nlink));
 					if (ret == 0){
 						struct umsdos_info info;
-						dir->i_count++;
+						atomic_inc(&dir->i_count);
 						umsdos_parse (name,len,&info);
 						/* The findentry is there only to complete */
 						/* the mangling */
@@ -960,7 +965,7 @@ int UMSDOS_unlink (
 						   using the standard lookup function.
 						   */
 						struct inode *inode;
-						dir->i_count++;
+						atomic_inc(&dir->i_count);
 						ret = UMSDOS_lookup (dir,name,len,&inode);
 						if (ret == 0){
 							PRINTK (("unlink nlink = %d ",inode->i_nlink));
@@ -988,7 +993,7 @@ int UMSDOS_unlink (
 						ret = umsdos_delentry (dir,&info,0);
 						if (ret == 0){
 							PRINTK (("Avant msdos_unlink %s ",info.fake.fname));
-							dir->i_count++;
+							atomic_inc(&dir->i_count);
 							ret = msdos_unlink_umsdos (dir,info.fake.fname
 										   ,info.fake.len);
 							PRINTK (("msdos_unlink %s %o ret %d ",info.fake.fname
@@ -1018,8 +1023,7 @@ int UMSDOS_rename(
 	int old_len,
 	struct inode * new_dir,
 	const char * new_name,
-	int new_len,
-	int must_be_dir)
+	int new_len)
 {
 	/* #Specification: weakness / rename
 		There is a case where UMSDOS rename has a different behavior
@@ -1036,8 +1040,8 @@ int UMSDOS_rename(
 	int ret = umsdos_nevercreat(new_dir,new_name,new_len,-EEXIST);
 	if (ret == 0){
 		/* umsdos_rename_f eat the inode and we may need those later */
-		old_dir->i_count++;
-		new_dir->i_count++;
+		atomic_inc(&old_dir->i_count);
+		atomic_inc(&new_dir->i_count);
 		ret = umsdos_rename_f (old_dir,old_name,old_len,new_dir,new_name
 			,new_len,0);
 		if (ret == -EEXIST){
@@ -1075,12 +1079,12 @@ int UMSDOS_rename(
 				is a problem at all.
 			*/
 			/* This is not super efficient but should work */
-			new_dir->i_count++;
+			atomic_inc(&new_dir->i_count);
 			ret = UMSDOS_unlink (new_dir,new_name,new_len);
 chkstk();
 			PRINTK (("rename unlink ret %d %d -- ",ret,new_len));
 			if (ret == -EISDIR){
-				new_dir->i_count++;
+				atomic_inc(&new_dir->i_count);
 				ret = UMSDOS_rmdir (new_dir,new_name,new_len);
 chkstk();
 				PRINTK (("rename rmdir ret %d -- ",ret));

@@ -5,8 +5,6 @@ typedef struct firm_event {
 	unsigned char  pair_type; /* unused by X11 */
         unsigned char  pair;	  /* unused by X11 */
         int            value;	  /* VKEY_UP, VKEY_DOWN or delta */
-
-	/* XXX Timeval could hose old 32-bit programs, investigate and fixme XXX */
         struct timeval time;
 } Firm_event;
 

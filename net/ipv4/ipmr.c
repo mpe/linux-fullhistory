@@ -1031,7 +1031,7 @@ int ipmr_mfc_info(char *buffer, char **start, off_t offset, int length, int dumm
 			}
 			if(pos>offset+length)
 			{
-				sti();
+				end_bh_atomic();
 				goto done;
 			}
 			mfc=mfc->next;

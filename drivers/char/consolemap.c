@@ -13,7 +13,7 @@
 #include <linux/malloc.h>
 #include <linux/init.h>
 #include <asm/uaccess.h>
-#include "consolemap.h"
+#include <linux/consolemap.h>
 
 static unsigned short translations[][256] = {
   /* 8-bit Latin-1 mapped to Unicode -- trivial mapping */

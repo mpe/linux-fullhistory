@@ -42,6 +42,10 @@ if [ "$CONFIG_AX25" != "n" ]; then
   dep_tristate 'Amateur Radio X.25 PLP (Rose)' CONFIG_ROSE $CONFIG_AX25
 fi
 if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
+#  tristate 'DECnet Support (NOT YET FUNCTIONAL)' CONFIG_DECNET
+#  if [ "$CONFIG_DECNET" != "n" ]; then
+#    source net/decnet/Config.in
+#  fi
   tristate 'CCITT X.25 Packet Layer (EXPERIMENTAL)' CONFIG_X25
   tristate 'LAPB Data Link Driver (EXPERIMENTAL)' CONFIG_LAPB
   bool 'Bridging (EXPERIMENTAL)' CONFIG_BRIDGE

@@ -260,10 +260,8 @@ int fat_readdirx(
 					ino = fat_parent_ino(inode,0);
 
 				if (shortnames || !is_long) {
-					dcache_add(inode, bufname, i+dotoffset, ino);
-					if (both) {
+					if (both)
 						bufname[i+dotoffset] = '\0';
-					}
 					spos = oldpos;
 					if (is_long) {
 						spos = filp->f_pos - sizeof(struct msdos_dir_entry);
@@ -276,7 +274,6 @@ int fat_readdirx(
 					}
 				}
 				if (is_long && longnames) {
-					dcache_add(inode, longname, long_len, ino);
 					if (both) {
 						memcpy(&longname[long_len+1], bufname, i+dotoffset);
 						long_len += i+dotoffset;

@@ -1,5 +1,5 @@
 			    AIC7xxx Driver for Linux
-				 April 15, 1996
+				 June 11, 1997
 
 Introduction
 ------------------------
@@ -31,6 +31,7 @@ linux-1.1.x and fairly stable since linux-1.2.x, and are also in FreeBSD
     -----------------------
     AIC-777x   
     AIC-785x
+    AIC-786x
     AIC-787x
     AIC-788x
 
@@ -58,6 +59,7 @@ linux-1.1.x and fairly stable since linux-1.2.x, and are also in FreeBSD
     Dan Eischen     deischen@iworks.InterWorks.org (Linux Driver Co-maintainer)
     Dean Gehnert    deang@teleport.com             (Linux FTP/patch maintainer)
     Jess Johnson    jester@frenzy.com              (AIC7xxx FAQ author)
+    Doug Ledford    dledford@dialnet.net           (Stress tester/bug squasher)
 
     Special thanks go to John Aycock (aycock@cpsc.ucalgary.ca), the original
     author of the driver. John has since retired from the project. Thanks
@@ -111,5 +113,5 @@ linux-1.1.x and fairly stable since linux-1.2.x, and are also in FreeBSD
 Dean W. Gehnert
 deang@teleport.com
 
-$Revision: 3.0 $
+$Revision: 3.1 $
 

@@ -137,7 +137,8 @@ struct inode *umsdos_emd_dir_lookup(struct inode *dir, int creat)
 	if (dir->u.umsdos_i.i_emd_dir != 0){
 		ret = iget (dir->i_sb,dir->u.umsdos_i.i_emd_dir);
 		PRINTK (("deja trouve %d %x [%d] "
-			,dir->u.umsdos_i.i_emd_dir,ret,ret->i_count));
+			,dir->u.umsdos_i.i_emd_dir,ret,
+			 atomic_read(&ret->i_count)));
 	}else{
 		umsdos_real_lookup (dir,UMSDOS_EMD_FILE,UMSDOS_EMD_NAMELEN,&ret);
 		PRINTK (("emd_dir_lookup "));
@@ -147,7 +148,7 @@ struct inode *umsdos_emd_dir_lookup(struct inode *dir, int creat)
 		}else if (creat){
 			int code;
 			PRINTK (("avant create "));
-			dir->i_count++;
+			atomic_inc(&dir->i_count);
 			code = msdos_create (dir,UMSDOS_EMD_FILE,UMSDOS_EMD_NAMELEN
 				,S_IFREG|0777,&ret);
 			PRINTK (("Creat EMD code %d ret %x ",code,ret));

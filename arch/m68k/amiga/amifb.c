@@ -1307,6 +1307,7 @@ static void ami_rebuild_copper(void);
 	 */
 
 extern unsigned short ami_intena_vals[];
+extern void amiga_init_sound(void);
 
 	/*
 	 * Support for Graphics Boards
@@ -1808,6 +1809,11 @@ __initfunc(struct fb_info *amiga_fb_init(long *mem_start))
 {
 	int err, tag, i;
 	u_long chipptr;
+
+	/*
+	 * Our beloved beeper
+	 */
+	amiga_init_sound();
 
 	/*
 	 * Check for a Graphics Board

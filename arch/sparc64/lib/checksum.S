@@ -71,8 +71,9 @@ csum_partial_end_cruft:
 	or	%o5, %o4, %o4			! coalese with hword (if any)
 6:	addcc	%o4, %o2, %o2			! add to sum
 1:	sllx	%g4, 32, %g4			! give gfp back
+	addc	%g0, %o2, %o0			! add final carry into retval
 	retl					! get outta here
-	 addc	%g0, %o2, %o0			! add final carry into retval
+	 srl	%o0, 0, %o0
 
 	/* Also do alignment out of band to get better cache patterns. */
 csum_partial_fix_alignment:
@@ -82,7 +83,9 @@ csum_partial_fix_alignment:
 	 */
 	.globl	csum_partial
 csum_partial:						/* %o0=buf, %o1=len, %o2=sum */
+	srl	%o1, 0, %o1				! doof scheiss
 	andcc	%o0, 0x7, %g0				! alignment problems?
+	srl	%o2, 0, %o2
 	be,pt	%icc, csum_partial_fix_aligned		! yep, handle it
 	 andn	%o1, 0x7f, %o3				! num loop iterations
 	cmp	%o1, 6
@@ -154,31 +157,31 @@ __csum_partial_copy_start:
 99:     ba,pt %xcc, 30f;                        \
          a, b, %o3;                             \
         .section __ex_table,z##alloc;           \
-        .align  4;                              \
-        .word   98b, 99b;                       \
+        .align  8;                              \
+        .xword   98b, 99b;                      \
         .text;                                  \
         .align  4
 
 #define EX2(x,y,z)                          	\
 98:     x,y;                                    \
         .section __ex_table,z##alloc;           \
-        .align  4;                              \
-        .word   98b, 30f;                       \
+        .align  8;                              \
+        .xword   98b, 30f;                      \
         .text;                                  \
         .align  4
 
 #define EX3(x,y,z)                          	\
 98:     x,y;                                    \
         .section __ex_table,z##alloc;           \
-        .align  4;                              \
-        .word   98b, 96f;                       \
+        .align  8;                              \
+        .xword   98b, 96f;                      \
         .text;                                  \
         .align  4
 
 #define EXT(start,end,handler,z)                \
         .section __ex_table,z##alloc;           \
-        .align  4;                              \
-        .word   start, 0, end, handler;         \
+        .align  8;                              \
+        .xword   start, 0, end, handler;        \
         .text;                                  \
         .align  4
 
@@ -189,12 +192,12 @@ __csum_partial_copy_start:
 	 * please check the fixup code below as well.
 	 */
 #define CSUMCOPY_BIGCHUNK_ALIGNED(src, dst, sum, off, t0, t1, t2, t3, t4, t5, t6, t7)	\
-	ldd	[src + off + 0x00], t0;							\
-	ldd	[src + off + 0x08], t2;							\
+	ldda	[src + off + 0x00] %asi, t0;						\
+	ldda	[src + off + 0x08] %asi, t2;						\
 	addccc	t0, sum, sum;								\
-	ldd	[src + off + 0x10], t4;							\
+	ldda	[src + off + 0x10] %asi, t4;						\
 	addccc	t1, sum, sum;								\
-	ldd	[src + off + 0x18], t6;							\
+	ldda	[src + off + 0x18] %asi, t6;						\
 	addccc	t2, sum, sum;								\
 	std	t0, [dst + off + 0x00];							\
 	addccc	t3, sum, sum;								\
@@ -211,10 +214,10 @@ __csum_partial_copy_start:
 	 * Viking MXCC into streaming mode.  Ho hum...
 	 */
 #define CSUMCOPY_BIGCHUNK(src, dst, sum, off, t0, t1, t2, t3, t4, t5, t6, t7)	\
-	ldd	[src + off + 0x00], t0;						\
-	ldd	[src + off + 0x08], t2;						\
-	ldd	[src + off + 0x10], t4;						\
-	ldd	[src + off + 0x18], t6;						\
+	ldda	[src + off + 0x00] %asi, t0;					\
+	ldda	[src + off + 0x08] %asi, t2;					\
+	ldda	[src + off + 0x10] %asi, t4;					\
+	ldda	[src + off + 0x18] %asi, t6;					\
 	st	t0, [dst + off + 0x00];						\
 	addccc	t0, sum, sum;							\
 	st	t1, [dst + off + 0x04];						\
@@ -234,8 +237,8 @@ __csum_partial_copy_start:
 
 	/* Yuck, 6 superscalar cycles... */
 #define CSUMCOPY_LASTCHUNK(src, dst, sum, off, t0, t1, t2, t3)	\
-	ldd	[src - off - 0x08], t0;				\
-	ldd	[src - off - 0x00], t2;				\
+	ldda	[src - off - 0x08] %asi, t0;			\
+	ldda	[src - off - 0x00] %asi, t2;			\
 	addccc	t0, sum, sum;					\
 	st	t0, [dst - off - 0x08];				\
 	addccc	t1, sum, sum;					\
@@ -250,7 +253,7 @@ cc_end_cruft:
 	andcc	%o3, 8, %g0		! begin checks for that code
 	be,pn	%icc, 1f
 	 and	%o3, 4, %g5
-	EX(ldd	[%o0 + 0x00], %g2, and %o3, 0xf,#)
+	EX(ldda	[%o0 + 0x00] %asi, %g2, and %o3, 0xf,#)
 	add	%o1, 8, %o1
 	addcc	%g2, %g7, %g7
 	add	%o0, 8, %o0
@@ -260,7 +263,7 @@ cc_end_cruft:
 	EX2(st	%g3, [%o1 - 0x04],#)
 1:	brz,pt	%g5, 1f
 	 andcc	%o3, 3, %o3
-	EX(ld	[%o0 + 0x00], %g2, add %o3, 4,#)
+	EX(lda	[%o0 + 0x00] %asi, %g2, add %o3, 4,#)
 	add	%o1, 4, %o1
 	addcc	%g2, %g7, %g7
 	EX2(st	%g2, [%o1 - 0x04],#)
@@ -272,20 +275,21 @@ cc_end_cruft:
 	 subcc	%o3, 2, %o3
 	ba,pt	%xcc, 4f
 	 clr	%o4
-2:	EX(lduh	[%o0 + 0x00], %o4, add %o3, 2,#)
+2:	EX(lduha [%o0 + 0x00] %asi, %o4, add %o3, 2,#)
 	add	%o0, 2, %o0
 	EX2(sth	%o4, [%o1 + 0x00],#)
 	be,pn	%icc, 6f
 	 add	%o1, 2, %o1
 	sll	%o4, 16, %o4
-4:	EX(ldub	[%o0 + 0x00], %o5, add %g0, 1,#)
+4:	EX(lduba [%o0 + 0x00] %asi, %o5, add %g0, 1,#)
 	EX2(stb	%o5, [%o1 + 0x00],#)
 	sll	%o5, 8, %o5
 	or	%o5, %o4, %o4
 6:	addcc	%o4, %g7, %g7
 1:	sllx	%g4, 32, %g4
+	addc	%g0, %g7, %o0
 	retl
-	 addc	%g0, %g7, %o0
+	 srl	%o0, 0, %o0
 
 	/* Sun, you just can't beat me, you just can't.  Stop trying,
 	 * give up.  I'm serious, I am going to kick the living shit
@@ -295,7 +299,9 @@ cc_end_cruft:
 	.globl	__csum_partial_copy_sparc_generic
 __csum_partial_copy_sparc_generic:
 					/* %o0=src, %o1=dest, %g1=len, %g7=sum */
+	srl	%g7, 0, %g7		! you neve know...
 	xor	%o0, %o1, %o4		! get changing bits
+	srl	%g1, 0, %g1		! doof scheiss
 	andcc	%o4, 3, %g0		! check for mismatched alignment
 	bne,pn	%icc, ccslow		! better this than unaligned/fixups
 	 andcc	%o0, 7, %g0		! need to align things?
@@ -309,7 +315,7 @@ __csum_partial_copy_sparc_generic:
 	 andcc	%o0, 0x2, %g0
 	be,pn	%icc, 1f
 	 andcc	%o0, 0x4, %g0
-	EX(lduh	[%o0 + 0x00], %g4, add %g1, 0,#)
+	EX(lduha [%o0 + 0x00] %asi, %g4, add %g1, 0,#)
 	sub	%g1, 2, %g1
 	EX2(sth	%g4, [%o1 + 0x00],#)
 	add	%o0, 2, %o0
@@ -325,7 +331,7 @@ __csum_partial_copy_sparc_generic:
 	or	%g3, %g7, %g7
 1:	be,pt	%icc, 3f
 	 andn	%g1, 0x7f, %g2
-	EX(ld	[%o0 + 0x00], %g4, add %g1, 0,#)
+	EX(lda	[%o0 + 0x00] %asi, %g4, add %g1, 0,#)
 	sub	%g1, 4, %g1
 	EX2(st	%g4, [%o1 + 0x00],#)
 	add	%o0, 4, %o0
@@ -372,8 +378,9 @@ cctbl:	CSUMCOPY_LASTCHUNK(%o0,%o1,%g7,0x68,%g2,%g3,%g4,%g5)
 ccte:	bne,pn	%icc, cc_end_cruft	! something left, handle it out of band
 	 sethi	%uhi(KERNBASE), %g4	! restore gfp
 	mov	%g7, %o0		! give em the computed checksum
+	sllx	%g4, 32, %g4		! finish gfp restoration
 	retl				! return
-	 sllx	%g4, 32, %g4		! finish gfp restoration
+	 srl	%o0, 0, %o0
 ccdbl:	CSUMCOPY_BIGCHUNK_ALIGNED(%o0,%o1,%g7,0x00,%o4,%o5,%g2,%g3,%g4,%g5,%o2,%o3)
 	CSUMCOPY_BIGCHUNK_ALIGNED(%o0,%o1,%g7,0x20,%o4,%o5,%g2,%g3,%g4,%g5,%o2,%o3)
 	CSUMCOPY_BIGCHUNK_ALIGNED(%o0,%o1,%g7,0x40,%o4,%o5,%g2,%g3,%g4,%g5,%o2,%o3)
@@ -394,7 +401,7 @@ ccslow:	mov	0, %g5
 	be,a,pt	%icc, 1f
 	 srl	%g1, 1, %o3		
 	sub	%g1, 1, %g1	
-	EX(ldub	[%o0], %g5, add %g1, 1,#)
+	EX(lduba [%o0] %asi, %g5, add %g1, 1,#)
 	add	%o0, 1, %o0	
 	EX2(stb	%g5, [%o1],#)
 	srl	%g1, 1, %o3
@@ -404,7 +411,7 @@ ccslow:	mov	0, %g5
 	andcc	%o0, 2, %g0	
 	be,a,pt	%icc, 1f
 	 srl	%o3, 1, %o3
-	EX(lduh	[%o0], %o4, add %g1, 0,#)
+	EX(lduha [%o0] %asi, %o4, add %g1, 0,#)
 	sub	%g1, 2, %g1	
 	srl	%o4, 8, %g2
 	sub	%o3, 1, %o3	
@@ -416,7 +423,7 @@ ccslow:	mov	0, %g5
 	add	%o1, 2, %o1
 1:	brz,a,pn %o3, 2f		
 	 andcc	%g1, 2, %g0
-	EX3(ld	[%o0], %o4,#)
+	EX3(lda	[%o0] %asi, %o4,#)
 5:	srl	%o4, 24, %g2
 	srl	%o4, 16, %g3
 	EX2(stb	%g2, [%o1],#)
@@ -430,7 +437,7 @@ ccslow:	mov	0, %g5
 	add	%o1, 4, %o1	! is worthy). Maybe some day - with the sll/srl
 	subcc	%o3, 1, %o3	! tricks
 	bne,a,pt %icc, 5b
-	 EX3(ld	[%o0], %o4,#)
+	 EX3(lda [%o0] %asi, %o4,#)
 	sll	%g5, 16, %g2
 	srl	%g5, 16, %g5
 	srl	%g2, 16, %g2
@@ -438,7 +445,7 @@ ccslow:	mov	0, %g5
 	add	%g2, %g5, %g5 
 2:	be,a,pt	%icc, 3f		
 	 andcc	%g1, 1, %g0
-	EX(lduh	[%o0], %o4, and %g1, 3,#)
+	EX(lduha [%o0] %asi, %o4, and %g1, 3,#)
 	andcc	%g1, 1, %g0
 	srl	%o4, 8, %g2
 	add	%o0, 2, %o0	
@@ -448,7 +455,7 @@ ccslow:	mov	0, %g5
 	add	%o1, 2, %o1
 3:	be,a,pt	%icc, 1f		
 	 sll	%g5, 16, %o4
-	EX(ldub	[%o0], %g2, add %g0, 1,#)
+	EX(lduba [%o0] %asi, %g2, add %g0, 1,#)
 	sll	%g2, 8, %o4	
 	EX2(stb	%g2, [%o1],#)
 	add	%g5, %o4, %g5
@@ -463,8 +470,9 @@ ccslow:	mov	0, %g5
 	sll	%g2, 8, %g2
 	or	%g2, %o4, %g5
 4:	addcc	%g7, %g5, %g7
+	addc	%g0, %g7, %o0
 	retl	
-	 addc	%g0, %g7, %o0
+	 srl	%o0, 0, %o0
 __csum_partial_copy_end:
 
         .section .fixup,#alloc,#execinstr

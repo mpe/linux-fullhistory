@@ -148,6 +148,11 @@ void ax25_free_cb(ax25_cb *ax25)
 	MOD_DEC_USE_COUNT;
 }
 
+static void ax25_free_sock(struct sock *sk)
+{
+	ax25_free_cb(sk->protinfo.ax25);
+}
+
 /*
  *	Socket removal during an interrupt is now safe.
  */
@@ -428,7 +433,6 @@ void ax25_destroy_socket(ax25_cb *ax25)	/* Not static as it's used by the timer 
 			add_timer(&ax25->timer);
 		} else {
 			sk_free(ax25->sk);
-			ax25_free_cb(ax25);
 		}
 	} else {
 		ax25_free_cb(ax25);
@@ -858,7 +862,8 @@ int ax25_create(struct socket *sock, int protocol)
 	}
 
 	sock_init_data(sock, sk);
-	
+
+	sk->destruct = ax25_free_sock;
 	sock->ops    = &ax25_proto_ops;
 	sk->protocol = protocol;
 	sk->mtu      = AX25_MTU;	/* 256 */
@@ -894,7 +899,8 @@ struct sock *ax25_make_new(struct sock *osk, struct ax25_dev *ax25_dev)
 	}
 
 	sock_init_data(NULL, sk);
-	
+
+	sk->destruct = ax25_free_sock;
 	sk->type     = osk->type;
 	sk->socket   = osk->socket;
 	sk->priority = osk->priority;
@@ -926,7 +932,6 @@ struct sock *ax25_make_new(struct sock *osk, struct ax25_dev *ax25_dev)
 	if (osk->protinfo.ax25->digipeat != NULL) {
 		if ((ax25->digipeat = kmalloc(sizeof(ax25_digi), GFP_ATOMIC)) == NULL) {
 			sk_free(sk);
-			ax25_free_cb(ax25);
 			return NULL;
 		}
 
@@ -1182,8 +1187,8 @@ static int ax25_connect(struct socket *sock, struct sockaddr *uaddr, int addr_le
 
 #ifdef CONFIG_AX25_DAMA_SLAVE
 		case AX25_PROTO_DAMA_SLAVE:
-			ax25->modulus = AX25_MODULUS;
-			ax25->window  = ax25->ax25_dev->values[AX25_VALUES_WINDOW];
+			sk->protinfo.ax25->modulus = AX25_MODULUS;
+			sk->protinfo.ax25->window  = sk->protinfo.ax25->ax25_dev->values[AX25_VALUES_WINDOW];
 			if (sk->protinfo.ax25->ax25_dev->dama.slave)
 				ax25_ds_establish_data_link(sk->protinfo.ax25);
 			else

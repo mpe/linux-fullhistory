@@ -68,6 +68,7 @@
  *  History:
  *   0.1  26.06.96  Adapted from baycom.c and made network driver interface
  *        18.10.96  Changed to new user space access routines (copy_{to,from}_user)
+ *   0.3  26.04.96  init code/data tagged
  */
 
 /*****************************************************************************/
@@ -89,7 +90,6 @@
 #include <linux/netdevice.h>
 #include <linux/hdlcdrv.h>
 #include <linux/baycom.h>
-#include <linux/init.h>
 
 /* --------------------------------------------------------------------- */
 
@@ -131,6 +131,14 @@ extern inline int copy_to_user(void *to, const void *from, unsigned long n)
         memcpy_tofs(to, from, n);
         return 0;
 }
+#endif
+
+#if LINUX_VERSION_CODE >= 0x20123
+#include <linux/init.h>
+#else
+#define __init
+#define __initdata
+#define __initfunc(x) x
 #endif
 
 /* --------------------------------------------------------------------- */
@@ -1001,7 +1009,7 @@ MODULE_DESCRIPTION("Baycom ser12, par96 and picpar amateur radio modem driver");
 
 #endif
 
-int init_module(void)
+__initfunc(int init_module(void))
 {
 	baycom_ports[0].mode = mode;
 	baycom_ports[0].iobase = iobase;

@@ -17,8 +17,11 @@
  * Modified to provide 'generic' keyboard support by Hamish Macdonald
  * Merge with the m68k keyboard driver and split-off of the PC low-level
  * parts by Geert Uytterhoeven, May 1997
+ *
+ * 27-05-97: Added support for the Magic SysRq Key (Martin Mares)
  */
 
+#include <linux/config.h>
 #include <linux/sched.h>
 #include <linux/tty.h>
 #include <linux/tty_flip.h>
@@ -30,9 +33,10 @@
 #include <asm/keyboard.h>
 #include <asm/bitops.h>
 
-#include "kbd_kern.h"
-#include "diacr.h"
-#include "vt_kern.h"
+#include <linux/kbd_kern.h>
+#include <linux/kbd_diacr.h>
+#include <linux/vt_kern.h>
+#include <linux/kbd_ll.h>
 
 #define SIZE(x) (sizeof(x)/sizeof((x)[0]))
 
@@ -82,7 +86,7 @@ static int dead_key_next = 0;
  * the variable must be global, or a new procedure must be created to 
  * return the value. I chose the former way.
  */
-/*static*/ int shift_state = 0;
+int shift_state = 0;
 static int npadch = -1;			/* -1 or number assembled on pad */
 static unsigned char diacr = 0;
 static char rep = 0;			/* flag telling character repeat */
@@ -140,8 +144,14 @@ const int NR_TYPES = SIZE(max_vals);
 static void put_queue(int);
 static unsigned char handle_diacr(unsigned char);
 
-/* pt_regs - set by keyboard_interrupt(), used by show_ptregs() */
-struct pt_regs * pt_regs;
+/* kbd_pt_regs - set by keyboard_interrupt(), used by show_ptregs() */
+struct pt_regs * kbd_pt_regs;
+
+#ifdef CONFIG_MAGIC_SYSRQ
+#define SYSRQ_KEY 0x54
+extern void handle_sysrq(int, struct pt_regs *, struct kbd_struct *, struct tty_struct *);
+static int sysrq_pressed;
+#endif
 
 /*
  * Many other routines do put_queue, but I think either
@@ -222,6 +232,17 @@ void handle_scancode(unsigned char scancode)
 		    up_flag = kbd_unexpected_up(keycode);
 	} else
  		rep = test_and_set_bit(keycode, key_down);
+
+#ifdef CONFIG_MAGIC_SYSRQ		/* Handle the SysRq Hack */
+	if (keycode == SYSRQ_KEY) {
+		sysrq_pressed = !up_flag;
+		return;
+	} else if (sysrq_pressed) {
+		if (!up_flag)
+			handle_sysrq(keycode, kbd_pt_regs, kbd, tty);
+		return;
+	}
+#endif
 
 	if (kbd->kbdmode == VC_MEDIUMRAW) {
 		/* soon keycodes will require more than one byte */
@@ -346,8 +367,8 @@ static void caps_on(void)
 
 static void show_ptregs(void)
 {
-	if (pt_regs)
-		show_regs(pt_regs);
+	if (kbd_pt_regs)
+		show_regs(kbd_pt_regs);
 }
 
 static void hold(void)

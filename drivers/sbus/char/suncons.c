@@ -1,4 +1,4 @@
-/* $Id: suncons.c,v 1.62 1997/05/02 22:32:32 davem Exp $
+/* $Id: suncons.c,v 1.63 1997/05/31 18:33:25 mj Exp $
  *
  * suncons.c: Sun SparcStation console support.
  *
@@ -76,11 +76,11 @@
 #include <asm/io.h>
 #include <asm/smp.h>
 
-#include "../../char/kbd_kern.h"
-#include "../../char/vt_kern.h"
-#include "../../char/consolemap.h"
-#include "../../char/selection.h"
-#include "../../char/console_struct.h"
+#include <linux/kbd_kern.h>
+#include <linux/vt_kern.h>
+#include <linux/consolemap.h>
+#include <linux/selection.h>
+#include <linux/console_struct.h>
 
 #include "fb.h"
 

@@ -870,6 +870,8 @@ __initfunc(static void do_boot_cpu(int i))
 	*((volatile unsigned long *)phys_to_virt(8192)) = 0;
 }
 
+unsigned int prof_multiplier[NR_CPUS];
+unsigned int prof_counter[NR_CPUS];
 
 /*
  *	Cycle through the processors sending APIC IPI's to boot each.
@@ -912,8 +914,15 @@ __initfunc(void smp_boot_cpus(void))
 	 *	of here now!
 	 */
 
-	if (!smp_found_config)
+	if (!smp_found_config) {
+		/*
+		 * For SMP-simulation on one CPU to work, we must initialize these 
+		 * values for the single CPU here:
+                 */
+	        prof_counter[0] = prof_multiplier[0] = 1;
+
 		return;
+        }
 
 	/*
 	 *	Map the local APIC into kernel space
@@ -1301,9 +1310,6 @@ void smp_flush_tlb(void)
  * multiplier is 1 and it can be changed by writing the new multiplier
  * value into /proc/profile.
  */
-
-unsigned int prof_multiplier[NR_CPUS];
-unsigned int prof_counter[NR_CPUS];
 
 void smp_local_timer_interrupt(struct pt_regs * regs)
 {

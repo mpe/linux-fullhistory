@@ -332,7 +332,7 @@ asmlinkage int sys_swapoff(const char * specialfile)
 	lock_kernel();
 	if (!suser())
 		goto out;
-	err = namei(specialfile,&inode);
+	err = namei(NAM_FOLLOW_LINK, specialfile, &inode);
 	if (err)
 		goto out;
 	prev = -1;
@@ -486,12 +486,12 @@ asmlinkage int sys_swapon(const char * specialfile, int swap_flags)
 	} else {
 		p->prio = --least_priority;
 	}
-	error = namei(specialfile,&swap_inode);
+	error = namei(NAM_FOLLOW_LINK, specialfile, &swap_inode);
 	if (error)
 		goto bad_swap_2;
 	p->swap_file = swap_inode;
 	error = -EBUSY;
-	if (swap_inode->i_count != 1)
+	if (atomic_read(&swap_inode->i_count) != 1)
 		goto bad_swap_2;
 	error = -EINVAL;
 

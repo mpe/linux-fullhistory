@@ -5,7 +5,7 @@
  *	Authors:
  *	Pedro Roque		<roque@di.fc.ul.pt>	
  *
- *	$Id: tcp_ipv6.c,v 1.31 1997/04/29 21:51:23 davem Exp $
+ *	$Id: tcp_ipv6.c,v 1.32 1997/06/04 08:28:58 davem Exp $
  *
  *	Based on: 
  *	linux/net/ipv4/tcp.c
@@ -643,7 +643,6 @@ static void tcp_v6_send_synack(struct sock *sk, struct open_request *req)
 	skb->end_seq = skb->seq + 1;
 	th->seq = ntohl(skb->seq);
 	th->ack_seq = htonl(req->rcv_isn + 1);
-	th->doff = sizeof(*th)/4 + 1;
 
 	/* Don't offer more than they did.
 	 * This way we don't have to memorize who said what.
@@ -669,8 +668,9 @@ static void tcp_v6_send_synack(struct sock *sk, struct open_request *req)
 	th->window = htons(req->rcv_wnd);
 
 	tmp = tcp_syn_build_options(skb, req->mss, req->sack_ok, req->tstamp_ok,
-		req->snd_wscale,req->rcv_wscale);
-	th->doff = sizeof(*th)/4 + (tmp>>2);
+		req->wscale_ok,req->rcv_wscale);
+	skb->csum = 0;
+	th->doff = (sizeof(*th) + tmp)>>2;
 	th->check = tcp_v6_check(th, sizeof(*th) + tmp,
 				 &req->af.v6_req.loc_addr, &req->af.v6_req.rmt_addr,
 				 csum_partial((char *)th, sizeof(*th)+tmp, skb->csum));

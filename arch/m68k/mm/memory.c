@@ -552,39 +552,26 @@ unsigned long mm_ptov (unsigned long paddr)
 void cache_clear (unsigned long paddr, int len)
 {
     if (CPU_IS_040_OR_060) {
+	int tmp;
+
 	/*
 	 * cwe need special treatment for the first page, in case it
 	 * is not page-aligned.
 	 */
-	if (paddr & (PAGE_SIZE - 1)){
+	if ((tmp = -paddr & (PAGE_SIZE - 1))) {
 	    pushcl040(paddr);
-	    if (len <= PAGE_SIZE){
-		if (((paddr + len - 1) ^ paddr) & PAGE_MASK) {
-		    pushcl040(paddr + len - 1);
-		}
+	    if ((len -= tmp) <= 0)
 		return;
-	    }else{
-		len -=PAGE_SIZE;
-		paddr += PAGE_SIZE;
-	    }
+	    paddr += tmp;
 	}
-		
-	while (len > PAGE_SIZE) {
-#if 0
-	    pushcl040(paddr);
-#else
+	tmp = PAGE_SIZE;
+	while ((len -= tmp) >= 0) {
 	    clear040(paddr);
-#endif
-	    len -= PAGE_SIZE;
-	    paddr += PAGE_SIZE;
+	    paddr += tmp;
 	}
-	if (len > 0) {
+	if ((len += tmp))
+	    /* a page boundary gets crossed at the end */
 	    pushcl040(paddr);
-	    if (((paddr + len - 1) ^ paddr) & PAGE_MASK) {
-		/* a page boundary gets crossed at the end */
-		pushcl040(paddr + len - 1);
-	    }
-	}
     }
     else /* 68030 or 68020 */
 	asm volatile ("movec %/cacr,%/d0\n\t"
@@ -605,26 +592,19 @@ void cache_clear (unsigned long paddr, int len)
 void cache_push (unsigned long paddr, int len)
 {
     if (CPU_IS_040_OR_060) {
+	int tmp = PAGE_SIZE;
+
 	/*
          * on 68040 or 68060, push cache lines for pages in the range;
 	 * on the '040 this also invalidates the pushed lines, but not on
 	 * the '060!
 	 */
-	while (len > PAGE_SIZE) {
+	len += paddr & (PAGE_SIZE - 1);
+	do {
 	    pushcli040(paddr);
-	    len -= PAGE_SIZE;
-	    paddr += PAGE_SIZE;
-	    }
-	if (len > 0) {
-	    pushcli040(paddr);
-	    if (((paddr + len - 1) ^ paddr) & PAGE_MASK) {
-		/* a page boundary gets crossed at the end */
-		pushcli040(paddr + len - 1);
-		}
-	    }
-	}
-    
-    
+	    paddr += tmp;
+	} while ((len -= tmp) > 0);
+    }
     /*
      * 68030/68020 have no writeback cache. On the other hand,
      * cache_push is actually a superset of cache_clear (the lines
@@ -654,34 +634,24 @@ void cache_push (unsigned long paddr, int len)
 void cache_push_v (unsigned long vaddr, int len)
 {
     if (CPU_IS_040) {
+	int tmp = PAGE_SIZE;
+
 	/* on 68040, push cache lines for pages in the range */
-	while (len > PAGE_SIZE) {
+	len += vaddr & (PAGE_SIZE - 1);
+	do {
 	    pushv040(vaddr);
-	    len -= PAGE_SIZE;
-	    vaddr += PAGE_SIZE;
-	    }
-	if (len > 0) {
-	    pushv040(vaddr);
-	    if (((vaddr + len - 1) ^ vaddr) & PAGE_MASK) {
-		/* a page boundary gets crossed at the end */
-		pushv040(vaddr + len - 1);
-		}
-	    }
-	}
+	    vaddr += tmp;
+	} while ((len -= tmp) > 0);
+    }
     else if (CPU_IS_060) {
+	int tmp = PAGE_SIZE;
+
 	/* on 68040, push cache lines for pages in the range */
-	while (len > PAGE_SIZE) {
+	len += vaddr & (PAGE_SIZE - 1);
+	do {
 	    pushv060(vaddr);
-	    len -= PAGE_SIZE;
-	    vaddr += PAGE_SIZE;
-	}
-	if (len > 0) {
-	    pushv060(vaddr);
-	    if (((vaddr + len - 1) ^ vaddr) & PAGE_MASK) {
-		/* a page boundary gets crossed at the end */
-		pushv060(vaddr + len - 1);
-	    }
-	}
+	    vaddr += tmp;
+	} while ((len -= tmp) > 0);
     }
     /* 68030/68020 have no writeback cache; still need to clear icache. */
     else /* 68030 or 68020 */

@@ -18,6 +18,8 @@ IO-mapping.txt
 	- how to access I/O mapped memory from within device drivers.
 SMP.txt
 	- notes, and "To Fix" list for multi-processor Linux. (see smp.tex)
+binfmt_misc.txt
+	- info on the kernel support for extra binary formats.
 cdrom/
 	- directory with information on the CD-ROM drivers that Linux has.
 devices.tex

@@ -769,6 +769,7 @@ kmem_cache_create(const char *name, size_t size, size_t offset,
 		printk("%sForcing size word alignment - %s\n", func_nm, name);
 	}
 
+	cachep->c_org_size = size;
 #if	SLAB_DEBUG_SUPPORT
 	if (flags & SLAB_RED_ZONE) {
 		/* There is no point trying to honour cache alignment when redzoning. */
@@ -776,7 +777,6 @@ kmem_cache_create(const char *name, size_t size, size_t offset,
 		size += 2*BYTES_PER_WORD;		/* words for redzone */
 	}
 #endif	/* SLAB_DEBUG_SUPPORT */
-	cachep->c_org_size = size;
 
 	align = BYTES_PER_WORD;
 	if (flags & SLAB_HWCACHE_ALIGN)
@@ -1250,18 +1250,18 @@ opps2:
 opps1:
 	kmem_freepages(cachep, objp); 
 failed:
+	spin_lock_irq(&cachep->c_spinlock);
 	if (local_flags != SLAB_ATOMIC && cachep->c_gfporder) {
 		/* For large order (>0) slabs, we try again.
 		 * Needed because the gfp() functions are not good at giving
 		 * out contigious pages unless pushed (but do not push too hard).
 		 */
-		spin_lock_irq(&cachep->c_spinlock);
 		if (cachep->c_failures++ < 4 && cachep->c_freep == kmem_slab_end(cachep))
 			goto re_try;
 		cachep->c_failures = 1;	/* Memory is low, don't try as hard next time. */
-		cachep->c_growing--;
-		spin_unlock_irqrestore(&cachep->c_spinlock, save_flags);
 	}
+	cachep->c_growing--;
+	spin_unlock_irqrestore(&cachep->c_spinlock, save_flags);
 	return 0;
 }
 
@@ -1467,16 +1467,14 @@ __kmem_cache_free(kmem_cache_t *cachep, void *objp)
 		goto null_addr;
 
 #if	SLAB_DEBUG_SUPPORT
-	if (cachep->c_flags & SLAB_RED_ZONE)
-		objp -= BYTES_PER_WORD;
-#endif	/* SLAB_DEBUG_SUPPORT */
-
-
-#if	SLAB_DEBUG_SUPPORT
 	/* A verify func is called without the cache-lock held. */
 	if (cachep->c_flags & SLAB_DEBUG_INITIAL)
 		goto init_state_check;
 finished_initial:
+
+	if (cachep->c_flags & SLAB_RED_ZONE)
+		goto red_zone;
+return_red:
 #endif	/* SLAB_DEBUG_SUPPORT */
 
 	spin_lock_irqsave(&cachep->c_spinlock, save_flags);
@@ -1511,25 +1509,24 @@ passed_extra:
 		slabp->s_inuse--;
 		bufp->buf_nextp = slabp->s_freep;
 		slabp->s_freep = bufp;
-		if (slabp->s_inuse) {
-			if (bufp->buf_nextp) {
+		if (bufp->buf_nextp) {
+			if (slabp->s_inuse) {
 				/* (hopefully) The most common case. */
 finished:
 #if	SLAB_DEBUG_SUPPORT
-				/* Need to poision the obj while holding the lock. */
-				if (cachep->c_flags & SLAB_POISION)
+				if (cachep->c_flags & SLAB_POISION) {
+					if (cachep->c_flags & SLAB_RED_ZONE)
+						objp += BYTES_PER_WORD;
 					kmem_poision_obj(cachep, objp);
-				if (cachep->c_flags & SLAB_RED_ZONE)
-					goto red_zone;
-return_red:
+				}
 #endif	/* SLAB_DEBUG_SUPPORT */
 				spin_unlock_irqrestore(&cachep->c_spinlock, save_flags);
 				return;
 			}
-			kmem_cache_one_free(cachep, slabp);
+			kmem_cache_full_free(cachep, slabp);
 			goto finished;
 		}
-		kmem_cache_full_free(cachep, slabp);
+		kmem_cache_one_free(cachep, slabp);
 		goto finished;
 	}
 
@@ -1563,20 +1560,20 @@ extra_checks:
 	}
 	goto passed_extra;
 red_zone:
-	/* We hold the cache-lock while checking the red-zone, just incase
-	 * some tries to take this obj from us...
+	/* We do not hold the cache-lock while checking the red-zone.
 	 */
+	objp -= BYTES_PER_WORD;
 	if (xchg((unsigned long *)objp, SLAB_RED_MAGIC1) != SLAB_RED_MAGIC2) {
 		/* Either write before start of obj, or a double free. */
 		kmem_report_free_err("Bad front redzone", objp, cachep);
 	}
-	objp += BYTES_PER_WORD;
-	if (xchg((unsigned long *)(objp+cachep->c_org_size), SLAB_RED_MAGIC1) != SLAB_RED_MAGIC2) {
+	if (xchg((unsigned long *)(objp+cachep->c_org_size+BYTES_PER_WORD), SLAB_RED_MAGIC1) != SLAB_RED_MAGIC2) {
 		/* Either write past end of obj, or a double free. */
 		kmem_report_free_err("Bad rear redzone", objp, cachep);
 	}
 	goto return_red;
 #endif	/* SLAB_DEBUG_SUPPORT */
+
 bad_slab:
 	/* Slab doesn't contain the correct magic num. */
 	if (slabp->s_magic == SLAB_MAGIC_DESTROYED) {
@@ -1712,24 +1709,49 @@ kmem_cache_reap(int pri, int dma, int wait)
 	kmem_slab_t	*slabp;
 	kmem_cache_t	*searchp;
 	kmem_cache_t	*best_cachep;
-	unsigned long	 scan;
-	unsigned long	 reap_level;
+	unsigned int	 scan;
+	unsigned int	 reap_level;
+	static unsigned long	call_count = 0;
 
 	if (in_interrupt()) {
 		printk("kmem_cache_reap() called within int!\n");
 		return 0;
 	}
-	scan = 9-pri;
-	reap_level = pri >> 1;
 
 	/* We really need a test semphore op so we can avoid sleeping when
 	 * !wait is true.
 	 */
 	down(&cache_chain_sem);
+
+	scan = 10-pri;
+	if (pri == 6 && !dma) {
+		if (++call_count == 199) {
+			/* Hack Alert!
+			 * Occassionally we try hard to reap a slab.
+			 */
+			call_count = 0UL;
+			reap_level = 0;
+			scan += 2;
+		} else
+			reap_level = 3;
+	} else {
+		if (pri >= 5) {
+			/* We also come here for dma==1 at pri==6, just
+			 * to try that bit harder (assumes that there are
+			 * less DMAable pages in a system - not always true,
+			 * but this doesn't hurt).
+			 */
+			reap_level = 2;
+		} else
+			reap_level = 0;
+	}
+
 	best_cachep = NULL;
 	searchp = clock_searchp;
 	do {
-		unsigned long	full_free;
+		unsigned int	full_free;
+		unsigned int	dma_flag;
+
 		/* It's safe to test this without holding the cache-lock. */
 		if (searchp->c_flags & SLAB_NO_REAP)
 			goto next;
@@ -1746,6 +1768,7 @@ kmem_cache_reap(int pri, int dma, int wait)
 			printk(KERN_ERR "kmem_reap: Corrupted cache struct for %s\n", searchp->c_name);
 			goto next;
 		}
+		dma_flag = 0;
 		full_free = 0;
 
 		/* Count num of fully free slabs.  Hopefully there are not many,
@@ -1755,8 +1778,13 @@ kmem_cache_reap(int pri, int dma, int wait)
 		while (!slabp->s_inuse && slabp != kmem_slab_end(searchp)) {
 			slabp = slabp->s_prevp;
 			full_free++;
+			if (slabp->s_dma)
+				dma_flag++;
 		}
 		spin_unlock_irq(&searchp->c_spinlock);
+
+		if (dma && !dma_flag)
+			goto next;
 
 		if (full_free) {
 			if (full_free >= 10) {
@@ -1768,10 +1796,8 @@ kmem_cache_reap(int pri, int dma, int wait)
 			 * more than one page per slab (as it can be difficult
 			 * to get high orders from gfp()).
 			 */
-			if (pri == 6) {		/* magic '6' from try_to_free_page() */
-				if (searchp->c_ctor)
-					full_free--;
-				if (full_free && searchp->c_gfporder)
+			if (pri == 6) {	/* magic '6' from try_to_free_page() */
+				if (searchp->c_gfporder || searchp->c_ctor)
 					full_free--;
 			}
 			if (full_free >= reap_level) {
@@ -1796,8 +1822,21 @@ next:
 
 	spin_lock_irq(&best_cachep->c_spinlock);
 	if (!best_cachep->c_growing && !(slabp = best_cachep->c_lastp)->s_inuse && slabp != kmem_slab_end(best_cachep)) {
+		if (dma) {
+			do {
+				if (slabp->s_dma)
+					goto good_dma;
+				slabp = slabp->s_prevp;
+			} while (!slabp->s_inuse && slabp != kmem_slab_end(best_cachep));
+
+			/* Didn't found a DMA slab (there was a free one -
+			 * must have been become active).
+			 */
+			goto dma_fail;
+good_dma:
+		}
 		if (slabp == best_cachep->c_freep)
-			best_cachep->c_freep = kmem_slab_end(best_cachep);
+			best_cachep->c_freep = slabp->s_nextp;
 		kmem_slab_unlink(slabp);
 		SLAB_STATS_INC_REAPED(best_cachep);
 
@@ -1808,6 +1847,7 @@ next:
 		kmem_slab_destroy(best_cachep, slabp);
 		return 1;
 	}
+dma_fail:
 	spin_unlock_irq(&best_cachep->c_spinlock);
 	return 0;
 }

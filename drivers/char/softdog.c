@@ -42,6 +42,10 @@
 
 static int soft_margin = TIMER_MARGIN;	/* in seconds */
 
+#ifdef MODULE
+MODULE_PARM(soft_margin,"i");
+#endif
+
 /*
  *	Our timer
  */

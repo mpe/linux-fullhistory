@@ -1,4 +1,4 @@
-/*  $Id: process.c,v 1.12 1997/05/23 09:35:43 jj Exp $
+/*  $Id: process.c,v 1.17 1997/06/02 06:33:32 davem Exp $
  *  arch/sparc64/kernel/process.c
  *
  *  Copyright (C) 1995, 1996 David S. Miller (davem@caip.rutgers.edu)
@@ -317,6 +317,13 @@ void exit_thread(void)
 #else
 	if(current->flags & PF_USEDFPU) {
 #endif
+		fprs_write(FPRS_FEF);
+		if(current->tss.flags & SPARC_FLAG_32BIT)
+			fpsave32((unsigned long *)&current->tss.float_regs[0],
+				 &current->tss.fsr);
+		else
+			fpsave((unsigned long *)&current->tss.float_regs[0],
+			       &current->tss.fsr);
 #ifndef __SMP__
 		last_task_used_math = NULL;
 #else
@@ -338,6 +345,13 @@ void flush_thread(void)
 #else
 	if(current->flags & PF_USEDFPU) {
 #endif
+		fprs_write(FPRS_FEF);
+		if(current->tss.flags & SPARC_FLAG_32BIT)
+			fpsave32((unsigned long *)&current->tss.float_regs[0],
+				 &current->tss.fsr);
+		else
+			fpsave((unsigned long *)&current->tss.float_regs[0],
+			       &current->tss.fsr);
 #ifndef __SMP__
 		last_task_used_math = NULL;
 #else
@@ -424,6 +438,8 @@ clone_stackframe(struct sparc_stackf *dst, struct sparc_stackf *src)
 	return sp;
 }
 
+/* #define DEBUG_WINFIXUPS */
+
 /* Standard stuff. */
 static inline void shift_window_buffer(int first_win, int last_win,
 				       struct thread_struct *tp)
@@ -440,12 +456,15 @@ static inline void shift_window_buffer(int first_win, int last_win,
 void synchronize_user_stack(void)
 {
 	struct thread_struct *tp = &current->tss;
-	unsigned long window = tp->w_saved;
+	unsigned long window;
 
 	flush_user_windows();
-	if(window) {
+	if((window = tp->w_saved) != 0) {
 		int winsize = REGWIN_SZ;
 
+#ifdef DEBUG_WINFIXUPS
+		printk("sus(%d", (int)window);
+#endif
 		if(tp->flags & SPARC_FLAG_32BIT)
 			winsize = REGWIN32_SZ;
 
@@ -459,18 +478,26 @@ void synchronize_user_stack(void)
 				tp->w_saved--;
 			}
 		} while(window--);
+#ifdef DEBUG_WINFIXUPS
+		printk(")");
+#endif
 	}
 }
 
 void fault_in_user_windows(struct pt_regs *regs)
 {
 	struct thread_struct *tp = &current->tss;
-	unsigned long window = tp->w_saved;
+	unsigned long window;
 	int winsize = REGWIN_SZ;
 
 	if(tp->flags & SPARC_FLAG_32BIT)
 		winsize = REGWIN32_SZ;
-	if(window) {
+	flush_user_windows();
+	window = tp->w_saved;
+#ifdef DEBUG_WINFIXUPS
+	printk("fiuw(%d", (int)window);
+#endif
+	if(window != 0) {
 		window -= 1;
 		do {
 			unsigned long sp = tp->rwbuf_stkptrs[window];
@@ -481,6 +508,9 @@ void fault_in_user_windows(struct pt_regs *regs)
 		} while(window--);
 	}
 	current->tss.w_saved = 0;
+#ifdef DEBUG_WINFIXUPS
+	printk(")");
+#endif
 }
 
 /* Copy a Sparc thread.  The fork() return value conventions
@@ -504,19 +534,17 @@ int copy_thread(int nr, unsigned long clone_flags, unsigned long sp,
 	struct reg_window *new_stack, *old_stack;
 	unsigned long stack_offset;
 
-#if 0
 #ifndef __SMP__
 	if(last_task_used_math == current) {
 #else
 	if(current->flags & PF_USEDFPU) {
 #endif
-		put_psr(get_psr() | PSR_EF);
-		fpsave(&p->tss.float_regs[0], &p->tss.fsr);
+		fprs_write(FPRS_FEF);
+		fpsave((unsigned long *)&p->tss.float_regs[0], &p->tss.fsr);
 #ifdef __SMP__
 		current->flags &= ~PF_USEDFPU;
 #endif
 	}
-#endif	
 
 	/* Calculate offset to stack_frame & pt_regs */
 	stack_offset = ((PAGE_SIZE<<1) - TRACEREG_SZ);

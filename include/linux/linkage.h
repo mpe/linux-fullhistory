@@ -15,6 +15,10 @@
 #define SYMBOL_NAME_LABEL(X) X/**/:
 #endif
 
+#ifdef __mc68000__
+#define __ALIGN .align 4
+#define __ALIGN_STR ".align 4"
+#else
 #if !defined(__i486__) && !defined(__i586__)
 #define __ALIGN .align 4,0x90
 #define __ALIGN_STR ".align 4,0x90"
@@ -22,6 +26,7 @@
 #define __ALIGN .align 16,0x90
 #define __ALIGN_STR ".align 16,0x90"
 #endif /* __i486__/__i586__ */
+#endif /* __mc68000__ */
 
 #ifdef __ASSEMBLY__
 

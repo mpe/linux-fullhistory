@@ -209,6 +209,10 @@ proc read_config { filename } {
 			set cmd "global $var; set $var $value"
 			eval $cmd
 		}
+		if [regexp {([0-9A-Za-z_]+)="([0-9A-Za-z]+)"} $line foo var value] {
+			set cmd "global $var; set $var $value"
+			eval $cmd
+		}
 	}
 	close $file1
 	update_choices
@@ -257,6 +261,16 @@ proc write_hex { file1 file2 varname variable dep } {
 	else {
 		puts $file1 "$varname=$variable"; \
 		puts $file2 "#define $varname 0x$variable"; \
+	}
+}
+
+proc write_string { file1 file2 varname variable dep } {
+	if { $dep == 0 } \
+		then { puts $file1 "# $varname is not set"; \
+		       puts $file2 "#undef $varname"} \
+	else {
+		puts $file1 "$varname=\"$variable\""; \
+		puts $file2 "#define $varname \"$variable\""; \
 	}
 }
 
@@ -310,6 +324,15 @@ proc int { w mnum line text variable } {
 
 proc hex { w mnum line text variable } {
 	int $w $mnum $line $text $variable
+}
+
+proc istring { w mnum line text variable } {
+	frame $w.x$line
+	entry $w.x$line.x -width 18 -relief sunken -borderwidth 2 \
+		-textvariable $variable
+	option_name $w $mnum $line $text $variable
+	pack $w.x$line.x -anchor w -side right -fill y
+	pack $w.x$line -anchor w -fill both -expand on
 }
 
 proc minimenu { w mnum line text variable helpidx } {

@@ -1,5 +1,5 @@
 /*
- *  linux/drivers/block/ide.c	Version 6.02  Mar  11, 1997
+ *  linux/drivers/block/ide.c	Version 6.03  June 4, 1997
  *
  *  Copyright (C) 1994-1997  Linus Torvalds & authors (see below)
  */
@@ -280,6 +280,7 @@
  *			support HDIO_GETGEO for floppies
  * Version 6.02		fix ide_ack_intr() call
  *			check partition table on floppies
+ * Version 6.03		handle bad status bit sequencing in ide_wait_stat()
  *
  *  Some additional driver compile-time options are in ide.h
  *
@@ -1044,27 +1045,24 @@ int ide_wait_stat (ide_drive_t *drive, byte good, byte bad, unsigned long timeou
 	byte stat;
 	unsigned long flags;
 
-test:
-	udelay(1);	/* spec allows drive 400ns to change "BUSY" */
-	if (OK_STAT((stat = GET_STAT()), good, bad))
-		return 0;	/* fast exit for most frequent case */
-	if (!(stat & BUSY_STAT)) {
-		ide_error(drive, "status error", stat);
-		return 1;
-	}
-
-	save_flags(flags);
-	ide_sti();
-	timeout += jiffies;
-	do {
-		if (!((stat = GET_STAT()) & BUSY_STAT)) {
-			restore_flags(flags);
-			goto test;
+	udelay(1);	/* spec allows drive 400ns to assert "BUSY" */
+	if ((stat = GET_STAT()) & BUSY_STAT) {
+		save_flags(flags);
+		ide_sti();
+		timeout += jiffies;
+		while ((stat = GET_STAT()) & BUSY_STAT) {
+			if (jiffies > timeout) {
+				restore_flags(flags);
+				ide_error(drive, "status timeout", stat);
+				return 1;
+			}
 		}
-	} while (jiffies <= timeout);
-
-	restore_flags(flags);
-	ide_error(drive, "status timeout", GET_STAT());
+		restore_flags(flags);
+	}
+	udelay(1);	/* allow status to settle, then read it again */
+	if (OK_STAT((stat = GET_STAT()), good, bad))
+		return 0;
+	ide_error(drive, "status error", stat);
 	return 1;
 }
 

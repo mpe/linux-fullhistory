@@ -10,10 +10,10 @@
 L_TARGET := filesystems.a
 L_OBJS    = $(join $(SUB_DIRS),$(SUB_DIRS:%=/%.o))
 O_TARGET := fs.o
-O_OBJS    = open.o read_write.o inode.o devices.o file_table.o buffer.o \
+O_OBJS    = open.o read_write.o devices.o file_table.o buffer.o \
 		super.o  block_dev.o stat.o exec.o pipe.o namei.o fcntl.o \
 		ioctl.o readdir.o select.o fifo.o locks.o filesystems.o \
-		dcache.o $(BINFMTS) 
+		inode.o dcache.o attr.o $(BINFMTS) 
 
 MOD_LIST_NAME := FS_MODULES
 ALL_SUB_DIRS = minix ext2 fat msdos vfat proc isofs nfs umsdos \
@@ -23,6 +23,10 @@ ifeq ($(CONFIG_QUOTA),y)
 O_OBJS += dquot.o
 else
 O_OBJS += noquot.o
+endif
+
+ifeq ($(CONFIG_TRANS_NAMES),y)
+O_OBJS += nametrans.o
 endif
 
 ifeq ($(CONFIG_MINIX_FS),y)
@@ -210,6 +214,14 @@ else
   endif
 endif
 
+
+ifeq ($(CONFIG_BINFMT_MISC),y)
+BINFMTS += binfmt_misc.o
+else
+  ifeq ($(CONFIG_BINFMT_MISC),m)
+  M_OBJS += binfmt_misc.o
+  endif
+endif
 
 # binfmt_script is always there
 BINFMTS += binfmt_script.o

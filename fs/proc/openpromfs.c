@@ -1,4 +1,4 @@
-/* $Id: openpromfs.c,v 1.13 1997/04/03 08:49:25 davem Exp $
+/* $Id: openpromfs.c,v 1.15 1997/06/05 01:28:11 davem Exp $
  * openpromfs.c: /proc/openprom handling routines
  *
  * Copyright (C) 1996 Jakub Jelinek (jj@sunsite.mff.cuni.cz)
@@ -484,7 +484,6 @@ static struct inode_operations openpromfs_prop_inode_ops = {
 	NULL,			/* mknod */
 	NULL,			/* rename */
 	NULL,			/* readlink */
-	NULL,			/* follow_link */
 	NULL,			/* readpage */
 	NULL,			/* writepage */
 	NULL,			/* bmap */
@@ -517,7 +516,6 @@ static struct inode_operations openpromfs_nodenum_inode_ops = {
 	NULL,			/* mknod */
 	NULL,			/* rename */
 	NULL,			/* readlink */
-	NULL,			/* follow_link */
 	NULL,			/* readpage */
 	NULL,			/* writepage */
 	NULL,			/* bmap */
@@ -550,7 +548,6 @@ static struct inode_operations openprom_alias_inode_operations = {
 	NULL,			/* mknod */
 	NULL,			/* rename */
 	NULL,			/* readlink */
-	NULL,			/* follow_link */
 	NULL,			/* readpage */
 	NULL,			/* writepage */
 	NULL,			/* bmap */
@@ -1015,7 +1012,7 @@ void openpromfs_use (struct inode *inode, int inc)
 	static int usec = 0;
 
 	if (inc) {
-		if (inode->i_count == 1)
+		if (atomic_read(&inode->i_count) == 1)
 			usec++;
 		else if (root_fresh && inode->i_ino == PROC_OPENPROM_FIRST) {
 			root_fresh = 0;
@@ -1028,10 +1025,10 @@ void openpromfs_use (struct inode *inode, int inc)
 			usec--;
 	}
 	printk ("openpromfs_use: %d %d %d %d\n",
-		inode->i_ino, inc, usec, inode->i_count);
+		inode->i_ino, inc, usec, atomic_read(&inode->i_count));
 #else
 	if (inc) {
-		if (inode->i_count == 1)
+		if (atomic_read(&inode->i_count) == 1)
 			MOD_INC_USE_COUNT;
 		else if (root_fresh && inode->i_ino == PROC_OPENPROM_FIRST) {
 			root_fresh = 0;

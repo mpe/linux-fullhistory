@@ -13,9 +13,9 @@
 #define OPC_INTL	0x11
 #define OPC_INTS	0x12
 #define OPC_INTM	0x13
-#define OPC_FLTV	0x14
-#define OPC_FLTI	0x15
-#define OPC_FLTL	0x16
+#define OPC_FLTV	0x15
+#define OPC_FLTI	0x16
+#define OPC_FLTL	0x17
 
 #define OPC_MISC	0x18
 
@@ -298,19 +298,26 @@ alpha_fp_emul (unsigned long pc)
 	 *
 	 *	- Set the appropriate bits in the FPCR
 	 *	- If the specified exception is enabled in the FPCR,
-	 *	  return.  The caller (mxr_signal_handler) will dispatch
+	 *	  return.  The caller (entArith) will dispatch
 	 *	  the appropriate signal to the translated program.
+	 *
+	 * In addition, properly track the exception state in software
+	 * as described in the Alpha Architectre Handbook section 4.7.7.3.
 	 */
 	if (res) {
-		fpcr |= FPCR_SUM | res;
+		/* Record exceptions in software control word.  */
+		current->tss.flags = fpcw |= res >> 35;
+
+		/* Update hardware control register */
+		fpcr &= (~FPCR_MASK | FPCR_DYN_MASK);
+		fpcr |= ieee_swcr_to_fpcr(fpcw | (~fpcw&IEEE_STATUS_MASK)>>16);
 		wrfpcr(fpcr);
-		if (((res & FPCR_INV) && (fpcw & IEEE_TRAP_ENABLE_INV)) ||
-		    ((res & FPCR_DZE) && (fpcw & IEEE_TRAP_ENABLE_DZE)) ||
-		    ((res & FPCR_OVF) && (fpcw & IEEE_TRAP_ENABLE_OVF)) ||
-		    ((res & FPCR_UNF) && (fpcw & IEEE_TRAP_ENABLE_UNF)) ||
-		    ((res & FPCR_INE) && (fpcw & IEEE_TRAP_ENABLE_INE)))
+
+		/* Do we generate a signal?  */
+		if (res >> 51 & fpcw & IEEE_TRAP_ENABLE_MASK)
 			return 0;
 	}
+
 	/*
 	 * Whoo-kay... we got this far, and we're not generating a signal
 	 * to the translated program.  All that remains is to write the
@@ -326,6 +333,7 @@ alpha_fp_emul_imprecise (struct pt_regs *regs, unsigned long write_mask)
 {
 	unsigned long trigger_pc = regs->pc - 4;
 	unsigned long insn, opcode, rc;
+
 	/*
 	 * Turn off the bits corresponding to registers that are the
 	 * target of instructions that set bits in the exception

@@ -1,4 +1,4 @@
-/*  $Id: signal.c,v 1.4 1997/05/27 06:28:05 davem Exp $
+/*  $Id: signal.c,v 1.6 1997/05/29 12:44:48 jj Exp $
  *  arch/sparc64/kernel/signal.c
  *
  *  Copyright (C) 1991, 1992  Linus Torvalds
@@ -193,13 +193,17 @@ save_fpu_state(struct pt_regs *regs, __siginfo_fpu_t *fpu)
 {
 #ifdef __SMP__
 	if (current->flags & PF_USEDFPU) {
-		fpsave(&current->tss.float_regs[0], &current->tss.fsr);
+		fprs_write(FPRS_FEF);
+		fpsave((unsigned long *)&current->tss.float_regs[0],
+		       &current->tss.fsr);
 		regs->tstate &= ~(TSTATE_PEF);
 		current->flags &= ~(PF_USEDFPU);
 	}
 #else
 	if (current == last_task_used_math) {
-		fpsave((unsigned long *)&current->tss.float_regs[0], &current->tss.fsr);
+		fprs_write(FPRS_FEF);
+		fpsave((unsigned long *)&current->tss.float_regs[0],
+		       &current->tss.fsr);
 		last_task_used_math = 0;
 		regs->tstate &= ~(TSTATE_PEF);
 	}

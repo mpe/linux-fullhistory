@@ -229,7 +229,11 @@ static const char *version = "defxx.c:v1.04 09/16/96  Lawrence V. Stefani (stefa
 #define DYNAMIC_BUFFERS 1
 
 #define SKBUFF_RX_COPYBREAK 200
-#define NEW_SKB_SIZE (PI_RCV_DATA_K_SIZE_MAX)
+/*
+ * NEW_SKB_SIZE = PI_RCV_DATA_K_SIZE_MAX+128 to allow 128 byte
+ * alignment for compatibility with old EISA boards.
+ */
+#define NEW_SKB_SIZE (PI_RCV_DATA_K_SIZE_MAX+128)
 
 /* Define global routines */
 
@@ -2944,6 +2948,12 @@ void dfx_rcv_init(
 			bp->descr_block_virt->rcv_data[i+j].long_0 = (u32) (PI_RCV_DESCR_M_SOP |
 				((PI_RCV_DATA_K_SIZE_MAX / PI_ALIGN_K_RCV_DATA_BUFF) << PI_RCV_DESCR_V_SEG_LEN));
 			newskb = dev_alloc_skb(NEW_SKB_SIZE);
+			/*
+			 * align to 128 bytes for compatibility with
+			 * the old EISA boards.
+			 */
+			newskb->data = (char *)((unsigned long)
+						(newskb->data+127) & ~128);
 			bp->descr_block_virt->rcv_data[i+j].long_1 = virt_to_bus(newskb->data);
 			/*
 			 * p_rcv_buff_va is only used inside the
@@ -3012,8 +3022,6 @@ void dfx_rcv_queue_process(
 	u32					descr, pkt_len;		/* FMC descriptor field and packet length */
 	struct sk_buff		*skb;				/* pointer to a sk_buff to hold incoming packet data */
 
-	static int testing_dyn;
-
 	/* Service all consumed LLC receive frames */
 
 	p_type_2_cons = (PI_TYPE_2_CONSUMER *)(&bp->cons_block_virt->xmt_rcv_data);
@@ -3056,18 +3064,12 @@ void dfx_rcv_queue_process(
 					newskb = dev_alloc_skb(NEW_SKB_SIZE);
 					if (newskb){
 						rx_in_place = 1;
-#define JES_TESTING
-#ifdef JES_TESTING
-						if(testing_dyn++ < 5)
-						  printk("Skipping a memcpy\n");
+
+						newskb->data = (char *)((unsigned long)(newskb->data+127) & ~128);
 						skb = (struct sk_buff *)bp->p_rcv_buff_va[entry];
 						skb->data += RCV_BUFF_K_PADDING;
 						bp->p_rcv_buff_va[entry] = (char *)newskb;
 						bp->descr_block_virt->rcv_data[entry].long_1 = virt_to_bus(newskb->data);
-#else
-						memcpy(newskb->data, p_buff + RCV_BUFF_K_PADDING, pkt_len+3);
-						skb = newskb;
-#endif
 					} else
 						skb = 0;
 				} else
@@ -3240,12 +3242,14 @@ int dfx_xmt_queue_pkt(
 	p_xmt_descr = &(bp->descr_block_virt->xmt_data[prod]);
 
 	/*
-	 * Get pointer to auxiliary queue entry to contain information for this packet.
+	 * Get pointer to auxiliary queue entry to contain information
+	 * for this packet.
 	 *
-	 * Note: The current xmt producer index will become the current xmt completion
-	 *       index when we complete this packet later on.  So, we'll get the
-	 *       pointer to the next auxiliary queue entry now before we bump the
-	 *		 producer index.
+	 * Note: The current xmt producer index will become the
+	 *	 current xmt completion index when we complete this
+	 *	 packet later on.  So, we'll get the pointer to the
+	 *	 next auxiliary queue entry now before we bump the
+	 *	 producer index.
 	 */
 
 	p_xmt_drv_descr = &(bp->xmt_drv_descr_blk[prod++]);	/* also bump producer index */
@@ -3290,15 +3294,15 @@ int dfx_xmt_queue_pkt(
 	 * Verify that descriptor is actually available
 	 *
 	 * Note: If descriptor isn't available, return 1 which tells
-	 *		 the upper layer to requeue the packet for later
-	 *		 transmission.
+	 *	 the upper layer to requeue the packet for later
+	 *	 transmission.
 	 *
 	 *       We need to ensure that the producer never reaches the
-	 *		 completion, except to indicate that the queue is empty.
+	 *	 completion, except to indicate that the queue is empty.
 	 */
 
 	if (prod == bp->rcv_xmt_reg.index.xmt_comp)
-		return(1);						/* requeue packet for later */
+		return(1);			/* requeue packet for later */
 
 	/*
 	 * Save info for this packet for xmt done indication routine
@@ -3311,9 +3315,9 @@ int dfx_xmt_queue_pkt(
 	 * one (1) for each completed packet.
 	 *
 	 * Note: If this assumption changes and we're presented with
-	 *		 an inconsistent number of transmit fragments for packet
-	 *		 data, we'll need to modify this code to save the current
-	 *		 transmit producer index.
+	 *	 an inconsistent number of transmit fragments for packet
+	 *	 data, we'll need to modify this code to save the current
+	 *	 transmit producer index.
 	 */
 
 	p_xmt_drv_descr->p_skb = skb;

@@ -417,59 +417,6 @@ out:
 	return mylen;
 }
 
-static int
-romfs_follow_link(struct inode *dir, struct inode *inode,
-	int flag, int mode, struct inode **res_inode)
-{
-	int error, len;
-	char *buf;
-
-	*res_inode = NULL;
-	if (!dir) {
-		dir = current->fs->root;
-		dir->i_count++;
-	}
-
-	if (!inode) {
-		iput(dir);
-		return -ENOENT;
-	}
-	if (!S_ISLNK(inode->i_mode)) {
-		*res_inode = inode;
-		iput(dir);
-		return 0;
-	}
-	if (current->link_count > 5) {
-		iput(inode);
-		iput(dir);
-		return -ELOOP;
-	}
-
-	/* Eek. Short enough. */
-	len = inode->i_size;
-	if (!(buf = kmalloc(len+1, GFP_KERNEL))) {
-		iput(inode);
-		iput(dir);
-		/* correct?  spin? */
-		return -EAGAIN;
-	}
-	error = romfs_copyfrom(inode, buf, inode->u.romfs_i.i_dataoffset, len);
-	if (error != len) {
-		iput(inode);
-		iput(dir);
-		error = -EIO;
-	} else {
-		iput(inode);
-		buf[len] = 0;
-		current->link_count++;
-		error = open_namei(buf, flag, mode, res_inode, dir);
-		current->link_count--;
-	}
-
-	kfree(buf);
-	return error;
-}
-
 /* Mapping from our types to the kernel */
 
 static struct file_operations romfs_file_operations = {
@@ -500,7 +447,6 @@ static struct inode_operations romfs_file_inode_operations = {
 	NULL,			/* mknod */
 	NULL,			/* rename */
 	NULL,			/* readlink */
-	NULL,			/* follow_link */
 	romfs_readpage,		/* readpage */
 	NULL,			/* writepage */
 	NULL,			/* bmap -- not really */
@@ -525,7 +471,7 @@ static struct file_operations romfs_dir_operations = {
 	NULL			/* revalidate */
 };
 
-/* Merged dir/symlink op table.  readdir/lookup/readlink/follow_link
+/* Merged dir/symlink op table.  readdir/lookup/readlink
  * will protect from type mismatch.
  */
 
@@ -541,7 +487,6 @@ static struct inode_operations romfs_dirlink_inode_operations = {
 	NULL,			/* mknod */
 	NULL,			/* rename */
 	romfs_readlink,		/* readlink */
-	romfs_follow_link,	/* follow_link */
 	NULL,			/* readpage */
 	NULL,			/* writepage */
 	NULL,			/* bmap */
@@ -638,7 +583,10 @@ static struct super_operations romfs_ops = {
 };
 
 static struct file_system_type romfs_fs_type = {
-	romfs_read_super, "romfs", 1, NULL
+	"romfs",
+	(FS_REQUIRES_DEV | FS_NO_DCACHE),	/* Can dcache be used? */
+	romfs_read_super,
+	NULL
 };
 
 __initfunc(int init_romfs_fs(void))

@@ -140,6 +140,7 @@ static inline void move_last_runqueue(struct task_struct * p)
 	prev->next_run = p;
 }
 
+#ifdef __SMP__
 /*
  * The tasklist_lock protects the linked list of processes.
  *
@@ -154,6 +155,7 @@ static inline void move_last_runqueue(struct task_struct * p)
 rwlock_t tasklist_lock = RW_LOCK_UNLOCKED;
 spinlock_t scheduler_lock = SPIN_LOCK_UNLOCKED;
 static spinlock_t runqueue_lock = SPIN_LOCK_UNLOCKED;
+#endif
 
 /*
  * Wake up a process. Put it on the run-queue if it's not

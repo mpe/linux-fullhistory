@@ -11,6 +11,7 @@
  * management can be a bitch. See 'mm/mm.c': 'copy_page_tables()'
  */
 
+#include <linux/init.h>
 #include <linux/errno.h>
 #include <linux/sched.h>
 #include <linux/kernel.h>
@@ -36,6 +37,9 @@ int last_pid=0;
 /* SLAB cache for mm_struct's. */
 kmem_cache_t *mm_cachep;
 
+/* SLAB cache for files structs */
+kmem_cache_t *files_cachep; 
+
 struct task_struct *pidhash[PIDHASH_SZ];
 spinlock_t pidhash_lock = SPIN_LOCK_UNLOCKED;
 
@@ -52,7 +56,10 @@ static struct uid_taskcount {
 	unsigned short uid;
 	int task_count;
 } *uidhash[UIDHASH_SZ];
+
+#ifdef __SMP__
 static spinlock_t uidhash_lock = SPIN_LOCK_UNLOCKED;
+#endif
 
 kmem_cache_t *uid_cachep;
 
@@ -116,7 +123,7 @@ int charge_uid(struct task_struct *p, int count)
 	return 0;
 }
 
-void uidcache_init(void)
+__initfunc(void uidcache_init(void))
 {
 	int i;
 
@@ -148,8 +155,10 @@ static inline int find_empty_process(void)
 	return -EAGAIN;
 }
 
+#ifdef __SMP__
 /* Protects next_safe and last_pid. */
 static spinlock_t lastpid_lock = SPIN_LOCK_UNLOCKED;
+#endif
 
 static int get_pid(unsigned long flags)
 {
@@ -216,7 +225,7 @@ static inline int dup_mmap(struct mm_struct * mm)
 		tmp->vm_next = NULL;
 		inode = tmp->vm_inode;
 		if (inode) {
-			inode->i_count++;
+			atomic_inc(&inode->i_count);
 			if (tmp->vm_flags & VM_DENYWRITE)
 				inode->i_writecount--;
       
@@ -294,15 +303,35 @@ static inline int copy_fs(unsigned long clone_flags, struct task_struct * tsk)
 	tsk->fs->count = 1;
 	tsk->fs->umask = current->fs->umask;
 	if ((tsk->fs->root = current->fs->root))
-		tsk->fs->root->i_count++;
+		atomic_inc(&tsk->fs->root->i_count);
 	if ((tsk->fs->pwd = current->fs->pwd))
-		tsk->fs->pwd->i_count++;
+		atomic_inc(&tsk->fs->pwd->i_count);
 	return 0;
+}
+
+/* return value is only accurate by +-sizeof(long)*8 fds */ 
+/* XXX make this architecture specific */
+static inline int __copy_fdset(unsigned long *d, unsigned long *src)
+{
+	int i; 
+	unsigned long *p = src; 
+	unsigned long *max = src; 
+
+	for (i = __FDSET_LONGS; i; --i) {
+		if ((*d++ = *p++) != 0) 
+			max = p; 
+	}
+	return (max - src)*sizeof(long)*8; 
+}
+
+static inline int copy_fdset(fd_set *dst, fd_set *src)
+{
+	return __copy_fdset(dst->fds_bits, src->fds_bits);  
 }
 
 static inline int copy_files(unsigned long clone_flags, struct task_struct * tsk)
 {
-	int i;
+	int i;  
 	struct files_struct *oldf, *newf;
 	struct file **old_fds, **new_fds;
 
@@ -312,18 +341,18 @@ static inline int copy_files(unsigned long clone_flags, struct task_struct * tsk
 		return 0;
 	}
 
-	newf = kmalloc(sizeof(*newf), GFP_KERNEL);
+	newf = kmem_cache_alloc(files_cachep, SLAB_KERNEL);
 	tsk->files = newf;
-	if (!newf)
+	if (!newf) 
 		return -1;
 
 	newf->count = 1;
 	newf->close_on_exec = oldf->close_on_exec;
-	newf->open_fds = oldf->open_fds;
+	i = copy_fdset(&newf->open_fds,&oldf->open_fds);
 
 	old_fds = oldf->fd;
 	new_fds = newf->fd;
-	for (i = NR_OPEN; i != 0; i--) {
+	for (; i != 0; i--) {
 		struct file * f = *old_fds;
 		old_fds++;
 		*new_fds = f;
@@ -469,4 +498,22 @@ bad_fork:
 fork_out:
 	unlock_kernel();
 	return error;
+}
+
+static void files_ctor(void *fp, kmem_cache_t *cachep, unsigned long flags)
+{
+	struct files_struct *f = fp;
+
+	memset(f, 0, sizeof(*f));
+}
+
+__initfunc(void filescache_init(void))
+{
+	files_cachep = kmem_cache_create("files_cache", 
+					 sizeof(struct files_struct),
+					 0, 
+					 SLAB_HWCACHE_ALIGN,
+					 files_ctor, NULL);
+	if (!files_cachep) 
+		panic("Cannot create files cache"); 
 }

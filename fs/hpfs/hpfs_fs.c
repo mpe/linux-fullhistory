@@ -175,7 +175,6 @@ static const struct inode_operations hpfs_file_iops =
 	NULL,				/* mknod */
 	NULL,				/* rename */
 	NULL,				/* readlink */
-	NULL,				/* follow_link */
 	generic_readpage,		/* readpage */
 	NULL,				/* writepage */
 	(int (*)(struct inode *, int))
@@ -219,7 +218,6 @@ static const struct inode_operations hpfs_dir_iops =
 	NULL,				/* mknod */
 	NULL,				/* rename */
 	NULL,				/* readlink */
-	NULL,				/* follow_link */
 	NULL,				/* readpage */
 	NULL,				/* writepage */
 	NULL,				/* bmap */
@@ -1746,7 +1744,10 @@ static void brelse4(struct quad_buffer_head *qbh)
 }
 
 static struct file_system_type hpfs_fs_type = {
-        hpfs_read_super, "hpfs", 1, NULL
+	"hpfs", 
+	FS_REQUIRES_DEV,
+        hpfs_read_super,
+	NULL
 };
 
 __initfunc(int init_hpfs_fs(void))
