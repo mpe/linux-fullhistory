@@ -365,10 +365,11 @@ static void scsi_single_lun_run(struct scsi_device *current_sdev)
 {
 	struct Scsi_Host *shost = current_sdev->host;
 	struct scsi_device *sdev, *tmp;
+	struct scsi_target *starget = scsi_target(current_sdev);
 	unsigned long flags;
 
 	spin_lock_irqsave(shost->host_lock, flags);
-	scsi_target(current_sdev)->starget_sdev_user = NULL;
+	starget->starget_sdev_user = NULL;
 	spin_unlock_irqrestore(shost->host_lock, flags);
 
 	/*
@@ -380,10 +381,12 @@ static void scsi_single_lun_run(struct scsi_device *current_sdev)
 	blk_run_queue(current_sdev->request_queue);
 
 	spin_lock_irqsave(shost->host_lock, flags);
-	if (scsi_target(current_sdev)->starget_sdev_user)
+	if (starget->starget_sdev_user)
 		goto out;
-	list_for_each_entry_safe(sdev, tmp, &current_sdev->same_target_siblings,
+	list_for_each_entry_safe(sdev, tmp, &starget->devices,
 			same_target_siblings) {
+		if (sdev == current_sdev)
+			continue;
 		if (scsi_device_get(sdev))
 			continue;
 
@@ -1932,3 +1935,55 @@ scsi_internal_device_unblock(struct scsi_device *sdev)
 	return 0;
 }
 EXPORT_SYMBOL_GPL(scsi_internal_device_unblock);
+
+static void
+device_block(struct scsi_device *sdev, void *data)
+{
+	scsi_internal_device_block(sdev);
+}
+
+static int
+target_block(struct device *dev, void *data)
+{
+	if (scsi_is_target_device(dev))
+		starget_for_each_device(to_scsi_target(dev), NULL,
+					device_block);
+	return 0;
+}
+
+void
+scsi_target_block(struct device *dev)
+{
+	if (scsi_is_target_device(dev))
+		starget_for_each_device(to_scsi_target(dev), NULL,
+					device_block);
+	else
+		device_for_each_child(dev, NULL, target_block);
+}
+EXPORT_SYMBOL_GPL(scsi_target_block);
+
+static void
+device_unblock(struct scsi_device *sdev, void *data)
+{
+	scsi_internal_device_unblock(sdev);
+}
+
+static int
+target_unblock(struct device *dev, void *data)
+{
+	if (scsi_is_target_device(dev))
+		starget_for_each_device(to_scsi_target(dev), NULL,
+					device_unblock);
+	return 0;
+}
+
+void
+scsi_target_unblock(struct device *dev)
+{
+	if (scsi_is_target_device(dev))
+		starget_for_each_device(to_scsi_target(dev), NULL,
+					device_unblock);
+	else
+		device_for_each_child(dev, NULL, target_unblock);
+}
+EXPORT_SYMBOL_GPL(scsi_target_unblock);
