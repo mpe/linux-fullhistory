@@ -13,8 +13,8 @@
  *  vsyscalls. One vsyscall can reserve more than 1 slot to avoid
  *  jumping out of line if necessary.
  *
- *  Note: the concept clashes with user mode linux. If you use UML just
- *  set the kernel.vsyscall sysctl to 0.
+ *  Note: the concept clashes with user mode linux. If you use UML and
+ *  want per guest time just set the kernel.vsyscall64 sysctl to 0.
  */
 
 /*
@@ -41,6 +41,7 @@
 #include <linux/timer.h>
 #include <linux/seqlock.h>
 #include <linux/jiffies.h>
+#include <linux/sysctl.h>
 
 #include <asm/vsyscall.h>
 #include <asm/pgtable.h>
@@ -107,7 +108,7 @@ static force_inline void do_get_tz(struct timezone * tz)
 static force_inline int gettimeofday(struct timeval *tv, struct timezone *tz)
 {
 	int ret;
-	asm volatile("syscall"
+	asm volatile("vsysc2: syscall"
 		: "=a" (ret)
 		: "0" (__NR_gettimeofday),"D" (tv),"S" (tz) : __syscall_clobber );
 	return ret;
@@ -116,7 +117,7 @@ static force_inline int gettimeofday(struct timeval *tv, struct timezone *tz)
 static force_inline long time_syscall(long *t)
 {
 	long secs;
-	asm volatile("syscall"
+	asm volatile("vsysc1: syscall"
 		: "=a" (secs)
 		: "0" (__NR_time),"D" (t) : __syscall_clobber);
 	return secs;
@@ -154,6 +155,69 @@ static long __vsyscall(3) venosys_1(void)
 	return -ENOSYS;
 }
 
+#ifdef CONFIG_SYSCTL
+
+#define SYSCALL 0x050f
+#define NOP2    0x9090
+
+/*
+ * NOP out syscall in vsyscall page when not needed.
+ */
+static int vsyscall_sysctl_change(ctl_table *ctl, int write, struct file * filp,
+                        void __user *buffer, size_t *lenp, loff_t *ppos)
+{
+	extern u16 vsysc1, vsysc2;
+	u16 *map1, *map2;
+	int ret = proc_dointvec(ctl, write, filp, buffer, lenp, ppos);
+	if (!write)
+		return ret;
+	/* gcc has some trouble with __va(__pa()), so just do it this
+	   way. */
+	map1 = ioremap(__pa_symbol(&vsysc1), 2);
+	if (!map1)
+		return -ENOMEM;
+	map2 = ioremap(__pa_symbol(&vsysc2), 2);
+	if (!map2) {
+		ret = -ENOMEM;
+		goto out;
+	}
+	if (!sysctl_vsyscall) {
+		*map1 = SYSCALL;
+		*map2 = SYSCALL;
+	} else {
+		*map1 = NOP2;
+		*map2 = NOP2;
+	}
+	iounmap(map2);
+out:
+	iounmap(map1);
+	return ret;
+}
+
+static int vsyscall_sysctl_nostrat(ctl_table *t, int __user *name, int nlen,
+				void __user *oldval, size_t __user *oldlenp,
+				void __user *newval, size_t newlen,
+				void **context)
+{
+	return -ENOSYS;
+}
+
+static ctl_table kernel_table2[] = {
+	{ .ctl_name = 99, .procname = "vsyscall64",
+	  .data = &sysctl_vsyscall, .maxlen = sizeof(int), .mode = 0644,
+	  .strategy = vsyscall_sysctl_nostrat,
+	  .proc_handler vsyscall_sysctl_change },
+	{ 0, }
+};
+
+static ctl_table kernel_root_table2[] = {
+	{ .ctl_name = CTL_KERN, .procname = "kernel", .mode = 0555,
+	  .child = kernel_table2 },
+	{ 0 },
+};
+
+#endif
+
 static void __init map_vsyscall(void)
 {
 	extern char __vsyscall_0;
@@ -170,7 +234,7 @@ static int __init vsyscall_init(void)
 	BUG_ON((VSYSCALL_ADDR(0) != __fix_to_virt(VSYSCALL_FIRST_PAGE)));
 	map_vsyscall();
 	sysctl_vsyscall = 1;
-
+	register_sysctl_table(kernel_root_table2, 0);
 	return 0;
 }
 
