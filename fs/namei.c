@@ -255,7 +255,6 @@ static struct dentry * real_lookup(struct dentry * parent, struct qstr * name)
 		}
 		up(&dir->i_sem);
 	}
-	up(&dir->i_sem);
 	return result;
 }
 
@@ -389,6 +388,9 @@ struct dentry * lookup_dentry(const char * name, struct dentry * base, int follo
 		struct qstr this;
 		char c, follow;
 
+		dentry = base;
+		if (IS_ERR(base))
+			break;
 		dentry = ERR_PTR(-ENOENT);
 		if (!base->d_inode)
 			break;

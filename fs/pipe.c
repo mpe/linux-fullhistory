@@ -391,7 +391,6 @@ static struct inode * get_pipe_inode(void)
 		} else {
 			PIPE_BASE(*inode) = (char *) page;
 			inode->i_op = &pipe_inode_operations;
-			inode->i_count = 1;
 			PIPE_WAIT(*inode) = NULL;
 			PIPE_START(*inode) = PIPE_LEN(*inode) = 0;
 			PIPE_RD_OPENERS(*inode) = PIPE_WR_OPENERS(*inode) = 0;
@@ -404,7 +403,7 @@ static struct inode * get_pipe_inode(void)
 			 * that it already _is_ on the dirty list.
 			 */
 			inode->i_state = 1 << I_DIRTY;
-			inode->i_mode |= S_IFIFO | S_IRUSR | S_IWUSR;
+			inode->i_mode = S_IFIFO | S_IRUSR | S_IWUSR;
 			inode->i_uid = current->fsuid;
 			inode->i_gid = current->fsgid;
 			inode->i_atime = inode->i_mtime = inode->i_ctime = CURRENT_TIME;

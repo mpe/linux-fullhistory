@@ -156,6 +156,8 @@ static int load_inode_bitmap (struct super_block * sb,
 
 void ext2_free_inode (struct inode * inode)
 {
+	int is_directory;
+	unsigned long ino;
 	struct super_block * sb;
 	struct buffer_head * bh;
 	struct buffer_head * bh2;
@@ -185,30 +187,38 @@ void ext2_free_inode (struct inode * inode)
 		return;
 	}
 
-	ext2_debug ("freeing inode %lu\n", inode->i_ino);
+	ino = inode->i_ino;
+	ext2_debug ("freeing inode %lu\n", ino);
 
 	sb = inode->i_sb;
 	lock_super (sb);
-	if (inode->i_ino < EXT2_FIRST_INO(sb) ||
-	    inode->i_ino > le32_to_cpu(sb->u.ext2_sb.s_es->s_inodes_count)) {
+	if (ino < EXT2_FIRST_INO(sb) ||
+	    ino > le32_to_cpu(sb->u.ext2_sb.s_es->s_inodes_count)) {
 		ext2_error (sb, "free_inode",
 			    "reserved inode or nonexistent inode");
 		unlock_super (sb);
 		return;
 	}
 	es = sb->u.ext2_sb.s_es;
-	block_group = (inode->i_ino - 1) / EXT2_INODES_PER_GROUP(sb);
-	bit = (inode->i_ino - 1) % EXT2_INODES_PER_GROUP(sb);
+	block_group = (ino - 1) / EXT2_INODES_PER_GROUP(sb);
+	bit = (ino - 1) % EXT2_INODES_PER_GROUP(sb);
 	bitmap_nr = load_inode_bitmap (sb, block_group);
 	bh = sb->u.ext2_sb.s_inode_bitmap[bitmap_nr];
+
+	is_directory = S_ISDIR(inode->i_mode);
+
+	if (sb->dq_op)
+		sb->dq_op->free_inode (inode, 1);
+	clear_inode (inode);
+
 	if (!ext2_clear_bit (bit, bh->b_data))
 		ext2_warning (sb, "ext2_free_inode",
-			      "bit already cleared for inode %lu", inode->i_ino);
+			      "bit already cleared for inode %lu", ino);
 	else {
 		gdp = get_group_desc (sb, block_group, &bh2);
 		gdp->bg_free_inodes_count =
 			cpu_to_le16(le16_to_cpu(gdp->bg_free_inodes_count) + 1);
-		if (S_ISDIR(inode->i_mode))
+		if (is_directory)
 			gdp->bg_used_dirs_count =
 				cpu_to_le16(le16_to_cpu(gdp->bg_used_dirs_count) - 1);
 		mark_buffer_dirty(bh2, 1);
@@ -221,10 +231,7 @@ void ext2_free_inode (struct inode * inode)
 		ll_rw_block (WRITE, 1, &bh);
 		wait_on_buffer (bh);
 	}
-	if (sb->dq_op)
-		sb->dq_op->free_inode (inode, 1);
 	sb->s_dirt = 1;
-	clear_inode (inode);
 	unlock_super (sb);
 }
 

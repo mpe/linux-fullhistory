@@ -227,7 +227,6 @@ static int get_fd(struct inode *inode)
 		file->f_op = &socket_file_ops;
 		file->f_mode = 3;
 		file->f_flags = O_RDWR;
-		file->f_dentry = d_alloc_root(inode, NULL);
 		file->f_pos = 0;
 	}
 	return fd;

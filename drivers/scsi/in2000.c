@@ -104,7 +104,7 @@
  *
  */
 
-
+#include <linux/module.h>
 
 #include <asm/system.h>
 #include <linux/sched.h>
@@ -115,46 +115,44 @@
 #include <linux/ioport.h>
 #include <linux/blkdev.h>
 
-#include "scsi.h"
-#include "sd.h"
-#include "hosts.h"
-#include "in2000.h"
-
 #include <linux/blk.h>
 #include <linux/stat.h>
 
-#ifdef MODULE
-#include <linux/module.h>
-#endif
+#include "scsi.h"
+#include "sd.h"
+#include "hosts.h"
 
-#define uchar unsigned char
 
-#define IN2000_VERSION    "1.30"
-#define IN2000_DATE       "14/Oct/1996"
+#define IN2000_VERSION    "1.31"
+#define IN2000_DATE       "06/July/1997"
 
-#define PROC_INTERFACE     /* add code for /proc/scsi/in2000/xxx interface */
-#define SYNC_DEBUG         /* extra info on sync negotiation printed */
-#define DEBUGGING_ON       /* enable command-line debugging bitmask */
-#define DEBUG_DEFAULTS 0   /* default bitmask - change from command-line */
+/*
+ * Note - the following defines have been moved to 'in2000.h':
+ *
+ *    PROC_INTERFACE
+ *    PROC_STATISTICS
+ *    SYNC_DEBUG
+ *    DEBUGGING_ON
+ *    DEBUG_DEFAULTS
+ *    FAST_READ_IO
+ *    FAST_WRITE_IO
+ *
+ */
 
-#define FAST_READ_IO       /* No problems with these on my machine */
-#define FAST_WRITE_IO
 
-#ifdef DEBUGGING_ON
-#define DB(f,a) if (hostdata->args & (f)) a;
-#define CHECK_NULL(p,s) /* if (!(p)) {printk("\n"); while (1) printk("NP:%s\r",(s));} */
-#else
-#define DB(f,a)
-#define CHECK_NULL(p,s)
-#endif
+#include "in2000.h"
+
 
 
 /*
- * setup_strings is an array of strings that define some of the operating
- * parameters and settings for this driver. It is used unless a LILO
- * or insmod command line has been specified, in which case those settings
- * are combined with the ones here. The driver recognizes the following
- * keywords (lower case required) and arguments:
+ * 'setup_strings' is a single string used to pass operating parameters and
+ * settings from the kernel/module command-line to the driver. 'setup_args[]'
+ * is an array of strings that define the compile-time default values for
+ * these settings. If Linux boots with a LILO or insmod command-line, those
+ * settings are combined with 'setup_args[]'. Note that LILO command-lines
+ * are prefixed with "in2000=" while insmod uses a "setup_strings=" prefix.
+ * The driver recognizes the following keywords (lower case required) and
+ * arguments:
  *
  * -  ioport:addr    -Where addr is IO address of a (usually ROM-less) card.
  * -  noreset        -No optional args. Prevents SCSI bus reset at boot time.
@@ -179,13 +177,11 @@
  *    _must_ be a colon between a keyword and its numeric argument, with no
  *    spaces.
  * -  Keywords are separated by commas, no spaces, in the standard kernel
- *    command-line manner, except in the case of 'setup_strings[]' (see
- *    below), which is simply a C array of pointers to char. Each element
- *    in the array is a string comprising one keyword & argument.
+ *    command-line manner.
  * -  A keyword in the 'nth' comma-separated command-line member will overwrite
- *    the 'nth' element of setup_strings[]. A blank command-line member (in
+ *    the 'nth' element of setup_args[]. A blank command-line member (in
  *    other words, a comma with no preceding keyword) will _not_ overwrite
- *    the corresponding setup_strings[] element.
+ *    the corresponding setup_args[] element.
  *
  * A few LILO examples (for insmod, use 'setup_strings' instead of 'in2000'):
  * -  in2000=ioport:0x220,noreset
@@ -194,334 +190,20 @@
  * -  in2000=proc:3
  */
 
-static char *setup_strings[] =
-      {"","","","","","","","","","","",""};
+/* Normally, no defaults are specified... */
+static char *setup_args[] =
+      {"","","","","","","","",""};
+
+/* filled in by 'insmod' */
+static char *setup_strings = 0;
+
+#ifdef MODULE_PARM
+MODULE_PARM(setup_strings, "s");
+#endif
+
 
 static struct Scsi_Host *instance_list = 0;
 
-#ifdef PROC_INTERFACE
-static unsigned long disc_allowed_total;
-static unsigned long disc_taken_total;
-#endif
-
-/* IN2000 io_port offsets */
-#define IO_WD_ASR       0x00     /* R - 3393 auxstat reg */
-#define     ASR_INT        0x80
-#define     ASR_LCI        0x40
-#define     ASR_BSY        0x20
-#define     ASR_CIP        0x10
-#define     ASR_PE         0x02
-#define     ASR_DBR        0x01
-#define IO_WD_ADDR      0x00     /* W - 3393 address reg */
-#define IO_WD_DATA      0x01     /* R/W - rest of 3393 regs */
-#define IO_FIFO         0x02     /* R/W - in2000 dual-port fifo (16 bits) */
-#define IN2000_FIFO_SIZE   2048  /*    fifo capacity in bytes */
-#define IO_CARD_RESET   0x03     /* W - in2000 start master reset */
-#define IO_FIFO_COUNT   0x04     /* R - in2000 fifo counter */
-#define IO_FIFO_WRITE   0x05     /* W - clear fifo counter, start write */
-#define IO_FIFO_READ    0x07     /* W - start fifo read */
-#define IO_LED_OFF      0x08     /* W - turn off in2000 activity LED */
-#define IO_SWITCHES     0x08     /* R - read in2000 dip switch */
-#define     SW_ADDR0       0x01  /*    bit 0 = bit 0 of index to io addr */
-#define     SW_ADDR1       0x02  /*    bit 1 = bit 1 of index io addr */
-#define     SW_DISINT      0x04  /*    bit 2 true if ints disabled */
-#define     SW_INT0        0x08  /*    bit 3 = bit 0 of index to interrupt */
-#define     SW_INT1        0x10  /*    bit 4 = bit 1 of index to interrupt */
-#define     SW_INT_SHIFT   3     /*    shift right this amount to right justify int bits */
-#define     SW_SYNC_DOS5   0x20  /*    bit 5 used by Always BIOS */
-#define     SW_FLOPPY      0x40  /*    bit 6 true if floppy enabled */
-#define     SW_BIT7        0x80  /*    bit 7 hardwired true (ground) */
-#define IO_LED_ON       0x09     /* W - turn on in2000 activity LED */
-#define IO_HARDWARE     0x0a     /* R - read in2000 hardware rev, stop reset */
-#define IO_INTR_MASK    0x0c     /* W - in2000 interrupt mask reg */
-#define     IMASK_WD       0x01  /*    WD33c93 interrupt mask */
-#define     IMASK_FIFO     0x02  /*    FIFO interrupt mask */
-
-/* wd register names */
-#define WD_OWN_ID    0x00
-#define WD_CONTROL   0x01
-#define WD_TIMEOUT_PERIOD  0x02
-#define WD_CDB_1     0x03
-#define WD_CDB_2     0x04
-#define WD_CDB_3     0x05
-#define WD_CDB_4     0x06
-#define WD_CDB_5     0x07
-#define WD_CDB_6     0x08
-#define WD_CDB_7     0x09
-#define WD_CDB_8     0x0a
-#define WD_CDB_9     0x0b
-#define WD_CDB_10    0x0c
-#define WD_CDB_11    0x0d
-#define WD_CDB_12    0x0e
-#define WD_TARGET_LUN      0x0f
-#define WD_COMMAND_PHASE   0x10
-#define WD_SYNCHRONOUS_TRANSFER  0x11
-#define WD_TRANSFER_COUNT_MSB 0x12
-#define WD_TRANSFER_COUNT  0x13
-#define WD_TRANSFER_COUNT_LSB 0x14
-#define WD_DESTINATION_ID  0x15
-#define WD_SOURCE_ID    0x16
-#define WD_SCSI_STATUS     0x17
-#define WD_COMMAND      0x18
-#define WD_DATA      0x19
-#define WD_QUEUE_TAG    0x1a
-#define WD_AUXILIARY_STATUS   0x1f
-
-/* WD commands */
-#define WD_CMD_RESET    0x00
-#define WD_CMD_ABORT    0x01
-#define WD_CMD_ASSERT_ATN  0x02
-#define WD_CMD_NEGATE_ACK  0x03
-#define WD_CMD_DISCONNECT  0x04
-#define WD_CMD_RESELECT    0x05
-#define WD_CMD_SEL_ATN     0x06
-#define WD_CMD_SEL      0x07
-#define WD_CMD_SEL_ATN_XFER   0x08
-#define WD_CMD_SEL_XFER    0x09
-#define WD_CMD_RESEL_RECEIVE  0x0a
-#define WD_CMD_RESEL_SEND  0x0b
-#define WD_CMD_WAIT_SEL_RECEIVE 0x0c
-#define WD_CMD_TRANS_ADDR  0x18
-#define WD_CMD_TRANS_INFO  0x20
-#define WD_CMD_TRANSFER_PAD   0x21
-#define WD_CMD_SBT_MODE    0x80
-
-/* SCSI Bus Phases */
-#define PHS_DATA_OUT    0x00
-#define PHS_DATA_IN     0x01
-#define PHS_COMMAND     0x02
-#define PHS_STATUS      0x03
-#define PHS_MESS_OUT    0x06
-#define PHS_MESS_IN     0x07
-
-/* Command Status Register definitions */
-
-  /* reset state interrupts */
-#define CSR_RESET    0x00
-#define CSR_RESET_AF    0x01
-
-  /* successful completion interrupts */
-#define CSR_RESELECT    0x10
-#define CSR_SELECT      0x11
-#define CSR_SEL_XFER_DONE  0x16
-#define CSR_XFER_DONE      0x18
-
-  /* paused or aborted interrupts */
-#define CSR_MSGIN    0x20
-#define CSR_SDP         0x21
-#define CSR_SEL_ABORT      0x22
-#define CSR_RESEL_ABORT    0x25
-#define CSR_RESEL_ABORT_AM 0x27
-#define CSR_ABORT    0x28
-
-  /* terminated interrupts */
-#define CSR_INVALID     0x40
-#define CSR_UNEXP_DISC     0x41
-#define CSR_TIMEOUT     0x42
-#define CSR_PARITY      0x43
-#define CSR_PARITY_ATN     0x44
-#define CSR_BAD_STATUS     0x45
-#define CSR_UNEXP    0x48
-
-  /* service required interrupts */
-#define CSR_RESEL    0x80
-#define CSR_RESEL_AM    0x81
-#define CSR_DISC     0x85
-#define CSR_SRV_REQ     0x88
-
-   /* Own ID/CDB Size register */
-#define OWNID_EAF    0x08
-#define OWNID_EHP    0x10
-#define OWNID_RAF    0x20
-#define OWNID_FS_8   0x00
-#define OWNID_FS_12  0x40
-#define OWNID_FS_16  0x80
-
-   /* Control register */
-#define CTRL_HSP     0x01
-#define CTRL_HA      0x02
-#define CTRL_IDI     0x04
-#define CTRL_EDI     0x08
-#define CTRL_HHP     0x10
-#define CTRL_POLLED  0x00
-#define CTRL_BURST   0x20
-#define CTRL_BUS     0x40
-#define CTRL_DMA     0x80
-
-   /* Timeout Period register */
-#define TIMEOUT_PERIOD_VALUE  20    /* results in 200 ms. */
-
-   /* Synchronous Transfer Register */
-#define STR_FSS      0x80
-
-   /* Destination ID register */
-#define DSTID_DPD    0x40
-#define DATA_OUT_DIR 0
-#define DATA_IN_DIR  1
-#define DSTID_SCC    0x80
-
-   /* Source ID register */
-#define SRCID_MASK   0x07
-#define SRCID_SIV    0x08
-#define SRCID_DSP    0x20
-#define SRCID_ES     0x40
-#define SRCID_ER     0x80
-
-
-
-#define DEFAULT_SX_PER     500   /* (ns) fairly safe */
-#define DEFAULT_SX_OFF     0     /* aka async */
-
-#define OPTIMUM_SX_PER     252   /* (ns) best we can do (mult-of-4) */
-#define OPTIMUM_SX_OFF     12    /* size of in2000 fifo */
-
-
-/* defines for hostdata->chip */
-
-#define C_WD33C93       0
-#define C_WD33C93A      1
-#define C_WD33C93B      2
-#define C_UNKNOWN_CHIP  100
-
-/* defines for hostdata->state */
-
-#define S_UNCONNECTED         0
-#define S_SELECTING           1
-#define S_RUNNING_LEVEL2      2
-#define S_CONNECTED           3
-#define S_PRE_TMP_DISC        4
-#define S_PRE_CMP_DISC        5
-
-/* defines for hostdata->fifo */
-
-#define FI_FIFO_UNUSED        0
-#define FI_FIFO_READING       1
-#define FI_FIFO_WRITING       2
-
-/* defines for hostdata->level2 */
-/* NOTE: only the first 3 are trustworthy at this point -
- * having trouble when more than 1 device is reading/writing
- * at the same time...
- */
-
-#define L2_NONE      0  /* no combination commands - we get lots of ints */
-#define L2_SELECT    1  /* start with SEL_ATN_XFER, but never resume it */
-#define L2_BASIC     2  /* resume after STATUS ints & RDP messages */
-#define L2_DATA      3  /* resume after DATA_IN/OUT ints */
-#define L2_MOST      4  /* resume after anything except a RESELECT int */
-#define L2_RESELECT  5  /* resume after everything, including RESELECT ints */
-#define L2_ALL       6  /* always resume */
-
-/* defines for hostdata->disconnect */
-
-#define DIS_NEVER    0
-#define DIS_ADAPTIVE 1
-#define DIS_ALWAYS   2
-
-/* defines for hostdata->args */
-
-#define DB_TEST               1<<0
-#define DB_FIFO               1<<1
-#define DB_QUEUE_COMMAND      1<<2
-#define DB_EXECUTE            1<<3
-#define DB_INTR               1<<4
-#define DB_TRANSFER           1<<5
-#define DB_MASK               0x3f
-
-#define A_NO_SCSI_RESET       1<<15
-
-
-/* defines for hostdata->sync_xfer[] */
-
-#define SS_UNSET     0
-#define SS_FIRST     1
-#define SS_WAITING   2
-#define SS_SET       3
-
-/* defines for hostdata->proc */
-
-#define PR_VERSION   1<<0
-#define PR_INFO      1<<1
-#define PR_TOTALS    1<<2
-#define PR_CONNECTED 1<<3
-#define PR_INPUTQ    1<<4
-#define PR_DISCQ     1<<5
-#define PR_TEST      1<<6
-#define PR_STOP      1<<7
-
-
-#define read1_io(a)     (inb(hostdata->io_base+(a)))
-#define read2_io(a)     (inw(hostdata->io_base+(a)))
-#define write1_io(b,a)  (outb((b),hostdata->io_base+(a)))
-#define write2_io(w,a)  (outw((w),hostdata->io_base+(a)))
-
-
-struct sx_period {
-   unsigned int   period_ns;
-   uchar          reg_value;
-   };
-
-
-struct IN2000_hostdata {
-    struct Scsi_Host *next;
-    uchar            chip;             /* what kind of wd33c93 chip? */
-    uchar            microcode;        /* microcode rev if 'B' */
-    unsigned short   io_base;          /* IO port base */
-    unsigned int     dip_switch;       /* dip switch settings */
-    unsigned int     hrev;             /* hardware revision of card */
-    volatile uchar   busy[8];          /* index = target, bit = lun */
-    volatile Scsi_Cmnd *input_Q;       /* commands waiting to be started */
-    volatile Scsi_Cmnd *selecting;     /* trying to select this command */
-    volatile Scsi_Cmnd *connected;     /* currently connected command */
-    volatile Scsi_Cmnd *disconnected_Q;/* commands waiting for reconnect */
-    uchar            state;            /* what we are currently doing */
-    uchar            fifo;             /* what the FIFO is up to */
-    uchar            level2;           /* extent to which Level-2 commands are used */
-    uchar            disconnect;       /* disconnect/reselect policy */
-    unsigned int     args;             /* set from command-line argument */
-    uchar            incoming_msg[8];  /* filled during message_in phase */
-    int              incoming_ptr;     /* mainly used with EXTENDED messages */
-    uchar            outgoing_msg[8];  /* send this during next message_out */
-    int              outgoing_len;     /* length of outgoing message */
-    unsigned int     default_sx_per;   /* default transfer period for SCSI bus */
-    uchar            sync_xfer[8];     /* sync_xfer reg settings per target */
-    uchar            sync_stat[8];     /* status of sync negotiation per target */
-    uchar            sync_off;         /* bit mask: don't use sync with these targets */
-    uchar            proc;             /* bit mask: what's in proc output */
-    };
-
-/* These inline assembly defines are derived from a patch
- * sent to me by Bill Earnest. He's done a lot of very
- * valuable thinking, testing, and coding during his effort
- * to squeeze more speed out of this driver. I really think
- * that we are doing IO at close to the maximum now with
- * the fifo. (And yes, insw uses 'edi' while outsw uses
- * 'esi'. Thanks Bill!)
- */
-
-#define FAST_READ2_IO()    \
-   __asm__ __volatile__ ("\n \
-   cld                    \n \
-   orl %%ecx, %%ecx       \n \
-   jz 1f                  \n \
-   rep                    \n \
-   insw %%dx              \n \
-1: "                       \
-   : "=D" (sp)                   /* output */   \
-   : "d" (f), "D" (sp), "c" (i)  /* input */    \
-   : "edx", "ecx", "edi" )       /* trashed */
-
-#define FAST_WRITE2_IO()   \
-   __asm__ __volatile__ ("\n \
-   cld                    \n \
-   orl %%ecx, %%ecx       \n \
-   jz 1f                  \n \
-   rep                    \n \
-   outsw %%dx             \n \
-1: "                       \
-   : "=S" (sp)                   /* output */   \
-   : "d" (f), "S" (sp), "c" (i)  /* input */    \
-   : "edx", "ecx", "esi" )       /* trashed */
 
 
 static inline uchar read_3393(struct IN2000_hostdata *hostdata, uchar reg_num)
@@ -596,10 +278,10 @@ static int is_dir_out(Scsi_Cmnd *cmd)
    switch (cmd->cmnd[0]) {
       case WRITE_6:           case WRITE_10:          case WRITE_12:
       case WRITE_LONG:        case WRITE_SAME:        case WRITE_BUFFER:
-      case WRITE_VERIFY:      case WRITE_VERIFY_12:
+      case WRITE_VERIFY:      case WRITE_VERIFY_12:      
       case COMPARE:           case COPY:              case COPY_VERIFY:
       case SEARCH_EQUAL:      case SEARCH_HIGH:       case SEARCH_LOW:
-      case SEARCH_EQUAL_12:   case SEARCH_HIGH_12:    case SEARCH_LOW_12:
+      case SEARCH_EQUAL_12:   case SEARCH_HIGH_12:    case SEARCH_LOW_12:      
       case FORMAT_UNIT:       case REASSIGN_BLOCKS:   case RESERVE:
       case MODE_SELECT:       case MODE_SELECT_10:    case LOG_SELECT:
       case SEND_DIAGNOSTIC:   case CHANGE_DEFINITION: case UPDATE_BLOCK:
@@ -624,7 +306,7 @@ static struct sx_period sx_table[] = {
    {1000,0x00},
    {0,   0} };
 
-int round_period(unsigned int period)
+static int round_period(unsigned int period)
 {
 int x;
 
@@ -657,7 +339,6 @@ struct IN2000_hostdata *hostdata;
 Scsi_Cmnd *tmp;
 unsigned long flags;
 
-
    hostdata = (struct IN2000_hostdata *)cmd->host->hostdata;
 
 DB(DB_QUEUE_COMMAND,printk("Q-%d-%02x-%ld(",cmd->target,cmd->cmnd[0],cmd->pid))
@@ -675,7 +356,7 @@ DB(DB_QUEUE_COMMAND,printk("Q-%d-%02x-%ld(",cmd->target,cmd->cmnd[0],cmd->pid))
 /* We use the Scsi_Pointer structure that's included with each command
  * as a scratchpad (as it's intended to be used!). The handy thing about
  * the SCp.xxx fields is that they're always associated with a given
- * cmd, and are preserved across disconnect-reconnect. This means we
+ * cmd, and are preserved across disconnect-reselect. This means we
  * can pretty much ignore SAVE_POINTERS and RESTORE_POINTERS messages
  * if we keep all the critical pointers and counters in SCp:
  *  - SCp.ptr is the pointer into the RAM buffer
@@ -703,9 +384,24 @@ DB(DB_QUEUE_COMMAND,printk("Q-%d-%02x-%ld(",cmd->target,cmd->cmnd[0],cmd->pid))
 
 /* We don't set SCp.phase here - that's done in in2000_execute() */
 
-/* Preset the command status to GOOD, since that's the normal case */
+/* WD docs state that at the conclusion of a "LEVEL2" command, the
+ * status byte can be retrieved from the LUN register. Apparently,
+ * this is the case only for *uninterrupted* LEVEL2 commands! If
+ * there are any unexpected phases entered, even if they are 100%
+ * legal (different devices may choose to do things differently),
+ * the LEVEL2 command sequence is exited. This often occurs prior
+ * to receiving the status byte, in which case the driver does a
+ * status phase interrupt and gets the status byte on its own.
+ * While such a command can then be "resumed" (ie restarted to
+ * finish up as a LEVEL2 command), the LUN register will NOT be
+ * a valid status byte at the command's conclusion, and we must
+ * use the byte obtained during the earlier interrupt. Here, we
+ * preset SCp.Status to an illegal value (0xff) so that when
+ * this command finally completes, we can tell where the actual
+ * status byte is stored.
+ */
 
-   cmd->SCp.Status = GOOD;
+   cmd->SCp.Status = ILLEGAL_STATUS_BYTE;
 
    save_flags(flags);
    cli();
@@ -803,6 +499,10 @@ DB(DB_EXECUTE,printk(")EX-1 "))
    else
       hostdata->input_Q = (Scsi_Cmnd *)cmd->host_scribble;
 
+#ifdef PROC_STATISTICS
+   hostdata->cmd_cnt[cmd->target]++;
+#endif
+
 /*
  * Start the selection process
  */
@@ -860,8 +560,8 @@ DB(DB_EXECUTE,printk(")EX-1 "))
 yes:
    cmd->SCp.phase = 1;
 
-#ifdef PROC_INTERFACE
-   disc_allowed_total++;
+#ifdef PROC_STATISTICS
+   hostdata->disc_allowed_cnt[cmd->target]++;
 #endif
 
 no:
@@ -1094,7 +794,8 @@ int i;
 
    if (data_in_dir) {
       write1_io(0,IO_FIFO_READ);
-      if ((hostdata->level2 >= L2_DATA) || (cmd->SCp.phase == 0)) {
+      if ((hostdata->level2 >= L2_DATA) ||
+          (hostdata->level2 == L2_BASIC && cmd->SCp.phase == 0)) {
          write_3393(hostdata,WD_COMMAND_PHASE,0x45);
          write_3393_cmd(hostdata,WD_CMD_SEL_ATN_XFER);
          hostdata->state = S_RUNNING_LEVEL2;
@@ -1111,7 +812,8 @@ int i;
  * write any bytes that don't make it at this stage.
  */
 
-   if ((hostdata->level2 >= L2_DATA) || (cmd->SCp.phase == 0)) {
+      if ((hostdata->level2 >= L2_DATA) ||
+          (hostdata->level2 == L2_BASIC && cmd->SCp.phase == 0)) {
       write_3393(hostdata,WD_COMMAND_PHASE,0x45);
       write_3393_cmd(hostdata,WD_CMD_SEL_ATN_XFER);
       hostdata->state = S_RUNNING_LEVEL2;
@@ -1176,6 +878,10 @@ unsigned short f;
 
    save_flags(flags);
    sti();
+
+#ifdef PROC_STATISTICS
+   hostdata->int_cnt++;
+#endif
 
 /* The IN2000 card has 2 interrupt sources OR'ed onto its IRQ line - the
  * WD3393 chip and the 2k fifo (which is actually a dual-port RAM combined
@@ -1484,9 +1190,10 @@ DB(DB_INTR,printk("CMND-%02x,%ld",cmd->cmnd[0],cmd->pid))
       case CSR_XFER_DONE|PHS_STATUS:
       case CSR_UNEXP    |PHS_STATUS:
       case CSR_SRV_REQ  |PHS_STATUS:
-DB(DB_INTR,printk("STATUS"))
+DB(DB_INTR,printk("STATUS="))
 
          cmd->SCp.Status = read_1_byte(hostdata);
+DB(DB_INTR,printk("%02x",cmd->SCp.Status))
          if (hostdata->level2 >= L2_BASIC) {
             sr = read_3393(hostdata,WD_SCSI_STATUS);  /* clear interrupt */
             hostdata->state = S_RUNNING_LEVEL2;
@@ -1494,7 +1201,6 @@ DB(DB_INTR,printk("STATUS"))
             write_3393_cmd(hostdata,WD_CMD_SEL_ATN_XFER);
             }
          else {
-DB(DB_INTR,printk("=%02x",cmd->SCp.Status))
             hostdata->state = S_CONNECTED;
             }
          break;
@@ -1665,15 +1371,16 @@ printk("sync_xfer=%02x",hostdata->sync_xfer[cmd->target]);
 DB(DB_INTR,printk("SX-DONE-%ld",cmd->pid))
             cmd->SCp.Message = COMMAND_COMPLETE;
             lun = read_3393(hostdata,WD_TARGET_LUN);
-            if (cmd->SCp.Status == GOOD)
-               cmd->SCp.Status = lun;
+DB(DB_INTR,printk(":%d.%d",cmd->SCp.Status,lun))
             hostdata->connected = NULL;
-            if (cmd->cmnd[0] != REQUEST_SENSE)
-               cmd->result = cmd->SCp.Status | (cmd->SCp.Message << 8);
-            else if (cmd->SCp.Status != GOOD)
-               cmd->result = (cmd->result & 0x00ffff) | (DID_ERROR << 16);
             hostdata->busy[cmd->target] &= ~(1 << cmd->lun);
             hostdata->state = S_UNCONNECTED;
+            if (cmd->SCp.Status == ILLEGAL_STATUS_BYTE)
+               cmd->SCp.Status = lun;
+            if (cmd->cmnd[0] == REQUEST_SENSE && cmd->SCp.Status != GOOD)
+               cmd->result = (cmd->result & 0x00ffff) | (DID_ERROR << 16);
+            else
+               cmd->result = cmd->SCp.Status | (cmd->SCp.Message << 8);
             cmd->scsi_done(cmd);
 
 /* We are no longer connected to a target - check to see if
@@ -1755,10 +1462,10 @@ DB(DB_INTR,printk("UNEXP_DISC-%ld",cmd->pid))
          hostdata->connected = NULL;
          hostdata->busy[cmd->target] &= ~(1 << cmd->lun);
          hostdata->state = S_UNCONNECTED;
-         if (cmd->cmnd[0] != REQUEST_SENSE)
-            cmd->result = cmd->SCp.Status | (cmd->SCp.Message << 8);
-         else if (cmd->SCp.Status != GOOD)
+         if (cmd->cmnd[0] == REQUEST_SENSE && cmd->SCp.Status != GOOD)
             cmd->result = (cmd->result & 0x00ffff) | (DID_ERROR << 16);
+         else
+            cmd->result = cmd->SCp.Status | (cmd->SCp.Message << 8);
          cmd->scsi_done(cmd);
 
 /* We are no longer connected to a target - check to see if
@@ -1788,10 +1495,11 @@ DB(DB_INTR,printk("DISC-%ld",cmd->pid))
                hostdata->connected = NULL;
                hostdata->busy[cmd->target] &= ~(1 << cmd->lun);
                hostdata->state = S_UNCONNECTED;
-               if (cmd->cmnd[0] != REQUEST_SENSE)
-                  cmd->result = cmd->SCp.Status | (cmd->SCp.Message << 8);
-               else if (cmd->SCp.Status != GOOD)
+DB(DB_INTR,printk(":%d",cmd->SCp.Status))
+               if (cmd->cmnd[0] == REQUEST_SENSE && cmd->SCp.Status != GOOD)
                   cmd->result = (cmd->result & 0x00ffff) | (DID_ERROR << 16);
+               else
+                  cmd->result = cmd->SCp.Status | (cmd->SCp.Message << 8);
                cmd->scsi_done(cmd);
                break;
             case S_PRE_TMP_DISC:
@@ -1801,8 +1509,8 @@ DB(DB_INTR,printk("DISC-%ld",cmd->pid))
                hostdata->connected = NULL;
                hostdata->state = S_UNCONNECTED;
 
-#ifdef PROC_INTERFACE
-               disc_taken_total++;
+#ifdef PROC_STATISTICS
+               hostdata->disc_done_cnt[cmd->target]++;
 #endif
 
                break;
@@ -2158,10 +1866,11 @@ unsigned long timeout;
 
 
 #define MAX_IN2000_HOSTS 3
-#define MAX_SETUP_STRINGS (sizeof(setup_strings) / sizeof(char *))
+#define MAX_SETUP_ARGS (sizeof(setup_args) / sizeof(char *))
 #define SETUP_BUFFER_SIZE 200
 static char setup_buffer[SETUP_BUFFER_SIZE];
-static char setup_used[MAX_SETUP_STRINGS];
+static char setup_used[MAX_SETUP_ARGS];
+static int done_setup = 0;
 
 void in2000_setup (char *str, int *ints)
 {
@@ -2172,43 +1881,44 @@ char *p1,*p2;
    setup_buffer[SETUP_BUFFER_SIZE - 1] = '\0';
    p1 = setup_buffer;
    i = 0;
-   while (*p1 && (i < MAX_SETUP_STRINGS)) {
+   while (*p1 && (i < MAX_SETUP_ARGS)) {
       p2 = strchr(p1, ',');
       if (p2) {
          *p2 = '\0';
          if (p1 != p2)
-            setup_strings[i] = p1;
+            setup_args[i] = p1;
          p1 = p2 + 1;
          i++;
          }
       else {
-         setup_strings[i] = p1;
+         setup_args[i] = p1;
          break;
          }
       }
-   for (i=0; i<MAX_SETUP_STRINGS; i++)
+   for (i=0; i<MAX_SETUP_ARGS; i++)
       setup_used[i] = 0;
+   done_setup = 1;
 }
 
 
-/* check_setup_strings() returns index if key found, 0 if not
+/* check_setup_args() returns index if key found, 0 if not
  */
 
-static int check_setup_strings(char *key, int *flags, int *val, char *buf)
+static int check_setup_args(char *key, int *flags, int *val, char *buf)
 {
 int x;
 char *cp;
 
-   for  (x=0; x<MAX_SETUP_STRINGS; x++) {
+   for  (x=0; x<MAX_SETUP_ARGS; x++) {
       if (setup_used[x])
          continue;
-      if (!strncmp(setup_strings[x], key, strlen(key)))
+      if (!strncmp(setup_args[x], key, strlen(key)))
          break;
       }
-   if (x == MAX_SETUP_STRINGS)
+   if (x == MAX_SETUP_ARGS)
       return 0;
    setup_used[x] = 1;
-   cp = setup_strings[x] + strlen(key);
+   cp = setup_args[x] + strlen(key);
    *val = -1;
    if (*cp != ':')
       return ++x;
@@ -2221,16 +1931,10 @@ char *cp;
 
 
 
-struct proc_dir_entry proc_scsi_in2000 = {
-   PROC_SCSI_IN2000, 6, "in2000",
-   S_IFDIR | S_IRUGO | S_IXUGO, 2
-   };
-
-
-/* As of the 2.1.x kernel series, memory-mapped hardware such
- * as the IN2000 EPROM and dip switch must be accessed through
- * special macros declared in 'asm/io.h'. We use readb() and
- * readl() when reading from the card's BIOS area in in2000_detect().
+/* The "correct" (ie portable) way to access memory-mapped hardware
+ * such as the IN2000 EPROM and dip switch is through the use of
+ * special macros declared in 'asm/io.h'. We use readb() and readl()
+ * when reading from the card's BIOS area in in2000_detect().
  */
 static const unsigned int *bios_tab[] = {
    (unsigned int *)0xc8000,
@@ -2253,6 +1957,7 @@ static const int int_tab[] = {
    10
    };
 
+
 int in2000_detect(Scsi_Host_Template * tpnt)
 {
 struct Scsi_Host *instance;
@@ -2268,29 +1973,33 @@ int val;
 char buf[32];
 
 /* Thanks to help from Bill Earnest, probing for IN2000 cards is a
- * pretty straightforward and fool-proof operation. We do require
- * that cards have their BIOS enabled, although I hope to be able
- * to detect and use BIOS-less cards in the future. There are 3
+ * pretty straightforward and fool-proof operation. There are 3
  * possible locations for the IN2000 EPROM in memory space - if we
  * find a BIOS signature, we can read the dip switch settings from
  * the byte at BIOS+32 (shadowed in by logic on the card). From 2
  * of the switch bits we get the card's address in IO space. There's
  * an image of the dip switch there, also, so we have a way to back-
- * check that this really is an IN2000 card. Very nifty.
- *
- * There have been a couple of BIOS versions with different layouts
- * for the obvious ID strings. We look for the 2 most common ones and
- * hope that they cover all the cases...
+ * check that this really is an IN2000 card. Very nifty. Use the
+ * 'ioport:xx' command-line parameter if your BIOS EPROM is absent
+ * or disabled.
  */
+
+   if (!done_setup && setup_strings)
+      in2000_setup(setup_strings,0);
 
    detect_count = 0;
    for (bios = 0; bios_tab[bios]; bios++) {
-      if (check_setup_strings("ioport",&flags,&val,buf)) {
+      if (check_setup_args("ioport",&flags,&val,buf)) {
          base = val;
          switches = ~inb(base + IO_SWITCHES) & 0xff;
          printk("Forcing IN2000 detection at IOport 0x%x ",base);
          bios = 2;
          }
+/*
+ * There have been a couple of BIOS versions with different layouts
+ * for the obvious ID strings. We look for the 2 most common ones and
+ * hope that they cover all the cases...
+ */
       else if (readl(bios_tab[bios]+0x04) == 0x41564f4e ||
                readl(bios_tab[bios]+0x0c) == 0x61776c41) {
          printk("Found IN2000 BIOS at 0x%x ",(unsigned int)bios_tab[bios]);
@@ -2374,6 +2083,11 @@ char buf[32];
          hostdata->busy[x] = 0;
          hostdata->sync_xfer[x] = calc_sync_xfer(DEFAULT_SX_PER/4,DEFAULT_SX_OFF);
          hostdata->sync_stat[x] = SS_UNSET;  /* using default sync values */
+#ifdef PROC_STATISTICS
+         hostdata->cmd_cnt[x] = 0;
+         hostdata->disc_allowed_cnt[x] = 0;
+         hostdata->disc_done_cnt[x] = 0;
+#endif
          }
       hostdata->input_Q = NULL;
       hostdata->selecting = NULL;
@@ -2395,36 +2109,42 @@ char buf[32];
       else
          hostdata->sync_off = 0xff;    /* sync defaults to off */
 
-      hostdata->proc = PR_VERSION|PR_INFO|PR_TOTALS|
+#ifdef PROC_INTERFACE
+      hostdata->proc = PR_VERSION|PR_INFO|PR_STATISTICS|
                        PR_CONNECTED|PR_INPUTQ|PR_DISCQ|
                        PR_STOP;
-
-#ifdef PROC_INTERFACE
-      disc_allowed_total = 0;
-      disc_taken_total = 0;
+#ifdef PROC_STATISTICS
+      hostdata->int_cnt = 0;
+#endif
 #endif
 
-      if (check_setup_strings("nosync",&flags,&val,buf))
+      if (check_setup_args("nosync",&flags,&val,buf))
          hostdata->sync_off = val;
 
-      if (check_setup_strings("period",&flags,&val,buf))
+      if (check_setup_args("period",&flags,&val,buf))
          hostdata->default_sx_per = sx_table[round_period((unsigned int)val)].period_ns;
 
-      if (check_setup_strings("disconnect",&flags,&val,buf)) {
+      if (check_setup_args("disconnect",&flags,&val,buf)) {
          if ((val >= DIS_NEVER) && (val <= DIS_ALWAYS))
             hostdata->disconnect = val;
          else
             hostdata->disconnect = DIS_ADAPTIVE;
          }
 
-      if (check_setup_strings("noreset",&flags,&val,buf))
+      if (check_setup_args("noreset",&flags,&val,buf))
          hostdata->args ^= A_NO_SCSI_RESET;
 
-      if (check_setup_strings("debug",&flags,&val,buf))
+      if (check_setup_args("level2",&flags,&val,buf))
+         hostdata->level2 = val;
+
+      if (check_setup_args("debug",&flags,&val,buf))
          hostdata->args = (val & DB_MASK);
 
-      if (check_setup_strings("proc",&flags,&val,buf))
+#ifdef PROC_INTERFACE
+      if (check_setup_args("proc",&flags,&val,buf))
          hostdata->proc = val;
+#endif
+
 
       x = reset_hardware(instance,(hostdata->args & A_NO_SCSI_RESET)?RESET_CARD:RESET_CARD_AND_BUS);
 
@@ -2450,9 +2170,9 @@ char buf[32];
                   (hostdata->chip==C_WD33C93B)?"WD33c93B":"unknown",
                   hostdata->microcode);
 #ifdef DEBUGGING_ON
-      printk("setup_strings = ");
-      for (x=0; x<8; x++)
-         printk("%s,",setup_strings[x]);
+      printk("setup_args = ");
+      for (x=0; x<MAX_SETUP_ARGS; x++)
+         printk("%s,",setup_args[x]);
       printk("\n");
 #endif
       if (hostdata->sync_off == 0xff)
@@ -2496,21 +2216,16 @@ int size;
       iinfo[0] = 255;
       iinfo[1] = 63;
       iinfo[2] = disk->capacity / (iinfo[0] * iinfo[1]);
-
-/* This next little bit of code was intended to prevent the number of
- * tracks from exceeding 1023. As Andries Brouwer (aeb@cwi.nl) pointed
- * out in his "Large Disk HOWTO" (June 1996), this kind of DOS
- * compatibility is pointless. And wasteful on disks larger than 8 gigs.
- */
-
-#if 0
-      if (iinfo[2] > 1023)
-         iinfo[2] = 1023;
-#endif
-
       }
     return 0;
 }
+
+
+
+struct proc_dir_entry proc_scsi_in2000 = {
+   PROC_SCSI_IN2000, 6, "in2000",
+   S_IFDIR | S_IRUGO | S_IXUGO, 2
+   };
 
 
 int in2000_proc_info(char *buf, char **start, off_t off, int len, int hn, int in)
@@ -2576,6 +2291,10 @@ static int stop = 0;
          bp += 5;
          hd->proc = simple_strtoul(bp,NULL,0);
          }
+      else if (!strncmp(bp,"level2:",7)) {
+         bp += 7;
+         hd->level2 = simple_strtoul(bp,NULL,0);
+         }
       return len;
       }
 
@@ -2594,12 +2313,38 @@ static int stop = 0;
                   (hd->dip_switch & 0x40)?"Yes":"No",
                   (hd->dip_switch & 0x20)?"Yes":"No");
       strcat(bp,tbuf);
+      strcat(bp,"\nsync_xfer[] =       ");
+      for (x=0; x<7; x++) {
+         sprintf(tbuf,"\t%02x",hd->sync_xfer[x]);
+         strcat(bp,tbuf);
+         }
+      strcat(bp,"\nsync_stat[] =       ");
+      for (x=0; x<7; x++) {
+         sprintf(tbuf,"\t%02x",hd->sync_stat[x]);
+         strcat(bp,tbuf);
+         }
       }
-   if (hd->proc & PR_TOTALS) {
-      sprintf(tbuf,"\n%ld disc_allowed, %ld disc_taken",
-            disc_allowed_total,disc_taken_total);
+#ifdef PROC_STATISTICS
+   if (hd->proc & PR_STATISTICS) {
+      strcat(bp,"\ncommands issued:    ");
+      for (x=0; x<7; x++) {
+         sprintf(tbuf,"\t%ld",hd->cmd_cnt[x]);
+         strcat(bp,tbuf);
+         }
+      strcat(bp,"\ndisconnects allowed:");
+      for (x=0; x<7; x++) {
+         sprintf(tbuf,"\t%ld",hd->disc_allowed_cnt[x]);
+         strcat(bp,tbuf);
+         }
+      strcat(bp,"\ndisconnects done:   ");
+      for (x=0; x<7; x++) {
+         sprintf(tbuf,"\t%ld",hd->disc_done_cnt[x]);
+         strcat(bp,tbuf);
+         }
+      sprintf(tbuf,"\ninterrupts:      \t%ld",hd->int_cnt);
       strcat(bp,tbuf);
       }
+#endif
    if (hd->proc & PR_CONNECTED) {
       strcat(bp,"\nconnected:     ");
       if (hd->connected) {
