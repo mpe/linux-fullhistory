@@ -37,51 +37,12 @@
  * poll table.
  */
 
-/*
- * I rewrote this again to make the poll_table size variable, take some
- * more shortcuts, improve responsiveness, and remove another race that
- * Linus noticed.  -- jrs
- */
-
-static poll_table* alloc_wait(int nfds)
+static void free_wait(struct poll_table_page * p)
 {
-	poll_table* out;
-	poll_table* walk;
-
-	out = (poll_table *) __get_free_page(GFP_KERNEL);
-	if(out==NULL)
-		return NULL;
-	out->nr = 0;
-	out->entry = (struct poll_table_entry *)(out + 1);
-	out->next = NULL;
-	nfds -=__MAX_POLL_TABLE_ENTRIES;
-	walk = out;
-	while(nfds > 0) {
-		poll_table *tmp = (poll_table *) __get_free_page(GFP_KERNEL);
-		if (!tmp) {
-			while(out != NULL) {
-				tmp = out->next;
-				free_page((unsigned long)out);
-				out = tmp;
-			}
-			return NULL;
-		}
-		tmp->nr = 0;
-		tmp->entry = (struct poll_table_entry *)(tmp + 1);
-		tmp->next = NULL;
-		walk->next = tmp;
-		walk = tmp;
-		nfds -=__MAX_POLL_TABLE_ENTRIES;
-	}
-	return out;
-}
-
-static void free_wait(poll_table * p)
-{
-	struct poll_table_entry * entry;
-	poll_table *old;
-
 	while (p) {
+		struct poll_table_entry * entry;
+		struct poll_table_page *old;
+
 		entry = p->entry + p->nr;
 		while (p->nr > 0) {
 			p->nr--;
@@ -97,19 +58,33 @@ static void free_wait(poll_table * p)
 
 void __pollwait(struct file * filp, wait_queue_head_t * wait_address, poll_table *p)
 {
-	for (;;) {
-		if (p->nr < __MAX_POLL_TABLE_ENTRIES) {
-			struct poll_table_entry * entry;
-		 	entry = p->entry + p->nr;
-		 	get_file(filp);
-		 	entry->filp = filp;
-			entry->wait_address = wait_address;
-			init_waitqueue_entry(&entry->wait, current);
-			add_wait_queue(wait_address,&entry->wait);
-			p->nr++;
+	struct poll_table_page *table = p->table;
+
+	if (!table || table->nr >= __MAX_POLL_TABLE_ENTRIES) {
+		struct poll_table_page *new_table;
+
+		new_table = (struct poll_table_page *) __get_free_page(GFP_KERNEL);
+		if (!new_table) {
+			p->error = -ENOMEM;
 			return;
 		}
-		p = p->next;
+		new_table->nr = 0;
+		new_table->entry = (struct poll_table_entry *)(new_table + 1);
+		new_table->next = table;
+		p->table = new_table;
+		table = new_table;
+	}
+
+	/* Add a new entry */
+	{
+		struct poll_table_entry * entry;
+	 	entry = table->entry + table->nr;
+		table->nr++;
+	 	get_file(filp);
+	 	entry->filp = filp;
+		entry->wait_address = wait_address;
+		init_waitqueue_entry(&entry->wait, current);
+		add_wait_queue(wait_address,&entry->wait);
 	}
 }
 
@@ -173,11 +148,9 @@ get_max:
 
 int do_select(int n, fd_set_bits *fds, long *timeout)
 {
-	poll_table *wait, *orig_wait;
+	poll_table table, *wait;
 	int retval, i, off;
 	long __timeout = *timeout;
-
-	orig_wait = wait = NULL;
 
  	read_lock(&current->files->file_lock);
 	retval = max_select_fd(n, fds);
@@ -186,11 +159,10 @@ int do_select(int n, fd_set_bits *fds, long *timeout)
 	if (retval < 0)
 		return retval;
 	n = retval;
-	if (__timeout) {
- 		orig_wait = wait = alloc_wait(n);
- 		if (!wait)
-			return -ENOMEM;
- 	}
+
+	table.error = 0;
+	table.table = NULL;
+	wait = &table;
 	retval = 0;
 	for (;;) {
 		set_current_state(TASK_INTERRUPTIBLE);
@@ -233,7 +205,7 @@ int do_select(int n, fd_set_bits *fds, long *timeout)
 	}
 	current->state = TASK_RUNNING;
 
-	free_wait(orig_wait);
+	free_wait(table.table);
 
 	/*
 	 * Up-to-date the caller timeout.
@@ -404,7 +376,7 @@ asmlinkage long sys_poll(struct pollfd * ufds, unsigned int nfds, long timeout)
 {
 	int i, j, fdcount, err;
 	struct pollfd **fds;
-	poll_table *wait = NULL;
+	poll_table table;
 	int nchunks, nleft;
 
 	/* Do a sanity check on nfds ... */
@@ -419,11 +391,8 @@ asmlinkage long sys_poll(struct pollfd * ufds, unsigned int nfds, long timeout)
 			timeout = MAX_SCHEDULE_TIMEOUT;
 	}
 
-	if (timeout) {
-		wait = alloc_wait(nfds);
-		if (!wait)
-			return -ENOMEM;
-	}
+	table.error = 0;
+	table.table = NULL;
 	err = -ENOMEM;
 
 	fds = NULL;
@@ -460,7 +429,7 @@ asmlinkage long sys_poll(struct pollfd * ufds, unsigned int nfds, long timeout)
 			goto out_fds1;
 	}
 
-	fdcount = do_poll(nfds, nchunks, nleft, fds, wait, timeout);
+	fdcount = do_poll(nfds, nchunks, nleft, fds, &table, timeout);
 
 	/* OK, now copy the revents fields back to user space. */
 	for(i=0; i < nchunks; i++)
@@ -483,6 +452,6 @@ out_fds:
 	if (nfds != 0)
 		kfree(fds);
 out:
-	free_wait(wait);
+	free_wait(table.table);
 	return err;
 }

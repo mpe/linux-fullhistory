@@ -114,6 +114,8 @@ compressed: zImage
 zlilo: vmlinux
 	@$(MAKEBOOT) BOOTIMAGE=zImage zlilo
 
+tmp:
+	@$(MAKEBOOT) BOOTIMAGE=bzImage zlilo
 bzlilo: vmlinux
 	@$(MAKEBOOT) BOOTIMAGE=bzImage zlilo
 

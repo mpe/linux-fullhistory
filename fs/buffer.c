@@ -1759,9 +1759,6 @@ static int do_kio(int rw, int nr, struct buffer_head *bh[], int size)
 	int i;
 	struct buffer_head *tmp;
 
-	struct task_struct *tsk = current;
-	DECLARE_WAITQUEUE(wait, tsk);
-
 	if (rw == WRITE)
 		rw = WRITERAW;
 	ll_rw_block(rw, nr, bh);

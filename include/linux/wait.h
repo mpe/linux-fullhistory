@@ -21,7 +21,7 @@
  * Temporary debugging help until all code is converted to the new
  * waitqueue usage.
  */
-#define WAITQUEUE_DEBUG 1
+#define WAITQUEUE_DEBUG 0
 
 #if WAITQUEUE_DEBUG
 extern int printk(const char *fmt, ...);

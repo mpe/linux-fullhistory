@@ -316,9 +316,6 @@ extern struct page * alloc_pages_node(int nid, int gfp_mask, unsigned long order
 #ifndef CONFIG_DISCONTIGMEM
 static inline struct page * alloc_pages(int gfp_mask, unsigned long order)
 {
-	/*  temporary check. */
-	if (contig_page_data.node_zonelists[gfp_mask].gfp_mask != (gfp_mask))
-		BUG();
 	/*
 	 * Gets optimized away by the compiler.
 	 */

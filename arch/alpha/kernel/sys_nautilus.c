@@ -53,6 +53,11 @@
 static void __init
 nautilus_init_irq(void)
 {
+	if (alpha_using_srm) {
+		alpha_mv.device_interrupt = srm_device_interrupt;
+		alpha_mv.kill_arch = NULL;
+	}
+
 	init_i8259a_irqs();
 	common_init_isa_dma();
 }

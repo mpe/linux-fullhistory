@@ -17,13 +17,18 @@ struct poll_table_entry {
 	wait_queue_head_t * wait_address;
 };
 
-typedef struct poll_table_struct {
-	struct poll_table_struct * next;
+struct poll_table_page {
+	struct poll_table_page * next;
 	unsigned int nr;
 	struct poll_table_entry * entry;
+};
+
+typedef struct poll_table_struct {
+	int error;
+	struct poll_table_page * table;
 } poll_table;
 
-#define __MAX_POLL_TABLE_ENTRIES ((PAGE_SIZE - sizeof (poll_table)) / sizeof (struct poll_table_entry))
+#define __MAX_POLL_TABLE_ENTRIES ((PAGE_SIZE - sizeof (struct poll_table_page)) / sizeof (struct poll_table_entry))
 
 extern void __pollwait(struct file * filp, wait_queue_head_t * wait_address, poll_table *p);
 

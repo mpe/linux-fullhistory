@@ -626,6 +626,7 @@ int try_to_free_pages(unsigned int gfp_mask)
 	int retval = 1;
 
 	if (gfp_mask & __GFP_WAIT) {
+		current->state = TASK_RUNNING;
 		current->flags |= PF_MEMALLOC;
 		retval = do_try_to_free_pages(gfp_mask);
 		current->flags &= ~PF_MEMALLOC;
