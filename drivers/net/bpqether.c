@@ -122,7 +122,7 @@ static struct bpqdev {
 	char   ethname[14];		/* ether device name */
 	struct device *ethdev;		/* link to ethernet device */
 	struct device axdev;		/* bpq device (bpq#) */
-	struct enet_statistics stats;	/* some statistics */
+	struct net_device_stats stats;	/* some statistics */
 	char   dest_addr[6];		/* ether destination address */
 	char   acpt_addr[6];		/* accept ether frames from this address only */
 } *bpq_devices = NULL;
@@ -331,7 +331,7 @@ static int bpq_xmit(struct sk_buff *skb, struct device *dev)
 /*
  *	Statistics
  */
-static struct enet_statistics *bpq_get_stats(struct device *dev)
+static struct net_device_stats *bpq_get_stats(struct device *dev)
 {
 	struct bpqdev *bpq;
 

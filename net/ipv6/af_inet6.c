@@ -129,6 +129,7 @@ static int inet6_create(struct socket *sock, int protocol)
 	}
 	
 	sock_init_data(sock,sk);
+	sk->zapped=0;
 
 	sk->family = AF_INET6;
 	sk->protocol = protocol;
@@ -779,8 +780,8 @@ void inet6_proto_init(struct net_proto *pro)
 
 	if (sizeof(struct ipv6_options) > sizeof(dummy_skb->cb))
 	{
-		printk(KERN_CRIT "inet6_proto_init: panic\n");
-		return;
+		printk(KERN_CRIT "inet6_proto_init: size fault\n");
+		return -EINVAL;
 	}
 
   	(void) sock_register(&inet6_family_ops);

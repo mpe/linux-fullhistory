@@ -416,7 +416,7 @@ static int shaper_start_xmit(struct sk_buff *skb, struct device *dev)
 	return shaper_qframe(sh, skb);
 }
 
-static struct enet_statistics *shaper_get_stats(struct device *dev)
+static struct net_device_stats *shaper_get_stats(struct device *dev)
 {
 	return NULL;
 }

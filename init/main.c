@@ -710,6 +710,7 @@ static void parse_options(char *line)
 		}
 		if (checksetup(line))
 			continue;
+		
 		/*
 		 * Then check if it's an environment variable or
 		 * an option.

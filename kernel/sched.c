@@ -1262,64 +1262,81 @@ asmlinkage unsigned int sys_alarm(unsigned int seconds)
  * The Alpha uses getxpid, getxuid, and getxgid instead.  Maybe this
  * should be moved into arch/i386 instead?
  */
+ 
 asmlinkage int sys_getpid(void)
 {
-	int ret;
-
-	lock_kernel();
-	ret = current->pid;
-	unlock_kernel();
-	return ret;
+	/* This is SMP safe - current->pid doesnt change */
+	return current->pid;
 }
 
+/*
+ * This is not strictly SMP safe: p_opptr could change
+ * from under us. However, rather than getting any lock
+ * we can use an optimistic algorithm: get the parent
+ * pid, and go back and check that the parent is still
+ * the same. If it has changed (which is extremely unlikely
+ * indeed), we just try again..
+ *
+ * NOTE! This depends on the fact that even if we _do_
+ * get an old value of "parent", we can happily dereference
+ * the pointer: we just can't necessarily trust the result
+ * until we know that the parent pointer is valid.
+ *
+ * The "mb()" macro is a memory barrier - a synchronizing
+ * event. It also makes sure that gcc doesn't optimize
+ * away the necessary memory references.. The barrier doesn't
+ * have to have all that strong semantics: on x86 we don't
+ * really require a synchronizing instruction, for example.
+ * The barrier is more important for code generation than
+ * for any real memory ordering semantics (even if there is
+ * a small window for a race, using the old pointer is
+ * harmless for a while).
+ */
 asmlinkage int sys_getppid(void)
 {
-	int ret;
+	int pid;
+	struct task_struct * me = current;
+	struct task_struct * parent;
 
-	lock_kernel();
-	ret = current->p_opptr->pid;
-	unlock_kernel();
-	return ret;
+	parent = me->p_opptr;
+	for (;;) {
+		pid = parent->pid;
+#if __SMP__
+{
+		struct task_struct *old = parent;
+		mb();
+		parent = me->p_opptr;
+		if (old != parent)
+			continue;
+}
+#endif
+		break;
+	}
+	return pid;
 }
 
 asmlinkage int sys_getuid(void)
 {
-	int ret;
-
-	lock_kernel();
-	ret = current->uid;
-	unlock_kernel();
-	return ret;
+	/* Only we change this so SMP safe */
+	return current->uid;
 }
 
 asmlinkage int sys_geteuid(void)
 {
-	int ret;
-
-	lock_kernel();
-	ret = current->euid;
-	unlock_kernel();
-	return ret;
+	/* Only we change this so SMP safe */
+	return current->euid;
 }
 
 asmlinkage int sys_getgid(void)
 {
-	int ret;
-
-	lock_kernel();
-	ret = current->gid;
-	unlock_kernel();
-	return ret;
+	/* Only we change this so SMP safe */
+	return current->gid;
 }
 
 asmlinkage int sys_getegid(void)
 {
-	int ret;
-
-	lock_kernel();
-	ret = current->egid;
-	unlock_kernel();
-	return ret;
+	/* Only we change this so SMP safe */
+	return  current->egid;
 }
 
 /*
@@ -1327,12 +1344,17 @@ asmlinkage int sys_getegid(void)
  * moved into the arch dependent tree for those ports that require
  * it for backward compatibility?
  */
+
 asmlinkage int sys_nice(int increment)
 {
 	unsigned long newprio;
 	int increase = 0;
 	int ret = -EPERM;
 
+	/*
+	 *	We need a lock. sys_setpriority can affect other tasks.
+	 */
+	 
 	lock_kernel();
 	newprio = increment;
 	if (increment < 0) {

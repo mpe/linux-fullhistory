@@ -11,7 +11,8 @@
  *		Andrew Lunn	:	Errors in iovec copying.
  *		Pedro Roque	:	Added memcpy_fromiovecend and
  *					csum_..._fromiovecend.
- *      Andi Kleen  :   fixed error handling for 2.1
+ *		Andi Kleen	:	fixed error handling for 2.1
+ *		Alexey Kuznetsov:	2.1 optimisations
  */
 
 
@@ -35,6 +36,9 @@ extern inline int min(int x, int y)
 /*
  *	Verify iovec
  *	verify area does a simple check for completly bogus addresses
+ *
+ *	Save time not doing verify_area. copy_*_user will make this work
+ *	in any case.
  */
 
 int verify_iovec(struct msghdr *m, struct iovec *iov, char *address, int mode)
@@ -48,14 +52,10 @@ int verify_iovec(struct msghdr *m, struct iovec *iov, char *address, int mode)
 		if(mode==VERIFY_READ)
 		{
 			err=move_addr_to_kernel(m->msg_name, m->msg_namelen, address);
-		}
-		else
-		{
-			err=verify_area(mode, m->msg_name, m->msg_namelen);
+			if(err<0)
+				return err;
 		}
 		
-		if(err<0)
-			return err;
 		m->msg_name = address;
 	} else
 		m->msg_name = NULL;
@@ -67,27 +67,18 @@ int verify_iovec(struct msghdr *m, struct iovec *iov, char *address, int mode)
 			return -ENOMEM;
 	}
 	
-	for(ct=0;ct<m->msg_iovlen;ct++)
+	err = copy_from_user(iov, m->msg_iov, sizeof(struct iovec)*m->msg_iovlen);
+	if (err)
 	{
-		err = copy_from_user(&iov[ct], &m->msg_iov[ct],
-				     sizeof(struct iovec));
-		if (err)
-		{
-			if (m->msg_iovlen > UIO_FASTIOV)
-				kfree(iov);
-			return err;
-		}
-		
-		err = verify_area(mode, iov[ct].iov_base, iov[ct].iov_len);
-		if(err)
-		{
-			if (m->msg_iovlen > UIO_FASTIOV)
-				kfree(iov);
-			return err;
-		}
-		len+=iov[ct].iov_len;
+		if (m->msg_iovlen > UIO_FASTIOV)
+			kfree(iov);
+		return -EFAULT;
 	}
-	m->msg_iov=&iov[0];
+
+	for(ct=0;ct<m->msg_iovlen;ct++)
+		len+=iov[ct].iov_len;
+
+	m->msg_iov=iov;
 	return len;
 }
 
@@ -131,7 +122,7 @@ int memcpy_fromiovec(unsigned char *kdata, struct iovec *iov, int len)
 			err = copy_from_user(kdata, iov->iov_base, copy);
 			if (err)
 			{
-				return err; 
+				return -EFAULT;
 			}
 			len-=copy;
 			kdata+=copy;
@@ -171,7 +162,7 @@ int memcpy_fromiovecend(unsigned char *kdata, struct iovec *iov, int offset,
 			err = copy_from_user(kdata, base, copy);
 			if (err)
 			{
-				return err;
+				return -EFAULT;
 			}
 			len-=copy;
 			kdata+=copy;
@@ -185,7 +176,7 @@ int memcpy_fromiovecend(unsigned char *kdata, struct iovec *iov, int offset,
 		err = copy_from_user(kdata, iov->iov_base, copy);
 		if (err)
 		{
-			return err;
+			return -EFAULT;
 		}
 		len-=copy;
 		kdata+=copy;

@@ -84,14 +84,14 @@ extern int atarilance_probe(struct device *);
 extern int a2065_probe(struct device *);
 extern int ariadne_probe(struct device *);
 extern int hydra_probe(struct device *);
+extern int cs89x0_probe(struct device *dev);
 
 /* Detachable devices ("pocket adaptors") */
 extern int atp_init(struct device *);
 extern int de600_probe(struct device *);
 extern int de620_probe(struct device *);
 
-static int
-ethif_probe(struct device *dev)
+static int ethif_probe(struct device *dev)
 {
     u_long base_addr = dev->base_addr;
 
@@ -149,6 +149,9 @@ ethif_probe(struct device *dev)
 #endif
 #ifdef CONFIG_AT1500
 	&& at1500_probe(dev)
+#endif
+#ifdef CONFIG_CS89x0
+ 	&& cs89x0_probe(dev)
 #endif
 #ifdef CONFIG_AT1700
 	&& at1700_probe(dev)
@@ -269,6 +272,17 @@ static struct device atp_dev = {
 #   undef	NEXT_DEV
 #   define	NEXT_DEV	(&arcnet_dev)
 #endif
+
+#if defined(CONFIG_LTPC)
+    extern int ltpc_probe(struct device *);
+    static struct device dev_ltpc = {
+        "ltalk0\0   ",
+                0, 0, 0, 0,
+                0x0, 0,
+                0, 0, 0, NEXT_DEV, ltpc_probe };
+#   undef NEXT_DEV
+#   define NEXT_DEV	(&dev_ltpc)
+#endif  /* LTPC */
 
 /* The first device defaults to I/O base '0', which means autoprobe. */
 #ifndef ETH0_ADDR

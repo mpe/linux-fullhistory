@@ -46,7 +46,6 @@ static int soft_margin = TIMER_MARGIN;	/* in seconds */
  
 struct timer_list watchdog_ticktock;
 static int timer_alive = 0;
-static int in_use = 0;
 
 
 /*
@@ -71,9 +70,8 @@ static void watchdog_fire(unsigned long data)
  
 static int softdog_open(struct inode *inode, struct file *file)
 {
-	if(in_use)
+	if(timer_alive)
 		return -EBUSY;
-	in_use = 1;
 	MOD_INC_USE_COUNT;
 	/*
 	 *	Activate timer
@@ -81,7 +79,7 @@ static int softdog_open(struct inode *inode, struct file *file)
 	del_timer(&watchdog_ticktock);
 	watchdog_ticktock.expires=jiffies + (soft_margin * HZ);
 	add_timer(&watchdog_ticktock);
-	timer_alive++;
+	timer_alive=1;
 	return 0;
 }
 
@@ -94,9 +92,8 @@ static void softdog_release(struct inode *inode, struct file *file)
 #ifndef CONFIG_WATCHDOG_NOWAYOUT	 
 	del_timer(&watchdog_ticktock);
 	MOD_DEC_USE_COUNT;
-	timer_alive=0;
 #endif	
-	in_use = 0;
+	timer_alive=0;
 }
 
 static void softdog_ping(void)

@@ -277,6 +277,13 @@ M:	cheshire@cs.stanford.edu
 W:	http://mosquitonet.Stanford.EDU/strip.html
 S:	Maintained
 
+WAN ROUTER AND SANGOMA WANPIPE DRIVERS (X.25, FRAME RELAY, PPP)
+P:     Gene Kozin
+M:     genek@compuserve.com
+M:     dm@sangoma.com
+W:     http://www.sangoma.com
+S:     Supported
+
 SMB FILESYSTEM:
 P:	Volker Lendecke
 M:	lendecke@namu01.Num.Math.Uni-Goettingen.de

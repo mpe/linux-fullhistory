@@ -122,7 +122,7 @@ struct lance_private {
 	int lance_log_rx_bufs, lance_log_tx_bufs;
 	int rx_ring_mod_mask, tx_ring_mod_mask;
 
-	struct enet_statistics stats;
+	struct net_device_stats stats;
 	int tpe;		      /* cable-selection is TPE */
 	int auto_select;	      /* cable-selection by carrier */
 	unsigned short busmaster_regval;
@@ -645,7 +645,7 @@ static int lance_start_xmit (struct sk_buff *skb, struct device *dev)
 	return status;
 }
 
-static struct enet_statistics *lance_get_stats (struct device *dev)
+static struct net_device_stats *lance_get_stats (struct device *dev)
 {
 	struct lance_private *lp = (struct lance_private *) dev->priv;
 

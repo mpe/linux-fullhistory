@@ -10,9 +10,6 @@
 
 #define	NR_SLOWHZ			10	/* Run timing at 1/10 second */
 
-#define	NR_T1CLAMPLO  	 		(1 * NR_SLOWHZ)		/* If defined, clamp at 1 second **/
-#define	NR_T1CLAMPHI 			(300 * NR_SLOWHZ)	/* If defined, clamp at 30 seconds **/
-
 #define	NR_NETWORK_LEN			15
 #define	NR_TRANSPORT_LEN		5
 
@@ -51,11 +48,12 @@
 #define	NR_DEFAULT_OBS			6			/* Default Obsolescence Count - 6 */
 #define	NR_DEFAULT_QUAL			10			/* Default Neighbour Quality - 10 */
 #define	NR_DEFAULT_TTL			16			/* Default Time To Live - 16 */
-#define NR_MODULUS 			256
-#define NR_MAX_WINDOW_SIZE		127			/* Maximum Window Allowable - 127 */
-#define	NR_DEFAULT_PACLEN		236			/* Default Packet Length - 236 */
 #define	NR_DEFAULT_ROUTING		1			/* Is routing enabled ? */
 #define	NR_DEFAULT_FAILS		2			/* Link fails until route fails */
+
+#define NR_MODULUS 			256
+#define NR_MAX_WINDOW_SIZE		127			/* Maximum Window Allowable - 127 */
+#define	NR_MAX_PACKET_SIZE		236			/* Maximum Packet Length - 236 */
 
 typedef struct {
 	ax25_address		user_addr, source_addr, dest_addr;
@@ -65,9 +63,9 @@ typedef struct {
 	unsigned char		state, condition, bpqext, hdrincl, window;
 	unsigned short		vs, vr, va, vl;
 	unsigned char		n2, n2count;
-	unsigned short		t1, t2, t4, idle, rtt;
+	unsigned short		t1, t2, t4, idle;
 	unsigned short		t1timer, t2timer, t4timer, idletimer;
-	unsigned short		fraglen, paclen;
+	unsigned short		fraglen;
 	struct sk_buff_head	ack_queue;
 	struct sk_buff_head	reseq_queue;
 	struct sk_buff_head	frag_queue;
@@ -95,7 +93,7 @@ struct nr_route {
 struct nr_node {
 	struct nr_node  *next;
 	ax25_address    callsign;
-	char mnemonic[7];
+	char		mnemonic[7];
 	unsigned char   which;
 	unsigned char   count;
 	struct nr_route routes[3];
@@ -111,7 +109,6 @@ extern int  sysctl_netrom_transport_acknowledge_delay;
 extern int  sysctl_netrom_transport_busy_delay;
 extern int  sysctl_netrom_transport_requested_window_size;
 extern int  sysctl_netrom_transport_no_activity_timeout;
-extern int  sysctl_netrom_transport_packet_length;
 extern int  sysctl_netrom_routing_control;
 extern int  sysctl_netrom_link_fails_count;
 extern int  nr_rx_frame(struct sk_buff *, struct device *);
@@ -154,8 +151,6 @@ extern int  nr_validate_nr(struct sock *, unsigned short);
 extern int  nr_in_rx_window(struct sock *, unsigned short);
 extern void nr_write_internal(struct sock *, int);
 extern void nr_transmit_dm(struct sk_buff *);
-extern unsigned short nr_calculate_t1(struct sock *);
-extern void nr_calculate_rtt(struct sock *);
 
 /* nr_timer.c */
 extern void nr_set_timer(struct sock *);

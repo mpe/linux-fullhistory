@@ -583,7 +583,7 @@ qm_symbols(struct module *mod, char *buf, size_t bufsize, size_t *ret)
 
 calc_space_needed:
 	for (; i < mod->nsyms; ++i, ++s)
-		space += strlen((++s)->name)+1;
+		space += strlen(s->name)+1;
 
 	if (put_user(space, ret))
 		return -EFAULT;

@@ -123,7 +123,7 @@ static void el_interrupt(int irq, void *dev_id, struct pt_regs *regs);
 static void el_receive(struct device *dev);
 static void el_reset(struct device *dev);
 static int  el1_close(struct device *dev);
-static struct enet_statistics *el1_get_stats(struct device *dev);
+static struct net_device_stats *el1_get_stats(struct device *dev);
 static void set_multicast_list(struct device *dev);
 
 #define EL1_IO_EXTENT	16
@@ -139,7 +139,7 @@ static int el_debug = EL_DEBUG;
 
 struct net_local
 {
-    struct enet_statistics stats;
+    struct net_device_stats stats;
     int tx_pkt_start;		/* The length of the current Tx packet. */
     int collisions;		/* Tx collisions this packet */
     int loading;		/* Spot buffer load collisions */
@@ -398,12 +398,6 @@ static int el_start_xmit(struct sk_buff *skb, struct device *dev)
 		dev->trans_start = jiffies;
 	}
 
-	if (skb == NULL)
-	{
-		dev_tint(dev);
-		return 0;
-	}
-
 	save_flags(flags);
 
 	/*
@@ -431,6 +425,8 @@ static int el_start_xmit(struct sk_buff *skb, struct device *dev)
 load_it_again_sam:
 		lp->tx_pkt_start = gp_start;
     		lp->collisions = 0;
+
+    		lp->stats.tx_bytes += skb->len;
 
 		/*
 		 *	Command mode with status cleared should [in theory]
@@ -769,7 +765,7 @@ static int el1_close(struct device *dev)
 	return 0;
 }
 
-static struct enet_statistics *el1_get_stats(struct device *dev)
+static struct net_device_stats *el1_get_stats(struct device *dev)
 {
 	struct net_local *lp = (struct net_local *)dev->priv;
 	return &lp->stats;

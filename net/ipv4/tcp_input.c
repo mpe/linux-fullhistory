@@ -760,21 +760,19 @@ static int tcp_ack(struct sock *sk, struct tcphdr *th,
 	}
 	else
 		tcp_clear_xmit_timer(sk, TIME_RETRANS);
-
-
+	
 	tcp_fast_retrans(sk, ack_seq, ack, (flag & (FLAG_DATA|FLAG_WIN_UPDATE)));
 
 	/*
 	 *	Remember the highest ack received.
 	 */
-
+	 
 	tp->snd_una = ack;
-
 	return 1;
 
 uninteresting_ack:
 
-	SOCK_DEBUG(sk, "Ack ignored %u %u\n", ack, tp->snd_nxt);
+	SOCK_DEBUG(sk, "Ack ignored %u %u\n",ack,tp->snd_nxt);
 	return 0;
 }
 
@@ -893,20 +891,17 @@ static void  tcp_ofo_queue(struct sock *sk)
 			break;
 
 		if (!after(skb->end_seq, tp->rcv_nxt)) {
-			SOCK_DEBUG(sk, "ofo packet already received \n");
+			SOCK_DEBUG(sk, "ofo packet was allready received \n");
 			skb_unlink(skb);
 			kfree_skb(skb, FREE_READ);
 			
 			continue;
 		}
-		SOCK_DEBUG(sk, "ofo requeuing : rcv_next %X seq %X - %X\n",
-			       tp->rcv_nxt, skb->seq, skb->end_seq);
-		
-		skb_unlink(skb);
+		SOCK_DEBUG(sk, "ofo requeuing : rcv_next %X seq %X - %X\n", tp->rcv_nxt, skb->seq, skb->end_seq);
 
+		skb_unlink(skb);
 		 
 		skb_queue_tail(&sk->receive_queue, skb);
-
 
 		tp->rcv_nxt = skb->end_seq;
 	}
@@ -970,9 +965,7 @@ static void tcp_data_queue(struct sock *sk, struct sk_buff *skb)
 		 * Partial packet
 		 * seq < rcv_next < end_seq
 		 */
-		SOCK_DEBUG(sk, "partial packet: rcv_next %X seq %X - %X\n",
-			       tp->rcv_nxt, skb->seq, skb->end_seq);
-
+		SOCK_DEBUG(sk, "partial packet: rcv_next %X seq %X - %X\n", tp->rcv_nxt, skb->seq, skb->end_seq);
 		skb_queue_tail(&sk->receive_queue, skb);
 
 		tp->rcv_nxt = skb->end_seq;
@@ -999,8 +992,7 @@ static void tcp_data_queue(struct sock *sk, struct sk_buff *skb)
 
 	tp->pred_flags = 0;
 
-	SOCK_DEBUG(sk, "out of order segment: rcv_next %X seq %X - %X\n",
-		       tp->rcv_nxt, skb->seq, skb->end_seq);
+	SOCK_DEBUG(sk, "out of order segment: rcv_next %X seq %X - %X\n", tp->rcv_nxt, skb->seq, skb->end_seq);
 
 	if (skb_peek(&sk->out_of_order_queue) == NULL) {
 		skb_queue_head(&sk->out_of_order_queue,skb);
@@ -1078,16 +1070,16 @@ static int tcp_data(struct sk_buff *skb, struct sock *sk, unsigned int len)
 	}
 
 	sk->delayed_acks++;
-
+	
 	/*
 	 *	Now tell the user we may have some data. 
 	 */
-
-	if (!sk->dead)
+	 
+	if (!sk->dead) 
 	{
-		SOCK_DEBUG(sk, "Data Wakeup.\n");
+		SOCK_DEBUG(sk, "Data wakeup.\n");
 		sk->data_ready(sk,0);
-	}
+	} 
 	return(1);
 }
 

@@ -518,7 +518,7 @@ static int hdlcdrv_set_mac_address(struct device *dev, void *addr)
 
 /* --------------------------------------------------------------------- */
 
-static struct enet_statistics *hdlcdrv_get_stats(struct device *dev)
+static struct net_device_stats *hdlcdrv_get_stats(struct device *dev)
 {
 	struct hdlcdrv_state *sm;
 

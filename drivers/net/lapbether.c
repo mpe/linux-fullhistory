@@ -74,7 +74,7 @@ static struct lapbethdev {
 	char   ethname[14];		/* ether device name */
 	struct device *ethdev;		/* link to ethernet device */
 	struct device axdev;		/* lapbeth device (lapb#) */
-	struct enet_statistics stats;	/* some statistics */
+	struct net_device_stats stats;	/* some statistics */
 } *lapbeth_devices = NULL;
 
 
@@ -330,7 +330,7 @@ static void lapbeth_disconnected(void *token, int reason)
 /*
  *	Statistics
  */
-static struct enet_statistics *lapbeth_get_stats(struct device *dev)
+static struct net_device_stats *lapbeth_get_stats(struct device *dev)
 {
 	struct lapbethdev *lapbeth;
 

@@ -74,7 +74,6 @@ int sysctl_netrom_transport_acknowledge_delay     = NR_DEFAULT_T2;
 int sysctl_netrom_transport_busy_delay            = NR_DEFAULT_T4;
 int sysctl_netrom_transport_requested_window_size = NR_DEFAULT_WINDOW;
 int sysctl_netrom_transport_no_activity_timeout   = NR_DEFAULT_IDLE;
-int sysctl_netrom_transport_packet_length         = NR_DEFAULT_PACLEN;
 int sysctl_netrom_routing_control                 = NR_DEFAULT_ROUTING;
 int sysctl_netrom_link_fails_count                = NR_DEFAULT_FAILS;
 
@@ -119,7 +118,6 @@ static struct sock *nr_alloc_sock(void)
 /*
  *	Socket removal during an interrupt is now safe.
  */
-
 static void nr_remove_socket(struct sock *sk)
 {
 	struct sock *s;
@@ -310,7 +308,7 @@ void nr_destroy_socket(struct sock *sk)	/* Not static as it's used by the timer 
 		kfree_skb(skb, FREE_READ);
 	}
 
-	if (sk->wmem_alloc || sk->rmem_alloc) {	/* Defer: outstanding buffers */
+	if (sk->wmem_alloc > 0 || sk->rmem_alloc > 0) {	/* Defer: outstanding buffers */
 		init_timer(&sk->timer);
 		sk->timer.expires  = jiffies + 10 * HZ;
 		sk->timer.function = nr_destroy_timer;
@@ -365,7 +363,6 @@ static int nr_ctl_ioctl(const unsigned int cmd, void *arg)
 	  	case NETROM_T1:
   			if (nr_ctl.arg < 1) 
   				return -EINVAL;
-  			sk->protinfo.nr->rtt = (nr_ctl.arg * NR_SLOWHZ) / 2;
   			sk->protinfo.nr->t1  = nr_ctl.arg * NR_SLOWHZ;
   			save_flags(flags); cli();
   			if (sk->protinfo.nr->t1timer > sk->protinfo.nr->t1)
@@ -410,14 +407,6 @@ static int nr_ctl_ioctl(const unsigned int cmd, void *arg)
 	  		restore_flags(flags);
 	  		break;
 
-	  	case NETROM_PACLEN:
-	  		if (nr_ctl.arg < 16 || nr_ctl.arg > 65535) 
-	  			return -EINVAL;
-	  		if (nr_ctl.arg > 236) /* we probably want this */
-	  			printk(KERN_WARNING "nr_ctl_ioctl: Warning --- huge paclen %d\n", (int)nr_ctl.arg);
-	  		sk->protinfo.nr->paclen = nr_ctl.arg;
-	  		break;
-
 	  	default:
 	  		return -EINVAL;
 	  }
@@ -446,7 +435,7 @@ static int nr_setsockopt(struct socket *sock, int level, int optname,
 		case NETROM_T1:
 			if (opt < 1)
 				return -EINVAL;
-			sk->protinfo.nr->rtt = (opt * NR_SLOWHZ) / 2;
+			sk->protinfo.nr->t1 = opt * NR_SLOWHZ;
 			return 0;
 
 		case NETROM_T2:
@@ -475,12 +464,6 @@ static int nr_setsockopt(struct socket *sock, int level, int optname,
 
 		case NETROM_HDRINCL:
 			sk->protinfo.nr->hdrincl = opt ? 1 : 0;
-			return 0;
-
-		case NETROM_PACLEN:
-			if (opt < 1 || opt > 65536)
-				return -EINVAL;
-			sk->protinfo.nr->paclen = opt;
 			return 0;
 
 		default:
@@ -521,10 +504,6 @@ static int nr_getsockopt(struct socket *sock, int level, int optname,
 
 		case NETROM_HDRINCL:
 			val = sk->protinfo.nr->hdrincl;
-			break;
-
-		case NETROM_PACLEN:
-			val = sk->protinfo.nr->paclen;
 			break;
 
 		default:
@@ -571,30 +550,25 @@ static int nr_create(struct socket *sock, int protocol)
 
 	nr = sk->protinfo.nr;
 
-	sock_init_data(sock,sk);
+	sock_init_data(sock, sk);
 
-	init_timer(&sk->timer);
-
-	sock->ops	  = &nr_proto_ops;
-
-	sk->protocol      = protocol;
-	sk->mtu           = NETROM_MTU;	/* 236 */
+	sock->ops    = &nr_proto_ops;
+	sk->protocol = protocol;
+	sk->mtu      = NETROM_MTU;	/* 236 */
 
 	skb_queue_head_init(&nr->ack_queue);
 	skb_queue_head_init(&nr->reseq_queue);
 	skb_queue_head_init(&nr->frag_queue);
 
-	nr->rtt      = sysctl_netrom_transport_timeout / 2;
-	nr->t1       = sysctl_netrom_transport_timeout;
-	nr->t2       = sysctl_netrom_transport_acknowledge_delay;
-	nr->n2       = sysctl_netrom_transport_maximum_tries;
-	nr->t4       = sysctl_netrom_transport_busy_delay;
-	nr->idle     = sysctl_netrom_transport_no_activity_timeout;
-	nr->paclen   = sysctl_netrom_transport_packet_length;
-	nr->window   = sysctl_netrom_transport_requested_window_size;
+	nr->t1     = sysctl_netrom_transport_timeout;
+	nr->t2     = sysctl_netrom_transport_acknowledge_delay;
+	nr->n2     = sysctl_netrom_transport_maximum_tries;
+	nr->t4     = sysctl_netrom_transport_busy_delay;
+	nr->idle   = sysctl_netrom_transport_no_activity_timeout;
+	nr->window = sysctl_netrom_transport_requested_window_size;
 
-	nr->bpqext     = 1;
-	nr->state      = NR_STATE_0;
+	nr->bpqext = 1;
+	nr->state  = NR_STATE_0;
 
 	return 0;
 }
@@ -612,38 +586,34 @@ static struct sock *nr_make_new(struct sock *osk)
 
 	nr = sk->protinfo.nr;
 
-	sock_init_data(NULL,sk);
+	sock_init_data(NULL, sk);
 
-	init_timer(&sk->timer);
-
-	sk->type        = osk->type;
-	sk->socket      = osk->socket;
-	sk->priority    = osk->priority;
-	sk->protocol    = osk->protocol;
-	sk->rcvbuf      = osk->rcvbuf;
-	sk->sndbuf      = osk->sndbuf;
-	sk->debug       = osk->debug;
-	sk->state       = TCP_ESTABLISHED;
-	sk->mtu         = osk->mtu;
-	sk->sleep       = osk->sleep;
-	sk->zapped      = osk->zapped;
+	sk->type     = osk->type;
+	sk->socket   = osk->socket;
+	sk->priority = osk->priority;
+	sk->protocol = osk->protocol;
+	sk->rcvbuf   = osk->rcvbuf;
+	sk->sndbuf   = osk->sndbuf;
+	sk->debug    = osk->debug;
+	sk->state    = TCP_ESTABLISHED;
+	sk->mtu      = osk->mtu;
+	sk->sleep    = osk->sleep;
+	sk->zapped   = osk->zapped;
 
 	skb_queue_head_init(&nr->ack_queue);
 	skb_queue_head_init(&nr->reseq_queue);
 	skb_queue_head_init(&nr->frag_queue);
 
-	nr->rtt      = osk->protinfo.nr->rtt;
-	nr->t1       = osk->protinfo.nr->t1;
-	nr->t2       = osk->protinfo.nr->t2;
-	nr->n2       = osk->protinfo.nr->n2;
-	nr->t4       = osk->protinfo.nr->t4;
-	nr->idle     = osk->protinfo.nr->idle;
-	nr->paclen   = osk->protinfo.nr->paclen;
-	nr->window   = osk->protinfo.nr->window;
+	nr->t1      = osk->protinfo.nr->t1;
+	nr->t2      = osk->protinfo.nr->t2;
+	nr->n2      = osk->protinfo.nr->n2;
+	nr->t4      = osk->protinfo.nr->t4;
+	nr->idle    = osk->protinfo.nr->idle;
+	nr->window  = osk->protinfo.nr->window;
 
-	nr->device   = osk->protinfo.nr->device;
-	nr->bpqext   = osk->protinfo.nr->bpqext;
-	nr->hdrincl  = osk->protinfo.nr->hdrincl;
+	nr->device  = osk->protinfo.nr->device;
+	nr->bpqext  = osk->protinfo.nr->bpqext;
+	nr->hdrincl = osk->protinfo.nr->hdrincl;
 
 	return sk;
 }
@@ -687,7 +657,7 @@ static int nr_release(struct socket *sock, struct socket *peer)
 			nr_write_internal(sk, NR_DISCACK);
 			sk->protinfo.nr->state = NR_STATE_0;
 			sk->state              = TCP_CLOSE;
-			sk->shutdown           = SEND_SHUTDOWN;
+			sk->shutdown          |= SEND_SHUTDOWN;
 			sk->state_change(sk);
 			sk->dead               = 1;
 			nr_destroy_socket(sk);
@@ -697,7 +667,7 @@ static int nr_release(struct socket *sock, struct socket *peer)
 			nr_clear_queues(sk);
 			sk->protinfo.nr->n2count = 0;
 			nr_write_internal(sk, NR_DISCREQ);
-			sk->protinfo.nr->t1timer = sk->protinfo.nr->t1 = nr_calculate_t1(sk);
+			sk->protinfo.nr->t1timer = sk->protinfo.nr->t1;
 			sk->protinfo.nr->t2timer = 0;
 			sk->protinfo.nr->t4timer = 0;
 			sk->protinfo.nr->state   = NR_STATE_2;
@@ -1033,8 +1003,8 @@ int nr_rx_frame(struct sk_buff *skb, struct device *dev)
 	/* L4 timeout negotiation */
 	if (skb->len == 37) {
 		timeout = skb->data[36] * 256 + skb->data[35];
-		if (timeout * NR_SLOWHZ < make->protinfo.nr->rtt * 2)
-			make->protinfo.nr->rtt = (timeout * NR_SLOWHZ) / 2;
+		if (timeout * NR_SLOWHZ < make->protinfo.nr->t1)
+			make->protinfo.nr->t1 = timeout * NR_SLOWHZ;
 		make->protinfo.nr->bpqext = 1;
 	} else {
 		make->protinfo.nr->bpqext = 0;
@@ -1109,8 +1079,6 @@ static int nr_sendmsg(struct socket *sock, struct msghdr *msg, int len, struct s
 
 	if ((skb = sock_alloc_send_skb(sk, size, 0, msg->msg_flags & MSG_DONTWAIT, &err)) == NULL)
 		return err;
-
-	skb->arp = 1;
 
 	skb_reserve(skb, size - len);
 
@@ -1285,7 +1253,7 @@ static int nr_get_info(char *buffer, char **start, off_t offset, int length, int
 
 	cli();
 
-	len += sprintf(buffer, "user_addr dest_node src_node  dev    my  your  st  vs  vr  va    t1     t2    n2  rtt wnd paclen Snd-Q Rcv-Q\n");
+	len += sprintf(buffer, "user_addr dest_node src_node  dev    my  your  st  vs  vr  va    t1     t2    n2  wnd Snd-Q Rcv-Q\n");
 
 	for (s = nr_list; s != NULL; s = s->next) {
 		if ((dev = s->protinfo.nr->device) == NULL)
@@ -1297,7 +1265,7 @@ static int nr_get_info(char *buffer, char **start, off_t offset, int length, int
 			ax2asc(&s->protinfo.nr->user_addr));
 		len += sprintf(buffer + len, "%-9s ",
 			ax2asc(&s->protinfo.nr->dest_addr));
-		len += sprintf(buffer + len, "%-9s %-3s  %02X/%02X %02X/%02X %2d %3d %3d %3d %3d/%03d %2d/%02d %2d/%02d %3d %3d %6d %5d %5d\n",
+		len += sprintf(buffer + len, "%-9s %-3s  %02X/%02X %02X/%02X %2d %3d %3d %3d %3d/%03d %2d/%02d %2d/%02d %3d %5d %5d\n",
 			ax2asc(&s->protinfo.nr->source_addr),
 			devname, s->protinfo.nr->my_index, s->protinfo.nr->my_id,
 			s->protinfo.nr->your_index, s->protinfo.nr->your_id,
@@ -1307,9 +1275,9 @@ static int nr_get_info(char *buffer, char **start, off_t offset, int length, int
 			s->protinfo.nr->t1      / NR_SLOWHZ,
 			s->protinfo.nr->t2timer / NR_SLOWHZ,
 			s->protinfo.nr->t2      / NR_SLOWHZ,
-			s->protinfo.nr->n2count, s->protinfo.nr->n2,
-			s->protinfo.nr->rtt     / NR_SLOWHZ,
-			s->protinfo.nr->window, s->protinfo.nr->paclen,
+			s->protinfo.nr->n2count,
+			s->protinfo.nr->n2,
+			s->protinfo.nr->window,
 			s->wmem_alloc, s->rmem_alloc);
 
 		pos = begin + len;
@@ -1399,7 +1367,7 @@ void nr_proto_init(struct net_proto *pro)
 
 	sock_register(&nr_family_ops);
 	register_netdevice_notifier(&nr_dev_notifier);
-	printk(KERN_INFO "G4KLX NET/ROM for Linux. Version 0.6 for AX25.034 Linux 2.1\n");
+	printk(KERN_INFO "G4KLX NET/ROM for Linux. Version 0.6 for AX25.035 Linux 2.1\n");
 
 	if (!ax25_protocol_register(AX25_P_NETROM, nr_route_frame))
 		printk(KERN_ERR "NET/ROM unable to register protocol with AX.25\n");

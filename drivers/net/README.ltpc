@@ -1,0 +1,98 @@
+This is the ALPHA version of the ltpc driver.
+
+In order to use it, you will need at least version 1.3.3 of the
+netatalk package, and the Apple or Farallon Localtalk PC card.
+There are a number of different Localtalk cards for the PC; this
+driver applies only to the one with the 65c02 processor chip on it.
+
+To include it in the kernel, select the CONFIG_LTPC switch in the
+configuration dialog; at this time (kernel 2.1.23) compiling it as
+a module will not work.
+
+Before starting up the netatalk demons (perhaps in rc.local), you
+need to add a line such as:
+
+/sbin/ifconfig ltalk0 127.0.0.42
+
+
+The driver will autoprobe, and you should see a message like:
+"LocalTalk card found at 240, IR9, DMA1."
+at bootup.
+
+The appropriate netatalk configuration depends on whether you are
+attached to a network that includes appletalk routers or not.  If,
+like me, you are simply connecting to your home Macintoshes and
+printers, you need to set up netatalk to "seed".  The way I do this
+is to have the lines
+
+dummy -seed -phase 2 -net 2000 -addr 2000.26 -zone "1033"
+ltalk0 -seed -phase 1 -net 1033 -addr 1033.27 -zone "1033"
+
+in my atalkd.conf.  What is going on here is that I need to fool
+netatalk into thinking that there are two appletalk interfaces
+present -- otherwise it refuses to seed.  This is a hack, and a
+more permanent solution would be to alter the netatalk code.
+Note that the dummy driver needs to accept multicasts also -- earlier
+versions of dummy.c may need to be patched.  
+
+
+If you are attached to an extended appletalk network, with routers on
+it, then you don't need to fool around with this -- the appropriate
+line in atalkd.conf is
+
+ltalk0 -phase 1
+
+--------------------------------------
+
+Card Configuration:
+
+The interrupts and so forth are configured via the dipswitch on the
+board.  Set the switches so as not to conflict with other hardware.
+
+       Interrupts -- set at most one.  If none are set, the driver uses
+       polled mode.  Because the card was developed in the XT era, the
+       original documentation refers to IRQ2.  Since you'll be running
+       this on an AT (or later) class machine, that really means IRQ9.
+
+       SW1     IRQ 4
+       SW2     IRQ 3
+       SW3     IRQ 9 (2 in original card documentation only applies to XT)
+
+
+       DMA -- choose DMA 1 or 3, and set both corresponding switches.
+
+       SW4     DMA 3
+       SW5     DMA 1
+       SW6     DMA 3
+       SW7     DMA 1
+
+
+       I/O address -- choose one.
+
+       SW8     220 / 240
+
+--------------------------------------
+
+IP:
+	Many people are interested in this driver in order to use IP
+when Localtalk, but no Ethernet, is available.  While the code to do
+this is not strictly speaking part of this driver, an experimental 
+version is available which seems to work under kernel 2.0.xx.  It is
+not yet functional in the 2.1.xx kernels.
+
+--------------------------------------
+
+BUGS:
+
+2.0.xx:
+
+2.1.xx:	The module support doesn't work yet.
+
+______________________________________
+
+THANKS:
+	Thanks to Alan Cox for helpful discussions early on in this
+work, and to Denis Hainsworth for doing the bleeding-edge testing.
+
+-- Bradford Johnson <bradford@math.umn.edu>
+

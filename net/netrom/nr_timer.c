@@ -43,37 +43,20 @@
 static void nr_timer(unsigned long);
 
 /*
- *	Linux set/reset timer routines
+ *	Linux set timer
  */
 void nr_set_timer(struct sock *sk)
 {
 	unsigned long flags;
 
-	save_flags(flags);
-	cli();
-	del_timer(&sk->timer);
-	restore_flags(flags);
-
-	sk->timer.next     = sk->timer.prev = NULL;	
-	sk->timer.data     = (unsigned long)sk;
-	sk->timer.function = &nr_timer;
-
-	sk->timer.expires = jiffies+10;
-	add_timer(&sk->timer);
-}
-
-static void nr_reset_timer(struct sock *sk)
-{
-	unsigned long flags;
-
-	save_flags(flags);
-	cli();
+	save_flags(flags); cli();
 	del_timer(&sk->timer);
 	restore_flags(flags);
 
 	sk->timer.data     = (unsigned long)sk;
 	sk->timer.function = &nr_timer;
 	sk->timer.expires  = jiffies+10;
+
 	add_timer(&sk->timer);
 }
 
@@ -133,7 +116,7 @@ static void nr_timer(unsigned long param)
 	}
 
 	if (sk->protinfo.nr->t1timer == 0 || --sk->protinfo.nr->t1timer > 0) {
-		nr_reset_timer(sk);
+		nr_set_timer(sk);
 		return;
 	}
 
@@ -187,7 +170,7 @@ static void nr_timer(unsigned long param)
 			break;
 	}
 
-	sk->protinfo.nr->t1timer = sk->protinfo.nr->t1 = nr_calculate_t1(sk);
+	sk->protinfo.nr->t1timer = sk->protinfo.nr->t1;
 
 	nr_set_timer(sk);
 }

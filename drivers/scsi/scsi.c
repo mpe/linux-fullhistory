@@ -238,6 +238,7 @@ static struct dev_info device_list[] =
 {"MAXTOR","XT-4170S","B5A", BLIST_NOLUN},       /* Locks-up sometimes when LUN>0 polled. */
 {"MAXTOR","XT-8760S","B7B", BLIST_NOLUN},       /* guess what? */
 {"MEDIAVIS","RENO CD-ROMX2A","2.03",BLIST_NOLUN},/*Responds to all lun */
+{"HP", "C3725S", "*", BLIST_NOTQ},		/* Buggy Tagged Queuing */
 {"MICROP", "4110", "*", BLIST_NOTQ},		/* Buggy Tagged Queuing */
 {"NEC","CD-ROM DRIVE:841","1.0", BLIST_NOLUN},  /* Locks-up when LUN>0 polled. */
 {"RODIME","RO3000S","2.33", BLIST_NOLUN},       /* Locks up if polled for lun != 0 */

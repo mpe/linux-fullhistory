@@ -50,11 +50,9 @@ void nr_output(struct sock *sk, struct sk_buff *skb)
 {
 	struct sk_buff *skbn;
 	unsigned char transport[NR_TRANSPORT_LEN];
-	int err, frontlen, len, mtu;
+	int err, frontlen, len;
 
-	mtu = sk->protinfo.nr->paclen;
-
-	if (skb->len - NR_TRANSPORT_LEN > mtu) {
+	if (skb->len - NR_TRANSPORT_LEN > NR_MAX_PACKET_SIZE) {
 		/* Save a copy of the Transport Header */
 		memcpy(transport, skb->data, NR_TRANSPORT_LEN);
 		skb_pull(skb, NR_TRANSPORT_LEN);
@@ -62,15 +60,12 @@ void nr_output(struct sock *sk, struct sk_buff *skb)
 		frontlen = skb_headroom(skb);
 
 		while (skb->len > 0) {
-			if ((skbn = sock_alloc_send_skb(sk, frontlen + mtu, 0, 0, &err)) == NULL)
+			if ((skbn = sock_alloc_send_skb(sk, frontlen + NR_MAX_PACKET_SIZE, 0, 0, &err)) == NULL)
 				return;
-
-			skbn->sk   = sk;
-			skbn->arp  = 1;
 
 			skb_reserve(skbn, frontlen);
 
-			len = (mtu > skb->len) ? skb->len : mtu;
+			len = (NR_MAX_PACKET_SIZE > skb->len) ? skb->len : NR_MAX_PACKET_SIZE;
 
 			/* Copy the user data */
 			memcpy(skb_put(skbn, len), skb->data, len);
@@ -187,9 +182,8 @@ void nr_kick(struct sock *sk)
 		sk->protinfo.nr->vl         = sk->protinfo.nr->vr;
 		sk->protinfo.nr->condition &= ~NR_COND_ACK_PENDING;
 
-		if (sk->protinfo.nr->t1timer == 0) {
-			sk->protinfo.nr->t1timer = sk->protinfo.nr->t1 = nr_calculate_t1(sk);
-		}
+		if (sk->protinfo.nr->t1timer == 0)
+			sk->protinfo.nr->t1timer = sk->protinfo.nr->t1;
 	}
 
 	nr_set_timer(sk);
@@ -218,8 +212,6 @@ void nr_transmit_buffer(struct sock *sk, struct sk_buff *skb)
 
 	*dptr++ = sysctl_netrom_network_ttl_initialiser;
 
-	skb->arp = 1;
-
 	if (!nr_route_frame(skb, NULL)) {
 		kfree_skb(skb, FREE_WRITE);
 
@@ -245,7 +237,7 @@ void nr_establish_data_link(struct sock *sk)
 	nr_write_internal(sk, NR_CONNREQ);
 
 	sk->protinfo.nr->t2timer = 0;
-	sk->protinfo.nr->t1timer = sk->protinfo.nr->t1 = nr_calculate_t1(sk);
+	sk->protinfo.nr->t1timer = sk->protinfo.nr->t1;
 }
 
 /*
@@ -258,9 +250,8 @@ void nr_enquiry_response(struct sock *sk)
 	if (sk->protinfo.nr->condition & NR_COND_OWN_RX_BUSY) {
 		frametype |= NR_CHOKE_FLAG;
 	} else {
-		if (skb_peek(&sk->protinfo.nr->reseq_queue) != NULL) {
+		if (skb_peek(&sk->protinfo.nr->reseq_queue) != NULL)
 			frametype |= NR_NAK_FLAG;
-		}
 	}
 
 	nr_write_internal(sk, frametype);
@@ -273,13 +264,12 @@ void nr_check_iframes_acked(struct sock *sk, unsigned short nr)
 {
 	if (sk->protinfo.nr->vs == nr) {
 		nr_frames_acked(sk, nr);
-		nr_calculate_rtt(sk);
 		sk->protinfo.nr->t1timer = 0;
 		sk->protinfo.nr->n2count = 0;
 	} else {
 		if (sk->protinfo.nr->va != nr) {
 			nr_frames_acked(sk, nr);
-			sk->protinfo.nr->t1timer = sk->protinfo.nr->t1 = nr_calculate_t1(sk);
+			sk->protinfo.nr->t1timer = sk->protinfo.nr->t1;
 		}
 	}
 }

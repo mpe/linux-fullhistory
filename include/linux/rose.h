@@ -10,7 +10,6 @@
 #define PF_ROSE		AF_ROSE
 #define ROSE_MTU	128
 
-#define ROSE_T0		1
 #define ROSE_T1		2
 #define	ROSE_T2		3
 #define	ROSE_T3		4

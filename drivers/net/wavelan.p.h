@@ -367,7 +367,7 @@ static const char	*version	= "wavelan.c : v12 (wireless extensions) 1/12/96\n";
 
 /* Shortcuts */
 typedef struct device		device;
-typedef struct enet_statistics	en_stats;
+typedef struct net_device_stats	en_stats;
 typedef struct iw_statistics	iw_stats;
 typedef struct iw_quality	iw_qual;
 typedef struct iw_freq		iw_freq;

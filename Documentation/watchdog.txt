@@ -87,6 +87,8 @@ Industrial Computer Source
 9950 Barnes Canyon Road 
 San Diego, CA     
 
+http://www.industry.net/indcompsrc
+
 and please mention Linux when enquiring.
 
 For full information about the PCWD cards see the pcwd-watchdog.txt document.

@@ -175,7 +175,7 @@ void nr_write_internal(struct sock *sk, int frametype)
 	switch (frametype & 0x0F) {
 
 		case NR_CONNREQ:
-			timeout  = (sk->protinfo.nr->rtt / NR_SLOWHZ) * 2;
+			timeout  = sk->protinfo.nr->t1 / NR_SLOWHZ;
 			*dptr++  = sk->protinfo.nr->my_index;
 			*dptr++  = sk->protinfo.nr->my_id;
 			*dptr++  = 0;
@@ -267,40 +267,8 @@ void nr_transmit_dm(struct sk_buff *skb)
 	*dptr++ = NR_CONNACK | NR_CHOKE_FLAG;
 	*dptr++ = 0;
 
-	skbn->sk   = NULL;
-
 	if (!nr_route_frame(skbn, NULL))
 		kfree_skb(skbn, FREE_WRITE);
-}
-
-/*
- *	Exponential backoff for NET/ROM
- */
-unsigned short nr_calculate_t1(struct sock *sk)
-{
-	int n, t;
-	
-	for (t = 2, n = 0; n < sk->protinfo.nr->n2count; n++)
-		t *= 2;
-
-	if (t > 8) t = 8;
-
-	return t * sk->protinfo.nr->rtt;
-}
-
-/*
- *	Calculate the Round Trip Time
- */
-void nr_calculate_rtt(struct sock *sk)
-{
-	if (sk->protinfo.nr->t1timer > 0 && sk->protinfo.nr->n2count == 0)
-		sk->protinfo.nr->rtt = (9 * sk->protinfo.nr->rtt + sk->protinfo.nr->t1 - sk->protinfo.nr->t1timer) / 10;
-
-	if (sk->protinfo.nr->rtt < NR_T1CLAMPLO)
-		sk->protinfo.nr->rtt = NR_T1CLAMPLO;
-
-        if (sk->protinfo.nr->rtt > NR_T1CLAMPHI)
-                sk->protinfo.nr->rtt = NR_T1CLAMPHI;
 }
 
 #endif

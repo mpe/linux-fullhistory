@@ -486,7 +486,7 @@ void ax25_dg_build_path(struct sk_buff *skb, ax25_address *addr, struct device *
 		return;
 	}
 
-	memcpy(&dest, skb->data    , AX25_ADDR_LEN);
+	memcpy(&dest, skb->data + 0, AX25_ADDR_LEN);
 	memcpy(&src,  skb->data + 7, AX25_ADDR_LEN);
 
 	bp = skb_push(skb, len);
@@ -638,11 +638,11 @@ struct device *ax25_fwd_dev(struct device *dev)
 
 	return ax25_dev->forward;
 }
-      
+
 #ifdef MODULE
 
 /*
- *    Free all memory associated with routing and device structures.
+ *	Free all memory associated with routing and device structures.
  */
 void ax25_rt_free(void)
 {

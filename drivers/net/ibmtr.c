@@ -174,7 +174,7 @@ static		void tr_tx(struct device *dev);
 static int	tok_open(struct device *dev);
 static int	tok_close(struct device *dev);
 static int	tok_send_packet(struct sk_buff *skb, struct device *dev);
-static struct enet_statistics * tok_get_stats(struct device *dev);
+static struct net_device_stats * tok_get_stats(struct device *dev);
 void		tr_readlog(struct device *dev);
 
 /* FIXME: Should use init_timer and friends not assume the structure
@@ -1561,11 +1561,11 @@ void tr_readlog(struct device *dev) {
    this device -- the tr.... structure is an ethnet look-alike
    so at least for this iteration may suffice.   */
 
-static struct enet_statistics * tok_get_stats(struct device *dev) {
+static struct net_device_stats * tok_get_stats(struct device *dev) {
 
 	struct tok_info *toki;
 	toki=(struct tok_info *) dev->priv;
-	return (struct enet_statistics *) &toki->tr_stats;
+	return (struct net_device_stats *) &toki->tr_stats;
 }
 
 #ifdef MODULE

@@ -39,6 +39,7 @@
 #include <linux/if_arp.h>
 #include <linux/fddidevice.h>
 #include <linux/net_alias.h>
+#include <linux/if_ltalk.h>
 
 /* The network devices currently exist only in the socket namespace, so these
    entries are unused.  The only ones that make sense are
@@ -243,6 +244,50 @@ void fddi_setup(struct device *dev)
 	dev->pa_mask	= 0;
 	dev->pa_alen	= 4;
 	return;
+}
+
+#endif
+
+#ifdef CONFIG_ATALK
+
+static int ltalk_change_mtu(struct device *dev, int mtu)
+{
+	return -EINVAL;
+}
+
+static int ltalk_mac_addr(struct device *dev, void *addr)
+{	
+	return -EINVAL;
+}
+
+
+void ltalk_setup(struct device *dev)
+{
+	/* Fill in the fields of the device structure with localtalk-generic values. */
+
+	dev_init_buffers(dev);
+	
+	dev->change_mtu		= ltalk_change_mtu;
+	dev->hard_header	= NULL;
+	dev->rebuild_header 	= NULL;
+	dev->set_mac_address 	= ltalk_mac_addr;
+	dev->hard_header_cache	= NULL;
+	dev->header_cache_update= NULL;
+
+	dev->type		= ARPHRD_LOCALTLK;
+	dev->hard_header_len 	= LTALK_HLEN;
+	dev->mtu		= LTALK_MTU;
+	dev->addr_len		= LTALK_ALEN;
+	dev->tx_queue_len	= 10;	
+	
+	dev->broadcast[0]	= 0xFF;
+
+	dev->flags		= IFF_BROADCAST|IFF_MULTICAST|IFF_NOARP;
+	dev->family		= AF_APPLETALK;
+	dev->pa_addr		= 0;
+	dev->pa_brdaddr 	= 0;
+	dev->pa_mask		= 0;
+	dev->pa_alen		= 1;
 }
 
 #endif

@@ -1,8 +1,8 @@
 /*
  *	Rose release 001
  *
- *	This is ALPHA test software. This code may break your machine, randomly fail to work with new 
- *	releases, misbehave and/or generally screw up. It might even work. 
+ *	This is ALPHA test software. This code may break your machine, randomly fail to work with new
+ *	releases, misbehave and/or generally screw up. It might even work.
  *
  *	This code REQUIRES 2.1.15 or higher/ NET3.038
  *
@@ -64,8 +64,6 @@ static int rose_queue_rx_frame(struct sock *sk, struct sk_buff *skb, int more)
 		if ((skbn = alloc_skb(sk->protinfo.rose->fraglen, GFP_ATOMIC)) == NULL)
 			return 1;
 
-		skbn->arp  = 1;
-		skb_set_owner_r(skbn, sk);
 		skbn->h.raw = skbn->data;
 
 		skbo = skb_dequeue(&sk->protinfo.rose->frag_queue);
@@ -189,11 +187,10 @@ static int rose_state3_machine(struct sock *sk, struct sk_buff *skb, int framety
 
 		case ROSE_RR:
 		case ROSE_RNR:
-			if (frametype == ROSE_RNR) {
+			if (frametype == ROSE_RNR)
 				sk->protinfo.rose->condition |= ROSE_COND_PEER_RX_BUSY;
-			} else {
+			else
 				sk->protinfo.rose->condition &= ~ROSE_COND_PEER_RX_BUSY;
-			}
 			if (!rose_validate_nr(sk, nr)) {
 				rose_clear_queues(sk);
 				rose_write_internal(sk, ROSE_RESET_REQUEST);
@@ -246,7 +243,7 @@ static int rose_state3_machine(struct sock *sk, struct sk_buff *skb, int framety
 			 * If the window is full, ack the frame, else start the
 			 * acknowledge hold back timer.
 			 */
-			if (((sk->protinfo.rose->vl + ROSE_DEFAULT_WINDOW) % ROSE_MODULUS) == sk->protinfo.rose->vr) {
+			if (((sk->protinfo.rose->vl + ROSE_MAX_WINDOW_SIZE) % ROSE_MODULUS) == sk->protinfo.rose->vr) {
 				sk->protinfo.rose->condition &= ~ROSE_COND_ACK_PENDING;
 				sk->protinfo.rose->timer      = 0;
 				rose_enquiry_response(sk);

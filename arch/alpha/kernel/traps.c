@@ -426,13 +426,13 @@ static inline unsigned long s_mem_to_reg (unsigned long s_mem)
 	exp = (exp_msb << 10) | exp_low;	/* common case */
 	if (exp_msb) {
 		if (exp_low == 0x7f) {
-			exp = 0x3ff;
+			exp = 0x7ff;
 		}
 	} else {
 		if (exp_low == 0x00) {
 			exp = 0x000;
 		} else {
-			exp |= (0x7 << 8);
+			exp |= (0x7 << 7);
 		}
 	}
 	return (sign << 63) | (exp << 52) | (frac << 29);

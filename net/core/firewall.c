@@ -10,8 +10,9 @@
 #include <linux/module.h>
 #include <linux/skbuff.h>
 #include <linux/firewall.h>
+#include <asm/semaphore.h>
 
-static int firewall_lock=0;
+struct semaphore firewall_sem = MUTEX; 
 static int firewall_policy[NPROTO];
 static struct firewall_ops *firewall_chain[NPROTO];
 
@@ -30,13 +31,7 @@ int register_firewall(int pf, struct firewall_ops *fw)
 	 *	Don't allow two people to adjust at once.
 	 */
 
-	/*
-	 *	FIXME: Swap for a kernel semaphore object
-	 */
-	 
-	while(firewall_lock)
-		schedule();
-	firewall_lock=1;
+	down(&firewall_sem); 
 
 	p=&firewall_chain[pf];
 
@@ -47,7 +42,6 @@ int register_firewall(int pf, struct firewall_ops *fw)
 		p=&((*p)->next);
 	}
 
-
 	/*
 	 * We need to use a memory barrier to make sure that this
 	 * works correctly even in SMP with weakly ordered writes.
@@ -56,6 +50,7 @@ int register_firewall(int pf, struct firewall_ops *fw)
 	 * chain), but not wrt itself (so you can't call this from
 	 * an interrupt. Not that you'd want to).
 	 */
+
 	fw->next=*p;
 	mb();
 	*p = fw;
@@ -64,7 +59,7 @@ int register_firewall(int pf, struct firewall_ops *fw)
 	 *	And release the sleep lock
 	 */
 
-	firewall_lock=0;
+ 	up(&firewall_sem); 
 	return 0;
 }
 
@@ -83,9 +78,7 @@ int unregister_firewall(int pf, struct firewall_ops *fw)
 	 *	Don't allow two people to adjust at once.
 	 */
 
-	while(firewall_lock)
-		schedule();
-	firewall_lock=1;
+	down(&firewall_sem); 
 
 	nl=&firewall_chain[pf];
 
@@ -95,12 +88,12 @@ int unregister_firewall(int pf, struct firewall_ops *fw)
 		{
 			struct firewall_ops *f=fw->next;
 			*nl = f;
-			firewall_lock=0;
+			up(&firewall_sem); 
 			return 0;
 		}
 		nl=&((*nl)->next);
 	}
-	firewall_lock=0;
+	up(&firewall_sem);
 	return -ENOENT;
 }
 

@@ -1034,6 +1034,9 @@ static int send_packet(struct device *dev, struct sk_buff *skb)
 	}
 	adapter = dev->priv;
 
+
+	adapter->stats.tx_bytes+=nlen;
+	
 	/*
 	 * send the adapter a transmit packet command. Ignore segment and offset
 	 * and make sure the length is even
@@ -1111,15 +1114,6 @@ static int elp_start_xmit(struct sk_buff *skb, struct device *dev)
 		adapter->stats.tx_dropped++;
 	}
 
-	/* Some upper layer thinks we've missed a tx-done interrupt */
-	if (skb == NULL) {
-		dev_tint(dev);
-		return 0;
-	}
-
-	if (skb->len <= 0)
-		return 0;
-
 	if (elp_debug >= 3)
 		printk("%s: request to send packet of length %d\n", dev->name, (int) skb->len);
 
@@ -1156,7 +1150,7 @@ static int elp_start_xmit(struct sk_buff *skb, struct device *dev)
  *
  ******************************************************/
 
-static struct enet_statistics *elp_get_stats(struct device *dev)
+static struct net_device_stats *elp_get_stats(struct device *dev)
 {
 	elp_device *adapter = (elp_device *) dev->priv;
 
@@ -1329,7 +1323,7 @@ static void elp_init(struct device *dev)
 	/*
 	 * setup ptr to adapter specific information
 	 */
-	memset(&(adapter->stats), 0, sizeof(struct enet_statistics));
+	memset(&(adapter->stats), 0, sizeof(struct net_device_stats));
 
 	/*
 	 * memory information

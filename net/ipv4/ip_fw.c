@@ -1309,14 +1309,13 @@ void ip_fw_init(void)
 
 	if(register_firewall(PF_INET,&ipfw_ops)<0)
 		panic("Unable to register IP firewall.\n");
-
 #ifdef CONFIG_PROC_FS		
 	proc_net_register(&proc_net_ipfwin);
 	proc_net_register(&proc_net_ipfwout);
 	proc_net_register(&proc_net_ipfwfwd);
 #endif
 #endif
-        
+
 #if defined(CONFIG_IP_ACCT) || defined(CONFIG_IP_FIREWALL)
 	/* Register for device up/down reports */
 	register_netdevice_notifier(&ipfw_dev_notifier);

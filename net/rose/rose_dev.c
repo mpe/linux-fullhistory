@@ -200,9 +200,7 @@ static struct enet_statistics *rose_get_stats(struct device *dev)
 
 int rose_init(struct device *dev)
 {
-	int i;
-
-	dev->mtu		= ROSE_PACLEN - 2;
+	dev->mtu		= ROSE_MAX_PACKET_SIZE - 2;
 	dev->tbusy		= 0;
 	dev->hard_start_xmit	= rose_xmit;
 	dev->open		= rose_open;
@@ -231,9 +229,7 @@ int rose_init(struct device *dev)
 
 	dev->get_stats = rose_get_stats;
 
-	/* Fill in the generic fields of the device structure. */
-	for (i = 0; i < DEV_NUMBUFFS; i++)
-		skb_queue_head_init(&dev->buffs[i]);
+	dev_init_buffers(dev);
 
 	return 0;
 };

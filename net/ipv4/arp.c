@@ -1552,7 +1552,7 @@ int arp_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
 	}
 
 	start_bh_atomic();
-	arp_update(sip, sha, dev, 0, !RT_LOCALADDR(rt->rt_flags));
+	arp_update(sip, sha, dev, 0, !RT_LOCALADDR(rt->rt_flags) && dev->type != ARPHRD_METRICOM);
 	end_bh_atomic();
 	kfree_skb(skb, FREE_READ);
 	return 0;
@@ -1617,6 +1617,13 @@ int arp_req_set(struct arpreq *r, struct device * dev)
 		if (!dev)
 			dev = rt->u.dst.dev;
 		if (rt->rt_flags&(RTF_LOCAL|RTF_BROADCAST|RTF_MULTICAST|RTCF_NAT)) {
+			if (rt->rt_flags&RTF_BROADCAST &&
+			    dev->type == ARPHRD_METRICOM &&
+			    r->arp_ha.sa_family == ARPHRD_METRICOM) {
+				memcpy(dev->broadcast, r->arp_ha.sa_data, dev->addr_len);
+				ip_rt_put(rt);
+				return 0;
+			}
 			ip_rt_put(rt);
 			return -EINVAL;
 		}

@@ -223,7 +223,7 @@ struct lance_private {
 	int					dirty_tx;		/* Ring entries to be freed. */
 						/* copy function */
 	void				*(*memcpy_f)( void *, const void *, size_t );
-	struct enet_statistics stats;
+	struct net_device_stats stats;
 /* These two must be ints for set_bit() */
 	int					tx_full;
 	int					lock;
@@ -346,7 +346,7 @@ static int lance_start_xmit( struct sk_buff *skb, struct device *dev );
 static void lance_interrupt( int irq, void *dev_id, struct pt_regs *fp );
 static int lance_rx( struct device *dev );
 static int lance_close( struct device *dev );
-static struct enet_statistics *lance_get_stats( struct device *dev );
+static struct net_device_stats *lance_get_stats( struct device *dev );
 static void set_multicast_list( struct device *dev );
 static int lance_set_mac_address( struct device *dev, void *addr );
 
@@ -1072,7 +1072,7 @@ static int lance_close( struct device *dev )
 }
 
 
-static struct enet_statistics *lance_get_stats( struct device *dev )
+static struct net_device_stats *lance_get_stats( struct device *dev )
 
 {	struct lance_private *lp = (struct lance_private *)dev->priv;
 

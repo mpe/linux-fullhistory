@@ -17,20 +17,39 @@ unsigned int csum_partial(const unsigned char * buff, int len, unsigned int sum)
 
 /*
  * the same as csum_partial, but copies from src while it
- * checksums
+ * checksums, and handles user-space pointer exceptions correctly, when needed.
  *
  * here even more important to align src and dst on a 32-bit (or even
  * better 64-bit) boundary
  */
 
-unsigned int csum_partial_copy( const char *src, char *dst, int len, int sum);
-
+unsigned int csum_partial_copy_from_user( int * err, const char *src, 
+						char *dst, int len, int sum);
 
 /*
- * the same as csum_partial, but copies from user space (but on the x86
- * we have just one address space, so this is identical to the above)
+ * I hope GCC will optimize 'dummy' away ...
  */
+
+unsigned int csum_partial_copy_nocheck_generic( int * err, const char *src, char *dst,
+						 int len, int sum);
+
+extern __inline__ unsigned int csum_partial_copy_nocheck ( const char *src, char *dst,
+                                                        int len, int sum)
+{
+        int dummy;
+
+        return csum_partial_copy_nocheck_generic ( &dummy, src, dst, len, sum);
+}
+
+/*
+ * These are the 'old' way of doing checksums, a warning message will be
+ * printed if they are used and an exeption occurs.
+ *
+ * these functions should go away after some time.
+ */
+
 #define csum_partial_copy_fromuser csum_partial_copy
+unsigned int csum_partial_copy( const char *src, char *dst, int len, int sum);
 
 /*
  *	This is a version of ip_compute_csum() optimized for IP headers,

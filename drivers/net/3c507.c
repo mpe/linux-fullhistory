@@ -115,7 +115,7 @@ enum commands {
 
 /* Information that need to be kept for each board. */
 struct net_local {
-	struct enet_statistics stats;
+	struct net_device_stats stats;
 	int last_restart;
 	ushort rx_head;
 	ushort rx_tail;
@@ -283,7 +283,7 @@ static int	el16_send_packet(struct sk_buff *skb, struct device *dev);
 static void	el16_interrupt(int irq, void *dev_id, struct pt_regs *regs);
 static void el16_rx(struct device *dev);
 static int	el16_close(struct device *dev);
-static struct enet_statistics *el16_get_stats(struct device *dev);
+static struct net_device_stats *el16_get_stats(struct device *dev);
 
 static void hardware_send_packet(struct device *dev, void *buf, short length);
 void init_82586_mem(struct device *dev);
@@ -300,8 +300,8 @@ struct netdev_entry netcard_drv =
 	If dev->base_addr == 2, (detachable devices only) allocate space for the
 	device and return success.
 	*/
-int
-el16_probe(struct device *dev)
+
+int el16_probe(struct device *dev)
 {
 	int base_addr = dev ? dev->base_addr : 0;
 	int i;
@@ -428,10 +428,7 @@ int el16_probe1(struct device *dev, int ioaddr)
 	return 0;
 }
 
-
-
-static int
-el16_open(struct device *dev)
+static int el16_open(struct device *dev)
 {
 	irq2dev_map[dev->irq] = dev;
 
@@ -447,14 +444,14 @@ el16_open(struct device *dev)
 	return 0;
 }
 
-static int
-el16_send_packet(struct sk_buff *skb, struct device *dev)
+static int el16_send_packet(struct sk_buff *skb, struct device *dev)
 {
 	struct net_local *lp = (struct net_local *)dev->priv;
 	int ioaddr = dev->base_addr;
 	short *shmem = (short*)dev->mem_start;
 
-	if (dev->tbusy) {
+	if (dev->tbusy) 
+	{
 		/* If we get here, some higher level has decided we are broken.
 		   There should really be a "kick me" function call instead. */
 		int tickssofar = jiffies - dev->trans_start;
@@ -480,21 +477,15 @@ el16_send_packet(struct sk_buff *skb, struct device *dev)
 		dev->trans_start = jiffies;
 	}
 
-	/* If some higher layer thinks we've missed an tx-done interrupt
-	   we are passed NULL. Caution: dev_tint() handles the cli()/sti()
-	   itself. */
-	if (skb == NULL) {
-		dev_tint(dev);
-		return 0;
-	}
-
 	/* Block a timer-based transmit from overlapping. */
 	if (set_bit(0, (void*)&dev->tbusy) != 0)
 		printk("%s: Transmitter access conflict.\n", dev->name);
-	else {
+	else
+	{
 		short length = ETH_ZLEN < skb->len ? skb->len : ETH_ZLEN;
 		unsigned char *buf = skb->data;
 
+		lp->stats.tx_bytes+=length;
 		/* Disable the 82586's input to the interrupt line. */
 		outb(0x80, ioaddr + MISC_CTRL);
 		hardware_send_packet(dev, buf, length);
@@ -509,11 +500,10 @@ el16_send_packet(struct sk_buff *skb, struct device *dev)
 
 	return 0;
 }
-
+
 /*	The typical workload of the driver:
 	Handle the network interface interrupts. */
-static void
-el16_interrupt(int irq, void *dev_id, struct pt_regs *regs)
+static void el16_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 {
 	struct device *dev = (struct device *)(irq2dev_map[irq]);
 	struct net_local *lp;
@@ -588,8 +578,9 @@ el16_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 		ack_cmd |= CUC_RESUME;
 	}
 
-	if ((status & 0x0070) != 0x0040  &&  dev->start) {
-	  static void init_rx_bufs(struct device *);
+	if ((status & 0x0070) != 0x0040  &&  dev->start) 
+	{
+		static void init_rx_bufs(struct device *);
 		/* The Rx unit is not ready, it must be hung.  Restart the receiver by
 		   initializing the rx buffers, and issuing an Rx start command. */
 		if (net_debug)
@@ -612,8 +603,7 @@ el16_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 	return;
 }
 
-static int
-el16_close(struct device *dev)
+static int el16_close(struct device *dev)
 {
 	int ioaddr = dev->base_addr;
 	ushort *shmem = (short*)dev->mem_start;
@@ -642,8 +632,7 @@ el16_close(struct device *dev)
 
 /* Get the current statistics.	This may be called with the card open or
    closed. */
-static struct enet_statistics *
-el16_get_stats(struct device *dev)
+static struct net_device_stats *el16_get_stats(struct device *dev)
 {
 	struct net_local *lp = (struct net_local *)dev->priv;
 
@@ -653,8 +642,7 @@ el16_get_stats(struct device *dev)
 }
 
 /* Initialize the Rx-block list. */
-static void
-init_rx_bufs(struct device *dev)
+static void init_rx_bufs(struct device *dev)
 {
 	struct net_local *lp = (struct net_local *)dev->priv;
 	unsigned short *write_ptr;
@@ -699,8 +687,7 @@ init_rx_bufs(struct device *dev)
 
 }
 
-void
-init_82586_mem(struct device *dev)
+void init_82586_mem(struct device *dev)
 {
 	struct net_local *lp = (struct net_local *)dev->priv;
 	short ioaddr = dev->base_addr;
@@ -758,8 +745,7 @@ init_82586_mem(struct device *dev)
 	return;
 }
 
-static void
-hardware_send_packet(struct device *dev, void *buf, short length)
+static void hardware_send_packet(struct device *dev, void *buf, short length)
 {
 	struct net_local *lp = (struct net_local *)dev->priv;
 	short ioaddr = dev->base_addr;
@@ -804,8 +790,7 @@ hardware_send_packet(struct device *dev, void *buf, short length)
 		dev->tbusy = 0;
 }
 
-static void
-el16_rx(struct device *dev)
+static void el16_rx(struct device *dev)
 {
 	struct net_local *lp = (struct net_local *)dev->priv;
 	short *shmem = (short*)dev->mem_start;

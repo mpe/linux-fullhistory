@@ -175,7 +175,7 @@ struct smc_local {
 	   can find out semi-useless statistics of how well the card is
 	   performing
  	*/
-	struct enet_statistics stats;
+	struct net_driver_stats stats;
 
 	/*
 	   If I have to wait until memory is available to send
@@ -234,7 +234,7 @@ static int smc_close(struct device *dev);
  . This routine allows the proc file system to query the driver's
  . statistics.
 */
-static struct enet_statistics * smc_query_statistics( struct device *dev);
+static struct net_driver_stats * smc_query_statistics( struct device *dev);
 
 /*
  . Finally, a call to set promiscuous mode ( for TCPDUMP and related
@@ -1643,7 +1643,7 @@ static int smc_close(struct device *dev)
  . Get the current statistics.
  . This may be called with the card open or closed.
  .-------------------------------------------------------------*/
-static struct enet_statistics * smc_query_statistics(struct device *dev) {
+static struct net_driver_stats* smc_query_statistics(struct device *dev) {
 	struct smc_local *lp = (struct smc_local *)dev->priv;
 
 	return &lp->stats;

@@ -1,0 +1,142 @@
+------------------------------------------------------------------------------
+WANPIPE(tm) Multiprotocol WAN Driver for Linux WAN Router
+------------------------------------------------------------------------------
+Release 3.0.0
+December 31, 1996
+Author: Gene Kozin <genek@compuserve.com>
+Copyright (c) 1995-1996 Sangoma Technologies Inc.
+------------------------------------------------------------------------------
+
+INTRODUCTION
+
+WANPIPE(tm) is a family of intelligent muliprotocol WAN communication adapters
+for personal computers (ISA bus) designed to provide PC connectivity to
+various communication links, such as leased lines and public data networks, at
+speeds up to T1/E1 using variety of synchronous communications protocols,
+including frame relay, PPP, X.25, SDLC, etc.
+
+WANPIPE driver together with Linux WAN Router module allows you to build
+relatively inexpensive, yet high-prformance multiprotocol WAN router.  For
+more information about Linux WAN Router please read file
+Documentation/networking/wan-router.txt.  You must also obtain WAN Tools
+package to be able to use Linux WAN Router and WANPIPE driver.  The package
+is available via the Internet from Sangoma Technologies' anonymous FTP server:
+
+	ftp.sangoma.com/pub/linux/wantools-X.Y.Z.tgz
+
+For technical questions and/or comments please e-mail to genek@compuserve.com.
+For general inquiries please contact Sangoma Technologies Inc. by
+
+	Hotline:	1-800-388-2475	(USA and Canada, toll free)
+	Phone:		(905) 474-1990
+	Fax:		(905) 474-9223
+	E-mail:		dm@sangoma.com	(David Mandelstam)
+	WWW:		http://www.sangoma.com
+
+
+
+COPYRIGHT AND LICENSING INFORMATION
+
+This program is free software; you can redistribute it and/or modify it under
+the terms of the GNU General Public License as published by the Free Software
+Foundation; either version 2, or (at your option) any later version.
+
+This program is distributed in the hope that it will be useful, but WITHOUT
+ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
+FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details.
+
+You should have received a copy of the GNU General Public License along with
+this program; if not, write to the Free Software Foundation, Inc., 675 Mass
+Ave, Cambridge, MA 02139, USA.
+
+
+
+NEW IN THIS RELEASE
+
+ o Implemented as WAN Link Driver compliant with Linux WAN Router interface
+ o Added support for X.25 protocol
+ o Miscellaneous bug fixes and performance improvements
+
+
+
+FILE LIST
+
+drivers/net:
+	README.wanpipe	This file
+	sdladrv.c	SDLA support module source code
+	wpmain.c	WANPIPE driver module main source code
+	wpx.c		WANPIPE driver module X.25 source code
+	wpf.c		WANPIPE driver module frame relay source code
+	wpp.c		WANPIPE driver module PPP source code
+	sdla_x25.h	SDLA X.25 firmware API definitions
+	sdla_fr.h	SDLA frame relay firmware API definitions
+	sdla_ppp.h	SDLA PPP firmware API definitions
+
+include/linux:
+	wanpipe.h	WANPIPE API definitions
+	sdladrv.h	SDLA support module API definitions
+	sdlasfm.h	SDLA firmware module definitions
+
+
+
+REVISION HISTORY
+
+3.0.0	December 31, 1996
+
+	o Uses Linux WAN Router interface
+	o Added support for X.25 routing
+	o Miscellaneous bug fixes and performance improvements
+
+2.4.1	December 18, 1996
+
+	o Added support for LMI and Q.933 frame relay link management
+
+2.3.0	October 17, 1996
+
+	o All shell scripts use meta-configuration file
+	o Miscellaneous bug fixes
+
+2.2.0	July 16, 1996
+
+	o Compatible with Linux 2.0
+	o Added uninstall script
+	o User's Manual is available in HTML format
+
+2.1.0	June 20, 1996
+
+	o Added support for synchronous PPP
+	o Added support for S503 adapter
+	o Added API for executing adapter commands
+	o Fixed a re-entrancy problem in frame relaty driver
+	o Changed interface between SDLA driver and protocol support modules
+	o Updated frame relay firmware
+
+2.0.0	May 1, 1996
+
+	o Added interactive installation and configuration scripts
+	o Added System V-style start-up script
+	o Added dynamic memory window address selection in SDLA driver
+	o Miscellaneous bug fixes in SDLA driver
+	o Updated S508 frame relay firmware
+	o Changed SFM file format
+
+1.0.0	February 12, 1996
+
+	o Final release
+	o Added support for Linux 1.3
+	o Updated S508 frame relay firmware
+
+0.9.0	December 21, 1995
+
+	o Added SNAP encapsulation for routed frames
+	o Added support for the frame relay switch emulation mode
+	o Added support for S508 adapter
+	o Added capability to autodetect adapter type
+	o Miscellaneous bug fixes in SDLA and frame relay drivers
+
+0.1.0	October 12, 1995
+
+	o Initial version
+
+>>>>>>> END OF README <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
+

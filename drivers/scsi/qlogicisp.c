@@ -2,6 +2,7 @@
  * QLogic ISP1020 Intelligent SCSI Processor Driver (PCI)
  * Written by Erik H. Moe, ehm@cris.com
  * Copyright 1995, Erik H. Moe
+ * Copyright 1996, 1997  Michael A. Griffith <grif@acm.org> 
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -12,32 +13,6 @@
  * WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
  * General Public License for more details.
- */
-
-/* Renamed and updated to 1.3.x by Michael Griffith <grif@cs.ucr.edu> */
-
-/*
- * $Date: 1995/09/22 02:23:15 $
- * $Revision: 0.5 $
- *
- * $Log: isp1020.c,v $
- * Revision 0.5  1995/09/22  02:23:15  root
- * do auto request sense
- *
- * Revision 0.4  1995/08/07  04:44:33  root
- * supply firmware with driver.
- * numerous bug fixes/general cleanup of code.
- *
- * Revision 0.3  1995/07/16  16:15:39  root
- * added reset/abort code.
- *
- * Revision 0.2  1995/06/29  03:14:19  root
- * fixed biosparam.
- * added queue protocol.
- *
- * Revision 0.1  1995/06/25  01:55:45  root
- * Initial release.
- *
  */
 
 #include <linux/blk.h>
@@ -390,7 +365,7 @@ struct Status_Entry {
 
 #define PACKB(a, b)			(((a)<<4)|(b))
 
-const u_char mbox_param[] = {
+static const u_char mbox_param[] = {
 	PACKB(1, 1),	/* MBOX_NO_OP */
 	PACKB(5, 5),	/* MBOX_LOAD_RAM */
 	PACKB(2, 0),	/* MBOX_EXEC_FIRMWARE */
@@ -534,7 +509,7 @@ struct isp1020_hostdata {
 						    QLOGICISP_REQ_QUEUE_LEN)
 #define RES_QUEUE_DEPTH(in, out)	QUEUE_DEPTH(in, out, RES_QUEUE_LEN)
 
-struct Scsi_Host *irq2host[NR_IRQS];
+static struct Scsi_Host *irq2host[NR_IRQS];
 
 static void	isp1020_enable_irqs(struct Scsi_Host *);
 static void	isp1020_disable_irqs(struct Scsi_Host *);

@@ -427,34 +427,26 @@ cannot_handle:
 	return_to_32bit(regs, VM86_INTx + (i << 8));
 }
 
-
-
+/* This must be called with the kernel lock held. */
 int handle_vm86_trap(struct kernel_vm86_regs * regs, long error_code, int trapno)
 {
-	int ret;
-
-	lock_kernel();
 	if (VMPI.is_vm86pus) {
 		if ( (trapno==3) || (trapno==1) )
 			return_to_32bit(regs, VM86_TRAP + (trapno << 8));
 		do_int(regs, trapno, (unsigned char *) (regs->ss << 4), SP(regs));
-		ret = 1;
-		goto out;
+		return  1;
 	}
-	ret = 0;
 	if (trapno !=1)
-		goto out; /* we let this handle by the calling routine */
+		return 0; /* we let this handle by the calling routine */
 	if (current->flags & PF_PTRACED)
 		current->blocked &= ~(1 << (SIGTRAP-1));
 	send_sig(SIGTRAP, current, 1);
 	current->tss.trap_no = trapno;
 	current->tss.error_code = error_code;
-out:
-	unlock_kernel();
-	return ret;
+	return 0;
 }
 
-
+/* This must be called with the kernel lock held. */
 void handle_vm86_fault(struct kernel_vm86_regs * regs, long error_code)
 {
 	unsigned char *csp, *ssp;
@@ -466,9 +458,8 @@ void handle_vm86_fault(struct kernel_vm86_regs * regs, long error_code)
 #define VM86_FAULT_RETURN \
 	if (VMPI.force_return_for_pic  && (VEFLAGS & IF_MASK)) \
 		return_to_32bit(regs, VM86_PICRETURN); \
-	goto out;
+	return;
 	                                   
-	lock_kernel();
 	csp = (unsigned char *) (regs->cs << 4);
 	ssp = (unsigned char *) (regs->ss << 4);
 	sp = SP(regs);
@@ -532,7 +523,7 @@ void handle_vm86_fault(struct kernel_vm86_regs * regs, long error_code)
 				return_to_32bit(regs, VM86_INTx + (intno << 8));
 		}
 		do_int(regs, intno, ssp, sp);
-		goto out;
+		return;
 	}
 
 	/* iret */
@@ -565,8 +556,6 @@ void handle_vm86_fault(struct kernel_vm86_regs * regs, long error_code)
 	default:
 		return_to_32bit(regs, VM86_UNKNOWN);
 	}
-out:
-	unlock_kernel();
 }
 
 /* ---------------- vm86 special IRQ passing stuff ----------------- */

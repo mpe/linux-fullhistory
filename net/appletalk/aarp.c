@@ -441,9 +441,11 @@ int aarp_send_ddp(struct device *dev,struct sk_buff *skb, struct at_addr *sa, vo
 		 *	Compressible ?
 		 * 
 		 *	IFF: src_net==dest_net==device_net
+		 *	(zero matches anything)
 		 */
 		 
-		if(at->s_net==sa->s_net && sa->s_net==ddp->deh_snet)
+		if( ( ddp->deh_snet==0 || at->s_net==ddp->deh_snet)
+		  &&( ddp->deh_dnet==0 || at->s_net==ddp->deh_dnet) )
 		{
 			skb_pull(skb,sizeof(struct ddpehdr)-4);
 			/*

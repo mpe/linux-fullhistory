@@ -49,8 +49,6 @@ static lapb_cb *volatile lapb_list = NULL;
  */
 static void lapb_free_cb(lapb_cb *lapb)
 {
-	del_timer(&lapb->timer);
-
 	kfree_s(lapb, sizeof(lapb_cb));
 
 	MOD_DEC_USE_COUNT;
@@ -161,6 +159,10 @@ int lapb_register(void *token, struct lapb_register_struct *callbacks)
 
 	lapb_insert_cb(lapb);
 
+	lapb->t1timer = lapb->t1;
+
+	lapb_set_timer(lapb);
+
 	return LAPB_OK;
 }
 
@@ -170,6 +172,8 @@ int lapb_unregister(void *token)
 
 	if ((lapb = lapb_tokentostruct(token)) == NULL)
 		return LAPB_BADTOKEN;
+
+	del_timer(&lapb->timer);
 
 	lapb_clear_queues(lapb);
 
@@ -225,14 +229,8 @@ int lapb_setparms(void *token, struct lapb_parms_struct *parms)
 				return LAPB_INVALUE;
 		}
 
-		lapb->mode   = parms->mode;
-		lapb->window = parms->window;
-
-		if (lapb->mode & LAPB_DCE) {
-			lapb_set_timer(lapb);
-		} else {
-			lapb->t1timer = 0;
-		}
+		lapb->mode    = parms->mode;
+		lapb->window  = parms->window;
 	}
 
 	lapb->t1    = parms->t1;
@@ -265,8 +263,6 @@ int lapb_connect_request(void *token)
 
 	lapb->state = LAPB_STATE_1;
 
-	lapb_set_timer(lapb);
-
 	return LAPB_OK;
 }
 	
@@ -290,7 +286,7 @@ int lapb_disconnect_request(void *token)
 #endif
 			lapb_send_control(lapb, LAPB_DISC, LAPB_POLLON, LAPB_COMMAND);
 			lapb->state   = LAPB_STATE_0;
-			lapb->t1timer = (lapb->mode & LAPB_DCE) ? lapb->t1 : 0;
+			lapb->t1timer = lapb->t1;
 			return LAPB_NOTCONNECTED;
 
 		case LAPB_STATE_2:

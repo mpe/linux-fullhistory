@@ -96,6 +96,42 @@ struct hh_cache
 };
 
 /*
+ *	Network device statistics. Akin to the 2.0 ether stats but
+ *	with byte counters.
+ */
+ 
+struct net_device_stats
+{
+	unsigned long	rx_packets;		/* total packets received	*/
+	unsigned long	tx_packets;		/* total packets transmitted	*/
+	unsigned long	rx_bytes;		/* total bytes received 	*/
+	unsigned long	tx_bytes;		/* total bytes transmitted	*/
+	unsigned long	rx_errors;		/* bad packets received		*/
+	unsigned long	tx_errors;		/* packet transmit problems	*/
+	unsigned long	rx_dropped;		/* no space in linux buffers	*/
+	unsigned long	tx_dropped;		/* no space available in linux	*/
+	unsigned long	multicast;		/* multicast packets received	*/
+	unsigned long	collisions;
+
+	/* detailed rx_errors: */
+	unsigned long	rx_length_errors;
+	unsigned long	rx_over_errors;		/* receiver ring buff overflow	*/
+	unsigned long	rx_crc_errors;		/* recved pkt with crc error	*/
+	unsigned long	rx_frame_errors;	/* recv'd frame alignment error */
+	unsigned long	rx_fifo_errors;		/* recv'r fifo overrun		*/
+	unsigned long	rx_missed_errors;	/* receiver missed packet	*/
+
+	/* detailed tx_errors */
+	unsigned long	tx_aborted_errors;
+	unsigned long	tx_carrier_errors;
+	unsigned long	tx_fifo_errors;
+	unsigned long	tx_heartbeat_errors;
+	unsigned long	tx_window_errors;
+	
+};
+
+
+/*
  *	The DEVICE structure.
  *	Actually, this whole structure is a big mistake.  It mixes I/O
  *	data with strictly "high-level" data, and it has to know about
@@ -155,7 +191,7 @@ struct device
 	 *	should change this.
 	 */
 	 
-	struct enet_statistics* (*get_stats)(struct device *dev);
+	struct net_device_stats* (*get_stats)(struct device *dev);
 	struct iw_statistics*	(*get_wireless_stats)(struct device *dev);
 
 	/*

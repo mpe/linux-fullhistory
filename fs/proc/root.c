@@ -511,7 +511,7 @@ static struct proc_dir_entry proc_root_mounts = {
 	S_IFREG | S_IRUGO, 1, 0, 0,
 };
 static struct proc_dir_entry proc_root_swaps = {
-	PROC_MTAB, 5, "swaps",
+	PROC_SWAP, 5, "swaps",
 	S_IFREG | S_IRUGO, 1, 0, 0,
 };
 static struct proc_dir_entry proc_root_profile = {

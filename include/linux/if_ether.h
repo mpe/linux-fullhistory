@@ -85,35 +85,11 @@ struct ethhdr
 };
 
 /*
- *	Ethernet statistics collection data. 
+ *	We Have changed the ethernet statistics collection data. This
+ *	is just for partial compatibility for now.
  */
  
-struct enet_statistics
-{
-	int	rx_packets;		/* total packets received	*/
-	int	tx_packets;		/* total packets transmitted	*/
-	int	rx_errors;		/* bad packets received		*/
-	int	tx_errors;		/* packet transmit problems	*/
-	int	rx_dropped;		/* no space in linux buffers	*/
-	int	tx_dropped;		/* no space available in linux	*/
-	int	multicast;		/* multicast packets received	*/
-	int	collisions;
-
-	/* detailed rx_errors: */
-	int	rx_length_errors;
-	int	rx_over_errors;		/* receiver ring buff overflow	*/
-	int	rx_crc_errors;		/* recved pkt with crc error	*/
-	int	rx_frame_errors;	/* recv'd frame alignment error */
-	int	rx_fifo_errors;		/* recv'r fifo overrun		*/
-	int	rx_missed_errors;	/* receiver missed packet	*/
-
-	/* detailed tx_errors */
-	int	tx_aborted_errors;
-	int	tx_carrier_errors;
-	int	tx_fifo_errors;
-	int	tx_heartbeat_errors;
-	int	tx_window_errors;
-};
-
+ 
+#define enet_statistics net_device_stats
 
 #endif	/* _LINUX_IF_ETHER_H */

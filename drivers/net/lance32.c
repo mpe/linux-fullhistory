@@ -132,7 +132,7 @@ struct lance32_private {
 	int cur_rx, cur_tx;			/* The next free ring entry */
 	int dirty_rx, dirty_tx;		        /* The ring entries to be free()ed. */
 	int dma;
-	struct enet_statistics stats;
+	struct net_device_stats stats;
 	char tx_full;
 	unsigned long lock;
 };
@@ -143,7 +143,7 @@ static int lance32_start_xmit(struct sk_buff *skb, struct device *dev);
 static int lance32_rx(struct device *dev);
 static void lance32_interrupt(int irq, void *dev_id, struct pt_regs *regs);
 static int lance32_close(struct device *dev);
-static struct enet_statistics *lance32_get_stats(struct device *dev);
+static struct net_device_stats *lance32_get_stats(struct device *dev);
 static void lance32_set_multicast_list(struct device *dev);
 
 
@@ -785,8 +785,7 @@ lance32_close(struct device *dev)
 	return 0;
 }
 
-static struct enet_statistics *
-lance32_get_stats(struct device *dev)
+static struct net_device_stats *lance32_get_stats(struct device *dev)
 {
 	struct lance32_private *lp = (struct lance32_private *)dev->priv;
 	int ioaddr = dev->base_addr;

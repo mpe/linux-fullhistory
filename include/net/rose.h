@@ -52,10 +52,12 @@
 #define	ROSE_DEFAULT_T3			(180 * ROSE_SLOWHZ)	/* Default T13 T23 value */
 #define	ROSE_DEFAULT_HB			(5 * ROSE_SLOWHZ)	/* Default Holdback value */
 #define	ROSE_DEFAULT_IDLE		(20 * 60 * ROSE_SLOWHZ)	/* Default No Activity value */
-#define	ROSE_DEFAULT_WINDOW		2			/* Default Window Size	*/
+#define	ROSE_DEFAULT_ROUTING		1			/* Default routing flag */
+#define	ROSE_DEFAULT_FAIL_TIMEOUT	(120 * ROSE_SLOWHZ)	/* Time until link considered usable */
+
 #define ROSE_MODULUS 			8
-#define ROSE_MAX_WINDOW_SIZE		7			/* Maximum Window Allowable */
-#define	ROSE_PACLEN			128			/* Default Packet Length */
+#define ROSE_MAX_WINDOW_SIZE		2			/* Maximum Window Allowable */
+#define	ROSE_MAX_PACKET_SIZE		128			/* Maximum Packet Length */
 
 #define	ROSE_COND_ACK_PENDING		0x01
 #define	ROSE_COND_PEER_RX_BUSY		0x02
@@ -81,7 +83,7 @@ struct rose_neigh {
 	unsigned int      number;
 	int               restarted;
 	struct sk_buff_head queue;
-	unsigned short    t0, t0timer;
+	unsigned short    t0timer, ftimer;
 	struct timer_list timer;
 };
 
@@ -89,7 +91,6 @@ struct rose_node {
 	struct rose_node  *next;
 	rose_address      address;
 	unsigned short    mask;
-	unsigned char     which;
 	unsigned char     count;
 	struct rose_neigh *neighbour[3];
 };
@@ -127,6 +128,7 @@ extern int  sysctl_rose_clear_request_timeout;
 extern int  sysctl_rose_no_activity_timeout;
 extern int  sysctl_rose_ack_hold_back_timeout;
 extern int  sysctl_rose_routing_control;
+extern int  sysctl_rose_link_fail_timeout;
 extern int  rosecmp(rose_address *, rose_address *);
 extern int  rosecmpm(rose_address *, rose_address *, unsigned short);
 extern char *rose2asc(rose_address *);
@@ -145,6 +147,7 @@ extern int  rose_init(struct device *);
 extern int  rose_process_rx_frame(struct sock *, struct sk_buff *);
 
 /* rose_link.c */
+extern void rose_link_set_timer(struct rose_neigh *);
 extern void rose_link_rx_restart(struct sk_buff *, struct rose_neigh *, unsigned short);
 extern void rose_transmit_restart_request(struct rose_neigh *);
 extern void rose_transmit_restart_confirmation(struct rose_neigh *);

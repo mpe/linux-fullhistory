@@ -23,6 +23,7 @@
  *		Alan Cox		:	Hooks for PPP (based on the
  *						localtalk hook).
  *		Alan Cox		:	Posix bits
+ *		Bradford Johnson	:	IP-over-DDP (experimental)
  *
  *		This program is free software; you can redistribute it and/or
  *		modify it under the terms of the GNU General Public License
@@ -59,6 +60,8 @@
 #include <net/p8022.h>
 #include <net/psnap.h>
 #include <net/sock.h>
+#include <linux/ip.h>
+#include <net/route.h>
 #include <linux/atalk.h>
 #include <linux/proc_fs.h>
 #include <linux/stat.h>
@@ -163,6 +166,7 @@ static struct sock *atalk_find_socket(struct sockaddr_at *sat)
 extern inline void atalk_destroy_socket(struct sock *sk)
 {
 	sklist_destroy_socket(&atalk_socket_list,sk);
+	MOD_DEC_USE_COUNT;
 }
 
 /*
@@ -1109,10 +1113,15 @@ static int atalk_connect(struct socket *sock, struct sockaddr *uaddr,
 
 	if(addr->sat_family!=AF_APPLETALK)
 		return -EAFNOSUPPORT;
-#if 0 	/* Netatalk doesn't check this - fix netatalk first!*/
 	if(addr->sat_addr.s_node==ATADDR_BCAST && !sk->broadcast)
+	{
+#if 1	
+		printk(KERN_WARNING "%s is broken and did not set SO_BROADCAST. It will break when 2.2 is released.\n",
+			current->comm);
+#else
 		return -EACCES;
-#endif
+#endif			
+	}
 	if(sk->zapped)
 	{
 		if(atalk_autobind(sk)<0)
@@ -1190,6 +1199,208 @@ static int atalk_getname(struct socket *sock, struct sockaddr *uaddr,
 	memcpy(uaddr,&sat,sizeof(sat));
 	return(0);
 }
+
+/*	
+ *	IP-over-DDP support.  Under construction.
+ */
+
+#ifdef CONFIG_IPDDP
+
+#define SIOCADDIPDDPRT SIOCDEVPRIVATE
+#define SIOCDELIPDDPRT SIOCDEVPRIVATE+1
+#define SIOCFINDIPDDPRT SIOCDEVPRIVATE+2
+
+struct ipddp_route {
+	struct device *dev;		/* Carrier device */
+	__u32 ip;			/* IP address */
+	struct at_addr at;		/* Gateway appletalk address */
+	int flags;
+	struct ipddp_route *next;
+};
+
+static struct ipddp_route *ipddp_route_head;
+
+static struct ipddp_route ipddp_route_test;
+
+int ipddp_open(struct device *dev)
+{
+	MOD_INC_USE_COUNT;
+	return 0;
+}
+
+int ipddp_close(struct device *dev)
+{
+	MOD_DEC_USE_COUNT;
+	return 0;
+}
+
+int ipddp_xmit(struct sk_buff *skb, struct device *dev)
+{
+	/* Retrieve the saved address hint */
+	struct at_addr *a=(struct at_addr *)skb->data;
+	skb_pull(skb,4);
+	
+	((struct net_device_stats *) dev->priv)->tx_packets++;
+
+	/* printk("ipddp_xmit called with headroom %d\n",skb_headroom(skb)); */
+
+	if( aarp_send_ddp(skb->dev,skb,a,NULL) < 0 )
+		dev_kfree_skb(skb,FREE_WRITE);
+
+	return 0;
+}
+
+struct net_device_stats *ipddp_get_stats(struct device *dev)
+{
+	return (struct enet_statistics *) dev->priv;
+}
+
+int ipddp_ioctl(struct device *dev, struct ifreq *ifr, int cmd)
+{
+	struct ipddp_route *urt = (struct ipddp_route *)ifr->ifr_data;
+
+	if(!suser())
+		return -EPERM;
+	
+	/* for now we only have one route at a time */
+
+	switch(cmd) 
+	{
+		case SIOCADDIPDDPRT:
+			if(copy_from_user(&ipddp_route_test,urt,sizeof(struct ipddp_route)))
+				return -EFAULT;
+			ipddp_route_test.dev = atrtr_get_dev(&ipddp_route_test.at);
+			if (dev==NULL)
+				return -ENETUNREACH;
+			ipddp_route_test.next = NULL;
+			printk("added ipddp route through %s\n",ipddp_route_test.dev->name);
+			ipddp_route_head = &ipddp_route_test;
+			return 0;
+		case SIOCFINDIPDDPRT:
+			if(copy_to_user(urt,&ipddp_route_test,sizeof(struct ipddp_route)))
+				return -EFAULT;
+			return 0;
+		case SIOCDELIPDDPRT:
+			ipddp_route_test.dev = NULL;
+			ipddp_route_head = NULL;
+			return 0;
+		default: 
+			return -EINVAL;
+	}
+}
+
+int ipddp_header (struct sk_buff *skb, struct device *dev, unsigned short type,
+		void *daddr, void *saddr, unsigned len)
+{
+	/* printk("ipddp_header\n"); */
+	/* Push down the header space and the type byte */
+	skb_push(skb, sizeof(struct ddpehdr)+1+4);
+	return 0;
+}
+
+/*
+ *	Now the packet really wants to go out. 
+ */
+ 
+int ipddp_rebuild_header (struct sk_buff *skb)
+{
+	struct ddpehdr *ddp;
+	struct at_addr at;
+	struct ipddp_route *rt;
+	struct at_addr *our_addr;
+	u32 paddr = ((struct rtable *)skb->dst)->rt_gateway;
+
+	/*
+	 *	On entry skb->data points to the ddpehdr we reserved earlier.
+	 *	skb->h.raw will be the higher level header.
+	 */
+
+	/*
+	 *	We created this earlier
+	 */
+
+	ddp = (struct ddpehdr *) (skb->data+4);
+	
+	/* find appropriate route */
+
+	for(rt=ipddp_route_head;rt;rt=rt->next) 
+	{
+		if(rt->ip == paddr) 
+			break;
+	}
+
+	if(!rt) {
+		printk("ipddp unreachable dst %08lx\n",ntohl(paddr));
+		return -ENETUNREACH;
+	}
+
+	our_addr = atalk_find_dev_addr(rt->dev);
+ 	
+	/* fill in ddpehdr */
+	ddp->deh_len = skb->len;
+	ddp->deh_hops = 1;
+	ddp->deh_pad = 0;
+	ddp->deh_sum = 0;
+	ddp->deh_dnet = rt->at.s_net;	/* FIXME more hops?? */ 
+	ddp->deh_snet = our_addr->s_net;
+	ddp->deh_dnode = rt->at.s_node;
+	ddp->deh_snode = our_addr->s_node;
+	ddp->deh_dport = 72;
+	ddp->deh_sport = 72;
+	
+	*((__u8 *)(ddp+1)) = 22;	/* ddp type = IP */
+
+	/* fix up length field */
+	*((__u16 *)ddp)=ntohs(*((__u16 *)ddp));
+
+	/* set skb->dev to appropriate device */
+	skb->dev = rt->dev;
+
+	/* skb->raddr = (unsigned long) at */ 
+	at = rt->at;
+	/* Hide it at the start of the buffer */
+	memcpy(skb->data,(void *)&at,sizeof(at));
+	skb->arp = 1;	/* so the actual device doesn't try to arp it... */
+	skb->protocol = htons(ETH_P_ATALK);	/* Protocol has changed */
+	
+	return 0;
+}
+
+int ipddp_init (struct device *dev)
+{
+	ether_setup(dev);
+	dev->hard_start_xmit = ipddp_xmit;
+	dev->priv = kmalloc(sizeof(struct enet_statistics), GFP_KERNEL);
+	if(!dev->priv) 
+		return -ENOMEM;
+	memset(dev->priv,0,sizeof(struct enet_statistics));
+	dev->get_stats = ipddp_get_stats;
+	dev->do_ioctl = ipddp_ioctl;
+	dev->type = ARPHRD_IPDDP;	/* IP over DDP tunnel */
+	dev->family = AF_INET;
+	dev->mtu = 585;
+	dev->flags |= IFF_NOARP;
+	dev->hard_header = ipddp_header; /* see ip_output.c */
+	dev->rebuild_header = ipddp_rebuild_header;
+	/*
+	 *	The worst case header we will need is currently a
+	 *	ethernet header (14 bytes) and a ddp header (sizeof ddpehdr+1)
+	 *	We send over SNAP so that takes another 8 bytes.
+	 */
+	dev->hard_header_len = 14+8+sizeof(struct ddpehdr)+1;
+	dev->open = ipddp_open;
+	dev->stop = ipddp_close;
+
+	return 0;
+}
+
+static struct device dev_ipddp = {
+	"ipddp0\0   ",
+		0, 0, 0, 0,
+		0x0, 0,
+		0, 0, 0, NULL, ipddp_init };
+
+#endif /* CONFIG_IPDDP */
 
 /*
  *	Receive a packet (in skb) from device dev. This has come from the SNAP decoder, and on entry
@@ -1349,18 +1560,38 @@ static int atalk_rcv(struct sk_buff *skb, struct device *dev, struct packet_type
 	tosat.sat_port = ddp->deh_dport;
 
 	sock=atalk_search_socket( &tosat, atif );
-
+	
 	if(sock==NULL)	/* But not one of our sockets */
 	{
 		kfree_skb(skb,FREE_READ);
 		return(0);
 	}
 
+#ifdef CONFIG_IPDDP
+	/*
+	 *	Check if IP-over-DDP
+	 */
 
+	if(skb->data[12]==22) {
+		struct enet_statistics *estats = 
+			(struct enet_statistics *) dev_ipddp.priv;
+		skb->protocol=htons(ETH_P_IP);
+		skb_pull(skb,13);
+		skb->dev=&dev_ipddp;
+		skb->h.raw = skb->data;
+	/*	printk("passing up ipddp, 0x%02x better be 45\n",skb->data[0]);
+	 *	printk("tot_len %d, skb->len %d\n",
+	 *		ntohs(skb->h.iph->tot_len),skb->len);
+	 */
+		estats->rx_packets++;
+		netif_rx(skb);
+		return 0;
+	}
+#endif /* CONFIG_IPDDP */	
 	/*
 	 *	Queue packet (standard)
 	 */
-
+	 
 	skb->sk = sock;
 
 	if(sock_queue_rcv_skb(sock,skb)<0)
@@ -1468,8 +1699,10 @@ static int atalk_sendmsg(struct socket *sock, struct msghdr *msg, int len,
 			return(-EINVAL);
 		if(usat->sat_family != AF_APPLETALK)
 			return -EINVAL;
+#if 0         /* netatalk doesn't implement this check */
 		if(usat->sat_addr.s_node==ATADDR_BCAST && !sk->broadcast)
 			return -EPERM;
+#endif
 	}
 	else
 	{
@@ -1848,7 +2081,11 @@ void atalk_proto_init(struct net_proto *pro)
 	proc_net_register(&proc_appletalk);
 	proc_net_register(&proc_atalk_route);
 	proc_net_register(&proc_atalk_iface);
-#endif
+#endif	
+
+#ifdef CONFIG_IPDDP
+	register_netdev(&dev_ipddp);
+#endif /* CONFIG_IPDDP */
 
 	printk(KERN_INFO "Appletalk 0.18 for Linux NET3.037\n");
 }

@@ -36,7 +36,7 @@ struct shaper
 	int (*hard_header_cache)(struct dst_entry *dst, struct dst_entry *neigh,
 		struct hh_cache *hh);
 	void (*header_cache_update)(struct hh_cache *hh, struct device *dev, unsigned char *  haddr);
-	struct enet_statistics* (*get_stats)(struct device *dev);
+	struct net_device_stats* (*get_stats)(struct device *dev);
 	struct wait_queue *wait_queue;
 	struct timer_list timer;
 };

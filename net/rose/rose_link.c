@@ -44,37 +44,20 @@
 static void rose_link_timer(unsigned long);
 
 /*
- *	Linux set/reset timer routines
+ *	Linux set timer
  */
-static void rose_link_set_timer(struct rose_neigh *neigh)
+void rose_link_set_timer(struct rose_neigh *neigh)
 {
 	unsigned long flags;
 
-	save_flags(flags);
-	cli();
-	del_timer(&neigh->timer);
-	restore_flags(flags);
-
-	neigh->timer.next     = neigh->timer.prev = NULL;	
-	neigh->timer.data     = (unsigned long)neigh;
-	neigh->timer.function = &rose_link_timer;
-
-	neigh->timer.expires  = jiffies + 10;
-	add_timer(&neigh->timer);
-}
-
-static void rose_link_reset_timer(struct rose_neigh *neigh)
-{
-	unsigned long flags;
-
-	save_flags(flags);
-	cli();
+	save_flags(flags); cli();
 	del_timer(&neigh->timer);
 	restore_flags(flags);
 
 	neigh->timer.data     = (unsigned long)neigh;
 	neigh->timer.function = &rose_link_timer;
 	neigh->timer.expires  = jiffies + 10;
+
 	add_timer(&neigh->timer);
 }
 
@@ -88,19 +71,22 @@ static void rose_link_timer(unsigned long param)
 {
 	struct rose_neigh *neigh = (struct rose_neigh *)param;
 
-	if (neigh->t0timer == 0 || --neigh->t0timer > 0) {
-		rose_link_reset_timer(neigh);
-		return;
+	if (neigh->ftimer > 0)
+		neigh->ftimer--;
+
+	if (neigh->t0timer > 0) {
+		neigh->t0timer--;
+
+		if (neigh->t0timer == 0) {
+			rose_transmit_restart_request(neigh);
+			neigh->t0timer = sysctl_rose_restart_request_timeout;
+		}
 	}
 
-	/*
-	 * T0 for a link has expired.
-	 */
-	rose_transmit_restart_request(neigh);
-
-	neigh->t0timer = neigh->t0;
-
-	rose_link_set_timer(neigh);
+	if (neigh->ftimer > 0 || neigh->t0timer > 0)
+		rose_link_set_timer(neigh);
+	else
+		del_timer(&neigh->timer);
 }
 
 /*
@@ -117,7 +103,7 @@ static int rose_send_frame(struct sk_buff *skb, struct rose_neigh *neigh)
 	else
 		rose_call = &rose_callsign;
 
-	return ax25_send_frame(skb, rose_call, &neigh->callsign, neigh->digipeat, neigh->dev);
+	return ax25_send_frame(skb, 0, rose_call, &neigh->callsign, neigh->digipeat, neigh->dev);
 }
 
 /*
@@ -199,8 +185,6 @@ void rose_transmit_restart_request(struct rose_neigh *neigh)
 	*dptr++ = 0x00;
 	*dptr++ = 0;
 
-	skb->sk = NULL;
-
 	if (!rose_send_frame(skb, neigh))
 		kfree_skb(skb, FREE_WRITE);
 }
@@ -227,8 +211,6 @@ void rose_transmit_restart_confirmation(struct rose_neigh *neigh)
 	*dptr++ = ROSE_GFI;
 	*dptr++ = 0x00;
 	*dptr++ = ROSE_RESTART_CONFIRMATION;
-
-	skb->sk = NULL;
 
 	if (!rose_send_frame(skb, neigh))
 		kfree_skb(skb, FREE_WRITE);
@@ -257,8 +239,6 @@ void rose_transmit_diagnostic(struct rose_neigh *neigh, unsigned char diag)
 	*dptr++ = 0x00;
 	*dptr++ = ROSE_DIAGNOSTIC;
 	*dptr++ = diag;
-
-	skb->sk = NULL;
 
 	if (!rose_send_frame(skb, neigh))
 		kfree_skb(skb, FREE_WRITE);
@@ -290,8 +270,6 @@ void rose_transmit_clear_request(struct rose_neigh *neigh, unsigned int lci, uns
 	*dptr++ = cause;
 	*dptr++ = 0x00;
 
-	skb->sk = NULL;
-
 	if (!rose_send_frame(skb, neigh))
 		kfree_skb(skb, FREE_WRITE);
 }
@@ -311,8 +289,6 @@ void rose_transmit_link(struct sk_buff *skb, struct rose_neigh *neigh)
 	dptr = skb_push(skb, 1);
 	*dptr++ = AX25_P_ROSE;
 
-	skb->arp = 1;
-
 	if (neigh->restarted) {
 		if (!rose_send_frame(skb, neigh))
 			kfree_skb(skb, FREE_WRITE);
@@ -321,7 +297,7 @@ void rose_transmit_link(struct sk_buff *skb, struct rose_neigh *neigh)
 
 		if (neigh->t0timer == 0) {
 			rose_transmit_restart_request(neigh);
-			neigh->t0timer = neigh->t0;
+			neigh->t0timer = sysctl_rose_restart_request_timeout;
 			rose_link_set_timer(neigh);
 		}
 	}

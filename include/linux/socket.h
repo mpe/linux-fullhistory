@@ -74,7 +74,22 @@ struct cmsghdr {
 				 (struct cmsghdr *)(msg)->msg_control : \
 				 (struct cmsghdr *)NULL)
 
-extern __inline__ struct cmsghdr * cmsg_nxthdr(struct msghdr *mhdr,
+/*
+ *	This mess will go away with glibc
+ */
+ 
+#ifdef __KERNEL__
+#define KINLINE extern __inline__
+#else
+#define KINLINE static
+#endif
+
+
+/*
+ *	Get the next cmsg header
+ */
+ 
+KINLINE struct cmsghdr * cmsg_nxthdr(struct msghdr *mhdr,
 					       struct cmsghdr *cmsg)
 {
 	unsigned char * ptr;

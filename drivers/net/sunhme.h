@@ -540,7 +540,7 @@ struct happy_meal {
 	enum happy_timer_state    timer_state;    /* State of the auto-neg timer.      */
 	unsigned int              timer_ticks;    /* Number of clicks at each state.   */
 
-	struct enet_statistics    enet_stats;     /* Statistical counters              */
+	struct net_device_stats	 enet_stats;     /* Statistical counters              */
 	struct linux_sbus_device *happy_sbus_dev; /* ;-)                               */
 	struct device            *dev;            /* Backpointer                       */
 	struct happy_meal        *next_module;

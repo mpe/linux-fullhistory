@@ -1,0 +1,130 @@
+------------------------------------------------------------------------------
+WAN Router for Linux Operating System
+------------------------------------------------------------------------------
+Version 1.0.0
+December 31, 1996
+Author: Gene Kozin <genek@compuserve.com>
+Copyright (c) 1995-1996 Sangoma Technologies Inc.
+------------------------------------------------------------------------------
+
+INTRODUCTION
+
+Wide Area Networks (WANs) are used to interconnect Local Area Networks (LANs)
+and/or stand-alone hosts over vast distances with data transfer rates
+significantly higher than those achievable with commonly used dial-up
+connections.
+
+Usually an external device called `WAN router' sitting on your local network
+or connected to your machine's serial port provides physical connection to
+WAN.  Although router's job may be as simple as taking your local network
+traffic, converting it to WAN format and piping it through the WAN link, these
+devices are notoriously expensive, with prices as much as 2 - 5 times higher
+then the price of a typical PC box.
+
+Alternatively, considering robustness and multitasking capabilities of Linux,
+an internal router can be build (most routers use some sort of stripped down
+Unix-like operating system anyway).  With number of relatively inexpensive WAN
+interface cards available on the market, a perfectly usable router can be
+built for less than half a price of an external router.  Yet a Linux box
+acting as a router can still be used for other purposes, such as firewalling,
+running FTP, WWW or DNS server, etc.
+
+This kernel module introduces the notion of a WAN Link Driver (WLD) to Linux
+operating system and provides generic hardware-independent services for such
+drivers.  Why existing Linux network device interface can not be used for
+this purpose?  Well, it can.  However, there are few key differences between
+typical network interface (i.e. ethernet) and WAN link.
+
+Many WAN protocols, such as X.25 and frame relay, allow for multiple logical
+connections (known as `virtual circuits' in X.25 terminology) over a single
+physical link.  Each such virtual circuit may (and almost always does) lead
+to diffrent geographical location and, therefore, different network.  As a
+result, it is the virtual circuit, not the physical link, that represents a
+route and, therefore, a network interface in Linux terms.
+
+To further complicate things, virtual cuircits are usually volatile in nature
+(excluding so called `permanent' virtual circuits or PVCs).  With almost no
+time required to set up and tear down virtual circuit, it is highly desirable
+to implement on-demand connections in order to minimize network charges.  So
+unlike typical network driver, the WAN driver must be able to handle multiple
+network interfaces and cope with multiple virtual circuits come into existance
+and go away dynamically.
+ 
+Last, but not least, WAN configuration is much more complex than that of say
+ethernet and may well amount to several dozens of parameters.  Some of them
+are "link-wide"  while others are virtual circuit-specific.  The same holds
+true for WAN statistics which is by far more extensive and extremely useful
+when troubleshooting WAN connections.  Extending ifconfig utility to suite
+these needs may be possible, but does not seem quite reasonable.  Therefore, a
+WAN configuration utility and corresponding application programmer's interface
+is needed for this purpose.
+
+Most of these problems are taken care of by this module.  It's goal is to
+provide user with more-or-less standard look and feel for all WAN devices and
+assist WAN device driver writer by providing common services, such as:
+
+ o User-level interface via /proc filesystem
+ o Centralized configuration
+ o Device managenent (setup, shutdown, etc.)
+ o Network interface management (dynamic creation/destruction)
+ o Protocol encapsulation/decapsulation
+
+To ba able to use Linux WAN Router you will also need a WAN Tools package
+available from
+
+	ftp.sangoma.com/pub/linux/wantools-X.Y.Z.tgz
+
+For technical questions and/or comments regarding this product please e-mail
+to genek@compuserve.com or dm@sangoma.com.
+
+
+
+COPYRIGHT AND LICENSING INFORMATION
+
+This program is free software; you can redistribute it and/or modify it under
+the terms of the GNU General Public License as published by the Free Software
+Foundation; either version 2, or (at your option) any later version.
+
+This program is distributed in the hope that it will be useful, but WITHOUT
+ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
+FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details.
+
+You should have received a copy of the GNU General Public License along with
+this program; if not, write to the Free Software Foundation, Inc., 675 Mass
+Ave, Cambridge, MA 02139, USA.
+
+
+
+KNOWN BUGS AND LIMITATIONS
+
+/proc user interface is not complete yet.
+
+
+
+ACKNOLEGEMENTS
+
+This product is based on the WANPIPE(tm) Multiprotocol WAN Router developed
+by Sangoma Technologies Inc. for Linux 1.2.x.  Release of Linux 2.0 in summer
+1996 commanded adequate changes to the WANPIPE code to take full advantage of
+new Linux features.  Instead of continuing developing proprietory interface
+specific to Sangoma WAN cards, we decided to put all hardware-independent code
+into a separate module and define two levels of interfaces - one for user-
+level applications and another for kernel-level WAN drivers.
+
+Many usefull ideas concerning hardware-independent interface implementation
+were given by Mike McLagan <mike.mclagan@linux.org> and his implementation
+of the Frame Relay router and drivers for Sangoma cards (dlci/sdla).
+
+Special thanks to all the WANPIPE users who performed field-testing, reported
+bugs and made valuable comments and suggestions that help us to improve this
+product.
+
+
+
+REVISION HISTORY
+
+1.0.0	 December 31, 1996
+--------------------------
+ o Initial version.
+
+>>>>>> END <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<

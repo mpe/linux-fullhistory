@@ -26,7 +26,6 @@ static int max_t4[]      = {1000 * NR_SLOWHZ};
 static int min_window[]  = {1}, max_window[]  = {127};
 static int min_idle[]    = {0 * NR_SLOWHZ};
 static int max_idle[]    = {65535 * NR_SLOWHZ};
-static int min_n1[]      = {1}, max_n1[]      = {236};
 static int min_route[]   = {0}, max_route[]   = {1};
 static int min_fails[]   = {1}, max_fails[]   = {10};
 
@@ -60,9 +59,6 @@ static ctl_table nr_table[] = {
         {NET_NETROM_TRANSPORT_NO_ACTIVITY_TIMEOUT, "transport_no_activity_timeout",
          &sysctl_netrom_transport_no_activity_timeout, sizeof(int), 0644, NULL,
          &proc_dointvec_minmax, &sysctl_intvec, NULL, &min_idle, &max_idle},
-        {NET_NETROM_TRANSPORT_PACKET_LENGTH, "transport_packet_length",
-         &sysctl_netrom_transport_packet_length, sizeof(int), 0644, NULL,
-         &proc_dointvec_minmax, &sysctl_intvec, NULL, &min_n1, &max_n1},
         {NET_NETROM_ROUTING_CONTROL, "routing_control",
          &sysctl_netrom_routing_control, sizeof(int), 0644, NULL,
          &proc_dointvec_minmax, &sysctl_intvec, NULL, &min_route, &max_route},

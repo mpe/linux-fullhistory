@@ -247,7 +247,7 @@ static void		dfx_int_type_0_process(DFX_board_t *bp);
 static void		dfx_int_common(DFX_board_t *bp);
 static void		dfx_interrupt(int irq, void *dev_id, struct pt_regs *regs);
 
-static struct	enet_statistics *dfx_ctl_get_stats(struct device *dev);
+static struct		net_device_stats *dfx_ctl_get_stats(struct device *dev);
 static void		dfx_ctl_set_multicast_list(struct device *dev);
 static int		dfx_ctl_set_mac_address(struct device *dev, void *addr);
 static int		dfx_ctl_update_cam(DFX_board_t *bp);
@@ -1991,7 +1991,7 @@ void dfx_interrupt(
  *   None
  */
 
-struct enet_statistics *dfx_ctl_get_stats(
+struct net_device_stats *dfx_ctl_get_stats(
 	struct device *dev
 	)
 
@@ -2013,7 +2013,7 @@ struct enet_statistics *dfx_ctl_get_stats(
 
 	bp->cmd_req_virt->cmd_type = PI_CMD_K_SMT_MIB_GET;
 	if (dfx_hw_dma_cmd_req(bp) != DFX_K_SUCCESS)
-		return((struct enet_statistics *) &bp->stats);
+		return((struct net_device_stats *) &bp->stats);
 
 	/* Fill the bp->stats structure with the SMT MIB object values */
 
@@ -2114,7 +2114,7 @@ struct enet_statistics *dfx_ctl_get_stats(
 
 	bp->cmd_req_virt->cmd_type = PI_CMD_K_CNTRS_GET;
 	if (dfx_hw_dma_cmd_req(bp) != DFX_K_SUCCESS)
-		return((struct enet_statistics *) &bp->stats);
+		return((struct net_device_stats *) &bp->stats);
 
 	/* Fill the bp->stats structure with the FDDI counter values */
 
@@ -2130,7 +2130,7 @@ struct enet_statistics *dfx_ctl_get_stats(
 	bp->stats.port_lem_cts[0]			= bp->cmd_rsp_virt->cntrs_get.cntrs.link_errors[0].ls;
 	bp->stats.port_lem_cts[1]			= bp->cmd_rsp_virt->cntrs_get.cntrs.link_errors[1].ls;
 
-	return((struct enet_statistics *) &bp->stats);
+	return((struct net_device_stats *) &bp->stats);
 	}
 
 

@@ -6,9 +6,6 @@
  */
 #define DMA_BUFF_SIZE 2200
 
-/* Network statistics, with the same names as 'struct enet_statistics'. */
-#define netstats enet_statistics
-
 #define ON 1
 #define OFF 0
 
@@ -98,16 +95,17 @@
 #define SIOCGPIIRQ		0x5006	/* get only IRQ */
 #define SIOCSPIIRQ		0x5007	
 
-struct pt_req  {
-    int cmd;
-    int speed;
-    int clockmode;
-    int txdelay;
-    unsigned char persist;
-    int slotime; 
-    int squeldelay;
-    int dmachan;    
-    int irq;    
+struct pt_req
+{
+	int cmd;
+	int speed;
+	int clockmode;
+	int txdelay;
+	unsigned char persist;
+	int slotime; 
+	int squeldelay;
+	int dmachan;    
+	int irq;    
 };
 
 /* SCC Interrupt vectors, if we have set 'status low' */
@@ -124,53 +122,53 @@ struct pt_req  {
 #ifdef __KERNEL__
 
 /* Information that needs to be kept for each channel. */
-struct pt_local {
-    struct netstats stats; /* %%%dp*/
-    long open_time;             /* Useless example local info. */
-    unsigned long xtal; 
+struct pt_local
+{
+	struct net_device_stats stats; /* %%%dp*/
+	long open_time;             /* Useless example local info. */
+	unsigned long xtal; 
 
-    struct mbuf *rcvbuf;/* Buffer for current rx packet */
-    struct mbuf *rxdmabuf1; /* DMA rx buffer */
-    struct mbuf *rxdmabuf2; /* DMA rx buffer */
+	struct mbuf *rcvbuf;/* Buffer for current rx packet */
+	struct mbuf *rxdmabuf1; /* DMA rx buffer */
+	struct mbuf *rxdmabuf2; /* DMA rx buffer */
 
-    int bufsiz;         /* Size of rcvbuf */
-    char *rcp;          /* Pointer into rcvbuf */
-
-    struct sk_buff_head sndq;  /* Packets awaiting transmission */
-    int sndcnt;         /* Number of packets on sndq */
-    struct sk_buff *sndbuf;/* Current buffer being transmitted */
-    char *txdmabuf;     /* Transmit DMA buffer */
-	char *txptr;		/* Used by B port tx */
+	int bufsiz;			/* Size of rcvbuf 			*/
+	char *rcp;			/* Pointer into rcvbuf 			*/
+	struct sk_buff_head sndq;	/* Packets awaiting transmission 	*/
+	int sndcnt;			/* Number of packets on sndq 		*/
+	struct sk_buff *sndbuf;		/* Current buffer being transmitted	*/
+	char *txdmabuf; 		/* Transmit DMA buffer 			*/
+	char *txptr;			/* Used by B port tx 			*/
 	int txcnt;			
-    char tstate;        /* Transmitter state */
-#define IDLE    0       /* Transmitter off, no data pending */
-#define ACTIVE  1       /* Transmitter on, sending data */
-#define UNDERRUN 2      /* Transmitter on, flushing CRC */
-#define FLAGOUT 3       /* CRC sent - attempt to start next frame */
-#define DEFER 4         /* Receive Active - DEFER Transmit */
-#define ST_TXDELAY 5    /* Sending leading flags */
+	char tstate;			/* Transmitter state 			*/
+#define IDLE    0       /* Transmitter off, no data pending 		*/
+#define ACTIVE  1       /* Transmitter on, sending data 		*/
+#define UNDERRUN 2      /* Transmitter on, flushing CRC			*/
+#define FLAGOUT 3       /* CRC sent - attempt to start next frame	*/
+#define DEFER 4         /* Receive Active - DEFER Transmit		*/
+#define ST_TXDELAY 5    /* Sending leading flags			*/
 #define CRCOUT 6
-    char rstate;        /* Set when !DCD goes to 0 (TRUE) */
+	char rstate;        /* Set when !DCD goes to 0 (TRUE)		*/
 /* Normal state is ACTIVE if Receive enabled */
-#define RXERROR 2       /* Error -- Aborting current Frame */
-#define RXABORT 3       /* ABORT sequence detected */
-#define TOOBIG 4        /* too large a frame to store */
+#define RXERROR 2       /* Error -- Aborting current Frame		*/
+#define RXABORT 3       /* ABORT sequence detected			*/
+#define TOOBIG 4        /* too large a frame to store			*/
 	
-    int dev;            /* Device number */
-    int base;       /* Base of I/O registers */
-    int cardbase;     /* Base address of card */
-    int stata;        /* address of Channel A status regs */
-    int statb;        /* address of Channel B status regs */
-    int speed;        /* Line speed, bps */
-    int clockmode;    /* tapr 9600 modem clocking option */
-    int txdelay;      /* Transmit Delay 10 ms/cnt */
-    unsigned char persist;       /* Persistence (0-255) as a % */
-    int slotime;      /* Delay to wait on persistence hit */
-    int squeldelay;   /* Delay after XMTR OFF for squelch tail */
-    struct iface *iface;    /* Associated interface */
-    int dmachan;           /* DMA channel for this port */
-    char saved_RR0;	/* The saved version of RR) that we compare with */
-    int nrzi;			/* Do we use NRZI (or NRZ) */
+	int dev;		/* Device number */
+	int base;		/* Base of I/O registers */
+	int cardbase;		/* Base address of card */
+	int stata;		/* address of Channel A status regs */
+	int statb;		/* address of Channel B status regs */
+	int speed;        	/* Line speed, bps */
+	int clockmode;    	/* tapr 9600 modem clocking option */
+	int txdelay;      	/* Transmit Delay 10 ms/cnt */
+	unsigned char persist;  /* Persistence (0-255) as a % */
+	int slotime;		/* Delay to wait on persistence hit */
+	int squeldelay; 	/* Delay after XMTR OFF for squelch tail */
+	struct iface *iface;    /* Associated interface */
+	int dmachan;		/* DMA channel for this port */
+	char saved_RR0;		/* The saved version of RR) that we compare with */
+	int nrzi;		/* Do we use NRZI (or NRZ) */
 };
 
 #endif

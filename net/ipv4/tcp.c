@@ -799,6 +799,7 @@ static int tcp_append_tail(struct sock *sk, struct sk_buff *skb, u8 *from,
 int tcp_do_sendmsg(struct sock *sk, int iovlen, struct iovec *iov,
 		   int len, int flags)
 {
+	int err = 0;
 	int copied  = 0;
 	struct tcp_opt *tp=&(sk->tp_pinfo.af_tcp);
 
@@ -849,6 +850,8 @@ int tcp_do_sendmsg(struct sock *sk, int iovlen, struct iovec *iov,
 			int tmp;
 			struct sk_buff *skb;
 
+			if (err)
+				return (err);
 			/*
 			 * Stop on errors
 			 */
@@ -1030,7 +1033,7 @@ int tcp_do_sendmsg(struct sock *sk, int iovlen, struct iovec *iov,
 				skb->h.th->urg_ptr = ntohs(copy);
 			}
 
-			skb->csum = csum_partial_copy_fromuser(from,
+			skb->csum = csum_partial_copy_from_user(&err, from,
 					skb_put(skb, copy), copy, 0);
 		
 			from += copy;
@@ -1043,6 +1046,9 @@ int tcp_do_sendmsg(struct sock *sk, int iovlen, struct iovec *iov,
 	}
 
 	sk->err = 0;
+
+	if (err)
+		return (err);
 
 	return copied;
 }
@@ -1124,7 +1130,7 @@ static int tcp_recv_urg(struct sock * sk, int nonblock,
 						       msg->msg_name);       
 		}
 		if(addr_len)
-			*addr_len= tp->af_specific->sockaddr_len;
+			*addr_len = tp->af_specific->sockaddr_len;
 		/* 
 		 *	Read urgent data
 		 */
@@ -1173,14 +1179,14 @@ static void cleanup_rbuf(struct sock *sk)
 			break;
 		tcp_eat_skb(sk, skb);
 	}
-
+       
 	SOCK_DEBUG(sk, "sk->rspace = %lu\n", sock_rspace(sk));
-
-	/*
-	 *  We send a ACK if the sender is blocked
-	 *  else let tcp_data deal with the acking policy.
-	 */
-
+	
+  	/*
+  	 *  We send a ACK if the sender is blocked
+  	 *  else let tcp_data deal with the acking policy.
+  	 */
+  
 	if (sk->delayed_acks)
 	{
 		struct tcp_opt *tp = &(sk->tp_pinfo.af_tcp);
@@ -1456,7 +1462,7 @@ int tcp_recvmsg(struct sock *sk, struct msghdr *msg,
 					       msg->msg_name);       
 	}
 	if(addr_len)
-		*addr_len = tp->af_specific->sockaddr_len;
+		*addr_len= tp->af_specific->sockaddr_len;
 
 	remove_wait_queue(sk->sleep, &wait);
 	current->state = TASK_RUNNING;

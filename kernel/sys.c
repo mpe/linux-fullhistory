@@ -766,12 +766,8 @@ out:
 
 asmlinkage int sys_getpgrp(void)
 {
-	int ret;
-
-	lock_kernel();
-	ret = current->pgrp;
-	unlock_kernel();
-	return ret;
+	/* SMP - assuming writes are word atomic this is fine */
+	return current->pgrp;
 }
 
 asmlinkage int sys_getsid(pid_t pid)
@@ -779,10 +775,12 @@ asmlinkage int sys_getsid(pid_t pid)
 	struct task_struct * p;
 	int ret;
 
-	lock_kernel();
+	/* SMP: The 'self' case requires no lock */
 	if (!pid) {
 		ret = current->session;
 	} else {
+		/* Walking the process table needs locks */
+		lock_kernel();
 		for_each_task(p) {
 			if (p->pid == pid) {
 				ret = p->session;
@@ -790,9 +788,9 @@ asmlinkage int sys_getsid(pid_t pid)
 			}
 		}
 		ret = -ESRCH;
-	}
 out:
-	unlock_kernel();
+		unlock_kernel();
+	}
 	return ret;
 }
 
@@ -1117,11 +1115,7 @@ out:
 
 asmlinkage int sys_umask(int mask)
 {
-	int old;
-
-	lock_kernel();
-	old = current->fs->umask;
-	current->fs->umask = mask & S_IRWXUGO;
-	unlock_kernel();
-	return (old);
+	/* The xchg() isn't SMP-safe on x86 right now.. */
+	mask = xchg(&current->fs->umask, mask & S_IRWXUGO);
+	return mask;
 }

@@ -67,8 +67,6 @@ static int nr_queue_rx_frame(struct sock *sk, struct sk_buff *skb, int more)
 		if ((skbn = alloc_skb(sk->protinfo.nr->fraglen, GFP_ATOMIC)) == NULL)
 			return 1;
 
-		skbn->arp  = 1;
-		skb_set_owner_r(skbn, sk);
 		skbn->h.raw = skbn->data;
 
 		skbo = skb_dequeue(&sk->protinfo.nr->frag_queue);
@@ -97,7 +95,6 @@ static int nr_state1_machine(struct sock *sk, struct sk_buff *skb, int frametype
 	switch (frametype) {
 
 		case NR_CONNACK:
-			nr_calculate_rtt(sk);
 			sk->protinfo.nr->your_index = skb->data[17];
 			sk->protinfo.nr->your_id    = skb->data[18];
 			sk->protinfo.nr->t1timer    = 0;
@@ -311,7 +308,7 @@ static int nr_state3_machine(struct sock *sk, struct sk_buff *skb, int frametype
 int nr_process_rx_frame(struct sock *sk, struct sk_buff *skb)
 {
 	int queued = 0, frametype;
-	
+
 	if (sk->protinfo.nr->state == NR_STATE_0)
 		return 0;
 
@@ -319,8 +316,7 @@ int nr_process_rx_frame(struct sock *sk, struct sk_buff *skb)
 
 	frametype = skb->data[19];
 
-	switch (sk->protinfo.nr->state)
-	{
+	switch (sk->protinfo.nr->state) {
 		case NR_STATE_1:
 			queued = nr_state1_machine(sk, skb, frametype);
 			break;

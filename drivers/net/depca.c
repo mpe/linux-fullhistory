@@ -352,7 +352,7 @@ struct depca_private {
     u_long dma_buffs;		   /* LANCE Rx and Tx buffers start address. */
     int	rx_new, tx_new;		   /* The next free ring entry               */
     int rx_old, tx_old;	           /* The ring entries to be free()ed.       */
-    struct enet_statistics stats;
+    struct net_device_stats stats;
     struct {                       /* Private stats counters                 */
 	u32 bins[DEPCA_PKT_STAT_SZ];
 	u32 unicast;
@@ -387,7 +387,7 @@ static int    depca_start_xmit(struct sk_buff *skb, struct device *dev);
 static void   depca_interrupt(int irq, void *dev_id, struct pt_regs * regs);
 static int    depca_close(struct device *dev);
 static int    depca_ioctl(struct device *dev, struct ifreq *rq, int cmd);
-static struct enet_statistics *depca_get_stats(struct device *dev);
+static struct net_device_stats *depca_get_stats(struct device *dev);
 static void   set_multicast_list(struct device *dev);
 
 /*
@@ -1113,7 +1113,7 @@ static int InitRestartDepca(struct device *dev)
   return status;
 }
 
-static struct enet_statistics *
+static struct net_device_stats *
 depca_get_stats(struct device *dev)
 {
     struct depca_private *lp = (struct depca_private *)dev->priv;

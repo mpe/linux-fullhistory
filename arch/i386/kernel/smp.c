@@ -22,6 +22,7 @@
  *	Matthias Sattler	:	Changes for 2.1 kernel map.
  *	Michel Lespinasse	:	Changes for 2.1 kernel map.
  *	Michael Chastain	:	Change trampoline.S to gnu as.
+ *		Alan Cox	:	Dumb bug: 'B' step PPro's are fine
  *
  */
 
@@ -573,8 +574,11 @@ void smp_store_cpu_info(int id)
 	c->x86=x86;
 	c->x86_model=x86_model;
 	c->x86_mask=x86_mask;
-	if(x86_mask>=1 && x86_mask<=4)
-		smp_b_stepping=1;		/* Remember we have B step CPUs */
+	/*
+	 *	Mask B, Pentium, but not Pentium MMX
+	 */
+	if(x86_mask>=1 && x86_mask<=4 && x86==5 && (x86_model>=0&&x86_model<=3))
+		smp_b_stepping=1;		/* Remember we have B step Pentia with bugs */
 	c->x86_capability=x86_capability;
 	c->fdiv_bug=fdiv_bug;
 	c->wp_works_ok=wp_works_ok;		/* Always assumed the same currently */

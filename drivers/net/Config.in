@@ -76,7 +76,8 @@ if [ "$CONFIG_NET_ETHERNET" = "y" ]; then
       tristate 'Ansel Communications EISA 3200 support (EXPERIMENTAL)' CONFIG_AC3200
     fi
     tristate 'Apricot Xen-II on board ethernet' CONFIG_APRICOT
-    tristate 'DE425, DE434, DE435, DE450, DE500 support' CONFIG_DE4X5
+    tristate 'CS89x0 support' CONFIG_CS89x0
+    tristate 'Generic DECchip & DIGITAL EtherWORKS PCI/EISA' CONFIG_DE4X5
     tristate 'DECchip Tulip (dc21x4x) PCI support' CONFIG_DEC_ELCP
     tristate 'Digi Intl. RightSwitch SE-X support' CONFIG_DGRS
     if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
@@ -102,6 +103,15 @@ if [ "$CONFIG_DLCI" = "y" -o "$CONFIG_DLCI" = "m" ]; then
   int '  Max open DLCI' CONFIG_DLCI_COUNT 24
   int '  Max DLCI per device' CONFIG_DLCI_MAX 8
   dep_tristate '  SDLA (Sangoma S502/S508) support' CONFIG_SDLA $CONFIG_DLCI
+fi
+
+#
+# LocalTalk
+#
+if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
+  if [ "$CONFIG_ATALK" != "n" ]; then
+    tristate 'LocalTalk PC support' CONFIG_LTPC
+  fi
 fi
 
 tristate 'PLIP (parallel port) support' CONFIG_PLIP
@@ -137,11 +147,6 @@ if [ "$CONFIG_NET_RADIO" != "n" ]; then
   fi
   tristate 'STRIP (Metricom starmode radio IP)' CONFIG_STRIP
   tristate 'AT&T WaveLAN & DEC RoamAbout DS support' CONFIG_WAVELAN
-  tristate 'WIC Radio IP bridge' CONFIG_WIC
-fi
-
-if [ "$CONFIG_X25" != "n" ]; then
-  tristate 'LAPB over Ethernet driver' CONFIG_LAPBETHER
 fi
 
 tristate 'SLIP (serial line) support' CONFIG_SLIP
@@ -158,5 +163,24 @@ fi
 
 if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
   tristate 'Traffic Shaper (EXPERIMENTAL)' CONFIG_SHAPER
+fi
+#
+# WAN drivers support
+#
+if [ "$CONFIG_WAN_ROUTER" = "y" ]; then
+  bool 'WAN drivers' CONFIG_WAN_DRIVERS
+  if [ "$CONFIG_WAN_DRIVERS" = "y" ]; then
+    bool 'Sangoma WANPIPE(tm) multiprotocol cards' CONFIG_VENDOR_SANGOMA
+    if [ "$CONFIG_VENDOR_SANGOMA" = "y" ]; then
+      int  '  Maximum number of cards' CONFIG_WANPIPE_CARDS 1
+      bool '  WANPIPE X.25 support' CONFIG_WANPIPE_X25
+      bool '  WANPIPE Frame Relay support' CONFIG_WANPIPE_FR
+      bool '  WANPIPE PPP support' CONFIG_WANPIPE_PPP
+    fi
+  fi
+fi
+
+if [ "$CONFIG_X25" != "n" ]; then
+  tristate 'LAPB over Ethernet driver' CONFIG_LAPBETHER
 fi
 

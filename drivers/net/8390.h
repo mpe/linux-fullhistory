@@ -75,7 +75,7 @@ struct ei_device {
   unsigned char reg5;		/* Register '5' in a WD8013 */
   unsigned char saved_irq;	/* Original dev->irq value. */
   /* The new statistics table. */
-  struct enet_statistics stat;
+  struct net_device_stats stat;
 };
 
 /* The maximum number of 8390 interrupt service routines called per IRQ. */

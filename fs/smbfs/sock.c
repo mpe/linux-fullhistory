@@ -240,6 +240,10 @@ smb_send_raw(struct socket *sock, unsigned char *source, int length)
 			       (void *) (source + already_sent),
 			       length - already_sent, 0, 0);
 
+		if (result == 0)
+		{
+			return -EIO;
+		}
 		if (result < 0)
 		{
 			DPRINTK("smb_send_raw: sendto error = %d\n",

@@ -118,7 +118,7 @@
 #define	AX25_VALUES_IPDEFMODE	0	/* 0=DG 1=VC */
 #define	AX25_VALUES_AXDEFMODE	1	/* 0=Normal 1=Extended Seq Nos */
 #define	AX25_VALUES_TEXT	2	/* Allow PID=Text - 0=No 1=Yes */
-#define	AX25_VALUES_BACKOFF	3	/* 0=Linear 1=Exponential */
+#define	AX25_VALUES_BACKOFF	3	/* 0=None 1=Linear 2=Exponential */
 #define	AX25_VALUES_CONMODE	4	/* Allow connected modes - 0=No 1=Yes */
 #define	AX25_VALUES_WINDOW	5	/* Default window size for standard AX.25 */
 #define	AX25_VALUES_EWINDOW	6	/* Default window size for extended AX.25 */
@@ -135,7 +135,7 @@
 #define	AX25_DEF_IPDEFMODE	0			/* Datagram */
 #define	AX25_DEF_AXDEFMODE	0			/* Normal */
 #define	AX25_DEF_TEXT		1			/* PID=Text allowed */
-#define	AX25_DEF_BACKOFF	1			/* Exponential backoff */
+#define	AX25_DEF_BACKOFF	1			/* Linear backoff */
 #define	AX25_DEF_CONMODE	1			/* Connected mode allowed */
 #define	AX25_DEF_WINDOW		2			/* Window=2 */
 #define	AX25_DEF_EWINDOW	32			/* Module-128 Window=32 */
@@ -197,7 +197,7 @@ extern ax25_address null_ax25_address;
 extern char *ax2asc(ax25_address *);
 extern ax25_address *asc2ax(char *);
 extern int  ax25cmp(ax25_address *, ax25_address *);
-extern int  ax25_send_frame(struct sk_buff *, ax25_address *, ax25_address *, ax25_digi *, struct device *);
+extern int  ax25_send_frame(struct sk_buff *, int, ax25_address *, ax25_address *, ax25_digi *, struct device *);
 extern int  ax25_link_up(ax25_address *, ax25_address *, struct device *);
 extern void ax25_destroy_socket(ax25_cb *);
 extern struct device *ax25rtr_get_dev(ax25_address *);
@@ -216,7 +216,7 @@ extern int  ax25_dev_is_dama_slave(struct device *);	/* dl1bke 951121 */
 extern int  ax25_process_rx_frame(ax25_cb *, struct sk_buff *, int, int);
 
 /* ax25_out.c */
-extern void ax25_output(ax25_cb *, struct sk_buff *);
+extern void ax25_output(ax25_cb *, int, struct sk_buff *);
 extern void ax25_kick(ax25_cb *);
 extern void ax25_transmit_buffer(ax25_cb *, struct sk_buff *, int);
 extern void ax25_nr_error_recovery(ax25_cb *);

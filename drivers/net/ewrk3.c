@@ -257,7 +257,7 @@ struct ewrk3_private {
     char adapter_name[80];              /* Name exported to /proc/ioports */
     u_long shmem_base;                  /* Shared memory start address */
     u_long shmem_length;                /* Shared memory window length */
-    struct enet_statistics stats;       /* Public stats */
+    struct net_device_stats stats;       /* Public stats */
     struct {
       u32 bins[EWRK3_PKT_STAT_SZ]; /* Private stats counters */
       u32 unicast;
@@ -291,7 +291,7 @@ static int    ewrk3_open(struct device *dev);
 static int    ewrk3_queue_pkt(struct sk_buff *skb, struct device *dev);
 static void   ewrk3_interrupt(int irq, void *dev_id, struct pt_regs *regs);
 static int    ewrk3_close(struct device *dev);
-static struct enet_statistics *ewrk3_get_stats(struct device *dev);
+static struct net_device_stats *ewrk3_get_stats(struct device *dev);
 static void   set_multicast_list(struct device *dev);
 static int    ewrk3_ioctl(struct device *dev, struct ifreq *rq, int cmd);
 
@@ -1159,21 +1159,18 @@ ewrk3_close(struct device *dev)
   return 0;
 }
 
-static struct enet_statistics *
-ewrk3_get_stats(struct device *dev)
+static struct net_device_stats *ewrk3_get_stats(struct device *dev)
 {
-  struct ewrk3_private *lp = (struct ewrk3_private *)dev->priv;
+	struct ewrk3_private *lp = (struct ewrk3_private *)dev->priv;
 
-  /* Null body since there is no framing error counter */
-
-  return &lp->stats;
+	/* Null body since there is no framing error counter */
+	return &lp->stats;
 }
 
 /*
 ** Set or clear the multicast filter for this adapter.
 */
-static void
-set_multicast_list(struct device *dev)
+static void set_multicast_list(struct device *dev)
 {
   struct ewrk3_private *lp = (struct ewrk3_private *)dev->priv;
   u_long iobase = dev->base_addr;

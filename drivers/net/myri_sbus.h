@@ -278,7 +278,7 @@ struct myri_eth {
 	struct lanai_regs		*lregs;		/* Quick ptr to LANAI regs.   */
 	struct sk_buff	       *rx_skbs[RX_RING_SIZE+1];/* RX skb's                   */
 	struct sk_buff	       *tx_skbs[TX_RING_SIZE];  /* TX skb's                   */
-	struct enet_statistics		enet_stats;	/* Interface stats.           */
+	struct net_device_stats		enet_stats;	/* Interface stats.           */
 
 	/* These are less frequently accessed. */
 	struct myri_regs		*regs;          /* MyriCOM register space.    */

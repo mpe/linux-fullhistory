@@ -228,9 +228,7 @@ static struct enet_statistics *nr_get_stats(struct device *dev)
 
 int nr_init(struct device *dev)
 {
-	int i;
-
-	dev->mtu		= 236;		/* MTU			*/
+	dev->mtu		= NR_MAX_PACKET_SIZE;
 	dev->tbusy		= 0;
 	dev->hard_start_xmit	= nr_xmit;
 	dev->open		= nr_open;
@@ -259,9 +257,7 @@ int nr_init(struct device *dev)
 
 	dev->get_stats = nr_get_stats;
 
-	/* Fill in the generic fields of the device structure. */
-	for (i = 0; i < DEV_NUMBUFFS; i++)
-		skb_queue_head_init(&dev->buffs[i]);
+	dev_init_buffers(dev);
 
 	return 0;
 };

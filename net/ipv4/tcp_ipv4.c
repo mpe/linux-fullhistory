@@ -1004,6 +1004,8 @@ int tcp_v4_rcv(struct sk_buff *skb, unsigned short len)
 	default:
 		/* CHECKSUM_UNNECESSARY */
 	}
+	
+	tcp_statistics.TcpInSegs++;
 
 #ifdef CONFIG_IP_TRANSPARENT_PROXY
 	if (IPCB(skb)->redirport)

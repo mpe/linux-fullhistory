@@ -905,6 +905,8 @@ int tcp_v6_rcv(struct sk_buff *skb, struct device *dev,
 				/* CHECKSUM_UNNECESSARY */
 		}
 
+		tcp_statistics.TcpInSegs++;
+		
 		sk = inet6_get_sock(&tcpv6_prot, daddr, saddr, 
 				    th->dest, th->source);
 

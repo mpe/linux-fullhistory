@@ -26,6 +26,9 @@ if [ "$CONFIG_IPX" != "n" ]; then
   fi
 fi
 tristate 'Appletalk DDP' CONFIG_ATALK
+if [ "$CONFIG_ATALK" != "n" ]; then
+  bool 'IP-over-DDP support (EXPERIMENTAL)' CONFIG_IPDDP
+fi
 tristate 'Amateur Radio AX.25 Level 2' CONFIG_AX25
 if [ "$CONFIG_AX25" != "n" ]; then
   dep_tristate 'Amateur Radio NET/ROM' CONFIG_NETROM $CONFIG_AX25
@@ -36,5 +39,6 @@ if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
   tristate 'LAPB Data Link Driver (EXPERIMENTAL)' CONFIG_LAPB
   bool 'Bridging (EXPERIMENTAL)' CONFIG_BRIDGE
   bool '802.2 LLC (VERY EXPERIMENTAL)' CONFIG_LLC
+  tristate 'WAN router' CONFIG_WAN_ROUTER
 fi
 endmenu

@@ -62,6 +62,8 @@
 #define PCI_CBER     iobase+0x0030   /* PCI Expansion ROM Base Address Reg. */
 #define PCI_CFIT     iobase+0x003c   /* PCI Configuration Interrupt Register */
 #define PCI_CFDA     iobase+0x0040   /* PCI Driver Area Register */
+#define PCI_CFDD     iobase+0x0041   /* PCI Driver Dependent Area Register */
+#define PCI_CFPM     iobase+0x0043   /* PCI Power Management Area Register */
 
 /*
 ** EISA Configuration Register 0 bit definitions
@@ -95,16 +97,20 @@
 #define ER3_LSR       0x02           /* Local Software Reset */
 
 /*
-** PCI Configuration ID Register (PCI_CFID)
+** PCI Configuration ID Register (PCI_CFID). The Device IDs are left
+** shifted 8 bits to allow detection of DC21142 and DC21143 variants with
+** the configuration revision register step number.
 */
 #define CFID_DID    0xff00           /* Device ID */
 #define CFID_VID    0x00ff           /* Vendor ID */
-#define DC21040_DID 0x0002           /* Unique Device ID # */
+#define DC21040_DID 0x0200           /* Unique Device ID # */
 #define DC21040_VID 0x1011           /* DC21040 Manufacturer */
-#define DC21041_DID 0x0014           /* Unique Device ID # */
+#define DC21041_DID 0x1400           /* Unique Device ID # */
 #define DC21041_VID 0x1011           /* DC21041 Manufacturer */
-#define DC21140_DID 0x0009           /* Unique Device ID # */
+#define DC21140_DID 0x0900           /* Unique Device ID # */
 #define DC21140_VID 0x1011           /* DC21140 Manufacturer */
+#define DC2114x_DID 0x1900           /* Unique Device ID # */
+#define DC2114x_VID 0x1011           /* DC2114[23] Manufacturer */
 
 /*
 ** Chipset defines
@@ -112,10 +118,16 @@
 #define DC21040     DC21040_DID
 #define DC21041     DC21041_DID
 #define DC21140     DC21140_DID
+#define DC2114x     DC2114x_DID
+#define DC21142     (DC2114x_DID | 0x0010)
+#define DC21143     (DC2114x_DID | 0x0020)
 
 #define is_DC21040 ((vendor == DC21040_VID) && (device == DC21040_DID))
 #define is_DC21041 ((vendor == DC21041_VID) && (device == DC21041_DID))
 #define is_DC21140 ((vendor == DC21140_VID) && (device == DC21140_DID))
+#define is_DC2114x ((vendor == DC2114x_VID) && (device == DC2114x_DID))
+#define is_DC21142 ((vendor == DC2114x_VID) && (device == DC21142))
+#define is_DC21143 ((vendor == DC2114x_VID) && (device == DC21143))
 
 /*
 ** PCI Configuration Command/Status Register (PCI_CFCS)
@@ -164,9 +176,14 @@
 #define CBER_ROME   0x00000001       /* ROM Enable */
 
 /*
-** PCI Configuration Driver Area Register (PCI_CFDA)
+** PCI Configuration Power Management Area Register (PCI_CFPM)
 */
-#define CFDA_PSM    0x80000000       /* Power Saving Mode */
+#define SLEEP       0x80             /* Power Saving Sleep Mode */
+#define SNOOZE      0x40             /* Power Saving Snooze Mode */
+#define WAKEUP      0x00             /* Power Saving Wakeup */
+
+#define PCI_CFDA_DSU 0x41            /* 8 bit Configuration Space Address */
+#define PCI_CFDA_PSM 0x43            /* 8 bit Configuration Space Address */
 
 /*
 ** DC21040 Bus Mode Register (DE4X5_BMR)
@@ -298,7 +315,7 @@
 #define OMR_ST     0x00002000       /* Start/Stop Transmission Command */
 #define OMR_FC     0x00001000       /* Force Collision Mode */
 #define OMR_OM     0x00000c00       /* Operating Mode */
-#define OMR_FD     0x00000200       /* Full Duplex Mode */
+#define OMR_FDX    0x00000200       /* Full Duplex Mode */
 #define OMR_FKD    0x00000100       /* Flaky Oscillator Disable */
 #define OMR_PM     0x00000080       /* Pass All Multicast */
 #define OMR_PR     0x00000040       /* Promiscuous Mode */
@@ -478,6 +495,74 @@
 #define MEDIA_BNC      0x0001      /* BNC Media present */
 
 /*
+** SROM Definitions (Digital Semiconductor Format)
+*/
+#define SROM_SSVID     0x0000      /* Sub-system Vendor ID offset */
+#define SROM_SSID      0x0002      /* Sub-system ID offset */
+#define SROM_CISPL     0x0004      /* CardBus CIS Pointer low offset */
+#define SROM_CISPH     0x0006      /* CardBus CIS Pointer high offset */
+#define SROM_IDCRC     0x0010      /* ID Block CRC offset*/
+#define SROM_RSVD2     0x0011      /* ID Reserved 2 offset */
+#define SROM_SFV       0x0012      /* SROM Format Version offset */
+#define SROM_CCNT      0x0013      /* Controller Count offset */
+#define SROM_HWADD     0x0014      /* Hardware Address offset */
+#define SROM_MRSVD     0x007c      /* Manufacturer Reserved offset*/
+#define SROM_CRC       0x007e      /* SROM CRC offset */
+
+/*
+** SROM Media Connection Definitions
+*/
+#define SROM_10BT      0x0000      /*  10BASE-T half duplex */
+#define SROM_10BTN     0x0100      /*  10BASE-T with Nway */
+#define SROM_10BTF     0x0204      /*  10BASE-T full duplex */
+#define SROM_10BTNLP   0x0400      /*  10BASE-T without Link Pass test */
+#define SROM_10B2      0x0001      /*  10BASE-2 (BNC) */
+#define SROM_10B5      0x0002      /*  10BASE-5 (AUI) */
+#define SROM_100BTH    0x0003      /*  100BASE-T half duplex */
+#define SROM_100BTF    0x0205      /*  100BASE-T full duplex */
+#define SROM_100BT4    0x0006      /*  100BASE-T4 */
+#define SROM_100BFX    0x0007      /*  100BASE-FX half duplex (Fiber) */
+#define SROM_M10BT     0x0009      /*  MII 10BASE-T half duplex */
+#define SROM_M10BTF    0x020a      /*  MII 10BASE-T full duplex */
+#define SROM_M100BT    0x000d      /*  MII 100BASE-T half duplex */
+#define SROM_M100BTF   0x020e      /*  MII 100BASE-T full duplex */
+#define SROM_M100BT4   0x000f      /*  MII 100BASE-T4 */
+#define SROM_M100BF    0x0010      /*  MII 100BASE-FX half duplex */
+#define SROM_M100BFF   0x0211      /*  MII 100BASE-FX full duplex */
+#define SROM_PDA       0x0800      /*  Powerup & Dynamic Autosense */
+#define SROM_PAO       0x8800      /*  Powerup Autosense Only */
+#define SROM_NSMI      0xffff      /*  No Selected Media Information */
+
+/*
+** SROM Media Definitions
+*/
+#define SROM_10BASET   0x0000      /*  10BASE-T half duplex */
+#define SROM_10BASE2   0x0001      /*  10BASE-2 (BNC) */
+#define SROM_10BASE5   0x0002      /*  10BASE-5 (AUI) */
+#define SROM_100BASET  0x0003      /*  100BASE-T half duplex */
+#define SROM_10BASETF  0x0004      /*  10BASE-T full duplex */
+#define SROM_100BASETF 0x0005      /*  100BASE-T full duplex */
+#define SROM_100BASET4 0x0006      /*  100BASE-T4 */
+#define SROM_100BASEF  0x0007      /*  100BASE-FX half duplex */
+#define SROM_100BASEFF 0x0008      /*  100BASE-FX full duplex */
+
+#define BLOCK_LEN      0x7f        /* Extended blocks length mask */
+
+/*
+** SROM Compact Format Block Masks
+*/
+#define COMPACT_FI      0x80       /* Format Indicator */
+#define COMPACT_LEN     0x04       /* Length */
+#define COMPACT_MC      0x3f       /* Media Code */
+
+/*
+** SROM Extended Format Block Type 0 Masks
+*/
+#define BLOCK0_FI      0x80        /* Format Indicator */
+#define BLOCK0_MCS     0x80        /* Media Code byte Sign */
+#define BLOCK0_MC      0x3f        /* Media Code */
+
+/*
 ** DC21040 Full Duplex Register (DE4X5_FDR)
 */
 #define FDR_FDACV  0x0000ffff      /* Full Duplex Auto Configuration Value */
@@ -501,7 +586,7 @@
 #define GEP_FLED 0x00000002        /* Force Activity LED on   (output) */
 #define GEP_MODE 0x00000001        /* 0: 10Mb/s,  1: 100Mb/s           */
 #define GEP_INIT 0x0000011f        /* Setup inputs (0) and outputs (1) */
-
+#define GEP_CTRL 0x00000100        /* GEP control bit                  */
 
 /*
 ** DC21040 SIA Status Register (DE4X5_SISR)
@@ -685,6 +770,20 @@
 #define TIMER_CB        0x80000000 /* Timer callback detection */
 
 /*
+** DE4X5 DEBUG Options
+*/
+#define DEBUG_NONE      0x0000     /* No DEBUG messages */
+#define DEBUG_VERSION   0x0001     /* Print version message */
+#define DEBUG_MEDIA     0x0002     /* Print media messages */
+#define DEBUG_TX        0x0004     /* Print TX (queue_pkt) messages */
+#define DEBUG_RX        0x0008     /* Print RX (de4x5_rx) messages */
+#define DEBUG_SROM      0x0010     /* Print SROM messages */
+#define DEBUG_MII       0x0020     /* Print MII messages */
+#define DEBUG_OPEN      0x0040     /* Print de4x5_open() messages */
+#define DEBUG_CLOSE     0x0080     /* Print de4x5_close() messages */
+#define DEBUG_PCICFG    0x0100
+
+/*
 ** Miscellaneous
 */
 #define PCI  0
@@ -728,11 +827,16 @@
 */
 #define NO                   0
 #define FALSE                0
-#define CLOSED               0
 
 #define YES                  ~0
 #define TRUE                 ~0
-#define OPEN                 ~0
+
+/*
+** Adapter state
+*/
+#define INITIALISED          0     /* After h/w initialised and mem alloc'd */
+#define CLOSED               1     /* Ready for opening */
+#define OPEN                 2     /* Running */
 
 /*
 ** IEEE OUIs for various PHY vendor/chip combos - Reg 2 values only. Since
@@ -748,55 +852,68 @@
 ** Speed Selection stuff
 */
 #define SET_10Mb {\
-  if (lp->phy[lp->active].id) {\
-    omr = inl(DE4X5_OMR) & ~(OMR_TTM | OMR_PCS | OMR_SCR | OMR_FD);\
+  if ((lp->phy[lp->active].id) && (!lp->useSROM || lp->useMII)) {\
+    omr = inl(DE4X5_OMR) & ~(OMR_TTM | OMR_PCS | OMR_SCR | OMR_FDX);\
     if ((lp->tmp != MII_SR_ASSC) || (lp->autosense != AUTO)) {\
-      mii_wr(MII_CR_10|(de4x5_full_duplex?MII_CR_FDM:0), MII_CR, lp->phy[lp->active].addr, DE4X5_MII);\
+      mii_wr(MII_CR_10|(lp->fdx?MII_CR_FDM:0), MII_CR, lp->phy[lp->active].addr, DE4X5_MII);\
     }\
-    omr |= ((de4x5_full_duplex ? OMR_FD : 0) | OMR_TTM);\
+    omr |= ((lp->fdx ? OMR_FDX : 0) | OMR_TTM);\
     outl(omr, DE4X5_OMR);\
-    outl(0, DE4X5_GEP);\
+    lp->cache.gep = 0;\
+  } else if (lp->useSROM && !lp->useMII) {\
+    omr = (inl(DE4X5_OMR) & ~(OMR_PS | OMR_HBD | OMR_TTM | OMR_PCS | OMR_SCR | OMR_FDX));\
+    omr |= (lp->fdx ? OMR_FDX : 0);\
+    outl(omr | lp->infoblock_csr6, DE4X5_OMR);\
   } else {\
-    omr = (inl(DE4X5_OMR) & ~(OMR_PS | OMR_HBD | OMR_TTM | OMR_PCS | OMR_SCR | OMR_FD));\
-    omr |= (de4x5_full_duplex ? OMR_FD : 0);\
+    omr = (inl(DE4X5_OMR) & ~(OMR_PS | OMR_HBD | OMR_TTM | OMR_PCS | OMR_SCR | OMR_FDX));\
+    omr |= (lp->fdx ? OMR_FDX : 0);\
     outl(omr | OMR_TTM, DE4X5_OMR);\
-    outl((de4x5_full_duplex ? 0 : GEP_FDXD), DE4X5_GEP);\
+    lp->cache.gep = (lp->fdx ? 0 : GEP_FDXD);\
   }\
 }
 
 #define SET_100Mb {\
-  if (lp->phy[lp->active].id) {\
+  if ((lp->phy[lp->active].id) && (!lp->useSROM || lp->useMII)) {\
     int fdx=0;\
     if (lp->phy[lp->active].id == NATIONAL_TX) {\
         mii_wr(mii_rd(0x18, lp->phy[lp->active].addr, DE4X5_MII) & ~0x2000,\
                       0x18, lp->phy[lp->active].addr, DE4X5_MII);\
     }\
-    omr = inl(DE4X5_OMR) & ~(OMR_TTM | OMR_PCS | OMR_SCR | OMR_FD);\
+    omr = inl(DE4X5_OMR) & ~(OMR_TTM | OMR_PCS | OMR_SCR | OMR_FDX);\
     sr = mii_rd(MII_SR, lp->phy[lp->active].addr, DE4X5_MII);\
-    if (!(sr & MII_ANA_T4AM) && de4x5_full_duplex) fdx=1;\
+    if (!(sr & MII_ANA_T4AM) && lp->fdx) fdx=1;\
     if ((lp->tmp != MII_SR_ASSC) || (lp->autosense != AUTO)) {\
       mii_wr(MII_CR_100|(fdx?MII_CR_FDM:0), MII_CR, lp->phy[lp->active].addr, DE4X5_MII);\
     }\
-    if (fdx) omr |= OMR_FD;\
+    if (fdx) omr |= OMR_FDX;\
     outl(omr, DE4X5_OMR);\
+    lp->cache.gep = 0;\
+  } else if (lp->useSROM && !lp->useMII) {\
+    omr = (inl(DE4X5_OMR) & ~(OMR_PS | OMR_HBD | OMR_TTM | OMR_PCS | OMR_SCR | OMR_FDX));\
+    omr |= (lp->fdx ? OMR_FDX : 0);\
+    outl(omr | lp->infoblock_csr6 | OMR_HBD, DE4X5_OMR);\
   } else {\
-    omr = (inl(DE4X5_OMR) & ~(OMR_PS | OMR_HBD | OMR_TTM | OMR_PCS | OMR_SCR | OMR_FD));\
-    omr |= (de4x5_full_duplex ? OMR_FD : 0);\
+    omr = (inl(DE4X5_OMR) & ~(OMR_PS | OMR_HBD | OMR_TTM | OMR_PCS | OMR_SCR | OMR_FDX));\
+    omr |= (lp->fdx ? OMR_FDX : 0);\
     outl(omr | OMR_PS | OMR_HBD | OMR_PCS | OMR_SCR, DE4X5_OMR);\
-    outl((de4x5_full_duplex ? 0 : GEP_FDXD) | GEP_MODE, DE4X5_GEP);\
+    lp->cache.gep = (lp->fdx ? 0 : GEP_FDXD) | GEP_MODE;\
   }\
 }
 
 /* FIX ME so I don't jam 10Mb networks */
 #define SET_100Mb_PDET {\
-  if (lp->phy[lp->active].id) {\
+  if ((lp->phy[lp->active].id) && (!lp->useSROM || lp->useMII)) {\
     mii_wr(MII_CR_100|MII_CR_ASSE, MII_CR, lp->phy[lp->active].addr, DE4X5_MII);\
-    omr = (inl(DE4X5_OMR) & ~(OMR_TTM | OMR_PCS | OMR_SCR | OMR_FD));\
+    omr = (inl(DE4X5_OMR) & ~(OMR_TTM | OMR_PCS | OMR_SCR | OMR_FDX));\
+    outl(omr, DE4X5_OMR);\
+    lp->cache.gep = 0;\
+  } else if (lp->useSROM && !lp->useMII) {\
+    omr = (inl(DE4X5_OMR) & ~(OMR_TTM | OMR_PCS | OMR_SCR | OMR_FDX));\
     outl(omr, DE4X5_OMR);\
   } else {\
-    omr = (inl(DE4X5_OMR) & ~(OMR_PS | OMR_HBD | OMR_TTM | OMR_PCS | OMR_SCR | OMR_FD));\
+    omr = (inl(DE4X5_OMR) & ~(OMR_PS | OMR_HBD | OMR_TTM | OMR_PCS | OMR_SCR | OMR_FDX));\
     outl(omr | OMR_PS | OMR_HBD | OMR_PCS | OMR_SCR, DE4X5_OMR);\
-    outl(GEP_FDXD | GEP_MODE, DE4X5_GEP);\
+    lp->cache.gep = (GEP_FDXD | GEP_MODE);\
   }\
 }
 

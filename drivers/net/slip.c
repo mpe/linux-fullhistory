@@ -372,6 +372,8 @@ sl_bump(struct slip *sl)
 	}
 #endif  /* SL_INCLUDE_CSLIP */
 
+	sl->rx_bytes+=count;
+	
 	skb = dev_alloc_skb(count);
 	if (skb == NULL)  {
 		printk("%s: memory squeeze, dropping packet.\n", sl->dev->name);
@@ -508,8 +510,10 @@ sl_xmit(struct sk_buff *skb, struct device *dev)
 	}
 
 	/* We were not busy, so we are now... :-) */
-	if (skb != NULL) {
+	if (skb != NULL) 
+	{
 		sl_lock(sl);
+		sl->tx_bytes+=skb->len;
 		sl_encaps(sl, skb->data, skb->len);
 		dev_kfree_skb(skb, FREE_WRITE);
 	}
@@ -625,8 +629,7 @@ sl_close(struct device *dev)
 	return 0;
 }
 
-static int
-slip_receive_room(struct tty_struct *tty)
+static int slip_receive_room(struct tty_struct *tty)
 {
 	return 65536;  /* We can handle an infinite amount of data. :-) */
 }
@@ -637,8 +640,8 @@ slip_receive_room(struct tty_struct *tty)
  * a block of SLIP data has been received, which can now be decapsulated
  * and sent on to some IP layer for further processing.
  */
-static void
-slip_receive_buf(struct tty_struct *tty, const unsigned char *cp, char *fp, int count)
+ 
+static void slip_receive_buf(struct tty_struct *tty, const unsigned char *cp, char *fp, int count)
 {
 	struct slip *sl = (struct slip *) tty->disc_data;
 
@@ -752,19 +755,21 @@ slip_close(struct tty_struct *tty)
 }
 
 
-static struct enet_statistics *
+static struct net_device_stats *
 sl_get_stats(struct device *dev)
 {
-	static struct enet_statistics stats;
+	static struct net_device_stats stats;
 	struct slip *sl = (struct slip*)(dev->priv);
 #ifdef SL_INCLUDE_CSLIP
 	struct slcompress *comp;
 #endif
 
-	memset(&stats, 0, sizeof(struct enet_statistics));
+	memset(&stats, 0, sizeof(struct net_device_stats));
 
 	stats.rx_packets     = sl->rx_packets;
 	stats.tx_packets     = sl->tx_packets;
+	stats.rx_bytes	     = sl->rx_bytes;
+	stats.tx_bytes	     = sl->tx_bytes;
 	stats.rx_dropped     = sl->rx_dropped;
 	stats.tx_dropped     = sl->tx_dropped;
 	stats.tx_errors      = sl->tx_errors;
@@ -828,8 +833,7 @@ slip_esc(unsigned char *s, unsigned char *d, int len)
 	return (ptr - d);
 }
 
-static void
-slip_unesc(struct slip *sl, unsigned char s)
+static void slip_unesc(struct slip *sl, unsigned char s)
 {
 
 	switch(s) {

@@ -77,14 +77,6 @@ else
   endif
 endif
 
-ifeq ($(CONFIG_WIC),y)
-L_OBJS += wic.o
-else
-  ifeq ($(CONFIG_WIC),m)
-  M_OBJS += wic.o
-  endif
-endif
-
 ifeq ($(CONFIG_SMC9194),y)
 L_OBJS += smc9194.o
 else
@@ -630,6 +622,22 @@ else
   endif
 endif
 
+ifeq ($(CONFIG_CS89x0),y)
+L_OBJS += cs89x0.o
+else
+  ifeq ($(CONFIG_CS89x0),m)
+  M_OBJS += cs89x0.o
+  endif
+endif
+
+ifeq ($(CONFIG_LTPC),y)
+L_OBJS += ltpc.o
+else
+  ifeq ($(CONFIG_LTPC),m)
+  M_OBJS += ltpc.o
+  endif
+endif
+
 ifeq ($(CONFIG_BAYCOM),y)
 L_OBJS += baycom.o
 CONFIG_HDLCDRV_BUILTIN = y
@@ -660,6 +668,21 @@ else
   endif
 endif
 
+
+ifeq ($(CONFIG_VENDOR_SANGOMA),y)
+  M_OBJS += sdladrv.o
+  M_OBJS += wanpipe.o
+  WANPIPE_OBJS = sdlamain.o
+  ifeq ($(CONFIG_WANPIPE_X25),y)
+    WANPIPE_OBJS += sdla_x25.o
+  endif
+  ifeq ($(CONFIG_WANPIPE_FR),y)
+    WANPIPE_OBJS += sdla_fr.o
+  endif
+  ifeq ($(CONFIG_WANPIPE_PPP),y)
+    WANPIPE_OBJS += sdla_ppp.o
+  endif
+endif
 
 include $(TOPDIR)/Rules.make
 
@@ -725,7 +748,24 @@ sdla.o: sdla.c CONFIG
 
 dlci.o: dlci.c CONFIG
 
+sdladrv.o: sdladrv.c CONFIG
+
+wanpipe.o: $(WANPIPE_OBJS)
+	ld -r -o $@ $^
+
+sdlamain.o: sdlamain.c CONFIG
+
+sdla_x25.o: sdla_x25.c CONFIG
+
+sdla_fr.o: sdla_fr.c CONFIG
+
+sdla_ppp.o: sdla_ppp.c CONFIG
+
 dgrs.o: dgrs.c dgrs.h CONFIG
 	$(CC) $(CPPFLAGS) $(CFLAGS) -c $<
+
+ltpc.o: ltpc.c ltpc.h CONFIG
+	$(CC) $(CPPFLAGS) $(CFLAGS) -c $<
+
 tulip.o: tulip.c CONFIG
 	$(CC) $(CPPFLAGS) $(CFLAGS) $(TULIP_OPTS) -c $<

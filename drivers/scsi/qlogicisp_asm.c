@@ -2,13 +2,13 @@
  *	Version 2.10 Initiator Firmware (16:13 Oct 18, 1995)
  */
 
-unsigned short risc_code_version = 2*1024+10;
+static const unsigned short risc_code_version = 2*1024+10;
 
-unsigned short risc_code_addr01 = 0x1000 ;
+static const unsigned short risc_code_addr01 = 0x1000 ;
 
 #if RELOAD_FIRMWARE
 
-unsigned short risc_code01[] = { 
+static const unsigned short risc_code01[] = { 
 	0x0078, 0x1041, 0x0000, 0x283a, 0x0000, 0x2043, 0x4f50, 0x5952,
 	0x4947, 0x4854, 0x2031, 0x3939, 0x312c, 0x3139, 0x3932, 0x2c31,
 	0x3939, 0x332c, 0x3139, 0x3934, 0x2051, 0x4c4f, 0x4749, 0x4320,
@@ -1301,4 +1301,4 @@ unsigned short risc_code01[] = {
 
 #endif /* RELOAD_FIRMWARE */
 
-unsigned short risc_code_length01 = 0x283a;
+static const unsigned short risc_code_length01 = 0x283a;

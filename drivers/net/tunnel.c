@@ -120,13 +120,13 @@ void print_ip(struct iphdr *ip)
 
 static int tunnel_xmit(struct sk_buff *skb, struct device *dev)
 {
-	struct enet_statistics *stats;		/* This device's statistics */
+	struct net_device_stats *stats;		/* This device's statistics */
 	struct rtable *rt;     			/* Route to the other host */
 	struct device *tdev;			/* Device to other host */
 	struct iphdr  *iph;			/* Our new IP header */
 	int    max_headroom;			/* The extra header space needed */
 
-	stats = (struct enet_statistics *)dev->priv;
+	stats = (struct net_device_stats *)dev->priv;
   
 	/*
 	 *  First things first.  Look up the destination address in the 
@@ -194,6 +194,8 @@ static int tunnel_xmit(struct sk_buff *skb, struct device *dev)
 	iph->id			=	htons(ip_id_count++);	/* Race condition here? */
 	ip_send_check(iph);
 
+	stats->tx_bytes+=skb->len;
+	
 	ip_send(skb);
 
 	/* Record statistics and return */
@@ -201,9 +203,9 @@ static int tunnel_xmit(struct sk_buff *skb, struct device *dev)
 	return 0;
 }
 
-static struct enet_statistics *tunnel_get_stats(struct device *dev)
+static struct net_device_stats *tunnel_get_stats(struct device *dev)
 {
-	return((struct enet_statistics*) dev->priv);
+	return((struct net_device_stats*) dev->priv);
 }
 
 /*
@@ -226,10 +228,10 @@ int tunnel_init(struct device *dev)
 	dev->stop		= tunnel_close;
 	dev->hard_start_xmit	= tunnel_xmit;
 	dev->get_stats		= tunnel_get_stats;
-	dev->priv = kmalloc(sizeof(struct enet_statistics), GFP_KERNEL);
+	dev->priv = kmalloc(sizeof(struct net_device_stats), GFP_KERNEL);
 	if (dev->priv == NULL)
 		return -ENOMEM;
-	memset(dev->priv, 0, sizeof(struct enet_statistics));
+	memset(dev->priv, 0, sizeof(struct net_device_stats));
 
 	/* Initialize the tunnel device structure */
 	
@@ -302,7 +304,7 @@ int init_module(void)
 void cleanup_module(void)
 {
 	unregister_netdev(&dev_tunnel);
-	kfree_s(dev_tunnel.priv,sizeof(struct enet_statistics));
+	kfree_s(dev_tunnel.priv,sizeof(struct net_device_stats));
 	dev_tunnel.priv=NULL;
 }
 #endif /* MODULE */

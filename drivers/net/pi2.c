@@ -146,7 +146,7 @@ static int pi_send_packet(struct sk_buff *skb, struct device *dev);
 static void pi_interrupt(int reg_ptr, void *dev_id, struct pt_regs *regs);
 static int pi_close(struct device *dev);
 static int pi_ioctl(struct device *dev, struct ifreq *ifr, int cmd);
-static struct enet_statistics *pi_get_stats(struct device *dev);
+static struct net_device_stats *pi_get_stats(struct device *dev);
 static void rts(struct pi_local *lp, int x);
 static void b_rxint(struct device *dev, struct pi_local *lp);
 static void b_txint(struct pi_local *lp);
@@ -164,69 +164,71 @@ static char ax25_test[7] =
 
 static int ext2_secrm_seed = 152;	/* Random generator base */
 
-static inline unsigned char random(void)
+extern inline unsigned char random(void)
 {
-    return (unsigned char) (ext2_secrm_seed = ext2_secrm_seed
+	return (unsigned char) (ext2_secrm_seed = ext2_secrm_seed
 			    * 69069l + 1);
 }
 
-static inline void wrtscc(int cbase, int ctl, int sccreg, int val)
+extern inline void wrtscc(int cbase, int ctl, int sccreg, int val)
 {
-    /* assume caller disables interrupts! */
-    outb_p(0, cbase + DMAEN);	/* Disable DMA while we touch the scc */
-    outb_p(sccreg, ctl);	/* Select register */
-    outb_p(val, ctl);		/* Output value */
-    outb_p(1, cbase + DMAEN);	/* Enable DMA */
+	/* assume caller disables interrupts! */
+	outb_p(0, cbase + DMAEN);	/* Disable DMA while we touch the scc */
+	outb_p(sccreg, ctl);		/* Select register */
+	outb_p(val, ctl);		/* Output value */
+	outb_p(1, cbase + DMAEN);	/* Enable DMA */
 }
 
-static inline int rdscc(int cbase, int ctl, int sccreg)
+extern inline int rdscc(int cbase, int ctl, int sccreg)
 {
-    int retval;
+	int retval;
 
-    /* assume caller disables interrupts! */
-    outb_p(0, cbase + DMAEN);	/* Disable DMA while we touch the scc */
-    outb_p(sccreg, ctl);	/* Select register */
-    retval = inb_p(ctl);
-    outb_p(1, cbase + DMAEN);	/* Enable DMA */
-    return retval;
+	/* assume caller disables interrupts! */
+	outb_p(0, cbase + DMAEN);	/* Disable DMA while we touch the scc */
+	outb_p(sccreg, ctl);	/* Select register */
+	retval = inb_p(ctl);
+	outb_p(1, cbase + DMAEN);	/* Enable DMA */
+	return retval;
 }
 
 static void switchbuffers(struct pi_local *lp)
 {
-    if (lp->rcvbuf == lp->rxdmabuf1)
-	lp->rcvbuf = lp->rxdmabuf2;
-    else
-	lp->rcvbuf = lp->rxdmabuf1;
+	if (lp->rcvbuf == lp->rxdmabuf1)
+		lp->rcvbuf = lp->rxdmabuf2;
+	else
+		lp->rcvbuf = lp->rxdmabuf1;
 }
 
 static void hardware_send_packet(struct pi_local *lp, struct sk_buff *skb)
 {
-    char kickflag;
-    unsigned long flags;
+	char kickflag;
+	unsigned long flags;
 
-    lp->stats.tx_packets++;
+	lp->stats.tx_packets++;
 
-    save_flags(flags);
-    cli();
-    kickflag = (skb_peek(&lp->sndq) == NULL) && (lp->sndbuf == NULL);
-    restore_flags(flags);
+	save_flags(flags);
+	cli();
+	kickflag = (skb_peek(&lp->sndq) == NULL) && (lp->sndbuf == NULL);
+	restore_flags(flags);
 
-    skb_queue_tail(&lp->sndq, skb);
-    if (kickflag) {
-	/* simulate interrupt to xmit */
-	switch (lp->base & 2) {
-	case 2:
-	    a_txint(lp);	/* process interrupt */
-	    break;
-	case 0:
-	    save_flags(flags);
-	    cli();
-	    if (lp->tstate == IDLE)
-		b_txint(lp);
-	    restore_flags(flags);
-	    break;
+	skb_queue_tail(&lp->sndq, skb);
+	if (kickflag) 
+	{
+		/* simulate interrupt to xmit */
+		switch (lp->base & 2) 
+		{
+			case 2:
+				a_txint(lp);	/* process interrupt */
+				break;
+			case 0:
+				save_flags(flags);
+				cli();
+				if (lp->tstate == IDLE)
+					b_txint(lp);
+				restore_flags(flags);
+				break;
+		}
 	}
-    }
 }
 
 static void setup_rx_dma(struct pi_local *lp)
@@ -1662,12 +1664,11 @@ static int pi_ioctl(struct device *dev, struct ifreq *ifr, int cmd)
 
 /* Get the current statistics.	This may be called with the card open or
    closed. */
-static struct netstats *
- pi_get_stats(struct device *dev)
+static struct net_device_stats *pi_get_stats(struct device *dev)
 {
-    struct pi_local *lp = (struct pi_local *) dev->priv;
+	struct pi_local *lp = (struct pi_local *) dev->priv;
 
-    return &lp->stats;
+	return &lp->stats;
 }
 
 #ifdef MODULE

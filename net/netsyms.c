@@ -93,6 +93,7 @@ EXPORT_SYMBOL(sk_alloc);
 EXPORT_SYMBOL(sk_free);
 EXPORT_SYMBOL(sock_wake_async);
 EXPORT_SYMBOL(sock_alloc_send_skb);
+EXPORT_SYMBOL(sock_init_data);
 EXPORT_SYMBOL(sock_no_fcntl);
 EXPORT_SYMBOL(sock_rfree);
 EXPORT_SYMBOL(sock_wfree);
@@ -102,7 +103,6 @@ EXPORT_SYMBOL(skb_copy_datagram);
 EXPORT_SYMBOL(skb_copy_datagram_iovec);
 EXPORT_SYMBOL(skb_realloc_headroom);
 EXPORT_SYMBOL(datagram_poll);
-EXPORT_SYMBOL(sock_init_data);
 EXPORT_SYMBOL(put_cmsg);
 
 EXPORT_SYMBOL(neigh_table_init);

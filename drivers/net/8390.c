@@ -179,17 +179,7 @@ static int ei_start_xmit(struct sk_buff *skb, struct device *dev)
 		dev->trans_start = jiffies;
     }
     
-    /* Sending a NULL skb means some higher layer thinks we've missed an
-       tx-done interrupt. Caution: dev_tint() handles the cli()/sti()
-       itself. */
-    if (skb == NULL) {
-		dev_tint(dev);
-		return 0;
-    }
-    
     length = skb->len;
-    if (skb->len <= 0)
-		return 0;
 
     /* Mask interrupts from the ethercard. */
     outb_p(0x00, e8390_base + EN0_IMR);
@@ -202,6 +192,8 @@ static int ei_start_xmit(struct sk_buff *skb, struct device *dev)
 
     send_length = ETH_ZLEN < length ? length : ETH_ZLEN;
 
+    ei_local->stat.tx_bytes+=send_length;
+    
 #ifdef EI_PINGPONG
 
     /*
@@ -560,6 +552,7 @@ static void ei_receive(struct device *dev)
 				skb->dev = dev;
 				skb_put(skb, pkt_len);	/* Make room */
 				ei_block_input(dev, pkt_len, skb, current_offset + sizeof(rx_frame));
+				ei_local->stat.rx_bytes+=skb->len;
 				skb->protocol=eth_type_trans(skb,dev);
 				netif_rx(skb);
 				ei_local->stat.rx_packets++;
@@ -663,7 +656,7 @@ static void ei_rx_overrun(struct device *dev)
 	
 }
 
-static struct enet_statistics *get_stats(struct device *dev)
+static struct net_device_stats *get_stats(struct device *dev)
 {
     short ioaddr = dev->base_addr;
     struct ei_device *ei_local = (struct ei_device *) dev->priv;

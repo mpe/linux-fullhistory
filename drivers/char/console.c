@@ -60,6 +60,7 @@
  * User-defined bell sound, new setterm control sequences and printk
  * redirection by Martin Mares <mj@k332.feld.cvut.cz> 19-Nov-95
  *
+ * APM screenblank bug fixed Takashi Manabe <manabe@roy.dsl.tutics.tut.jp>
  */
 
 #define BLANK 0x0020
@@ -2194,12 +2195,14 @@ void do_blank_screen(int nopowersave)
 	hide_cursor();
 	console_blanked = fg_console + 1;
 
-#ifdef CONFIG_APM
-	if (apm_display_blank())
-		return;
-#endif
 	if(!nopowersave)
-	    vesa_blank();
+	{
+#ifdef CONFIG_APM
+		if (apm_display_blank())
+			return;
+#endif
+		vesa_blank();
+	}
 }
 
 void do_unblank_screen(void)

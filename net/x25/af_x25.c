@@ -421,28 +421,6 @@ static int x25_listen(struct socket *sock, int backlog)
 	return -EOPNOTSUPP;
 }
 
-static void def_callback1(struct sock *sk)
-{
-	if (!sk->dead)
-		wake_up_interruptible(sk->sleep);
-}
-
-static void def_callback2(struct sock *sk, int len)
-{
-	if (!sk->dead) {
-		wake_up_interruptible(sk->sleep);
-		sock_wake_async(sk->socket, 1);
-	}
-}
-
-static void def_callback3(struct sock *sk)
-{
-	if (!sk->dead) {
-		wake_up_interruptible(sk->sleep);
-		sock_wake_async(sk->socket, 2);
-	}
-}
-
 static struct sock *x25_alloc_socket(void)
 {
 	struct sock *sk;
@@ -463,16 +441,7 @@ static struct sock *x25_alloc_socket(void)
 
 	MOD_INC_USE_COUNT;
 
-	skb_queue_head_init(&sk->receive_queue);
-	skb_queue_head_init(&sk->write_queue);
-	skb_queue_head_init(&sk->back_log);
-
-	init_timer(&sk->timer);
-
-	sk->state_change = def_callback1;
-	sk->data_ready   = def_callback2;
-	sk->write_space  = def_callback3;
-	sk->error_report = def_callback1;
+	sock_init_data(NULL, sk);
 
 	skb_queue_head_init(&x25->fragment_queue);
 	skb_queue_head_init(&x25->interrupt_in_queue);
@@ -494,30 +463,17 @@ static int x25_create(struct socket *sock, int protocol)
 
 	x25 = sk->protinfo.x25;
 
-	sock->ops         = &x25_proto_ops;
+	sock_init_data(sock, sk);
 
-	sk->socket        = sock;
-	sk->type          = sock->type;
-	sk->protocol      = protocol;
-	sk->allocation	  = GFP_KERNEL;
-	sk->rcvbuf        = SK_RMEM_MAX;
-	sk->sndbuf        = SK_WMEM_MAX;
-	sk->state         = TCP_CLOSE;
-	sk->priority      = SOPRI_NORMAL;
-	sk->mtu           = X25_DEFAULT_PACKET_SIZE;	/* X25_PS128 */
-	sk->zapped        = 1;
+	sock->ops    = &x25_proto_ops;
+	sk->protocol = protocol;
+	sk->mtu      = X25_DEFAULT_PACKET_SIZE;	/* X25_PS128 */
 
-	if (sock != NULL) {
-		sock->sk  = sk;
-		sk->sleep = &sock->wait;
-	}
-
-	x25->t21      = sysctl_x25_call_request_timeout;
-	x25->t22      = sysctl_x25_reset_request_timeout;
-	x25->t23      = sysctl_x25_clear_request_timeout;
-	x25->t2       = sysctl_x25_ack_holdback_timeout;
-
-	x25->state       = X25_STATE_0;
+	x25->t21   = sysctl_x25_call_request_timeout;
+	x25->t22   = sysctl_x25_reset_request_timeout;
+	x25->t23   = sysctl_x25_clear_request_timeout;
+	x25->t2    = sysctl_x25_ack_holdback_timeout;
+	x25->state = X25_STATE_0;
 
 	x25->facilities.winsize_in  = X25_DEFAULT_WINDOW_SIZE;
 	x25->facilities.winsize_out = X25_DEFAULT_WINDOW_SIZE;

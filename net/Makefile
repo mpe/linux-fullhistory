@@ -9,7 +9,7 @@
 
 MOD_SUB_DIRS := ipv4
 ALL_SUB_DIRS := 802 ax25 bridge core ethernet ipv4 ipv6 ipx unix appletalk \
-		netrom rose lapb x25 #decnet
+		netrom rose lapb x25 wanrouter #decnet
 SUB_DIRS     := core ethernet unix
 MOD_LIST_NAME := NET_MISC_MODULES
 
@@ -46,6 +46,14 @@ SUB_DIRS += appletalk
 else
   ifeq ($(CONFIG_ATALK),m)
   MOD_SUB_DIRS += appletalk
+  endif
+endif
+
+ifeq ($(CONFIG_WAN_ROUTER),y)
+SUB_DIRS += wanrouter
+else
+  ifeq ($(CONFIG_WAN_ROUTER),m)
+  MOD_SUB_DIRS += wanrouter
   endif
 endif
 

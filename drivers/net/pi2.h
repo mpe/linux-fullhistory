@@ -1,9 +1,6 @@
 
 #define DMA_BUFF_SIZE 2200
 
-/* Network statistics, with the same names as 'struct enet_statistics'. */
-#define netstats enet_statistics
-
 #define ON 1
 #define OFF 0
 

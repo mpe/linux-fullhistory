@@ -11,7 +11,7 @@
 
 static int min_ax25[] = {0, 0, 0, 0, 0, 1,  1,                1,                1,
 	                 0,                   0,  1,   1,  1, 0x00};
-static int max_ax25[] = {1, 1, 1, 1, 1, 7, 63, 30 * AX25_SLOWHZ, 20 * AX25_SLOWHZ,
+static int max_ax25[] = {1, 1, 1, 2, 1, 7, 63, 30 * AX25_SLOWHZ, 20 * AX25_SLOWHZ,
 	3600 * AX25_SLOWHZ, 65535 * AX25_SLOWHZ, 31, 512, 20, 0x03};
 
 static struct ctl_table_header *ax25_table_header;

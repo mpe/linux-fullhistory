@@ -1,0 +1,78 @@
+                       Linux Serial Console
+
+These examples are valid if you want to use /dev/ttyS1 (COM2)
+as the serial console. Replace as needed.
+
+1. Tell LILO to use the serial port.
+   In lilo.conf (global section): 
+
+   serial  = 1,9600n8 (ttyS1, 9600 bd, no parity, 8 bits)
+
+2. Adjust to kernel flags for the new kernel,
+   again in lilo.conf (kernel section)
+
+   append = "console=1,9600,n8" 
+
+   (Note the extra comma needed if you want to supply parity/framing 
+   information.)
+
+3. Link /dev/console to the serial port.
+
+   Your probably want to save your old /dev/console (the "master" virtual
+   console). Check if it is a symbolic link first. If not, `mv' it to
+   `/dev/tty0':
+
+   ls -l /dev/console
+   mv /dev/console /dev/tty0
+
+   Now link the serial port you are going to use as the console to
+   /dev/console, for example ttyS1:
+
+   ln -s /dev/ttyS1 /dev/console
+
+   On some systems you might want to edit your bootup scripts to make sure
+   they don't reset this arrangement on boot. (On Debian, check
+   /etc/rc.boot/console and /etc/default/console). You probably also want
+   to put a getty on either /dev/console or /dev/ttyS1.
+
+4. Init and /dev/console.
+   Sysvinit will open /dev/console on boot. If this does not point
+   to the serial console device, the startup messages will be printed
+   to the wrong device. The kernel also passes the environment variable
+   "CONSOLE" to the init program. sysvinit-2.64 reckognizes this, and
+   opens that device instead. Boot scripts as mentioned in (3) can
+   also check this variable to see what device the system console is.
+   If CONSOLE is not set you can assume the console is /dev/tty0.
+
+   Sysvinit remembers its stty settings in a file in /etc, called
+   `/etc/ioctl.save'. REMOVE THIS FILE before using the serial
+   console for the first time, because otherwise init will probably
+   set the baudrate to 38400 (bausdrate of the virtual console).
+
+5. /dev/console and X
+   Programs that want to do something with the virtual console usually
+   open /dev/console. XF86 does this, and probably SVGALIB as well.
+   IMO this is wrong; they should open /dev/tty0.
+   I have binary patched /usr/bin/X11/XF86_SVGA to use "tty0"
+   instead of "console".
+
+6. Notes.
+
+   If you compile the next little program, you will be able
+   to really "halt" the system. It will enter a little
+   monitor :)
+
+   main() { reboot(0xfee1dead, 672274793, 0xCDEF0123); }
+
+   This is just a call to the new "halt" function that later
+   kernels have. This is included the "halt" command of
+   the recent sysvinit versions.
+
+   The monitor will also be entered at a kernel panic, or
+   when you press "break". That last function does not
+   work at the moment I think, but it would be useful for
+   kernel debugging.  You don't have alt-scrollock on a serial
+   console to find out the current EIP...
+
+Miquel van Smoorenburg <miquels@cistron.nl>, 21-Jun-1996
+Stephen C. Tweedie <sct@dcs.ed.ac.uk>, 23-Dec-1996

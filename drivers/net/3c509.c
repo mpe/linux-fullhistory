@@ -110,7 +110,7 @@ enum RxFilter {
 #define SKB_QUEUE_SIZE	64
 
 struct el3_private {
-	struct enet_statistics stats;
+	struct net_device_stats stats;
 	/* skb send-queue */
 	int head, size;
 	struct sk_buff *queue[SKB_QUEUE_SIZE];
@@ -123,7 +123,7 @@ static int el3_open(struct device *dev);
 static int el3_start_xmit(struct sk_buff *skb, struct device *dev);
 static void el3_interrupt(int irq, void *dev_id, struct pt_regs *regs);
 static void update_stats(int addr, struct device *dev);
-static struct enet_statistics *el3_get_stats(struct device *dev);
+static struct net_device_stats *el3_get_stats(struct device *dev);
 static int el3_rx(struct device *dev);
 static int el3_close(struct device *dev);
 #ifdef HAVE_MULTICAST
@@ -421,8 +421,7 @@ el3_open(struct device *dev)
 	return 0;					/* Always succeed */
 }
 
-static int
-el3_start_xmit(struct sk_buff *skb, struct device *dev)
+static int el3_start_xmit(struct sk_buff *skb, struct device *dev)
 {
 	struct el3_private *lp = (struct el3_private *)dev->priv;
 	int ioaddr = dev->base_addr;
@@ -443,14 +442,6 @@ el3_start_xmit(struct sk_buff *skb, struct device *dev)
 		outw(TxEnable, ioaddr + EL3_CMD);
 		dev->tbusy = 0;
 	}
-
-	if (skb == NULL) {
-		dev_tint(dev);
-		return 0;
-	}
-
-	if (skb->len <= 0)
-		return 0;
 
 	if (el3_debug > 4) {
 		printk("%s: el3_start_xmit(length = %u) called, status %4.4x.\n",
@@ -479,6 +470,7 @@ el3_start_xmit(struct sk_buff *skb, struct device *dev)
 	if (set_bit(0, (void*)&dev->tbusy) != 0)
 		printk("%s: Transmitter access conflict.\n", dev->name);
 	else {
+		lp->stats.tx_bytes+=skb->len;
 		/* Put out the doubleword header... */
 		outw(skb->len, ioaddr + TX_FIFO);
 		outw(0x00, ioaddr + TX_FIFO);
@@ -589,8 +581,7 @@ el3_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 }
 
 
-static struct enet_statistics *
-el3_get_stats(struct device *dev)
+static struct net_device_stats *el3_get_stats(struct device *dev)
 {
 	struct el3_private *lp = (struct el3_private *)dev->priv;
 	unsigned long flags;

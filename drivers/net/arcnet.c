@@ -535,7 +535,7 @@ struct Outgoing
 
 /* Information that needs to be kept for each board. */
 struct arcnet_local {
-	struct enet_statistics stats;
+	struct net_device_stats stats;
 	u_short sequence;	/* sequence number (incs with each packet) */
 	u_char stationid,	/* our 8-bit station address */
 		recbuf,		/* receive buffer # (0 or 1) */
@@ -609,7 +609,7 @@ static void arcnet_rx(struct device *dev,int recbuf);
 static void arcnetA_rx(struct device *dev,u_char *buf,
 	int length,u_char saddr, u_char daddr);
 
-static struct enet_statistics *arcnet_get_stats(struct device *dev);
+static struct net_device_stats *arcnet_get_stats(struct device *dev);
 
 int arcnetA_header(struct sk_buff *skb,struct device *dev,
 		unsigned short type,void *daddr,void *saddr,unsigned len);
@@ -2580,8 +2580,7 @@ arcnetA_rx(struct device *dev,u_char *buf,
  * closed.
  */
 
-static struct enet_statistics *
-arcnet_get_stats(struct device *dev)
+static struct net_device_stats *arcnet_get_stats(struct device *dev)
 {
 	struct arcnet_local *lp = (struct arcnet_local *)dev->priv;
 

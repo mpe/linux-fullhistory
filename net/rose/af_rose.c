@@ -59,7 +59,8 @@ int sysctl_rose_reset_request_timeout   = ROSE_DEFAULT_T2;
 int sysctl_rose_clear_request_timeout   = ROSE_DEFAULT_T3;
 int sysctl_rose_no_activity_timeout     = ROSE_DEFAULT_IDLE;
 int sysctl_rose_ack_hold_back_timeout   = ROSE_DEFAULT_HB;
-int sysctl_rose_routing_control         = 1;
+int sysctl_rose_routing_control         = ROSE_DEFAULT_ROUTING;
+int sysctl_rose_link_fail_timeout       = ROSE_DEFAULT_FAIL_TIMEOUT;
 
 static unsigned int lci = 1;
 
@@ -157,7 +158,7 @@ static struct sock *rose_alloc_sock(void)
 	memset(rose, 0x00, sizeof(*rose));
 
 	sk->protinfo.rose = rose;
-	rose->sk = sk;
+	rose->sk          = sk;
 
 	return sk;
 }
@@ -221,7 +222,7 @@ static int rose_device_event(struct notifier_block *this, unsigned long event, v
 
 	if (event != NETDEV_DOWN)
 		return NOTIFY_DONE;
-		
+
 	rose_kill_by_device(dev);
 	rose_rt_device_down(dev);
 	rose_link_device_down(dev);
@@ -356,7 +357,7 @@ void rose_destroy_socket(struct sock *sk)	/* Not static as it's used by the time
 		kfree_skb(skb, FREE_READ);
 	}
 
-	if (sk->wmem_alloc || sk->rmem_alloc) {	/* Defer: outstanding buffers */
+	if (sk->wmem_alloc > 0 || sk->rmem_alloc > 0) {	/* Defer: outstanding buffers */
 		init_timer(&sk->timer);
 		sk->timer.expires  = jiffies + 10 * HZ;
 		sk->timer.function = rose_destroy_timer;
@@ -411,16 +412,6 @@ static int rose_ctl_ioctl(const unsigned int cmd, void *arg)
 			sk->dead                 = 1;
 			rose_set_timer(sk);
 	  		break;
-
-	  	case ROSE_T0:
-  			if (rose_ctl.arg < 1) 
-  				return -EINVAL;
-  			if (sk->protinfo.rose->neighbour != NULL) {
-	  			save_flags(flags); cli();
-	  			sk->protinfo.rose->neighbour->t0 = rose_ctl.arg * ROSE_SLOWHZ;
-	  			restore_flags(flags);
-	  		}
-  			break;
 
 	  	case ROSE_T1:
   			if (rose_ctl.arg < 1) 
@@ -487,13 +478,6 @@ static int rose_setsockopt(struct socket *sock, int level, int optname,
 	get_user(opt, (int *)optval);
 
 	switch (optname) {
-		case ROSE_T0:
-			if (opt < 1)
-				return -EINVAL;
-			if (sk->protinfo.rose->neighbour != NULL)
-				sk->protinfo.rose->neighbour->t0 = opt * ROSE_SLOWHZ;
-			return 0;
-
 		case ROSE_T1:
 			if (opt < 1)
 				return -EINVAL;
@@ -544,13 +528,6 @@ static int rose_getsockopt(struct socket *sock, int level, int optname,
 		return -EOPNOTSUPP;
 	
 	switch (optname) {
-		case ROSE_T0:
-			if (sk->protinfo.rose->neighbour != NULL)
-				val = sk->protinfo.rose->neighbour->t0 / ROSE_SLOWHZ;
-			else
-				val = sysctl_rose_restart_request_timeout / ROSE_SLOWHZ;
-			break;
-
 		case ROSE_T1:
 			val = sk->protinfo.rose->t1 / ROSE_SLOWHZ;
 			break;
@@ -609,28 +586,6 @@ static int rose_listen(struct socket *sock, int backlog)
 	return -EOPNOTSUPP;
 }
 
-static void def_callback1(struct sock *sk)
-{
-	if (!sk->dead)
-		wake_up_interruptible(sk->sleep);
-}
-
-static void def_callback2(struct sock *sk, int len)
-{
-	if (!sk->dead) {
-		wake_up_interruptible(sk->sleep);
-		sock_wake_async(sk->socket, 1);
-	}
-}
-
-static void def_callback3(struct sock *sk)
-{
-	if (!sk->dead) {
-		wake_up_interruptible(sk->sleep);
-		sock_wake_async(sk->socket, 2); 
-	}		
-}
-
 static int rose_create(struct socket *sock, int protocol)
 {
 	struct sock *sk;
@@ -644,19 +599,19 @@ static int rose_create(struct socket *sock, int protocol)
 
 	rose = sk->protinfo.rose;
 
-	sock_init_data(sock,sk);
+	sock_init_data(sock, sk);
 	
-	sock->ops	  = &rose_proto_ops;
-	sk->protocol      = protocol;
-	sk->mtu           = ROSE_MTU;	/* 128 */
+	sock->ops    = &rose_proto_ops;
+	sk->protocol = protocol;
+	sk->mtu      = ROSE_MTU;	/* 128 */
 
 	skb_queue_head_init(&rose->frag_queue);
 
-	rose->t1    = sysctl_rose_call_request_timeout;
-	rose->t2    = sysctl_rose_reset_request_timeout;
-	rose->t3    = sysctl_rose_clear_request_timeout;
-	rose->hb    = sysctl_rose_ack_hold_back_timeout;
-	rose->idle  = sysctl_rose_no_activity_timeout;
+	rose->t1   = sysctl_rose_call_request_timeout;
+	rose->t2   = sysctl_rose_reset_request_timeout;
+	rose->t3   = sysctl_rose_clear_request_timeout;
+	rose->hb   = sysctl_rose_ack_hold_back_timeout;
+	rose->idle = sysctl_rose_no_activity_timeout;
 
 	rose->state = ROSE_STATE_0;
 
@@ -676,28 +631,19 @@ static struct sock *rose_make_new(struct sock *osk)
 
 	rose = sk->protinfo.rose;
 
-	skb_queue_head_init(&sk->receive_queue);
-	skb_queue_head_init(&sk->write_queue);
-	skb_queue_head_init(&sk->back_log);
+	sock_init_data(NULL, sk);
 
-	init_timer(&sk->timer);
-
-	sk->type        = osk->type;
-	sk->socket      = osk->socket;
-	sk->priority    = osk->priority;
-	sk->protocol    = osk->protocol;
-	sk->rcvbuf      = osk->rcvbuf;
-	sk->sndbuf      = osk->sndbuf;
-	sk->debug       = osk->debug;
-	sk->state       = TCP_ESTABLISHED;
-	sk->mtu         = osk->mtu;
-	sk->sleep       = osk->sleep;
-	sk->zapped      = osk->zapped;
-
-	sk->state_change = def_callback1;
-	sk->data_ready   = def_callback2;
-	sk->write_space  = def_callback3;
-	sk->error_report = def_callback1;
+	sk->type     = osk->type;
+	sk->socket   = osk->socket;
+	sk->priority = osk->priority;
+	sk->protocol = osk->protocol;
+	sk->rcvbuf   = osk->rcvbuf;
+	sk->sndbuf   = osk->sndbuf;
+	sk->debug    = osk->debug;
+	sk->state    = TCP_ESTABLISHED;
+	sk->mtu      = osk->mtu;
+	sk->sleep    = osk->sleep;
+	sk->zapped   = osk->zapped;
 
 	skb_queue_head_init(&rose->frag_queue);
 
@@ -845,7 +791,7 @@ static int rose_connect(struct socket *sock, struct sockaddr *uaddr, int addr_le
 	if (sk->state == TCP_ESTABLISHED)
 		return -EISCONN;	/* No reconnect on a seqpacket socket */
 
-	sk->state   = TCP_CLOSE;	
+	sk->state   = TCP_CLOSE;
 	sock->state = SS_UNCONNECTED;
 
 	if (addr_len != sizeof(struct sockaddr_rose))
@@ -894,7 +840,7 @@ static int rose_connect(struct socket *sock, struct sockaddr *uaddr, int addr_le
 	/* Now the loop */
 	if (sk->state != TCP_ESTABLISHED && (flags & O_NONBLOCK))
 		return -EINPROGRESS;
-		
+
 	cli();	/* To avoid races on the sleep */
 
 	/*
@@ -920,7 +866,7 @@ static int rose_connect(struct socket *sock, struct sockaddr *uaddr, int addr_le
 
 	return 0;
 }
-	
+
 static int rose_socketpair(struct socket *sock1, struct socket *sock2)
 {
 	return -EOPNOTSUPP;
@@ -1138,8 +1084,6 @@ static int rose_sendmsg(struct socket *sock, struct msghdr *msg, int len,
 
 	if ((skb = sock_alloc_send_skb(sk, size, 0, msg->msg_flags & MSG_DONTWAIT, &err)) == NULL)
 		return err;
-
-	skb->arp = 1;
 
 	skb_reserve(skb, size - len);
 
@@ -1470,7 +1414,7 @@ void rose_proto_init(struct net_proto *pro)
 	proc_net_register(&proc_net_rose_neigh);
 	proc_net_register(&proc_net_rose_nodes);
 	proc_net_register(&proc_net_rose_routes);
-#endif	
+#endif
 }
 
 #ifdef MODULE

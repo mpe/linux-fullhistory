@@ -240,6 +240,16 @@ loader_ok:
 	push	ax
 	push	cx
 	push	dx
+				! which bootloader ?
+	seg cs
+	mov	al,byte ptr type_of_loader
+	and	al,#0xf0
+	cmp	al,#0x10
+	jne	try_xe801	! not Loadlin
+	seg cs
+	cmp	byte ptr type_of_loader,#0x16
+	jbe	oldstylemem	! Loadlin <= 1.6 don't like that
+try_xe801:
 	mov	ax,#0xe801
 	int	0x15
 	jc	oldstylemem
@@ -257,6 +267,9 @@ loader_ok:
 oldstylemem:
 	mov	ah,#0x88
 	int	0x15
+	or	ax,ax		! some BIOSes report ZERO for 64meg
+	mov	word ptr [2],#0x400
+	jz	gotmem
 	mov	cx,#64		! got memory size in kbytes, so we need to
 	xor	dx,dx		! adjust to 64k chunks for the system.
 	div	cx

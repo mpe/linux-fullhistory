@@ -52,31 +52,14 @@ static void x25_link_set_timer(struct x25_neigh *neigh)
 {
 	unsigned long flags;
 
-	save_flags(flags);
-	cli();
-	del_timer(&neigh->timer);
-	restore_flags(flags);
-
-	neigh->timer.next     = neigh->timer.prev = NULL;	
-	neigh->timer.data     = (unsigned long)neigh;
-	neigh->timer.function = &x25_link_timer;
-
-	neigh->timer.expires  = jiffies + 100;
-	add_timer(&neigh->timer);
-}
-
-static void x25_link_reset_timer(struct x25_neigh *neigh)
-{
-	unsigned long flags;
-
-	save_flags(flags);
-	cli();
+	save_flags(flags); cli();
 	del_timer(&neigh->timer);
 	restore_flags(flags);
 
 	neigh->timer.data     = (unsigned long)neigh;
 	neigh->timer.function = &x25_link_timer;
 	neigh->timer.expires  = jiffies + 100;
+
 	add_timer(&neigh->timer);
 }
 
@@ -91,7 +74,7 @@ static void x25_link_timer(unsigned long param)
 	struct x25_neigh *neigh = (struct x25_neigh *)param;
 
 	if (neigh->t20timer == 0 || --neigh->t20timer > 0) {
-		x25_link_reset_timer(neigh);
+		x25_link_set_timer(neigh);
 		return;
 	}
 

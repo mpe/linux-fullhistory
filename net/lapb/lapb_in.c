@@ -198,7 +198,7 @@ static void lapb_state1_machine(lapb_cb *lapb, struct sk_buff *skb, int frametyp
 #endif
 				lapb_clear_queues(lapb);
 				lapb->state   = LAPB_STATE_0;
-				lapb->t1timer = (lapb->mode & LAPB_DCE) ? lapb->t1 : 0;
+				lapb->t1timer = lapb->t1;
 				lapb->t2timer = 0;
 				lapb_disconnect_indication(lapb, LAPB_REFUSED);
 			}
@@ -244,7 +244,7 @@ static void lapb_state2_machine(lapb_cb *lapb, struct sk_buff *skb, int frametyp
 				printk(KERN_DEBUG "lapb: (%p) S2 -> S0\n", lapb->token);
 #endif
 				lapb->state   = LAPB_STATE_0;
-				lapb->t1timer = (lapb->mode & LAPB_DCE) ? lapb->t1 : 0;
+				lapb->t1timer = lapb->t1;
 				lapb->t2timer = 0;
 				lapb_disconnect_confirmation(lapb, LAPB_OK);
 			}
@@ -259,7 +259,7 @@ static void lapb_state2_machine(lapb_cb *lapb, struct sk_buff *skb, int frametyp
 				printk(KERN_DEBUG "lapb: (%p) S2 -> S0\n", lapb->token);
 #endif
 				lapb->state   = LAPB_STATE_0;
-				lapb->t1timer = (lapb->mode & LAPB_DCE) ? lapb->t1 : 0;
+				lapb->t1timer = lapb->t1;
 				lapb->t2timer = 0;
 				lapb_disconnect_confirmation(lapb, LAPB_NOTCONNECTED);
 			}
@@ -315,6 +315,7 @@ static void lapb_state3_machine(lapb_cb *lapb, struct sk_buff *skb, int frametyp
 				lapb->vs        = 0;
 				lapb->vr        = 0;
 				lapb->va        = 0;
+				lapb_requeue_frames(lapb);
 			}
 			break;
 
@@ -333,6 +334,7 @@ static void lapb_state3_machine(lapb_cb *lapb, struct sk_buff *skb, int frametyp
 				lapb->vs        = 0;
 				lapb->vr        = 0;
 				lapb->va        = 0;
+				lapb_requeue_frames(lapb);
 			} else {
 #if LAPB_DEBUG > 1
 				printk(KERN_DEBUG "lapb: (%p) S3 TX DM(%d)\n", lapb->token, pf);
@@ -351,7 +353,7 @@ static void lapb_state3_machine(lapb_cb *lapb, struct sk_buff *skb, int frametyp
 			lapb_clear_queues(lapb);
 			lapb_send_control(lapb, LAPB_UA, pf, LAPB_RESPONSE);
 			lapb->state   = LAPB_STATE_0;
-			lapb->t1timer = (lapb->mode & LAPB_DCE) ? lapb->t1 : 0;
+			lapb->t1timer = lapb->t1;
 			lapb->t2timer = 0;
 			lapb_disconnect_indication(lapb, LAPB_OK);
 			break;
@@ -365,7 +367,7 @@ static void lapb_state3_machine(lapb_cb *lapb, struct sk_buff *skb, int frametyp
 #endif
 			lapb_clear_queues(lapb);
 			lapb->state   = LAPB_STATE_0;
-			lapb->t1timer = (lapb->mode & LAPB_DCE) ? lapb->t1 : 0;
+			lapb->t1timer = lapb->t1;
 			lapb->t2timer = 0;
 			lapb_disconnect_indication(lapb, LAPB_NOTCONNECTED);
 			break;
@@ -519,6 +521,7 @@ static void lapb_state4_machine(lapb_cb *lapb, struct sk_buff *skb, int frametyp
 				lapb->vs        = 0;
 				lapb->vr        = 0;
 				lapb->va        = 0;
+				lapb_requeue_frames(lapb);
 			}
 			break;
 
@@ -537,6 +540,7 @@ static void lapb_state4_machine(lapb_cb *lapb, struct sk_buff *skb, int frametyp
 				lapb->vs        = 0;
 				lapb->vr        = 0;
 				lapb->va        = 0;
+				lapb_requeue_frames(lapb);
 			} else {
 #if LAPB_DEBUG > 1
 				printk(KERN_DEBUG "lapb: (%p) S4 TX DM(%d)\n", lapb->token, pf);
@@ -555,7 +559,7 @@ static void lapb_state4_machine(lapb_cb *lapb, struct sk_buff *skb, int frametyp
 			lapb_clear_queues(lapb);
 			lapb_send_control(lapb, LAPB_UA, pf, LAPB_RESPONSE);
 			lapb->state   = LAPB_STATE_0;
-			lapb->t1timer = (lapb->mode & LAPB_DCE) ? lapb->t1 : 0;
+			lapb->t1timer = lapb->t1;
 			lapb->t2timer = 0;
 			lapb_disconnect_indication(lapb, LAPB_OK);
 			break;
@@ -569,7 +573,7 @@ static void lapb_state4_machine(lapb_cb *lapb, struct sk_buff *skb, int frametyp
 #endif
 			lapb_clear_queues(lapb);
 			lapb->state   = LAPB_STATE_0;
-			lapb->t1timer = (lapb->mode & LAPB_DCE) ? lapb->t1 : 0;
+			lapb->t1timer = lapb->t1;
 			lapb->t2timer = 0;
 			lapb_disconnect_indication(lapb, LAPB_NOTCONNECTED);
 			break;

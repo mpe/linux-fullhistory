@@ -1,20 +1,22 @@
-The de425/de434/de435/de500 driver in this distribution  is designed to work
-with  the  Digital Equipment Corporation   series of PCI/EISA ethernet cards
-(DE425, DE434, DE435, DE500) and with all kernels that support PCI.
+This driver has been upgraded to include generic DECchip support through the
+use of the on-board SROM  that is found on all  DECchip cards except for the
+DC21040. The driver  will work with the following  set of cards and probably
+more:
+
+        KINGSTON
+	Linksys
+	ZNYX342
+	SMC8432
+	SMC9332 (w/new SROM)
+	ZNYX31[45]
+	DIGITAL EtherWORKS PCI/EISA (DE425, DE434, DE435, DE450, DE500)
 
 Auto media detection is provided so that the  media choice isn't compiled in
-and is  flexible enough to be able  to  reconfigure on-the-fly. This feature
-hasn't been included for the DE500 unfortunately, due  to a potential patent
-dispute. When I get around to implementing the autosense algorithm by myself
-(which could legally be difficult to prove since I'm  part of the group that
-has implemented the patented algorithm) you'll  have an auto speed selection
-for the de500. If you want the auto speed feature yell at Digital. If enough
-of you do things might change.
+and is  flexible enough to be able  to  reconfigure on-the-fly. 
 
-The ability to load   this driver as  a loadable  module has been  included,
-although I don't recommend its use with PCI, since PCI dynamically allocates
-where the card will go at boot time (i.e. the  card would have to be present
-in the system at boot time for its address/IRQ to be assigned).
+The ability to load this driver as  a loadable module  has been included and
+will now load  (and   unload) as many  DECchip  cards  as  it can  find  and
+configure with just one invocation of 'insmod'.
 
 The performance we've achieved  so far has  been measured through the 'ttcp'
 tool at 1.06MB/s for  TCP  and 1.17MB/s for  UDP.   This measures  the total
@@ -32,16 +34,8 @@ All  values are   typical  (in kBytes/sec) from   a  sample of   4  for each
 measurement. Their error  is approx +/-20k on a  quiet (private) network and
 also depend on what load the CPU has, CPU speed etc.
 
-ZYNX and SMC cards, which use the PCI DECchip  DC21040, are not specifically
-supported in this driver because
-
-a) I have  no information on them.   
-b) I cannot test  them with the driver.
-c) Donald Becker's 'tulip.c' driver  works with them....well one person says
-   they do and another says they do not, so take your pick!
-
-This driver can be made to work with the ZYNX  (and may be  the SMC) card by
-setting a compile time flag (IS_NOT_DEC) in linux/drivers/net/CONFIG
+I've had  reports  that Alphas  can get 80+Mb/s   when using  100BASE-TX and
+similar figures for 133MHz Pentium Pros.
 
 Enjoy!
 

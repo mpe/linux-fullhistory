@@ -778,8 +778,8 @@ int udp_rcv(struct sk_buff *skb, unsigned short len)
 		/* <mea@utu.fi> wants to know, who sent it, to
 		   go and stomp on the garbage sender... */
 
-	  /* RFC1122: OK.  Discards the bad packet silently (as far as */
-	  /* the network is concerned, anyway) as per 4.1.3.4 (MUST). */
+		/* RFC1122: OK.  Discards the bad packet silently (as far as */
+		/* the network is concerned, anyway) as per 4.1.3.4 (MUST). */
 
 		NETDEBUG(printk("UDP: bad checksum. From %08lX:%d to %08lX:%d ulen %d\n",
 		       ntohl(saddr),ntohs(uh->source),
@@ -793,11 +793,17 @@ int udp_rcv(struct sk_buff *skb, unsigned short len)
 
 	len = ulen;
 
-	/* Wrong! --ANK */
+	/*
+	 *	FIXME:
+	 *	Trimming things wrongly. We must adjust the base/end to allow
+	 *	for the headers we keep!
+	 *		 --ANK 
+	 */
 	skb_trim(skb,len);
 
 
-	if (rt->rt_flags&(RTF_BROADCAST|RTF_MULTICAST)) {
+	if (rt->rt_flags&(RTF_BROADCAST|RTF_MULTICAST))
+	{
 		/*
 		 *	Multicasts and broadcasts go to each listener.
 		 */

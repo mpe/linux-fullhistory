@@ -147,7 +147,7 @@ static int plip_rebuild_header(struct sk_buff *skb);
 static int plip_tx_packet(struct sk_buff *skb, struct device *dev);
 static int plip_open(struct device *dev);
 static int plip_close(struct device *dev);
-static struct enet_statistics *plip_get_stats(struct device *dev);
+static struct net_device_stats *plip_get_stats(struct device *dev);
 static int plip_config(struct device *dev, struct ifmap *map);
 static int plip_ioctl(struct device *dev, struct ifreq *ifr, int cmd);
 
@@ -198,7 +198,7 @@ struct plip_local {
 };
 
 struct net_local {
-	struct enet_statistics enet_stats;
+	struct net_device_stats enet_stats;
 	struct tq_struct immediate;
 	struct tq_struct deferred;
 	struct plip_local snd_data;
@@ -213,8 +213,8 @@ struct net_local {
 
 /* Entry point of PLIP driver.
    Probe the hardware, and register/initialize the driver. */
-int
-plip_init(struct device *dev)
+
+int plip_init(struct device *dev)
 {
 	struct net_local *nl;
 	int iosize = (PAR_DATA(dev) == 0x3bc) ? 3 : 8;
@@ -306,8 +306,8 @@ plip_init(struct device *dev)
 /* Bottom half handler for the delayed request.
    This routine is kicked by do_timer().
    Request `plip_bh' to be invoked. */
-static void
-plip_kick_bh(struct device *dev)
+   
+static void plip_kick_bh(struct device *dev)
 {
 	struct net_local *nl = (struct net_local *)dev->priv;
 
@@ -350,8 +350,7 @@ static plip_func connection_state_table[] =
 };
 
 /* Bottom half handler of PLIP. */
-static void
-plip_bh(struct device *dev)
+static void plip_bh(struct device *dev)
 {
 	struct net_local *nl = (struct net_local *)dev->priv;
 	struct plip_local *snd = &nl->snd_data;
@@ -368,8 +367,7 @@ plip_bh(struct device *dev)
 	}
 }
 
-static int
-plip_bh_timeout_error(struct device *dev, struct net_local *nl,
+static int plip_bh_timeout_error(struct device *dev, struct net_local *nl,
 		      struct plip_local *snd, struct plip_local *rcv,
 		      int error)
 {
@@ -431,8 +429,7 @@ plip_bh_timeout_error(struct device *dev, struct net_local *nl,
 	return TIMEOUT;
 }
 
-static int
-plip_none(struct device *dev, struct net_local *nl,
+static int plip_none(struct device *dev, struct net_local *nl,
 	  struct plip_local *snd, struct plip_local *rcv)
 {
 	return OK;
@@ -440,8 +437,7 @@ plip_none(struct device *dev, struct net_local *nl,
 
 /* PLIP_RECEIVE --- receive a byte(two nibbles)
    Returns OK on success, TIMEOUT on timeout */
-inline static int
-plip_receive(unsigned short nibble_timeout, unsigned short status_addr,
+extern inline int plip_receive(unsigned short nibble_timeout, unsigned short status_addr,
 	     enum plip_nibble_state *ns_p, unsigned char *data_p)
 {
 	unsigned char c0, c1;
@@ -490,8 +486,7 @@ plip_receive(unsigned short nibble_timeout, unsigned short status_addr,
 }
 
 /* PLIP_RECEIVE_PACKET --- receive a packet */
-static int
-plip_receive_packet(struct device *dev, struct net_local *nl,
+static int plip_receive_packet(struct device *dev, struct net_local *nl,
 		    struct plip_local *snd, struct plip_local *rcv)
 {
 	unsigned short status_addr = PAR_STATUS(dev);
@@ -607,8 +602,7 @@ plip_receive_packet(struct device *dev, struct net_local *nl,
 
 /* PLIP_SEND --- send a byte (two nibbles)
    Returns OK on success, TIMEOUT when timeout    */
-inline static int
-plip_send(unsigned short nibble_timeout, unsigned short data_addr,
+extern inline int plip_send(unsigned short nibble_timeout, unsigned short data_addr,
 	  enum plip_nibble_state *ns_p, unsigned char data)
 {
 	unsigned char c0;
@@ -654,8 +648,7 @@ plip_send(unsigned short nibble_timeout, unsigned short data_addr,
 }
 
 /* PLIP_SEND_PACKET --- send a packet */
-static int
-plip_send_packet(struct device *dev, struct net_local *nl,
+static int plip_send_packet(struct device *dev, struct net_local *nl,
 		 struct plip_local *snd, struct plip_local *rcv)
 {
 	unsigned short data_addr = PAR_DATA(dev);
@@ -759,8 +752,7 @@ plip_send_packet(struct device *dev, struct net_local *nl,
 	return OK;
 }
 
-static int
-plip_connection_close(struct device *dev, struct net_local *nl,
+static int plip_connection_close(struct device *dev, struct net_local *nl,
 		      struct plip_local *snd, struct plip_local *rcv)
 {
 	cli();
@@ -774,8 +766,7 @@ plip_connection_close(struct device *dev, struct net_local *nl,
 }
 
 /* PLIP_ERROR --- wait till other end settled */
-static int
-plip_error(struct device *dev, struct net_local *nl,
+static int plip_error(struct device *dev, struct net_local *nl,
 	   struct plip_local *snd, struct plip_local *rcv)
 {
 	unsigned char status;
@@ -799,8 +790,7 @@ plip_error(struct device *dev, struct net_local *nl,
 }
 
 /* Handle the parallel port interrupts. */
-static void
-plip_interrupt(int irq, void *dev_id, struct pt_regs * regs)
+static void plip_interrupt(int irq, void *dev_id, struct pt_regs * regs)
 {
 	struct device *dev = (struct device *) irq2dev_map[irq];
 	struct net_local *nl = (struct net_local *)dev->priv;
@@ -853,8 +843,7 @@ plip_interrupt(int irq, void *dev_id, struct pt_regs * regs)
 }
 
 /* We don't need to send arp, for plip is point-to-point. */
-static int
-plip_rebuild_header(struct sk_buff *skb)
+static int plip_rebuild_header(struct sk_buff *skb)
 {
 	struct device *dev = skb->dev;
 	struct net_local *nl = (struct net_local *)dev->priv;
@@ -888,8 +877,7 @@ plip_rebuild_header(struct sk_buff *skb)
 	return 0;
 }
 
-static int
-plip_tx_packet(struct sk_buff *skb, struct device *dev)
+static int plip_tx_packet(struct sk_buff *skb, struct device *dev)
 {
 	struct net_local *nl = (struct net_local *)dev->priv;
 	struct plip_local *snd = &nl->snd_data;
@@ -941,8 +929,7 @@ plip_tx_packet(struct sk_buff *skb, struct device *dev)
    This routine gets exclusive access to the parallel port by allocating
    its IRQ line.
  */
-static int
-plip_open(struct device *dev)
+static int plip_open(struct device *dev)
 {
 	struct net_local *nl = (struct net_local *)dev->priv;
 	int i;
@@ -985,8 +972,7 @@ plip_open(struct device *dev)
 }
 
 /* The inverse routine to plip_open (). */
-static int
-plip_close(struct device *dev)
+static int plip_close(struct device *dev)
 {
 	struct net_local *nl = (struct net_local *)dev->priv;
 	struct plip_local *snd = &nl->snd_data;
@@ -1019,17 +1005,15 @@ plip_close(struct device *dev)
 	return 0;
 }
 
-static struct enet_statistics *
-plip_get_stats(struct device *dev)
+static struct net_device_stats *plip_get_stats(struct device *dev)
 {
 	struct net_local *nl = (struct net_local *)dev->priv;
-	struct enet_statistics *r = &nl->enet_stats;
+	struct net_device_stats *r = &nl->enet_stats;
 
 	return r;
 }
 
-static int
-plip_config(struct device *dev, struct ifmap *map)
+static int plip_config(struct device *dev, struct ifmap *map)
 {
 	if (dev->flags & IFF_UP)
 		return -EBUSY;
@@ -1043,8 +1027,7 @@ plip_config(struct device *dev, struct ifmap *map)
 	return 0;
 }
 
-static int
-plip_ioctl(struct device *dev, struct ifreq *rq, int cmd)
+static int plip_ioctl(struct device *dev, struct ifreq *rq, int cmd)
 {
 	struct net_local *nl = (struct net_local *) dev->priv;
 	struct plipconf *pc = (struct plipconf *) &rq->ifr_data;
@@ -1092,8 +1075,7 @@ static struct device dev_plip[] = {
 	}
 };
 
-int
-init_module(void)
+int init_module(void)
 {
 	int no_parameters=1;
 	int devices=0;
@@ -1134,8 +1116,7 @@ init_module(void)
 	return 0;
 }
 
-void
-cleanup_module(void)
+void cleanup_module(void)
 {
 	int i;
 

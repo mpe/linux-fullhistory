@@ -55,7 +55,7 @@
 
 static int dummy_xmit(struct sk_buff *skb, struct device *dev);
 #ifdef DUMMY_STATS
-static struct enet_statistics *dummy_get_stats(struct device *dev);
+static struct net_device_stats *dummy_get_stats(struct device *dev);
 #endif
 
 static int dummy_open(struct device *dev)
@@ -81,10 +81,10 @@ int dummy_init(struct device *dev)
 	dev->hard_start_xmit	= dummy_xmit;
 
 #if DUMMY_STATS
-	dev->priv = kmalloc(sizeof(struct enet_statistics), GFP_KERNEL);
+	dev->priv = kmalloc(sizeof(struct net_device_stats), GFP_KERNEL);
 	if (dev->priv == NULL)
 		return -ENOMEM;
-	memset(dev->priv, 0, sizeof(struct enet_statistics));
+	memset(dev->priv, 0, sizeof(struct net_device_stats));
 	dev->get_stats		= dummy_get_stats;
 #endif
 
@@ -103,16 +103,12 @@ static int
 dummy_xmit(struct sk_buff *skb, struct device *dev)
 {
 #if DUMMY_STATS
-	struct enet_statistics *stats;
+	struct net_device_stats *stats;
 #endif
-
-	if (skb == NULL || dev == NULL)
-		return 0;
-
 	dev_kfree_skb(skb, FREE_WRITE);
 
 #if DUMMY_STATS
-	stats = (struct enet_statistics *)dev->priv;
+	stats = (struct net_device_stats *)dev->priv;
 	stats->tx_packets++;
 #endif
 
@@ -120,10 +116,9 @@ dummy_xmit(struct sk_buff *skb, struct device *dev)
 }
 
 #if DUMMY_STATS
-static struct enet_statistics *
-dummy_get_stats(struct device *dev)
+static struct net_device_stats *dummy_get_stats(struct device *dev)
 {
-	struct enet_statistics *stats = (struct enet_statistics*) dev->priv;
+	struct net_device_stats *stats = (struct net_device_stats *) dev->priv;
 	return stats;
 }
 #endif

@@ -143,6 +143,7 @@
 #include <asm/system.h>
 #include <asm/dma.h>
 #include <asm/io.h>
+#include <asm/irq.h>
 #include <linux/ioport.h>
 #include <linux/proc_fs.h>
 #include <linux/blk.h>
@@ -215,7 +216,7 @@ typedef struct adapter {
  * Note that if SA_INTERRUPT is not used, wd7000_intr_handle must be
  * changed to pick up the IRQ level correctly.
  */
-Adapter *irq2host[16] = {NULL};	/* Possible IRQs are 0-15 */
+static Adapter *irq2host[NR_IRQS] = {NULL};
 
 /*
  * (linear) base address for ROM BIOS

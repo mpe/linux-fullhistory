@@ -183,7 +183,7 @@ static int ppp_dev_open (struct device *);
 static int ppp_dev_ioctl (struct device *dev, struct ifreq *ifr, int cmd);
 static int ppp_dev_close (struct device *);
 static int ppp_dev_xmit (sk_buff *, struct device *);
-static struct enet_statistics *ppp_dev_stats (struct device *);
+static struct net_device_stats *ppp_dev_stats (struct device *);
 
 /*
  * TTY callbacks
@@ -3080,11 +3080,11 @@ ppp_dev_xmit (sk_buff *skb, struct device *dev)
  * Generate the statistic information for the /proc/net/dev listing.
  */
 
-static struct enet_statistics *
+static struct net_device_stats *
 ppp_dev_stats (struct device *dev)
 {
 	struct ppp *ppp = dev2ppp (dev);
-	static struct enet_statistics ppp_stats;
+	static struct net_device_stats ppp_stats;
 
 	ppp_stats.rx_packets	      = ppp->stats.ppp_ipackets;
 	ppp_stats.rx_errors	      = ppp->stats.ppp_ierrors;

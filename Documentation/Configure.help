@@ -841,41 +841,6 @@ CONFIG_INET
   on sunsite.unc.edu:/pub/Linux/docs/HOWTO).  Short answer:
   say Y.
 
-IP: forwarding/gatewaying
-CONFIG_IP_FORWARD
-  People who want to use their Linux box as the router for a local
-  network (i.e. the computer responsible for distributing Internet
-  traffic to and from the machines in the local network and the
-  subnetworks) should say Y here (thereby enlarging their kernel by
-  about 5 kB). Note that in this case, you possibly have two ethernet
-  devices in your computer: one for the "outside world" and one for
-  your local net. The kernel is not able to recognize both at boot
-  time without help; for details read the
-  Multiple-Ethernet-mini-HOWTO, available via ftp (user: anonymous) in
-  sunsite.unc.edu:/pub/Linux/docs/HOWTO/mini.  If your box is
-  connected to two networks, it may still make sense to say N here,
-  namely if you want to turn your box into a firewall protecting a
-  local network from the internet. The Firewall-HOWTO tells you how to
-  do this. If your setup is more complex, say you are connected to
-  three networks and you want to act as a firewall between two of them
-  and route traffic for the others, you need to say Y here and Y to 
-  "IP firewalling" below. If you intend to use IP masquerading (i.e. IP
-  traffic from one of the local computers and destined for an outside
-  host is changed by your box so that it appears to come from you),
-  you'll have to say Y here and also to IP firewalling and IP
-  masquerading below. You should also say Y here if you want to
-  configure your box as a SLIP (the protocol for sending internet
-  traffic over telephone lines) or PPP (a better SLIP) server for
-  other people to dial into and your box is connected to a local
-  network at the same time. You would then most likely use proxy-ARP
-  (Address Resolution Protocol), explained in the Proxy-Arp mini howto
-  on sunsite in /pub/Linux/docs/HOWTO/mini. You also need to say Y
-  here if you want to run mrouted in order to do multicast routing as
-  used on the MBONE (a high bandwidth network on top of the internet
-  which carries audio and video broadcasts) for example. In this case,
-  say Y to "IP: multicasting" and "IP: multicast routing" as well. If
-  unsure, say N.
-
 IP: multicasting
 CONFIG_IP_MULTICAST
   This is code for addressing several networked computers at once,
@@ -1248,6 +1213,23 @@ CONFIG_ATALK
   however supports localtalk and when such drivers become available
   all you will need to do is download and install the localtalk
   driver.
+
+IP-over-DDP support
+CONFIG_IPDDP
+  This allows IP networking for users who only have Appletalk
+  networking available.  It doesn't work yet in 2.1.xx, so you
+  should say N.
+
+LocalTalk PC card support
+CONFIG_LTPC
+  This allows you to use the AppleTalk PC card to connect to LocalTalk
+  networks.  The card is also known as the Farallon PhoneNet PC card.
+  If you are in doubt, this card is the one with the 65C02 chip on it.
+  You also need version 1.3.3 or later of the netatalk package.
+  This driver is experimental, which means that it may not work.
+  In particular the module support is not yet working for the 2.1.xx
+  kernels, so choose Y or N, but not M for now.
+  See README.ltpc in the drivers/net directory.
 
 Amateur Radio AX.25 Level 2
 CONFIG_AX25
@@ -2156,14 +2138,6 @@ CONFIG_STRIP
   the running kernel whenever you want), say M here and read
   Documentation/modules.txt. The module will be called strip.o.
 
-WIC (Radio IP bridge)
-CONFIG_WIC
-  Support for the WIC parallel port radio bridge. You'll probably want
-  to say N.  If you want to compile this driver as a module though ( =
-  code which can be inserted in and removed from the running kernel
-  whenever you want), say M here and read Documentation/modules.txt.
-  The module will be called wic.o.
-  
 CONFIG_LAPBETHER
 LAPB over Ethernet driver
   This is a driver for a pseudo device (usually called /dev/lapb0)
@@ -2382,6 +2356,75 @@ CONFIG_SDLA
   running kernel whenever you want). The module will be called
   sdla.o. If you want to compile it as a module, say M here and read
   Documentation/modules.txt.
+
+WAN Router
+CONFIG_WAN_ROUTER
+      Wide Area Networks (WANs), such as X.25, frame relay and leased
+  lines, are used to interconnect Local Area Networks (LANs) over vast
+  distances with data transfer rates significantly higher than those
+  achievable with commonly used asynchronous modem connections.
+  Usually, a quite expensive external device called `WAN router' is
+  needed to connect to WAN.
+      As an alternative, WAN router can be build into Linux kernel.
+  With relatively inexpensive WAN interface cards available on the
+  market, a perfectly usable router can be built for less than half a
+  price of an external router.  If you have one of those cards (with
+  appropriate WAN Link Driver) and wish to use your Linux box as a WAN
+  router, you may say 'Y' to this option.  You will also need a
+  wan-tools package available via FTP (user: anonymous) from
+  ftp.sangoma.com.  Read Documentation/networking/wan-router.txt for
+  more information.
+      WAN router is always built as a module ( = code which can be
+  inserted in and removed from the running kernel whenever you want).
+  For general information about modules read Documentation/modules.txt.
+
+WAN Drivers
+CONFIG_WAN_DRIVERS
+      Say 'Y' to this option if you are planning to use your Linux box
+  as a WAN router ( = device used to interconnect local area networks
+  over wide area communication links, such as leased lines and public
+  data networks, e.g. X.25 and frame relay) and you will be offered a
+  list of WAN drivers currently available.  For more information, read
+  Documentation/networking/wan-router.txt.
+
+Sangoma WANPIPE(tm) multiprotocol cards
+CONFIG_VENDOR_SANGOMA
+      WANPIPE from Sangoma Technologies Inc. (http://www.sangoma.com)
+  is a family of intelligent multiprotocol WAN adapter with data
+  transfer rates up to T1 (1.544 Mbps).  They are also known as
+  Synchronous Data Link Adapters (SDLA) and designated S502E(A), S503
+  or S508.  If you have one of these cards, say 'Y' to this option.
+      WANPIPE driver is always built as a module ( = code which can be
+  inserted in and removed from the running kernel whenever you want).
+  For general information about modules read Documentation/modules.txt.
+
+Maximum number of cards
+CONFIG_WANPIPE_CARDS
+      Enter number of WANPIPE adapters installed in your machine.  The
+  driver can support up to 8 cards.  You may enter more that you
+  actually have if you plan to add more cards in the future without
+  re-compiling the driver, but remember that in this case you'll waste
+  some kernel memory (about 1K per card).
+
+WANPIPE X.25 support
+CONFIG_WANPIPE_X25
+      Say 'Y' to this option, if you are planning to connect WANPIPE
+  card to an X.25 network.  If you say 'N', the X.25 support will not
+  be included in the driver (saves about 16K of kernel memory).
+
+WANPIPE Frame Relay support
+CONFIG_WANPIPE_FR
+      Say 'Y' to this option, if you are planning to connect WANPIPE
+  card to a frame relay network.  If you say 'N', the frame relay
+  support will not be included in the driver (saves about 16K of
+  kernel memory).
+
+WANPIPE PPP support
+CONFIG_WANPIPE_PPP
+      Say 'Y' to this option, if you are planning to connect WANPIPE
+  card to a leased line using Point-to-Point protocol (PPP).  If you
+  say 'N', the PPP support will not be included in the driver (saves
+  about 16K of kernel memory).
 
 Sun LANCE Ethernet support
 CONFIG_SUN_LANCE
@@ -2656,6 +2699,20 @@ CONFIG_E2100
   Documentation/modules.txt as well as
   Documentation/networking/net-modules.txt. If you plan to use more
   than one network card under linux, read the
+  Multiple-Ethernet-mini-HOWTO, available from
+  sunsite.unc.edu:/pub/Linux/docs/HOWTO/mini.
+
+CS89x0 support
+CONFIG_CS89x0
+  Support for CS89x0 chipset based ethernet cards. 
+  If you have a network (ethernet) card of this type, say Y and read
+  the Ethernet-HOWTO, available via ftp (user: anonymous) in
+  sunsite.unc.edu:/pub/Linux/docs/HOWTO as well as
+  drivers/net/depca.c.  If you want to compile this as a module ( =
+  code which can be inserted in and removed from the running kernel
+  whenever you want), say M here and read Documentation/modules.txt as
+  well as Documentation/networking/net-modules.txt. If you plan to use
+  more than one network card under linux, read the
   Multiple-Ethernet-mini-HOWTO, available from
   sunsite.unc.edu:/pub/Linux/docs/HOWTO/mini.
 

@@ -155,7 +155,7 @@ static int eql_close(struct device *dev); /*  */
 static int eql_ioctl(struct device *dev, struct ifreq *ifr, int cmd); /*  */
 static int eql_slave_xmit(struct sk_buff *skb, struct device *dev); /*  */
 
-static struct enet_statistics *eql_get_stats(struct device *dev); /*  */
+static struct net_device_stats *eql_get_stats(struct device *dev); /*  */
 
 /* ioctl() handlers
    ---------------- */
@@ -225,14 +225,14 @@ int eql_init(struct device *dev)
 	memset (dev->priv, 0, sizeof (equalizer_t));
 	eql = (equalizer_t *) dev->priv;
 
-	eql->stats = kmalloc (sizeof (struct enet_statistics), GFP_KERNEL);
+	eql->stats = kmalloc (sizeof (struct net_device_stats), GFP_KERNEL);
 	if (eql->stats == NULL) 
 	{
 		kfree(dev->priv);
 		dev->priv = NULL;
 		return -ENOMEM;
 	}
-	memset (eql->stats, 0, sizeof (struct enet_statistics));
+	memset (eql->stats, 0, sizeof (struct net_device_stats));
 
 	init_timer (&eql->timer);
 	eql->timer.data     	= (unsigned long) dev->priv;
@@ -398,7 +398,7 @@ static int eql_slave_xmit(struct sk_buff *skb, struct device *dev)
 }
 
 
-static struct enet_statistics * eql_get_stats(struct device *dev)
+static struct net_device_stats * eql_get_stats(struct device *dev)
 {
 	equalizer_t *eql = (equalizer_t *) dev->priv;
 	return eql->stats;

@@ -101,7 +101,8 @@ void ax25_frames_acked(ax25_cb *ax25, unsigned short nr)
 	}
 }
 
-/* Maybe this should be your ax25_invoke_retransmission(), which appears
+/*
+ * Maybe this should be your ax25_invoke_retransmission(), which appears
  * to be used but not do anything.  ax25_invoke_retransmission() used to
  * be in AX 0.29, but has now gone in 0.30.
  */
@@ -260,11 +261,9 @@ void ax25_return_dm(struct device *dev, ax25_address *src, ax25_address *dest, a
 	/*
 	 *	Do the address ourselves
 	 */
-
 	dptr  = skb_push(skb, size_ax25_addr(digi));
 	dptr += build_ax25_addr(dptr, dest, src, &retdigi, AX25_RESPONSE, AX25_MODULUS);
 
-	skb->arp      = 1;
 	skb->dev      = dev;
 	skb->priority = SOPRI_NORMAL;
 
@@ -278,11 +277,19 @@ unsigned short ax25_calculate_t1(ax25_cb *ax25)
 {
 	int n, t = 2;
 
-	if (ax25->backoff) {
-		for (n = 0; n < ax25->n2count; n++)
-			t *= 2;
+	switch (ax25->backoff) {
+		case 0:
+			break;
 
-		if (t > 8) t = 8;
+		case 1:
+			t += 2 * ax25->n2count;
+			break;
+
+		case 2:
+			for (n = 0; n < ax25->n2count; n++)
+				t *= 2;
+			if (t > 8) t = 8;
+			break;
 	}
 
 	return t * ax25->rtt;
@@ -306,7 +313,7 @@ void ax25_calculate_rtt(ax25_cb *ax25)
 /*
  *	Digipeated address processing
  */
- 
+
 
 /*
  *	Given an AX.25 address pull of to, from, digi list, command/response and the start of data
@@ -333,8 +340,10 @@ unsigned char *ax25_parse_addr(unsigned char *buf, int len, ax25_address *src, a
 	/* Copy to, from */
 	if (dest != NULL) 
 		memcpy(dest, buf + 0, AX25_ADDR_LEN);
+
 	if (src != NULL)  
 		memcpy(src,  buf + 7, AX25_ADDR_LEN);
+
 	buf += 2 * AX25_ADDR_LEN;
 	len -= 2 * AX25_ADDR_LEN;
 	digi->lastrepeat = -1;
@@ -486,7 +495,6 @@ static int ax25_list_length(struct sk_buff_head *list, struct sk_buff *skb)
 /*
  *	count the number of buffers of one socket on the write/ack-queue
  */
-
 int ax25_queue_length(ax25_cb *ax25, struct sk_buff *skb)
 {
 	return ax25_list_length(&ax25->write_queue, skb) + ax25_list_length(&ax25->ack_queue, skb);
@@ -500,7 +508,6 @@ int ax25_queue_length(ax25_cb *ax25, struct sk_buff *skb)
  *
  *	Not to mention this request isn't currently reliable.
  */
- 
 void ax25_kiss_cmd(ax25_cb *ax25, unsigned char cmd, unsigned char param)
 {
 	struct sk_buff *skb;
@@ -539,6 +546,7 @@ void ax25_dama_off(ax25_cb *ax25)
 		return;
 
 	ax25->dama_slave = 0;
+
 	if (ax25_dev_is_dama_slave(ax25->device) == 0) {
 		SOCK_DEBUG(ax25->sk, "ax25_dama_off: DAMA off\n");
 		ax25_kiss_cmd(ax25, 5, 0);

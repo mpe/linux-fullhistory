@@ -234,7 +234,7 @@ struct lance_private {
 	int cur_rx, cur_tx;			/* The next free ring entry */
 	int dirty_rx, dirty_tx;		/* The ring entries to be free()ed. */
 	int dma;
-	struct enet_statistics stats;
+	struct net_device_stats stats;
 	unsigned char chip_version;	/* See lance_chip_type. */
 	char tx_full;
 	unsigned long lock;
@@ -294,7 +294,7 @@ static int lance_start_xmit(struct sk_buff *skb, struct device *dev);
 static int lance_rx(struct device *dev);
 static void lance_interrupt(int irq, void *dev_id, struct pt_regs *regs);
 static int lance_close(struct device *dev);
-static struct enet_statistics *lance_get_stats(struct device *dev);
+static struct net_device_stats *lance_get_stats(struct device *dev);
 static void set_multicast_list(struct device *dev);
 
 
@@ -777,8 +777,7 @@ lance_restart(struct device *dev, unsigned int csr0_bits, int must_reinit)
 	outw(csr0_bits, dev->base_addr + LANCE_DATA);
 }
 
-static int
-lance_start_xmit(struct sk_buff *skb, struct device *dev)
+static int lance_start_xmit(struct sk_buff *skb, struct device *dev)
 {
 	struct lance_private *lp = (struct lance_private *)dev->priv;
 	int ioaddr = dev->base_addr;
@@ -819,14 +818,6 @@ lance_start_xmit(struct sk_buff *skb, struct device *dev)
 
 		return 0;
 	}
-
-	if (skb == NULL) {
-		dev_tint(dev);
-		return 0;
-	}
-
-	if (skb->len <= 0)
-		return 0;
 
 	if (lance_debug > 3) {
 		outw(0x0000, ioaddr+LANCE_ADDR);
@@ -881,7 +872,8 @@ lance_start_xmit(struct sk_buff *skb, struct device *dev)
 		lp->tx_ring[entry].base = ((u32)virt_to_bus(skb->data) & 0xffffff) | 0x83000000;
 	}
 	lp->cur_tx++;
-
+	lp->stats.tx_bytes+=skb->len;
+	
 	/* Trigger an immediate send poll. */
 	outw(0x0000, ioaddr+LANCE_ADDR);
 	outw(0x0048, ioaddr+LANCE_DATA);
@@ -1088,9 +1080,10 @@ lance_rx(struct device *dev)
 				eth_copy_and_sum(skb,
 					(unsigned char *)bus_to_virt((lp->rx_ring[entry].base & 0x00ffffff)),
 					pkt_len,0);
+				lp->stats.rx_bytes+=skb->len;
 				skb->protocol=eth_type_trans(skb,dev);
-				netif_rx(skb);
 				lp->stats.rx_packets++;
+				netif_rx(skb);
 			}
 		}
 		/* The docs say that the buffer length isn't touched, but Andrew Boyd
@@ -1139,8 +1132,7 @@ lance_close(struct device *dev)
 	return 0;
 }
 
-static struct enet_statistics *
-lance_get_stats(struct device *dev)
+static struct net_device_stats *lance_get_stats(struct device *dev)
 {
 	struct lance_private *lp = (struct lance_private *)dev->priv;
 	short ioaddr = dev->base_addr;

@@ -573,7 +573,7 @@ static inline void happy_meal_stop(struct hmeal_gregs *gregs)
 static void happy_meal_get_counters(struct happy_meal *hp,
 				    struct hmeal_bigmacregs *bregs)
 {
-	struct enet_statistics *stats = &hp->enet_stats;
+	struct net_device_stats *stats = &hp->net_stats;
 
 	stats->rx_crc_errors += bregs->rcrce_ctr;
 	bregs->rcrce_ctr = 0;
@@ -1501,9 +1501,11 @@ static inline void happy_meal_tx(struct happy_meal *hp)
 			break;
 		skb = hp->tx_skbs[elem];
 		hp->tx_skbs[elem] = NULL;
+		hp->net_stats.tx_bytes+=skb->len;
+		
 		dev_kfree_skb(skb, FREE_WRITE);
 
-		hp->enet_stats.tx_packets++;
+		hp->net_stats.tx_packets++;
 		elem = NEXT_TX(elem);
 	}
 	hp->tx_old = elem;
@@ -1525,7 +1527,7 @@ static inline void sun4c_happy_meal_tx(struct happy_meal *hp)
 		if(this->tx_flags & TXFLAG_OWN)
 			break;
 
-		hp->enet_stats.tx_packets++;
+		hp->net_stats.tx_packets++;
 		elem = NEXT_TX(elem);
 	}
 	hp->tx_old = elem;
@@ -1562,17 +1564,17 @@ static inline void happy_meal_rx(struct happy_meal *hp, struct device *dev,
 		/* Check for errors. */
 		if((len < ETH_ZLEN) || (flags & RXFLAG_OVERFLOW)) {
 			RXD(("ERR(%08lx)]", flags));
-			hp->enet_stats.rx_errors++;
+			hp->net_stats.rx_errors++;
 			if(len < ETH_ZLEN)
-				hp->enet_stats.rx_length_errors++;
+				hp->net_stats.rx_length_errors++;
 			if(len & (RXFLAG_OVERFLOW >> 16)) {
-				hp->enet_stats.rx_over_errors++;
-				hp->enet_stats.rx_fifo_errors++;
+				hp->net_stats.rx_over_errors++;
+				hp->net_stats.rx_fifo_errors++;
 			}
 
 			/* Return it to the Happy meal. */
 	drop_it:
-			hp->enet_stats.rx_dropped++;
+			hp->net_stats.rx_dropped++;
 			this->rx_addr = (unsigned int) hp->rx_skbs[elem]->data;
 			this->rx_flags =
 				(RXFLAG_OWN | ((RX_BUF_ALLOC_SIZE - RX_OFFSET) << 16));
@@ -1630,7 +1632,7 @@ static inline void happy_meal_rx(struct happy_meal *hp, struct device *dev,
 		skb->protocol = eth_type_trans(skb, dev);
 		netif_rx(skb);
 
-		hp->enet_stats.rx_packets++;
+		hp->net_stats.rx_packets++;
 	next:
 		elem = NEXT_RX(elem);
 		this = &rxbase[elem];
@@ -1662,20 +1664,20 @@ static inline void sun4c_happy_meal_rx(struct happy_meal *hp, struct device *dev
 		/* Check for errors. */
 		if((len < ETH_ZLEN) || (flags & RXFLAG_OVERFLOW)) {
 			RXD(("ERR(%08lx)]", flags));
-			hp->enet_stats.rx_errors++;
+			hp->net_stats.rx_errors++;
 			if(len < ETH_ZLEN)
-				hp->enet_stats.rx_length_errors++;
+				hp->net_stats.rx_length_errors++;
 			if(len & (RXFLAG_OVERFLOW >> 16)) {
-				hp->enet_stats.rx_over_errors++;
-				hp->enet_stats.rx_fifo_errors++;
+				hp->net_stats.rx_over_errors++;
+				hp->net_stats.rx_fifo_errors++;
 			}
 
-			hp->enet_stats.rx_dropped++;
+			hp->net_stats.rx_dropped++;
 		} else {
 			skb = dev_alloc_skb(len + 2);
 			if(skb == 0) {
 				drops++;
-				hp->enet_stats.rx_dropped++;
+				hp->net_stats.rx_dropped++;
 			} else {
 				RXD(("len=%d]", len));
 				skb->dev = hp->dev;
@@ -1684,7 +1686,7 @@ static inline void sun4c_happy_meal_rx(struct happy_meal *hp, struct device *dev
 				eth_copy_and_sum(skb, (thisbuf+2), len, 0);
 				skb->protocol = eth_type_trans(skb, dev);
 				netif_rx(skb);
-				hp->enet_stats.rx_packets++;
+				hp->net_stats.rx_packets++;
 			}
 		}
 		/* Return the buffer to the Happy Meal. */
@@ -1846,18 +1848,12 @@ static int happy_meal_start_xmit(struct sk_buff *skb, struct device *dev)
 			return 1;
 		} else {
 			printk ("%s: transmit timed out, resetting\n", dev->name);
-			hp->enet_stats.tx_errors++;
+			hp->net_stats.tx_errors++;
 			happy_meal_init(hp, 0);
 			dev->tbusy = 0;
 			dev->trans_start = jiffies;
 			return 0;
 		}
-	}
-
-	if(skb == NULL || skb->len <= 0) {
-		printk("%s: skb is NULL\n", dev->name);
-		dev_tint(dev);
-		return 0;
 	}
 
 	if(set_bit(0, (void *) &dev->tbusy) != 0) {
@@ -1902,7 +1898,7 @@ static int sun4c_happy_meal_start_xmit(struct sk_buff *skb, struct device *dev)
 			return 1;
 		} else {
 			printk ("%s: transmit timed out, resetting\n", dev->name);
-			hp->enet_stats.tx_errors++;
+			hp->net_stats.tx_errors++;
 			happy_meal_init(hp, 0);
 			dev->tbusy = 0;
 			dev->trans_start = jiffies;
@@ -1948,12 +1944,12 @@ static int sun4c_happy_meal_start_xmit(struct sk_buff *skb, struct device *dev)
 	return 0;
 }
 
-static struct enet_statistics *happy_meal_get_stats(struct device *dev)
+static struct net_device_stats *happy_meal_get_stats(struct device *dev)
 {
 	struct happy_meal *hp = (struct happy_meal *) dev->priv;
 
 	happy_meal_get_counters(hp, hp->bigmacregs);
-	return &hp->enet_stats;
+	return &hp->net_stats;
 }
 
 #define CRC_POLYNOMIAL_BE 0x04c11db7UL  /* Ethernet CRC, big endian */

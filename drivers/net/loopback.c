@@ -60,10 +60,14 @@
  */
 static int loopback_xmit(struct sk_buff *skb, struct device *dev)
 {
-	struct enet_statistics *stats = (struct enet_statistics *)dev->priv;
-  
+	struct net_device_stats *stats = (struct net_device_stats *)dev->priv;
+
+	/*
+	 *	Take this out if the debug says its ok
+	 */
+	   
 	if (skb == NULL || dev == NULL) 
-		return(0);
+		printk(KERN_DEBUG "loopback fed NULL data - splat\n");
 
 	/*
 	 *	Optimise so buffers with skb->free=1 are not copied but
@@ -96,9 +100,9 @@ static int loopback_xmit(struct sk_buff *skb, struct device *dev)
 	return(0);
 }
 
-static struct enet_statistics *get_stats(struct device *dev)
+static struct net_device_stats *get_stats(struct device *dev)
 {
-	return (struct enet_statistics *)dev->priv;
+	return (struct net_device_stats *)dev->priv;
 }
 
 static int loopback_open(struct device *dev)
@@ -130,10 +134,10 @@ int loopback_init(struct device *dev)
 	dev->pa_mask		= in_aton("255.0.0.0");
 	dev->pa_alen		= 4;
 #endif  
-	dev->priv = kmalloc(sizeof(struct enet_statistics), GFP_KERNEL);
+	dev->priv = kmalloc(sizeof(struct net_device_stats), GFP_KERNEL);
 	if (dev->priv == NULL)
 			return -ENOMEM;
-	memset(dev->priv, 0, sizeof(struct enet_statistics));
+	memset(dev->priv, 0, sizeof(struct net_device_stats));
 	dev->get_stats = get_stats;
 
 	/*

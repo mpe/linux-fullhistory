@@ -819,7 +819,7 @@ static int myri_change_mtu(struct device *dev, int new_mtu)
 	return 0;
 }
 
-static struct enet_statistics *myri_get_stats(struct device *dev)
+static struct net_device_stats *myri_get_stats(struct device *dev)
 { return &(((struct myri_eth *)dev->priv)->enet_stats); }
 
 #define CRC_POLYNOMIAL_BE 0x04c11db7UL  /* Ethernet CRC, big endian */

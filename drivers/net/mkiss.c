@@ -643,12 +643,12 @@ static void ax25_close(struct tty_struct *tty)
 }
 
 
-static struct enet_statistics *ax_get_stats(struct device *dev)
+static struct net_device_stats *ax_get_stats(struct device *dev)
 {
-	static struct enet_statistics stats;
+	static struct net_device_stats stats;
 	struct ax_disp *ax = (struct ax_disp*)dev->priv;
 
-	memset(&stats, 0, sizeof(struct enet_statistics));
+	memset(&stats, 0, sizeof(struct net_device_stats));
 
 	stats.rx_packets     = ax->rx_packets;
 	stats.tx_packets     = ax->tx_packets;
@@ -839,7 +839,7 @@ int mkiss_init_ctrl_dev(void)
 	ax_ldisc.read   = NULL;
 	ax_ldisc.write  = NULL;
 	ax_ldisc.ioctl  = (int (*)(struct tty_struct *, struct file *, unsigned int, unsigned long))ax25_disp_ioctl;
-	ax_ldisc.select = NULL;
+	ax_ldisc.poll   = NULL;
 
 	ax_ldisc.receive_buf  = ax25_receive_buf;
 	ax_ldisc.receive_room = ax25_receive_room;

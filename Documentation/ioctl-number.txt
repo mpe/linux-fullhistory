@@ -81,6 +81,7 @@ Code	Seq#	Include File		Comments
 'T'	all	linux/soundcard.h	conflict!
 'T'	all	asm-i386/ioctls.h	conflict!
 'V'	all	linux/vt.h
+'W'	00-1F	linux/router.h		conflict [Please reallocate]
 'W'	00-1F	linux/watchdog.h
 'W'	20-27	linux/octal-relay.h	in development
 'W'	28-2F	linux/iso16-relay.h	in development

@@ -64,13 +64,12 @@
  * 	This function notifies the line discpline that a change has
  * 	been made to the termios stucture.
  * 
- * int	(*select)(struct tty_struct * tty, struct inode * inode,
- * 		  struct file * file, int sel_type,
- * 		  struct select_table_struct *wait);
+ * int	(*poll)(struct tty_struct * tty, struct file * file,
+ * 		  poll_table *wait);
  *
- * 	This function is called when a user attempts to select on a
+ * 	This function is called when a user attempts to select/poll on a
  * 	tty device.  It is solely the responsibility of the line
- * 	discipline to handle select requests.
+ * 	discipline to handle poll requests.
  *
  * void	(*receive_buf)(struct tty_struct *, const unsigned char *cp,
  * 		       char *fp, int count);

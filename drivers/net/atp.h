@@ -2,12 +2,13 @@
 #include <linux/types.h>
 #include <asm/io.h>
 
-struct net_local {
+struct net_local 
+{
 #ifdef __KERNEL__
-    struct enet_statistics stats;
+	struct net_device_stats stats;
 #endif
-    ushort saved_tx_size;
-    unsigned char
+	ushort saved_tx_size;
+	unsigned char
 	re_tx,			/* Number of packet retransmissions. */
 	tx_unit_busy,
 	addr_mode,		/* Current Rx filter e.g. promiscuous, etc. */
@@ -15,10 +16,10 @@ struct net_local {
 };
 
 struct rx_header {
-    ushort pad;			/* The first read is always corrupted. */
-    ushort rx_count;
-    ushort rx_status;		/* Unknown bit assignments :-<.  */
-    ushort cur_addr;		/* Apparently the current buffer address(?) */
+	ushort pad;			/* The first read is always corrupted. */
+	ushort rx_count;
+	ushort rx_status;		/* Unknown bit assignments :-<.  */
+	ushort cur_addr;		/* Apparently the current buffer address(?) */
 };
 
 #define PAR_DATA	0
@@ -40,15 +41,16 @@ struct rx_header {
 
 enum page0_regs
 {
-    /* The first six registers hold the ethernet physical station address. */
-    PAR0 = 0, PAR1 = 1, PAR2 = 2, PAR3 = 3, PAR4 = 4, PAR5 = 5,
-    TxCNT0 = 6, TxCNT1 = 7,		/* The transmit byte count. */
-    TxSTAT = 8, RxSTAT = 9,		/* Tx and Rx status. */
-    ISR = 10, IMR = 11,			/* Interrupt status and mask. */
-    CMR1 = 12,				/* Command register 1. */
-    CMR2 = 13,				/* Command register 2. */
-    MAR = 14,				/* Memory address register. */
-    CMR2_h = 0x1d, };
+	/* The first six registers hold the ethernet physical station address. */
+	PAR0 = 0, PAR1 = 1, PAR2 = 2, PAR3 = 3, PAR4 = 4, PAR5 = 5,
+	TxCNT0 = 6, TxCNT1 = 7,		/* The transmit byte count. */
+	TxSTAT = 8, RxSTAT = 9,		/* Tx and Rx status. */
+	ISR = 10, IMR = 11,		/* Interrupt status and mask. */
+	CMR1 = 12,			/* Command register 1. */
+	CMR2 = 13,			/* Command register 2. */
+	MAR = 14,			/* Memory address register. */
+	CMR2_h = 0x1d, 
+};
 
 enum eepage_regs
 { PROM_CMD = 6, PROM_DATA = 7 };	/* Note that PROM_CMD is in the "high" bits. */
@@ -81,135 +83,139 @@ enum eepage_regs
 
 /* An inline function used below: it differs from inb() by explicitly return an unsigned
    char, saving a truncation. */
+   
 extern inline unsigned char inbyte(unsigned short port)
 {
-    unsigned char _v;
-    __asm__ __volatile__ ("inb %w1,%b0" :"=a" (_v):"d" (port));
-    return _v;
+	unsigned char _v;
+	__asm__ __volatile__ ("inb %w1,%b0" :"=a" (_v):"d" (port));
+	return _v;
 }
 
 /* Read register OFFSET.
    This command should always be terminated with read_end(). */
+
 extern inline unsigned char read_nibble(short port, unsigned char offset)
 {
-    unsigned char retval;
-    outb(EOC+offset, port + PAR_DATA);
-    outb(RdAddr+offset, port + PAR_DATA);
-    inbyte(port + PAR_STATUS);		/* Settling time delay */
-    retval = inbyte(port + PAR_STATUS);
-    outb(EOC+offset, port + PAR_DATA);
+	unsigned char retval;
+	outb(EOC+offset, port + PAR_DATA);
+	outb(RdAddr+offset, port + PAR_DATA);
+	inbyte(port + PAR_STATUS);		/* Settling time delay */
+	retval = inbyte(port + PAR_STATUS);
+	outb(EOC+offset, port + PAR_DATA);
 
-    return retval;
+	return retval;
 }
 
 /* Functions for bulk data read.  The interrupt line is always disabled. */
 /* Get a byte using read mode 0, reading data from the control lines. */
+
 extern inline unsigned char read_byte_mode0(short ioaddr)
 {
-    unsigned char low_nib;
+	unsigned char low_nib;
 
-    outb(Ctrl_LNibRead, ioaddr + PAR_CONTROL);
-    inbyte(ioaddr + PAR_STATUS);
-    low_nib = (inbyte(ioaddr + PAR_STATUS) >> 3) & 0x0f;
-    outb(Ctrl_HNibRead, ioaddr + PAR_CONTROL);
-    inbyte(ioaddr + PAR_STATUS);	/* Settling time delay -- needed!  */
-    inbyte(ioaddr + PAR_STATUS);	/* Settling time delay -- needed!  */
-    return low_nib | ((inbyte(ioaddr + PAR_STATUS) << 1) & 0xf0);
+	outb(Ctrl_LNibRead, ioaddr + PAR_CONTROL);
+	inbyte(ioaddr + PAR_STATUS);
+	low_nib = (inbyte(ioaddr + PAR_STATUS) >> 3) & 0x0f;
+	outb(Ctrl_HNibRead, ioaddr + PAR_CONTROL);
+	inbyte(ioaddr + PAR_STATUS);	/* Settling time delay -- needed!  */
+	inbyte(ioaddr + PAR_STATUS);	/* Settling time delay -- needed!  */
+	return low_nib | ((inbyte(ioaddr + PAR_STATUS) << 1) & 0xf0);
 }
 
 /* The same as read_byte_mode0(), but does multiple inb()s for stability. */
+
 extern inline unsigned char read_byte_mode2(short ioaddr)
 {
-    unsigned char low_nib;
+	unsigned char low_nib;
 
-    outb(Ctrl_LNibRead, ioaddr + PAR_CONTROL);
-    inbyte(ioaddr + PAR_STATUS);
-    low_nib = (inbyte(ioaddr + PAR_STATUS) >> 3) & 0x0f;
-    outb(Ctrl_HNibRead, ioaddr + PAR_CONTROL);
-    inbyte(ioaddr + PAR_STATUS);	/* Settling time delay -- needed!  */
-    return low_nib | ((inbyte(ioaddr + PAR_STATUS) << 1) & 0xf0);
+	outb(Ctrl_LNibRead, ioaddr + PAR_CONTROL);
+	inbyte(ioaddr + PAR_STATUS);
+	low_nib = (inbyte(ioaddr + PAR_STATUS) >> 3) & 0x0f;
+	outb(Ctrl_HNibRead, ioaddr + PAR_CONTROL);
+	inbyte(ioaddr + PAR_STATUS);	/* Settling time delay -- needed!  */
+	return low_nib | ((inbyte(ioaddr + PAR_STATUS) << 1) & 0xf0);
 }
 
 /* Read a byte through the data register. */
+
 extern inline unsigned char read_byte_mode4(short ioaddr)
 {
-    unsigned char low_nib;
+	unsigned char low_nib;
 
-    outb(RdAddr | MAR, ioaddr + PAR_DATA);
-    low_nib = (inbyte(ioaddr + PAR_STATUS) >> 3) & 0x0f;
-    outb(RdAddr | HNib | MAR, ioaddr + PAR_DATA);
-    return low_nib | ((inbyte(ioaddr + PAR_STATUS) << 1) & 0xf0);
+	outb(RdAddr | MAR, ioaddr + PAR_DATA);
+	low_nib = (inbyte(ioaddr + PAR_STATUS) >> 3) & 0x0f;
+	outb(RdAddr | HNib | MAR, ioaddr + PAR_DATA);
+	return low_nib | ((inbyte(ioaddr + PAR_STATUS) << 1) & 0xf0);
 }
 
 /* Read a byte through the data register, double reading to allow settling. */
+
 extern inline unsigned char read_byte_mode6(short ioaddr)
 {
-    unsigned char low_nib;
+	unsigned char low_nib;
 
-    outb(RdAddr | MAR, ioaddr + PAR_DATA);
-    inbyte(ioaddr + PAR_STATUS);
-    low_nib = (inbyte(ioaddr + PAR_STATUS) >> 3) & 0x0f;
-    outb(RdAddr | HNib | MAR, ioaddr + PAR_DATA);
-    inbyte(ioaddr + PAR_STATUS);
-    return low_nib | ((inbyte(ioaddr + PAR_STATUS) << 1) & 0xf0);
+	outb(RdAddr | MAR, ioaddr + PAR_DATA);
+	inbyte(ioaddr + PAR_STATUS);
+	low_nib = (inbyte(ioaddr + PAR_STATUS) >> 3) & 0x0f;
+	outb(RdAddr | HNib | MAR, ioaddr + PAR_DATA);
+	inbyte(ioaddr + PAR_STATUS);
+	return low_nib | ((inbyte(ioaddr + PAR_STATUS) << 1) & 0xf0);
 }
 
-extern inline void
-write_reg(short port, unsigned char reg, unsigned char value)
+extern inline void write_reg(short port, unsigned char reg, unsigned char value)
 {
-    unsigned char outval;
-    outb(EOC | reg, port + PAR_DATA);
-    outval = WrAddr | reg;
-    outb(outval, port + PAR_DATA);
-    outb(outval, port + PAR_DATA);	/* Double write for PS/2. */
+	unsigned char outval;
+	outb(EOC | reg, port + PAR_DATA);
+	outval = WrAddr | reg;
+	outb(outval, port + PAR_DATA);
+	outb(outval, port + PAR_DATA);	/* Double write for PS/2. */
 
-    outval &= 0xf0;
-    outval |= value;
-    outb(outval, port + PAR_DATA);
-    outval &= 0x1f;
-    outb(outval, port + PAR_DATA);
-    outb(outval, port + PAR_DATA);
+	outval &= 0xf0;
+	outval |= value;
+	outb(outval, port + PAR_DATA);
+	outval &= 0x1f;
+	outb(outval, port + PAR_DATA);
+	outb(outval, port + PAR_DATA);
 
-    outb(EOC | outval, port + PAR_DATA);
+	outb(EOC | outval, port + PAR_DATA);
 }
 
-extern inline void
-write_reg_high(short port, unsigned char reg, unsigned char value)
+extern inline void write_reg_high(short port, unsigned char reg, unsigned char value)
 {
-    unsigned char outval = EOC | HNib | reg;
+	unsigned char outval = EOC | HNib | reg;
 
-    outb(outval, port + PAR_DATA);
-    outval &= WrAddr | HNib | 0x0f;
-    outb(outval, port + PAR_DATA);
-    outb(outval, port + PAR_DATA);	/* Double write for PS/2. */
+	outb(outval, port + PAR_DATA);
+	outval &= WrAddr | HNib | 0x0f;
+	outb(outval, port + PAR_DATA);
+	outb(outval, port + PAR_DATA);	/* Double write for PS/2. */
 
-    outval = WrAddr | HNib | value;
-    outb(outval, port + PAR_DATA);
-    outval &= HNib | 0x0f;		/* HNib | value */
-    outb(outval, port + PAR_DATA);
-    outb(outval, port + PAR_DATA);
+	outval = WrAddr | HNib | value;
+	outb(outval, port + PAR_DATA);
+	outval &= HNib | 0x0f;		/* HNib | value */
+	outb(outval, port + PAR_DATA);
+	outb(outval, port + PAR_DATA);
 
-    outb(EOC | HNib | outval, port + PAR_DATA);
+	outb(EOC | HNib | outval, port + PAR_DATA);
 }
 
 /* Write a byte out using nibble mode.  The low nibble is written first. */
-extern inline void
-write_reg_byte(short port, unsigned char reg, unsigned char value)
+
+extern inline void write_reg_byte(short port, unsigned char reg, unsigned char value)
 {
-    unsigned char outval;
-    outb(EOC | reg, port + PAR_DATA); 	/* Reset the address register. */
-    outval = WrAddr | reg;
-    outb(outval, port + PAR_DATA);
-    outb(outval, port + PAR_DATA);	/* Double write for PS/2. */
+	unsigned char outval;
+	outb(EOC | reg, port + PAR_DATA); 	/* Reset the address register. */
+	outval = WrAddr | reg;
+	outb(outval, port + PAR_DATA);
+	outb(outval, port + PAR_DATA);		/* Double write for PS/2. */
 
-    outb((outval & 0xf0) | (value & 0x0f), port + PAR_DATA);
-    outb(value & 0x0f, port + PAR_DATA);
-    value >>= 4;
-    outb(value, port + PAR_DATA);
-    outb(0x10 | value, port + PAR_DATA);
-    outb(0x10 | value, port + PAR_DATA);
+	outb((outval & 0xf0) | (value & 0x0f), port + PAR_DATA);
+	outb(value & 0x0f, port + PAR_DATA);
+	value >>= 4;
+	outb(value, port + PAR_DATA);
+	outb(0x10 | value, port + PAR_DATA);
+	outb(0x10 | value, port + PAR_DATA);
 
-    outb(EOC  | value, port + PAR_DATA); 	/* Reset the address register. */
+	outb(EOC  | value, port + PAR_DATA); 	/* Reset the address register. */
 }
 
 /*
@@ -219,30 +225,32 @@ write_reg_byte(short port, unsigned char reg, unsigned char value)
  * It should only be needed when there is skew between the individual data
  * lines.
  */
+
 extern inline void write_byte_mode0(short ioaddr, unsigned char value)
 {
-    outb(value & 0x0f, ioaddr + PAR_DATA);
-    outb((value>>4) | 0x10, ioaddr + PAR_DATA);
+	outb(value & 0x0f, ioaddr + PAR_DATA);
+	outb((value>>4) | 0x10, ioaddr + PAR_DATA);
 }
 
 extern inline void write_byte_mode1(short ioaddr, unsigned char value)
 {
-    outb(value & 0x0f, ioaddr + PAR_DATA);
-    outb(Ctrl_IRQEN | Ctrl_LNibWrite, ioaddr + PAR_CONTROL);
-    outb((value>>4) | 0x10, ioaddr + PAR_DATA);
-    outb(Ctrl_IRQEN | Ctrl_HNibWrite, ioaddr + PAR_CONTROL);
+	outb(value & 0x0f, ioaddr + PAR_DATA);
+	outb(Ctrl_IRQEN | Ctrl_LNibWrite, ioaddr + PAR_CONTROL);
+	outb((value>>4) | 0x10, ioaddr + PAR_DATA);
+	outb(Ctrl_IRQEN | Ctrl_HNibWrite, ioaddr + PAR_CONTROL);
 }
 
 /* Write 16bit VALUE to the packet buffer: the same as above just doubled. */
+
 extern inline void write_word_mode0(short ioaddr, unsigned short value)
 {
-    outb(value & 0x0f, ioaddr + PAR_DATA);
-    value >>= 4;
-    outb((value & 0x0f) | 0x10, ioaddr + PAR_DATA);
-    value >>= 4;
-    outb(value & 0x0f, ioaddr + PAR_DATA);
-    value >>= 4;
-    outb((value & 0x0f) | 0x10, ioaddr + PAR_DATA);
+	outb(value & 0x0f, ioaddr + PAR_DATA);
+	value >>= 4;
+	outb((value & 0x0f) | 0x10, ioaddr + PAR_DATA);
+	value >>= 4;
+	outb(value & 0x0f, ioaddr + PAR_DATA);
+	value >>= 4;
+	outb((value & 0x0f) | 0x10, ioaddr + PAR_DATA);
 }
 
 /*  EEPROM_Ctrl bits. */

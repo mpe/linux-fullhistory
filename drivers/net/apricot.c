@@ -162,7 +162,7 @@ struct i596_private {
     struct i596_cmd *cmd_head;
     int cmd_backlog;
     unsigned long last_cmd;
-    struct enet_statistics stats;
+    struct net_device_stats stats;
 };
 
 char init_setup[] = {
@@ -185,7 +185,7 @@ static int i596_open(struct device *dev);
 static int i596_start_xmit(struct sk_buff *skb, struct device *dev);
 static void i596_interrupt(int irq, void *dev_id, struct pt_regs *regs);
 static int i596_close(struct device *dev);
-static struct enet_statistics *i596_get_stats(struct device *dev);
+static struct net_device_stats *i596_get_stats(struct device *dev);
 static void i596_add_cmd(struct device *dev, struct i596_cmd *cmd);
 static void print_eth(char *);
 static void set_multicast_list(struct device *dev);
@@ -942,7 +942,7 @@ i596_close(struct device *dev)
     return 0;
 }
 
-static struct enet_statistics *
+static struct net_device_stats *
 i596_get_stats(struct device *dev)
 {
     struct i596_private *lp = (struct i596_private *)dev->priv;

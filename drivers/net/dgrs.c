@@ -195,7 +195,7 @@ typedef struct
 	 */
 	char			devname[8];	/* "ethN" string */
 	struct device		*next_dev;
-	struct enet_statistics	stats;
+	struct net_device_stats	stats;
 
 	/*
 	 *	DGRS specific data
@@ -687,8 +687,8 @@ out:
  *	output port by setting the special "dstchan" member at the
  *	end of the traditional 82596 RFD structure.
  */
-static int
-dgrs_start_xmit(struct sk_buff *skb, struct device *devN)
+
+static int dgrs_start_xmit(struct sk_buff *skb, struct device *devN)
 {
 	DGRS_PRIV	*privN = (DGRS_PRIV *) devN->priv;
 	struct device	*dev0;
@@ -793,9 +793,9 @@ dgrs_open( struct device *dev )
 	dev->interrupt = 0;
 	dev->start = 1;
 
-	#ifdef MODULE
-		MOD_INC_USE_COUNT;
-	#endif
+#ifdef MODULE
+	MOD_INC_USE_COUNT;
+#endif
 
 	return (0);
 }
@@ -803,15 +803,14 @@ dgrs_open( struct device *dev )
 /*
  *	Close the interface
  */
-static int
-dgrs_close( struct device *dev )
+static int dgrs_close( struct device *dev )
 {
 	dev->start = 0;
 	dev->tbusy = 1;
 
-	#ifdef MODULE
-		MOD_DEC_USE_COUNT;
-	#endif
+#ifdef MODULE
+	MOD_DEC_USE_COUNT;
+#endif
 
 	return (0);
 }
@@ -819,8 +818,7 @@ dgrs_close( struct device *dev )
 /*
  *	Get statistics
  */
-static struct enet_statistics *
-dgrs_get_stats( struct device *dev )
+static struct net_device_stats *dgrs_get_stats( struct device *dev )
 {
 	DGRS_PRIV	*priv = (DGRS_PRIV *) dev->priv;
 
@@ -830,8 +828,8 @@ dgrs_get_stats( struct device *dev )
 /*
  *	Set multicast list and/or promiscuous mode
  */
-static void
-dgrs_set_multicast_list( struct device *dev)
+
+static void dgrs_set_multicast_list( struct device *dev)
 {
 	DGRS_PRIV	*priv = (DGRS_PRIV *) dev->priv;
 
@@ -841,63 +839,60 @@ dgrs_set_multicast_list( struct device *dev)
 /*
  *	Unique ioctl's
  */
-static int
-dgrs_ioctl(struct device *devN, struct ifreq *ifr, int cmd)
+static int dgrs_ioctl(struct device *devN, struct ifreq *ifr, int cmd)
 {
 	DGRS_PRIV	*privN = (DGRS_PRIV *) devN->priv;
 	DGRS_IOCTL	ioc;
 	int		i, rc;
 
-	rc = verify_area(VERIFY_WRITE, ifr->ifr_data, sizeof(DGRS_IOCTL));
-	if (rc) return (rc);
-	if (cmd != DGRSIOCTL) return -EINVAL;
+	if (cmd != DGRSIOCTL)
+		return -EINVAL;
 
-	COPY_FROM_USER(&ioc, ifr->ifr_data, sizeof(DGRS_IOCTL));
+	if(COPY_FROM_USER(&ioc, ifr->ifr_data, sizeof(DGRS_IOCTL)))
+		return -EFAULT;
 
 	switch (ioc.cmd)
 	{
-	case DGRS_GETMEM:
-		if (ioc.len != sizeof(ulong))
-			return -EINVAL;
-		rc = verify_area(VERIFY_WRITE, (void *) ioc.data, ioc.len);
-		if (rc) return (rc);
-		COPY_TO_USER(ioc.data, &devN->mem_start, ioc.len);
-		return (0);
-	case DGRS_SETFILTER:
-		rc = verify_area(VERIFY_READ, (void *) ioc.data, ioc.len);
-		if (rc) return (rc);
-		if (ioc.port > privN->bcomm->bc_nports)
-			return -EINVAL;
-		if (ioc.filter >= NFILTERS)
-			return -EINVAL;
-		if (ioc.len > privN->bcomm->bc_filter_area_len)
-			return -EINVAL;
+		case DGRS_GETMEM:
+			if (ioc.len != sizeof(ulong))
+				return -EINVAL;
+			if(COPY_TO_USER(ioc.data, &devN->mem_start, ioc.len))
+				return -EFAULT;
+			return (0);
+		case DGRS_SETFILTER:
+			if (ioc.port > privN->bcomm->bc_nports)
+				return -EINVAL;
+			if (ioc.filter >= NFILTERS)
+				return -EINVAL;
+			if (ioc.len > privN->bcomm->bc_filter_area_len)
+				return -EINVAL;
 
-		/* Wait for old command to finish */
-		for (i = 0; i < 1000; ++i)
-		{
-			if ( (volatile) privN->bcomm->bc_filter_cmd <= 0 )
-				break;
-			udelay(1);
-		}
-		if (i >= 1000)
-			return -EIO;
+			/* Wait for old command to finish */
+			for (i = 0; i < 1000; ++i)
+			{
+				if ( (volatile) privN->bcomm->bc_filter_cmd <= 0 )
+					break;
+				udelay(1);
+			}
+			if (i >= 1000)
+				return -EIO;
 
-		privN->bcomm->bc_filter_port = ioc.port;
-		privN->bcomm->bc_filter_num = ioc.filter;
-		privN->bcomm->bc_filter_len = ioc.len;
-
-		if (ioc.len)
-		{
-			COPY_FROM_USER(S2HN(privN->bcomm->bc_filter_area),
-					ioc.data, ioc.len);
-			privN->bcomm->bc_filter_cmd = BC_FILTER_SET;
-		}
-		else
-			privN->bcomm->bc_filter_cmd = BC_FILTER_CLR;
-		return(0);
-	default:
-		return -EOPNOTSUPP;
+			privN->bcomm->bc_filter_port = ioc.port;
+			privN->bcomm->bc_filter_num = ioc.filter;
+			privN->bcomm->bc_filter_len = ioc.len;
+	
+			if (ioc.len)
+			{
+				if(COPY_FROM_USER(S2HN(privN->bcomm->bc_filter_area),
+					ioc.data, ioc.len))
+					return -EFAULT;
+				privN->bcomm->bc_filter_cmd = BC_FILTER_SET;
+			}
+			else
+				privN->bcomm->bc_filter_cmd = BC_FILTER_CLR;
+			return(0);
+		default:
+			return -EOPNOTSUPP;
 	}
 }
 
@@ -906,8 +901,8 @@ dgrs_ioctl(struct device *devN, struct ifreq *ifr, int cmd)
  *
  *	dev, priv will always refer to the 0th device in Multi-NIC mode.
  */
-static void
-dgrs_intr(int irq, void *dev_id, struct pt_regs *regs)
+
+static void dgrs_intr(int irq, void *dev_id, struct pt_regs *regs)
 {
 	struct device	*dev0 = (struct device *) dev_id;
 	DGRS_PRIV	*priv0 = (DGRS_PRIV *) dev0->priv;

@@ -57,6 +57,7 @@
 #define ARPHRD_FDDI	774		/* Fiber Distributed Data Interface */
 #define ARPHRD_BIF      775             /* AP1000 BIF                   */
 #define ARPHRD_SIT	776		/* sit0 device - IPv6-in-IPv4	*/
+#define ARPHRD_IPDDP	777		/* IP over DDP tunneller	*/
 
 /* ARP protocol opcodes. */
 #define	ARPOP_REQUEST	1		/* ARP request			*/

@@ -1,5 +1,3 @@
-#error "Doesn't run with 2.1.x"
-
 /*
  * Copyright 1996 The Board of Trustees of The Leland Stanford
  * Junior University. All Rights Reserved.
@@ -1623,20 +1621,12 @@ static unsigned char *strip_make_packet(unsigned char *ptr, struct strip *strip_
      */
     if (haddr.c[0] == 0xFF)
     {
-        /*IPaddr a;
-        a.l = strip_info->dev.pa_brdaddr;
-        printk(KERN_INFO "%s: Broadcast packet! Sending to %d.%d.%d.%d\n",
-                strip_info->dev.name, a.b[0], a.b[1], a.b[2], a.b[3]);*/
-
-        if (!arp_query(haddr.c, strip_info->dev.pa_brdaddr, &strip_info->dev))
-        {
-            /*IPaddr a;
-            a.l = strip_info->dev.pa_brdaddr;
-            printk(KERN_INFO "%s: No ARP cache entry for %d.%d.%d.%d\n",
-                strip_info->dev.name, a.b[0], a.b[1], a.b[2], a.b[3]);
-            strip_info->tx_dropped++;*/
-            return(NULL);
-        }
+	    memcpy(haddr.c, dev->broadcast, sizeof(haddr));
+	    if (haddr.c[0] == 0xFF)
+	    {
+		    strip_info->tx_dropped++;
+		    return(NULL);
+	    }
     }
 
     *ptr++ = '*';
@@ -2294,12 +2284,12 @@ static int strip_set_dev_mac_address(struct device *dev, void *addr)
     return -1;        /* You cannot override a Metricom radio's address */
 }
 
-static struct enet_statistics *strip_get_stats(struct device *dev)
+static struct net_device_stats *strip_get_stats(struct device *dev)
 {
-    static struct enet_statistics stats;
+    static struct net_device_stats stats;
     struct strip *strip_info = (struct strip *)(dev->priv);
 
-    memset(&stats, 0, sizeof(struct enet_statistics));
+    memset(&stats, 0, sizeof(struct net_device_stats));
 
     stats.rx_packets     = strip_info->rx_packets;
     stats.tx_packets     = strip_info->tx_packets;
@@ -2355,12 +2345,6 @@ static int strip_open_low(struct device *dev)
     strip_info->sx_count = 0;
     strip_info->tx_left  = 0;
 
-    /*
-     * Needed because address '0' is special
-     */
-
-    if (dev->pa_addr == 0)
-        dev->pa_addr=ntohl(0xC0A80001);
     dev->tbusy  = 0;
     dev->start  = 1;
 

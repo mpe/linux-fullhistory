@@ -103,7 +103,7 @@ struct ariadne_private {
     u_short *rx_buff[RX_RING_SIZE];
     int cur_tx, cur_rx;			/* The next free ring entry */
     int dirty_tx;			/* The ring entries to be free()ed. */
-    struct enet_statistics stats;
+    struct net_device_stats stats;
     char tx_full;
     unsigned long lock;
     int key;
@@ -128,7 +128,7 @@ static int ariadne_start_xmit(struct sk_buff *skb, struct device *dev);
 static int ariadne_rx(struct device *dev);
 static void ariadne_interrupt(int irq, void *data, struct pt_regs *fp);
 static int ariadne_close(struct device *dev);
-static struct enet_statistics *ariadne_get_stats(struct device *dev);
+static struct net_device_stats *ariadne_get_stats(struct device *dev);
 #ifdef HAVE_MULTICAST
 static void set_multicast_list(struct device *dev);
 #endif
@@ -782,7 +782,7 @@ static int ariadne_rx(struct device *dev)
 }
 
 
-static struct enet_statistics *ariadne_get_stats(struct device *dev)
+static struct net_device_stats *ariadne_get_stats(struct device *dev)
 {
     struct ariadne_private *priv = (struct ariadne_private *)dev->priv;
     struct AriadneBoard *board = priv->board;

@@ -1006,17 +1006,19 @@ static int dev_ifconf(char *arg)
 #ifdef CONFIG_PROC_FS
 static int sprintf_stats(char *buffer, struct device *dev)
 {
-	struct enet_statistics *stats = (dev->get_stats ? dev->get_stats(dev): NULL);
+	struct net_device_stats *stats = (dev->get_stats ? dev->get_stats(dev): NULL);
 	int size;
 	
 	if (stats)
-		size = sprintf(buffer, "%6s:%7d %4d %4d %4d %4d %8d %4d %4d %4d %5d %4d\n",
+		size = sprintf(buffer, "%6s:%8ld %7ld %4ld %4ld %4ld %4ld %8ld %8ld %4ld %4ld %4ld %5ld %4ld\n",
 		   dev->name,
+		   stats->rx_bytes,
 		   stats->rx_packets, stats->rx_errors,
 		   stats->rx_dropped + stats->rx_missed_errors,
 		   stats->rx_fifo_errors,
 		   stats->rx_length_errors + stats->rx_over_errors
 		   + stats->rx_crc_errors + stats->rx_frame_errors,
+		   stats->tx_bytes,
 		   stats->tx_packets, stats->tx_errors, stats->tx_dropped,
 		   stats->tx_fifo_errors, stats->collisions,
 		   stats->tx_carrier_errors + stats->tx_aborted_errors
@@ -1043,7 +1045,7 @@ int dev_get_info(char *buffer, char **start, off_t offset, int length, int dummy
 
 
 	size = sprintf(buffer, "Inter-|   Receive                  |  Transmit\n"
-			    " face |packets errs drop fifo frame|packets errs drop fifo colls carrier\n");
+			    " face |bytes    packets errs drop fifo frame|bytes    packets errs drop fifo colls carrier\n");
 	
 	pos+=size;
 	len+=size;

@@ -15,6 +15,9 @@
 
 	Subscribe to linux-tulip@cesdis.gsfc.nasa.gov and linux-tulip-bugs@cesdis.gsfc.nasa.gov
 	for late breaking news and exciting develovements.
+	
+	This has Baldur Norddahl's one liner fix for the AC/AE boards. If it
+	stops working please change TINTR_ENABLE to 0xFFFFFFFF
 */
 
 static char *version =
@@ -240,7 +243,7 @@ enum tulip_offsets {
 #define	TCMOD_AUTO			(TCMOD_SW100TP|TCMOD_TH128|TCMOD_10TP)
 
 /* description of CSR7 interrupt mask register */
-#define	TINTR_ENABLE		0xFFFFFFFF
+#define	TINTR_ENABLE		0xFFFFBBFF
 #define	TINTR_DISABLE		0x00000000
 
 /* description of CSR11 G.P. timer (21041/21140) register */
@@ -334,7 +337,7 @@ struct tulip_private {
 	struct sk_buff* tx_skbuff[TX_RING_SIZE];
 	char rx_buffs[RX_RING_SIZE][PKT_BUF_SZ];
 	/* temporary Rx buffers. */
-	struct enet_statistics stats;
+	struct net_device_stats stats;
 	int setup_frame[48];	/* Pseudo-Tx frame to init address table. */
 	void (*port_select)(struct device *dev);
 	int (*port_fail)(struct device *dev);
@@ -371,7 +374,7 @@ static int tulip_start_xmit(struct sk_buff *skb, struct device *dev);
 static int tulip_rx(struct device *dev);
 static void tulip_interrupt(int irq, void *dev_id, struct pt_regs *regs);
 static int tulip_close(struct device *dev);
-static struct enet_statistics *tulip_get_stats(struct device *dev);
+static struct net_device_stats *tulip_get_stats(struct device *dev);
 static void set_multicast_list(struct device *dev);
 
 #define	generic21140_fail	NULL
@@ -881,6 +884,7 @@ tulip_start_xmit(struct sk_buff *skb, struct device *dev)
 	} else {
 		daddr = virt_to_bus(skb->data);
 		len = skb->len;
+		tp->stats.tx_bytes+=len;
 	}
 	tp->tx_skbuff[entry] = skb;
 	tp->tx_ring[entry].length = len |
@@ -1120,8 +1124,7 @@ tulip_config(struct device *dev, struct ifmap *map)
 	return(0);
 }
 
-static struct enet_statistics *
-tulip_get_stats(struct device *dev)
+static struct net_device_stats *tulip_get_stats(struct device *dev)
 {
 	struct tulip_private *tp = (struct tulip_private *)dev->priv;
 	/*	short ioaddr = dev->base_addr;*/

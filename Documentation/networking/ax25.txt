@@ -12,7 +12,7 @@ No.	Name			Meaning				Default
 1	IP Default Mode		0=DG 1=VC			0
 2	AX.25 Default Mode	0=Normal 1=Extended		0
 3	Allow Vanilla Connects	0=No 1=Yes			1
-4	Backoff			0=Linear 1=Exponential		1
+4	Backoff			0=None 1=Linear 2=Exponential	1
 5	Connected Mode		0=No 1=Yes			1
 6	Standard Window		1  <= N <= 7			2
 7	Extended Window		1  <= N <= 63			32

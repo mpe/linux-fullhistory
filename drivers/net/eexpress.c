@@ -103,7 +103,7 @@
 
 struct net_local
 {
-	struct enet_statistics stats;
+	struct net_device_stats stats;
 	unsigned long init_time;     /* jiffies when eexp_hw_init586 called */
 	unsigned short rx_first;     /* first rx buf, same as RX_BUF_START */
 	unsigned short rx_last;      /* last rx buf */
@@ -189,7 +189,7 @@ static char irqrmap[] = { 0,0,1,2,3,4,0,0,0,1,5,6,0,0,0,0 };
 extern int express_probe(struct device *dev);
 static int eexp_open(struct device *dev);
 static int eexp_close(struct device *dev);
-static struct enet_statistics *eexp_stats(struct device *dev);
+static struct net_device_stats *eexp_stats(struct device *dev);
 static int eexp_xmit(struct sk_buff *buf, struct device *dev);
 
 static void eexp_irq(int irq, void *dev_addr, struct pt_regs *regs);
@@ -358,7 +358,7 @@ static int eexp_close(struct device *dev)
  * Return interface stats
  */
 
-static struct enet_statistics *eexp_stats(struct device *dev)
+static struct net_device_stats *eexp_stats(struct device *dev)
 {
 	struct net_local *lp = (struct net_local *)dev->priv;
 

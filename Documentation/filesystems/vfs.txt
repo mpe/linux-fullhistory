@@ -1,0 +1,173 @@
+A Brief Overview of the Virtual File System
+===========================================
+	by Benjamin LaHaise (blah@dot.superaje.com)
+
+Noone else seems to be writing this, so here's a quick description of what
+I've learned while writing lofs...
+
+The VFS relatively simple, but it is nice not to have to browse through
+pages of code to determine what is expected when writing a filesystem.
+Hopefully this helps anyone attempting such a feat, as well as clearing up
+a few important points/dependancies.
+
+
+register_filesystem (struct file_system_type *fstype)
+=====================================================
+
+All filesystems are created equal... or at least they start out that way.
+A filesystem, be it in module form, or linked into the kernel, needs to add
+itself to the table of filesystems by calling register_filesystem with an
+initialized file_system_type structure.  Any further functions of the
+filesystem are accessed through the following function tables...
+
+
+struct file_system_type
+=======================
+
+	struct super_block *(*read_super) (struct super_block *sb, void *options, int silent);
+
+		This is the entry point of all filesystems.  If the filesystem succeeds
+		in mounting itself, sb should be returned, otherwise NULL.  options is
+		a pointer to a maximum of PAGE_SIZE-1 bytes of options, typically a zero
+		terminated string passed from mount.  This page is freed after read_super
+		returns, so do not use any pointers into it.
+
+		This routine _must_ set the s_op member of sb to point to a valid
+		super_operations structure.
+
+	const char *name;
+
+		Name points to a string that the system will know the filesystem by.
+
+	int requires_dev;
+
+		Set this flag to 1 if the filesystem requires a block device to be mounted
+		on.
+
+	struct file_system_type * next;
+
+		This field points to the next file_system_type that is present in the system,
+		and should be initialized to NULL.
+
+struct super_operations
+=======================
+
+The super_operations structure is found through the s_op member of the
+super_block structure.
+
+	void (*read_inode) (struct inode *inode);
+	[optional - doesn't quite make sense]
+		read_inode is called by the VFS when iget is called requesting an inode
+		not already present in the inode table.  i_ino is set to the number of the
+		inode requested.
+
+		The i_op member of inode should be set to a valid inode_operations
+		structure.  Typically filesystems have separate inode_operations for
+		directories, files and symlinks.  i_op can be NULL.
+
+	int (*notify_change) (struct inode *, struct iattr *);
+	[optional]
+	void (*write_inode) (struct inode *);
+	[optional]
+
+	int (*put_inode) (struct inode *inode);
+	[optional]
+		put_inode is called by the VFS when the last instance of inode is released
+		with a call to iput.  The only special consideration that should be made
+		is that iget may reuse inode without calling read_inode unless clear_inode
+		is called.  put_inode MUST return 1 if it called clear_inode on the inode,
+		otherwise zero.
+
+	void (*put_super) (struct super_block *);
+	[optional]
+	void (*write_super) (struct super_block *);
+	[optional]
+	void (*statfs) (struct super_block *, struct statfs *, int);
+	[optional]
+	int (*remount_fs) (struct super_block *, int *, char *);
+	[optional]
+
+
+struct inode_operations
+=======================
+
+	struct file_operations * default_file_ops;
+	[mandatory]
+		All inode_operations structures must have default_file_ops pointing to
+		a valid file_operations structure.
+
+	int (*create) (struct inode *,const char *,int,int,struct inode **);
+	[optional]
+
+	int (*lookup) (struct inode *dir, const char *name, int len, struct inode **result);
+	[optional]
+		lookup is called when the VFS wishes to have the filesystem resolve a name
+		into an inode.  Dir is a directory on the filesystem that [hopefully] contains
+		the zero terminated string name (length len).  A return value of zero indicates
+		that there is a valid inode stored in *result.
+
+***		Note: lofs assumes that any filesystem returns an inode within the filesystem
+		for all directory inodes.  Therefore, __iget(sb,ino,0) should be used to fetch
+		the inode in a filesystem's lookup routine.
+
+	int (*link) (struct inode *,struct inode *,const char *,int);
+	[optional]
+	int (*unlink) (struct inode *,const char *,int);
+	[optional]
+	int (*symlink) (struct inode *,const char *,int,const char *);
+	[optional]
+	int (*mkdir) (struct inode *,const char *,int,int);
+	[optional]
+	int (*rmdir) (struct inode *,const char *,int);
+	[optional]
+	int (*mknod) (struct inode *,const char *,int,int,int);
+	[optional]
+	int (*rename) (struct inode *,const char *,int,struct inode *,const char *,int, int);
+	[optional]
+
+	int (*readlink) (struct inode *inode, char *buf, int len);
+	[optional]
+		readlink is called by the VFS to read the contents of a symbolic link.
+		inode is an inode that meets the S_ISLNK test, and buf points to a buffer
+		of len bytes.
+
+	int (*follow_link) (struct inode *,struct inode *,int,int,struct inode **);
+	[optional]
+		The follow_link function is only nescessary if a filesystem uses a really
+		twisted form of symbolic links - namely if the symbolic link comes from a
+		foriegn filesystem that makes no sense....
+		I threw this one out - too much redundant code!
+
+	int (*readpage) (struct inode *, struct page *);	[optional]
+	int (*writepage) (struct inode *, struct page *);	[mandatory with readpage]
+
+		In order for files to be mmap'd, readpage and writepage are required.
+		A filesystem can use generic_readpage/writepage if it supports the bmap
+		function.  Otherwise, a custom version must be written. 
+
+	int (*bmap) (struct inode *,int);
+	[optional]
+	void (*truncate) (struct inode *);
+	[optional]
+	int (*permission) (struct inode *, int);
+	[optional]
+	int (*smap) (struct inode *,int);
+	[optional]
+
+struct file_operations
+======================
+
+	int (*lseek) (struct inode *, struct file *, off_t, int);
+	int (*read) (struct inode *, struct file *, char *, int);
+	int (*write) (struct inode *, struct file *, const char *, int);
+	int (*readdir) (struct inode *, struct file *, void *, filldir_t);
+	unsigned int (*poll) (struct file *, poll_table *);
+	int (*ioctl) (struct inode *, struct file *, unsigned int, unsigned long);
+	int (*mmap) (struct inode *, struct file *, struct vm_area_struct *);
+	int (*open) (struct inode *, struct file *);
+	void (*release) (struct inode *, struct file *);
+	int (*fsync) (struct inode *, struct file *);
+	int (*fasync) (struct inode *, struct file *, int);
+	int (*check_media_change) (kdev_t dev);
+	int (*revalidate) (kdev_t dev);
+

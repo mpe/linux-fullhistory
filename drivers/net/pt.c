@@ -124,7 +124,7 @@ static int pt_send_packet(struct sk_buff *skb, struct device *dev);
 static void pt_interrupt(int irq, void *dev_id, struct pt_regs *regs);
 static int pt_close(struct device *dev);
 static int pt_ioctl(struct device *dev, struct ifreq *ifr, int cmd);
-static struct enet_statistics *pt_get_stats(struct device *dev);
+static struct net_device_stats *pt_get_stats(struct device *dev);
 static void pt_rts(struct pt_local *lp, int x);
 static void pt_rxisr(struct device *dev);
 static void pt_txisr(struct pt_local *lp);
@@ -175,10 +175,10 @@ static void switchbuffers(struct pt_local *lp)
 
 static void hardware_send_packet(struct pt_local *lp, struct sk_buff *skb)
 {
-    char kickflag;
-    unsigned long flags;
-    char *ptr;
-    struct device *dev;
+	char kickflag;
+	unsigned long flags;
+	char *ptr;
+	struct device *dev;
 
 	/* First, let's see if this packet is actually a KISS packet */
 	ptr = skb->data;
@@ -215,73 +215,78 @@ static void hardware_send_packet(struct pt_local *lp, struct sk_buff *skb)
 		return;
 	}
 
-    lp->stats.tx_packets++;
-
-    save_flags(flags);
-    cli();
-    kickflag = (skb_peek(&lp->sndq) == NULL) && (lp->sndbuf == NULL);
-    restore_flags(flags);
+	lp->stats.tx_packets++;
+	lp->stats.tx_bytes+=skb->len;
+	save_flags(flags);
+	cli();
+	kickflag = (skb_peek(&lp->sndq) == NULL) && (lp->sndbuf == NULL);
+	restore_flags(flags);
 
 #ifdef PT_DEBUG
 	printk(KERN_DEBUG "PT: hardware_send_packet(): kickflag = %d (%d).\n", kickflag, lp->base & CHANA);
 #endif
-    skb_queue_tail(&lp->sndq, skb);
-    if (kickflag) {
+	skb_queue_tail(&lp->sndq, skb);
+	if (kickflag) 
+	{
         /* Simulate interrupt to transmit */
-            if (lp->dmachan)
-            {
-            	pt_txisr(lp);
-            } else {
-            	save_flags(flags);
+        	if (lp->dmachan)
+			pt_txisr(lp);
+		else 
+		{
+            		save_flags(flags);
 	           	cli();
-            	if (lp->tstate == IDLE)
-                	pt_txisr(lp);
-            	restore_flags(flags);
-            }
-    }
+            		if (lp->tstate == IDLE)
+                		pt_txisr(lp);
+            		restore_flags(flags);
+		}
+	}
 } /* hardware_send_packet() */
 
 static void setup_rx_dma(struct pt_local *lp)
 {
-    unsigned long flags;
-    int cmd;
-    unsigned long dma_abs;
-    unsigned char dmachan;
+	unsigned long flags;
+	int cmd;
+	unsigned long dma_abs;
+	unsigned char dmachan;
 
-    save_flags(flags);
-    cli();
+	save_flags(flags);
+	cli();
 
-    dma_abs = (unsigned long) (lp->rcvbuf->data);
-    dmachan = lp->dmachan;
-    cmd = lp->base + CTL;
+	dma_abs = (unsigned long) (lp->rcvbuf->data);
+	dmachan = lp->dmachan;
+	cmd = lp->base + CTL;
 
-    if(!valid_dma_page(dma_abs, DMA_BUFF_SIZE + sizeof(struct mbuf)))
-	panic("PI: RX buffer violates DMA boundary!");
+	if(!valid_dma_page(dma_abs, DMA_BUFF_SIZE + sizeof(struct mbuf)))
+		panic("PI: RX buffer violates DMA boundary!");
 
-    /* Get ready for RX DMA */
-    wrtscc(lp->cardbase, cmd, R1, WT_FN_RDYFN | WT_RDY_RT | INT_ERR_Rx | EXT_INT_ENAB);
+	/* Get ready for RX DMA */
+	wrtscc(lp->cardbase, cmd, R1, WT_FN_RDYFN | WT_RDY_RT | INT_ERR_Rx | EXT_INT_ENAB);
 
-    disable_dma(dmachan);
-    clear_dma_ff(dmachan);
+	disable_dma(dmachan);
+	clear_dma_ff(dmachan);
 
-    /* Set DMA mode register to single transfers, incrementing address,
-     *  auto init, writes
-     */
-    set_dma_mode(dmachan, DMA_MODE_READ | 0x10);
-    set_dma_addr(dmachan, dma_abs);
-    set_dma_count(dmachan, lp->bufsiz);
-    enable_dma(dmachan);
+	/*
+	 *	Set DMA mode register to single transfers, incrementing address,
+	 *	auto init, writes
+	 */
 
-    /* If a packet is already coming in, this line is supposed to
-	   avoid receiving a partial packet.
-     */
-    wrtscc(lp->cardbase, cmd, R0, RES_Rx_CRC);
+	set_dma_mode(dmachan, DMA_MODE_READ | 0x10);
+	set_dma_addr(dmachan, dma_abs);
+	set_dma_count(dmachan, lp->bufsiz);
+	enable_dma(dmachan);
 
-    /* Enable RX dma */
-    wrtscc(lp->cardbase, cmd, R1,
-      WT_RDY_ENAB | WT_FN_RDYFN | WT_RDY_RT | INT_ERR_Rx | EXT_INT_ENAB);
+	/*
+	 *	If a packet is already coming in, this line is supposed to
+	 *	avoid receiving a partial packet.
+	 */
 
-    restore_flags(flags);
+	wrtscc(lp->cardbase, cmd, R0, RES_Rx_CRC);
+
+	/* Enable RX dma */
+	wrtscc(lp->cardbase, cmd, R1,
+		WT_RDY_ENAB | WT_FN_RDYFN | WT_RDY_RT | INT_ERR_Rx | EXT_INT_ENAB);
+
+	restore_flags(flags);
 }
 
 static void setup_tx_dma(struct pt_local *lp, int length)
@@ -324,79 +329,76 @@ static void free_p(struct sk_buff *skb)
  */
 static void scc_init(struct device *dev)
 {
-    unsigned long flags;
-    struct pt_local *lp = (struct pt_local*) dev->priv;
-    register int cmd = lp->base + CTL;
-    int tc, br;
+	unsigned long flags;
+	struct pt_local *lp = (struct pt_local*) dev->priv;
+	register int cmd = lp->base + CTL;
+	int tc, br;
 
 #ifdef PT_DEBUG
 	printk(KERN_DEBUG "PT: scc_init(): (%d).\n", lp->base & CHANA);
 #endif
-    save_flags(flags);
-    cli();
+	save_flags(flags);
+	cli();
 
-    /* We may put something here to enable_escc */
+	/* We may put something here to enable_escc */
 
-    if (cmd & CHANA)
-    {
-        wrtscc(lp->cardbase, cmd, R9, CHRA);		/* Reset channel A */
-        wrtscc(lp->cardbase, cmd, R2, 0xff);		/* Initialise interrupt vector */
-    } else {
-    	wrtscc(lp->cardbase, cmd, R9, CHRB);		/* Reset channel B */
-    }
+	if (cmd & CHANA)
+	{
+	        wrtscc(lp->cardbase, cmd, R9, CHRA);	/* Reset channel A */
+	        wrtscc(lp->cardbase, cmd, R2, 0xff);	/* Initialise interrupt vector */
+	}
+	else
+	    	wrtscc(lp->cardbase, cmd, R9, CHRB);	/* Reset channel B */
 
-    /* Deselect all Rx and Tx interrupts */
-    wrtscc(lp->cardbase, cmd, R1, 0);
+	/* Deselect all Rx and Tx interrupts */
+	wrtscc(lp->cardbase, cmd, R1, 0);
 
-    /* Turn off external interrupts (like CTS/CD) */
-    wrtscc(lp->cardbase, cmd, R15, 0);
+	/* Turn off external interrupts (like CTS/CD) */
+	wrtscc(lp->cardbase, cmd, R15, 0);
 
-    /* X1 clock, SDLC mode */
-    wrtscc(lp->cardbase, cmd, R4, SDLC | X1CLK);
+	/* X1 clock, SDLC mode */
+	wrtscc(lp->cardbase, cmd, R4, SDLC | X1CLK);
 
 	/* Preset CRC and set mode */
 	if (lp->nrzi)
+	    	/* Preset Tx CRC, put into NRZI mode */
+		wrtscc(lp->cardbase, cmd, R10, CRCPS | NRZI);
+	else
+		/* Preset Tx CRC, put into NRZ mode */
+		wrtscc(lp->cardbase, cmd, R10, CRCPS);
+
+	/* Tx/Rx parameters */
+	if (lp->speed)		/* Use internal clocking */
+	       /* Tx Clk from BRG. Rx Clk form DPLL, TRxC pin outputs DPLL */
+	       wrtscc(lp->cardbase, cmd, R11, TCBR | RCDPLL | TRxCDP | TRxCOI);
+	else	/* Use external clocking */
 	{
-    	/* Preset Tx CRC, put into NRZI mode */
-       wrtscc(lp->cardbase, cmd, R10, CRCPS | NRZI);
-    } else {
-    	/* Preset Tx CRC, put into NRZ mode */
-       wrtscc(lp->cardbase, cmd, R10, CRCPS);
-    }
+		/* Tx Clk from TRxCL. Rx Clk from RTxCL, TRxC pin if input */
+		wrtscc(lp->cardbase, cmd, R11, TCTRxCP | RCRTxCP | TRxCBR);
+        	wrtscc(lp->cardbase,cmd, R14, 0);	/* wiz1 */
+	}
 
-    /* Tx/Rx parameters */
-    if (lp->speed)		/* Use internal clocking */
-    {
-       /* Tx Clk from BRG. Rx Clk form DPLL, TRxC pin outputs DPLL */
-       wrtscc(lp->cardbase, cmd, R11, TCBR | RCDPLL | TRxCDP | TRxCOI);
+	/* Null out SDLC start address */
+	wrtscc(lp->cardbase, cmd, R6, 0);
 
-    } else {			/* Use external clocking */
-           /* Tx Clk from TRxCL. Rx Clk from RTxCL, TRxC pin if input */
-           wrtscc(lp->cardbase, cmd, R11, TCTRxCP | RCRTxCP | TRxCBR);
-           wrtscc(lp->cardbase,cmd, R14, 0);	/* wiz1 */
-    }
+	/* SDLC flag */
+	wrtscc(lp->cardbase, cmd, R7, FLAG);
 
-    /* Null out SDLC start address */
-    wrtscc(lp->cardbase, cmd, R6, 0);
+	/* Setup Tx but don't enable it */
+	wrtscc(lp->cardbase, cmd, R5, Tx8 | DTR);
 
-    /* SDLC flag */
-    wrtscc(lp->cardbase, cmd, R7, FLAG);
+	/* Setup Rx */
+	wrtscc(lp->cardbase, cmd, R3, AUTO_ENAB | Rx8);
 
-    /* Setup Tx but don't enable it */
-    wrtscc(lp->cardbase, cmd, R5, Tx8 | DTR);
+	/* Setup the BRG, turn it off first */
+	wrtscc(lp->cardbase, cmd, R14, BRSRC);
 
-    /* Setup Rx */
-    wrtscc(lp->cardbase, cmd, R3, AUTO_ENAB | Rx8);
-
-    /* Setup the BRG, turn it off first */
-    wrtscc(lp->cardbase, cmd, R14, BRSRC);
-
-    /* set the 32x time constant for the BRG in Rx mode */
+	/* set the 32x time constant for the BRG in Rx mode */
 	if (lp->speed)
 	{
 		br = lp->speed;
 		tc = ((lp->xtal / 32) / (br * 2)) - 2;
-	    wrtscc(lp->cardbase, cmd, R12, tc & 0xff);		/* lower byte */
+		wrtscc(lp->cardbase, cmd, R12, tc & 0xff);		/* lower byte */
    		wrtscc(lp->cardbase, cmd, R13, (tc >> 8) & 0xff);	/* upper byte */
 	}
 
@@ -409,36 +411,37 @@ static void scc_init(struct device *dev)
 		/* DPLL frm BRG, BRG src PCLK */
 		wrtscc(lp->cardbase, cmd, R14, BRSRC | SSBR);
 		wrtscc(lp->cardbase, cmd, R14, BRSRC | SEARCH);	/* SEARCH mode, keep BRG src */
-	    wrtscc(lp->cardbase, cmd, R14, BRSRC | BRENABL);	/* Enable the BRG */
+		wrtscc(lp->cardbase, cmd, R14, BRSRC | BRENABL);	/* Enable the BRG */
 
 	    /* Turn off external clock port */
-        if (lp->base & CHANA)
-            outb_p( (pt_sercfg &= ~PT_EXTCLKA), (lp->cardbase + SERIAL_CFG) );
-        else
-            outb_p( (pt_sercfg &= ~PT_EXTCLKB), (lp->cardbase + SERIAL_CFG) );
-    } else {
+		if (lp->base & CHANA)
+			outb_p( (pt_sercfg &= ~PT_EXTCLKA), (lp->cardbase + SERIAL_CFG) );
+		else
+			outb_p( (pt_sercfg &= ~PT_EXTCLKB), (lp->cardbase + SERIAL_CFG) );
+	}
+	else
+	{
 		/* DPLL frm rtxc,BRG src PCLK */
-/*		wrtscc(lp->cardbase, cmd, R14, BRSRC | SSRTxC);*/
-        /* Turn on external clock port */
-        if (lp->base & CHANA)
-            outb_p( (pt_sercfg |= PT_EXTCLKA), (lp->cardbase + SERIAL_CFG) );
-        else
-            outb_p( (pt_sercfg |= PT_EXTCLKB), (lp->cardbase + SERIAL_CFG) );
-    }
+		/* Turn on external clock port */
+		if (lp->base & CHANA)
+			outb_p( (pt_sercfg |= PT_EXTCLKA), (lp->cardbase + SERIAL_CFG) );
+		else
+			outb_p( (pt_sercfg |= PT_EXTCLKB), (lp->cardbase + SERIAL_CFG) );
+	}
 
-    if (!lp->dmachan)
+	if (!lp->dmachan)
 		wrtscc(lp->cardbase, cmd, R1, (INT_ALL_Rx | EXT_INT_ENAB));
 
-    wrtscc(lp->cardbase, cmd, R15, BRKIE);	/* ABORT int */
+	wrtscc(lp->cardbase, cmd, R15, BRKIE);	/* ABORT int */
 
 	/* Turn on the DTR to tell modem we're alive */
 	if (lp->base & CHANA)
-	    outb_p( (pt_sercfg |= PT_DTRA_ON), (lp->cardbase + SERIAL_CFG) );
+		outb_p( (pt_sercfg |= PT_DTRA_ON), (lp->cardbase + SERIAL_CFG) );
 	else
-    	outb_p( (pt_sercfg |= PT_DTRB_ON), (lp->cardbase + SERIAL_CFG) );
+	    	outb_p( (pt_sercfg |= PT_DTRB_ON), (lp->cardbase + SERIAL_CFG) );
 
-    /* Now, turn on the receiver and hunt for a flag */
-    wrtscc(lp->cardbase, cmd, R3, RxENABLE | RxCRC_ENAB | AUTO_ENAB | Rx8 );
+	/* Now, turn on the receiver and hunt for a flag */
+	wrtscc(lp->cardbase, cmd, R3, RxENABLE | RxCRC_ENAB | AUTO_ENAB | Rx8 );
 
 	restore_flags(flags);
 
@@ -1075,14 +1078,15 @@ static int pt_ioctl(struct device *dev, struct ifreq *ifr, int cmd)
     return ret;
 }
 
-/* Get the current statistics.	This may be called with the card open or
-   closed. */
-static struct netstats *
- pt_get_stats(struct device *dev)
+/*
+ *	Get the current statistics.
+ *	This may be called with the card open or closed. 
+ */
+ 
+static struct net_device_stats *pt_get_stats(struct device *dev)
 {
-    struct pt_local *lp = (struct pt_local *) dev->priv;
-
-    return &lp->stats;
+	struct pt_local *lp = (struct pt_local *) dev->priv;
+	return &lp->stats;
 }
 
 
@@ -1102,13 +1106,16 @@ static void tdelay(struct pt_local *lp, int time)
 	if (!lp->dmachan)
 		wrtscc(lp->cardbase, lp->base + CTL, R1, INT_ALL_Rx | EXT_INT_ENAB);
 
-    if (lp->base & CHANA) {
-        outb_p(time & 0xff, lp->cardbase + TMR1);
-        outb_p((time >> 8)&0xff, lp->cardbase + TMR1);
-    } else {
-        outb_p(time & 0xff, lp->cardbase + TMR2);
-        outb_p((time >> 8)&0xff, lp->cardbase + TMR2);
-    }
+	if (lp->base & CHANA) 
+	{
+		outb_p(time & 0xff, lp->cardbase + TMR1);
+		outb_p((time >> 8)&0xff, lp->cardbase + TMR1);
+	}
+	else
+	{
+		outb_p(time & 0xff, lp->cardbase + TMR2);
+		outb_p((time >> 8)&0xff, lp->cardbase + TMR2);
+	}
 } /* tdelay */
 
 
@@ -1379,6 +1386,7 @@ static void pt_rxisr(struct device *dev)
                     memcpy(cfix, lp->rcvbuf->data, pkt_len - 1);
                  skb->protocol = ntohs(ETH_P_AX25);
                  skb->mac.raw=skb->data;
+                 lp->stats.rx_bytes+=skb->len;
                  IS_SKB(skb);
                  netif_rx(skb);
                  lp->stats.rx_packets++;
@@ -1767,21 +1775,21 @@ EXPORT_NO_SYMBOLS;
 
 int init_module(void)
 {
-    return pt_init();
+	return pt_init();
 }
 
 void cleanup_module(void)
 {
-    free_irq(pt0a.irq, NULL);	/* IRQs and IO Ports are shared */
-    release_region(pt0a.base_addr & 0x3f0, PT_TOTAL_SIZE);
-    irq2dev_map[pt0a.irq] = NULL;
+	free_irq(pt0a.irq, NULL);	/* IRQs and IO Ports are shared */
+	release_region(pt0a.base_addr & 0x3f0, PT_TOTAL_SIZE);
+	irq2dev_map[pt0a.irq] = NULL;
 
-    kfree(pt0a.priv);
-    pt0a.priv = NULL;
-    unregister_netdev(&pt0a);
+	kfree(pt0a.priv);
+	pt0a.priv = NULL;
+	unregister_netdev(&pt0a);
 
-    kfree(pt0b.priv);
-    pt0b.priv = NULL;
-    unregister_netdev(&pt0b);
+	kfree(pt0b.priv);
+	pt0b.priv = NULL;
+	unregister_netdev(&pt0b);
 }
 #endif

@@ -68,6 +68,8 @@ struct slip {
   /* SLIP interface statistics. */
   unsigned long		rx_packets;	/* inbound frames counter	*/
   unsigned long         tx_packets;     /* outbound frames counter      */
+  unsigned long		rx_bytes;	/* inbound byte counte		*/
+  unsigned long         tx_bytes;       /* outbound byte counter	*/
   unsigned long         rx_errors;      /* Parity, etc. errors          */
   unsigned long         tx_errors;      /* Planned stuff                */
   unsigned long         rx_dropped;     /* No memory for skb            */

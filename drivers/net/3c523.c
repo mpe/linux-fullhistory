@@ -170,7 +170,7 @@ static void    elmc_interrupt(int irq,void *dev_id,struct pt_regs *reg_ptr);
 static int     elmc_open(struct device *dev);
 static int     elmc_close(struct device *dev);
 static int     elmc_send_packet(struct sk_buff *,struct device *);
-static struct  enet_statistics *elmc_get_stats(struct device *dev);
+static struct  net_device_stats *elmc_get_stats(struct device *dev);
 static void    set_multicast_list(struct device *dev);
 
 /* helper-functions */
@@ -183,25 +183,26 @@ static void    elmc_rcv_int(struct device *dev);
 static void    elmc_xmt_int(struct device *dev);
 static void    elmc_rnr_int(struct device *dev);
 
-struct priv {
-  struct enet_statistics stats;
-  unsigned long base;
-  char *memtop;
-  volatile struct rfd_struct  *rfd_last,*rfd_top,*rfd_first;
-  volatile struct scp_struct  *scp;  /* volatile is important */
-  volatile struct iscp_struct *iscp; /* volatile is important */
-  volatile struct scb_struct  *scb;  /* volatile is important */
-  volatile struct tbd_struct  *xmit_buffs[NUM_XMIT_BUFFS];
-  volatile struct transmit_cmd_struct *xmit_cmds[NUM_XMIT_BUFFS];
+struct priv 
+{
+	struct net_device_stats stats;
+	unsigned long base;
+	char *memtop;
+	volatile struct rfd_struct	*rfd_last,*rfd_top,*rfd_first;
+	volatile struct scp_struct	*scp;	/* volatile is important */
+	volatile struct iscp_struct *iscp; /* volatile is important */
+	volatile struct scb_struct  *scb;  /* volatile is important */
+	volatile struct tbd_struct  *xmit_buffs[NUM_XMIT_BUFFS];
+	volatile struct transmit_cmd_struct *xmit_cmds[NUM_XMIT_BUFFS];
 #if (NUM_XMIT_BUFFS == 1)
-  volatile struct nop_cmd_struct *nop_cmds[2];
+	volatile struct nop_cmd_struct *nop_cmds[2];
 #else
-  volatile struct nop_cmd_struct *nop_cmds[NUM_XMIT_BUFFS];
+	volatile struct nop_cmd_struct *nop_cmds[NUM_XMIT_BUFFS];
 #endif
-  volatile int    nop_point,num_recv_buffs;
-  volatile char  *xmit_cbuffs[NUM_XMIT_BUFFS];
-  volatile int    xmit_count,xmit_last;
-  volatile int slot;
+	volatile int    nop_point,num_recv_buffs;
+	volatile char  *xmit_cbuffs[NUM_XMIT_BUFFS];
+	volatile int    xmit_count,xmit_last;
+	volatile int slot;
 };
 
 #define elmc_attn586()  {elmc_do_attn586(dev->base_addr,ELMC_CTRL_INTE);}
@@ -1208,9 +1209,8 @@ elmc_send_packet(struct sk_buff *skb, struct device *dev)
  * Someone wanna have the statistics
  */
 
-static
-struct enet_statistics*
-elmc_get_stats( struct device *dev ) {
+static struct net_device_stats *elmc_get_stats( struct device *dev ) 
+{
   struct priv *p = (struct priv *) dev->priv;
   unsigned short crc,aln,rsc,ovrn;
 

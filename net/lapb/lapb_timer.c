@@ -41,37 +41,20 @@
 static void lapb_timer(unsigned long);
 
 /*
- *	Linux set/reset timer routines
+ *	Linux set timer
  */
 void lapb_set_timer(lapb_cb *lapb)
 {
 	unsigned long flags;	
 
-	save_flags(flags);
-	cli();
-	del_timer(&lapb->timer);
-	restore_flags(flags);
-
-	lapb->timer.next     = lapb->timer.prev = NULL;	
-	lapb->timer.data     = (unsigned long)lapb;
-	lapb->timer.function = &lapb_timer;
-
-	lapb->timer.expires = jiffies + 10;
-	add_timer(&lapb->timer);
-}
-
-static void lapb_reset_timer(lapb_cb *lapb)
-{
-	unsigned long flags;
-
-	save_flags(flags);
-	cli();
+	save_flags(flags); cli();
 	del_timer(&lapb->timer);
 	restore_flags(flags);
 
 	lapb->timer.data     = (unsigned long)lapb;
 	lapb->timer.function = &lapb_timer;
 	lapb->timer.expires  = jiffies + 10;
+
 	add_timer(&lapb->timer);
 }
 
@@ -98,7 +81,7 @@ static void lapb_timer(unsigned long param)
 	}
 
 	if (lapb->t1timer == 0 || --lapb->t1timer > 0) {
-		lapb_reset_timer(lapb);
+		lapb_set_timer(lapb);
 		return;
 	}
 
@@ -111,7 +94,6 @@ static void lapb_timer(unsigned long param)
 			if (lapb->n2count == lapb->n2) {
 				lapb_clear_queues(lapb);
 				lapb->state   = LAPB_STATE_0;
-				lapb->t1timer = (lapb->mode & LAPB_DCE) ? lapb->t1 : 0;
 				lapb->t2timer = 0;
 				lapb_disconnect_indication(lapb, LAPB_TIMEDOUT);
 #if LAPB_DEBUG > 0
@@ -137,7 +119,6 @@ static void lapb_timer(unsigned long param)
 			if (lapb->n2count == lapb->n2) {
 				lapb_clear_queues(lapb);
 				lapb->state   = LAPB_STATE_0;
-				lapb->t1timer = (lapb->mode & LAPB_DCE) ? lapb->t1 : 0;
 				lapb->t2timer = 0;
 				lapb_disconnect_confirmation(lapb, LAPB_TIMEDOUT);
 #if LAPB_DEBUG > 0
@@ -156,13 +137,15 @@ static void lapb_timer(unsigned long param)
 			lapb->n2count = 1;
 			lapb_transmit_enquiry(lapb);
 			lapb->state   = LAPB_STATE_4;
+#if LAPB_DEBUG > 0
+			printk(KERN_DEBUG "lapb: (%p) S3 -> S4\n", lapb->token);
+#endif
 			break;
 
 		case LAPB_STATE_4:
 			if (lapb->n2count == lapb->n2) {
 				lapb_clear_queues(lapb);
 				lapb->state   = LAPB_STATE_0;
-				lapb->t1timer = (lapb->mode & LAPB_DCE) ? lapb->t1 : 0;
 				lapb->t2timer = 0;
 				lapb_disconnect_indication(lapb, LAPB_TIMEDOUT);
 #if LAPB_DEBUG > 0

@@ -54,6 +54,7 @@ SCC_MAGIC           0x8530      struct scc_channel   include/linux/scc.h
 ISDN_ASYNC_MAGIC    0x49344C01  modem_info           include/linux/isdn.h
 ISDN_NET_MAGIC      0x49344C02  isdn_net_ndev        include/linux/isdn.h
 STLI_BOARDMAGIC     0x4bc6c825  stlibrd_t            include/linux/istallion.h
+ROUTER_MAGIC        0x524d4157  wanlink_t            include/linux/router.h
 STLI_PORTMAGIC      0xe671c7a1  stliport_t           include/linux/istallion.h
 STL_PANELMAGIC      0x7ef621a1  stlpanel_t           include/linux/stallion.h
 STL_BOARDMAGIC      0xa2267f52  stlbrd_t             include/linux/stallion.h

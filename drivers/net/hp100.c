@@ -151,7 +151,7 @@ struct hp100_private {
   int hub_status;		    /* login to hub was successful? */
   u_char mac1_mode;
   u_char mac2_mode;
-  struct enet_statistics stats;
+  struct net_device_stats stats;
 };
 
 /*
@@ -192,7 +192,7 @@ static int hp100_open( struct device *dev );
 static int hp100_close( struct device *dev );
 static int hp100_start_xmit( struct sk_buff *skb, struct device *dev );
 static void hp100_rx( struct device *dev );
-static struct enet_statistics *hp100_get_stats( struct device *dev );
+static struct net_device_stats *hp100_get_stats( struct device *dev );
 static void hp100_update_stats( struct device *dev );
 static void hp100_clear_stats( int ioaddr );
 static void hp100_set_multicast_list( struct device *dev);
@@ -636,14 +636,6 @@ static int hp100_start_xmit( struct sk_buff *skb, struct device *dev )
       return -EAGAIN;
     }
 
-  if ( skb == NULL )
-    {
-      dev_tint( dev );
-      return 0;
-    }
-
-  if ( skb -> len <= 0 ) return 0;
-
   for ( i = 0; i < 6000 && ( hp100_inw( OPTION_MSW ) & HP100_TX_CMD ); i++ )
     {
 #ifdef HP100_DEBUG_TX
@@ -798,7 +790,7 @@ static void hp100_rx( struct device *dev )
  *  statistics
  */
 
-static struct enet_statistics *hp100_get_stats( struct device *dev )
+static struct net_device_stats *hp100_get_stats( struct device *dev )
 {
   int ioaddr = dev -> base_addr;
 

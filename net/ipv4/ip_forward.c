@@ -173,7 +173,6 @@ int ip_forward(struct sk_buff *skb)
 			}
 			if (rt->rt_flags&RTCF_MASQ)
 				goto skip_call_fw_firewall;
-		}
 #endif
 #ifdef CONFIG_FIREWALL
 		fw_res=call_fw_firewall(PF_INET, dev2, iph, NULL);
@@ -191,6 +190,8 @@ int ip_forward(struct sk_buff *skb)
 #endif
 
 #ifdef CONFIG_IP_MASQUERADE
+		}
+
 skip_call_fw_firewall:
 		/*
 		 * If this fragment needs masquerading, make it so...
@@ -219,7 +220,7 @@ skip_call_fw_firewall:
 		}
 
 #ifdef CONFIG_FIREWALL
-		if ((fw_res = call_out_firewall(PF_INET, skb->dev, iph, NULL)) < FW_ACCEPT) {
+		if ((fw_res = call_out_firewall(PF_INET, dev2, iph, NULL)) < FW_ACCEPT) {
 			/* FW_ACCEPT and FW_MASQUERADE are treated equal:
 			   masquerading is only supported via forward rules */
 			if (fw_res == FW_REJECT)

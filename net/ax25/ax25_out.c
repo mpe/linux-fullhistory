@@ -55,10 +55,12 @@
 #include <linux/interrupt.h>
 
 /*
- * All outgoing AX.25 I frames pass via this routine. Therefore this is
- * where the fragmentation of frames takes place.
+ *	All outgoing AX.25 I frames pass via this routine. Therefore this is
+ *	where the fragmentation of frames takes place. If fragment is set to
+ *	zero then we are not allowed to do fragmentation, even if the frame
+ *	is too large.
  */
-void ax25_output(ax25_cb *ax25, struct sk_buff *skb)
+void ax25_output(ax25_cb *ax25, int fragment, struct sk_buff *skb)
 {
 	struct sk_buff *skbn;
 	unsigned char *p;
@@ -67,7 +69,7 @@ void ax25_output(ax25_cb *ax25, struct sk_buff *skb)
 
 	mtu = ax25->paclen;
 
-	if ((skb->len - 1) > mtu) {
+	if ((skb->len - 1) > mtu && fragment) {
 		if (*skb->data == AX25_P_TEXT) {
 			skb_pull(skb, 1); /* skip PID */
 			ka9qfrag = 0;
@@ -96,8 +98,6 @@ void ax25_output(ax25_cb *ax25, struct sk_buff *skb)
 			
 			restore_flags(flags);
 			
-			skbn->arp  = 1;
-
 			len = (mtu > skb->len) ? skb->len : mtu;
 
 			if (ka9qfrag == 1) {
@@ -257,7 +257,6 @@ void ax25_transmit_buffer(ax25_cb *ax25, struct sk_buff *skb, int type)
 	ptr = skb_push(skb, size_ax25_addr(ax25->digipeat));
 	build_ax25_addr(ptr, &ax25->source_addr, &ax25->dest_addr, ax25->digipeat, type, ax25->modulus);
 
-	skb->arp      = 1;
 	skb->dev      = ax25->device;
 	skb->priority = SOPRI_NORMAL;
 
@@ -397,9 +396,9 @@ void dama_enquiry_response(ax25_cb *ax25)
 		if (!ax25o->dama_slave)
 			continue;
 
-		if ( !(ax25o->condition & AX25_COND_PEER_RX_BUSY) && 
-		     (ax25o->state == AX25_STATE_3 || 
-		     (ax25o->state == AX25_STATE_4 && ax25o->t1timer == 0))) {
+		if (!(ax25o->condition & AX25_COND_PEER_RX_BUSY) && 
+		    (ax25o->state == AX25_STATE_3 || 
+		    (ax25o->state == AX25_STATE_4 && ax25o->t1timer == 0))) {
 			ax25_requeue_frames(ax25o);
 			ax25_kick(ax25o);
 		}

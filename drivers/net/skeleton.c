@@ -84,7 +84,7 @@ static unsigned int net_debug = NET_DEBUG;
 
 /* Information that need to be kept for each board. */
 struct net_local {
-	struct enet_statistics stats;
+	struct net_device_stats stats;
 	long open_time;			/* Useless example local info. */
 };
 
@@ -97,19 +97,19 @@ struct net_local {
 
 extern int netcard_probe(struct device *dev);
 
-static int netcard_probe1(struct device *dev, int ioaddr);
-static int net_open(struct device *dev);
+static int	netcard_probe1(struct device *dev, int ioaddr);
+static int	net_open(struct device *dev);
 static int	net_send_packet(struct sk_buff *skb, struct device *dev);
-static void net_interrupt(int irq, void *dev_id, struct pt_regs *regs);
-static void net_rx(struct device *dev);
-static int net_close(struct device *dev);
-static struct enet_statistics *net_get_stats(struct device *dev);
-static void set_multicast_list(struct device *dev);
+static void	net_interrupt(int irq, void *dev_id, struct pt_regs *regs);
+static void	net_rx(struct device *dev);
+static int	net_close(struct device *dev);
+static struct	net_device_stats *net_get_stats(struct device *dev);
+static void	set_multicast_list(struct device *dev);
 
 /* Example routines you must write ;->. */
 #define tx_done(dev) 1
 extern void	hardware_send_packet(short ioaddr, char *buf, int length);
-extern void chipset_init(struct device *dev, int startp);
+extern void 	chipset_init(struct device *dev, int startp);
 
 /*
  * Check for a network adaptor of this type, and return '0' iff one exists.
@@ -286,8 +286,8 @@ static int netcard_probe1(struct device *dev, int ioaddr)
 
 	dev->open		= net_open;
 	dev->stop		= net_close;
-	dev->hard_start_xmit = net_send_packet;
-	dev->get_stats	= net_get_stats;
+	dev->hard_start_xmit	= net_send_packet;
+	dev->get_stats		= net_get_stats;
 	dev->set_multicast_list = &set_multicast_list;
 
 	/* Fill in the fields of the device structure with ethernet values. */
@@ -340,8 +340,7 @@ net_open(struct device *dev)
 	return 0;
 }
 
-static int
-net_send_packet(struct sk_buff *skb, struct device *dev)
+static int net_send_packet(struct sk_buff *skb, struct device *dev)
 {
 	struct net_local *lp = (struct net_local *)dev->priv;
 	int ioaddr = dev->base_addr;
@@ -361,15 +360,7 @@ net_send_packet(struct sk_buff *skb, struct device *dev)
 		dev->tbusy=0;
 		dev->trans_start = jiffies;
 	}
-	/*
-	 * If some higher layer thinks we've missed an tx-done interrupt
-	 * we are passed NULL. Caution: dev_tint() handles the cli()/sti()
-	 * itself.
-	 */
-	if (skb == NULL) {
-		dev_tint(dev);
-		return 0;
-	}
+
 	/*
 	 * Block a timer-based transmit from overlapping. This could better be
 	 * done with atomic_swap(1, dev->tbusy), but set_bit() works as well.
@@ -379,7 +370,7 @@ net_send_packet(struct sk_buff *skb, struct device *dev)
 	else {
 		short length = ETH_ZLEN < skb->len ? skb->len : ETH_ZLEN;
 		unsigned char *buf = skb->data;
-
+		lp->stats.tx_bytes+=skb->len;
 		hardware_send_packet(ioaddr, buf, length);
 		dev->trans_start = jiffies;
 	}
@@ -396,8 +387,7 @@ net_send_packet(struct sk_buff *skb, struct device *dev)
  * The typical workload of the driver:
  *   Handle the network interface interrupts.
  */
-static void
-net_interrupt(int irq, void *dev_id, struct pt_regs * regs)
+static void net_interrupt(int irq, void *dev_id, struct pt_regs * regs)
 {
 	struct device *dev = (struct device *)(irq2dev_map[irq]);
 	struct net_local *lp;
@@ -458,6 +448,8 @@ net_rx(struct device *dev)
 			/* Malloc up new buffer. */
 			struct sk_buff *skb;
 
+			lp->stats.rx_bytes+=pkt_len;
+			
 			skb = dev_alloc_skb(pkt_len);
 			if (skb == NULL) {
 				printk(KERN_NOTICE "%s: Memory squeeze, dropping packet.\n",
@@ -522,8 +514,7 @@ net_close(struct device *dev)
  * Get the current statistics.
  * This may be called with the card open or closed.
  */
-static struct enet_statistics *
-net_get_stats(struct device *dev)
+static struct net_device_stats *net_get_stats(struct device *dev)
 {
 	struct net_local *lp = (struct net_local *)dev->priv;
 	short ioaddr = dev->base_addr;

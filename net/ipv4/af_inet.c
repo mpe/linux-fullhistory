@@ -1732,15 +1732,21 @@ void inet_proto_init(struct net_proto *pro)
 	/*
 	 *	Set the ARP module up
 	 */
+
 	arp_init();
+
   	/*
   	 *	Set the IP module up
   	 */
+
 	ip_init();
+
 	/*
 	 *	Set the ICMP layer up
 	 */
+
 	icmp_init(&inet_family_ops);
+
 	/*
 	 *	Set the firewalling up
 	 */
@@ -1757,7 +1763,7 @@ void inet_proto_init(struct net_proto *pro)
 #if defined(CONFIG_IP_MROUTE)
 	ip_mr_init();
 #endif
-
+	
 	/*
 	 *  Initialise AF_INET alias type (register net_alias_type)
 	 */

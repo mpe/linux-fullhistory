@@ -1571,11 +1571,9 @@ static int rtcmsg_process(struct nlmsghdr *n, struct in_rtctlmsg *r)
 
 static int get_rt_from_user(struct in_rtmsg *rtm, void *arg)
 {
-	int err;
 	struct rtentry r;
 
-	err = copy_from_user(&r, arg, sizeof(struct rtentry));
-	if (err)
+	if (copy_from_user(&r, arg, sizeof(struct rtentry)))
 		return -EFAULT;
 	if (r.rt_dev) {
 		struct device *dev;
@@ -1662,18 +1660,16 @@ int ip_rt_ioctl(unsigned int cmd, void *arg)
 		case SIOCRTMSG:
 			if (!suser())
 				return -EPERM;
-			err = copy_from_user(&dummy_nlh, arg, sizeof(dummy_nlh));
-			if (err)
-				return err;
+			if (copy_from_user(&dummy_nlh, arg, sizeof(dummy_nlh)))
+				return -EFAULT;
 			switch (dummy_nlh.nlmsg_type)
 			{
 			case RTMSG_NEWROUTE:
 			case RTMSG_DELROUTE:
 				if (dummy_nlh.nlmsg_len < sizeof(m.rtmsg) + sizeof(dummy_nlh))
 					return -EINVAL;
-				err = copy_from_user(&m.rtmsg, arg+sizeof(dummy_nlh), sizeof(m.rtmsg));
-				if (err)
-					return err;
+				if (copy_from_user(&m.rtmsg, arg+sizeof(dummy_nlh), sizeof(m.rtmsg)))
+					return -EFAULT;
 				fib_lock();
 				err = rtmsg_process(&dummy_nlh, &m.rtmsg);
 				fib_unlock();
@@ -1682,9 +1678,8 @@ int ip_rt_ioctl(unsigned int cmd, void *arg)
 			case RTMSG_DELRULE:
 				if (dummy_nlh.nlmsg_len < sizeof(m.rtrmsg) + sizeof(dummy_nlh))
 					return -EINVAL;
-				err = copy_from_user(&m.rtrmsg, arg+sizeof(dummy_nlh), sizeof(m.rtrmsg));
-				if (err)
-					return err;
+				if (copy_from_user(&m.rtrmsg, arg+sizeof(dummy_nlh), sizeof(m.rtrmsg)))
+					return -EFAULT;
 				fib_lock();
 				err = rtrulemsg_process(&dummy_nlh, &m.rtrmsg);
 				fib_unlock();
@@ -1693,9 +1688,8 @@ int ip_rt_ioctl(unsigned int cmd, void *arg)
 			case RTMSG_DELDEVICE:
 				if (dummy_nlh.nlmsg_len < sizeof(m.ifmsg) + sizeof(dummy_nlh))
 					return -EINVAL;
-				err = copy_from_user(&m.ifmsg, arg+sizeof(dummy_nlh), sizeof(m.ifmsg));
-				if (err)
-					return err;
+				if (copy_from_user(&m.ifmsg, arg+sizeof(dummy_nlh), sizeof(m.ifmsg)))
+					return -EFAULT;
 				fib_lock();
 				err = ifmsg_process(&dummy_nlh, &m.ifmsg);
 				fib_unlock();
@@ -1703,9 +1697,8 @@ int ip_rt_ioctl(unsigned int cmd, void *arg)
 			case RTMSG_CONTROL:
 				if (dummy_nlh.nlmsg_len < sizeof(m.rtcmsg) + sizeof(dummy_nlh))
 					return -EINVAL;
-				err = copy_from_user(&m.rtcmsg, arg+sizeof(dummy_nlh), sizeof(m.rtcmsg));
-				if (err)
-					return err;
+				if (copy_from_user(&m.rtcmsg, arg+sizeof(dummy_nlh), sizeof(m.rtcmsg)))
+					return -EFAULT;
 				fib_lock();
 				err = rtcmsg_process(&dummy_nlh, &m.rtcmsg);
 				fib_unlock();

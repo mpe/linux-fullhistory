@@ -140,7 +140,6 @@ static const char *version =
 /* Constant definitions for the DE-620 registers, commands and bits */
 #include "de620.h"
 
-#define netstats enet_statistics
 typedef unsigned char byte;
 
 /*******************************************************
@@ -212,7 +211,7 @@ MODULE_PARM(de620_debug, "i");
 /* Put in the device structure. */
 static int	de620_open(struct device *);
 static int	de620_close(struct device *);
-static struct netstats *get_stats(struct device *);
+static struct	net_device_stats *get_stats(struct device *);
 static void	de620_set_multicast_list(struct device *);
 static int	de620_start_xmit(struct sk_buff *, struct device *);
 
@@ -477,10 +476,9 @@ de620_close(struct device *dev)
  * Return current statistics
  *
  */
-static struct netstats *
-get_stats(struct device *dev)
+static struct net_device_stats *get_stats(struct device *dev)
 {
-	return (struct netstats *)(dev->priv);
+	return (struct net_device_stats *)(dev->priv);
 }
 
 /*********************************************
@@ -590,7 +588,7 @@ de620_start_xmit(struct sk_buff *skb, struct device *dev)
 	dev->trans_start = jiffies;
 	dev->tbusy = (using_txbuf == (TXBF0 | TXBF1)); /* Boolean! */
 
-	((struct netstats *)(dev->priv))->tx_packets++;
+	((struct net_device_stats *)(dev->priv))->tx_packets++;
 
 	restore_flags(flags); /* interrupts maybe back on */
 
@@ -681,7 +679,7 @@ de620_rx_intr(struct device *dev)
 		printk("%s: Ring overrun? Restoring...\n", dev->name);
 		/* You win some, you loose some. And sometimes plenty... */
 		adapter_init(dev);
-		((struct netstats *)(dev->priv))->rx_over_errors++;
+		((struct net_device_stats *)(dev->priv))->rx_over_errors++;
 		return 0;
 	}
 
@@ -701,7 +699,7 @@ de620_rx_intr(struct device *dev)
 		next_rx_page = header_buf.Rx_NextPage; /* at least a try... */
 		de620_send_command(dev, W_DUMMY);
 		de620_set_register(dev, W_NPRF, next_rx_page);
-		((struct netstats *)(dev->priv))->rx_over_errors++;
+		((struct net_device_stats *)(dev->priv))->rx_over_errors++;
 		return 0;
 	}
 	next_rx_page = pagelink;
@@ -715,7 +713,7 @@ de620_rx_intr(struct device *dev)
 		if (skb == NULL) { /* Yeah, but no place to put it... */
 			printk("%s: Couldn't allocate a sk_buff of size %d.\n",
 				dev->name, size);
-			((struct netstats *)(dev->priv))->rx_dropped++;
+			((struct net_device_stats *)(dev->priv))->rx_dropped++;
 		}
 		else { /* Yep! Go get it! */
 			skb_reserve(skb,2);	/* Align */
@@ -729,7 +727,7 @@ de620_rx_intr(struct device *dev)
 			skb->protocol=eth_type_trans(skb,dev);
 			netif_rx(skb); /* deliver it "upstairs" */
 			/* count all receives */
-			((struct netstats *)(dev->priv))->rx_packets++;
+			((struct net_device_stats *)(dev->priv))->rx_packets++;
 		}
 	}
 
@@ -838,7 +836,7 @@ adapter_init(struct device *dev)
 int
 de620_probe(struct device *dev)
 {
-	static struct netstats de620_netstats;
+	static struct net_device_stats de620_netstats;
 	int i;
 	byte checkbyte = 0xa5;
 
@@ -892,10 +890,9 @@ de620_probe(struct device *dev)
 		printk(" UTP)\n");
 
 	/* Initialize the device structure. */
-	/*dev->priv = kmalloc(sizeof(struct netstats), GFP_KERNEL);*/
 	dev->priv = &de620_netstats;
 
-	memset(dev->priv, 0, sizeof(struct netstats));
+	memset(dev->priv, 0, sizeof(struct net_device_stats));
 	dev->get_stats = get_stats;
 	dev->open = de620_open;
 	dev->stop = de620_close;

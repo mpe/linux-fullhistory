@@ -6,7 +6,6 @@
 #ifndef	AX25_KERNEL_H
 #define	AX25_KERNEL_H
 
-#define PF_AX25		AF_AX25
 #define AX25_MTU	256
 #define AX25_MAX_DIGIS	6	/* This is wrong, should be 8 */
 

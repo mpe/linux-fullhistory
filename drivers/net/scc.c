@@ -204,7 +204,7 @@ static int scc_net_tx(struct sk_buff *skb, struct device *dev);
 static int scc_net_ioctl(struct device *dev, struct ifreq *ifr, int cmd);
 static int scc_net_set_mac_address(struct device *dev, void *addr);
 static int scc_net_header(struct sk_buff *skb, struct device *dev, unsigned short type, void *daddr, void *saddr, unsigned len);
-static struct enet_statistics * scc_net_get_stats(struct device *dev);
+static struct net_device_stats * scc_net_get_stats(struct device *dev);
 
 static unsigned char *SCC_DriverName = "scc";
 
@@ -1663,12 +1663,6 @@ static int scc_net_tx(struct sk_buff *skb, struct device *dev)
                 dev->trans_start = jiffies;
         }
         
-	if (skb == NULL)
-	{
-		dev_tint(dev);
-		return 0;
-	}
-	
 	if (scc == NULL || scc->magic != SCC_MAGIC)
 	{
 		dev_kfree_skb(skb, FREE_WRITE);
@@ -1971,12 +1965,12 @@ static int scc_net_set_mac_address(struct device *dev, void *addr)
 static int  scc_net_header(struct sk_buff *skb, struct device *dev, 
 	unsigned short type, void *daddr, void *saddr, unsigned len)
 {
-    return ax25_encapsulate(skb, dev, type, daddr, saddr, len);
+	return ax25_encapsulate(skb, dev, type, daddr, saddr, len);
 }
 
 /* ----> get statistics <---- */
 
-static struct enet_statistics *scc_net_get_stats(struct device *dev)
+static struct net_device_stats *scc_net_get_stats(struct device *dev)
 {
 	struct scc_channel *scc = (struct scc_channel *) dev->priv;
 	

@@ -88,8 +88,6 @@ static const char *version =
 #define DE600_DEBUG 0
 #define PRINTK(x) /**/
 #endif
-unsigned int de600_debug = DE600_DEBUG;
-MODULE_PARM(de600_debug, "i");
 
 #include <linux/module.h>
 
@@ -111,12 +109,14 @@ MODULE_PARM(de600_debug, "i");
 #include <linux/etherdevice.h>
 #include <linux/skbuff.h>
 
+unsigned int de600_debug = DE600_DEBUG;
+MODULE_PARM(de600_debug, "i");
+
 #ifdef FAKE_SMALL_MAX
 static unsigned long de600_rspace(struct sock *sk);
 #include <net/sock.h>
 #endif
 
-#define netstats enet_statistics
 typedef unsigned char byte;
 
 /**************************************************
@@ -244,7 +244,7 @@ static byte	de600_read_byte(unsigned char type, struct device *dev);
 /* Put in the device structure. */
 static int	de600_open(struct device *dev);
 static int	de600_close(struct device *dev);
-static struct netstats *get_stats(struct device *dev);
+static struct net_device_stats *get_stats(struct device *dev);
 static int	de600_start_xmit(struct sk_buff *skb, struct device *dev);
 
 /* Dispatch from interrupts. */
@@ -374,10 +374,10 @@ de600_close(struct device *dev)
 	return 0;
 }
 
-static struct netstats *
+static struct net_device_stats *
 get_stats(struct device *dev)
 {
-    return (struct netstats *)(dev->priv);
+    return (struct net_device_stats *)(dev->priv);
 }
 
 static inline void
@@ -556,7 +556,7 @@ de600_tx_intr(struct device *dev, int irq_status)
 	if (!(irq_status & TX_FAILED16)) {
 		tx_fifo_out = (tx_fifo_out + 1) % TX_PAGES;
 		++free_tx_pages;
-		((struct netstats *)(dev->priv))->tx_packets++;
+		((struct net_device_stats *)(dev->priv))->tx_packets++;
 		dev->tbusy = 0;
 	}
 
@@ -623,7 +623,7 @@ de600_rx_intr(struct device *dev)
 	for (i = size; i > 0; --i, ++buffer)
 		*buffer = de600_read_byte(READ_DATA, dev);
 
-	((struct netstats *)(dev->priv))->rx_packets++; /* count all receives */
+	((struct net_device_stats *)(dev->priv))->rx_packets++; /* count all receives */
 
 	skb->protocol=eth_type_trans(skb,dev);
 
@@ -639,8 +639,8 @@ int
 de600_probe(struct device *dev)
 {
 	int	i;
-	static struct netstats de600_netstats;
-	/*dev->priv = kmalloc(sizeof(struct netstats), GFP_KERNEL);*/
+	static struct net_device_stats de600_netstats;
+	/*dev->priv = kmalloc(sizeof(struct net_device_stats), GFP_KERNEL);*/
 
 	printk("%s: D-Link DE-600 pocket adapter", dev->name);
 	/* Alpha testers must have the version number to report bugs. */
@@ -697,10 +697,9 @@ de600_probe(struct device *dev)
 	printk("\n");
 
 	/* Initialize the device structure. */
-	/*dev->priv = kmalloc(sizeof(struct netstats), GFP_KERNEL);*/
 	dev->priv = &de600_netstats;
 
-	memset(dev->priv, 0, sizeof(struct netstats));
+	memset(dev->priv, 0, sizeof(struct net_device_stats));
 	dev->get_stats = get_stats;
 
 	dev->open = de600_open;

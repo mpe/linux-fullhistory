@@ -49,7 +49,7 @@ void rose_output(struct sock *sk, struct sk_buff *skb)
 	unsigned char header[ROSE_MIN_LEN];
 	int err, frontlen, len;
 
-	if (skb->len - ROSE_MIN_LEN > ROSE_PACLEN) {
+	if (skb->len - ROSE_MIN_LEN > ROSE_MAX_PACKET_SIZE) {
 		/* Save a copy of the Header */
 		memcpy(header, skb->data, ROSE_MIN_LEN);
 		skb_pull(skb, ROSE_MIN_LEN);
@@ -57,15 +57,12 @@ void rose_output(struct sock *sk, struct sk_buff *skb)
 		frontlen = skb_headroom(skb);
 
 		while (skb->len > 0) {
-			if ((skbn = sock_alloc_send_skb(sk, frontlen + ROSE_PACLEN, 0, 0, &err)) == NULL)
+			if ((skbn = sock_alloc_send_skb(sk, frontlen + ROSE_MAX_PACKET_SIZE, 0, 0, &err)) == NULL)
 				return;
-
-			skbn->sk   = sk;
-			skbn->arp  = 1;
 
 			skb_reserve(skbn, frontlen);
 
-			len = (ROSE_PACLEN > skb->len) ? skb->len : ROSE_PACLEN;
+			len = (ROSE_MAX_PACKET_SIZE > skb->len) ? skb->len : ROSE_MAX_PACKET_SIZE;
 
 			/* Copy the user data */
 			memcpy(skb_put(skbn, len), skb->data, len);
@@ -112,7 +109,7 @@ void rose_kick(struct sock *sk)
 
 	del_timer(&sk->timer);
 
-	end = (sk->protinfo.rose->va + ROSE_DEFAULT_WINDOW) % ROSE_MODULUS;
+	end = (sk->protinfo.rose->va + ROSE_MAX_WINDOW_SIZE) % ROSE_MODULUS;
 
 	if (!(sk->protinfo.rose->condition & ROSE_COND_PEER_RX_BUSY) &&
 	    sk->protinfo.rose->vs != end                             &&
@@ -149,11 +146,10 @@ void rose_kick(struct sock *sk)
 
 void rose_enquiry_response(struct sock *sk)
 {
-	if (sk->protinfo.rose->condition & ROSE_COND_OWN_RX_BUSY) {
+	if (sk->protinfo.rose->condition & ROSE_COND_OWN_RX_BUSY)
 		rose_write_internal(sk, ROSE_RNR);
-	} else {
+	else
 		rose_write_internal(sk, ROSE_RR);
-	}
 
 	sk->protinfo.rose->vl         = sk->protinfo.rose->vr;
 	sk->protinfo.rose->condition &= ~ROSE_COND_ACK_PENDING;

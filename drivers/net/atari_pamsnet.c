@@ -134,7 +134,7 @@ static unsigned int pamsnet_min_poll_time = 2;
 /* Information that need to be kept for each board.
  */
 struct net_local {
-	struct enet_statistics stats;
+	struct net_device_stats stats;
 	long open_time;			/* for debugging */
 	int  poll_time;			/* polling time varies with net load */
 };
@@ -167,7 +167,7 @@ static int pamsnet_open(struct device *dev);
 static int pamsnet_send_packet(struct sk_buff *skb, struct device *dev);
 static void pamsnet_poll_rx(struct device *);
 static int pamsnet_close(struct device *dev);
-static struct enet_statistics *net_get_stats(struct device *dev);
+static struct net_device_stats *net_get_stats(struct device *dev);
 static void pamsnet_tick(unsigned long);
 
 static void pamsnet_intr(int irq, void *data, struct pt_regs *fp);
@@ -866,8 +866,8 @@ pamsnet_close(struct device *dev) {
 /* Get the current statistics.
    This may be called with the card open or closed.
  */
-static struct enet_statistics *
-net_get_stats(struct device *dev) {
+static struct net_device_stats *net_get_stats(struct device *dev) 
+{
 	struct net_local *lp = (struct net_local *)dev->priv;
 	return &lp->stats;
 }

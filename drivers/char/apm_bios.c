@@ -59,6 +59,7 @@
 
 #include <asm/system.h>
 #include <asm/uaccess.h>
+#include <asm/poll.h>
 
 #include <linux/types.h>
 #include <linux/stddef.h>

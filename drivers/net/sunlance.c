@@ -220,7 +220,7 @@ struct lance_private {
 	int rx_new, tx_new;
 	int rx_old, tx_old;
     
-	struct enet_statistics stats;
+	struct net_device_stats	stats;
 	struct Linux_SBus_DMA *ledma; /* If set this points to ledma    */
 				      /* and arch = sun4m		*/
 
@@ -786,17 +786,6 @@ static int lance_start_xmit (struct sk_buff *skb, struct device *dev)
 		return status;
 	}
 
-	if (skb == NULL) {
-		dev_tint (dev);
-		printk ("skb is NULL\n");
-		return 0;
-	}
-
-	if (skb->len <= 0) {
-		printk ("skb len is %d\n", skb->len);
-		return 0;
-	}
-
 	/* Block a timer-based transmit from overlapping. */
 	if (set_bit (0, (void *) &dev->tbusy) != 0) {
 		printk ("Transmitter access conflict.\n");
@@ -813,6 +802,9 @@ static int lance_start_xmit (struct sk_buff *skb, struct device *dev)
 	}
 
 	len = (skblen <= ETH_ZLEN) ? ETH_ZLEN : skblen;
+	
+	lp->stats.tx_bytes+=len;
+	
 	entry = lp->tx_new & TX_RING_MOD_MASK;
 	ib->btx_ring [entry].length = (-len) | 0xf000;
 	ib->btx_ring [entry].misc = 0;
@@ -820,6 +812,7 @@ static int lance_start_xmit (struct sk_buff *skb, struct device *dev)
 	memcpy ((char *)&ib->tx_buf [entry][0], skb->data, skblen);
 
 	/* Clear the slack of the packet, do I need this? */
+	/* For a firewall its a good idea - AC */
 	if (len != skblen)
 		memset ((char *) &ib->tx_buf [entry][skblen], 0, len - skblen);
     
@@ -845,7 +838,7 @@ static int lance_start_xmit (struct sk_buff *skb, struct device *dev)
 	return status;
 }
 
-static struct enet_statistics *lance_get_stats (struct device *dev)
+static struct net_device_stats *lance_get_stats (struct device *dev)
 {
 	struct lance_private *lp = (struct lance_private *) dev->priv;
 

@@ -101,6 +101,7 @@ static int nr_add_node(ax25_address *nr, const char *mnemonic, ax25_address *ax2
 		nr_neigh->locked   = 0;
 		nr_neigh->count    = 0;
 		nr_neigh->number   = nr_neigh_no++;
+		nr_neigh->failed   = 0;
 
 		if (ax25_digi != NULL && ax25_digi->ndigi > 0) {
 			if ((nr_neigh->digipeat = kmalloc(sizeof(*ax25_digi), GFP_KERNEL)) == NULL) {
@@ -330,7 +331,7 @@ static int nr_del_node(ax25_address *callsign, ax25_address *neighbour, struct d
 
 			if (nr_neigh->count == 0 && !nr_neigh->locked)
 				nr_remove_neigh(nr_neigh);
-				
+
 			nr_node->count--;
 
 			if (nr_node->count == 0) {
@@ -697,7 +698,7 @@ int nr_route_frame(struct sk_buff *skb, ax25_cb *ax25)
 
 	if (ax25 != NULL)
 		nr_add_node(nr_src, "", &ax25->dest_addr, ax25->digipeat,
-		            ax25->device, 0, sysctl_netrom_network_ttl_initialiser);
+			    ax25->device, 0, sysctl_netrom_obsolescence_count_initialiser);
 
 	if ((dev = nr_dev_get(nr_dest)) != NULL)	/* Its for me */
 		return nr_rx_frame(skb, dev);
@@ -729,7 +730,7 @@ int nr_route_frame(struct sk_buff *skb, ax25_cb *ax25)
 	dptr  = skb_push(skb, 1);
 	*dptr = AX25_P_NETROM;
 
-	return ax25_send_frame(skb, (ax25_address *)dev->dev_addr, &nr_neigh->callsign, nr_neigh->digipeat, nr_neigh->dev);
+	return ax25_send_frame(skb, 0, (ax25_address *)dev->dev_addr, &nr_neigh->callsign, nr_neigh->digipeat, nr_neigh->dev);
 }
 
 int nr_nodes_get_info(char *buffer, char **start, off_t offset,

@@ -49,37 +49,20 @@
 static void ax25_timer(unsigned long);
 
 /*
- *	Linux set/reset timer routines
+ *	Linux set timer
  */
 void ax25_set_timer(ax25_cb *ax25)
 {
 	unsigned long flags;	
 
-	save_flags(flags);
-	cli();
-	del_timer(&ax25->timer);
-	restore_flags(flags);
-
-	ax25->timer.next     = ax25->timer.prev = NULL;	
-	ax25->timer.data     = (unsigned long)ax25;
-	ax25->timer.function = &ax25_timer;
-
-	ax25->timer.expires = jiffies + 10;
-	add_timer(&ax25->timer);
-}
-
-static void ax25_reset_timer(ax25_cb *ax25)
-{
-	unsigned long flags;
-	
-	save_flags(flags);
-	cli();
+	save_flags(flags); cli();
 	del_timer(&ax25->timer);
 	restore_flags(flags);
 
 	ax25->timer.data     = (unsigned long)ax25;
 	ax25->timer.function = &ax25_timer;
 	ax25->timer.expires  = jiffies + 10;
+
 	add_timer(&ax25->timer);
 }
 
@@ -158,7 +141,7 @@ static void ax25_timer(unsigned long param)
 				ax25->sk->dead      = 1;
 			}
 
-			ax25_reset_timer(ax25);
+			ax25_set_timer(ax25);
 			return;
 		}
 
@@ -207,9 +190,8 @@ static void ax25_timer(unsigned long param)
 
 	/* dl1bke 960114: DAMA T1 timeouts are handled in ax25_dama_slave_transmit */
 	/* 		  nevertheless we have to re-enqueue the timer struct...   */
-
 	if (ax25->t1timer == 0 || --ax25->t1timer > 0) {
-		ax25_reset_timer(ax25);
+		ax25_set_timer(ax25);
 		return;
 	}
 
@@ -229,7 +211,7 @@ static void ax25_timer(unsigned long param)
  *                Thus we'll have to do parts of our T1 handling in
  *                ax25_enquiry_response().
  */
-void ax25_t1_timeout(ax25_cb * ax25)
+void ax25_t1_timeout(ax25_cb *ax25)
 {	
 	switch (ax25->state) {
 		case AX25_STATE_1: 

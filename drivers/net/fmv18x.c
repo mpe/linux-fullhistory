@@ -70,7 +70,7 @@ typedef unsigned char uchar;
 
 /* Information that need to be kept for each board. */
 struct net_local {
-	struct enet_statistics stats;
+	struct net_device_stats stats;
 	long open_time;				/* Useless example local info. */
 	uint tx_started:1;			/* Number of packet on the Tx queue. */
 	uchar tx_queue;				/* Number of packet on the Tx queue. */
@@ -113,7 +113,7 @@ static int	net_send_packet(struct sk_buff *skb, struct device *dev);
 static void net_interrupt(int irq, void *dev_id, struct pt_regs *regs);
 static void net_rx(struct device *dev);
 static int net_close(struct device *dev);
-static struct enet_statistics *net_get_stats(struct device *dev);
+static struct net_device_stats *net_get_stats(struct device *dev);
 static void set_multicast_list(struct device *dev);
 
 
@@ -578,8 +578,7 @@ static int net_close(struct device *dev)
 
 /* Get the current statistics.	This may be called with the card open or
    closed. */
-static struct enet_statistics *
-net_get_stats(struct device *dev)
+static struct net_device_stats *net_get_stats(struct device *dev)
 {
 	struct net_local *lp = (struct net_local *)dev->priv;
 
@@ -596,8 +595,8 @@ net_get_stats(struct device *dev)
    num_addrs > 0	Multicast mode, receive normal and MC packets, and do
 			best-effort filtering.
  */
-static void
-set_multicast_list(struct device *dev)
+ 
+static void set_multicast_list(struct device *dev)
 {
 	short ioaddr = dev->base_addr;
 	if (dev->mc_count || dev->flags&(IFF_PROMISC|IFF_ALLMULTI))
