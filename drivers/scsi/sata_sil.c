@@ -424,12 +424,16 @@ static int sil_init_one (struct pci_dev *pdev, const struct pci_device_id *ent)
 
 	/* Initialize FIFO PCI bus arbitration */
 	cls = sil_get_device_cache_line(pdev);
-	cls >>= 3;
-	cls++;  /* cls = (line_size/8)+1 */
-	writeb(cls, mmio_base + SIL_FIFO_R0);
-	writeb(cls, mmio_base + SIL_FIFO_W0);
-	writeb(cls, mmio_base + SIL_FIFO_R1);
-	writeb(cls, mmio_base + SIL_FIFO_W2);
+	if (cls) {
+		cls >>= 3;
+		cls++;  /* cls = (line_size/8)+1 */
+		writeb(cls, mmio_base + SIL_FIFO_R0);
+		writeb(cls, mmio_base + SIL_FIFO_W0);
+		writeb(cls, mmio_base + SIL_FIFO_R1);
+		writeb(cls, mmio_base + SIL_FIFO_W2);
+	} else
+		printk(KERN_WARNING DRV_NAME "(%s): cache line size not set.  Driver may not function\n",
+			pci_name(pdev));
 
 	if (ent->driver_data == sil_3114) {
 		irq_mask = SIL_MASK_4PORT;
