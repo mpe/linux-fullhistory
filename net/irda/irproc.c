@@ -75,7 +75,7 @@ void irda_proc_register(void)
 #endif /* MODULE */
 
 	for (i=0;i<IRDA_ENTRIES_NUM;i++)
-		create_proc_entry(dir[i].name,0,proc_irda)->get_info=dir[i].fn;
+		create_proc_info_entry(dir[i].name,0,proc_irda,dir[i].fn);
 }
 
 /*

@@ -46,18 +46,18 @@ extern __inline__ void memc_update_mm(struct mm_struct *mm)
 }
 
 extern __inline__ void
-memc_update_addr(struct mm_struct *mm, pte_t pte, unsigned long addr)
+memc_update_addr(struct mm_struct *mm, pte_t pte, unsigned long vaddr)
 {
-	cpu_memc_update_entry(mm->pgd, pte_val(pte), addr);
+	cpu_memc_update_entry(mm->pgd, pte_val(pte), vaddr);
 
 	if (mm == current->active_mm)
 		processor._set_pgd(mm->pgd);
 }
 
 extern __inline__ void
-memc_clear(struct mm_struct *mm, unsigned long phys_addr)
+memc_clear(struct mm_struct *mm, struct page *page)
 {
-	cpu_memc_update_entry(mm->pgd, phys_addr, 0);
+	cpu_memc_update_entry(mm->pgd, page_address(page), 0);
 
 	if (mm == current->active_mm)
 		processor._set_pgd(mm->pgd);

@@ -831,14 +831,6 @@ int br_tree_get_info(char *buffer, char **start, off_t offset, int length, int d
 
 	return len;
 }
-#ifdef CONFIG_PROC_FS
-struct proc_dir_entry proc_net_bridge= {
-	PROC_NET_BRIDGE, 6, "bridge",
-	S_IFREG | S_IRUGO, 1, 0, 0,
-	0, &proc_net_inode_operations,
-	br_tree_get_info
-};
-#endif
 void __init br_init(void)
 {						  /* (4.8.1)	 */
 	int port_no;
@@ -895,9 +887,7 @@ void __init br_init(void)
 	br_stats.exempt_protocols = 0;
 	/*start_hello_timer();*/
 	/* Vova Oksman: register the function for the PROCfs "bridge" file */
-#ifdef CONFIG_PROC_FS
-	proc_net_register(&proc_net_bridge);
-#endif
+	proc_net_create("bridge", 0, br_tree_get_info);
 }
 
 static inline unsigned short make_port_id(int port_no)

@@ -1540,8 +1540,8 @@ void cleanup_module(void)
 #	endif
 	while(!list_empty(&ohci_hcd_list)) {
 		ohci = list_entry(ohci_hcd_list.next, struct ohci, ohci_hcd_list);
-		list_del(ohci->ohci_hcd_list);
-		INIT_LIST_HEAD(ohci->ohci_hcd_list);
+		list_del(&ohci->ohci_hcd_list);
+		INIT_LIST_HEAD(&ohci->ohci_hcd_list);
 		release_ohci(ohci);
 	}		
 }

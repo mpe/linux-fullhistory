@@ -81,6 +81,7 @@
  *                     replaced current->state = x with set_current_state(x)
  *    03.09.99   0.21  change read semantics for MIDI to match
  *                     OSS more closely; remove possible wakeup race
+ *    28.10.99   0.22  More waitqueue races fixed
  *
  */
 
@@ -1267,9 +1268,9 @@ static int drain_dac(struct sv_state *s, int nonblock)
 
 	if (s->dma_dac.mapped || !s->dma_dac.ready)
 		return 0;
-        __set_current_state(TASK_INTERRUPTIBLE);
         add_wait_queue(&s->dma_dac.wait, &wait);
         for (;;) {
+		__set_current_state(TASK_INTERRUPTIBLE);
                 spin_lock_irqsave(&s->lock, flags);
 		count = s->dma_dac.count;
                 spin_unlock_irqrestore(&s->lock, flags);
@@ -1299,6 +1300,7 @@ static int drain_dac(struct sv_state *s, int nonblock)
 static ssize_t sv_read(struct file *file, char *buffer, size_t count, loff_t *ppos)
 {
 	struct sv_state *s = (struct sv_state *)file->private_data;
+	DECLARE_WAITQUEUE(wait, current);
 	ssize_t ret;
 	unsigned long flags;
 	unsigned swptr;
@@ -1315,24 +1317,30 @@ static ssize_t sv_read(struct file *file, char *buffer, size_t count, loff_t *pp
 		return -EFAULT;
 	ret = 0;
 #if 0
-   spin_lock_irqsave(&s->lock, flags);
-   sv_update_ptr(s);
-   spin_unlock_irqrestore(&s->lock, flags);
+	spin_lock_irqsave(&s->lock, flags);
+	sv_update_ptr(s);
+	spin_unlock_irqrestore(&s->lock, flags);
 #endif
+        add_wait_queue(&s->dma_adc.wait, &wait);
 	while (count > 0) {
 		spin_lock_irqsave(&s->lock, flags);
 		swptr = s->dma_adc.swptr;
 		cnt = s->dma_adc.dmasize-swptr;
 		if (s->dma_adc.count < cnt)
 			cnt = s->dma_adc.count;
+		if (cnt <= 0)
+			__set_current_state(TASK_INTERRUPTIBLE);
 		spin_unlock_irqrestore(&s->lock, flags);
 		if (cnt > count)
 			cnt = count;
 		if (cnt <= 0) {
 			start_adc(s);
-			if (file->f_flags & O_NONBLOCK)
-				return ret ? ret : -EAGAIN;
-			if (!interruptible_sleep_on_timeout(&s->dma_adc.wait, HZ)) {
+			if (file->f_flags & O_NONBLOCK) {
+				if (!ret)
+					ret = -EAGAIN;
+				break;
+			}
+			if (!schedule_timeout(HZ)) {
 				printk(KERN_DEBUG "sv: read: chip lockup? dmasz %u fragsz %u count %i hwptr %u swptr %u\n",
 				       s->dma_adc.dmasize, s->dma_adc.fragsize, s->dma_adc.count, 
 				       s->dma_adc.hwptr, s->dma_adc.swptr);
@@ -1345,12 +1353,18 @@ static ssize_t sv_read(struct file *file, char *buffer, size_t count, loff_t *pp
 				s->dma_adc.count = s->dma_adc.hwptr = s->dma_adc.swptr = 0;
 				spin_unlock_irqrestore(&s->lock, flags);
 			}
-			if (signal_pending(current))
-				return ret ? ret : -ERESTARTSYS;
+			if (signal_pending(current)) {
+				if (!ret)
+					ret = -ERESTARTSYS;
+				break;
+			}
 			continue;
 		}
-		if (copy_to_user(buffer, s->dma_adc.rawbuf + swptr, cnt))
-			return ret ? ret : -EFAULT;
+		if (copy_to_user(buffer, s->dma_adc.rawbuf + swptr, cnt)) {
+			if (!ret)
+				ret = -EFAULT;
+			break;
+		}
 		swptr = (swptr + cnt) % s->dma_adc.dmasize;
 		spin_lock_irqsave(&s->lock, flags);
 		s->dma_adc.swptr = swptr;
@@ -1361,12 +1375,15 @@ static ssize_t sv_read(struct file *file, char *buffer, size_t count, loff_t *pp
 		ret += cnt;
 		start_adc(s);
 	}
+        remove_wait_queue(&s->dma_adc.wait, &wait);
+	set_current_state(TASK_RUNNING);
 	return ret;
 }
 
 static ssize_t sv_write(struct file *file, const char *buffer, size_t count, loff_t *ppos)
 {
 	struct sv_state *s = (struct sv_state *)file->private_data;
+	DECLARE_WAITQUEUE(wait, current);
 	ssize_t ret;
 	unsigned long flags;
 	unsigned swptr;
@@ -1383,10 +1400,11 @@ static ssize_t sv_write(struct file *file, const char *buffer, size_t count, lof
 		return -EFAULT;
 	ret = 0;
 #if 0
-   spin_lock_irqsave(&s->lock, flags);
-   sv_update_ptr(s);
-   spin_unlock_irqrestore(&s->lock, flags);
+	spin_lock_irqsave(&s->lock, flags);
+	sv_update_ptr(s);
+	spin_unlock_irqrestore(&s->lock, flags);
 #endif
+        add_wait_queue(&s->dma_dac.wait, &wait);
 	while (count > 0) {
 		spin_lock_irqsave(&s->lock, flags);
 		if (s->dma_dac.count < 0) {
@@ -1397,14 +1415,19 @@ static ssize_t sv_write(struct file *file, const char *buffer, size_t count, lof
 		cnt = s->dma_dac.dmasize-swptr;
 		if (s->dma_dac.count + cnt > s->dma_dac.dmasize)
 			cnt = s->dma_dac.dmasize - s->dma_dac.count;
+		if (cnt <= 0)
+			__set_current_state(TASK_INTERRUPTIBLE);
 		spin_unlock_irqrestore(&s->lock, flags);
 		if (cnt > count)
 			cnt = count;
 		if (cnt <= 0) {
 			start_dac(s);
-			if (file->f_flags & O_NONBLOCK)
-				return ret ? ret : -EAGAIN;
-			if (!interruptible_sleep_on_timeout(&s->dma_dac.wait, HZ)) {
+			if (file->f_flags & O_NONBLOCK) {
+				if (!ret)
+					ret = -EAGAIN;
+				break;
+			}
+			if (!schedule_timeout(HZ)) {
 				printk(KERN_DEBUG "sv: write: chip lockup? dmasz %u fragsz %u count %i hwptr %u swptr %u\n",
 				       s->dma_dac.dmasize, s->dma_dac.fragsize, s->dma_dac.count, 
 				       s->dma_dac.hwptr, s->dma_dac.swptr);
@@ -1417,12 +1440,18 @@ static ssize_t sv_write(struct file *file, const char *buffer, size_t count, lof
 				s->dma_dac.count = s->dma_dac.hwptr = s->dma_dac.swptr = 0;
 				spin_unlock_irqrestore(&s->lock, flags);
 			}
-			if (signal_pending(current))
-				return ret ? ret : -ERESTARTSYS;
+			if (signal_pending(current)) {
+				if (!ret)
+					ret = -ERESTARTSYS;
+				break;
+			}
 			continue;
 		}
-		if (copy_from_user(s->dma_dac.rawbuf + swptr, buffer, cnt))
-			return ret ? ret : -EFAULT;
+		if (copy_from_user(s->dma_dac.rawbuf + swptr, buffer, cnt)) {
+			if (!ret)
+				ret = -EFAULT;
+			break;
+		}
 		swptr = (swptr + cnt) % s->dma_dac.dmasize;
 		spin_lock_irqsave(&s->lock, flags);
 		s->dma_dac.swptr = swptr;
@@ -1434,6 +1463,8 @@ static ssize_t sv_write(struct file *file, const char *buffer, size_t count, lof
 		ret += cnt;
 		start_dac(s);
 	}
+        remove_wait_queue(&s->dma_dac.wait, &wait);
+	set_current_state(TASK_RUNNING);
 	return ret;
 }
 
@@ -1798,6 +1829,7 @@ static int sv_ioctl(struct inode *inode, struct file *file, unsigned int cmd, un
 static int sv_open(struct inode *inode, struct file *file)
 {
 	int minor = MINOR(inode->i_rdev);
+	DECLARE_WAITQUEUE(wait, current);
 	struct sv_state *s = devs;
 	unsigned char fmtm = ~0, fmts = 0;
 
@@ -1814,8 +1846,12 @@ static int sv_open(struct inode *inode, struct file *file)
 			up(&s->open_sem);
 			return -EBUSY;
 		}
+		add_wait_queue(&s->open_wait, &wait);
+		__set_current_state(TASK_INTERRUPTIBLE);
 		up(&s->open_sem);
-		interruptible_sleep_on(&s->open_wait);
+		schedule();
+		remove_wait_queue(&s->open_wait, &wait);
+		set_current_state(TASK_RUNNING);
 		if (signal_pending(current))
 			return -ERESTARTSYS;
 		down(&s->open_sem);
@@ -1858,8 +1894,8 @@ static int sv_release(struct inode *inode, struct file *file)
 		dealloc_dmabuf(&s->dma_adc);
 	}
 	s->open_mode &= (~file->f_mode) & (FMODE_READ|FMODE_WRITE);
-	up(&s->open_sem);
 	wake_up(&s->open_wait);
+	up(&s->open_sem);
 	MOD_DEC_USE_COUNT;
 	return 0;
 }
@@ -1908,6 +1944,8 @@ static ssize_t sv_midi_read(struct file *file, char *buffer, size_t count, loff_
 		cnt = MIDIINBUF - ptr;
 		if (s->midi.icnt < cnt)
 			cnt = s->midi.icnt;
+		if (cnt <= 0)
+                      __set_current_state(TASK_INTERRUPTIBLE);
 		spin_unlock_irqrestore(&s->lock, flags);
 		if (cnt > count)
 			cnt = count;
@@ -1917,7 +1955,6 @@ static ssize_t sv_midi_read(struct file *file, char *buffer, size_t count, loff_
                                       ret = -EAGAIN;
                               break;
                       }
-                      __set_current_state(TASK_INTERRUPTIBLE);
                       schedule();
                       if (signal_pending(current)) {
                               if (!ret)
@@ -1970,8 +2007,10 @@ static ssize_t sv_midi_write(struct file *file, const char *buffer, size_t count
 		cnt = MIDIOUTBUF - ptr;
 		if (s->midi.ocnt + cnt > MIDIOUTBUF)
 			cnt = MIDIOUTBUF - s->midi.ocnt;
-		if (cnt <= 0)
+		if (cnt <= 0) {
+			__set_current_state(TASK_INTERRUPTIBLE);
 			sv_handle_midi(s);
+		}
 		spin_unlock_irqrestore(&s->lock, flags);
 		if (cnt > count)
 			cnt = count;
@@ -1981,7 +2020,6 @@ static ssize_t sv_midi_write(struct file *file, const char *buffer, size_t count
 					ret = -EAGAIN;
 				break;
 			}
-			__set_current_state(TASK_INTERRUPTIBLE);
 			schedule();
 			if (signal_pending(current)) {
 				if (!ret)
@@ -2039,6 +2077,7 @@ static unsigned int sv_midi_poll(struct file *file, struct poll_table_struct *wa
 static int sv_midi_open(struct inode *inode, struct file *file)
 {
 	int minor = MINOR(inode->i_rdev);
+	DECLARE_WAITQUEUE(wait, current);
 	struct sv_state *s = devs;
 	unsigned long flags;
 
@@ -2055,8 +2094,12 @@ static int sv_midi_open(struct inode *inode, struct file *file)
 			up(&s->open_sem);
 			return -EBUSY;
 		}
+		add_wait_queue(&s->open_wait, &wait);
+		__set_current_state(TASK_INTERRUPTIBLE);
 		up(&s->open_sem);
-		interruptible_sleep_on(&s->open_wait);
+		schedule();
+		remove_wait_queue(&s->open_wait, &wait);
+		set_current_state(TASK_RUNNING);
 		if (signal_pending(current))
 			return -ERESTARTSYS;
 		down(&s->open_sem);
@@ -2103,9 +2146,9 @@ static int sv_midi_release(struct inode *inode, struct file *file)
 	VALIDATE_STATE(s);
 
 	if (file->f_mode & FMODE_WRITE) {
-		__set_current_state(TASK_INTERRUPTIBLE);
 		add_wait_queue(&s->midi.owait, &wait);
 		for (;;) {
+			__set_current_state(TASK_INTERRUPTIBLE);
 			spin_lock_irqsave(&s->lock, flags);
 			count = s->midi.ocnt;
 			spin_unlock_irqrestore(&s->lock, flags);
@@ -2133,8 +2176,8 @@ static int sv_midi_release(struct inode *inode, struct file *file)
 		del_timer(&s->midi.timer);		
 	}
 	spin_unlock_irqrestore(&s->lock, flags);
-	up(&s->open_sem);
 	wake_up(&s->open_wait);
+	up(&s->open_sem);
 	MOD_DEC_USE_COUNT;
 	return 0;
 }
@@ -2259,6 +2302,7 @@ static int sv_dmfm_ioctl(struct inode *inode, struct file *file, unsigned int cm
 static int sv_dmfm_open(struct inode *inode, struct file *file)
 {
 	int minor = MINOR(inode->i_rdev);
+	DECLARE_WAITQUEUE(wait, current);
 	struct sv_state *s = devs;
 
 	while (s && s->dev_dmfm != minor)
@@ -2274,8 +2318,12 @@ static int sv_dmfm_open(struct inode *inode, struct file *file)
 			up(&s->open_sem);
 			return -EBUSY;
 		}
+		add_wait_queue(&s->open_wait, &wait);
+		__set_current_state(TASK_INTERRUPTIBLE);
 		up(&s->open_sem);
-		interruptible_sleep_on(&s->open_wait);
+		schedule();
+		remove_wait_queue(&s->open_wait, &wait);
+		set_current_state(TASK_RUNNING);
 		if (signal_pending(current))
 			return -ERESTARTSYS;
 		down(&s->open_sem);
@@ -2307,8 +2355,8 @@ static int sv_dmfm_release(struct inode *inode, struct file *file)
 		outb(regb, s->iosynth+2);
 		outb(0, s->iosynth+3);
 	}
-	up(&s->open_sem);
 	wake_up(&s->open_wait);
+	up(&s->open_sem);
 	MOD_DEC_USE_COUNT;
 	return 0;
 }
@@ -2385,7 +2433,7 @@ static int __init init_sonicvibes(void)
 
 	if (!pci_present())   /* No PCI bus in this machine! */
 		return -ENODEV;
-	printk(KERN_INFO "sv: version v0.20 time " __TIME__ " " __DATE__ "\n");
+	printk(KERN_INFO "sv: version v0.22 time " __TIME__ " " __DATE__ "\n");
 #if 0
 	if (!(wavetable_mem = __get_free_pages(GFP_KERNEL, 20-PAGE_SHIFT)))
 		printk(KERN_INFO "sv: cannot allocate 1MB of contiguous nonpageable memory for wavetable data\n");

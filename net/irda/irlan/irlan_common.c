@@ -176,7 +176,7 @@ int __init irlan_init(void)
 		return -ENOMEM;
 	}
 #ifdef CONFIG_PROC_FS
-	create_proc_entry("irlan", 0, proc_irda)->get_info = irlan_proc_read;
+	create_proc_info_entry("irlan", 0, proc_irda, irlan_proc_read);
 #endif /* CONFIG_PROC_FS */
 
 	DEBUG(4, __FUNCTION__ "()\n");

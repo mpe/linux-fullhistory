@@ -3,6 +3,8 @@
  *
  * (C) Copyright Linus Torvalds 1999
  * (C) Copyright Johannes Erdfelt 1999
+ * (C) Copyright Andreas Gal 1999
+ * (C) Copyright Gregory P. Smith 1999
  *
  * NOTE! This is not actually a driver at all, rather this is
  * just a collection of helper routines that implement the
@@ -27,15 +29,20 @@
 
 #include "usb.h"
 
-static int usb_find_driver(struct usb_device *);
+/*
+ * Prototypes for the device driver probing/loading functions
+ */
+static void usb_find_drivers(struct usb_device *);
+static int  usb_find_interface_driver(struct usb_device *, unsigned int);
 static void usb_check_support(struct usb_device *);
-static void usb_driver_purge(struct usb_driver *, struct usb_device *);
 
 /*
  * We have a per-interface "registered driver" list.
  */
 static LIST_HEAD(usb_driver_list);
 static LIST_HEAD(usb_bus_list);
+
+static struct usb_busmap busmap;
 
 static struct usb_driver *usb_minors[16];
 
@@ -70,6 +77,44 @@ int usb_register(struct usb_driver *new_driver)
 	return 0;
 }
 
+/*
+ * This function is part of a depth-first search down the device tree,
+ * removing any instances of a device driver.
+ */
+static void usb_drivers_purge(struct usb_driver *driver,struct usb_device *dev)
+{
+	int i;
+
+	if (!dev) {
+		printk(KERN_ERR "usbcore: null device being purged!!!\n");
+		return;
+	}
+
+	for (i=0; i<USB_MAXCHILDREN; i++)
+		if (dev->children[i])
+			usb_drivers_purge(driver, dev->children[i]);
+
+        if (!dev->actconfig)
+                return;
+                        
+        for (i = 0; i < dev->actconfig->bNumInterfaces; i++) {
+                struct usb_interface *interface = &dev->actconfig->interface[i];
+		
+	        if (interface->driver == driver) {
+                        driver->disconnect(dev, interface->private_data);
+			usb_driver_release_interface(driver, interface);
+		        /*
+		         * This will go through the list looking for another
+		         * driver that can handle the device
+		         */
+                        usb_find_interface_driver(dev, i);
+                }
+	}
+}
+
+/*
+ * Unlink a driver from the driver list when it is unloaded
+ */
 void usb_deregister(struct usb_driver *driver)
 {
 	struct list_head *tmp;
@@ -89,45 +134,10 @@ void usb_deregister(struct usb_driver *driver)
 		struct usb_bus *bus = list_entry(tmp,struct usb_bus,bus_list);
 
 		tmp = tmp->next;
-		usb_driver_purge(driver, bus->root_hub);
+		usb_drivers_purge(driver, bus->root_hub);
 	}
 }
 
-/*
- * This function is part of a depth-first search down the device tree,
- * removing any instances of a device driver.
- */
-static void usb_driver_purge(struct usb_driver *driver,struct usb_device *dev)
-{
-	int i;
-
-	if (!dev) {
-		printk(KERN_ERR "usbcore: null device being purged!!!\n");
-		return;
-	}
-
-	for (i=0; i<USB_MAXCHILDREN; i++)
-		if (dev->children[i])
-			usb_driver_purge(driver, dev->children[i]);
-
-	/* now we check this device */
-	if (dev->driver == driver) {
-		/*
-		 * Note: this is not the correct way to do this, this
-		 * uninitializes and reinitializes EVERY driver
-		 */
-		printk(KERN_INFO "disconnect driverless device %d\n",
-			dev->devnum);
-		dev->driver->disconnect(dev);
-		dev->driver = NULL;
-
-		/*
-		 * This will go back through the list looking for a driver
-		 * that can handle the device
-		 */
-		usb_find_driver(dev);
-	}
-}
 
 /*
  * calc_bus_time:
@@ -222,6 +232,7 @@ struct usb_bus *usb_alloc_bus(struct usb_operations *op)
 	bus->op = op;
 	bus->root_hub = NULL;
 	bus->hcpriv = NULL;
+	bus->busnum = -1;
 	bus->bandwidth_allocated = 0;
 	bus->bandwidth_int_reqs  = 0;
 	bus->bandwidth_isoc_reqs = 0;
@@ -241,16 +252,27 @@ void usb_free_bus(struct usb_bus *bus)
 
 void usb_register_bus(struct usb_bus *bus)
 {
+	int busnum;
+
+	busnum = find_next_zero_bit(busmap.busmap, USB_MAXBUS, 1);
+	if (busnum < USB_MAXBUS) {
+		set_bit(busnum, busmap.busmap);
+		bus->busnum = busnum;
+	} else
+		printk(KERN_INFO "usb: too many bus'\n");
+
 	proc_usb_add_bus(bus);
 
 	/* Add it to the list of buses */
 	list_add(&bus->bus_list, &usb_bus_list);
 
-	printk("New USB bus registered\n");
+	printk("New USB bus registered, assigned bus number %d\n", bus->busnum);
 }
 
 void usb_deregister_bus(struct usb_bus *bus)
 {
+	printk("usbcore: USB bus %d deregistered\n", bus->busnum);
+
 	/*
 	 * NOTE: make sure that all the devices are removed by the
 	 * controller code, as well as having it call this when cleaning
@@ -259,6 +281,8 @@ void usb_deregister_bus(struct usb_bus *bus)
 	list_del(&bus->bus_list);
 
 	proc_usb_remove_bus(bus);
+
+	clear_bit(bus->busnum, busmap.busmap);
 }
 
 /*
@@ -278,37 +302,123 @@ static void usb_check_support(struct usb_device *dev)
 		if (dev->children[i])
 			usb_check_support(dev->children[i]);
 
+        if (!dev->actconfig)
+                return;
+
 	/* now we check this device */
-	if (!dev->driver && dev->devnum > 0)
-		usb_find_driver(dev);
+        if (dev->devnum > 0)
+                for (i = 0; i < dev->actconfig->bNumInterfaces; i++)
+                        usb_find_interface_driver(dev, i);
+}
+
+
+/*
+ * This is intended to be used by usb device drivers that need to
+ * claim more than one interface on a device at once when probing
+ * (audio and acm are good examples).  No device driver should have
+ * to mess with the internal usb_interface or usb_device structure
+ * members.
+ */
+void usb_driver_claim_interface(struct usb_driver *driver, struct usb_interface *iface, void* priv)
+{
+	if (!iface || !driver)
+		return;
+
+	printk(KERN_DEBUG "usbcore: %s driver claimed interface %p\n", driver->name, iface);
+
+	iface->driver = driver;
+	iface->private_data = priv;
+} /* usb_driver_claim_interface() */
+
+/*
+ * This should be used by drivers to check other interfaces to see if
+ * they are available or not.
+ */
+int usb_interface_claimed(struct usb_interface *iface)
+{
+	if (!iface)
+		return 0;
+
+	return (iface->driver != NULL);
+} /* usb_interface_claimed() */
+
+/*
+ * This should be used by drivers to release their claimed interfaces
+ */
+void usb_driver_release_interface(struct usb_driver *driver, struct usb_interface *iface)
+{
+	/* this should never happen, don't release something that's not ours */
+	if (iface->driver != driver || !iface)
+		return;
+
+	iface->driver = NULL;
+	iface->private_data = NULL;
 }
 
 /*
  * This entrypoint gets called for each new device.
  *
  * We now walk the list of registered USB drivers,
- * looking for one that will accept this device as
- * his..
+ * looking for one that will accept this interface.
+ *
+ * The probe return value is changed to be a private pointer.  This way
+ * the drivers don't have to dig around in our structures to set the
+ * private pointer if they only need one interface. 
+ *
+ * Returns: 0 if a driver accepted the interface, -1 otherwise
  */
-static int usb_find_driver(struct usb_device *dev)
+static int usb_find_interface_driver(struct usb_device *dev, unsigned ifnum)
 {
 	struct list_head *tmp = usb_driver_list.next;
-
-	while (tmp != &usb_driver_list) {
-		struct usb_driver *driver = list_entry(tmp, struct usb_driver,
-						       driver_list);
-		tmp = tmp->next;
-		if (driver->probe(dev))
-			continue;
-		dev->driver = driver;
-		return 1;
+        struct usb_interface *interface;
+	
+	if ((!dev) || (ifnum >= dev->actconfig->bNumInterfaces)) {
+		printk(KERN_ERR "usb-core: bad find_interface_driver params\n");
+		return -1;
 	}
 
-	/*
-	 * Ok, no driver accepted the device, so show the info
-	 * for debugging..
-	 */
-	return 0;
+	interface = &dev->actconfig->interface[ifnum];
+
+        if (usb_interface_claimed(interface))
+                return -1;
+
+        while (tmp != &usb_driver_list) {
+		void *private;
+                struct usb_driver *driver = list_entry(tmp, struct usb_driver,
+		  			               driver_list);
+                        
+                tmp = tmp->next;
+                if (!(private = driver->probe(dev, ifnum)))
+                        continue;
+		usb_driver_claim_interface(driver, interface, private);
+
+                return 0;
+        }
+        
+	return -1;
+}
+
+/*
+ * This entrypoint gets called for each new device.
+ *
+ * All interfaces are scanned for matching drivers.
+ */
+static void usb_find_drivers(struct usb_device *dev)
+{
+	unsigned ifnum;
+        unsigned rejected = 0;
+
+	for (ifnum = 0; ifnum < dev->actconfig->bNumInterfaces; ifnum++) {
+		/* if this interface hasn't already been claimed */
+		if (!usb_interface_claimed(dev->actconfig->interface)) {
+			if (usb_find_interface_driver(dev, ifnum))
+				rejected++;
+		}
+	}
+ 
+	if (rejected) {
+		printk(KERN_DEBUG "usbcore: unhandled interfaces on device.\n");
+	}
 }
 
 /*
@@ -631,6 +741,7 @@ void usb_init_root_hub(struct usb_device *dev)
 {
 	dev->devnum = -1;
 	dev->slow = 0;
+	dev->actconfig = NULL;
 }
 
 /*
@@ -646,10 +757,18 @@ void usb_disconnect(struct usb_device **pdev)
 
 	*pdev = NULL;
 
-	printk("USB disconnect on device %d\n", dev->devnum);
+	printk("usbcore: USB disconnect on device %d\n", dev->devnum);
 
-	if (dev->driver)
-		dev->driver->disconnect(dev);
+        if (dev->actconfig) {
+                for (i = 0; i < dev->actconfig->bNumInterfaces; i++) {
+                        struct usb_interface *interface = &dev->actconfig->interface[i];
+			struct usb_driver *driver = interface->driver;
+		        if (driver) {
+			        driver->disconnect(dev, interface->private_data);
+				usb_driver_release_interface(driver, interface);
+                        }
+                }
+        }
 
 	/* Free up all the children.. */
 	for (i = 0; i < USB_MAXCHILDREN; i++) {
@@ -894,7 +1013,6 @@ int usb_set_interface(struct usb_device *dev, int interface, int alternate)
 	if (err)
 		return err;
 
-	dev->ifnum = interface;
 	dev->actconfig->interface[interface].act_altsetting = alternate;
 	usb_set_maxpacket(dev);
 	return 0;
@@ -1113,8 +1231,13 @@ int usb_new_device(struct usb_device *dev)
 	}
 
 	dev->actconfig = dev->config;
-	dev->ifnum = 0;
 	usb_set_maxpacket(dev);
+
+	/* we set the default configuration here */
+	if (usb_set_configuration(dev, dev->config[0].bConfigurationValue)) {
+		printk(KERN_ERR "usbcore: failed to set default configuration\n");
+		return -1;
+	}
 
 	usb_show_string(dev, "Manufacturer", dev->descriptor.iManufacturer);
 	usb_show_string(dev, "Product", dev->descriptor.iProduct);
@@ -1123,14 +1246,8 @@ int usb_new_device(struct usb_device *dev)
 	/* now that the basic setup is over, add a /proc/bus/usb entry */
 	proc_usb_add_device(dev);
 
-	if (!usb_find_driver(dev)) {
-		/*
-		 * Ok, no driver accepted the device, so show the info for
-		 * debugging
-		 */
-		printk(KERN_DEBUG "Unknown new USB device:\n");
-		usb_show_device(dev);
-	}
+	/* find drivers willing to handle this device */
+        usb_find_drivers(dev);
 
 	return 0;
 }
@@ -1226,12 +1343,12 @@ int usb_release_irq(struct usb_device *dev, void *handle, unsigned int pipe)
  * returns the current frame number for the parent USB bus/controller
  * of the given USB device.
  */
-int usb_get_current_frame_number (struct usb_device *usb_dev)
+int usb_get_current_frame_number(struct usb_device *usb_dev)
 {
 	return usb_dev->bus->op->get_frame_number (usb_dev);
 }
 
-int usb_init_isoc (struct usb_device *usb_dev,
+int usb_init_isoc(struct usb_device *usb_dev,
 			unsigned int pipe,
 			int frame_count,
 			void *context,
@@ -1302,7 +1419,7 @@ static int usb_open(struct inode * inode, struct file * file)
 	struct usb_driver *c = usb_minors[minor/16];
 	file->f_op = NULL;
 
-	if ((file->f_op = c->fops) && file->f_op->open)
+	if (c && (file->f_op = c->fops) && file->f_op->open)
 		return file->f_op->open(inode,file);
 	else
 		return -ENODEV;
@@ -1323,10 +1440,15 @@ static struct file_operations usb_fops = {
 
 void usb_major_init(void)
 {
-	if (register_chrdev(180,"usb",&usb_fops)) {
+	if (register_chrdev(USB_MAJOR,"usb",&usb_fops)) {
 		printk("unable to get major %d for usb devices\n",
-		       MISC_MAJOR);
+		       USB_MAJOR);
 	}
+}
+
+void usb_major_cleanup(void)
+{
+	unregister_chrdev(USB_MAJOR, "usb");
 }
 
 

@@ -54,8 +54,11 @@
  * This flushes back any buffered write data.  We have to clean the entries
  * in the cache for this page.  This does not invalidate either I or D caches.
  */
-#define flush_page_to_ram(_page)					\
-	cpu_flush_ram_page((_page) & PAGE_MASK);
+static __inline__ void flush_page_to_ram(struct page *page)
+{
+	unsigned long virt = page_address(page);
+	cpu_flush_ram_page(virt);
+}
 
 /*
  * TLB flushing:

@@ -3,6 +3,9 @@
  *
  * The H8 is used to deal with the power and thermal environment
  * of a system.
+ *
+ * Fixes:
+ *	June 1999, AV	added releasing /proc/driver/h8
  */
 
 #include <linux/config.h>
@@ -18,10 +21,8 @@
 #include <linux/fcntl.h>
 #include <linux/malloc.h>
 #include <linux/linkage.h>
-#ifdef CONFIG_PROC_FS
 #include <linux/stat.h>
 #include <linux/proc_fs.h>
-#endif
 #include <linux/miscdevice.h>
 #include <linux/lists.h>
 #include <linux/ioport.h>
@@ -58,6 +59,8 @@ static void  h8_intr(int irq, void *dev_id, struct pt_regs *regs);
 
 #ifdef CONFIG_PROC_FS
 static int   h8_get_info(char *, char **, off_t, int, int);
+#else
+static int   h8_get_info(char *, char **, off_t, int, int) {}
 #endif
 
 /*
@@ -124,12 +127,6 @@ static struct miscdevice h8_device = {
         "h8",
         &h8_fops
 };
-
-#ifdef CONFIG_PROC_FS
-static struct proc_dir_entry    h8_proc_entry = {
-        0, 3, "h8", S_IFREG | S_IRUGO, 1, 0, 0, 0, 0, h8_get_info
-};
-#endif
 
 union	intr_buf intrbuf;
 int	intr_buf_ptr;
@@ -321,9 +318,7 @@ int init_module(void)
         misc_register(&h8_device);
         request_region(h8_base, 8, "h8");
 
-#ifdef CONFIG_PROC_FS
-        proc_register(&proc_root, &h8_proc_entry);
-#endif
+        create_proc_info_entry("driver/h8", 0, NULL, h8_get_info);
 
 	QUEUE_INIT(&h8_actq, link, h8_cmd_q_t *);
 	QUEUE_INIT(&h8_cmdq, link, h8_cmd_q_t *);
@@ -339,6 +334,7 @@ int init_module(void)
 
 void cleanup_module(void)
 {
+	remove_proc_entry("driver/h8", NULL);
         misc_deregister(&h8_device);
         release_region(h8_base, 8);
         free_irq(h8_irq, NULL);
@@ -355,9 +351,7 @@ int h8_init(void)
         }
         printk("H8 at 0x%x IRQ %d\n", h8_base, h8_irq);
 
-#ifdef CONFIG_PROC_FS
-        proc_register(&proc_root, &h8_proc_entry);
-#endif
+        create_proc_info_entry("driver/h8", 0, NULL, h8_get_info);
 
         misc_register(&h8_device);
         request_region(h8_base, 8, "h8");

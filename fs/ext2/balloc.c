@@ -11,6 +11,12 @@
  *        David S. Miller (davem@caip.rutgers.edu), 1995
  */
 
+#include <linux/module.h>
+#include <linux/fs.h>
+#include <linux/locks.h>
+#include <linux/quotaops.h>
+
+
 /*
  * balloc.c contains the blocks allocation and deallocation routines
  */
@@ -26,16 +32,6 @@
  * when a file system is mounted (see ext2_read_super).
  */
 
-#include <linux/fs.h>
-#include <linux/ext2_fs.h>
-#include <linux/stat.h>
-#include <linux/sched.h>
-#include <linux/string.h>
-#include <linux/locks.h>
-#include <linux/quotaops.h>
-
-#include <asm/bitops.h>
-#include <asm/byteorder.h>
 
 #define in_range(b, first, len)		((b) >= (first) && (b) <= (first) + (len) - 1)
 

@@ -980,11 +980,12 @@ out:
 /*
  *	Write the contents of the ARP cache to a PROCfs file.
  */
-#ifdef CONFIG_PROC_FS
-
+#ifndef CONFIG_PROC_FS
+static int arp_get_info(char *buffer, char **start, off_t offset, int length, int dummy) { return 0; }
+#else
 #define HBUFFERLEN 30
 
-int arp_get_info(char *buffer, char **start, off_t offset, int length, int dummy)
+static int arp_get_info(char *buffer, char **start, off_t offset, int length, int dummy)
 {
 	int len=0;
 	off_t pos=0;
@@ -1116,24 +1117,14 @@ static struct packet_type arp_packet_type =
 	NULL
 };
 
-#ifdef CONFIG_PROC_FS
-static struct proc_dir_entry proc_net_arp = {
-	PROC_NET_ARP, 3, "arp",
-	S_IFREG | S_IRUGO, 1, 0, 0,
-	0, &proc_net_inode_operations,
-	arp_get_info
-};
-#endif
-
 void __init arp_init (void)
 {
 	neigh_table_init(&arp_tbl);
 
 	dev_add_pack(&arp_packet_type);
 
-#ifdef CONFIG_PROC_FS
-	proc_net_register(&proc_net_arp);
-#endif
+	proc_net_create ("arp", 0, arp_get_info);
+
 #ifdef CONFIG_SYSCTL
 	neigh_sysctl_register(NULL, &arp_tbl.parms, NET_IPV4, NET_IPV4_NEIGH, "ipv4");
 #endif

@@ -29,6 +29,7 @@
  * Page offset: 3GB
  */
 #define PAGE_OFFSET		(0xc0000000UL)
+#define PHYS_OFFSET		(0x00000000UL)
 
 #define __virt_to_bus__is_a_macro
 #define __virt_to_bus(x)	((x) - 0xe0000000)
@@ -49,6 +50,7 @@
  * Page offset: 1.5GB
  */
 #define PAGE_OFFSET		(0x60000000UL)
+#define PHYS_OFFSET		(0x00000000UL)
 
 #else
 

@@ -70,7 +70,7 @@ static int
 nfs_readpage_sync(struct dentry *dentry, struct inode *inode, struct page *page)
 {
 	struct nfs_rreq	rqst;
-	unsigned long	offset = page->offset;
+	unsigned long	offset = page->pg_offset << PAGE_CACHE_SHIFT;
 	char		*buffer = (char *) page_address(page);
 	int		rsize = NFS_SERVER(inode)->rsize;
 	int		result, refresh = 0;
@@ -179,7 +179,7 @@ nfs_readpage_async(struct dentry *dentry, struct inode *inode,
 
 	/* Initialize request */
 	/* N.B. Will the dentry remain valid for life of request? */
-	nfs_readreq_setup(req, NFS_FH(dentry), page->offset,
+	nfs_readreq_setup(req, NFS_FH(dentry), page->pg_offset << PAGE_CACHE_SHIFT,
 				(void *) address, PAGE_SIZE);
 	req->ra_inode = inode;
 	req->ra_page = page; /* count has been incremented by caller */
@@ -224,8 +224,8 @@ nfs_readpage(struct file *file, struct page *page)
 	int		error;
 
 	lock_kernel();
-	dprintk("NFS: nfs_readpage (%p %ld@%ld)\n",
-		page, PAGE_SIZE, page->offset);
+	dprintk("NFS: nfs_readpage (%p %ld@%lu)\n",
+		page, PAGE_SIZE, page->pg_offset);
 	get_page(page);
 
 	/*

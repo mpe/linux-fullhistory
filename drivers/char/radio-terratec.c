@@ -307,8 +307,13 @@ static struct video_device terratec_radio=
 	NULL
 };
 
-int __init terratec_init(struct video_init *v)
+static int __init terratec_init(void)
 {
+	if(io==-1)
+	{
+		printk(KERN_ERR "You must set an I/O address with io=0x???\n");
+		return -EINVAL;
+	}
 	if (check_region(io, 2)) 
 	{
 		printk(KERN_ERR "TerraTec: port 0x%x already in use\n", io);
@@ -334,8 +339,6 @@ int __init terratec_init(struct video_init *v)
 	return 0;
 }
 
-#ifdef MODULE
-
 MODULE_AUTHOR("R.OFFERMANNS & others");
 MODULE_DESCRIPTION("A driver for the TerraTec ActiveRadio Standalone radio card.");
 MODULE_PARM(io, "i");
@@ -343,21 +346,13 @@ MODULE_PARM_DESC(io, "I/O address of the TerraTec ActiveRadio card (0x590 or 0x5
 
 EXPORT_NO_SYMBOLS;
 
-int init_module(void)
-{
-	if(io==-1)
-	{
-		printk(KERN_ERR "You must set an I/O address with io=0x???\n");
-		return -EINVAL;
-	}
-	return terratec_init(NULL);
-}
-
-void cleanup_module(void)
+static void __exit terratec_cleanup_module(void)
 {
 	video_unregister_device(&terratec_radio);
 	release_region(io,2);
 	printk(KERN_INFO "TERRATEC ActivRadio Standalone card driver unloaded.\n");	
 }
 
-#endif
+module_init(terratec_init);
+module_exit(terratec_cleanup_module);
+

@@ -13,16 +13,14 @@
 #include <asm/irq.h>
 #include <asm/system.h>
 
+#include "bios32.h"
+
+static int debug_pci;
 int have_isa_bridge;
 
-int (*pci_irq_fixup)(struct pci_dev *dev);
-
-extern struct pci_ops *dc21285_init(int pass);
-extern void pcibios_fixup_ebsa285(struct pci_dev *dev);
 extern void hw_init(void);
 
-void
-pcibios_report_device_errors(void)
+void pcibios_report_device_errors(void)
 {
 	struct pci_dev *dev;
 
@@ -31,16 +29,17 @@ pcibios_report_device_errors(void)
 
 		pci_read_config_word(dev, PCI_STATUS, &status);
 
-		if (status & 0xf900) {
-			pci_write_config_word(dev, PCI_STATUS, status & 0xf900);
-			printk(KERN_DEBUG "PCI: %02x:%02x status = %X\n",
-				dev->bus->number, dev->devfn, status);
-		}
+		if ((status & 0xf900) == 0)
+			continue;
+
+		pci_write_config_word(dev, PCI_STATUS, status & 0xf900);
+		printk(KERN_DEBUG "PCI: status %04X on %s\n",
+			status, dev->name);
 	}
 }
 
 /*
- * We don't use this to fix the device, but more our initialisation.
+ * We don't use this to fix the device, but initialisation of it.
  * It's not the correct use for this, but it works.  The actions we
  * take are:
  * - enable only IO
@@ -68,241 +67,48 @@ static void __init pci_fixup_83c553(struct pci_dev *dev)
 	pci_write_config_byte(dev, 0x81, 0x01);
 }
 
+static void __init pci_fixup_unassign(struct pci_dev *dev)
+{
+	dev->resource[0].end -= dev->resource[0].start;
+	dev->resource[0].start = 0;
+}
+
+/*
+ * PCI IDE controllers use non-standard I/O port
+ * decoding, respect it.
+ */
+static void __init pci_fixup_ide_bases(struct pci_dev *dev)
+{
+	struct resource *r;
+	int i;
+
+	if ((dev->class >> 8) != PCI_CLASS_STORAGE_IDE)
+		return;
+
+	for (i = 0; i < PCI_NUM_RESOURCES; i++) {
+		r = dev->resource + i;
+		if ((r->start & ~0x80) == 0x374) {
+			r->start |= 2;
+			r->end = r->start;
+		}
+	}
+}
+
 struct pci_fixup pcibios_fixups[] = {
-	{ PCI_FIXUP_HEADER, PCI_VENDOR_ID_WINBOND, PCI_DEVICE_ID_WINBOND_83C553, pci_fixup_83c553 },
-	{ 0 }
+	{
+		PCI_FIXUP_HEADER,
+		PCI_VENDOR_ID_WINBOND,	PCI_DEVICE_ID_WINBOND_83C553,
+		pci_fixup_83c553
+	}, {
+		PCI_FIXUP_HEADER,
+		PCI_VENDOR_ID_WINBOND2,	PCI_DEVICE_ID_WINBOND2_89C940F,
+		pci_fixup_unassign
+	}, {
+		PCI_FIXUP_HEADER,
+		PCI_ANY_ID,		PCI_ANY_ID,
+		pci_fixup_ide_bases
+	}, { 0 }
 };
-
-/*
- * Assign new address to PCI resource.  We hope our resource information
- * is complete.  On the PC, we don't re-assign resources unless we are
- * forced to do so.
- *
- * Expects start=0, end=size-1, flags=resource type.
- */
-
-int __init pcibios_assign_resource(struct pci_dev *dev, int i)
-{
-	struct resource *r = &dev->resource[i];
-	struct resource *pr = pci_find_parent_resource(dev, r);
-	unsigned long size = r->end + 1;
-	unsigned long flags = 0;
-
-	if (!pr)
-		return -EINVAL;
-	if (r->flags & IORESOURCE_IO) {
-		if (size > 0x100)
-			return -EFBIG;
-		if (allocate_resource(pr, r, size, 0x9000, ~0, 1024))
-			return -EBUSY;
-		flags = PCI_BASE_ADDRESS_SPACE_IO;
-	} else {
-		if (allocate_resource(pr, r, size, 0x00100000, 0x7fffffff, size))
-			return -EBUSY;
-	}
-	if (i < 6)
-		pci_write_config_dword(dev, PCI_BASE_ADDRESS_0 + 4*i, r->start | flags);
-	return 0;
-}
-
-/*
- * Assign an address to an I/O range.
- */
-static void __init pcibios_fixup_io_addr(struct pci_dev *dev, struct resource *r, int idx)
-{
-	unsigned int reg = PCI_BASE_ADDRESS_0 + (idx << 2);
-	unsigned int size = r->end - r->start + 1;
-	u32 try;
-
-	/*
-	 * We need to avoid collisions with `mirrored' VGA ports and other strange
-	 * ISA hardware, so we always want the addresses kilobyte aligned.
-	 */
-	if (!size || size > 256) {
-		printk(KERN_ERR "PCI: Cannot assign I/O space to %s, "
-		       "%d bytes are too much.\n", dev->name, size);
-		return;
-	}
-
-	if (allocate_resource(&ioport_resource, r, size, 0x9000, ~0, 1024)) {
-		printk(KERN_ERR "PCI: Unable to find free %d bytes of I/O "
-			"space for %s.\n", size, dev->name);
-		return;
-	}
-
-	printk("PCI: Assigning I/O space %04lx-%04lx to %s\n",
-		r->start, r->end, dev->name);
-
-	pci_write_config_dword(dev, reg, r->start | PCI_BASE_ADDRESS_SPACE_IO);
-	pci_read_config_dword(dev, reg, &try);
-
-	if ((try & PCI_BASE_ADDRESS_IO_MASK) != r->start) {
-		r->start = 0;
-		pci_write_config_dword(dev, reg, 0);
-		printk(KERN_ERR "PCI: I/O address setup failed, got %04x\n", try);
-	}
-}
-
-/*
- * Assign an address to an memory range.
- */
-static void __init pcibios_fixup_mem_addr(struct pci_dev *dev, struct resource *r, int idx)
-{
-	unsigned int reg = PCI_BASE_ADDRESS_0 + (idx << 2);
-	unsigned int size = r->end - r->start + 1;
-	u32 try;
-
-	if (!size) {
-		printk(KERN_ERR "PCI: Cannot assign memory space to %s, "
-		       "%d bytes are too much.\n", dev->name, size);
-		return;
-	}
-
-	if (allocate_resource(&iomem_resource, r, size,
-			      0x00100000, 0x0fffffff, 1024)) {
-		printk(KERN_ERR "PCI: Unable to find free %d bytes of memory "
-			"space for %s.\n", size, dev->name);
-		return;
-	}
-
-	printk("PCI: Assigning memory space %08lx-%08lx to %s\n",
-		r->start, r->end, dev->name);
-
-	pci_write_config_dword(dev, reg, r->start);
-	pci_read_config_dword(dev, reg, &try);
-
-	if (try != r->start) {
-		r->start = 0;
-		pci_write_config_dword(dev, reg, 0);
-		printk(KERN_ERR "PCI: memory address setup failed, "
-		       "got %08x\n", try);
-	}
-}
-
-#define _PCI_REGION_IO	1
-#define _PCI_REGION_MEM	2
-
-/*
- * Fix up one PCI devices regions, enables and interrupt lines
- */
-static void __init pcibios_fixup_device(struct pci_dev *dev, u16 *cmd)
-{
-	int i, has_regions = 0;
-
-	/*
-	 * Fix up the regions.  Any regions which aren't allocated
-	 * are given a free region.
-	 */
-	for (i = 0; i < 6; i++) {
-		struct resource *r = dev->resource + i;
-
-		if (r->flags & IORESOURCE_IO) {
-			has_regions |= _PCI_REGION_IO;
-
-			if (!r->start || r->end == 0xffffffff)
-				pcibios_fixup_io_addr(dev, r, i);
-		} else if (r->end) {
-			has_regions |= _PCI_REGION_MEM;
-
-			if (!r->start)
-				pcibios_fixup_mem_addr(dev, r, i);
-		}
-	}
-
-	switch (dev->class >> 8) {
-	case PCI_CLASS_BRIDGE_ISA:
-	case PCI_CLASS_BRIDGE_EISA:
-		/*
-		 * If this device is an ISA bridge, set the have_isa_bridge
-		 * flag.  We will then go looking for things like keyboard,
-		 * etc
-		 */
-		have_isa_bridge = !0;
-		/* FALL THROUGH */
-
-	default:
-		/*
-		 * Don't enable VGA-compatible cards since they have
-		 * fixed I/O and memory space.
-		 *
-		 * Don't enabled disabled IDE interfaces either because
-		 * some BIOSes may reallocate the same address when they
-		 * find that no devices are attached. 
-		 */
-		if (has_regions & _PCI_REGION_IO &&
-		    !((*cmd) & PCI_COMMAND_IO)) {
-			printk("PCI: Enabling I/O for %s\n", dev->name);
-			*cmd |= PCI_COMMAND_IO;
-		}
-
-		if (has_regions & _PCI_REGION_MEM &&
-		    !((*cmd) & PCI_COMMAND_MEMORY)) {
-			printk("PCI: Enabling memory for %s\n", dev->name);
-			*cmd |= PCI_COMMAND_MEMORY;
-		}
-	}
-}
-
-/*
- * Fix base addresses, I/O and memory enables and IRQ's
- */
-static void __init pcibios_fixup_devices(void)
-{
-	struct pci_dev *dev;
-
-	for (dev = pci_devices; dev; dev = dev->next) {
-		u16 cmd;
-
-		/*
-		 * architecture specific hacks.
-		 * I don't really want this here,
-		 * but I don't see any other place
-		 * for it to live.
-		 */
-		if (machine_is_netwinder() &&
-		    dev->vendor == PCI_VENDOR_ID_DEC &&
-		    dev->device == PCI_DEVICE_ID_DEC_21142)
-			/* Put the chip to sleep in case the driver isn't loaded */
-			pci_write_config_dword(dev, 0x40, 0x80000000);
-
-		/*
-		 * Set latency timer to 32, and a cache line size to 32 bytes.
-		 * Also, set system error enable, parity error enable, and
-		 * fast back to back transaction enable.  Disable ROM.
-		 */
-		pci_write_config_byte(dev, PCI_LATENCY_TIMER, 32);
-		pci_write_config_byte(dev, PCI_CACHE_LINE_SIZE, 8);
-		pci_write_config_dword(dev, PCI_ROM_ADDRESS, 0);
-		pci_read_config_word(dev, PCI_COMMAND, &cmd);
-
-		cmd |= PCI_COMMAND_FAST_BACK | PCI_COMMAND_SERR |
-		       PCI_COMMAND_PARITY;
-
-		pcibios_fixup_device(dev, &cmd);
-
-		pci_write_config_word(dev, PCI_COMMAND, cmd);
-		pci_read_config_word(dev, PCI_COMMAND, &cmd);
-
-		/*
-		 * now fixup the IRQs, if required
-		 */
-		if (pci_irq_fixup)
-			dev->irq = pci_irq_fixup(dev);
-
-		/*
-		 * If any remaining IRQs are weird, fix it now.
-		 */
-		if (dev->irq >= NR_IRQS)
-			dev->irq = 0;
-
-		/*
-		 * catch any drivers still reading this from the
-		 * device itself.  This can be removed once
-		 * all drivers are fixed. (are there any?)
-		 */
-		pci_write_config_byte(dev, PCI_INTERRUPT_LINE, dev->irq);
-	}
-}
 
 /*
  * Allocate resources for all PCI devices that have been enabled.
@@ -314,71 +120,222 @@ static void __init pcibios_claim_resources(void)
 	int idx;
 
 	for (dev = pci_devices; dev; dev = dev->next)
-		for (idx = 0; idx < PCI_NUM_RESOURCES; idx++) {
-			struct resource *a, *r = &dev->resource[idx];
+		for (idx = 0; idx < PCI_NUM_RESOURCES; idx++)
+			if (dev->resource[idx].flags &&
+			    dev->resource[idx].start)
+				pci_claim_resource(dev, idx);
+}
 
-			/*
-			 * Ignore regions that start at 0 or
-			 * end at 0xffffffff
-			 */
-			if (!r->start || r->end == 0xffffffff)
-				continue;
+void __init
+pcibios_update_resource(struct pci_dev *dev, struct resource *root,
+			struct resource *res, int resource)
+{
+	unsigned long where, size;
+	u32 reg;
 
-			if (r->flags & IORESOURCE_IO)
-				a = &ioport_resource;
-			else
-				a = &iomem_resource;
+	if (debug_pci)
+		printk("PCI: Assigning %3s %08lx to %s\n",
+			res->flags & IORESOURCE_IO ? "IO" : "MEM",
+			res->start, dev->name);
 
-			if (request_resource(a, r) < 0)
-				printk(KERN_ERR "PCI: Address space collision "
-					"on region %d of %s\n",
-					idx, dev->name);
-				/* We probably should disable the region,
-				 * shouldn't we?
-				 */
-		}
+	where = PCI_BASE_ADDRESS_0 + resource * 4;
+	size  = res->end - res->start;
+
+	pci_read_config_dword(dev, where, &reg);
+	reg = (reg & size) | (((u32)(res->start - root->start)) & ~size);
+	pci_write_config_dword(dev, where, reg);
+}
+
+void __init pcibios_update_irq(struct pci_dev *dev, int irq)
+{
+	if (debug_pci)
+		printk("PCI: Assigning IRQ %02d to %s\n", irq, dev->name);
+	pci_write_config_byte(dev, PCI_INTERRUPT_LINE, irq);
 }
 
 /*
  * Called after each bus is probed, but before its children
  * are examined.
- *
- * No fixup of bus required
  */
 void __init pcibios_fixup_bus(struct pci_bus *bus)
 {
+	struct pci_dev *dev;
+
+	for (dev = bus->devices; dev; dev = dev->sibling) {
+		u16 cmd;
+
+		/*
+		 * architecture specific hacks. I don't really want
+		 * this here, but I don't see any other place for it
+		 * to live.  Shame the device doesn't support
+		 * capabilities
+		 */
+		if (machine_is_netwinder() &&
+		    dev->vendor == PCI_VENDOR_ID_DEC &&
+		    dev->device == PCI_DEVICE_ID_DEC_21142)
+			/* Put the chip to sleep in case the driver isn't loaded */
+			pci_write_config_dword(dev, 0x40, 0x80000000);
+
+		/*
+		 * If this device is an ISA bridge, set the have_isa_bridge
+		 * flag.  We will then go looking for things like keyboard,
+		 * etc
+		 */
+		if (dev->class >> 8 == PCI_CLASS_BRIDGE_ISA ||
+		    dev->class >> 8 == PCI_CLASS_BRIDGE_EISA)
+			have_isa_bridge = !0;
+			
+		/*
+		 * Set latency timer to 32, and a cache line size to 32 bytes.
+		 * Also, set system error enable, parity error enable, and
+		 * fast back to back transaction enable.  Disable ROM.
+		 */
+		pci_write_config_byte(dev, PCI_LATENCY_TIMER, 32);
+		pci_write_config_byte(dev, PCI_CACHE_LINE_SIZE, 8);
+		pci_read_config_word(dev, PCI_COMMAND, &cmd);
+
+		cmd |= PCI_COMMAND_FAST_BACK | PCI_COMMAND_SERR |
+		       PCI_COMMAND_PARITY;
+
+		pci_write_config_word(dev, PCI_COMMAND, cmd);
+		pci_read_config_word(dev, PCI_COMMAND, &cmd);
+		pci_write_config_dword(dev, PCI_ROM_ADDRESS, 0);
+	}
 }
+
+static u8 __init no_swizzle(struct pci_dev *dev, u8 *pin)
+{
+	return 0;
+}
+
+/* ebsa285 host-specific stuff */
+static int irqmap_ebsa285[] __initdata = { IRQ_IN1, IRQ_IN0, IRQ_PCI, IRQ_IN3 };
+
+static u8 __init ebsa285_swizzle(struct pci_dev *dev, u8 *pin)
+{
+	return PCI_SLOT(dev->devfn);
+}
+
+static int __init ebsa285_map_irq(struct pci_dev *dev, u8 slot, u8 pin)
+{
+	return irqmap_ebsa285[(slot + pin) & 3];
+}
+
+static struct hw_pci ebsa285_pci __initdata = {
+	dc21285_init,
+	0x9000,
+	0x00100000,
+	ebsa285_swizzle,
+	ebsa285_map_irq
+};
+
+/* cats host-specific stuff */
+static int irqmap_cats[] __initdata = { IRQ_PCI, IRQ_IN0, IRQ_IN1, IRQ_IN3 };
+
+static int __init cats_map_irq(struct pci_dev *dev, u8 slot, u8 pin)
+{
+	if (dev->irq >= 128)
+		return 16 + (dev->irq & 0x1f);
+
+	if (dev->irq >= 1 && dev->irq <= 4)
+		return irqmap_cats[dev->irq - 1];
+
+	if (dev->irq != 0)
+		printk("PCI: device %02x:%02x has unknown irq line %x\n",
+		       dev->bus->number, dev->devfn, dev->irq);
+
+	return -1;
+}
+
+static struct hw_pci cats_pci __initdata = {
+	dc21285_init,
+	0x9000,
+	0x00100000,
+	no_swizzle,
+	cats_map_irq
+};
+
+/* netwinder host-specific stuff */
+static int __init netwinder_map_irq(struct pci_dev *dev, u8 slot, u8 pin)
+{
+#define DEV(v,d) ((v)<<16|(d))
+	switch (DEV(dev->vendor, dev->device)) {
+	case DEV(PCI_VENDOR_ID_DEC, PCI_DEVICE_ID_DEC_21142):
+		return IRQ_NETWINDER_ETHER100;
+
+	case DEV(PCI_VENDOR_ID_WINBOND2, 0x5a5a):
+		return IRQ_NETWINDER_ETHER10;
+
+	case DEV(PCI_VENDOR_ID_WINBOND, PCI_DEVICE_ID_WINBOND_83C553):
+		return 0;
+
+	case DEV(PCI_VENDOR_ID_WINBOND, PCI_DEVICE_ID_WINBOND_82C105):
+		return IRQ_ISA_HARDDISK1;
+
+	case DEV(PCI_VENDOR_ID_INTERG, PCI_DEVICE_ID_INTERG_2000):
+		return IRQ_NETWINDER_VGA;
+
+	default:
+		printk(KERN_ERR "PCI: %02X:%02X [%04X:%04X] unknown device\n",
+			dev->bus->number, dev->devfn,
+			dev->vendor, dev->device);
+		return 0;
+	}
+}
+
+static struct hw_pci netwinder_pci __initdata = {
+	dc21285_init,
+	0x9000,
+	0x00100000,
+	no_swizzle,
+	netwinder_map_irq
+};
 
 void __init pcibios_init(void)
 {
-	struct pci_ops *ops;
+	struct hw_pci *hw_pci = NULL;
+
+	if (machine_is_ebsa285())
+		hw_pci = &ebsa285_pci;
+	else if (machine_is_cats())
+		hw_pci = &cats_pci;
+	else if (machine_is_netwinder())
+		hw_pci = &netwinder_pci;
+
+	if (hw_pci == NULL)
+		return;
 
 	/*
-	 * Pre-initialisation.  Set up the host bridge.
+	 * Set up the host bridge, and scan the bus.
 	 */
-	ops = dc21285_init(0);
+	hw_pci->init();
 
-	printk("PCI: Probing PCI hardware\n");
-
-	pci_scan_bus(0, ops, NULL);
+	/*
+	 * Other architectures don't seem to do this... should we?
+	 */
 	pcibios_claim_resources();
-	pcibios_fixup_devices();
 
 	/*
-	 * Now clear down any PCI error IRQs and
-	 * register the error handler
+	 * Assign any unassigned resources.  Note that we really ought to
+	 * have min/max stuff here - max mem address is 0x0fffffff
 	 */
-	dc21285_init(1);
+	pci_assign_unassigned_resources(hw_pci->io_start, hw_pci->mem_start);
+	pci_fixup_irqs(hw_pci->swizzle, hw_pci->map_irq);
+	pci_set_bus_ranges();
 
 	/*
-	 * Initialise any other hardware after we've
-	 * got the PCI bus initialised.  We may need
-	 * the PCI bus to talk to this other hardware.
+	 * Initialise any other hardware after we've got the PCI bus
+	 * initialised.  We may need the PCI bus to talk to this other
+	 * hardware.
 	 */
 	hw_init();
 }
 
 char * __init pcibios_setup(char *str)
 {
+	if (!strcmp(str, "debug")) {
+		debug_pci = 1;
+		return NULL;
+	}
 	return str;
 }

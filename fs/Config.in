@@ -58,6 +58,12 @@ if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
 fi
 tristate 'ROM filesystem support' CONFIG_ROMFS_FS
 tristate 'Second extended fs support' CONFIG_EXT2_FS
+if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
+   tristate 'BFS filesystem (read only) support (EXPERIMENTAL)' CONFIG_BFS_FS
+   if [ "$CONFIG_BFS_FS" != "n" ]; then
+      bool '  BFS filesystem write support (DANGEROUS)' CONFIG_BFS_FS_WRITE
+   fi
+fi
 tristate 'System V and Coherent filesystem support' CONFIG_SYSV_FS
 if [ "$CONFIG_SYSV_FS" != "n" -a "$CONFIG_EXPERIMENTAL" = "y" ]; then
    bool '  SYSV filesystem write support (DANGEROUS)' CONFIG_SYSV_FS_WRITE

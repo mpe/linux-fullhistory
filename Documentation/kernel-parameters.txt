@@ -11,7 +11,7 @@ restrictions on the kernel for the said kernel parameter to be valid. The
 restrictions referred to are that the relevant option is valid if:
 
     APIC	APIC support is enabled.
-    APM 	Automatic Power Management support is enabled.
+    APM 	Advanced Power Management support is enabled.
     AX25	Appropriate AX.25 support is enabled.
     CD		Appropriate CD support is enabled.
     EIDE	EIDE/ATAPI support is enabled.
@@ -65,7 +65,7 @@ running once the system is up.
 
     AM53C974=		[HW,SCSI]
 
-    apm=		[APM] Automatic Power Management.
+    apm=		[APM] Advanced Power Management.
 
     arcrimi=		[HW,NET]
 

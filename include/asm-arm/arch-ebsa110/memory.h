@@ -22,6 +22,7 @@
  * Page offset: 3GB
  */
 #define PAGE_OFFSET	(0xc0000000UL)
+#define PHYS_OFFSET	(0x00000000UL)
 
 #define __virt_to_phys__is_a_macro
 #define __virt_to_phys(vpage) ((vpage) - PAGE_OFFSET)

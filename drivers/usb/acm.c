@@ -73,6 +73,8 @@
 #define CTRL_STAT_DTR	1
 #define CTRL_STAT_RTS	2
 
+static struct usb_driver acm_driver;
+
 static int acm_refcount;
 
 static struct tty_driver acm_tty_driver;
@@ -83,6 +85,7 @@ static struct acm_state acm_state_table[NR_PORTS];
 
 struct acm_state {
 	struct usb_device *dev;				//the coresponding usb device
+	int cfgnum;					//configuration number on this device
 	struct tty_struct *tty;				//the coresponding tty
 	char present;					//a device for this struct was detected => this tty is used
 	char active;					//someone has this acm's device open 
@@ -194,7 +197,7 @@ static int acm_read_irq(int state, void *__buffer, int count, void *dev_id)
 	info("ACM_READ_IRQ: state %d, %d bytes\n", state, count);
 	if (state) {
 		printk( "acm_read_irq: strange state received: %x\n", state );
-		return 1;
+		return 0;
 	}
 	
 	if (!ACM_READY)
@@ -204,7 +207,7 @@ static int acm_read_irq(int state, void *__buffer, int count, void *dev_id)
 		tty_insert_flip_char(tty,data[i],0);
   	tty_flip_buffer_push(tty);
 
-	return 1; /* continue transfer */
+	return 0; /* Never return 1 from this routine. It makes uhci do bad things. */
 }
 
 static int acm_write_irq(int state, void *__buffer, int count, void *dev_id)
@@ -382,7 +385,7 @@ static int get_free_acm(void)
 	return -1;
 }
 
-static int acm_probe(struct usb_device *dev)
+static void * acm_probe(struct usb_device *dev, unsigned int ifnum)
 {
 	struct acm_state *acm;
 	struct usb_interface_descriptor *interface;
@@ -394,7 +397,7 @@ static int acm_probe(struct usb_device *dev)
 	
 	if (0>(acmno=get_free_acm())) {
 		info("Too many acm devices connected\n");
-		return -1;
+		return NULL;
 	}
 	acm = &acm_state_table[acmno];
 
@@ -402,9 +405,13 @@ static int acm_probe(struct usb_device *dev)
 	if (dev->descriptor.bDeviceClass != 2 ||
 	    dev->descriptor.bDeviceSubClass != 0 ||
             dev->descriptor.bDeviceProtocol != 0)
-		return -1;
+		return NULL;
 
 #define IFCLASS(if) ((if->bInterfaceClass << 24) | (if->bInterfaceSubClass << 16) | (if->bInterfaceProtocol << 8) | (if->bNumEndpoints))
+
+	/* FIXME: should the driver really be doing the configuration
+	 * selecting or should the usbcore?  [different configurations
+	 * can have different bandwidth requirements] -greg */
 
 	/* Now scan all configs for a ACM configuration*/
 	for (cfgnum=0;cfgnum<dev->descriptor.bNumConfigurations;cfgnum++) {
@@ -425,7 +432,14 @@ static int acm_probe(struct usb_device *dev)
 		    interface->bNumEndpoints != 2)
 			continue;
 
-		/* if ((endpoint->bEndpointAddress & 0x80) == 0x80) */
+		/* make sure both interfaces are available for our use */
+		if (usb_interface_claimed(&dev->config[cfgnum].interface[0]) ||
+		    usb_interface_claimed(&dev->config[cfgnum].interface[1])) {
+			printk("usb-acm: required interface already has a driver\n");
+			continue;
+		}
+
+		endpoint = &interface->endpoint[0];
 		if ((endpoint->bEndpointAddress & 0x80) != 0x80)
 			swapped = 1;
 
@@ -445,7 +459,6 @@ static int acm_probe(struct usb_device *dev)
 		usb_set_configuration(dev, dev->config[cfgnum].bConfigurationValue);
 
 		acm->dev=dev;
-		dev->private=acm;
 
 		acm->readendp=dev->config[cfgnum].interface[1].altsetting[0].endpoint[0^swapped].bEndpointAddress;
 		acm->readpipe=usb_rcvbulkpipe(dev,acm->readendp);
@@ -453,7 +466,7 @@ static int acm_probe(struct usb_device *dev)
 		acm->reading=0;
 		if (!acm->readbuffer) {
 			printk("ACM: Couldn't allocate readbuffer\n");
-			return -1;
+			return NULL;
 		}
 
 		acm->writeendp=dev->config[cfgnum].interface[1].altsetting[0].endpoint[1^swapped].bEndpointAddress;
@@ -463,23 +476,29 @@ static int acm_probe(struct usb_device *dev)
 		if (!acm->writebuffer) {
 			printk("ACM: Couldn't allocate writebuffer\n");
 			kfree(acm->readbuffer);
-			return -1;
+			return NULL;
 		}
 
 		acm->ctrlendp=dev->config[cfgnum].interface[0].altsetting[0].endpoint[0].bEndpointAddress;
 		acm->ctrlpipe=usb_rcvctrlpipe(acm->dev,acm->ctrlendp);
 		acm->ctrlinterval=dev->config[cfgnum].interface[0].altsetting[0].endpoint[0].bInterval;
 
+		acm->cfgnum = cfgnum;
 		acm->present=1;				
 		MOD_INC_USE_COUNT;
-		return 0;
+
+		usb_driver_claim_interface(&acm_driver,
+				&dev->config[cfgnum].interface[0], acm);
+		usb_driver_claim_interface(&acm_driver,
+				&dev->config[cfgnum].interface[1], acm);
+		return acm;
 	}
-	return -1;
+	return NULL;
 }
 
-static void acm_disconnect(struct usb_device *dev)
+static void acm_disconnect(struct usb_device *dev, void *ptr)
 {
-	struct acm_state *acm = (struct acm_state *) dev->private;
+	struct acm_state *acm = ptr;
 
 	info("acm_disconnect\n");
 	
@@ -500,6 +519,12 @@ static void acm_disconnect(struct usb_device *dev)
 	//BUG: What to do if a device is open?? Notify process or not allow cleanup?
 	kfree(acm->writebuffer);
 	kfree(acm->readbuffer);
+
+	/* release the interfaces so that other drivers can have at them */
+	usb_driver_release_interface(&acm_driver,
+				&dev->config[acm->cfgnum].interface[0]);
+	usb_driver_release_interface(&acm_driver,
+				&dev->config[acm->cfgnum].interface[1]);
 
 	MOD_DEC_USE_COUNT;
 }
@@ -584,7 +609,7 @@ void usb_acm_cleanup(void)
 		acm=&acm_state_table[i];
 		if (acm->present) {
 			printk("disconnecting %d\n",i);
-			acm_disconnect(acm->dev);
+			acm_disconnect(acm->dev, acm);
 		}  
 	}
 	tty_unregister_driver(&acm_tty_driver);

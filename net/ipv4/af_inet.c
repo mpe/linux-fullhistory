@@ -948,45 +948,6 @@ struct net_proto_family inet_family_ops = {
 };
 
 
-#ifdef CONFIG_PROC_FS
-static struct proc_dir_entry proc_net_raw = {
-	PROC_NET_RAW, 3, "raw",
-	S_IFREG | S_IRUGO, 1, 0, 0,
-	0, &proc_net_inode_operations,
-	raw_get_info
-};
-static struct proc_dir_entry proc_net_netstat = {
-	PROC_NET_NETSTAT, 7, "netstat",
-	S_IFREG | S_IRUGO, 1, 0, 0,
-	0, &proc_net_inode_operations,
-	netstat_get_info
-};
-static struct proc_dir_entry proc_net_snmp = {
-	PROC_NET_SNMP, 4, "snmp",
-	S_IFREG | S_IRUGO, 1, 0, 0,
-	0, &proc_net_inode_operations,
-	snmp_get_info
-};
-static struct proc_dir_entry proc_net_sockstat = {
-	PROC_NET_SOCKSTAT, 8, "sockstat",
-	S_IFREG | S_IRUGO, 1, 0, 0,
-	0, &proc_net_inode_operations,
-	afinet_get_info
-};
-static struct proc_dir_entry proc_net_tcp = {
-	PROC_NET_TCP, 3, "tcp",
-	S_IFREG | S_IRUGO, 1, 0, 0,
-	0, &proc_net_inode_operations,
-	tcp_get_info
-};
-static struct proc_dir_entry proc_net_udp = {
-	PROC_NET_UDP, 3, "udp",
-	S_IFREG | S_IRUGO, 1, 0, 0,
-	0, &proc_net_inode_operations,
-	udp_get_info
-};
-#endif		/* CONFIG_PROC_FS */
-
 extern void tcp_init(void);
 extern void tcp_v4_init(struct net_proto_family *);
 
@@ -1071,13 +1032,12 @@ void __init inet_proto_init(struct net_proto *pro)
 	/*
 	 *	Create all the /proc entries.
 	 */
-
 #ifdef CONFIG_PROC_FS
-	proc_net_register(&proc_net_raw);
-	proc_net_register(&proc_net_snmp);
-	proc_net_register(&proc_net_netstat);
-	proc_net_register(&proc_net_sockstat);
-	proc_net_register(&proc_net_tcp);
-	proc_net_register(&proc_net_udp);
+	proc_net_create ("raw", 0, raw_get_info);
+	proc_net_create ("netstat", 0, netstat_get_info);
+	proc_net_create ("snmp", 0, snmp_get_info);
+	proc_net_create ("sockstat", 0, afinet_get_info);
+	proc_net_create ("tcp", 0, tcp_get_info);
+	proc_net_create ("udp", 0, udp_get_info);
 #endif		/* CONFIG_PROC_FS */
 }

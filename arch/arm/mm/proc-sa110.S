@@ -446,7 +446,8 @@ ENTRY(cpu_sa1100_reset)
 		bl	cpu_sa110_flush_tlb_all
 		mcr	p15, 0, ip, c7, c7, 0		@ flush I,D caches
 		mrc	p15, 0, r0, c1, c0, 0		@ ctrl register
-		bic	r0, r0, #1			@ ...............m
+		bic	r0, r0, #0x000f			@ ............wcam
+		bic	r0, r0, #0x1100			@ ...i...s........
 		ldmfd	sp!, {r1, pc}
 /*
  * Purpose : Function pointers used to access above functions - all calls
@@ -546,6 +547,7 @@ cpu_elf_name:	.asciz	"v4"
 		.align
 
 		.section ".proc.info", #alloc, #execinstr
+
 		.type	__sa110_proc_info,#object
 __sa110_proc_info:
 		.long	0x4401a100

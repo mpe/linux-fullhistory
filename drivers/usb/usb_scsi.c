@@ -69,6 +69,7 @@ struct us_data {
 	struct usb_scsi_filter  *filter;		/* filter driver */
 	void 			*fdata;			/* filter data */
 	unsigned int		flags;			/* from filter initially*/
+	__u8			ifnum;			/* interface number */
 	__u8			ep_in;			/* in endpoint */
 	__u8			ep_out;			/* out ....... */
 	__u8			ep_int;			/* interrupt . */
@@ -118,8 +119,8 @@ static struct us_data *us_list;
 
 static struct usb_scsi_filter *filters;
 
-static int scsi_probe(struct usb_device *dev);
-static void scsi_disconnect(struct usb_device *dev);
+static void * scsi_probe(struct usb_device *dev, unsigned int ifnum);
+static void scsi_disconnect(struct usb_device *dev, void *ptr);
 static struct usb_driver scsi_driver = {
 	"usb_scsi",
 	scsi_probe,
@@ -269,7 +270,7 @@ static int pop_CB_reset(struct us_data *us)
     cmd[1] = 4;
     result = usb_control_msg(us->pusb_dev, usb_sndctrlpipe(us->pusb_dev,0),
 			US_CBI_ADSC, USB_TYPE_CLASS | USB_RT_INTERFACE,
-			0, us->pusb_dev->ifnum, cmd, sizeof(cmd), HZ*5);
+			0, us->ifnum, cmd, sizeof(cmd), HZ*5);
 
     /* long wait for reset */
 
@@ -324,7 +325,7 @@ static int pop_CB_command(Scsi_Cmnd *srb)
 	    }
 	    result = usb_control_msg(us->pusb_dev, usb_sndctrlpipe(us->pusb_dev,0),
 				US_CBI_ADSC, USB_TYPE_CLASS | USB_RT_INTERFACE,
-				0, us->pusb_dev->ifnum,
+				0, us->ifnum,
 				cmd, us->fixedlength, HZ*5);
 	    if (!done_start && (us->subclass == US_SC_UFI /*|| us->subclass == US_SC_8070*/)
 		 && cmd[0] == TEST_UNIT_READY && result) {
@@ -336,7 +337,7 @@ static int pop_CB_command(Scsi_Cmnd *srb)
 		cmd[4] = 1;		/* start */
 		result = usb_control_msg(us->pusb_dev, usb_sndctrlpipe(us->pusb_dev,0),
 				US_CBI_ADSC, USB_TYPE_CLASS | USB_RT_INTERFACE,
-				0, us->pusb_dev->ifnum,
+				0, us->ifnum,
 				cmd, us->fixedlength, HZ*5);
 		wait_ms(100);
 		retry++;
@@ -345,7 +346,7 @@ static int pop_CB_command(Scsi_Cmnd *srb)
 	} else {
 	    result = usb_control_msg(us->pusb_dev, usb_sndctrlpipe(us->pusb_dev,0),
 				US_CBI_ADSC, USB_TYPE_CLASS | USB_RT_INTERFACE,
-				0, us->pusb_dev->ifnum,
+				0, us->ifnum,
 	    			srb->cmnd, srb->cmd_len, HZ*5);
 	}
 	if (/*result != USB_ST_STALL &&*/ result != USB_ST_TIMEOUT)
@@ -374,7 +375,7 @@ static int pop_CB_status(Scsi_Cmnd *srb)
 	while (retry--) {
 	    result = usb_control_msg(us->pusb_dev, usb_rcvctrlpipe(us->pusb_dev,0),
 	    			USB_REQ_GET_STATUS, USB_DIR_IN | USB_TYPE_STANDARD | USB_RT_DEVICE,
-				0, 0,
+				0, us->ifnum,
 				status, sizeof(status), HZ*5);
 	    if (result != USB_ST_TIMEOUT)
 		break;
@@ -479,7 +480,7 @@ static int pop_Bulk_reset(struct us_data *us)
 
     result = usb_control_msg(us->pusb_dev, usb_sndctrlpipe(us->pusb_dev,0),
 			US_BULK_RESET, USB_TYPE_CLASS | USB_RT_INTERFACE,
-			US_BULK_RESET_HARD, 0,
+			US_BULK_RESET_HARD, us->ifnum,
 			NULL, 0, HZ*5);
     if (result)
 	US_DEBUGP("Bulk hard reset failed %d\n", result);
@@ -1052,7 +1053,7 @@ static int usbscsi_control_thread(void * __us)
     return 0;
 }	
 
-static int scsi_probe(struct usb_device *dev)
+static void * scsi_probe(struct usb_device *dev, unsigned int ifnum)
 {
     struct usb_interface_descriptor *interface;
     int i;
@@ -1098,11 +1099,11 @@ static int scsi_probe(struct usb_device *dev)
 	    protocol = US_PR_CB;
 	    subclass = US_SC_8070;	/* an assumption */
 	} else if (dev->descriptor.bDeviceClass != 0 ||
-	    dev->config[0].interface[0].altsetting[0].bInterfaceClass !=
+	    dev->actconfig->interface[ifnum].altsetting[0].bInterfaceClass !=
 		USB_CLASS_MASS_STORAGE ||
-	    dev->config[0].interface[0].altsetting[0].bInterfaceSubClass < US_SC_MIN ||
-	    dev->config[0].interface[0].altsetting[0].bInterfaceSubClass > US_SC_MAX) {
-	    return -1;
+	    dev->actconfig->interface[ifnum].altsetting[0].bInterfaceSubClass < US_SC_MIN ||
+	    dev->actconfig->interface[ifnum].altsetting[0].bInterfaceSubClass > US_SC_MAX) {
+	    return NULL;
 	}
 
 	/* now check if we have seen it before */
@@ -1130,12 +1131,12 @@ static int scsi_probe(struct usb_device *dev)
 	    printk(KERN_WARNING USB_SCSI "Out of memory\n");
 	    if (filter)
 		    filter->release(fdata);
-	    return -1;
+	    return NULL;
 	}
 	memset(ss, 0, sizeof(struct us_data));
     }
 
-    interface = &dev->config[0].interface[0].altsetting[0];
+    interface = &dev->actconfig->interface[ifnum].altsetting[0];
     ss->filter = filter;
     ss->fdata = fdata;
     ss->flags = flags;
@@ -1195,10 +1196,12 @@ static int scsi_probe(struct usb_device *dev)
     US_DEBUGP("Endpoints In %d Out %d Int %d\n",
 		ss->ep_in, ss->ep_out, ss->ep_int);
 
+    /* save the interface number */
+    ss->ifnum = ifnum;
+
     /* exit if strange looking */
 
-    if (usb_set_configuration(dev, dev->config[0].bConfigurationValue) ||
-	usb_set_interface(dev, interface->bInterfaceNumber, 0) ||
+    if (usb_set_interface(dev, interface->bInterfaceNumber, 0) ||
 	!ss->ep_in || !ss->ep_out || (ss->protocol == US_PR_CBI && ss->ep_int == 0)) {
 	US_DEBUGP("Problems with device\n");
 	if (ss->host) {
@@ -1209,12 +1212,12 @@ static int scsi_probe(struct usb_device *dev)
 	if (filter)
 		filter->release(fdata);
 	kfree(ss);
-	return -1;			/* no endpoints */
+	return NULL;			/* no endpoints */
     }
 
-    if (dev->config[0].iConfiguration && usb_string(dev, dev->config[0].iConfiguration))
+    if (dev->actconfig->iConfiguration && usb_string(dev, dev->actconfig->iConfiguration))
 	US_DEBUGP("Configuration %s\n",
-		usb_string(dev, dev->config[0].iConfiguration));
+		usb_string(dev, dev->actconfig->iConfiguration));
     if (interface->iInterface && usb_string(dev, interface->iInterface))
 	US_DEBUGP("Interface %s\n",
 		usb_string(dev, interface->iInterface));
@@ -1268,7 +1271,7 @@ static int scsi_probe(struct usb_device *dev)
 	    if (filter)
 		    filter->release(fdata);
 	    kfree(ss);
-	    return -1;
+	    return NULL;
 	}
 	memcpy(htmplt, &my_host_template, sizeof(my_host_template));
 	ss->host_number = my_host_number++;
@@ -1284,7 +1287,7 @@ static int scsi_probe(struct usb_device *dev)
 	    /* shuttle E-USB */
 	    result = usb_control_msg(ss->pusb_dev, usb_rcvctrlpipe(dev,0),
 			1, 0xC0,
-			0, 0,
+			0, ss->ifnum,
 			qstat, 2, HZ*5);
 	    US_DEBUGP("C0 status %x %x\n", qstat[0], qstat[1]);
 	    init_waitqueue_head(&ss->ip_waitq);
@@ -1292,7 +1295,7 @@ static int scsi_probe(struct usb_device *dev)
 	    result = usb_request_irq(ss->pusb_dev, ss->irqpipe, pop_CBI_irq,
 				0, (void *)ss, &ss->irq_handle);
 	    if (result)
-	    	return -1;
+	    	return NULL;
 	    interruptible_sleep_on_timeout(&ss->ip_waitq, HZ*6);
 
 	} else if (ss->protocol == US_PR_CBI)
@@ -1314,7 +1317,7 @@ static int scsi_probe(struct usb_device *dev)
 		if (filter)
 			filter->release(fdata);
 		kfree(ss);
-		return -1;
+		return NULL;
 	    }
 
 	    /* wait for it to start */
@@ -1336,20 +1339,18 @@ static int scsi_probe(struct usb_device *dev)
 
     printk(KERN_INFO "USB SCSI device found at address %d\n", dev->devnum);
 
-    dev->private = ss;
-    return 0;
+    return ss;
 }
 
-static void scsi_disconnect(struct usb_device *dev)
+static void scsi_disconnect(struct usb_device *dev, void *ptr)
 {
-	struct us_data *ss = dev->private;
+	struct us_data *ss = ptr;
 
 	if (!ss)
 	    return;
 	if (ss->filter)
 		ss->filter->release(ss->fdata);
 	ss->pusb_dev = NULL;
-	dev->private = NULL;		/* just in case */
 	MOD_DEC_USE_COUNT;
 }
 

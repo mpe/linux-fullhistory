@@ -297,14 +297,6 @@ static int sound_proc_get_info(char *buffer, char **start, off_t offset, int len
         return len;
 }
 
-#ifdef CONFIG_PROC_FS
-static struct proc_dir_entry proc_root_sound = {
-        PROC_SOUND, 5, "sound",
-        S_IFREG | S_IRUGO, 1, 0, 0,
-        0, NULL, sound_proc_get_info
-};
-#endif
-
 #ifndef MIN
 #define MIN(a,b) (((a) < (b)) ? (a) : (b))
 #endif
@@ -756,7 +748,7 @@ static int sound_mmap(struct file *file, struct vm_area_struct *vma)
 /*		printk("Sound: mmap() called twice for the same DMA buffer\n");*/
 		return -EIO;
 	}
-	if (vma->vm_offset != 0)
+	if (vma->vm_pgoff != 0)
 	{
 /*		printk("Sound: mmap() offset must be 0.\n");*/
 		return -EINVAL;
@@ -855,7 +847,7 @@ soundcard_init(void)
 	}
 #endif
 #ifdef CONFIG_PROC_FS
-	if (proc_register(&proc_root, &proc_root_sound))
+	if (!create_proc_info_entry("sound", 0, NULL, sound_proc_get_info))
 		printk(KERN_ERR "sound: registering /proc/sound failed\n");
 #endif		
 }
@@ -935,10 +927,7 @@ void cleanup_module(void)
 	{
 		return;
 	}
-#ifdef CONFIG_PROC_FS	
-        if (proc_unregister(&proc_root, PROC_SOUND))
-		printk(KERN_ERR "sound: unregistering /proc/sound failed\n");
-#endif		
+        remove_proc_entry("sound", NULL);
 	if (chrdev_registered)
 		destroy_special_devices();
 

@@ -83,6 +83,7 @@ int usb_init(void)
  */
 void cleanup_drivers(void)
 {
+	usb_major_cleanup();
 #ifdef CONFIG_USB_PROC
 	proc_usb_cleanup ();
 #endif

@@ -1133,9 +1133,6 @@ int __init pktsched_init(void)
 #ifdef CONFIG_RTNETLINK
 	struct rtnetlink_link *link_p;
 #endif
-#ifdef CONFIG_PROC_FS
-	struct proc_dir_entry *ent;
-#endif
 
 #if PSCHED_CLOCK_SOURCE == PSCHED_CPU
 	if (psched_calibrate_clock() < 0)
@@ -1216,8 +1213,7 @@ int __init pktsched_init(void)
 #endif
 
 #ifdef CONFIG_PROC_FS
-	ent = create_proc_entry("net/psched", 0, 0);
-	ent->read_proc = psched_read_proc;
+	create_proc_read_entry("net/psched", 0, 0, psched_read_proc, NULL);
 #endif
 
 	return 0;

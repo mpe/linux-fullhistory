@@ -449,7 +449,7 @@ el2_block_output(struct net_device *dev, int count,
     if (dev->mem_start) {	/* Shared memory transfer */
 	unsigned long dest_addr = dev->mem_start +
 	    ((start_page - ei_status.tx_start_page) << 8);
-	memcpy_toio(dest_addr, buf, count);
+	isa_memcpy_toio(dest_addr, buf, count);
 	outb(EGACFR_NORM, E33G_GACFR);	/* Back to bank1 in case on bank0 */
 	return;
     }
@@ -514,7 +514,7 @@ el2_get_8390_hdr(struct net_device *dev, struct e8390_pkt_hdr *hdr, int ring_pag
     unsigned short word;
 
     if (dev->mem_start) {       /* Use the shared memory. */
-	memcpy_fromio(hdr, hdr_start, sizeof(struct e8390_pkt_hdr));
+	isa_memcpy_fromio(hdr, hdr_start, sizeof(struct e8390_pkt_hdr));
 	return;
     }
 
@@ -560,12 +560,12 @@ el2_block_input(struct net_device *dev, int count, struct sk_buff *skb, int ring
 	if (dev->mem_start + ring_offset + count > end_of_ring) {
 	    /* We must wrap the input move. */
 	    int semi_count = end_of_ring - (dev->mem_start + ring_offset);
-	    memcpy_fromio(skb->data, dev->mem_start + ring_offset, semi_count);
+	    isa_memcpy_fromio(skb->data, dev->mem_start + ring_offset, semi_count);
 	    count -= semi_count;
-	    memcpy_fromio(skb->data + semi_count, dev->rmem_start, count);
+	    isa_memcpy_fromio(skb->data + semi_count, dev->rmem_start, count);
 	} else {
 		/* Packet is in one chunk -- we can copy + cksum. */
-		eth_io_copy_and_sum(skb, dev->mem_start + ring_offset, count, 0);
+		isa_eth_io_copy_and_sum(skb, dev->mem_start + ring_offset, count, 0);
 	}
 	return;
     }

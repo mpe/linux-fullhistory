@@ -95,12 +95,12 @@ nfs_writepage_sync(struct dentry *dentry, struct inode *inode,
 	struct nfs_fattr fattr;
 
 	lock_kernel();
-	dprintk("NFS:      nfs_writepage_sync(%s/%s %d@%ld)\n",
+	dprintk("NFS:      nfs_writepage_sync(%s/%s %d@%lu/%ld)\n",
 		dentry->d_parent->d_name.name, dentry->d_name.name,
-		count, page->offset + offset);
+		count, page->pg_offset, offset);
 
 	buffer = (u8 *) page_address(page) + offset;
-	offset += page->offset;
+	offset += page->pg_offset << PAGE_CACHE_SHIFT;
 
 	do {
 		if (count < wsize && !IS_SWAPFILE(inode))
@@ -287,7 +287,7 @@ create_write_request(struct file * file, struct page *page, unsigned int offset,
 
 	dprintk("NFS:      create_write_request(%s/%s, %ld+%d)\n",
 		dentry->d_parent->d_name.name, dentry->d_name.name,
-		page->offset + offset, bytes);
+		(page->pg_offset << PAGE_CACHE_SHIFT) + offset, bytes);
 
 	/* FIXME: Enforce hard limit on number of concurrent writes? */
 	wreq = kmem_cache_alloc(nfs_wreq_cachep, SLAB_KERNEL);
@@ -435,7 +435,7 @@ nfs_updatepage(struct file *file, struct page *page, unsigned long offset, unsig
 
 	dprintk("NFS:      nfs_updatepage(%s/%s %d@%ld)\n",
 		dentry->d_parent->d_name.name, dentry->d_name.name,
-		count, page->offset+offset);
+		count, (page->pg_offset << PAGE_CACHE_SHIFT) +offset);
 
 	/*
 	 * Try to find a corresponding request on the writeback queue.
@@ -620,7 +620,7 @@ nfs_wback_begin(struct rpc_task *task)
 	/* Setup the task struct for a writeback call */
 	req->wb_flags |= NFS_WRITE_INPROGRESS;
 	req->wb_args.fh     = NFS_FH(dentry);
-	req->wb_args.offset = page->offset + req->wb_offset;
+	req->wb_args.offset = (page->pg_offset << PAGE_CACHE_SHIFT) + req->wb_offset;
 	req->wb_args.count  = req->wb_bytes;
 	req->wb_args.buffer = (void *) (page_address(page) + req->wb_offset);
 

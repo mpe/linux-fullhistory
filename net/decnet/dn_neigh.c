@@ -643,13 +643,6 @@ done:
         return len;
 }
 
-static struct proc_dir_entry proc_net_dn_neigh = {
-        PROC_NET_DN_ADJ, 12, "decnet_neigh",
-        S_IFREG | S_IRUGO, 1, 0, 0,
-        0, &proc_net_inode_operations,
-        dn_neigh_get_info
-};
-
 #endif
 
 void __init dn_neigh_init(void)
@@ -657,7 +650,7 @@ void __init dn_neigh_init(void)
 	neigh_table_init(&dn_neigh_table);
 
 #ifdef CONFIG_PROC_FS
-	proc_net_register(&proc_net_dn_neigh);
+	proc_net_create("decnet_neigh",0,dn_neigh_get_info);
 #endif /* CONFIG_PROC_FS */
 }
 
@@ -665,7 +658,7 @@ void __init dn_neigh_init(void)
 void dn_neigh_cleanup(void)
 {
 #ifdef CONFIG_PROC_FS
-	proc_net_unregister(PROC_NET_DN_ADJ);
+	proc_net_remove("decnet_neigh");
 #endif /* CONFIG_PROC_FS */
 	neigh_table_clear(&dn_neigh_table);
 }

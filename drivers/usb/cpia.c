@@ -37,6 +37,8 @@
 
 #define MDEBUG(x)	do { } while(0)		/* Debug memory management */
 
+static struct usb_driver cpia_driver;
+
 /* Given PGD from the address space's page table, return the kernel
  * virtual mapping of the physical memory mapped at ADR.
  */
@@ -1195,12 +1197,11 @@ static int usb_cpia_configure(struct usb_cpia *cpia)
 	struct usb_device *dev = cpia->dev;
 	unsigned char version[4];
 
-	if (usb_set_configuration(dev, dev->config[0].bConfigurationValue) < 0) {
-		printk(KERN_INFO "cpia: usb_set_configuration failed\n");
-		return -EBUSY;
-	}
+	/* claim interface 1 */
+	usb_driver_claim_interface(&cpia_driver,
+		&dev->actconfig->interface[1], cpia);
 
-	/* Set packet size to 0 */
+	/* Set altsetting 0 on interface 1 */
 	if (usb_set_interface(dev, 1, 0) < 0) {
 		printk(KERN_INFO "usb_set_interface error\n");
 		return -EBUSY;
@@ -1267,56 +1268,62 @@ static int usb_cpia_configure(struct usb_cpia *cpia)
 
 error:
 	video_unregister_device(&cpia->vdev);
+	usb_driver_release_interface(&cpia_driver,
+		&dev->actconfig->interface[1]);
 
 	kfree(cpia);
 
 	return -EBUSY;
 }
 
-static int cpia_probe(struct usb_device *dev)
+static void * cpia_probe(struct usb_device *dev, unsigned int ifnum)
 {
 	struct usb_interface_descriptor *interface;
 	struct usb_cpia *cpia;
 
 	/* We don't handle multi-config cameras */
 	if (dev->descriptor.bNumConfigurations != 1)
-		return -1;
+		return NULL;
 
-	interface = &dev->config[0].interface[0].altsetting[0];
+	interface = &dev->actconfig->interface[ifnum].altsetting[0];
 
 	/* Is it a CPiA? */
 	if (dev->descriptor.idVendor != 0x0553)
-		return -1;
+		return NULL;
 	if (dev->descriptor.idProduct != 0x0002)
-		return -1;
+		return NULL;
 
 	/* Checking vendor/product should be enough, but what the hell */
 	if (interface->bInterfaceClass != 0xFF)
-		return -1;
+		return NULL;
 	if (interface->bInterfaceSubClass != 0x00)
-		return -1;
+		return NULL;
 
 	/* We found a CPiA */
 	printk("USB CPiA camera found\n");
 
 	if ((cpia = kmalloc(sizeof(*cpia), GFP_KERNEL)) == NULL) {
 		printk("couldn't kmalloc cpia struct\n");
-		return -1;
+		return NULL;
 	}
 
 	memset(cpia, 0, sizeof(*cpia));
 
-	dev->private = cpia;
 	cpia->dev = dev;
 
-	return usb_cpia_configure(cpia);
+	if (!usb_cpia_configure(cpia)) {
+	    return cpia;
+	} else return NULL;
 }
 
-static void cpia_disconnect(struct usb_device *dev)
+static void cpia_disconnect(struct usb_device *dev, void *ptr)
 {
-	struct usb_cpia *cpia = dev->private;
+	struct usb_cpia *cpia = (struct usb_cpia *) ptr;
 
 	video_unregister_device(&cpia->vdev);
+
+	usb_driver_release_interface(&cpia_driver,
+		&cpia->dev->actconfig->interface[1]);
 
 	/* Free the memory */
 	kfree(cpia);

@@ -16,17 +16,9 @@ struct map_desc {
 	    bufferable:1;
 };
 
-struct mem_desc {
-	unsigned long virt_start;
-	unsigned long virt_end;
-};
-
 extern struct map_desc	io_desc[];
 extern unsigned int	io_desc_size;
-extern struct mem_desc	mem_desc[];
-extern unsigned int	mem_desc_size;
 
-extern void mark_usable_memory_areas(unsigned long start, unsigned long end);
-extern unsigned long create_mem_holes(unsigned long start, unsigned long end);
-extern unsigned long setup_page_tables(unsigned long start, unsigned long end);
+extern void create_memmap_holes(void);
+extern void pagetable_init(void);
 

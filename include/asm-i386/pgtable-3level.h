@@ -121,11 +121,4 @@ extern inline pmd_t * pmd_alloc(pgd_t *pgd, unsigned long address)
 	return (pmd_t *)pgd_page(*pgd) + address;
 }
 
-/*
- * Subtle. offset can overflow 32 bits and that's a feature - we can do
- * up to 16 TB swap on PAE. (Not that anyone should need that much
- * swapspace, but who knows?)
- */
-#define SWP_ENTRY(type,offset) __pte((((type) << 1) | ((offset) << 8ULL)))
-
 #endif /* _I386_PGTABLE_3LEVEL_H */

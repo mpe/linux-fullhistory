@@ -68,8 +68,8 @@ struct page * replace_with_highmem(struct page * page)
 	kunmap(vaddr, KM_WRITE);
 
 	/* Preserve the caching of the swap_entry. */
-	highpage->offset = page->offset;
-	highpage->inode = page->inode;
+	highpage->pg_offset = page->pg_offset;
+	highpage->mapping = page->mapping;
 
 	/*
 	 * We can just forget the old page since 

@@ -48,30 +48,39 @@ get_cached_page(struct address_space *mapping, unsigned long offset, int new)
 {
 	struct page * page;
 	struct page ** hash;
-	unsigned long new_page;
+	struct page *cached_page = NULL;
 
  again:
 	hash = page_hash(mapping, offset);
 	page = __find_lock_page(mapping, offset, hash);
 	if(!page && new) {
-		/* not in cache, alloc a new page */
-		new_page = page_cache_alloc();
-		if (!new_page)
-			return 0;
-		clear_page(new_page);	/* smb code assumes pages are zeroed */
-		page = page_cache_entry(new_page);
-		if (add_to_page_cache_unique(page, mapping, offset, hash)) {
-			/* Hmm, a page has materialized in the
-                           cache. Fine. Go back and get that page
-                           instead ... throwing away this one first. */
-			put_cached_page((unsigned long) page);
+		/* not in cache, alloc a new page if we didn't do it yet */
+		if (!cached_page) {
+			cached_page = page_cache_alloc();
+			if (!cached_page)
+				return 0;
+			/* smb code assumes pages are zeroed */
+			clear_page(page_address(cached_page));
 			goto again;
 		}
+		page = cached_page;
+		if (page->buffers)
+			BUG();
+		printk(KERN_DEBUG "smbfs: get_cached_page\n");
+		if (add_to_page_cache_unique(page, mapping, offset, hash))
+			/* Hmm, a page has materialized in the
+                           cache. Fine. Go back and get that page
+                          instead... */
+			goto again;
+		cached_page = NULL;
 	}
+	printk(KERN_DEBUG "smbfs: get_cached_page done\n");
+	if (cached_page)
+		page_cache_free(cached_page);
 	if(!page)
 		return 0;
 	if(!PageLocked(page))
-		printk(KERN_ERR "smbfs/cache.c: page isn't locked! This could be fun ...\n");
+		BUG();
 	return page_address(page);
 }
 

@@ -45,8 +45,8 @@ struct usb_keyboard
 
 extern unsigned char usb_kbd_map[];
 
-static int usb_kbd_probe(struct usb_device *dev);
-static void usb_kbd_disconnect(struct usb_device *dev);
+static void * usb_kbd_probe(struct usb_device *dev, unsigned int i);
+static void usb_kbd_disconnect(struct usb_device *dev, void *ptr);
 static void usb_kbd_repeat(unsigned long dummy);
 
 static LIST_HEAD(usb_kbd_list);
@@ -190,25 +190,22 @@ usb_kbd_irq(int state, void *buffer, int len, void *dev_id)
     return 1;
 }
 
-static int
-usb_kbd_probe(struct usb_device *dev)
+static void *
+usb_kbd_probe(struct usb_device *dev, unsigned int i)
 {
     struct usb_interface_descriptor *interface;
     struct usb_endpoint_descriptor *endpoint;
     struct usb_keyboard *kbd;
     int ret;
     
-    if (dev->descriptor.bNumConfigurations < 1)
-	return -1;
-
-    interface = &dev->config[0].interface[0].altsetting[0];
+    interface = &dev->actconfig->interface[i].altsetting[0];
     endpoint = &interface->endpoint[0];
 
     if(interface->bInterfaceClass != 3
        || interface->bInterfaceSubClass != 1
        || interface->bInterfaceProtocol != 1)
     {
-        return -1;
+        return NULL;
     }
 
     printk(KERN_INFO "USB HID boot protocol keyboard detected.\n");
@@ -218,12 +215,7 @@ usb_kbd_probe(struct usb_device *dev)
     {
         memset(kbd, 0, sizeof(*kbd));
         kbd->dev = dev;
-        dev->private = kbd;
 
-        if (usb_set_configuration(dev, dev->config[0].bConfigurationValue)) {
-		printk (KERN_INFO " Failed usb_set_configuration: kbd\n");
-		goto probe_err;
-	}
         usb_set_protocol(dev, 0);
         usb_set_idle(dev, 0, 0);
         
@@ -238,23 +230,22 @@ usb_kbd_probe(struct usb_device *dev)
 
         list_add(&kbd->list, &usb_kbd_list);
 	
-	return 0;
+	return kbd;
     }
 
 probe_err:
     if (kbd)
     	kfree (kbd);
-    return -1;
+    return NULL;
 }
 
 static void
-usb_kbd_disconnect(struct usb_device *dev)
+usb_kbd_disconnect(struct usb_device *dev, void *ptr)
 {
-    struct usb_keyboard *kbd = (struct usb_keyboard*) dev->private;
+    struct usb_keyboard *kbd = (struct usb_keyboard*) ptr;
     if (kbd)
     {
 	usb_release_irq(dev, kbd->irq_handler, kbd->irqpipe);
-	dev->private = NULL;
 	list_del(&kbd->list);
 	del_timer(&kbd->repeat_timer);
 	kfree(kbd);

@@ -1458,33 +1458,6 @@ static struct notifier_block rose_dev_notifier = {
 	0
 };
 
-#ifdef CONFIG_PROC_FS
-static struct proc_dir_entry proc_net_rose = {
-	PROC_NET_RS, 4, "rose",
-	S_IFREG | S_IRUGO, 1, 0, 0,
-	0, &proc_net_inode_operations, 
-	rose_get_info
-};
-static struct proc_dir_entry proc_net_rose_neigh = {
-	PROC_NET_RS_NEIGH, 10, "rose_neigh",
-	S_IFREG | S_IRUGO, 1, 0, 0,
-	0, &proc_net_inode_operations, 
-	rose_neigh_get_info
-};
-static struct proc_dir_entry proc_net_rose_nodes = {
-	PROC_NET_RS_NODES, 10, "rose_nodes",
-	S_IFREG | S_IRUGO, 1, 0, 0,
-	0, &proc_net_inode_operations, 
-	rose_nodes_get_info
-};
-static struct proc_dir_entry proc_net_rose_routes = {
-	PROC_NET_RS_ROUTES, 11, "rose_routes",
-	S_IFREG | S_IRUGO, 1, 0, 0,
-	0, &proc_net_inode_operations, 
-	rose_routes_get_info
-};
-#endif	
-
 static struct net_device *dev_rose;
 
 void __init rose_proto_init(struct net_proto *pro)
@@ -1527,10 +1500,10 @@ void __init rose_proto_init(struct net_proto *pro)
 	rose_add_loopback_neigh();
 
 #ifdef CONFIG_PROC_FS
-	proc_net_register(&proc_net_rose);
-	proc_net_register(&proc_net_rose_neigh);
-	proc_net_register(&proc_net_rose_nodes);
-	proc_net_register(&proc_net_rose_routes);
+	proc_net_create("rose", 0, rose_get_info);
+	proc_net_create("rose_neigh", 0, rose_neigh_get_info);
+	proc_net_create("rose_nodes", 0, rose_nodes_get_info);
+	proc_net_create("rose_routes", 0, rose_routes_get_info);
 #endif
 }
 
@@ -1555,10 +1528,10 @@ void cleanup_module(void)
 	int i;
 
 #ifdef CONFIG_PROC_FS
-	proc_net_unregister(PROC_NET_RS);
-	proc_net_unregister(PROC_NET_RS_NEIGH);
-	proc_net_unregister(PROC_NET_RS_NODES);
-	proc_net_unregister(PROC_NET_RS_ROUTES);
+	proc_net_remove("rose");
+	proc_net_remove("rose_neigh");
+	proc_net_remove("rose_nodes");
+	proc_net_remove("rose_routes");
 #endif
 	rose_loopback_clear();
 

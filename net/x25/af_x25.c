@@ -1283,21 +1283,6 @@ void x25_kill_by_neigh(struct x25_neigh *neigh)
 	} 
 }
 
-#ifdef CONFIG_PROC_FS
-static struct proc_dir_entry proc_net_x25 = {
-	PROC_NET_X25, 3, "x25",
-	S_IFREG | S_IRUGO, 1, 0, 0,
-	0, &proc_net_inode_operations, 
-	x25_get_info
-};
-static struct proc_dir_entry proc_net_x25_routes = {
-	PROC_NET_X25_ROUTES, 10, "x25_routes",
-	S_IFREG | S_IRUGO, 1, 0, 0,
-	0, &proc_net_inode_operations, 
-	x25_routes_get_info
-};
-#endif	
-
 void __init x25_proto_init(struct net_proto *pro)
 {
 	sock_register(&x25_family_ops);
@@ -1314,8 +1299,8 @@ void __init x25_proto_init(struct net_proto *pro)
 #endif
 
 #ifdef CONFIG_PROC_FS
-	proc_net_register(&proc_net_x25);
-	proc_net_register(&proc_net_x25_routes);
+	proc_net_create("x25", 0, x25_get_info);
+	proc_net_create("x25_routes", 0, x25_routes_get_info);
 #endif	
 }
 
@@ -1352,8 +1337,8 @@ void cleanup_module(void)
 {
 
 #ifdef CONFIG_PROC_FS
-	proc_net_unregister(PROC_NET_X25);
-	proc_net_unregister(PROC_NET_X25_ROUTES);
+	proc_net_remove("x25");
+	proc_net_remove("x25_routes");
 #endif
 
 	x25_link_free();

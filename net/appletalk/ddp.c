@@ -2069,32 +2069,6 @@ EXPORT_SYMBOL(aarp_send_ddp);
 EXPORT_SYMBOL(atrtr_get_dev);
 EXPORT_SYMBOL(atalk_find_dev_addr);
 
-#ifdef CONFIG_PROC_FS
-static struct proc_dir_entry proc_appletalk=
-{
-	PROC_NET_ATALK, 9, "appletalk",
-	S_IFREG | S_IRUGO, 1, 0, 0,
-	0, &proc_net_inode_operations,
-	atalk_get_info
-};
-
-static struct proc_dir_entry proc_atalk_route=
-{
-	PROC_NET_AT_ROUTE, 11,"atalk_route",
-	S_IFREG | S_IRUGO, 1, 0, 0,
-	0, &proc_net_inode_operations,
-	atalk_rt_get_info
-};
-
-static struct proc_dir_entry proc_atalk_iface=
-{
-	PROC_NET_ATIF, 11,"atalk_iface",
-	S_IFREG | S_IRUGO, 1, 0, 0,
-	0, &proc_net_inode_operations,
-	atalk_if_get_info
-};
-#endif /* CONFIG_PROC_FS */
-
 /* Called by proto.c on kernel start up */
 
 void __init atalk_proto_init(struct net_proto *pro)
@@ -2113,9 +2087,9 @@ void __init atalk_proto_init(struct net_proto *pro)
 	aarp_proto_init();
 
 #ifdef CONFIG_PROC_FS
-	proc_net_register(&proc_appletalk);
-	proc_net_register(&proc_atalk_route);
-	proc_net_register(&proc_atalk_iface);
+	proc_net_create("appletalk", 0, atalk_get_info);
+	proc_net_create("atalk_route", 0, atalk_rt_get_info);
+	proc_net_create("atalk_iface", 0, atalk_if_get_info);
 
 	aarp_register_proc_fs();
 #endif /* CONFIG_PROC_FS */
@@ -2155,9 +2129,9 @@ void cleanup_module(void)
 #endif /* CONFIG_SYSCTL */
 
 #ifdef CONFIG_PROC_FS
-	proc_net_unregister(PROC_NET_ATALK);
-	proc_net_unregister(PROC_NET_AT_ROUTE);
-	proc_net_unregister(PROC_NET_ATIF);
+	proc_net_remove("appletalk");
+	proc_net_remove("atalk_route");
+	proc_net_remove("atalk_iface");
 
 	aarp_unregister_proc_fs();
 #endif /* CONFIG_PROC_FS */

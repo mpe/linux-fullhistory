@@ -289,8 +289,13 @@ static struct video_device fmi_radio=
 	NULL
 };
 
-int __init fmi_init(struct video_init *v)
+static int __init fmi_init(void)
 {
+	if(io==-1)
+	{
+		printk(KERN_ERR "You must set an I/O address with io=0x???\n");
+		return -EINVAL;
+	}
 	if (check_region(io, 2)) 
 	{
 		printk(KERN_ERR "fmi: port 0x%x already in use\n", io);
@@ -316,8 +321,6 @@ int __init fmi_init(struct video_init *v)
 	return 0;
 }
 
-#ifdef MODULE
-
 MODULE_AUTHOR("Petr Vandrovec, vandrove@vc.cvut.cz and M. Kirkwood");
 MODULE_DESCRIPTION("A driver for the SF16MI radio.");
 MODULE_PARM(io, "i");
@@ -325,20 +328,12 @@ MODULE_PARM_DESC(io, "I/O address of the SF16MI card (0x284 or 0x384)");
 
 EXPORT_NO_SYMBOLS;
 
-int init_module(void)
-{
-	if(io==-1)
-	{
-		printk(KERN_ERR "You must set an I/O address with io=0x???\n");
-		return -EINVAL;
-	}
-	return fmi_init(NULL);
-}
-
-void cleanup_module(void)
+static void __exit fmi_cleanup_module(void)
 {
 	video_unregister_device(&fmi_radio);
 	release_region(io,2);
 }
 
-#endif
+module_init(fmi_init);
+module_exit(fmi_cleanup_module);
+

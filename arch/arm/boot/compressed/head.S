@@ -96,6 +96,8 @@ start:
  */
 reloc_start:	add	r8, r5, r0
 #if 0
+	mov r0, #'\n'
+	bl putc
 	mov r0, r6
 	mov r1, #8
 	bl phex
@@ -139,8 +141,8 @@ reloc_start:	add	r8, r5, r0
 	bl phex
 	mov r0, #'\n'
 	bl putc
-	mov	r0, r4
-	bl	memdump
+	mov r0, r4
+	bl  memdump
 #endif
 		eor	r0, r6, #0x44 << 24	@ SA-110?
 		eor	r0, r0, #0x01 << 16
@@ -154,6 +156,25 @@ call_kernel:	mov	r0, #0
 		mov	pc, r4			@ call kernel
 
 phexbuf:	.space	12
+
+#if 0
+		.macro	loadsp,	rb
+		mov	\rb, #0x7c000000
+		.endm
+
+		.macro	writeb,	rb
+		strb	\rb, [r3, #0x3f8]
+		.endm
+#else
+		.macro	loadsp,	rb
+		mov	\rb, #0x03000000
+		orr	\rb, \rb, #0x00010000
+		.endm
+
+		.macro	writeb,	rb
+		strb	\rb, [r3, #0x3f8 << 2]
+		.endm
+#endif
 
 phex:		adr	r3, phexbuf
 		mov	r2, #0
@@ -169,11 +190,11 @@ phex:		adr	r3, phexbuf
 		strb	r2, [r3, r1]
 		b	1b
 
-puts:		mov	r3, #0x7c000000
+puts:		loadsp	r3
 1:		ldrb	r2, [r0], #1
 		teq	r2, #0
 		moveq	pc, lr
-2:		strb	r2, [r3, #0x3f8]
+2:		writeb	r2
 		mov	r1, #0x00020000
 3:		subs	r1, r1, #1
 		bne	3b
@@ -186,7 +207,7 @@ puts:		mov	r3, #0x7c000000
 putc:
 		mov	r2, r0
 		mov	r0, #0
-		mov	r3, #0x7c000000
+		loadsp	r3
 		b	2b
 
 memdump:	mov	r12, r0

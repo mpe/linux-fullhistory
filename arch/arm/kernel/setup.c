@@ -20,6 +20,7 @@
 #include <linux/blk.h>
 #include <linux/console.h>
 #include <linux/init.h>
+#include <linux/bootmem.h>
 
 #include <asm/elf.h>
 #include <asm/hardware.h>
@@ -42,8 +43,30 @@
 
 extern void reboot_setup(char *str, int *ints);
 extern void disable_hlt(void);
+extern int root_mountflags;
+extern int _stext, _text, _etext, _edata, _end;
+
+unsigned int processor_id;
+unsigned int __machine_arch_type;
+unsigned int vram_size;
+unsigned int system_rev;
+unsigned int system_serial_low;
+unsigned int system_serial_high;
+unsigned int elf_hwcap;
+
+#ifdef CONFIG_ARCH_ACORN
+unsigned int memc_ctrl_reg;
+unsigned int number_mfm_drives;
+#endif
+
+struct meminfo meminfo;
+
+#ifdef MULTI_CPU
+struct processor processor;
+#endif
 
 struct drive_info_struct { char dummy[32]; } drive_info;
+
 struct screen_info screen_info = {
  orig_video_lines:	30,
  orig_video_cols:	80,
@@ -53,39 +76,41 @@ struct screen_info screen_info = {
  orig_video_points:	8
 };
 
-extern int root_mountflags;
-extern int _text, _etext, _edata, _end;
-
 unsigned char aux_device_present;
-         char elf_platform[ELF_PLATFORM_SIZE];
-unsigned int  elf_hwcap;
-
-/*
- * From head-armv.S
- */
-unsigned int processor_id;
-unsigned int __machine_arch_type;
-unsigned int vram_size;
-unsigned int system_rev;
-unsigned int system_serial_low;
-unsigned int system_serial_high;
-#ifdef MULTI_CPU
-struct processor processor;
-#endif
-#ifdef CONFIG_ARCH_ACORN
-unsigned int memc_ctrl_reg;
-unsigned int number_mfm_drives;
-#endif
+char elf_platform[ELF_PLATFORM_SIZE];
+char saved_command_line[COMMAND_LINE_SIZE];
 
 static struct proc_info_item proc_info;
+static char command_line[COMMAND_LINE_SIZE] = { 0, };
+
+static char default_command_line[COMMAND_LINE_SIZE] __initdata = CONFIG_CMDLINE;
 static union { char c[4]; unsigned long l; } endian_test __initdata = { { 'l', '?', '?', 'b' } };
 #define ENDIANNESS ((char)endian_test.l)
 
-/*-------------------------------------------------------------------------
- * Early initialisation routines for various configurable items in the
- * kernel.  Each one either supplies a setup_ function, or defines this
- * symbol to be empty if not configured.
+/*
+ * Standard memory resources
  */
+static struct resource mem_res[] = {
+	{ "System RAM",  0,     0,     IORESOURCE_MEM | IORESOURCE_BUSY },
+	{ "Video RAM",   0,     0,     IORESOURCE_MEM			},
+	{ "Kernel code", 0,     0,     IORESOURCE_MEM			},
+	{ "Kernel data", 0,     0,     IORESOURCE_MEM			}
+};
+
+#define system_ram  mem_res[0]
+#define video_ram   mem_res[1]
+#define kernel_code mem_res[2]
+#define kernel_data mem_res[3]
+
+static struct resource io_res[] = {
+	{ "reserved",    0x3bc, 0x3be, IORESOURCE_IO | IORESOURCE_BUSY },
+	{ "reserved",    0x378, 0x37f, IORESOURCE_IO | IORESOURCE_BUSY },
+	{ "reserved",    0x278, 0x27f, IORESOURCE_IO | IORESOURCE_BUSY }
+};
+
+#define lp0 io_res[0]
+#define lp1 io_res[1]
+#define lp2 io_res[2]
 
 static void __init setup_processor(void)
 {
@@ -124,55 +149,69 @@ static void __init setup_processor(void)
 	cpu_proc_init();
 }
 
-static char default_command_line[COMMAND_LINE_SIZE] __initdata = CONFIG_CMDLINE;
-static char command_line[COMMAND_LINE_SIZE] = { 0, };
-       char saved_command_line[COMMAND_LINE_SIZE];
+static unsigned long __init memparse(char *ptr, char **retptr)
+{
+	unsigned long ret = simple_strtoul(ptr, retptr, 0);
 
+	switch (**retptr) {
+	case 'M':
+	case 'm':
+		ret <<= 10;
+	case 'K':
+	case 'k':
+		ret <<= 10;
+		(*retptr)++;
+	default:
+		break;
+	}
+	return ret;
+}
+
+/*
+ * Initial parsing of the command line.  We need to pick out the
+ * memory size.  We look for mem=size@start, where start and size
+ * are "size[KkMm]"
+ */
 static void __init
-setup_mem(char *cmd_line, unsigned long *mem_sz)
+parse_cmdline(char **cmdline_p, char *from)
 {
 	char c = ' ', *to = command_line;
-	int len = 0;
-
-	if (!*mem_sz)
-		*mem_sz = MEM_SIZE;
+	int usermem = 0, len = 0;
 
 	for (;;) {
-		if (c == ' ') {
-			if (cmd_line[0] == 'm' &&
-			    cmd_line[1] == 'e' &&
-			    cmd_line[2] == 'm' &&
-			    cmd_line[3] == '=') {
-				*mem_sz = simple_strtoul(cmd_line+4, &cmd_line, 0);
-				switch(*cmd_line) {
-				case 'M':
-				case 'm':
-					*mem_sz <<= 10;
-				case 'K':
-				case 'k':
-					*mem_sz <<= 10;
-					cmd_line++;
-				}
+		if (c == ' ' && !memcmp(from, "mem=", 4)) {
+			unsigned long size, start;
+
+			if (to != command_line)
+				to -= 1;
+
+			/* If the user specifies memory size, we
+			 * blow away any automatically generated
+			 * size.
+			 */
+			if (usermem == 0) {
+				usermem = 1;
+				meminfo.nr_banks = 0;
 			}
-			/* if there are two spaces, remove one */
-			if (*cmd_line == ' ') {
-				cmd_line++;
-				continue;
-			}
+
+			start = 0;
+			size  = memparse(from + 4, &from);
+			if (*from == '@')
+				start = memparse(from + 1, &from);
+
+			meminfo.bank[meminfo.nr_banks].start = start;
+			meminfo.bank[meminfo.nr_banks].size  = size;
+			meminfo.nr_banks += 1;
 		}
-		c = *cmd_line++;
+		c = *from++;
 		if (!c)
 			break;
 		if (COMMAND_LINE_SIZE <= ++len)
 			break;
 		*to++ = c;
 	}
-
 	*to = '\0';
-
-	/* remove trailing spaces */
-	while (*--to == ' ' && to != command_line)
-		*to = '\0';
+	*cmdline_p = command_line;
 }
 
 static void __init
@@ -199,51 +238,90 @@ setup_ramdisk(int doload, int prompt, int image_start, unsigned int rd_sz)
 static void __init setup_initrd(unsigned int start, unsigned int size)
 {
 #ifdef CONFIG_BLK_DEV_INITRD
-	if (start) {
-		initrd_start = start;
-		initrd_end   = start + size;
-	} else {
-		initrd_start = 0;
-		initrd_end   = 0;
-	}
-#endif
-}
-
-static void __init check_initrd(unsigned long mem_end)
-{
-#ifdef CONFIG_BLK_DEV_INITRD
-	if (initrd_end > mem_end) {
-		printk ("initrd extends beyond end of memory "
-			"(0x%08lx > 0x%08lx) - disabling initrd\n",
-			initrd_end, mem_end);
-		initrd_start = 0;
-	}
+	if (start == 0)
+		size = 0;
+	initrd_start = start;
+	initrd_end   = start + size;
 #endif
 }
 
 /*
- * Standard memory resources
+ * Work out our memory regions.  Note that "pfn" is the physical page number
+ * relative to the first physical page, not the physical address itself.
  */
-static struct resource system_ram  = { "System RAM",  0, 0, IORESOURCE_MEM | IORESOURCE_BUSY };
-static struct resource video_ram   = { "Video RAM",   0, 0, IORESOURCE_MEM };
-static struct resource kernel_code = { "Kernel code", 0, 0, IORESOURCE_MEM };
-static struct resource kernel_data = { "Kernel data", 0, 0, IORESOURCE_MEM };
-static struct resource lpt1 = { "reserved", 0x3bc, 0x3be, IORESOURCE_IO | IORESOURCE_BUSY };
-static struct resource lpt2 = { "reserved", 0x378, 0x37f, IORESOURCE_IO | IORESOURCE_BUSY };
-static struct resource lpt3 = { "reserved", 0x278, 0x27f, IORESOURCE_IO | IORESOURCE_BUSY };
+static void __init setup_bootmem(void)
+{
+	unsigned int end_pfn, bootmem_end;
+	int bank;
 
-static void __init request_standard_resources(unsigned long end)
+	/*
+	 * Calculate the end of memory.
+	 */
+	for (bank = 0; bank < meminfo.nr_banks; bank++) {
+		if (meminfo.bank[bank].size) {
+			unsigned long end;
+
+			end = meminfo.bank[bank].start +
+			      meminfo.bank[bank].size;
+			if (meminfo.end < end)
+				meminfo.end = end;
+		}
+	}
+
+	bootmem_end = __pa(PAGE_ALIGN((unsigned long)&_end));
+	end_pfn     = meminfo.end >> PAGE_SHIFT;
+
+	/*
+	 * Initialise the boot-time allocator
+	 */
+	bootmem_end += init_bootmem(bootmem_end >> PAGE_SHIFT, end_pfn);
+
+	/*
+	 * Register all available RAM with the bootmem allocator.
+	 * The address is relative to the start of physical memory.
+	 */
+	for (bank = 0; bank < meminfo.nr_banks; bank ++)
+		free_bootmem(meminfo.bank[bank].start, meminfo.bank[bank].size);
+
+	/*
+	 * reserve the following regions:
+	 *  physical page 0 - it contains the exception vectors
+	 *  kernel and the bootmem structure
+	 *  swapper page directory (if any)
+	 *  initrd (if any)
+	 */
+	reserve_bootmem(0, PAGE_SIZE);
+#ifdef CONFIG_CPU_32
+	reserve_bootmem(__pa(swapper_pg_dir), PTRS_PER_PGD * sizeof(void *));
+#endif
+	reserve_bootmem(__pa(&_stext), bootmem_end - __pa(&_stext));
+#ifdef CONFIG_BLK_DEV_INITRD
+	if (__pa(initrd_end) > (end_pfn << PAGE_SHIFT)) {
+		printk ("initrd extends beyond end of memory "
+			"(0x%08lx > 0x%08x) - disabling initrd\n",
+			__pa(initrd_end), end_pfn << PAGE_SHIFT);
+		initrd_start = 0;
+	}
+
+	if (initrd_start)
+		reserve_bootmem(__pa(initrd_start),
+				initrd_end - initrd_start);
+#endif
+}
+
+static void __init request_standard_resources(void)
 {
 	kernel_code.start  = __virt_to_bus((unsigned long) &_text);
 	kernel_code.end    = __virt_to_bus((unsigned long) &_etext - 1);
 	kernel_data.start  = __virt_to_bus((unsigned long) &_etext);
 	kernel_data.end    = __virt_to_bus((unsigned long) &_edata - 1);
 	system_ram.start   = __virt_to_bus(PAGE_OFFSET);
-	system_ram.end     = __virt_to_bus(end - 1);
+	system_ram.end     = __virt_to_bus(meminfo.end + PAGE_OFFSET - 1);
 
 	request_resource(&iomem_resource, &system_ram);
 	request_resource(&system_ram, &kernel_code);
 	request_resource(&system_ram, &kernel_data);
+
 	if (video_ram.start != video_ram.end)
 		request_resource(&iomem_resource, &video_ram);
 
@@ -253,17 +331,16 @@ static void __init request_standard_resources(unsigned long end)
 	 */
 	if (machine_is_ebsa110() || machine_is_riscpc() ||
 	    machine_is_netwinder())
-		request_resource(&ioport_resource, &lpt1);
+		request_resource(&ioport_resource, &lp0);
 	if (machine_is_riscpc())
-		request_resource(&ioport_resource, &lpt2);
+		request_resource(&ioport_resource, &lp1);
 	if (machine_is_ebsa110() || machine_is_netwinder())
-		request_resource(&ioport_resource, &lpt3);
+		request_resource(&ioport_resource, &lp2);
 }
 
-void __init setup_arch(char **cmdline_p, unsigned long * memory_start_p, unsigned long * memory_end_p)
+void __init setup_arch(char **cmdline_p)
 {
 	struct param_struct *params = (struct param_struct *)PARAMS_BASE;
-	unsigned long memory_end = 0;
 	char *from = default_command_line;
 
 #if defined(CONFIG_ARCH_ARC)
@@ -296,10 +373,6 @@ void __init setup_arch(char **cmdline_p, unsigned long * memory_start_p, unsigne
 	case MACH_TYPE_RISCPC:
 		/* RiscPC can't handle half-word loads and stores */
 		elf_hwcap &= ~HWCAP_HALF;
-		{
-			extern void init_dram_banks(struct param_struct *);
-			init_dram_banks(params);
-		}
 
 		switch (params->u1.s.pages_in_vram) {
 		case 512:
@@ -308,6 +381,17 @@ void __init setup_arch(char **cmdline_p, unsigned long * memory_start_p, unsigne
 			vram_size += PAGE_SIZE * 256;
 		default:
 			break;
+		}
+		{
+			int i;
+
+			for (i = 0; i < 4; i++) {
+				meminfo.bank[i].start = i << 26;
+				meminfo.bank[i].size  =
+					params->u1.s.pages_in_bank[i] *
+					params->u1.s.page_size;
+			}
+			meminfo.nr_banks = 4;
 		}
 #endif
 	case MACH_TYPE_ARCHIMEDES:
@@ -347,7 +431,7 @@ void __init setup_arch(char **cmdline_p, unsigned long * memory_start_p, unsigne
 		 */
 		reboot_setup("s", NULL);
 		params = NULL;
-		ORIG_VIDEO_LINES = 25;
+		ORIG_VIDEO_LINES  = 25;
 		ORIG_VIDEO_POINTS = 16;
 		ORIG_Y = 24;
 		video_ram.start = 0x0a0000;
@@ -393,7 +477,11 @@ void __init setup_arch(char **cmdline_p, unsigned long * memory_start_p, unsigne
 	}
 
 	if (params) {
-		memory_end	   = PAGE_SIZE * params->u1.s.nr_pages;
+		if (meminfo.nr_banks == 0) {
+			meminfo.nr_banks      = 1;
+			meminfo.bank[0].start = 0;
+			meminfo.bank[0].size  = params->u1.s.nr_pages << PAGE_SHIFT;
+		}
 		ROOT_DEV	   = to_kdev_t(params->u1.s.rootdev);
 		system_rev	   = params->u1.s.system_rev;
 		system_serial_low  = params->u1.s.system_serial_low;
@@ -413,24 +501,23 @@ void __init setup_arch(char **cmdline_p, unsigned long * memory_start_p, unsigne
 		from = params->commandline;
 	}
 
-	/* Save unparsed command line copy for /proc/cmdline */
-	memcpy(saved_command_line, from, COMMAND_LINE_SIZE);
-	saved_command_line[COMMAND_LINE_SIZE-1] = '\0';
+	if (meminfo.nr_banks == 0) {
+		meminfo.nr_banks      = 1;
+		meminfo.bank[0].start = 0;
+		meminfo.bank[0].size  = MEM_SIZE;
+	}
 
-	setup_mem(from, &memory_end);
-
-	memory_end += PAGE_OFFSET;
-
-	*cmdline_p         = command_line;
 	init_mm.start_code = (unsigned long) &_text;
 	init_mm.end_code   = (unsigned long) &_etext;
 	init_mm.end_data   = (unsigned long) &_edata;
 	init_mm.brk	   = (unsigned long) &_end;
-	*memory_start_p    = (unsigned long) &_end;
-	*memory_end_p      = memory_end;
 
-	request_standard_resources(memory_end);
-	check_initrd(memory_end);
+	/* Save unparsed command line copy for /proc/cmdline */
+	memcpy(saved_command_line, from, COMMAND_LINE_SIZE);
+	saved_command_line[COMMAND_LINE_SIZE-1] = '\0';
+	parse_cmdline(cmdline_p, from);
+	setup_bootmem();
+	request_standard_resources();
 
 #ifdef CONFIG_VT
 #if defined(CONFIG_VGA_CONSOLE)

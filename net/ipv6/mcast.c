@@ -707,9 +707,6 @@ done:
 
 int __init igmp6_init(struct net_proto_family *ops)
 {
-#ifdef CONFIG_PROC_FS
-	struct proc_dir_entry *ent;
-#endif
 	struct sock *sk;
 	int err;
 
@@ -738,8 +735,7 @@ int __init igmp6_init(struct net_proto_family *ops)
 
 	sk->net_pinfo.af_inet6.hop_limit = 1;
 #ifdef CONFIG_PROC_FS
-	ent = create_proc_entry("net/igmp6", 0, 0);
-	ent->read_proc = igmp6_read_proc;
+	create_proc_read_entry("net/igmp6", 0, 0, igmp6_read_proc, NULL);
 #endif
 
 	return 0;

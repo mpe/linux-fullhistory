@@ -648,12 +648,7 @@ struct notifier_block fib_netdev_notifier = {
 void __init ip_fib_init(void)
 {
 #ifdef CONFIG_PROC_FS
-	proc_net_register(&(struct proc_dir_entry) {
-		PROC_NET_ROUTE, 5, "route",
-		S_IFREG | S_IRUGO, 1, 0, 0,
-		0, &proc_net_inode_operations,
-		fib_get_procinfo
-	});
+	proc_net_create("route",0,fib_get_procinfo);
 #endif		/* CONFIG_PROC_FS */
 
 #ifndef CONFIG_IP_MULTIPLE_TABLES

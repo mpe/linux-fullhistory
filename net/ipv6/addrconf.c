@@ -1590,13 +1590,6 @@ done:
 	return len;
 }
 
-struct proc_dir_entry iface_proc_entry =
-{
-        0, 8, "if_inet6",
-        S_IFREG | S_IRUGO, 1, 0, 0,
-        0, NULL,
-        &iface_proc_info
-};
 #endif	/* CONFIG_PROC_FS */
 
 /*
@@ -2008,7 +2001,7 @@ void __init addrconf_init(void)
 #endif
 
 #ifdef CONFIG_PROC_FS
-	proc_net_register(&iface_proc_entry);
+	proc_net_create("if_inet6", 0, iface_proc_info);
 #endif
 	
 	addr_chk_timer.expires = jiffies + ADDR_CHECK_FREQUENCY;
@@ -2075,7 +2068,7 @@ void addrconf_cleanup(void)
 	rtnl_unlock();
 
 #ifdef CONFIG_PROC_FS
-	proc_net_unregister(iface_proc_entry.low_ino);
+	proc_net_remove("if_inet6");
 #endif
 }
 #endif	/* MODULE */

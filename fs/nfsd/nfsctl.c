@@ -57,13 +57,9 @@ int exp_procfs_exports(char *buffer, char **start, off_t offset,
 
 void proc_export_init(void)
 {
-	struct proc_dir_entry *nfs_export_ent = NULL;
-
-	if (!(nfs_export_ent = create_proc_entry("fs/nfs", S_IFDIR, 0)))
+	if (!create_proc_entry("fs/nfs", S_IFDIR, 0))
 		return;
-	if (!(nfs_export_ent = create_proc_entry("fs/nfs/exports", 0, 0)))
-		return;
-	nfs_export_ent->read_proc = exp_procfs_exports;
+	create_proc_read_entry("fs/nfs/exports", 0, 0, exp_procfs_exports,NULL);
 }
 
 

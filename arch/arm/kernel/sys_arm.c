@@ -29,8 +29,6 @@
 /*
  * Constant strings used in inlined functions in header files
  */
-/* proc/system.h */
-const char xchg_str[] = "xchg";
 
 /*
  * sys_pipe() is the normal C calling standard for creating

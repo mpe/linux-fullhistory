@@ -3,6 +3,9 @@
  * Apple Powermacs.  Assumes it's under a DBDMA controller.
  *
  * Copyright (C) 1998 Randy Gobbel.
+ *
+ * May 1999, Al Viro: proper release of /proc/net/bmac entry, switched to
+ * dynamic procfs inode.
  */
 #include <linux/config.h>
 #include <linux/module.h>
@@ -1378,14 +1381,7 @@ bmac_probe(struct net_device *dev)
     
 	if (!bmac_reset_and_enable(dev, 0)) return -ENOMEM;
     
-#ifdef CONFIG_PROC_FS
-	proc_net_register(&(struct proc_dir_entry) {
-		PROC_NET_BMAC, 4, "bmac",
-			S_IFREG | S_IRUGO, 1, 0, 0,
-			0, &proc_net_inode_operations,
-			bmac_proc_info
-			});
-#endif
+	proc_net_create ("bmac", 0, bmac_proc_info);
 
 	return 0;
 }
@@ -1627,6 +1623,7 @@ void cleanup_module(void)
 
     bp = (struct bmac_data *) bmac_devs->priv;
     unregister_netdev(bmac_devs);
+    proc_net_remove("bmac");
 
     free_irq(bmac_devs->irq, bmac_misc_intr);
     free_irq(bp->tx_dma_intr, bmac_txdma_intr);

@@ -75,13 +75,6 @@ static void typhoon_close(struct video_device *dev);
 static int typhoon_read_proc(char *buf, char **start, off_t offset, int len,
 	                     int unused);
 #endif
-#ifdef MODULE
-int init_module(void);
-void cleanup_module(void);
-int typhoon_init(struct video_init *v);
-#else
-int typhoon_init(struct video_init *v) __init;
-#endif
 
 static void typhoon_setvol_generic(struct typhoon_device *dev, int vol)
 {
@@ -337,23 +330,43 @@ static int typhoon_read_proc(char *buf, char **start, off_t offset, int len,
 	return len;
 }
 
-static struct proc_dir_entry typhoon_proc_entry = {
-	0,			/* low_ino: inode is dynamic */
-	13, "radio-typhoon",	/* length of name and name */
-	S_IFREG | S_IRUGO,	/* mode */
-	1, 0, 0,		/* nlinks, owner, group */
-	0,			/* size -- not used */
-	NULL,			/* operations -- use default */
-	&typhoon_read_proc,	/* function used to read data */
-	/* nothing more */
-};
-
 #endif /* CONFIG_RADIO_TYPHOON_PROC_FS */
 
-int typhoon_init(struct video_init *v)
+MODULE_AUTHOR("Dr. Henrik Seidel");
+MODULE_DESCRIPTION("A driver for the Typhoon radio card (a.k.a. EcoRadio).");
+MODULE_PARM(io, "i");
+MODULE_PARM_DESC(io, "I/O address of the Typhoon card (0x316 or 0x336)");
+MODULE_PARM(mutefreq, "i");
+MODULE_PARM_DESC(mutefreq, "Frequency used when muting the card (in kHz)");
+
+EXPORT_NO_SYMBOLS;
+
+static int io = -1;
+
+#ifdef MODULE
+static unsigned long mutefreq = 0;
+#endif
+
+static int __init typhoon_init(void)
 {
+#ifdef MODULE
+	if (io == -1) {
+		printk(KERN_ERR "radio-typhoon: You must set an I/O address with io=0x316 or io=0x336\n");
+		return -EINVAL;
+	}
+	typhoon_unit.iobase = io;
+
+	if (mutefreq < 87000 || mutefreq > 108500) {
+		printk(KERN_ERR "radio-typhoon: You must set a frequency (in kHz) used when muting the card,\n");
+		printk(KERN_ERR "radio-typhoon: e.g. with \"mutefreq=87500\" (87000 <= mutefreq <= 108500)\n");
+		return -EINVAL;
+	}
+	typhoon_unit.mutefreq = mutefreq;
+#endif /* MODULE */
+
 	printk(KERN_INFO BANNER);
-	if (check_region(typhoon_unit.iobase, 8)) {
+	io = typhoon_unit.iobase;
+	if (check_region(io, 8)) {
 		printk(KERN_ERR "radio-typhoon: port 0x%x already in use\n",
 		       typhoon_unit.iobase);
 		return -EBUSY;
@@ -373,61 +386,25 @@ int typhoon_init(struct video_init *v)
 	typhoon_mute(&typhoon_unit);
 
 #ifdef CONFIG_RADIO_TYPHOON_PROC_FS
-	
-	if (proc_register(&proc_root, &typhoon_proc_entry))
-	    	printk(KERN_ERR "radio-typhoon: registering /proc/radio-typhoon failed\n");
-
+	if (!create_proc_read_entry("driver/radio-typhoon", 0, NULL,
+					typhoon_read_proc, NULL)) 
+	    	printk(KERN_ERR "radio-typhoon: registering /proc/driver/radio-typhoon failed\n");
 #endif
 
 	return 0;
 }
 
-#ifdef MODULE
-
-MODULE_AUTHOR("Dr. Henrik Seidel");
-MODULE_DESCRIPTION("A driver for the Typhoon radio card (a.k.a. EcoRadio).");
-MODULE_PARM(io, "i");
-MODULE_PARM_DESC(io, "I/O address of the Typhoon card (0x316 or 0x336)");
-MODULE_PARM(mutefreq, "i");
-MODULE_PARM_DESC(mutefreq, "Frequency used when muting the card (in kHz)");
-
-EXPORT_NO_SYMBOLS;
-
-static int io = -1;
-static unsigned long mutefreq = 0;
-
-int init_module(void)
-{
-	if (io == -1) {
-		printk(KERN_ERR "radio-typhoon: You must set an I/O address with io=0x316 or io=0x336\n");
-		return -EINVAL;
-	}
-	typhoon_unit.iobase = io;
-
-	if (mutefreq < 87000 || mutefreq > 108500) {
-		printk(KERN_ERR "radio-typhoon: You must set a frequency (in kHz) used when muting the card,\n");
-		printk(KERN_ERR "radio-typhoon: e.g. with \"mutefreq=87500\" (87000 <= mutefreq <= 108500)\n");
-		return -EINVAL;
-	}
-	typhoon_unit.mutefreq = mutefreq;
-
-	return typhoon_init(NULL);
-}
-
-void cleanup_module(void)
+static void __exit typhoon_cleanup_module(void)
 {
 
 #ifdef CONFIG_RADIO_TYPHOON_PROC_FS
-
-	if (proc_unregister(&proc_root, typhoon_proc_entry.low_ino))
-	    	printk(KERN_ERR "radio-typhoon: unregistering /proc/radio-typhoon failed\n");
-
+	remove_proc_entry("driver/radio-typhoon");
 #endif
 
 	video_unregister_device(&typhoon_radio);
 	release_region(io, 8);
 }
 
-#endif
-
+module_init(typhoon_init);
+module_exit(typhoon_cleanup_module);
 

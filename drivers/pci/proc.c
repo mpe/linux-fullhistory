@@ -271,13 +271,6 @@ get_pci_dev_info(char *buf, char **start, off_t pos, int count, int wr)
 	return (count > cnt) ? cnt : count;
 }
 
-static struct proc_dir_entry proc_pci_devices = {
-	PROC_BUS_PCI_DEVICES, 7, "devices",
-	S_IFREG | S_IRUGO, 1, 0, 0,
-	0, &proc_array_inode_operations,
-	get_pci_dev_info
-};
-
 static struct proc_dir_entry *proc_bus_pci_dir;
 
 int pci_proc_attach_device(struct pci_dev *dev)
@@ -498,37 +491,39 @@ static int sprint_dev_config(struct pci_dev *dev, char *buf, int size)
 	return len;
 }
 
-
-static struct proc_dir_entry proc_old_pci = {
-	PROC_PCI, 3, "pci",
-	S_IFREG | S_IRUGO, 1, 0, 0,
-	0, &proc_array_inode_operations
-};
-
 /*
  * Return list of PCI devices as a character string for /proc/pci.
  * BUF is a buffer that is PAGE_SIZE bytes long.
  */
-int get_pci_list(char *buf)
+static int pci_read_proc(char *buf, char **start, off_t off,
+				int count, int *eof, void *data)
 {
-	int nprinted, len, size;
+	int nprinted, len, begin = 0;
 	struct pci_dev *dev;
-#	define MSG "\nwarning: page-size limit reached!\n"
 
-	/* reserve same for truncation warning message: */
-	size  = PAGE_SIZE - (strlen(MSG) + 1);
 	len   = sprintf(buf, "PCI devices found:\n");
 
 	for (dev = pci_devices; dev; dev = dev->next) {
-		nprinted = sprint_dev_config(dev, buf + len, size - len);
-		if (nprinted < 0) {
-			len += sprintf(buf + len, MSG);
-			proc_old_pci.size = len;
-			return len;
-		}
+		nprinted = sprint_dev_config(dev, buf + len, count - len);
+		if (nprinted < 0)
+			break;
 		len += nprinted;
+		if (len+begin < off) {
+			begin += len;
+			len = 0;
+		}
+		if (len+begin >= off+count)
+			break;
 	}
-	proc_old_pci.size = len;
+	if (!dev || len+begin < off)
+		*eof = 1;
+	off -= begin;
+	*start = buf + off;
+	len -= off;
+	if (len>count)
+		len = count;
+	if (len<0)
+		len = 0;
 	return len;
 }
 
@@ -536,9 +531,10 @@ static int __init pci_proc_init(void)
 {
 	if (pci_present()) {
 		proc_bus_pci_dir = create_proc_entry("pci", S_IFDIR, proc_bus);
-		proc_register(proc_bus_pci_dir, &proc_pci_devices);
+		create_proc_info_entry("devices",0, proc_bus_pci_dir,
+					get_pci_dev_info);
 		proc_bus_pci_add(pci_root);
-		proc_register(&proc_root, &proc_old_pci);
+		create_proc_read_entry("pci", 0, NULL, pci_read_proc, NULL);
 	}
 	return 0;
 }

@@ -136,7 +136,7 @@ struct inode_operations proc_sys_inode_operations =
 	NULL		/* revalidate */
 };
 
-extern struct proc_dir_entry proc_sys_root;
+extern struct proc_dir_entry *proc_sys_root;
 
 static void register_proc_table(ctl_table *, struct proc_dir_entry *);
 static void unregister_proc_table(ctl_table *, struct proc_dir_entry *);
@@ -285,7 +285,7 @@ static ctl_table dev_table[] = {
 void __init sysctl_init(void)
 {
 #ifdef CONFIG_PROC_FS
-	register_proc_table(root_table, &proc_sys_root);
+	register_proc_table(root_table, proc_sys_root);
 #endif
 }
 
@@ -480,7 +480,7 @@ struct ctl_table_header *register_sysctl_table(ctl_table * table,
 	else
 		DLIST_INSERT_BEFORE(&root_table_header, tmp, ctl_entry);
 #ifdef CONFIG_PROC_FS
-	register_proc_table(table, &proc_sys_root);
+	register_proc_table(table, proc_sys_root);
 #endif
 	return tmp;
 }
@@ -492,7 +492,7 @@ void unregister_sysctl_table(struct ctl_table_header * header)
 {
 	DLIST_DELETE(header, ctl_entry);
 #ifdef CONFIG_PROC_FS
-	unregister_proc_table(header->ctl_table, &proc_sys_root);
+	unregister_proc_table(header->ctl_table, proc_sys_root);
 #endif
 	kfree(header);
 }
@@ -1067,6 +1067,12 @@ int proc_dointvec(ctl_table *table, int write, struct file *filp,
 	return -ENOSYS;
 }
 
+int proc_dointvec_bset(ctl_table *table, int write, struct file *filp,
+			void *buffer, size_t *lenp)
+{
+	return -ENOSYS;
+}
+
 int proc_dointvec_minmax(ctl_table *table, int write, struct file *filp,
 		    void *buffer, size_t *lenp)
 {
@@ -1308,6 +1314,12 @@ int proc_dostring(ctl_table *table, int write, struct file *filp,
 
 int proc_dointvec(ctl_table *table, int write, struct file *filp,
 		  void *buffer, size_t *lenp)
+{
+	return -ENOSYS;
+}
+
+int proc_dointvec_bset(ctl_table *table, int write, struct file *filp,
+			void *buffer, size_t *lenp)
 {
 	return -ENOSYS;
 }

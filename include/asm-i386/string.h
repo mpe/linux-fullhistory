@@ -303,6 +303,7 @@ __asm__ __volatile__( \
 #include <asm/system.h>
 #include <asm/ptrace.h>
 #include <linux/smp.h>
+#include <linux/spinlock.h>
 #include <linux/interrupt.h>
 #include <asm/mmx.h>
 

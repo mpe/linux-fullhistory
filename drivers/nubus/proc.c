@@ -60,13 +60,6 @@ get_nubus_dev_info(char *buf, char **start, off_t pos, int count, int wr)
 	return (count > cnt) ? cnt : count;
 }
 
-static struct proc_dir_entry proc_nubus_devices = {
-	PROC_BUS_NUBUS_DEVICES, 7, "devices",
-	S_IFREG | S_IRUGO, 1, 0, 0,
-	0, &proc_array_inode_operations,
-	get_nubus_dev_info
-};
-
 static struct proc_dir_entry *proc_bus_nubus_dir;
 
 static void nubus_proc_subdir(struct nubus_dev* dev,
@@ -178,6 +171,7 @@ void __init nubus_proc_init(void)
 	if (!MACH_IS_MAC)
 		return;
 	proc_bus_nubus_dir = create_proc_entry("nubus", S_IFDIR, proc_bus);
-	proc_register(proc_bus_nubus_dir, &proc_nubus_devices);
+	create_proc_info_entry("devices", 0, proc_bus_nubus_dir,
+				get_nubus_dev_info);
 	proc_bus_nubus_add_devices();
 }

@@ -56,7 +56,7 @@ struct vm_area_struct {
 	struct vm_area_struct **vm_pprev_share;
 
 	struct vm_operations_struct * vm_ops;
-	unsigned long vm_offset;
+	unsigned long vm_pgoff;		/* offset in PAGE_SIZE units, *not* PAGE_CACHE_SIZE */
 	struct file * vm_file;
 	void * vm_private_data;		/* was vm_pte (shared mem) */
 };
@@ -110,6 +110,15 @@ struct vm_operations_struct {
 };
 
 /*
+ * A swap entry has to fit into a "unsigned long", as
+ * the entry is hidden in the "pg_offset" field of the
+ * swapper address space.
+ */
+typedef struct {
+	unsigned long val;
+} swp_entry_t;
+
+/*
  * Try to keep the most commonly accessed fields in single cache lines
  * here (16 bytes or greater).  This ordering should be particularly
  * beneficial on 32-bit processors.
@@ -121,7 +130,7 @@ typedef struct page {
 	/* these must be first (free area handling) */
 	struct list_head list;
 	struct address_space *mapping;
-	unsigned long offset;
+	unsigned long pg_offset;
 	struct page *next_hash;
 	atomic_t count;
 	unsigned long flags;	/* atomic flags, some possibly updated asynchronously */
@@ -325,7 +334,7 @@ extern void mem_init(void);
 extern void show_mem(void);
 extern void oom(struct task_struct * tsk);
 extern void si_meminfo(struct sysinfo * val);
-extern void swapin_readahead(pte_t);
+extern void swapin_readahead(swp_entry_t);
 
 /* mmap.c */
 extern void vma_init(void);
@@ -389,15 +398,15 @@ static inline int expand_stack(struct vm_area_struct * vma, unsigned long addres
 	unsigned long grow;
 
 	address &= PAGE_MASK;
-	grow = vma->vm_start - address;
+	grow = (vma->vm_start - address) >> PAGE_SHIFT;
 	if (vma->vm_end - address > current->rlim[RLIMIT_STACK].rlim_cur ||
-	    (vma->vm_mm->total_vm << PAGE_SHIFT) + grow > current->rlim[RLIMIT_AS].rlim_cur)
+	    ((vma->vm_mm->total_vm + grow) << PAGE_SHIFT) > current->rlim[RLIMIT_AS].rlim_cur)
 		return -ENOMEM;
 	vma->vm_start = address;
-	vma->vm_offset -= grow;
-	vma->vm_mm->total_vm += grow >> PAGE_SHIFT;
+	vma->vm_pgoff -= grow;
+	vma->vm_mm->total_vm += grow;
 	if (vma->vm_flags & VM_LOCKED)
-		vma->vm_mm->locked_vm += grow >> PAGE_SHIFT;
+		vma->vm_mm->locked_vm += grow;
 	return 0;
 }
 

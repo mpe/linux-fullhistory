@@ -62,8 +62,8 @@
 
 
 static char *format_topo =
-/* T:  Lev=dd Prnt=dd Port=dd Cnt=dd Dev#=ddd Spd=ddd If#=ddd MxCh=dd Driver=%s */
-  "T:  Lev=%2.2d Prnt=%2.2d Port=%2.2d Cnt=%2.2d Dev#=%3d Spd=%3s If#=%3d MxCh=%2d Driver=%s\n";
+/* T:  Lev=dd Prnt=dd Port=dd Cnt=dd Dev#=ddd Spd=ddd MxCh=dd */
+  "T:  Lev=%2.2d Prnt=%2.2d Port=%2.2d Cnt=%2.2d Dev#=%3d Spd=%3s MxCh=%2d\n";
 
 static char *format_bandwidth =
 /* B:  Alloc=ddd/ddd us (xx%), #Int=ddd, #Iso=ddd */
@@ -83,7 +83,7 @@ static char *format_config =
   
 static char *format_iface =
 /* I:  If#=dd Alt=dd #EPs=dd Cls=xx(sssss) Sub=xx Prot=xx */
-  "I:  If#=%2d Alt=%2d #EPs=%2d Cls=%02x(%-5s) Sub=%02x Prot=%02x\n";
+  "I:  If#=%2d Alt=%2d #EPs=%2d Cls=%02x(%-5s) Sub=%02x Prot=%02x Driver=%s\n";
 
 static char *format_endpt =
 /* E:  Ad=xx(s) Atr=xx(ssss) MxPS=dddd Ivl=dddms */
@@ -161,9 +161,12 @@ static int usb_dump_endpoint (const struct usb_endpoint_descriptor *endpoint,
 	return 0;
 }
 
-static int usb_dump_interface_descriptor (const struct usb_interface_descriptor *desc,
-						char *buf, int *len)
+static int usb_dump_interface_descriptor (const struct usb_interface *iface,
+						int setno, char *buf, int *len)
 {
+	struct usb_interface_descriptor *desc =
+	    &iface->altsetting[setno];
+
 	*len += sprintf (buf + *len, format_iface,
 		desc->bInterfaceNumber,
 		desc->bAlternateSetting,
@@ -171,22 +174,25 @@ static int usb_dump_interface_descriptor (const struct usb_interface_descriptor 
 		desc->bInterfaceClass,
 		class_decode (desc->bInterfaceClass),
 		desc->bInterfaceSubClass,
-		desc->bInterfaceProtocol
+		desc->bInterfaceProtocol,
+		iface->driver ? iface->driver->name : "(none)"
 		);
 
 	return (*len >= DUMP_LIMIT) ? -1 : 0;
 }
 
-static int usb_dump_interface (const struct usb_interface_descriptor *interface,
-				char *buf, int *len)
+static int usb_dump_interface (const struct usb_interface *iface,
+				int setno, char *buf, int *len)
 {
 	int i;
+	struct usb_interface_descriptor *desc =
+	    &iface->altsetting[setno];
 
-	if (usb_dump_interface_descriptor (interface, buf, len) < 0)
+	if (usb_dump_interface_descriptor (iface, setno, buf, len) < 0)
 		return -1;
 
-	for (i = 0; i < interface->bNumEndpoints; i++) {
-		if (usb_dump_endpoint (interface->endpoint + i, buf, len) < 0)
+	for (i = 0; i < desc->bNumEndpoints; i++) {
+		if (usb_dump_endpoint (desc->endpoint + i, buf, len) < 0)
 			return -1;
 	}
 
@@ -234,7 +240,7 @@ static int usb_dump_config (const struct usb_config_descriptor *config,
 			break;
 
 		for (j = 0; j < interface->num_altsetting; j++)
-			if (usb_dump_interface (interface->altsetting + j, buf, len) < 0)
+			if (usb_dump_interface (interface, j, buf, len) < 0)
 				return -1;
 	}
 
@@ -349,9 +355,7 @@ static int usb_device_dump (char *buf, int *len,
 		level, parent_devnum, index, count,
 		usbdev->devnum,
 		usbdev->slow ? "1.5" : "12 ",
-		usbdev->ifnum, usbdev->maxchild,
-		usbdev->driver ? usbdev->driver->name :
-		(level == 0) ? "(root hub)" : "(none)"
+		usbdev->maxchild
 		);
 		/*
 		 * level = topology-tier level;
@@ -1036,21 +1040,21 @@ int proc_usb_init (void)
 		return -1;
 	}
 
-	driversdir = create_proc_entry ("drivers", 0, usbdir);
+	driversdir = create_proc_read_entry("drivers", 0, usbdir,
+					usb_driver_list_dump, NULL);
 	if (!driversdir) {
 		printk ("proc_usb: cannot create /proc/bus/usb/drivers entry\n");
 		proc_usb_cleanup ();
 		return -1;
 	}
-	driversdir->read_proc = usb_driver_list_dump;
 
-	devicesdir = create_proc_entry ("devices", 0, usbdir);
+	devicesdir = create_proc_read_entry ("devices", 0, usbdir,
+					usb_bus_list_dump_devices, NULL);
 	if (!devicesdir) {
 		printk ("proc_usb: cannot create /proc/bus/usb/devices entry\n");
 		proc_usb_cleanup ();
 		return -1;
 	}
-	devicesdir->read_proc = usb_bus_list_dump_devices;
 
 	return 0;
 }

@@ -16,6 +16,8 @@
  *  - when adding fields, don't rely on the address until
  *    a patch from me has been released
  *  - unused fields should be zero (for future expansion)
+ *  - this structure is relatively short-lived - only
+ *    guaranteed to contain useful data in setup_arch()
  */
 #define COMMAND_LINE_SIZE 1024
 
@@ -59,5 +61,21 @@ struct param_struct {
     } u2;
     char commandline[COMMAND_LINE_SIZE];
 };
+
+/*
+ * Memory map description
+ */
+#define NR_BANKS 4
+
+struct meminfo {
+	int nr_banks;
+	unsigned long end;
+	struct {
+		unsigned long start;
+		unsigned long size;
+	} bank[NR_BANKS];
+};
+
+extern struct meminfo meminfo;
 
 #endif

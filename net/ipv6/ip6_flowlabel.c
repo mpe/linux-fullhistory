@@ -606,15 +606,10 @@ done:
 
 void ip6_flowlabel_init()
 {
-#ifdef CONFIG_PROC_FS
-	struct proc_dir_entry *ent;
-#endif
-
 	init_timer(&ip6_fl_gc_timer);
 	ip6_fl_gc_timer.function = ip6_fl_gc;
 #ifdef CONFIG_PROC_FS
-	ent = create_proc_entry("net/ip6_flowlabel", 0, 0);
-	ent->read_proc = ip6_fl_read_proc;
+	create_proc_read_entry("net/ip6_flowlabel", 0, 0, ip6_fl_read_proc, NULL);
 #endif
 }
 

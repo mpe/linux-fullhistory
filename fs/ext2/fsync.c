@@ -22,17 +22,10 @@
  * we can depend on generic_block_fdatasync() to sync the data blocks.
  */
 
-#include <asm/uaccess.h>
-#include <asm/system.h>
-#include <asm/byteorder.h>
-
-#include <linux/errno.h>
+#include <linux/module.h>
 #include <linux/fs.h>
-#include <linux/ext2_fs.h>
-#include <linux/fcntl.h>
-#include <linux/sched.h>
-#include <linux/stat.h>
-#include <linux/locks.h>
+
+
 
 
 #define blocksize	(EXT2_BLOCK_SIZE(inode->i_sb))

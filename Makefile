@@ -1,6 +1,6 @@
 VERSION = 2
 PATCHLEVEL = 3
-SUBLEVEL = 24
+SUBLEVEL = 25
 EXTRAVERSION =
 
 ARCH := $(shell uname -m | sed -e s/i.86/i386/ -e s/sun4u/sparc64/ -e s/arm.*/arm/ -e s/sa110/arm/)
@@ -392,10 +392,8 @@ clean:	archclean
 	rm -f drivers/sound/bin2hex drivers/sound/hex2hex
 	rm -f net/khttpd/make_times_h
 	rm -f net/khttpd/times.h
-	if [ -d modules ]; then \
-		rm -f core `find modules/ -type f -print`; \
-	fi
 	rm -f submenu*
+	rm -rf modules
 
 mrproper: clean archmrproper
 	rm -f include/linux/autoconf.h include/linux/version.h
@@ -416,7 +414,6 @@ mrproper: clean archmrproper
 	rm -f .hdepend scripts/mkdep scripts/split-include
 	rm -f $(TOPDIR)/include/linux/modversions.h
 	rm -rf $(TOPDIR)/include/linux/modules
-	rm -rf modules
 
 distclean: mrproper
 	rm -f core `find . \( -name '*.orig' -o -name '*.rej' -o -name '*~' \

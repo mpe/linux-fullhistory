@@ -18,12 +18,6 @@
 
 #include "map.h"
  
-struct mem_desc mem_desc[] __initdata = {
-	0, 0
-};
-
-unsigned int __initdata mem_desc_size = 0;
-
 /*    Logical    Physical
  * 0xffff1000	0x00100000	DMA registers
  * 0xffff2000	0x00200000	MPEG

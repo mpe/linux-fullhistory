@@ -959,13 +959,6 @@ static int decnet_cache_get_info(char *buffer, char **start, off_t offset, int l
         return(len);
 } 
 
-static struct proc_dir_entry proc_net_decnet_cache = {
-        PROC_NET_DN_CACHE, 12, "decnet_cache",
-        S_IFREG | S_IRUGO, 1, 0, 0,
-        0, &proc_net_inode_operations,
-        decnet_cache_get_info
-};
-
 #endif /* CONFIG_PROC_FS */
 
 void __init dn_route_init(void)
@@ -982,7 +975,7 @@ void __init dn_route_init(void)
 	add_timer(&dn_route_timer);
 
 #ifdef CONFIG_PROC_FS
-	proc_net_register(&proc_net_decnet_cache);
+	proc_net_create("decnet_cache",0,decnet_cache_get_info);
 #endif /* CONFIG_PROC_FS */
 }
 
@@ -992,7 +985,7 @@ void dn_route_cleanup(void)
 	del_timer(&dn_route_timer);
 	dn_run_flush(0);
 #ifdef CONFIG_PROC_FS
-	proc_net_unregister(PROC_NET_DN_CACHE);
+	proc_net_remove("decnet_cache");
 #endif /* CONFIG_PROC_FS */
 }
 #endif /* CONFIG_DECNET_MODULE */

@@ -38,7 +38,7 @@ struct ipc_perm
 
 #ifdef __KERNEL__
 
-/* special shmsegs[id], msgque[id] or semary[id]  values */
+/* special shmsegs[id]  values */
 #define IPC_UNUSED	((void *) -1)
 #define IPC_NOID	((void *) -2)		/* being allocated/destroyed */
 

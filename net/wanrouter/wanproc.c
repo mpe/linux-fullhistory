@@ -193,16 +193,6 @@ static struct proc_dir_entry proc_router =
 	name_root,		/* .name */
 	0555 | S_IFDIR,		/* .mode */
 	2,			/* .nlink */
-	0,			/* .uid */
-	0,			/* .gid */
-	0,			/* .size */
-	&proc_dir_inode_operations, /* .ops */
-	NULL,			/* .get_info */
-	NULL,			/* .fill_node */
-	NULL,			/* .next */
-	NULL,			/* .parent */
-	NULL,			/* .subdir */
-	NULL,			/* .data */
 };
 
 /*

@@ -354,8 +354,12 @@ static struct video_device zoltrix_radio =
 	NULL
 };
 
-int __init zoltrix_init(struct video_init *v)
+static int __init zoltrix_init(void)
 {
+	if (io == -1) {
+		printk(KERN_ERR "You must set an I/O address with io=0x???\n");
+		return -EINVAL;
+	}
 	if (check_region(io, 2)) {
 		printk(KERN_ERR "zoltrix: port 0x%x already in use\n", io);
 		return -EBUSY;
@@ -390,8 +394,6 @@ int __init zoltrix_init(struct video_init *v)
 	return 0;
 }
 
-#ifdef MODULE
-
 MODULE_AUTHOR("C.van Schaik");
 MODULE_DESCRIPTION("A driver for the Zoltrix Radio Plus.");
 MODULE_PARM(io, "i");
@@ -399,19 +401,12 @@ MODULE_PARM_DESC(io, "I/O address of the Zoltrix Radio Plus (0x20c or 0x30c)");
 
 EXPORT_NO_SYMBOLS;
 
-int init_module(void)
-{
-	if (io == -1) {
-		printk(KERN_ERR "You must set an I/O address with io=0x???\n");
-		return -EINVAL;
-	}
-	return zoltrix_init(NULL);
-}
-
-void cleanup_module(void)
+static void __exit zoltrix_cleanup_module(void)
 {
 	video_unregister_device(&zoltrix_radio);
 	release_region(io, 2);
 }
 
-#endif
+module_init(zoltrix_init);
+module_exit(zoltrix_cleanup_module);
+

@@ -327,7 +327,7 @@ arm2_elf_name:	.asciz	"v1"
 arm3_elf_name:	.asciz	"v2"
 		.align
 
-		.section ".proc.info", #alloc
+		.section ".proc.info", #alloc, #execinstr
 
 		.long	0x41560200
 		.long	0xfffffff0

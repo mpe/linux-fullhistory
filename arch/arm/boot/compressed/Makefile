@@ -8,7 +8,7 @@ OBJS		 = misc.o
 SYSTEM		 = $(TOPDIR)/vmlinux
 CFLAGS		 = -O2 -DSTDC_HEADERS $(CFLAGS_PROC)
 FONTC		 = $(TOPDIR)/drivers/video/font_acorn_8x8.c
-ZLDFLAGS	 = -X -T vmlinux.lds
+ZLDFLAGS	 = -p -X -T vmlinux.lds
 
 #
 # Architecture dependencies

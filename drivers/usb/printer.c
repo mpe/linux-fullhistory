@@ -254,9 +254,10 @@ static ssize_t read_printer(struct file * file,
 	return read_count;
 }
 
-static int printer_probe(struct usb_device *dev)
+static void * printer_probe(struct usb_device *dev, unsigned int ifnum)
 {
 	struct usb_interface_descriptor *interface;
+	struct pp_usb_data *pp;
 	int i;
 
 	/*
@@ -265,29 +266,29 @@ static int printer_probe(struct usb_device *dev)
 	if ((dev->descriptor.bDeviceClass != USB_CLASS_PRINTER &&
 	    dev->descriptor.bDeviceClass != 0) ||
 	    dev->descriptor.bNumConfigurations != 1 ||
-	    dev->config[0].bNumInterfaces != 1) {
-		return -1;
+	    dev->actconfig->bNumInterfaces != 1) {
+		return NULL;
 	}
 
-	interface = &dev->config[0].interface[0].altsetting[0];
+	interface = &dev->actconfig->interface[ifnum].altsetting[0];
 
 	/* Let's be paranoid (for the moment). */
 	if (interface->bInterfaceClass != USB_CLASS_PRINTER ||
 	    interface->bInterfaceSubClass != 1 ||
 	    (interface->bInterfaceProtocol != 2 && interface->bInterfaceProtocol != 1) ||
 	    interface->bNumEndpoints > 2) {
-		return -1;
+		return NULL;
 	}
 
 	/* Does this (these) interface(s) support bulk transfers? */
 	if ((interface->endpoint[0].bmAttributes & USB_ENDPOINT_XFERTYPE_MASK)
 	      != USB_ENDPOINT_XFER_BULK) {
-		return -1;
+		return NULL;
 	}
 	if ((interface->bNumEndpoints > 1) &&
 	      ((interface->endpoint[1].bmAttributes & USB_ENDPOINT_XFERTYPE_MASK)
 	      != USB_ENDPOINT_XFER_BULK)) {
-		return -1;
+		return NULL;
 	}
 
 	/*
@@ -299,7 +300,7 @@ static int printer_probe(struct usb_device *dev)
 	    (interface->bNumEndpoints > 1 &&
 	      (interface->endpoint[1].bEndpointAddress & USB_ENDPOINT_DIR_MASK)
 	      != USB_DIR_OUT)) {
- 		return -1;
+ 		return NULL;
  	}
 
 	for (i=0; i<MAX_PRINTERS; i++) {
@@ -308,18 +309,18 @@ static int printer_probe(struct usb_device *dev)
 	}
 	if (i >= MAX_PRINTERS) {
 		printk("No minor table space available for USB Printer\n");
-		return -1;
+		return NULL;
 	}
 
 	printk(KERN_INFO "USB Printer found at address %d\n", dev->devnum);
 
-	if (!(dev->private = kmalloc(sizeof(struct pp_usb_data), GFP_KERNEL))) {
+	if (!(pp = kmalloc(sizeof(struct pp_usb_data), GFP_KERNEL))) {
 		printk(KERN_DEBUG "usb_printer: no memory!\n");
-		return -1;
+		return NULL;
 	}
 
-	memset(dev->private, 0, sizeof(struct pp_usb_data));
-	minor_data[i] = PPDATA(dev->private);
+	memset(pp, 0, sizeof(struct pp_usb_data));
+	minor_data[i] = PPDATA(pp);
 	minor_data[i]->minor = i;
 	minor_data[i]->pusb_dev = dev;
 	minor_data[i]->maxout = (BIG_BUF_SIZE > PAGE_SIZE) ? PAGE_SIZE : BIG_BUF_SIZE;
@@ -340,11 +341,6 @@ static int printer_probe(struct usb_device *dev)
 	if (interface->bInterfaceProtocol == 2) {	/* if bidirectional */
 		minor_data[i]->maxin =
 			interface->endpoint[minor_data[i]->bulk_in_index].wMaxPacketSize;
-	}
-
-        if (usb_set_configuration(dev, dev->config[0].bConfigurationValue)) {
-		printk(KERN_INFO "  Failed usb_set_configuration: printer\n");
-		return -1;
 	}
 
 	printk(KERN_INFO "USB Printer Summary:\n");
@@ -374,19 +370,19 @@ static int printer_probe(struct usb_device *dev)
 			printk(KERN_INFO "  USB Printer ID is %s\n",
 				&ieee_id[2]);
 		}
-		status = printer_read_status(PPDATA(dev->private));
+		status = printer_read_status(PPDATA(pp));
 		printk(KERN_INFO "  Status is %s,%s,%s\n",
 		       (status & LP_PSELECD) ? "Selected" : "Not Selected",
 		       (status & LP_POUTPA)  ? "No Paper" : "Paper",
 		       (status & LP_PERRORP) ? "No Error" : "Error");
 	}
 #endif
-	return 0;
+	return pp;
 }
 
-static void printer_disconnect(struct usb_device *dev)
+static void printer_disconnect(struct usb_device *dev, void *ptr)
 {
-	struct pp_usb_data *pp = dev->private;
+	struct pp_usb_data *pp = ptr;
 
 	if (pp->isopen) {
 		/* better let it finish - the release will do whats needed */
@@ -395,7 +391,6 @@ static void printer_disconnect(struct usb_device *dev)
 	}
 	minor_data[pp->minor] = NULL;
 	kfree(pp);
-	dev->private = NULL;		/* just in case */
 }
 
 static struct file_operations usb_printer_fops = {

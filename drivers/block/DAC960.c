@@ -95,11 +95,11 @@ static FileOperations_T
 
 
 /*
-  DAC960_ProcDirectoryEntry is the DAC960 /proc/rd directory entry.
+  DAC960_ProcDirectoryEntry is the DAC960 /proc/driver/rd directory entry.
 */
 
-static PROC_DirectoryEntry_T
-  DAC960_ProcDirectoryEntry;
+static PROC_DirectoryEntry_T *
+  DAC960_ProcDirectoryEntry = NULL;
 
 
 /*
@@ -3466,23 +3466,18 @@ static int DAC960_ProcWriteUserCommand(File_T *File, const char *Buffer,
 
 
 /*
-  DAC960_CreateProcEntries creates the /proc/rd/... entries for the DAC960
-  Driver.
+  DAC960_CreateProcEntries creates the /proc/driver/rd/... entries
+  for the DAC960 Driver.
 */
 
 static void DAC960_CreateProcEntries(void)
 {
-  static PROC_DirectoryEntry_T StatusProcEntry;
+  static PROC_DirectoryEntry_T *StatusProcEntry;
   int ControllerNumber;
-  DAC960_ProcDirectoryEntry.name = "rd";
-  DAC960_ProcDirectoryEntry.namelen = strlen(DAC960_ProcDirectoryEntry.name);
-  DAC960_ProcDirectoryEntry.mode = S_IFDIR | S_IRUGO | S_IXUGO;
-  proc_register(&proc_root, &DAC960_ProcDirectoryEntry);
-  StatusProcEntry.name = "status";
-  StatusProcEntry.namelen = strlen(StatusProcEntry.name);
-  StatusProcEntry.mode = S_IFREG | S_IRUGO;
-  StatusProcEntry.read_proc = DAC960_ProcReadStatus;
-  proc_register(&DAC960_ProcDirectoryEntry, &StatusProcEntry);
+  DAC960_ProcDirectoryEntry = create_proc_entry("driver/rd", S_IFDIR, NULL);
+  StatusProcEntry = create_proc_read_entry("status", 0,
+					   DAC960_ProcDirectoryEntry,
+					   DAC960_ProcReadStatus, NULL);
   for (ControllerNumber = 0;
        ControllerNumber < DAC960_ControllerCount;
        ControllerNumber++)
@@ -3495,7 +3490,7 @@ static void DAC960_CreateProcEntries(void)
       ControllerProcEntry->name = Controller->ControllerName;
       ControllerProcEntry->namelen = strlen(ControllerProcEntry->name);
       ControllerProcEntry->mode = S_IFDIR | S_IRUGO | S_IXUGO;
-      proc_register(&DAC960_ProcDirectoryEntry, ControllerProcEntry);
+      proc_register(DAC960_ProcDirectoryEntry, ControllerProcEntry);
       InitialStatusProcEntry = &Controller->InitialStatusProcEntry;
       InitialStatusProcEntry->name = "initial_status";
       InitialStatusProcEntry->namelen = strlen(InitialStatusProcEntry->name);
@@ -3529,7 +3524,7 @@ static void DAC960_CreateProcEntries(void)
 
 static void DAC960_DestroyProcEntries(void)
 {
-  proc_unregister(&proc_root, DAC960_ProcDirectoryEntry.low_ino);
+  remove_proc_entry("driver/rd", NULL);
 }
 
 

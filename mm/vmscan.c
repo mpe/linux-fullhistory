@@ -35,7 +35,8 @@
  */
 static int try_to_swap_out(struct vm_area_struct* vma, unsigned long address, pte_t * page_table, int gfp_mask)
 {
-	pte_t pte, entry;
+	pte_t pte;
+	swp_entry_t entry;
 	struct page * page;
 	int (*swapout)(struct page *, struct file *);
 
@@ -72,9 +73,9 @@ static int try_to_swap_out(struct vm_area_struct* vma, unsigned long address, pt
 	 * memory, and we should just continue our scan.
 	 */
 	if (PageSwapCache(page)) {
-		entry = get_pagecache_pte(page);
+		entry.val = page->pg_offset;
 		swap_duplicate(entry);
-		set_pte(page_table, entry);
+		set_pte(page_table, swp_entry_to_pte(entry));
 drop_pte:
 		vma->vm_mm->rss--;
 		flush_tlb_page(vma, address);
@@ -151,14 +152,14 @@ drop_pte:
 	 * page with that swap entry.
 	 */
 	entry = acquire_swap_entry(page);
-	if (!pte_val(entry))
+	if (!entry.val)
 		goto out_failed; /* No swap space left */
 		
 	if (!(page = prepare_highmem_swapout(page)))
 		goto out_swap_free;
 
 	vma->vm_mm->rss--;
-	set_pte(page_table, entry);
+	set_pte(page_table, swp_entry_to_pte(entry));
 	vmlist_access_unlock(vma->vm_mm);
 
 	flush_tlb_page(vma, address);

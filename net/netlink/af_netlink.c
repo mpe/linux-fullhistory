@@ -967,9 +967,6 @@ struct net_proto_family netlink_family_ops = {
 
 void netlink_proto_init(struct net_proto *pro)
 {
-#ifdef CONFIG_PROC_FS
-	struct proc_dir_entry *ent;
-#endif
 	struct sk_buff *dummy_skb;
 
 	if (sizeof(struct netlink_skb_parms) > sizeof(dummy_skb->cb)) {
@@ -978,7 +975,6 @@ void netlink_proto_init(struct net_proto *pro)
 	}
 	sock_register(&netlink_family_ops);
 #ifdef CONFIG_PROC_FS
-	ent = create_proc_entry("net/netlink", 0, 0);
-	ent->read_proc = netlink_read_proc;
+	create_proc_read_entry("net/netlink", 0, 0, netlink_read_proc, NULL);
 #endif
 }

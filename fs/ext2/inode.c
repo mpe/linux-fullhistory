@@ -20,18 +20,13 @@
  * 	(jj@sunsite.ms.mff.cuni.cz)
  */
 
-#include <asm/uaccess.h>
-#include <asm/system.h>
-
-#include <linux/errno.h>
+#include <linux/module.h>
 #include <linux/fs.h>
-#include <linux/ext2_fs.h>
-#include <linux/sched.h>
-#include <linux/stat.h>
-#include <linux/string.h>
 #include <linux/locks.h>
-#include <linux/mm.h>
 #include <linux/smp_lock.h>
+#include <linux/sched.h>
+
+
 
 static int ext2_update_inode(struct inode * inode, int do_sync);
 

@@ -8,24 +8,6 @@
 
 extern void die(char *msg, struct pt_regs *regs, unsigned int err);
 
-void __bad_pmd(pmd_t *pmd)
-{
-	printk("Bad pmd in pte_alloc: %08lx\n", pmd_val(*pmd));
-#ifdef CONFIG_DEBUG_ERRORS
-	__backtrace();
-#endif
-	set_pmd(pmd, mk_user_pmd(BAD_PAGETABLE));
-}
-
-void __bad_pmd_kernel(pmd_t *pmd)
-{
-	printk("Bad pmd in pte_alloc_kernel: %08lx\n", pmd_val(*pmd));
-#ifdef CONFIG_DEBUG_ERRORS
-	__backtrace();
-#endif
-	set_pmd(pmd, mk_kernel_pmd(BAD_PAGETABLE));
-}
-
 /*
  * This is useful to dump out the page tables associated with
  * 'addr' in mm 'mm'.

@@ -228,8 +228,13 @@ static struct video_device rtrack2_radio=
 	NULL
 };
 
-int __init rtrack2_init(struct video_init *v)
+static int __init rtrack2_init(void)
 {
+	if(io==-1)
+	{
+		printk(KERN_ERR "You must set an I/O address with io=0x20c or io=0x30c\n");
+		return -EINVAL;
+	}
 	if (check_region(io, 4)) 
 	{
 		printk(KERN_ERR "rtrack2: port 0x%x already in use\n", io);
@@ -252,8 +257,6 @@ int __init rtrack2_init(struct video_init *v)
 	return 0;
 }
 
-#ifdef MODULE
-
 MODULE_AUTHOR("Ben Pfaff");
 MODULE_DESCRIPTION("A driver for the RadioTrack II radio card.");
 MODULE_PARM(io, "i");
@@ -261,23 +264,14 @@ MODULE_PARM_DESC(io, "I/O address of the RadioTrack card (0x20c or 0x30c)");
 
 EXPORT_NO_SYMBOLS;
 
-int init_module(void)
-{
-	if(io==-1)
-	{
-		printk(KERN_ERR "You must set an I/O address with io=0x20c or io=0x30c\n");
-		return -EINVAL;
-	}
-	return rtrack2_init(NULL);
-}
-
-void cleanup_module(void)
+static void __exit rtrack2_cleanup_module(void)
 {
 	video_unregister_device(&rtrack2_radio);
 	release_region(io,4);
 }
 
-#endif
+module_init(rtrack2_init);
+module_exit(rtrack2_cleanup_module);
 
 /*
   Local variables:

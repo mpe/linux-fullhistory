@@ -18,19 +18,15 @@
  *  General cleanup and race fixes, wsh, 1998
  */
 
+#include <linux/module.h>
+#include <linux/fs.h>
+#include <linux/locks.h>
+
+
 /*
  * Real random numbers for secure rm added 94/02/18
  * Idea from Pierre del Perugia <delperug@gla.ecoledoc.ibp.fr>
  */
-
-#include <linux/errno.h>
-#include <linux/fs.h>
-#include <linux/ext2_fs.h>
-#include <linux/fcntl.h>
-#include <linux/sched.h>
-#include <linux/stat.h>
-#include <linux/locks.h>
-#include <linux/string.h>
 
 #if 0
 

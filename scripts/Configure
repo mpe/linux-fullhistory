@@ -389,9 +389,9 @@ function hex () {
 #	define_string define value
 #
 function define_string () {
-	echo "$1="'"'$2'"' >>$CONFIG
-	echo "#define $1 "'"'$2'"' >>$CONFIG_H
-	eval "$1=$2"
+	echo "$1=\"$2\"" >>$CONFIG
+	echo "#define $1 \"$2\"" >>$CONFIG_H
+	eval "$1=\"$2\""
 }
 
 #

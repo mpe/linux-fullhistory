@@ -1703,18 +1703,6 @@ done:
 }
 
 #ifdef CONFIG_PROC_FS	
-static struct proc_dir_entry proc_net_ipmr_vif = {
-	PROC_NET_IPMR_VIF, 9 ,"ip_mr_vif",
-	S_IFREG | S_IRUGO, 1, 0, 0,
-	0, &proc_net_inode_operations,
-	ipmr_vif_info
-};
-static struct proc_dir_entry proc_net_ipmr_mfc = {
-	PROC_NET_IPMR_MFC, 11 ,"ip_mr_cache",
-	S_IFREG | S_IRUGO, 1, 0, 0,
-	0, &proc_net_inode_operations,
-	ipmr_mfc_info
-};
 #endif	
 
 #ifdef CONFIG_IP_PIMSM_V2
@@ -1746,7 +1734,7 @@ void __init ip_mr_init(void)
 	ipmr_expire_timer.function=ipmr_expire_process;
 	register_netdevice_notifier(&ip_mr_notifier);
 #ifdef CONFIG_PROC_FS	
-	proc_net_register(&proc_net_ipmr_vif);
-	proc_net_register(&proc_net_ipmr_mfc);
+	proc_net_create("ip_mr_vif",0,ipmr_vif_info);
+	proc_net_create("ip_mr_cache",0,ipmr_mfc_info);
 #endif	
 }

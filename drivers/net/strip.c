@@ -118,8 +118,8 @@ static const char StripVersion[] = "1.3-STUART.CHESHIRE";
 #include <linux/if_arp.h>
 #include <linux/if_strip.h>
 #include <linux/proc_fs.h>
-#include <linux/serialP.h>
 #include <linux/serial.h>
+#include <linux/serialP.h>
 #include <net/arp.h>
 
 #include <linux/ip.h>
@@ -1269,25 +1269,6 @@ static int get_status_info(char *buffer, char **start, off_t req_offset, int req
     exit:
     return(calc_start_len(buffer, start, req_offset, req_len, total, buf));
 }
-
-static const char proc_strip_status_name[] = "strip";
-
-#ifdef CONFIG_PROC_FS
-static struct proc_dir_entry proc_strip_get_status_info =
-{
-    PROC_NET_STRIP_STATUS,		/* unsigned short low_ino */
-    sizeof(proc_strip_status_name)-1,	/* unsigned short namelen */
-    proc_strip_status_name,		/* const char *name */
-    S_IFREG | S_IRUGO,			/* mode_t mode */
-    1,					/* nlink_t nlink */
-    0, 0, 0,				/* uid_t uid, gid_t gid, unsigned long size */
-    &proc_net_inode_operations,		/* struct inode_operations * ops */
-    &get_status_info,			/* int (*get_info)(...) */
-    NULL,				/* void (*fill_inode)(struct inode *); */
-    NULL, NULL, NULL,			/* struct proc_dir_entry *next, *parent, *subdir; */
-    NULL				/* void *data; */
-};
-#endif /* CONFIG_PROC_FS */
 
 /************************************************************************/
 /* Sending routines							*/
@@ -2885,12 +2866,7 @@ int strip_init_ctrl_dev(struct net_device *dummy)
     /*
      * Register the status file with /proc
      */
-#ifdef CONFIG_PROC_FS 
-    if (proc_net_register(&proc_strip_get_status_info) != 0)
-    {
-        printk(KERN_ERR "strip: status proc_net_register() failed.\n");
-    }
-#endif
+    proc_net_create ("strip", S_IFREG | S_IRUGO, get_status_info);
 
 #ifdef MODULE
      return status;
@@ -2921,9 +2897,7 @@ void cleanup_module(void)
         strip_free(struct_strip_list);
 
     /* Unregister with the /proc/net file here. */
-#ifdef CONFIG_PROC_FS
-    proc_net_unregister(PROC_NET_STRIP_STATUS);
-#endif
+    proc_net_remove ("strip");
 
     if ((i = tty_register_ldisc(N_STRIP, NULL)))
         printk(KERN_ERR "STRIP: can't unregister line discipline (err = %d)\n", i);

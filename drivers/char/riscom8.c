@@ -75,6 +75,8 @@
 #define MIN(a,b) ((a) < (b) ? (a) : (b))
 #endif
 
+#define RS_EVENT_WRITE_WAKEUP	0
+
 DECLARE_TASK_QUEUE(tq_riscom);
 
 #define RISCOM_TYPE_NORMAL	1

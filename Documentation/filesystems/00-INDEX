@@ -4,6 +4,8 @@ adfs.txt
 	- info and mount options for the Acorn Advanced Disc Filing System.
 affs.txt
 	- info and mount options for the Amiga Fast File System.
+bfs.txt
+	- info for the SCO UnixWare Boot Filesystem (BFS).
 coda.txt
 	- description of the CODA filesystem.
 fat_cvf.txt

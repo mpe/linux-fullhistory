@@ -134,13 +134,6 @@ get_zorro_dev_info(char *buf, char **start, off_t pos, int count, int wr)
 	return (count > cnt) ? cnt : count;
 }
 
-static struct proc_dir_entry proc_zorro_devices = {
-	PROC_BUS_ZORRO_DEVICES, 7, "devices",
-	S_IFREG | S_IRUGO, 1, 0, 0,
-	0, &proc_array_inode_operations,
-	get_zorro_dev_info
-};
-
 static struct proc_dir_entry *proc_bus_zorro_dir;
 
 static int __init zorro_proc_attach_device(u_int slot)
@@ -165,7 +158,7 @@ void __init zorro_proc_init(void)
 	if (!MACH_IS_AMIGA || !AMIGAHW_PRESENT(ZORRO))
 		return;
 	proc_bus_zorro_dir = create_proc_entry("zorro", S_IFDIR, proc_bus);
-	proc_register(proc_bus_zorro_dir, &proc_zorro_devices);
+	create_proc_info_entry("devices", 0, proc_bus_zorro_dir, get_zorro_dev_info);
 	for (slot = 0; slot < zorro_num_autocon; slot++)
 	    zorro_proc_attach_device(slot);
 }

@@ -49,7 +49,7 @@ static int
 smb_readpage_sync(struct dentry *dentry, struct page *page)
 {
 	char *buffer = (char *) page_address(page);
-	unsigned long offset = page->offset;
+	unsigned long offset = page->pg_offset << PAGE_CACHE_SHIFT;
 	int rsize = smb_get_rsize(server_from_dentry(dentry));
 	int count = PAGE_SIZE;
 	int result;
@@ -128,7 +128,7 @@ smb_writepage_sync(struct dentry *dentry, struct page *page,
 	int wsize = smb_get_wsize(server_from_dentry(dentry));
 	int result, written = 0;
 
-	offset += page->offset;
+	offset += page->pg_offset << PAGE_CACHE_SHIFT;
 #ifdef SMBFS_DEBUG_VERBOSE
 printk("smb_writepage_sync: file %s/%s, count=%d@%ld, wsize=%d\n",
 dentry->d_parent->d_name.name, dentry->d_name.name, count, offset, wsize);
@@ -191,7 +191,7 @@ smb_updatepage(struct file *file, struct page *page, unsigned long offset, unsig
 
 	pr_debug("SMBFS: smb_updatepage(%s/%s %d@%ld)\n",
 		dentry->d_parent->d_name.name, dentry->d_name.name,
-	 	count, page->offset+offset);
+	 	count, (page->pg_offset << PAGE_CACHE_SHIFT)+offset);
 
 	return smb_writepage_sync(dentry, page, offset, count);
 }

@@ -646,16 +646,12 @@ unregister_framebuffer(const struct fb_info *fb_info)
 	return 0;
 }
 
-static struct proc_dir_entry *proc_fbmem;
-
 void __init 
 fbmem_init(void)
 {
 	int i;
 
-	proc_fbmem = create_proc_entry("fb", 0, 0);
-	if (proc_fbmem)
-		proc_fbmem->read_proc = fbmem_read_proc;
+	create_proc_read_entry("fb", 0, 0, fbmem_read_proc, NULL);
 
 	if (register_chrdev(FB_MAJOR,"fb",&fb_fops))
 		printk("unable to get major %d for fb devs\n", FB_MAJOR);

@@ -1777,7 +1777,6 @@ void __init unix_proto_init(struct net_proto *pro)
 #endif
 {
 	struct sk_buff *dummy_skb;
-	struct proc_dir_entry *ent;
 	
 	printk(KERN_INFO "NET4: Unix domain sockets 1.0/SMP for Linux NET4.0.\n");
 	if (sizeof(struct unix_skb_parms) > sizeof(dummy_skb->cb))
@@ -1791,8 +1790,7 @@ void __init unix_proto_init(struct net_proto *pro)
 	}
 	sock_register(&unix_family_ops);
 #ifdef CONFIG_PROC_FS
-	ent = create_proc_entry("net/unix", 0, 0);
-	ent->read_proc = unix_read_proc;
+	create_proc_read_entry("net/unix", 0, 0, unix_read_proc, NULL);
 #endif
 
 #ifdef MODULE

@@ -7970,6 +7970,21 @@ CONFIG_EXT2_FS
   compiled as a module, and so this could be dangerous. Most everyone
   wants to say Y here.
 
+SCO UnixWare BFS Support
+CONFIG_BFS_FS
+  Boot Filesystem (BFS) is a filesystem used under SCO UnixWare to
+  allow bootloader access the kernel image and other important files
+  during the boot process. It is usually mounted under /stand and
+  corresponds to the slice marked as "STAND" in the UnixWare
+  partition. This is useful if you want to access files on your /stand
+  slice from Linux. If you don't know what it is, say N.
+
+  If you want to compile this as a module ( = code which can be
+  inserted in and removed from the running kernel whenever you want),
+  say M here and read Documentation/modules.txt. The module will be
+  called bfs.o. Note that the filesystem of your root partition (the
+  one containing the directory /) cannot be compiled as a module.
+ 
 ISO 9660 CDROM filesystem support
 CONFIG_ISO9660_FS
   This is the standard filesystem used on CDROMs. It was previously
@@ -9881,7 +9896,7 @@ CONFIG_MTRR
   lead to all sorts of problems.
 
   You can safely say Y even if your machine doesn't have MTRRs, you'll
-  just add about 3k to your kernel.
+  just add about 9K to your kernel.
 
   See Documentation/mtrr.txt for more information.
 
@@ -9938,9 +9953,15 @@ CONFIG_APM
   APM is a BIOS specification for saving power using several different
   techniques. This is mostly useful for battery powered laptops with
   APM compliant BIOSes. If you say Y here, the system time will be
-  reset after a USER RESUME operation, the /proc/apm device will
-  provide battery status information, and user-space programs will
-  receive notification of APM "events" (e.g., battery status change).
+  reset after a RESUME operation, the /proc/apm device will provide
+  battery status information, and user-space programs will receive
+  notification of APM "events" (e.g. battery status change).
+
+  If you select "Y" here, you can disable actual use of the APM
+  BIOS by passing the "apm=off" option to the kernel at boot time.
+
+  Note that the APM support is almost completely disabled for
+  machines with more than one CPU.
 
   Supporting software is available; for more information, read the
   Battery Powered Linux mini-HOWTO, available from
@@ -9953,9 +9974,7 @@ CONFIG_APM
   This driver does not support the TI 4000M TravelMate and the ACER
   486/DX4/75 because they don't have compliant BIOSes. Many "green"
   desktop machines also don't have compliant BIOSes, and this driver
-  will cause those machines to panic during the boot phase (typically,
-  these machines are using a data segment of 0040, which is reserved
-  for the Linux kernel). 
+  may cause those machines to panic during the boot phase.
 
   If you are running Linux on a laptop, you may also want to read the
   Linux Laptop home page on the WWW at

@@ -30,6 +30,7 @@
 #include <linux/ntfs_fs.h>
 #include <linux/hfs_fs.h>
 #include <linux/devpts_fs.h>
+#include <linux/bfs_fs.h>
 #include <linux/major.h>
 #include <linux/smp.h>
 #include <linux/smp_lock.h>
@@ -153,6 +154,10 @@ void __init filesystem_setup(void)
 
 #ifdef CONFIG_UDF_FS
 	init_udf_fs();
+#endif
+
+#ifdef CONFIG_BFS_FS
+	init_bfs_fs();
 #endif
    
 #ifdef CONFIG_NLS

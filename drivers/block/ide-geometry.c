@@ -81,7 +81,6 @@ void probe_cmos_for_drives (ide_hwif_t *hwif)
  */
 static void
 ontrack(ide_drive_t *drive, int heads, int *c, int *h, int *s) {
-	struct hd_driveid *id = drive->id;
 	static const byte dm_head_vals[] = {4, 8, 16, 32, 64, 128, 255, 0};
 	const byte *headp = dm_head_vals;
 	unsigned long total, tracks;
@@ -92,10 +91,7 @@ ontrack(ide_drive_t *drive, int heads, int *c, int *h, int *s) {
 	 * 1024*255*63. Now take S=63, H the first in the sequence
 	 * 4, 8, 16, 32, 64, 128, 255 such that 63*H*1024 >= total.
 	 */
-	if (id)
-		total = id->cyls * id->heads * id->sectors;
-	else
-		total = drive->cyl * drive->head * drive->sect;
+	total = DRIVER(drive)->capacity(drive);
 
 	*s = 63;
 

@@ -31,6 +31,12 @@ D: NFS over TCP patches
 S: University of Limerick
 S: Ireland
 
+N: Tigran A. Aivazian
+E: tigran@ocston.org
+W: http://www.ocston.org/~tigran
+D: BFS filesystem
+S: United Kingdom
+
 N: Werner Almesberger
 E: werner.almesberger@lrc.di.epfl.ch
 D: dosfs, LILO, some fd features, various other hacks here and there
@@ -1772,8 +1778,8 @@ S: 7000 Stuttgart 50
 S: Germany
 
 N: Stephen Rothwell
-E: Stephen.Rothwell@canb.auug.org.au
-W: http://www.canb.auug.org.au/~sfr
+E: sfr@linuxcare.com
+W: http://linuxcare.com.au/sfr
 P: 1024/BD8C7805 CD A4 9D 01 10 6E 7E 3B  91 88 FA D9 C8 40 AA 02
 D: Boot/setup/build work for setup > 2K
 D: Author, APM driver

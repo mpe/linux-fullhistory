@@ -34,7 +34,10 @@ char *processor_modes[]=
   "UK8_32" , "UK9_32" , "UK10_32", "UND_32" , "UK12_32", "UK13_32", "UK14_32", "SYS_32"
 };
 
-static char *handler[]= { "prefetch abort", "data abort", "address exception", "interrupt" };
+/* proc/system.h */
+const char xchg_str[] = "xchg";
+
+static const char *handler[]= { "prefetch abort", "data abort", "address exception", "interrupt" };
 
 static inline void console_verbose(void)
 {
@@ -335,10 +338,11 @@ asmlinkage void deferred(int n, struct pt_regs *regs)
 	}
 
 #ifdef CONFIG_DEBUG_USER
-	printk(KERN_ERR "[%d] %s: old system call.\n", current->pid, 
-	       current->comm);
+	printk(KERN_ERR "[%d] %s: obsolete system call %08x.\n", current->pid, 
+	       current->comm, n);
 #endif
 	force_sig(SIGILL, current);
+	die_if_kernel("Oops", regs, n);
 }
 
 asmlinkage void arm_malalignedptr(const char *str, void *pc, volatile void *ptr)
@@ -385,8 +389,37 @@ asmlinkage void baddataabort(int code, unsigned long instr, struct pt_regs *regs
 }
 #endif
 
+void __bug(const char *file, int line, void *data)
+{
+	printk(KERN_CRIT"kernel BUG at %s:%d!\n", file, line);
+	if (data)
+		printk(KERN_CRIT"extra data = %p\n", data);
+	*(int *)0 = 0;
+}
+
+void __readwrite_bug(const char *fn)
+{
+	printk("%s called, but not implemented", fn);
+	*(int *)0 = 0;
+}
+
+void __pte_error(const char *file, int line, unsigned long val)
+{
+	printk("%s:%d: bad pte %08lx.\n", file, line, val);
+}
+
+void __pmd_error(const char *file, int line, unsigned long val)
+{
+	printk("%s:%d: bad pmd %08lx.\n", file, line, val);
+}
+
+void __pgd_error(const char *file, int line, unsigned long val)
+{
+	printk("%s:%d: bad pgd %08lx.\n", file, line, val);
+}
+
 asmlinkage void __div0(void)
 {
-	printk("Awooga, division by zero in kernel.\n");
+	printk("Division by zero in kernel.\n");
 	__backtrace();
 }

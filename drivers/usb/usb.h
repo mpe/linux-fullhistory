@@ -175,6 +175,8 @@ struct usb_proc_setinterface {
 #include <linux/list.h>
 #include <linux/sched.h>
 
+#define USB_MAJOR 180
+
 extern int usb_hub_init(void);
 extern int usb_kbd_init(void);
 extern int usb_cpia_init(void);
@@ -233,6 +235,12 @@ typedef struct {
  */
 struct usb_devmap {
 	unsigned long devicemap[128 / (8*sizeof(unsigned long))];
+};
+
+#define USB_MAXBUS		64
+
+struct usb_busmap {
+	unsigned long busmap[USB_MAXBUS / (8*sizeof(unsigned long))];
 };
 
 /*
@@ -320,6 +328,9 @@ struct usb_interface {
 
 	int act_altsetting;		/* active alternate setting */
 	int num_altsetting;		/* number of alternate settings */
+
+        struct usb_driver *driver;	/* driver */
+	void *private_data;
 };
 
 /* Configuration descriptor information.. */
@@ -348,8 +359,8 @@ struct usb_device;
 struct usb_driver {
 	const char *name;
 
-	int (*probe)(struct usb_device *);
-	void (*disconnect)(struct usb_device *);
+	void * (*probe)(struct usb_device *, unsigned int);
+	void (*disconnect)(struct usb_device *, void *);
 
 	struct list_head driver_list;
 
@@ -476,6 +487,8 @@ struct usb_operations {
  * Allocated per bus we have
  */
 struct usb_bus {
+	int busnum;			/* Bus number (in order of reg) */
+
 	struct usb_devmap devmap;       /* Device map */
 	struct usb_operations *op;      /* Operations (specific to the HC) */
 	struct usb_device *root_hub;    /* Root hub */
@@ -510,11 +523,9 @@ struct usb_device {
 	struct usb_config_descriptor *actconfig;/* the active configuration */
 	int epmaxpacketin[16];		/* INput endpoint specific maximums */
 	int epmaxpacketout[16];		/* OUTput endpoint specific maximums */
-	int ifnum;			/* active interface number */
 
 	struct usb_device *parent;
 	struct usb_bus *bus;		/* Bus we're part of */
-	struct usb_driver *driver;	/* Driver */
 
 	struct usb_device_descriptor descriptor;/* Descriptor */
 	struct usb_config_descriptor *config;	/* All of the configs */
@@ -523,7 +534,6 @@ struct usb_device {
 	int string_langid;		/* language ID for strings */
   
 	void *hcpriv;			/* Host Controller private data */
-	void *private;			/* Upper layer private data */
 	void *audiopriv;		/* May be both audio and HID */
 	/* procfs entry */
 	struct proc_dir_entry *proc_entry;
@@ -542,6 +552,11 @@ struct usb_device {
 
 extern int usb_register(struct usb_driver *);
 extern void usb_deregister(struct usb_driver *);
+
+/* used these for multi-interface device registration */
+extern void usb_driver_claim_interface(struct usb_driver *driver, struct usb_interface *iface, void* priv);
+extern int usb_interface_claimed(struct usb_interface *iface);
+extern void usb_driver_release_interface(struct usb_driver *driver, struct usb_interface *iface);
 
 extern struct usb_bus *usb_alloc_bus(struct usb_operations *);
 extern void usb_free_bus(struct usb_bus *);
@@ -620,6 +635,11 @@ int usb_kill_isoc (struct usb_isoc_desc *isocdesc);
 #define PIPE_INTERRUPT			1
 #define PIPE_CONTROL			2
 #define PIPE_BULK			3
+
+#define USB_ISOCHRONOUS		0
+#define USB_INTERRUPT		1
+#define USB_CONTROL		2
+#define USB_BULK		3
 
 #define usb_maxpacket(dev, pipe, out)	(out \
 				? (dev)->epmaxpacketout[usb_pipeendpoint(pipe)] \

@@ -227,7 +227,7 @@ skip_copy_pte_range:		address = (address + PMD_SIZE) & PMD_MASK;
 				if (pte_none(pte))
 					goto cont_copy_pte_range;
 				if (!pte_present(pte)) {
-					swap_duplicate(pte);
+					swap_duplicate(pte_to_swp_entry(pte));
 					set_pte(dst_pte, pte);
 					goto cont_copy_pte_range;
 				}
@@ -282,7 +282,7 @@ static inline int free_pte(pte_t page)
 		free_page_and_swap_cache(mem_map+nr);
 		return 1;
 	}
-	swap_free(page);
+	swap_free(pte_to_swp_entry(page));
 	return 0;
 }
 
@@ -887,12 +887,19 @@ static void partial_clear(struct vm_area_struct *vma, unsigned long address)
  */
 void vmtruncate(struct inode * inode, unsigned long offset)
 {
+	unsigned long partial, pgoff;
 	struct vm_area_struct * mpnt;
 
 	truncate_inode_pages(inode, offset);
 	spin_lock(&inode->i_shared_lock);
 	if (!inode->i_mmap)
 		goto out_unlock;
+
+	partial = offset & (PAGE_CACHE_SIZE - 1);
+	pgoff = offset >> PAGE_CACHE_SHIFT;
+	if (partial)
+		pgoff ++;
+
 	mpnt = inode->i_mmap;
 	do {
 		struct mm_struct *mm = mpnt->vm_mm;
@@ -902,19 +909,22 @@ void vmtruncate(struct inode * inode, unsigned long offset)
 		unsigned long diff;
 
 		/* mapping wholly truncated? */
-		if (mpnt->vm_offset >= offset) {
+		if (mpnt->vm_pgoff >= pgoff) {
 			flush_cache_range(mm, start, end);
 			zap_page_range(mm, start, len);
 			flush_tlb_range(mm, start, end);
 			continue;
 		}
+
 		/* mapping wholly unaffected? */
-		diff = offset - mpnt->vm_offset;
+		len = len >> PAGE_SHIFT;
+		diff = pgoff - mpnt->vm_pgoff;
 		if (diff >= len)
 			continue;
+
 		/* Ok, partially affected.. */
-		start += diff;
-		len = (len - diff) & PAGE_MASK;
+		start += diff << PAGE_SHIFT;
+		len = (len - diff) << PAGE_SHIFT;
 		if (start & ~PAGE_MASK) {
 			partial_clear(mpnt, start);
 			start = (start + ~PAGE_MASK) & PAGE_MASK;
@@ -935,7 +945,7 @@ out_unlock:
  * because it doesn't cost us any seek time.  We also make sure to queue
  * the 'original' request together with the readahead ones...  
  */
-void swapin_readahead(pte_t entry)
+void swapin_readahead(swp_entry_t entry)
 {
 	int i;
 	struct page *new_page;
@@ -969,7 +979,7 @@ void swapin_readahead(pte_t entry)
 
 static int do_swap_page(struct task_struct * tsk,
 	struct vm_area_struct * vma, unsigned long address,
-	pte_t * page_table, pte_t entry, int write_access)
+	pte_t * page_table, swp_entry_t entry, int write_access)
 {
 	struct page *page = lookup_swap_cache(entry);
 	pte_t pte;
@@ -1116,7 +1126,7 @@ static inline int handle_pte_fault(struct task_struct *tsk,
 	if (!pte_present(entry)) {
 		if (pte_none(entry))
 			return do_no_page(tsk, vma, address, write_access, pte);
-		return do_swap_page(tsk, vma, address, pte, entry, write_access);
+		return do_swap_page(tsk, vma, address, pte, pte_to_swp_entry(entry), write_access);
 	}
 
 	/*

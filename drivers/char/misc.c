@@ -76,7 +76,6 @@ extern int rtc_sun_init(void);		/* Combines MK48T02 and MK48T08 */
 extern int rtc_DP8570A_init(void);
 extern int rtc_MK48T08_init(void);
 extern int dsp56k_init(void);
-extern int nvram_init(void);
 extern int radio_init(void);
 extern int pc110pad_init(void);
 extern int pmu_device_init(void);
@@ -180,13 +179,9 @@ int misc_deregister(struct miscdevice * misc)
 EXPORT_SYMBOL(misc_register);
 EXPORT_SYMBOL(misc_deregister);
 
-static struct proc_dir_entry *proc_misc;
-
 int __init misc_init(void)
 {
-	proc_misc = create_proc_entry("misc", 0, 0);
-	if (proc_misc)
-		proc_misc->read_proc = misc_read_proc;
+	create_proc_read_entry("misc", 0, 0, misc_read_proc, NULL);
 #ifdef CONFIG_BUSMOUSE
 	bus_mouse_init();
 #endif
@@ -234,9 +229,6 @@ int __init misc_init(void)
 #endif
 #ifdef CONFIG_ATARI_DSP56K
 	dsp56k_init();
-#endif
-#ifdef CONFIG_NVRAM
-	nvram_init();
 #endif
 #ifdef CONFIG_MISC_RADIO
 	radio_init();

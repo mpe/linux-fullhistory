@@ -17,23 +17,14 @@
  */
 
 #include <linux/module.h>
-
-#include <stdarg.h>
-
-#include <asm/bitops.h>
-#include <asm/uaccess.h>
-#include <asm/system.h>
-
-#include <linux/errno.h>
-#include <linux/fs.h>
-#include <linux/ext2_fs.h>
-#include <linux/malloc.h>
-#include <linux/sched.h>
-#include <linux/stat.h>
 #include <linux/string.h>
-#include <linux/locks.h>
-#include <linux/blkdev.h>
+#include <linux/fs.h>
+#include <linux/slab.h>
 #include <linux/init.h>
+#include <linux/locks.h>
+#include <asm/uaccess.h>
+
+
 
 static char error_buf[1024];
 

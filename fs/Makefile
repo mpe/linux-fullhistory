@@ -18,7 +18,7 @@ O_OBJS    = open.o read_write.o devices.o file_table.o buffer.o \
 MOD_LIST_NAME := FS_MODULES
 ALL_SUB_DIRS = coda minix ext2 fat msdos vfat proc isofs nfs umsdos ntfs \
 		hpfs sysv smbfs ncpfs ufs efs affs romfs autofs hfs lockd \
-		nfsd nls devpts adfs partitions qnx4 udf
+		nfsd nls devpts adfs partitions qnx4 udf bfs
 
 SUB_DIRS := partitions
 
@@ -84,6 +84,14 @@ MOD_TO_LIST += openpromfs.o
 endif
 endif
 
+ifeq ($(CONFIG_BFS_FS),y)
+SUB_DIRS += bfs
+else
+  ifeq ($(CONFIG_BFS_FS),m)
+  MOD_SUB_DIRS += bfs
+  endif
+endif
+ 
 ifeq ($(CONFIG_ISO9660_FS),y)
 SUB_DIRS += isofs
 else

@@ -57,6 +57,4 @@ extern inline pmd_t * pmd_alloc(pgd_t *pgd, unsigned long address)
 	return (pmd_t *) pgd;
 }
 
-#define SWP_ENTRY(type,offset) __pte((((type) << 1) | ((offset) << 8)))
-
 #endif /* _I386_PGTABLE_2LEVEL_H */

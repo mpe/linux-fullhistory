@@ -459,39 +459,6 @@ struct net_proto_family inet6_family_ops = {
 	inet6_create
 };
 
-#ifdef CONFIG_PROC_FS
-static struct proc_dir_entry proc_net_raw6 = {
-	PROC_NET_RAW6, 4, "raw6",
-	S_IFREG | S_IRUGO, 1, 0, 0,
-	0, &proc_net_inode_operations,
-	raw6_get_info
-};
-static struct proc_dir_entry proc_net_tcp6 = {
-	PROC_NET_TCP6, 4, "tcp6",
-	S_IFREG | S_IRUGO, 1, 0, 0,
-	0, &proc_net_inode_operations,
-	tcp6_get_info
-};
-static struct proc_dir_entry proc_net_udp6 = {
-	PROC_NET_RAW6, 4, "udp6",
-	S_IFREG | S_IRUGO, 1, 0, 0,
-	0, &proc_net_inode_operations,
-	udp6_get_info
-};
-static struct proc_dir_entry proc_net_sockstat6 = {
-	PROC_NET_SOCKSTAT6, 9, "sockstat6",
-	S_IFREG | S_IRUGO, 1, 0, 0,
-	0, &proc_net_inode_operations,
-	afinet6_get_info
-};
-static struct proc_dir_entry proc_net_snmp6 = {
-	PROC_NET_SNMP6, 5, "snmp6",
-	S_IFREG | S_IRUGO, 1, 0, 0,
-	0, &proc_net_inode_operations,
-	afinet6_get_snmp
-};
-#endif	/* CONFIG_PROC_FS */
-
 #ifdef MODULE
 int ipv6_unload(void)
 {
@@ -566,11 +533,11 @@ void __init inet6_proto_init(struct net_proto *pro)
 
 	/* Create /proc/foo6 entries. */
 #ifdef CONFIG_PROC_FS
-	proc_net_register(&proc_net_raw6);
-	proc_net_register(&proc_net_tcp6);
-	proc_net_register(&proc_net_udp6);
-	proc_net_register(&proc_net_sockstat6);
-	proc_net_register(&proc_net_snmp6);
+	proc_net_create("raw6", 0, raw6_get_info);
+	proc_net_create("tcp6", 0, tcp6_get_info);
+	proc_net_create("udp6", 0, udp6_get_info);
+	proc_net_create("sockstat6", 0, afinet6_get_info);
+	proc_net_create("snmp6", 0, afinet6_get_snmp);
 #endif
 
 	/* Now the userspace is allowed to create INET6 sockets. */
@@ -603,11 +570,11 @@ void cleanup_module(void)
 	/* First of all disallow new sockets creation. */
 	sock_unregister(PF_INET6);
 #ifdef CONFIG_PROC_FS
-	proc_net_unregister(proc_net_raw6.low_ino);
-	proc_net_unregister(proc_net_tcp6.low_ino);
-	proc_net_unregister(proc_net_udp6.low_ino);
-	proc_net_unregister(proc_net_sockstat6.low_ino);
-	proc_net_unregister(proc_net_snmp6.low_ino);
+	proc_net_remove("raw6");
+	proc_net_remove("tcp6");
+	proc_net_remove("udp6");
+	proc_net_remove("sockstat6");
+	proc_net_remove("snmp6");
 #endif
 	/* Cleanup code parts. */
 	sit_cleanup();

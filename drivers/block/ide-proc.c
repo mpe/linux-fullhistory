@@ -769,31 +769,25 @@ static void destroy_proc_ide_interfaces(void)
 
 void proc_ide_create(void)
 {
-	struct proc_dir_entry *ent;
 	proc_ide_root = create_proc_entry("ide", S_IFDIR, 0);
 	if (!proc_ide_root) return;
+
 	create_proc_ide_interfaces();
 
-	ent = create_proc_entry("drivers", 0, proc_ide_root);
-	if (!ent) return;
-	ent->read_proc  = proc_ide_read_drivers;
+	create_proc_read_entry("drivers",0,proc_ide_root,
+				proc_ide_read_drivers, NULL);
+
 #ifdef CONFIG_BLK_DEV_ALI15X3
-	if ((ali_display_info) && (ali_proc)) {
-		ent = create_proc_entry("ali", 0, proc_ide_root);
-		ent->get_info = ali_display_info;
-	}
+	if ((ali_display_info) && (ali_proc))
+		create_proc_info_entry("ali", 0, proc_ide_root, ali_display_info);
 #endif /* CONFIG_BLK_DEV_ALI15X3 */
 #ifdef CONFIG_BLK_DEV_SIS5513
-	if ((sis_display_info) && (sis_proc)) {
-		ent = create_proc_entry("sis", 0, proc_ide_root);
-		ent->get_info = sis_display_info;
-	}
+	if ((sis_display_info) && (sis_proc))
+		create_proc_info_entry("sis", 0, proc_ide_root, sis_display_info);
 #endif /* CONFIG_BLK_DEV_SIS5513 */
 #ifdef CONFIG_BLK_DEV_VIA82CXXX
-	if ((via_display_info) && (via_proc)) {
-		ent = create_proc_entry("via", 0, proc_ide_root);
-		ent->get_info = via_display_info;
-	}
+	if ((via_display_info) && (via_proc))
+		create_proc_info_entry("via", 0, proc_ide_root, via_display_info);
 #endif /* CONFIG_BLK_DEV_VIA82CXXX */
 }
 

@@ -265,10 +265,7 @@ int __init net_profile_init(void)
 	int i;
 
 #ifdef CONFIG_PROC_FS
-	struct proc_dir_entry *ent;
-
-	ent = create_proc_entry("net/profile", 0, 0);
-	ent->read_proc = profile_read_proc;
+	create_proc_read_entry("net/profile", 0, 0, profile_read_proc, NULL);
 #endif
 
 	register_netdevice(&whitehole_dev);

@@ -1980,8 +1980,6 @@ static struct packet_type dn_dix_packet_type =
 	NULL,
 };
 
-#ifdef CONFIG_PROC_FS
-
 static int dn_get_info(char *buffer, char **start, off_t offset, int length, int dummy)
 {
 	struct sock *sk;
@@ -2036,22 +2034,11 @@ static int dn_get_info(char *buffer, char **start, off_t offset, int length, int
 	return len;
 }
 
-struct proc_dir_entry decnet_linkinfo = {
-	PROC_NET_DN_SKT, 6, "decnet", S_IFREG | S_IRUGO,
-	1, 0, 0, 0, &proc_net_inode_operations, dn_get_info
-};
-
 #ifdef CONFIG_DECNET_RAW
 
 extern int dn_raw_get_info(char *, char **, off_t, int, int);
 
-struct proc_dir_entry decnet_rawinfo = {
-	PROC_NET_DN_RAW, 10, "decnet_raw", S_IFREG | S_IRUGO,
-	1, 0, 0, 0, &proc_net_inode_operations, dn_raw_get_info
-};
-
 #endif /* CONFIG_DECNET_RAW */
-#endif /* CONFIG_PROC_FS */
 static struct net_proto_family	dn_family_ops = {
 	AF_DECnet,
 	dn_create
@@ -2089,11 +2076,9 @@ void __init decnet_proto_init(struct net_proto *pro)
 	dev_add_pack(&dn_dix_packet_type);
 	register_netdevice_notifier(&dn_dev_notifier);
 
-#ifdef CONFIG_PROC_FS
-	proc_net_register(&decnet_linkinfo);
+	proc_net_create("decnet", 0, dn_get_info);
 #ifdef CONFIG_DECNET_RAW
-	proc_net_register(&decnet_rawinfo);
-#endif
+	proc_net_create("decnet_raw", 0, dn_raw_get_info);
 #endif
 	dn_dev_init();
 	dn_neigh_init();
@@ -2222,11 +2207,9 @@ void cleanup_module(void)
 	dn_fib_cleanup();
 #endif /* CONFIG_DECNET_ROUTER */
 
-#ifdef CONFIG_PROC_FS
-	proc_net_unregister(PROC_NET_DN_SKT);
+	proc_net_remove("decnet");
 #ifdef CONFIG_DECNET_RAW
-	proc_net_unregister(PROC_NET_DN_RAW);
-#endif
+	proc_net_remove("decnet_raw");
 #endif
 
 	dev_remove_pack(&dn_dix_packet_type);

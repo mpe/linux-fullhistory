@@ -24,11 +24,12 @@
  * Page offset: 3GB
  */
 #define PAGE_OFFSET	(0xc0000000UL)
+#define PHYS_OFFSET	(0x10000000UL)
 
 #define __virt_to_phys__is_a_macro
-#define __virt_to_phys(vpage) ((vpage) - PAGE_OFFSET + 0x10000000)
+#define __virt_to_phys(vpage) ((vpage) - PAGE_OFFSET + PHYS_OFFSET)
 #define __phys_to_virt__is_a_macro
-#define __phys_to_virt(ppage) ((ppage) + PAGE_OFFSET - 0x10000000)
+#define __phys_to_virt(ppage) ((ppage) + PAGE_OFFSET - PHYS_OFFSET)
 
 /*
  * These are exactly the same on the RiscPC as the

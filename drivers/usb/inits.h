@@ -4,6 +4,7 @@ int usb_hub_init(void);
 void usb_hub_cleanup(void);
 int usb_kbd_init(void);
 void usb_major_init(void);
+void usb_major_cleanup(void);
 void usb_mouse_cleanup(void);
 int usb_hp_scanner_init(void);
 void usb_hp_scanner_cleanup(void);

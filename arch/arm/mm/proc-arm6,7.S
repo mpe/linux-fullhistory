@@ -532,7 +532,7 @@ cpu_elf_name:	.asciz	"v3"
 		.size	cpu_elf_name, . - cpu_elf_name
 		.align
 
-		.section ".proc.info", #alloc
+		.section ".proc.info", #alloc, #execinstr
 
 		.type	__arm6_proc_info, #object
 __arm6_proc_info:

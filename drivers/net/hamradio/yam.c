@@ -893,28 +893,17 @@ static int yam_net_get_info(char *buffer, char **start, off_t offset, int length
 }
 
 #ifdef CONFIG_INET
-
-#ifndef PROC_NET_YAM
-#define PROC_NET_YAM (PROC_NET_LAST+10)		/* Sorry again... */
-#endif
-
 #ifdef CONFIG_PROC_FS
-struct proc_dir_entry yam_proc_dir_entry =
-{
-	PROC_NET_YAM, 3, "yam", S_IFREG | S_IRUGO, 1, 0, 0, 0,
-	&proc_net_inode_operations, yam_net_get_info
-};
-
-#define yam_net_procfs_init()   proc_net_register(&yam_proc_dir_entry);
-#define yam_net_procfs_remove() proc_net_unregister(PROC_NET_YAM);
+#define yam_net_procfs_init() proc_net_create("yam",0,yam_net_get_info)
+#define yam_net_procfs_remove() proc_net_remove("yam")
 #else
 #define yam_net_procfs_init()
 #define yam_net_procfs_remove()
-#endif
+#endif /* CONFIG_PROC_FS */
 #else
 #define yam_net_procfs_init()
 #define yam_net_procfs_remove()
-#endif
+#endif /* CONFIG_INET */
 
 /* --------------------------------------------------------------------- */
 

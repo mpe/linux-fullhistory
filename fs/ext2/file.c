@@ -18,19 +18,11 @@
  * 	(jj@sunsite.ms.mff.cuni.cz)
  */
 
-#include <asm/uaccess.h>
-#include <asm/system.h>
-
-#include <linux/errno.h>
+#include <linux/module.h>
 #include <linux/fs.h>
-#include <linux/ext2_fs.h>
-#include <linux/fcntl.h>
 #include <linux/sched.h>
-#include <linux/stat.h>
-#include <linux/locks.h>
-#include <linux/mm.h>
-#include <linux/pagemap.h>
-#include <linux/smp_lock.h>
+
+
 
 #define	NBUF	32
 

@@ -125,21 +125,9 @@
 int iop_scc_present,iop_ism_present;
 
 #ifdef CONFIG_PROC_FS
-
-/*
- * sneaky reuse of the PROC_MAC_VIA inode. It's not needed by via.c
- * anymore so we'll use it to debut the IOPs.
- */
-
-int iop_get_proc_info(char *, char **, off_t, int, int);
-
-static struct proc_dir_entry proc_mac_iop = {
-	PROC_MAC_VIA, 7, "mac_iop",
-	S_IFREG | S_IRUGO, 1, 0, 0,
-	0, &proc_array_inode_operations,
-	&iop_get_proc_info
-};
-
+static int iop_get_proc_info(char *, char **, off_t, int, int);
+#else
+static int iop_get_proc_info(char *, char **, off_t, int, int) {}
 #endif /* CONFIG_PROC_FS */
 
 /* structure for tracking channel listeners */
@@ -315,9 +303,7 @@ void __init iop_init(void)
 		iop_listeners[IOP_NUM_ISM][i].handler = NULL;
 	}
 
-#ifdef CONFIG_PROC_FS
-	proc_register(&proc_root, &proc_mac_iop);
-#endif
+	create_proc_info_entry("mac_iop",0,0,iop_get_proc_info);
 }
 
 /*
@@ -722,4 +708,5 @@ int iop_get_proc_info(char *buf, char **start, off_t pos, int count, int wr)
 	}
 	return (count > cnt) ? cnt : count;
 }
+
 #endif /* CONFIG_PROC_FS */

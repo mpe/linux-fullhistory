@@ -12,6 +12,7 @@
 #include <asm/byteorder.h>
 #include <asm/elf.h>
 #include <asm/io.h>
+#include <asm/irq.h>
 #include <asm/dma.h>
 #include <asm/pgtable.h>
 #include <asm/proc-fns.h>
@@ -98,7 +99,8 @@ EXPORT_SYMBOL(kernel_thread);
 EXPORT_SYMBOL(system_rev);
 EXPORT_SYMBOL(system_serial_low);
 EXPORT_SYMBOL(system_serial_high);
-
+EXPORT_SYMBOL(__bug);
+EXPORT_SYMBOL(__readwrite_bug);
 EXPORT_SYMBOL(enable_irq);
 EXPORT_SYMBOL(disable_irq);
 
@@ -152,8 +154,8 @@ EXPORT_SYMBOL(__bus_to_virt);
 #ifndef CONFIG_NO_PGT_CACHE
 EXPORT_SYMBOL(quicklists);
 #endif
-EXPORT_SYMBOL(__bad_pmd);
-EXPORT_SYMBOL(__bad_pmd_kernel);
+EXPORT_SYMBOL(__handle_bad_pmd);
+EXPORT_SYMBOL(__handle_bad_pmd_kernel);
 
 	/* string / mem functions */
 EXPORT_SYMBOL_NOVERS(strcpy);

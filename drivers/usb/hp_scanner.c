@@ -217,8 +217,8 @@ read_scanner(struct file * file, char * buffer,
 	return read_count;
 }
 
-static int
-probe_scanner(struct usb_device *dev)
+static void *
+probe_scanner(struct usb_device *dev, unsigned int ifnum)
 {
 	struct hpscan_usb_data *hps = &hpscan;
 
@@ -228,41 +228,36 @@ probe_scanner(struct usb_device *dev)
 	 * soon.  */
 	if (dev->descriptor.idVendor != 0x3f0 ) {
 		printk(KERN_INFO "Scanner is not an HP Scanner.\n");
-		return -1;
+		return NULL;
 	}
 
 	if (dev->descriptor.idProduct != 0x101 && /* HP 4100C */
 	    dev->descriptor.idProduct != 0x202 && /* HP 5100C */
             dev->descriptor.idProduct != 0x601) { /* HP 6300C */
 		printk(KERN_INFO "Scanner model not supported/tested.\n");
-		return -1;
+		return NULL;
 	}
 	
 	printk(KERN_DEBUG "USB Scanner found at address %d\n", dev->devnum);
 	
-	if (usb_set_configuration(dev, dev->config[0].bConfigurationValue)) {
-		printk(KERN_DEBUG "Failed to set configuration\n");
-		return -1;
-	}
-
 	hps->present = 1;
 	hps->hpscan_dev = dev;
 
 	if (!(hps->obuf = (char *)kmalloc(OBUF_SIZE, GFP_KERNEL))) {
-		return -ENOMEM;
+		return NULL;
 	}
 
 	if (!(hps->ibuf = (char *)kmalloc(IBUF_SIZE, GFP_KERNEL))) {
-		return -ENOMEM;
+		return NULL;
 	}
   
-	return 0;
+	return hps;
 }
 
 static void
-disconnect_scanner(struct usb_device *dev)
+disconnect_scanner(struct usb_device *dev, void *ptr)
 {
-	struct hpscan_usb_data *hps = &hpscan;
+	struct hpscan_usb_data *hps = (struct hpscan_usb_data *) ptr;
 
 	if (hps->isopen) {
 		/* better let it finish - the release will do whats needed */
@@ -272,7 +267,6 @@ disconnect_scanner(struct usb_device *dev)
 	kfree(hps->ibuf);
 	kfree(hps->obuf);
 
-	dev->private = NULL;		/* just in case */
 	hps->present = 0;
 }
 

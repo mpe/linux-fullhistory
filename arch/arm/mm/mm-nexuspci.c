@@ -18,12 +18,6 @@
 
 #include "map.h"
  
-struct mem_desc mem_desc[] __initdata = {
-	0, 0
-};
-
-unsigned int __initdata mem_desc_size = 0;
-
 const struct map_desc io_desc[] __initdata = {
  	{ 0xfff00000, 0x10000000, 0x00001000, DOMAIN_IO, 0, 1, 0, 0 },
  	{ 0xffe00000, 0x20000000, 0x00001000, DOMAIN_IO, 0, 1, 0, 0 },

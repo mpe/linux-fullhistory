@@ -201,8 +201,9 @@ static __inline__ unsigned rt_hash_code(u32 daddr, u32 saddr, u8 tos)
 	return (hash^(hash>>8)) & 0xFF;
 }
 
-#ifdef CONFIG_PROC_FS
-
+#ifndef CONFIG_PROC_FS
+static int rt_cache_get_info(char *buffer, char **start, off_t offset, int length, int dummy) { return 0; }
+#else
 static int rt_cache_get_info(char *buffer, char **start, off_t offset, int length, int dummy)
 {
 	int len=0;
@@ -2147,11 +2148,6 @@ static int ip_rt_acct_read(char *buffer, char **start, off_t offset,
 
 void __init ip_rt_init(void)
 {
-#ifdef CONFIG_PROC_FS
-#ifdef CONFIG_NET_CLS_ROUTE
-	struct proc_dir_entry *ent;
-#endif
-#endif
 	ipv4_dst_ops.kmem_cachep = kmem_cache_create("ip_dst_cache",
 						     sizeof(struct rtable),
 						     0, SLAB_HWCACHE_ALIGN,
@@ -2167,16 +2163,8 @@ void __init ip_rt_init(void)
 		+ ip_rt_gc_interval;
 	add_timer(&rt_periodic_timer);
 
-#ifdef CONFIG_PROC_FS
-	proc_net_register(&(struct proc_dir_entry) {
-		PROC_NET_RTCACHE, 8, "rt_cache",
-		S_IFREG | S_IRUGO, 1, 0, 0,
-		0, &proc_net_inode_operations,
-		rt_cache_get_info
-	});
+	proc_net_create ("rt_cache", 0, rt_cache_get_info);
 #ifdef CONFIG_NET_CLS_ROUTE
-	ent = create_proc_entry("net/rt_acct", 0, 0);
-	ent->read_proc = ip_rt_acct_read;
-#endif
+	create_proc_read_entry("net/rt_acct", 0, 0, ip_rt_acct_read);
 #endif
 }

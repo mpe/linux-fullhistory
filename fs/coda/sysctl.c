@@ -476,43 +476,7 @@ int coda_cache_inv_stats_get_info( char * buffer, char ** start, off_t offset,
 
 */
 
-struct proc_dir_entry proc_fs_coda = {
-        PROC_FS_CODA, 4, "coda",
-        S_IFDIR | S_IRUGO | S_IXUGO, 2, 0, 0,
-        0, &proc_dir_inode_operations,
-	NULL, NULL,
-	NULL,
-	NULL, NULL
-};
-
-struct proc_dir_entry proc_coda_vfs =  {
-                PROC_VFS_STATS , 9, "vfs_stats",
-                S_IFREG | S_IRUGO, 1, 0, 0,
-                0, &proc_net_inode_operations,
-                coda_vfs_stats_get_info
-        };
-
-struct proc_dir_entry proc_coda_upcall =  {
-                PROC_UPCALL_STATS , 12, "upcall_stats",
-                S_IFREG | S_IRUGO, 1, 0, 0,
-                0, &proc_net_inode_operations,
-                coda_upcall_stats_get_info
-        };
-
-struct proc_dir_entry proc_coda_permission =  {
-                PROC_PERMISSION_STATS , 16, "permission_stats",
-                S_IFREG | S_IRUGO, 1, 0, 0,
-                0, &proc_net_inode_operations,
-                coda_permission_stats_get_info
-        };
-
-
-struct proc_dir_entry proc_coda_cache_inv =  {
-                PROC_CACHE_INV_STATS , 15, "cache_inv_stats",
-                S_IFREG | S_IRUGO, 1, 0, 0,
-                0, &proc_net_inode_operations,
-                coda_cache_inv_stats_get_info
-        };
+struct proc_dir_entry* proc_fs_coda;
 
 static void coda_proc_modcount(struct inode *inode, int fill)
 {
@@ -525,6 +489,8 @@ static void coda_proc_modcount(struct inode *inode, int fill)
 
 #endif
 
+#define coda_proc_create(name,get_info) \
+	create_proc_info_entry(name, 0, proc_fs_coda, get_info)
 
 void coda_sysctl_init()
 {
@@ -535,12 +501,12 @@ void coda_sysctl_init()
 	reset_coda_cache_inv_stats();
 
 #ifdef CONFIG_PROC_FS
-	proc_register(&proc_root_fs,&proc_fs_coda);
-	proc_fs_coda.fill_inode = &coda_proc_modcount;
-	proc_register(&proc_fs_coda,&proc_coda_vfs);
-	proc_register(&proc_fs_coda,&proc_coda_upcall);
-	proc_register(&proc_fs_coda,&proc_coda_permission);
-	proc_register(&proc_fs_coda,&proc_coda_cache_inv);
+	proc_fs_coda = create_proc_entry("coda", S_IFDIR, proc_root_fs);
+	proc_fs_coda->fill_inode = &coda_proc_modcount;
+	coda_proc_create("vfs_stats", coda_vfs_stats_get_info);
+	coda_proc_create("upcall_stats", coda_upcall_stats_get_info);
+	coda_proc_create("permission_stats", coda_permission_stats_get_info);
+	coda_proc_create("cache_inv_stats", coda_cache_inv_stats_get_info);
 #endif
 
 #ifdef CONFIG_SYSCTL
@@ -560,10 +526,10 @@ void coda_sysctl_clean()
 #endif
 
 #if CONFIG_PROC_FS
-        proc_unregister(&proc_fs_coda, proc_coda_cache_inv.low_ino);
-        proc_unregister(&proc_fs_coda, proc_coda_permission.low_ino);
-        proc_unregister(&proc_fs_coda, proc_coda_upcall.low_ino);
-        proc_unregister(&proc_fs_coda, proc_coda_vfs.low_ino);
-	proc_unregister(&proc_root_fs, proc_fs_coda.low_ino);
+        remove_proc_entry("cache_inv_stats", proc_fs_coda);
+        remove_proc_entry("permission_stats", proc_fs_coda);
+        remove_proc_entry("upcall_stats", proc_fs_coda);
+        remove_proc_entry("vfs_stats", proc_fs_coda);
+	remove_proc_entry("coda", proc_root_fs);
 #endif 
 }

@@ -72,13 +72,6 @@
 #include <asm/pgtable.h>
 #include <asm/io.h>
 
-#define LOAD_INT(x) ((x) >> FSHIFT)
-#define LOAD_FRAC(x) LOAD_INT(((x) & (FIXED_1-1)) * 100)
-
-#ifdef CONFIG_DEBUG_MALLOC
-int get_malloc(char * buffer);
-#endif
-
 
 static int open_kcore(struct inode * inode, struct file * filp)
 {
@@ -228,193 +221,6 @@ static struct file_operations proc_profile_operations = {
 struct inode_operations proc_profile_inode_operations = {
 	&proc_profile_operations,
 };
-
-
-static int get_loadavg(char * buffer)
-{
-	int a, b, c;
-
-	a = avenrun[0] + (FIXED_1/200);
-	b = avenrun[1] + (FIXED_1/200);
-	c = avenrun[2] + (FIXED_1/200);
-	return sprintf(buffer,"%d.%02d %d.%02d %d.%02d %d/%d %d\n",
-		LOAD_INT(a), LOAD_FRAC(a),
-		LOAD_INT(b), LOAD_FRAC(b),
-		LOAD_INT(c), LOAD_FRAC(c),
-		nr_running, nr_threads, last_pid);
-}
-
-static int get_kstat(char * buffer)
-{
-	int i, len;
-	unsigned sum = 0;
-	extern unsigned long total_forks;
-	unsigned long jif = jiffies;
-
-	for (i = 0 ; i < NR_IRQS ; i++)
-		sum += kstat_irqs(i);
-
-#ifdef __SMP__
-	len = sprintf(buffer,
-		"cpu  %u %u %u %lu\n",
-		kstat.cpu_user,
-		kstat.cpu_nice,
-		kstat.cpu_system,
-		jif*smp_num_cpus - (kstat.cpu_user + kstat.cpu_nice + kstat.cpu_system));
-	for (i = 0 ; i < smp_num_cpus; i++)
-		len += sprintf(buffer + len, "cpu%d %u %u %u %lu\n",
-			i,
-			kstat.per_cpu_user[cpu_logical_map(i)],
-			kstat.per_cpu_nice[cpu_logical_map(i)],
-			kstat.per_cpu_system[cpu_logical_map(i)],
-			jif - (  kstat.per_cpu_user[cpu_logical_map(i)] \
-			           + kstat.per_cpu_nice[cpu_logical_map(i)] \
-			           + kstat.per_cpu_system[cpu_logical_map(i)]));
-	len += sprintf(buffer + len,
-		"disk %u %u %u %u\n"
-		"disk_rio %u %u %u %u\n"
-		"disk_wio %u %u %u %u\n"
-		"disk_rblk %u %u %u %u\n"
-		"disk_wblk %u %u %u %u\n"
-		"page %u %u\n"
-		"swap %u %u\n"
-		"intr %u",
-#else
-	len = sprintf(buffer,
-		"cpu  %u %u %u %lu\n"
-		"disk %u %u %u %u\n"
-		"disk_rio %u %u %u %u\n"
-		"disk_wio %u %u %u %u\n"
-		"disk_rblk %u %u %u %u\n"
-		"disk_wblk %u %u %u %u\n"
-		"page %u %u\n"
-		"swap %u %u\n"
-		"intr %u",
-		kstat.cpu_user,
-		kstat.cpu_nice,
-		kstat.cpu_system,
-		jif*smp_num_cpus - (kstat.cpu_user + kstat.cpu_nice + kstat.cpu_system),
-#endif
-		kstat.dk_drive[0], kstat.dk_drive[1],
-		kstat.dk_drive[2], kstat.dk_drive[3],
-		kstat.dk_drive_rio[0], kstat.dk_drive_rio[1],
-		kstat.dk_drive_rio[2], kstat.dk_drive_rio[3],
-		kstat.dk_drive_wio[0], kstat.dk_drive_wio[1],
-		kstat.dk_drive_wio[2], kstat.dk_drive_wio[3],
-		kstat.dk_drive_rblk[0], kstat.dk_drive_rblk[1],
-		kstat.dk_drive_rblk[2], kstat.dk_drive_rblk[3],
-		kstat.dk_drive_wblk[0], kstat.dk_drive_wblk[1],
-		kstat.dk_drive_wblk[2], kstat.dk_drive_wblk[3],
-		kstat.pgpgin,
-		kstat.pgpgout,
-		kstat.pswpin,
-		kstat.pswpout,
-		sum);
-	for (i = 0 ; i < NR_IRQS ; i++)
-		len += sprintf(buffer + len, " %u", kstat_irqs(i));
-	len += sprintf(buffer + len,
-		"\nctxt %u\n"
-		"btime %lu\n"
-		"processes %lu\n",
-		kstat.context_swtch,
-		xtime.tv_sec - jif / HZ,
-		total_forks);
-	return len;
-}
-
-
-static int get_uptime(char * buffer)
-{
-	unsigned long uptime;
-	unsigned long idle;
-
-	uptime = jiffies;
-	idle = init_tasks[0]->times.tms_utime + init_tasks[0]->times.tms_stime;
-
-	/* The formula for the fraction parts really is ((t * 100) / HZ) % 100, but
-	   that would overflow about every five days at HZ == 100.
-	   Therefore the identity a = (a / b) * b + a % b is used so that it is
-	   calculated as (((t / HZ) * 100) + ((t % HZ) * 100) / HZ) % 100.
-	   The part in front of the '+' always evaluates as 0 (mod 100). All divisions
-	   in the above formulas are truncating. For HZ being a power of 10, the
-	   calculations simplify to the version in the #else part (if the printf
-	   format is adapted to the same number of digits as zeroes in HZ.
-	 */
-#if HZ!=100
-	return sprintf(buffer,"%lu.%02lu %lu.%02lu\n",
-		uptime / HZ,
-		(((uptime % HZ) * 100) / HZ) % 100,
-		idle / HZ,
-		(((idle % HZ) * 100) / HZ) % 100);
-#else
-	return sprintf(buffer,"%lu.%02lu %lu.%02lu\n",
-		uptime / HZ,
-		uptime % HZ,
-		idle / HZ,
-		idle % HZ);
-#endif
-}
-
-static int get_meminfo(char * buffer)
-{
-	struct sysinfo i;
-	int len;
-
-/*
- * display in kilobytes.
- */
-#define K(x) ((x) << (PAGE_SHIFT - 10))
-
-	si_meminfo(&i);
-	si_swapinfo(&i);
-	len = sprintf(buffer, "        total:    used:    free:  shared: buffers:  cached:\n"
-		"Mem:  %8lu %8lu %8lu %8lu %8lu %8u\n"
-		"Swap: %8lu %8lu %8lu\n",
-		K(i.totalram), K(i.totalram-i.freeram), K(i.freeram),
-		K(i.sharedram), K(i.bufferram),
-		K(atomic_read(&page_cache_size)), K(i.totalswap),
-		K(i.totalswap-i.freeswap), K(i.freeswap));
-	/*
-	 * Tagged format, for easy grepping and expansion.
-	 * The above will go away eventually, once the tools
-	 * have been updated.
-	 */
-	return len + sprintf(buffer+len,
-		"MemTotal:  %8lu kB\n"
-		"MemFree:   %8lu kB\n"
-		"MemShared: %8lu kB\n"
-		"Buffers:   %8lu kB\n"
-		"Cached:    %8u kB\n"
-		"HighTotal: %8lu kB\n"
-		"HighFree:  %8lu kB\n"
-		"SwapTotal: %8lu kB\n"
-		"SwapFree:  %8lu kB\n",
-		K(i.totalram),
-		K(i.freeram),
-		K(i.sharedram),
-		K(i.bufferram),
-		K(atomic_read(&page_cache_size)),
-		K(i.totalhigh),
-		K(i.freehigh),
-		K(i.totalswap),
-		K(i.freeswap));
-#undef K
-}
-
-static int get_version(char * buffer)
-{
-	extern char *linux_banner;
-
-	strcpy(buffer, linux_banner);
-	return strlen(buffer);
-}
-
-static int get_cmdline(char * buffer)
-{
-	extern char saved_command_line[];
-
-	return sprintf(buffer, "%s\n", saved_command_line);
-}
 
 static struct page * get_phys_addr(struct mm_struct * mm, unsigned long ptr)
 {
@@ -633,7 +439,7 @@ static unsigned long get_wchan(struct task_struct *p)
 		int count = 0;
 
 		stack_page = 4096 + (unsigned long)p;
-		fp = get_css_fp (&p->tss);
+		fp = get_css_fp(&p->thread);
 		do {
 			if (fp < stack_page || fp > 4092+stack_page)
 				return 0;
@@ -684,8 +490,13 @@ static unsigned long get_wchan(struct task_struct *p)
     (*(unsigned long *)(PT_REG(pc) + PAGE_SIZE + (unsigned long)(tsk)))
 # define KSTK_ESP(tsk)	((tsk) == current ? rdusp() : (tsk)->thread.usp)
 #elif defined(__arm__)
-# define KSTK_EIP(tsk)	(((unsigned long *)(4096+(unsigned long)(tsk)))[1022])
-# define KSTK_ESP(tsk)	(((unsigned long *)(4096+(unsigned long)(tsk)))[1020])
+# ifdef CONFIG_CPU_26
+#  define KSTK_EIP(tsk)	(((unsigned long *)(4096+(unsigned long)(tsk)))[1022])
+#  define KSTK_ESP(tsk)	(((unsigned long *)(4096+(unsigned long)(tsk)))[1020])
+# else
+#  define KSTK_EIP(tsk)	(((unsigned long *)(4096+(unsigned long)(tsk)))[1021])
+#  define KSTK_ESP(tsk)	(((unsigned long *)(4096+(unsigned long)(tsk)))[1019])
+# endif
 #elif defined(__mc68000__)
 #define	KSTK_EIP(tsk)	\
     ({			\
@@ -1250,7 +1061,7 @@ static ssize_t read_maps (int pid, struct file * file, char * buf,
 
 		len = sprintf(line,
 			      sizeof(void*) == 4 ? MAPS_LINE_FORMAT4 : MAPS_LINE_FORMAT8,
-			      map->vm_start, map->vm_end, str, map->vm_offset,
+			      map->vm_start, map->vm_end, str, map->vm_pgoff << PAGE_SHIFT,
 			      kdevname(dev), ino);
 
 		if(map->vm_file) {
@@ -1329,131 +1140,6 @@ static int get_pidcpu(int pid, char * buffer)
 }
 #endif
 
-#ifdef CONFIG_MODULES
-extern int get_module_list(char *);
-extern int get_ksyms_list(char *, char **, off_t, int);
-#endif
-extern int get_device_list(char *);
-extern int get_partition_list(char *);
-extern int get_filesystem_list(char *);
-extern int get_filesystem_info( char * );
-extern int get_irq_list(char *);
-extern int get_dma_list(char *);
-extern int get_cpuinfo(char *);
-extern int get_pci_list(char *);
-extern int get_md_status (char *);
-extern int get_rtc_status (char *);
-extern int get_locks_status (char *, char **, off_t, int);
-extern int get_swaparea_info (char *);
-extern int get_hardware_list(char *);
-extern int get_stram_list(char *);
-
-static long get_root_array(char * page, int type, char **start,
-	off_t offset, unsigned long length)
-{
-	switch (type) {
-		case PROC_LOADAVG:
-			return get_loadavg(page);
-
-		case PROC_UPTIME:
-			return get_uptime(page);
-
-		case PROC_MEMINFO:
-			return get_meminfo(page);
-
-#ifdef CONFIG_PCI
-	        case PROC_PCI:
-			return get_pci_list(page);
-#endif
-
-#ifdef CONFIG_NUBUS
-		case PROC_NUBUS:
-			return get_nubus_list(page);
-#endif			
-			
-		case PROC_CPUINFO:
-			return get_cpuinfo(page);
-
-		case PROC_VERSION:
-			return get_version(page);
-
-#ifdef CONFIG_DEBUG_MALLOC
-		case PROC_MALLOC:
-			return get_malloc(page);
-#endif
-
-#ifdef CONFIG_MODULES
-		case PROC_MODULES:
-			return get_module_list(page);
-
-		case PROC_KSYMS:
-			return get_ksyms_list(page, start, offset, length);
-#endif
-
-		case PROC_STAT:
-			return get_kstat(page);
-
-		case PROC_SLABINFO:
-			return get_slabinfo(page);
-
-		case PROC_DEVICES:
-			return get_device_list(page);
-
-		case PROC_PARTITIONS:
-			return get_partition_list(page);
-
-		case PROC_INTERRUPTS:
-			return get_irq_list(page);
-
-		case PROC_FILESYSTEMS:
-			return get_filesystem_list(page);
-
-		case PROC_DMA:
-			return get_dma_list(page);
-
-		case PROC_IOPORTS:
-			return get_ioport_list(page);
-
-		case PROC_MEMORY:
-			return get_mem_list(page);
-#ifdef CONFIG_BLK_DEV_MD
-	        case PROC_MD:
-			return get_md_status(page);
-#endif
-		case PROC_CMDLINE:
-			return get_cmdline(page);
-
-		case PROC_MTAB:
-			return get_filesystem_info( page );
-
-		case PROC_SWAP:
-			return get_swaparea_info(page);
-#ifdef CONFIG_RTC
-		case PROC_RTC:
-			return get_rtc_status(page);
-#endif
-#ifdef CONFIG_SGI_DS1286
-		case PROC_RTC:
-			return get_ds1286_status(page);
-#endif
-#ifdef CONFIG_SGI_DS1286
-		case PROC_RTC:
-			return get_ds1286_status(page);
-#endif
-		case PROC_LOCKS:
-			return get_locks_status(page, start, offset, length);
-#ifdef CONFIG_PROC_HARDWARE
-		case PROC_HARDWARE:
-			return get_hardware_list(page);
-#endif
-#ifdef CONFIG_STRAM_PROC
-		case PROC_STRAM:
-			return get_stram_list(page);
-#endif
-	}
-	return -EBADF;
-}
-
 static int process_unauthorized(int type, int pid)
 {
 	struct task_struct *p;
@@ -1495,7 +1181,7 @@ static int process_unauthorized(int type, int pid)
 }
 
 
-static int get_process_array(char * page, int pid, int type)
+static inline int get_process_array(char * page, int pid, int type)
 {
 	switch (type) {
 		case PROC_PID_STATUS:
@@ -1514,14 +1200,6 @@ static int get_process_array(char * page, int pid, int type)
 #endif
 	}
 	return -EBADF;
-}
-
-
-static inline int fill_array(char * page, int pid, int type, char **start, off_t offset, int length)
-{
-	if (pid)
-		return get_process_array(page, pid, type);
-	return get_root_array(page, type, start, offset, length);
 }
 
 #define PROC_BLOCK_SIZE	(3*1024)		/* 4K page size but our output routines use some slack for overruns */
@@ -1546,39 +1224,32 @@ static ssize_t array_read(struct file * file, char * buf,
 	type &= 0x0000ffff;
 	start = NULL;
 	dp = (struct proc_dir_entry *) inode->u.generic_ip;
+
+	if (!pid) {	/* can't happen */
+		free_page(page);
+		return -EBADF;
+	}
 	
-	if (pid && process_unauthorized(type, pid)) {
+	if (process_unauthorized(type, pid)) {
 		free_page(page);
 		return -EIO;
 	}
 	
-	if (dp->get_info)
-		length = dp->get_info((char *)page, &start, *ppos,
-				      count, 0);
-	else
-		length = fill_array((char *) page, pid, type,
-				    &start, *ppos, count);
+	length = get_process_array((char *) page, pid, type);
 	if (length < 0) {
 		free_page(page);
 		return length;
 	}
-	if (start != NULL) {
-		/* We have had block-adjusting processing! */
-		copy_to_user(buf, start, length);
-		*ppos += length;
-		count = length;
-	} else {
-		/* Static 4kB (or whatever) block capacity */
-		if (*ppos >= length) {
-			free_page(page);
-			return 0;
-		}
-		if (count + *ppos > length)
-			count = length - *ppos;
-		end = count + *ppos;
-		copy_to_user(buf, (char *) page + *ppos, count);
-		*ppos = end;
+	/* Static 4kB (or whatever) block capacity */
+	if (*ppos >= length) {
+		free_page(page);
+		return 0;
 	}
+	if (count + *ppos > length)
+		count = length - *ppos;
+	end = count + *ppos;
+	copy_to_user(buf, (char *) page + *ppos, count);
+	*ppos = end;
 	free_page(page);
 	return count;
 }

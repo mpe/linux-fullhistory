@@ -40,7 +40,7 @@ void show_swap_cache_info(void)
 }
 #endif
 
-void add_to_swap_cache(struct page *page, pte_t entry)
+void add_to_swap_cache(struct page *page, swp_entry_t entry)
 {
 #ifdef SWAP_CACHE_INFO
 	swap_cache_add_total++;
@@ -49,7 +49,7 @@ void add_to_swap_cache(struct page *page, pte_t entry)
 		BUG();
 	if (page->mapping)
 		BUG();
-	add_to_page_cache(page, &swapper_space, pte_val(entry));
+	add_to_page_cache(page, &swapper_space, entry.val);
 }
 
 /*
@@ -58,13 +58,14 @@ void add_to_swap_cache(struct page *page, pte_t entry)
  * Note: if swap_map[] reaches SWAP_MAP_MAX the entries are treated as
  * "permanent", but will be reclaimed by the next swapoff.
  */
-int swap_duplicate(pte_t entry)
+int swap_duplicate(swp_entry_t entry)
 {
 	struct swap_info_struct * p;
 	unsigned long offset, type;
 	int result = 0;
 
-	if (!pte_val(entry))
+	/* Swap entry 0 is illegal */
+	if (!entry.val)
 		goto out;
 	type = SWP_TYPE(entry);
 	if (type & SHM_SWP_TYPE)
@@ -85,7 +86,7 @@ int swap_duplicate(pte_t entry)
 	else {
 		static int overflow = 0;
 		if (overflow++ < 5)
-			pte_ERROR(entry);
+			printk("VM: swap entry overflow\n");
 		p->swap_map[offset] = SWAP_MAP_MAX;
 	}
 	result = 1;
@@ -93,13 +94,13 @@ out:
 	return result;
 
 bad_file:
-	pte_ERROR(entry);
+	printk("Bad swap file entry %08lx\n", entry.val);
 	goto out;
 bad_offset:
-	pte_ERROR(entry);
+	printk("Bad swap offset entry %08lx\n", entry.val);
 	goto out;
 bad_unused:
-	pte_ERROR(entry);
+	printk("Unused swap offset entry %08lx\n", entry.val);
 	goto out;
 }
 
@@ -107,10 +108,11 @@ int swap_count(struct page *page)
 {
 	struct swap_info_struct * p;
 	unsigned long offset, type;
-	pte_t entry = get_pagecache_pte(page);
+	swp_entry_t entry;
 	int retval = 0;
 
-	if (!pte_val(entry))
+	entry.val = page->pg_offset;
+	if (!entry.val)
 		goto bad_entry;
 	type = SWP_TYPE(entry);
 	if (type & SHM_SWP_TYPE)
@@ -131,13 +133,13 @@ bad_entry:
 	printk(KERN_ERR "swap_count: null entry!\n");
 	goto out;
 bad_file:
-	pte_ERROR(entry);
+	printk("Bad swap file entry %08lx\n", entry.val);
 	goto out;
 bad_offset:
-	pte_ERROR(entry);
+	printk("Bad swap offset entry %08lx\n", entry.val);
 	goto out;
 bad_unused:
-	pte_ERROR(entry);
+	printk("Unused swap offset entry %08lx\n", entry.val);
 	goto out;
 }
 
@@ -160,7 +162,9 @@ static inline void remove_from_swap_cache(struct page *page)
  */
 void __delete_from_swap_cache(struct page *page)
 {
-	pte_t entry = get_pagecache_pte(page);
+	swp_entry_t entry;
+
+	entry.val = page->pg_offset;
 
 #ifdef SWAP_CACHE_INFO
 	swap_cache_del_total++;
@@ -223,7 +227,7 @@ void free_page_and_swap_cache(struct page *page)
  * lock before returning.
  */
 
-struct page * lookup_swap_cache(pte_t entry)
+struct page * lookup_swap_cache(swp_entry_t entry)
 {
 	struct page *found;
 
@@ -232,9 +236,9 @@ struct page * lookup_swap_cache(pte_t entry)
 #endif
 	while (1) {
 		/*
-		 * Right now the pagecache is 32-bit only.
+		 * Right now the pagecache is 32-bit only.  But it's a 32 bit index. =)
 		 */
-		found = find_lock_page(&swapper_space, pte_val(entry));
+		found = find_lock_page(&swapper_space, entry.val);
 		if (!found)
 			return 0;
 		if (found->mapping != &swapper_space || !PageSwapCache(found))
@@ -262,7 +266,7 @@ out_bad:
  * the swap entry is no longer in use.
  */
 
-struct page * read_swap_cache_async(pte_t entry, int wait)
+struct page * read_swap_cache_async(swp_entry_t entry, int wait)
 {
 	struct page *found_page = 0, *new_page;
 	unsigned long new_page_addr;

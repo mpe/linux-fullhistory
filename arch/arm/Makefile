@@ -16,10 +16,10 @@ LD		:= $(CROSS_COMPILE)ld
 OBJCOPY		:= $(CROSS_COMPILE)objcopy -O binary -R .note -R .comment -S
 CPP		:= $(CC) -E
 PERL		:= perl
-LINKFLAGS	:= -X -T arch/arm/vmlinux.lds
+LINKFLAGS	:= -p -X -T arch/arm/vmlinux.lds
 ARCHCC		:= $(word 1,$(CC))
 
-
+AFLAGS		+= -mno-fpu
 CFLAGS_PIPE	:= -pipe
 CFLAGS		:= $(CFLAGS) $(CFLAGS_PIPE)
 
@@ -29,6 +29,15 @@ endif
 
 ifdef CONFIG_DEBUG_INFO
 CFLAGS		+= -g
+endif
+
+# Ensure this is ld "2.9.4" or later
+NEW_LINKER	:= $(shell if $(LD) --gc-sections --version >/dev/null 2>&1; then echo y; else echo n; fi)
+
+ifneq ($(NEW_LINKER),y)
+dummy:;		@echo '*** 2.3 kernels no longer build correctly with old versions of binutils.'
+		@echo '*** Please upgrade your binutils to 2.9.5.'
+		@false
 endif
 
 
@@ -55,21 +64,6 @@ CFLAGS_ARM7		:= -m6
 CFLAGS_SA110		:= -m6
 endif
 
-# See if this is ld "2.9.4" or later
-NEW_LINKER		:= $(shell if $(LD) --gc-sections --version >/dev/null 2>&1; then echo y; else echo n; fi)
-
-ifeq ($(NEW_LINKER),y)
-AFLAGS			+= -mno-fpu
-AFLAGS_PROC_CPU_26	:= -mapcs-26
-AFLAGS_PROC_CPU_32v3	:= -mapcs-32 -marmv3m
-AFLAGS_PROC_CPU_32v4	:= -mapcs-32 -marmv4t
-LINKFLAGS		:= -p $(LINKFLAGS)
-else
-AFLAGS_PROC_CPU_26	:= -m3
-AFLAGS_PROC_CPU_32v3	:= -m6
-AFLAGS_PROC_CPU_32v4	:= -m6
-endif
-
 #
 # Select CPU dependent flags
 #
@@ -77,7 +71,7 @@ ifeq ($(CONFIG_CPU_26),y)
  PROCESSOR	 = armo
  TEXTADDR	 = 0x02080000
  CFLAGS		+= $(CFLAGS_PROC_CPU_26)
- AFLAGS		+= $(AFLAGS_PROC_CPU_26)
+ AFLAGS		+= -mapcs-26
 endif
 
 ifeq ($(CONFIG_CPU_32),y)
@@ -85,10 +79,10 @@ ifeq ($(CONFIG_CPU_32),y)
  TEXTADDR	 = 0xC0008000
  ifeq ($(CONFIG_CPU_32v4),y)
   CFLAGS	+= $(CFLAGS_PROC_CPU_32v4)
-  AFLAGS	+= $(AFLAGS_PROC_CPU_32v4)
+  AFLAGS	+= -mapcs-32 -marmv4
  else
   CFLAGS	+= $(CFLAGS_PROC_CPU_32v3)
-  AFLAGS	+= $(AFLAGS_PROC_CPU_32v3)
+  AFLAGS	+= -mapcs-32 -marmv3m
  endif
  #
  # Exactly one of the following must be selected
@@ -156,7 +150,7 @@ LIBS		:= arch/arm/lib/lib.a $(LIBS) $(GCCLIB)
 DRIVERS		+= arch/arm/special/special.a
 
 ifeq ($(CONFIG_NWFPE),y)
-CORE_FILES	+= arch/arm/nwfpe/math-emu.o
+LIBS		:= arch/arm/nwfpe/math-emu.o $(LIBS)
 endif
 
 ifeq ($(CONFIG_ARCH_ACORN),y)
@@ -173,7 +167,7 @@ MAKEBOOT	 = $(MAKE) -C arch/$(ARCH)/boot
 # to date before starting compilation
 CONSTANTS	:= constants
 
-constants: dummy
+constants: $(TOPDIR)/include/asm-arm/proc-fns.h dummy
 	@$(MAKE) -C arch/arm/lib constants.h
 
 symlinks: archsymlinks

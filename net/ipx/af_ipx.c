@@ -2388,23 +2388,6 @@ extern struct datalink_proto *make_8023_client(void);
 extern void destroy_EII_client(struct datalink_proto *);
 extern void destroy_8023_client(struct datalink_proto *);
 
-#ifdef CONFIG_PROC_FS
-struct proc_dir_entry ipx_procinfo = {
-	PROC_NET_IPX, 3, "ipx", S_IFREG | S_IRUGO,
-	1, 0, 0, 0, &proc_net_inode_operations, ipx_get_info
-};
-
-struct proc_dir_entry ipx_if_procinfo = {
-	PROC_NET_IPX_INTERFACE, 13, "ipx_interface", S_IFREG | S_IRUGO,
-	1, 0, 0, 0, &proc_net_inode_operations, ipx_interface_get_info
-};
-
-struct proc_dir_entry ipx_rt_procinfo = {
-	PROC_NET_IPX_ROUTE, 9, "ipx_route", S_IFREG | S_IRUGO,
-	1, 0, 0, 0, &proc_net_inode_operations, ipx_rt_get_info
-};
-#endif
-
 static unsigned char ipx_8022_type = 0xE0;
 static unsigned char ipx_snap_id[5] = { 0x0, 0x0, 0x0, 0x81, 0x37 };
 
@@ -2429,9 +2412,9 @@ void ipx_proto_init(struct net_proto *pro)
 	register_netdevice_notifier(&ipx_dev_notifier);
 
 #ifdef CONFIG_PROC_FS
-	proc_net_register(&ipx_procinfo);
-	proc_net_register(&ipx_if_procinfo);
-	proc_net_register(&ipx_rt_procinfo);
+	proc_net_create("ipx", 0, ipx_get_info);
+	proc_net_create("ipx_interface", 0, ipx_interface_get_info);
+	proc_net_create("ipx_route", 0, ipx_rt_get_info);
 #endif
 
 	printk(KERN_INFO "NET4: Linux IPX 0.38 for NET4.0\n");
@@ -2482,9 +2465,9 @@ static void ipx_proto_finito(void)
 	}
 
 #ifdef CONFIG_PROC_FS
-	proc_net_unregister(PROC_NET_IPX_ROUTE);
-	proc_net_unregister(PROC_NET_IPX_INTERFACE);
-	proc_net_unregister(PROC_NET_IPX);
+	proc_net_remove("ipx_route");
+	proc_net_remove("ipx_interface");
+	proc_net_remove("ipx");
 #endif
 
 	unregister_netdevice_notifier(&ipx_dev_notifier);

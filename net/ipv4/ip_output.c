@@ -1006,18 +1006,6 @@ static struct packet_type ip_packet_type =
 };
 
 
-
-#ifdef CONFIG_PROC_FS
-#ifdef CONFIG_IP_MULTICAST
-static struct proc_dir_entry proc_net_igmp = {
-	PROC_NET_IGMP, 4, "igmp",
-	S_IFREG | S_IRUGO, 1, 0, 0,
-	0, &proc_net_inode_operations,
-	ip_mc_procinfo
-};
-#endif
-#endif	
-
 /*
  *	IP registers the packet type and then calls the subprotocol initialisers
  */
@@ -1028,10 +1016,8 @@ void __init ip_init(void)
 
 	ip_rt_init();
 
-#ifdef CONFIG_PROC_FS
 #ifdef CONFIG_IP_MULTICAST
-	proc_net_register(&proc_net_igmp);
+	proc_net_create("igmp", S_IFREG | S_IRUGO, ip_mc_procinfo);
 #endif
-#endif	
 }
 

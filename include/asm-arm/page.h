@@ -12,7 +12,7 @@
 #define STRICT_MM_TYPECHECKS
 
 #define clear_page(page)	memzero((void *)(page), PAGE_SIZE)
-extern void copy_page(unsigned long to, unsigned long from);
+extern void copy_page(void *to, void *from);
 
 #ifdef STRICT_MM_TYPECHECKS
 /*
@@ -60,22 +60,18 @@ typedef unsigned long pgprot_t;
 
 #ifndef __ASSEMBLY__
 
-#define BUG() do { \
-	printk("kernel BUG at %s:%d!\n", __FILE__, __LINE__); \
-	*(int *)0 = 0; \
-} while (0)
+extern void __bug(const char *file, int line, void *data);
 
-#define PAGE_BUG(page) do { \
-	BUG(); \
-} while (0)
+#define BUG()		__bug(__FILE__, __LINE__, NULL)
+#define PAGE_BUG(page)	__bug(__FILE__, __LINE__, page)
 
 #endif /* !__ASSEMBLY__ */
 
 #include <asm/arch/memory.h>
 
-#define __pa(x)			__virt_to_phys((unsigned long)(x))
-#define __va(x)			((void *)(__phys_to_virt((unsigned long)(x))))
-#define MAP_NR(addr)		(((unsigned long)(addr) - PAGE_OFFSET) >> PAGE_SHIFT)
+#define __pa(x)			((unsigned long)(x) - PAGE_OFFSET)
+#define __va(x)			((void *)((unsigned long)(x) + PAGE_OFFSET))
+#define MAP_NR(addr)		(__pa(addr) >> PAGE_SHIFT)
 
 #endif
 

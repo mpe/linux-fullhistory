@@ -542,11 +542,24 @@ static void usbin_stop(struct usb_audiodev *as)
 	i = u->flags;
         spin_unlock_irqrestore(&as->lock, flags);
 	while (i & (FLG_ID0RUNNING|FLG_ID1RUNNING|FLG_SYNC0RUNNING|FLG_SYNC1RUNNING)) {
+		set_current_state(TASK_INTERRUPTIBLE);
 		schedule_timeout(1);
+		if (signal_pending(current)) {
+			if (i & FLG_ID0RUNNING)
+				usb_kill_isoc(u->dataiso[0]);
+			if (i & FLG_ID1RUNNING)
+				usb_kill_isoc(u->dataiso[1]);
+			if (i & FLG_SYNC0RUNNING)
+				usb_kill_isoc(u->synciso[0]);
+			if (i & FLG_SYNC1RUNNING)
+				usb_kill_isoc(u->synciso[1]);
+			break;
+		}
 		spin_lock_irqsave(&as->lock, flags);
 		i = u->flags;
 		spin_unlock_irqrestore(&as->lock, flags);
 	}
+	set_current_state(TASK_RUNNING);
 	if (u->dataiso[0])
 		usb_free_isoc(u->dataiso[0]);
 	if (u->dataiso[1])
@@ -801,6 +814,7 @@ static int usbin_completed(int status, void *__buffer, int rval, void *dev_id)
 		printk(KERN_DEBUG "usbin_completed: killing id\n");
 		usb_kill_isoc(id);
 		printk(KERN_DEBUG "usbin_completed: id killed\n");
+		wake_up(&u->dma.wait);
 	}
 	spin_unlock_irqrestore(&as->lock, flags);
 	return 0;
@@ -873,6 +887,7 @@ static int usbin_sync_completed(int status, void *__buffer, int rval, void *dev_
 		printk(KERN_DEBUG "usbin_sync_completed: killing id\n");
 		usb_kill_isoc(id);
 		printk(KERN_DEBUG "usbin_sync_completed: id killed\n");
+		wake_up(&u->dma.wait);
 	}
 	spin_unlock_irqrestore(&as->lock, flags);
 	return 0;
@@ -1005,12 +1020,25 @@ printk(KERN_DEBUG "usb_audio: usbout_stop (1) flags 0x%04x\n", u->flags);
         spin_unlock_irqrestore(&as->lock, flags);
 printk(KERN_DEBUG "usb_audio: usbout_stop (2) flags 0x%04x\n", i);
 	while (i & (FLG_ID0RUNNING|FLG_ID1RUNNING|FLG_SYNC0RUNNING|FLG_SYNC1RUNNING)) {
+		set_current_state(TASK_INTERRUPTIBLE);
 		schedule_timeout(1);
+		if (signal_pending(current)) {
+			if (i & FLG_ID0RUNNING)
+				usb_kill_isoc(u->dataiso[0]);
+			if (i & FLG_ID1RUNNING)
+				usb_kill_isoc(u->dataiso[1]);
+			if (i & FLG_SYNC0RUNNING)
+				usb_kill_isoc(u->synciso[0]);
+			if (i & FLG_SYNC1RUNNING)
+				usb_kill_isoc(u->synciso[1]);
+			break;
+		}
 		spin_lock_irqsave(&as->lock, flags);
 		i = u->flags;
 		spin_unlock_irqrestore(&as->lock, flags);
 printk(KERN_DEBUG "usb_audio: usbout_stop (3) flags 0x%04x\n", i);
 	}
+	set_current_state(TASK_RUNNING);
 	if (u->dataiso[0])
 		usb_free_isoc(u->dataiso[0]);
 	if (u->dataiso[1])
@@ -1272,6 +1300,7 @@ static int usbout_completed(int status, void *__buffer, int rval, void *dev_id)
 		printk(KERN_DEBUG "usbout_completed: killing id\n");
 		usb_kill_isoc(id);
 		printk(KERN_DEBUG "usbout_completed: id killed\n");
+		wake_up(&u->dma.wait);
 	}
 	spin_unlock_irqrestore(&as->lock, flags);
 	return 0;
@@ -1347,6 +1376,7 @@ static int usbout_sync_completed(int status, void *__buffer, int rval, void *dev
 		printk(KERN_DEBUG "usbout_sync_completed: killing id\n");
 		usb_kill_isoc(id);
 		printk(KERN_DEBUG "usbout_sync_completed: id killed\n");
+		wake_up(&u->dma.wait);
 	}
 	spin_unlock_irqrestore(&as->lock, flags);
 	return 0;
@@ -1952,10 +1982,10 @@ static int drain_out(struct usb_audiodev *as, int nonblock)
         
         if (as->usbout.dma.mapped || !as->usbout.dma.ready)
                 return 0;
-        __set_current_state(TASK_INTERRUPTIBLE);
         add_wait_queue(&as->usbout.dma.wait, &wait);
         for (;;) {
-                spin_lock_irqsave(&as->lock, flags);
+		__set_current_state(TASK_INTERRUPTIBLE);
+		spin_lock_irqsave(&as->lock, flags);
                 count = as->usbout.dma.count;
                 spin_unlock_irqrestore(&as->lock, flags);
                 if (count <= 0)
@@ -1969,8 +1999,10 @@ static int drain_out(struct usb_audiodev *as, int nonblock)
                 }
                 tmo = 3 * HZ * count / as->usbout.dma.srate;
 		tmo >>= AFMT_BYTESSHIFT(as->usbout.dma.format);
-                if (!schedule_timeout(tmo + 1))
+                if (!schedule_timeout(tmo + 1)) {
                         printk(KERN_DEBUG "usbaudio: dma timed out??\n");
+			break;
+		}
         }
         remove_wait_queue(&as->usbout.dma.wait, &wait);
         set_current_state(TASK_RUNNING);
@@ -1998,12 +2030,14 @@ static ssize_t usb_audio_read(struct file *file, char *buffer, size_t count, lof
                 return ret;
         if (!access_ok(VERIFY_WRITE, buffer, count))
                 return -EFAULT;
-	__set_current_state(TASK_INTERRUPTIBLE);
 	add_wait_queue(&as->usbin.dma.wait, &wait);
 	while (count > 0) {
 		spin_lock_irqsave(&as->lock, flags);
 		ptr = as->usbin.dma.rdptr;
 		cnt = as->usbin.dma.count;
+		/* set task state early to avoid wakeup races */
+		if (cnt <= 0)
+			__set_current_state(TASK_INTERRUPTIBLE);
 		spin_unlock_irqrestore(&as->lock, flags);
 		if (cnt > count)
 			cnt = count;
@@ -2060,9 +2094,13 @@ static ssize_t usb_audio_write(struct file *file, const char *buffer, size_t cou
                 return ret;
         if (!access_ok(VERIFY_READ, buffer, count))
                 return -EFAULT;
-	__set_current_state(TASK_INTERRUPTIBLE);
 	add_wait_queue(&as->usbout.dma.wait, &wait);
         while (count > 0) {
+#if 0
+		printk(KERN_DEBUG "usb_audio_write: count %u dma: count %u rdptr %u wrptr %u dmasize %u fragsize %u flags 0x%02x taskst 0x%x\n",
+		       count, as->usbout.dma.count, as->usbout.dma.rdptr, as->usbout.dma.wrptr, as->usbout.dma.dmasize, as->usbout.dma.fragsize,
+		       as->usbout.flags, current->state);
+#endif
                 spin_lock_irqsave(&as->lock, flags);
                 if (as->usbout.dma.count < 0) {
                         as->usbout.dma.count = 0;
@@ -2070,6 +2108,9 @@ static ssize_t usb_audio_write(struct file *file, const char *buffer, size_t cou
                 }
                 ptr = as->usbout.dma.wrptr;
                 cnt = as->usbout.dma.dmasize - as->usbout.dma.count;
+		/* set task state early to avoid wakeup races */
+		if (cnt <= 0)
+			__set_current_state(TASK_INTERRUPTIBLE);
                 spin_unlock_irqrestore(&as->lock, flags);
                 if (cnt > count)
                         cnt = count;
@@ -2532,14 +2573,16 @@ static /*const*/ struct file_operations usb_audio_fops = {
  *	zero bandwidth (idle) config and one or more live one pers interface.
  */
 
-static int usb_audio_probe(struct usb_device *dev);
-static void usb_audio_disconnect(struct usb_device *dev);
+static void * usb_audio_probe(struct usb_device *dev, unsigned int ifnum);
+static void usb_audio_disconnect(struct usb_device *dev, void *ptr);
 
 static struct usb_driver usb_audio_driver = {
 	"audio",
 	usb_audio_probe,
 	usb_audio_disconnect,
-	{ NULL, NULL }
+	/*{ NULL, NULL }, */ LIST_HEAD_INIT(usb_audio_driver.driver_list), 
+	NULL,
+	0
 };
 
 
@@ -3298,7 +3341,7 @@ static void usb_audio_constructmixer(struct usb_audio_state *s, unsigned char *b
 	list_add_tail(&ms->list, &s->mixerlist);
 }
 
-static int usb_audio_parsecontrol(struct usb_device *dev, unsigned char *buffer, unsigned int buflen, unsigned int ctrlif)
+static void * usb_audio_parsecontrol(struct usb_device *dev, unsigned char *buffer, unsigned int buflen, unsigned int ctrlif)
 {
 	struct usb_audio_state *s;
 	struct usb_config_descriptor *config = dev->actconfig;
@@ -3308,7 +3351,7 @@ static int usb_audio_parsecontrol(struct usb_device *dev, unsigned char *buffer,
 	unsigned int i, j, numifin = 0, numifout = 0;
 
 	if (!(s = kmalloc(sizeof(struct usb_audio_state), GFP_KERNEL)))
-		return -1;
+		return NULL;
 	memset(s, 0, sizeof(struct usb_audio_state));
 	INIT_LIST_HEAD(&s->audiolist);
 	INIT_LIST_HEAD(&s->mixerlist);
@@ -3365,11 +3408,15 @@ static int usb_audio_parsecontrol(struct usb_device *dev, unsigned char *buffer,
 		/* note: this requires the data endpoint to be ep0 and the optional sync
 		   ep to be ep1, which seems to be the case */
 		if (iface->altsetting[1].endpoint[0].bEndpointAddress & USB_DIR_IN) {
-			if (numifin < USB_MAXINTERFACES)
+			if (numifin < USB_MAXINTERFACES) {
 				ifin[numifin++] = j;
+				usb_driver_claim_interface(&usb_audio_driver, iface, s);
+			}
 		} else {
-			if (numifout < USB_MAXINTERFACES)
+			if (numifout < USB_MAXINTERFACES) {
 				ifout[numifout++] = j;
+				usb_driver_claim_interface(&usb_audio_driver, iface, s);
+			}
 		}
 	}
 	printk(KERN_INFO "usb_audio: device %d audiocontrol interface %u has %u input and %u output AudioStreaming interfaces\n",
@@ -3391,20 +3438,19 @@ static int usb_audio_parsecontrol(struct usb_device *dev, unsigned char *buffer,
  ret:
 	if (list_empty(&s->audiolist) && list_empty(&s->mixerlist)) {
 		kfree(s);
-		return -1;
+		return NULL;
 	}
 	/* everything successful */
-	dev->private = s;
 	down(&open_sem);
 	list_add_tail(&s->audiodev, &audiodevs);
 	up(&open_sem);
 	MOD_INC_USE_COUNT;
-	return 0;
+	return s;
 }
 
 /* we only care for the currently active configuration */
 
-static int usb_audio_probe(struct usb_device *dev)
+static void * usb_audio_probe(struct usb_device *dev, unsigned int ifnum)
 {
 	struct usb_config_descriptor *config = dev->actconfig;	
 	unsigned char *buffer;
@@ -3418,7 +3464,7 @@ static int usb_audio_probe(struct usb_device *dev)
 			goto audioctrlfound;
 	printk(KERN_DEBUG "usb_audio: vendor id 0x%04x, product id 0x%04x contains no AudioControl interface\n",
 	       dev->descriptor.idVendor, dev->descriptor.idProduct);
-	return -1;
+	return NULL;
 
  audioctrlfound:
 	/* find which configuration number is active */
@@ -3426,30 +3472,26 @@ static int usb_audio_probe(struct usb_device *dev)
 		if (dev->config+i == config)
 			goto configfound;
 	printk(KERN_ERR "usb_audio: cannot find active configuration number of device %d\n", dev->devnum);
-	return -1;
+	return NULL;
 
  configfound:
-        if (usb_set_configuration(dev, config->bConfigurationValue) < 0) {
-		printk(KERN_ERR "usb_audio: set_configuration failed (ConfigValue 0x%x)\n", config->bConfigurationValue);
-		return -1;
-	}
 	ret = usb_get_descriptor(dev, USB_DT_CONFIG, i, buf, 8);
 	if (ret) {
 		printk(KERN_ERR "usb_audio: cannot get first 8 bytes of config descriptor %d of device %d\n", i, dev->devnum);
-		return -1;
+		return NULL;
 	}
 	if (buf[1] != USB_DT_CONFIG || buf[0] < 9) {
 		printk(KERN_ERR "usb_audio: invalid config descriptor %d of device %d\n", i, dev->devnum);
-		return -1;
+		return NULL;
 	}
 	buflen = buf[2] | (buf[3] << 8);
 	if (!(buffer = kmalloc(buflen, GFP_KERNEL)))
-		return -1;
+		return NULL;
 	ret = usb_get_descriptor(dev, USB_DT_CONFIG, i, buffer, buflen);
 	if (ret) {
 		kfree(buffer);
 		printk(KERN_ERR "usb_audio: cannot get config descriptor %d of device %d\n", i, dev->devnum);
-		return -1;
+		return NULL;
 	}
 	/* find first audio control interface; we currently cannot handle more than one */
 	for (i = 0; i < config->bNumInterfaces; i++) {
@@ -3457,18 +3499,17 @@ static int usb_audio_probe(struct usb_device *dev)
 		    config->interface[i].altsetting[0].bInterfaceSubClass != 1)
 			continue;
 		/* audiocontrol interface found */
-		if (!usb_audio_parsecontrol(dev, buffer, buflen, i)) 
-			return 0;
+		return usb_audio_parsecontrol(dev, buffer, buflen, i);
 	}
-	return -1;
+	return NULL;
 }
 
 
 /* a revoke facility would make things simpler */
 
-static void usb_audio_disconnect(struct usb_device *dev)
+static void usb_audio_disconnect(struct usb_device *dev, void *ptr)
 {
-	struct usb_audio_state *s = (struct usb_audio_state *)dev->private;
+	struct usb_audio_state *s = (struct usb_audio_state *)ptr;
 	struct list_head *list;
 	struct usb_audiodev *as;
 	struct usb_mixerdev *ms;
@@ -3496,7 +3537,6 @@ static void usb_audio_disconnect(struct usb_device *dev)
 #endif
 	release(s);
         wake_up(&open_wait);
-	dev->private = NULL;
 }
 
 int usb_audio_init(void)

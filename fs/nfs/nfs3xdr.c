@@ -679,7 +679,7 @@ nfs_get_info(char *buffer, char **start, off_t offset, int length, int dummy)
 static struct proc_dir_entry	proc_nfsclnt = {
 	0, 3, "nfs",
 	S_IFREG | S_IRUGO, 1, 0, 0,
-	6, &proc_net_inode_operations,
+	6, NULL,
 	nfs_get_info
 };
 

@@ -1159,22 +1159,14 @@ void aarp_cleanup_module(void)
 
 #ifdef CONFIG_PROC_FS
 
-static struct proc_dir_entry proc_aarp_entries=
-{
-	PROC_NET_AT_AARP, 4, "aarp",
-	S_IFREG | S_IRUGO, 1, 0, 0,
-	0, &proc_net_inode_operations,
-	aarp_get_info
-};
-
 void aarp_register_proc_fs(void)
 {
-	proc_net_register(&proc_aarp_entries);
+	proc_net_create("aarp", 0, aarp_get_info);
 }
 
 void aarp_unregister_proc_fs(void)
 {
-	proc_net_unregister(PROC_NET_AT_AARP);
+	proc_net_remove("aarp");
 }
 
 #endif

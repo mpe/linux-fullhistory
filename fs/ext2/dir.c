@@ -18,13 +18,10 @@
  *        David S. Miller (davem@caip.rutgers.edu), 1995
  */
 
-#include <asm/uaccess.h>
-
-#include <linux/errno.h>
+#include <linux/module.h>
 #include <linux/fs.h>
-#include <linux/ext2_fs.h>
-#include <linux/sched.h>
-#include <linux/stat.h>
+
+
 
 static ssize_t ext2_dir_read (struct file * filp, char * buf,
 			      size_t count, loff_t *ppos)

@@ -58,7 +58,7 @@ static char buffersize_index[65] =
   6};
 
 #define BUFSIZE_INDEX(X) ((int) buffersize_index[(X)>>9])
-#define MAX_BUF_PER_PAGE (PAGE_SIZE / 512)
+#define MAX_BUF_PER_PAGE (PAGE_CACHE_SIZE / 512)
 #define NR_RESERVED (2*MAX_BUF_PER_PAGE)
 #define MAX_UNUSED_BUFFERS NR_RESERVED+20 /* don't ever have more than this 
 					     number of unused buffer heads */
@@ -1313,7 +1313,7 @@ int block_write_full_page(struct file *file, struct page *page)
 	struct dentry *dentry = file->f_dentry;
 	struct inode *inode = dentry->d_inode;
 	int err, i;
-	unsigned long block, offset;
+	unsigned long block;
 	struct buffer_head *bh, *head;
 
 	if (!PageLocked(page))
@@ -1323,12 +1323,10 @@ int block_write_full_page(struct file *file, struct page *page)
 		create_empty_buffers(page, inode, inode->i_sb->s_blocksize);
 	head = page->buffers;
 
-	offset = page->offset;
-	block = offset >> inode->i_sb->s_blocksize_bits;
-
-	// FIXME: currently we assume page alignment.
-	if (offset & (PAGE_SIZE-1))
-		BUG();
+	/* The page cache is now PAGE_CACHE_SIZE aligned, period.  We handle old a.out
+	 * and others via unaligned private mappings.
+	 */
+	block = page->pg_offset << (PAGE_CACHE_SHIFT - inode->i_sb->s_blocksize_bits);
 
 	bh = head;
 	i = 0;
@@ -1389,8 +1387,8 @@ int block_write_partial_page(struct file *file, struct page *page, unsigned long
 	head = page->buffers;
 
 	bbits = inode->i_sb->s_blocksize_bits;
-	block = page->offset >> bbits;
-	blocks = PAGE_SIZE >> bbits;
+	block = page->pg_offset << (PAGE_CACHE_SHIFT - bbits);
+	blocks = PAGE_CACHE_SIZE >> bbits;
 	start_block = offset >> bbits;
 	end_block = (offset + bytes - 1) >> bbits;
 	start_offset = offset & (blocksize - 1);
@@ -1408,9 +1406,6 @@ int block_write_partial_page(struct file *file, struct page *page, unsigned long
 	if (start_block < 0 || start_block >= blocks)
 		BUG();
 	if (end_block < 0 || end_block >= blocks)
-		BUG();
-	// FIXME: currently we assume page alignment.
-	if (page->offset & (PAGE_SIZE-1))
 		BUG();
 
 	i = 0;
@@ -1537,12 +1532,12 @@ int block_write_cont_page(struct file *file, struct page *page, unsigned long of
 	unsigned long data_offset = offset;
 	int need_balance_dirty;
 
-	offset = inode->i_size - page->offset;
-	if (page->offset>inode->i_size)
+	offset = inode->i_size - (page->pg_offset << PAGE_CACHE_SHIFT);
+	if (page->pg_offset > (inode->i_size >> PAGE_CACHE_SHIFT))
 		offset = 0;
 	else if (offset >= data_offset)
 		offset = data_offset;
-	bytes += data_offset-offset;
+	bytes += data_offset - offset;
 
 	target_buf = (char *)page_address(page) + offset;
 	target_data = (char *)page_address(page) + data_offset;
@@ -1556,8 +1551,8 @@ int block_write_cont_page(struct file *file, struct page *page, unsigned long of
 	head = page->buffers;
 
 	bbits = inode->i_sb->s_blocksize_bits;
-	block = page->offset >> bbits;
-	blocks = PAGE_SIZE >> bbits;
+	block = page->pg_offset << (PAGE_CACHE_SHIFT - bbits);
+	blocks = PAGE_CACHE_SIZE >> bbits;
 	start_block = offset >> bbits;
 	end_block = (offset + bytes - 1) >> bbits;
 	start_offset = offset & (blocksize - 1);
@@ -1575,9 +1570,6 @@ int block_write_cont_page(struct file *file, struct page *page, unsigned long of
 	if (start_block < 0 || start_block > blocks)
 		BUG();
 	if (end_block < 0 || end_block >= blocks)
-		BUG();
-	// FIXME: currently we assume page alignment.
-	if (page->offset & (PAGE_SIZE-1))
 		BUG();
 
 	i = 0;
@@ -2015,8 +2007,8 @@ int block_read_full_page(struct file * file, struct page * page)
 		create_empty_buffers(page, inode, blocksize);
 	head = page->buffers;
 
-	blocks = PAGE_SIZE >> inode->i_sb->s_blocksize_bits;
-	iblock = page->offset >> inode->i_sb->s_blocksize_bits;
+	blocks = PAGE_CACHE_SIZE >> inode->i_sb->s_blocksize_bits;
+	iblock = page->pg_offset << (PAGE_CACHE_SHIFT - inode->i_sb->s_blocksize_bits);
 	bh = head;
 	nr = 0;
 

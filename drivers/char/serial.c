@@ -152,12 +152,12 @@
 #endif
 #endif /* NEW_MODULES */
 #include <linux/module.h>
-
+#include <linux/types.h>
 #ifdef LOCAL_HEADERS
 #include "serial_local.h"
 #else
-#include <linux/serialP.h>
 #include <linux/serial.h>
+#include <linux/serialP.h>
 #include <linux/serial_reg.h>
 #include <asm/serial.h>
 static char *serial_version = "4.30";

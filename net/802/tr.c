@@ -447,7 +447,9 @@ static void rif_check_expire(unsigned long dummy)
  *	routing.
  */
  
-#ifdef CONFIG_PROC_FS
+#ifndef CONFIG_PROC_FS
+int rif_get_info(char *buffer,char **start, off_t offset, int length, int dummy)  {}
+#else
 int rif_get_info(char *buffer,char **start, off_t offset, int length, int dummy) 
 {
 	int len=0;
@@ -529,15 +531,6 @@ int rif_get_info(char *buffer,char **start, off_t offset, int length, int dummy)
  *	too much for this.
  */
 
-#ifdef CONFIG_PROC_FS
-static struct proc_dir_entry tr_rif_proc = {
-	PROC_NET_TR_RIF, 6, "tr_rif",
-	S_IFREG | S_IRUGO, 1, 0, 0,
-	0, &proc_net_inode_operations,
-	rif_get_info
-};
-#endif
-
 void __init rif_init(struct net_proto *unused)
 {
 	rif_timer.expires  = RIF_TIMEOUT;
@@ -546,7 +539,5 @@ void __init rif_init(struct net_proto *unused)
 	init_timer(&rif_timer);
 	add_timer(&rif_timer);
 
-#ifdef CONFIG_PROC_FS
-	proc_net_register(&tr_rif_proc);
-#endif
+	proc_net_create("tr_rif",0,rif_get_info);
 }

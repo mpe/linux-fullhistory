@@ -89,12 +89,6 @@ unsigned long __bus_to_virt(unsigned long res)
 
 #endif
 
-struct mem_desc mem_desc[] __initdata = {
-	0, 0
-};
-
-unsigned int __initdata mem_desc_size = 0;
-
 struct map_desc io_desc[] __initdata = {
 	MAPPING
 };

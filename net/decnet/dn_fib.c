@@ -798,20 +798,13 @@ static int decnet_rt_get_info(char *buffer, char **start, off_t offset, int leng
 	return pinfo.len;
 }
 
-static struct proc_dir_entry proc_net_decnet_route = {
-	PROC_NET_DN_ROUTE, 12, "decnet_route",
-	 S_IFREG | S_IRUGO, 1, 0, 0,
-        0, &proc_net_inode_operations,
-	decnet_rt_get_info
-};
-
 #endif /* CONFIG_PROC_FS */
 
 #ifdef CONFIG_DECNET_MODULE
 void dn_fib_cleanup(void)
 {
 #ifdef CONFIG_PROC_FS
-	proc_net_unregister(PROC_NET_DN_ROUTE);
+	proc_net_create("decnet_route",0,decnet_rt_get_info);
 #endif /* CONFIG_PROC_FS */
 }
 #endif /* CONFIG_DECNET_MODULE */
@@ -822,7 +815,7 @@ void __init dn_fib_init(void)
 	memset(dn_fib_tables, 0, DN_NUM_TABLES * sizeof(struct dn_fib_table *));
 
 #ifdef CONFIG_PROC_FS
-	proc_net_register(&proc_net_decnet_route);
+	proc_net_remove("decnet_route");
 #endif
 
 }

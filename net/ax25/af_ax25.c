@@ -1766,27 +1766,6 @@ EXPORT_SYMBOL(asc2ax);
 EXPORT_SYMBOL(null_ax25_address);
 EXPORT_SYMBOL(ax25_display_timer);
 
-#ifdef CONFIG_PROC_FS
-static struct proc_dir_entry proc_ax25_route = {
-	PROC_NET_AX25_ROUTE, 10, "ax25_route",
-	S_IFREG | S_IRUGO, 1, 0, 0,
-	0, &proc_net_inode_operations,
-	ax25_rt_get_info
-};
-static struct proc_dir_entry proc_ax25 = {
-	PROC_NET_AX25, 4, "ax25",
-	S_IFREG | S_IRUGO, 1, 0, 0,
-	0, &proc_net_inode_operations,
-	ax25_get_info
-};
-static struct proc_dir_entry proc_ax25_calls = {
-	PROC_NET_AX25_CALLS, 10, "ax25_calls",
-	S_IFREG | S_IRUGO, 1, 0, 0,
-	0, &proc_net_inode_operations,
-	ax25_uid_get_info
-};
-#endif
-
 void __init ax25_proto_init(struct net_proto *pro)
 {
 	sock_register(&ax25_family_ops);
@@ -1798,9 +1777,9 @@ void __init ax25_proto_init(struct net_proto *pro)
 #endif
 
 #ifdef CONFIG_PROC_FS
-	proc_net_register(&proc_ax25_route);
-	proc_net_register(&proc_ax25);
-	proc_net_register(&proc_ax25_calls);
+	proc_net_create("ax25_route", 0, ax25_rt_get_info);
+	proc_net_create("ax25", 0, ax25_get_info);
+	proc_net_create("ax25_calls", 0, ax25_uid_get_info);
 #endif
 
 	printk(KERN_INFO "NET4: G4KLX/GW4PTS AX.25 for Linux. Version 0.37 for Linux NET4.0\n");
@@ -1820,10 +1799,9 @@ int init_module(void)
 void cleanup_module(void)
 {
 #ifdef CONFIG_PROC_FS
-	proc_net_unregister(PROC_NET_AX25_ROUTE);
-	proc_net_unregister(PROC_NET_AX25);
-	proc_net_unregister(PROC_NET_AX25_CALLS);
-	proc_net_unregister(PROC_NET_AX25_ROUTE);
+	proc_net_remove("ax25_route");
+	proc_net_remove("ax25");
+	proc_net_remove("ax25_calls");
 #endif
 	ax25_rt_free();
 	ax25_uid_free();

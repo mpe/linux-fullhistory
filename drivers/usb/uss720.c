@@ -538,7 +538,7 @@ static struct parport_operations parport_uss720_ops =
 
 /* --------------------------------------------------------------------- */
 
-static int uss720_probe(struct usb_device *usbdev)
+static void * uss720_probe(struct usb_device *usbdev, unsigned int ifnum)
 {
         struct usb_interface_descriptor *interface;
         struct usb_endpoint_descriptor *endpoint;
@@ -552,31 +552,16 @@ static int uss720_probe(struct usb_device *usbdev)
         if ((usbdev->descriptor.idVendor != 0x047e || usbdev->descriptor.idProduct != 0x1001) &&
 	    (usbdev->descriptor.idVendor != 0x0557 || usbdev->descriptor.idProduct != 0x2001) &&
 	    (usbdev->descriptor.idVendor != 0x0729 || usbdev->descriptor.idProduct != 0x1284))
-                return -1;
+                return NULL;
 
-        /* We don't handle multiple configurations */
-        if (usbdev->descriptor.bNumConfigurations != 1)
-                return -1;
+        /* our known interfaces have 3 alternate settings */
+        if (usbdev->actconfig->interface[ifnum].num_altsetting != 3)
+                return NULL;
 
-        /* We don't handle multiple interfaces */
-        if (usbdev->config[0].bNumInterfaces != 1)
-                return -1;
-
-        /* We don't handle multiple interfaces */
-        if (usbdev->config[0].interface[0].num_altsetting != 3)
-                return -1;
-
-        printk(KERN_DEBUG "uss720: set configuration\n");
-        usb_set_configuration(usbdev, usbdev->config[0].bConfigurationValue);
-
-        i = usb_set_interface(usbdev, 0, 2);
+        i = usb_set_interface(usbdev, ifnum, 2);
         printk(KERN_DEBUG "uss720: set inteface result %d\n", i);
 
-        interface = &usbdev->config[0].interface[0].altsetting[2];
-
-        //printk(KERN_DEBUG "uss720: get interface\n");
-        //i = usb_get_interface(usbdev, 0);
-        //printk(KERN_DEBUG "uss720: is in alternate setting %d\n", i);
+        interface = &usbdev->actconfig->interface[ifnum].altsetting[2];
 
 	/*
 	 * Allocate parport interface 
@@ -584,13 +569,13 @@ static int uss720_probe(struct usb_device *usbdev)
 	printk(KERN_INFO "uss720: (C) 1999 by Thomas Sailer, <sailer@ife.ee.ethz.ch>\n");
 
 	if (!(priv = kmalloc(sizeof(struct parport_uss720_private), GFP_KERNEL)))
-		return -1;
+		return NULL;
 	if (!(pp = parport_register_port(0, PARPORT_IRQ_NONE, PARPORT_DMA_NONE, &parport_uss720_ops))) {
-		kfree(priv);
-		return -1;
+		printk(KERN_WARNING "usb-uss720: could not register parport\n");
+		goto probe_abort;
 	}
+
 	pp->private_data = priv;
-        usbdev->private = pp;
 	priv->usbdev = usbdev;
 	pp->modes = PARPORT_MODE_PCSPP | PARPORT_MODE_TRISTATE | PARPORT_MODE_EPP | PARPORT_MODE_ECP | PARPORT_MODE_COMPAT;
 
@@ -612,26 +597,28 @@ static int uss720_probe(struct usb_device *usbdev)
 				  pp, &priv->irqhandle);
 	if (i) {
 		printk (KERN_WARNING "usb-uss720: usb_request_irq failed (0x%x)\n", i);
-		/* FIXME: undo some stuff and free some memory. */
-		return -1;
+		goto probe_abort_port;
 	}
 #endif
         parport_proc_register(pp);
         parport_announce_port(pp);
 
 	MOD_INC_USE_COUNT;
-        return 0;
+        return pp;
+
+probe_abort_port:
+	parport_unregister_port(pp);
+probe_abort:
+	kfree(priv);
+	return NULL;
 }
 
-static void uss720_disconnect(struct usb_device *usbdev)
+static void uss720_disconnect(struct usb_device *usbdev, void *ptr)
 {
-	struct parport *pp = (struct parport *)usbdev->private;
+	struct parport *pp = (struct parport *)ptr;
 	struct parport_uss720_private *priv = pp->private_data;
 
-#if 0
 	usb_release_irq(usbdev, priv->irqhandle, priv->irqpipe);
-#endif
-        usbdev->private = NULL;
         priv->usbdev = NULL;
 	parport_proc_unregister(pp);
 	parport_unregister_port(pp);

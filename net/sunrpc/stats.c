@@ -126,14 +126,10 @@ svc_proc_read(char *buffer, char **start, off_t offset, int count,
 static inline struct proc_dir_entry *
 do_register(const char *name, void *data, int issvc)
 {
-	struct proc_dir_entry	*ent;
-
 	dprintk("RPC: registering /proc/net/rpc/%s\n", name);
-	ent = create_proc_entry(name, 0, proc_net_rpc);
-	ent->read_proc = issvc? svc_proc_read : rpc_proc_read;
-	ent->data = data;
-
-	return ent;
+	return create_proc_read_entry(name, 0, proc_net_rpc, 
+				      issvc? svc_proc_read : rpc_proc_read,
+				      data);
 }
 
 struct proc_dir_entry *

@@ -90,6 +90,7 @@ static unsigned long ai_half;
 static unsigned long ai_word;
 static unsigned long ai_multi;
 
+#ifdef CONFIG_SYSCTL
 static int proc_alignment_read(char *page, char **start, off_t off,
 			       int count, int *eof, void *data)
 {
@@ -113,23 +114,18 @@ static int proc_alignment_read(char *page, char **start, off_t off,
 	return len;
 }
 
-#ifdef CONFIG_SYSCTL
 /*
  * This needs to be done after sysctl_init, otherwise sys/
  * will be overwritten.
  */
 void __init alignment_init(void)
 {
-	struct proc_dir_entry *e;
-
-	e = create_proc_entry("sys/debug/alignment", S_IFREG | S_IRUGO, NULL);
-
-	if (e)
-		e->read_proc = proc_alignment_read;
+	create_proc_read_entry("sys/debug/alignment", 0, NULL,
+				proc_alignment_read);
 }
 
 __initcall(alignment_init);
-#endif
+#endif /* CONFIG_SYSCTL */
 
 static int
 do_alignment_exception(struct pt_regs *regs)

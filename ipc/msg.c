@@ -97,17 +97,13 @@ extern int ipcperms (struct ipc_perm *ipcp, short msgflg);
 void __init msg_init (void)
 {
 	int id;
-#ifdef CONFIG_PROC_FS
-	struct proc_dir_entry *ent;
-#endif
 
 	for (id = 0; id < MSGMNI; id++) {
 		msg_que[id].lock = SPIN_LOCK_UNLOCKED;
 		msg_que[id].q = NULL;
 	}
 #ifdef CONFIG_PROC_FS
-	ent = create_proc_entry("sysvipc/msg", 0, 0);
-	ent->read_proc = sysvipc_msg_read_proc;
+	create_proc_read_entry("sysvipc/msg", 0, 0, sysvipc_msg_read_proc, NULL);
 #endif
 }
 

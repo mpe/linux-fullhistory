@@ -205,11 +205,13 @@ extern void iounmap(void *addr);
 #define isa_memcpy_fromio(a,b,c)	memcpy_fromio((a),__ISA_IO_base + (b),(c))
 #define isa_memcpy_toio(a,b,c)		memcpy_toio(__ISA_IO_base + (a),(b),(c))
 
+
 /*
  * Again, i386 does not require mem IO specific function.
  */
 
-#define eth_io_copy_and_sum(a,b,c,d)	eth_copy_and_sum((a),__io_virt(b),(c),(d))
+#define eth_io_copy_and_sum(a,b,c,d)		eth_copy_and_sum((a),__io_virt(b),(c),(d))
+#define isa_eth_io_copy_and_csum(a,b,c,d)	eth_copy_and_sum((a),__io_virt(__ISA_IO_base + (b)),(c),(d))
 
 static inline int check_signature(unsigned long io_addr,
 	const unsigned char *signature, int length)

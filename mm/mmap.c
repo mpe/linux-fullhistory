@@ -183,6 +183,8 @@ unsigned long do_mmap(struct file * file, unsigned long addr, unsigned long len,
 	if (off + len < off)
 		return -EINVAL;
 
+	off = off >> PAGE_SHIFT;
+
 	/* Too many mappings? */
 	if (mm->map_count > MAX_MAP_COUNT)
 		return -ENOMEM;
@@ -272,7 +274,7 @@ unsigned long do_mmap(struct file * file, unsigned long addr, unsigned long len,
 		vma->vm_flags |= VM_MAYREAD | VM_MAYWRITE | VM_MAYEXEC;
 	vma->vm_page_prot = protection_map[vma->vm_flags & 0x0f];
 	vma->vm_ops = NULL;
-	vma->vm_offset = off;
+	vma->vm_pgoff = off;
 	vma->vm_file = NULL;
 	vma->vm_private_data = NULL;
 
@@ -533,7 +535,7 @@ static struct vm_area_struct * unmap_fixup(struct vm_area_struct *area,
 		area->vm_end = addr;
 		vmlist_modify_lock(current->mm);
 	} else if (addr == area->vm_start) {
-		area->vm_offset += (end - area->vm_start);
+		area->vm_pgoff += (end - area->vm_start) >> PAGE_SHIFT;
 		area->vm_start = end;
 		vmlist_modify_lock(current->mm);
 	} else {
@@ -548,7 +550,8 @@ static struct vm_area_struct * unmap_fixup(struct vm_area_struct *area,
 		mpnt->vm_page_prot = area->vm_page_prot;
 		mpnt->vm_flags = area->vm_flags;
 		mpnt->vm_ops = area->vm_ops;
-		mpnt->vm_offset = area->vm_offset + (end - area->vm_start);
+		mpnt->vm_pgoff = area->vm_pgoff;
+		area->vm_pgoff += (end - area->vm_start) >> PAGE_SHIFT;
 		mpnt->vm_file = area->vm_file;
 		mpnt->vm_private_data = area->vm_private_data;
 		if (mpnt->vm_file)
@@ -783,7 +786,7 @@ unsigned long do_brk(unsigned long addr, unsigned long len)
 	vma->vm_flags |= VM_MAYREAD | VM_MAYWRITE | VM_MAYEXEC;
 	vma->vm_page_prot = protection_map[vma->vm_flags & 0x0f];
 	vma->vm_ops = NULL;
-	vma->vm_offset = 0;
+	vma->vm_pgoff = 0;
 	vma->vm_file = NULL;
 	vma->vm_private_data = NULL;
 
@@ -943,8 +946,9 @@ void merge_segments (struct mm_struct * mm, unsigned long start_addr, unsigned l
 		 * the offsets must be contiguous..
 		 */
 		if ((mpnt->vm_file != NULL) || (mpnt->vm_flags & VM_SHM)) {
-			unsigned long off = prev->vm_offset+prev->vm_end-prev->vm_start;
-			if (off != mpnt->vm_offset)
+			unsigned long off = prev->vm_pgoff;
+			off += (prev->vm_end - prev->vm_start) >> PAGE_SHIFT;
+			if (off != mpnt->vm_pgoff)
 				continue;
 		}
 
@@ -957,7 +961,7 @@ void merge_segments (struct mm_struct * mm, unsigned long start_addr, unsigned l
 		prev->vm_end = mpnt->vm_end;
 		prev->vm_next = mpnt->vm_next;
 		if (mpnt->vm_ops && mpnt->vm_ops->close) {
-			mpnt->vm_offset += mpnt->vm_end - mpnt->vm_start;
+			mpnt->vm_pgoff += (mpnt->vm_end - mpnt->vm_start) >> PAGE_SHIFT;
 			mpnt->vm_start = mpnt->vm_end;
 			vmlist_modify_unlock(mm);
 			mpnt->vm_ops->close(mpnt);

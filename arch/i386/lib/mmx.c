@@ -89,7 +89,7 @@ void *_mmx_memcpy(void *to, const void *from, size_t len)
 	return p;
 }
 
-static void fast_clear_page(long page)
+static void fast_clear_page(void *page)
 {
 	int i;
 	if (!(current->flags & PF_USEDFPU))
@@ -129,7 +129,7 @@ static void fast_clear_page(long page)
 	stts();
 }
 
-static void fast_copy_page(long to, long from)
+static void fast_copy_page(void *to, void *from)
 {
 	int i;
 	if (!(current->flags & PF_USEDFPU))
@@ -196,7 +196,7 @@ static void fast_copy_page(long to, long from)
  *	Favour MMX for page clear and copy. 
  */
 
-static void slow_zero_page(long page)
+static void slow_zero_page(void * page)
 {
 	int d0, d1;
 	__asm__ __volatile__( \
@@ -207,7 +207,7 @@ static void slow_zero_page(long page)
 		:"memory");
 }
  
-void mmx_clear_page(long page)
+void mmx_clear_page(void * page)
 {
 	if(in_interrupt())
 		slow_zero_page(page);
@@ -215,7 +215,7 @@ void mmx_clear_page(long page)
 		fast_clear_page(page);
 }
 
-static void slow_copy_page(long to, long from)
+static void slow_copy_page(void *to, void *from)
 {
 	int d0, d1, d2;
 	__asm__ __volatile__( \
@@ -227,7 +227,7 @@ static void slow_copy_page(long to, long from)
 }
   
 
-void mmx_copy_page(long to, long from)
+void mmx_copy_page(void *to, void *from)
 {
 	if(in_interrupt())
 		slow_copy_page(to, from);

@@ -7,16 +7,16 @@
  * Universite Pierre et Marie Curie (Paris VI)
  */
 
+#include <linux/module.h>
+#include <linux/fs.h>
+#include <linux/sched.h>
+
+
 /*
  * This file will contain the Access Control Lists management for the
  * second extended file system.
  */
 
-#include <linux/errno.h>
-#include <linux/fs.h>
-#include <linux/ext2_fs.h>
-#include <linux/sched.h>
-#include <linux/stat.h>
 
 /*
  * ext2_permission ()

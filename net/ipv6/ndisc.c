@@ -1179,16 +1179,8 @@ done:
 	return len;
 }
 
-struct proc_dir_entry ndisc_proc_entry =
-{
-        PROC_NET_NDISC, 5, "ndisc",
-        S_IFREG | S_IRUGO, 1, 0, 0,
-        0, NULL,
-        &ndisc_get_info
-};
 #endif
 #endif	/* CONFIG_PROC_FS */
-
 
 
 int __init ndisc_init(struct net_proto_family *ops)
@@ -1230,7 +1222,7 @@ int __init ndisc_init(struct net_proto_family *ops)
 
 #ifdef CONFIG_PROC_FS
 #ifndef CONFIG_RTNETLINK
-	proc_net_register(&ndisc_proc_entry);
+	proc_net_create("ndisc", 0, ndisc_get_info);
 #endif
 #endif
 #ifdef CONFIG_SYSCTL
@@ -1244,7 +1236,7 @@ void ndisc_cleanup(void)
 {
 #ifdef CONFIG_PROC_FS
 #ifndef CONFIG_RTNETLINK
-        proc_net_unregister(ndisc_proc_entry.low_ino);
+        proc_net_remove("ndisc");
 #endif
 #endif
 	neigh_table_clear(&nd_tbl);

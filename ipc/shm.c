@@ -57,17 +57,13 @@ static ulong used_segs = 0;
 void __init shm_init (void)
 {
 	int id;
-#ifdef CONFIG_PROC_FS
-	struct proc_dir_entry *ent;
-#endif
 
 	for (id = 0; id < SHMMNI; id++)
 		shm_segs[id] = (struct shmid_kernel *) IPC_UNUSED;
 	shm_tot = shm_rss = shm_seq = max_shmid = used_segs = 0;
 	init_waitqueue_head(&shm_wait);
 #ifdef CONFIG_PROC_FS
-	ent = create_proc_entry("sysvipc/shm", 0, 0);
-	ent->read_proc = sysvipc_shm_read_proc;
+	create_proc_read_entry("sysvipc/shm", 0, 0, sysvipc_shm_read_proc, NULL);
 #endif
 	return;
 }
@@ -237,7 +233,7 @@ static void killseg (int id)
 			rss++;
 		} else {
 			lock_kernel();
-			swap_free(pte);
+			swap_free(pte_to_swp_entry(pte));
 			unlock_kernel();
 			swp++;
 		}
@@ -409,7 +405,7 @@ out_unlocked:
  * shmd->vm_end		multiple of SHMLBA
  * shmd->vm_next	next attach for task
  * shmd->vm_next_share	next attach for segment
- * shmd->vm_offset	offset into segment
+ * shmd->vm_pgoff	offset into segment (in pages)
  * shmd->vm_private_data		signature for this attach
  */
 
@@ -551,7 +547,7 @@ asmlinkage long sys_shmat (int shmid, char *shmaddr, int shmflg, ulong *raddr)
 			 | VM_MAYREAD | VM_MAYEXEC | VM_READ | VM_EXEC
 			 | ((shmflg & SHM_RDONLY) ? 0 : VM_MAYWRITE | VM_WRITE);
 	shmd->vm_file = NULL;
-	shmd->vm_offset = 0;
+	shmd->vm_pgoff = 0;
 	shmd->vm_ops = &shm_vm_ops;
 
 	shp->u.shm_nattch++;	    /* prevent destruction */
@@ -631,7 +627,7 @@ asmlinkage long sys_shmdt (char *shmaddr)
 	for (shmd = current->mm->mmap; shmd; shmd = shmdnext) {
 		shmdnext = shmd->vm_next;
 		if (shmd->vm_ops == &shm_vm_ops
-		    && shmd->vm_start - shmd->vm_offset == (ulong) shmaddr)
+		    && shmd->vm_start - (shmd->vm_pgoff << PAGE_SHIFT) == (ulong) shmaddr)
 			do_munmap(shmd->vm_start, shmd->vm_end - shmd->vm_start);
 	}
 	up(&current->mm->mmap_sem);
@@ -662,7 +658,8 @@ static struct page * shm_nopage(struct vm_area_struct * shmd, unsigned long addr
 	struct page * page;
 
 	shp = *(struct shmid_kernel **) shmd->vm_private_data;
-	idx = (address - shmd->vm_start + shmd->vm_offset) >> PAGE_SHIFT;
+	idx = (address - shmd->vm_start) >> PAGE_SHIFT;
+	idx += shmd->vm_pgoff;
 
 	spin_lock(&shm_lock);
 again:
@@ -678,7 +675,7 @@ again:
 			if (pte_val(pte) != pte_val(shp->shm_pages[idx]))
 				goto changed;
 		} else {
-			pte_t entry = pte;
+			swp_entry_t entry = pte_to_swp_entry(pte);
 
 			spin_unlock(&shm_lock);
 			page = lookup_swap_cache(entry);
@@ -735,15 +732,18 @@ int shm_swap (int prio, int gfp_mask)
 {
 	pte_t page;
 	struct shmid_kernel *shp;
-	pte_t swap_entry;
+	swp_entry_t swap_entry;
 	unsigned long id, idx;
 	int loop = 0;
 	int counter;
 	struct page * page_map;
 	
 	counter = shm_rss >> prio;
+	if (!counter)
+		return 0;
 	lock_kernel();
-	if (!counter || !pte_val(swap_entry = get_swap_page())) {
+	swap_entry = get_swap_page();
+	if (!swap_entry.val) {
 		unlock_kernel();
 		return 0;
 	}
@@ -792,7 +792,7 @@ failed:
 		goto check_table;
 	if (!(page_map = prepare_highmem_swapout(page_map)))
 		goto check_table;
-	shp->shm_pages[idx] = swap_entry;
+	shp->shm_pages[idx] = swp_entry_to_pte(swap_entry);
 	swap_successes++;
 	shm_swp++;
 	shm_rss--;
@@ -812,7 +812,7 @@ failed:
  * Free the swap entry and set the new pte for the shm page.
  */
 static void shm_unuse_page(struct shmid_kernel *shp, unsigned long idx,
-			pte_t entry, struct page *page)
+			swp_entry_t entry, struct page *page)
 {
 	pte_t pte;
 
@@ -832,7 +832,7 @@ static void shm_unuse_page(struct shmid_kernel *shp, unsigned long idx,
 /*
  * unuse_shm() search for an eventually swapped out shm page.
  */
-void shm_unuse(pte_t entry, struct page *page)
+void shm_unuse(swp_entry_t entry, struct page *page)
 {
 	int i, n;
 
@@ -841,11 +841,16 @@ void shm_unuse(pte_t entry, struct page *page)
 		struct shmid_kernel *seg = shm_segs[i];
 		if ((seg == IPC_UNUSED) || (seg == IPC_NOID))
 			continue;
-		for (n = 0; n < seg->shm_npages; n++)
-			if (pte_val(seg->shm_pages[n]) == pte_val(entry)) {
+		for (n = 0; n < seg->shm_npages; n++) {
+			if (pte_none(seg->shm_pages[n]))
+				continue;
+			if (pte_present(seg->shm_pages[n]))
+				continue;
+			if (pte_to_swp_entry(seg->shm_pages[n]).val == entry.val) {
 				shm_unuse_page(seg, n, entry, page);
 				return;
 			}
+		}
 	}
 	spin_unlock(&shm_lock);
 }

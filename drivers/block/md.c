@@ -872,11 +872,74 @@ EXPORT_SYMBOL(md_wakeup_thread);
 EXPORT_SYMBOL(md_do_sync);
 
 #ifdef CONFIG_PROC_FS
-static struct proc_dir_entry proc_md = {
-	PROC_MD, 6, "mdstat",
-	S_IFREG | S_IRUGO, 1, 0, 0,
-	0, &proc_array_inode_operations,
-};
+static int md_status_read_proc(char *page, char **start, off_t off,
+			int count, int *eof, void *data)
+{
+	int sz = 0, i, j, size;
+	int begin = 0;
+
+	sz=sprintf( page, "Personalities : ");
+	for (i=0; i<MAX_PERSONALITY; i++)
+		if (pers[i])
+			sz+=sprintf (page+sz, "[%d %s] ", i, pers[i]->name);
+	page[sz-1]='\n';
+
+	sz+=sprintf (page+sz, "read_ahead ");
+	if (read_ahead[MD_MAJOR]==INT_MAX)
+		sz+=sprintf (page+sz, "not set\n");
+	else
+		sz+=sprintf (page+sz, "%d sectors\n", read_ahead[MD_MAJOR]);
+
+	for (i=0; i<MAX_MD_DEV; i++) {
+		if (sz < off) {
+			begin += sz;
+			off -= sz;
+			sz = 0;
+		}
+		if (sz >= off+count) {
+			*eof = 1;
+			break;
+		}
+		sz+=sprintf (page+sz, "md%d : %sactive",
+				i, md_dev[i].pers ? "" : "in");
+
+		if (md_dev[i].pers)
+			sz+=sprintf (page+sz, " %s", md_dev[i].pers->name);
+
+		for (j=0, size=0; j<md_dev[i].nb_dev; j++) {
+			sz+=sprintf (page+sz, " %s",
+				partition_name(md_dev[i].devices[j].dev));
+			size+=md_dev[i].devices[j].size;
+		}
+
+		if (md_dev[i].nb_dev) {
+			if (md_dev[i].pers)
+				sz+=sprintf (page+sz, " %d blocks", md_size[i]);
+			else
+				sz+=sprintf (page+sz, " %d blocks", size);
+		}
+
+		if (!md_dev[i].pers) {
+			sz+=sprintf (page+sz, "\n");
+			continue;
+		}
+
+		if (md_dev[i].pers->max_invalid_dev)
+			sz+=sprintf (page+sz, " maxfault=%ld",
+					MAX_FAULT(md_dev+i));
+
+		sz+=md_dev[i].pers->status (page+sz, i, md_dev+i);
+		sz+=sprintf (page+sz, "\n");
+	}
+
+	sz -= off;
+	*start = page + off;
+	if (sz>count)
+		sz = count;
+	if (sz<0)
+		sz = 0;
+	return sz;
+}
 #endif
 
 static void md_geninit (struct gendisk *gdisk)
@@ -896,7 +959,7 @@ static void md_geninit (struct gendisk *gdisk)
   max_readahead[MD_MAJOR] = md_maxreadahead;
 
 #ifdef CONFIG_PROC_FS
-  proc_register(&proc_root, &proc_md);
+	create_proc_read_entry("mdstat", 0, NULL, md_status_read_proc, NULL);
 #endif
 }
 
@@ -917,61 +980,6 @@ int md_error (kdev_t mddev, kdev_t rdev)
 	return rc;
     }
     return 0;
-}
-
-int get_md_status (char *page)
-{
-  int sz=0, i, j, size;
-
-  sz+=sprintf( page+sz, "Personalities : ");
-  for (i=0; i<MAX_PERSONALITY; i++)
-    if (pers[i])
-      sz+=sprintf (page+sz, "[%d %s] ", i, pers[i]->name);
-
-  page[sz-1]='\n';
-
-  sz+=sprintf (page+sz, "read_ahead ");
-  if (read_ahead[MD_MAJOR]==INT_MAX)
-    sz+=sprintf (page+sz, "not set\n");
-  else
-    sz+=sprintf (page+sz, "%d sectors\n", read_ahead[MD_MAJOR]);
-  
-  for (i=0; i<MAX_MD_DEV; i++)
-  {
-    sz+=sprintf (page+sz, "md%d : %sactive", i, md_dev[i].pers ? "" : "in");
-
-    if (md_dev[i].pers)
-      sz+=sprintf (page+sz, " %s", md_dev[i].pers->name);
-
-    size=0;
-    for (j=0; j<md_dev[i].nb_dev; j++)
-    {
-      sz+=sprintf (page+sz, " %s",
-		   partition_name(md_dev[i].devices[j].dev));
-      size+=md_dev[i].devices[j].size;
-    }
-
-    if (md_dev[i].nb_dev) {
-      if (md_dev[i].pers)
-        sz+=sprintf (page+sz, " %d blocks", md_size[i]);
-      else
-        sz+=sprintf (page+sz, " %d blocks", size);
-    }
-
-    if (!md_dev[i].pers)
-    {
-      sz+=sprintf (page+sz, "\n");
-      continue;
-    }
-
-    if (md_dev[i].pers->max_invalid_dev)
-      sz+=sprintf (page+sz, " maxfault=%ld", MAX_FAULT(md_dev+i));
-
-    sz+=md_dev[i].pers->status (page+sz, i, md_dev+i);
-    sz+=sprintf (page+sz, "\n");
-  }
-
-  return (sz);
 }
 
 int register_md_personality (int p_num, struct md_personality *p)

@@ -109,7 +109,7 @@ static inline int mprotect_fixup_start(struct vm_area_struct * vma,
 	if (n->vm_ops && n->vm_ops->open)
 		n->vm_ops->open(n);
 	vmlist_modify_lock(vma->vm_mm);
-	vma->vm_offset += end - vma->vm_start;
+	vma->vm_pgoff += (end - vma->vm_start) >> PAGE_SHIFT;
 	vma->vm_start = end;
 	insert_vm_struct(current->mm, n);
 	vmlist_modify_unlock(vma->vm_mm);
@@ -127,7 +127,7 @@ static inline int mprotect_fixup_end(struct vm_area_struct * vma,
 		return -ENOMEM;
 	*n = *vma;
 	n->vm_start = start;
-	n->vm_offset += n->vm_start - vma->vm_start;
+	n->vm_pgoff += (n->vm_start - vma->vm_start) >> PAGE_SHIFT;
 	n->vm_flags = newflags;
 	n->vm_page_prot = prot;
 	if (n->vm_file)
@@ -159,7 +159,7 @@ static inline int mprotect_fixup_middle(struct vm_area_struct * vma,
 	*right = *vma;
 	left->vm_end = start;
 	right->vm_start = end;
-	right->vm_offset += right->vm_start - left->vm_start;
+	right->vm_pgoff += (right->vm_start - left->vm_start) >> PAGE_SHIFT;
 	if (vma->vm_file)
 		atomic_add(2,&vma->vm_file->f_count);
 	if (vma->vm_ops && vma->vm_ops->open) {
@@ -167,7 +167,7 @@ static inline int mprotect_fixup_middle(struct vm_area_struct * vma,
 		vma->vm_ops->open(right);
 	}
 	vmlist_modify_lock(vma->vm_mm);
-	vma->vm_offset += start - vma->vm_start;
+	vma->vm_pgoff += (start - vma->vm_start) >> PAGE_SHIFT;
 	vma->vm_start = start;
 	vma->vm_end = end;
 	vma->vm_flags = newflags;

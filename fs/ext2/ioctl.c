@@ -7,14 +7,11 @@
  * Universite Pierre et Marie Curie (Paris VI)
  */
 
+#include <linux/module.h>
+#include <linux/fs.h>
+#include <linux/sched.h>
 #include <asm/uaccess.h>
 
-#include <linux/errno.h>
-#include <linux/fs.h>
-#include <linux/ext2_fs.h>
-#include <linux/ioctl.h>
-#include <linux/sched.h>
-#include <linux/mm.h>
 
 int ext2_ioctl (struct inode * inode, struct file * filp, unsigned int cmd,
 		unsigned long arg)

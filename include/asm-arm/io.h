@@ -185,17 +185,16 @@ __IO(l,"",long)
 
 #endif
 
+extern void __readwrite_bug(const char *fn);
+
 #ifndef ARCH_READWRITE
 
-/* for panic */
-#include <linux/kernel.h>
-
-#define readb(p)	(panic("readb called, but not implemented"),0)
-#define readw(p)	(panic("readw called, but not implemented"),0)
-#define readl(p)	(panic("readl called, but not implemented"),0)
-#define writeb(v,p)	panic("writeb called, but not implemented")
-#define writew(v,p)	panic("writew called, but not implemented")
-#define writel(v,p)	panic("writel called, but not implemented")
+#define readb(p)	(__readwrite_bug("readb"),0)
+#define readw(p)	(__readwrite_bug("readw"),0)
+#define readl(p)	(__readwrite_bug("readl"),0)
+#define writeb(v,p)	__readwrite_bug("writeb")
+#define writew(v,p)	__readwrite_bug("writew")
+#define writel(v,p)	__readwrite_bug("writel")
 
 #endif
 

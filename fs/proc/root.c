@@ -164,27 +164,15 @@ struct proc_dir_entry proc_root = {
 	&proc_root, NULL
 };
 
-struct proc_dir_entry *proc_net, *proc_scsi, *proc_bus, *proc_sysvipc;
+struct proc_dir_entry *proc_net, *proc_scsi, *proc_bus, *proc_sysvipc,
+		      *proc_root_fs, *proc_root_driver;
 
 #ifdef CONFIG_MCA
-struct proc_dir_entry proc_mca = {
-	PROC_MCA, 3, "mca",
-	S_IFDIR | S_IRUGO | S_IXUGO, 2, 0, 0,
-	0, &proc_dir_inode_operations,
-	NULL, NULL,
-	NULL, &proc_root, NULL
-};
+struct proc_dir_entry *proc_mca;
 #endif
 
 #ifdef CONFIG_SYSCTL
-struct proc_dir_entry proc_sys_root = {
-	PROC_SYS, 3, "sys",			/* inode, name */
-	S_IFDIR | S_IRUGO | S_IXUGO, 2, 0, 0,	/* mode, nlink, uid, gid */
-	0, &proc_dir_inode_operations,		/* size, ops */
-	NULL, NULL,				/* get_info, fill_inode */
-	NULL,					/* next */
-	NULL, NULL				/* parent, subdir */
-};
+struct proc_dir_entry *proc_sys_root;
 #endif
 
 #if defined(CONFIG_SUN_OPENPROMFS) || defined(CONFIG_SUN_OPENPROMFS_MODULE)
@@ -535,175 +523,14 @@ static struct inode_operations proc_link_inode_operations = {
 	NULL			/* revalidate */
 };
 
-static struct proc_dir_entry proc_root_loadavg = {
-	PROC_LOADAVG, 7, "loadavg",
-	S_IFREG | S_IRUGO, 1, 0, 0,
-	0, &proc_array_inode_operations
-};
-static struct proc_dir_entry proc_root_uptime = {
-	PROC_UPTIME, 6, "uptime",
-	S_IFREG | S_IRUGO, 1, 0, 0,
-	0, &proc_array_inode_operations
-};
-static struct proc_dir_entry proc_root_meminfo = {
-	PROC_MEMINFO, 7, "meminfo",
-	S_IFREG | S_IRUGO, 1, 0, 0,
-	0, &proc_array_inode_operations
-};
-static struct proc_dir_entry proc_root_kmsg = {
-	PROC_KMSG, 4, "kmsg",
-	S_IFREG | S_IRUSR, 1, 0, 0,
-	0, &proc_kmsg_inode_operations
-};
-static struct proc_dir_entry proc_root_version = {
-	PROC_VERSION, 7, "version",
-	S_IFREG | S_IRUGO, 1, 0, 0,
-	0, &proc_array_inode_operations
-};
-static struct proc_dir_entry proc_root_cpuinfo = {
-	PROC_CPUINFO, 7, "cpuinfo",
-	S_IFREG | S_IRUGO, 1, 0, 0,
-	0, &proc_array_inode_operations
-};
-#if defined (CONFIG_PROC_HARDWARE)
-static struct proc_dir_entry proc_root_hardware = {
-	PROC_HARDWARE, 8, "hardware",
-	S_IFREG | S_IRUGO, 1, 0, 0,
-	0, &proc_array_inode_operations
-};
-#endif
-#ifdef CONFIG_STRAM_PROC
-static struct proc_dir_entry proc_root_stram = {
-	PROC_STRAM, 5, "stram",
-	S_IFREG | S_IRUGO, 1, 0, 0,
-	0, &proc_array_inode_operations
-};
-#endif
 static struct proc_dir_entry proc_root_self = {
-	PROC_SELF, 4, "self",
+	0, 4, "self",
 	S_IFLNK | S_IRUGO | S_IWUGO | S_IXUGO, 1, 0, 0,
 	64, &proc_self_inode_operations,
 };
-#ifdef CONFIG_DEBUG_MALLOC
-static struct proc_dir_entry proc_root_malloc = {
-	PROC_MALLOC, 6, "malloc",
-	S_IFREG | S_IRUGO, 1, 0, 0,
-	0, &proc_array_inode_operations
-};
-#endif
-static struct proc_dir_entry proc_root_kcore = {
-	PROC_KCORE, 5, "kcore",
-	S_IFREG | S_IRUSR, 1, 0, 0,
-	0, &proc_kcore_inode_operations
-};
-#ifdef CONFIG_MODULES
-static struct proc_dir_entry proc_root_modules = {
-	PROC_MODULES, 7, "modules",
-	S_IFREG | S_IRUGO, 1, 0, 0,
-	0, &proc_array_inode_operations
-};
-static struct proc_dir_entry proc_root_ksyms = {
-	PROC_KSYMS, 5, "ksyms",
-	S_IFREG | S_IRUGO, 1, 0, 0,
-	0, &proc_array_inode_operations
-};
-#endif
-static struct proc_dir_entry proc_root_stat = {
-	PROC_STAT, 4, "stat",
-	S_IFREG | S_IRUGO, 1, 0, 0,
-	0, &proc_array_inode_operations
-};
-static struct proc_dir_entry proc_root_devices = {
-	PROC_DEVICES, 7, "devices",
-	S_IFREG | S_IRUGO, 1, 0, 0,
-	0, &proc_array_inode_operations
-};
-static struct proc_dir_entry proc_root_partitions = {
-	PROC_PARTITIONS, 10, "partitions",
-	S_IFREG | S_IRUGO, 1, 0, 0,
-	0, &proc_array_inode_operations
-};
-static struct proc_dir_entry proc_root_interrupts = {
-	PROC_INTERRUPTS, 10,"interrupts",
-	S_IFREG | S_IRUGO, 1, 0, 0,
-	0, &proc_array_inode_operations
-};
-static struct proc_dir_entry proc_root_filesystems = {
-	PROC_FILESYSTEMS, 11,"filesystems",
-	S_IFREG | S_IRUGO, 1, 0, 0,
-	0, &proc_array_inode_operations
-};
-struct proc_dir_entry proc_root_fs = {
-        PROC_FS, 2, "fs",
-        S_IFDIR | S_IRUGO | S_IXUGO, 2, 0, 0,
-        0, &proc_dir_inode_operations,
-	NULL, NULL,
-	NULL,
-	NULL, NULL
-};
-struct proc_dir_entry proc_root_driver = {
-        PROC_DRIVER, 6, "driver",
-        S_IFDIR | S_IRUGO | S_IXUGO, 2, 0, 0,
-        0, &proc_dir_inode_operations,
-	NULL, NULL,
-	NULL,
-	NULL, NULL
-};
-static struct proc_dir_entry proc_root_dma = {
-	PROC_DMA, 3, "dma",
-	S_IFREG | S_IRUGO, 1, 0, 0,
-	0, &proc_array_inode_operations
-};
-static struct proc_dir_entry proc_root_ioports = {
-	PROC_IOPORTS, 7, "ioports",
-	S_IFREG | S_IRUGO, 1, 0, 0,
-	0, &proc_array_inode_operations
-};
-static struct proc_dir_entry proc_root_iomem = {
-	PROC_MEMORY, 5, "iomem",
-	S_IFREG | S_IRUGO, 1, 0, 0,
-	0, &proc_array_inode_operations
-};
-static struct proc_dir_entry proc_root_cmdline = {
-	PROC_CMDLINE, 7, "cmdline",
-	S_IFREG | S_IRUGO, 1, 0, 0,
-	0, &proc_array_inode_operations
-};
-#ifdef CONFIG_RTC
-static struct proc_dir_entry proc_root_rtc = {
-	PROC_RTC, 3, "rtc",
-	S_IFREG | S_IRUGO, 1, 0, 0,
-	0, &proc_array_inode_operations
-};
-#endif
-static struct proc_dir_entry proc_root_locks = {
-	PROC_LOCKS, 5, "locks",
-	S_IFREG | S_IRUGO, 1, 0, 0,
-	0, &proc_array_inode_operations
-};
-static struct proc_dir_entry proc_root_mounts = {
-	PROC_MTAB, 6, "mounts",
-	S_IFREG | S_IRUGO, 1, 0, 0,
-	0, &proc_array_inode_operations
-};
-static struct proc_dir_entry proc_root_swaps = {
-	PROC_SWAP, 5, "swaps",
-	S_IFREG | S_IRUGO, 1, 0, 0,
-	0, &proc_array_inode_operations
-};
-static struct proc_dir_entry proc_root_profile = {
-	PROC_PROFILE, 7, "profile",
-	S_IFREG | S_IRUGO | S_IWUSR, 1, 0, 0,
-	0, &proc_profile_inode_operations
-};
-static struct proc_dir_entry proc_root_slab = {
-	PROC_SLABINFO, 8, "slabinfo",
-	S_IFREG | S_IRUGO, 1, 0, 0,
-	0, &proc_array_inode_operations
-};
 #ifdef __powerpc__
 static struct proc_dir_entry proc_root_ppc_htab = {
-	PROC_PPC_HTAB, 8, "ppc_htab",
+	0, 8, "ppc_htab",
 	S_IFREG | S_IRUSR|S_IWUSR|S_IRGRP|S_IROTH, 1, 0, 0,
 	0, &proc_ppc_htab_inode_operations,
 	NULL, NULL,                		/* get_info, fill_inode */
@@ -715,12 +542,7 @@ static struct proc_dir_entry proc_root_ppc_htab = {
 void __init proc_root_init(void)
 {
 	proc_base_init();
-	proc_register(&proc_root, &proc_root_loadavg);
-	proc_register(&proc_root, &proc_root_uptime);
-	proc_register(&proc_root, &proc_root_meminfo);
-	proc_register(&proc_root, &proc_root_kmsg);
-	proc_register(&proc_root, &proc_root_version);
-	proc_register(&proc_root, &proc_root_cpuinfo);
+	proc_misc_init();
 	proc_register(&proc_root, &proc_root_self);
 	proc_net = create_proc_entry("net", S_IFDIR, 0);
 	proc_scsi = create_proc_entry("scsi", S_IFDIR, 0);
@@ -728,60 +550,19 @@ void __init proc_root_init(void)
 	proc_sysvipc = create_proc_entry("sysvipc", S_IFDIR, 0);
 #endif
 #ifdef CONFIG_SYSCTL
-	proc_register(&proc_root, &proc_sys_root);
+	proc_sys_root = create_proc_entry("sys", S_IFDIR, 0);
 #endif
 #ifdef CONFIG_MCA
-	proc_register(&proc_root, &proc_mca);
+	proc_mca = create_proc_entry("mca", S_IFDIR, 0);
 #endif
-
-#ifdef CONFIG_DEBUG_MALLOC
-	proc_register(&proc_root, &proc_root_malloc);
-#endif
-	proc_register(&proc_root, &proc_root_kcore);
-	proc_root_kcore.size = (MAP_NR(high_memory) << PAGE_SHIFT) + PAGE_SIZE;
-
-#ifdef CONFIG_MODULES
-	proc_register(&proc_root, &proc_root_modules);
-	proc_register(&proc_root, &proc_root_ksyms);
-#endif
-	proc_register(&proc_root, &proc_root_stat);
-	proc_register(&proc_root, &proc_root_devices);
-	proc_register(&proc_root, &proc_root_driver);
-	proc_register(&proc_root, &proc_root_partitions);
-	proc_register(&proc_root, &proc_root_interrupts);
-	proc_register(&proc_root, &proc_root_filesystems);
-	proc_register(&proc_root, &proc_root_fs);
-	proc_register(&proc_root, &proc_root_dma);
-	proc_register(&proc_root, &proc_root_ioports);
-	proc_register(&proc_root, &proc_root_iomem);
-	proc_register(&proc_root, &proc_root_cmdline);
-#ifdef CONFIG_RTC
-	proc_register(&proc_root, &proc_root_rtc);
-#endif
-	proc_register(&proc_root, &proc_root_locks);
-
-	proc_register(&proc_root, &proc_root_mounts);
-	proc_register(&proc_root, &proc_root_swaps);
-
+	proc_root_fs = create_proc_entry("fs", S_IFDIR, 0);
+	proc_root_driver = create_proc_entry("driver", S_IFDIR, 0);
 #if defined(CONFIG_SUN_OPENPROMFS) || defined(CONFIG_SUN_OPENPROMFS_MODULE)
 #ifdef CONFIG_SUN_OPENPROMFS
 	openpromfs_init ();
 #endif
 	proc_register(&proc_root, &proc_openprom);
 #endif
-#ifdef CONFIG_PROC_HARDWARE
-	proc_register(&proc_root, &proc_root_hardware);
-#endif
-#ifdef CONFIG_STRAM_PROC
-	proc_register(&proc_root, &proc_root_stram);
-#endif
-	proc_register(&proc_root, &proc_root_slab);
-
-	if (prof_shift) {
-		proc_register(&proc_root, &proc_root_profile);
-		proc_root_profile.size = (1+prof_len) * sizeof(unsigned int);
-	}
-
 	proc_tty_init();
 #ifdef __powerpc__
 	proc_register(&proc_root, &proc_root_ppc_htab);
@@ -789,7 +570,6 @@ void __init proc_root_init(void)
 #ifdef CONFIG_PROC_DEVICETREE
 	proc_device_tree_init();
 #endif
-
 	proc_bus = create_proc_entry("bus", S_IFDIR, 0);
 }
 

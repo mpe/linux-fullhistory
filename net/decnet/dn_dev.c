@@ -1214,13 +1214,6 @@ static int decnet_dev_get_info(char *buffer, char **start, off_t offset, int len
         return(len);
 }
 
-static struct proc_dir_entry proc_net_decnet_dev = {
-        PROC_NET_DN_DEV, 10, "decnet_dev",
-        S_IFREG | S_IRUGO, 1, 0, 0,
-        0, &proc_net_inode_operations,
-        decnet_dev_get_info
-};
-
 #endif /* CONFIG_PROC_FS */
 
 #ifdef CONFIG_RTNETLINK
@@ -1271,7 +1264,7 @@ void __init dn_dev_init(void)
 #endif /* CONFIG_RTNETLINK */
 
 #ifdef CONFIG_PROC_FS
-	proc_net_register(&proc_net_decnet_dev);
+	proc_net_create("decnet_dev", 0, decnet_dev_get_info);
 #endif /* CONFIG_PROC_FS */
 
 #ifdef CONFIG_SYSCTL
@@ -1303,7 +1296,7 @@ void dn_dev_cleanup(void)
 #endif /* CONFIG_SYSCTL */
 
 #ifdef CONFIG_PROC_FS
-	proc_net_unregister(PROC_NET_DN_DEV);
+	proc_net_remove("decnet_dev");
 #endif /* CONFIG_PROC_FS */
 
 	dn_dev_devices_off();

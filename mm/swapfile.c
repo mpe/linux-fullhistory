@@ -81,13 +81,14 @@ static inline int scan_swap_map(struct swap_info_struct *si)
 	return 0;
 }
 
-pte_t get_swap_page(void)
+swp_entry_t get_swap_page(void)
 {
 	struct swap_info_struct * p;
 	unsigned long offset;
-	pte_t entry = __pte(0);
+	swp_entry_t entry;
 	int type, wrapped = 0;
 
+	entry.val = 0;	/* Out of memory */
 	type = swap_list.next;
 	if (type < 0)
 		goto out;
@@ -125,12 +126,12 @@ out:
 }
 
 
-void swap_free(pte_t entry)
+void swap_free(swp_entry_t entry)
 {
 	struct swap_info_struct * p;
 	unsigned long offset, type;
 
-	if (!pte_val(entry))
+	if (!entry.val)
 		goto out;
 
 	type = SWP_TYPE(entry);
@@ -170,24 +171,24 @@ bad_offset:
 	printk("swap_free: offset exceeds max\n");
 	goto out;
 bad_free:
-	pte_ERROR(entry);
+	printk("VM: Bad swap entry %08lx\n", entry.val);
 	goto out;
 }
 
 /* needs the big kernel lock */
-pte_t acquire_swap_entry(struct page *page)
+swp_entry_t acquire_swap_entry(struct page *page)
 {
 	struct swap_info_struct * p;
 	unsigned long offset, type;
-	pte_t entry;
+	swp_entry_t entry;
 
 	if (!test_bit(PG_swap_entry, &page->flags))
 		goto new_swap_entry;
 
 	/* We have the old entry in the page offset still */
-	if (!page->offset)
+	if (!page->pg_offset)
 		goto new_swap_entry;
-	entry = get_pagecache_pte(page);
+	entry.val = page->pg_offset;
 	type = SWP_TYPE(entry);
 	if (type & SHM_SWP_TYPE)
 		goto new_swap_entry;
@@ -222,7 +223,7 @@ new_swap_entry:
  * what to do if a write is requested later.
  */
 static inline void unuse_pte(struct vm_area_struct * vma, unsigned long address,
-	pte_t *dir, pte_t entry, struct page* page)
+	pte_t *dir, swp_entry_t entry, struct page* page)
 {
 	pte_t pte = *dir;
 
@@ -238,7 +239,7 @@ static inline void unuse_pte(struct vm_area_struct * vma, unsigned long address,
 		set_pte(dir, pte_mkdirty(pte));
 		return;
 	}
-	if (pte_val(pte) != pte_val(entry))
+	if (pte_val(pte) != entry.val)
 		return;
 	set_pte(dir, pte_mkdirty(mk_pte(page, vma->vm_page_prot)));
 	swap_free(entry);
@@ -248,7 +249,7 @@ static inline void unuse_pte(struct vm_area_struct * vma, unsigned long address,
 
 static inline void unuse_pmd(struct vm_area_struct * vma, pmd_t *dir,
 	unsigned long address, unsigned long size, unsigned long offset,
-	pte_t entry, struct page* page)
+	swp_entry_t entry, struct page* page)
 {
 	pte_t * pte;
 	unsigned long end;
@@ -275,7 +276,7 @@ static inline void unuse_pmd(struct vm_area_struct * vma, pmd_t *dir,
 
 static inline void unuse_pgd(struct vm_area_struct * vma, pgd_t *dir,
 	unsigned long address, unsigned long size,
-	pte_t entry, struct page* page)
+	swp_entry_t entry, struct page* page)
 {
 	pmd_t * pmd;
 	unsigned long offset, end;
@@ -304,7 +305,7 @@ static inline void unuse_pgd(struct vm_area_struct * vma, pgd_t *dir,
 }
 
 static void unuse_vma(struct vm_area_struct * vma, pgd_t *pgdir,
-			pte_t entry, struct page* page)
+			swp_entry_t entry, struct page* page)
 {
 	unsigned long start = vma->vm_start, end = vma->vm_end;
 
@@ -318,7 +319,7 @@ static void unuse_vma(struct vm_area_struct * vma, pgd_t *pgdir,
 }
 
 static void unuse_process(struct mm_struct * mm,
-			pte_t entry, struct page* page)
+			swp_entry_t entry, struct page* page)
 {
 	struct vm_area_struct* vma;
 
@@ -344,7 +345,7 @@ static int try_to_unuse(unsigned int type)
 	struct swap_info_struct * si = &swap_info[type];
 	struct task_struct *p;
 	struct page *page;
-	pte_t entry;
+	swp_entry_t entry;
 	int i;
 
 	while (1) {
@@ -388,7 +389,7 @@ static int try_to_unuse(unsigned int type)
 		 */
 		if (si->swap_map[i] != 0) {
 			if (si->swap_map[i] != SWAP_MAP_MAX)
-				pte_ERROR(entry);
+				printk("VM: Undead swap entry %08lx\n", entry.val);
 			si->swap_map[i] = 0;
 			nr_swap_pages++;
 		}

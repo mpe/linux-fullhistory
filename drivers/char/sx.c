@@ -340,6 +340,8 @@ static inline void *ioremap(unsigned long base, long length)
 
 #endif
 
+#undef RS_EVENT_WRITE_WAKEUP
+#define RS_EVENT_WRITE_WAKEUP	0
 
 
 #include "generic_serial.h"

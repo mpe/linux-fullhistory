@@ -161,8 +161,14 @@ static int frevalidate_logvol(kdev_t dev);
 static int revalidate_logvol(kdev_t dev, int maxusage);
 static int revalidate_allvol(kdev_t dev);
 
+#ifdef CONFIG_PROC_FS
 static void ida_procinit(int i);
 static int ida_proc_get_info(char *buffer, char **start, off_t offset, int length, int *eof, void *data);
+#else
+static void ida_procinit(int i) {}
+static int ida_proc_get_info(char *buffer, char **start, off_t offset,
+			     int length, int *eof, void *data) {}
+#endif
 
 static void ida_geninit(struct gendisk *g)
 {
@@ -207,26 +213,21 @@ struct file_operations ida_fops  = {
 };
 
 
+#ifdef CONFIG_PROC_FS
+
 /*
  * Get us a file in /proc/array that says something about each controller.
  * Create /proc/array if it doesn't exist yet.
  */
-static void ida_procinit(int i)
+static void __init ida_procinit(int i)
 {
-#ifdef CONFIG_PROC_FS
-	struct proc_dir_entry *pd;
-
 	if (proc_array == NULL) {
-		proc_array = create_proc_entry("array", S_IFDIR|S_IRUGO|S_IXUGO,
-								&proc_root);
+		proc_array = create_proc_entry("driver/array", S_IFDIR, NULL);
 		if (!proc_array) return;
 	}
 
-	pd = create_proc_entry(hba[i]->devname, S_IFREG|S_IRUGO, proc_array);
-	if (!pd) return;
-	pd->read_proc = ida_proc_get_info;
-	pd->data = hba[i];
-#endif	
+	create_proc_read_entry(hba[i]->devname, 0, proc_array,
+			       ida_proc_get_info, hba[i]);
 }
 
 /*
@@ -311,6 +312,7 @@ static int ida_proc_get_info(char *buffer, char **start, off_t offset, int lengt
 		len = length;
 	return len;
 }
+#endif /* CONFIG_PROC_FS */
 
 #ifdef MODULE
 
@@ -318,7 +320,7 @@ MODULE_PARM(eisa, "1-8i");
 EXPORT_NO_SYMBOLS;
 
 /* This is a bit of a hack... */
-int init_module(void)
+int __init init_module(void)
 {
 	int i, j;
 	cpqarray_init();
@@ -333,10 +335,13 @@ int init_module(void)
 	}
 	return 0;
 }
+
 void cleanup_module(void)
 {
 	int i;
 	struct gendisk *g;
+
+	remove_proc_entry("driver/array", NULL);
 
 	for(i=0; i<nr_ctlr; i++) {
 		hba[i]->access.set_intr_mask(hba[i], 0);
@@ -359,15 +364,11 @@ void cleanup_module(void)
 			}
 		}
 	}
-#ifdef CONFIG_PROC_FS
-	remove_proc_entry("array", &proc_root);
-#endif
+
 	kfree(ida);
 	kfree(ida_sizes);
 	kfree(ida_hardsizes);
 	kfree(ida_blocksizes);
-
-
 }
 #endif /* MODULE */
 
@@ -375,7 +376,7 @@ void cleanup_module(void)
  *  This is it.  Find all the controllers and register them.  I really hate
  *  stealing all these major device numbers.
  */
-void cpqarray_init(void)
+void __init cpqarray_init(void)
 {
 	void (*request_fns[MAX_CTLR])(void) = {
 		do_ida_request0, do_ida_request1,

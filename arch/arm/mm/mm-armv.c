@@ -1,21 +1,27 @@
 /*
- * arch/arm/mm/mm-armv.c
+ *  linux/arch/arm/mm/mm-armv.c
  *
- * Page table sludge for ARM v3 and v4 processor architectures.
+ *  Page table sludge for ARM v3 and v4 processor architectures.
  *
- * Copyright (C) 1998-1999 Russell King
+ *  Copyright (C) 1998-1999 Russell King
  */
 #include <linux/sched.h>
 #include <linux/mm.h>
 #include <linux/init.h>
+#include <linux/bootmem.h>
 
 #include <asm/pgtable.h>
 #include <asm/page.h>
 #include <asm/io.h>
+#include <asm/setup.h>
 
 #include "map.h"
 
 unsigned long *valid_addr_bitmap;
+
+extern unsigned long get_page_2k(int priority);
+extern void free_page_2k(unsigned long page);
+extern pte_t *get_bad_pte_table(void);
 
 /*
  * need to get a 16k page for level 1
@@ -26,12 +32,12 @@ pgd_t *get_pgd_slow(void)
 	pmd_t *new_pmd;
 
 	if (pgd) {
-		pgd_t *init = pgd_offset(&init_mm, 0);
+		pgd_t *init = pgd_offset_k(0);
 		
-		memzero(pgd, USER_PTRS_PER_PGD * BYTES_PER_PTR);
+		memzero(pgd, USER_PTRS_PER_PGD * sizeof(pgd_t));
 		memcpy(pgd + USER_PTRS_PER_PGD, init + USER_PTRS_PER_PGD,
-			(PTRS_PER_PGD - USER_PTRS_PER_PGD) * BYTES_PER_PTR);
-		clean_cache_area(pgd, PTRS_PER_PGD * BYTES_PER_PTR);
+			(PTRS_PER_PGD - USER_PTRS_PER_PGD) * sizeof(pgd_t));
+		clean_cache_area(pgd, PTRS_PER_PGD * sizeof(pgd_t));
 
 		/*
 		 * On ARM, first page must always be allocated
@@ -48,7 +54,7 @@ pgd_t *get_pgd_slow(void)
 				pte_t *new_pte = pte_offset(new_pmd, 0);
 				pte_t *old_pte = pte_offset(old_pmd, 0);
 
-				set_pte (new_pte, *old_pte);
+				set_pte(new_pte, *old_pte);
 			}
 		}
 	}
@@ -61,6 +67,31 @@ nomem:
 	return NULL;
 }
 
+void free_pgd_slow(pgd_t *pgd)
+{
+	if (pgd) { /* can pgd be NULL? */
+		pmd_t *pmd;
+		pte_t *pte;
+
+		/* pgd is always present and good */
+		pmd = (pmd_t *)pgd;
+		if (pmd_none(*pmd))
+			goto free;
+		if (pmd_bad(*pmd)) {
+			pmd_ERROR(*pmd);
+			pmd_clear(pmd);
+			goto free;
+		}
+
+		pte = pte_offset(pmd, 0);
+		pmd_clear(pmd);
+		pte_free(pte);
+		pmd_free(pmd);
+	}
+free:
+	free_pages((unsigned long) pgd, 2);
+}
+
 pte_t *get_pte_slow(pmd_t *pmd, unsigned long offset)
 {
 	pte_t *pte;
@@ -68,18 +99,18 @@ pte_t *get_pte_slow(pmd_t *pmd, unsigned long offset)
 	pte = (pte_t *)get_page_2k(GFP_KERNEL);
 	if (pmd_none(*pmd)) {
 		if (pte) {
-			memzero(pte, 2 * PTRS_PER_PTE * BYTES_PER_PTR);
-			clean_cache_area(pte, PTRS_PER_PTE * BYTES_PER_PTR);
+			memzero(pte, 2 * PTRS_PER_PTE * sizeof(pte_t));
+			clean_cache_area(pte, PTRS_PER_PTE * sizeof(pte_t));
 			pte += PTRS_PER_PTE;
 			set_pmd(pmd, mk_user_pmd(pte));
 			return pte + offset;
 		}
-		set_pmd(pmd, mk_user_pmd(BAD_PAGETABLE));
+		set_pmd(pmd, mk_user_pmd(get_bad_pte_table()));
 		return NULL;
 	}
 	free_page_2k((unsigned long)pte);
 	if (pmd_bad(*pmd)) {
-		__bad_pmd(pmd);
+		__handle_bad_pmd(pmd);
 		return NULL;
 	}
 	return (pte_t *) pmd_page(*pmd) + offset;
@@ -92,21 +123,26 @@ pte_t *get_pte_kernel_slow(pmd_t *pmd, unsigned long offset)
 	pte = (pte_t *)get_page_2k(GFP_KERNEL);
 	if (pmd_none(*pmd)) {
 		if (pte) {
-			memzero(pte, 2 * PTRS_PER_PTE * BYTES_PER_PTR);
-			clean_cache_area(pte, PTRS_PER_PTE * BYTES_PER_PTR);
+			memzero(pte, 2 * PTRS_PER_PTE * sizeof(pte_t));
+			clean_cache_area(pte, PTRS_PER_PTE * sizeof(pte_t));
 			pte += PTRS_PER_PTE;
 			set_pmd(pmd, mk_kernel_pmd(pte));
 			return pte + offset;
 		}
-		set_pmd(pmd, mk_kernel_pmd(BAD_PAGETABLE));
+		set_pmd(pmd, mk_kernel_pmd(get_bad_pte_table()));
 		return NULL;
 	}
 	free_page_2k((unsigned long)pte);
 	if (pmd_bad(*pmd)) {
-		__bad_pmd_kernel(pmd);
+		__handle_bad_pmd_kernel(pmd);
 		return NULL;
 	}
 	return (pte_t *) pmd_page(*pmd) + offset;
+}
+
+void free_pte_slow(pte_t *pte)
+{
+	free_page_2k((unsigned long)(pte - PTRS_PER_PTE));
 }
 
 /*
@@ -131,34 +167,22 @@ alloc_init_section(unsigned long virt, unsigned long phys, int prot)
  * the hardware pte table.
  */
 static inline void
-alloc_init_page(unsigned long *mem, unsigned long virt, unsigned long phys, int domain, int prot)
+alloc_init_page(unsigned long virt, unsigned long phys, int domain, int prot)
 {
 	pmd_t *pmdp;
 	pte_t *ptep;
 
 	pmdp = pmd_offset(pgd_offset_k(virt), virt);
 
-#define PTE_SIZE (PTRS_PER_PTE * BYTES_PER_PTR)
-
 	if (pmd_none(*pmdp)) {
-		unsigned long memory = *mem;
+		pte_t *ptep = alloc_bootmem_low_pages(2 * PTRS_PER_PTE *
+						      sizeof(pte_t));
 
-		memory = (memory + PTE_SIZE - 1) & ~(PTE_SIZE - 1);
-
-		ptep = (pte_t *)memory;
-		memzero(ptep, PTE_SIZE);
-		memory += PTE_SIZE;
-
-		ptep = (pte_t *)memory;
-		memzero(ptep, PTE_SIZE);
+		memzero(ptep, 2 * PTRS_PER_PTE * sizeof(pte_t));
+		ptep += PTRS_PER_PTE;
 
 		set_pmd(pmdp, __mk_pmd(ptep, PMD_TYPE_TABLE | PMD_DOMAIN(domain)));
-
-		*mem = memory + PTE_SIZE;
 	}
-
-#undef PTE_SIZE
-
 	ptep = pte_offset(pmdp, virt);
 
 	set_pte(ptep, mk_pte_phys(phys, __pgprot(prot)));
@@ -169,8 +193,7 @@ alloc_init_page(unsigned long *mem, unsigned long virt, unsigned long phys, int 
  * the clearance is done by the middle-level functions (pmd)
  * rather than the top-level (pgd) functions.
  */
-static inline void
-free_init_section(unsigned long virt)
+static inline void free_init_section(unsigned long virt)
 {
 	pmd_clear(pmd_offset(pgd_offset_k(virt), virt));
 }
@@ -181,8 +204,7 @@ free_init_section(unsigned long virt)
  * are able to cope here with varying sizes and address
  * offsets, and we take full advantage of sections.
  */
-static void __init
-create_mapping(unsigned long *mem_ptr, struct map_desc *md)
+static void __init create_mapping(struct map_desc *md)
 {
 	unsigned long virt, length;
 	int prot_sect, prot_pte;
@@ -205,7 +227,7 @@ create_mapping(unsigned long *mem_ptr, struct map_desc *md)
 	length = md->length;
 
 	while ((virt & 1048575 || (virt + off) & 1048575) && length >= PAGE_SIZE) {
-		alloc_init_page(mem_ptr, virt, virt + off, md->domain, prot_pte);
+		alloc_init_page(virt, virt + off, md->domain, prot_pte);
 
 		virt   += PAGE_SIZE;
 		length -= PAGE_SIZE;
@@ -219,7 +241,7 @@ create_mapping(unsigned long *mem_ptr, struct map_desc *md)
 	}
 
 	while (length >= PAGE_SIZE) {
-		alloc_init_page(mem_ptr, virt, virt + off, md->domain, prot_pte);
+		alloc_init_page(virt, virt + off, md->domain, prot_pte);
 
 		virt   += PAGE_SIZE;
 		length -= PAGE_SIZE;
@@ -227,17 +249,15 @@ create_mapping(unsigned long *mem_ptr, struct map_desc *md)
 }
 
 /*
- * Initial boot-time mapping.  This covers just the
- * zero page, kernel and the flush area.  NB: it
- * must be sorted by virtual address, and no
+ * Initial boot-time mapping.  This covers just the zero page, kernel and
+ * the flush area.  NB: it must be sorted by virtual address, and no
  * virtual address overlaps.
- *  init_map[2..4] are for architectures with small
- *  amounts of banked memory.
+ *  init_map[2..4] are for architectures with banked memory.
  */
 static struct map_desc init_map[] __initdata = {
 	{ 0, 0, PAGE_SIZE,  DOMAIN_USER,   0, 0, 1, 0 }, /* zero page     */
 	{ 0, 0, 0,          DOMAIN_KERNEL, 0, 1, 1, 1 }, /* kernel memory */
-	{ 0, 0, 0,          DOMAIN_KERNEL, 0, 1, 1, 1 },
+	{ 0, 0, 0,          DOMAIN_KERNEL, 0, 1, 1, 1 }, /* (4 banks)	  */
 	{ 0, 0, 0,          DOMAIN_KERNEL, 0, 1, 1, 1 },
 	{ 0, 0, 0,          DOMAIN_KERNEL, 0, 1, 1, 1 },
 	{ 0, 0, PGDIR_SIZE, DOMAIN_KERNEL, 1, 0, 1, 1 }, /* cache flush 1 */
@@ -246,19 +266,15 @@ static struct map_desc init_map[] __initdata = {
 
 #define NR_INIT_MAPS (sizeof(init_map) / sizeof(init_map[0]))
 
-unsigned long __init
-setup_page_tables(unsigned long start_mem, unsigned long end_mem)
+void __init pagetable_init(void)
 {
 	unsigned long address = 0;
-	int idx = 0;
+	int i;
 
 	/*
-	 * Correct the above mappings
+	 * Setup the above mappings
 	 */
-	init_map[0].physical =
-	init_map[1].physical = __virt_to_phys(PAGE_OFFSET);
-	init_map[1].virtual  = PAGE_OFFSET;
-	init_map[1].length   = end_mem - PAGE_OFFSET;
+	init_map[0].physical = PHYS_OFFSET;
 	init_map[5].physical = FLUSH_BASE_PHYS;
 	init_map[5].virtual  = FLUSH_BASE;
 #ifdef FLUSH_BASE_MINICACHE
@@ -267,109 +283,108 @@ setup_page_tables(unsigned long start_mem, unsigned long end_mem)
 	init_map[6].length   = PGDIR_SIZE;
 #endif
 
+	for (i = 0; i < meminfo.nr_banks; i++) {
+		init_map[i+1].physical = PHYS_OFFSET + meminfo.bank[i].start;
+		init_map[i+1].virtual  = PAGE_OFFSET + meminfo.bank[i].start;
+		init_map[i+1].length   = meminfo.bank[i].size;
+	}
+
 	/*
-	 * Firstly, go through the initial mappings,
-	 * but clear out any pgdir entries that are
-	 * not in the description.
+	 * Go through the initial mappings, but clear out any
+	 * pgdir entries that are not in the description.
 	 */
+	i = 0;
 	do {
-		if (address < init_map[idx].virtual || idx == NR_INIT_MAPS) {
+		if (address < init_map[i].virtual || i == NR_INIT_MAPS) {
 			free_init_section(address);
 			address += PGDIR_SIZE;
 		} else {
-			create_mapping(&start_mem, init_map + idx);
+			create_mapping(init_map + i);
 
-			address = init_map[idx].virtual + init_map[idx].length;
+			address = init_map[i].virtual + init_map[i].length;
 			address = (address + PGDIR_SIZE - 1) & PGDIR_MASK;
 
 			do {
-				idx += 1;
-			} while (init_map[idx].length == 0 && idx < NR_INIT_MAPS);
+				i += 1;
+			} while (init_map[i].length == 0 && i < NR_INIT_MAPS);
 		}
 	} while (address != 0);
 
 	/*
-	 * Now, create the architecture specific mappings
+	 * Create the architecture specific mappings
 	 */
-	for (idx = 0; idx < io_desc_size; idx++)
-		create_mapping(&start_mem, io_desc + idx);
+	for (i = 0; i < io_desc_size; i++)
+		create_mapping(io_desc + i);
 
 	flush_cache_all();
-
-	return start_mem;
 }
 
 /*
- * The mem_map array can get very big.  Mark the end of the
- * valid mem_map banks with PG_skip, and setup the address
- * validity bitmap.
+ * The mem_map array can get very big.  Mark the end of the valid mem_map
+ * banks with PG_skip, and setup the address validity bitmap.
  */
-unsigned long __init
-create_mem_holes(unsigned long start_mem, unsigned long end_mem)
+void __init create_memmap_holes(void)
 {
+	unsigned int start_pfn, end_pfn = -1;
 	struct page *pg = NULL;
 	unsigned int sz, i;
 
-	if (!machine_is_riscpc())
-		return start_mem;
+	for (i = 0; i < meminfo.nr_banks; i++) {
+		if (meminfo.bank[i].size == 0)
+			continue;
 
-	sz = (end_mem - PAGE_OFFSET) >> 20;
-	sz = (sz + 31) >> 3;
+		start_pfn = meminfo.bank[i].start >> PAGE_SHIFT;
 
-	valid_addr_bitmap = (unsigned long *)start_mem;
-	start_mem += sz;
+		/*
+		 * subtle here - if we have a full bank, then
+		 * start_pfn == end_pfn, and we don't want to
+		 * set PG_skip, or next_hash
+		 */
+		if (pg && start_pfn != end_pfn) {
+			set_bit(PG_skip, &pg->flags);
+			pg->next_hash = mem_map + start_pfn;
 
-	memset(valid_addr_bitmap, 0, sz);
+			start_pfn = PAGE_ALIGN(__pa(pg + 1));
+			end_pfn   = __pa(pg->next_hash) & PAGE_MASK;
 
-	if (start_mem > mem_desc[0].virt_end)
-		printk(KERN_CRIT "*** Error: RAM bank 0 too small\n");
+			if (end_pfn != start_pfn)
+				free_bootmem(start_pfn, end_pfn - start_pfn);
 
-	for (i = 0; i < mem_desc_size; i++) {
-		unsigned int idx, end;
-
-		if (pg) {
-			pg->next_hash = mem_map +
-				 MAP_NR(mem_desc[i].virt_start);
 			pg = NULL;
 		}
 
-		idx = __kern_valid_idx(mem_desc[i].virt_start);
-		end = __kern_valid_idx(mem_desc[i].virt_end);
+		end_pfn = (meminfo.bank[i].start +
+			   meminfo.bank[i].size) >> PAGE_SHIFT;
 
+		if (end_pfn != meminfo.end >> PAGE_SHIFT)
+			pg = mem_map + end_pfn;
+	}
+
+	if (pg) {
+		set_bit(PG_skip, &pg->flags);
+		pg->next_hash = NULL;
+	}
+
+#if 0
+	/*
+	 * setup address validity map
+	 *  - don't think this is used anymore?
+	 */
+	sz = meminfo.end >> (PAGE_SHIFT + 8); /* in MB */
+	sz = (sz + 31) >> 3;
+
+	valid_addr_bitmap = alloc_bootmem(sz);
+	memzero(valid_addr_bitmap, sz);
+
+	for (i = 0; i < meminfo.nr_banks; i++) {
+		int idx, end;
+
+		idx = meminfo.bank[i].start >> 20;
+		end = (meminfo.bank[i].start +
+		       meminfo.bank[i].size) >> 20;
 		do
 			set_bit(idx, valid_addr_bitmap);
 		while (++idx < end);
-
-		if (mem_desc[i].virt_end < end_mem) {
-			pg = mem_map + MAP_NR(mem_desc[i].virt_end);
-
-			set_bit(PG_skip, &pg->flags);
-		}
 	}
-
-	if (pg)
-		pg->next_hash = NULL;
-
-	return start_mem;
+#endif
 }
-
-void __init
-mark_usable_memory_areas(unsigned long start_mem, unsigned long end_mem)
-{
-	/*
-	 * Mark all of memory from the end of kernel to end of memory
-	 */
-	while (start_mem < end_mem) {
-		clear_bit(PG_reserved, &mem_map[MAP_NR(start_mem)].flags);
-		start_mem += PAGE_SIZE;
-	}
-
-	/*
-	 * Mark memory from page 1 to start of the swapper page directory
-	 */
-	start_mem = PAGE_OFFSET + PAGE_SIZE;
-	while (start_mem < (unsigned long)&swapper_pg_dir) {
-		clear_bit(PG_reserved, &mem_map[MAP_NR(start_mem)].flags);
-		start_mem += PAGE_SIZE;
-	}
-}	

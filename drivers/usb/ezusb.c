@@ -968,7 +968,7 @@ static struct file_operations ezusb_fops = {
 
 /* --------------------------------------------------------------------- */
 
-static int ezusb_probe(struct usb_device *usbdev)
+static void * ezusb_probe(struct usb_device *usbdev, unsigned int ifnum)
 {
 	struct ezusb *ez = &ezusb[0];
         struct usb_interface_descriptor *interface;
@@ -982,56 +982,49 @@ static int ezusb_probe(struct usb_device *usbdev)
 	/* the 1234:5678 is just a self assigned test ID */
         if ((usbdev->descriptor.idVendor != 0x0547 || usbdev->descriptor.idProduct != 0x2131) &&
 	    (usbdev->descriptor.idVendor != 0x1234 || usbdev->descriptor.idProduct != 0x5678))
-                return -1;
+                return NULL;
 
         /* We don't handle multiple configurations */
         if (usbdev->descriptor.bNumConfigurations != 1)
-                return -1;
+                return NULL;
 
 #if 0
         /* We don't handle multiple interfaces */
-        if (usbdev->config[0].bNumInterfaces != 1)
-                return -1;
+        if (usbdev->actconfig.bNumInterfaces != 1)
+                return NULL;
 #endif
 
 	down(&ez->mutex);
 	if (ez->usbdev) {
 		up(&ez->mutex);
 		printk(KERN_INFO "ezusb: device already used\n");
-		return -1;
+		return NULL;
 	}
 	ez->usbdev = usbdev;
-	usbdev->private = ez;
-        if (usb_set_configuration(usbdev, usbdev->config[0].bConfigurationValue) < 0) {
-		printk(KERN_ERR "ezusb: set_configuration failed\n");
-		goto err;
-	}
-        interface = &usbdev->config[0].interface[0].altsetting[1];
-	if (usb_set_interface(usbdev, 0, 1) < 0) {
+        interface = &usbdev->actconfig->interface[ifnum].altsetting[1];
+	if (usb_set_interface(usbdev, ifnum, 1) < 0) {
 		printk(KERN_ERR "ezusb: set_interface failed\n");
 		goto err;
 	}
 	up(&ez->mutex);
 	MOD_INC_USE_COUNT;
-        return 0;
+        return ez;
 
  err:
 	up(&ez->mutex);
 	ez->usbdev = NULL;
-	usbdev->private = NULL;
-	return -1;
+	return NULL;
 }
 
-static void ezusb_disconnect(struct usb_device *usbdev)
+static void ezusb_disconnect(struct usb_device *usbdev, void *ptr)
 {
-	struct ezusb *ez = (struct ezusb *)usbdev->private;
+	struct ezusb *ez = (struct ezusb *) ptr;
 
 	down(&ez->mutex);
 	destroy_all_async(ez);
 	ez->usbdev = NULL;
 	up(&ez->mutex);
 	wake_up(&ez->wait);
-        usbdev->private = NULL;
 	MOD_DEC_USE_COUNT;
 }
 

@@ -39,7 +39,6 @@ struct timer_list tunertimer,rdstimer,readtimer;
 static __u8 rdsin=0,rdsout=0,rdsstat=0;
 static unsigned char rdsbuf[RDS_BUFFER];
 static int cadet_lock=0;
-static int cadet_probe(void);
 
 /*
  * Signal Strength Threshold Values
@@ -543,22 +542,6 @@ static struct video_device cadet_radio=
 	NULL
 };
 
-int __init cadet_init(struct video_init *v)
-{
-#ifndef MODULE        
-        if(cadet_probe()<0) {
-	        return EINVAL;
-	}
-#endif
-	if(video_register_device(&cadet_radio,VFL_TYPE_RADIO)==-1)
-		return -EINVAL;
-		
-	request_region(io,2,"cadet");
-	printk(KERN_INFO "ADS Cadet Radio Card at 0x%x\n",io);
-	return 0;
-}
-
-
 #ifndef MODULE
 static int cadet_probe(void)
 {
@@ -578,9 +561,27 @@ static int cadet_probe(void)
 }
 #endif
 
+int __init cadet_init(void)
+{
+#ifndef MODULE        
+	io = cadet_probe ();
+#endif
+
+        if(io < 0) {
+#ifdef MODULE        
+		printk(KERN_ERR "You must set an I/O address with io=0x???\n");
+#endif
+	        return EINVAL;
+	}
+	if(video_register_device(&cadet_radio,VFL_TYPE_RADIO)==-1)
+		return -EINVAL;
+		
+	request_region(io,2,"cadet");
+	printk(KERN_INFO "ADS Cadet Radio Card at 0x%x\n",io);
+	return 0;
+}
 
 
-#ifdef MODULE
 
 MODULE_AUTHOR("Fred Gleason, Russell Kroll, Quay Lu, Donald Song, Jason Lewis, Scott McGrath, William McGrath");
 MODULE_DESCRIPTION("A driver for the ADS Cadet AM/FM/RDS radio card.");
@@ -589,21 +590,12 @@ MODULE_PARM_DESC(io, "I/O address of Cadet card (0x330,0x332,0x334,0x336,0x338,0
 
 EXPORT_NO_SYMBOLS;
 
-int init_module(void)
-{
-	if(io==-1)
-	{
-		printk(KERN_ERR "You must set an I/O address with io=0x???\n");
-		return -EINVAL;
-	}
-	return cadet_init(NULL);
-}
-
-void cleanup_module(void)
+static void __exit cadet_cleanup_module(void)
 {
 	video_unregister_device(&cadet_radio);
 	release_region(io,2);
 }
 
-#endif
+module_init(cadet_init);
+module_exit(cadet_cleanup_module);
 

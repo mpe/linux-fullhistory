@@ -222,7 +222,7 @@ int mem_mmap(struct file * file, struct vm_area_struct * vma)
 	pgd_t *src_dir, *dest_dir;
 	pmd_t *src_middle, *dest_middle;
 	pte_t *src_table, *dest_table;
-	unsigned long stmp, dtmp, mapnr;
+	unsigned long stmp, etmp, dtmp, mapnr;
 	struct vm_area_struct *src_vma = NULL;
 	struct inode *inode = file->f_dentry->d_inode;
 	
@@ -239,8 +239,9 @@ int mem_mmap(struct file * file, struct vm_area_struct * vma)
 	 worth it. */
 
 	src_vma = tsk->mm->mmap;
-	stmp = vma->vm_offset;
-	while (stmp < vma->vm_offset + (vma->vm_end - vma->vm_start)) {
+	stmp = vma->vm_pgoff << PAGE_SHIFT;
+	etmp = stmp + vma->vm_end - vma->vm_start;
+	while (stmp < etmp) {
 		while (src_vma && stmp > src_vma->vm_end)
 			src_vma = src_vma->vm_next;
 		if (!src_vma || (src_vma->vm_flags & VM_SHM))
@@ -274,7 +275,7 @@ int mem_mmap(struct file * file, struct vm_area_struct * vma)
 	}
 
 	src_vma = tsk->mm->mmap;
-	stmp    = vma->vm_offset;
+	stmp    = vma->vm_pgoff << PAGE_SHIFT;
 	dtmp    = vma->vm_start;
 
 	flush_cache_range(vma->vm_mm, vma->vm_start, vma->vm_end);

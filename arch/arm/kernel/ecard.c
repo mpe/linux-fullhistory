@@ -888,19 +888,13 @@ int get_ecard_dev_info(char *buf, char **start, off_t pos, int count, int wr)
 	return (count > cnt) ? cnt : count;
 }
 
-static struct proc_dir_entry proc_ecard_devices = {
-	PROC_BUS_ECARD_DEVICES, 7, "devices",
-	S_IFREG | S_IRUGO, 1, 0, 0,
-	0, &proc_array_inode_operations,
-	get_ecard_dev_info
-};
-
-static struct proc_dir_entry *proc_bus_ecard_dir;
+static struct proc_dir_entry *proc_bus_ecard_dir = NULL;
 
 static void ecard_proc_init(void)
 {
 	proc_bus_ecard_dir = create_proc_entry("ecard", S_IFDIR, proc_bus);
-	proc_register(proc_bus_ecard_dir, &proc_ecard_devices);
+	create_proc_info_entry("devices", 0, proc_bus_ecard_dir,
+		get_ecard_dev_info);
 }
 
 /*

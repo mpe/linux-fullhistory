@@ -8,6 +8,7 @@
 #include <linux/sched.h>
 #include <linux/mm.h>
 #include <linux/init.h>
+#include <linux/bootmem.h>
 
 #include <asm/pgtable.h>
 #include <asm/page.h>
@@ -18,40 +19,54 @@
 #define MEMC_TABLE_SIZE (256*sizeof(unsigned long))
 #define PGD_TABLE_SIZE	(PTRS_PER_PGD * BYTES_PER_PTR)
 
-/*
- * FIXME: the following over-allocates by 6400%
- */
-static inline void *alloc_table(int size, int prio)
-{
-	if (size != 128)
-		printk("invalid table size\n");
-	return (void *)get_page_8k(prio);
-}
+int page_nr;
+
+extern unsigned long get_page_2k(int prio);
+extern void free_page_2k(unsigned long);
+extern pte_t *get_bad_pte_table(void);
 
 /*
  * Allocate a page table.  Note that we place the MEMC
  * table before the page directory.  This means we can
  * easily get to both tightly-associated data structures
- * with a single pointer.  This function is slightly
- * better - it over-allocates by only 711%
+ * with a single pointer.
+ *
+ * We actually only need 1152 bytes, 896 bytes is wasted.
+ * We could try to fit 7 PTEs into that slot somehow.
  */
 static inline void *alloc_pgd_table(int priority)
 {
-	unsigned long pg8k;
+	unsigned long pg2k;
 
-	pg8k = get_page_8k(priority);
-	if (pg8k)
-		pg8k += MEMC_TABLE_SIZE;
+	pg2k = get_page_2k(priority);
+	if (pg2k)
+		pg2k += MEMC_TABLE_SIZE;
 
-	return (void *)pg8k;
+	return (void *)pg2k;
 }
 
-void free_table(void *table)
+void free_pgd_slow(pgd_t *pgd)
 {
-	unsigned long tbl = (unsigned long)table;
+	unsigned long tbl = (unsigned long)pgd;
 
-	tbl &= ~8191;
-	free_page_8k(tbl);
+	tbl -= MEMC_TABLE_SIZE;
+	free_page_2k(tbl);
+}
+
+/*
+ * FIXME: the following over-allocates by 1600%
+ */
+static inline void *alloc_pte_table(int size, int prio)
+{
+	if (size != 128)
+		printk("invalid table size\n");
+	return (void *)get_page_2k(prio);
+}
+
+void free_pte_slow(pte_t *pte)
+{
+	unsigned long tbl = (unsigned long)pte;
+	free_page_2k(tbl);
 }
 
 pgd_t *get_pgd_slow(void)
@@ -62,9 +77,9 @@ pgd_t *get_pgd_slow(void)
 	if (pgd) {
 		pgd_t *init = pgd_offset(&init_mm, 0);
 		
-		memzero(pgd, USER_PTRS_PER_PGD * BYTES_PER_PTR);
+		memzero(pgd, USER_PTRS_PER_PGD * sizeof(pgd_t));
 		memcpy(pgd + USER_PTRS_PER_PGD, init + USER_PTRS_PER_PGD,
-			(PTRS_PER_PGD - USER_PTRS_PER_PGD) * BYTES_PER_PTR);
+			(PTRS_PER_PGD - USER_PTRS_PER_PGD) * sizeof(pgd_t));
 
 		/*
 		 * On ARM, first page must always be allocated
@@ -92,7 +107,7 @@ pgd_t *get_pgd_slow(void)
 nomem_pmd:
 	pmd_free(new_pmd);
 nomem:
-	free_table(pgd);
+	free_pgd_slow(pgd);
 	return NULL;
 }
 
@@ -100,19 +115,19 @@ pte_t *get_pte_slow(pmd_t *pmd, unsigned long offset)
 {
 	pte_t *pte;
 
-	pte = (pte_t *)alloc_table(PTRS_PER_PTE * BYTES_PER_PTR, GFP_KERNEL);
+	pte = (pte_t *)alloc_pte_table(PTRS_PER_PTE * sizeof(pte_t), GFP_KERNEL);
 	if (pmd_none(*pmd)) {
 		if (pte) {
-			memzero(pte, PTRS_PER_PTE * BYTES_PER_PTR);
-			set_pmd(pmd, mk_pmd(pte));
+			memzero(pte, PTRS_PER_PTE * sizeof(pte_t));
+			set_pmd(pmd, mk_user_pmd(pte));
 			return pte + offset;
 		}
-		set_pmd(pmd, mk_pmd(BAD_PAGETABLE));
+		set_pmd(pmd, mk_user_pmd(get_bad_pte_table()));
 		return NULL;
 	}
-	free_table((void *)pte);
+	free_pte_slow(pte);
 	if (pmd_bad(*pmd)) {
-		__bad_pmd(pmd);
+		__handle_bad_pmd(pmd);
 		return NULL;
 	}
 	return (pte_t *) pmd_page(*pmd) + offset;
@@ -124,47 +139,22 @@ pte_t *get_pte_slow(pmd_t *pmd, unsigned long offset)
  * some more work to get it to fit into our separate processor and
  * architecture structure.
  */
-int page_nr;
-
-#define PTE_SIZE	(PTRS_PER_PTE * BYTES_PER_PTR)
-
-static inline void setup_swapper_dir (int index, pte_t *ptep)
+void __init pagetable_init(void)
 {
-	set_pmd (pmd_offset (swapper_pg_dir + index, 0), mk_pmd (ptep));
-}
+	pte_t *pte;
+	int i;
 
-unsigned long __init
-setup_page_tables(unsigned long start_mem, unsigned long end_mem)
-{
-	unsigned int i;
-	union { unsigned long l; pte_t *pte; } u;
+	page_nr = max_low_pfn;
 
-	page_nr = MAP_NR(end_mem);
-
-	/* map in pages for (0x0000 - 0x8000) */
-	u.l = ((start_mem + (PTE_SIZE-1)) & ~(PTE_SIZE-1));
-	start_mem = u.l + PTE_SIZE;
-	memzero (u.pte, PTE_SIZE);
-	u.pte[0] = mk_pte(PAGE_OFFSET + 491520, PAGE_READONLY);
-	setup_swapper_dir (0, u.pte);
+	pte = alloc_bootmem_low_pages(PTRS_PER_PTE * sizeof(pte_t));
+	memzero(pte, PTRS_PER_PTE * sizeof(pte_t));
+	pte[0] = mk_pte_phys(PAGE_OFFSET + 491520, PAGE_READONLY);
+	set_pmd(pmd_offset(swapper_pg_dir, 0), mk_kernel_pmd(pte));
 
 	for (i = 1; i < PTRS_PER_PGD; i++)
 		pgd_val(swapper_pg_dir[i]) = 0;
-
-	return start_mem;
 }
 
-unsigned long __init
-create_mem_holes(unsigned long start, unsigned long end)
+void __init create_memmap_holes(void)
 {
-	return start;
-}
-
-void __init
-mark_usable_memory_areas(unsigned long start_mem, unsigned long end_mem)
-{
-	while (start_mem < end_mem) {
-		clear_bit(PG_reserved, &mem_map[MAP_NR(start_mem)].flags);
-		start_mem += PAGE_SIZE;
-	}
 }

@@ -14,15 +14,6 @@
 #include <linux/highmem.h>
 #include <linux/list.h>
 
-extern inline pte_t get_pagecache_pte(struct page *page)
-{
-	/*
-	 * the pagecache is still machineword sized. The rest of the VM
-	 * can deal with arbitrary sized ptes.
-	 */
-        return __pte(page->offset);
-}
-
 /*
  * The page cache can done in larger chunks than
  * one page, because it allows for more efficient
@@ -66,9 +57,8 @@ extern void page_cache_init(unsigned long);
 extern inline unsigned long _page_hashfn(struct address_space * mapping, unsigned long offset)
 {
 #define i (((unsigned long) mapping)/(sizeof(struct inode) & ~ (sizeof(struct inode) - 1)))
-#define o (offset >> PAGE_SHIFT)
 #define s(x) ((x)+((x)>>PAGE_HASH_BITS))
-	return s(i+o) & (PAGE_HASH_SIZE-1);
+	return s(i+offset) & (PAGE_HASH_SIZE-1);
 #undef i
 #undef o
 #undef s

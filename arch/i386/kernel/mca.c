@@ -705,11 +705,11 @@ void __init mca_do_proc_init(void)
 
 	if(mca_info == NULL) return;	/* Should never happen */
 
-	proc_register(&proc_mca, &(struct proc_dir_entry) {
+	proc_register(proc_mca, &(struct proc_dir_entry) {
 		PROC_MCA_REGISTERS, 3, "pos", S_IFREG|S_IRUGO,
 		1, 0, 0, 0, &proc_mca_inode_operations,});
 
-	proc_register(&proc_mca, &(struct proc_dir_entry) {
+	proc_register(proc_mca, &(struct proc_dir_entry) {
 		PROC_MCA_MACHINE, 7, "machine", S_IFREG|S_IRUGO,
 		1, 0, 0, 0, &proc_mca_inode_operations,});
 
@@ -745,7 +745,7 @@ void __init mca_do_proc_init(void)
 		node->name = mca_info->slot[i].procname;
 		node->mode = S_IFREG | S_IRUGO;
 		node->ops = &proc_mca_inode_operations;
-		proc_register(&proc_mca, node);
+		proc_register(proc_mca, node);
 	}
 
 } /* mca_do_proc_init() */

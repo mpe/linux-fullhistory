@@ -2174,15 +2174,8 @@ done:
 }
 
 #ifdef CONFIG_PROC_FS
-
-struct proc_dir_entry scc_proc_dir_entry = 
-{ 
-	PROC_NET_Z8530, 8, "z8530drv", S_IFREG | S_IRUGO, 1, 0, 0, 0, 
-	&proc_net_inode_operations, scc_net_get_info 
-};
-
-#define scc_net_procfs_init()   proc_net_register(&scc_proc_dir_entry);
-#define scc_net_procfs_remove() proc_net_unregister(PROC_NET_Z8530);
+#define scc_net_procfs_init() proc_net_create("z8530drv",0,scc_net_get_info)
+#define scc_net_procfs_remove() proc_net_remove("z8530drv")
 #else
 #define scc_net_procfs_init()
 #define scc_net_procfs_remove()

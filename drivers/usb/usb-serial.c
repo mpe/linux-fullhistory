@@ -67,8 +67,8 @@
 				/* into dynamically creating them at insertion time. */
 
 
-static int usb_serial_probe(struct usb_device *dev);
-static void usb_serial_disconnect(struct usb_device *dev);
+static void * usb_serial_probe(struct usb_device *dev, unsigned int ifnum);
+static void usb_serial_disconnect(struct usb_device *dev, void *ptr);
 
 typedef enum {
 	unknown = 0,
@@ -441,7 +441,7 @@ static int Get_Free_Serial (void)
 }
 
 
-static int usb_serial_probe(struct usb_device *dev)
+static void * usb_serial_probe(struct usb_device *dev, unsigned int ifnum)
 {
 	struct usb_serial_state *serial;
 	struct usb_interface_descriptor *interface;
@@ -466,18 +466,13 @@ static int usb_serial_probe(struct usb_device *dev)
 		}
 
 	if (type == unknown)
-		return (-1);	
+		return NULL;	
 
 	printk (KERN_INFO "USB serial converter detected.\n");
 
-	if (usb_set_configuration(dev, dev->config[0].bConfigurationValue)) {
-		printk (KERN_INFO " Failed usb_set_configuration: serial\n");
-		return (-1);
-	}
-
 	if (0>(serial_num = Get_Free_Serial())) {
 		debug_info("USB Serial: Too many devices connected\n");
-		return (-1);
+		return NULL;
 	}
 	
 	serial = &serial_state_table[serial_num];
@@ -485,10 +480,9 @@ static int usb_serial_probe(struct usb_device *dev)
        	memset(serial, 0, sizeof(serial));
        	serial->dev = dev;
 	serial->type = type;
-       	dev->private = serial;
 
 	/* we should have 1 bulk in, 1 bulk out, and 1 interrupt in endpoints */
-	interface = &dev->config[0].interface[0].altsetting[0];
+	interface = &dev->actconfig->interface[ifnum].altsetting[0];
 	for (i = 0; i < interface->bNumEndpoints; ++i) {
 		endpoint = &interface->endpoint[i];
 		
@@ -564,7 +558,7 @@ static int usb_serial_probe(struct usb_device *dev)
 	serial->present = 1;
 	MOD_INC_USE_COUNT;
 
-	return (0);
+	return serial;
 
 probe_error:
 	if (serial) {
@@ -575,13 +569,13 @@ probe_error:
 		if (serial->interrupt_in_buffer)
 			kfree (serial->interrupt_in_buffer);
 	}
-	return (-1);
+	return NULL;
 }
 
 
-static void usb_serial_disconnect(struct usb_device *dev)
+static void usb_serial_disconnect(struct usb_device *dev, void *ptr)
 {
-	struct usb_serial_state *serial = (struct usb_serial_state *)dev->private;
+	struct usb_serial_state *serial = (struct usb_serial_state *) ptr;
 
 	if (serial) {
 		if (!serial->present) {
@@ -610,7 +604,6 @@ static void usb_serial_disconnect(struct usb_device *dev)
 		serial->present = 0;
 		serial->active = 0;
 	}
-       	dev->private = NULL;
 	
 	MOD_DEC_USE_COUNT;
 

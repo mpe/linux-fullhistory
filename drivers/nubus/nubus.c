@@ -963,37 +963,39 @@ static int sprint_nubus_board(struct nubus_board* board, char* ptr, int len)
 	return strlen(ptr);
 }
 
-/* We're going to have to be a bit more sophisticated about this, I
-   think, because it doesn't really seem to work right when you do a
-   full listing of boards and devices */
-int get_nubus_list(char *buf)
+static int nubus_read_proc(char *buf, char **start, off_t off,
+				int count, int *eof, void *data)
 {
-	int nprinted, len, size;
-	struct nubus_board* board;
-#define MSG "\nwarning: page-size limit reached!\n"
+	int nprinted, len, begin = 0;
+	int slot;
 
-	/* reserve same for truncation warning message: */
-	size  = PAGE_SIZE - (strlen(MSG) + 1);
-	len   = sprintf(buf, "Nubus boards found:\n");
-
+	len   = sprintf(buf, "Nubus devices found:\n");
 	/* Walk the list of NuBus boards */
 	for (board = nubus_boards; board != NULL; board = board->next)
 	{
 		nprinted = sprint_nubus_board(board, buf + len, size - len);
-		if (nprinted < 0) {
-			return len + sprintf(buf + len, MSG);
-		}
+		if (nprinted < 0)
+			break;
 		len += nprinted;
+		if (len+begin < off) {
+			begin += len;
+			len = 0;
+		}
+		if (len+begin >= off+count)
+			break;
 	}
+	if (slot==16 || len+begin < off)
+		*eof = 1;
+	off -= begin;
+	*strat = buf + off;
+	len -= off;
+	if (len>count)
+		len = count;
+	if (len<0)
+		len = 0;
 	return len;
 }
-
-static struct proc_dir_entry proc_old_nubus = {
-	PROC_NUBUS, 5, "nubus",
-	S_IFREG | S_IRUGO, 1, 0, 0,
-	0, &proc_array_inode_operations
-};
-#endif /* CONFIG_PROC_FS */
+#endif
 
 void __init nubus_scan_bus(void)
 {
@@ -1034,7 +1036,7 @@ void __init nubus_init(void)
 	nubus_scan_bus();
 
 #ifdef CONFIG_PROC_FS
-	proc_register(&proc_root, &proc_old_nubus);
+	create_proc_read_entry("nubus", 0, NULL, nubus_read_proc, NULL);
 	nubus_proc_init();
 #endif
 }

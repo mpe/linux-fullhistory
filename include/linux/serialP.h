@@ -24,14 +24,6 @@
 #include <linux/tqueue.h>
 #include <linux/wait.h>
 
-/*
- * Counters of the input lines (CTS, DSR, RI, CD) interrupts
- */
-struct async_icount {
-	__u32	cts, dsr, rng, dcd, tx, rx;
-	__u32	frame, parity, overrun, brk;
-	__u32	buf_overrun;
-};
 
 struct serial_state {
 	int	magic;
@@ -107,10 +99,6 @@ struct async_struct {
 #define SERIAL_MAGIC 0x5301
 #define SSTATE_MAGIC 0x5302
 
-/*
- * The size of the serial xmit buffer is 1 page, or 4096 bytes
- */
-#define SERIAL_XMIT_SIZE 4096
 
 /*
  * Events are used to schedule things to happen at timer-interrupt

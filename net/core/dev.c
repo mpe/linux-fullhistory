@@ -2008,26 +2008,6 @@ extern void ip_auto_config(void);
 extern int cpm_enet_init(void);
 #endif /* CONFIG_8xx */
 
-#ifdef CONFIG_PROC_FS
-static struct proc_dir_entry proc_net_dev = {
-	PROC_NET_DEV, 3, "dev",
-	S_IFREG | S_IRUGO, 1, 0, 0,
-	0, &proc_net_inode_operations,
-	dev_get_info
-};
-#endif
-
-#ifdef CONFIG_NET_RADIO
-#ifdef CONFIG_PROC_FS
-static struct proc_dir_entry proc_net_wireless = {
-	PROC_NET_WIRELESS, 8, "wireless",
-	S_IFREG | S_IRUGO, 1, 0, 0,
-	0, &proc_net_inode_operations,
-	dev_get_wireless_info
-};
-#endif	/* CONFIG_PROC_FS */
-#endif	/* CONFIG_NET_RADIO */
-
 int __init net_dev_init(void)
 {
 	struct net_device *dev, **dp;
@@ -2142,18 +2122,12 @@ int __init net_dev_init(void)
 	}
 
 #ifdef CONFIG_PROC_FS
-	proc_net_register(&proc_net_dev);
-	{
-		struct proc_dir_entry *ent = create_proc_entry("net/dev_stat", 0, 0);
-		ent->read_proc = dev_proc_stats;
-	}
-#endif
-
+	proc_net_create("dev", 0, dev_get_info);
+	create_proc_read_entry("net/dev_stat", 0, 0, dev_proc_stats, NULL);
 #ifdef CONFIG_NET_RADIO
-#ifdef CONFIG_PROC_FS
-	proc_net_register(&proc_net_wireless);
-#endif	/* CONFIG_PROC_FS */
+	proc_net_create("wireless", 0, dev_get_wireless_info);
 #endif	/* CONFIG_NET_RADIO */
+#endif	/* CONFIG_PROC_FS */
 
 	init_bh(NET_BH, net_bh);
 

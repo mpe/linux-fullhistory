@@ -632,14 +632,7 @@ int __init bpq_init(void)
 
 	printk(KERN_INFO "AX.25 ethernet driver version 0.01\n");
 
-#ifdef CONFIG_PROC_FS
-	proc_net_register(&(struct proc_dir_entry) {
-		PROC_NET_AX25_BPQETHER, 8, "bpqether",
-		S_IFREG | S_IRUGO, 1, 0, 0,
-		0, &proc_net_inode_operations,
-		bpq_get_info
-	});
-#endif
+	proc_net_create ("bpqether", 0, bpq_get_info);
 
 	read_lock_bh(&dev_base_lock);
 	for (dev = dev_base; dev != NULL; dev = dev->next) {
@@ -673,9 +666,7 @@ void cleanup_module(void)
 
 	unregister_netdevice_notifier(&bpq_dev_notifier);
 
-#ifdef CONFIG_PROC_FS
-	proc_net_unregister(PROC_NET_AX25_BPQETHER);
-#endif
+	proc_net_remove ("bpqether");
 
 	for (bpq = bpq_devices; bpq != NULL; bpq = bpq->next)
 		unregister_netdev(&bpq->axdev);

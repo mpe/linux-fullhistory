@@ -1268,27 +1268,6 @@ static struct notifier_block nr_dev_notifier = {
 	0
 };
 
-#ifdef CONFIG_PROC_FS
-static struct proc_dir_entry proc_net_nr = {
-	PROC_NET_NR, 2, "nr",
-	S_IFREG | S_IRUGO, 1, 0, 0,
-	0, &proc_net_inode_operations, 
-	nr_get_info
-};
-static struct proc_dir_entry proc_net_nr_neigh = {
-	PROC_NET_NR_NEIGH, 8, "nr_neigh",
-	S_IFREG | S_IRUGO, 1, 0, 0,
-	0, &proc_net_inode_operations, 
-	nr_neigh_get_info
-};
-static struct proc_dir_entry proc_net_nr_nodes = {
-	PROC_NET_NR_NODES, 8, "nr_nodes",
-	S_IFREG | S_IRUGO, 1, 0, 0,
-	0, &proc_net_inode_operations, 
-	nr_nodes_get_info
-};
-#endif	
-
 static struct net_device *dev_nr;
 
 void __init nr_proto_init(struct net_proto *pro)
@@ -1328,9 +1307,9 @@ void __init nr_proto_init(struct net_proto *pro)
 	nr_loopback_init();
 
 #ifdef CONFIG_PROC_FS
-	proc_net_register(&proc_net_nr);
-	proc_net_register(&proc_net_nr_neigh);
-	proc_net_register(&proc_net_nr_nodes);
+	proc_net_create("nr", 0, nr_get_info);
+	proc_net_create("nr_neigh", 0, nr_neigh_get_info);
+	proc_net_create("nr_nodes", 0, nr_nodes_get_info);
 #endif	
 }
 
@@ -1355,9 +1334,9 @@ void cleanup_module(void)
 	int i;
 
 #ifdef CONFIG_PROC_FS
-	proc_net_unregister(PROC_NET_NR);
-	proc_net_unregister(PROC_NET_NR_NEIGH);
-	proc_net_unregister(PROC_NET_NR_NODES);
+	proc_net_remove("nr");
+	proc_net_remove("nr_neigh");
+	proc_net_remove("nr_nodes");
 #endif
 	nr_loopback_clear();
 

@@ -33,7 +33,7 @@
  * that shared pages stay shared while being swapped.
  */
 
-static int rw_swap_page_base(int rw, pte_t entry, struct page *page, int wait)
+static int rw_swap_page_base(int rw, swp_entry_t entry, struct page *page, int wait)
 {
 	unsigned long type, offset;
 	struct swap_info_struct * p;
@@ -59,7 +59,7 @@ static int rw_swap_page_base(int rw, pte_t entry, struct page *page, int wait)
 		return 0;
 	}
 	if (p->swap_map && !p->swap_map[offset]) {
-		pte_ERROR(entry);
+		printk("VM: Bad swap entry %08lx\n", entry.val);
 		return 0;
 	}
 	if (!(p->flags & SWP_USED)) {
@@ -130,7 +130,9 @@ static int rw_swap_page_base(int rw, pte_t entry, struct page *page, int wait)
  */
 void rw_swap_page(int rw, struct page *page, int wait)
 {
-	pte_t entry = get_pagecache_pte(page);
+	swp_entry_t entry;
+
+	entry.val = page->pg_offset;
 
 	if (!PageLocked(page))
 		PAGE_BUG(page);
@@ -147,7 +149,7 @@ void rw_swap_page(int rw, struct page *page, int wait)
  * Therefore we can't use it.  Later when we can remove the need for the
  * lock map and we can reduce the number of functions exported.
  */
-void rw_swap_page_nolock(int rw, pte_t entry, char *buf, int wait)
+void rw_swap_page_nolock(int rw, swp_entry_t entry, char *buf, int wait)
 {
 	struct page *page = mem_map + MAP_NR(buf);
 	

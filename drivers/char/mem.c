@@ -190,10 +190,7 @@ static inline int noncached_address(unsigned long addr)
 
 static int mmap_mem(struct file * file, struct vm_area_struct * vma)
 {
-	unsigned long offset = vma->vm_offset;
-
-	if (offset & ~PAGE_MASK)
-		return -ENXIO;
+	unsigned long offset = vma->vm_pgoff << PAGE_SHIFT;
 
 	/*
 	 * Accessing memory above the top the kernel knows about or

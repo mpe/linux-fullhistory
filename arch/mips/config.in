@@ -177,13 +177,12 @@ if [ "$CONFIG_NET" = "y" ]; then
          if [ "$CONFIG_SGI" = "y" ]; then
 	 bool '  SGI Seeq ethernet controller support' CONFIG_SGISEEQ
       fi
-	 if [ "$CONFIG_DECSTATION" = "y" ]; then
-            bool '  DEC LANCE ethernet controller support' CONFIG_DECLANCE
-         fi
-	 if [ "$CONFIG_BAGET_MIPS" = "y" ]; then
-	    tristate '  Baget AMD LANCE support' CONFIG_BAGETLANCE
-	    tristate '  Baget Backplane Shared Memory support' CONFIG_BAGETBSM
-	 fi
+      if [ "$CONFIG_DECSTATION" = "y" ]; then
+         bool '  DEC LANCE ethernet controller support' CONFIG_DECLANCE
+      fi
+      if [ "$CONFIG_BAGET_MIPS" = "y" ]; then
+	 tristate '  Baget AMD LANCE support' CONFIG_BAGETLANCE
+	 tristate '  Baget Backplane Shared Memory support' CONFIG_BAGETBSM
       fi
    fi
    endmenu
@@ -206,7 +205,7 @@ if [ "$CONFIG_SGI" != "y" -a "$CONFIG_DECSTATION" != "y" -a "$CONFIG_BAGET_MIPS"
 
 
    mainmenu_option next_comment
-   comment comment 'Old CD-ROM drivers (not SCSI, not IDE)'
+   comment 'Old CD-ROM drivers (not SCSI, not IDE)'
 
    bool 'Support non-SCSI/IDE/ATAPI drives' CONFIG_CD_NO_IDESCSI
    if [ "$CONFIG_CD_NO_IDESCSI" != "n" ]; then

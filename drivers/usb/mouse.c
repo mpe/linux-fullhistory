@@ -316,50 +316,37 @@ struct file_operations usb_mouse_fops = {
 	fasync_mouse,
 };
 
-static int mouse_probe(struct usb_device *dev)
+static void* mouse_probe(struct usb_device *dev, unsigned int i)
 {
 	struct usb_interface_descriptor *interface;
 	struct usb_endpoint_descriptor *endpoint;
 	struct mouse_state *mouse = &static_mouse_state;
 	int ret;
 
-	/* We don't handle multi-config mice */
-	if (dev->descriptor.bNumConfigurations != 1)
-		return -1;
-
-	/* We don't handle multi-interface mice */
-	if (dev->config[0].bNumInterfaces != 1)
-		return -1;
-
 	/* Is it a mouse interface? */
-	interface = &dev->config[0].interface[0].altsetting[0];
+	interface = &dev->actconfig->interface[i].altsetting[0];
 	if (interface->bInterfaceClass != 3)
-		return -1;
+		return NULL;
 	if (interface->bInterfaceSubClass != 1)
-		return -1;
+		return NULL;
 	if (interface->bInterfaceProtocol != 2)
-		return -1;
+		return NULL;
 
 	/* Multiple endpoints? What kind of mutant ninja-mouse is this? */
 	if (interface->bNumEndpoints != 1)
-		return -1;
+		return NULL;
 
 	endpoint = &interface->endpoint[0];
 
 	/* Output endpoint? Curiousier and curiousier.. */
 	if (!(endpoint->bEndpointAddress & 0x80))
-		return -1;
+		return NULL;
 
 	/* If it's not an interrupt endpoint, we'd better punt! */
 	if ((endpoint->bmAttributes & 3) != 3)
-		return -1;
+		return NULL;
 
 	printk("USB mouse found\n");
-
-	if (usb_set_configuration(dev, dev->config[0].bConfigurationValue)) {
-		printk (KERN_INFO " Failed usb_set_configuration: mouse\n");
-		return -1;
-	}
 
 	/* these are used to request the irq when the mouse is opened */
 	mouse->dev = dev;
@@ -379,17 +366,17 @@ static int mouse_probe(struct usb_device *dev)
 			NULL, &mouse->irq_handle);
 		if (ret) {
 			printk (KERN_WARNING "usb-mouse: usb_request_irq failed (0x%x)\n", ret);
-			return ret;
+			return NULL;
 		}
 		mouse->suspended = 0;
 	}
 
-	return 0;
+	return mouse;
 }
 
-static void mouse_disconnect(struct usb_device *dev)
+static void mouse_disconnect(struct usb_device *dev, void *ptr)
 {
-	struct mouse_state *mouse = &static_mouse_state;
+	struct mouse_state *mouse = ptr;
 
 	/* stop the usb interrupt transfer */
 	if (mouse->present) {
@@ -402,7 +389,7 @@ static void mouse_disconnect(struct usb_device *dev)
 
 	/* this might need work */
 	mouse->present = 0;
-	printk("Mouse disconnected\n");
+	printk("USB Mouse disconnected\n");
 }
 
 static struct usb_driver mouse_driver = {
