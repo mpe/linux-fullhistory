@@ -710,7 +710,7 @@ int get_conf_PIO(struct eata_register *base, struct get_conf *buf)
 	    while (inb((uint) base + HA_RSTATUS) & HA_SDRQ) 
 	        inw((uint) base + HA_RDATA);
             if (warning == TRUE)
-                printk("Warning: HBA with IO on 0x%p dectected,\n"
+                printk("Warning: HBA with IO on 0x%p detected,\n"
                        "         this IO space is already allocated, probably by the IDE driver.\n"
                        "         This might lead to problems.", base);
  	    return (TRUE);

@@ -6,6 +6,16 @@
 #undef htonl
 #undef htons
 
+#ifdef MIPSEL
+#define LITTLE_ENDIAN
+#define LITTLE_ENDIAN_BITFIELD
+#elif MIPSEB
+#define BIG_ENDIAN
+#define BIG_ENDIAN_BITFIELD
+#else
+#error "MIPS but neither MIPSEL nor MIPSEB?"
+#endif
+
 extern unsigned long int	ntohl(unsigned long int);
 extern unsigned short int	ntohs(unsigned short int);
 extern unsigned long int	htonl(unsigned long int);

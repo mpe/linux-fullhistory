@@ -733,7 +733,7 @@ static void do_softint(void *private_)
 
 /*
  * This routine is called from the scheduler tqueue when the interrupt
- * routine has signalled that a hangup has occured.  The path of
+ * routine has signalled that a hangup has occurred.  The path of
  * hangup processing is:
  *
  * 	serial interrupt routine -> (scheduler tqueue) ->

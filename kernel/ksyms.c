@@ -34,15 +34,17 @@
 #include <linux/delay.h>
 #include <linux/config.h>
 
-#ifdef CONFIG_INET
+#ifdef CONFIG_NET
 #include <linux/net.h>
 #include <linux/netdevice.h>
+#ifdef CONFIG_INET
 #include <linux/ip.h>
 #include <linux/tcp.h>
 #include "../net/inet/protocol.h"
 #include "../net/inet/arp.h"
 #if defined(CONFIG_PPP) || defined(CONFIG_SLIP)
 #include "../drivers/net/slhc.h"
+#endif
 #endif
 #endif
 #ifdef CONFIG_PCI
@@ -105,6 +107,7 @@ struct symbol_table symbol_table = {
 	X(pcibios_read_config_byte),
 	X(pcibios_read_config_word),
 	X(pcibios_read_config_dword),
+    	X(pcibios_strerror),
 	X(pcibios_write_config_byte),
 	X(pcibios_write_config_word),
 	X(pcibios_write_config_dword),
@@ -277,6 +280,7 @@ struct symbol_table symbol_table = {
 	X(inet_add_protocol),
 	X(inet_del_protocol),
 #if defined(CONFIG_PPP) || defined(CONFIG_SLIP)
+    	/* VJ header compression */
 	X(slhc_init),
 	X(slhc_free),
 	X(slhc_remember),
@@ -321,6 +325,11 @@ struct symbol_table symbol_table = {
 #endif
 #ifdef CONFIG_SCSI
 	/* Supports loadable scsi drivers */
+    	/* 
+ 	 * in_scan_scsis is a hack, and should go away once the new 
+	 * memory allocation code is in the NCR driver 
+	 */
+    	X(in_scan_scsis),
 	X(scsi_register_module),
 	X(scsi_unregister_module),
 	X(scsi_free),
@@ -331,6 +340,8 @@ struct symbol_table symbol_table = {
         X(scsi_init_malloc),
         X(scsi_init_free),
 	X(print_command),
+    	X(print_msg),
+	X(print_status),
 #endif
 	/* Added to make file system as module */
 	X(set_writetime),

@@ -26,7 +26,7 @@ struct tcphdr {
 	__u16	dest;
 	__u32	seq;
 	__u32	ack_seq;
-#if defined(__i386__)
+#if defined(LITTLE_ENDIAN_BITFIELD)
 	__u16	res1:4,
 		doff:4,
 		fin:1,
@@ -36,47 +36,7 @@ struct tcphdr {
 		ack:1,
 		urg:1,
 		res2:2;
-#elif defined(__mc68000__)
-	__u16	res2:2,
-		urg:1,
-		ack:1,
-		psh:1,
-		rst:1,
-		syn:1,
-		fin:1,
-		doff:4,
-		res1:4;
-#elif defined(__MIPSEL__)
-	__u16	res1:4,
-		doff:4,
-		fin:1,
-		syn:1,
-		rst:1,
-		psh:1,
-		ack:1,
-		urg:1,
-		res2:2;
-#elif defined(__MIPSEB__)
-	__u16	res2:2,
-		urg:1,
-		ack:1,
-		psh:1,
-		rst:1,
-		syn:1,
-		fin:1,
-		doff:4,
-		res1:4;
-#elif defined(__alpha__)
-	__u16	res1:4,
-		doff:4,
-		fin:1,
-		syn:1,
-		rst:1,
-		psh:1,
-		ack:1,
-		urg:1,
-		res2:2;
-#elif defined(__sparc__)
+#elif defined(BIG_ENDIAN_BITFIELD)
 	__u16	res2:2,
 		urg:1,
 		ack:1,
@@ -87,7 +47,7 @@ struct tcphdr {
 		doff:4,
 		res1:4;
 #else
-#error	"Adjust this structure for your cpu alignment rules"
+#error	"Adjust your <asm/byteorder.h> defines"
 #endif	
 	__u16	window;
 	__u16	check;

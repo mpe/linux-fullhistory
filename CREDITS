@@ -683,6 +683,10 @@ E: ken@halcyon.com
 D: CDROM driver "sonycd535" (Sony CDU-535/531)
 S: 
 
+N: Frederic Potter 
+E: Frederic.Potter@masi.ibp.fr 
+D: Some PCI kernel support
+
 N: Stefan Probst
 E: snprobst@immd4.informatik.uni-erlangen.de
 D: The Linux Support Team Erlangen

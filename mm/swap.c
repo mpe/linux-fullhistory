@@ -523,7 +523,7 @@ static int swap_out(unsigned int priority)
 	int loop, counter;
 	struct task_struct *p;
 
-	counter = 2*nr_tasks >> priority;
+	counter = 6*nr_tasks >> priority;
 	for(; counter >= 0; counter--) {
 		/*
 		 * Check that swap_task is suitable for swapping.  If not, look for
@@ -605,7 +605,7 @@ static int try_to_free_page(int priority)
 			if (swap_out(i))
 				return 1;
 			state = 0;
-		} while(--i);
+		} while(i--);
 	}
 	return 0;
 }

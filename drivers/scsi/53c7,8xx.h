@@ -46,20 +46,27 @@
  * array.
  */
 
-#ifdef HOSTS_C 
+#if defined(HOSTS_C) || defined(MODULE)
 #include <linux/scsicam.h>
 extern int NCR53c7xx_abort(Scsi_Cmnd *);
 extern int NCR53c7xx_detect(Scsi_Host_Template *tpnt);
 extern int NCR53c7xx_queue_command(Scsi_Cmnd *, void (*done)(Scsi_Cmnd *));
 extern int NCR53c7xx_reset(Scsi_Cmnd *);
-
-#define NCR53c7xx {NULL, NULL, "NCR53c{7,8}xx (rel 3)", NCR53c7xx_detect, 	\
-    	NULL, NULL,						\
-	NULL, NCR53c7xx_queue_command, NCR53c7xx_abort, NCR53c7xx_reset,\
-        NULL, scsicam_bios_param, 					\
-	/* can queue */ 1, /* id */ 7, 127 /* old SG_ALL */, 		\
-	/* cmd per lun */ 1 , 0, 0, DISABLE_CLUSTERING}
+#ifdef MODULE
+extern int NCR53c7xx_release(struct Scsi_Host *);
 #else
+#define NCR53c7xx_release NULL
+#endif
+
+#define NCR53c7xx {NULL, NULL, "NCR53c{7,8}xx (rel 4)", NCR53c7xx_detect, 	\
+    	NULL, /* info */ NULL, /* command, depricated */ NULL, 		\
+	NCR53c7xx_queue_command, NCR53c7xx_abort, NCR53c7xx_reset,	\
+        NULL /* slave attach */, scsicam_bios_param, /* can queue */ 1, \
+	/* id */ 7, 127 /* old SG_ALL */, /* cmd per lun */ 1 , 	\
+        /* present */ 0, /* unchecked isa dma */ 0, DISABLE_CLUSTERING} 
+#endif /* defined(HOSTS_C) || defined(MODULE) */ 
+
+#ifndef HOSTS_C
 /* Register addresses, ordered numerically */
 
 
@@ -932,6 +939,9 @@ struct NCR53c7x0_table_indirect {
 
 struct NCR53c7x0_cmd {
     void *real;				/* Real, unaligned address */
+    void (* free)(void *);		/* Command to deallocate; NULL
+					   for structures allocated with
+					   scsi_register, etc. */
     Scsi_Cmnd *cmd;			/* Associated Scsi_Cmnd 
 					   structure, Scsi_Cmnd points
 					   at NCR53c7x0_cmd using 
@@ -949,7 +959,11 @@ struct NCR53c7x0_cmd {
 					 */
 
 
-    struct NCR53c7x0_cmd *next, *prev;	/* Linux maintained lists */
+    volatile struct NCR53c7x0_cmd *next, *prev;	
+                                        /* Linux maintained lists.  Note that
+					   hostdata->free is a singly linked
+					   list; the rest are doubly linked */
+    					 
 
 
     unsigned long *data_transfer_start;	/* Start of data transfer routines */
@@ -986,10 +1000,12 @@ struct NCR53c7x0_break {
 /* Indicates that the NCR is executing other code. */
 #define STATE_RUNNING	2		
 /* 
- * Indicates that the NCR was being aborted.  Only used when running 
- * NCR53c700 compatible scripts.  
+ * Indicates that the NCR was being aborted.
  */
 #define STATE_ABORTING	3
+/* 
+ * Indicates that the NCR was successfully aborted. */
+#define STATE_ABORTED 4
     
 
 /* 
@@ -1072,6 +1088,7 @@ struct NCR53c7x0_hostdata {
 
     int (* dstat_sir_intr)(struct Scsi_Host *host, struct NCR53c7x0_cmd *cmd);
 
+    long dsa_size; /* Size of DSA structure */
 
     /*
      * Location of DSA fields for the SCSI SCRIPT corresponding to this 
@@ -1160,11 +1177,13 @@ struct NCR53c7x0_hostdata {
 	*breakpoint_current;		/* Current breakpoint being stepped 
 					   through, NULL if we are running 
 					   normally. */
+#ifdef NCR_DEBUG
     int debug_size;			/* Size of debug buffer */
     volatile int debug_count;		/* Current data count */
     volatile char *debug_buf;		/* Output ring buffer */
     volatile char *debug_write;		/* Current write pointer */
     volatile char *debug_read;		/* Current read pointer */
+#endif /* def NCR_DEBUG */
 
     /* XXX - primitive debugging junk, remove when working ? */
     int debug_print_limit;		/* Number of commands to print
@@ -1203,6 +1222,21 @@ struct NCR53c7x0_hostdata {
 						   nexus, ONLY valid for
 						   NCR53c700/NCR53c700-66
 						 */
+
+    volatile struct NCR53c7x0_cmd *spare;	/* pointer to spare,
+    	    	    	    	    	    	   allocated at probe time,
+    	    	    	    	    	    	   which we can use for 
+						   initialization */
+    volatile struct NCR53c7x0_cmd *free;
+    int max_cmd_size;				/* Maximum size of NCR53c7x0_cmd
+					    	   based on number of 
+						   scatter/gather segments, etc.
+						   */
+    volatile int num_cmds;			/* Number of commands 
+						   allocated */
+    volatile unsigned char cmd_allocated[8];	/* Have we allocated commands
+						   for this target yet?  If not,
+						   do so ASAP */
     volatile unsigned char busy[8][8];     	/* number of commands 
 						   executing on each target
     	    	    	    	    	    	 */
@@ -1226,13 +1260,21 @@ struct NCR53c7x0_hostdata {
     volatile unsigned char msg_buf[16];		/* buffer for messages
 						   other than the command
 						   complete message */
-    volatile struct NCR53c7x0_cmd *reconnect_dsa_head;	
+    volatile unsigned char *reconnect_dsa_head;	
 						/* disconnected commands,
 						   maintained by NCR */
     /* Data identifying nexus we are trying to match during reselection */
     volatile unsigned char reselected_identify; /* IDENTIFY message */
     volatile unsigned char reselected_tag;	/* second byte of queue tag 
 						   message or 0 */
+    /* These were static variables before we moved them */
+
+    long NCR53c7xx_zero;
+    long NCR53c7xx_sink;
+    char NCR53c7xx_msg_reject;
+    char NCR53c7xx_msg_abort;
+    char NCR53c7xx_msg_nop;
+
     int script_count;				/* Size of script in longs */
     unsigned long script[0];			/* Relocated SCSI script */
 

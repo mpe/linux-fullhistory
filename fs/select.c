@@ -237,11 +237,10 @@ asmlinkage int sys_select( unsigned long *buffer )
 	}
 	current->timeout = timeout;
 	i = do_select(n, &in, &out, &ex, &res_in, &res_out, &res_ex);
-	if (current->timeout > jiffies)
-		timeout = current->timeout - jiffies;
-	else
-		timeout = 0;
+	timeout = current->timeout - jiffies - 1;
 	current->timeout = 0;
+	if ((long) timeout < 0)
+		timeout = 0;
 	if (tvp && !(current->personality & STICKY_TIMEOUTS)) {
 		put_fs_long(timeout/HZ, (unsigned long *) &tvp->tv_sec);
 		timeout %= HZ;

@@ -469,10 +469,7 @@ static void buslogic_interrupt(int irq, struct pt_regs * regs)
     interrupt_flags = inb(INTERRUPT(base));
 
     if (!(interrupt_flags & INTV))
-      {
-	buslogic_printk("interrupt received, but INTV not set\n");
-	return;
-      }
+      buslogic_printk("interrupt received, but INTV not set\n");
 
     /*
       Reset the Host Adapter Interrupt Register.  It appears to be
@@ -504,16 +501,27 @@ static void buslogic_interrupt(int irq, struct pt_regs * regs)
     while (mb[mbi].status != MBX_NOT_IN_USE && found < BUSLOGIC_MAILBOXES)
       {
 	int mbo = (struct ccb *)mb[mbi].ccbptr - ccb;
-	int result = 0;
 
-	saved_mbo[found++] = mbo;
+	sctmp = HOSTDATA(shpnt)->sc[mbo];
 
-	if (mb[mbi].status != MBX_COMPLETION_OK)
-	  result = makecode(ccb[mbo].hastat, ccb[mbo].tarstat);
+	/*
+	  If sctmp has become NULL, higher level code must have aborted
+	  this operation and called the necessary completion routine.
+	*/
 
-	HOSTDATA(shpnt)->sc[mbo]->result = result;
+	if (sctmp != NULL && mb[mbi].status != MBX_COMPLETION_NOT_FOUND)
+	  {
+	    int result = 0;
 
-	mb[mbi].status = MBX_NOT_IN_USE;
+	    saved_mbo[found++] = mbo;
+
+	    if (mb[mbi].status != MBX_COMPLETION_OK)
+	      result = makecode(ccb[mbo].hastat, ccb[mbo].tarstat);
+
+	    sctmp->result = result;
+
+	    mb[mbi].status = MBX_NOT_IN_USE;
+	  }
 
 	HOSTDATA(shpnt)->last_mbi_used = mbi;
 
@@ -535,6 +543,7 @@ static void buslogic_interrupt(int irq, struct pt_regs * regs)
       {
 	int mbo = saved_mbo[i];
 	sctmp = HOSTDATA(shpnt)->sc[mbo];
+	if (sctmp == NULL) continue;
 	/*
 	  First, free any storage allocated for a scatter/gather
 	  data segment list.
@@ -542,14 +551,15 @@ static void buslogic_interrupt(int irq, struct pt_regs * regs)
 	if (sctmp->host_scribble)
 	  scsi_free(sctmp->host_scribble, BUSLOGIC_SG_MALLOC);
 	/*
-	  Next, call the SCSI command completion handler.
-	*/
-	sctmp->scsi_done(sctmp);
-	/*
-	  Finally, mark the SCSI Command as completed so it may be reused
-	  for another command by buslogic_queuecommand.
+	  Next, mark the SCSI Command as completed so it may be reused
+	  for another command by buslogic_queuecommand.  This also signals
+	  to buslogic_reset that the command is no longer active.
 	*/
 	HOSTDATA(shpnt)->sc[mbo] = NULL;
+	/*
+	  Finally, call the SCSI command completion handler.
+	*/
+	sctmp->scsi_done(sctmp);
       }
 }
 
@@ -1344,7 +1354,7 @@ int buslogic_abort(Scsi_Cmnd *scpnt)
 #if 1
     static const unsigned char buscmd[] = { CMD_START_SCSI };
     struct mailbox *mb;
-    size_t mbi, mbo;
+    int mbi, mbo, last_mbi;
     unsigned long flags;
     unsigned int i;
 
@@ -1355,28 +1365,30 @@ int buslogic_abort(Scsi_Cmnd *scpnt)
     save_flags(flags);
     cli();
     mb = HOSTDATA(scpnt->host)->mb;
-    mbi = HOSTDATA(scpnt->host)->last_mbi_used + 1;
+    last_mbi = HOSTDATA(scpnt->host)->last_mbi_used;
+    mbi = last_mbi + 1;
     if (mbi >= 2 * BUSLOGIC_MAILBOXES)
 	mbi = BUSLOGIC_MAILBOXES;
 
     do {
 	if (mb[mbi].status != MBX_NOT_IN_USE)
 	    break;
+	last_mbi = mbi;
 	mbi++;
 	if (mbi >= 2 * BUSLOGIC_MAILBOXES)
 	    mbi = BUSLOGIC_MAILBOXES;
     } while (mbi != HOSTDATA(scpnt->host)->last_mbi_used);
-    restore_flags(flags);
 
     if (mb[mbi].status != MBX_NOT_IN_USE) {
-	buslogic_printk("lost interrupt discovered on irq %d"
+	buslogic_printk("lost interrupt discovered on irq %d, "
 			" - attempting to recover...\n",
 			scpnt->host->irq);
-	{
-	    buslogic_interrupt(scpnt->host->irq, NULL);
-	    return SCSI_ABORT_SUCCESS;
-	}
+	HOSTDATA(scpnt->host)->last_mbi_used = last_mbi;
+	buslogic_interrupt(scpnt->host->irq, NULL);
+	restore_flags(flags);
+	return SCSI_ABORT_SUCCESS;
     }
+    restore_flags(flags);
 
     /* OK, no lost interrupt.  Try looking to see how many pending commands we
        think we have. */

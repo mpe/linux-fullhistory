@@ -1,3 +1,7 @@
+#undef A_NCR53c7xx_msg_abort
+#undef A_NCR53c7xx_msg_reject
+#undef A_NCR53c7xx_sink
+#undef A_NCR53c7xx_zero
 #undef A_addr_scratch
 #undef A_addr_sfbr
 #undef A_addr_temp

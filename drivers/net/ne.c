@@ -376,7 +376,6 @@ ne_block_output(struct device *dev, int count,
 {
     int retries = 0;
     int nic_base = NE_BASE;
-    unsigned long flags;
 
     /* Round the count up for word writes.  Do we need to do this?
        What effect will an odd byte count have on the 8390?
@@ -412,19 +411,7 @@ ne_block_output(struct device *dev, int count,
     SLOW_DOWN_IO;
 #endif  /* rw_bugfix */
 
-   /*
-    	Now the normal output. I believe that if we don't lock this, a
-	race condition will munge the remote byte count values, and then
-	the ne2k will hang the machine by holding I/O CH RDY because it
-	expects more data. Hopefully fixes the lockups. -- Paul Gortmaker.
-
-	Use save_flags/cli/restore_flags rather than cli/sti to avoid risk
-	of accidentally enabling interrupts which were disabled when we
-	were entered.   Dave Platt <dplatt@3do.com>
-    */
-
-    save_flags(flags);
-    cli();
+   /* Now the normal output. */
     outb_p(count & 0xff, nic_base + EN0_RCNTLO);
     outb_p(count >> 8,   nic_base + EN0_RCNTHI);
     outb_p(0x00, nic_base + EN0_RSARLO);
@@ -436,7 +423,6 @@ ne_block_output(struct device *dev, int count,
     } else {
 	outsb(NE_BASE + NE_DATAPORT, buf, count);
     }
-    restore_flags(flags);
 
 #ifdef CONFIG_NE_SANITY
     /* This was for the ALPHA version only, but enough people have

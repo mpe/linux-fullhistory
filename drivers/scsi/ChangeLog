@@ -1,3 +1,296 @@
+Wed Apr 12 15:25:52 1995  Eric Youngdale  (eric@andante)
+
+	* Linux 1.2.5 released.
+
+	* buslogic.c: Update to version 1.15 (From Dave G, I expect).
+	Fixed interrupt routine to avoid races when handling multiple
+	complete commands per interrupt.  Seems to come up with faster
+	cards.
+
+	* eata_dma.c: Modularize.  Update to 2.3.5r.
+
+	* scsi.c: If we get a FMK, EOM, or ILI when attempting to scan
+	the bus, assume that it was just noise on the bus, and ignore
+	the device.
+
+	* scsi.h: Update and add a bunch of missing commands which we
+	were never using.
+
+	* sd.c: Use restore_flags in do_sd_request - this may result in
+	latency conditions, but it gets rid of races and crashes.
+	Do not save flags again when searching for a second command to
+	queue.
+
+	* st.c: Use bytes, not STP->buffer->buffer_size when reading
+	from tape.
+
+
+Tue Apr  4 09:42:08 1995  Eric Youngdale  (eric@andante)
+
+	* Linux 1.2.4 released.
+
+	* st.c: Fix typo - restoring wrong flags.
+
+Wed Mar 29 06:55:12 1995  Eric Youngdale  (eric@andante)
+
+	* Linux 1.2.3 released.
+
+	* st.c: Perform some waiting operations with interrupts off.
+	Is this correct???
+
+Wed Mar 22 10:34:26 1995  Eric Youngdale  (eric@andante)
+
+	* Linux 1.2.2 released.
+
+	* aha152x.c: Modularize.  Add support for PCMCIA.
+
+	* eata.c: Update to version 2.0.  Fixed bug preventing media
+	detection.  If scsi_register_host returns NULL, fail gracefully.
+
+	* scsi.c: Detect as NEC (for photo-cd purposes) for the 84
+	and 25 models as "NEC_OLDCDR".
+
+	* scsi.h: Add define for NEC_OLDCDR
+
+	* sr.c: Add handling for NEC_OLDCDR.  Treat as unknown.
+
+	* u14-34f.c: Update to version 2.0.  Fixed same bug as in
+	eata.c.
+
+
+Mon Mar  6 11:11:20 1995  Eric Youngdale  (eric@andante)
+
+	* Linux 1.2.0 released.  Yeah!!!
+
+	* Minor spelling/punctuation changes throughout.  Nothing
+	substantive.
+
+Mon Feb 20 21:33:03 1995  Eric Youngdale  (eric@andante)
+
+	* Linux 1.1.95 released.
+
+	* qlogic.c: Update to version 0.41.
+
+	* seagate.c: Change some message to be more descriptive about what
+	we detected.
+
+	* sr.c: spelling/whitespace changes.
+
+Mon Feb 20 21:33:03 1995  Eric Youngdale  (eric@andante)
+
+	* Linux 1.1.94 released.
+
+Mon Feb 20 08:57:17 1995  Eric Youngdale  (eric@andante)
+
+	* Linux 1.1.93 released.
+
+	* hosts.h: Change io_port to long int from short.
+
+	* 53c7,8xx.c: crash on AEN fixed, SCSI reset is no longer a NOP,
+	  NULL pointer panic on odd UDCs fixed, two bugs in diagnostic output 
+	  fixed, should initialize correctly if left running, now loadable, 
+ 	  new memory allocation, extraneous diagnostic output supressed,
+	  splx() replaced with save/restore flags. [ Drew ]
+
+	* hosts.c, hosts.h, scsi_ioctl.c, sd.c, sd_ioctl.c, sg.c, sr.c,
+	sr_ioctl.c: Add special junk at end that Emacs will use for
+	formatting the file.
+
+	* qlogic.c: Update to v0.40a.  Improve parity handling.
+
+	* scsi.c: Add Hitachi DK312C to blacklist.  Change "};" to "}" in
+	many places.  Use scsi_init_malloc to get command block - may
+	need this to be dma compatible for some host adapters.
+	Restore interrupts after unregistering a host.
+
+	* sd.c: Use sti instead of restore flags - causes latency problems.
+
+	* seagate.c: Use controller_type to determine string used when
+	registering irq.
+
+	* sr.c: More photo-cd hacks to make sure we get the xa stuff right.
+	* sr.h, sr.c: Change is_xa to xa_flags field.
+
+	* st.c: Diable retries for write operations.
+
+Wed Feb 15 10:52:56 1995  Eric Youngdale  (eric@andante)
+
+	* Linux 1.1.92 released.
+
+	* eata.c: Update to 1.17.
+
+	* eata_dma.c: Add more support for /proc/scsi, add HBA_interpret flag.
+
+	* hosts.c: If we remove last host registered, reuse host number.
+	When freeing memory from host being deregistered, free extra_bytes
+	too.
+
+	* scsi.c (scan_scsis): memset(SDpnt, 0) and set SCmd.device to SDpnt.
+	Change memory allocation to work around bugs in __get_dma_pages.
+	Do not free host if usage count is not zero (for modules).
+
+	* sr_ioctl.c: Increase IOCTL_TIMEOUT to 3000.
+
+	* st.c: Allow for ST_EXTRA_DEVS in st data structures.
+
+	* u14-34f.c: Update to 1.17.
+
+Thu Feb  9 10:11:16 1995  Eric Youngdale  (eric@andante)
+
+	* Linux 1.1.91 released.
+
+	* eata.c: Update to 1.16.  Use wish_block instead of host->block.
+
+	* hosts.c: Initialize wish_block to 0.
+
+	* hosts.h: Add wish_block.
+
+	* scsi.c: Use wish_block as indicator that the host should be added
+	to block list.
+
+	* sg.c: Add SG_EXTRA_DEVS to number of slots.
+
+	* u14-34f.c: Use wish_block.
+
+Tue Feb  7 11:46:04 1995  Eric Youngdale  (eric@andante)
+
+	* Linux 1.1.90 released.
+
+	* eata.c: Change naming from eata_* to eata2x_*.  Now at vers 1.15.
+	Update interrupt handler to take pt_regs as arg.  Allow blocking
+	even if loaded as module.  Initialize target_time_out array.
+	Do not put sti(); in timing loop.
+
+	* hosts.c: Do not reuse host numbers.
+	Use scsi_make_blocked_list to generate blocking list.
+
+	* script_asm.pl:  Beats me.  Don't know perl.  Something to do with
+	phase index.
+
+	* scsi.c (scsi_make_blocked_list): New function - code copied from
+	hosts.c.
+
+	* scsi.c: Update code to disable photo CD for Toshiba cdroms.
+	Use just manufacturer name, not model number.
+
+	* sr.c: Fix setting density for Toshiba drives.
+
+	* u14-34f.c: Clear target_time_out array during reset.
+
+Wed Feb  1 09:20:45 1995  Eric Youngdale  (eric@andante)
+
+	* Linux 1.1.89 released.
+
+	* Makefile, u14-34f.c: Modulariz.e
+
+	* Makefile, eata.c: Modularize.  Now version 1.14
+
+	* NCR5380.c: Update interrupt handler with new arglist.  Minor
+	cleanups.
+
+	* eata_dma.c: Modularize.  Add hooks for /proc/scsi.  
+	New version 2.3.0a.
+	
+	* hosts.c: Initialize ->dma_channel and ->io_port when registering
+	a new host.
+
+	* qlogic.c: Modularize and add PCMCIA support.
+
+	* scsi.c: Add Hitachi to blacklist.
+
+	* scsi.c: Change default to no lun scan (too many problem devices).
+
+	* scsi.h: Define QUEUE_FULL condition.
+
+	* sd.c: Do not check for non-existant partition until after
+	new media check.
+
+	* sg.c: Undo previous change which was wrong.
+
+	* sr_ioctl.c: Increase IOCTL_TIMEOUT to 2000.
+
+	* st.c: Patches from Kai - improve filemark handling.
+
+Tue Jan 31 17:32:12 1995  Eric Youngdale  (eric@andante)
+
+	* Linux 1.1.88 released.
+
+	* Throughout - spelling/grammar fixups.
+
+	* scsi.c: Make sure that all buffers are 16 byte aligned - some
+	drivers (buslogic) need this.
+
+	* scsi.c (scan_scsis): Remove message printed.
+
+	* scsi.c (scsi_init): Move message here.
+
+Mon Jan 30 06:40:25 1995  Eric Youngdale  (eric@andante)
+
+	* Linux 1.1.87 released.
+
+	* sr.c: Photo-cd related changes. (Gerd Knorr??).
+
+	* st.c: Changes from Kai related to EOM detection.
+
+Mon Jan 23 23:53:10 1995  Eric Youngdale  (eric@andante)
+
+	* Linux 1.1.86 released.
+
+	* 53c7,8xx.h: Change SG size to 127.
+
+	* eata_dma: Update to version 0i.
+
+	* scsi.c: Test for Toshiba XM-3401TA and exclude from detection
+	as toshiba drive - photo cd does not work with this drive.
+
+	* sr.c:  Update photocd code.
+
+Mon Jan 23 23:53:10 1995  Eric Youngdale  (eric@andante)
+
+	* Linux 1.1.85 released.
+
+	* st.c, st_ioctl.c, sg.c, sd_ioctl.c, scsi_ioctl.c, hosts.c:
+	include linux/mm.h
+
+	* qlogic.c, buslogic.c, aha1542.c: Include linux/module.h.
+
+Sun Jan 22 22:08:46 1995  Eric Youngdale  (eric@andante)
+
+	* Linux 1.1.84 released.
+
+	* Makefile: Support for loadable QLOGIC boards.
+
+	* aha152x.c: Update to version 1.8 from Juergen.
+
+	* eata_dma.c: Update from Michael Neuffer
+
+	* in2000.c: Fix biosparam to support large disks.
+
+	* qlogic.c: Minor changes (change sti -> restore_flags).
+
+Wed Jan 18 23:33:09 1995  Eric Youngdale  (eric@andante)
+
+	* Linux 1.1.83 released.
+
+	* aha1542.c(aha1542_intr_handle): Use arguments handed down to find
+	which irq.
+
+	* buslogic.c: Likewise.
+
+	* eata_dma.c: Use min of 2 cmd_per_lun for OCS_enabled boards.
+
+	* scsi.c: Make RECOVERED_ERROR a SUGGEST_IS_OK.
+
+	* sd.c: Fail if we are opening a non-existant partition.
+
+	* sr.c: Bump SR_TIMEOUT to 15000.
+	Do not probe for media size at boot time(hard on changers).
+	Flag device as needing sector size instead.
+
+	* sr_ioctl.c: Remove CDROMMULTISESSION_SYS ioctl.
+
+	* ultrastor.c: Fix bug in call to ultrastor_interrupt (wrong #args).
+
 Mon Jan 16 07:18:23 1995  Eric Youngdale  (eric@andante)
 
 	* Linux 1.1.82 released.

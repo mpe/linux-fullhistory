@@ -123,7 +123,7 @@ static int nfs_file_read(struct inode *inode, struct file *file, char *buf,
 		if ((cache[i].inode_num == inode->i_ino)
 			&& (cache[i].file_pos <= pos)
 			&& (cache[i].file_pos + cache[i].len >= pos + count)
-			&& (abs(jiffies - cache[i].time) <= EXPIRE_CACHE))
+			&& (abs(jiffies - cache[i].time) < EXPIRE_CACHE))
 			break;
 	if (i < READ_CACHE_SIZE) {
 		++cache[i].in_use;

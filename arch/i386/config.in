@@ -74,6 +74,10 @@ bool 'Scsi tape support' CONFIG_CHR_DEV_ST n
 bool 'Scsi CDROM support' CONFIG_BLK_DEV_SR n
 bool 'Scsi generic support' CONFIG_CHR_DEV_SG n
 
+comment 'Some SCSI devices (e.g. CD jukebox) support multiple LUNs'
+
+bool 'Probe all LUNs on each SCSI device' CONFIG_SCSI_MULTI_LUN n
+
 comment 'SCSI low-level drivers'
 
 bool 'Adaptec AHA152X support' CONFIG_SCSI_AHA152X n

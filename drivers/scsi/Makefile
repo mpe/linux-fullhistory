@@ -127,6 +127,8 @@ endif
 ifdef CONFIG_SCSI_NCR53C7xx
 SCSI_OBJS := $(SCSI_OBJS) 53c7,8xx.o 
 SCSI_SRCS := $(SCSI_SRCS) 53c7,8xx.c
+else
+SCSI_MODULE_OBJS := $(SCSI_MODULE_OBJS) 53c7,8xx.o
 endif
 
 ifdef CONFIG_SCSI_PAS16
@@ -190,7 +192,7 @@ seagate.o: seagate.c
 
 53c8xx_d.h 53c8xx_u.h : 53c7,8xx.scr script_asm.pl
 	ln 53c7,8xx.scr fake.c
-	$(CPP) -DCHIP=810 fake.c | grep -v ^# | perl script_asm.pl 
+	$(CPP) -traditional -DCHIP=810 fake.c | grep -v '^#' | perl script_asm.pl 
 	mv script.h 53c8xx_d.h
 	mv scriptu.h 53c8xx_u.h
 	rm fake.c

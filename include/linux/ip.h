@@ -16,7 +16,7 @@
  */
 #ifndef _LINUX_IP_H
 #define _LINUX_IP_H
-
+#include <asm/byteorder.h>
 
 #define IPOPT_END	0
 #define IPOPT_NOOP	1
@@ -34,26 +34,14 @@ struct timestamp {
 	__u8	len;
 	__u8	ptr;
 	union {
-#if defined(__i386__)
+#if defined(LITTLE_ENDIAN_BITFIELD)
 	__u8	flags:4,
 		overflow:4;
-#elif defined(__mc68000__)
-	__u8	overflow:4,
-		flags:4;
-#elif defined(__MIPSEL__) 
-	__u8	flags:4,
-		overflow:4;
-#elif defined(__MIPSEB__)
-	__u8	overflow:4,
-		flags:4;
-#elif defined(__alpha__)
-	__u8	flags:4,
-		overflow:4;
-#elif defined(__sparc__)
+#elif defined(BIG_ENDIAN_BITFIELD)
 	__u8	overflow:4,
 		flags:4;
 #else
-#error	"Adjust this structure to match your CPU"
+#error	"Please fix <asm/byteorder.h>"
 #endif						
 	__u8	full_char;
 	} x;
@@ -84,26 +72,14 @@ struct options {
 
 
 struct iphdr {
-#if defined(__i386__)
+#if defined(LITTLE_ENDIAN_BITFIELD)
 	__u8	ihl:4,
 		version:4;
-#elif defined (__mc68000__)
-	__u8	version:4,
-  		ihl:4;
-#elif defined(__MIPSEL__)
-	__u8	ihl:4,
-		version:4;
-#elif defined(__MIPSEB__)
-	__u8	version:4,
-  		ihl:4;
-#elif defined(__alpha__)
-	__u8	ihl:4,
-		version:4;
-#elif defined (__sparc__)
+#elif defined (BIG_ENDIAN_BITFIELD)
 	__u8	version:4,
   		ihl:4;
 #else
-#error "Adjust this structure to match your CPU"
+#error	"Please fix <asm/byteorder.h>"
 #endif
 	__u8	tos;
 	__u16	tot_len;
