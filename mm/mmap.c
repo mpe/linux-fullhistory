@@ -1316,7 +1316,7 @@ get_unmapped_area(struct file *file, unsigned long addr, unsigned long len,
 			 * reserved hugepage range.  For some archs like IA-64,
 			 * there is a separate region for hugepages.
 			 */
-			ret = is_hugepage_only_range(addr, len);
+			ret = is_hugepage_only_range(current->mm, addr, len);
 		}
 		if (ret)
 			return -EINVAL;
@@ -1687,7 +1687,7 @@ static void unmap_region(struct mm_struct *mm,
 	unmap_vmas(&tlb, mm, vma, start, end, &nr_accounted, NULL);
 	vm_unacct_memory(nr_accounted);
 
-	if (is_hugepage_only_range(start, end - start))
+	if (is_hugepage_only_range(mm, start, end - start))
 		hugetlb_free_pgtables(tlb, prev, start, end);
 	else
 		free_pgtables(tlb, prev, start, end);

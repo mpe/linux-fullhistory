@@ -36,7 +36,7 @@ extern const unsigned long hugetlb_zero, hugetlb_infinity;
 extern int sysctl_hugetlb_shm_group;
 
 #ifndef ARCH_HAS_HUGEPAGE_ONLY_RANGE
-#define is_hugepage_only_range(addr, len)	0
+#define is_hugepage_only_range(mm, addr, len)	0
 #define hugetlb_free_pgtables(tlb, prev, start, end) do { } while (0)
 #endif
 
@@ -71,7 +71,7 @@ static inline unsigned long hugetlb_total_pages(void)
 #define is_aligned_hugepage_range(addr, len)	0
 #define prepare_hugepage_range(addr, len)	(-EINVAL)
 #define pmd_huge(x)	0
-#define is_hugepage_only_range(addr, len)	0
+#define is_hugepage_only_range(mm, addr, len)	0
 #define hugetlb_free_pgtables(tlb, prev, start, end) do { } while (0)
 #define alloc_huge_page()			({ NULL; })
 #define free_huge_page(p)			({ (void)(p); BUG(); })
