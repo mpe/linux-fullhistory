@@ -48,6 +48,7 @@
 #include <linux/blkdev.h>
 #include <linux/smp_lock.h>
 #include <linux/completion.h>
+#include <scsi/scsi_host.h>
 
 struct us_data;
 struct scsi_cmnd;

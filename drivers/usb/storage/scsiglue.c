@@ -53,10 +53,9 @@
 #include <scsi/scsi_devinfo.h>
 #include <scsi/scsi_device.h>
 #include <scsi/scsi_eh.h>
-#include <scsi/scsi_host.h>
 
-#include "scsiglue.h"
 #include "usb.h"
+#include "scsiglue.h"
 #include "debug.h"
 #include "transport.h"
 #include "protocol.h"

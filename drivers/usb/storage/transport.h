@@ -43,9 +43,6 @@
 
 #include <linux/config.h>
 #include <linux/blkdev.h>
-#include "usb.h"
-
-struct scsi_cmnd;
 
 /* Protocols */
 
