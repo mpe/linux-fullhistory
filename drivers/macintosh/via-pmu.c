@@ -2344,7 +2344,7 @@ pmac_suspend_devices(void)
 	}
 
 	/* Send suspend call to devices, hold the device core's dpm_sem */
-	ret = device_suspend(PM_SUSPEND_MEM);
+	ret = device_suspend(PMSG_SUSPEND);
 	if (ret) {
 		broadcast_wake();
 		printk(KERN_ERR "Driver sleep failed\n");
