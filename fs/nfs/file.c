@@ -21,8 +21,7 @@
 static int nfs_file_read(struct inode *, struct file *, char *, int);
 static int nfs_file_write(struct inode *, struct file *, char *, int);
 static int nfs_fsync(struct inode *, struct file *);
-extern int nfs_mmap(struct inode * inode, struct file * file,
-	      unsigned long addr, size_t len, int prot, unsigned long off);
+extern int nfs_mmap(struct inode * inode, struct file * file, struct vm_area_struct * vma);
 
 static struct file_operations nfs_file_operations = {
 	NULL,			/* lseek - default */

@@ -1,5 +1,5 @@
 static char *version =
-	"de600.c: $Revision: 1.39 $,  Bjorn Ekwall (bj0rn@blox.se)\n";
+	"de600.c: $Revision: 1.40 $,  Bjorn Ekwall (bj0rn@blox.se)\n";
 /*
  *	de600.c
  *
@@ -76,8 +76,10 @@ static char *version =
  * Tricks TCP to announce a small max window (max 2 fast packets please :-)
  *
  * Comment away at your own risk!
+ *
+ * Update: Use the more general per-device maxwindow parameter instead.
  */
-#define FAKE_SMALL_MAX
+#undef FAKE_SMALL_MAX
 
 /* use 0 for production, 1 for verification, >2 for debug */
 #ifdef DE600_DEBUG
@@ -106,8 +108,10 @@ unsigned int de600_debug = DE600_DEBUG;
 #include <linux/etherdevice.h>
 #include <linux/skbuff.h>
 
+#ifdef MODULE
 #include <linux/module.h>
 #include "../../tools/version.h"
+#endif
 
 #ifdef FAKE_SMALL_MAX
 static unsigned long de600_rspace(struct sock *sk);

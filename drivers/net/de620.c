@@ -1,5 +1,5 @@
 /*
- *	de620.c $Revision: 1.30 $ BETA
+ *	de620.c $Revision: 1.31 $ BETA
  *
  *
  *	Linux driver for the D-Link DE-620 Ethernet pocket adapter.
@@ -39,7 +39,7 @@
  *
  *****************************************************************************/
 static char *version =
-	"de620.c: $Revision: 1.30 $,  Bjorn Ekwall <bj0rn@blox.se>\n";
+	"de620.c: $Revision: 1.31 $,  Bjorn Ekwall <bj0rn@blox.se>\n";
 
 /***********************************************************************
  *
@@ -119,8 +119,10 @@ static char *version =
 #include <linux/etherdevice.h>
 #include <linux/skbuff.h>
 
+#ifdef MODULE
 #include <linux/module.h>
 #include "../../tools/version.h"
+#endif
 
 /* Constant definitions for the DE-620 registers, commands and bits */
 #include "de620.h"

@@ -322,11 +322,12 @@ unsigned long * create_tables(char * p,int argc,int envc,int ibcs)
 		mpnt->vm_start = PAGE_MASK & (unsigned long) p;
 		mpnt->vm_end = TASK_SIZE;
 		mpnt->vm_page_prot = PAGE_PRIVATE|PAGE_DIRTY;
-		mpnt->vm_flags = VM_GROWSDOWN;
+		mpnt->vm_flags = VM_STACK_FLAGS;
 		mpnt->vm_share = NULL;
-		mpnt->vm_inode = NULL;
-		mpnt->vm_offset = 0;
 		mpnt->vm_ops = NULL;
+		mpnt->vm_offset = 0;
+		mpnt->vm_inode = NULL;
+		mpnt->vm_pte = 0;
 		insert_vm_struct(current, mpnt);
 	}
 	sp = (unsigned long *) (0xfffffffc & (unsigned long) p);
@@ -525,10 +526,6 @@ void flush_old_exec(struct linux_binprm * bprm)
 	current->comm[i] = '\0';
 	if (current->shm)
 		shm_exit();
-	if (current->executable) {
-		iput(current->executable);
-		current->executable = NULL;
-	}
 	/* Release all of the old mmap stuff. */
 
 	mpnt = current->mm->mmap;
@@ -821,7 +818,6 @@ static int load_aout_binary(struct linux_binprm * bprm, struct pt_regs * regs)
 		(current->mm->start_code = N_TXTADDR(ex)))));
 	current->mm->rss = 0;
 	current->mm->mmap = NULL;
-	current->executable = NULL;  /* for OMAGIC files */
 	current->suid = current->euid = bprm->e_uid;
 	current->sgid = current->egid = bprm->e_gid;
 	if (N_MAGIC(ex) == OMAGIC) {
@@ -851,7 +847,8 @@ static int load_aout_binary(struct linux_binprm * bprm, struct pt_regs * regs)
 		if (ex.a_text) {
 			error = do_mmap(file, N_TXTADDR(ex), ex.a_text,
 				PROT_READ | PROT_EXEC,
-				MAP_FIXED | MAP_SHARED, fd_offset);
+				MAP_FIXED | MAP_SHARED | MAP_DENYWRITE,
+				fd_offset);
 
 			if (error != N_TXTADDR(ex)) {
 				sys_close(fd);
@@ -862,14 +859,13 @@ static int load_aout_binary(struct linux_binprm * bprm, struct pt_regs * regs)
 		
  		error = do_mmap(file, N_TXTADDR(ex) + ex.a_text, ex.a_data,
 				PROT_READ | PROT_WRITE | PROT_EXEC,
-				MAP_FIXED | MAP_PRIVATE, fd_offset + ex.a_text);
+				MAP_FIXED | MAP_PRIVATE | MAP_DENYWRITE,
+				fd_offset + ex.a_text);
 		sys_close(fd);
 		if (error != N_TXTADDR(ex) + ex.a_text) {
 			send_sig(SIGSEGV, current, 0);
 			return -EINVAL;
 		}
-		current->executable = bprm->inode;
-		bprm->inode->i_count++;
 	}
 beyond_if:
 	if (current->exec_domain && current->exec_domain->use_count)
@@ -939,7 +935,8 @@ static int load_aout_library(int fd)
 
 	/* Now use mmap to map the library into memory. */
 	error = do_mmap(file, start_addr, ex.a_text + ex.a_data,
-			PROT_READ | PROT_WRITE | PROT_EXEC, MAP_FIXED | MAP_PRIVATE,
+			PROT_READ | PROT_WRITE | PROT_EXEC,
+			MAP_FIXED | MAP_PRIVATE | MAP_DENYWRITE,
 			N_TXTOFF(ex));
 	if (error != start_addr)
 		return error;

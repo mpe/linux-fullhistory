@@ -192,8 +192,7 @@ extern struct inode_operations msdos_file_inode_operations_no_bmap;
 extern void msdos_truncate(struct inode *inode);
 
 /* mmap.c */
-extern int msdos_mmap (struct inode *, struct file *, unsigned long, size_t
-	,int , unsigned long);
+extern int msdos_mmap(struct inode *, struct file *, struct vm_area_struct *);
 
 #endif /* __KERNEL__ */
 

@@ -12,4 +12,7 @@
 #define MAP_FIXED        0x10      /* Interpret addr exactly */
 #define MAP_ANONYMOUS    0x20      /* don't use a file */
 
+#define MAP_GROWSDOWN	0x0400		/* stack-like segment */
+#define MAP_DENYWRITE	0x0800		/* ETXTBSY */
+
 #endif /* _LINUX_MMAN_H */

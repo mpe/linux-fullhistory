@@ -410,32 +410,17 @@ static int get_maps(int pid, char *buf)
 
 	for(map = (*p)->mm->mmap; map != NULL; map = map->vm_next) {
 		char str[7], *cp = str;
-		int prot = map->vm_page_prot;
-		int perms, flags;
+		int flags;
 		int end = sz + 80;	/* Length of line */
 		dev_t dev;
 		unsigned long ino;
 
-		/*
-		 * This tries to get an "rwxsp" string out of silly
-		 * intel page permissions.  The vm_area_struct should
-		 * probably have the original mmap args preserved.
-		 */
-		
-		flags = perms = 0;
+		flags = map->vm_flags;
 
-		if ((prot & PAGE_READONLY) == PAGE_READONLY)
-			perms |= PROT_READ | PROT_EXEC;
-		if (prot & (PAGE_COW|PAGE_RW)) {
-			perms |= PROT_WRITE | PROT_READ;
-			flags = prot & PAGE_COW ? MAP_PRIVATE : MAP_SHARED;
-		}
-
-		*cp++ = perms & PROT_READ ? 'r' : '-';
-		*cp++ = perms & PROT_WRITE ? 'w' : '-';
-		*cp++ = perms & PROT_EXEC ? 'x' : '-';
-		*cp++ = flags & MAP_SHARED ? 's' : '-';
-		*cp++ = flags & MAP_PRIVATE ? 'p' : '-';
+		*cp++ = flags & VM_READ ? 'r' : '-';
+		*cp++ = flags & VM_WRITE ? 'w' : '-';
+		*cp++ = flags & VM_EXEC ? 'x' : '-';
+		*cp++ = flags & VM_SHARED ? 's' : 'p';
 		*cp++ = 0;
 		
 		if (end >= PAGE_SIZE) {

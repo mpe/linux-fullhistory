@@ -353,14 +353,12 @@ int open_namei(const char * pathname, int flag, int mode,
 		        struct vm_area_struct * mpnt;
  			if (!*p)
  				continue;
- 			if (inode == (*p)->executable) {
- 				iput(inode);
- 				return -ETXTBSY;
- 			}
 			for(mpnt = (*p)->mm->mmap; mpnt; mpnt = mpnt->vm_next) {
+				if (inode != mpnt->vm_inode)
+					continue;
 				if (mpnt->vm_page_prot & PAGE_RW)
 					continue;
-				if (inode == mpnt->vm_inode) {
+				if (mpnt->vm_flags & VM_DENYWRITE) {
 					iput(inode);
 					return -ETXTBSY;
 				}

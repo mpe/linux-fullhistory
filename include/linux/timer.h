@@ -80,4 +80,10 @@ struct timer_list {
 extern void add_timer(struct timer_list * timer);
 extern int  del_timer(struct timer_list * timer);
 
+extern inline void init_timer(struct timer_list * timer)
+{
+	timer->next = NULL;
+	timer->prev = NULL;
+}
+
 #endif

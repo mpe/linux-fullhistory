@@ -81,19 +81,11 @@ struct vm_operations_struct msdos_file_mmap = {
  * This is used for a general mmap of an msdos file
  * Returns 0 if ok, or a negative error code if not.
  */
-int msdos_mmap(
-	struct inode * inode,
-	struct file * file,
-	unsigned long addr,
-	size_t len,
-	int prot,
-	unsigned long off)
+int msdos_mmap(struct inode * inode, struct file * file, struct vm_area_struct * vma)
 {
-	struct vm_area_struct * mpnt;
-
-	if (prot & PAGE_RW)	/* only PAGE_COW or read-only supported now */
+	if (vma->vm_page_prot & PAGE_RW)	/* only PAGE_COW or read-only supported now */
 		return -EINVAL;
-	if (off & (inode->i_sb->s_blocksize - 1))
+	if (vma->vm_offset & (inode->i_sb->s_blocksize - 1))
 		return -EINVAL;
 	if (!inode->i_sb || !S_ISREG(inode->i_mode))
 		return -EACCES;
@@ -102,22 +94,12 @@ int msdos_mmap(
 		inode->i_dirt = 1;
 	}
 
-	mpnt = (struct vm_area_struct * ) kmalloc(sizeof(struct vm_area_struct), GFP_KERNEL);
-	if (!mpnt)
-		return -ENOMEM;
-
-	unmap_page_range(addr, len);
-	mpnt->vm_task = current;
-	mpnt->vm_start = addr;
-	mpnt->vm_end = addr + len;
-	mpnt->vm_page_prot = prot;
-	mpnt->vm_share = NULL;
-	mpnt->vm_inode = inode;
+	unmap_page_range(vma->vm_start, vma->vm_end - vma->vm_start);
+	vma->vm_inode = inode;
 	inode->i_count++;
-	mpnt->vm_offset = off;
-	mpnt->vm_ops = &msdos_file_mmap;
-	insert_vm_struct (current,mpnt);
-	merge_segments (current->mm->mmap,NULL,NULL);
+	vma->vm_ops = &msdos_file_mmap;
+	insert_vm_struct(current, vma);
+	merge_segments(current->mm->mmap);
 	return 0;
 }
 

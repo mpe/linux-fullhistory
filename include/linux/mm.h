@@ -34,17 +34,31 @@ struct vm_area_struct {
 	unsigned short vm_flags;
 	struct vm_area_struct * vm_next;	/* linked list */
 	struct vm_area_struct * vm_share;	/* linked list */
-	struct inode * vm_inode;
-	unsigned long vm_offset;
 	struct vm_operations_struct * vm_ops;
+	unsigned long vm_offset;
+	struct inode * vm_inode;
+	unsigned long vm_pte;			/* shared mem */
 };
 
 /*
  * vm_flags..
  */
-#define VM_GROWSDOWN	0x01
-#define VM_GROWSUP	0x02
-#define VM_SHM		0x04
+#define VM_READ		0x0001	/* currently active flags */
+#define VM_WRITE	0x0002
+#define VM_EXEC		0x0004
+#define VM_SHARED	0x0008
+
+#define VM_MAYREAD	0x0010	/* limits for mprotect() etc */
+#define VM_MAYWRITE	0x0020
+#define VM_MAYEXEC	0x0040
+#define VM_MAYSHARE	0x0080
+
+#define VM_GROWSDOWN	0x0100	/* general info on the segment */
+#define VM_GROWSUP	0x0200
+#define VM_SHM		0x0400
+#define VM_DENYWRITE	0x0800	/* ETXTBSY on write attempts.. */
+
+#define VM_STACK_FLAGS	0x0177
 
 /*
  * These are the virtual MM functions - opening of an area, closing it (needed to
@@ -178,12 +192,8 @@ extern void rw_swap_page(int rw, unsigned long nr, char * buf);
 /* mmap.c */
 extern int do_mmap(struct file * file, unsigned long addr, unsigned long len,
 	unsigned long prot, unsigned long flags, unsigned long off);
-typedef int (*map_mergep_fnp)(const struct vm_area_struct *,
-			      const struct vm_area_struct *, void *);
-extern void merge_segments(struct vm_area_struct *, map_mergep_fnp, void *);
+extern void merge_segments(struct vm_area_struct *);
 extern void insert_vm_struct(struct task_struct *, struct vm_area_struct *);
-extern int ignoff_mergep(const struct vm_area_struct *,
-			 const struct vm_area_struct *, void *);
 extern int do_munmap(unsigned long, size_t);
 
 #define read_swap_page(nr,buf) \

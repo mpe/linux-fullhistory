@@ -400,8 +400,6 @@ static void exit_fs(void)
 	current->fs->pwd = NULL;
 	iput(current->fs->root);
 	current->fs->root = NULL;
-	iput(current->executable);
-	current->executable = NULL;
 }
 
 NORET_TYPE void do_exit(long code)

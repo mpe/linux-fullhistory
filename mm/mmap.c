@@ -16,9 +16,8 @@
 #include <asm/segment.h>
 #include <asm/system.h>
 
-static int anon_map(struct inode *, struct file *,
-		    unsigned long, size_t, int,
-		    unsigned long);
+static int anon_map(struct inode *, struct file *, struct vm_area_struct *);
+
 /*
  * description of effects of mapping type and prot in current implementation.
  * this is due to the limited x86 page protection hardware.  The expected
@@ -40,11 +39,16 @@ int do_mmap(struct file * file, unsigned long addr, unsigned long len,
 	unsigned long prot, unsigned long flags, unsigned long off)
 {
 	int mask, error;
+	struct vm_area_struct * vma;
 
 	if ((len = PAGE_ALIGN(len)) == 0)
 		return addr;
 
 	if (addr > TASK_SIZE || len > TASK_SIZE || addr > TASK_SIZE-len)
+		return -EINVAL;
+
+	/* offset overflow? */
+	if (off + len < off)
 		return -EINVAL;
 
 	/*
@@ -53,7 +57,7 @@ int do_mmap(struct file * file, unsigned long addr, unsigned long len,
 	 * of the memory object, so we don't do any here.
 	 */
 
-	if (file != NULL)
+	if (file != NULL) {
 		switch (flags & MAP_TYPE) {
 		case MAP_SHARED:
 			if ((prot & PROT_WRITE) && !(file->f_mode & 2))
@@ -67,6 +71,9 @@ int do_mmap(struct file * file, unsigned long addr, unsigned long len,
 		default:
 			return -EINVAL;
 		}
+	} else if ((flags & MAP_TYPE) == MAP_SHARED)
+		return -EINVAL;
+
 	/*
 	 * obtain the address to map to. we verify (or select) it and ensure
 	 * that it represents a valid section of the address space.
@@ -105,7 +112,7 @@ int do_mmap(struct file * file, unsigned long addr, unsigned long len,
 	 */
 	if (file && (!file->f_op || !file->f_op->mmap))
 		return -ENODEV;
-	mask = 0;
+	mask = PAGE_PRESENT;
 	if (prot & (PROT_READ | PROT_EXEC))
 		mask |= PAGE_READONLY;
 	if (prot & PROT_WRITE)
@@ -113,19 +120,44 @@ int do_mmap(struct file * file, unsigned long addr, unsigned long len,
 			mask |= PAGE_COPY;
 		else
 			mask |= PAGE_SHARED;
-	if (!mask) /* PROT_NONE */
-		mask = PAGE_PRESENT;	/* none of PAGE_USER, PAGE_RW, PAGE_COW */
+
+	vma = kmalloc(sizeof(struct vm_area_struct), GFP_KERNEL);
+	if (!vma)
+		return -ENOMEM;
+
+	vma->vm_task = current;
+	vma->vm_start = addr;
+	vma->vm_end = addr + len;
+	vma->vm_page_prot = mask;
+	vma->vm_flags = prot & (VM_READ | VM_WRITE | VM_EXEC);
+	vma->vm_flags |= flags & (VM_GROWSDOWN | VM_DENYWRITE);
+
+	if (file) {
+		if (file->f_mode & 1)
+			vma->vm_flags |= VM_MAYREAD | VM_MAYWRITE | VM_MAYEXEC;
+		if (flags & MAP_SHARED) {
+			vma->vm_flags |= VM_SHARED | VM_MAYSHARE;
+			if (!(file->f_mode & 2))
+				vma->vm_flags &= ~VM_MAYWRITE;
+		}
+	} else
+		vma->vm_flags |= VM_MAYREAD | VM_MAYWRITE | VM_MAYEXEC;
+	vma->vm_ops = NULL;
+	vma->vm_offset = off;
+	vma->vm_inode = NULL;
+	vma->vm_pte = 0;
 
 	do_munmap(addr, len);	/* Clear old maps */
 
 	if (file)
-		error = file->f_op->mmap(file->f_inode, file, addr, len, mask, off);
+		error = file->f_op->mmap(file->f_inode, file, vma);
 	else
-		error = anon_map(NULL, NULL, addr, len, mask, off);
+		error = anon_map(NULL, NULL, vma);
 	
 	if (!error)
 		return addr;
 
+	kfree(vma);
 	if (!current->errno)
 		current->errno = -error;
 	return -1;
@@ -225,12 +257,6 @@ void unmap_fixup(struct vm_area_struct *area,
 	insert_vm_struct(current, mpnt);
 }
 
-
-asmlinkage int sys_mprotect(unsigned long addr, size_t len, unsigned long prot)
-{
-	return -EINVAL; /* Not implemented yet */
-}
-
 asmlinkage int sys_munmap(unsigned long addr, size_t len)
 {
 	return do_munmap(addr, len);
@@ -307,16 +333,14 @@ int do_munmap(unsigned long addr, size_t len)
 }
 
 /* This is used for a general mmap of a disk file */
-int generic_mmap(struct inode * inode, struct file * file,
-	unsigned long addr, size_t len, int prot, unsigned long off)
+int generic_mmap(struct inode * inode, struct file * file, struct vm_area_struct * vma)
 {
-  	struct vm_area_struct * mpnt;
 	extern struct vm_operations_struct file_mmap;
 	struct buffer_head * bh;
 
-	if (prot & PAGE_RW)	/* only PAGE_COW or read-only supported right now */
+	if (vma->vm_page_prot & PAGE_RW)	/* only PAGE_COW or read-only supported right now */
 		return -EINVAL;
-	if (off & (inode->i_sb->s_blocksize - 1))
+	if (vma->vm_offset & (inode->i_sb->s_blocksize - 1))
 		return -EINVAL;
 	if (!inode->i_sb || !S_ISREG(inode->i_mode))
 		return -EACCES;
@@ -330,23 +354,12 @@ int generic_mmap(struct inode * inode, struct file * file,
 	}
 	brelse(bh);
 
-	mpnt = (struct vm_area_struct * ) kmalloc(sizeof(struct vm_area_struct), GFP_KERNEL);
-	if (!mpnt)
-		return -ENOMEM;
-
-	unmap_page_range(addr, len);	
-	mpnt->vm_task = current;
-	mpnt->vm_start = addr;
-	mpnt->vm_end = addr + len;
-	mpnt->vm_page_prot = prot;
-	mpnt->vm_flags = 0;
-	mpnt->vm_share = NULL;
-	mpnt->vm_inode = inode;
+	unmap_page_range(vma->vm_start, vma->vm_end - vma->vm_start);
+	vma->vm_inode = inode;
 	inode->i_count++;
-	mpnt->vm_offset = off;
-	mpnt->vm_ops = &file_mmap;
-	insert_vm_struct(current, mpnt);
-	merge_segments(current->mm->mmap, NULL, NULL);
+	vma->vm_ops = &file_mmap;
+	insert_vm_struct(current, vma);
+	merge_segments(current->mm->mmap);
 	
 	return 0;
 }
@@ -388,8 +401,7 @@ void insert_vm_struct(struct task_struct *t, struct vm_area_struct *vmp)
  * Redundant vm_area_structs are freed.
  * This assumes that the list is ordered by address.
  */
-void merge_segments(struct vm_area_struct *mpnt,
-		    map_mergep_fnp mergep, void *mpd)
+void merge_segments(struct vm_area_struct *mpnt)
 {
 	struct vm_area_struct *prev, *next;
 
@@ -400,32 +412,29 @@ void merge_segments(struct vm_area_struct *mpnt,
 	    mpnt != NULL;
 	    prev = mpnt, mpnt = next)
 	{
-		int mp;
-
 		next = mpnt->vm_next;
-		
-		if (mergep == NULL)
-		{
-			unsigned long psz = prev->vm_end - prev->vm_start;
-			mp = prev->vm_offset + psz == mpnt->vm_offset;
-		}
-		else
-			mp = (*mergep)(prev, mpnt, mpd);
 
 		/*
-		 * Check they are compatible.
-		 * and the like...
-		 * What does the share pointer mean?
+		 * To share, we must have the same inode, operations.. 
 		 */
-		if (prev->vm_ops != mpnt->vm_ops ||
-		    prev->vm_page_prot != mpnt->vm_page_prot ||
-		    prev->vm_inode != mpnt->vm_inode ||
-		    prev->vm_end != mpnt->vm_start ||
-		    !mp ||
-		    prev->vm_flags != mpnt->vm_flags ||
-		    prev->vm_share != mpnt->vm_share ||		/* ?? */
-		    prev->vm_next != mpnt)			/* !!! */
+		if (mpnt->vm_inode != prev->vm_inode)
 			continue;
+		if (mpnt->vm_pte != prev->vm_pte)
+			continue;
+		if (mpnt->vm_ops != prev->vm_ops)
+			continue;
+		if (mpnt->vm_page_prot != prev->vm_page_prot ||
+		    mpnt->vm_flags != prev->vm_flags)
+			continue;
+		if (prev->vm_end != mpnt->vm_start)
+			continue;
+		/*
+		 * and if we have an inode, the offsets must be contiguous..
+		 */
+		if (mpnt->vm_inode != NULL) {
+			if (prev->vm_offset + prev->vm_end - prev->vm_start != mpnt->vm_offset)
+				continue;
+		}
 
 		/*
 		 * merge prev with mpnt and set up pointers so the new
@@ -443,41 +452,12 @@ void merge_segments(struct vm_area_struct *mpnt,
  * Map memory not associated with any file into a process
  * address space.  Adjecent memory is merged.
  */
-static int anon_map(struct inode *ino, struct file * file,
-		    unsigned long addr, size_t len, int mask,
-		    unsigned long off)
+static int anon_map(struct inode *ino, struct file * file, struct vm_area_struct * vma)
 {
-  	struct vm_area_struct * mpnt;
-
-	if (zeromap_page_range(addr, len, mask))
+	if (zeromap_page_range(vma->vm_start, vma->vm_end - vma->vm_start, vma->vm_page_prot))
 		return -ENOMEM;
 
-	mpnt = (struct vm_area_struct * ) kmalloc(sizeof(struct vm_area_struct), GFP_KERNEL);
-	if (!mpnt)
-		return -ENOMEM;
-
-	mpnt->vm_task = current;
-	mpnt->vm_start = addr;
-	mpnt->vm_end = addr + len;
-	mpnt->vm_page_prot = mask;
-	mpnt->vm_flags = 0;
-	mpnt->vm_share = NULL;
-	mpnt->vm_inode = NULL;
-	mpnt->vm_offset = 0;
-	mpnt->vm_ops = NULL;
-	insert_vm_struct(current, mpnt);
-	merge_segments(current->mm->mmap, ignoff_mergep, NULL);
-
+	insert_vm_struct(current, vma);
+	merge_segments(current->mm->mmap);
 	return 0;
-}
-
-/* Merge, ignoring offsets */
-int ignoff_mergep(const struct vm_area_struct *m1,
-		  const struct vm_area_struct *m2,
-		  void *data)
-{
-	if (m1->vm_inode != m2->vm_inode)	/* Just to be sure */
-		return 0;
-
-	return (struct inode *)data == m1->vm_inode;
 }

@@ -629,6 +629,27 @@ static void csi_K(int currcons, int vpar)
 	need_wrap = 0;
 }
 
+static void csi_X(int currcons, int vpar)
+{
+	long count;
+	long start;
+
+	if (!vpar)
+	        vpar++;
+
+	start=pos;
+	count=(vpar > video_num_columns-x) ? (video_num_columns-x) : vpar;
+
+	__asm__("cld\n\t"
+		"rep\n\t"
+		"stosw\n\t"
+		: /* no output */
+		:"c" (count),
+		"D" (start),"a" (video_erase_char)
+		:"cx","di");
+	need_wrap = 0;
+}
+
 /*
  *  I hope this works. The monochrome part is untested.
  */
@@ -1346,6 +1367,9 @@ static int con_write(struct tty_struct * tty, int from_user,
 						continue;
 					case 'u':
 						restore_cur(currcons);
+						continue;
+					case 'X':
+						csi_X(currcons, par[0]);
 						continue;
 					case '@':
 						csi_at(currcons,par[0]);

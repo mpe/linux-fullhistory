@@ -292,7 +292,7 @@ struct file_operations {
 	int (*readdir) (struct inode *, struct file *, struct dirent *, int);
 	int (*select) (struct inode *, struct file *, int, select_table *);
 	int (*ioctl) (struct inode *, struct file *, unsigned int, unsigned long);
-	int (*mmap) (struct inode *, struct file *, unsigned long, size_t, int, unsigned long);
+	int (*mmap) (struct inode *, struct file *, struct vm_area_struct *);
 	int (*open) (struct inode *, struct file *);
 	void (*release) (struct inode *, struct file *);
 	int (*fsync) (struct inode *, struct file *);
@@ -464,7 +464,7 @@ extern int read_ahead[];
 extern int char_write(struct inode *, struct file *, char *, int);
 extern int block_write(struct inode *, struct file *, char *, int);
 
-extern int generic_mmap(struct inode *, struct file *, unsigned long, size_t, int, unsigned long);
+extern int generic_mmap(struct inode *, struct file *, struct vm_area_struct *);
 
 extern int block_fsync(struct inode *, struct file *);
 extern int file_fsync(struct inode *, struct file *);

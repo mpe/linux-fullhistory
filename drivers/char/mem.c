@@ -83,34 +83,18 @@ static int write_mem(struct inode * inode, struct file * file,char * buf, int co
 	return count;
 }
 
-static int mmap_mem(struct inode * inode, struct file * file,
-	unsigned long addr, size_t len, int prot, unsigned long off)
+static int mmap_mem(struct inode * inode, struct file * file, struct vm_area_struct * vma)
 {
-	struct vm_area_struct * mpnt;
-
-	if (off & 0xfff || off + len < off)
+	if (vma->vm_offset & ~PAGE_MASK)
 		return -ENXIO;
-	if (x86 > 3 && off >= high_memory)
-		prot |= PAGE_PCD;
-	if (remap_page_range(addr, off, len, prot))
+	if (x86 > 3 && vma->vm_offset >= high_memory)
+		vma->vm_page_prot |= PAGE_PCD;
+	if (remap_page_range(vma->vm_start, vma->vm_offset, vma->vm_end - vma->vm_start, vma->vm_page_prot))
 		return -EAGAIN;
-/* try to create a dummy vmm-structure so that the rest of the kernel knows we are here */
-	mpnt = (struct vm_area_struct * ) kmalloc(sizeof(struct vm_area_struct), GFP_KERNEL);
-	if (!mpnt)
-		return 0;
-
-	mpnt->vm_task = current;
-	mpnt->vm_start = addr;
-	mpnt->vm_end = addr + len;
-	mpnt->vm_page_prot = prot;
-	mpnt->vm_flags = 0;
-	mpnt->vm_share = NULL;
-	mpnt->vm_inode = inode;
+	vma->vm_inode = inode;
 	inode->i_count++;
-	mpnt->vm_offset = off;
-	mpnt->vm_ops = NULL;
-	insert_vm_struct(current, mpnt);
-	merge_segments(current->mm->mmap, NULL, NULL);
+	insert_vm_struct(current, vma);
+	merge_segments(current->mm->mmap);
 	return 0;
 }
 
@@ -177,34 +161,14 @@ static int read_zero(struct inode * node,struct file * file,char * buf,int count
 	return count;
 }
 
-static int mmap_zero(struct inode * inode, struct file * file,
-	unsigned long addr, size_t len, int prot, unsigned long off)
+static int mmap_zero(struct inode * inode, struct file * file, struct vm_area_struct * vma)
 {
-	struct vm_area_struct *mpnt;
-
-	if (prot & PAGE_RW)
+	if (vma->vm_page_prot & PAGE_RW)
 		return -EINVAL;
-	if (zeromap_page_range(addr, len, prot))
+	if (zeromap_page_range(vma->vm_start, vma->vm_end - vma->vm_start, vma->vm_page_prot))
 		return -EAGAIN;
-	/*
-	 * try to create a dummy vmm-structure so that the
-	 * rest of the kernel knows we are here
-	 */
-	mpnt = (struct vm_area_struct *)kmalloc(sizeof(*mpnt), GFP_KERNEL);
-	if (!mpnt)
-		return 0;
-
-	mpnt->vm_task = current;
-	mpnt->vm_start = addr;
-	mpnt->vm_end = addr + len;
-	mpnt->vm_page_prot = prot;
-	mpnt->vm_flags = 0;
-	mpnt->vm_share = NULL;
-	mpnt->vm_inode = NULL;
-	mpnt->vm_offset = off;
-	mpnt->vm_ops = NULL;
-	insert_vm_struct(current, mpnt);
-	merge_segments(current->mm->mmap, ignoff_mergep, inode);
+	insert_vm_struct(current, vma);
+	merge_segments(current->mm->mmap);
 	return 0;
 }
 

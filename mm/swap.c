@@ -303,6 +303,7 @@ static inline int try_to_swap_out(unsigned long * table_ptr)
 		return 0;
 	
 	if ((PAGE_DIRTY & page) && delete_from_swap_cache(page))  {
+		*table_ptr &= ~PAGE_ACCESSED;
 		return 0;
 	}
 	if (PAGE_ACCESSED & page) {
@@ -321,7 +322,6 @@ static inline int try_to_swap_out(unsigned long * table_ptr)
 		free_page(page);
 		return 1;
 	}
-
         if ((entry = find_in_swap_cache(page)))  {
 		if (mem_map[MAP_NR(page)] != 1) {
 			*table_ptr |= PAGE_DIRTY;

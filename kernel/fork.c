@@ -156,8 +156,6 @@ static void copy_fs(unsigned long clone_flags, struct task_struct * p)
 		current->fs->pwd->i_count++;
 	if (current->fs->root)
 		current->fs->root->i_count++;
-	if (current->executable)
-		current->executable->i_count++;
 }
 
 #define IS_CLONE (regs.orig_eax == __NR_clone)

@@ -794,7 +794,7 @@ sb_dsp_init (long mem_start, struct address_info *hw_config)
     mixer_type = sb_mixer_init (sbc_major);
 #endif
 
-#ifndef EXCLUDE_YM8312
+#ifndef EXCLUDE_YM3812
 
   if (sbc_major > 3 ||
       (sbc_major == 3 && INB (0x388) == 0x00))	/* Should be 0x06 if not OPL-3 */

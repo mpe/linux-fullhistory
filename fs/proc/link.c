@@ -71,9 +71,17 @@ static int proc_follow_link(struct inode * dir, struct inode * inode,
 		case 5:
 			inode = p->fs->root;
 			break;
-		case 6:
-			inode = p->executable;
+		case 6: {
+			struct vm_area_struct * vma = p->mm->mmap;
+			while (vma) {
+				if (vma->vm_flags & VM_DENYWRITE) {
+					inode = vma->vm_inode;
+					break;
+				}
+				vma = vma->vm_next;
+			}
 			break;
+		}
 		default:
 			switch (ino >> 8) {
 				case 1:
