@@ -671,6 +671,7 @@ static int msdos_fill_super(struct super_block *sb, void *data, int silent)
 	if (res)
 		return res;
 
+	sb->s_flags |= MS_NOATIME;
 	sb->s_root->d_op = &msdos_dentry_operations;
 	return 0;
 }
