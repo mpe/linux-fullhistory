@@ -23,7 +23,7 @@
 
 typedef void (cryptfn_t)(void *, u8 *, const u8 *);
 typedef void (procfn_t)(struct crypto_tfm *, u8 *,
-                        u8*, cryptfn_t, int enc, void *, int);
+                        u8*, cryptfn_t, int enc, void *);
 
 static inline void xor_64(u8 *a, const u8 *b)
 {
@@ -74,22 +74,22 @@ static int crypt(struct crypto_tfm *tfm,
 		scatterwalk_map(&walk_in, 0);
 		scatterwalk_map(&walk_out, 1);
 
+		in_place = scatterwalk_samebuf(&walk_in, &walk_out);
+
 		src_p = walk_in.data;
 		if (unlikely(scatterwalk_across_pages(&walk_in, bsize)))
 			src_p = tmp_src;
 
 		dst_p = walk_out.data;
-		if (unlikely(scatterwalk_across_pages(&walk_out, bsize)))
+		if (unlikely(scatterwalk_across_pages(&walk_out, bsize)) ||
+		    in_place)
 			dst_p = tmp_dst;
-
-		in_place = scatterwalk_samebuf(&walk_in, &walk_out,
-					       src_p, dst_p);
 
 		nbytes -= bsize;
 
 		scatterwalk_copychunks(src_p, &walk_in, bsize, 0);
 
-		prfn(tfm, dst_p, src_p, crfn, enc, info, in_place);
+		prfn(tfm, dst_p, src_p, crfn, enc, info);
 
 		scatterwalk_done(&walk_in, 0, nbytes);
 
@@ -104,7 +104,7 @@ static int crypt(struct crypto_tfm *tfm,
 }
 
 static void cbc_process(struct crypto_tfm *tfm, u8 *dst, u8 *src,
-			cryptfn_t fn, int enc, void *info, int in_place)
+			cryptfn_t fn, int enc, void *info)
 {
 	u8 *iv = info;
 	
@@ -117,19 +117,14 @@ static void cbc_process(struct crypto_tfm *tfm, u8 *dst, u8 *src,
 		fn(crypto_tfm_ctx(tfm), dst, iv);
 		memcpy(iv, dst, crypto_tfm_alg_blocksize(tfm));
 	} else {
-		u8 stack[in_place ? crypto_tfm_alg_blocksize(tfm) : 0];
-		u8 *buf = in_place ? stack : dst;
-
-		fn(crypto_tfm_ctx(tfm), buf, src);
-		tfm->crt_u.cipher.cit_xor_block(buf, iv);
+		fn(crypto_tfm_ctx(tfm), dst, src);
+		tfm->crt_u.cipher.cit_xor_block(dst, iv);
 		memcpy(iv, src, crypto_tfm_alg_blocksize(tfm));
-		if (buf != dst)
-			memcpy(dst, buf, crypto_tfm_alg_blocksize(tfm));
 	}
 }
 
 static void ecb_process(struct crypto_tfm *tfm, u8 *dst, u8 *src,
-			cryptfn_t fn, int enc, void *info, int in_place)
+			cryptfn_t fn, int enc, void *info)
 {
 	fn(crypto_tfm_ctx(tfm), dst, src);
 }

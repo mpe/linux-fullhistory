@@ -34,12 +34,10 @@ static inline struct scatterlist *sg_next(struct scatterlist *sg)
 }
 
 static inline int scatterwalk_samebuf(struct scatter_walk *walk_in,
-				      struct scatter_walk *walk_out,
-				      void *src_p, void *dst_p)
+				      struct scatter_walk *walk_out)
 {
 	return walk_in->page == walk_out->page &&
-	       walk_in->offset == walk_out->offset &&
-	       walk_in->data == src_p && walk_out->data == dst_p;
+	       walk_in->offset == walk_out->offset;
 }
 
 static inline int scatterwalk_across_pages(struct scatter_walk *walk,
