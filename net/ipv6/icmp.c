@@ -15,6 +15,12 @@
  *      2 of the License, or (at your option) any later version.
  */
 
+/*
+ *	Changes:
+ *
+ *	Andi Kleen		:	exception handling
+ */
+
 #define __NO_VERSION__
 #include <linux/module.h>
 #include <linux/errno.h>
@@ -95,7 +101,7 @@ struct icmpv6_msg {
  *	not static because it's needed in ndisc.c
  */
 
-static void icmpv6_getfrag(const void *data, struct in6_addr *saddr, 
+static int icmpv6_getfrag(const void *data, struct in6_addr *saddr, 
 			   char *buff, unsigned int offset, unsigned int len)
 {
 	struct icmpv6_msg *msg = (struct icmpv6_msg *) data;
@@ -114,7 +120,7 @@ static void icmpv6_getfrag(const void *data, struct in6_addr *saddr,
 					 offset - sizeof(struct icmpv6hdr), 
 					 buff, len, msg->csum);
 		msg->csum = csum;
-		return;
+		return 0;
 	}
 
 	csum = csum_partial_copy((void *) &msg->icmph, buff,
@@ -128,6 +134,7 @@ static void icmpv6_getfrag(const void *data, struct in6_addr *saddr,
 
 	icmph->checksum = csum_ipv6_magic(saddr, msg->daddr, msg->len,
 					  IPPROTO_ICMPV6, csum);
+	return 0; 
 }
 
 /*

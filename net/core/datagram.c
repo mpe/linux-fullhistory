@@ -166,9 +166,15 @@ void skb_free_datagram(struct sock * sk, struct sk_buff *skb)
  *	Copy a datagram to a linear buffer.
  */
 
-void skb_copy_datagram(struct sk_buff *skb, int offset, char *to, int size)
+int skb_copy_datagram(struct sk_buff *skb, int offset, char *to, int size)
 {
-	copy_to_user(to,skb->h.raw+offset,size);
+	int err;
+	err = copy_to_user(to, skb->h.raw+offset, size);
+	if (err)
+	{
+		err = -EFAULT;
+	}
+	return err;
 }
 
 
@@ -176,9 +182,16 @@ void skb_copy_datagram(struct sk_buff *skb, int offset, char *to, int size)
  *	Copy a datagram to an iovec.
  */
  
-void skb_copy_datagram_iovec(struct sk_buff *skb, int offset, struct iovec *to, int size)
+int skb_copy_datagram_iovec(struct sk_buff *skb, int offset, struct iovec *to,
+			    int size)
 {
-	memcpy_toiovec(to,skb->h.raw+offset,size);
+	int err;
+	err = memcpy_toiovec(to, skb->h.raw+offset, size);
+	if (err)
+	{
+		err = -EFAULT;
+	}
+	return err;
 }
 
 /*

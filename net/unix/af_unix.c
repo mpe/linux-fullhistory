@@ -925,7 +925,15 @@ static int unix_sendmsg(struct socket *sock, struct msghdr *msg, int len, int no
 			}
 			return err;
 		}
-		size=skb_tailroom(skb);		/* If we dropped back on a limit then our skb is smaller */
+
+		/*
+		 *	If you pass two values to the sock_alloc_send_skb
+		 *	it tries to grab the large buffer with GFP_BUFFER
+		 *	(which can fail easily), and if it fails grab the
+		 *	fallback size buffer which is under a page and will
+		 *	succeed. [Alan]
+		 */
+		size = min(size, skb_tailroom(skb));
 
 		skb->sk=sk;
 		skb->free=1;
@@ -1024,6 +1032,7 @@ static int unix_recvmsg(struct socket *sock, struct msghdr *msg, int size, int n
 	struct iovec *iov=msg->msg_iov;
 	struct cmsghdr *cm=NULL;
 	int ct=msg->msg_iovlen;
+	int err = 0;
 
 	if(flags&MSG_OOB)
 		return -EOPNOTSUPP;
@@ -1098,8 +1107,13 @@ static int unix_recvmsg(struct socket *sock, struct msghdr *msg, int size, int n
 			}
 
 			num=min(skb->len,len-done);
-			copy_to_user(sp, skb->data, num);
+			err = copy_to_user(sp, skb->data, num);
 
+			if (err)
+			{
+				goto out;
+			}
+			
 			if (skb->h.filp!=NULL)
 				unix_detach_fds(skb,cm);
 
@@ -1121,7 +1135,7 @@ static int unix_recvmsg(struct socket *sock, struct msghdr *msg, int size, int n
 out:
 	up(&sk->protinfo.af_unix.readsem);
 
-	return copied;
+	return err ? -EFAULT : copied;
 }
 
 static int unix_shutdown(struct socket *sock, int mode)
@@ -1161,34 +1175,28 @@ static int unix_select(struct socket *sock,  int sel_type, select_table *wait)
 static int unix_ioctl(struct socket *sock, unsigned int cmd, unsigned long arg)
 {
 	unix_socket *sk=sock->data;
-	int err;
 	long amount=0;
 			
 	switch(cmd)
 	{
 	
 		case TIOCOUTQ:
-			err=verify_area(VERIFY_WRITE,(void *)arg,sizeof(int));
-			if(err)
-				return err;
 			amount=sk->sndbuf-sk->wmem_alloc;
 			if(amount<0)
 				amount=0;
-			put_user(amount, (int *)arg);
-			return 0;
+			return put_user(amount, (int *)arg);
 		case TIOCINQ:
 		{
 			struct sk_buff *skb;
 			if(sk->state==TCP_LISTEN)
 				return -EINVAL;
-			/* These two are safe on a single CPU system as only user tasks fiddle here */
+			/*
+			 *	These two are safe on a single CPU system as
+			 *	only user tasks fiddle here
+			 */
 			if((skb=skb_peek(&sk->receive_queue))!=NULL)
 				amount=skb->len;
-			err=verify_area(VERIFY_WRITE,(void *)arg,sizeof(int));
-			if(err)
-				return err;
-			put_user(amount, (int *)arg);
-			return 0;
+			return put_user(amount, (int *)arg);
 		}
 
 		default:

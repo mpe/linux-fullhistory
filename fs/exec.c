@@ -178,27 +178,23 @@ asmlinkage int sys_uselib(const char * library)
 
 /*
  * count() counts the number of arguments/envelopes
- *
- * We also do some limited EFAULT checking: this isn't complete, but
- * it does cover most cases. I'll have to do this correctly some day..
  */
 static int count(char ** argv)
 {
-	int error, i = 0;
-	char ** tmp, *p;
+	int i = 0;
 
-	if ((tmp = argv) != NULL) {
-		error = verify_area(VERIFY_READ, tmp, sizeof(char *));
-		if (error)
-			return error;
+	if (argv != NULL) {
 		for (;;) {
-			get_user(p,tmp++);
-			if (!p)
-				break;
-			i++;
-			error = verify_area(VERIFY_READ, p, 1);
+			char * p;
+			int error;
+
+			error = get_user(p,argv);
 			if (error)
 				return error;
+			if (!p)
+				break;
+			argv++;
+			i++;
 		}
 	}
 	return i;
@@ -224,60 +220,51 @@ static int count(char ** argv)
 unsigned long copy_strings(int argc,char ** argv,unsigned long *page,
 		unsigned long p, int from_kmem)
 {
-	char *tmp, *tmp1, *pag = NULL;
-	int len, offset = 0;
-	unsigned long old_fs, new_fs;
+	char *str;
+	unsigned long old_fs;
 
 	if (!p)
 		return 0;	/* bullet-proofing */
-	new_fs = get_ds();
 	old_fs = get_fs();
 	if (from_kmem==2)
-		set_fs(new_fs);
+		set_fs(KERNEL_DS);
 	while (argc-- > 0) {
+		int len;
+		unsigned long pos;
+
 		if (from_kmem == 1)
-			set_fs(new_fs);
-		get_user(tmp, argv+argc);
-		if (!tmp)
+			set_fs(KERNEL_DS);
+		get_user(str, argv+argc);
+		if (!str)
 			panic("VFS: argc is wrong");
-		tmp1 = tmp;
 		if (from_kmem == 1)
 			set_fs(old_fs);
-		for (;;) {
-			char c;
-			get_user(c,tmp++);
-			if (!c)
-				break;
-		}
-		len = tmp - tmp1;
+		len = strlen_user(str);	/* includes the '\0' */
 		if (p < len) {	/* this shouldn't happen - 128kB */
 			set_fs(old_fs);
 			return 0;
 		}
+		p -= len;
+		pos = p;
 		while (len) {
-			--p; --tmp; --len;
-			if (--offset < 0) {
-				offset = p % PAGE_SIZE;
+			char *pag;
+			int offset, bytes_to_copy;
+
+			offset = pos % PAGE_SIZE;
+			if (!(pag = (char *) page[pos/PAGE_SIZE]) &&
+			    !(pag = (char *) page[pos/PAGE_SIZE] =
+			      (unsigned long *) get_free_page(GFP_USER))) {
 				if (from_kmem==2)
 					set_fs(old_fs);
-				if (!(pag = (char *) page[p/PAGE_SIZE]) &&
-				    !(pag = (char *) page[p/PAGE_SIZE] =
-				      (unsigned long *) get_free_page(GFP_USER))) 
-					return 0;
-				if (from_kmem==2)
-					set_fs(new_fs);
-
+				return 0;
 			}
-			if (len == 0 || offset == 0)
-				get_user(*(pag + offset), tmp);
-			else {
-			  int bytes_to_copy = (len > offset) ? offset : len;
-			  tmp -= bytes_to_copy;
-			  p -= bytes_to_copy;
-			  offset -= bytes_to_copy;
-			  len -= bytes_to_copy;
-			  copy_from_user(pag + offset, tmp, bytes_to_copy + 1);
-			}
+			bytes_to_copy = PAGE_SIZE - offset;
+			if (bytes_to_copy > len)
+				bytes_to_copy = len;
+			copy_from_user(pag + offset, str, bytes_to_copy);
+			pos += bytes_to_copy;
+			str += bytes_to_copy;
+			len -= bytes_to_copy;
 		}
 	}
 	if (from_kmem==2)

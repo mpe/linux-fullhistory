@@ -133,7 +133,7 @@ extern int			ipv6_reassembly(struct sk_buff **skb,
  *	Function prototype for build_xmit
  */
 
-typedef void		(*inet_getfrag_t) (const void *data,
+typedef int		(*inet_getfrag_t) (const void *data,
 					   struct in6_addr *addr,
 					   char *,
 					   unsigned int, unsigned int);

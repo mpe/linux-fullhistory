@@ -17,6 +17,21 @@
 /* For avoiding bswap on i386 */
 #ifdef __KERNEL__
 #include <linux/config.h>
+
+/*
+ * In-kernel byte order macros to handle stuff like
+ * byte-order-dependent filesystems etc.
+ */
+#define cpu_to_le32(x) (x)
+#define le32_to_cpu(x) (x)
+#define cpu_to_le16(x) (x)
+#define le16_to_cpu(x) (x)
+
+#define cpu_to_be32(x) htonl((x))
+#define be32_to_cpu(x) ntohl((x))
+#define cpu_to_be16(x) htons((x))
+#define be16_to_cpu(x) ntohs((x))
+
 #endif
 
 extern unsigned long int	ntohl(unsigned long int);

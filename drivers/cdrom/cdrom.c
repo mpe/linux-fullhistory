@@ -268,13 +268,11 @@ int cdrom_media_changed(kdev_t dev)
    meaningful format indicated above.
  */
 
-#undef current                          /* set in sched.h */
-
 static
 void sanitize_format(union cdrom_addr *addr,
-                     u_char * current, u_char requested)
+                     u_char * curr, u_char requested)
 {
-        if (*current == requested)
+        if (*curr == requested)
                 return;                 /* nothing to be done! */
         if (requested == CDROM_LBA) {
                 addr->lba = (int) addr->msf.frame +
@@ -287,7 +285,7 @@ void sanitize_format(union cdrom_addr *addr,
                 addr->msf.second = lba % 60;
                 addr->msf.minute = lba / 60;
         }
-        *current = requested;
+        *curr = requested;
 }
 
 /* All checking and format change makes this code really hard to read!

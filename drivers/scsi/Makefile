@@ -58,8 +58,12 @@ else
   endif
 endif
 
+ifeq ($(CONFIG_BLK_DEV_SR_VENDOR),y)
+SR_VENDOR = sr_vendor.o
+endif
+
 ifeq ($(CONFIG_BLK_DEV_SR),y)
-L_OBJS += sr.o sr_ioctl.o
+L_OBJS += sr.o sr_ioctl.o $(SR_VENDOR)
 else
   ifeq ($(CONFIG_BLK_DEV_SR),m)
   M_OBJS += sr_mod.o
@@ -376,8 +380,8 @@ scsi_mod.o: $(MX_OBJS) hosts.o scsi.o scsi_ioctl.o constants.o \
 		scsicam.o scsi_proc.o
 	$(LD) $(LD_RFLAG) -r -o $@ $(MX_OBJS) hosts.o scsi.o scsi_ioctl.o constants.o scsicam.o scsi_proc.o
 
-sr_mod.o: sr.o sr_ioctl.o
-	$(LD) $(LD_RFLAG) -r -o $@ sr.o sr_ioctl.o
+sr_mod.o: sr.o sr_ioctl.o $(SR_VENDOR)
+	$(LD) $(LD_RFLAG) -r -o $@ sr.o sr_ioctl.o $(SR_VENDOR)
 
 sd_mod.o: sd.o sd_ioctl.o
 	$(LD) $(LD_RFLAG) -r -o $@ sd.o sd_ioctl.o

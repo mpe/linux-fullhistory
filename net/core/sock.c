@@ -122,12 +122,13 @@
  */
 
 int sock_setsockopt(struct sock *sk, int level, int optname,
-		char *optval, int optlen)
+		    char *optval, int optlen)
 {
 	int val;
 	int valbool;
 	int err;
 	struct linger ling;
+	int ret = 0;
 
 	/*
 	 *	Options without arguments
@@ -144,33 +145,36 @@ int sock_setsockopt(struct sock *sk, int level, int optname,
 		
   	if (optval == NULL) 
   		return(-EINVAL);
-
-  	err=verify_area(VERIFY_READ, optval, sizeof(int));
-  	if(err)
-  		return err;
   	
-	get_user(val, (int *)optval);
+	err = get_user(val, (int *)optval);
+	if (err)
+		return err;
+	
   	valbool = val?1:0;
   	
   	switch(optname) 
   	{
 		case SO_DEBUG:	
 			if(val && !suser())
-				return(-EPERM);
-			sk->debug=valbool;
-			return 0;
+			{
+				ret = -EPERM;
+			}
+			else
+				sk->debug=valbool;
+			break;
 		case SO_REUSEADDR:
 			sk->reuse = valbool;
-			return(0);
+			break;
 		case SO_TYPE:
 		case SO_ERROR:
-		  	return(-ENOPROTOOPT);
+			ret = -ENOPROTOOPT;
+		  	break;
 		case SO_DONTROUTE:
 			sk->localroute=valbool;
-			return 0;
+			break;
 		case SO_BROADCAST:
 			sk->broadcast=valbool;
-			return 0;
+			break;
 		case SO_SNDBUF:
 			if(val > SK_WMEM_MAX*2)
 				val = SK_WMEM_MAX*2;
@@ -179,7 +183,7 @@ int sock_setsockopt(struct sock *sk, int level, int optname,
 			if(val > 65535)
 				val = 65535;
 			sk->sndbuf = val;
-			return 0;
+			break;
 
 		case SO_RCVBUF:
 			if(val > SK_RMEM_MAX*2)
@@ -189,41 +193,45 @@ int sock_setsockopt(struct sock *sk, int level, int optname,
 			if(val > 65535)
 				val = 65535;
 			sk->rcvbuf = val;
-			return(0);
+			break;
 
 		case SO_KEEPALIVE:
+#ifdef CONFIG_INET
 			if (sk->protocol == IPPROTO_TCP)
 			{
 				tcp_set_keepalive(sk, valbool);
 			}
+#endif
 			sk->keepopen = valbool;
-			return(0);
+			break;
 
 	 	case SO_OOBINLINE:
 			sk->urginline = valbool;
-			return(0);
+			break;
 
 	 	case SO_NO_CHECK:
 			sk->no_check = valbool;
-			return(0);
+			break;
 
 		case SO_PRIORITY:
 			if (val >= 0 && val < DEV_NUMBUFFS) 
 			{
 				sk->priority = val;
 			} 
-			else 
+			else
 			{
 				return(-EINVAL);
 			}
-			return(0);
+			break;
 
 
 		case SO_LINGER:
-			err=verify_area(VERIFY_READ,optval,sizeof(ling));
-			if(err)
-				return err;
-			copy_from_user(&ling,optval,sizeof(ling));
+			err = copy_from_user(&ling,optval,sizeof(ling));
+			if (err)
+			{
+				ret = -EFAULT;
+				break;
+			}
 			if(ling.l_onoff==0)
 				sk->linger=0;
 			else
@@ -231,15 +239,16 @@ int sock_setsockopt(struct sock *sk, int level, int optname,
 				sk->lingertime=ling.l_linger;
 				sk->linger=1;
 			}
-			return 0;
+			break;
 
 		case SO_BSDCOMPAT:
 			sk->bsdism = valbool;
-			return 0;
+			break;
 			
 		default:
 		  	return(-ENOPROTOOPT);
   	}
+	return ret;
 }
 
 
@@ -303,17 +312,13 @@ int sock_getsockopt(struct sock *sk, int level, int optname,
 			break;
 		
 		case SO_LINGER:	
-			err=verify_area(VERIFY_WRITE,optval,sizeof(ling));
-			if(err)
-				return err;
-			err=verify_area(VERIFY_WRITE,optlen,sizeof(int));
-			if(err)
-				return err;
-			put_user(sizeof(ling), optlen);
-			ling.l_onoff=sk->linger;
-			ling.l_linger=sk->lingertime;
-			copy_to_user(optval,&ling,sizeof(ling));
-			return 0;
+			err = put_user(sizeof(ling), optlen);
+			if (!err) {
+				ling.l_onoff=sk->linger;
+				ling.l_linger=sk->lingertime;
+				err = copy_to_user(optval,&ling,sizeof(ling));
+			}
+			return err;
 		
 		case SO_BSDCOMPAT:
 			val = sk->bsdism;
@@ -322,17 +327,11 @@ int sock_getsockopt(struct sock *sk, int level, int optname,
 		default:
 			return(-ENOPROTOOPT);
 	}
-	err=verify_area(VERIFY_WRITE, optlen, sizeof(int));
-	if(err)
-  		return err;
-  	put_user(sizeof(int), optlen);
+  	err = put_user(sizeof(int), optlen);
+	if (!err)
+		err = put_user(val,(unsigned int *)optval);
 
-  	err=verify_area(VERIFY_WRITE, optval, sizeof(int));
-  	if(err)
-  		return err;
-  	put_user(val,(unsigned int *)optval);
-
-  	return(0);
+  	return err;
 }
 
 struct sock *sk_alloc(int priority)

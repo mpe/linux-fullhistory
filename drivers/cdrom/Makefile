@@ -90,11 +90,11 @@ endif #CONFIG_GSCD
 
 ifeq ($(CONFIG_CM206),y)
 L_OBJS += cm206.o
-C = 1 
+USE_GENERIC_CD=1
 else
   ifeq ($(CONFIG_CM206),m)
   M_OBJS += cm206.o
-  CM = 1
+    USE_MODULAR_GENERIC_CD=1
   endif
 endif #CONFIG_CM206
 
@@ -127,6 +127,14 @@ else
   M_OBJS += isp16.o
   endif
 endif #CONFIG_ISP16_CDI
+
+ifeq ($(CONFIG_BLK_DEV_SR),y)
+USE_GENERIC_CD=1
+else
+  ifeq ($(CONFIG_BLK_DEV_SR),m)
+    USE_MODULAR_GENERIC_CD=1
+  endif
+endif #SCSI CDROM DRIVER
 
 ifeq ($(CONFIG_BLK_DEV_IDECD),y)
 USE_GENERIC_CD=1

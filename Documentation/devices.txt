@@ -2,7 +2,7 @@
 
 	     Maintained by H. Peter Anvin <hpa@zytor.com>
 
-		     Last revised: July 9, 1996
+		   Last revised: November 13, 1996
 
 This list is the successor to Rick Miller's Linux Device List, which
 he stopped maintaining when he got busy with other things in 1993.  It
@@ -269,6 +269,7 @@ reply.
 		  5 = /dev/atarimouse	Atari mouse
 		  6 = /dev/sunmouse	Sun mouse
 		  7 = /dev/amigamouse1	Second Amiga mouse
+		  8 = /dev/smouse	Simple serial mouse driver
 		128 = /dev/beep		Fancy beep device
 		129 = /dev/modreq	Kernel module load request
 		130 = /dev/watchdog	Watchdog timer port
@@ -785,7 +786,26 @@ reply.
 		<mseritan@ottonel.pub.ro> to transfer data from Holter
 		24-hour heart monitoring equipment.
 
- 55-59		UNALLOCATED
+ 55 char	DSP56001 digital signal processor
+		  0 = /dev/dsp56k	First DSP56001
+
+ 56 char	Apple Desktop Bus
+		  0 = /dev/adb		ADB bus control
+
+		Additional devices will be added to this number, all
+		starting with /dev/adb.
+
+ 57 char	Hayes ESP serial card
+		  0 = /dev/ttyP0	First ESP port
+		  1 = /dev/ttyP1	Second ESP port
+		      ...
+
+ 58 char	Hayes ESP serial card - alternate devices
+		  0 = /dev/cup0		Callout device corresponding to ttyP0
+		  1 = /dev/cup1		Callout device corresponding to ttyP1
+		      ...
+
+ 59		UNALLOCATED
 
  60-63		LOCAL/EXPERIMENTAL USE
 		Allocated for local/experimental use.  For devices not

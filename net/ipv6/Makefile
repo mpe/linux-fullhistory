@@ -13,6 +13,7 @@ O_OBJS   := af_inet6.o ipv6_output.o ipv6_input.o addrconf.o sit.o \
 	    protocol.o icmp.o mcast.o reassembly.o tcp_ipv6.o \
 	    exthdrs.o sysctl_net_ipv6.o datagram.o
 
+MOD_LIST_NAME := IPV6_MODULES
 M_OBJS   := $(O_TARGET)
 
 include $(TOPDIR)/Rules.make

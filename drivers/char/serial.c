@@ -50,7 +50,7 @@
 #include <asm/bitops.h>
 
 static char *serial_name = "Serial driver";
-static char *serial_version = "4.20";
+static char *serial_version = "4.21";
 
 DECLARE_TASK_QUEUE(tq_serial);
 
@@ -2687,7 +2687,7 @@ static int get_auto_irq(struct async_struct *info)
 	(void)serial_inp(info, UART_IIR);
 	(void)serial_inp(info, UART_MSR);
 	
-	timeout = jiffies+2*HZ/100;
+	timeout = jiffies+ ((2*HZ)/100);
 	while (timeout >= jiffies) {
 		if (rs_irq_triggered)
 			break;
@@ -2758,7 +2758,9 @@ static void autoconfig(struct serial_state * state)
 	if (!state->port)
 		return;
 	info = &scr_info;	/* This is just for serial_{in,out} */
-	info->port = state->port; 
+	info->magic = SERIAL_MAGIC;
+	info->port = state->port;
+	info->flags = state->flags;
 
 	save_flags(flags); cli();
 	
@@ -2848,8 +2850,13 @@ static void autoconfig(struct serial_state * state)
 		serial_outp(info, UART_FCR,
 			    UART_FCR_ENABLE_FIFO | UART_FCR7_64BYTE);
 		scratch = serial_in(info, UART_IIR) >> 5;
-		if (scratch == 7)
-			state->type = PORT_16750;
+		if (scratch == 7) {
+			serial_outp(info, UART_LCR, 0);
+			serial_outp(info, UART_FCR, UART_FCR_ENABLE_FIFO);
+			scratch = serial_in(info, UART_IIR) >> 5;
+			if (scratch == 7)
+				state->type = PORT_16750;
+		}
 		serial_outp(info, UART_FCR, UART_FCR_ENABLE_FIFO);
 	}
 	serial_outp(info, UART_LCR, scratch2);

@@ -194,11 +194,18 @@ static int tcp_reset(struct sock *sk, struct sk_buff *skb)
 	/*
 	 *	We want the right error as BSD sees it (and indeed as we do).
 	 */
-	sk->err = ECONNRESET;
-	if (sk->state == TCP_SYN_SENT)
-		sk->err = ECONNREFUSED;
-	if (sk->state == TCP_CLOSE_WAIT)
-		sk->err = EPIPE;
+	switch (sk->state) {
+		case TCP_TIME_WAIT:
+			break;
+		case TCP_SYN_SENT:
+			sk->err = ECONNREFUSED;
+			break;
+		case TCP_CLOSE_WAIT:
+			sk->err = EPIPE;
+			break;
+		default:
+			sk->err = ECONNRESET;
+	}
 #ifdef CONFIG_TCP_RFC1337
 	/*
 	 *	Time wait assassination protection [RFC1337]

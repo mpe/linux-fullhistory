@@ -42,7 +42,7 @@ foo \kill}%
 %
 \title{{\bf Linux Allocated Devices}}
 \author{Maintained by H. Peter Anvin $<$hpa@zytor.com$>$}
-\date{Last revised: July 9, 1996}
+\date{Last revised: November 13, 1996}
 \maketitle
 %
 \noindent
@@ -179,7 +179,11 @@ reply.
 \major{52}{}{char }{Spellcaster DataComm/BRI ISDN card}
 \major{53}{}{char }{BDM interface for remote debugging MC683xx microcontrollers}
 \major{54}{}{char }{Electrocardiognosis Holter serial card}
-\major{55}{--59}{}{Unallocated}
+\major{55}{}{char }{DSP56001 digital signal processor}
+\major{56}{}{char }{Apple Desktop Bus}
+\major{57}{}{char }{Hayes ESP serial card}
+\major{58}{}{char }{Hayes ESP serial card -- alternate devices}
+\major{59}{}{}{Unallocated}
 \major{60}{--63}{}{Local/experimental use}
 \major{64}{--119}{}{Unallocated}
 \major{120}{--127}{}{Local/experimental use}
@@ -453,6 +457,7 @@ physical disks.
 	\minor{5}{/dev/atarimouse}{Atari mouse}
 	\minor{6}{/dev/sunmouse}{Sun mouse}
 	\minor{7}{/dev/amigamouse1}{Second Amiga mouse}
+	\minor{8}{/dev/smouse}{Simple serial mouse driver}
 	\minor{128}{/dev/beep}{Fancy beep device}
 	\minor{129}{/dev/modreq}{Kernel module load request}
 	\minor{130}{/dev/watchdog}{Watchdog timer port}
@@ -1116,7 +1121,35 @@ $<$mseritan@ottonel.pub.ro$>$ to transfer data from Holter 24-hour
 heart monitoring equipment.
 
 \begin{devicelist}
-\major{55}{--59}{}{Unallocated}
+\major{55}{}{char }{DSP56001 digital signal processor}
+	\minor{0}{/dev/dsp56k}{First DSP56001}
+\end{devicelist}
+
+\begin{devicelist}
+\major{56}{}{char }{Apple Desktop Bus}
+	\minor{0}{/dev/adb}{ADB bus control}
+\end{devicelist}
+
+\noindent
+Additional devices will be added to this number, all starting with
+{\file /dev/adb}.
+
+\begin{devicelist}
+\major{57}{}{char }{Hayes ESP serial card}
+	\minor{0}{/dev/ttyP0}{First ESP port}
+	\minor{1}{/dev/ttyP1}{Second ESP port}
+	\minordots
+\end{devicelist}
+
+\begin{devicelist}
+\major{58}{}{char }{Hayes ESP serial card -- alternate devices}
+	\minor{0}{/dev/cup0}{Callout device corresponding to {\file ttyP0}}
+	\minor{1}{/dev/cup1}{Callout device corresponding to {\file ttyP1}}
+	\minordots
+\end{devicelist}
+
+\begin{devicelist}
+\major{59}{}{}{Unallocated}
 \end{devicelist}
 
 \begin{devicelist}
@@ -1182,9 +1215,9 @@ It is recommended that these links exist on all systems:
 \link{/dev/ramdisk}{ram0}{symbolic}{Backward compatibility}
 \link{/dev/ftape}{rft0}{symbolic}{Backward compatibility}
 \link{/dev/scd?}{sr?}{hard}{Alternate name for CD-ROMs}
-%\link{/dev/fd?H*}{fd?D*}{hard}{Compatible floppy formats}
-%\link{/dev/fd?E*}{fd?D*}{hard}{Compatible floppy formats}
-%\link{/dev/fd?E*}{fd?H*}{hard}{Compatible floppy formats}
+\link{/dev/fd?D*}{fd?u*}{hard}{Backward compatibility}
+\link{/dev/fd?H*}{fd?u*}{hard}{Backward compatibility}
+\link{/dev/fd?E*}{fd?u*}{hard}{Backward compatibility}
 \end{nodelist}
 
 \subsection{Locally defined links}

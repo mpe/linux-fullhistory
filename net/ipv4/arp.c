@@ -2179,20 +2179,18 @@ int arp_ioctl(unsigned int cmd, void *arg)
 			if (!suser())
 				return -EPERM;
 		case SIOCGARP:
-			err = verify_area(VERIFY_READ, arg, sizeof(struct arpreq));
+			err = copy_from_user(&r, arg, sizeof(struct arpreq));
 			if (err)
-				return err;
-			copy_from_user(&r, arg, sizeof(struct arpreq));
+				return -EFAULT; 
 			break;
 		case OLD_SIOCDARP:
 		case OLD_SIOCSARP:
 			if (!suser())
 				return -EPERM;
 		case OLD_SIOCGARP:
-			err = verify_area(VERIFY_READ, arg, sizeof(struct arpreq_old));
+			err = copy_from_user(&r, arg, sizeof(struct arpreq_old));
 			if (err)
-				return err;
-			copy_from_user(&r, arg, sizeof(struct arpreq_old));
+				return -EFAULT; 
 			memset(&r.arp_dev, 0, sizeof(r.arp_dev));
 			break;
 		default:
@@ -2250,17 +2248,15 @@ int arp_ioctl(unsigned int cmd, void *arg)
 			}
 			return err;
 		case SIOCGARP:
-			err = verify_area(VERIFY_WRITE, arg, sizeof(struct arpreq));
-			if (err)
-				return err;
 			err = arp_req_get(&r, dev);
 			if (!err)
-				copy_to_user(arg, &r, sizeof(r));
+			{
+				err = copy_to_user(arg, &r, sizeof(r));
+				if (err)
+					err = -EFAULT;
+			}
 			return err;
 		case OLD_SIOCGARP:
-			err = verify_area(VERIFY_WRITE, arg, sizeof(struct arpreq_old));
-			if (err)
-				return err;
 			r.arp_flags &= ~ATF_PUBL;
 			err = arp_req_get(&r, dev);
 			if (err < 0)
@@ -2269,7 +2265,11 @@ int arp_ioctl(unsigned int cmd, void *arg)
 				err = arp_req_get(&r, dev);
 			}
 			if (!err)
-				copy_to_user(arg, &r, sizeof(struct arpreq_old));
+			{
+				err = copy_to_user(arg, &r, sizeof(struct arpreq_old));
+				if (err)
+					err = -EFAULT;
+			}
 			return err;
 	}
 	/*NOTREACHED*/

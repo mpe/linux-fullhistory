@@ -382,7 +382,7 @@ static __inline__ unsigned short tcp_raise_window(struct sock *sk)
          * old_window - received_bytes_on_that_win
 	 */
 
-	cur_win = tp->rcv_wup + tp->rcv_wnd - tp->rcv_nxt;
+	cur_win = tp->rcv_wup - (tp->rcv_nxt - tp->rcv_wnd);
 
 
 	/*
@@ -396,82 +396,7 @@ static __inline__ unsigned short tcp_raise_window(struct sock *sk)
 	return res;
 }
 
-/*
- *      This function returns the amount that we can raise the
- *      usable window based on the following constraints
- *  
- *	1. The window can never be shrunk once it is offered (RFC 793)
- *	2. We limit memory per socket
- */
-
-
-static __inline__ unsigned short tcp_select_window(struct sock *sk)
-{
-	struct tcp_opt *tp = &sk->tp_pinfo.af_tcp;
-	long free_space = sock_rspace(sk);
-	long window;
-	long cur_win;
-	long usable;
-	
-	if (sk->window_clamp)
-		free_space = min(sk->window_clamp, free_space);
-	
-	/*
-	 * compute the actual window i.e.
-	 * old_window - received_bytes_on_that_win
-	 */
-
-	cur_win = tp->rcv_wup + tp->rcv_wnd - tp->rcv_nxt;
-	window  = tp->rcv_wnd;
-	
-	if ( cur_win < 0 )
-	{
-		cur_win = 0;
-		printk(KERN_DEBUG "TSW: win < 0 w=%d 1=%u 2=%u\n",
-		       tp->rcv_wnd, tp->rcv_nxt, tp->rcv_wup);
-	}
-
-	/*
-	 * RFC 1122:
-	 * "the suggested [SWS] avoidance algoritm for the receiver is to keep
-	 *  RECV.NEXT + RCV.WIN fixed until:
-	 *  RCV.BUFF - RCV.USER - RCV.WINDOW >= min(1/2 RCV.BUFF, MSS)"
-	 *
-	 * i.e. don't raise the right edge of the window until you can't raise
-	 * it MSS bytes
-	 */
-
-	/*
-	 * It would be a good idea if it didn't break header prediction.
-	 * and BSD made the header predition standard...
-	 * It expects the same value in the header i.e. th->window to be
-	 * constant
-	 */
-
-	if (tp->rcv_wnd >= free_space)
-	{
-		if (cur_win > (sk->mss << 1))
-			goto out;
-	}
-
-	usable = free_space - cur_win;
-
-#define WROUND(X, Y) ((X + (Y-1)) & (Y-1))
-		
-	window += WROUND(min(usable, sk->mss), 1024);
-
-#undef WROUND
-
-	if (window < cur_win)
-	{
-		window = cur_win;
-	}
-
-  out:	
-	tp->rcv_wnd = window;
-	tp->rcv_wup = tp->rcv_nxt;
-	return window;
-}
+extern unsigned short	tcp_select_window(struct sock *sk);
 
 /*
  * List all states of a TCP socket that can be viewed as a "connected"

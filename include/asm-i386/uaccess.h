@@ -407,5 +407,33 @@ strncpy_from_user(char *dst, const char *src, long count)
 	return res;
 }
 
+/*
+ * Return the size of a string (including the ending 0)
+ *
+ * Return 0 for error
+ */
+extern inline long strlen_user(const char * s)
+{
+	long res;
+	__asm__ __volatile__(
+		"\n"
+		"0:\trepne ; scasb\n\t"
+		"notl %0\n"
+		"1:\n"
+		".section .fixup,\"ax\"\n"
+		"2:\txorl %0,%0\n\t"
+		"jmp 1b\n"
+		".section __ex_table,\"a\"\n\t"
+		".align 4\n\t"
+		".long 0b,2b\n"
+		".text"
+		:"=c" (res)
+		:"D" (s),"a" (0),"0" (0xffffffff)
+		:"di");
+	if (!access_ok(VERIFY_READ, s, res))
+		res = 0;
+	return res;
+}
+
 
 #endif /* __i386_UACCESS_H */

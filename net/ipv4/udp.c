@@ -227,14 +227,14 @@ struct udpfakehdr
  *	for direct user->board I/O transfers. That one will be fun.
  */
  
-static void udp_getfrag(const void *p, __u32 saddr, char * to, unsigned int offset, unsigned int fraglen) 
+static int udp_getfrag(const void *p, __u32 saddr, char * to, unsigned int offset, unsigned int fraglen) 
 {
 	struct udpfakehdr *ufh = (struct udpfakehdr *)p;
 	const char *src;
 	char *dst;
 	unsigned int len;
 
-	if (offset) 
+	if (offset)
 	{
 		len = fraglen;
 	 	src = ufh->from+(offset-sizeof(struct udphdr));
@@ -258,6 +258,7 @@ static void udp_getfrag(const void *p, __u32 saddr, char * to, unsigned int offs
 			ufh->uh.check = -1;
 		memcpy(to, ufh, sizeof(struct udphdr));
 	}
+	return 0;
 }
 
 /*
@@ -267,12 +268,13 @@ static void udp_getfrag(const void *p, __u32 saddr, char * to, unsigned int offs
  *	this is a valid decision.
  */
  
-static void udp_getfrag_nosum(const void *p, __u32 saddr, char * to, unsigned int offset, unsigned int fraglen) 
+static int udp_getfrag_nosum(const void *p, __u32 saddr, char * to, unsigned int offset, unsigned int fraglen) 
 {
 	struct udpfakehdr *ufh = (struct udpfakehdr *)p;
 	const char *src;
 	char *dst;
 	unsigned int len;
+	int err; 
 
 	if (offset) 
 	{
@@ -286,9 +288,10 @@ static void udp_getfrag_nosum(const void *p, __u32 saddr, char * to, unsigned in
  		src = ufh->from;
 		dst = to+sizeof(struct udphdr);
 	}
-	copy_from_user(dst,src,len);
+	err = copy_from_user(dst,src,len);
 	if (offset == 0) 
 		memcpy(to, ufh, sizeof(struct udphdr));
+	return err; 
 }
 
 
@@ -458,11 +461,16 @@ int udp_sendmsg(struct sock *sk, struct msghdr *msg, int len, int noblock,
 		buf=kmalloc(len, GFP_KERNEL);
 		if(buf==NULL)
 			return -ENOBUFS;
-		memcpy_fromiovec(buf, msg->msg_iov, len);
-		fs=get_fs();
-		set_fs(get_ds());
-		err=udp_sendto(sk,buf,len, noblock, flags, msg->msg_name, msg->msg_namelen);
-		set_fs(fs);
+		err = memcpy_fromiovec(buf, msg->msg_iov, len);
+		if (err)
+			err = -EFAULT;
+		if (!err)
+		{
+			fs=get_fs();
+			set_fs(get_ds());
+			err=udp_sendto(sk,buf,len, noblock, flags, msg->msg_name, msg->msg_namelen);
+			set_fs(fs);
+		}
 		kfree_s(buf,len);
 		return err;
 	}
@@ -474,7 +482,6 @@ int udp_sendmsg(struct sock *sk, struct msghdr *msg, int len, int noblock,
  
 int udp_ioctl(struct sock *sk, int cmd, unsigned long arg)
 {
-	int err;
 	switch(cmd) 
 	{
 		case TIOCOUTQ:
@@ -483,12 +490,7 @@ int udp_ioctl(struct sock *sk, int cmd, unsigned long arg)
 
 			if (sk->state == TCP_LISTEN) return(-EINVAL);
 			amount = sock_wspace(sk);
-			err=verify_area(VERIFY_WRITE,(void *)arg,
-					sizeof(unsigned long));
-			if(err)
-				return(err);
-			put_user(amount, (int *)arg);
-			return(0);
+			return put_user(amount, (int *)arg);
 		}
 
 		case TIOCINQ:
@@ -507,12 +509,7 @@ int udp_ioctl(struct sock *sk, int cmd, unsigned long arg)
 				 */
 				amount = skb->len-sizeof(struct udphdr);
 			}
-			err=verify_area(VERIFY_WRITE,(void *)arg,
-						sizeof(unsigned long));
-			if(err)
-				return(err);
-			put_user(amount, (int *)arg);
-			return(0);
+			return put_user(amount, (int *)arg);
 		}
 
 		default:
@@ -559,7 +556,9 @@ int udp_recvmsg(struct sock *sk, struct msghdr *msg, int len,
   	 *	FIXME : should use udp header size info value 
   	 */
   	 
-	skb_copy_datagram_iovec(skb,sizeof(struct udphdr),msg->msg_iov,copied);
+	er = skb_copy_datagram_iovec(skb,sizeof(struct udphdr),msg->msg_iov,copied);
+	if (er)
+		return er; 
 	sk->stamp=skb->stamp;
 
 	/* Copy the address. */

@@ -159,8 +159,7 @@ int move_addr_to_user(void *kaddr, int klen, void *uaddr, int *ulen)
 		if(copy_to_user(uaddr,kaddr,len))
 			return -EFAULT;
 	}
- 	put_user(len, ulen);
- 	return 0;
+ 	return put_user(len, ulen);
 }
 
 /*
@@ -649,17 +648,14 @@ asmlinkage int sys_socketpair(int family, int type, int protocol, int usockvec[2
 	sock1->state = SS_CONNECTED;
 	sock2->state = SS_CONNECTED;
 
-	er=verify_area(VERIFY_WRITE, usockvec, sizeof(usockvec));
-	if(er)
-	{
+	er = put_user(fd1, &usockvec[0]); 
+	if (!er) 
+		er = put_user(fd2, &usockvec[1]);
+	if (er) {
 		sys_close(fd1);
 		sys_close(fd2);
-	 	return er;
 	}
-	put_user(fd1, &usockvec[0]);
-	put_user(fd2, &usockvec[1]);
-
-	return(0);
+	return er;
 }
 
 
@@ -1133,12 +1129,8 @@ asmlinkage int sys_sendmsg(int fd, struct msghdr *msg, unsigned int flags)
 	if(sock->ops->sendmsg==NULL)
 		return -EOPNOTSUPP;
 
-
-	err=verify_area(VERIFY_READ, msg,sizeof(struct msghdr));
-	if(err)
-		return err;
-
-	copy_from_user(&msg_sys,msg,sizeof(struct msghdr));
+	if ((err = copy_from_user(&msg_sys,msg,sizeof(struct msghdr))))
+		return -EFAULT; 
 
 	/* do not move before msg_sys is valid */
 	if(msg_sys.msg_iovlen>UIO_MAXIOV)
@@ -1200,11 +1192,8 @@ asmlinkage int sys_recvmsg(int fd, struct msghdr *msg, unsigned int flags)
 	if (!(sock = sockfd_lookup(fd, NULL)))
 		return(-ENOTSOCK);
 	
-	err=verify_area(VERIFY_READ, msg,sizeof(struct msghdr));
-	if(err)
-		return err;
-
-	copy_from_user(&msg_sys,msg,sizeof(struct msghdr));
+	if ((err = copy_from_user(&msg_sys,msg,sizeof(struct msghdr))))
+		return -EFAULT; 
 
 	if(msg_sys.msg_iovlen>UIO_MAXIOV)
 		return -EINVAL;
@@ -1240,19 +1229,24 @@ asmlinkage int sys_recvmsg(int fd, struct msghdr *msg, unsigned int flags)
 	if(len<0)
 		return len;
 
-	if (uaddr != NULL) {
+	if (uaddr != NULL)
+	{
 		err = move_addr_to_user(addr, addr_len, uaddr, uaddr_len);
-		if (err)
-			return err;
 	}
 
 	if (msg_sys.msg_control)
 	{
-		copy_to_user(usr_msg_ctl, krn_msg_ctl, msg_sys.msg_controllen);
-		kfree(krn_msg_ctl);
+		if (!err)
+		{
+			int ret;
+			ret = copy_to_user(usr_msg_ctl, krn_msg_ctl,
+					   msg_sys.msg_controllen);
+			err = -EFAULT;
+		}
+		kfree(krn_msg_ctl);		
 	}
 
-	return len;
+	return err ? err : len;
 }
 
 
@@ -1285,7 +1279,6 @@ int sock_fcntl(struct file *filp, unsigned int cmd, unsigned long arg)
 
 asmlinkage int sys_socketcall(int call, unsigned long *args)
 {
-	int er;
 	unsigned char nargs[18]={0,3,3,3,2,3,3,3,
 				 4,4,4,6,6,2,5,5,3,3};
 	unsigned long a[6];
@@ -1294,10 +1287,8 @@ asmlinkage int sys_socketcall(int call, unsigned long *args)
 	if(call<1||call>SYS_RECVMSG)
 		return -EINVAL;
 		
-	er=verify_area(VERIFY_READ, args, nargs[call] * sizeof(unsigned long));
-	if(er)
-		return er;
-	copy_from_user(a, args, nargs[call] * sizeof(unsigned long));
+	if ((copy_from_user(a, args, nargs[call] * sizeof(unsigned long))))
+		return -EFAULT;
 		
 	a0=a[0];
 	a1=a[1];

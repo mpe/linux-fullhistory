@@ -713,6 +713,10 @@ S: 2a, rue de l'Acier
 S: L-4505 Differdange
 S: Luxembourg
 
+N: Gerd Knorr
+E: kraxel@cs.tu-berlin.de
+D: SCSI CD-ROM driver hacking, minor bug fixes
+
 N: Harald Koenig
 E: koenig@tat.physik.uni-tuebingen.de
 D: XFree86 (S3), DCF77, some kernel hacks and fixes

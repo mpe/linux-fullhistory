@@ -289,9 +289,12 @@ static int rarp_req_set(struct arpreq *req)
 	unsigned long ip;
 	struct rtable *rt;
 	struct device * dev;
+	int err; 
   
-	copy_from_user(&r, req, sizeof(r));
-  
+	err = copy_from_user(&r, req, sizeof(r));
+	if (err)
+		return -EFAULT;
+
 	/*
 	 *	We only understand about IP addresses... 
 	 */
@@ -390,13 +393,16 @@ static int rarp_req_get(struct arpreq *req)
 	struct rarp_table *entry;
 	struct sockaddr_in *si;
 	unsigned long ip;
-
+	int err; 
+	
 /*
  *	We only understand about IP addresses...
  */
         
-	copy_from_user(&r, req, sizeof(r));
-  
+	err = copy_from_user(&r, req, sizeof(r));
+	if (err)
+		return -EFAULT; 
+
 	if (r.arp_pa.sa_family != AF_INET)
 		return -EPFNOSUPPORT;
   
@@ -430,8 +436,7 @@ static int rarp_req_get(struct arpreq *req)
  *        Copy the information back
  */
   
-	copy_to_user(req, &r, sizeof(r));
-	return 0;
+	return copy_to_user(req, &r, sizeof(r));
 }
 
 
@@ -450,10 +455,9 @@ int rarp_ioctl(unsigned int cmd, void *arg)
 		case SIOCDRARP:
 			if (!suser())
 				return -EPERM;
-			err = verify_area(VERIFY_READ, arg, sizeof(struct arpreq));
-			if(err)
-				return err;
-			copy_from_user(&r, arg, sizeof(r));
+			err = copy_from_user(&r, arg, sizeof(r));
+			if (err)
+				return -EFAULT; 
 			if (r.arp_pa.sa_family != AF_INET)
 				return -EPFNOSUPPORT;
 			si = (struct sockaddr_in *) &r.arp_pa;
@@ -461,16 +465,11 @@ int rarp_ioctl(unsigned int cmd, void *arg)
 			return 0;
 
 		case SIOCGRARP:
-			err = verify_area(VERIFY_WRITE, arg, sizeof(struct arpreq));
-			if(err)
-				return err;
+
 			return rarp_req_get((struct arpreq *)arg);
 		case SIOCSRARP:
 			if (!suser())
 				return -EPERM;
-			err = verify_area(VERIFY_READ, arg, sizeof(struct arpreq));
-			if(err)
-				return err;
 			return rarp_req_set((struct arpreq *)arg);
 		default:
 			return -EINVAL;

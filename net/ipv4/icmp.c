@@ -474,16 +474,17 @@ static void icmp_out_count(int type)
  *	Checksum each fragment, and on the first include the headers and final checksum.
  */
  
-static void icmp_glue_bits(const void *p, __u32 saddr, char *to, unsigned int offset, unsigned int fraglen)
+static int icmp_glue_bits(const void *p, __u32 saddr, char *to, unsigned int offset, unsigned int fraglen)
 {
 	struct icmp_bxm *icmp_param = (struct icmp_bxm *)p;
 	struct icmphdr *icmph;
 	unsigned long csum;
 
-	if (offset) {
+	if (offset)
+	{
 		icmp_param->csum=csum_partial_copy(icmp_param->data_ptr+offset-sizeof(struct icmphdr), 
 				to, fraglen,icmp_param->csum);
-		return;
+		return 0;
 	}
 
 	/*
@@ -499,6 +500,8 @@ static void icmp_glue_bits(const void *p, __u32 saddr, char *to, unsigned int of
 		fraglen-sizeof(struct icmphdr), csum);
 	icmph=(struct icmphdr *)to;
 	icmph->checksum = csum_fold(csum);
+
+	return 0; 
 }
  
 /*

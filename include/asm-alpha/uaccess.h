@@ -387,6 +387,16 @@ extern long __strncpy_from_user(char *__to, const char *__from, long __to_len);
 	__sfu_ret;							      \
 })
 
+/* Returns: 0 if bad, string length+1 (memory size) of string if ok */
+extern long __strlen_user(const char *);
+
+extern inline long strlen_user(const char *str)
+{
+	long len = __strlen_user(str);
+	if (!access_ok(VERIFY_READ, str, len))
+		len = 0;
+	return len;
+}
 
 /*
  * About the exception table:

@@ -175,8 +175,8 @@ extern __inline__ struct cmsghdr * cmsg_nxthdr(struct msghdr *mhdr,
 #define SOPRI_BACKGROUND	2
 
 #ifdef __KERNEL__
-extern void memcpy_fromiovec(unsigned char *kdata, struct iovec *iov, int len);
-extern void memcpy_fromiovecend(unsigned char *kdata, struct iovec *iov, 
+extern int memcpy_fromiovec(unsigned char *kdata, struct iovec *iov, int len);
+extern int memcpy_fromiovecend(unsigned char *kdata, struct iovec *iov, 
 				int offset, int len);
 extern unsigned int csum_partial_copy_fromiovecend(unsigned char *kdata, 
 						   struct iovec *iov, 
@@ -184,7 +184,7 @@ extern unsigned int csum_partial_copy_fromiovecend(unsigned char *kdata,
 						   int len, int csum);
 
 extern int verify_iovec(struct msghdr *m, struct iovec *iov, char *address, int mode);
-extern void memcpy_toiovec(struct iovec *v, unsigned char *kdata, int len);
+extern int memcpy_toiovec(struct iovec *v, unsigned char *kdata, int len);
 extern int move_addr_to_user(void *kaddr, int klen, void *uaddr, int *ulen);
 extern int move_addr_to_kernel(void *uaddr, int ulen, void *kaddr);
 #endif

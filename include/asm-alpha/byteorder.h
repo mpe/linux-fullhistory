@@ -7,12 +7,30 @@
 #undef htons
 
 #ifndef __LITTLE_ENDIAN
-#define __LITTLE_ENDIAN
+#define __LITTLE_ENDIAN 1234
 #endif
 
 #ifndef __LITTLE_ENDIAN_BITFIELD
 #define __LITTLE_ENDIAN_BITFIELD
 #endif
+
+#ifdef __KERNEL__
+
+/*
+ * In-kernel byte order macros to handle stuff like
+ * byte-order-dependent filesystems etc.
+ */
+#define cpu_to_le32(x) (x)
+#define le32_to_cpu(x) (x)
+#define cpu_to_le16(x) (x)
+#define le16_to_cpu(x) (x)
+
+#define cpu_to_be32(x) htonl((x))
+#define be32_to_cpu(x) ntohl((x))
+#define cpu_to_be16(x) htons((x))
+#define be16_to_cpu(x) ntohs((x))
+
+#endif /* __KERNEL__ */
 
 extern unsigned long int	ntohl(unsigned long int);
 extern unsigned short int	ntohs(unsigned short int);

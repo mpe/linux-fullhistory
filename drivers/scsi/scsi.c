@@ -642,26 +642,6 @@ int scan_scsis_single (int channel, int dev, int lun, int *max_dev_lun,
     scsi_result[1] |= 0x80;     /* removable */
   }
 
-  if (!strncmp (scsi_result + 8, "NEC", 3)) {
-    if (!strncmp (scsi_result + 16, "CD-ROM DRIVE:84 ", 16) ||
-        !strncmp (scsi_result + 16, "CD-ROM DRIVE:25", 15))
-      SDpnt->manufacturer = SCSI_MAN_NEC_OLDCDR;
-    else
-      SDpnt->manufacturer = SCSI_MAN_NEC;
-  }
-  else if (!strncmp (scsi_result + 8, "TOSHIBA", 7))
-    SDpnt->manufacturer = SCSI_MAN_TOSHIBA;
-  else if (!strncmp (scsi_result + 8, "SONY", 4))
-    SDpnt->manufacturer = SCSI_MAN_SONY;
-  else if (!strncmp (scsi_result + 8, "PIONEER", 7))
-    SDpnt->manufacturer = SCSI_MAN_PIONEER;
-  else if (!strncmp (scsi_result + 8, "MATSHITA", 8))
-    SDpnt->manufacturer = SCSI_MAN_MATSHITA;
-  else if (!strncmp (scsi_result + 8, "HP", 2))
-    SDpnt->manufacturer = SCSI_MAN_HP;
-  else
-    SDpnt->manufacturer = SCSI_MAN_UNKNOWN;
-
   memcpy (SDpnt->vendor, scsi_result + 8, 8);
   memcpy (SDpnt->model, scsi_result + 16, 16);
   memcpy (SDpnt->rev, scsi_result + 32, 4);

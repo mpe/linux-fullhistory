@@ -161,18 +161,22 @@ int raw_rcv(struct sock *sk, struct sk_buff *skb, struct device *dev, __u32 sadd
  *	Callback support is trivial for SOCK_RAW
  */
   
-static void raw_getfrag(const void *p, __u32 saddr, char *to, unsigned int offset, unsigned int fraglen)
+static int raw_getfrag(const void *p, __u32 saddr, char *to,
+		       unsigned int offset, unsigned int fraglen)
 {
-	copy_from_user(to, (const unsigned char *)p+offset, fraglen);
+	return copy_from_user(to, (const unsigned char *)p+offset, fraglen);
 }
 
 /*
  *	IPPROTO_RAW needs extra work.
  */
  
-static void raw_getrawfrag(const void *p, __u32 saddr, char *to, unsigned int offset, unsigned int fraglen)
+static int raw_getrawfrag(const void *p, __u32 saddr, char *to, unsigned int offset, unsigned int fraglen)
 {
-	copy_from_user(to, (const unsigned char *)p+offset, fraglen);
+	int err; 
+	err = copy_from_user(to, (const unsigned char *)p+offset, fraglen);
+	if (err)
+		return err; 
 	if(offset==0)
 	{
 		struct iphdr *iph=(struct iphdr *)to;
@@ -189,6 +193,7 @@ static void raw_getrawfrag(const void *p, __u32 saddr, char *to, unsigned int of
 			iph->id = htons(ip_id_count++);
 		iph->check=ip_fast_csum((unsigned char *)iph, iph->ihl);
 	}
+	return 0; 
 }
 
 static int raw_sendto(struct sock *sk, const unsigned char *from, 
@@ -283,11 +288,17 @@ static int raw_sendmsg(struct sock *sk, struct msghdr *msg, int len, int noblock
 		buf=kmalloc(len, GFP_KERNEL);
 		if(buf==NULL)
 			return -ENOBUFS;
-		memcpy_fromiovec(buf, msg->msg_iov, len);
-		fs=get_fs();
-		set_fs(get_ds());
-		err=raw_sendto(sk,buf,len, noblock, flags, msg->msg_name, msg->msg_namelen);
-		set_fs(fs);
+		err = memcpy_fromiovec(buf, msg->msg_iov, len);
+		if (!err)
+		{
+			fs=get_fs();
+			set_fs(get_ds());
+			err=raw_sendto(sk,buf,len, noblock, flags, msg->msg_name, msg->msg_namelen);
+			set_fs(fs);
+		}
+		else
+			err = -EFAULT;
+		
 		kfree_s(buf,len);
 		return err;
 	}
@@ -341,7 +352,7 @@ int raw_recvmsg(struct sock *sk, struct msghdr *msg, int len,
 
 	copied = min(len, skb->len);
 	
-	skb_copy_datagram_iovec(skb, 0, msg->msg_iov, copied);
+	err = skb_copy_datagram_iovec(skb, 0, msg->msg_iov, copied);
 	sk->stamp=skb->stamp;
 
 	/* Copy the address. */
@@ -351,7 +362,7 @@ int raw_recvmsg(struct sock *sk, struct msghdr *msg, int len,
 		sin->sin_addr.s_addr = skb->daddr;
 	}
 	skb_free_datagram(sk, skb);
-	return (copied);
+	return err ? err : (copied);
 }
 
 

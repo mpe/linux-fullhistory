@@ -61,6 +61,10 @@
 	07 July 1995 Modifications by Andrew J. Kroll
 
 	Bjorn Ekwall <bj0rn@blox.se> added unregister_blkdev to mcd_init()
+
+	Michael K. Johnson <johnsonm@redhat.com> added retries on open
+	for slow drives which take a while to recognize that they contain
+	a CD.
 */
 
 #include <linux/module.h>
@@ -1095,6 +1099,7 @@ int
 mcd_open(struct inode *ip, struct file *fp)
 {
 	int st;
+	int count = 0;
 
 	if (mcdPresent == 0)
 		return -ENXIO;			/* no hardware */
@@ -1106,9 +1111,16 @@ mcd_open(struct inode *ip, struct file *fp)
 
 	mcd_invalidate_buffers();
 
-	st = statusCmd();			/* check drive status */
-	if (st == -1)
-		return -EIO;			/* drive doesn't respond */
+	do {
+		st = statusCmd();		/* check drive status */
+		if (st == -1)
+			return -EIO;		/* drive doesn't respond */
+		if ((st & MST_READY) == 0) {	/* no disk? wait a sec... */
+			current->state = TASK_INTERRUPTIBLE;
+			current->timeout = jiffies + HZ;
+			schedule();
+		}
+	} while (((st & MST_READY) == 0) && count++ < MCD_RETRY_ATTEMPTS);
 
 	if ((st & MST_READY) == 0)		/* no disk in drive */
 	{

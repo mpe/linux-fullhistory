@@ -1696,10 +1696,9 @@ int ip_rt_ioctl(unsigned int cmd, void *arg)
 		case SIOCDELRT:		/* Delete a route */
 			if (!suser())
 				return -EPERM;
-			err=verify_area(VERIFY_READ, arg, sizeof(struct rtentry));
+			err = copy_from_user(&rt, arg, sizeof(struct rtentry));
 			if (err)
-				return err;
-			copy_from_user(&rt, arg, sizeof(struct rtentry));
+				return -EFAULT; 
 			return (cmd == SIOCDELRT) ? ip_rt_kill(&rt) : ip_rt_new(&rt);
 	}
 

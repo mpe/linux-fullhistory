@@ -774,7 +774,7 @@ void addrconf_prefix_rcv(struct device *dev, u8 *opt, int len)
 
 }
 
-static void addrconf_ifdown(struct device *dev)
+static int addrconf_ifdown(struct device *dev)
 {
 	struct inet6_dev *idev, **bidev;
 	struct inet6_ifaddr *ifa, **bifa;
@@ -796,8 +796,9 @@ static void addrconf_ifdown(struct device *dev)
 
 	if (idev == NULL)
 	{
-		printk(KERN_DEBUG "addrconf_ifdown: device not found\n"); 
-		return;
+		printk(KERN_DEBUG "addrconf_ifdown: device not found\n");
+		end_bh_atomic();
+		return -ENODEV;
 	}
 	
 	/*
@@ -828,6 +829,7 @@ static void addrconf_ifdown(struct device *dev)
 
 	kfree(idev);
 	end_bh_atomic();
+	return 0;
 }
 
 /*
@@ -1024,9 +1026,12 @@ int addrconf_notify(struct notifier_block *this, unsigned long event,
 		 *	Remove all addresses from this interface
 		 *	and take the interface out of the list.
 		 */
-		addrconf_ifdown(dev);
-		rt6_ifdown(dev);
-		rt6_sndmsg(RTMSG_NEWDEVICE, NULL, NULL, 0, 0, dev->name, 0);
+		if (addrconf_ifdown(dev) == 0)
+		{
+			rt6_ifdown(dev);
+			rt6_sndmsg(RTMSG_NEWDEVICE, NULL, NULL, 0, 0,
+				   dev->name, 0);
+		}
 
 		break;
 	}

@@ -736,16 +736,15 @@ int atif_ioctl(int cmd, void *arg)
 	struct device *dev;
 	struct atalk_iface *atif;
 	int ro=(cmd==SIOCSIFADDR);
-	int err=verify_area(ro?VERIFY_READ:VERIFY_WRITE, arg,sizeof(atreq));
+	int err;
 	int ct;
 	int limit;
 	struct rtentry rtdef;
 	
-	if(err)
-		return err;
-	
-	copy_from_user(&atreq,arg,sizeof(atreq));
-	
+	err = copy_from_user(&atreq,arg,sizeof(atreq));
+	if (err)
+		return -EFAULT; 
+
 	if((dev=dev_get(atreq.ifr_name))==NULL)
 		return -ENODEV;
 		
@@ -855,8 +854,13 @@ int atif_ioctl(int cmd, void *arg)
 			((struct sockaddr_at *)(&atreq.ifr_addr))->sat_addr.s_node=ATADDR_BCAST;
 			break;
 	}
-	copy_to_user(arg,&atreq,sizeof(atreq));
-	return 0;
+	err = copy_to_user(arg,&atreq,sizeof(atreq));
+
+	if (err)
+	{
+		err = -EFAULT;
+	}
+	return err;
 }
 
 /*
@@ -868,11 +872,10 @@ static int atrtr_ioctl(unsigned int cmd, void *arg)
 	int err;
 	struct rtentry rt;
 	
-	err=verify_area(VERIFY_READ, arg, sizeof(rt));
-	if(err)
-		return err;
-	copy_from_user(&rt,arg,sizeof(rt));
-	
+	err = copy_from_user(&rt,arg,sizeof(rt));
+	if (err)
+		return -EFAULT; 
+
 	switch(cmd)
 	{
 		case SIOCDELRT:
@@ -1077,15 +1080,10 @@ static int atalk_getsockopt(struct socket *sock, int level, int optname,
 		default:
 			return -EOPNOTSUPP;
 	}
-	err=verify_area(VERIFY_WRITE,optlen,sizeof(int));
-	if(err)
-		return err;
-	put_user(sizeof(int),optlen);
-	err=verify_area(VERIFY_WRITE,optval,sizeof(int));
-	if (err) 
-		return err;
-	put_user(val, (int *)optval);
-	return(0);
+	err = put_user(sizeof(int),optlen);
+	if (!err)
+		err = put_user(val, (int *) optval);
+	return err;
 }
 
 /*
@@ -1736,8 +1734,13 @@ static int atalk_sendmsg(struct socket *sock, struct msghdr *msg, int len, int n
 	if(sk->debug)
 		printk("SK %p: Copy user data (%d bytes).\n", sk, len);
 		
-	memcpy_fromiovec(skb_put(skb,len),msg->msg_iov,len);
-
+	err = memcpy_fromiovec(skb_put(skb,len),msg->msg_iov,len);
+	if (err)
+	{
+		kfree_skb(skb, FREE_WRITE);
+		return err;
+	}
+		
 	if(sk->no_check==1)
 		ddp->deh_sum=0;
 	else
@@ -1816,7 +1819,7 @@ static int atalk_recvmsg(struct socket *sock, struct msghdr *msg, int size, int 
 	struct ddpehdr	*ddp = NULL;
 	int copied = 0;
 	struct sk_buff *skb;
-	int er;
+	int er = 0;
 	
 	if(sk->err)
 		return sock_error(sk);
@@ -1834,14 +1837,18 @@ static int atalk_recvmsg(struct socket *sock, struct msghdr *msg, int size, int 
 		copied=ddp->deh_len;
 		if(copied > size)
 			copied=size;
-		skb_copy_datagram_iovec(skb,0,msg->msg_iov,copied);
+		er = skb_copy_datagram_iovec(skb,0,msg->msg_iov,copied);
+		if (er)
+			goto out;
 	}
 	else
 	{
 		copied=ddp->deh_len - sizeof(*ddp);
 		if (copied > size)
 			copied = size;
-		skb_copy_datagram_iovec(skb,sizeof(*ddp),msg->msg_iov,copied);
+		er = skb_copy_datagram_iovec(skb,sizeof(*ddp),msg->msg_iov,copied);
+		if (er) 
+			goto out; 
 	}
 	if(sat)
 	{
@@ -1850,8 +1857,9 @@ static int atalk_recvmsg(struct socket *sock, struct msghdr *msg, int size, int 
 		sat->sat_addr.s_node=ddp->deh_snode;
 		sat->sat_addr.s_net=ddp->deh_snet;
 	}
+out:
 	skb_free_datagram(sk, skb);
-	return(copied);
+	return er ? er : (copied);
 }		
 
 
@@ -1900,11 +1908,7 @@ static int atalk_ioctl(struct socket *sock,unsigned int cmd, unsigned long arg)
 			{
 				if(sk->stamp.tv_sec==0)
 					return -ENOENT;
-				err=verify_area(VERIFY_WRITE,(void *)arg,sizeof(struct timeval));
-				if(err)
-					return err;
-					copy_to_user((void *)arg,&sk->stamp,sizeof(struct timeval));
-				return 0;
+				return copy_to_user((void *)arg,&sk->stamp,sizeof(struct timeval));
 			}
 			return -EINVAL;
 		/*
@@ -1950,11 +1954,7 @@ static int atalk_ioctl(struct socket *sock,unsigned int cmd, unsigned long arg)
 		default:
 			return -EINVAL;
 	}
-	err=verify_area(VERIFY_WRITE,(void *)arg,sizeof(int));
-	if(err)
-		return err;
-	put_user(amount, (int *)arg);
-	return(0);
+	return put_user(amount, (int *)arg);
 }
 
 static struct proto_ops atalk_proto_ops = {

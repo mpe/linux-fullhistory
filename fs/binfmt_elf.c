@@ -144,20 +144,14 @@ unsigned long * create_elf_tables(char *p, int argc, int envc,
 	__put_user((unsigned long)argc,--sp);
 	current->mm->arg_start = (unsigned long) p;
 	while (argc-->0) {
-		char c;
 		__put_user(p,argv++);
-		do {
-			get_user(c,p++);
-		} while (c);
+		p += strlen_user(p);
 	}
 	__put_user(NULL, argv);
 	current->mm->arg_end = current->mm->env_start = (unsigned long) p;
 	while (envc-->0) {
-		char c;
 		__put_user(p,envp++);
-		do {
-			get_user(c,p++);
-		} while (c);
+		p += strlen_user(p);
 	}
 	__put_user(NULL, envp);
 	current->mm->env_end = (unsigned long) p;

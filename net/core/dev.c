@@ -793,11 +793,10 @@ static int dev_ifconf(char *arg)
 	/*
 	 *	Fetch the caller's info block. 
 	 */
-	 
-	err=verify_area(VERIFY_WRITE, arg, sizeof(struct ifconf));
-	if(err)
-	  	return err;
-	copy_from_user(&ifc, arg, sizeof(struct ifconf));
+	
+	err = copy_from_user(&ifc, arg, sizeof(struct ifconf));
+	if (err)
+		return -EFAULT; 
 	len = ifc.ifc_len;
 	pos = ifc.ifc_buf;
 
@@ -805,11 +804,7 @@ static int dev_ifconf(char *arg)
 	 *	We now walk the device list filling each active device
 	 *	into the array.
 	 */
-	 
-	err=verify_area(VERIFY_WRITE,pos,len);
-	if(err)
-	  	return err;
-  	
+	
 	/*
 	 *	Loop over the interfaces, and write an info block for each. 
 	 */
@@ -835,7 +830,9 @@ static int dev_ifconf(char *arg)
 		 *	Write this block to the caller's space. 
 		 */
 		 
-		copy_to_user(pos, &ifr, sizeof(struct ifreq));
+		err = copy_to_user(pos, &ifr, sizeof(struct ifreq));
+		if (err)
+			return -EFAULT; 
 		pos += sizeof(struct ifreq);
 		len -= sizeof(struct ifreq);		
   	}
@@ -846,8 +843,10 @@ static int dev_ifconf(char *arg)
 	 
 	ifc.ifc_len = (pos - ifc.ifc_buf);
 	ifc.ifc_req = (struct ifreq *) ifc.ifc_buf;
-	copy_to_user(arg, &ifc, sizeof(struct ifconf));
-	
+	err = copy_to_user(arg, &ifc, sizeof(struct ifconf));
+	if (err)
+		return -EFAULT; 
+
 	/*
 	 *	Report how much was filled in
 	 */
@@ -956,17 +955,15 @@ static int dev_ifsioc(void *arg, unsigned int getset)
 {
 	struct ifreq ifr;
 	struct device *dev;
-	int ret;
+	int ret, err;
 
 	/*
 	 *	Fetch the caller's info block into kernel space
 	 */
-
-	int err=verify_area(VERIFY_WRITE, arg, sizeof(struct ifreq));
-	if(err)
-		return err;
 	
-	copy_from_user(&ifr, arg, sizeof(struct ifreq));
+	err = copy_from_user(&ifr, arg, sizeof(struct ifreq));
+	if (err)
+		return -EFAULT; 
 
 	/*
 	 *	See which interface the caller is talking about. 
@@ -1266,8 +1263,13 @@ static int dev_ifsioc(void *arg, unsigned int getset)
 			   (getset <= (SIOCDEVPRIVATE + 15))) {
 				if(dev->do_ioctl==NULL)
 					return -EOPNOTSUPP;
-				ret=dev->do_ioctl(dev, &ifr, getset);
-				copy_to_user(arg,&ifr,sizeof(struct ifreq));
+				ret = dev->do_ioctl(dev, &ifr, getset);
+				if (!ret)
+				{
+					err = copy_to_user(arg,&ifr,sizeof(struct ifreq));
+					if (err)
+						ret = -EFAULT;
+				}
 				break;
 			}
 			
@@ -1278,8 +1280,10 @@ static int dev_ifsioc(void *arg, unsigned int getset)
  *	The load of calls that return an ifreq and ok (saves memory).
  */
 rarok:
-	copy_to_user(arg, &ifr, sizeof(struct ifreq));
-	return 0;
+	err = copy_to_user(arg, &ifr, sizeof(struct ifreq));
+	if (err)
+		err = -EFAULT;
+	return err;
 }
 
 

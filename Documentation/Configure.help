@@ -1243,6 +1243,13 @@ CONFIG_BLK_DEV_SR
   say M here and read Documentation/modules.txt and
   Documentation/scsi.txt .
 
+Enable vendor-specific extentions (for SCSI CDROM)
+CONFIG_BLK_DEV_SR_VENDOR
+  This enables the usage of vendor specific SCSI commands. This is
+  required for some stuff which is newer than the SCSI-II standard,
+  most important is the multisession CD support. You'll probably want
+  to say y here, unless you have a _real old_ CD-ROM drive.
+
 SCSI generic support
 CONFIG_CHR_DEV_SG
   If you want to use SCSI scanners, synthesizers or CD-writers or just

@@ -658,7 +658,6 @@ int tcp_select(struct sock *sk, int sel_type, select_table *wait)
 
 int tcp_ioctl(struct sock *sk, int cmd, unsigned long arg)
 {
-	int err;
 	switch(cmd)
 	{
 
@@ -675,21 +674,12 @@ int tcp_ioctl(struct sock *sk, int cmd, unsigned long arg)
 			lock_sock(sk);
 			amount = tcp_readable(sk);
 			release_sock(sk);
-			err=verify_area(VERIFY_WRITE,(void *)arg, sizeof(int));
-			if(err)
-				return err;
-			put_user(amount, (int *)arg);
-			return(0);
+			return put_user(amount, (int *)arg);
 		}
 		case SIOCATMARK:
 		{
 			int answ = sk->urg_data && sk->urg_seq == sk->copied_seq;
-
-			err = verify_area(VERIFY_WRITE,(void *) arg, sizeof(int));
-			if (err)
-				return err;
-			put_user(answ,(int *) arg);
-			return(0);
+			return put_user(answ,(int *) arg);
 		}
 		case TIOCOUTQ:
 		{
@@ -697,11 +687,7 @@ int tcp_ioctl(struct sock *sk, int cmd, unsigned long arg)
 
 			if (sk->state == TCP_LISTEN) return(-EINVAL);
 			amount = sock_wspace(sk);
-			err=verify_area(VERIFY_WRITE,(void *)arg, sizeof(int));
-			if(err)
-				return err;
-			put_user(amount, (int *)arg);
-			return(0);
+			return put_user(amount, (int *)arg);
 		}
 		default:
 			return(-EINVAL);
@@ -718,9 +704,9 @@ extern __inline int tcp_build_header(struct tcphdr *th, struct sock *sk, int pus
 	struct tcp_opt *tp=&(sk->tp_pinfo.af_tcp);
 	memcpy(th,(void *) &(sk->dummy_th), sizeof(*th));
 	th->seq = htonl(sk->write_seq);
-#if 0
+
 	th->psh =(push == 0) ? 1 : 0;
-#endif
+
 	sk->bytes_rcv = 0;
 	sk->ack_timed = 0;
 	th->ack_seq = htonl(tp->rcv_nxt);
@@ -986,7 +972,7 @@ int tcp_do_sendmsg(struct sock *sk, int iovlen, struct iovec *iov,
 			{
 				tmp += copy;
 			}
-			
+
 			skb = sock_wmalloc(sk, tmp, 0, GFP_KERNEL);
 	
 			/*
@@ -1106,6 +1092,7 @@ static int tcp_recv_urg(struct sock * sk, int nonblock,
 			struct msghdr *msg, int len, int flags, 
 			int *addr_len)
 {
+	int err; 
 	struct tcp_opt *tp = &(sk->tp_pinfo.af_tcp);
 
 	/*
@@ -1138,7 +1125,7 @@ static int tcp_recv_urg(struct sock * sk, int nonblock,
 		char c = sk->urg_data;
 		if (!(flags & MSG_PEEK))
 			sk->urg_data = URG_READ;
-		memcpy_toiovec(msg->msg_iov, &c, 1);
+		err = memcpy_toiovec(msg->msg_iov, &c, 1);
 		if(msg->msg_name)
 		{
 			tp->af_specific->addr2sockaddr(sk, (struct sockaddr *)
@@ -1148,7 +1135,7 @@ static int tcp_recv_urg(struct sock * sk, int nonblock,
 			*addr_len= tp->af_specific->sockaddr_len;
 
 		release_sock(sk);
-		return 1;
+		return err ? -EFAULT : 1;
 	}
 	release_sock(sk);
 
@@ -1226,6 +1213,7 @@ int tcp_recvmsg(struct sock *sk, struct msghdr *msg,
 	u32 peek_seq;
 	volatile u32 *seq;	/* So gcc doesn't overoptimise */
 	unsigned long used;
+	int err = 0; 
 
 	/*
 	 *	This error should be checked.
@@ -1274,6 +1262,8 @@ int tcp_recvmsg(struct sock *sk, struct msghdr *msg,
 			if (copied)
 				break;
 			copied = -ERESTARTSYS;
+			if (nonblock)
+				copied = -EAGAIN;
 			break;
 		}
 
@@ -1398,13 +1388,28 @@ int tcp_recvmsg(struct sock *sk, struct msghdr *msg,
 		*seq += used;
 
 		/*
-		 *	This memcpy_tofs can sleep. If it sleeps and we
+		 *	This memcpy_toiovec can sleep. If it sleeps and we
 		 *	do a second read it relies on the skb->users to avoid
 		 *	a crash when cleanup_rbuf() gets called.
 		 */
 
-		memcpy_toiovec(msg->msg_iov,((unsigned char *)skb->h.th) +
-			skb->h.th->doff*4 + offset, used);
+		/*
+		 *	FIXME: should break out of the loop early when an
+		 *	error occurs
+		 */
+		
+		err = memcpy_toiovec(msg->msg_iov, ((unsigned char *)skb->h.th) + skb->h.th->doff*4 + offset, used);
+		
+		if (err)
+		{
+			/*
+			 *	exception. bailout!
+			 */
+			*seq -= err;
+			skb->users--;
+			return -EFAULT;
+		}
+
 		copied += used;
 		len -= used;
 
@@ -1414,7 +1419,7 @@ int tcp_recvmsg(struct sock *sk, struct msghdr *msg,
 		 *	but you'll just have to fix it neatly ;)
 		 */
 
-		skb->users --;
+		skb->users--;
 
 		if (after(sk->copied_seq,sk->urg_seq))
 			sk->urg_data = 0;
@@ -1824,17 +1829,12 @@ int tcp_getsockopt(struct sock *sk, int level, int optname, char *optval,
 		default:
 			return(-ENOPROTOOPT);
 	}
-	err=verify_area(VERIFY_WRITE, optlen, sizeof(int));
-	if(err)
-  		return err;
-  	put_user(sizeof(int),(int *) optlen);
 
-  	err=verify_area(VERIFY_WRITE, optval, sizeof(int));
-  	if(err)
-  		return err;
-  	put_user(val,(int *)optval);
+  	err = put_user(sizeof(int),(int *) optlen);
+	if (!err)
+		err = put_user(val,(int *)optval);
 
-  	return(0);
+  	return err;
 }
 
 void tcp_set_keepalive(struct sock *sk, int val)
@@ -1847,6 +1847,104 @@ void tcp_set_keepalive(struct sock *sk, int val)
 	{
 		tcp_dec_slow_timer(TCP_SLT_KEEPALIVE);
 	}
+}
+
+
+/*
+ *      This function returns the amount that we can raise the
+ *      usable window based on the following constraints
+ *  
+ *	1. The window can never be shrunk once it is offered (RFC 793)
+ *	2. We limit memory per socket
+ */
+
+
+unsigned short tcp_select_window(struct sock *sk)
+{
+	struct tcp_opt *tp = &sk->tp_pinfo.af_tcp;
+	long free_space = sock_rspace(sk);
+	long window;
+	long cur_win;
+	long usable;
+	int mss = sk->mss;
+	
+	if (sk->window_clamp)
+	{
+		free_space = min(sk->window_clamp, free_space);
+		mss = min(sk->window_clamp, mss);
+	}
+	
+	/*
+	 * compute the actual window i.e.
+	 * old_window - received_bytes_on_that_win
+	 */
+
+	cur_win = tp->rcv_wup - (tp->rcv_nxt - tp->rcv_wnd);
+	window  = tp->rcv_wnd;
+	
+	if ( cur_win < 0 )
+	{
+		cur_win = 0;
+		printk(KERN_DEBUG "TSW: win < 0 w=%d 1=%u 2=%u\n",
+		       tp->rcv_wnd, tp->rcv_nxt, tp->rcv_wup);
+	}
+
+	/*
+	 * RFC 1122:
+	 * "the suggested [SWS] avoidance algoritm for the receiver is to keep
+	 *  RECV.NEXT + RCV.WIN fixed until:
+	 *  RCV.BUFF - RCV.USER - RCV.WINDOW >= min(1/2 RCV.BUFF, MSS)"
+	 *
+	 * i.e. don't raise the right edge of the window until you can't raise
+	 * it MSS bytes
+	 */
+
+	/*
+	 * It would be a good idea if it didn't break header prediction.
+	 * and BSD made the header predition standard...
+	 * It expects the same value in the header i.e. th->window to be
+	 * constant
+	 */
+
+	usable = free_space - cur_win;
+	if (usable < 0)
+	{
+		usable = 0;
+	}
+
+	if ( window <  usable )
+	{
+		/*
+		 *	Window is not blocking the sender
+		 *	and we have enought free space for it
+		 */
+
+		if (cur_win > (sk->mss << 1))
+			goto out;
+	}
+
+       	
+	if (window >= usable)
+	{
+		/*
+		 *	We are offering too much, cut it down... 
+		 *	but don't shrink the window
+		 */
+		
+		window = max(usable, cur_win);
+	}
+	else
+	{	
+		if ((usable - window) >= mss)
+		{
+			window += mss;
+		}
+	}
+
+  out:
+	tp->rcv_wnd = window;
+	tp->rcv_wup = tp->rcv_nxt;
+	return window;
 }
 
 /*

@@ -120,7 +120,8 @@ static int packet_sendmsg(struct sock *sk, struct msghdr *msg, int len,
 	struct device *dev;
 	struct sockaddr_pkt *saddr=(struct sockaddr_pkt *)msg->msg_name;
 	unsigned short proto=0;
-
+	int err;
+	
 	/*
 	 *	Check the flags. 
 	 */
@@ -180,18 +181,33 @@ static int packet_sendmsg(struct sock *sk, struct msghdr *msg, int len,
 	 
 	skb->sk = sk;
 	skb->free = 1;
-	memcpy_fromiovec(skb_put(skb,len), msg->msg_iov, len);
-	skb->arp = 1;		/* No ARP needs doing on this (complete) frame */
+	err = memcpy_fromiovec(skb_put(skb,len), msg->msg_iov, len);
+	skb->arp = 1;	/* No ARP needs doing on this (complete) frame */
 	skb->protocol = proto;
 
 	/*
 	 *	Now send it
 	 */
 
-	if (dev->flags & IFF_UP) 
-		dev_queue_xmit(skb, dev, sk->priority);
+	if (err)
+	{
+		err = -EFAULT;
+	}
 	else
+	{
+		if (!(dev->flags & IFF_UP))
+		{
+			err = -ENODEV;
+		}
+	}
+	
+	if (err) 
+	{
 		kfree_skb(skb, FREE_WRITE);
+		return err;
+	}
+		
+	dev_queue_xmit(skb, dev, sk->priority);
 	return(len);
 }
 
@@ -436,7 +452,13 @@ int packet_recvmsg(struct sock *sk, struct msghdr *msg, int len,
 	 
 	copied = min(len, skb->len);
 
-	memcpy_toiovec(msg->msg_iov, skb->data, copied);	/* We can't use skb_copy_datagram here */
+	/* We can't use skb_copy_datagram here */
+	err = memcpy_toiovec(msg->msg_iov, skb->data, copied);
+	if (err)
+	{
+		return -EFAULT;
+	}
+
 	sk->stamp=skb->stamp;
 
 	/*

@@ -1442,22 +1442,20 @@ int br_ioctl(unsigned int cmd, void *arg)
 	switch(cmd)
 	{
 		case SIOCGIFBR:	/* get bridging control blocks */
-			err = verify_area(VERIFY_WRITE, arg, 
-				sizeof(struct br_stat));
-			if(err)
-				return err;
 			memcpy(&br_stats.bridge_data, &bridge_info, sizeof(Bridge_data));
 			memcpy(&br_stats.port_data, &port_info, sizeof(Port_data)*No_of_ports);
-			copy_to_user(arg, &br_stats, sizeof(struct br_stat));
-			return(0);
+			err = copy_to_user(arg, &br_stats, sizeof(struct br_stat));
+			if (err)
+			{
+				err = -EFAULT;
+			}
+			return err;
 		case SIOCSIFBR:
 			if (!suser())
 				return -EPERM;
-			err = verify_area(VERIFY_READ, arg, 
-				sizeof(struct br_cf));
-			if(err)
-				return err;
-			copy_from_user(&bcf, arg, sizeof(struct br_cf));
+			err = copy_from_user(&bcf, arg, sizeof(struct br_cf));
+			if (err)
+				return -EFAULT; 
 			switch (bcf.cmd) {
 				case BRCMD_BRIDGE_ENABLE:
 					if (br_stats.flags & BR_UP)

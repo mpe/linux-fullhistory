@@ -164,10 +164,6 @@ int ipv6_setsockopt(struct sock *sk, int level, int optname, char *optval,
 	{
 		struct in6_addr addr;
 
-		err=verify_area(VERIFY_READ, optval, sizeof(struct in6_addr));
-		if(err)
-			return err;
-
 		err = copy_from_user(&addr, optval, sizeof(struct in6_addr));
 		if(err)
 			return -EFAULT;

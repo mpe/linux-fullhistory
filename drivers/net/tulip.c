@@ -17,7 +17,8 @@
 static char *version =
 "tulip.c:v0.10 8/11/95 becker@cesdis.gsfc.nasa.gov\n"
 "        +0.72 4/17/96 "
-"http://www.dsl.tutics.tut.ac.jp/~linux/tulip\n";
+"http://www.dsl.tutics.tut.ac.jp/~linux/tulip\n"
+"        +0.01 10/24/96 mjacob@feral.com (2.1.7)\n";
 
 /* A few user-configurable values. */
 
@@ -334,6 +335,7 @@ struct tulip_private {
 	int setup_frame[48];	/* Pseudo-Tx frame to init address table. */
 	void (*port_select)(struct device *dev);
 	int (*port_fail)(struct device *dev);
+	struct device *next_module;
 	char *signature;
 	unsigned int cur_rx, cur_tx;		/* The next free ring entry */
 	unsigned int dirty_rx, dirty_tx;	/* The ring entries to be free()ed. */
@@ -367,7 +369,6 @@ static int tulip_rx(struct device *dev);
 static void tulip_interrupt(int irq, void *dev_id, struct pt_regs *regs);
 static int tulip_close(struct device *dev);
 static struct enet_statistics *tulip_get_stats(struct device *dev);
-static struct device *tulip_alloc(struct device *dev);
 static void set_multicast_list(struct device *dev);
 
 #define	generic21140_fail	NULL
@@ -378,6 +379,11 @@ static void auto21140_select(struct device *dev);
 static void cogent21140_select(struct device *dev);
 static int generic21040_fail(struct device *dev);
 static int generic21041_fail(struct device *dev);
+
+#ifdef MODULE
+/* A list of all installed Tulip devices, for removing the driver module. */
+static struct device *root_tulip_dev = NULL;
+#endif
 
 static struct {
 	void (*port_select)(struct device *dev);
@@ -436,7 +442,6 @@ static struct {
 
 #ifdef MODULE
 static int if_port=TULIP_AUTO_PORT;
-static size_t alloc_size;
 #ifdef TULIP_FULL_DUPLEX
 static int full_duplex=1;
 #else
@@ -1132,6 +1137,7 @@ static void set_multicast_list(struct device *dev)
 			*setup_frm++ = eaddrs[2];
 		} while (++i < 15);
 
+#ifndef	__alpha__
 		/* Now add this frame to the Tx list. */
 		{
 			unsigned long flags;
@@ -1152,46 +1158,8 @@ static void set_multicast_list(struct device *dev)
 			/* Trigger an immediate transmit demand. */
 			tio_write(TPOLL_TRIGGER, CSR1);
 		}
-	}
-}
-
-static struct device *tulip_alloc(struct device *dev)
-{
-	struct tulip_private *tp;
-	char *buff;
-#ifndef	MODULE
-	size_t alloc_size;
 #endif
-	if (!dev || dev->priv) {
-		struct device *olddev = dev;
-
-		alloc_size = sizeof(struct device)
-			+ sizeof(struct tulip_private)
-			+ ETHNAMSIZ;
-		alloc_size = ROUND_UP(alloc_size, 8);
-
-		buff = (char *)kmalloc(alloc_size, GFP_KERNEL);
-		dev = (struct device *)buff;
-		if (dev == NULL) {
-			printk("tulip_alloc: kmalloc failed.\n");
-			return(NULL);
-		}
-		tp = (struct tulip_private *)(buff + sizeof(struct device));
-		memset(buff, 0, alloc_size);
-		dev->priv = (void *)tp;
-		dev->name = (char *)(buff + sizeof(struct device)
-							 + sizeof(struct tulip_private));
-		if (olddev) {
-			dev->next = olddev->next;
-			olddev->next = dev;
-		}
-	} else {
-		alloc_size = ROUND_UP(sizeof(struct tulip_private), 8);
-		tp = (struct tulip_private *)kmalloc(alloc_size, GFP_KERNEL);
-		memset((void *)tp, 0, alloc_size);
-		dev->priv = (void *)tp;
 	}
-	return(dev);
 }
 
 int
@@ -1200,6 +1168,7 @@ tulip_hwinit(struct device *dev, int ioaddr,
 {
 	/* See note below on the Znyx 315 etherarray. */
 	static unsigned char last_phys_addr[6] = {0x00, 'L', 'i', 'n', 'u', 'x'};
+	static int last_irq;
 	char detect_mesg[80], *mesgp=detect_mesg;
 	struct tulip_private *tp = (struct tulip_private *)dev->priv;
 	int i;
@@ -1269,11 +1238,13 @@ tulip_hwinit(struct device *dev, int ioaddr,
 		for (i = 0; i < ETH_ALEN - 1; i++)
 			dev->dev_addr[i] = last_phys_addr[i];
 		dev->dev_addr[i] = last_phys_addr[i] + 1;
+		irq = last_irq;
 	}
 	for (i = 0; i < ETH_ALEN - 1; i++)
 		mesgp += sprintf(mesgp, "%2.2x:", dev->dev_addr[i]);
 	mesgp += sprintf(mesgp, "%2.2x, IRQ %d\n",
 					 last_phys_addr[i] = dev->dev_addr[i], irq);
+	last_irq = irq;
 
 	/* copy ethernet address */
 	if (card_type(tp, device_id,
@@ -1295,21 +1266,20 @@ tulip_hwinit(struct device *dev, int ioaddr,
 	dev->set_multicast_list = &set_multicast_list;
 
 #ifdef	MODULE
-    ether_setup(dev);
 	if (if_port == TULIP_AUTO_PORT)
 		if_port = TULIP_PORT;
 	else
 		tp->port_fix = 1;
 	dev->if_port = if_port;
 	tp->full_duplex = full_duplex;
+	tp->next_module = root_tulip_dev;
+	root_tulip_dev = dev;
 #else
 #ifdef TULIP_FULL_DUPLEX
 	tp->full_duplex = 1;
 #endif
-    init_etherdev(dev, 0);
 	dev->if_port = TULIP_PORT;
 #endif
-
 #ifdef	TULIP_FIX_PORT
 	tp->port_fix = 1;
 #endif
@@ -1340,14 +1310,13 @@ int tulip_probe(struct device *dev)
 
     if (!pcibios_present()) return(-ENODEV);
 
-	for (pci_index = 0; pci_index < 8; pci_index++) {
+	for (pci_index = 0; pci_index < 0xff; pci_index++) {
 		/* Search for the PCI_DEVICE_ID_DEV_TULIP* chips */
-		for (cno = 0; pci_chips[cno] != PCI_DEVICE_ID_NONE; cno ++)
+		for (cno = 0; pci_chips[cno] != PCI_DEVICE_ID_NONE; cno++) {
 			if (pcibios_find_device(PCI_VENDOR_ID_DEC,
 									pci_chips[cno],
 									pci_index, &pci_bus,
 									&pci_device_fn) == 0) {
-				struct device *dp;
 
 				/* get IO address */
 				pcibios_read_config_dword(pci_bus, pci_device_fn,
@@ -1355,19 +1324,14 @@ int tulip_probe(struct device *dev)
 										  &pci_ioaddr);
 				/* Remove I/O space marker in bit 0. */
 				pci_ioaddr &= ~3;
-				for (dp = tulip_head; dp != NULL; dp = dp->next)
-					if (dp->base_addr == pci_ioaddr) break;
-				if (dp) continue;
 				/* get IRQ */
-				pcibios_read_config_byte(pci_bus, pci_device_fn,
-										 PCI_INTERRUPT_LINE, &pci_irq);
-#ifdef	MODULE
-				/* compare requested IRQ/IO address */
-				if (dev && dev->base_addr &&
-					dev->base_addr != pci_ioaddr) continue;
-#else
-				if ((dev = tulip_alloc(dev)) == NULL) break;
-#endif
+				pcibios_read_config_byte(pci_bus, pci_device_fn, PCI_INTERRUPT_LINE, &pci_irq);
+				dev = init_etherdev(NULL, 
+					ROUND_UP(sizeof(struct device) +
+						sizeof (struct tulip_private) +
+						ETHNAMSIZ, 8));
+
+				if (dev == NULL) break;
 				if (!tulip_head) {
 					printk(version);
 					tulip_head = dev;
@@ -1394,56 +1358,48 @@ int tulip_probe(struct device *dev)
 											  PCI_LATENCY_TIMER, 100);
 				}
 				if (tulip_hwinit(dev, pci_ioaddr, pci_irq,
-								 pci_chips[cno]) < 0) continue;
-				num ++;
-#ifdef	MODULE
-				return(0);
-#endif
+								 pci_chips[cno]) < 0) {
+					continue;
+				}
+				num++;
 #ifdef	TULIP_MAX_CARDS
 				if (num >= TULIP_MAX_CARDS) return(0);
 #endif
 		}
 	}
+	}
 	return(num > 0 ? 0: -ENODEV);
 }
 
 #ifdef MODULE
-#ifdef __alpha__
-#if 1
-static int io = 0xb000;
-#else
-static int io = 0x10400;
-#endif
-#else
-static int io = 0xfc80;
-#endif
 
-static struct device *mod_dev;
+/* The parameters that may be passed in... */
+/* This driver does nothing with options yet.  It will later be used to
+   pass the full-duplex flag, etc. */
+int debug = -1;
 
-int init_module(void)
+int
+init_module(void)
 {
-	if ((mod_dev = tulip_alloc(0)) == NULL) return(-EIO);
-
-	mod_dev->base_addr = io;
-	mod_dev->irq = 0;
-	mod_dev->init = &tulip_probe;
-
-	if (register_netdev(mod_dev)) {
-		printk("tulip: register_netdev() returned non-zero.\n");
-		kfree_s(mod_dev, alloc_size);
-		return -EIO;
-	}
-	return(0);
+	root_tulip_dev = NULL;
+	return tulip_probe(NULL);
 }
 
 void
 cleanup_module(void)
 {
-	release_region(mod_dev->base_addr, TULIP_TOTAL_SIZE);
-	unregister_netdev(mod_dev);
-	kfree_s(mod_dev, alloc_size);
-}
+	struct device *next_dev;
 
+	/* No need to check MOD_IN_USE, as sys_delete_module() checks. */
+	while (root_tulip_dev) {
+		next_dev =
+		   ((struct tulip_private *) root_tulip_dev->priv)->next_module;
+		unregister_netdev(root_tulip_dev);
+		release_region(root_tulip_dev->base_addr, TULIP_TOTAL_SIZE);
+		kfree(root_tulip_dev);
+		root_tulip_dev = next_dev;
+	}
+}
 #endif /* MODULE */
 
 

@@ -123,11 +123,11 @@ int ip_setsockopt(struct sock *sk, int level, int optname, char *optval, int opt
 	}
 	else
 	{
-		err=verify_area(VERIFY_READ, optval, sizeof(int));
-		if(err)
-			return err;
-		get_user(val, (int *) optval);
-		get_user(ucval, (unsigned char *) optval);
+		err = get_user(val, (int *) optval);
+		if (!err)
+			err = get_user(ucval, (unsigned char *) optval);
+		if (err)
+			return err; 
 	}
 	
 	if(level!=SOL_IP)
@@ -147,15 +147,20 @@ int ip_setsockopt(struct sock *sk, int level, int optname, char *optval, int opt
 			  struct options * old_opt;
 			  if (optlen > 40 || optlen < 0)
 			  	return -EINVAL;
-			  err = verify_area(VERIFY_READ, optval, optlen);
-			  if (err)
-			  	return err;
 			  opt = kmalloc(sizeof(struct options)+((optlen+3)&~3), GFP_KERNEL);
 			  if (!opt)
 			  	return -ENOMEM;
 			  memset(opt, 0, sizeof(struct options));
 			  if (optlen)
-			  	copy_from_user(opt->__data, optval, optlen);
+			  {
+				  err = copy_from_user(opt->__data, optval, optlen);
+				  if (err)
+				  {
+					  kfree_s(opt, sizeof(struct options) + ((optlen+3)&~3));
+					  return -EFAULT;
+				  }
+			  }
+
 			  while (optlen & 3)
 			  	opt->__data[optlen++] = IPOPT_END;
 			  opt->optlen = optlen;
@@ -228,13 +233,11 @@ int ip_setsockopt(struct sock *sk, int level, int optname, char *optval, int opt
 			/*
 			 *	Check the arguments are allowable
 			 */
-
-			err=verify_area(VERIFY_READ, optval, sizeof(addr));
-			if(err)
-				return err;
 				
-			copy_from_user(&addr,optval,sizeof(addr));
-			
+			err = copy_from_user(&addr,optval,sizeof(addr));
+			if (err)
+				return -EFAULT; 
+
 			
 			/*
 			 *	What address has been requested
@@ -278,11 +281,9 @@ int ip_setsockopt(struct sock *sk, int level, int optname, char *optval, int opt
 			 *	Check the arguments.
 			 */
 
-			err=verify_area(VERIFY_READ, optval, sizeof(mreq));
-			if(err)
-				return err;
-
-			copy_from_user(&mreq,optval,sizeof(mreq));
+			err = copy_from_user(&mreq,optval,sizeof(mreq));
+			if (err)
+				return -EFAULT; 
 
 			/* 
 			 *	Get device for use later
@@ -333,11 +334,9 @@ int ip_setsockopt(struct sock *sk, int level, int optname, char *optval, int opt
 			 *	Check the arguments
 			 */
 			 
-			err=verify_area(VERIFY_READ, optval, sizeof(mreq));
-			if(err)
-				return err;
-
-			copy_from_user(&mreq,optval,sizeof(mreq));
+			err = copy_from_user(&mreq,optval,sizeof(mreq));
+			if (err)
+				return -EFAULT; 
 
 			/*
 			 *	Get device for use later 
@@ -399,10 +398,9 @@ int ip_setsockopt(struct sock *sk, int level, int optname, char *optval, int opt
 				return -EPERM;
 			if(optlen>sizeof(tmp_fw) || optlen<1)
 				return -EINVAL;
-			err=verify_area(VERIFY_READ,optval,optlen);
-			if(err)
-				return err;
-			copy_from_user(&tmp_fw,optval,optlen);
+			err = copy_from_user(&tmp_fw,optval,optlen);
+			if (err)
+				return -EFAULT; 
 			err=ip_fw_ctl(optname, &tmp_fw,optlen);
 			return -err;	/* -0 is 0 after all */
 			
@@ -417,10 +415,9 @@ int ip_setsockopt(struct sock *sk, int level, int optname, char *optval, int opt
 				return -EPERM;
 			if(optlen>sizeof(tmp_fw) || optlen<1)
 				return -EINVAL;
-			err=verify_area(VERIFY_READ,optval,optlen);
-			if(err)
-				return err;
-			copy_from_user(&tmp_fw, optval,optlen);
+			err = copy_from_user(&tmp_fw, optval,optlen);
+			if (err)
+				return -EFAULT; 
 			err=ip_acct_ctl(optname, &tmp_fw,optlen);
 			return -err;	/* -0 is 0 after all */
 #endif
@@ -458,9 +455,7 @@ int ip_getsockopt(struct sock *sk, int level, int optname, char *optval, int *op
 			{
 				unsigned char optbuf[sizeof(struct options)+40];
 				struct options * opt = (struct options*)optbuf;
-				err = verify_area(VERIFY_WRITE, optlen, sizeof(int));
-				if (err)
-					return err;
+
 				cli();
 				opt->optlen = 0;
 				if (sk->opt)
@@ -468,12 +463,8 @@ int ip_getsockopt(struct sock *sk, int level, int optname, char *optval, int *op
 				sti();
 				if (opt->optlen == 0) 
 				{
-					put_user(0, optlen);
-					return 0;
+					return put_user(0, optlen);
 				}
-				err = verify_area(VERIFY_WRITE, optval, opt->optlen);
-				if (err)
-					return err;
 /*
  * Now we should undo all the changes done by ip_options_compile().
  */
@@ -503,8 +494,10 @@ int ip_getsockopt(struct sock *sk, int level, int optname, char *optval, int *op
 						optptr[2] -= 4;
 					}
 				}
-				put_user(opt->optlen, optlen);
-				copy_to_user(optval, opt->__data, opt->optlen);
+				err = put_user(opt->optlen, optlen);
+				if (!err)
+					err = copy_to_user(optval, opt->__data, opt->optlen);
+				return err; 
 			}
 			return 0;
 		case IP_TOS:
@@ -524,29 +517,17 @@ int ip_getsockopt(struct sock *sk, int level, int optname, char *optval, int *op
 			val=sk->ip_mc_loop;
 			break;
 		case IP_MULTICAST_IF:
-			err=verify_area(VERIFY_WRITE, optlen, sizeof(int));
-			if(err)
-  				return err;
   			len=strlen(sk->ip_mc_name);
-  			err=verify_area(VERIFY_WRITE, optval, len);
-		  	if(err)
-  				return err;
-  			put_user(len, optlen);
-			copy_to_user((void *)optval,sk->ip_mc_name, len);
-			return 0;
+  			err = put_user(len, optlen);
+			if (!err)
+				err = copy_to_user((void *)optval,sk->ip_mc_name, len);
+			return err;
 #endif
 		default:
 			return(-ENOPROTOOPT);
 	}
-	err=verify_area(VERIFY_WRITE, optlen, sizeof(int));
-	if(err)
-		return err;
-	put_user(sizeof(int), optlen);
-
-	err=verify_area(VERIFY_WRITE, optval, sizeof(int));
-	if(err)
-		return err;
-	put_user(val,(int *) optval);
-
-	return(0);
+	err = put_user(sizeof(int), optlen);
+	if (err) 
+		return err; 
+	return put_user(val,(int *) optval);
 }

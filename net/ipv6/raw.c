@@ -124,8 +124,11 @@ int rawv6_recvmsg(struct sock *sk, struct msghdr *msg, int len,
 	
 	copied = min(len, skb->tail - skb->h.raw);
 	
-	skb_copy_datagram_iovec(skb, 0, msg->msg_iov, copied);
+	err = skb_copy_datagram_iovec(skb, 0, msg->msg_iov, copied);
 	sk->stamp=skb->stamp;
+
+	if (err)
+		return err;
 
 	/* Copy the address. */
 	if (sin6) 
@@ -166,15 +169,15 @@ struct rawv6_fakehdr {
 	struct in6_addr *daddr;
 };
 
-static void rawv6_getfrag(const void *data, struct in6_addr *saddr, 
+static int rawv6_getfrag(const void *data, struct in6_addr *saddr, 
 			  char *buff, unsigned int offset, unsigned int len)
 {
 	struct iovec *iov = (struct iovec *) data;
 
-	memcpy_fromiovecend(buff, iov, offset, len);
+	return memcpy_fromiovecend(buff, iov, offset, len);
 }
 
-static void rawv6_frag_cksum(const void *data, struct in6_addr *addr,
+static int rawv6_frag_cksum(const void *data, struct in6_addr *addr,
 			     char *buff, unsigned int offset, 
 			     unsigned int len)
 {
@@ -220,6 +223,7 @@ static void rawv6_frag_cksum(const void *data, struct in6_addr *addr,
 			printk(KERN_DEBUG "icmp: cksum offset too big\n");
 		}
 	}	
+	return 0; 
 }
 
 
@@ -354,8 +358,10 @@ static int rawv6_seticmpfilter(struct sock *sk, int level, int optname,
 
 	switch (optname) {
 		case ICMPV6_FILTER:
-			copy_from_user(&opt->filter, optval,
+			err = copy_from_user(&opt->filter, optval,
 				       sizeof(struct icmp6_filter));
+			if (err)
+				err = -EFAULT;
 			break;
 		default:
 			err = -ENOPROTOOPT;

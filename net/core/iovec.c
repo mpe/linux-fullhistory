@@ -11,6 +11,7 @@
  *		Andrew Lunn	:	Errors in iovec copying.
  *		Pedro Roque	:	Added memcpy_fromiovecend and
  *					csum_..._fromiovecend.
+ *      Andi Kleen  :   fixed error handling for 2.1
  */
 
 
@@ -29,6 +30,12 @@ extern inline int min(int x, int y)
 	return x>y?y:x;
 }
 
+
+/*
+ *	Verify iovec
+ *	verify area does a simple check for completly bogus addresses
+ */
+
 int verify_iovec(struct msghdr *m, struct iovec *iov, char *address, int mode)
 {
 	int err=0;
@@ -37,14 +44,20 @@ int verify_iovec(struct msghdr *m, struct iovec *iov, char *address, int mode)
 	
 	if(m->msg_name!=NULL)
 	{
-		if(mode==VERIFY_READ) {
+		if(mode==VERIFY_READ)
+		{
 			err=move_addr_to_kernel(m->msg_name, m->msg_namelen, address);
-		} else
+		}
+		else
+		{
 			err=verify_area(mode, m->msg_name, m->msg_namelen);
+		}
+		
 		if(err<0)
 			return err;
 		m->msg_name = address;
 	}
+	
 	if(m->msg_control!=NULL)
 	{
 		err=verify_area(mode, m->msg_control, m->msg_controllen);
@@ -54,11 +67,12 @@ int verify_iovec(struct msghdr *m, struct iovec *iov, char *address, int mode)
 	
 	for(ct=0;ct<m->msg_iovlen;ct++)
 	{
-		err=verify_area(VERIFY_READ, &m->msg_iov[ct], sizeof(struct iovec));
-		if(err)
+		err = copy_from_user(&iov[ct], &m->msg_iov[ct],
+				     sizeof(struct iovec));
+		if (err)
 			return err;
-		copy_from_user(&iov[ct], &m->msg_iov[ct], sizeof(struct iovec));
-		err=verify_area(mode, iov[ct].iov_base, iov[ct].iov_len);
+		
+		err = verify_area(mode, iov[ct].iov_base, iov[ct].iov_len);
 		if(err)
 			return err;
 		len+=iov[ct].iov_len;
@@ -71,14 +85,18 @@ int verify_iovec(struct msghdr *m, struct iovec *iov, char *address, int mode)
  *	Copy kernel to iovec.
  */
  
-void memcpy_toiovec(struct iovec *iov, unsigned char *kdata, int len)
+int memcpy_toiovec(struct iovec *iov, unsigned char *kdata, int len)
 {
+	int err; 
 	while(len>0)
 	{
 		if(iov->iov_len)
 		{
 			int copy = min(iov->iov_len,len);
-			copy_to_user(iov->iov_base,kdata,copy);
+			err = copy_to_user(iov->iov_base,kdata,copy);
+			if (err) {
+				return err; 
+			}
 			kdata+=copy;
 			len-=copy;
 			iov->iov_len-=copy;
@@ -86,20 +104,26 @@ void memcpy_toiovec(struct iovec *iov, unsigned char *kdata, int len)
 		}
 		iov++;
 	}
+	return 0; 
 }
 
 /*
  *	Copy iovec to kernel.
  */
  
-void memcpy_fromiovec(unsigned char *kdata, struct iovec *iov, int len)
+int memcpy_fromiovec(unsigned char *kdata, struct iovec *iov, int len)
 {
+	int err; 
 	while(len>0)
 	{
 		if(iov->iov_len)
 		{
 			int copy=min(len,iov->iov_len);
-			copy_from_user(kdata, iov->iov_base, copy);
+			err = copy_from_user(kdata, iov->iov_base, copy);
+			if (err)
+			{
+				return err; 
+			}
 			len-=copy;
 			kdata+=copy;
 			iov->iov_base+=copy;
@@ -107,6 +131,7 @@ void memcpy_fromiovec(unsigned char *kdata, struct iovec *iov, int len)
 		}
 		iov++;
 	}
+	return 0; 
 }
 
 
@@ -114,9 +139,10 @@ void memcpy_fromiovec(unsigned char *kdata, struct iovec *iov, int len)
  *	For use with ip_build_xmit
  */
 
-void memcpy_fromiovecend(unsigned char *kdata, struct iovec *iov, int offset, 
-			 int len)
+int memcpy_fromiovecend(unsigned char *kdata, struct iovec *iov, int offset,
+			int len)
 {
+	int err; 
 	while(offset>0)
 	{
 		if (offset > iov->iov_len)
@@ -133,21 +159,30 @@ void memcpy_fromiovecend(unsigned char *kdata, struct iovec *iov, int offset,
 			copy = min(len, iov->iov_len - offset);
 			offset = 0;
 
-			copy_from_user(kdata, base, copy);
+			err = copy_from_user(kdata, base, copy);
+			if (err)
+			{
+				return err;
+			}
 			len-=copy;
 			kdata+=copy;
 		}
-		iov++;	
+		iov++;
 	}
 
 	while (len>0)
 	{
 		int copy=min(len, iov->iov_len);
-		copy_from_user(kdata, iov->iov_base, copy);
+		err = copy_from_user(kdata, iov->iov_base, copy);
+		if (err)
+		{
+			return err;
+		}
 		len-=copy;
 		kdata+=copy;
 		iov++;
 	}
+	return 0;
 }
 
 /*
@@ -157,6 +192,9 @@ void memcpy_fromiovecend(unsigned char *kdata, struct iovec *iov, int offset,
  *
  *	ip_build_xmit must ensure that when fragmenting only the last
  *	call to this function will be unaligned also.
+ *
+ *	FIXME: add an error handling path when a copy/checksum from
+ *	user space failed because of a invalid pointer.
  */
 
 unsigned int csum_partial_copy_fromiovecend(unsigned char *kdata, 
@@ -190,13 +228,18 @@ unsigned int csum_partial_copy_fromiovecend(unsigned char *kdata,
 					       partial_cnt);
 			}
 
+			/*	
+			 *	FIXME: add exception handling to the
+			 *	csum functions and set *err when an
+			 *	exception occurs.
+			 */
 			csum = csum_partial_copy_fromuser(base, kdata, 
 							  copy, csum);
 
 			len   -= copy + partial_cnt;
 			kdata += copy + partial_cnt;
 		}
-		iov++;			
+		iov++;	
 	}
 
 	while (len>0)
@@ -226,8 +269,7 @@ unsigned int csum_partial_copy_fromiovecend(unsigned char *kdata,
 			}
 		}
 
-		csum = csum_partial_copy_fromuser(base, kdata, 
-						  copy, csum);
+		csum = csum_partial_copy_fromuser(base, kdata, copy, csum);
 		len   -= copy + partial_cnt;
 		kdata += copy + partial_cnt;
 		iov++;

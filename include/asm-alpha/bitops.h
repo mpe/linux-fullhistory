@@ -160,4 +160,14 @@ found_middle:
 #define find_first_zero_bit(addr, size) \
 	find_next_zero_bit((addr), (size), 0)
 
+#ifdef __KERNEL__
+
+#define ext2_set_bit                 set_bit
+#define ext2_clear_bit               clear_bit
+#define ext2_test_bit                test_bit
+#define ext2_find_first_zero_bit     find_first_zero_bit
+#define ext2_find_next_zero_bit      find_next_zero_bit
+
+#endif /* __KERNEL__ */
+
 #endif /* _ALPHA_BITOPS_H */

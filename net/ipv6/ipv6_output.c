@@ -15,6 +15,11 @@
  *      2 of the License, or (at your option) any later version.
  */
 
+/*
+ *	Changes:
+ *
+ *	Andi Kleen		:	exception handling
+ */
 
 #include <linux/errno.h>
 #include <linux/types.h>
@@ -440,7 +445,7 @@ int ipv6_build_xmit(struct sock *sk, inet_getfrag_t getfrag, const void *data,
 	int	pktlength;
 	int	pmtu = 0;
 	int	rt_flags = 0;
-	
+	int	error; 
 	
 	if (opt && opt->srcrt)
 	{
@@ -568,8 +573,6 @@ int ipv6_build_xmit(struct sock *sk, inet_getfrag_t getfrag, const void *data,
 
 	if (pktlength <= pmtu) 
 	{
-		int error;
-
 		struct sk_buff *skb =
 			sock_alloc_send_skb(sk, pktlength+15+
 					    dev->hard_header_len,
@@ -624,14 +627,22 @@ int ipv6_build_xmit(struct sock *sk, inet_getfrag_t getfrag, const void *data,
 		}
 			
 		skb_put(skb, length);
-		getfrag(data, &hdr->saddr,
-			((char *) hdr) + (pktlength - length), 0, length);
+		error = getfrag(data, &hdr->saddr,
+				((char *) hdr) + (pktlength - length),
+				0, length);
 			
-		ipv6_statistics.Ip6OutRequests++;
-		(*output_method)(skb, (struct rt6_info *) dc);
+		if (!error) 
+		{
+			ipv6_statistics.Ip6OutRequests++;
+			(*output_method)(skb, (struct rt6_info *) dc);
+		} else
+		{
+			error = -EFAULT;
+			kfree_skb(skb, FREE_WRITE);			
+		}
 
 		dev_unlock_list();
-		return 0;
+		return error;
 	}
 	else
 	{
@@ -763,31 +774,52 @@ int ipv6_build_xmit(struct sock *sk, inet_getfrag_t getfrag, const void *data,
 
 		fhdr_dist = (unsigned char *) fhdr - last_skb->data;
 
-		getfrag(data, &hdr->saddr, last_skb->tail, nfrags * frag_len, 
-			last_len);
+		error = getfrag(data, &hdr->saddr, last_skb->tail,
+				nfrags * frag_len, last_len);
 		
-		while (nfrags--)
+		if (!error)
+		{	
+			while (nfrags--)
+			{
+				struct sk_buff *skb;
+			
+				struct frag_hdr *fhdr2;
+				
+				printk(KERN_DEBUG "sending frag %d\n", nfrags);
+				skb = skb_copy(last_skb, sk->allocation);
+				
+				fhdr2 = (struct frag_hdr *)
+					(skb->data + fhdr_dist);
+				
+				/* more flag on */
+				fhdr2->frag_off = ntohs(nfrags * frag_len + 1);
+				
+				/*
+				 *	FIXME:
+				 *	if (nfrags == 0)
+				 *	put rest of headers
+				 */
+				
+				error = getfrag(data, &hdr->saddr,
+						skb_put(skb, frag_len), 
+						nfrags * frag_len, frag_len);
+			
+				if (error)
+				{
+					kfree_skb(skb, FREE_WRITE);
+					break;
+				}
+
+				ipv6_statistics.Ip6OutRequests++;
+				(*output_method)(skb, (struct rt6_info *) dc);
+			}
+		}
+
+		if (error)
 		{
-			struct sk_buff *skb;
-
-			struct frag_hdr *fhdr2;
-
-			printk(KERN_DEBUG "sending frag %d\n", nfrags);
-			skb = skb_copy(last_skb, sk->allocation);
-
-			fhdr2 = (struct frag_hdr *) (skb->data + fhdr_dist);
-			/* more flag on */
-			fhdr2->frag_off = ntohs(nfrags * frag_len + 1);
-
-			/* if (nfrags == 0)
-			   put rest of headers
-			   */
-
-			getfrag(data, &hdr->saddr, skb_put(skb, frag_len), 
-				nfrags * frag_len, frag_len);
-
-			ipv6_statistics.Ip6OutRequests++;
-			(*output_method)(skb, (struct rt6_info *) dc);
+			kfree_skb(last_skb, FREE_WRITE);
+			dev_unlock_list();
+			return -EFAULT;
 		}
 
 		printk(KERN_DEBUG "sending last frag \n");

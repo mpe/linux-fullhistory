@@ -1,3 +1,9 @@
+Thu Nov 14 00:06:09 1996  Theodore Ts'o  <tytso@rsts-11.mit.edu>
+
+	* serial.c (autoconfig): Fix autoconfiguration problems;
+		info->flags wasn't getting initialized from the state
+		structure.  Put in more paranoid test for the 16750.
+
 Fri Nov  8 20:19:50 1996  Theodore Ts'o  <tytso@rsts-11.mit.edu>
 
 	* n_tty.c (n_tty_flush_buffer): Only call driver->unthrottle() if

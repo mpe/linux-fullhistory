@@ -107,7 +107,7 @@ static int inet6_create(struct socket *sock, int protocol)
 	struct proto *prot;
 	int err;
 
-	sk = (struct sock *) kmalloc(sizeof(*sk), GFP_KERNEL);
+	sk = sk_alloc(GFP_KERNEL);
 	if (sk == NULL) 
 		return(-ENOBUFS);
 

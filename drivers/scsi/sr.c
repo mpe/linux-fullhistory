@@ -17,6 +17,9 @@
  *	 Modified by Thomas Quinot thomas@melchior.cuivre.fdn.fr to
  *	 provide auto-eject.
  *
+ *          Modified by Gerd Knorr <kraxel@cs.tu-berlin.de> to support the
+ *          generic cdrom interface
+ *
  */
 
 #include <linux/module.h>
@@ -28,7 +31,9 @@
 #include <linux/string.h>
 #include <linux/errno.h>
 #include <linux/cdrom.h>
+#include <linux/ucdrom.h>
 #include <linux/interrupt.h>
+#include <linux/config.h>
 #include <asm/system.h>
 
 #define MAJOR_NR SCSI_CDROM_MAJOR
@@ -49,53 +54,48 @@ static int sr_detect(Scsi_Device *);
 static void sr_detach(Scsi_Device *);
 
 struct Scsi_Device_Template sr_template = {NULL, "cdrom", "sr", NULL, TYPE_ROM, 
-					       SCSI_CDROM_MAJOR, 0, 0, 0, 1,
-					       sr_detect, sr_init,
-					       sr_finish, sr_attach, sr_detach};
+                                           SCSI_CDROM_MAJOR, 0, 0, 0, 1,
+                                           sr_detect, sr_init,
+                                           sr_finish, sr_attach, sr_detach};
 
 Scsi_CD * scsi_CDs = NULL;
 static int * sr_sizes;
 
 static int * sr_blocksizes;
 
-static int sr_open(struct inode *, struct file *);
+static int sr_open(struct cdrom_device_info*, int);
 void get_sectorsize(int);
-void sr_photocd(struct inode *);
-
-extern int sr_ioctl(struct inode *, struct file *, unsigned int, unsigned long);
 
 void requeue_sr_request (Scsi_Cmnd * SCpnt);
-static int check_cdrom_media_change(kdev_t);
+static int sr_media_change(struct cdrom_device_info*, int);
 
-static void sr_release(struct inode * inode, struct file * file)
+static void sr_release(struct cdrom_device_info *cdi)
 {
-	sync_dev(inode->i_rdev);
-	if(! --scsi_CDs[MINOR(inode->i_rdev)].device->access_count)
-	{
-	    sr_ioctl(inode, NULL, SCSI_IOCTL_DOORUNLOCK, 0);
-	    if (scsi_CDs[MINOR(inode->i_rdev)].auto_eject)
-		sr_ioctl(inode, NULL, CDROMEJECT, 0);
-	}
-	if (scsi_CDs[MINOR(inode->i_rdev)].device->host->hostt->usage_count)
-	    (*scsi_CDs[MINOR(inode->i_rdev)].device->host->hostt->usage_count)--;
+	sync_dev(cdi->dev);
+	scsi_CDs[MINOR(cdi->dev)].device->access_count--;
+	if (scsi_CDs[MINOR(cdi->dev)].device->host->hostt->usage_count)
+	    (*scsi_CDs[MINOR(cdi->dev)].device->host->hostt->usage_count)--;
 	if(sr_template.usage_count) (*sr_template.usage_count)--;
 }
 
-static struct file_operations sr_fops = 
-{
-	NULL,			/* lseek - default */
-	block_read,		/* read - general block-dev read */
-	block_write,		/* write - general block-dev write */
-	NULL,			/* readdir - bad */
-	NULL,			/* select */
-	sr_ioctl,		/* ioctl */
-	NULL,			/* mmap */
-	sr_open,       	/* special open code */
-	sr_release,		/* release */
-	NULL,			/* fsync */
-	NULL,			/* fasync */
-	check_cdrom_media_change,  /* Disk change */
-	NULL			/* revalidate */
+static struct cdrom_device_ops sr_dops = {
+        sr_open,                      /* open */
+        sr_release,                   /* release */
+        sr_drive_status,              /* drive status */
+        sr_disk_status,               /* disc status */
+        sr_media_change,              /* media changed */
+        sr_tray_move,                 /* tray move */
+        sr_lock_door,                 /* lock door */
+        NULL,                         /* select speed */
+        NULL,                         /* select disc */
+        sr_get_last_session,          /* get last session */
+        sr_get_mcn,                   /* get universal product code */
+        sr_reset,                     /* hard reset */
+        sr_audio_ioctl,               /* audio ioctl */
+        sr_dev_ioctl,                 /* device-specific ioctl */
+        CDC_CLOSE_TRAY | CDC_OPEN_TRAY| CDC_LOCK |
+        CDC_MULTI_SESSION | CDC_MCN | CDC_MEDIA_CHANGED | CDC_PLAY_AUDIO,
+        0
 };
 
 /*
@@ -108,38 +108,38 @@ static struct file_operations sr_fops =
  * an inode for that to work, and we do not always have one.
  */
 
-int check_cdrom_media_change(kdev_t full_dev){
-	int retval, target;
-	struct inode inode;
-	int flag = 0;
+int sr_media_change(struct cdrom_device_info *cdi, int slot){
+	int retval;
+
+        if (CDSL_CURRENT != slot) {
+                /* no changer support */
+                return -EINVAL;
+        }
+        
+	retval = scsi_ioctl(scsi_CDs[MINOR(cdi->dev)].device,
+                            SCSI_IOCTL_TEST_UNIT_READY, 0);
     
-	target =  MINOR(full_dev);
-    
-	if (target >= sr_template.nr_dev) {
-		printk("CD-ROM request error: invalid device.\n");
-		return 0;
-	};
-    
-	inode.i_rdev = full_dev;  /* This is all we really need here */
-	retval = sr_ioctl(&inode, NULL, SCSI_IOCTL_TEST_UNIT_READY, 0);
-    
-	if(retval){ /* Unable to test, unit probably not ready.  This usually
+	if(retval){
+                /* Unable to test, unit probably not ready.  This usually
 		 * means there is no disc in the drive.  Mark as changed,
 		 * and we will figure it out later once the drive is
 		 * available again.  */
 	
-	scsi_CDs[target].device->changed = 1;
-	return 1; /* This will force a flush, if called from
-		   * check_disk_change */
+                scsi_CDs[MINOR(cdi->dev)].device->changed = 1;
+                return 1; /* This will force a flush, if called from
+                           * check_disk_change */
 	};
     
-	retval = scsi_CDs[target].device->changed;
-	if(!flag) {
-	scsi_CDs[target].device->changed = 0;
-	/* If the disk changed, the capacity will now be different,
-	 * so we force a re-read of this information */
-	if (retval) scsi_CDs[target].needs_sector_size = 1;
-	};
+	retval = scsi_CDs[MINOR(cdi->dev)].device->changed;
+        scsi_CDs[MINOR(cdi->dev)].device->changed = 0;
+        /* If the disk changed, the capacity will now be different,
+         * so we force a re-read of this information */
+        if (retval) {
+#ifdef CONFIG_BLK_DEV_SR_VENDOR
+                sr_cd_check(cdi);
+#endif
+                scsi_CDs[MINOR(cdi->dev)].needs_sector_size = 1;
+        }
 	return retval;
 }
 
@@ -361,316 +361,25 @@ static void rw_intr (Scsi_Cmnd * SCpnt)
     }
 }
 
-/*
- * Here I tried to implement support for multisession-CD's
- * 
- * Much of this has do be done with vendor-specific SCSI-commands, because
- * multisession is newer than the SCSI-II standard.
- * So I have to complete it step by step. Useful information is welcome.
- *
- * Actually works:
- *   - NEC:     Detection and support of multisession CD's. Special handling
- *              for XA-disks is not necessary.
- *     
- *   - TOSHIBA: setting density is done here now, mounting PhotoCD's should
- *              work now without running the program "set_density"
- *              Multisession CD's are supported too.
- *
- *   Gerd Knorr <kraxel@cs.tu-berlin.de> 
- */
-/*
- * 19950704 operator@melchior.cuivre.fdn.fr (Thomas Quinot)
- *
- *   - SONY:	Same as Nec.
- *
- *   - PIONEER: works with SONY code (may be others too ?)
- *
- * 19961011
- *
- *   - HP:      reportedly working.
- */
-
-void sr_photocd(struct inode *inode)
+static int sr_open(struct cdrom_device_info *cdi, int purpose)
 {
-    unsigned long   sector,min,sec,frame;
-    unsigned char   buf[40];    /* the buffer for the ioctl */
-    Scsi_Ioctl_Command *sic = (Scsi_Ioctl_Command *) buf;
-#define CLEAR_CMD_BUFFER memset (buf, 0, sizeof buf);
-    unsigned char   *cmd;       /* the scsi-command */
-    unsigned char   *send;      /* the data we send to the drive ... */
-    unsigned char   *rec;       /* ... and get back */
-    int             rc,is_xa,no_multi;
-    
-    if (scsi_CDs[MINOR(inode->i_rdev)].xa_flags & 0x02) {
-#ifdef DEBUG
-	printk(KERN_DEBUG "sr_photocd: CDROM and/or driver do not support multisession CD's");
-#endif
-	return;
-    }
-    
-    if (!suser()) {
-	/* I'm not the superuser, so SCSI_IOCTL_SEND_COMMAND isn't allowed
-         * for me. That's why mpcd_sector will be initialized with zero,
-         * because I'm not able to get the right value. Necessary only if
-         * access_count is 1, else no disk change happened since the last
-         * call of this function and we can keep the old value.
-	 */
-	if (1 == scsi_CDs[MINOR(inode->i_rdev)].device->access_count) {
-	    scsi_CDs[MINOR(inode->i_rdev)].mpcd_sector = 0;
-	    scsi_CDs[MINOR(inode->i_rdev)].xa_flags &= ~0x01;
-	}
-	return;
-    }
-    
-    sector   = 0;
-    is_xa    = 0;
-    no_multi = 0;
-    cmd = rec = sic->data;
-    
-    switch(scsi_CDs[MINOR(inode->i_rdev)].device->manufacturer) {
-	
-    case SCSI_MAN_NEC:
-#ifdef DEBUG
-	printk(KERN_DEBUG "sr_photocd: use NEC code\n");
-#endif
-	CLEAR_CMD_BUFFER;
-	sic->inlen  = 0x0;   /* we send nothing...     */
-	sic->outlen = 0x16;  /* and receive 0x16 bytes */
-	cmd[0] = 0xde;
-	cmd[1] = 0x03;
-	cmd[2] = 0xb0;
-	rc = kernel_scsi_ioctl(scsi_CDs[MINOR(inode->i_rdev)].device,
-			   SCSI_IOCTL_SEND_COMMAND, sic);
-	if (rc != 0) {
-            if (rc != 0x28000002) /* drop "not ready" */
-                printk(KERN_WARNING"sr_photocd: ioctl error (NEC): 0x%x\n",rc);
-	    break;
-	}
-	if (rec[14] != 0 && rec[14] != 0xb0) {
-	    printk(KERN_INFO"sr_photocd: (NEC) Hmm, seems the CDROM doesn't support multisession CD's\n");
-	    no_multi = 1;
-	    break;
-	}
-	min   = (unsigned long) rec[15]/16*10 + (unsigned long) rec[15]%16;
-	sec   = (unsigned long) rec[16]/16*10 + (unsigned long) rec[16]%16;
-	frame = (unsigned long) rec[17]/16*10 + (unsigned long) rec[17]%16;
-	sector = min*CD_SECS*CD_FRAMES + sec*CD_FRAMES + frame;
-	is_xa  = (rec[14] == 0xb0);
-	break;
-	
-    case SCSI_MAN_TOSHIBA:
-#ifdef DEBUG
-	printk(KERN_DEBUG "sr_photocd: use TOSHIBA code\n");
-#endif
-	
-	/* we request some disc information (is it a XA-CD ?,
-	 * where starts the last session ?) */
-	CLEAR_CMD_BUFFER;
-	sic->inlen  = 0; /* we send nothing...  */
-	sic->outlen = 4; /* and receive 4 bytes */
-	cmd[0]                  = (unsigned char) 0x00c7;
-	cmd[1]                  = (unsigned char) 3;
-	rc = kernel_scsi_ioctl(scsi_CDs[MINOR(inode->i_rdev)].device,
-			       SCSI_IOCTL_SEND_COMMAND, sic);
-	if (rc != 0) {
-	    if (rc == 0x28000002) {
-		/* Got a "not ready" - error. No chance to find out if this is
-		 * because there is no CD in the drive or because the drive
-		 * don't knows multisession CD's. So I need to do an extra
-                 * check... */
-		if (!kernel_scsi_ioctl(scsi_CDs[MINOR(inode->i_rdev)].device,
-				       SCSI_IOCTL_TEST_UNIT_READY, NULL)) {
-		    printk(KERN_INFO "sr_photocd: (TOSHIBA) Hmm, seems the CDROM doesn't support multisession CD's\n");
-		    no_multi = 1;
-		}
-	    } else
-		printk(KERN_WARNING"sr_photocd: ioctl error (TOSHIBA #1): 0x%x\n",rc);
-	    break; /* if the first ioctl fails, we don't call the second one */
-	}
-	is_xa  = (rec[0] == 0x20);
-	min    = (unsigned long) rec[1]/16*10 + (unsigned long) rec[1]%16;
-	sec    = (unsigned long) rec[2]/16*10 + (unsigned long) rec[2]%16;
-	frame  = (unsigned long) rec[3]/16*10 + (unsigned long) rec[3]%16;
-	sector = min*CD_SECS*CD_FRAMES + sec*CD_FRAMES + frame;
-	if (sector)
-	    sector -= CD_BLOCK_OFFSET;
-	
-	/* now we do a get_density... */
-	CLEAR_CMD_BUFFER;
-	sic->inlen  = 0;  /* we send nothing...  */
-	sic->outlen = 12; /* and receive 12 bytes */
-	cmd[0]                  = (unsigned char) MODE_SENSE;
-	cmd[2]                  = (unsigned char) 1;
-	cmd[4]                  = (unsigned char) 12;
-	rc = kernel_scsi_ioctl(scsi_CDs[MINOR(inode->i_rdev)].device,
-			       SCSI_IOCTL_SEND_COMMAND, sic);
-	if (rc != 0) {
-	    printk(KERN_WARNING "sr_photocd: ioctl error (TOSHIBA #2): 0x%x\n",rc);
-	    break;
-	}
-#ifdef DEBUG
-	printk(KERN_DEBUG "sr_photocd: get_density: 0x%x\n",rec[4]);
-#endif
-	
-	/* ...and only if necessary a set_density */
-	if ((rec[4] != 0x81 && is_xa) || (rec[4] != 0 && !is_xa)) {
-#ifdef DEBUG
-	    printk(KERN_DEBUG "sr_photocd: doing set_density\n");
-#endif
-	    CLEAR_CMD_BUFFER;
-	    sic->inlen  = 12; /* we send 12 bytes... */
-	    sic->outlen = 0;  /* and receive nothing */
-	    cmd[0]                  = (unsigned char) MODE_SELECT;
-	    cmd[1]                  = (unsigned char) (1 << 4);
-	    cmd[4]                  = (unsigned char) 12;
-            send = &cmd[6]; 		/* this is a 6-Byte command    */
-            send[ 3]                = (unsigned char) 0x08; /* data for cmd */
-            /* density 0x81 for XA, 0 else */
-            send[ 4]                = (is_xa) ? 
-                                    (unsigned char) 0x81 : (unsigned char) 0;  
-            send[10]                = (unsigned char) 0x08;
-	    rc = kernel_scsi_ioctl(scsi_CDs[MINOR(inode->i_rdev)].device,
-				   SCSI_IOCTL_SEND_COMMAND, sic);
-	    if (rc != 0) {
-		printk(KERN_WARNING "sr_photocd: ioctl error (TOSHIBA #3): 0x%x\n",rc);
-	    }
-	    /* The set_density command may have changed the
-             * sector size or capacity. */
-	    scsi_CDs[MINOR(inode->i_rdev)].needs_sector_size = 1;
-	}
-	break;
+    check_disk_change(cdi->dev);
 
-    case SCSI_MAN_SONY: /* Thomas QUINOT <thomas@melchior.cuivre.fdn.fr> */
-    case SCSI_MAN_PIONEER:
-    case SCSI_MAN_MATSHITA:
-#ifdef DEBUG
-	printk(KERN_DEBUG "sr_photocd: use SONY/PIONEER/MATSHITA code\n");
-#endif
-	get_sectorsize(MINOR(inode->i_rdev));	/* spinup (avoid timeout) */
-	CLEAR_CMD_BUFFER;
-	sic->inlen  = 0x0;  /* we send nothing...     */
-	sic->outlen = 0x0c; /* and receive 0x0c bytes */
-        
-	cmd[0] = READ_TOC;
-	cmd[8] = 0x0c;
-	cmd[9] = 0x40;
-	rc = kernel_scsi_ioctl(scsi_CDs[MINOR(inode->i_rdev)].device,
-			       SCSI_IOCTL_SEND_COMMAND, sic);
-	
-	if (rc != 0) {
-            if (rc != 0x28000002) /* drop "not ready" */
-                printk(KERN_WARNING "sr_photocd: ioctl error (SONY/PIONEER/MATSHITA): 0x%x\n",rc);
-	    break;
-	}
-	if ((rec[0] << 8) + rec[1] != 0x0a) {
-	    printk(KERN_INFO "sr_photocd: (SONY/PIONEER/MATSHITA) Hmm, seems the CDROM doesn't support multisession CD's\n");
-	    no_multi = 1;
-	    break;
-	}
-	sector = rec[11] + (rec[10] << 8) + (rec[9] << 16) + (rec[8] << 24);
-	is_xa = !!sector;
-	break;
-    case SCSI_MAN_HP:
-#define DEBUG
-#ifdef DEBUG
-        printk(KERN_DEBUG "sr_photocd: use HP code\n");
-#endif
-        CLEAR_CMD_BUFFER;
-	sic->inlen  = 0x0; /* we send nothing...  */
-	sic->outlen = 0x4; /* and receive 4 bytes */
-        cmd[0] = 0x43; /* Read TOC */
-        cmd[8] = 0x04;
-        cmd[9] = 0x40;
-        rc = kernel_scsi_ioctl(scsi_CDs[MINOR(inode->i_rdev)].device,
-                               SCSI_IOCTL_SEND_COMMAND, sic);
-        if (rc != 0) {
-            if (rc != 0x28000002) /* drop "not ready" */
-                printk(KERN_WARNING "sr_photocd: ioctl error (HP-1): 0x%x\n",rc);
-	break;
-        }
-		
-        if ((rc = rec[2]) == 0) {
-          printk (KERN_WARNING "sr_photocd: (HP) No finished session");
-          break;
-        }
-        CLEAR_CMD_BUFFER;
-	sic->inlen  = 0x0;  /* we send nothing...     */
-	sic->outlen = 0x0c; /* and receive 0x0c bytes */
-        cmd[0] = 0x43; /* Read TOC */
-        cmd[6] = rc & 0x7f;  /* number of last session */
-        cmd[8] = 0x0c;
-        cmd[9] = 0x40;
-        rc = kernel_scsi_ioctl(scsi_CDs[MINOR(inode->i_rdev)].device,
-                               SCSI_IOCTL_SEND_COMMAND, sic);
-        if (rc != 0) {
-            if (rc != 0x28000002) /* drop "not ready" */
-                printk(KERN_WARNING "sr_photocd: ioctl error (HP-2): 0x%x\n",rc);
-            break;
-        }
-#undef STRICT_HP
-#ifdef STRICT_HP
-        sector = rec[11] + (rec[10] << 8) + (rec[9] << 16);
-        /* HP documentation states that Logical Start Address is
-           returned as three (!) bytes, and that rec[8] is
-           reserved. This is strange, because a LBA usually is
-           4 bytes long. */
-#else
-	sector = rec[11] + (rec[10] << 8) + (rec[9] << 16) + (rec[8] << 24);
-#endif
-        is_xa = !!sector;
-        break;
-    case SCSI_MAN_NEC_OLDCDR:
-    case SCSI_MAN_UNKNOWN:
-    default:
-	sector = 0;
-	no_multi = 1;
-	break; }
-    
-#ifdef DEBUG
-    if (sector)
-        printk (KERN_DEBUG "sr_photocd: multisession CD detected. start: %lu\n",sector);
-#endif
-#undef DEBUG
-
-    scsi_CDs[MINOR(inode->i_rdev)].mpcd_sector = sector;
-    if (is_xa)
-	scsi_CDs[MINOR(inode->i_rdev)].xa_flags |= 0x01;
-    else
-	scsi_CDs[MINOR(inode->i_rdev)].xa_flags &= ~0x01;
-    if (no_multi)
-	scsi_CDs[MINOR(inode->i_rdev)].xa_flags |= 0x02;
-    return;
-}
-
-static int sr_open(struct inode * inode, struct file * filp)
-{
-    if(MINOR(inode->i_rdev) >= sr_template.nr_dev || 
-       !scsi_CDs[MINOR(inode->i_rdev)].device) return -ENXIO;   /* No such device */
-
-    if (filp->f_mode & 2)  
-	return -EROFS;
-
-    check_disk_change(inode->i_rdev);
-    
-    if(!scsi_CDs[MINOR(inode->i_rdev)].device->access_count++)
-	sr_ioctl(inode, NULL, SCSI_IOCTL_DOORLOCK, 0);
-    if (scsi_CDs[MINOR(inode->i_rdev)].device->host->hostt->usage_count)
-	(*scsi_CDs[MINOR(inode->i_rdev)].device->host->hostt->usage_count)++;
+    scsi_CDs[MINOR(cdi->dev)].device->access_count++;
+    if (scsi_CDs[MINOR(cdi->dev)].device->host->hostt->usage_count)
+	(*scsi_CDs[MINOR(cdi->dev)].device->host->hostt->usage_count)++;
     if(sr_template.usage_count) (*sr_template.usage_count)++;
-    
-    sr_photocd(inode);
-    
+
     /* If this device did not have media in the drive at boot time, then
      * we would have been unable to get the sector size.  Check to see if
      * this is the case, and try again.
      */
 
-    if(scsi_CDs[MINOR(inode->i_rdev)].needs_sector_size)
-	get_sectorsize(MINOR(inode->i_rdev));
+    if(scsi_CDs[MINOR(cdi->dev)].needs_sector_size)
+	get_sectorsize(MINOR(cdi->dev));
 
     return 0;
 }
-
 
 /*
  * do_sr_request() is the request handler function for the sr driver.
@@ -1079,6 +788,19 @@ static int sr_attach(Scsi_Device * SDp){
     
     SDp->scsi_request_fn = do_sr_request;
     scsi_CDs[i].device = SDp;
+    
+    scsi_CDs[i].cdi.ops        = &sr_dops;
+    scsi_CDs[i].cdi.handle     = &scsi_CDs[i];
+    scsi_CDs[i].cdi.dev        = MKDEV(MAJOR_NR,i);
+    scsi_CDs[i].cdi.mask       = 0;
+    scsi_CDs[i].cdi.speed      = 1;
+    scsi_CDs[i].cdi.capacity   = 1;
+    register_cdrom(&scsi_CDs[i].cdi, "sr");
+            
+#ifdef CONFIG_BLK_DEV_SR_VENDOR
+    sr_vendor_init(i);
+#endif
+
     sr_template.nr_dev++;
     if(sr_template.nr_dev > sr_template.dev_max)
 	panic ("scsi_devices corrupt (sr)");
@@ -1184,7 +906,7 @@ static int sr_init()
     if(sr_template.dev_noticed == 0) return 0;
 
     if(!sr_registered) {
-	if (register_blkdev(MAJOR_NR,"sr",&sr_fops)) {
+	if (register_blkdev(MAJOR_NR,"sr",&cdrom_fops)) {
 	    printk("Unable to get major %d for SCSI-CD\n",MAJOR_NR);
 	    return 1;
 	}
@@ -1193,7 +915,8 @@ static int sr_init()
 
     
     if (scsi_CDs) return 0;
-    sr_template.dev_max = sr_template.dev_noticed + SR_EXTRA_DEVS;
+    sr_template.dev_max =
+            sr_template.dev_noticed + SR_EXTRA_DEVS;
     scsi_CDs = (Scsi_CD *) scsi_init_malloc(sr_template.dev_max * sizeof(Scsi_CD), GFP_ATOMIC);
     memset(scsi_CDs, 0, sr_template.dev_max * sizeof(Scsi_CD));
 
@@ -1222,6 +945,7 @@ void sr_finish()
 	scsi_CDs[i].capacity = 0x1fffff;
 	scsi_CDs[i].sector_size = 2048;  /* A guess, just in case */
 	scsi_CDs[i].needs_sector_size = 1;
+	scsi_CDs[i].device->changed = 1; /* force recheck CD type */
 #if 0
 	/* seems better to leave this for later */
 	get_sectorsize(i);
@@ -1230,7 +954,6 @@ void sr_finish()
 	scsi_CDs[i].use = 1;
 	scsi_CDs[i].ten = 1;
 	scsi_CDs[i].remap = 1;
-	scsi_CDs[i].auto_eject = 0; /* Default is not to eject upon unmount. */
 	sr_sizes[i] = scsi_CDs[i].capacity >> (BLOCK_SIZE_BITS - 9);
     }
     
@@ -1266,6 +989,7 @@ static void sr_detach(Scsi_Device * SDp)
 	     * Reset things back to a sane state so that one can re-load a new
 	     * driver (perhaps the same one).
 	     */
+            unregister_cdrom(&(cpnt->cdi));
 	    cpnt->device = NULL;
 	    cpnt->capacity = 0;
 	    SDp->attached--;
@@ -1281,14 +1005,14 @@ static void sr_detach(Scsi_Device * SDp)
 #ifdef MODULE
 
 int init_module(void) {
-    sr_template.usage_count = &mod_use_count_;
-    return scsi_register_module(MODULE_SCSI_DEV, &sr_template);
+        sr_template.usage_count = &mod_use_count_;
+        return scsi_register_module(MODULE_SCSI_DEV, &sr_template);
 }
 
 void cleanup_module( void) 
 {
     scsi_unregister_module(MODULE_SCSI_DEV, &sr_template);
-    unregister_blkdev(SCSI_CDROM_MAJOR, "sr");
+    unregister_blkdev(MAJOR_NR, "sr");
     sr_registered--;
     if(scsi_CDs != NULL) {
 	scsi_init_free((char *) scsi_CDs,

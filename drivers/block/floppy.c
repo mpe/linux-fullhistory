@@ -1013,7 +1013,7 @@ static void setup_DMA(void)
 		FDCS->reset = 1;
 		return;
 	}
-	if ((long) raw_cmd->kernel_data % 512){
+	if (((unsigned long) raw_cmd->kernel_data) % 512){
 		printk("non aligned address: %p\n", raw_cmd->kernel_data);
 		cont->done(0);
 		FDCS->reset=1;
@@ -2541,7 +2541,8 @@ static int make_raw_rw_request(void)
 		}
 		/* 64 kb boundaries */
 		if (CROSS_64KB(CURRENT->buffer, max_size << 9))
-			max_size = (K_64 - ((long) CURRENT->buffer) % K_64)>>9;
+			max_size = (K_64 - 
+				    ((unsigned long)CURRENT->buffer) % K_64)>>9;
 		direct = transfer_size(ssize,max_sector,max_size) - sector_t;
 		/*
 		 * We try to read tracks, but if we get too many errors, we

@@ -37,6 +37,7 @@
 #include <linux/interrupt.h>
 
 #include <asm/system.h>
+#include <asm/io.h>
 
 #define MAJOR_NR SCSI_DISK_MAJOR
 #include <linux/blk.h>
@@ -660,10 +661,10 @@ static void requeue_sd_request (Scsi_Cmnd * SCpnt)
      * a bounce buffer if we are straddling the 16Mb line 
      */ 
     if (contiguous && SCpnt->request.bh &&
-	((long) SCpnt->request.bh->b_data) 
+      virt_to_phys(SCpnt->request.bh->b_data) 
 	+ (SCpnt->request.nr_sectors << 9) - 1 > ISA_DMA_THRESHOLD 
 	&& SCpnt->host->unchecked_isa_dma) {
-	if(((long) SCpnt->request.bh->b_data) > ISA_DMA_THRESHOLD)
+      if(virt_to_phys(SCpnt->request.bh->b_data) > ISA_DMA_THRESHOLD)
 	    bounce_buffer = (char *) scsi_malloc(bounce_size);
 	if(!bounce_buffer) contiguous = 0;
     }
@@ -720,7 +721,7 @@ static void requeue_sd_request (Scsi_Cmnd * SCpnt)
 	    if(!bhp || !CONTIGUOUS_BUFFERS(bhp,bh) ||
 	       !CLUSTERABLE_DEVICE(SCpnt) ||
 	       (SCpnt->host->unchecked_isa_dma &&
-		((unsigned long) bh->b_data-1) == ISA_DMA_THRESHOLD)) {
+		virt_to_phys(bh->b_data-1) == ISA_DMA_THRESHOLD)) {
 		if (count < SCpnt->host->sg_tablesize) count++;
 		else break;
 	    }
@@ -730,7 +731,7 @@ static void requeue_sd_request (Scsi_Cmnd * SCpnt)
 	}
 #if 0
 	if(SCpnt->host->unchecked_isa_dma &&
-	   ((unsigned int) SCpnt->request.bh->b_data-1) == ISA_DMA_THRESHOLD) count--;
+	 virt_to_phys(SCpnt->request.bh->b_data-1) == ISA_DMA_THRESHOLD) count--;
 #endif
 	SCpnt->use_sg = count;  /* Number of chains */
 	/* scsi_malloc can only allocate in chunks of 512 bytes */
@@ -762,7 +763,7 @@ static void requeue_sd_request (Scsi_Cmnd * SCpnt)
 		sgpnt[count].length += bh->b_size;
 		counted += bh->b_size >> 9;
 		
-		if (((long) sgpnt[count].address) + sgpnt[count].length - 1 > 
+		if (virt_to_phys(sgpnt[count].address) + sgpnt[count].length - 1 >
 		    ISA_DMA_THRESHOLD && (SCpnt->host->unchecked_isa_dma) &&
 		    !sgpnt[count].alt_address) {
 		    sgpnt[count].alt_address = sgpnt[count].address;
@@ -809,7 +810,7 @@ static void requeue_sd_request (Scsi_Cmnd * SCpnt)
 		   && CLUSTERABLE_DEVICE(SCpnt)) {
 		    char * tmp;
 		    
-		    if (((long) sgpnt[count].address) + sgpnt[count].length +
+		  if (virt_to_phys(sgpnt[count].address) + sgpnt[count].length +
 			bhp->b_size - 1 > ISA_DMA_THRESHOLD && 
 			(SCpnt->host->unchecked_isa_dma) &&
 			!sgpnt[count].alt_address) continue;
@@ -871,7 +872,7 @@ static void requeue_sd_request (Scsi_Cmnd * SCpnt)
     /* Now handle the possibility of DMA to addresses > 16Mb */
     
     if(SCpnt->use_sg == 0){
-	if (((long) buff) + (this_count << 9) - 1 > ISA_DMA_THRESHOLD && 
+      if (virt_to_phys(buff) + (this_count << 9) - 1 > ISA_DMA_THRESHOLD && 
 	    (SCpnt->host->unchecked_isa_dma)) {
 	    if(bounce_buffer)
 		buff = bounce_buffer;

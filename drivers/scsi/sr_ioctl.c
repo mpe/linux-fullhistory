@@ -9,13 +9,13 @@
 #include <linux/blk.h>
 #include "scsi.h"
 #include "hosts.h"
-#include "sr.h"
 #include <scsi/scsi_ioctl.h>
 
 #include <linux/cdrom.h>
+#include <linux/ucdrom.h>
+#include "sr.h"
 
 extern void get_sectorsize(int);
-extern void sr_photocd(struct inode *);
 
 #define IOCTL_RETRIES 3
 /* The CDROM is fairly slow, so we need a little extra time */
@@ -38,7 +38,7 @@ static void sr_ioctl_done(Scsi_Cmnd * SCpnt)
    error code is.  Normally the UNIT_ATTENTION code will automatically
    clear after one error */
 
-static int do_ioctl(int target, unsigned char * sr_cmd, void * buffer, unsigned buflength)
+int sr_do_ioctl(int target, unsigned char * sr_cmd, void * buffer, unsigned buflength)
 {
     Scsi_Cmnd * SCpnt;
     int result;
@@ -88,17 +88,134 @@ static int do_ioctl(int target, unsigned char * sr_cmd, void * buffer, unsigned 
     return result;
 }
 
-int sr_ioctl(struct inode * inode, struct file * file, unsigned int cmd, unsigned long arg)
+/* ---------------------------------------------------------------------- */
+/* interface to cdrom.c                                                   */
+
+int sr_tray_move(struct cdrom_device_info *cdi, int pos)
 {
-    u_char  sr_cmd[10];
+        u_char  sr_cmd[10];
+        
+        sr_cmd[0] = START_STOP;
+        sr_cmd[1] = ((scsi_CDs[MINOR(cdi->dev)].device -> lun) << 5);
+        sr_cmd[2] = sr_cmd[3] = sr_cmd[5] = 0;
+        sr_cmd[4] = (pos == 0) ? 0x03 /* close */ : 0x02 /* eject */;
+	
+        return sr_do_ioctl(MINOR(cdi->dev), sr_cmd, NULL, 255);
+}
+
+int sr_lock_door(struct cdrom_device_info *cdi, int lock)
+{
+        return scsi_ioctl (scsi_CDs[MINOR(cdi->dev)].device,
+                           lock ? SCSI_IOCTL_DOORLOCK : SCSI_IOCTL_DOORUNLOCK,
+                           0);
+}
+
+int sr_drive_status(struct cdrom_device_info *cdi, int slot)
+{
+        if (CDSL_CURRENT != slot) {
+                /* we have no changer support */
+                return -EINVAL;
+        }
+
+        if (!scsi_ioctl(scsi_CDs[MINOR(cdi->dev)].device,
+                        SCSI_IOCTL_TEST_UNIT_READY,0))
+                return CDS_DISC_OK;
+
+#if 0
+        /* Enable this if you want to try auto-close. Is'nt enabled by
+         * default because it does'nt work perfectly (no way to
+         * difference between "tray open" and "tray closed, no disk"),
+         * and for caddy drives this is useless anyway. */
+        return CDS_TRAY_OPEN;
+#else
+        return CDS_NO_DISC;
+#endif
+}
+
+int sr_disk_status(struct cdrom_device_info *cdi)
+{
+	struct cdrom_tochdr    toc_h;
+	struct cdrom_tocentry  toc_e;
+        int                    i;
+
+        if (scsi_ioctl(scsi_CDs[MINOR(cdi->dev)].device,SCSI_IOCTL_TEST_UNIT_READY,0))
+                return CDS_NO_DISC;
+
+        /* if the xa-bit is on, we tell it is XA... */
+        if (scsi_CDs[MINOR(cdi->dev)].xa_flag)
+                return CDS_XA_2_1;
+        
+        /* ...else we look for data tracks */
+        if (sr_audio_ioctl(cdi, CDROMREADTOCHDR, &toc_h))
+                return CDS_NO_INFO;
+        for (i = toc_h.cdth_trk0; i <= toc_h.cdth_trk1; i++) {
+                toc_e.cdte_track  = i;
+                toc_e.cdte_format = CDROM_LBA;
+                if (sr_audio_ioctl(cdi, CDROMREADTOCENTRY, &toc_e))
+                        return CDS_NO_INFO;
+                if (toc_e.cdte_ctrl & CDROM_DATA_TRACK)
+                        return CDS_DATA_1;
+#if 0
+                if (i == toc_h.cdth_trk0 && toc_e.cdte_addr.lba > 100)
+                        /* guess: looks like a "hidden track" CD */
+                        return CDS_DATA_1;
+#endif
+        }
+        return CDS_AUDIO;
+}
+
+int sr_get_last_session(struct cdrom_device_info *cdi,
+                        struct cdrom_multisession* ms_info)
+{
+        ms_info->addr.lba=scsi_CDs[MINOR(cdi->dev)].ms_offset;
+        ms_info->xa_flag=scsi_CDs[MINOR(cdi->dev)].xa_flag;
+
+	return 0;
+}
+
+int sr_get_mcn(struct cdrom_device_info *cdi,struct cdrom_mcn *mcn)
+{
+        u_char  sr_cmd[10];
+	char * buffer;
+        int result;
+        	
+	sr_cmd[0] = SCMD_READ_SUBCHANNEL;
+	sr_cmd[1] = ((scsi_CDs[MINOR(cdi->dev)].device->lun) << 5);
+	sr_cmd[2] = 0x40;    /* I do want the subchannel info */
+	sr_cmd[3] = 0x02;    /* Give me medium catalog number info */
+	sr_cmd[4] = sr_cmd[5] = 0;
+	sr_cmd[6] = 0;
+	sr_cmd[7] = 0;
+	sr_cmd[8] = 24;
+	sr_cmd[9] = 0;
+	
+	buffer = (unsigned char*) scsi_malloc(512);
+	if(!buffer) return -ENOMEM;
+	
+	result = sr_do_ioctl(MINOR(cdi->dev), sr_cmd, buffer, 24);
+	
+	memcpy (mcn->medium_catalog_number, buffer + 9, 13);
+        mcn->medium_catalog_number[13] = 0;
+
+	scsi_free(buffer, 512);
+	
+	return result;
+}
+
+int sr_reset(struct cdrom_device_info *cdi)
+{
+	invalidate_buffers(cdi->dev);
+	return 0;        
+}
+
+/* ----------------------------------------------------------------------- */
+
+int sr_audio_ioctl(struct cdrom_device_info *cdi, unsigned int cmd, void* arg)
+{
+    u_char  sr_cmd[10];    
+    int result, target;
     
-    kdev_t dev = inode->i_rdev;
-    int result, target, err;
-    
-    target = MINOR(dev);
-    
-    if (target >= sr_template.nr_dev ||
-	!scsi_CDs[target].device) return -ENXIO;
+    target = MINOR(cdi->dev);
     
     switch (cmd) 
     {
@@ -112,8 +229,8 @@ int sr_ioctl(struct inode * inode, struct file * file, unsigned int cmd, unsigne
 	sr_cmd[8] = 0;
 	sr_cmd[9] = 0;
 	
-	result = do_ioctl(target, sr_cmd, NULL, 255);
-	return result;
+	result = sr_do_ioctl(target, sr_cmd, NULL, 255);
+        break;
 	
     case CDROMRESUME:
 	
@@ -124,86 +241,69 @@ int sr_ioctl(struct inode * inode, struct file * file, unsigned int cmd, unsigne
 	sr_cmd[8] = 1;
 	sr_cmd[9] = 0;
 	
-	result = do_ioctl(target, sr_cmd, NULL, 255);
-	
-	return result;
+	result = sr_do_ioctl(target, sr_cmd, NULL, 255);	
+        break;
 	
     case CDROMPLAYMSF:
     {
-	struct cdrom_msf msf;
+	struct cdrom_msf* msf = (struct cdrom_msf*)arg;
 
-        err = verify_area (VERIFY_READ, (void *) arg, sizeof (msf));
-        if (err) return err;
-
-	copy_from_user(&msf, (void *) arg, sizeof(msf));
-	
 	sr_cmd[0] = SCMD_PLAYAUDIO_MSF;
 	sr_cmd[1] = scsi_CDs[target].device->lun << 5;
 	sr_cmd[2] = 0;
-	sr_cmd[3] = msf.cdmsf_min0;
-	sr_cmd[4] = msf.cdmsf_sec0;
-	sr_cmd[5] = msf.cdmsf_frame0;
-	sr_cmd[6] = msf.cdmsf_min1;
-	sr_cmd[7] = msf.cdmsf_sec1;
-	sr_cmd[8] = msf.cdmsf_frame1;
+	sr_cmd[3] = msf->cdmsf_min0;
+	sr_cmd[4] = msf->cdmsf_sec0;
+	sr_cmd[5] = msf->cdmsf_frame0;
+	sr_cmd[6] = msf->cdmsf_min1;
+	sr_cmd[7] = msf->cdmsf_sec1;
+	sr_cmd[8] = msf->cdmsf_frame1;
 	sr_cmd[9] = 0;
 	
-	result = do_ioctl(target, sr_cmd, NULL, 255);
-	return result;
+	result = sr_do_ioctl(target, sr_cmd, NULL, 255);
+        break;
     }
 
     case CDROMPLAYBLK:
     {
-	struct cdrom_blk blk;
+	struct cdrom_blk* blk = (struct cdrom_blk*)arg;
 
-        err = verify_area (VERIFY_READ, (void *) arg, sizeof (blk));
-        if (err) return err;
-
-	copy_from_user(&blk, (void *) arg, sizeof(blk));
-	
 	sr_cmd[0] = SCMD_PLAYAUDIO10;
 	sr_cmd[1] = scsi_CDs[target].device->lun << 5;
-	sr_cmd[2] = blk.from >> 24;
-	sr_cmd[3] = blk.from >> 16;
-	sr_cmd[4] = blk.from >> 8;
-	sr_cmd[5] = blk.from;
+	sr_cmd[2] = blk->from >> 24;
+	sr_cmd[3] = blk->from >> 16;
+	sr_cmd[4] = blk->from >> 8;
+	sr_cmd[5] = blk->from;
 	sr_cmd[6] = 0;
-	sr_cmd[7] = blk.len >> 8;
-	sr_cmd[8] = blk.len;
+	sr_cmd[7] = blk->len >> 8;
+	sr_cmd[8] = blk->len;
 	sr_cmd[9] = 0;
 	
-	result = do_ioctl(target, sr_cmd, NULL, 255);
-	return result;
+	result = sr_do_ioctl(target, sr_cmd, NULL, 255);
+        break;
     }
 		
     case CDROMPLAYTRKIND:
     {
-	struct cdrom_ti ti;
+	struct cdrom_ti* ti = (struct cdrom_ti*)arg;
 
-        err = verify_area (VERIFY_READ, (void *) arg, sizeof (ti));
-        if (err) return err;
-
-	copy_from_user(&ti, (void *) arg, sizeof(ti));
-	
 	sr_cmd[0] = SCMD_PLAYAUDIO_TI;
 	sr_cmd[1] = scsi_CDs[target].device->lun << 5;
 	sr_cmd[2] = 0;
 	sr_cmd[3] = 0;
-	sr_cmd[4] = ti.cdti_trk0;
-	sr_cmd[5] = ti.cdti_ind0;
+	sr_cmd[4] = ti->cdti_trk0;
+	sr_cmd[5] = ti->cdti_ind0;
 	sr_cmd[6] = 0;
-	sr_cmd[7] = ti.cdti_trk1;
-	sr_cmd[8] = ti.cdti_ind1;
+	sr_cmd[7] = ti->cdti_trk1;
+	sr_cmd[8] = ti->cdti_ind1;
 	sr_cmd[9] = 0;
 	
-	result = do_ioctl(target, sr_cmd, NULL, 255);
-	
-	return result;
+	result = sr_do_ioctl(target, sr_cmd, NULL, 255);
+        break;
     }
 	
     case CDROMREADTOCHDR:
     {
-	struct cdrom_tochdr tochdr;
+	struct cdrom_tochdr* tochdr = (struct cdrom_tochdr*)arg;
 	char * buffer;
 	
 	sr_cmd[0] = SCMD_READ_TOC;
@@ -217,36 +317,25 @@ int sr_ioctl(struct inode * inode, struct file * file, unsigned int cmd, unsigne
 	buffer = (unsigned char *) scsi_malloc(512);
 	if(!buffer) return -ENOMEM;
 	
-	result = do_ioctl(target, sr_cmd, buffer, 12);
+	result = sr_do_ioctl(target, sr_cmd, buffer, 12);
 	
-	tochdr.cdth_trk0 = buffer[2];
-	tochdr.cdth_trk1 = buffer[3];
+	tochdr->cdth_trk0 = buffer[2];
+	tochdr->cdth_trk1 = buffer[3];
 	
 	scsi_free(buffer, 512);
-	
-	err = verify_area (VERIFY_WRITE, (void *) arg, sizeof (struct cdrom_tochdr));
-	if (err)
-	    return err;
-	copy_to_user ((void *) arg, &tochdr, sizeof (struct cdrom_tochdr));
-	
-	return result;
+        break;
     }
 	
     case CDROMREADTOCENTRY:
     {
-	struct cdrom_tocentry tocentry;
+	struct cdrom_tocentry* tocentry = (struct cdrom_tocentry*)arg;
 	unsigned char * buffer;
-	
-        err = verify_area (VERIFY_READ, (void *) arg, sizeof (struct cdrom_tocentry));
-        if (err) return err;
-
-	copy_from_user (&tocentry, (void *) arg, sizeof (struct cdrom_tocentry));
 	
 	sr_cmd[0] = SCMD_READ_TOC;
 	sr_cmd[1] = ((scsi_CDs[target].device->lun) << 5) |
-          (tocentry.cdte_format == CDROM_MSF ? 0x02 : 0);
+          (tocentry->cdte_format == CDROM_MSF ? 0x02 : 0);
 	sr_cmd[2] = sr_cmd[3] = sr_cmd[4] = sr_cmd[5] = 0;
-	sr_cmd[6] = tocentry.cdte_track;
+	sr_cmd[6] = tocentry->cdte_track;
 	sr_cmd[7] = 0;             /* MSB of length (12)  */
 	sr_cmd[8] = 12;            /* LSB of length */
 	sr_cmd[9] = 0;
@@ -254,28 +343,21 @@ int sr_ioctl(struct inode * inode, struct file * file, unsigned int cmd, unsigne
 	buffer = (unsigned char *) scsi_malloc(512);
 	if(!buffer) return -ENOMEM;
 	
-	result = do_ioctl (target, sr_cmd, buffer, 12);
+	result = sr_do_ioctl (target, sr_cmd, buffer, 12);
 	
-        tocentry.cdte_ctrl = buffer[5] & 0xf;	
-        tocentry.cdte_adr = buffer[5] >> 4;
-        tocentry.cdte_datamode = (tocentry.cdte_ctrl & 0x04) ? 1 : 0;
-	if (tocentry.cdte_format == CDROM_MSF) {
-	    tocentry.cdte_addr.msf.minute = buffer[9];
-	    tocentry.cdte_addr.msf.second = buffer[10];
-	    tocentry.cdte_addr.msf.frame = buffer[11];
-	}
-	else
-	    tocentry.cdte_addr.lba = (((((buffer[8] << 8) + buffer[9]) << 8)
+        tocentry->cdte_ctrl = buffer[5] & 0xf;	
+        tocentry->cdte_adr = buffer[5] >> 4;
+        tocentry->cdte_datamode = (tocentry->cdte_ctrl & 0x04) ? 1 : 0;
+	if (tocentry->cdte_format == CDROM_MSF) {
+	    tocentry->cdte_addr.msf.minute = buffer[9];
+	    tocentry->cdte_addr.msf.second = buffer[10];
+	    tocentry->cdte_addr.msf.frame = buffer[11];
+	} else
+	    tocentry->cdte_addr.lba = (((((buffer[8] << 8) + buffer[9]) << 8)
                                        + buffer[10]) << 8) + buffer[11];
 	
 	scsi_free(buffer, 512);
-	
-	err = verify_area (VERIFY_WRITE, (void *) arg, sizeof (struct cdrom_tocentry));
-	if (err)
-	    return err;
-	copy_to_user ((void *) arg, &tocentry, sizeof (struct cdrom_tocentry));
-	
-	return result;
+        break;
     }
 	
     case CDROMSTOP:
@@ -284,8 +366,8 @@ int sr_ioctl(struct inode * inode, struct file * file, unsigned int cmd, unsigne
 	sr_cmd[2] = sr_cmd[3] = sr_cmd[5] = 0;
 	sr_cmd[4] = 0;
 	
-	result = do_ioctl(target, sr_cmd, NULL, 255);
-	return result;
+	result = sr_do_ioctl(target, sr_cmd, NULL, 255);
+        break;
 	
     case CDROMSTART:
 	sr_cmd[0] = START_STOP;
@@ -293,59 +375,13 @@ int sr_ioctl(struct inode * inode, struct file * file, unsigned int cmd, unsigne
 	sr_cmd[2] = sr_cmd[3] = sr_cmd[5] = 0;
 	sr_cmd[4] = 1;
 	
-	result = do_ioctl(target, sr_cmd, NULL, 255);
-	return result;
+	result = sr_do_ioctl(target, sr_cmd, NULL, 255);
+        break;
 	
-    case CDROMCLOSETRAY:
-	sr_cmd[0] = START_STOP;
-	sr_cmd[1] = ((scsi_CDs[target].device -> lun) << 5);
-	sr_cmd[2] = sr_cmd[3] = sr_cmd[5] = 0;
-	sr_cmd[4] = 0x03;
-	
-        if ((result = do_ioctl(target, sr_cmd, NULL, 255)))
-          return result;
-
-        /* Gather information about newly inserted disc */
-        check_disk_change (inode->i_rdev);
-        sr_ioctl (inode, NULL, SCSI_IOCTL_DOORLOCK, 0);
-        sr_photocd (inode);
-
-        if (scsi_CDs[MINOR(inode->i_rdev)].needs_sector_size)
-          get_sectorsize (MINOR(inode->i_rdev));
-
-        return 0;
-
-    case CDROMEJECT:
-        /*
-         * Allow 0 for access count for auto-eject feature.
-         */
-	if (scsi_CDs[target].device -> access_count > 1)
-	    return -EBUSY;
-	
-	sr_ioctl (inode, NULL, SCSI_IOCTL_DOORUNLOCK, 0);
-	sr_cmd[0] = START_STOP;
-	sr_cmd[1] = ((scsi_CDs[target].device -> lun) << 5) | 1;
-	sr_cmd[2] = sr_cmd[3] = sr_cmd[5] = 0;
-	sr_cmd[4] = 0x02;
-	
-	if (!(result = do_ioctl(target, sr_cmd, NULL, 255)))
-	    scsi_CDs[target].device -> changed = 1;
-	
-	return result;
-	
-    case CDROMEJECT_SW:
-        scsi_CDs[target].auto_eject = !!arg;
-        return 0;
-
     case CDROMVOLCTRL:
     {
 	char * buffer, * mask;
-	struct cdrom_volctrl volctrl;
-	
-        err = verify_area (VERIFY_READ, (void *) arg, sizeof (struct cdrom_volctrl));
-        if (err) return err;
-
-	copy_from_user (&volctrl, (void *) arg, sizeof (struct cdrom_volctrl));
+	struct cdrom_volctrl* volctrl = (struct cdrom_volctrl*)arg;
 	
 	/* First we get the current params so we can just twiddle the volume */
 	
@@ -359,10 +395,10 @@ int sr_ioctl(struct inode * inode, struct file * file, unsigned int cmd, unsigne
 	buffer = (unsigned char *) scsi_malloc(512);
 	if(!buffer) return -ENOMEM;
 	
-	if ((result = do_ioctl (target, sr_cmd, buffer, 28))) {
+	if ((result = sr_do_ioctl (target, sr_cmd, buffer, 28))) {
 	    printk ("Hosed while obtaining audio mode page\n");
 	    scsi_free(buffer, 512);
-	    return result;
+            break;
 	}
 	
 	sr_cmd[0] = MODE_SENSE;
@@ -375,23 +411,24 @@ int sr_ioctl(struct inode * inode, struct file * file, unsigned int cmd, unsigne
 	mask = (unsigned char *) scsi_malloc(512);
 	if(!mask) {
 	    scsi_free(buffer, 512);
-	    return -ENOMEM;
+	    result = -ENOMEM;
+            break;
 	};
 
-	if ((result = do_ioctl (target, sr_cmd, mask, 28))) {
+	if ((result = sr_do_ioctl (target, sr_cmd, mask, 28))) {
 	    printk ("Hosed while obtaining mask for audio mode page\n");
 	    scsi_free(buffer, 512);
 	    scsi_free(mask, 512);
-	    return result;
+	    break;
 	}
 	
 	/* Now mask and substitute our own volume and reuse the rest */
 	buffer[0] = 0;  /* Clear reserved field */
 	
-	buffer[21] = volctrl.channel0 & mask[21];
-	buffer[23] = volctrl.channel1 & mask[23];
-	buffer[25] = volctrl.channel2 & mask[25];
-	buffer[27] = volctrl.channel3 & mask[27];
+	buffer[21] = volctrl->channel0 & mask[21];
+	buffer[23] = volctrl->channel1 & mask[23];
+	buffer[25] = volctrl->channel2 & mask[25];
+	buffer[27] = volctrl->channel3 & mask[27];
 	
 	sr_cmd[0] = MODE_SELECT;
 	sr_cmd[1] = ((scsi_CDs[target].device -> lun) << 5) | 0x10;    /* Params are SCSI-2 */
@@ -399,19 +436,16 @@ int sr_ioctl(struct inode * inode, struct file * file, unsigned int cmd, unsigne
 	sr_cmd[4] = 28;
 	sr_cmd[5] = 0;
 	
-	result = do_ioctl (target, sr_cmd, buffer, 28);
+	result = sr_do_ioctl (target, sr_cmd, buffer, 28);
 	scsi_free(buffer, 512);
 	scsi_free(mask, 512);
-	return result;
+        break;
     }
 	
     case CDROMVOLREAD:
     {
 	char * buffer;
-	struct cdrom_volctrl volctrl;
-	
-        err = verify_area (VERIFY_WRITE, (void *) arg, sizeof (struct cdrom_volctrl));
-        if (err) return err;
+	struct cdrom_volctrl* volctrl = (struct cdrom_volctrl*)arg;
 	
 	/* Get the current params */
 	
@@ -425,27 +459,24 @@ int sr_ioctl(struct inode * inode, struct file * file, unsigned int cmd, unsigne
 	buffer = (unsigned char *) scsi_malloc(512);
 	if(!buffer) return -ENOMEM;
 	
-	if ((result = do_ioctl (target, sr_cmd, buffer, 28))) {
+	if ((result = sr_do_ioctl (target, sr_cmd, buffer, 28))) {
 	    printk ("(CDROMVOLREAD) Hosed while obtaining audio mode page\n");
 	    scsi_free(buffer, 512);
-	    return result;
+            break;
 	}
 
-	volctrl.channel0 = buffer[21];
-	volctrl.channel1 = buffer[23];
-	volctrl.channel2 = buffer[25];
-	volctrl.channel3 = buffer[27];
-
-	copy_to_user ((void *) arg, &volctrl, sizeof (struct cdrom_volctrl));
+	volctrl->channel0 = buffer[21];
+	volctrl->channel1 = buffer[23];
+	volctrl->channel2 = buffer[25];
+	volctrl->channel3 = buffer[27];
 
 	scsi_free(buffer, 512);
-
-	return 0;
+        break;
     }
 	
     case CDROMSUBCHNL:
     {
-	struct cdrom_subchnl subchnl;
+	struct cdrom_subchnl* subchnl = (struct cdrom_subchnl*)arg;
 	char * buffer;
 	
 	sr_cmd[0] = SCMD_READ_SUBCHANNEL;
@@ -461,98 +492,46 @@ int sr_ioctl(struct inode * inode, struct file * file, unsigned int cmd, unsigne
 	buffer = (unsigned char*) scsi_malloc(512);
 	if(!buffer) return -ENOMEM;
 	
-	result = do_ioctl(target, sr_cmd, buffer, 16);
+	result = sr_do_ioctl(target, sr_cmd, buffer, 16);
 	
-	subchnl.cdsc_audiostatus = buffer[1];
-	subchnl.cdsc_format = CDROM_MSF;
-	subchnl.cdsc_ctrl = buffer[5] & 0xf;
-	subchnl.cdsc_trk = buffer[6];
-	subchnl.cdsc_ind = buffer[7];
+	subchnl->cdsc_audiostatus = buffer[1];
+	subchnl->cdsc_format = CDROM_MSF;
+	subchnl->cdsc_ctrl = buffer[5] & 0xf;
+	subchnl->cdsc_trk = buffer[6];
+	subchnl->cdsc_ind = buffer[7];
 	
-	subchnl.cdsc_reladdr.msf.minute = buffer[13];
-	subchnl.cdsc_reladdr.msf.second = buffer[14];
-	subchnl.cdsc_reladdr.msf.frame = buffer[15];
-	subchnl.cdsc_absaddr.msf.minute = buffer[9];
-	subchnl.cdsc_absaddr.msf.second = buffer[10];
-	subchnl.cdsc_absaddr.msf.frame = buffer[11];
+	subchnl->cdsc_reladdr.msf.minute = buffer[13];
+	subchnl->cdsc_reladdr.msf.second = buffer[14];
+	subchnl->cdsc_reladdr.msf.frame = buffer[15];
+	subchnl->cdsc_absaddr.msf.minute = buffer[9];
+	subchnl->cdsc_absaddr.msf.second = buffer[10];
+	subchnl->cdsc_absaddr.msf.frame = buffer[11];
 	
 	scsi_free(buffer, 512);
-	
-	err = verify_area (VERIFY_WRITE, (void *) arg, sizeof (struct cdrom_subchnl));
-	if (err)
-	    return err;
-	copy_to_user ((void *) arg, &subchnl, sizeof (struct cdrom_subchnl));
-	return result;
+        break;
     }
-	
-    case CDROM_GET_UPC:
-    {
-	struct cdrom_mcn mcn;
-	char * buffer;
-	
-	sr_cmd[0] = SCMD_READ_SUBCHANNEL;
-	sr_cmd[1] = ((scsi_CDs[target].device->lun) << 5);
-	sr_cmd[2] = 0x40;    /* I do want the subchannel info */
-	sr_cmd[3] = 0x02;    /* Give me medium catalog number info */
-	sr_cmd[4] = sr_cmd[5] = 0;
-	sr_cmd[6] = 0;
-	sr_cmd[7] = 0;
-	sr_cmd[8] = 24;
-	sr_cmd[9] = 0;
-	
-	buffer = (unsigned char*) scsi_malloc(512);
-	if(!buffer) return -ENOMEM;
-	
-	result = do_ioctl(target, sr_cmd, buffer, 24);
-	
-	memcpy (mcn.medium_catalog_number, buffer + 9, 13);
-        mcn.medium_catalog_number[13] = 0;
+    default:
+        return -EINVAL;
+    }
 
-	scsi_free(buffer, 512);
+    if (result)
+        printk("DEBUG: sr_audio: result for ioctl %x: %x\n",cmd,result);
+    
+    return result;
+}
 	
-	err = verify_area (VERIFY_WRITE, (void *) arg, sizeof (struct cdrom_mcn));
-	if (err)
-	    return err;
-	copy_to_user ((void *) arg, &mcn, sizeof (struct cdrom_mcn));
-	return result;
-    }
-	
+int sr_dev_ioctl(struct cdrom_device_info *cdi,
+                 unsigned int cmd, unsigned long arg)
+{
+    int target, err;
+    
+    target = MINOR(cdi->dev);
+    
+    switch (cmd) {
     case CDROMREADMODE2:
 	return -EINVAL;
     case CDROMREADMODE1:
-	return -EINVAL;
-	
-	/* block-copy from ../block/sbpcd.c with some adjustments... */
-    case CDROMMULTISESSION: /* tell start-of-last-session to user */
-    {
-	struct cdrom_multisession  ms_info;
-	long                       lba;
-	
-	err = verify_area(VERIFY_READ, (void *) arg,
-			  sizeof(struct cdrom_multisession));
-	if (err) return (err);
-	
-	copy_from_user(&ms_info, (void *) arg, sizeof(struct cdrom_multisession));
-	
-	if (ms_info.addr_format==CDROM_MSF) { /* MSF-bin requested */
-	    lba = scsi_CDs[target].mpcd_sector+CD_BLOCK_OFFSET;
-	    ms_info.addr.msf.minute = lba / (CD_SECS*CD_FRAMES);
-	    lba %= CD_SECS*CD_FRAMES;
-	    ms_info.addr.msf.second = lba / CD_FRAMES;
-	    ms_info.addr.msf.frame  = lba % CD_FRAMES;
-	} else if (ms_info.addr_format==CDROM_LBA) /* lba requested */
-	    ms_info.addr.lba=scsi_CDs[target].mpcd_sector;
-	else return (-EINVAL);
-	
-	ms_info.xa_flag=scsi_CDs[target].xa_flags & 0x01;
-	
-	err=verify_area(VERIFY_WRITE,(void *) arg,
-			sizeof(struct cdrom_multisession));
-	if (err) return (err);
-	
-	copy_to_user((void *) arg, &ms_info, sizeof(struct cdrom_multisession));
-	return (0);
-    }
+	return -EINVAL;	
 	
     case BLKRAGET:
 	if (!arg)
@@ -560,24 +539,20 @@ int sr_ioctl(struct inode * inode, struct file * file, unsigned int cmd, unsigne
 	err = verify_area(VERIFY_WRITE, (int *) arg, sizeof(int));
 	if (err)
 		return err;
-	put_user(read_ahead[MAJOR(inode->i_rdev)], (int *) arg);
+	put_user(read_ahead[MAJOR(cdi->dev)], (int *) arg);
 	return 0;
 
     case BLKRASET:
 	if(!suser())
         	return -EACCES;
-	if(!(inode->i_rdev))
+	if(!(cdi->dev))
         	return -EINVAL;
 	if(arg > 0xff)
         	return -EINVAL;
-	read_ahead[MAJOR(inode->i_rdev)] = arg;
+	read_ahead[MAJOR(cdi->dev)] = arg;
 	return 0;
 
-    RO_IOCTLS(dev,arg);
-
-    case CDROMRESET:
-	invalidate_buffers(inode->i_rdev);
-	return 0;
+    RO_IOCTLS(cdi->dev,arg);
 
     default:
 	return scsi_ioctl(scsi_CDs[target].device,cmd,(void *) arg);

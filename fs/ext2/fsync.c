@@ -10,6 +10,9 @@
  *  linux/fs/minix/truncate.c   Copyright (C) 1991, 1992  Linus Torvalds
  * 
  *  ext2fs fsync primitive
+ *
+ *  Big-endian to little-endian byte-swapping/bitmaps by
+ *        David S. Miller (davem@caip.rutgers.edu), 1995
  */
 
 #include <asm/uaccess.h>
@@ -27,7 +30,7 @@
 #define blocksize (EXT2_BLOCK_SIZE(inode->i_sb))
 #define addr_per_block (EXT2_ADDR_PER_BLOCK(inode->i_sb))
 
-static int sync_block (struct inode * inode, u32 * block, int wait)
+static __inline__ int sync_block (struct inode * inode, u32 * block, int wait)
 {
 	struct buffer_head * bh;
 	int tmp;
@@ -55,7 +58,35 @@ static int sync_block (struct inode * inode, u32 * block, int wait)
 	return 0;
 }
 
-static int sync_iblock (struct inode * inode, u32 * iblock, 
+static __inline__ int sync_block_swab32 (struct inode * inode, u32 * block, int wait)
+{
+	struct buffer_head * bh;
+	int tmp;
+	
+	if (!le32_to_cpu(*block))
+		return 0;
+	tmp = le32_to_cpu(*block);
+	bh = get_hash_table (inode->i_dev, le32_to_cpu(*block), blocksize);
+	if (!bh)
+		return 0;
+	if (le32_to_cpu(*block) != tmp) {
+		brelse (bh);
+		return 1;
+	}
+	if (wait && buffer_req(bh) && !buffer_uptodate(bh)) {
+		brelse (bh);
+		return -1;
+	}
+	if (wait || !buffer_uptodate(bh) || !buffer_dirty(bh)) {
+		brelse (bh);
+		return 0;
+	}
+	ll_rw_block (WRITE, 1, &bh);
+	bh->b_count--;
+	return 0;
+}
+
+static __inline__ int sync_iblock (struct inode * inode, u32 * iblock, 
 			struct buffer_head ** bh, int wait) 
 {
 	int rc, tmp;
@@ -78,8 +109,31 @@ static int sync_iblock (struct inode * inode, u32 * iblock,
 	return 0;
 }
 
+static __inline__ int sync_iblock_swab32 (struct inode * inode, u32 * iblock, 
+			       struct buffer_head ** bh, int wait) 
+{
+	int rc, tmp;
+	
+	*bh = NULL;
+	tmp = le32_to_cpu(*iblock);
+	if (!tmp)
+		return 0;
+	rc = sync_block_swab32 (inode, iblock, wait);
+	if (rc)
+		return rc;
+	*bh = bread (inode->i_dev, tmp, blocksize);
+	if (tmp != le32_to_cpu(*iblock)) {
+		brelse (*bh);
+		*bh = NULL;
+		return 1;
+	}
+	if (!*bh)
+		return -1;
+	return 0;
+}
 
-static int sync_direct (struct inode * inode, int wait)
+
+static __inline__ int sync_direct (struct inode * inode, int wait)
 {
 	int i;
 	int rc, err = 0;
@@ -94,7 +148,7 @@ static int sync_direct (struct inode * inode, int wait)
 	return err;
 }
 
-static int sync_indirect (struct inode * inode, u32 * iblock, int wait)
+static __inline__ int sync_indirect (struct inode * inode, u32 * iblock, int wait)
 {
 	int i;
 	struct buffer_head * ind_bh;
@@ -105,9 +159,9 @@ static int sync_indirect (struct inode * inode, u32 * iblock, int wait)
 		return rc;
 	
 	for (i = 0; i < addr_per_block; i++) {
-		rc = sync_block (inode, 
-				 ((u32 *) ind_bh->b_data) + i,
-				 wait);
+		rc = sync_block_swab32 (inode, 
+					((u32 *) ind_bh->b_data) + i,
+					wait);
 		if (rc > 0)
 			break;
 		if (rc)
@@ -117,7 +171,30 @@ static int sync_indirect (struct inode * inode, u32 * iblock, int wait)
 	return err;
 }
 
-static int sync_dindirect (struct inode * inode, u32 * diblock, int wait)
+static __inline__ int sync_indirect_swab32 (struct inode * inode, u32 * iblock, int wait)
+{
+	int i;
+	struct buffer_head * ind_bh;
+	int rc, err = 0;
+
+	rc = sync_iblock_swab32 (inode, iblock, &ind_bh, wait);
+	if (rc || !ind_bh)
+		return rc;
+	
+	for (i = 0; i < addr_per_block; i++) {
+		rc = sync_block_swab32 (inode, 
+					((u32 *) ind_bh->b_data) + i,
+					wait);
+		if (rc > 0)
+			break;
+		if (rc)
+			err = rc;
+	}
+	brelse (ind_bh);
+	return err;
+}
+
+static __inline__ int sync_dindirect (struct inode * inode, u32 * diblock, int wait)
 {
 	int i;
 	struct buffer_head * dind_bh;
@@ -128,9 +205,9 @@ static int sync_dindirect (struct inode * inode, u32 * diblock, int wait)
 		return rc;
 	
 	for (i = 0; i < addr_per_block; i++) {
-		rc = sync_indirect (inode,
-				    ((u32 *) dind_bh->b_data) + i,
-				    wait);
+		rc = sync_indirect_swab32 (inode,
+					   ((u32 *) dind_bh->b_data) + i,
+					   wait);
 		if (rc > 0)
 			break;
 		if (rc)
@@ -140,7 +217,30 @@ static int sync_dindirect (struct inode * inode, u32 * diblock, int wait)
 	return err;
 }
 
-static int sync_tindirect (struct inode * inode, u32 * tiblock, int wait)
+static __inline__ int sync_dindirect_swab32 (struct inode * inode, u32 * diblock, int wait)
+{
+	int i;
+	struct buffer_head * dind_bh;
+	int rc, err = 0;
+
+	rc = sync_iblock_swab32 (inode, diblock, &dind_bh, wait);
+	if (rc || !dind_bh)
+		return rc;
+	
+	for (i = 0; i < addr_per_block; i++) {
+		rc = sync_indirect_swab32 (inode,
+					   ((u32 *) dind_bh->b_data) + i,
+					   wait);
+		if (rc > 0)
+			break;
+		if (rc)
+			err = rc;
+	}
+	brelse (dind_bh);
+	return err;
+}
+
+static __inline__ int sync_tindirect (struct inode * inode, u32 * tiblock, int wait)
 {
 	int i;
 	struct buffer_head * tind_bh;
@@ -151,9 +251,9 @@ static int sync_tindirect (struct inode * inode, u32 * tiblock, int wait)
 		return rc;
 	
 	for (i = 0; i < addr_per_block; i++) {
-		rc = sync_dindirect (inode,
-				     ((u32 *) tind_bh->b_data) + i,
-				     wait);
+		rc = sync_dindirect_swab32 (inode,
+					    ((u32 *) tind_bh->b_data) + i,
+					    wait);
 		if (rc > 0)
 			break;
 		if (rc)

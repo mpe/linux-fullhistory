@@ -20,6 +20,7 @@ static struct symbol_table arch_symbol_table = {
 	X(dump_thread),
 	X(dump_fpu),
 	X(ioremap),
+	X(iounmap),
 	XNOVERS(__down_failed),
 	XNOVERS(__up_wakeup),
 #ifdef __SMP__

@@ -35,6 +35,7 @@
 #include <asm/system.h>
 #include <asm/uaccess.h>
 #include <asm/io.h>
+#include <asm/bitops.h>
 
 #define NR_SIZES 5
 static char buffersize_index[17] =
@@ -169,7 +170,7 @@ repeat:
 	   there to be dirty buffers on any of the other lists. */
 		bh = lru_list[BUF_DIRTY];
 		if (!bh)
-			break;
+			goto repeat2;
 		for (i = nr_buffers_type[BUF_DIRTY]*2 ; i-- > 0 ; bh = next) {
 			if (bh->b_list != BUF_DIRTY)
 				goto repeat;
@@ -1865,6 +1866,32 @@ unsigned long generate_cluster(kdev_t dev, int b[], int size)
 		 return reassign_cluster(dev, b[0], size);
 }
 
+unsigned long generate_cluster_swab32(kdev_t dev, int b[], int size)
+{
+	int i, offset;
+	
+	for (i = 0, offset = 0 ; offset < PAGE_SIZE ; i++, offset += size) {
+		if(i && le32_to_cpu(b[i])-1 !=
+		   le32_to_cpu(b[i-1])) return 0;  /* No need to cluster */
+		if(find_buffer(dev, le32_to_cpu(b[i]), size)) return 0;
+	};
+
+	/* OK, we have a candidate for a new cluster */
+	
+	/* See if one size of buffer is over-represented in the buffer cache,
+	   if so reduce the numbers of buffers */
+	if(maybe_shrink_lav_buffers(size))
+	 {
+		 int retval;
+		 retval = try_to_generate_cluster(dev, le32_to_cpu(b[0]), size);
+		 if(retval) return retval;
+	 };
+	
+	if (nr_free_pages > min_free_pages*2) 
+		 return try_to_generate_cluster(dev, le32_to_cpu(b[0]), size);
+	else
+		 return reassign_cluster(dev, le32_to_cpu(b[0]), size);
+}
 
 /* ===================== Init ======================= */
 

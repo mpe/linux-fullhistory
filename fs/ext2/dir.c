@@ -13,6 +13,9 @@
  *  Copyright (C) 1991, 1992  Linus Torvalds
  *
  *  ext2 directory handling functions
+ *
+ *  Big-endian to little-endian byte-swapping/bitmaps by
+ *        David S. Miller (davem@caip.rutgers.edu), 1995
  */
 
 #include <asm/uaccess.h>
@@ -77,23 +80,24 @@ int ext2_check_dir_entry (const char * function, struct inode * dir,
 {
 	const char * error_msg = NULL;
 
-	if (de->rec_len < EXT2_DIR_REC_LEN(1))
+	if (le16_to_cpu(de->rec_len) < EXT2_DIR_REC_LEN(1))
 		error_msg = "rec_len is smaller than minimal";
-	else if (de->rec_len % 4 != 0)
+	else if (le16_to_cpu(de->rec_len) % 4 != 0)
 		error_msg = "rec_len % 4 != 0";
-	else if (de->rec_len < EXT2_DIR_REC_LEN(de->name_len))
+	else if (le16_to_cpu(de->rec_len) < EXT2_DIR_REC_LEN(le16_to_cpu(de->name_len)))
 		error_msg = "rec_len is too small for name_len";
-	else if (dir && ((char *) de - bh->b_data) + de->rec_len >
+	else if (dir && ((char *) de - bh->b_data) + le16_to_cpu(de->rec_len) >
 		 dir->i_sb->s_blocksize)
 		error_msg = "directory entry across blocks";
-	else if (dir && de->inode > dir->i_sb->u.ext2_sb.s_es->s_inodes_count)
+	else if (dir && le32_to_cpu(de->inode) > le32_to_cpu(dir->i_sb->u.ext2_sb.s_es->s_inodes_count))
 		error_msg = "inode out of bounds";
 
 	if (error_msg != NULL)
 		ext2_error (dir->i_sb, function, "bad entry in directory #%lu: %s - "
 			    "offset=%lu, inode=%lu, rec_len=%d, name_len=%d",
-			    dir->i_ino, error_msg, offset, (unsigned long) de->inode,
-			    de->rec_len, de->name_len);
+			    dir->i_ino, error_msg, offset,
+			    (unsigned long) le32_to_cpu(de->inode),
+			    le16_to_cpu(de->rec_len), le16_to_cpu(de->name_len));
 	return error_msg == NULL ? 1 : 0;
 }
 
@@ -161,9 +165,9 @@ revalidate:
 				 * least that it is non-zero.  A
 				 * failure will be detected in the
 				 * dirent test below. */
-				if (de->rec_len < EXT2_DIR_REC_LEN(1))
+				if (le16_to_cpu(de->rec_len) < EXT2_DIR_REC_LEN(1))
 					break;
-				i += de->rec_len;
+				i += le16_to_cpu(de->rec_len);
 			}
 			offset = i;
 			filp->f_pos = (filp->f_pos & ~(sb->s_blocksize - 1))
@@ -183,8 +187,8 @@ revalidate:
 				brelse (bh);
 				return stored;
 			}
-			offset += de->rec_len;
-			if (de->inode) {
+			offset += le16_to_cpu(de->rec_len);
+			if (le32_to_cpu(de->inode)) {
 				/* We might block in the next section
 				 * if the data destination is
 				 * currently swapped out.  So, use a
@@ -192,16 +196,17 @@ revalidate:
 				 * not the directory has been modified
 				 * during the copy operation. */
 				unsigned long version;
-				dcache_add(inode, de->name, de->name_len, de->inode);
+				dcache_add(inode, de->name, le16_to_cpu(de->name_len),
+					   le32_to_cpu(de->inode));
 				version = inode->i_version;
-				error = filldir(dirent, de->name, de->name_len, filp->f_pos, de->inode);
+				error = filldir(dirent, de->name, le16_to_cpu(de->name_len), filp->f_pos, le32_to_cpu(de->inode));
 				if (error)
 					break;
 				if (version != inode->i_version)
 					goto revalidate;
 				stored ++;
 			}
-			filp->f_pos += de->rec_len;
+			filp->f_pos += le16_to_cpu(de->rec_len);
 		}
 		offset = 0;
 		brelse (bh);

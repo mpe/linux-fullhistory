@@ -122,6 +122,7 @@ extern int max_files, nr_files;
 #ifdef __KERNEL__
 
 #include <asm/semaphore.h>
+#include <asm/byteorder.h>
 #include <asm/bitops.h>
 
 extern void buffer_init(void);
@@ -665,6 +666,7 @@ extern long generic_file_read(struct inode *, struct file *, char *, unsigned lo
 
 extern void put_super(kdev_t dev);
 unsigned long generate_cluster(kdev_t dev, int b[], int size);
+unsigned long generate_cluster_swab32(kdev_t dev, int b[], int size);
 extern kdev_t ROOT_DEV;
 
 extern void show_buffers(void);

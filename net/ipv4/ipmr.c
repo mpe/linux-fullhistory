@@ -447,11 +447,11 @@ int ip_mroute_setsockopt(struct sock *sk,int optname,char *optval,int optlen)
 				return -EOPNOTSUPP;
 			if(optlen!=sizeof(int))
 				return -ENOPROTOOPT;
-			if((err=verify_area(VERIFY_READ,optval,sizeof(int)))<0)
-				return err;
 			{
 				int opt;
-				get_user(opt,(int *)optval);
+				err = get_user(opt,(int *)optval);
+				if (err) 
+					return err; 
 				if (opt != 1)
 					return -ENOPROTOOPT;
 			}
@@ -468,9 +468,9 @@ int ip_mroute_setsockopt(struct sock *sk,int optname,char *optval,int optlen)
 		case MRT_DEL_VIF:
 			if(optlen!=sizeof(vif))
 				return -EINVAL;
-			if((err=verify_area(VERIFY_READ, optval, sizeof(vif)))<0)
-				return err;
-			copy_from_user(&vif,optval,sizeof(vif));
+			err = copy_from_user(&vif,optval,sizeof(vif));
+			if (err)
+				return -EFAULT; 
 			if(vif.vifc_vifi > MAXVIFS)
 				return -ENFILE;
 			if(optname==MRT_ADD_VIF)
@@ -545,17 +545,16 @@ int ip_mroute_setsockopt(struct sock *sk,int optname,char *optval,int optlen)
 		 */
 		case MRT_ADD_MFC:
 		case MRT_DEL_MFC:
-			err=verify_area(VERIFY_READ, optval, sizeof(mfc));
-			if(err)
-				return err;
-			copy_from_user(&mfc,optval, sizeof(mfc));
-			return ipmr_mfc_modify(optname, &mfc);
+			err = copy_from_user(&mfc,optval, sizeof(mfc));
+			return err ? -EFAULT : ipmr_mfc_modify(optname, &mfc);
 		/*
 		 *	Control PIM assert.
 		 */
 		case MRT_ASSERT:
 			if(optlen!=sizeof(int))
 				return -EINVAL;
+
+			/* BUG BUG this is wrong IMHO -AK. */ 
 			if((err=verify_area(VERIFY_READ, optval,sizeof(int)))<0)
 				return err;
 			mroute_do_pim= (optval)?1:0;
@@ -583,18 +582,19 @@ int ip_mroute_getsockopt(struct sock *sk,int optname,char *optval,int *optlen)
 	if(optname!=MRT_VERSION && optname!=MRT_ASSERT)
 		return -EOPNOTSUPP;
 	
-	get_user(olr, optlen);
+	err = get_user(olr, optlen);
+	if (err)
+		return err; 
 	if(olr!=sizeof(int))
 		return -EINVAL;
-	err=verify_area(VERIFY_WRITE, optval,sizeof(int));
-	if(err)
-		return err;
-	put_user(sizeof(int),optlen);
+	err = put_user(sizeof(int),optlen);
+	if (err)
+		return err; 
 	if(optname==MRT_VERSION)
-		put_user(0x0305,(int *)optval);
+		err = put_user(0x0305,(int *)optval);
 	else
-		put_user(mroute_do_pim,(int *)optval);
-	return 0;
+		err = put_user(mroute_do_pim,(int *)optval);
+	return err;
 }
 
 /*
@@ -611,10 +611,9 @@ int ipmr_ioctl(struct sock *sk, int cmd, unsigned long arg)
 	switch(cmd)
 	{
 		case SIOCGETVIFCNT:
-			err=verify_area(VERIFY_WRITE, (void *)arg, sizeof(vr));
-			if(err)
-				return err;
-			copy_from_user(&vr,(void *)arg,sizeof(vr));
+			err = copy_from_user(&vr,(void *)arg,sizeof(vr));
+			if (err)
+				return -EFAULT; 
 			if(vr.vifi>=MAXVIFS)
 				return -EINVAL;
 			vif=&vif_table[vr.vifi];
@@ -624,17 +623,19 @@ int ipmr_ioctl(struct sock *sk, int cmd, unsigned long arg)
 				vr.ocount=vif->pkt_out;
 				vr.ibytes=vif->bytes_in;
 				vr.obytes=vif->bytes_out;
-				copy_to_user((void *)arg,&vr,sizeof(vr));
-				return 0;
+				err = copy_to_user((void *)arg,&vr,sizeof(vr));
+				if (err)
+					err = -EFAULT;
+				return err;
 			}
 			return -EADDRNOTAVAIL;
 		case SIOCGETSGCNT:
-			err=verify_area(VERIFY_WRITE, (void *)arg, sizeof(sr));
-			if(err)
-				return err;
-			copy_from_user(&sr,(void *)arg,sizeof(sr));
-			copy_to_user((void *)arg,&sr,sizeof(sr));
-			return 0;
+			err = copy_from_user(&sr,(void *)arg,sizeof(sr));
+			if (!err)
+				err = copy_to_user((void *)arg,&sr,sizeof(sr));
+			if (err)
+				err = -EFAULT;
+			return err;
 		default:
 			return -EINVAL;
 	}

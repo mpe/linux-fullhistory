@@ -85,12 +85,13 @@ static int netlink_select(struct inode *inode, struct file *file, int sel_type, 
 static long netlink_write(struct inode * inode, struct file * file,
 			  const char * buf, unsigned long count)
 {
+	int err; 
 	unsigned int minor = MINOR(inode->i_rdev);
 	struct sk_buff *skb;
 	skb=alloc_skb(count, GFP_KERNEL);
 	skb->free=1;
-	copy_from_user(skb_put(skb,count),buf, count);
-	return (netlink_handler[minor])(skb);
+	err = copy_from_user(skb_put(skb,count),buf, count);
+	return err ? -EFAULT : (netlink_handler[minor])(skb);
 }
 
 /*
@@ -100,6 +101,7 @@ static long netlink_write(struct inode * inode, struct file * file,
 static long netlink_read(struct inode * inode, struct file * file, char * buf,
 			 unsigned long count)
 {
+	int err; 
 	unsigned int minor = MINOR(inode->i_rdev);
 	struct sk_buff *skb;
 	cli();
@@ -121,9 +123,9 @@ static long netlink_read(struct inode * inode, struct file * file, char * buf,
 	sti();
 	if(skb->len<count)
 		count=skb->len;
-	copy_to_user(buf,skb->data,count);
+	err = copy_to_user(buf,skb->data,count);
 	kfree_skb(skb, FREE_READ);
-	return count;
+	return err ? -EFAULT : count;
 }
 
 static loff_t netlink_lseek(struct inode * inode, struct file * file,

@@ -504,11 +504,11 @@ fragment:
  */
 
 int ip_build_xmit(struct sock *sk,
-		   void getfrag (const void *,
-				 __u32,
-				 char *,
-				 unsigned int,	
-				 unsigned int),
+		  int getfrag (const void *,
+			       __u32,
+			       char *,
+			       unsigned int,	
+			       unsigned int),
 		   const void *frag,
 		   unsigned short int length,
 		   __u32 daddr,
@@ -529,6 +529,7 @@ int ip_build_xmit(struct sock *sk,
 	struct hh_cache * hh=NULL;
 	int nfrags=0;
 	__u32 true_daddr = daddr;
+	int err; 
 
 	if (opt && opt->srr && !sk->ip_hdrincl)
 	  daddr = opt->faddr;
@@ -648,18 +649,31 @@ int ip_build_xmit(struct sock *sk,
 			}
 			iph->check=0;
 			iph->check = ip_fast_csum((unsigned char *)iph, iph->ihl);
-			getfrag(frag,saddr,((char *)iph)+iph->ihl*4,0, length-iph->ihl*4);
+			err = getfrag(frag,saddr,((char *)iph)+iph->ihl*4,0, length-iph->ihl*4);
 		}
 		else
-			getfrag(frag,saddr,(void *)iph,0,length);
+			err = getfrag(frag, saddr, (void *)iph, 0, length);
+		
 		dev_unlock_list();
-#ifdef CONFIG_FIREWALL
-		if(call_out_firewall(PF_INET, skb->dev, iph, NULL)< FW_ACCEPT)
+		
+		if (err)
 		{
-			kfree_skb(skb, FREE_WRITE);
-			return -EPERM;
+			err = -EFAULT;
+		}
+
+#ifdef CONFIG_FIREWALL
+		if(!err && call_out_firewall(PF_INET, skb->dev, iph, NULL)< FW_ACCEPT)
+		{
+			err = -EPERM; 
 		}
 #endif
+
+		if (err)
+		{
+			kfree_skb(skb, FREE_WRITE);
+			return err;
+		}
+
 #ifdef CONFIG_IP_ACCT
 		ip_fw_chk(iph,dev,NULL,ip_acct_chain,0,IP_FW_MODE_ACCT_OUT);
 #endif		
@@ -675,7 +689,7 @@ int ip_build_xmit(struct sock *sk,
 	if (!sk->ip_hdrincl)
 		length -= sizeof(struct iphdr);
 		
-	if(opt) 
+	if(opt)
 	{
 		length -= opt->optlen;
 		fragheaderlen = dev->hard_header_len + sizeof(struct iphdr) + opt->optlen;
@@ -688,8 +702,8 @@ int ip_build_xmit(struct sock *sk,
 			fragheaderlen += 20;
 		
 		/*
-		 *	Fragheaderlen is the size of 'overhead' on each buffer. Now work
-		 *	out the size of the frames to send.
+		 *	Fragheaderlen is the size of 'overhead' on each buffer.
+		 *	Now work out the size of the frames to send.
 		 */
 	 
 		maxfraglen = ((dev->mtu-20) & ~7) + fragheaderlen;
@@ -758,7 +772,7 @@ int ip_build_xmit(struct sock *sk,
 		{
 			ip_statistics.IpOutDiscards++;
 			if(nfrags>1)
-				ip_statistics.IpFragCreates++;			
+				ip_statistics.IpFragCreates++;
 			dev_unlock_list();
 			return(error);
 		}
@@ -795,7 +809,7 @@ int ip_build_xmit(struct sock *sk,
 				skb->arp = 0;
 #if RT_CACHE_DEBUG >= 2
 				printk("ip_build_xmit: hh miss %08x via %08x\n", rt->rt_dst, rt->rt_gateway);
-#endif				
+#endif
 			}
 		}
 		else if (dev->hard_header)
@@ -856,20 +870,29 @@ int ip_build_xmit(struct sock *sk,
 		 *	User data callback
 		 */
 
-		getfrag(frag, saddr, data, offset, fraglen-fragheaderlen);
+		err = getfrag(frag, saddr, data, offset, fraglen-fragheaderlen);
+		if (err)
+		{
+			err = -EFAULT;
+		}
 		
 		/*
 		 *	Account for the fragment.
 		 */
 		 
 #ifdef CONFIG_FIREWALL
-		if(!offset && call_out_firewall(PF_INET, skb->dev, iph, NULL) < FW_ACCEPT)
+		if(!err && !offset && call_out_firewall(PF_INET, skb->dev, iph, NULL) < FW_ACCEPT)
+		{
+			err = -EPERM; 
+		}
+#endif
+		if (err)
 		{
 			kfree_skb(skb, FREE_WRITE);
 			dev_unlock_list();
-			return -EPERM;
+			return err;
 		}
-#endif		
+
 #ifdef CONFIG_IP_ACCT
 		if(!offset)
 			ip_fw_chk(iph, dev, NULL, ip_acct_chain, 0, IP_FW_MODE_ACCT_OUT);

@@ -634,7 +634,7 @@ void kfree_skb(struct sk_buff *skb, int rw)
 struct sk_buff *alloc_skb(unsigned int size,int priority)
 {
 	struct sk_buff *skb;
-	int len=size;
+	int len;
 	unsigned char *bptr;
 
 	if (intr_count && priority!=GFP_ATOMIC) 
@@ -648,6 +648,8 @@ struct sk_buff *alloc_skb(unsigned int size,int priority)
 	}
 
 	size=(size+15)&~15;		/* Allow for alignments. Make a multiple of 16 bytes */
+	len = size;
+	
 	size+=sizeof(struct sk_buff);	/* And stick the control itself on the end */
 	
 	/*
@@ -748,7 +750,7 @@ struct sk_buff *skb_clone(struct sk_buff *skb, int priority)
 	int inbuff = 0;
 	
 	IS_SKB(skb);
-	if (skb_tailroom(skb) >= sizeof(struct sk_buff))
+	if (!skb->inclone && skb_tailroom(skb) >= sizeof(struct sk_buff))
 	{
 		n = ((struct sk_buff *) skb->end) - 1;
 		skb->end -= sizeof(struct sk_buff);

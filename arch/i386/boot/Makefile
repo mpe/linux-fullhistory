@@ -25,7 +25,7 @@ zImage: $(CONFIGURE) bootsect setup compressed/vmlinux tools/build
 
 bzImage: $(CONFIGURE) bbootsect setup compressed/bvmlinux tools/bbuild
 	if hash $(ENCAPS) 2> /dev/null; then \
-	  $(OBJDUMP) $(OBJDUMP_FLAGS) -o $(IMAGE_OFFSET) compressed/bvmlinux > compressed/bvmlinux.out; \
+	  $(OBJDUMP) $(OBJDUMP_FLAGS) -o $(BZIMAGE_OFFSET) compressed/bvmlinux > compressed/bvmlinux.out; \
 	else \
 	  $(OBJCOPY) compressed/bvmlinux compressed/bvmlinux.out; \
 	fi

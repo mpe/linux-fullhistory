@@ -172,7 +172,7 @@ int udpv6_recvmsg(struct sock *sk, struct msghdr *msg, int len,
   	int copied = 0;
   	int truesize;
   	struct sk_buff *skb;
-  	int er;
+  	int err;
   	
 
 	/*
@@ -187,9 +187,9 @@ int udpv6_recvmsg(struct sock *sk, struct msghdr *msg, int len,
 	 *	the finished NET3, it will do _ALL_ the work!
 	 */
 	 	
-	skb = skb_recv_datagram(sk, flags, noblock, &er);
+	skb = skb_recv_datagram(sk, flags, noblock, &err);
 	if(skb==NULL)
-  		return er;
+  		return err;
   
   	truesize = skb->tail - skb->h.raw - sizeof(struct udphdr);
   	copied = min(len, truesize);
@@ -198,7 +198,11 @@ int udpv6_recvmsg(struct sock *sk, struct msghdr *msg, int len,
   	 *	FIXME : should use udp header size info value 
   	 */
   	 
-	skb_copy_datagram_iovec(skb,sizeof(struct udphdr),msg->msg_iov,copied);
+	err = skb_copy_datagram_iovec(skb, sizeof(struct udphdr), 
+				      msg->msg_iov, copied);
+	if (err)
+		return err; 
+	
 	sk->stamp=skb->stamp;
 
 	/* Copy the address. */
@@ -428,8 +432,8 @@ struct udpv6fakehdr
  *	with checksum
  */
 
-static void udpv6_getfrag(const void *data, struct in6_addr *addr,
-			  char *buff, unsigned int offset, unsigned int len)
+static int udpv6_getfrag(const void *data, struct in6_addr *addr,
+			 char *buff, unsigned int offset, unsigned int len)
 {
 	struct udpv6fakehdr *udh = (struct udpv6fakehdr *) data;
 	char *dst;
@@ -479,6 +483,7 @@ static void udpv6_getfrag(const void *data, struct in6_addr *addr,
 
 		memcpy(buff, udh, sizeof(struct udphdr));
 	}
+	return 0;
 }
 
 static int udpv6_sendmsg(struct sock *sk, struct msghdr *msg, int ulen, 

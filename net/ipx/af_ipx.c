@@ -141,8 +141,7 @@ ipxcfg_get_config_data(ipx_config_data *arg)
 	
 	vals.ipxcfg_auto_create_interfaces = ipxcfg_auto_create_interfaces;
 	vals.ipxcfg_auto_select_primary = ipxcfg_auto_select_primary;
-	copy_to_user(arg, &vals, sizeof(vals));
-	return 0;
+	return copy_to_user(arg, &vals, sizeof(vals));
 }
 
 
@@ -1062,7 +1061,8 @@ ipxitf_ioctl_real(unsigned int cmd, void *arg)
 			struct sockaddr_ipx *sipx;
 			ipx_interface *ipxif;
 			struct device *dev;
-
+			int err;
+			
 			if (copy_from_user(&ifr,arg,sizeof(ifr)))
 				return -EFAULT;
 			sipx=(struct sockaddr_ipx *)&ifr.ifr_addr;
@@ -1075,9 +1075,10 @@ ipxitf_ioctl_real(unsigned int cmd, void *arg)
 			sipx->sipx_family=AF_IPX;
 			sipx->sipx_network=ipxif->if_netnum;
 			memcpy(sipx->sipx_node, ipxif->if_node, sizeof(sipx->sipx_node));
-			if (copy_to_user(arg,&ifr,sizeof(ifr)))
+			err = copy_to_user(arg,&ifr,sizeof(ifr));
+			if (err)
 				return -EFAULT;
-			return 0;
+			return err;
 		}
 		case SIOCAIPXITFCRT: {
 			int err, val;
@@ -1333,7 +1334,12 @@ static int ipxrtr_route_packet(ipx_socket *sk, struct sockaddr_ipx *usipx, struc
 	memcpy(ipx->ipx_dest.node,usipx->sipx_node,IPX_NODE_LEN);
 	ipx->ipx_dest.sock=usipx->sipx_port;
 
-	memcpy_fromiovec(skb_put(skb,len),iov,len);
+	err = memcpy_fromiovec(skb_put(skb,len),iov,len);
+	if (err) 
+	{
+		kfree_skb(skb, FREE_WRITE);
+		return -EFAULT; 
+	}	
 
 	/*
 	 *	Apply checksum. Not allowed on 802.3 links.
@@ -1384,13 +1390,11 @@ static int ipxrtr_ioctl(unsigned int cmd, void *arg)
 	int err;
 	struct rtentry rt;	/* Use these to behave like 'other' stacks */
 	struct sockaddr_ipx *sg,*st;
-
-	err=verify_area(VERIFY_READ,arg,sizeof(rt));
-	if(err)
-		return err;
 		
-	copy_from_user(&rt,arg,sizeof(rt));
-	
+	err = copy_from_user(&rt,arg,sizeof(rt));
+	if (err)
+		return -EFAULT; 
+
 	sg=(struct sockaddr_ipx *)&rt.rt_gateway;
 	st=(struct sockaddr_ipx *)&rt.rt_dst;
 	
@@ -1677,14 +1681,10 @@ static int ipx_getsockopt(struct socket *sock, int level, int optname,
 		default:
 			return -EOPNOTSUPP;
 	}
-	err=verify_area(VERIFY_WRITE,optlen,sizeof(int));
-	if(err)
-		return err;
-	put_user(sizeof(int), optlen);
-	err=verify_area(VERIFY_WRITE,optval,sizeof(int));
-	if (err) return err;
-	put_user(val, (int *)optval);
-	return(0);
+	err = put_user(sizeof(int), optlen);
+	if (!err)
+		err = put_user(val, (int *)optval);
+	return err;
 }
 
 static int ipx_listen(struct socket *sock, int backlog)
@@ -2168,8 +2168,11 @@ static int ipx_recvmsg(struct socket *sock, struct msghdr *msg, int size, int no
 	ipx = (ipx_packet *)(skb->h.raw);
 	truesize=ntohs(ipx->ipx_pktsize) - sizeof(ipx_packet);
 	copied = (truesize > size) ? size : truesize;
-	skb_copy_datagram_iovec(skb,sizeof(struct ipx_packet),msg->msg_iov,copied);
+	err = skb_copy_datagram_iovec(skb,sizeof(struct ipx_packet),msg->msg_iov,copied);
 	
+	if (err)
+		return err; 
+
 	if(sipx)
 	{
 		sipx->sipx_family=AF_IPX;
@@ -2203,25 +2206,17 @@ static int ipx_ioctl(struct socket *sock,unsigned int cmd, unsigned long arg)
 	switch(cmd)
 	{
 		case TIOCOUTQ:
-			err=verify_area(VERIFY_WRITE,(void *)arg,sizeof(int));
-			if(err)
-				return err;
 			amount=sk->sndbuf-sk->wmem_alloc;
 			if(amount<0)
 				amount=0;
-			put_user(amount, (int *)arg);
-			return 0;
+			return put_user(amount, (int *)arg);
 		case TIOCINQ:
 		{
 			struct sk_buff *skb;
 			/* These two are safe on a single CPU system as only user tasks fiddle here */
 			if((skb=skb_peek(&sk->receive_queue))!=NULL)
 				amount=skb->len-sizeof(struct ipx_packet);
-			err=verify_area(VERIFY_WRITE,(void *)arg,sizeof(int));
-			if(err)
-				return err;
-			put_user(amount, (int *)arg);
-			return 0;
+			return put_user(amount, (int *)arg);
 		}
 		case SIOCADDRT:
 		case SIOCDELRT:
@@ -2237,23 +2232,21 @@ static int ipx_ioctl(struct socket *sock,unsigned int cmd, unsigned long arg)
 			return(ipxitf_ioctl(cmd,(void *)arg));
 		case SIOCIPXCFGDATA: 
 		{
-			err=verify_area(VERIFY_WRITE,(void *)arg,
-				sizeof(ipx_config_data));
-			if(err) return err;
 			return(ipxcfg_get_config_data((void *)arg));
 		}
 		case SIOCGSTAMP:
+		{
+			int ret = -EINVAL;
 			if (sk)
 			{
 				if(sk->stamp.tv_sec==0)
 					return -ENOENT;
-				err=verify_area(VERIFY_WRITE,(void *)arg,sizeof(struct timeval));
-				if(err)
-					return err;
-				copy_to_user((void *)arg,&sk->stamp,sizeof(struct timeval));
-				return 0;
+				ret = copy_to_user((void *)arg,&sk->stamp,sizeof(struct timeval));
+				if (ret)
+					ret = -EFAULT;
 			}
-			return -EINVAL;
+			return 0;
+		}
 		case SIOCGIFDSTADDR:
 		case SIOCSIFDSTADDR:
 		case SIOCGIFBRDADDR:

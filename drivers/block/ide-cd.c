@@ -2647,8 +2647,8 @@ int ide_cdrom_probe_capabilities (ide_drive_t *drive)
 	return nslots;
 }
 
-
-void ide_cdrom_setup (ide_drive_t *drive)
+static
+int ide_cdrom_setup (ide_drive_t *drive)
 {
 	struct cdrom_info *info = drive->driver_data;
 	int nslots;
@@ -2750,8 +2750,12 @@ void ide_cdrom_setup (ide_drive_t *drive)
 
 	nslots = ide_cdrom_probe_capabilities (drive);
 
-	if (ide_cdrom_register (drive, nslots))
-		printk ("%s: Can't register\n", drive->name);
+	if (ide_cdrom_register (drive, nslots)) {
+		printk ("%s: ide_cdrom_setup failed to register device with the cdrom driver.\n", drive->name);
+		info->devinfo.handle = NULL;
+		return 1;
+	}
+	return 0;
 }
 
 /* Forwarding functions to generic routines. */
@@ -2765,13 +2769,22 @@ int ide_cdrom_ioctl (ide_drive_t *drive,
 
 int ide_cdrom_open (struct inode *ip, struct file *fp, ide_drive_t *drive)
 {
-	return cdrom_fops.open (ip, fp);
+	int rc;
+
+	MOD_INC_USE_COUNT;
+	rc = cdrom_fops.open (ip, fp);
+	if (rc) {
+		drive->usage--;
+		MOD_DEC_USE_COUNT;
+	}
+	return rc;
 }
 
 void ide_cdrom_release (struct inode *inode, struct file *file,
 			ide_drive_t *drive)
 {
 	cdrom_fops.release (inode, file);
+	MOD_DEC_USE_COUNT;
 }
 
 int ide_cdrom_check_media_change (ide_drive_t *drive)
@@ -2785,6 +2798,7 @@ int ide_cdrom_check_media_change (ide_drive_t *drive)
 int ide_cdrom_cleanup(ide_drive_t *drive)
 {
 	struct cdrom_info *info = drive->driver_data;
+	struct cdrom_device_info *devinfo = &info->devinfo;
 
 	if (ide_unregister_subdriver (drive))
 		return 1;
@@ -2792,6 +2806,8 @@ int ide_cdrom_cleanup(ide_drive_t *drive)
 		kfree (info->sector_buffer);
 	if (info->toc != NULL)
 		kfree (info->toc);
+	if (devinfo->handle == drive && unregister_cdrom (devinfo))
+		printk ("%s: ide_cdrom_cleanup failed to unregister device from the cdrom driver.\n", drive->name);
 	kfree (info);
 	drive->driver_data = NULL;
 	return 0;
@@ -2860,10 +2876,17 @@ int ide_cdrom_init (void)
 			kfree (info);
 			continue;
 		}
-		failed--;
 		memset (info, 0, sizeof (struct cdrom_info));
 		drive->driver_data = info;
-		ide_cdrom_setup (drive);
+		DRIVER(drive)->busy++;
+		if (ide_cdrom_setup (drive)) {
+			DRIVER(drive)->busy--;
+			if (ide_cdrom_cleanup (drive))
+				printk ("%s: ide_cdrom_cleanup failed in ide_cdrom_init\n", drive->name);
+			continue;
+		}
+		DRIVER(drive)->busy--;
+		failed--;
 	}
 	ide_register_module(&ide_cdrom_module);
 	MOD_DEC_USE_COUNT;
