@@ -349,7 +349,7 @@ UNUSUAL_DEV(  0x054c, 0x0010, 0x0106, 0x0450,
 		"Sony",
 		"DSC-S30/S70/S75/505V/F505/F707/F717/P8", 
 		US_SC_SCSI, US_PR_DEVICE, NULL,
-		US_FL_SINGLE_LUN | US_FL_NOT_LOCKABLE ),
+		US_FL_SINGLE_LUN | US_FL_NOT_LOCKABLE | US_FL_NO_WP_DETECT ),
 
 /* This entry is needed because the device reports Sub=ff */
 UNUSUAL_DEV(  0x054c, 0x0010, 0x0500, 0x0500, 
@@ -953,6 +953,13 @@ UNUSUAL_DEV(  0x0ea0, 0x6828, 0x0110, 0x0110,
 		"Flash Disk",
 		US_SC_DEVICE, US_PR_DEVICE, NULL,
 		US_FL_IGNORE_RESIDUE ),
+
+/* Reported by Michael Stattmann <michael@stattmann.com> */
+UNUSUAL_DEV(  0x0fce, 0xd008, 0x0000, 0x0000,
+		"Sony Ericsson",
+		"V800-Vodafone 802",
+		US_SC_DEVICE, US_PR_DEVICE, NULL,
+		US_FL_NO_WP_DETECT ),
 
 /* Reported by Kevin Cernekee <kpc-usbdev@gelato.uiuc.edu>
  * Tested on hardware version 1.10.

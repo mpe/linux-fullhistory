@@ -89,6 +89,8 @@ struct us_unusual_dev {
 		/* PREVENT/ALLOW not supported */		\
 	US_FLAG(GO_SLOW,	0x00000100)			\
 		/* Need delay after Command phase */		\
+	US_FLAG(NO_WP_DETECT,	0x00000200)			\
+		/* Don't check for write-protect */		\
 
 #define US_FLAG(name, value)	US_FL_##name = value ,
 enum { US_DO_ALL_FLAGS };

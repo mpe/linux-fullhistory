@@ -136,17 +136,19 @@ static int slave_configure(struct scsi_device *sdev)
 		 * 192 bytes (that's what Windows uses). */
 		sdev->use_192_bytes_for_3f = 1;
 
+		/* Some devices don't like MODE SENSE with page=0x3f,
+		 * which is the command used for checking if a device
+		 * is write-protected.  Now that we tell the sd driver
+		 * to do a 192-byte transfer with this command the
+		 * majority of devices work fine, but a few still can't
+		 * handle it.  The sd driver will simply assume those
+		 * devices are write-enabled. */
+		if (us->flags & US_FL_NO_WP_DETECT)
+			sdev->skip_ms_page_3f = 1;
+
 		/* A number of devices have problems with MODE SENSE for
 		 * page x08, so we will skip it. */
 		sdev->skip_ms_page_8 = 1;
-
-#ifndef CONFIG_USB_STORAGE_RW_DETECT
-		/* Some devices may not like MODE SENSE with page=0x3f.
-		 * Now that we're using 192-byte transfers this may no
-		 * longer be a problem.  So this will be a configuration
-		 * option. */
-		sdev->skip_ms_page_3f = 1;
-#endif
 
 		/* Some disks return the total number of blocks in response
 		 * to READ CAPACITY rather than the highest block number.
