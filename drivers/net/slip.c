@@ -1260,8 +1260,10 @@ static int sl_ioctl(struct net_device *dev,struct ifreq *rq,int cmd)
 	switch(cmd){
         case SIOCSKEEPALIVE:
 		/* max for unchar */
-                if (((unsigned int)((unsigned long)rq->ifr_data)) > 255)
+                if (((unsigned int)((unsigned long)rq->ifr_data)) > 255) {
+			spin_unlock_bh(&sl->lock);
 			return -EINVAL;
+		}
 		sl->keepalive = (unchar) ((unsigned long)rq->ifr_data);
 		if (sl->keepalive != 0) {
 			sl->keepalive_timer.expires=jiffies+sl->keepalive*HZ;
@@ -1270,7 +1272,6 @@ static int sl_ioctl(struct net_device *dev,struct ifreq *rq,int cmd)
                 } else {
                         del_timer(&sl->keepalive_timer);
 		}
-		spin_unlock_bh(&sl->lock);
 		break;
 
         case SIOCGKEEPALIVE:
@@ -1278,8 +1279,10 @@ static int sl_ioctl(struct net_device *dev,struct ifreq *rq,int cmd)
 		break;
 
         case SIOCSOUTFILL:
-                if (((unsigned)((unsigned long)rq->ifr_data)) > 255) /* max for unchar */
+                if (((unsigned)((unsigned long)rq->ifr_data)) > 255) { /* max for unchar */
+			spin_unlock_bh(&sl->lock);
 			return -EINVAL;
+		}
                 if ((sl->outfill = (unchar)((unsigned long) rq->ifr_data)) != 0){
 			mod_timer(&sl->outfill_timer, jiffies+sl->outfill*HZ);
 			set_bit(SLF_OUTWAIT, &sl->flags);

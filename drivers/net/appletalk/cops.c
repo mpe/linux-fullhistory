@@ -772,6 +772,7 @@ static void cops_rx(struct net_device *dev)
                 if(boguscount==1000000)
                 {
                         printk(KERN_WARNING "%s: DMA timed out.\n",dev->name);
+			restore_flags(flags);
                         return;
                 }
         }

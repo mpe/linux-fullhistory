@@ -436,8 +436,11 @@ int ipv6_flowlabel_opt(struct sock *sk, char *optval, int optlen)
 	case IPV6_FL_A_RENEW:
 		read_lock_bh(&ip6_sk_fl_lock);
 		for (sfl = np->ipv6_fl_list; sfl; sfl = sfl->next) {
-			if (sfl->fl->label == freq.flr_label)
-				return fl6_renew(sfl->fl, freq.flr_linger, freq.flr_expires);
+			if (sfl->fl->label == freq.flr_label) {
+				err = fl6_renew(sfl->fl, freq.flr_linger, freq.flr_expires);
+				read_unlock_bh(&ip6_sk_fl_lock);
+				return err;
+			}
 		}
 		read_unlock_bh(&ip6_sk_fl_lock);
 

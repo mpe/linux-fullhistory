@@ -50,45 +50,70 @@ pci_claim_resource(struct pci_dev *dev, int resource)
 	return err;
 }
 
+/*
+ * Given the PCI bus a device resides on, try to
+ * find an acceptable resource allocation for a
+ * specific device resource..
+ */
+static int pci_assign_bus_resource(const struct pci_bus *bus,
+	struct pci_dev *dev,
+	struct resource *res,
+	unsigned long size,
+	unsigned long min,
+	unsigned int type_mask)
+{
+	int i;
+
+	type_mask |= IORESOURCE_IO | IORESOURCE_MEM;
+	for (i = 0 ; i < 4; i++) {
+		struct resource *r = bus->resource[i];
+		if (!r)
+			continue;
+
+		/* type_mask must match */
+		if ((res->flags ^ r->flags) & type_mask)
+			continue;
+
+		/* We cannot allocate a non-prefetching resource from a pre-fetching area */
+		if ((r->flags & IORESOURCE_PREFETCH) && !(res->flags & IORESOURCE_PREFETCH))
+			continue;
+
+		/* Ok, try it out.. */
+		if (allocate_resource(r, res, size, min, -1, size, pcibios_align_resource, dev) < 0)
+			continue;
+
+		/* Update PCI config space.  */
+		pcibios_update_resource(dev, r, res, i);
+		return 0;
+	}
+	return -EBUSY;
+}
+
 int 
 pci_assign_resource(struct pci_dev *dev, int i)
 {
-	struct resource *root, *res;
+	const struct pci_bus *bus = dev->bus;
+	struct resource *res = dev->resource + i;
 	unsigned long size, min;
 
-	res = &dev->resource[i];
+	size = res->end - res->start + 1;
+	min = (res->flags & IORESOURCE_IO) ? PCIBIOS_MIN_IO : PCIBIOS_MIN_MEM;
 
-	/* Determine the root we allocate from.  */
-	res->end -= res->start;
-	res->start = 0;
-	root = pci_find_parent_resource(dev, res);
-	if (root == NULL) {
-		printk(KERN_ERR "PCI: Cannot find parent resource for "
-		       "device %s\n", dev->slot_name);
-		return -EINVAL;
+	/* First, try exact prefetching match.. */
+	if (pci_assign_bus_resource(bus, dev, res, size, min, IORESOURCE_PREFETCH) < 0) {
+		/*
+		 * That failed.
+		 *
+		 * But a prefetching area can handle a non-prefetching
+		 * window (it will just not perform as well).
+		 */
+		if (!(res->flags & IORESOURCE_PREFETCH) || pci_assign_bus_resource(bus, dev, res, size, min, 0) < 0) {
+			printk(KERN_ERR "PCI: Failed to allocate resource %d for %s\n", i, dev->name);
+			return -EBUSY;
+		}
 	}
 
-	min = (res->flags & IORESOURCE_IO ? PCIBIOS_MIN_IO : PCIBIOS_MIN_MEM);
-	size = res->end + 1;
-	DBGC(("  for root[%lx:%lx] min[%lx] size[%lx]\n",
-	      root->start, root->end, min, size));
-
-	if (allocate_resource(root, res, size, min, -1, size,
-			      pcibios_align_resource, dev) < 0) {
-		printk(KERN_ERR "PCI: Failed to allocate resource %d for %s\n",
-		       i, dev->name);
-		printk(KERN_ERR "  failed root[%lx:%lx] min[%lx] size[%lx]\n",
-		       root->start, root->end, min, size);
-		printk(KERN_ERR "  failed res[%lx:%lx]\n",
-		       res->start, res->end);
-		return -EBUSY;
-	}
-
-	DBGC(("  got res[%lx:%lx] for resource %d\n",
-	      res->start, res->end, i));
-
-	/* Update PCI config space.  */
-	pcibios_update_resource(dev, root, res, i);
+	DBGC(("  got res[%lx:%lx] for resource %d\n", res->start, res->end, i));
 
 	return 0;
 }

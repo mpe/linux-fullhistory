@@ -76,10 +76,12 @@ endif
 ifeq ($(CONFIG_COMX_HW_LOCOMX),y)
 L_OBJS += comx-hw-locomx.o
 CONFIG_85230_BUILTIN=y
+CONFIG_SYNCPPP_BUILTIN = y
 else 
   ifeq ($(CONFIG_COMX_HW_LOCOMX),m)
   M_OBJS += comx-hw-locomx.o
   CONFIG_85230_MODULE=y
+  CONFIG_SYNCPPP_MODULE = y
   endif
 endif
 

@@ -1712,12 +1712,15 @@ static void tx_dle_intr(struct atm_dev *dev)
             vcc = ATM_SKB(skb)->vcc;
             if (!vcc) {
                   printk("tx_dle_intr: vcc is null\n");
+		  spin_unlock_irqrestore(&iadev->tx_lock, flags);
                   dev_kfree_skb_any(skb);
+
                   return;
             }
             iavcc = INPH_IA_VCC(vcc);
             if (!iavcc) {
                   printk("tx_dle_intr: iavcc is null\n");
+		  spin_unlock_irqrestore(&iadev->tx_lock, flags);
                   dev_kfree_skb_any(skb);
                   return;
             }

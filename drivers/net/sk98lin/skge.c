@@ -2406,8 +2406,7 @@ SK_EVPARA 	EvPara;
 	SkEventDispatcher(pAC, pAC->IoBase);
 
 	for (i=0; i<pAC->GIni.GIMacsFound; i++) {
-		spin_lock_irqsave(
-			&pAC->TxPort[i][TX_PRIO_LOW].TxDesRingLock, Flags);
+		spin_lock(&pAC->TxPort[i][TX_PRIO_LOW].TxDesRingLock);
 	}
 	netif_stop_queue(pAC->dev);
 
@@ -2500,8 +2499,7 @@ SK_EVPARA 	EvPara;
 
 	netif_start_queue(pAC->dev);
 	for (i=pAC->GIni.GIMacsFound-1; i>=0; i--) {
-		spin_unlock_irqrestore(
-			&pAC->TxPort[i][TX_PRIO_LOW].TxDesRingLock, Flags);
+		spin_unlock(&pAC->TxPort[i][TX_PRIO_LOW].TxDesRingLock);
 	}
 
 	/* enable Interrupts */

@@ -582,6 +582,8 @@ int blkdev_get(struct block_device *bdev, mode_t mode, unsigned flags, int kind)
 		/*
 		 * This crockload is due to bad choice of ->open() type.
 		 * It will go away.
+		 * For now, block device ->open() routine must _not_
+		 * examine anything in 'inode' argument except ->i_rdev.
 		 */
 		struct file fake_file = {};
 		struct dentry fake_dentry = {};

@@ -130,8 +130,8 @@ ENOSYS = 38
 .previous
 
 #define GET_CURRENT(reg) \
-	movl %esp, reg; \
-	andl $-8192, reg;
+	movl $-8192, reg; \
+	andl %esp, reg
 
 ENTRY(lcall7)
 	pushfl			# We get a different stack layout with call gates,

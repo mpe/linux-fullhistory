@@ -441,8 +441,10 @@ static int spx_transmit(struct sock *sk, struct sk_buff *skb, int type, int len)
 		save_flags(flags);
 		cli();
         	skb = sock_alloc_send_skb(sk, size, 1, 0, &err);
-        	if(skb == NULL)
+        	if(skb == NULL) {
+			restore_flags(flags);
                 	return (-ENOMEM);
+		}
         	skb_reserve(skb, offset);
         	skb->h.raw = skb->nh.raw = skb_put(skb,sizeof(struct ipxspxhdr));
 		restore_flags(flags);
@@ -741,9 +743,9 @@ static int spx_sendmsg(struct socket *sock, struct msghdr *msg, int len,
 
 	cli();
         skb  	= sock_alloc_send_skb(sk, size, 0, flags&MSG_DONTWAIT, &err);
+	sti();
         if(skb == NULL)
                 return (err);
-	sti();
 
 	skb->sk = sk;
         skb_reserve(skb, offset);

@@ -263,11 +263,13 @@ static int ipq_receive_peer(ipq_queue_t *q, ipq_peer_msg_t *m,
 {
 
 	int status = 0;
+	int busy;
 		
 	spin_lock_bh(&q->lock);
-	if (q->terminate || q->flushing)
-		return -EBUSY;
+	busy = (q->terminate || q->flushing);
 	spin_unlock_bh(&q->lock);
+	if (busy)
+		return -EBUSY;
 	if (len < sizeof(ipq_peer_msg_t))
 		return -EINVAL;
 	switch (type) {

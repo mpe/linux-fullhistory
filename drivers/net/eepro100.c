@@ -2252,8 +2252,10 @@ static struct pci_driver eepro100_driver = {
 	id_table:	eepro100_pci_tbl,
 	probe:		eepro100_init_one,
 	remove:		eepro100_remove_one,
+#if 0	/* These seem to be broken.. */
 	suspend:	eepro100_suspend,
 	resume:		eepro100_resume,
+#endif
 };
 
 #if LINUX_VERSION_CODE < KERNEL_VERSION(2,3,48)
