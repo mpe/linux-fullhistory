@@ -938,6 +938,10 @@ static int adjust_abs_time(struct k_clock *clock, struct timespec *tp,
 	 */
 	if (oc.tv_sec < 0)
 		oc.tv_sec = oc.tv_nsec = 0;
+
+	if (oc.tv_sec | oc.tv_nsec)
+		set_normalized_timespec(&oc, oc.tv_sec,
+					oc.tv_nsec + clock->res);
 	tstojiffie(&oc, clock->res, exp);
 
 	/*
@@ -1507,7 +1511,6 @@ static int common_nsleep(clockid_t which_clock,
 		if (abs || !rq_time) {
 			adjust_abs_time(&posix_clocks[which_clock], &t, abs,
 					&rq_time, &dum);
-			rq_time += (t.tv_sec || t.tv_nsec);
 		}
 
 		left = rq_time - get_jiffies_64();
