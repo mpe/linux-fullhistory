@@ -9,7 +9,7 @@
 #include <asm/uaccess.h>
 
 /* Note: never hold tasklist_lock while spinning for this one */
-spinlock_t task_capability_lock;
+spinlock_t task_capability_lock = SPIN_LOCK_UNLOCKED;
 
 /*
  * For sys_getproccap() and sys_setproccap(), any of the three

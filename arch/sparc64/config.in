@@ -37,6 +37,7 @@ define_bool CONFIG_SUN_CONSOLE y
 define_bool CONFIG_SUN_AUXIO y
 define_bool CONFIG_SUN_IO y
 bool 'PCI support' CONFIG_PCI
+source drivers/pci/Config.in
 source drivers/sbus/char/Config.in
 source drivers/sbus/audio/Config.in
 

@@ -928,6 +928,13 @@ L:	linux-kernel@vger.rutgers.edu
 W:	http://www.kernel.dk
 S:	Maintained
 
+USB SUBSYSTEM
+P:	Randy Dunlap
+M:	randy.dunlap@intel.com
+L:	linux-usb@suse.com
+W:	http://www.linux-usb.org
+S:	Supported
+
 USB HUB AND UHCI DRIVERS
 P:	Johannes Erdfelt
 M:	jerdfelt@sventech.com

@@ -306,84 +306,6 @@ void __init proc_bus_pci_add(struct pci_bus *bus)
  *  Backward compatible /proc/pci interface.
  */
 
-static const char *pci_strclass (unsigned int class)
-{
-	switch (class >> 8) {
-	      case PCI_CLASS_NOT_DEFINED:		return "Non-VGA device";
-	      case PCI_CLASS_NOT_DEFINED_VGA:		return "VGA compatible device";
-
-	      case PCI_CLASS_STORAGE_SCSI:		return "SCSI storage controller";
-	      case PCI_CLASS_STORAGE_IDE:		return "IDE interface";
-	      case PCI_CLASS_STORAGE_FLOPPY:		return "Floppy disk controller";
-	      case PCI_CLASS_STORAGE_IPI:		return "IPI bus controller";
-	      case PCI_CLASS_STORAGE_RAID:		return "RAID bus controller";
-	      case PCI_CLASS_STORAGE_OTHER:		return "Unknown mass storage controller";
-
-	      case PCI_CLASS_NETWORK_ETHERNET:		return "Ethernet controller";
-	      case PCI_CLASS_NETWORK_TOKEN_RING:	return "Token ring network controller";
-	      case PCI_CLASS_NETWORK_FDDI:		return "FDDI network controller";
-	      case PCI_CLASS_NETWORK_ATM:		return "ATM network controller";
-	      case PCI_CLASS_NETWORK_OTHER:		return "Network controller";
-
-	      case PCI_CLASS_DISPLAY_VGA:		return "VGA compatible controller";
-	      case PCI_CLASS_DISPLAY_XGA:		return "XGA compatible controller";
-	      case PCI_CLASS_DISPLAY_OTHER:		return "Display controller";
-
-	      case PCI_CLASS_MULTIMEDIA_VIDEO:		return "Multimedia video controller";
-	      case PCI_CLASS_MULTIMEDIA_AUDIO:		return "Multimedia audio controller";
-	      case PCI_CLASS_MULTIMEDIA_OTHER:		return "Multimedia controller";
-
-	      case PCI_CLASS_MEMORY_RAM:		return "RAM memory";
-	      case PCI_CLASS_MEMORY_FLASH:		return "FLASH memory";
-	      case PCI_CLASS_MEMORY_OTHER:		return "Memory";
-
-	      case PCI_CLASS_BRIDGE_HOST:		return "Host bridge";
-	      case PCI_CLASS_BRIDGE_ISA:		return "ISA bridge";
-	      case PCI_CLASS_BRIDGE_EISA:		return "EISA bridge";
-	      case PCI_CLASS_BRIDGE_MC:			return "MicroChannel bridge";
-	      case PCI_CLASS_BRIDGE_PCI:		return "PCI bridge";
-	      case PCI_CLASS_BRIDGE_PCMCIA:		return "PCMCIA bridge";
-	      case PCI_CLASS_BRIDGE_NUBUS:		return "NuBus bridge";
-	      case PCI_CLASS_BRIDGE_CARDBUS:		return "CardBus bridge";
-	      case PCI_CLASS_BRIDGE_OTHER:		return "Bridge";
-
-	      case PCI_CLASS_COMMUNICATION_SERIAL:	return "Serial controller";
-	      case PCI_CLASS_COMMUNICATION_PARALLEL:	return "Parallel controller";
-	      case PCI_CLASS_COMMUNICATION_OTHER:	return "Communication controller";
-
-	      case PCI_CLASS_SYSTEM_PIC:		return "PIC";
-	      case PCI_CLASS_SYSTEM_DMA:		return "DMA controller";
-	      case PCI_CLASS_SYSTEM_TIMER:		return "Timer";
-	      case PCI_CLASS_SYSTEM_RTC:		return "RTC";
-	      case PCI_CLASS_SYSTEM_OTHER:		return "System peripheral";
-
-	      case PCI_CLASS_INPUT_KEYBOARD:		return "Keyboard controller";
-	      case PCI_CLASS_INPUT_PEN:			return "Digitizer Pen";
-	      case PCI_CLASS_INPUT_MOUSE:		return "Mouse controller";
-	      case PCI_CLASS_INPUT_OTHER:		return "Input device controller";
-
-	      case PCI_CLASS_DOCKING_GENERIC:		return "Generic Docking Station";
-	      case PCI_CLASS_DOCKING_OTHER:		return "Docking Station";
-
-	      case PCI_CLASS_PROCESSOR_386:		return "386";
-	      case PCI_CLASS_PROCESSOR_486:		return "486";
-	      case PCI_CLASS_PROCESSOR_PENTIUM:		return "Pentium";
-	      case PCI_CLASS_PROCESSOR_ALPHA:		return "Alpha";
-	      case PCI_CLASS_PROCESSOR_POWERPC:		return "Power PC";
-	      case PCI_CLASS_PROCESSOR_CO:		return "Co-processor";
-
-	      case PCI_CLASS_SERIAL_FIREWIRE:		return "FireWire (IEEE 1394)";
-	      case PCI_CLASS_SERIAL_ACCESS:		return "ACCESS Bus";
-	      case PCI_CLASS_SERIAL_SSA:		return "SSA";
-	      case PCI_CLASS_SERIAL_USB:		return "USB Controller";
-	      case PCI_CLASS_SERIAL_FIBER:		return "Fiber Channel";
-
-	      case PCI_CLASS_HOT_SWAP_CONTROLLER:	return "Hot Swap Controller";
-
-	      default:					return "Unknown class";
-	}
-}
-
 /*
  * Convert some of the configuration space registers of the device at
  * address (bus,devfn) into a string (possibly several lines each).
@@ -392,8 +314,8 @@ static const char *pci_strclass (unsigned int class)
  */
 static int sprint_dev_config(struct pci_dev *dev, char *buf, int size)
 {
-	unsigned int class_rev;
-	unsigned char latency, min_gnt, max_lat;
+	u32 class_rev;
+	unsigned char latency, min_gnt, max_lat, *class;
 	int reg, len = 0;
 
 	pci_read_config_dword(dev, PCI_CLASS_REVISION, &class_rev);
@@ -404,10 +326,12 @@ static int sprint_dev_config(struct pci_dev *dev, char *buf, int size)
 		return -1;
 	len += sprintf(buf + len, "  Bus %2d, device %3d, function %2d:\n",
 		       dev->bus->number, PCI_SLOT(dev->devfn), PCI_FUNC(dev->devfn));
-	len += sprintf(buf + len, "    %s: %s (rev %d).\n",
-		       pci_strclass(class_rev >> 8),
-		       dev->name,
-		       class_rev & 0xff);
+	class = pci_class_name(class_rev >> 16);
+	if (class)
+		len += sprintf(buf+len, "    %s", class);
+	else
+		len += sprintf(buf+len, "    Class %04x", class_rev >> 16);
+	len += sprintf(buf+len, ": %s (rev %d).\n", dev->name, class_rev & 0xff);
 
 	if (dev->irq) {
 		if (len + 40 > size)
@@ -512,7 +436,7 @@ static int __init pci_proc_init(void)
 {
 	if (pci_present()) {
 		proc_bus_pci_dir = proc_mkdir("pci", proc_bus);
-		create_proc_info_entry("devices",0, proc_bus_pci_dir,
+		create_proc_info_entry("devices", 0, proc_bus_pci_dir,
 					get_pci_dev_info);
 		proc_bus_pci_add(pci_root);
 		create_proc_read_entry("pci", 0, NULL, pci_read_proc, NULL);

@@ -72,14 +72,6 @@ ifeq ($(CONFIG_USB_HP_SCANNER),m)
   MI_OBJS +=hp_scanner.o
 endif
 
-ifeq ($(CONFIG_USB_HUB),y)
-  L_OBJS += hub.o
-endif
-ifeq ($(CONFIG_USB_HUB),m)
-  M_OBJS += hub.o
-  MI_OBJS += hub.o	
-endif
-
 ifeq ($(CONFIG_USB_ACM),y)
   L_OBJS += acm.o
 endif
@@ -212,9 +204,11 @@ usb-ohci-hcd.o: ohci-hcd.o ohci-root-hub.o
 	$(LD) $(LD_RFLAG) -r -o $@ ohci-hcd.o ohci-root-hub.o 
 
 ifeq ($(CONFIG_USB_PROC),y)
-usbcore.o: usb.o usb-debug.o usb-core.o proc_usb.o
-	$(LD) $(LD_RFLAG) -r -o $@ usb.o usb-debug.o usb-core.o proc_usb.o
+usbcore.o: usb.o usb-debug.o usb-core.o proc_usb.o hub.o
+	$(LD) $(LD_RFLAG) -r -o $@ usb.o usb-debug.o usb-core.o proc_usb.o \
+	hub.o
 else
-usbcore.o: usb.o usb-debug.o usb-core.o
-	$(LD) $(LD_RFLAG) -r -o $@ usb.o usb-debug.o usb-core.o
+usbcore.o: usb.o usb-debug.o usb-core.o hub.o
+	$(LD) $(LD_RFLAG) -r -o $@ usb.o usb-debug.o usb-core.o \
+	hub.o
 endif

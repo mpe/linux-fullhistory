@@ -491,13 +491,16 @@ static unsigned int __init pci_do_scan_bus(struct pci_bus *bus)
 			pci_read_config_word(dev, PCI_CB_SUBSYSTEM_ID, &dev->subsystem_device);
 			break;
 		default:				    /* unknown header */
-		bad:
 			printk(KERN_ERR "PCI: device %s has unknown header type %02x, ignoring.\n",
 				dev->slot_name, hdr_type);
 			continue;
+		bad:
+			printk(KERN_ERR "PCI: %s: class %x doesn't match header type %02x. Ignoring class.\n",
+			       dev->slot_name, class, hdr_type);
+			dev->class = PCI_CLASS_NOT_DEFINED;
 		}
 
-		DBG("PCI: %02x:%02x [%04x/%04x]\n", bus->number, dev->devfn, dev->vendor, dev->device);
+		DBG("PCI: %02x:%02x [%04x/%04x] %06x %02x\n", bus->number, dev->devfn, dev->vendor, dev->device, class, hdr_type);
 
 		/*
 		 * Put it into the global PCI device chain. It's used to

@@ -1720,6 +1720,19 @@ CONFIG_PCI_GOBIOS
   kernel will try the direct access method and falls back to the BIOS
   if that doesn't work. If unsure, go with the default.
 
+PCI device name database
+CONFIG_PCI_NAMES
+  By default, the kernel contains a database of all known PCI device
+  names to make the information in /proc/pci, /proc/ioports and similar
+  files comprehensible to the user. This database increases size of
+  the kernel image by about 80KB, but it gets freed after the system
+  boots up, so it doesn't take up kernel memory. Anyway, if you are
+  building an installation floppy or kernel for an embedded system
+  where kernel image size really matters, you can disable this feature
+  and you'll get device ID numbers instead of names.
+
+  When in doubt, say Y.
+
 MCA support
 CONFIG_MCA
   MicroChannel Architecture is found in some IBM PS/2 machines and
@@ -5554,13 +5567,13 @@ CONFIG_AIRONET4500_PCI
 	This option should be enabled for PCI cards
 	module aironet4500_card
 
-Aironet 4500/4800 ISA broken support
+Aironet 4500/4800 ISA broken support (EXPERIMENTAL)
 CONFIG_AIRONET4500_ISA
 	This option enables support for ISA cards in non-PNP mode. 
 	Does not operate correctly by now.
 	module aironet4500_card
 
-Aironet 4500/4800 I365 broken support
+Aironet 4500/4800 I365 broken support (EXPERIMENTAL)
 CONFIG_AIRONET4500_I365
 	This option enables support for PCMCIA cards on i365 controller 
 	_without_ cardservices. Doesnt have much sense and is not working

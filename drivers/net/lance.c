@@ -437,9 +437,9 @@ int __init lance_probe1(struct net_device *dev, int ioaddr, int irq, int options
 	   There are two HP versions, check the BIOS for the configuration port.
 	   This method provided by L. Julliard, Laurent_Julliard@grenoble.hp.com.
 	   */
-	if (readw(0x000f0102) == 0x5048)  {
+	if (isa_readw(0x000f0102) == 0x5048)  {
 		static const short ioaddr_table[] = { 0x300, 0x320, 0x340, 0x360};
-		int hp_port = (readl(0x000f00f1) & 1)  ? 0x499 : 0x99;
+		int hp_port = (isa_readl(0x000f00f1) & 1)  ? 0x499 : 0x99;
 		/* We can have boards other than the built-in!  Verify this is on-board. */
 		if ((inb(hp_port) & 0xc0) == 0x80
 			&& ioaddr_table[inb(hp_port) & 3] == ioaddr)

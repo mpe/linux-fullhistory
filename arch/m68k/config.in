@@ -124,6 +124,7 @@ if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
    fi
 fi
 
+source drivers/pci/Config.in
 
 endmenu
 

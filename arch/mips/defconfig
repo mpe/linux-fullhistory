@@ -16,6 +16,7 @@
 # CONFIG_SGI is not set
 CONFIG_SNI_RM200_PCI=y
 CONFIG_PCI=y
+CONFIG_PCI_NAMES=y
 
 #
 # CPU selection

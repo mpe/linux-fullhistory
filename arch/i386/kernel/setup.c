@@ -1371,9 +1371,9 @@ int get_cpuinfo(char * buffer)
 	char *p = buffer;
 	int sep_bug;
 	static char *x86_cap_flags[] = {
-	        "fpu", "vme", "de", "pse", "tsc", "msr", "6", "mce",
-	        "cx8", "9", "10", "sep", "mtrr", "pge", "14", "cmov",
-	        "16", "17", "psn", "19", "20", "21", "22", "mmx",
+	        "fpu", "vme", "de", "pse", "tsc", "msr", "pae", "mce",
+	        "cx8", "apic", "10", "sep", "mtrr", "pge", "mca", "cmov",
+	        "pat", "17", "psn", "19", "20", "21", "22", "mmx",
 	        "24", "kni", "26", "27", "28", "29", "30", "31"
 	};
 	struct cpuinfo_x86 *c = cpu_data;
@@ -1419,15 +1419,14 @@ int get_cpuinfo(char * buffer)
 		    case X86_VENDOR_AMD:
 			if (c->x86 == 5 && c->x86_model == 6)
 				x86_cap_flags[10] = "sep";
-			x86_cap_flags[16] = "fcmov";
+			if (c->x86 < 6)
+				x86_cap_flags[16] = "fcmov";
+			x86_cap_flags[22] = "mmxext";
+			x86_cap_flags[30] = "3dnowext";
 			x86_cap_flags[31] = "3dnow";
 			break;
 
 		    case X86_VENDOR_INTEL:
-			x86_cap_flags[6] = "pae";
-			x86_cap_flags[9] = "apic";
-			x86_cap_flags[14] = "mca";
-			x86_cap_flags[16] = "pat";
 			x86_cap_flags[17] = "pse36";
 			x86_cap_flags[18] = "psn";
 			x86_cap_flags[24] = "osfxsr";

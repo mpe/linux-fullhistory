@@ -1,9 +1,7 @@
 /*
- *	$Id: oldproc.c,v 1.24 1998/10/11 15:13:04 mj Exp $
+ *	PCI Class and Device Name Tables
  *
- *	Backward-compatible procfs interface for PCI.
- *
- *	Copyright 1993, 1994, 1995, 1997 Drew Eckhardt, Frederic Potter,
+ *	Copyright 1993--1999 Drew Eckhardt, Frederic Potter,
  *	David Mosberger-Tang, Martin Mares
  */
 
@@ -11,6 +9,8 @@
 #include <linux/kernel.h>
 #include <linux/pci.h>
 #include <linux/init.h>
+
+#ifdef CONFIG_PCI_NAMES
 
 struct pci_device_info {
 	unsigned short device;
@@ -92,3 +92,43 @@ void __init pci_name_device(struct pci_dev *dev)
 		}
 	}
 }
+
+/*
+ *  Class names. Not in .init section as they are needed in runtime.
+ */
+
+static u16 pci_class_numbers[] = {
+#define CLASS(x,y) 0x##x,
+#include "classlist.h"
+};
+
+static char *pci_class_names[] = {
+#define CLASS(x,y) y,
+#include "classlist.h"
+};
+
+char *
+pci_class_name(u32 class)
+{
+	int i;
+
+	for(i=0; i<sizeof(pci_class_numbers)/sizeof(pci_class_numbers[0]); i++)
+		if (pci_class_numbers[i] == class)
+			return pci_class_names[i];
+	return NULL;
+}
+
+#else
+
+void __init pci_name_device(struct pci_dev *dev)
+{
+	sprintf(dev->name, "PCI device %04x:%04x", dev->vendor, dev->device);
+}
+
+char *
+pci_class_name(u32 class)
+{
+	return NULL;
+}
+
+#endif

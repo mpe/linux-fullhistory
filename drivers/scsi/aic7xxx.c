@@ -9084,7 +9084,7 @@ aic7xxx_detect(Scsi_Host_Template *template)
    * aic7xxx_setup
    */
   if(aic7xxx)
-    aic7xxx_setup(aic7xxx, NULL);
+    aic7xxx_setup(aic7xxx);
   if(dummy_buffer[0] != 'P')
     printk(KERN_WARNING "aic7xxx: Please read the file /usr/src/linux/drivers"
       "/scsi/README.aic7xxx\n"

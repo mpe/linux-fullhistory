@@ -28,7 +28,6 @@
 #include <asm/io.h>
 #include <asm/bitops.h>
 #include <asm/machvec.h>
-#include <asm/spinlock.h>
 
 #include "proto.h"
 

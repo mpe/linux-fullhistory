@@ -33,6 +33,7 @@
 #define _DRM_P_H_
 
 #ifdef __KERNEL__
+#include <linux/config.h>
 #include <linux/module.h>
 #include <linux/kernel.h>
 #include <linux/miscdevice.h>

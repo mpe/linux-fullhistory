@@ -30,6 +30,7 @@
  */
 
 #define EXPORT_SYMTAB
+#include <linux/config.h>
 #include "drmP.h"
 #include "tdfx_drv.h"
 EXPORT_SYMBOL(tdfx_init);

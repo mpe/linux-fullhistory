@@ -11,7 +11,6 @@
 #include <linux/list.h>
 #include <linux/malloc.h>
 #include <linux/smp_lock.h>
-#include <linux/module.h>
 #include <linux/spinlock.h>
 
 #include <asm/uaccess.h>
@@ -519,16 +518,3 @@ void usb_hub_cleanup(void)
 	 */
 	usb_deregister(&hub_driver);
 } /* usb_hub_cleanup() */
-
-#ifdef MODULE
-int init_module(void)
-{
-	return usb_hub_init();
-}
-
-void cleanup_module(void)
-{
-	usb_hub_cleanup();
-}
-#endif
-

@@ -25,7 +25,6 @@
 #include <asm/io.h>
 #include <asm/system.h>
 #include <asm/bitops.h>
-#include <linux/timer.h>
 
 #include <linux/netdevice.h>
 #include <linux/etherdevice.h>

@@ -23,6 +23,7 @@ CONFIG_VT_CONSOLE=y
 # CONFIG_SMP is not set
 # CONFIG_SUN4 is not set
 # CONFIG_PCI is not set
+# CONFIG_PCI_NAMES is not set
 
 #
 # Console drivers

@@ -450,6 +450,7 @@ struct pci_bus *pci_scan_bus(int bus, struct pci_ops *ops, void *sysdata);
 int pci_proc_attach_device(struct pci_dev *dev);
 int pci_proc_detach_device(struct pci_dev *dev);
 void pci_name_device(struct pci_dev *dev);
+char *pci_class_name(u32 class);
 void pci_read_bridge_bases(struct pci_bus *child);
 struct resource *pci_find_parent_resource(struct pci_dev *dev, struct resource *res);
 

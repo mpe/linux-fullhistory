@@ -197,6 +197,8 @@
 #define __NR_vfork		190
 #define __NR_ugetrlimit		191	/* SuS compliant getrlimit */
 #define __NR_mmap2		192
+#define __NR_truncate64		193
+#define __NR_ftruncate64	194
 
 /* user-visible error numbers are in the range -1 - -124: see <asm-i386/errno.h> */
 

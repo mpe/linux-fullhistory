@@ -15,7 +15,6 @@
 #define	AIRONET4500_H
 // redefined to avoid PCMCIA includes
 
-#include <linux/config.h>
 #include <linux/version.h>
 #include <linux/module.h>
 #include <linux/kernel.h>

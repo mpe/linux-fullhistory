@@ -110,6 +110,7 @@ fi
 if [ "$CONFIG_ARCH_NEXUSPCI" = "y" -o \
      "$CONFIG_HOST_FOOTBRIDGE" = "y" ]; then
    define_bool CONFIG_PCI y
+   source drivers/pci/Config.h
 fi
 
 #

@@ -178,6 +178,8 @@ then
 	bool 'Symmetric multi-processing support' CONFIG_SMP
 fi
 
+source drivers/pci/Config.in
+
 bool 'Networking support' CONFIG_NET
 bool 'System V IPC' CONFIG_SYSVIPC
 bool 'BSD Process Accounting' CONFIG_BSD_PROCESS_ACCT

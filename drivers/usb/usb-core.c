@@ -33,6 +33,8 @@ int usb_init(void)
 #ifdef CONFIG_USB_PROC
 	proc_usb_init();
 #endif
+	usb_hub_init();
+
 #ifndef CONFIG_USB_MODULE
 #	ifdef CONFIG_USB_UHCI
 		uhci_init();
@@ -70,9 +72,6 @@ int usb_init(void)
 #	ifdef CONFIG_USB_DC2XX
 		usb_dc2xx_init();
 #	endif
-#	ifdef CONFIG_USB_HUB
-		usb_hub_init();
-#	endif
 #	ifdef CONFIG_USB_SCSI
 		usb_scsi_init();
 #	endif
@@ -89,10 +88,8 @@ void cleanup_drivers(void)
 #ifdef CONFIG_USB_PROC
 	proc_usb_cleanup ();
 #endif
+	usb_hub_cleanup();
 #ifndef MODULE
-#	ifdef CONFIG_USB_HUB
-		usb_hub_cleanup();
-#	endif
 #	ifdef CONFIG_USB_MOUSE
         	usb_mouse_cleanup();
 #	endif

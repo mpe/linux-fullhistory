@@ -636,6 +636,11 @@ else
   endif
 endif
 
+ifeq ($(CONFIG_AGP), m)
+  ALL_SUB_DIRS += agp
+  MOD_SUB_DIRS += agp
+endif
+
 include $(TOPDIR)/Rules.make
 
 fastdep:

@@ -14,7 +14,6 @@ static const char *awc_version =
 "aironet4500_cs.c v0.1 1/1/99 Elmer Joandi, elmer@ylenurme.ee.\n";
 
 
-#include <linux/config.h>
 #include <linux/module.h>
 //#include <pcmcia/config.h>
 
@@ -29,7 +28,6 @@ static const char *awc_version =
 #include <asm/io.h>
 #include <asm/system.h>
 #include <asm/bitops.h>
-#include <linux/timer.h>
 
 #include <linux/netdevice.h>
 #include <linux/etherdevice.h>

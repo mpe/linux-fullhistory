@@ -95,8 +95,12 @@ else
          define_bool CONFIG_PCI_DIRECT y
       fi
    fi
-   bool 'MCA support' CONFIG_MCA
+fi
 
+source drivers/pci/Config.in
+
+if [ "$CONFIG_VISWS" != "y" ]; then
+   bool 'MCA support' CONFIG_MCA
 fi
 
 source drivers/pcmcia/Config.in

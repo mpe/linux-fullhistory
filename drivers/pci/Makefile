@@ -33,10 +33,10 @@ endif
 
 include $(TOPDIR)/Rules.make
 
-names.o: names.c devlist.h
+names.o: names.c devlist.h classlist.h
 
-devlist.h: pci.ids gen-devlist
-	./gen-devlist <pci.ids >devlist.h
+devlist.h classlist.h: pci.ids gen-devlist
+	./gen-devlist <pci.ids
 
 gen-devlist: gen-devlist.c
 	$(HOSTCC) $(HOSTCFLAGS) -o gen-devlist gen-devlist.c
