@@ -34,8 +34,12 @@
  *   YIELD	parport_yield_blocking
  *   WCTLONIRQ	on interrupt, set control lines
  *   CLRIRQ	clear (and return) interrupt count
+ *   SETTIME	sets device timeout (struct timeval)
+ *   GETTIME    gets device timeout (struct timeval)
  * read/write	read or write in current IEEE 1284 protocol
  * select	wait for interrupt (in readfds)
+ *
+ * Added SETTIME/GETTIME ioctl, Fred Barnes 1999.
  */
 
 #include <linux/module.h>
@@ -73,6 +77,9 @@ struct pp_struct {
 #define PP_INTERRUPT_TIMEOUT (10 * HZ) /* 10s */
 #define PP_BUFFER_SIZE 256
 #define PARDEVICE_MAX 8
+
+/* ROUND_UP macro from fs/select.c */
+#define ROUND_UP(x,y) (((x)+(y)-1)/(y))
 
 static inline void enable_irq (struct pp_struct *pp)
 {
@@ -356,6 +363,8 @@ static int pp_ioctl(struct inode *inode, struct file *file,
 		unsigned char mask;
 		int mode;
 		int ret;
+		struct timeval par_timeout;
+		long to_jiffies;
 
 	case PPRSTATUS:
 		reg = parport_read_status (port);
@@ -449,6 +458,33 @@ static int pp_ioctl(struct inode *inode, struct file *file,
 		if (copy_to_user ((int *) arg, &ret, sizeof (ret)))
 			return -EFAULT;
 		atomic_sub (ret, &pp->irqc);
+		return 0;
+
+	case PPSETTIME:
+		if (copy_from_user (&par_timeout, (struct timeval *)arg,
+				    sizeof(struct timeval))) {
+			return -EFAULT;
+		}
+		/* Convert to jiffies, place in pp->pdev->timeout */
+		if ((par_timeout.tv_sec < 0) || (par_timeout.tv_usec < 0)) {
+			return -EINVAL;
+		}
+		to_jiffies = ROUND_UP(par_timeout.tv_usec, 1000000/HZ);
+		to_jiffies += par_timeout.tv_sec * (long)HZ;
+		if (to_jiffies <= 0) {
+			return -EINVAL;
+		}
+		pp->pdev->timeout = to_jiffies;
+		return 0;
+
+	case PPGETTIME:
+		to_jiffies = pp->pdev->timeout;
+		par_timeout.tv_sec = to_jiffies / HZ;
+		par_timeout.tv_usec = (to_jiffies % (long)HZ) * (1000000/HZ);
+		if (copy_to_user ((struct timeval *)arg, &par_timeout,
+				  sizeof(struct timeval))) {
+			return -EFAULT;
+		}
 		return 0;
 
 	default:

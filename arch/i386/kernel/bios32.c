@@ -1053,14 +1053,17 @@ static void __init pci_fixup_ide_bases(struct pci_dev *d)
 	 */
 	if ((d->class >> 8) != PCI_CLASS_STORAGE_IDE)
 		return;
+/* This just can't be right even with the fixes */
+#if 0
 	DBG("PCI: IDE base address fixup for %s\n", d->slot_name);
-	for(i=0; i<4; i += 2) {
+	for(i=0; i<4; i++) {
 		struct resource *r = &d->resource[i];
-		if (r->start) {
+		if ((r->start & ~0x80) == 0x374) {
 			r->start += 2;
 			r->end = r->start;
 		}
 	}
+#endif
 }
 
 struct pci_fixup pcibios_fixups[] = {

@@ -10,6 +10,7 @@
  * as published by the Free Software Foundation; either version
  * 2 of the License, or (at your option) any later version.
  *
+ * Added PPGETTIME/PPSETTIME, Fred Barnes, 1999
  */
 
 #define PP_MAJOR	99
@@ -72,3 +73,9 @@ struct ppdev_frob_struct {
 
 /* Set the IEEE 1284 phase that we're in (e.g. IEEE1284_PH_FWD_IDLE) */
 #define PPSETPHASE	_IOW(PP_IOCTL, 0x94, int)
+
+/* Set and get port timeout (struct timeval's) */
+#define PPGETTIME	_IOW(PP_IOCTL, 0x95, struct timeval)
+#define PPSETTIME	_IOR(PP_IOCTL, 0x96, struct timeval)
+
+

@@ -25,7 +25,7 @@ ifdef CONFIG_PROC_FS
 L_OBJS   += proc.o
 endif
 
-L_OBJS   += compat.o quirks.o names.o
+L_OBJS   += compat.o quirks.o names.o helper.o
 
 ifndef CONFIG_X86
 L_OBJS   += syscall.o setup.o

@@ -1604,7 +1604,8 @@ struct parport *__maybe_init parport_pc_probe_port (unsigned long int base,
 		p->dma = PARPORT_DMA_NONE;
 
 #ifdef CONFIG_PARPORT_PC_FIFO
-	if (priv->fifo_depth > 0 && p->irq != PARPORT_IRQ_NONE) {
+	if (p->dma != PARPORT_DMA_NOFIFO &&
+	    priv->fifo_depth > 0 && p->irq != PARPORT_IRQ_NONE) {
 		p->ops->compat_write_data = parport_pc_compat_write_block_pio;
 #ifdef CONFIG_PARPORT_1284
 		p->ops->ecp_write_data = parport_pc_ecp_write_block_pio;

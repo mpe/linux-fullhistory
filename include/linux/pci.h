@@ -471,6 +471,28 @@ void pci_fixup_irqs(u8 (*)(struct pci_dev *, u8 *),
 		    int (*)(struct pci_dev *, u8, u8));
 
 /*
+ * simple PCI probing for drivers
+ */
+ 
+struct pci_simple_probe_entry;
+typedef int (*pci_simple_probe_callback) (struct pci_dev *dev, int match_num,
+				   	  const struct pci_simple_probe_entry *ent,
+					  void *drvr_data);
+
+struct pci_simple_probe_entry {
+	unsigned short vendor;	/* vendor id, PCI_ANY_ID, or 0 for last entry */
+	unsigned short device;	/* device id, PCI_ANY_ID, or 0 for last entry */
+	unsigned short subsys_vendor; /* subsystem vendor id, 0 for don't care */
+	unsigned short subsys_device; /* subsystem device id, 0 for don't care */
+	void *dev_data;		/* driver-private, entry-specific data */
+};
+
+int pci_simple_probe (struct pci_simple_probe_entry *list, size_t match_limit,
+		      pci_simple_probe_callback cb, void *drvr_data);
+
+
+
+/*
  *  If the system does not have PCI, clearly these return errors.  Define
  *  these as simple inline functions to avoid hair in drivers.
  */
@@ -505,6 +527,9 @@ unsigned int ss_vendor, unsigned int ss_device, struct pci_dev *from)
 extern inline void pci_set_master(struct pci_dev *dev) 
 { return; }
 
+extern inline int pci_simple_probe (struct pci_simple_probe_entry *list, size_t match_limit,
+		      pci_simple_probe_callback cb, void *drvr_data)
+{ return 0; }
 
 #endif /* !CONFIG_PCI */
 

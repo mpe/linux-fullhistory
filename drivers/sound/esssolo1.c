@@ -58,6 +58,8 @@
  *                     replaced current->state = x with set_current_state(x)
  *    03.09.99   0.8   change read semantics for MIDI to match
  *                     OSS more closely; remove possible wakeup race
+ *    07.10.99   0.9   Fix initialization; complain if sequencer writes time out
+ *                     Revised resource grabbing for the FM synthesizer
  *
  */
 
@@ -108,6 +110,7 @@
 #define MPUBASE_EXTENT            4
 #define GPBASE_EXTENT             4
 
+#define FMSYNTH_EXTENT            4
 
 /* MIDI buffer sizes */
 
@@ -207,7 +210,7 @@ extern inline void write_seq(struct solo1_state *s, unsigned char data)
 {
         int i;
 	unsigned long flags;
-        
+
 	/* the __cli stunt is to send the data within the command window */
         for (i = 0; i < 0xffff; i++) {
 		__save_flags(flags);
@@ -219,6 +222,8 @@ extern inline void write_seq(struct solo1_state *s, unsigned char data)
                 }
 		__restore_flags(flags);
 	}
+	printk(KERN_ERR "esssolo1: write_seq timeout\n");
+	outb(data, s->sbbase+0xc);
 }
 
 extern inline int read_seq(struct solo1_state *s, unsigned char *data)
@@ -232,6 +237,7 @@ extern inline int read_seq(struct solo1_state *s, unsigned char *data)
                         *data = inb(s->sbbase+0xa);
                         return 1;
                 }
+	printk(KERN_ERR "esssolo1: read_seq timeout\n");
         return 0;
 }
 
@@ -1993,6 +1999,12 @@ static int solo1_dmfm_open(struct inode *inode, struct file *file)
 			return -ERESTARTSYS;
 		down(&s->open_sem);
 	}
+	if (check_region(s->sbbase, FMSYNTH_EXTENT)) {
+		up(&s->open_sem);
+		printk(KERN_ERR "solo1: FM synth io ports in use, opl3 loaded?\n");
+		return -EBUSY;
+	}
+	request_region(s->sbbase, FMSYNTH_EXTENT, "ESS Solo1");
 	/* init the stuff */
 	outb(1, s->sbbase);
 	outb(0x20, s->sbbase+1); /* enable waveforms */
@@ -2020,6 +2032,7 @@ static int solo1_dmfm_release(struct inode *inode, struct file *file)
 		outb(regb, s->sbbase+2);
 		outb(0, s->sbbase+3);
 	}
+	release_region(s->sbbase, FMSYNTH_EXTENT);
 	up(&s->open_sem);
 	wake_up(&s->open_wait);
 	MOD_DEC_USE_COUNT;
@@ -2113,14 +2126,14 @@ static int __init init_solo1(void)
 		s->gpbase = RSRCADDRESS(pcidev, 4);
 		s->irq = pcidev->irq;
 		if (check_region(s->iobase, IOBASE_EXTENT) ||
-		    check_region(s->sbbase+4, SBBASE_EXTENT-4) ||
+		    check_region(s->sbbase+FMSYNTH_EXTENT, SBBASE_EXTENT-FMSYNTH_EXTENT) ||
 		    check_region(s->ddmabase, DDMABASE_EXTENT) ||
 		    check_region(s->mpubase, MPUBASE_EXTENT)) {
 			printk(KERN_ERR "solo1: io ports in use\n");
 			goto err_region;
 		}
 		request_region(s->iobase, IOBASE_EXTENT, "ESS Solo1");
-		request_region(s->sbbase+4, SBBASE_EXTENT-4, "ESS Solo1");  /* allow OPL3 synth module */
+		request_region(s->sbbase+FMSYNTH_EXTENT, SBBASE_EXTENT-FMSYNTH_EXTENT, "ESS Solo1");
 		request_region(s->ddmabase, DDMABASE_EXTENT, "ESS Solo1");
 		request_region(s->mpubase, MPUBASE_EXTENT, "ESS Solo1");
 		if (request_irq(s->irq, solo1_interrupt, SA_SHIRQ, "ESS Solo1", s)) {
@@ -2147,6 +2160,10 @@ static int __init init_solo1(void)
 		if ((s->dev_dmfm = register_sound_special(&solo1_dmfm_fops, 15 /* ?? */)) < 0)
 			goto err_dev4;
 		/* initialize the chips */
+		if (!reset_ctrl(s)) {
+			printk(KERN_ERR "esssolo1: cannot reset controller\n");
+			goto err;
+		}
 		outb(0xb0, s->iobase+7); /* enable A1, A2, MPU irq's */
 
 		/* initialize mixer regs */
@@ -2181,6 +2198,8 @@ static int __init init_solo1(void)
 		index++;
 		continue;
 
+	err:
+		unregister_sound_dsp(s->dev_dmfm);
 	err_dev4:
 		unregister_sound_dsp(s->dev_midi);
 	err_dev3:
@@ -2192,7 +2211,7 @@ static int __init init_solo1(void)
 		free_irq(s->irq, s);
 	err_irq:
 		release_region(s->iobase, IOBASE_EXTENT);
-		release_region(s->sbbase+4, SBBASE_EXTENT-4);
+		release_region(s->sbbase+FMSYNTH_EXTENT, SBBASE_EXTENT-FMSYNTH_EXTENT);
 		release_region(s->ddmabase, DDMABASE_EXTENT);
 		release_region(s->mpubase, MPUBASE_EXTENT);
 	err_region:
@@ -2222,7 +2241,7 @@ static void __exit cleanup_solo1(void)
 		pci_write_config_word(s->pcidev, 0x60, 0); /* turn off DDMA controller address space */
 		free_irq(s->irq, s);
 		release_region(s->iobase, IOBASE_EXTENT);
-		release_region(s->sbbase+4, SBBASE_EXTENT-4);
+		release_region(s->sbbase+FMSYNTH_EXTENT, SBBASE_EXTENT-FMSYNTH_EXTENT);
 		release_region(s->ddmabase, DDMABASE_EXTENT);
 		release_region(s->mpubase, MPUBASE_EXTENT);
 		unregister_sound_dsp(s->dev_audio);
