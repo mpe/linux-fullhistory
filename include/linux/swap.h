@@ -12,6 +12,8 @@
 #define SWP_USED	1
 #define SWP_WRITEOK	3
 
+#define SWAP_CLUSTER_MAX 32
+
 struct swap_info_struct {
 	unsigned int flags;
 	kdev_t swap_device;
@@ -20,6 +22,8 @@ struct swap_info_struct {
 	unsigned char * swap_lockmap;
 	int lowest_bit;
 	int highest_bit;
+	int cluster_next;
+	int cluster_nr;
 	int prio;			/* swap priority */
 	int pages;
 	unsigned long max;
@@ -28,6 +32,7 @@ struct swap_info_struct {
 
 extern int nr_swap_pages;
 extern int nr_free_pages;
+extern int nr_async_pages;
 extern int min_free_pages;
 extern int free_pages_low;
 extern int free_pages_high;
@@ -40,17 +45,17 @@ struct sysinfo;
 /* linux/ipc/shm.c */
 extern int shm_swap (int, unsigned long);
 
-/* linux/mm/swap_clock.c */
-extern int try_to_free_page(int, unsigned long);
+/* linux/mm/vmscan.c */
+extern int try_to_free_page(int, unsigned long, int);
 
-/* linux/mm/swap_io.c */
-extern void rw_swap_page(int, unsigned long, char *);
+/* linux/mm/page_io.c */
+extern void rw_swap_page(int, unsigned long, char *, int);
 #define read_swap_page(nr,buf) \
-	rw_swap_page(READ,(nr),(buf))
+	rw_swap_page(READ,(nr),(buf),1)
 #define write_swap_page(nr,buf) \
-	rw_swap_page(WRITE,(nr),(buf))
+	rw_swap_page(WRITE,(nr),(buf),1)
 
-/* linux/mm/swap_mman.c */
+/* linux/mm/page_alloc.c */
 extern void swap_in(struct task_struct *, struct vm_area_struct *,
 		    pte_t *, unsigned long, int);
 

@@ -436,16 +436,19 @@ static void make_request(int major,int rw, struct buffer_head * bh)
 	add_request(major+blk_dev,req);
 }
 
+/*
+ * Swap partitions are now read via brw_page.  ll_rw_page is an
+ * asynchronous function now --- we must call wait_on_page afterwards
+ * if synchronous IO is required.  
+ */
 void ll_rw_page(int rw, kdev_t dev, unsigned long page, char * buffer)
 {
-	struct request * req;
 	unsigned int major = MAJOR(dev);
-	unsigned long sector = page * (PAGE_SIZE / 512);
-	struct semaphore sem = MUTEX_LOCKED;
-
+	int block = page;
+	
 	if (major >= MAX_BLKDEV || !(blk_dev[major].request_fn)) {
 		printk("Trying to read nonexistent block-device %s (%ld)\n",
-		       kdevname(dev), sector);
+		       kdevname(dev), page);
 		return;
 	}
 	switch (rw) {
@@ -461,19 +464,10 @@ void ll_rw_page(int rw, kdev_t dev, unsigned long page, char * buffer)
 		default:
 			panic("ll_rw_page: bad block dev cmd, must be R/W");
 	}
-	req = get_request_wait(NR_REQUEST, dev);
-/* fill up the request-info, and add it to the queue */
-	req->cmd = rw;
-	req->errors = 0;
-	req->sector = sector;
-	req->nr_sectors = PAGE_SIZE / 512;
-	req->current_nr_sectors = PAGE_SIZE / 512;
-	req->buffer = buffer;
-	req->sem = &sem;
-	req->bh = NULL;
-	req->next = NULL;
-	add_request(major+blk_dev,req);
-	down(&sem);
+	if (mem_map[MAP_NR(buffer)].locked)
+		panic ("ll_rw_page: page already locked");
+	mem_map[MAP_NR(buffer)].locked = 1;
+	brw_page(rw, (unsigned long) buffer, dev, &block, PAGE_SIZE, 0);
 }
 
 /* This function can be used to request a number of buffers from a block

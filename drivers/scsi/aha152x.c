@@ -20,9 +20,12 @@
  * General Public License for more details.
  *
  *
- * $Id: aha152x.c,v 1.13 1996/01/09 02:15:53 fischer Exp $
+ * $Id: aha152x.c,v 1.14 1996/01/17 15:11:20 fischer Exp fischer $
  *
  * $Log: aha152x.c,v $
+ * Revision 1.14  1996/01/17  15:11:20  fischer
+ * - fixed lockup in MESSAGE IN phase after reconnection
+ *
  * Revision 1.13  1996/01/09  02:15:53  fischer
  * - some cleanups
  * - moved request_irq behind controller initialization
@@ -1402,8 +1405,6 @@ void aha152x_intr(int irqno, struct pt_regs * regs)
           aha152x_panic(shpnt, "unknown lun");
 	}
 
-      make_acklow(shpnt);
-      getphase(shpnt);
 
 #if defined(DEBUG_QUEUES)
       if(HOSTDATA(shpnt)->debug & debug_queues)
@@ -1430,6 +1431,8 @@ void aha152x_intr(int irqno, struct pt_regs * regs)
       CURRENT_SC->SCp.phase &= ~disconnected;
       restore_flags(flags);
 
+      make_acklow(shpnt);
+      if(getphase(shpnt)!=P_MSGI) {
       SETPORT(SIMODE0, 0);
       SETPORT(SIMODE1, ENPHASEMIS|ENBUSFREE);
 #if defined(DEBUG_RACE)
@@ -1437,6 +1440,7 @@ void aha152x_intr(int irqno, struct pt_regs * regs)
 #endif
       SETBITS(DMACNTRL0, INTEN);
       return;
+    }
     }
   
   /* Check, if we aren't busy with a command */
@@ -1946,6 +1950,7 @@ void aha152x_intr(int irqno, struct pt_regs * regs)
 	    printk("d+, ");
 #endif
             append_SC(&DISCONNECTED_SC, CURRENT_SC);
+            CURRENT_SC->SCp.phase |= 1<<16;
             CURRENT_SC = NULL;
 	  restore_flags(flags);
 

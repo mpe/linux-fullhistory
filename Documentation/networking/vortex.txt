@@ -1,0 +1,35 @@
+This document describes the usage and errata of the 3Com "Vortex" device
+driver for Linux.
+
+This driver supports the following hardware:
+	3c590, 3c592, 3c595, 3c597
+
+When loaded as a module the following variables may be set:
+ name	 type	description
+ debug	 int	The debug message level, 0 (no messages) to 6 (wordy).
+ options int[]	The media type override and card operation settings
+		(See list below.)
+
+An example of loading the vortex module is
+	insmod 3c59x.o debug=1 options=0,,12
+This sets the debug message level to minimal messages, sets the first card to
+the 10baseT transceiver, the second to the EEPROM-set transceiver, and the
+third card to operate in full-duplex mode using its 100baseTx transceiver.
+(Note: card ordering is set by the PCI BIOS.)
+
+Possible media type settings
+	0	10baseT
+	1	10Mbs AUI
+	2	undefined
+	3	10base2 (BNC)
+	4	100base-TX
+	5	100base-FX
+	6	MII (not yet available)
+	7	<Use default setting>
+	
+	8	Full-duplex bit
+		8 10baseT full-duplex
+		12 100baseTx full-duplex 
+	16	Bus-master enable bit (experimental use only!)
+
+Details of the device driver implementation are at the top of the source file.

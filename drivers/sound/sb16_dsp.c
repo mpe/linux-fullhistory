@@ -410,8 +410,8 @@ sb16_dsp_prepare_for_input (int dev, int bsize, int bcount)
   audio_devs[my_dev]->dmachan1 = dsp_16bit ? dma16 : dma8;
   dsp_count = 0;
   dsp_cleanup ();
-  sb_dsp_command (0xd0);	/* Halt DMA until trigger() is called */
   trigger_bits = 0;
+  sb_dsp_command (0xd4);
   return 0;
 }
 
@@ -421,20 +421,14 @@ sb16_dsp_prepare_for_output (int dev, int bsize, int bcount)
   audio_devs[my_dev]->dmachan1 = dsp_16bit ? dma16 : dma8;
   dsp_count = 0;
   dsp_cleanup ();
-  sb_dsp_command (0xd0);	/* Halt DMA until trigger() is called */
   trigger_bits = 0;
+  sb_dsp_command (0xd4);
   return 0;
 }
 
 static void
 sb16_dsp_trigger (int dev, int bits)
 {
-  if (bits != 0)
-    bits = 1;
-
-  if (bits == trigger_bits)	/* No change */
-    return;
-
   trigger_bits = bits;
 
   if (!bits)

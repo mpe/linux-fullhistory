@@ -42,6 +42,10 @@ int min_free_pages = 20;
 int free_pages_low = 30;
 int free_pages_high = 40;
 
+/* We track the number of pages currently being asynchronously swapped
+   out, so that we don't try to swap TOO many pages out at once */
+int nr_async_pages = 0;
+
 /*
  * Constants for the page aging mechanism: the maximum age (actually,
  * the maximum "youthfulness"); the quanta by which pages rejuvinate

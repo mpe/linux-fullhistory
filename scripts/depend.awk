@@ -37,6 +37,7 @@ BEGIN{
 	hasdep=0
 	hasconfig=0
 	needsconfig=0
+	incomment=0
 	if(!(TOPDIR=ENVIRON["TOPDIR"])) {
 		print "Environment variable TOPDIR is not set"
 		exit 1
@@ -45,6 +46,30 @@ BEGIN{
 	for(path in parray) {
 	    sub("^-I","",parray[path])
 	    sub("[/ ]*$","",parray[path])
+	}
+}
+
+# eliminate comments
+{
+    # remove all comments fully contained on a single line
+	gsub("\\/\\*.*\\*\\/", "")
+	if (incomment) {
+		if ($0 ~ /\*\//) {
+			incomment = 0;
+			gsub(".*\\*\\/", "")
+		} else {
+			next
+		}
+	} else {
+		# start of multi-line comment
+		if ($0 ~ /\/\*/)
+		{
+			incomment = 1;
+			sub("\\/\\*.*", "")
+		} else if ($0 ~ /\*\//) {
+			incomment = 0;
+			sub(".*\\*\\/", "")
+		}
 	}
 }
 
@@ -64,6 +89,7 @@ BEGIN{
 		hasdep=0
 		hasconfig=0
 		needsconfig=0
+		incomment=0
 		cmd=""
 		LASTFILE=FILENAME
 		depname=FILENAME

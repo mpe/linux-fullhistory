@@ -77,12 +77,9 @@ extern unsigned long video_mem_term;
  * of the VC's backing store, or the "shadow screen" memory where the screen
  * contents are kept, as the TGA frame buffer is *not* char/attr cells.
  *
- * The "(unsigned long) addr < video_mem_term" tests for an Alpha kernel
- *  virtual address less than the end of the "shadow scrren" memory. This
- *  indicates we really want to write to the screen, so, we do... :-)
- *
- * NOTE: we must guarantee that video_mem_term is less than *any* VC's backing
- * store; to do that, we must allocate it earlier than any VC's are done.
+ * We must test for an Alpha kernel virtual address that falls within
+ *  the "shadow screen" memory. This condition indicates we really want 
+ *  to write to the screen, so, we do... :-)
  *
  * NOTE also: there's only *TWO* operations: to put/get a character/attribute.
  *  All the others needed by VGA support go away, as Not Applicable for TGA.
@@ -94,7 +91,8 @@ static inline void scr_writew(unsigned short val, unsigned short * addr)
 	 * if so, then render the char/attr onto the real screen.
         */
         *addr = val;
-        if ((unsigned long)addr < video_mem_term) {
+        if ((unsigned long)addr < video_mem_term &&
+	    (unsigned long)addr >= video_mem_base) {
                 tga_blitc(val, (unsigned long) addr);
         }
 }

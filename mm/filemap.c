@@ -168,8 +168,7 @@ void update_vm_cache(struct inode * inode, unsigned long pos, const char * buf, 
 	if (page) {
 		unsigned long addr;
 
-		if (!page->uptodate)
-			sleep_on(&page->wait);
+		wait_on_page(page);
 		addr = page_address(page);
 		memcpy((void *) ((pos & ~PAGE_MASK) + addr), buf, count);
 		free_page(addr);

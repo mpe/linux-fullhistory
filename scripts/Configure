@@ -263,7 +263,8 @@ function int () {
         while :; do
           readln "$1 ($2) [$def] " "$def"
           case "$ans" in
-             [1-9] | [1-9][0-9] | [1-9][0-9][0-9] | [1-9][0-9][0-9][0-9] ) 
+             -1 | [1-9] | [1-9][0-9] |\
+             [1-9][0-9][0-9] | [1-9][0-9][0-9][0-9] | [1-9][0-9][0-9][0-9][0-9]) 
                  define_int "$2" "$ans"
                  break;;
              * ) help "$2"
@@ -278,7 +279,7 @@ function int () {
 #
 function define_hex () {
 	echo "$1=$2" >>$CONFIG
-	echo "#define $1 0x$2" >>$CONFIG_H
+	echo "#define $1 0x${2#*[x,X]}" >>$CONFIG_H
 	eval "$1=$2"
 }
 
@@ -289,10 +290,15 @@ function define_hex () {
 #
 function hex () {
 	def=$(eval echo "\${$2:-$3}")
+	def=${def#*[x,X]}
         while :; do
           readln "$1 ($2) [$def] " "$def"
+          ans=${ans#*[x,X]}
           case "$ans" in
-             [1-9] | [1-9][0-9] | [1-9][0-9][0-9] | [1-9][0-9][0-9][0-9] ) 
+             [0-9,a-f,A-F] |\
+             [0-9,a-f,A-F][0-9,a-f,A-F] |\
+             [0-9,a-f,A-F][0-9,a-f,A-F][0-9,a-f,A-F] |\
+             [0-9,a-f,A-F][0-9,a-f,A-F][0-9,a-f,A-F][0-9,a-f,A-F])\
                  define_hex "$2" "$ans"
                  break;;
              * ) help "$2"

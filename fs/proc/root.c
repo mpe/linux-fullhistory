@@ -297,11 +297,7 @@ void proc_root_init(void)
 		64, &proc_self_inode_operations,
 	});
 	proc_register(&proc_root, &proc_net);
-
-#ifdef CONFIG_SCSI
 	proc_register(&proc_root, &proc_scsi);
-#endif
-
 	proc_register(&proc_root, &proc_sys_root);
 
 #ifdef CONFIG_DEBUG_MALLOC

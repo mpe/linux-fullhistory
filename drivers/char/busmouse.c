@@ -65,7 +65,6 @@ static void mouse_interrupt(int irq, struct pt_regs *regs)
 	char dx, dy;
 	unsigned char buttons;
 
-	MSE_INT_OFF();
 	outb(MSE_READ_X_LOW, MSE_CONTROL_PORT);
 	dx = (inb(MSE_DATA_PORT) & 0xf);
 	outb(MSE_READ_X_HIGH, MSE_CONTROL_PORT);
@@ -171,6 +170,7 @@ static int read_mouse(struct inode * inode, struct file * file, char * buffer, i
 	int dx;
 	int dy;
 	unsigned char buttons; 
+	/* long flags; */
 
 	if (count < 3)
 		return -EINVAL;
@@ -186,7 +186,8 @@ static int read_mouse(struct inode * inode, struct file * file, char * buffer, i
 	 * so paging in put_user() does not effect mouse tracking.
 	 */
 
-	MSE_INT_OFF();
+	/* save_flags(flags); cli(); */
+	disable_irq(mouse_irq);
 	dx = mouse.dx;
 	dy = mouse.dy;
 	if (dx < -127)
@@ -201,7 +202,8 @@ static int read_mouse(struct inode * inode, struct file * file, char * buffer, i
 	mouse.dx -= dx;
 	mouse.dy -= dy;
 	mouse.ready = 0;
-	MSE_INT_ON();
+	enable_irq(mouse_irq);
+	/* restore_flags(flags); */
 
 	put_user(buttons | 0x80, buffer);
 	put_user((char)dx, buffer + 1);

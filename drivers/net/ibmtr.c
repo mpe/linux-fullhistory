@@ -325,7 +325,7 @@ int tok_probe(struct device *dev)
       if (intr==2) irq=10;
       if (intr==3) irq=11;
       while(!(ti->mmio + ACA_OFFSET + ACA_RW + RRR_EVEN));
-      ti->sram=(unsigned char *)((unsigned long)(ti->mmio + ACA_OFFSET + ACA_RW + RRR_EVEN) <<12);
+      ti->sram=(unsigned char *)((unsigned long)(*(ti->mmio + ACA_OFFSET + ACA_RW + RRR_EVEN)) <<12);
       ti->global_int_enable=PIOaddr+ADAPTINTREL;
       break;
       

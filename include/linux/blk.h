@@ -13,14 +13,14 @@
 #define NR_REQUEST	64
 
 /*
- * This is used in the elevator algorithm: Note that
- * reads always go before writes. This is natural: reads
- * are much more time-critical than writes.
+ * This is used in the elevator algorithm.  We don't prioritise reads
+ * over writes any more --- although reads are more time-critical than
+ * writes, by treating them equally we increase filesystem throughput.
+ * This turns out to give better overall performance.  -- sct
  */
 #define IN_ORDER(s1,s2) \
-((s1)->cmd < (s2)->cmd || ((s1)->cmd == (s2)->cmd && \
 ((s1)->rq_dev < (s2)->rq_dev || (((s1)->rq_dev == (s2)->rq_dev && \
-(s1)->sector < (s2)->sector)))))
+(s1)->sector < (s2)->sector)))
 
 /*
  * These will have to be changed to be aware of different buffer

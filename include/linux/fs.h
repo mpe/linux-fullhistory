@@ -598,8 +598,8 @@ extern struct buffer_head * breada(kdev_t dev,int block, int size,
 extern int generic_readpage(struct inode *, struct page *);
 extern int generic_file_read(struct inode *, struct file *, char *, int);
 extern int generic_mmap(struct inode *, struct file *, struct vm_area_struct *);
+extern int brw_page(int, unsigned long, kdev_t, int [], int, int);
 
-extern void bwrite_page(unsigned long addr,kdev_t dev,int b[],int size);
 extern void put_super(kdev_t dev);
 unsigned long generate_cluster(kdev_t dev, int b[], int size);
 extern kdev_t ROOT_DEV;

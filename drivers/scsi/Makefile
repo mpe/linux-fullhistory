@@ -76,9 +76,9 @@ endif
 ifeq ($(CONFIG_SCSI_ADVANSYS),y)
 L_OBJS += advansys.o
 else
-	ifeq ($(CONFIG_SCSI_ADVANSYS),m)
-	M_OBJS += advansys.o
-	endif
+  ifeq ($(CONFIG_SCSI_ADVANSYS),m)
+  M_OBJS += advansys.o
+  endif
 endif
 
 ifeq ($(CONFIG_SCSI_QLOGIC),y)
@@ -119,6 +119,10 @@ else
   ifeq ($(CONFIG_SCSI_AIC7XXX),m)
   M_OBJS += aic7xxx.o
   endif
+endif
+
+ifeq ($(CONFIG_SCSI_AM53C974),y)
+L_OBJS += AM53C974.o
 endif
 
 ifeq ($(CONFIG_SCSI_BUSLOGIC),y)

@@ -181,7 +181,7 @@ repeat:
 		return 0;
 	}
 	restore_flags(flags);
-	if (priority != GFP_BUFFER && try_to_free_page(priority, limit))
+	if (priority != GFP_BUFFER && try_to_free_page(priority, limit, 1))
 		goto repeat;
 	return 0;
 }

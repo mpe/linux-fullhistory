@@ -5,7 +5,7 @@
  *
  *  Swap reorganised 29.12.95, Stephen Tweedie.
  *  kswapd added: 7.1.96  sct
- *  Version: $Id: vmscan.c,v 1.3.2.3 1996/01/17 02:43:11 linux Exp $
+ *  Version: $Id: vmscan.c,v 1.4.2.2 1996/01/20 18:22:47 linux Exp $
  */
 
 #include <linux/mm.h>
@@ -68,7 +68,7 @@ static void init_swap_timer(void);
  * have died while we slept).
  */
 static inline int try_to_swap_out(struct task_struct * tsk, struct vm_area_struct* vma,
-	unsigned long address, pte_t * page_table, unsigned long limit)
+	unsigned long address, pte_t * page_table, unsigned long limit, int wait)
 {
 	pte_t pte;
 	unsigned long entry;
@@ -114,7 +114,7 @@ static inline int try_to_swap_out(struct task_struct * tsk, struct vm_area_struc
 			set_pte(page_table, __pte(entry));
 			invalidate_page(vma, address);
 			tsk->nswap++;
-			write_swap_page(entry, (char *) page);
+			rw_swap_page(WRITE, entry, (char *) page, wait);
 		}
 		free_page(page);
 		return 1;	/* we slept: the process may not exist any more */
@@ -154,7 +154,7 @@ static inline int try_to_swap_out(struct task_struct * tsk, struct vm_area_struc
  */
 
 static inline int swap_out_pmd(struct task_struct * tsk, struct vm_area_struct * vma,
-	pmd_t *dir, unsigned long address, unsigned long end, unsigned long limit)
+	pmd_t *dir, unsigned long address, unsigned long end, unsigned long limit, int wait)
 {
 	pte_t * pte;
 	unsigned long pmd_end;
@@ -176,7 +176,7 @@ static inline int swap_out_pmd(struct task_struct * tsk, struct vm_area_struct *
 	do {
 		int result;
 		tsk->swap_address = address + PAGE_SIZE;
-		result = try_to_swap_out(tsk, vma, address, pte, limit);
+		result = try_to_swap_out(tsk, vma, address, pte, limit, wait);
 		if (result)
 			return result;
 		address += PAGE_SIZE;
@@ -186,7 +186,7 @@ static inline int swap_out_pmd(struct task_struct * tsk, struct vm_area_struct *
 }
 
 static inline int swap_out_pgd(struct task_struct * tsk, struct vm_area_struct * vma,
-	pgd_t *dir, unsigned long address, unsigned long end, unsigned long limit)
+	pgd_t *dir, unsigned long address, unsigned long end, unsigned long limit, int wait)
 {
 	pmd_t * pmd;
 	unsigned long pgd_end;
@@ -206,7 +206,7 @@ static inline int swap_out_pgd(struct task_struct * tsk, struct vm_area_struct *
 		end = pgd_end;
 	
 	do {
-		int result = swap_out_pmd(tsk, vma, pmd, address, end, limit);
+		int result = swap_out_pmd(tsk, vma, pmd, address, end, limit, wait);
 		if (result)
 			return result;
 		address = (address + PMD_SIZE) & PMD_MASK;
@@ -216,7 +216,7 @@ static inline int swap_out_pgd(struct task_struct * tsk, struct vm_area_struct *
 }
 
 static int swap_out_vma(struct task_struct * tsk, struct vm_area_struct * vma,
-	pgd_t *pgdir, unsigned long start, unsigned long limit)
+	pgd_t *pgdir, unsigned long start, unsigned long limit, int wait)
 {
 	unsigned long end;
 
@@ -227,7 +227,7 @@ static int swap_out_vma(struct task_struct * tsk, struct vm_area_struct * vma,
 
 	end = vma->vm_end;
 	while (start < end) {
-		int result = swap_out_pgd(tsk, vma, pgdir, start, end, limit);
+		int result = swap_out_pgd(tsk, vma, pgdir, start, end, limit, wait);
 		if (result)
 			return result;
 		start = (start + PGDIR_SIZE) & PGDIR_MASK;
@@ -236,7 +236,7 @@ static int swap_out_vma(struct task_struct * tsk, struct vm_area_struct * vma,
 	return 0;
 }
 
-static int swap_out_process(struct task_struct * p, unsigned long limit)
+static int swap_out_process(struct task_struct * p, unsigned long limit, int wait)
 {
 	unsigned long address;
 	struct vm_area_struct* vma;
@@ -257,7 +257,7 @@ static int swap_out_process(struct task_struct * p, unsigned long limit)
 		address = vma->vm_start;
 
 	for (;;) {
-		int result = swap_out_vma(p, vma, pgd_offset(p->mm, address), address, limit);
+		int result = swap_out_vma(p, vma, pgd_offset(p->mm, address), address, limit, wait);
 		if (result)
 			return result;
 		vma = vma->vm_next;
@@ -269,7 +269,7 @@ static int swap_out_process(struct task_struct * p, unsigned long limit)
 	return 0;
 }
 
-static int swap_out(unsigned int priority, unsigned long limit)
+static int swap_out(unsigned int priority, unsigned long limit, int wait)
 {
 	static int swap_task;
 	int loop, counter;
@@ -308,7 +308,7 @@ static int swap_out(unsigned int priority, unsigned long limit)
 		}
 		if (!--p->swap_cnt)
 			swap_task++;
-		switch (swap_out_process(p, limit)) {
+		switch (swap_out_process(p, limit, wait)) {
 			case 0:
 				if (p->swap_cnt)
 					swap_task++;
@@ -327,7 +327,7 @@ static int swap_out(unsigned int priority, unsigned long limit)
  * to be.  This works out OK, because we now do proper aging on page
  * contents. 
  */
-int try_to_free_page(int priority, unsigned long limit)
+int try_to_free_page(int priority, unsigned long limit, int wait)
 {
 	static int state = 0;
 	int i=6;
@@ -343,7 +343,7 @@ int try_to_free_page(int priority, unsigned long limit)
 				return 1;
 			state = 2;
 		default:
-			if (swap_out(i, limit))
+			if (swap_out(i, limit, wait))
 				return 1;
 			state = 0;
 		} while(i--);
@@ -359,7 +359,7 @@ int try_to_free_page(int priority, unsigned long limit)
 int kswapd(void *unused)
 {
 	int i;
-	char *revision="$Revision: 1.3.2.3 $", *s, *e;
+	char *revision="$Revision: 1.4.2.2 $", *s, *e;
 	
 	current->session = 1;
 	current->pgrp = 1;
@@ -400,7 +400,7 @@ int kswapd(void *unused)
 		swapstats.wakeups++;
 		/* Do the background pageout: */
 		for (i=0; i < kswapd_ctl.maxpages; i++)
-			try_to_free_page(GFP_KERNEL, ~0UL);
+			try_to_free_page(GFP_KERNEL, ~0UL, 0);
 	}
 }
 
@@ -410,8 +410,8 @@ int kswapd(void *unused)
 
 void swap_tick(void)
 {
-	if (nr_free_pages < free_pages_low ||
-	    (nr_free_pages < free_pages_high && 
+	if ((nr_free_pages + nr_async_pages) < free_pages_low ||
+	    ((nr_free_pages + nr_async_pages) < free_pages_high && 
 	     jiffies >= next_swap_jiffies)) {
 		if (!kswapd_awake && kswapd_ctl.maxpages > 0) {
 			wake_up(&kswapd_wait);

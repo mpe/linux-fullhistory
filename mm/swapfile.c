@@ -31,6 +31,46 @@ static struct {
 
 struct swap_info_struct swap_info[MAX_SWAPFILES];
 
+static inline int scan_swap_map(struct swap_info_struct *si)
+{
+	int offset;
+	/* 
+	 * We try to cluster swap pages by allocating them
+	 * sequentially in swap.  Once we've allocated
+	 * SWAP_CLUSTER_MAX pages this way, however, we resort to
+	 * first-free allocation, starting a new cluster.  This
+	 * prevents us from scattering swap pages all over the entire
+	 * swap partition, so that we reduce overall disk seek times
+	 * between swap pages.  -- sct */
+	if (si->cluster_nr) {
+		while (si->cluster_next <= si->highest_bit) {
+			offset = si->cluster_next++;
+			if (si->swap_map[offset])
+				continue;
+			if (test_bit(offset, si->swap_lockmap))
+				continue;
+			si->cluster_nr--;
+			goto got_page;
+		}
+	}
+	si->cluster_nr = SWAP_CLUSTER_MAX;
+	for (offset = si->lowest_bit; offset <= si->highest_bit ; offset++) {
+		if (si->swap_map[offset])
+			continue;
+		if (test_bit(offset, si->swap_lockmap))
+			continue;
+		si->lowest_bit = offset;
+got_page:
+		si->swap_map[offset] = 1;
+		nr_swap_pages--;
+		if (offset == si->highest_bit)
+			si->highest_bit--;
+		si->cluster_next = offset;
+		return offset;
+	}
+	return 0;
+}
+
 unsigned long get_swap_page(void)
 {
 	struct swap_info_struct * p;
@@ -44,26 +84,17 @@ unsigned long get_swap_page(void)
 	while (1) {
 		p = &swap_info[type];
 		if ((p->flags & SWP_WRITEOK) == SWP_WRITEOK) {
-			for (offset = p->lowest_bit; offset <= p->highest_bit ; offset++) {
-				if (p->swap_map[offset])
-				  continue;
-				if (test_bit(offset, p->swap_lockmap))
-				  continue;
-				p->swap_map[offset] = 1;
-				nr_swap_pages--;
-				if (offset == p->highest_bit)
-				  p->highest_bit--;
-				p->lowest_bit = offset;
-				entry = SWP_ENTRY(type,offset);
-
-				type = swap_info[type].next;
-				if (type < 0 || p->prio != swap_info[type].prio) {
-				    swap_list.next = swap_list.head;
-				} else {
-				    swap_list.next = type;
-				}
-				return entry;
+			offset = scan_swap_map(p);
+			if (!offset)
+				continue;
+			entry = SWP_ENTRY(type,offset);
+			type = swap_info[type].next;
+			if (type < 0 || p->prio != swap_info[type].prio) {
+				swap_list.next = swap_list.head;
+			} else {
+				swap_list.next = type;
 			}
+			return entry;
 		}
 		type = p->next;
 		if (!wrapped) {
@@ -380,6 +411,7 @@ asmlinkage int sys_swapon(const char * specialfile, int swap_flags)
 	p->swap_lockmap = NULL;
 	p->lowest_bit = 0;
 	p->highest_bit = 0;
+	p->cluster_nr = 0;
 	p->max = 1;
 	p->next = -1;
 	if (swap_flags & SWAP_FLAG_PREFER) {
@@ -399,7 +431,8 @@ asmlinkage int sys_swapon(const char * specialfile, int swap_flags)
 
 	if (S_ISBLK(swap_inode->i_mode)) {
 		p->swap_device = swap_inode->i_rdev;
-
+		set_blocksize(p->swap_device, PAGE_SIZE);
+		
 		filp.f_inode = swap_inode;
 		filp.f_mode = 3; /* read write */
 		error = blkdev_open(swap_inode, &filp);

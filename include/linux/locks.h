@@ -4,6 +4,9 @@
 #ifndef _LINUX_MM_H
 #include <linux/mm.h>
 #endif
+#ifndef _LINUX_PAGEMAP_H
+#include <linux/pagemap.h>
+#endif
 
 /*
  * Unlocked, temporary IO buffer_heads gets moved to the reuse_list
@@ -29,39 +32,8 @@ extern inline void lock_buffer(struct buffer_head * bh)
 		__wait_on_buffer(bh);
 }
 
-extern inline void unlock_buffer(struct buffer_head * bh)
-{
-	struct buffer_head *tmp = bh;
-	int page_locked = 0;
-	unsigned long flags;
-	
-	clear_bit(BH_Lock, &bh->b_state);
-	wake_up(&bh->b_wait);
-	do {
-		if (test_bit(BH_Lock, &tmp->b_state)) {
-			page_locked = 1;
-			break;
-		}
-		tmp=tmp->b_this_page;
-	} while (tmp && tmp != bh);
-	save_flags(flags);
-	if (!page_locked) {
-		struct page *page = mem_map + MAP_NR(bh->b_data);
-		page->locked = 0;
-		wake_up(&page->wait);
-		tmp = bh;
-		cli();
-		do {
-			if (test_bit(BH_FreeOnIO, &tmp->b_state)) {
-				tmp->b_next_free = reuse_list;
-				reuse_list = tmp;
-				clear_bit(BH_FreeOnIO, &tmp->b_state);
-			}
-			tmp = tmp->b_this_page;
-		} while (tmp && tmp != bh);
-		restore_flags(flags);
-	}
-}
+void unlock_buffer(struct buffer_head *);
+
 
 /*
  * super-block locking. Again, interrupts may only unlock

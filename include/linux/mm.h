@@ -122,7 +122,8 @@ typedef struct page {
 		 error:1,
 		 referenced:1,
 		 locked:1,
-		 unused:3,
+		 free_after:1,
+		 unused:2,
 		 reserved:1;
 	struct wait_queue *wait;
 	struct page *next;

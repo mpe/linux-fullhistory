@@ -70,6 +70,7 @@ extern void generic_NCR5380_setup(char *str, int *intr);
 extern void aha152x_setup(char *str, int *ints);
 extern void aha1542_setup(char *str, int *ints);
 extern void aic7xxx_setup(char *str, int *ints);
+extern void AM53C974_setup(char *str, int *ints);
 extern void BusLogic_Setup(char *str, int *ints);
 extern void fdomain_setup(char *str, int *ints);
 extern void NCR53c406a_setup(char *str, int *ints);
@@ -238,6 +239,9 @@ struct {
 #endif
 #ifdef CONFIG_SCSI_BUSLOGIC
 	{ "BusLogic=", BusLogic_Setup},
+#endif
+#ifdef CONFIG_SCSI_AM53C974
+        { "AM53C974=", AM53C974_setup},
 #endif
 #ifdef CONFIG_SCSI_NCR53C406A
 	{ "ncr53c406a=", NCR53c406a_setup},

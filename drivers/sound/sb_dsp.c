@@ -1378,26 +1378,23 @@ Jazz16_set_dma16 (int dma)
   initialize_ProSonic16 ();
 }
 
-long
-sb_dsp_init (long mem_start, struct address_info *hw_config)
+static void
+dsp_get_vers (struct address_info *hw_config)
 {
   int             i;
-  int             ess_major = 0, ess_minor = 0;
 
-  int             mixer_type = 0;
+  unsigned long   flags;
 
+  save_flags (flags);
+  cli ();
   sb_osp = hw_config->osp;
   sbc_major = sbc_minor = 0;
-  sb_dsp_command (0xe1);	/*
-				 * Get version
-				 */
+  sb_dsp_command (0xe1);	/* Get version */
 
-  for (i = 1000; i; i--)
+  for (i = 100000; i; i--)
     {
       if (inb (DSP_DATA_AVAIL) & 0x80)
-	{			/*
-				 * wait for Data Ready
-				 */
+	{
 	  if (sbc_major == 0)
 	    sbc_major = inb (DSP_READ);
 	  else
@@ -1407,10 +1404,28 @@ sb_dsp_init (long mem_start, struct address_info *hw_config)
 	    }
 	}
     }
+  restore_flags (flags);
+}
+
+long
+sb_dsp_init (long mem_start, struct address_info *hw_config)
+{
+  int             i;
+  int             ess_major = 0, ess_minor = 0;
+
+  int             mixer_type = 0;
+
+  dsp_get_vers (hw_config);
 
   if (sbc_major == 0)
     {
-      printk ("\n\nFailed to get SB version (%x) - possible I/O conflict\n\n",
+      sb_reset_dsp ();
+      dsp_get_vers (hw_config);
+    }
+
+  if (sbc_major == 0)
+    {
+      printk ("\n\nFailed to get SB version (%x) - possible I/O conflict?\n\n",
 	      inb (DSP_DATA_AVAIL));
       sbc_major = 1;
     }

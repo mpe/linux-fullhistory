@@ -998,13 +998,12 @@ static inline void recover_reusable_buffer_heads(void)
 	unsigned long flags;
 	
 	save_flags(flags);
-	cli();
 	while (reuse_list) {
+		cli();
 		bh = reuse_list;
 		reuse_list = bh->b_next_free;
 		restore_flags(flags);
 		put_unused_buffer_head(bh);
-		cli();
 	}
 }
 
@@ -1062,7 +1061,7 @@ no_grow:
 	return NULL;
 }
 
-static int bread_page(unsigned long address, kdev_t dev, int b[], int size)
+int brw_page(int rw, unsigned long address, kdev_t dev, int b[], int size, int bmap)
 {
 	struct buffer_head *bh, *prev, *next, *arr[MAX_BUF_PER_PAGE];
 	int block, nr;
@@ -1085,35 +1084,55 @@ static int bread_page(unsigned long address, kdev_t dev, int b[], int size)
 		next->b_blocknr = block;
 		next->b_count = 1;
 		next->b_flushtime = 0;
-		clear_bit(BH_Dirty, &next->b_state);
-		clear_bit(BH_Req, &next->b_state);
 		set_bit(BH_Uptodate, &next->b_state);
-		
-		if (!block) {
+
+		/* When we use bmap, we define block zero to represent
+                   a hole.  ll_rw_page, however, may legitimately
+                   access block zero, and we need to distinguish the
+                   two cases. 
+		   */
+		if (bmap && !block) {
 			memset(next->b_data, 0, size);
+			next->b_count--;
 			continue;
 		}
 		tmp = get_hash_table(dev, block, size);
 		if (tmp) {
 			if (!buffer_uptodate(tmp)) {
-				ll_rw_block(READ, 1, &tmp);
+				if (rw == READ)
+					ll_rw_block(READ, 1, &tmp);
 				wait_on_buffer(tmp);
 			}
-			memcpy(next->b_data, tmp->b_data, size);
+			if (rw == READ) 
+				memcpy(next->b_data, tmp->b_data, size);
+			else {
+				memcpy(tmp->b_data, next->b_data, size);
+				set_bit(BH_Dirty, &tmp->b_state);
+			}
 			brelse(tmp);
+			next->b_count--;
 			continue;
 		}
-		clear_bit(BH_Uptodate, &next->b_state);
+		if (rw == READ)
+			clear_bit(BH_Uptodate, &next->b_state);
+		else
+			set_bit(BH_Dirty, &next->b_state);
 		arr[nr++] = next;
 	} while (prev = next, (next = next->b_this_page) != NULL);
 	prev->b_this_page = bh;
 	
 	if (nr)
-		ll_rw_block(READ, nr, arr);
+		ll_rw_block(rw, nr, arr);
 	else {
 		page->locked = 0;
 		page->uptodate = 1;
 		wake_up(&page->wait);
+		next = bh;
+		do {
+			next->b_next_free = reuse_list;
+			reuse_list = next;
+			next = next->b_this_page;
+		} while (next != bh);
 	}
 	++current->maj_flt;
 	return 0;
@@ -1136,6 +1155,64 @@ void mark_buffer_uptodate(struct buffer_head * bh, int on)
 			mem_map[MAP_NR(bh->b_data)].uptodate = 1;
 	} else
 		clear_bit(BH_Uptodate, &bh->b_state);
+}
+
+void unlock_buffer(struct buffer_head * bh)
+{
+	struct buffer_head *tmp;
+	unsigned long flags;
+	struct page *page;
+
+	clear_bit(BH_Lock, &bh->b_state);
+	wake_up(&bh->b_wait);
+
+	if (!test_bit(BH_FreeOnIO, &bh->b_state))
+		return;
+	page = mem_map + MAP_NR(bh->b_data);
+	if (!page->locked) {
+		printk ("Whoops: unlock_buffer: "
+			"async io complete on unlocked page\n");
+		return;
+	}
+	if (bh->b_count != 1) {
+		printk ("Whoops: unlock_buffer: b_count != 1 on async io.\n");
+		return;
+	}
+	/* Async buffer_heads are here only as labels for IO, and get
+           thrown away once the IO for this page is complete.  IO is
+           deemed complete once all buffers have been visited
+           (b_count==0) and are now unlocked. */
+	bh->b_count--;
+	for (tmp = bh; tmp=tmp->b_this_page, tmp!=bh; ) {
+		if (test_bit(BH_Lock, &tmp->b_state) || tmp->b_count)
+			return;
+	}
+
+	/* OK, go ahead and complete the async IO on this page. */
+	save_flags(flags);
+	page->locked = 0;
+	wake_up(&page->wait);
+	cli();
+	tmp = bh;
+	do {
+		if (!test_bit(BH_FreeOnIO, &tmp->b_state)) {
+			printk ("Whoops: unlock_buffer: "
+				"async IO mismatch on page.\n");
+			restore_flags(flags);
+			return;
+		}
+		tmp->b_next_free = reuse_list;
+		reuse_list = tmp;
+		clear_bit(BH_FreeOnIO, &tmp->b_state);
+		tmp = tmp->b_this_page;
+	} while (tmp != bh);
+	restore_flags(flags);
+	if (page->free_after) {
+		extern int nr_async_pages;
+		nr_async_pages--;
+		page->free_after = 0;
+		free_page(page_address(page));
+	}
 }
 
 /*
@@ -1167,37 +1244,10 @@ int generic_readpage(struct inode * inode, struct page * page)
 	/* IO start */
 	page->count++;
 	address = page_address(page);
-	bread_page(address, inode->i_dev, nr, inode->i_sb->s_blocksize);
+	brw_page(READ, address, inode->i_dev, nr, inode->i_sb->s_blocksize, 1);
 	free_page(address);
 	return 0;
 }
-
-#if 0
-/*
- * bwrite_page writes a page out to the buffer cache and/or the physical device.
- * It's used for mmap writes (the same way bread_page() is used for mmap reads).
- */
-void bwrite_page(unsigned long address, kdev_t dev, int b[], int size)
-{
-	struct buffer_head * bh[MAX_BUF_PER_PAGE];
-	int i, j;
-
- 	for (i=0, j=0; j<PAGE_SIZE ; i++, j+= size) {
-		bh[i] = NULL;
-		if (b[i])
-			bh[i] = getblk(dev, b[i], size);
-	}
- 	for (i=0, j=0; j<PAGE_SIZE ; i++, j += size, address += size) {
-		if (bh[i]) {
-			memcpy(bh[i]->b_data, (void *) address, size);
-			mark_buffer_uptodate(bh[i], 1);
-			mark_buffer_dirty(bh[i], 0);
-			brelse(bh[i]);
-		} else
-			memset((void *) address, 0, size); /* ???!?!! */
-	}	
-}
-#endif
 
 /*
  * Try to increase the number of buffers available: the size argument

@@ -28,11 +28,12 @@
 
 static struct wait_queue * lock_queue = NULL;
 
-void rw_swap_page(int rw, unsigned long entry, char * buf)
+void rw_swap_page(int rw, unsigned long entry, char * buf, int wait)
 {
 	unsigned long type, offset;
 	struct swap_info_struct * p;
-
+	struct page *page;
+	
 	type = SWP_TYPE(entry);
 	if (type >= nr_swapfiles) {
 		printk("Internal error: bad swap-device\n");
@@ -58,8 +59,17 @@ void rw_swap_page(int rw, unsigned long entry, char * buf)
 		kstat.pswpin++;
 	else
 		kstat.pswpout++;
+	page = mem_map + MAP_NR(buf);
+	wait_on_page(page);
 	if (p->swap_device) {
+		if (!wait) {
+			page->count++;
+			page->free_after = 1;
+			nr_async_pages++;
+		}
 		ll_rw_page(rw,p->swap_device,offset,buf);
+		if (wait)
+			wait_on_page(page);
 	} else if (p->swap_file) {
 		struct inode *swapf = p->swap_file;
 		unsigned int zones[PAGE_SIZE/512];
@@ -105,4 +115,3 @@ void rw_swap_page(int rw, unsigned long entry, char * buf)
 		printk("rw_swap_page: lock already cleared\n");
 	wake_up(&lock_queue);
 }
-

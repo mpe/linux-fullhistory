@@ -20,6 +20,10 @@
  * January 1996, Rik Faith (faith@cs.unc.edu):
  *    Make /proc/apm easy to format (bump driver version)
  *
+ * History:
+ *    0.6b: first version in official kernel, Linux 1.3.46
+ *    0.7: changed /proc/apm format, Linux 1.3.58
+ *    0.8: fixed gcc 2.7.[12] compilation problems, Linux 1.3.59
  *
  * Reference:
  *
@@ -110,28 +114,39 @@ extern unsigned long get_cmos_time(void);
  */
 
 /*
- * define to have debug messages
+ * Define to have debug messages.
  */
 #undef APM_DEBUG
 
 /*
- * define to always call the APM BIOS busy routine even if the clock was
- * not slowed by the idle routine
+ * Define to always call the APM BIOS busy routine even if the clock was
+ * not slowed by the idle routine.
  */
 #define ALWAYS_CALL_BUSY
 
 /*
- * define to disable interrupts in APM BIOS calls (the CPU Idle BIOS call
- * should turn interrupts on before it does a 'hlt')
+ * Define to disable interrupts in APM BIOS calls (the CPU Idle BIOS call
+ * should turn interrupts on before it does a 'hlt').
  */
 #define APM_NOINTS
 
 /*
- * define to make the APM BIOS calls zero all data segment registers (do
- * that an incorrect BIOS implementation will cause a kernel panic if it
- * tries to write to arbitrary memory)
+ * Define to make the APM BIOS calls zero all data segment registers (do
+ * that if an incorrect BIOS implementation will cause a kernel panic if it
+ * tries to write to arbitrary memory).
  */
 #define APM_ZERO_SEGS
+
+/*
+ * Define to make all set_limit calls use 64k limits.  The APM 1.1 BIOS is
+ * supposed to provide limit information that it recognizes.  Many machines
+ * do this correctly, but many others do not restrict themselves to their
+ * claimed limit.  When this happens, they will cause a segmentation
+ * violation in the kernel at boot time.  Most BIOS's, however, will
+ * respect a 64k limit, so we use that.  If you want to be pedantic and
+ * hold your BIOS to its claims, then undefine this.
+ */
+#define APM_RELAX_SEGMENTS
 
 /*
  * Need to poll the APM BIOS every second
@@ -193,27 +208,27 @@ extern unsigned long get_cmos_time(void);
 #define APM_SET_CPU_IDLE(error) \
 	APM_BIOS_CALL(al) \
 	: "=a" (error) \
-	: "0" (0x5305) \
+	: "a" (0x5305) \
 	APM_BIOS_CALL_END
 #endif
 
 #define APM_SET_CPU_BUSY(error) \
 	APM_BIOS_CALL(al) \
 	: "=a" (error) \
-	: "0" (0x5306) \
+	: "a" (0x5306) \
 	APM_BIOS_CALL_END
 
 #define APM_SET_POWER_STATE(state, error) \
 	APM_BIOS_CALL(al) \
 	: "=a" (error) \
-	: "0" (0x5307), "b" (0x0001), "c" (state) \
+	: "a" (0x5307), "b" (0x0001), "c" (state) \
 	APM_BIOS_CALL_END
 
 #ifdef CONFIG_APM_DISPLAY_BLANK
 #define APM_SET_DISPLAY_POWER_STATE(state, error) \
 	APM_BIOS_CALL(al) \
 	: "=a" (error) \
-	: "0" (0x5307), "b" (0x01ff), "c" (state) \
+	: "a" (0x5307), "b" (0x01ff), "c" (state) \
 	APM_BIOS_CALL_END
 #endif
 
@@ -221,32 +236,32 @@ extern unsigned long get_cmos_time(void);
 #define APM_ENABLE_POWER_MANAGEMENT(device, error) \
 	APM_BIOS_CALL(al) \
 	: "=a" (error) \
-	: "0" (0x5308), "b" (device), "c" (1) \
+	: "a" (0x5308), "b" (device), "c" (1) \
 	APM_BIOS_CALL_END
 #endif
 
 #define APM_GET_POWER_STATUS(bx, cx, dx, error) \
 	APM_BIOS_CALL(al) \
 	: "=a" (error), "=b" (bx), "=c" (cx), "=d" (dx) \
-	: "0" (0x530a), "1" (1) \
+	: "a" (0x530a), "b" (1) \
 	APM_BIOS_CALL_END
 
 #define APM_GET_EVENT(event, error)	\
 	APM_BIOS_CALL(al) \
 	: "=a" (error), "=b" (event) \
-	: "0" (0x530b) \
+	: "a" (0x530b) \
 	APM_BIOS_CALL_END
 
 #define APM_DRIVER_VERSION(ver, ax, error) \
 	APM_BIOS_CALL(bl) \
 	: "=a" (ax), "=b" (error) \
-	: "0" (0x530e), "1" (0), "c" (ver) \
+	: "a" (0x530e), "b" (0), "c" (ver) \
 	APM_BIOS_CALL_END
 
 #define APM_ENGAGE_POWER_MANAGEMENT(device, error) \
 	APM_BIOS_CALL(al) \
 	: "=a" (error) \
-	: "0" (0x530f), "b" (device), "c" (1) \
+	: "a" (0x530f), "b" (device), "c" (1) \
 	APM_BIOS_CALL_END
 
 /*
@@ -292,7 +307,7 @@ static struct apm_bios_struct *	user_list = NULL;
 
 static struct timer_list	apm_timer;
 
-static char			driver_version[] = "0.7";/* no spaces */
+static char			driver_version[] = "0.8";/* no spaces */
 
 #ifdef APM_DEBUG
 static char *	apm_event_name[] = {
@@ -1025,13 +1040,18 @@ static int apm_setup(void)
 		set_limit(gdt[APM_CS_16 >> 3], 64 * 1024);
 		set_limit(gdt[APM_DS >> 3], 64 * 1024);
 	} else {
-		set_limit(gdt[APM_CS >> 3], apm_bios_info.cseg_len);
-		/* This is not clear from the spec, but at least one
-		   machine needs CS_16 to be a 64k segment, and the DEC
-		   Hinote Ultra CT475 (and others?) needs DS to be a 64k
-		   segment. */
+#ifdef APM_RELAX_SEGMENTS
+		/* For ASUS motherboard, Award BIOS rev 110 (and others?) */
+		set_limit(gdt[APM_CS >> 3], 64 * 1024);
+		/* For some unknown machine. */
 		set_limit(gdt[APM_CS_16 >> 3], 64 * 1024);
+		/* For the DEC Hinote Ultra CT475 (and others?) */
 		set_limit(gdt[APM_DS >> 3], 64 * 1024);
+#else
+		set_limit(gdt[APM_CS >> 3], apm_bios_info.cseg_len);
+		set_limit(gdt[APM_CS_16 >> 3], 64 * 1024);
+		set_limit(gdt[APM_DS >> 3], apm_bios_info.dseg_len);
+#endif
 		apm_bios_info.version = 0x0101;
 		error = apm_driver_version(&apm_bios_info.version);
 		if (error != 0)

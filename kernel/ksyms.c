@@ -86,19 +86,6 @@ extern unsigned char aux_device_present, kbd_read_mask;
 #include <linux/smp.h>
 #endif
 
-#ifndef CONFIG_SCSI
-#if defined(CONFIG_PROC_FS)
-/*
- * This is all required so that if we load all of scsi as a module,
- * that the scsi code will be able to talk to the /proc/scsi handling
- * in the procfs.
- */
-extern int (* dispatch_scsi_info_ptr) (int ino, char *buffer, char **start,
-				off_t offset, int length, int inout);
-extern struct inode_operations proc_scsi_inode_operations;
-#endif
-#endif
-
 extern char *get_options(char *str, int *ints);
 extern void set_device_ro(int dev,int flag);
 extern struct file_operations * get_blkfops(unsigned int);
@@ -210,6 +197,7 @@ struct symbol_table symbol_table = {
 	X(__bforget),
 	X(ll_rw_block),
 	X(__wait_on_buffer),
+	X(unlock_buffer),
 	X(dcache_lookup),
 	X(dcache_add),
 	X(aout_core_dump),
@@ -435,14 +423,6 @@ struct symbol_table symbol_table = {
 	 */
 	X(gendisk_head),
 	X(resetup_one_dev),
-#if defined(CONFIG_PROC_FS)
-	/*
-	 * This is required so that if we load scsi later, that the
-	 * scsi code can attach to /proc/scsi in the correct manner.
-	 */
-	X(proc_scsi_inode_operations),
-	X(dispatch_scsi_info_ptr),
-#endif
 #endif
 	/* Added to make file system as module */
 	X(set_writetime),

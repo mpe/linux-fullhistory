@@ -6,7 +6,7 @@
 # Loadable module support
 #
 CONFIG_MODULES=y
-CONFIG_MODVERSIONS=y
+# CONFIG_MODVERSIONS is not set
 # CONFIG_KERNELD is not set
 
 #
@@ -88,6 +88,7 @@ CONFIG_NET_VENDOR_3COM=y
 # CONFIG_EL1 is not set
 # CONFIG_EL2 is not set
 CONFIG_EL3=y
+# CONFIG_VORTEX is not set
 # CONFIG_NET_ISA is not set
 # CONFIG_NET_EISA is not set
 # CONFIG_NET_POCKET is not set
