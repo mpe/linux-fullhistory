@@ -393,7 +393,7 @@ struct timer_struct timer_table[32];
  * irq uses this to decide if it should update the user or system
  * times.
  */
-static void do_timer(int regs)
+static void do_timer(struct pt_regs * regs)
 {
 	unsigned long mask;
 	struct timer_struct *tp = timer_table+0;
@@ -401,7 +401,7 @@ static void do_timer(int regs)
 	static int avg_cnt = 0;
 
 	jiffies++;
-	if (3 & ((struct pt_regs *) regs)->cs) {
+	if ((VM_MASK & regs->eflags) || (3 & regs->cs)) {
 		current->utime++;
 		/* Update ITIMER_VIRT for current task if not in a system call */
 		if (current->it_virt_value && !(--current->it_virt_value)) {
@@ -412,7 +412,7 @@ static void do_timer(int regs)
 		current->stime++;
 #ifdef PROFILE_SHIFT
 		if (prof_buffer && current != task[0]) {
-			unsigned long eip = ((struct pt_regs *) regs)->eip;
+			unsigned long eip = regs->eip;
 			eip >>= PROFILE_SHIFT;
 			if (eip < prof_len)
 				prof_buffer[eip]++;
@@ -543,5 +543,5 @@ void sched_init(void)
 	outb_p(0x36,0x43);		/* binary, mode 3, LSB/MSB, ch 0 */
 	outb_p(LATCH & 0xff , 0x40);	/* LSB */
 	outb(LATCH >> 8 , 0x40);	/* MSB */
-	request_irq(TIMER_IRQ,do_timer);
+	request_irq(TIMER_IRQ,(void (*)(int)) do_timer);
 }

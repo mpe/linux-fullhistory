@@ -3,32 +3,21 @@
 
 #define HZ 100
 
+/*
+ * This is the maximum nr of tasks - change it if you need to
+ */
 #define NR_TASKS	64
-#define TASK_SIZE	0x04000000
-#define LIBRARY_SIZE	0x00400000
+
+/*
+ * User space process size: 3GB. This is hardcoded into a few places,
+ * so don't change it unless you know what you are doing.
+ */
+#define TASK_SIZE	0xc0000000
 
 /*
  * Size of io_bitmap in longwords: 32 is ports 0-0x3ff.
  */
 #define IO_BITMAP_SIZE	32
-
-#if (TASK_SIZE & 0x3fffff)
-#error "TASK_SIZE must be multiple of 4M"
-#endif
-
-#if (LIBRARY_SIZE & 0x3fffff)
-#error "LIBRARY_SIZE must be a multiple of 4M"
-#endif
-
-#if (LIBRARY_SIZE >= (TASK_SIZE/2))
-#error "LIBRARY_SIZE too damn big!"
-#endif
-
-#if (((TASK_SIZE>>16)*NR_TASKS) != 0x10000)
-#error "TASK_SIZE*NR_TASKS must be 4GB"
-#endif
-
-#define LIBRARY_OFFSET (TASK_SIZE - LIBRARY_SIZE)
 
 #define CT_TO_SECS(x)	((x) / HZ)
 #define CT_TO_USECS(x)	(((x) % HZ) * 1000000/HZ)
@@ -43,6 +32,7 @@
 #include <linux/time.h>
 #include <linux/param.h>
 #include <linux/resource.h>
+#include <linux/vm86.h>
 
 #if (NR_OPEN > 32)
 #error "Currently the close-on-exec-flags and select masks are in one long, max 32 files/proc"
@@ -115,6 +105,7 @@ struct task_struct {
 	long signal;
 	struct sigaction sigaction[32];
 	long blocked;	/* bitmap of masked signals */
+	unsigned long saved_kernel_stack;
 /* various fields */
 	int exit_code;
 	int dumpable:1;
@@ -146,6 +137,7 @@ struct task_struct {
 	unsigned short used_math;
 	unsigned short rss;	/* number of resident pages */
 	char comm[8];
+	struct vm86_struct * vm86_info;
 /* file system info */
 	int link_count;
 	int tty;		/* -1 if no tty, so it must be signed */
@@ -157,6 +149,7 @@ struct task_struct {
 		struct inode * library;
 		unsigned long start;
 		unsigned long length;
+		unsigned long bss;
 	} libraries[MAX_SHARED_LIBS];
 	int numlibraries;
 	struct file * filp[NR_OPEN];
@@ -173,9 +166,6 @@ struct task_struct {
 #define PF_ALIGNWARN	0x00000001	/* Print alignment warning msgs */
 					/* Not implemented yet, only for 486*/
 #define PF_PTRACED	0x00000010	/* set if ptrace (0) has been called. */
-#define PF_VM86		0x00000020	/* set if process can execute a vm86 */
-					/* task. */
-                                        /* not impelmented. */
 
 /*
  *  INIT_TASK is used to set up the first task table, touch at
@@ -183,7 +173,7 @@ struct task_struct {
  */
 #define INIT_TASK \
 /* state etc */	{ 0,15,15, \
-/* signals */	0,{{},},0, \
+/* signals */	0,{{},},0,0, \
 /* ec,brk... */	0,0,0,0,0,0,0,0, \
 /* pid etc.. */	0,0,0,0, \
 /* suppl grps*/ {NOGROUP,}, \
@@ -199,15 +189,16 @@ struct task_struct {
 /* math */	0, \
 /* rss */	2, \
 /* comm */	"swapper", \
+/* vm86_info */	NULL, \
 /* fs info */	0,-1,0022,NULL,NULL,NULL, \
 /* libraries */	{ { NULL, 0, 0}, }, 0, \
 /* filp */	{NULL,}, 0, \
 		{ \
 			{0,0}, \
-/* ldt */		{0x9f,0xc0fa00}, \
-			{0x9f,0xc0f200} \
+/* ldt */		{0x9f,0xc0c0fa00}, \
+			{0x9f,0xc0c0f200} \
 		}, \
-/*tss*/	{0,PAGE_SIZE+(long)&init_task,0x10,0,0,0,0,(long)&pg_dir,\
+/*tss*/	{0,PAGE_SIZE+(long)&init_task,0x10,0,0,0,0,(long)&swapper_pg_dir,\
 	 0,0,0,0,0,0,0,0, \
 	 0,0,0x17,0x17,0x17,0x17,0x17,0x17, \
 	 _LDT(0),0x80000000,{0xffffffff}, \

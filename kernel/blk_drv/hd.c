@@ -53,7 +53,8 @@ static inline unsigned char CMOS_READ(unsigned char addr)
 static void recal_intr(void);
 static void bad_rw_intr(void);
 
-static int recalibrate = 0;
+static char recalibrate[ MAX_HD ] = { 0, };
+
 static int reset = 0;
 
 #if (HD_DELAY > 0)
@@ -221,6 +222,8 @@ void unexpected_hd_interrupt(void)
 
 static void bad_rw_intr(void)
 {
+	int i;
+
 	if (!CURRENT)
 		return;
 	if (++CURRENT->errors >= MAX_ERRORS)
@@ -228,7 +231,8 @@ static void bad_rw_intr(void)
 	else if (CURRENT->errors > MAX_ERRORS/2)
 		reset = 1;
 	else
-		recalibrate = 1;
+		for (i=0; i < NR_HD; i++)
+			recalibrate[i] = 1;
 }
 
 static inline int wait_DRQ(void)
@@ -378,7 +382,7 @@ static void hd_times_out(void)
 static void do_hd_request(void)
 {
 	unsigned int block,dev;
-	unsigned int sec,head,cyl;
+	unsigned int sec,head,cyl,track;
 	unsigned int nsect;
 
 repeat:
@@ -399,24 +403,26 @@ repeat:
 	}
 	block += hd[dev].start_sect;
 	dev >>= 6;
-	sec = block % hd_info[dev].sect;
-	block /= hd_info[dev].sect;
-	head = block % hd_info[dev].head;
-	cyl = block / hd_info[dev].head;
-	sec++;
+	sec = block % hd_info[dev].sect + 1;
+	track = block / hd_info[dev].sect;
+	head = track % hd_info[dev].head;
+	cyl = track / hd_info[dev].head;
 #ifdef DEBUG
 	printk("hd%d : cyl = %d, head = %d, sector = %d, buffer = %08x\n",
 		dev, cyl, head, sec, CURRENT->buffer);
 #endif
 	cli();
 	if (reset) {
-		recalibrate = 1;
+		int i;
+
+		for (i=0; i < NR_HD; i++)
+			recalibrate[i] = 1;
 		reset_hd();
 		sti();
 		return;
 	}
-	if (recalibrate) {
-		recalibrate = 0;
+	if (recalibrate[dev]) {
+		recalibrate[dev] = 0;
 		hd_out(dev,hd_info[dev].sect,0,0,0,WIN_RESTORE,&recal_intr);
 		if (reset)
 			goto repeat;
@@ -434,13 +440,16 @@ repeat:
 		}
 		port_write(HD_DATA,CURRENT->buffer,256);
 		sti();
-	} else if (CURRENT->cmd == READ) {
+		return;
+	}
+	if (CURRENT->cmd == READ) {
 		hd_out(dev,nsect,sec,head,cyl,WIN_READ,&read_intr);
 		if (reset)
 			goto repeat;
 		sti();
-	} else
-		panic("unknown hd-command");
+		return;
+	}
+	panic("unknown hd-command");
 }
 
 static int hd_ioctl(struct inode * inode, struct file * file,
@@ -481,7 +490,6 @@ static void hd_release(struct inode * inode, struct file * file)
 	sync_dev(inode->i_rdev);
 }
 
-
 static void hd_geninit();
 
 static struct gendisk hd_gendisk = {
@@ -500,11 +508,11 @@ static struct gendisk hd_gendisk = {
 	
 static void hd_geninit(void)
 {
-	int drive;
+	int drive, i;
 #ifndef HD_TYPE
 	extern struct drive_info drive_info;
 	void *BIOS = (void *) &drive_info;
-	int cmos_disks, i;
+	int cmos_disks;
 	   
 	for (drive=0 ; drive<2 ; drive++) {
 		hd_info[drive].cyl = *(unsigned short *) BIOS;
@@ -593,7 +601,7 @@ static struct sigaction hd_sigaction = {
 	NULL
 };
 
-unsigned long hd_init(unsigned long mem_start)
+unsigned long hd_init(unsigned long mem_start, unsigned long mem_end)
 {
 	blk_dev[MAJOR_NR].request_fn = DEVICE_REQUEST;
 	blkdev_fops[MAJOR_NR] = &hd_fops;

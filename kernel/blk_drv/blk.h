@@ -69,6 +69,7 @@ extern struct wait_queue * wait_for_request;
 
 extern int * blk_size[NR_BLK_DEV];
 
+extern unsigned long hd_init(unsigned long mem_start, unsigned long mem_end);
 extern int is_read_only(int dev);
 extern void set_device_ro(int dev,int flag);
 

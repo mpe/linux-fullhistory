@@ -111,6 +111,10 @@ struct buffer_head {
 	struct buffer_head * b_reqnext;		/* request queue */
 };
 
+#include <linux/minix_fs_i.h>
+#include <linux/ext_fs_i.h>
+#include <linux/msdos_fs_i.h>
+
 struct inode {
 	dev_t		i_dev;
 	unsigned long	i_ino;
@@ -123,11 +127,14 @@ struct inode {
 	time_t		i_atime;
 	time_t		i_mtime;
 	time_t		i_ctime;
+	unsigned long	i_blksize;
+	unsigned long	i_blocks;
 	unsigned long i_data[16];
 	struct inode_operations * i_op;
 	struct super_block * i_sb;
 	struct wait_queue * i_wait;
 	struct wait_queue * i_wait2;	/* for pipes */
+	struct file_lock *i_flock;
 	unsigned short i_count;
 	unsigned short i_flags;
 	unsigned char i_lock;
@@ -136,6 +143,11 @@ struct inode {
 	unsigned char i_mount;
 	unsigned char i_seek;
 	unsigned char i_update;
+	union {
+		struct minix_inode_info minix_i;
+		struct ext_inode_info ext_i;
+		struct msdos_inode_info msdos_i;
+	} u;
 };
 
 struct file {
@@ -147,6 +159,16 @@ struct file {
 	struct inode * f_inode;
 	struct file_operations * f_op;
 	off_t f_pos;
+};
+
+struct file_lock {
+	struct file_lock *fl_next;	/* singly linked list */
+	struct task_struct *fl_owner;	/* NULL if on free list, for sanity checks */
+	struct wait_queue *fl_wait;
+	char fl_type;
+	char fl_whence;
+	off_t fl_start;
+	off_t fl_end;
 };
 
 #include <linux/minix_fs_sb.h>
@@ -196,7 +218,7 @@ struct inode_operations {
 	int (*mknod) (struct inode *,const char *,int,int,int);
 	int (*rename) (struct inode *,const char *,int,struct inode *,const char *,int);
 	int (*readlink) (struct inode *,char *,int);
-	struct inode * (*follow_link) (struct inode *, struct inode *);
+	int (*follow_link) (struct inode *, struct inode *, int flag, int mode, struct inode ** res_inode);
 	int (*bmap) (struct inode *,int);
 	void (*truncate) (struct inode *);
 };
@@ -239,13 +261,11 @@ extern void floppy_off(unsigned int dev);
 extern void sync_inodes(void);
 extern void wait_on(struct inode * inode);
 extern int bmap(struct inode * inode,int block);
-extern struct inode * namei(const char * pathname);
-extern struct inode * lnamei(const char * pathname);
+extern int namei(const char * pathname, struct inode ** res_inode);
+extern int lnamei(const char * pathname, struct inode ** res_inode);
 extern int permission(struct inode * inode,int mask);
-extern struct inode * _namei(const char * filename, struct inode * base,
-	int follow_links);
 extern int open_namei(const char * pathname, int flag, int mode,
-	struct inode ** res_inode);
+	struct inode ** res_inode, struct inode * base);
 extern int do_mknod(const char * filename, int mode, int dev);
 extern void iput(struct inode * inode);
 extern struct inode * iget(int dev,int nr);

@@ -62,6 +62,9 @@ static void do_emu(struct info * info)
 	else
 		I387.swd &= 0x7fff;
 	ORIG_EIP = EIP;
+/* We cannot handle emulation in v86-mode */
+	if (EFLAGS & 0x00020000)
+		math_abort(info,SIGILL);
 /* 0x0007 means user code space */
 	if (CS != 0x000F) {
 		printk("math_emulate: %04x:%08x\n\r",CS,EIP);

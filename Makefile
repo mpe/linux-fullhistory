@@ -94,7 +94,7 @@ SUBDIRS		=kernel mm fs net lib
 KERNELHDRS	=/usr/src/linux/include
 
 .c.s:
-	$(CC) $(CFLAGS) -S $<
+	$(CC) $(CFLAGS) -S -o $*.s $<
 .s.o:
 	$(AS) -c -o $*.o $<
 .c.o:
@@ -103,11 +103,11 @@ KERNELHDRS	=/usr/src/linux/include
 all:	Version Image
 
 linuxsubdirs: dummy
-	@for i in $(SUBDIRS); do (cd $$i; echo $$i; $(MAKE)) || exit; done
+	@for i in $(SUBDIRS); do (cd $$i && echo $$i && $(MAKE)) || exit; done
 
 Version:
 	@./makever.sh
-	@echo \#define UTS_RELEASE \"0.97-`cat .version`\" > include/linux/config_rel.h
+	@echo \#define UTS_RELEASE \"0.97.pl2-`cat .version`\" > include/linux/config_rel.h
 	@echo \#define UTS_VERSION \"`date +%D`\" > include/linux/config_ver.h
 	touch include/linux/config.h
 
@@ -126,6 +126,9 @@ tools/build: tools/build.c
 	-o tools/build tools/build.c
 
 boot/head.o: boot/head.s
+
+init/main.o: init/main.c
+	$(CC) $(CFLAGS) $(PROFILING) -c -o $*.o $<
 
 tools/system:	boot/head.o init/main.o linuxsubdirs
 	$(LD) $(LDFLAGS) -M boot/head.o init/main.o \
@@ -157,17 +160,17 @@ clean:
 	rm -f Image System.map tmp_make core boot/bootsect boot/setup \
 		boot/bootsect.s boot/setup.s init/main.s
 	rm -f init/*.o tools/system tools/build boot/*.o
-	for i in $(SUBDIRS); do (cd $$i; $(MAKE) clean); done
+	for i in $(SUBDIRS); do (cd $$i && $(MAKE) clean); done
 
 backup: clean
-	cd .. ; tar cf - linux | compress - > backup.Z
+	cd .. && tar cf - linux | compress - > backup.Z
 	sync
 
 depend dep:
 	sed '/\#\#\# Dependencies/q' < Makefile > tmp_make
 	for i in init/*.c;do echo -n "init/";$(CPP) -M $$i;done >> tmp_make
 	cp tmp_make Makefile
-	for i in $(SUBDIRS); do (cd $$i; $(MAKE) dep) || exit; done
+	for i in $(SUBDIRS); do (cd $$i && $(MAKE) dep) || exit; done
 
 dummy:
 

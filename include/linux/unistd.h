@@ -119,6 +119,7 @@
 #define __NR_iopl		110
 #define __NR_vhangup		111
 #define __NR_idle		112
+#define __NR_vm86		113
 
 extern int errno;
 

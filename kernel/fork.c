@@ -56,15 +56,12 @@ int copy_mem(int nr,struct task_struct * p)
 	}
 	if (data_limit < code_limit)
 		panic("Bad data_limit");
-	new_data_base = new_code_base = nr * TASK_SIZE;
+	new_data_base = old_data_base;
+	new_code_base = old_code_base;
 	p->start_code = new_code_base;
 	set_base(p->ldt[1],new_code_base);
 	set_base(p->ldt[2],new_data_base);
-	if (copy_page_tables(old_data_base,new_data_base,data_limit)) {
-		free_page_tables(new_data_base,data_limit);
-		return -ENOMEM;
-	}
-	return 0;
+	return copy_page_tables(p);
 }
 
 static int find_empty_process(void)

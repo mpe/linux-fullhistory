@@ -28,18 +28,18 @@ blk_drv.a: $(OBJS)
 	sync
 
 scsisubdirs: dummy
-	@for i in $(SUBDIRS); do (cd $$i; echo $$i; $(MAKE)) || exit; done
+	@for i in $(SUBDIRS); do (cd $$i && echo $$i && $(MAKE)) || exit; done
 
 clean:
 	rm -f core *.o *.a tmp_make
 	for i in *.c;do rm -f `basename $$i .c`.s;done
-	for i in $(SUBDIRS); do (cd $$i; $(MAKE) clean); done
+	for i in $(SUBDIRS); do (cd $$i && $(MAKE) clean); done
 
 dep:
 	sed '/\#\#\# Dependencies/q' < Makefile > tmp_make
 	for i in *.c;do $(CPP) -M $$i;done >> tmp_make
 	cp tmp_make Makefile
-	for i in $(SUBDIRS); do (cd $$i; $(MAKE) dep); done
+	for i in $(SUBDIRS); do (cd $$i && $(MAKE) dep); done
 
 dummy:
 

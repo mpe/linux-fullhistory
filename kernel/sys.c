@@ -13,12 +13,14 @@
 #include <linux/utsname.h>
 #include <linux/param.h>
 #include <linux/resource.h>
+#include <linux/signal.h>
 #include <linux/string.h>
+#include <linux/ptrace.h>
 
 #include <asm/segment.h>
 
 /*
- * this indicates wether you can reboot with ctrl-alt-del: the deault is yes
+ * this indicates wether you can reboot with ctrl-alt-del: the default is yes
  */
 static int C_A_D = 1;
 
@@ -126,6 +128,53 @@ int sys_gtty()
 int sys_prof()
 {
 	return -ENOSYS;
+}
+
+unsigned long save_v86_state(int signr,struct vm86_regs * regs)
+{
+	unsigned long stack;
+
+	if (!current->vm86_info) {
+		printk("no vm86_info: BAD\n");
+		do_exit(SIGSEGV);
+	}
+	memcpy_tofs(&(current->vm86_info->regs),regs,sizeof(*regs));
+	stack = current->tss.esp0;
+	current->tss.esp0 = current->saved_kernel_stack;
+	current->saved_kernel_stack = 0;
+	return stack;
+}
+
+int sys_vm86(struct vm86_struct * v86)
+{
+	struct vm86_struct info;
+	struct pt_regs * pt_regs = (struct pt_regs *) &v86;
+
+	if (current->saved_kernel_stack)
+		return -EPERM;
+	memcpy_fromfs(&info,v86,sizeof(info));
+/*
+ * make sure the vm86() system call doesn't try to do anything silly
+ */
+	info.regs.__null_ds = 0;
+	info.regs.__null_es = 0;
+	info.regs.__null_fs = 0;
+	info.regs.__null_gs = 0;
+/*
+ * The eflags register is also special: we cannot trust that the user
+ * has set it up safely, so this makes sure interrupt etc flags are
+ * inherited from protected mode.
+ */
+	info.regs.eflags &= 0x00000dd5;
+	info.regs.eflags |= 0xfffff22a & pt_regs->eflags;
+	info.regs.eflags |= VM_MASK;
+	current->saved_kernel_stack = current->tss.esp0;
+	current->tss.esp0 = (unsigned long) pt_regs;
+	current->vm86_info = v86;
+	__asm__ __volatile__("movl %0,%%esp\n\t"
+		"pushl $ret_from_sys_call\n\t"
+		"ret"::"g" ((long) &(info.regs)),"a" (info.regs.eax));
+	return 0;
 }
 
 extern void hard_reset_now(void);

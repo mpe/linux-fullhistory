@@ -38,7 +38,7 @@ static int read_mem(struct inode * inode, struct file * file,char * buf, int cou
 	while (count > 0) {
 		if (current->signal & ~current->blocked)
 			break;
-		pde = (unsigned long) pg_dir + (addr >> 20 & 0xffc);
+		pde = current->tss.cr3 + (addr >> 20 & 0xffc);
 		pte = *(unsigned long *) pde;
 		if (!(pte & PAGE_PRESENT))
 			break;
@@ -75,7 +75,7 @@ static int write_mem(struct inode * inode, struct file * file,char * buf, int co
 	while (count > 0) {
 		if (current->signal & ~current->blocked)
 			break;
-		pde = (unsigned long) pg_dir + (addr >> 20 & 0xffc);
+		pde = current->tss.cr3 + (addr >> 20 & 0xffc);
 		pte = *(unsigned long *) pde;
 		if (!(pte & PAGE_PRESENT))
 			break;

@@ -351,7 +351,7 @@ unix_proto_bind(struct socket *sock, struct sockaddr *umyaddr,
 	set_fs(get_ds());
 	i = do_mknod(fname, S_IFSOCK | 0777, 0);
 	if (i == 0)
-		i = open_namei(fname, 0, S_IFSOCK, &upd->inode);
+		i = open_namei(fname, 0, S_IFSOCK, &upd->inode, NULL);
 	set_fs(old_fs);
 	if (i < 0) {
 		printk("unix_proto_bind: can't open socket %s\n", fname);

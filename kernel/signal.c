@@ -135,11 +135,6 @@ int do_signal(long signr,struct pt_regs * regs)
 	int longs;
 	unsigned long * tmp_esp;
 
-#ifdef notdef
-	printk("pid: %d, signr: %x, eax=%d, oeax = %d, int=%d\n", 
-		current->pid, signr, regs->eax, regs->orig_eax, 
-		sa->sa_flags & SA_INTERRUPT);
-#endif
 	sa_handler = (unsigned long) sa->sa_handler;
 	if ((regs->orig_eax != -1) &&
 	    ((regs->eax == -ERESTARTSYS) || (regs->eax == -ERESTARTNOINTR))) {

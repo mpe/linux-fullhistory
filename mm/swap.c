@@ -179,16 +179,9 @@ int try_to_swap_out(unsigned long * table_ptr)
 	return 1;
 }
 
-/*
- * We never page the pages in task[0] - kernel memory.
- * We page all other pages.
- */
-#define FIRST_VM_PAGE (TASK_SIZE>>12)
-#define LAST_VM_PAGE (1024*1024)
-#define VM_PAGES (LAST_VM_PAGE - FIRST_VM_PAGE)
-
-static unsigned int dir_entry = 1024;
-static unsigned int page_entry = 0;
+static int swap_task = 1;
+static int swap_table = 0;
+static int swap_page = 0;
 
 /*
  * sys_idle() does nothing much: it just searches for likely candidates for
@@ -201,23 +194,32 @@ int sys_idle(void)
 	unsigned long page;
 
 	need_resched = 1;
-	if (dir_entry >= 1024)
-		dir_entry = FIRST_VM_PAGE>>10;
-	p = task[dir_entry >> 4];
-	page = pg_dir[dir_entry];
-	if (!(page & 1) || !p || !p->swappable) {
-		dir_entry++;
+	if (swap_task >= NR_TASKS)
+		swap_task = 1;
+	p = task[swap_task];
+	if (!p || !p->swappable) {
+		swap_task++;
+		return 0;
+	}
+	if (swap_table >= 1024) {
+		swap_task++;
+		swap_table = 0;
+		return 0;
+	}
+	page = ((unsigned long *) p->tss.cr3)[swap_table];
+	if (!(page & 1) || (page < low_memory)) {
+		swap_table++;
 		return 0;
 	}
 	page &= 0xfffff000;
-	if (page_entry >= 1024) {
-		page_entry = 0;
-		dir_entry++;
+	if (swap_page >= 1024) {
+		swap_page = 0;
+		swap_table++;
 		return 0;
 	}
-	page = *(page_entry + (unsigned long *) page);
+	page = *(swap_page + (unsigned long *) page);
 	if ((page < low_memory) || !(page & PAGE_PRESENT) || (page & PAGE_ACCESSED))
-		page_entry++;
+		swap_page++;
 	return 0;
 }
 
@@ -231,48 +233,54 @@ int sys_idle(void)
  */
 int swap_out(unsigned int priority)
 {
-	int counter = VM_PAGES / 2;
+	int counter = NR_TASKS;
 	int pg_table;
 	struct task_struct * p;
 
+	counter <<= priority;
+check_task:
+	if (counter-- < 0)
+		return 0;
+	if (swap_task >= NR_TASKS) {
+		swap_task = 1;
+		goto check_task;
+	}
+	p = task[swap_task];
+	if (!p || !p->swappable) {
+		swap_task++;
+		goto check_task;
+	}
 check_dir:
-	if (counter < 0)
-		goto no_swap;
-	if (dir_entry >= 1024)
-		dir_entry = FIRST_VM_PAGE>>10;
-	if (!(p = task[dir_entry >> 4]) || !p->swappable) {
-		counter -= 1024;
-		dir_entry++;
+	if (swap_table >= 1024) {
+		swap_table = 0;
+		swap_task++;
+		goto check_task;
+	}
+	pg_table = ((unsigned long *) p->tss.cr3)[swap_table];
+	if (pg_table < low_memory) {
+		swap_table++;
 		goto check_dir;
 	}
-	if (!(1 & (pg_table = pg_dir[dir_entry]))) {
-		if (pg_table) {
-			printk("bad page-table at pg_dir[%d]: %08x\n\r",
-				dir_entry,pg_table);
-			pg_dir[dir_entry] = 0;
-		}
-		counter -= 1024;
-		dir_entry++;
+	if (!(1 & pg_table)) {
+		printk("bad page-table at pg_dir[%d]: %08x\n\r",
+			swap_table,pg_table);
+		((unsigned long *) p->tss.cr3)[swap_table] = 0;
+		swap_table++;
 		goto check_dir;
 	}
 	pg_table &= 0xfffff000;
 check_table:
-	if (counter < 0)
-		goto no_swap;
-	if (page_entry >= 1024) {
-		page_entry = 0;
-		dir_entry++;
+	if (swap_page >= 1024) {
+		swap_page = 0;
+		swap_table++;
 		goto check_dir;
 	}
-	if (try_to_swap_out(page_entry + (unsigned long *) pg_table)) {
+	if (try_to_swap_out(swap_page + (unsigned long *) pg_table)) {
 		p->rss--;
 		return 1;
 	}
-	page_entry++;
-	counter--;
+	swap_page++;
 	goto check_table;
-no_swap:
-	return 0;
 }
 
 static int try_to_free_page(void)
@@ -335,10 +343,8 @@ repeat:
 	}
 	if (priority <= GFP_BUFFER)
 		return 0;
-	if (try_to_free_page()) {
-		schedule();
+	if (try_to_free_page())
 		goto repeat;
-	}
 	return 0;
 }
 
@@ -355,8 +361,9 @@ int sys_swapon(const char * specialfile)
 
 	if (!suser())
 		return -EPERM;
-	if (!(swap_inode  = namei(specialfile)))
-		return -ENOENT;
+	i = namei(specialfile,&swap_inode);
+	if (i)
+		return i;
 	if (swap_file || swap_device || swap_bitmap || swap_lockmap) {
 		iput(swap_inode);
 		return -EBUSY;

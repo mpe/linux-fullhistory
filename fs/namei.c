@@ -19,9 +19,6 @@
 #include <linux/fcntl.h>
 #include <linux/stat.h>
 
-struct inode * _namei(const char * filename, struct inode * base,
-	int follow_links);
-
 #define ACC_MODE(x) ("\004\002\006\377"[(x)&O_ACCMODE])
 
 /*
@@ -91,18 +88,21 @@ int lookup(struct inode * dir,const char * name, int len,
 	return dir->i_op->lookup(dir,name,len,result);
 }
 
-struct inode * follow_link(struct inode * dir, struct inode * inode)
+int follow_link(struct inode * dir, struct inode * inode,
+	int flag, int mode, struct inode ** res_inode)
 {
 	if (!dir || !inode) {
 		iput(dir);
 		iput(inode);
-		return NULL;
+		*res_inode = NULL;
+		return -ENOENT;
 	}
 	if (!inode->i_op || !inode->i_op->follow_link) {
 		iput(dir);
-		return inode;
+		*res_inode = inode;
+		return 0;
 	}
-	return inode->i_op->follow_link(dir,inode);
+	return inode->i_op->follow_link(dir,inode,flag,mode,res_inode);
 }
 
 /*
@@ -111,14 +111,15 @@ struct inode * follow_link(struct inode * dir, struct inode * inode)
  * dir_namei() returns the inode of the directory of the
  * specified name, and the name within that directory.
  */
-static struct inode * dir_namei(const char * pathname,
-	int * namelen, const char ** name, struct inode * base)
+static int dir_namei(const char * pathname, int * namelen, const char ** name,
+	struct inode * base, struct inode ** res_inode)
 {
 	char c;
 	const char * thisname;
 	int len,error;
 	struct inode * inode;
 
+	*res_inode = NULL;
 	if (!base) {
 		base = current->pwd;
 		base->i_count++;
@@ -139,41 +140,48 @@ static struct inode * dir_namei(const char * pathname,
 		error = lookup(base,thisname,len,&inode);
 		if (error) {
 			iput(base);
-			return NULL;
+			return error;
 		}
-		if (!(base = follow_link(base,inode)))
-			return NULL;
+		error = follow_link(base,inode,0,0,&base);
+		if (error)
+			return error;
 	}
 	*name = thisname;
 	*namelen = len;
-	return base;
+	*res_inode = base;
+	return 0;
 }
 
-struct inode * _namei(const char * pathname, struct inode * base,
-	int follow_links)
+static int _namei(const char * pathname, struct inode * base,
+	int follow_links, struct inode ** res_inode)
 {
 	const char * basename;
 	int namelen,error;
 	struct inode * inode;
 
-	if (!(base = dir_namei(pathname,&namelen,&basename,base)))
-		return NULL;
+	*res_inode = NULL;
+	error = dir_namei(pathname,&namelen,&basename,base,&base);
+	if (error)
+		return error;
 	base->i_count++;	/* lookup uses up base */
 	error = lookup(base,basename,namelen,&inode);
 	if (error) {
 		iput(base);
-		return NULL;
+		return error;
 	}
-	if (follow_links)
-		inode = follow_link(base,inode);
-	else
+	if (follow_links) {
+		error = follow_link(base,inode,0,0,&inode);
+		if (error)
+			return error;
+	} else
 		iput(base);
-	return inode;
+	*res_inode = inode;
+	return 0;
 }
 
-struct inode * lnamei(const char * pathname)
+int lnamei(const char * pathname, struct inode ** res_inode)
 {
-	return _namei(pathname, NULL, 0);
+	return _namei(pathname,NULL,0,res_inode);
 }
 
 /*
@@ -183,9 +191,9 @@ struct inode * lnamei(const char * pathname)
  * Open, link etc use their own routines, but this is enough for things
  * like 'chmod' etc.
  */
-struct inode * namei(const char * pathname)
+int namei(const char * pathname, struct inode ** res_inode)
 {
-	return _namei(pathname,NULL,1);
+	return _namei(pathname,NULL,1,res_inode);
 }
 
 /*
@@ -194,7 +202,7 @@ struct inode * namei(const char * pathname)
  * namei for open - this is in fact almost the whole open-routine.
  */
 int open_namei(const char * pathname, int flag, int mode,
-	struct inode ** res_inode)
+	struct inode ** res_inode, struct inode * base)
 {
 	const char * basename;
 	int namelen,error,i;
@@ -205,8 +213,9 @@ int open_namei(const char * pathname, int flag, int mode,
 		flag |= O_WRONLY;
 	mode &= 07777 & ~current->umask;
 	mode |= I_REGULAR;
-	if (!(dir = dir_namei(pathname,&namelen,&basename,NULL)))
-		return -ENOENT;
+	error = dir_namei(pathname,&namelen,&basename,base,&dir);
+	if (error)
+		return error;
 	if (!namelen) {			/* special case: '/usr/' etc */
 		if (!(flag & (O_ACCMODE|O_CREAT|O_TRUNC))) {
 			*res_inode=dir;
@@ -241,8 +250,8 @@ int open_namei(const char * pathname, int flag, int mode,
 		iput(inode);
 		return -EEXIST;
 	}
-	if (!(inode = follow_link(dir,inode)))
-		return -ELOOP;
+	if (error = follow_link(dir,inode,flag,mode,&inode))
+		return error;
 	if (S_ISBLK(inode->i_mode) || S_ISCHR(inode->i_mode)) {
 		if (IS_NODEV(inode)) {
 			iput(inode);
@@ -289,11 +298,12 @@ int open_namei(const char * pathname, int flag, int mode,
 int do_mknod(const char * filename, int mode, int dev)
 {
 	const char * basename;
-	int namelen;
+	int namelen, error;
 	struct inode * dir;
-	
-	if (!(dir = dir_namei(filename,&namelen,&basename, NULL)))
-		return -ENOENT;
+
+	error = dir_namei(filename,&namelen,&basename, NULL, &dir);
+	if (error)
+		return error;
 	if (!namelen) {
 		iput(dir);
 		return -ENOENT;
@@ -323,11 +333,12 @@ int sys_mknod(const char * filename, int mode, int dev)
 int sys_mkdir(const char * pathname, int mode)
 {
 	const char * basename;
-	int namelen;
+	int namelen, error;
 	struct inode * dir;
 
-	if (!(dir = dir_namei(pathname,&namelen,&basename, NULL)))
-		return -ENOENT;
+	error = dir_namei(pathname,&namelen,&basename,NULL,&dir);
+	if (error)
+		return error;
 	if (!namelen) {
 		iput(dir);
 		return -ENOENT;
@@ -350,11 +361,12 @@ int sys_mkdir(const char * pathname, int mode)
 int sys_rmdir(const char * name)
 {
 	const char * basename;
-	int namelen;
+	int namelen, error;
 	struct inode * dir;
 
-	if (!(dir = dir_namei(name,&namelen,&basename, NULL)))
-		return -ENOENT;
+	error = dir_namei(name,&namelen,&basename,NULL,&dir);
+	if (error)
+		return error;
 	if (!namelen) {
 		iput(dir);
 		return -ENOENT;
@@ -377,11 +389,12 @@ int sys_rmdir(const char * name)
 int sys_unlink(const char * name)
 {
 	const char * basename;
-	int namelen;
+	int namelen, error;
 	struct inode * dir;
 
-	if (!(dir = dir_namei(name,&namelen,&basename, NULL)))
-		return -ENOENT;
+	error = dir_namei(name,&namelen,&basename,NULL,&dir);
+	if (error)
+		return error;
 	if (!namelen) {
 		iput(dir);
 		return -EPERM;
@@ -405,11 +418,11 @@ int sys_symlink(const char * oldname, const char * newname)
 {
 	struct inode * dir;
 	const char * basename;
-	int namelen;
+	int namelen, error;
 
-	dir = dir_namei(newname,&namelen,&basename, NULL);
-	if (!dir)
-		return -ENOENT;
+	error = dir_namei(newname,&namelen,&basename,NULL,&dir);
+	if (error)
+		return error;
 	if (!namelen) {
 		iput(dir);
 		return -ENOENT;
@@ -433,15 +446,15 @@ int sys_link(const char * oldname, const char * newname)
 {
 	struct inode * oldinode, * dir;
 	const char * basename;
-	int namelen;
+	int namelen, error;
 
-	oldinode = namei(oldname);
-	if (!oldinode)
-		return -ENOENT;
-	dir = dir_namei(newname,&namelen,&basename, NULL);
-	if (!dir) {
+	error = namei(oldname, &oldinode);
+	if (error)
+		return error;
+	error = dir_namei(newname,&namelen,&basename,NULL,&dir);
+	if (error) {
 		iput(oldinode);
-		return -EACCES;
+		return error;
 	}
 	if (!namelen) {
 		iput(oldinode);
@@ -475,11 +488,11 @@ int sys_rename(const char * oldname, const char * newname)
 {
 	struct inode * old_dir, * new_dir;
 	const char * old_base, * new_base;
-	int old_len, new_len;
+	int old_len, new_len, error;
 
-	old_dir = dir_namei(oldname,&old_len,&old_base, NULL);
-	if (!old_dir)
-		return -ENOENT;
+	error = dir_namei(oldname,&old_len,&old_base,NULL,&old_dir);
+	if (error)
+		return error;
 	if (!permission(old_dir,MAY_WRITE)) {
 		iput(old_dir);
 		return -EACCES;
@@ -490,10 +503,10 @@ int sys_rename(const char * oldname, const char * newname)
 		iput(old_dir);
 		return -EPERM;
 	}
-	new_dir = dir_namei(newname,&new_len,&new_base, NULL);
-	if (!new_dir) {
+	error = dir_namei(newname,&new_len,&new_base,NULL,&new_dir);
+	if (error) {
 		iput(old_dir);
-		return -ENOENT;
+		return error;
 	}
 	if (!permission(new_dir,MAY_WRITE)) {
 		iput(old_dir);

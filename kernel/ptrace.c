@@ -88,7 +88,6 @@ static unsigned long get_long(struct task_struct * tsk,
 {
 	unsigned long page;
 
-	addr += tsk->start_code;
 repeat:
 	page = tsk->tss.cr3 + ((addr >> 20) & 0xffc);
 	page = *(unsigned long *) page;
@@ -117,7 +116,6 @@ static void put_long(struct task_struct * tsk, unsigned long addr,
 {
 	unsigned long page;
 
-	addr += tsk->start_code;
 repeat:
 	page = tsk->tss.cr3 + ((addr >> 20) & 0xffc);
 	page = *(unsigned long *) page;

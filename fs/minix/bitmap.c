@@ -230,6 +230,7 @@ struct inode * minix_new_inode(int dev)
 	inode->i_ino = j + i*8192;
 	inode->i_mtime = inode->i_atime = inode->i_ctime = CURRENT_TIME;
 	inode->i_op = NULL;
+	inode->i_blocks = inode->i_blksize = 0;
 	return inode;
 }
 

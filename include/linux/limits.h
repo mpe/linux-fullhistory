@@ -8,6 +8,7 @@
 #define NR_FILE 128
 #define NR_SUPER 8
 #define NR_HASH 997
+#define NR_FILE_LOCKS 32
 #define BLOCK_SIZE 1024
 #define BLOCK_SIZE_BITS 10
 #define MAX_CHRDEV 16

@@ -494,7 +494,6 @@ void grow_buffers(int size)
 		tmp = bh;
 		bh->b_data = (char * ) (page+i);
 		bh->b_size = size;
-		i += size;
 	}
 	tmp = bh;
 	while (1) {

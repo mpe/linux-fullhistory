@@ -21,7 +21,7 @@
 #include <linux/stat.h>
 
 static int ext_readlink(struct inode *, char *, int);
-static struct inode * ext_follow_link(struct inode *, struct inode *);
+static int ext_follow_link(struct inode *, struct inode *, int, int, struct inode **);
 
 /*
  * symlinks can't do much...
@@ -43,8 +43,10 @@ struct inode_operations ext_symlink_inode_operations = {
 	NULL			/* truncate */
 };
 
-static struct inode * ext_follow_link(struct inode * dir, struct inode * inode)
+static int ext_follow_link(struct inode * dir, struct inode * inode,
+	int flag, int mode, struct inode ** res_inode)
 {
+	int error;
 	unsigned short fs;
 	struct buffer_head * bh;
 
@@ -54,27 +56,30 @@ static struct inode * ext_follow_link(struct inode * dir, struct inode * inode)
 	}
 	if (!inode) {
 		iput(dir);
-		return NULL;
+		*res_inode = NULL;
+		return -ENOENT;
 	}
 	if (!S_ISLNK(inode->i_mode)) {
 		iput(dir);
-		return inode;
+		*res_inode = inode;
+		return 0;
 	}
 	__asm__("mov %%fs,%0":"=r" (fs));
 	if ((current->link_count > 5) || !inode->i_data[0] ||
 	   !(bh = bread(inode->i_dev, inode->i_data[0], BLOCK_SIZE))) {
 		iput(dir);
 		iput(inode);
-		return NULL;
+		*res_inode = NULL;
+		return -ELOOP;
 	}
 	iput(inode);
 	__asm__("mov %0,%%fs"::"r" ((unsigned short) 0x10));
 	current->link_count++;
-	inode = _namei(bh->b_data,dir,1);
+	error = open_namei(bh->b_data,flag,mode,res_inode,dir);
 	current->link_count--;
 	__asm__("mov %0,%%fs"::"r" (fs));
 	brelse(bh);
-	return inode;
+	return error;
 }
 
 static int ext_readlink(struct inode * inode, char * buffer, int buflen)

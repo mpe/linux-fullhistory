@@ -57,10 +57,12 @@ extern void rw_swap_page(int rw, unsigned int nr, char * buf);
 /* memory.c */
 	
 extern unsigned long get_free_page(int priority);
-extern unsigned long put_dirty_page(unsigned long page,unsigned long address);
+extern unsigned long put_dirty_page(struct task_struct * tsk,unsigned long page,
+	unsigned long address);
 extern void free_page(unsigned long addr);
-extern int free_page_tables(unsigned long from,unsigned long size);
-extern int copy_page_tables(unsigned long from,unsigned long to,long size);
+extern void free_page_tables(struct task_struct * tsk);
+extern void clear_page_tables(struct task_struct * tsk);
+extern int copy_page_tables(struct task_struct * new);
 extern int unmap_page_range(unsigned long from, unsigned long size);
 extern int remap_page_range(unsigned long from, unsigned long to, unsigned long size,
 	 int permiss);
@@ -82,7 +84,7 @@ extern void swap_free(unsigned int page_nr);
 extern void swap_in(unsigned long *table_ptr);
 
 #define invalidate() \
-__asm__("movl %%eax,%%cr3"::"a" (0))
+__asm__ __volatile__("movl %%cr3,%%eax\n\tmovl %%eax,%%cr3":::"ax")
 
 extern unsigned long low_memory;
 extern unsigned long high_memory;

@@ -63,7 +63,7 @@ static void die_if_kernel(char * str,long esp_ptr,long nr)
 	long * esp = (long *) esp_ptr;
 	int i;
 
-	if ((0xffff & esp[1]) == 0xf)
+	if ((esp[2] & VM_MASK) || ((0xffff & esp[1]) == 0xf))
 		return;
 	printk("%s: %04x\n\r",str,nr&0xffff);
 	printk("EIP:    %04x:%p\nEFLAGS: %p\n", 0xffff & esp[1],esp[0],esp[2]);

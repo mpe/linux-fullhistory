@@ -58,6 +58,10 @@ EFLAGS		= 0x38
 OLDESP		= 0x3C
 OLDSS		= 0x40
 
+IF_MASK		= 0x00000200
+NT_MASK		= 0x00004000
+VM_MASK		= 0x00020000
+
 /*
  * these are offsets into the task-struct.
  */
@@ -67,6 +71,7 @@ priority	= 8
 signal		= 12
 sigaction	= 16		# MUST be 16 (=len of sigaction)
 blocked		= (33*16)
+saved_kernel_stack = ((33*16)+4)
 
 /*
  * offsets within sigaction
@@ -121,11 +126,17 @@ _system_call:
 	movl %eax,EAX(%esp)		# save the return value
 	.align 4,0x90
 ret_from_sys_call:
+	movl EFLAGS(%esp),%eax
+	testl $VM_MASK,%eax
+	jne 1f
 	cmpw $0x0f,CS(%esp)		# was old code segment supervisor ?
 	jne 2f
 	cmpw $0x17,OLDSS(%esp)		# was stack segment = 0x17 ?
 	jne 2f
-1:	cmpl $0,_need_resched
+1:	orl $IF_MASK,%eax		# these just try to make sure
+	andl $~NT_MASK,%eax		# the program doesn't do anything
+	movl %eax,EFLAGS(%esp)		# stupid
+	cmpl $0,_need_resched
 	jne reschedule
 	movl _current,%eax
 	cmpl _task,%eax			# task[0] cannot have signals
@@ -141,10 +152,18 @@ ret_from_sys_call:
 	bsfl %ecx,%ecx
 	je 2f
 	btrl %ecx,%ebx
+	incl %ecx
 	movl %ebx,signal(%eax)
 	movl %esp,%ebx
+	testl $VM_MASK,EFLAGS(%esp)
+	je 3f
 	pushl %ebx
-	incl %ecx
+	pushl %ecx
+	call _save_v86_state
+	popl %ecx
+	movl %eax,%ebx
+	movl %eax,%esp
+3:	pushl %ebx
 	pushl %ecx
 	call _do_signal
 	popl %ecx

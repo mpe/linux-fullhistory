@@ -230,6 +230,7 @@ void minix_read_inode(struct inode * inode)
 	inode->i_nlink = raw_inode->i_nlinks;
 	inode->i_size = raw_inode->i_size;
 	inode->i_mtime = inode->i_atime = inode->i_ctime = raw_inode->i_time;
+	inode->i_blocks = inode->i_blksize = 0;
 	if (S_ISCHR(inode->i_mode) || S_ISBLK(inode->i_mode))
 		inode->i_rdev = raw_inode->i_zone[0];
 	else for (block = 0; block < 9; block++)

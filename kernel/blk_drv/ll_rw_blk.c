@@ -102,9 +102,6 @@ void set_device_ro(int dev,int flag)
  * add-request adds a request to the linked list.
  * It disables interrupts so that it can muck with the
  * request-lists in peace.
- *
- * Note that swapping requests always go before other requests,
- * and are done in the order they appear.
  */
 static void add_request(struct blk_dev_struct * dev, struct request * req)
 {
@@ -121,11 +118,6 @@ static void add_request(struct blk_dev_struct * dev, struct request * req)
 		return;
 	}
 	for ( ; tmp->next ; tmp = tmp->next) {
-		if (!req->bh)
-			if (tmp->next->bh)
-				break;
-			else
-				continue;
 		if ((IN_ORDER(tmp,req) ||
 		    !IN_ORDER(tmp,tmp->next)) &&
 		    IN_ORDER(req,tmp->next))
@@ -208,9 +200,10 @@ repeat:
 	sti();
 	goto repeat;
 
-found:	sti();
+found:
 /* fill up the request-info, and add it to the queue */
 	req->dev = bh->b_dev;
+	sti();
 	req->cmd = rw;
 	req->errors = 0;
 	req->sector = sector;
