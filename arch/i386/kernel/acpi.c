@@ -258,6 +258,8 @@ static struct ctl_table acpi_table[] =
 	{ACPI_FACP, "facp", &acpi_facp, 0, 0644, NULL, &acpi_do_table},
 
 	{ACPI_DSDT, "dsdt", &acpi_dsdt, 0, 0644, NULL, &acpi_do_table},
+	
+	{ACPI_FACS, "facs", &acpi_facs, 0, 0644, NULL, &acpi_do_table},
 
 	{ACPI_PM1_ENABLE, "pm1_enable",
 	 NULL, 0,
@@ -722,12 +724,21 @@ static int __init acpi_find_tables(void)
 		if (!acpi_init_table(&acpi_facp, dt, 1)) {
 			struct acpi_facp *facp
 				= (struct acpi_facp*) acpi_facp.table;
+			struct acpi_table *facs;
 
 			// map DSDT if it exists
-			dt = acpi_map_table(facp->dsdt);
-			if (acpi_init_table(&acpi_dsdt, dt, 1))
-				acpi_unmap_table(dt);
-
+			if ((dt = acpi_map_table(facp->dsdt))) {
+				if (acpi_init_table(&acpi_dsdt, dt, 1))
+					acpi_unmap_table(dt);
+			}
+			
+			/*
+			 * map FACS if it exists
+			 */
+			if ((facs = acpi_map_table(facp->facs))) {
+				if (acpi_init_table(&acpi_facs,facs,1))
+					acpi_unmap_table(facs);
+			}
 			break;
 		}
 		else {

@@ -374,7 +374,6 @@ void __init init_8259A(int auto_eoi)
 	spin_unlock_irqrestore(&i8259A_lock, flags);
 }
 
-#ifndef CONFIG_VISWS
 /*
  * Note that on a 486, we don't want to do a SIGFPE on an irq13
  * as the irq is unreliable, and exception 16 works correctly
@@ -400,12 +399,13 @@ static void math_error_irq(int cpl, void *dev_id, struct pt_regs *regs)
  * New motherboards sometimes make IRQ 13 be a PCI interrupt,
  * so allow interrupt sharing.
  */
-static struct irqaction irq13 = { math_error_irq, SA_SHIRQ, 0, "fpu", NULL, NULL };
+static struct irqaction irq13 = { math_error_irq, 0, 0, "fpu", NULL, NULL };
 
 /*
  * IRQ2 is cascade interrupt to second interrupt controller
  */
 
+#ifndef CONFIG_VISWS
 static struct irqaction irq2 = { no_action, 0, 0, "cascade", NULL, NULL};
 #endif
 
@@ -494,6 +494,12 @@ void __init init_IRQ(void)
 
 #ifndef CONFIG_VISWS
 	setup_irq(2, &irq2);
-	setup_irq(13, &irq13);
 #endif
+
+	/*
+	 * External FPU? Set up irq13 if so, for
+	 * original braindamaged IBM FERR coupling.
+	 */
+	if (boot_cpu_data.hard_math && !cpu_has_fpu)
+		setup_irq(13, &irq13);
 }

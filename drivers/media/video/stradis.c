@@ -1827,11 +1827,6 @@ static int saa_ioctl(struct video_device *dev, unsigned int cmd, void *arg)
 	return 0;
 }
 
-static int saa_init_done(struct video_device *dev)
-{
-	return 0;
-}
-
 static int saa_mmap(struct video_device *dev, const char *adr,
 		    unsigned long size)
 {
@@ -1993,20 +1988,15 @@ static void saa_close(struct video_device *dev)
 /* template for video_device-structure */
 static struct video_device saa_template =
 {
-	"SAA7146A",
-	VID_TYPE_CAPTURE | VID_TYPE_OVERLAY,
-	VID_HARDWARE_SAA7146,
-	saa_open,
-	saa_close,
-	saa_read,
-	saa_write,
-	NULL,			/* poll */
-	saa_ioctl,
-	saa_mmap,
-	saa_init_done,
-	NULL,
-	0,
-	0
+	name:		"SAA7146A",
+	type:		VID_TYPE_CAPTURE | VID_TYPE_OVERLAY,
+	hardware:	VID_HARDWARE_SAA7146,
+	open:		saa_open,
+	close:		saa_close,
+	read:		saa_read,
+	write:		saa_write,
+	ioctl:		saa_ioctl,
+	mmap:		saa_mmap,
 };
 
 static int configure_saa7146(struct pci_dev *dev, int num)

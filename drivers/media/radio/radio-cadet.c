@@ -542,17 +542,13 @@ static void cadet_close(struct video_device *dev)
 
 static struct video_device cadet_radio=
 {
-	"Cadet radio",
-	VID_TYPE_TUNER,
-	VID_HARDWARE_CADET,
-	cadet_open,
-	cadet_close,
-	cadet_read,
-	NULL,	/* Can't write */
-	NULL,	/* No poll */
-	cadet_ioctl,
-	NULL,
-	NULL
+	name:		"Cadet radio",
+	type:		VID_TYPE_TUNER,
+	hardware:	VID_HARDWARE_CADET,
+	open:		cadet_open,
+	close:		cadet_close,
+	read:		cadet_read,
+	ioctl:		cadet_ioctl,
 };
 
 #ifdef CONFIG_ISAPNP

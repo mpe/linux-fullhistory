@@ -2492,11 +2492,6 @@ static void ibmcam_close(struct video_device *dev)
 	MOD_DEC_USE_COUNT;
 }
 
-static int ibmcam_init_done(struct video_device *dev)
-{
-	return 0;
-}
-
 static long ibmcam_write(struct video_device *dev, const char *buf, unsigned long count, int noblock)
 {
 	return -EINVAL;
@@ -2855,20 +2850,15 @@ static int ibmcam_mmap(struct video_device *dev, const char *adr, unsigned long 
 }
 
 static struct video_device ibmcam_template = {
-	"CPiA USB Camera",
-	VID_TYPE_CAPTURE,
-	VID_HARDWARE_CPIA,
-	ibmcam_open,
-	ibmcam_close,
-	ibmcam_read,
-	ibmcam_write,
-	NULL,
-	ibmcam_ioctl,
-	ibmcam_mmap,
-	ibmcam_init_done,
-	NULL,
-	0,
-	0
+	name:		"CPiA USB Camera",
+	type:		VID_TYPE_CAPTURE,
+	hardware:	VID_HARDWARE_CPIA,
+	open:		ibmcam_open,
+	close:		ibmcam_close,
+	read:		ibmcam_read,
+	write:		ibmcam_write,
+	ioctl:		ibmcam_ioctl,
+	mmap:		ibmcam_mmap,
 };
 
 static void usb_ibmcam_configure_video(struct usb_ibmcam *ibmcam)

@@ -12,6 +12,8 @@ struct timespec {
 };
 #endif /* _STRUCT_TIMESPEC */
 
+#ifdef __KERNEL__
+
 /*
  * Change timeval to jiffies, trying to avoid the
  * most obvious overflows..
@@ -79,6 +81,8 @@ mktime (unsigned int year, unsigned int mon,
 	  )*60 + min /* now have minutes */
 	)*60 + sec; /* finally seconds */
 }
+
+#endif /* __KERNEL__ */
 
 
 struct timeval {

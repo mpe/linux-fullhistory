@@ -2122,7 +2122,7 @@ int get_cpuinfo(char * buffer)
 			p += sprintf(p, "cache size\t: %d KB\n", c->x86_cache_size);
 		
 		/* We use exception 16 if we have hardware math and we've either seen it or the CPU claims it is internal */
-		fpu_exception = c->hard_math && (ignore_irq13 | test_bit(X86_FEATURE_FPU, &c->x86_capability));
+		fpu_exception = c->hard_math && (ignore_irq13 || cpu_has_fpu);
 		p += sprintf(p, "fdiv_bug\t: %s\n"
 			        "hlt_bug\t\t: %s\n"
 			        "f00f_bug\t: %s\n"
@@ -2178,7 +2178,7 @@ void __init cpu_init (void)
 	if (tsc_disable && cpu_has_tsc) {
 		printk("Disabling TSC...\n");
 		/**** FIX-HPA: DOES THIS REALLY BELONG HERE? ****/
-		clear_bit(&boot_cpu_data.x86_capability, X86_FEATURE_TSC);
+		clear_bit(X86_FEATURE_TSC, boot_cpu_data.x86_capability);
 		set_in_cr4(X86_CR4_TSD);
 	}
 #endif

@@ -30,6 +30,7 @@ extern void restore_fpu( struct task_struct *tsk );
 
 #define clear_fpu( tsk ) do { \
 	if ( tsk->flags & PF_USEDFPU ) { \
+		asm volatile("fwait"); \
 		tsk->flags &= ~PF_USEDFPU; \
 		stts(); \
 	} \

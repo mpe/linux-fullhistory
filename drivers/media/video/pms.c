@@ -681,11 +681,6 @@ static void pms_close(struct video_device *dev)
 	MOD_DEC_USE_COUNT;
 }
 
-static int pms_init_done(struct video_device *dev)
-{
-	return 0;
-}
-
 static long pms_write(struct video_device *v, const char *buf, unsigned long count, int noblock)
 {
 	return -EINVAL;
@@ -907,20 +902,14 @@ static long pms_read(struct video_device *v, char *buf, unsigned long count,  in
  
 struct video_device pms_template=
 {
-	"Mediavision PMS",
-	VID_TYPE_CAPTURE,
-	VID_HARDWARE_PMS,
-	pms_open,
-	pms_close,
-	pms_read,
-	pms_write,
-	NULL,		/* FIXME - we can use POLL on this board with the irq */
-	pms_ioctl,
-	NULL,
-	pms_init_done,
-	NULL,
-	0,
-	0
+	name:		"Mediavision PMS",
+	type:		VID_TYPE_CAPTURE,
+	hardware:	VID_HARDWARE_PMS,
+	open:		pms_open,
+	close:		pms_close,
+	read:		pms_read,
+	write:		pms_write,
+	ioctl:		pms_ioctl,
 };
 
 struct pms_device pms_device;

@@ -2016,11 +2016,6 @@ static int bttv_ioctl(struct video_device *dev, unsigned int cmd, void *arg)
 	return 0;
 }
 
-static int bttv_init_done(struct video_device *dev)
-{
-	return 0;
-}
-
 /*
  *	This maps the vmalloced and reserved fbuffer to user space.
  *
@@ -2067,20 +2062,16 @@ static int bttv_mmap(struct video_device *dev, const char *adr, unsigned long si
 
 static struct video_device bttv_template=
 {
-	"UNSET",
-	VID_TYPE_TUNER|VID_TYPE_CAPTURE|VID_TYPE_OVERLAY|VID_TYPE_TELETEXT,
-	VID_HARDWARE_BT848,
-	bttv_open,
-	bttv_close,
-	bttv_read,
-	bttv_write,
-	NULL,
-	bttv_ioctl,
-	bttv_mmap,
-	bttv_init_done,
-	NULL,
-	0,
-	-1
+	name:		"UNSET",
+	type:		VID_TYPE_TUNER|VID_TYPE_CAPTURE|VID_TYPE_OVERLAY|VID_TYPE_TELETEXT,
+	hardware:	VID_HARDWARE_BT848,
+	open:		bttv_open,
+	close:		bttv_close,
+	read:		bttv_read,
+	write:		bttv_write,
+	ioctl:		bttv_ioctl,
+	mmap:		bttv_mmap,
+	minor:		-1,
 };
 
 
@@ -2220,20 +2211,16 @@ static int vbi_ioctl(struct video_device *dev, unsigned int cmd, void *arg)
 
 static struct video_device vbi_template=
 {
-	"bttv vbi",
-	VID_TYPE_CAPTURE|VID_TYPE_TELETEXT,
-	VID_HARDWARE_BT848,
-	vbi_open,
-	vbi_close,
-	vbi_read,
-	bttv_write,
-	vbi_poll,
-	vbi_ioctl,
-	NULL,	/* no mmap yet */
-	bttv_init_done,
-	NULL,
-	0,
-	-1
+	name:		"bttv vbi",
+	type:		VID_TYPE_CAPTURE|VID_TYPE_TELETEXT,
+	hardware:	VID_HARDWARE_BT848,
+	open:		vbi_open,
+	close:		vbi_close,
+	read:		vbi_read,
+	write:		bttv_write,
+	poll:		vbi_poll,
+	ioctl:		vbi_ioctl,
+	minor:		-1,
 };
 
 
@@ -2342,20 +2329,15 @@ static int radio_ioctl(struct video_device *dev, unsigned int cmd, void *arg)
 
 static struct video_device radio_template=
 {
-	"bttv radio",
-	VID_TYPE_TUNER,
-	VID_HARDWARE_BT848,
-	radio_open,
-	radio_close,
-	radio_read,          /* just returns -EINVAL */
-	bttv_write,          /* just returns -EINVAL */
-	NULL,                /* no poll */
-	radio_ioctl,
-	NULL,	             /* no mmap */
-	bttv_init_done,      /* just returns 0 */
-	NULL,
-	0,
-	-1
+	name:		"bttv radio",
+	type:		VID_TYPE_TUNER,
+	hardware:	VID_HARDWARE_BT848,
+	open:		radio_open,
+	close:		radio_close,
+	read:		radio_read,          /* just returns -EINVAL */
+	write:		bttv_write,          /* just returns -EINVAL */
+	ioctl:		radio_ioctl,
+	minor:		-1,
 };
 
 

@@ -705,11 +705,6 @@ static void qcam_close(struct video_device *dev)
 	MOD_DEC_USE_COUNT;
 }
 
-static int qcam_init_done(struct video_device *dev)
-{
-	return 0;
-}
-
 static long qcam_write(struct video_device *v, const char *buf, unsigned long count, int noblock)
 {
 	return -EINVAL;
@@ -926,20 +921,14 @@ static long qcam_read(struct video_device *v, char *buf, unsigned long count,  i
  
 static struct video_device qcam_template=
 {
-	"Connectix Quickcam",
-	VID_TYPE_CAPTURE,
-	VID_HARDWARE_QCAM_BW,
-	qcam_open,
-	qcam_close,
-	qcam_read,
-	qcam_write,
-	NULL,
-	qcam_ioctl,
-	NULL,
-	qcam_init_done,
-	NULL,
-	0,
-	0
+	name:		"Connectix Quickcam",
+	type:		VID_TYPE_CAPTURE,
+	hardware:	VID_HARDWARE_QCAM_BW,
+	open:		qcam_open,
+	close:		qcam_close,
+	read:		qcam_read,
+	write:		qcam_write,
+	ioctl:		qcam_ioctl,
 };
 
 #define MAX_CAMS 4

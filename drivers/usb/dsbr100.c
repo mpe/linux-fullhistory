@@ -91,17 +91,12 @@ typedef struct
 
 static struct video_device usb_dsbr100_radio=
 {
-	"D-Link DSB R-100 USB radio",
-	VID_TYPE_TUNER,
-	VID_HARDWARE_AZTECH,
-	usb_dsbr100_open,
-	usb_dsbr100_close,
-	NULL,	/* Can't read  (no capture ability) */
-	NULL,	/* Can't write */
-	NULL,	/* No poll */
-	usb_dsbr100_ioctl,
-	NULL,
-	NULL
+	name:		"D-Link DSB R-100 USB radio",
+	type:		VID_TYPE_TUNER,
+	hardware:	VID_HARDWARE_AZTECH,
+	open:		usb_dsbr100_open,
+	close:		usb_dsbr100_close,
+	ioctl:		usb_dsbr100_ioctl,
 };
 
 static int users = 0;

@@ -69,17 +69,12 @@ static void radio_close(struct video_device *);
 
 static struct video_device maestro_radio=
 {
-	"Maestro radio",
-	VID_TYPE_TUNER,
-	VID_HARDWARE_SF16MI,
-	radio_open,
-	radio_close,
-	NULL,
-	NULL,
-	NULL,
-	radio_ioctl,
-	NULL,
-	NULL
+	name:		"Maestro radio",
+	type:		VID_TYPE_TUNER,
+	hardware:	VID_HARDWARE_SF16MI,
+	open:		radio_open,
+	close:		radio_close,
+	ioctl:		radio_ioctl,
 };
 
 static struct radio_device
@@ -300,21 +295,17 @@ static void radio_close(struct video_device *dev)
 
 inline static __u16 radio_install(struct pci_dev *pcidev);
 
-#ifdef MODULE
 MODULE_AUTHOR("Adam Tlalka, atlka@pg.gda.pl");
 MODULE_DESCRIPTION("Radio driver for the Maestro PCI sound card radio.");
 
 EXPORT_NO_SYMBOLS;
 
-void cleanup_module(void)
+void __exit maestro_radio_exit(void)
 {
 	video_unregister_device(&maestro_radio);
 }
 
-int init_module(void)
-#else
-int __init maestro_radio_init(struct video_init *v)
-#endif
+int __init maestro_radio_init(void)
 {
 	register __u16 found=0;
 	struct pci_dev *pcidev = NULL;
@@ -334,6 +325,9 @@ int __init maestro_radio_init(struct video_init *v)
 	}
 	return 0;
 }
+
+module_init(maestro_radio_init);
+module_exit(maestro_radio_exit);
 
 inline static __u16 radio_power_on(struct radio_device *dev)
 {

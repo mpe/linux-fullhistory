@@ -273,17 +273,12 @@ static struct az_device aztech_unit;
 
 static struct video_device aztech_radio=
 {
-	"Aztech radio",
-	VID_TYPE_TUNER,
-	VID_HARDWARE_AZTECH,
-	az_open,
-	az_close,
-	NULL,	/* Can't read  (no capture ability) */
-	NULL,	/* Can't write */
-	NULL,	/* No poll */
-	az_ioctl,
-	NULL,
-	NULL
+	name:		"Aztech radio",
+	type:		VID_TYPE_TUNER,
+	hardware:	VID_HARDWARE_AZTECH,
+	open:		az_open,
+	close:		az_close,
+	ioctl:		az_ioctl,
 };
 
 static int __init aztech_init(void)

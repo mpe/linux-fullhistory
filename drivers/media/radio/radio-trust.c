@@ -286,17 +286,12 @@ static void tr_close(struct video_device *dev)
 
 static struct video_device trust_radio=
 {
-	"Trust FM Radio",
-	VID_TYPE_TUNER,
-	VID_HARDWARE_TRUST,
-	tr_open,
-	tr_close,
-	NULL,	/* Can't read  (no capture ability) */
-	NULL,	/* Can't write */
-	NULL,	/* No poll */
-	tr_ioctl,
-	NULL,
-	NULL
+	name:		"Trust FM Radio",
+	type:		VID_TYPE_TUNER,
+	hardware:	VID_HARDWARE_TRUST,
+	open:		tr_open,
+	close:		tr_close,
+	ioctl:		tr_ioctl,
 };
 
 static int __init trust_init(void)

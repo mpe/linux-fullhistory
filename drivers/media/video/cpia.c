@@ -3031,20 +3031,16 @@ int cpia_video_init(struct video_device *vdev)
 }
 
 static struct video_device cpia_template = {
-	"CPiA Camera",
-	VID_TYPE_CAPTURE,
-	VID_HARDWARE_CPIA,      /* FIXME */
-	cpia_open,              /* open */
-	cpia_close,             /* close */
-	cpia_read,              /* read */
-	NULL,                   /* no write */
-	NULL,                   /* no poll */
-	cpia_ioctl,             /* ioctl */
-	cpia_mmap,              /* mmap */
-	cpia_video_init,        /* initialize */
-	NULL,                   /* priv */
-	0,                      /* busy */
-	-1                      /* minor - unset */
+	name:		"CPiA Camera",
+	type:		VID_TYPE_CAPTURE,
+	hardware:	VID_HARDWARE_CPIA,      /* FIXME */
+	open:		cpia_open,
+	close:		cpia_close,
+	read:		cpia_read,
+	ioctl:		cpia_ioctl,
+	mmap:		cpia_mmap,
+	initialize:	cpia_video_init,
+	minor:		-1,
 };
 
 /* initialise cam_data structure  */

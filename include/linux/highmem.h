@@ -20,7 +20,7 @@ extern struct buffer_head * create_bounce(int rw, struct buffer_head * bh_orig);
 
 static inline char *bh_kmap(struct buffer_head *bh)
 {
-	return kmap(bh->p_page) + bh_offset(bh);
+	return kmap(bh->b_page) + bh_offset(bh);
 }
 
 static inline void bh_kunmap(struct buffer_head *bh)

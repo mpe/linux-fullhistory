@@ -192,17 +192,12 @@ static struct pcm20_device pcm20_unit;
 
 static struct video_device pcm20_radio=
 {
-	"Miro PCM 20 radio",
-	VID_TYPE_TUNER,
-	VID_HARDWARE_RTRACK,
-	pcm20_open,
-	pcm20_close,
-	NULL,	/* Can't read  (no capture ability) */
-	NULL,	/* Can't write */
-	NULL,	/* Can't poll */
-	pcm20_ioctl,
-	NULL,
-	NULL
+	name:		"Miro PCM 20 radio",
+	type:		VID_TYPE_TUNER,
+	hardware:	VID_HARDWARE_RTRACK,
+	open:		pcm20_open,
+	close:		pcm20_close,
+	ioctl:		pcm20_ioctl,
 };
 
 static int __init pcm20_init(void)

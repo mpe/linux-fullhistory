@@ -294,17 +294,12 @@ static struct tt_device terratec_unit;
 
 static struct video_device terratec_radio=
 {
-	"TerraTec ActiveRadio",
-	VID_TYPE_TUNER,
-	VID_HARDWARE_TERRATEC,
-	tt_open,
-	tt_close,
-	NULL,	/* Can't read  (no capture ability) */
-	NULL,	/* Can't write */
-	NULL,	/* No poll */
-	tt_ioctl,
-	NULL,
-	NULL
+	name:		"TerraTec ActiveRadio",
+	type:		VID_TYPE_TUNER,
+	hardware:	VID_HARDWARE_TERRATEC,
+	open:		tt_open,
+	close:		tt_close,
+	ioctl:		tt_ioctl,
 };
 
 static int __init terratec_init(void)

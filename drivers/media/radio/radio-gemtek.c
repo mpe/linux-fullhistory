@@ -249,17 +249,12 @@ static struct gemtek_device gemtek_unit;
 
 static struct video_device gemtek_radio=
 {
-	"GemTek radio",
-	VID_TYPE_TUNER,
-	VID_HARDWARE_GEMTEK,
-	gemtek_open,
-	gemtek_close,
-	NULL,	/* Can't read  (no capture ability) */
-	NULL,	/* Can't write */
-	NULL,	/* Can't poll */
-	gemtek_ioctl,
-	NULL,
-	NULL
+	name:		"GemTek radio",
+	type:		VID_TYPE_TUNER,
+	hardware:	VID_HARDWARE_GEMTEK,
+	open:		gemtek_open,
+	close:		gemtek_close,
+	ioctl:		gemtek_ioctl,
 };
 
 static int __init gemtek_init(void)

@@ -3027,28 +3027,18 @@ static int zoran_mmap(struct video_device *dev, const char *adr, unsigned long s
 	return 0;
 }
 
-static int zoran_init_done(struct video_device *dev)
-{
-	return 0;
-}
-
 static struct video_device zoran_template =
 {
-	BUZ_NAME,
-	VID_TYPE_CAPTURE | VID_TYPE_OVERLAY | VID_TYPE_CLIPPING | VID_TYPE_FRAMERAM |
-	VID_TYPE_SCALES | VID_TYPE_SUBCAPTURE,
-	VID_HARDWARE_ZR36067,
-	zoran_open,
-	zoran_close,
-	zoran_read,
-	zoran_write,
-	NULL,
-	zoran_ioctl,
-	zoran_mmap,
-	zoran_init_done,
-	NULL,
-	0,
-	0
+	name:		BUZ_NAME,
+	type:		VID_TYPE_CAPTURE | VID_TYPE_OVERLAY | VID_TYPE_CLIPPING | VID_TYPE_FRAMERAM |
+			VID_TYPE_SCALES | VID_TYPE_SUBCAPTURE,
+	hardware:	VID_HARDWARE_ZR36067,
+	open:		zoran_open,
+	close:		zoran_close,
+	read:		zoran_read,
+	write:		zoran_write,
+	ioctl:		zoran_ioctl,
+	mmap:		zoran_mmap,
 };
 
 static int zr36057_init(int i)

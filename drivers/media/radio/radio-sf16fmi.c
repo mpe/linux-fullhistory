@@ -276,17 +276,12 @@ static struct fmi_device fmi_unit;
 
 static struct video_device fmi_radio=
 {
-	"SF16FMx radio",
-	VID_TYPE_TUNER,
-	VID_HARDWARE_SF16MI,
-	fmi_open,
-	fmi_close,
-	NULL,	/* Can't read  (no capture ability) */
-	NULL,	/* Can't write */
-	NULL,	/* Can't poll */
-	fmi_ioctl,
-	NULL,
-	NULL
+	name:		"SF16FMx radio",
+	type:		VID_TYPE_TUNER,
+	hardware:	VID_HARDWARE_SF16MI,
+	open:		fmi_open,
+	close:		fmi_close,
+	ioctl:		fmi_ioctl,
 };
 
 static int __init fmi_init(void)

@@ -273,27 +273,19 @@ static void typhoon_close(struct video_device *dev)
 
 static struct typhoon_device typhoon_unit =
 {
-	0,				/* users */
-	CONFIG_RADIO_TYPHOON_PORT,	/* iobase */
-	0,				/* curvol */
-	0,				/* muted */
-	CONFIG_RADIO_TYPHOON_MUTEFREQ,	/* curfreq */
-	CONFIG_RADIO_TYPHOON_MUTEFREQ	/* mutefreq */
+	iobase:		CONFIG_RADIO_TYPHOON_PORT,
+	curfreq:	CONFIG_RADIO_TYPHOON_MUTEFREQ,
+	mutefreq:	CONFIG_RADIO_TYPHOON_MUTEFREQ,
 };
 
 static struct video_device typhoon_radio =
 {
-	"Typhoon Radio",
-	VID_TYPE_TUNER,
-	VID_HARDWARE_TYPHOON,
-	typhoon_open,
-	typhoon_close,
-	NULL,			/* Can't read  (no capture ability) */
-	NULL,			/* Can't write */
-	NULL,			/* Can't poll */
-	typhoon_ioctl,
-	NULL,
-	NULL
+	name:		"Typhoon Radio",
+	type:		VID_TYPE_TUNER,
+	hardware:	VID_HARDWARE_TYPHOON,
+	open:		typhoon_open,
+	close:		typhoon_close,
+	ioctl:		typhoon_ioctl,
 };
 
 #ifdef CONFIG_RADIO_TYPHOON_PROC_FS

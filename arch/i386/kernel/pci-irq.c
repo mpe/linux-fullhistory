@@ -297,13 +297,19 @@ static struct irq_router pirq_routers[] = {
 	{ "PIIX", PCI_VENDOR_ID_INTEL, PCI_DEVICE_ID_INTEL_82371FB_0, pirq_piix_get, pirq_piix_set },
 	{ "PIIX", PCI_VENDOR_ID_INTEL, PCI_DEVICE_ID_INTEL_82371SB_0, pirq_piix_get, pirq_piix_set },
 	{ "PIIX", PCI_VENDOR_ID_INTEL, PCI_DEVICE_ID_INTEL_82371AB_0, pirq_piix_get, pirq_piix_set },
+	{ "PIIX", PCI_VENDOR_ID_INTEL, PCI_DEVICE_ID_INTEL_82371MX,   pirq_piix_get, pirq_piix_set },
 	{ "PIIX", PCI_VENDOR_ID_INTEL, PCI_DEVICE_ID_INTEL_82443MX_0, pirq_piix_get, pirq_piix_set },
+
 	{ "ALI", PCI_VENDOR_ID_AL, PCI_DEVICE_ID_AL_M1533, pirq_ali_get, pirq_ali_set },
+
 	{ "VIA", PCI_VENDOR_ID_VIA, PCI_DEVICE_ID_VIA_82C586_0, pirq_via_get, pirq_via_set },
 	{ "VIA", PCI_VENDOR_ID_VIA, PCI_DEVICE_ID_VIA_82C596, pirq_via_get, pirq_via_set },
 	{ "VIA", PCI_VENDOR_ID_VIA, PCI_DEVICE_ID_VIA_82C686, pirq_via_get, pirq_via_set },
+
 	{ "OPTI", PCI_VENDOR_ID_OPTI, PCI_DEVICE_ID_OPTI_82C700, pirq_opti_get, pirq_opti_set },
+
 	{ "NatSemi", PCI_VENDOR_ID_CYRIX, PCI_DEVICE_ID_CYRIX_5520, pirq_cyrix_get, pirq_cyrix_set },
+
 	{ "default", 0, 0, NULL, NULL }
 };
 
@@ -313,7 +319,6 @@ static struct pci_dev *pirq_router_dev;
 static void __init pirq_find_router(void)
 {
 	struct irq_routing_table *rt = pirq_table;
-	u16 rvendor, rdevice;
 	struct irq_router *r;
 
 #ifdef CONFIG_PCI_BIOS
@@ -323,32 +328,31 @@ static void __init pirq_find_router(void)
 		return;
 	}
 #endif
-	if (!(pirq_router_dev = pci_find_slot(rt->rtr_bus, rt->rtr_devfn))) {
+	/* fall back to default router if nothing else found */
+	pirq_router = pirq_routers + sizeof(pirq_routers) / sizeof(pirq_routers[0]) - 1;
+
+	pirq_router_dev = pci_find_slot(rt->rtr_bus, rt->rtr_devfn);
+	if (!pirq_router_dev) {
 		DBG("PCI: Interrupt router not found at %02x:%02x\n", rt->rtr_bus, rt->rtr_devfn);
-		/* fall back to default router */
-		pirq_router = pirq_routers + sizeof(pirq_routers) / sizeof(pirq_routers[0]) - 1;
 		return;
 	}
-	if (rt->rtr_vendor) {
-		rvendor = rt->rtr_vendor;
-		rdevice = rt->rtr_device;
-	} else {
-		/*
-		 * Several BIOSes forget to set the router type. In such cases, we
-		 * use chip vendor/device. This doesn't guarantee us semantics of
-		 * PIRQ values, but was found to work in practice and it's still
-		 * better than not trying.
-		 */
-		DBG("PCI: Guessed interrupt router ID from %s\n", pirq_router_dev->slot_name);
-		rvendor = pirq_router_dev->vendor;
-		rdevice = pirq_router_dev->device;
-	}
-	for(r=pirq_routers; r->vendor; r++)
-		if (r->vendor == rvendor && r->device == rdevice)
+
+	for(r=pirq_routers; r->vendor; r++) {
+		/* Exact match against router table entry? Use it! */
+		if (r->vendor == rt->rtr_vendor && r->device == rt->rtr_device) {
+			pirq_router = r;
 			break;
-	pirq_router = r;
-	printk("PCI: Using IRQ router %s [%04x/%04x] at %s\n", r->name,
-	       rvendor, rdevice, pirq_router_dev->slot_name);
+		}
+		/* Match against router device entry? Use it as a fallback */
+		if (r->vendor == pirq_router_dev->vendor && r->device == pirq_router_dev->device) {
+			pirq_router = r;
+		}
+	}
+	printk("PCI: Using IRQ router %s [%04x/%04x] at %s\n",
+		pirq_router->name,
+		pirq_router_dev->vendor,
+		pirq_router_dev->device,
+		pirq_router_dev->slot_name);
 }
 
 static struct irq_info *pirq_get_info(struct pci_dev *dev, int pin)

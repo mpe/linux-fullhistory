@@ -224,20 +224,13 @@ static int vino_mmap(struct video_device *dev, const char *adr,
 }
 
 static struct video_device vino_dev = {
-	"Vino IndyCam/TV",
-	VID_TYPE_CAPTURE,
-	VID_HARDWARE_VINO,
-	vino_open,
-	vino_close,
-	NULL,		/* vino_read */
-	NULL,		/* vino_write */
-	NULL,		/* vino_poll */
-	vino_ioctl,
-	vino_mmap,
-	NULL,		/* vino_init */
-	NULL,
-	0,
-	0
+	name:		"Vino IndyCam/TV",
+	type:		VID_TYPE_CAPTURE,
+	hardware:	VID_HARDWARE_VINO,
+	open:		vino_open,
+	close:		vino_close,
+	ioctl:		vino_ioctl,
+	mmap:		vino_mmap,
 };
 
 int __init init_vino(struct video_device *dev)

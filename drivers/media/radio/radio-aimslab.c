@@ -322,17 +322,12 @@ static struct rt_device rtrack_unit;
 
 static struct video_device rtrack_radio=
 {
-	"RadioTrack radio",
-	VID_TYPE_TUNER,
-	VID_HARDWARE_RTRACK,
-	rt_open,
-	rt_close,
-	NULL,	/* Can't read  (no capture ability) */
-	NULL,	/* Can't write */
-	NULL,	/* No poll */
-	rt_ioctl,
-	NULL,
-	NULL
+	name:		"RadioTrack radio",
+	type:		VID_TYPE_TUNER,
+	hardware:	VID_HARDWARE_RTRACK,
+	open:		rt_open,
+	close:		rt_close,
+	ioctl:		rt_ioctl,
 };
 
 static int __init rtrack_init(void)

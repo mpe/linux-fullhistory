@@ -341,17 +341,12 @@ static struct zol_device zoltrix_unit;
 
 static struct video_device zoltrix_radio =
 {
-	"Zoltrix Radio Plus",
-	VID_TYPE_TUNER,
-	VID_HARDWARE_ZOLTRIX,
-	zol_open,
-	zol_close,
-	NULL,			/* Can't read  (no capture ability) */
-	NULL,			/* Can't write */
-	NULL,
-	zol_ioctl,
-	NULL,
-	NULL
+	name:		"Zoltrix Radio Plus",
+	type:		VID_TYPE_TUNER,
+	hardware:	VID_HARDWARE_ZOLTRIX,
+	open:		zol_open,
+	close:		zol_close,
+	ioctl:		zol_ioctl,
 };
 
 static int __init zoltrix_init(void)

@@ -669,15 +669,12 @@ module_exit(cleanup_saa_5249);
 
 static struct video_device saa_template =
 {
-	IF_NAME,
-	VID_TYPE_TELETEXT,	/*| VID_TYPE_TUNER ?? */
-	VID_HARDWARE_SAA5249,
-	saa5249_open,
-	saa5249_release,
-	NULL,			/* read */
-	saa5249_write,
-	NULL,			/* poll */
-	saa5249_ioctl,
-	/* the rest are null */
+	name:		IF_NAME,
+	type:		VID_TYPE_TELETEXT,	/*| VID_TYPE_TUNER ?? */
+	hardware:	VID_HARDWARE_SAA5249,
+	open:		saa5249_open,
+	close:		saa5249_release,
+	write:		saa5249_write,
+	ioctl:		saa5249_ioctl,
 };
 

@@ -2035,31 +2035,17 @@ static int planb_mmap(struct video_device *dev, const char *adr, unsigned long s
 	return 0;
 }
 
-/* This gets called upon device registration */
-/* we could do some init here */
-static int planb_init_done(struct video_device *dev)
-{
-	return 0;
-}
-
 static struct video_device planb_template=
 {
-	PLANB_DEVICE_NAME,
-	VID_TYPE_OVERLAY,
-	VID_HARDWARE_PLANB,
-	planb_open,
-	planb_close,
-	planb_read,
-	planb_write,
-#if LINUX_VERSION_CODE >= 0x020100
-	NULL,	/* poll */
-#endif
-	planb_ioctl,
-	planb_mmap,	/* mmap? */
-	planb_init_done,
-	NULL,	/* pointer to private data */
-	0,
-	0
+	name:		PLANB_DEVICE_NAME,
+	type:		VID_TYPE_OVERLAY,
+	hardware:	VID_HARDWARE_PLANB,
+	open:		planb_open,
+	close:		planb_close,
+	read:		planb_read,
+	write:		planb_write,
+	ioctl:		planb_ioctl,
+	mmap:		planb_mmap,	/* mmap? */
 };
 
 static int init_planb(struct planb *pb)
