@@ -87,6 +87,12 @@ M:	ajk@iehk.rwth-aachen.de
 L:	linux-hams@vger.kernel.org
 S:	Maintained
 
+8139TOO ETHERNET DRIVER
+P:	Jeff Garzik
+M:	jgarzik@mandrakesoft.com
+W:	http://sourceforge.net/projects/gkernel/
+S:	Maintained
+
 8250/16?50 (AND CLONE UARTS) SERIAL DRIVER
 P:	Theodore Ts'o
 M:	tytso@mit.edu
@@ -208,7 +214,7 @@ CIRRUS LOGIC GENERIC FBDEV DRIVER
 P:	Jeff Garzik
 M:	jgarzik@mandrakesoft.com
 L:	linux-fbdev@vuser.vu.union.edu
-S:	Maintained
+S:	Odd Fixes
 
 COMPAQ FIBRE CHANNEL 64-bit/66MHz PCI non-intelligent HBA
 P:      Amy Vanzant-Hodge 
@@ -255,7 +261,7 @@ S:	Maintained
 
 CONFIGURE.HELP
 P:	Axel Boldt
-M:	boldt@math.ucsb.edu
+M:	axel@uni-paderborn.de
 S:	Maintained
 
 COSA/SRP SYNC SERIAL DRIVER
@@ -609,6 +615,12 @@ P:	Ingo Molnar
 M:	mingo@redhat.com
 S:	Maintained
 
+INTEL I8XX RANDOM NUMBER GENERATOR SUPPORT
+P:	Jeff Garzik
+M:	jgarzik@mandrakesoft.com
+W:	http://sourceforge.net/projects/gkernel/
+S:	Maintained
+
 INTEL P6 MICROCODE UPDATE SUPPORT
 P:	Tigran Aivazian
 M:	tigran@veritas.com
@@ -675,6 +687,12 @@ S:	Supported
 KERNEL AUTOMOUNTER (AUTOFS)
 P:	H. Peter Anvin
 M:	hpa@zytor.com
+L:	autofs@linux.kernel.org
+S:	Maintained
+
+KERNEL AUTOMOUNTER v4 (AUTOFS4)
+P:	Jeremy Fitzhardinge
+M:	jeremy@goop.org
 L:	autofs@linux.kernel.org
 S:	Maintained
 
@@ -1180,7 +1198,8 @@ S:	Maintained
 TULIP NETWORK DRIVER
 P:	Jeff Garzik
 M:	jgarzik@mandrakesoft.com
-L:	linux-tulip@cesdis.gsfc.nasa.gov
+L:	tulip-users@lists.sourceforge.net
+W:	http://sourceforge.net/projects/tulip/
 S:	Maintained
 
 TUN/TAP driver
@@ -1338,6 +1357,7 @@ VIA 82Cxxx AUDIO DRIVER
 P:	Jeff Garzik
 M:	jgarzik@mandrakesoft.com
 L:	linux-via@gtf.org
+W:	http://sourceforge.net/projects/gkernel/
 S:	Maintained
 
 USB DIAMOND RIO500 DRIVER

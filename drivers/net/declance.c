@@ -1000,10 +1000,11 @@ static void lance_set_multicast_retry(unsigned long _opaque)
 
 static int __init dec_lance_init(struct net_device *dev, const int type)
 {
-	static unsigned version_printed = 0;
+	static unsigned version_printed;
+	struct net_device *dev;
 	struct lance_private *lp;
 	volatile struct lance_regs *ll;
-	int i;
+	int i, ret;
 	unsigned long esar_base;
 	unsigned char *esar;
 
@@ -1016,19 +1017,11 @@ static int __init dec_lance_init(struct net_device *dev, const int type)
 	if (dec_lance_debug && version_printed++ == 0)
 		printk(version);
 
-	if (dev == NULL) {
-		dev = init_etherdev(0, sizeof(struct lance_private) + 8);
-	} else {
-		dev->priv = kmalloc(sizeof(struct lance_private) + 8,
-				    GFP_KERNEL);
-		if (dev->priv == NULL)
-			return -ENOMEM;
-		memset(dev->priv, 0, sizeof(struct lance_private) + 8);
+	dev = init_etherdev(0, sizeof(struct lance_private));
+	if (!dev)
+		return -ENOMEM;
 
-	}
-
-	/* Make certain the data structures used by the LANCE are aligned. */
-	dev->priv = (void *) (((unsigned long) dev->priv + 7) & ~7);
+	/* init_etherdev ensures the data structures used by the LANCE are aligned. */
 	lp = (struct lance_private *) dev->priv;
 	spin_lock_init(&lp->lock);
 
@@ -1114,8 +1107,8 @@ static int __init dec_lance_init(struct net_device *dev, const int type)
 		break;
 	default:
 		printk("declance_init called with unknown type\n");
-		return -ENODEV;
-		break;
+		ret = -ENODEV;
+		goto err_out;
 	}
 
 	ll = (struct lance_regs *) dev->base_addr;
@@ -1126,7 +1119,8 @@ static int __init dec_lance_init(struct net_device *dev, const int type)
 	if (esar[0x60] != 0xff && esar[0x64] != 0x00 &&
 	    esar[0x68] != 0x55 && esar[0x6c] != 0xaa) {
 		printk("Ethernet station address prom not found!\n");
-		return -ENODEV;
+		ret = -ENODEV;
+		goto err_out;
 	}
 	/* Check the prom contents */
 	for (i = 0; i < 8; i++) {
@@ -1135,7 +1129,8 @@ static int __init dec_lance_init(struct net_device *dev, const int type)
 		    esar[0x3c - i * 4] != esar[0x40 + i * 4]) {
 			printk("Something is wrong with the ethernet "
 			       "station address prom!\n");
-			return -ENODEV;
+			ret = -ENODEV;
+			goto err_out;
 		}
 	}
 
@@ -1199,6 +1194,11 @@ static int __init dec_lance_init(struct net_device *dev, const int type)
 	root_lance_dev = lp;
 #endif
 	return 0;
+
+err_out:
+	unregister_netdev(dev);
+	kfree(dev);
+	return ret;
 }
 
 

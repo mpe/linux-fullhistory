@@ -320,7 +320,7 @@ E: bogstad@pobox.com
 D: wrote /proc/self hack, minor samba & dosemu patches
 
 N: Axel Boldt
-E: boldt@math.ucsb.edu
+E: axel@uni-paderborn.de
 W: http://math-www.uni-paderborn.de/~axel/
 D: Configuration help text support
 D: Linux CD and Support Giveaway List
@@ -800,10 +800,10 @@ W: http://www.goop.org/~jeremy
 D: author of userfs filesystem
 D: Improved mmap and munmap handling
 D: General mm minor tidyups
-D: autofs v4 filesystem rework
+D: autofs v4 maintainer
 S: 987 Alabama St
 S: San Francisco
-S: SA, 94110
+S: CA, 94110
 S: USA
 
 N: Ralf Flaxa

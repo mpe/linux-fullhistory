@@ -197,10 +197,6 @@ int __init fmv18x_probe1(struct net_device *dev, short ioaddr)
 		return -EAGAIN;
 	}
 
-	/* Allocate a new 'dev' if needed. */
-	if (dev == NULL)
-		dev = init_etherdev(0, sizeof(struct net_local));
-
 	/* Grab the region so that we can find another board if the IRQ request
 	   fails. */
  	request_region(ioaddr, FMV18X_IO_EXTENT, "fmv18x");
@@ -607,15 +603,10 @@ static void set_multicast_list(struct net_device *dev)
 }
 
 #ifdef MODULE
-static char devicename[9] = { 0, };
-static struct net_device dev_fmv18x = {
-	devicename, /* device name is inserted by linux/drivers/net/net_init.c */
-	0, 0, 0, 0,
-	0, 0,
-	0, 0, 0, NULL, fmv18x_probe };
+static struct net_device dev_fmv18x = { init: fmv18x_probe };
 
 static int io = 0x220;
-static int irq = 0;
+static int irq;
 
 MODULE_PARM(io, "i");
 MODULE_PARM(irq, "i");

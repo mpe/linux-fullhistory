@@ -87,8 +87,8 @@ static __devinitdata struct usb_device_id camera_table [] = {
 	/* These have the same application level protocol */  
     { idVendor: 0x040a, idProduct: 0x0120 },		// Kodak DC-240
     { idVendor: 0x040a, idProduct: 0x0130 },		// Kodak DC-280
+    { idVendor: 0x040a, idProduct: 0x0131 },		// Kodak DC-5000
     { idVendor: 0x040a, idProduct: 0x0132 },		// Kodak DC-3400
-    // { idVendor: 0x040a, idProduct: 0xXXXX },		// Kodak DC-5000
 
 	/* These have a different application level protocol which
 	 * is part of the Flashpoint "DigitaOS".  That supports some
@@ -115,7 +115,7 @@ struct camera_state {
 	struct usb_device	*dev;		/* USB device handle */
 	int			inEP;		/* read endpoint */
 	int			outEP;		/* write endpoint */
-	const struct usb_device_id	*info;		/* DC-240, etc */
+	const struct usb_device_id	*info;	/* DC-240, etc */
 	int			subminor;	/* which minor dev #? */
 	struct semaphore	sem;		/* locks this struct */
 

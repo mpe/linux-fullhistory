@@ -173,7 +173,7 @@ struct el3_isapnp_adapters_struct {
 	unsigned short vendor, function;
 	char *name;
 };
-struct el3_isapnp_adapters_struct el3_isapnp_adapters[] = {
+static struct el3_isapnp_adapters_struct el3_isapnp_adapters[] = {
 	{ISAPNP_VENDOR('T', 'C', 'M'), ISAPNP_FUNCTION(0x5090), "3Com Etherlink III (TP)"},
 	{ISAPNP_VENDOR('T', 'C', 'M'), ISAPNP_FUNCTION(0x5091), "3Com Etherlink III"},
 	{ISAPNP_VENDOR('T', 'C', 'M'), ISAPNP_FUNCTION(0x5094), "3Com Etherlink III (combo)"},
@@ -182,13 +182,10 @@ struct el3_isapnp_adapters_struct el3_isapnp_adapters[] = {
 	{ISAPNP_VENDOR('P', 'N', 'P'), ISAPNP_FUNCTION(0x80f8), "3Com Etherlink III compatible"},
 	{0, }
 };
-u16 el3_isapnp_phys_addr[8][3] = {
-	{0, 0, 0}, {0, 0, 0}, {0, 0, 0}, {0, 0, 0},
-	{0, 0, 0}, {0, 0, 0}, {0, 0, 0}, {0, 0, 0}
-};
+static u16 el3_isapnp_phys_addr[8][3];
 #endif /* CONFIG_ISAPNP */
 #ifdef __ISAPNP__
-static int nopnp = 0;
+static int nopnp;
 #endif
 
 int el3_probe(struct net_device *dev)
@@ -437,13 +434,6 @@ no_pnp:
 	/* Free the interrupt so that some other card can use it. */
 	outw(0x0f00, ioaddr + WN0_IRQ);
  found:
-	if (dev == NULL) {
-		dev = init_etherdev(dev, sizeof(struct el3_private));
-		if (dev == NULL) {
-			release_region(ioaddr, EL3_IO_EXTENT);
-			return -ENOMEM;
-		}
-	}
 	memcpy(dev->dev_addr, phys_addr, sizeof(phys_addr));
 	dev->base_addr = ioaddr;
 	dev->irq = irq;

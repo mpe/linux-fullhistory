@@ -95,7 +95,7 @@ enum HP_Option {
 	MemEnable = 0x40, ZeroWait = 0x80, MemDisable = 0x1000, };
 
 int hp_plus_probe(struct net_device *dev);
-int hpp_probe1(struct net_device *dev, int ioaddr);
+static int hpp_probe1(struct net_device *dev, int ioaddr);
 
 static void hpp_reset_8390(struct net_device *dev);
 static int hpp_open(struct net_device *dev);
@@ -116,12 +116,6 @@ static void hpp_io_get_8390_hdr(struct net_device *dev, struct e8390_pkt_hdr *hd
 
 /*	Probe a list of addresses for an HP LAN+ adaptor.
 	This routine is almost boilerplate. */
-#ifdef HAVE_DEVLIST
-/* Support for an alternate probe manager, which will eliminate the
-   boilerplate below. */
-struct netdev_entry hpplus_drv =
-{"hpplus", hpp_probe1, HP_IO_EXTENT, hpplus_portlist};
-#else
 
 int __init hp_plus_probe(struct net_device *dev)
 {
@@ -133,36 +127,30 @@ int __init hp_plus_probe(struct net_device *dev)
 	else if (base_addr != 0)	/* Don't probe at all. */
 		return -ENXIO;
 
-	for (i = 0; hpplus_portlist[i]; i++) {
-		int ioaddr = hpplus_portlist[i];
-		if (check_region(ioaddr, HP_IO_EXTENT))
-			continue;
-		if (hpp_probe1(dev, ioaddr) == 0)
+	for (i = 0; hpplus_portlist[i]; i++)
+		if (hpp_probe1(dev, hpplus_portlist[i]) == 0)
 			return 0;
-	}
 
 	return -ENODEV;
 }
-#endif
 
 /* Do the interesting part of the probe at a single address. */
-int __init hpp_probe1(struct net_device *dev, int ioaddr)
+static int __init hpp_probe1(struct net_device *dev, int ioaddr)
 {
-	int i;
+	int i, retval;
 	unsigned char checksum = 0;
 	const char *name = "HP-PC-LAN+";
 	int mem_start;
 	static unsigned version_printed = 0;
 
-	/* Check for the HP+ signature, 50 48 0x 53. */
-	if (inw(ioaddr + HP_ID) != 0x4850
-		|| (inw(ioaddr + HP_PAGING) & 0xfff0) != 0x5300)
+	if (!request_region(ioaddr, HP_IO_EXTENT, "hp-plus"))
 		return -ENODEV;
 
-	/* We should have a "dev" from Space.c or the static module table. */
-	if (dev == NULL) {
-		printk("hp-plus.c: Passed a NULL device.\n");
-		dev = init_etherdev(0, 0);
+	/* Check for the HP+ signature, 50 48 0x 53. */
+	if (inw(ioaddr + HP_ID) != 0x4850
+		|| (inw(ioaddr + HP_PAGING) & 0xfff0) != 0x5300) {
+		retval = -ENODEV;
+		goto out;
 	}
 
 	if (ei_debug  &&  version_printed++ == 0)
@@ -183,7 +171,8 @@ int __init hpp_probe1(struct net_device *dev, int ioaddr)
 
 	if (checksum != 0xff) {
 		printk(" bad checksum %2.2x.\n", checksum);
-		return -ENODEV;
+		retval = -ENODEV;
+		goto out;
 	} else {
 		/* Point at the Software Configuration Flags. */
 		outw(ID_Page, ioaddr + HP_PAGING);
@@ -193,11 +182,9 @@ int __init hpp_probe1(struct net_device *dev, int ioaddr)
 	/* Allocate dev->priv and fill in 8390 specific dev fields. */
 	if (ethdev_init(dev)) {
 		printk ("hp-plus.c: unable to allocate memory for dev->priv.\n");
-		return -ENOMEM;
+		retval = -ENOMEM;
+		goto out;
 	 }
-
-	/* Grab the region so we can find another board if something fails. */
-	request_region(ioaddr, HP_IO_EXTENT,"hp-plus");
 
 	/* Read the IRQ line. */
 	outw(HW_Page, ioaddr + HP_PAGING);
@@ -252,6 +239,9 @@ int __init hpp_probe1(struct net_device *dev, int ioaddr)
 	outw(inw(ioaddr + HPP_OPTION) & ~EnableIRQ, ioaddr + HPP_OPTION);
 
 	return 0;
+out:
+	release_region(ioaddr, HP_IO_EXTENT);
+	return retval;
 }
 
 static int

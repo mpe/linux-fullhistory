@@ -256,11 +256,13 @@ static int yenta_set_socket(pci_socket_t *socket, socket_state_t *state)
 	}  else {
 		u8 reg;
 
-		bridge |= CB_BRIDGE_INTR;
 		reg = exca_readb(socket, I365_INTCTL) & (I365_RING_ENA | I365_INTR_ENA);
 		reg |= (state->flags & SS_RESET) ? 0 : I365_PC_RESET;
 		reg |= (state->flags & SS_IOCARD) ? I365_PC_IOCARD : 0;
-		reg |= state->io_irq;
+		if (state->io_irq != socket->cb_irq) {
+			reg |= state->io_irq;
+			bridge |= CB_BRIDGE_INTR;
+		}
 		exca_writeb(socket, I365_INTCTL, reg);
 
 		reg = exca_readb(socket, I365_POWER) & (I365_VCC_MASK|I365_VPP1_MASK);

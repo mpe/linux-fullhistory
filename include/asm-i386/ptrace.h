@@ -49,6 +49,11 @@ struct pt_regs {
 #define PTRACE_GETFPXREGS         18
 #define PTRACE_SETFPXREGS         19
 
+#define PTRACE_SETOPTIONS         21
+
+/* options set using PTRACE_SETOPTIONS */
+#define PTRACE_O_TRACESYSGOOD     0x00000001
+
 #ifdef __KERNEL__
 #define user_mode(regs) ((VM_MASK & (regs)->eflags) || (3 & (regs)->xcs))
 #define instruction_pointer(regs) ((regs)->eip)

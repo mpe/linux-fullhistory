@@ -781,8 +781,8 @@ int remap_page_range(unsigned long from, unsigned long phys_addr, unsigned long 
  */
 static inline void establish_pte(struct vm_area_struct * vma, unsigned long address, pte_t *page_table, pte_t entry)
 {
-	flush_tlb_page(vma, address);
 	set_pte(page_table, entry);
+	flush_tlb_page(vma, address);
 	update_mmu_cache(vma, address, entry);
 }
 

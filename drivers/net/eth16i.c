@@ -484,7 +484,6 @@ static int __init eth16i_probe1(struct net_device *dev, int ioaddr)
 	  */
 
 	if(ioaddr < 0x1000) {
-	
 		if(eth16i_portlist[(inb(ioaddr + JUMPERLESS_CONFIG) & 0x07)] 
 		   != ioaddr)
 			return -ENODEV;
@@ -508,9 +507,6 @@ static int __init eth16i_probe1(struct net_device *dev, int ioaddr)
 
 	outb(0x00, ioaddr + RESET);             /* Reset some parts of chip */
 	BITSET(ioaddr + CONFIG_REG_0, BIT(7));  /* Disable the data link */
-
-	if(dev == NULL)
-		dev = init_etherdev(0, 0);
 
 	if( (eth16i_debug & version_printed++) == 0)
 		printk(KERN_INFO "%s", version);
@@ -1392,20 +1388,12 @@ static ushort eth16i_parse_mediatype(const char* s)
 
 #define MAX_ETH16I_CARDS 4  /* Max number of Eth16i cards per module */
 
-static struct net_device dev_eth16i[MAX_ETH16I_CARDS] = {
-	{
-		"",
-		0, 0, 0, 0,
-		0, 0,
-		0, 0, 0, NULL, NULL
-	},
-};
-
-static int io[MAX_ETH16I_CARDS] = { 0, };
+static struct net_device dev_eth16i[MAX_ETH16I_CARDS];
+static int io[MAX_ETH16I_CARDS];
 #if 0
-static int irq[MAX_ETH16I_CARDS] = { 0, };
+static int irq[MAX_ETH16I_CARDS];
 #endif
-static char* mediatype[MAX_ETH16I_CARDS] = { 0, };
+static char* mediatype[MAX_ETH16I_CARDS];
 static int debug = -1;
 
 #if (LINUX_VERSION_CODE >= 0x20115) 

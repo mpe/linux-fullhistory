@@ -599,13 +599,9 @@ int sgiseeq_init(struct net_device *dev, struct sgiseeq_regs *sregs,
 	int i;
 	struct sgiseeq_private *sp;
 
-	if (dev == NULL) {
-		dev = init_etherdev(0, sizeof(struct sgiseeq_private));
-	} else {
-		dev->priv = (struct sgiseeq_private *) get_free_page(GFP_KERNEL);
-		if (dev->priv == NULL)
-			return -ENOMEM;
-	}
+	dev->priv = (struct sgiseeq_private *) get_free_page(GFP_KERNEL);
+	if (dev->priv == NULL)
+		return -ENOMEM;
 
 	if (!version_printed++)
 		printk(version);

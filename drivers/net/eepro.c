@@ -530,12 +530,6 @@ static unsigned eeprom_reg = EEPROM_REG_PRO;
    If dev->base_addr == 2, allocate space for the device and return success
    (detachable devices only).
    */
-#ifdef HAVE_DEVLIST
-/* Support for an alternate probe manager, which will eliminate the
-   boilerplate below. */
-struct netdev_entry netcard_drv =
-{"eepro", eepro_probe1, EEPRO_IO_EXTENT, eepro_portlist};
-#else
 int __init eepro_probe(struct net_device *dev)
 {
 	int i;
@@ -589,7 +583,6 @@ int __init eepro_probe(struct net_device *dev)
 
 	return -ENODEV;
 }
-#endif
 
 void printEEPROMInfo(short ioaddr, struct net_device *dev)
 {

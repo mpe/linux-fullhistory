@@ -326,11 +326,6 @@ wildfire_map_irq(struct pci_dev *dev, u8 slot, u8 pin)
 	return irq;
 }
 
-static void __init
-wildfire_init_pci(void)
-{
-	common_init_pci();
-}
 
 /*
  * The System Vectors
@@ -353,7 +348,7 @@ struct alpha_machine_vector wildfire_mv __initmv = {
 	init_arch:		wildfire_init_arch,
 	init_irq:		wildfire_init_irq,
 	init_rtc:		common_init_rtc,
-	init_pci:		wildfire_init_pci,
+	init_pci:		common_init_pci,
 	kill_arch:		wildfire_kill_arch,
 	pci_map_irq:		wildfire_map_irq,
 	pci_swizzle:		common_swizzle,

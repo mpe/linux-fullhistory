@@ -127,34 +127,38 @@ int  __init e2100_probe(struct net_device *dev)
 	else if (base_addr != 0)	/* Don't probe at all. */
 		return -ENXIO;
 
-	for (port = e21_probe_list; *port; port++) {
-		if (check_region(*port, E21_IO_EXTENT))
-			continue;
+	for (port = e21_probe_list; *port; port++)
 		if (e21_probe1(dev, *port) == 0)
 			return 0;
-	}
 
 	return -ENODEV;
 }
 
 int __init e21_probe1(struct net_device *dev, int ioaddr)
 {
-	int i, status;
+	int i, status, retval;
 	unsigned char *station_addr = dev->dev_addr;
 	static unsigned version_printed = 0;
+
+	if (!request_region(ioaddr, E21_IO_EXTENT, "e2100"))
+		return -ENODEV;
 
 	/* First check the station address for the Ctron prefix. */
 	if (inb(ioaddr + E21_SAPROM + 0) != 0x00
 		|| inb(ioaddr + E21_SAPROM + 1) != 0x00
-		|| inb(ioaddr + E21_SAPROM + 2) != 0x1d)
-		return -ENODEV;
+		|| inb(ioaddr + E21_SAPROM + 2) != 0x1d) {
+		retval = -ENODEV;
+		goto out;
+	}
 
 	/* Verify by making certain that there is a 8390 at there. */
 	outb(E8390_NODMA + E8390_STOP, ioaddr);
 	udelay(1);	/* we want to delay one I/O cycle - which is 2MHz */
 	status = inb(ioaddr);
-	if (status != 0x21 && status != 0x23)
-		return -ENODEV;
+	if (status != 0x21 && status != 0x23) {
+		retval = -ENODEV;
+		goto out;
+	}
 
 	/* Read the station address PROM.  */
 	for (i = 0; i < 6; i++)
@@ -166,20 +170,14 @@ int __init e21_probe1(struct net_device *dev, int ioaddr)
 	if (ei_debug  &&  version_printed++ == 0)
 		printk(version);
 
-	/* We should have a "dev" from Space.c or the static module table. */
-	if (dev == NULL) {
-		printk("e2100.c: Passed a NULL device.\n");
-		dev = init_etherdev(0, 0);
-	}
-
-	printk("%s: E21** at %#3x,", dev->name, ioaddr);
 	for (i = 0; i < 6; i++)
 		printk(" %02X", station_addr[i]);
 
 	/* Allocate dev->priv and fill in 8390 specific dev fields. */
 	if (ethdev_init(dev)) {
 		printk (" unable to get memory for dev->priv.\n");
-		return -ENOMEM;
+		retval = -ENOMEM;
+		goto out;
 	}
 
 	if (dev->irq < 2) {
@@ -191,13 +189,13 @@ int __init e21_probe1(struct net_device *dev, int ioaddr)
 			}
 		if (i >= 8) {
 			printk(" unable to get IRQ %d.\n", dev->irq);
-			return -EAGAIN;
+			kfree(dev->priv);
+			dev->priv = NULL;
+			retval = -EAGAIN;
+			goto out;
 		}
 	} else if (dev->irq == 2)	/* Fixup luser bogosity: IRQ2 is really IRQ9 */
 		dev->irq = 9;
-
-	/* Grab the region so we can find a different board if IRQ select fails. */
-	request_region(ioaddr, E21_IO_EXTENT, "e2100");
 
 	/* The 8390 is at the base address. */
 	dev->base_addr = ioaddr;
@@ -248,6 +246,9 @@ int __init e21_probe1(struct net_device *dev, int ioaddr)
 	NS8390_init(dev, 0);
 
 	return 0;
+out:
+	release_region(ioaddr, E21_IO_EXTENT);
+	return retval;
 }
 
 static int
@@ -373,23 +374,10 @@ e21_close(struct net_device *dev)
 	return 0;
 }
 
-#ifdef HAVE_DEVLIST
-struct netdev_entry e21_drv =
-{"e21", e21_probe1, E21_IO_EXTENT, e21_probe_list};
-#endif
-
 
 #ifdef MODULE
 #define MAX_E21_CARDS	4	/* Max number of E21 cards per module */
-static struct net_device dev_e21[MAX_E21_CARDS] = {
-	{
-		"",
-		0, 0, 0, 0,
-		0, 0,
-		0, 0, 0, NULL, NULL
-	},
-};
-
+static struct net_device dev_e21[MAX_E21_CARDS];
 static int io[MAX_E21_CARDS];
 static int irq[MAX_E21_CARDS];
 static int mem[MAX_E21_CARDS];

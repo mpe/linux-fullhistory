@@ -1,4 +1,4 @@
-/* $Id: param.h,v 1.3 1995/11/25 02:32:18 davem Exp $ */
+/* $Id: param.h,v 1.4 2000/10/30 21:01:41 davem Exp $ */
 #ifndef _ASMSPARC_PARAM_H
 #define _ASMSPARC_PARAM_H
 
@@ -17,5 +17,9 @@
 #endif
 
 #define MAXHOSTNAMELEN	64	/* max length of hostname */
+
+#ifdef __KERNEL__
+# define CLOCKS_PER_SEC	HZ	/* frequency at which times() counts */
+#endif
 
 #endif

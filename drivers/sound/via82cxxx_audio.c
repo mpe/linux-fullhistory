@@ -15,7 +15,7 @@
  */
 
 
-#define VIA_VERSION	"1.1.12"
+#define VIA_VERSION	"1.1.14"
 
 
 #include <linux/config.h>
@@ -1696,7 +1696,7 @@ static struct page * via_mm_nopage (struct vm_area_struct * vma,
 		return NOPAGE_OOM;	/* Nothing allocated */
 	}
 
-	pgoff = vma->vm_pgoff + (address - vma->vm_start) >> PAGE_SHIFT;
+	pgoff = vma->vm_pgoff + ((address - vma->vm_start) >> PAGE_SHIFT);
 	rd = card->ch_in.is_mapped;
 	wr = card->ch_out.is_mapped;
 
@@ -1727,15 +1727,20 @@ static struct page * via_mm_nopage (struct vm_area_struct * vma,
 }
 
 
+#ifndef VM_RESERVE
 static int via_mm_swapout (struct page *page, struct file *filp)
 {
 	return 0;
 }
+#endif /* VM_RESERVE */
 
 
 struct vm_operations_struct via_mm_ops = {
 	nopage:		via_mm_nopage,
+
+#ifndef VM_RESERVE
 	swapout:	via_mm_swapout,
+#endif
 };
 
 
@@ -1783,6 +1788,10 @@ static int via_dsp_mmap(struct file *file, struct vm_area_struct *vma)
 
 	vma->vm_ops = &via_mm_ops;
 	vma->vm_private_data = card;
+
+#ifdef VM_RESERVE
+	vma->vm_flags |= VM_RESERVE;
+#endif
 
 	if (rd)
 		card->ch_in.is_mapped = 1;

@@ -119,14 +119,20 @@ int __init ac3200_probe(struct net_device *dev)
 
 static int __init ac_probe1(int ioaddr, struct net_device *dev)
 {
-	int i;
+	int i, retval;
 
-	if (inb_p(ioaddr + AC_ID_PORT) == 0xff) 
+	if (!request_region(ioaddr, AC_IO_EXTENT, "ac3200"))
 		return -ENODEV;
 
-	if (inl(ioaddr + AC_ID_PORT) != AC_EISA_ID)
-		return -ENODEV;
+	if (inb_p(ioaddr + AC_ID_PORT) == 0xff) {
+		retval = -ENODEV;
+		goto out;
+	}
 
+	if (inl(ioaddr + AC_ID_PORT) != AC_EISA_ID) {
+		retval = -ENODEV;
+		goto out;
+	}
 
 #ifndef final_version
 	printk(KERN_DEBUG "AC3200 ethercard configuration register is %#02x,"
@@ -134,15 +140,6 @@ static int __init ac_probe1(int ioaddr, struct net_device *dev)
 		   inb(ioaddr + AC_ID_PORT + 0), inb(ioaddr + AC_ID_PORT + 1),
 		   inb(ioaddr + AC_ID_PORT + 2), inb(ioaddr + AC_ID_PORT + 3));
 #endif
-
-	/* We should have a "dev" from Space.c or the static module table. */
-	if (dev == NULL) {
-		printk("ac3200.c: Passed a NULL device.\n");
-		dev = init_etherdev(0, 0);
-
-		if (!dev)
-			return -ENOMEM;
-	}
 
 	printk("AC3200 in EISA slot %d, node", ioaddr/0x1000);
 	for(i = 0; i < 6; i++)
@@ -154,14 +151,16 @@ static int __init ac_probe1(int ioaddr, struct net_device *dev)
 		|| inb(ioaddr + AC_SA_PROM + 1) != AC_ADDR1
 		|| inb(ioaddr + AC_SA_PROM + 2) != AC_ADDR2 ) {
 		printk(", not found (invalid prefix).\n");
-		return -ENODEV;
+		retval = -ENODEV;
+		goto out;
 	}
 #endif
 
 	/* Allocate dev->priv and fill in 8390 specific dev fields. */
 	if (ethdev_init(dev)) {
 		printk (", unable to allocate memory for dev->priv.\n");
-		return -ENOMEM;
+		retval = -ENOMEM;
+		goto out;
 	}
 
 	/* Assign and allocate the interrupt now. */
@@ -175,14 +174,11 @@ static int __init ac_probe1(int ioaddr, struct net_device *dev)
 
 	if (request_irq(dev->irq, ei_interrupt, 0, "ac3200", dev)) {
 		printk (" nothing! Unable to get IRQ %d.\n", dev->irq);
-		kfree(dev->priv);
-		dev->priv = NULL;
-		return -EAGAIN;
+		retval = -EAGAIN;
+		goto out1;
 	}
 
 	printk(" IRQ %d, %s port\n", dev->irq, port_name[dev->if_port]);
-
-	request_region(ioaddr, AC_IO_EXTENT, "ac3200");
 
 	dev->base_addr = ioaddr;
 
@@ -213,20 +209,16 @@ static int __init ac_probe1(int ioaddr, struct net_device *dev)
 			printk(KERN_CRIT "ac3200.c: Use EISA SCU to set card memory below 1MB,\n");
 			printk(KERN_CRIT "ac3200.c: or to an address above 0x%lx.\n", virt_to_bus(high_memory));
 			printk(KERN_CRIT "ac3200.c: Driver NOT installed.\n");
-			free_irq(dev->irq, dev);
-			kfree(dev->priv);
-			dev->priv = NULL;
-			return -EINVAL;
+			retval = -EINVAL;
+			goto out2;
 		}
 		dev->mem_start = (unsigned long)ioremap(dev->mem_start, AC_STOP_PG*0x100);
 		if (dev->mem_start == 0) {
 			printk(KERN_ERR "ac3200.c: Unable to remap card memory above 1MB !!\n");
 			printk(KERN_ERR "ac3200.c: Try using EISA SCU to set memory below 1MB.\n");
 			printk(KERN_ERR "ac3200.c: Driver NOT installed.\n");
-			free_irq(dev->irq, dev);
-			kfree(dev->priv);
-			dev->priv = NULL;
-			return -EAGAIN;
+			retval = -EINVAL;
+			goto out2;
 		}
 		ei_status.reg0 = 1;	/* Use as remap flag */
 		printk("ac3200.c: remapped %dkB card memory to virtual address %#lx\n",
@@ -255,6 +247,14 @@ static int __init ac_probe1(int ioaddr, struct net_device *dev)
 	dev->stop = &ac_close_card;
 	NS8390_init(dev, 0);
 	return 0;
+out2:
+	free_irq(dev->irq, dev);
+out1:
+	kfree(dev->priv);
+	dev->priv = NULL;
+out:
+	release_region(ioaddr, AC_IO_EXTENT);
+	return retval;
 }
 
 static int ac_open(struct net_device *dev)
@@ -347,18 +347,10 @@ static int ac_close_card(struct net_device *dev)
 
 #ifdef MODULE
 #define MAX_AC32_CARDS	4	/* Max number of AC32 cards per module */
-static struct net_device dev_ac32[MAX_AC32_CARDS] = {
-	{
-		"",
-		0, 0, 0, 0,
-		0, 0,
-		0, 0, 0, NULL, NULL
-	},
-};
-
-static int io[MAX_AC32_CARDS] = { 0, };
-static int irq[MAX_AC32_CARDS]  = { 0, };
-static int mem[MAX_AC32_CARDS] = { 0, };
+static struct net_device dev_ac32[MAX_AC32_CARDS];
+static int io[MAX_AC32_CARDS];
+static int irq[MAX_AC32_CARDS];
+static int mem[MAX_AC32_CARDS];
 MODULE_PARM(io, "1-" __MODULE_STRING(MAX_AC32_CARDS) "i");
 MODULE_PARM(irq, "1-" __MODULE_STRING(MAX_AC32_CARDS) "i");
 MODULE_PARM(mem, "1-" __MODULE_STRING(MAX_AC32_CARDS) "i");

@@ -6,7 +6,7 @@
  *	Pedro Roque		<roque@di.fc.ul.pt>	
  *	Alexey Kuznetsov	<kuznet@ms2.inr.ac.ru>
  *
- *	$Id: sit.c,v 1.44 2000/10/10 04:36:50 davem Exp $
+ *	$Id: sit.c,v 1.45 2000/10/28 17:19:25 davem Exp $
  *
  *	This program is free software; you can redistribute it and/or
  *      modify it under the terms of the GNU General Public License
@@ -829,7 +829,9 @@ int __init sit_init(void)
 #ifdef MODULE
 	register_netdev(&ipip6_fb_tunnel_dev);
 #else
+	rtnl_lock();
 	register_netdevice(&ipip6_fb_tunnel_dev);
+	rtnl_unlock();
 #endif
 	inet_add_protocol(&sit_protocol);
 	return 0;

@@ -72,7 +72,7 @@ ip_nat_fn(unsigned int hooknum,
            unreliable. */
 	if (!ct) {
 		if (net_ratelimit())
-			printk("NAT: %u dropping untracked packet %p %u %u.%u.%u.%u -> %u.%u.%u.%u\n",
+			printk(KERN_DEBUG "NAT: %u dropping untracked packet %p %u %u.%u.%u.%u -> %u.%u.%u.%u\n",
 			       hooknum,
 			       *pskb,
 			       (*pskb)->nh.iph->protocol,

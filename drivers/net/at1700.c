@@ -191,13 +191,6 @@ struct at1720_mca_adapters_struct at1720_mca_adapters[] = {
    (detachable devices only).
    */
 
-#ifdef HAVE_DEVLIST
-/* Support for a alternate probe manager, which will eliminate the
-   boilerplate below. */
-struct netdev_entry at1700_drv =
-{"at1700", at1700_probe1, AT1700_IO_EXTENT, at1700_probe_list};
-#else
-
 int at1700_probe(struct net_device *dev)
 {
 	int i;
@@ -217,7 +210,6 @@ int at1700_probe(struct net_device *dev)
 	}
 	return -ENODEV;
 }
-#endif
 
 /* The Fujitsu datasheet suggests that the NIC be probed for by checking its
    "signature", the default bit pattern after a reset.  This *doesn't* work --
@@ -323,10 +315,6 @@ found:
 
 		/* Reset the internal state machines. */
 	outb(0, ioaddr + RESET);
-
-	/* Allocate a new 'dev' if needed. */
-	if (dev == NULL)
-		dev = init_etherdev(0, sizeof(struct net_local));
 
 	if (is_at1700)
 		irq = at1700_irqmap[(read_eeprom(ioaddr, 12)&0x04)
@@ -878,14 +866,10 @@ set_rx_mode(struct net_device *dev)
 }
 
 #ifdef MODULE
-static struct net_device dev_at1700 = {
-	"", /* device name is inserted by linux/drivers/net/net_init.c */
-	0, 0, 0, 0,
-	0, 0,
-	0, 0, 0, NULL, at1700_probe };
+static struct net_device dev_at1700 = { init: at1700_probe };
 
 static int io = 0x260;
-static int irq = 0;
+static int irq;
 
 MODULE_PARM(io, "i");
 MODULE_PARM(irq, "i");

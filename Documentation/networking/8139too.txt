@@ -180,6 +180,20 @@ suggestions welcome)  (WIP)
 Change History
 --------------
 
+Version 0.9.11 - October 28, 2000
+
+* Do not fail when PIO and MMIO region lengths do not match.
+  (They don't on some CardBus models, at least)
+* Sanity check Rx packet status and size (Tobias)
+* When handling a Tx timeout, disable Tx ASAP if not already.
+* Do not inline Tx interrupt handler (better register usage)
+* Handle dirty_tx signed integer wrap
+* Do not abort Rx processing on lack of memory, keep going
+  until the current Rx ring is completely handling. (Tobias)
+* Clean up rtl8139_close
+* Whitespace correction for dev_kfree_skb_irq call
+
+
 Version 0.9.10 - September 12, 2000
 
 * Never wrap an Rx packet (faster Rx interrupt handling)

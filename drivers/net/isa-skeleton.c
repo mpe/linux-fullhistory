@@ -1,4 +1,4 @@
-/* skeleton.c: A network driver outline for linux.
+/* isa-skeleton.c: A network driver outline for linux.
  *
  *	Written 1993-94 by Donald Becker.
  *
@@ -22,7 +22,7 @@
  */
 
 static const char *version =
-	"skeleton.c:v1.51 9/24/94 Donald Becker (becker@cesdis.gsfc.nasa.gov)\n";
+	"isa-skeleton.c:v1.51 9/24/94 Donald Becker (becker@cesdis.gsfc.nasa.gov)\n";
 
 /*
  *  Sources:
@@ -131,14 +131,6 @@ extern void 	chipset_init(struct net_device *dev, int startp);
  * If dev->base_addr == 2, allocate space for the device and return success
  * (detachable devices only).
  */
-#ifdef HAVE_DEVLIST
-/*
- * Support for an alternate probe manager,
- * which will eliminate the boilerplate below.
- */
-struct netdev_entry netcard_drv =
-{cardname, netcard_probe1, NETCARD_IO_EXTENT, netcard_portlist};
-#else
 int __init 
 netcard_probe(struct net_device *dev)
 {
@@ -160,7 +152,6 @@ netcard_probe(struct net_device *dev)
 
 	return -ENODEV;
 }
-#endif
 
 /*
  * This is the real probe routine. Linux has a history of friendly device
@@ -182,18 +173,6 @@ static int __init netcard_probe1(struct net_device *dev, int ioaddr)
 		||	 inb(ioaddr + 1) != SA_ADDR1
 		||	 inb(ioaddr + 2) != SA_ADDR2) {
 		return -ENODEV;
-	}
-
-	/* Allocate a new 'dev' if needed. */
-	if (dev == NULL) {
-		/*
-		 * Don't allocate the private data here, it is done later
-		 * This makes it easier to free the memory when this driver
-		 * is used as a module.
-		 */
-		dev = init_etherdev(0, 0);
-		if (dev == NULL)
-			return -ENOMEM;
 	}
 
 	if (net_debug  &&  version_printed++ == 0)
@@ -654,13 +633,7 @@ set_multicast_list(struct net_device *dev)
 
 #ifdef MODULE
 
-static char devicename[9] = { 0, };
-static struct net_device this_device = {
-	devicename, /* will be inserted by linux/drivers/net/net_init.c */
-	0, 0, 0, 0,
-	0, 0,  /* I/O address, IRQ */
-	0, 0, 0, NULL, netcard_probe };
-
+static struct net_device this_device = { init: netcard_probe };
 static int io = 0x300;
 static int irq;
 static int dma;

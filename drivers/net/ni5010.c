@@ -235,14 +235,6 @@ static int __init ni5010_probe1(struct net_device *dev, int ioaddr)
 	
 	PRINTK2((KERN_DEBUG "%s: I/O #3 passed!\n", dev->name));
 
-	if (dev == NULL) {
-		dev = init_etherdev(0,0);
-		if (dev == NULL) {
-			printk(KERN_WARNING "%s: Failed to allocate device memory\n", boardname);
-			return -ENOMEM;
-		}
-	}
-
 	if (NI5010_DEBUG && version_printed++ == 0)
 		printk(KERN_INFO "%s", version);
 
@@ -741,14 +733,9 @@ static void show_registers(struct net_device *dev)
 }
 
 #ifdef MODULE
-static struct net_device dev_ni5010 = {
-        "",
-        0, 0, 0, 0,
-        0, 0,
-        0, 0, 0, NULL, ni5010_probe };
-
-int io  = 0;
-int irq = 0;
+static struct net_device dev_ni5010 = { init: ni5010_probe };
+static int io;
+static int irq;
 
 MODULE_PARM(io, "i");
 MODULE_PARM(irq, "i");

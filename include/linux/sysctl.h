@@ -636,16 +636,6 @@ extern ctl_handler sysctl_string;
 extern ctl_handler sysctl_intvec;
 extern ctl_handler sysctl_jiffies;
 
-extern int do_string (
-	void *oldval, size_t *oldlenp, void *newval, size_t newlen,
-	int rdwr, char *data, size_t max);
-extern int do_int (
-	void *oldval, size_t *oldlenp, void *newval, size_t newlen,
-	int rdwr, int *data);
-extern int do_struct (
-	void *oldval, size_t *oldlenp, void *newval, size_t newlen,
-	int rdwr, void *data, size_t len);
-
 
 /*
  * Register a set of sysctl names by calling register_sysctl_table

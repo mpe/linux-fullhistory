@@ -608,6 +608,9 @@ int idescsi_detect (Scsi_Host_Template *host_template)
 
 	host_template->proc_name = "ide-scsi";
 	host = scsi_register(host_template, 0);
+	if(host == NULL)
+		return 0;
+		
 	for (id = 0; id < MAX_HWIFS * MAX_DRIVES && idescsi_drives[id]; id++)
 		last_lun = IDE_MAX(last_lun, idescsi_drives[id]->last_lun);
 	host->max_id = id;

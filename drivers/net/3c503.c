@@ -62,15 +62,6 @@ static unsigned int netcard_portlist[] __initdata =
 
 #define EL2_IO_EXTENT	16
 
-#ifdef HAVE_DEVLIST
-/* The 3c503 uses two entries, one for the safe memory-mapped probe and
-   the other for the typical I/O probe. */
-struct netdev_entry el2_drv =
-{"3c503", el2_probe, EL1_IO_EXTENT, 0};
-struct netdev_entry el2pio_drv =
-{"3c503pio", el2_pioprobe1, EL1_IO_EXTENT, netcard_portlist};
-#endif
-
 static int el2_open(struct net_device *dev);
 static int el2_close(struct net_device *dev);
 static void el2_reset_8390(struct net_device *dev);
@@ -115,14 +106,13 @@ el2_probe(struct net_device *dev)
 	if (el2_probe1(dev, netcard_portlist[i]) == 0)
 	    return 0;
     }
-#if ! defined(no_probe_nonshared_memory) && ! defined (HAVE_DEVLIST)
+#if ! defined(no_probe_nonshared_memory)
     return el2_pio_probe(dev);
 #else
     return -ENODEV;
 #endif
 }
 
-#ifndef HAVE_DEVLIST
 /*  Try all of the locations that aren't obviously empty.  This touches
     a lot of locations, and is much riskier than the code above. */
 int __init 
@@ -146,7 +136,6 @@ el2_pio_probe(struct net_device *dev)
 
     return -ENODEV;
 }
-#endif
 
 /* Probe for the Etherlink II card at I/O port base IOADDR,
    returning non-zero on success.  If found, set the station
@@ -184,15 +173,6 @@ el2_probe1(struct net_device *dev, int ioaddr)
 	/* Restore the register we frobbed. */
 	outb(saved_406, ioaddr + 0x406);
 	return -ENODEV;
-    }
-
-    /* We should have a "dev" from Space.c or the static module table. */
-    if (dev == NULL) {
-	printk("3c503.c: Passed a NULL device.\n");
-	dev = init_etherdev(0, 0);
-
-	if (!dev)
-		return -ENOMEM;
     }
 
     if (ei_debug  &&  version_printed++ == 0)

@@ -157,12 +157,6 @@ int __init ne3210_probe1(struct net_device *dev, int ioaddr)
 	}
 #endif
 
-	/* We should have a "dev" from Space.c or the static module table. */
-	if (dev == NULL) {
-		printk("ne3210.c: Passed a NULL device.\n");
-		dev = init_etherdev(0, 0);
-	}
-
 	/* Allocate dev->priv and fill in 8390 specific dev fields. */
 	if (ethdev_init(dev)) {
 		printk ("ne3210.c: unable to allocate memory for dev->priv!\n");
@@ -360,15 +354,7 @@ static int ne3210_close(struct net_device *dev)
 
 #ifdef MODULE
 #define MAX_NE3210_CARDS	4	/* Max number of NE3210 cards per module */
-static struct net_device dev_ne3210[MAX_NE3210_CARDS] = {
-	{
-		"",
-		0, 0, 0, 0,
-		0, 0,
-		0, 0, 0, NULL, NULL
-	},
-};
-
+static struct net_device dev_ne3210[MAX_NE3210_CARDS];
 static int io[MAX_NE3210_CARDS];
 static int irq[MAX_NE3210_CARDS];
 static int mem[MAX_NE3210_CARDS];

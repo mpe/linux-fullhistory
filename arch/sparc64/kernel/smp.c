@@ -28,6 +28,7 @@
 #include <asm/softirq.h>
 #include <asm/uaccess.h>
 #include <asm/timer.h>
+#include <asm/starfire.h>
 
 #define __KERNEL_SYSCALLS__
 #include <linux/unistd.h>
@@ -302,9 +303,17 @@ void __init smp_boot_cpus(void)
 
 static inline void xcall_deliver(u64 data0, u64 data1, u64 data2, u64 pstate, unsigned long cpu)
 {
-	u64 result, target = (cpu << 14) | 0x70;
+	u64 result, target;
 	int stuck, tmp;
 
+	if (this_is_starfire) {
+		/* map to real upaid */
+		cpu = (((cpu & 0x3c) << 1) |
+			((cpu & 0x40) >> 4) |
+			(cpu & 0x3));
+	}
+
+	target = (cpu << 14) | 0x70;
 #ifdef XCALL_DEBUG
 	printk("CPU[%d]: xcall(data[%016lx:%016lx:%016lx],tgt[%016lx])\n",
 	       smp_processor_id(), data0, data1, data2, target);

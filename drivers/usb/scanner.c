@@ -274,13 +274,18 @@ open_scanner(struct inode * inode, struct file * file)
 
 	kdev_t scn_minor;
 
+	int err=0;
+
+	lock_kernel();
+
 	scn_minor = USB_SCN_MINOR(inode);
 
 	dbg("open_scanner: scn_minor:%d", scn_minor);
 
 	if (!p_scn_table[scn_minor]) {
 		err("open_scanner(%d): Unable to access minor data", scn_minor);
-		return -ENODEV;
+		err = -ENODEV;
+		goto out_error;
 	}
 
 	scn = p_scn_table[scn_minor];
@@ -289,17 +294,20 @@ open_scanner(struct inode * inode, struct file * file)
 
 	if (!dev) {
 		err("open_scanner(%d): Scanner device not present", scn_minor);
-		return -ENODEV;
+		err = -ENODEV;
+		goto out_error;
 	}
 
 	if (!scn->present) {
 		err("open_scanner(%d): Scanner is not present", scn_minor);
-		return -ENODEV;
+		err = -ENODEV;
+		goto out_error;
 	}
 
 	if (scn->isopen) {
 		err("open_scanner(%d): Scanner device is already open", scn_minor);
-		return -EBUSY;
+		err = -EBUSY;
+		goto out_error;
 	}
 
 	init_waitqueue_head(&scn->rd_wait_q);
@@ -310,7 +318,11 @@ open_scanner(struct inode * inode, struct file * file)
 
 	MOD_INC_USE_COUNT;
 
-	return 0;
+out_error:
+
+	unlock_kernel();
+
+	return err;
 }
 
 static int
@@ -346,7 +358,7 @@ write_scanner(struct file * file, const char * buffer,
 {
 	struct scn_usb_data *scn;
 	struct usb_device *dev;
-	
+
 	ssize_t bytes_written = 0; /* Overall count of bytes written */
 	ssize_t ret = 0;
 
@@ -355,7 +367,7 @@ write_scanner(struct file * file, const char * buffer,
 	int this_write;		/* Number of bytes to write */
 	int partial;		/* Number of bytes successfully written */
 	int result = 0;
-	
+
 	char *obuf;
 
 	scn = file->private_data;
@@ -368,6 +380,8 @@ write_scanner(struct file * file, const char * buffer,
 
 	file->f_dentry->d_inode->i_atime = CURRENT_TIME;
 
+	down(&(scn->gen_lock));
+
 	while (count > 0) {
 
 		if (signal_pending(current)) {
@@ -376,7 +390,7 @@ write_scanner(struct file * file, const char * buffer,
 		}
 
 		this_write = (count >= OBUF_SIZE) ? OBUF_SIZE : count;
-		
+
 		if (copy_from_user(scn->obuf, buffer, this_write)) {
 			ret = -EFAULT;
 			break;
@@ -393,7 +407,7 @@ write_scanner(struct file * file, const char * buffer,
 			warn("write_scanner(%d): funky result: %d. Please notify the maintainer.", scn_minor, result);
 			ret = -EIO;
 			break;
-		} 
+		}
 
 #ifdef WR_DATA_DUMP
 		if (partial) {
@@ -420,6 +434,7 @@ write_scanner(struct file * file, const char * buffer,
 			break;
 		}
 	}
+	up(&(scn->gen_lock));
 	mdelay(5);		/* This seems to help with SANE queries */
 	return ret ? ret : bytes_written;
 }
@@ -458,6 +473,7 @@ read_scanner(struct file * file, char * buffer,
                                                             atime of
                                                             the device
                                                             node */
+	down(&(scn->gen_lock));
 
 	while (count > 0) {
 		if (signal_pending(current)) {
@@ -466,11 +482,11 @@ read_scanner(struct file * file, char * buffer,
 		}
 
 		this_read = (count >= IBUF_SIZE) ? IBUF_SIZE : count;
-		
+
 		result = usb_bulk_msg(dev, usb_rcvbulkpipe(dev, scn->bulk_in_ep), ibuf, this_read, &partial, RD_NAK_TIMEOUT);
 		dbg("read stats(%d): result:%d this_read:%d partial:%d count:%d", scn_minor, result, this_read, partial, count);
 
-/* 
+/*
  * Scanners are sometimes inheriently slow since they are mechanical
  * in nature.  USB bulk reads tend to timeout while the scanner is
  * positioning, resetting, warming up the lamp, etc if the timeout is
@@ -481,7 +497,7 @@ read_scanner(struct file * file, char * buffer,
  * that something had hung or crashed when in fact the USB read was
  * just waiting on data.  So, the below code retains the same long
  * timeout period, but splits it up into smaller parts so that
- * Ctrl-C's are acted upon in a reasonable amount of time. 
+ * Ctrl-C's are acted upon in a reasonable amount of time.
  */
 
 		if (result == USB_ST_TIMEOUT && !partial) { /* Timeout
@@ -526,7 +542,8 @@ read_scanner(struct file * file, char * buffer,
 			break;
 		}
 	}
-	
+	up(&(scn->gen_lock));
+
 	return ret ? ret : bytes_read;
 }
 
@@ -536,7 +553,7 @@ probe_scanner(struct usb_device *dev, unsigned int ifnum)
 	struct scn_usb_data *scn;
 	struct usb_interface_descriptor *interface;
 	struct usb_endpoint_descriptor *endpoint;
-	
+
 	int ep_cnt;
 	int ix;
 
@@ -558,7 +575,7 @@ probe_scanner(struct usb_device *dev, unsigned int ifnum)
  * 3. Determine/Assign Intr Endpoint
  */
 
-/* 
+/*
  * There doesn't seem to be an imaging class defined in the USB
  * Spec. (yet).  If there is, HP isn't following it and it doesn't
  * look like anybody else is either.  Therefore, we have to test the
@@ -585,7 +602,7 @@ probe_scanner(struct usb_device *dev, unsigned int ifnum)
 	    dev->descriptor.idProduct == product) { /* User specified */
 		valid_device = 1;
 	}
-	
+
         if (!valid_device)
                 return NULL;    /* We didn't find anything pleasing */
 
@@ -607,7 +624,7 @@ probe_scanner(struct usb_device *dev, unsigned int ifnum)
 	interface = dev->config[0].interface[ifnum].altsetting;
 	endpoint = interface[ifnum].endpoint;
 
-/* 
+/*
  * Start checking for two bulk endpoints OR two bulk endpoints *and* one
  * interrupt endpoint. If we have an interrupt endpoint go ahead and
  * setup the handler. FIXME: This is a future enhancement...
@@ -630,7 +647,7 @@ probe_scanner(struct usb_device *dev, unsigned int ifnum)
 			dbg("probe_scanner: bulk_in_ep:%d", have_bulk_in);
 			continue;
 		}
-		
+
 		if (!have_bulk_out && IS_EP_BULK_OUT(endpoint[ep_cnt])) {
 			ep_cnt++;
 			have_bulk_out = ep_cnt;
@@ -673,7 +690,7 @@ probe_scanner(struct usb_device *dev, unsigned int ifnum)
 	}
 
 
-/* 
+/*
  * Determine a minor number and initialize the structure associated
  * with it.  The problem with this is that we are counting on the fact
  * that the user will sequentially add device nodes for the scanner
@@ -703,7 +720,7 @@ probe_scanner(struct usb_device *dev, unsigned int ifnum)
 /* Ok, if we detected an interrupt EP, setup a handler for it */
 	if (have_intr) {
 		dbg("probe_scanner(%d): Configuring IRQ handler for intr EP:%d", scn_minor, have_intr);
-		FILL_INT_URB(&scn->scn_irq, dev, 
+		FILL_INT_URB(&scn->scn_irq, dev,
 			     usb_rcvintpipe(dev, have_intr),
 			     &scn->button, 1, irq_scanner, scn,
 			     // endpoint[(int)have_intr].bInterval);
@@ -741,6 +758,8 @@ probe_scanner(struct usb_device *dev, unsigned int ifnum)
 	scn->scn_minor = scn_minor;
 	scn->isopen = 0;
 
+	init_MUTEX(&(scn->gen_lock));
+
 	return p_scn_table[scn_minor] = scn;
 }
 
@@ -748,7 +767,7 @@ static void
 disconnect_scanner(struct usb_device *dev, void *ptr)
 {
 	struct scn_usb_data *scn = (struct scn_usb_data *) ptr;
-	
+
 	if(scn->intr_ep) {
 		dbg("disconnect_scanner(%d): Unlinking IRQ URB", scn->scn_minor);
 		usb_unlink_urb(&scn->scn_irq);
@@ -770,11 +789,11 @@ ioctl_scanner(struct inode *inode, struct file *file,
 	      unsigned int cmd, unsigned long arg)
 {
 	struct usb_device *dev;
-	
+
 	int result;
 
 	kdev_t scn_minor;
-	
+
 	scn_minor = USB_SCN_MINOR(inode);
 
 	if (!p_scn_table[scn_minor]) {
@@ -783,7 +802,7 @@ ioctl_scanner(struct inode *inode, struct file *file,
 	}
 
 	dev = p_scn_table[scn_minor]->scn_dev;
-	
+
 	switch (cmd)
 	{
 	case PV8630_IOCTL_INREQUEST :
@@ -794,10 +813,10 @@ ioctl_scanner(struct inode *inode, struct file *file,
 			__u16 value;
 			__u16 index;
 		} args;
-		
+
 		if (copy_from_user(&args, (void *)arg, sizeof(args)))
 			return -EFAULT;
-		
+
 		result = usb_control_msg(dev, usb_rcvctrlpipe(dev, 0),
 					 args.request, USB_TYPE_VENDOR|
 					 USB_RECIP_DEVICE|USB_DIR_IN,
@@ -810,7 +829,7 @@ ioctl_scanner(struct inode *inode, struct file *file,
 			return -EFAULT;
 
 		dbg("ioctl_scanner(%d): inreq: result:%d\n", scn_minor, result);
-		
+
 		return result;
 	}
 	case PV8630_IOCTL_OUTREQUEST :
@@ -820,10 +839,10 @@ ioctl_scanner(struct inode *inode, struct file *file,
 			__u16 value;
 			__u16 index;
 		} args;
-		
+
 		if (copy_from_user(&args, (void *)arg, sizeof(args)))
 			return -EFAULT;
-		
+
 		dbg("ioctl_scanner(%d): outreq: args.value:%x args.index:%x args.request:%x\n", scn_minor, args.value, args.index, args.request);
 
 		result = usb_control_msg(dev, usb_sndctrlpipe(dev, 0),
@@ -833,7 +852,7 @@ ioctl_scanner(struct inode *inode, struct file *file,
 					 0, HZ*5);
 
 		dbg("ioctl_scanner(%d): outreq: result:%d\n", scn_minor, result);
-		
+
 		return result;
 	}
 	default:

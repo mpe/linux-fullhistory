@@ -1,4 +1,4 @@
-/* $Id: dbri.c,v 1.21 2000/08/31 23:44:17 davem Exp $
+/* $Id: dbri.c,v 1.22 2000/10/27 07:01:38 uzi Exp $
  * drivers/sbus/audio/dbri.c
  *
  * Copyright (C) 1997 Rudolf Koenig (rfkoenig@immd4.informatik.uni-erlangen.de)
@@ -486,6 +486,7 @@ static void dbri_process_interrupt_buffer(struct dbri *dbri)
 		else if ((dbri->dbri_irqp & (DBRI_INT_BLK-1)) == 0)
 			dbri->dbri_irqp++;
 
+		tprintk(("dbri->dbri_irqp == %d\n", dbri->dbri_irqp));
 		dbri_process_one_interrupt(dbri, x);
 	}
 }
@@ -1269,6 +1270,7 @@ static void mmcodec_setgain(struct dbri *dbri, int muted)
 	} else {
 		int left_gain = (dbri->perchip_info.play.gain / 4) % 64;
 		int right_gain = (dbri->perchip_info.play.gain / 4) % 64;
+		int outport = dbri->perchip_info.play.port;
 
 		if (dbri->perchip_info.play.balance < AUDIO_MID_BALANCE) {
 			right_gain *= dbri->perchip_info.play.balance;
@@ -1282,8 +1284,11 @@ static void mmcodec_setgain(struct dbri *dbri, int muted)
 		dprintk(D_MM, ("DBRI: Setting codec gain left: %d right: %d\n",
 			       left_gain, right_gain));
 
-		dbri->mm.data[0] = CS4215_LE | CS4215_HE | (63 - left_gain);
-		dbri->mm.data[1] = CS4215_SE | (63 - right_gain);
+		dbri->mm.data[0] = (63 - left_gain);
+		if (outport & AUDIO_HEADPHONE) dbri->mm.data[0] |= CS4215_HE;
+		if (outport & AUDIO_LINE_OUT)  dbri->mm.data[0] |= CS4215_LE;
+		dbri->mm.data[1] = (63 - right_gain);
+		if (outport & AUDIO_SPEAKER)   dbri->mm.data[1] |= CS4215_SE;
 	}
 
 	xmit_fixed(dbri, 20, *(int *)dbri->mm.data);
@@ -1484,8 +1489,14 @@ static int mmcodec_init(struct sparcaudio_driver *drv)
 
 	dbri->perchip_info.play.channels = 1;
 	dbri->perchip_info.play.precision = 8;
-	dbri->perchip_info.play.gain = 255;
+	dbri->perchip_info.play.gain = (AUDIO_MAX_GAIN * 7 / 10);  /* 70% */
 	dbri->perchip_info.play.balance = AUDIO_MID_BALANCE;
+	dbri->perchip_info.play.port = dbri->perchip_info.play.avail_ports = 
+		AUDIO_SPEAKER | AUDIO_HEADPHONE | AUDIO_LINE_OUT;
+	dbri->perchip_info.record.port = AUDIO_MICROPHONE;
+	dbri->perchip_info.record.avail_ports =
+		AUDIO_MICROPHONE | AUDIO_LINE_IN;
+
 	mmcodec_init_data(dbri);
 
 	return 0;
@@ -1834,32 +1845,52 @@ static int dbri_get_input_rate(struct sparcaudio_driver *drv)
 
 static int dbri_set_output_port(struct sparcaudio_driver *drv, int port)
 {
-        return 0;
+	struct dbri *dbri = (struct dbri *) drv->private;
+
+	port &= dbri->perchip_info.play.avail_ports;
+	dbri->perchip_info.play.port = port;
+	mmcodec_setgain(dbri, 0);
+
+	return 0;
 }
 
 static int dbri_get_output_port(struct sparcaudio_driver *drv)
 {
-        return 0;
+	struct dbri *dbri = (struct dbri *) drv->private;
+
+	return dbri->perchip_info.play.port;
 }
 
 static int dbri_set_input_port(struct sparcaudio_driver *drv, int port)
 {
-        return 0;
+	struct dbri *dbri = (struct dbri *) drv->private;
+
+	port &= dbri->perchip_info.record.avail_ports;
+	dbri->perchip_info.record.port = port;
+	mmcodec_setgain(dbri, 0);
+
+	return 0;
 }
 
 static int dbri_get_input_port(struct sparcaudio_driver *drv)
 {
-        return 0;
+	struct dbri *dbri = (struct dbri *) drv->private;
+
+	return dbri->perchip_info.record.port;
 }
 
 static int dbri_get_output_ports(struct sparcaudio_driver *drv)
 {
-        return 0;
+	struct dbri *dbri = (struct dbri *) drv->private;
+
+	return dbri->perchip_info.play.avail_ports;
 }
 
 static int dbri_get_input_ports(struct sparcaudio_driver *drv)
 {
-        return 0;
+	struct dbri *dbri = (struct dbri *) drv->private;
+
+	return dbri->perchip_info.record.avail_ports;
 }
 
 /******************* sparcaudio midlevel - driver ID ********************/
@@ -1888,12 +1919,6 @@ static int dbri_open(struct inode * inode, struct file * file,
 		     struct sparcaudio_driver *drv)
 {
 	MOD_INC_USE_COUNT;
-
-        /* I've taken the liberty of setting half gain and
-	 * mid balance, to put the codec in a known state.
-	 */
-	dbri_set_output_balance(drv, AUDIO_MID_BALANCE);
-	dbri_set_output_volume(drv, AUDIO_MAX_GAIN / 2);
 
 	return 0;
 }

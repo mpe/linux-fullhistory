@@ -203,20 +203,35 @@ static int pirq_ali_set(struct pci_dev *router, struct pci_dev *dev, int pirq, i
 }
 
 /*
- * The Intel PIIX4 pirq rules are very sane, compared to
- * the ALI ones (or anything else, for that matter).
+ * The Intel PIIX4 pirq rules are fairly simple: "pirq" is
+ * just a pointer to the config space. However, something
+ * funny is going on with 0xfe/0xff, and apparently they
+ * should handle IDE irq routing. Ignore them for now.
  */
 static int pirq_piix_get(struct pci_dev *router, struct pci_dev *dev, int pirq)
 {
 	u8 x;
-	pci_read_config_byte(router, pirq, &x);
-	return (x < 16) ? x : 0;
+
+	switch (pirq) {
+	case 0xfe:
+	case 0xff:
+		return 0;
+	default:
+		pci_read_config_byte(router, pirq, &x);
+		return (x < 16) ? x : 0;
+	}
 }
 
 static int pirq_piix_set(struct pci_dev *router, struct pci_dev *dev, int pirq, int irq)
 {
-	pci_write_config_byte(router, pirq, irq);
-	return 1;
+	switch (pirq) {
+	case 0xfe:
+	case 0xff:
+		return 0;
+	default:
+		pci_write_config_byte(router, pirq, irq);
+		return 1;
+	}
 }
 
 /*

@@ -11,6 +11,7 @@
 #include <linux/fs.h>
 #include <linux/nfs_fs.h>
 #include <linux/utsname.h>
+#include <linux/smp_lock.h>
 #include <linux/sunrpc/clnt.h>
 #include <linux/sunrpc/svc.h>
 #include <linux/lockd/lockd.h>
@@ -64,11 +65,11 @@ nlmclnt_setlockargs(struct nlm_rqst *req, struct file_lock *fl)
 int
 nlmclnt_setgrantargs(struct nlm_rqst *call, struct nlm_lock *lock)
 {
-	nlmclnt_next_cookie(&call->a_args.cookie);
-	call->a_args.lock    = *lock;
+	locks_copy_lock(&call->a_args.lock.fl, &lock->fl);
+	memcpy(&call->a_args.lock.fh, &lock->fh, sizeof(call->a_args.lock.fh));
 	call->a_args.lock.caller = system_utsname.nodename;
+	call->a_args.lock.oh.len = lock->oh.len;
 
-	init_waitqueue_head(&call->a_args.lock.fl.fl_wait);
 	/* set default data area */
 	call->a_args.lock.oh.data = call->a_owner;
 
@@ -406,15 +407,19 @@ nlmclnt_test(struct nlm_rqst *req, struct file_lock *fl)
 static
 void nlmclnt_insert_lock_callback(struct file_lock *fl)
 {
+	lock_kernel();
 	nlm_get_host(fl->fl_u.nfs_fl.host);
+	unlock_kernel();
 }
 static
 void nlmclnt_remove_lock_callback(struct file_lock *fl)
 {
+	lock_kernel();
 	if (fl->fl_u.nfs_fl.host) {
 		nlm_release_host(fl->fl_u.nfs_fl.host);
 		fl->fl_u.nfs_fl.host = NULL;
 	}
+	unlock_kernel();
 }
 
 /*

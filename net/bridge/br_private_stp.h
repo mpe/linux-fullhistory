@@ -4,7 +4,7 @@
  *	Authors:
  *	Lennert Buytenhek		<buytenh@gnu.org>
  *
- *	$Id: br_private_stp.h,v 1.1 2000/02/18 16:47:13 davem Exp $
+ *	$Id: br_private_stp.h,v 1.2 2000/10/30 22:03:20 davem Exp $
  *
  *	This program is free software; you can redistribute it and/or
  *	modify it under the terms of the GNU General Public License
@@ -16,7 +16,7 @@
 #define _BR_PRIVATE_STP_H
 
 #define BPDU_TYPE_CONFIG 0
-#define BPDU_TYPE_TCN 1
+#define BPDU_TYPE_TCN 0x80
 
 struct br_config_bpdu
 {

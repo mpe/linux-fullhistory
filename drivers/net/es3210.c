@@ -131,30 +131,30 @@ int __init es_probe(struct net_device *dev)
 	if (ioaddr > 0x1ff)		/* Check a single specified location. */
 		return es_probe1(dev, ioaddr);
 	else if (ioaddr > 0)		/* Don't probe at all. */
-		return ENXIO;
+		return -ENXIO;
 
 	if (!EISA_bus) {
 #if ES_DEBUG & ES_D_PROBE
 		printk("es3210.c: Not EISA bus. Not probing high ports.\n");
 #endif
-		return ENXIO;
+		return -ENXIO;
 	}
 
 	/* EISA spec allows for up to 16 slots, but 8 is typical. */
-	for (ioaddr = 0x1000; ioaddr < 0x9000; ioaddr += 0x1000) {
-		if (check_region(ioaddr + ES_SA_PROM, ES_IO_EXTENT))
-			continue;
+	for (ioaddr = 0x1000; ioaddr < 0x9000; ioaddr += 0x1000)
 		if (es_probe1(dev, ioaddr) == 0)
 			return 0;
-	}
 
-	return ENODEV;
+	return -ENODEV;
 }
 
 int __init es_probe1(struct net_device *dev, int ioaddr)
 {
-	int i;
+	int i, retval;
 	unsigned long eisa_id;
+
+	if (!request_region(ioaddr + ES_SA_PROM, ES_IO_EXTENT, "es3210"))
+		return -ENODEV;
 
 #if ES_DEBUG & ES_D_PROBE
 	printk("es3210.c: probe at %#x, ID %#8x\n", ioaddr, inl(ioaddr + ES_ID_PORT));
@@ -167,7 +167,8 @@ int __init es_probe1(struct net_device *dev, int ioaddr)
 /*	Check the EISA ID of the card. */
 	eisa_id = inl(ioaddr + ES_ID_PORT);
 	if ((eisa_id != ES_EISA_ID1) && (eisa_id != ES_EISA_ID2)) {
-		return ENODEV;
+		retval = -ENODEV;
+		goto out;
 	}
 
 /*	Check the Racal vendor ID as well. */
@@ -178,13 +179,8 @@ int __init es_probe1(struct net_device *dev, int ioaddr)
 		for(i = 0; i < ETHER_ADDR_LEN; i++)
 			printk(" %02x", inb(ioaddr + ES_SA_PROM + i));
 		printk(" (invalid prefix).\n");
-		return ENODEV;
-	}
-
-	/* We should have a "dev" from Space.c or the static module table. */
-	if (dev == NULL) {
-		printk("es3210.c: Passed a NULL device.\n");
-		dev = init_etherdev(0, 0);
+		retval = -ENODEV;
+		goto out;
 	}
 
 	printk("es3210.c: ES3210 rev. %ld at %#x, node", eisa_id>>24, ioaddr);
@@ -216,7 +212,8 @@ int __init es_probe1(struct net_device *dev, int ioaddr)
 
 	if (request_irq(dev->irq, ei_interrupt, 0, "es3210", dev)) {
 		printk (" unable to get IRQ %d.\n", dev->irq);
-		return EAGAIN;
+		retval = -EAGAIN;
+		goto out;
 	}
 
 	if (dev->mem_start == 0) {
@@ -225,8 +222,8 @@ int __init es_probe1(struct net_device *dev, int ioaddr)
 
 		if (mem_enabled != 0x80) {
 			printk(" shared mem disabled - giving up\n");
-			free_irq(dev->irq, dev);
-			return -ENXIO;
+			retval = -ENXIO;
+			goto out1;
 		}
 		dev->mem_start = 0xC0000 + mem_bits*0x4000;
 		printk(" using ");
@@ -243,8 +240,8 @@ int __init es_probe1(struct net_device *dev, int ioaddr)
 	/* Allocate dev->priv and fill in 8390 specific dev fields. */
 	if (ethdev_init(dev)) {
 		printk (" unable to allocate memory for dev->priv.\n");
-		free_irq(dev->irq, dev);
-		return -ENOMEM;
+		retval = -ENOMEM;
+		goto out1;
 	}
 
 #if ES_DEBUG & ES_D_PROBE
@@ -253,8 +250,6 @@ int __init es_probe1(struct net_device *dev, int ioaddr)
 #endif
 	/* Note, point at the 8390, and not the card... */
 	dev->base_addr = ioaddr + ES_NIC_OFFSET;
-	request_region(ioaddr + ES_SA_PROM, ES_IO_EXTENT, "es3210");
-
 
 	ei_status.name = "ES3210";
 	ei_status.tx_start_page = ES_START_PG;
@@ -274,6 +269,11 @@ int __init es_probe1(struct net_device *dev, int ioaddr)
 	dev->stop = &es_close;
 	NS8390_init(dev, 0);
 	return 0;
+out1:
+	free_irq(dev->irq, dev);
+out:
+	release_region(ioaddr + ES_SA_PROM, ES_IO_EXTENT);
+	return retval;
 }
 
 /*

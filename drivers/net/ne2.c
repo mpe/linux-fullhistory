@@ -207,12 +207,6 @@ static int __init ne2_probe1(struct net_device *dev, int slot)
 	int start_page, stop_page;
 	static unsigned version_printed = 0;
 
-	/* We should have a "dev" from Space.c or the static module table. */
-	if (dev == NULL) {
-		printk(KERN_ERR "ne2.c: Passed a NULL device.\n");
-		dev = init_etherdev(0, 0);
-	}
-
 	if (ei_debug && version_printed++ == 0)
 		printk(version);
 
@@ -619,18 +613,10 @@ retry:
 
 #ifdef MODULE
 #define MAX_NE_CARDS	4	/* Max number of NE cards per module */
-static struct net_device dev_ne[MAX_NE_CARDS] = {
-	{
-		"",
-		0, 0, 0, 0,
-		0, 0,
-		0, 0, 0, NULL, NULL
-	},
-};
-
-static int io[MAX_NE_CARDS] = { 0, };
-static int irq[MAX_NE_CARDS]  = { 0, };
-static int bad[MAX_NE_CARDS]  = { 0, };	/* 0xbad = bad sig or no reset ack */
+static struct net_device dev_ne[MAX_NE_CARDS];
+static int io[MAX_NE_CARDS];
+static int irq[MAX_NE_CARDS];
+static int bad[MAX_NE_CARDS];	/* 0xbad = bad sig or no reset ack */
 
 #ifdef MODULE_PARM
 MODULE_PARM(io, "1-" __MODULE_STRING(MAX_NE_CARDS) "i");

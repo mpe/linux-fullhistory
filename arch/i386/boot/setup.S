@@ -641,7 +641,13 @@ end_move_self:					# now we are at the right place
 	outb	%al, $0x60
 	call	empty_8042
 
-	movb	$02, %al			# "fast A20" version
+#
+#	You must preserve the other bits here. Otherwise embarrasing things
+#	like laptops powering off on boot happen. Corrected version by Kira
+#	Brown from Linux 2.2
+#
+	inb	$0x92, %al			# 
+	orb	$02, %al			# "fast A20" version
 	outb	%al, $0x92			# some chips have only this
 
 # wait until a20 really *is* enabled; it can take a fair amount of

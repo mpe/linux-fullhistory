@@ -99,6 +99,7 @@ if [ "$CONFIG_NET_ETHERNET" = "y" ]; then
       tristate '  AT1700/1720 support (EXPERIMENTAL)' CONFIG_AT1700
    fi
    tristate '  DEPCA, DE10x, DE200, DE201, DE202, DE422 support' CONFIG_DEPCA
+   tristate '  HP 10/100VG PCLAN (ISA, EISA, PCI) support' CONFIG_HP100
    bool '  Other ISA cards' CONFIG_NET_ISA
    if [ "$CONFIG_NET_ISA" = "y" ]; then
       tristate '    Cabletron E21xx support' CONFIG_E2100
@@ -112,7 +113,6 @@ if [ "$CONFIG_NET_ETHERNET" = "y" ]; then
       fi
       tristate '    HP PCLAN+ (27247B and 27252A) support' CONFIG_HPLAN_PLUS
       tristate '    HP PCLAN (27245 and other 27xxx series) support' CONFIG_HPLAN
-      tristate '    HP 10/100VG PCLAN (ISA, EISA, PCI) support' CONFIG_HP100
       tristate '    ICL EtherTeam 16i/32 support' CONFIG_ETH16I
       tristate '    NE2000/NE1000 support' CONFIG_NE2000
       if [ "$CONFIG_OBSOLETE" = "y" ]; then
@@ -195,7 +195,7 @@ dep_tristate 'Packet Engines Hamachi GNIC-II support' CONFIG_HAMACHI $CONFIG_PCI
 if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
    dep_tristate 'Packet Engines Yellowfin Gigabit-NIC support (EXPERIMENTAL)' CONFIG_YELLOWFIN $CONFIG_PCI
 fi
-tristate 'SysKonnect SK-98xx support' CONFIG_SK98LIN
+dep_tristate 'SysKonnect SK-98xx support' CONFIG_SK98LIN $CONFIG_PCI
 
 endmenu
 

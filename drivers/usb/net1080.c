@@ -49,11 +49,13 @@ static const struct usb_device_id	products [] = {
 	{		// reference design
 	    idProduct:		0x1080,
 	    idVendor:		0x0525,
-	    driver_info:	"NetChip TurboCONNECT",
+	    driver_info:	(unsigned long) "NetChip TurboCONNECT",
 	},
 	// Belkin, ...
 	{ },		// END
 };
+
+MODULE_DEVICE_TABLE (usb, products);
 
 static u8	node_id [ETH_ALEN];
 
@@ -91,6 +93,7 @@ struct nc_trailer {
 				+ (mtu) \
 				+ 1 \
 				+ sizeof (struct nc_trailer))
+#define MAX_PACKET	8191
 
 // zero means no timeout; else, how long a 64 byte bulk
 // read may be queued before HW flushes it.
@@ -443,7 +446,7 @@ done:
 
 static int net1080_change_mtu (struct net_device *net, int new_mtu)
 {
-	if ((new_mtu < 0) || NC_MAX_PACKET (new_mtu) > 8191)
+	if ((new_mtu < 0) || NC_MAX_PACKET (new_mtu) > MAX_PACKET)
 		return -EINVAL;
 	net->mtu = new_mtu;
 	return 0;
@@ -518,8 +521,7 @@ static void rx_complete (struct urb *urb)
 	entry->state = rx_done;
 	entry->urb = 0;
 
-	if ((urb->transfer_flags & USB_ASYNC_UNLINK) != 0
-			|| netif_queue_stopped (&dev->net)) {
+	if ((urb->transfer_flags & USB_ASYNC_UNLINK) != 0) {
 		dbg ("rx ... shutting down");
 		usb_free_urb (urb);
 		urb = 0;
@@ -528,12 +530,17 @@ static void rx_complete (struct urb *urb)
 	switch (urb_status) {
 	    // success
 	    case 0:
-		if (skb->len & 0x01)
-			break;
-		entry->state = rx_cleanup;
-		dev->stats.rx_errors++;
-		dev->stats.rx_length_errors++;
-		dbg ("even rx len %d", skb->len);
+		if (!(skb->len & 0x01)) {
+			entry->state = rx_cleanup;
+			dev->stats.rx_errors++;
+			dev->stats.rx_length_errors++;
+			dbg ("even rx len %d", skb->len);
+		} else if (skb->len > MAX_PACKET) {
+			entry->state = rx_cleanup;
+			dev->stats.rx_errors++;
+			dev->stats.rx_frame_errors++;
+			dbg ("rx too big, %d", skb->len);
+		}
 		break;
 
 	    // hardware-reported interface shutdown ... which we
@@ -816,9 +823,17 @@ static void rx_process (struct net1080 *dev, struct sk_buff *skb)
 	header = (struct nc_header *) skb->data;
 	le16_to_cpus (&header->hdr_len);
 	le16_to_cpus (&header->packet_len);
-	if (header->hdr_len < NC_MIN_HEADER) {
+	if (header->packet_len > MAX_PACKET) {
+		dev->stats.rx_frame_errors++;
+		dbg ("packet too big, %d", header->packet_len);
+		goto error;
+	} else if (header->hdr_len < NC_MIN_HEADER) {
 		dev->stats.rx_frame_errors++;
 		dbg ("header too short, %d", header->hdr_len);
+		goto error;
+	} else if (header->hdr_len > header->packet_len) {
+		dev->stats.rx_frame_errors++;
+		dbg ("header too big, %d packet %d", header->hdr_len, header->packet_len);
 		goto error;
 	} else if (header->hdr_len != sizeof *header) {
 		// out of band data for us?

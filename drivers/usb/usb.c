@@ -1589,9 +1589,9 @@ int usb_get_descriptor(struct usb_device *dev, unsigned char type, unsigned char
 	while (i--) {
 		if ((result = usb_control_msg(dev, usb_rcvctrlpipe(dev, 0),
 			USB_REQ_GET_DESCRIPTOR, USB_DIR_IN,
-			(type << 8) + index, 0, buf, size, HZ * GET_TIMEOUT)) >= 0 ||
+			(type << 8) + index, 0, buf, size, HZ * GET_TIMEOUT)) > 0 ||
 		     result == -EPIPE)
-			break;
+			break;	/* retry if the returned length was 0; flaky device */
 	}
 	return result;
 }

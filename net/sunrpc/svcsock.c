@@ -800,7 +800,6 @@ svc_recv(struct svc_serv *serv, struct svc_rqst *rqstp, long timeout)
 			"svc_recv: service %p, wait queue active!\n",
 			 rqstp);
 
-again:
 	/* Initialize the buffers */
 	rqstp->rq_argbuf = rqstp->rq_defbuf;
 	rqstp->rq_resbuf = rqstp->rq_defbuf;
@@ -846,7 +845,7 @@ again:
 	/* No data, incomplete (TCP) read, or accept() */
 	if (len == 0 || len == -EAGAIN) {
 		svc_sock_release(rqstp);
-		goto again;
+		return -EAGAIN;
 	}
 
 	rqstp->rq_secure  = ntohs(rqstp->rq_addr.sin_port) < 1024;

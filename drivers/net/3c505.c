@@ -1302,8 +1302,8 @@ static int __init elp_sense(struct net_device *dev)
 	long flags;
 	byte orig_HSR;
 
-	if (check_region(addr, 0xf))
-		return -1;
+	if (!request_region(addr, ELP_IO_EXTENT, "3c505"))
+		return -ENODEV;
 
 	orig_HSR = inb_status(addr);
 
@@ -1313,7 +1313,7 @@ static int __init elp_sense(struct net_device *dev)
 	if (orig_HSR == 0xff) {
 		if (elp_debug > 0)
 			printk(notfound_msg, 1);
-		return -1;
+		goto out;
 	}
 	/* Enable interrupts - we need timers! */
 	save_flags(flags);
@@ -1332,7 +1332,7 @@ static int __init elp_sense(struct net_device *dev)
 		if (inb_status(addr) & DIR) {
 			if (elp_debug > 0)
 				printk(notfound_msg, 2);
-			return -1;
+			goto out;
 		}
 	} else {
 		/* If HCR.DIR is down, we pull it up. HSR.DIR should follow. */
@@ -1343,7 +1343,7 @@ static int __init elp_sense(struct net_device *dev)
 		if (!(inb_status(addr) & DIR)) {
 			if (elp_debug > 0)
 				printk(notfound_msg, 3);
-			return -1;
+			goto out;
 		}
 	}
 	/*
@@ -1353,6 +1353,9 @@ static int __init elp_sense(struct net_device *dev)
 		printk(found_msg);
 
 	return 0;
+out:
+	release_region(addr, ELP_IO_EXTENT);
+	return -ENODEV;
 }
 
 /*************************************************************
@@ -1503,6 +1506,7 @@ int __init elplus_probe(struct net_device *dev)
 		outb_control(adapter->hcr_val & ~(FLSH | ATTN), dev);
 	}
 	printk("%s: failed to initialise 3c505\n", dev->name);
+	release_region(dev->base_addr, ELP_IO_EXTENT);
 	return -ENODEV;
 
       okay:
@@ -1593,10 +1597,6 @@ int __init elplus_probe(struct net_device *dev)
 	if (adapter->rx_pcb.data.configure) {
 		printk("%s: adapter configuration failed\n", dev->name);
 	}
-	/*
-	 * and reserve the address region
-	 */
-	request_region(dev->base_addr, ELP_IO_EXTENT, "3c505");
 
 	/*
 	 * initialise the device

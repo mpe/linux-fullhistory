@@ -1,7 +1,7 @@
 /*
  *	Linux NET3:	IP/IP protocol decoder. 
  *
- *	Version: $Id: ipip.c,v 1.39 2000/08/25 02:15:47 davem Exp $
+ *	Version: $Id: ipip.c,v 1.40 2000/10/28 17:19:25 davem Exp $
  *
  *	Authors:
  *		Sam Lantinga (slouken@cs.ucdavis.edu)  02/01/95
@@ -894,7 +894,9 @@ int __init ipip_init(void)
 #ifdef MODULE
 	register_netdev(&ipip_fb_tunnel_dev);
 #else
+	rtnl_lock();
 	register_netdevice(&ipip_fb_tunnel_dev);
+	rtnl_unlock();
 #endif
 
 	inet_add_protocol(&ipip_protocol);

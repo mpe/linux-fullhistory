@@ -1488,20 +1488,8 @@ static void set_multicast_list(struct net_device *dev)
 	}
 }
 
-#ifdef HAVE_DEVLIST
-static unsigned int i596_portlist[] __initdata =
-{0x300, 0};
-struct netdev_entry i596_drv =
-{"i82596", i82596_probe, I596_TOTAL_SIZE, i596_portlist};
-#endif
-
 #ifdef MODULE
-static struct net_device dev_82596 =
-{
-	"",	/* device name inserted by drivers/net/net_init.c */
-	0, 0, 0, 0,
-	0, 0,		/* base, irq */
-	0, 0, 0, NULL, i82596_probe};
+static struct net_device dev_82596 = { init: i82596_probe };
 
 #ifdef ENABLE_APRICOT
 static int io = 0x300;

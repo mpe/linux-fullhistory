@@ -148,12 +148,6 @@ int __init ultra32_probe1(struct net_device *dev, int ioaddr)
 	if ((checksum & 0xff) != 0xff)
 		return -ENODEV;
 
-	/* We should have a "dev" from Space.c or the static module table. */
-	if (dev == NULL) {
-		printk("smc-ultra32.c: Passed a NULL device.\n");
-		dev = init_etherdev(0, 0);
-	}
-
 	if (ei_debug  &&  version_printed++ == 0)
 		printk(version);
 
@@ -365,14 +359,7 @@ static void ultra32_block_output(struct net_device *dev,
 
 #ifdef MODULE
 #define MAX_ULTRA32_CARDS   4	/* Max number of Ultra cards per module */
-static struct net_device dev_ultra[MAX_ULTRA32_CARDS] = {
-	{
-		"",
-		0, 0, 0, 0,
-		0, 0,
-		0, 0, 0, NULL, NULL
-	},
-};
+static struct net_device dev_ultra[MAX_ULTRA32_CARDS];
 
 int init_module(void)
 {

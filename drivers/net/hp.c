@@ -79,10 +79,6 @@ static char irqmap[16] __initdata= { 0, 0, 4, 6, 8,10, 0,14, 0, 4, 2,12,0,0,0,0}
 /*	Probe for an HP LAN adaptor.
 	Also initialize the card and fill in STATION_ADDR with the station
 	address. */
-#ifdef HAVE_DEVLIST
-struct netdev_entry netcard_drv =
-{"hp", hp_probe1, HP_IO_EXTENT, hppclan_portlist};
-#else
 
 int __init hp_probe(struct net_device *dev)
 {
@@ -94,23 +90,21 @@ int __init hp_probe(struct net_device *dev)
 	else if (base_addr != 0)	/* Don't probe at all. */
 		return -ENXIO;
 
-	for (i = 0; hppclan_portlist[i]; i++) {
-		int ioaddr = hppclan_portlist[i];
-		if (check_region(ioaddr, HP_IO_EXTENT))
-			continue;
-		if (hp_probe1(dev, ioaddr) == 0)
+	for (i = 0; hppclan_portlist[i]; i++)
+		if (hp_probe1(dev, hppclan_portlist[i]) == 0)
 			return 0;
-	}
 
 	return -ENODEV;
 }
-#endif
 
 int __init hp_probe1(struct net_device *dev, int ioaddr)
 {
-	int i, board_id, wordmode;
+	int i, retval, board_id, wordmode;
 	const char *name;
 	static unsigned version_printed = 0;
+
+	if (!request_region(ioaddr, HP_IO_EXTENT, "hp"))
+		return -ENODEV;
 
 	/* Check for the HP physical address, 08 00 09 xx xx xx. */
 	/* This really isn't good enough: we may pick up HP LANCE boards
@@ -118,8 +112,10 @@ int __init hp_probe1(struct net_device *dev, int ioaddr)
 	if (inb(ioaddr) != 0x08
 		|| inb(ioaddr+1) != 0x00
 		|| inb(ioaddr+2) != 0x09
-		|| inb(ioaddr+14) == 0x57)
-		return -ENODEV;
+		|| inb(ioaddr+14) == 0x57) {
+		retval = -ENODEV;
+		goto out;
+	}
 
 	/* Set up the parameters based on the board ID.
 	   If you have additional mappings, please mail them to me -djb. */
@@ -131,19 +127,14 @@ int __init hp_probe1(struct net_device *dev, int ioaddr)
 		wordmode = 0;
 	}
 
-	/* We should have a "dev" from Space.c or the static module table. */
-	if (dev == NULL) {
-		printk("hp.c: Passed a NULL device.\n");
-		dev = init_etherdev(0, 0);
-	}
-
 	if (ei_debug  &&  version_printed++ == 0)
 		printk(version);
 
 	/* Allocate dev->priv and fill in 8390 specific dev fields. */
 	if (ethdev_init(dev)) {
 		printk (" unable to get memory for dev->priv.\n");
-		return -ENOMEM;
+		retval = -ENOMEM;
+		goto out;
 	}
 
 	printk("%s: %s (ID %02x) at %#3x,", dev->name, name, board_id, ioaddr);
@@ -173,23 +164,18 @@ int __init hp_probe1(struct net_device *dev, int ioaddr)
 		} while (*++irqp);
 		if (*irqp == 0) {
 			printk(" no free IRQ lines.\n");
-			kfree(dev->priv);
-			dev->priv = NULL;
-			return -EBUSY;
+			retval = -EBUSY;
+			goto out1;
 		}
 	} else {
 		if (dev->irq == 2)
 			dev->irq = 9;
 		if (request_irq(dev->irq, ei_interrupt, 0, "hp", dev)) {
 			printk (" unable to get IRQ %d.\n", dev->irq);
-			kfree(dev->priv);
-			dev->priv = NULL;
-			return -EBUSY;
+			retval = -EBUSY;
+			goto out1;
 		}
 	}
-
-	/* Grab the region so we can find another board if something fails. */
-	request_region(ioaddr, HP_IO_EXTENT,"hp");
 
 	/* Set the base address to point to the NIC, not the "real" base! */
 	dev->base_addr = ioaddr + NIC_OFFSET;
@@ -209,6 +195,12 @@ int __init hp_probe1(struct net_device *dev, int ioaddr)
 	hp_init_card(dev);
 
 	return 0;
+out1:
+	kfree(dev->priv);
+	dev->priv = NULL;
+out:
+	release_region(ioaddr, HP_IO_EXTENT);
+	return retval;
 }
 
 static int

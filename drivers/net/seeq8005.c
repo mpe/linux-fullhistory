@@ -104,12 +104,7 @@ static inline void wait_for_buffer(struct net_device *dev);
    If dev->base_addr == 2, allocate space for the device and return success
    (detachable devices only).
    */
-#ifdef HAVE_DEVLIST
-/* Support for an alternate probe manager, which will eliminate the
-   boilerplate below. */
-struct netdev_entry seeq8005_drv =
-{"seeq8005", seeq8005_probe1, SEEQ8005_IO_EXTENT, seeq8005_portlist};
-#else
+
 int __init 
 seeq8005_probe(struct net_device *dev)
 {
@@ -131,7 +126,6 @@ seeq8005_probe(struct net_device *dev)
 
 	return -ENODEV;
 }
-#endif
 
 /* This is the real probe routine.  Linux has a history of friendly device
    probes on the ISA bus.  A good device probes avoids doing writes, and
@@ -269,10 +263,6 @@ static int __init seeq8005_probe1(struct net_device *dev, int ioaddr)
 		}
 	}
 #endif
-
-	/* Allocate a new 'dev' if needed. */
-	if (dev == NULL)
-		dev = init_etherdev(0, sizeof(struct net_local));
 
 	if (net_debug  &&  version_printed++ == 0)
 		printk(version);
@@ -712,18 +702,9 @@ inline void wait_for_buffer(struct net_device * dev)
 	
 #ifdef MODULE
 
-static char devicename[9] = { 0, };
-
-static struct net_device dev_seeq =
-{
-	devicename, /* device name is inserted by linux/drivers/net/net_init.c */
-	0, 0, 0, 0,
-	0x300, 5,
-	0, 0, 0, NULL, seeq8005_probe
-};
-
-static int io=0x320;
-static int irq=10;
+static struct net_device dev_seeq = { init: seeq8005_probe };
+static int io = 0x320;
+static int irq = 10;
 MODULE_PARM(io, "i");
 MODULE_PARM(irq, "i");
 

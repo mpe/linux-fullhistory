@@ -362,11 +362,9 @@ int __init ni52_probe(struct net_device *dev)
 #endif
 	int base_addr = dev->base_addr;
 
-	if (base_addr > 0x1ff) {		/* Check a single specified location. */
-		if( (inb(base_addr+NI52_MAGIC1) == NI52_MAGICVAL1) &&
-				(inb(base_addr+NI52_MAGIC2) == NI52_MAGICVAL2))
-			return ni52_probe1(dev, base_addr);
-	} else if (base_addr > 0)		/* Don't probe at all. */
+	if (base_addr > 0x1ff)		/* Check a single specified location. */
+		return ni52_probe1(dev, base_addr);
+	else if (base_addr > 0)		/* Don't probe at all. */
 		return -ENXIO;
 
 #ifdef MODULE
@@ -374,29 +372,15 @@ int __init ni52_probe(struct net_device *dev)
 #else
 	for (port = ports; *port; port++) {
 		int ioaddr = *port;
-		if (check_region(ioaddr, NI52_TOTAL_SIZE))
-			continue;
-		if( !(inb(ioaddr+NI52_MAGIC1) == NI52_MAGICVAL1) ||
-				!(inb(ioaddr+NI52_MAGIC2) == NI52_MAGICVAL2))
-			continue;
-
 		dev->base_addr = ioaddr;
 		if (ni52_probe1(dev, ioaddr) == 0)
 			return 0;
 	}
 
 #ifdef FULL_IO_PROBE
-	for(dev->base_addr=0x200;dev->base_addr<0x400;dev->base_addr+=8)
-	{
-		int ioaddr = dev->base_addr;
-		if (check_region(ioaddr, NI52_TOTAL_SIZE))
-			continue;
-		if( !(inb(ioaddr+NI52_MAGIC1) == NI52_MAGICVAL1) ||
-				!(inb(ioaddr+NI52_MAGIC2) == NI52_MAGICVAL2))
-			continue;
-		if (ni52_probe1(dev, ioaddr) == 0)
+	for(dev->base_addr=0x200; dev->base_addr<0x400; dev->base_addr+=8)
+		if (ni52_probe1(dev, dev->base_addr) == 0)
 			return 0;
-	}
 #endif
 
 #endif
@@ -407,33 +391,42 @@ int __init ni52_probe(struct net_device *dev)
 
 static int __init ni52_probe1(struct net_device *dev,int ioaddr)
 {
-	int i,size;
+	int i, size, retval;
+
+	if (!request_region(ioaddr, NI52_TOTAL_SIZE, "ni5210"))
+		return -ENODEV;
+
+	if( !(inb(ioaddr+NI52_MAGIC1) == NI52_MAGICVAL1) ||
+	    !(inb(ioaddr+NI52_MAGIC2) == NI52_MAGICVAL2)) {
+		retval = -ENODEV;
+		goto out;
+	}
 
 	for(i=0;i<ETH_ALEN;i++)
 		dev->dev_addr[i] = inb(dev->base_addr+i);
 
 	if(dev->dev_addr[0] != NI52_ADDR0 || dev->dev_addr[1] != NI52_ADDR1
-		 || dev->dev_addr[2] != NI52_ADDR2)
-		return -ENODEV;
+		 || dev->dev_addr[2] != NI52_ADDR2) {
+		retval = -ENODEV;
+		goto out;
+	}
 
 	printk("%s: NI5210 found at %#3lx, ",dev->name,dev->base_addr);
-
-	request_region(ioaddr,NI52_TOTAL_SIZE,"ni5210");
 
 	/*
 	 * check (or search) IO-Memory, 8K and 16K
 	 */
 #ifdef MODULE
 	size = dev->mem_end - dev->mem_start;
-	if(size != 0x2000 && size != 0x4000)
-	{
+	if(size != 0x2000 && size != 0x4000) {
 		printk("\n%s: Illegal memory size %d. Allowed is 0x2000 or 0x4000 bytes.\n",dev->name,size);
-		return -ENODEV;
+		retval = -ENODEV;
+		goto out;
 	}
-	if(!check586(dev,(char *) dev->mem_start,size))
-	{
+	if(!check586(dev,(char *) dev->mem_start,size)) {
 		printk("?memcheck, Can't find memory at 0x%lx with size %d!\n",dev->mem_start,size);
-		return -ENODEV;
+		retval = -ENODEV;
+		goto out;
 	}
 #else
 	if(dev->mem_start != 0) /* no auto-mem-probe */
@@ -443,7 +436,8 @@ static int __init ni52_probe1(struct net_device *dev,int ioaddr)
 			size = 0x2000; /* check for 8K mem */
 			if(!check586(dev,(char *) dev->mem_start,size)) {
 				printk("?memprobe, Can't find memory at 0x%lx!\n",dev->mem_start);
-				return -ENODEV;
+				retval = -ENODEV;
+				goto out;
 			}
 		}
 	}
@@ -455,7 +449,8 @@ static int __init ni52_probe1(struct net_device *dev,int ioaddr)
 		{
 			if(!memaddrs[i]) {
 				printk("?memprobe, Can't find io-memory!\n");
-				return -ENODEV;
+				retval = -ENODEV;
+				goto out;
 			}
 			dev->mem_start = memaddrs[i];
 			size = 0x2000; /* check for 8K mem */
@@ -470,10 +465,10 @@ static int __init ni52_probe1(struct net_device *dev,int ioaddr)
 #endif
 
 	dev->priv = (void *) kmalloc(sizeof(struct priv),GFP_KERNEL);
-	if(dev->priv == NULL)
-	{
+	if(dev->priv == NULL) {
 		printk("%s: Ooops .. can't allocate private driver memory.\n",dev->name);
-		return -ENOMEM;
+		retval = -ENOMEM;
+		goto out;
 	}
 																	/* warning: we don't free it on errors */
 	memset((char *) dev->priv,0,sizeof(struct priv));
@@ -498,7 +493,10 @@ static int __init ni52_probe1(struct net_device *dev,int ioaddr)
 		if(!(dev->irq = autoirq_report(2)))
 		{
 			printk("?autoirq, Failed to detect IRQ line!\n");
-			return 1;
+			kfree(dev->priv);
+			dev->priv = NULL;
+			retval = -EAGAIN;
+			goto out;
 		}
 		printk("IRQ %d (autodetected).\n",dev->irq);
 	}
@@ -521,6 +519,9 @@ static int __init ni52_probe1(struct net_device *dev,int ioaddr)
 	ether_setup(dev);
 
 	return 0;
+out:
+	release_region(ioaddr, NI52_TOTAL_SIZE);
+	return retval;
 }
 
 /**********************************************

@@ -64,7 +64,7 @@
 
 #define OHCI_USE_NPS		// force NoPowerSwitching mode
 // #define OHCI_VERBOSE_DEBUG	/* not always helpful */
-#define OHCI_MEM_SLAB
+// #define OHCI_MEM_SLAB
 // #define OHCI_MEM_FLAGS	SLAB_POISON	/* no redzones; see mm/slab.c */
 
 #include "usb-ohci.h"

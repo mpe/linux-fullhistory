@@ -144,12 +144,9 @@ static int __init sonic_probe1(struct net_device *dev,
 	return -ENODEV;
     }
     
-    request_region(base_addr, 0x100, "SONIC");
+    if (!request_region(base_addr, 0x100, dev->name))
+    	return -EBUSY;
     
-    /* Allocate a new 'dev' if needed. */
-    if (dev == NULL)
-      dev = init_etherdev(0, sizeof(struct sonic_local));
-
     if (sonic_debug  &&  version_printed++ == 0)
       printk(version);
 

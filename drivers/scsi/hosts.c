@@ -139,6 +139,12 @@ struct Scsi_Host * scsi_register(Scsi_Host_Template * tpnt, int j){
     retval = (struct Scsi_Host *)kmalloc(sizeof(struct Scsi_Host) + j,
 					 (tpnt->unchecked_isa_dma && j ? 
 					  GFP_DMA : 0) | GFP_ATOMIC);
+    if(retval == NULL)
+    {
+        printk("scsi: out of memory in scsi_register.\n");
+    	return NULL;
+    }
+    	
     memset(retval, 0, sizeof(struct Scsi_Host) + j);
 
     /* trying to find a reserved entry (host_no) */

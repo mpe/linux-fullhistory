@@ -176,11 +176,16 @@ static int nfs_commit_write(struct file *file, struct page *page, unsigned offse
  */
 static int nfs_sync_page(struct page *page)
 {
-	struct inode	*inode = (struct inode *)page->mapping->host;
+	struct address_space *mapping;
+	struct inode	*inode;
 	unsigned long	index = page_index(page);
 	unsigned int	rpages, wpages;
 	int		result;
 
+	mapping = page->mapping;
+	if (!mapping)
+		return 0;
+	inode = (struct inode *)mapping->host;
 	if (!inode)
 		return 0;
 

@@ -1,4 +1,4 @@
-/* $Id: sparc64_ksyms.c,v 1.92 2000/08/09 08:45:40 anton Exp $
+/* $Id: sparc64_ksyms.c,v 1.95 2000/10/30 21:01:40 davem Exp $
  * arch/sparc64/kernel/sparc64_ksyms.c: Sparc64 specific ksyms support.
  *
  * Copyright (C) 1996 David S. Miller (davem@caip.rutgers.edu)
@@ -18,6 +18,8 @@
 #include <linux/in6.h>
 #include <linux/pci.h>
 #include <linux/interrupt.h>
+#include <linux/fs_struct.h>
+#include <linux/mm.h>
 
 #include <asm/oplib.h>
 #include <asm/delay.h>
@@ -29,6 +31,7 @@
 #include <asm/hardirq.h>
 #include <asm/idprom.h>
 #include <asm/svr4.h>
+#include <asm/elf.h>
 #include <asm/head.h>
 #include <asm/smp.h>
 #include <asm/mostek.h>
@@ -37,6 +40,7 @@
 #include <asm/uaccess.h>
 #include <asm/checksum.h>
 #include <asm/fpumacro.h>
+#include <asm/pgalloc.h>
 #ifdef CONFIG_SBUS
 #include <asm/sbus.h>
 #include <asm/dma.h>
@@ -88,6 +92,7 @@ extern void __flush_dcache_page(void *addr);
 extern int __ashrdi3(int, int);
 
 extern void dump_thread(struct pt_regs *, struct user *);
+extern int dump_fpu (struct pt_regs * regs, elf_fpregset_t * fpregs);
 
 #ifdef CONFIG_SMP
 extern spinlock_t kernel_flag;
@@ -230,6 +235,13 @@ EXPORT_SYMBOL(_sigpause_common);
 
 /* Should really be in linux/kernel/ksyms.c */
 EXPORT_SYMBOL(dump_thread);
+EXPORT_SYMBOL(dump_fpu);
+EXPORT_SYMBOL(get_pmd_slow);
+EXPORT_SYMBOL(get_pte_slow);
+#ifndef CONFIG_SMP
+EXPORT_SYMBOL(pgt_quicklists);
+#endif
+EXPORT_SYMBOL(put_fs_struct);
 
 /* math-emu wants this */
 EXPORT_SYMBOL(die_if_kernel);
@@ -264,6 +276,7 @@ EXPORT_SYMBOL(__prom_getsibling);
 EXPORT_SYMBOL(__strlen);
 EXPORT_SYMBOL(strlen);
 EXPORT_SYMBOL(strnlen);
+EXPORT_SYMBOL(__strlen_user);
 EXPORT_SYMBOL(strcpy);
 EXPORT_SYMBOL(strncpy);
 EXPORT_SYMBOL(strcat);

@@ -354,6 +354,7 @@ CONFIG_NET_ETHERNET=y
 # CONFIG_NET_VENDOR_SMC is not set
 # CONFIG_NET_VENDOR_RACAL is not set
 # CONFIG_DEPCA is not set
+# CONFIG_HP100 is not set
 # CONFIG_NET_ISA is not set
 CONFIG_NET_PCI=y
 # CONFIG_PCNET32 is not set

@@ -106,7 +106,7 @@ static int nbd_xmit(int send, struct socket *sock, char *buf, int size)
 
 
 	do {
-		sock->sk->allocation = GFP_ATOMIC;
+		sock->sk->allocation = GFP_BUFFER;
 		iov.iov_base = buf;
 		iov.iov_len = size;
 		msg.msg_name = NULL;

@@ -178,12 +178,6 @@ static int __init apne_probe1(struct net_device *dev, int ioaddr)
                 8,   9+GAYLE_ODD, 0xa, 0xb+GAYLE_ODD,
               0xc, 0xd+GAYLE_ODD, 0xe, 0xf+GAYLE_ODD };
 
-    /* We should have a "dev" from Space.c or the static module table. */
-    if (dev == NULL) {
-	printk(KERN_ERR "apne.c: Passed a NULL device.\n");
-	dev = init_etherdev(0, 0);
-    }
-
     if (ei_debug  &&  version_printed++ == 0)
 	printk(version);
 
@@ -556,15 +550,7 @@ static void apne_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 }
 
 #ifdef MODULE
-static char devicename[9] = {0, };
-
-static struct net_device apne_dev =
-{
-	devicename,
-	0, 0, 0, 0,
-	0, 0,
-	0, 0, 0, NULL, apne_probe,
-};
+static struct net_device apne_dev = { init: apne_probe };
 
 int init_module(void)
 {

@@ -1,4 +1,4 @@
-/* $Id: cs4215.h,v 1.7 1999/09/21 14:37:19 davem Exp $
+/* $Id: cs4215.h,v 1.8 2000/10/27 07:01:38 uzi Exp $
  * drivers/sbus/audio/cs4215.h
  *
  * Copyright (C) 1997 Rudolf Koenig (rfkoenig@immd4.informatik.uni-erlangen.de)
@@ -103,7 +103,7 @@ static struct {
 
 /* Time Slot 6, Output Setting  */
 #define CS4215_RO(v)	v	/* Right Output Attenuation 0x3f: -94.5 dB */
-#define CS4215_SE	(1<<6)	/* Line Out Enable */
+#define CS4215_SE	(1<<6)	/* Speaker Enable */
 #define CS4215_ADI	(1<<7)	/* A/D Data Invalid: Busy in calibration */
 
 /* Time Slot 7, Input Setting */

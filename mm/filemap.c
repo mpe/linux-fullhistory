@@ -981,7 +981,7 @@ page_ok:
 		 * virtual addresses, take care about potential aliasing
 		 * before reading the page on the kernel side.
 		 */
-		if (page->mapping->i_mmap_shared != NULL)
+		if (mapping->i_mmap_shared != NULL)
 			flush_dcache_page(page);
 
 		/*
@@ -1463,17 +1463,25 @@ page_not_uptodate:
 	return NULL;
 }
 
+/*
+ * If a task terminates while we're swapping the page, the vma and
+ * and file could be released: try_to_swap_out has done a get_file.
+ * vma/file is guaranteed to exist in the unmap/sync cases because
+ * mmap_sem is held.
+ *
+ * The "mapping" test takes care of somebody having truncated the
+ * page and thus made this write-page a no-op..
+ */
 static int filemap_write_page(struct file *file,
 			      struct page * page,
 			      int wait)
 {
-	/*
-	 * If a task terminates while we're swapping the page, the vma and
-	 * and file could be released: try_to_swap_out has done a get_file.
-	 * vma/file is guaranteed to exist in the unmap/sync cases because
-	 * mmap_sem is held.
-	 */
-	return page->mapping->a_ops->writepage(file, page);
+	struct address_space * mapping = page->mapping;
+	int error = 0;
+
+	if (mapping)
+		error = mapping->a_ops->writepage(file, page);
+	return error;
 }
 
 
@@ -1543,10 +1551,7 @@ static inline int filemap_sync_pte(pte_t * ptep, struct vm_area_struct *vma,
 	spin_unlock(&vma->vm_mm->page_table_lock);
 	lock_page(page);
 
-	error = 0;
-	/* Nothing to do if somebody truncated the page from under us.. */
-	if (page->mapping)
-		error = filemap_write_page(vma->vm_file, page, 1);
+	error = filemap_write_page(vma->vm_file, page, 1);
 
 	UnlockPage(page);
 	page_cache_free(page);
@@ -2313,13 +2318,20 @@ struct page *read_cache_page(struct address_space *mapping,
 				int (*filler)(void *,struct page*),
 				void *data)
 {
-	struct page *page = __read_cache_page(mapping, index, filler, data);
+	struct page *page;
 	int err;
 
+retry:
+	page = __read_cache_page(mapping, index, filler, data);
 	if (IS_ERR(page) || Page_Uptodate(page))
 		goto out;
 
 	lock_page(page);
+	if (!page->mapping) {
+		UnlockPage(page);
+		page_cache_release(page);
+		goto retry;
+	}
 	if (Page_Uptodate(page)) {
 		UnlockPage(page);
 		goto out;

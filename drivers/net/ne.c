@@ -175,11 +175,6 @@ static void ne_block_output(struct net_device *dev, const int count,
 	E2010	 starts at 0x100 and ends at 0x4000.
 	E2010-x starts at 0x100 and ends at 0xffff.  */
 
-#ifdef HAVE_DEVLIST
-struct netdev_entry netcard_drv =
-{"ne", ne_probe1, NE_IO_EXTENT, netcard_portlist};
-#else
-
 /*
  * Note that at boot, this probe only picks up one card at a time, even for
  * multiple PCI ne2k cards. Use "ether=0,0,eth1" if you have a second PCI
@@ -220,7 +215,6 @@ int __init ne_probe(struct net_device *dev)
 
 	return -ENODEV;
 }
-#endif
 
 #ifdef CONFIG_PCI
 static int __init ne_probe_pci(struct net_device *dev)
@@ -326,13 +320,6 @@ static int __init ne_probe1(struct net_device *dev, int ioaddr)
 			outb_p(regd, ioaddr + 0x0d);	/* Restore the old values. */
 			return -ENODEV;
 		}
-	}
-
-	/* We should have a "dev" from Space.c or the static module table. */
-	if (dev == NULL) 
-	{
-		printk(KERN_ERR "ne.c: Passed a NULL device.\n");
-		dev = init_etherdev(0, 0);
 	}
 
 	if (ei_debug  &&  version_printed++ == 0)
@@ -805,19 +792,10 @@ retry:
 
 #ifdef MODULE
 #define MAX_NE_CARDS	4	/* Max number of NE cards per module */
-#define NAMELEN		8	/* # of chars for storing dev->name */
-static struct net_device dev_ne[MAX_NE_CARDS] = {
-	{
-		"",
-		0, 0, 0, 0,
-		0, 0,
-		0, 0, 0, NULL, NULL
-	},
-};
-
-static int io[MAX_NE_CARDS] = { 0, };
-static int irq[MAX_NE_CARDS]  = { 0, };
-static int bad[MAX_NE_CARDS]  = { 0, };	/* 0xbad = bad sig or no reset ack */
+static struct net_device dev_ne[MAX_NE_CARDS];
+static int io[MAX_NE_CARDS];
+static int irq[MAX_NE_CARDS];
+static int bad[MAX_NE_CARDS];	/* 0xbad = bad sig or no reset ack */
 
 MODULE_PARM(io, "1-" __MODULE_STRING(MAX_NE_CARDS) "i");
 MODULE_PARM(irq, "1-" __MODULE_STRING(MAX_NE_CARDS) "i");

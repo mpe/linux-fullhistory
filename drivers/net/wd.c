@@ -46,7 +46,7 @@ static unsigned int wd_portlist[] __initdata =
 {0x300, 0x280, 0x380, 0x240, 0};
 
 int wd_probe(struct net_device *dev);
-int wd_probe1(struct net_device *dev, int ioaddr);
+static int wd_probe1(struct net_device *dev, int ioaddr);
 
 static int wd_open(struct net_device *dev);
 static void wd_reset_8390(struct net_device *dev);
@@ -81,11 +81,6 @@ static int wd_close(struct net_device *dev);
 	The wd_probe1() routine initializes the card and fills the
 	station address field. */
 
-#ifdef HAVE_DEVLIST
-struct netdev_entry wd_drv =
-{"wd", wd_probe1, WD_IO_EXTENT, wd_portlist};
-#else
-
 int __init wd_probe(struct net_device *dev)
 {
 	int i;
@@ -106,9 +101,8 @@ int __init wd_probe(struct net_device *dev)
 
 	return -ENODEV;
 }
-#endif
 
-int __init wd_probe1(struct net_device *dev, int ioaddr)
+static int __init wd_probe1(struct net_device *dev, int ioaddr)
 {
 	int i;
 	int checksum = 0;
@@ -123,12 +117,6 @@ int __init wd_probe1(struct net_device *dev, int ioaddr)
 		|| inb(ioaddr + 9) == 0xff
 		|| (checksum & 0xff) != 0xFF)
 		return -ENODEV;
-
-	/* We should have a "dev" from Space.c or the static module table. */
-	if (dev == NULL) {
-		printk("wd.c: Passed a NULL device.\n");
-		dev = init_etherdev(0, 0);
-	}
 
 	/* Check for semi-valid mem_start/end values if supplied. */
 	if ((dev->mem_start % 0x2000) || (dev->mem_end % 0x2000)) {
@@ -438,15 +426,7 @@ wd_close(struct net_device *dev)
 
 #ifdef MODULE
 #define MAX_WD_CARDS	4	/* Max number of wd cards per module */
-static struct net_device dev_wd[MAX_WD_CARDS] = {
-	{
-		"",		/* assign a chunk of namelist[] below */
-		0, 0, 0, 0,
-		0, 0,
-		0, 0, 0, NULL, NULL
-	},
-};
-
+static struct net_device dev_wd[MAX_WD_CARDS];
 static int io[MAX_WD_CARDS];
 static int irq[MAX_WD_CARDS];
 static int mem[MAX_WD_CARDS];

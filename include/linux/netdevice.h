@@ -55,6 +55,7 @@ struct divert_blk;
 #define NET_RX_CN_MOD		2   /* Storm on its way! */
 #define NET_RX_CN_HIGH		5   /* The storm is here */
 #define NET_RX_DROP		-1  /* packet dropped */
+#define NET_RX_BAD		-2  /* packet dropped due to kernel error */
 
 #define net_xmit_errno(e)	((e) != NET_XMIT_CN ? -ENOBUFS : 0)
 

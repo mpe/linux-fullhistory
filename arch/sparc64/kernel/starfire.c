@@ -1,4 +1,4 @@
-/* $Id: starfire.c,v 1.7 2000/09/22 23:02:13 davem Exp $
+/* $Id: starfire.c,v 1.8 2000/10/27 18:36:47 anton Exp $
  * starfire.c: Starfire/E10000 support.
  *
  * Copyright (C) 1998 David S. Miller (davem@redhat.com)
@@ -31,7 +31,12 @@ void check_if_starfire(void)
 void starfire_cpu_setup(void)
 {
 	if (this_is_starfire) {
-/* We do this in starfire_translate - Anton */
+/*
+ * We do this in starfire_translate and xcall_deliver. When we fix our cpu
+ * arrays to support > 64 processors we can use the real upaid instead
+ * of the logical cpuid in __cpu_number_map etc, then we can get rid of
+ * the translations everywhere. - Anton
+ */
 #if 0
 		int i;
 

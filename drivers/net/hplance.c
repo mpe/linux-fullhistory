@@ -106,15 +106,17 @@ static int __init hplance_init(struct net_device *dev, int scode)
         struct hplance_private *lp;
         int i;
         
-        if (dev == NULL)
-                dev = init_etherdev(0, sizeof(struct hplance_private));
-        else
-        {
-                dev->priv = kmalloc(sizeof(struct hplance_private), GFP_KERNEL);
-                if (dev->priv == NULL)
-                        return -ENOMEM;
-                memset(dev->priv, 0, sizeof(struct hplance_private));
-        }
+#ifdef MODULE
+	dev = init_etherdev(0, sizeof(struct hplance_private));
+	if (!dev)
+		return -ENOMEM;
+#else
+	dev->priv = kmalloc(sizeof(struct hplance_private), GFP_KERNEL);
+	if (dev->priv == NULL)
+		return -ENOMEM;
+	memset(dev->priv, 0, sizeof(struct hplance_private));
+#endif
+
         printk("%s: HP LANCE; select code %d, addr", dev->name, scode);
 
         /* reset the board */

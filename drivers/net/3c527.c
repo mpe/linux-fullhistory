@@ -272,19 +272,6 @@ static int __init mc32_probe1(struct net_device *dev, int slot)
 		return -ENODEV;
 	}
 
-	/*
-	 * Don't allocate the private data here, it is done later
-	 * This makes it easier to free the memory when this driver
-	 * is used as a module.
-	 */
-
-	if(dev==NULL)
-	{
-		dev = init_etherdev(0, 0);
-		if (dev == NULL)
-			return -ENOMEM;
-	}
-
 	/* Fill in the 'dev' fields. */
 	dev->base_addr = mca_io_bases[(POS>>1)&7];
 	dev->mem_start = mca_mem_bases[(POS>>4)&7];
@@ -1457,11 +1444,7 @@ static void mc32_reset_multicast_list(struct net_device *dev)
 
 #ifdef MODULE
 
-static struct net_device this_device = {
-	"", /* will be inserted by linux/drivers/net/mc32_init.c */
-	0, 0, 0, 0,
-	0, 0,  /* I/O address, IRQ */
-	0, 0, 0, NULL, mc32_probe };
+static struct net_device this_device = { init: mc32_probe };
 
 
 /**

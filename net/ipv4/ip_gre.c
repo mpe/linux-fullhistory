@@ -1266,7 +1266,9 @@ int __init ipgre_init(void)
 #ifdef MODULE
 	register_netdev(&ipgre_fb_tunnel_dev);
 #else
+	rtnl_lock();
 	register_netdevice(&ipgre_fb_tunnel_dev);
+	rtnl_unlock();
 #endif
 
 	inet_add_protocol(&ipgre_protocol);

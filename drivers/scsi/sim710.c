@@ -1448,10 +1448,16 @@ sim710_detect(Scsi_Host_Template * tpnt)
     tpnt->proc_name = "sim710";
 
     for(indx = 0; indx < no_of_boards; indx++) {
+        unsigned long page = __get_free_pages(GFP_ATOMIC, order);
+        if(page == NULL)
+        {
+        	printk(KERN_WARNING "sim710: out of memory registering board %d.\n", indx);
+        	break;
+        }
 	host = scsi_register(tpnt, 4);
-	host->hostdata[0] = __get_free_pages(GFP_ATOMIC, order);
-	if (host->hostdata[0] == 0)
-	    panic ("sim710: Couldn't get hostdata memory");
+	if(host == NULL)
+		break;
+	host->hostdata[0] = page;
 	hostdata = (struct sim710_hostdata *)host->hostdata[0];
 	memset(hostdata, 0, size);
 #ifdef CONFIG_TP34V_SCSI

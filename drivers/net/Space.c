@@ -102,6 +102,7 @@ extern int mace68k_probe(struct net_device *dev);
 extern int macsonic_probe(struct net_device *dev);
 extern int mac8390_probe(struct net_device *dev);
 extern int mac89x0_probe(struct net_device *dev);
+extern int mc32_probe(struct net_device *dev);
   
 /* Gigabit Ethernet adapters */
 extern int yellowfin_probe(struct net_device *dev);
@@ -203,6 +204,9 @@ struct devprobe mca_probes[] __initdata = {
 #endif
 #ifdef CONFIG_ELMC		/* 3c523 */
 	{elmc_probe, 0},
+#endif
+#ifdef CONFIG_ELMC_II		/* 3c527 */
+	{mc32_probe, 0},
 #endif
 #ifdef CONFIG_SKMC              /* SKnet Microchannel */
         {skmca_probe, 0},

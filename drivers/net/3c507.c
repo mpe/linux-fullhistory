@@ -295,11 +295,6 @@ static void hardware_send_packet(struct net_device *dev, void *buf, short length
 static void init_82586_mem(struct net_device *dev);
 
 
-#ifdef HAVE_DEVLIST
-struct netdev_entry netcard_drv =
-{"3c507", el16_probe1, EL16_IO_EXTENT, netcard_portlist};
-#endif
-
 /* Check for a network adaptor of this type, and return '0' iff one exists.
 	If dev->base_addr == 0, probe all likely locations.
 	If dev->base_addr == 1, always return failure.
@@ -352,13 +347,6 @@ static int __init el16_probe1(struct net_device *dev, int ioaddr)
 		retval = -ENODEV;
 		goto out;
 	}
-
-	/* Allocate a new 'dev' if needed. */
-	if (dev == NULL)
-		if (!(dev = init_etherdev(0, 0))) {
-			retval = -ENOMEM;
-			goto out;
-		}
 
 	if (net_debug  &&  version_printed++ == 0)
 		printk(version);
@@ -869,12 +857,7 @@ static void el16_rx(struct net_device *dev)
 	lp->rx_tail = rx_tail;
 }
 #ifdef MODULE
-static struct net_device dev_3c507 = {
-	"", /* device name is inserted by linux/drivers/net/net_init.c */
-	0, 0, 0, 0,
-	0, 0,
-	0, 0, 0, NULL, el16_probe
-};
+static struct net_device dev_3c507 = { init: el16_probe };
 
 static int io = 0x300;
 static int irq = 0;

@@ -30,6 +30,7 @@
 #include <linux/delay.h>
 #include <linux/ioctl.h>
 #include <linux/sched.h>
+#include <linux/smp_lock.h>
 
 // #define DEBUG
 
@@ -94,6 +95,7 @@ struct scn_usb_data {
 	char *obuf, *ibuf;	/* transfer buffers */
 	char bulk_in_ep, bulk_out_ep, intr_ep; /* Endpoint assignments */
 	wait_queue_head_t rd_wait_q; /* read timeouts */
+	struct semaphore gen_lock; /* lock to prevent concurrent reads or writes */
 };
 
 static struct scn_usb_data *p_scn_table[SCN_MAX_MNR] = { NULL, /* ... */};

@@ -157,7 +157,7 @@ static inline char * task_state(struct task_struct *p, char *buffer)
 		"Uid:\t%d\t%d\t%d\t%d\n"
 		"Gid:\t%d\t%d\t%d\t%d\n",
 		get_task_state(p),
-		p->pid, p->p_opptr->pid, p->p_pptr->pid != p->p_opptr->pid ? p->p_opptr->pid : 0,
+		p->pid, p->p_opptr->pid, p->p_pptr->pid != p->p_opptr->pid ? p->p_pptr->pid : 0,
 		p->uid, p->euid, p->suid, p->fsuid,
 		p->gid, p->egid, p->sgid, p->fsgid);
 	read_unlock(&tasklist_lock);	

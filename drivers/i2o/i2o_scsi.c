@@ -437,6 +437,8 @@ int i2o_scsi_detect(Scsi_Host_Template * tpnt)
 				continue;
 		
 			shpnt = scsi_register(tpnt, sizeof(struct i2o_scsi_host));
+			if(shpnt==NULL)
+				continue;
 			save_flags(flags);
 			cli();
 			shpnt->unique_id = (u32)d;

@@ -112,12 +112,6 @@ static int __init ariadne2_init(struct net_device *dev, unsigned long board)
     };
     unsigned long ioaddr = board+ARIADNE2_BASE*2;
 
-    /* We should have a "dev" from Space.c or the static module table. */
-    if (dev == NULL) {
-	printk(KERN_ERR "ariadne2.c: Passed a NULL device.\n");
-	dev = init_etherdev(0, 0);
-    }
-
     /* Reset card. Who knows what dain-bramaged state it was left in. */
     {
 	unsigned long reset_start_time = jiffies;
@@ -387,15 +381,7 @@ static void ariadne2_block_output(struct net_device *dev, int count,
 }
 
 #ifdef MODULE
-static char devicename[9] = { 0, };
-
-static struct net_device ariadne2_dev =
-{
-    devicename,
-    0, 0, 0, 0,
-    0, 0,
-    0, 0, 0, NULL, ariadne2_probe,
-};
+static struct net_device ariadne2_dev = { init: ariadne2_probe };
 
 int init_module(void)
 {

@@ -67,7 +67,7 @@ static unsigned int ultra_portlist[] __initdata =
 {0x200, 0x220, 0x240, 0x280, 0x300, 0x340, 0x380, 0};
 
 int ultra_probe(struct net_device *dev);
-int ultra_probe1(struct net_device *dev, int ioaddr);
+static int ultra_probe1(struct net_device *dev, int ioaddr);
 
 static int ultra_open(struct net_device *dev);
 static void ultra_reset_8390(struct net_device *dev);
@@ -101,10 +101,6 @@ static int ultra_close_card(struct net_device *dev);
 	address PROM at I/O ports <base>+8 to <base>+13, with a checksum
 	following.
 */
-#ifdef HAVE_DEVLIST
-struct netdev_entry ultra_drv =
-{"ultra", ultra_probe1, NETCARD_IO_EXTENT, netcard_portlist};
-#else
 
 int __init ultra_probe(struct net_device *dev)
 {
@@ -126,9 +122,8 @@ int __init ultra_probe(struct net_device *dev)
 
 	return -ENODEV;
 }
-#endif
 
-int __init ultra_probe1(struct net_device *dev, int ioaddr)
+static int __init ultra_probe1(struct net_device *dev, int ioaddr)
 {
 	int i;
 	int checksum = 0;
@@ -152,9 +147,6 @@ int __init ultra_probe1(struct net_device *dev, int ioaddr)
 		checksum += inb(ioaddr + 8 + i);
 	if ((checksum & 0xff) != 0xFF)
 		return -ENODEV;
-
-	if (dev == NULL)
-		dev = init_etherdev(0, 0);
 
 	if (ei_debug  &&  version_printed++ == 0)
 		printk(version);
@@ -421,17 +413,9 @@ ultra_close_card(struct net_device *dev)
 
 #ifdef MODULE
 #define MAX_ULTRA_CARDS	4	/* Max number of Ultra cards per module */
-static struct net_device dev_ultra[MAX_ULTRA_CARDS] = {
-	{
-		"",		/* assign a chunk of namelist[] below */
-		0, 0, 0, 0,
-		0, 0,
-		0, 0, 0, NULL, NULL
-	},
-};
-
-static int io[MAX_ULTRA_CARDS] = { 0, };
-static int irq[MAX_ULTRA_CARDS]  = { 0, };
+static struct net_device dev_ultra[MAX_ULTRA_CARDS];
+static int io[MAX_ULTRA_CARDS];
+static int irq[MAX_ULTRA_CARDS];
 
 MODULE_PARM(io, "1-" __MODULE_STRING(MAX_ULTRA_CARDS) "i");
 MODULE_PARM(irq, "1-" __MODULE_STRING(MAX_ULTRA_CARDS) "i");

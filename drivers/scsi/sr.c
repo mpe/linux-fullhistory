@@ -473,9 +473,19 @@ void get_sectorsize(int i)
 	Scsi_Request *SRpnt;
 
 	buffer = (unsigned char *) scsi_malloc(512);
-
-
 	SRpnt = scsi_allocate_request(scsi_CDs[i].device);
+	
+	if(buffer == NULL || SRpnt == NULL)
+	{
+		scsi_CDs[i].capacity = 0x1fffff;
+		sector_size = 2048;	/* A guess, just in case */
+		scsi_CDs[i].needs_sector_size = 1;
+		if(buffer)
+			scsi_free(buffer, 512);
+		if(SRpnt)
+			scsi_release_request(SRpnt);
+		return;
+	}	
 
 	retries = 3;
 	do {
