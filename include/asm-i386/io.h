@@ -107,10 +107,15 @@ __OUTS(l)
  * Temporary debugging check to catch old code using
  * unmapped ISA addresses. Will be removed in 2.4.
  */
-#define __io_virt(x) ((unsigned long)(x) < PAGE_OFFSET ? \
-	({ __label__ __l; __l: printk("io mapaddr %p not valid at %p!\n", (char *)(x), &&__l); __va(x); }) : (char *)(x))
-#define __io_phys(x) ((unsigned long)(x) < PAGE_OFFSET ? \
-	({ __label__ __l; __l: printk("io mapaddr %p not valid at %p!\n", (char *)(x), &&__l); (unsigned long)(x); }) : __pa(x))
+#if 1
+  extern void *__io_virt_debug(unsigned long x, const char *file, int line);
+  extern unsigned long __io_phys_debug(unsigned long x, const char *file, int line);
+  #define __io_virt(x) __io_virt_debug((unsigned long)(x), __FILE__, __LINE__)
+//#define __io_phys(x) __io_phys_debug((unsigned long)(x), __FILE__, __LINE__)
+#else
+  #define __io_virt(x) ((void *)(x))
+//#define __io_phys(x) __pa(x)
+#endif
 
 /*
  * Change virtual addresses to physical addresses and vv.

@@ -104,6 +104,7 @@ typedef struct {
 	unsigned char density;
 	unsigned char door_locked;
 	unsigned char rew_at_close;
+	unsigned char inited;
 	int block_size;
 	int min_block;
 	int max_block;

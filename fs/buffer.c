@@ -43,7 +43,6 @@
 #include <linux/init.h>
 #include <linux/quotaops.h>
 #include <linux/iobuf.h>
-#include <linux/bigmem.h>
 
 #include <asm/uaccess.h>
 #include <asm/io.h>

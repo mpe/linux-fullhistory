@@ -360,16 +360,24 @@ static int get_meminfo(char * buffer)
 	struct sysinfo i;
 	int len;
 
+/*
+ * display in kilobytes.
+ */
+#define K(x) ((x) << (PAGE_SHIFT - 10))
+
 	si_meminfo(&i);
 	si_swapinfo(&i);
 	len = sprintf(buffer, "        total:    used:    free:  shared: buffers:  cached:\n"
-		"Mem:  %8lu %8lu %8lu %8lu %8lu %8lu\n"
+		"Mem:  %8lu %8lu %8lu %8lu %8lu %8u\n"
 		"Swap: %8lu %8lu %8lu\n",
-		i.totalram, i.totalram-i.freeram, i.freeram, i.sharedram, i.bufferram, (unsigned long) atomic_read(&page_cache_size)*PAGE_SIZE,
-		i.totalswap, i.totalswap-i.freeswap, i.freeswap);
+		K(i.totalram), K(i.totalram-i.freeram), K(i.freeram),
+		K(i.sharedram), K(i.bufferram),
+		K(atomic_read(&page_cache_size)), K(i.totalswap),
+		K(i.totalswap-i.freeswap), K(i.freeswap));
 	/*
-	 * Tagged format, for easy grepping and expansion. The above will go away
-	 * eventually, once the tools have been updated.
+	 * Tagged format, for easy grepping and expansion.
+	 * The above will go away eventually, once the tools
+	 * have been updated.
 	 */
 	return len + sprintf(buffer+len,
 		"MemTotal:  %8lu kB\n"
@@ -377,19 +385,20 @@ static int get_meminfo(char * buffer)
 		"MemShared: %8lu kB\n"
 		"Buffers:   %8lu kB\n"
 		"Cached:    %8u kB\n"
-		"BigTotal:  %8lu kB\n"
-		"BigFree:   %8lu kB\n"
+		"HighTotal: %8lu kB\n"
+		"HighFree:  %8lu kB\n"
 		"SwapTotal: %8lu kB\n"
 		"SwapFree:  %8lu kB\n",
-		i.totalram >> 10,
-		i.freeram >> 10,
-		i.sharedram >> 10,
-		i.bufferram >> 10,
-		atomic_read(&page_cache_size) << (PAGE_SHIFT - 10),
-		i.totalhigh >> 10,
-		i.freehigh >> 10,
-		i.totalswap >> 10,
-		i.freeswap >> 10);
+		K(i.totalram),
+		K(i.freeram),
+		K(i.sharedram),
+		K(i.bufferram),
+		K(atomic_read(&page_cache_size)),
+		K(i.totalhigh),
+		K(i.freehigh),
+		K(i.totalswap),
+		K(i.freeswap));
+#undef K
 }
 
 static int get_version(char * buffer)
@@ -407,69 +416,68 @@ static int get_cmdline(char * buffer)
 	return sprintf(buffer, "%s\n", saved_command_line);
 }
 
-static struct page * get_phys_page(struct mm_struct * mm, unsigned long ptr)
+static struct page * get_phys_addr(struct mm_struct * mm, unsigned long ptr)
 {
-	pgd_t *page_dir;
-	pmd_t *page_middle;
+	pgd_t *pgd;
+	pmd_t *pmd;
 	pte_t pte;
 
 	if (ptr >= TASK_SIZE)
 		return 0;
-	page_dir = pgd_offset(mm,ptr);
-	if (pgd_none(*page_dir))
+	pgd = pgd_offset(mm,ptr);
+	if (pgd_none(*pgd))
 		return 0;
-	if (pgd_bad(*page_dir)) {
-		printk("bad page directory entry %08lx\n", pgd_val(*page_dir));
-		pgd_clear(page_dir);
-		return 0;
-	}
-	page_middle = pmd_offset(page_dir,ptr);
-	if (pmd_none(*page_middle))
-		return 0;
-	if (pmd_bad(*page_middle)) {
-		printk("bad page middle entry %08lx\n", pmd_val(*page_middle));
-		pmd_clear(page_middle);
+	if (pgd_bad(*pgd)) {
+		pgd_ERROR(*pgd);
+		pgd_clear(pgd);
 		return 0;
 	}
-	pte = *pte_offset(page_middle,ptr);
+	pmd = pmd_offset(pgd,ptr);
+	if (pmd_none(*pmd))
+		return 0;
+	if (pmd_bad(*pmd)) {
+		pmd_ERROR(*pmd);
+		pmd_clear(pmd);
+		return 0;
+	}
+	pte = *pte_offset(pmd,ptr);
 	if (!pte_present(pte))
 		return 0;
 	return pte_page(pte);
 }
 
-#include <linux/highmem.h>
-
 static int get_array(struct mm_struct *mm, unsigned long start, unsigned long end, char * buffer)
 {
-	unsigned long addr;
+	struct page *page;
+	unsigned long kaddr;
 	int size = 0, result = 0;
-	char *buf, c;
+	char c;
 
 	if (start >= end)
 		return result;
 	for (;;) {
-		struct page *page = get_phys_page(mm, start);
+		page = get_phys_addr(mm, start);
 		if (!page)
 			return result;
-		addr = kmap(page, KM_READ);
-		buf = (char *) (addr + (start & ~PAGE_MASK));
+		kaddr = kmap(page, KM_READ) + (start & ~PAGE_MASK);
 		do {
-			c = *buf;
+			c = *(char *) kaddr;
 			if (!c)
 				result = size;
-			if (size >= PAGE_SIZE) {
-				kunmap(addr, KM_READ);
+			if (size < PAGE_SIZE)
+				buffer[size++] = c;
+			else {
+				kunmap(kaddr, KM_READ);
 				return result;
 			}
-			buffer[size++] = c;
-			buf++;
+			kaddr++;
 			start++;
 			if (!c && start >= end) {
-				kunmap(addr, KM_READ);
+				kunmap(kaddr, KM_READ);
 				return result;
 			}
-		} while (~PAGE_MASK & (unsigned long)buf);
-		kunmap(addr, KM_READ);
+		} while (kaddr & ~PAGE_MASK);
+		kunmap(kaddr, KM_READ);
 	}
 	return result;
 }
@@ -1032,7 +1040,7 @@ static inline void statm_pte_range(pmd_t * pmd, unsigned long address, unsigned 
 	if (pmd_none(*pmd))
 		return;
 	if (pmd_bad(*pmd)) {
-		printk("statm_pte_range: bad pmd (%08lx)\n", pmd_val(*pmd));
+		pmd_ERROR(*pmd);
 		pmd_clear(pmd);
 		return;
 	}
@@ -1070,7 +1078,7 @@ static inline void statm_pmd_range(pgd_t * pgd, unsigned long address, unsigned 
 	if (pgd_none(*pgd))
 		return;
 	if (pgd_bad(*pgd)) {
-		printk("statm_pmd_range: bad pgd (%08lx)\n", pgd_val(*pgd));
+		pgd_ERROR(*pgd);
 		pgd_clear(pgd);
 		return;
 	}
