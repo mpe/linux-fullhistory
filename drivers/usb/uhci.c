@@ -1437,10 +1437,12 @@ static struct uhci *alloc_uhci(unsigned int io_addr)
 
 	/* We need exactly one page (per UHCI specs), how convenient */
 	uhci->fl = (void *)__get_free_page(GFP_KERNEL);
+	if (!uhci->fl)
+		goto au_free_uhci;
 
 	bus = kmalloc(sizeof(*bus), GFP_KERNEL);
 	if (!bus)
-		return NULL;
+		goto au_free_fl;
 
 	memset(bus, 0, sizeof(*bus));
 
@@ -1460,7 +1462,7 @@ static struct uhci *alloc_uhci(unsigned int io_addr)
 	 */
 	usb = uhci_usb_allocate(NULL);
 	if (!usb)
-		return NULL;
+		goto au_free_bus;
 
 	usb->bus = bus;
 	dev = usb_to_uhci(usb);
@@ -1531,6 +1533,18 @@ static struct uhci *alloc_uhci(unsigned int io_addr)
 	}
 
 	return uhci;
+
+/*
+ * error exits:
+ */
+
+au_free_bus:
+	kfree (bus);
+au_free_fl:
+	free_page ((unsigned long)uhci->fl);
+au_free_uhci:
+	kfree (uhci);
+	return NULL;
 }
 
 

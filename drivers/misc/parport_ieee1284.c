@@ -17,7 +17,7 @@
 #include <linux/kernel.h>
 #include <linux/interrupt.h>
 
-#define DEBUG /* undef me for production */
+#undef DEBUG /* undef me for production */
 
 #ifdef CONFIG_LP_CONSOLE
 #undef DEBUG /* Don't want a garbled console */

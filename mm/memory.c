@@ -344,12 +344,10 @@ static inline int zap_pte_range(struct mm_struct *mm, pmd_t * pmd, unsigned long
 		pte_t page;
 		if (!size)
 			break;
-		spin_lock(&mm->page_table_lock);
 		page = *pte;
 		pte++;
 		size--;
 		pte_clear(pte-1);
-		spin_unlock(&mm->page_table_lock);
 		if (pte_none(page))
 			continue;
 		freed += free_pte(page);
@@ -394,11 +392,21 @@ void zap_page_range(struct mm_struct *mm, unsigned long address, unsigned long s
 	int freed = 0;
 
 	dir = pgd_offset(mm, address);
+
+	/*
+	 * This is a long-lived spinlock. That's fine.
+	 * There's no contention, because the page table
+	 * lock only protects against kswapd anyway, and
+	 * even if kswapd happened to be looking at this
+	 * process we _want_ it to get stuck.
+	 */
+	spin_lock(&mm->page_table_lock);
 	while (address < end) {
 		freed += zap_pmd_range(mm, dir, address, end - address);
 		address = (address + PGDIR_SIZE) & PGDIR_MASK;
 		dir++;
 	}
+	spin_unlock(&mm->page_table_lock);
 	/*
 	 * Update rss for the mm_struct (not necessarily current->mm)
 	 */

@@ -124,6 +124,7 @@ static int open_printer(struct inode * inode, struct file * file)
 		return -EBUSY;
 	}
 	if (!(p->obuf = (char *)__get_free_page(GFP_KERNEL))) {
+		p->isopen = 0;
 		return -ENOMEM;
 	}
 

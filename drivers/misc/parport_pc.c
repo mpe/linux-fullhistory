@@ -1275,9 +1275,7 @@ static int __init parport_ECPPS2_supported(struct parport *pb)
 
 static int __init parport_EPP_supported(struct parport *pb)
 {
-	/* If EPP timeout bit clear then EPP available */
-	if (!clear_epp_timeout(pb))
-		return 0;  /* No way to clear timeout */
+	const struct parport_pc_private *priv = pb->private_data;
 
 	/*
 	 * Theory:
@@ -1292,50 +1290,21 @@ static int __init parport_EPP_supported(struct parport *pb)
 	 *	This bit is always high in non EPP modes.
 	 */
 
-	parport_pc_data_reverse (pb);
-	parport_pc_enable_irq (pb);
-	clear_epp_timeout(pb);
-	
-	inb (EPPDATA (pb));
-	udelay(30);  /* Wait for possible EPP timeout */
-	
-	if (parport_pc_read_status(pb) & 0x01)
-		goto supported;
+	/* If EPP timeout bit clear then EPP available */
+	if (!clear_epp_timeout(pb))
+		return 0;  /* No way to clear timeout */
 
-	/*
-	 * Theory:
-	 *     Write two values to the EPP address register and
-	 *     read them back. When the transfer times out, the state of
-	 *     the EPP register is undefined in some cases (EPP 1.9?) but
-	 *     in others (EPP 1.7, ECPEPP?) it is possible to read back
-	 *     its value.
-	 */
-	clear_epp_timeout(pb);
-	udelay(30); /* Wait for possible EPP timeout */
-
-	/* We must enable the outputs to be able to read the address
-       register. */
-
-	parport_pc_data_forward (pb);
-
-	outb (0x55, EPPADDR (pb));
-
-	clear_epp_timeout(pb);
-	udelay(30); /* Wait for possible EPP timeout */
-
-	if (inb (EPPADDR (pb)) == 0x55) {
-		clear_epp_timeout(pb);
-		udelay(30); /* Wait for possible EPP timeout */
-		outb (0xaa, EPPADDR (pb));
-
-		if (inb (EPPADDR (pb)) == 0xaa)
-			goto supported;
+	/* Check for Intel bug. */
+	if (priv->ecr) {
+		unsigned char i;
+		for (i = 0x00; i < 0x80; i += 0x20) {
+			outb (i, ECONTROL (pb));
+			if (clear_epp_timeout (pb))
+				/* Phony EPP in ECP. */
+				return 0;
+		}
 	}
 
-	return 0;
-
- supported:
-	clear_epp_timeout(pb);
 	pb->modes |= PARPORT_MODE_EPP;
 
 	/* Set up access functions to use EPP hardware. */
@@ -1581,8 +1550,9 @@ static int __init probe_one_port(unsigned long int base,
 	}
 	if (base != 0x3bc) {
 		if (!check_region(base+0x3, 5)) {
-			parport_ECPEPP_supported(p);
 			parport_EPP_supported(p);
+			if (!(p->modes & PARPORT_MODE_EPP))
+				parport_ECPEPP_supported(p);
 		}
 	}
 	if (!parport_SPP_supported (p)) {
@@ -1708,6 +1678,7 @@ static int __init probe_one_port(unsigned long int base,
 		outb (0x24, ECONTROL (p));
 
 	parport_pc_write_data(p, 0);
+	parport_pc_data_forward (p);
 	parport_pc_write_control(p, PARPORT_CONTROL_SELECT);
 	udelay (50);
 	parport_pc_write_control(p,

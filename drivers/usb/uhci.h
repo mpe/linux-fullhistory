@@ -167,12 +167,12 @@ struct uhci_device {
  * Linus:
  *
  *  generic-iso-QH  ->  dev1-iso-QH  ->  generic-irq-QH  ->  dev1-irq-QH  -> ...
- *       |                       |                  |                   |
- *      End          dev1-iso-TD1          End            dev1-irq-TD1
- *                       |
- *                   dev1-iso-TD2
- *                       |
- *                      ....
+ *       |                  |                  |                   |
+ *      End             dev1-iso-TD1          End            dev1-irq-TD1
+ *                          |
+ *                      dev1-iso-TD2
+ *                          |
+ *                        ....
  *
  * This may vary a bit (the UHCI docs don't explicitly say you can put iso
  * transfers in QH's and all of their pictures don't have that either) but

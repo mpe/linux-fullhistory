@@ -260,7 +260,7 @@ static int usb_check_descriptor(unsigned char *ptr, int len, unsigned char desct
 
 static int usb_parse_endpoint(struct usb_device *dev, struct usb_endpoint_descriptor *endpoint, unsigned char *ptr, int len)
 {
-	int parsed = usb_expect_descriptor(ptr, len, USB_DT_ENDPOINT, 7);
+	int parsed = usb_expect_descriptor(ptr, len, USB_DT_ENDPOINT, USB_DT_ENDPOINT_SIZE);
 	int i;
 
 	if (parsed < 0)
@@ -284,7 +284,7 @@ static int usb_parse_endpoint(struct usb_device *dev, struct usb_endpoint_descri
 static int usb_parse_interface(struct usb_device *dev, struct usb_interface_descriptor *interface, unsigned char *ptr, int len)
 {
 	int i;
-	int parsed = usb_expect_descriptor(ptr, len, USB_DT_INTERFACE, 9);
+	int parsed = usb_expect_descriptor(ptr, len, USB_DT_INTERFACE, USB_DT_INTERFACE_SIZE);
 	int retval;
 
 	if (parsed < 0)
@@ -848,29 +848,40 @@ int usb_get_report(struct usb_device *dev)
 int usb_get_configuration(struct usb_device *dev)
 {
 	unsigned int cfgno;
-	unsigned char buffer[400];
 	unsigned char * bufptr;
-	
+	unsigned char * buffer;
+	int parse;
+
+	buffer = (unsigned char *) __get_free_page (GFP_KERNEL);
+	if (!buffer)
+		return -1;
+
 	bufptr = buffer;
 	for (cfgno = 0 ; cfgno < dev->descriptor.bNumConfigurations ; cfgno++) {
 		unsigned int size;
   		/* Get the first 8 bytes - guaranteed */
-	  	if (usb_get_descriptor(dev, USB_DT_CONFIG, cfgno, bufptr, 8))
+	  	if (usb_get_descriptor(dev, USB_DT_CONFIG, cfgno, bufptr, 8)) {
+			__free_page ((struct page *) buffer);
 	    		return -1;
+		}
 
   	  	/* Get the full buffer */
 	  	size = le16_to_cpup((unsigned short *)(bufptr+2));
-	  	if (bufptr+size > buffer+sizeof(buffer)) {
+	  	if (bufptr+size > buffer+PAGE_SIZE) {
 			printk(KERN_INFO "usb: truncated DT_CONFIG (want %d).\n", size);
-			size = buffer+sizeof(buffer)-bufptr;
+			size = buffer+PAGE_SIZE-bufptr;
 		}
-		if (usb_get_descriptor(dev, USB_DT_CONFIG, cfgno, bufptr, size))
+		if (usb_get_descriptor(dev, USB_DT_CONFIG, cfgno, bufptr, size)) {
+			__free_page ((struct page *) buffer);
 			return -1;
+		}
 			
 		/* Prepare for next configuration */
 		bufptr += size;
 	}
-	return usb_parse_configuration(dev, buffer, bufptr - buffer);
+	parse = usb_parse_configuration(dev, buffer, bufptr - buffer);
+	__free_page ((struct page *) buffer);
+	return parse;
 }
 
 int usb_get_stringtable(struct usb_device *dev)

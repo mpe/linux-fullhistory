@@ -281,6 +281,9 @@ if [ "$CONFIG_WAN_ROUTER" != "n" ]; then
     fi
   fi
 fi
+
+endmenu
+
 #
 # X.25 network drivers
 #

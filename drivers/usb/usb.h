@@ -31,9 +31,16 @@ typedef struct {
 } devrequest;
 
 /*
- * Class codes
+ * Device and/or Interface Class codes
  */
+#define USB_CLASS_PER_INTERFACE		0	/* for DeviceClass */
+#define USB_CLASS_AUDIO			1
+#define USB_CLASS_COMM			2
+#define USB_CLASS_HID			3
+#define USB_CLASS_PRINTER		7
+#define USB_CLASS_MASS_STORAGE		8
 #define USB_CLASS_HUB			9
+#define USB_CLASS_VENDOR_SPEC		0xff
 
 /*
  * Descriptor types
@@ -46,6 +53,28 @@ typedef struct {
 
 #define USB_DT_HUB			0x29
 #define USB_DT_HID			0x21
+
+/*
+ * Descriptor sizes per descriptor type
+ */
+#define USB_DT_DEVICE_SIZE		18
+#define USB_DT_CONFIG_SIZE		9
+#define USB_DT_INTERFACE_SIZE		9
+#define USB_DT_ENDPOINT_SIZE		7
+#define USB_DT_HUB_NONVAR_SIZE		7
+
+/*
+ * USB Request Type and Endpoint Directions
+ */
+#define USB_DIR_OUT			0
+#define USB_DIR_IN			0x80
+
+/*
+ * USB Packet IDs (PIDs)
+ */
+#define USB_PID_OUT			0xe1
+#define USB_PID_IN			0x69
+#define USB_PID_SETUP			0x2d
 
 /*
  * Standard requests
@@ -276,7 +305,7 @@ struct usb_bus {
 struct usb_device {
 	int devnum;			/* Device number on USB bus */
 	int slow;			/* Slow device? */
-	int maxpacketsize;		/* Maximum packet size */
+	int maxpacketsize;		/* Maximum packet size; encoded as 0,1,2,3 = 8,16,32,64 */
 	int toggle[2];			/* one bit for each endpoint ([0] = IN, [1] = OUT) */
 	int halted;			/* endpoint halts */
 	struct usb_config_descriptor *actconfig;/* the active configuration */
@@ -343,16 +372,16 @@ extern void usb_destroy_configuration(struct usb_device *dev);
  * Let's not fall in that trap. We'll just encode it as a simple
  * unsigned int. The encoding is:
  *
+ *  - max size:		bits 0-1	(00 = 8, 01 = 16, 10 = 32, 11 = 64)
+ *  - direction:	bit 7		(0 = Host-to-Device, 1 = Device-to-Host)
  *  - device:		bits 8-14
  *  - endpoint:		bits 15-18
  *  - Data0/1:		bit 19
- *  - direction:	bit 7		(0 = Host-to-Device, 1 = Device-to-Host)
- *  - speed:		bit 26		(0 = High, 1 = Low Speed)
- *  - max size:		bits 0-1	(00 = 8, 01 = 16, 10 = 32, 11 = 64)
+ *  - speed:		bit 26		(00 = Full, 01 = Low Speed)
  *  - pipe type:	bits 30-31	(00 = isochronous, 01 = interrupt, 10 = control, 11 = bulk)
  *
  * Why? Because it's arbitrary, and whatever encoding we select is really
- * up to us. This one happens to share a lot of bit positions with the UCHI
+ * up to us. This one happens to share a lot of bit positions with the UHCI
  * specification, so that much of the uhci driver can just mask the bits
  * appropriately.
  */
@@ -373,6 +402,7 @@ extern void usb_destroy_configuration(struct usb_device *dev);
 #define usb_pipebulk(pipe)	(usb_pipetype((pipe)) == 3)
 
 #define usb_pipe_endpdev(pipe)	(((pipe) >> 8) & 0x7ff)
+#define PIPE_DEVEP_MASK		0x0007ff00
 
 /* The D0/D1 toggle bits */
 #define usb_gettoggle(dev, ep, out) (((dev)->toggle[out] >> ep) & 1)
@@ -394,7 +424,7 @@ static inline unsigned int __default_pipe(struct usb_device *dev)
 	return (dev->slow << 26);
 }
 
-/* Create control pipes.. */
+/* Create various pipes... */
 #define usb_sndctrlpipe(dev,endpoint)	((2 << 30) | __create_pipe(dev,endpoint))
 #define usb_rcvctrlpipe(dev,endpoint)	((2 << 30) | __create_pipe(dev,endpoint) | 0x80)
 #define usb_sndisocpipe(dev,endpoint)	((0 << 30) | __create_pipe(dev,endpoint))
