@@ -101,7 +101,7 @@ do { \
 			     "flush	%%g6" \
 			     : /* No outputs */ \
 			     : "r" (CTX_HWBITS((__mm)->context)), \
-			       "r" (0x10), "i" (ASI_DMMU))
+			       "r" (SECONDARY_CONTEXT), "i" (ASI_DMMU))
 
 extern void __flush_tlb_mm(unsigned long, unsigned long);
 
