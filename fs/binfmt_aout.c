@@ -206,7 +206,7 @@ do_aout_core_dump(long signr, struct pt_regs * regs)
 	set_fs(KERNEL_DS);
 	DUMP_WRITE(current,sizeof(*current));
 close_coredump:
-	close_fp(file, NULL);
+	filp_close(file, NULL);
 end_coredump:
 	set_fs(fs);
 	return has_dumped;
@@ -318,6 +318,8 @@ static inline int do_load_aout_binary(struct linux_binprm * bprm, struct pt_regs
 	}
 
 	if (N_MAGIC(ex) == ZMAGIC && ex.a_text &&
+	    bprm->dentry->d_inode->i_op &&
+	    bprm->dentry->d_inode->i_op->bmap &&
 	    (fd_offset < bprm->dentry->d_inode->i_sb->s_blocksize)) {
 		printk(KERN_NOTICE "N_TXTOFF < BLOCK_SIZE. Please convert binary.\n");
 		return -ENOEXEC;

@@ -202,18 +202,25 @@ int Pci2000_BiosParam		(Disk *disk, kdev_t dev, int geom[]);
 
 extern struct proc_dir_entry Proc_Scsi_Pci2000;
 
-#define PCI2000 { proc_dir:       &Proc_Scsi_Pci2000,/* proc_dir_entry */ \
-		  name:           "PCI-2000 SCSI Intelligent Disk Controller",\
-		  detect:         Pci2000_Detect,			\
-		  command:	  Pci2000_Command,			\
-		  queuecommand:	  Pci2000_QueueCommand,			\
-		  abort:	  Pci2000_Abort,			\
-		  reset:	  Pci2000_Reset,			\
-		  bios_param:	  Pci2000_BiosParam,                 	\
-		  can_queue:	  16, 					\
-		  this_id:	  -1, 					\
-		  sg_tablesize:	  16,		 			\
-		  cmd_per_lun:	  1, 					\
-		  use_clustering: DISABLE_CLUSTERING }
+#define PCI2000 { NULL, NULL,							\
+			&Proc_Scsi_Pci2000,/* proc_dir_entry */		\
+			NULL,		                				\
+			"PCI-2000 SCSI Intelligent Disk Controller",\
+			Pci2000_Detect,								\
+			NULL,										\
+			NULL,	 									\
+			Pci2000_Command,							\
+			Pci2000_QueueCommand,						\
+			Pci2000_Abort,								\
+			Pci2000_Reset,								\
+			NULL,										\
+			Pci2000_BiosParam,                 			\
+			16, 										\
+			-1, 										\
+			16,		 									\
+			1, 											\
+			0, 											\
+			0, 											\
+			DISABLE_CLUSTERING }
 
 #endif

@@ -68,8 +68,10 @@ unx_create_cred(struct rpc_task *task)
 	dprintk("RPC:      allocating UNIX cred for uid %d gid %d\n",
 				current->uid, current->gid);
 
-	if (!(cred = (struct unx_cred *) rpc_malloc(task, sizeof(*cred))))
+	if (!(cred = (struct unx_cred *) rpc_malloc(task, sizeof(*cred)))) {
+		task->tk_status = -ENOMEM;
 		return NULL;
+	}
 
 	cred->uc_count = 0;
 	cred->uc_flags = RPCAUTH_CRED_UPTODATE;

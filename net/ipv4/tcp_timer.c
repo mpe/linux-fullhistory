@@ -5,7 +5,7 @@
  *
  *		Implementation of the Transmission Control Protocol(TCP).
  *
- * Version:	$Id: tcp_timer.c,v 1.58 1999/03/14 19:48:30 davem Exp $
+ * Version:	$Id: tcp_timer.c,v 1.59 1999/03/23 21:21:09 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -403,7 +403,7 @@ static void tcp_keepalive(unsigned long data)
 	for(i = chain_start; i < (chain_start + ((TCP_HTABLE_SIZE/2) >> 2)); i++) {
 		struct sock *sk = tcp_established_hash[i];
 		while(sk) {
-			if(sk->keepopen) {
+			if(!atomic_read(&sk->sock_readers) && sk->keepopen) {
 				count += tcp_keepopen_proc(sk);
 				if(count == sysctl_tcp_max_ka_probes)
 					goto out;

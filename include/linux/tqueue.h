@@ -59,7 +59,7 @@ extern task_queue tq_timer, tq_immediate, tq_scheduler, tq_disk;
  *
  * struct tq_struct *my_bh = NULL;
  * struct tq_struct run_my_bh = {
- *	0, 0, (void *)(void *) run_task_queue, &my_bh
+ *	0, 0, (void (*)(void *)) run_task_queue, &my_bh
  * };
  *
  * To activate a bottom half on your list, use:

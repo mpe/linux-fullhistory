@@ -464,8 +464,7 @@ __initfunc(static int amd_model(struct cpuinfo_x86 *c))
 				rdmsr(0xC0000082, l, h);
 				if((l&0xFFFF0000)==0)
 				{
-					mbytes>>=2;
-					l=(mbytes<<22)|(1<<16);
+					l=((mbytes>>2)<<22)|(1<<16);
 					save_flags(flags);
 					__cli();
 					__asm__ __volatile__ ("wbinvd": : :"memory");

@@ -175,7 +175,8 @@ rpcauth_lookup_credcache(struct rpc_task *task)
 	if (!cred)
 		cred = auth->au_ops->crcreate(task);
 
-	rpcauth_insert_credcache(auth, cred);
+	if (cred)
+		rpcauth_insert_credcache(auth, cred);
 
 	return (struct rpc_cred *) cred;
 }

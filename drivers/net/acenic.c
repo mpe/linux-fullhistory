@@ -16,6 +16,9 @@
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation; either version 2 of the License, or
  * (at your option) any later version.
+ *
+ * Additional work by Pete Wyckoff <wyckoff@ca.sandia.gov> for initial
+ * Alpha and trace dump support.
  */
 
 #define PKT_COPY_THRESHOLD 300
@@ -40,6 +43,7 @@
 #include <asm/io.h>
 #include <asm/irq.h>
 #include <asm/byteorder.h>
+#include <asm/uaccess.h>
 
 #include "acenic.h"
 
@@ -52,10 +56,23 @@
 
 #include "acenic_firmware.h"
 
+#ifndef PCI_VENDOR_ID_ALTEON
+#define PCI_VENDOR_ID_ALTEON		0x12ae	
+#define PCI_DEVICE_ID_ALTEON_ACENIC	0x0001
+#endif
+#ifndef PCI_DEVICE_ID_3COM_3C985
+#define PCI_DEVICE_ID_3COM_3C985	0x0001
+#endif
+#ifndef PCI_VENDOR_ID_NETGEAR
+#define PCI_VENDOR_ID_NETGEAR		0x1385
+#define PCI_DEVICE_ID_NETGEAR_GA620	0x620a
+#endif
 
 /*
  * This driver currently supports Tigon I and Tigon II based cards
- * including the Alteon AceNIC and the 3Com 3C985.
+ * including the Alteon AceNIC and the 3Com 3C985. The driver should
+ * also work on the NetGear GA620, however I have not been able to
+ * test that myself.
  *
  * This card is really neat, it supports receive hardware checksumming
  * and jumbo frames (up to 9000 bytes) and does a lot of work in the
@@ -114,16 +131,37 @@
  *  max_rx_desc=<val> - maximum number of receive descriptors
  *                (packets) received before interrupting the host.
  *
+ *  tx_ratio=<val> - 7 bit value (0 - 63) specifying the split in 64th
+ *                increments of the NIC's on board memory to be used for
+ *                transmit and receive buffers. For the 1MB NIC app. 800KB
+ *                is available, on the 1/2MB NIC app. 300KB is available.
+ *                68KB will always be available as a minimum for both
+ *                directions. The default value is a 50/50 split.
+ *
  * If you use more than one NIC, specify the parameters for the
  * individual NICs with a comma, ie. trace=0,0x00001fff,0 you want to
  * run tracing on NIC #2 but not on NIC #1 and #3.
  *
  * TODO:
  *
- * - Add multicast support.
+ * - Proper multicast support.
  * - NIC dump support.
  * - More tuning parameters.
+ *
+ * The mini ring is not used under Linux and I am not sure it makes sense
+ * to actually use it.
  */
+
+/*
+ * Default values for tuning parameters
+ */
+#define DEF_TX_RATIO	31
+#define DEF_TX_COAL	TICKS_PER_SEC / 500
+#define DEF_TX_MAX_DESC	7
+#define DEF_RX_COAL	TICKS_PER_SEC / 10000
+#define DEF_RX_MAX_DESC	2
+#define DEF_TRACE	0
+#define DEF_STAT	2 * TICKS_PER_SEC
 
 static int link[8] = {0, };
 static int trace[8] = {0, };
@@ -131,12 +169,11 @@ static int tx_coal_tick[8] = {0, };
 static int rx_coal_tick[8] = {0, };
 static int max_tx_desc[8] = {0, };
 static int max_rx_desc[8] = {0, };
+static int tx_ratio[8] = {0, };
 
-static const char *version = "acenic.c: v0.24 01/13/99  Jes Sorensen (Jes.Sorensen@cern.ch)\n";
+static const char __initdata *version = "acenic.c: v0.32 03/15/99  Jes Sorensen (Jes.Sorensen@cern.ch)\n";
 
 static struct device *root_dev = NULL;
-
-static int ace_load_firmware(struct device *dev);
 
 static int probed __initdata = 0;
 
@@ -163,13 +200,15 @@ __initfunc(int acenic_probe (struct device *dev))
 
 	version_disp = 0;
 
-	while((pdev = pci_find_class(PCI_CLASS_NETWORK_ETHERNET << 8, pdev)))
-	{
+	while ((pdev = pci_find_class(PCI_CLASS_NETWORK_ETHERNET<<8, pdev))){
 		dev = NULL;
 
-		if ((pdev->vendor != PCI_VENDOR_ID_ALTEON) &&
+		if (!((pdev->vendor == PCI_VENDOR_ID_ALTEON) &&
+		      (pdev->device == PCI_DEVICE_ID_ALTEON_ACENIC)) &&
 		    !((pdev->vendor == PCI_VENDOR_ID_3COM) &&
-		      (pdev->device == PCI_DEVICE_ID_3COM_3C985)))
+		      (pdev->device == PCI_DEVICE_ID_3COM_3C985)) &&
+		    !((pdev->vendor == PCI_VENDOR_ID_NETGEAR) &&
+		      (pdev->device == PCI_DEVICE_ID_NETGEAR_GA620)))
 			continue;
 
 		dev = init_etherdev(dev, sizeof(struct ace_private));
@@ -182,6 +221,8 @@ __initfunc(int acenic_probe (struct device *dev))
 
 		if (!dev->priv)
 			dev->priv = kmalloc(sizeof(*ap), GFP_KERNEL);
+		if (!dev->priv)
+			return -ENOMEM;
 
 		ap = dev->priv;
 		ap->pdev = pdev;
@@ -197,6 +238,9 @@ __initfunc(int acenic_probe (struct device *dev))
 		dev->stop = &ace_close;
 		dev->get_stats = &ace_get_stats;
 		dev->set_multicast_list = &ace_set_multicast_list;
+#if 0
+		dev->do_ioctl = &ace_ioctl;
+#endif
 		dev->set_mac_address = &ace_set_mac_addr;
 		dev->change_mtu = &ace_change_mtu;
 
@@ -234,6 +278,10 @@ __initfunc(int acenic_probe (struct device *dev))
 			sprintf(ap->name, "3Com 3C985 Gigabit Ethernet");
 			printk(KERN_INFO "%s: 3Com 3C985 ", dev->name);
 			break;
+		case PCI_VENDOR_ID_NETGEAR:
+			sprintf(ap->name, "NetGear GA620 Gigabit Ethernet");
+			printk(KERN_INFO "%s: NetGear GA620 ", dev->name);
+			break;
 		default:
 			sprintf(ap->name, "Unknown AceNIC based Gigabit Ethernet");
 			printk(KERN_INFO "%s: Unknown AceNIC ", dev->name);
@@ -256,9 +304,11 @@ __initfunc(int acenic_probe (struct device *dev))
 		}
 
 #ifdef MODULE
-		ace_init(dev, boards_found);
+		if (ace_init(dev, boards_found))
+			continue;
 #else
-		ace_init(dev, -1);
+		if (ace_init(dev, -1))
+			continue;
 #endif
 
 		boards_found++;
@@ -317,17 +367,18 @@ void cleanup_module(void)
 	short i;
 	unsigned long flags;
 
-	while (root_dev) {
+	while (root_dev){
 		next = ((struct ace_private *)root_dev->priv)->next;
 		ap = (struct ace_private *)root_dev->priv;
 
 		regs = ap->regs;
 		spin_lock_irqsave(&ap->lock, flags);
 
-		regs->CpuCtrl |= CPU_HALT;
+		writel(readl(&regs->CpuCtrl) | CPU_HALT, &regs->CpuCtrl);
 		if (ap->version == 2)
-			regs->CpuBCtrl |= CPU_HALT;
-		regs->Mb0Lo = 0;
+			writel(readl(&regs->CpuBCtrl) | CPU_HALT,
+			       &regs->CpuBCtrl);
+		writel(0, &regs->Mb0Lo);
 
 		spin_unlock_irqrestore(&ap->lock, flags);
 
@@ -337,7 +388,7 @@ void cleanup_module(void)
 		for (i = 0; i < RX_STD_RING_ENTRIES; i++) {
 			if (ap->rx_std_skbuff[i]) {
 				ap->rx_std_ring[i].size = 0;
-				ap->rx_std_ring[i].addr = 0;
+				set_aceaddr_bus(&ap->rx_std_ring[i].addr, 0);
 				dev_kfree_skb(ap->rx_std_skbuff[i]);
 			}
 		}
@@ -363,12 +414,12 @@ static inline void ace_issue_cmd(struct ace_regs *regs, struct cmd *cmd)
 {
 	u32 idx;
 
-	idx = regs->CmdPrd;
+	idx = readl(&regs->CmdPrd);
 
-	regs->CmdRng[idx] = *(u32 *)(cmd);
+	writel(*(u32 *)(cmd), &regs->CmdRng[idx]);
 	idx = (idx + 1) % CMD_RING_ENTRIES;
 
-	regs->CmdPrd = idx;
+	writel(idx, &regs->CmdPrd);
 }
 
 
@@ -384,51 +435,42 @@ __initfunc(static int ace_init(struct device *dev, int board_idx))
 	ap = dev->priv;
 	regs = ap->regs;
 
-#if 0
-	regs->HostCtrl  |= 0x08;
-	regs->CpuCtrl = CPU_RESET;
-	regs->CpuBCtrl = CPU_RESET;
-
-	{
-		long myjif = jiffies + HZ;
-		while (time_before(jiffies, myjif));
-	}
-#endif
-
 	/*
 	 * Don't access any other registes before this point!
 	 */
 #ifdef __BIG_ENDIAN
-	regs->HostCtrl = ((BYTE_SWAP | WORD_SWAP | CLR_INT) |
-			  ((BYTE_SWAP | WORD_SWAP | CLR_INT) << 24));
+	writel(((BYTE_SWAP | WORD_SWAP | CLR_INT) |
+		((BYTE_SWAP | WORD_SWAP | CLR_INT) << 24)),
+	       &regs->HostCtrl);
 #else
-	regs->HostCtrl = (CLR_INT | WORD_SWAP |
-			  ((CLR_INT | WORD_SWAP) << 24));
+	writel((CLR_INT | WORD_SWAP | ((CLR_INT | WORD_SWAP) << 24)),
+	       &regs->HostCtrl);
 #endif
+	mb();
 
 	/*
 	 * Stop the NIC CPU and clear pending interrupts
 	 */
-	regs->CpuCtrl |= CPU_HALT;
-	regs->Mb0Lo = 0;
+	writel(readl(&regs->CpuCtrl) | CPU_HALT, &regs->CpuCtrl);
+	writel(0, &regs->Mb0Lo);
 
-	tig_ver = regs->HostCtrl >> 28;
+	tig_ver = readl(&regs->HostCtrl) >> 28;
 
 	switch(tig_ver){
 	case 4:
 		printk(KERN_INFO"  Tigon I (Rev. 4), Firmware: %i.%i.%i, ",
 		       tigonFwReleaseMajor, tigonFwReleaseMinor,
 		       tigonFwReleaseFix);
-		regs->LocalCtrl = 0;
+		writel(0, &regs->LocalCtrl);
 		ap->version = 1;
 		break;
 	case 6:
 		printk(KERN_INFO"  Tigon II (Rev. %i), Firmware: %i.%i.%i, ",
 		       tig_ver, tigon2FwReleaseMajor, tigon2FwReleaseMinor,
 		       tigon2FwReleaseFix);
-		regs->CpuBCtrl |= CPU_HALT;
-		regs->LocalCtrl = SRAM_BANK_512K;
-		regs->MiscCfg = SYNC_SRAM_TIMING;
+		writel(readl(&regs->CpuBCtrl) | CPU_HALT, &regs->CpuBCtrl);
+		writel(SRAM_BANK_512K, &regs->LocalCtrl);
+		writel(SYNC_SRAM_TIMING, &regs->MiscCfg);
 		ap->version = 2;
 		break;
 	default:
@@ -445,8 +487,8 @@ __initfunc(static int ace_init(struct device *dev, int board_idx))
 	 * `Firmware not running' problem on the Tigon II.
 	 */
 #ifdef __LITTLE_ENDIAN
-	regs->ModeStat = ACE_BYTE_SWAP_DATA | ACE_WARN | ACE_FATAL
-			| ACE_WORD_SWAP;
+	writel(ACE_BYTE_SWAP_DATA | ACE_WARN | ACE_FATAL |
+	       ACE_WORD_SWAP | ACE_NO_JUMBO_FRAG, &regs->ModeStat);
 #else
 #error "this driver doesn't run on big-endian machines yet!"
 #endif
@@ -462,8 +504,8 @@ __initfunc(static int ace_init(struct device *dev, int board_idx))
 		mac2 |= read_eeprom_byte(regs, 0x8c+i);
 	}
 
-	regs->MacAddrHi = mac1;
-	regs->MacAddrLo = mac2;
+	writel(mac1, &regs->MacAddrHi);
+	writel(mac2, &regs->MacAddrLo);
 
 	printk("MAC: %02x:%02x:%02x:%02x:%02x:%02x\n",
 	       (mac1 >> 8) & 0xff, mac1 & 0xff, (mac2 >> 24) &0xff,
@@ -514,10 +556,9 @@ __initfunc(static int ace_init(struct device *dev, int board_idx))
 			}
 		}
 	}
-	regs->PciState = tmp;
+	writel(tmp, &regs->PciState);
 
-	if (request_irq(dev->irq, ace_interrupt, SA_SHIRQ, ap->name, dev))
-	{
+	if (request_irq(dev->irq, ace_interrupt, SA_SHIRQ, ap->name, dev)) {
 		printk(KERN_WARNING "%s: Requested IRQ %d is busy\n",
 		       dev->name, dev->irq);
 		return -EAGAIN;
@@ -548,150 +589,149 @@ __initfunc(static int ace_init(struct device *dev, int board_idx))
 
 	tmp_ptr = virt_to_bus((void *)info);
 #if (BITS_PER_LONG == 64)
-	regs->InfoPtrHi = (tmp_ptr >> 32);
+	writel(tmp_ptr >> 32, &regs->InfoPtrHi);
 #else
-	regs->InfoPtrHi = 0;
+	writel(0, &regs->InfoPtrHi);
 #endif
-	regs->InfoPtrLo = ((tmp_ptr) & 0xffffffff);
+	writel(tmp_ptr & 0xffffffff, &regs->InfoPtrLo);
 
 	memset(ap->evt_ring, 0, EVT_RING_ENTRIES * sizeof(struct event));
 
-	info->evt_ctrl.rngptr = virt_to_bus(ap->evt_ring);
+	set_aceaddr(&info->evt_ctrl.rngptr, ap->evt_ring);
 	info->evt_ctrl.flags = 0;
 
-	info->evt_prd_ptr = virt_to_bus(&ap->evt_prd);
+	set_aceaddr(&info->evt_prd_ptr, &ap->evt_prd);
 	ap->evt_prd = 0;
-	regs->EvtCsm = 0;
+	writel(0, &regs->EvtCsm);
 
 	info->cmd_ctrl.flags = 0;
-	info->cmd_ctrl.rngptr = 0x100;
+	set_aceaddr_bus(&info->cmd_ctrl.rngptr, (void *)0x100);
 	info->cmd_ctrl.max_len = 0;
 
-	for (i = 0; i < CMD_RING_ENTRIES; i++) {
-		regs->CmdRng[i] = 0;
-	}
+	for (i = 0; i < CMD_RING_ENTRIES; i++)
+		writel(0, &regs->CmdRng[i]);
 
-	regs->CmdPrd = 0;
-	regs->CmdCsm = 0;
+	writel(0, &regs->CmdPrd);
+	writel(0, &regs->CmdCsm);
 
-	info->stats2_ptr = virt_to_bus(&info->s.stats);
+	set_aceaddr(&info->stats2_ptr, &info->s.stats);
 
 	info->rx_std_ctrl.max_len = ACE_STD_MTU + ETH_HLEN + 4;
-	info->rx_std_ctrl.rngptr = virt_to_bus(ap->rx_std_ring);
-	info->rx_std_ctrl.flags = RX_TCP_UDP_SUM;
+	set_aceaddr(&info->rx_std_ctrl.rngptr, ap->rx_std_ring);
+	info->rx_std_ctrl.flags = FLG_RX_TCP_UDP_SUM;
 
 	memset(ap->rx_std_ring, 0,
 	       RX_STD_RING_ENTRIES * sizeof(struct rx_desc));
 
 	info->rx_jumbo_ctrl.max_len = 0;
-	info->rx_jumbo_ctrl.rngptr = virt_to_bus(ap->rx_jumbo_ring);
-	info->rx_jumbo_ctrl.flags = RX_TCP_UDP_SUM;
+	set_aceaddr(&info->rx_jumbo_ctrl.rngptr, ap->rx_jumbo_ring);
+	info->rx_jumbo_ctrl.flags = FLG_RX_TCP_UDP_SUM;
 
 	memset(ap->rx_jumbo_ring, 0,
 	       RX_JUMBO_RING_ENTRIES * sizeof(struct rx_desc));
 
-	info->rx_return_ctrl.max_len = 0;
-	info->rx_return_ctrl.rngptr = virt_to_bus(ap->rx_return_ring);
+	info->rx_mini_ctrl.max_len = 0;
+#if 0
+	set_aceaddr(&info->rx_mini_ctrl.rngptr, ap->rx_mini_ring);
+#else
+	set_aceaddr_bus(&info->rx_mini_ctrl.rngptr, 0);
+#endif
+	info->rx_mini_ctrl.flags = FLG_RNG_DISABLED;
+
+#if 0
+	memset(ap->rx_mini_ring, 0,
+	       RX_MINI_RING_ENTRIES * sizeof(struct rx_desc));
+#endif
+
+	set_aceaddr(&info->rx_return_ctrl.rngptr, ap->rx_return_ring);
 	info->rx_return_ctrl.flags = 0;
+	info->rx_return_ctrl.max_len = RX_RETURN_RING_ENTRIES;
 
 	memset(ap->rx_return_ring, 0,
 	       RX_RETURN_RING_ENTRIES * sizeof(struct rx_desc));
 
-	info->rx_ret_prd_ptr = virt_to_bus(&ap->rx_ret_prd);
+	set_aceaddr(&info->rx_ret_prd_ptr, &ap->rx_ret_prd);
 
-	regs->WinBase = TX_RING_BASE;
+	writel(TX_RING_BASE, &regs->WinBase);
 	ap->tx_ring = (struct tx_desc *)regs->Window;
-	memset(ap->tx_ring, 0, TX_RING_ENTRIES * sizeof(struct tx_desc));
+	for (i = 0; i < (TX_RING_ENTRIES * sizeof(struct tx_desc) / 4); i++){
+		writel(0, (unsigned long)ap->tx_ring + i * 4);
+	}
 
 	info->tx_ctrl.max_len = TX_RING_ENTRIES;
 	info->tx_ctrl.flags = 0;
-#if (BITS_PER_LONG == 64) && defined(__BIG_ENDIAN)
-	info->tx_ctrl.rngptr = TX_RING_BASE << 32;
-#else
-	info->tx_ctrl.rngptr = TX_RING_BASE;
-#endif
+	set_aceaddr_bus(&info->tx_ctrl.rngptr, (void *)TX_RING_BASE);
 
-	info->tx_csm_ptr = virt_to_bus(&ap->tx_csm);
+	set_aceaddr(&info->tx_csm_ptr, &ap->tx_csm);
 
 	/*
 	 * Potential item for tuning parameter
 	 */
-	regs->DmaReadCfg = DMA_THRESH_8W;
-	regs->DmaWriteCfg = DMA_THRESH_8W;
+	writel(DMA_THRESH_8W, &regs->DmaReadCfg);
+	writel(DMA_THRESH_8W, &regs->DmaWriteCfg);
 
-	regs->MaskInt = 0;
-	regs->IfIdx = 1;
+	writel(0, &regs->MaskInt);
+	writel(1, &regs->IfIdx);
+	writel(1, &regs->AssistState);
 
-	regs->AssistState = 1;
-#if 0
-{
-	u32 tmp;
+	writel(DEF_STAT, &regs->TuneStatTicks);
 
-	tmp = regs->MacRxState;
-	tmp &= ~4;
-	regs->MacRxState = tmp;
-}
-#endif
+	writel(DEF_TX_COAL, &regs->TuneTxCoalTicks);
+	writel(DEF_TX_MAX_DESC, &regs->TuneMaxTxDesc);
+	writel(DEF_RX_COAL, &regs->TuneRxCoalTicks);
+	writel(DEF_RX_MAX_DESC, &regs->TuneMaxRxDesc);
+	writel(DEF_TRACE, &regs->TuneTrace);
+	writel(DEF_TX_RATIO, &regs->TxBufRat);
 
-	regs->TuneStatTicks = 2 * TICKS_PER_SEC;
-
-	if (board_idx >= 0) {
-		if ((board_idx < 8) && tx_coal_tick[board_idx])
-			regs->TuneTxCoalTicks = tx_coal_tick[board_idx] *
-				TICKS_PER_SEC / 1000;
-		else
-			regs->TuneTxCoalTicks = TICKS_PER_SEC / 500;
-		if ((board_idx < 8) && max_tx_desc[board_idx])
-			regs->TuneMaxTxDesc = max_tx_desc[board_idx];
-		else
-			regs->TuneMaxTxDesc = 7;
-
-		if ((board_idx < 8) && rx_coal_tick[board_idx])
-			regs->TuneRxCoalTicks = rx_coal_tick[board_idx] *
-				TICKS_PER_SEC / 1000;
-		else
-			regs->TuneRxCoalTicks = TICKS_PER_SEC / 10000;
-		if ((board_idx < 8) && max_rx_desc[board_idx])
-			regs->TuneMaxRxDesc = max_rx_desc[board_idx];
-		else
-			regs->TuneMaxRxDesc = 2;
-
-		if (board_idx < 8)
-			regs->TuneTrace = trace[board_idx];
-		else
-			regs->TuneTrace = 0;
-	}else{
-		regs->TuneTxCoalTicks = TICKS_PER_SEC / 500;
-		regs->TuneMaxTxDesc = 7;
-		regs->TuneRxCoalTicks = TICKS_PER_SEC / 10000;
-		regs->TuneMaxRxDesc = 2;
-		regs->TuneTrace = 0;
+	if (board_idx >= 8) {
+		printk(KERN_WARNING "%s: more then 8 NICs detected, "
+		       "ignoring module parameters!\n", dev->name);
+		board_idx = -1;
 	}
 
-	tmp = LNK_ENABLE;
+	if (board_idx >= 0) {
+		if (tx_coal_tick[board_idx])
+			writel(tx_coal_tick[board_idx],
+			       &regs->TuneTxCoalTicks);
+		if (max_tx_desc[board_idx])
+			writel(max_tx_desc[board_idx], &regs->TuneMaxTxDesc);
 
-	if ((board_idx > 7) || (board_idx < 0) || !(link[board_idx])){
-		if (board_idx > 7)
-			printk(KERN_WARNING "%s: more then 8 NICs detected, "
-			       "ignoring link options!\n", dev->name);
-		/*
-		 * No link options specified, we go for the defaults
-		 */
-		tmp |=  LNK_FULL_DUPLEX | LNK_1000MB | LNK_100MB | LNK_10MB |
-			LNK_RX_FLOW_CTL_Y | LNK_NEG_FCTL | LNK_NEGOTIATE;
+		if (rx_coal_tick[board_idx])
+			writel(rx_coal_tick[board_idx],
+			       &regs->TuneRxCoalTicks);
+		if (max_rx_desc[board_idx])
+			writel(max_rx_desc[board_idx], &regs->TuneMaxRxDesc);
 
-		if(ap->version == 2)
-			tmp |= LNK_TX_FLOW_CTL_Y;
-	} else {
+		if (trace[board_idx])
+			writel(trace[board_idx], &regs->TuneTrace);
+
+		if ((tx_ratio[board_idx] >= 0) && (tx_ratio[board_idx] < 64))
+			writel(tx_ratio[board_idx], &regs->TxBufRat);
+	}
+
+	/*
+	 * Default link parameters
+	 */
+	tmp = LNK_ENABLE | LNK_FULL_DUPLEX | LNK_1000MB | LNK_100MB |
+		LNK_10MB | LNK_RX_FLOW_CTL_Y | LNK_NEG_FCTL | LNK_NEGOTIATE;
+	if(ap->version == 2)
+		tmp |= LNK_TX_FLOW_CTL_Y;
+
+	/*
+	 * Override link default parameters
+	 */
+	if ((board_idx >= 0) && link[board_idx]) {
 		int option = link[board_idx];
+
+		tmp = LNK_ENABLE;
 
 		if (option & 0x01){
 			printk(KERN_INFO "%s: Setting half duplex link\n",
 			       dev->name);
-			tmp |= LNK_FULL_DUPLEX;
+			tmp &= ~LNK_FULL_DUPLEX;
 		}
-		if ((option & 0x02) == 0)
-			tmp |= LNK_NEGOTIATE;
+		if (option & 0x02)
+			tmp &= ~LNK_NEGOTIATE;
 		if (option & 0x10)
 			tmp |= LNK_10MB;
 		if (option & 0x20)
@@ -718,22 +758,22 @@ __initfunc(static int ace_init(struct device *dev, int board_idx))
 		}
 	}
 
-	regs->TuneLink = tmp;
+	writel(tmp, &regs->TuneLink);
 	if (ap->version == 2)
-		regs->TuneFastLink = tmp;
+		writel(tmp, &regs->TuneFastLink);
 
 	if (ap->version == 1)
-		regs->Pc = tigonFwStartAddr;
+		writel(tigonFwStartAddr, &regs->Pc);
 	else if (ap->version == 2)
-		regs->Pc = tigon2FwStartAddr;
+		writel(tigon2FwStartAddr, &regs->Pc);
 
-	regs->Mb0Lo = 0;
+	writel(0, &regs->Mb0Lo);
 
 	/*
 	 * Start the NIC CPU
 	 */
 
-	regs->CpuCtrl = (regs->CpuCtrl & ~(CPU_HALT | CPU_TRACE));
+	writel(readl(&regs->CpuCtrl) & ~(CPU_HALT|CPU_TRACE), &regs->CpuCtrl);
 
 	/*
 	 * Wait for the firmware to spin up - max 3 seconds.
@@ -743,7 +783,7 @@ __initfunc(static int ace_init(struct device *dev, int board_idx))
 	if (!ap->fw_running){
 		printk(KERN_ERR "%s: Firmware NOT running!\n", dev->name);
 		ace_dump_trace(ap);
-		regs->CpuCtrl |= CPU_HALT;
+		writel(readl(&regs->CpuCtrl) | CPU_HALT, &regs->CpuCtrl);
 		return -EBUSY;
 	}
 
@@ -773,7 +813,7 @@ static void ace_timer(unsigned long data)
 	 */
 	if (ap->tx_csm != ap->tx_ret_csm){
 		printk(KERN_WARNING "%s: Transmitter is stuck, %08x\n",
-		       dev->name, regs->HostCtrl);
+		       dev->name, (unsigned int)readl(&regs->HostCtrl));
 	}
 
 	ap->timer.expires = jiffies + (5/2*HZ);
@@ -786,9 +826,11 @@ static void ace_timer(unsigned long data)
  */
 static void ace_dump_trace(struct ace_private *ap)
 {
+#if 0
 	if (!ap->trace_buf)
 		if (!(ap->trace_buf = kmalloc(ACE_TRACE_SIZE, GFP_KERNEL)));
 		    return;
+#endif
 }
 
 
@@ -819,7 +861,7 @@ static int ace_load_std_rx_ring(struct device *dev)
 	ap->tx_full = 0;
 	ap->cur_rx = ap->dirty_rx = 0;
 	ap->tx_prd = ap->tx_csm = ap->tx_ret_csm = 0;
-	regs->RxRetCsm = 0;
+	writel(0, &regs->RxRetCsm);
 
 	for (i = 0; i < RX_RING_THRESH; i++) {
 		struct sk_buff *skb;
@@ -833,7 +875,7 @@ static int ace_load_std_rx_ring(struct device *dev)
 		 */
 		skb_reserve(skb, 2);
 
-		ap->rx_std_ring[i].addr = virt_to_bus(skb->data);
+		set_aceaddr(&ap->rx_std_ring[i].addr, skb->data);
 		ap->rx_std_ring[i].size = ACE_STD_MTU + ETH_HLEN + 4;
 
 		ap->rx_std_ring[i].flags = 0;
@@ -877,7 +919,7 @@ static int ace_load_jumbo_rx_ring(struct device *dev)
 
 	spin_lock_irqsave(&ap->lock, flags);
 
-	for (i = 0; i < RX_RING_THRESH; i++) {
+	for (i = 0; i < RX_RING_JUMBO_THRESH; i++) {
 		struct sk_buff *skb;
 
 		ap->rx_jumbo_ring[i].flags = 0;
@@ -889,10 +931,10 @@ static int ace_load_jumbo_rx_ring(struct device *dev)
 		 */
 		skb_reserve(skb, 2);
 
-		ap->rx_jumbo_ring[i].addr = virt_to_bus(skb->data);
+		set_aceaddr(&ap->rx_jumbo_ring[i].addr, skb->data);
 		ap->rx_jumbo_ring[i].size = ACE_JUMBO_MTU + ETH_HLEN + 4;
 
-		ap->rx_jumbo_ring[i].flags = JUMBO_FLAG;
+		ap->rx_jumbo_ring[i].flags = DFLG_RX_JUMBO;
 		ap->rx_jumbo_ring[i].type = DESC_RX;
 
 		ap->rx_jumbo_ring[i].idx = i;
@@ -939,7 +981,7 @@ static int ace_flush_jumbo_rx_ring(struct device *dev)
 		for (i = 0; i < RX_JUMBO_RING_ENTRIES; i++) {
 			if (ap->rx_jumbo_skbuff[i]) {
 				ap->rx_jumbo_ring[i].size = 0;
-				ap->rx_jumbo_ring[i].addr = 0;
+				set_aceaddr_bus(&ap->rx_jumbo_ring[i].addr, 0);
 				dev_kfree_skb(ap->rx_jumbo_skbuff[i]);
 			}
 		}
@@ -959,10 +1001,8 @@ static int ace_flush_jumbo_rx_ring(struct device *dev)
 static u32 ace_handle_event(struct device *dev, u32 evtcsm, u32 evtprd)
 {
 	struct ace_private *ap;
-	struct ace_regs *regs;
 
 	ap = (struct ace_private *)dev->priv;
-	regs = ap->regs;
 
 	while (evtcsm != evtprd){
 		switch (ap->evt_ring[evtcsm].evt){
@@ -1019,24 +1059,24 @@ static u32 ace_handle_event(struct device *dev, u32 evtcsm, u32 evtprd)
 }
 
 
-static int rx_int(struct device *dev, u32 rxretprd, u32 rxretcsm)
+static int ace_rx_int(struct device *dev, u32 rxretprd, u32 rxretcsm)
 {
 	struct ace_private *ap = (struct ace_private *)dev->priv;
-	u32 idx, oldidx;
 	struct ace_regs *regs = ap->regs;
+	u32 idx, oldidx;
 
 	idx = rxretcsm;
 
-	while(idx != rxretprd){
+	while (idx != rxretprd){
 		struct sk_buff *skb, *newskb, *oldskb;
 		struct rx_desc *newrxdesc, *oldrxdesc;
 		u32 prdidx, size;
-		unsigned long addr;
+		void *addr;
 		u16 csum;
 		int jumbo;
 
 		oldidx = ap->rx_return_ring[idx].idx;
-		jumbo = ap->rx_return_ring[idx].flags & JUMBO_FLAG;
+		jumbo = ap->rx_return_ring[idx].flags & DFLG_RX_JUMBO;
 
 		if (jumbo){
 			oldskb = ap->rx_jumbo_skbuff[oldidx];
@@ -1065,7 +1105,7 @@ static int rx_int(struct device *dev, u32 rxretprd, u32 rxretcsm)
 
 			skb_reserve(skb, 2);
 			memcpy(skb_put(skb, size), oldskb->data, size);
-			addr = oldrxdesc->addr;
+			addr = get_aceaddr_bus(&oldrxdesc->addr);
 			newskb = oldskb;
 		}else{
 			skb = oldskb;
@@ -1084,21 +1124,21 @@ static int rx_int(struct device *dev, u32 rxretprd, u32 rxretcsm)
 			 * aligned receive buffers
 			 */
 			skb_reserve(newskb, 2);
-			addr = virt_to_bus(newskb->data);
+			addr = (void *)virt_to_bus(newskb->data);
 		}
 
-		newrxdesc->addr = addr;
+		set_aceaddr_bus(&newrxdesc->addr, addr);
 		newrxdesc->size = size;
 
 		newrxdesc->flags = oldrxdesc->flags;
 		newrxdesc->idx = prdidx;
 		newrxdesc->type = DESC_RX;
 #if (BITS_PER_LONG == 32)
-		newrxdesc->zero = 0;
+		newrxdesc->addr.addrhi = 0;
 #endif
 
 		oldrxdesc->size = 0;
-		oldrxdesc->addr = 0;
+		set_aceaddr_bus(&oldrxdesc->addr, 0);
 
 		if (jumbo){
 			ap->rx_jumbo_skbuff[oldidx] = NULL;
@@ -1152,7 +1192,11 @@ static int rx_int(struct device *dev, u32 rxretprd, u32 rxretcsm)
 		idx = (idx + 1) % RX_RETURN_RING_ENTRIES;
 	}
  out:
-	regs->RxRetCsm = idx;
+	/*
+	 * According to the documentation RxRetCsm is obsolete with
+	 * the 12.3.x Firmware - my Tigon I NIC's seem to disagree!
+	 */
+	writel(idx, &regs->RxRetCsm);
 	ap->cur_rx = idx;
 
 	return idx;
@@ -1180,7 +1224,7 @@ static void ace_interrupt(int irq, void *dev_id, struct pt_regs *ptregs)
 	 * we want to make sure it is actually our interrupt before
 	 * spending any time in here.
 	 */
-	if (!(regs->HostCtrl & IN_INT)){
+	if (!(readl(&regs->HostCtrl) & IN_INT)){
 		spin_unlock(&ap->lock);
 		return;
 	}
@@ -1188,7 +1232,16 @@ static void ace_interrupt(int irq, void *dev_id, struct pt_regs *ptregs)
 	/*
 	 * Tell the card not to generate interrupts while we are in here.
 	 */
-	regs->Mb0Lo = 1;
+	writel(1, &regs->Mb0Lo);
+
+	/*
+	 * Service RX ints before TX
+	 */
+	rxretprd = ap->rx_ret_prd;
+	rxretcsm = ap->cur_rx;
+
+	if (rxretprd != rxretcsm)
+		rxretprd = ace_rx_int(dev, rxretprd, rxretcsm);
 
 	txcsm = ap->tx_csm;
 	if (txcsm != ap->tx_ret_csm) {
@@ -1201,9 +1254,11 @@ static void ace_interrupt(int irq, void *dev_id, struct pt_regs *ptregs)
 
 			ap->tx_skbuff[idx] = NULL;
 
-			ap->tx_ring[idx].size = 0;
-			ap->tx_ring[idx].addr = 0;
-			ap->tx_ring[idx].flags = 0;
+#if (BITS_PER_LONG == 64)
+			writel(0, &ap->tx_ring[idx].addr.addrhi);
+#endif
+			writel(0, &ap->tx_ring[idx].addr.addrlo);
+			writel(0, &ap->tx_ring[idx].flagsize);
 
 			idx = (idx + 1) % TX_RING_ENTRIES;
 		} while (idx != txcsm);
@@ -1224,21 +1279,15 @@ static void ace_interrupt(int irq, void *dev_id, struct pt_regs *ptregs)
 		ap->tx_ret_csm = txcsm;
 	}
 
-	rxretprd = ap->rx_ret_prd;
-	rxretcsm = ap->cur_rx;
-
-	if (rxretprd != rxretcsm)
-		rxretprd = rx_int(dev, rxretprd, rxretcsm);
-
-	evtcsm = regs->EvtCsm;
+	evtcsm = readl(&regs->EvtCsm);
 	evtprd = ap->evt_prd;
 
 	if (evtcsm != evtprd){
 		evtcsm = ace_handle_event(dev, evtcsm, evtprd);
 	}
 
-	regs->EvtCsm = evtcsm;
-	regs->Mb0Lo = 0;
+	writel(evtcsm, &regs->EvtCsm);
+	writel(0, &regs->Mb0Lo);
 
 	spin_unlock(&ap->lock);
 }
@@ -1258,7 +1307,7 @@ static int ace_open(struct device *dev)
 		return -EBUSY;
 	}
 
-	regs->IfMtu = dev->mtu + ETH_HLEN + 4;
+	writel(dev->mtu + ETH_HLEN + 4, &regs->IfMtu);
 
 	cmd.evt = C_HOST_STATE;
 	cmd.code = C_C_STACK_UP;
@@ -1277,6 +1326,7 @@ static int ace_open(struct device *dev)
 		ap->promisc = 1;
 	}else
 		ap->promisc = 0;
+	ap->mcast_all = 0;
 
 #if 0
 	{ long myjif = jiffies + HZ;
@@ -1338,8 +1388,9 @@ static int ace_close(struct device *dev)
 
 	for (i = 0; i < TX_RING_ENTRIES; i++) {
 		if (ap->tx_skbuff[i]) {
-			ap->tx_ring[i].size = 0;
-			ap->tx_ring[i].addr = 0;
+			writel(0, &ap->tx_ring[i].addr.addrhi);
+			writel(0, &ap->tx_ring[i].addr.addrlo);
+			writel(0, &ap->tx_ring[i].flagsize);
 			dev_kfree_skb(ap->tx_skbuff[i]);
 		}
 	}
@@ -1359,30 +1410,37 @@ static int ace_start_xmit(struct sk_buff *skb, struct device *dev)
 	struct ace_private *ap = (struct ace_private *)dev->priv;
 	struct ace_regs *regs = ap->regs;
 	unsigned long flags;
-	u32 idx;
+	unsigned long addr;
+	u32 idx, flagsize;
 
 	spin_lock_irqsave(&ap->lock, flags);
 
 	idx = ap->tx_prd;
 
 	ap->tx_skbuff[idx] = skb;
-	ap->tx_ring[idx].addr = virt_to_bus(skb->data);
-	ap->tx_ring[idx].size = skb->len;
-	ap->tx_ring[idx].flags = DESC_END;
+	addr = virt_to_bus(skb->data);
+#if (BITS_PER_LONG == 64)
+	writel(addr >> 32, &ap->tx_ring[idx].addr.addrhi);
+#endif
+	writel(addr & 0xffffffff, &ap->tx_ring[idx].addr.addrlo);
+	flagsize = (skb->len << 16) | (DESC_END) ;
+	writel(flagsize, &ap->tx_ring[idx].flagsize);
+	mb();
 	idx = (idx + 1) % TX_RING_ENTRIES;
 
 	ap->tx_prd = idx;
-	regs->TxPrd = idx;
+	writel(idx, &regs->TxPrd);
 
 	if ((idx + 1) % TX_RING_ENTRIES == ap->tx_ret_csm){
 		ap->tx_full = 1;
 		set_bit(0, (void*)&dev->tbusy);
 		/*
 		 * Queue is full, add timer to detect whether the
-		 * transmitter is stuck.
+		 * transmitter is stuck. Use mod_timer as we can get
+		 * into the situation where we risk adding several
+		 * timers.
 		 */
-		ap->timer.expires = jiffies + (3 * HZ);
-		add_timer(&ap->timer);
+		mod_timer(&ap->timer, jiffies + (3 * HZ));
 	}
 
 	spin_unlock_irqrestore(&ap->lock, flags);
@@ -1400,7 +1458,7 @@ static int ace_change_mtu(struct device *dev, int new_mtu)
 	if ((new_mtu < 68) || (new_mtu > ACE_JUMBO_MTU))
 		return -EINVAL;
 
-	regs->IfMtu = new_mtu + ETH_HLEN + 4;
+	writel(new_mtu + ETH_HLEN + 4, &regs->IfMtu);
 	dev->mtu = new_mtu;
 
 	if (new_mtu > ACE_STD_MTU){
@@ -1442,8 +1500,8 @@ static int ace_set_mac_addr(struct device *dev, void *p)
 	da = (u16 *)dev->dev_addr;
 
 	regs = ((struct ace_private *)dev->priv)->regs;
-	regs->MacAddrHi = da[0];
-	regs->MacAddrLo = (da[1] << 16) | da[2];
+	writel(da[0], &regs->MacAddrHi);
+	writel((da[1] << 16) | da[2], &regs->MacAddrLo);
 
 	cmd.evt = C_SET_MAC_ADDR;
 	cmd.code = 0;
@@ -1460,20 +1518,50 @@ static void ace_set_multicast_list(struct device *dev)
 	struct ace_regs *regs = ap->regs;
 	struct cmd cmd;
 
+	if ((dev->flags & IFF_ALLMULTI) && !(ap->mcast_all)) {
+		cmd.evt = C_SET_MULTICAST_MODE;
+		cmd.code = C_C_MCAST_ENABLE;
+		cmd.idx = 0;
+		ace_issue_cmd(regs, &cmd);
+		ap->mcast_all = 1;
+	} else if (ap->mcast_all){
+		cmd.evt = C_SET_MULTICAST_MODE;
+		cmd.code = C_C_MCAST_ENABLE;
+		cmd.idx = 0;
+		ace_issue_cmd(regs, &cmd);
+		ap->mcast_all = 0;
+	}
+
 	if ((dev->flags & IFF_PROMISC) && !(ap->promisc)) {
 		cmd.evt = C_SET_PROMISC_MODE;
 		cmd.code = C_C_PROMISC_ENABLE;
 		cmd.idx = 0;
 		ace_issue_cmd(regs, &cmd);
-
 		ap->promisc = 1;
 	}else if (!(dev->flags & IFF_PROMISC) && (ap->promisc)){
 		cmd.evt = C_SET_PROMISC_MODE;
 		cmd.code = C_C_PROMISC_DISABLE;
 		cmd.idx = 0;
 		ace_issue_cmd(regs, &cmd);
-
 		ap->promisc = 0;
+	}
+
+	/*
+	 * For the time being multicast relies on the upper layers
+	 * filtering it properly. The Firmware does not allow one to
+	 * set the entire multicast list at a time and keeping track of
+	 * it here is going to be messy.
+	 */
+	if ((dev->mc_count) && !(ap->mcast_all)) {
+		cmd.evt = C_SET_MULTICAST_MODE;
+		cmd.code = C_C_MCAST_ENABLE;
+		cmd.idx = 0;
+		ace_issue_cmd(regs, &cmd);
+	}else if (!ap->mcast_all) {
+		cmd.evt = C_SET_MULTICAST_MODE;
+		cmd.code = C_C_MCAST_DISABLE;
+		cmd.idx = 0;
+		ace_issue_cmd(regs, &cmd);
 	}
 }
 
@@ -1488,24 +1576,29 @@ static struct net_device_stats *ace_get_stats(struct device *dev)
 
 __initfunc(void ace_copy(struct ace_regs *regs, void *src, u32 dest, int size))
 {
-	int tsize;
-	u32 tdest;
+	unsigned long tdest;
+	u32 *wsrc;
+	short tsize, i;
 
 	if (size <= 0)
 		return;
 
-	while(size > 0){
+	while (size > 0){
 		tsize = min(((~dest & (ACE_WINDOW_SIZE - 1)) + 1),
 			    min(size, ACE_WINDOW_SIZE));
-		tdest = dest & (ACE_WINDOW_SIZE - 1);
-		regs->WinBase = dest & ~(ACE_WINDOW_SIZE - 1);
+		tdest = (unsigned long)&regs->Window +
+			(dest & (ACE_WINDOW_SIZE - 1));
+		writel(dest & ~(ACE_WINDOW_SIZE - 1), &regs->WinBase);
 #ifdef __BIG_ENDIAN
 #error "data must be swapped here"
 #else
-#if 0
-		printk("copying %04x from %08x to %06x (Window addr %08x), winbase %02x\n", tsize, (unsigned)src, dest, (unsigned) ((void *)regs->Window + tdest), regs->WinBase);
-#endif
-		memcpy((void *)((void *)regs->Window + tdest), src, tsize);
+/*
+ * XXX - special memcpy needed here!!!
+ */
+		wsrc = src;
+		for (i = 0; i < (tsize / 4); i++){
+			writel(wsrc[i], tdest + i*4);
+		}
 #endif
 		dest += tsize;
 		src += tsize;
@@ -1518,19 +1611,22 @@ __initfunc(void ace_copy(struct ace_regs *regs, void *src, u32 dest, int size))
 
 __initfunc(void ace_clear(struct ace_regs *regs, u32 dest, int size))
 {
-	int tsize = 0;
-	u32 tdest;
+	unsigned long tdest;
+	short tsize = 0, i;
 
 	if (size <= 0)
 		return;
 
-	while(size > 0){
+	while (size > 0){
 		tsize = min(((~dest & (ACE_WINDOW_SIZE - 1)) + 1),
 			    min(size, ACE_WINDOW_SIZE));
-		tdest = dest & (ACE_WINDOW_SIZE - 1);
-		regs->WinBase = dest & ~(ACE_WINDOW_SIZE - 1);
+		tdest = (unsigned long)&regs->Window +
+			(dest & (ACE_WINDOW_SIZE - 1));
+		writel(dest & ~(ACE_WINDOW_SIZE - 1), &regs->WinBase);
 
-		memset((void *)((void *)regs->Window + tdest), 0, tsize);
+		for (i = 0; i < (tsize / 4); i++){
+			writel(0, tdest + i*4);
+		}
 
 		dest += tsize;
 		size -= tsize;
@@ -1554,13 +1650,17 @@ __initfunc(int ace_load_firmware(struct device *dev))
 	ap = (struct ace_private *)dev->priv;
 	regs = ap->regs;
 
-	if (!(regs->CpuCtrl & CPU_HALTED)){
+	if (!(readl(&regs->CpuCtrl) & CPU_HALTED)){
 		printk(KERN_ERR "%s: trying to download firmware while the "
 		       "CPU is running!\n", dev->name);
 		return -EFAULT;
 	}
 
-	ace_clear(regs, 0x2000, 0x100000-0x2000);
+	/*
+	 * Do not try to clear more than 512KB or we end up seeing
+	 * funny things on NICs with only 512KB SRAM
+	 */
+	ace_clear(regs, 0x2000, 0x80000-0x2000);
 	if (ap->version == 1){
 		ace_copy(regs, tigonFwText, tigonFwTextAddr, tigonFwTextLen);
 		ace_copy(regs, tigonFwData, tigonFwDataAddr, tigonFwDataLen);
@@ -1595,36 +1695,56 @@ __initfunc(int ace_load_firmware(struct device *dev))
  */
 static void eeprom_start(struct ace_regs *regs)
 {
+	u32 local = readl(&regs->LocalCtrl);
+
 	udelay(1);
-	regs->LocalCtrl |= (EEPROM_DATA_OUT | EEPROM_WRITE_ENABLE);
+	local |= EEPROM_DATA_OUT | EEPROM_WRITE_ENABLE;
+	writel(local, &regs->LocalCtrl);
+	mb();
 	udelay(1);
-	regs->LocalCtrl |= EEPROM_CLK_OUT;
+	local |= EEPROM_CLK_OUT;
+	writel(local, &regs->LocalCtrl);
+	mb();
 	udelay(1);
-	regs->LocalCtrl &= ~EEPROM_DATA_OUT;
+	local &= ~EEPROM_DATA_OUT;
+	writel(local, &regs->LocalCtrl);
+	mb();
 	udelay(1);
-	regs->LocalCtrl &= ~EEPROM_CLK_OUT;
+	local &= ~EEPROM_CLK_OUT;
+	writel(local, &regs->LocalCtrl);
+	mb();
 }
 
 
 static void eeprom_prep(struct ace_regs *regs, u8 magic)
 {
 	short i;
+	u32 local;
 
 	udelay(2);
-	regs->LocalCtrl &= ~EEPROM_DATA_OUT;
-	regs->LocalCtrl |= EEPROM_WRITE_ENABLE;
+	local = readl(&regs->LocalCtrl);
+	local &= ~EEPROM_DATA_OUT;
+	local |= EEPROM_WRITE_ENABLE;
+	writel(local, &regs->LocalCtrl);
+	mb();
 
 	for (i = 0; i < 8; i++, magic <<= 1) {
 		udelay(2);
 		if (magic & 0x80) 
-			regs->LocalCtrl |= EEPROM_DATA_OUT;
+			local |= EEPROM_DATA_OUT;
 		else
-			regs->LocalCtrl &= ~EEPROM_DATA_OUT;
+			local &= ~EEPROM_DATA_OUT;
+		writel(local, &regs->LocalCtrl);
+		mb();
 
 		udelay(1);
-		regs->LocalCtrl |= EEPROM_CLK_OUT;
+		local |= EEPROM_CLK_OUT;
+		writel(local, &regs->LocalCtrl);
+		mb();
 		udelay(1);
-		regs->LocalCtrl &= ~(EEPROM_CLK_OUT | EEPROM_DATA_OUT);
+		local &= ~(EEPROM_CLK_OUT | EEPROM_DATA_OUT);
+		writel(local, &regs->LocalCtrl);
+		mb();
 	}
 }
 
@@ -1632,15 +1752,23 @@ static void eeprom_prep(struct ace_regs *regs, u8 magic)
 static int eeprom_check_ack(struct ace_regs *regs)
 {
 	int state;
-    
-	regs->LocalCtrl &= ~EEPROM_WRITE_ENABLE;
+	u32 local;
+
+	local = readl(&regs->LocalCtrl);
+	local &= ~EEPROM_WRITE_ENABLE;
+	writel(local, &regs->LocalCtrl);
+	mb();
 	udelay(2);
-	regs->LocalCtrl |= EEPROM_CLK_OUT;
+	local |= EEPROM_CLK_OUT;
+	writel(local, &regs->LocalCtrl);
+	mb();
 	udelay(1);
 	/* sample data in middle of high clk */
-	state = (regs->LocalCtrl & EEPROM_DATA_IN) != 0;
+	state = (readl(&regs->LocalCtrl) & EEPROM_DATA_IN) != 0;
 	udelay(1);
-	regs->LocalCtrl &= ~EEPROM_CLK_OUT;
+	mb();
+	writel(readl(&regs->LocalCtrl) & ~EEPROM_CLK_OUT, &regs->LocalCtrl);
+	mb();
 
 	return state;
 }
@@ -1648,15 +1776,28 @@ static int eeprom_check_ack(struct ace_regs *regs)
 
 static void eeprom_stop(struct ace_regs *regs)
 {
-	regs->LocalCtrl |= EEPROM_WRITE_ENABLE;
+	u32 local;
+
+	local = readl(&regs->LocalCtrl);
+	local |= EEPROM_WRITE_ENABLE;
+	writel(local, &regs->LocalCtrl);
+	mb();
 	udelay(1);
-	regs->LocalCtrl &= ~EEPROM_DATA_OUT;
+	local &= ~EEPROM_DATA_OUT;
+	writel(local, &regs->LocalCtrl);
+	mb();
 	udelay(1);
-	regs->LocalCtrl |= EEPROM_CLK_OUT;
+	local |= EEPROM_CLK_OUT;
+	writel(local, &regs->LocalCtrl);
+	mb();
 	udelay(1);
-	regs->LocalCtrl |= EEPROM_DATA_OUT;
+	local |= EEPROM_DATA_OUT;
+	writel(local, &regs->LocalCtrl);
+	mb();
 	udelay(2);
-	regs->LocalCtrl &= ~EEPROM_CLK_OUT;
+	local &= ~EEPROM_CLK_OUT;
+	writel(local, &regs->LocalCtrl);
+	mb();
 }
 
 
@@ -1665,7 +1806,8 @@ static void eeprom_stop(struct ace_regs *regs)
  */
 static u8 read_eeprom_byte(struct ace_regs *regs, unsigned long offset)
 {
-	u32 i;
+	u32 local;
+	short i;
 	u8 result = 0;
 
 	if (!regs){
@@ -1695,24 +1837,37 @@ static u8 read_eeprom_byte(struct ace_regs *regs, unsigned long offset)
 		return 0;
 
 	for (i = 0; i < 8; i++) {
-		regs->LocalCtrl &= ~EEPROM_WRITE_ENABLE;
+		local = readl(&regs->LocalCtrl);
+		local &= ~EEPROM_WRITE_ENABLE;
+		writel(local, &regs->LocalCtrl);
 		udelay(2);
-		regs->LocalCtrl |= EEPROM_CLK_OUT;
+		mb();
+		local |= EEPROM_CLK_OUT;
+		writel(local, &regs->LocalCtrl);
 		udelay(1);
+		mb();
 		/* sample data mid high clk */
 		result = (result << 1) |
-			((regs->LocalCtrl & EEPROM_DATA_IN) != 0);
+			((readl(&regs->LocalCtrl) & EEPROM_DATA_IN) != 0);
 		udelay(1);
-		regs->LocalCtrl &= ~EEPROM_CLK_OUT;
-		if (i == 7)
-			regs->LocalCtrl |= EEPROM_WRITE_ENABLE;
+		mb();
+		local = readl(&regs->LocalCtrl);
+		local &= ~EEPROM_CLK_OUT;
+		writel(local, &regs->LocalCtrl);
+		mb();
+		if (i == 7){
+			local |= EEPROM_WRITE_ENABLE;
+			writel(local, &regs->LocalCtrl);
+			mb();
+		}
 	}
 
-	regs->LocalCtrl |= EEPROM_DATA_OUT;
+	local |= EEPROM_DATA_OUT;
+	writel(local, &regs->LocalCtrl);
 	udelay(1);
-	regs->LocalCtrl |= EEPROM_CLK_OUT;
+	writel(readl(&regs->LocalCtrl) | EEPROM_CLK_OUT, &regs->LocalCtrl);
 	udelay(2);
-	regs->LocalCtrl &= ~EEPROM_CLK_OUT;
+	writel(readl(&regs->LocalCtrl) & ~EEPROM_CLK_OUT, &regs->LocalCtrl);
 	eeprom_stop(regs);
 
 	return result;
@@ -1721,6 +1876,6 @@ static u8 read_eeprom_byte(struct ace_regs *regs, unsigned long offset)
 
 /*
  * Local variables:
- * compile-command: "gcc -D__KERNEL__ -D__SMP__ -I/data/home/jes/linux/include -Wall -Wstrict-prototypes -O2 -fomit-frame-pointer -pipe -fno-strength-reduce -m486 -malign-loops=2 -malign-jumps=2 -malign-functions=2 -DCPU=686 -DMODULE -DMODVERSIONS -include /data/home/jes/linux/include/linux/modversions.h   -c -o acenic.o acenic.c"
+ * compile-command: "gcc -D__KERNEL__ -D__SMP__ -DMODULE -I/data/home/jes/linux/include -Wall -Wstrict-prototypes -O2 -fomit-frame-pointer -pipe -fno-strength-reduce -DMODVERSIONS -include /data/home/jes/linux/include/linux/modversions.h   -c -o acenic.o acenic.c"
  * End:
  */

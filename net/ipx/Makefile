@@ -10,8 +10,12 @@
 # We only get in/to here if CONFIG_IPX = 'y' or 'm'
 
 O_TARGET := ipx.o
-M_OBJS   := $(O_TARGET)
-OX_OBJS  += af_ipx.o
+M_OBJS   :=
+OX_OBJS  := af_ipx.o
+
+ifeq ($(CONFIG_IPX),m)
+  M_OBJS += $(O_TARGET)
+endif
 
 ifeq ($(CONFIG_SYSCTL),y)
   O_OBJS += sysctl_net_ipx.o

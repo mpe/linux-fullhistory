@@ -12,6 +12,7 @@
 #include <linux/net.h>
 #include <linux/in.h>
 #include <linux/netdevice.h>
+#include <linux/inetdevice.h>
 #include <linux/fddidevice.h>
 #include <linux/trdevice.h>
 #include <linux/ioport.h>
@@ -239,6 +240,10 @@ EXPORT_SYMBOL(inet_dgram_ops);
 EXPORT_SYMBOL(ip_cmsg_recv);
 EXPORT_SYMBOL(__release_sock);
 
+/* Route manipulation */
+EXPORT_SYMBOL(ip_rt_ioctl);
+EXPORT_SYMBOL(devinet_ioctl);
+
 /* needed for ip_gre -cw */
 EXPORT_SYMBOL(ip_statistics);
 
@@ -435,6 +440,7 @@ EXPORT_SYMBOL(dev_get_by_index);
 EXPORT_SYMBOL(eth_type_trans);
 #ifdef CONFIG_FDDI
 EXPORT_SYMBOL(fddi_type_trans);
+EXPORT_SYMBOL(fddi_setup);
 #endif /* CONFIG_FDDI */
 EXPORT_SYMBOL(eth_copy_and_sum);
 EXPORT_SYMBOL(alloc_skb);

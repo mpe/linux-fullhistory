@@ -49,8 +49,11 @@ nul_create_cred(struct rpc_task *task)
 {
 	struct rpc_cred	*cred;
 
-	if (!(cred = (struct rpc_cred *) rpc_malloc(task, sizeof(*cred))))
+	if (!(cred = (struct rpc_cred *) rpc_malloc(task, sizeof(*cred)))) {
+		task->tk_status = -ENOMEM;
 		return NULL;
+	}
+
 	cred->cr_count = 0;
 	cred->cr_flags = RPCAUTH_CRED_UPTODATE;
 

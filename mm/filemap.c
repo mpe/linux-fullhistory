@@ -1326,7 +1326,8 @@ int generic_file_mmap(struct file * file, struct vm_area_struct * vma)
 			return -EINVAL;
 	} else {
 		ops = &file_private_mmap;
-		if (vma->vm_offset & (inode->i_sb->s_blocksize - 1))
+		if (inode->i_op && inode->i_op->bmap &&
+		    (vma->vm_offset & (inode->i_sb->s_blocksize - 1)))
 			return -EINVAL;
 	}
 	if (!inode->i_sb || !S_ISREG(inode->i_mode))

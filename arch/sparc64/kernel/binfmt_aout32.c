@@ -161,7 +161,7 @@ do_aout32_core_dump(long signr, struct pt_regs * regs)
 	set_fs(KERNEL_DS);
 	DUMP_WRITE(current,sizeof(*current));
 close_coredump:
-	close_fp(file, NULL);
+	filp_close(file, NULL);
 end_coredump:
 	set_fs(fs);
 	return has_dumped;

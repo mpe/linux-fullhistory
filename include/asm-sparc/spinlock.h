@@ -112,7 +112,7 @@ do {	unsigned long flags; \
 	_do_read_unlock(lock, "read_unlock"); \
 	__restore_flags(flags); \
 } while(0)
-#define read_unlock_irq(lock)	do { _do_read_unlock(lock, "read_unlock_irq"); __sti() } while(0)
+#define read_unlock_irq(lock)	do { _do_read_unlock(lock, "read_unlock_irq"); __sti(); } while(0)
 #define read_unlock_irqrestore(lock, flags) do { _do_read_unlock(lock, "read_unlock_irqrestore"); __restore_flags(flags); } while(0)
 
 #define write_lock(lock) \

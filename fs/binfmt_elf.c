@@ -1324,7 +1324,7 @@ static int elf_core_dump(long signr, struct pt_regs * regs)
 	}
 
  close_coredump:
- 	close_fp(file, NULL);
+ 	filp_close(file, NULL);
 
  end_coredump:
 	set_fs(fs);

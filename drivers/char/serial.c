@@ -771,7 +771,7 @@ static void rs_interrupt_multi(int irq, void *dev_id, struct pt_regs * regs)
 			continue;
 		if (!multi->port4)
 			break;
-		if ((inb(multi->port4) & multi->mask4) == multi->match4)
+		if ((inb(multi->port4) & multi->mask4) != multi->match4)
 			continue;
 		break;
 	} 
@@ -1274,6 +1274,8 @@ static void change_speed(struct async_struct *info,
 
 	/* Determine divisor based on baud rate */
 	baud = tty_get_baud_rate(info->tty);
+	if (!baud)
+		baud = 9600;	/* B0 transition handled in rs_set_termios */
 	baud_base = info->state->baud_base;
 	if (baud == 38400 &&
 	    ((info->flags & ASYNC_SPD_MASK) == ASYNC_SPD_CUST))
@@ -1740,7 +1742,7 @@ static int set_serial_info(struct async_struct * info,
 check_and_exit:
 	if (!state->port || !state->type)
 		return 0;
-	if (state->flags & ASYNC_INITIALIZED) {
+	if (info->flags & ASYNC_INITIALIZED) {
 		if (((old_state.flags & ASYNC_SPD_MASK) !=
 		     (state->flags & ASYNC_SPD_MASK)) ||
 		    (old_state.custom_divisor != state->custom_divisor)) {
@@ -2162,8 +2164,9 @@ static void rs_set_termios(struct tty_struct *tty, struct termios *old_termios)
 {
 	struct async_struct *info = (struct async_struct *)tty->driver_data;
 	unsigned long flags;
+	unsigned int cflag = tty->termios->c_cflag;
 	
-	if (   (tty->termios->c_cflag == old_termios->c_cflag)
+	if (   (cflag == old_termios->c_cflag)
 	    && (   RELEVANT_IFLAG(tty->termios->c_iflag) 
 		== RELEVANT_IFLAG(old_termios->c_iflag)))
 	  return;
@@ -2172,7 +2175,7 @@ static void rs_set_termios(struct tty_struct *tty, struct termios *old_termios)
 
 	/* Handle transition to B0 status */
 	if ((old_termios->c_cflag & CBAUD) &&
-	    !(tty->termios->c_cflag & CBAUD)) {
+	    !(cflag & CBAUD)) {
 		info->MCR &= ~(UART_MCR_DTR|UART_MCR_RTS);
 		save_flags(flags); cli();
 		serial_out(info, UART_MCR, info->MCR);
@@ -2181,7 +2184,7 @@ static void rs_set_termios(struct tty_struct *tty, struct termios *old_termios)
 	
 	/* Handle transition away from B0 status */
 	if (!(old_termios->c_cflag & CBAUD) &&
-	    (tty->termios->c_cflag & CBAUD)) {
+	    (cflag & CBAUD)) {
 		info->MCR |= UART_MCR_DTR;
 		if (!(tty->termios->c_cflag & CRTSCTS) || 
 		    !test_bit(TTY_THROTTLED, &tty->flags)) {

@@ -759,7 +759,7 @@ int bmap(struct inode * inode, int block)
  * Initialize the hash tables and default
  * value for max inodes
  */
-#define MAX_INODE (8192)
+#define MAX_INODE (12288)
 
 void __init inode_init(void)
 {

@@ -831,7 +831,10 @@ el3_rx(struct device *dev)
 static void
 set_multicast_list(struct device *dev)
 {
+	unsigned long flags;
+	struct el3_private *lp = (struct el3_private *)dev->priv;
 	int ioaddr = dev->base_addr;
+
 	if (el3_debug > 1) {
 		static int old = 0;
 		if (old != dev->mc_count) {
@@ -839,6 +842,7 @@ set_multicast_list(struct device *dev)
 			printk("%s: Setting Rx mode to %d addresses.\n", dev->name, dev->mc_count);
 		}
 	}
+	spin_lock_irqsave(&lp->lock, flags);
 	if (dev->flags&IFF_PROMISC) {
 		outw(SetRxFilter | RxStation | RxMulticast | RxBroadcast | RxProm,
 			 ioaddr + EL3_CMD);
@@ -848,6 +852,7 @@ set_multicast_list(struct device *dev)
 	}
 	else
                 outw(SetRxFilter | RxStation | RxBroadcast, ioaddr + EL3_CMD);
+	spin_unlock_irqrestore(&lp->lock, flags);
 }
 
 static int

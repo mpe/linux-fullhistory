@@ -37,6 +37,7 @@
 #include <asm/uaccess.h>
 #include <asm/system.h>
 #include <asm/sysinfo.h>
+#include <asm/hwrpb.h>
 
 extern int do_mount(kdev_t, const char *, const char *, char *, int, void *);
 extern int do_pipe(int *);
@@ -762,13 +763,9 @@ asmlinkage long osf_proplist_syscall(enum pl_code code, union pl_args *args)
 asmlinkage int osf_sigstack(struct sigstack *uss, struct sigstack *uoss)
 {
 	unsigned long usp = rdusp();
-	unsigned long oss_sp, oss_os;
+	unsigned long oss_sp = current->sas_ss_sp + current->sas_ss_size;
+	unsigned long oss_os = on_sig_stack(usp);
 	int error;
-
-	if (uoss) {
-		oss_sp = current->sas_ss_sp + current->sas_ss_size;
-		oss_os = on_sig_stack(usp);
-	}
 
 	if (uss) {
 		void *ss_sp;
@@ -880,10 +877,12 @@ asmlinkage unsigned long osf_getsysinfo(unsigned long op, void *buffer,
 					int *start, void *arg)
 {
 	unsigned long w;
+	struct percpu_struct *cpu;
 
 	switch (op) {
 	case GSI_IEEE_FP_CONTROL:
 		/* Return current software fp control & status bits.  */
+		/* Note that DU doesn't verify available space here.  */
 		w = current->tss.flags & IEEE_SW_MASK;
 		if (put_user(w, (unsigned long *) buffer))
 			return -EFAULT;
@@ -898,10 +897,28 @@ asmlinkage unsigned long osf_getsysinfo(unsigned long op, void *buffer,
 		break;
 
  	case GSI_UACPROC:
+		if (nbytes < sizeof(unsigned int))
+			return -EINVAL;
  		w = (current->tss.flags >> UAC_SHIFT) & UAC_BITMASK;
  		if (put_user(w, (unsigned int *)buffer))
  			return -EFAULT;
- 		return 0;
+ 		return 1;
+
+	case GSI_PROC_TYPE:
+		if (nbytes < sizeof(unsigned long))
+			return -EINVAL;
+		cpu = (struct percpu_struct*)
+		  ((char*)hwrpb + hwrpb->processor_offset);
+		if (put_user(w, (unsigned long *)buffer))
+			return -EFAULT;
+		return 1;
+
+	case GSI_GET_HWRPB:
+		if (nbytes < sizeof(*hwrpb))
+			return -EINVAL;
+		if (copy_to_user(buffer, hwrpb, nbytes) != 0)
+			return -EFAULT;
+		return 1;
 
 	default:
 		break;

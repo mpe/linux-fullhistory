@@ -229,8 +229,8 @@ S:	Maintained
 DIGI INTL. EPCA DRIVER
 P:      Daniel Taylor
 M:      support@dgii.com
-M:      digilnux@dgii.com
-L:      digiboard@list.fuller.edu
+M:      danielt@dgii.com
+L:      digilnux@dgii.com
 S:      Maintained
 
 DIGI RIGHTSWITCH NETWORK DRIVER
@@ -719,10 +719,8 @@ W:	http://www.stallion.com
 S:	Supported
 
 STARMODE RADIO IP (STRIP) PROTOCOL DRIVER
-P:	Stuart Cheshire
-M:	cheshire@cs.stanford.edu
 W:	http://mosquitonet.Stanford.EDU/strip.html
-S:	Maintained
+S:	Unsupported ?
 
 SVGA HANDLING
 P:	Martin Mares
@@ -819,4 +817,4 @@ S:	Maintained
 
 THE REST
 P:	Linus Torvalds
-S:	Buried alive in diapers
+S:	Buried alive in reporters

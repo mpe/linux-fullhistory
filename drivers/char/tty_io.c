@@ -1143,7 +1143,7 @@ static void release_dev(struct file * filp)
 	/*
 	 * We've decremented tty->count, so we should zero out
 	 * filp->private_data, to break the link between the tty and
-	 * the file descriptor.  Otherwise if close_fp() blocks before
+	 * the file descriptor.  Otherwise if filp_close() blocks before
 	 * the the file descriptor is removed from the inuse_filp
 	 * list, check_tty_count() could observe a discrepancy and
 	 * printk a warning message to the user.

@@ -695,8 +695,9 @@ asmlinkage int sys_close(unsigned int);		/* yes, it's really unsigned */
 extern int do_truncate(struct dentry *, unsigned long);
 extern int get_unused_fd(void);
 extern void put_unused_fd(unsigned int);
-extern int close_fp(struct file *, fl_owner_t id);
+
 extern struct file *filp_open(const char *, int, int);
+extern int filp_close(struct file *, fl_owner_t id);
 
 extern char * getname(const char * filename);
 #define __getname()	((char *) __get_free_page(GFP_KERNEL))

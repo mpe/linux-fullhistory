@@ -1,13 +1,84 @@
 #ifndef _ACENIC_H_
 #define _ACENIC_H_
 
-#if ((BITS_PER_LONG != 32) && (BITS_PER_LONG != 64))
-#error "BITS_PER_LONG not defined or not valid"
+/*
+ * Addressing:
+ *
+ * The Tigon uses 64-bit host addresses, regardless of their actual
+ * length, and it expects a big-endian format. For 32 bit systems the
+ * upper 32 bits of the address are simply ignored (zero), however for
+ * little endian 64 bit systems (Alpha) this looks strange with the
+ * two parts of the address word being swapped.
+ *
+ * The addresses are split in two 32 bit words for all architectures
+ * as some of them are in PCI shared memory and it is necessary to use
+ * readl/writel to access them.
+ *
+ * The addressing code is derived from Pete Beckman's work, but
+ * modified to deal properly with readl/writel usage.
+ */
+
+typedef struct {
+	u32 addrhi;
+	u32 addrlo;
+} aceaddr;
+
+
+static inline void set_aceaddr(aceaddr *aa, volatile void *addr)
+{
+	unsigned long baddr = virt_to_bus((void *)addr);
+#if (BITS_PER_LONG == 64)
+	aa->addrlo = baddr & 0xffffffff;
+	aa->addrhi = baddr >> 32;
+#else
+    /* Don't bother setting zero every time */
+	aa->addrlo = baddr;
 #endif
+	mb();
+}
+
+
+static inline void set_aceaddr_bus(aceaddr *aa, volatile void *addr)
+{
+	unsigned long baddr = (unsigned long)addr;
+#if (BITS_PER_LONG == 64)
+	aa->addrlo = baddr & 0xffffffff;
+	aa->addrhi = baddr >> 32;
+#else
+    /* Don't bother setting zero every time */
+	aa->addrlo = baddr;
+#endif
+	mb();
+}
+
+
+static inline void *get_aceaddr(aceaddr *aa)
+{
+	unsigned long addr;
+	mb();
+#if (BITS_PER_LONG == 64)
+	addr = (u64)aa->addrhi << 32 | aa->addrlo;
+#else
+	addr = aa->addrlo;
+#endif
+	return bus_to_virt(addr);
+}
+
+
+static inline void *get_aceaddr_bus(aceaddr *aa)
+{
+	unsigned long addr;
+	mb();
+#if (BITS_PER_LONG == 64)
+	addr = (u64)aa->addrhi << 32 | aa->addrlo;
+#else
+	addr = aa->addrlo;
+#endif
+	return (void *)addr;
+}
 
 
 struct ace_regs {
-
 	u32	pad0[16];	/* PCI control registers */
 
 	u32	HostCtrl;	/* 0x40 */
@@ -109,7 +180,7 @@ struct ace_regs {
 	u32	ModeStat;
 	u32	DmaReadCfg;
 	u32	DmaWriteCfg;	/* 0x620 */
-	u32	pad15;
+	u32	TxBufRat;
 	u32	EvtCsm;
 	u32	CmdCsm;
 	u32	TuneRxCoalTicks;/* 0x630 */
@@ -220,6 +291,7 @@ struct ace_regs {
 #define ACE_BYTE_SWAP_DATA	0x10
 #define ACE_WARN		0x08
 #define ACE_WORD_SWAP		0x04
+#define ACE_NO_JUMBO_FRAG	0x200
 #define ACE_FATAL		0x40000000
 
 
@@ -227,7 +299,7 @@ struct ace_regs {
  * DMA config
  */
 
-#define DMA_THRESH_8W		0x80;
+#define DMA_THRESH_8W		0x80
 
 
 /*
@@ -366,19 +438,19 @@ struct cmd {
 #define DESC_MORE		0x08
 
 /*
- * RX control block flags
+ * Control block flags
  */
 
-#define RX_TCP_UDP_SUM		0x01
-#define RX_IP_SUM		0x02
-#define RX_SPLIT_HDRS		0x04
-#define RX_NO_PSEUDO_HDR_SUM	0x08
+#define FLG_RX_TCP_UDP_SUM	0x01
+#define FLG_RX_IP_SUM		0x02
+#define FLG_RX_SPLIT_HDRS	0x04
+#define FLG_RX_NO_PSDO_HDR_SUM	0x08
+#define FLG_RNG_DISABLED	0x200
 
 /*
  * Descriptor flags
  */
-
-#define JUMBO_FLAG		0x10
+#define DFLG_RX_JUMBO		0x10
 
 /*
  * TX ring
@@ -389,18 +461,20 @@ struct cmd {
 #define TX_RING_BASE	0x3800
 
 struct tx_desc{
-#if (BITS_PER_LONG == 64)
-	u64	addr;
-#else
-        u32	zero;
-	u32	addr;
-#endif
+        aceaddr	addr;
+	u32	flagsize; 
+#if 0
+/*
+ * This is in PCI shared mem and must be accessed with readl/writel
+ * real layout is:
+ */
 #if __LITTLE_ENDIAN
 	u16	flags;
 	u16	size;
 #else
 	u16	size;
 	u16	flags;
+#endif
 #endif
 	u32	nic_addr;
 };
@@ -412,19 +486,18 @@ struct tx_desc{
 #define RX_JUMBO_RING_ENTRIES	256
 #define RX_JUMBO_RING_SIZE	(RX_JUMBO_RING_ENTRIES *sizeof(struct rx_desc))
 
-#define RX_RETURN_RING_ENTRIES	(2 * RX_STD_RING_ENTRIES)
-#define RX_RETURN_RING_SIZE	(RX_RETURN_RING_ENTRIES * \
+#define RX_MINI_RING_ENTRIES	1024
+#define RX_MINI_RING_SIZE	(RX_MINI_RING_ENTRIES *sizeof(struct rx_desc))
+
+#define RX_RETURN_RING_ENTRIES	2048
+#define RX_RETURN_RING_SIZE	(RX_MAX_RETURN_RING_ENTRIES * \
 				 sizeof(struct rx_desc))
 
-#define RX_RING_THRESH		32
+#define RX_RING_THRESH		64
+#define RX_RING_JUMBO_THRESH	48
 
 struct rx_desc{
-#if (BITS_PER_LONG == 64)
-	u64	addr;
-#else
-        u32	zero;
-	u32	addr;
-#endif
+	aceaddr	addr;
 #ifdef __LITTLE_ENDIAN
 	u16	size;
 	u16	idx;
@@ -462,12 +535,7 @@ struct rx_desc{
  * This struct is shared with the NIC firmware.
  */
 struct ring_ctrl {
-#if (BITS_PER_LONG == 64)
-	u64	rngptr;
-#else
-	u32	zero;
-	u32	rngptr;
-#endif
+	aceaddr	rngptr;
 #ifdef __LITTLE_ENDIAN
 	u16	flags;
 	u16	max_len;
@@ -522,22 +590,12 @@ struct ace_info {
 	struct ring_ctrl	tx_ctrl;
 	struct ring_ctrl	rx_std_ctrl;
 	struct ring_ctrl	rx_jumbo_ctrl;
+	struct ring_ctrl	rx_mini_ctrl;
 	struct ring_ctrl	rx_return_ctrl;
-#if (BITS_PER_LONG == 64)
-	u64	evt_prd_ptr;
-	u64	rx_ret_prd_ptr;
-	u64	tx_csm_ptr;
-	u64	stats2_ptr;
-#else
-	u32	evt_prd_ptr_hi;
-	u32	evt_prd_ptr;
-	u32	rx_ret_prd_ptr_hi;
-	u32	rx_ret_prd_ptr;
-	u32	tx_csm_ptr_hi;
-	u32	tx_csm_ptr;
-	u32	stats2_ptr_hi;
-	u32	stats2_ptr;
-#endif
+	aceaddr	evt_prd_ptr;
+	aceaddr	rx_ret_prd_ptr;
+	aceaddr	tx_csm_ptr;
+	aceaddr	stats2_ptr;
 };
 
 /*
@@ -555,6 +613,9 @@ struct ace_private
 	struct tx_desc		*tx_ring;
 	struct rx_desc		rx_std_ring[RX_STD_RING_ENTRIES];
 	struct rx_desc		rx_jumbo_ring[RX_JUMBO_RING_ENTRIES];
+#if 0
+	struct rx_desc		rx_mini_ring[RX_MINI_RING_ENTRIES];
+#endif
 	struct rx_desc		rx_return_ring[RX_RETURN_RING_ENTRIES];
 	struct event		evt_ring[EVT_RING_ENTRIES];
 	struct ace_info		*info;
@@ -576,7 +637,7 @@ struct ace_private
 	struct device		*next
 				__attribute__ ((aligned (L1_CACHE_BYTES)));
 	unsigned char		*trace_buf;
-	int			fw_running, fw_up, jumbo, promisc;
+	int			fw_running, fw_up, jumbo, promisc, mcast_all;
 	int			version;
 	int			flags;
 	u16			vendor;
@@ -598,7 +659,7 @@ static int ace_load_std_rx_ring(struct device *dev);
 static int ace_load_jumbo_rx_ring(struct device *dev);
 static int ace_flush_jumbo_rx_ring(struct device *dev);
 static void ace_interrupt(int irq, void *dev_id, struct pt_regs *regs);
-
+static int ace_load_firmware(struct device *dev);
 static int ace_open(struct device *dev);
 static int ace_start_xmit(struct sk_buff *skb, struct device *dev);
 static int ace_close(struct device *dev);

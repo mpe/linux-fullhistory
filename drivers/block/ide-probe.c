@@ -43,33 +43,6 @@
 
 #include "ide.h"
 
-/*
- * CompactFlash cards and their brethern pretend to be removable hard disks, except:
- *	(1) they never have a slave unit, and
- *	(2) they don't have doorlock mechanisms.
- * This test catches them, and is invoked elsewhere when setting appropriate config bits.
- *
- * FIXME: This treatment is probably applicable for *all* PCMCIA (PC CARD) devices,
- * so in linux 2.3.x we should change this to just treat all PCMCIA drives this way,
- * and get rid of the model-name tests below (too big of an interface change for 2.2.x).
- * At that time, we might also consider parameterizing the timeouts and retries,
- * since these are MUCH faster than mechanical drives.	-M.Lord
- */
-int drive_is_flashcard (ide_drive_t *drive)
-{
-	struct hd_driveid *id = drive->id;
-
-	if (drive->removable && id != NULL) {
-		if (!strncmp(id->model, "KODAK ATA_FLASH", 15)	/* Kodak */
-		 || !strncmp(id->model, "Hitachi CV", 10)		/* Hitachi */
-		 || !strncmp(id->model, "SunDisk SDCFB", 13))	/* SunDisk */
-		{
-			return 1;	/* yes, it is a flash memory card */
-		}
-	}
-	return 0;	/* no, it is not a flash memory card */
-}
-
 static inline void do_identify (ide_drive_t *drive, byte cmd)
 {
 	int bswap = 1;

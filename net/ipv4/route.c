@@ -5,7 +5,7 @@
  *
  *		ROUTE - implementation of the IP router.
  *
- * Version:	$Id: route.c,v 1.63 1999/03/21 05:22:45 davem Exp $
+ * Version:	$Id: route.c,v 1.64 1999/03/23 21:21:13 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -1187,7 +1187,7 @@ int ip_route_input_slow(struct sk_buff *skb, u32 daddr, u32 saddr,
 	if (err)
 		flags |= RTCF_DIRECTSRC;
 
-	if (out_dev == in_dev && err && !(flags&RTCF_NAT) &&
+	if (out_dev == in_dev && err && !(flags&(RTCF_NAT|RTCF_MASQ)) &&
 	    (IN_DEV_SHARED_MEDIA(out_dev)
 	     || inet_addr_onlink(out_dev, saddr, FIB_RES_GW(res))))
 		flags |= RTCF_DOREDIRECT;

@@ -1,7 +1,7 @@
 /*+M*************************************************************************
- * Perceptive Solutions, Inc. PCI-2000 device driver proc support for Linux.
+ * Perceptive Solutions, Inc. PCI-22220I device driver proc support for Linux.
  *
- * Copyright (c) 1997 Perceptive Solutions, Inc.
+ * Copyright (c) 1999 Perceptive Solutions, Inc.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -25,56 +25,51 @@
  *-M*************************************************************************/
 
 #include <linux/module.h>
-
 #include <linux/kernel.h>
+#include <linux/head.h>
 #include <linux/types.h>
 #include <linux/string.h>
+#include <linux/bios32.h>
 #include <linux/pci.h>
 #include <linux/ioport.h>
 #include <linux/delay.h>
 #include <linux/sched.h>
 #include <linux/proc_fs.h>
+#include <linux/stat.h>
+#include <linux/kdev_t.h>
+#include <linux/blk.h>
+#include <linux/timer.h>
 #include <asm/dma.h>
 #include <asm/system.h>
-#include <asm/spinlock.h>
 #include <asm/io.h>
-#include <linux/blk.h>
 #include "scsi.h"
 #include "hosts.h"
-
 #include "pci2220i.h"
-#include "psi_dale.h"
 
-#include<linux/stat.h>
+#define	PCI2220I_VERSION		"1.10"
+//#define	READ_CMD				IDE_COMMAND_READ
+//#define	WRITE_CMD				IDE_COMMAND_WRITE
+//#define	MAX_BUS_MASTER_BLOCKS	1		// This is the maximum we can bus master
+#define	READ_CMD				IDE_CMD_READ_MULTIPLE
+#define	WRITE_CMD				IDE_CMD_WRITE_MULTIPLE
+#define	MAX_BUS_MASTER_BLOCKS	SECTORSXFER		// This is the maximum we can bus master
+
 
 struct proc_dir_entry Proc_Scsi_Pci2220i =
-	{ PROC_SCSI_PCI2220I, 7, "pci2220i", S_IFDIR | S_IRUGO | S_IXUGO, 2 };
+	{ PROC_SCSI_PCI2220I, 8, "pci2220i", S_IFDIR | S_IRUGO | S_IXUGO, 2 };
 
 //#define DEBUG 1
 
 #ifdef DEBUG
 #define DEB(x) x
-#define STOP_HERE	{int st;for(st=0;st<100;st++){st=1;}}
+#define STOP_HERE()	{int st;for(st=0;st<100;st++){st=1;}}
 #else
 #define DEB(x)
-#define STOP_HERE
+#define STOP_HERE()
 #endif
 
-#define MAXADAPTER 4	/* Increase this and the sizes of the arrays below, if you need more. */
+#define MAXADAPTER 4					// Increase this and the sizes of the arrays below, if you need more.
 
-#define	MAX_BUS_MASTER_BLOCKS	1		// This is the maximum we can bus master for (1024 bytes)
-
-#define	PORT_DATA				0
-#define	PORT_ERROR				1
-#define	PORT_SECTOR_COUNT		2
-#define	PORT_LBA_0				3
-#define	PORT_LBA_8				4
-#define	PORT_LBA_16				5
-#define	PORT_LBA_24				6
-#define	PORT_STAT_CMD			7
-#define	PORT_STAT_SEL			8
-#define	PORT_FAIL				9
-#define	PORT_ALT_STAT		   	10
 
 typedef struct
 	{
@@ -87,44 +82,245 @@ typedef struct
 	USHORT			cylinders;			// number of cylinders for this device
 	USHORT			spareword;			// placeholder
 	ULONG			blocks;				// number of blocks on device
-	}	OUR_DEVICE, *POUR_DEVICE;
+	DISK_MIRROR		DiskMirror[2];		// RAID status and control
+	ULONG			lastsectorlba[2];	// last addressable sector on the drive
+	USHORT			raid;				// RAID active flag
+	USHORT			mirrorRecon;
+	UCHAR			hotRecon;
+	USHORT			reconCount;
+	}	OUR_DEVICE, *POUR_DEVICE;	
 
 typedef struct
 	{
-	USHORT		 ports[12];
-	USHORT		 regDmaDesc;					// address of the DMA discriptor register for direction of transfer
-	USHORT		 regDmaCmdStat;					// Byte #1 of DMA command status register
-	USHORT		 regDmaAddrPci;					// 32 bit register for PCI address of DMA
-	USHORT		 regDmaAddrLoc;					// 32 bit register for local bus address of DMA
-	USHORT		 regDmaCount;					// 32 bit register for DMA transfer count
-	USHORT		 regDmaMode;						// 32 bit register for DMA mode control
-	USHORT		 regRemap;						// 32 bit local space remap
-	USHORT		 regDesc;						// 32 bit local region descriptor
-	USHORT		 regRange;						// 32 bit local range
-	USHORT		 regIrqControl;					// 16 bit Interrupt enable/disable and status
-	USHORT		 regScratchPad;					// scratch pad I/O base address
-	USHORT		 regBase;						// Base I/O register for data space
-	USHORT		 basePort;						// PLX base I/O port
-	USHORT		 timingMode;					// timing mode currently set for adapter
-	ULONG		 timingAddress;					// address to use on adapter for current timing mode
-	OUR_DEVICE	 device[4];
-	IDE_STRUCT	 ide;
+	USHORT		 regDmaDesc;			// address of the DMA discriptor register for direction of transfer
+	USHORT		 regDmaCmdStat;			// Byte #1 of DMA command status register
+	USHORT		 regDmaAddrPci;			// 32 bit register for PCI address of DMA
+	USHORT		 regDmaAddrLoc;			// 32 bit register for local bus address of DMA
+	USHORT		 regDmaCount;			// 32 bit register for DMA transfer count
+	USHORT		 regDmaMode;			// 32 bit register for DMA mode control
+	USHORT		 regRemap;				// 32 bit local space remap
+	USHORT		 regDesc;				// 32 bit local region descriptor
+	USHORT		 regRange;				// 32 bit local range
+	USHORT		 regIrqControl;			// 16 bit Interrupt enable/disable and status
+	USHORT		 regScratchPad;			// scratch pad I/O base address
+	USHORT		 regBase;				// Base I/O register for data space
+	USHORT		 regData;				// data register I/O address
+	USHORT		 regError;				// error register I/O address
+	USHORT		 regSectCount;			// sector count register I/O address
+	USHORT		 regLba0;				// least significant byte of LBA
+	USHORT		 regLba8;				// next least significant byte of LBA
+	USHORT		 regLba16;				// next most significan byte of LBA
+	USHORT		 regLba24;				// head and most 4 significant bits of LBA
+	USHORT		 regStatCmd;			// status on read and command on write register
+	USHORT		 regStatSel;			// board status on read and spigot select on write register
+	USHORT		 regFail;				// fail bits control register
+	USHORT		 regAltStat;			// alternate status and drive control register
+	USHORT		 basePort;				// PLX base I/O port
+	USHORT		 timingMode;			// timing mode currently set for adapter
+	USHORT		 timingPIO;				// TRUE if PIO timing is active
+	ULONG		 timingAddress;			// address to use on adapter for current timing mode
+	OUR_DEVICE	 device[DALE_MAXDRIVES];
+	DISK_MIRROR	*raidData[8];
 	ULONG		 startSector;
 	USHORT		 sectorCount;
+	UCHAR		 cmd;
 	Scsi_Cmnd	*SCpnt;
 	VOID		*buffer;
+	POUR_DEVICE	 pdev;					// current device opearating on
 	USHORT		 expectingIRQ;
-	USHORT		 readPhase;
+	USHORT		 reconIsStarting;		// indicate hot reconstruct is starting
+	USHORT		 reconOn;				// Hot reconstruct is to be done.
+	USHORT		 reconPhase;			// Hot reconstruct operation is in progress.
+	ULONG		 reconSize;
+	USHORT		 demoFail;				// flag for RAID failure demonstration
+	USHORT		 survivor;
+	USHORT		 failinprog;
+	USHORT		 timeoutReconRetry;
+	struct timer_list	reconTimer;	
+	struct timer_list	timer;
 	}	ADAPTER2220I, *PADAPTER2220I;
 
 #define HOSTDATA(host) ((PADAPTER2220I)&host->hostdata)
 
+#define	RECON_PHASE_READY		0x01
+#define	RECON_PHASE_COPY		0x02
+#define	RECON_PHASE_UPDATE		0x03
+#define	RECON_PHASE_LAST		0x04
+#define	RECON_PHASE_END			0x07	
+#define	RECON_PHASE_MARKING		0x80
+#define	RECON_PHASE_FAILOVER	0xFF
 
 static struct	Scsi_Host 	   *PsiHost[MAXADAPTER] = {NULL,};  // One for each adapter
 static			int				NumAdapters = 0;
-static			IDENTIFY_DATA	identifyData;
 static			SETUP			DaleSetup;
+static			DISK_MIRROR		DiskMirror[2];
+static			ULONG			ModeArray[] = {DALE_DATA_MODE2, DALE_DATA_MODE3, DALE_DATA_MODE4, DALE_DATA_MODE4P};
+static			UCHAR			Buffer[SECTORSXFER * BYTES_PER_SECTOR];
 
+static void ReconTimerExpiry (unsigned long data);
+
+/****************************************************************
+ *	Name:	MuteAlarm	:LOCAL
+ *
+ *	Description:	Mute the audible alarm.
+ *
+ *	Parameters:		padapter - Pointer adapter data structure.
+ *
+ *	Returns:		TRUE if drive does not assert DRQ in time.
+ *
+ ****************************************************************/
+static void MuteAlarm (PADAPTER2220I padapter)
+	{
+	UCHAR	old;
+
+	old = (inb_p (padapter->regStatSel) >> 3) | (inb_p (padapter->regStatSel) & 0x83);
+	outb_p (old | 0x40, padapter->regFail);
+	}
+/****************************************************************
+ *	Name:	WaitReady	:LOCAL
+ *
+ *	Description:	Wait for device ready.
+ *
+ *	Parameters:		padapter - Pointer adapter data structure.
+ *
+ *	Returns:		TRUE if drive does not assert DRQ in time.
+ *
+ ****************************************************************/
+static int WaitReady (PADAPTER2220I padapter)
+	{
+	ULONG	z;
+	UCHAR	status;
+
+	for ( z = 0;  z < (TIMEOUT_READY * 4);  z++ )
+		{
+		status = inb_p (padapter->regStatCmd);
+		if ( (status & (IDE_STATUS_DRDY | IDE_STATUS_BUSY)) == IDE_STATUS_DRDY )
+			return 0;
+		udelay (250);
+		}
+	return status;
+	}
+/****************************************************************
+ *	Name:	WaitReadyReset	:LOCAL
+ *
+ *	Description:	Wait for device ready.
+ *
+ *	Parameters:		padapter - Pointer adapter data structure.
+ *
+ *	Returns:		TRUE if drive does not assert DRQ in time.
+ *
+ ****************************************************************/
+static int WaitReadyReset (PADAPTER2220I padapter)
+	{
+	ULONG	z;
+	UCHAR	status;
+
+	for ( z = 0;  z < (250 * 4);  z++ )				// wait up to 1/4 second
+		{
+		status = inb_p (padapter->regStatCmd);
+		if ( (status & (IDE_STATUS_DRDY | IDE_STATUS_BUSY)) == IDE_STATUS_DRDY )
+			{
+			DEB (printk ("\nPCI2220I:  Reset took %ld mSec to be ready", z / 4));
+			return 0;
+			}
+		udelay (250);
+		}
+	DEB (printk ("\nPCI2220I:  Reset took more than 1 Second to come ready, Disk Failure"));
+	return status;
+	}
+/****************************************************************
+ *	Name:	WaitDrq	:LOCAL
+ *
+ *	Description:	Wait for device ready for data transfer.
+ *
+ *	Parameters:		padapter - Pointer adapter data structure.
+ *
+ *	Returns:		TRUE if drive does not assert DRQ in time.
+ *
+ ****************************************************************/
+static int WaitDrq (PADAPTER2220I padapter)
+	{
+	ULONG	z;
+	UCHAR	status;
+
+	for ( z = 0;  z < (TIMEOUT_DRQ * 4);  z++ )
+		{
+		status = inb_p (padapter->regStatCmd);
+		if ( status & IDE_STATUS_DRQ )
+			return 0;
+		udelay (250);
+		}
+	return status;
+	}
+/****************************************************************
+ *	Name:	HardReset	:LOCAL
+ *
+ *	Description:	Wait for device ready for data transfer.
+ *
+ *	Parameters:		padapter - Pointer adapter data structure.
+ *					pdev	 - Pointer to device.
+ *					spigot	 - Spigot number.
+ *
+ *	Returns:		TRUE if drive does not assert DRQ in time.
+ *
+ ****************************************************************/
+static int HardReset (PADAPTER2220I padapter, POUR_DEVICE pdev, UCHAR spigot)
+	{
+	SelectSpigot (padapter, spigot | 0x80);
+	
+	outb_p (0x0E, padapter->regAltStat);					// reset the suvivor
+	udelay (100);											// wait a little	
+	outb_p (0x08, padapter->regAltStat);					// clear the reset
+	udelay (100);
+	outb_p (0xA0, padapter->regLba24);						//Specify drive
+
+	outb_p (pdev->byte6, padapter->regLba24);				// select the drive
+	if ( WaitReadyReset (padapter) )
+		return TRUE;
+	outb_p (SECTORSXFER, padapter->regSectCount);
+	WriteCommand (padapter, IDE_CMD_SET_MULTIPLE);	
+	if ( WaitReady (padapter) )
+		return TRUE;
+	return FALSE;
+	}
+/****************************************************************
+ *	Name:	BusMaster	:LOCAL
+ *
+ *	Description:	Do a bus master I/O.
+ *
+ *	Parameters:		padapter - Pointer adapter data structure.
+ *					datain	 - TRUE if data read.
+ *					irq		 - TRUE if bus master interrupt expected.
+ *
+ *	Returns:		TRUE if drive does not assert DRQ in time.
+ *
+ ****************************************************************/
+static void BusMaster (PADAPTER2220I padapter, UCHAR datain, UCHAR irq)
+	{
+	ULONG zl;
+	
+	outl (padapter->timingAddress, padapter->regDmaAddrLoc);
+	outl (virt_to_bus (padapter->buffer), padapter->regDmaAddrPci);
+	zl = (padapter->sectorCount > MAX_BUS_MASTER_BLOCKS) ? MAX_BUS_MASTER_BLOCKS : padapter->sectorCount;
+	padapter->sectorCount -= zl;
+	zl *= (ULONG)BYTES_PER_SECTOR;
+	padapter->buffer += zl;
+	outl (zl, padapter->regDmaCount);
+	if ( datain )
+		{
+		outb_p (8, padapter->regDmaDesc);						// read operation
+		if ( irq && !padapter->sectorCount )
+			outb_p (5, padapter->regDmaMode);					// interrupt on
+		else
+			outb_p (1, padapter->regDmaMode);					// no interrupt
+		}
+	else
+		{
+		outb_p (0, padapter->regDmaDesc);						// write operation
+		outb_p (1, padapter->regDmaMode);						// no interrupt
+		}
+	outb_p (0x03, padapter->regDmaCmdStat);						// kick the DMA engine in gear
+	}
 /****************************************************************
  *	Name:	WriteData	:LOCAL
  *
@@ -137,114 +333,224 @@ static			SETUP			DaleSetup;
  ****************************************************************/
 static int WriteData (PADAPTER2220I padapter)
 	{
-	ULONG	timer;
-	USHORT *pports = padapter->ports;
-
-	timer = jiffies + TIMEOUT_DRQ;								// calculate the timeout value
-	do  {
-		if ( inb_p (pports[PORT_STAT_CMD]) & IDE_STATUS_DRQ )
+	ULONG	zl;
+	
+	if ( !WaitDrq (padapter) )
+		{
+		if ( padapter->timingPIO )
 			{
-			outb_p (0, padapter->regDmaDesc);							// write operation
-			outl (padapter->timingAddress, padapter->regDmaAddrLoc);
-			outl (virt_to_bus (padapter->buffer), padapter->regDmaAddrPci);
-			outl ((ULONG)padapter->ide.ide.ide[2] * (ULONG)512, padapter->regDmaCount);
-			outb_p (1, padapter->regDmaMode);							// interrupts off
-			outb_p (0x03, padapter->regDmaCmdStat);						// kick the DMA engine in gear
+			zl = (padapter->sectorCount > MAX_BUS_MASTER_BLOCKS) ? MAX_BUS_MASTER_BLOCKS : padapter->sectorCount;
+			outsw (padapter->regData, padapter->buffer, zl * (BYTES_PER_SECTOR / 2));
+			padapter->sectorCount -= zl;
+			padapter->buffer += zl * BYTES_PER_SECTOR;
+			}
+		else
+			BusMaster (padapter, 0, 0);
+		return 0;
+		}
+	padapter->cmd = 0;												// null out the command byte
+	return 1;
+	}
+/****************************************************************
+ *	Name:	WriteDataBoth	:LOCAL
+ *
+ *	Description:	Write data to device.
+ *
+ *	Parameters:		padapter - Pointer adapter data structure.
+ *
+ *	Returns:		TRUE if drive does not assert DRQ in time.
+ *
+ ****************************************************************/
+static int WriteDataBoth (PADAPTER2220I padapter)
+	{
+	ULONG	zl;
+	UCHAR	status0, status1;
+
+	SelectSpigot (padapter, 1);
+	status0 = WaitDrq (padapter);
+	if ( !status0 )
+		{
+		SelectSpigot (padapter, 2);
+		status1 = WaitDrq (padapter);
+		if ( !status1 )
+			{
+			SelectSpigot (padapter, 3);
+			if ( padapter->timingPIO )
+				{
+				zl = (padapter->sectorCount > MAX_BUS_MASTER_BLOCKS) ? MAX_BUS_MASTER_BLOCKS : padapter->sectorCount;
+				outsw (padapter->regData, padapter->buffer, zl * (BYTES_PER_SECTOR / 2));
+				padapter->sectorCount -= zl;
+				padapter->buffer += zl * BYTES_PER_SECTOR;
+				}
+			else
+				BusMaster (padapter, 0, 0);
 			return 0;
 			}
-		}	while ( timer > jiffies );									// test for timeout
-
-	padapter->ide.ide.ides.cmd = 0;									// null out the command byte
-	return 1;
+		}
+	padapter->cmd = 0;												// null out the command byte
+	if ( status0 )
+		return 1;
+	return 2;
 	}
 /****************************************************************
  *	Name:	IdeCmd	:LOCAL
  *
- *	Description:	Process a queued command from the SCSI manager.
+ *	Description:	Process an IDE command.
  *
  *	Parameters:		padapter - Pointer adapter data structure.
+ *					pdev	 - Pointer to device.
  *
  *	Returns:		Zero if no error or status register contents on error.
  *
  ****************************************************************/
-static UCHAR IdeCmd (PADAPTER2220I padapter)
+static UCHAR IdeCmd (PADAPTER2220I padapter, POUR_DEVICE pdev)
 	{
-	ULONG	timer;
-	USHORT *pports = padapter->ports;
 	UCHAR	status;
 
-	outb_p (padapter->ide.ide.ides.spigot, pports[PORT_STAT_SEL]);	// select the spigot
-	outb_p (padapter->ide.ide.ide[6], pports[PORT_LBA_24]);			// select the drive
-	timer = jiffies + TIMEOUT_READY;							// calculate the timeout value
-	DEB(printk ("\npci2220i Issueing new command: 0x%X",padapter->ide.ide.ides.cmd));
-	do  {
-		status = inb_p (padapter->ports[PORT_STAT_CMD]);
-		if ( status & IDE_STATUS_DRDY )
-			{
-			outb_p (padapter->ide.ide.ide[2], pports[PORT_SECTOR_COUNT]);
-			outb_p (padapter->ide.ide.ide[3], pports[PORT_LBA_0]);
-			outb_p (padapter->ide.ide.ide[4], pports[PORT_LBA_8]);
-			outb_p (padapter->ide.ide.ide[5], pports[PORT_LBA_16]);
-			padapter->expectingIRQ = 1;
-			outb_p (padapter->ide.ide.ide[7], pports[PORT_STAT_CMD]);
+	SelectSpigot (padapter, pdev->spigot);							// select the spigot
+	outb_p (pdev->byte6 | ((UCHAR *)(&padapter->startSector))[3], padapter->regLba24);			// select the drive
+	status = WaitReady (padapter);
+	if ( !status )
+		{
+		outb_p (padapter->sectorCount, padapter->regSectCount);
+		outb_p (((UCHAR *)(&padapter->startSector))[0], padapter->regLba0);
+		outb_p (((UCHAR *)(&padapter->startSector))[1], padapter->regLba8);
+		outb_p (((UCHAR *)(&padapter->startSector))[2], padapter->regLba16);
+		padapter->expectingIRQ = TRUE;
+		WriteCommand (padapter, padapter->cmd);
+		return 0;
+		}
 
-			if ( padapter->ide.ide.ides.cmd == IDE_CMD_WRITE_MULTIPLE )
-				return (WriteData (padapter));
-			return 0;
-			}
-		}	while ( timer > jiffies );									// test for timeout
-
-	padapter->ide.ide.ides.cmd = 0;									// null out the command byte
+	padapter->cmd = 0;									// null out the command byte
 	return status;
 	}
 /****************************************************************
- *	Name:	SetupTransfer	:LOCAL
+ *	Name:	IdeCmdBoth	:LOCAL
  *
- *	Description:	Setup a data transfer command.
+ *	Description:	Process an IDE command to both drivers.
  *
  *	Parameters:		padapter - Pointer adapter data structure.
- *					drive	 - Drive/head register upper nibble only.
  *
- *	Returns:		TRUE if no data to transfer.
+ *	Returns:		Zero if no error or spigot of error.
  *
  ****************************************************************/
-static int SetupTransfer (PADAPTER2220I padapter, UCHAR drive)
+static UCHAR IdeCmdBoth (PADAPTER2220I padapter)
 	{
-	if ( padapter->sectorCount )
+	UCHAR	status0;
+	UCHAR	status1;
+
+	SelectSpigot (padapter, 3);										// select the spigots
+	outb_p (padapter->pdev->byte6 | ((UCHAR *)(&padapter->startSector))[3], padapter->regLba24);// select the drive
+	SelectSpigot (padapter, 1);
+	status0 = WaitReady (padapter);
+	if ( !status0 )
 		{
-		*(ULONG *)padapter->ide.ide.ides.lba = padapter->startSector;
-		padapter->ide.ide.ide[6] |= drive;
-//		padapter->ide.ide.ides.sectors = ( padapter->sectorCount > SECTORSXFER ) ? SECTORSXFER : padapter->sectorCount;
-		padapter->ide.ide.ides.sectors = ( padapter->sectorCount > MAX_BUS_MASTER_BLOCKS ) ? MAX_BUS_MASTER_BLOCKS : padapter->sectorCount;
-		padapter->sectorCount -= padapter->ide.ide.ides.sectors;	// bump the start and count for next xfer
-		padapter->startSector += padapter->ide.ide.ides.sectors;
-		return 0;
+		SelectSpigot (padapter, 2);
+		status1 = WaitReady (padapter);
+		if ( !status1 )
+			{
+			SelectSpigot (padapter, 3);
+			outb_p (padapter->sectorCount, padapter->regSectCount);
+			outb_p (((UCHAR *)(&padapter->startSector))[0], padapter->regLba0);
+			outb_p (((UCHAR *)(&padapter->startSector))[1], padapter->regLba8);
+			outb_p (((UCHAR *)(&padapter->startSector))[2], padapter->regLba16);
+			padapter->expectingIRQ = TRUE;
+			WriteCommand (padapter, padapter->cmd);
+			return 0;
+			}
+		}
+	padapter->cmd = 0;									// null out the command byte
+	if ( status0 )
+		return 1;
+	return 2;
+	}
+/****************************************************************
+ *	Name:	OpDone	:LOCAL
+ *
+ *	Description:	Complete an operatoin done sequence.
+ *
+ *	Parameters:		padapter - Pointer to host data block.
+ *					spigot	 - Spigot select code.
+ *					device	 - Device byte code.
+ *
+ *	Returns:		Nothing.
+ *
+ ****************************************************************/
+static void OpDone (PADAPTER2220I padapter, ULONG result)
+	{
+	Scsi_Cmnd	   *SCpnt = padapter->SCpnt;
+	
+	if ( padapter->reconPhase )
+		{
+		padapter->reconPhase = 0;
+		if ( padapter->SCpnt )
+			{
+			Pci2220i_QueueCommand (SCpnt, SCpnt->scsi_done);
+			}
+		else
+			{
+			if ( padapter->reconOn )
+				{
+				ReconTimerExpiry ((unsigned long)padapter);
+				}
+			}
 		}
 	else
 		{
-		padapter->ide.ide.ides.cmd = 0;								// null out the command byte
-		padapter->SCpnt = NULL;
-		return 1;
+		padapter->cmd = 0;
+		padapter->SCpnt = NULL;	
+		SCpnt->result = result;
+		SCpnt->scsi_done (SCpnt);
+		if ( padapter->reconOn && !padapter->reconTimer.data )
+			{
+			padapter->reconTimer.expires = jiffies + (HZ / 4);	// start in 1/4 second
+			padapter->reconTimer.data = (unsigned long)padapter;
+			add_timer (&padapter->reconTimer);
+			}
 		}
+	}
+/****************************************************************
+ *	Name:	InlineIdentify	:LOCAL
+ *
+ *	Description:	Do an intline inquiry on a drive.
+ *
+ *	Parameters:		padapter - Pointer to host data block.
+ *					spigot	 - Spigot select code.
+ *					device	 - Device byte code.
+ *
+ *	Returns:		Last addressable sector or zero if none.
+ *
+ ****************************************************************/
+static ULONG InlineIdentify (PADAPTER2220I padapter, UCHAR spigot, UCHAR device)
+	{
+	PIDENTIFY_DATA	pid = (PIDENTIFY_DATA)Buffer;
+
+	SelectSpigot (padapter, spigot | 0x80);						// select the spigot
+	outb_p (device << 4, padapter->regLba24);				// select the drive
+	if ( WaitReady (padapter) )
+		return 0;
+	WriteCommand (padapter, IDE_COMMAND_IDENTIFY);	
+	if ( WaitDrq (padapter) )
+		return 0;
+	insw (padapter->regData, Buffer, sizeof (IDENTIFY_DATA) >> 1);
+	return (pid->LBATotalSectors - 1);
 	}
 /****************************************************************
  *	Name:	DecodeError	:LOCAL
  *
  *	Description:	Decode and process device errors.
  *
- *	Parameters:		pshost - Pointer to host data block.
+ *	Parameters:		padapter - Pointer to adapter data.
  *					status - Status register code.
  *
  *	Returns:		The driver status code.
  *
  ****************************************************************/
-static ULONG DecodeError (struct Scsi_Host *pshost, UCHAR status)
+static ULONG DecodeError (PADAPTER2220I	padapter, UCHAR status)
 	{
-	PADAPTER2220I	padapter = HOSTDATA(pshost);
 	UCHAR			error;
 
 	padapter->expectingIRQ = 0;
-	padapter->SCpnt = NULL;
 	if ( status & IDE_STATUS_WRITE_FAULT )
 		{
 		return DID_PARITY << 16;
@@ -252,7 +558,7 @@ static ULONG DecodeError (struct Scsi_Host *pshost, UCHAR status)
 	if ( status & IDE_STATUS_BUSY )
 		return DID_BUS_BUSY << 16;
 
-	error = inb_p (padapter->ports[PORT_ERROR]);
+	error = inb_p (padapter->regError);
 	DEB(printk ("\npci2220i error register: %x", error));
 	switch ( error )
 		{
@@ -266,6 +572,483 @@ static ULONG DecodeError (struct Scsi_Host *pshost, UCHAR status)
 			return DID_ERROR << 16;
 		}
 	return DID_ERROR << 16;
+	}
+/****************************************************************
+ *	Name:	StartTimer	:LOCAL
+ *
+ *	Description:	Start the timer.
+ *
+ *	Parameters:		ipadapter - Pointer adapter data structure.
+ *
+ *	Returns:		Nothing.
+ *
+ ****************************************************************/
+static void StartTimer (PADAPTER2220I padapter)
+	{
+	padapter->timer.expires = jiffies + TIMEOUT_DATA;
+	add_timer (&padapter->timer);
+	}
+/****************************************************************
+ *	Name:	WriteSignature	:LOCAL
+ *
+ *	Description:	Start the timer.
+ *
+ *	Parameters:		padapter - Pointer adapter data structure.
+ *					pdev	 - Pointer to our device.
+ *					spigot	 - Selected spigot.
+ *					index	 - index of mirror signature on device.
+ *
+ *	Returns:		TRUE on any error.
+ *
+ ****************************************************************/
+static int WriteSignature (PADAPTER2220I padapter, POUR_DEVICE pdev, UCHAR spigot, int index)
+	{
+	ULONG	zl;
+
+	SelectSpigot (padapter, spigot);
+	zl = pdev->lastsectorlba[index];
+	outb_p (pdev->byte6 | ((UCHAR *)&zl)[3], padapter->regLba24);		
+	outb_p (((UCHAR *)&zl)[2], padapter->regLba16);
+	outb_p (((UCHAR *)&zl)[1], padapter->regLba8);
+	outb_p (((UCHAR *)&zl)[0], padapter->regLba0);
+	outb_p (1, padapter->regSectCount);
+
+	WriteCommand (padapter, IDE_COMMAND_WRITE);	
+	if ( WaitDrq (padapter) )
+		return TRUE;
+	StartTimer (padapter);	
+	padapter->expectingIRQ = TRUE;
+	
+	outsw (padapter->regData, Buffer, DISK_MIRROR_POSITION / 2);
+	outsw (padapter->regData, &pdev->DiskMirror[index], sizeof (DISK_MIRROR) / 2);
+	outsw (padapter->regData, Buffer, ((512 - (DISK_MIRROR_POSITION + sizeof (DISK_MIRROR))) / 2));
+	return FALSE;
+	}
+/*******************************************************************************************************
+ *	Name:			InitFailover
+ *
+ *	Description:	This is the beginning of the failover routine
+ *
+ *	Parameters:		SCpnt	 - Pointer to SCSI command structure.
+ *					padapter - Pointer adapter data structure.
+ *					pdev	 - Pointer to our device.
+ *	
+ *	Returns:		TRUE on error.
+ *
+ ******************************************************************************************************/
+static int InitFailover (PADAPTER2220I padapter, POUR_DEVICE pdev)
+	{
+	UCHAR			 spigot;
+	
+	DEB (printk ("\npci2000i:  Initialize failover process - survivor = %d", padapter->survivor));
+	pdev->raid = FALSE;									//initializes system for non raid mode
+	pdev->hotRecon = 0;
+	padapter->reconOn = FALSE;
+	spigot = (padapter->survivor) ? 2 : 1;	
+
+	if ( pdev->DiskMirror[padapter->survivor].status & UCBF_REBUILD )
+		return (TRUE); 	
+
+	if ( HardReset (padapter, pdev, spigot) )
+		return TRUE;
+
+	outb_p (0x3C | spigot, padapter->regFail);			// sound alarm and set fail light		
+	pdev->DiskMirror[padapter->survivor].status = UCBF_MIRRORED | UCBF_SURVIVOR;	//clear present status
+	
+	if ( WriteSignature (padapter, pdev, spigot, padapter->survivor) )
+		return TRUE;
+	padapter->failinprog = TRUE;
+	return FALSE;
+	}
+/****************************************************************
+ *	Name:	TimerExpiry	:LOCAL
+ *
+ *	Description:	Timer expiry routine.
+ *
+ *	Parameters:		data - Pointer adapter data structure.
+ *
+ *	Returns:		Nothing.
+ *
+ ****************************************************************/
+static void TimerExpiry (unsigned long data)
+	{
+	PADAPTER2220I	padapter = (PADAPTER2220I)data;
+	POUR_DEVICE		pdev = padapter->pdev;
+	ULONG			flags;
+	UCHAR			status = IDE_STATUS_BUSY;
+	UCHAR			temp, temp1;
+
+	DEB (printk ("\nPCI2220I: Timeout expired "));
+	save_flags (flags);
+	cli ();
+
+	if ( padapter->failinprog )
+		{
+		DEB (printk ("in failover process"));
+		restore_flags (flags);
+		OpDone (padapter, DecodeError (padapter, inb_p (padapter->regStatCmd)));
+		return;
+		}
+	
+	while ( padapter->reconPhase )
+		{
+		DEB (printk ("in recon phase %X", padapter->reconPhase));
+		if ( --padapter->timeoutReconRetry )
+			{
+			StartTimer (padapter);
+			return;
+			}
+		switch ( padapter->reconPhase )
+			{
+			case RECON_PHASE_MARKING:
+			case RECON_PHASE_LAST:
+				padapter->survivor = (pdev->spigot ^ 3) >> 1;
+				restore_flags (flags);
+				DEB (printk ("\npci2220i: FAILURE 1"));
+				if ( InitFailover (padapter, pdev) )
+					OpDone (padapter, DID_ERROR << 16);
+				return;
+			
+			case RECON_PHASE_READY:
+				OpDone (padapter, DID_ERROR << 16);
+				return;
+
+			case RECON_PHASE_COPY:
+				padapter->survivor = (pdev->spigot) >> 1;
+				restore_flags (flags);
+				DEB (printk ("\npci2220i: FAILURE 2"));
+				if ( InitFailover (padapter, pdev) )
+					OpDone (padapter, DID_ERROR << 16);
+				return;
+
+			case RECON_PHASE_UPDATE:
+				padapter->survivor = (pdev->spigot) >> 1;
+				restore_flags (flags);
+				DEB (printk ("\npci2220i: FAILURE 3"));
+				if ( InitFailover (padapter, pdev) )
+					OpDone (padapter, DID_ERROR << 16);
+				return;
+
+			case RECON_PHASE_END:
+				padapter->survivor = (pdev->spigot) >> 1;
+				restore_flags (flags);
+				DEB (printk ("\npci2220i: FAILURE 4"));
+				if ( InitFailover (padapter, pdev) )
+					OpDone (padapter, DID_ERROR << 16);
+				return;
+			
+			default:
+				return;
+			}
+		}
+	
+	while ( padapter->cmd )
+		{
+		outb_p (0x08, padapter->regDmaCmdStat);					// cancel interrupt from DMA engine
+		if ( pdev->raid )
+			{
+			if ( padapter->cmd == WRITE_CMD )
+				{
+				DEB (printk ("in RAID write operation"));
+				if ( inb_p (padapter->regStatSel) & 1 )
+					{
+					SelectSpigot (padapter, 0x81 ); // Masking the interrupt during spigot select
+					temp = inb_p (padapter->regStatCmd);
+					}
+				else
+					temp = IDE_STATUS_BUSY;
+
+				if ( inb (padapter->regStatSel) & 2 )
+					{
+					SelectSpigot (padapter, 0x82 ); // Masking the interrupt during spigot select
+					temp1 = inb_p (padapter->regStatCmd);
+					}
+				else
+					temp1 = IDE_STATUS_BUSY;
+			
+				if ( (temp & IDE_STATUS_BUSY) || (temp1 & IDE_STATUS_BUSY) )
+					{
+	 				if ( (temp & IDE_STATUS_BUSY) && (temp1 & IDE_STATUS_BUSY) ) 
+						{
+						status = temp;
+						break;
+						}		
+					else	
+						{
+						if (temp & IDE_STATUS_BUSY)
+							padapter->survivor = 1;
+						else
+							padapter->survivor = 0;
+						restore_flags (flags);
+				DEB (printk ("\npci2220i: FAILURE 5"));
+						if ( InitFailover (padapter, pdev) )
+							{
+							status = inb_p (padapter->regStatCmd);
+							break;
+							}
+						return;
+						}
+					}
+				}
+			else
+				{
+				DEB (printk ("in RAID read operation"));
+				padapter->survivor = (pdev->spigot ^ 3) >> 1;
+				restore_flags (flags);
+				DEB (printk ("\npci2220i: FAILURE 6"));
+				if ( InitFailover (padapter, pdev) )
+					{
+					status = inb_p (padapter->regStatCmd);
+					break;
+					}
+				return;
+				}
+			}
+		else
+			{
+			DEB (printk ("in I/O operation"));
+			status = inb_p (padapter->regStatCmd);
+			}
+		break;
+		}
+	
+	restore_flags (flags);
+	OpDone (padapter, DecodeError (padapter, status));
+	}
+/****************************************************************
+ *	Name:			SetReconstruct	:LOCAL
+ *
+ *	Description:	Set the reconstruct up.
+ *
+ *	Parameters:		pdev	- Pointer to device structure.
+ *					index	- Mirror index number.
+ *
+ *	Returns:		Number of sectors on new disk required.
+ *
+ ****************************************************************/
+static LONG SetReconstruct (POUR_DEVICE pdev, int index)
+	{
+	pdev->DiskMirror[index].status = UCBF_MIRRORED;							// setup the flags
+	pdev->DiskMirror[index ^ 1].status = UCBF_MIRRORED | UCBF_REBUILD;
+	pdev->DiskMirror[index ^ 1].reconstructPoint = 0;						// start the reconstruct
+	pdev->reconCount = 1990;												// mark target drive early
+	pdev->hotRecon = 1 >> index;
+	return pdev->DiskMirror[index].reconstructPoint;
+	}
+/****************************************************************
+ *	Name:	ReconTimerExpiry	:LOCAL
+ *
+ *	Description:	Reconstruct timer expiry routine.
+ *
+ *	Parameters:		data - Pointer adapter data structure.
+ *
+ *	Returns:		Nothing.
+ *
+ ****************************************************************/
+static void ReconTimerExpiry (unsigned long data)
+	{
+	PADAPTER2220I	padapter;
+	POUR_DEVICE		pdev;
+	ULONG			testsize = 0;
+	PIDENTIFY_DATA	pid;
+	USHORT			minmode;
+	ULONG			zl;
+	UCHAR			zc;
+
+	padapter = (PADAPTER2220I)data;
+	if ( padapter->SCpnt )
+		return;
+
+	pdev = padapter->device;
+	pid = (PIDENTIFY_DATA)Buffer;
+	padapter->reconTimer.data = 0;
+	padapter->timeoutReconRetry = 2;
+	padapter->pdev = pdev;
+	if ( padapter->reconIsStarting )
+		{
+		padapter->reconIsStarting = FALSE;
+		padapter->reconOn = FALSE;
+		pdev->hotRecon = FALSE;
+
+		if ( (pdev->DiskMirror[0].signature == SIGNATURE) && (pdev->DiskMirror[1].signature == SIGNATURE) &&
+			 (pdev->DiskMirror[0].pairIdentifier == (pdev->DiskMirror[1].pairIdentifier ^ 1)) )
+			{
+			if ( (pdev->DiskMirror[0].status & UCBF_MATCHED) && (pdev->DiskMirror[1].status & UCBF_MATCHED) )
+				{
+				return;
+				}
+
+			if ( pdev->DiskMirror[0].status & UCBF_SURVIVOR )				// is first drive survivor?
+				testsize = SetReconstruct (pdev, 0);
+			else
+				if ( pdev->DiskMirror[1].status & UCBF_SURVIVOR )			// is second drive survivor?
+					testsize = SetReconstruct (pdev, 1);
+
+			if ( (pdev->DiskMirror[0].status & UCBF_REBUILD) || (pdev->DiskMirror[1].status & UCBF_REBUILD) )
+				{
+				if ( pdev->DiskMirror[0].status & UCBF_REBUILD )
+					{
+					pdev->hotRecon = 1;
+					pdev->mirrorRecon = 0;
+					}
+				else
+					{
+					pdev->hotRecon = 2;
+					pdev->mirrorRecon = 1;
+					}
+				}
+			}
+
+		if ( !pdev->hotRecon )
+			return;
+
+		zc = ((inb_p (padapter->regStatSel) >> 3) | inb_p (padapter->regStatSel)) & 0x83;		// mute the alarm
+		outb_p (zc | pdev->hotRecon | 0x40, padapter->regFail);
+
+		while ( 1 )
+			{
+			if ( HardReset (padapter, pdev, pdev->hotRecon) )
+				{
+				DEB (printk ("\npci2220i: sub 1"));
+				break;
+				}
+
+			pdev->lastsectorlba[pdev->mirrorRecon] = InlineIdentify (padapter, pdev->hotRecon, 0);
+
+			if ( pdev->lastsectorlba[pdev->mirrorRecon] < testsize )
+				{
+				DEB (printk ("\npci2220i: sub 2 %ld %ld", pdev->lastsectorlba[pdev->mirrorRecon], testsize));
+				break;
+				}
+
+	        // test LBA and multiper sector transfer compatability
+			if (!pid->SupportLBA || (pid->NumSectorsPerInt < SECTORSXFER) || !pid->Valid_64_70 )
+				{
+				DEB (printk ("\npci2220i: sub 3"));
+				break;
+				}
+
+	        // test PIO/bus matering mode compatability
+			if ( (pid->MinPIOCycleWithoutFlow > 240) && !pid->SupportIORDYDisable && !padapter->timingPIO )
+				{
+				DEB (printk ("\npci2220i: sub 4"));
+				break;
+				}
+
+			if ( pid->MinPIOCycleWithoutFlow <= 120 )	// setup timing mode of drive
+				minmode = 5;
+			else
+				{
+				if ( pid->MinPIOCylceWithFlow <= 150 )
+					minmode = 4;
+				else
+					{
+					if ( pid->MinPIOCylceWithFlow <= 180 )
+						minmode = 3;
+					else
+						{
+						if ( pid->MinPIOCylceWithFlow <= 240 )
+							minmode = 2;
+						else
+							{
+							DEB (printk ("\npci2220i: sub 5"));
+							break;
+							}
+						}
+					}
+				}
+
+			if ( padapter->timingMode > minmode )									// set minimum timing mode
+				padapter->timingMode = minmode;
+			if ( padapter->timingMode >= 2 )
+				padapter->timingAddress	= ModeArray[padapter->timingMode - 2];
+			else
+				padapter->timingPIO = TRUE;
+
+			padapter->reconOn = TRUE;
+			break;
+			}
+
+		if ( !padapter->reconOn )
+			{		
+			pdev->hotRecon = FALSE;
+			padapter->survivor = pdev->mirrorRecon ^ 1;
+			padapter->reconPhase = RECON_PHASE_FAILOVER;
+				DEB (printk ("\npci2220i: FAILURE 7"));
+			InitFailover (padapter, pdev);
+			return;
+			}
+
+		pdev->raid = TRUE;
+	
+		if ( WriteSignature (padapter, pdev, pdev->spigot, pdev->mirrorRecon ^ 1) )
+			return;
+		padapter->reconPhase = RECON_PHASE_MARKING;
+		return;
+		}
+
+	//**********************************
+	// reconstruct copy starts here	
+	//**********************************
+	if ( pdev->reconCount++ > 2000 )
+		{
+		pdev->reconCount = 0;
+		if ( WriteSignature (padapter, pdev, pdev->hotRecon, pdev->mirrorRecon) )
+			{
+			padapter->survivor = pdev->mirrorRecon ^ 1;
+			padapter->reconPhase = RECON_PHASE_FAILOVER;
+				DEB (printk ("\npci2220i: FAILURE 8"));
+			InitFailover (padapter, pdev);
+			return;
+			}
+		padapter->reconPhase = RECON_PHASE_UPDATE;
+		return;
+		}
+
+	zl = pdev->DiskMirror[pdev->mirrorRecon].reconstructPoint;	
+	padapter->reconSize = pdev->DiskMirror[pdev->mirrorRecon ^ 1].reconstructPoint - zl;
+	if ( padapter->reconSize > MAX_BUS_MASTER_BLOCKS )
+		padapter->reconSize = MAX_BUS_MASTER_BLOCKS;
+
+	if ( padapter->reconSize )
+		{
+		SelectSpigot (padapter, 3);										// select the spigots
+		outb_p (pdev->byte6 | ((UCHAR *)(&zl))[3], padapter->regLba24);// select the drive
+		SelectSpigot (padapter, pdev->spigot);
+		if ( WaitReady (padapter) )
+			return;
+
+		SelectSpigot (padapter, pdev->hotRecon);
+		if ( WaitReady (padapter) )
+			{
+			padapter->survivor = pdev->mirrorRecon ^ 1;
+			padapter->reconPhase = RECON_PHASE_FAILOVER;
+				DEB (printk ("\npci2220i: FAILURE 9"));
+			InitFailover (padapter, pdev);
+			return;
+			}
+	
+		SelectSpigot (padapter, 3);
+		outb_p (padapter->reconSize & 0xFF, padapter->regSectCount);
+		outb_p (((UCHAR *)(&zl))[0], padapter->regLba0);
+		outb_p (((UCHAR *)(&zl))[1], padapter->regLba8);
+		outb_p (((UCHAR *)(&zl))[2], padapter->regLba16);
+		padapter->expectingIRQ = TRUE;
+		padapter->reconPhase = RECON_PHASE_READY;
+		SelectSpigot (padapter, pdev->hotRecon);
+		WriteCommand (padapter, WRITE_CMD);
+		StartTimer (padapter);
+		SelectSpigot (padapter, pdev->spigot);
+		WriteCommand (padapter, READ_CMD);
+		return;
+		}
+
+	pdev->DiskMirror[pdev->mirrorRecon].status = UCBF_MIRRORED | UCBF_MATCHED;
+	pdev->DiskMirror[pdev->mirrorRecon ^ 1].status = UCBF_MIRRORED | UCBF_MATCHED;
+	if ( WriteSignature (padapter, pdev, pdev->spigot, pdev->mirrorRecon ^ 1) )
+		return;
+	padapter->reconPhase = RECON_PHASE_LAST;
+	return;
 	}
 /****************************************************************
  *	Name:	Irq_Handler	:LOCAL
@@ -283,12 +1066,14 @@ static void Irq_Handler (int irq, void *dev_id, struct pt_regs *regs)
 	{
 	struct Scsi_Host   *shost = NULL;	// Pointer to host data block
 	PADAPTER2220I		padapter;		// Pointer to adapter control structure
-	USHORT		 	   *pports;			// I/O port array
+	POUR_DEVICE			pdev;
 	Scsi_Cmnd		   *SCpnt;
 	UCHAR				status;
+	UCHAR				status1;
 	int					z;
+	ULONG				zl;
 
-//	DEB(printk ("\npci2220i recieved interrupt\n"));
+//	DEB (printk ("\npci2220i recieved interrupt\n"));
 
 	for ( z = 0; z < NumAdapters;  z++ )								// scan for interrupt to process
 		{
@@ -309,82 +1094,264 @@ static void Irq_Handler (int irq, void *dev_id, struct pt_regs *regs)
 		}
 
 	padapter = HOSTDATA(shost);
-	pports = padapter->ports;
+	pdev = padapter->pdev;
 	SCpnt = padapter->SCpnt;
 
-	if ( !padapter->expectingIRQ )
+	if ( !padapter->expectingIRQ || !(SCpnt || padapter->reconPhase) )
 		{
 		DEB(printk ("\npci2220i Unsolicited interrupt\n"));
+		STOP_HERE ();
 		return;
 		}
 	padapter->expectingIRQ = 0;
+	outb_p (0x08, padapter->regDmaCmdStat);									// cancel interrupt from DMA engine
 
-	status = inb_p (padapter->ports[PORT_STAT_CMD]);					// read the device status
-	if ( status & (IDE_STATUS_ERROR | IDE_STATUS_WRITE_FAULT) )
-		goto irqerror;
-
-	switch ( padapter->ide.ide.ides.cmd )								// decide how to handle the interrupt
+	if ( padapter->failinprog )
 		{
-		case IDE_CMD_READ_MULTIPLE:
-			if ( padapter->readPhase == 1 )								// is this a bus master channel complete?
-				{
-				DEB(printk ("\npci2220i processing read interrupt cleanup"));
-				outb_p (0x08, padapter->regDmaCmdStat);					// cancel interrupt from DMA engine
-				padapter->buffer += padapter->ide.ide.ides.sectors * 512;
-				if ( SetupTransfer (padapter, padapter->ide.ide.ide[6] & 0xF0) )
+		DEB (printk ("\npci2220i interrupt failover complete"));
+		padapter->failinprog = FALSE;
+		status = inb_p (padapter->regStatCmd);								// read the device status
+		if ( status & (IDE_STATUS_ERROR | IDE_STATUS_WRITE_FAULT) )
+			{
+			DEB (printk ("\npci2220i: interrupt failover error from drive %X", status));
+			padapter->cmd = 0;
+			}
+		else
+			{
+			DEB (printk ("\npci2220i: restarting failed opertation."));
+			pdev->spigot = (padapter->survivor) ? 2 : 1;
+			del_timer (&padapter->timer);
+			if ( padapter->reconPhase )
+				OpDone (padapter, DID_OK << 16);
+			else
+				Pci2220i_QueueCommand (SCpnt, SCpnt->scsi_done);
+			return;		
+			}
+		}
+
+	if ( padapter->reconPhase )
+		{
+		switch ( padapter->reconPhase )
+			{
+			case RECON_PHASE_MARKING:
+			case RECON_PHASE_LAST:
+				status = inb_p (padapter->regStatCmd);						// read the device status
+				del_timer (&padapter->timer);
+				if ( padapter->reconPhase == RECON_PHASE_LAST )
 					{
-					SCpnt->result = DID_OK << 16;
-					padapter->SCpnt = NULL;
-					SCpnt->scsi_done (SCpnt);
+					if ( status & (IDE_STATUS_ERROR | IDE_STATUS_WRITE_FAULT) )
+						{
+						padapter->survivor = (pdev->spigot ^ 3) >> 1;
+				DEB (printk ("\npci2220i: FAILURE 10"));
+						if ( InitFailover (padapter, pdev) )
+							OpDone (padapter, DecodeError (padapter, status));
+						return;
+						}
+					if ( WriteSignature (padapter, pdev, pdev->hotRecon, pdev->mirrorRecon) )
+						{
+						padapter->survivor = (pdev->spigot) >> 1;
+				DEB (printk ("\npci2220i: FAILURE 11"));
+						if ( InitFailover (padapter, pdev) )
+							OpDone (padapter, DecodeError (padapter, status));
+						return;
+						}
+					padapter->reconPhase = RECON_PHASE_END;	
 					return;
 					}
-				padapter->readPhase = 0;
-				if ( !(status = IdeCmd (padapter)) )
+				OpDone (padapter, DID_OK << 16);
+				return;
+
+			case RECON_PHASE_READY:
+				status = inb_p (padapter->regStatCmd);						// read the device status
+				if ( status & (IDE_STATUS_ERROR | IDE_STATUS_WRITE_FAULT) )
 					{
-					DEB (printk ("\npci2220i interrupt complete, waiting for another"));
+					del_timer (&padapter->timer);
+					OpDone (padapter, DecodeError (padapter, status));
 					return;
 					}
-				}
-			if ( status & IDE_STATUS_DRQ )
+				SelectSpigot (padapter, pdev->hotRecon);
+				if ( WaitDrq (padapter) )
+					{
+					del_timer (&padapter->timer);
+					padapter->survivor = (pdev->spigot) >> 1;
+				DEB (printk ("\npci2220i: FAILURE 12"));
+					if ( InitFailover (padapter, pdev) )
+						OpDone (padapter, DecodeError (padapter, status));
+					return;
+					}
+				SelectSpigot (padapter, pdev->spigot | 0x40);
+				padapter->reconPhase = RECON_PHASE_COPY;
+				padapter->expectingIRQ = TRUE;
+				if ( padapter->timingPIO )
+					{
+					insw (padapter->regData, Buffer, padapter->reconSize * (BYTES_PER_SECTOR / 2));
+					}
+				else
+					{
+					outl (padapter->timingAddress, padapter->regDmaAddrLoc);
+					outl (virt_to_bus (Buffer), padapter->regDmaAddrPci);
+					outl (padapter->reconSize * BYTES_PER_SECTOR, padapter->regDmaCount);
+					outb_p (8, padapter->regDmaDesc);						// read operation
+					outb_p (1, padapter->regDmaMode);						// no interrupt
+					outb_p (0x03, padapter->regDmaCmdStat);					// kick the DMA engine in gear
+					}
+				return;
+
+			case RECON_PHASE_COPY:
+				pdev->DiskMirror[pdev->mirrorRecon].reconstructPoint += padapter->reconSize;
+
+			case RECON_PHASE_UPDATE:
+				SelectSpigot (padapter, pdev->hotRecon | 0x80);
+				status = inb_p (padapter->regStatCmd);						// read the device status
+				del_timer (&padapter->timer);
+				if ( status & (IDE_STATUS_ERROR | IDE_STATUS_WRITE_FAULT) )
+					{
+					padapter->survivor = (pdev->spigot) >> 1;
+				DEB (printk ("\npci2220i: FAILURE 13"));
+				DEB (printk ("  status = %X  error = %X", status, inb_p (padapter->regError)));
+					if ( InitFailover (padapter, pdev) )
+						OpDone (padapter, DecodeError (padapter, status));
+					return;
+					}
+				OpDone (padapter, DID_OK << 16);
+				return;
+
+			case RECON_PHASE_END:
+				status = inb_p (padapter->regStatCmd);						// read the device status
+				del_timer (&padapter->timer);
+				if ( status & (IDE_STATUS_ERROR | IDE_STATUS_WRITE_FAULT) )
+					{
+					padapter->survivor = (pdev->spigot) >> 1;
+				DEB (printk ("\npci2220i: FAILURE 14"));
+					if ( InitFailover (padapter, pdev) )
+						OpDone (padapter, DecodeError (padapter, status));
+					return;
+					}
+				padapter->reconOn = FALSE;
+				pdev->hotRecon = 0;
+				OpDone (padapter, DID_OK << 16);
+				return;
+
+			default:
+				return;
+			}
+		}
+		
+	switch ( padapter->cmd )												// decide how to handle the interrupt
+		{
+		case READ_CMD:
+			if ( padapter->sectorCount )
 				{
-				DEB(printk ("\npci2220i processing read interrupt start bus master cycle"));
-				outb_p (8, padapter->regDmaDesc); 				   		// read operation
-				padapter->readPhase = 1;
-				padapter->expectingIRQ = 1;
-				outl   (padapter->timingAddress, padapter->regDmaAddrLoc);
-				outl   (virt_to_bus (padapter->buffer), padapter->regDmaAddrPci);
-				outl   ((ULONG)padapter->ide.ide.ides.sectors * (ULONG)512, padapter->regDmaCount);
-				outb_p (5, padapter->regDmaMode);				   		// interrupt enable/disable
-				outb_p (0x03, padapter->regDmaCmdStat);			   		// kick the DMA engine in gear
+				status = inb_p (padapter->regStatCmd);						// read the device status
+				if ( status & (IDE_STATUS_ERROR | IDE_STATUS_WRITE_FAULT) )
+					{
+					if ( pdev->raid )
+						{
+						padapter->survivor = (pdev->spigot ^ 3) >> 1;
+						del_timer (&padapter->timer);
+				DEB (printk ("\npci2220i: FAILURE 15"));
+						if ( !InitFailover (padapter, pdev) )
+							return;
+						}
+					break;	
+					}
+				if ( padapter->timingPIO )
+					{
+					zl = (padapter->sectorCount > MAX_BUS_MASTER_BLOCKS) ? MAX_BUS_MASTER_BLOCKS : padapter->sectorCount;
+					insw (padapter->regData, padapter->buffer, zl * (BYTES_PER_SECTOR / 2));
+					padapter->sectorCount -= zl;
+					padapter->buffer += zl * BYTES_PER_SECTOR;
+					if ( !padapter->sectorCount )
+						{
+						status = 0;
+						break;
+						}
+					}
+				else
+					BusMaster (padapter, 1, 1);
+				padapter->expectingIRQ = TRUE;
 				return;
 				}
+			status = 0;
 			break;
 
-		case IDE_CMD_WRITE_MULTIPLE:
-			DEB(printk ("\npci2220i processing write interrupt cleanup"));
-			padapter->buffer += padapter->ide.ide.ides.sectors * 512;
-			if ( SetupTransfer (padapter, padapter->ide.ide.ide[6] & 0xF0) )
+		case WRITE_CMD:
+			SelectSpigot (padapter, pdev->spigot | 0x80);				
+			status = inb_p (padapter->regStatCmd);								// read the device status
+			if ( pdev->raid )
 				{
-				SCpnt->result = DID_OK << 16;
-				padapter->SCpnt = NULL;
-				SCpnt->scsi_done (SCpnt);
+				SelectSpigot (padapter, (pdev->spigot ^ 3) | 0x80);				
+				status1 = inb_p (padapter->regStatCmd);							// read the device status
+				}
+			else
+				status1 = 0;
+		
+			if ( status & (IDE_STATUS_ERROR | IDE_STATUS_WRITE_FAULT) )
+				{	
+				if ( pdev->raid && !(status1 & (IDE_STATUS_ERROR | IDE_STATUS_WRITE_FAULT)) )
+					{
+					padapter->survivor = (pdev->spigot ^ 3) >> 1;
+					del_timer (&padapter->timer);
+				SelectSpigot (padapter, pdev->spigot | 0x80);
+				DEB (printk ("\npci2220i: FAILURE 16  status = %X  error = %X", status, inb_p (padapter->regError)));
+					if ( !InitFailover (padapter, pdev) )
+						return;
+					}
+				break;
+				}
+			if ( pdev->raid )
+				{
+				if ( status1 & (IDE_STATUS_ERROR | IDE_STATUS_WRITE_FAULT) )
+					{	
+					padapter->survivor = pdev->spigot >> 1;
+					del_timer (&padapter->timer);
+				DEB (printk ("\npci2220i: FAILURE 17  status = %X  error = %X", status1, inb_p (padapter->regError)));
+					if ( !InitFailover (padapter, pdev) )
+						return;
+					status = status1;
+					break;
+					}
+				if ( padapter->sectorCount )
+					{
+					status = WriteDataBoth (padapter);
+					if ( status )
+						{
+						padapter->survivor = (status ^ 3) >> 1;
+						del_timer (&padapter->timer);
+				DEB (printk ("\npci2220i: FAILURE 18"));
+						if ( !InitFailover (padapter, pdev) )
+							return;
+						SelectSpigot (padapter, status | 0x80);				
+						status = inb_p (padapter->regStatCmd);								// read the device status
+						break;
+						}
+					padapter->expectingIRQ = TRUE;
+					return;
+					}
+				status = 0;
+				break;
+				}
+			if ( padapter->sectorCount )	
+				{	
+				SelectSpigot (padapter, pdev->spigot);
+				status = WriteData (padapter);
+				if ( status )
+					break;
+				padapter->expectingIRQ = TRUE;
 				return;
 				}
-			if ( !(status = IdeCmd (padapter)) )
-				{
-				DEB (printk ("\npci2220i interrupt complete, waiting for another"));
-				return;
-				}
+			status = 0;
 			break;
 
 		case IDE_COMMAND_IDENTIFY:
 			{
 			PINQUIRYDATA	pinquiryData  = SCpnt->request_buffer;
+			PIDENTIFY_DATA	pid = (PIDENTIFY_DATA)Buffer;
 
-			DEB(printk ("\npci2220i processing verify interrupt cleanup"));
+			status = inb_p (padapter->regStatCmd);
 			if ( status & IDE_STATUS_DRQ )
 				{
-				insw (pports[PORT_DATA], &identifyData, sizeof (identifyData) >> 1);
+				insw (padapter->regData, pid, sizeof (IDENTIFY_DATA) >> 1);
 
 				memset (pinquiryData, 0, SCpnt->request_bufflen);		// Zero INQUIRY data structure.
 				pinquiryData->DeviceType = 0;
@@ -394,8 +1361,8 @@ static void Irq_Handler (int irq, void *dev_id, struct pt_regs *regs)
 				// Fill in vendor identification fields.
 				for ( z = 0;  z < 20;  z += 2 )
 					{
-					pinquiryData->VendorId[z]	  = ((UCHAR *)identifyData.ModelNumber)[z + 1];
-					pinquiryData->VendorId[z + 1] = ((UCHAR *)identifyData.ModelNumber)[z];
+					pinquiryData->VendorId[z]	  = ((UCHAR *)pid->ModelNumber)[z + 1];
+					pinquiryData->VendorId[z + 1] = ((UCHAR *)pid->ModelNumber)[z];
 					}
 
 				// Initialize unused portion of product id.
@@ -406,38 +1373,32 @@ static void Irq_Handler (int irq, void *dev_id, struct pt_regs *regs)
 				// product revision in INQUIRY data.
 				for ( z = 0;  z < 4;  z += 2 )
 					{
-					pinquiryData->ProductRevisionLevel[z]	 = ((UCHAR *)identifyData.FirmwareRevision)[z + 1];
-					pinquiryData->ProductRevisionLevel[z + 1] = ((UCHAR *)identifyData.FirmwareRevision)[z];
+					pinquiryData->ProductRevisionLevel[z]	 = ((UCHAR *)pid->FirmwareRevision)[z + 1];
+					pinquiryData->ProductRevisionLevel[z + 1] = ((UCHAR *)pid->FirmwareRevision)[z];
 					}
-
-				SCpnt->result = DID_OK << 16;
-				padapter->SCpnt = NULL;
-				SCpnt->scsi_done (SCpnt);
-				return;
+				if ( pdev == padapter->device )
+					*((USHORT *)(&pinquiryData->VendorSpecific)) = DEVICE_DALE_1;
+				
+				status = 0;
 				}
 			break;
 			}
 
 		default:
-			DEB(printk ("\npci2220i no real process here!"));
-			SCpnt->result = DID_OK << 16;
-			padapter->SCpnt = NULL;
-			SCpnt->scsi_done (SCpnt);
-			return;
+			status = 0;
+			break;
 		}
 
-irqerror:;
-	DEB(printk ("\npci2220i error  Device Status: %X\n", status));
-	SCpnt->result = DecodeError (shost, status);
-	SCpnt->scsi_done (SCpnt);
-	}
-static void do_Irq_Handler (int irq, void *dev_id, struct pt_regs *regs)
-	{
-	unsigned long flags;
+	del_timer (&padapter->timer);
+	if ( status )
+		{
+		DEB (printk ("\npci2220i Interupt hanlder return error"));
+		zl = DecodeError (padapter, status);
+		}
+	else
+		zl = DID_OK << 16;
 
-	spin_lock_irqsave(&io_request_lock, flags);
-	Irq_Handler(irq, dev_id, regs);
-	spin_unlock_irqrestore(&io_request_lock, flags);
+	OpDone (padapter, zl);
 	}
 /****************************************************************
  *	Name:	Pci2220i_QueueCommand
@@ -456,121 +1417,182 @@ int Pci2220i_QueueCommand (Scsi_Cmnd *SCpnt, void (*done)(Scsi_Cmnd *))
 	PADAPTER2220I	padapter = HOSTDATA(SCpnt->host);			// Pointer to adapter control structure
 	POUR_DEVICE		pdev	 = &padapter->device[SCpnt->target];// Pointer to device information
 	UCHAR			rc;											// command return code
+	int				z; 
+	PDEVICE_RAID1	pdr;
 
 	SCpnt->scsi_done = done;
-	padapter->ide.ide.ides.spigot = pdev->spigot;
 	padapter->buffer = SCpnt->request_buffer;
-	if (done)
-		{
-		if ( !pdev->device )
-			{
-			SCpnt->result = DID_BAD_TARGET << 16;
-			done (SCpnt);
-			return 0;
-			}
-		}
-	else
+	padapter->SCpnt = SCpnt;  									// Save this command data
+	if ( !done )
 		{
 		printk("pci2220i_queuecommand: %02X: done can't be NULL\n", *cdb);
 		return 0;
 		}
+	
+	if ( padapter->reconPhase )
+		return 0;
+	if ( padapter->reconTimer.data )
+		{
+		del_timer (&padapter->reconTimer);
+		padapter->reconTimer.data = 0;
+		}
+		
+	if ( !pdev->device || SCpnt->lun )
+		{
+		OpDone (padapter, DID_BAD_TARGET << 16);
+		return 0;
+		}
 
-	DEB (if(*cdb) printk ("\nCDB: %X-  %X %X %X %X %X %X %X %X %X %X ", SCpnt->cmd_len, cdb[0], cdb[1], cdb[2], cdb[3], cdb[4], cdb[5], cdb[6], cdb[7], cdb[8], cdb[9]));
+	
 	switch ( *cdb )
 		{
 		case SCSIOP_INQUIRY:   					// inquiry CDB
 			{
-			padapter->ide.ide.ide[6] = pdev->byte6;
-			padapter->ide.ide.ides.cmd = IDE_COMMAND_IDENTIFY;
+			if ( cdb[2] == SC_MY_RAID )
+				{
+				switch ( cdb[3] ) 
+					{
+					case MY_SCSI_REBUILD:
+						padapter->reconOn = padapter->reconIsStarting = TRUE;
+						OpDone (padapter, DID_OK << 16);
+						break;
+					case MY_SCSI_ALARMMUTE:
+						MuteAlarm (padapter);
+						OpDone (padapter, DID_OK << 16);
+						break;
+					case MY_SCSI_DEMOFAIL:
+						padapter->demoFail = TRUE;				
+						OpDone (padapter, DID_OK << 16);
+						break;
+					default:
+						z = cdb[5];				// get index
+						pdr = (PDEVICE_RAID1)SCpnt->request_buffer;
+						if ( padapter->raidData[z] )
+							{
+							memcpy (&pdr->DiskRaid1, padapter->raidData[z], sizeof (DISK_MIRROR));
+							pdr->TotalSectors = padapter->device[0].blocks;
+							}
+						else
+							memset (pdr, 0, sizeof (DEVICE_RAID1));
+						OpDone (padapter, DID_OK << 16);
+						break;
+					}	
+				return 0;
+				}
+			padapter->cmd = IDE_COMMAND_IDENTIFY;
 			break;
 			}
 
 		case SCSIOP_TEST_UNIT_READY:			// test unit ready CDB
-			SCpnt->result = DID_OK << 16;
-			done (SCpnt);
+			OpDone (padapter, DID_OK << 16);
 			return 0;
-
 		case SCSIOP_READ_CAPACITY:			  	// read capctiy CDB
 			{
 			PREAD_CAPACITY_DATA	pdata = (PREAD_CAPACITY_DATA)SCpnt->request_buffer;
 
 			pdata->blksiz = 0x20000;
 			XANY2SCSI ((UCHAR *)&pdata->blks, pdev->blocks);
-			SCpnt->result = DID_OK << 16;
-			done (SCpnt);
+			OpDone (padapter, DID_OK << 16);
 			return 0;
 			}
-
 		case SCSIOP_VERIFY:						// verify CDB
-			*(ULONG *)padapter->ide.ide.ides.lba = XSCSI2LONG (&cdb[2]);
-			padapter->ide.ide.ide[6] |= pdev->byte6;
-			padapter->ide.ide.ide[2] = (UCHAR)((USHORT)cdb[8] | ((USHORT)cdb[7] << 8));
-			padapter->ide.ide.ides.cmd = IDE_COMMAND_VERIFY;
+			padapter->startSector = XSCSI2LONG (&cdb[2]);
+			padapter->sectorCount = (UCHAR)((USHORT)cdb[8] | ((USHORT)cdb[7] << 8));
+			padapter->cmd = IDE_COMMAND_VERIFY;
 			break;
-
 		case SCSIOP_READ:						// read10 CDB
 			padapter->startSector = XSCSI2LONG (&cdb[2]);
 			padapter->sectorCount = (USHORT)cdb[8] | ((USHORT)cdb[7] << 8);
-			SetupTransfer (padapter, pdev->byte6);
-			padapter->ide.ide.ides.cmd = IDE_CMD_READ_MULTIPLE;
-			padapter->readPhase = 0;
+			padapter->cmd = READ_CMD;
 			break;
-
 		case SCSIOP_READ6:						// read6  CDB
 			padapter->startSector = SCSI2LONG (&cdb[1]);
 			padapter->sectorCount = cdb[4];
-			SetupTransfer (padapter, pdev->byte6);
-			padapter->ide.ide.ides.cmd = IDE_CMD_READ_MULTIPLE;
-			padapter->readPhase = 0;
+			padapter->cmd = READ_CMD;
 			break;
-
 		case SCSIOP_WRITE:						// write10 CDB
 			padapter->startSector = XSCSI2LONG (&cdb[2]);
 			padapter->sectorCount = (USHORT)cdb[8] | ((USHORT)cdb[7] << 8);
-			SetupTransfer (padapter, pdev->byte6);
-			padapter->ide.ide.ides.cmd = IDE_CMD_WRITE_MULTIPLE;
+			padapter->cmd = WRITE_CMD;
 			break;
 		case SCSIOP_WRITE6:						// write6  CDB
 			padapter->startSector = SCSI2LONG (&cdb[1]);
 			padapter->sectorCount = cdb[4];
-			SetupTransfer (padapter, pdev->byte6);
-			padapter->ide.ide.ides.cmd = IDE_CMD_WRITE_MULTIPLE;
+			padapter->cmd = WRITE_CMD;
 			break;
-
 		default:
 			DEB (printk ("pci2220i_queuecommand: Unsupported command %02X\n", *cdb));
-			SCpnt->result = DID_ERROR << 16;
-			done (SCpnt);
+			OpDone (padapter, DID_ERROR << 16);
 			return 0;
 		}
 
-	padapter->SCpnt = SCpnt;  									// Save this command data
+	if ( padapter->reconPhase )
+		return 0;
+	
+	padapter->pdev = pdev;
 
-	rc = IdeCmd (padapter);
-	if ( rc )
+	while ( padapter->demoFail )
 		{
-		padapter->expectingIRQ = 0;
-		DEB (printk ("pci2220i_queuecommand: %02X, %02X: Device failed to respond for command\n", *cdb, padapter->ide.ide.ides.cmd));
-		SCpnt->result = DID_ERROR << 16;
-		done (SCpnt);
+		padapter->demoFail = FALSE;
+		if ( !pdev->raid || 
+			 (pdev->DiskMirror[0].status & UCBF_SURVIVOR) || 
+			 (pdev->DiskMirror[1].status & UCBF_SURVIVOR) )
+			{
+			break;
+			}
+		if ( pdev->DiskMirror[0].status & UCBF_REBUILD )
+			padapter->survivor = 1;
+		else
+			padapter->survivor = 0;
+				DEB (printk ("\npci2220i: FAILURE 19"));
+		if ( InitFailover (padapter, pdev ) )
+			break;
 		return 0;
 		}
-	if ( padapter->ide.ide.ides.cmd == IDE_CMD_WRITE_MULTIPLE )
+
+	StartTimer (padapter);
+	if ( pdev->raid && (padapter->cmd == WRITE_CMD) )
 		{
-		if ( WriteData (padapter) )
+		rc = IdeCmdBoth (padapter);
+		if ( !rc )
+			rc = WriteDataBoth (padapter);
+		if ( rc )
 			{
+			del_timer (&padapter->timer);
 			padapter->expectingIRQ = 0;
-			DEB (printk ("pci2220i_queuecommand: %02X, %02X: Device failed to accept data\n", *cdb, padapter->ide.ide.ides.cmd));
-			SCpnt->result = DID_ERROR << 16;
-			done (SCpnt);
+			padapter->survivor = (rc ^ 3) >> 1;
+				DEB (printk ("\npci2220i: FAILURE 20"));
+			if ( InitFailover (padapter, pdev) )
+				{
+				OpDone (padapter, DID_ERROR << 16);
+				return 0;
+				}
+			}
+		}
+	else
+		{
+		rc = IdeCmd (padapter, pdev);
+		if ( (padapter->cmd == WRITE_CMD) && !rc )
+			rc = WriteData (padapter);
+		if ( rc )
+			{
+			del_timer (&padapter->timer);
+			padapter->expectingIRQ = 0;
+			if ( pdev->raid )
+				{
+				padapter->survivor = (pdev->spigot ^ 3) >> 1;
+				DEB (printk ("\npci2220i: FAILURE 21"));
+				if ( !InitFailover (padapter, pdev) )
+					return 0;
+				}
+			OpDone (padapter, DID_ERROR << 16);
 			return 0;
 			}
 		}
-	DEB (printk("  now waiting for initial interrupt "));
 	return 0;
 	}
 
-static void internal_done(Scsi_Cmnd * SCpnt)
+static void internal_done(Scsi_Cmnd *SCpnt)
 	{
 	SCpnt->SCp.Status++;
 	}
@@ -586,10 +1608,7 @@ static void internal_done(Scsi_Cmnd * SCpnt)
  ****************************************************************/
 int Pci2220i_Command (Scsi_Cmnd *SCpnt)
 	{
-	DEB(printk("pci2220i_command: ..calling pci2220i_queuecommand\n"));
-
 	Pci2220i_QueueCommand (SCpnt, internal_done);
-
     SCpnt->SCp.Status = 0;
 	while (!SCpnt->SCp.Status)
 		barrier ();
@@ -600,7 +1619,7 @@ int Pci2220i_Command (Scsi_Cmnd *SCpnt)
  *
  *	Description:	Read information from controller Flash memory.
  *
- *	Parameters:		hostdata - Pointer to host interface data structure.
+ *	Parameters:		padapter - Pointer to host interface data structure.
  *					pdata	 - Pointer to data structures.
  *					base	 - base address in Flash.
  *					length	 - lenght of data space in bytes.
@@ -608,25 +1627,24 @@ int Pci2220i_Command (Scsi_Cmnd *SCpnt)
  *	Returns:		Nothing.
  *
  ****************************************************************/
-VOID ReadFlash (PADAPTER2220I hostdata, VOID *pdata, ULONG base, ULONG length)
+VOID ReadFlash (PADAPTER2220I padapter, VOID *pdata, ULONG base, ULONG length)
 	{
 	ULONG	 oldremap;
 	UCHAR	 olddesc;
 	ULONG	 z;
 	UCHAR	*pd = (UCHAR *)pdata;
 
-	oldremap = inl (hostdata->regRemap);									// save values to restore later
-	olddesc  = inb_p (hostdata->regDesc);
+	oldremap = inl (padapter->regRemap);									// save values to restore later
+	olddesc  = inb_p (padapter->regDesc);
 
-	outl (base | 1, hostdata->regRemap);									// remap to Flash space as specified
-	outb_p (0x40, hostdata->regDesc);										// describe remap region as 8 bit
+	outl (base | 1, padapter->regRemap);									// remap to Flash space as specified
+	outb_p (0x40, padapter->regDesc);										// describe remap region as 8 bit
 	for ( z = 0;  z < length;  z++)											// get "length" data count
-		*pd++ = inb_p (hostdata->regBase + z);								// read in the data
+		*pd++ = inb_p (padapter->regBase + z);								// read in the data
 
-	outl (oldremap, hostdata->regRemap);									// restore remap register values
-	outb_p (olddesc, hostdata->regDesc);
+	outl (oldremap, padapter->regRemap);									// restore remap register values
+	outb_p (olddesc, padapter->regDesc);
 	}
-
 /****************************************************************
  *	Name:	Pci2220i_Detect
  *
@@ -639,109 +1657,183 @@ VOID ReadFlash (PADAPTER2220I hostdata, VOID *pdata, ULONG base, ULONG length)
  ****************************************************************/
 int Pci2220i_Detect (Scsi_Host_Template *tpnt)
 	{
-	struct pci_dev	   *pdev = NULL;
+	int					pci_index = 0;
 	struct Scsi_Host   *pshost;
-	PADAPTER2220I	    hostdata;
-	ULONG				modearray[] = {DALE_DATA_MODE2, DALE_DATA_MODE3, DALE_DATA_MODE4, DALE_DATA_MODE4P};
+	PADAPTER2220I	    padapter;
 	int					unit;
 	int					z;
+	USHORT				zs;
+	USHORT				raidon = FALSE;
 	int					setirq;
+	UCHAR				spigot1 = FALSE;
+	UCHAR				spigot2 = FALSE;
 
-	if ( pci_present () )
-		while ((pdev = pci_find_device(VENDOR_PSI, DEVICE_DALE_1, pdev)))
+	if ( pcibios_present () )
+		{
+		for ( pci_index = 0;  pci_index <= MAXADAPTER;  ++pci_index )
 			{
+			UCHAR	pci_bus, pci_device_fn;
+
+			if ( pcibios_find_device (VENDOR_PSI, DEVICE_DALE_1, pci_index, &pci_bus, &pci_device_fn) != 0 )
+				break;
+
 			pshost = scsi_register (tpnt, sizeof(ADAPTER2220I));
-			hostdata = HOSTDATA(pshost);
+			padapter = HOSTDATA(pshost);
+			memset (padapter, 0, sizeof (ADAPTER2220I));
 
-			hostdata->basePort = pdev->base_address[1] & PCI_BASE_ADDRESS_IO_MASK;
-			DEB (printk ("\nBase Regs = %#04X", hostdata->basePort));
-			hostdata->regRemap		= hostdata->basePort + RTR_LOCAL_REMAP;				// 32 bit local space remap
-			DEB (printk (" %#04X", hostdata->regRemap));
-			hostdata->regDesc		= hostdata->basePort + RTR_REGIONS;	  				// 32 bit local region descriptor
-			DEB (printk (" %#04X", hostdata->regDesc));
-			hostdata->regRange		= hostdata->basePort + RTR_LOCAL_RANGE;				// 32 bit local range
-			DEB (printk (" %#04X", hostdata->regRange));
-			hostdata->regIrqControl	= hostdata->basePort + RTR_INT_CONTROL_STATUS;		// 16 bit interupt control and status
-			DEB (printk (" %#04X", hostdata->regIrqControl));
-			hostdata->regScratchPad	= hostdata->basePort + RTR_MAILBOX;	  				// 16 byte scratchpad I/O base address
-			DEB (printk (" %#04X", hostdata->regScratchPad));
+			pcibios_read_config_word (pci_bus, pci_device_fn, PCI_BASE_ADDRESS_1, &zs);
+			zs &= 0xFFFE;
+			padapter->basePort = zs;
+			padapter->regRemap		= zs + RTR_LOCAL_REMAP;				// 32 bit local space remap
+			padapter->regDesc		= zs + RTR_REGIONS;	  				// 32 bit local region descriptor
+			padapter->regRange		= zs + RTR_LOCAL_RANGE;				// 32 bit local range
+			padapter->regIrqControl	= zs + RTR_INT_CONTROL_STATUS;		// 16 bit interupt control and status
+			padapter->regScratchPad	= zs + RTR_MAILBOX;	  				// 16 byte scratchpad I/O base address
 
-			hostdata->regBase = pdev->base_address[2] & PCI_BASE_ADDRESS_IO_MASK;
-			for ( z = 0;  z < 9;  z++ )													// build regester address array
-				hostdata->ports[z] = hostdata->regBase + 0x80 + (z * 4);
-			hostdata->ports[PORT_FAIL] = hostdata->regBase + REG_FAIL;
-			hostdata->ports[PORT_ALT_STAT] = hostdata->regBase + REG_ALT_STAT;
-			DEB (printk ("\nPorts ="));
-			DEB (for (z=0;z<11;z++) printk(" %#04X", hostdata->ports[z]););
+			pcibios_read_config_word (pci_bus, pci_device_fn, PCI_BASE_ADDRESS_2, &zs);
+			zs &= 0xFFFE;
+			padapter->regBase		= zs;
+			padapter->regData		= zs + REG_DATA;					// data register I/O address
+			padapter->regError		= zs + REG_ERROR;					// error register I/O address
+			padapter->regSectCount	= zs + REG_SECTOR_COUNT;			// sector count register I/O address
+			padapter->regLba0		= zs + REG_LBA_0;					// least significant byte of LBA
+			padapter->regLba8		= zs + REG_LBA_8;					// next least significant byte of LBA
+			padapter->regLba16		= zs + REG_LBA_16;					// next most significan byte of LBA
+			padapter->regLba24		= zs + REG_LBA_24;					// head and most 4 significant bits of LBA
+			padapter->regStatCmd	= zs + REG_STAT_CMD;				// status on read and command on write register
+			padapter->regStatSel	= zs + REG_STAT_SEL;				// board status on read and spigot select on write register
+			padapter->regFail		= zs + REG_FAIL;
+			padapter->regAltStat	= zs + REG_ALT_STAT;
 
-			hostdata->regDmaDesc	= hostdata->regBase + RTL_DMA1_DESC_PTR;			// address of the DMA discriptor register for direction of transfer
-			DEB (printk ("\nDMA Regs = %#04X", hostdata->regDmaDesc));
-			hostdata->regDmaCmdStat	= hostdata->regBase + RTL_DMA_COMMAND_STATUS + 1;	// Byte #1 of DMA command status register
-			DEB (printk (" %#04X", hostdata->regDmaCmdStat));
-			hostdata->regDmaAddrPci	= hostdata->regBase + RTL_DMA1_PCI_ADDR;			// 32 bit register for PCI address of DMA
-			DEB (printk (" %#04X", hostdata->regDmaAddrPci));
-			hostdata->regDmaAddrLoc	= hostdata->regBase + RTL_DMA1_LOCAL_ADDR;			// 32 bit register for local bus address of DMA
-			DEB (printk (" %#04X", hostdata->regDmaAddrLoc));
-			hostdata->regDmaCount	= hostdata->regBase + RTL_DMA1_COUNT;				// 32 bit register for DMA transfer count
-			DEB (printk (" %#04X", hostdata->regDmaCount));
-			hostdata->regDmaMode	= hostdata->regBase + RTL_DMA1_MODE + 1;			// 32 bit register for DMA mode control
-			DEB (printk (" %#04X", hostdata->regDmaMode));
+			padapter->regDmaDesc	= zs + RTL_DMA1_DESC_PTR;			// address of the DMA discriptor register for direction of transfer
+			padapter->regDmaCmdStat	= zs + RTL_DMA_COMMAND_STATUS + 1;	// Byte #1 of DMA command status register
+			padapter->regDmaAddrPci	= zs + RTL_DMA1_PCI_ADDR;			// 32 bit register for PCI address of DMA
+			padapter->regDmaAddrLoc	= zs + RTL_DMA1_LOCAL_ADDR;			// 32 bit register for local bus address of DMA
+			padapter->regDmaCount	= zs + RTL_DMA1_COUNT;				// 32 bit register for DMA transfer count
+			padapter->regDmaMode	= zs + RTL_DMA1_MODE + 1;			// 32 bit register for DMA mode control
 
-			if ( !inb_p (hostdata->regScratchPad + DALE_NUM_DRIVES) )					// if no devices on this board
+			if ( !inb_p (padapter->regScratchPad + DALE_NUM_DRIVES) )	// if no devices on this board
 				goto unregister;
 
-			pshost->irq = pdev->irq;
+			pcibios_read_config_byte (pci_bus, pci_device_fn, PCI_INTERRUPT_LINE, &pshost->irq);
 			setirq = 1;
-			for ( z = 0;  z < NumAdapters;  z++ )										// scan for shared interrupts
+			for ( z = 0;  z < pci_index;  z++ )							// scan for shared interrupts
 				{
-				if ( PsiHost[z]->irq == pshost->irq )									// if shared then, don't posses
+				if ( PsiHost[z]->irq == pshost->irq )					// if shared then, don't posses
 					setirq = 0;
 				}
-			if ( setirq )																// if not shared, posses
+			if ( setirq )												// if not shared, posses
 				{
-				if ( request_irq (pshost->irq, do_Irq_Handler, 0, "pci2220i", NULL) )
+				if ( request_irq (pshost->irq, Irq_Handler, 0, "pci2220i", NULL) )
 					{
 					printk ("Unable to allocate IRQ for PSI-2220I controller.\n");
 					goto unregister;
 					}
 				}
-			PsiHost[NumAdapters]	= pshost;											// save SCSI_HOST pointer
+			PsiHost[pci_index]	= pshost;								// save SCSI_HOST pointer
 
-			pshost->unique_id	= hostdata->regBase;
+			pshost->unique_id	= padapter->regBase;
 			pshost->max_id		= 4;
 
-			outb_p (0x01, hostdata->regRange);											// fix our range register because other drivers want to tromp on it
+			outb_p (0x01, padapter->regRange);							// fix our range register because other drivers want to tromp on it
 
-			hostdata->timingMode	= inb_p (hostdata->regScratchPad + DALE_TIMING_MODE);
-			hostdata->timingAddress	= modearray[hostdata->timingMode - 2];
-			ReadFlash (hostdata, &DaleSetup, DALE_FLASH_SETUP, sizeof (SETUP));
-
-			for ( z = 0;  z < inb_p (hostdata->regScratchPad + DALE_NUM_DRIVES);  ++z )
+			padapter->timingMode = inb_p (padapter->regScratchPad + DALE_TIMING_MODE);
+			if ( padapter->timingMode >= 2 )
+				padapter->timingAddress	= ModeArray[padapter->timingMode - 2];
+			else
+				padapter->timingPIO = TRUE;
+			
+			ReadFlash (padapter, &DaleSetup, DALE_FLASH_SETUP, sizeof (SETUP));
+			for ( z = 0;  z < inb_p (padapter->regScratchPad + DALE_NUM_DRIVES);  ++z )
 				{
-				unit = inb_p (hostdata->regScratchPad + DALE_CHANNEL_DEVICE_0 + z) & 0x0F;
-				hostdata->device[unit].device	 = inb_p (hostdata->regScratchPad + DALE_SCRATH_DEVICE_0 + unit);
-				hostdata->device[unit].byte6	 = (UCHAR)(((unit & 1) << 4) | 0xE0);
-				hostdata->device[unit].spigot	 = (UCHAR)(1 << (unit >> 1));
-				hostdata->device[unit].sectors	 = DaleSetup.setupDevice[unit].sectors;
-				hostdata->device[unit].heads	 = DaleSetup.setupDevice[unit].heads;
-				hostdata->device[unit].cylinders = DaleSetup.setupDevice[unit].cylinders;
-				hostdata->device[unit].blocks	 = DaleSetup.setupDevice[unit].blocks;
-				DEB (printk ("\nHOSTDATA->device    = %X", hostdata->device[unit].device));
-				DEB (printk ("\n          byte6     = %X", hostdata->device[unit].byte6));
-				DEB (printk ("\n          spigot    = %X", hostdata->device[unit].spigot));
-				DEB (printk ("\n          sectors   = %X", hostdata->device[unit].sectors));
-				DEB (printk ("\n          heads     = %X", hostdata->device[unit].heads));
-				DEB (printk ("\n          cylinders = %X", hostdata->device[unit].cylinders));
-				DEB (printk ("\n          blocks    = %lX", hostdata->device[unit].blocks));
-				}
+				unit = inb_p (padapter->regScratchPad + DALE_CHANNEL_DEVICE_0 + z) & 0x0F;
+				padapter->device[z].device	 = inb_p (padapter->regScratchPad + DALE_SCRATH_DEVICE_0 + unit);
+				padapter->device[z].byte6	 = (UCHAR)(((unit & 1) << 4) | 0xE0);
+				padapter->device[z].spigot	 = (UCHAR)(1 << (unit >> 1));
+				padapter->device[z].sectors	 = DaleSetup.setupDevice[unit].sectors;
+				padapter->device[z].heads	 = DaleSetup.setupDevice[unit].heads;
+				padapter->device[z].cylinders = DaleSetup.setupDevice[unit].cylinders;
+				padapter->device[z].blocks	 = DaleSetup.setupDevice[unit].blocks;
 
-			printk("\nPSI-2220I EIDE CONTROLLER: at I/O = %X/%X  IRQ = %d\n", hostdata->basePort, hostdata->regBase, pshost->irq);
-			printk("(C) 1997 Perceptive Solutions, Inc. All rights reserved\n\n");
-			continue;
-unregister:
-			scsi_unregister (pshost);
+				if ( !z )
+					{
+					ReadFlash (padapter, &DiskMirror, DALE_FLASH_RAID, sizeof (DiskMirror));
+					DiskMirror[0].status = inb_p (padapter->regScratchPad + DALE_RAID_0_STATUS);		
+					DiskMirror[1].status = inb_p (padapter->regScratchPad + DALE_RAID_1_STATUS);		
+					if ( (DiskMirror[0].signature == SIGNATURE) && (DiskMirror[1].signature == SIGNATURE) &&
+					     (DiskMirror[0].pairIdentifier == (DiskMirror[1].pairIdentifier ^ 1)) )
+						{			 
+						raidon = TRUE;
+						}	
+
+					memcpy (padapter->device[z].DiskMirror, DiskMirror, sizeof (DiskMirror));
+					padapter->raidData[0] = &padapter->device[z].DiskMirror[0];
+					padapter->raidData[2] = &padapter->device[z].DiskMirror[1];
+				
+					if ( raidon )
+						{
+						padapter->device[z].lastsectorlba[0] = InlineIdentify (padapter, 1, 0);
+						padapter->device[z].lastsectorlba[1] = InlineIdentify (padapter, 2, 0);
+						
+						if ( !(DiskMirror[1].status & UCBF_SURVIVOR) && padapter->device[z].lastsectorlba[0] )
+							spigot1 = TRUE;
+						if ( !(DiskMirror[0].status & UCBF_SURVIVOR) && padapter->device[z].lastsectorlba[1] )
+							spigot2 = TRUE;
+						if ( DiskMirror[0].status & UCBF_SURVIVOR & DiskMirror[1].status & UCBF_SURVIVOR )
+							spigot1 = TRUE;
+
+						if ( spigot1 && spigot2 )
+							{
+							padapter->device[z].raid = 1;
+							if ( DiskMirror[0].status & UCBF_REBUILD )
+								padapter->device[z].spigot = 2;
+							else
+								padapter->device[z].spigot = 1;
+							if ( (DiskMirror[0].status & UCBF_REBUILD) || (DiskMirror[1].status & UCBF_REBUILD) )
+								{
+								padapter->reconOn = padapter->reconIsStarting = TRUE;
+								}
+							}
+						else
+							{
+							if ( spigot1 )
+								{
+								if ( DiskMirror[0].status & UCBF_REBUILD )
+									goto unregister;
+								DiskMirror[0].status = UCBF_MIRRORED | UCBF_SURVIVOR;
+								padapter->device[z].spigot = 1;
+								}
+							else
+								{
+								if ( DiskMirror[1].status & UCBF_REBUILD )
+									goto unregister;
+								DiskMirror[1].status = UCBF_MIRRORED | UCBF_SURVIVOR;
+								padapter->device[z].spigot = 2;
+								}
+							if ( DaleSetup.rebootRebuil )
+								padapter->reconOn = padapter->reconIsStarting = TRUE;
+							}
+				
+						break;
+						}
+					}
+				}
+			
+			init_timer (&padapter->timer);
+			padapter->timer.function = TimerExpiry;
+			padapter->timer.data = (unsigned long)padapter;
+			init_timer (&padapter->reconTimer);
+			padapter->reconTimer.function = ReconTimerExpiry;
+			padapter->reconTimer.data = (unsigned long)padapter;
+			printk("\nPCI-2220I EIDE CONTROLLER: at I/O = %X/%X  IRQ = %d\n", padapter->basePort, padapter->regBase, pshost->irq);
+			printk("Version %s, Compiled %s %s\n\n", PCI2220I_VERSION, __DATE__, __TIME__);
 			NumAdapters++;
+			continue;
+unregister:;
+			scsi_unregister (pshost);
 			}
+		}
+	
 	return NumAdapters;
 	}
 /****************************************************************
@@ -756,7 +1848,6 @@ unregister:
  ****************************************************************/
 int Pci2220i_Abort (Scsi_Cmnd *SCpnt)
 	{
-	DEB (printk ("pci2220i_abort\n"));
 	return SCSI_ABORT_SNOOZE;
 	}
 /****************************************************************

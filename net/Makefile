@@ -63,6 +63,8 @@ endif
 
 ifeq ($(CONFIG_IPX),y)
 SUB_DIRS += ipx
+# SPX can be still a module
+MOD_SUB_DIRS += ipx
 else
   ifeq ($(CONFIG_IPX),m)
   MOD_SUB_DIRS += ipx

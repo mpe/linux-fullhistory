@@ -1197,7 +1197,7 @@ xprt_request_init(struct rpc_task *task, struct rpc_xprt *xprt)
 	static u32	xid = 0;
 
 	if (!xid)
-		xid = jiffies;
+		xid = CURRENT_TIME << 12;
 
 	dprintk("RPC: %4d reserved req %p xid %08x\n", task->tk_pid, req, xid);
 	task->tk_status = 0;
@@ -1206,6 +1206,8 @@ xprt_request_init(struct rpc_task *task, struct rpc_xprt *xprt)
 	req->rq_task	= task;
 	req->rq_xprt    = xprt;
 	req->rq_xid     = xid++;
+	if (!xid)
+		xid++;
 }
 
 /*

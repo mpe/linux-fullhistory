@@ -900,7 +900,7 @@ amiga_partition(struct gendisk *hd, kdev_t dev, unsigned long first_sector)
 					continue;
 				}
 				printk("Warning: Trashed word at 0xd0 in block %d "
-					"ignored in checksum calculation\n",kdevname(dev),blk);
+					"ignored in checksum calculation\n",blk);
 			}
 			printk(" RDSK");
 			blk = htonl(rdb->rdb_PartitionList);

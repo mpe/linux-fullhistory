@@ -49,8 +49,8 @@
  *		such socket and closed it (descriptor). That would happen on
  *		each unix_gc() until the accept(). Since the struct file in
  *		question would go to the free list and might be reused...
- *		That might be the reason of random oopses on close_fp() in
- *		unrelated processes.
+ *		That might be the reason of random oopses on filp_close()
+ *		in unrelated processes.
  *
  *	AV		28 Feb 1999
  *		Kill the explicit allocation of stack. Now we keep the tree
