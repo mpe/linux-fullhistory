@@ -9,30 +9,14 @@
  *  a different vsyscall implementation for Linux/IA32 and for the name.
  *
  *  vsyscall 1 is located at -10Mbyte, vsyscall 2 is located
- *  at virtual address -10Mbyte+1024bytes etc... There are at max 8192
+ *  at virtual address -10Mbyte+1024bytes etc... There are at max 4
  *  vsyscalls. One vsyscall can reserve more than 1 slot to avoid
- *  jumping out of line if necessary.
+ *  jumping out of line if necessary. We cannot add more with this
+ *  mechanism because older kernels won't return -ENOSYS.
+ *  If we want more than four we need a vDSO.
  *
  *  Note: the concept clashes with user mode linux. If you use UML and
  *  want per guest time just set the kernel.vsyscall64 sysctl to 0.
- */
-
-/*
- * TODO 2001-03-20:
- *
- * 1) make page fault handler detect faults on page1-page-last of the vsyscall
- *    virtual space, and make it increase %rip and write -ENOSYS in %rax (so
- *    we'll be able to upgrade to a new glibc without upgrading kernel after
- *    we add more vsyscalls.
- * 2) Possibly we need a fixmap table for the vsyscalls too if we want
- *    to avoid SIGSEGV and we want to return -EFAULT from the vsyscalls as well.
- *    Can we segfault inside a "syscall"? We can fix this anytime and those fixes
- *    won't be visible for userspace. Not fixing this is a noop for correct programs,
- *    broken programs will segfault and there's no security risk until we choose to
- *    fix it.
- *
- * These are not urgent things that we need to address only before shipping the first
- * production binary kernels.
  */
 
 #include <linux/time.h>
