@@ -207,13 +207,13 @@ static void send_reset(struct sk_buff *oldskb, int hook)
 					   nskb->nh.iph->ihl);
 
 	/* "Never happens" */
-	if (nskb->len > dst_pmtu(nskb->dst))
+	if (nskb->len > dst_mtu(nskb->dst))
 		goto free_nskb;
 
 	nf_ct_attach(nskb, oldskb);
 
 	NF_HOOK(PF_INET, NF_IP_LOCAL_OUT, nskb, NULL, nskb->dst->dev,
-		ip_finish_output);
+		dst_output);
 	return;
 
  free_nskb:
