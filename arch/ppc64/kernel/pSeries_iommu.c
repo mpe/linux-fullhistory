@@ -43,6 +43,7 @@
 #include <asm/machdep.h>
 #include <asm/abs_addr.h>
 #include <asm/plpar_wrappers.h>
+#include <asm/pSeries_reconfig.h>
 #include <asm/systemcfg.h>
 #include "pci.h"
 
@@ -455,6 +456,28 @@ static void iommu_dev_setup_pSeries(struct pci_dev *dev)
 	}
 }
 
+static int iommu_reconfig_notifier(struct notifier_block *nb, unsigned long action, void *node)
+{
+	int err = NOTIFY_OK;
+	struct device_node *np = node;
+
+	switch (action) {
+	case PSERIES_RECONFIG_REMOVE:
+		if (np->iommu_table &&
+		    get_property(np, "ibm,dma-window", NULL))
+			iommu_free_table(np);
+		break;
+	default:
+		err = NOTIFY_DONE;
+		break;
+	}
+	return err;
+}
+
+static struct notifier_block iommu_reconfig_nb = {
+	.notifier_call = iommu_reconfig_notifier,
+};
+
 static void iommu_bus_setup_null(struct pci_bus *b) { }
 static void iommu_dev_setup_null(struct pci_dev *d) { }
 
@@ -486,6 +509,8 @@ void iommu_init_early_pSeries(void)
 	}
 
 	ppc_md.iommu_dev_setup = iommu_dev_setup_pSeries;
+
+	pSeries_reconfig_notifier_register(&iommu_reconfig_nb);
 
 	pci_iommu_init();
 }
