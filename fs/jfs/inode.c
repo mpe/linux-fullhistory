@@ -176,7 +176,6 @@ jfs_get_blocks(struct inode *ip, sector_t lblock, unsigned long max_blocks,
 			struct buffer_head *bh_result, int create)
 {
 	s64 lblock64 = lblock;
-	int no_size_check = 0;
 	int rc = 0;
 	int take_locks;
 	xad_t xad;
@@ -201,15 +200,13 @@ jfs_get_blocks(struct inode *ip, sector_t lblock, unsigned long max_blocks,
 	}
 
 	/*
-	 * A directory's "data" is the inode index table, but i_size is the
-	 * size of the d-tree, so don't check the offset against i_size
+	 * Don't try to do xtLookup when there is no xtree
 	 */
-	if (S_ISDIR(ip->i_mode))
-		no_size_check = 1;
+	if (S_ISDIR(ip->i_mode) && jfs_dirtable_inline(ip))
+		goto unlock;
 
-	if ((no_size_check ||
-	     ((lblock64 << ip->i_sb->s_blocksize_bits) < ip->i_size)) &&
-	    (xtLookup(ip, lblock64, max_blocks, &xflag, &xaddr, &xlen, no_size_check)
+	if (((lblock64 << ip->i_sb->s_blocksize_bits) < ip->i_size) &&
+	    (xtLookup(ip, lblock64, max_blocks, &xflag, &xaddr, &xlen, 0)
 	     == 0) && xlen) {
 		if (xflag & XAD_NOTRECORDED) {
 			if (!create)

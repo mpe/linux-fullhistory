@@ -1567,7 +1567,7 @@ static int dataLog(struct jfs_log * log, struct tblock * tblk, struct lrd * lrd,
 	/* log after-image for logredo(): */
 	lrd->type = cpu_to_le16(LOG_REDOPAGE);
 
-	if (JFS_IP(tlck->ip)->next_index < MAX_INLINE_DIRTABLE_ENTRY) {
+	if (jfs_dirtable_inline(tlck->ip)) {
 		/*
 		 * The table has been truncated, we've must have deleted
 		 * the last entry, so don't bother logging this
