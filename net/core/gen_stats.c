@@ -177,8 +177,11 @@ gnet_stats_copy_queue(struct gnet_dump *d, struct gnet_stats_queue *q)
 int
 gnet_stats_copy_app(struct gnet_dump *d, void *st, int len)
 {
-	if (d->compat_xstats)
-		d->xstats = (struct rtattr *) d->skb->tail;
+	if (d->compat_xstats) {
+		d->xstats = st;
+		d->xstats_len = len;
+	}
+
 	return gnet_stats_copy(d, TCA_STATS_APP, st, len);
 }
 
@@ -206,8 +209,8 @@ gnet_stats_finish_copy(struct gnet_dump *d)
 			return -1;
 
 	if (d->compat_xstats && d->xstats) {
-		if (gnet_stats_copy(d, d->compat_xstats, RTA_DATA(d->xstats),
-			RTA_PAYLOAD(d->xstats)) < 0)
+		if (gnet_stats_copy(d, d->compat_xstats, d->xstats,
+			d->xstats_len) < 0)
 			return -1;
 	}
 
