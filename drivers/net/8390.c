@@ -576,7 +576,7 @@ static struct enet_statistics *get_stats(struct device *dev)
  *	Set or clear the multicast filter for this adaptor.
  */
  
-static void set_multicast_list(struct device *dev, int num_addrs, void *addrs)
+static void set_multicast_list(struct device *dev)
 {
 	short ioaddr = dev->base_addr;
     

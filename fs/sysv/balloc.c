@@ -84,7 +84,7 @@ void sysv_free_block(struct super_block * sb, unsigned int block)
 		*flc_count = *sb->sv_sb_flc_count; /* = sb->sv_flc_size */
 		memcpy(flc_blocks, sb->sv_sb_flc_blocks, *flc_count * sizeof(sysv_zone_t));
 		mark_buffer_dirty(bh, 1);
-		bh->b_uptodate = 1;
+		mark_buffer_uptodate(bh, 1);
 		brelse(bh);
 		*sb->sv_sb_flc_count = 0;
 	} else
@@ -101,14 +101,14 @@ void sysv_free_block(struct super_block * sb, unsigned int block)
 		memset(bh->b_data, 0, sb->sv_block_size);
 		/* this implies ((struct ..._freelist_chunk *) bh->b_data)->flc_count = 0; */
 		mark_buffer_dirty(bh, 1);
-		bh->b_uptodate = 1;
+		mark_buffer_uptodate(bh, 1);
 		brelse(bh);
 		/* still *sb->sv_sb_flc_count = 0 */
 	} else {
 		/* Throw away block's contents */
 		bh = sv_get_hash_table(sb, sb->s_dev, block);
 		if (bh)
-			bh->b_dirt = 0;
+			mark_buffer_clean(bh);
 		brelse(bh);
 	}
 	if (sb->sv_convert)
@@ -208,7 +208,7 @@ int sysv_new_block(struct super_block * sb)
 	}
 	memset(bh->b_data, 0, sb->sv_block_size);
 	mark_buffer_dirty(bh, 1);
-	bh->b_uptodate = 1;
+	mark_buffer_uptodate(bh, 1);
 	brelse(bh);
 	if (sb->sv_convert)
 		*sb->sv_sb_total_free_blocks =

@@ -134,6 +134,7 @@ extern void vt_init(void);
 extern void register_console(void (*proc)(const char *));
 extern void vesa_blank(void);
 extern void vesa_unblank(void);
+extern void vesa_powerdown(void);
 extern void compute_shiftstate(void);
 extern void reset_palette(int currcons);
 extern void set_palette(void);
@@ -169,6 +170,7 @@ static unsigned short console_charmask = 0x0ff;
 
        int console_blanked = 0;
 static int blankinterval = 10*60*HZ;
+static int vesa_off_interval = 0;
 static long blank_origin, blank__origin, unblank_origin;
 
 struct vc vc_cons [MAX_NR_CONSOLES];
@@ -1150,6 +1152,9 @@ static void setterm_command(int currcons)
 		case 13: /* unblank the screen */
 			unblank_screen();
 			break;
+		case 14: /* set vesa powerdown interval */
+			vesa_off_interval = ((par[1] < 60) ? par[1] : 60) * 60 * HZ;
+			break;
 	}
 }
 
@@ -1826,6 +1831,7 @@ void poke_blanked_console(void)
 	if (vt_cons[fg_console]->vc_mode == KD_GRAPHICS)
 		return;
 	if (console_blanked) {
+		timer_table[BLANK_TIMER].fn = unblank_screen;
 		timer_table[BLANK_TIMER].expires = 0;
 		timer_active |= 1<<BLANK_TIMER;
 	} else if (blankinterval) {
@@ -2058,6 +2064,14 @@ unsigned long con_init(unsigned long kmem_start)
 	return kmem_start;
 }
 
+void vesa_powerdown_screen(void)
+{
+	timer_active &= ~(1<<BLANK_TIMER);
+	timer_table[BLANK_TIMER].fn = unblank_screen;
+
+	vesa_powerdown();
+}
+
 void do_blank_screen(int nopowersave)
 {
 	int currcons;
@@ -2065,8 +2079,14 @@ void do_blank_screen(int nopowersave)
 	if (console_blanked)
 		return;
 
-	timer_active &= ~(1<<BLANK_TIMER);
-	timer_table[BLANK_TIMER].fn = unblank_screen;
+	if(vesa_off_interval && !nopowersave) {
+		timer_table[BLANK_TIMER].fn = vesa_powerdown_screen;
+		timer_table[BLANK_TIMER].expires = jiffies + vesa_off_interval;
+		timer_active |= (1<<BLANK_TIMER);
+	} else {
+		timer_active &= ~(1<<BLANK_TIMER);
+		timer_table[BLANK_TIMER].fn = unblank_screen;
+	}
 
 	/* try not to lose information by blanking, and not to waste memory */
 	currcons = fg_console;

@@ -150,7 +150,7 @@ static int ext2_file_read (struct inode * inode, struct file * filp,
 #endif
 
 			*bhb = ext2_getblk (inode, block++, 0, &err);
-			if (*bhb && !(*bhb)->b_uptodate) {
+			if (*bhb && !buffer_uptodate(*bhb)) {
 				uptodate = 0;
 				bhreq[bhrequest++] = *bhb;
 			}
@@ -181,7 +181,7 @@ static int ext2_file_read (struct inode * inode, struct file * filp,
 			 */
 			if (*bhe) {
 				wait_on_buffer (*bhe);
-				if (!(*bhe)->b_uptodate) { /* read error? */
+				if (!buffer_uptodate(*bhe)) { /* read error? */
 				        brelse(*bhe);
 					if (++bhe == &buflist[NBUF])
 					  bhe = buflist;
@@ -207,7 +207,7 @@ static int ext2_file_read (struct inode * inode, struct file * filp,
 			chars = sb->s_blocksize;
 			if (++bhe == &buflist[NBUF])
 				bhe = buflist;
-		} while (left > 0 && bhe != bhb && (!*bhe || !(*bhe)->b_lock));
+		} while (left > 0 && bhe != bhb && (!*bhe || !buffer_locked(*bhe)));
 	} while (left > 0);
 
 	/*
@@ -259,7 +259,6 @@ static int ext2_file_write (struct inode * inode, struct file * filp,
 			      inode->i_mode);
 		return -EINVAL;
 	}
-	down(&inode->i_sem);
 	if (filp->f_flags & O_APPEND)
 		pos = inode->i_size;
 	else
@@ -292,10 +291,10 @@ static int ext2_file_write (struct inode * inode, struct file * filp,
 		count -= c;
 		if (count < 0)
 			c += count;
-		if (c != sb->s_blocksize && !bh->b_uptodate) {
+		if (c != sb->s_blocksize && !buffer_uptodate(bh)) {
 			ll_rw_block (READ, 1, &bh);
 			wait_on_buffer (bh);
-			if (!bh->b_uptodate) {
+			if (!buffer_uptodate(bh)) {
 				brelse (bh);
 				if (!written)
 					written = -EIO;
@@ -307,7 +306,7 @@ static int ext2_file_write (struct inode * inode, struct file * filp,
 		written += c;
 		memcpy_fromfs (bh->b_data + offset, buf, c);
 		buf += c;
-		bh->b_uptodate = 1;
+		mark_buffer_uptodate(bh, 1);
 		mark_buffer_dirty(bh, 0);
 		if (filp->f_flags & O_SYNC)
 			bufferlist[buffercount++] = bh;
@@ -317,7 +316,7 @@ static int ext2_file_write (struct inode * inode, struct file * filp,
 			ll_rw_block(WRITE, buffercount, bufferlist);
 			for(i=0; i<buffercount; i++){
 				wait_on_buffer(bufferlist[i]);
-				if (!bufferlist[i]->b_uptodate)
+				if (!buffer_uptodate(bufferlist[i]))
 					write_error=1;
 				brelse(bufferlist[i]);
 			}
@@ -333,7 +332,7 @@ static int ext2_file_write (struct inode * inode, struct file * filp,
 		ll_rw_block(WRITE, buffercount, bufferlist);
 		for(i=0; i<buffercount; i++){
 			wait_on_buffer(bufferlist[i]);
-			if (!bufferlist[i]->b_uptodate)
+			if (!buffer_uptodate(bufferlist[i]))
 				write_error=1;
 			brelse(bufferlist[i]);
 		}
@@ -342,7 +341,6 @@ static int ext2_file_write (struct inode * inode, struct file * filp,
 		inode->i_size = pos;
 	if (filp->f_flags & O_SYNC)
 		inode->u.ext2_i.i_osync--;
-	up(&inode->i_sem);
 	inode->i_ctime = inode->i_mtime = CURRENT_TIME;
 	filp->f_pos = pos;
 	inode->i_dirt = 1;

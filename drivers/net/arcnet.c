@@ -575,7 +575,7 @@ static void arcnetS_rx(struct device *dev,u_char *buf,
 	int length,u_char saddr, u_char daddr);
 
 static struct enet_statistics *arcnet_get_stats(struct device *dev);
-static void set_multicast_list(struct device *dev, int num_addrs, void *addrs);
+static void set_multicast_list(struct device *dev);
 
 	/* functions for header/arp/etc building */
 #ifdef LINUX12
@@ -2690,7 +2690,7 @@ arcnet_get_stats(struct device *dev)
  *			best-effort filtering.
  */
 static void
-set_multicast_list(struct device *dev, int num_addrs, void *addrs)
+set_multicast_list(struct device *dev)
 {
 #if 0	  /* no promiscuous mode at all on most (all?) ARCnet models */
 	struct arcnet_local *lp=(struct arcnet_local *)(dev->priv);

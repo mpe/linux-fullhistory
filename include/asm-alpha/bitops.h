@@ -17,6 +17,7 @@ extern __inline__ unsigned long set_bit(unsigned long nr, void * addr)
 {
 	unsigned long oldbit;
 	unsigned long temp;
+	unsigned int * m = ((unsigned int *) addr) + (nr >> 5);
 
 	__asm__ __volatile__(
 		"\n1:\t"
@@ -28,10 +29,10 @@ extern __inline__ unsigned long set_bit(unsigned long nr, void * addr)
 		"beq %0,1b\n"
 		"2:"
 		:"=&r" (temp),
-		 "=m" (((int *) addr)[nr >> 5]),
+		 "=m" (*m),
 		 "=&r" (oldbit)
 		:"r" (1UL << (nr & 31)),
-		 "m" (((int *) addr)[nr >> 5]));
+		 "m" (*m));
 	return oldbit != 0;
 }
 
@@ -39,6 +40,7 @@ extern __inline__ unsigned long clear_bit(unsigned long nr, void * addr)
 {
 	unsigned long oldbit;
 	unsigned long temp;
+	unsigned int * m = ((unsigned int *) addr) + (nr >> 5);
 
 	__asm__ __volatile__(
 		"\n1:\t"
@@ -50,10 +52,10 @@ extern __inline__ unsigned long clear_bit(unsigned long nr, void * addr)
 		"beq %0,1b\n"
 		"2:"
 		:"=&r" (temp),
-		 "=m" (((int *) addr)[nr >> 5]),
+		 "=m" (*m),
 		 "=&r" (oldbit)
 		:"r" (1UL << (nr & 31)),
-		 "m" (((int *) addr)[nr >> 5]));
+		 "m" (*m));
 	return oldbit != 0;
 }
 
@@ -61,6 +63,7 @@ extern __inline__ unsigned long change_bit(unsigned long nr, void * addr)
 {
 	unsigned long oldbit;
 	unsigned long temp;
+	unsigned int * m = ((unsigned int *) addr) + (nr >> 5);
 
 	__asm__ __volatile__(
 		"\n1:\t"
@@ -70,10 +73,10 @@ extern __inline__ unsigned long change_bit(unsigned long nr, void * addr)
 		"stl_c %0,%1\n\t"
 		"beq %0,1b\n"
 		:"=&r" (temp),
-		 "=m" (((int *) addr)[nr >> 5]),
+		 "=m" (*m),
 		 "=&r" (oldbit)
 		:"r" (1UL << (nr & 31)),
-		 "m" (((int *) addr)[nr >> 5]));
+		 "m" (*m));
 	return oldbit != 0;
 }
 

@@ -49,9 +49,9 @@ DECLARE_TASK_QUEUE(tq_scheduler);
  * phase-lock loop variables
  */
 int time_state = TIME_BAD;     /* clock synchronization status */
-int time_status = STA_UNSYNC;	/* clock status bits */
+int time_status = STA_UNSYNC | STA_PLL;	/* clock status bits */
 long time_offset = 0;           /* time adjustment (us) */
-long time_constant = 0;         /* pll time constant */
+long time_constant = 2;         /* pll time constant */
 long time_tolerance = MAXFREQ;  /* frequency tolerance (ppm) */
 long time_precision = 1; 	/* clock precision (us) */
 long time_maxerror = 0x70000000;/* maximum error */

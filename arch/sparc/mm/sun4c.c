@@ -461,13 +461,11 @@ pmd_t *sun4c_pmd_alloc(pgd_t * pgd, unsigned long address)
 void sun4c_pgd_free(pgd_t *pgd)
 {
 	free_page((unsigned long) pgd);
-	sun4c_unlock_tlb_entry((unsigned long) pgd);
 }
 
 pgd_t *sun4c_pgd_alloc(void)
 {
 	unsigned long new_pgd = get_free_page(GFP_KERNEL);
-	sun4c_lock_tlb_entry(new_pgd);
 	return (pgd_t *) new_pgd;
 }
 

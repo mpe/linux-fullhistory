@@ -1,5 +1,5 @@
 /*
- *  linux/drivers/block/triton.c	Version 1.02  Oct 13, 1995
+ *  linux/drivers/block/triton.c	Version 1.03  Nov 16, 1995
  *
  *  Copyright (c) 1995  Mark Lord
  *  May be copied or modified under the terms of the GNU General Public License
@@ -64,8 +64,12 @@
  *	  the observation that WRITEs work most of the time, depending on
  *	  cache-buffer occupancy, but multi-sector reads seldom work.
  *
- * Drives like the AC31000H could likely be made to work if all DMA were done
- * one sector at a time, but that would likely negate any advantage over PIO.
+ * Testing was done with a Gigabyte GA-586 ATE system and the following drive:
+ * (Uwe Bonnes - bon@elektron.ikp.physik.th-darmstadt.de)
+ *
+ *   Western Digital AC31600H (1.6Gig w/128kB buffer), DMA mode2, PIO mode4.
+ *	- much better than its 1Gig cousin, this drive is reported to work
+ *	  very well with DMA (7.3MB/sec).
  *
  * If you have any drive models to add, email your results to:  mlord@bnr.ca
  * Keep an eye on /var/adm/messages for "DMA disabled" messages.

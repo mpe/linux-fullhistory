@@ -306,7 +306,7 @@ static void make_request(int major,int rw, struct buffer_head * bh)
 /* buffer is locked, we just forget about it, else it's a normal read */
 	rw_ahead = (rw == READA || rw == WRITEA);
 	if (rw_ahead) {
-		if (bh->b_lock)
+		if (buffer_locked(bh))
 			return;
 		if (rw == READA)
 			rw = READ;
@@ -321,17 +321,16 @@ static void make_request(int major,int rw, struct buffer_head * bh)
 	sector = bh->b_blocknr * count;
 	if (blk_size[major])
 		if (blk_size[major][MINOR(bh->b_dev)] < (sector + count)>>1) {
-			bh->b_dirt = bh->b_uptodate = 0;
-			bh->b_req = 0;
+			bh->b_state = 0;
 			printk("attempt to access beyond end of device\n");
 			return;
 		}
 	/* Uhhuh.. Nasty dead-lock possible here.. */
-	if (bh->b_lock)
+	if (buffer_locked(bh))
 		return;
 	/* Maybe the above fixes it, and maybe it doesn't boot. Life is interesting */
 	lock_buffer(bh);
-	if ((rw == WRITE && !bh->b_dirt) || (rw == READ && bh->b_uptodate)) {
+	if ((rw == WRITE && !buffer_dirty(bh)) || (rw == READ && buffer_uptodate(bh))) {
 		unlock_buffer(bh);
 		return;
 	}
@@ -523,7 +522,7 @@ void ll_rw_block(int rw, int nr, struct buffer_head * bh[])
 		plug_device(dev, &plug);
 	for (i = 0; i < nr; i++) {
 		if (bh[i]) {
-			bh[i]->b_req = 1;
+			set_bit(BH_Req, &bh[i]->b_state);
 			make_request(major, rw, bh[i]);
 			if (rw == READ || rw == READA)
 				kstat.pgpgin++;
@@ -536,8 +535,10 @@ void ll_rw_block(int rw, int nr, struct buffer_head * bh[])
 
       sorry:
 	for (i = 0; i < nr; i++) {
-		if (bh[i])
-			bh[i]->b_dirt = bh[i]->b_uptodate = 0;
+		if (bh[i]) {
+			clear_bit(BH_Dirty, &bh[i]->b_state);
+			clear_bit(BH_Uptodate, &bh[i]->b_state);
+		}
 	}
 	return;
 }

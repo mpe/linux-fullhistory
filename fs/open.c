@@ -66,10 +66,12 @@ static int do_truncate(struct inode *inode, unsigned long length)
 	struct iattr newattrs;
 
 	/* truncate virtual mappings of this file */
+	down(&inode->i_sem);
 	vmtruncate(inode, length);
 	inode->i_size = newattrs.ia_size = length;
 	if (inode->i_op && inode->i_op->truncate)
 		inode->i_op->truncate(inode);
+	up(&inode->i_sem);
 	newattrs.ia_ctime = newattrs.ia_mtime = CURRENT_TIME;
 	newattrs.ia_valid = ATTR_SIZE | ATTR_CTIME | ATTR_MTIME;
 	inode->i_dirt = 1;

@@ -1,4 +1,4 @@
-/* $Id: entry.S,v 1.64 1995/11/25 00:57:53 davem Exp $
+/* $Id: entry.S,v 1.65 1995/11/25 14:36:22 zaitcev Exp $
  * arch/sparc/kernel/entry.S:  Sparc trap low-level entry points.
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
@@ -124,16 +124,43 @@ C_LABEL(trap_low):
 
 
 #ifdef CONFIG_BLK_DEV_FD
+#ifdef TRACE_FLOPPY_HARDINT
+/* Useful tracing */
+	.data
+	.align	4
+	.globl	C_LABEL(floppy_hardint_trace)
+C_LABEL(floppy_hardint_trace):
+	.skip	32
+	.globl	C_LABEL(floppy_hardint_index)
+C_LABEL(floppy_hardint_index):
+	.word	0
+#endif
+
+	.text
 	.align	4
 	.globl	C_LABEL(floppy_hardint)
 C_LABEL(floppy_hardint):
 	/* Can only use regs %l3->%l7:
 	 * %l3 -- base address of fdc registers
-	 * %l4 -- doing_pdma upon entry, AUXIO reg vaddr after
-	 * %l5 -- pdma_vaddr
+	 * %l4 -- pdma_vaddr
+	 * %l5 -- scratch for ld/st address
 	 * %l6 -- pdma_size
 	 * %l7 -- floppy_softint
 	 */
+
+#ifdef TRACE_FLOPPY_HARDINT
+        sethi   %hi(C_LABEL(floppy_hardint_trace)), %l5
+        or      %l5, %lo(C_LABEL(floppy_hardint_trace)), %l5
+        ld      [%l5 + 32], %l7
+        add     %l7, 1, %l7
+        and     %l7, 31, %l7
+        st      %l7, [%l5 + 32]
+        sub     %l7, 1, %l7
+        and     %l7, 31, %l7
+        add     %l7, %l5, %l5
+	or	%g0, 0xf, %l7
+	stb	%l7, [%l5]
+#endif
 
 	/* Do we have work to do? */
 	sethi	%hi(C_LABEL(doing_pdma)), %l4
@@ -152,7 +179,22 @@ C_LABEL(floppy_hardint):
 	sethi	%hi(C_LABEL(pdma_size)), %l5	! bytes to go
 	ld	[%l5 + %lo(C_LABEL(pdma_size))], %l6
 next_byte:
+#ifdef TRACE_FLOPPY_HARDINT
+	sethi	%hi(C_LABEL(floppy_hardint_trace)), %l5
+	or	%l5, %lo(C_LABEL(floppy_hardint_trace)), %l5
+	ld	[%l5 + 32], %l7
+	add	%l7, 1, %l7
+	and	%l7, 31, %l7
+	st	%l7, [%l5 + 32]
+	sub	%l7, 1, %l7
+	and	%l7, 31, %l7
+	add	%l7, %l5, %l5
 	ldub	[%l3], %l7
+	stb	%l7, [%l5]
+#else
+  	ldub	[%l3], %l7
+#endif
+
 	andcc	%l7, 0x80, %g0		! Does fifo still have data
 	bz	floppy_fifo_emptied	! fifo has been emptied...
 	 andcc	%l7, 0x20, %g0		! in non-dma mode still?

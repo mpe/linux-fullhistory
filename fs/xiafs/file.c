@@ -118,7 +118,7 @@ xiafs_file_read(struct inode * inode, struct file * filp, char * buf, int count)
 	uptodate = 1;
 	while (zones--) {
 	    *bhb = xiafs_getblk(inode, zone_nr++, 0);
-	    if (*bhb && !(*bhb)->b_uptodate) {
+	    if (*bhb && !buffer_uptodate(*bhb)) {
 	        uptodate = 0;
 		bhreq[bhrequest++] = *bhb;
 	    }
@@ -141,7 +141,7 @@ xiafs_file_read(struct inode * inode, struct file * filp, char * buf, int count)
 	do { /* Finish off all I/O that has actually completed */
 	    if (*bhe) {
 	        wait_on_buffer(*bhe);
-		if (!(*bhe)->b_uptodate) {	/* read error? */
+		if (!buffer_uptodate(*bhe)) {	/* read error? */
 		    brelse(*bhe);
 		    if (++bhe == &buflist[NBUF])
 		      bhe = buflist;
@@ -167,7 +167,7 @@ xiafs_file_read(struct inode * inode, struct file * filp, char * buf, int count)
 	    offset = 0;
 	    if (++bhe == &buflist[NBUF])
 	        bhe = buflist;
-	} while (left > 0 && bhe != bhb && (!*bhe || !(*bhe)->b_lock));
+	} while (left > 0 && bhe != bhb && (!*bhe || !buffer_locked(*bhe)));
     } while (left > 0);
 
 /* Release the read-ahead blocks */
@@ -221,10 +221,10 @@ xiafs_file_write(struct inode * inode, struct file * filp, const char * buf, int
 	c = XIAFS_ZSIZE(inode->i_sb) - (pos & (XIAFS_ZSIZE(inode->i_sb) - 1));
 	if (c > count-written)
 	    c = count-written;
-	if (c != XIAFS_ZSIZE(inode->i_sb) && !bh->b_uptodate) {
+	if (c != XIAFS_ZSIZE(inode->i_sb) && !buffer_uptodate(bh)) {
 	    ll_rw_block(READ, 1, &bh);
 	    wait_on_buffer(bh);
-	    if (!bh->b_uptodate) {
+	    if (!buffer_uptodate(bh)) {
 	        brelse(bh);
 		if (!written)
 		    written = -EIO;
@@ -240,7 +240,7 @@ xiafs_file_write(struct inode * inode, struct file * filp, const char * buf, int
 	written += c;
 	memcpy_fromfs(cp,buf,c);
 	buf += c;
-	bh->b_uptodate = 1;
+	mark_buffer_uptodate(bh, 1);
 	mark_buffer_dirty(bh, 0);
 	brelse(bh);
     }

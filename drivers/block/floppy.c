@@ -2608,7 +2608,7 @@ static void redo_fd_request(void)
 		}
 		if (MAJOR(CURRENT->rq_dev) != MAJOR_NR)
 			panic(DEVICE_NAME ": request list destroyed");
-		if (CURRENT->bh && !CURRENT->bh->b_lock)
+		if (CURRENT->bh && !buffer_locked(CURRENT->bh))
 			panic(DEVICE_NAME ": block not locked");
 
 		device = CURRENT->rq_dev;
@@ -3581,7 +3581,7 @@ static int floppy_revalidate(kdev_t dev)
 				process_fd_request();
 				return 1;
 			}
-			if (bh && !bh->b_uptodate)
+			if (bh && !buffer_uptodate(bh))
 				ll_rw_block(READ, 1, &bh);
 			process_fd_request();
 			wait_on_buffer(bh);

@@ -59,7 +59,7 @@ void minix_free_block(struct super_block * sb, int block)
 	}
 	bh = get_hash_table(sb->s_dev,block,BLOCK_SIZE);
 	if (bh)
-		bh->b_dirt=0;
+		clear_bit(BH_Dirty, &bh->b_state);
 	brelse(bh);
 	zone = block - sb->u.minix_sb.s_firstdatazone + 1;
 	bit = zone & 8191;
@@ -107,7 +107,7 @@ repeat:
 		return 0;
 	}
 	memset(bh->b_data, 0, BLOCK_SIZE);
-	bh->b_uptodate = 1;
+	mark_buffer_uptodate(bh, 1);
 	mark_buffer_dirty(bh, 1);
 	brelse(bh);
 	return j;

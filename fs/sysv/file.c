@@ -128,7 +128,7 @@ int sysv_file_read(struct inode * inode, struct file * filp, char * buf, int cou
 		while (blocks) {
 			--blocks;
 			*bhb = sysv_getblk(inode, block++, 0);
-			if (*bhb && !(*bhb)->b_uptodate) {
+			if (*bhb && !buffer_uptodate(*bhb)) {
 				uptodate = 0;
 				bhreq[bhrequest++] = *bhb;
 			}
@@ -151,7 +151,7 @@ int sysv_file_read(struct inode * inode, struct file * filp, char * buf, int cou
 		do { /* Finish off all I/O that has actually completed */
 			if (*bhe) {
 				wait_on_buffer(*bhe);
-				if (!(*bhe)->b_uptodate) {	/* read error? */
+				if (!buffer_uptodate(*bhe)) {	/* read error? */
 					brelse(*bhe);
 					if (++bhe == &buflist[NBUF])
 						bhe = buflist;
@@ -177,7 +177,7 @@ int sysv_file_read(struct inode * inode, struct file * filp, char * buf, int cou
 			offset = 0;
 			if (++bhe == &buflist[NBUF])
 				bhe = buflist;
-		} while (left > 0 && bhe != bhb && (!*bhe || !(*bhe)->b_lock));
+		} while (left > 0 && bhe != bhb && (!*bhe || !buffer_locked(*bhe)));
 	} while (left > 0);
 
 /* Release the read-ahead blocks */
@@ -234,17 +234,17 @@ static int sysv_file_write(struct inode * inode, struct file * filp, const char 
 		c = sb->sv_block_size - (pos & sb->sv_block_size_1);
 		if (c > count-written)
 			c = count-written;
-		if (c != sb->sv_block_size && !bh->b_uptodate) {
+		if (c != sb->sv_block_size && !buffer_uptodate(bh)) {
 			ll_rw_block(READ, 1, &bh);
 			wait_on_buffer(bh);
-			if (!bh->b_uptodate) {
+			if (!buffer_uptodate(bh)) {
 				brelse(bh);
 				if (!written)
 					written = -EIO;
 				break;
 			}
 		}
-		/* now either c==sb->sv_block_size or bh->b_uptodate */
+		/* now either c==sb->sv_block_size or buffer_uptodate(bh) */
 		p = (pos & sb->sv_block_size_1) + bh->b_data;
 		pos += c;
 		if (pos > inode->i_size) {
@@ -254,7 +254,7 @@ static int sysv_file_write(struct inode * inode, struct file * filp, const char 
 		written += c;
 		memcpy_fromfs(p,buf,c);
 		buf += c;
-		bh->b_uptodate = 1;
+		mark_buffer_uptodate(bh, 1);
 		mark_buffer_dirty(bh, 0);
 		brelse(bh);
 	}

@@ -1551,7 +1551,7 @@ cdu31a_request_startover:
       }
       if (CURRENT->bh)
       {
-	 if (!CURRENT->bh->b_lock)
+	 if (!buffer_locked(CURRENT->bh))
          {
 	    panic(DEVICE_NAME ": block not locked");
          }

@@ -663,7 +663,7 @@ int verify_area(int type, const void * addr, unsigned long size)
 		goto good_area;
 	if (!(vma->vm_flags & VM_GROWSDOWN))
 		goto bad_area;
-	if (vma->vm_end - start > current->rlim[RLIMIT_STACK].rlim_cur)
+	if (expand_stack(vma, start))
 		goto bad_area;
 
 good_area:

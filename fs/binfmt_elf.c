@@ -75,7 +75,13 @@ static void padzero(unsigned long elf_bss)
 	nbyte = elf_bss & (PAGE_SIZE-1);
 	if (nbyte) {
 		nbyte = PAGE_SIZE - nbyte;
-		verify_area(VERIFY_WRITE, (void *) elf_bss, nbyte);
+		/* FIXME: someone should investigate, why a bad binary
+		   is allowed to bring a wrong elf_bss until here,
+		   and how to react. Suffice the plain return?
+		   rossius@hrz.tu-chemnitz.de */
+		if (verify_area(VERIFY_WRITE, (void *) elf_bss, nbyte)) {
+			return;
+		}
 		fpnt = (char *) elf_bss;
 		do {
 			put_user(0, fpnt++);

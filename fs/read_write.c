@@ -138,7 +138,9 @@ asmlinkage int sys_write(unsigned int fd,char * buf,unsigned int count)
 	error = verify_area(VERIFY_READ,buf,count);
 	if (error)
 		return error;
+	down(&inode->i_sem);
 	written = file->f_op->write(inode,file,buf,count);
+	up(&inode->i_sem);
 	/*
 	 * If data has been written to the file, remove the setuid and
 	 * the setgid bits

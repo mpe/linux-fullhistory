@@ -132,7 +132,7 @@ static int ext2_readdir (struct inode * inode, struct file * filp,
 			for (i = 16 >> (EXT2_BLOCK_SIZE_BITS(sb) - 9), num = 0;
 			     i > 0; i--) {
 				tmp = ext2_getblk (inode, ++blk, 0, &err);
-				if (tmp && !tmp->b_uptodate && !tmp->b_lock)
+				if (tmp && !buffer_uptodate(tmp) && !buffer_locked(tmp))
 					bha[num++] = tmp;
 				else
 					brelse (tmp);

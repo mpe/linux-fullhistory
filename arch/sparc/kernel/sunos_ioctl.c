@@ -1,4 +1,4 @@
-/* $Id: sunos_ioctl.c,v 1.7 1995/11/25 00:58:30 davem Exp $
+/* $Id: sunos_ioctl.c,v 1.8 1995/11/26 04:07:39 davem Exp $
  * sunos_ioctl.c: The Linux Operating system: SunOS ioctl compatibility.
  * 
  * Copyright (C) 1995 Miguel de Icaza (miguel@nuclecu.unam.mx)
@@ -20,7 +20,7 @@
 
 extern asmlinkage int sys_ioctl(unsigned int, unsigned int, unsigned long);
 
-asmlinkage int sunos_ioctl (int fd, unsigned long cmd, void *arg)
+asmlinkage int sunos_ioctl (int fd, unsigned long cmd, unsigned long arg)
 {
 	struct file *filp;
 	

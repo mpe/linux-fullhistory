@@ -1334,7 +1334,7 @@ static void do_sjcd_request( void ){
     /*
      * Who of us are paranoic?
      */
-    if( CURRENT->bh && !( CURRENT->bh->b_lock ) )
+    if( CURRENT->bh && !buffer_locked(CURRENT->bh) )
       panic( DEVICE_NAME ": block not locked" );
 
     sjcd_transfer();

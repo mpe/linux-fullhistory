@@ -268,10 +268,10 @@ static struct buffer_head * block_getblk(struct inode * inode,
 
 	if (!bh)
 		return NULL;
-	if (!bh->b_uptodate) {
+	if (!buffer_uptodate(bh)) {
 		ll_rw_block(READ, 1, &bh);
 		wait_on_buffer(bh);
-		if (!bh->b_uptodate) {
+		if (!buffer_uptodate(bh)) {
 			brelse(bh);
 			return NULL;
 		}
@@ -346,11 +346,11 @@ struct buffer_head * ext_bread(struct inode * inode, int block, int create)
 	struct buffer_head * bh;
 
 	bh = ext_getblk(inode,block,create);
-	if (!bh || bh->b_uptodate) 
+	if (!bh || buffer_uptodate(bh)) 
 		return bh;
 	ll_rw_block(READ, 1, &bh);
 	wait_on_buffer(bh);
-	if (bh->b_uptodate)
+	if (buffer_uptodate(bh))
 		return bh;
 	brelse(bh);
 	return NULL;
@@ -433,11 +433,11 @@ int ext_sync_inode (struct inode *inode)
 	struct buffer_head *bh;
 
 	bh = ext_update_inode(inode);
-	if (bh && bh->b_dirt)
+	if (bh && buffer_dirty(bh))
 	{
 		ll_rw_block(WRITE, 1, &bh);
 		wait_on_buffer(bh);
-		if (bh->b_req && !bh->b_uptodate)
+		if (buffer_req(bh) && !buffer_uptodate(bh))
 		{
 			printk ("IO error syncing ext inode ["
 				"%s:%08lx]\n",

@@ -427,9 +427,11 @@ int open_namei(const char * pathname, int flag, int mode,
 			iput(inode);
 			return error;
 		}
+		down(&inode->i_sem);
 		inode->i_size = 0;
 		if (inode->i_op && inode->i_op->truncate)
 			inode->i_op->truncate(inode);
+		up(&inode->i_sem);
 		inode->i_dirt = 1;
 		put_write_access(inode);
 	}

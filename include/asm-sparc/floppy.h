@@ -1,5 +1,4 @@
-/* $Id: floppy.h,v 1.8 1995/11/25 02:31:45 davem Exp $
- * asm-sparc/floppy.h: Sparc specific parts of the Floppy driver.
+/* asm-sparc/floppy.h: Sparc specific parts of the Floppy driver.
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
  */
@@ -130,12 +129,14 @@ static void sun_82072_fd_outb(unsigned char value, int port)
 		 *               drive attached to a Sun controller
 		 *               and it will be at drive zero.
 		 */
-		if(value & 0xf0)
-			set_auxio(AUXIO_FLPY_DSEL, 0);
 #if 0
+		if(value & 0xf0)
+#else
+		if(value & 0x10)
+#endif
+			set_auxio(AUXIO_FLPY_DSEL, 0);
 		else
 			set_auxio(0, AUXIO_FLPY_DSEL);
-#endif
 		break;
 	case 5: /* FD_DATA */
 		sun_fdc->data_82072 = value;
@@ -203,7 +204,6 @@ static void sun_82077_fd_outb(unsigned char value, int port)
  * the transfer for debugging.  1=read 2=write
  */
 char *pdma_vaddr;
-char *pdma_vsave;
 unsigned long pdma_size;
 int doing_pdma = 0;
 
@@ -246,7 +246,7 @@ static inline void sun_fd_set_dma_count(int length)
 static inline void sun_fd_enable_dma(void)
 {
 	/* We're about to let it rip, lock any tlb entries necessary. */
-	pdma_vaddr = pdma_vsave = mmu_lockarea(pdma_vaddr, pdma_size);
+	pdma_vaddr = mmu_lockarea(pdma_vaddr, pdma_size);
 }
 
 /* Our low-level entry point in arch/sparc/kernel/entry.S */

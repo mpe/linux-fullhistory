@@ -1,4 +1,4 @@
-/* $Id: processor.h,v 1.28 1995/11/25 02:32:30 davem Exp $
+/* $Id: processor.h,v 1.29 1995/11/26 05:01:29 davem Exp $
  * include/asm-sparc/processor.h
  *
  * Copyright (C) 1994 David S. Miller (davem@caip.rutgers.edu)
@@ -73,7 +73,7 @@ struct thread_struct {
 	struct sigstack sstk_info;
 };
 
-#define INIT_MMAP { &init_mm, (0xf0000000UL), (0xffffffffUL), \
+#define INIT_MMAP { &init_mm, (0xf0000000UL), (0xfe100000UL), \
 		    __pgprot(0x0) , VM_READ | VM_WRITE | VM_EXEC }
 
 #define INIT_TSS  { \

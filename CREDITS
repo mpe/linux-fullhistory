@@ -231,12 +231,13 @@ D: NET-2-HOWTO author.
 D: RADIOLINUX Amateur Radio software for Linux list collator.
 
 N: Todd J. Derr
-E: tjd@cs.pitt.edu
+E: tjd@fore.com
+D: x86 VESA console blanking enhancements
 D: maintainer of dual-monitor patches for 1.0+
 D: MouseMan driver for selection
-S: Department of Computer Science
-S: University of Pittsburgh
-S: Pittsburgh, Pennsylvania 15260
+S: Fore Systems, Inc.
+S: 5800 Corporate Drive
+S: Pittsburgh, Pennsylvania 15237-5829
 S: USA
 
 N: Thomas Dunbar
@@ -504,6 +505,13 @@ W: http://wwwcip.informatik.uni-erlangen.de/user/mskuhn
 D: Unicode, time, standards
 S: Schlehenweg 9
 S: D-91080 Uttenreuth
+S: Germany
+
+N: Gero Kuhlmann
+E: gero@gkminix.han.de
+D: mounting root via NFS
+S: Donarweg 4
+S: D-30657 Hannover
 S: Germany
 
 N: Bas Laarhoven

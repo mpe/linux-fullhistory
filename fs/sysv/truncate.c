@@ -171,13 +171,16 @@ static int trunc_dindirect(struct inode * inode, unsigned long offset, unsigned 
 	else
 		i = (inode->i_size - offset + sb->sv_ind_per_block_block_size_1) >> sb->sv_ind_per_block_block_size_bits;
 	for (; i < sb->sv_ind_per_block; i++) {
+		unsigned char dirty = 0;
 		ind = ((sysv_zone_t *) indbh->b_data) + i;
 		block = tmp = *ind;
 		if (sb->sv_convert)
 			block = from_coh_ulong(block);
 		if (!block)
 			continue;
-		retry |= trunc_indirect(inode,offset+(i<<sb->sv_ind_per_block_bits),ind,sb->sv_convert,&indbh->b_dirt);
+		retry |= trunc_indirect(inode,offset+(i<<sb->sv_ind_per_block_bits),ind,sb->sv_convert,&dirty);
+		if (dirty)
+			mark_buffer_dirty(indbh, 1);
 	}
 	for (i = 0; i < sb->sv_ind_per_block; i++)
 		if (((sysv_zone_t *) indbh->b_data)[i])
@@ -225,13 +228,16 @@ static int trunc_tindirect(struct inode * inode, unsigned long offset, unsigned 
 	else
 		i = (inode->i_size - offset + sb->sv_ind_per_block_2_block_size_1) >> sb->sv_ind_per_block_2_block_size_bits;
 	for (; i < sb->sv_ind_per_block; i++) {
+		unsigned char dirty = 0;
 		ind = ((sysv_zone_t *) indbh->b_data) + i;
 		block = tmp = *ind;
 		if (sb->sv_convert)
 			block = from_coh_ulong(block);
 		if (!block)
 			continue;
-		retry |= trunc_dindirect(inode,offset+(i<<sb->sv_ind_per_block_2_bits),ind,sb->sv_convert,&indbh->b_dirt);
+		retry |= trunc_dindirect(inode,offset+(i<<sb->sv_ind_per_block_2_bits),ind,sb->sv_convert,&dirty);
+		if (dirty)
+			mark_buffer_dirty(indbh, 1);
 	}
 	for (i = 0; i < sb->sv_ind_per_block; i++)
 		if (((sysv_zone_t *) indbh->b_data)[i])

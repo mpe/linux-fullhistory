@@ -998,7 +998,7 @@ static void do_optcd_request(void) {
 	opt_transfer_is_active = 1;
 	while (CURRENT_VALID) {
 		if (CURRENT->bh) {
-			if (!CURRENT->bh->b_lock)
+			if (!buffer_locked(CURRENT->bh))
 				panic(DEVICE_NAME ": block not locked");
 		}
 		opt_transfer();	/* First try to transfer block from buffers */

@@ -184,7 +184,7 @@ static int isofs_file_read(struct inode * inode, struct file * filp, char * buf,
 			--blocks;
 			*bhb = getblk(inode->i_dev,isofs_bmap(inode, block++), ISOFS_BUFFER_SIZE(inode));
 			uptodate = 1;
-			if (*bhb && !(*bhb)->b_uptodate) {
+			if (*bhb && !buffer_uptodate(*bhb)) {
 			        uptodate = 0;
 			        bhreq[bhrequest++] = *bhb;
 			      };
@@ -207,7 +207,7 @@ static int isofs_file_read(struct inode * inode, struct file * filp, char * buf,
 		do{ /* Finish off all I/O that has actually completed */
 		  if (*bhe) {/* test for valid buffer */
 		    wait_on_buffer(*bhe);
-		    if (!(*bhe)->b_uptodate) {
+		    if (!buffer_uptodate(*bhe)) {
 		      brelse(*bhe);
 		      if (++bhe == &buflist[NBUF])
 			bhe = buflist;
@@ -239,7 +239,7 @@ static int isofs_file_read(struct inode * inode, struct file * filp, char * buf,
 		  offset = 0;
 		  if (++bhe == &buflist[NBUF])
 		    bhe = buflist;
-		} while( bhe != bhb && (*bhe == 0 || !(*bhe)->b_lock) && 
+		} while( bhe != bhb && (*bhe == 0 || !buffer_locked(*bhe)) && 
 			(left > 0));
 	} while (left > 0);
 

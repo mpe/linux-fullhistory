@@ -16,6 +16,9 @@
 #ifndef _LINUX_DIRENT_H
 #include <linux/dirent.h>
 #endif
+#ifndef _LINUX_IOCTL_H
+#include <linux/ioctl.h>
+#endif
 
 struct umsdos_fake_info {
 	char fname[13];
@@ -70,19 +73,19 @@ struct umsdos_info{
 /* The next ioctl commands operate only on the DOS directory */
 /* The file umsdos_progs/umsdosio.c contain a string table */
 /* based on the order of those definition. Keep it in sync */
-#define UMSDOS_READDIR_DOS	1234	/* Do a readdir of the DOS directory */
-#define UMSDOS_UNLINK_DOS	1235	/* Erase in the DOS directory only */
-#define UMSDOS_RMDIR_DOS	1236	/* rmdir in the DOS directory only */
-#define UMSDOS_STAT_DOS		1237	/* Get info about a file */
+#define UMSDOS_READDIR_DOS _IO(0x04,210) /* Do a readdir of the DOS directory */
+#define UMSDOS_UNLINK_DOS  _IO(0x04,211) /* Erase in the DOS directory only */
+#define UMSDOS_RMDIR_DOS   _IO(0x04,212) /* rmdir in the DOS directory only */
+#define UMSDOS_STAT_DOS    _IO(0x04,213) /* Get info about a file */
 /* The next ioctl commands operate only on the EMD file */
-#define UMSDOS_CREAT_EMD	1238	/* Create a file */
-#define UMSDOS_UNLINK_EMD	1239	/* unlink (rmdir) a file */
-#define UMSDOS_READDIR_EMD	1240	/* read the EMD file only. */
-#define UMSDOS_GETVERSION	1241	/* Get the release number of UMSDOS */
-#define UMSDOS_INIT_EMD		1242	/* Create the EMD file if not there */
-#define UMSDOS_DOS_SETUP	1243	/* Set the defaults of the MsDOS driver */
+#define UMSDOS_CREAT_EMD   _IO(0x04,214) /* Create a file */
+#define UMSDOS_UNLINK_EMD  _IO(0x04,215) /* unlink (rmdir) a file */
+#define UMSDOS_READDIR_EMD _IO(0x04,216) /* read the EMD file only. */
+#define UMSDOS_GETVERSION  _IO(0x04,217) /* Get the release number of UMSDOS */
+#define UMSDOS_INIT_EMD    _IO(0x04,218) /* Create the EMD file if not there */
+#define UMSDOS_DOS_SETUP   _IO(0x04,219) /* Set the defaults of the MsDOS driver */
 
-#define UMSDOS_RENAME_DOS	1244	/* rename a file/directory in the DOS */
+#define UMSDOS_RENAME_DOS  _IO(0x04,220) /* rename a file/directory in the DOS */
 									/* directory only */
 struct umsdos_ioctl{
 	struct dirent dos_dirent;

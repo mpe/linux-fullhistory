@@ -325,7 +325,7 @@ static void (DEVICE_REQUEST)(void);
 	if (MAJOR(CURRENT->rq_dev) != MAJOR_NR) \
 		panic(DEVICE_NAME ": request list destroyed"); \
 	if (CURRENT->bh) { \
-		if (!CURRENT->bh->b_lock) \
+		if (!buffer_locked(CURRENT->bh)) \
 			panic(DEVICE_NAME ": block not locked"); \
 	}
 
@@ -362,7 +362,7 @@ static void end_request(int uptodate) {
 	if ((bh = req->bh) != NULL) {
 		req->bh = bh->b_reqnext;
 		bh->b_reqnext = NULL;
-		bh->b_uptodate = uptodate;		
+		mark_buffer_uptodate(bh, uptodate);
 		unlock_buffer(bh);
 		if ((bh = req->bh) != NULL) {
 			req->current_nr_sectors = bh->b_size >> 9;

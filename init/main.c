@@ -123,8 +123,8 @@ int root_mountflags = MS_RDONLY;
 char *execute_command = 0;
 
 #ifdef CONFIG_ROOT_NFS
-char nfs_root_name[256] = { 0, };
-extern int nfs_root_init(char *name);
+char nfs_root_name[256] = { NFS_ROOT };
+char nfs_root_addrs[128] = { "" };
 #endif
 
 static char * argv_init[MAX_INIT_ARGS+2] = { "init", NULL, };
@@ -397,16 +397,24 @@ static void parse_options(char *line)
 			continue;
 		}
 #ifdef CONFIG_ROOT_NFS
-		if (!strncmp(line,"nfsroot=",8)) {
-			int n = 255 - strlen (NFS_ROOT);
+		if (!strncmp(line, "nfsroot=", 8)) {
+			int n;
 			line += 8;
-			if (line [0] == '/' || (line [0] >= '0' && line [0] <= '9')){
-				strncpy (nfs_root_name, line, 255);
+			if (line[0] == '/' || (line[0] >= '0' && line[0] <= '9')) {
+				strncpy(nfs_root_name, line, sizeof(nfs_root_name));
+				nfs_root_name[sizeof(nfs_root_name)] = '\0';
 				continue;
 			}
-			if (strlen (line) >= n)
-			        line [n] = 0;
-			sprintf (nfs_root_name, NFS_ROOT, line);
+			n = strlen(line) + strlen(NFS_ROOT);
+			if (n >= sizeof(nfs_root_name))
+				line[sizeof(nfs_root_name) - strlen(NFS_ROOT) - 1] = '\0';
+			sprintf(nfs_root_name, NFS_ROOT, line);
+			continue;
+		}
+		if (!strncmp(line, "nfsaddrs=", 9)) {
+			line += 9;
+			strncpy(nfs_root_addrs, line, sizeof(nfs_root_addrs));
+			nfs_root_addrs[sizeof(nfs_root_addrs)] = '\0';
 			continue;
 		}
 #endif

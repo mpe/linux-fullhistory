@@ -1,4 +1,4 @@
-/*  $Id: signal.c,v 1.19 1995/11/25 00:58:24 davem Exp $
+/*  $Id: signal.c,v 1.20 1995/11/26 02:29:09 davem Exp $
  *  linux/arch/sparc/kernel/signal.c
  *
  *  Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
@@ -87,7 +87,6 @@ extern unsigned long nwindows;
 
 asmlinkage void do_sigreturn(struct pt_regs *regs)
 {
-	int wsvd;
 	struct sigcontext_struct *scptr =
 		(struct sigcontext_struct *) regs->u_regs[UREG_I0];
 

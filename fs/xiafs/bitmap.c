@@ -227,7 +227,7 @@ void xiafs_free_zone(struct super_block * sb, int d_addr)
     }
     bh = get_hash_table(sb->s_dev, d_addr, XIAFS_ZSIZE(sb));
     if (bh)
-        bh->b_dirt=0;
+        mark_buffer_clean(bh);
     brelse(bh);
     bit=d_addr - sb->u.xiafs_sb.s_firstdatazone + 1;
     bh = get_zmap_zone(sb, bit, NULL);
@@ -269,7 +269,7 @@ int xiafs_new_zone(struct super_block * sb, u_long prev_addr)
 	return 0;
     }
     clear_buf(bh);
-    bh->b_uptodate = 1;
+    mark_buffer_uptodate(bh, 1);
     mark_buffer_dirty(bh, 1);
     brelse(bh);
     return tmp;

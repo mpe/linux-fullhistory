@@ -461,12 +461,12 @@ typedef struct cdkasy {
  *	to the board. These include interrupting it, and initializeing
  *	the driver after board startup and shutdown.
  */
-#define	STLCMD		(((unsigned long) 's') << 8)
+#include <linux/ioctl.h>
 
-#define	STL_BINTR	(STLCMD | 20)
-#define	STL_BSTART	(STLCMD | 21)
-#define	STL_BSTOP	(STLCMD | 22)
-#define	STL_BRESET	(STLCMD | 23)
+#define	STL_BINTR	_IO('s',20)
+#define	STL_BSTART	_IO('s',21)
+#define	STL_BSTOP	_IO('s',22)
+#define	STL_BRESET	_IO('s',23)
 
 /*****************************************************************************/
 #endif

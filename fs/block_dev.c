@@ -79,7 +79,7 @@ int block_write(struct inode * inode, struct file * filp, const char * buf, int 
 		  generate_cluster(dev, cluster_list, blocksize);
 		bh = getblk(dev, block, blocksize);
 
-		if (chars != blocksize && !bh->b_uptodate) {
+		if (chars != blocksize && !buffer_uptodate(bh)) {
 		  if(!filp->f_reada ||
 		     !read_ahead[MAJOR(dev)]) {
 		    /* We do this to force the read of a single buffer */
@@ -123,7 +123,7 @@ int block_write(struct inode * inode, struct file * filp, const char * buf, int 
 		memcpy_fromfs(p,buf,chars);
 		p += chars;
 		buf += chars;
-		bh->b_uptodate = 1;
+		mark_buffer_uptodate(bh, 1);
 		mark_buffer_dirty(bh, 0);
 		if (filp->f_flags & O_SYNC)
 			bufferlist[buffercount++] = bh;
@@ -133,7 +133,7 @@ int block_write(struct inode * inode, struct file * filp, const char * buf, int 
 			ll_rw_block(WRITE, buffercount, bufferlist);
 			for(i=0; i<buffercount; i++){
 				wait_on_buffer(bufferlist[i]);
-				if (!bufferlist[i]->b_uptodate)
+				if (!buffer_uptodate(bufferlist[i]))
 					write_error=1;
 				brelse(bufferlist[i]);
 			}
@@ -146,7 +146,7 @@ int block_write(struct inode * inode, struct file * filp, const char * buf, int 
 		ll_rw_block(WRITE, buffercount, bufferlist);
 		for(i=0; i<buffercount; i++){
 			wait_on_buffer(bufferlist[i]);
-			if (!bufferlist[i]->b_uptodate)
+			if (!buffer_uptodate(bufferlist[i]))
 				write_error=1;
 			brelse(bufferlist[i]);
 		}
@@ -247,7 +247,7 @@ int block_read(struct inode * inode, struct file * filp, char * buf, int count)
 			}
 #endif
 			*bhb = getblk(dev, block++, blocksize);
-			if (*bhb && !(*bhb)->b_uptodate) {
+			if (*bhb && !buffer_uptodate(*bhb)) {
 				uptodate = 0;
 				bhreq[bhrequest++] = *bhb;
 			}
@@ -272,7 +272,7 @@ int block_read(struct inode * inode, struct file * filp, char * buf, int count)
 		do { /* Finish off all I/O that has actually completed */
 			if (*bhe) {
 				wait_on_buffer(*bhe);
-				if (!(*bhe)->b_uptodate) {	/* read error? */
+				if (!buffer_uptodate(*bhe)) {	/* read error? */
 				        brelse(*bhe);
 					if (++bhe == &buflist[NBUF])
 					  bhe = buflist;
@@ -298,7 +298,7 @@ int block_read(struct inode * inode, struct file * filp, char * buf, int count)
 			offset = 0;
 			if (++bhe == &buflist[NBUF])
 				bhe = buflist;
-		} while (left > 0 && bhe != bhb && (!*bhe || !(*bhe)->b_lock));
+		} while (left > 0 && bhe != bhb && (!*bhe || !buffer_locked(*bhe)));
 	} while (left > 0);
 
 /* Release the read-ahead blocks */

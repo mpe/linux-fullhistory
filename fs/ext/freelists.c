@@ -54,7 +54,7 @@ void ext_free_block(struct super_block * sb, int block)
 	}
 	bh = get_hash_table(sb->s_dev, block, sb->s_blocksize);
 	if (bh)
-		bh->b_dirt=0;
+		mark_buffer_clean(bh);
 	brelse(bh);
 	if (sb->u.ext_sb.s_firstfreeblock)
 		efb = (struct ext_free_block *) sb->u.ext_sb.s_firstfreeblock->b_data;
@@ -127,7 +127,7 @@ printk("ext_new_block: block empty, skipping to %d\n", efb->next);
 		return 0;
 	}
 	memset(bh->b_data, 0, BLOCK_SIZE);
-	bh->b_uptodate = 1;
+	mark_buffer_uptodate(bh, 1);
 	mark_buffer_dirty(bh, 1);
 	brelse(bh);
 #ifdef EXTFS_DEBUG

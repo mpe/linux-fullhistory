@@ -177,6 +177,12 @@ int msdos_lookup(struct inode *dir,const char *name,int len,
 		return -EACCES;
 	}
 	PRINTK (("msdos_lookup 5\n"));
+	if (!(*result)->i_sb ||
+	    ((*result)->i_sb->s_magic != MSDOS_SUPER_MAGIC)) {
+		/* crossed a mount point into a non-msdos fs */
+		iput(dir);
+		return 0;
+	}
 	if (MSDOS_I(*result)->i_busy) { /* mkdir in progress */
 		iput(*result);
 		iput(dir);

@@ -109,9 +109,7 @@ static void extended_partition(struct gendisk *hd, kdev_t dev)
 	   * This block is from a device that we're about to stomp on.
 	   * So make sure nobody thinks this block is usable.
 	   */
-		bh->b_dirt = 0;
-		bh->b_uptodate = 0;
-		bh->b_req = 0;
+		bh->b_state = 0;
 
 		if (*(unsigned short *) (bh->b_data+510) != 0xAA55)
 			goto done;
@@ -194,9 +192,10 @@ read_mbr:
 		return -1;
 	}
 	data = bh->b_data;
-	bh->b_dirt = 0;		/* In some cases we modify the geometry    */
-	bh->b_uptodate = 0;	/*  of the drive (below), so ensure that   */
-	bh->b_req = 0;		/*  nobody else tries to re-use this data. */
+	/* In some cases we modify the geometry    */
+	/*  of the drive (below), so ensure that   */
+	/*  nobody else tries to re-use this data. */
+	bh->b_state = 0;
 #ifdef CONFIG_BLK_DEV_IDE
 check_table:
 #endif

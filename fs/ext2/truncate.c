@@ -181,14 +181,13 @@ repeat:
 		if (ind_bh->b_count != 1)
 			retry = 1;
 		else {
-			ind_bh->b_reuse = 1;
 			tmp = *p;
 			*p = 0;
 			inode->i_blocks -= blocks;
 			inode->i_dirt = 1;
 			ext2_free_blocks (inode->i_sb, tmp, 1);
 		}
-	if (IS_SYNC(inode) && ind_bh->b_dirt) {
+	if (IS_SYNC(inode) && buffer_dirty(ind_bh)) {
 		ll_rw_block (WRITE, 1, &ind_bh);
 		wait_on_buffer (ind_bh);
 	}
@@ -242,14 +241,13 @@ repeat:
 		if (dind_bh->b_count != 1)
 			retry = 1;
 		else {
-			dind_bh->b_reuse = 1;
 			tmp = *p;
 			*p = 0;
 			inode->i_blocks -= blocks;
 			inode->i_dirt = 1;
 			ext2_free_blocks (inode->i_sb, tmp, 1);
 		}
-	if (IS_SYNC(inode) && dind_bh->b_dirt) {
+	if (IS_SYNC(inode) && buffer_dirty(dind_bh)) {
 		ll_rw_block (WRITE, 1, &dind_bh);
 		wait_on_buffer (dind_bh);
 	}
@@ -302,14 +300,13 @@ repeat:
 		if (tind_bh->b_count != 1)
 			retry = 1;
 		else {
-			tind_bh->b_reuse = 1;
 			tmp = *p;
 			*p = 0;
 			inode->i_blocks -= blocks;
 			inode->i_dirt = 1;
 			ext2_free_blocks (inode->i_sb, tmp, 1);
 		}
-	if (IS_SYNC(inode) && tind_bh->b_dirt) {
+	if (IS_SYNC(inode) && buffer_dirty(tind_bh)) {
 		ll_rw_block (WRITE, 1, &tind_bh);
 		wait_on_buffer (tind_bh);
 	}
@@ -331,7 +328,6 @@ void ext2_truncate (struct inode * inode)
 		return;
 	ext2_discard_prealloc(inode);
 	while (1) {
-		down(&inode->i_sem);
 		retry = trunc_direct(inode);
 		retry |= trunc_indirect (inode, EXT2_IND_BLOCK,
 			(u32 *) &inode->u.ext2_i.i_data[EXT2_IND_BLOCK]);
@@ -339,7 +335,6 @@ void ext2_truncate (struct inode * inode)
 			EXT2_ADDR_PER_BLOCK(inode->i_sb),
 			(u32 *) &inode->u.ext2_i.i_data[EXT2_DIND_BLOCK]);
 		retry |= trunc_tindirect (inode);
-		up(&inode->i_sem);
 		if (!retry)
 			break;
 		if (IS_SYNC(inode) && inode->i_dirt)

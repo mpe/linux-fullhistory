@@ -102,7 +102,7 @@ static int ext2_alloc_block (struct inode * inode, unsigned long goal)
 			return 0;
 		}
 		memset(bh->b_data, 0, inode->i_sb->s_blocksize);
-		bh->b_uptodate = 1;
+		mark_buffer_uptodate(bh, 1);
 		mark_buffer_dirty(bh, 1);
 		brelse (bh);
 	} else {
@@ -258,10 +258,10 @@ static struct buffer_head * block_getblk (struct inode * inode,
 
 	if (!bh)
 		return NULL;
-	if (!bh->b_uptodate) {
+	if (!buffer_uptodate(bh)) {
 		ll_rw_block (READ, 1, &bh);
 		wait_on_buffer (bh);
-		if (!bh->b_uptodate) {
+		if (!buffer_uptodate(bh)) {
 			brelse (bh);
 			return NULL;
 		}
@@ -477,11 +477,11 @@ struct buffer_head * ext2_bread (struct inode * inode, int block,
 	struct buffer_head * bh;
 
 	bh = ext2_getblk (inode, block, create, err);
-	if (!bh || bh->b_uptodate)
+	if (!bh || buffer_uptodate(bh))
 		return bh;
 	ll_rw_block (READ, 1, &bh);
 	wait_on_buffer (bh);
-	if (bh->b_uptodate)
+	if (buffer_uptodate(bh))
 		return bh;
 	brelse (bh);
 	*err = -EIO;
@@ -655,11 +655,11 @@ int ext2_sync_inode (struct inode *inode)
 	struct buffer_head *bh;
 
 	bh = ext2_update_inode (inode);
-	if (bh && bh->b_dirt)
+	if (bh && buffer_dirty(bh))
 	{
 		ll_rw_block (WRITE, 1, &bh);
 		wait_on_buffer (bh);
-		if (bh->b_req && !bh->b_uptodate)
+		if (buffer_req(bh) && !buffer_uptodate(bh))
 		{
 			printk ("IO error syncing ext2 inode ["
 				"%s:%08lx]\n",

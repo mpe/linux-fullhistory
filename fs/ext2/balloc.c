@@ -453,7 +453,7 @@ got_block:
 		return 0;
 	}
 	memset(bh->b_data, 0, sb->s_blocksize);
-	bh->b_uptodate = 1;
+	mark_buffer_uptodate(bh, 1);
 	mark_buffer_dirty(bh, 1);
 	brelse (bh);
 

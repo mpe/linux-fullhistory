@@ -1,4 +1,4 @@
-/* $Id: probe.c,v 1.38 1995/11/25 00:58:14 davem Exp $
+/* $Id: probe.c,v 1.39 1995/11/26 00:54:37 davem Exp $
  * probe.c: Preliminary device tree probing routines...
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
@@ -30,8 +30,8 @@
  * XXX and smaller as time goes on...
  */
 enum sparc_clock_type sp_clock_typ;
-struct mostek48t02 *mstk48t02_regs;
-struct mostek48t08 *mstk48t08_regs;
+struct mostek48t02 *mstk48t02_regs = 0;
+struct mostek48t08 *mstk48t08_regs = 0;
 volatile unsigned int *master_l10_limit = 0;
 volatile unsigned int *master_l10_counter = 0;
 struct sun4m_timer_regs *sun4m_timers;
@@ -331,7 +331,7 @@ probe_clock(int fchild)
 			mstk48t02_regs = (struct mostek48t02 *) 
 				sparc_alloc_io((void *) clk_reg[0].phys_addr,
 					       (void *) 0, sizeof(*mstk48t02_regs),
-					       "clock", 0x0, 0x1);
+					       "clock", 0x0, 0x0);
 			mstk48t08_regs = 0;  /* To catch weirdness */
 			break;
 		}
@@ -348,7 +348,7 @@ probe_clock(int fchild)
 			mstk48t08_regs = (struct mostek48t08 *)
 				sparc_alloc_io((void *) clk_reg[0].phys_addr,
 					       (void *) 0, sizeof(*mstk48t08_regs),
-					       "clock", 0x0, 0x1);
+					       "clock", 0x0, 0x0);
 
 			mstk48t02_regs = &mstk48t08_regs->regs;
 			break;

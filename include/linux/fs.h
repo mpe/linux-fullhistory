@@ -13,6 +13,9 @@
 #include <linux/vfs.h>
 #include <linux/net.h>
 #include <linux/kdev_t.h>
+#include <linux/ioctl.h>
+
+#include <asm/bitops.h>
 
 /*
  * It's silly to have NR_OPEN bigger than NR_FILE, but I'll fix
@@ -94,17 +97,17 @@
 /* the read-only stuff doesn't really belong here, but any other place is
    probably as bad and I don't want to create yet another include file. */
 
-#define BLKROSET 4701 /* set device read-only (0 = read-write) */
-#define BLKROGET 4702 /* get read-only status (0 = read_write) */
-#define BLKRRPART 4703 /* re-read partition table */
-#define BLKGETSIZE 4704 /* return device size */
-#define BLKFLSBUF 4705 /* flush buffer cache */
-#define BLKRASET 4706 /* Set read ahead for block device */
-#define BLKRAGET 4707 /* get current read ahead setting */
+#define BLKROSET   _IO(0x12,93)	/* set device read-only (0 = read-write) */
+#define BLKROGET   _IO(0x12,94)	/* get read-only status (0 = read_write) */
+#define BLKRRPART  _IO(0x12,95)	/* re-read partition table */
+#define BLKGETSIZE _IO(0x12,96)	/* return device size */
+#define BLKFLSBUF  _IO(0x12,97)	/* flush buffer cache */
+#define BLKRASET   _IO(0x12,98)	/* Set read ahead for block device */
+#define BLKRAGET   _IO(0x12,99)	/* get current read ahead setting */
 
 #define BMAP_IOCTL 1		/* obsolete - kept for compatibility */
-#define FIBMAP	   0x0001	/* bmap access */
-#define FIGETBSZ   0x0002	/* get the block size used for bmap */
+#define FIBMAP	   _IO(0x00,1)	/* bmap access */
+#define FIGETBSZ   _IO(0x00,2)	/* get the block size used for bmap */
 
 #ifdef __KERNEL__
 extern void buffer_init(void);
@@ -114,28 +117,22 @@ extern unsigned long name_cache_init(unsigned long start, unsigned long end);
 
 typedef char buffer_block[BLOCK_SIZE];
 
+/* bh state bits */
+#define BH_Uptodate	0	/* 1 if the buffer contains valid data */
+#define BH_Dirty	1	/* 1 if the buffer is dirty */
+#define BH_Lock		2	/* 1 if the buffer is locked */
+#define BH_Req		3	/* 0 if the buffer has been invalidated */
+#define BH_Touched	4	/* 1 if the buffer has been touched (aging) */
+#define BH_Has_aged	5	/* 1 if the buffer has been aged (aging) */
+
 struct buffer_head {
 	char * b_data;			/* pointer to data block (1024 bytes) */
 	unsigned long b_size;		/* block size */
 	unsigned long b_blocknr;	/* block number */
 	kdev_t b_dev;			/* device (B_FREE = free) */
-
-	unsigned short b_count;		/* users using this block */
-	unsigned char b_uptodate;
-	unsigned char b_dirt;		/* 0-clean,1-dirty */
-	unsigned char b_lock;		/* 0 - ok, 1 -locked */
-	unsigned char b_req;		/* 0 if the buffer has been 
-					 * invalidated */
-	unsigned char b_list;		/* List that this buffer appears */
-	unsigned char b_reuse;		/* 0 - normal, 
-					 * 1 - better reused for something 
-					 *     else */
-	unsigned char b_touched:1;	/* True if the buffer has been
-					 * accessed since it was last aged */
-	unsigned char b_has_aged:1;	/* True if the buffer has aged
-					 * (by alias to another buffer
-					 * on the same page) since it
-					 * was last scanned for aging */
+	unsigned long b_state;		/* buffer state bitmap (see above) */
+	unsigned int b_count;		/* users using this block */
+	unsigned int b_list;		/* List that this buffer appears */
 	unsigned long b_flushtime;      /* Time when this (dirty) buffer
 					 * should be written */
 	unsigned long b_lru_time;       /* Time when this buffer was 
@@ -148,6 +145,36 @@ struct buffer_head {
 	struct buffer_head * b_this_page;	/* circular list of buffers in one page */
 	struct buffer_head * b_reqnext;		/* request queue */
 };
+
+static inline int buffer_uptodate(struct buffer_head * bh)
+{
+	return test_bit(BH_Uptodate, &bh->b_state);
+}	
+
+static inline int buffer_dirty(struct buffer_head * bh)
+{
+	return test_bit(BH_Dirty, &bh->b_state);
+}
+
+static inline int buffer_locked(struct buffer_head * bh)
+{
+	return test_bit(BH_Lock, &bh->b_state);
+}
+
+static inline int buffer_req(struct buffer_head * bh)
+{
+	return test_bit(BH_Req, &bh->b_state);
+}
+
+static inline int buffer_touched(struct buffer_head * bh)
+{
+	return test_bit(BH_Touched, &bh->b_state);
+}
+
+static inline int buffer_has_aged(struct buffer_head * bh)
+{
+	return test_bit(BH_Has_aged, &bh->b_state);
+}
 
 #include <linux/pipe_fs_i.h>
 #include <linux/minix_fs_i.h>
@@ -445,23 +472,30 @@ extern int nr_buffer_heads;
 #define BUF_SHARED 5   /* Buffers shared */
 #define NR_LIST 6
 
+extern inline void mark_buffer_uptodate(struct buffer_head * bh, int on)
+{
+	if (on)
+		set_bit(BH_Uptodate, &bh->b_state);
+	else
+		clear_bit(BH_Uptodate, &bh->b_state);
+}
+
 extern inline void mark_buffer_clean(struct buffer_head * bh)
 {
-  if(bh->b_dirt) {
-    bh->b_dirt = 0;
-    if(bh->b_list == BUF_DIRTY) refile_buffer(bh);
-  }
+	if (clear_bit(BH_Dirty, &bh->b_state)) {
+		if (bh->b_list == BUF_DIRTY)
+			refile_buffer(bh);
+	}
 }
 
 extern inline void mark_buffer_dirty(struct buffer_head * bh, int flag)
 {
-  if(!bh->b_dirt) {
-    bh->b_dirt = 1;
-    set_writetime(bh, flag);
-    if(bh->b_list != BUF_DIRTY) refile_buffer(bh);
-  }
+	if (!set_bit(BH_Dirty, &bh->b_state)) {
+		set_writetime(bh, flag);
+		if (bh->b_list != BUF_DIRTY)
+			refile_buffer(bh);
+	}
 }
-
 
 extern int check_disk_change(kdev_t dev);
 extern void invalidate_inodes(kdev_t dev);

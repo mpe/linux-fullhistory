@@ -9,20 +9,19 @@ extern void __wait_on_buffer(struct buffer_head *);
 
 extern inline void wait_on_buffer(struct buffer_head * bh)
 {
-	if (bh->b_lock)
+	if (test_bit(BH_Lock, &bh->b_state))
 		__wait_on_buffer(bh);
 }
 
 extern inline void lock_buffer(struct buffer_head * bh)
 {
-	if (bh->b_lock)
+	if (set_bit(BH_Lock, &bh->b_state))
 		__wait_on_buffer(bh);
-	bh->b_lock = 1;
 }
 
 extern inline void unlock_buffer(struct buffer_head * bh)
 {
-	bh->b_lock = 0;
+	clear_bit(BH_Lock, &bh->b_state);
 	wake_up(&bh->b_wait);
 }
 

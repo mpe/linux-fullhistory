@@ -97,7 +97,7 @@ static struct buffer_head * ext2_find_entry (struct inode * dir,
 			break;
 		bh = ext2_getblk (dir, block, 0, &err);
 		bh_use[block] = bh;
-		if (bh && !bh->b_uptodate)
+		if (bh && !buffer_uptodate(bh))
 			bh_read[toread++] = bh;
 	}
 
@@ -119,7 +119,7 @@ static struct buffer_head * ext2_find_entry (struct inode * dir,
 			continue;
 		}
 		wait_on_buffer (bh);
-		if (!bh->b_uptodate) {
+		if (!buffer_uptodate(bh)) {
 			/*
 			 * read error: all bets are off
 			 */
@@ -152,7 +152,7 @@ static struct buffer_head * ext2_find_entry (struct inode * dir,
 		else
 			bh = ext2_getblk (dir, block + NAMEI_RA_SIZE, 0, &err);
 		bh_use[block % NAMEI_RA_SIZE] = bh;
-		if (bh && !bh->b_uptodate)
+		if (bh && !buffer_uptodate(bh))
 			bh_read[toread++] = bh;
 	}
 

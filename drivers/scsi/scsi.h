@@ -472,7 +472,7 @@ static Scsi_Cmnd * end_scsi_request(Scsi_Cmnd * SCpnt, int uptodate, int sectors
 	    req->nr_sectors -= bh->b_size >> 9;
 	    req->sector += bh->b_size >> 9;
 	    bh->b_reqnext = NULL;
-	    bh->b_uptodate = uptodate;
+	    mark_buffer_uptodate(bh, uptodate);
 	    unlock_buffer(bh);
 	    sectors -= bh->b_size >> 9;
 	    if ((bh = req->bh) != NULL) {
@@ -521,7 +521,7 @@ static Scsi_Cmnd * end_scsi_request(Scsi_Cmnd * SCpnt, int uptodate, int sectors
     if (MAJOR(CURRENT->rq_dev) != MAJOR_NR)           \
 	panic(DEVICE_NAME ": request list destroyed");\
     if (CURRENT->bh) {                                \
-	if (!CURRENT->bh->b_lock)                     \
+	if (!buffer_locked(CURRENT->bh))              \
 	    panic(DEVICE_NAME ": block not locked");  \
     }
 #endif

@@ -1,4 +1,4 @@
-/* $Id: socket.h,v 1.4 1995/11/25 02:32:49 davem Exp $ */
+/* $Id: socket.h,v 1.5 1995/11/26 01:32:36 davem Exp $ */
 #ifndef _ASM_SOCKET_H
 #define _ASM_SOCKET_H
 
@@ -21,6 +21,7 @@
 #define SO_LINGER	0x0080
 #define SO_OOBINLINE	0x0100
 /* To add :#define SO_REUSEPORT 0x0200 */
+#define SO_BSDCOMPAT    0x0400
 
 /* wha!??? */
 #define SO_DONTLINGER   (~SO_LINGER)  /* Older SunOS compat. hack */

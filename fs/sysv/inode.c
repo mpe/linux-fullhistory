@@ -498,7 +498,7 @@ struct super_block *sysv_read_super(struct super_block *sb,void *data,
 void sysv_write_super (struct super_block *sb)
 {
 	lock_super(sb);
-	if (sb->sv_bh1->b_dirt || sb->sv_bh2->b_dirt) {
+	if (buffer_dirty(sb->sv_bh1) || buffer_dirty(sb->sv_bh2)) {
 		/* If we are going to write out the super block,
 		   then attach current time stamp.
 		   But if the filesystem was marked clean, keep it clean. */
@@ -678,10 +678,10 @@ static struct buffer_head * block_getblk(struct inode * inode,
 
 	if (!bh)
 		return NULL;
-	if (!bh->b_uptodate) {
+	if (!buffer_uptodate(bh)) {
 		ll_rw_block(READ, 1, &bh);
 		wait_on_buffer(bh);
-		if (!bh->b_uptodate) {
+		if (!buffer_uptodate(bh)) {
 			brelse(bh);
 			return NULL;
 		}
@@ -760,11 +760,11 @@ struct buffer_head * sysv_file_bread(struct inode * inode, int block, int create
 	struct buffer_head * bh;
 
 	bh = sysv_getblk(inode,block,create);
-	if (!bh || bh->b_uptodate)
+	if (!bh || buffer_uptodate(bh))
 		return bh;
 	ll_rw_block(READ, 1, &bh);
 	wait_on_buffer(bh);
-	if (bh->b_uptodate)
+	if (buffer_uptodate(bh))
 		return bh;
 	brelse(bh);
 	return NULL;
@@ -952,10 +952,10 @@ int sysv_sync_inode(struct inode * inode)
         struct buffer_head *bh;
 
         bh = sysv_update_inode(inode);
-        if (bh && bh->b_dirt) {
+        if (bh && buffer_dirty(bh)) {
                 ll_rw_block(WRITE, 1, &bh);
                 wait_on_buffer(bh);
-                if (bh->b_req && !bh->b_uptodate)
+                if (buffer_req(bh) && !buffer_uptodate(bh))
                 {
                         printk ("IO error syncing sysv inode ["
 				"%s:%08lx]\n",

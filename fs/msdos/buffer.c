@@ -118,7 +118,7 @@ void msdos_set_uptodate (
 	if (sb->s_blocksize != 512){
 		bh = bh->b_next;
 	}
-	bh->b_uptodate = val;
+	mark_buffer_uptodate(bh, val);
 }
 int msdos_is_uptodate (
 	struct super_block *sb,
@@ -127,7 +127,7 @@ int msdos_is_uptodate (
 	if (sb->s_blocksize != 512){
 		bh = bh->b_next;
 	}
-	return bh->b_uptodate;
+	return buffer_uptodate(bh);
 }
 
 void msdos_ll_rw_block (

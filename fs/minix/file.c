@@ -120,7 +120,7 @@ static int minix_file_read(struct inode * inode, struct file * filp, char * buf,
 		while (blocks) {
 			--blocks;
 			*bhb = minix_getblk(inode, block++, 0);
-			if (*bhb && !(*bhb)->b_uptodate) {
+			if (*bhb && !buffer_uptodate(*bhb)) {
 				uptodate = 0;
 				bhreq[bhrequest++] = *bhb;
 			}
@@ -143,7 +143,7 @@ static int minix_file_read(struct inode * inode, struct file * filp, char * buf,
 		do { /* Finish off all I/O that has actually completed */
 			if (*bhe) {
 				wait_on_buffer(*bhe);
-				if (!(*bhe)->b_uptodate) {	/* read error? */
+				if (!buffer_uptodate(*bhe)) {	/* read error? */
 				        brelse(*bhe);
 					if (++bhe == &buflist[NBUF])
 					  bhe = buflist;
@@ -169,7 +169,7 @@ static int minix_file_read(struct inode * inode, struct file * filp, char * buf,
 			offset = 0;
 			if (++bhe == &buflist[NBUF])
 				bhe = buflist;
-		} while (left > 0 && bhe != bhb && (!*bhe || !(*bhe)->b_lock));
+		} while (left > 0 && bhe != bhb && (!*bhe || !buffer_locked(*bhe)));
 	} while (left > 0);
 
 /* Release the read-ahead blocks */
@@ -201,7 +201,6 @@ static int minix_file_write(struct inode * inode, struct file * filp, const char
 		printk("minix_file_write: mode = %07o\n",inode->i_mode);
 		return -EINVAL;
 	}
-	down(&inode->i_sem);
 	if (filp->f_flags & O_APPEND)
 		pos = inode->i_size;
 	else
@@ -217,10 +216,10 @@ static int minix_file_write(struct inode * inode, struct file * filp, const char
 		c = BLOCK_SIZE - (pos % BLOCK_SIZE);
 		if (c > count-written)
 			c = count-written;
-		if (c != BLOCK_SIZE && !bh->b_uptodate) {
+		if (c != BLOCK_SIZE && !buffer_uptodate(bh)) {
 			ll_rw_block(READ, 1, &bh);
 			wait_on_buffer(bh);
-			if (!bh->b_uptodate) {
+			if (!buffer_uptodate(bh)) {
 				brelse(bh);
 				if (!written)
 					written = -EIO;
@@ -232,13 +231,12 @@ static int minix_file_write(struct inode * inode, struct file * filp, const char
 		written += c;
 		memcpy_fromfs(p,buf,c);
 		buf += c;
-		bh->b_uptodate = 1;
+		mark_buffer_uptodate(bh, 1);
 		mark_buffer_dirty(bh, 0);
 		brelse(bh);
 	}
 	if (pos > inode->i_size)
 		inode->i_size = pos;
-	up(&inode->i_sem);
 	inode->i_mtime = inode->i_ctime = CURRENT_TIME;
 	filp->f_pos = pos;
 	inode->i_dirt = 1;

@@ -74,7 +74,7 @@
 #define FINEUSEC (1L << SHIFT_SCALE) /* 1 us in phase units */
 
 #define MAXPHASE 512000L        /* max phase error (us) */
-#define MAXFREQ (512000L << SHIFT_USEC)  /* max frequency error (ppm) */
+#define MAXFREQ (100L << SHIFT_USEC)  /* max frequency error (ppm) */
 #define MAXTIME (200L << PPS_AVG) /* max PPS error (jitter) (200 us) */
 #define MINSEC 16L              /* min interval between updates (s) */
 #define MAXSEC 1200L            /* max interval between updates (s) */

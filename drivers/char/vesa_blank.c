@@ -4,6 +4,7 @@
  * Exported functions:
  *	void vesa_blank(void);
  *	void vesa_unblank(void);
+ *	void vesa_powerdown(void);
  *	void set_vesa_blanking(const unsigned long arg);
  *
  * Not all hardware reacts well to this code - activate at your own risk.
@@ -18,7 +19,7 @@
 |    struct { char ten, onoff; } arg;
 |
 |    if (argc != 2) {
-|	fprintf(stderr, "usage: setvesablank ON|on|off\n");
+|	fprintf(stderr, "usage: setvesablank on|vsync|hsync|powerdown|off\n");
 |	exit(1);
 |    }
 |    if ((fd = open("/dev/console", 0)) < 0)
@@ -27,8 +28,12 @@
 |    arg.onoff = 0;
 |    if (!strcmp(argv[1], "on"))
 |      arg.onoff = 1;
-|    else if (!strcmp(argv[1], "ON"))
+|    else if (!strcmp(argv[1], "vsync"))
+|      arg.onoff = 1;
+|    else if (!strcmp(argv[1], "hsync"))
 |      arg.onoff = 2;
+|    else if (!strcmp(argv[1], "powerdown"))
+|      arg.onoff = 3;
 |    if (ioctl(fd, TIOCLINUX, &arg)) {
 |	perror("setvesablank: TIOCLINUX");
 |	exit(1);
@@ -53,8 +58,8 @@ extern unsigned short video_port_reg, video_port_val;
  *  -------------------------------------------
  *  "On"		on	on	active  (mode 0)
  *  "Suspend" {either}	on	off	blank   (mode 1)
- *            {  or  }	off	on	blank   
- *  "Off"               off	off	blank	(mode 2)
+ *            {  or  }	off	on	blank   (mode 2)
+ *  "Off"               off	off	blank	(mode 3)
  *
  * Original code taken from the Power Management Utility (PMU) of
  * Huang shi chao, delivered together with many new monitor models
@@ -63,6 +68,8 @@ extern unsigned short video_port_reg, video_port_val;
  * Adapted to Linux by Christoph Rimek (chrimek@toppoint.de)  15-may-94.
  * A slightly adapted fragment of his README follows.
  *
+ * Two-stage blanking by todd j. derr (tjd@barefoot.org)      10-oct-95.
+
 Patch (based on Linux Kernel revision 1.0) for handling the Power Saving
 feature of the new monitor generation. The code works on all these monitors
 (mine is a Smile 1506) and should run on *all* video adapter cards (change
@@ -71,12 +78,21 @@ cheap Cirrus Logic (5428) and a miro Crystal 8S (S3-805).
 
 You can choose from two options:
 
-(1) Setting vesa_blanking_mode to 1.
+(1) Setting vesa_blanking_mode to 1 or 2.
     The code will save the current setting of your video adapters'
     register settings and then program the controller to turn off
-    the vertical synchronisation pulse.
+    the vertical synchronization pulse (mode 1) or horizontal
+    synchronization pulse (mode 2).  Mode 1 should work with most
+    monitors, but the VESA spec allows mode 2, so it's included for
+    completeness.
 
-(2) Setting vesa_blanking_mode to 2.
+    If you use one of these modes, you can also set a second interval
+    by echoing the escape sequence ESC[10;interval] to the terminal.
+    The monitor will be turned off completely (mode 3) after being in
+    suspend mode for the specified interval.  The interval defaults to
+    60 minutes. An interval of 0 disables this feature.
+
+(2) Setting vesa_blanking_mode to 3.
     If your monitor locally has an Off_Mode timer then you should not
     force your video card to send the OFF-signal - your monitor will
     power down by itself.
@@ -92,9 +108,6 @@ sends the signal to enter Standby mode, you have the chance to interfere
 before the monitor powers down. Do not set a too short period, if you love
 your hardware :-)) .
 
-If requested, in the future it may be possible to install another timer
-to provide a configurable delay between the two stages Standby and Off
-similar to the "setterm -blank"-feature.
 */
 
 #define seq_port_reg	(0x3c4)		/* Sequencer register select port */
@@ -118,7 +131,15 @@ static struct {
 	unsigned char	ClockingMode;		/* Seq-Controller:01h */
 } vga;
 
-static int vesa_blanking_mode = 0;
+#define VESA_NO_BLANKING	0
+#define VESA_VSYNC_SUSPEND	1
+#define VESA_HSYNC_SUSPEND	2
+#define VESA_POWERDOWN		(VESA_HSYNC_SUSPEND | VESA_VSYNC_SUSPEND)
+
+#define DEFAULT_VESA_BLANKING_MODE	VESA_NO_BLANKING
+
+static int vesa_blanking_mode = DEFAULT_VESA_BLANKING_MODE;
+static int suspend_vesa_blanking_mode = DEFAULT_VESA_BLANKING_MODE;
 static int vesa_blanked = 0;
 
 /* routine to blank a vesa screen */
@@ -130,13 +151,13 @@ void vesa_blank(void)
 	  return;
 
 	/* save original values of VGA controller registers */
-	cli();
-	vga.SeqCtrlIndex = inb_p(seq_port_reg);
-	vga.CrtCtrlIndex = inb_p(video_port_reg);
-	vga.CrtMiscIO = inb_p(video_misc_rd);
-	sti();
+	if(!vesa_blanked) {
+	    cli();
+	    vga.SeqCtrlIndex = inb_p(seq_port_reg);
+	    vga.CrtCtrlIndex = inb_p(video_port_reg);
+	    vga.CrtMiscIO = inb_p(video_misc_rd);
+	    sti();
 
-	if(mode == 2) {
 	    outb_p(0x00,video_port_reg);		/* HorizontalTotal */
 	    vga.HorizontalTotal = inb_p(video_port_val);
 	    outb_p(0x01,video_port_reg);		/* HorizDisplayEnd */
@@ -145,17 +166,17 @@ void vesa_blank(void)
 	    vga.StartHorizRetrace = inb_p(video_port_val);
 	    outb_p(0x05,video_port_reg);		/* EndHorizRetrace */
 	    vga.EndHorizRetrace = inb_p(video_port_val);
+	    outb_p(0x07,video_port_reg);		/* Overflow */
+	    vga.Overflow = inb_p(video_port_val);
+	    outb_p(0x10,video_port_reg);		/* StartVertRetrace */
+	    vga.StartVertRetrace = inb_p(video_port_val);
+	    outb_p(0x11,video_port_reg);		/* EndVertRetrace */
+	    vga.EndVertRetrace = inb_p(video_port_val);
+	    outb_p(0x17,video_port_reg);		/* ModeControl */
+	    vga.ModeControl = inb_p(video_port_val);
+	    outb_p(0x01,seq_port_reg);			/* ClockingMode */
+	    vga.ClockingMode = inb_p(seq_port_val);
 	}
-	outb_p(0x07,video_port_reg);			/* Overflow */
-	vga.Overflow = inb_p(video_port_val);
-	outb_p(0x10,video_port_reg);			/* StartVertRetrace */
-	vga.StartVertRetrace = inb_p(video_port_val);
-	outb_p(0x11,video_port_reg);			/* EndVertRetrace */
-	vga.EndVertRetrace = inb_p(video_port_val);
-	outb_p(0x17,video_port_reg);			/* ModeControl */
-	vga.ModeControl = inb_p(video_port_val);
-	outb_p(0x01,seq_port_reg);			/* ClockingMode */
-	vga.ClockingMode = inb_p(seq_port_val);
 
 	/* assure that video is enabled */
 	/* "0x20" is VIDEO_ENABLE_bit in register 01 of sequencer */
@@ -172,14 +193,17 @@ void vesa_blank(void)
 	 * <Start of vertical Retrace> to maximum (incl. overflow)
 	 * Result: turn off vertical sync (VSync) pulse.
 	 */
-	outb_p(0x10,video_port_reg);		/* StartVertRetrace */
-	outb_p(0xff,video_port_val);		/* maximum value */
-	outb_p(0x11,video_port_reg);		/* EndVertRetrace */
-	outb_p(0x40,video_port_val);            /* minimum (bits 0..3)  */
-	outb_p(0x07,video_port_reg);		/* Overflow */
-	outb_p(vga.Overflow | 0x84,video_port_val);	/* bits 9,10 of  */
+	if (mode & VESA_VSYNC_SUSPEND) {
+	    outb_p(0x10,video_port_reg);	/* StartVertRetrace */
+	    outb_p(0xff,video_port_val); 	/* maximum value */
+	    outb_p(0x11,video_port_reg);	/* EndVertRetrace */
+	    outb_p(0x40,video_port_val);	/* minimum (bits 0..3)  */
+	    outb_p(0x07,video_port_reg);		/* Overflow */
+	    outb_p(vga.Overflow | 0x84,video_port_val);	/* bits 9,10 of  */
 							/* vert. retrace */
-	if (mode == 2) {
+	}
+
+	if (mode & VESA_HSYNC_SUSPEND) {
 	    /*
 	     * Set <End of horizontal retrace> to minimum (0) and
 	     *  <Start of horizontal Retrace> to maximum
@@ -209,16 +233,14 @@ void vesa_unblank(void)
 	cli();
 	outb_p(vga.CrtMiscIO,video_misc_wr);
 
-	if (vesa_blanked == 2) {
-	    outb_p(0x00,video_port_reg);	/* HorizontalTotal */
-	    outb_p(vga.HorizontalTotal,video_port_val);
-	    outb_p(0x01,video_port_reg);	/* HorizDisplayEnd */
-	    outb_p(vga.HorizDisplayEnd,video_port_val);
-	    outb_p(0x04,video_port_reg);	/* StartHorizRetrace */
-	    outb_p(vga.StartHorizRetrace,video_port_val);
-	    outb_p(0x05,video_port_reg);	/* EndHorizRetrace */
-	    outb_p(vga.EndHorizRetrace,video_port_val);
-	}
+	outb_p(0x00,video_port_reg);		/* HorizontalTotal */
+	outb_p(vga.HorizontalTotal,video_port_val);
+	outb_p(0x01,video_port_reg);		/* HorizDisplayEnd */
+	outb_p(vga.HorizDisplayEnd,video_port_val);
+	outb_p(0x04,video_port_reg);		/* StartHorizRetrace */
+	outb_p(vga.StartHorizRetrace,video_port_val);
+	outb_p(0x05,video_port_reg);		/* EndHorizRetrace */
+	outb_p(vga.EndHorizRetrace,video_port_val);
 	outb_p(0x07,video_port_reg);		/* Overflow */
 	outb_p(vga.Overflow,video_port_val);
 	outb_p(0x10,video_port_reg);		/* StartVertRetrace */
@@ -242,5 +264,17 @@ void set_vesa_blanking(const unsigned long arg)
 {
 	unsigned char *argp = (unsigned char *)(arg + 1);
 	unsigned int mode = get_user(argp);
-	vesa_blanking_mode = ((mode < 3) ? mode : 0);
+	vesa_blanking_mode = suspend_vesa_blanking_mode =
+		((mode <= VESA_POWERDOWN) ? mode : DEFAULT_VESA_BLANKING_MODE);
+}
+
+void vesa_powerdown(void)
+{
+	if(vesa_blanking_mode == VESA_VSYNC_SUSPEND
+		|| vesa_blanking_mode == VESA_HSYNC_SUSPEND)
+	{
+		vesa_blanking_mode = VESA_POWERDOWN;
+		vesa_blank();
+		vesa_blanking_mode = suspend_vesa_blanking_mode;
+	}
 }

@@ -60,17 +60,11 @@ extern __inline__ int change_bit(int nr, void * addr)
 }
 
 /*
- * This routine doesn't need to be atomic, but it's faster to code it
- * this way.
+ * This routine doesn't need to be atomic.
  */
 extern __inline__ int test_bit(int nr, const void * addr)
 {
-	int oldbit;
-
-	__asm__ __volatile__("btl %2,%1\n\tsbbl %0,%0"
-		:"=r" (oldbit)
-		:"m" (CONST_ADDR),"ir" (nr));
-	return oldbit;
+	return 1UL & (((unsigned int *) addr)[nr >> 5] >> (nr & 31));
 }
 
 /*

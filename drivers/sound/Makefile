@@ -118,4 +118,4 @@ sound.o: local.h $(FIXEDOBJS) sound.a
 	$(LD) -r -o sound.o $(FIXEDOBJS) sound.a
 
 modules: local.h sound.o
-	ln -fs `pwd`/sound.o /usr/src/linux/modules/sound.o
+	ln -fs `pwd`/sound.o $(TOPDIR)/modules/sound.o

@@ -120,7 +120,7 @@ void __wait_on_buffer(struct buffer_head * bh)
 	add_wait_queue(&bh->b_wait, &wait);
 repeat:
 	current->state = TASK_UNINTERRUPTIBLE;
-	if (bh->b_lock) {
+	if (buffer_locked(bh)) {
 		schedule();
 		goto repeat;
 	}
@@ -166,7 +166,7 @@ static int sync_buffers(kdev_t dev, int wait)
 			 if(!lru_list[nlist]) break;
 			 if (dev && bh->b_dev != dev)
 				  continue;
-			 if (bh->b_lock)
+			 if (buffer_locked(bh))
 			  {
 				  /* Buffer is locked; skip it unless wait is
 				     requested AND pass > 0. */
@@ -179,17 +179,17 @@ static int sync_buffers(kdev_t dev, int wait)
 			  }
 			 /* If an unlocked buffer is not uptodate, there has
 			     been an IO error. Skip it. */
-			 if (wait && bh->b_req && !bh->b_lock &&
-			     !bh->b_dirt && !bh->b_uptodate) {
+			 if (wait && buffer_req(bh) && !buffer_locked(bh) &&
+			     !buffer_dirty(bh) && !buffer_uptodate(bh)) {
 				  err = 1;
 				  continue;
 			  }
 			 /* Don't write clean buffers.  Don't write ANY buffers
 			    on the third pass. */
-			 if (!bh->b_dirt || pass>=2)
+			 if (!buffer_dirty(bh) || pass>=2)
 				  continue;
 			 /* don't bother about locked buffers */
-			 if (bh->b_lock)
+			 if (buffer_locked(bh))
 				 continue;
 			 bh->b_count++;
 			 bh->b_flushtime = 0;
@@ -273,8 +273,10 @@ void invalidate_buffers(kdev_t dev)
 				continue;
 			if (bh->b_count)
 				continue;
-			bh->b_flushtime = bh->b_uptodate = 
-				bh->b_dirt = bh->b_req = 0;
+			bh->b_flushtime = 0;
+			clear_bit(BH_Uptodate, &bh->b_state);
+			clear_bit(BH_Dirty, &bh->b_state);
+			clear_bit(BH_Req, &bh->b_state);
 		}
 	}
 }
@@ -458,7 +460,6 @@ struct buffer_head * get_hash_table(kdev_t dev, int block, int size)
 	for (;;) {
 		if (!(bh=find_buffer(dev,block,size)))
 			return NULL;
-		bh->b_reuse=0;
 		bh->b_count++;
 		wait_on_buffer(bh);
 		if (bh->b_dev == dev && bh->b_blocknr == block
@@ -505,15 +506,17 @@ void set_blocksize(kdev_t dev, int size)
 			
 			wait_on_buffer(bh);
 			if (bh->b_dev == dev && bh->b_size != size) {
-				bh->b_uptodate = bh->b_dirt = bh->b_req =
-					 bh->b_flushtime = 0;
-			};
+				clear_bit(BH_Dirty, &bh->b_state);
+				clear_bit(BH_Uptodate, &bh->b_state);
+				clear_bit(BH_Req, &bh->b_state);
+				bh->b_flushtime = 0;
+			}
 			remove_from_hash_queue(bh);
 		}
 	}
 }
 
-#define BADNESS(bh) (((bh)->b_dirt<<1)+(bh)->b_lock)
+#define BADNESS(bh) (buffer_dirty(bh) || buffer_locked(bh))
 
 void refill_freelist(int size)
 {
@@ -578,10 +581,10 @@ repeat0:
 			 if (!bh) break;
 			 
 			 if (mem_map[MAP_NR((unsigned long) bh->b_data)].count != 1 ||
-			     bh->b_dirt) {
+			     buffer_dirty(bh)) {
 				 refile_buffer(bh);
 				 continue;
-			 };
+			 }
 			 
 			 if (bh->b_count || bh->b_size != size)
 				  continue;
@@ -590,7 +593,7 @@ repeat0:
 			    on the locked list. If we encounter a locked
 			    buffer here, this means that the rest of them
 			    are also locked */
-			 if(bh->b_lock && (i == BUF_LOCKED || i == BUF_LOCKED1)) {
+			 if (buffer_locked(bh) && (i == BUF_LOCKED || i == BUF_LOCKED1)) {
 				 buffers[i] = 0;
 				 break;
 			 }
@@ -650,7 +653,7 @@ repeat0:
 				if (!bh) break;
 				
 				if (mem_map[MAP_NR((unsigned long) bh->b_data)].count != 1 ||
-				    bh->b_dirt) {
+				    buffer_dirty(bh)) {
 					refile_buffer(bh);
 					continue;
 				};
@@ -662,7 +665,7 @@ repeat0:
 				   placed on the locked list.  If we encounter
 				   a locked buffer here, this means that the
 				   rest of them are also locked */
-				if(bh->b_lock && (i == BUF_LOCKED || i == BUF_LOCKED1)) {
+				if (buffer_locked(bh) && (i == BUF_LOCKED || i == BUF_LOCKED1)) {
 					buffers[i] = 0;
 					break;
 				}
@@ -721,10 +724,12 @@ struct buffer_head * getblk(kdev_t dev, int block, int size)
 repeat:
 	bh = get_hash_table(dev, block, size);
 	if (bh) {
-		if (bh->b_uptodate && !bh->b_dirt)
-			 put_last_lru(bh);
-		if(!bh->b_dirt) bh->b_flushtime = 0;
-		bh->b_touched = 1;
+		if (!buffer_dirty(bh)) {
+			if (buffer_uptodate(bh))
+				 put_last_lru(bh);
+			bh->b_flushtime = 0;
+		}
+		set_bit(BH_Touched, &bh->b_state);
 		return bh;
 	}
 
@@ -737,16 +742,10 @@ repeat:
 	remove_from_free_list(bh);
 
 /* OK, FINALLY we know that this buffer is the only one of its kind, */
-/* and that it's unused (b_count=0), unlocked (b_lock=0), and clean */
+/* and that it's unused (b_count=0), unlocked (buffer_locked=0), and clean */
 	bh->b_count=1;
-	bh->b_dirt=0;
-	bh->b_lock=0;
-	bh->b_uptodate=0;
 	bh->b_flushtime=0;
-	bh->b_req=0;
-	bh->b_reuse=0;
-	bh->b_touched = 1;
-	bh->b_has_aged = 0;
+	bh->b_state=(1<<BH_Touched);
 	bh->b_dev=dev;
 	bh->b_blocknr=block;
 	insert_into_queues(bh);
@@ -757,7 +756,7 @@ void set_writetime(struct buffer_head * buf, int flag)
 {
         int newtime;
 
-	if (buf->b_dirt){
+	if (buffer_dirty(buf)) {
 		/* Move buffer to dirty list if jiffies is clear */
 		newtime = jiffies + (flag ? bdf_prm.b_un.age_super : 
 				     bdf_prm.b_un.age_buffer);
@@ -777,11 +776,11 @@ void refile_buffer(struct buffer_head * buf)
 		printk("Attempt to refile free buffer\n");
 		return;
 	}
-	if (buf->b_dirt)
+	if (buffer_dirty(buf))
 		dispose = BUF_DIRTY;
 	else if (mem_map[MAP_NR((unsigned long) buf->b_data)].count > 1)
 		dispose = BUF_SHARED;
-	else if (buf->b_lock)
+	else if (buffer_locked(buf))
 		dispose = BUF_LOCKED;
 	else if (buf->b_list == BUF_SHARED)
 		dispose = BUF_UNSHARED;
@@ -858,11 +857,11 @@ struct buffer_head * bread(kdev_t dev, int block, int size)
 			kdevname(dev));
 		return NULL;
 	}
-	if (bh->b_uptodate)
+	if (buffer_uptodate(bh))
 		return bh;
 	ll_rw_block(READ, 1, &bh);
 	wait_on_buffer(bh);
-	if (bh->b_uptodate)
+	if (buffer_uptodate(bh))
 		return bh;
 	brelse(bh);
 	return NULL;
@@ -893,7 +892,7 @@ struct buffer_head * breada(kdev_t dev, int block, int bufsize,
 
 	index = BUFSIZE_INDEX(bh->b_size);
 
-	if (bh->b_uptodate)
+	if (buffer_uptodate(bh))
 		return bh;
 
 	blocks = ((filesize & (bufsize - 1)) - (pos & (bufsize - 1))) >> (9+index);
@@ -907,7 +906,7 @@ struct buffer_head * breada(kdev_t dev, int block, int bufsize,
 	j = 1;
 	for(i=1; i<blocks; i++) {
 		bh = getblk(dev,block+i,bufsize);
-		if (bh->b_uptodate) {
+		if (buffer_uptodate(bh)) {
 			brelse(bh);
 			break;
 		}
@@ -923,7 +922,7 @@ struct buffer_head * breada(kdev_t dev, int block, int bufsize,
 	/* Wait for this buffer, and then continue on */
 	bh = bhlist[0];
 	wait_on_buffer(bh);
-	if (bh->b_uptodate)
+	if (buffer_uptodate(bh))
 		return bh;
 	brelse(bh);
 	return NULL;
@@ -972,7 +971,7 @@ static struct buffer_head * get_unused_buffer_head(void)
 	bh->b_next_free = NULL;
 	bh->b_data = NULL;
 	bh->b_size = 0;
-	bh->b_req = 0;
+	bh->b_state = 0;
 	return bh;
 }
 
@@ -1020,7 +1019,7 @@ static void read_buffers(struct buffer_head * bh[], int nrbuf)
 	struct buffer_head * bhr[MAX_BUF_PER_PAGE];
 
 	for (i = 0 ; i < nrbuf ; i++) {
-		if (bh[i] && !bh[i]->b_uptodate)
+		if (bh[i] && !buffer_uptodate(bh[i]))
 			bhr[bhnum++] = bh[i];
 	}
 	if (bhnum)
@@ -1116,11 +1115,10 @@ static unsigned long try_to_load_aligned(unsigned long address,
 	while (1) {
 		arr[block++] = bh;
 		bh->b_count = 1;
-		bh->b_dirt = 0;
-		bh->b_reuse = 0;
 		bh->b_flushtime = 0;
-		bh->b_uptodate = 0;
-		bh->b_req = 0;
+		clear_bit(BH_Dirty, &bh->b_state);
+		clear_bit(BH_Uptodate, &bh->b_state);
+		clear_bit(BH_Req, &bh->b_state);
 		bh->b_dev = dev;
 		bh->b_blocknr = *(p++);
 		bh->b_list = BUF_CLEAN;
@@ -1203,7 +1201,7 @@ unsigned long bread_page(unsigned long address, kdev_t dev, int b[], int size, i
 	where = address;
  	for (i=0, j=0; j<PAGE_SIZE ; i++, j += size, where += size) {
 		if (bh[i]) {
-			if (bh[i]->b_uptodate)
+			if (buffer_uptodate(bh[i]))
 				memcpy((void *) where, bh[i]->b_data, size);
 			brelse(bh[i]);
 		} else
@@ -1230,7 +1228,7 @@ void bwrite_page(unsigned long address, kdev_t dev, int b[], int size)
  	for (i=0, j=0; j<PAGE_SIZE ; i++, j += size, address += size) {
 		if (bh[i]) {
 			memcpy(bh[i]->b_data, (void *) address, size);
-			bh[i]->b_uptodate = 1;
+			mark_buffer_uptodate(bh[i], 1);
 			mark_buffer_dirty(bh[i], 0);
 			brelse(bh[i]);
 		} else
@@ -1315,9 +1313,9 @@ static int try_to_free(struct buffer_head * bh, struct buffer_head ** bhp,
 	do {
 		if (!tmp)
 			return 0;
-		if (tmp->b_count || tmp->b_dirt || tmp->b_lock || tmp->b_wait)
+		if (tmp->b_count || buffer_dirty(tmp) || buffer_locked(tmp) || tmp->b_wait)
 			return 0;
-		if (priority && tmp->b_touched)
+		if (priority && buffer_touched(tmp))
 			return 0;
 		tmp = tmp->b_this_page;
 	} while (tmp != bh);
@@ -1356,18 +1354,15 @@ static inline void age_buffer(struct buffer_head *bh)
 	 * ensures that a page full of multiple buffers only gets aged
 	 * once per pass through the lru lists. 
 	 */
-	if (bh->b_has_aged) {
-		bh->b_has_aged = 0;
+	if (clear_bit(BH_Has_aged, &bh->b_state))
 		return;
-	}
 	
 	do {
-		touched |= tmp->b_touched;
-		tmp->b_touched = 0;
+		touched |= clear_bit(BH_Touched, &tmp->b_state);
 		tmp = tmp->b_this_page;
-		tmp->b_has_aged = 1;
+		set_bit(BH_Has_aged, &tmp->b_state);
 	} while (tmp != bh);
-	bh->b_has_aged = 0;
+	clear_bit(BH_Has_aged, &bh->b_state);
 
 	if (touched) 
 		touch_page((unsigned long) bh->b_data);
@@ -1500,12 +1495,12 @@ static int shrink_specific_buffers(unsigned int priority, int size)
 			if (bh->b_count || !bh->b_this_page)
 				 continue;
 			if(size && bh->b_size != size) continue;
-			if (bh->b_lock)
+			if (buffer_locked(bh))
 				 if (priority)
 					  continue;
 				 else
 					  wait_on_buffer(bh);
-			if (bh->b_dirt) {
+			if (buffer_dirty(bh)) {
 				bh->b_count++;
 				bh->b_flushtime = 0;
 				ll_rw_block(WRITEA, 1, &bh);
@@ -1546,9 +1541,9 @@ void show_buffers(void)
 	  if(!bh) continue;
 	  do {
 		found++;
-		if (bh->b_lock)
+		if (buffer_locked(bh))
 			locked++;
-		if (bh->b_dirt)
+		if (buffer_dirty(bh))
 			dirty++;
 		if(mem_map[MAP_NR(((unsigned long) bh->b_data))].count !=1) shared++;
 		if (bh->b_count)
@@ -1590,7 +1585,7 @@ static inline int try_to_reassign(struct buffer_head * bh, struct buffer_head **
 		if (!tmp)
 			 return 0;
 		
-		if (tmp->b_count || tmp->b_dirt || tmp->b_lock)
+		if (tmp->b_count || buffer_dirty(tmp) || buffer_locked(tmp))
 			 return 0;
 		tmp = tmp->b_this_page;
 	} while (tmp != bh);
@@ -1606,8 +1601,8 @@ static inline int try_to_reassign(struct buffer_head * bh, struct buffer_head **
 		tmp = tmp->b_this_page;
 		remove_from_queues(p);
 		p->b_dev = dev;
-		p->b_uptodate = 0;
-		p->b_req = 0;
+		mark_buffer_uptodate(p, 0);
+		clear_bit(BH_Req, &p->b_state);
 		p->b_blocknr = starting_block++;
 		insert_into_queues(p);
 	} while (tmp != bh);
@@ -1681,11 +1676,8 @@ static unsigned long try_to_generate_cluster(kdev_t dev, int block, int size)
 	while (1) {
 		arr[nblock++] = bh;
 		bh->b_count = 1;
-		bh->b_dirt = 0;
 		bh->b_flushtime = 0;
-		bh->b_lock = 0;
-		bh->b_uptodate = 0;
-		bh->b_req = 0;
+		bh->b_state = 0;
 		bh->b_dev = dev;
 		bh->b_list = BUF_CLEAN;
 		bh->b_blocknr = block++;
@@ -1850,13 +1842,13 @@ asmlinkage int sync_old_buffers(void)
 				 }
 				 
 				 /* Clean buffer on dirty list?  Refile it */
-				 if (nlist == BUF_DIRTY && !bh->b_dirt && !bh->b_lock)
+				 if (nlist == BUF_DIRTY && !buffer_dirty(bh) && !buffer_locked(bh))
 				  {
 					  refile_buffer(bh);
 					  continue;
 				  }
 				 
-				 if (bh->b_lock || !bh->b_dirt)
+				 if (buffer_locked(bh) || !buffer_dirty(bh))
 					  continue;
 				 ndirty++;
 				 if(bh->b_flushtime > jiffies) continue;
@@ -1957,13 +1949,13 @@ asmlinkage int sys_bdflush(int func, long data)
 					  }
 					  
 					  /* Clean buffer on dirty list?  Refile it */
-					  if (nlist == BUF_DIRTY && !bh->b_dirt && !bh->b_lock)
+					  if (nlist == BUF_DIRTY && !buffer_dirty(bh) && !buffer_locked(bh))
 					   {
 						   refile_buffer(bh);
 						   continue;
 					   }
 					  
-					  if (bh->b_lock || !bh->b_dirt)
+					  if (buffer_locked(bh) || !buffer_dirty(bh))
 						   continue;
 					  /* Should we write back buffers that are shared or not??
 					     currently dirty buffers are not shared, so it does not matter */
