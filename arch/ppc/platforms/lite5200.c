@@ -79,20 +79,46 @@ lite5200_map_irq(struct pci_dev *dev, unsigned char idsel, unsigned char pin)
 static void __init
 lite5200_setup_cpu(void)
 {
+	struct mpc52xx_cdm  __iomem *cdm;
+	struct mpc52xx_gpio __iomem *gpio;
 	struct mpc52xx_intr __iomem *intr;
 	struct mpc52xx_xlb  __iomem *xlb;
 
+	u32 port_config;
 	u32 intr_ctrl;
 
 	/* Map zones */
+	cdm  = ioremap(MPC52xx_PA(MPC52xx_CDM_OFFSET), MPC52xx_CDM_SIZE);
+	gpio = ioremap(MPC52xx_PA(MPC52xx_GPIO_OFFSET), MPC52xx_GPIO_SIZE);
 	xlb  = ioremap(MPC52xx_PA(MPC52xx_XLB_OFFSET), MPC52xx_XLB_SIZE);
 	intr = ioremap(MPC52xx_PA(MPC52xx_INTR_OFFSET), MPC52xx_INTR_SIZE);
 
-	if (!xlb || !intr) {
-		printk("lite5200.c: Error while mapping XLB/INTR during "
+	if (!cdm || !gpio || !xlb || !intr) {
+		printk("lite5200.c: Error while mapping CDM/GPIO/XLB/INTR during"
 				"lite5200_setup_cpu\n");
 		goto unmap_regs;
 	}
+
+	/* Use internal 48 Mhz */
+	out_8(&cdm->ext_48mhz_en, 0x00);
+	out_8(&cdm->fd_enable, 0x01);
+	if (in_be32(&cdm->rstcfg) & 0x40)	/* Assumes 33Mhz clock */
+		out_be16(&cdm->fd_counters, 0x0001);
+	else
+		out_be16(&cdm->fd_counters, 0x5555);
+
+	/* Get port mux config */
+	port_config = in_be32(&gpio->port_config);
+
+	/* 48Mhz internal, pin is GPIO */
+	port_config &= ~0x00800000;
+
+	/* USB port */
+	port_config &= ~0x00007000;	/* Differential mode - USB1 only */
+	port_config |=  0x00001000;
+
+	/* Commit port config */
+	out_be32(&gpio->port_config, port_config);
 
 	/* Configure the XLB Arbiter */
 	out_be32(&xlb->master_pri_enable, 0xff);
@@ -111,6 +137,8 @@ lite5200_setup_cpu(void)
 
 	/* Unmap reg zone */
 unmap_regs:
+	if (cdm)  iounmap(cdm);
+	if (gpio) iounmap(gpio);
 	if (xlb)  iounmap(xlb);
 	if (intr) iounmap(intr);
 }
@@ -171,7 +199,11 @@ platform_init(unsigned long r3, unsigned long r4, unsigned long r5,
 	isa_mem_base		= 0;
 
 	/* Powersave */
-	powersave_nap = 1;	/* We allow this platform to NAP */
+	/* This is provided as an example on how to do it. But you
+	   need to be aware that NAP disable bus snoop and that may
+	   be required for some devices to work properly, like USB ... */
+	/* powersave_nap = 1; */
+
 
 	/* Setup the ppc_md struct */
 	ppc_md.setup_arch	= lite5200_setup_arch;
