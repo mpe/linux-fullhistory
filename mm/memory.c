@@ -33,7 +33,6 @@
  * 		Idea by Alex Bligh (alex@cconcepts.co.uk)
  */
 
-#include <linux/config.h>
 #include <linux/signal.h>
 #include <linux/sched.h>
 #include <linux/head.h>

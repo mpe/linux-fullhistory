@@ -13,12 +13,12 @@ void swap_statistics(u8 *p)
 
     do {
 	sp = (u16 *)lp;		  /* Convert SubHeader */
-    *sp = ntohs(*sp);
-    bp = (u8 *) lp;
-    y = *(bp + 3);
-    lp++;
-    for (h_lp = (u32)lp; (u32)lp < h_lp + ((u32)*(bp + 3)); lp++)
-	*lp = ntohl(*lp);
+	*sp = ntohs(*sp);
+	bp = (u8 *) lp;
+	y = *(bp + 3);
+	lp++;
+	for (h_lp = (u32)lp; (u32)lp < h_lp + ((u32)*(bp + 3)); lp++)
+	    *lp = ntohl(*lp);
     }while ((u32)lp < ((u32)p) + 4 + h_sp);
 
 }

@@ -6,7 +6,6 @@
 
 #undef DEBUG_PROC_TREE
 
-#include <linux/config.h>
 #include <linux/wait.h>
 #include <linux/errno.h>
 #include <linux/signal.h>

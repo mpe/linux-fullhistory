@@ -9,7 +9,6 @@
  */
 
 .text
-#include <linux/config.h>
 #include <linux/tasks.h>
 #include <linux/fd.h>
 #include <linux/linkage.h>
@@ -33,7 +32,7 @@ startup_32:
 	mov %ax,%es
 	mov %ax,%fs
 	mov %ax,%gs
-#ifdef CONFIG_SMP
+#ifdef __SMP__
 	orw  %bx,%bx
 	jz  1f				/* Initial CPU cleans BSS */
 /*
@@ -48,7 +47,7 @@ startup_32:
 	jmp checkCPUtype
 1:
 	lss stack_start,%esp
-#endif CONFIG_SMP
+#endif __SMP__
 /*
  * Clear BSS first so that there are no surprises...
  */
@@ -100,7 +99,7 @@ startup_32:
 	rep
 	movsb
 1:
-#ifdef CONFIG_SMP
+#ifdef __SMP__
 checkCPUtype:
 #endif
 
@@ -170,7 +169,7 @@ is386:	pushl %ecx		# restore original EFLAGS
 	orl $2,%eax		# set MP
 2:	movl %eax,%cr0
 	call check_x87
-#ifdef CONFIG_SMP
+#ifdef __SMP__
 	movb ready,%eax
 	orb %eax,%eax
 	jz 3f	
@@ -192,7 +191,7 @@ is386:	pushl %ecx		# restore original EFLAGS
 #endif
 3:
 	call setup_paging
-#ifdef CONFIG_SMP
+#ifdef __SMP__
 	incb ready
 #endif
 4:
@@ -204,7 +203,7 @@ is386:	pushl %ecx		# restore original EFLAGS
 	mov %ax,%es
 	mov %ax,%fs
 	mov %ax,%gs
-#ifdef CONFIG_SMP
+#ifdef __SMP__
 	movl $(KERNEL_DS), %eax
 	mov  %ax,%ss		# Reload the stack pointer (segment only)
 #else
@@ -221,7 +220,7 @@ L6:
 	jmp L6			# main should never return here, but
 				# just in case, we know what happens.
 
-#ifdef CONFIG_SMP
+#ifdef __SMP__
 ready:	.byte 0
 #endif
 

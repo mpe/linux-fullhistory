@@ -57,6 +57,8 @@
 #include <net/udp.h>
 #include <net/checksum.h>
 
+#include <linux/config.h>
+
 #ifdef CONFIG_IP_MROUTE
 struct sock *mroute_socket=NULL;
 #endif
@@ -234,13 +236,40 @@ static int raw_sendto(struct sock *sk, const unsigned char *from,
 	return err<0?err:len;
 }
 
-
-static int raw_write(struct sock *sk, const unsigned char *buff, int len, int noblock,
-	   unsigned flags)
+/*
+ *	Temporary
+ */
+ 
+static int raw_sendmsg(struct sock *sk, struct msghdr *msg,
+	int len, int noblock, int flags)
 {
-	return(raw_sendto(sk, buff, len, noblock, flags, NULL, 0));
+	if(msg->msg_iovlen==1)
+		return raw_sendto(sk,msg->msg_iov[0].iov_base,len, noblock, flags, msg->msg_name, msg->msg_namelen);
+	else
+	{
+		/*
+		 *	For awkward cases we linearise the buffer first. In theory this is only frames
+		 *	whose iovec's don't split on 4 byte boundaries, and soon encrypted stuff (to keep
+		 *	skip happy). We are a bit more general about it.
+		 */
+		 
+		unsigned char *buf;
+		int fs;
+		int err;
+		if(len>65515)
+			return -EMSGSIZE;
+		buf=kmalloc(len, GFP_KERNEL);
+		if(buf==NULL)
+			return -ENOBUFS;
+		memcpy_fromiovec(buf, msg->msg_iov, len);
+		fs=get_fs();
+		set_fs(get_fs());
+		err=raw_sendto(sk,buf,len, noblock, flags, msg->msg_name, msg->msg_namelen);
+		set_fs(fs);
+		kfree_s(buf,len);
+		return err;
+	}
 }
-
 
 static void raw_close(struct sock *sk, int timeout)
 {
@@ -304,38 +333,8 @@ int raw_recvmsg(struct sock *sk, struct msghdr *msg, int len,
 }
 
 
-static int raw_recvfrom(struct sock *sk, unsigned char *ubuf, int size, int noblock, unsigned flags,
-		struct sockaddr_in *sa, int *addr_len)
-{
-	struct iovec iov;
-	struct msghdr msg;
-
-	iov.iov_base = ubuf;
-	iov.iov_len  = size;
-
-	msg.msg_name      = (void *)sa;
-	msg.msg_namelen   = 0;
-	if (addr_len)
-		msg.msg_namelen = *addr_len;
-	msg.msg_accrights = NULL;
-	msg.msg_iov       = &iov;
-	msg.msg_iovlen    = 1;
-
-	return raw_recvmsg(sk, &msg, size, noblock, flags, addr_len);
-}
-
-int raw_read (struct sock *sk, unsigned char *buff, int len, int noblock, unsigned flags)
-{
-	return(raw_recvfrom(sk, buff, len, noblock, flags, NULL, NULL));
-}
-
-
 struct proto raw_prot = {
 	raw_close,
-	raw_read,
-	raw_write,
-	raw_sendto,
-	raw_recvfrom,
 	ip_build_header,
 	udp_connect,
 	NULL,
@@ -354,8 +353,9 @@ struct proto raw_prot = {
 	NULL,
 	ip_setsockopt,
 	ip_getsockopt,
-	NULL,
+	raw_sendmsg,
 	raw_recvmsg,
+	NULL,		/* No special bind */
 	128,
 	0,
 	"RAW",

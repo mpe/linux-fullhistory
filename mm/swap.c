@@ -837,6 +837,8 @@ unsigned long __get_free_pages(int priority, unsigned long order, unsigned long 
 	unsigned long flags;
 	int reserved_pages;
 
+	if (order >= NR_MEM_LISTS)
+		return 0;
 	if (intr_count && priority != GFP_ATOMIC) {
 		static int count = 0;
 		if (++count < 5) {

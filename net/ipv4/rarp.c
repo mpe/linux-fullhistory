@@ -163,7 +163,7 @@ static void rarp_destroy_dev(struct device *dev)
 	sti();
 }
 
-static int rarp_device_event(unsigned long event, void *ptr)
+static int rarp_device_event(struct notifier_block *this, unsigned long event, void *ptr)
 {
 	if(event!=NETDEV_DOWN)
 		return NOTIFY_DONE;

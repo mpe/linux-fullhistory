@@ -24,10 +24,6 @@
 static const char *version =
 	"skeleton.c:v1.51 9/24/94 Donald Becker (becker@cesdis.gsfc.nasa.gov)\n";
 
-/* Always include 'config.h' first in case the user wants to turn on
-   or override something. */
-#include <linux/config.h>
-
 /*
   Sources:
 	List your sources of programming information to document that

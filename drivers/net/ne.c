@@ -48,13 +48,13 @@ static const char *version =
 /* Some defines that people can play with if so inclined. */
 
 /* Do we support clones that don't adhere to 14,15 of the SAprom ? */
-#define CONFIG_NE_BAD_CLONES
+#define SUPPORT_NE_BAD_CLONES
 
 /* Do we perform extra sanity checks on stuff ? */
-/* #define CONFIG_NE_SANITY */
+/* #define NE_SANITY_CHECK */
 
 /* Do we implement the read before write bugfix ? */
-/* #define CONFIG_NE_RW_BUGFIX */
+/* #define NE_RW_BUGFIX */
 
 /* ---- No user-serviceable parts below ---- */
 
@@ -62,7 +62,7 @@ static const char *version =
 static unsigned int netcard_portlist[] =
 { 0x300, 0x280, 0x320, 0x340, 0x360, 0};
 
-#ifdef CONFIG_NE_BAD_CLONES
+#ifdef SUPPORT_NE_BAD_CLONES
 /* A list of bad clones that we none-the-less recognize. */
 static struct { const char *name8, *name16; unsigned char SAprefix[4];}
 bad_clone_list[] = {
@@ -255,7 +255,7 @@ static int ne_probe1(struct device *dev, int ioaddr)
 	start_page = 0x01;
 	stop_page = (wordlength == 2) ? 0x40 : 0x20;
     } else {
-#ifdef CONFIG_NE_BAD_CLONES
+#ifdef SUPPORT_NE_BAD_CLONES
 	/* Ack!  Well, there might be a *bad* NE*000 clone there.
 	   Check for total bogus addresses. */
 	for (i = 0; bad_clone_list[i].name8; i++) {
@@ -412,7 +412,7 @@ ne_get_8390_hdr(struct device *dev, struct e8390_pkt_hdr *hdr, int ring_page)
 static void
 ne_block_input(struct device *dev, int count, struct sk_buff *skb, int ring_offset)
 {
-#ifdef CONFIG_NE_SANITY
+#ifdef NE_SANITY_CHECK
     int xfer_count = count;
 #endif
     int nic_base = dev->base_addr;
@@ -437,7 +437,7 @@ ne_block_input(struct device *dev, int count, struct sk_buff *skb, int ring_offs
       insw(NE_BASE + NE_DATAPORT,buf,count>>1);
       if (count & 0x01) {
 	buf[count-1] = inb(NE_BASE + NE_DATAPORT);
-#ifdef CONFIG_NE_SANITY
+#ifdef NE_SANITY_CHECK
 	xfer_count++;
 #endif
       }
@@ -445,7 +445,7 @@ ne_block_input(struct device *dev, int count, struct sk_buff *skb, int ring_offs
 	insb(NE_BASE + NE_DATAPORT, buf, count);
     }
 
-#ifdef CONFIG_NE_SANITY
+#ifdef NE_SANITY_CHECK
     /* This was for the ALPHA version only, but enough people have
        been encountering problems so it is still here.  If you see
        this message you either 1) have a slightly incompatible clone
@@ -477,7 +477,7 @@ ne_block_output(struct device *dev, int count,
 {
     int nic_base = NE_BASE;
     unsigned long dma_start;
-#ifdef CONFIG_NE_SANITY
+#ifdef NE_SANITY_CHECK
     int retries = 0;
 #endif
 
@@ -499,7 +499,7 @@ ne_block_output(struct device *dev, int count,
     /* We should already be in page 0, but to be safe... */
     outb_p(E8390_PAGE0+E8390_START+E8390_NODMA, nic_base + NE_CMD);
 
-#ifdef CONFIG_NE_SANITY
+#ifdef NE_SANITY_CHECK
  retry:
 #endif
 
@@ -536,7 +536,7 @@ ne_block_output(struct device *dev, int count,
 
     dma_start = jiffies;
 
-#ifdef CONFIG_NE_SANITY
+#ifdef NE_SANITY_CHECK
     /* This was for the ALPHA version only, but enough people have
        been encountering problems so it is still here. */
     if (ei_debug > 1) {		/* DMA termination address check... */

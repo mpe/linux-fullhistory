@@ -113,3 +113,13 @@ void * __memcpy(void * dest, const void *src, size_t n)
 	__memcpy_unaligned((unsigned long) dest, (unsigned long) src, n);
 	return dest;
 }
+
+/*
+ * Broken compiler uses "bcopy" to do internal
+ * assignments. Silly OSF/1 BSDism.
+ */
+char * bcopy(const char * src, char * dest, size_t n)
+{
+	__memcpy(dest, src, n);
+	return dest;
+}

@@ -38,9 +38,9 @@ struct sparc_phys_banks {
 
 extern struct sparc_phys_banks sp_banks[SPARC_PHYS_BANKS];
 
-#define CONFIG_STRICT_MM_TYPECHECKS
+#define STRICT_MM_TYPECHECKS
 
-#ifdef CONFIG_STRICT_MM_TYPECHECKS
+#ifdef STRICT_MM_TYPECHECKS
 /*
  * These are used to make use of C type-checking..
  */

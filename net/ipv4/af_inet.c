@@ -45,6 +45,7 @@
  *					listen.
  *		Germano Caronni	:	Assorted small races.
  *		Alan Cox	:	sendmsg/recvmsg basic support.
+ *		Alan Cox	:	Only sendmsg/recvmsg now supported.
  *
  *		This program is free software; you can redistribute it and/or
  *		modify it under the terms of the GNU General Public License
@@ -657,78 +658,6 @@ static int inet_create(struct socket *sock, int protocol)
 	sk->cong_window = 1; /* start with only sending one packet at a time. */
 	sk->priority = 1;
 	sk->state = TCP_CLOSE;
-#ifdef WHAT_WE_DO_THE_MEMZERO_INSTEAD_OF	
-	sk->stamp.tv_sec=0;
-	sk->wmem_alloc = 0;
-	sk->rmem_alloc = 0;
-	sk->pair = NULL;
-	sk->opt = NULL;
-	sk->write_seq = 0;
-	sk->acked_seq = 0;
-	sk->copied_seq = 0;
-	sk->fin_seq = 0;
-	sk->urg_seq = 0;
-	sk->urg_data = 0;
-	sk->proc = 0;
-	sk->rtt = 0;				/*TCP_WRITE_TIME << 3;*/
-	sk->mdev = 0;
-	sk->backoff = 0;
-	sk->packets_out = 0;
-	sk->cong_count = 0;
-	sk->ssthresh = 0;
-	sk->max_window = 0;
-	sk->urginline = 0;
-	sk->intr = 0;
-	sk->linger = 0;
-	sk->destroy = 0;
-	sk->shutdown = 0;
-	sk->keepopen = 0;
-	sk->zapped = 0;
-	sk->done = 0;
-	sk->ack_backlog = 0;
-	sk->window = 0;
-	sk->bytes_rcv = 0;
-	sk->dead = 0;
-	sk->ack_timed = 0;
-	sk->partial = NULL;
-	sk->user_mss = 0;
-	sk->debug = 0;
-	/* how many packets we should send before forcing an ack. 
-	   if this is set to zero it is the same as sk->delay_acks = 0 */
-	sk->max_ack_backlog = 0;
-	sk->inuse = 0;
-	sk->delay_acks = 0;
-	sk->daddr = 0;
-	sk->saddr = 0;
-	sk->rcv_saddr = 0;
-	sk->err = 0;
-	sk->next = NULL;
-	sk->pair = NULL;
-	sk->send_tail = NULL;
-	sk->send_head = NULL;
-	sk->timeout = 0;
-	sk->broadcast = 0;
-	sk->localroute = 0;
-	sk->blog = 0;
-	sk->dummy_th.res1=0;
-	sk->dummy_th.res2=0;
-	sk->dummy_th.urg_ptr = 0;
-	sk->dummy_th.fin = 0;
-	sk->dummy_th.syn = 0;
-	sk->dummy_th.rst = 0;
-	sk->dummy_th.psh = 0;
-	sk->dummy_th.ack = 0;
-	sk->dummy_th.urg = 0;
-	sk->dummy_th.dest = 0;
-	sk->ip_tos=0;
-	sk->ip_route_cache=NULL;
-	sk->ip_hcache_ver= 0;
-	sk->ip_option_len=0;
-	sk->ip_option_flen=0;
-	sk->ip_opt_next_hop=0;
-	sk->ip_opt_ptr[0]=NULL;
-	sk->ip_opt_ptr[1]=NULL;
-#endif	
 
 	/* this is how many unacked bytes we will accept for this socket.  */
 	sk->max_unacked = 2048; /* needs to be at most 2 full packets. */
@@ -894,6 +823,13 @@ static int inet_bind(struct socket *sock, struct sockaddr *uaddr,
 	unsigned short snum = 0 /* Stoopid compiler.. this IS ok */;
 	int chk_addr_ret;
 
+	/*
+	 *	If the socket has its own bind function then use it.
+	 */
+	 
+	if(sk->prot->bind)
+		return sk->prot->bind(sk,uaddr, addr_len);
+		
 	/* check this error. */
 	if (sk->state != TCP_CLOSE)
 		return(-EIO);
@@ -984,22 +920,6 @@ static int inet_bind(struct socket *sock, struct sockaddr *uaddr,
 }
 
 /*
- *	Handle sk->err properly. The cli/sti matter.
- */
- 
-static int inet_error(struct sock *sk)
-{
-	unsigned long flags;
-	int err;
-	save_flags(flags);
-	cli();	
-	err=sk->err;
-	sk->err=0;
-	restore_flags(flags);
-	return -err;
-}
-
-/*
  *	Connect to a remote host. There is regrettably still a little
  *	TCP 'magic' in here.
  */
@@ -1021,7 +941,7 @@ static int inet_connect(struct socket *sock, struct sockaddr * uaddr,
 	if (sock->state == SS_CONNECTING && sk->protocol == IPPROTO_TCP && (flags & O_NONBLOCK))
 	{
 		if(sk->err!=0)
-			return inet_error(sk);
+			return sock_error(sk);
 		return -EALREADY;	/* Connecting is currently in progress */
   	}
 	if (sock->state != SS_CONNECTING) 
@@ -1040,7 +960,7 @@ static int inet_connect(struct socket *sock, struct sockaddr * uaddr,
 	if (sk->state > TCP_FIN_WAIT2 && sock->state==SS_CONNECTING)
 	{
 		sock->state=SS_UNCONNECTED;
-		return inet_error(sk);
+		return sock_error(sk);
 	}
 
 	if (sk->state != TCP_ESTABLISHED &&(flags & O_NONBLOCK)) 
@@ -1061,7 +981,7 @@ static int inet_connect(struct socket *sock, struct sockaddr * uaddr,
 		{
 			sock->state = SS_UNCONNECTED;
 			sti();
-			return inet_error(sk); /* set by tcp_err() */
+			return sock_error(sk); /* set by tcp_err() */
 		}
 	}
 	sti();
@@ -1070,7 +990,7 @@ static int inet_connect(struct socket *sock, struct sockaddr * uaddr,
 	if (sk->state != TCP_ESTABLISHED && sk->err) 
 	{
 		sock->state = SS_UNCONNECTED;
-		return inet_error(sk);
+		return sock_error(sk);
 	}
 	return(0);
 }
@@ -1120,7 +1040,7 @@ static int inet_accept(struct socket *sock, struct socket *newsock, int flags)
 		sk2 = sk1->prot->accept(sk1,flags);
 		if (sk2 == NULL) 
 		{
-			return inet_error(sk1);
+			return sock_error(sk1);
 		}
 	}
 	newsock->data = (void *)sk2;
@@ -1148,7 +1068,7 @@ static int inet_accept(struct socket *sock, struct socket *newsock, int flags)
 
 	if (sk2->state != TCP_ESTABLISHED && sk2->err > 0) 
 	{
-		err = inet_error(sk2);
+		err = sock_error(sk2);
 		sk2->dead=1;
 		destroy_sock(sk2);
 		newsock->data = NULL;
@@ -1194,25 +1114,6 @@ static int inet_getname(struct socket *sock, struct sockaddr *uaddr,
 }
 
 
-/*
- *	The assorted BSD I/O operations
- */
-
-static int inet_recvfrom(struct socket *sock, void *ubuf, int size, int noblock, 
-		   unsigned flags, struct sockaddr *sin, int *addr_len )
-{
-	struct sock *sk = (struct sock *) sock->data;
-	
-	if (sk->prot->recvfrom == NULL) 
-		return(-EOPNOTSUPP);
-	if(sk->err)
-		return inet_error(sk);
-	/* We may need to bind the socket. */
-	if(inet_autobind(sk)!=0)
-		return(-EAGAIN);
-	return(sk->prot->recvfrom(sk, (unsigned char *) ubuf, size, noblock, flags,
-			     (struct sockaddr_in*)sin, addr_len));
-}
 
 static int inet_recvmsg(struct socket *sock, struct msghdr *ubuf, int size, int noblock, 
 		   int flags, int *addr_len )
@@ -1222,74 +1123,13 @@ static int inet_recvmsg(struct socket *sock, struct msghdr *ubuf, int size, int 
 	if (sk->prot->recvmsg == NULL) 
 		return(-EOPNOTSUPP);
 	if(sk->err)
-		return inet_error(sk);
+		return sock_error(sk);
 	/* We may need to bind the socket. */
 	if(inet_autobind(sk)!=0)
 		return(-EAGAIN);
 	return(sk->prot->recvmsg(sk, ubuf, size, noblock, flags,addr_len));
 }
 
-
-static int inet_recv(struct socket *sock, void *ubuf, int size, int noblock,
-	  unsigned flags)
-{
-	/* BSD explicitly states these are the same - so we do it this way to be sure */
-	return inet_recvfrom(sock,ubuf,size,noblock,flags,NULL,NULL);
-}
-
-static int inet_read(struct socket *sock, char *ubuf, int size, int noblock)
-{
-	struct sock *sk = (struct sock *) sock->data;
-	
-	if(sk->err)
-		return inet_error(sk);
-	/* We may need to bind the socket. */
-	if(inet_autobind(sk))
-		return(-EAGAIN);	
-	return(sk->prot->read(sk, (unsigned char *) ubuf, size, noblock, 0));
-}
-
-static int inet_send(struct socket *sock, const void *ubuf, int size, int noblock, 
-	       unsigned flags)
-{
-	struct sock *sk = (struct sock *) sock->data;
-	if (sk->shutdown & SEND_SHUTDOWN) 
-	{
-		send_sig(SIGPIPE, current, 1);
-		return(-EPIPE);
-	}
-	if(sk->err)
-		return inet_error(sk);
-	/* We may need to bind the socket. */
-	if(inet_autobind(sk)!=0)
-		return(-EAGAIN);
-	return(sk->prot->write(sk, (const unsigned char *) ubuf, size, noblock, flags));
-}
-
-static int inet_write(struct socket *sock, const char *ubuf, int size, int noblock)
-{
-	return inet_send(sock,ubuf,size,noblock,0);
-}
-
-static int inet_sendto(struct socket *sock, const void *ubuf, int size, int noblock, 
-	    unsigned flags, struct sockaddr *sin, int addr_len)
-{
-	struct sock *sk = (struct sock *) sock->data;
-	if (sk->shutdown & SEND_SHUTDOWN) 
-	{
-		send_sig(SIGPIPE, current, 1);
-		return(-EPIPE);
-	}
-	if (sk->prot->sendto == NULL) 
-		return(-EOPNOTSUPP);
-	if(sk->err)
-		return inet_error(sk);
-	/* We may need to bind the socket. */
-	if(inet_autobind(sk)!=0)
-		return -EAGAIN;
-	return(sk->prot->sendto(sk, (const unsigned char *) ubuf, size, noblock, flags, 
-			   (struct sockaddr_in *)sin, addr_len));
-}
 
 static int inet_sendmsg(struct socket *sock, struct msghdr *msg, int size, int noblock, 
 	   int flags)
@@ -1303,7 +1143,7 @@ static int inet_sendmsg(struct socket *sock, struct msghdr *msg, int size, int n
 	if (sk->prot->sendmsg == NULL) 
 		return(-EOPNOTSUPP);
 	if(sk->err)
-		return inet_error(sk);
+		return sock_error(sk);
 	/* We may need to bind the socket. */
 	if(inet_autobind(sk)!=0)
 		return -EAGAIN;
@@ -1424,7 +1264,6 @@ static int inet_ioctl(struct socket *sock, unsigned int cmd, unsigned long arg)
 		case SIOCSIFLINK:
 		case SIOCGIFHWADDR:
 		case SIOCSIFHWADDR:
-		case OLD_SIOCGIFHWADDR:
 		case SIOCSIFMAP:
 		case SIOCGIFMAP:
 		case SIOCSIFSLAVE:
@@ -1597,15 +1436,9 @@ static struct proto_ops inet_proto_ops = {
 	inet_socketpair,
 	inet_accept,
 	inet_getname, 
-	inet_read,
-	inet_write,
 	inet_select,
 	inet_ioctl,
 	inet_listen,
-	inet_send,
-	inet_recv,
-	inet_sendto,
-	inet_recvfrom,
 	inet_shutdown,
 	inet_setsockopt,
 	inet_getsockopt,

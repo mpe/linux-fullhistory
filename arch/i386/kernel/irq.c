@@ -15,7 +15,6 @@
  * Naturally it's not a 1:1 relation, but there are similarities.
  */
 
-#include <linux/config.h>
 #include <linux/ptrace.h>
 #include <linux/errno.h>
 #include <linux/kernel_stat.h>
@@ -105,14 +104,14 @@ BUILD_IRQ(SECOND,9,0x02)
 BUILD_IRQ(SECOND,10,0x04)
 BUILD_IRQ(SECOND,11,0x08)
 BUILD_IRQ(SECOND,12,0x10)
-#ifdef CONFIG_SMP
+#ifdef __SMP__
 BUILD_MSGIRQ(SECOND,13,0x20)
 #else
 BUILD_IRQ(SECOND,13,0x20)
 #endif
 BUILD_IRQ(SECOND,14,0x40)
 BUILD_IRQ(SECOND,15,0x80)
-#ifdef CONFIG_SMP
+#ifdef __SMP__
 BUILD_RESCHEDIRQ(16)
 #endif
 
@@ -125,7 +124,7 @@ static void (*interrupt[17])(void) = {
 	IRQ4_interrupt, IRQ5_interrupt, IRQ6_interrupt, IRQ7_interrupt,
 	IRQ8_interrupt, IRQ9_interrupt, IRQ10_interrupt, IRQ11_interrupt,
 	IRQ12_interrupt, IRQ13_interrupt, IRQ14_interrupt, IRQ15_interrupt	
-#ifdef CONFIG_SMP	
+#ifdef __SMP__	
 	,IRQ16_interrupt
 #endif
 };
@@ -189,7 +188,7 @@ int get_irq_list(char *buf)
 /*
  *	Linus - should you add NMI counts here ?????
  */
-#ifdef CONFIG_SMP
+#ifdef __SMP__
 	len+=sprintf(buf+len, "IPI: %8lu received\n",
 		ipi_count);
 	len+=sprintf(buf+len, "LCK: %8lu spins\n",
@@ -208,7 +207,7 @@ int get_irq_list(char *buf)
 asmlinkage void do_IRQ(int irq, struct pt_regs * regs)
 {
 	struct irqaction * action = irq + irq_action;
-#ifdef CONFIG_SMP
+#ifdef __SMP__
 	if(smp_threads_ready && active_kernel_processor!=smp_processor_id())
 		panic("IRQ %d: active processor set wrongly(%d not %d).\n", irq, active_kernel_processor, smp_processor_id());
 #endif
@@ -227,7 +226,7 @@ asmlinkage void do_IRQ(int irq, struct pt_regs * regs)
 asmlinkage void do_fast_IRQ(int irq)
 {
 	struct irqaction * action = irq + irq_action;
-#ifdef CONFIG_SMP
+#ifdef __SMP__
 	/* IRQ 13 is allowed - thats an invalidate */
 	if(smp_threads_ready && active_kernel_processor!=smp_processor_id() && irq!=13)
 		panic("fast_IRQ %d: active processor set wrongly(%d not %d).\n", irq, active_kernel_processor, smp_processor_id());
@@ -311,7 +310,7 @@ void free_irq(unsigned int irq)
 	restore_flags(flags);
 }
 
-#ifndef CONFIG_SMP
+#ifndef __SMP__
 
 /*
  * Note that on a 486, we don't want to do a SIGFPE on a irq13
@@ -406,12 +405,12 @@ void init_IRQ(void)
 		set_intr_gate(0x20+i,bad_interrupt[i]);
 	/* This bit is a hack because we don't send timer messages to all processors yet */
 	/* It has to here .. it doesnt work if you put it down the bottom - assembler explodes 8) */
-#ifdef CONFIG_SMP	
+#ifdef __SMP__	
 	set_intr_gate(0x20+i, interrupt[i]);	/* IRQ '16' - IPI for rescheduling */
 #endif	
 	if (request_irq(2, no_action, SA_INTERRUPT, "cascade"))
 		printk("Unable to get IRQ2 for cascade.\n");
-#ifndef CONFIG_SMP		
+#ifndef __SMP__		
 	if (request_irq(13,math_error_irq, 0, "math error"))
 		printk("Unable to get IRQ13 for math-error handler.\n");
 #else

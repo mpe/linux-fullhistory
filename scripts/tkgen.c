@@ -189,7 +189,7 @@ generate_if(struct kconfig * item,
       printf(".menu%d.x%d.y configure -state disabled;",menu_num, line_num);
       printf(".menu%d.x%d.n configure -state disabled;",menu_num, line_num);
       printf(".menu%d.x%d.l configure -state disabled;",menu_num, line_num);
-      printf("set %s [expr $%s|16];", item->optionname, item->optionname);
+      printf("set %s [ expr $%s | 16 ];", item->optionname, item->optionname);
       printf("}\n");
 #endif
       break;

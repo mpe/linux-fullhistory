@@ -9,7 +9,6 @@
  *		
  */
 
-#include <linux/config.h>
 #include <linux/types.h>
 #include <linux/skbuff.h>
 #include <linux/ip.h>

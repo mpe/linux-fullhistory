@@ -54,14 +54,7 @@
 static const char *version =
 	"eepro.c: v0.07a 6/5/95 Bao C. Ha (bao@saigon.async.com)\n";
 
-/* Always include 'config.h' first in case the user wants to turn on
-   or override something. */
-#include <linux/config.h>
-
-#ifdef MODULE
 #include <linux/module.h>
-#include <linux/version.h>
-#endif
 
 /*
   Sources:
@@ -1138,7 +1131,6 @@ eepro_transmit_interrupt(struct device *dev)
 }
 
 #ifdef MODULE
-char kernel_version[] = UTS_RELEASE;
 static char devicename[9] = { 0, };
 static struct device dev_eepro = {
 	devicename, /* device name is inserted by linux/drivers/net/net_init.c */

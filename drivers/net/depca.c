@@ -188,14 +188,7 @@
 
 static const char *version = "depca.c:v0.41 5/26/95 davies@wanton.lkg.dec.com\n";
 
-#include <linux/config.h>
-#ifdef MODULE
 #include <linux/module.h>
-#include <linux/version.h>
-#else
-#define MOD_INC_USE_COUNT
-#define MOD_DEC_USE_COUNT
-#endif /* MODULE */
 
 #include <linux/types.h>
 #include <linux/kernel.h>
@@ -1818,7 +1811,6 @@ static int depca_ioctl(struct device *dev, struct ifreq *rq, int cmd)
 }
 
 #ifdef MODULE
-char kernel_version[] = UTS_RELEASE;
 static char devicename[9] = { 0, };
 static struct device thisDepca = {
   devicename, /* device name is inserted by linux/drivers/net/net_init.c */

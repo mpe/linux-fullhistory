@@ -15,7 +15,6 @@
  *		Alan Cox, <gw4pts@gw4pts.ampr.org>
  */
  
-#include <linux/config.h>
 #include <asm/segment.h>
 #include <asm/system.h>
 #include <asm/bitops.h>

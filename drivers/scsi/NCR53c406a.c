@@ -37,10 +37,7 @@
 
 /* ============= End of user configurable parameters ============= */
 
-#ifdef MODULE
-#include <linux/config.h>
 #include <linux/module.h>
-#endif
 
 #include <linux/errno.h>
 #include <linux/ioport.h>

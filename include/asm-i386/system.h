@@ -49,7 +49,7 @@ __asm__("str %%ax\n\t" \
  */
 
  
-#ifdef CONFIG_SMP
+#ifdef __SMP__
 	/*
 	 *	Keep the lock depth straight. If we switch on an interrupt from
 	 *	kernel->user task we need to lose a depth, and if we switch the

@@ -242,7 +242,7 @@ asmlinkage void do_debug(struct pt_regs * regs, long error_code)
 void math_error(void)
 {
 	struct i387_hard_struct * env;
-#ifdef CONFIG_SMP
+#ifdef __SMP__
 	env=&current->tss.i387.hard;
 	send_sig(SIGFPE, current, 1);
 	/*
@@ -289,7 +289,7 @@ asmlinkage void do_coprocessor_error(struct pt_regs * regs, long error_code)
  */
 asmlinkage void math_state_restore(void)
 {
-#ifdef CONFIG_SMP
+#ifdef __SMP__
 /*
  *	SMP is actually simpler than uniprocessor for once. Because
  *	we can't pull the delayed FPU switching trick Linus does

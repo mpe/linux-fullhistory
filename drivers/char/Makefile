@@ -18,7 +18,7 @@ L_TARGET := char.a
 M_OBJS   :=
 L_OBJS   := tty_io.o n_tty.o console.o keyboard.o serial.o \
 	tty_ioctl.o pty.o vt.o mem.o vc_screen.o random.o \
-	defkeymap.o consolemap.o vesa_blank.o selection.o
+	defkeymap.o consolemap.o selection.o
 
 ifdef CONFIG_CYCLADES
 L_OBJS += cyclades.o
@@ -102,6 +102,12 @@ endif
   
 ifdef CONFIG_SCC
 L_OBJS += scc.o
+endif
+
+ifdef CONFIG_TGA_CONSOLE
+L_OBJS += tga.o
+else
+L_OBJS += vga.o vesa_blank.o
 endif
 
 include $(TOPDIR)/Rules.make

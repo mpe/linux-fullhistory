@@ -143,14 +143,7 @@
 
 static const char *version = "de4x5.c:v0.32 6/26/95 davies@wanton.lkg.dec.com\n";
 
-#include <linux/config.h>
-#ifdef MODULE
 #include <linux/module.h>
-#include <linux/version.h>
-#else
-#define MOD_INC_USE_COUNT
-#define MOD_DEC_USE_COUNT
-#endif /* MODULE */
 
 #include <linux/kernel.h>
 #include <linux/sched.h>
@@ -1837,13 +1830,23 @@ static void dc21040_autoconf(struct device *dev)
     dce_ms_delay(500);
     linkBad = ping_media(dev);
     if (linkBad && (lp->autosense == AUTO)) {
+      lp->media = EXT_SIA;
+      dc21040_autoconf(dev);
+    }
+    break;
+
+  case EXT_SIA:
+    reset_init_sia(dev, 0x3041, 0x0000, 0x0006);
+    dce_ms_delay(500);
+    linkBad = ping_media(dev);
+    if (linkBad && (lp->autosense == AUTO)) {
       lp->media = NC;
       dc21040_autoconf(dev);
     }
     break;
 
   case NC:
-#ifdef i386
+#ifndef __alpha__
     reset_init_sia(dev, 0x8f01, 0xffff, 0x0000);
     break;
 #else
@@ -2736,7 +2739,6 @@ static int de4x5_ioctl(struct device *dev, struct ifreq *rq, int cmd)
 }
 
 #ifdef MODULE
-char kernel_version[] = UTS_RELEASE;
 static char devicename[9] = { 0, };
 static struct device thisDE4X5 = {
   devicename, /* device name is inserted by linux/drivers/net/net_init.c */

@@ -38,7 +38,7 @@ startup_32:
 	mov %ax,%es
 	mov %ax,%fs
 	mov %ax,%gs
-#ifdef CONFIG_SMP
+#ifdef __SMP__
 	orw %bx,%bx			# What state are we in BX=1 for SMP
 					# 0 for boot
 	jz  2f				# Initial boot

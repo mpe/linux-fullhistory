@@ -44,6 +44,19 @@
 #define PIO             0xfe
 
 #define EATA_SIGNATURE	0x45415441     /* BIG ENDIAN coded "EATA" sig.	 */
+
+#define DPT_ID1         0x12
+#define DPT_ID2         0x14
+
+#define ATT_ID1         0x06
+#define ATT_ID2         0x94
+#define ATT_ID3         0x0
+
+#define NEC_ID1         0x38
+#define NEC_ID2         0xa3
+#define NEC_ID3         0x82
+
+
 #define EATA_CP_SIZE	44
 
 #define MAX_PCI_DEVICES 32	       /* Maximum # Of Devices Per Bus	 */
@@ -109,14 +122,13 @@
 
 #define ECS_EMULATE_SENSE	 0xd4
 
-
-#define GENERIC_ABORT  0x00 
-#define SPECIFIC_RESET 0x01
-#define BUS_RESET      0x02
-#define SPECIFIC_ABORT 0x03
-#define QUIET_INTR     0x04
-#define COLD_BOOT_HBA  0x06	   /* Only as a last resort	*/
-#define FORCE_IO       0x07
+#define EATA_GENERIC_ABORT       0x00 
+#define EATA_SPECIFIC_RESET      0x01
+#define EATA_BUS_RESET           0x02
+#define EATA_SPECIFIC_ABORT      0x03
+#define EATA_QUIET_INTR          0x04
+#define EATA_COLD_BOOT_HBA       0x06	   /* Only as a last resort	*/
+#define EATA_FORCE_IO            0x07
 
 
 #define HA_WCOMMAND    0x07	   /* command register offset	*/

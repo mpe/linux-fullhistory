@@ -28,6 +28,8 @@
 #include <linux/if_ether.h>
 #include <linux/skbuff.h>
 
+#include <linux/config.h>
+
 /* for future expansion when we will have different priorities. */
 #define DEV_NUMBUFFS	3
 #define MAX_ADDR_LEN	7
@@ -160,7 +162,7 @@ struct device
   void			  (*set_multicast_list)(struct device *dev,
   					 int num_addrs, void *addrs);
 #define HAVE_SET_MAC_ADDR  		 
-  int			  (*set_mac_address)(struct device *dev, void *addr);
+  int			  (*set_mac_address)(struct device *dev, struct sockaddr *addr);
 #define HAVE_PRIVATE_IOCTL
   int			  (*do_ioctl)(struct device *dev, struct ifreq *ifr, int cmd);
 #define HAVE_SET_CONFIG
@@ -186,7 +188,7 @@ struct packet_type {
 /* Used by dev_rint */
 #define IN_SKBUFF	1
 
-extern volatile char in_bh;
+extern volatile unsigned long in_bh;
 
 extern struct device	loopback_dev;
 extern struct device	*dev_base;

@@ -9,15 +9,15 @@
 #  ifdef MODULE
 #    define _set_ver(sym,ver) \
 	{ (void *) & sym ## _R ## ver, SYMBOL_NAME_STR(sym) "_R" #ver }
-#  else /* MODULE */
+#  else /* !MODULE */
 #    define _set_ver(sym,ver) \
 	{ (void *) & sym, SYMBOL_NAME_STR(sym) "_R" #ver }
-#  endif /* MODULE */
+#  endif /* !MODULE */
 #  define X(a) a
 # endif /* !__GENKSYMS__ */
-#else /* CONFIG_MODVERSIONS */
+#else /* !CONFIG_MODVERSIONS */
 # define X(sym) { (void *) & sym, SYMBOL_NAME_STR(sym)}
-#endif /* CONFIG_MODVERSIONS */
+#endif /* !CONFIG_MODVERSIONS */
 
 #define EMPTY {0,0}
 	0, 0, 0, {

@@ -15,6 +15,10 @@
 #define CONFIG_OSF_PARTITION 1
 #endif
 
+#ifdef __sparc__
+#define CONFIG_SUN_PARTITION 1
+#endif
+
 /* These two have identical behaviour; use the second one if DOS fdisk gets
    confused about extended/logical partitions starting past cylinder 1023. */	
 #define DOS_EXTENDED_PARTITION 5

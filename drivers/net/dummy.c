@@ -31,10 +31,7 @@
 /* To have statistics (just packets sent) define this */
 #undef DUMMY_STATS
 
-#ifdef MODULE
 #include <linux/module.h>
-#include <linux/version.h>
-#endif
 
 #include <linux/kernel.h>
 #include <linux/sched.h>
@@ -73,7 +70,6 @@ static int dummy_close(struct device *dev)
 	MOD_DEC_USE_COUNT;
 	return 0;
 }
-
 #endif
 
 
@@ -135,7 +131,6 @@ dummy_get_stats(struct device *dev)
 #endif
 
 #ifdef MODULE
-char kernel_version[] = UTS_RELEASE;
 
 static int dummy_probe(struct device *dev)
 {

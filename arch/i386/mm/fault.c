@@ -4,7 +4,6 @@
  *  Copyright (C) 1995  Linus Torvalds
  */
 
-#include <linux/config.h>
 #include <linux/signal.h>
 #include <linux/sched.h>
 #include <linux/head.h>
@@ -88,7 +87,7 @@ good_area:
 			current->tss.screen_bitmap |= 1 << bit;
 	}
 	if (error_code & 1) {
-#ifdef CONFIG_TEST_VERIFY_AREA
+#ifdef TEST_VERIFY_AREA
 		if (regs->cs == KERNEL_CS)
 			printk("WP fault at %08x\n", regs->eip);
 #endif

@@ -10,6 +10,7 @@
  *		Alan Cox	: 	Fixed bug with 1.3.18 and IPIP not working (now needs to set skb->h.iph)
  *					to keep ip_forward happy.
  *		Alan Cox	:	More fixes for 1.3.21, and firewall fix. Maybe this will work soon 8).
+ *		Kai Schulte	:	Fixed #defines for IP_FIREWALL->FIREWALL
  *
  *	This program is free software; you can redistribute it and/or
  *	modify it under the terms of the GNU General Public License
@@ -34,20 +35,11 @@
 #include <net/ipip.h>
 #include <linux/firewall.h>
 
-/*
- * NB. we must include the kernel idenfication string in to install the module.
- */
- 
-#if ( defined(CONFIG_NET_IPIP) && defined(CONFIG_IP_FORWARD)) || defined(MODULE)
-#ifdef MODULE
-#include <linux/module.h>
-#include <linux/version.h>
+#include <linux/config.h>
 
-static char kernel_version[] = UTS_RELEASE;
-#else
-#define MOD_INC_USE_COUNT
-#define MOD_DEC_USE_COUNT
-#endif 
+#include <linux/module.h>
+
+#if ( defined(CONFIG_NET_IPIP) && defined(CONFIG_IP_FORWARD)) || defined(MODULE)
 
 
 /*
@@ -63,7 +55,7 @@ int ipip_rcv(struct sk_buff *skb, struct device *dev, struct options *opt,
 		__u32 daddr, unsigned short len, __u32 saddr,
                                    int redo, struct inet_protocol *protocol)
 {
-#ifdef CONFIG_IP_FIREWALL
+#ifdef CONFIG_FIREWALL
 	int err;
 #endif
 	/* Don't unlink in the middle of a turnaround */

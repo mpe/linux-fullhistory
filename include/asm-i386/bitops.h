@@ -13,9 +13,7 @@
  * bit 0 is the LSB of addr; bit 32 is the LSB of (addr+1).
  */
 
-#include <linux/config.h>
-
-#ifdef CONFIG_SMP
+#ifdef __SMP__
 #define LOCK_PREFIX "lock ; "
 #else
 #define LOCK_PREFIX ""

@@ -372,7 +372,7 @@ static void aarp_expire_timeout(unsigned long unused)
  *	Network device notifier chain handler.
  */
  
-static int aarp_device_event(unsigned long event, void *ptr)
+static int aarp_device_event(struct notifier_block *this, unsigned long event, void *ptr)
 {
 	int ct=0;
 	if(event==NETDEV_DOWN)

@@ -1,7 +1,7 @@
 #ifndef __ASM_SMP_H
 #define __ASM_SMP_H
 
-#ifdef CONFIG_SMP
+#ifdef __SMP__
 #ifndef ASSEMBLY
 
 #include <asm/i82489.h>

@@ -1,5 +1,5 @@
 /*
- *  linux/drivers/block/ide.c	Version 5.16  Oct 19, 1995
+ *  linux/drivers/block/ide.c	Version 5.17  Nov 3, 1995
  *
  *  Copyright (C) 1994, 1995  Linus Torvalds & authors (see below)
  */
@@ -166,6 +166,7 @@
  *  Version 5.16	ugh.. fix "serialize" support, broken in 5.15
  *			remove "Huh?" from cmd640 code
  *			added qd6580 interface speed select from Colten Edwards
+ *  Version 5.17	kludge around bug in BIOS32 on Intel triton motherboards
  *
  *  Driver compile-time options are in ide.h
  *
@@ -2949,7 +2950,7 @@ typedef void (ide_pci_init_proc_t)(byte, byte);
  * ide_probe_pci() scans PCI for a specific vendor/device function,
  * and invokes the supplied init routine for each instance detected.
  */
-static void ide_probe_pci (unsigned short vendor, unsigned short device, ide_pci_init_proc_t *init)
+static void ide_probe_pci (unsigned short vendor, unsigned short device, ide_pci_init_proc_t *init, int func_adj)
 {
 	unsigned long flags;
 	unsigned index;
@@ -2958,7 +2959,7 @@ static void ide_probe_pci (unsigned short vendor, unsigned short device, ide_pci
 	save_flags(flags);
 	cli();
 	for (index = 0; !pcibios_find_device (vendor, device, index, &bus, &fn); ++index) {
-		init (bus, fn);
+		init (bus, fn + func_adj);
 	}
 	restore_flags(flags);
 }
@@ -2972,13 +2973,18 @@ static void ide_probe_pci (unsigned short vendor, unsigned short device, ide_pci
 static void ide_init_pci (void)
 {
 #if SUPPORT_RZ1000
-	ide_probe_pci (PCI_VENDOR_ID_PCTECH, PCI_DEVICE_ID_PCTECH_RZ1000, &init_rz1000);
+	ide_probe_pci (PCI_VENDOR_ID_PCTECH, PCI_DEVICE_ID_PCTECH_RZ1000, &init_rz1000, 0);
 #endif
 #if SUPPORT_CMD640
-	ide_probe_pci (PCI_VENDOR_ID_CMD, PCI_DEVICE_ID_CMD_640, &init_cmd640);
+	ide_probe_pci (PCI_VENDOR_ID_CMD, PCI_DEVICE_ID_CMD_640, &init_cmd640, 0);
 #endif
 #ifdef CONFIG_BLK_DEV_TRITON
-	ide_probe_pci (PCI_VENDOR_ID_INTEL, PCI_DEVICE_ID_INTEL_82371_1, &ide_init_triton);
+	/*
+	 * Apparently the BIOS32 services on Intel motherboards are buggy,
+	 * and won't find the PCI_DEVICE_ID_INTEL_82371_1 for us.
+	 * So we instead search for PCI_DEVICE_ID_INTEL_82371_0, and then add 1.
+	 */
+	ide_probe_pci (PCI_VENDOR_ID_INTEL, PCI_DEVICE_ID_INTEL_82371_0, &ide_init_triton, 1);
 #endif
 }
 #endif /* CONFIG_PCI */

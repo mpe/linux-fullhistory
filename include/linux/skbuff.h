@@ -89,6 +89,7 @@ struct sk_buff {
   unsigned char			*data;			/* Data head pointer				*/
   unsigned char			*tail;			/* Tail pointer					*/
   unsigned char 		*end;			/* End pointer					*/
+  void 				(*destructor)(struct sk_buff *this);	/* Destruct function		*/
 };
 
 #ifdef CONFIG_SKB_LARGE

@@ -8,9 +8,9 @@
 
 #ifdef __KERNEL__
 
-#define CONFIG_STRICT_MM_TYPECHECKS
+#define STRICT_MM_TYPECHECKS
 
-#ifdef CONFIG_STRICT_MM_TYPECHECKS
+#ifdef STRICT_MM_TYPECHECKS
 /*
  * These are used to make use of C type-checking..
  */
@@ -61,7 +61,7 @@ typedef unsigned long pgprot_t;
  * ..but the i386 has somewhat limited invalidation capabilities.
  */
  
-#ifndef CONFIG_SMP
+#ifndef __SMP__
 #define invalidate() \
 __asm__ __volatile__("movl %%cr3,%%eax\n\tmovl %%eax,%%cr3": : :"ax")
 

@@ -4,12 +4,7 @@
  *	controlled by an Intel 82586 coprocessor.
  */
 
-#include	<linux/config.h>
-
-#if	defined(MODULE)
 #include	<linux/module.h>
-#include	<linux/version.h>
-#endif	/* defined(MODULE) */
 
 #include	<linux/kernel.h>
 #include	<linux/sched.h>
@@ -2175,7 +2170,6 @@ wavelan_get_info(char *buffer, char **start, off_t offset, int length, int dummy
 }
 
 #if	defined(MODULE)
-char			kernel_version[]	= UTS_RELEASE;
 static char		devicename[9]		= { 0, };
 static struct device	dev_wavelan		=
 {

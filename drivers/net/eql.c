@@ -102,12 +102,8 @@ static const char *version =
  *
  */
 
-#ifdef MODULE
 #include <linux/module.h>
-#include <linux/version.h>
-#endif
 
-#include <linux/config.h>
 #include <linux/kernel.h>
 #include <linux/sched.h>
 #include <linux/types.h>
@@ -1192,7 +1188,6 @@ eql_timer(unsigned long param)
 }
 
 #ifdef MODULE
-char kernel_version[] = UTS_RELEASE;
 static struct device dev_eql = {
 	"eql", 0, 0, 0, 0, 0, 0, 0, 0, 0, NULL, eql_init };
 

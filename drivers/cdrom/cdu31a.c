@@ -172,11 +172,7 @@
 #include <linux/major.h>
 #include <linux/config.h>
 
-#ifdef MODULE
-# include <linux/module.h>
-# include <linux/version.h>
-char kernel_version[]= UTS_RELEASE;
-#endif
+#include <linux/module.h>
 
 #include <linux/errno.h>
 #include <linux/signal.h>

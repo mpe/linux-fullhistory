@@ -75,7 +75,6 @@ static char mcchannelid[]={0x04, 0x0d, 0x04, 0x01,
 			 0x03, 0x05, 0x03, 0x01,
 			 0x03, 0x08, 0x02, 0x00};
 
-#include <linux/config.h>
 #include <linux/kernel.h>
 #include <linux/sched.h>
 #include <linux/errno.h>
@@ -106,13 +105,9 @@ char *adapter_def(char type)
 {
        switch (type)
        {
-               case 'f':
-               case 'F' : return "Adapter/A";
-               case 'e':
-               case 'E' : return "16/4 Adapter/II";
-               default :
-                       printk("Unknow adapter %c\n", type);
-                       return "adapter";
+               case 0xF : return "Adapter/A";
+               case 0xE : return "16/4 Adapter/II";
+               default : return "adapter";
        };
 };
 #endif
@@ -1017,7 +1012,9 @@ void tok_open_adapter(unsigned long dev_addr) {
   struct tok_info *ti;
   ti=(struct tok_info *) dev->priv;
 
+#ifndef TR_NEWFORMAT
 	DPRINTK("now opening the board...\n");
+#endif
 
 	*(unsigned char *)(ti->mmio + ACA_OFFSET + ACA_RESET + ISRP_ODD)=~(SRB_RESP_INT);
 	*(unsigned char *)(ti->mmio + ACA_OFFSET + ACA_RESET + ISRA_ODD)=~(CMD_IN_SRB);

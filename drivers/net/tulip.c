@@ -16,12 +16,8 @@
 
 static const char *version = "tulip.c:v0.05 1/20/95 becker@cesdis.gsfc.nasa.gov\n";
 
-#ifdef MODULE
 #include <linux/module.h>
-#include <linux/version.h>
-#endif
 
-#include <linux/config.h>
 #include <linux/kernel.h>
 #include <linux/sched.h>
 #include <linux/string.h>
@@ -741,7 +737,6 @@ set_mac_address(struct device *dev, void *addr)
 }
 
 #ifdef MODULE
-char kernel_version[] = UTS_RELEASE;
 static char devicename[9] = { 0, };
 static struct device dev_tulip = {
 	devicename, /* device name is inserted by linux/drivers/net/net_init.c */

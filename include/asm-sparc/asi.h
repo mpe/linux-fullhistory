@@ -13,8 +13,6 @@
  * be similar under regular sun4's.
  */
 
-#include <linux/config.h>
-
 #define ASI_NULL1        0x0
 #define ASI_NULL2        0x1
 

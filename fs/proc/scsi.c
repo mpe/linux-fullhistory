@@ -26,7 +26,6 @@
 #include <linux/sched.h>
 #include <linux/proc_fs.h>
 #include <linux/stat.h>
-#include <linux/config.h>
 #include <linux/mm.h>
 
 /* forward references */

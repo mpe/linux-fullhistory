@@ -7,7 +7,7 @@
  * Delay routines, using a pre-computed "loops_per_second" value.
  */
  
-#ifdef CONFIG_SMP
+#ifdef __SMP__
 #include <asm/smp.h>
 #endif 
 
@@ -31,7 +31,7 @@ extern __inline__ void udelay(unsigned long usecs)
 	usecs *= 0x000010c6;		/* 2**32 / 1000000 */
 	__asm__("mull %0"
 		:"=d" (usecs)
-#ifdef CONFIG_SMP
+#ifdef __SMP__
 		:"a" (usecs),"0" (cpu_data[smp_processor_id()].udelay_val)
 #else
 		:"a" (usecs),"0" (loops_per_sec)

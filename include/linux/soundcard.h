@@ -78,6 +78,7 @@
 #define SNDCARD_CS4232		21
 #define SNDCARD_CS4232_MPU	22
 #define SNDCARD_MAUI		23
+#define SNDCARD_PSEUDO_MSS	24
 
 /***********************************
  * IOCTL Commands for /dev/sequencer

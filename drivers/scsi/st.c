@@ -11,7 +11,7 @@
   Copyright 1992, 1993, 1994, 1995 Kai Makisara
 		 email Kai.Makisara@metla.fi
 
-  Last modified: Tue Oct 17 21:46:26 1995 by root@kai.makisara.fi
+  Last modified: Sat Nov  4 22:23:54 1995 by root@kai.makisara.fi
   Some small formal changes - aeb, 950809
 */
 #ifdef MODULE
@@ -212,7 +212,6 @@ st_sleep_done (Scsi_Cmnd * SCpnt)
     STp->write_pending = 0;
 #endif
     up(SCpnt->request.sem);
-    SCpnt->request.sem = NULL;
   }
 #if DEBUG
   else if (debugging)

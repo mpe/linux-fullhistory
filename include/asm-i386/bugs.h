@@ -11,6 +11,8 @@
  *	void check_bugs(void);
  */
 
+#include <linux/config.h>
+
 #define CONFIG_BUGi386
 
 static void no_halt(char *s, int *ints)

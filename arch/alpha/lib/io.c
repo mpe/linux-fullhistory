@@ -11,90 +11,77 @@
  * byte-wide IO.
  */
 #ifdef __is_local
-#undef __bus_inb
-unsigned int __bus_inb(unsigned long addr)
+
+unsigned int _bus_inb(unsigned long addr)
 {
-	return ___bus_inb(addr);
+	return __bus_inb(addr);
 }
 
-#undef __bus_outb
-void __bus_outb(unsigned char b, unsigned long addr)
+void _bus_outb(unsigned char b, unsigned long addr)
 {
-	___bus_outb(b, addr);
+	__bus_outb(b, addr);
 }
 #endif
 
-#undef inb
-unsigned int inb(unsigned long addr)
+unsigned int _inb(unsigned long addr)
 {
 	return __inb(addr);
 }
 
-#undef inw
-unsigned int inw(unsigned long addr)
+unsigned int _inw(unsigned long addr)
 {
 	return __inw(addr);
 }
 
-#undef inl
-unsigned int inl(unsigned long addr)
+unsigned int _inl(unsigned long addr)
 {
 	return __inl(addr);
 }
 
 
-#undef outb
-void outb(unsigned char b, unsigned long addr)
+void _outb(unsigned char b, unsigned long addr)
 {
 	__outb(b, addr);
 }
 
-#undef outw
-void outw(unsigned short b, unsigned long addr)
+void _outw(unsigned short b, unsigned long addr)
 {
 	__outw(b, addr);
 }
 
-#undef outl
-void outl(unsigned int b, unsigned long addr)
+void _outl(unsigned int b, unsigned long addr)
 {
 	__outl(b, addr);
 }
 
 
-#undef readb
-unsigned long readb(unsigned long addr)
+unsigned long _readb(unsigned long addr)
 {
 	return __readb(addr);
 }
 
-#undef readw
-unsigned long readw(unsigned long addr)
+unsigned long _readw(unsigned long addr)
 {
 	return __readw(addr);
 }
 
-#undef readl
-unsigned long readl(unsigned long addr)
+unsigned long _readl(unsigned long addr)
 {
 	return __readl(addr);
 }
 
 
-#undef writeb
-void writeb(unsigned char b, unsigned long addr)
+void _writeb(unsigned char b, unsigned long addr)
 {
 	__writeb(b, addr);
 }
 
-#undef writew
-void writew(unsigned short b, unsigned long addr)
+void _writew(unsigned short b, unsigned long addr)
 {
 	__writew(b, addr);
 }
 
-#undef writel
-void writel(unsigned int b, unsigned long addr)
+void _writel(unsigned int b, unsigned long addr)
 {
 	__writel(b, addr);
 }
@@ -103,7 +90,6 @@ void writel(unsigned int b, unsigned long addr)
  * Read COUNT 8-bit bytes from port PORT into memory starting at
  * SRC.
  */
-#undef insb
 void insb (unsigned long port, void *dst, unsigned long count)
 {
 	while (((unsigned long)dst) & 0x3) {
@@ -140,7 +126,6 @@ void insb (unsigned long port, void *dst, unsigned long count)
  * the interfaces seems to be slow: just using the inlined version
  * of the inw() breaks things.
  */
-#undef insw
 void insw (unsigned long port, void *dst, unsigned long count)
 {
 	if (((unsigned long)dst) & 0x3) {
@@ -176,7 +161,6 @@ void insw (unsigned long port, void *dst, unsigned long count)
  * the interfaces seems to be slow: just using the inlined version
  * of the inw() breaks things.
  */
-#undef insl
 void insl (unsigned long port, void *dst, unsigned long count)
 {
 	if (((unsigned long)dst) & 0x3) {
@@ -196,7 +180,6 @@ void insl (unsigned long port, void *dst, unsigned long count)
  * doing byte reads the "slow" way isn't nearly as slow as
  * doing byte writes the slow way (no r-m-w cycle).
  */
-#undef outsb
 void outsb(unsigned long port, void * src, unsigned long count)
 {
 	while (count) {
@@ -212,7 +195,6 @@ void outsb(unsigned long port, void * src, unsigned long count)
  * interfaces seems to be slow: just using the inlined version of the
  * outw() breaks things.
  */
-#undef outsw
 void outsw (unsigned long port, void *src, unsigned long count)
 {
 	if (((unsigned long)src) & 0x3) {
@@ -245,7 +227,6 @@ void outsw (unsigned long port, void *src, unsigned long count)
  * interfaces seems to be slow: just using the inlined version of the
  * outw() breaks things.
  */
-#undef outsw
 void outsl (unsigned long port, void *src, unsigned long count)
 {
 	if (((unsigned long)src) & 0x3) {
@@ -264,7 +245,6 @@ void outsl (unsigned long port, void *src, unsigned long count)
  * Copy data from IO memory space to "real" memory space.
  * This needs to be optimized.
  */
-#undef memcpy_fromio
 void memcpy_fromio(void * to, unsigned long from, unsigned long count)
 {
 	while (count) {
@@ -279,7 +259,6 @@ void memcpy_fromio(void * to, unsigned long from, unsigned long count)
  * Copy data from "real" memory space to IO memory space.
  * This needs to be optimized.
  */
-#undef memcpy_toio
 void memcpy_toio(unsigned long to, void * from, unsigned long count)
 {
 	while (count) {
@@ -294,7 +273,6 @@ void memcpy_toio(unsigned long to, void * from, unsigned long count)
  * "memset" on IO memory space.
  * This needs to be optimized.
  */
-#undef memset_io
 void memset_io(unsigned long dst, int c, unsigned long count)
 {
 	while (count) {

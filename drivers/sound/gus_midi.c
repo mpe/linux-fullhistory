@@ -81,7 +81,7 @@ gus_midi_open (int dev, int mode,
     }
 
   outb (gus_midi_control, u_MidiControl);	/*
-						 * Enable
+						   * Enable
 						 */
 
   midi_busy = 1;

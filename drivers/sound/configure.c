@@ -143,7 +143,7 @@ hw_entry        hw_table[] =
   {B (OPT_SB) | B (OPT_SBPRO), B (OPT_PAS), "SB16", 1, 0, 1},
   {B (OPT_SBPRO) | B (OPT_MSS) | B (OPT_MPU401), 0, "AEDSP16", 1, 0, 0},
   {AUDIO_CARDS, 0, "AUDIO", 1, 0, 1},
-  {B (OPT_MPU401), 0, "MIDI_AUTO", 0, OPT_MIDI, 0},
+  {B (OPT_MPU401) | B (OPT_MAUI), 0, "MIDI_AUTO", 0, OPT_MIDI, 0},
   {MIDI_CARDS, 0, "MIDI", 1, 0, 1},
   {B (OPT_ADLIB), 0, "YM3812_AUTO", 0, OPT_YM3812, 0},
   {B (OPT_PSS) | B (OPT_SB) | B (OPT_PAS) | B (OPT_ADLIB) | B (OPT_MSS) | B (OPT_PSS), B (OPT_YM3812_AUTO), "YM3812", 1, 0, 1},
@@ -200,6 +200,8 @@ extra_options[] =
     NULL, 0
   }
 };
+
+char           *oldconf = "/etc/soundconf";
 
 int             old_config_used = 0;
 
@@ -506,19 +508,34 @@ main (int argc, char *argv[])
   int             i, num, def_size, full_driver = 1;
   char            answ[10];
   int             sb_base = 0;
+  char            old_config_file[200];
 
   fprintf (stderr, "\nConfiguring the sound support\n\n");
 
+  if (getuid () != 0)		/* Not root */
+    {
+      char           *home;
+
+      if ((home = getenv ("HOME")) != NULL)
+	{
+	  sprintf (old_config_file, "%s/.soundconf", home);
+	  oldconf = old_config_file;
+	}
+    }
+
   if (argc > 1)
     {
-      if (use_old_config (argv[1]))
+      if (strcmp (argv[1], "-o") == 0 &&
+	  use_old_config (oldconf))
 	exit (0);
     }
-  else if (access ("/etc/soundconf", R_OK) == 0)
+
+  if (access (oldconf, R_OK) == 0)
     {
-      fprintf (stderr, "Old configuration exists in /etc/soundconf. Use it (y/n) ? ");
-      if (think_positively (0))
-	if (use_old_config ("/etc/soundconf"))
+      fprintf (stderr, "Old configuration exists in %s. Use it (y/n) ? ",
+	       oldconf);
+      if (think_positively (1))
+	if (use_old_config (oldconf))
 	  exit (0);
 
     }
@@ -1701,12 +1718,16 @@ main (int argc, char *argv[])
 
   if (!old_config_used)
     {
-      fprintf (stderr, "Save this configuration to /etc/soundconf (y/n)");
+      fprintf (stderr, "Save copy of this configuration to %s (y/n)", oldconf);
       if (think_positively (1))
 	{
+	  char            cmd[200];
+
+	  sprintf (cmd, "cp local.h %s", oldconf);
+
 	  fclose (stdout);
-	  if (system ("cp local.h /etc/soundconf") != 0)
-	    perror ("'cp local.h /etc/soundconf'");
+	  if (system (cmd) != 0)
+	    perror (cmd);
 	}
     }
   exit (0);

@@ -36,8 +36,13 @@
 
 #include <linux/major.h>
 
-static int      soundcards_installed = 0;	/* Number of installed cards */
+#ifndef EXCLUDE_PNP
+#include <linux/pnp.h>
+#endif
+
 static int      chrdev_registered = 0;
+
+static int      is_unloading = 0;
 
 /*
  * Table for permanently allocated memory (used when unloading the module)
@@ -73,6 +78,7 @@ sound_read (struct inode *inode, struct file *file, char *buf, int count)
 
   dev = inode->i_rdev;
   dev = MINOR (dev);
+  files[dev].flags = file->f_flags;
 
   return sound_read_sw (dev, &files[dev], buf, count);
 }
@@ -84,6 +90,7 @@ sound_write (struct inode *inode, struct file *file, const char *buf, int count)
 
   dev = inode->i_rdev;
   dev = MINOR (dev);
+  files[dev].flags = file->f_flags;
 
   return sound_write_sw (dev, &files[dev], buf, count);
 }
@@ -100,6 +107,12 @@ sound_open (struct inode *inode, struct file *file)
   int             dev, retval;
   struct fileinfo tmp_file;
 
+  if (is_unloading)
+    {
+      printk ("Sound: Driver partially removed. Can't open device\n");
+      return -EBUSY;
+    }
+
   dev = inode->i_rdev;
   dev = MINOR (dev);
 
@@ -110,13 +123,13 @@ sound_open (struct inode *inode, struct file *file)
     }
 
   tmp_file.mode = 0;
-  tmp_file.filp = file;
+  tmp_file.flags = file->f_flags;
 
-  if ((file->f_flags & O_ACCMODE) == O_RDWR)
+  if ((tmp_file.flags & O_ACCMODE) == O_RDWR)
     tmp_file.mode = OPEN_READWRITE;
-  if ((file->f_flags & O_ACCMODE) == O_RDONLY)
+  if ((tmp_file.flags & O_ACCMODE) == O_RDONLY)
     tmp_file.mode = OPEN_READ;
-  if ((file->f_flags & O_ACCMODE) == O_WRONLY)
+  if ((tmp_file.flags & O_ACCMODE) == O_WRONLY)
     tmp_file.mode = OPEN_WRITE;
 
   if ((retval = sound_open_sw (dev, &tmp_file)) < 0)
@@ -137,6 +150,7 @@ sound_release (struct inode *inode, struct file *file)
 
   dev = inode->i_rdev;
   dev = MINOR (dev);
+  files[dev].flags = file->f_flags;
 
   sound_release_sw (dev, &files[dev]);
 #ifdef MODULE
@@ -152,26 +166,7 @@ sound_ioctl (struct inode *inode, struct file *file,
 
   dev = inode->i_rdev;
   dev = MINOR (dev);
-
-  if (cmd == 1)
-    {
-      int             i;
-
-      unsigned char  *p;
-
-
-      if (!audio_devs[dev >> 4]->dmap_out)
-	return 0;
-      if (!audio_devs[dev >> 4]->dmap_out->raw_buf)
-	return 0;
-
-      p = audio_devs[dev >> 4]->dmap_out->raw_buf;
-
-      for (i = 0; i < 256; i++)
-	printk ("%02x ", p[i]);
-      printk ("\n");
-      return 0;
-    }
+  files[dev].flags = file->f_flags;
 
   if (cmd & IOC_INOUT)
     {
@@ -208,6 +203,7 @@ sound_select (struct inode *inode, struct file *file, int sel_type, select_table
 
   dev = inode->i_rdev;
   dev = MINOR (dev);
+  files[dev].flags = file->f_flags;
 
   DEB (printk ("sound_select(dev=%d, type=0x%x)\n", dev, sel_type));
 
@@ -241,91 +237,6 @@ sound_select (struct inode *inode, struct file *file, int sel_type, select_table
   return 0;
 }
 
-static int
-sound_mmap (struct inode *inode, struct file *file, struct vm_area_struct *vma)
-{
-  int             dev, dev_class;
-  unsigned long   size;
-  struct dma_buffparms *dmap = NULL;
-
-  dev = inode->i_rdev;
-  dev = MINOR (dev);
-
-  dev_class = dev & 0x0f;
-  dev >>= 4;
-
-  if (dev_class != SND_DEV_DSP && dev_class != SND_DEV_DSP16 && dev_class != SND_DEV_AUDIO)
-    {
-      printk ("Sound: mmap() not supported for other than audio devices\n");
-      return -EINVAL;
-    }
-
-  if ((vma->vm_flags & (VM_READ | VM_WRITE)) == (VM_READ | VM_WRITE))
-    {
-      printk ("Sound: Cannot do read/write mmap()\n");
-      return -EINVAL;
-    }
-
-  if (vma->vm_flags & VM_READ)
-    {
-      dmap = audio_devs[dev]->dmap_in;
-    }
-  else if (vma->vm_flags & VM_WRITE)
-    {
-      dmap = audio_devs[dev]->dmap_out;
-    }
-  else
-    {
-      printk ("Sound: Undefined mmap() access\n");
-      return -EINVAL;
-    }
-
-  if (dmap == NULL)
-    {
-      printk ("Sound: mmap() error. dmap == NULL\n");
-      return -EIO;
-    }
-
-  if (dmap->raw_buf == NULL)
-    {
-      printk ("Sound: mmap() called when raw_buf == NULL\n");
-      return -EIO;
-    }
-
-  if (dmap->mapping_flags)
-    {
-      printk ("Sound: mmap() called twice for the same DMA buffer\n");
-      return -EIO;
-    }
-
-  if (vma->vm_offset != 0)
-    {
-      printk ("Sound: mmap() offset must be 0.\n");
-      return -EINVAL;
-    }
-
-  size = vma->vm_end - vma->vm_start;
-
-  if (size != dmap->bytes_in_use)
-    {
-      printk ("Sound: mmap() size = %ld. Should be %d\n",
-	      size, dmap->bytes_in_use);
-    }
-
-  if (remap_page_range (vma->vm_start, dmap->raw_buf_phys, vma->vm_end - vma->vm_start, vma->vm_page_prot))
-    return -EAGAIN;
-
-
-  vma->vm_inode = inode;
-  inode->i_count++;
-
-  dmap->mapping_flags |= DMA_MAP_MAPPED;
-
-  memset (dmap->raw_buf,
-	  dmap->neutral_byte,
-	  dmap->bytes_in_use);
-  return 0;
-}
 
 static struct file_operations sound_fops =
 {
@@ -335,7 +246,7 @@ static struct file_operations sound_fops =
   NULL,				/* sound_readdir */
   sound_select,
   sound_ioctl,
-  sound_mmap,
+  NULL,
   sound_open,
   sound_release
 };
@@ -352,7 +263,12 @@ soundcard_init (void)
 
   sndtable_init (0);		/* Initialize call tables and
 				   * detect cards */
-  if (!(soundcards_installed = sndtable_get_cardcount ()))
+
+#ifndef EXCLUDE_PNP
+  sound_pnp_init ();
+#endif
+
+  if (sndtable_get_cardcount () == 0)
     return;			/* No cards detected */
 
 #ifndef EXCLUDE_AUDIO
@@ -408,6 +324,12 @@ init_module (void)
   int             ints[21];
   int             i;
 
+  if (0 < 0)
+    {
+      printk ("Sound: Incompatible kernel (wrapper) version\n");
+      return -EINVAL;
+    }
+
   /*
      * "sound=" command line handling by Harald Milz.
    */
@@ -436,6 +358,8 @@ init_module (void)
 }
 
 #ifdef MODULE
+
+
 void
 cleanup_module (void)
 {
@@ -448,7 +372,9 @@ cleanup_module (void)
       if (chrdev_registered)
 	unregister_chrdev (SOUND_MAJOR, "sound");
 
+#ifndef EXCLUDE_SEQUENCER
       sound_stop_timer ();
+#endif
       sound_unload_drivers ();
 
       for (i = 0; i < sound_num_blocks; i++)
@@ -462,6 +388,10 @@ cleanup_module (void)
 	    printk ("Sound: Hmm, DMA%d was left allocated\n", i);
 	    sound_free_dma (i);
 	  }
+
+#ifndef EXCLUDE_PNP
+      sound_pnp_disconnect ();
+#endif
 
     }
 }
@@ -585,13 +515,12 @@ request_sound_timer (int count)
   };
 }
 
-#endif
-
 void
 sound_stop_timer (void)
 {
   del_timer (&seq_timer);;
 }
+#endif
 
 #ifndef EXCLUDE_AUDIO
 
@@ -667,7 +596,7 @@ sound_alloc_dmap (int dev, struct dma_buffparms *dmap, int chan)
 
       if (((long) start_addr & ~(dma_pagesize - 1))
 	  != ((long) end_addr & ~(dma_pagesize - 1))
-	  || end_addr >= (char *) MAX_DMA_ADDRESS)
+	  || end_addr >= (char *) (MAX_DMA_ADDRESS))
 	{
 	  printk (
 		   "sound: kmalloc returned invalid address 0x%lx for %ld Bytes DMA-buffer\n",
@@ -677,15 +606,13 @@ sound_alloc_dmap (int dev, struct dma_buffparms *dmap, int chan)
 	}
     }
   dmap->raw_buf = start_addr;
-  dmap->raw_buf_phys = virt_to_bus((unsigned long) start_addr);
+  dmap->raw_buf_phys = virt_to_phys (start_addr);
+
+  memset (dmap->raw_buf, 0x00, audio_devs[dev]->buffsize);
 
   for (i = MAP_NR (start_addr); i <= MAP_NR (end_addr); i++)
     {
-#ifdef MAP_PAGE_RESERVED
-      mem_map[i] |= MAP_PAGE_RESERVED;
-#else
       mem_map[i].reserved = 1;
-#endif
     }
 
   return 0;
@@ -709,12 +636,9 @@ sound_free_dmap (int dev, struct dma_buffparms *dmap)
 
     for (i = MAP_NR (start_addr); i <= MAP_NR (end_addr); i++)
       {
-#ifdef MAP_PAGE_RESERVED
-	mem_map[i] &= ~MAP_PAGE_RESERVED;
-#else
 	mem_map[i].reserved = 0;
-#endif
       }
+
     free_pages ((unsigned long) dmap->raw_buf, sz);
   }
   dmap->raw_buf = NULL;

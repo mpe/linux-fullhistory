@@ -229,7 +229,7 @@ opl3_detect (int ioaddr, sound_os_info * osp)
     tenmicrosec ();
 
   stat2 = inb (ioaddr);		/*
-				 * Read status after timers have expired
+				   * Read status after timers have expired
 				 */
 
   /*
@@ -887,7 +887,7 @@ opl3_load_patch (int dev, int format, const snd_rw_buf * addr,
       return -EINVAL;
     }
 
-  memcpy_fromfs (&((char *) &ins)[offs], &(((char *) addr)[offs]), sizeof (ins) - offs);
+  memcpy_fromfs (&((char *) &ins)[offs], &((addr)[offs]), sizeof (ins) - offs);
 
   if (ins.channel < 0 || ins.channel >= SBFM_MAXINSTR)
     {

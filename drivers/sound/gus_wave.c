@@ -827,8 +827,8 @@ gus_initialize (void)
   mix_image &= ~0x02;		/* Enable line out */
   mix_image |= 0x08;		/* Enable IRQ */
   outb (mix_image, u_Mixer);	/*
-				 * Turn mixer channels on
-				 * Note! Mic in is left off.
+				   * Turn mixer channels on
+				   * Note! Mic in is left off.
 				 */
 
   gus_select_voice (0);		/* This disables writes to IRQ/DMA reg */
@@ -1484,10 +1484,7 @@ guswave_open (int dev, int mode)
   else
     gus_no_dma = 0;
 
-  {
-    dram_sleep_flag.aborting = 0;
-    dram_sleep_flag.mode = WK_NONE;
-  };
+  dram_sleep_flag.mode = WK_NONE;
   gus_busy = 1;
   active_device = GUS_DEV_WAVE;
 
@@ -1737,16 +1734,14 @@ guswave_load_patch (int dev, int format, const snd_rw_buf * addr,
 	    unsigned long   tl;
 
 	    if (HZ)
-	      tl = current->timeout = jiffies + (HZ);
+	      current->timeout = tl = jiffies + (HZ);
 	    else
 	      tl = 0xffffffff;
 	    dram_sleep_flag.mode = WK_SLEEP;
 	    interruptible_sleep_on (&dram_sleeper);
 	    if (!(dram_sleep_flag.mode & WK_WAKEUP))
 	      {
-		if (current->signal & ~current->blocked)
-		  dram_sleep_flag.aborting = 1;
-		else if (jiffies >= tl)
+		if (jiffies >= tl)
 		  dram_sleep_flag.mode |= WK_TIMEOUT;
 	      }
 	    dram_sleep_flag.mode &= ~WK_SLEEP;
@@ -2458,8 +2453,8 @@ gus_copy_from_user (int dev, char *localbuf, int localoffs,
     }
   else
     {
-      int             in_left = useroffs / 2;
-      int             in_right = useroffs / 2 + 1;
+      int             in_left = useroffs;
+      int             in_right = useroffs + 2;
       short          *out_left, *out_right;
       int             i;
 
@@ -2471,10 +2466,10 @@ gus_copy_from_user (int dev, char *localbuf, int localoffs,
 
       for (i = 0; i < len; i++)
 	{
-	  *out_left++ = get_fs_word (&(((short *) userbuf)[in_left]));
-	  in_left += 2;
-	  *out_right++ = get_fs_word (&(((short *) userbuf)[in_right]));
-	  in_right += 2;
+	  *out_left++ = get_fs_word (&((userbuf)[in_left]));
+	  in_left += 4;
+	  *out_right++ = get_fs_word (&((userbuf)[in_right]));
+	  in_right += 4;
 	}
     }
 }

@@ -895,9 +895,9 @@ void smp_reschedule_irq(int cpl, struct pt_regs *regs)
  
 void smp_message_irq(int cpl, struct pt_regs *regs)
 {
-	static int n=0;
 	int i=smp_processor_id();
-/*	if(n++<NR_CPUS)
+/*	static int n=0;
+	if(n++<NR_CPUS)
 		printk("IPI %d->%d(%d,%ld)\n",smp_src_cpu,i,smp_msg_id,smp_msg_data);*/
 	switch(smp_msg_id)
 	{

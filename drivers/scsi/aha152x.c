@@ -204,10 +204,7 @@
 #define MODULE
 #endif
 
-#ifdef MODULE
-#include <linux/config.h>
 #include <linux/module.h>
-#endif
 
 #ifdef PCMCIA
 #undef MODULE

@@ -176,6 +176,7 @@
  *		Marc Tamsky	:	Closing in closing fixes.
  *		Mike Shaver	:	RFC1122 verifications.
  *		Alan Cox	:	rcv_saddr errors.
+ *		Alan Cox	:	Block double connect()
  *
  *
  * To Fix:
@@ -1697,9 +1698,7 @@ static int tcp_sendmsg(struct sock *sk, struct msghdr *msg,
 				release_sock(sk);
 				if (copied) 
 					return(copied);
-				tmp = -sk->err;
-				sk->err = 0;
-				return(tmp);
+				return sock_error(sk);
 			}
 
 			/*
@@ -1727,9 +1726,7 @@ static int tcp_sendmsg(struct sock *sk, struct msghdr *msg,
 					release_sock(sk);
 					if (copied) 
 						return(copied);
-					tmp = -sk->err;
-					sk->err = 0;
-					return(tmp);
+					return sock_error(sk);
 				}		
 	
 				if (sk->state != TCP_SYN_SENT && sk->state != TCP_SYN_RECV) 
@@ -1739,11 +1736,7 @@ static int tcp_sendmsg(struct sock *sk, struct msghdr *msg,
 						return(copied);
 	
 					if (sk->err) 
-					{	
-						tmp = -sk->err;
-						sk->err = 0;
-						return(tmp);
-					}
+						return sock_error(sk);
 
 					if (sk->keepopen) 
 					{
@@ -1996,30 +1989,6 @@ static int tcp_sendmsg(struct sock *sk, struct msghdr *msg,
 	return(copied);
 }
 
-static int tcp_sendto(struct sock *sk, const unsigned char *ubuf, int size, int noblock, unsigned flags,
-		struct sockaddr_in *sin, int addr_len)
-{
-	struct iovec iov;
-	struct msghdr msg;
-
-	iov.iov_base = (void *)ubuf;
-	iov.iov_len  = size;
-
-	msg.msg_name      = (void *)sin;
-	msg.msg_namelen   = addr_len;
-	msg.msg_accrights = NULL;
-	msg.msg_iov       = &iov;
-	msg.msg_iovlen    = 1;
-
-	return tcp_sendmsg(sk, &msg, size, noblock, flags);
-}
-
-static int tcp_write(struct sock *sk, const unsigned char *ubuf, int size, int noblock, unsigned flags)
-{
-	return tcp_sendto(sk,ubuf,size,noblock,flags,NULL,0);
-}
-
-
 /*
  *	Send an ack if one is backlogged at this point. Ought to merge
  *	this with tcp_send_ack().
@@ -2205,12 +2174,8 @@ static int tcp_recv_urg(struct sock * sk, int nonblock,
 		return -EINVAL;	/* Yes this is right ! */
 		
 	if (sk->err) 
-	{
-		int tmp = -sk->err;
-		sk->err = 0;
-		return tmp;
-	}
-
+		return sock_error(sk);
+		
 	if (sk->state == TCP_CLOSE || sk->done) 
 	{
 		if (!sk->done) 
@@ -2341,8 +2306,7 @@ static int tcp_recvmsg(struct sock *sk, struct msghdr *msg,
 
 		if (sk->err) 
 		{
-			copied = -sk->err;
-			sk->err = 0;
+			copied = -xchg(&sk->err,0);
 			break;
 		}
 
@@ -2499,32 +2463,6 @@ static int tcp_recvmsg(struct sock *sk, struct msghdr *msg,
 	return copied;
 }
 
-
-static int tcp_recvfrom(struct sock *sk, unsigned char *ubuf, int size, int noblock, unsigned flags,
-		struct sockaddr_in *sa, int *addr_len)
-{
-	struct iovec iov;
-	struct msghdr msg;
-
-	iov.iov_base = (void *)ubuf;
-	iov.iov_len  = size;
-
-	msg.msg_name      = (void *)sa;
-	msg.msg_namelen   = 0;
-	if (addr_len)
-		msg.msg_namelen = *addr_len;
-	msg.msg_accrights = NULL;
-	msg.msg_iov       = &iov;
-	msg.msg_iovlen    = 1;
-
-	return tcp_recvmsg(sk, &msg, size, noblock, flags, addr_len);
-}
-
-int tcp_read(struct sock *sk, unsigned char *buff, int len, int noblock,
-	 unsigned flags)
-{
-	return(tcp_recvfrom(sk, buff, len, noblock, flags, NULL, NULL));
-}
 
 
 /*
@@ -4531,9 +4469,14 @@ static int tcp_connect(struct sock *sk, struct sockaddr_in *usin, int addr_len)
 	struct rtable *rt;
 
 	if (sk->state != TCP_CLOSE) 
-	{
 		return(-EISCONN);
-	}
+
+	/*
+	 *	Don't allow a double connect.
+	 */
+	 	
+	if(sk->daddr)
+		return -EINVAL;
 	
 	if (addr_len < 8) 
 		return(-EINVAL);
@@ -4580,9 +4523,9 @@ static int tcp_connect(struct sock *sk, struct sockaddr_in *usin, int addr_len)
 	 */
 	 
 	if (sk->localroute)
-	  rt=ip_rt_local(sk->daddr, NULL, sk->saddr ? NULL : &sk->saddr);
+		rt=ip_rt_local(sk->daddr, NULL, sk->saddr ? NULL : &sk->saddr);
 	else
-	  rt=ip_rt_route(sk->daddr, NULL, sk->saddr ? NULL : &sk->saddr);
+		rt=ip_rt_route(sk->daddr, NULL, sk->saddr ? NULL : &sk->saddr);
 
 	/*
 	 *	When we connect we enforce receive requirements too.
@@ -4674,8 +4617,9 @@ static int tcp_connect(struct sock *sk, struct sockaddr_in *usin, int addr_len)
 		sk->rto = TCP_TIMEOUT_INIT;
 	sk->retransmit_timer.function=&retransmit_timer;
 	sk->retransmit_timer.data = (unsigned long)sk;
-	reset_xmit_timer(sk, TIME_WRITE, sk->rto);	/* Timer for repeating the SYN until an answer */
-	sk->retransmits = 0;	/* Now works the right way instead of a hacked initial setting */
+	reset_xmit_timer(sk, TIME_WRITE, sk->rto);	/* Timer for repeating the SYN until an answer  */
+	sk->retransmits = 0;				/* Now works the right way instead of a hacked 
+											initial setting */
 
 	sk->prot->queue_xmit(sk, dev, buff, 0);  
 	reset_xmit_timer(sk, TIME_WRITE, sk->rto);
@@ -4687,7 +4631,10 @@ static int tcp_connect(struct sock *sk, struct sockaddr_in *usin, int addr_len)
 }
 
 
-/* This functions checks to see if the tcp header is actually acceptable. */
+/*
+ *	This functions checks to see if the tcp header is actually acceptable. 
+ */
+ 
 extern __inline__ int tcp_sequence(struct sock *sk, struct tcphdr *th, short len,
 	     struct options *opt, unsigned long saddr, struct device *dev)
 {
@@ -4868,7 +4815,6 @@ int tcp_rcv(struct sk_buff *skb, struct device *dev, struct options *opt,
 			return(0);
 		}
 
-/*		skb->len = len;*/
 		skb->acked = 0;
 		skb->used = 0;
 		skb->free = 0;
@@ -4909,13 +4855,6 @@ int tcp_rcv(struct sk_buff *skb, struct device *dev, struct options *opt,
 	 *	Charge the memory to the socket. 
 	 */
 	 
-	if (sk->rmem_alloc + skb->truesize >= sk->rcvbuf) 
-	{
-		kfree_skb(skb, FREE_READ);
-		release_sock(sk);
-		return(0);
-	}
-
 	skb->sk=sk;
 	sk->rmem_alloc += skb->truesize;
 
@@ -5152,6 +5091,20 @@ int tcp_rcv(struct sk_buff *skb, struct device *dev, struct options *opt,
 rfc_step6:		/* I'll clean this up later */
 
 	/*
+	 *	If the accepted buffer put us over our queue size we
+	 *	now drop it (we must process the ack first to avoid
+	 *	deadlock cases).
+	 */
+	 
+	if (sk->rmem_alloc  >= sk->rcvbuf) 
+	{
+		kfree_skb(skb, FREE_READ);
+		release_sock(sk);
+		return(0);
+	}
+
+
+	/*
 	 *	Process urgent data
 	 */
 	 	
@@ -5161,7 +5114,6 @@ rfc_step6:		/* I'll clean this up later */
 		release_sock(sk);
 		return 0;
 	}
-	
 	
 	/*
 	 *	Process the encapsulated data
@@ -5500,10 +5452,6 @@ int tcp_getsockopt(struct sock *sk, int level, int optname, char *optval, int *o
 
 struct proto tcp_prot = {
 	tcp_close,
-	tcp_read,
-	tcp_write,
-	tcp_sendto,
-	tcp_recvfrom,
 	ip_build_header,
 	tcp_connect,
 	tcp_accept,
@@ -5520,6 +5468,7 @@ struct proto tcp_prot = {
 	tcp_getsockopt,
 	tcp_sendmsg,
 	tcp_recvmsg,
+	NULL,		/* No special bind() */
 	128,
 	0,
 	"TCP",

@@ -131,7 +131,7 @@ static unsigned short default_mixer_levels[SOUND_MIXER_NRDEVICES] =
   0x4b4b,			/* Output gain */
   0x4040,			/* Line1 */
   0x4040,			/* Line2 */
-  0x2020			/* Line3 (usually line in)*/
+  0x1515			/* Line3 (usually line in)*/
 };
 
 #define LEFT_CHN	0

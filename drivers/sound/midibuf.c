@@ -106,23 +106,21 @@ drain_midi_queue (int dev)
    */
 
   if (midi_devs[dev]->buffer_status != NULL)
-    while (!((current->signal & ~current->blocked)) &&
+    while (!(current->signal & ~current->blocked) &&
 	   midi_devs[dev]->buffer_status (dev))
 
       {
 	unsigned long   tl;
 
 	if (HZ / 10)
-	  tl = current->timeout = jiffies + (HZ / 10);
+	  current->timeout = tl = jiffies + (HZ / 10);
 	else
 	  tl = 0xffffffff;
 	midi_sleep_flag[dev].mode = WK_SLEEP;
 	interruptible_sleep_on (&midi_sleeper[dev]);
 	if (!(midi_sleep_flag[dev].mode & WK_WAKEUP))
 	  {
-	    if (current->signal & ~current->blocked)
-	      midi_sleep_flag[dev].aborting = 1;
-	    else if (jiffies >= tl)
+	    if (jiffies >= tl)
 	      midi_sleep_flag[dev].mode |= WK_TIMEOUT;
 	  }
 	midi_sleep_flag[dev].mode &= ~WK_SLEEP;
@@ -237,14 +235,8 @@ MIDIbuf_open (int dev, struct fileinfo *file)
 
   parms[dev].prech_timeout = 0;
 
-  {
-    midi_sleep_flag[dev].aborting = 0;
-    midi_sleep_flag[dev].mode = WK_NONE;
-  };
-  {
-    input_sleep_flag[dev].aborting = 0;
-    input_sleep_flag[dev].mode = WK_NONE;
-  };
+  midi_sleep_flag[dev].mode = WK_NONE;
+  input_sleep_flag[dev].mode = WK_NONE;
 
   midi_in_buf[dev] = (struct midi_buf *) kmalloc (sizeof (struct midi_buf), GFP_KERNEL);
 
@@ -306,23 +298,21 @@ MIDIbuf_release (int dev, struct fileinfo *file)
 						   * devices
 						 */
 
-      while (!((current->signal & ~current->blocked)) &&
+      while (!(current->signal & ~current->blocked) &&
 	     DATA_AVAIL (midi_out_buf[dev]))
 
 	{
 	  unsigned long   tl;
 
 	  if (0)
-	    tl = current->timeout = jiffies + (0);
+	    current->timeout = tl = jiffies + (0);
 	  else
 	    tl = 0xffffffff;
 	  midi_sleep_flag[dev].mode = WK_SLEEP;
 	  interruptible_sleep_on (&midi_sleeper[dev]);
 	  if (!(midi_sleep_flag[dev].mode & WK_WAKEUP))
 	    {
-	      if (current->signal & ~current->blocked)
-		midi_sleep_flag[dev].aborting = 1;
-	      else if (jiffies >= tl)
+	      if (jiffies >= tl)
 		midi_sleep_flag[dev].mode |= WK_TIMEOUT;
 	    }
 	  midi_sleep_flag[dev].mode &= ~WK_SLEEP;
@@ -375,21 +365,19 @@ MIDIbuf_write (int dev, struct fileinfo *file, const snd_rw_buf * buf, int count
 	    unsigned long   tl;
 
 	    if (0)
-	      tl = current->timeout = jiffies + (0);
+	      current->timeout = tl = jiffies + (0);
 	    else
 	      tl = 0xffffffff;
 	    midi_sleep_flag[dev].mode = WK_SLEEP;
 	    interruptible_sleep_on (&midi_sleeper[dev]);
 	    if (!(midi_sleep_flag[dev].mode & WK_WAKEUP))
 	      {
-		if (current->signal & ~current->blocked)
-		  midi_sleep_flag[dev].aborting = 1;
-		else if (jiffies >= tl)
+		if (jiffies >= tl)
 		  midi_sleep_flag[dev].mode |= WK_TIMEOUT;
 	      }
 	    midi_sleep_flag[dev].mode &= ~WK_SLEEP;
 	  };
-	  if (((current->signal & ~current->blocked)))
+	  if ((current->signal & ~current->blocked))
 	    {
 	      restore_flags (flags);
 	      return -EINTR;
@@ -403,7 +391,7 @@ MIDIbuf_write (int dev, struct fileinfo *file, const snd_rw_buf * buf, int count
 
       for (i = 0; i < n; i++)
 	{
-	  memcpy_fromfs (&tmp_data, &((buf)[c]), 1);
+	  memcpy_fromfs ((char *) &tmp_data, &((buf)[c]), 1);
 	  QUEUE_BYTE (midi_out_buf[dev], tmp_data);
 	  c++;
 	}
@@ -436,21 +424,19 @@ MIDIbuf_read (int dev, struct fileinfo *file, snd_rw_buf * buf, int count)
 	unsigned long   tl;
 
 	if (parms[dev].prech_timeout)
-	  tl = current->timeout = jiffies + (parms[dev].prech_timeout);
+	  current->timeout = tl = jiffies + (parms[dev].prech_timeout);
 	else
 	  tl = 0xffffffff;
 	input_sleep_flag[dev].mode = WK_SLEEP;
 	interruptible_sleep_on (&input_sleeper[dev]);
 	if (!(input_sleep_flag[dev].mode & WK_WAKEUP))
 	  {
-	    if (current->signal & ~current->blocked)
-	      input_sleep_flag[dev].aborting = 1;
-	    else if (jiffies >= tl)
+	    if (jiffies >= tl)
 	      input_sleep_flag[dev].mode |= WK_TIMEOUT;
 	  }
 	input_sleep_flag[dev].mode &= ~WK_SLEEP;
       };
-      if (((current->signal & ~current->blocked)))
+      if ((current->signal & ~current->blocked))
 	c = -EINTR;		/*
 				   * The user is getting restless
 				 */
@@ -468,7 +454,7 @@ MIDIbuf_read (int dev, struct fileinfo *file, snd_rw_buf * buf, int count)
       while (c < n)
 	{
 	  REMOVE_BYTE (midi_in_buf[dev], tmp_data);
-	  memcpy_tofs (&((buf)[c]), &tmp_data, 1);
+	  memcpy_tofs (&((buf)[c]), (char *) &tmp_data, 1);
 	  c++;
 	}
     }

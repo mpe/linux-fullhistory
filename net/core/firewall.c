@@ -23,8 +23,6 @@ int register_firewall(int pf, struct firewall_ops *fw)
 	
 	if(pf<0||pf>=NPROTO)
 		return -EINVAL;
-	if(pf!=PF_INET)
-		return -ENOPROTOOPT;
 	
 	/*
 	 *	Don't allow two people to adjust at once.
@@ -69,8 +67,6 @@ int unregister_firewall(int pf, struct firewall_ops *fw)
 	
 	if(pf<0||pf>=NPROTO)
 		return -EINVAL;
-	if(pf!=PF_INET)
-		return -ENOPROTOOPT;
 	
 	/*
 	 *	Don't allow two people to adjust at once.

@@ -323,6 +323,8 @@ static int sock_read(struct inode *inode, struct file *file, char *ubuf, int siz
 {
 	struct socket *sock;
 	int err;
+	struct iovec iov;
+	struct msghdr msg;
   
 	sock = socki_lookup(inode); 
 	if (sock->flags & SO_ACCEPTCON) 
@@ -334,7 +336,14 @@ static int sock_read(struct inode *inode, struct file *file, char *ubuf, int siz
 		return 0;
 	if ((err=verify_area(VERIFY_WRITE,ubuf,size))<0)
 	  	return err;
-	return(sock->ops->read(sock, ubuf, size, (file->f_flags & O_NONBLOCK)));
+	msg.msg_name=NULL;
+	msg.msg_iov=&iov;
+	msg.msg_iovlen=1;
+	msg.msg_accrights=NULL;
+	iov.iov_base=ubuf;
+	iov.iov_len=size;
+
+	return(sock->ops->recvmsg(sock, &msg, size,(file->f_flags & O_NONBLOCK), 0,&msg.msg_namelen));
 }
 
 /*
@@ -346,6 +355,8 @@ static int sock_write(struct inode *inode, struct file *file, const char *ubuf, 
 {
 	struct socket *sock;
 	int err;
+	struct msghdr msg;
+	struct iovec iov;
 	
 	sock = socki_lookup(inode); 
 
@@ -356,10 +367,18 @@ static int sock_write(struct inode *inode, struct file *file, const char *ubuf, 
 		return -EINVAL;
 	if(size==0)		/* Match SYS5 behaviour */
 		return 0;
-		
+	
 	if ((err=verify_area(VERIFY_READ,ubuf,size))<0)
 	  	return err;
-	return(sock->ops->write(sock, ubuf, size,(file->f_flags & O_NONBLOCK)));
+	
+	msg.msg_name=NULL;
+	msg.msg_iov=&iov;
+	msg.msg_iovlen=1;
+	msg.msg_accrights=NULL;
+	iov.iov_base=(void *)ubuf;
+	iov.iov_len=size;
+	
+	return(sock->ops->sendmsg(sock, &msg, size,(file->f_flags & O_NONBLOCK),0));
 }
 
 /*
@@ -845,6 +864,8 @@ asmlinkage int sys_send(int fd, void * buff, int len, unsigned flags)
 	struct socket *sock;
 	struct file *file;
 	int err;
+	struct msghdr msg;
+	struct iovec iov;
 
 	if (fd < 0 || fd >= NR_OPEN || ((file = current->files->fd[fd]) == NULL))
 		return(-EBADF);
@@ -856,7 +877,14 @@ asmlinkage int sys_send(int fd, void * buff, int len, unsigned flags)
 	err=verify_area(VERIFY_READ, buff, len);
 	if(err)
 		return err;
-	return(sock->ops->send(sock, buff, len, (file->f_flags & O_NONBLOCK), flags));
+		
+	msg.msg_name=NULL;
+	msg.msg_iov=&iov;
+	msg.msg_iovlen=1;
+	msg.msg_accrights=NULL;
+	iov.iov_base=buff;
+	iov.iov_len=1;
+	return(sock->ops->sendmsg(sock, &msg, len, (file->f_flags & O_NONBLOCK), flags));
 }
 
 /*
@@ -872,6 +900,8 @@ asmlinkage int sys_sendto(int fd, void * buff, int len, unsigned flags,
 	struct file *file;
 	char address[MAX_SOCK_ADDR];
 	int err;
+	struct msghdr msg;
+	struct iovec iov;
 	
 	if (fd < 0 || fd >= NR_OPEN || ((file = current->files->fd[fd]) == NULL))
 		return(-EBADF);
@@ -886,22 +916,27 @@ asmlinkage int sys_sendto(int fd, void * buff, int len, unsigned flags,
   	
 	if((err=move_addr_to_kernel(addr,addr_len,address))<0)
 	  	return err;
-
-	return(sock->ops->sendto(sock, buff, len, (file->f_flags & O_NONBLOCK),
-		flags, (struct sockaddr *)address, addr_len));
+	  	
+	iov.iov_base=buff;
+	iov.iov_len=len;
+	msg.msg_name=address;
+	msg.msg_namelen=addr_len;
+	msg.msg_iov=&iov;
+	msg.msg_iovlen=1;
+	msg.msg_accrights=NULL;
+	return(sock->ops->sendmsg(sock, &msg, len, (file->f_flags & O_NONBLOCK),
+		flags));
 }
 
 
 /*
- *	Receive a datagram from a socket. This isn't really right. The BSD manual
- *	pages explicitly state that recv is recvfrom with a NULL to argument. The
- *	Linux stack gets the right results for the wrong reason and this need to
- *	be tidied in the inet layer and removed from here.
- *	We check the buffer is writable and valid.
+ *	Receive a datagram from a socket. Call the protocol recvmsg method
  */
 
-asmlinkage int sys_recv(int fd, void * buff, int len, unsigned flags)
+asmlinkage int sys_recv(int fd, void * ubuf, int size, unsigned flags)
 {
+	struct iovec iov;
+	struct msghdr msg;
 	struct socket *sock;
 	struct file *file;
 	int err;
@@ -912,15 +947,22 @@ asmlinkage int sys_recv(int fd, void * buff, int len, unsigned flags)
 	if (!(sock = sockfd_lookup(fd, NULL))) 
 		return(-ENOTSOCK);
 		
-	if(len<0)
+	if(size<0)
 		return -EINVAL;
-	if(len==0)
+	if(size==0)
 		return 0;
-	err=verify_area(VERIFY_WRITE, buff, len);
+	err=verify_area(VERIFY_WRITE, ubuf, size);
 	if(err)
 		return err;
+		
+	msg.msg_name=NULL;
+	msg.msg_iov=&iov;
+	msg.msg_iovlen=1;
+	msg.msg_accrights=NULL;
+	iov.iov_base=ubuf;
+	iov.iov_len=size;
 
-	return(sock->ops->recv(sock, buff, len,(file->f_flags & O_NONBLOCK), flags));
+	return(sock->ops->recvmsg(sock, &msg, size,(file->f_flags & O_NONBLOCK), flags,&msg.msg_namelen));
 }
 
 /*
@@ -929,11 +971,13 @@ asmlinkage int sys_recv(int fd, void * buff, int len, unsigned flags)
  *	sender address from kernel to user space.
  */
 
-asmlinkage int sys_recvfrom(int fd, void * buff, int len, unsigned flags,
+asmlinkage int sys_recvfrom(int fd, void * ubuf, int size, unsigned flags,
 	     struct sockaddr *addr, int *addr_len)
 {
 	struct socket *sock;
 	struct file *file;
+	struct iovec iov;
+	struct msghdr msg;
 	char address[MAX_SOCK_ADDR];
 	int err;
 	int alen;
@@ -941,24 +985,31 @@ asmlinkage int sys_recvfrom(int fd, void * buff, int len, unsigned flags,
 		return(-EBADF);
 	if (!(sock = sockfd_lookup(fd, NULL))) 
 	  	return(-ENOTSOCK);
-	if(len<0)
+	if(size<0)
 		return -EINVAL;
-	if(len==0)
+	if(size==0)
 		return 0;
 
-	err=verify_area(VERIFY_WRITE,buff,len);
+	err=verify_area(VERIFY_WRITE,ubuf,size);
 	if(err)
 	  	return err;
   
-	len=sock->ops->recvfrom(sock, buff, len, (file->f_flags & O_NONBLOCK),
-		     flags, (struct sockaddr *)address, &alen);
+  	msg.msg_accrights=NULL;
+  	msg.msg_iovlen=0;
+  	msg.msg_iov=&iov;
+  	iov.iov_len=size;
+  	iov.iov_base=ubuf;
+  	msg.msg_name=address;
+  	msg.msg_namelen=MAX_SOCK_ADDR;
+	size=sock->ops->recvmsg(sock, &msg, size, (file->f_flags & O_NONBLOCK),
+		     flags, &alen);
 
-	if(len<0)
-	 	return len;
+	if(size<0)
+	 	return size;
 	if(addr!=NULL && (err=move_addr_to_user(address,alen, addr, addr_len))<0)
 	  	return err;
 
-	return len;
+	return size;
 }
 
 /*
@@ -1288,7 +1339,7 @@ void sock_init(void)
 {
 	int i;
 
-	printk("Swansea University Computer Society NET3.032 for Linux 1.3.35\n");
+	printk("Swansea University Computer Society NET3.033 for Linux 1.3.38\n");
 
 	/*
 	 *	Initialize all address (protocol) families. 

@@ -24,8 +24,6 @@
 static const char *version =
 	"eexpress.c:v0.07 1/19/94 Donald Becker (becker@super.org)\n";
 
-#include <linux/config.h>
-
 /*
   Sources:
 	This driver wouldn't have been written with the availability of the
@@ -37,10 +35,7 @@ static const char *version =
 	info that the casual reader might think that it documents the i82586.
 */
 
-#ifdef MODULE
 #include <linux/module.h>
-#include <linux/version.h>
-#endif
 
 #include <linux/kernel.h>
 #include <linux/sched.h>
@@ -1003,7 +998,6 @@ eexp_rx(struct device *dev)
 }
 
 #ifdef MODULE
-char kernel_version[] = UTS_RELEASE;
 static char devicename[9] = { 0, };
 static struct device dev_eexpress = {
 	devicename, /* device name is inserted by linux/drivers/net/net_init.c */

@@ -200,7 +200,7 @@ function int () {
 #	choice question choice-list default
 #
 # The choice list has a syntax of:
-#	NAME:VALUE { WHITESPACE '|' NAME:VALUE }
+#	NAME WHITESPACE VALUE { WHITESPACE NAME WHITESPACE VALUE }
 # The user may enter any unique prefix of one of the NAMEs and
 # choice will define VALUE as if it were a boolean option.
 # VALUE must be in all uppercase.  Normally, VALUE is of the
@@ -254,8 +254,16 @@ function choice () {
 			shift; shift
 		done
 	done
-	echo "  defining $val"
-	define_bool "$val" "y"
+	set -- $choices
+	while [ -n "$2" ]; do
+		if [ "$2" = "$val" ]; then
+			echo "  defined $val"
+			define_bool "$2" "y"
+		else
+			define_bool "$2" "n"
+		fi
+		shift; shift
+	done
 }
 
 CONFIG=.tmpconfig

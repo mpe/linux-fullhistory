@@ -587,17 +587,15 @@ static inline void avanti_and_noname_fixup(void)
 	 * example, sound boards seem to like using IRQ 9.
 	 */
 	const unsigned int route_tab = 0x0b0a090f;
-	unsigned char pin;
+	unsigned char pin, level_bits;
 	int pirq;
 
 	pcibios_write_config_dword(0, PCI_DEVFN(7, 0), 0x60, route_tab);
 
-	/* ensure irq 9, 10, 11, and 15 are level sensitive: */
-	outb((1<<(9-8)) | (1<<(10-8)) | (1<<(11-8)) | (1<<(15-8)), 0x4d1);
-
 	/*
 	 * Go through all devices, fixing up irqs as we see fit:
 	 */
+	level_bits = 0;
 	for (dev = pci_devices; dev; dev = dev->next) {
 		dev->irq = 0;
 		if (dev->bus->number != 0 ||
@@ -614,7 +612,16 @@ static inline void avanti_and_noname_fixup(void)
 		if (pirq < 0) {
 			continue;
 		}
+		if ((dev->class >> 16) == PCI_BASE_CLASS_DISPLAY) {
+			continue; /* for now, displays get no IRQ */
+		}
 		dev->irq = (route_tab >> (8 * pirq)) & 0xff;
+
+		/* must set the PCI IRQs to level triggered */
+		/* assume they are all >= 8 */
+		level_bits |= (1 << (dev->irq - 8));
+		outb(level_bits, 0x4d1);
+
 #if PCI_MODIFY
 		/* tell the device: */
 		pcibios_write_config_byte(dev->bus->number, dev->devfn,
@@ -646,6 +653,10 @@ static inline void avanti_and_noname_fixup(void)
 }
 
 
+#ifdef CONFIG_TGA_CONSOLE
+extern void tga_console_init(void);
+#endif /* CONFIG_TGA_CONSOLE */
+
 unsigned long pcibios_fixup(unsigned long mem_start, unsigned long mem_end)
 {
 #if PCI_MODIFY
@@ -671,6 +682,11 @@ unsigned long pcibios_fixup(unsigned long mem_start, unsigned long mem_end)
 #else
 #	error You must tell me what kind of platform you want.
 #endif
+
+#ifdef CONFIG_TGA_CONSOLE
+        tga_console_init();
+#endif /* CONFIG_TGA_CONSOLE */
+
 	return mem_start;
 }
 

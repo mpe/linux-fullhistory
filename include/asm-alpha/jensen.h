@@ -118,8 +118,9 @@ extern inline void __local_outb(unsigned char b, unsigned long addr)
 	mb();
 }
 
-extern unsigned int __bus_inb(unsigned long addr);
-extern inline unsigned int ___bus_inb(unsigned long addr)
+extern unsigned int _bus_inb(unsigned long addr);
+
+extern inline unsigned int __bus_inb(unsigned long addr)
 {
 	long result;
 
@@ -129,8 +130,9 @@ extern inline unsigned int ___bus_inb(unsigned long addr)
 	return 0xffUL & result;
 }
 
-extern void __bus_outb(unsigned char b, unsigned long addr);
-extern inline void ___bus_outb(unsigned char b, unsigned long addr)
+extern void _bus_outb(unsigned char b, unsigned long addr);
+
+extern inline void __bus_outb(unsigned char b, unsigned long addr)
 {
 	__set_hae(0);
 	*(volatile unsigned int *) ((addr << 7) + EISA_IO + 0x00) = b * 0x01010101;
@@ -153,7 +155,7 @@ extern inline unsigned int __inb(unsigned long addr)
 {
 	if (__is_local(addr))
 		return __local_inb(addr);
-	return __bus_inb(addr);
+	return _bus_inb(addr);
 }
 
 extern inline void __outb(unsigned char b, unsigned long addr)
@@ -161,7 +163,7 @@ extern inline void __outb(unsigned char b, unsigned long addr)
 	if (__is_local(addr))
 		__local_outb(b, addr);
 	else
-		__bus_outb(b, addr);
+		_bus_outb(b, addr);
 }
 
 extern inline unsigned int __inw(unsigned long addr)
@@ -251,30 +253,11 @@ extern inline void __writel(unsigned int b, unsigned long addr)
  * The above have so much overhead that it probably doesn't make
  * sense to have them inlined (better icache behaviour).
  */
-extern unsigned int inb(unsigned long addr);
-extern unsigned int inw(unsigned long addr);
-extern unsigned int inl(unsigned long addr);
-
-extern void outb(unsigned char b, unsigned long addr);
-extern void outw(unsigned short b, unsigned long addr);
-extern void outl(unsigned int b, unsigned long addr);
-
-extern unsigned long readb(unsigned long addr);
-extern unsigned long readw(unsigned long addr);
-extern unsigned long readl(unsigned long addr);
-
-extern void writeb(unsigned char b, unsigned long addr);
-extern void writew(unsigned short b, unsigned long addr);
-extern void writel(unsigned int b, unsigned long addr);
-
 #define inb(port) \
-(__builtin_constant_p((port))?__inb(port):(inb)(port))
+(__builtin_constant_p((port))?__inb(port):_inb(port))
 
 #define outb(x, port) \
-(__builtin_constant_p((port))?__outb((x),(port)):(outb)((x),(port)))
-
-#define inb_p inb
-#define outb_p outb
+(__builtin_constant_p((port))?__outb((x),(port)):_outb((x),(port)))
 
 /*
  * The Alpha Jensen hardware for some rather strange reason puts

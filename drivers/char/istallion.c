@@ -25,11 +25,7 @@
 
 /*****************************************************************************/
 
-#ifdef MODULE
-#include <linux/config.h>
 #include <linux/module.h>
-#include <linux/version.h>
-#endif
 
 #include <linux/errno.h>
 #include <linux/sched.h>
@@ -711,11 +707,6 @@ static int	stli_timeron = 0;
 /*****************************************************************************/
 
 #ifdef MODULE
-
-/*
- *	Include kernel version number for modules.
- */
-char	kernel_version[] = UTS_RELEASE;
 
 int init_module()
 {

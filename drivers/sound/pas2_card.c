@@ -321,10 +321,10 @@ detect_pas_hw (struct address_info *hw_config)
    */
 
   outb (0xBC, MASTER_DECODE);	/*
-				 * Talk to first board
+				   * Talk to first board
 				 */
   outb (hw_config->io_base >> 2, MASTER_DECODE);	/*
-							 * Set base address
+							   * Set base address
 							 */
   translat_code = PAS_DEFAULT_BASE ^ hw_config->io_base;
   pas_write (1, WAIT_STATE);	/*
@@ -387,9 +387,6 @@ attach_pas_card (long mem_start, struct address_info *hw_config)
 					 */
 #endif
 
-#ifndef EXCLUDE_YM3812
-	  enable_opl3_mode (0x388, 0x38a, 0);
-#endif
 
 #ifndef EXCLUDE_MIDI
 	  mem_start = pas_midi_init (mem_start);

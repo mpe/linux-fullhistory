@@ -12,7 +12,6 @@
  *		Alan Cox	:	Split from ip.c , see ip_input.c for history.
  */
 
-#include <linux/config.h>
 #include <linux/types.h>
 #include <linux/mm.h>
 #include <linux/sched.h>

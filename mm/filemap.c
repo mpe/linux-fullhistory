@@ -279,19 +279,11 @@ static int filemap_sync(struct vm_area_struct * vma, unsigned long address,
 }
 
 /*
- * This handles partial area unmaps..
+ * This handles (potentially partial) area unmaps..
  */
 static void filemap_unmap(struct vm_area_struct *vma, unsigned long start, size_t len)
 {
 	filemap_sync(vma, start, len, MS_ASYNC);
-}
-
-/*
- * This handles complete area closes..
- */
-static void filemap_close(struct vm_area_struct * vma)
-{
-	filemap_sync(vma, vma->vm_start, vma->vm_end - vma->vm_start, MS_ASYNC);
 }
 
 /*
@@ -300,10 +292,10 @@ static void filemap_close(struct vm_area_struct * vma)
  * backing-store for swapping..
  */
 static struct vm_operations_struct file_shared_mmap = {
-	NULL,			/* open */
-	filemap_close,		/* close */
-	filemap_unmap,		/* unmap */
-	NULL,			/* protect */
+	NULL,			/* no special open */
+	NULL,			/* no special close */
+	filemap_unmap,		/* unmap - we need to sync the pages */
+	NULL,			/* no special protect */
 	filemap_sync,		/* sync */
 	NULL,			/* advise */
 	filemap_nopage,		/* nopage */

@@ -13,7 +13,7 @@
 
 struct notifier_block
 {
-	int (*notifier_call)(unsigned long, void *);
+	int (*notifier_call)(struct notifier_block *this, unsigned long, void *);
 	struct notifier_block *next;
 	int priority;
 };
@@ -68,7 +68,7 @@ extern __inline__ int notifier_call_chain(struct notifier_block **n, unsigned lo
 	struct notifier_block *nb = *n;
 	while(nb)
 	{
-		ret=nb->notifier_call(val,v);
+		ret=nb->notifier_call(nb,val,v);
 		if(ret&NOTIFY_STOP_MASK)
 			return ret;
 		nb=nb->next;

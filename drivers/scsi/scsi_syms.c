@@ -1,6 +1,3 @@
-
-#include <linux/autoconf.h>
-
 /*
  * We should not even be trying to compile this if we are not doing
  * a module.
@@ -17,19 +14,20 @@
 #undef MODULE
 
 #include <linux/module.h>
-#include <linux/version.h>
 
-#include <asm/system.h>
+#include <linux/config.h>
 #include <linux/sched.h>
 #include <linux/timer.h>
 #include <linux/string.h>
 #include <linux/malloc.h>
-#include <asm/irq.h>
-#include <asm/dma.h>
 #include <linux/ioport.h>
 #include <linux/kernel.h>
-
 #include <linux/blk.h>
+
+#include <asm/system.h>
+#include <asm/irq.h>
+#include <asm/dma.h>
+
 #include "scsi.h"
 #include "scsi_ioctl.h"
 #include "hosts.h"

@@ -449,10 +449,7 @@ sscape_coproc_close (void *dev_info, int sub_device)
 #endif
       devc->dma_allocated = 0;
     }
-  {
-    sscape_sleep_flag.aborting = 0;
-    sscape_sleep_flag.mode = WK_NONE;
-  };
+  sscape_sleep_flag.mode = WK_NONE;
   restore_flags (flags);
 
   return;
@@ -514,10 +511,7 @@ sscape_download_boot (struct sscape_info *devc, unsigned char *block, int size, 
   /*
    * Wait until transfer completes.
    */
-  {
-    sscape_sleep_flag.aborting = 0;
-    sscape_sleep_flag.mode = WK_NONE;
-  };
+  sscape_sleep_flag.mode = WK_NONE;
   done = 0;
   timeout_val = 100;
   while (!done && timeout_val-- > 0)
@@ -529,16 +523,14 @@ sscape_download_boot (struct sscape_info *devc, unsigned char *block, int size, 
 	unsigned long   tl;
 
 	if (1)
-	  tl = current->timeout = jiffies + (1);
+	  current->timeout = tl = jiffies + (1);
 	else
 	  tl = 0xffffffff;
 	sscape_sleep_flag.mode = WK_SLEEP;
 	interruptible_sleep_on (&sscape_sleeper);
 	if (!(sscape_sleep_flag.mode & WK_WAKEUP))
 	  {
-	    if (current->signal & ~current->blocked)
-	      sscape_sleep_flag.aborting = 1;
-	    else if (jiffies >= tl)
+	    if (jiffies >= tl)
 	      sscape_sleep_flag.mode |= WK_TIMEOUT;
 	  }
 	sscape_sleep_flag.mode &= ~WK_SLEEP;
@@ -579,16 +571,14 @@ sscape_download_boot (struct sscape_info *devc, unsigned char *block, int size, 
 	    unsigned long   tl;
 
 	    if (1)
-	      tl = current->timeout = jiffies + (1);
+	      current->timeout = tl = jiffies + (1);
 	    else
 	      tl = 0xffffffff;
 	    sscape_sleep_flag.mode = WK_SLEEP;
 	    interruptible_sleep_on (&sscape_sleeper);
 	    if (!(sscape_sleep_flag.mode & WK_WAKEUP))
 	      {
-		if (current->signal & ~current->blocked)
-		  sscape_sleep_flag.aborting = 1;
-		else if (jiffies >= tl)
+		if (jiffies >= tl)
 		  sscape_sleep_flag.mode |= WK_TIMEOUT;
 	      }
 	    sscape_sleep_flag.mode &= ~WK_SLEEP;
@@ -614,16 +604,14 @@ sscape_download_boot (struct sscape_info *devc, unsigned char *block, int size, 
 	    unsigned long   tl;
 
 	    if (1)
-	      tl = current->timeout = jiffies + (1);
+	      current->timeout = tl = jiffies + (1);
 	    else
 	      tl = 0xffffffff;
 	    sscape_sleep_flag.mode = WK_SLEEP;
 	    interruptible_sleep_on (&sscape_sleeper);
 	    if (!(sscape_sleep_flag.mode & WK_WAKEUP))
 	      {
-		if (current->signal & ~current->blocked)
-		  sscape_sleep_flag.aborting = 1;
-		else if (jiffies >= tl)
+		if (jiffies >= tl)
 		  sscape_sleep_flag.mode |= WK_TIMEOUT;
 	      }
 	    sscape_sleep_flag.mode &= ~WK_SLEEP;

@@ -18,6 +18,8 @@
 		
 	Modifications by Wolfgang Walter
 		Use dev_close cleanly so we always shut things down tidily.
+		
+	Changed 29/10/95, Alan Cox to pass sockaddr's around for mac addresses.
 */
 
 #include <linux/config.h>
@@ -130,13 +132,11 @@ init_etherdev(struct device *dev, int sizeof_priv)
 }
 
 
-static int eth_mac_addr(struct device *dev, void * addr)
+static int eth_mac_addr(struct device *dev, struct sockaddr *addr)
 {
-	struct ifreq * ifr = (struct ifreq *) addr;
-
 	if(dev->start)
 		return -EBUSY;
-	memcpy(dev->dev_addr, ifr->ifr_hwaddr.sa_data,dev->hard_header_len);
+	memcpy(dev->dev_addr, addr->sa_data,dev->addr_len);
 	return 0;
 }
 
@@ -247,6 +247,7 @@ int register_netdev(struct device *dev)
 			for (i = 0; i < MAX_ETH_CARDS; ++i)
 				if (ethdev_index[i] == NULL) {
 					sprintf(dev->name, "eth%d", i);
+					printk("loading device '%s'...\n", dev->name);
 					ethdev_index[i] = dev;
 					break;
 				}

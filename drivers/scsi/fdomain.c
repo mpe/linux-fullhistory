@@ -211,6 +211,8 @@
 #include <linux/pci.h>
 #include <linux/stat.h>
 
+#include <linux/config.h>	/* for CONFIG_PCI */
+
 struct proc_dir_entry proc_scsi_fdomain = {
     PROC_SCSI_FDOMAIN, 7, "fdomain",
     S_IFDIR | S_IRUGO | S_IXUGO, 2

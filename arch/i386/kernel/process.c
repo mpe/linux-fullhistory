@@ -8,7 +8,6 @@
  * This file handles the architecture-dependent parts of process handling..
  */
 
-#include <linux/config.h>
 #include <linux/errno.h>
 #include <linux/sched.h>
 #include <linux/kernel.h>
@@ -52,7 +51,7 @@ asmlinkage int sys_idle(void)
 	/*	printk("Wrong process idled\n");	SMP bug check */
 		return -EPERM;
 	}
-#ifdef CONFIG_SMP
+#ifdef __SMP__
 	/*
 	 *	SMP locking sanity checker
 	 */
@@ -77,7 +76,7 @@ asmlinkage int sys_idle(void)
 	/* endless idle loop with no priority at all */
 	current->counter = -100;
 	for (;;) {
-#ifdef CONFIG_SMP
+#ifdef __SMP__
 		if (cpu_data[smp_processor_id()].hlt_works_ok && !hlt_counter && !need_resched)
 #else	
 		if (hlt_works_ok && !hlt_counter && !need_resched)

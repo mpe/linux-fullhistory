@@ -48,15 +48,12 @@
  * Thanks also to Greg Hosler who did a lot of testing and  *
  * found quite a number of bugs during the development.	    *
  ************************************************************
- *  last change: 95/09/17                 OS: Linux 1.3.28  *
+ *  last change: 95/11/03                 OS: Linux 1.3.37  *
  ************************************************************/
 
 /* Look in eata_dma.h for configuration and revision information */
 
-#ifdef MODULE
 #include <linux/module.h>
-#include <linux/version.h>
-#endif
  
 #include <linux/kernel.h>
 #include <linux/sched.h>
@@ -79,7 +76,8 @@
 #include "eata_dma.h"
 #include "eata_dma_proc.h" 
 
-#include<linux/stat.h>
+#include <linux/stat.h>
+#include <linux/config.h>	/* for CONFIG_PCI */
 
 struct proc_dir_entry proc_scsi_eata_dma = {
     PROC_SCSI_EATA, 8, "eata_dma",
@@ -144,7 +142,7 @@ int eata_release(struct Scsi_Host *sh)
     }
     
     if (SD(sh)->channel == 0) {
-	if (sh->dma_channel != 0xff) free_dma(sh->dma_channel);
+	if (sh->dma_channel != BUSMASTER) free_dma(sh->dma_channel);
 	if (sh->io_port && sh->n_io_port)
 	    release_region(sh->io_port, sh->n_io_port);
     }
@@ -178,7 +176,13 @@ void eata_int_handler(int irq, struct pt_regs * regs)
 	
 	sp=&SD(sh)->sp;
 	
-	cp = sp->ccb; /* Has been passed thru, no conversion needed */
+	if((cp = sp->ccb) == NULL) {
+	    eata_stat = inb(base + HA_RSTATUS);
+	    printk("eata_dma: Board: %x Spurious IRQ %lx "
+		   "received. CCB pointer not set.\n", base, (long)cp);
+	    restore_flags(flags);
+	    return;
+	}
 	cmd = cp->cmd;
 	base = (uint) cmd->host->base;
 	
@@ -373,7 +377,7 @@ int eata_queue(Scsi_Cmnd * cmd, void (* done) (Scsi_Cmnd *))
 	printk(KERN_EMERG "eata_dma: run out of queue slots cmdno:%ld"
 	       " intrno: %ld, can_queue: %d, x: %d, y: %d\n", 
 	       queue_counter, int_counter, sh->can_queue, x, y);
-	printk(KERN_EMERG "List of free queueslots:");
+	printk(KERN_EMERG "Status of queueslots:");
 	for(z = 0; z < sh->can_queue; z +=2) {
 	    switch(hd->ccb[z].status) {
 	    case FREE:
@@ -499,20 +503,22 @@ int eata_queue(Scsi_Cmnd * cmd, void (* done) (Scsi_Cmnd *))
     
     cp->cp_statDMA = htonl(virt_to_bus(&(hd->sp)));
     
-    cp->cp_viraddr = cp; /* This will be passed thru, so we don't need to convert it */
+    cp->cp_viraddr = cp; /* This will be passed thru, so we don't need to 
+                          * convert it */
     cp->cmd = cmd;
     cmd->host_scribble = (char *)&hd->ccb[y];	
     
     if(eata_send_command((u32) cp, (u32) sh->base, EATA_CMD_DMA_SEND_CP) == FALSE) {
 	cmd->result = DID_BUS_BUSY << 16;
-	printk("eata_queue target %d, pid %ld, HBA busy, returning DID_BUS_BUSY\n", 
-	       cmd->target, cmd->pid);
+	DBG(DBG_QUEUE && DBG_ABNORM, 
+	    printk("eata_queue target %d, pid %ld, HBA busy, "
+		   "returning DID_BUS_BUSY\n",cmd->target, cmd->pid));
 	done(cmd);
-	cp->status = FREE;     /* Hmmm..... */
+	cp->status = FREE;    
 	restore_flags(flags);
 	return(0);
     }
-    DBG(DBG_QUEUE,printk("Queued base %#.4x pid: %ld target: %x lun: %x "
+    DBG(DBG_QUEUE, printk("Queued base %#.4x pid: %ld target: %x lun: %x "
 			 "slot %d irq %d\n", (s32)sh->base, cmd->pid, 
 			 cmd->target, cmd->lun, y, sh->irq));
     DBG(DBG_QUEUE && DBG_DELAY, DEL2(200));
@@ -1042,8 +1048,9 @@ short register_HBA(u32 base, struct get_conf *gc, Scsi_Host_Template * tpnt,
 	if(hd->bustype != IS_ISA)
 	    sh->cmd_per_lun = sh->can_queue/C_P_L_DIV; 
 	else
-	    sh->cmd_per_lun = 8; /* We artificially limit this to conserve memory, 
-				  * which would be needed for ISA bounce buffers */
+	    sh->cmd_per_lun = 8; /* We artificially limit this to conserve 
+				  * memory, which would be needed for ISA 
+				  * bounce buffers */
     } else 
 	sh->cmd_per_lun = 1;
     
@@ -1118,9 +1125,9 @@ void find_EISA(struct get_conf *buf, Scsi_Host_Template * tpnt)
 	    pal2 = inb((u16)base - 7);
 	    pal3 = inb((u16)base - 6);
 	    
-	    if (((pal1 == 0x12) && (pal2 == 0x14)) ||
-		((pal1 == 0x38) && (pal2 == 0xa3) && (pal3 == 0x82)) ||
-		((pal1 == 0x06) && (pal2 == 0x94) && (pal3 == 0x24))) {
+	    if (((pal1 == DPT_ID1) && (pal2 == DPT_ID2)) ||
+		((pal1 == NEC_ID1) && (pal2 == NEC_ID2) && (pal3 == NEC_ID3))||
+		((pal1 == ATT_ID1) && (pal2 == ATT_ID2) && (pal3 == ATT_ID3))){
 		DBG(DBG_PROBE, printk("EISA EATA id tags found: %x %x %x \n",
 				      (int)pal1, (int)pal2, (int)pal3));
 #endif
@@ -1133,7 +1140,7 @@ void find_EISA(struct get_conf *buf, Scsi_Host_Template * tpnt)
 		} else {
 		    if (check_blink_state(base)) 
 			printk("HBA is in BLINK state. Consult your HBAs "
-			       " Manual to correct this.\n");
+			       "Manual to correct this.\n");
 		} 
 		/* Nothing found here so we take it from the list */
 		EISAbases[i] = 0;  
@@ -1224,9 +1231,11 @@ void find_PCI(struct get_conf *buf, Scsi_Host_Template * tpnt)
 		    pal1 = inb(base);
 		    pal2 = inb(base + 1);
 		    pal3 = inb(base + 2);
-		    if (((pal1 == 0x12) && (pal2 == 0x14)) ||
-			((pal1 == 0x38) && (pal2 == 0xa3) && (pal3 == 0x82)) ||
-			((pal1 == 0x06) && (pal2 == 0x94) && (pal3 == 0x24)))
+		    if (((pal1 == DPT_ID1) && (pal2 == DPT_ID2)) ||
+			((pal1 == NEC_ID1) && (pal2 == NEC_ID2) && 
+			 (pal3 == NEC_ID3)) ||
+			((pal1 == ATT_ID1) && (pal2 == ATT_ID2) && 
+			 (pal3 == ATT_ID3)))
 			base += 0x08;
 		    else
 			base += 0x10;   /* Now, THIS is the real address */

@@ -96,28 +96,22 @@
  * features to asm/floppy.h.
  */
 
-#define CONFIG_FLOPPY_SANITY
-#undef  CONFIG_FLOPPY_SILENT_DCL_CLEAR
+#define FLOPPY_SANITY_CHECK
+#undef  FLOPPY_SILENT_DCL_CLEAR
 
 #define REALLY_SLOW_IO
 
 #define DEBUGT 2
 #define DCL_DEBUG /* debug disk change line */
 
-#include <linux/config.h>
-
 /* do print messages for unexpected interrupts */
 static int print_unex=1;
 
-#ifdef MODULE
-#define FD_MODULE
-
 #include <linux/module.h>
-/*
- * NB. we must include the kernel identification string to install the module.
- */
-#include <linux/version.h>
-char kernel_version[] = UTS_RELEASE;
+
+#ifdef MODULE
+
+#define FD_MODULE
 
 int FLOPPY_IRQ=6;
 int FLOPPY_DMA=2;
@@ -608,7 +602,7 @@ static struct timer_list fd_timeout ={ NULL, NULL, 0, 0,
 
 static const char *timeout_message;
 
-#ifdef CONFIG_FLOPPY_SANITY
+#ifdef FLOPPY_SANITY_CHECK
 static void is_alive(const char *message)
 {
 	/* this routine checks whether the floppy driver is "alive" */
@@ -618,7 +612,7 @@ static void is_alive(const char *message)
 }
 #endif
 
-#ifdef CONFIG_FLOPPY_SANITY
+#ifdef FLOPPY_SANITY_CHECK
 
 #define OLOGSIZE 20
 
@@ -697,7 +691,7 @@ static void reschedule_timeout(int drive, const char *message, int marg)
 static int disk_change(int drive)
 {
 	int fdc=FDC(drive);
-#ifdef CONFIG_FLOPPY_SANITY
+#ifdef FLOPPY_SANITY_CHECK
 	if(jiffies < UDP->select_delay + UDRS->select_date)
 		DPRINT("WARNING disk change called early\n");
 	if(! (FDCS->dor & (0x10 << UNIT(drive))) ||
@@ -1019,7 +1013,7 @@ static void floppy_enable_hlt(void)
 
 static void setup_DMA(void)
 {
-#ifdef CONFIG_FLOPPY_SANITY
+#ifdef FLOPPY_SANITY_CHECK
 	if (raw_cmd->length == 0){
 		int i;
 
@@ -1096,7 +1090,7 @@ static int output_byte(char byte)
 		if (status == STATUS_READY){
 			fd_outb(byte,FD_DATA);
 
-#ifdef CONFIG_FLOPPY_SANITY
+#ifdef FLOPPY_SANITY_CHECK
 			output_log[output_log_pos].data = byte;
 			output_log[output_log_pos].status = rstatus;
 			output_log[output_log_pos].jiffies = jiffies;
@@ -1127,7 +1121,7 @@ static int result(void)
 		if (!(status & STATUS_READY))
 			continue;
 		if (status == STATUS_READY){
-#ifdef CONFIG_FLOPPY_SANITY
+#ifdef FLOPPY_SANITY_CHECK
 			resultjiffies = jiffies;
 			resultsize = i;
 #endif
@@ -1749,7 +1743,7 @@ void show_floppy(void)
 	       jiffies, interruptjiffies, lasthandler);
 
 
-#ifdef CONFIG_FLOPPY_SANITY
+#ifdef FLOPPY_SANITY_CHECK
 	printk("timeout_message=%s\n", timeout_message);
 	printk("last output bytes:\n");
 	for(i=0; i < OLOGSIZE; i++)
@@ -2222,7 +2216,7 @@ static void rw_interrupt(void)
 		floppy->sect + ((R_SECTOR-SECTOR) <<  SIZECODE >> 2) -
 		(sector_t % floppy->sect) % ssize;
 
-#ifdef CONFIG_FLOPPY_SANITY
+#ifdef FLOPPY_SANITY_CHECK
 	if ( nr_sectors > current_count_sectors + ssize -
 	     (current_count_sectors + sector_t) % ssize +
 	     sector_t % ssize){
@@ -2341,7 +2335,7 @@ static void copy_buffer(int ssize, int max_sector, int max_sector_2)
 			current_count_sectors = CURRENT->nr_sectors;
 	}
 	remaining = current_count_sectors << 9;
-#ifdef CONFIG_FLOPPY_SANITY
+#ifdef FLOPPY_SANITY_CHECK
 	if ((remaining >> 9) > CURRENT->nr_sectors  &&
 	    CT(COMMAND) == FD_WRITE ){
 		DPRINT("in copy buffer\n");
@@ -2367,7 +2361,7 @@ static void copy_buffer(int ssize, int max_sector, int max_sector_2)
 	while ( remaining > 0){
 		if ( size > remaining )
 			size = remaining;
-#ifdef CONFIG_FLOPPY_SANITY
+#ifdef FLOPPY_SANITY_CHECK
 		if (dma_buffer + size >
 		    floppy_track_buffer + (max_buffer_sectors << 10) ||
 		    dma_buffer < floppy_track_buffer ){
@@ -2400,7 +2394,7 @@ static void copy_buffer(int ssize, int max_sector, int max_sector_2)
 
 		dma_buffer += size;
 		bh = bh->b_reqnext;
-#ifdef CONFIG_FLOPPY_SANITY
+#ifdef FLOPPY_SANITY_CHECK
 		if ( !bh){
 			DPRINT("bh=null in copy buffer after copy\n");
 			break;
@@ -2409,7 +2403,7 @@ static void copy_buffer(int ssize, int max_sector, int max_sector_2)
 		size = bh->b_size;
 		buffer = bh->b_data;
 	}
-#ifdef CONFIG_FLOPPY_SANITY
+#ifdef FLOPPY_SANITY_CHECK
 	if ( remaining ){
 		if ( remaining > 0 )
 			max_sector -= remaining >> 9;
@@ -2591,7 +2585,7 @@ static int make_raw_rw_request(void)
 		 * if we get here, we know that the write
 		 * is either aligned or the data already in the buffer
 		 * (buffer will be overwritten) */
-#ifdef CONFIG_FLOPPY_SANITY
+#ifdef FLOPPY_SANITY_CHECK
 		if (sector_t != aligned_sector_t && buffer_track == -1 )
 			DPRINT("internal error offset !=0 on write\n");
 #endif
@@ -2606,7 +2600,7 @@ static int make_raw_rw_request(void)
 	raw_cmd->length = sector_t+current_count_sectors-aligned_sector_t;
 	raw_cmd->length = ((raw_cmd->length -1)|(ssize-1))+1;
 	raw_cmd->length <<= 9;
-#ifdef CONFIG_FLOPPY_SANITY
+#ifdef FLOPPY_SANITY_CHECK
 	if ((raw_cmd->length < current_count_sectors << 9) ||
 	    (raw_cmd->kernel_data != CURRENT->buffer &&
 	     CT(COMMAND) == FD_WRITE &&
@@ -3949,7 +3943,7 @@ static int floppy_grab_irq_and_dma(void)
 
 static void floppy_release_irq_and_dma(void)
 {
-#ifdef CONFIG_FLOPPY_SANITY
+#ifdef FLOPPY_SANITY_CHECK
 	int drive;
 #endif
 	long tmpsize;
@@ -3983,7 +3977,7 @@ static void floppy_release_irq_and_dma(void)
 		free_pages((unsigned long)tmpaddr, __get_order(tmpsize));
 	}
 
-#ifdef CONFIG_FLOPPY_SANITY
+#ifdef FLOPPY_SANITY_CHECK
 	for(drive=0; drive < N_FDC * 4; drive++)
 		if( motor_off_timer[drive].next )
 			printk("motor off timer %d still active\n", drive);

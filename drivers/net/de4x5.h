@@ -563,6 +563,7 @@
 #define AUI        0x0008          /* Thickwire */
 #define BNC_AUI    0x0010          /* BNC/AUI on DC21040 indistinguishable */
 #define ANS        0x0020          /* Intermediate AutoNegotiation State */
+#define EXT_SIA    0x0400	    /* external SIA (as on DEC MULTIA) */
 
 #define _10Mb      0x0040          /* 10Mb/s Ethernet */
 #define _100Mb     0x0080          /* 100Mb/s Ethernet */

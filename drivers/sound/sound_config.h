@@ -138,7 +138,8 @@
 
 struct fileinfo {
        	  int mode;	      /* Open mode */
-	  struct file *filp;     /* Reference to file-flags. OS-dependent. */
+	  int flags;
+	  int dummy;     /* Reference to file-flags. OS-dependent. */
        };
 
 struct address_info {
@@ -151,6 +152,7 @@ struct address_info {
 	int driver_use_1;	/* Driver defined field 1 */
 	int driver_use_2;	/* Driver defined field 2 */
 	sound_os_info *osp;	/* OS spesific info */
+	int card_subtype;	/* Driver spesific. Usually 0 */
 };
 
 #define SYNTH_MAX_VOICES	32

@@ -159,7 +159,7 @@ int get_cpuinfo(char * buffer)
 			{"Pentium 60/66","Pentium 75+","3",
 				"4","5","6","7","8"}};
 	char mask[2];
-#ifndef CONFIG_SMP	
+#ifndef __SMP__	
 	mask[0] = x86_mask+'@';
 	mask[1] = '\0';
 	return sprintf(buffer,"cpu\t\t: %c86\n"

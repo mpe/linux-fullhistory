@@ -21,6 +21,7 @@
  *					a socket is reset and must stay shut up
  *		Alan Cox	:	New fields for options
  *	Pauline Middelink	:	identd support
+ *		Alan Cox	:	Eliminate low level recv/recvfrom
  *
  *		This program is free software; you can redistribute it and/or
  *		modify it under the terms of the GNU General Public License
@@ -69,6 +70,19 @@ struct unix_opt
 	struct inode *		inode;
 	struct semaphore	readsem;
 	struct sock *		other;
+};
+
+/*
+ *	IP packet socket options
+ */
+
+struct inet_packet_opt
+{
+	struct notifier_block	notifier;		/* Used when bound */
+	struct device		*bound_dev;
+	unsigned long		dev_stamp;
+	struct packet_type	*prot_hook;
+	char			device_name[15];
 };
 
 
@@ -187,7 +201,7 @@ struct sock
   
 /*
  *	This is where all the private (optional) areas that don't
- *	overlap will eventually live. For now just AF_UNIX is here.
+ *	overlap will eventually live. 
  */
 
 	union
@@ -195,6 +209,9 @@ struct sock
 	  	struct unix_opt	af_unix;
 #ifdef CONFIG_ATALK
 		struct atalk_sock	af_at;
+#endif
+#ifdef CONFIG_INET
+		struct inet_packet_opt  af_packet;
 #endif
 	} protinfo;  		
 
@@ -264,18 +281,6 @@ struct sock
 struct proto 
 {
 	void			(*close)(struct sock *sk, int timeout);
-	int			(*read)(struct sock *sk, unsigned char *to,
-					int len, int nonblock, unsigned flags);
-	int			(*write)(struct sock *sk, const unsigned char *to,
-				 	int len, int nonblock, unsigned flags);
-	int			(*sendto)(struct sock *sk,
-				  	const unsigned char *from, int len, 
-				  	int noblock, unsigned flags,
-				        struct sockaddr_in *usin, int addr_len);
-	int			(*recvfrom)(struct sock *sk,
-				        unsigned char *from, int len, int noblock,
-				        unsigned flags, struct sockaddr_in *usin,
-				        int *addr_len);
 	int			(*build_header)(struct sk_buff *skb,
 					__u32 saddr,
 					__u32 daddr,
@@ -309,6 +314,7 @@ struct proto
 					int noblock, int flags);
 	int			(*recvmsg)(struct sock *sk, struct msghdr *msg, int len,
 					int noblock, int flags, int *addr_len);
+	int			(*bind)(struct sock *sk, struct sockaddr *uaddr, int addr_len);
 	unsigned short		max_header;
 	unsigned long		retransmits;
 	char			name[32];
@@ -405,6 +411,16 @@ extern __inline__ int sock_queue_rcv_skb(struct sock *sk, struct sk_buff *skb)
 	return 0;
 }
 
+/*
+ *	Recover an error report and clear atomically
+ */
+ 
+extern __inline__ int sock_error(struct sock *sk)
+{
+	int err=xchg(&sk->err,0);
+	return -err;
+}
+ 
 /* 
  *	Declarations from timer.c 
  */

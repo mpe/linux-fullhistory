@@ -379,6 +379,76 @@ static int osf_partition(struct gendisk *hd, unsigned int dev, unsigned long fir
 
 #endif /* CONFIG_OSF_PARTITION */
 
+#ifdef CONFIG_SUN_PARTITION
+
+static int sun_partition(struct gendisk *hd, unsigned int dev, unsigned long first_sector)
+{
+	int i, csum;
+	unsigned short *ush;
+	struct buffer_head *bh;
+	struct sun_disklabel {
+		unsigned char info[128];   /* Informative text string */
+		unsigned char spare[292];  /* Boot information etc. */
+		unsigned short rspeed;     /* Disk rotational speed */
+		unsigned short pcylcount;  /* Physical cylinder count */
+		unsigned short sparecyl;   /* extra sects per cylinder */
+		unsigned char spare2[4];   /* More magic... */
+		unsigned short ilfact;     /* Interleave factor */
+		unsigned short ncyl;       /* Data cylinder count */
+		unsigned short nacyl;      /* Alt. cylinder count */
+		unsigned short ntrks;      /* Tracks per cylinder */
+		unsigned short nsect;      /* Sectors per track */
+		unsigned char spare3[4];   /* Even more magic... */
+		struct sun_partition {
+			unsigned long start_cylinder;
+			unsigned long num_sectors;
+		} partitions[8];
+		unsigned short magic;      /* Magic number */
+		unsigned short csum;       /* Label xor'd checksum */
+	} * label;		
+	struct sun_partition *p;
+	unsigned long spc;
+#define SUN_LABEL_MAGIC  0xDABE
+
+	if(!(bh = bread(dev, 0, 1024))) {
+		printk("Dev %d: unable to read partition table\n", dev);
+		return -1;
+	}
+	label = (struct sun_disklabel *) bh->b_data;
+	p = label->partitions;
+	if(label->magic != SUN_LABEL_MAGIC) {
+		printk("Dev %d Sun disklabel: bad magic %08x\n", dev, label->magic);
+		brelse(bh);
+		return 0;
+	}
+	/* Look at the checksum */
+	ush = ((unsigned short *) (label+1)) - 1;
+	for(csum = 0; ush >= ((unsigned short *) label);)
+		csum ^= *ush--;
+	if(csum) {
+		printk("Dev %d Sun disklabel: Csum bad, label corrupted\n", dev);
+		brelse(bh);
+		return 0;
+	}
+	/* All Sun disks have 8 partition entries */
+	spc = (label->ntrks * label->nsect);
+	for(i=0; i < 8; i++, p++) {
+		unsigned long st_sector;
+
+		/* We register all partitions, even if zero size, so that
+		 * the minor numbers end up ok as per SunOS interpretation.
+		 */
+		st_sector = first_sector + (p->start_cylinder * spc);
+		add_partition(hd, current_minor, st_sector, p->num_sectors);
+		current_minor++;
+	}
+	printk("\n");
+	brelse(bh);
+	return 1;
+}
+
+#endif /* CONFIG_SUN_PARTITION */
+
 static void check_partition(struct gendisk *hd, kdev_t dev)
 {
 	static int first_time = 1;
@@ -406,6 +476,10 @@ static void check_partition(struct gendisk *hd, kdev_t dev)
 #endif
 #ifdef CONFIG_OSF_PARTITION
 	if (osf_partition(hd, dev, first_sector))
+		return;
+#endif
+#ifdef CONFIG_SUN_PARTITION
+	if(sun_partition(hd, dev, first_sector))
 		return;
 #endif
 	printk(" unknown partition table\n");

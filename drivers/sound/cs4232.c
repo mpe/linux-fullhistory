@@ -196,6 +196,7 @@ attach_cs4232 (long mem_start, struct address_info *hw_config)
       hw_config2.name = NULL;
       hw_config2.driver_use_1 = 0;
       hw_config2.driver_use_2 = 0;
+      hw_config2.card_subtype = 0;
       hw_config2.osp = hw_config->osp;
 
       if (probe_mpu401 (&hw_config2))
@@ -240,6 +241,7 @@ unload_cs4232 (struct address_info *hw_config)
       hw_config2.name = NULL;
       hw_config2.driver_use_1 = 0;
       hw_config2.driver_use_2 = 0;
+      hw_config2.card_subtype = 0;
       hw_config2.osp = hw_config->osp;
 
       unload_mpu401 (&hw_config2);
@@ -252,5 +254,6 @@ unload_cs4232_mpu (struct address_info *hw_config)
 {
   /* Not required. Handled by cs4232_unload */
 }
+
 
 #endif

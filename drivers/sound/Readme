@@ -1,5 +1,5 @@
 
-VoxWare v3.5-alpha3 release notes
+VoxWare v3.5-alpha5 release notes
 ---------------------------------
 
 IMPORTANT! This version of the driver is compatible only with Linux versions
@@ -41,7 +41,7 @@ after v3.0 (I will not add aditional features before v3.0 is ready).
    your kernel version, please use the sound driver version
    included in your kernel.
 
-You will need the snd-util-2.5.tar.gz and snd-data-0.1.tar.Z
+You will need the snd-util-3.0.tar.gz and snd-data-0.1.tar.Z
 packages to use this driver. They should be in the same
 ftp site or BBS from where you got this driver. For
 example at nic.funet.fi:pub/OS/Linux/*.

@@ -1,8 +1,6 @@
 #ifndef _LINUX_SCHED_H
 #define _LINUX_SCHED_H
 
-#include <linux/config.h>
-
 /*
  * define DEBUG if you want the wait-queues to have some extra
  * debugging code. It's not normally used, but might catch some
@@ -220,7 +218,7 @@ struct task_struct {
 	struct mm_struct *mm;
 /* signal handlers */
 	struct signal_struct *sig;
-#ifdef CONFIG_SMP
+#ifdef __SMP__
 	int processor;
 	int last_processor;
 	int lock_depth;		/* Lock depth. We can context switch in and out of holding a syscall kernel lock... */	

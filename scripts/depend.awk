@@ -24,8 +24,19 @@ function fileExists(f,    TMP, dummy, result) {
 	}
 }
 
+function endfile(f) {
+	if (hasconfig && !needsconfig) {
+		printf "%s doesn't need config\n",f > "/dev/stderr"
+	}
+	if (hasdep) {
+		print cmd
+	}
+}
+
 BEGIN{
 	hasdep=0
+	hasconfig=0
+	needsconfig=0
 	if(!(TOPDIR=ENVIRON["TOPDIR"])) {
 		print "Environment variable TOPDIR is not set"
 		exit 1
@@ -37,13 +48,22 @@ BEGIN{
 	}
 }
 
-/^#[ 	]*include[ 	]*[<"][^ 	]*[>"]/{
+/^[ 	]*#[ 	]*if.*[^A-Za-z_]CONFIG_/ {
+	needsconfig=1
+	if (!hasconfig) {
+		printf "%s needs config but has not included config file\n",FILENAME > "/dev/stderr"
+		# only say it once per file..
+		hasconfig = 1
+	}
+}
+
+/^[ 	]*#[ 	]*include[ 	]*[<"][^ 	]*[>"]/{
 	found=0
 	if(LASTFILE!=FILENAME) {
-		if (hasdep) {
-			print cmd
-		}
+		endfile(LASTFILE)
 		hasdep=0
+		hasconfig=0
+		needsconfig=0
 		cmd=""
 		LASTFILE=FILENAME
 		depname=FILENAME
@@ -65,6 +85,9 @@ BEGIN{
 	fname=$0
 	sub("^#[ 	]*include[ 	]*[<\"]","",fname)
 	sub("[>\"].*","",fname)
+	if (fname=="linux/config.h") {
+		hasconfig=1
+	}
 	if(fileExists(relpath""fname)) {
 		found=1
 		if (!hasdep) {
@@ -94,7 +117,5 @@ BEGIN{
 }
 
 END{
-	if (hasdep) {
-		print cmd
-	}
+	endfile(FILENAME)
 }

@@ -116,7 +116,7 @@ static unsigned long memory_end = 0;
 int rows, cols;
 
 int ramdisk_size;
-int root_mountflags = 0;
+int root_mountflags = MS_RDONLY;
 
 static char * argv_init[MAX_INIT_ARGS+2] = { "init", NULL, };
 static char * envp_init[MAX_INIT_ENVS+2] = { "HOME=/", "TERM=linux", NULL, };
@@ -297,7 +297,7 @@ void calibrate_delay(void)
 	int ticks;
 	int loopbit;
 	int lps_precision = LPS_PREC;
-#ifdef CONFIG_SMP
+#ifdef __SMP__
 	loops_per_sec = (1<<12);
 #endif		
 
@@ -418,7 +418,7 @@ static void parse_options(char *line)
 
 extern void setup_arch(char **, unsigned long *, unsigned long *);
 
-#ifdef CONFIG_SMP
+#ifdef __SMP__
 /*
  *	Activate a secondary processor.
  */
@@ -488,7 +488,7 @@ asmlinkage void start_kernel(void)
  *	This little check will move.
  */
 
-#ifdef CONFIG_SMP	
+#ifdef __SMP__
 	static int first_cpu=1;
 	
 	if(!first_cpu)
@@ -545,7 +545,7 @@ asmlinkage void start_kernel(void)
 	check_bugs();
 
 	printk(linux_banner);
-#ifdef CONFIG_SMP	
+#ifdef __SMP__
 	smp_init();
 #endif
 	/* we count on the initial thread going ok */
@@ -598,7 +598,7 @@ static int init(void * unused)
 
 	setup();
 
-#ifdef CONFIG_SMP	
+#ifdef __SMP__
 	/*
 	 *	With the devices probed and setup we can
 	 *	now enter SMP mode.

@@ -15,8 +15,10 @@ if [ "$CONFIG_ST506" = "y" ]; then
     bool '   Use new IDE driver for primary/secondary i/f' CONFIG_BLK_DEV_IDE
   fi
   if [ "$CONFIG_BLK_DEV_IDE" = "y" ]; then
-    bool '   PCI Triton IDE Bus Master DMA support' CONFIG_BLK_DEV_TRITON
     bool '   Include support for IDE/ATAPI CDROMs' CONFIG_BLK_DEV_IDECD
+    if [ "$CONFIG_PCI" = "y" ]; then
+      bool '   PCI Triton IDE Bus Master DMA support' CONFIG_BLK_DEV_TRITON
+    fi
   fi
 fi
 

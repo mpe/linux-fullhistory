@@ -306,42 +306,14 @@ extern inline void __writel(unsigned int b, unsigned long addr)
 	*(vuip) (addr + APECS_DENSE_MEM) = b;
 }
 
-/*
- * Most of the above have so much overhead that it probably doesn't
- * make sense to have them inlined (better icache behavior).
- */
-extern unsigned int inb(unsigned long addr);
-extern unsigned int inw(unsigned long addr);
-extern unsigned int inl(unsigned long addr);
-
-extern void outb(unsigned char b, unsigned long addr);
-extern void outw(unsigned short b, unsigned long addr);
-extern void outl(unsigned int b, unsigned long addr);
-
-extern unsigned long readb(unsigned long addr);
-extern unsigned long readw(unsigned long addr);
-
-extern void writeb(unsigned char b, unsigned long addr);
-extern void writew(unsigned short b, unsigned long addr);
-
 #define inb(port) \
-(__builtin_constant_p((port))?__inb(port):(inb)(port))
+(__builtin_constant_p((port))?__inb(port):_inb(port))
 
 #define outb(x, port) \
-(__builtin_constant_p((port))?__outb((x),(port)):(outb)((x),(port)))
+(__builtin_constant_p((port))?__outb((x),(port)):_outb((x),(port)))
 
-#define inb_p inb
-#define outb_p outb
-
-extern inline unsigned long readl(unsigned long addr)
-{
-	return __readl(addr);
-}
-
-extern inline void writel(unsigned int b, unsigned long addr)
-{
-	__writel(b, addr);
-}
+#define readl(a)	__readl((unsigned long)(a))
+#define writel(v,a)	__writel((v),(unsigned long)(a))
 
 #undef vuip
 

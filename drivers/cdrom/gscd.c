@@ -1108,7 +1108,7 @@ int u, t;
 }
 
 
-#ifdef FUTURE_WOTK
+#ifdef FUTURE_WORK
 static long gscd_msf2hsg (struct msf *mp)
 {
 	return gscd_bcd2bin(mp -> frame)

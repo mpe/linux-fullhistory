@@ -7,7 +7,7 @@ Initial patches to catch up with things we want to add.
 
 o	Merged in the Jorge Cwik fast checksum.		[TESTED]
 o	Added Arnt Gulbrandsen's fast UDP build.	[TESTED]
-o	Pauline Middelinks masquerade patch		[TESTED(bar spoof bug)]
+o	Pauline Middelinks masquerade patch		[TESTED]
 
 
 0.1
@@ -21,7 +21,7 @@ o	Cache last socket for TCP			[TESTED]
 o	Routing cache (only in ip_build_header so far)	[TESTED]
 ------->>>>>  ALPHA 001  <<<<<----------
 o	eql load balancing driver.			[TESTED]
-o	Token ring drivers.				[COMPILE - CANT TEST]
+o	Token ring drivers.				[NOW WORK APPARENTLY]
 o	IPIP and tunnels				[TESTED]
 o	Fix ethernet/token ring promisc broadcast error [QUICK TEST]
 	(pkt_type set to OTHERHOST in error).
@@ -46,7 +46,7 @@ o	IP build xmit fragment fixes			[TESTED]
 o	TCP SWS probe fix				[TESTED]
 o	Appletalk DDP					[TESTED]
 o	IP firewall bug fixed				[TESTED]
-o	IP masquerade ftp port spoof			[IN/BUG]
+o	IP masquerade ftp port spoof			[NOW WORKS]
 o	gcc 2.6.3 -O3 fix for checksum assembler	[TESTED]
 o	/proc support shows both timers			[TESTED]
 o	TCP irtt support				[TESTED]
@@ -84,7 +84,7 @@ o	IP Firewall accounting zero bug			[TESTED]
 ////////////////////////////1.3.0/////////////////////////// 
 
 
-o	Merged loadable firewall code			[NOT INCLUDED YET]
+o	Merged loadable firewall code			[NOW IN (1.3.38)]
 o	New buffers used totally non optimally		[TESTED]
 o	Fast ip_forwarding (needs changing)		[NOW INCLUDED IN 1.3.15]
 o	Fixed connection hang bug in new SWS code	[TESTED]
@@ -158,9 +158,9 @@ o	Missing patches for device change in TCP	[TESTED]
 o	Device locking					[TESTED]
 o	Infinite slip devices				[IN - BUG]
 o	New AF_UNIX sockets				[TESTED]
-o	Sendmsg/recvmsg (for some stuff only)		[IN]
+o	Sendmsg/recvmsg (for some stuff only)		[TESTED]
 o	Device unload loopholes fixed			[TESTED]
-o	Extra firewall abilities			[IN]
+o	Extra firewall abilities			[TESTED]
 o	Appletalk node probe bug fix			[TESTED]
 
 ------->>>> 1.3.18 <<<<---------
@@ -172,70 +172,69 @@ o	Datagram select matches BSD semantics		[TESTED]
 
 -------->>>>> 1.3.21 <<<<<---------
 
-o	AF_UNIX fixes and 4K limiter			[IN]
-o	Sendmsg/recvmsg for AX.25/Appletalk		[IN]
-o	Datagram generic iovec support			[IN]
-o	Misc minor bug fixes				[IN]
+o	AF_UNIX fixes and 4K limiter			[TESTED]
+o	Sendmsg/recvmsg for AX.25/Appletalk		[TESTED]
+o	Datagram generic iovec support			[TESTED]
+o	Misc minor bug fixes				[TESTED]
 
 -------->>>>> 1.3.22  <<<<<-------
 
 o	Device lock against page fault			[TESTED]
 o	IP_HDRINCL					[TESTED]
-o	IP firewalling spoofing protection		[IN]
+o	IP firewalling spoofing protection		[TESTED]
 o	IGMP bug fixes and workarounds			[TESTED]
 o	IFF_ALLMULTI protocol layer support		[TESTED]
 o	First parts of IP multicast routing code	[IN]
 o	Generate BSD ENETDOWN errors			[TESTED]
-o	Clean device unload bug<Walter Wolfgang>	[IN]
+o	Clean device unload bug<Walter Wolfgang>	[NOW WORKS]
 
 -------->>>>> 1.3.24 <<<<<-------
 
 o	Missing IGMP includes fixes			[TESTED]
-o	Smarter buffer use options for sockets		[IN]
-o	AF_UNIX smarter buffer driving			[IN]
-o	AF_UNIX full BSD semantics on STREAM writes	[IN]
-o	IOVEC's support repeated calls to copy more	[IN]
-o	Zero fragment 'solaris nfs' bug fixed <Werner>  [IN]
-o	NetROM supports sendmsg/recvmsg			[IN]
-o	Sendmsg verify_iovec bugfix			[IN]
-o	ARP PERM is really permanent now <Craig>	[IN]
-o	IPIP tunnels work fully we hope			[IN]
-o	Closing socket change (Marc Tamsky)		[IN]
+o	Smarter buffer use options for sockets		[TESTED]
+o	AF_UNIX smarter buffer driving			[TESTED]
+o	AF_UNIX full BSD semantics on STREAM writes	[TESTED]
+o	IOVEC's support repeated calls to copy more	[TESTED]
+o	Zero fragment 'solaris nfs' bug fixed <Werner>  [TESTED]
+o	NetROM supports sendmsg/recvmsg			[TESTED]
+o	Sendmsg verify_iovec bugfix			[TESTED]
+o	ARP PERM is really permanent now <Craig>	[TESTED]
+o	IPIP tunnels work fully we hope			[UMM...]
+o	Closing socket change (Marc Tamsky)		[TESTED]
 o	RFC1122 verification of tcp.c <Mike Shaver>	[IN]
 
 -------->>>>> 1.3.26 <<<<<-------
 
-o	Rewrote ICMP completely				[TESTED -
-							 fragmenting is wrong]
-o	Moved most IP addresses to __u32		[IN]
-o	Cleaned up ICMP reporting			[IN]
-o	Tidied remove_sock				[IN]
+o	Rewrote ICMP completely				[TESTED]
+o	Moved most IP addresses to __u32		[TESTED]
+o	Cleaned up ICMP reporting			[TESTED]
+o	Tidied remove_sock				[TESTED]
 o	Added memory allocation type to ip_build_xmit	[IN]
-o	Cleaned up af_inet to use inet_error		[IN]
-o	Named firewall returns				[IN]
-o	Added firewall output checks to ip_build_xmit	[IN]
+o	Cleaned up af_inet to use inet_error		[TESTED]
+o	Named firewall returns				[TESTED]
+o	Added firewall output checks to ip_build_xmit	[TESTED]
 o	Multicast router downs VIF's when their
-	physical interface is dropped			[IN]
-o	Reformatted ipv4/protocol.c, dropped frag field	[IN]
-o	Fixed MSS for TCP				[IN]
-o	Dropped sock_awaitconn				[IN]
+	physical interface is dropped			[TESTED]
+o	Reformatted ipv4/protocol.c, dropped frag field	[TESTED]
+o	Fixed MSS for TCP				[TESTED]
+o	Dropped sock_awaitconn				[TESTED]
 o	Added ip_forward to ksyms for IPIP etc		[IN]
-o	Appletalk TIOCINQ/TIOCOUTQ bug fix		[IN]
-o	Rewrote the IFF_UP/IFF_DOWN handling code	[IN]
+o	Appletalk TIOCINQ/TIOCOUTQ bug fix		[TESTED]
+o	Rewrote the IFF_UP/IFF_DOWN handling code	[TESTED]
 
 -------->>>>> 1.3.29 <<<<<-------
 
-o	Major AX.25/NetROM fixes [John Naylor]		[IN]
-o	Error in ip_mr ioctls fixed [Michael Chastain]  [IN]
-o	TCP cache zap bugs hopefully fixed		[IN]
-o	Length checks in udp/raw sending [Craig Metz]	[IN]
+o	Major AX.25/NetROM fixes [John Naylor]		[TESTED]
+o	Error in ip_mr ioctls fixed [Michael Chastain]  [TESTED]
+o	TCP cache zap bugs hopefully fixed		[CLOSE BUT NO COOKIE]
+o	Length checks in udp/raw sending [Craig Metz]	[TESTED]
 
 -------->>>>> 1.3.31 <<<<<<-------
 
-o	IP_OPTIONS [A.N.Kuznetsov]			[IN]
-o	TCP cache zap more fixes			[IN]
-o	Most of the IP multicast routing cache added	[IN]
-o	Kernel/user communication module (not used yet) [IN]
+o	IP_OPTIONS [A.N.Kuznetsov]			[TESTED]
+o	TCP cache zap more fixes			[TESTED.. STILL NO COOKIE]
+o	Most of the IP multicast routing cache added	[TESTED - WORK NEEDED]
+o	Kernel/user communication module (not used yet) [TESTED]
 
 -------->>>>> 1.3.31 <<<<<<-------
 
@@ -244,30 +243,44 @@ o	IFF_ALLMULTI support for 3c501,3c509,8390 and
 
 -------->>>>> 1.3.33 <<<<<<--------
 
-o	IFF_ALLMULTI causes an address check on ether	[IN]
-o	Added multicast ability readme file		[IN]
-o	Assorted driver/multicast fixes			[IN]
-o	IP routing change errors resemble BSD more	[IN]
-o	IP port masquerading fixes			[IN]
+o	IFF_ALLMULTI causes an address check on ether	[TESTED]
+o	Added multicast ability readme file		[TESTED]
+o	Assorted driver/multicast fixes			[TESTED]
+o	IP routing change errors resemble BSD more	[TESTED/MORE TO COME]
+o	IP port masquerading fixes			[TESTED]
 
 -------->>>>> 1.3.35 <<<<<<--------
 
-o	Appletalk data now in the protinfo union	[IN]
+o	Appletalk data now in the protinfo union	[TESTED]
 o	BSD style bind to broadcast address supported	[IN]
-o	Standard loadable firewall chains		[IN]
+o	Standard loadable firewall chains		[TESTED]
 o	IPFW uses the firewall chains for firewall but
-		not yet acct/masquerade			[IN]
-o	Firewall chain hooks in all other protocols	[IN]
-o	Sendmsg/recvmsg for IPX. 			[IN]
-o	IPX uses sock_alloc_send_skb			[IN]
+		not yet acct/masquerade			[TESTED]
+o	Firewall chain hooks in all other protocols	[TESTED]
+o	Sendmsg/recvmsg for IPX. 			[TESTED]
+o	IPX uses sock_alloc_send_skb			[TESTED]
 o	Recvmsg for all IP, sendmsg for TCP		[IN]
 	(nearly ready to go all *msg())
+
+-------->>>>> 1.3.38 <<<<<<--------
+
+o	ip udp/raw nonblock bug fixed			[TESTED]
+o	ICMP lockup fix					[IN]
+o	Fundamental operations now only sendmsg/recvmsg	[IN]
+o	bind() for SOCK_PACKET				[IN]
+o	set_mac_addr fixed up				[IN]
+o	BSD SIOCSIFADDR, AF_UNSPEC behaviour		[IN]
+o	Updated this list				[IN]
+
 
 ---------- Things I thought Linus had for a while and not merged ----------------
 
 
----------- Things pending from other people to chase -------------
+---------- Things pending from other people -------------
 
+o	Improved IPX support for lwared.
+o	Decnet pre pre pre pre pre Alpha 0.0.
+o	Faster routing/caching support.
 
 ---------- Things pending for me to merge --------------
 
@@ -275,6 +288,9 @@ o	IPFW support for TOS changing (Al Longyear)
 o	AF_UNIX garbage collect code
 o	Faster closedown option for heavy use sites (me)
 o	Tom May's insw_and_checksum()			
+o	IPX PPP support
+o	DECNET PPP test code
+o	SPARC patches [Dave]
 
 --------------- Things That Need Doing Before 1.4 ------------------
 
@@ -287,14 +303,12 @@ o	Faster ip_forward last hit cache		[PENDING(GuruA0)]
 o	L2 ip routing cache				[PENDING(btv)]
 o	Forwarding queue control (+ fairness algorithms ??)
 o	IP forward flow control.
-o	Infinite PPP devices.
 o	Clean up RAW AX.25 sockets.
 o	Finish 802.2 Class I code to be compliant to the oddities of 802.2
 o	Tidy BPQ support to use a bpqip tunnel device
 o	Strange eth0-eth3 bug 
 o	Finish IPIP bug fixes				[Done hopefully]
 o	Why doesnt the PROTO_UNREACH get sent ?		[Should now work]
-o	IP protocols using sendmsg()
 o	Kill off old ip_queue_xmit/ip_send stuff.
 o	Remove kernel RARP and replace with user mode daemon.
 o	Throw out existing firewall ioctl()'s and use a single table load.
@@ -304,9 +318,8 @@ o	Throw out existing firewall ioctl()'s and use a single table load.
 o	Better TCP window handling [Pedro Roque]
 o	Add tty support to sonix driver.
 o	PPP for Sonix ISDN.
-o	Loadable firewall extensions.
 o	Screend loadable firewall module
-o	LZ SLIP				[Done, resolving patent issues]
+o	LZ SLIP				[Done, resolving patent issues - sod it use PPP]
 o	AXIP
 
 0.3

@@ -62,7 +62,7 @@ sb_setmixer (unsigned int port, unsigned int value)
   save_flags (flags);
   cli ();
   outb ((unsigned char) (port & 0xff), MIXER_ADDR);	/*
-							 * Select register
+							   * Select register
 							 */
   tenmicrosec ();
   outb ((unsigned char) (value & 0xff), MIXER_DATA);
@@ -79,7 +79,7 @@ sb_getmixer (unsigned int port)
   save_flags (flags);
   cli ();
   outb ((unsigned char) (port & 0xff), MIXER_ADDR);	/*
-							 * Select register
+							   * Select register
 							 */
   tenmicrosec ();
   val = inb (MIXER_DATA);
@@ -555,7 +555,7 @@ sb_mixer_init (int major_model)
 	{
 	  supported_devices = SGNXPRO_MIXER_DEVICES;
 	  supported_rec_devices = SGNXPRO_RECORDING_DEVICES;
-	  iomap = &sgnxpro_mix[0][0];
+	  iomap = &sgnxpro_mix;
 	}
       else
 #endif

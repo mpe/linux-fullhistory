@@ -116,6 +116,7 @@ cs4232_pnp (void *parm)
 	  hw_config.driver_use_1 = 0;
 	  hw_config.driver_use_2 = 0;
 	  hw_config.osp = NULL;
+	  hw_config.card_subtype = 0;
 
 	  if (sndtable_probe (opl3_driver, &hw_config))
 	    sndtable_init_card (opl3_driver, &hw_config);
@@ -133,6 +134,7 @@ cs4232_pnp (void *parm)
 	  hw_config.driver_use_1 = 0;
 	  hw_config.driver_use_2 = 0;
 	  hw_config.osp = NULL;
+	  hw_config.card_subtype = 0;
 
 	  if (sndtable_probe (wss_driver, &hw_config))
 	    sndtable_init_card (wss_driver, &hw_config);

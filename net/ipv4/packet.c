@@ -198,37 +198,6 @@ static int packet_sendmsg(struct sock *sk, struct msghdr *msg, int len,
 	return(len);
 }
 
-static int packet_sendto(struct sock *sk, const unsigned char *from, int len,
-	      int noblock, unsigned flags, struct sockaddr_in *usin,
-	      int addr_len)
-{
-	struct iovec iov;
-	struct msghdr msg;
-
-	iov.iov_base = (void *)from;
-	iov.iov_len  = len;
-
-	msg.msg_name      = (void *)usin;
-	msg.msg_namelen   = addr_len;
-	msg.msg_accrights = NULL;
-	msg.msg_iov       = &iov;
-	msg.msg_iovlen    = 1;
-
-	return packet_sendmsg(sk, &msg, len, noblock, flags);
-}
-
-
-/*
- *	A write to a SOCK_PACKET can't actually do anything useful and will
- *	always fail but we include it for completeness and future expansion.
- */
-
-static int packet_write(struct sock *sk, const unsigned char *buff, 
-	     int len, int noblock,  unsigned flags)
-{
-	return(packet_sendto(sk, buff, len, noblock, flags, NULL, 0));
-}
-
 /*
  *	Close a SOCK_PACKET socket. This is fairly simple. We immediately go
  *	to 'closed' state and remove our protocol entry in the device list.
@@ -238,27 +207,45 @@ static int packet_write(struct sock *sk, const unsigned char *buff,
 
 static void packet_close(struct sock *sk, int timeout)
 {
+	/*
+	 *	Stop more data and kill the socket off.
+	 */
+
 	sk->inuse = 1;
 	sk->state = TCP_CLOSE;
-	dev_remove_pack((struct packet_type *)sk->pair);
-	kfree_s((void *)sk->pair, sizeof(struct packet_type));
-	sk->pair = NULL;
+
+	/*
+	 *	Unhook the notifier
+	 */
+
+	unregister_netdevice_notifier(&sk->protinfo.af_packet.notifier);
+
+	if(sk->protinfo.af_packet.prot_hook)
+	{
+		/*
+		 *	Remove the protocol hook
+		 */
+		 
+		dev_remove_pack((struct packet_type *)sk->protinfo.af_packet.prot_hook);
+
+		/*
+		 *	Dispose of litter carefully.
+		 */
+	 
+		kfree_s((void *)sk->protinfo.af_packet.prot_hook, sizeof(struct packet_type));
+		sk->protinfo.af_packet.prot_hook = NULL;
+	}
+	
 	release_sock(sk);
 }
 
 /*
- *	Create a packet of type SOCK_PACKET. We do one slightly irregular
- *	thing here that wants tidying up. We borrow the 'pair' pointer in
- *	the socket object so we can find the packet_type entry in the
- *	device list. The reverse is easy as we use the data field of the
- *	packet type to point to our socket.
+ *	Attach a packer hook to a device.
  */
 
-static int packet_init(struct sock *sk)
+int packet_attach(struct sock *sk)
 {
-	struct packet_type *p;
-
-	p = (struct packet_type *) kmalloc(sizeof(*p), GFP_KERNEL);
+	struct packet_type *p = (struct packet_type *) kmalloc(sizeof(*p), GFP_KERNEL);
 	if (p == NULL) 
 		return(-ENOMEM);
 
@@ -272,7 +259,113 @@ static int packet_init(struct sock *sk)
 	 *	We need to remember this somewhere. 
 	 */
    
-	sk->pair = (struct sock *)p;
+	sk->protinfo.af_packet.prot_hook = p;
+	return 0;	
+}
+ 
+/*
+ *	Bind a packet socket to a device
+ */
+
+static int packet_bind(struct sock *sk, struct sockaddr *uaddr, int addr_len)
+{
+	char dev[15];
+	
+	/*
+	 *	Check legality
+	 */
+	 
+	if(addr_len!=sizeof(struct sockaddr))
+		return -EINVAL;
+	strncpy(dev,uaddr->sa_data,14);
+	dev[14]=0;
+	
+	/*
+	 *	Lock the device chain while we sanity check
+	 *	the bind request.
+	 */
+	 
+	dev_lock_list();
+	if((sk->protinfo.af_packet.bound_dev=dev_get(dev))==NULL)
+	{
+		dev_unlock_list();
+		return -ENODEV;
+	}
+	if(!(sk->protinfo.af_packet.bound_dev->flags&IFF_UP))
+	{
+		dev_unlock_list();
+		return -ENETDOWN;
+	}
+	
+	/*
+	 *	Perform the request.
+	 */
+	 
+	memcpy(sk->protinfo.af_packet.device_name,dev,15);
+	if(sk->protinfo.af_packet.prot_hook)
+		dev_remove_pack(sk->protinfo.af_packet.prot_hook);
+	else
+	{
+		int err=packet_attach(sk);
+		if(err)
+		{
+			dev_unlock_list();
+			return err;
+		}
+	}
+	sk->protinfo.af_packet.prot_hook->dev=sk->protinfo.af_packet.bound_dev;
+	dev_add_pack(sk->protinfo.af_packet.prot_hook);
+	/*
+	 *	Now the notifier is set up right this lot is safe.
+	 */
+	dev_unlock_list();
+	return 0;
+}
+
+/*
+ *	This hook is called when a device goes up or down so that
+ *	SOCK_PACKET sockets can come unbound properly.
+ */
+
+static int packet_unbind(struct notifier_block *this, unsigned long msg, void *data)
+{
+	struct inet_packet_opt *ipo=(struct inet_packet_opt *)this;
+	if(msg==NETDEV_DOWN && data==ipo->bound_dev)
+	{
+		/*
+		 *	Our device has gone down.
+		 */
+		ipo->bound_dev=NULL;
+		dev_remove_pack(ipo->prot_hook);
+		kfree(ipo->prot_hook);
+		ipo->prot_hook=NULL;
+	}
+	return NOTIFY_DONE;
+}
+
+
+/*
+ *	Create a packet of type SOCK_PACKET. 
+ */
+
+static int packet_init(struct sock *sk)
+{
+	/*
+	 *	Attach a protocol block
+	 */
+	 
+	int err=packet_attach(sk);
+	if(err)
+		return err;
+		
+	/*
+	 *	Set up the per socket notifier.
+	 */
+	 
+	sk->protinfo.af_packet.notifier.notifier_call=packet_unbind;
+	sk->protinfo.af_packet.notifier.priority=0;
+
+	register_netdevice_notifier(&sk->protinfo.af_packet.notifier);
 
 	return(0);
 }
@@ -293,6 +386,13 @@ int packet_recvmsg(struct sock *sk, struct msghdr *msg, int len,
 
 	if (sk->shutdown & RCV_SHUTDOWN) 
 		return(0);
+		
+	/*
+	 *	If there is no protocol hook then the device is down.
+	 */
+	 
+	if(sk->protinfo.af_packet.prot_hook==NULL)
+		return -ENETDOWN;
 		
 	/*
 	 *	If the address length field is there to be filled in, we fill
@@ -354,40 +454,6 @@ int packet_recvmsg(struct sock *sk, struct msghdr *msg, int len,
 	return(copied);
 }
 
-static int packet_recvfrom(struct sock *sk, unsigned char *ubuf, int size, int noblock, unsigned flags,
-		struct sockaddr_in *sa, int *addr_len)
-{
-	struct iovec iov;
-	struct msghdr msg;
-
-	iov.iov_base = ubuf;
-	iov.iov_len  = size;
-
-	msg.msg_name      = (void *)sa;
-	msg.msg_namelen   = 0;
-	if (addr_len)
-		msg.msg_namelen = *addr_len;
-	msg.msg_accrights = NULL;
-	msg.msg_iov       = &iov;
-	msg.msg_iovlen    = 1;
-
-	return packet_recvmsg(sk, &msg, size, noblock, flags, addr_len);
-}
-
-
-
-/*
- *	A packet read can succeed and is just the same as a recvfrom but without the
- *	addresses being recorded.
- */
-
-int packet_read(struct sock *sk, unsigned char *buff,
-	    int len, int noblock, unsigned flags)
-{
-	return(packet_recvfrom(sk, buff, len, noblock, flags, NULL, NULL));
-}
-
-
 /*
  *	This structure declares to the lower layer socket subsystem currently
  *	incorrectly embedded in the IP code how to behave. This interface needs
@@ -397,10 +463,6 @@ int packet_read(struct sock *sk, unsigned char *buff,
 struct proto packet_prot = 
 {
 	packet_close,
-	packet_read,
-	packet_write,
-	packet_sendto,
-	packet_recvfrom,
 	ip_build_header,	/* Not actually used */
 	NULL,
 	NULL,
@@ -417,8 +479,11 @@ struct proto packet_prot =
 	NULL,
 	packet_sendmsg,		/* Sendmsg */
 	packet_recvmsg,		/* Recvmsg */
+	packet_bind,		/* Bind */
 	128,
 	0,
 	"PACKET",
 	0, 0
 };
+
+	

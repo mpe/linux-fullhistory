@@ -66,6 +66,8 @@
  *						Moved digipeating ctl to new ax25_dev structs.
  *						Fixed ax25_release(), set TCP_CLOSE, wakeup app
  *						context, THEN make the sock dead.
+ *			Alan(GW4PTS)		Cleaned up for single recvmsg methods.
+ *			Alan(GW4PTS)		Fixed not clearing error on connect failure.
  *
  *	To do:
  *		Restructure the ax25_rcv code to be cleaner/faster and
@@ -222,7 +224,7 @@ static void ax25_kill_by_device(struct device *dev)
 /*
  *	Handle device status changes.
  */
-static int ax25_device_event(unsigned long event, void *ptr)
+static int ax25_device_event(struct notifier_block *this,unsigned long event, void *ptr)
 {
 	struct device *dev = (struct device *)ptr;
 
@@ -1252,10 +1254,12 @@ static int ax25_connect(struct socket *sock, struct sockaddr *uaddr,
 		}
 	}
 
-	if (sk->state != TCP_ESTABLISHED) {	/* Not in ABM, not in WAIT_UA -> failed */
+	if (sk->state != TCP_ESTABLISHED) 
+	{
+		/* Not in ABM, not in WAIT_UA -> failed */
 		sti();
 		sock->state = SS_UNCONNECTED;
-		return -sk->err;	/* Always set at this point */
+		return sock_error(sk);	/* Always set at this point */
 	}
 	
 	sock->state = SS_CONNECTED;
@@ -1693,11 +1697,7 @@ static int ax25_sendmsg(struct socket *sock, struct msghdr *msg, int len, int no
 	int addr_len=msg->msg_namelen;
 	
 	if (sk->err) {
-		cli();
-		err     = sk->err;
-		sk->err = 0;
-		sti();
-		return -err;
+		return sock_error(sk);
 	}
 
 	if (flags|| msg->msg_accrights)
@@ -1820,34 +1820,6 @@ static int ax25_sendmsg(struct socket *sock, struct msghdr *msg, int len, int no
 		
 }
 
-static int ax25_sendto(struct socket *sock, const void *ubuf, int size, int noblock, unsigned flags,
-		struct sockaddr *sa, int addr_len)
-{
-	struct iovec iov;
-	struct msghdr msg;
-
-	iov.iov_base = (void *)ubuf;
-	iov.iov_len  = size;
-
-	msg.msg_name      = (void *)sa;
-	msg.msg_namelen   = addr_len;
-	msg.msg_accrights = NULL;
-	msg.msg_iov       = &iov;
-	msg.msg_iovlen    = 1;
-
-	return ax25_sendmsg(sock, &msg, size, noblock, flags);
-}
-
-static int ax25_send(struct socket *sock, const void *ubuf, int size, int noblock, unsigned flags)
-{
-	return ax25_sendto(sock, ubuf, size, noblock, flags, NULL, 0);
-}
-
-static int ax25_write(struct socket *sock, const char *ubuf, int size, int noblock)
-{
-	return ax25_sendto(sock, ubuf, size, noblock, 0, NULL, 0);
-}
-
 static int ax25_recvmsg(struct socket *sock, struct msghdr *msg, int size, int noblock, int flags, int *addr_len)
 {
 	struct sock *sk = (struct sock *)sock->data;
@@ -1857,11 +1829,7 @@ static int ax25_recvmsg(struct socket *sock, struct msghdr *msg, int size, int n
 	int er;
 
 	if (sk->err) {
-		cli();
-		er      = -sk->err;
-		sk->err = 0;
-		sti();
-		return er;
+		return sock_error(sk);
 	}
 	
 	if (addr_len != NULL)
@@ -1927,42 +1895,6 @@ static int ax25_recvmsg(struct socket *sock, struct msghdr *msg, int size, int n
 
 	return copied;
 }		
-
-static int ax25_recvfrom(struct socket *sock, void *ubuf, int size, int noblock, unsigned flags,
-		struct sockaddr *sa, int *addr_len)
-{
-	struct iovec iov;
-	struct msghdr msg;
-
-	iov.iov_base = ubuf;
-	iov.iov_len  = size;
-
-	msg.msg_name      = (void *)sa;
-	msg.msg_namelen   = 0;
-	if (addr_len)
-		msg.msg_namelen = *addr_len;
-	msg.msg_accrights = NULL;
-	msg.msg_iov       = &iov;
-	msg.msg_iovlen    = 1;
-
-	return ax25_recvmsg(sock, &msg, size, noblock, flags, addr_len);
-}
-
-static int ax25_recv(struct socket *sock, void *ubuf, int size , int noblock,
-	unsigned flags)
-{
-	struct sock *sk = (struct sock *)sock->data;
-
-	if (sk->zapped)
-		return -ENOTCONN;
-
-	return ax25_recvfrom(sock, ubuf, size, noblock, flags, NULL, NULL);
-}
-
-static int ax25_read(struct socket *sock, char *ubuf, int size, int noblock)
-{
-	return ax25_recv(sock, ubuf, size, noblock, 0);
-}
 
 static int ax25_shutdown(struct socket *sk, int how)
 {
@@ -2143,15 +2075,9 @@ static struct proto_ops ax25_proto_ops = {
 	ax25_socketpair,
 	ax25_accept,
 	ax25_getname,
-	ax25_read,
-	ax25_write,
 	ax25_select,
 	ax25_ioctl,
 	ax25_listen,
-	ax25_send,
-	ax25_recv,
-	ax25_sendto,
-	ax25_recvfrom,
 	ax25_shutdown,
 	ax25_setsockopt,
 	ax25_getsockopt,

@@ -1,8 +1,18 @@
 VERSION = 1
 PATCHLEVEL = 3
-SUBLEVEL = 37
+SUBLEVEL = 38
 
 ARCH = i386
+
+#
+# For SMP kernels, set this. We don't want to have this in the config file
+# because it makes re-config very ugly and too many fundamental files depend
+# on "CONFIG_SMP"
+#
+# NOTE! SMP is experimental, and gcc-2.5.8 is recommended. See the file
+# Documentation/SMP.
+#
+# SMP = 1
 
 .EXPORT_ALL_VARIABLES:
 
@@ -74,6 +84,10 @@ CFLAGS = -Wall -Wstrict-prototypes -O2 -fomit-frame-pointer
 
 ifdef CONFIG_CPP
 CFLAGS := $(CFLAGS) -x c++
+endif
+
+ifdef SMP
+CFLAGS += -D__SMP__
 endif
 
 #

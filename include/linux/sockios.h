@@ -42,7 +42,6 @@
 #define SIOCSIFMEM	0x8920		/* set memory address (BSD)	*/
 #define SIOCGIFMTU	0x8921		/* get MTU size			*/
 #define SIOCSIFMTU	0x8922		/* set MTU size			*/
-#define	OLD_SIOCGIFHWADDR	0x8923		/* get hardware address		*/
 #define	SIOCSIFHWADDR	0x8924		/* set hardware address (NI)	*/
 #define SIOCGIFENCAP	0x8925		/* get/set slip encapsulation   */
 #define SIOCSIFENCAP	0x8926		
@@ -53,10 +52,6 @@
 #define SIOCADDMULTI  0x8931
 #define SIOCDELMULTI  0x8932
 /* end multicast support change */
-
-/* Routing table calls (oldrtent - don't use) */
-#define SIOCADDRTOLD	0x8940		/* add routing table entry	*/
-#define SIOCDELRTOLD	0x8941		/* delete routing table entry	*/
 
 /* ARP cache control calls. */
 #define SIOCDARP	0x8950		/* delete ARP table entry	*/

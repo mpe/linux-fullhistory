@@ -154,7 +154,7 @@ audio_release (int dev, struct fileinfo *file)
   DMAbuf_release (dev, mode);
 }
 
-#if !defined(i386)
+#if defined(NO_INLINE_ASM) || !defined(i386)
 static void
 translate_bytes (const unsigned char *table, unsigned char *buff, int n)
 {
@@ -182,6 +182,7 @@ translate_bytes (const void *table, void *buff, int n)
     :	       "bx", "cx", "di", "si", "ax");
     }
 }
+
 #endif
 
 int
@@ -262,7 +263,7 @@ audio_write (int dev, struct fileinfo *file, const snd_rw_buf * buf, int count)
 	  /*
 	   * This just allows interrupts while the conversion is running
 	   */
-	  sti();
+	  sti ();
 	  translate_bytes (ulaw_dsp, (unsigned char *) &wr_dma_buf[dev][wr_buff_ptr[dev]], l);
 	}
 
@@ -337,7 +338,7 @@ audio_read (int dev, struct fileinfo *file, snd_rw_buf * buf, int count)
 	  /*
 	   * This just allows interrupts while the conversion is running
 	   */
-	  sti();
+	  sti ();
 
 	  translate_bytes (dsp_ulaw, (unsigned char *) dmabuf, l);
 	}
@@ -501,7 +502,9 @@ audio_select (int dev, struct fileinfo *file, int sel_type, select_table * wait)
 	return 0;		/* Wrong direction */
 
       if (wr_buff_no[dev] != -1)
-	return 1;		/* There is space in the current buffer */
+	{
+	  return 1;		/* There is space in the current buffer */
+	}
 
       return DMAbuf_select (dev, file, sel_type, wait);
       break;
@@ -514,52 +517,5 @@ audio_select (int dev, struct fileinfo *file, int sel_type, select_table * wait)
 }
 
 
-#else /* EXCLUDE_AUDIO */
-/*
- * Stub versions
- */
-
-int
-audio_read (int dev, struct fileinfo *file, snd_rw_buf * buf, int count)
-{
-  return -EIO;
-}
-
-int
-audio_write (int dev, struct fileinfo *file, snd_rw_buf * buf, int count)
-{
-  return -EIO;
-}
-
-int
-audio_open (int dev, struct fileinfo *file)
-{
-  return -ENXIO;
-}
-
-void
-audio_release (int dev, struct fileinfo *file)
-{
-};
-int
-audio_ioctl (int dev, struct fileinfo *file,
-	     unsigned int cmd, unsigned int arg)
-{
-  return -EIO;
-}
-
-int
-audio_lseek (int dev, struct fileinfo *file, off_t offset, int orig)
-{
-  return -EIO;
-}
-
-long
-audio_init (long mem_start)
-{
-  return mem_start;
-}
-
 #endif
-
 #endif

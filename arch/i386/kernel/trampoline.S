@@ -14,7 +14,6 @@
 !	won't get very far.
 !
 #define __ASSEMBLY__
-#include <linux/config.h>
 #include <asm/segment.h>
 
 .text

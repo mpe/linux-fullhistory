@@ -5,11 +5,7 @@
  *
  */
 
-#include <linux/config.h>
-#ifdef MODULE
 #include <linux/module.h>
-#include <linux/version.h>
-#endif
 
 #include <linux/sched.h>
 #include <linux/smb_fs.h>

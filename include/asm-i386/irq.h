@@ -127,7 +127,7 @@ extern void enable_irq(unsigned int);
 #define FAST_IRQ_NAME(nr) IRQ_NAME2(fast_IRQ##nr)
 #define BAD_IRQ_NAME(nr) IRQ_NAME2(bad_IRQ##nr)
 
-#ifdef	CONFIG_SMP
+#ifdef	___SMP__
 
 #define GET_PROCESSOR_ID \
 	"movl "SYMBOL_NAME_STR(apic_reg)", %edx\n\t" \

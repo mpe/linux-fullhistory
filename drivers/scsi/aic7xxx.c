@@ -64,7 +64,9 @@
 #include "scsi.h"
 #include "hosts.h"
 #include "aic7xxx.h"
-#include<linux/stat.h>
+#include <linux/stat.h>
+
+#include <linux/config.h>	/* for CONFIG_PCI */
 
 struct proc_dir_entry proc_scsi_aic7xxx = {
     PROC_SCSI_AIC7XXX, 7, "aic7xxx",
@@ -3976,10 +3978,10 @@ aic7xxx_detect(Scsi_Host_Template *template)
     while (!done)
     {
       if ((!pcibios_find_device(PCI_VENDOR_ID_ADAPTEC,
-				PCI_DEVICE_ID_ADAPTEC_294x,
+				PCI_DEVICE_ID_ADAPTEC_7870,
 				index, &pci_bus, &pci_device_fn)) ||
 	   (!pcibios_find_device(PCI_VENDOR_ID_ADAPTEC,
-				PCI_DEVICE_ID_ADAPTEC_2940,
+				PCI_DEVICE_ID_ADAPTEC_7871,
 				index, &pci_bus, &pci_device_fn)))
       {
 	type = AIC_7870;

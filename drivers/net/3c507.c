@@ -27,12 +27,7 @@ static const char *version =
 	"3c507.c:v1.10 9/23/94 Donald Becker (becker@cesdis.gsfc.nasa.gov)\n";
 
 
-#ifdef MODULE
 #include <linux/module.h>
-#include <linux/version.h>
-#endif
-
-#include <linux/config.h>
 
 /*
   Sources:
@@ -884,7 +879,6 @@ el16_rx(struct device *dev)
 	lp->rx_tail = rx_tail;
 }
 #ifdef MODULE
-char kernel_version[] = UTS_RELEASE;
 static char devicename[9] = { 0, };
 static struct device dev_3c507 = {
 	devicename, /* device name is inserted by linux/drivers/net/net_init.c */

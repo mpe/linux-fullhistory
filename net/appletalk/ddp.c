@@ -663,7 +663,7 @@ void atrtr_device_down(struct device *dev)
  *	delete our use of them (iface and route).
  */
 
-static int ddp_device_event(unsigned long event, void *ptr)
+static int ddp_device_event(struct notifier_block *this, unsigned long event, void *ptr)
 {
 	if(event==NETDEV_DOWN)
 	{
@@ -1696,27 +1696,6 @@ static int atalk_sendmsg(struct socket *sock, struct msghdr *msg, int len, int n
 }
 
 
-static int atalk_sendto(struct socket *sock, const void *ubuf, int size, int noblock, unsigned flags,
-		struct sockaddr *sa, int addr_len)
-{
-	struct iovec iov;
-	struct msghdr msg;
-	iov.iov_base=(void *)ubuf;
-	iov.iov_len=size;
-	msg.msg_name=(void *)sa;
-	msg.msg_namelen=addr_len;
-	msg.msg_accrights=NULL;
-	msg.msg_iov=&iov;
-	msg.msg_iovlen=1;
-	return atalk_sendmsg(sock,&msg,size,noblock,flags);	
-}
-
-
-static int atalk_send(struct socket *sock, const void *ubuf, int size, int noblock, unsigned flags)
-{
-	return atalk_sendto(sock,ubuf,size,noblock,flags,NULL,0);
-}
-
 static int atalk_recvmsg(struct socket *sock, struct msghdr *msg, int size, int noblock, int flags, int *addr_len)
 {
 	atalk_socket *sk=(atalk_socket *)sock->data;
@@ -1727,11 +1706,7 @@ static int atalk_recvmsg(struct socket *sock, struct msghdr *msg, int size, int 
 	int er;
 	
 	if(sk->err)
-	{
-		er= -sk->err;
-		sk->err=0;
-		return er;
-	}
+		return sock_error(sk);
 	
 	if(addr_len)
 		*addr_len=sizeof(*sat);
@@ -1765,44 +1740,6 @@ static int atalk_recvmsg(struct socket *sock, struct msghdr *msg, int size, int 
 	skb_free_datagram(skb);
 	return(copied);
 }		
-
-
-static int atalk_write(struct socket *sock, const char *ubuf, int size, int noblock)
-{
-	return atalk_send(sock,ubuf,size,noblock,0);
-}
-
-
-static int atalk_recvfrom(struct socket *sock, void *ubuf, int size, int noblock, unsigned flags,
-		struct sockaddr *sa, int *addr_len)
-{
-	struct iovec iov;
-	struct msghdr msg;
-	iov.iov_base=ubuf;
-	iov.iov_len=size;
-	msg.msg_name=(void *)sa;
-	msg.msg_namelen=0;
-	if (addr_len)
-		msg.msg_namelen = *addr_len;
-	msg.msg_accrights=NULL;
-	msg.msg_iov=&iov;
-	msg.msg_iovlen=1;
-	return atalk_recvmsg(sock,&msg,size,noblock,flags,addr_len);	
-}
-
-static int atalk_recv(struct socket *sock, void *ubuf, int size , int noblock,
-	unsigned flags)
-{
-	atalk_socket *sk=(atalk_socket *)sock->data;
-	if(sk->zapped)
-		return -ENOTCONN;
-	return atalk_recvfrom(sock,ubuf,size,noblock,flags,NULL, NULL);
-}
-
-static int atalk_read(struct socket *sock, char *ubuf, int size, int noblock)
-{
-	return atalk_recv(sock,ubuf,size,noblock,0);
-}
 
 
 static int atalk_shutdown(struct socket *sk,int how)
@@ -1878,7 +1815,6 @@ static int atalk_ioctl(struct socket *sock,unsigned int cmd, unsigned long arg)
 		case SIOCSIFLINK:
 		case SIOCGIFHWADDR:
 		case SIOCSIFHWADDR:
-		case OLD_SIOCGIFHWADDR:
 		case SIOCGIFFLAGS:
 		case SIOCSIFFLAGS:
 		case SIOCGIFMTU:
@@ -1919,15 +1855,9 @@ static struct proto_ops atalk_proto_ops = {
 	atalk_socketpair,
 	atalk_accept,
 	atalk_getname,
-	atalk_read,
-	atalk_write,
 	atalk_select,
 	atalk_ioctl,
 	atalk_listen,
-	atalk_send,
-	atalk_recv,
-	atalk_sendto,
-	atalk_recvfrom,
 	atalk_shutdown,
 	atalk_setsockopt,
 	atalk_getsockopt,

@@ -127,6 +127,17 @@ MAD16 and Mozart based cards
 Audio Excell DSP16 
 	Support for this card is made by Riccardo Faccetti
 	(riccardo@cdc8g5.cdc.polimi.it). See aedsp16.c for more info.
+	
+Crystal CS4232 based cards such as AcerMagic S23
+	CS4232 is a PnP multimedia chip which contains a CS3231A codec,
+	SB and MPU401 emulations. There is support for OPL3 too.
+	(Unfortunately the MPU401 mode doesn't work).
+
+Turtle Beach Maui and Tropez
+	VoxWare supports sample, parch and program loading commands
+	described in the Maui/Tropez User's manual. There is no initialization
+	code for Maui so it must be initialized using DOS. Audio side of Tropez
+	is based on the MAD16 chip (see above).
 
 Jumpers and software configuration
 ----------------------------------

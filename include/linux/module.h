@@ -7,7 +7,7 @@
 #ifndef _LINUX_MODULE_H
 #define _LINUX_MODULE_H
 
-#ifdef CONFIG_MODVERSIONS
+#ifdef MODVERSIONS
 # ifndef __GENKSYMS__
 #  ifdef MODULE
 #   define _set_ver(sym,vers) sym ## _R ## vers
@@ -20,8 +20,8 @@
 #  endif /* MODULE */
 # else /* __GENKSYMS__ */
 #  define _set_ver(sym,vers) sym
-#  endif /* __GENKSYMS__ */
-#endif /* CONFIG_MODVERSIONS */
+# endif /* __GENKSYMS__ */
+#endif /* MODVERSIONS */
 
 /* values of module.state */
 #define MOD_UNINITIALIZED 0
@@ -90,19 +90,28 @@ extern int register_symtab(struct symbol_table *);
  * define the count variable, and usage macros.
  */
 
-#if defined(CONFIG_MODVERSIONS) && defined(MODULE) && !defined(__GENKSYMS__)
-int Using_Versions; /* gcc will handle this global (used as a flag) correctly */
-#endif
-
 #ifdef MODULE
+
 extern long mod_use_count_;
 #define MOD_INC_USE_COUNT      mod_use_count_++
 #define MOD_DEC_USE_COUNT      mod_use_count_--
 #define MOD_IN_USE	       (mod_use_count_ != 0)
+
+#ifndef __NO_VERSION__
+#include <linux/version.h>
+char kernel_version[]=UTS_RELEASE;
+#endif
+
+#if defined(MODVERSIONS) && !defined(__GENKSYMS__)
+int Using_Versions; /* gcc will handle this global (used as a flag) correctly */
+#endif
+
 #else
+
 #define MOD_INC_USE_COUNT	do { } while (0)
 #define MOD_DEC_USE_COUNT	do { } while (0)
 #define MOD_IN_USE		1
+
 #endif
 
 #endif

@@ -1777,28 +1777,6 @@ static int ipx_sendmsg(struct socket *sock, struct msghdr *msg, int len, int nob
 	return len;
 }
 
-static int ipx_sendto(struct socket *sock, const void *ubuf, int size, int noblock, unsigned flags,
-		struct sockaddr *sa, int addr_len)
-{
-	struct iovec iov;
-	struct msghdr msg;
-
-	iov.iov_base = (void *)ubuf;
-	iov.iov_len  = size;
-
-	msg.msg_name      = (void *)sa;
-	msg.msg_namelen   = addr_len;
-	msg.msg_accrights = NULL;
-	msg.msg_iov       = &iov;
-	msg.msg_iovlen    = 1;
-
-	return ipx_sendmsg(sock, &msg, size, noblock, flags);
-}
-
-static int ipx_send(struct socket *sock, const void *ubuf, int size, int noblock, unsigned flags)
-{
-	return ipx_sendto(sock,ubuf,size,noblock,flags,NULL,0);
-}
 
 static int ipx_recvmsg(struct socket *sock, struct msghdr *msg, int size, int noblock,
 		 int flags, int *addr_len)
@@ -1812,11 +1790,7 @@ static int ipx_recvmsg(struct socket *sock, struct msghdr *msg, int size, int no
 	int er;
 	
 	if(sk->err)
-	{
-		er= -sk->err;
-		sk->err=0;
-		return er;
-	}
+		return sock_error(sk);
 	
 	if (sk->zapped)
 		return -EIO;
@@ -1845,46 +1819,6 @@ static int ipx_recvmsg(struct socket *sock, struct msghdr *msg, int size, int no
 	skb_free_datagram(skb);
 	return(truesize);
 }		
-
-static int ipx_write(struct socket *sock, const char *ubuf, int size, int noblock)
-{
-	return ipx_send(sock,ubuf,size,noblock,0);
-}
-
-static int ipx_recvfrom(struct socket *sock, void *ubuf, int size, int noblock, unsigned flags,
-		struct sockaddr *sa, int *addr_len)
-{
-	struct iovec iov;
-	struct msghdr msg;
-
-	iov.iov_base = ubuf;
-	iov.iov_len  = size;
-
-	msg.msg_name      = (void *)sa;
-	msg.msg_namelen   = 0;
-	if (addr_len)
-		msg.msg_namelen = *addr_len;
-	msg.msg_accrights = NULL;
-	msg.msg_iov       = &iov;
-	msg.msg_iovlen    = 1;
-
-	return ipx_recvmsg(sock, &msg, size, noblock, flags, addr_len);
-}
-
-static int ipx_recv(struct socket *sock, void *ubuf, int size , int noblock,
-	unsigned flags)
-{
-	ipx_socket *sk=(ipx_socket *)sock->data;
-	if(sk->zapped)
-		return -ENOTCONN;
-	return ipx_recvfrom(sock,ubuf,size,noblock,flags,NULL, NULL);
-}
-
-static int ipx_read(struct socket *sock, char *ubuf, int size, int noblock)
-{
-	return ipx_recv(sock,ubuf,size,noblock,0);
-}
-
 
 static int ipx_shutdown(struct socket *sk,int how)
 {
@@ -1983,15 +1917,9 @@ static struct proto_ops ipx_proto_ops = {
 	ipx_socketpair,
 	ipx_accept,
 	ipx_getname,
-	ipx_read,
-	ipx_write,
 	ipx_select,
 	ipx_ioctl,
 	ipx_listen,
-	ipx_send,
-	ipx_recv,
-	ipx_sendto,
-	ipx_recvfrom,
 	ipx_shutdown,
 	ipx_setsockopt,
 	ipx_getsockopt,

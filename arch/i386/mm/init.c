@@ -21,6 +21,13 @@
 #include <asm/segment.h>
 #include <asm/pgtable.h>
 
+/*
+ * The SMP kernel can't handle the 4MB page table optimizations yet
+ */
+#ifdef __SMP__
+#undef USE_PENTIUM_MM
+#endif
+
 extern void scsi_mem_init(unsigned long);
 extern void die_if_kernel(char *,struct pt_regs *,long);
 extern void show_net_buffers(void);
@@ -116,7 +123,7 @@ unsigned long paging_init(unsigned long start_mem, unsigned long end_mem)
 #if 0
 	memset((void *) 0, 0, PAGE_SIZE);
 #endif
-#ifdef CONFIG_SMP
+#ifdef __SMP__
 	smp_scan_config(0x0,0x400);	/* Scan the bottom 1K for a signature */
 	/*
 	 *	FIXME: Linux assumes you have 640K of base ram.. this continues
@@ -132,15 +139,14 @@ unsigned long paging_init(unsigned long start_mem, unsigned long end_mem)
 	 */
 /*	smp_alloc_memory(8192); */
 #endif
-#ifdef CONFIG_TEST_VERIFY_AREA
+#ifdef TEST_VERIFY_AREA
 	wp_works_ok = 0;
 #endif
 	start_mem = PAGE_ALIGN(start_mem);
 	address = 0;
 	pg_dir = swapper_pg_dir;
 	while (address < end_mem) {
-#ifdef CONFIG_PENTIUM_MM
-#ifndef CONFIG_SMP
+#ifdef USE_PENTIUM_MM
 		if (address <= end_mem + 4*1024*1024 &&
 		    (x86_capability & 8)) {
 #ifdef GAS_KNOWS_CR4
@@ -161,7 +167,6 @@ unsigned long paging_init(unsigned long start_mem, unsigned long end_mem)
 			address += 4*1024*1024;
 			continue;
 		}
-#endif
 #endif
 		/* map the memory at virtual addr 0xC0000000 */
 		pg_table = (pte_t *) (PAGE_MASK & pgd_val(pg_dir[768]));
@@ -204,7 +209,7 @@ void mem_init(unsigned long start_mem, unsigned long end_mem)
 	/* mark usable pages in the mem_map[] */
 	start_low_mem = PAGE_ALIGN(start_low_mem);
 
-#ifdef CONFIG_SMP
+#ifdef __SMP__
 	/*
 	 * But first pinch a few for the stack/trampoline stuff
 	 */

@@ -51,6 +51,7 @@ static int      open_mode = 0;	/* Read, write or both */
 int             Jazz16_detected = 0;
 int             sb_no_recording = 0;
 static int      dsp_count = 0;
+static int      trigger_bits;
 
 /*
  * The DSP channel can be used either for input or output. Variable
@@ -514,10 +515,15 @@ sb_dsp_start_input (int dev, unsigned long buf, int count, int intrflag,
 static void
 sb_dsp_trigger (int dev, int bits)
 {
+  if (bits == trigger_bits)
+    return;
+
   if (!bits)
     sb_dsp_command (0xd0);	/* Halt DMA */
   else if (bits & sb_irq_mode)
     sb_dsp_command (0xd4);	/* Continue DMA */
+
+  trigger_bits = bits;
 }
 
 static void
@@ -558,6 +564,8 @@ sb_dsp_prepare_for_input (int dev, int bsize, int bcount)
 					 * #channels * changes
 					 */
     }
+  trigger_bits = 0;
+  sb_dsp_command (0xd0);	/* Halt DMA */
   return 0;
 }
 
@@ -591,6 +599,8 @@ sb_dsp_prepare_for_output (int dev, int bsize, int bcount)
 					 */
     }
 #endif
+  trigger_bits = 0;
+  sb_dsp_command (0xd0);	/* Halt DMA */
   return 0;
 }
 
@@ -686,6 +696,7 @@ sb_dsp_close (int dev)
 
   /* DMAbuf_close_dma (dev); */
   sb_free_irq ();
+  /* sb_dsp_command (0xd4); */
   dsp_cleanup ();
   dsp_speaker (OFF);
   sb_dsp_busy = 0;
@@ -822,14 +833,6 @@ sb_dsp_reset (int dev)
  * E-Mail: rvranken@polaris.informatik.uni-essen.de
  */
 
-
-#ifndef MPU_BASE		/* take default values if not specified */
-#define MPU_BASE 0
-#endif
-#ifndef MPU_IRQ
-#define MPU_IRQ 0
-#endif
-
 unsigned int
 get_sb_byte (void)
 {
@@ -887,33 +890,35 @@ smw_getmem (int base, int addr)
   return val;
 }
 
-static int
-initialize_smw (void)
-{
 #ifdef SMW_MIDI0001_INCLUDED
 #include "smw-midi0001.h"
 #else
-  unsigned char   smw_ucode[1];
-  int             smw_ucodeLen = 0;
+unsigned char  *smw_ucode = NULL;
+int             smw_ucodeLen = 0;
 
 #endif
 
-  int             mp_base = MPU_BASE + 4;	/* Microcontroller base */
+static int
+initialize_smw (int mpu_base)
+{
+
+  int             mp_base = mpu_base + 4;	/* Microcontroller base */
   int             i;
   unsigned char   control;
+
 
   /*
      *  Reset the microcontroller so that the RAM can be accessed
    */
 
-  control = inb (MPU_BASE + 7);
-  outb (control | 3, MPU_BASE + 7);	/* Set last two bits to 1 (?) */
-  outb ((control & 0xfe) | 2, MPU_BASE + 7);	/* xxxxxxx0 resets the mc */
+  control = inb (mpu_base + 7);
+  outb (control | 3, mpu_base + 7);	/* Set last two bits to 1 (?) */
+  outb ((control & 0xfe) | 2, mpu_base + 7);	/* xxxxxxx0 resets the mc */
 
   for (i = 0; i < 300; i++)	/* Wait at least 1ms */
     tenmicrosec ();
 
-  outb (control & 0xfc, MPU_BASE + 7);	/* xxxxxx00 enables RAM */
+  outb (control & 0xfc, mpu_base + 7);	/* xxxxxx00 enables RAM */
 
   /*
      *  Detect microcontroller by probing the 8k RAM area
@@ -933,32 +938,32 @@ initialize_smw (void)
      *  There is RAM so assume it's really a SM Wave
    */
 
-#ifdef SMW_MIDI0001_INCLUDED
-  if (smw_ucodeLen != 8192)
+  if (smw_ucodeLen > 0)
     {
-      printk ("\nSM Wave: Invalid microcode (MIDI0001.BIN) length\n");
-      return 1;
+      if (smw_ucodeLen != 8192)
+	{
+	  printk ("\nSM Wave: Invalid microcode (MIDI0001.BIN) length\n");
+	  return 1;
+	}
+
+      /*
+         *  Download microcode
+       */
+
+      for (i = 0; i < 8192; i++)
+	smw_putmem (mp_base, i, smw_ucode[i]);
+
+      /*
+         *  Verify microcode
+       */
+
+      for (i = 0; i < 8192; i++)
+	if (smw_getmem (mp_base, i) != smw_ucode[i])
+	  {
+	    printk ("SM Wave: Microcode verification failed\n");
+	    return 0;
+	  }
     }
-
-  /*
-     *  Download microcode
-   */
-
-  for (i = 0; i < 8192; i++)
-    smw_putmem (mp_base, i, smw_ucode[i]);
-
-  /*
-     *  Verify microcode
-   */
-
-  for (i = 0; i < 8192; i++)
-    if (smw_getmem (mp_base, i) != smw_ucode[i])
-      {
-	printk ("SM Wave: Microcode verification failed\n");
-	return 0;
-      }
-
-#endif
 
   control = 0;
 #ifdef SMW_SCSI_IRQ
@@ -988,7 +993,7 @@ initialize_smw (void)
   /* control |= 0x20;      Uncomment this if you want to use IRQ7 */
 #endif
 
-  outb (control | 0x03, MPU_BASE + 7);	/* xxxxxx11 restarts */
+  outb (control | 0x03, mpu_base + 7);	/* xxxxxx11 restarts */
   return 1;
 }
 
@@ -1002,11 +1007,25 @@ initialize_ProSonic16 (void)
   {0, 0, 2, 3, 0, 1, 0, 4, 0, 2, 5, 0, 0, 0, 0, 6}, dma_translat[8] =
   {0, 1, 0, 2, 0, 3, 0, 4};
 
+  struct address_info *mpu_config;
+
+  int             mpu_base, mpu_irq;
+
+  if ((mpu_config = sound_getconf (SNDCARD_MPU401)))
+    {
+      mpu_base = mpu_config->io_base;
+      mpu_irq = mpu_config->irq;
+    }
+  else
+    {
+      mpu_base = mpu_irq = 0;
+    }
+
   outb (0xAF, 0x201);		/* ProSonic/Jazz16 wakeup */
   for (x = 0; x < 1000; ++x)	/* wait 10 milliseconds */
     tenmicrosec ();
   outb (0x50, 0x201);
-  outb ((sbc_base & 0x70) | ((MPU_BASE & 0x30) >> 4), 0x201);
+  outb ((sbc_base & 0x70) | ((mpu_base & 0x30) >> 4), 0x201);
 
   if (sb_reset_dsp ())
     {				/* OK. We have at least a SB */
@@ -1019,13 +1038,17 @@ initialize_ProSonic16 (void)
 	return 1;
 
       if (sb_dsp_command (0xFB) &&	/* set DMA-channels and Interrupts */
-	  sb_dsp_command ((dma_translat[JAZZ_DMA16] << 4) | dma_translat[SBC_DMA]) &&
-      sb_dsp_command ((int_translat[MPU_IRQ] << 4) | int_translat[sbc_irq]))
+	  sb_dsp_command ((dma_translat[JAZZ_DMA16] << 4) | dma_translat[dma8]) &&
+      sb_dsp_command ((int_translat[mpu_irq] << 4) | int_translat[sbc_irq]))
 	{
 	  Jazz16_detected = 1;
+	  if (mpu_base == 0)
+	    printk ("Jazz16: No MPU401 devices configured - MIDI port not initialized\n");
+
 #ifdef SM_WAVE
-	  if (initialize_smw ())
-	    Jazz16_detected = 2;
+	  if (mpu_base != 0)
+	    if (initialize_smw (mpu_base))
+	      Jazz16_detected = 2;
 #endif
 	  sb_dsp_disable_midi ();
 	}
@@ -1182,12 +1205,6 @@ sb_dsp_init (long mem_start, struct address_info *hw_config)
     printk ("\n\n\n\nNOTE! SB Pro support is required with your soundcard!\n\n\n");
 #endif
 
-#ifndef EXCLUDE_YM3812
-
-  if (sbc_major > 3 ||
-      (sbc_major == 3 && inb (0x388) == 0x00))	/* Should be 0x06 if not OPL-3 */
-    enable_opl3_mode (OPL3_LEFT, OPL3_RIGHT, OPL3_BOTH);
-#endif
 
 #ifndef EXCLUDE_AUDIO
   if (sbc_major >= 3)
@@ -1290,5 +1307,6 @@ sb_dsp_disable_midi (void)
 {
   midi_disabled = 1;
 }
+
 
 #endif

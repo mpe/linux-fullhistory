@@ -69,7 +69,6 @@
 
 #include <linux/module.h>
 #ifdef MODULE
-#include <linux/version.h>
 #define  STATIC
 #else
 #define  STATIC static

@@ -37,8 +37,8 @@ else
     ifdef CONFIG_MODVERSIONS
       # Create this before we build anything else.
       SCSI_MODULE_VER := scsi_syms.ver
-      SYMTAB_OBJS := scsi_syms.o
-      endif
+    endif
+    SYMTAB_OBJS := scsi_syms.o
     M_OBJS += scsi_mod.o
   endif
 endif

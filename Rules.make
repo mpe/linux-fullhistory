@@ -32,13 +32,14 @@ first_rule: sub_dirs $(O_TARGET) $(L_TARGET)
 #
 # Common rules
 #
-.c.s:
+
+%.s: %.c
 	$(CC) $(CFLAGS) $(EXTRA_CFLAGS) -S $< -o $@
 
-.c.o:
+%.o: %.c
 	$(CC) $(CFLAGS) $(EXTRA_CFLAGS) -c -o $@ $<
 
-.s.o:
+%.o: %.s
 	$(AS) $(ASFLAGS) $(EXTRA_CFLAGS) -o $@ $<
 
 #

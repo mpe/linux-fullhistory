@@ -8,9 +8,9 @@
 
 #ifdef __KERNEL__
 
-#define CONFIG_STRICT_MM_TYPECHECKS
+#define STRICT_MM_TYPECHECKS
 
-#ifdef CONFIG_STRICT_MM_TYPECHECKS
+#ifdef STRICT_MM_TYPECHECKS
 /*
  * These are used to make use of C type-checking..
  */

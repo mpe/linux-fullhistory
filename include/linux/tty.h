@@ -68,6 +68,8 @@ extern struct screen_info screen_info;
 #define VIDEO_TYPE_EGAC		0x21	/* EGA in Color Mode		*/
 #define VIDEO_TYPE_VGAC		0x22	/* VGA+ in Color Mode		*/
 
+#define VIDEO_TYPE_TGAC		0x40	/* DEC TGA */
+
 /*
  * This character is the same as _POSIX_VDISABLE: it cannot be used as
  * a c_cc[] character, but indicates that a particular special character
@@ -279,15 +281,9 @@ extern int lp_init(void);
 extern int pty_init(void);
 extern int tty_init(void);
 extern int vcs_init(void);
-#ifdef CONFIG_CYCLADES
 extern int cy_init(void);
-#endif
-#ifdef CONFIG_STALLION
 extern int stl_init(void);
-#endif
-#ifdef CONFIG_ISTALLION
 extern int stli_init(void);
-#endif
 
 extern int tty_paranoia_check(struct tty_struct *tty, kdev_t device,
 			      const char *routine);

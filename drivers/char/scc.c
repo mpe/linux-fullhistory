@@ -1,6 +1,3 @@
-#include <linux/autoconf.h>	/* fastest method */
-#ifdef CONFIG_SCC
-
 #define RCS_ID "$Id: scc.c,v 1.26 1995/09/07 14:46:19 jreuter Exp jreuter $"
 
 #define BANNER "Z8530 SCC driver v1.9.dl1bke (beta) by dl1bke\n"
@@ -134,7 +131,6 @@
 #include <linux/serial.h>
 #include <linux/interrupt.h>
 #include <linux/ioport.h>
-#include <linux/config.h>
 #include <linux/string.h>
 #include <linux/fcntl.h>
 #include <linux/ptrace.h>
@@ -2420,4 +2416,3 @@ int scc_init (void)
 	
 	return 0;
 }
-#endif

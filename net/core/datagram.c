@@ -74,9 +74,7 @@ restart:
 		if(sk->err)
 		{
 			release_sock(sk);
-			cli();
-			*err=-sk->err;
-			sk->err=0;
+			*err=sock_error(sk);
 			restore_flags(intflags);
 			return NULL;
 		}
@@ -115,8 +113,7 @@ restart:
 						   eg an icmp sent earlier by the
 						   peer has finally turned up now */
 			{
-				*err = -sk->err;
-				sk->err=0;
+				*err = sock_error(sk);
 				restore_flags(intflags);
 				return NULL;
 			}

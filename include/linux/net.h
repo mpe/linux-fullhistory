@@ -102,23 +102,11 @@ struct proto_ops {
 			 int flags);
   int	(*getname)	(struct socket *sock, struct sockaddr *uaddr,
 			 int *usockaddr_len, int peer);
-  int	(*read)		(struct socket *sock, char *ubuf, int size,
-			 int nonblock);
-  int	(*write)	(struct socket *sock, const char *ubuf, int size,
-			 int nonblock);
   int	(*select)	(struct socket *sock, int sel_type,
 			 select_table *wait);
   int	(*ioctl)	(struct socket *sock, unsigned int cmd,
 			 unsigned long arg);
   int	(*listen)	(struct socket *sock, int len);
-  int	(*send)		(struct socket *sock, const void *buff, int len, int nonblock,
-			 unsigned flags);
-  int	(*recv)		(struct socket *sock, void *buff, int len, int nonblock,
-			 unsigned flags);
-  int	(*sendto)	(struct socket *sock, const void *buff, int len, int nonblock,
-			 unsigned flags, struct sockaddr *, int addr_len);
-  int	(*recvfrom)	(struct socket *sock, void *buff, int len, int nonblock,
-			 unsigned flags, struct sockaddr *, int *addr_len);
   int	(*shutdown)	(struct socket *sock, int flags);
   int	(*setsockopt)	(struct socket *sock, int level, int optname,
 			 char *optval, int optlen);

@@ -48,8 +48,6 @@
 #include <linux/notifier.h>
 #include <net/checksum.h>
 
-#ifdef CONFIG_IP_MROUTE
-
 /*
  *	Multicast router conrol variables
  */
@@ -669,7 +667,7 @@ void mroute_close(struct sock *sk)
 	/* The timer will clear any 'pending' stuff */
 }
 
-static int ipmr_device_event(unsigned long event, void *ptr)
+static int ipmr_device_event(struct notifier_block *this, unsigned long event, void *ptr)
 {
 	struct vif_device *v;
 	int ct;
@@ -915,5 +913,3 @@ void ip_mr_init(void)
 		ipmr_mfc_info
 	});
 }
-
-#endif

@@ -5,7 +5,7 @@
  * This is the maximum nr of tasks - change it if you need to
  */
  
-#ifdef CONFIG_SMP
+#ifdef __SMP__
 #define NR_CPUS	32		/* Max processors that can be running in SMP */
 #else
 #define NR_CPUS 1

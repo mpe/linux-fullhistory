@@ -1,14 +1,9 @@
-
 #define ALLOW_SELECT
-#define ALLOW_BUFFER_MAPPING
+#undef ALLOW_BUFFER_MAPPING
 #undef NO_INLINE_ASM
 #undef SHORT_BANNERS
 
-#ifdef MODULE
-#include <linux/config.h>
 #include <linux/module.h>
-#include <linux/version.h>
-#endif
 
 #include <linux/param.h>
 #include <linux/types.h>
@@ -29,6 +24,7 @@
 #include <linux/string.h>
 #include <linux/ioport.h>
 
+
 #include <linux/soundcard.h>
 
 typedef char snd_rw_buf;
@@ -38,7 +34,7 @@ typedef caddr_t ioctl_arg;
 #define TRUE	1
 
 struct snd_wait {
-	  int mode; int aborting;
+	  int mode;
 	};
 
 extern int sound_alloc_dma(int chn, char *deviceID);
@@ -50,7 +46,5 @@ extern void sound_close_dma(int chn);
 
 extern caddr_t sound_mem_blocks[1024];
 extern int sound_num_blocks;
-
-#define SND_SA_INTERRUPT
 
 typedef int sound_os_info;

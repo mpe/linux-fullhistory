@@ -144,6 +144,8 @@ probe_gus (struct address_info *hw_config)
 void
 unload_gus (struct address_info *hw_config)
 {
+  DDB (printk ("unload_gus(%x)\n", hw_config->io_base));
+
   gus_wave_unload ();
 
   release_region (hw_config->io_base, 16);

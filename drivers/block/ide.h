@@ -4,6 +4,8 @@
  *  Copyright (C) 1994, 1995  Linus Torvalds & authors
  */
 
+#include <linux/config.h>
+
 /*
  * This is the multiple IDE interface driver, as evolved from hd.c.  
  * It supports up to four IDE interfaces, on one or more IRQs (usually 14 & 15).

@@ -11,7 +11,6 @@
  * management can be a bitch. See 'mm/mm.c': 'copy_page_tables()'
  */
 
-#include <linux/config.h>
 #include <linux/errno.h>
 #include <linux/sched.h>
 #include <linux/kernel.h>
@@ -240,7 +239,7 @@ int do_fork(unsigned long clone_flags, unsigned long usp, struct pt_regs *regs)
 	p->tty_old_pgrp = 0;
 	p->utime = p->stime = 0;
 	p->cutime = p->cstime = 0;
-#ifdef CONFIG_SMP
+#ifdef __SMP__
 	p->processor = NO_PROC_ID;
 	p->lock_depth = 1;
 #endif

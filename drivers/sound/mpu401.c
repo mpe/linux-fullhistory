@@ -41,7 +41,11 @@
 #include "coproc.h"
 
 static int      init_sequence[20];	/* NOTE! pos 0 = len, start pos 1. */
+
+#ifndef EXCLUDE_SEQUENCER
 static int      timer_mode = TMR_INTERNAL, timer_caps = TMR_INTERNAL;
+
+#endif
 
 struct mpu_config
   {
@@ -112,6 +116,7 @@ static volatile int irq2dev[17] =
 
 static int      reset_mpu401 (struct mpu_config *devc);
 static void     set_uart_mode (int dev, struct mpu_config *devc, int arg);
+
 static void     mpu_timer_init (int midi_dev);
 static void     mpu_timer_interrupt (void);
 static void     timer_ext_event (struct mpu_config *devc, int event, int parm);
@@ -148,6 +153,9 @@ static unsigned char len_tab[] =	/* # of data bytes following a status
   0				/* Fx */
 };
 
+#ifdef EXCLUDE_SEQUENCER
+#define STORE(cmd)
+#else
 #define STORE(cmd) \
 { \
   int len; \
@@ -155,6 +163,8 @@ static unsigned char len_tab[] =	/* # of data bytes following a status
   cmd; \
   seq_input_event(obuf, len); \
 }
+#endif
+
 #define _seqbuf obuf
 #define _seqbufptr 0
 #define _SEQ_ADVBUF(x) len=x
@@ -1815,6 +1825,8 @@ mpu_timer_init (int midi_dev)
 }
 
 #endif
+
+
 
 #endif
 

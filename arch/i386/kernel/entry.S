@@ -41,7 +41,6 @@
  */
 
 #include <linux/sys.h>
-#include <linux/config.h>
 #include <linux/linkage.h>
 #include <asm/segment.h>
 #define ASSEMBLY
@@ -105,7 +104,7 @@ ENOSYS = 38
 	movl $(USER_DS),%edx; \
 	mov %dx,%fs;
 
-#ifdef	CONFIG_SMP
+#ifdef	__SMP__
 
 #define GET_PROCESSOR_ID \
 	movl SYMBOL_NAME(apic_reg), %edx; \
@@ -230,7 +229,7 @@ ENTRY(lcall7)
 	pushfl			# We get a different stack layout with call gates,
 	pushl %eax		# which has to be cleaned up later..
 	SAVE_ALL
-#ifdef CONFIG_SMP
+#ifdef __SMP__
 	ENTER_KERNEL
 #endif
 	movl EIP(%esp),%eax	# due to call gates, this is eflags, not eip..
@@ -240,7 +239,7 @@ ENTRY(lcall7)
 	movl %edx,EIP(%esp)	# Now we move them to their "normal" places
 	movl %ecx,CS(%esp)	#
 	movl %esp,%eax
-#ifdef CONFIG_SMP
+#ifdef __SMP__
 	GET_PROCESSOR_OFFSET(%edx)	# Processor offset into edx
 	movl SYMBOL_NAME(current_set)(,%edx),%edx
 #else
@@ -270,7 +269,7 @@ reschedule:
 ENTRY(system_call)
 	pushl %eax			# save orig_eax
 	SAVE_ALL
-#ifdef CONFIG_SMP
+#ifdef __SMP__
 	ENTER_KERNEL
 #endif
 	movl $-ENOSYS,EAX(%esp)
@@ -279,7 +278,7 @@ ENTRY(system_call)
 	movl SYMBOL_NAME(sys_call_table)(,%eax,4),%eax
 	testl %eax,%eax
 	je ret_from_sys_call
-#ifdef CONFIG_SMP
+#ifdef __SMP__
 	GET_PROCESSOR_OFFSET(%edx)
 	movl SYMBOL_NAME(current_set)(,%edx),%ebx
 #else
@@ -304,7 +303,7 @@ ENTRY(system_call)
 	movl ORIG_EAX(%esp),%eax
 	call SYMBOL_NAME(sys_call_table)(,%eax,4)
 	movl %eax,EAX(%esp)		# save the return value
-#ifdef CONFIG_SMP
+#ifdef __SMP__
 	GET_PROCESSOR_OFFSET(%eax)
 	movl SYMBOL_NAME(current_set)(,%eax),%eax
 #else
@@ -336,7 +335,7 @@ ret_from_sys_call:
 	movl %eax,EFLAGS(%esp)		# stupid
 	cmpl $0,SYMBOL_NAME(need_resched)
 	jne reschedule
-#ifdef CONFIG_SMP
+#ifdef __SMP__
 	GET_PROCESSOR_OFFSET(%eax)
 	movl SYMBOL_NAME(current_set)(,%eax), %eax
 #else
@@ -407,11 +406,11 @@ error_code:
 	mov %dx,%es
 	movl $(USER_DS),%edx
 	mov %dx,%fs
-#ifdef CONFIG_SMP
+#ifdef __SMP__
 	ENTER_KERNEL
 #endif
 	pushl %eax
-#ifdef CONFIG_SMP
+#ifdef __SMP__
 	GET_PROCESSOR_OFFSET(%eax)
 	movl SYMBOL_NAME(current_set)(,%eax), %eax
 #else
@@ -432,7 +431,7 @@ ENTRY(coprocessor_error)
 ENTRY(device_not_available)
 	pushl $-1		# mark this as an int
 	SAVE_ALL
-#ifdef CONFIG_SMP
+#ifdef __SMP__
 	ENTER_KERNEL
 #endif
 	pushl $ret_from_sys_call

@@ -31,12 +31,7 @@
 static const char *version =
 	"at1700.c:v1.12 1/18/95  Donald Becker (becker@cesdis.gsfc.nasa.gov)\n";
 
-#ifdef MODULE
 #include <linux/module.h>
-#include <linux/version.h>
-#endif
-
-#include <linux/config.h>
 
 #include <linux/kernel.h>
 #include <linux/sched.h>
@@ -638,7 +633,6 @@ set_multicast_list(struct device *dev, int num_addrs, void *addrs)
 		outb(2, ioaddr + RX_MODE);	/* Disable promiscuous, use normal mode */
 }
 #ifdef MODULE
-char kernel_version[] = UTS_RELEASE;
 static char devicename[9] = { 0, };
 static struct device dev_at1700 = {
 	devicename, /* device name is inserted by linux/drivers/net/net_init.c */

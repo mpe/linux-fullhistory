@@ -11,6 +11,10 @@
 #include <linux/version.h>
 #include <linux/compile.h>
 
+/* make the "checkconfig" script happy: we really need to include config.h */
+#ifdef CONFIG_BOGUS
+#endif
+
 struct new_utsname system_utsname = {
 	UTS_SYSNAME, UTS_NODENAME, UTS_RELEASE, UTS_VERSION,
 	UTS_MACHINE, UTS_DOMAINNAME

@@ -1196,6 +1196,7 @@ int kbd_init(void)
 	request_irq(KEYBOARD_IRQ, keyboard_interrupt, 0, "keyboard");
 	request_region(0x60,16,"kbd");
 #ifdef __alpha__
+#if 0
 	/* if there is an input byte left, eat it up: */
 	if (inb(0x64) & 0x01) {
 	    inb(0x60);
@@ -1209,8 +1210,192 @@ int kbd_init(void)
 	kb_wait();
 	if (!send_data(0xf0) || !send_data(0x02))
 		printk("Scanmode 2 change failed\n");
-#endif
+#else /* 0 */
+	{
+	    static int alpha_kbd_init(void);	/* forward decl */
+
+	    alpha_kbd_init();
+	}
+#endif /* 0 */
+#endif /* __alpha __ */
 	mark_bh(KEYBOARD_BH);
 	enable_bh(KEYBOARD_BH);
 	return 0;
 }
+
+#ifdef __alpha__
+/*
+ * keyboard controller registers
+ */
+#define KBD_STATUS_REG      (unsigned int) 0x64
+#define KBD_CNTL_REG        (unsigned int) 0x64
+#define KBD_DATA_REG	    (unsigned int) 0x60
+/*
+ * controller commands
+ */
+#define KBD_READ_MODE	    (unsigned int) 0x20
+#define KBD_WRITE_MODE	    (unsigned int) 0x60
+#define KBD_SELF_TEST	    (unsigned int) 0xAA
+#define KBD_SELF_TEST2	    (unsigned int) 0xAB
+#define KBD_CNTL_ENABLE	    (unsigned int) 0xAE
+/*
+ * keyboard commands
+ */
+#define KBD_ENABLE	    (unsigned int) 0xF4
+#define KBD_DISABLE	    (unsigned int) 0xF5
+#define KBD_RESET	    (unsigned int) 0xFF
+/*
+ * keyboard replies
+ */
+#define KBD_ACK		    (unsigned int) 0xFA
+#define KBD_POR		    (unsigned int) 0xAA
+/*
+ * status register bits
+ */
+#define KBD_OBF		    (unsigned int) 0x01
+#define KBD_IBF		    (unsigned int) 0x02
+#define KBD_GTO		    (unsigned int) 0x40
+#define KBD_PERR	    (unsigned int) 0x80
+/*
+ * keyboard controller mode register bits
+ */
+#define KBD_EKI		    (unsigned int) 0x01
+
+#define TIMEOUT_CONST	500000
+
+static int
+kbd_wait_for_input(void)
+{
+        int     n;
+        int     status, data;
+
+        n = TIMEOUT_CONST;
+        do {
+                status = inb(KBD_STATUS_REG);
+                /*
+                 * Wait for input data to become available.  This bit will
+                 * then be cleared by the following read of the DATA
+                 * register.
+                 */
+
+                if (!(status & KBD_OBF))
+			continue;
+
+		data = inb(KBD_DATA_REG);
+
+                /*
+                 * Check to see if a timeout error has occured.  This means
+                 * that transmission was started but did not complete in the
+                 * normal time cycle.  PERR is set when a parity error occured
+                 * in the last transmission.
+                 */
+                if (status & (KBD_GTO | KBD_PERR)) {
+			continue;
+                }
+		return (data & 0xff);
+        } while (--n);
+        return (-1);	/* timed-out if fell through to here... */
+}
+
+static void
+kbd_write(int address, int data)
+{
+    int status;
+   
+   do {
+      status = inb(KBD_STATUS_REG);  /* spin until input buffer empty*/
+   } while (status & KBD_IBF);
+   outb(data, address);               /* write out the data*/
+}
+
+static int
+alpha_kbd_init(void)
+{
+    unsigned long flags;
+
+    save_flags(flags); cli();
+
+    /* Flush any pending input. */
+    while (kbd_wait_for_input() != -1)
+      continue;
+
+    /*
+     * Test the keyboard interface.
+     * This seems to be the only way to get it going.
+     * If the test is successful a x55 is placed in the input buffer.
+     */
+    kbd_write(KBD_CNTL_REG, KBD_SELF_TEST);
+    if (kbd_wait_for_input() != 0x55) {
+      printk("alpha_kbd_init: keyboard failed self test.\n");
+      restore_flags(flags);
+      return(-1);
+    }
+
+    /*
+     * Perform a keyboard interface test.  This causes the controller
+     * to test the keyboard clock and data lines.  The results of the
+     * test are placed in the input buffer.
+     */
+    kbd_write(KBD_CNTL_REG, KBD_SELF_TEST2);
+    if (kbd_wait_for_input() != 0x00) {
+      printk("alpha_kbd_init: keyboard failed self test 2.\n");
+      restore_flags(flags);
+      return(-1);
+    }
+
+    /* Enable the keyboard by allowing the keyboard clock to run. */
+    kbd_write(KBD_CNTL_REG, KBD_CNTL_ENABLE);
+
+    /*
+     * Reset keyboard. If the read times out
+     * then the assumption is that no keyboard is
+     * plugged into the machine.
+     * This defaults the keyboard to scan-code set 2.
+     */
+    kbd_write(KBD_DATA_REG, KBD_RESET);
+    if (kbd_wait_for_input() != KBD_ACK) {
+      printk("alpha_kbd_init: reset kbd failed, no ACK.\n");
+      restore_flags(flags);
+      return(-1);
+    }
+
+    if (kbd_wait_for_input() != KBD_POR) {
+      printk("alpha_kbd_init: reset kbd failed, not POR.\n");
+      restore_flags(flags);
+      return(-1);
+    }
+
+    /*
+     * now do a DEFAULTS_DISABLE always
+     */
+    kbd_write(KBD_DATA_REG, KBD_DISABLE);
+    if (kbd_wait_for_input() != KBD_ACK) {
+      printk("alpha_kbd_init: disable kbd failed, no ACK.\n");
+      restore_flags(flags);
+      return(-1);
+    }
+
+    /*
+     * enable keyboard interrupt, operate in "real" mode,
+     * Enable keyboard (by clearing the disable keyboard bit),
+     * no conversion of keycodes.
+     */
+    kbd_write(KBD_CNTL_REG, KBD_WRITE_MODE);
+    kbd_write(KBD_DATA_REG, KBD_EKI);
+
+    /*
+     * now ENABLE the keyboard to set it scanning...
+     */
+    kbd_write(KBD_DATA_REG, KBD_ENABLE);
+    if (kbd_wait_for_input() != KBD_ACK) {
+      printk("alpha_kbd_init: keyboard enable failed.\n");
+      restore_flags(flags);
+      return(-1);
+    }
+
+    restore_flags(flags);
+
+    return (1);
+
+}
+#endif /* __alpha__ */

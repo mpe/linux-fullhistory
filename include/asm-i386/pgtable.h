@@ -2,10 +2,10 @@
 #define _I386_PGTABLE_H
 
 /*
- * Define CONFIG_PENTIUM_MM if you want the 4MB page table optimizations.
+ * Define USE_PENTIUM_MM if you want the 4MB page table optimizations.
  * This works only on a intel Pentium.
  */
-#define CONFIG_PENTIUM_MM 1
+#define USE_PENTIUM_MM 1
 
 /*
  * The Linux memory management assumes a three-level page table setup. On
@@ -98,7 +98,7 @@
  * it will (on a i486) warn about kernel memory accesses that are
  * done without a 'verify_area(VERIFY_WRITE,..)'
  */
-#undef CONFIG_TEST_VERIFY_AREA
+#undef TEST_VERIFY_AREA
 
 /* page table for 0-4MB for everybody */
 extern unsigned long pg0[1024];
@@ -154,7 +154,7 @@ extern inline void pte_reuse(pte_t * ptep)
 extern inline int pmd_none(pmd_t pmd)		{ return !pmd_val(pmd); }
 extern inline int pmd_bad(pmd_t pmd)		{ return (pmd_val(pmd) & ~PAGE_MASK) != _PAGE_TABLE || pmd_val(pmd) > high_memory; }
 extern inline int pmd_present(pmd_t pmd)	{ return pmd_val(pmd) & _PAGE_PRESENT; }
-#ifdef CONFIG_PENTIUM_MM
+#ifdef USE_PENTIUM_MM
 extern inline int pmd_inuse(pmd_t *pmdp)	{ return (pmd_val(*pmdp) & _PAGE_4M) != 0; }
 #else
 extern inline int pmd_inuse(pmd_t *pmdp)	{ return 0; }

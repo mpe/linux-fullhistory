@@ -1,11 +1,11 @@
-#ifdef CONFIG_MODVERSIONS /* CONFIG_MODVERSIONS */
+#ifdef MODVERSIONS /* MODVERSIONS */
 #undef _set_ver
 #if defined(MODULE) && !defined(__GENKSYMS__)
 #define _set_ver(sym,vers) sym ## _R ## vers
 #else
 #define _set_ver(a,b) a
 #endif
-#endif /* CONFIG_MODVERSIONS */
+#endif /* MODVERSIONS */
 #undef X
 #undef EMPTY
 	 /* mark end of table, last entry above ended with a comma! */

@@ -1077,7 +1077,7 @@ void ip_netlink_msg(unsigned long msg, __u32 daddr, __u32 gw, __u32 mask, short 
  *	Device notifier
  */
  
-static int ip_rt_event(unsigned long event, void *ptr)
+static int ip_rt_event(struct notifier_block *this, unsigned long event, void *ptr)
 {
 	struct device *dev=ptr;
 	if(event==NETDEV_DOWN)

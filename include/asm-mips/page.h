@@ -1,7 +1,7 @@
 #ifndef __ASM_MIPS_PAGE_H
 #define __ASM_MIPS_PAGE_H
 
-#define CONFIG_STRICT_MM_TYPECHECKS
+#define STRICT_MM_TYPECHECKS
 
 #ifndef __ASSEMBLY__
 
@@ -18,7 +18,7 @@ extern asmlinkage void tlbflush(void);
 
 typedef unsigned short mem_map_t;
 
-#ifdef CONFIG_STRICT_MM_TYPECHECKS
+#ifdef STRICT_MM_TYPECHECKS
 /*
  * These are used to make use of C type-checking..
  */
@@ -34,7 +34,7 @@ typedef struct { unsigned long pgprot; } pgprot_t;
 #define __pgd(x)	((pgd_t) { (x) } )
 #define __pgprot(x)	((pgprot_t) { (x) } )
 
-#else /* !defined (CONFIG_STRICT_MM_TYPECHECKS) */
+#else /* !defined (STRICT_MM_TYPECHECKS) */
 /*
  * .. while these make it easier on the compiler
  */
@@ -50,7 +50,7 @@ typedef unsigned long pgprot_t;
 #define __pgd(x)	(x)
 #define __pgprot(x)	(x)
 
-#endif /* !defined (CONFIG_STRICT_MM_TYPECHECKS) */
+#endif /* !defined (STRICT_MM_TYPECHECKS) */
 #endif /* __ASSEMBLY__ */
 
 /*

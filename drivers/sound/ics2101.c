@@ -37,6 +37,7 @@
 			 SOUND_MASK_SYNTH| \
   			 SOUND_MASK_CD | SOUND_MASK_VOLUME)
 
+extern sound_os_info *gus_osp;
 extern int      gus_base;
 static int      volumes[ICS_MIXDEVS];
 static int      left_fix[ICS_MIXDEVS] =

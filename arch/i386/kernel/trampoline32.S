@@ -2,7 +2,6 @@
 !	32bit side of the trampoline code
 !
 #define __ASSEMBLY__
-#include <linux/config.h>
 #include <asm/segment.h>
 !
 !

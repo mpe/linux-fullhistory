@@ -1635,6 +1635,9 @@ probe_ms_sound (struct address_info *hw_config)
   InitAEDSP16_MSS (hw_config);
 #endif
 
+  if (hw_config->card_subtype == 1)	/* Has IRQ/DMA registers */
+    return ad1848_detect (hw_config->io_base + 4, NULL, hw_config->osp);
+
   /*
      * Check if the IO port returns valid signature. The original MS Sound
      * system returns 0x04 while some cards (AudioTriX Pro for example)

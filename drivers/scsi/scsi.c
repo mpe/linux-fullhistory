@@ -20,19 +20,13 @@
  *  Native multichannel and wide scsi support added 
  *  by Michael Neuffer neuffer@goofy.zdv.uni-mainz.de
  */
-#ifdef MODULE
+
 /*
  * Don't import our own symbols, as this would severely mess up our
  * symbol tables.
  */
 #define _SCSI_SYMS_VER_
-#include <linux/autoconf.h>
 #include <linux/module.h>
-#include <linux/version.h>
-#else
-#define MOD_INC_USE_COUNT
-#define MOD_DEC_USE_COUNT
-#endif
 
 #include <asm/system.h>
 #include <linux/sched.h>
@@ -50,6 +44,7 @@
 #include "hosts.h"
 #include "constants.h"
 
+#include <linux/config.h>
 
 #undef USE_STATIC_SCSI_MEMORY
 
@@ -2148,7 +2143,7 @@ void *scsi_malloc(unsigned int len)
 		restore_flags(flags);
 		dma_free_sectors -= nbits;
 #ifdef DEBUG
-		printk("SMalloc: %d %p ",len, dma_malloc_pages[i] + (j << 9));
+		printk("SMalloc: %d %p\n",len, dma_malloc_pages[i] + (j << 9));
 #endif
 		return (void *) ((unsigned long) dma_malloc_pages[i] + (j << 9));
 	    }
@@ -2499,7 +2494,7 @@ static void resize_dma_pool(void)
 	 * Free up the DMA pool.
 	 */
 	if( dma_free_sectors != dma_sectors )
-	    panic("SCSI DMA pool memory leak\n");
+	    panic("SCSI DMA pool memory leak %d %d\n",dma_free_sectors,dma_sectors);
 
 	for(i=0; i < dma_sectors >> 3; i++)
 	    scsi_init_free(dma_malloc_pages[i], PAGE_SIZE);
@@ -3062,11 +3057,7 @@ scsi_dump_status(void)
 
 #ifdef MODULE
 
-
-char kernel_version[] = UTS_RELEASE;
-
 extern struct symbol_table scsi_symbol_table;
-
 
 int init_module(void) {
     /*
@@ -3080,6 +3071,7 @@ int init_module(void) {
     scsi_loadable_module_flag = 1;
     
     dma_sectors = PAGE_SIZE / 512;
+    dma_free_sectors= dma_sectors;
     /*
      * Set up a minimal DMA buffer list - this will be used during scan_scsis
      * in some cases.
@@ -3100,8 +3092,6 @@ int init_module(void) {
 
 void cleanup_module( void) 
 {
-    int i;
-    
     if (MOD_IN_USE) {
 	printk(KERN_INFO __FILE__ ": module is in use, remove rejected\n");
 	return;

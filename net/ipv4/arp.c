@@ -45,6 +45,7 @@
  *		Germano Caronni	:	Assorted subtle races.
  *		Craig Schlenter :	Don't modify permanent entry 
  *					during arp_rcv.
+ *		Russ Nelson	:	Tidied up a few bits.
  */
 
 /* RFC1122 Status:
@@ -293,7 +294,7 @@ static void arp_release_entry(struct arp_table *entry)
  *	Purge a device from the ARP queue
  */
  
-int arp_device_event(unsigned long event, void *ptr)
+int arp_device_event(struct notifier_block *this, unsigned long event, void *ptr)
 {
 	struct device *dev=ptr;
 	int i;
@@ -603,7 +604,7 @@ int arp_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
 	unsigned char *arp_ptr= (unsigned char *)(arp+1);
 	struct arp_table *entry;
 	struct arp_table *proxy_entry;
-	int addr_hint,hlen,htype;
+	int hlen,htype;
 	unsigned long hash;
 	unsigned char ha[MAX_ADDR_LEN];	/* So we can enable ints again. */
 	unsigned char *sha,*tha;
@@ -720,31 +721,8 @@ int arp_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
  *  cache.
  */
 
-	addr_hint = ip_chk_addr(tip);
-
-	if(arp->ar_op == htons(ARPOP_REPLY))
-	{
-		if(addr_hint!=IS_MYADDR)
-		{
-/* 
- *	Replies to other machines get tossed. 
- */
-
- /* Should we reset the expiry timers for an entry that isn't for us, if we */
- /* have it in the cache? RFC1122 suggests it. -- MS */
-
-			kfree_skb(skb, FREE_READ);
-			return 0;
-		}
-/*
- *	Fall through to code below that adds sender to cache. 
- */
-	}
-	else
+	if(arp->ar_op == htons(ARPOP_REQUEST))
 	{ 
-/* 
- * 	It is now an arp request 
- */
 /*
  * Only reply for the real device address or when it's in our proxy tables
  */
@@ -796,8 +774,17 @@ int arp_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
 			arp_send(ARPOP_REPLY,ETH_P_ARP,sip,dev,tip,sha,dev->dev_addr);
 		}
 	}
-
-
+/*
+ *	It is now an arp reply.
+ */
+	if(ip_chk_addr(tip)!=IS_MYADDR)
+	{
+/*
+ *	Replies to other machines get tossed.
+ */
+ 		kfree_skb(skb, FREE_READ);
+ 		return 0;
+ 	}
 /*
  * Now all replies are handled.  Next, anything that falls through to here
  * needs to be added to the arp cache, or have its entry updated if it is 

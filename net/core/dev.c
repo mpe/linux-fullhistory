@@ -34,19 +34,14 @@
  *		Alan Cox	:	Network driver sets packet type before calling netif_rx. Saves
  *					a function call a packet.
  *		Alan Cox	:	Hashed net_bh()
- *	Richard Kooijman	:	Timestamp fixes.
+ *		Richard Kooijman:	Timestamp fixes.
  *		Alan Cox	:	Wrong field in SIOCGIFDSTADDR
  *		Alan Cox	:	Device lock protection.
  *		Alan Cox	: 	Fixed nasty side effect of device close changes.
+ *		Rudi Cilibrasi	:	Pass the right thing to set_mac_address()
  *
- *	Cleaned up and recommented by Alan Cox 2nd April 1994. I hope to have
- *	the rest as well commented in the end.
  */
 
-/*
- *	A lot of these includes will be going walkies very soon 
- */
- 
 #include <asm/segment.h>
 #include <asm/system.h>
 #include <asm/bitops.h>
@@ -588,7 +583,7 @@ void dev_transmit(void)
  *	useful will emerge.
  */
  
-volatile char in_bh = 0;	/* Non-reentrant remember */
+volatile unsigned long in_bh = 0;	/* Non-reentrant remember */
 
 int in_net_bh()	/* Used by timer.c */
 {
@@ -1050,26 +1045,50 @@ static int dev_ifsioc(void *arg, unsigned int getset)
 			break;
 		
 		case SIOCGIFADDR:	/* Get interface address (and family) */
-			(*(struct sockaddr_in *)
-				  &ifr.ifr_addr).sin_addr.s_addr = dev->pa_addr;
-			(*(struct sockaddr_in *)
-				  &ifr.ifr_addr).sin_family = dev->family;
-			(*(struct sockaddr_in *)
-				  &ifr.ifr_addr).sin_port = 0;
+			if(ifr.ifr_addr.sa_family==AF_UNSPEC)
+			{
+				memcpy(ifr.ifr_hwaddr.sa_data,dev->dev_addr, MAX_ADDR_LEN);
+				ifr.ifr_hwaddr.sa_family=dev->type;			
+				goto rarok;
+			}
+			else
+			{
+				(*(struct sockaddr_in *)
+					  &ifr.ifr_addr).sin_addr.s_addr = dev->pa_addr;
+				(*(struct sockaddr_in *)
+					  &ifr.ifr_addr).sin_family = dev->family;
+				(*(struct sockaddr_in *)
+					  &ifr.ifr_addr).sin_port = 0;
+			}
 			goto rarok;
 	
 		case SIOCSIFADDR:	/* Set interface address (and family) */
-			dev->pa_addr = (*(struct sockaddr_in *)
-				 &ifr.ifr_addr).sin_addr.s_addr;
-			dev->family = ifr.ifr_addr.sa_family;
+		
+			/*
+			 *	BSDism. SIOCSIFADDR family=AF_UNSPEC sets the
+			 *	physical address. We can cope with this now.
+			 */
+			
+			if(ifr.ifr_addr.sa_family==AF_UNSPEC)
+			{
+				if(dev->set_mac_address==NULL)
+					return -EOPNOTSUPP;
+				ret=dev->set_mac_address(dev,&ifr.ifr_addr);
+			}
+			else
+			{
+				dev->pa_addr = (*(struct sockaddr_in *)
+					 &ifr.ifr_addr).sin_addr.s_addr;
+				dev->family = ifr.ifr_addr.sa_family;
 			
 #ifdef CONFIG_INET	
-			/* This is naughty. When net-032e comes out It wants moving into the net032
-			   code not the kernel. Till then it can sit here (SIGH) */		
-			dev->pa_mask = ip_get_mask(dev->pa_addr);
+				/* This is naughty. When net-032e comes out It wants moving into the net032
+				   code not the kernel. Till then it can sit here (SIGH) */		
+				dev->pa_mask = ip_get_mask(dev->pa_addr);
 #endif			
-			dev->pa_brdaddr = dev->pa_addr | ~dev->pa_mask;
-			ret = 0;
+				dev->pa_brdaddr = dev->pa_addr | ~dev->pa_mask;
+				ret = 0;
+			}
 			break;
 			
 		case SIOCGIFBRDADDR:	/* Get the broadcast address */
@@ -1161,10 +1180,6 @@ static int dev_ifsioc(void *arg, unsigned int getset)
 			ret = -EINVAL;
 			break;
 
-		case OLD_SIOCGIFHWADDR:	/* Get the hardware address. This will change and SIFHWADDR will be added */
-			memcpy(ifr.old_ifr_hwaddr,dev->dev_addr, MAX_ADDR_LEN);
-			goto rarok;
-
 		case SIOCGIFHWADDR:
 			memcpy(ifr.ifr_hwaddr.sa_data,dev->dev_addr, MAX_ADDR_LEN);
 			ifr.ifr_hwaddr.sa_family=dev->type;			
@@ -1175,7 +1190,7 @@ static int dev_ifsioc(void *arg, unsigned int getset)
 				return -EOPNOTSUPP;
 			if(ifr.ifr_hwaddr.sa_family!=dev->type)
 				return -EINVAL;
-			ret=dev->set_mac_address(dev,ifr.ifr_hwaddr.sa_data);
+			ret=dev->set_mac_address(dev,&ifr.ifr_hwaddr);
 			break;
 			
 		case SIOCGIFMAP:
@@ -1260,7 +1275,6 @@ int dev_ioctl(unsigned int cmd, void *arg)
 		case SIOCGIFMEM:
 		case SIOCGIFHWADDR:
 		case SIOCSIFHWADDR:
-		case OLD_SIOCGIFHWADDR:
 		case SIOCGIFSLAVE:
 		case SIOCGIFMAP:
 			return dev_ifsioc(arg, cmd);

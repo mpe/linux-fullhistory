@@ -11,7 +11,6 @@
  * current-task
  */
 
-#include <linux/config.h>
 #include <linux/signal.h>
 #include <linux/sched.h>
 #include <linux/timer.h>
@@ -183,7 +182,7 @@ static inline int goodness(struct task_struct * p, int this_cpu)
 {
 	int weight;
 
-#ifdef CONFIG_SMP	
+#ifdef __SMP__	
 	/* We are not permitted to run a task someone else is running */
 	if (p->processor != NO_PROC_ID)
 		return -1000;
@@ -199,7 +198,7 @@ static inline int goodness(struct task_struct * p, int this_cpu)
 	weight = p->counter;
 	if (weight) {
 
-#ifdef CONFIG_SMP
+#ifdef __SMP__
 		/* Give a largish advantage to the same processor...   */
 		/* (this is equivalent to penalizing other processors) */
 		if (p->last_processor == this_cpu)
@@ -261,7 +260,7 @@ asmlinkage void schedule(void)
 	p = init_task.next_run;
 	sti();
 	
-#ifdef CONFIG_SMP
+#ifdef __SMP__
 	/*
 	 *	This is safe as we do not permit re-entry of schedule()
 	 */
@@ -288,7 +287,7 @@ asmlinkage void schedule(void)
 		for_each_task(p)
 			p->counter = (p->counter >> 1) + p->priority;
 	}
-#ifdef CONFIG_SMP	
+#ifdef __SMP__	
 	
 	/*
 	 *	Context switching between two idle threads is pointless.
@@ -519,7 +518,7 @@ static unsigned long count_active_tasks(void)
 			   (*p)->state == TASK_UNINTERRUPTIBLE ||
 			   (*p)->state == TASK_SWAPPING))
 			nr += FIXED_1;
-#ifdef CONFIG_SMP
+#ifdef __SMP__
 	nr-=(smp_num_cpus-1)*FIXED_1;
 #endif			
 	return nr;
@@ -978,7 +977,7 @@ void sched_init(void)
 	 */
 	int cpu=smp_processor_id();
 	current_set[cpu]=&init_task;
-#ifdef CONFIG_SMP	
+#ifdef __SMP__	
 	init_task.processor=cpu;
 #endif
 	bh_base[TIMER_BH].routine = timer_bh;

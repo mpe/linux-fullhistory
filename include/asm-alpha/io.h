@@ -63,28 +63,11 @@ extern inline void * phys_to_virt(unsigned long address)
  */
 extern void __sethae (unsigned long addr);	/* syscall */
 extern void _sethae (unsigned long addr);	/* cached version */
-extern unsigned int _inb (unsigned long port);
-extern unsigned int _inw (unsigned long port);
-extern unsigned int _inl (unsigned long port);
-extern void _outb (unsigned char b,unsigned long port);
-extern void _outw (unsigned short w,unsigned long port);
-extern void _outl (unsigned int l,unsigned long port);
-
-#ifndef inb
-# define inb(p) _inb((p))
-# define inw(p) _inw((p))
-# define inl(p) _inl((p))
-# define outb(b,p) _outb((b),(p))
-# define outw(w,p) _outw((w),(p))
-# define outl(l,p) _outl((l),(p))
-#endif
 
 #endif /* !__KERNEL__ */
 
 /*
- * There are different version of the alpha motherboards: the
- * "interesting" (read: slightly braindead) Jensen type hardware
- * and the PCI version
+ * There are different version of the Alpha PC motherboards:
  */
 #if defined(CONFIG_ALPHA_LCA)
 # include <asm/lca.h>		/* get chip-specific definitions */
@@ -92,6 +75,80 @@ extern void _outl (unsigned int l,unsigned long port);
 # include <asm/apecs.h>		/* get chip-specific definitions */
 #else
 # include <asm/jensen.h>
+#endif
+
+/*
+ * The convention used for inb/outb etc. is that names starting with
+ * two underscores are the inline versions, names starting with a
+ * single underscore are proper functions, and names starting with a
+ * letter are macros that map in some way to inline or proper function
+ * versions.  Not all that pretty, but before you change it, be sure
+ * to convince yourself that it won't break anything (in particular
+ * module support).
+ */
+extern unsigned int	_inb (unsigned long port);
+extern unsigned int	_inw (unsigned long port);
+extern unsigned int	_inl (unsigned long port);
+extern void		_outb (unsigned char b,unsigned long port);
+extern void		_outw (unsigned short w,unsigned long port);
+extern void		_outl (unsigned int l,unsigned long port);
+extern unsigned long	_readb(unsigned long addr);
+extern unsigned long	_readw(unsigned long addr);
+extern void		_writeb(unsigned char b, unsigned long addr);
+extern void		_writew(unsigned short b, unsigned long addr);
+
+/*
+ * The platform header files may define some of these macros to use
+ * the inlined versions where appropriate.  These macros may also be
+ * redefined by userlevel programs.
+ */
+#ifndef inb
+# define inb(p)		_inb((p))
+#endif
+#ifndef inw
+# define inw(p)		_inw((p))
+#endif
+#ifndef inl
+# define inl(p)		_inl((p))
+#endif
+#ifndef outb
+# define outb(b,p)	_outb((b),(p))
+#endif
+#ifndef outw
+# define outw(w,p)	_outw((w),(p))
+#endif
+#ifndef outl
+# define outl(l,p)	_outl((l),(p))
+#endif
+
+#ifndef inb_p
+# define inb_p		inb
+#endif
+#ifndef outb_p
+# define outb_p		outb
+#endif
+
+/*
+ * The "address" in IO memory space is not clearly either a integer or a
+ * pointer. We will accept both, thus the casts.
+ */
+#ifndef readb
+# define readb(a)	_readb((unsigned long)(a))
+#endif
+#ifndef readw
+# define readw(a)	_readw((unsigned long)(a))
+#endif
+#ifndef readl
+# define readl(a)	_readl((unsigned long)(a))
+#endif
+#ifndef writeb
+# define writeb(v,a)	_writeb((v),(unsigned long)(a))
+#endif
+#ifndef writew
+# define writew(v,a)	_writew((v),(unsigned long)(a))
+#endif
+#ifndef writel
+# define writel(v,a)	_writel((v),(unsigned long)(a))
 #endif
 
 #ifdef __KERNEL__
@@ -112,22 +169,6 @@ extern void insl (unsigned long port, void *src, unsigned long count);
 extern void outsb (unsigned long port, void *dst, unsigned long count);
 extern void outsw (unsigned long port, void *dst, unsigned long count);
 extern void outsl (unsigned long port, void *dst, unsigned long count);
-
-/*
- * The "address" in IO memory space is not clearly either a integer or a
- * pointer. We will accept both, thus the casts.
- */
-#define readb(addr) ((unsigned char) (readb)((unsigned long)(addr)))
-#define readw(addr) ((unsigned short) (readw)((unsigned long)(addr)))
-#define readl(addr) ((unsigned int) (readl)((unsigned long)(addr)))
-
-#define writeb(b,addr) (writeb)((b),(unsigned long)(addr))
-#define writew(w,addr) (writew)((w),(unsigned long)(addr))
-#define writel(l,addr) (writel)((l),(unsigned long)(addr))
-
-#define memset_io(addr,c,len)		(memset_io)((unsigned long)(addr),(c),(len))
-#define memcpy_fromio(to,from,len)	(memcpy_fromio)((to),(unsigned long)(from),(len))
-#define memcpy_toio(to,from,len)	(memcpy_toio)((unsigned long)(to),(from),(len))
 
 /*
  * XXX - We don't have csum_partial_copy_fromio() yet, so we cheat here and 

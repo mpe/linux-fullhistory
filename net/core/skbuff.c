@@ -9,6 +9,7 @@
  *		Dave Platt	:	Interrupt stacking fix.
  *	Richard Kooijman	:	Timestamp fixes.
  *		Alan Cox	:	Changed buffer format.
+ *		Alan Cox	:	destructor hook for AF_UNIX etc.
  *
  *	This program is free software; you can redistribute it and/or
  *	modify it under the terms of the GNU General Public License
@@ -460,6 +461,8 @@ void kfree_skb(struct sk_buff *skb, int rw)
 	if (skb->next)
 	 	printk("Warning: kfree_skb passed an skb still on a list (from %p).\n",
 			__builtin_return_address(0));
+	if(skb->destructor)
+		skb->destructor(skb);
 	if (skb->sk)
 	{
 	        if(skb->sk->prot!=NULL)
@@ -565,6 +568,7 @@ struct sk_buff *alloc_skb(unsigned int size,int priority)
 	skb->tail=bptr;
 	skb->end=bptr+len;
 	skb->len=0;
+	skb->destructor=NULL;
 	return skb;
 }
 

@@ -638,7 +638,7 @@ static void avl_check (struct task_struct * task, char *caller)
  * Case 4 involves the creation of 2 new areas, for each side of
  * the hole.
  */
-void unmap_fixup(struct vm_area_struct *area,
+static void unmap_fixup(struct vm_area_struct *area,
 		 unsigned long addr, size_t len)
 {
 	struct vm_area_struct *mpnt;
@@ -768,7 +768,7 @@ int do_munmap(unsigned long addr, size_t len)
 
 		if (mpnt->vm_ops && mpnt->vm_ops->unmap)
 			mpnt->vm_ops->unmap(mpnt, st, end-st);
-
+		zap_page_range(current->mm, st, end-st);
 		unmap_fixup(mpnt, st, end-st);
 		kfree(mpnt);
 	}
@@ -797,12 +797,16 @@ void exit_mmap(struct mm_struct * mm)
 	mm->mmap_avl = NULL;
 	while (mpnt) {
 		struct vm_area_struct * next = mpnt->vm_next;
-		if (mpnt->vm_ops && mpnt->vm_ops->close)
-			mpnt->vm_ops->close(mpnt);
+		if (mpnt->vm_ops) {
+			if (mpnt->vm_ops->unmap)
+				mpnt->vm_ops->unmap(mpnt, mpnt->vm_start, mpnt->vm_end-mpnt->vm_start);
+			if (mpnt->vm_ops->close)
+				mpnt->vm_ops->close(mpnt);
+		}
 		remove_shared_vm_struct(mpnt);
+		zap_page_range(mm, mpnt->vm_start, mpnt->vm_end-mpnt->vm_start);
 		if (mpnt->vm_inode)
 			iput(mpnt->vm_inode);
-		zap_page_range(mm, mpnt->vm_start, mpnt->vm_end-mpnt->vm_start);
 		kfree(mpnt);
 		mpnt = next;
 	}

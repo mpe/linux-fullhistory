@@ -24,6 +24,8 @@
  *					context, THEN make the sock dead.
  *					Circuit ID check before allocating it on
  *					a connection.
+ *			Alan(GW4PTS)	sendmsg/recvmsg only. Fixed connect clear bug
+ *					inherited from AX.25
  */
   
 #include <linux/config.h>
@@ -122,7 +124,7 @@ static void nr_kill_by_device(struct device *dev)
 /*
  *	Handle device status changes.
  */
-static int nr_device_event(unsigned long event, void *ptr)
+static int nr_device_event(struct notifier_block *this, unsigned long event, void *ptr)
 {
 	struct device *dev = (struct device *)ptr;
 
@@ -816,7 +818,7 @@ static int nr_connect(struct socket *sock, struct sockaddr *uaddr,
 	if (sk->state != TCP_ESTABLISHED) {
 		sti();
 		sock->state = SS_UNCONNECTED;
-		return -sk->err;	/* Always set at this point */
+		return sock_error(sk);	/* Always set at this point */
 	}
 	
 	sock->state = SS_CONNECTED;
@@ -1033,11 +1035,8 @@ static int nr_sendmsg(struct socket *sock, struct msghdr *msg, int len, int nobl
 	unsigned char *asmptr;
 	int size;
 	
-	if (sk->err) {
-		err     = sk->err;
-		sk->err = 0;
-		return -err;
-	}
+	if (sk->err)
+		return sock_error(sk);
 
 	if (flags)
 		return -EINVAL;
@@ -1128,32 +1127,6 @@ static int nr_sendmsg(struct socket *sock, struct msghdr *msg, int len, int nobl
 	return len;
 }
 
-static int nr_sendto(struct socket *sock, const void *ubuf, int size, int noblock, unsigned flags,
-		struct sockaddr *sa, int addr_len)
-{
-	struct iovec iov;
-	struct msghdr msg;
-
-	iov.iov_base = (void *)ubuf;
-	iov.iov_len  = size;
-
-	msg.msg_name      = (void *)sa;
-	msg.msg_namelen   = addr_len;
-	msg.msg_accrights = NULL;
-	msg.msg_iov       = &iov;
-	msg.msg_iovlen    = 1;
-	return nr_sendmsg(sock, &msg, size, noblock, flags);
-}
-
-static int nr_send(struct socket *sock, const void *ubuf, int size, int noblock, unsigned flags)
-{
-	return nr_sendto(sock, ubuf, size, noblock, flags, NULL, 0);
-}
-
-static int nr_write(struct socket *sock, const char *ubuf, int size, int noblock)
-{
-	return nr_sendto(sock, ubuf, size, noblock, 0, NULL, 0);
-}
 
 static int nr_recvmsg(struct socket *sock, struct msghdr *msg, int size, int noblock,
 		   int flags, int *addr_len)
@@ -1164,13 +1137,8 @@ static int nr_recvmsg(struct socket *sock, struct msghdr *msg, int size, int nob
 	struct sk_buff *skb;
 	int er;
 
-	if (sk->err) {
-		cli();
-		er      = -sk->err;
-		sk->err = 0;
-		sti();
-		return er;
-	}
+	if (sk->err)
+		return sock_error(sk);
 	
 	if (addr_len != NULL)
 		*addr_len = sizeof(*sax);
@@ -1209,43 +1177,6 @@ static int nr_recvmsg(struct socket *sock, struct msghdr *msg, int size, int nob
 
 	return copied;
 }		
-
-static int nr_recvfrom(struct socket *sock, void *ubuf, int size, int noblock, unsigned flags,
-		struct sockaddr *sa, int *addr_len)
-{
-	struct iovec iov;
-	struct msghdr msg;
-
-	iov.iov_base = ubuf;
-	iov.iov_len  = size;
-
-	msg.msg_name      = (void *)sa;
-	msg.msg_namelen   = 0;
-	if (addr_len)
-		msg.msg_namelen = *addr_len;
-	msg.msg_accrights = NULL;
-	msg.msg_iov       = &iov;
-	msg.msg_iovlen    = 1;
-
-	return nr_recvmsg(sock, &msg, size, noblock, flags, addr_len);
-}
-
-
-static int nr_recv(struct socket *sock, void *ubuf, int size , int noblock,
-	unsigned flags)
-{
-	struct sock *sk = (struct sock *)sock->data;
-
-	if (sk->zapped)
-		return -ENOTCONN;
-
-	return nr_recvfrom(sock, ubuf, size, noblock, flags, NULL, NULL);
-}
-
-static int nr_read(struct socket *sock, char *ubuf, int size, int noblock)
-{
-	return nr_recv(sock, ubuf, size, noblock, 0);
-}
 
 static int nr_shutdown(struct socket *sk, int how)
 {
@@ -1417,15 +1348,9 @@ static struct proto_ops nr_proto_ops = {
 	nr_socketpair,
 	nr_accept,
 	nr_getname,
-	nr_read,
-	nr_write,
 	nr_select,
 	nr_ioctl,
 	nr_listen,
-	nr_send,
-	nr_recv,
-	nr_sendto,
-	nr_recvfrom,
 	nr_shutdown,
 	nr_setsockopt,
 	nr_getsockopt,

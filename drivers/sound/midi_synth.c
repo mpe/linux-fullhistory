@@ -47,6 +47,9 @@ static int      sysex_state[MAX_MIDI_DEV] =
 {0};
 static unsigned char prev_out_status[MAX_MIDI_DEV];
 
+#ifdef EXCLUDE_SEQUENCER
+#define STORE(cmd)
+#else
 #define STORE(cmd) \
 { \
   int len; \
@@ -54,6 +57,8 @@ static unsigned char prev_out_status[MAX_MIDI_DEV];
   cmd; \
   seq_input_event(obuf, len); \
 }
+#endif
+
 #define _seqbuf obuf
 #define _seqbufptr 0
 #define _SEQ_ADVBUF(x) len=x
@@ -538,12 +543,9 @@ midi_synth_load_patch (int dev, int format, const snd_rw_buf * addr,
   left = sysex.len;
   src_offs = 0;
 
-  {
-    sysex_sleep_flag.aborting = 0;
-    sysex_sleep_flag.mode = WK_NONE;
-  };
+  sysex_sleep_flag.mode = WK_NONE;
 
-  for (i = 0; i < left && !((current->signal & ~current->blocked)); i++)
+  for (i = 0; i < left && !(current->signal & ~current->blocked); i++)
     {
       unsigned char   data;
 
@@ -564,22 +566,20 @@ midi_synth_load_patch (int dev, int format, const snd_rw_buf * addr,
 	}
 
       while (!midi_devs[orig_dev]->putc (orig_dev, (unsigned char) (data & 0xff)) &&
-	     !((current->signal & ~current->blocked)))
+	     !(current->signal & ~current->blocked))
 
 	{
 	  unsigned long   tl;
 
 	  if (1)
-	    tl = current->timeout = jiffies + (1);
+	    current->timeout = tl = jiffies + (1);
 	  else
 	    tl = 0xffffffff;
 	  sysex_sleep_flag.mode = WK_SLEEP;
 	  interruptible_sleep_on (&sysex_sleeper);
 	  if (!(sysex_sleep_flag.mode & WK_WAKEUP))
 	    {
-	      if (current->signal & ~current->blocked)
-		sysex_sleep_flag.aborting = 1;
-	      else if (jiffies >= tl)
+	      if (jiffies >= tl)
 		sysex_sleep_flag.mode |= WK_TIMEOUT;
 	    }
 	  sysex_sleep_flag.mode &= ~WK_SLEEP;

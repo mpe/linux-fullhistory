@@ -63,10 +63,7 @@ pmgr_open (int dev)
     return -EBUSY;
   pmgr_opened[dev] = 1;
 
-  {
-    server_wait_flag[dev].aborting = 0;
-    server_wait_flag[dev].mode = WK_NONE;
-  };
+  server_wait_flag[dev].mode = WK_NONE;
 
   return 0;
 }
@@ -105,29 +102,27 @@ pmgr_read (int dev, struct fileinfo *file, snd_rw_buf * buf, int count)
       return -EIO;
     }
 
-  while (!ok && !((current->signal & ~current->blocked)))
+  while (!ok && !(current->signal & ~current->blocked))
     {
       save_flags (flags);
       cli ();
 
       while (!(mbox[dev] && msg_direction[dev] == A_TO_S) &&
-	     !((current->signal & ~current->blocked)))
+	     !(current->signal & ~current->blocked))
 	{
 
 	  {
 	    unsigned long   tl;
 
 	    if (0)
-	      tl = current->timeout = jiffies + (0);
+	      current->timeout = tl = jiffies + (0);
 	    else
 	      tl = 0xffffffff;
 	    server_wait_flag[dev].mode = WK_SLEEP;
 	    interruptible_sleep_on (&server_procs[dev]);
 	    if (!(server_wait_flag[dev].mode & WK_WAKEUP))
 	      {
-		if (current->signal & ~current->blocked)
-		  server_wait_flag[dev].aborting = 1;
-		else if (jiffies >= tl)
+		if (jiffies >= tl)
 		  server_wait_flag[dev].mode |= WK_TIMEOUT;
 	      }
 	    server_wait_flag[dev].mode &= ~WK_SLEEP;
@@ -161,7 +156,7 @@ pmgr_write (int dev, struct fileinfo *file, const snd_rw_buf * buf, int count)
       return -EIO;
     }
 
-  memcpy_fromfs (mbox[dev], &((buf)[0]), 4);
+  memcpy_fromfs ((char *) mbox[dev], &((buf)[0]), 4);
 
   if (*(unsigned char *) mbox[dev] == SEQ_FULLSIZE)
     {
@@ -238,16 +233,14 @@ pmgr_access (int dev, struct patmgr_info *rec)
 	unsigned long   tl;
 
 	if (0)
-	  tl = current->timeout = jiffies + (0);
+	  current->timeout = tl = jiffies + (0);
 	else
 	  tl = 0xffffffff;
 	appl_wait_flag.mode = WK_SLEEP;
 	interruptible_sleep_on (&appl_proc);
 	if (!(appl_wait_flag.mode & WK_WAKEUP))
 	  {
-	    if (current->signal & ~current->blocked)
-	      appl_wait_flag.aborting = 1;
-	    else if (jiffies >= tl)
+	    if (jiffies >= tl)
 	      appl_wait_flag.mode |= WK_TIMEOUT;
 	  }
 	appl_wait_flag.mode &= ~WK_SLEEP;
@@ -318,16 +311,14 @@ pmgr_inform (int dev, int event, unsigned long p1, unsigned long p2,
 	unsigned long   tl;
 
 	if (0)
-	  tl = current->timeout = jiffies + (0);
+	  current->timeout = tl = jiffies + (0);
 	else
 	  tl = 0xffffffff;
 	appl_wait_flag.mode = WK_SLEEP;
 	interruptible_sleep_on (&appl_proc);
 	if (!(appl_wait_flag.mode & WK_WAKEUP))
 	  {
-	    if (current->signal & ~current->blocked)
-	      appl_wait_flag.aborting = 1;
-	    else if (jiffies >= tl)
+	    if (jiffies >= tl)
 	      appl_wait_flag.mode |= WK_TIMEOUT;
 	  }
 	appl_wait_flag.mode &= ~WK_SLEEP;

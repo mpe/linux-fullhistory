@@ -60,4 +60,5 @@ unload_adlib (struct address_info *hw_config)
   release_region (hw_config->io_base, 4);
 }
 
+
 #endif

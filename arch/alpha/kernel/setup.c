@@ -66,6 +66,24 @@ struct screen_info screen_info = {
 	16			/* orig-video-points */
 };
 
+/*
+ * Initialize Programmable Interval Timers with standard values.  Some
+ * drivers depend on them being initialized (e.g., joystick driver).
+ */
+static void init_pit (void)
+{
+    outb(0x54, 0x43);	/* counter 1: refresh timer */
+    outb(0x18, 0x41);
+
+    outb(0x36, 0x43);	/* counter 0: system timer */
+    outb(0x00, 0x40);
+    outb(0x00, 0x40);
+
+    outb(0xb6, 0x43);	/* counter 2: speaker */
+    outb(0x31, 0x42);
+    outb(0x13, 0x42);
+}
+
 static unsigned long find_end_memory(void)
 {
 	int i;
@@ -91,6 +109,8 @@ void setup_arch(char **cmdline_p,
 	unsigned long * memory_start_p, unsigned long * memory_end_p)
 {
 	extern int _end;
+
+	init_pit();
 
 	hwrpb = (struct hwrpb_struct*)(IDENT_ADDR + INIT_HWRPB->phys_addr);
 

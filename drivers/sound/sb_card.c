@@ -34,6 +34,8 @@
 
 #if defined(CONFIGURE_SOUNDCARD) && !defined(EXCLUDE_SB)
 
+#include "sb.h"
+
 long
 attach_sb_card (long mem_start, struct address_info *hw_config)
 {

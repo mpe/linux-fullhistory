@@ -37,10 +37,7 @@
 
 /* Look in eata_pio.h for configuration information */
 
-#ifdef MODULE
 #include <linux/module.h>
-#include <linux/version.h>
-#endif
  
 #include <linux/kernel.h>
 #include <linux/sched.h>
@@ -57,7 +54,9 @@
 #include "scsi.h"
 #include "sd.h"
 
-#include<linux/stat.h>
+#include <linux/stat.h>
+#include <linux/config.h>	/* for CONFIG_PCI */
+
 struct proc_dir_entry proc_scsi_eata_pio = {
     PROC_SCSI_EATA_PIO, 9, "eata_pio",
     S_IFDIR | S_IRUGO | S_IXUGO, 2

@@ -551,15 +551,15 @@ asmlinkage long sys_ptrace(long request, long pid, long addr, long data,
 			DBG(DBG_MEM, ("peek %#lx->%#lx\n", addr, tmp));
 			if (res < 0)
 				return res;
-			regs.r0 = tmp;	/* special return */
-			return -255;
+			regs.r0 = 0;	/* special return: no errors */
+			return tmp;
 		}
 
 	/* read register number ADDR. */
 		case PTRACE_PEEKUSR:
-			regs.r0 = get_reg(child, addr);
+			regs.r0 = 0;	/* special return: no errors */
 			DBG(DBG_MEM, ("peek $%ld=%#lx\n", addr, regs.r0));
-			return -255;		/* special return */
+			return get_reg(child, addr);
 
 	/* when I and D space are separate, this will have to be fixed. */
 		case PTRACE_POKETEXT: /* write the word at location addr. */

@@ -497,7 +497,6 @@ entSys:
 1:	jsr	$26,($27),do_entSys
 	blt	$0,syscall_error	/* the call failed */
 	stq	$0,0($30)
-ret_success:
 	stq	$31,72($30)		/* a3=0 => no error */
 .align 3
 ret_from_sys_call:
@@ -527,19 +526,20 @@ syscall_error:
 	/*
 	 * Some system calls (e.g., ptrace) can return arbitrary
 	 * values which might normally be mistaken as error numbers.
-	 * Those functions must setup $0 (v0) directly in the stack frame
-	 * and return with value -255.
+	 * Those functions must zero $0 (v0) directly in the stack
+	 * frame to indicate that a negative return value wasn't an
+	 * error number..
 	 */
-	addq	$0,255,$1
-	beq	$1,ret_success
+	ldq	$19,0($30)	/* old syscall nr (zero if success) */
+	beq	$19,ret_success
 
-	bis	$31,$31,$26	/* tell "ret_from_sys_call" that we can restart */
-	ldq	$19,0($30)	/* .. with this syscall nr */
 	ldq	$20,72($30)	/* .. and this a3 */
 	subq	$31,$0,$0	/* with error in v0 */
 	addq	$31,1,$1	/* set a3 for errno return */
-	stq	$0,0($30)
+	bis	$31,$31,$26	/* tell "ret_from_sys_call" that we can restart */
 	stq	$1,72($30)	/* a3 for return */
+ret_success:
+	stq	$0,0($30)
 	br	$31,ret_from_sys_call
 
 .align 3

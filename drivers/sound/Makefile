@@ -5,10 +5,11 @@
 #
 #
 
-VERSION		= `cat .version`
+VERSION		= `head -1 .version`
 TARGET_OS	= linux
 USRINCDIR	= /usr/include
 MODULEDIR	= /lib/modules/misc
+
 FIXEDOBJS	= soundcard.o dev_table.o sound_switch.o
 
 ifeq (.defines,$(wildcard .defines))
@@ -21,7 +22,7 @@ OBJS   = audio.o dmabuf.o sb_dsp.o \
 	 gus_midi.o gus_vol.o patmgr.o sb_mixer.o sb16_dsp.o sb_midi.o \
 	 sb16_midi.o midi_synth.o uart6850.o sound_timer.o \
 	 sys_timer.o ics2101.o ad1848.o pss.o sscape.o trix.o aedsp16.o \
-	 mad16.o mad16_sb_midi.o cs4232.o maui.o
+	 mad16.o mad16_sb_midi.o cs4232.o maui.o sound_pnp.o
 endif
 
 ifndef HOSTCC
@@ -31,6 +32,7 @@ ifndef HOSTCC
 CC	= gcc
 HOSTCC	= gcc
 CFLAGS	= -D__KERNEL__ -DMODULE -I/usr/src/linux/include -Wall -Wstrict-prototypes -O2 -fomit-frame-pointer -pipe -m486
+
 
 build:
 	@echo Compiling modularized sound driver
@@ -72,8 +74,14 @@ local.h:
 	$(MAKE) setup-$(TARGET_OS)
 	$(MAKE) oldconfig
 	$(MAKE) dep
-	@echo You have to restart make. This ensures that options are read corrrectly.
-	exit -1
+	@echo
+	@echo
+	@echo
+	@echo NOTE! Object file dependencies may not be up to date. Run
+	@echo make again if kernel/driver doesn't link properly. Restarting
+	@echo it now may save some time.
+	@echo
+	@echo
 
 config: configure
 	@$(MAKE) setup-$(TARGET_OS)
@@ -85,7 +93,7 @@ config: configure
 	@echo \#define SOUND_UNAME_A \"`uname -a`\" >> local.h
 
 oldconfig: setup-$(TARGET_OS) configure
-	@./configure /etc/soundconf > local.h
+	@./configure -o > local.h
 	@echo \#define SOUND_CONFIG_DATE \"`date`\" >> local.h
 	@echo \#define SOUND_CONFIG_BY \"`whoami`\" >> local.h
 #	@echo \#define SOUND_CONFIG_HOST \"`hostname`\" >> local.h 2>/dev/null

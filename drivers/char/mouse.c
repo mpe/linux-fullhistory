@@ -16,13 +16,7 @@
  * Support for loadable modules. 8-Sep-95 Philip Blundell <pjb27@cam.ac.uk>
  */
 
-#ifdef MODULE
 #include <linux/module.h>
-#include <linux/version.h>
-#else
-#define MOD_INC_USE_COUNT
-#define MOD_DEC_USE_COUNT
-#endif
 
 #include <linux/fs.h>
 #include <linux/errno.h>
@@ -100,8 +94,14 @@ int mouse_deregister(struct mouse * mouse)
 }
 
 #ifdef MODULE
-char kernel_version[] = UTS_RELEASE;
+
 #define mouse_init init_module
+
+void cleanup_module(void)
+{
+	unregister_chrdev(MOUSE_MAJOR, "mouse");
+}
+
 #endif
 
 int mouse_init(void)
@@ -127,14 +127,3 @@ int mouse_init(void)
 	}
 	return 0;
 }
-
-#ifdef MODULE
-void cleanup_module(void)
-{
-	if (MOD_IN_USE) {
-		printk("mouse: in use, remove delayed\n");
-		return;
-	}
-	unregister_chrdev(MOUSE_MAJOR, "mouse");
-}
-#endif

@@ -10,8 +10,6 @@
 #ifndef __ASM_MIPS_FLOPPY_H
 #define __ASM_MIPS_FLOPPY_H
 
-#include <linux/config.h>
-
 #include <asm/bootinfo.h>
 #include <asm/jazz.h>
 #include <asm/jazzdma.h>

@@ -50,7 +50,9 @@
                        when changing the baud rate or clock mode.
                        version 0.8 ALPHA
    July 17, 1995 (ac)  Finally polishing of AX25.030+ support
-         
+   Oct  29, 1995 (ac)  A couple of minor fixes before this, and this release changes
+   		       to the proper set_mac_address semantics which will break 
+   		       a few programs I suspect.
 */
 
 /* The following #define invokes a hack that will improve performance (baud)
@@ -92,7 +94,6 @@ static const char *version =
 #include <linux/modules.h>
 #endif
 
-#include <linux/config.h>
 #include <linux/kernel.h>
 #include <linux/sched.h>
 #include <linux/types.h>
@@ -1274,10 +1275,10 @@ static int valid_dma_page(unsigned long addr, unsigned long dev_buffsize)
 	return 0;
 }
 
-static int pi_set_mac_address(struct device *dev, void *addr)
+static int pi_set_mac_address(struct device *dev, struct sockaddr *sa)
 {
-    memcpy(dev->dev_addr, addr, 7);	/* addr is an AX.25 shifted ASCII */
-    return 0;			/* mac address */
+    memcpy(dev->dev_addr, sa->sa_data, dev->addr_len);	/* addr is an AX.25 shifted ASCII */
+    return 0;						/* mac address */
 }
 
 /* Allocate a buffer which does not cross a DMA page boundary */

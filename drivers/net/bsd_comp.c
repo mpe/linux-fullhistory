@@ -57,7 +57,6 @@
 #endif
 
 #include <linux/module.h>
-#include <linux/version.h>
 
 #include <endian.h>
 #include <linux/kernel.h>
@@ -1185,8 +1184,6 @@ static struct compressor ppp_bsd_compress = {
 /*************************************************************
  * Module support routines
  *************************************************************/
-
-char kernel_version[] = UTS_RELEASE;
 
 int
 init_module(void)

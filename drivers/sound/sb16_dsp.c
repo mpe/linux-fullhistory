@@ -49,7 +49,7 @@ static int      dsp_stereo = 0;
 static int      dsp_current_speed = 8000;
 static int      dsp_busy = 0;
 static int      dma16, dma8;
-static int      trigger_bits = 0x7fffffff;
+static int      trigger_bits = 0;
 static unsigned long dsp_count = 0;
 
 static int      irq_mode = IMODE_NONE;
@@ -233,7 +233,7 @@ sb16_dsp_open (int dev, int mode)
 
   irq_mode = IMODE_NONE;
   dsp_busy = 1;
-  trigger_bits = irq_mode;
+  trigger_bits = 0;
 
   return 0;
 }
@@ -385,6 +385,8 @@ sb16_dsp_prepare_for_input (int dev, int bsize, int bcount)
   audio_devs[my_dev]->dmachan1 = dsp_16bit ? dma16 : dma8;
   dsp_count = 0;
   dsp_cleanup ();
+  sb_dsp_command (0xd0);	/* Halt DMA until trigger() is called */
+  trigger_bits = 0;
   return 0;
 }
 
@@ -394,12 +396,17 @@ sb16_dsp_prepare_for_output (int dev, int bsize, int bcount)
   audio_devs[my_dev]->dmachan1 = dsp_16bit ? dma16 : dma8;
   dsp_count = 0;
   dsp_cleanup ();
+  sb_dsp_command (0xd0);	/* Halt DMA until trigger() is called */
+  trigger_bits = 0;
   return 0;
 }
 
 static void
 sb16_dsp_trigger (int dev, int bits)
 {
+  if (bits != 0)
+    bits = 1;
+
   if (bits == trigger_bits)	/* No change */
     return;
 
@@ -572,7 +579,7 @@ sb16_dsp_interrupt (int unused)
   int             data;
 
   data = inb (DSP_DATA_AVL16);	/*
-				 * Interrupt acknowledge
+				   * Interrupt acknowledge
 				 */
 
   if (intr_active)

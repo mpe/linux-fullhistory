@@ -80,17 +80,16 @@ rpc_remque(struct rpc_sock *rsock, struct rpc_wait *slot)
 }
 
 static inline int
-rpc_sendto(struct rpc_sock *rsock, const int *buf, int len,
-			struct sockaddr *sap, int salen)
+rpc_sendmsg(struct rpc_sock *rsock, struct msghdr *msg, int len)
 {
 	struct socket	*sock = rsock->sock;
 	unsigned long	oldfs;
 	int		result;
 
-	dprintk("RPC: sending %d bytes (buf %08lx)\n", len, (long) buf);
+	dprintk("RPC: sending %d bytes (buf %p)\n", len, msg->msg_iov[0].iov_base);
 	oldfs = get_fs();
 	set_fs(get_ds());
-	result = sock->ops->sendto(sock, buf, len, 0, 0, sap, salen);
+	result = sock->ops->sendmsg(sock, msg, len, 0, 0);
 	set_fs(oldfs);
 	dprintk("RPC: result = %d\n", result);
 
@@ -129,8 +128,7 @@ rpc_select(struct rpc_sock *rsock)
 }
 
 static inline int
-rpc_recvfrom(struct rpc_sock *rsock, int *buf, int len,
-			struct sockaddr *sap, int salen, int flags)
+rpc_recvmsg(struct rpc_sock *rsock, struct msghdr *msg, int len,int flags)
 {
 	struct socket	*sock = rsock->sock;
 	struct sockaddr	sa;
@@ -138,10 +136,10 @@ rpc_recvfrom(struct rpc_sock *rsock, int *buf, int len,
 	unsigned long	oldfs;
 	int		result;
 
-	dprintk("RPC: receiving %d bytes max (buf %08lx)\n", len, (long) buf);
+	dprintk("RPC: receiving %d bytes max (buf %p)\n", len, msg->msg_iov[0].iov_base);
 	oldfs = get_fs();
 	set_fs(get_ds());
-	result = sock->ops->recvfrom(sock, buf, len, 1, flags, &sa, &alen);
+	result = sock->ops->recvmsg(sock, msg, len, 1, flags, &alen);
 	set_fs(oldfs);
 	dprintk("RPC: result = %d\n", result);
 
@@ -167,6 +165,16 @@ rpc_call_one(struct rpc_sock *rsock, struct rpc_wait *slot,
 	int		result;
 	u32		xid;
 	int		safe;
+	struct msghdr   msg;
+	struct iovec	iov;
+	
+	msg.msg_iov	=	&iov;
+	msg.msg_iovlen	=	1;
+	msg.msg_name	=	(void *)sap;
+	msg.msg_namelen	=	salen;
+	msg.msg_accrights =	NULL;
+	iov.iov_base	=	(void *)sndbuf;
+	iov.iov_len	=	slen;
 
 	dprintk("RPC: placing one call, rsock = %08lx, slot = %08lx, "
 		"sap = %08lx, salen = %d, "
@@ -174,7 +182,7 @@ rpc_call_one(struct rpc_sock *rsock, struct rpc_wait *slot,
 		(long) rsock, (long) slot, (long) sap, 
 		salen, (long) sndbuf, slen, (long) rcvbuf, rlen);
 
-	result = rpc_sendto(rsock, sndbuf, slen, sap, salen);
+	result = rpc_sendmsg(rsock, &msg, slen);
 	if (result < 0)
 		return result;
 
@@ -200,8 +208,10 @@ rpc_call_one(struct rpc_sock *rsock, struct rpc_wait *slot,
 			break;
 		}
 
-		result = rpc_recvfrom(rsock, (int *)&xid, sizeof(xid),
-						sap, salen, MSG_PEEK);
+		iov.iov_base=(void *)&xid;
+		iov.iov_len=sizeof(xid);
+		
+		result = rpc_recvmsg(rsock, &msg, sizeof(xid), MSG_PEEK);
 		if (result < 0) {
 			switch (-result) {
 			case EAGAIN: case ECONNREFUSED:
@@ -228,15 +238,19 @@ rpc_call_one(struct rpc_sock *rsock, struct rpc_wait *slot,
 		if (!rovr || rovr->gotit) {
 			/* bad XID or duplicate reply, discard dgram */
 			dprintk("RPC: bad XID or duplicate reply.\n");
-			rpc_recvfrom(rsock, (int *)&xid, sizeof(xid),
-						sap, salen, 0);
+			iov.iov_base=(void *)&xid;
+			iov.iov_len=sizeof(xid);
+			rpc_recvmsg(rsock, &msg, sizeof(xid),0);
 			continue;
 		}
 		rovr->gotit = 1;
 
 		/* Now receive the reply */
-		result = rpc_recvfrom(rsock, rovr->buf, rovr->len,
-						sap, salen, 0);
+		
+		iov.iov_base=rovr->buf;
+		iov.iov_len=rovr->len;
+		
+		result = rpc_recvmsg(rsock, &msg, rovr->len, 0);
 
 		/* If this is not for ourselves, wake up the caller */
 		if (rovr != slot)

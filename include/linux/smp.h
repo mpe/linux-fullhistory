@@ -6,7 +6,7 @@
  *		Alan Cox. <alan@cymru.net>
  */
 
-#ifdef CONFIG_SMP
+#ifdef __SMP__
 #include <asm/smp.h>
 
  

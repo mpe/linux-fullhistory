@@ -17,10 +17,6 @@
 static const char *version =
 	"seeq8005.c:v1.00 8/07/95 Hamish Coleman (hamish@zot.apana.org.au)\n";
 
-/* Always include 'config.h' first in case the user wants to turn on
-   or override something. */
-#include <linux/config.h>
-
 /*
   Sources:
   	SEEQ 8005 databook

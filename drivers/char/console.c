@@ -3,7 +3,6 @@
  *
  *  Copyright (C) 1991, 1992  Linus Torvalds
  */
-
 /*
  *	console.c
  *
@@ -33,16 +32,6 @@
  *     'void scrollback(int lines)'
  *     'void scrollfront(int lines)'
  *
- *     'int con_get_font(char *data)'
- *     'int con_set_font(char *data, int ch512)'
- *     'int con_adjust_height(int fontheight)'
- *
- *     'int con_get_cmap(char *)'
- *     'int con_set_cmap(char *)'
- *
- *     'int reset_palette(int currcons)'
- *     'void set_palette(void)'
- *
  *     'void mouse_report(struct tty_struct * tty, int butt, int mrx, int mry)'
  *     'int mouse_reporting(void)'
  *
@@ -56,9 +45,6 @@
  * Copy and paste function by Andrew Haylett,
  *   some enhancements by Alessandro Rubini.
  *
- * User definable mapping table and font loading by Eugene G. Crosser,
- * <crosser@pccross.msk.su>
- *
  * Code to check for different video-cards mostly by Galen Hunt,
  * <g-hunt@ee.utah.edu>
  *
@@ -71,17 +57,9 @@
  * Code for xterm like mouse click reporting by Peter Orbaek 20-Jul-94
  * <poe@daimi.aau.dk>
  *
- * Improved loadable font/UTF-8 support by H. Peter Anvin 
- * Feb-Sep 1995 <peter.anvin@linux.org>
- *
- * improved scrollback, plus colour palette handling, by Simon Tatham
- * 17-Jun-95 <sgt20@cam.ac.uk>
- *
  */
 
 #define BLANK 0x0020
-#define CAN_LOAD_EGA_FONTS    /* undefine if the user must not do this */
-#define CAN_LOAD_PALETTE      /* undefine if the user must not do this */
 
 /* A bitmap for codes <32. A bit of 1 indicates that the code
  * corresponding to that bit number invokes some special action
@@ -122,7 +100,7 @@
 #include "vt_kern.h"
 #include "consolemap.h"
 #include "selection.h"
-
+#include "console_struct.h"
 
 #ifndef MIN
 #define MIN(a,b)	((a) < (b) ? (a) : (b))
@@ -134,20 +112,19 @@ static struct tty_struct *console_table[MAX_NR_CONSOLES];
 static struct termios *console_termios[MAX_NR_CONSOLES];
 static struct termios *console_termios_locked[MAX_NR_CONSOLES];
 
-#define NPAR 16
-
 static void con_setsize(unsigned long rows, unsigned long cols);
 static void vc_init(unsigned int console, unsigned long rows,
 		    unsigned long cols, int do_clear);
-static void get_scrmem(int currcons);
-static void set_scrmem(int currcons, long offset);
+extern void get_scrmem(int currcons);
+extern void set_scrmem(int currcons, long offset);
 static void set_origin(int currcons);
 static void blank_screen(void);
 static void unblank_screen(void);
-void poke_blanked_console(void);
+extern void poke_blanked_console(void);
 static void gotoxy(int currcons, int new_x, int new_y);
 static void save_cur(int currcons);
-static inline void set_cursor(int currcons);
+extern void set_cursor(int currcons);
+extern void hide_cursor(void);
 static void reset_terminal(int currcons, int do_clear);
 extern void reset_vc(unsigned int new_console);
 extern void vt_init(void);
@@ -157,11 +134,15 @@ extern void vesa_unblank(void);
 extern void compute_shiftstate(void);
 extern void reset_palette(int currcons);
 extern void set_palette(void);
+extern unsigned long con_type_init(unsigned long, char *);
+extern int set_get_cmap(unsigned char *, int);
+extern int set_get_font(unsigned char *, int, int);
 
 /* Description of the hardware situation */
-static unsigned char	video_type;		/* Type of display being used	*/
-static unsigned long	video_mem_base;		/* Base of video memory		*/
-static unsigned long	video_mem_term;		/* End of video memory		*/
+/* used in vga.c/tga.c/etc.c... :-) */
+       unsigned char	video_type;		/* Type of display being used	*/
+       unsigned long	video_mem_base;		/* Base of video memory		*/
+       unsigned long	video_mem_term;		/* End of video memory		*/
 static unsigned char	video_page;		/* Initial video page (unused)  */
        /* these two also used in vesa_blank.c */
        unsigned short	video_port_reg;		/* Video register select port	*/
@@ -170,172 +151,140 @@ static unsigned char	video_page;		/* Initial video page (unused)  */
        unsigned long	video_num_columns;	/* Number of text columns	*/
        unsigned long	video_num_lines;	/* Number of text lines		*/
        unsigned long	video_size_row;
-static unsigned long	video_screen_size;
-static int can_do_color = 0;
+       unsigned long	video_screen_size;
+       int can_do_color = 0;
 static int printable = 0;			/* Is console ready for printing? */
 	/* these also used in in vt.c */
        int		video_mode_512ch = 0;	/* 512-character mode */
        unsigned long	video_font_height;	/* Height of current screen font */
        unsigned long	video_scan_lines;	/* Number of scan lines on screen */
        unsigned long    default_font_height;    /* Height of default screen font */
-static int              video_font_is_default = 1;
+       int		video_font_is_default = 1;
 static unsigned short console_charmask = 0x0ff;
 
-static unsigned short *vc_scrbuf[MAX_NR_CONSOLES];
+       unsigned short *vc_scrbuf[MAX_NR_CONSOLES];
 
-static int console_blanked = 0;
+       int console_blanked = 0;
 static int blankinterval = 10*60*HZ;
 static long blank_origin, blank__origin, unblank_origin;
 
+struct vc vc_cons [MAX_NR_CONSOLES];
 
-struct vc_data {
-	unsigned long	vc_screenbuf_size;
-	unsigned short	vc_video_erase_char;	/* Background erase character */
-	unsigned char	vc_attr;		/* Current attributes */
-	unsigned char	vc_def_color;		/* Default colors */
-	unsigned char	vc_color;		/* Foreground & background */
-	unsigned char	vc_s_color;		/* Saved foreground & background */
-	unsigned char	vc_ulcolor;		/* Colour for underline mode */
-	unsigned char	vc_halfcolor;		/* Colour for half intensity mode */
-	unsigned long	vc_origin;		/* Used for EGA/VGA fast scroll	*/
-	unsigned long	vc_scr_end;		/* Used for EGA/VGA fast scroll	*/
-	unsigned long	vc_pos;
-	unsigned long	vc_x,vc_y;
-	unsigned long	vc_top,vc_bottom;
-	unsigned long	vc_state;
-	unsigned long	vc_npar,vc_par[NPAR];
-	unsigned long	vc_video_mem_start;	/* Start of video RAM		*/
-	unsigned long	vc_video_mem_end;	/* End of video RAM (sort of)	*/
-	unsigned long	vc_saved_x;
-	unsigned long	vc_saved_y;
-	/* mode flags */
-	unsigned long	vc_charset	: 1;	/* Character set G0 / G1 */
-	unsigned long	vc_s_charset	: 1;	/* Saved character set */
-	unsigned long	vc_disp_ctrl	: 1;	/* Display chars < 32? */
-	unsigned long	vc_toggle_meta	: 1;	/* Toggle high bit? */
-	unsigned long	vc_decscnm	: 1;	/* Screen Mode */
-	unsigned long	vc_decom	: 1;	/* Origin Mode */
-	unsigned long	vc_decawm	: 1;	/* Autowrap Mode */
-	unsigned long	vc_deccm	: 1;	/* Cursor Visible */
-	unsigned long	vc_decim	: 1;	/* Insert Mode */
-	unsigned long	vc_deccolm	: 1;	/* 80/132 Column Mode */
-	/* attribute flags */
-	unsigned long	vc_intensity	: 2;	/* 0=half-bright, 1=normal, 2=bold */
-	unsigned long	vc_underline	: 1;
-	unsigned long	vc_blink	: 1;
-	unsigned long	vc_reverse	: 1;
-	unsigned long	vc_s_intensity	: 2;	/* saved rendition */
-	unsigned long	vc_s_underline	: 1;
-	unsigned long	vc_s_blink	: 1;
-	unsigned long	vc_s_reverse	: 1;
-	/* misc */
-	unsigned long	vc_ques		: 1;
-	unsigned long	vc_need_wrap	: 1;
-	unsigned long	vc_has_scrolled : 1;	/* Info for unblank_screen */
-	unsigned long	vc_kmalloced	: 1;	/* kfree_s() needed */
-	unsigned long	vc_report_mouse : 2;
-	unsigned char	vc_utf		: 1;	/* Unicode UTF-8 encoding */
-	unsigned char	vc_utf_count;
-		 long	vc_utf_char;
-	unsigned long	vc_tab_stop[5];		/* Tab stops. 160 columns. */
-	unsigned char   vc_palette[16*3];       /* Colour palette for VGA+ */
-	unsigned short * vc_translate;
-	unsigned char 	vc_G0_charset;
-	unsigned char 	vc_G1_charset;
-	unsigned char 	vc_saved_G0;
-	unsigned char 	vc_saved_G1;
-	/* additional information is in vt_kern.h */
-};
 
-static struct vc {
-	struct vc_data *d;
+#ifdef CONFIG_SERIAL_ECHO
 
-	/* might add  scrmem, vt_struct, kbd  at some time,
-	   to have everything in one place - the disadvantage
-	   would be that vc_cons etc can no longer be static */
-} vc_cons [MAX_NR_CONSOLES];
+#include <linux/serial_reg.h>
 
-#define screenbuf_size	(vc_cons[currcons].d->vc_screenbuf_size)
-#define origin		(vc_cons[currcons].d->vc_origin)
-#define scr_end		(vc_cons[currcons].d->vc_scr_end)
-#define pos		(vc_cons[currcons].d->vc_pos)
-#define top		(vc_cons[currcons].d->vc_top)
-#define bottom		(vc_cons[currcons].d->vc_bottom)
-#define x		(vc_cons[currcons].d->vc_x)
-#define y		(vc_cons[currcons].d->vc_y)
-#define vc_state	(vc_cons[currcons].d->vc_state)
-#define npar		(vc_cons[currcons].d->vc_npar)
-#define par		(vc_cons[currcons].d->vc_par)
-#define ques		(vc_cons[currcons].d->vc_ques)
-#define attr		(vc_cons[currcons].d->vc_attr)
-#define saved_x		(vc_cons[currcons].d->vc_saved_x)
-#define saved_y		(vc_cons[currcons].d->vc_saved_y)
-#define translate	(vc_cons[currcons].d->vc_translate)
-#define G0_charset	(vc_cons[currcons].d->vc_G0_charset)
-#define G1_charset	(vc_cons[currcons].d->vc_G1_charset)
-#define saved_G0	(vc_cons[currcons].d->vc_saved_G0)
-#define saved_G1	(vc_cons[currcons].d->vc_saved_G1)
-#define utf		(vc_cons[currcons].d->vc_utf)
-#define utf_count	(vc_cons[currcons].d->vc_utf_count)
-#define utf_char	(vc_cons[currcons].d->vc_utf_char)
-#define video_mem_start	(vc_cons[currcons].d->vc_video_mem_start)
-#define video_mem_end	(vc_cons[currcons].d->vc_video_mem_end)
-#define video_erase_char (vc_cons[currcons].d->vc_video_erase_char)
-#define disp_ctrl	(vc_cons[currcons].d->vc_disp_ctrl)
-#define toggle_meta	(vc_cons[currcons].d->vc_toggle_meta)
-#define decscnm		(vc_cons[currcons].d->vc_decscnm)
-#define decom		(vc_cons[currcons].d->vc_decom)
-#define decawm		(vc_cons[currcons].d->vc_decawm)
-#define deccm		(vc_cons[currcons].d->vc_deccm)
-#define decim		(vc_cons[currcons].d->vc_decim)
-#define deccolm	 	(vc_cons[currcons].d->vc_deccolm)
-#define need_wrap	(vc_cons[currcons].d->vc_need_wrap)
-#define has_scrolled	(vc_cons[currcons].d->vc_has_scrolled)
-#define kmalloced	(vc_cons[currcons].d->vc_kmalloced)
-#define report_mouse	(vc_cons[currcons].d->vc_report_mouse)
-#define color		(vc_cons[currcons].d->vc_color)
-#define s_color		(vc_cons[currcons].d->vc_s_color)
-#define def_color	(vc_cons[currcons].d->vc_def_color)
-#define	foreground	(color & 0x0f)
-#define background	(color & 0xf0)
-#define charset		(vc_cons[currcons].d->vc_charset)
-#define s_charset	(vc_cons[currcons].d->vc_s_charset)
-#define	intensity	(vc_cons[currcons].d->vc_intensity)
-#define	underline	(vc_cons[currcons].d->vc_underline)
-#define	blink		(vc_cons[currcons].d->vc_blink)
-#define	reverse		(vc_cons[currcons].d->vc_reverse)
-#define	s_intensity	(vc_cons[currcons].d->vc_s_intensity)
-#define	s_underline	(vc_cons[currcons].d->vc_s_underline)
-#define	s_blink		(vc_cons[currcons].d->vc_s_blink)
-#define	s_reverse	(vc_cons[currcons].d->vc_s_reverse)
-#define	ulcolor		(vc_cons[currcons].d->vc_ulcolor)
-#define	halfcolor	(vc_cons[currcons].d->vc_halfcolor)
-#define tab_stop	(vc_cons[currcons].d->vc_tab_stop)
-#define palette		(vc_cons[currcons].d->vc_palette)
+extern int serial_echo_init (int base);
+extern int serial_echo_print (const char *s);
 
-#define vcmode		(vt_cons[currcons]->vc_mode)
-#define structsize	(sizeof(struct vc_data) + sizeof(struct vt_struct))
+/*
+ * this defines the address for the port to which printk echoing is done
+ *  when CONFIG_SERIAL_ECHO is defined
+ */
+#define SERIAL_ECHO_PORT	0x3f8	/* COM1 */
 
-static void memsetw(void * s, unsigned short c, unsigned int count)
+static int serial_echo_port = 0;
+
+#define serial_echo_outb(v,a) outb((v),(a)+serial_echo_port)
+#define serial_echo_inb(a)    inb((a)+serial_echo_port)
+
+#define BOTH_EMPTY (UART_LSR_TEMT | UART_LSR_THRE)
+
+/* Wait for transmitter & holding register to empty */
+#define WAIT_FOR_XMITR \
+ do { \
+       lsr = serial_echo_inb(UART_LSR); \
+ } while ((lsr & BOTH_EMPTY) != BOTH_EMPTY)
+
+/* These two functions abstract the actual communications with the
+ * debug port.	This is so we can change the underlying communications
+ * mechanism without modifying the rest of the code.
+ */
+int
+serial_echo_print(const char *s)
 {
-	unsigned short * addr = (unsigned short *) s;
+	int     lsr, ier;
+	int     i;
 
-	count /= 2;
-	while (count) {
-		count--;
-		scr_writew(c, addr++);
+	if (!serial_echo_port) return (0);
+
+	/*
+	 * First save the IER then disable the interrupts
+	 */
+	ier = serial_echo_inb(UART_IER);
+	serial_echo_outb(0x00, UART_IER);
+
+	/*
+	 * Now, do each character
+	 */
+	for (i = 0; *s; i++, s++) {
+		WAIT_FOR_XMITR;
+
+		/* Send the character out. */
+		serial_echo_outb(*s, UART_TX);
+
+		/* if a LF, also do CR... */
+		if (*s == 10) {
+			WAIT_FOR_XMITR;
+			serial_echo_outb(13, UART_TX);
+		}
 	}
+
+	/*
+	 * Finally, Wait for transmitter & holding register to empty
+	 *  and restore the IER
+	 */
+	do {
+		lsr = serial_echo_inb(UART_LSR);
+	} while ((lsr & BOTH_EMPTY) != BOTH_EMPTY);
+	serial_echo_outb(ier, UART_IER);
+
+	return (0);
 }
 
-static inline void memcpyw(unsigned short *to, unsigned short *from,
-			   unsigned int count)
+
+int
+serial_echo_init(int base)
 {
-	count /= 2;
-	while (count) {
-		count--;
-		scr_writew(scr_readw(from++), to++);
-	}
+	int comstat, hi, lo;
+	
+	if (base != 0x2f8 && base != 0x3f8) {
+		serial_echo_port = 0;
+		return (0);
+	} else
+	  serial_echo_port = base;
+
+	/*
+	 * read the Divisor Latch
+	 */
+	comstat = serial_echo_inb(UART_LCR);
+	serial_echo_outb(comstat | UART_LCR_DLAB, UART_LCR);
+	hi = serial_echo_inb(UART_DLM);
+	lo = serial_echo_inb(UART_DLL);
+	serial_echo_outb(comstat, UART_LCR);
+
+	/*
+	 * now do hardwired init
+	 */
+	serial_echo_outb(0x03, UART_LCR); /* No parity, 8 data bits, 1 stop */
+	serial_echo_outb(0x83, UART_LCR); /* Access divisor latch */
+	serial_echo_outb(0x00, UART_DLM); /* 9600 baud */
+	serial_echo_outb(0x0c, UART_DLL);
+	serial_echo_outb(0x03, UART_LCR); /* Done with divisor */
+
+	/* Prior to disabling interrupts, read the LSR and RBR
+	 * registers
+	 */
+	comstat = serial_echo_inb(UART_LSR); /* COM? LSR */
+	comstat = serial_echo_inb(UART_RX);	/* COM? RBR */
+	serial_echo_outb(0x00, UART_IER); /* Disable all interrupts */
+
+	return(0);
 }
+
+#endif /* CONFIG_SERIAL_ECHO */
+
 
 int vc_cons_allocated(unsigned int i)
 {
@@ -503,15 +452,15 @@ void vc_disallocate(unsigned int currcons)
 #define VT100ID "\033[?1;2c"
 #define VT102ID "\033[?6c"
 
-static unsigned char color_table[] = { 0, 4, 2, 6, 1, 5, 3, 7,
+unsigned char color_table[] = { 0, 4, 2, 6, 1, 5, 3, 7,
 				       8,12,10,14, 9,13,11,15 };
 
 /* the default colour table, for VGA+ colour systems */
-static int default_red[] = {0x00,0xaa,0x00,0xaa,0x00,0xaa,0x00,0xaa,
+int default_red[] = {0x00,0xaa,0x00,0xaa,0x00,0xaa,0x00,0xaa,
     0x55,0xff,0x55,0xff,0x55,0xff,0x55,0xff};
-static int default_grn[] = {0x00,0x00,0xaa,0x55,0x00,0x00,0xaa,0xaa,
+int default_grn[] = {0x00,0x00,0xaa,0x55,0x00,0x00,0xaa,0xaa,
     0x55,0x55,0xff,0xff,0x55,0x55,0xff,0xff};
-static int default_blu[] = {0x00,0x00,0x00,0x00,0xaa,0xaa,0xaa,0xaa,
+int default_blu[] = {0x00,0x00,0x00,0x00,0xaa,0xaa,0xaa,0xaa,
     0x55,0x55,0x55,0x55,0xff,0xff,0xff,0xff};
 
 /*
@@ -549,27 +498,13 @@ static void gotoxy(int currcons, int new_x, int new_y)
 /*
  * Hardware scrollback support
  */
-static unsigned short __real_origin;
-static unsigned short __origin;	   /* offset of currently displayed screen */
+unsigned short __real_origin;
+unsigned short __origin;	   /* offset of currently displayed screen */
 #define last_lpos (((video_mem_term-video_mem_base)/video_num_columns/2)-video_num_lines+1)
 #define last_origin_rel ( last_lpos * video_num_columns )
 #define last_origin ( video_mem_base + last_origin_rel * 2 )
-static unsigned short __scrollback_mode;   /* 1 means scrollback can wrap */
-
-static inline void __set_origin(unsigned short offset)
-{
-	unsigned long flags;
-
-	clear_selection();
-
-	save_flags(flags); cli();
-	__origin = offset;
-	outb_p(12, video_port_reg);
-	outb_p(offset >> 8, video_port_val);
-	outb_p(13, video_port_reg);
-	outb_p(offset, video_port_val);
-	restore_flags(flags);
-}
+unsigned short __scrollback_mode;   /* 1 means scrollback can wrap */
+extern void __set_origin(unsigned short);
 
 void scrollback(int lines)
 {
@@ -633,40 +568,7 @@ static void set_origin(int currcons)
 	__set_origin(__real_origin);
 }
 
-/*
- * Put the cursor just beyond the end of the display adaptor memory.
- */
-static inline void hide_cursor(void)
-{
-  /* This is inefficient, we could just put the cursor at 0xffff,
-     but perhaps the delays due to the inefficiency are useful for
-     some hardware... */
-	outb_p(14, video_port_reg);
-	outb_p(0xff&((video_mem_term-video_mem_base)>>9), video_port_val);
-	outb_p(15, video_port_reg);
-	outb_p(0xff&((video_mem_term-video_mem_base)>>1), video_port_val);
-}
-
-static inline void set_cursor(int currcons)
-{
-	unsigned long flags;
-
-	if (currcons != fg_console || console_blanked || vcmode == KD_GRAPHICS)
-		return;
-	if (__real_origin != __origin)
-		__set_origin(__real_origin);
-	save_flags(flags); cli();
-	if (deccm) {
-		outb_p(14, video_port_reg);
-		outb_p(0xff&((pos-video_mem_base)>>9), video_port_val);
-		outb_p(15, video_port_reg);
-		outb_p(0xff&((pos-video_mem_base)>>1), video_port_val);
-	} else
-		hide_cursor();
-	restore_flags(flags);
-}
-
-static void scrup(int currcons, unsigned int t, unsigned int b)
+void scrup(int currcons, unsigned int t, unsigned int b)
 {
 	int hardscroll = 1;
 
@@ -733,7 +635,8 @@ static void scrup(int currcons, unsigned int t, unsigned int b)
 	}
 }
 
-static void scrdown(int currcons, unsigned int t, unsigned int b)
+void
+scrdown(int currcons, unsigned int t, unsigned int b)
 {
 	unsigned short *d, *s;
 	unsigned int count;
@@ -1919,6 +1822,10 @@ void console_print(const char * b)
 		return;
 	}
 
+#ifdef CONFIG_SERIAL_ECHO
+        serial_echo_print(b);
+#endif /* CONFIG_SERIAL_ECHO */
+
 	while ((c = *(b++)) != 0) {
 		if (c == 10 || c == 13 || need_wrap) {
 			if (c != 13)
@@ -2002,7 +1909,7 @@ static void con_setsize(unsigned long rows, unsigned long cols)
  */
 unsigned long con_init(unsigned long kmem_start)
 {
-	const char *display_desc = "????";
+	char display_desc[5] = "????";
 	int currcons = 0;
 	int orig_x = ORIG_X;
 	int orig_y = ORIG_Y;
@@ -2039,6 +1946,7 @@ unsigned long con_init(unsigned long kmem_start)
 	video_page = ORIG_VIDEO_PAGE; 			/* never used */
 	__scrollback_mode = 0 ;
 
+
 	timer_table[BLANK_TIMER].fn = blank_screen;
 	timer_table[BLANK_TIMER].expires = 0;
 	if (blankinterval) {
@@ -2046,90 +1954,7 @@ unsigned long con_init(unsigned long kmem_start)
 		timer_active |= 1<<BLANK_TIMER;
 	}
 
-	if (ORIG_VIDEO_MODE == 7)	/* Is this a monochrome display? */
-	{
-		video_mem_base = 0xb0000;
-		video_port_reg = 0x3b4;
-		video_port_val = 0x3b5;
-		if ((ORIG_VIDEO_EGA_BX & 0xff) != 0x10)
-		{
-			video_type = VIDEO_TYPE_EGAM;
-			video_mem_term = 0xb8000;
-			display_desc = "EGA+";
-			request_region(0x3b0,16,"ega");
-		}
-		else
-		{
-			video_type = VIDEO_TYPE_MDA;
-			video_mem_term = 0xb2000;
-			display_desc = "*MDA";
-			request_region(0x3b0,12,"mda");
-			request_region(0x3bf, 1,"mda");
-		}
-	}
-	else				/* If not, it is color. */
-	{
-		can_do_color = 1;
-		video_mem_base = 0xb8000;
-		video_port_reg	= 0x3d4;
-		video_port_val	= 0x3d5;
-		if ((ORIG_VIDEO_EGA_BX & 0xff) != 0x10)
-		{
-			int i ;
-
-			video_mem_term = 0xc0000;
-
-			if (!ORIG_VIDEO_ISVGA) {
-				video_type = VIDEO_TYPE_EGAC;
-				display_desc = "EGA";
-				request_region(0x3c0,32,"ega");
-			} else {
-				video_type = VIDEO_TYPE_VGAC;
-				display_desc = "VGA+";
-				request_region(0x3c0,32,"vga+");
-
-#ifdef VGA_CAN_DO_64KB
-				/*
-				 * get 64K rather than 32K of video RAM.
-				 * This doesn't actually work on all "VGA"
-				 * controllers (it seems like setting MM=01
-				 * and COE=1 isn't necessarily a good idea)
-				 */
-				video_mem_base = 0xa0000 ;
-				video_mem_term = 0xb0000 ;
-				outb_p (6, 0x3ce) ;
-				outb_p (6, 0x3cf) ;
-#endif
-
-				/* normalise the palette registers, to point the
-				 * 16 screen colours to the first 16 DAC entries */
-
-				for (i=0; i<16; i++) {
-					inb_p (0x3da) ;
-					outb_p (i, 0x3c0) ;
-					outb_p (i, 0x3c0) ;
-				}
-				outb_p (0x20, 0x3c0) ;
-
-				/* now set the DAC registers back to their default
-				 * values */
-
-				for (i=0; i<16; i++) {
-					outb_p (color_table[i], 0x3c8) ;
-					outb_p (default_red[i], 0x3c9) ;
-					outb_p (default_grn[i], 0x3c9) ;
-					outb_p (default_blu[i], 0x3c9) ;
-				}
-			}
-		}
-		else
-		{
-			video_type = VIDEO_TYPE_CGA;
-			video_mem_term = 0xba000;
-			display_desc = "*CGA";
-			request_region(0x3d4,2,"cga");
-		}
-	}
+	kmem_start = con_type_init(kmem_start, display_desc);
 
 	/* Initialize the variables used for scrolling (mostly EGA/VGA)	*/
 
@@ -2170,11 +1995,15 @@ unsigned long con_init(unsigned long kmem_start)
 
 	printable = 1;
 	if ( video_type == VIDEO_TYPE_VGAC || video_type == VIDEO_TYPE_EGAC
-	    || video_type == VIDEO_TYPE_EGAM )
+	    || video_type == VIDEO_TYPE_EGAM || video_type == VIDEO_TYPE_TGAC )
 	{
 		default_font_height = video_font_height = ORIG_VIDEO_POINTS;
 		/* This may be suboptimal but is a safe bet - go with it */
 		video_scan_lines = video_font_height * video_num_lines;
+
+#ifdef CONFIG_SERIAL_ECHO
+		serial_echo_init(SERIAL_ECHO_PORT);
+#endif /* CONFIG_SERIAL_ECHO */
 
 		printk("Console: %ld point font, %ld scans\n",
 		       video_font_height, video_scan_lines);
@@ -2182,65 +2011,20 @@ unsigned long con_init(unsigned long kmem_start)
 
 	printk("Console: %s %s %ldx%ld, %d virtual console%s (max %d)\n",
 		can_do_color ? "colour" : "mono",
-		display_desc,
-		video_num_columns,video_num_lines,
-		MIN_NR_CONSOLES, (MIN_NR_CONSOLES == 1) ? "" : "s", MAX_NR_CONSOLES);
-	register_console(console_print);
+		display_desc, video_num_columns, video_num_lines,
+		MIN_NR_CONSOLES, (MIN_NR_CONSOLES == 1) ? "" : "s",
+	        MAX_NR_CONSOLES);
+
+	/*
+	 * can't register TGA yet, because PCI bus probe has *not* taken
+	 * place before con_init() gets called. Trigger the real TGA hw
+	 * initialization and register_console() event from
+	 * within the bus probing code... :-(
+	 */
+	if (video_type != VIDEO_TYPE_TGAC)
+		register_console(console_print);
+
 	return kmem_start;
-}
-
-static void get_scrmem(int currcons)
-{
-	memcpyw((unsigned short *)vc_scrbuf[currcons],
-		(unsigned short *)origin, video_screen_size);
-	__scrollback_mode = 0 ;
-	origin = video_mem_start = (unsigned long)vc_scrbuf[currcons];
-	scr_end = video_mem_end = video_mem_start + video_screen_size;
-	pos = origin + y*video_size_row + (x<<1);
-}
-
-static void set_scrmem(int currcons, long offset)
-{
-#ifdef CONFIG_HGA
-  /* This works with XFree86 1.2, 1.3 and 2.0
-     This code could be extended and made more generally useful if we could
-     determine the actual video mode. It appears that this should be
-     possible on a genuine Hercules card, but I (WM) haven't been able to
-     read from any of the required registers on my clone card.
-     */
-	/* This code should work with Hercules and MDA cards. */
-	if (video_type == VIDEO_TYPE_MDA)
-	  {
-	    if (vcmode == KD_TEXT)
-	      {
-		/* Ensure that the card is in text mode. */
-		int	i;
-		static char herc_txt_tbl[12] = {
-		  0x61,0x50,0x52,0x0f,0x19,6,0x19,0x19,2,0x0d,0x0b,0x0c };
-		outb_p(0, 0x3bf);  /* Back to power-on defaults */
-		outb_p(0, 0x3b8);  /* Blank the screen, select page 0, etc */
-		for ( i = 0 ; i < 12 ; i++ )
-		  {
-		    outb_p(i, 0x3b4);
-		    outb_p(herc_txt_tbl[i], 0x3b5);
-		  }
-	      }
-#define HGA_BLINKER_ON 0x20
-#define HGA_SCREEN_ON  8
-	    /* Make sure that the hardware is not blanked */
-	    outb_p(HGA_BLINKER_ON | HGA_SCREEN_ON, 0x3b8);
-	  }
-#endif CONFIG_HGA
-
-	if (video_mem_term - video_mem_base < offset + video_screen_size)
-	  offset = 0;	/* strange ... */
-	memcpyw((unsigned short *)(video_mem_base + offset),
-		(unsigned short *) origin, video_screen_size);
-	video_mem_start = video_mem_base;
-	video_mem_end = video_mem_term;
-	origin = video_mem_base + offset;
-	scr_end = origin + video_screen_size;
-	pos = origin + y*video_size_row + (x<<1);
 }
 
 void do_blank_screen(int nopowersave)
@@ -2379,222 +2163,6 @@ int con_open(struct tty_struct *tty, struct file * filp)
 
 
 /*
- * PIO_FONT support.
- *
- * The font loading code goes back to the codepage package by
- * Joel Hoffman (joel@wam.umd.edu). (He reports that the original
- * reference is: "From: p. 307 of _Programmer's Guide to PC & PS/2
- * Video Systems_ by Richard Wilton. 1987.  Microsoft Press".)
- *
- * Change for certain monochrome monitors by Yury Shevchuck
- * (sizif@botik.yaroslavl.su).
- */
-
-#define colourmap ((char *)0xa0000)
-/* Pauline Middelink <middelin@polyware.iaf.nl> reports that we
-   should use 0xA0000 for the bwmap as well.. */
-#define blackwmap ((char *)0xa0000)
-#define cmapsz 8192
-#define attrib_port (0x3c0)
-#define seq_port_reg (0x3c4)
-#define seq_port_val (0x3c5)
-#define gr_port_reg (0x3ce)
-#define gr_port_val (0x3cf)
-
-static int set_get_font(char * arg, int set, int ch512)
-{
-#ifdef CAN_LOAD_EGA_FONTS
-	int i;
-	char *charmap;
-	int beg;
-	unsigned short video_port_status = video_port_reg + 6;
-	int font_select = 0x00;
-
-	/* no use to "load" CGA... */
-
-	if (video_type == VIDEO_TYPE_EGAC || video_type == VIDEO_TYPE_VGAC) {
-		charmap = colourmap;
-		beg = 0x0e;
-#ifdef VGA_CAN_DO_64KB
-		if (video_type == VIDEO_TYPE_VGAC)
-			beg = 0x06;
-#endif
-	} else if (video_type == VIDEO_TYPE_EGAM) {
-		charmap = blackwmap;
-		beg = 0x0a;
-	} else
-		return -EINVAL;
-	
-	if (arg)
-	  {
-	    i = verify_area(set ? VERIFY_READ : VERIFY_WRITE, (void *)arg,
-			    ch512 ? 2*cmapsz : cmapsz);
-	    if (i)
-	      return i;
-	  }
-	else
-	  ch512 = 0;		/* Default font is always 256 */
-
-#ifdef BROKEN_GRAPHICS_PROGRAMS
-	/*
-	 * All fonts are loaded in slot 0 (0:1 for 512 ch)
-	 */
-
-	if (!arg)
-	  return -EINVAL;	/* Return to default font not supported */
-
-	video_font_is_default = 0;
-	font_select = ch512 ? 0x04 : 0x00;
-#else	
-	/*
-	 * The default font is kept in slot 0 and is never touched.
-	 * A custom font is loaded in slot 2 (256 ch) or 2:3 (512 ch)
-	 */
-
-	if (set)
-	  {
-	    video_font_is_default = !arg;
-	    font_select = arg ? (ch512 ? 0x0e : 0x0a) : 0x00;
-	  }
-
-	if ( !video_font_is_default )
-	  charmap += 4*cmapsz;
-#endif
-
-	cli();
-	outb_p( 0x00, seq_port_reg );   /* First, the sequencer */
-	outb_p( 0x01, seq_port_val );   /* Synchronous reset */
-	outb_p( 0x02, seq_port_reg );
-	outb_p( 0x04, seq_port_val );   /* CPU writes only to map 2 */
-	outb_p( 0x04, seq_port_reg );
-	outb_p( 0x07, seq_port_val );   /* Sequential addressing */
-	outb_p( 0x00, seq_port_reg );
-	outb_p( 0x03, seq_port_val );   /* Clear synchronous reset */
-
-	outb_p( 0x04, gr_port_reg );    /* Now, the graphics controller */
-	outb_p( 0x02, gr_port_val );    /* select map 2 */
-	outb_p( 0x05, gr_port_reg );
-	outb_p( 0x00, gr_port_val );    /* disable odd-even addressing */
-	outb_p( 0x06, gr_port_reg );
-	outb_p( 0x00, gr_port_val );    /* map start at A000:0000 */
-	sti();
-	
-	if (arg)
-	  {
-	    if (set)
-	      for (i=0; i<cmapsz ; i++)
-		scr_writeb(get_user(arg + i), charmap + i);
-	    else
-	      for (i=0; i<cmapsz ; i++)
-		put_user(scr_readb(charmap + i), arg + i);
-	    
-	    
-	/*
-	 * In 512-character mode, the character map is not contiguous if
-	 * we want to remain EGA compatible -- which we do
-	 */
-
-	    if (ch512)
-	      {
-		charmap += 2*cmapsz;
-		arg += cmapsz;
-		if (set)
-		  for (i=0; i<cmapsz ; i++)
-		    *(charmap+i) = get_user(arg+i);
-		else
-		  for (i=0; i<cmapsz ; i++)
-		    put_user(*(charmap+i), arg+i);
-	      }
-	  }
-	
-	cli();
-	outb_p( 0x00, seq_port_reg );   /* First, the sequencer */
-	outb_p( 0x01, seq_port_val );   /* Synchronous reset */
-	outb_p( 0x02, seq_port_reg );
-	outb_p( 0x03, seq_port_val );   /* CPU writes to maps 0 and 1 */
-	outb_p( 0x04, seq_port_reg );
-	outb_p( 0x03, seq_port_val );   /* odd-even addressing */
-	if (set)
-	  {
-	    outb_p( 0x03, seq_port_reg ); /* Character Map Select */
-	    outb_p( font_select, seq_port_val );
-	  }
-	outb_p( 0x00, seq_port_reg );
-	outb_p( 0x03, seq_port_val );   /* clear synchronous reset */
-
-	outb_p( 0x04, gr_port_reg );    /* Now, the graphics controller */
-	outb_p( 0x00, gr_port_val );    /* select map 0 for CPU */
-	outb_p( 0x05, gr_port_reg );
-	outb_p( 0x10, gr_port_val );    /* enable even-odd addressing */
-	outb_p( 0x06, gr_port_reg );
-	outb_p( beg, gr_port_val );     /* map starts at b800:0 or b000:0 */
-	if (set)			/* attribute controller */
-	  {
-	    /* 256-char: enable intensity bit
-	       512-char: disable intensity bit */
-	    inb_p( video_port_status );	/* clear address flip-flop */
-	    outb_p ( 0x12, attrib_port ); /* color plane enable register */
-	    outb_p ( ch512 ? 0x07 : 0x0f, attrib_port );
-	    /* Wilton (1987) mentions the following; I don't know what
-	       it means, but it works, and it appears necessary */
-	    inb_p( video_port_status );
-	    outb_p ( 0x20, attrib_port );
-	  }
-	sti();
-
-	return 0;
-#else
-	return -EINVAL;
-#endif
-}
-
-#define dac_reg (0x3c8)
-#define dac_val (0x3c9)
-
-static int set_get_cmap(unsigned char * arg, int set) {
-#ifdef CAN_LOAD_PALETTE
-	int i;
-
-	/* no use to set colourmaps in less than colour VGA */
-
-	if (video_type != VIDEO_TYPE_VGAC)
-		return -EINVAL;
-
-	i = verify_area(set ? VERIFY_READ : VERIFY_WRITE, (void *)arg, 16*3);
-	if (i)
-		return i;
-
-	for (i=0; i<16; i++) {
-		if (set) {
-			default_red[i] = get_user(arg++) ;
-			default_grn[i] = get_user(arg++) ;
-			default_blu[i] = get_user(arg++) ;
-		} else {
-			put_user (default_red[i], arg++) ;
-			put_user (default_grn[i], arg++) ;
-			put_user (default_blu[i], arg++) ;
-		}
-	}
-	if (set) {
-		for (i=0; i<MAX_NR_CONSOLES; i++)
-			if (vc_cons_allocated(i)) {
-				int j, k ;
-				for (j=k=0; j<16; j++) {
-					vc_cons[i].d->vc_palette[k++] = default_red[j];
-					vc_cons[i].d->vc_palette[k++] = default_grn[j];
-					vc_cons[i].d->vc_palette[k++] = default_blu[j];
-				}
-			}
-		set_palette() ;
-	}
-
-	return 0;
-#else
-	return -EINVAL;
-#endif
-}
-
-/*
  * Load palette into the EGA/VGA DAC registers. arg points to a colour
  * map, 3 bytes per colour, 16 colours, range from 0 to 255.
  */
@@ -2620,22 +2188,6 @@ void reset_palette (int currcons)
 	set_palette() ;
 }
 
-void set_palette (void)
-{
-	int i, j ;
-
-	if (video_type != VIDEO_TYPE_VGAC || console_blanked ||
-	    vt_cons[fg_console]->vc_mode == KD_GRAPHICS)
-		return ;
-
-	for (i=j=0; i<16; i++) {
-		outb_p (color_table[i], dac_reg) ;
-		outb_p (vc_cons[fg_console].d->vc_palette[j++]>>2, dac_val) ;
-		outb_p (vc_cons[fg_console].d->vc_palette[j++]>>2, dac_val) ;
-		outb_p (vc_cons[fg_console].d->vc_palette[j++]>>2, dac_val) ;
-	}
-}
-
 /*
  * Load font into the EGA/VGA character generator. arg points to a 8192
  * byte map, 32 bytes per character. Only first H of them are used for
@@ -2658,80 +2210,4 @@ int con_set_font (char *arg, int ch512)
 int con_get_font (char *arg)
 {
 	return set_get_font (arg,0,video_mode_512ch);
-}
-
-/*
- * Adjust the screen to fit a font of a certain height
- *
- * Returns < 0 for error, 0 if nothing changed, and the number
- * of lines on the adjusted console if changed.
- */
-int con_adjust_height(unsigned long fontheight)
-{
-	int rows, maxscan;
-	unsigned char ovr, vde, fsr, curs, cure;
-
-	if (fontheight > 32 || (video_type != VIDEO_TYPE_VGAC &&
-	    video_type != VIDEO_TYPE_EGAC && video_type != VIDEO_TYPE_EGAM))
-		return -EINVAL;
-
-	if ( fontheight == video_font_height || fontheight == 0 )
-		return 0;
-
-	video_font_height = fontheight;
-
-	rows = video_scan_lines/fontheight;	/* Number of video rows we end up with */
-	maxscan = rows*fontheight - 1;		/* Scan lines to actually display-1 */
-
-	/* Reprogram the CRTC for the new font size
-	   Note: the attempt to read the overflow register will fail
-	   on an EGA, but using 0xff for the previous value appears to
-	   be OK for EGA text modes in the range 257-512 scan lines, so I
-	   guess we don't need to worry about it.
-
-	   The same applies for the spill bits in the font size and cursor
-	   registers; they are write-only on EGA, but it appears that they
-	   are all don't care bits on EGA, so I guess it doesn't matter. */
-
-	cli();
-	outb_p( 0x07, video_port_reg );		/* CRTC overflow register */
-	ovr = inb_p(video_port_val);
-	outb_p( 0x09, video_port_reg );		/* Font size register */
-	fsr = inb_p(video_port_val);
-	outb_p( 0x0a, video_port_reg );		/* Cursor start */
-	curs = inb_p(video_port_val);
-	outb_p( 0x0b, video_port_reg );		/* Cursor end */
-	cure = inb_p(video_port_val);
-	sti();
-
-	vde = maxscan & 0xff;			/* Vertical display end reg */
-	ovr = (ovr & 0xbd) +			/* Overflow register */
-	      ((maxscan & 0x100) >> 7) +
-	      ((maxscan & 0x200) >> 3);
-	fsr = (fsr & 0xe0) + (fontheight-1);    /*  Font size register */
-	curs = (curs & 0xc0) + fontheight - (fontheight < 10 ? 2 : 3);
-	cure = (cure & 0xe0) + fontheight - (fontheight < 10 ? 1 : 2);
-
-	cli();
-	outb_p( 0x07, video_port_reg );		/* CRTC overflow register */
-	outb_p( ovr, video_port_val );
-	outb_p( 0x09, video_port_reg );		/* Font size */
-	outb_p( fsr, video_port_val );
-	outb_p( 0x0a, video_port_reg );		/* Cursor start */
-	outb_p( curs, video_port_val );
-	outb_p( 0x0b, video_port_reg );		/* Cursor end */
-	outb_p( cure, video_port_val );
-	outb_p( 0x12, video_port_reg );		/* Vertical display limit */
-	outb_p( vde, video_port_val );
-	sti();
-
-	if ( rows == video_num_lines ) {
-	  /* Change didn't affect number of lines -- no need to scare
-	     the rest of the world */
-	  return 0;
-	}
-
-	vc_resize(rows, 0);			/* Adjust console size */
-
-	return rows;
 }

@@ -4,6 +4,10 @@
 #
 mainmenu_name "Kernel configuration of Linux for Alpha machines"
 
+# clear all implied options (don't want default values for those):
+unset CONFIG_CROSSCOMPILE CONFIG_NATIVE
+unset CONFIG_PCI CONFIG_ALPHA_LCA CONFIG_ALPHA_APECS
+
 mainmenu_option next_comment
 comment 'General setup'
 
@@ -28,7 +32,7 @@ then
 	define_bool CONFIG_PCI y
 	define_bool CONFIG_ALPHA_LCA y
 fi
-if [ "$CONFIG_ALPHA_CABRIOLET" = "y" \
+if [ "$CONFIG_ALPHA_CABRIOLET" = "y" -o "$CONFIG_ALPHA_AVANTI" = "y" \
 	-o "$CONFIG_ALPHA_EB64" = "y" -o "$CONFIG_ALPHA_EB64P" = "y" ]
 then
 	bool 'Using SRM as bootloader' CONFIG_ALPHA_SRM
@@ -36,8 +40,11 @@ then
 	define_bool CONFIG_ALPHA_APECS y
 fi
 
+bool 'Kernel GDB support' CONFIG_KGDB
+bool 'Echo console messages on /dev/ttyS1' CONFIG_SERIAL_ECHO
 if [ "$CONFIG_PCI" = "y" ]; then
-  bool '   PCI bridge optimisation (experimental)' CONFIG_PCI_OPTIMIZE
+  bool 'TGA Console Support' CONFIG_TGA_CONSOLE
+  bool 'PCI bridge optimisation (experimental)' CONFIG_PCI_OPTIMIZE
 fi
 bool 'Networking support' CONFIG_NET
 bool 'System V IPC' CONFIG_SYSVIPC

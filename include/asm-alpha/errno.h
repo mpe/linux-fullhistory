@@ -91,44 +91,47 @@
 #define	EILSEQ		116	/* Illegal byte sequence */
 
 /* The following are just random noise.. */
-#define	ECHRNG		44	/* Channel number out of range */
-#define	EL2NSYNC	45	/* Level 2 not synchronized */
-#define	EL3HLT		46	/* Level 3 halted */
-#define	EL3RST		47	/* Level 3 reset */
-#define	ELNRNG		48	/* Link number out of range */
-#define	EUNATCH		49	/* Protocol driver not attached */
-#define	ENOCSI		50	/* No CSI structure available */
-#define	EL2HLT		51	/* Level 2 halted */
-#define	EBADE		52	/* Invalid exchange */
-#define	EBADR		53	/* Invalid request descriptor */
-#define	EXFULL		54	/* Exchange full */
-#define	ENOANO		55	/* No anode */
-#define	EBADRQC		56	/* Invalid request code */
-#define	EBADSLT		57	/* Invalid slot */
-#define	EDEADLOCK	58	/* File locking deadlock error */
-#define	EBFONT		59	/* Bad font file format */
-#define	ENONET		64	/* Machine is not on the network */
-#define	ENOLINK		67	/* Link has been severed */
-#define	EADV		68	/* Advertise error */
-#define	ESRMNT		69	/* Srmount error */
-#define	ECOMM		70	/* Communication error on send */
-#define	EMULTIHOP	72	/* Multihop attempted */
-#define	EDOTDOT		73	/* RFS specific error */
-#define	EOVERFLOW	75	/* Value too large for defined data type */
-#define	ENOTUNIQ	76	/* Name not unique on network */
-#define	EBADFD		77	/* File descriptor in bad state */
-#define	EREMCHG		78	/* Remote address changed */
-#define	ELIBACC		79	/* Can not access a needed shared library */
-#define	ELIBBAD		80	/* Accessing a corrupted shared library */
-#define	ELIBSCN		81	/* .lib section in a.out corrupted */
-#define	ELIBMAX		82	/* Attempting to link in too many shared libraries */
-#define	ELIBEXEC	83	/* Cannot exec a shared library directly */
-#define	ERESTART	85	/* Interrupted system call should be restarted */
-#define	ESTRPIPE	86	/* Streams pipe error */
+#define	ECHRNG		88	/* Channel number out of range */
+#define	EL2NSYNC	89	/* Level 2 not synchronized */
+#define	EL3HLT		90	/* Level 3 halted */
+#define	EL3RST		91	/* Level 3 reset */
+
+#define	ELNRNG		93	/* Link number out of range */
+#define	EUNATCH		94	/* Protocol driver not attached */
+#define	ENOCSI		95	/* No CSI structure available */
+#define	EL2HLT		96	/* Level 2 halted */
+#define	EBADE		97	/* Invalid exchange */
+#define	EBADR		98	/* Invalid request descriptor */
+#define	EXFULL		99	/* Exchange full */
+#define	ENOANO		100	/* No anode */
+#define	EBADRQC		101	/* Invalid request code */
+#define	EBADSLT		102	/* Invalid slot */
+#define	EDEADLOCK	103	/* File locking deadlock error */
+#define	EBFONT		104	/* Bad font file format */
+#define	ENONET		105	/* Machine is not on the network */
+#define	ENOLINK		106	/* Link has been severed */
+#define	EADV		107	/* Advertise error */
+#define	ESRMNT		108	/* Srmount error */
+#define	ECOMM		109	/* Communication error on send */
+#define	EMULTIHOP	110	/* Multihop attempted */
+#define	EDOTDOT		111	/* RFS specific error */
+#define	EOVERFLOW	112	/* Value too large for defined data type */
+#define	ENOTUNIQ	113	/* Name not unique on network */
+#define	EBADFD		114	/* File descriptor in bad state */
+#define	EREMCHG		115	/* Remote address changed */
+
 #define	EUCLEAN		117	/* Structure needs cleaning */
 #define	ENOTNAM		118	/* Not a XENIX named type file */
 #define	ENAVAIL		119	/* No XENIX semaphores available */
 #define	EISNAM		120	/* Is a named type file */
 #define	EREMOTEIO	121	/* Remote I/O error */
+
+#define	ELIBACC		122	/* Can not access a needed shared library */
+#define	ELIBBAD		123	/* Accessing a corrupted shared library */
+#define	ELIBSCN		124	/* .lib section in a.out corrupted */
+#define	ELIBMAX		125	/* Attempting to link in too many shared libraries */
+#define	ELIBEXEC	126	/* Cannot exec a shared library directly */
+#define	ERESTART	127	/* Interrupted system call should be restarted */
+#define	ESTRPIPE	128	/* Streams pipe error */
 
 #endif

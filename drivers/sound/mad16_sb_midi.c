@@ -118,12 +118,12 @@ mad16_sb_reset_dsp (void)
   tenmicrosec ();
 
   for (loopc = 0; loopc < 1000 && !(inb (DSP_DATA_AVAIL) & 0x80); loopc++);	/*
-										 * Wait
-										 * for
-										 * data
-										 * *
-										 * available
-										 * status
+										   * Wait
+										   * for
+										   * data
+										   * *
+										   * available
+										   * status
 										 */
 
   if (inb (DSP_READ) != 0xAA)

@@ -82,10 +82,7 @@
  *
  */
 
-#ifdef MODULE
 #include <linux/module.h>
-#include <linux/version.h>
-#endif /* MODULE */
 
 #include <linux/kernel.h>
 #include <linux/sched.h>
@@ -104,6 +101,7 @@
 #include <linux/skbuff.h>
 
 #include <linux/types.h>
+#include <linux/config.h>	/* for CONFIG_PCI */
 
 #include "hp100.h"
 
@@ -1124,8 +1122,6 @@ down_link:
  */
  
 #ifdef MODULE
-
-char kernel_version[] = UTS_RELEASE;
 
 static int hp100_port = -1;
 

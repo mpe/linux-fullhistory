@@ -4,14 +4,7 @@
  *  Copyright (C) 1995 by Volker Lendecke
  *
  */
-#include <linux/config.h>
-#ifdef MODULE
 #include <linux/module.h>
-#include <linux/version.h>
-#else
-#define MOD_INC_USE_COUNT
-#define MOD_DEC_USE_COUNT
-#endif
 
 #include <asm/segment.h>
 #include <linux/errno.h>
