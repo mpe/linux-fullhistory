@@ -99,7 +99,7 @@ extern struct buffer_head * minix_bread(struct inode *, int, int);
 
 extern void minix_truncate(struct inode *);
 extern void minix_put_super(struct super_block *);
-extern struct super_block *minix_read_super(struct super_block *,void *);
+extern struct super_block *minix_read_super(struct super_block *,void *,int);
 extern void minix_read_inode(struct inode *);
 extern void minix_write_inode(struct inode *);
 extern void minix_put_inode(struct inode *);

@@ -184,7 +184,9 @@ signal_return:
 	pushl %ebx
 	testl $VM_MASK,EFLAGS(%ebx)
 	jne v86_signal_return
+	pushl blocked(%eax)
 	call _do_signal
+	popl %ebx
 	popl %ebx
 	RESTORE_ALL
 .align 4
@@ -192,7 +194,9 @@ v86_signal_return:
 	call _save_v86_state
 	movl %eax,%esp
 	pushl %eax
+	pushl blocked(%eax)
 	call _do_signal
+	popl %ebx
 	popl %ebx
 	RESTORE_ALL
 

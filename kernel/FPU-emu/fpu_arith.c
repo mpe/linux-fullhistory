@@ -1,9 +1,10 @@
 /*---------------------------------------------------------------------------+
  |  fpu_arith.c                                                              |
  |                                                                           |
- | Code to implement the FPU register/register arithmetis instructions       |
+ | Code to implement the FPU register/register arithmetic instructions       |
  |                                                                           |
- | Copyright (C) 1992    W. Metzenthen, 22 Parker St, Ormond, Vic 3163,      |
+ | Copyright (C) 1992,1993                                                   |
+ |                       W. Metzenthen, 22 Parker St, Ormond, Vic 3163,      |
  |                       Australia.  E-mail apm233m@vaxc.cc.monash.edu.au    |
  |                                                                           |
  |                                                                           |
@@ -11,12 +12,14 @@
 
 #include "fpu_system.h"
 #include "fpu_emu.h"
+#include "control_w.h"
 
 
 void fadd__()
 {
   /* fadd st,st(i) */
   reg_add(FPU_st0_ptr, &st(FPU_rm), FPU_st0_ptr);
+  PRECISION_ADJUST(FPU_st0_ptr);
 }
 
 
@@ -24,6 +27,7 @@ void fmul__()
 {
   /* fmul st,st(i) */
   reg_mul(FPU_st0_ptr, &st(FPU_rm), FPU_st0_ptr);
+  PRECISION_ADJUST(FPU_st0_ptr);
 }
 
 
@@ -32,6 +36,7 @@ void fsub__()
 {
   /* fsub st,st(i) */
   reg_sub(FPU_st0_ptr, &st(FPU_rm), FPU_st0_ptr);
+  PRECISION_ADJUST(FPU_st0_ptr);
 }
 
 
@@ -39,6 +44,7 @@ void fsubr_()
 {
   /* fsubr st,st(i) */
   reg_sub(&st(FPU_rm), FPU_st0_ptr, FPU_st0_ptr);
+  PRECISION_ADJUST(FPU_st0_ptr);
 }
 
 
@@ -46,6 +52,7 @@ void fdiv__()
 {
   /* fdiv st,st(i) */
   reg_div(FPU_st0_ptr, &st(FPU_rm), FPU_st0_ptr);
+  PRECISION_ADJUST(FPU_st0_ptr);
 }
 
 
@@ -53,6 +60,7 @@ void fdivr_()
 {
   /* fdivr st,st(i) */
   reg_div(&st(FPU_rm), FPU_st0_ptr, FPU_st0_ptr);
+  PRECISION_ADJUST(FPU_st0_ptr);
 }
 
 
@@ -61,6 +69,7 @@ void fadd_i()
 {
   /* fadd st(i),st */
   reg_add(FPU_st0_ptr, &st(FPU_rm), &st(FPU_rm));
+  PRECISION_ADJUST(&st(FPU_rm));
 }
 
 
@@ -68,6 +77,7 @@ void fmul_i()
 {
   /* fmul st(i),st */
   reg_mul(&st(FPU_rm), FPU_st0_ptr, &st(FPU_rm));
+  PRECISION_ADJUST(&st(FPU_rm));
 }
 
 
@@ -77,6 +87,7 @@ void fsubri()
   /* This is the sense of the 80486 manual
      reg_sub(&st(FPU_rm), FPU_st0_ptr, &st(FPU_rm)); */
   reg_sub(FPU_st0_ptr, &st(FPU_rm), &st(FPU_rm));
+  PRECISION_ADJUST(&st(FPU_rm));
 }
 
 
@@ -86,6 +97,7 @@ void fsub_i()
   /* This is the sense of the 80486 manual
      reg_sub(FPU_st0_ptr, &st(FPU_rm), &st(FPU_rm)); */
   reg_sub(&st(FPU_rm), FPU_st0_ptr, &st(FPU_rm));
+  PRECISION_ADJUST(&st(FPU_rm));
 }
 
 
@@ -93,6 +105,7 @@ void fdivri()
 {
   /* fdivr st(i),st */
   reg_div(FPU_st0_ptr, &st(FPU_rm), &st(FPU_rm));
+  PRECISION_ADJUST(&st(FPU_rm));
 }
 
 
@@ -100,6 +113,7 @@ void fdiv_i()
 {
   /* fdiv st(i),st */
   reg_div(&st(FPU_rm), FPU_st0_ptr, &st(FPU_rm));
+  PRECISION_ADJUST(&st(FPU_rm));
 }
 
 
@@ -108,6 +122,7 @@ void faddp_()
 {
   /* faddp st(i),st */
   reg_add(FPU_st0_ptr, &st(FPU_rm), &st(FPU_rm));
+  PRECISION_ADJUST(&st(FPU_rm));
   pop();
 }
 
@@ -116,6 +131,7 @@ void fmulp_()
 {
   /* fmulp st(i),st */
   reg_mul(&st(FPU_rm), FPU_st0_ptr, &st(FPU_rm));
+  PRECISION_ADJUST(&st(FPU_rm));
   pop();
 }
 
@@ -127,6 +143,7 @@ void fsubrp()
   /* This is the sense of the 80486 manual
      reg_sub(&st(FPU_rm), FPU_st0_ptr, &st(FPU_rm)); */
   reg_sub(FPU_st0_ptr, &st(FPU_rm), &st(FPU_rm));
+  PRECISION_ADJUST(&st(FPU_rm));
   pop();
 }
 
@@ -137,6 +154,7 @@ void fsubp_()
   /* This is the sense of the 80486 manual
      reg_sub(FPU_st0_ptr, &st(FPU_rm), &st(FPU_rm)); */
   reg_sub(&st(FPU_rm), FPU_st0_ptr, &st(FPU_rm));
+  PRECISION_ADJUST(&st(FPU_rm));
   pop();
 }
 
@@ -145,6 +163,7 @@ void fdivrp()
 {
   /* fdivrp st(i),st */
   reg_div(FPU_st0_ptr, &st(FPU_rm), &st(FPU_rm));
+  PRECISION_ADJUST(&st(FPU_rm));
   pop();
 }
 
@@ -153,6 +172,7 @@ void fdivp_()
 {
   /* fdivp st(i),st */
   reg_div(&st(FPU_rm), FPU_st0_ptr, &st(FPU_rm));
+  PRECISION_ADJUST(&st(FPU_rm));
   pop();
 }
 

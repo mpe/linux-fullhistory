@@ -91,7 +91,8 @@ static int parse_options(char *options,char *map,char *conversion, char * rock, 
 	return 1;
 }
 
-struct super_block *isofs_read_super(struct super_block *s,void *data)
+struct super_block *isofs_read_super(struct super_block *s,void *data,
+				     int silent)
 {
 	struct buffer_head *bh;
 	int iso_blknum;
@@ -155,7 +156,8 @@ struct super_block *isofs_read_super(struct super_block *s,void *data)
 		brelse(bh);
 	      }
 	if(iso_blknum == 100) {
-		printk("Unable to identify CD-ROM format.\n");
+		if (!silent)
+			printk("Unable to identify CD-ROM format.\n");
 		s->s_dev = 0;
 		unlock_super(s);
 		return NULL;
@@ -247,6 +249,7 @@ void isofs_statfs (struct super_block *sb, struct statfs *buf)
 	put_fs_long(0, &buf->f_bavail);
 	put_fs_long(sb->u.isofs_sb.s_ninodes, &buf->f_files);
 	put_fs_long(0, &buf->f_ffree);
+	put_fs_long(NAME_MAX, &buf->f_namelen);
 	/* Don't know what value to put in buf->f_fsid */
 }
 
@@ -415,14 +418,8 @@ void isofs_read_inode(struct inode * inode)
 		inode->i_op = &chrdev_inode_operations;
 	else if (S_ISBLK(inode->i_mode))
 		inode->i_op = &blkdev_inode_operations;
-	else if (S_ISFIFO(inode->i_mode)) {
-		inode->i_op = &fifo_inode_operations;
-		inode->i_pipe = 1;
-		PIPE_BASE(*inode) = NULL;
-		PIPE_HEAD(*inode) = PIPE_TAIL(*inode) = 0;
-		PIPE_READ_WAIT(*inode) = PIPE_WRITE_WAIT(*inode) = NULL;
-		PIPE_READERS(*inode) = PIPE_WRITERS(*inode) = 0;
-	}
+	else if (S_ISFIFO(inode->i_mode))
+		init_fifo(inode);
 }
 
 /* There are times when we need to know the inode number of a parent of

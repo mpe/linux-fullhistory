@@ -40,7 +40,8 @@ static struct super_operations proc_sops = {
 	proc_statfs
 };
 
-struct super_block *proc_read_super(struct super_block *s,void *data)
+struct super_block *proc_read_super(struct super_block *s,void *data, 
+				    int silent)
 {
 	lock_super(s);
 	s->s_blocksize = 1024;
@@ -64,6 +65,7 @@ void proc_statfs(struct super_block *sb, struct statfs *buf)
 	put_fs_long(0, &buf->f_bavail);
 	put_fs_long(0, &buf->f_files);
 	put_fs_long(0, &buf->f_ffree);
+	put_fs_long(NAME_MAX, &buf->f_namelen);
 	/* Don't know what value to put in buf->f_fsid */
 }
 
@@ -101,8 +103,10 @@ void proc_read_inode(struct inode * inode)
 	if (!pid) {
 		inode->i_mode = S_IFREG | 0444;
 		inode->i_op = &proc_array_inode_operations;
-		if (ino == 5)
+		if (ino == 5) {
+			inode->i_mode = S_IFREG | 0400;
 			inode->i_op = &proc_kmsg_inode_operations;
+		}
 		return;
 	}
 	ino &= 0x0000ffff;

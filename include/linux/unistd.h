@@ -125,6 +125,7 @@
 #define __NR_sysinfo		116
 #define __NR_ipc		117	/* not implemented yet */
 #define __NR_fsync		118	/* not implemented yet */
+#define __NR_sigreturn		119
 
 extern int errno;
 

@@ -1,8 +1,12 @@
 #ifndef _AHA1740_H
 
-/* $Id: aha1740.h,v 1.1 1992/07/24 06:27:38 root Exp root $
+/* $Id$
  *
  * Header file for the adaptec 1740 driver for Linux
+ *
+ * With minor revisions 3/31/93
+ * Written and (C) 1992,1993 Brad McLean.  See aha1740.c
+ * for more info
  *
  */
 
@@ -10,7 +14,8 @@
 
 /* Eisa Enhanced mode operation - slot locating and addressing */
 #define MINEISA 1   /* I don't have an EISA Spec to know these ranges, so I */
-#define MAXEISA 6   /* Just took my machine's specifications.  Adjust to fit.*/
+#define MAXEISA 8   /* Just took my machine's specifications.  Adjust to fit.*/
+		    /* I just saw an ad, and bumped this from 6 to 8 */
 #define	SLOTBASE(x)	((x << 12)+ 0xc80 )
 #define	BASE		(base)
 
@@ -31,7 +36,7 @@
 
 #define	HID_MFG	"ADP"
 #define	HID_PRD 0
-#define HID_REV 1
+#define HID_REV 2
 #define EBCNTRL_VALUE 1
 #define PORTADDR_ENH 0x80
 /* READ */
@@ -80,7 +85,7 @@ struct aha1740_chain {
   ulong  datalen;		/* Size of this part of chain */
 };
 
-/* These belong in scsi.h also */
+/* These belong in scsi.h */
 #define any2scsi(up, p)				\
 (up)[0] = (((unsigned long)(p)) >> 16)  ;	\
 (up)[1] = (((unsigned long)(p)) >> 8);		\
@@ -155,11 +160,11 @@ const char *aha1740_info(void);
 int aha1740_reset(void);
 int aha1740_biosparam(int, int, int*);
 
-#define AHA1740_ECBS 64
+#define AHA1740_ECBS 32
 #define AHA1740_SCATTER 16
 
 #ifndef NULL
-	#define NULL 0
+#define NULL 0
 #endif
 
 #define AHA1740 {"Adaptec 1740", aha1740_detect,	\

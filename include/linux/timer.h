@@ -23,7 +23,7 @@
  *
  * NET_TIMER		tcp/ip timeout timer
  *
- * MISC_TIMER		reserved for special uses like the 387 timeouts etc
+ * COPRO_TIMER		387 timeout for buggy hardware..
  */
 
 #define BLANK_TIMER	0
@@ -35,7 +35,7 @@
 #define SCSI_TIMER 	18
 #define NET_TIMER	19
 #define SOUND_TIMER	20
-#define MISC_TIMER	21
+#define COPRO_TIMER	21
 
 struct timer_struct {
 	unsigned long expires;

@@ -10,6 +10,7 @@
 #include <linux/errno.h>
 #include <linux/wait.h>
 #include <linux/ptrace.h>
+#include <linux/unistd.h>
 
 #include <asm/segment.h>
 
@@ -18,6 +19,7 @@
 #define _BLOCKABLE (~(_S(SIGKILL) | _S(SIGSTOP)))
 
 extern int core_dump(long signr,struct pt_regs * regs);
+int do_signal(unsigned long oldmask, struct pt_regs * regs);
 
 int sys_sgetmask(void)
 {
@@ -42,47 +44,23 @@ int sys_sigpending(sigset_t *set)
 	return error;
 }
 
-/* atomically swap in the new signal mask, and wait for a signal.
- *
- * we need to play some games with syscall restarting.  We get help
- * from the syscall library interface.  Note that we need to coordinate
- * the calling convention with the libc routine.
- *
- * "set" is just the sigmask as described in 1003.1-1988, 3.3.7.
- * 	It is assumed that sigset_t can be passed as a 32 bit quantity.
- *
- * "restart" holds a restart indication.  If it's 1, then we 
- * 	install the old mask, and return normally.  If it's zero, we store 
- * 	the current mask in old_mask and block until a signal comes in.
- *	If it's 2, then it's a signal we must handle but not return from.
- *
- * We are careful to prevent a rouge restart from user space from fooling
- * us into blocking SIGKILL or SIGSTOP.
+/*
+ * atomically swap in the new signal mask, and wait for a signal.
  */
-int sys_sigsuspend(volatile int restart, volatile unsigned long old_mask, unsigned long set)
+int sys_sigsuspend(volatile int restart, volatile unsigned long oldmask, unsigned long set)
 {
-	extern int sys_pause(void);
+	unsigned long mask;
+	struct pt_regs * regs = (struct pt_regs *) &restart;
 
-	switch (restart) {
-	case 0:
-		/* we're not restarting.  do the work */
-		restart = 1;
-		old_mask = current->blocked;
-		current->blocked = set & _BLOCKABLE;
-		break;
-	case 1:
-		/* we're restarting to restore and exit */
-		current->blocked = old_mask & _BLOCKABLE;
-		return -EINTR;
-	case 2:
-		/* we're restarting but staying paused */
-		restart = 1;
-		break;
+	mask = current->blocked;
+	current->blocked = set & _BLOCKABLE;
+	regs->eax = -EINTR;
+	while (1) {
+		current->state = TASK_INTERRUPTIBLE;
+		schedule();
+		if (do_signal(mask,regs))
+			return -EINTR;
 	}
-	/* pause returns after a signal arrives */
-	if (sys_pause() == -ERESTARTSYS)
-		restart = 2;
-	return -ERESTARTNOINTR;		/* handle the signal, and come back */
 }
 
 /*
@@ -119,7 +97,7 @@ static void check_pending(int signum)
 	}	
 }
 
-int sys_signal(int signum, long handler, long restorer)
+int sys_signal(int signum, long handler)
 {
 	struct sigaction tmp;
 
@@ -128,7 +106,7 @@ int sys_signal(int signum, long handler, long restorer)
 	tmp.sa_handler = (void (*)(int)) handler;
 	tmp.sa_mask = 0;
 	tmp.sa_flags = SA_ONESHOT | SA_NOMASK | SA_INTERRUPT;
-	tmp.sa_restorer = (void (*)(void)) restorer;
+	tmp.sa_restorer = NULL;
 	handler = (long) current->sigaction[signum-1].sa_handler;
 	current->sigaction[signum-1] = tmp;
 	check_pending(signum);
@@ -165,26 +143,75 @@ int sys_sigaction(int signum, const struct sigaction * action,
 
 extern int sys_waitpid(pid_t pid,unsigned long * stat_addr, int options);
 
+void sys_sigreturn(int signr, unsigned long oldmask, unsigned long unused)
+{
+	current->blocked = oldmask & _BLOCKABLE;
+}
+
+/*
+ * This routine sets up the return stack for the first signal found
+ * (== last delivered). It makes room for the registers we need to save,
+ * but the actual saving is left until the very last moment when we
+ * know whether we can restart system calls etc.
+ */
+static unsigned long * setup_first(struct pt_regs * regs,
+	int signr, unsigned long sa_handler, unsigned long oldmask)
+{
+	unsigned long * tmp_esp;
+
+	regs->esp -= 18*4;
+	tmp_esp = (unsigned long *) regs->esp;
+	verify_area(VERIFY_WRITE,tmp_esp,18*4);
+/* set up the "normal" stack seen by the signal handler */
+	put_fs_long(regs->esp+15*4,tmp_esp);	/* points to the stack.. */
+	put_fs_long(signr,tmp_esp+1);		/* parameter to handler and sigreturn */
+	put_fs_long(0,tmp_esp+2);		/* third parameter to sigreturn */
+	put_fs_long(oldmask,tmp_esp+3);		/* second .. */
+	put_fs_long(__NR_sigreturn,tmp_esp+4);	/* sigreturn number.. */
+/* save this frame so that we later can fill in the saved registers */
+	return tmp_esp+5;
+}
+
+/*
+ * This sets up the stack for any stacked signals other than the
+ * first one: no need to restore registers etc, as that is done
+ * by the very last signal handler return code..
+ */
+static void setup_other(unsigned long eip, struct pt_regs * regs, int signr,
+	unsigned long sa_handler, unsigned long oldmask)
+{
+	unsigned long * tmp_esp;
+
+	regs->esp -= 9*4;
+	tmp_esp = (unsigned long *) regs->esp;
+	verify_area(VERIFY_WRITE,tmp_esp,9*4);
+/* set up the "normal" stack seen by the signal handler */
+	put_fs_long(regs->esp+6*4,tmp_esp);	/* points to the stack.. */
+	put_fs_long(signr,tmp_esp+1);		/* parameter to handler and sigreturn */
+	put_fs_long(0,tmp_esp+2);		/* third parameter to sigreturn */
+	put_fs_long(oldmask,tmp_esp+3);		/* second .. */
+	put_fs_long(__NR_sigreturn,tmp_esp+4);	/* sigreturn number.. */
+	put_fs_long(eip,tmp_esp+5);		/* return address */
+/* set up the return code... */
+	put_fs_long(0x58595a5b,tmp_esp+6);	/* pop bx,dx,cx,ax */
+	put_fs_long(0x909080cd,tmp_esp+7);	/* int $0x80 + nop + nop */
+	put_fs_long(0x000cc290,tmp_esp+8);	/* nop + "ret 12" */
+}
+
 /*
  * Note that 'init' is a special process: it doesn't get signals it doesn't
  * want to handle. Thus you cannot kill init even with a SIGKILL even by
  * mistake.
  */
-void do_signal(struct pt_regs * regs)
+int do_signal(unsigned long oldmask, struct pt_regs * regs)
 {
+	unsigned long *frame = NULL;
+	unsigned long eip = 0;
 	unsigned long signr;
 	unsigned long sa_handler;
-	long old_eip = regs->eip;
 	struct sigaction * sa;
-	int longs;
-	unsigned long * tmp_esp;
 
-	if (regs->orig_eax >= 0 && regs->eax == -ERESTARTNOINTR) {
-		regs->eax = regs->orig_eax;
-		regs->eip = old_eip -= 2;
-	}
-	signr = current->signal & ~current->blocked;
-	do {
+	while ((signr = current->signal & ~current->blocked)) {
 		__asm__("bsf %2,%1\n\t"
 			"btrl %1,%0"
 			:"=m" (current->signal),"=r" (signr)
@@ -203,15 +230,10 @@ void do_signal(struct pt_regs * regs)
 			if (current->pid == 1)
 				continue;
 			switch (signr) {
-			case SIGCONT:
-			case SIGCHLD:
-			case SIGWINCH:
+			case SIGCONT: case SIGCHLD: case SIGWINCH:
 				continue;
 
-			case SIGSTOP:
-			case SIGTSTP:
-			case SIGTTIN:
-			case SIGTTOU:
+			case SIGSTOP: case SIGTSTP: case SIGTTIN: case SIGTTOU:
 				current->state = TASK_STOPPED;
 				current->exit_code = signr;
 				if (!(current->p_pptr->sigaction[SIGCHLD-1].sa_flags & 
@@ -220,12 +242,8 @@ void do_signal(struct pt_regs * regs)
 				schedule();
 				continue;
 
-			case SIGQUIT:
-			case SIGILL:
-			case SIGTRAP:
-			case SIGIOT:
-			case SIGFPE:
-			case SIGSEGV:
+			case SIGQUIT: case SIGILL: case SIGTRAP:
+			case SIGIOT: case SIGFPE: case SIGSEGV:
 				if (core_dump(signr,regs))
 					signr |= 0x80;
 				/* fall through */
@@ -235,39 +253,49 @@ void do_signal(struct pt_regs * regs)
 			}
 		}
 		/*
-		 * OK, we're invoking a handler 
+		 * OK, we're invoking a handler
 		 */
-		if (regs->orig_eax >= 0 && regs->eax == -ERESTARTSYS) {
-			if (sa->sa_flags & SA_INTERRUPT)
+		if (regs->orig_eax >= 0) {
+			if (regs->eax == -ERESTARTNOHAND ||
+			   (regs->eax == -ERESTARTSYS && (sa->sa_flags & SA_INTERRUPT)))
 				regs->eax = -EINTR;
-			else {
-				regs->eax = regs->orig_eax;
-				regs->eip = old_eip -= 2;
-			}
 		}
 		if (sa->sa_flags & SA_ONESHOT)
 			sa->sa_handler = NULL;
-		regs->eip = sa_handler;
-		longs = (sa->sa_flags & SA_NOMASK)?(7*4):(8*4);
-		regs->esp -= longs;
-		tmp_esp = (unsigned long *) regs->esp;
-		verify_area(VERIFY_WRITE,tmp_esp,longs);
-		put_fs_long((long) sa->sa_restorer,tmp_esp++);
-		put_fs_long(signr,tmp_esp++);
-		if (!(sa->sa_flags & SA_NOMASK))
-			put_fs_long(current->blocked,tmp_esp++);
-		put_fs_long(regs->eax,tmp_esp++);
-		put_fs_long(regs->ecx,tmp_esp++);
-		put_fs_long(regs->edx,tmp_esp++);
-		put_fs_long(regs->eflags,tmp_esp++);
-		put_fs_long(old_eip,tmp_esp++);
-		current->blocked |= sa->sa_mask;
 /* force a supervisor-mode page-in of the signal handler to reduce races */
 		__asm__("testb $0,%%fs:%0"::"m" (*(char *) sa_handler));
-		return;
-	} while ((signr = current->signal & ~current->blocked));
-	if (regs->orig_eax >= 0 && regs->eax == -ERESTARTSYS) {
-		regs->eax = regs->orig_eax;
-		regs->eip = old_eip -= 2;
+		if (!frame) {
+			frame = setup_first(regs,signr,sa_handler,oldmask);
+		} else
+			setup_other(eip,regs,signr,sa_handler,oldmask);
+		eip = sa_handler;
+		current->blocked |= sa->sa_mask;
+		oldmask |= sa->sa_mask;
 	}
+	if (regs->orig_eax >= 0 &&
+	    (regs->eax == -ERESTARTNOHAND ||
+	     regs->eax == -ERESTARTSYS ||
+	     regs->eax == -ERESTARTNOINTR)) {
+		regs->eax = regs->orig_eax;
+		regs->eip -= 2;
+	}
+	if (!frame)				/* no handlers installed - return 0 */
+		return 0;
+/* save registers if one or more handlers are called.. */
+	put_fs_long(regs->edi,frame);		/* suitable order for "popad" */
+	put_fs_long(regs->esi,frame+1);
+	put_fs_long(regs->ebp,frame+2);		/* using 'frame++' instead of the 'frame+x' */
+	put_fs_long(regs->esp,frame+3);		/* form used now results in atrocious code */
+	put_fs_long(regs->ebx,frame+4);		/* due to gcc not being very good at optimizing */
+	put_fs_long(regs->edx,frame+5);		/* things with inline-assembly/functions.. */
+	put_fs_long(regs->ecx,frame+6);
+	put_fs_long(regs->eax,frame+7);
+	put_fs_long(regs->eflags,frame+8);	/* flags */
+	put_fs_long(regs->eip,frame+9);		/* original return address */
+/* set up the return code... */
+	put_fs_long(0x58595a5b,frame+10);	/* pop bx,dx,cx,ax */
+	put_fs_long(0x906180cd,frame+11);	/* int $0x80 + popad + nop */
+	put_fs_long(0x000cc29d,frame+12);	/* popfl + "ret 12" */
+	regs->eip = eip;			/* "return" to the first handler */
+	return 1;
 }

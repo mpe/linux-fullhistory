@@ -244,6 +244,8 @@ static void scan_scsis (void)
 		    scsi_devices[NR_SCSI_DEVICES].
 		      removable = (0x80 & 
 				   scsi_result[1]) >> 7;
+		    scsi_devices[NR_SCSI_DEVICES].lockable =
+		      scsi_devices[NR_SCSI_DEVICES].removable;
 		    scsi_devices[NR_SCSI_DEVICES].
 		      changed = 0;
 		    scsi_devices[NR_SCSI_DEVICES].
@@ -309,7 +311,10 @@ static void scan_scsis (void)
 			/* These devices need this "key" to unlock the device
 			   so we can use it */
 			if(strncmp("INSITE", &scsi_result[8], 6) == 0 &&
-			   strncmp("Floptical   F*8I", &scsi_result[16], 16) == 0) {
+			   (strncmp("Floptical   F*8I", &scsi_result[16], 16) == 0
+			    ||strncmp("I325VM", &scsi_result[16], 6) == 0)) {
+			  printk("Unlocked floptical drive.\n");
+			  scsi_devices[NR_SCSI_DEVICES].lockable = 0;
 			  scsi_cmd[0] = MODE_SENSE;
 			  scsi_cmd[1] = (lun << 5) & 0xe0;
 			  scsi_cmd[2] = 0x2e;
@@ -464,8 +469,8 @@ Scsi_Cmnd * allocate_device (struct request ** reqp, int index, int wait)
   
   if (reqp) req = *reqp;
 
-  if (req && (dev = req->dev) <= 0)
-    panic("Invalid device in allocate_device");
+    /* See if this request has already been queued by an interrupt routine */
+  if (req && (dev = req->dev) <= 0) return NULL;
   
   host = scsi_devices[index].host_no;
   
@@ -481,7 +486,10 @@ Scsi_Cmnd * allocate_device (struct request ** reqp, int index, int wait)
     };
     cli();
     /* See if this request has already been queued by an interrupt routine */
-    if (req && ((req->dev < 0) || (req->dev != dev))) return NULL;
+    if (req && ((req->dev < 0) || (req->dev != dev))) {
+      sti();
+      return NULL;
+    };
     if (!SCpnt || SCpnt->request.dev >= 0)  /* Might have changed */
       {
 	sti();
@@ -1407,7 +1415,8 @@ unsigned long scsi_dev_init (unsigned long memory_start,unsigned long memory_end
 	  if(scsi_hosts[host].unchecked_isa_dma &&
 	     memory_end > ISA_DMA_THRESHOLD &&
 	     scsi_devices[i].type != TYPE_TAPE) {
-	    dma_sectors += 32 * scsi_hosts[host].cmd_per_lun;
+	    dma_sectors += (BLOCK_SIZE >> 9) * scsi_hosts[host].sg_tablesize * 
+	      scsi_hosts[host].cmd_per_lun;
 	    need_isa_buffer++;
 	  };
 	};

@@ -3,7 +3,8 @@
  |                                                                           |
  | Compare two floating point registers                                      |
  |                                                                           |
- | Copyright (C) 1992    W. Metzenthen, 22 Parker St, Ormond, Vic 3163,      |
+ | Copyright (C) 1992,1993                                                   |
+ |                       W. Metzenthen, 22 Parker St, Ormond, Vic 3163,      |
  |                       Australia.  E-mail apm233m@vaxc.cc.monash.edu.au    |
  |                                                                           |
  |                                                                           |
@@ -91,9 +92,14 @@ int compare(FPU_REG *b)
   diff = FPU_st0_ptr->exp - b->exp;
   if ( diff == 0 )
     {
-      diff = FPU_st0_ptr->sigh - b->sigh;
+      diff = FPU_st0_ptr->sigh - b->sigh;  /* Works only if ms bits are
+					      identical */
       if ( diff == 0 )
-	diff = FPU_st0_ptr->sigl - b->sigl;
+	{
+	diff = FPU_st0_ptr->sigl > b->sigl;
+	if ( diff == 0 )
+	  diff = -(FPU_st0_ptr->sigl < b->sigl);
+	}
     }
 
   if ( diff > 0 )

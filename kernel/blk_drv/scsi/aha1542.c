@@ -66,6 +66,7 @@ static int aha1542_last_mbo_used  = (AHA1542_MAILBOXES - 1);
 static long WAITnexttimeout = 3000000;
 
 static int aha1542_host = 0;
+static void setup_mailboxes();
 extern void aha1542_interrupt();
 
 #define aha1542_intr_reset()  outb(IRST, CONTROL)
@@ -185,6 +186,7 @@ int aha1542_test_port(int bse)
     debug = 2;
     /* Shouldn't have generated any interrupts during reset */
     if (inb(INTRFLAGS)&INTRMASK) goto fail;
+    setup_mailboxes();
     
     debug = 3;
     /* Test the basic ECHO command */
@@ -229,7 +231,7 @@ int aha1542_test_port(int bse)
 /* What's this little function for? */
 const char *aha1542_info(void)
 {
-    static char buffer[] = "";			/* looks nicer without anything here */
+    static char buffer[] = "Adaptec 1542";
     return buffer;
 }
 
@@ -396,7 +398,7 @@ int aha1542_queuecommand(Scsi_Cmnd * SCpnt, void (*done)(Scsi_Cmnd *))
       printk("aha1542_command: dev %d cmd %02x pos %d len %d ", target, *cmd, i, bufflen);
     aha1542_stat();
     printk("aha1542_queuecommand: dumping scsi cmd:");
-    for (i = 0; i < (*cmd<=0x1f?6:10); i++) printk("%02x ", cmd[i]);
+    for (i = 0; i < (COMMAND_SIZE(*cmd)); i++) printk("%02x ", cmd[i]);
     printk("\n");
     if (*cmd == WRITE_10 || *cmd == WRITE_6)
       return 0; /* we are still testing, so *don't* write */
@@ -430,7 +432,7 @@ int aha1542_queuecommand(Scsi_Cmnd * SCpnt, void (*done)(Scsi_Cmnd *))
 
     memset(&ccb[mbo], 0, sizeof(struct ccb));
 
-    ccb[mbo].cdblen = (*cmd<=0x1f)?6:10;	/* SCSI Command Descriptor Block Length */
+    ccb[mbo].cdblen = COMMAND_SIZE(*cmd);     /* SCSI Command Descriptor Block Length */
 
     direction = 0;
     if (*cmd == READ_10 || *cmd == READ_6)
@@ -548,7 +550,6 @@ static void setup_mailboxes()
     aha1542_intr_reset();
 }
 
-/* Query the board to find out if it is a 1542 or a 1740, or whatever. */
 static int aha1542_getconfig(int hostnum)
 {
   static unchar inquiry_cmd[] = {CMD_RETCONF };
@@ -776,6 +777,6 @@ int aha1542_biosparam(int size, int dev, int* info){
   info[0] = 64;
   info[1] = 32;
   info[2] = size >> 11;
-  if (info[2] >= 1024) info[2] = 1024;
+/*  if (info[2] >= 1024) info[2] = 1024; */
   return 0;
 }

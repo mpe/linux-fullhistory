@@ -357,7 +357,7 @@ int wd7000_queuecommand(Scsi_Cmnd * SCpnt, void (*done)(Scsi_Cmnd *))
     short cdblen;
 
     cdb = (unchar *) SCpnt->cmnd;
-    cdblen = (*cdb <= 0x1f ? 6 : 10);
+    cdblen = COMMAND_SIZE(*cdb);
     idlun = ((SCpnt->target << 5) & 0xe0) | (SCpnt->lun & 7);
     SCpnt->scsi_done = done;
     SCpnt->SCp.phase = 1;
@@ -580,7 +580,7 @@ int wd7000_abort(Scsi_Cmnd * SCpnt, int i)
     printk("wd7000_abort: Scsi_Cmnd = 0x%08x, code = %d ", SCpnt, i);
     printk("id %d lun %d cdb", SCpnt->target, SCpnt->lun);
     {  int j;  unchar *cdbj = (unchar *) SCpnt->cmnd;
-       for (j=0; j < (*cdbj <= 0x1f?6:10);  j++)  printk(" %02x", *(cdbj++));
+       for (j=0; j < COMMAND_SIZE(*cdbj);  j++)  printk(" %02x", *(cdbj++));
        printk(" result %08x\n", SCpnt->result);
     }
 #endif
@@ -606,7 +606,7 @@ int wd7000_biosparam(int size, int dev, int* info)
   info[0] = 64;
   info[1] = 32;
   info[2] = (size + 2047) >> 11;
-  if (info[2] >= 1024) info[2] = 1024;
+/*  if (info[2] >= 1024) info[2] = 1024; */
   return 0;
 }
 

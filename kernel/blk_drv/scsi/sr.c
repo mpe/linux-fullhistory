@@ -28,7 +28,7 @@
 #include "sr.h"
 #include "scsi_ioctl.h"   /* For the door lock/unlock commands */
 
-#define MAX_RETRIES 0
+#define MAX_RETRIES 1
 #define SR_TIMEOUT 250
 
 int NR_SR=0;
@@ -279,14 +279,19 @@ static void do_sr_request (void)
   int flag = 0;
 
   while (1==1){
-    if (CURRENT != NULL && CURRENT->dev == -1) return;
+    cli();
+    if (CURRENT != NULL && CURRENT->dev == -1) {
+      sti();
+      return;
+    };
 
-    INIT_REQUEST;
+    INIT_SCSI_REQUEST;
 
     if (flag++ == 0)
       SCpnt = allocate_device(&CURRENT,
 			      scsi_CDs[DEVICE_NR(MINOR(CURRENT->dev))].device->index, 0); 
     else SCpnt = NULL;
+    sti();
 
 
 /* This is a performance enhancement.  We dig down into the request list and
@@ -542,15 +547,21 @@ are any multiple of 512 bytes long.  */
 	    }
 	};
 
-	block = block >> 2; /* These are the sectors that the cdrom uses */
+	if (scsi_CDs[dev].sector_size == 2048)
+	  block = block >> 2; /* These are the sectors that the cdrom uses */
+	else
+	  block = block & 0xfffffffc;
+
 	realcount = (this_count + 3) / 4;
+
+	if (scsi_CDs[dev].sector_size == 512) realcount = realcount << 2;
 
 	if (((realcount > 0xff) || (block > 0x1fffff)) && scsi_CDs[dev].ten) 
 		{
 		if (realcount > 0xffff)
 		        {
 			realcount = 0xffff;
-			this_count = realcount * 4;
+			this_count = realcount * (scsi_CDs[dev].sector_size >> 9);
 			}
 
 		cmd[0] += READ_10 - READ_6 ;
@@ -567,7 +578,7 @@ are any multiple of 512 bytes long.  */
 		if (realcount > 0xff)
 		        {
 			realcount = 0xff;
-			this_count = realcount * 4;
+			this_count = realcount * (scsi_CDs[dev].sector_size >> 9);
 		        }
 	
 		cmd[1] |= (unsigned char) ((block >> 16) & 0x1f);
@@ -578,11 +589,12 @@ are any multiple of 512 bytes long.  */
 		}   
 
 #ifdef DEBUG
-	printk("ReadCD: %d %d %d\n",block, realcount, buffer);
+	printk("ReadCD: %d %d %d %d\n",block, realcount, buffer, this_count);
 #endif
 
 	SCpnt->this_count = this_count;
-	scsi_do_cmd (SCpnt, (void *) cmd, buffer, realcount << 11, 
+	scsi_do_cmd (SCpnt, (void *) cmd, buffer, 
+		     realcount * scsi_CDs[dev].sector_size, 
 		     rw_intr, SR_TIMEOUT, MAX_RETRIES);
 }
 
@@ -597,9 +609,29 @@ void sr_attach(Scsi_Device * SDp){
   if(NR_SR > MAX_SR) panic ("scsi_devices corrupt (sr)");
 };
 
+static void sr_init_done (Scsi_Cmnd * SCpnt)
+{
+  struct request * req;
+  struct task_struct * p;
+  
+  req = &SCpnt->request;
+  req->dev = 0xfffe; /* Busy, but indicate request done */
+  
+  if ((p = req->waiting) != NULL) {
+    req->waiting = NULL;
+    p->state = TASK_RUNNING;
+    if (p->counter > current->counter)
+      need_resched = 1;
+  }
+}
+
 unsigned long sr_init(unsigned long memory_start, unsigned long memory_end)
 {
 	int i;
+	unsigned char cmd[10];
+	unsigned char buffer[513];
+	int the_result, retries;
+	Scsi_Cmnd * SCpnt;
 
 	if (register_blkdev(MAJOR_NR,"sr",&sr_fops)) {
 		printk("Unable to get major %d for SCSI-CD\n",MAJOR_NR);
@@ -613,8 +645,56 @@ unsigned long sr_init(unsigned long memory_start, unsigned long memory_end)
 
 	for (i = 0; i < NR_SR; ++i)
 		{
-		scsi_CDs[i].capacity = 0x1fffff;
-		scsi_CDs[i].sector_size = 2048;
+		  SCpnt = allocate_device(NULL, scsi_CDs[i].device->index, 1);
+
+		  retries = 3;
+		  do {
+		    cmd[0] = READ_CAPACITY;
+		    cmd[1] = (scsi_CDs[i].device->lun << 5) & 0xe0;
+		    memset ((void *) &cmd[2], 0, 8);
+		    SCpnt->request.dev = 0xffff;  /* Mark as really busy */
+		    
+		    scsi_do_cmd (SCpnt,
+				 (void *) cmd, (void *) buffer,
+				 512, sr_init_done,  SR_TIMEOUT,
+				 MAX_RETRIES);
+		    
+		    if (current == task[0])
+		      while(SCpnt->request.dev != 0xfffe);
+		    else
+		      if (SCpnt->request.dev != 0xfffe){
+			SCpnt->request.waiting = current;
+			current->state = TASK_UNINTERRUPTIBLE;
+			while (SCpnt->request.dev != 0xfffe) schedule();
+		      };
+		    
+		    the_result = SCpnt->result;
+		    retries--;
+		    
+		  } while(the_result && retries);
+		  
+		  SCpnt->request.dev = -1;  /* Mark as not busy */
+		  
+		  wake_up(&scsi_devices[SCpnt->index].device_wait); 
+		  if (the_result) {
+		    scsi_CDs[i].capacity = 0x1fffff;
+		    scsi_CDs[i].sector_size = 2048;
+		  } else {
+		    scsi_CDs[i].capacity = (buffer[0] << 24) |
+		      (buffer[1] << 16) | (buffer[2] << 8) | buffer[3];
+		    scsi_CDs[i].sector_size = (buffer[4] << 24) |
+		      (buffer[5] << 16) | (buffer[6] << 8) | buffer[7];
+		    if(scsi_CDs[i].sector_size != 2048 && 
+		       scsi_CDs[i].sector_size != 512) {
+		      printk ("scd%d : unsupported sector size %d.\n",
+			      i, scsi_CDs[i].sector_size);
+		      scsi_CDs[i].capacity = 0;
+		    };
+		    if(scsi_CDs[i].sector_size == 2048)
+		      scsi_CDs[i].capacity *= 4;
+		  };
+
+		  printk("Scd sectorsize = %d bytes\n", scsi_CDs[i].sector_size);
 		scsi_CDs[i].use = 1;
 		scsi_CDs[i].ten = 1;
 		scsi_CDs[i].remap = 1;

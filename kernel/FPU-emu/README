@@ -1,7 +1,8 @@
  +---------------------------------------------------------------------------+
  |  wm-FPU-emu   an FPU emulator for 80386 and 80486SX microprocessors.      |
  |                                                                           |
- | Copyright (C) 1992    W. Metzenthen, 22 Parker St, Ormond, Vic 3163,      |
+ | Copyright (C) 1992,1993                                                   |
+ |                       W. Metzenthen, 22 Parker St, Ormond, Vic 3163,      |
  |                       Australia.  E-mail apm233m@vaxc.cc.monash.edu.au    |
  |                                                                           |
  |    This program is free software; you can redistribute it and/or modify   |
@@ -43,14 +44,7 @@ Please report bugs, etc to me at:
 
 
 --Bill Metzenthen
-  Oct 1992
-
-
-[ note:  I have advanced the version number from alpha numbers
-         to beta numbers. This is not meant to indicate any major
-         changes but rather the fact that the emulator has been a
-         standard part of the Linux distribution for some months
-         and is currently reasonably stable.          WM Jan 1993  ]
+  March 1993
 
 
 ----------------------- Internals of wm-FPU-emu -----------------------
@@ -89,7 +83,7 @@ is confined to five files:
 ----------------------- Limitations of wm-FPU-emu -----------------------
 
 There are a number of differences between the current wm-FPU-emu
-(version beta 1.0) and the 80486 FPU (apart from bugs). Some of the
+(version beta 1.2) and the 80486 FPU (apart from bugs). Some of the
 more important differences are listed below:
 
 Internal computations do not use de-normal numbers (but External
@@ -97,9 +91,12 @@ de-normals ARE recognised and generated). The design of wm-FPU-emu
 allows a larger exponent range than the 80486 FPU for internal
 computations.
 
-All computations are performed at full 64 bit precision (the PC bits
-of the FPU control word are ignored). Under Linux, the FPU normally
-runs at 64 bits precision.
+All computations are performed at full 64 bit precision with `round to
+nearest or even' performed for the basic functions. The results of the
+basic arithmetic functions and sqrt are then rounded to lower
+precision if required by the PC bits of the FPU control word. Under
+the crt0 version for Linux current at March 1993, the FPU PC bits
+specify 53 bits precision.
 
 The precision flag (PE of the FPU status word) is not implemented.
 Does anyone write code which uses this feature?

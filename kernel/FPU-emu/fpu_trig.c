@@ -3,7 +3,8 @@
  |                                                                           |
  | Implementation of the FPU "transcendental" functions.                     |
  |                                                                           |
- | Copyright (C) 1992    W. Metzenthen, 22 Parker St, Ormond, Vic 3163,      |
+ | Copyright (C) 1992,1993                                                   |
+ |                       W. Metzenthen, 22 Parker St, Ormond, Vic 3163,      |
  |                       Australia.  E-mail apm233m@vaxc.cc.monash.edu.au    |
  |                                                                           |
  |                                                                           |
@@ -105,9 +106,8 @@ static void f2xm1(void)
 	  {
 	    /* poly_2xm1(x) requires 0 < x < 1. */
 	    if ( poly_2xm1(FPU_st0_ptr, &rv) )
-	      return;
+	      return;                  /* error */
 	    reg_mul(&rv, FPU_st0_ptr, FPU_st0_ptr);
-	    return;
 	  }
 	else
 	  {
@@ -119,9 +119,9 @@ static void f2xm1(void)
 	    reg_mul(&rv, &tmp, &tmp);
 	    reg_sub(&tmp, &CONST_1, FPU_st0_ptr);
 	    FPU_st0_ptr->exp--;
+	    if ( FPU_st0_ptr->exp <= EXP_UNDER )
+	      arith_underflow(FPU_st0_ptr);
 	  }
-	if ( FPU_st0_ptr->exp <= EXP_UNDER )
-	  arith_underflow(FPU_st0_ptr);
 	return;
       }
     case TW_Zero:
@@ -301,7 +301,9 @@ static void fsqrt_(void)
       return;
     }
   else
-    single_arg_error();
+    { single_arg_error(); return; }
+
+  PRECISION_ADJUST(FPU_st0_ptr);
 }
 
 
@@ -557,30 +559,27 @@ static void fyl2x(void)
 	  reg_mul(FPU_st0_ptr, st1_ptr, st1_ptr);
 	  pop(); FPU_st0_ptr = &st(0);
 	  if ( FPU_st0_ptr->exp <= EXP_UNDER )
-	    arith_underflow(FPU_st0_ptr);
+	    { arith_underflow(FPU_st0_ptr); return; }
 	  else if ( FPU_st0_ptr->exp >= EXP_OVER )
-	    arith_overflow(FPU_st0_ptr);
+	    { arith_overflow(FPU_st0_ptr); return; }
 	}
       else
 	{
 	  /* negative	*/
 	  pop(); FPU_st0_ptr = &st(0);
 	  arith_invalid(FPU_st0_ptr);
+	  return;
 	}
-      return;
     }
-
-  if ( (FPU_st0_tag == TW_Empty) || (st1_tag == TW_Empty) )
+  else if ( (FPU_st0_tag == TW_Empty) || (st1_tag == TW_Empty) )
     { stack_underflow(); return; }
-
-  if ( (FPU_st0_tag == TW_NaN) || (st1_tag == TW_NaN) )
+  else if ( (FPU_st0_tag == TW_NaN) || (st1_tag == TW_NaN) )
     {
       real_2op_NaN(FPU_st0_ptr, st1_ptr, st1_ptr);
       pop();
       return;
     }
-
-  if ( (FPU_st0_tag <= TW_Zero) && (st1_tag <= TW_Zero) )
+  else if ( (FPU_st0_tag <= TW_Zero) && (st1_tag <= TW_Zero) )
     {
       /* one of the args is zero, the other valid, or both zero */
       if ( FPU_st0_tag == TW_Zero )
@@ -592,7 +591,7 @@ static void fyl2x(void)
 	    divide_by_zero(st1_ptr->sign ^ SIGN_NEG, FPU_st0_ptr);
 	  return;
 	}
-      if ( st1_ptr->sign == SIGN_POS )
+      else if ( st1_ptr->sign == SIGN_POS )
 	{
 	  /* Zero is the valid answer */
 	  char sign = FPU_st0_ptr->sign;
@@ -602,13 +601,15 @@ static void fyl2x(void)
 	  FPU_st0_ptr->sign = sign;
 	  return;
 	}
-      pop(); FPU_st0_ptr = &st(0);
-      arith_invalid(FPU_st0_ptr);
-      return;
+      else
+	{
+	  pop(); FPU_st0_ptr = &st(0);
+	  arith_invalid(FPU_st0_ptr);
+	  return;
+	}
     }
-
   /* One or both arg must be an infinity */
-  if ( FPU_st0_tag == TW_Infinity )
+  else if ( FPU_st0_tag == TW_Infinity )
     {
       if ( (FPU_st0_ptr->sign == SIGN_NEG) || (st1_tag == TW_Zero) )
 	{ pop(); FPU_st0_ptr = &st(0); arith_invalid(FPU_st0_ptr); return; }
@@ -621,9 +622,8 @@ static void fyl2x(void)
 	  return;
 	}
     }
-
   /* st(1) must be infinity here */
-  if ( (FPU_st0_tag == TW_Valid) && (FPU_st0_ptr->sign == SIGN_POS) )
+  else if ( (FPU_st0_tag == TW_Valid) && (FPU_st0_ptr->sign == SIGN_POS) )
     {
       if ( FPU_st0_ptr->exp >= EXP_BIAS )
 	{
@@ -636,19 +636,21 @@ static void fyl2x(void)
 	      return;
 	    }
 	  pop();
-	  return;
 	}
       else
 	{
 	  pop(); FPU_st0_ptr = &st(0);
 	  FPU_st0_ptr->sign ^= SIGN_NEG;
-	  return;
 	}
+      return;
     }
-  /* st(0) must be zero or negative */
-  pop(); FPU_st0_ptr = &st(0);
-  arith_invalid(FPU_st0_ptr);
-  return;
+  else
+    {
+      /* st(0) must be zero or negative */
+      pop(); FPU_st0_ptr = &st(0);
+      arith_invalid(FPU_st0_ptr);
+      return;
+    }
 }
 
 
@@ -686,21 +688,17 @@ static void fpatan(void)
       reg_move(&sum, st1_ptr);
       pop(); FPU_st0_ptr = &st(0);
       if ( FPU_st0_ptr->exp <= EXP_UNDER )
-	arith_underflow(FPU_st0_ptr);
-      return;
+	{ arith_underflow(FPU_st0_ptr); return; }
     }
-
-  if ( (FPU_st0_tag == TW_Empty) || (st1_tag == TW_Empty) )
+  else if ( (FPU_st0_tag == TW_Empty) || (st1_tag == TW_Empty) )
     { stack_underflow(); return; }
-
-  if ( (FPU_st0_tag == TW_NaN) || (st1_tag == TW_NaN) )
+  else if ( (FPU_st0_tag == TW_NaN) || (st1_tag == TW_NaN) )
     {
       real_2op_NaN(FPU_st0_ptr, st1_ptr, st1_ptr);
       pop();
       return;
     }
-
-  if ( (FPU_st0_tag == TW_Infinity) || (st1_tag == TW_Infinity) )
+  else if ( (FPU_st0_tag == TW_Infinity) || (st1_tag == TW_Infinity) )
     {
       char sign = st1_ptr->sign;
       if ( FPU_st0_tag == TW_Infinity )
@@ -726,10 +724,8 @@ static void fpatan(void)
 	}
       st1_ptr->sign = sign;
       pop();
-      return;
     }
-
- if ( st1_tag == TW_Zero )
+  else if ( st1_tag == TW_Zero )
     {
       char sign = st1_ptr->sign;
       /* st(0) must be valid or zero */
@@ -737,21 +733,20 @@ static void fpatan(void)
 	{ reg_move(&CONST_Z, st1_ptr); }
       else
 	reg_move(&CONST_PI, st1_ptr);
-      st1_tag = sign;
+      st1_ptr->sign = sign;
       pop();
-      return;
     }
   else if ( FPU_st0_tag == TW_Zero )
     {
       char sign = st1_ptr->sign;
       /* st(1) must be TW_Valid here */
       reg_move(&CONST_PI2, st1_ptr);
-      st1_tag = sign;
+      st1_ptr->sign = sign;
       pop();
-      return;
     }
 #ifdef PARANOID
-  EXCEPTION(EX_INTERNAL | 0x220);
+  else
+    EXCEPTION(EX_INTERNAL | 0x220);
 #endif PARANOID
 }
 
@@ -782,10 +777,9 @@ static void fyl2xp1(void)
       
       reg_mul(FPU_st0_ptr, st1_ptr, st1_ptr);
       pop();
-      return;
     }
   else if ( (FPU_st0_tag == TW_Empty) | (st1_tag == TW_Empty) )
-    stack_underflow();
+    { stack_underflow(); return; }
   else if ( FPU_st0_tag == TW_Zero )
     {
       if ( st1_tag <= TW_Zero )
@@ -796,21 +790,23 @@ static void fyl2xp1(void)
       else if ( st1_tag == TW_Infinity )
 	{
 	  arith_invalid(st1_ptr);
+	  return;
 	}
       else if ( st1_tag == TW_NaN )
 	{
 	  if ( !(st1_ptr->sigh & 0x40000000) )
 	    EXCEPTION(EX_Invalid);            /* signaling NaN */
 	  st1_ptr->sigh |= 0x40000000;     /* QNaN */
+	  return;
 	}
 #ifdef PARANOID
       else
 	{
 	  EXCEPTION(EX_INTERNAL | 0x116);
+	  return;
 	}
 #endif PARANOID
       pop();
-      return;
     }
   else if ( FPU_st0_tag == TW_NaN )
     {
@@ -868,9 +864,9 @@ static void fscale(void)
       FPU_st0_ptr->exp = scale;
 
       if ( scale <= EXP_UNDER )
-	arith_underflow(FPU_st0_ptr);
+	{ arith_underflow(FPU_st0_ptr); return; }
       else if ( scale >= EXP_OVER )
-	arith_overflow(FPU_st0_ptr);
+	{ arith_overflow(FPU_st0_ptr); return; }
 
       return;
     }

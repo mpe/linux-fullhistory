@@ -1,7 +1,8 @@
 /*---------------------------------------------------------------------------+
  |  control_w.h                                                              |
  |                                                                           |
- | Copyright (C) 1992    W. Metzenthen, 22 Parker St, Ormond, Vic 3163,      |
+ | Copyright (C) 1992,1993                                                   |
+ |                       W. Metzenthen, 22 Parker St, Ormond, Vic 3163,      |
  |                       Australia.  E-mail apm233m@vaxc.cc.monash.edu.au    |
  |                                                                           |
  +---------------------------------------------------------------------------*/
@@ -29,5 +30,23 @@
 #define RC_DOWN		_Const_(0x0400)
 #define RC_UP		_Const_(0x0800)
 #define RC_CHOP		_Const_(0x0C00)
+
+/* p 15-5: Precision control bits affect only the following:
+   ADD, SUB(R), MUL, DIV(R), and SQRT */
+#define PRECISION_ADJUST_CONTROL (control_word & 0x300)
+#define PR_24_BITS      0x000
+#define PR_53_BITS      0x200
+/* By doing this as a macro, we allow easy modification */
+#define PRECISION_ADJUST(x) \
+	      switch (PRECISION_ADJUST_CONTROL) \
+		{ \
+		case PR_24_BITS: \
+		  round_to_24_bits(x); \
+		  break; \
+		case PR_53_BITS: \
+		  round_to_53_bits(x); \
+		  break; \
+		}
+
 
 #endif _CONTROLW_H_

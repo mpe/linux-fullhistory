@@ -14,6 +14,7 @@ struct msdos_sb_info {
 	unsigned long clusters;      /* number of clusters */
 	uid_t fs_uid;
 	gid_t fs_gid;
+	int quiet; /* fake successful chmods and chowns */
 	unsigned short fs_umask;
 	unsigned char name_check; /* r = relaxed, n = normal, s = strict */
 	unsigned char conversion; /* b = binary, t = text, a = auto */

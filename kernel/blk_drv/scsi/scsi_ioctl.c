@@ -29,10 +29,14 @@ static int ioctl_probe(int dev, void *buffer)
 {
 	int temp;
 	int len;
+	char * string;
 	
 	if ((temp = scsi_hosts[dev].present) && buffer) {
 		len = get_fs_long ((int *) buffer);
-		memcpy_tofs (buffer, scsi_hosts[dev].info(), len);
+		string = scsi_hosts[dev].info();
+		if (len > strlen(string)) len = strlen(string)+1;
+		verify_area(VERIFY_WRITE, buffer, len);
+		memcpy_tofs (buffer, string, len);
 	}
 	return temp;
 }
@@ -101,7 +105,8 @@ static int ioctl_internal_command(Scsi_Device *dev, char * cmd)
 	if(driver_byte(SCpnt->result) != 0)
 	  switch(SCpnt->sense_buffer[2] & 0xf) {
 	  case ILLEGAL_REQUEST:
-	    printk("SCSI device (ioctl) reports ILLEGAL REQUEST.\n");
+	    if(cmd[0] == ALLOW_MEDIUM_REMOVAL) dev->lockable = 0;
+	    else printk("SCSI device (ioctl) reports ILLEGAL REQUEST.\n");
 	    break;
 	  case NOT_READY: /* This happens if there is no disc in drive */
 	    if(dev->removable){
@@ -225,12 +230,17 @@ int scsi_ioctl (Scsi_Device *dev, int cmd, void *arg)
 		return -ENODEV;
 	
 	switch (cmd) {
+	        case SCSI_IOCTL_GET_IDLUN:
+	                verify_area(VERIFY_WRITE, (void *) arg, sizeof(int));
+			put_fs_long(dev->id + (dev->lun << 8) + 
+				    (dev->host_no << 16), (long *) arg);
+			return 0;
 		case SCSI_IOCTL_PROBE_HOST:
 			return ioctl_probe(dev->host_no, arg);
 		case SCSI_IOCTL_SEND_COMMAND:
 			return ioctl_command((Scsi_Device *) dev, arg);
 		case SCSI_IOCTL_DOORLOCK:
-			if (!dev->removable) return 0;
+			if (!dev->removable || !dev->lockable) return 0;
 		        scsi_cmd[0] = ALLOW_MEDIUM_REMOVAL;
 			scsi_cmd[1] = dev->lun << 5;
 			scsi_cmd[2] = scsi_cmd[3] = scsi_cmd[5] = 0;
@@ -238,7 +248,7 @@ int scsi_ioctl (Scsi_Device *dev, int cmd, void *arg)
 			return ioctl_internal_command((Scsi_Device *) dev, scsi_cmd);
 			break;
 		case SCSI_IOCTL_DOORUNLOCK:
-			if (!dev->removable) return 0;
+			if (!dev->removable || !dev->lockable) return 0;
 		        scsi_cmd[0] = ALLOW_MEDIUM_REMOVAL;
 			scsi_cmd[1] = dev->lun << 5;
 			scsi_cmd[2] = scsi_cmd[3] = scsi_cmd[5] = 0;

@@ -3,7 +3,8 @@
  |                                                                           |
  | The entry function for wm-FPU-emu                                         |
  |                                                                           |
- | Copyright (C) 1992    W. Metzenthen, 22 Parker St, Ormond, Vic 3163,      |
+ | Copyright (C) 1992,1993                                                   |
+ |                       W. Metzenthen, 22 Parker St, Ormond, Vic 3163,      |
  |                       Australia.  E-mail apm233m@vaxc.cc.monash.edu.au    |
  |                                                                           |
  | See the files "README" and "COPYING" for further copyright and warranty   |
@@ -31,6 +32,7 @@
 #include "fpu_system.h"
 #include "fpu_emu.h"
 #include "exception.h"
+#include "control_w.h"
 
 #include <asm/segment.h>
 
@@ -157,7 +159,10 @@ void math_emulate(long arg)
 
   /* We cannot handle emulation in v86-mode */
   if (FPU_EFLAGS & 0x00020000)
-    math_abort(FPU_info,SIGILL);
+    {
+      FPU_ORIG_EIP = FPU_EIP;
+      math_abort(FPU_info,SIGILL);
+    }
 
   /* 0x000f means user code space */
   if (FPU_CS != 0x000f)
@@ -227,10 +232,12 @@ do_another:
 		  break;
 		case 2:         /* fcom */
 		  compare_st_data();
+		  goto no_precision_adjust;
 		  break;
 		case 3:         /* fcomp */
 		  compare_st_data();
 		  pop();
+		  goto no_precision_adjust;
 		  break;
 		case 4:         /* fsub */
 		  reg_sub(FPU_st0_ptr, &FPU_loaded_data, FPU_st0_ptr);
@@ -245,6 +252,9 @@ do_another:
 		  reg_div(&FPU_loaded_data, FPU_st0_ptr, FPU_st0_ptr);
 		  break;
 		}
+	      PRECISION_ADJUST(FPU_st0_ptr);
+no_precision_adjust:
+		;
 	    }
 	  else
 	    stack_underflow();
@@ -328,9 +338,14 @@ test_for_fp:
 
 void __math_abort(struct info * info, unsigned int signal)
 {
+	RE_ENTRANT_CHECK_OFF
 	FPU_EIP = FPU_ORIG_EIP;
 	send_sig(signal,current,1);
+	RE_ENTRANT_CHECK_OFF
 	__asm__("movl %0,%%esp ; ret"::"g" (((long) info)-4));
+#ifdef PARANOID
+      printk("ERROR: wm-FPU-emu math_abort failed!\n");
+#endif PARANOID
 }
 
 #else /* no math emulation */

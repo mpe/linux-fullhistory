@@ -8,6 +8,8 @@
  *  linux/fs/minix/inode.c
  *
  *  Copyright (C) 1991, 1992  Linus Torvalds
+ *
+ *  Goal-directed block allocation by Stephen Tweedie (sct@dcs.ed.ac.uk), 1993
  */
 
 #include <linux/sched.h>
@@ -38,7 +40,7 @@ void ext2_put_super (struct super_block * sb)
 
 	lock_super (sb);
 	es = (struct ext2_super_block *) sb->u.ext2_sb.s_sbh->b_data;
-	es->s_valid = 1;
+	es->s_valid = sb->u.ext2_sb.s_was_mounted_valid;
 	sb->u.ext2_sb.s_sbh->b_dirt = 1;
 #ifndef DONT_USE_DCACHE
 	ext2_dcache_invalidate (sb->s_dev);
@@ -105,7 +107,8 @@ static int convert_pre_02b_fs (struct super_block * sb,
 	return 1;
 }
 
-struct super_block * ext2_read_super (struct super_block * s, void * data)
+struct super_block * ext2_read_super (struct super_block * s, void * data,
+				      int silent)
 {
 	struct buffer_head * bh;
 	struct ext2_super_block * es;
@@ -122,6 +125,7 @@ struct super_block * ext2_read_super (struct super_block * s, void * data)
 		return NULL;
 	}
 	es = (struct ext2_super_block *) bh->b_data;
+	s->s_magic = es->s_magic;
 	s->s_blocksize = EXT2_MIN_BLOCK_SIZE << es->s_log_block_size;
 	s->u.ext2_sb.s_inodes_count = es->s_inodes_count;
 	s->u.ext2_sb.s_blocks_count = es->s_blocks_count;
@@ -131,8 +135,11 @@ struct super_block * ext2_read_super (struct super_block * s, void * data)
 	s->u.ext2_sb.s_log_frag_size = es->s_log_frag_size;
 	s->u.ext2_sb.s_frag_size = EXT2_MIN_FRAG_SIZE <<
 				     es->s_log_frag_size;
-	s->u.ext2_sb.s_frags_per_block = s->s_blocksize /
+	if (s->u.ext2_sb.s_frag_size)
+		s->u.ext2_sb.s_frags_per_block = s->s_blocksize /
 					   s->u.ext2_sb.s_frag_size;
+	else
+		s->s_magic = 0;
 	s->u.ext2_sb.s_blocks_per_group = es->s_blocks_per_group;
 	s->u.ext2_sb.s_frags_per_group = es->s_frags_per_group;
 	s->u.ext2_sb.s_inodes_per_group = es->s_inodes_per_group;
@@ -140,8 +147,8 @@ struct super_block * ext2_read_super (struct super_block * s, void * data)
 					    sizeof (struct ext2_inode);
 	s->u.ext2_sb.s_desc_per_block = s->s_blocksize /
 					  sizeof (struct ext2_group_desc);
-	s->s_magic = es->s_magic;
 	s->u.ext2_sb.s_sbh = bh;
+	s->u.ext2_sb.s_was_mounted_valid = es->s_valid;
 	s->u.ext2_sb.s_rename_lock = 0;
 	s->u.ext2_sb.s_rename_wait = NULL;
 	if (s->s_magic == EXT2_OLD_SUPER_MAGIC) {
@@ -177,7 +184,9 @@ struct super_block * ext2_read_super (struct super_block * s, void * data)
 		s->s_dev = 0;
 		unlock_super (s);
 		brelse (bh);
-		printk ("EXT2-fs: magic match failed\n");
+		if (!silent)
+			printk("VFS: Can't find an ext2fs filesystem on dev 0x%04x.\n",
+				   dev);
 		return NULL;
 	}
 	if (s->s_blocksize != s->u.ext2_sb.s_frag_size) {
@@ -188,7 +197,8 @@ struct super_block * ext2_read_super (struct super_block * s, void * data)
 		return NULL;
 	}
 	if (!es->s_valid)
-		printk ("EXT2-fs warning: mounting non valid file system\n");
+		printk ("EXT2-fs warning: mounting unchecked file system, "
+			"running e2fsck is recommended\n");
 	s->u.ext2_sb.s_groups_count = (s->u.ext2_sb.s_blocks_count -
 				       s->u.ext2_sb.s_first_data_block +
 				       (EXT2_BLOCK_SIZE(s) * 8) - 1) /
@@ -322,7 +332,11 @@ void ext2_statfs (struct super_block * sb, struct statfs * buf)
 		&buf->f_blocks);
 	tmp = ext2_count_free_blocks (sb);
 	put_fs_long (tmp, &buf->f_bfree);
-	put_fs_long (tmp - sb->u.ext2_sb.s_r_blocks_count, &buf->f_bavail);
+	if (tmp >= sb->u.ext2_sb.s_r_blocks_count)
+		put_fs_long (tmp - sb->u.ext2_sb.s_r_blocks_count,
+			     &buf->f_bavail);
+	else
+		put_fs_long (0, &buf->f_bavail);
 	put_fs_long (sb->u.ext2_sb.s_inodes_count, &buf->f_files);
 	put_fs_long (ext2_count_free_inodes(sb), &buf->f_ffree);
 	put_fs_long (EXT2_NAME_LEN, &buf->f_namelen);
@@ -398,9 +412,9 @@ int ext2_bmap (struct inode * inode, int block)
 }
 
 static struct buffer_head * inode_getblk (struct inode * inode, int nr,
-					  int create)
+					  int create, int new_block)
 {
-	int tmp;
+	int tmp, goal = 0;
 	unsigned long * p;
 	struct buffer_head * result;
 	int blocks = inode->i_sb->s_blocksize / 512;
@@ -415,9 +429,32 @@ repeat:
 		brelse (result);
 		goto repeat;
 	}
-	if (!create)
+	if (!create || new_block >= 
+	    (current->rlim[RLIMIT_FSIZE].rlim_cur >>
+	     EXT2_BLOCK_SIZE_BITS(inode->i_sb)))
 		return NULL;
-	tmp = ext2_new_block (inode->i_sb, inode->u.ext2_i.i_block_group);
+	if (inode->u.ext2_i.i_next_alloc_block == new_block)
+		goal = inode->u.ext2_i.i_next_alloc_goal;
+#ifdef EXT2FS_DEBUG
+	printk ("ext2 inode_getblk: hint = %d,", goal);
+#endif
+	if (!goal) {
+		for (tmp = nr-1; tmp>=0; tmp--) {
+			if (inode->u.ext2_i.i_data[tmp]) {
+				goal = inode->u.ext2_i.i_data[tmp];
+				break;
+			}
+		}
+		if (!goal)
+			goal = (inode->u.ext2_i.i_block_group * 
+				EXT2_BLOCKS_PER_GROUP(inode->i_sb))
+				+ inode->i_sb->u.ext2_sb.s_first_data_block;
+	}
+
+#ifdef EXT2FS_DEBUG
+	printk (" goal = %d.\n", goal);
+#endif
+	tmp = ext2_new_block (inode->i_sb, goal);
 	if (!tmp)
 		return NULL;
 	result = getblk (inode->i_dev, tmp, inode->i_sb->s_blocksize);
@@ -427,6 +464,8 @@ repeat:
 		goto repeat;
 	}
 	*p = tmp;
+	inode->u.ext2_i.i_next_alloc_block = new_block;
+	inode->u.ext2_i.i_next_alloc_goal = tmp;
 	inode->i_ctime = CURRENT_TIME;
 	inode->i_blocks += blocks;
 	inode->i_dirt = 1;
@@ -435,9 +474,9 @@ repeat:
 
 static struct buffer_head * block_getblk (struct inode * inode,
 					  struct buffer_head * bh, int nr,
-					  int create, int blocksize)
+					  int create, int blocksize, int new_block)
 {
-	int tmp;
+	int tmp, goal;
 	unsigned long * p;
 	struct buffer_head * result;
 	int blocks = inode->i_sb->s_blocksize / 512;
@@ -464,11 +503,25 @@ repeat:
 		brelse (result);
 		goto repeat;
 	}
-	if (!create) {
+	if (!create || new_block >= 
+	    (current->rlim[RLIMIT_FSIZE].rlim_cur >> 
+	     EXT2_BLOCK_SIZE_BITS(inode->i_sb))) {
 		brelse (bh);
 		return NULL;
 	}
-	tmp = ext2_new_block (inode->i_sb, inode->u.ext2_i.i_block_group);
+	if (inode->u.ext2_i.i_next_alloc_block == new_block)
+		goal = inode->u.ext2_i.i_next_alloc_goal;
+	if (!goal) {
+		for (tmp = nr-1; tmp>=0; tmp--) {
+			if (bh->b_data[tmp]) {
+				goal = bh->b_data[tmp];
+				break;
+			}
+		}
+		if (!goal)
+			goal = bh->b_blocknr+1;
+	}
+	tmp = ext2_new_block (inode->i_sb, goal);
 	if (!tmp) {
 #ifdef EXT2FS_DEBUG
 		printk ("inode_getblk: ext2_new_block returned 0\n");
@@ -484,8 +537,11 @@ repeat:
 	}
 	*p = tmp;
 	bh->b_dirt = 1;
+	inode->i_ctime = CURRENT_TIME;
 	inode->i_blocks += blocks;
 	inode->i_dirt = 1;
+	inode->u.ext2_i.i_next_alloc_block = new_block;
+	inode->u.ext2_i.i_next_alloc_goal = tmp;
 	brelse (bh);
 	return result;
 }
@@ -494,6 +550,7 @@ struct buffer_head * ext2_getblk (struct inode * inode, int block,
 				  int create)
 {
 	struct buffer_head * bh;
+	int b;
 	unsigned long addr_per_block = EXT2_ADDR_PER_BLOCK(inode->i_sb);
 
 	if (block < 0) {
@@ -506,30 +563,44 @@ struct buffer_head * ext2_getblk (struct inode * inode, int block,
 		printk ("ext2_getblk: block > big\n");
 		return NULL;
 	}
+	/* If this is a sequential block allocation, set the next_alloc_block
+	   to this block now so that all the indblock and data block allocations
+	   use the same goal zone */
+#ifdef EXT2FS_DEBUG
+	printk ("ext2_getblk: block %d, next %d, goal %d.\n", block, 
+		inode->u.ext2_i.i_next_alloc_block,
+		inode->u.ext2_i.i_next_alloc_goal);
+#endif
+	if (block == inode->u.ext2_i.i_next_alloc_block + 1) {
+		inode->u.ext2_i.i_next_alloc_block++;
+		inode->u.ext2_i.i_next_alloc_goal++;
+	}
+
+	b = block;
 	if (block < EXT2_NDIR_BLOCKS)
-		return inode_getblk (inode, block, create);
+		return inode_getblk (inode, block, create, b);
 	block -= EXT2_NDIR_BLOCKS;
 	if (block < addr_per_block) {
-		bh = inode_getblk (inode, EXT2_IND_BLOCK, create);
+		bh = inode_getblk (inode, EXT2_IND_BLOCK, create, b);
 		return block_getblk (inode, bh, block, create,
-				     inode->i_sb->s_blocksize);
+				     inode->i_sb->s_blocksize, b);
 	}
 	block -= addr_per_block;
 	if (block < addr_per_block * addr_per_block) {
-		bh = inode_getblk (inode, EXT2_DIND_BLOCK, create);
+		bh = inode_getblk (inode, EXT2_DIND_BLOCK, create,b );
 		bh = block_getblk (inode, bh, block / addr_per_block, create,
-				   inode->i_sb->s_blocksize);
+				   inode->i_sb->s_blocksize, b);
 		return block_getblk (inode, bh, block & (addr_per_block - 1),
-				     create, inode->i_sb->s_blocksize);
+				     create, inode->i_sb->s_blocksize, b);
 	}
 	block -= addr_per_block * addr_per_block;
-	bh = inode_getblk (inode, EXT2_IND_BLOCK, create);
+	bh = inode_getblk (inode, EXT2_TIND_BLOCK, create, b);
 	bh = block_getblk (inode, bh, block / (addr_per_block * addr_per_block),
-			   create, inode->i_sb->s_blocksize);
+			   create, inode->i_sb->s_blocksize, b);
 	bh = block_getblk (inode, bh, (block / addr_per_block) & (addr_per_block - 1),
-			   create, inode->i_sb->s_blocksize);
+			   create, inode->i_sb->s_blocksize, b);
 	return block_getblk (inode, bh, block & (addr_per_block - 1), create,
-			     inode->i_sb->s_blocksize);
+			     inode->i_sb->s_blocksize, b);
 }
 
 struct buffer_head * ext2_bread (struct inode * inode, int block, int create)
@@ -587,21 +658,26 @@ void ext2_read_inode (struct inode * inode)
 	inode->i_atime = raw_inode->i_atime;
 	inode->i_ctime = raw_inode->i_ctime;
 	inode->i_mtime = raw_inode->i_mtime;
-	inode->u.ext2_i.i_dtime = raw_inode->i_dtime;
+	if (!S_ISFIFO(inode->i_mode))
+		inode->u.ext2_i.i_dtime = raw_inode->i_dtime;
 	inode->i_blksize = inode->i_sb->s_blocksize;
 	inode->i_blocks = raw_inode->i_blocks;
-	inode->u.ext2_i.i_flags = raw_inode->i_flags;
-	inode->u.ext2_i.i_faddr = raw_inode->i_faddr;
-	inode->u.ext2_i.i_frag = raw_inode->i_frag;
-	inode->u.ext2_i.i_fsize = raw_inode->i_fsize;
-	inode->u.ext2_i.i_file_acl = raw_inode->i_file_acl;
-	inode->u.ext2_i.i_dir_acl = raw_inode->i_dir_acl;
-	inode->u.ext2_i.i_version = raw_inode->i_version;
-	inode->u.ext2_i.i_block_group = block_group;
-	if (S_ISCHR(inode->i_mode) || S_ISBLK(inode->i_mode))
-		inode->i_rdev = raw_inode->i_block[0];
-	else for (block = 0; block < EXT2_N_BLOCKS; block++)
-		inode->u.ext2_i.i_data[block] = raw_inode->i_block[block];
+	if (!S_ISFIFO(inode->i_mode)) {
+		inode->u.ext2_i.i_flags = raw_inode->i_flags;
+		inode->u.ext2_i.i_faddr = raw_inode->i_faddr;
+		inode->u.ext2_i.i_frag = raw_inode->i_frag;
+		inode->u.ext2_i.i_fsize = raw_inode->i_fsize;
+		inode->u.ext2_i.i_file_acl = raw_inode->i_file_acl;
+		inode->u.ext2_i.i_dir_acl = raw_inode->i_dir_acl;
+		inode->u.ext2_i.i_version = raw_inode->i_version;
+		inode->u.ext2_i.i_block_group = block_group;
+		inode->u.ext2_i.i_next_alloc_block = 0;
+		inode->u.ext2_i.i_next_alloc_goal = 0;
+		if (S_ISCHR(inode->i_mode) || S_ISBLK(inode->i_mode))
+			inode->i_rdev = raw_inode->i_block[0];
+		else for (block = 0; block < EXT2_N_BLOCKS; block++)
+			inode->u.ext2_i.i_data[block] = raw_inode->i_block[block];
+	}
 	brelse (bh);
 	inode->i_op = NULL;
 	if (S_ISREG(inode->i_mode))
@@ -614,14 +690,8 @@ void ext2_read_inode (struct inode * inode)
 		inode->i_op = &chrdev_inode_operations;
 	else if (S_ISBLK(inode->i_mode))
 		inode->i_op = &blkdev_inode_operations;
-	else if (S_ISFIFO(inode->i_mode)) {
-		inode->i_op = &fifo_inode_operations;
-		inode->i_pipe = 1;
-		PIPE_BASE(*inode) = NULL;
-		PIPE_HEAD(*inode) = PIPE_TAIL(*inode) = 0;
-		PIPE_READ_WAIT(*inode) = PIPE_WRITE_WAIT(*inode) = NULL;
-		PIPE_READERS(*inode) = PIPE_WRITERS(*inode) = 0;
-	}
+	else if (S_ISFIFO(inode->i_mode))
+		init_fifo(inode);
 }
 
 void ext2_write_inode (struct inode * inode)
@@ -664,19 +734,21 @@ void ext2_write_inode (struct inode * inode)
 	raw_inode->i_atime = inode->i_atime;
 	raw_inode->i_ctime = inode->i_ctime;
 	raw_inode->i_mtime = inode->i_mtime;
-	raw_inode->i_dtime = inode->u.ext2_i.i_dtime;
 	raw_inode->i_blocks = inode->i_blocks;
-	raw_inode->i_flags = inode->u.ext2_i.i_flags;
-	raw_inode->i_faddr = inode->u.ext2_i.i_faddr;
-	raw_inode->i_frag = inode->u.ext2_i.i_frag;
-	raw_inode->i_fsize = inode->u.ext2_i.i_fsize;
-	raw_inode->i_file_acl = inode->u.ext2_i.i_file_acl;
-	raw_inode->i_dir_acl = inode->u.ext2_i.i_dir_acl;
-	raw_inode->i_version = inode->u.ext2_i.i_version;
-	if (S_ISCHR(inode->i_mode) || S_ISBLK(inode->i_mode))
-		raw_inode->i_block[0] = inode->i_rdev;
-	else for (block = 0; block < EXT2_N_BLOCKS; block++)
-		raw_inode->i_block[block] = inode->u.ext2_i.i_data[block];
+	if (!S_ISFIFO(inode->i_mode)) {
+		raw_inode->i_dtime = inode->u.ext2_i.i_dtime;
+		raw_inode->i_flags = inode->u.ext2_i.i_flags;
+		raw_inode->i_faddr = inode->u.ext2_i.i_faddr;
+		raw_inode->i_frag = inode->u.ext2_i.i_frag;
+		raw_inode->i_fsize = inode->u.ext2_i.i_fsize;
+		raw_inode->i_file_acl = inode->u.ext2_i.i_file_acl;
+		raw_inode->i_dir_acl = inode->u.ext2_i.i_dir_acl;
+		raw_inode->i_version = inode->u.ext2_i.i_version;
+		if (S_ISCHR(inode->i_mode) || S_ISBLK(inode->i_mode))
+			raw_inode->i_block[0] = inode->i_rdev;
+		else for (block = 0; block < EXT2_N_BLOCKS; block++)
+			raw_inode->i_block[block] = inode->u.ext2_i.i_data[block];
+	}
 	bh->b_dirt = 1;
 	inode->i_dirt = 0;
 	brelse (bh);

@@ -3,7 +3,8 @@
  |                                                                           |
  | All of the functions which transfer data between user memory and FPU_REGs.|
  |                                                                           |
- | Copyright (C) 1992    W. Metzenthen, 22 Parker St, Ormond, Vic 3163,      |
+ | Copyright (C) 1992,1993                                                   |
+ |                       W. Metzenthen, 22 Parker St, Ormond, Vic 3163,      |
  |                       Australia.  E-mail apm233m@vaxc.cc.monash.edu.au    |
  |                                                                           |
  |                                                                           |
@@ -505,45 +506,19 @@ int reg_store_double(void)
 
   if (FPU_st0_tag == TW_Valid)
     {
-      /* Rounding can get a little messy.. */
-      int exp = FPU_st0_ptr->exp - EXP_BIAS;
-      int increment = ((FPU_st0_ptr->sigl & 0x7ff) > 0x400) |	/* nearest */
-	((FPU_st0_ptr->sigl & 0xc00) == 0xc00);           	/* odd -> even */
-      if ( increment )
-	{
-	  if ( FPU_st0_ptr->sigl >= 0xfffff800 )
-	    {
-	      /* the sigl part overflows */
-	      if ( FPU_st0_ptr->sigh == 0xffffffff )
-		{
-		  /* The sigh part overflows */
-		  l[0] = l[1] = 0;
-		  exp++;	/* no need to check here for overflow */
-		}
-	      else
-		{
-		  /* No overflow of sigh will happen, can safely increment */
-		  l[0] = (FPU_st0_ptr->sigh+1) << 21;
-		  l[1] = (((FPU_st0_ptr->sigh+1) >> 11) & 0xfffff);
-		}
-	    }
-	  else
-	    {
-	      /* We only need to increment sigl */
-	      l[0] = ((FPU_st0_ptr->sigl+0x800) >> 11) | (FPU_st0_ptr->sigh << 21);
-	      l[1] = ((FPU_st0_ptr->sigh >> 11) & 0xfffff);
-	    }
-	}
-      else
-	{
-	  /* No increment required */
-	  l[0] = (FPU_st0_ptr->sigl >> 11) | (FPU_st0_ptr->sigh << 21);
-	  l[1] = ((FPU_st0_ptr->sigh >> 11) & 0xfffff);
-	}
+      int exp;
+      FPU_REG tmp;
+
+      reg_move(FPU_st0_ptr, &tmp);
+      if (round_to_53_bits(&tmp)) goto overflow;
+      l[0] = (tmp.sigl >> 11) | (tmp.sigh << 21);
+      l[1] = ((tmp.sigh >> 11) & 0xfffff);
+      exp = tmp.exp - EXP_BIAS;
 
       if ( exp > DOUBLE_Emax )
 	{
 	  EXCEPTION(EX_Overflow);
+	overflow:
 	  /* This is a special case: see sec 16.2.5.1 of the 80486 book */
 	  if ( control_word & EX_Overflow )
 	    {
@@ -645,7 +620,6 @@ put_indefinite:
   RE_ENTRANT_CHECK_ON
 
   return 1;
-
 }
 
 
@@ -654,31 +628,21 @@ int reg_store_single(void)
 {
   float *single = (float *)FPU_data_address;
   long templ;
-  int exp = FPU_st0_ptr->exp - EXP_BIAS;
-  unsigned long sigh = FPU_st0_ptr->sigh;
-
 
   if (FPU_st0_tag == TW_Valid)
     {
-      if ( ((sigh & 0xff) > 0x80)           /* more than half */
-	  || ((sigh & 0x180) == 0x180) )    /* round to even */
-	{
-	  /* Round up */
-	  if ( sigh >= 0xffffff00 )
-	    {
-	      /* sigh would overflow */
-	      exp++;
-	      sigh = 0x80000000;
-	    }
-	  else
-	    {
-	      sigh += 0x100;
-	    }
-	}
-      templ = (sigh >> 8) & 0x007fffff;
+      int exp;
+      FPU_REG tmp;
+
+      reg_move(FPU_st0_ptr, &tmp);
+      if (round_to_24_bits(&tmp)) goto overflow;
+      templ = (tmp.sigh >> 8) & 0x007fffff;
+      exp = tmp.exp - EXP_BIAS;
+
       if ( exp > SINGLE_Emax )
 	{
 	  EXCEPTION(EX_Overflow);
+	overflow:
 	  /* This is a special case: see sec 16.2.5.1 of the 80486 book */
 	  if ( control_word & EX_Overflow )
 	    {

@@ -550,7 +550,7 @@ restart_interp:
 		p = copy_strings(1, &i_name, page, p, 2);
 		argc++;
 		if (!p) {
-			retval = -ENOMEM;
+			retval = -E2BIG;
 			goto exec_error1;
 		}
 		/*
@@ -578,7 +578,7 @@ restart_interp:
 		p = copy_strings(envc,envp,page,p,0);
 		p = copy_strings(argc,argv,page,p,0);
 		if (!p) {
-			retval = -ENOMEM;
+			retval = -E2BIG;
 			goto exec_error2;
 		}
 	}

@@ -48,7 +48,8 @@ static struct super_operations minix_sops = {
 	minix_statfs
 };
 
-struct super_block *minix_read_super(struct super_block *s,void *data)
+struct super_block *minix_read_super(struct super_block *s,void *data, 
+				     int silent)
 {
 	struct buffer_head *bh;
 	struct minix_super_block *ms;
@@ -83,7 +84,9 @@ struct super_block *minix_read_super(struct super_block *s,void *data)
 	} else {
 		s->s_dev = 0;
 		unlock_super(s);
-		printk("MINIX-fs magic match failed\n");
+		if (!silent)
+			printk("VFS: Can't find a minix filesystem on dev 0x%04x.\n",
+				   dev);
 		return NULL;
 	}
 	for (i=0;i < MINIX_I_MAP_SLOTS;i++)
@@ -138,6 +141,7 @@ void minix_statfs(struct super_block *sb, struct statfs *buf)
 	put_fs_long(tmp, &buf->f_bavail);
 	put_fs_long(sb->u.minix_sb.s_ninodes, &buf->f_files);
 	put_fs_long(minix_count_free_inodes(sb), &buf->f_ffree);
+	put_fs_long(sb->u.minix_sb.s_namelen, &buf->f_namelen);
 	/* Don't know what value to put in buf->f_fsid */
 }
 
@@ -354,14 +358,8 @@ void minix_read_inode(struct inode * inode)
 		inode->i_op = &chrdev_inode_operations;
 	else if (S_ISBLK(inode->i_mode))
 		inode->i_op = &blkdev_inode_operations;
-	else if (S_ISFIFO(inode->i_mode)) {
-		inode->i_op = &fifo_inode_operations;
-		inode->i_pipe = 1;
-		PIPE_BASE(*inode) = NULL;
-		PIPE_HEAD(*inode) = PIPE_TAIL(*inode) = 0;
-		PIPE_READ_WAIT(*inode) = PIPE_WRITE_WAIT(*inode) = NULL;
-		PIPE_READERS(*inode) = PIPE_WRITERS(*inode) = 0;
-	}
+	else if (S_ISFIFO(inode->i_mode))
+		init_fifo(inode);
 }
 
 void minix_write_inode(struct inode * inode)

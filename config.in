@@ -11,7 +11,7 @@ CONFIG_TCPIP y/n y
 Kernel profiling support
 CONFIG_PROFILE y/n n
 Limit memory to low 16MB
-CONFIG_MAX_16M y/n y
+CONFIG_MAX_16M y/n n
 Use -m486 flag for 486-specific optimizations
 CONFIG_M486 y/n y
 :
@@ -23,29 +23,31 @@ CONFIG_SCSI y/n n
 SCSI support type (disk, tape, CDrom)
 .
 Scsi disk support
-CONFIG_BLK_DEV_SD y/n y
+CONFIG_BLK_DEV_SD y/n n
 Scsi tape support
-CONFIG_BLK_DEV_ST y/n y
+CONFIG_BLK_DEV_ST y/n n
 Scsi CDROM support
-CONFIG_BLK_DEV_SR y/n y
+CONFIG_BLK_DEV_SR y/n n
 .
 SCSI low-level drivers
 .
 Adaptec AHA1542 support
-CONFIG_SCSI_AHA1542 y/n y
+CONFIG_SCSI_AHA1542 y/n n
 Adaptec AHA1740 support
-CONFIG_SCSI_AHA1740 y/n y
+CONFIG_SCSI_AHA1740 y/n n
 Future Domain SCSI support
-CONFIG_SCSI_FUTURE_DOMAIN y/n y
+CONFIG_SCSI_FUTURE_DOMAIN y/n n
 Seagate ST-02 and Future Domain TMC-8xx SCSI support
-CONFIG_SCSI_SEAGATE y/n y
+CONFIG_SCSI_SEAGATE y/n n
 UltraStor SCSI support
-CONFIG_SCSI_ULTRASTOR y/n y
+CONFIG_SCSI_ULTRASTOR y/n n
 7000FASST SCSI support
-CONFIG_SCSI_7000FASST y/n y
+CONFIG_SCSI_7000FASST y/n n
 .
 Filesystems
 .
+Mount root initially readonly
+CONFIG_ROOT_RDONLY y/n n
 Standard (minix) fs support
 CONFIG_MINIX_FS y/n y
 Extended fs support

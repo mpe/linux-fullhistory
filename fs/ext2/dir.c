@@ -65,6 +65,31 @@ struct inode_operations ext2_dir_inode_operations = {
 	NULL			/* permission */
 };
 
+int ext2_check_dir_entry (char * function, struct inode * dir,
+			  struct ext2_dir_entry * de, struct buffer_head * bh,
+			  unsigned int offset)
+{
+	char * error_msg = NULL;
+
+	if (de->rec_len < EXT2_DIR_REC_LEN(1))
+		error_msg = "rec_len is smaller than minimal";
+	else if (de->rec_len % 4 != 0)
+		error_msg = "rec_len % 4 != 0";
+	else if (de->rec_len < EXT2_DIR_REC_LEN(de->name_len))
+		error_msg = "rec_len is too small for name_len";
+	else if (((char *) de - bh->b_data) + de->rec_len >
+		 dir->i_sb->s_blocksize)
+		error_msg = "directory entry accross blocks";
+
+	if (error_msg != NULL) {
+		printk ("%s: bad directory entry (dev %04x, dir %d): %s\n",
+			function, dir->i_dev, dir->i_ino, error_msg);
+		printk ("offset=%d, inode=%d, rec_len=%d, name_len=%d\n",
+			offset, de->inode, de->rec_len,	de->name_len);
+	}
+	return error_msg == NULL ? 1 : 0;
+}
+
 static int ext2_readdir (struct inode * inode, struct file * filp,
 			 struct dirent * dirent, int count)
 {
@@ -85,13 +110,8 @@ static int ext2_readdir (struct inode * inode, struct file * filp,
 		}
 		de = (struct ext2_dir_entry *) (offset + bh->b_data);
 		while (offset < sb->s_blocksize && filp->f_pos < inode->i_size) {
-			if (de->rec_len < EXT2_DIR_REC_LEN(1) ||
-			    de->rec_len % 4 != 0 ||
-			    de->rec_len < EXT2_DIR_REC_LEN(de->name_len)) {
-				printk ("ext2_readdir: bad directory entry (dev %04x, dir %d)\n",
-					inode->i_dev, inode->i_ino);
-				printk ("offset=%d, inode=%d, rec_len=%d, name_len=%d\n",
-					offset, de->inode, de->rec_len, de->name_len);
+			if (! ext2_check_dir_entry ("ext2_readdir", inode, de,
+						    bh, offset)) {
 				brelse (bh);
 				return 0;
 			}

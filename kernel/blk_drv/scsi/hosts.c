@@ -67,6 +67,13 @@ static const char RCSid[] = "$Header: /usr/src/linux/kernel/blk_drv/scsi/RCS/hos
  *	during detection.
  */
 
+/* This is a placeholder for controllers that are not configured into
+   the system - we do this to ensure that the controller numbering is
+   always consistent, no matter how the kernel is configured. */
+
+#define NO_CONTROLLER {NULL, NULL, NULL, NULL, NULL, NULL, NULL, \
+	        NULL, NULL, 0, 0, 0, 0, 0, 0}
+
 /*
  *	When figure is run, we don't want to link to any object code.  Since 
  *	the macro for each host will contain function pointers, we cannot 

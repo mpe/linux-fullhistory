@@ -37,12 +37,12 @@ static int xiafs_match(int len, const char * name, struct xiafs_direct * dep)
     /* "" means "." ---> so paths like "/usr/lib//libc.a" work */
     if (!len && (dep->d_name[0]=='.') && (dep->d_name[1]=='\0'))
         return 1;
-    if (len < _XIAFS_NAME_LEN && dep->d_name[len])
+    if (len != dep->d_name_len)
         return 0;
     for (i=0; i < len; i++)
         if (*name++ != dep->d_name[i])
-	    break;
-    return (i==len) ? 1 : 0;
+	    return 0;
+    return 1;
 }
 
 /*
@@ -306,14 +306,8 @@ int xiafs_mknod(struct inode *dir, const char *name, int len, int mode, int rdev
         inode->i_op = &chrdev_inode_operations;
     else if (S_ISBLK(inode->i_mode))
         inode->i_op = &blkdev_inode_operations;
-    else if (S_ISFIFO(inode->i_mode)) {
-        inode->i_op = &fifo_inode_operations;
-	inode->i_pipe = 1;
-	PIPE_BASE(*inode) = NULL;
-	PIPE_HEAD(*inode) = PIPE_TAIL(*inode) = 0;
-	PIPE_READ_WAIT(*inode) = PIPE_WRITE_WAIT(*inode) = NULL;
-	PIPE_READERS(*inode) = PIPE_WRITERS(*inode) = 0;
-    }
+    else if (S_ISFIFO(inode->i_mode))
+    	init_fifo(inode);
     if (S_ISBLK(mode) || S_ISCHR(mode))
         inode->i_rdev = rdev;
     inode->i_atime = inode->i_ctime = inode->i_atime = CURRENT_TIME;

@@ -13,7 +13,7 @@ struct ext2_sb_info {
 	unsigned long s_r_blocks_count;	/* Reserved blocks count */
 	unsigned long s_first_data_block;/* First data block */
 	unsigned long s_log_block_size;	/* Log of block size */
-	unsigned long s_log_frag_size;	/* Log of fragment size */
+	long s_log_frag_size;		/* Log of fragment size */
 	unsigned long s_frag_size;	/* Size of a fragment in bytes */
 	unsigned long s_frags_per_block;/* Number of fragments per block */
 	unsigned long s_inodes_per_block;/* Number of inodes per block */
@@ -31,6 +31,7 @@ struct ext2_sb_info {
 	unsigned long s_block_bitmap_number[EXT2_MAX_GROUP_LOADED];
 	struct buffer_head * s_block_bitmap[EXT2_MAX_GROUP_LOADED];
 	int s_rename_lock;
+	int s_was_mounted_valid;
 	struct wait_queue * s_rename_wait;
 };
 

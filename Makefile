@@ -139,7 +139,7 @@ tools/./version.h: tools/version.h
 
 tools/version.h: $(CONFIGURE) Makefile
 	@./makever.sh
-	@echo \#define UTS_RELEASE \"0.99.pl7A-`cat .version`\" > tools/version.h
+	@echo \#define UTS_RELEASE \"0.99.pl8-`cat .version`\" > tools/version.h
 	@echo \#define UTS_VERSION \"`date +%D`\" >> tools/version.h
 	@echo \#define LINUX_COMPILE_TIME \"`date +%T`\" >> tools/version.h
 	@echo \#define LINUX_COMPILE_BY \"`whoami`\" >> tools/version.h

@@ -17,6 +17,7 @@
 
 #include <asm/system.h>
 #include <asm/segment.h>
+
  
 /*
  * The definition of file_systems that used to be here is now in
@@ -28,6 +29,8 @@ extern struct file_operations * blkdev_fops[];
 
 extern void wait_for_keypress(void);
 extern void fcntl_init_locks(void);
+
+extern int root_mountflags;
 
 struct super_block super_block[NR_SUPER];
 
@@ -118,7 +121,8 @@ void put_super(dev_t dev)
 		sb->s_op->put_super(sb);
 }
 
-static struct super_block * read_super(dev_t dev,char *name,int flags,void *data)
+static struct super_block * read_super(dev_t dev,char *name,int flags,
+				       void *data, int silent)
 {
 	struct super_block * s;
 	struct file_system_type *type;
@@ -142,7 +146,7 @@ static struct super_block * read_super(dev_t dev,char *name,int flags,void *data
 	}
 	s->s_dev = dev;
 	s->s_flags = flags;
-	if (!type->read_super(s,data)) {
+	if (!type->read_super(s,data, silent)) {
 		s->s_dev = 0;
 		return NULL;
 	}
@@ -308,7 +312,7 @@ static int do_mount(dev_t dev, const char * dir, char * type, int flags, void * 
 		iput(dir_i);
 		return -EBUSY;
 	}
-	sb = read_super(dev,type,flags,data);
+	sb = read_super(dev,type,flags,data,0);
 	if (!sb || sb->s_covered) {
 		iput(dir_i);
 		return -EBUSY;
@@ -452,14 +456,17 @@ void mount_root(void)
 	for (fs_type = file_systems; fs_type->read_super; fs_type++) {
 		if (!fs_type->requires_dev)
 			continue;
-		sb = read_super(ROOT_DEV,fs_type->name,0,NULL);
+		sb = read_super(ROOT_DEV,fs_type->name,root_mountflags,NULL,1);
 		if (sb) {
 			inode = sb->s_mounted;
 			inode->i_count += 3 ;	/* NOTE! it is logically used 4 times, not 1 */
 			sb->s_covered = inode;
-			sb->s_flags = 0;
+			sb->s_flags = root_mountflags;
 			current->pwd = inode;
 			current->root = inode;
+			printk ("VFS: Mounted root (%s filesystem)%s.\n",
+				fs_type->name,
+				(sb->s_flags & MS_RDONLY) ? " readonly" : "");
 			return;
 		}
 	}

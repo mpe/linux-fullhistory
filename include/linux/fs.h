@@ -300,7 +300,7 @@ struct super_operations {
 };
 
 struct file_system_type {
-	struct super_block *(*read_super) (struct super_block *, void *);
+	struct super_block *(*read_super) (struct super_block *, void *, int);
 	char *name;
 	int requires_dev;
 };
@@ -318,7 +318,7 @@ extern int chrdev_open(struct inode * inode, struct file * filp);
 extern struct file_operations def_chr_fops;
 extern struct inode_operations chrdev_inode_operations;
 
-extern struct inode_operations fifo_inode_operations;
+extern void init_fifo(struct inode * inode);
 
 extern struct file_system_type *get_fs_type(char *name);
 

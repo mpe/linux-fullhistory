@@ -243,6 +243,8 @@ void do_tty_hangup(struct tty_struct * tty, struct file_operations *fops)
 			continue;
 		if (filp->f_rdev != dev)
 			continue;
+		if (filp->f_inode && filp->f_inode->i_rdev == 0x0400)
+			continue;
 		if (filp->f_op != &tty_fops)
 			continue;
 		filp->f_op = fops;

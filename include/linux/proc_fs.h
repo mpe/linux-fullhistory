@@ -15,7 +15,7 @@ struct proc_dir_entry {
 	char * name;
 };
 
-extern struct super_block *proc_read_super(struct super_block *,void *);
+extern struct super_block *proc_read_super(struct super_block *,void *,int);
 extern void proc_put_inode(struct inode *);
 extern void proc_put_super(struct super_block *);
 extern void proc_statfs(struct super_block *, struct statfs *);

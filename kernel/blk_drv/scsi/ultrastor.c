@@ -403,7 +403,7 @@ int ultrastor_queuecommand(Scsi_Cmnd *SCpnt, void (*done)(Scsi_Cmnd *))
     memset(&mscp.command_link, 0, sizeof(mscp.command_link));	/*???*/
     mscp.scsi_command_link_id = 0;	/*???*/
     mscp.length_of_sense_byte = 0;	/*???*/
-    mscp.length_of_scsi_cdbs = ((SCpnt->cmnd[0] <= 0x1F) ? 6 : 10);
+    mscp.length_of_scsi_cdbs = COMMAND_SIZE(*(unsigned char *)SCpnt->cmnd);
     memcpy(mscp.scsi_cdbs, SCpnt->cmnd, mscp.length_of_scsi_cdbs);
     mscp.adapter_status = 0;
     mscp.target_status = 0;
@@ -496,8 +496,8 @@ int ultrastor_biosparam(int size, int dev, int *info)
     info[0] = config.heads;
     info[1] = config.sectors;
     info[2] = (size + (s - 1)) / s;
-    if (info[2] > 1024)
-	info[2] = 1024;
+/*    if (info[2] > 1024)
+	info[2] = 1024; */
     return 0;
 }
 

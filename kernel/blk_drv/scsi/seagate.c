@@ -64,9 +64,9 @@ static volatile int st0x_aborted=0;	/*
 static unsigned char controller_type;	/* set to SEAGATE for ST0x boards or FD for TMC-88x boards */
 			
 #define retcode(result) (((result) << 16) | (message << 8) | status) 			
-#define STATUS (*(unsigned char *) st0x_cr_sr)
+#define STATUS (*(volatile unsigned char *) st0x_cr_sr)
 #define CONTROL STATUS 
-#define DATA (*(unsigned char *) st0x_dr)
+#define DATA (*(volatile unsigned char *) st0x_dr)
 
 #ifndef OVERRIDE		
 static const char *  seagate_bases[] = {(char *) 0xc8000, (char *) 0xca000, (char *) 0xcc000, (char *) 0xce000, (char *) 0xce000,

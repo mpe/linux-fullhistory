@@ -4,6 +4,7 @@
 # It's a fast hack - feel free to do something better.
 CONFIG=.config~
 CONFIG_H=include/linux/autoconf.h
+> config.new
 echo "#" > $CONFIG
 echo "# Automatically generated make config: don't edit" >> $CONFIG
 echo "#" >> $CONFIG
@@ -17,6 +18,7 @@ old="y"
 
 while read i
 do
+	echo $i >> config.new
 	echo >> $CONFIG
 	echo >> $CONFIG_H
 	echo
@@ -29,11 +31,13 @@ do
 		echo " * "$i >> $CONFIG_H
 		echo "**" $i
 		read i || break
+		echo $i >> config.new
 	done
 	echo "#" >> $CONFIG
 	echo " */" >> $CONFIG_H
 	echo "**"
 	read i || break
+	echo $i >> config.new
 	while [ "$i" != "." -a "$i" != ":" ]
 	do
 		read j ques def || break
@@ -49,6 +53,7 @@ do
 				ans=$def
 			fi
 		fi
+		echo $j $ques $ans >> config.new
 		if [ "$ans" = "y" ]
 		then
 			echo $j = $j >> $CONFIG
@@ -56,6 +61,7 @@ do
 			next="y";
 		fi
 		read i || break
+		echo $i >> config.new
 	done
 	old=$next
 	next="y"
@@ -64,6 +70,8 @@ do
 		next="n"
 	fi
 done
+
+mv config.new config.in
 
 echo
 echo "The linux kernel is now hopefully configured for your setup."

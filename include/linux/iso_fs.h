@@ -163,7 +163,7 @@ extern int isofs_free_block(int dev, int block);
 extern int isofs_bmap(struct inode *,int);
 
 extern void isofs_put_super(struct super_block *);
-extern struct super_block *isofs_read_super(struct super_block *,void *);
+extern struct super_block *isofs_read_super(struct super_block *,void *,int);
 extern void isofs_read_inode(struct inode *);
 extern void isofs_put_inode(struct inode *);
 extern void isofs_statfs(struct super_block *, struct statfs *);

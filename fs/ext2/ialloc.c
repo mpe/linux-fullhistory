@@ -1,8 +1,11 @@
+
 /*
  *  linux/fs/ext2/ialloc.c
  *
  *  Copyright (C) 1992, 1993  Remy Card (card@masi.ibp.fr)
  *
+ *  BSD ufs-inspired inode and directory allocation by 
+ *  Stephen Tweedie (sct@dcs.ed.ac.uk), 1993
  */
 
 /* ialloc.c contains the inodes allocation and deallocation routines */
@@ -27,45 +30,31 @@
 #include <linux/string.h>
 #include <linux/locks.h>
 
-#define set_bit(nr,addr) ( \
-{ \
-	char res; \
-	__asm__ __volatile__("btsl %1,%2\n\tsetb %0" \
-			     :"=q" (res) \
-			     :"r" (nr),"m" (*(addr))); \
-	res; \
-} \
-)
+#include <asm/bitops.h>
 
-#define clear_bit(nr,addr) ( \
-{ \
-	char res; \
-	__asm__ __volatile__("btrl %1,%2\n\tsetnb %0" \
-			     :"=q" (res) \
-			     :"r" (nr),"m" (*(addr))); \
-	res; \
-} \
-)
-
-
-#define find_first_zero(addr,size) ( \
-{ \
-	int __res; \
-	__asm__("cld\n" \
-		"1:\tlodsl\n\t" \
-		"notl %%eax\n\t" \
-		"bsfl %%eax,%%edx\n\t" \
-		"jne 2f\n\t" \
-		"addl $32,%%ecx\n\t" \
-		"cmpl %%ebx,%%ecx\n\t" \
-		"jl 1b\n\t" \
-		"xorl %%edx,%%edx\n" \
-		"2:\taddl %%edx,%%ecx" \
-		:"=c" (__res):"0" (0), "S" (addr), "b" (size) \
-		:"ax", "bx", "dx", "si"); \
-	__res; \
-} \
-)
+static inline int find_first_zero_bit(unsigned *addr, unsigned size)
+{
+	int res;
+	if (!size)
+		return 0;
+	__asm__("
+	cld
+	movl $-1,%%eax
+	repe; scasl
+	je 1f
+	subl $4,%%edi
+	movl (%%edi),%%eax
+	notl %%eax
+	bsfl %%eax,%%edx
+	jmp 2f
+1:	xorl %%edx,%%edx
+2:	subl %%ebx,%%edi
+	shll $3,%%edi
+	addl %%edi,%%edx"
+	:"=d" (res):"c" ((size+31)>>5), "D" (addr), "b" (addr)
+	:"ax", "bx", "cx", "di");
+	return res;
+}
 
 static void read_inode_bitmap (struct super_block * sb,
 			       unsigned long block_group,
@@ -278,13 +267,13 @@ void ext2_free_inode (struct inode * inode)
  */
 static void inc_inode_version (struct inode * inode,
 			       struct ext2_group_desc *gdp,
-			       unsigned long desc)
+			       int mode)
 {
 	unsigned long inode_block;
 	struct buffer_head * bh;
 	struct ext2_inode * raw_inode;
 
-	inode_block = gdp[desc].bg_inode_table + (((inode->i_ino - 1) %
+	inode_block = gdp->bg_inode_table + (((inode->i_ino - 1) %
 			EXT2_INODES_PER_GROUP(inode->i_sb)) /
 			EXT2_INODES_PER_BLOCK(inode->i_sb));
 	bh = bread (inode->i_sb->s_dev, inode_block, inode->i_sb->s_blocksize);
@@ -300,26 +289,44 @@ static void inc_inode_version (struct inode * inode,
 			EXT2_INODES_PER_GROUP(inode->i_sb)) %
 			EXT2_INODES_PER_BLOCK(inode->i_sb));
 	raw_inode->i_version++;
-	inode->u.ext2_i.i_version = raw_inode->i_version;
+	if (!S_ISFIFO(mode))
+		inode->u.ext2_i.i_version = raw_inode->i_version;
 	bh->b_dirt = 1;
 	brelse (bh);
 }
 
+static struct ext2_group_desc * 
+get_group_desc(struct super_block *sb, int group)
+{
+	struct ext2_group_desc * gdp;
+	if (group >=  sb->u.ext2_sb.s_groups_count || group < 0 )
+		panic ("ext2: get_group_desc: Invalid group\n");
+	if (!sb->u.ext2_sb.s_group_desc[group / EXT2_DESC_PER_BLOCK(sb)])
+		panic ("ext2: get_group_desc: Descriptor not loaded");
+	gdp = (struct ext2_group_desc *)
+		sb->u.ext2_sb.s_group_desc[group / EXT2_DESC_PER_BLOCK(sb)]
+		->b_data;
+	return gdp + (group % EXT2_DESC_PER_BLOCK(sb));
+}
+	
 /*
- * ext2_new_inode does not use a very clever algorithm yet
+ * There are two policies for allocating an inode.  If the new inode is
+ * a directory, then a forward search is made for a block group with both
+ * free space and a low directory-to-inode ratio; if that fails, then of
+ * the groups with above-average free space, that group with the fewest
+ * directories already is chosen.
  *
- * Currently, the group descriptors are scanned until a free block is found
+ * For other inodes, search forward from the parent directory\'s block
+ * group to find a free inode.
  */
 struct inode * ext2_new_inode (const struct inode * dir, int mode)
 {
 	struct super_block * sb;
 	struct buffer_head * bh;
-	int i, j;
+	int i, j, avefreei;
 	struct inode * inode;
-	unsigned long group_desc;
-	unsigned long desc;
 	int bitmap_nr;
-	struct ext2_group_desc * gdp;
+	struct ext2_group_desc * gdp, * tmp;
 	struct ext2_super_block * es;
 
 	if (!dir || !(inode = get_empty_inode ()))
@@ -330,25 +337,73 @@ struct inode * ext2_new_inode (const struct inode * dir, int mode)
 	lock_super (sb);
 	es = (struct ext2_super_block *) sb->u.ext2_sb.s_sbh->b_data;
 repeat:
-	group_desc = 0;
-	desc = 0;
-	gdp = NULL;
-	for (i = 0; i < sb->u.ext2_sb.s_groups_count; i++) {
-		if (!gdp) {
-			if (!sb->u.ext2_sb.s_group_desc[group_desc])
-				panic ("ext2_new_inode: Descriptor not loaded");
-			gdp = (struct ext2_group_desc *) sb->u.ext2_sb.s_group_desc[group_desc]->b_data;
+	gdp = NULL; i=0;
+	
+	if (S_ISDIR(mode)) {
+		avefreei = es->s_free_inodes_count / 
+			sb->u.ext2_sb.s_groups_count;
+/* I am not yet convinced that this next bit is necessary.
+		i = dir->u.ext2_i.i_block_group;
+		for (j = 0; j < sb->u.ext2_sb.s_groups_count; j++) {
+			tmp = get_group_desc(sb, i);
+			if ((tmp->bg_used_dirs_count << 8) < 
+			    tmp->bg_free_inodes_count) {
+				gdp = tmp;
+				break;
+			}
+			else
+			i = ++i % sb->u.ext2_sb.s_groups_count;
 		}
-		if (gdp[desc].bg_free_inodes_count > 0)
-			break;
-		desc ++;
-		if (desc == EXT2_DESC_PER_BLOCK(sb)) {
-			group_desc ++;
-			desc = 0;
-			gdp = NULL;
+*/
+		if (!gdp) {
+			for (j = 0; j < sb->u.ext2_sb.s_groups_count; j++) {
+				tmp = get_group_desc(sb, j);
+				if (tmp->bg_free_inodes_count >= avefreei) {
+					if (!gdp || 
+					    (tmp->bg_free_inodes_count >
+					     gdp->bg_free_inodes_count)) {
+						i = j;
+						gdp = tmp;
+					}
+				}
+			}
 		}
 	}
-	if (i >= sb->u.ext2_sb.s_groups_count) {
+	else 
+	{ /* Try to place the inode in it\'s parent directory */
+		i = dir->u.ext2_i.i_block_group;
+		tmp = get_group_desc(sb, i);
+		if (tmp->bg_free_inodes_count)
+			gdp = tmp;
+		else
+		{ /* Use a quadratic hash to find a group with a free inode */
+			for (j=1; j<sb->u.ext2_sb.s_groups_count; j<<=1) {
+				i+=j;
+				if (i>=sb->u.ext2_sb.s_groups_count)
+					i-=sb->u.ext2_sb.s_groups_count;
+				tmp = get_group_desc(sb,i);
+				if (tmp->bg_free_inodes_count) {
+					gdp = tmp;
+					break;
+				}
+			}
+		}
+		if (!gdp) {
+			/* That failed: try linear search for a free inode */
+			i = dir->u.ext2_i.i_block_group + 2;
+			for (j=2; j<sb->u.ext2_sb.s_groups_count; j++) {
+				if (++i > sb->u.ext2_sb.s_groups_count)
+					i=0;
+				tmp = get_group_desc(sb,i);
+				if (tmp->bg_free_inodes_count) {
+					gdp = tmp;
+					break;
+				}
+			}
+		}
+	}
+	
+	if (!gdp) {
 		unlock_super (sb);
 		return NULL;
 	}
@@ -358,7 +413,8 @@ repeat:
 		printk ("block_group = %d\n", i);
 		panic ("ext2_new_inode: Unable to load group inode bitmap");
 	}
-	if ((j = find_first_zero (bh->b_data, EXT2_INODES_PER_GROUP(sb))) <
+	if ((j = find_first_zero_bit ((unsigned long *) bh->b_data,
+				      EXT2_INODES_PER_GROUP(sb))) <
 	    EXT2_INODES_PER_GROUP(sb)) {
 		if (set_bit (j, bh->b_data)) {
 			printk ("ext2_new_inode: bit already set\n");
@@ -373,10 +429,10 @@ repeat:
 		printk ("ext2_new_inode: inode > inodes count");
 		return NULL;
 	}
-	gdp[desc].bg_free_inodes_count --;
+	gdp->bg_free_inodes_count --;
 	if (S_ISDIR(mode))
-		gdp[desc].bg_used_dirs_count ++;
-	sb->u.ext2_sb.s_group_desc[group_desc]->b_dirt = 1;
+		gdp->bg_used_dirs_count ++;
+	sb->u.ext2_sb.s_group_desc[i / EXT2_DESC_PER_BLOCK(sb)]->b_dirt = 1;
 	es->s_free_inodes_count --;
 	sb->u.ext2_sb.s_sbh->b_dirt = 1;
 	sb->s_dirt = 1;
@@ -398,9 +454,10 @@ repeat:
 	inode->u.ext2_i.i_file_acl = 0;
 	inode->u.ext2_i.i_dir_acl = 0;
 	inode->u.ext2_i.i_dtime = 0;
-	inode->u.ext2_i.i_block_group = i;
+ 	if (!S_ISFIFO(mode))
+ 		inode->u.ext2_i.i_block_group = i;
 	inode->i_op = NULL;
-	inc_inode_version (inode, gdp, desc);
+	inc_inode_version (inode, gdp, mode);
 #ifdef EXT2FS_DEBUG
 	printk ("ext2_new_inode : allocating inode %d\n", inode->i_ino);
 #endif

@@ -92,7 +92,7 @@ extern struct buffer_head * xiafs_bread(struct inode *, int, int);
 
 extern void xiafs_truncate(struct inode *);
 extern void xiafs_put_super(struct super_block *);
-extern struct super_block *xiafs_read_super(struct super_block *,void *);
+extern struct super_block *xiafs_read_super(struct super_block *,void *,int);
 extern void xiafs_read_inode(struct inode *);
 extern void xiafs_write_inode(struct inode *);
 extern void xiafs_put_inode(struct inode *);

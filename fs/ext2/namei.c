@@ -105,13 +105,8 @@ static struct buffer_head * ext2_find_entry (struct inode * dir,
 			if (prev_dir)
 				*prev_dir = NULL;
 		}
-		if (de->rec_len < EXT2_DIR_REC_LEN(1) || 
-		    de->rec_len % 4 != 0 ||
-		    de->rec_len < EXT2_DIR_REC_LEN(de->name_len)) {
-			printk ("ext2_find_entry: bad directory entry (dev %04x, dir %d)\n",
-				dir->i_dev, dir->i_ino);
-			printk ("offset=%d, inode=%d, rec_len=%d, name_len=%d\n",
-				offset, de->inode, de->rec_len, de->name_len);
+		if (! ext2_check_dir_entry ("ext2_find_entry", dir, de, bh,
+					    offset)) {
 			brelse (bh);
 			return NULL;
 		}
@@ -230,13 +225,8 @@ static struct buffer_head * ext2_add_entry (struct inode * dir,
 				de = (struct ext2_dir_entry *) bh->b_data;
 			}
 		}
-		if (de->rec_len < EXT2_DIR_REC_LEN(1) || 
-		    de->rec_len % 4 != 0 ||
-		    de->rec_len < EXT2_DIR_REC_LEN(de->name_len)) {
-			printk ("ext2_add_entry: bad directory entry (dev %04x, dir %d)\n",
-				dir->i_dev, dir->i_ino);
-			printk ("offset=%d, inode=%d, rec_len=%d, name_len=%d\n",
-				offset, de->inode, de->rec_len, de->name_len);
+		if (! ext2_check_dir_entry ("ext2_add_entry", dir, de, bh,
+					    offset)) {
 			brelse (bh);
 			return NULL;
 		}
@@ -265,6 +255,19 @@ static struct buffer_head * ext2_add_entry (struct inode * dir,
 	}
 	brelse (bh);
 	return NULL;
+}
+
+/*
+ * ext2_delete_entry deletes a directory entry by merging it with the
+ * previous entry
+ */
+static void ext2_delete_entry (struct ext2_dir_entry * dir,
+			       struct ext2_dir_entry * prev_dir)
+{
+	if (prev_dir != NULL)
+		prev_dir->rec_len += dir->rec_len;
+	else
+		dir->inode = 0;
 }
 
 int ext2_create (struct inode * dir,const char * name, int len, int mode,
@@ -341,14 +344,8 @@ int ext2_mknod (struct inode * dir, const char * name, int len, int mode,
 		inode->i_op = &chrdev_inode_operations;
 	else if (S_ISBLK(inode->i_mode))
 		inode->i_op = &blkdev_inode_operations;
-	else if (S_ISFIFO(inode->i_mode)) {
-		inode->i_op = &fifo_inode_operations;
-		inode->i_pipe = 1;
-		PIPE_BASE(*inode) = NULL;
-		PIPE_HEAD(*inode) = PIPE_TAIL(*inode) = 0;
-		PIPE_READ_WAIT(*inode) = PIPE_WRITE_WAIT(*inode) = NULL;
-		PIPE_READERS(*inode) = PIPE_WRITERS(*inode) = 0;
-	}
+	else if (S_ISFIFO(inode->i_mode)) 
+		init_fifo(inode);
 	if (S_ISBLK(mode) || S_ISCHR(mode))
 		inode->i_rdev = rdev;
 	inode->i_mtime = inode->i_atime = CURRENT_TIME;
@@ -477,13 +474,8 @@ static int empty_dir (struct inode * inode)
 			}
 			de = (struct ext2_dir_entry *) bh->b_data;
 		}
-		if (de->rec_len < EXT2_DIR_REC_LEN(1) || 
-		    de->rec_len % 4 != 0 ||
-		    de->rec_len < EXT2_DIR_REC_LEN(de->name_len)) {
-			printk ("empty_dir: bad directory entry (dev %04x, dir %d)\n",
-				inode->i_dev, inode->i_ino);
-			printk ("offset=%d, inode=%d, rec_len=%d, name_len=%d\n",
-				offset, de->inode, de->rec_len, de->name_len);
+		if (! ext2_check_dir_entry ("empty_dir", inode, de, bh,
+					    offset)) {
 			brelse (bh);
 			return 1;
 		}
@@ -537,10 +529,13 @@ int ext2_rmdir (struct inode * dir, const char * name, int len)
 #ifndef DONT_USE_DCACHE
 	ext2_dcache_remove (dir->i_dev, dir->i_ino, de->name, de->name_len);
 #endif
+	ext2_delete_entry (de, pde);
+#if 0	
 	if (pde)
 		pde->rec_len += de->rec_len;
 	else
 		de->inode = 0;
+#endif
 	bh->b_dirt = 1;
 	inode->i_nlink = 0;
 	inode->i_dirt = 1;
@@ -584,10 +579,13 @@ int ext2_unlink (struct inode * dir, const char * name, int len)
 #ifndef DONT_USE_DCACHE
 	ext2_dcache_remove (dir->i_dev, dir->i_ino, de->name, de->name_len);
 #endif
+	ext2_delete_entry (de, pde);
+#if 0
 	if (pde)
 		pde->rec_len += de->rec_len;
 	else
 		de->inode = 0;
+#endif
 	bh->b_dirt = 1;
 	dir->i_ctime = dir->i_mtime = CURRENT_TIME;
 	dir->i_dirt = 1;
@@ -857,12 +855,19 @@ start_up:
 	ext2_dcache_add (new_dir->i_dev, new_dir->i_ino, new_de->name,
 			 new_de->name_len, new_de->inode);
 #endif
+	if (old_bh->b_blocknr == new_bh->b_blocknr &&
+	    ((char *) new_de) + new_de->rec_len == (char *) old_de)
+		new_de->rec_len += old_de->rec_len;
+	else
+		ext2_delete_entry (old_de, pde);
+#if 0
 	if (((char *) new_de) + new_de->rec_len == (char *) old_de)
 		new_de->rec_len += old_de->rec_len;
 	else if (pde)
 		pde->rec_len += old_de->rec_len;
 	else
 		old_de->inode = 0;
+#endif
 	if (new_inode) {
 		new_inode->i_nlink --;
 		new_inode->i_dirt = 1;

@@ -122,7 +122,7 @@ static int fifo_open(struct inode * inode,struct file * filp)
  * is contain the open that then fills in the correct operations
  * depending on the access mode of the file...
  */
-struct file_operations def_fifo_fops = {
+static struct file_operations def_fifo_fops = {
 	NULL,
 	NULL,
 	NULL,
@@ -135,7 +135,7 @@ struct file_operations def_fifo_fops = {
 	NULL
 };
 
-struct inode_operations fifo_inode_operations = {
+static struct inode_operations fifo_inode_operations = {
 	&def_fifo_fops,		/* default file operations */
 	NULL,			/* create */
 	NULL,			/* lookup */
@@ -152,3 +152,14 @@ struct inode_operations fifo_inode_operations = {
 	NULL,			/* truncate */
 	NULL			/* permission */
 };
+
+void init_fifo(struct inode * inode)
+{
+	inode->i_op = &fifo_inode_operations;
+	inode->i_pipe = 1;
+	PIPE_BASE(*inode) = NULL;
+	PIPE_HEAD(*inode) = PIPE_TAIL(*inode) = 0;
+	PIPE_RD_OPENERS(*inode) = PIPE_WR_OPENERS(*inode) = 0;
+	PIPE_READ_WAIT(*inode) = PIPE_WRITE_WAIT(*inode) = NULL;
+	PIPE_READERS(*inode) = PIPE_WRITERS(*inode) = 0;
+}

@@ -53,7 +53,8 @@ static struct super_operations ext_sops = {
 	ext_statfs
 };
 
-struct super_block *ext_read_super(struct super_block *s,void *data)
+struct super_block *ext_read_super(struct super_block *s,void *data, 
+				   int silent)
 {
 	struct buffer_head *bh;
 	struct ext_super_block *es;
@@ -82,7 +83,9 @@ struct super_block *ext_read_super(struct super_block *s,void *data)
 	if (s->s_magic != EXT_SUPER_MAGIC) {
 		s->s_dev = 0;
 		unlock_super(s);
-		printk("EXT-fs: magic match failed\n");
+		if (!silent)
+			printk("VFS: Can't find an extfs filesystem on dev 0x%04x.\n",
+				   dev);
 		return NULL;
 	}
 	if (!s->u.ext_sb.s_firstfreeblocknumber)
@@ -151,6 +154,7 @@ void ext_statfs (struct super_block *sb, struct statfs *buf)
 	put_fs_long(tmp, &buf->f_bavail);
 	put_fs_long(sb->u.ext_sb.s_ninodes, &buf->f_files);
 	put_fs_long(ext_count_free_inodes(sb), &buf->f_ffree);
+	put_fs_long(EXT_NAME_LEN, &buf->f_namelen);
 	/* Don't know what value to put in buf->f_fsid */
 }
 
@@ -375,14 +379,8 @@ void ext_read_inode(struct inode * inode)
 		inode->i_op = &chrdev_inode_operations;
 	else if (S_ISBLK(inode->i_mode))
 		inode->i_op = &blkdev_inode_operations;
-	else if (S_ISFIFO(inode->i_mode)) {
-		inode->i_op = &fifo_inode_operations;
-		inode->i_pipe = 1;
-		PIPE_BASE(*inode) = NULL;
-		PIPE_HEAD(*inode) = PIPE_TAIL(*inode) = 0;
-		PIPE_READ_WAIT(*inode) = PIPE_WRITE_WAIT(*inode) = NULL;
-		PIPE_READERS(*inode) = PIPE_WRITERS(*inode) = 0;
-	}
+	else if (S_ISFIFO(inode->i_mode))
+		init_fifo(inode);
 }
 
 void ext_write_inode(struct inode * inode)

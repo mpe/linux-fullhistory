@@ -387,8 +387,9 @@ int tty_ioctl(struct inode * inode, struct file * file,
 		case TIOCNXCL:
 			return -EINVAL; /* not implemented */
 		case TIOCSCTTY:
-			if (current->leader && current->tty < 0
-			    && tty->session == 0) {
+			if ((current->leader && current->tty < 0 &&
+			     tty->session == 0) ||
+			    (arg == 1 && suser())) {
 				current->tty = dev;
 				tty->session = current->session;
 				tty->pgrp = current->pgrp;

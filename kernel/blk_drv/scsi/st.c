@@ -1197,7 +1197,7 @@ static int st_ioctl(struct inode * inode,struct file * file,
      return result;
    }
    else
-     return (-EINVAL);
+     return scsi_ioctl(scsi_tapes[dev].device, cmd_in, (void *) arg);
 }
 
 

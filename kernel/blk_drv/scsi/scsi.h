@@ -76,7 +76,28 @@
 #define MODE_SELECT_10		0x55
 #define MODE_SENSE_10		0x5a
 
-#define COMMAND_SIZE(opcode) ((opcode) ? ((opcode) > 0x20 ? 10 : 6) : 0)
+static __inline__ int COMMAND_SIZE (int opcode) {
+    int group = (opcode >> 5) & 7;
+    switch (group) {
+    case 0:
+        return 6;
+    case 1:
+    case 2:
+        return 10;
+    case 3:
+    case 4:
+        printk("COMMAND_SIZE : reserved command group %d\n", group);
+        panic ("");
+    case 5:
+        return 12;
+    default:
+#ifdef DEBUG
+        printk("COMMAND_SIZE : vendor specific command group %d - assuming"
+	       " 10 bytes\n", group);
+#endif
+	return 10;
+    }
+}
 
 /*
 	MESSAGE CODES
@@ -258,6 +279,7 @@ typedef struct scsi_device {
 	unsigned random:1;
 	unsigned changed:1;	/* Data invalid due to media change */
 	unsigned busy:1;	/* Used to prevent races */
+	unsigned lockable:1;    /* Able to prevent media removal */
 } Scsi_Device;
 /*
 	Use these to separate status msg and our bytes
@@ -348,7 +370,7 @@ typedef struct scsi_cmnd {
  *	abort, etc are in process. 
  */
 
-	unsigned char internal_timeout;
+	unsigned volatile char internal_timeout;
 
 	unsigned flags;
 		
@@ -459,6 +481,24 @@ static void end_scsi_request(Scsi_Cmnd * SCpnt, int uptodate, int sectors)
 	wake_up(&scsi_devices[SCpnt->index].device_wait);
 	return;
 }
+
+
+/* This is just like INIT_REQUEST, but we need to be aware of the fact
+   that an interrupt may start another request, so we run this with interrupts
+   turned off */
+
+#define INIT_SCSI_REQUEST \
+	if (!CURRENT) {\
+		CLEAR_INTR; \
+		sti();   \
+		return; \
+	} \
+	if (MAJOR(CURRENT->dev) != MAJOR_NR) \
+		panic(DEVICE_NAME ": request list destroyed"); \
+	if (CURRENT->bh) { \
+		if (!CURRENT->bh->b_lock) \
+			panic(DEVICE_NAME ": block not locked"); \
+	}
 #endif
 
 #define SCSI_SLEEP(QUEUE, CONDITION) {				\
@@ -476,4 +516,3 @@ sleep_repeat:							\
 	}; }
 
 #endif
-

@@ -66,7 +66,7 @@ static struct super_operations msdos_sops = {
 
 
 static int parse_options(char *options,char *check,char *conversion,uid_t *uid,
-    gid_t *gid,int *umask,int *debug,int *fat)
+    gid_t *gid,int *umask,int *debug,int *fat,int *quiet)
 {
 	char *this,*value;
 
@@ -75,7 +75,7 @@ static int parse_options(char *options,char *check,char *conversion,uid_t *uid,
 	*uid = current->uid;
 	*gid = current->gid;
 	*umask = current->umask;
-	*debug = *fat = 0;
+	*debug = *fat = *quiet = 0;
 	if (!options) return 1;
 	for (this = strtok(options,","); this; this = strtok(NULL,",")) {
 		if ((value = strchr(this,'=')) != NULL)
@@ -128,6 +128,10 @@ static int parse_options(char *options,char *check,char *conversion,uid_t *uid,
 			if (*value || (*fat != 12 && *fat != 16))
 				return 0;
 		}
+		else if (!strcmp(this,"quiet")) {
+			if (value) return 0;
+			*quiet = 1;
+		}
 		else return 0;
 	}
 	return 1;
@@ -136,19 +140,20 @@ static int parse_options(char *options,char *check,char *conversion,uid_t *uid,
 
 /* Read the super block of an MS-DOS FS. */
 
-struct super_block *msdos_read_super(struct super_block *s,void *data)
+struct super_block *msdos_read_super(struct super_block *s,void *data,
+				     int silent)
 {
 	struct buffer_head *bh;
 	struct msdos_boot_sector *b;
 	int data_sectors,logical_sector_size,sector_mult;
-	int debug,error,fat;
+	int debug,error,fat,quiet;
 	char check,conversion;
 	uid_t uid;
 	gid_t gid;
 	int umask;
 
 	if (!parse_options((char *) data,&check,&conversion,&uid,&gid,&umask,
-	    &debug,&fat)) {
+	    &debug,&fat,&quiet)) {
 		s->s_dev = 0;
 		return NULL;
 	}
@@ -198,21 +203,24 @@ struct super_block *msdos_read_super(struct super_block *s,void *data)
 	data_sectors = (CF_LE_W(*((unsigned short *) &b->sectors)) ?
 	    CF_LE_W(*((unsigned short *) &b->sectors)) :
 	    CF_LE_L(b->total_sect))*sector_mult-MSDOS_SB(s)->data_start;
-	MSDOS_SB(s)->clusters = b->cluster_size ? data_sectors/b->cluster_size/
-	    sector_mult : 0;
-	MSDOS_SB(s)->fat_bits = fat ? fat : MSDOS_SB(s)->clusters > MSDOS_FAT12
-	    ? 16 : 12;
-	error = !MSDOS_SB(s)->fats || (MSDOS_SB(s)->dir_entries & (MSDOS_DPS-1))
-	    || !b->cluster_size || MSDOS_SB(s)->clusters+2 > MSDOS_SB(s)->
-	    fat_length*SECTOR_SIZE*8/MSDOS_SB(s)->fat_bits || !sector_mult ||
-	    (logical_sector_size & (SECTOR_SIZE-1)) || !b->secs_track ||
-	    !b->heads;
+	error = !b->cluster_size || !sector_mult;
+	if (!error) {
+		MSDOS_SB(s)->clusters = b->cluster_size ? data_sectors/
+		    b->cluster_size/sector_mult : 0;
+		MSDOS_SB(s)->fat_bits = fat ? fat : MSDOS_SB(s)->clusters >
+		    MSDOS_FAT12 ? 16 : 12;
+		error = !MSDOS_SB(s)->fats || (MSDOS_SB(s)->dir_entries &
+		    (MSDOS_DPS-1)) || MSDOS_SB(s)->clusters+2 > MSDOS_SB(s)->
+		    fat_length*SECTOR_SIZE*8/MSDOS_SB(s)->fat_bits ||
+		    (logical_sector_size & (SECTOR_SIZE-1)) || !b->secs_track ||
+		    !b->heads;
+	}
 	brelse(bh);
 	if (error || debug) {
-		printk("[MS-DOS FS Rel. alpha.10,FAT %d,check=%c,conv=%c,"
+		printk("[MS-DOS FS Rel. 12,FAT %d,check=%c,conv=%c,"
 		    "uid=%d,gid=%d,umask=%03o%s]\n",MSDOS_SB(s)->fat_bits,check,
-		    conversion,uid,gid,umask,MSDOS_CAN_BMAP(MSDOS_SB(s)) ? ",
-		    bmap" : "");
+		    conversion,uid,gid,umask,MSDOS_CAN_BMAP(MSDOS_SB(s)) ?
+		    ",bmap" : "");
 		printk("[me=0x%x,cs=%d,#f=%d,fs=%d,fl=%d,ds=%d,de=%d,data=%d,"
 		    "se=%d,ts=%d,ls=%d]\n",b->media,MSDOS_SB(s)->cluster_size,
 		    MSDOS_SB(s)->fats,MSDOS_SB(s)->fat_start,MSDOS_SB(s)->
@@ -221,8 +229,10 @@ struct super_block *msdos_read_super(struct super_block *s,void *data)
 		    sectors),b->total_sect,logical_sector_size);
 	}
 	if (error) {
+		if (!silent)
+			printk("VFS: Can't find a valid MSDOS filesystem on dev 0x%04x.\n",
+				   s->s_dev);
 		s->s_dev = 0;
-		printk("Unsupported FS parameters\n");
 		return NULL;
 	}
 	s->s_magic = MSDOS_SUPER_MAGIC;
@@ -233,6 +243,7 @@ struct super_block *msdos_read_super(struct super_block *s,void *data)
 	MSDOS_SB(s)->fs_uid = uid;
 	MSDOS_SB(s)->fs_gid = gid;
 	MSDOS_SB(s)->fs_umask = umask;
+	MSDOS_SB(s)->quiet = quiet;
 	MSDOS_SB(s)->free_clusters = -1; /* don't know yet */
 	MSDOS_SB(s)->fat_wait = NULL;
 	MSDOS_SB(s)->fat_lock = 0;
@@ -267,6 +278,7 @@ void msdos_statfs(struct super_block *sb,struct statfs *buf)
 	put_fs_long(free,&buf->f_bavail);
 	put_fs_long(0,&buf->f_files);
 	put_fs_long(0,&buf->f_ffree);
+	put_fs_long(12,&buf->f_namelen);
 }
 
 
@@ -416,7 +428,7 @@ int msdos_notify_change(int flags,struct inode *inode)
 		error = -EPERM;
 	}
 	if (!(flags & NOTIFY_MODE))
-		return error;
+		return MSDOS_SB(inode->i_sb)->quiet ? 0 : error;
 	if (inode->i_mode & ~MSDOS_VALID_MODE) {
 		inode->i_mode &= MSDOS_VALID_MODE;
 		error = -EPERM;
@@ -427,5 +439,5 @@ int msdos_notify_change(int flags,struct inode *inode)
 	inode->i_mode = ((inode->i_mode & S_IFMT) | ((((inode->i_mode & S_IRWXU
 	    & ~MSDOS_SB(inode->i_sb)->fs_umask) | S_IRUSR) >> 6)*0111)) &
 	    ~MSDOS_SB(inode->i_sb)->fs_umask;
-	return error;
+	return MSDOS_SB(inode->i_sb)->quiet ? 0 : error;
 }

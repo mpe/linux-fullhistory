@@ -55,7 +55,8 @@ static struct super_operations xiafs_sops = {
     xiafs_statfs
 };
 
-struct super_block *xiafs_read_super(struct super_block *s, void *data)
+struct super_block *xiafs_read_super(struct super_block *s, void *data,
+				     int silent)
 {
     struct buffer_head *bh;
     struct xiafs_super_block *sp;
@@ -75,7 +76,9 @@ struct super_block *xiafs_read_super(struct super_block *s, void *data)
         s->s_dev = 0;
 	unlock_super(s);
 	brelse(bh);
-	printk("XIA-FS: super magic mismatch\n");
+	if (!silent)
+		printk("VFS: Can't find a xiafs filesystem on dev 0x%04x.\n",
+		   dev);
 	return NULL;
     }
     s->s_blocksize = sp->s_zone_size;
@@ -150,6 +153,7 @@ void xiafs_statfs(struct super_block *sb, struct statfs *buf)
     put_fs_long(tmp, &buf->f_bavail);
     put_fs_long(sb->u.xiafs_sb.s_ninodes, &buf->f_files);
     put_fs_long(xiafs_count_free_inodes(sb), &buf->f_ffree);
+    put_fs_long(_XIAFS_NAME_LEN, &buf->f_namelen);
     /* don't know what should be put in buf->f_fsid */
 }
 
@@ -394,14 +398,8 @@ void xiafs_read_inode(struct inode * inode)
         inode->i_op = &chrdev_inode_operations;
     else if (S_ISBLK(inode->i_mode))
         inode->i_op = &blkdev_inode_operations;
-    else if (S_ISFIFO(inode->i_mode)) {
-        inode->i_op = &fifo_inode_operations;
-	inode->i_pipe = 1;
-	PIPE_BASE(*inode) = NULL;
-	PIPE_HEAD(*inode) = PIPE_TAIL(*inode) = 0;
-	PIPE_READ_WAIT(*inode) = PIPE_WRITE_WAIT(*inode) = NULL;
-	PIPE_READERS(*inode) = PIPE_WRITERS(*inode) = 0;
-    }
+    else if (S_ISFIFO(inode->i_mode))
+    	init_fifo(inode);
 }
 
 void xiafs_write_inode(struct inode * inode)

@@ -168,7 +168,8 @@ extern int msdos_rename(struct inode *old_dir,const char *old_name,int old_len,
 
 extern void msdos_put_inode(struct inode *inode);
 extern void msdos_put_super(struct super_block *sb);
-extern struct super_block *msdos_read_super(struct super_block *s,void *data);
+extern struct super_block *msdos_read_super(struct super_block *s,
+					    void *data,int);
 extern void msdos_statfs(struct super_block *sb,struct statfs *buf);
 extern int msdos_bmap(struct inode *inode,int block);
 extern void msdos_read_inode(struct inode *inode);

@@ -23,7 +23,7 @@
 /*
  * The second extended file system version
  */
-#define EXT2FS_VERSION	"0.2c, 93/03/06"
+#define EXT2FS_VERSION	"0.2d, 93/03/30"
 
 /*
  * Special inodes numbers
@@ -138,10 +138,11 @@ struct ext2_inode {
 	unsigned long i_version;	/* File version (for NFS) */
 	unsigned long i_file_acl;	/* File ACL */
 	unsigned long i_dir_acl;	/* Directory ACL */
-	unsigned short i_faddr;		/* Fragment address */
+	unsigned long i_faddr;		/* Fragment address */
 	unsigned char i_frag;		/* Fragment number */
 	unsigned char i_fsize;		/* Fragment size */
-	unsigned long i_reserved2[3];
+	unsigned short i_pad1;
+	unsigned long i_reserved2[2];
 };
 
 /*
@@ -155,7 +156,7 @@ struct ext2_super_block {
 	unsigned long s_free_inodes_count;/* Free inodes count */
 	unsigned long s_first_data_block;/* First Data Block */
 	unsigned long s_log_block_size;	/* Block size */
-	unsigned long s_log_frag_size;	/* Fragment size */
+	long s_log_frag_size;		/* Fragment size */
 	unsigned long s_blocks_per_group;/* # Blocks per group */
 	unsigned long s_frags_per_group;/* # Fragments per group */
 	unsigned long s_inodes_per_group;/* # Inodes per group */
@@ -212,6 +213,11 @@ extern void ext2_dcache_add (unsigned short, unsigned long, const char *,
 extern void ext2_dcache_remove (unsigned short, unsigned long, const char *,
 				int);
 
+/* dir.c */
+extern int ext2_check_dir_entry (char *, struct inode *,
+				 struct ext2_dir_entry *, struct buffer_head *,
+				 unsigned int);
+
 /* file.c */
 extern int ext2_read (struct inode *, struct file *, char *, int);
 extern int ext2_write (struct inode *, struct file *, char *, int);
@@ -230,7 +236,7 @@ extern struct buffer_head * ext2_bread (struct inode *, int, int);
 extern void ext2_truncate (struct inode *);
 extern void ext2_put_super (struct super_block *);
 extern void ext2_write_super (struct super_block *);
-extern struct super_block * ext2_read_super (struct super_block *,void *);
+extern struct super_block * ext2_read_super (struct super_block *,void *,int);
 extern void ext2_read_inode (struct inode *);
 extern void ext2_write_inode (struct inode *);
 extern void ext2_put_inode (struct inode *);
@@ -255,18 +261,9 @@ extern int ext2_rename (struct inode *, const char *, int,
  * Inodes and files operations
  */
 
-/* blkdev.c */
-extern struct inode_operations ext2_blkdev_inode_operations;
-
-/* chrdev.c */
-extern struct inode_operations ext2_chrdev_inode_operations;
-
 /* dir.c */
 extern struct inode_operations ext2_dir_inode_operations;
 extern struct file_operations ext2_dir_operations;
-
-/* fifo.c */
-extern struct inode_operations ext2_fifo_inode_operations;
 
 /* file.c */
 extern struct inode_operations ext2_file_inode_operations;

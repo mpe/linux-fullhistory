@@ -21,6 +21,7 @@
 extern int close_fp(struct file *filp);
 
 static int nfs_notify_change(int, struct inode *);
+static void nfs_put_inode(struct inode *);
 static void nfs_put_super(struct super_block *);
 static void nfs_statfs(struct super_block *, struct statfs *);
 
@@ -28,11 +29,16 @@ static struct super_operations nfs_sops = {
 	NULL,			/* read inode */
 	nfs_notify_change,	/* notify change */
 	NULL,			/* write inode */
-	NULL,			/* put inode */
+	nfs_put_inode,		/* put inode */
 	nfs_put_super,		/* put superblock */
 	NULL,			/* write superblock */
 	nfs_statfs		/* stat filesystem */
 };
+
+static void nfs_put_inode(struct inode * inode)
+{
+	clear_inode(inode);
+}
 
 void nfs_put_super(struct super_block *sb)
 {
@@ -50,7 +56,8 @@ void nfs_put_super(struct super_block *sb)
  * Later we can add other mount parameters like caching values.
  */
 
-struct super_block *nfs_read_super(struct super_block *sb, void *raw_data)
+struct super_block *nfs_read_super(struct super_block *sb, void *raw_data,
+				   int silent)
 {
 	struct nfs_mount_data *data = (struct nfs_mount_data *) raw_data;
 	struct nfs_server *server;
@@ -134,6 +141,9 @@ void nfs_statfs(struct super_block *sb, struct statfs *buf)
 	put_fs_long(res.bavail, &buf->f_bavail);
 	put_fs_long(0, &buf->f_files);
 	put_fs_long(0, &buf->f_ffree);
+	/* We should really try to interrogate the remote server to find
+	   it's maximum name length here */
+	put_fs_long(NAME_MAX, &buf->f_namelen);
 }
 
 /*

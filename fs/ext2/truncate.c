@@ -47,7 +47,7 @@ repeat:
 		tmp = *p;
 		if (!tmp)
 			continue;
-		bh = getblk (inode->i_dev, tmp, inode->i_sb->s_blocksize);
+		bh = get_hash_table (inode->i_dev, tmp, inode->i_sb->s_blocksize);
 		if (i < direct_block) {
 			brelse (bh);
 			goto repeat;
@@ -100,7 +100,8 @@ repeat:
 		tmp = *ind;
 		if (!tmp)
 			continue;
-		bh = getblk (inode->i_dev, tmp, inode->i_sb->s_blocksize);
+		bh = get_hash_table (inode->i_dev, tmp,
+				     inode->i_sb->s_blocksize);
 		if (i < indirect_block) {
 			brelse (bh);
 			goto repeat;

@@ -74,6 +74,8 @@ void math_state_restore(void)
 {
 	if (last_task_used_math == current)
 		return;
+	timer_table[COPRO_TIMER].expires = jiffies+50;
+	timer_active |= 1<<COPRO_TIMER;	
 	if (last_task_used_math) {
 		__asm__("fnsave %0"::"m" (last_task_used_math->tss.i387));
 	}
@@ -85,6 +87,7 @@ void math_state_restore(void)
 		__asm__("fninit"::);
 		current->used_math=1;
 	}
+	timer_active &= ~(1<<COPRO_TIMER);
 }
 
 /*
@@ -138,39 +141,11 @@ void schedule(void)
 	switch_to(next);
 }
 
-/*
- * This is a little tricky because POSIX pause (3.4.2.1) should only
- * return for a caught signal or a signal that terminates the process.
- * We just block ignored signals or "harmless" default signals.
- * For suspending signals, we must return so that they are handled
- * and then pause again.  -- jrs
- */
-
 int sys_pause(void)
 {
-	unsigned long old_blocked;
-	unsigned long mask;
-	int sig;
-	struct sigaction * sa = current->sigaction;
-
-	old_blocked = current->blocked;
-	/* block everything we can that shouldn't interrupt pause */
-	for (mask = 1, sig = 1; mask; sa++, mask += mask, sig++)
-		if (sa->sa_handler == SIG_IGN || (sa->sa_handler == SIG_DFL
-		    && (sig == SIGCONT || sig == SIGCHLD || sig == SIGWINCH)))
-			current->blocked |= mask;
-	do {
-		current->state = TASK_INTERRUPTIBLE;
-		schedule();
-	} while (!(current->signal & ~current->blocked));
-	/* if a suspending signal interrupted us we must restart */
-	if (!(current->signal & ~current->blocked &
-		~(_S(SIGSTOP) | _S(SIGTSTP) | _S(SIGTTIN) | _S(SIGTTOU)))) {
-		current->blocked = old_blocked;
-		return -ERESTARTSYS;
-	}
-	current->blocked = old_blocked;
-	return -EINTR;
+	current->state = TASK_INTERRUPTIBLE;
+	schedule();
+	return -ERESTARTNOHAND;
 }
 
 /*

@@ -20,12 +20,6 @@
 #define ACC_MODE(x) ("\000\004\002\006"[(x)&O_ACCMODE])
 
 /*
- * comment out this line if you want names > MINIX_NAME_LEN chars to be
- * truncated. Else they will be disallowed.
- */
-/* #define NO_TRUNCATE */
-
-/*
  * In order to reduce some races, while at the same time doing additional
  * checking and hopefully speeding things up, we copy filenames to the
  * kernel data space before using them..
@@ -105,8 +99,13 @@ int lookup(struct inode * dir,const char * name, int len,
 	struct inode ** result)
 {
 	struct super_block * sb;
+	int perm;
 
 	*result = NULL;
+	if (!dir)
+		return -ENOENT;
+/* check permissions before traversing mount-points */
+	perm = permission(dir,MAY_EXEC);
 	if (len==2 && name[0] == '.' && name[1] == '.') {
 		if (dir == current->root) {
 			*result = dir;
@@ -115,17 +114,16 @@ int lookup(struct inode * dir,const char * name, int len,
 			sb = dir->i_sb;
 			iput(dir);
 			dir = sb->s_covered;
-			if (dir)
-				dir->i_count++;
+			if (!dir)
+				return -ENOENT;
+			dir->i_count++;
 		}
 	}
-	if (!dir)
-		return -ENOENT;
 	if (!dir->i_op || !dir->i_op->lookup) {
 		iput(dir);
 		return -ENOTDIR;
 	}
- 	if (!permission(dir,MAY_EXEC)) {
+ 	if (!perm) {
 		iput(dir);
 		return -EACCES;
 	}
@@ -305,9 +303,11 @@ int open_namei(const char * pathname, int flag, int mode,
 		*res_inode=dir;
 		return 0;
 	}
-	dir->i_count++;		/* lookup eats the dir */
-	error = lookup(dir,basename,namelen,&inode);
-	if (error) {
+	for (i = 0; i < 5; i++) {	/* races... */
+		dir->i_count++;		/* lookup eats the dir */
+		error = lookup(dir,basename,namelen,&inode);
+		if (!error)
+			break;
 		if (!(flag & O_CREAT)) {
 			iput(dir);
 			return error;
@@ -324,7 +324,16 @@ int open_namei(const char * pathname, int flag, int mode,
 			iput(dir);
 			return -EROFS;
 		}
-		return dir->i_op->create(dir,basename,namelen,mode,res_inode);
+		dir->i_count++;		/* create eats the dir */
+		error = dir->i_op->create(dir,basename,namelen,mode,res_inode);
+		if (error != -EEXIST) {
+			iput(dir);
+			return error;
+		}
+	}
+	if (error) {
+		iput(dir);
+		return error;
 	}
 	if ((flag & (O_CREAT | O_EXCL)) == (O_CREAT | O_EXCL)) {
 		iput(dir);

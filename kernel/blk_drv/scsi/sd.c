@@ -322,9 +322,13 @@ static void do_sd_request (void)
   struct request * req = NULL;
   int flag = 0;
   while (1==1){
-    if (CURRENT != NULL && CURRENT->dev == -1) return;
+    cli();
+    if (CURRENT != NULL && CURRENT->dev == -1) {
+      sti();
+      return;
+    };
 
-    INIT_REQUEST;
+    INIT_SCSI_REQUEST;
 
 /* We have to be careful here.  allocate_device will get a free pointer, but
    there is no guarantee that it is queueable.  In normal usage, we want to
@@ -341,6 +345,7 @@ static void do_sd_request (void)
       SCpnt = allocate_device(&CURRENT,
 			      rscsi_disks[DEVICE_NR(MINOR(CURRENT->dev))].device->index, 0); 
     else SCpnt = NULL;
+    sti();
 
 /* This is a performance enhancement.  We dig down into the request list and
    try and find a queueable request (i.e. device not busy, and host able to
@@ -562,6 +567,18 @@ repeat:
 
 	cmd[1] = (SCpnt->lun << 5) & 0xe0;
 
+	if (rscsi_disks[dev].sector_size == 1024){
+	  if(block & 1) panic("sd.c:Bad block number requested");
+	  if(this_count & 1) panic("sd.c:Bad block number requested");
+	  block = block >> 1;
+	  this_count = this_count >> 1;
+	};
+
+	if (rscsi_disks[dev].sector_size == 256){
+	  block = block << 1;
+	  this_count = this_count << 1;
+	};
+
 	if (((this_count > 0xff) ||  (block > 0x1fffff)) && rscsi_disks[dev].ten)
 		{
 		if (this_count > 0xffff)
@@ -588,7 +605,8 @@ repeat:
 		cmd[5] = 0;
 		}
 
-	scsi_do_cmd (SCpnt, (void *) cmd, buff, this_count << 9,
+	scsi_do_cmd (SCpnt, (void *) cmd, buff, 
+		     this_count * rscsi_disks[dev].sector_size,
 		     rw_intr, SD_TIMEOUT, MAX_RETRIES);
 }
 
@@ -660,6 +678,8 @@ static int sd_init_onedisk(int i)
     cmd[1] = (rscsi_disks[i].device->lun << 5) & 0xe0;
     memset ((void *) &cmd[2], 0, 8);
     SCpnt->request.dev = 0xffff;  /* Mark as really busy again */
+    SCpnt->sense_buffer[0] = 0;
+    SCpnt->sense_buffer[2] = 0;
     
     scsi_do_cmd (SCpnt,
 		 (void *) cmd, (void *) buffer,
@@ -717,8 +737,15 @@ static int sd_init_onedisk(int i)
 	printk("sd%d : sense not available. \n", i);
 
       printk("sd%d : block size assumed to be 512 bytes, disk size 1GB.  \n", i);
-      rscsi_disks[i].capacity = 0xfffff;
+      rscsi_disks[i].capacity = 0x1fffff;
       rscsi_disks[i].sector_size = 512;
+
+      /* Set dirty bit for removable devices if not ready - sometimes drives
+	 will not report this properly. */
+      if(rscsi_disks[i].device->removable && 
+	 SCpnt->sense_buffer[2] == NOT_READY)
+	rscsi_disks[i].device->changed = 1;
+
     }
   else
     {
@@ -727,10 +754,12 @@ static int sd_init_onedisk(int i)
 	  (buffer[2] << 8) |
 	    buffer[3];
 
-      if ((rscsi_disks[i].sector_size = (buffer[4] << 24) |
-	   (buffer[5] << 16) |
-	   (buffer[6] << 8) |
-	   buffer[7]) != 512)
+      rscsi_disks[i].sector_size = (buffer[4] << 24) |
+	(buffer[5] << 16) | (buffer[6] << 8) | buffer[7];
+
+      if (rscsi_disks[i].sector_size != 512 &&
+	  rscsi_disks[i].sector_size != 1024 &&
+	  rscsi_disks[i].sector_size != 256)
 	{
 	  printk ("sd%d : unsupported sector size %d.\n",
 		  i, rscsi_disks[i].sector_size);
@@ -745,6 +774,10 @@ static int sd_init_onedisk(int i)
 	    return i;
 	  };
 	}
+      if(rscsi_disks[i].sector_size == 1024)
+	rscsi_disks[i].capacity <<= 1;  /* Change this into 512 byte sectors */
+      if(rscsi_disks[i].sector_size == 256)
+	rscsi_disks[i].capacity >>= 1;  /* Change this into 512 byte sectors */
     }
 
   rscsi_disks[i].ten = 1;

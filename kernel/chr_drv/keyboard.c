@@ -40,7 +40,9 @@
 extern void do_keyboard_interrupt(void);
 extern void ctrl_alt_del(void);
 extern void change_console(unsigned int new_console);
-extern void fake_keyboard_interrupt(void);
+
+#define fake_keyboard_interrupt() \
+__asm__ __volatile__("int $0x21")
 
 unsigned long kbd_flags = 0;
 unsigned long kbd_dead_keys = 0;
