@@ -94,8 +94,8 @@ extern struct kernel_param __setup_start, __setup_end;
 #define __FINIT
 #define __INITDATA
 
-/* Not sure what version aliases were introduced in, but certainly in 2.95.  */
-#if __GNUC__ > 2 || (__GNUC__ == 2 && __GNUC_MINOR__ >= 95)
+/* Not sure what version aliases were introduced in, but certainly in 2.91.66.  */
+#if __GNUC__ > 2 || (__GNUC__ == 2 && __GNUC_MINOR__ >= 91)
 #define module_init(x)	int init_module(void) __attribute__((alias(#x)));
 #define module_exit(x)	void cleanup_module(void) __attribute__((alias(#x)));
 #else

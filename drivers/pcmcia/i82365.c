@@ -2664,7 +2664,33 @@ static int pcic_set_bridge(unsigned int sock, struct cb_bridge_map *m)
 #endif
 }
 
+static int pcic_init(unsigned int s)
+{
+	int i;
+	pccard_io_map io = { 0, 0, 0, 0, 1 };
+	pccard_mem_map mem = { 0, 0, 0, 0, 0, 0 };
+
+	mem.sys_stop = 0x1000;
+	pcic_set_socket(s, &dead_socket);
+	for (i = 0; i < 2; i++) {
+		io.map = i;
+		pcic_set_io_map(s, &io);
+	}
+	for (i = 0; i < 5; i++) {
+		mem.map = i;
+		pcic_set_mem_map(s, &mem);
+	}
+	return 0;
+}
+
+static int pcic_suspend(unsigned int sock)
+{
+	return pcic_set_socket(sock, &dead_socket);
+}
+
 static struct pccard_operations pcic_operations = {
+	pcic_init,
+	pcic_suspend,
 	pcic_register_callback,
 	pcic_inquire_socket,
 	pcic_get_status,

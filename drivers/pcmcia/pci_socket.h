@@ -20,6 +20,8 @@ struct pci_socket_ops {
 	int (*open)(struct pci_socket *);
 	void (*close)(struct pci_socket *);
 
+	int (*init)(struct pci_socket *);
+	int (*suspend)(struct pci_socket *);
 	int (*inquire)(struct pci_socket *, socket_cap_t *cap);
 	int (*get_status)(struct pci_socket *, unsigned int *);
 	int (*get_socket)(struct pci_socket *, socket_state_t *);

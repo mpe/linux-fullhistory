@@ -42,11 +42,24 @@ static struct pci_simple_probe_entry controller_list[] = {
 #define MAX_SOCKETS (8)
 static pci_socket_t pci_socket_array[MAX_SOCKETS];
 
-/*
- * Work in progress. I need to distill the _real_ differences in
- * carbus drivers, and change the cardbus "op" list to match. This
- * is just a direct 1:1 mapping of the pccard operations.
- */
+static int pci_init_socket(unsigned int sock)
+{
+	pci_socket_t *socket = pci_socket_array + sock;
+
+	if (socket->op && socket->op->init)
+		return socket->op->init(socket);
+	return -EINVAL;
+}
+
+static int pci_suspend_socket(unsigned int sock)
+{
+	pci_socket_t *socket = pci_socket_array + sock;
+
+	if (socket->op && socket->op->suspend)
+		return socket->op->suspend(socket);
+	return -EINVAL;
+}
+
 static int pci_register_callback(unsigned int sock, void (*handler)(void *, unsigned int), void * info)
 {
 	pci_socket_t *socket = pci_socket_array + sock;
@@ -160,6 +173,8 @@ static void pci_proc_setup(unsigned int sock, struct proc_dir_entry *base)
 }
 
 static struct pccard_operations pci_socket_operations = {
+	pci_init_socket,
+	pci_suspend_socket,
 	pci_register_callback,
 	pci_inquire_socket,
 	pci_get_status,

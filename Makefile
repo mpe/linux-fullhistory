@@ -146,6 +146,10 @@ ifdef CONFIG_WAN
 DRIVERS := $(DRIVERS) drivers/net/wan/wan.a
 endif
 
+ifeq ($(CONFIG_ARCNET),y)
+DRIVERS := $(DRIVERS) drivers/net/arcnet/arcnet.a
+endif
+
 ifdef CONFIG_ATM
 DRIVERS := $(DRIVERS) drivers/atm/atm.a
 endif

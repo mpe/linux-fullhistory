@@ -929,18 +929,44 @@ static int tcic_set_mem_map(unsigned int lsock, struct pccard_mem_map *mem)
 
 /*====================================================================*/
 
-int tcic_get_bridge(unsigned int sock, struct cb_bridge_map *m)
+static int tcic_get_bridge(unsigned int sock, struct cb_bridge_map *m)
 {
 	return -EINVAL;
 }
 
 #define tcic_set_bridge tcic_get_bridge
 
-void tcic_proc_setup(unsigned int sock, struct proc_dir_entry *base)
+static void tcic_proc_setup(unsigned int sock, struct proc_dir_entry *base)
 {
 }
 
+static int tcic_init(unsigned int s)
+{
+	int i;
+	pccard_io_map io = { 0, 0, 0, 0, 1 };
+	pccard_mem_map mem = { 0, 0, 0, 0, 0, 0 };
+
+	mem.sys_stop = 0x1000;
+	tcic_set_socket(s, &dead_socket);
+	for (i = 0; i < 2; i++) {
+		io.map = i;
+		tcic_set_io_map(s, &io);
+	}
+	for (i = 0; i < 5; i++) {
+		mem.map = i;
+		tcic_set_mem_map(s, &mem);
+	}
+	return 0;
+}
+
+static int tcic_suspend(unsigned int sock)
+{
+	return tcic_set_socket(sock, &dead_socket);
+}
+
 static struct pccard_operations tcic_operations = {
+	tcic_init,
+	tcic_suspend,
 	tcic_register_callback,
 	tcic_inquire_socket,
 	tcic_get_status,

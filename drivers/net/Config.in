@@ -2,20 +2,7 @@
 # Network device configuration
 #
 
-mainmenu_option next_comment
-comment 'ARCnet devices'
-
-tristate 'ARCnet support' CONFIG_ARCNET
-if [ "$CONFIG_ARCNET" != "n" ]; then
-   bool '  Enable arc0e (ARCnet "Ether-Encap" packet format)' CONFIG_ARCNET_ETH
-   bool '  Enable arc0s (ARCnet RFC1051 packet format)' CONFIG_ARCNET_1051
-   dep_tristate '  ARCnet COM90xx (normal) chipset driver' CONFIG_ARCNET_COM90xx $CONFIG_ARCNET
-   dep_tristate '  ARCnet COM90xx (IO mapped) chipset driver' CONFIG_ARCNET_COM90xxIO $CONFIG_ARCNET
-   dep_tristate '  ARCnet COM90xx (RIM I) chipset driver' CONFIG_ARCNET_RIM_I $CONFIG_ARCNET
-   dep_tristate '  ARCnet COM20020 chipset driver' CONFIG_ARCNET_COM20020 $CONFIG_ARCNET
-fi
-
-endmenu
+source drivers/net/arcnet/Config.in
 
 tristate 'Dummy net driver support' CONFIG_DUMMY
 tristate 'EQL (serial line load balancing) support' CONFIG_EQUALIZER

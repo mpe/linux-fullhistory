@@ -79,13 +79,24 @@ static int yenta_Vpp_power(u32 control)
 
 static int yenta_get_socket(pci_socket_t *socket, socket_state_t *state)
 {
-	u32 control = cb_readl(socket, CB_SOCKET_CONTROL);
 	u8 reg;
+	u32 status, control;
+
+	status = cb_readb(socket, CB_SOCKET_STATE);
+	control = cb_readl(socket, CB_SOCKET_CONTROL);
 
 	state->Vcc = yenta_Vcc_power(control);
 	state->Vpp = yenta_Vpp_power(control);
 	state->io_irq = socket->io_irq;
 
+	if (status & CB_CBCARD) {
+		u16 bridge = cb_readw(socket, CB_BRIDGE_CONTROL);
+		if (bridge & CB_BRIDGE_CRST)
+			state->flags |= SS_RESET;
+		return 0;
+	}
+
+	/* 16-bit card state.. */
 	reg = exca_readb(socket, I365_POWER);
 	state->flags = (reg & I365_PWR_AUTO) ? SS_PWR_AUTO : 0;
 	state->flags |= (reg & I365_PWR_OUT) ? SS_OUTPUT_ENA : 0;
@@ -103,8 +114,6 @@ static int yenta_get_socket(pci_socket_t *socket, socket_state_t *state)
 		state->csc_mask |= (reg & I365_CSC_BVD2) ? SS_BATWARN : 0;
 		state->csc_mask |= (reg & I365_CSC_READY) ? SS_READY : 0;
 	}
-
-printk("yenta_get_socket(%p) = %d, %d\n", socket, state->Vcc, state->Vpp);
 
 	return 0;
 }
@@ -439,11 +448,25 @@ static unsigned int yenta_probe_irq(pci_socket_t *socket)
 {
 	int i;
 	unsigned long val;
+	u16 bridge_ctrl;
+
+	/* Are we set up to route the IO irq to the PCI irq? */
+	bridge_ctrl = config_readw(socket, CB_BRIDGE_CONTROL);
+	if (!(bridge_ctrl & CB_BRIDGE_INTR)) {
+		socket->io_irq = socket->cb_irq;
+		if (socket->cb_irq && socket->cb_irq < 16)
+			return 1 << socket->cb_irq;
+
+		printk("CardBus: Hmm.. Routing interrupts to bad PCI irq %d\n", socket->cb_irq);
+		return 0;
+	}
 
 	cb_writel(socket, CB_SOCKET_EVENT, -1);
 	cb_writel(socket, CB_SOCKET_MASK, CB_CSTSMASK);
 	val = probe_irq_on();
 	for (i = 1; i < 16; i++) {
+		if (!((val >> i) & 1))
+			continue;
 		exca_writeb(socket, I365_CSCINT, I365_CSC_STSCHG | (i << 4));
 		cb_writel(socket, CB_SOCKET_FORCE, CB_FCARDSTS);
 		udelay(100);
@@ -460,16 +483,43 @@ static void yenta_get_socket_capabilities(pci_socket_t *socket)
 	config_writeb(socket, PCI_SEC_LATENCY_TIMER, 176);
 
 	socket->cap.features |= SS_CAP_PAGE_REGS | SS_CAP_PCCARD | SS_CAP_CARDBUS;
-	socket->cap.irq_mask = yenta_probe_irq(socket);
-	if (socket->cb_irq && socket->cb_irq < 16)
-		socket->cap.irq_mask |= 1 << socket->cb_irq;
 	socket->cap.map_size = 0x1000;
 	socket->cap.pci_irq = socket->cb_irq;
+	socket->cap.irq_mask = yenta_probe_irq(socket);
 	socket->cap.cardbus = config_readb(socket, PCI_CB_CARD_BUS);
 	socket->cap.cb_bus = socket->dev->subordinate;
 	socket->cap.bus = NULL;
 
 	printk("Yenta IRQ list %04x\n", socket->cap.irq_mask);
+}
+
+/* Called at resume and initialization events */
+static int yenta_init(pci_socket_t *socket)
+{
+	int i;
+	pccard_io_map io = { 0, 0, 0, 0, 1 };
+	pccard_mem_map mem = { 0, 0, 0, 0, 0, 0 };
+
+	pci_set_power_state(socket->dev, 0);
+
+	mem.sys_stop = 0x1000;
+	yenta_set_socket(socket, &dead_socket);
+	for (i = 0; i < 2; i++) {
+		io.map = i;
+		yenta_set_io_map(socket, &io);
+	}
+	for (i = 0; i < 5; i++) {
+		mem.map = i;
+		yenta_set_mem_map(socket, &mem);
+	}
+	return 0;
+}
+
+static int yenta_suspend(pci_socket_t *socket)
+{
+	yenta_set_socket(socket, &dead_socket);
+	pci_set_power_state(socket->dev, 3);
+	return 0;
 }
 
 /*
@@ -528,6 +578,8 @@ static void yenta_close(pci_socket_t *sock)
 struct pci_socket_ops yenta_operations = {
 	yenta_open,
 	yenta_close,
+	yenta_init,
+	yenta_suspend,
 	yenta_inquire,
 	yenta_get_status,
 	yenta_get_socket,

@@ -731,6 +731,7 @@ unsigned long probe_irq_on(void)
 {
 	unsigned int i;
 	unsigned long delay;
+	unsigned long val;
 
 	/*
 	 * first, enable any unassigned irqs
@@ -754,6 +755,7 @@ unsigned long probe_irq_on(void)
 	/*
 	 * Now filter out any obviously spurious interrupts
 	 */
+	val = 0;
 	spin_lock_irq(&irq_controller_lock);
 	for (i=0; i<NR_IRQS; i++) {
 		unsigned int status = irq_desc[i].status;
@@ -766,23 +768,23 @@ unsigned long probe_irq_on(void)
 			irq_desc[i].status = status & ~IRQ_AUTODETECT;
 			irq_desc[i].handler->shutdown(i);
 		}
+
+		if (i < 32)
+			val |= 1 << i;
 	}
 	spin_unlock_irq(&irq_controller_lock);
 
-	return 0x12345678;
+	return val;
 }
 
 /*
  * Return a mask of triggered interrupts (this
  * can handle only legacy ISA interrupts).
  */
-unsigned int probe_irq_mask(unsigned long unused)
+unsigned int probe_irq_mask(unsigned long val)
 {
 	int i;
 	unsigned int mask;
-
-	if (unused != 0x12345678)
-		printk("Bad IRQ probe from %lx\n", (&unused)[-1]);
 
 	mask = 0;
 	spin_lock_irq(&irq_controller_lock);
@@ -800,19 +802,16 @@ unsigned int probe_irq_mask(unsigned long unused)
 	}
 	spin_unlock_irq(&irq_controller_lock);
 
-	return mask;
+	return mask & val;
 }
 
 /*
  * Return the one interrupt that triggered (this can
  * handle any interrupt source)
  */
-int probe_irq_off(unsigned long unused)
+int probe_irq_off(unsigned long val)
 {
 	int i, irq_found, nr_irqs;
-
-	if (unused != 0x12345678)
-		printk("Bad IRQ probe from %lx\n", (&unused)[-1]);
 
 	nr_irqs = 0;
 	irq_found = 0;

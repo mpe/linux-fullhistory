@@ -30,6 +30,7 @@ obj-$(CONFIG_PCMCIA_NMCLAN)	+= nmclan_cs.o
 obj-$(CONFIG_PCMCIA_PCNET)	+= pcnet_cs.o
 obj-$(CONFIG_PCMCIA_SMC91C92)	+= smc91c92_cs.o
 obj-$(CONFIG_PCMCIA_XIRC2PS)	+= xirc2ps_cs.o
+obj-$(CONFIG_ARCNET_COM20020_CS)+= com20020_cs.o
 
 # 16-bit wireless client drivers
 obj-$(CONFIG_PCMCIA_RAYCS)	+= ray_cs.o

@@ -131,7 +131,7 @@ MODULE_PARM(io_speed, "i");
 
 /*====================================================================*/
 
-static socket_state_t dead_socket = {
+socket_state_t dead_socket = {
     0, SS_DETECT, 0, 0, 0
 };
 
@@ -276,29 +276,16 @@ static int set_mem_map(socket_info_t *s, struct pccard_mem_map *mem)
 	return s->ss_entry->set_mem_map(s->sock, mem);
 }
 
-/*======================================================================
-
-    Reset a socket to the default state
-    
-======================================================================*/
-
-static void init_socket(socket_info_t *s)
+static int suspend_socket(socket_info_t *s)
 {
-    int i;
-    pccard_io_map io = { 0, 0, 0, 0, 1 };
-    pccard_mem_map mem = { 0, 0, 0, 0, 0, 0 };
+	s->socket = dead_socket;
+	return s->ss_entry->suspend(s->sock);
+}
 
-    mem.sys_stop = s->cap.map_size;
-    s->socket = dead_socket;
-    set_socket(s, &s->socket);
-    for (i = 0; i < 2; i++) {
-	io.map = i;
-	set_io_map(s, &io);
-    }
-    for (i = 0; i < 5; i++) {
-	mem.map = i;
-	set_mem_map(s, &mem);
-    }
+static int init_socket(socket_info_t *s)
+{
+	s->socket = dead_socket;
+	return s->ss_entry->init(s->sock);
 }
 
 /*====================================================================*/
@@ -704,7 +691,7 @@ static int handle_apm_event(apm_event_t event)
 	    if ((s->state & SOCKET_PRESENT) &&
 		!(s->state & SOCKET_SUSPEND)){
 		send_event(s, CS_EVENT_PM_SUSPEND, CS_EVENT_PRI_LOW);
-		set_socket(s, &dead_socket);
+		suspend_socket(s);
 		s->state |= SOCKET_SUSPEND;
 	    }
 	}
@@ -1972,7 +1959,7 @@ int pcmcia_suspend_card(client_handle_t handle, client_req_t *req)
 
     DEBUG(1, "cs: suspending socket %d\n", i);
     send_event(s, CS_EVENT_PM_SUSPEND, CS_EVENT_PRI_LOW);
-    set_socket(s, &dead_socket);
+    suspend_socket(s);
     s->state |= SOCKET_SUSPEND;
 
     return CS_SUCCESS;

@@ -155,6 +155,12 @@ CONFIG_SKB_LARGE=y
 # CONFIG_ATALK is not set
 
 #
+# Telephony Support
+#
+# CONFIG_PHONE is not set
+# CONFIG_PHONE_IXJ is not set
+
+#
 # SCSI support
 #
 CONFIG_SCSI=y

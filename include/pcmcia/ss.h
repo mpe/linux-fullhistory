@@ -72,6 +72,8 @@ typedef struct socket_state_t {
     u_char	io_irq;
 } socket_state_t;
 
+extern socket_state_t dead_socket;
+
 /* Socket configuration flags */
 #define SS_PWR_AUTO	0x0010
 #define SS_IOCARD	0x0020
@@ -118,6 +120,8 @@ typedef struct cb_bridge_map {
  * Socket operations.
  */
 struct pccard_operations {
+	int (*init)(unsigned int sock);
+	int (*suspend)(unsigned int sock);
 	int (*register_callback)(unsigned int sock, void (*handler)(void *, unsigned int), void * info);
 	int (*inquire_socket)(unsigned int sock, socket_cap_t *cap);
 	int (*get_status)(unsigned int sock, u_int *value);

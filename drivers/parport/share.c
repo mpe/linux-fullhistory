@@ -95,6 +95,14 @@ static void call_driver_chain(int attach, struct parport *port)
 	}
 }
 
+/* Ask kmod for some lowlevel drivers. */
+static void get_lowlevel_driver (void)
+{
+	/* There is no actual module called this: you should set
+	 * up an alias for modutils. */
+	request_module ("parport_lowlevel");
+}
+
 int parport_register_driver (struct parport_driver *drv)
 {
 	struct parport *port;
@@ -107,12 +115,8 @@ int parport_register_driver (struct parport_driver *drv)
 	for (port = portlist; port; port = port->next)
 		drv->attach (port);
 
-	/* For compatibility with 2.2, check the (obsolete) parport_lowlevel
-	 * alias in case some people haven't changed to post-install rules
-	 * yet.  parport_enumerate (itself deprecated) will printk a
-	 * friendly reminder. */
 	if (!portlist)
-		parport_enumerate ();
+		get_lowlevel_driver ();
 
 	return 0;
 }
@@ -123,12 +127,21 @@ void parport_unregister_driver (struct parport_driver *arg)
 
 	while (drv) {
 		if (drv == arg) {
+			struct parport *port;
+
 			spin_lock (&driverlist_lock);
 			if (olddrv)
 				olddrv->next = drv->next;
 			else
 				driver_chain = drv->next;
 			spin_unlock (&driverlist_lock);
+
+			/* Call the driver's detach routine for each
+			 * port to clean up any resources that the
+			 * attach routine acquired. */
+			for (port = portlist; port; port = port->next)
+				drv->detach (port);
+
 			return;
 		}
 		olddrv = drv;
@@ -136,20 +149,12 @@ void parport_unregister_driver (struct parport_driver *arg)
 	}
 }
 
-/* Return a list of all the ports we know about. */
+/* Return a list of all the ports we know about.  This function shouldn't
+ * really be used -- use parport_register_driver instead. */
 struct parport *parport_enumerate(void)
 {
-	/* Attempt to make things work on 2.2 systems. */
-	if (!portlist) {
-		request_module ("parport_lowlevel");
-		if (portlist)
-			/* The user has a parport_lowlevel alias in
-			 * modules.conf. Warn them that it won't work
-			 * for long. */
-			printk (KERN_WARNING
-				"parport: 'parport_lowlevel' is deprecated; "
-				"see parport.txt\n");
-	}
+	if (!portlist)
+		get_lowlevel_driver ();
 
 	return portlist;
 }

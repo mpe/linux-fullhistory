@@ -1687,12 +1687,6 @@ struct parport *__maybe_init parport_pc_probe_port (unsigned long int base,
 
 	parport_pc_write_data(p, 0);
 	parport_pc_data_forward (p);
-	parport_pc_write_control(p, PARPORT_CONTROL_SELECT);
-	udelay (50);
-	parport_pc_write_control(p,
-				 PARPORT_CONTROL_SELECT
-				 | PARPORT_CONTROL_INIT);
-	udelay (50);
 
 	/* Now that we've told the sharing engine about the port, and
 	   found out its characteristics, let the high-level drivers

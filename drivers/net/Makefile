@@ -17,7 +17,7 @@ obj-            :=
 SUB_DIRS     := 
 MOD_SUB_DIRS :=
 MOD_IN_SUB_DIRS :=
-ALL_SUB_DIRS := $(SUB_DIRS) fc hamradio irda pcmcia tokenring wan sk98lin
+ALL_SUB_DIRS := $(SUB_DIRS) fc hamradio irda pcmcia tokenring wan sk98lin arcnet
 
 O_TARGET := net.o
 O_OBJS   :=
@@ -27,7 +27,7 @@ MOD_LIST_NAME := NET_MODULES
 # All of the (potential) objects that export symbols.
 # This list comes from 'grep -l EXPORT_SYMBOL *.[hc]'.
 
-export-objs     :=	8390.o arcnet.o arlan.o aironet4500_core.o aironet4500_card.o ppp_async.o \
+export-objs     :=	8390.o arlan.o aironet4500_core.o aironet4500_card.o ppp_async.o \
 			ppp_generic.o slhc.o
 
 ifeq ($(CONFIG_PCMCIA),y)
@@ -93,6 +93,15 @@ else
     ifeq ($(CONFIG_ISDN_PPP),y)
       obj-m += slhc.o ppp_deflate.o
     endif
+  endif
+endif
+
+ifeq ($(CONFIG_ARCNET),y)
+SUB_DIRS += arcnet
+MOD_IN_SUB_DIRS += arcnet
+else
+  ifeq ($(CONFIG_ARCNET),m)
+  MOD_IN_SUB_DIRS += arcnet
   endif
 endif
 
@@ -215,11 +224,6 @@ obj-$(CONFIG_APRICOT) += 82596.o
 obj-$(CONFIG_MVME16x_NET) += 82596.o
 obj-$(CONFIG_BVME6000_NET) += 82596.o
 obj-$(CONFIG_DEC_ELCP) += tulip.o
-obj-$(CONFIG_ARCNET) += arcnet.o
-obj-$(CONFIG_ARCNET_COM90xx) += com90xx.o
-obj-$(CONFIG_ARCNET_COM90xxIO) += com90io.o
-obj-$(CONFIG_ARCNET_RIM_I) += arc-rimi.o
-obj-$(CONFIG_ARCNET_COM20020) += com20020.o
 obj-$(CONFIG_ETH16I) += eth16i.o
 obj-$(CONFIG_EPIC100) += epic100.o
 obj-$(CONFIG_ARIADNE2) += ariadne2.o 8390.o
