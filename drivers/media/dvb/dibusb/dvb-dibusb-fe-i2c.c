@@ -345,8 +345,6 @@ static int panasonic_cofdm_env57h1xd5_pll_set(struct dvb_frontend_parameters *fe
  *             BSn = 0 corresponding port is off, high-impedance state (at power-on)
  *             BSn = 1 corresponding port is on
  */
-
-
 static int panasonic_cofdm_env77h11d5_tda6650_init(struct dvb_frontend *fe, u8 pllbuf[4])
 {
 	pllbuf[0] = 0x0b;
@@ -441,55 +439,54 @@ static int panasonic_cofdm_env77h11d5_tda6650_set (struct dvb_frontend_parameter
  *          0	1	c2 (always valid)
  *          1	0	c4
  *          1	1	c6
- *
- *
- *
  */
-
 static int lg_tdtp_e102p_tua6034(struct dvb_frontend_parameters* fep, u8 pllbuf[4])
 {
 	u32 div;
-	u8 p3210, p4;
+	u8 p210, p3;
 
 #define TUNER_MUL 62500
 
 	div = (fep->frequency + 36125000 + TUNER_MUL / 2) / TUNER_MUL;
+//	div = ((fep->frequency/1000 + 36166) * 6) / 1000;
 
 	if (fep->frequency < 174500000)
-		p3210 = 1; // not supported by the tdtp_e102p
+		p210 = 1; // not supported by the tdtp_e102p
 	else if (fep->frequency < 230000000) // VHF
-		p3210 = 2;
+		p210 = 2;
 	else
-		p3210 = 4;
+		p210 = 4;
 
 	if (fep->u.ofdm.bandwidth == BANDWIDTH_7_MHZ)
-		p4 = 0;
+		p3 = 0;
 	else
-		p4 = 1;
+		p3 = 1;
 
 	pllbuf[0] = (div >> 8) & 0x7f;
 	pllbuf[1] = div & 0xff;
 	pllbuf[2] = 0xce;
-	pllbuf[3] = (p4 << 4) | p3210;
+//	pllbuf[2] = 0xcc;
+	pllbuf[3] = (p3 << 3) | p210;
 
 	return 0;
 }
 
 static int lg_tdtp_e102p_mt352_demod_init(struct dvb_frontend *fe)
 {
-	static u8 mt352_clock_config[] = { 0x89, 0xb0, 0x2d };
+	static u8 mt352_clock_config[] = { 0x89, 0xb8, 0x2d };
 	static u8 mt352_reset[] = { 0x50, 0x80 };
 	static u8 mt352_mclk_ratio[] = { 0x8b, 0x00 };
 	static u8 mt352_adc_ctl_1_cfg[] = { 0x8E, 0x40 };
-	static u8 mt352_agc_cfg[] = { 0x67, 0x14, 0x22 };
-	static u8 mt352_sec_agc_cfg[] = { 0x69, 0x00, 0xff, 0xff, 0x00, 0xff, 0x00, 0x40, 0x40 };
+	static u8 mt352_agc_cfg[] = { 0x67, 0x10, 0xa0 };
 
-	static u8 mt352_unk [] = { 0xb5, 0x7a };
+	static u8 mt352_sec_agc_cfg1[] = { 0x6a, 0xff };
+	static u8 mt352_sec_agc_cfg2[] = { 0x6d, 0xff };
+	static u8 mt352_sec_agc_cfg3[] = { 0x70, 0x40 };
+	static u8 mt352_sec_agc_cfg4[] = { 0x7b, 0x03 };
+	static u8 mt352_sec_agc_cfg5[] = { 0x7d, 0x0f };
 
-	static u8 mt352_acq_ctl[] = { 0x53, 0x5f };
-	static u8 mt352_input_freq_1[] = { 0x56, 0xf1, 0x05 };
-
-//	static u8 mt352_capt_range_cfg[] = { 0x75, 0x32 };
+	static u8 mt352_acq_ctl[] = { 0x53, 0x50 };
+	static u8 mt352_input_freq_1[] = { 0x56, 0x31, 0x06 };
 
 	mt352_write(fe, mt352_clock_config, sizeof(mt352_clock_config));
 	udelay(2000);
@@ -499,14 +496,14 @@ static int lg_tdtp_e102p_mt352_demod_init(struct dvb_frontend *fe)
 	mt352_write(fe, mt352_adc_ctl_1_cfg, sizeof(mt352_adc_ctl_1_cfg));
 	mt352_write(fe, mt352_agc_cfg, sizeof(mt352_agc_cfg));
 
-	mt352_write(fe, mt352_sec_agc_cfg, sizeof(mt352_sec_agc_cfg));
-
-	mt352_write(fe, mt352_unk, sizeof(mt352_unk));
+	mt352_write(fe, mt352_sec_agc_cfg1, sizeof(mt352_sec_agc_cfg1));
+	mt352_write(fe, mt352_sec_agc_cfg2, sizeof(mt352_sec_agc_cfg2));
+	mt352_write(fe, mt352_sec_agc_cfg3, sizeof(mt352_sec_agc_cfg3));
+	mt352_write(fe, mt352_sec_agc_cfg4, sizeof(mt352_sec_agc_cfg4));
+	mt352_write(fe, mt352_sec_agc_cfg5, sizeof(mt352_sec_agc_cfg5));
 
 	mt352_write(fe, mt352_acq_ctl, sizeof(mt352_acq_ctl));
 	mt352_write(fe, mt352_input_freq_1, sizeof(mt352_input_freq_1));
-
-//	mt352_write(fe, mt352_capt_range_cfg, sizeof(mt352_capt_range_cfg));
 
 	return 0;
 }

@@ -98,7 +98,7 @@ MODULE_PARM_DESC(rc_key_repeat_count, "how many key repeats will be dropped befo
 #define USB_PID_UNK_HYPER_PALTEK_COLD		0x005e
 #define USB_PID_UNK_HYPER_PALTEK_WARM		0x005f
 #define USB_PID_HANFTEK_UMT_010_COLD		0x0001
-#define USB_PID_HANFTEK_UMT_010_WARM		0x0025
+#define USB_PID_HANFTEK_UMT_010_WARM		0x0015
 #define USB_PID_YAKUMO_DTT200U_COLD			0x0201
 #define USB_PID_YAKUMO_DTT200U_WARM			0x0301
 #define USB_PID_WINTV_NOVA_T_USB2_COLD		0x9300
@@ -235,9 +235,9 @@ static struct dibusb_device_class dibusb_device_classes[] = {
 	  &dibusb_tuner[DIBUSB_TUNER_COFDM_PANASONIC_ENV57H1XD5],
 	},
 	{ UMT2_0, &dibusb_usb_ctrl[2],
-	  "dvb-dibusb-umt-1.fw",
-	  0x01, 0x02, 
-	  7, 188*21,
+	  "dvb-dibusb-umt-2.fw",
+	  0x01, 0x06,
+	  20, 512,
 	  DIBUSB_RC_NO,
 	  &dibusb_demod[DIBUSB_MT352],
 	  &dibusb_tuner[DIBUSB_TUNER_CABLE_LG_TDTP_E102P],

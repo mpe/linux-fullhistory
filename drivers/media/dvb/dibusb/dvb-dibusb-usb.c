@@ -143,13 +143,11 @@ int dibusb_streaming(struct usb_dibusb *dib,int onoff)
 		case DIBUSB2_0:
 		case DIBUSB2_0B:
 		case NOVAT_USB2:
+		case UMT2_0:
 			if (onoff)
 				return dibusb_ioctl_cmd(dib,DIBUSB_IOCTL_CMD_ENABLE_STREAM,NULL,0);
 			else
 				return dibusb_ioctl_cmd(dib,DIBUSB_IOCTL_CMD_DISABLE_STREAM,NULL,0);
-			break;
-		case UMT2_0:
-			return dibusb_set_streaming_mode(dib,onoff);
 			break;
 		default:
 			break;
