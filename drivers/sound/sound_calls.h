@@ -225,7 +225,7 @@ void sound_timer_interrupt(void);
 /*	From ad1848.c */
 void ad1848_init (char *name, int io_base, int irq, int dma_playback, int dma_capture);
 int ad1848_detect (int io_base);
-void     ad1848_interrupt (int dev);
+void     ad1848_interrupt (int dev, struct pt_regs *regs);
 long attach_ms_sound(long mem_start, struct address_info * hw_config);
 int probe_ms_sound(struct address_info *hw_config);
 

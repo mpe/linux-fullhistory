@@ -25,6 +25,11 @@ extern void die_if_kernel(char *,struct pt_regs *,long);
  * This routine handles page faults.  It determines the address,
  * and the problem, and then passes it off to one of the appropriate
  * routines.
+ *
+ * error_code:
+ *	bit 0 == 0 means no page found, 1 means protection fault
+ *	bit 1 == 0 means read, 1 means write
+ *	bit 2 == 0 means kernel, 1 means user-mode
  */
 asmlinkage void do_page_fault(struct pt_regs *regs, unsigned long error_code)
 {
@@ -50,24 +55,36 @@ asmlinkage void do_page_fault(struct pt_regs *regs, unsigned long error_code)
  * we can handle it..
  */
 good_area:
+	/*
+	 * was it a write?
+	 */
+	if (error_code & 2) {
+		if (!(vma->vm_flags & VM_WRITE))
+			goto bad_area;
+	} else {
+		/* read with protection fault? */
+		if (error_code & 1)
+			goto bad_area;
+		if (!(vma->vm_flags & (VM_READ | VM_EXEC)))
+			goto bad_area;
+	}
+	/*
+	 * Did it hit the DOS screen memory VA from vm86 mode?
+	 */
 	if (regs->eflags & VM_MASK) {
 		unsigned long bit = (address - 0xA0000) >> PAGE_SHIFT;
 		if (bit < 32)
 			current->tss.screen_bitmap |= 1 << bit;
 	}
-	if (!(vma->vm_page_prot & PAGE_USER))
-		goto bad_area;
-	if (error_code & PAGE_PRESENT) {
-		if (!(vma->vm_page_prot & (PAGE_RW | PAGE_COW)))
-			goto bad_area;
+	if (error_code & 1) {
 #ifdef CONFIG_TEST_VERIFY_AREA
 		if (regs->cs == KERNEL_CS)
 			printk("WP fault at %08x\n", regs->eip);
 #endif
-		do_wp_page(vma, address, error_code & PAGE_RW);
+		do_wp_page(vma, address, error_code & 2);
 		return;
 	}
-	do_no_page(vma, address, error_code & PAGE_RW);
+	do_no_page(vma, address, error_code & 2);
 	return;
 
 /*
@@ -75,7 +92,7 @@ good_area:
  * Fix it, but check if it's kernel or user first..
  */
 bad_area:
-	if (error_code & PAGE_USER) {
+	if (error_code & 4) {
 		current->tss.cr2 = address;
 		current->tss.error_code = error_code;
 		current->tss.trap_no = 14;
@@ -85,17 +102,19 @@ bad_area:
 /*
  * Oops. The kernel tried to access some bad page. We'll have to
  * terminate things with extreme prejudice.
+ *
+ * First we check if it was the bootup rw-test, though..
  */
-	if (wp_works_ok < 0 && address == TASK_SIZE && (error_code & PAGE_PRESENT)) {
+	if (wp_works_ok < 0 && address == TASK_SIZE && (error_code & 1)) {
 		wp_works_ok = 1;
-		pg0[0] = PAGE_SHARED;
+		pg0[0] = pte_val(mk_pte(0, PAGE_SHARED));
 		invalidate();
 		printk("This processor honours the WP bit even when in supervisor mode. Good.\n");
 		return;
 	}
 	if ((unsigned long) (address-TASK_SIZE) < PAGE_SIZE) {
 		printk(KERN_ALERT "Unable to handle kernel NULL pointer dereference");
-		pg0[0] = PAGE_SHARED;
+		pg0[0] = pte_val(mk_pte(0, PAGE_SHARED));
 	} else
 		printk(KERN_ALERT "Unable to handle kernel paging request");
 	printk(" at virtual address %08lx\n",address);
@@ -104,7 +123,7 @@ bad_area:
 		current->tss.cr3, page);
 	page = ((unsigned long *) page)[address >> 22];
 	printk(KERN_ALERT "*pde = %08lx\n", page);
-	if (page & PAGE_PRESENT) {
+	if (page & 1) {
 		page &= PAGE_MASK;
 		address &= 0x003ff000;
 		page = ((unsigned long *) page)[address >> PAGE_SHIFT];

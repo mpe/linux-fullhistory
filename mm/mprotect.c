@@ -16,32 +16,40 @@
 #include <asm/segment.h>
 #include <asm/system.h>
 
-static void change_protection(unsigned long start, unsigned long end, int prot)
+static void change_protection(unsigned long start, unsigned long end, pgprot_t newprot)
 {
-	unsigned long *page_table, *dir;
-	unsigned long page, offset;
+	pgd_t *dir;
+	pte_t *page_table, entry;
+	unsigned long offset;
 	int nr;
 
 	dir = PAGE_DIR_OFFSET(current, start);
 	offset = (start >> PAGE_SHIFT) & (PTRS_PER_PAGE-1);
 	nr = (end - start) >> PAGE_SHIFT;
 	while (nr > 0) {
-		page = *dir;
-		dir++;
-		if (!(page & PAGE_PRESENT)) {
+		if (pgd_none(*dir)) {
+			dir++;
 			nr = nr - PTRS_PER_PAGE + offset;
 			offset = 0;
 			continue;
 		}
-		page_table = offset + (unsigned long *) (page & PAGE_MASK);
+		if (pgd_bad(*dir)) {
+			printk("Bad page dir entry %08lx\n", pgd_val(*dir));
+			pgd_clear(dir);
+			dir++;
+			nr = nr - PTRS_PER_PAGE + offset;
+			offset = 0;
+			continue;
+		}
+		page_table = offset + (pte_t *) pgd_page(*dir);
 		offset = PTRS_PER_PAGE - offset;
 		if (offset > nr)
 			offset = nr;
 		nr = nr - offset;
 		do {
-			page = *page_table;
-			if (page & PAGE_PRESENT)
-				*page_table = (page & PAGE_CHG_MASK) | prot;
+			entry = *page_table;
+			if (pte_present(entry))
+				*page_table = pte_modify(entry, newprot);
 			++page_table;
 		} while (--offset);
 	}
@@ -49,7 +57,7 @@ static void change_protection(unsigned long start, unsigned long end, int prot)
 }
 
 static inline int mprotect_fixup_all(struct vm_area_struct * vma,
-	int newflags, int prot)
+	int newflags, pgprot_t prot)
 {
 	vma->vm_flags = newflags;
 	vma->vm_page_prot = prot;
@@ -58,7 +66,7 @@ static inline int mprotect_fixup_all(struct vm_area_struct * vma,
 
 static inline int mprotect_fixup_start(struct vm_area_struct * vma,
 	unsigned long end,
-	int newflags, int prot)
+	int newflags, pgprot_t prot)
 {
 	struct vm_area_struct * n;
 
@@ -81,7 +89,7 @@ static inline int mprotect_fixup_start(struct vm_area_struct * vma,
 
 static inline int mprotect_fixup_end(struct vm_area_struct * vma,
 	unsigned long start,
-	int newflags, int prot)
+	int newflags, pgprot_t prot)
 {
 	struct vm_area_struct * n;
 
@@ -104,7 +112,7 @@ static inline int mprotect_fixup_end(struct vm_area_struct * vma,
 
 static inline int mprotect_fixup_middle(struct vm_area_struct * vma,
 	unsigned long start, unsigned long end,
-	int newflags, int prot)
+	int newflags, pgprot_t prot)
 {
 	struct vm_area_struct * left, * right;
 
@@ -140,33 +148,26 @@ static inline int mprotect_fixup_middle(struct vm_area_struct * vma,
 static int mprotect_fixup(struct vm_area_struct * vma, 
 	unsigned long start, unsigned long end, unsigned int newflags)
 {
-	int prot, error;
+	pgprot_t newprot;
+	int error;
 
 	if (newflags == vma->vm_flags)
 		return 0;
-	prot = PAGE_PRESENT;
-	if (newflags & (VM_READ | VM_EXEC))
-		prot |= PAGE_READONLY;
-	if (newflags & VM_WRITE)
-		if (newflags & VM_SHARED)
-			prot |= PAGE_SHARED;
-		else
-			prot |= PAGE_COPY;
-
+	newprot = protection_map[vma->vm_flags & 0xf];
 	if (start == vma->vm_start)
 		if (end == vma->vm_end)
-			error = mprotect_fixup_all(vma, newflags, prot);
+			error = mprotect_fixup_all(vma, newflags, newprot);
 		else
-			error = mprotect_fixup_start(vma, end, newflags, prot);
+			error = mprotect_fixup_start(vma, end, newflags, newprot);
 	else if (end == vma->vm_end)
-		error = mprotect_fixup_end(vma, start, newflags, prot);
+		error = mprotect_fixup_end(vma, start, newflags, newprot);
 	else
-		error = mprotect_fixup_middle(vma, start, end, newflags, prot);
+		error = mprotect_fixup_middle(vma, start, end, newflags, newprot);
 
 	if (error)
 		return error;
 
-	change_protection(start, end, prot);
+	change_protection(start, end, newprot);
 	return 0;
 }
 

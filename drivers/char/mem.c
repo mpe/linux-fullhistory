@@ -87,7 +87,13 @@ static int mmap_mem(struct inode * inode, struct file * file, struct vm_area_str
 {
 	if (vma->vm_offset & ~PAGE_MASK)
 		return -ENXIO;
-#ifdef __i386__
+#if 0 && defined(__i386__)
+	/*
+	 * hmm.. This disables high-memory caching, as the XFree86 team wondered
+	 * about that at one time. It doesn't seem to make a difference, though:
+	 * the surround logic should disable caching for the high device addresses
+	 * anyway.
+	 */
 	if (x86 > 3 && vma->vm_offset >= high_memory)
 		vma->vm_page_prot |= PAGE_PCD;
 #endif
@@ -163,7 +169,7 @@ static int read_zero(struct inode * node,struct file * file,char * buf,int count
 
 static int mmap_zero(struct inode * inode, struct file * file, struct vm_area_struct * vma)
 {
-	if (vma->vm_page_prot & PAGE_RW)
+	if (vma->vm_flags & VM_SHARED)
 		return -EINVAL;
 	if (zeromap_page_range(vma->vm_start, vma->vm_end - vma->vm_start, vma->vm_page_prot))
 		return -EAGAIN;

@@ -12,44 +12,35 @@
 
 extern unsigned long high_memory;
 
-static int check_one_table(unsigned long * page_dir)
+static int check_one_table(struct pde * page_dir)
 {
-	unsigned long pg_table = *page_dir;
-
-	if (!pg_table)
+	if (pgd_none(*page_dir))
 		return 0;
-	if (pg_table >= high_memory || !(pg_table & PAGE_PRESENT)) {
+	if (pgd_bad(*page_dir))
 		return 1;
-	}
 	return 0;
 }
 
 /*
- * This function frees up all page tables of a process when it exits.
+ * This function checks all page tables of "current"
  */
 void check_page_tables(void)
 {
-	unsigned long pg_dir;
+	struct pgd * pg_dir;
 	static int err = 0;
 
 	int stack_level = (long)(&pg_dir)-current->kernel_stack_page;
 	if (stack_level < 1500) printk ("** %d ** ",stack_level);
-	pg_dir = current->tss.cr3;
-	if (mem_map[MAP_NR(pg_dir)] > 1) {
-		return;
-	}
-	if (err == 0){
-		unsigned long *page_dir = (unsigned long *) pg_dir;
-		unsigned long *base = page_dir;
+	pg_dir = PAGE_DIR_OFFSET(current, 0);
+	if (err == 0) {
 		int i;
 		for (i = 0 ; i < PTRS_PER_PAGE ; i++,page_dir++){
 			int notok = check_one_table(page_dir);
 			if (notok){
 				err++;
-				printk ("|%d| ",page_dir-base);
+				printk ("|%d:%08lx| ",i, page_dir->pgd);
 			}
 		}
-		if (err) printk ("Erreur MM %d\n",err);
+		if (err) printk ("\nErreur MM %d\n",err);
 	}
 }
-

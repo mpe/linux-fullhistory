@@ -85,45 +85,51 @@ static inline void file_mmap_sync_page(struct vm_area_struct * vma,
 static void file_mmap_sync(struct vm_area_struct * vma, unsigned long start,
 	size_t size, unsigned int flags)
 {
-	unsigned long page_dir;
-	unsigned long *page_table, *dir;
-	unsigned long poff, pcnt, pc;
+	pgd_t * dir;
+	unsigned long poff, pcnt;
 
 	size = size >> PAGE_SHIFT;
 	dir = PAGE_DIR_OFFSET(current,start);
 	poff = (start >> PAGE_SHIFT) & (PTRS_PER_PAGE-1);
 	start -= vma->vm_start;
-	if ((pcnt = PTRS_PER_PAGE - poff) > size)
+	pcnt = PTRS_PER_PAGE - poff;
+	if (pcnt > size)
 		pcnt = size;
 
-	for ( ; size > 0; ++dir, size -= pcnt,
-	     pcnt = (size > PTRS_PER_PAGE ? PTRS_PER_PAGE : size)) {
-		if (!(PAGE_PRESENT & (page_dir = *dir))) {
-			if (page_dir)
-				printk("file_mmap_sync: bad page directory.\n");
+	for ( ; size > 0; ++dir, size -= pcnt, pcnt = (size > PTRS_PER_PAGE ? PTRS_PER_PAGE : size)) {
+		pte_t *page_table;
+		unsigned long pc;
+
+		if (pgd_none(*dir)) {
 			poff = 0;
 			start += pcnt*PAGE_SIZE;
 			continue;
 		}
-		page_table = (unsigned long *)(PAGE_MASK & page_dir);
-		if (poff) {
-			page_table += poff;
+		if (pgd_bad(*dir)) {
+			printk("file_mmap_sync: bad page directory entry %08lx.\n", pgd_val(*dir));
+			pgd_clear(dir);
 			poff = 0;
+			start += pcnt*PAGE_SIZE;
+			continue;
 		}
+		page_table = poff + (pte_t *) pgd_page(*dir);
+		poff = 0;
 		for (pc = pcnt; pc--; page_table++, start += PAGE_SIZE) {
-			unsigned long page = *page_table;
-			if (!(page & PAGE_PRESENT))
+			pte_t pte;
+
+			pte = *page_table;
+			if (!pte_present(pte))
 				continue;
-			if (!(page & PAGE_DIRTY))
+			if (!pte_dirty(pte))
 				continue;
-			mem_map[MAP_NR(page)]++;
 			if (flags & MS_INVALIDATE) {
-				*page_table = 0;
-				free_page(page);
-			} else
-				*page_table = page & ~PAGE_DIRTY;
-			file_mmap_sync_page(vma, start, page);
-			free_page(page);
+				pte_clear(page_table);
+			} else {
+				mem_map[MAP_NR(pte_page(pte))]++;
+				*page_table = pte_mkclean(pte);
+			}
+			file_mmap_sync_page(vma, start, pte_page(pte));
+			free_page(pte_page(pte));
 		}
 	}
 	invalidate();
@@ -135,8 +141,7 @@ static void file_mmap_sync(struct vm_area_struct * vma, unsigned long start,
  */
 static void file_mmap_unmap(struct vm_area_struct *vma, unsigned long start, size_t len)
 {
-	if (vma->vm_page_prot & PAGE_RW)
-		file_mmap_sync(vma, start, len, MS_ASYNC);
+	file_mmap_sync(vma, start, len, MS_ASYNC);
 }
 
 /*
@@ -144,8 +149,7 @@ static void file_mmap_unmap(struct vm_area_struct *vma, unsigned long start, siz
  */
 static void file_mmap_close(struct vm_area_struct * vma)
 {
-	if (vma->vm_page_prot & PAGE_RW)
-		file_mmap_sync(vma, vma->vm_start, vma->vm_end - vma->vm_start, MS_ASYNC);
+	file_mmap_sync(vma, vma->vm_start, vma->vm_end - vma->vm_start, MS_ASYNC);
 }
 
 /*
@@ -157,10 +161,10 @@ static void file_mmap_close(struct vm_area_struct * vma)
  */
 void file_mmap_swapout(struct vm_area_struct * vma,
 	unsigned long offset,
-	unsigned long *pte)
+	pte_t *page_table)
 {
 	printk("swapout not implemented on shared files..\n");
-	*pte = 0;
+	pte_clear(page_table);
 }
 
 /*

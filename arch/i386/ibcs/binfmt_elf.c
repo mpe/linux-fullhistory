@@ -65,7 +65,7 @@ unsigned long * create_elf_tables(char * p,int argc,int envc,struct elfhdr * exe
 		mpnt->vm_task = current;
 		mpnt->vm_start = PAGE_MASK & (unsigned long) p;
 		mpnt->vm_end = TASK_SIZE;
-		mpnt->vm_page_prot = PAGE_PRIVATE|PAGE_DIRTY;
+		mpnt->vm_page_prot = PAGE_COPY;
 		mpnt->vm_flags = VM_STACK_FLAGS;
 		mpnt->vm_ops = NULL;
 		mpnt->vm_inode = NULL;

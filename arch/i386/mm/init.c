@@ -36,19 +36,19 @@ extern void show_net_buffers(void);
  * ZERO_PAGE is a special page that is used for zero-initialized
  * data and COW.
  */
-unsigned long __bad_pagetable(void)
+pte_t * __bad_pagetable(void)
 {
 	extern char empty_bad_page_table[PAGE_SIZE];
 
 	__asm__ __volatile__("cld ; rep ; stosl":
-		:"a" (BAD_PAGE + PAGE_TABLE),
+		:"a" (pte_val(BAD_PAGE)),
 		 "D" ((long) empty_bad_page_table),
 		 "c" (PTRS_PER_PAGE)
 		:"di","cx");
-	return (unsigned long) empty_bad_page_table;
+	return (pte_t *) empty_bad_page_table;
 }
 
-unsigned long __bad_page(void)
+pte_t __bad_page(void)
 {
 	extern char empty_bad_page[PAGE_SIZE];
 
@@ -57,7 +57,7 @@ unsigned long __bad_page(void)
 		 "D" ((long) empty_bad_page),
 		 "c" (PTRS_PER_PAGE)
 		:"di","cx");
-	return (unsigned long) empty_bad_page;
+	return pte_mkdirty(mk_pte((unsigned long) empty_bad_page, PAGE_SHARED));
 }
 
 unsigned long __zero_page(void)
@@ -111,8 +111,8 @@ extern unsigned long free_area_init(unsigned long, unsigned long);
  */
 unsigned long paging_init(unsigned long start_mem, unsigned long end_mem)
 {
-	unsigned long * pg_dir;
-	unsigned long * pg_table;
+	pgd_t * pg_dir;
+	pte_t * pg_table;
 	unsigned long tmp;
 	unsigned long address;
 
@@ -129,20 +129,22 @@ unsigned long paging_init(unsigned long start_mem, unsigned long end_mem)
 	address = 0;
 	pg_dir = swapper_pg_dir;
 	while (address < end_mem) {
-		tmp = *(pg_dir + 768);		/* at virtual addr 0xC0000000 */
-		if (!tmp) {
-			tmp = start_mem | PAGE_TABLE;
-			*(pg_dir + 768) = tmp;
+		/* map the memory at virtual addr 0xC0000000 */
+		if (pgd_none(pg_dir[768])) {
+			pgd_set(pg_dir+768, (pte_t *) start_mem);
 			start_mem += PAGE_SIZE;
 		}
-		*pg_dir = tmp;			/* also map it in at 0x0000000 for init */
+		pg_table = (pte_t *) pgd_page(pg_dir[768]);
+
+		/* also map it tempoarily at 0x0000000 for init */
+		pgd_set(pg_dir+768, pg_table);
+		pgd_set(pg_dir, pg_table);
 		pg_dir++;
-		pg_table = (unsigned long *) (tmp & PAGE_MASK);
 		for (tmp = 0 ; tmp < PTRS_PER_PAGE ; tmp++,pg_table++) {
 			if (address < end_mem)
-				*pg_table = address | PAGE_SHARED;
+				*pg_table = mk_pte(address, PAGE_SHARED);
 			else
-				*pg_table = 0;
+				pte_clear(pg_table);
 			address += PAGE_SIZE;
 		}
 	}
@@ -208,7 +210,7 @@ void mem_init(unsigned long start_mem, unsigned long end_mem)
 		datapages << (PAGE_SHIFT-10));
 /* test if the WP bit is honoured in supervisor mode */
 	wp_works_ok = -1;
-	pg0[0] = PAGE_READONLY;
+	pg0[0] = pte_val(mk_pte(0, PAGE_READONLY));
 	invalidate();
 	__asm__ __volatile__("movb 0,%%al ; movb %%al,0": : :"ax", "memory");
 	pg0[0] = 0;

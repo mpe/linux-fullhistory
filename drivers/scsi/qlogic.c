@@ -14,7 +14,7 @@
    Reference Qlogic FAS408 Technical Manual, 53408-510-00A, May 10, 1994
    (you can reference it, but it is incomplete and inaccurate in places)
 
-   Version 0.38a
+   Version 0.38b
 
    This also works with loadable SCSI as a module.  Check configuration
    options QL_INT_ACTIVE_HIGH and QL_TURBO_PDMA for PCMCIA usage (which
@@ -25,6 +25,9 @@
 */
 /*----------------------------------------------------------------*/
 /* Configuration */
+/* Set this if you are using the PCMCIA adapter - it will automatically
+   take care of several settings */
+#define QL_PCMCIA 0
 
 /* Set the following to 2 to use normal interrupt (active high/totempole-
    tristate), otherwise use 0 (REQUIRED FOR PCMCIA) for active low, open
@@ -68,6 +71,15 @@
 	of the 40Mhz clock. If FASTCLK is 1, specifying 01 (1/2) will
 	cause the deassertion to be early by 1/2 clock.  Bits 5&4 control
 	the assertion delay, also in 1/2 clocks (FASTCLK is ignored here). */
+
+/* Option Synchronization */
+	
+#if QL_PCMCIA
+#undef QL_INT_ACTIVE_HIGH
+#undef QL_TURBO_PDMA
+#define QL_INT_ACTIVE_HIGH 0
+#define QL_TURBO_PDMA 0
+#endif
 
 /*----------------------------------------------------------------*/
 
@@ -118,6 +130,8 @@ static void	ql_zap(void);
 void	ql_zap()
 {
 int	x;
+unsigned long	flags;
+	save_flags( flags );
 	cli();
 	x = inb(qbase + 0xd);
 	REG0;
@@ -125,7 +139,7 @@ int	x;
 	outb(2, qbase + 3);				/* reset chip */
 	if (x & 0x80)
 		REG1;
-	sti();
+	restore_flags( flags );
 }
 
 /*----------------------------------------------------------------*/
@@ -228,8 +242,11 @@ int	i,k;
 static void	ql_icmd(Scsi_Cmnd * cmd)
 {
 unsigned int	    i;
+unsigned long	flags;
+
 	qabort = 0;
 
+	save_flags( flags );
 	cli();
 	REG0;
 /* clearing of interrupts and the fifo is needed */
@@ -274,7 +291,7 @@ unsigned int	    i;
 		outb(cmd->cmnd[i], qbase + 2);
 	qlcmd = cmd;
 	outb(0x41, qbase + 3);	/* select and send command */
-	sti();
+	restore_flags( flags );
 }
 /*----------------------------------------------------------------*/
 /* process scsi command - usually after interrupt */
@@ -464,6 +481,7 @@ int	qlogic_detect(Scsi_Host_Template * host)
 int	i, j;			/* these are only used by IRQ detect */
 int	qltyp;			/* type of chip */
 struct	Scsi_Host	*hreg;	/* registered host structure */
+unsigned long	flags;
 
 /* Qlogic Cards only exist at 0x230 or 0x330 (the chip itself decodes the
    address - I check 230 first since MIDI cards are typically at 330
@@ -479,8 +497,10 @@ struct	Scsi_Host	*hreg;	/* registered host structure */
 */
 
 	for (qbase = 0x230; qbase < 0x430; qbase += 0x100) {
+#ifndef PCMCIA
 		if( check_region( qbase , 0x10 ) )
 			continue;
+#endif			
 		REG1;
 		if ( ( (inb(qbase + 0xe) ^ inb(qbase + 0xe)) == 7 )
 		  && ( (inb(qbase + 0xe) ^ inb(qbase + 0xe)) == 7 ) )
@@ -506,6 +526,7 @@ struct	Scsi_Host	*hreg;	/* registered host structure */
 #endif
 #if QL_USE_IRQ
 /* IRQ probe - toggle pin and check request pending */
+	save_flags( flags );
 	cli();
 	i = 0xffff;
 	j = 3;
@@ -525,17 +546,19 @@ struct	Scsi_Host	*hreg;	/* registered host structure */
 		i >>= 1, qlirq++;	/* should check for exactly 1 on */
 	if (qlirq >= 0 && !request_irq(qlirq, ql_ihandl, SA_INTERRUPT, "qlogic"))
 		host->can_queue = 1;
-	sti();
+	restore_flags( flags );
 #endif
+#ifndef PCMCIA
 	request_region( qbase , 0x10 ,"qlogic");
-
+#endif
 	hreg = scsi_register( host , 0 );	/* no host data */
 	hreg->io_port = qbase;
 	hreg->n_io_port = 16;
 	if( qlirq != -1 )
 		hreg->irq = qlirq;
 
-	sprintf(qinfo, "Qlogic Driver version 0.38a, chip %02X at %03X, IRQ %d", qltyp, qbase, qlirq);
+	sprintf(qinfo, "Qlogic Driver version 0.38b, chip %02X at %03X, IRQ %d, Opts:%d%d",
+	    qltyp, qbase, qlirq, QL_INT_ACTIVE_HIGH, QL_TURBO_PDMA );
 	host->name = qinfo;
 
 	return 1;

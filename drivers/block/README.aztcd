@@ -45,7 +45,7 @@ old kernel, in order to reboot if something goes wrong!
 2. INSTALLATION
 If you received this software as a standalone package AZTECH.CDROM.Vxx.tgz 
 (xx=version number) and not included in the standard Linux kernel, read the 
-file AZTECH.CDROM.Vxx.README included in that package to install it. The 
+file AZTECH.CDROM.README included in that package to install it. The 
 standalone package's home is 'ftp.gwdg.de : pub/linux/cdrom/drivers/aztech'.
 The driver consists of a header file 'aztcd.h', which normally should reside 
 in /usr/include/linux and the source code 'aztcd.c', which normally resides in
@@ -62,13 +62,12 @@ see the following message while Linux boots:
     Aztech CD-ROM Init: <drive type> detected
     Aztech CD-ROM Init: End
 If the message looks different and you are sure to have a supported drive,
-it may have a different base address. The Aztech driver does have an 'auto-
-detection feature', which looks for the CD-ROM drive at the base address 
-specified in aztcd.h at compile time. This address can be overwritten by boot 
-parameter aztcd=....You should reboot and start Linux with boot parameter 
-aztcd=<base address>, e.g. aztcd=0x320. If you do not know the base address, 
-start your PC with DOS and look at the boot message of your CD-ROM's DOS 
-driver. 
+it may have a different base address. The Aztech driver does look for the 
+CD-ROM drive at the base address specified in aztcd.h at compile time. This 
+address can be overwritten by boot parameter aztcd=....You should reboot and 
+start Linux with boot parameter aztcd=<base address>, e.g. aztcd=0x320. If 
+you do not know the base address, start your PC with DOS and look at the boot 
+message of your CD-ROM's DOS driver. 
 
 If the message looks correct, as user 'root' you should be able to mount the 
 drive by
@@ -146,13 +145,12 @@ Please send detailed bug reports and bug fixes via EMail to
 
         zimmerma@rz.fht-esslingen.de
 
-I also would like to get positive feedback. Please inform me, if you have
-positive test results. Please include a description of your CD-ROM drive
-type and interface card, the exact firmware message during Linux bootup, 
-the version number of the AZTECH-CDROM-driver and the Linux kernel version.
-Also a description of your system's other hardware could be of interest,
-especially microprocessor type, clock frequency, other interface cards such
-as soundcards, ethernet adapter, game cards etc..
+Please include a description of your CD-ROM drive type and interface card, 
+the exact firmware message during Linux bootup, the version number of the 
+AZTECH-CDROM-driver and the Linux kernel version. Also a description of your 
+system's other hardware could be of interest, especially microprocessor type, 
+clock frequency, other interface cards such as soundcards, ethernet adapter, 
+game cards etc..
 
 I will try to collect the reports and make the necessary modifications from 
 time to time. I may also come back to you directly with some bug fixes and 
@@ -172,12 +170,12 @@ snail mail address for such 'stuff' is
 7. OTHER DRIVES
 The following drives ORCHID CDS3110, OKANO CDD110 and WEARNES nearly look 
 the same as AZTECH CDA268-01A, especially they seem to use the same command 
-codes. So it should be simple to make the AZTECH driver work with these drives. 
+codes. So it was quite simple to make the AZTECH driver work with these drives. 
 
-Unfortuntately I do not have any of these drives available, so I can't test
-it. I've got reports, that it works with ORCHID CDS3110 and Game-Wave32
-sound cards and also with WEARNES CDD110 in some different combinations. In 
-some installations, it seems necessary to initialize the drive with the DOS 
+Unfortuntately I do not have any of these drives available, so I couldn't test
+it myself. But I've got reports, that it works with ORCHID CDS3110 and Game-
+Wave32 sound cards and also with WEARNES CDD110 in some different combinations. 
+In some installations, it seems necessary to initialize the drive with the DOS 
 driver before (especially if combined with a sound card) and then do a warm 
 boot (CTRL-ALT-RESET) or start Linux from DOS, e.g. with 'loadlin'.
 
@@ -350,8 +348,8 @@ great job in analyzing the command structure of various CD-ROM drives, this
 work would not have been possible. E.Moenkeberg was also a great help in 
 making the software 'kernel ready' and in answering many of the CDROM-related 
 questions in the newsgroups. He really is *the* Linux CD-ROM guru. Thanks 
-also to  Ruediger Helsch, Unifix, and to all the guys on the Internet, who 
-collected valuable technical information about CDROMs. 
+also to all the guys on the Internet, who collected valuable technical 
+information about CDROMs. 
 
 Joe Nardone (nardone@clark.net) was a patient tester even for my first
 trial, which was more than slow, and made suggestions for code improvement.
@@ -462,7 +460,7 @@ int main(void)
            unsigned char buf[2336];
          } azt;
 
-  printf("\nMini-Audio CD-Player V0.5   (C) 1994  W.Zimmermann\n");
+  printf("\nMini-Audio CD-Player V0.5   (C) 1994,1995  W.Zimmermann\n");
   handle=open("/dev/cdrom",O_RDWR);
   ioctl(handle,CDROMRESUME);
   
@@ -608,7 +606,7 @@ int main(void)
                            { printf("Drive error or invalid adress\n");
                            }
                           break;
-#ifdef AZT_PRIVATE_IOCTLS
+#ifdef AZT_PRIVATE_IOCTLS /*not supported by every CDROM driver*/
               case 'd':   cmd=CDROMREADMODE1;
                           printf("Adress (min:sec:frame)  ");
                           scanf("%d:%d:%d",&arg1,&arg2,&arg3);
@@ -618,7 +616,7 @@ int main(void)
                           if (azt.msf.cdmsf_sec0  > 59) azt.msf.cdmsf_sec0  =59;
                           if (azt.msf.cdmsf_frame0> 74) azt.msf.cdmsf_frame0=74;
                           if (ioctl(handle,cmd,&azt.msf)) 
-                           { printf("Drive error or invalid adress\n");
+                           { printf("Drive error, invalid adress or unsupported command\n");
                            }
                           k=0;
                           getchar();
@@ -651,7 +649,7 @@ int main(void)
                           if (azt.msf.cdmsf_sec0  > 59) azt.msf.cdmsf_sec0  =59;
                           if (azt.msf.cdmsf_frame0> 74) azt.msf.cdmsf_frame0=74;
                           if (ioctl(handle,cmd,&azt)) 
-                           { printf("Drive error or invalid adress\n");
+                           { printf("Drive error, invalid adress or unsupported command\n");
                            }
                           k=0;
                           for (i=0;i<146;i++)

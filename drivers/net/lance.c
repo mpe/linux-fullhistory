@@ -1,6 +1,6 @@
 /* lance.c: An AMD LANCE ethernet driver for linux. */
 /*
-	Written 1993-94 by Donald Becker.
+	Written 1993,1994,1995 by Donald Becker.
 
 	Copyright 1993 United States Government as represented by the
 	Director, National Security Agency.
@@ -15,7 +15,7 @@
 	   Code 930.5, Goddard Space Flight Center, Greenbelt MD 20771
 */
 
-static char *version = "lance.c:v1.06 11/29/94 becker@cesdis.gsfc.nasa.gov\n";
+static char *version = "lance.c:v1.07 1/18/95 becker@cesdis.gsfc.nasa.gov\n";
 
 #include <linux/config.h>
 #include <linux/kernel.h>
@@ -188,7 +188,8 @@ struct lance_init_block {
 };
 
 struct lance_private {
-	char devname[8];
+	char *name;
+	void *pad;
 	/* The Tx and Rx ring entries must aligned on 8-byte boundaries. */
 	struct lance_rx_head rx_ring[RX_RING_SIZE];
 	struct lance_tx_head tx_ring[TX_RING_SIZE];
@@ -263,7 +264,8 @@ unsigned long lance_init(unsigned long mem_start, unsigned long mem_end)
 		for (pci_index = 0; pci_index < 8; pci_index++) {
 			unsigned char pci_bus, pci_device_fn;
 			unsigned long pci_ioaddr;
-		
+			unsigned short pci_command;
+
 			if (pcibios_find_device (AMD_VENDOR_ID, AMD_DEVICE_ID, pci_index,
 									 &pci_bus, &pci_device_fn) != 0)
 				break;
@@ -273,6 +275,18 @@ unsigned long lance_init(unsigned long mem_start, unsigned long mem_end)
 									  PCI_BASE_ADDRESS_0, &pci_ioaddr);
 			/* Remove I/O space marker in bit 0. */
 			pci_ioaddr &= ~3;
+			/* PCI Spec 2.1 states that it is either the driver or PCI card's
+	 		 * responsibility to set the PCI Master Enable Bit if needed.
+			 *	(From Mark Stockton <marks@schooner.sys.hou.compaq.com>)
+			 */
+			pcibios_read_config_word(pci_bus, pci_device_fn,
+									 PCI_COMMAND, &pci_command);
+			if ( ! (pci_command & PCI_COMMAND_MASTER)) {
+				printk("PCI Master Bit has not been set. Setting...\n");
+				pci_command |= PCI_COMMAND_MASTER;
+				pcibios_write_config_word(pci_bus, pci_device_fn,
+										  PCI_COMMAND, pci_command);
+			}
 			printk("Found PCnet/PCI at %#lx, irq %d (mem_start is %#lx).\n",
 				   pci_ioaddr, pci_irq_line, mem_start);
 			mem_start = lance_probe1(pci_ioaddr, mem_start);
@@ -300,6 +314,7 @@ unsigned long lance_probe1(int ioaddr, unsigned long mem_start)
 	struct lance_private *lp;
 	short dma_channels;					/* Mark spuriously-busy DMA channels */
 	int i, reset_val, lance_version;
+	char *chipname;
 	/* Flags for specific chips or boards. */
 	unsigned char hpJ2405A = 0;						/* HP ISA adaptor */
 	int hp_builtin = 0;					/* HP on-board ethernet. */
@@ -357,7 +372,8 @@ unsigned long lance_probe1(int ioaddr, unsigned long mem_start)
 						+ PKT_BUF_SZ*(RX_RING_SIZE + TX_RING_SIZE),
 						&mem_start);
 
-	printk("%s: %s at %#3x,", dev->name, chip_table[lance_version].name, ioaddr);
+	chipname = chip_table[lance_version].name;
+	printk("%s: %s at %#3x,", dev->name, chipname, ioaddr);
 
 	/* There is a 16 byte station address PROM at the base address.
 	   The first six bytes are the station address. */
@@ -365,11 +381,12 @@ unsigned long lance_probe1(int ioaddr, unsigned long mem_start)
 		printk(" %2.2x", dev->dev_addr[i] = inb(ioaddr + i));
 
 	dev->base_addr = ioaddr;
-	request_region(ioaddr, LANCE_TOTAL_SIZE,"lance");
+	request_region(ioaddr, LANCE_TOTAL_SIZE, chip_table[lance_version].name);
 
 	/* Make certain the data structures used by the LANCE are aligned. */
 	dev->priv = (void *)(((int)dev->priv + 7) & ~7);
 	lp = (struct lance_private *)dev->priv;
+	lp->name = chipname;
 	lp->rx_buffs = (long)dev->priv + sizeof(struct lance_private);
 	lp->tx_bounce_buffs = (char (*)[PKT_BUF_SZ])
 						   (lp->rx_buffs + PKT_BUF_SZ*RX_RING_SIZE);
@@ -464,7 +481,7 @@ unsigned long lance_probe1(int ioaddr, unsigned long mem_start)
 	if (dev->dma == 4) {
 		printk(", no DMA needed.\n");
 	} else if (dev->dma) {
-		if (request_dma(dev->dma, "lance")) {
+		if (request_dma(dev->dma, chipname)) {
 			printk("DMA %d allocation failed.\n", dev->dma);
 			return mem_start;
 		} else
@@ -480,7 +497,7 @@ unsigned long lance_probe1(int ioaddr, unsigned long mem_start)
 			if (test_bit(dma, &dma_channels))
 				continue;
 			outw(0x7f04, ioaddr+LANCE_DATA); /* Clear the memory error bits. */
-			if (request_dma(dma, "lance"))
+			if (request_dma(dma, chipname))
 				continue;
 			set_dma_mode(dma, DMA_MODE_CASCADE);
 			enable_dma(dma);
@@ -534,7 +551,7 @@ lance_open(struct device *dev)
 	int i;
 
 	if (dev->irq == 0 ||
-		request_irq(dev->irq, &lance_interrupt, 0, "lance")) {
+		request_irq(dev->irq, &lance_interrupt, 0, lp->name)) {
 		return -EAGAIN;
 	}
 
@@ -587,7 +604,11 @@ lance_open(struct device *dev)
 	while (i++ < 100)
 		if (inw(ioaddr+LANCE_DATA) & 0x0100)
 			break;
-	outw(0x0142, ioaddr+LANCE_DATA);
+	/* 
+	 * We used to clear the InitDone bit, 0x0100, here but Mark Stockton
+	 * reports that doing so triggers a bug in the '974.
+	 */
+ 	outw(0x0042, ioaddr+LANCE_DATA);
 
 	if (lance_debug > 2)
 		printk("%s: LANCE open after %d ticks, init block %#x csr0 %4.4x.\n",

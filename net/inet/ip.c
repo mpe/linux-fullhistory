@@ -335,10 +335,6 @@ int ip_build_header(struct sk_buff *skb, unsigned long saddr, unsigned long dadd
 #ifdef Not_Yet_Avail
 	build_options(iph, opt);
 #endif
-#ifdef CONFIG_IP_FIREWALL
-	if(!ip_fw_chk(iph,ip_fw_blk_chain))
-		return -EPERM;
-#endif		
 
 	return(20 + tmp);	/* IP header plus MAC header size */
 }

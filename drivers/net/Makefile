@@ -166,6 +166,9 @@ endif
 ifdef CONFIG_APRICOT
 NETDRV_OBJS := $(NETDRV_OBJS) apricot.o
 endif
+ifdef CONFIG_DEC_ELCP
+NETDRV_OBJS := $(NETDRV_OBJS) tulip.o
+endif
 
 ifdef CONFIG_8390
 NETDRV_OBJS := $(NETDRV_OBJS) 8390.o

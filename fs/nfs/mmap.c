@@ -92,7 +92,7 @@ struct vm_operations_struct nfs_file_mmap = {
 /* This is used for a general mmap of a nfs file */
 int nfs_mmap(struct inode * inode, struct file * file, struct vm_area_struct * vma)
 {
-	if (vma->vm_page_prot & PAGE_RW)	/* only PAGE_COW or read-only supported now */
+	if (vma->vm_flags & VM_SHARED)	/* only PAGE_COW or read-only supported now */
 		return -EINVAL;
 	if (!inode->i_sb || !S_ISREG(inode->i_mode))
 		return -EACCES;

@@ -28,7 +28,7 @@ char * strncpy(char * dest,const char *src,size_t count)
 {
 	char *tmp = dest;
 
-	while ((*dest++ = *src++) != '\0' && --count)
+	while (count-- && (*dest++ = *src++) != '\0')
 		/* nothing */;
 
 	return tmp;
@@ -64,7 +64,7 @@ char * strncat(char *dest, const char *src, size_t count)
 
 int strcmp(const char * cs,const char * ct)
 {
-	register char __res;
+	register signed char __res;
 
 	while (1) {
 		if ((__res = *cs - *ct++) != 0 || !*cs++)
@@ -76,7 +76,7 @@ int strcmp(const char * cs,const char * ct)
 
 int strncmp(const char * cs,const char * ct,size_t count)
 {
-	register char __res = 0;
+	register signed char __res = 0;
 
 	while (count) {
 		if ((__res = *cs - *ct++) != 0 || !*cs++)
@@ -89,9 +89,7 @@ int strncmp(const char * cs,const char * ct,size_t count)
 
 char * strchr(const char * s,char c)
 {
-	const char ch = c;
-
-	for(; *s != ch; ++s)
+	for(; *s != c; ++s)
 		if (*s == '\0')
 			return NULL;
 	return (char *) s;
@@ -211,11 +209,12 @@ void * memmove(void * dest,const void *src,size_t count)
 int memcmp(const void * cs,const void * ct,size_t count)
 {
 	const unsigned char *su1, *su2;
+	signed char res = 0;
 
 	for( su1 = cs, su2 = ct; 0 < count; ++su1, ++su2, count--)
-		if (*su1 != *su2)
-			return((*su1 < *su2) ? -1 : +1);
-	return(0);
+		if ((res = *su1 - *su2) != 0)
+			break;
+	return res;
 }
 
 /*

@@ -38,10 +38,10 @@ extern void show_net_buffers(void);
  * ZERO_PAGE is a special page that is used for zero-initialized
  * data and COW.
  */
-unsigned long __bad_pagetable(void)
+struct pte * __bad_pagetable(void)
 {
 	memset((void *) EMPTY_PGT, 0, PAGE_SIZE);
-	return EMPTY_PGT;
+	return (struct pte *) EMPTY_PGT;
 }
 
 unsigned long __bad_page(void)

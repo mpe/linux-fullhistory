@@ -33,37 +33,56 @@ static struct vm_struct * vmlist = NULL;
  */
 #define VMALLOC_OFFSET	(8*1024*1024)
 
-static inline void set_pgdir(unsigned long dindex, unsigned long value)
+static inline void set_pgdir(unsigned long dindex, pte_t * page_table)
 {
 	struct task_struct * p;
 
 	p = &init_task;
 	do {
-		PAGE_DIR_OFFSET(p,0)[dindex] = value;
+		pgd_set(PAGE_DIR_OFFSET(p,0) + dindex, page_table);
+		p = p->next_task;
+	} while (p != &init_task);
+}
+
+static inline void clear_pgdir(unsigned long dindex)
+{
+	struct task_struct * p;
+
+	p = &init_task;
+	do {
+		pgd_clear(PAGE_DIR_OFFSET(p,0) + dindex);
 		p = p->next_task;
 	} while (p != &init_task);
 }
 
 static int free_area_pages(unsigned long dindex, unsigned long index, unsigned long nr)
 {
-	unsigned long page, *pte;
+	pgd_t * dir;
+	pte_t * page_table;
+	unsigned long page;
 
-	if (!(PAGE_PRESENT & (page = swapper_pg_dir[dindex])))
+	dir = swapper_pg_dir + dindex;
+	if (pgd_none(*dir))
 		return 0;
-	page &= PAGE_MASK;
-	pte = index + (unsigned long *) page;
+	if (pgd_bad(*dir)) {
+		printk("bad page directory entry in free_area_pages: %08lx\n", pgd_val(*dir));
+		pgd_clear(dir);
+		return 0;
+	}
+	page = pgd_page(*dir);
+	page_table = index + (pte_t *) page;
 	do {
-		unsigned long pg = *pte;
-		*pte = 0;
-		if (pg & PAGE_PRESENT)
-			free_page(pg);
-		pte++;
+		pte_t pte = *page_table;
+		pte_clear(page_table);
+		if (pte_present(pte))
+			free_page(pte_page(pte));
+		page_table++;
 	} while (--nr);
-	pte = (unsigned long *) page;
-	for (nr = 0 ; nr < 1024 ; nr++, pte++)
-		if (*pte)
+	page_table = (pte_t *) page;
+	for (nr = 0 ; nr < PTRS_PER_PAGE ; nr++, page_table++)
+		if (!pte_none(*page_table))
 			return 0;
-	set_pgdir(dindex,0);
+	clear_pgdir(dindex);
 	mem_map[MAP_NR(page)] = 1;
 	free_page(page);
 	invalidate();
@@ -72,31 +91,39 @@ static int free_area_pages(unsigned long dindex, unsigned long index, unsigned l
 
 static int alloc_area_pages(unsigned long dindex, unsigned long index, unsigned long nr)
 {
-	unsigned long page, *pte;
+	pgd_t *dir;
+	pte_t *page_table;
 
-	page = swapper_pg_dir[dindex];
-	if (!page) {
-		page = get_free_page(GFP_KERNEL);
+	dir = swapper_pg_dir + dindex;
+	if (pgd_none(*dir)) {
+		unsigned long page = get_free_page(GFP_KERNEL);
 		if (!page)
 			return -ENOMEM;
-		if (swapper_pg_dir[dindex]) {
+		if (!pgd_none(*dir)) {
 			free_page(page);
-			page = swapper_pg_dir[dindex];
 		} else {
 			mem_map[MAP_NR(page)] = MAP_PAGE_RESERVED;
-			set_pgdir(dindex, page | PAGE_SHARED);
+			set_pgdir(dindex, (pte_t *) page);
 		}
 	}
-	page &= PAGE_MASK;
-	pte = index + (unsigned long *) page;
-	*pte = PAGE_SHARED;		/* remove a race with vfree() */
+	if (pgd_bad(*dir)) {
+		printk("Bad page dir entry in alloc_area_pages (%08lx)\n", pgd_val(*dir));
+		return -ENOMEM;
+	}
+	page_table = index + (pte_t *) pgd_page(*dir);
+	/*
+	 * use a tempotary page-table entry to remove a race with
+	 * vfree(): it mustn't free the page table from under us
+	 * if we sleep in get_free_page()
+	 */
+	*page_table = BAD_PAGE;
 	do {
 		unsigned long pg = get_free_page(GFP_KERNEL);
 
 		if (!pg)
 			return -ENOMEM;
-		*pte = pg | PAGE_SHARED;
-		pte++;
+		*page_table = mk_pte(pg, PAGE_KERNEL);
+		page_table++;
 	} while (--nr);
 	invalidate();
 	return 0;

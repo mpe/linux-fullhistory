@@ -67,20 +67,24 @@ asmlinkage struct pt_regs * save_v86_state(struct vm86_regs * regs)
 
 static void mark_screen_rdonly(struct task_struct * tsk)
 {
-	unsigned long tmp;
-	unsigned long *pg_table;
+	pgd_t *pg_dir;
 
-	if ((tmp = tsk->tss.cr3) != 0) {
-		tmp = *(unsigned long *) tmp;
-		if (tmp & PAGE_PRESENT) {
-			tmp &= PAGE_MASK;
-			pg_table = (0xA0000 >> PAGE_SHIFT) + (unsigned long *) tmp;
-			tmp = 32;
-			while (tmp--) {
-				if (PAGE_PRESENT & *pg_table)
-					*pg_table &= ~PAGE_RW;
-				pg_table++;
-			}
+	pg_dir = PAGE_DIR_OFFSET(tsk, 0);
+	if (!pgd_none(*pg_dir)) {
+		pte_t *pg_table;
+		int i;
+
+		if (pgd_bad(*pg_dir)) {
+			printk("vm86: bad page table directory entry %08lx\n", pgd_val(*pg_dir));
+			pgd_clear(pg_dir);
+			return;
+		}
+		pg_table = (pte_t *) pgd_page(*pg_dir);
+		pg_table += 0xA0000 >> PAGE_SHIFT;
+		for (i = 0 ; i < 32 ; i++) {
+			if (pte_present(*pg_table))
+				*pg_table = pte_wrprotect(*pg_table);
+			pg_table++;
 		}
 	}
 }

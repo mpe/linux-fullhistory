@@ -22,7 +22,7 @@ static int shm_map (struct vm_area_struct *shmd, int remap);
 static void killseg (int id);
 static void shm_open (struct vm_area_struct *shmd);
 static void shm_close (struct vm_area_struct *shmd);
-static unsigned long shm_swap_in (struct vm_area_struct *, unsigned long, unsigned long);
+static pte_t shm_swap_in(struct vm_area_struct *, unsigned long, unsigned long);
 
 static int shm_tot = 0; /* total number of shared memory pages */
 static int shm_rss = 0; /* number of shared memory pages that are in memory */
@@ -161,7 +161,6 @@ static void killseg (int id)
 {
 	struct shmid_ds *shp;
 	int i, numpages;
-	ulong page;
 
 	shp = shm_segs[id];
 	if (shp == IPC_NOID || shp == IPC_UNUSED) {
@@ -180,13 +179,15 @@ static void killseg (int id)
 	}
 	numpages = shp->shm_npages;
 	for (i = 0; i < numpages ; i++) {
-		if (!(page = shp->shm_pages[i]))
+		pte_t pte;
+		pte_val(pte) = shp->shm_pages[i];
+		if (pte_none(pte))
 			continue;
-		if (page & PAGE_PRESENT) {
-			free_page (page & PAGE_MASK);
+		if (pte_present(pte)) {
+			free_page (pte_page(pte));
 			shm_rss--;
 		} else {
-			swap_free (page);
+			swap_free(pte_val(pte));
 			shm_swp--;
 		}
 	}
@@ -414,20 +415,26 @@ static inline void remove_attach (struct shmid_ds * shp, struct vm_area_struct *
  */
 static int shm_map (struct vm_area_struct *shmd, int remap)
 {
-	unsigned long *page_table;
+	pgd_t *page_dir;
+	pte_t *page_table;
 	unsigned long tmp, shm_sgn;
 
 	/* check that the range is unmapped */
 	if (!remap)
 		for (tmp = shmd->vm_start; tmp < shmd->vm_end; tmp += PAGE_SIZE) {
-			page_table = PAGE_DIR_OFFSET(shmd->vm_task,tmp);
-			if (*page_table & PAGE_PRESENT) {
-				page_table = (ulong *) (PAGE_MASK & *page_table);
-				page_table += ((tmp >> PAGE_SHIFT) & (PTRS_PER_PAGE-1));
-				if (*page_table) {
-					/* printk("shmat() -> EINVAL because address 0x%lx is already mapped.\n",tmp); */
-					return -EINVAL;
-				}
+			page_dir = PAGE_DIR_OFFSET(shmd->vm_task,tmp);
+			if (pgd_none(*page_dir))
+				continue;
+			if (pgd_bad(*page_dir)) {
+				printk("bad ipc page directory entry %08lx\n", pgd_val(*page_dir));
+				pgd_clear(page_dir);
+				continue;
+			}
+			page_table = (pte_t *) pgd_page(*page_dir);	
+			page_table += ((tmp >> PAGE_SHIFT) & (PTRS_PER_PAGE-1));
+			if (!pte_none(*page_table)) {
+				/* printk("shmat() -> EINVAL because address 0x%lx is already mapped.\n",tmp); */
+				return -EINVAL;
 			}
 		}
 
@@ -440,24 +447,22 @@ static int shm_map (struct vm_area_struct *shmd, int remap)
 
 	/* check that the range has page_tables */
 	for (tmp = shmd->vm_start; tmp < shmd->vm_end; tmp += PAGE_SIZE) {
-		page_table = PAGE_DIR_OFFSET(shmd->vm_task,tmp);
-		if (*page_table & PAGE_PRESENT) {
-			page_table = (ulong *) (PAGE_MASK & *page_table);
+		page_dir = PAGE_DIR_OFFSET(shmd->vm_task,tmp);
+		if (!pgd_none(*page_dir)) {
+			page_table = (pte_t *) pgd_page(*page_dir);
 			page_table += ((tmp >> PAGE_SHIFT) & (PTRS_PER_PAGE-1));
-			if (*page_table) {
-				if (*page_table & PAGE_PRESENT) {
+			if (!pte_none(*page_table)) {
+				if (pte_present(*page_table)) {
 					--current->mm->rss;
-					free_page (*page_table & PAGE_MASK);
-				}
-				else
-					swap_free (*page_table);
-				*page_table = 0;
+					free_page (pte_page(*page_table));
+				} else
+					swap_free(pte_val(*page_table));
+				pte_clear(page_table);
 			}
 		} else {
-			unsigned long new_pt;
-			if (!(new_pt = get_free_page(GFP_KERNEL)))
+			if (!(page_table = (pte_t *) get_free_page(GFP_KERNEL)))
 				return -ENOMEM;
-			*page_table = new_pt | PAGE_TABLE;
+			pgd_set(page_dir, page_table);
 			tmp |= ((PAGE_SIZE << 10) - PAGE_SIZE);
 		}
 	}
@@ -466,10 +471,10 @@ static int shm_map (struct vm_area_struct *shmd, int remap)
 	shm_sgn = shmd->vm_pte + ((shmd->vm_offset >> PAGE_SHIFT) << SHM_IDX_SHIFT);
 	for (tmp = shmd->vm_start; tmp < shmd->vm_end; tmp += PAGE_SIZE,
 	     shm_sgn += (1 << SHM_IDX_SHIFT)) {
-		page_table = PAGE_DIR_OFFSET(shmd->vm_task,tmp);
-		page_table = (ulong *) (PAGE_MASK & *page_table);
+		page_dir = PAGE_DIR_OFFSET(shmd->vm_task,tmp);
+		page_table = (pte_t *) pgd_page(*page_dir);
 		page_table += (tmp >> PAGE_SHIFT) & (PTRS_PER_PAGE-1);
-		*page_table = shm_sgn;
+		pte_val(*page_table) = shm_sgn;
 	}
 	invalidate();
 	return 0;
@@ -623,9 +628,9 @@ int sys_shmdt (char *shmaddr)
 /*
  * page not present ... go through shm_pages
  */
-static unsigned long shm_swap_in(struct vm_area_struct * shmd, unsigned long offset, unsigned long code)
+static pte_t shm_swap_in(struct vm_area_struct * shmd, unsigned long offset, unsigned long code)
 {
-	unsigned long page;
+	pte_t pte;
 	struct shmid_ds *shp;
 	unsigned int id, idx;
 
@@ -633,57 +638,60 @@ static unsigned long shm_swap_in(struct vm_area_struct * shmd, unsigned long off
 	if (id != ((shmd->vm_pte >> SHM_ID_SHIFT) & SHM_ID_MASK)) {
 		printk ("shm_swap_in: code id = %d and shmd id = %ld differ\n",
 			id, (shmd->vm_pte >> SHM_ID_SHIFT) & SHM_ID_MASK);
-		return BAD_PAGE | PAGE_SHARED;
+		return BAD_PAGE;
 	}
 	if (id > max_shmid) {
 		printk ("shm_swap_in: id=%d too big. proc mem corrupted\n", id);
-		return BAD_PAGE | PAGE_SHARED;
+		return BAD_PAGE;
 	}
 	shp = shm_segs[id];
 	if (shp == IPC_UNUSED || shp == IPC_NOID) {
 		printk ("shm_swap_in: id=%d invalid. Race.\n", id);
-		return BAD_PAGE | PAGE_SHARED;
+		return BAD_PAGE;
 	}
 	idx = (code >> SHM_IDX_SHIFT) & SHM_IDX_MASK;
 	if (idx != (offset >> PAGE_SHIFT)) {
 		printk ("shm_swap_in: code idx = %u and shmd idx = %lu differ\n",
 			idx, offset >> PAGE_SHIFT);
-		return BAD_PAGE | PAGE_SHARED;
+		return BAD_PAGE;
 	}
 	if (idx >= shp->shm_npages) {
 		printk ("shm_swap_in : too large page index. id=%d\n", id);
-		return BAD_PAGE | PAGE_SHARED;
+		return BAD_PAGE;
 	}
 
-	if (!(shp->shm_pages[idx] & PAGE_PRESENT)) {
-		if (!(page = get_free_page(GFP_KERNEL))) {
+	pte_val(pte) = shp->shm_pages[idx];
+	if (!pte_present(pte)) {
+		unsigned long page = get_free_page(GFP_KERNEL);
+		if (!page) {
 			oom(current);
-			return BAD_PAGE | PAGE_SHARED;
+			return BAD_PAGE;
 		}
-		if (shp->shm_pages[idx] & PAGE_PRESENT) {
+		pte_val(pte) = shp->shm_pages[idx];
+		if (pte_present(pte)) {
 			free_page (page);
 			goto done;
 		}
-		if (shp->shm_pages[idx]) {
-			read_swap_page (shp->shm_pages[idx], (char *) page);
-			if (shp->shm_pages[idx] & PAGE_PRESENT)  {
+		if (!pte_none(pte)) {
+			read_swap_page(pte_val(pte), (char *) page);
+			pte_val(pte) = shp->shm_pages[idx];
+			if (pte_present(pte))  {
 				free_page (page);
 				goto done;
 			}
-			swap_free (shp->shm_pages[idx]);
+			swap_free(pte_val(pte));
 			shm_swp--;
 		}
 		shm_rss++;
-		shp->shm_pages[idx] = page | (PAGE_SHARED | PAGE_DIRTY);
+		pte = pte_mkdirty(mk_pte(page, PAGE_SHARED));
+		shp->shm_pages[idx] = pte_val(pte);
 	} else
 		--current->mm->maj_flt;  /* was incremented in do_no_page */
 
 done:
 	current->mm->min_flt++;
-	page = shp->shm_pages[idx];
-	page &= ~(PAGE_RW & ~shmd->vm_page_prot);  /* write-protect */
-	mem_map[MAP_NR(page)]++;
-	return page;
+	mem_map[MAP_NR(pte_page(pte))]++;
+	return pte_modify(pte, shmd->vm_page_prot);
 }
 
 /*
@@ -694,7 +702,7 @@ static unsigned long swap_idx = 0; /* next to swap */
 
 int shm_swap (int prio)
 {
-	unsigned long page;
+	pte_t page;
 	struct shmid_ds *shp;
 	struct vm_area_struct *shmd;
 	unsigned int swap_nr;
@@ -724,8 +732,8 @@ int shm_swap (int prio)
 		goto check_id;
 	}
 
-	page = shp->shm_pages[idx];
-	if (!(page & PAGE_PRESENT))
+	pte_val(page) = shp->shm_pages[idx];
+	if (!pte_present(page))
 		goto check_table;
 	swap_attempts++;
 
@@ -737,7 +745,10 @@ int shm_swap (int prio)
 	}
 	for (shmd = shp->attaches; ; ) {
 	    do {
-		unsigned long tmp, *pte;
+		pgd_t *page_dir;
+		pte_t *page_table, pte;
+		unsigned long tmp;
+
 		if ((shmd->vm_pte >> SHM_ID_SHIFT & SHM_ID_MASK) != id) {
 			printk ("shm_swap: id=%ld does not match shmd->vm_pte.id=%ld\n", id, shmd->vm_pte >> SHM_ID_SHIFT & SHM_ID_MASK);
 			continue;
@@ -745,24 +756,26 @@ int shm_swap (int prio)
 		tmp = shmd->vm_start + (idx << PAGE_SHIFT) - shmd->vm_offset;
 		if (!(tmp >= shmd->vm_start && tmp < shmd->vm_end))
 			continue;
-		pte = PAGE_DIR_OFFSET(shmd->vm_task,tmp);
-		if (!(*pte & PAGE_PRESENT)) {
+		page_dir = PAGE_DIR_OFFSET(shmd->vm_task,tmp);
+		if (pgd_none(*page_dir) || pgd_bad(*page_dir)) {
 			printk("shm_swap: bad pgtbl! id=%ld start=%lx idx=%ld\n",
 					id, shmd->vm_start, idx);
-			*pte = 0;
+			pgd_clear(page_dir);
 			continue;
 		}
-		pte = (ulong *) (PAGE_MASK & *pte);
-		pte += ((tmp >> PAGE_SHIFT) & (PTRS_PER_PAGE-1));
-		tmp = *pte;
-		if (!(tmp & PAGE_PRESENT))
+		page_table = (pte_t *) pgd_page(*page_dir);
+		page_table += ((tmp >> PAGE_SHIFT) & (PTRS_PER_PAGE-1));
+		pte = *page_table;
+		if (!pte_present(pte))
 			continue;
-		if (tmp & PAGE_ACCESSED) {
-			*pte &= ~PAGE_ACCESSED;
+		if (pte_young(pte)) {
+			*page_table = pte_mkold(pte);
 			continue;
 		}
-		*pte = shmd->vm_pte | idx << SHM_IDX_SHIFT;
-		mem_map[MAP_NR(page)]--;
+		if (pte_page(pte) != pte_page(page))
+			printk("shm_swap_out: page and pte mismatch\n");
+		pte_val(*page_table) = shmd->vm_pte | idx << SHM_IDX_SHIFT;
+		mem_map[MAP_NR(pte_page(pte))]--;
 		shmd->vm_task->mm->rss--;
 		invalid++;
 	    /* continue looping through circular list */
@@ -771,14 +784,13 @@ int shm_swap (int prio)
 		break;
 	}
 
-	if (mem_map[MAP_NR(page)] != 1)
+	if (mem_map[MAP_NR(pte_page(page))] != 1)
 		goto check_table;
-	page &= PAGE_MASK;
 	shp->shm_pages[idx] = swap_nr;
 	if (invalid)
 		invalidate();
-	write_swap_page (swap_nr, (char *) page);
-	free_page (page);
+	write_swap_page (swap_nr, (char *) pte_page(page));
+	free_page(pte_page(page));
 	swap_successes++;
 	shm_swp++;
 	shm_rss--;

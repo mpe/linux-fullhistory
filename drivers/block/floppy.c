@@ -92,6 +92,8 @@
 
 #include <linux/config.h>
 
+#ifdef CONFIG_BLK_DEV_FD
+
 #ifndef FD_MODULE
 /* the following is the mask of allowed drives. By default units 2 and
  * 3 of both floppy controllers are disabled, because switching on the
@@ -108,7 +110,6 @@ static int FDC2=-1;
 
 #define MODULE_AWARE_DRIVER
 
-#ifdef CONFIG_BLK_DEV_FD
 #include <linux/sched.h>
 #include <linux/fs.h>
 #include <linux/kernel.h>
@@ -989,7 +990,7 @@ static void fdc_specify(void)
 		/* TODO: lock this in via LOCK during initialization */
 		output_byte(FD_CONFIGURE);
 		output_byte(0);
-		output_byte(0x1A);	/* FIFO on, polling off, 10 byte threshold */
+		output_byte(0x2A);	/* FIFO on, polling off, 10 byte threshold */
 		output_byte(0);		/* precompensation from track 0 upwards */
 		if ( FDCS->reset ){
 			FDCS->has_fifo=0;
@@ -1708,9 +1709,10 @@ static void failure_and_wakeup(void)
 static int next_valid_format(void)
 {
 	int probed_format;
+
+	probed_format = DRS->probed_format;
 	while(1){
-		probed_format = DRS->probed_format;
-		if ( probed_format > N_DRIVE ||
+		if ( probed_format >= 8 ||
 		    ! DP->autodetect[probed_format] ){
 			DRS->probed_format = 0;
 			return 1;

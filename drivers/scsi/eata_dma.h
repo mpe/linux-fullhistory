@@ -2,7 +2,7 @@
 * Header file for eata_dma.c Linux EATA-DMA SCSI driver *
 * (c) 1993,94,95 Michael Neuffer                        *
 *********************************************************
-* last change: 95/01/15                                 *
+* last change: 95/01/16                                 *
 ********************************************************/
 
 
@@ -16,7 +16,7 @@
 
 #define VER_MAJOR 2
 #define VER_MINOR 1
-#define VER_SUB   "0g"
+#define VER_SUB   "0h"
 
 /************************************************************************
  * Here you can configure your drives that are using a non-standard     *
@@ -49,7 +49,7 @@
  * Debug options.                                                       * 
  * Enable DEBUG and whichever options you require.                      *
  ************************************************************************/
-#define DEBUG		1	/* Enable debug code. 			*/
+#define DEBUG_EATA	1	/* Enable debug code. 			*/
 #define DPT_DEBUG       0       /* Bobs special                         */
 #define DBG_DELAY       0	/* Build in delays so debug messages can be
 				 * be read before they vanish of the top of
@@ -64,10 +64,11 @@
 #define DBG_COM 	0	/* Trace command call   		*/
 #define DBG_QUEUE	0	/* Trace command queueing. 		*/
 #define DBG_INTR	0       /* Trace interrupt service routine. 	*/
+#define DBG_INTR2	0       /* Trace interrupt service routine. 	*/
 #define DBG_REGISTER    0       /* */
 #define DBG_ABNORM	1	/* Debug abnormal actions (reset, abort)*/
 
-#if DEBUG 
+#if DEBUG_EATA 
 #define DBG(x, y)	if ((x)) {y;} 
 #else
 #define DBG(x, y)
@@ -91,7 +92,7 @@
         0,      /* sg_tablesize */   \
         0,      /* cmd_per_lun  */   \
         0,      /* present      */   \
-        0,      /* True if ISA  */   \
+        1,      /* True if ISA  */   \
 	ENABLE_CLUSTERING }
 
 int eata_detect(Scsi_Host_Template *);
@@ -121,21 +122,19 @@ int eata_reset(Scsi_Cmnd *);
 #define MAXIRQ    16 
 #define MAXTARGET  8
 
-/* PCI Bus And Device Limitations */
+#define MAX_PCI_DEVICES   32             /* Maximum # Of Devices Per Bus   */
+#define MAX_METHOD_2      16             /* Max Devices For Method 2       */
+#define MAX_PCI_BUS       16             /* Maximum # Of Busses Allowed    */
 
-#define MAX_PCI_DEVICES          32       /* Maximum # Of Devices Per Bus   */
-#define MAX_METHOD_2             16       /* Max Devices For Method 2       */
-#define MAX_PCI_BUS              16       /* Maximum # Of Busses Allowed    */
+#define SG_SIZE           64 
+#define C_P_L_DIV          8             /* 1 <= C_P_L_DIV <= 8            */
+#define C_P_L_CURRENT_MAX  2             /* Until this limit is removed    */
 
-
-#define SG_SIZE   64
-#define C_P_L_DIV 32     
-
-#define FREE      0
-#define USED      1
-#define TIMEOUT   2
-#define RESET     4
-#define LOCKED    8
+#define FREE       0
+#define USED       1
+#define TIMEOUT    2
+#define RESET      4
+#define LOCKED     8
 
 #define HD(cmd)  ((hostdata *)&(cmd->host->hostdata))
 #define CD(cmd)  ((struct eata_ccb *)(cmd->host_scribble))
@@ -335,6 +334,7 @@ typedef struct hstd{
   char   vendor[9];
   char   name[18];
   char   revision[6];
+  char   EATA_revision;
   unchar bustype;              /* bustype of HBA             */
   unchar channel;              /* no. of scsi channel        */
   unchar state;                /* state of HBA               */
@@ -387,5 +387,7 @@ typedef struct emul_pp {
   ushort drive_type;   /* In Little Endian ! */
   struct lun_map lunmap[4];
 }emulpp;
+
+
 
 #endif /* _EATA_H */

@@ -1,4 +1,4 @@
-/* $Id$
+/* $Id: aztcd.h,v 0.80 1995/01/21 19:55:04 root Exp $
  * Definitions for a AztechCD268 CD-ROM interface
  *	Copyright (C) 1994, 1995  Werner Zimmermann
  *
@@ -20,11 +20,13 @@
  *
  *  History:	W.Zimmermann adaption to Aztech CD268-01A Version 1.3
  *		Oktober 1994 Email: zimmerma@rz.fht-esslingen.de
- *  Note:	Points marked with ??? are questionable !
  */
 
 /* *** change this to set the I/O port address */
 #define AZT_BASE_ADDR		0x320
+
+/* use incompatible ioctls for reading in raw and cooked mode */
+#define AZT_PRIVATE_IOCTLS
 
 /* Increase this if you get lots of timeouts; if you get kernel panic, replace
    STEN_LOW_WAIT by STEN_LOW in the source code */
@@ -34,17 +36,6 @@
 
 /* number of times to retry a command before giving up */
 #define AZT_RETRY_ATTEMPTS	3
-
-/*defines for compatibility with mcd.c/mcd.h for Mitsumi drive, will probably
-  go away, when the AZTECH driver is integrated in the standard Linux kernel*/
-#ifdef CONFIG_AZTCD
-#else
-#define AZTCD_TIMER		    MCD_TIMER
-#define aztcd_init		    mcd_init
-#define do_aztcd_request	    do_mcd_request
-#define aztcd_setup		    mcd_setup
-#define check_aztcd_media_change    check_mcd_media_change
-#endif
 
 /* port access macros */
 #define CMD_PORT		azt_port
@@ -87,13 +78,12 @@
 #define ACMD_SET_MODE		0xA1		/* set drive mode */
 #define ACMD_SET_VOLUME		0xAE		/* set audio level */
 
-/* borrowed from hd.c */
 #define SET_TIMER(func, jifs) \
-	((timer_table[AZTCD_TIMER].expires = jiffies + jifs), \
-	(timer_table[AZTCD_TIMER].fn = func), \
-	(timer_active |= 1<<AZTCD_TIMER))
+        delay_timer.expires = jifs; \
+        delay_timer.function = (void *) func; \
+        add_timer(&delay_timer);
 
-#define CLEAR_TIMER		timer_active &= ~(1<<AZTCD_TIMER)
+#define CLEAR_TIMER             del_timer(&delay_timer)
 
 #define MAX_TRACKS		104
 

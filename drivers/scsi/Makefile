@@ -52,9 +52,11 @@ SCSI_OBJS := $(SCSI_OBJS) sg.o
 SCSI_SRCS := $(SCSI_SRCS) sg.c
 endif
 
+SCSI_SRCS := $(SCSI_SRCS) qlogic.c
 ifdef CONFIG_SCSI_QLOGIC
 SCSI_OBJS := $(SCSI_OBJS) qlogic.o
-SCSI_SRCS := $(SCSI_SRCS) qlogic.c
+else
+SCSI_MODULE_OBJS := $(SCSI_MODULE_OBJS) qlogic.o
 endif
 
 ifdef CONFIG_SCSI_AHA152X

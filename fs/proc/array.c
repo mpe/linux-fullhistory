@@ -334,21 +334,23 @@ static struct task_struct ** get_task(pid_t pid)
 
 static unsigned long get_phys_addr(struct task_struct ** p, unsigned long ptr)
 {
-	unsigned long page;
+	pgd_t *dir;
+	pte_t *table, pte;
 
 	if (!p || !*p || ptr >= TASK_SIZE)
 		return 0;
-	page = *PAGE_DIR_OFFSET(*p,ptr);
-	if (!(page & PAGE_PRESENT))
+	dir = PAGE_DIR_OFFSET(*p,ptr);
+	if (pgd_none(*dir))
 		return 0;
-	page &= PAGE_MASK;
-	page += PAGE_PTR(ptr);
-	page = *(unsigned long *) page;
-	if (!(page & PAGE_PRESENT))
+	if (pgd_bad(*dir)) {
+		printk("bad page directory entry %08lx\n", pgd_val(*dir));
 		return 0;
-	page &= PAGE_MASK;
-	page += ptr & ~PAGE_MASK;
-	return page;
+	}
+	table = (pte_t *) (pgd_page(*dir) + PAGE_PTR(ptr));
+	pte = *table;
+	if (!pte_present(pte))
+		return 0;
+	return pte_page(pte) + (ptr & ~PAGE_MASK);
 }
 
 static int get_array(struct task_struct ** p, unsigned long start, unsigned long end, char * buffer)
@@ -511,9 +513,10 @@ static int get_stat(int pid, char * buffer)
 static int get_statm(int pid, char * buffer)
 {
 	struct task_struct ** p = get_task(pid);
-	int i, tpag;
+	pgd_t *pagedir;
+	pte_t *pte;
+	int i, j, tpag;
 	int size=0, resident=0, share=0, trs=0, lrs=0, drs=0, dt=0;
-	unsigned long ptbl, *buf, *pte, *pagedir, map_nr;
 
 	if (!p || !*p)
 		return 0;
@@ -521,15 +524,21 @@ static int get_statm(int pid, char * buffer)
 	if ((*p)->state != TASK_ZOMBIE) {
 	  pagedir = PAGE_DIR_OFFSET(*p, 0);
 	  for (i = 0; i < 0x300; ++i) {
-	    if ((ptbl = pagedir[i]) == 0) {
+	    if (pgd_none(pagedir[i])) {
 	      tpag -= PTRS_PER_PAGE;
 	      continue;
 	    }
-	    buf = (unsigned long *)(ptbl & PAGE_MASK);
-	    for (pte = buf; pte < (buf + PTRS_PER_PAGE); ++pte) {
-	      if (*pte != 0) {
+	    if (pgd_bad(pagedir[i])) {
+	    	printk("bad page table dir %08lx\n", pgd_val(pagedir[i]));
+	    	pgd_clear(pagedir+i);
+	    	tpag -= PTRS_PER_PAGE;
+	    	continue;
+	    }
+	    pte = (pte_t *) pgd_page(pagedir[i]);
+	    for (j = 0; j < PTRS_PER_PAGE; j++, pte++) {
+	      if (!pte_none(*pte)) {
 		++size;
-		if (*pte & 1) {
+		if (pte_present(*pte)) {
 		  ++resident;
 		  if (tpag > 0)
 		    ++trs;
@@ -537,13 +546,12 @@ static int get_statm(int pid, char * buffer)
 		    ++drs;
 		  if (i >= 15 && i < 0x2f0) {
 		    ++lrs;
-		    if (*pte & 0x40)
+		    if (pte_dirty(*pte))
 		      ++dt;
 		    else
 		      --drs;
 		  }
-		  map_nr = MAP_NR(*pte);
-		  if (map_nr < (high_memory / PAGE_SIZE) && mem_map[map_nr] > 1)
+		  if (pte_page(*pte) < high_memory && mem_map[MAP_NR(pte_page(*pte))] > 1)
 		    ++share;
 		}
 	      }

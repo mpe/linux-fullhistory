@@ -128,7 +128,7 @@ gusintr (int irq, struct pt_regs * regs)
 
 #ifndef EXCLUDE_GUSMAX
   if (have_gus_max)
-    ad1848_interrupt (irq);
+    ad1848_interrupt (irq, regs);
 #endif
 
   while (1)

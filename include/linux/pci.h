@@ -25,7 +25,7 @@
 /* Configuration method #1 */
 #define PCI_CONFIG1_ADDRESS_REG  0xcf8
 #define PCI_CONFIG1_ENABLE 0x80000000
-#define PCI_CONFIG1_TUPPLE (bus, device, function, register)	\
+#define PCI_CONFIG1_TUPPLE(bus, device, function, register)	\
         (PCI_CONFIG1_ENABLE | ((bus) << 16) & 0xff0000 |	\
         ((device) << 11) & 0xf800 | ((function) << 8) & 0x700 | \
         ((register) << 2) & 0xfc)
@@ -34,7 +34,7 @@
 /* Configuration method #2, deprecated */
 #define PCI_CONFIG2_ENABLE_REG	0xcf8
 #define PCI_CONFIG2_ENABLE	0xf0
-#define PCI_CONFIG2_TUPPLE (function)				\
+#define PCI_CONFIG2_TUPPLE(function)				\
 	(PCI_CONFIG2_ENABLE | ((function) << 1) & 0xe)
 #define PCI_CONFIG2_FORWARD_REG	0xcfa
 
@@ -208,7 +208,8 @@ struct pci_class_type {
 #define PCI_DEVICE_ID_S3_864_1		0x88c0
 #define PCI_DEVICE_ID_S3_864_2		0x88c1
 #define PCI_DEVICE_ID_S3_928		0x88b0
-#define PCI_DEVICE_ID_S3_964		0x88d0
+#define PCI_DEVICE_ID_S3_964_1		0x88d0
+#define PCI_DEVICE_ID_S3_964_2		0x88d1
 #define PCI_DEVICE_ID_S3_811		0x8811
 
 #define PCI_VENDOR_ID_OPTI		0x1045
@@ -257,12 +258,17 @@ struct pci_class_type {
 #define PCI_VENDOR_ID_N9		0x105D
 #define PCI_DEVICE_ID_N9_I128		0x2309
 
-#define PCI_VENDOR_ID_ALI		0x1025
-#define PCI_DEVICE_ID_ALI_M1435		0x1435
+#define PCI_VENDOR_ID_AI		0x1025
+#define PCI_DEVICE_ID_AI_M1435		0x1435
+
+#define PCI_VENDOR_ID_AL		0x10b9
+#define PCI_DEVICE_ID_AL_M1449		0x4449
+#define PCI_DEVICE_ID_AL_M1451		0x1451
 
 #define PCI_VENDOR_ID_TSENG		0x100c
 #define PCI_DEVICE_ID_TSENG_W32P_2	0x3202
-#define PCI_DEVICE_ID_TSENG_W32P_5	0x3205
+#define PCI_DEVICE_ID_TSENG_W32P_b	0x3205
+#define PCI_DEVICE_ID_TSENG_W32P_a	0x3207
 
 #define PCI_VENDOR_ID_CMD		0x1095
 #define PCI_DEVICE_ID_CMD_640		0x0640
@@ -276,8 +282,8 @@ struct pci_class_type {
 #define PCI_VENDOR_ID_VLSI		0x1004
 #define PCI_DEVICE_ID_VLSI_82C593	0x0006
 
-#define PCI_VENDOR_ID_AL		0x1005
-#define PCI_DEVICE_ID_AL_2301		0x2301
+#define PCI_VENDOR_ID_ADL		0x1005
+#define PCI_DEVICE_ID_ADL_2301		0x2301
 
 #define PCI_VENDOR_ID_SYMPHONY		0x1c1c
 #define PCI_DEVICE_ID_SYMPHONY_101	0x0001
@@ -285,13 +291,18 @@ struct pci_class_type {
 #define PCI_VENDOR_ID_TRIDENT		0x1023
 #define PCI_DEVICE_ID_TRIDENT_9420	0x9420
 
+#define PCI_VENDOR_ID_CONTAQ		0x1023
+#define PCI_DEVICE_ID_CONTAQ_82C599	0x0600
+
+#define PCI_VENDOR_ID_NS		0x100b
+
 struct pci_vendor_type {
 	unsigned short vendor_id;
 	char *vendor_name;
 };
 
 
-#define PCI_VENDOR_NUM 24
+#define PCI_VENDOR_NUM 27
 #define PCI_VENDOR_TYPE { \
 	{PCI_VENDOR_ID_NCR,		"NCR"}, \
 	{PCI_VENDOR_ID_ADAPTEC,		"Adaptec"}, \
@@ -307,16 +318,19 @@ struct pci_vendor_type {
 	{PCI_VENDOR_ID_WEITEK,		"Weitek"}, \
 	{PCI_VENDOR_ID_CIRRUS,		"Cirrus Logic"}, \
 	{PCI_VENDOR_ID_BUSLOGIC,	"Bus Logic"}, \
-	{PCI_VENDOR_ID_N9,		"Number #9"}, \
-	{PCI_VENDOR_ID_ALI,		"ALI"}, \
+	{PCI_VENDOR_ID_N9,		"Number Nine"}, \
+	{PCI_VENDOR_ID_AI,		"Acer Incorporated"}, \
+	{PCI_VENDOR_ID_AL,		"Acer Labs"}, \
 	{PCI_VENDOR_ID_TSENG,		"Tseng'Lab"}, \
 	{PCI_VENDOR_ID_CMD,		"CMD"}, \
 	{PCI_VENDOR_ID_VISION,		"Vision"}, \
 	{PCI_VENDOR_ID_AMD,		"AMD"}, \
 	{PCI_VENDOR_ID_VLSI,		"VLSI"}, \
-	{PCI_VENDOR_ID_AL,		"Advance Logic"}, \
+	{PCI_VENDOR_ID_ADL,		"Advance Logic"}, \
 	{PCI_VENDOR_ID_SYMPHONY,	"Symphony"}, \
-	{PCI_VENDOR_ID_TRIDENT,		"Trident"} \
+	{PCI_VENDOR_ID_TRIDENT,		"Trident"}, \
+	{PCI_VENDOR_ID_CONTAQ,		"Contaq"}, \
+	{PCI_VENDOR_ID_NS,		"NS"} \
 }
 
 
@@ -335,7 +349,7 @@ struct pci_device_type {
 	char *device_name;
 };
 
-#define PCI_DEVICE_NUM 45
+#define PCI_DEVICE_NUM 50
 #define PCI_DEVICE_TYPE { \
 	{0xff,	PCI_VENDOR_ID_NCR,	PCI_DEVICE_ID_NCR_53C810,	"53c810"}, \
 	{0xff,	PCI_VENDOR_ID_NCR,	PCI_DEVICE_ID_NCR_53C815,	"53c815"}, \
@@ -346,8 +360,9 @@ struct pci_device_type {
 	{0xff,	PCI_VENDOR_ID_S3,	PCI_DEVICE_ID_S3_864_1,		"Vision 864-P"}, \
 	{0xff,	PCI_VENDOR_ID_S3,	PCI_DEVICE_ID_S3_864_2,		"Vision 864-P"}, \
 	{0xff,	PCI_VENDOR_ID_S3,	PCI_DEVICE_ID_S3_928,		"Vision 928-P"}, \
-	{0xff,	PCI_VENDOR_ID_S3,	PCI_DEVICE_ID_S3_964,		"Vision 964-P"}, \
-	{0xff,	PCI_VENDOR_ID_S3,	PCI_DEVICE_ID_S3_811,		"Trio64"}, \
+	{0xff,	PCI_VENDOR_ID_S3,	PCI_DEVICE_ID_S3_964_1,		"Vision 964-P"}, \
+	{0xff,	PCI_VENDOR_ID_S3,	PCI_DEVICE_ID_S3_964_2,		"Vision 964-P"}, \
+	{0xff,	PCI_VENDOR_ID_S3,	PCI_DEVICE_ID_S3_811,		"Trio32/Trio64"}, \
 	{0x02,	PCI_VENDOR_ID_OPTI,	PCI_DEVICE_ID_OPTI_82C822,	"82C822"}, \
 	{0xff,	PCI_VENDOR_ID_OPTI,	PCI_DEVICE_ID_OPTI_82C621,	"82C621"}, \
 	{0xff,	PCI_VENDOR_ID_UMC,	PCI_DEVICE_ID_UMC_UM8881F,	"UM8881F"}, \
@@ -372,16 +387,20 @@ struct pci_device_type {
 	{0xff,	PCI_VENDOR_ID_CIRRUS,	PCI_DEVICE_ID_CIRRUS_6729,	"CL 6729"}, \
 	{0xff,	PCI_VENDOR_ID_BUSLOGIC,PCI_DEVICE_ID_BUSLOGIC_946C,	"946C"}, \
 	{0xff,	PCI_VENDOR_ID_N9,	PCI_DEVICE_ID_N9_I128,		"Imagine 128"}, \
-	{0xff,	PCI_VENDOR_ID_ALI,	PCI_DEVICE_ID_ALI_M1435,	"M1435"}, \
+	{0xff,	PCI_VENDOR_ID_AI,	PCI_DEVICE_ID_AI_M1435,		"M1435"}, \
+	{0xff,	PCI_VENDOR_ID_AL,	PCI_DEVICE_ID_AL_M1449,		"M1449"}, \
+	{0xff,	PCI_VENDOR_ID_AL,	PCI_DEVICE_ID_AL_M1451,		"M1451"}, \
 	{0xff,	PCI_VENDOR_ID_TSENG,	PCI_DEVICE_ID_TSENG_W32P_2,	"ET4000W32P"}, \
-	{0xff,	PCI_VENDOR_ID_TSENG,	PCI_DEVICE_ID_TSENG_W32P_5,	"ET4000W32P"}, \
+	{0xff,	PCI_VENDOR_ID_TSENG,	PCI_DEVICE_ID_TSENG_W32P_b,	"ET4000W32P rev B"}, \
+	{0xff,	PCI_VENDOR_ID_TSENG,	PCI_DEVICE_ID_TSENG_W32P_a,	"ET4000W32P rev A"}, \
 	{0xff,	PCI_VENDOR_ID_CMD,	PCI_DEVICE_ID_CMD_640,		"640A"}, \
 	{0xff,	PCI_VENDOR_ID_VISION,	PCI_DEVICE_ID_VISION_QD8500,	"QD-8500PCI"}, \
 	{0xff,	PCI_VENDOR_ID_AMD,	PCI_DEVICE_ID_AMD_LANCE,	"79C970"}, \
 	{0xff,	PCI_VENDOR_ID_VLSI,	PCI_DEVICE_ID_VLSI_82C593,	"82C593-FC1"}, \
-	{0xff,	PCI_VENDOR_ID_AL,	PCI_DEVICE_ID_AL_2301,		"2301"}, \
+	{0xff,	PCI_VENDOR_ID_ADL,	PCI_DEVICE_ID_ADL_2301,		"2301"}, \
 	{0xff,	PCI_VENDOR_ID_SYMPHONY,	PCI_DEVICE_ID_SYMPHONY_101,	"82C101"}, \
-	{0xff,	PCI_VENDOR_ID_TRIDENT,	PCI_DEVICE_ID_TRIDENT_9420,	"TG 9420"} \
+	{0xff,	PCI_VENDOR_ID_TRIDENT,	PCI_DEVICE_ID_TRIDENT_9420,	"TG 9420"}, \
+	{0xff,	PCI_VENDOR_ID_CONTAQ,	PCI_DEVICE_ID_CONTAQ_82C599,	"82C599"} \
 }
 
 /* An item of this structure has the following meaning	*/

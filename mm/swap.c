@@ -28,9 +28,9 @@
 #define SWP_USED	1
 #define SWP_WRITEOK	3
 
-#define SWP_TYPE(entry) (((entry) & 0xfe) >> 1)
-#define SWP_OFFSET(entry) ((entry) >> PAGE_SHIFT)
-#define SWP_ENTRY(type,offset) (((type) << 1) | ((offset) << PAGE_SHIFT))
+#define SWP_TYPE(entry) (((entry) >> 1) & 0x7f)
+#define SWP_OFFSET(entry) ((entry) >> 12)
+#define SWP_ENTRY(type,offset) (((type) << 1) | ((offset) << 12))
 
 int min_free_pages = 20;
 
@@ -70,10 +70,10 @@ extern inline void show_swap_cache_info(void)
 }
 #endif
 
-extern inline int add_to_swap_cache(unsigned long addr, unsigned long entry)
+static int add_to_swap_cache(unsigned long addr, unsigned long entry)
 {
 	struct swap_info_struct * p = &swap_info[SWP_TYPE(entry)];
-	
+
 #ifdef SWAP_CACHE_INFO
 	swap_cache_add_total++;
 #endif
@@ -116,6 +116,10 @@ void rw_swap_page(int rw, unsigned long entry, char * buf)
 	offset = SWP_OFFSET(entry);
 	if (offset >= p->max) {
 		printk("rw_swap_page: weirdness\n");
+		return;
+	}
+	if (p->swap_map && !p->swap_map[offset]) {
+		printk("Hmm.. Trying to use unallocated swap (%08lx)\n", entry);
 		return;
 	}
 	if (!(p->flags & SWP_USED)) {
@@ -199,32 +203,32 @@ unsigned int get_swap_page(void)
 	return 0;
 }
 
-unsigned long swap_duplicate(unsigned long entry)
+void swap_duplicate(unsigned long entry)
 {
 	struct swap_info_struct * p;
 	unsigned long offset, type;
 
 	if (!entry)
-		return 0;
+		return;
 	offset = SWP_OFFSET(entry);
 	type = SWP_TYPE(entry);
 	if (type == SHM_SWP_TYPE)
-		return entry;
+		return;
 	if (type >= nr_swapfiles) {
 		printk("Trying to duplicate nonexistent swap-page\n");
-		return 0;
+		return;
 	}
 	p = type + swap_info;
 	if (offset >= p->max) {
 		printk("swap_duplicate: weirdness\n");
-		return 0;
+		return;
 	}
 	if (!p->swap_map[offset]) {
 		printk("swap_duplicate: trying to duplicate unused page\n");
-		return 0;
+		return;
 	}
 	p->swap_map[offset]++;
-	return entry;
+	return;
 }
 
 void swap_free(unsigned long entry)
@@ -267,52 +271,69 @@ void swap_free(unsigned long entry)
 	wake_up(&lock_queue);
 }
 
-unsigned long swap_in(unsigned long entry)
+/*
+ * The tests may look silly, but it essentially makes sure that
+ * no other process did a swap-in on us just as we were waiting.
+ *
+ * Also, don't bother to add to the swap cache if this page-in
+ * was due to a write access.
+ */
+void swap_in(struct vm_area_struct * vma, pte_t * page_table,
+	unsigned long entry, int write_access)
 {
-	unsigned long page;
+	unsigned long page = get_free_page(GFP_KERNEL);
 
-	if (!(page = get_free_page(GFP_KERNEL))) {
+	if (pte_val(*page_table) != entry) {
+		free_page(page);
+		return;
+	}
+	if (!page) {
+		*page_table = BAD_PAGE;
+		swap_free(entry);
 		oom(current);
-		return BAD_PAGE;
+		return;
 	}
 	read_swap_page(entry, (char *) page);
-	if (add_to_swap_cache(page, entry))
-		return page | PAGE_PRESENT;
+	if (pte_val(*page_table) != entry) {
+		free_page(page);
+		return;
+	}
+	if (!write_access && add_to_swap_cache(page, entry)) {
+		*page_table = mk_pte(page, vma->vm_page_prot);
+		return;
+	}
+	*page_table = pte_mkwrite(pte_mkdirty(mk_pte(page, vma->vm_page_prot)));
   	swap_free(entry);
-	return page | PAGE_DIRTY | PAGE_PRESENT;
+  	return;
 }
 
-static inline int try_to_swap_out(struct vm_area_struct* vma, unsigned offset, unsigned long * table_ptr)
+static inline int try_to_swap_out(struct vm_area_struct* vma, unsigned offset, pte_t * page_table)
 {
-	unsigned long page, entry;
+	pte_t pte;
+	unsigned long entry;
+	unsigned long page;
 
-	page = *table_ptr;
-	if (!(PAGE_PRESENT & page))
+	pte = *page_table;
+	if (!pte_present(pte))
 		return 0;
+	page = pte_page(pte);
 	if (page >= high_memory)
 		return 0;
 	if (mem_map[MAP_NR(page)] & MAP_PAGE_RESERVED)
 		return 0;
-	
-	if ((PAGE_DIRTY & page) && delete_from_swap_cache(page))  {
-		*table_ptr &= ~PAGE_ACCESSED;
+	if ((pte_dirty(pte) && delete_from_swap_cache(page)) || pte_young(pte))  {
+		*page_table = pte_mkold(pte);
 		return 0;
-	}
-	if (PAGE_ACCESSED & page) {
-		*table_ptr &= ~PAGE_ACCESSED;
-		return 0;
-	}
-	if (PAGE_DIRTY & page) {
-		page &= PAGE_MASK;
+	}	
+	if (pte_dirty(pte)) {
 		if (mem_map[MAP_NR(page)] != 1)
 			return 0;
 		if (vma->vm_ops && vma->vm_ops->swapout)
-			vma->vm_ops->swapout(vma, offset, table_ptr);
-		else
-		{
+			vma->vm_ops->swapout(vma, offset, page_table);
+		else {
 			if (!(entry = get_swap_page()))
 				return 0;
-			*table_ptr = entry;
+			pte_val(*page_table) = entry;
 			invalidate();
 			write_swap_page(entry, (char *) page);
 		}
@@ -321,17 +342,16 @@ static inline int try_to_swap_out(struct vm_area_struct* vma, unsigned offset, u
 	}
         if ((entry = find_in_swap_cache(page)))  {
 		if (mem_map[MAP_NR(page)] != 1) {
-			*table_ptr |= PAGE_DIRTY;
+			*page_table = pte_mkdirty(pte);
 			printk("Aiee.. duplicated cached swap-cache entry\n");
 			return 0;
 		}
-		*table_ptr = entry;
+		pte_val(*page_table) = entry;
 		invalidate();
-		free_page(page & PAGE_MASK);
+		free_page(page);
 		return 1;
 	} 
-	page &= PAGE_MASK;
-	*table_ptr = 0;
+	pte_clear(page_table);
 	invalidate();
 	free_page(page);
 	return 1 + mem_map[MAP_NR(page)];
@@ -366,10 +386,9 @@ static inline int try_to_swap_out(struct vm_area_struct* vma, unsigned offset, u
 
 static int swap_out_process(struct task_struct * p)
 {
+	pgd_t *pgdir;
 	unsigned long address;
 	unsigned long offset;
-	unsigned long *pgdir;
-	unsigned long pg_table;
 	struct vm_area_struct* vma;
 
 	/*
@@ -390,25 +409,25 @@ static int swap_out_process(struct task_struct * p)
 	pgdir = PAGE_DIR_OFFSET(p, address);
 	offset = address & ~PGDIR_MASK;
 	address &= PGDIR_MASK;
-	for ( ; address < TASK_SIZE ;
-	pgdir++, address = address + PGDIR_SIZE, offset = 0) {
-		pg_table = *pgdir;
-		if (pg_table >= high_memory)
+	for ( ; address < TASK_SIZE ; pgdir++, address = address + PGDIR_SIZE, offset = 0) {
+		pte_t *pg_table;
+
+		if (pgd_none(*pgdir))
 			continue;
-		if (mem_map[MAP_NR(pg_table)] & MAP_PAGE_RESERVED)
-			continue;
-		if (!(PAGE_PRESENT & pg_table)) {
-			printk("swap_out_process (%s): bad page-table at vm %08lx: %08lx\n",
-					p->comm, address + offset, pg_table);
-			*pgdir = 0;
+		if (pgd_bad(*pgdir)) {
+			printk("Bad page directory at address %08lx: %08lx\n", address, pgd_val(*pgdir));
+			pgd_clear(pgdir);
 			continue;
 		}
-		pg_table &= 0xfffff000;
+		pg_table = (pte_t *) pgd_page(*pgdir);
+		if (mem_map[MAP_NR((unsigned long) pg_table)] & MAP_PAGE_RESERVED)
+			continue;
+		pg_table += offset >> PAGE_SHIFT;
 
 		/*
 		 * Go through this page table.
 		 */
-		for( ; offset < ~PGDIR_MASK ; offset += PAGE_SIZE) {
+		for( ; offset < ~PGDIR_MASK ; pg_table++, offset += PAGE_SIZE) {
 			/*
 			 * Update vma again..
 			 */
@@ -420,7 +439,7 @@ static int swap_out_process(struct task_struct * p)
 					return 0;
 			}
 
-			switch(try_to_swap_out(vma, offset+address-vma->vm_start, (unsigned long *) (pg_table + (offset >> 10)))) {
+			switch(try_to_swap_out(vma, offset+address-vma->vm_start, pg_table)) {
 				case 0:
 					break;
 
@@ -594,7 +613,7 @@ void free_pages(unsigned long addr, unsigned long order)
 			return;
 		}
 		printk("Trying to free free memory (%08lx): memory probably corrupted\n",addr);
-		printk("PC = %08lx\n",*(((unsigned long *)&addr)-1));
+		printk("PC = %p\n", __builtin_return_address(0));
 		return;
 	}
 }
@@ -726,62 +745,69 @@ void show_free_areas(void)
  */
 static int try_to_unuse(unsigned int type)
 {
-	int nr, pgt, pg;
-	unsigned long page, *ppage;
+	int nr;
 	unsigned long tmp = 0;
 	struct task_struct *p;
 
-	nr = 0;
-	
+	nr = 0;	
 /*
  * When we have to sleep, we restart the whole algorithm from the same
  * task we stopped in. That at least rids us of all races.
  */
 repeat:
 	for (; nr < NR_TASKS ; nr++) {
+		pgd_t * page_dir;
+		int i;
+
 		p = task[nr];
 		if (!p)
 			continue;
-		for (pgt = 0 ; pgt < PTRS_PER_PAGE ; pgt++) {
-			ppage = pgt + PAGE_DIR_OFFSET(p, 0);
-			page = *ppage;
-			if (!page)
+		page_dir = PAGE_DIR_OFFSET(p, 0);
+		for (i = 0 ; i < PTRS_PER_PAGE ; page_dir++, i++) {
+			int j;
+			pte_t *page_table;
+
+			if (pgd_none(*page_dir))
 				continue;
-			if (!(page & PAGE_PRESENT) || (page >= high_memory))
+			if (pgd_bad(*page_dir)) {
+				printk("bad page directory entry [%d] %08lx\n", i, pgd_val(*page_dir));
+				pgd_clear(page_dir);
 				continue;
-			if (mem_map[MAP_NR(page)] & MAP_PAGE_RESERVED)
+			}
+			page_table = (pte_t *) pgd_page(*page_dir);
+			if (mem_map[MAP_NR((unsigned long) page_table)] & MAP_PAGE_RESERVED)
 				continue;
-			ppage = (unsigned long *) (page & PAGE_MASK);	
-			for (pg = 0 ; pg < PTRS_PER_PAGE ; pg++,ppage++) {
-				page = *ppage;
-				if (!page)
+			for (j = 0 ; j < PTRS_PER_PAGE ; page_table++, j++) {
+				pte_t pte;
+				pte = *page_table;
+				if (pte_none(pte))
 					continue;
-				if (page & PAGE_PRESENT) {
+				if (pte_present(pte)) {
+					unsigned long page = pte_page(pte);
 					if (page >= high_memory)
 						continue;
-					if (!(page = in_swap_cache(page)))
+					if (!in_swap_cache(page))
 						continue;
-					if (SWP_TYPE(page) != type)
+					if (SWP_TYPE(in_swap_cache(page)) != type)
 						continue;
-					*ppage |= PAGE_DIRTY;
-					delete_from_swap_cache(*ppage);
+					delete_from_swap_cache(page);
+					*page_table = pte_mkdirty(pte);
 					continue;
 				}
-				if (SWP_TYPE(page) != type)
+				if (SWP_TYPE(pte_val(pte)) != type)
 					continue;
 				if (!tmp) {
 					if (!(tmp = __get_free_page(GFP_KERNEL)))
 						return -ENOMEM;
 					goto repeat;
 				}
-				read_swap_page(page, (char *) tmp);
-				if (*ppage == page) {
-					*ppage = tmp | (PAGE_DIRTY | PAGE_PRIVATE);
-					++p->mm->rss;
-					swap_free(page);
-					tmp = 0;
-				}
-				goto repeat;
+				read_swap_page(pte_val(pte), (char *) tmp);
+				if (pte_val(*page_table) != pte_val(pte))
+					goto repeat;
+				*page_table = pte_mkwrite(pte_mkdirty(mk_pte(tmp, PAGE_COPY)));
+				++p->mm->rss;
+				swap_free(pte_val(pte));
+				tmp = 0;
 			}
 		}
 	}

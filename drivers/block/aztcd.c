@@ -1,5 +1,5 @@
-#define AZT_VERSION "V0.72"
-/*      $Id: aztcd.c,v 0.72 1995/01/13 15:21:09 root Exp root $
+#define AZT_VERSION "V0.8"
+/*      $Id: aztcd.c,v 0.80 1995/01/21 19:54:53 root Exp $
 	linux/drivers/block/aztcd.c - AztechCD268 CDROM driver
 
 	Copyright (C) 1994,1995 Werner Zimmermann (zimmerma@rz.fht-esslingen.de)
@@ -90,7 +90,10 @@
 		W.Zimmermann, Jan. 8, 1995
 	V0.72   Some more modifications for adaption to the standard kernel.
 		W.Zimmermann, Jan. 16, 1995
-			     
+        V0.80   aztcd is now part of the standard kernel since version 1.1.83.
+                Modified the SET_TIMER and CLEAR_TIMER macros to comply with
+                the new timer scheme.
+                W.Zimmermann, Jan. 21, 1995
 	NOTE: 
 	Points marked with ??? are questionable !
 */
@@ -110,11 +113,7 @@
 #include <asm/io.h>
 #include <asm/segment.h>
 
-#ifdef CONFIG_AZTCD
 #define MAJOR_NR AZTECH_CDROM_MAJOR 
-#else
-#define MAJOR_NR MITSUMI_CDROM_MAJOR    /*use Mitsumi major number, if Aztech*/                 
-#endif                                  /*major number is not configured*/
 
 #include "blk.h"
 #include <linux/aztcd.h>
@@ -128,7 +127,6 @@ static int aztPresent = 0;
 #define AZT_TEST4 /* QUICK_LOOP-counter */
 #define AZT_TEST5 /* port(1) state */
 #define AZT_DEBUG
-#define AZT_PRIVATE_IOCTLS /*incompatible ioctls*/
 #endif
 
 #define CURRENT_VALID \
@@ -176,6 +174,7 @@ static char  azt_init_end = 0;
 
 static int AztTimeout, AztTries;
 static struct wait_queue *azt_waitq = NULL; 
+static struct timer_list delay_timer = { NULL, NULL, 0, 0, NULL };
 
 static struct azt_DiskInfo DiskInfo;
 static struct azt_Toc Toc[MAX_TRACKS];
@@ -1208,6 +1207,7 @@ static void aztcd_release(struct inode * inode, struct file * file)
 	azt_invalidate_buffers();
 	sync_dev(inode->i_rdev);             /*??? isn't it a read only dev?*/
 	invalidate_buffers(inode -> i_rdev);
+        CLEAR_TIMER;
   }
   return;
 }

@@ -88,7 +88,7 @@ struct vm_operations_struct msdos_file_mmap = {
  */
 int msdos_mmap(struct inode * inode, struct file * file, struct vm_area_struct * vma)
 {
-	if (vma->vm_page_prot & PAGE_RW)	/* only PAGE_COW or read-only supported now */
+	if (vma->vm_flags & VM_SHARED)	/* only PAGE_COW or read-only supported now */
 		return -EINVAL;
 	if (vma->vm_offset & (inode->i_sb->s_blocksize - 1))
 		return -EINVAL;
@@ -104,4 +104,5 @@ int msdos_mmap(struct inode * inode, struct file * file, struct vm_area_struct *
 	vma->vm_ops = &msdos_file_mmap;
 	return 0;
 }
+
 

@@ -40,8 +40,9 @@
    Given that almost all of these functions are handled in the current
    socket-based scheme, putting ethercard devices in /dev/ seems pointless.
    
-   [Removed all support for /dev network devices. When someone adds streams then
-    by magic we get them, but otherwise they are un-needed and a space waste]
+   [Removed all support for /dev network devices. When someone adds
+    streams then by magic we get them, but otherwise they are un-needed
+	and a space waste]
 */
 
 /* The list of used and available "eth" slots (for "eth0", "eth1", etc.) */
@@ -51,7 +52,7 @@ static struct device *ethdev_index[MAX_ETH_CARDS];
 unsigned long lance_init(unsigned long mem_start, unsigned long mem_end);
 unsigned long pi_init(unsigned long mem_start, unsigned long mem_end);
 unsigned long apricot_init(unsigned long mem_start, unsigned long mem_end);
-
+unsigned long dec21040_init(unsigned long mem_start, unsigned long mem_end);
 
 /*
   net_dev_init() is our network device initialization routine.
@@ -62,11 +63,17 @@ unsigned long apricot_init(unsigned long mem_start, unsigned long mem_end);
 unsigned long net_dev_init (unsigned long mem_start, unsigned long mem_end)
 {
 
-#if defined(CONFIG_LANCE)			/* Note this is _not_ CONFIG_AT1500. */
+	/* Network device initialization for devices that must allocate
+	   low-memory or contiguous DMA buffers.
+	   */
+#if defined(CONFIG_LANCE)
 	mem_start = lance_init(mem_start, mem_end);
 #endif
 #if defined(CONFIG_PI)
 	mem_start = pi_init(mem_start, mem_end);
+#endif	
+#if defined(CONFIG_DEC_ELCP)
+	mem_start = dec21040_init(mem_start, mem_end);
 #endif	
 	return mem_start;
 }
@@ -82,14 +89,33 @@ unsigned long net_dev_init (unsigned long mem_start, unsigned long mem_end)
  */
 
 struct device *
-init_etherdev(struct device *dev, int sizeof_private, unsigned long *mem_startp)
+init_etherdev(struct device *dev, int sizeof_priv, unsigned long *mem_startp)
 {
 	int new_device = 0;
 	int i;
 
+	/* Use an existing correctly named device in Space.c:dev_base. */
 	if (dev == NULL) {
 		int alloc_size = sizeof(struct device) + sizeof("eth%d  ")
-			+ sizeof_private + 3;
+			+ sizeof_priv + 3;
+		struct device *cur_dev;
+		char pname[8];		/* Putative name for the device.  */
+
+		for (i = 0; i < MAX_ETH_CARDS; ++i)
+			if (ethdev_index[i] == NULL) {
+				sprintf(pname, "eth%d", i);
+				for (cur_dev = dev_base; cur_dev; cur_dev = cur_dev->next)
+					if (strcmp(pname, cur_dev->name) == 0) {
+						dev = cur_dev;
+						dev->init = NULL;
+						if (mem_startp && *mem_startp ) {
+							dev->priv = (void*) *mem_startp;
+							*mem_startp += sizeof_priv + 3;
+						} else
+							dev->priv = kmalloc(sizeof_priv + 3, GFP_KERNEL);
+						goto found;
+					}
+			}
 
 		alloc_size &= ~3;		/* Round to dword boundary. */
 
@@ -99,11 +125,13 @@ init_etherdev(struct device *dev, int sizeof_private, unsigned long *mem_startp)
 		} else
 			dev = (struct device *)kmalloc(alloc_size, GFP_KERNEL);
 		memset(dev, 0, alloc_size);
-		if (sizeof_private)
+		if (sizeof_priv)
 			dev->priv = (void *) (dev + 1);
-		dev->name = sizeof_private + (char *)(dev + 1);
+		dev->name = sizeof_priv + (char *)(dev + 1);
 		new_device = 1;
 	}
+
+	found:						/* From the double loop above. */
 
 	if (dev->name &&
 		((dev->name[0] == '\0') || (dev->name[0] == ' '))) {
@@ -115,7 +143,7 @@ init_etherdev(struct device *dev, int sizeof_private, unsigned long *mem_startp)
 			}
 	}
 
-	ether_setup(dev); /* should this be called here? */
+	ether_setup(dev); 	/* Hmmm, should this be called here? */
 	
 	if (new_device) {
 		/* Append the device to the device queue. */

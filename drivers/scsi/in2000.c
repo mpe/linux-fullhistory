@@ -1,7 +1,7 @@
 /*
  *  This file is in2000.c, written and
  *  Copyright (C) 1993  Brad McLean
- *	Last edit 08/25/94 WDE
+ *	Last edit 1/19/95 TZ
  * Disclaimer:
  * Note:  This is ugly.  I know it, I wrote it, but my whole
  * focus was on getting the damn thing up and out quickly.
@@ -49,6 +49,9 @@
  *
  * 1/7/95 Fix from Peter Lu (swift@world.std.com) for datalen vs. dataptr
  * logic, much more stable under load.
+ *
+ * 1/19/95 (zerucha@shell.portal.com) Added module and biosparam support for
+ * larger SCSI hard drives (untested).
  */
 
 #include <linux/kernel.h>
@@ -684,5 +687,33 @@ int in2000_biosparam(Disk * disk, int dev, int* iinfo)
     iinfo[0] = 64;
     iinfo[1] = 32;
     iinfo[2] = size >> 11;
+/* This should approximate the large drive handling that the DOS ASPI manager
+   uses.  Drives very near the boundaries may not be handled correctly (i.e.
+   near 2.0 Gb and 4.0 Gb) */
+    if (iinfo[2] > 1024) {
+	iinfo[0] = 64;
+	iinfo[1] = 63;
+	iinfo[2] = disk->capacity / (iinfo[0] * iinfo[1]);
+	}
+    if (iinfo[2] > 1024) {
+	iinfo[0] = 128;
+	iinfo[1] = 63;
+	iinfo[2] = disk->capacity / (iinfo[0] * iinfo[1]);
+	}
+    if (iinfo[2] > 1024) {
+	iinfo[0] = 255;
+	iinfo[1] = 63;
+	iinfo[2] = disk->capacity / (iinfo[0] * iinfo[1]);
+	if (iinfo[2] > 1023)
+	    iinfo[2] = 1023;
+	}
     return 0;
     }
+
+#ifdef MODULE
+/* Eventually this will go into an include file, but this will be later */
+Scsi_Host_Template driver_template = IN2000;
+
+#include "scsi_module.c"
+#endif
+

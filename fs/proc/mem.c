@@ -24,10 +24,12 @@
 
 static int mem_read(struct inode * inode, struct file * file,char * buf, int count)
 {
+	pgd_t *pgdir;
+	pte_t pte;
+	char * page;
 	struct task_struct * tsk;
 	unsigned long addr, pid;
 	char *tmp;
-	unsigned long pte, page;
 	int i;
 
 	if (count < 0)
@@ -47,20 +49,22 @@ static int mem_read(struct inode * inode, struct file * file,char * buf, int cou
 	while (count > 0) {
 		if (current->signal & ~current->blocked)
 			break;
-		pte = *PAGE_DIR_OFFSET(tsk,addr);
-		if (!(pte & PAGE_PRESENT))
+		pgdir = PAGE_DIR_OFFSET(tsk,addr);
+		if (pgd_none(*pgdir))
 			break;
-		pte &= PAGE_MASK;
-		pte += PAGE_PTR(addr);
-		page = *(unsigned long *) pte;
-		if (!(page & 1))
+		if (pgd_bad(*pgdir)) {
+			printk("Bad page dir entry %08lx\n", pgd_val(*pgdir));
+			pgd_clear(pgdir);
 			break;
-		page &= PAGE_MASK;
-		page += addr & ~PAGE_MASK;
+		}
+		pte = *(pte_t *) (PAGE_PTR(addr) + pgd_page(*pgdir));
+		if (!pte_present(pte))
+			break;
+		page = (char *) pte_page(pte) + (addr & ~PAGE_MASK);
 		i = PAGE_SIZE-(addr & ~PAGE_MASK);
 		if (i > count)
 			i = count;
-		memcpy_tofs(tmp,(void *) page,i);
+		memcpy_tofs(tmp, page, i);
 		addr += i;
 		tmp += i;
 		count -= i;
@@ -73,10 +77,12 @@ static int mem_read(struct inode * inode, struct file * file,char * buf, int cou
 
 static int mem_write(struct inode * inode, struct file * file,char * buf, int count)
 {
+	pgd_t * pgdir;
+	pte_t * pte;
+	char * page;
 	struct task_struct * tsk;
 	unsigned long addr, pid;
 	char *tmp;
-	unsigned long pte, page;
 	int i;
 
 	if (count < 0)
@@ -96,24 +102,24 @@ static int mem_write(struct inode * inode, struct file * file,char * buf, int co
 	while (count > 0) {
 		if (current->signal & ~current->blocked)
 			break;
-		pte = *PAGE_DIR_OFFSET(tsk,addr);
-		if (!(pte & PAGE_PRESENT))
+		pgdir = PAGE_DIR_OFFSET(tsk,addr);
+		if (pgd_none(*pgdir))
 			break;
-		pte &= PAGE_MASK;
-		pte += PAGE_PTR(addr);
-		page = *(unsigned long *) pte;
-		if (!(page & PAGE_PRESENT))
+		if (pgd_bad(*pgdir)) {
+			printk("Bad page dir entry %08lx\n", pgd_val(*pgdir));
+			pgd_clear(pgdir);
 			break;
-		if (!(page & 2)) {
-			do_wp_page(0,addr,current,0);
-			continue;
 		}
-		page &= PAGE_MASK;
-		page += addr & ~PAGE_MASK;
+		pte = *(pte_t *) (PAGE_PTR(addr) + pgd_page(*pgdir));
+		if (!pte_present(pte))
+			break;
+		if (!pte_write(pte))
+			break;
+		page = (char *) pte_page(pte) + (addr & ~PAGE_MASK);
 		i = PAGE_SIZE-(addr & ~PAGE_MASK);
 		if (i > count)
 			i = count;
-		memcpy_fromfs((void *) page,tmp,i);
+		memcpy_fromfs(page, tmp, i);
 		addr += i;
 		tmp += i;
 		count -= i;
@@ -142,93 +148,112 @@ static int mem_lseek(struct inode * inode, struct file * file, off_t offset, int
 	}
 }
 
-int
-mem_mmap(struct inode * inode, struct file * file,
+/*
+ * This isn't really reliable by any means..
+ */
+int mem_mmap(struct inode * inode, struct file * file,
 	     struct vm_area_struct * vma)
 {
-  struct task_struct *tsk;
-  unsigned long *src_table, *dest_table, stmp, dtmp;
-  struct vm_area_struct *src_vma = 0;
-  int i;
+	struct task_struct *tsk;
+	pgd_t *src_dir, *dest_dir;
+	pte_t *src_table, *dest_table;
+	unsigned long stmp, dtmp;
+	struct vm_area_struct *src_vma = NULL;
+	int i;
 
-  /* Get the source's task information */
+	/* Get the source's task information */
 
-  tsk = NULL;
-  for (i = 1 ; i < NR_TASKS ; i++)
-    if (task[i] && task[i]->pid == (inode->i_ino >> 16)) {
-      tsk     = task[i];
-      src_vma = task[i]->mm->mmap;
-      break;
-    }
+	tsk = NULL;
+	for (i = 1 ; i < NR_TASKS ; i++)
+		if (task[i] && task[i]->pid == (inode->i_ino >> 16)) {
+			tsk = task[i];
+			src_vma = task[i]->mm->mmap;
+			break;
+		}
 
-  if (!tsk)
-    return -EACCES;
+	if (!tsk)
+		return -EACCES;
 
-/* Ensure that we have a valid source area.  (Has to be mmap'ed and
-   have valid page information.)  We can't map shared memory at the
-   moment because working out the vm_area_struct & nattach stuff isn't
-   worth it. */
+	/* Ensure that we have a valid source area.  (Has to be mmap'ed and
+	 have valid page information.)  We can't map shared memory at the
+	 moment because working out the vm_area_struct & nattach stuff isn't
+	 worth it. */
 
-  stmp = vma->vm_offset;
-  while (stmp < vma->vm_offset + (vma->vm_end - vma->vm_start)) {
-    while (src_vma && stmp > src_vma->vm_end)
-      src_vma = src_vma->vm_next;
-    if (!src_vma || (src_vma->vm_flags & VM_SHM))
-      return -EINVAL;
+	stmp = vma->vm_offset;
+	while (stmp < vma->vm_offset + (vma->vm_end - vma->vm_start)) {
+		while (src_vma && stmp > src_vma->vm_end)
+			src_vma = src_vma->vm_next;
+		if (!src_vma || (src_vma->vm_flags & VM_SHM))
+			return -EINVAL;
 
-    src_table = PAGE_DIR_OFFSET(tsk, stmp);
-    if (!*src_table)
-      return -EINVAL;
-    src_table = (unsigned long *)((*src_table & PAGE_MASK) + PAGE_PTR(stmp));
-    if (!*src_table)
-      return -EINVAL;
+		src_dir = PAGE_DIR_OFFSET(tsk, stmp);
+		if (pgd_none(*src_dir))
+			return -EINVAL;
+		if (pgd_bad(*src_dir)) {
+			printk("Bad source page dir entry %08lx\n", pgd_val(*src_dir));
+			return -EINVAL;
+		}
 
-    if (stmp < src_vma->vm_start) {
-      if (!(src_vma->vm_flags & VM_GROWSDOWN))
-	return -EINVAL;
-      if (src_vma->vm_end - stmp > current->rlim[RLIMIT_STACK].rlim_cur)
-	return -EINVAL;
-    }
-    stmp += PAGE_SIZE;
-  }
+		src_table = (pte_t *)(pgd_page(*src_dir) + PAGE_PTR(stmp));
+		if (pte_none(*src_table))
+			return -EINVAL;
 
-  src_vma = task[i]->mm->mmap;
-  stmp    = vma->vm_offset;
-  dtmp    = vma->vm_start;
+		if (stmp < src_vma->vm_start) {
+			if (!(src_vma->vm_flags & VM_GROWSDOWN))
+				return -EINVAL;
+			if (src_vma->vm_end - stmp > current->rlim[RLIMIT_STACK].rlim_cur)
+				return -EINVAL;
+		}
+		stmp += PAGE_SIZE;
+	}
 
-  while (dtmp < vma->vm_end) {
-    while (src_vma && stmp > src_vma->vm_end)
-      src_vma = src_vma->vm_next;
+	src_vma = task[i]->mm->mmap;
+	stmp    = vma->vm_offset;
+	dtmp    = vma->vm_start;
 
-    src_table = PAGE_DIR_OFFSET(tsk, stmp);
-    src_table = (unsigned long *)((*src_table & PAGE_MASK) + PAGE_PTR(stmp));
+	while (dtmp < vma->vm_end) {
+		while (src_vma && stmp > src_vma->vm_end)
+			src_vma = src_vma->vm_next;
 
-    dest_table = PAGE_DIR_OFFSET(current, dtmp);
+		src_dir = PAGE_DIR_OFFSET(tsk, stmp);
+		src_table = (pte_t *) (pgd_page(*src_dir) + PAGE_PTR(stmp));
 
-    if (!*dest_table) {
-      *dest_table = get_free_page(GFP_KERNEL);
-      if (!*dest_table) { oom(current); *dest_table=BAD_PAGE; }
-      else *dest_table |= PAGE_TABLE;
-    }
-    
-    dest_table = (unsigned long *)((*dest_table & PAGE_MASK) + PAGE_PTR(dtmp));
+		dest_dir = PAGE_DIR_OFFSET(current, dtmp);
 
-    if (!(*src_table & PAGE_PRESENT)) 
-      do_no_page(src_vma, stmp, PAGE_PRESENT);
+		if (pgd_none(*dest_dir)) {
+			unsigned long page = get_free_page(GFP_KERNEL);
+			if (!page)
+				return -ENOMEM;
+			if (pgd_none(*dest_dir)) {
+				pgd_set(dest_dir, (pte_t *) page);
+			} else {
+				free_page(page);
+			}
+		}
 
-    if ((vma->vm_flags & VM_WRITE) && !(*src_table & PAGE_RW))
-      do_wp_page(src_vma, stmp, PAGE_RW | PAGE_PRESENT);
+		if (pgd_bad(*dest_dir)) {
+			printk("Bad dest directory entry %08lx\n", pgd_val(*dest_dir));
+			return -EINVAL;
+		}
 
-    *src_table |= PAGE_DIRTY;
-    *dest_table = *src_table;
-    mem_map[MAP_NR(*src_table)]++;
+		dest_table = (pte_t *) (pgd_page(*dest_dir) + PAGE_PTR(dtmp));
 
-    stmp += PAGE_SIZE;
-    dtmp += PAGE_SIZE;
-  }
+		if (!pte_present(*src_table))
+			do_no_page(src_vma, stmp, 1);
 
-  invalidate();
-  return 0;
+		if ((vma->vm_flags & VM_WRITE) && !pte_write(*src_table))
+			do_wp_page(src_vma, stmp, 1);
+
+		*src_table = pte_mkdirty(*src_table);
+		*dest_table = *src_table;
+		mem_map[MAP_NR(pte_page(*src_table))]++;
+
+		stmp += PAGE_SIZE;
+		dtmp += PAGE_SIZE;
+	}
+
+	invalidate();
+	return 0;
 }
 
 static struct file_operations proc_mem_operations = {

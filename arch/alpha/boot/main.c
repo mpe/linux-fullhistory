@@ -8,11 +8,11 @@
 #include <linux/kernel.h>
 #include <linux/string.h>
 #include <linux/version.h>
+#include <linux/mm.h>
 
 #include <asm/system.h>
 #include <asm/console.h>
 #include <asm/hwrpb.h>
-#include <asm/page.h>
 
 #include <stdarg.h>
 

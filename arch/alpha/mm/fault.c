@@ -60,11 +60,18 @@ asmlinkage void do_page_fault(unsigned long address, unsigned long mmcsr,
  * we can handle it..
  */
 good_area:
-	if (!(vma->vm_page_prot & PAGE_USER))
-		goto bad_area;
-	if (mmcsr) {
-		if (!(vma->vm_page_prot & (PAGE_RW | PAGE_COW)))
+	if (cause < 0) {
+		if (!(vma->vm_flags & VM_EXEC))
 			goto bad_area;
+	} else if (!cause) {
+		if (!(vma->vm_flags & VM_READ))
+			goto bad_area;
+	} else {
+		if (!(vma->vm_flags & VM_WRITE))
+			goto bad_area;
+	}
+
+	if (mmcsr) {
 		do_wp_page(vma, address, cause > 0);
 		return;
 	}

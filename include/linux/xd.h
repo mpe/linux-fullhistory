@@ -118,7 +118,7 @@ static int xd_reread_partitions (int dev);
 static int xd_readwrite (u_char operation,u_char drive,char *buffer,u_int block,u_int count);
 static void xd_recalibrate (u_char drive);
 
-static void xd_interrupt_handler (int unused);
+static void xd_interrupt_handler (int irq, struct pt_regs * regs);
 static u_char xd_setup_dma (u_char opcode,u_char *buffer,u_int count);
 static u_char *xd_build (u_char *cmdblk,u_char command,u_char drive,u_char head,u_short cylinder,u_char sector,u_char count,u_char control);
 static inline u_char xd_waitport (u_short port,u_char flags,u_char mask,u_long timeout);

@@ -35,10 +35,15 @@ static int anon_map(struct inode *, struct file *, struct vm_area_struct *);
  *
  */
 
+pgprot_t protection_map[16] = {
+	__P000, __P001, __P010, __P011, __P100, __P101, __P110, __P111,
+	__S000, __S001, __S010, __S011, __S100, __S101, __S110, __S111
+};
+
 int do_mmap(struct file * file, unsigned long addr, unsigned long len,
 	unsigned long prot, unsigned long flags, unsigned long off)
 {
-	int mask, error;
+	int error;
 	struct vm_area_struct * vma;
 
 	if ((len = PAGE_ALIGN(len)) == 0)
@@ -99,14 +104,6 @@ int do_mmap(struct file * file, unsigned long addr, unsigned long len,
 	 */
 	if (file && (!file->f_op || !file->f_op->mmap))
 		return -ENODEV;
-	mask = PAGE_PRESENT;
-	if (prot & (PROT_READ | PROT_EXEC))
-		mask |= PAGE_READONLY;
-	if (prot & PROT_WRITE)
-		if ((flags & MAP_TYPE) == MAP_PRIVATE)
-			mask |= PAGE_COPY;
-		else
-			mask |= PAGE_SHARED;
 
 	vma = (struct vm_area_struct *)kmalloc(sizeof(struct vm_area_struct),
 		GFP_KERNEL);
@@ -116,7 +113,6 @@ int do_mmap(struct file * file, unsigned long addr, unsigned long len,
 	vma->vm_task = current;
 	vma->vm_start = addr;
 	vma->vm_end = addr + len;
-	vma->vm_page_prot = mask;
 	vma->vm_flags = prot & (VM_READ | VM_WRITE | VM_EXEC);
 	vma->vm_flags |= flags & (VM_GROWSDOWN | VM_DENYWRITE | VM_EXECUTABLE);
 
@@ -130,6 +126,7 @@ int do_mmap(struct file * file, unsigned long addr, unsigned long len,
 		}
 	} else
 		vma->vm_flags |= VM_MAYREAD | VM_MAYWRITE | VM_MAYEXEC;
+	vma->vm_page_prot = protection_map[vma->vm_flags & 0x0f];
 	vma->vm_ops = NULL;
 	vma->vm_offset = off;
 	vma->vm_inode = NULL;
@@ -658,7 +655,6 @@ void unmap_fixup(struct vm_area_struct *area,
 	if (addr == area->vm_start && end == area->vm_end) {
 		if (area->vm_ops && area->vm_ops->close)
 			area->vm_ops->close(area);
-		remove_shared_vm_struct(area);
 		if (area->vm_inode)
 			iput(area->vm_inode);
 		return;
@@ -700,7 +696,6 @@ void unmap_fixup(struct vm_area_struct *area,
 	if (area->vm_ops && area->vm_ops->close) {
 		area->vm_end = area->vm_start;
 		area->vm_ops->close(area);
-		remove_shared_vm_struct(area);
 	}
 	insert_vm_struct(current, mpnt);
 }
@@ -762,6 +757,8 @@ int do_munmap(unsigned long addr, size_t len)
 
 		mpnt = free;
 		free = free->vm_next;
+
+		remove_shared_vm_struct(mpnt);
 
 		st = addr < mpnt->vm_start ? mpnt->vm_start : addr;
 		end = addr+len;
@@ -922,8 +919,7 @@ void merge_segments (struct task_struct * task, unsigned long start_addr, unsign
 			continue;
 		if (mpnt->vm_ops != prev->vm_ops)
 			continue;
-		if (mpnt->vm_page_prot != prev->vm_page_prot ||
-		    mpnt->vm_flags != prev->vm_flags)
+		if (mpnt->vm_flags != prev->vm_flags)
 			continue;
 		if (prev->vm_end != mpnt->vm_start)
 			continue;

@@ -20,10 +20,19 @@
  * General Public License for more details.
  
  *
- * $Id: aha152x.c,v 1.6 1994/11/24 20:35:27 root Exp $
+ * $Id: aha152x.c,v 1.8 1995/01/21 22:07:19 root Exp root $
  *
 
  * $Log: aha152x.c,v $
+ * Revision 1.8  1995/01/21  22:07:19  root
+ * - snarf_region => request_region
+ * - aha152x_intr interface change
+ *
+ * Revision 1.7  1995/01/02  23:19:36  root
+ * - updated COMMAND_SIZE to cmd_len
+ * - changed sti() to restore_flags()
+ * - fixed some #ifdef which generated warnings
+ *
  * Revision 1.6  1994/11/24  20:35:27  root
  * - problem with odd number of bytes in fifo fixed
  *
@@ -252,15 +261,13 @@
 #if 0
 #endif
 
-#define DEBUG_QUEUE
 #define DEBUG_PHASES
-
-#endif
-
-#define DEBUG_RESET             /* resets should be rare */
-#define DEBUG_ABORT             /* aborts too */
+#define DEBUG_RESET
+#define DEBUG_ABORT
 
 #define DEBUG_DEFAULT (debug_reset|debug_abort)
+
+#endif
 
 /* END OF DEFINES */
 
@@ -330,6 +337,18 @@ static void enter_driver(const char *);
 static void leave_driver(const char *);
 #endif
 
+/* possible i/o addresses for the AIC-6260 */
+static unsigned short ports[] =
+{
+  0x340,      /* default first */
+  0x140
+};
+#define PORT_COUNT (sizeof( ports ) / sizeof( unsigned short ))
+
+/* possible interrupt channels */
+static unsigned short irqs[] = { 9, 10, 11, 12, 0 };
+
+#if !defined(SKIP_BIOSTEST)
 /* possible locations for the Adaptec BIOS */
 static void *addresses[] =
 {
@@ -344,17 +363,6 @@ static void *addresses[] =
   (void *) 0xeb800,   /* VTech Platinum SMP */
 };
 #define ADDRESS_COUNT (sizeof( addresses ) / sizeof( void * ))
-
-/* possible i/o addresses for the AIC-6260 */
-static unsigned short ports[] =
-{
-  0x340,      /* default first */
-  0x140
-};
-#define PORT_COUNT (sizeof( ports ) / sizeof( unsigned short ))
-
-/* possible interrupt channels */
-static unsigned short ints[] = { 9, 10, 11, 12 };
 
 /* signatures for various AIC-6[23]60 based controllers.
    The point in detecting signatures is to avoid useless
@@ -378,6 +386,7 @@ static struct signature {
   { "GA-400 LOCAL BUS SCSI BIOS", 0x102e, 26 },  /* Gigabyte Local-Bus-SCSI */
 };
 #define SIGNATURE_COUNT (sizeof( signatures ) / sizeof( struct signature ))
+#endif
 
 
 static void do_pause( unsigned amount ) /* Pause for amount*10 milliseconds */
@@ -537,8 +546,10 @@ static int aha152x_porttest(int port_base)
 
 int aha152x_detect(Scsi_Host_Template * tpnt)
 {
-  int                 i, j,  ok;
+  int                 i, ok;
+#if defined(AUTOCONF)
   aha152x_config      conf;
+#endif
   int                 interrupt_level;
   
   if(setup_called)
@@ -585,9 +596,9 @@ int aha152x_detect(Scsi_Host_Template * tpnt)
         }
 
       i=0;
-      while(ints[i] && (interrupt_level!=ints[i]))
+      while(irqs[i] && (interrupt_level!=irqs[i]))
         i++;
-      if(!ints[i])
+      if(!irqs[i])
         {
           printk("illegal IRQ %d\n", interrupt_level);
           panic("aha152x panics in line %d", __LINE__);
@@ -615,6 +626,8 @@ int aha152x_detect(Scsi_Host_Template * tpnt)
   else
     {
 #if !defined(SKIP_BIOSTEST)
+      int j;
+
       ok=0;
       for( i=0; i < ADDRESS_COUNT && !ok; i++)
         for( j=0; (j < SIGNATURE_COUNT) && !ok; j++)
@@ -651,7 +664,7 @@ int aha152x_detect(Scsi_Host_Template * tpnt)
 
       conf.cf_port = (GETPORT(PORTA)<<8) + GETPORT(PORTB);
 
-      interrupt_level = ints[conf.cf_irq];
+      interrupt_level = irqs[conf.cf_irq];
       this_host       = conf.cf_id;
       can_disconnect  = conf.cf_tardisc;
       can_doparity    = !conf.cf_parity;
@@ -722,7 +735,7 @@ int aha152x_detect(Scsi_Host_Template * tpnt)
          can_disconnect ? "enabled" : "disabled",
          can_doparity ? "enabled" : "disabled");
 
-  request_region(port_base, TEST-SCSISEQ,"aha152x");        /* Register */
+  request_region(port_base, TEST-SCSISEQ, "aha152x");        /* Register */
   
   /* not expecting any interrupts */
   SETPORT(SIMODE0, 0);
@@ -737,6 +750,8 @@ int aha152x_detect(Scsi_Host_Template * tpnt)
  */
 int aha152x_queue( Scsi_Cmnd * SCpnt, void (*done)(Scsi_Cmnd *))
 {
+  unsigned long flags;
+
 #if defined(DEBUG_RACE)
   enter_driver("queue");
 #else
@@ -749,13 +764,10 @@ int aha152x_queue( Scsi_Cmnd * SCpnt, void (*done)(Scsi_Cmnd *))
 #if defined(DEBUG_QUEUE)
   if(aha152x_debug & debug_queue)
   {
-    printk( "SCpnt (target = %d lun = %d cmnd = ",
-            SCpnt->target,
-            SCpnt->lun);
+    printk( "SCpnt (target = %d lun = %d cmnd = ", SCpnt->target, SCpnt->lun);
     print_command(SCpnt->cmnd);
-    printk( ", pieces = %d size = %u), ",
-            SCpnt->use_sg,
-            SCpnt->request_bufflen );
+    printk( ", cmd_len=%d, pieces = %d size = %u), ",
+            SCpnt->cmd_len, SCpnt->use_sg, SCpnt->request_bufflen );
     disp_ports();
   }
 #endif
@@ -790,6 +802,7 @@ int aha152x_queue( Scsi_Cmnd * SCpnt, void (*done)(Scsi_Cmnd *))
   SCpnt->SCp.sent_command        = 0;
 
   /* Turn led on, when this is the first command. */
+  save_flags(flags);
   cli();
   commands++;
   if(commands==1)
@@ -807,7 +820,7 @@ int aha152x_queue( Scsi_Cmnd * SCpnt, void (*done)(Scsi_Cmnd *))
       SETPORT(SIMODE0, disconnected_SC ? ENSELDI : 0 );
       SETPORT(SIMODE1, issue_SC ? ENBUSFREE : 0);
     }
-  sti();
+  restore_flags(flags);
 
 #if defined(DEBUG_RACE)
   leave_driver("queue");
@@ -831,8 +844,10 @@ int aha152x_command( Scsi_Cmnd *SCpnt )
  */
 int aha152x_abort( Scsi_Cmnd *SCpnt)
 {
+  unsigned long flags;
   Scsi_Cmnd *ptr, *prev;
 
+  save_flags(flags);
   cli();
 
 #if defined(DEBUG_ABORT)
@@ -857,7 +872,7 @@ int aha152x_abort( Scsi_Cmnd *SCpnt)
         prev->host_scribble = ptr->host_scribble;
       else
         issue_SC = (Scsi_Cmnd *) ptr->host_scribble;
-      sti();
+      restore_flags(flags);
 
       ptr->host_scribble = NULL;
       ptr->result = DID_ABORT << 16;
@@ -874,7 +889,7 @@ int aha152x_abort( Scsi_Cmnd *SCpnt)
       if(!current_SC)
         printk("bus busy w/o current command, ");
  
-      sti();
+      restore_flags(flags);
       return SCSI_ABORT_BUSY;
     }
 
@@ -883,7 +898,7 @@ int aha152x_abort( Scsi_Cmnd *SCpnt)
   if(current_SC)
   { 
     /* target entered bus free before COMMAND COMPLETE, nothing to abort */
-    sti();
+    restore_flags(flags);
     current_SC->result = DID_ERROR << 16;
     current_SC->done(current_SC);
     current_SC = (Scsi_Cmnd *) NULL;
@@ -922,7 +937,8 @@ int aha152x_abort( Scsi_Cmnd *SCpnt)
         abort_result=SCSI_ABORT_SUCCESS;
         aborting++;
         abortion_complete=0;
-        sti();
+
+        sti();  /* Hi Eric, guess what ;-) */
   
         /* sleep until the abortion is complete */
         while(!abortion_complete)
@@ -933,13 +949,13 @@ int aha152x_abort( Scsi_Cmnd *SCpnt)
     else
       {
         /* we're already aborting a command */
-        sti();
-        return( SCSI_ABORT_BUSY );
+        restore_flags(flags);
+        return SCSI_ABORT_BUSY;
       }
 
   /* command wasn't found */
   printk("command not found\n");
-  sti();
+  restore_flags(flags);
   return SCSI_ABORT_NOT_RUNNING;
 }
 
@@ -983,6 +999,7 @@ static void aha152x_reset_ports(void)
  */
 int aha152x_reset(Scsi_Cmnd * __unused)
 {
+  unsigned long flags;
   Scsi_Cmnd *ptr, *prev, *next;
 
   aha152x_reset_ports();
@@ -1008,6 +1025,7 @@ int aha152x_reset(Scsi_Cmnd * __unused)
            current_SC=NULL;
          }
 
+       save_flags(flags);
        cli();
        prev=NULL; ptr=disconnected_SC;
        while(ptr)
@@ -1033,7 +1051,7 @@ int aha152x_reset(Scsi_Cmnd * __unused)
 	       ptr = (Scsi_Cmnd *) ptr->host_scribble;
 	     }
 	 }
-       sti();
+       restore_flags(flags);
 
 #if defined( DEBUG_RESET )
        if(aha152x_debug & debug_reset)
@@ -1093,6 +1111,7 @@ int aha152x_biosparam(Scsi_Disk * disk, int dev, int *info_array )
  */
 void aha152x_done( int error )
 {
+  unsigned long flags;
   Scsi_Cmnd *done_SC;
 
 #if defined(DEBUG_DONE)
@@ -1110,6 +1129,7 @@ void aha152x_done( int error )
         printk("done(%x), ", error);
 #endif
 
+      save_flags(flags);
       cli();
 
       done_SC = current_SC;
@@ -1124,7 +1144,7 @@ void aha152x_done( int error )
       if(aha152x_debug & debug_queues) 
         printk("ok (%d), ", commands);
 #endif
-      sti();
+      restore_flags(flags);
 
       SETPORT(SIMODE0, disconnected_SC ? ENSELDI : 0 );
       SETPORT(SIMODE1, issue_SC ? ENBUSFREE : 0);
@@ -1165,6 +1185,7 @@ void aha152x_done( int error )
  */
 void aha152x_intr( int irqno, struct pt_regs * regs )
 {
+  unsigned int flags;
   int done=0, phase;
 
 #if defined(DEBUG_RACE)
@@ -1181,7 +1202,7 @@ void aha152x_intr( int irqno, struct pt_regs * regs )
      intr(). To avoid race conditions we have to return
      immediately afterwards. */
   CLRBITS( DMACNTRL0, INTEN);
-  sti();
+  sti();  /* Yes, sti() really needs to be here */
 
   /* disconnected target is trying to reconnect.
      Only possible, if we have disconnected nexuses and
@@ -1202,10 +1223,11 @@ void aha152x_intr( int irqno, struct pt_regs * regs )
 	  if(aha152x_debug & debug_queues)
           printk("i+, ");
 #endif
+	  save_flags(flags);
           cli();
           append_SC( &issue_SC, current_SC);
           current_SC=NULL;
-          sti();
+          restore_flags(flags);
         }
 
       /* disable sequences */
@@ -1265,7 +1287,9 @@ void aha152x_intr( int irqno, struct pt_regs * regs )
         printk("identify=%02x, lun=%d, ", identify_msg, identify_msg & 0x3f );
 #endif
 
+      save_flags(flags);
       cli();
+
 #if defined(DEBUG_QUEUES)
       if(aha152x_debug & debug_queues)
         printk("d-, ");
@@ -1281,7 +1305,7 @@ void aha152x_intr( int irqno, struct pt_regs * regs )
         }
 
       current_SC->SCp.phase &= ~disconnected;
-      sti();
+      restore_flags(flags);
 
       SETPORT( SIMODE0, 0 );
       SETPORT( SIMODE1, ENPHASEMIS|ENBUSFREE );
@@ -1298,13 +1322,14 @@ void aha152x_intr( int irqno, struct pt_regs * regs )
       /* bus is free to issue a queued command */
       if(TESTHI( SSTAT1, BUSFREE) && issue_SC)
         {
+          save_flags(flags);
           cli();
 #if defined(DEBUG_QUEUES)
           if(aha152x_debug & debug_queues)
             printk("i-, ");
 #endif
           current_SC = remove_first_SC( &issue_SC );
-          sti();
+          restore_flags(flags);
 
 #if defined(DEBUG_INTR) || defined(DEBUG_SELECTION) || defined(DEBUG_PHASES)
 	  if(aha152x_debug & (debug_intr|debug_selection|debug_phases))
@@ -1579,15 +1604,13 @@ void aha152x_intr( int irqno, struct pt_regs * regs )
 #if defined(DEBUG_CMD)
           if(aha152x_debug & debug_cmd)
           {
-            printk("DFIFOEMP, outsw (%d words), ",
-                   current_SC->cmd_len >>1 );
+            printk("DFIFOEMP, outsw (%d bytes, %d words), ",
+		   current_SC->cmd_len, current_SC->cmd_len >> 1 );
             disp_ports();
           }
 #endif
   
-          outsw( DATAPORT,
-                 &current_SC->cmnd,
-		current_SC->cmd_len >>1 );
+          outsw( DATAPORT, &current_SC->cmnd, current_SC->cmd_len >> 1 );
 
 #if defined(DEBUG_CMD)
 	  if(aha152x_debug & debug_cmd)
@@ -1597,15 +1620,30 @@ void aha152x_intr( int irqno, struct pt_regs * regs )
           }
 #endif
 
+#if defined(DEBUG_CMD)
+	  if(aha152x_debug & debug_cmd)
+            printk("waiting for SEMPTY, ");
+#endif
+
           /* wait for SCSI FIFO to get empty.
              very important to send complete commands. */
           while( TESTLO ( SSTAT2, SEMPTY ) )
             ;
 
+#if defined(DEBUG_CMD)
+	  if(aha152x_debug & debug_cmd)
+            printk("SEMPTY, ");
+#endif
+
           CLRBITS(SXFRCTL0, SCSIEN|DMAEN);
           /* transfer can be considered ended, when SCSIEN reads back zero */
           while( TESTHI( SXFRCTL0, SCSIEN ) )
             ;
+
+#if defined(DEBUG_CMD)
+	  if(aha152x_debug & debug_cmd)
+            printk("!SEMPTY, ");
+#endif
 
           CLRBITS(DMACNTRL0, ENDMA);
 
@@ -1774,6 +1812,7 @@ void aha152x_intr( int irqno, struct pt_regs * regs )
 
       if(current_SC->SCp.phase & disconnected)
         {
+          save_flags(flags);
           cli();
 #if defined(DEBUG_QUEUES)
 	  if(aha152x_debug & debug_queues)
@@ -1781,7 +1820,7 @@ void aha152x_intr( int irqno, struct pt_regs * regs )
 #endif
           append_SC( &disconnected_SC, current_SC);
           current_SC = NULL;
-          sti();
+          restore_flags(flags);
 
           SETBITS( SCSISEQ, ENRESELI );
 
@@ -2223,8 +2262,10 @@ static void disp_ports(void)
 #ifdef DEBUG_AHA152X
   int s;
 
+#ifdef SKIP_PORTS
   if(aha152x_debug & debug_skipports)
 	return;
+#endif
 
   printk("\n%s: ", current_SC ? "on bus" : "waiting");
 
@@ -2436,6 +2477,9 @@ static int in_driver=0;
  */
 static void enter_driver(const char *func)
 {
+  unsigned long flags;
+
+  save_flags(flags);
   cli();
   printk("aha152x: entering %s() (%x)\n", func, jiffies);
   if(in_driver)
@@ -2446,11 +2490,14 @@ static void enter_driver(const char *func)
 
   in_driver++;
   should_leave=func;
-  sti();
+  restore_flags(flags);
 }
 
 static void leave_driver(const char *func)
 {
+  unsigned long flags;
+
+  save_flags(flags);
   cli();
   printk("\naha152x: leaving %s() (%x)\n", func, jiffies);
   if(!in_driver)
@@ -2461,7 +2508,7 @@ static void leave_driver(const char *func)
 
   in_driver--;
   should_leave=func;
-  sti();
+  restore_flags(flags);
 }
 #endif
 
@@ -2522,8 +2569,10 @@ static void show_command(Scsi_Cmnd *ptr)
  */
 static void show_queues(void)
 {
+  unsigned long flags;
   Scsi_Cmnd *ptr;
 
+  save_flags(flags);
   cli();
   printk("QUEUE STATUS:\nissue_SC:\n");
   for(ptr=issue_SC; ptr; ptr = (Scsi_Cmnd *) ptr->host_scribble )
@@ -2541,5 +2590,5 @@ static void show_queues(void)
 
   disp_ports();
   disp_enintr();
-  sti();
+  restore_flags(flags);
 }

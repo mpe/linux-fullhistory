@@ -9,6 +9,7 @@ bool 'Kernel math emulation' CONFIG_MATH_EMULATION n
 bool 'Normal floppy disk support' CONFIG_BLK_DEV_FD y
 bool 'Normal (MFM/RLL) disk and IDE disk/cdrom support' CONFIG_ST506 y
 if [ "$CONFIG_ST506" = "y" ]; then
+  comment 'Please see block/drivers/README.ide for help/info on IDE drives'
   bool '   Use old (reliable) disk-only driver for primary i/f' CONFIG_BLK_DEV_HD y
   if [ "$CONFIG_BLK_DEV_HD" = "y" ]; then
     bool '   Include new IDE driver for secondary i/f support' CONFIG_BLK_DEV_IDE n

@@ -93,7 +93,6 @@ static void     ad1848_start_input (int dev, unsigned long buf, int count, int i
 static int      ad1848_prepare_for_IO (int dev, int bsize, int bcount);
 static void     ad1848_reset (int dev);
 static void     ad1848_halt (int dev);
-void            ad1848_interrupt (int dev, struct pt_regs * regs);
 
 static int
 ad_read (ad1848_info * devc, int reg)

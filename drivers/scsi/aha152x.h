@@ -2,7 +2,7 @@
 #define _AHA152X_H
 
 /*
- * $Id: aha152x.h,v 1.6 1994/11/24 21:35:38 root Exp root $
+ * $Id: aha152x.h,v 1.8 1995/01/21 22:11:07 root Exp root $
  */
 
 #if defined(__KERNEL__)
@@ -22,7 +22,7 @@ int        aha152x_biosparam(Disk *, int, int*);
    (unless we support more than 1 cmd_per_lun this should do) */
 #define AHA152X_MAXQUEUE	7		
 
-#define AHA152X_REVID "Adaptec 152x SCSI driver; $Revision: 1.6 $"
+#define AHA152X_REVID "Adaptec 152x SCSI driver; $Revision: 1.8 $"
 
 /* Initial value of Scsi_Host entry */
 #define AHA152X       { /* next */		NULL,			    \
