@@ -283,30 +283,30 @@ static ssize_t read_kmem(struct file *file, char __user *buf,
 			 size_t count, loff_t *ppos)
 {
 	unsigned long p = *ppos;
-	ssize_t read, virtr, sz;
+	ssize_t low_count, read, sz;
 	char * kbuf; /* k-addr because vread() takes vmlist_lock rwlock */
 
 	read = 0;
-	virtr = 0;
 	if (p < (unsigned long) high_memory) {
-		read = count;
+		low_count = count;
 		if (count > (unsigned long) high_memory - p)
-			read = (unsigned long) high_memory - p;
+			low_count = (unsigned long) high_memory - p;
 
 #ifdef __ARCH_HAS_NO_PAGE_ZERO_MAPPED
 		/* we don't have page 0 mapped on sparc and m68k.. */
-		if (p < PAGE_SIZE && read > 0) {
+		if (p < PAGE_SIZE && low_count > 0) {
 			size_t tmp = PAGE_SIZE - p;
-			if (tmp > read) tmp = read;
+			if (tmp > low_count) tmp = low_count;
 			if (clear_user(buf, tmp))
 				return -EFAULT;
 			buf += tmp;
 			p += tmp;
-			read -= tmp;
+			read += tmp;
+			low_count -= tmp;
 			count -= tmp;
 		}
 #endif
-		while (read > 0) {
+		while (low_count > 0) {
 			/*
 			 * Handle first page in case it's not aligned
 			 */
@@ -315,7 +315,7 @@ static ssize_t read_kmem(struct file *file, char __user *buf,
 			else
 				sz = PAGE_SIZE;
 
-			sz = min_t(unsigned long, sz, count);
+			sz = min_t(unsigned long, sz, low_count);
 
 			/*
 			 * On ia64 if a page has been mapped somewhere as
@@ -328,7 +328,8 @@ static ssize_t read_kmem(struct file *file, char __user *buf,
 				return -EFAULT;
 			buf += sz;
 			p += sz;
-			read -= sz;
+			read += sz;
+			low_count -= sz;
 			count -= sz;
 		}
 	}
@@ -351,13 +352,13 @@ static ssize_t read_kmem(struct file *file, char __user *buf,
 			}
 			count -= len;
 			buf += len;
-			virtr += len;
+			read += len;
 			p += len;
 		}
 		free_page((unsigned long)kbuf);
 	}
  	*ppos = p;
- 	return virtr + read;
+ 	return read;
 }
 
 
