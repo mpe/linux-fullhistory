@@ -1,4 +1,4 @@
-			Video Mode Selection Support 2.4
+			Video Mode Selection Support 2.5
 	      (c) 1995, 1996 Martin Mares, <mj@k332.feld.cvut.cz>
 --------------------------------------------------------------------------------
 
@@ -222,3 +222,4 @@ this must be done manually -- no autodetection mechanisms are available.
 		these changes. Unfortunately, screen contents retaining works
 		only with some loaders now.
 		Added a Tseng 132x60 mode.
+2.5 (19-Mar-96)	Fixed a VESA mode scanning bug introduced in 2.4.

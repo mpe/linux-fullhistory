@@ -809,6 +809,17 @@ static void NCR5380_init (struct Scsi_Host *instance, int flags) {
     hostdata->connected = NULL;
     hostdata->issue_queue = NULL;
     hostdata->disconnected_queue = NULL;
+#ifdef NCR5380_STATS
+    for (i = 0; i < 8; ++i) {
+	hostdata->time_read[i] = 0;
+	hostdata->time_write[i] = 0;
+	hostdata->bytes_read[i] = 0;
+	hostdata->bytes_write[i] = 0;
+    }
+    hostdata->timebase = 0;
+    hostdata->pendingw = 0;
+    hostdata->pendingr = 0;
+#endif
 
     /* The CHECK code seems to break the 53C400. Will check it later maybe */
     if (flags & FLAG_NCR53C400)
@@ -916,6 +927,7 @@ int NCR5380_queue_command (Scsi_Cmnd *cmd, void (*done)(Scsi_Cmnd *)) {
 #if (NDEBUG & NDEBUG_NO_WRITE)
     switch (cmd->cmnd[0]) {
     case WRITE:
+    case WRITE_6:
     case WRITE_10:
 	printk("scsi%d : WRITE attempted with NO_WRITE debugging flag set\n",
 	    instance->host_no);
@@ -925,6 +937,34 @@ int NCR5380_queue_command (Scsi_Cmnd *cmd, void (*done)(Scsi_Cmnd *)) {
     }
 #endif /* (NDEBUG & NDEBUG_NO_WRITE) */
 
+#ifdef NCR5380_STATS
+# if 0
+    if (!hostdata->connected && !hostdata->issue_queue &&
+	!hostdata->disconnected_queue) {
+	hostdata->timebase = jiffies;
+    }
+# endif
+# ifdef NCR5380_STAT_LIMIT
+    if (cmd->request_bufflen > NCR5380_STAT_LIMIT)
+# endif
+	switch (cmd->cmnd[0])
+	{
+	    case WRITE:
+	    case WRITE_6:
+	    case WRITE_10:
+		hostdata->time_write[cmd->target] -= (jiffies - hostdata->timebase);
+		hostdata->bytes_write[cmd->target] += cmd->request_bufflen;
+		hostdata->pendingw++;
+		break;
+	    case READ:
+	    case READ_6:
+	    case READ_10:
+		hostdata->time_read[cmd->target] -= (jiffies - hostdata->timebase);
+		hostdata->bytes_read[cmd->target] += cmd->request_bufflen;
+		hostdata->pendingr++;
+		break;
+	}
+#endif
 
     /* 
      * We use the host_scribble field as a pointer to the next command  
@@ -1224,6 +1264,32 @@ static void NCR5380_intr (int irq, void *dev_id, struct pt_regs * regs) {
     } while (!done);
 }
 
+#ifdef NCR5380_STATS
+static void collect_stats(struct NCR5380_hostdata* hostdata, Scsi_Cmnd* cmd)
+{
+# ifdef NCR5380_STAT_LIMIT
+    if (cmd->request_bufflen > NCR5380_STAT_LIMIT)
+# endif
+	switch (cmd->cmnd[0])
+	{
+	    case WRITE:
+	    case WRITE_6:
+	    case WRITE_10:
+		hostdata->time_write[cmd->target] += (jiffies - hostdata->timebase);
+		/*hostdata->bytes_write[cmd->target] += cmd->request_bufflen;*/
+		hostdata->pendingw--;
+		break;
+	    case READ:
+	    case READ_6:
+	    case READ_10:
+		hostdata->time_read[cmd->target] += (jiffies - hostdata->timebase);
+		/*hostdata->bytes_read[cmd->target] += cmd->request_bufflen;*/
+		hostdata->pendingr--;
+		break;
+	}
+}
+#endif
+
 /* 
  * Function : int NCR5380_select (struct Scsi_Host *instance, Scsi_Cmnd *cmd, 
  *	int tag);
@@ -1469,6 +1535,9 @@ static int NCR5380_select (struct Scsi_Host *instance, Scsi_Cmnd *cmd,
 	    return -1;
 	}
 	cmd->result = DID_BAD_TARGET << 16;
+#ifdef NCR5380_STATS
+	collect_stats(hostdata, cmd);
+#endif
 	cmd->scsi_done(cmd);
 	NCR5380_write(SELECT_ENABLE_REG, hostdata->id_mask);
 #if (NDEBUG & NDEBUG_SELECTION)
@@ -2322,6 +2391,9 @@ static void NCR5380_information_transfer (struct Scsi_Host *instance) {
 		    printk("scsi%d : target %d lun %d linked request done, calling scsi_done().\n",
 			instance->host_no, cmd->target, cmd->lun);
 #endif
+#ifdef NCR5380_STATS
+		    collect_stats(hostdata, cmd);
+#endif
 		    cmd->scsi_done(cmd);
 		    cmd = hostdata->connected;
 		    break;
@@ -2387,9 +2459,13 @@ static void NCR5380_information_transfer (struct Scsi_Host *instance) {
 #if (NDEBUG & NDEBUG_QUEUES)
 			printk("scsi%d : REQUEST SENSE added to head of issue queue\n",instance->host_no);
 #endif
-		   } else
+		   } else {
 #endif /* def AUTOSENSE */
+#ifdef NCR5380_STATS
+			collect_stats(hostdata, cmd);
+#endif
 			cmd->scsi_done(cmd);
+		   }
 
 		    NCR5380_write(SELECT_ENABLE_REG, hostdata->id_mask);
 		    /* 
@@ -2557,6 +2633,9 @@ static void NCR5380_information_transfer (struct Scsi_Host *instance) {
 		    hostdata->busy[cmd->target] &= ~(1 << cmd->lun);
 		    hostdata->connected = NULL;
 		    cmd->result = DID_ERROR << 16;
+#ifdef NCR5380_STATS
+		    collect_stats(hostdata, cmd);
+#endif
 		    cmd->scsi_done(cmd);
 		    NCR5380_write(SELECT_ENABLE_REG, hostdata->id_mask);
 		    return;
@@ -2841,7 +2920,7 @@ int NCR5380_abort (Scsi_Cmnd *cmd) {
 
     cli();
     NCR5380_setup(instance);
-    
+
 #if (NDEBUG & NDEBUG_ABORT)
     printk("scsi%d : abort called\n", instance->host_no);
     printk("        basr 0x%X, sr 0x%X\n", 

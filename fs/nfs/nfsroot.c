@@ -27,6 +27,9 @@
  *	Martin Mares	:	Code cleanup.
  *	Martin Mares	: (2.1)	BOOTP and RARP made configuration options.
  *	Martin Mares	:	Server hostname generation fixed.
+ *	Gerd Knorr	:	Fixed wired inode handling
+ *	Martin Mares	: (2.2)	"0.0.0.0" addresses from command line ignored.
+ *	Martin Mares	:	RARP replies not tested for server address.
  *
  *
  *	Known bugs and caveats:
@@ -128,7 +131,7 @@ static int nfs_port;			/* Port to connect to for NFS service */
 
 /* Yes, we use sys_socket, but there's no include file for it */
 extern asmlinkage int sys_socket(int family, int type, int protocol);
-
+     
 
 /***************************************************************************
 
@@ -299,12 +302,6 @@ static int root_rarp_recv(struct sk_buff *skb, struct device *dev, struct packet
 
 	/* Discard packets which are not meant for us. */
 	if (memcmp(tha, dev->dev_addr, dev->addr_len)) {
-		kfree_skb(skb, FREE_READ);
-		return 0;
-	}
-	/* Discard packets which are not from specified server. */
-	if (server.sin_addr.s_addr != INADDR_NONE &&
-	    server.sin_addr.s_addr != sip) {
 		kfree_skb(skb, FREE_READ);
 		return 0;
 	}
@@ -1170,7 +1167,7 @@ static void root_nfs_ip_config(char *addrs)
 	while (ip && *ip) {
 		if ((cp = strchr(ip, ':')))
 			*cp++ = '\0';
-		if (strlen(ip) > 0) {
+		if (strlen(ip) > 0 && strcmp(ip, "0.0.0.0")) {
 			switch (num) {
 			case 0:
 				myaddr.sin_addr.s_addr = in_aton(ip);
@@ -1361,8 +1358,8 @@ int nfs_root_init(char *nfsname, char *nfsaddrs)
 
  ***************************************************************************/
 
-static struct file nfs_file;		/* File descriptor containing socket */
-static struct inode nfs_inode;		/* Inode containing socket */
+static struct file  *nfs_file;
+static struct inode *nfs_sock_inode;	/* Inode containing socket */
 static int *rpc_packet = NULL;		/* RPC packet */
 
 
@@ -1371,63 +1368,28 @@ static int *rpc_packet = NULL;		/* RPC packet */
  */
 static int root_nfs_open(void)
 {
-	struct file *filp;
-
 	/* Open the socket */
 	if ((nfs_data.fd = sys_socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP)) < 0) {
 		printk(KERN_ERR "Root-NFS: Cannot open UDP socket!\n");
 		return -1;
 	}
-	/*
-	 * Copy the file and inode data area so that we can remove the
-	 * file lateron without killing the socket. After all this the
-	 * closing routine just needs to remove the file pointer from the
-	 * init-task descriptor.
-	 */
-	filp = current->files->fd[nfs_data.fd];
-	memcpy(&nfs_file, filp, sizeof(struct file));
-	nfs_file.f_next = nfs_file.f_prev = NULL;
-	current->files->fd[nfs_data.fd] = &nfs_file;
-	filp->f_count = 0;		/* Free the file descriptor */
+	nfs_file = current->files->fd[nfs_data.fd];
+	nfs_sock_inode = nfs_file->f_inode;
 
-	memcpy(&nfs_inode, nfs_file.f_inode, sizeof(struct inode));
-	nfs_inode.i_hash_next = nfs_inode.i_hash_prev = NULL;
-	nfs_inode.i_next = nfs_inode.i_prev = NULL;
-	clear_inode(nfs_file.f_inode);
-	nfs_file.f_inode = &nfs_inode;
-	nfs_inode.u.socket_i.inode = &nfs_inode;
-	nfs_file.private_data = NULL;
-
+	/* keep socket open. Do we need really this ? */
+	/* nfs_file->f_count++; */                   
 	return 0;
 }
 
 
 /*
- *  Close the UDP file descriptor. The main part of preserving the socket
- *  has already been done after opening it. Now we have to remove the file
- *  descriptor from the init task.
+ *  Close the UDP file descriptor. If nfs_read_super is successful, it
+ *  increases the reference count, so we can simply close the file, and
+ *  the socket keeps open.
  */
 static void root_nfs_close(int close_all)
 {
-	/* Remove the file from the list of open files */
-	current->files->fd[nfs_data.fd] = NULL;
-	if (current->files->count > 0)
-		current->files->count--;
-
-	/* Clear memory used by the RPC packet */
-	if (rpc_packet != NULL)
-		kfree_s(rpc_packet, nfs_data.wsize + 1024);
-
-	/*
-	 * In case of an error we also have to close the socket again
-	 * (sigh)
-	 */
-	if (close_all) {
-		nfs_inode.u.socket_i.inode = NULL;	/* The inode is already
-							 * cleared */
-		if (nfs_file.f_op->release)
-			nfs_file.f_op->release(&nfs_inode, &nfs_file);
-	}
+	sys_close(nfs_data.fd);
 }
 
 
@@ -1441,14 +1403,15 @@ static int root_nfs_bind(void)
 	struct sockaddr_in *sin = &myaddr;
 	int i;
 
-	if (nfs_inode.u.socket_i.ops->bind) {
+	if (nfs_sock_inode->u.socket_i.ops->bind) {
 		for (i = 0; i < NPORTS && res < 0; i++) {
 			sin->sin_port = htons(port++);
 			if (port > ENDPORT) {
 				port = STARTPORT;
 			}
-			res = nfs_inode.u.socket_i.ops->bind(&nfs_inode.u.socket_i,
-							     (struct sockaddr *)sin, sizeof(struct sockaddr_in));
+			res = nfs_sock_inode->u.socket_i.ops->bind
+				(&nfs_sock_inode->u.socket_i,
+				 (struct sockaddr *)sin, sizeof(struct sockaddr_in));
 		}
 	}
 	if (res < 0) {
@@ -1468,11 +1431,10 @@ static int root_nfs_bind(void)
  */
 static int *root_nfs_call(int *end)
 {
-	struct file *filp;
 	struct socket *sock;
 	int dummylen;
 	static struct nfs_server s = {
-		&nfs_file,		/* struct file *	 */
+		0,			/* struct file *	 */
 		0,			/* struct rsock *	 */
 		{
 		    0, "",
@@ -1486,8 +1448,8 @@ static int *root_nfs_call(int *end)
 		3 * HZ, 60 * HZ, 30 * HZ, 60 * HZ, "\0"
 	};
 
-	filp = &nfs_file;
-	sock = &((filp->f_inode)->u.socket_i);
+	s.file = nfs_file;
+	sock = &((nfs_file->f_inode)->u.socket_i);
 
 	/* extract the other end of the socket into s->toaddr */
 	sock->ops->getname(sock, &(s.toaddr), &dummylen, 1);
@@ -1495,7 +1457,7 @@ static int *root_nfs_call(int *end)
 	((struct sockaddr_in *) &s.toaddr)->sin_family = server.sin_family;
 	((struct sockaddr_in *) &s.toaddr)->sin_addr.s_addr = server.sin_addr.s_addr;
 
-	s.rsock = rpc_makesock(filp);
+	s.rsock = rpc_makesock(nfs_file);
 	s.flags = nfs_data.flags;
 	s.rsize = nfs_data.rsize;
 	s.wsize = nfs_data.wsize;
@@ -1507,12 +1469,13 @@ static int *root_nfs_call(int *end)
 	 * First connect the UDP socket to a server port, then send the
 	 * packet out, and finally check wether the answer is OK.
 	 */
-	if (nfs_inode.u.socket_i.ops->connect &&
-	    nfs_inode.u.socket_i.ops->connect(&nfs_inode.u.socket_i,
-						(struct sockaddr *) &server,
-						sizeof(struct sockaddr_in),
-						nfs_file.f_flags) < 0)
-		            return NULL;
+	if (nfs_sock_inode->u.socket_i.ops->connect &&
+	    nfs_sock_inode->u.socket_i.ops->connect
+	    (&nfs_sock_inode->u.socket_i,
+	     (struct sockaddr *) &server,
+	     sizeof(struct sockaddr_in),
+	     nfs_file->f_flags) < 0)
+		return NULL;
 	if (nfs_rpc_call(&s, rpc_packet, end, nfs_data.wsize) < 0)
 		return NULL;
 	return rpc_verify(rpc_packet);
@@ -1643,11 +1606,12 @@ static int root_nfs_do_mount(struct super_block *sb)
 	/* First connect to the nfsd port on the server */
 	server.sin_port = htons(nfs_port);
 	nfs_data.addr = server;
-	if (nfs_inode.u.socket_i.ops->connect &&
-	    nfs_inode.u.socket_i.ops->connect(&nfs_inode.u.socket_i,
-						(struct sockaddr *) &server,
-						sizeof(struct sockaddr_in),
-						nfs_file.f_flags) < 0) {
+	if (nfs_sock_inode->u.socket_i.ops->connect &&
+	    nfs_sock_inode->u.socket_i.ops->connect
+	    (&nfs_sock_inode->u.socket_i,
+	     (struct sockaddr *) &server,
+	     sizeof(struct sockaddr_in),
+	     nfs_file->f_flags) < 0) {
 		root_nfs_close(1);
 		return -1;
 	}

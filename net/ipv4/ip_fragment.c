@@ -45,7 +45,7 @@
 
 static struct ipq *ipqueue = NULL;		/* IP fragment queue	*/
 
-unsigned long ip_frag_mem = 0;			/* Memory used for fragments */
+atomic_t ip_frag_mem = 0;			/* Memory used for fragments */
 
 /*
  *	Memory Tracking Functions
@@ -53,34 +53,22 @@ unsigned long ip_frag_mem = 0;			/* Memory used for fragments */
  
 extern __inline__ void frag_kfree_skb(struct sk_buff *skb, int type)
 {
-	unsigned long flags;
-	save_flags(flags);
-	cli();
-	ip_frag_mem-=skb->truesize;
-	restore_flags(flags);
+	atomic_sub(skb->truesize, &ip_frag_mem);
 	kfree_skb(skb,type);
 }
 
 extern __inline__ void frag_kfree_s(void *ptr, int len)
 {
-	unsigned long flags;
-	save_flags(flags);
-	cli();
-	ip_frag_mem-=len;
-	restore_flags(flags);
+	atomic_sub(len, &ip_frag_mem);
 	kfree_s(ptr,len);
 }
  
 extern __inline__ void *frag_kmalloc(int size, int pri)
 {
-	unsigned long flags;
 	void *vp=kmalloc(size,pri);
 	if(!vp)
 		return NULL;
-	save_flags(flags);
-	cli();
-	ip_frag_mem+=size;
-	restore_flags(flags);
+	atomic_add(size, &ip_frag_mem);
 	return vp;
 }
  
@@ -623,7 +611,6 @@ void ip_fragment(struct sock *sk, struct sk_buff *skb, struct device *dev, int i
 	struct sk_buff *skb2;
 	int left, mtu, hlen, len;
 	int offset;
-	unsigned long flags;
 
 	/*
 	 *	Point into the IP datagram header.
@@ -730,14 +717,11 @@ void ip_fragment(struct sock *sk, struct sk_buff *skb, struct device *dev, int i
 		 *	it might possess
 		 */
 
-		save_flags(flags);
 		if (sk)
 		{
-			cli();
-			sk->wmem_alloc += skb2->truesize;
+			atomic_add(skb2->truesize, &sk->wmem_alloc);
 			skb2->sk=sk;
 		}
-		restore_flags(flags);
 		skb2->raddr = skb->raddr;	/* For rebuild_header - must be here */
 
 		/*

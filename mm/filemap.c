@@ -493,12 +493,36 @@ static unsigned long filemap_nopage(struct vm_area_struct * area, unsigned long 
  * Tries to write a shared mapped page to its backing store. May return -EIO
  * if the disk is full.
  */
+static inline int do_write_page(struct inode * inode, struct file * file,
+	const char * page, unsigned long offset)
+{
+	int old_fs, retval;
+	unsigned long size;
+
+	size = offset + PAGE_SIZE;
+	/* refuse to extend file size.. */
+	if (S_ISREG(inode->i_mode)) {
+		if (size > inode->i_size)
+			size = inode->i_size;
+		/* Ho humm.. We should have tested for this earlier */
+		if (size < offset)
+			return -EIO;
+	}
+	size -= offset;
+	old_fs = get_fs();
+	set_fs(KERNEL_DS);
+	retval = -EIO;
+	if (size == file->f_op->write(inode, file, (const char *) page, size))
+		retval = 0;
+	set_fs(old_fs);
+	return retval;
+}
+
 static int filemap_write_page(struct vm_area_struct * vma,
 	unsigned long offset,
 	unsigned long page)
 {
-	int old_fs;
-	unsigned long size, result;
+	int result;
 	struct file file;
 	struct inode * inode;
 	struct buffer_head * bh;
@@ -518,29 +542,17 @@ static int filemap_write_page(struct vm_area_struct * vma,
 	file.f_op = inode->i_op->default_file_ops;
 	if (!file.f_op->write)
 		return -EIO;
-	size = offset + PAGE_SIZE;
-	/* refuse to extend file size.. */
-	if (S_ISREG(inode->i_mode)) {
-		if (size > inode->i_size)
-			size = inode->i_size;
-		/* Ho humm.. We should have tested for this earlier */
-		if (size < offset)
-			return -EIO;
-	}
-	size -= offset;
 	file.f_mode = 3;
 	file.f_flags = 0;
 	file.f_count = 1;
 	file.f_inode = inode;
 	file.f_pos = offset;
 	file.f_reada = 0;
-	old_fs = get_fs();
-	set_fs(KERNEL_DS);
-	result = file.f_op->write(inode, &file, (const char *) page, size);
-	set_fs(old_fs);
-	if (result != size)
-		return -EIO;
-	return 0;
+
+	down(&inode->i_sem);
+	result = do_write_page(inode, &file, (const char *) page, offset);
+	up(&inode->i_sem);
+	return result;
 }
 
 

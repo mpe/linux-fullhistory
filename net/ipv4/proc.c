@@ -108,7 +108,7 @@ get__netinfo(struct proto *pro, char *buffer, int format, char **start, off_t of
 			    timer_active=timer_active2;
 			    timer_expires=sp->timer.expires;
 			}
-			len += sprintf(buffer+len, "%2d: %08lX:%04X %08lX:%04X %02X %08lX:%08lX %02X:%08lX %08X %d %d\n",
+			len += sprintf(buffer+len, "%2d: %08lX:%04X %08lX:%04X %02X %08X:%08X %02X:%08lX %08X %d %d\n",
 				i, src, srcp, dest, destp, sp->state, 
 				format==0?sp->write_seq-sp->rcv_ack_seq:sp->wmem_alloc, 
 				format==0?sp->acked_seq-sp->copied_seq:sp->rmem_alloc,

@@ -79,7 +79,7 @@ struct sk_buff *skb_recv_datagram(struct sock *sk, unsigned flags, int noblock, 
 
 	lock_sock(sk);
 restart:
-	while(skb_peek(&sk->receive_queue) == NULL)	/* No data */
+	while(skb_queue_empty(&sk->receive_queue))	/* No data */
 	{
 		/* Socket errors? */
 		error = sock_error(sk);
@@ -142,14 +142,12 @@ void skb_free_datagram(struct sock * sk, struct sk_buff *skb)
 	save_flags(flags);
 	cli();
 	skb->users--;
-	if(skb->users>0)
-	{
-		restore_flags(flags);
-		return;
+	if(skb->users <= 0) {
+		/* See if it needs destroying */
+		/* Been dequeued by someone - ie it's read */
+		if(!skb->next && !skb->prev)
+			kfree_skb(skb,FREE_READ);
 	}
-	/* See if it needs destroying */
-	if(!skb->next && !skb->prev)	/* Been dequeued by someone - ie it's read */
-		kfree_skb(skb,FREE_READ);
 	restore_flags(flags);
 	release_sock(sk);
 }

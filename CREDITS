@@ -1198,6 +1198,7 @@ N: Greg Wettstein
 E: greg@wind.rmcc.com
 D: Filesystem valid flag for MINIX filesystem.
 D: Minor kernel debugging.
+D: Development and maintenance of sysklogd.
 D: Monitoring of development kernels for long-term stability.
 D: Early implementations of Linux in a commercial environment.
 S: Dr. Greg Wettstein, Ph.D.

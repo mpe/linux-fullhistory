@@ -886,7 +886,7 @@ static inline void do_it_virt(struct task_struct * p, unsigned long ticks)
 	unsigned long it_virt = p->it_virt_value;
 
 	if (it_virt) {
-		if (it_virt < ticks) {
+		if (it_virt <= ticks) {
 			it_virt = ticks + p->it_virt_incr;
 			send_sig(SIGVTALRM, p, 1);
 		}
@@ -899,7 +899,7 @@ static inline void do_it_prof(struct task_struct * p, unsigned long ticks)
 	unsigned long it_prof = p->it_prof_value;
 
 	if (it_prof) {
-		if (it_prof < ticks) {
+		if (it_prof <= ticks) {
 			it_prof = ticks + p->it_prof_incr;
 			send_sig(SIGPROF, p, 1);
 		}

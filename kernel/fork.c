@@ -28,6 +28,7 @@
 
 int nr_tasks=1;
 int nr_running=1;
+unsigned long int total_forks=0;	/* Handle normal Linux uptimes. */
 
 static inline int find_empty_process(void)
 {
@@ -269,6 +270,7 @@ int do_fork(unsigned long clone_flags, unsigned long usp, struct pt_regs *regs)
 	p->exit_signal = clone_flags & CSIGNAL;
 	p->counter = current->counter >> 1;
 	wake_up_process(p);			/* do this last, just in case */
+	++total_forks;
 	return p->pid;
 
 bad_fork_cleanup_sighand:

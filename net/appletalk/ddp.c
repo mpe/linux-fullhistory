@@ -1791,7 +1791,7 @@ static int atalk_sendmsg(struct socket *sock, struct msghdr *msg, int len, int n
 		if(sk->debug)
 			printk("SK %p: Loop back.\n", sk);
 		/* loop back */
-		sk->wmem_alloc-=skb->truesize;
+		atomic_sub(skb->truesize, &sk->wmem_alloc);
 		ddp_dl->datalink_header(ddp_dl, skb, dev->dev_addr);
 		skb->sk = NULL;
 		skb->mac.raw=skb->data;

@@ -377,7 +377,7 @@ static void ax25_send_to_raw(struct sock *sk, struct sk_buff *skb, int proto)
 				return;
 
 			copy->sk = sk;
-			sk->rmem_alloc += copy->truesize;
+			atomic_add(copy->truesize, &sk->rmem_alloc);
 			skb_queue_tail(&sk->receive_queue, copy);
 			if (!sk->dead)
 				sk->data_ready(sk, skb->len);
@@ -1727,7 +1727,7 @@ static int ax25_rcv(struct sk_buff *skb, struct device *dev, ax25_address *dev_a
 						skb_pull(skb, 2);
 						skb_queue_tail(&sk->receive_queue, skb);
 						skb->sk = sk;
-						sk->rmem_alloc += skb->truesize;
+						atomic_add(skb->truesize, &sk->rmem_alloc);
 						if (!sk->dead)
 							sk->data_ready(sk, skb->len);
 					}

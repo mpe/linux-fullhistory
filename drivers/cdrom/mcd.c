@@ -60,6 +60,7 @@
 	17 June 95 Modifications By Andrew J. Kroll <ag784@freenet.buffalo.edu>
 	07 July 1995 Modifications by Andrew J. Kroll
 
+	Bjorn Ekwall <bj0rn@blox.se> added unregister_blkdev to mcd_init()
 */
 
 #include <linux/module.h>
@@ -1181,6 +1182,7 @@ int mcd_init(void)
 	}
 
         if (check_region(mcd_port, 4)) {
+	  unregister_blkdev(MAJOR_NR, "mcd");
 	  printk("Init failed, I/O port (%X) already in use\n",
 		 mcd_port);
           return -EIO;
@@ -1204,6 +1206,7 @@ int mcd_init(void)
 	if (count >= 2000000) {
 		printk("Init failed. No mcd device at 0x%x irq %d\n",
 		     mcd_port, mcd_irq);
+		unregister_blkdev(MAJOR_NR, "mcd");
                 return -EIO;
 	}
 	count = inb(MCDPORT(0));		/* pick up the status */
@@ -1211,13 +1214,16 @@ int mcd_init(void)
 	outb(MCMD_GET_VERSION,MCDPORT(0));
 	for(count=0;count<3;count++)
 		if(getValue(result+count)) {
+			unregister_blkdev(MAJOR_NR, "mcd");
 			printk("mitsumi get version failed at 0x%d\n",
 			       mcd_port);
                         return -EIO;
 		}	
 
-	if (result[0] == result[1] && result[1] == result[2])
+	if (result[0] == result[1] && result[1] == result[2]) {
+		unregister_blkdev(MAJOR_NR, "mcd");
                 return -EIO;
+	}
 	printk("Mitsumi status, type and version : %02X %c %x ",
 	       result[0],result[1],result[2]);
 
@@ -1239,6 +1245,7 @@ int mcd_init(void)
 	if (request_irq(mcd_irq, mcd_interrupt, SA_INTERRUPT, "Mitsumi CD", NULL))
 	{
 		printk("Unable to get IRQ%d for Mitsumi CD-ROM\n", mcd_irq);
+		unregister_blkdev(MAJOR_NR, "mcd");
                 return -EIO;
 	}
 	request_region(mcd_port, 4,"mcd");

@@ -537,19 +537,6 @@ void dev_transmit(void)
 ***********************************************************************************/
 
 /*
- *	This is a single non-reentrant routine which takes the received packet
- *	queue and throws it at the networking layers in the hope that something
- *	useful will emerge.
- */
- 
-volatile unsigned long in_bh = 0;	/* Non-reentrant remember */
-
-int in_net_bh()	/* Used by timer.c */
-{
-	return(in_bh==0?0:1);
-}
-
-/*
  *	When we are called the queue is ready to grab, the interrupts are
  *	on and hardware can interrupt and queue to the receive queue a we
  *	run with no problems.
@@ -559,17 +546,9 @@ int in_net_bh()	/* Used by timer.c */
  
 void net_bh(void)
 {
-	struct sk_buff *skb;
 	struct packet_type *ptype;
 	struct packet_type *pt_prev;
 	unsigned short type;
-
-	/*
-	 *	Atomically check and mark our BUSY state. 
-	 */
-
-	if (set_bit(1, (void*)&in_bh))
-		return;
 
 	/*
 	 *	Can we send anything now? We want to clear the
@@ -586,19 +565,23 @@ void net_bh(void)
 	 *	that from the device which does a mark_bh() just after
 	 */
 
-	cli();
-	
 	/*
-	 *	While the queue is not empty
+	 *	While the queue is not empty..
+	 *
+	 *	Note that the queue never shrinks due to
+	 *	an interrupt, so we can do this test without
+	 *	disabling interrupts.
 	 */
-	 
-	while((skb=__skb_dequeue(&backlog))!=NULL)
-	{
+
+	while (!skb_queue_empty(&backlog)) {
+		struct sk_buff * skb = backlog.next;
+
 		/*
 		 *	We have a packet. Therefore the queue has shrunk
 		 */
+		cli();
+		__skb_unlink(skb, &backlog);
   		backlog_size--;
-
 		sti();
 		
 	       /*
@@ -681,15 +664,11 @@ void net_bh(void)
 #ifdef XMIT_EVERY
 		dev_transmit();
 #endif		
-		cli();
   	}	/* End of queue loop */
   	
   	/*
   	 *	We have emptied the queue
   	 */
-  	 
-  	in_bh = 0;
-	sti();
 	
 	/*
 	 *	One last output flush.

@@ -57,23 +57,23 @@
  *	Resource tracking variables
  */
 
-unsigned long net_skbcount = 0;
-unsigned long net_locked = 0;
-unsigned long net_allocs = 0;
-unsigned long net_fails  = 0;
-unsigned long net_free_locked = 0;
+atomic_t net_skbcount = 0;
+atomic_t net_locked = 0;
+atomic_t net_allocs = 0;
+atomic_t net_fails  = 0;
+atomic_t net_free_locked = 0;
 
-extern unsigned long ip_frag_mem;
+extern atomic_t ip_frag_mem;
 
 void show_net_buffers(void)
 {
-	printk("Networking buffers in use          : %lu\n",net_skbcount);
-	printk("Network buffers locked by drivers  : %lu\n",net_locked);
-	printk("Total network buffer allocations   : %lu\n",net_allocs);
-	printk("Total failed network buffer allocs : %lu\n",net_fails);
-	printk("Total free while locked events     : %lu\n",net_free_locked);
+	printk("Networking buffers in use          : %u\n",net_skbcount);
+	printk("Network buffers locked by drivers  : %u\n",net_locked);
+	printk("Total network buffer allocations   : %u\n",net_allocs);
+	printk("Total failed network buffer allocs : %u\n",net_fails);
+	printk("Total free while locked events     : %u\n",net_free_locked);
 #ifdef CONFIG_INET
-	printk("IP fragment buffer size            : %lu\n",ip_frag_mem);
+	printk("IP fragment buffer size            : %u\n",ip_frag_mem);
 #endif	
 }
 
@@ -614,27 +614,24 @@ void kfree_skb(struct sk_buff *skb, int rw)
 		skb->destructor(skb);
 	if (skb->sk)
 	{
-	        if(skb->sk->prot!=NULL)
+		struct sock * sk = skb->sk;
+	        if(sk->prot!=NULL)
 		{
 			if (rw)
-		     		sock_rfree(skb->sk, skb);
+		     		sock_rfree(sk, skb);
 		     	else
-		     		sock_wfree(skb->sk, skb);
+		     		sock_wfree(sk, skb);
 
 		}
 		else
 		{
-			unsigned long flags;
-			/* Non INET - default wmalloc/rmalloc handler */
-			save_flags(flags);
-			cli();
 			if (rw)
-				skb->sk->rmem_alloc-=skb->truesize;
-			else
-				skb->sk->wmem_alloc-=skb->truesize;
-			restore_flags(flags);
-			if(!skb->sk->dead)
-				skb->sk->write_space(skb->sk);
+				atomic_sub(skb->truesize, &sk->rmem_alloc);
+			else {
+				atomic_sub(skb->truesize, &sk->wmem_alloc);
+				if(!sk->dead)
+					sk->write_space(sk);
+			}
 			kfree_skbmem(skb);
 		}
 	}
@@ -760,7 +757,6 @@ void kfree_skbmem(struct sk_buff *skb)
 
 struct sk_buff *skb_clone(struct sk_buff *skb, int priority)
 {
-	unsigned long flags;
 	struct sk_buff *n;
 
 	IS_SKB(skb);
@@ -771,12 +767,9 @@ struct sk_buff *skb_clone(struct sk_buff *skb, int priority)
 	n->count = 1;
 	if (skb->data_skb)
 		skb = skb->data_skb;
-	save_flags(flags);
-	cli();
-	skb->count++;
-	net_allocs++;
-	net_skbcount++;
-	restore_flags(flags);
+	atomic_inc(&skb->count);
+	atomic_inc(&net_allocs);
+	atomic_inc(&net_skbcount);
 	n->data_skb = skb;
 	n->next = n->prev = n->link3 = NULL;
 	n->list = NULL;

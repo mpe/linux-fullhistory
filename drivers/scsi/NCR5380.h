@@ -265,6 +265,15 @@ struct NCR5380_hostdata {
     unsigned long time_expires;			/* in jiffies, set prior to sleeping */
     struct Scsi_Host *next_timer;
 #endif
+#ifdef NCR5380_STATS
+    unsigned timebase;				/* Base for time calcs */
+    long time_read[8];				/* time to do reads */
+    long time_write[8];				/* time to do writes */
+    unsigned long bytes_read[8];		/* bytes read */
+    unsigned long bytes_write[8];		/* byytes written */
+    unsigned pendingr;
+    unsigned pendingw;
+#endif
 };
 
 #ifdef __KERNEL__

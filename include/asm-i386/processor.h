@@ -9,7 +9,9 @@
 
 /*
  * System setup and hardware bug flags..
+ * [Note we don't test the 386 multiply bug or popad bug]
  */
+
 extern char hard_math;
 extern char x86;		/* lower 4 bits */
 extern char x86_vendor_id[13];
@@ -18,8 +20,9 @@ extern char x86_mask;		/* lower 4 bits */
 extern int  x86_capability;	/* field of flags */
 extern int  fdiv_bug;		
 extern char ignore_irq13;
-extern char wp_works_ok;		/* doesn't work on a 386 */
+extern char wp_works_ok;	/* doesn't work on a 386 */
 extern char hlt_works_ok;	/* problems on some 486Dx4's and old 386's */
+extern int  have_cpuid;		/* We have a CPUID */
 
 /*
  * Bus types (default is ISA, but people can check others with these..)

@@ -232,8 +232,10 @@ static const char * getmodel(int x86, int model)
 	switch (x86) {
 		case 4:
 			p = i486model(model);
+			break;
 		case 5:
 			p = i586model(model);
+			break;
 	}
         if (p)
                 return p;
@@ -255,7 +257,9 @@ int get_cpuinfo(char * buffer)
 #ifdef __SMP__
         int n;
 
-#define CD(X) (cpu_data[n].(X))
+#define CD(X)		(cpu_data[n].X)
+/* SMP has the wrong name for loops_per_sec */
+#define loops_per_sec	udelay_val
 #define CPUN n
 
         for ( n = 0 ; n < 32 ; n++ ) {

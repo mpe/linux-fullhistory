@@ -55,6 +55,8 @@
 
 #include <linux/igmp.h>
 
+#include <asm/atomic.h>
+
 /* Think big (also on some systems a byte is faster) */
 #define SOCK_ARRAY_SIZE	256
 
@@ -149,8 +151,8 @@ struct tcp_opt
 struct sock 
 {
 	struct options		*opt;
-	volatile unsigned long	wmem_alloc;
-	volatile unsigned long	rmem_alloc;
+	atomic_t		wmem_alloc;
+	atomic_t		rmem_alloc;
 	unsigned long		allocation;		/* Allocation mode */
 	__u32			write_seq;
 	__u32			sent_seq;
@@ -484,14 +486,10 @@ extern struct sk_buff 		*sock_alloc_send_skb(struct sock *skb,
 
 extern __inline__ int sock_queue_rcv_skb(struct sock *sk, struct sk_buff *skb)
 {
-	unsigned long flags;
-	if(sk->rmem_alloc + skb->truesize >= sk->rcvbuf)
+	if (sk->rmem_alloc + skb->truesize >= sk->rcvbuf)
 		return -ENOMEM;
-	save_flags(flags);
-	cli();
-	sk->rmem_alloc+=skb->truesize;
+	atomic_add(skb->truesize, &sk->rmem_alloc);
 	skb->sk=sk;
-	restore_flags(flags);
 	skb_queue_tail(&sk->receive_queue,skb);
 	if(!sk->dead)
 		sk->data_ready(sk,skb->len);

@@ -47,6 +47,7 @@ int generic_NCR5380_detect(Scsi_Host_Template *);
 int generic_NCR5380_release_resources(struct Scsi_Host *);
 int generic_NCR5380_queue_command(Scsi_Cmnd *, void (*done)(Scsi_Cmnd *));
 int generic_NCR5380_reset(Scsi_Cmnd *);
+const char* generic_NCR5380_info(struct Scsi_Host *);
 #ifdef BIOSPARAM
 int generic_NCR5380_biosparam(Disk *, kdev_t, int *);
 #endif

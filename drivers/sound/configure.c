@@ -418,7 +418,6 @@ ask_int_choice (int mask, char *macro,
     {
 
       for (i = 0; i < OPT_LAST; i++)
-      if (!(DISABLED_OPTIONS & B (i)))
 	if (mask == B (i))
 	  {
 	    unsigned int             j;
@@ -778,7 +777,7 @@ ask_parameters (void)
 		  "Check from manual of the card");
 
   ask_int_choice (B (OPT_SB), "SB_MPU_IRQ",
-		  "SB MPU401 IRQ (Jazz16 and ES1688)",
+		  "SB MPU401 IRQ (Jazz16, SM Wave and ES1688)",
 		  FMT_INT,
 		  -1,
 		  "Check from manual of the card");

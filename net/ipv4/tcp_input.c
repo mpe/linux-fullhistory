@@ -1595,7 +1595,7 @@ int tcp_rcv(struct sk_buff *skb, struct device *dev, struct options *opt,
 	 */
 	 
 	skb->sk=sk;
-	sk->rmem_alloc += skb->truesize;
+	atomic_add(skb->truesize, &sk->rmem_alloc);
 	
 	/*
 	 *	We should now do header prediction.
@@ -1773,7 +1773,7 @@ int tcp_rcv(struct sk_buff *skb, struct device *dev, struct options *opt,
 			if(sk->debug)
 				printk("Doing a BSD time wait\n");
 			tcp_statistics.TcpEstabResets++;	   
-			sk->rmem_alloc -= skb->truesize;
+			atomic_sub(skb->truesize, &sk->rmem_alloc);
 			skb->sk = NULL;
 			sk->err=ECONNRESET;
 			tcp_set_state(sk, TCP_CLOSE);
@@ -1783,7 +1783,7 @@ int tcp_rcv(struct sk_buff *skb, struct device *dev, struct options *opt,
 			if (sk && sk->state==TCP_LISTEN)
 			{
 				skb->sk = sk;
-				sk->rmem_alloc += skb->truesize;
+				atomic_add(skb->truesize, &sk->rmem_alloc);
 				tcp_conn_request(sk, skb, daddr, saddr,opt, dev,seq+128000);
 				return 0;
 			}
@@ -1847,12 +1847,18 @@ rfc_step6:		/* I'll clean this up later */
 	 *	now drop it (we must process the ack first to avoid
 	 *	deadlock cases).
 	 */
-	 
+#if 0
+	/*
+	 *	Is this test really a good idea? We should
+	 *	throw away packets that aren't in order, not
+	 *	new packets.
+	 */
 	if (sk->rmem_alloc  >= sk->rcvbuf) 
 	{
 		kfree_skb(skb, FREE_READ);
 		return(0);
 	}
+#endif
 
 
 	/*

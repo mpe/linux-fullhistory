@@ -324,50 +324,32 @@ int sock_getsockopt(struct sock *sk, int level, int optname,
   	return(0);
 }
 
-
 struct sk_buff *sock_wmalloc(struct sock *sk, unsigned long size, int force, int priority)
 {
-	if (sk) 
-	{
-		if (sk->wmem_alloc + size < sk->sndbuf || force) 
-		{
-			struct sk_buff * c = alloc_skb(size, priority);
-			if (c) 
-			{
-				unsigned long flags;
-				save_flags(flags);
-				cli();
-				sk->wmem_alloc+= c->truesize;
-				restore_flags(flags); /* was sti(); */
-			}
-			return c;
+	if (sk) {
+		if (force || sk->wmem_alloc + size < sk->sndbuf) {
+			struct sk_buff * skb = alloc_skb(size, priority);
+			if (skb)
+				atomic_add(skb->truesize, &sk->wmem_alloc);
+			return skb;
 		}
-		return(NULL);
+		return NULL;
 	}
-	return(alloc_skb(size, priority));
+	return alloc_skb(size, priority);
 }
-
 
 struct sk_buff *sock_rmalloc(struct sock *sk, unsigned long size, int force, int priority)
 {
-	if (sk) 
-	{
-		if (sk->rmem_alloc + size < sk->rcvbuf || force) 
-		{
-			struct sk_buff *c = alloc_skb(size, priority);
-			if (c) 
-			{
-				unsigned long flags;
-				save_flags(flags);
-				cli();
-				sk->rmem_alloc += c->truesize;
-				restore_flags(flags); /* was sti(); */
-			}
-			return(c);
+	if (sk) {
+		if (force || sk->rmem_alloc + size < sk->rcvbuf) {
+			struct sk_buff *skb = alloc_skb(size, priority);
+			if (skb)
+				atomic_add(skb->truesize, &sk->rmem_alloc);
+			return skb;
 		}
-		return(NULL);
+		return NULL;
 	}
-	return(alloc_skb(size, priority));
+	return alloc_skb(size, priority);
 }
 
 
@@ -396,7 +378,7 @@ unsigned long sock_wspace(struct sock *sk)
 			return(0);
 		if (sk->wmem_alloc >= sk->sndbuf)
 			return(0);
-		return(sk->sndbuf-sk->wmem_alloc );
+		return sk->sndbuf - sk->wmem_alloc;
 	}
 	return(0);
 }
@@ -411,14 +393,9 @@ void sock_wfree(struct sock *sk, struct sk_buff *skb)
 	kfree_skbmem(skb);
 	if (sk) 
 	{
-		unsigned long flags;
-		save_flags(flags);
-		cli();
-		sk->wmem_alloc -= s;
-		restore_flags(flags);
+		atomic_sub(s, &sk->wmem_alloc);
 		/* In case it might be waiting for more memory. */
 		sk->write_space(sk);
-		return;
 	}
 }
 
@@ -432,11 +409,7 @@ void sock_rfree(struct sock *sk, struct sk_buff *skb)
 	kfree_skbmem(skb);
 	if (sk) 
 	{
-		unsigned long flags;
-		save_flags(flags);
-		cli();
-		sk->rmem_alloc -= s;
-		restore_flags(flags);
+		atomic_sub(s, &sk->rmem_alloc);
 	}
 }
 

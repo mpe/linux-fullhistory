@@ -194,6 +194,7 @@ static int get_kstat(char * buffer)
 {
 	int i, len;
 	unsigned sum = 0;
+	extern unsigned long total_forks;
 
 	for (i = 0 ; i < NR_IRQS ; i++)
 		sum += kstat.interrupts[i];
@@ -230,9 +231,11 @@ static int get_kstat(char * buffer)
 		len += sprintf(buffer + len, " %u", kstat.interrupts[i]);
 	len += sprintf(buffer + len,
 		"\nctxt %u\n"
-		"btime %lu\n",
+		"btime %lu\n"
+		"processes %lu\n",
 		kstat.context_swtch,
-		xtime.tv_sec - jiffies / HZ);
+		xtime.tv_sec - jiffies / HZ,
+		total_forks);
 	return len;
 }
 

@@ -602,6 +602,7 @@ int lp_init(void)
 {
 	int offset = 0;
 	int count = 0;
+	int failed = 0;
 
 	if (register_chrdev(LP_MAJOR,"lp",&lp_fops)) {
 		printk("lp: unable to get major %d\n", LP_MAJOR);
@@ -623,13 +624,25 @@ int lp_init(void)
 		if (specified) {
 			if (lp_probe(offset) <= 0) {
 				printk(KERN_INFO "lp%d: Not found\n", offset);
-				return -EIO;
+				failed++;
 			} else
 				count++;
 		}
 	}
+	/* Successful specified devices increase count
+	 * Unsuccessful specified devices increase failed
+	 */
 	if (count)
 		return 0;
+	if (failed) {
+		printk(KERN_INFO "lp: No override devices found.\n");
+		unregister_chrdev(LP_MAJOR,"lp");
+		return -EIO;
+	}
+	/* Only get here if there were no specified devices. To continue 
+	 * would be silly since the above code has scribbled all over the
+	 * probe list.
+	 */
 #endif
 	/* take on all known port values */
 	for (offset = 0; offset < LP_NO; offset++) {

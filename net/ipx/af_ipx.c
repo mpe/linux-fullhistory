@@ -593,7 +593,7 @@ static int ipxitf_send(ipx_interface *intrfc, struct sk_buff *skb, char *node)
 			 */
 			if(skb->sk)
 			{
-				skb->sk->wmem_alloc-=skb->truesize;
+				atomic_sub(skb->truesize, &skb->sk->wmem_alloc);
 				skb->sk=NULL;
 			}
 			/*
@@ -608,7 +608,7 @@ static int ipxitf_send(ipx_interface *intrfc, struct sk_buff *skb, char *node)
 		{
 			if (!send_to_wire && skb->sk)
 			{
-				skb->sk->wmem_alloc-=skb->truesize;
+				atomic_sub(skb->truesize, &skb->sk->wmem_alloc);
 				skb->sk=NULL;
 			}
 			ipxitf_demux_socket(intrfc, skb, send_to_wire);

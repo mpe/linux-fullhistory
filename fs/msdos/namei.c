@@ -590,7 +590,6 @@ set_hid:
 	mark_buffer_dirty(old_bh, 1);
 	/* update binary info for conversion, i_attrs */
 	if ((old_inode = iget(old_dir->i_sb,old_ino)) != NULL) {
-		msdos_read_inode(old_inode);
 		MSDOS_I(old_inode)->i_attrs = is_hid
 			? (MSDOS_I(old_inode)->i_attrs |  ATTR_HIDDEN)
 			: (MSDOS_I(old_inode)->i_attrs &~ ATTR_HIDDEN);

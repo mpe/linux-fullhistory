@@ -95,7 +95,7 @@ static int ax25_rx_fragment(ax25_cb *ax25, struct sk_buff *skb)
 
 					if (ax25->sk != NULL) {
 						skbn->sk = ax25->sk;
-						ax25->sk->rmem_alloc += skbn->truesize;
+						atomic_add(skbn->truesize, &ax25->sk->rmem_alloc);
 					}
 
 					/* get first fragment from queue */

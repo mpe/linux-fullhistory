@@ -3168,6 +3168,10 @@ cleanup_module(void)
       printk("Can't unregister cdu31a\n");
       return;
    }
+
+   if (cdu31a_irq > 0)
+      free_irq(cdu31a_irq, NULL);
+
    release_region(cdu31a_port,4);
    printk("cdu31a module released.\n");
 }   

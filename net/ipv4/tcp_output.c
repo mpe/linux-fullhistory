@@ -738,8 +738,8 @@ void tcp_send_synack(struct sock * newsk, struct sock * sk, struct sk_buff * skb
 	 *	Charge the sock_buff to newsk. 
 	 */
 	 
-	sk->rmem_alloc -= skb->truesize;
-	newsk->rmem_alloc += skb->truesize;
+	atomic_sub(skb->truesize, &sk->rmem_alloc);
+	atomic_add(skb->truesize, &newsk->rmem_alloc);
 	
 	skb_queue_tail(&sk->receive_queue,skb);
 	sk->ack_backlog++;

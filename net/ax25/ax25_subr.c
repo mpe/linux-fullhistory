@@ -215,7 +215,7 @@ void ax25_send_control(ax25_cb *ax25, int frametype, int poll_bit, int type)
 
 	if (ax25->sk != NULL) {
 		skb->sk = ax25->sk;
-        	ax25->sk->wmem_alloc += skb->truesize;
+		atomic_add(skb->truesize, &ax25->sk->wmem_alloc);
 	}
 
 	/* Assume a response - address structure for DTE */
@@ -498,7 +498,7 @@ void ax25_kiss_cmd(ax25_cb *ax25, unsigned char cmd, unsigned char param)
 
 	if (ax25->sk != NULL) {
 		skb->sk = ax25->sk;
-		ax25->sk->wmem_alloc += skb->truesize;
+		atomic_add(skb->truesize, &ax25->sk->wmem_alloc);
 	}
 
 	skb->protocol = htons(ETH_P_AX25);

@@ -1,5 +1,5 @@
 !
-!	Display adapter & video mode setup, version 2.4 (18-Mar-96)
+!	Display adapter & video mode setup, version 2.5 (19-Mar-96)
 !
 !	Copyright (C) 1995, 1996 Martin Mares <mj@k332.feld.cvut.cz>
 !	Based on the original setup.S code (C) Linus Torvalds
@@ -753,13 +753,13 @@ vesa_modes:
 	mov	di,bp
 	cmp	ax,#0x004f	! Successful?
 	jnz	ret0
-	cmp	(di+0x400),#0x4556
+	cmp	(di+0x200),#0x4556
 	jnz	ret0
-	cmp	(di+0x402),#0x4153
+	cmp	(di+0x202),#0x4153
 	jnz	ret0
 	mov	[card_name],#vesa_name	! Set name to "VESA VGA"
 	push	gs
-	lgs	si,(di+0x40e)	! GS:SI=mode list
+	lgs	si,(di+0x20e)	! GS:SI=mode list
 	mov	cx,#128		! Iteration limit
 vesa1:	seg	gs		! Get next mode in the list
 	lodsw
