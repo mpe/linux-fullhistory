@@ -165,8 +165,7 @@ int scsi_insert_special_req(Scsi_Request * SRpnt, int at_head)
 	spin_lock_irqsave(&io_request_lock, flags);
 
 	if (at_head) {
-		SRpnt->sr_request.next = q->current_request;
-		q->current_request = &SRpnt->sr_request;
+		list_add(&SRpnt->sr_request.queue, &q->queue_head);
 	} else {
 		/*
 		 * FIXME(eric) - we always insert at the tail of the
@@ -176,19 +175,7 @@ int scsi_insert_special_req(Scsi_Request * SRpnt, int at_head)
 		 * request might not float high enough in the queue
 		 * to be scheduled.
 		 */
-		SRpnt->sr_request.next = NULL;
-		if (q->current_request == NULL) {
-			q->current_request = &SRpnt->sr_request;
-		} else {
-			struct request *req;
-
-			for (req = q->current_request; req; req = req->next) {
-				if (req->next == NULL) {
-					req->next = &SRpnt->sr_request;
-					break;
-				}
-			}
-		}
+		list_add_tail(&SRpnt->sr_request.queue, &q->queue_head);
 	}
 
 	/*
