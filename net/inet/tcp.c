@@ -3388,6 +3388,15 @@ if (inet_debug == DBG_SLIP) printk("\rtcp_rcv: not in seq\n");
 		release_sock(sk);
 		return(0);
 
+	case TCP_SYN_RECV:
+		if (th->syn) {
+			/* Probably a retransmitted syn */
+			kfree_skb(skb, FREE_READ);
+			release_sock(sk);
+			return(0);
+		}
+
+
 	default:
 		if (!tcp_sequence(sk, th, len, opt, saddr,dev)) {
 			kfree_skb(skb, FREE_READ);

@@ -9,7 +9,7 @@
 #include <linux/fs.h>
 #include <linux/sched.h>
 
-#define X(name)	{ (void *) &name, #name }
+#define X(name)	{ (void *) &name, "_" #name }
 
 struct {
 	void *addr;

@@ -5,7 +5,7 @@
  *            and for "no-sound" interfaces like Lasermate and the
  *            Panasonic CI-101P.
  *
- *  NOTE:     This is release 1.3.
+ *  NOTE:     This is release 1.4.
  *            It works with my SbPro & drive CR-521 V2.11 from 2/92
  *            and with the new CR-562-B V0.75 on a "naked" Panasonic
  *            CI-101P interface. And vice versa. 
@@ -62,6 +62,15 @@
  *
  *  1.3  Minor cleanups.
  *       Refinements regarding Workman.
+ *
+ *  1.4  Read XA disks (PhotoCDs) with "old" drives, too (but possibly only
+ *       the first session - I could not try a "multi-session" CD yet).
+ *       This currently still is too slow (50 kB/sec) - but possibly
+ *       the old drives won't do it faster.
+ *       Implemented "door (un)lock" for new drives (still does not work
+ *       as wanted - no lock possible after an unlock).
+ *       Added some debugging printout for the UPC/EAN code - but my drives 
+ *       return only zeroes. Is there no UPC/EAN code written?
  *
  *     special thanks to Kai Makisara (kai.makisara@vtt.fi) for his fine
  *     elaborated speed-up experiments (and the fabulous results!), for
@@ -120,7 +129,7 @@
 #define MAJOR_NR MATSUSHITA_CDROM_MAJOR
 #include "blk.h"
 
-#define VERSION "1.3 Eberhard Moenkeberg <emoenke@gwdg.de>"
+#define VERSION "1.4 Eberhard Moenkeberg <emoenke@gwdg.de>"
 
 #define SBPCD_DEBUG
 
@@ -131,10 +140,22 @@
 /*
  * still testing around...
  */
-#define MANY_SESSION 0
-#define CDMKE
+#define LONG_TIMING 0 /* test against timeouts with "gold" CDs on CR-521 */
+#define MANY_SESSION 0 /* this will conflict with "true" multi-session! */
 #undef  FUTURE
 #define WORKMAN 1 /* some testing stuff to make it better */
+#define CDMKE /* makes timing independent of processor speed */
+
+#undef XA_TEST1
+#define XA_TEST2
+
+/*==========================================================================*/
+/*==========================================================================*/
+
+#if MANY_SESSION
+#undef LONG_TIMING
+#define LONG_TIMING 1
+#endif
 
 /*==========================================================================*/
 /*==========================================================================*/
@@ -214,6 +235,9 @@ static int  sbp_data(void);
  * (1<<DBG_SPI)  SpinUp test info
  * (1<<DBG_IOS)  ioctl trace: "subchannel"
  * (1<<DBG_IO2)  ioctl trace: general
+ * (1<<DBG_UPC)  show UPC info
+ * (1<<DBG_XA)   XA mode debugging
+ * (1<<DBG_LCK)  door (un)lock info
  * (1<<DBG_000)  unnecessary information
  */
 #if 1
@@ -221,7 +245,10 @@ static int sbpcd_debug =  (1<<DBG_INF) | (1<<DBG_WRN);
 #else
 static int sbpcd_debug =  (1<<DBG_INF) |
                           (1<<DBG_TOC) |
+                          (1<<DBG_UPC) |
                           (1<<DBG_IOC) |
+                          (1<<DBG_XA)  |
+                          (1<<DBG_LCK) |
                           (1<<DBG_IOX);
 #endif
 static int sbpcd_ioaddr = CDROM_PORT;	/* default I/O base address */
@@ -260,6 +287,7 @@ static u_int flags_cmd_out;
 static u_char cmd_type=0;
 static u_char drvcmd[7];
 static u_char infobuf[20];
+static u_char scratch_buf[CD_XA_TAIL];
 
 static u_char timed_out=0;
 static u_int datarate= 1000000;
@@ -267,11 +295,11 @@ static u_int maxtim16=16000000;
 static u_int maxtim04= 4000000;
 static u_int maxtim02= 2000000;
 static u_int maxtim_8=   30000;
-#if MANY_SESSION
+#if LONG_TIMING
 static u_int maxtim_data= 9000;
 #else
 static u_int maxtim_data= 3000;
-#endif MANY_SESSION
+#endif LONG_TIMING
 
 /*==========================================================================*/
 
@@ -306,7 +334,7 @@ static struct {
   u_char sense_byte;
   
   u_char CD_changed;
-  
+  u_char open_count;
   u_char error_byte;
   
   u_char f_multisession;
@@ -369,7 +397,6 @@ static struct {
 /*
  * drive space ends here (needed separate for each unit)
  */
-
 /*==========================================================================*/
 /*==========================================================================*/
 /*
@@ -766,6 +793,7 @@ int cmd_out(void)
 	  if (sbpro_type) OUT(CDo_sel_d_i,0x01);
 	  DPRINTF((DBG_INF,"SBPCD: misleaded to try ResponseData.\n"));
 	  if (sbpro_type) OUT(CDo_sel_d_i,0x00);
+	  return (-22);
 	}
       else i=ResponseInfo();
       if (i<0) return (-9);
@@ -1055,10 +1083,10 @@ static int SetSpeed(void)
   int i, speed;
 
   if (!(DS[d].drv_options&(speed_auto|speed_300|speed_150))) return (0);
-  speed=0x80;
+  speed=speed_auto;
   if (!(DS[d].drv_options&speed_auto))
     {
-      speed |= 0x40;
+      speed |= speed_300;
       if (!(DS[d].drv_options&speed_300)) speed=0;
     }
   i=yy_SetSpeed(speed,0,0);
@@ -1105,12 +1133,12 @@ static int xx_Pause_Resume(int pau_res)
   return (i);
 }
 /*==========================================================================*/
-#if 000
 static int yy_LockDoor(char lock)
 {
   int i;
 
-  if (!new_drive) return (-3);
+  if (!new_drive) return (0);
+  DPRINTF((DBG_LCK,"SBPCD: yy_LockDoor: %d (drive %d)\n", lock, d));
   clr_cmdbuf();
   drvcmd[0]=0x0C;
   if (lock==1) drvcmd[1]=0x01;
@@ -1119,7 +1147,6 @@ static int yy_LockDoor(char lock)
   i=cmd_out();
   return (i);
 }
-#endif 000
 /*==========================================================================*/
 static int xx_ReadSubQ(void)
 {
@@ -1192,6 +1219,51 @@ static int xx_ModeSense(void)
   i=0;
   if (new_drive) DS[d].sense_byte=infobuf[i++];
   DS[d].frame_size=make16(infobuf[i],infobuf[i+1]);
+
+  DPRINTF((DBG_XA,"SBPCD: xx_ModeSense: "));
+  for (i=0;i<(new_drive?5:2);i++)
+    {
+      DPRINTF((DBG_XA,"%02X ", infobuf[i]));
+    }
+  DPRINTF((DBG_XA,"\n"));
+
+  DS[d].diskstate_flags |= frame_size_bit;
+  return (0);
+}
+/*==========================================================================*/
+/*==========================================================================*/
+static int xx_ModeSelect(int framesize)
+{
+  int i;
+
+  DS[d].diskstate_flags &= ~frame_size_bit;
+  clr_cmdbuf();
+  DS[d].frame_size=framesize;
+
+  DPRINTF((DBG_XA,"SBPCD: xx_ModeSelect: %02X %04X\n",
+	   DS[d].sense_byte, DS[d].frame_size));
+
+  if (new_drive)
+    {
+      drvcmd[0]=0x09;
+      drvcmd[1]=0x00;
+      drvcmd[2]=DS[d].sense_byte;
+      drvcmd[3]=(DS[d].frame_size>>8)&0xFF;
+      drvcmd[4]=DS[d].frame_size&0xFF;
+      flags_cmd_out=f_putcmd|f_ResponseStatus|f_obey_p_check;
+    }
+  else
+    {
+      drvcmd[0]=0x84;
+      drvcmd[1]=0x00;
+      drvcmd[2]=(DS[d].frame_size>>8)&0xFF;
+      drvcmd[3]=DS[d].frame_size&0xFF;
+      drvcmd[4]=0x00;
+      flags_cmd_out=f_putcmd|f_getsta|f_ResponseStatus|f_obey_p_check;
+    }
+  response_count=0;
+  i=cmd_out();
+  if (i<0) return (i);
   DS[d].diskstate_flags |= frame_size_bit;
   return (0);
 }
@@ -1430,15 +1502,31 @@ static int xx_ReadUPC(void)
       i=xx_ReadPacket();
       if (i<0) return (i);
     }
+
+  DPRINTF((DBG_UPC,"SBPCD: UPC info: "));
+  for (i=0;i<(new_drive?8:16);i++)
+    {
+      DPRINTF((DBG_UPC,"%02X ", infobuf[i]));
+    }
+  DPRINTF((DBG_UPC,"\n"));
+
   DS[d].UPC_ctl_adr=0;
   if (new_drive) i=0;
   else i=2;
   if ((infobuf[i]&0x80)!=0)
     {
       convert_UPC(&infobuf[i]);
-      DS[d].UPC_ctl_adr &= 0xF0;
-      DS[d].UPC_ctl_adr |= 0x02;
+      DS[d].UPC_ctl_adr = (DS[d].TocEnt_ctl_adr & 0xF0) | 0x02;
     }
+
+  DPRINTF((DBG_UPC,"SBPCD: UPC code: "));
+  DPRINTF((DBG_UPC,"(%02X) ", DS[d].UPC_ctl_adr));
+  for (i=0;i<7;i++)
+    {
+      DPRINTF((DBG_UPC,"%02X ", DS[d].UPC_buf[i]));
+    }
+  DPRINTF((DBG_UPC,"\n"));
+
   DS[d].diskstate_flags |= upc_bit;
   return (0);
 }
@@ -1504,11 +1592,11 @@ static void check_datarate(void)
   maxtim04=datarate*4;
   maxtim02=datarate*2;
   maxtim_8=datarate/32;
-#if MANY_SESSION
+#if LONG_TIMING
   maxtim_data=datarate/100;
 #else
   maxtim_data=datarate/300;
-#endif MANY_SESSION
+#endif LONG_TIMING
   DPRINTF((DBG_TIM,"SBPCD: maxtim_8 %d, maxtim_data %d.\n",
 	   maxtim_8, maxtim_data));
 #endif CDMKE
@@ -1860,6 +1948,14 @@ static int DiskInfo(void)
       DPRINTF((DBG_INF,"SBPCD: DiskInfo: xx_ReadUPC returns %d\n", i));
       return (i);
     }
+#ifdef XA_TEST2
+  if ((!new_drive) && (DS[d].xa_byte==0x20)) /* XA disk with old drive */
+      {
+	xx_ModeSelect(CD_FRAMESIZE_XA);
+	xx_ModeSense();
+      }
+#endif XA_TEST2
+
   return (0);
 }
 /*==========================================================================*/
@@ -2378,6 +2474,14 @@ request_loop:
 
   if (!st_spinning) xx_SpinUp();
 
+#ifdef XA_TEST1
+  if ((!new_drive) && (DS[d].xa_byte==0x20)) /* XA disk with old drive */
+      {
+	xx_ModeSelect(CD_FRAMESIZE_XA);
+	xx_ModeSense();
+      }
+#endif XA_TEST1
+
   for (data_tries=3; data_tries > 0; data_tries--)
     {
       for (status_tries=3; status_tries > 0; status_tries--)
@@ -2463,32 +2567,47 @@ static void sbp_read_cmd(void)
 
   if (!new_drive)
     {
-      if (DS[d].drv_type>=drv_201)
+      flags_cmd_out |= f_lopsta | f_getsta | f_bit1;
+      if (DS[d].xa_byte==0x20)
 	{
-	  lba2msf(block,&drvcmd[1]); /* msf-bcd format required */
-	  bin2bcdx(&drvcmd[1]);
-	  bin2bcdx(&drvcmd[2]);
-	  bin2bcdx(&drvcmd[3]);
-	}
-      else
-	{
+	  cmd_type=READ_M2;
+	  drvcmd[0]=0x03;   /* "read XA frames" command for old drives */
 	  drvcmd[1]=(block>>16)&0x000000ff;
 	  drvcmd[2]=(block>>8)&0x000000ff;
 	  drvcmd[3]=block&0x000000ff;
+	  drvcmd[4]=0;
+	  drvcmd[5]=DS[d].sbp_read_frames;
+	  drvcmd[6]=0;
 	}
-      drvcmd[4]=0;
-      drvcmd[5]=DS[d].sbp_read_frames;
-      drvcmd[6]=(DS[d].drv_type<drv_201)?0:2; /* flag "lba or msf-bcd format" */
-      drvcmd[0]=0x02;              /* "read frames" command for old drives */
-      flags_cmd_out |= f_lopsta|f_getsta|f_bit1;
+      else
+	{
+	  drvcmd[0]=0x02;        /* "read frames" command for old drives */
+	  
+	  if (DS[d].drv_type>=drv_201)
+	    {
+	      lba2msf(block,&drvcmd[1]); /* msf-bcd format required */
+	      bin2bcdx(&drvcmd[1]);
+	      bin2bcdx(&drvcmd[2]);
+	      bin2bcdx(&drvcmd[3]);
+	    }
+	  else
+	    {
+	      drvcmd[1]=(block>>16)&0x000000ff;
+	      drvcmd[2]=(block>>8)&0x000000ff;
+	      drvcmd[3]=block&0x000000ff;
+	    }
+	  drvcmd[4]=0;
+	  drvcmd[5]=DS[d].sbp_read_frames;
+	  drvcmd[6]=(DS[d].drv_type<drv_201)?0:2; /* flag "lba or msf-bcd format" */
+	}
     }
   else /* if new_drive */
     {
+      drvcmd[0]=0x10;              /* "read frames" command for new drives */
       lba2msf(block,&drvcmd[1]); /* msf-bin format required */
       drvcmd[4]=0;
       drvcmd[5]=0;
       drvcmd[6]=DS[d].sbp_read_frames;
-      drvcmd[0]=0x10;              /* "read frames" command for new drives */
     }
 #if SBPCD_DIS_IRQ
   cli();
@@ -2524,7 +2643,11 @@ static int sbp_data(void)
       cli();
 #endif SBPCD_DIS_IRQ
       try=maxtim_data;
+#if LONG_TIMING
+      for (timeout=jiffies+900; ; )
+#else
       for (timeout=jiffies+100; ; )
+#endif
 	{
 	  for ( ; try!=0;try--)
 	    {
@@ -2564,7 +2687,9 @@ static int sbp_data(void)
       p = DS[d].sbp_buf + frame *  CD_FRAMESIZE;
 
       if (sbpro_type) OUT(CDo_sel_d_i,0x01);
+      if (cmd_type==READ_M2) READ_DATA(CDi_data, scratch_buf, CD_XA_HEAD);
       READ_DATA(CDi_data, p, CD_FRAMESIZE);
+      if (cmd_type==READ_M2) READ_DATA(CDi_data, scratch_buf, CD_XA_TAIL);
       if (sbpro_type) OUT(CDo_sel_d_i,0x00);
       DS[d].sbp_current++;
 
@@ -2681,10 +2806,11 @@ int sbpcd_open(struct inode *ip, struct file *fp)
     }
 
 /*
- * we could try to keep an "open" counter here and lock the door if 0->1.
- * not done yet.
+ * try to keep an "open" counter here and lock the door if 0->1.
  */
-
+  DPRINTF((DBG_LCK,"SBPCD: open_count: %d -> %d\n",
+	   DS[d].open_count,DS[d].open_count+1));
+  if (++DS[d].open_count==1) yy_LockDoor(1);
   
   if (!st_spinning) xx_SpinUp();
 
@@ -2700,11 +2826,6 @@ int sbpcd_open(struct inode *ip, struct file *fp)
 static void sbpcd_release(struct inode * ip, struct file * file)
 {
   int i;
-/*
- * we could try to count down an "open" counter here
- * and unlock the door if zero.
- * not done yet.
- */
 
   i = MINOR(ip->i_rdev);
   if ( (i<0) || (i>=NR_SBPCD) ) 
@@ -2718,6 +2839,13 @@ static void sbpcd_release(struct inode * ip, struct file * file)
   sync_dev(ip->i_rdev);                    /* nonsense if read only device? */
   invalidate_buffers(ip->i_rdev);
   DS[d].diskstate_flags &= ~cd_size_bit;
+
+/*
+ * try to keep an "open" counter here and unlock the door if 1->0.
+ */
+  DPRINTF((DBG_LCK,"SBPCD: open_count: %d -> %d\n",
+	   DS[d].open_count,DS[d].open_count-1));
+  if (--DS[d].open_count==0) yy_LockDoor(0);
 }
 /*==========================================================================*/
 /*

@@ -1,4 +1,4 @@
-This is release 1.3 of the SoundBlaster Pro (Matsushita, Kotobuki,
+This is release 1.4 of the SoundBlaster Pro (Matsushita, Kotobuki,
 Panasonic, CreativeLabs, Aztech) CD-ROM driver for Linux.
 
 The driver is able to drive the whole family of IDE-style
@@ -14,11 +14,11 @@ is a 2.11, but it should work with "old" drives <2.01 ... >3.00
 and with "new" drives (which count the releases around 0.75 or
 1.00).
 
-Up to 4 drives are supported. CR-52x and CR-56x drives can be mixed,
-but the CR-521 ones are hard-wired to drive ID 0. The drives have
-to use different drive IDs, but the same controller (it will be a
-little bit harder to support up to four interface cards - but I plan
-to do it the day somebody wishes to connect a fifth drive).
+Up to 4 drives are supported. CR-52x ("old") and CR-56x ("new") drives
+can be mixed, but the CR-521 ones are hard-wired to drive ID 0. 
+The drives have to use different drive IDs, but the same controller 
+(it will be a little bit harder to support up to four interface cards - 
+but I plan to do it the day somebody wishes to connect a fifth drive).
 Each drive has to get a unique minor number (0...3), corresponding
 to it's drive ID. The drive IDs may be selected freely from 0 to 3 -
 they must not be in consecutive order.
@@ -28,12 +28,14 @@ audio tracks. The audio part should run with WorkMan, xcdplayer,
 with the "non-X11" products CDplayer and WorkBone - tell me if
 it is not compatible with other software.
 
-MultiSession is supported, "ManySession" (see below) alternatively.
+MultiSession is supported (but "old" drives lack this capability),
+"ManySession" (see below) alternatively.
 Photo CDs work, too. At ftp.gwdg.de:/pub/linux/hpcdtoppm/ is a package 
 to convert photo CD image files.
 
-The transfer rate will reach 150 kB/sec with standard drives and
-the full 300 kB/sec with double-speed drives.
+The transfer rate will reach 150 kB/sec with "old" drives and
+the full 300 kB/sec with double-speed drives. XA (PhotoCD) disks
+with "old" drives are as slow as 50 kB/sec.
 
 This release is part of the standard kernel and consists of
 - this README file
@@ -188,6 +190,13 @@ Known problems:
 Currently, the detection of disk change or removal does not
 work as good as it should.
 
+The "door (un)lock" commands get done at every "(u)mount" (only the
+"new" drives support it), but after an unlock, locking again does not
+work.
+
+All attempts to read the UPC/EAN code result in a stream of zeroes.
+All my drives are telling there is no UPC/EAN code on disk or there
+is, but it is an all-zero number.
 
 Bug reports, comments, wishes, donations (technical information
 is a donation, too :-) etc. to

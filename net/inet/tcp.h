@@ -24,7 +24,7 @@
 #define MAX_FIN_SIZE	40 + sizeof (struct sk_buff) + MAX_HEADER
 #define MAX_ACK_SIZE	40 + sizeof (struct sk_buff) + MAX_HEADER
 #define MAX_RESET_SIZE	40 + sizeof (struct sk_buff) + MAX_HEADER
-#define MAX_WINDOW	4096
+#define MAX_WINDOW	8192
 #define MIN_WINDOW	2048
 #define MAX_ACK_BACKLOG	2
 #define MIN_WRITE_SPACE	2048

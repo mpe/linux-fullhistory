@@ -1241,6 +1241,9 @@ static struct floppy_struct *find_base(int drive,int code)
 		base = &floppy_types[(code-1)*2];
 		printk("fd%d is %s",drive,base->name);
 		return base;
+	} else if (!code) {
+		printk("fd%d is not installed", drive);
+		return NULL;
 	}
 	printk("fd%d is unknown type %d",drive,code);
 	return NULL;
@@ -1250,7 +1253,7 @@ static void config_types(void)
 {
 	printk("Floppy drive(s): ");
 	base_type[0] = find_base(0,(CMOS_READ(0x10) >> 4) & 15);
-	if (((CMOS_READ(0x14) >> 6) & 1) == 0)
+	if ((CMOS_READ(0x10) & 15) == 0)
 		base_type[1] = NULL;
 	else {
 		printk(", ");

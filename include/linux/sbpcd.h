@@ -71,7 +71,10 @@
 #define DBG_SPI		18	/* SpinUp test */
 #define DBG_IOS		19	/* ioctl trace: "subchannel" */
 #define DBG_IO2		20	/* ioctl trace: general */
-#define DBG_000		21	/* unnecessary information */
+#define DBG_UPC		21	/* show UPC information */
+#define DBG_XA 		22	/* XA mode debugging */
+#define DBG_LCK		23	/* door (un)lock info */
+#define DBG_000		24	/* unnecessary information */
 
 /*==========================================================================*/
 /*==========================================================================*/
@@ -192,9 +195,9 @@
 /*
  * values of cmd_type (0 else):
  */
-#define cmd_type_READ_M1  0x01 /* "data mode 1": 2048 bytes per frame */
-#define cmd_type_READ_M2  0x02 /* "data mode 2": 12+2048+280 bytes per frame */
-#define cmd_type_READ_SC  0x04 /* "subchannel info": 96 bytes per frame */
+#define READ_M1  0x01 /* "data mode 1": 2048 bytes per frame */
+#define READ_M2  0x02 /* "data mode 2": 12+2048+280 bytes per frame */
+#define READ_SC  0x04 /* "subchannel info": 96 bytes per frame */
 
 /*
  * sense byte: used only if new_drive
@@ -210,10 +213,11 @@
 #define CD_SECS                   60  /* seconds per minutes             */
 #define CD_FRAMES                 75  /* frames per second               */
 #define CD_FRAMESIZE            2048  /* bytes per frame, data mode      */
-#define CD_FRAMESIZE_XA	        2340  /* bytes per frame, "xa" mode      */
+#define CD_FRAMESIZE_XA         2340  /* bytes per frame, "xa" mode      */
 #define CD_FRAMESIZE_RAW        2352  /* bytes per frame, "raw" mode     */
 #define CD_BLOCK_OFFSET          150  /* offset of first logical frame   */
-
+#define CD_XA_HEAD                12  /* header size of XA frame         */
+#define CD_XA_TAIL               280  /* tail size of XA frame           */
 
 /* audio status (bin) */
 #define aud_00 0x00 /* Audio status byte not supported or not valid */
@@ -339,9 +343,8 @@ read:    02 xx-xx-xx nn-nn fl. (??)  read nn-nn blocks of 2048 bytes,
                                      fl=0: "lba"-, =2:"msf-bcd"-coded xx-xx-xx
 
 Read XA-Data:
-read:    03 xx-xx-xx nn-nn fl. (??)  read nn-nn blocks of 2340 bytes, 
-                                     starting at block xx-xx-xx  
-                                     fl=0: "lba"-, =2:"msf-bcd"-coded xx-xx-xx
+read:    03 ll-bb-aa nn-nn 00. (??)  read nn-nn blocks of 2340 bytes, 
+                                     starting at block ll-bb-aa
 
 Read SUB_Q:
          89 fl 00 00 00 00 00. (13)  r0: audio status, r4-r7: lba/msf, 
