@@ -605,7 +605,7 @@ asmlinkage void do_ptrace(struct pt_regs *regs)
 		    (current->uid != child->uid) ||
 		    (current->gid != child->egid) ||
 		    (current->gid != child->sgid) ||
-		    (cap_issubset(child->cap_permitted, current->cap_permitted)) ||
+		    (!cap_issubset(child->cap_permitted, current->cap_permitted)) ||
 		    (current->gid != child->gid)) && !capable(CAP_SYS_PTRACE)) {
 			pt_error_return(regs, EPERM);
 			goto out;

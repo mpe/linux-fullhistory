@@ -853,6 +853,7 @@ void __bforget(struct buffer_head * buf)
 		__brelse(buf);
 		return;
 	}
+	buf->b_count = 0;
 	remove_from_queues(buf);
 	put_last_free(buf);
 }

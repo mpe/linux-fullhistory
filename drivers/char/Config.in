@@ -42,6 +42,8 @@ if [ "$CONFIG_SERIAL_NONSTANDARD" = "y" ]; then
    if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
 	dep_tristate 'Multi-Tech multiport card support' CONFIG_ISI m
    fi
+   dep_tristate 'Microgate SyncLink card support' CONFIG_SYNCLINK m
+   dep_tristate 'HDLC line discipline support' CONFIG_N_HDLC m
 fi
 bool 'Unix98 PTY support' CONFIG_UNIX98_PTYS
 if [ "$CONFIG_UNIX98_PTYS" = "y" ]; then

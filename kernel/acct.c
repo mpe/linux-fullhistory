@@ -194,13 +194,13 @@ asmlinkage int sys_acct(const char *name)
 	}
 	if (old_acct) {
 		do_acct_process(0,old_acct);
-		filp_close(old_acct);
+		filp_close(old_acct, NULL);
 	}
 out:
 	unlock_kernel();
 	return error;
 out_err:
-	filp_close(file);
+	filp_close(file, NULL);
 	goto out;
 }
 

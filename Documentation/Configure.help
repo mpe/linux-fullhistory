@@ -7957,6 +7957,19 @@ CONFIG_ISTALLION
   read Documentation/modules.txt. The module will be called
   istallion.o.
 
+Microgate SyncLink adapter support
+CONFIG_SYNCLINK
+  Provides support for the SyncLink ISA and PCI
+  multiprotocol serial adapters. These adapters
+  support asynchronous and HDLC bit synchronous
+  communication up to 10Mbps (PCI adapter)
+
+Synchronous HDLC line discipline support
+CONFIG_N_HDLC
+  Allows synchronous HDLC communications with
+  tty device drivers that support synchronous
+  HDLC such as the Microgate SyncLink adapter.
+  
 Hayes ESP serial port support
 CONFIG_ESPSERIAL
   This is a driver which supports Hayes ESP serial ports. Both single

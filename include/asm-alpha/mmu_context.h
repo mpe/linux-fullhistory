@@ -14,11 +14,11 @@
 /*
  * The maximum ASN's the processor supports.  On the EV4 this is 63
  * but the PAL-code doesn't actually use this information.  On the
- * EV5 this is 127.
+ * EV5 this is 127, and EV6 has 255.
  *
  * On the EV4, the ASNs are more-or-less useless anyway, as they are
- * only used as an icache tag, not for TB entries.  On the EV5 ASN's
- * also validate the TB entries, and thus make a lot more sense.
+ * only used as an icache tag, not for TB entries.  On the EV5 and EV6,
+ * ASN's also validate the TB entries, and thus make a lot more sense.
  *
  * The EV4 ASN's don't even match the architecture manual, ugh.  And
  * I quote: "If a processor implements address space numbers (ASNs),
@@ -73,7 +73,7 @@ extern unsigned long last_asn[];
 extern unsigned long asn_cache;
 #endif /* __SMP__ */
 
-#define WIDTH_HARDWARE_ASN	7
+#define WIDTH_HARDWARE_ASN	8
 #define ASN_FIRST_VERSION (1UL << (WIDTH_THIS_PROCESSOR + WIDTH_HARDWARE_ASN))
 #define HARDWARE_ASN_MASK ((1UL << WIDTH_HARDWARE_ASN) - 1)
 

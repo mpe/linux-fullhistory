@@ -288,9 +288,11 @@ static void Oops_decode_one(SYMBOL_SET *ss, const char *line, elf_addr_t eip,
 		errno = 0;
 		eip_relative = strtoul(string[5], NULL, 16);
 		if (errno) {
+#if 0
 			/* Try strtoull also, e.g. sparc binutils print <_PC+0xfffffffffffffd58> */
 			errno = 0;
 			eip_relative = strtoull(string[5], NULL, 16);
+#endif
 			if (errno) {
 				fprintf(stderr,
 					"%s Invalid hex value in objdump line, "

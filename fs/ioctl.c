@@ -74,14 +74,20 @@ asmlinkage int sys_ioctl(unsigned int fd, unsigned int cmd, unsigned long arg)
 				filp->f_flags &= ~flag;
 			break;
 
-		case FIOASYNC: /* O_SYNC is not yet implemented,
-				  but it's here for completeness. */
+		case FIOASYNC:
 			if ((error = get_user(on, (int *)arg)) != 0)
 				break;
+			flag = on ? FASYNC : 0;
+
+			/* Did FASYNC state change ? */
+			if ((flag ^ filp->f_flags) & FASYNC) {
+				if (filp->f_op && filp->f_op->fasync)
+					filp->f_op->fasync(fd, filp, on); 
+			}
 			if (on)
-				filp->f_flags |= O_SYNC;
+				filp->f_flags |= FASYNC;
 			else
-				filp->f_flags &= ~O_SYNC;
+				filp->f_flags &= ~FASYNC;
 			break;
 
 		default:

@@ -139,6 +139,14 @@ else
   endif
 endif
 
+ifeq ($(CONFIG_SYNCLINK),m)
+  M_OBJS += synclink.o
+endif
+
+ifeq ($(CONFIG_N_HDLC),m)
+  M_OBJS += n_hdlc.o
+endif
+
 ifeq ($(CONFIG_SPECIALIX),y)
 L_OBJS += specialix.o
 else
