@@ -416,7 +416,7 @@ void scsi_mem_init(unsigned long memory_end)
 		     Low24 += PAGE_SIZE) {
 		    unsigned long ForbiddenAddress = High8 + Low24;
 		    if (ForbiddenAddress >= memory_end) goto next_host;
-		    mem_map[MAP_NR(ForbiddenAddress)] = MAP_PAGE_RESERVED;
+		    mem_map[MAP_NR(ForbiddenAddress)].reserved = 1;
 		}
 	    }
 	}

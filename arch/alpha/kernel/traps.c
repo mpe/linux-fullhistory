@@ -42,9 +42,7 @@ void die_if_kernel(char * str, struct pt_regs * regs, long err)
 	for (i = -3; i < 6; i++)
 		printk("%c%08x%c",i?' ':'<',pc[i],i?' ':'>');
 	printk("\n");
-	for (i = 0 ; i < 5000000000 ; i++)
-		/* pause */;
-	halt();
+	do_exit(SIGSEGV);
 }
 
 asmlinkage void do_entArith(unsigned long summary, unsigned long write_mask,

@@ -42,7 +42,7 @@ foo \kill}%
 %
 \title{{\bf Linux Allocated Devices}}
 \author{Maintained by H. Peter Anvin $<$Peter.Anvin@linux.org$>$}
-\date{Last revised: September 6, 1995}
+\date{Last revised: September 20, 1995}
 \maketitle
 %
 \noindent
@@ -138,8 +138,10 @@ an unreasonable effort.
 \major{  }{}{block}{Third IDE hard disk/CD-ROM interface}
 \major{34}{}{char }{Z8530 HDLC driver}
 \major{  }{}{block}{Fourth IDE hard disk/CD-ROM interface}
-\major{35}{}{block}{Modular RAM disk}
-\major{36--223}{}{}{Unallocated}
+\major{35}{}{char }{tclmidi MIDI driver}
+\major{  }{}{block}{Modular RAM disk}
+\major{36}{}{block}{MCA ESDI hard disk}
+\major{37--223}{}{}{Unallocated}
 \major{224--254}{}{}{Local use}
 \major{255}{}{}{Reserved}
 \end{devicelist}
@@ -318,9 +320,9 @@ NOTE: These devices permit both read and write access.
 \end{devicelist}
 
 \noindent
-Partitions are handled in the same way as for IDE
-disks (see major number 3) except that the limit on
-logical partitions is 11 rather than 59 per disk.
+Partitions are handled in the same way as for IDE disks (see major
+number 3) except that the limit on logical partitions is 11 rather
+than 59 per disk.
 
 \begin{devicelist}
 \major{ 9}{}{char }{SCSI tape devices}
@@ -401,8 +403,8 @@ names for these devices, please let me know.
 \end{devicelist}
 
 \noindent
-Partitions are handled in the same way as IDE disks
-(see major number 3).
+Partitions are handled in the same way as for IDE disks (see major
+number 3).
 
 \begin{devicelist}
 \major{14}{}{char }{Sound card}
@@ -430,8 +432,8 @@ Partitions are handled in the same way as IDE disks
 \end{devicelist}
 
 \noindent
-Partitions are handled in the same way as IDE disks
-(see major number 3).
+Partitions are handled in the same way as for IDE disks (see major
+number 3).
 
 \begin{devicelist}
 \major{15}{}{char }{Joystick}
@@ -517,8 +519,8 @@ See the Double documentation for an explanation of the ``mirror'' devices.
 \end{devicelist}
 
 \noindent
-Partitions are handled the same way as for the first
-interface (see major number 3).
+Partitions are handled the same way as for the first interface (see
+major number 3).
 
 \begin{devicelist}
 \major{23}{}{char }{Digiboard serial card -- alternate devices}
@@ -621,9 +623,9 @@ interface (see major number 3).
 \end{devicelist}
 
 \noindent
-Partitions are handled in the same way as for IDE
-disks (see major number 3) except that the limit on
-logical partitions is 11 rather than 59 per disk.
+Partitions are handled in the same way as for IDE disks (see major
+number 3) except that the limit on logical partitions is 11 rather
+than 59 per disk.
 
 \begin{devicelist}
 \major{29}{}{char }{Universal frame buffer}
@@ -702,6 +704,7 @@ support reading only.
 	\minor{0}{/dev/ttyX0}{First Specialix port}
 	\minor{1}{/dev/ttyX1}{Second Specialix port}
 	\minordots
+\\
 \major{  }{}{block}{Philips LMS CM-206 CD-ROM}
 	\minor{0}{/dev/cm206cd}{Philips LMS CM-206 CD-ROM}
 \end{devicelist}
@@ -711,6 +714,7 @@ support reading only.
 	\minor{0}{/dev/cux0}{Callout device corresponding to {\file ttyX0}}
 	\minor{1}{/dev/cux1}{Callout device corresponding to {\file ttyX1}}
 	\minordots
+\\
 \major{  }{}{block}{Third IDE hard disk/CD-ROM interface}
 	\minor{0}{/dev/hde}{Master: whole disk (or CD-ROM)}
 	\minor{64}{/dev/hdf}{Slave: whole disk (or CD-ROM)}
@@ -727,6 +731,13 @@ major number 3).
 	\minor{2}{/dev/sc3}{Second Z8530, first port}
 	\minor{3}{/dev/sc4}{Second Z8530, second port}
 	\minordots
+\end{devicelist}
+
+\noindent
+The author has indicated that the device names will change in a
+subsequent version; {\file /dev/sc1} will become {\file /dev/scc0} etc.
+
+\begin{devicelist}
 \major{  }{}{block}{Fourth IDE hard disk/CD-ROM interface}
 	\minor{0}{/dev/hdg}{Master: whole disk (or CD-ROM)}
 	\minor{64}{/dev/hdh}{Slave: whole disk (or CD-ROM)}
@@ -737,7 +748,21 @@ Partitions are handled the same way as for the first interface (see
 major number 3).
 
 \begin{devicelist}
-\major{35}{}{block}{Modular RAM disk}
+\major{35}{}{char }{tclmidi MIDI driver}
+	\minor{0}{/dev/midi0}{First MIDI port, kernel timed}
+	\minor{1}{/dev/midi1}{Second MIDI port, kernel timed}
+	\minor{2}{/dev/midi2}{Third MIDI port, kernel timed}
+	\minor{3}{/dev/midi3}{Fourth MIDI port, kernel timed}
+	\minor{64}{/dev/rmidi0}{First MIDI port, untimed}
+	\minor{65}{/dev/rmidi1}{Second MIDI port, untimed}
+	\minor{66}{/dev/rmidi2}{Third MIDI port, untimed}
+	\minor{67}{/dev/rmidi3}{Fourth MIDI port, untimed}
+	\minor{128}{/dev/smpte0}{First MIDI port, SMPTE timed}
+	\minor{129}{/dev/smpte1}{Second MIDI port, SMPTE timed}
+	\minor{130}{/dev/smpte2}{Third MIDI port, SMPTE timed}
+	\minor{131}{/dev/smpte3}{Fourth MIDI port, SMPTE timed}
+\\
+\major{  }{}{block}{Modular RAM disk}
 	\minor{0}{/dev/ram0}{First modular RAM disk}
 	\minor{1}{/dev/ram1}{Second modular RAM disk}
 	\minordots
@@ -745,7 +770,18 @@ major number 3).
 \end{devicelist}
 
 \begin{devicelist}
-\major{36}{--223}{}{Unallocated}
+\major{36}{}{block}{MCA ESDI hard disk}
+	\minor{0}{/dev/eda}{First ESDI disk whole disk}
+	\minor{64}{/dev/edb}{Second ESDI disk whole disk}
+	\minordots
+\end{devicelist}
+
+\noindent
+Partitions are handled the same way as for IDE disks (see major number
+3).
+
+\begin{devicelist}
+\major{37}{--223}{}{Unallocated}
 \end{devicelist}
 
 \begin{devicelist}

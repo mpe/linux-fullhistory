@@ -153,7 +153,7 @@ static pte_t filemap_swapin(struct vm_area_struct * vma,
 {
 	unsigned long page = SWP_OFFSET(entry);
 
-	mem_map[page]++;
+	mem_map[page].count++;
 	page = (page << PAGE_SHIFT) + PAGE_OFFSET;
 	return mk_pte(page,vma->vm_page_prot);
 }
@@ -173,7 +173,7 @@ static inline int filemap_sync_pte(pte_t * ptep, struct vm_area_struct *vma,
 			return 0;
 		set_pte(ptep, pte_mkclean(pte));
 		page = pte_page(pte);
-		mem_map[MAP_NR(page)]++;
+		mem_map[MAP_NR(page)].count++;
 	} else {
 		if (pte_none(pte))
 			return 0;

@@ -9,9 +9,9 @@
 #
 
 # enable this for linking under OSF/1:
-LINKFLAGS = -non_shared -T 0x20000000 -N
+#LINKFLAGS = -non_shared -T 0x20000000 -N
 # enable this for linking under Linux:
-#LINKFLAGS = -static -T bootloader.lds -N 
+LINKFLAGS = -static -T bootloader.lds -N 
 
 .S.s:
 	$(CC) -D__ASSEMBLY__ -traditional -E -o $*.o $<
@@ -32,9 +32,9 @@ vmlinux.gz: vmlinux
 	gzip -fv vmlinux
 
 vmlinux: tools/build $(TOPDIR)/vmlinux
-	tools/build -v $(TOPDIR)/vmlinux > vmlinux
-#	cp $(TOPDIR)/vmlinux vmlinux
-#	quickstrip vmlinux
+#	tools/build -v $(TOPDIR)/vmlinux > vmlinux
+	cp $(TOPDIR)/vmlinux vmlinux
+	quickstrip vmlinux
 
 tools/lxboot: tools/build
 	tools/build > tools/lxboot

@@ -18,7 +18,7 @@ typedef struct {
   int writing;
   int last_result;
   int last_result_fatal;
-  unsigned char b_data[1];
+  unsigned char *b_data;
 } ST_buffer;
 
 typedef struct {

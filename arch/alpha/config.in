@@ -6,7 +6,7 @@
 comment 'General setup'
 
 tristate 'Normal floppy disk support' CONFIG_BLK_DEV_FD y
-bool 'Normal (MFM/RLL) disk and IDE disk/cdrom support' CONFIG_ST506 n
+bool 'Normal (MFM/RLL) disk and IDE disk/cdrom support' CONFIG_ST506 y
 if [ "$CONFIG_ST506" = "y" ]; then
   comment 'Please see drivers/block/README.ide for help/info on IDE drives'
   bool '   Use old disk-only driver for primary i/f' CONFIG_BLK_DEV_HD n
@@ -29,7 +29,7 @@ choice 'Alpha system type' \
 	 EB66		CONFIG_ALPHA_EB66		\
 	 EB66+		CONFIG_ALPHA_EB66P		\
 	 EB64		CONFIG_ALPHA_EB64		\
-	 EB64+		CONFIG_ALPHA_EB64P" Jensen
+	 EB64+		CONFIG_ALPHA_EB64P" Cabriolet
 if [ "$CONFIG_ALPHA_NONAME" = "y" ]; then
 	define_bool CONFIG_PCI y
 	define_bool CONFIG_ALPHA_LCA y
@@ -110,7 +110,7 @@ comment 'SCSI low-level drivers'
 
 dep_tristate 'Adaptec AHA152X support' CONFIG_SCSI_AHA152X n $CONFIG_SCSI
 dep_tristate 'Adaptec AHA1542 support' CONFIG_SCSI_AHA1542 n $CONFIG_SCSI
-dep_tristate 'Adaptec AHA1740 support' CONFIG_SCSI_AHA1740 y $CONFIG_SCSI
+dep_tristate 'Adaptec AHA1740 support' CONFIG_SCSI_AHA1740 n $CONFIG_SCSI
 dep_tristate 'Adaptec AHA274X/284X/294X support' CONFIG_SCSI_AIC7XXX n $CONFIG_SCSI
 dep_tristate 'BusLogic SCSI support' CONFIG_SCSI_BUSLOGIC n $CONFIG_SCSI
 dep_tristate 'EATA-DMA (DPT, NEC, ATT, Olivetti) support' CONFIG_SCSI_EATA_DMA n $CONFIG_SCSI
@@ -119,7 +119,7 @@ dep_tristate 'UltraStor 14F/34F support' CONFIG_SCSI_U14_34F n $CONFIG_SCSI
 dep_tristate 'Future Domain 16xx SCSI support' CONFIG_SCSI_FUTURE_DOMAIN n $CONFIG_SCSI
 bool 'Generic NCR5380 SCSI support' CONFIG_SCSI_GENERIC_NCR5380 n
 if [ "$CONFIG_PCI" = "y" ]; then
-  dep_tristate 'NCR53c7,8xx SCSI support'  CONFIG_SCSI_NCR53C7xx n $CONFIG_SCSI
+  dep_tristate 'NCR53c7,8xx SCSI support'  CONFIG_SCSI_NCR53C7xx y $CONFIG_SCSI
 fi
 dep_tristate 'Always IN2000 SCSI support (test release)' CONFIG_SCSI_IN2000 n $CONFIG_SCSI
 bool 'PAS16 SCSI support' CONFIG_SCSI_PAS16 n
@@ -176,7 +176,7 @@ if [ "$CONFIG_NET_VENDOR_3COM" = "y" ]; then
 	fi
 	tristate '3c509/3c579 support' CONFIG_EL3 y
 fi
-bool 'Other ISA cards' CONFIG_NET_ISA y
+bool 'Other ISA cards' CONFIG_NET_ISA n
 if [ "$CONFIG_NET_ISA" = "y" ]; then
 	tristate 'Cabletron E21xx support' CONFIG_E2100 n
 	tristate 'DEPCA support' CONFIG_DEPCA y
@@ -199,17 +199,17 @@ if [ "$CONFIG_NET_ISA" = "y" ]; then
 	tristate 'NE2000/NE1000 support' CONFIG_NE2000 n
 	bool 'SK_G16 support' CONFIG_SK_G16 n
 fi
-bool 'EISA, VLB, PCI and on board controllers' CONFIG_NET_EISA n
+bool 'EISA, VLB, PCI and on board controllers' CONFIG_NET_EISA y
 if [ "$CONFIG_NET_EISA" = "y" ]; then
 	if [ "$CONFIG_NET_ALPHA" = "y" ]; then
 		tristate 'Ansel Communications EISA 3200 support' CONFIG_AC3200 n
 	fi
 	tristate 'Apricot Xen-II on board ethernet' CONFIG_APRICOT n
-	tristate 'DE425, DE434, DE435, DE500 support' CONFIG_DE4X5 n
+	tristate 'DE425, DE434, DE435, DE500 support' CONFIG_DE4X5 y
 #	tristate 'DEC 21040 PCI support' CONFIG_DEC_ELCP n
 #	bool 'LPL T100V 100Mbs support' CONFIG_LPL_T100 n
 #	bool 'PCnet32 (32 bit VLB and PCI LANCE) support' CONFIG_PCNET32 n
-	bool 'Zenith Z-Note support' CONFIG_ZNET y
+	bool 'Zenith Z-Note support' CONFIG_ZNET n
 fi
 bool 'Pocket and portable adaptors' CONFIG_NET_POCKET n
 if [ "$CONFIG_NET_POCKET" = "y" ]; then

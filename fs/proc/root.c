@@ -328,8 +328,10 @@ int proc_lookup(struct inode * dir,const char * name, int len,
 	}
 
 	de = (struct proc_dir_entry *) dir->u.generic_ip;
-	if (!de)
+	if (!de) {
+		iput(dir);
 		return -EINVAL;
+	}
 
 	/* Special case "." and "..": they aren't on the directory list */
 	*result = dir;
@@ -354,8 +356,10 @@ int proc_lookup(struct inode * dir,const char * name, int len,
 		if (proc_match(len, name, de))
 			break;
 	}
-	if (!de)
+	if (!de) {
+		iput(dir);
 		return -ENOENT;
+	}
 
 	ino = de->low_ino | (dir->i_ino & ~(0xffff));
 
@@ -371,11 +375,14 @@ static int proc_root_lookup(struct inode * dir,const char * name, int len,
 	struct inode ** result)
 {
 	unsigned int pid, c;
-	int i, ino;
+	int i, ino, retval;
 
-	int retval = proc_lookup(dir, name, len, result);
-	if (retval != -ENOENT)
+	dir->i_count++;
+	retval = proc_lookup(dir, name, len, result);
+	if (retval != -ENOENT) {
+		iput(dir);
 		return retval;
+	}
 	
 	pid = 0;
 	while (len-- > 0) {

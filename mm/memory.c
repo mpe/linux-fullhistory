@@ -207,7 +207,7 @@ static inline void copy_one_pte(pte_t * old_pte, pte_t * new_pte)
 		set_pte(new_pte, pte);
 		return;
 	}
-	if (pte_page(pte) > high_memory || (mem_map[MAP_NR(pte_page(pte))] & MAP_PAGE_RESERVED)) {
+	if (pte_page(pte) > high_memory || mem_map[MAP_NR(pte_page(pte))].reserved) {
 		set_pte(new_pte, pte);
 		return;
 	}
@@ -217,7 +217,7 @@ static inline void copy_one_pte(pte_t * old_pte, pte_t * new_pte)
 		pte = pte_mkdirty(pte);
 	set_pte(new_pte, pte_mkold(pte));
 	set_pte(old_pte, pte);
-	mem_map[MAP_NR(pte_page(pte))]++;
+	mem_map[MAP_NR(pte_page(pte))].count++;
 }
 
 static inline int copy_pte_range(pmd_t *dst_pmd, pmd_t *src_pmd, unsigned long address, unsigned long size)
@@ -315,7 +315,7 @@ static inline void forget_pte(pte_t page)
 		return;
 	if (pte_present(page)) {
 		free_page(pte_page(page));
-		if (mem_map[MAP_NR(pte_page(page))] & MAP_PAGE_RESERVED)
+		if (mem_map[MAP_NR(pte_page(page))].reserved)
 			return;
 		if (current->mm->rss <= 0)
 			return;
@@ -479,7 +479,7 @@ static inline void remap_pte_range(pte_t * pte, unsigned long address, unsigned 
 	do {
 		pte_t oldpage = *pte;
 		pte_clear(pte);
-		if (offset >= high_memory || (mem_map[MAP_NR(offset)] & MAP_PAGE_RESERVED))
+		if (offset >= high_memory || mem_map[MAP_NR(offset)].reserved)
 			set_pte(pte, mk_pte(offset, prot));
 		forget_pte(oldpage);
 		address += PAGE_SIZE;
@@ -558,7 +558,7 @@ unsigned long put_dirty_page(struct task_struct * tsk, unsigned long page, unsig
 
 	if (page >= high_memory)
 		printk("put_dirty_page: trying to put page %08lx at %08lx\n",page,address);
-	if (mem_map[MAP_NR(page)] != 1)
+	if (mem_map[MAP_NR(page)].count != 1)
 		printk("mem_map disagrees with %08lx at %08lx\n",page,address);
 	pgd = pgd_offset(tsk->mm,address);
 	pmd = pmd_alloc(pgd, address);
@@ -632,9 +632,9 @@ void do_wp_page(struct task_struct * tsk, struct vm_area_struct * vma,
 	/*
 	 * Do we need to copy?
 	 */
-	if (mem_map[MAP_NR(old_page)] != 1) {
+	if (mem_map[MAP_NR(old_page)].count != 1) {
 		if (new_page) {
-			if (mem_map[MAP_NR(old_page)] & MAP_PAGE_RESERVED)
+			if (mem_map[MAP_NR(old_page)].reserved)
 				++vma->vm_mm->rss;
 			copy_page(old_page,new_page);
 			set_pte(page_table, pte_mkwrite(pte_mkdirty(mk_pte(new_page, vma->vm_page_prot))));
@@ -812,7 +812,7 @@ static int try_to_share(unsigned long to_address, struct vm_area_struct * to_are
 /* is the page reasonable at all? */
 	if (pte_page(from) >= high_memory)
 		return 0;
-	if (mem_map[MAP_NR(pte_page(from))] & MAP_PAGE_RESERVED)
+	if (mem_map[MAP_NR(pte_page(from))].reserved)
 		return 0;
 /* is the destination ok? */
 	to_dir = pgd_offset(to_area->vm_mm,to_address);
@@ -862,7 +862,7 @@ static int try_to_share(unsigned long to_address, struct vm_area_struct * to_are
 		set_pte(from_table, pte_mkdirty(from));
 		delete_from_swap_cache(pte_page(from));
 	}
-	mem_map[MAP_NR(pte_page(from))]++;
+	mem_map[MAP_NR(pte_page(from))].count++;
 	set_pte(to_table, mk_pte(pte_page(from), to_area->vm_page_prot));
 /* Check if we need to do anything at all to the 'from' field */
 	if (!pte_write(from))
@@ -966,7 +966,7 @@ static inline void do_swap_page(struct task_struct * tsk,
 		free_page(pte_page(page));
 		return;
 	}
-	if (mem_map[MAP_NR(pte_page(page))] > 1 && !(vma->vm_flags & VM_SHARED))
+	if (mem_map[MAP_NR(pte_page(page))].count > 1 && !(vma->vm_flags & VM_SHARED))
 		page = pte_wrprotect(page);
 	++vma->vm_mm->rss;
 	++tsk->maj_flt;
@@ -1041,7 +1041,7 @@ void do_no_page(struct task_struct * tsk, struct vm_area_struct * vma,
 	entry = mk_pte(page, vma->vm_page_prot);
 	if (write_access) {
 		entry = pte_mkwrite(pte_mkdirty(entry));
-	} else if (mem_map[MAP_NR(page)] > 1 && !(vma->vm_flags & VM_SHARED))
+	} else if (mem_map[MAP_NR(page)].count > 1 && !(vma->vm_flags & VM_SHARED))
 		entry = pte_wrprotect(entry);
 	put_page(page_table, entry);
 }

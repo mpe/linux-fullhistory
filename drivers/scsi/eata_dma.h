@@ -16,7 +16,7 @@
 
 #define VER_MAJOR 2
 #define VER_MINOR 5
-#define VER_SUB   "7b"
+#define VER_SUB   "8"
 
 
 /************************************************************************
@@ -72,6 +72,8 @@ int eata_release(struct Scsi_Host *);
 #else
 #define eata_release NULL  
 #endif
+
+#include <linux/scsicam.h>
 
 #define EATA_DMA {                   \
         NULL, NULL,                  \

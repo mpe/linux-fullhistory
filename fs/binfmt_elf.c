@@ -590,7 +590,7 @@ load_elf_binary(struct linux_binprm * bprm, struct pt_regs * regs)
 					elf_ppnt->p_offset & 0xfffff000);
 			
 #ifdef LOW_ELF_STACK
-			if(elf_ppnt->p_vaddr & 0xfffff000 < elf_stack) 
+			if((elf_ppnt->p_vaddr & 0xfffff000) < elf_stack) 
 				elf_stack = elf_ppnt->p_vaddr & 0xfffff000;
 #endif
 			

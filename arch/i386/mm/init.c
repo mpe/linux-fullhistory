@@ -73,12 +73,12 @@ void show_mem(void)
 	i = high_memory >> PAGE_SHIFT;
 	while (i-- > 0) {
 		total++;
-		if (mem_map[i] & MAP_PAGE_RESERVED)
+		if (mem_map[i].reserved)
 			reserved++;
-		else if (!mem_map[i])
+		else if (!mem_map[i].count)
 			free++;
 		else
-			shared += mem_map[i]-1;
+			shared += mem_map[i].count-1;
 	}
 	printk("%d pages of RAM\n",total);
 	printk("%d free pages\n",free);
@@ -192,12 +192,12 @@ void mem_init(unsigned long start_mem, unsigned long end_mem)
 	 * controller as well..
 	 */
 	while (start_low_mem < 0x9f000) {
-		mem_map[MAP_NR(start_low_mem)] = 0;
+		mem_map[MAP_NR(start_low_mem)].reserved = 0;
 		start_low_mem += PAGE_SIZE;
 	}
 
 	while (start_mem < high_memory) {
-		mem_map[MAP_NR(start_mem)] = 0;
+		mem_map[MAP_NR(start_mem)].reserved = 0;
 		start_mem += PAGE_SIZE;
 	}
 #ifdef CONFIG_SCSI
@@ -207,7 +207,7 @@ void mem_init(unsigned long start_mem, unsigned long end_mem)
 	sound_mem_init();
 #endif
 	for (tmp = 0 ; tmp < high_memory ; tmp += PAGE_SIZE) {
-		if (mem_map[MAP_NR(tmp)]) {
+		if (mem_map[MAP_NR(tmp)].reserved) {
 			if (tmp >= 0xA0000 && tmp < 0x100000)
 				reservedpages++;
 			else if (tmp < (unsigned long) &_etext)
@@ -216,7 +216,7 @@ void mem_init(unsigned long start_mem, unsigned long end_mem)
 				datapages++;
 			continue;
 		}
-		mem_map[MAP_NR(tmp)] = 1;
+		mem_map[MAP_NR(tmp)].count = 1;
 		free_page(tmp);
 	}
 	tmp = nr_free_pages << PAGE_SHIFT;
@@ -249,12 +249,12 @@ void si_meminfo(struct sysinfo *val)
 	val->freeram = nr_free_pages << PAGE_SHIFT;
 	val->bufferram = buffermem;
 	while (i-- > 0)  {
-		if (mem_map[i] & MAP_PAGE_RESERVED)
+		if (mem_map[i].reserved)
 			continue;
 		val->totalram++;
-		if (!mem_map[i])
+		if (!mem_map[i].count)
 			continue;
-		val->sharedram += mem_map[i]-1;
+		val->sharedram += mem_map[i].count-1;
 	}
 	val->totalram <<= PAGE_SHIFT;
 	val->sharedram <<= PAGE_SHIFT;

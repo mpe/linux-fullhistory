@@ -664,7 +664,7 @@ static pte_t shm_swap_in(struct vm_area_struct * shmd, unsigned long offset, uns
 
 done:	/* pte_val(pte) == shp->shm_pages[idx] */
 	current->min_flt++;
-	mem_map[MAP_NR(pte_page(pte))]++;
+	mem_map[MAP_NR(pte_page(pte))].count++;
 	return pte_modify(pte, shmd->vm_page_prot);
 }
 
@@ -764,7 +764,7 @@ int shm_swap (int prio, unsigned long limit)
 			printk("shm_swap_out: page and pte mismatch\n");
 		set_pte(page_table,
 		  __pte(shmd->vm_pte + SWP_ENTRY(0, idx << SHM_IDX_SHIFT)));
-		mem_map[MAP_NR(pte_page(pte))]--;
+		mem_map[MAP_NR(pte_page(pte))].count--;
 		if (shmd->vm_mm->rss > 0)
 			shmd->vm_mm->rss--;
 		invalid++;
@@ -774,7 +774,7 @@ int shm_swap (int prio, unsigned long limit)
 		break;
 	}
 
-	if (mem_map[MAP_NR(pte_page(page))] != 1)
+	if (mem_map[MAP_NR(pte_page(page))].count != 1)
 		goto check_table;
 	shp->shm_pages[idx] = swap_nr;
 	if (invalid)

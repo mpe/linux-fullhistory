@@ -2,7 +2,7 @@
 
 	 Maintained by H. Peter Anvin <Peter.Anvin@linux.org>
 
-		   Last revised: September 6, 1995
+		   Last revised: September 20, 1995
 
 This list is the successor to Rick Miller's Linux Device List, which
 he stopped maintaining when he lost network access in 1993.  It is a
@@ -503,13 +503,34 @@ an unreasonable effort.
 		Partitions are handled the same way as for the first
 		interface (see major number 3).
 
- 35 block	Modular RAM disk device
+ 35 char	tclmidi MIDI driver
+		  0 = /dev/midi0	First MIDI port, kernel timed
+		  1 = /dev/midi1	Second MIDI port, kernel timed
+		  2 = /dev/midi2	Third MIDI port, kernel timed
+		  3 = /dev/midi3	Fourth MIDI port, kernel timed
+	         64 = /dev/rmidi0	First MIDI port, untimed
+	         65 = /dev/rmidi1	Second MIDI port, untimed
+	         66 = /dev/rmidi2	Third MIDI port, untimed
+	         67 = /dev/rmidi3	Fourth MIDI port, untimed
+		128 = /dev/smpte0	First MIDI port, SMPTE timed
+		129 = /dev/smpte1	Second MIDI port, SMPTE timed
+		130 = /dev/smpte2	Third MIDI port, SMPTE timed
+		131 = /dev/smpte3	Fourth MIDI port, SMPTE timed
+    block	Modular RAM disk device
 		  0 = /dev/ram0		First modular RAM disk
 		  1 = /dev/ram1		Second modular RAM disk
 		      ...
 		255 = /dev/ram255	256th modular RAM disk
 
- 36-223		UNALLOCATED
+ 36 block	MCA ESDI hard disk
+		  0 = /dev/eda		First ESDI disk whole disk
+		 64 = /dev/edb		Second ESDI disk whole disk
+		      ...
+
+		Partitions are handled in the same way as IDE disks
+		(see major number 3).
+
+ 37-223		UNALLOCATED
 
 224-254		LOCAL USE
 		Allocated for local/experimental use

@@ -221,7 +221,6 @@ extern int proc_match(int, const char *, struct proc_dir_entry *);
 extern int proc_readdir(struct inode *, struct file *, void *, filldir_t);
 extern int proc_lookup(struct inode *, const char *, int, struct inode **);
 
-extern struct inode_operations proc_base_inode_operations;
 extern struct inode_operations proc_net_inode_operations;
 extern struct inode_operations proc_netdir_inode_operations;
 extern struct inode_operations proc_scsi_inode_operations;

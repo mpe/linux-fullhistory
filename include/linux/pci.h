@@ -29,8 +29,11 @@
  *	- your exact hardware description. Try to find out
  *	  which device is unknown. It may be you mainboard chipset.
  *	  PCI-CPU bridge or PCI-ISA bridge.
- *	- Send all that to frederic@cao-vlsi.ibp.fr, and I'll add
- *	  your device to the list as soon as possible
+ *	- If you can't find the actual information in your hardware
+ *	  booklet, try to read the references of the chip on the board.
+ *	- Send all that, with the word PCIPROBE in the subject,
+ *	  to frederic@cao-vlsi.ibp.fr, and I'll add your device to 
+ *	  the list as soon as possible
  *		fred.
  */
 
@@ -285,6 +288,8 @@
 #define PCI_DEVICE_ID_SI_501		0x0406
 #define PCI_DEVICE_ID_SI_496		0x0496
 #define PCI_DEVICE_ID_SI_601		0x0601
+#define PCI_DEVICE_ID_SI_5511		0x5511
+#define PCI_DEVICE_ID_SI_5513		0x5513
 
 #define PCI_VENDOR_ID_HP		0x103c
 #define PCI_DEVICE_ID_HP_J2585A		0x1030
@@ -345,6 +350,7 @@
 
 #define PCI_VENDOR_ID_CMD		0x1095
 #define PCI_DEVICE_ID_CMD_640		0x0640
+#define PCI_DEVICE_ID_CMD_646		0x0646
 
 #define PCI_VENDOR_ID_VISION		0x1098
 #define PCI_DEVICE_ID_VISION_QD8500	0x0001
@@ -370,6 +376,9 @@
 
 #define PCI_VENDOR_ID_IMS		0x10e0
 #define PCI_DEVICE_ID_IMS_8849		0x8849
+
+#define PCI_VENDOR_ID_REALTEK		0x10ec
+#define PCI_DEVICE_ID_REALTEK_8300	0x8029
 
 #define PCI_VENDOR_ID_VIA		0x1106
 #define PCI_DEVICE_ID_VIA_82C505	0x0505

@@ -48,7 +48,7 @@
  * Thanks also to Greg Hosler who did a lot of testing and  *
  * found quite a number of bugs during the development.	    *
  ************************************************************
- *  last change: 95/07/18                 OS: Linux 1.3.10  *
+ *  last change: 95/09/17                 OS: Linux 1.3.28  *
  ************************************************************/
 
 /* Look in eata_dma.h for configuration and revision information */
@@ -504,10 +504,11 @@ int eata_queue(Scsi_Cmnd * cmd, void (* done) (Scsi_Cmnd *))
     cmd->host_scribble = (char *)&hd->ccb[y];	
     
     if(eata_send_command((u32) cp, (u32) sh->base, EATA_CMD_DMA_SEND_CP) == FALSE) {
-	cmd->result = DID_ERROR << 16;
-	printk("eata_queue target %d, pid %ld, HBA busy, returning DID_ERROR,"
-	       " done.\n", cmd->target, cmd->pid);
+	cmd->result = DID_BUS_BUSY << 16;
+	printk("eata_queue target %d, pid %ld, HBA busy, returning DID_BUS_BUSY\n", 
+	       cmd->target, cmd->pid);
 	done(cmd);
+	cp->status = FREE;     /* Hmmm..... */
 	restore_flags(flags);
 	return(0);
     }
@@ -857,7 +858,6 @@ short register_HBA(u32 base, struct get_conf *gc, Scsi_Host_Template * tpnt,
 	       "Please use the EATA-PIO driver.\n", base);
 	return (FALSE);
     }
-
     if(gc->HAA_valid == FALSE || ntohl(gc->len) < 0x22) 
 	gc->MAX_CHAN = 0;
     
@@ -1124,8 +1124,8 @@ void find_EISA(struct get_conf *buf, Scsi_Host_Template * tpnt)
 				      (int)pal1, (int)pal2, (int)pal3));
 #endif
 		if (get_conf_PIO(base, buf) == TRUE) {
-		    DBG(DBG_PROBE && DBG_EISA, print_config(buf));
 		    if (buf->IRQ) {  
+			DBG(DBG_EISA, printk("Registering EISA HBA\n"));
 			register_HBA(base, buf, tpnt, IS_EISA);
 		    } else
 			printk("eata_dma: No valid IRQ. HBA removed from list\n");
@@ -1151,6 +1151,7 @@ void find_ISA(struct get_conf *buf, Scsi_Host_Template * tpnt)
     for (i = 0; i < MAXISA; i++) {  
 	if (ISAbases[i]) {  
 	    if (get_conf_PIO(ISAbases[i],buf) == TRUE){
+		DBG(DBG_ISA, printk("Registering ISA HBA\n"));
 		register_HBA(ISAbases[i], buf, tpnt, IS_ISA);
 	    } else {
 		if (check_blink_state(ISAbases[i])) 
@@ -1176,6 +1177,7 @@ void find_PCI(struct get_conf *buf, Scsi_Host_Template * tpnt)
     u16 com_adr;
     u16 rev_device;
     u32 error, i, x;
+    u8 pal1, pal2, pal3;
 
     if (pcibios_present()) {
 	for (i = 0; i <= MAXPCI; ++i, ++pci_index) {
@@ -1217,21 +1219,26 @@ void find_PCI(struct get_conf *buf, Scsi_Host_Template * tpnt)
 		/* Check if the address is valid */
 		if (base & 0x01) {
 		    base &= 0xfffffffe;
-		    /* EISA tag there ? */
-		    if ((inb(base) == 0x12) && (inb(base + 1) == 0x14))
-			continue;   /* Jep, it's forced, so move on  */
-		    base += 0x10;   /* Now, THIS is the real address */
+                    /* EISA tag there ? */
+		    pal1 = inb(base);
+		    pal2 = inb(base + 1);
+		    pal3 = inb(base + 2);
+		    if (((pal1 == 0x12) && (pal2 == 0x14)) ||
+			((pal1 == 0x38) && (pal2 == 0xa3) && (pal3 == 0x82)) ||
+			((pal1 == 0x06) && (pal2 == 0x94) && (pal3 == 0x24)))
+			base += 0x08;
+		    else
+			base += 0x10;   /* Now, THIS is the real address */
+
 		    if (base != 0x1f8) {
 			/* We didn't find it in the primary search */
 			if (get_conf_PIO(base, buf) == TRUE) {
-			    if (buf->FORCADR)	/* If the address is forced */
-				continue;	/* we'll find it later	    */
-			    
+
 			    /* OK. We made it till here, so we can go now  
 			     * and register it. We  only have to check and 
 			     * eventually remove it from the EISA and ISA list 
 			     */
-			    
+			    DBG(DBG_PCI, printk("Registering PCI HBA\n"));
 			    register_HBA(base, buf, tpnt, IS_PCI);
 			    
 			    if (base < 0x1000) {

@@ -378,11 +378,12 @@ int eata_pio_queue(Scsi_Cmnd * cmd, void (*done) (Scsi_Cmnd *))
     
     if (eata_pio_send_command(base, EATA_CMD_PIO_SEND_CP)) 
     {
-	cmd->result = DID_ERROR << 16;
+	cmd->result = DID_BUS_BUSY << 16;
 	printk("eata_pio_queue target %d, pid %ld, HBA busy, returning "
-               "DID_ERROR, done.\n", cmd->target, cmd->pid);
-	restore_flags(flags);
+               "DID_BUS_BUSY, done.\n", cmd->target, cmd->pid);
         done(cmd);
+        cp->status = FREE;      
+        restore_flags(flags);
 	return (0);
     }
     while (!(inb(base + HA_RSTATUS) & HA_SDRQ));

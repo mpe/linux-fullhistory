@@ -367,7 +367,7 @@ static inline int try_to_swap_out(struct task_struct * tsk, struct vm_area_struc
 		return 0;
 	if (page >= limit)
 		return 0;
-	if (mem_map[MAP_NR(page)] & MAP_PAGE_RESERVED)
+	if (mem_map[MAP_NR(page)].reserved)
 		return 0;
 	if ((pte_dirty(pte) && delete_from_swap_cache(page)) || pte_young(pte))  {
 		set_pte(page_table, pte_mkold(pte));
@@ -380,7 +380,7 @@ static inline int try_to_swap_out(struct task_struct * tsk, struct vm_area_struc
 			if (vma->vm_ops->swapout(vma, address - vma->vm_start + vma->vm_offset, page_table))
 				kill_proc(pid, SIGBUS, 1);
 		} else {
-			if (mem_map[MAP_NR(page)] != 1)
+			if (mem_map[MAP_NR(page)].count != 1)
 				return 0;
 			if (!(entry = get_swap_page()))
 				return 0;
@@ -393,7 +393,7 @@ static inline int try_to_swap_out(struct task_struct * tsk, struct vm_area_struc
 		return 1;	/* we slept: the process may not exist any more */
 	}
         if ((entry = find_in_swap_cache(page)))  {
-		if (mem_map[MAP_NR(page)] != 1) {
+		if (mem_map[MAP_NR(page)].count != 1) {
 			set_pte(page_table, pte_mkdirty(pte));
 			printk("Aiee.. duplicated cached swap-cache entry\n");
 			return 0;
@@ -407,7 +407,7 @@ static inline int try_to_swap_out(struct task_struct * tsk, struct vm_area_struc
 	vma->vm_mm->rss--;
 	pte_clear(page_table);
 	invalidate();
-	entry = mem_map[MAP_NR(page)];
+	entry = mem_map[MAP_NR(page)].count;
 	free_page(page);
 	return entry;
 }
@@ -717,21 +717,21 @@ static inline void check_free_buffers(unsigned long addr)
 
 void free_pages(unsigned long addr, unsigned long order)
 {
-	if (addr < high_memory) {
+	if (MAP_NR(addr) < MAP_NR(high_memory)) {
 		unsigned long flag;
 		mem_map_t * map = mem_map + MAP_NR(addr);
-		if (*map) {
-			if (!(*map & MAP_PAGE_RESERVED)) {
-				save_flags(flag);
-				cli();
-				if (!--*map)  {
-					free_pages_ok(addr, order);
-					delete_from_swap_cache(addr);
-				}
-				restore_flags(flag);
-				if (*map == 1)
-					check_free_buffers(addr);
+		if (map->reserved)
+			return;
+		if (map->count) {
+			save_flags(flag);
+			cli();
+			if (!--map->count) {
+				free_pages_ok(addr, order);
+				delete_from_swap_cache(addr);
 			}
+			restore_flags(flag);
+			if (map->count == 1)
+				check_free_buffers(addr);
 			return;
 		}
 		printk("Trying to free free memory (%08lx): memory probably corrupted\n",addr);
@@ -775,7 +775,7 @@ do { unsigned long size = PAGE_SIZE << high; \
 		mark_used((unsigned long) addr, high); \
 		restore_flags(flags); \
 		addr = (struct mem_list *) (size + (unsigned long) addr); \
-	} mem_map[MAP_NR((unsigned long) addr)] = 1; \
+	} mem_map[MAP_NR((unsigned long) addr)].count = 1; \
 } while (0)
 
 unsigned long __get_free_pages(int priority, unsigned long order, unsigned long limit)
@@ -956,6 +956,8 @@ static int unuse_process(struct task_struct * p, unsigned int type, unsigned lon
 	/*
 	 * Go through process' page directory.
 	 */
+	if (!p->mm || pgd_inuse(p->mm->pgd))
+		return 0;
 	vma = p->mm->mmap;
 	while (vma) {
 		pgd_t * pgd = pgd_offset(p->mm, vma->vm_start);
@@ -1244,7 +1246,7 @@ void si_swapinfo(struct sysinfo *val)
 
 /*
  * set up the free-area data structures:
- *   - mark all pages MAP_PAGE_RESERVED
+ *   - mark all pages reserved
  *   - mark all memory queues empty
  *   - clear the memory bitmaps
  */
@@ -1266,8 +1268,12 @@ unsigned long free_area_init(unsigned long start_mem, unsigned long end_mem)
 	mem_map = (mem_map_t *) start_mem;
 	p = mem_map + MAP_NR(end_mem);
 	start_mem = LONG_ALIGN((unsigned long) p);
-	while (p > mem_map)
-		*--p = MAP_PAGE_RESERVED;
+	while (p > mem_map) {
+		--p;
+		p->count = 0;
+		p->dirty = 0;
+		p->reserved = 1;
+	}
 
 	for (i = 0 ; i < NR_MEM_LISTS ; i++) {
 		unsigned long bitmap_size;

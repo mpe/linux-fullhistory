@@ -81,9 +81,12 @@ do { if ((task)->mm == current->mm) invalidate(); } while (0)
 /* This handles the memory map.. */
 #define PAGE_OFFSET		0
 #define MAP_NR(addr)		(((unsigned long)(addr)) >> PAGE_SHIFT)
-#define MAP_PAGE_RESERVED	(1<<15)
 
-typedef unsigned short mem_map_t;
+typedef struct {
+	unsigned count:30,
+		 dirty:1,
+		 reserved:1;
+} mem_map_t;
 
 #endif /* __KERNEL__ */
 

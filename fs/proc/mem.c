@@ -291,7 +291,7 @@ int mem_mmap(struct inode * inode, struct file * file,
 
 		set_pte(src_table, pte_mkdirty(*src_table));
 		set_pte(dest_table, *src_table);
-		mem_map[MAP_NR(pte_page(*src_table))]++;
+		mem_map[MAP_NR(pte_page(*src_table))].count++;
 
 		stmp += PAGE_SIZE;
 		dtmp += PAGE_SIZE;

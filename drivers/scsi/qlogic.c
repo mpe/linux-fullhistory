@@ -543,7 +543,7 @@ int	qltyp;			/* type of chip */
 struct	Scsi_Host	*hreg;	/* registered host structure */
 unsigned long	flags;
 
-tpnt->proc_dir =  &proc_scsi_qlogic;
+host->proc_dir =  &proc_scsi_qlogic;
 
 /* Qlogic Cards only exist at 0x230 or 0x330 (the chip itself decodes the
    address - I check 230 first since MIDI cards are typically at 330

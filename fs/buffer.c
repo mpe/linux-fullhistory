@@ -566,7 +566,7 @@ repeat0:
 			 tmp = bh->b_next_free;
 			 if (!bh) break;
 			 
-			 if (mem_map[MAP_NR((unsigned long) bh->b_data)] != 1 ||
+			 if (mem_map[MAP_NR((unsigned long) bh->b_data)].count != 1 ||
 			     bh->b_dirt) {
 				 refile_buffer(bh);
 				 continue;
@@ -614,7 +614,7 @@ repeat0:
 		if(candidate[i] == bh) candidate[i] = NULL;  /* Got last one */
 		if (bh->b_count || bh->b_size != size)
 			 panic("Busy buffer in candidate list\n");
-		if (mem_map[MAP_NR((unsigned long) bh->b_data)] != 1)
+		if (mem_map[MAP_NR((unsigned long) bh->b_data)].count != 1)
 			 panic("Shared buffer in candidate list\n");
 		if (BADNESS(bh)) panic("Buffer in candidate list with BADNESS != 0\n");
 		
@@ -638,7 +638,7 @@ repeat0:
 				tmp = bh->b_next_free;
 				if (!bh) break;
 				
-				if (mem_map[MAP_NR((unsigned long) bh->b_data)] != 1 ||
+				if (mem_map[MAP_NR((unsigned long) bh->b_data)].count != 1 ||
 				    bh->b_dirt) {
 					refile_buffer(bh);
 					continue;
@@ -761,7 +761,7 @@ void refile_buffer(struct buffer_head * buf){
 		panic("Attempt to refile free buffer\n");
 	if (buf->b_dirt)
 		dispose = BUF_DIRTY;
-	else if (mem_map[MAP_NR((unsigned long) buf->b_data)] > 1)
+	else if (mem_map[MAP_NR((unsigned long) buf->b_data)].count > 1)
 		dispose = BUF_SHARED;
 	else if (buf->b_lock)
 		dispose = BUF_LOCKED;
@@ -1048,7 +1048,7 @@ static unsigned long check_aligned(struct buffer_head * first, unsigned long add
 	}
 	if (!aligned)
 		return try_to_align(bh, nrbuf, address);
-	mem_map[MAP_NR(page)]++;
+	mem_map[MAP_NR(page)].count++;
 	read_buffers(bh,nrbuf);		/* make sure they are actually read correctly */
 	while (nrbuf-- > 0)
 		brelse(bh[nrbuf]);
@@ -1106,7 +1106,7 @@ static unsigned long try_to_load_aligned(unsigned long address,
 	}
 	buffermem += PAGE_SIZE;
 	bh->b_this_page = tmp;
-	mem_map[MAP_NR(address)]++;
+	mem_map[MAP_NR(address)].count++;
 	buffer_pages[MAP_NR(address)] = bh;
 	read_buffers(arr,block);
 	while (block-- > 0)
@@ -1308,7 +1308,7 @@ static int try_to_free(struct buffer_head * bh, struct buffer_head ** bhp)
 	buffermem -= PAGE_SIZE;
 	buffer_pages[MAP_NR(page)] = NULL;
 	free_page(page);
-	return !mem_map[MAP_NR(page)];
+	return !mem_map[MAP_NR(page)].count;
 }
 
 
@@ -1471,7 +1471,7 @@ void show_buffers(void)
 			locked++;
 		if (bh->b_dirt)
 			dirty++;
-		if(mem_map[MAP_NR(((unsigned long) bh->b_data))] !=1) shared++;
+		if(mem_map[MAP_NR(((unsigned long) bh->b_data))].count !=1) shared++;
 		if (bh->b_count)
 			used++, lastused = found;
 		bh = bh->b_next_free;
@@ -1505,7 +1505,7 @@ static inline int try_to_reassign(struct buffer_head * bh, struct buffer_head **
 	*bhp = bh;
 	page = (unsigned long) bh->b_data;
 	page &= PAGE_MASK;
-	if(mem_map[MAP_NR(page)] != 1) return 0;
+	if(mem_map[MAP_NR(page)].count != 1) return 0;
 	tmp = bh;
 	do {
 		if (!tmp)

@@ -512,7 +512,7 @@ static inline void statm_pte_range(pmd_t * pmd, unsigned long address, unsigned 
 			++*dirty;
 		if (pte_page(page) >= high_memory)
 			continue;
-		if (mem_map[MAP_NR(pte_page(page))] > 1)
+		if (mem_map[MAP_NR(pte_page(page))].count > 1)
 			++*shared;
 	} while (address < end);
 }

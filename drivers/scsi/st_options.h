@@ -3,11 +3,17 @@
 
    Copyright 1995 Kai Makisara.
 
-   Last modified: Sun Sep 10 13:26:02 1995 by root@kai.makisara.fi
+   Last modified: Mon Sep 18 21:00:49 1995 by root@kai.makisara.fi
 */
 
 #ifndef _ST_OPTIONS_H
 #define _ST_OPTIONS_H
+
+/* The driver allocates the tape buffers when needed if ST_RUNTIME_BUFFERS
+   is nonzero. Otherwise a number of buffers are allocated at initialization.
+   The drawback of runtime allocation is that allocation may fail. In any
+   case the driver tries to allocate a new tape buffer when none is free. */
+#define ST_RUNTIME_BUFFERS 0
 
 /* The driver does not wait for some operations to finish before returning
    to the user program if ST_NOWAIT is non-zero. This helps if the SCSI
@@ -30,15 +36,8 @@
    SENSE. */
 #define ST_DEFAULT_BLOCK 0
 
-/* The tape driver buffer size in kilobytes. When loading as module, the
-   memory block being used is slightly less than a power of two, i.e.,
-   a 64 kB block is used for a 32 kB buffer => we may as well use what is
-   being allocated! */
-#ifdef MODULE
-#define ST_BUFFER_BLOCKS 63
-#else
+/* The tape driver buffer size in kilobytes. */
 #define ST_BUFFER_BLOCKS 32
-#endif
 
 /* The number of kilobytes of data in the buffer that triggers an
    asynchronous write in fixed block mode. See also ST_ASYNC_WRITES

@@ -11,9 +11,9 @@
 NM := nm -B
 
 # enable this for linking under OSF/1:
-LINKFLAGS = -non_shared -T 0xfffffc0000310000 -N
+#LINKFLAGS = -non_shared -T 0xfffffc0000310000 -N
 # enable this for linking under Linux:
-#LINKFLAGS = -static -T arch/alpha/vmlinux.lds -N
+LINKFLAGS = -static -T arch/alpha/vmlinux.lds -N
 
 CFLAGS := $(CFLAGS) -mno-fp-regs
 

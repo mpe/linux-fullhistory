@@ -1163,15 +1163,14 @@ slip_init_ctrl_dev(struct device *dummy)
 	}
 
 
-	/* If not loadable module, a bootstrap Space.c slip_proto dev
-	 *  now needs to be unregistered.
-	 */
-#ifndef MODULE
-/*	printk("SLIP: Unregistering bootstrap device "
-	       "'slip_proto' - slip OK\n");*/
-	unregister_netdev(dummy);
-#endif
+#ifdef MODULE
 	return status;
+#else
+	/* Return "not found", so that dev_init() will unlink
+	 * the placeholder device entry for us.
+	 */
+	return ENODEV;
+#endif
       }
 
 

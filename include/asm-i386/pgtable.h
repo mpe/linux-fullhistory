@@ -143,12 +143,12 @@ do { \
 
 extern inline int pte_none(pte_t pte)		{ return !pte_val(pte); }
 extern inline int pte_present(pte_t pte)	{ return pte_val(pte) & _PAGE_PRESENT; }
-extern inline int pte_inuse(pte_t *ptep)	{ return mem_map[MAP_NR(ptep)] != 1; }
+extern inline int pte_inuse(pte_t *ptep)	{ return mem_map[MAP_NR(ptep)].reserved || mem_map[MAP_NR(ptep)].count != 1; }
 extern inline void pte_clear(pte_t *ptep)	{ pte_val(*ptep) = 0; }
 extern inline void pte_reuse(pte_t * ptep)
 {
-	if (!(mem_map[MAP_NR(ptep)] & MAP_PAGE_RESERVED))
-		mem_map[MAP_NR(ptep)]++;
+	if (!mem_map[MAP_NR(ptep)].reserved)
+		mem_map[MAP_NR(ptep)].count++;
 }
 
 extern inline int pmd_none(pmd_t pmd)		{ return !pmd_val(pmd); }
@@ -170,13 +170,8 @@ extern inline void pmd_reuse(pmd_t * pmdp)	{ }
 extern inline int pgd_none(pgd_t pgd)		{ return 0; }
 extern inline int pgd_bad(pgd_t pgd)		{ return 0; }
 extern inline int pgd_present(pgd_t pgd)	{ return 1; }
-extern inline int pgd_inuse(pgd_t * pgdp)	{ return mem_map[MAP_NR(pgdp)] != 1; }
+extern inline int pgd_inuse(pgd_t * pgdp)	{ return mem_map[MAP_NR(pgdp)].reserved; }
 extern inline void pgd_clear(pgd_t * pgdp)	{ }
-extern inline void pgd_reuse(pgd_t * pgdp)
-{
-	if (!(mem_map[MAP_NR(pgdp)] & MAP_PAGE_RESERVED))
-		mem_map[MAP_NR(pgdp)]++;
-}
 
 /*
  * The following only work if pte_present() is true.
@@ -243,7 +238,7 @@ extern inline pte_t * pte_offset(pmd_t * dir, unsigned long address)
  */
 extern inline void pte_free_kernel(pte_t * pte)
 {
-	mem_map[MAP_NR(pte)] = 1;
+	mem_map[MAP_NR(pte)].reserved = 0;
 	free_page((unsigned long) pte);
 }
 
@@ -255,7 +250,7 @@ extern inline pte_t * pte_alloc_kernel(pmd_t * pmd, unsigned long address)
 		if (pmd_none(*pmd)) {
 			if (page) {
 				pmd_val(*pmd) = _PAGE_TABLE | (unsigned long) page;
-				mem_map[MAP_NR(page)] = MAP_PAGE_RESERVED;
+				mem_map[MAP_NR(page)].reserved = 1;
 				return page + address;
 			}
 			pmd_val(*pmd) = _PAGE_TABLE | (unsigned long) BAD_PAGETABLE;

@@ -79,11 +79,12 @@ static void extended_partition(struct gendisk *hd, kdev_t dev)
 {
 	struct buffer_head *bh;
 	struct partition *p;
-	unsigned long first_sector, this_sector, this_size;
+	unsigned long first_sector, first_size, this_sector, this_size;
 	int mask = (1 << hd->minor_shift) - 1;
 	int i;
 
 	first_sector = hd->part[MINOR(dev)].start_sect;
+	first_size = hd->part[MINOR(dev)].nr_sects;
 	this_sector = first_sector;
 
 	while (1) {
@@ -122,7 +123,13 @@ static void extended_partition(struct gendisk *hd, kdev_t dev)
 		    if (!p->nr_sects || p->sys_ind == EXTENDED_PARTITION)
 		      continue;
 
-		    if (p->start_sect + p->nr_sects > this_size)
+		    /* Check the 3rd and 4th entries -
+		       these sometimes contain random garbage */
+		    if (i >= 2
+			&& p->start_sect + p->nr_sects > this_size
+			&& (this_sector + p->start_sect < first_sector ||
+			    this_sector + p->start_sect + p->nr_sects >
+			     first_sector + first_size))
 		      continue;
 
 		    add_partition(hd, current_minor, this_sector+p->start_sect, p->nr_sects);

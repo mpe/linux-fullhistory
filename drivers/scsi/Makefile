@@ -38,7 +38,6 @@ else
       # Create this before we build anything else.
       SCSI_MODULE_VER := scsi_syms.ver
       SYMTAB_OBJS := scsi_syms.o
-      include ../../versions.mk
       endif
     M_OBJS += scsi_mod.o
   endif
@@ -234,6 +233,12 @@ else
 endif
 
 include $(TOPDIR)/Rules.make
+
+ifeq ($(CONFIG_SCSI),m)
+  ifdef CONFIG_MODVERSIONS
+      include ../../versions.mk
+  endif
+endif
 
 aha152x.o: aha152x.c
 	$(CC) $(CFLAGS) $(AHA152X) -c aha152x.c 

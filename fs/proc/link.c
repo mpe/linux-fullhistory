@@ -61,7 +61,7 @@ struct inode_operations proc_link_inode_operations = {
  * looking up the file structure of the newly opened proc fd file, and
  * replacing it with the actual file structure of the process's file
  * descriptor.  This allows plan 9 semantics, so that the returned
- * file descriptor is an dup of the target file descriptor.
+ * file descriptor is a dup of the target file descriptor.
  */
 static int proc_fd_dupf(struct inode * inode, struct file * f)
 {

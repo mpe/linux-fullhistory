@@ -92,12 +92,13 @@ ifdef MOD_SUB_DIRS
 	set -e; for i in $(MOD_SUB_DIRS); do $(MAKE) -C $$i modules; done
 endif
 ifneq "$(strip $(MOD_LIST_NAME))" ""
-ifndef M_OBJS # Hack for fs subdirectories
 	rm -f $$TOPDIR/modules/$(MOD_LIST_NAME)
+ifdef MOD_SUB_DIRS
 	for i in $(MOD_SUB_DIRS); do \
 	    echo `basename $$i`.o >> $$TOPDIR/modules/$(MOD_LIST_NAME); done
-else
-	echo $(M_OBJS) > $$TOPDIR/modules/$(MOD_LIST_NAME)
+endif
+ifdef M_OBJS
+	echo $(M_OBJS) >> $$TOPDIR/modules/$(MOD_LIST_NAME)
 endif
 endif
 ifdef M_OBJS

@@ -11,7 +11,7 @@
   Copyright 1992, 1993, 1994, 1995 Kai Makisara
 		 email Kai.Makisara@metla.fi
 
-  Last modified: Sun Sep 10 20:33:24 1995 by makisara@kai.makisara.fi
+  Last modified: Tue Sep 19 21:51:41 1995 by root@kai.makisara.fi
   Some small formal changes - aeb, 950809
 */
 #ifdef MODULE
@@ -74,13 +74,15 @@ static int debugging = 1;
 #define TAPE_NR(x) (MINOR(x) & 127)
 
 static int st_nbr_buffers;
-static int st_req_nbr_buffers;
 static ST_buffer **st_buffers;
 static int st_buffer_size = ST_BUFFER_SIZE;
 static int st_write_threshold = ST_WRITE_THRESHOLD;
 static int st_max_buffers = ST_MAX_BUFFERS;
 
+#define MAX_SCSI_TAPES 8
 Scsi_Tape * scsi_tapes = NULL;
+
+static ST_buffer *new_tape_buffer(int);
 
 static int st_init(void);
 static int st_attach(Scsi_Device *);
@@ -189,7 +191,7 @@ st_sleep_done (Scsi_Cmnd * SCpnt)
     if ((STp->buffer)->writing)
       SCpnt->request.rq_status = RQ_INACTIVE;
     else
-      SCpnt->request.rq_status = RQ_SCSI_BUSY;
+      SCpnt->request.rq_status = RQ_SCSI_DONE;
     if (!(STp->buffer)->writing || STp->write_pending)
       wake_up( &(STp->waiting) );
     STp->write_pending = 0;
@@ -257,13 +259,13 @@ back_over_eof(kdev_t devt)
   unsigned int flags;
 
   SCpnt = allocate_device(NULL, STp->device, 1);
+  SCpnt->request.rq_dev = devt;
   cmd[0] = SPACE;
   cmd[1] = ((SCpnt->lun << 5) & 0xe0) | 0x01; /* Space FileMarks */
   cmd[2] = cmd[3] = cmd[4] = 0xff;  /* -1 filemarks */
   cmd[5] = 0;
 
-  SCpnt->request.rq_status = RQ_ACTIVE;
-  SCpnt->request.rq_dev = devt;
+  SCpnt->request.rq_status = RQ_SCSI_BUSY;
   scsi_do_cmd(SCpnt,
 	      (void *) cmd, (void *) (STp->buffer)->b_data, 0,
 	      st_sleep_done, ST_TIMEOUT, MAX_RETRIES);
@@ -271,7 +273,7 @@ back_over_eof(kdev_t devt)
   /* need to do the check with interrupts off. -RAB */
   save_flags(flags);
   cli();
-  if (TAPE_NR(SCpnt->request.rq_dev) == dev)
+  if (SCpnt->request.rq_status != RQ_SCSI_DONE)
     sleep_on( &(STp->waiting) );
   restore_flags(flags);
   
@@ -336,7 +338,7 @@ flush_write_buffer(kdev_t devt)
     cmd[2] = blks >> 16;
     cmd[3] = blks >> 8;
     cmd[4] = blks;
-    SCpnt->request.rq_status = RQ_ACTIVE;
+    SCpnt->request.rq_status = RQ_SCSI_BUSY;
     SCpnt->request.rq_dev = devt;
     scsi_do_cmd (SCpnt,
 		 (void *) cmd, (STp->buffer)->b_data, transfer,
@@ -345,7 +347,7 @@ flush_write_buffer(kdev_t devt)
     /* this must be done with interrupts off */
     save_flags (flags);
     cli();
-    if (TAPE_NR(SCpnt->request.rq_dev) == dev)
+    if (SCpnt->request.rq_status != RQ_SCSI_DONE)
       sleep_on( &(STp->waiting) );
     restore_flags(flags);
  
@@ -387,7 +389,6 @@ flush_buffer(struct inode * inode, struct file * filp, int seek_next)
 
   STp = &(scsi_tapes[dev]);
   STbuffer = STp->buffer;
-
 
   /*
    * If there was a bus reset, block further access
@@ -455,10 +456,14 @@ scsi_tape_open(struct inode * inode, struct file * filp)
       if (!st_buffers[i]->in_use)
 	break;
     if (i >= st_nbr_buffers) {
-      printk("st%d: No free buffers.\n", dev);
-      return (-EBUSY);
+      STp->buffer = new_tape_buffer(FALSE);
+      if (STp->buffer == NULL) {
+	printk("st%d: No free buffers.\n", dev);
+	return (-EBUSY);
+      }
     }
-    STp->buffer = st_buffers[i];
+    else
+      STp->buffer = st_buffers[i];
     (STp->buffer)->in_use = 1;
     (STp->buffer)->writing = 0;
     STp->in_use = 1;
@@ -479,6 +484,7 @@ scsi_tape_open(struct inode * inode, struct file * filp)
 #endif
 
     SCpnt = allocate_device(NULL, STp->device, 1);
+    SCpnt->request.rq_dev = devt;
     if (!SCpnt) {
       printk("st%d: Tape request not allocated", dev);
       return (-EBUSY);
@@ -487,8 +493,7 @@ scsi_tape_open(struct inode * inode, struct file * filp)
     memset ((void *) &cmd[0], 0, 10);
     cmd[0] = TEST_UNIT_READY;
     cmd[1] = (SCpnt->lun << 5) & 0xe0;
-    SCpnt->request.rq_status = RQ_ACTIVE;
-    SCpnt->request.rq_dev = devt;
+    SCpnt->request.rq_status = RQ_SCSI_BUSY;
     scsi_do_cmd(SCpnt,
 		(void *) cmd, (void *) (STp->buffer)->b_data,
 		0, st_sleep_done, ST_LONG_TIMEOUT,
@@ -497,7 +502,7 @@ scsi_tape_open(struct inode * inode, struct file * filp)
     /* this must be done with interrupts off */
     save_flags (processor_flags);
     cli();
-    if (TAPE_NR(SCpnt->request.rq_dev) == dev)
+    if (SCpnt->request.rq_status != RQ_SCSI_DONE)
       sleep_on( &(STp->waiting) );
     restore_flags(processor_flags);
 
@@ -507,8 +512,7 @@ scsi_tape_open(struct inode * inode, struct file * filp)
       memset ((void *) &cmd[0], 0, 10);
       cmd[0] = TEST_UNIT_READY;
       cmd[1] = (SCpnt->lun << 5) & 0xe0;
-      SCpnt->request.rq_status = RQ_ACTIVE;
-      SCpnt->request.rq_dev = devt;
+      SCpnt->request.rq_status = RQ_SCSI_BUSY;
       scsi_do_cmd(SCpnt,
 		  (void *) cmd, (void *) (STp->buffer)->b_data,
 		  0, st_sleep_done, ST_LONG_TIMEOUT,
@@ -517,7 +521,7 @@ scsi_tape_open(struct inode * inode, struct file * filp)
       /* this must be done with interrupts off */
       save_flags (processor_flags);
       cli();
-      if (TAPE_NR(SCpnt->request.rq_dev) == dev)
+      if (SCpnt->request.rq_status != RQ_SCSI_DONE)
 	sleep_on( &(STp->waiting) );
       restore_flags(processor_flags);
 
@@ -551,8 +555,7 @@ scsi_tape_open(struct inode * inode, struct file * filp)
     memset ((void *) &cmd[0], 0, 10);
     cmd[0] = READ_BLOCK_LIMITS;
     cmd[1] = (SCpnt->lun << 5) & 0xe0;
-    SCpnt->request.rq_status = RQ_ACTIVE;
-    SCpnt->request.rq_dev = devt;
+    SCpnt->request.rq_status = RQ_SCSI_BUSY;
     scsi_do_cmd(SCpnt,
 		(void *) cmd, (void *) (STp->buffer)->b_data,
 		6, st_sleep_done, ST_TIMEOUT, MAX_READY_RETRIES);
@@ -560,7 +563,7 @@ scsi_tape_open(struct inode * inode, struct file * filp)
     /* this must be done with interrupts off */
     save_flags (processor_flags);
     cli();
-    if (TAPE_NR(SCpnt->request.rq_dev) == dev)
+    if (SCpnt->request.rq_status != RQ_SCSI_DONE)
       sleep_on( &(STp->waiting) );
     restore_flags(processor_flags);
 
@@ -587,8 +590,7 @@ scsi_tape_open(struct inode * inode, struct file * filp)
     cmd[0] = MODE_SENSE;
     cmd[1] = (SCpnt->lun << 5) & 0xe0;
     cmd[4] = 12;
-    SCpnt->request.rq_status = RQ_ACTIVE;
-    SCpnt->request.rq_dev = devt;
+    SCpnt->request.rq_status = RQ_SCSI_BUSY;
     scsi_do_cmd(SCpnt,
 		(void *) cmd, (void *) (STp->buffer)->b_data,
 		12, st_sleep_done, ST_TIMEOUT, MAX_READY_RETRIES);
@@ -596,7 +598,7 @@ scsi_tape_open(struct inode * inode, struct file * filp)
     /* this must be done with interrupts off */
     save_flags (processor_flags);
     cli();
-    if (TAPE_NR(SCpnt->request.rq_dev) == dev)
+    if (SCpnt->request.rq_status != RQ_SCSI_DONE)
       sleep_on( &(STp->waiting) );
     restore_flags(processor_flags);
 
@@ -714,13 +716,13 @@ scsi_tape_close(struct inode * inode, struct file * filp)
 
       if (result == 0 || result == (-ENOSPC)) {
 	SCpnt = allocate_device(NULL, STp->device, 1);
+	SCpnt->request.rq_dev = devt;
 
 	memset(cmd, 0, 10);
 	cmd[0] = WRITE_FILEMARKS;
 	cmd[1] = (SCpnt->lun << 5) & 0xe0;
 	cmd[4] = 1 + STp->two_fm;
-	SCpnt->request.rq_status = RQ_ACTIVE;
-	SCpnt->request.rq_dev = devt;
+	SCpnt->request.rq_status = RQ_SCSI_BUSY;
 	scsi_do_cmd( SCpnt,
 		    (void *) cmd, (void *) (STp->buffer)->b_data,
 		    0, st_sleep_done, ST_TIMEOUT, MAX_WRITE_RETRIES);
@@ -728,7 +730,7 @@ scsi_tape_close(struct inode * inode, struct file * filp)
 	/* this must be done with interrupts off */
 	save_flags (flags);
 	cli();
-	if (TAPE_NR(SCpnt->request.rq_dev) == dev)
+	if (SCpnt->request.rq_status != RQ_SCSI_DONE)
 	  sleep_on( &(STp->waiting) );
 	restore_flags(flags);
 
@@ -867,6 +869,7 @@ st_write(struct inode * inode, struct file * filp, const char * buf, int count)
       write_threshold--;
 
     SCpnt = allocate_device(NULL, STp->device, 1);
+    SCpnt->request.rq_dev = devt;
 
     total = count;
 
@@ -902,8 +905,7 @@ st_write(struct inode * inode, struct file * filp, const char * buf, int count)
       cmd[2] = blks >> 16;
       cmd[3] = blks >> 8;
       cmd[4] = blks;
-      SCpnt->request.rq_status = RQ_ACTIVE;
-      SCpnt->request.rq_dev = devt;
+      SCpnt->request.rq_status = RQ_SCSI_BUSY;
       scsi_do_cmd (SCpnt,
 		   (void *) cmd, (STp->buffer)->b_data, transfer,
 		   st_sleep_done, ST_TIMEOUT, MAX_WRITE_RETRIES);
@@ -911,7 +913,7 @@ st_write(struct inode * inode, struct file * filp, const char * buf, int count)
       /* this must be done with interrupts off */
       save_flags (flags);
       cli();
-      if (TAPE_NR(SCpnt->request.rq_dev) == dev)
+      if (SCpnt->request.rq_status != RQ_SCSI_DONE)
 	sleep_on( &(STp->waiting) );
       restore_flags(flags);
 
@@ -1018,8 +1020,7 @@ st_write(struct inode * inode, struct file * filp, const char * buf, int count)
       cmd[2] = blks >> 16;
       cmd[3] = blks >> 8;
       cmd[4] = blks;
-      SCpnt->request.rq_status = RQ_ACTIVE;
-      SCpnt->request.rq_dev = devt;
+      SCpnt->request.rq_status = RQ_SCSI_BUSY;
       STp->write_pending = 1;
       scsi_do_cmd (SCpnt,
 		   (void *) cmd, (STp->buffer)->b_data,
@@ -1090,6 +1091,7 @@ st_read(struct inode * inode, struct file * filp, char * buf, int count)
     STp->rw = ST_READING;
 
     SCpnt = allocate_device(NULL, STp->device, 1);
+    SCpnt->request.rq_dev = devt;
 
     for (total = 0; total < count; ) {
 
@@ -1118,8 +1120,7 @@ st_read(struct inode * inode, struct file * filp, char * buf, int count)
 	cmd[3] = blks >> 8;
 	cmd[4] = blks;
 
-	SCpnt->request.rq_status = RQ_ACTIVE;
-	SCpnt->request.rq_dev = devt;
+	SCpnt->request.rq_status = RQ_SCSI_BUSY;
 	scsi_do_cmd (SCpnt,
 		     (void *) cmd, (STp->buffer)->b_data,
 		     bytes, st_sleep_done, ST_TIMEOUT, MAX_RETRIES);
@@ -1127,7 +1128,7 @@ st_read(struct inode * inode, struct file * filp, char * buf, int count)
 	/* this must be done with interrupts off */
 	save_flags (flags);
 	cli();
-	if (TAPE_NR(SCpnt->request.rq_dev) == dev)
+	if (SCpnt->request.rq_status != RQ_SCSI_DONE)
 	  sleep_on( &(STp->waiting) );
 	restore_flags(flags);
 
@@ -1687,9 +1688,9 @@ st_int_ioctl(struct inode * inode,struct file * file,
      }
 
    SCpnt = allocate_device(NULL, STp->device, 1);
-   cmd[1] |= (SCpnt->lun << 5) & 0xe0;
-   SCpnt->request.rq_status = RQ_ACTIVE;
    SCpnt->request.rq_dev = devt;
+   cmd[1] |= (SCpnt->lun << 5) & 0xe0;
+   SCpnt->request.rq_status = RQ_SCSI_BUSY;
    scsi_do_cmd(SCpnt,
 	       (void *) cmd, (void *) (STp->buffer)->b_data, datalen,
 	       st_sleep_done, timeout, MAX_RETRIES);
@@ -1697,7 +1698,7 @@ st_int_ioctl(struct inode * inode,struct file * file,
    /* this must be done with interrupts off */
    save_flags (flags);
    cli();
-   if (TAPE_NR(SCpnt->request.rq_dev) == dev)
+   if (SCpnt->request.rq_status != RQ_SCSI_DONE)
      sleep_on( &(STp->waiting) );
    restore_flags(flags);
 
@@ -1860,30 +1861,38 @@ st_ioctl(struct inode * inode,struct file * file,
      if (i)
 	return i;
 
-     /*
-      * If there was a bus reset, block further access
-      * to this device.  If the user wants to rewind the tape,
-      * then reset the flag and allow access again.
-      */
-     if( STp->device->was_reset) 
-       {
-	 if(mtc.mt_op != MTREW && 
-	    mtc.mt_op != MTOFFL &&
-	    mtc.mt_op != MTRESET && 
-	    mtc.mt_op != MTRETEN && 
-	    mtc.mt_op != MTEOM)
-	   return (-EIO);
-	 STp->device->was_reset = 0;
-       }
-
      memcpy_fromfs((char *) &mtc, (char *)arg, sizeof(struct mtop));
 
-     i = flush_buffer(inode, file, mtc.mt_op == MTSEEK ||
-		      mtc.mt_op == MTREW || mtc.mt_op == MTOFFL ||
-		      mtc.mt_op == MTRETEN || mtc.mt_op == MTEOM ||
-		      mtc.mt_op == MTLOCK || mtc.mt_op == MTLOAD);
-     if (i < 0)
-       return i;
+     if (!(STp->device)->was_reset) {
+       i = flush_buffer(inode, file, mtc.mt_op == MTSEEK ||
+			mtc.mt_op == MTREW || mtc.mt_op == MTOFFL ||
+			mtc.mt_op == MTRETEN || mtc.mt_op == MTEOM ||
+			mtc.mt_op == MTLOCK || mtc.mt_op == MTLOAD);
+       if (i < 0)
+	 return i;
+     }
+     else {
+       /*
+	* If there was a bus reset, block further access
+	* to this device.  If the user wants to rewind the tape,
+	* then reset the flag and allow access again.
+	*/
+       if(mtc.mt_op != MTREW && 
+	  mtc.mt_op != MTOFFL &&
+	  mtc.mt_op != MTRETEN && 
+	  mtc.mt_op != MTERASE &&
+	  mtc.mt_op != MTSEEK &&
+	  mtc.mt_op != MTEOM)
+	 return (-EIO);
+       STp->device->was_reset = 0;
+       if (STp->door_locked != ST_UNLOCKED) {
+	 if (st_int_ioctl(inode, file, MTLOCK, 0)) {
+	   printk("st%d: Could not relock door after bus reset.\n", dev);
+	   STp->door_locked = ST_UNLOCKED;
+	 }
+       }
+     }
+
      if (mtc.mt_op != MTNOP && mtc.mt_op != MTSETBLK &&
 	 mtc.mt_op != MTSETDENSITY && mtc.mt_op != MTWSM &&
 	 mtc.mt_op != MTSETDRVBUFFER)
@@ -1970,6 +1979,7 @@ st_ioctl(struct inode * inode,struct file * file,
        return i;
 
      SCpnt = allocate_device(NULL, STp->device, 1);
+     SCpnt->request.rq_dev = devt;
 
      memset (scmd, 0, 10);
      if ((STp->device)->scsi_level < SCSI_2) {
@@ -1980,8 +1990,7 @@ st_ioctl(struct inode * inode,struct file * file,
        scmd[0] = READ_POSITION;
        scmd[1] = 1;
      }
-     SCpnt->request.rq_status = RQ_ACTIVE;
-     SCpnt->request.rq_dev = devt;
+     SCpnt->request.rq_status = RQ_SCSI_BUSY;
      scmd[1] |= (SCpnt->lun << 5) & 0xe0;
      scsi_do_cmd(SCpnt,
 		 (void *) scmd, (void *) (STp->buffer)->b_data,
@@ -1990,7 +1999,7 @@ st_ioctl(struct inode * inode,struct file * file,
      /* this must be done with interrupts off */
      save_flags (flags);
      cli();
-     if (TAPE_NR(SCpnt->request.rq_dev) == dev)
+     if (SCpnt->request.rq_status != RQ_SCSI_DONE)
        sleep_on( &(STp->waiting) );
      restore_flags(flags);
 
@@ -2026,6 +2035,44 @@ st_ioctl(struct inode * inode,struct file * file,
 }
 
 
+/* Try to allocate a new tape buffer */
+	static ST_buffer *
+new_tape_buffer( int from_initialization )
+{
+  int priority;
+  ST_buffer *tb;
+
+  if (st_nbr_buffers >= st_template.dev_max)
+    return NULL;  /* Should never happen */
+
+  if (from_initialization)
+    priority = GFP_ATOMIC;
+  else
+    priority = GFP_KERNEL;
+  tb = (ST_buffer *)scsi_init_malloc(sizeof(ST_buffer), priority);
+  if (tb) {
+    tb->b_data = (unsigned char *)scsi_init_malloc(st_buffer_size,
+						   priority | GFP_DMA);
+    if (!tb->b_data) {
+      scsi_init_free((char *)tb, sizeof(ST_buffer));
+      tb = NULL;
+    }
+  }
+  if (!tb) {
+    printk("st: Can't allocate new tape buffer (nbr %d).\n", st_nbr_buffers);
+    return NULL;
+  }
+
+#if DEBUG
+  printk("st: Allocated tape buffer %d.\n", st_nbr_buffers);
+#endif
+  tb->in_use = 0;
+  tb->writing = 0;
+  st_buffers[st_nbr_buffers++] = tb;
+  return tb;
+}
+
+
 /* Set the boot options. Syntax: st=xxx,yyy
    where xxx is buffer size in 512 byte blocks and yyy is write threshold
    in 512 byte blocks. */
@@ -2120,6 +2167,9 @@ static int st_init()
 {
   int i;
   Scsi_Tape * STp;
+#if !ST_RUNTIME_BUFFERS
+  int target_nbr;
+#endif
 
   if (st_template.dev_noticed == 0) return 0;
 
@@ -2132,15 +2182,17 @@ static int st_init()
   }
 
   if (scsi_tapes) return 0;
-  scsi_tapes = (Scsi_Tape *) scsi_init_malloc(
-  		(st_template.dev_noticed + ST_EXTRA_DEVS) * 
-					      sizeof(Scsi_Tape), GFP_ATOMIC);
+  st_template.dev_max = st_template.dev_noticed + ST_EXTRA_DEVS;
+  if (st_template.dev_max < MAX_SCSI_TAPES)
+    st_template.dev_max = MAX_SCSI_TAPES;
+  scsi_tapes =
+    (Scsi_Tape *) scsi_init_malloc(st_template.dev_max * sizeof(Scsi_Tape),
+				   GFP_ATOMIC);
   if (scsi_tapes == NULL) {
     printk("Unable to allocate descriptors for SCSI tapes.\n");
     unregister_chrdev(SCSI_TAPE_MAJOR, "st");
     return 1;
   }
-  st_template.dev_max = st_template.dev_noticed + ST_EXTRA_DEVS;
 
 #if DEBUG
   printk("st: Buffer size %d bytes, write threshold %d bytes.\n",
@@ -2168,62 +2220,49 @@ static int st_init()
     STp->drv_block = 0;
     STp->moves_after_eof = 1;
     STp->at_sm = 0;
-    STp->mt_status = (struct mtget *) scsi_init_malloc(sizeof(struct mtget), GFP_ATOMIC);
+    STp->mt_status = (struct mtget *) scsi_init_malloc(sizeof(struct mtget),
+						       GFP_ATOMIC);
     /* Initialize status */
     memset((void *) scsi_tapes[i].mt_status, 0, sizeof(struct mtget));
   }
 
   /* Allocate the buffers */
-  st_nbr_buffers = st_template.dev_noticed;
-  if (st_nbr_buffers < ST_EXTRA_DEVS)
-    st_nbr_buffers = ST_EXTRA_DEVS;
-  if (st_nbr_buffers > st_max_buffers)
-    st_nbr_buffers = st_max_buffers;
-  st_req_nbr_buffers = st_nbr_buffers;
-  st_buffers = (ST_buffer **) scsi_init_malloc(st_nbr_buffers * 
-					       sizeof(ST_buffer *),
-					       GFP_ATOMIC);
+  st_buffers =
+    (ST_buffer **) scsi_init_malloc(st_template.dev_max * sizeof(ST_buffer *),
+				    GFP_ATOMIC);
   if (st_buffers == NULL) {
     printk("Unable to allocate tape buffer pointers.\n");
     unregister_chrdev(SCSI_TAPE_MAJOR, "st");
     scsi_init_free((char *) scsi_tapes,
-		   (st_template.dev_noticed + ST_EXTRA_DEVS) 
-		   * sizeof(Scsi_Tape));
+		   st_template.dev_max * sizeof(Scsi_Tape));
     return 1;
   }
 
-  /* FIXME - if we are hitting this because we are loading a tape module
-  as a loadable driver, we should not use kmalloc - it will allocate
-  a 64Kb region in order to buffer about 32Kb.  Try using 31 blocks
-  instead. */
-  
-  for (i=0; i < st_nbr_buffers; i++) {
-    st_buffers[i] = (ST_buffer *) scsi_init_malloc(sizeof(ST_buffer) - 
-						   1 + st_buffer_size,
-						   GFP_ATOMIC | GFP_DMA);
-    if (st_buffers[i] == NULL) {
-      printk("Not enough memory for buffer %d.\n", i);
+#if ST_RUNTIME_BUFFERS
+  st_nbr_buffers = 0;
+#else
+  target_nbr = st_template.dev_noticed;
+  if (target_nbr < ST_EXTRA_DEVS)
+    target_nbr = ST_EXTRA_DEVS;
+  if (target_nbr > st_max_buffers)
+    target_nbr = st_max_buffers;
+
+  for (i=st_nbr_buffers=0; i < target_nbr; i++) {
+    if (!new_tape_buffer(TRUE)) {
       if (i == 0) {
+	printk("Can't continue without at least one tape buffer.\n");
 	unregister_chrdev(SCSI_TAPE_MAJOR, "st");
-	scsi_init_free((char *) scsi_tapes,
-		       (st_template.dev_noticed + ST_EXTRA_DEVS) 
-		       * sizeof(Scsi_Tape));
 	scsi_init_free((char *) st_buffers,
-		       st_nbr_buffers * sizeof(ST_buffer *));
+		       st_template.dev_max * sizeof(ST_buffer *));
+	scsi_init_free((char *) scsi_tapes,
+		       st_template.dev_max * sizeof(Scsi_Tape));
 	return 1;
       }
-      st_nbr_buffers = i;
       printk("Number of tape buffers adjusted.\n");
       break;
     }
-    else {
-#if DEBUG
-/*    printk("st: Buffer address: %p\n", st_buffers[i]); */
-#endif
-      st_buffers[i]->in_use = 0;
-      st_buffers[i]->writing = 0;
-    }
   }
+#endif
   return 0;
 }
 
@@ -2265,18 +2304,17 @@ void cleanup_module( void)
   st_registered--;
   if(scsi_tapes != NULL) {
     scsi_init_free((char *) scsi_tapes,
-		   (st_template.dev_noticed + ST_EXTRA_DEVS) 
-		   * sizeof(Scsi_Tape));
+		   st_template.dev_max * sizeof(Scsi_Tape));
 
     if (st_buffers != NULL) {
       for (i=0; i < st_nbr_buffers; i++)
 	if (st_buffers[i] != NULL) {
-	  scsi_init_free((char *) st_buffers[i],
-			 sizeof(ST_buffer) - 1 + st_buffer_size);
+	  scsi_init_free((char *) st_buffers[i]->b_data, st_buffer_size);
+	  scsi_init_free((char *) st_buffers[i], sizeof(ST_buffer));
 	}
       
       scsi_init_free((char *) st_buffers,
-		     st_req_nbr_buffers * sizeof(ST_buffer *));
+		     st_template.dev_max * sizeof(ST_buffer *));
     }
   }
   st_template.dev_max = 0;

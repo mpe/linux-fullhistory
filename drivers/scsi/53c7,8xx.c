@@ -994,6 +994,8 @@ int NCR53c7xx_detect(Scsi_Host_Template *tpnt) {
     unsigned char pci_bus, pci_device_fn;
     static short pci_index=0;	/* Device index to PCI BIOS calls */
 
+    tpnt->proc_dir = &proc_scsi_ncr53c7xx;
+
     for (current_override = count = 0; current_override < OVERRIDE_LIMIT; 
 	 ++current_override) {
 	 if (overrides[current_override].pci ? 
@@ -1120,7 +1122,6 @@ NCR53c8x0_init_fixup (struct Scsi_Host *host) {
      * SCRIPTS.
      */
     
-    tpnt->proc_dir = &proc_scsi_ncr53c7xx;
 
     patch_abs_rwri_data (hostdata->script, 0, dmode_memory_to_memory, tmp);
     patch_abs_rwri_data (hostdata->script, 0, dmode_memory_to_ncr, memory_to_ncr);

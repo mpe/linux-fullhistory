@@ -92,11 +92,6 @@ int (* dispatch_scsi_info_ptr) (int ino, char *buffer, char **start,
 				off_t offset, int length, 
 				int inode, int func) = 0; /* Dirty hack */
 
-#if defined(CONFIG_PROC_FS)
-extern struct proc_dir_entry scsi_dir[]; 
-extern struct proc_dir_entry scsi_hba_dir[];
-#endif
-
 extern int sys_tz;
 extern int request_dma(unsigned int dmanr, char * deviceID);
 extern void free_dma(unsigned int dmanr);
@@ -290,6 +285,7 @@ struct symbol_table symbol_table = {
 	X(printk),
 	X(sprintf),
 	X(vsprintf),
+	X(kdevname),
 	X(simple_strtoul),
 	X(system_utsname),
 	X(sys_call_table),
@@ -416,11 +412,6 @@ struct symbol_table symbol_table = {
 	 */
 	X(gendisk_head),
 	X(resetup_one_dev),
-
-#if defined(CONFIG_PROC_FS)
-	X(scsi_dir),
-	X(scsi_hba_dir),
-#endif
 	X(dispatch_scsi_info_ptr),
 #endif
 	/* Added to make file system as module */

@@ -34,7 +34,7 @@ fi
 bool 'System V IPC' CONFIG_SYSVIPC y
 tristate 'Kernel support for ELF binaries' CONFIG_BINFMT_ELF y
 if [ "$CONFIG_BINFMT_ELF" = "y" ]; then
-bool 'Compile kernel as ELF - if your GCC is ELF-GCC' CONFIG_KERNEL_ELF n
+bool 'Compile kernel as ELF - if your GCC is ELF-GCC' CONFIG_KERNEL_ELF y
 fi
 #bool 'Use -mpentium flag for Pentium-specific optimizations' CONFIG_M586 n
 #if [ "$CONFIG_M586" = "n" ]; then

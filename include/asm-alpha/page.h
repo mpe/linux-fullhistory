@@ -71,9 +71,13 @@ __asm__ __volatile__( \
 
 #define PAGE_OFFSET		0xFFFFFC0000000000
 #define MAP_NR(addr)		((((unsigned long) (addr)) - PAGE_OFFSET) >> PAGE_SHIFT)
-#define MAP_PAGE_RESERVED	(1<<31)
 
-typedef unsigned int mem_map_t;
+typedef struct {
+	unsigned count:30,
+		 dirty:1,
+		 reserved:1;
+} mem_map_t;
+
 
 #endif /* __KERNEL__ */
 

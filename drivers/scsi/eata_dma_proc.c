@@ -369,7 +369,7 @@ int eata_proc_info(char *buffer, char **start, off_t offset, int length,
 		       SD(HBA_ptr)->writes[11]);
 	len += size; 
 	pos = begin + len;
-	size = sprintf(buffer+len,"Sum   : %12u %12u\n",
+	size = sprintf(buffer+len,"Sum   :%12u %12u\n",
 		       SD(HBA_ptr)->reads[12], 
 		       SD(HBA_ptr)->writes[12]);
 	len += size; 

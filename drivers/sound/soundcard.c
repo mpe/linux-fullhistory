@@ -618,10 +618,10 @@ sound_mem_init (void)
 
 	    for (i = MAP_NR (start_addr); i <= MAP_NR (end_addr); i++)
 	      {
-		if (mem_map[i])
+		if (mem_map[i].reserved || mem_map[i].count)
 		  panic ("sound_mem_init: Page not free (driver incompatible with kernel).\n");
 
-		mem_map[i] = MAP_PAGE_RESERVED;
+		mem_map[i].reserved = 1;
 	      }
 	  }
       }				/* for dev */

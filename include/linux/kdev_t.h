@@ -104,11 +104,11 @@ static inline kdev_t to_kdev_t(int dev)
 #else /* __KERNEL__ */
 
 /*
-Some unfortunate programs want their definitions of MAJOR and MINOR
-from the kernel sources.
+Some programs want their definitions of MAJOR and MINOR and MKDEV
+from the kernel sources. These must be the externally visible ones.
 */
 #define MAJOR(dev)	((dev)>>8)
 #define MINOR(dev)	((dev) & 0xff)
-
+#define MKDEV(ma,mi)	((ma)<<8 | (mi))
 #endif /* __KERNEL__ */
 #endif
