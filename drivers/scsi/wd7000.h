@@ -12,7 +12,7 @@
 
 #include <linux/types.h>
 
-int wd7000_detect(int);
+int wd7000_detect(Scsi_Host_Template *);
 int wd7000_command(Scsi_Cmnd *);
 int wd7000_queuecommand(Scsi_Cmnd *, void (*done)(Scsi_Cmnd *));
 int wd7000_abort(Scsi_Cmnd *);
@@ -38,9 +38,10 @@ int wd7000_biosparam(Disk *, int, int*);
 #define WD7000_Q    16
 #define WD7000_SG   16
 
-#define WD7000 {\
+#define WD7000 { NULL, \
 	"Western Digital WD-7000",      \
 	wd7000_detect,                  \
+	NULL,				\
 	wd7000_info,                    \
 	wd7000_command,	                \
 	wd7000_queuecommand,	        \

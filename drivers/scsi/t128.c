@@ -181,19 +181,19 @@ void t128_setup(char *str, int *ints) {
 static struct sigaction t128_sigaction =  { t128_intr, 0, SA_INTERRUPT , NULL };
 
 /* 
- * Function : int t128_detect(int hostno)
+ * Function : int t128_detect(Scsi_Host_Template * tpnt)
  *
  * Purpose : detects and initializes T128,T128F, or T228 controllers
  *	that were autoprobed, overriden on the LILO command line, 
  *	or specified at compile time.
  *
- * Inputs : hostno - id of this SCSI adapter.
+ * Inputs : tpnt - template for this SCSI adapter.
  * 
  * Returns : 1 if a host adapter was found, 0 if not.
  *
  */
 
-int t128_detect(int hostno) {
+int t128_detect(Scsi_Host_Template * tpnt) {
     static int current_override = 0, current_base = 0;
     struct Scsi_Host *instance;
     unsigned char *base;
@@ -207,7 +207,7 @@ int t128_detect(int hostno) {
 	else 
 	    for (; !base && (current_base < NO_BASES); ++current_base) {
 #if (TDEBUG & TDEBUG_INIT)
-    printk("scsi%d : probing address %08x\n", hostno, (unsigned int) bases[current_base].address);
+    printk("scsi : probing address %08x\n", (unsigned int) bases[current_base].address);
 #endif
 		for (sig = 0; sig < NO_SIGNATURES; ++sig) 
 		    if (!bases[current_base].noauto && !memcmp 
@@ -215,20 +215,20 @@ int t128_detect(int hostno) {
 			signatures[sig].string, strlen(signatures[sig].string))) {
 			base = bases[current_base].address;
 #if (TDEBUG & TDEBUG_INIT)
-			printk("scsi%d : detected board.\n", hostno);
+			printk("scsi-t128 : detected board.\n");
 #endif
 			break;
 		    }
 	    }
 
 #if defined(TDEBUG) && (TDEBUG & TDEBUG_INIT)
-	printk("scsi%d : base = %08x\n", hostno, (unsigned int) base);
+	printk("scsi-t128 : base = %08x\n", (unsigned int) base);
 #endif
 
 	if (!base)
 	    break;
 
-	instance = scsi_register (hostno, sizeof(struct NCR5380_hostdata));
+	instance = scsi_register (tpnt, sizeof(struct NCR5380_hostdata));
 	instance->base = base;
 
 	NCR5380_init(instance);
@@ -241,17 +241,17 @@ int t128_detect(int hostno) {
 	if (instance->irq != IRQ_NONE) 
 	    if (irqaction (instance->irq, &t128_sigaction)) {
 		printk("scsi%d : IRQ%d not free, interrupts disabled\n", 
-		    hostno, instance->irq);
+		    instance->host_no, instance->irq);
 		instance->irq = IRQ_NONE;
 	    } 
 
 	if (instance->irq == IRQ_NONE) {
-	    printk("scsi%d : interrupts not enabled. for better interactive performance,\n", hostno);
-	    printk("scsi%d : please jumper the board for a free IRQ.\n", hostno);
+	    printk("scsi%d : interrupts not enabled. for better interactive performance,\n", instance->host_no);
+	    printk("scsi%d : please jumper the board for a free IRQ.\n", instance->host_no);
 	}
 
 #if defined(TDEBUG) && (TDEBUG & TDEBUG_INIT)
-	printk("scsi%d : irq = %d\n", hostno, instance->irq);
+	printk("scsi%d : irq = %d\n", instance->host_no, instance->irq);
 #endif
 
 	printk("scsi%d : at 0x%08x", instance->host_no, (int) 
@@ -267,7 +267,6 @@ int t128_detect(int hostno) {
 
 	++current_override;
 	++count;
-	++hostno;
     }
     return count;
 }

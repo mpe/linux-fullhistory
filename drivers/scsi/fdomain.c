@@ -258,7 +258,6 @@ static void              *bios_base        = NULL;
 static int               bios_major        = 0;
 static int               bios_minor        = 0;
 static int               interrupt_level   = 0;
-static int               this_host         = 0;
 static volatile int      in_command        = 0;
 static Scsi_Cmnd         *current_SC       = NULL;
 static enum chip_type    chip              = unknown;
@@ -480,7 +479,7 @@ static int fdomain_test_loopback( void )
    return 0;
 }
 
-int fdomain_16x0_detect( int hostnum )
+int fdomain_16x0_detect(Scsi_Host_Template * tpnt)
 {
    int              i, j;
    int              flag = 0;
@@ -614,11 +613,7 @@ int fdomain_16x0_detect( int hostnum )
       printk( "Future Domain: LOOPBACK TEST FAILED, FAILING DETECT!\n" );
 #endif
       return 0;
-   }
-
-   this_host = hostnum;
-
-				/* Log IRQ with kernel */
+   }				/* Log IRQ with kernel */
    
    if (!interrupt_level) {
       panic( "Future Domain: *NO* interrupt level selected!\n" );
@@ -659,7 +654,7 @@ int fdomain_16x0_detect( int hostnum )
 
    if ((bios_major == 3 && bios_minor >= 2) || bios_major < 0) {
       adapter_mask = 0x80;
-      scsi_hosts[this_host].this_id = 7;
+      tpnt->this_id = 7;
    }
    
 #if DO_DETECT
@@ -679,7 +674,7 @@ int fdomain_16x0_detect( int hostnum )
    printk( "Future Domain detection routine scanning for devices:\n" );
    for (i = 0; i < 8; i++) {
       SCinit.target = i;
-      if (i == scsi_hosts[this_host].this_id) /* Skip host adapter */
+      if (i == tpnt->this_id) /* Skip host adapter */
 	    continue;
       memcpy(SCinit.cmnd, do_request_sense, sizeof(do_request_sense));
       retcode = fdomain_16x0_command(&SCinit);

@@ -853,6 +853,7 @@ repeat:
 		if (driver->subtype == PTY_TYPE_MASTER)
 			(*o_tty_loc)->count++;
 	}
+	(*tty_loc)->driver = *driver;
 	*ret_tty = *tty_loc;
 	retval = 0;
 end_init:

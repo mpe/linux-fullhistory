@@ -1184,7 +1184,7 @@ static int NCR5380_select (struct Scsi_Host *instance, Scsi_Cmnd *cmd,
 	ICR_ASSERT_ATN | ICR_ASSERT_SEL));
 
     /* 
-     * Something wierd happens when we cease to drive BSY - looks
+     * Something weird happens when we cease to drive BSY - looks
      * like the board/chip is letting us do another read before the 
      * appropriate propogation delay has expired, and we're confusing
      * a BSY signal from ourselves as the target's response to SELECTION.
@@ -1256,15 +1256,15 @@ static int NCR5380_select (struct Scsi_Host *instance, Scsi_Cmnd *cmd,
 #endif
     tmp[0] = IDENTIFY(((instance->irq == IRQ_NONE) ? 0 : 1), cmd->lun);
 #ifdef SCSI2
-    if (scsi_devices[cmd->index].tagged_queue && (tag != TAG_NONE)) {
+    if (cmd->device->tagged_queue && (tag != TAG_NONE)) {
 	tmp[1] = SIMPLE_QUEUE_TAG;
 	if (tag == TAG_NEXT) {
 	    /* 0 is TAG_NONE, used to imply no tag for this command */
-	    if (scsi_devices[cmd->index].current_tag == 0)
-		scsi_devices[cmd->index].current_tag = 1;
+	    if (cmd->device->current_tag == 0)
+		cmd->device->current_tag = 1;
 
-	    cmd->tag = scsi_devices[cmd->index].current_tag;
-	    scsi_devices[cmd->index].current_tag++;
+	    cmd->tag = cmd->device->current_tag;
+	    cmd->device->current_tag++;
 	} else  
 	    cmd->tag = (unsigned char) tag;
 
@@ -1288,7 +1288,7 @@ static int NCR5380_select (struct Scsi_Host *instance, Scsi_Cmnd *cmd,
     /* XXX need to handle errors here */
     hostdata->connected = cmd;
 #ifdef SCSI2
-    if (!scsi_devices[cmd->index].tagged_queue)
+    if (!cmd->device->tagged_queue)
 #endif    
 	hostdata->busy[cmd->target] |= (1 << cmd->lun);
 
@@ -1794,10 +1794,10 @@ static void NCR5380_information_transfer (struct Scsi_Host *instance) {
 
 #if defined(PSEUDO_DMA) || defined(REAL_DMA_POLL)
 #ifdef NCR5380_dma_xfer_len
-		if (!scsi_devices[cmd->index].borken &&
+		if (!cmd->device->borken &&
 		    (transfersize = NCR5380_dma_xfer_len(instance, cmd)) != 0) {
 #else
-		if (!scsi_devices[cmd->index].borken && 
+		if (!cmd->device->borken && 
 		    (transfersize = cmd->transfersize) && 
 		    cmd->SCp.this_residual && !(cmd->SCp.this_residual % 
 		    transfersize)) {
@@ -1811,7 +1811,7 @@ static void NCR5380_information_transfer (struct Scsi_Host *instance) {
 			 */ 
 			printk("scsi%d : switching target %d lun %d to slow handshake\n",
 			    instance->host_no, cmd->target, cmd->lun);
-			scsi_devices[cmd->index].borken = 1;
+			cmd->device->borken = 1;
 			NCR5380_write(INITIATOR_COMMAND_REG, ICR_BASE | 
 			    ICR_ASSERT_ATN);
 			msgout = ABORT;
@@ -1951,14 +1951,14 @@ static void NCR5380_information_transfer (struct Scsi_Host *instance) {
 		    case HEAD_OF_QUEUE_TAG:
 		    case ORDERED_QUEUE_TAG:
 		    case SIMPLE_QUEUE_TAG:
-			scsi_devices[cmd->index].tagged_queue = 0;
+			cmd->device->tagged_queue = 0;
 			hostdata->busy[cmd->target] |= (1 << cmd->lun);
 			break;
 		    default:
 			break;
 		    }
 		case DISCONNECT:
-		    scsi_devices[cmd->index].disconnect = 1;
+		    cmd->device->disconnect = 1;
 		    cli();
 		    cmd->host_scribble = (unsigned char *) 
 			hostdata->disconnected_queue;

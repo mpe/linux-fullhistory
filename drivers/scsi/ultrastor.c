@@ -241,9 +241,6 @@ static struct ultrastor_config
   volatile int csir_done;
 #endif
 
-  /* Our index in the host adapter array maintained by higher-level driver */
-  int host_number;
-
   /* A pool of MSCP structures for this adapter, and a bitmask of
      busy structures.  (If ULTRASTOR_14F_MAX_CMDS == 1, a 1 byte
      busy flag is used instead.)  */
@@ -339,7 +336,7 @@ static void log_ultrastor_abort(register struct ultrastor_config *config,
 }
 #endif
 
-static int ultrastor_14f_detect(int hostnum)
+static int ultrastor_14f_detect(Scsi_Host_Template * tpnt)
 {
     size_t i;
     unsigned char in_byte, version_byte = 0;
@@ -486,9 +483,8 @@ static int ultrastor_14f_detect(int hostnum)
 	   config.port_address, config.bios_segment, config.interrupt,
 	   config.dma_channel, config.ha_scsi_id, config.subversion);
 #endif
-    config.host_number = hostnum;
-    scsi_hosts[hostnum].this_id = config.ha_scsi_id;
-    scsi_hosts[hostnum].unchecked_isa_dma = (config.subversion != U34F);
+    tpnt->this_id = config.ha_scsi_id;
+    tpnt->unchecked_isa_dma = (config.subversion != U34F);
 
 #if ULTRASTOR_MAX_CMDS > 1
     config.mscp_free = ~0;
@@ -505,14 +501,14 @@ static int ultrastor_14f_detect(int hostnum)
 	free_irq(config.interrupt);
 	return FALSE;
     }
-    scsi_hosts[hostnum].sg_tablesize = ULTRASTOR_14F_MAX_SG;
+    tpnt->sg_tablesize = ULTRASTOR_14F_MAX_SG;
     printk("UltraStor driver version" VERSION ".  Using %d SG lists.\n",
 	   ULTRASTOR_14F_MAX_SG);
 
     return TRUE;
 }
 
-static int ultrastor_24f_detect(int hostnum)
+static int ultrastor_24f_detect(Scsi_Host_Template * tpnt)
 {
   register int i;
   struct Scsi_Host * shpnt = NULL;
@@ -589,12 +585,11 @@ static int ultrastor_24f_detect(int hostnum)
 	     config.port_address, config.bios_segment,
 	     config.interrupt, config.ha_scsi_id);
 #endif
-      config.host_number = hostnum;
-      scsi_hosts[hostnum].this_id = config.ha_scsi_id;
-      scsi_hosts[hostnum].unchecked_isa_dma = 0;
-      scsi_hosts[hostnum].sg_tablesize = ULTRASTOR_24F_MAX_SG;
+      tpnt->this_id = config.ha_scsi_id;
+      tpnt->unchecked_isa_dma = 0;
+      tpnt->sg_tablesize = ULTRASTOR_24F_MAX_SG;
 
-      shpnt = scsi_register(hostnum, 0);
+      shpnt = scsi_register(tpnt, 0);
       shpnt->irq = config.interrupt;
       shpnt->dma_channel = config.dma_channel;
       shpnt->io_port = config.port_address;
@@ -611,15 +606,15 @@ static int ultrastor_24f_detect(int hostnum)
       outb(ultrastor_bus_reset ? 0xc2 : 0x82, LCL_DOORBELL_MASK(addr+12));
       outb(0x02, SYS_DOORBELL_MASK(addr+12));
       printk("UltraStor driver version " VERSION ".  Using %d SG lists.\n",
-	     scsi_hosts[hostnum].sg_tablesize);
+	     tpnt->sg_tablesize);
       return TRUE;
     }
   return FALSE;
 }
 
-int ultrastor_detect(int hostnum)
+int ultrastor_detect(Scsi_Host_Template * tpnt)
 {
-  return ultrastor_14f_detect(hostnum) || ultrastor_24f_detect(hostnum);
+  return ultrastor_14f_detect(tpnt) || ultrastor_24f_detect(tpnt);
 }
 
 const char *ultrastor_info(void)
@@ -699,7 +694,7 @@ int ultrastor_queuecommand(Scsi_Cmnd *SCpnt, void (*done)(Scsi_Cmnd *))
        activity. 
 
        ???  Which other device types should never use the cache?   */
-    my_mscp->ca = scsi_devices[SCpnt->index].type != TYPE_TAPE;
+    my_mscp->ca = SCpnt->device->type != TYPE_TAPE;
     my_mscp->target_id = SCpnt->target;
     my_mscp->ch_no = 0;
     my_mscp->lun = SCpnt->lun;

@@ -278,19 +278,19 @@ void pas16_setup(char *str, int *ints) {
 static struct sigaction pas16_sigaction =  { pas16_intr, 0, SA_INTERRUPT , NULL };
 
 /* 
- * Function : int pas16_detect(int hostno)
+ * Function : int pas16_detect(Scsi_Host_Template * tpnt)
  *
  * Purpose : detects and initializes PAS16 controllers
  *	that were autoprobed, overriden on the LILO command line, 
  *	or specified at compile time.
  *
- * Inputs : hostno - id of this SCSI adapter.
+ * Inputs : tpnt - template for this SCSI adapter.
  * 
  * Returns : 1 if a host adapter was found, 0 if not.
  *
  */
 
-int pas16_detect(int hostno) {
+int pas16_detect(Scsi_Host_Template * tpnt) {
     static int current_override = 0;
     static unsigned short current_base = 0;
     struct Scsi_Host *instance;
@@ -309,27 +309,27 @@ int pas16_detect(int hostno) {
 	else
 	    for (; !io_port && (current_base < NO_BASES); ++current_base) {
 #if (PDEBUG & PDEBUG_INIT)
-    printk("scsi%d : probing io_port %04x\n", hostno, (unsigned int) bases[current_base].io_port);
+    printk("scsi-pas16 : probing io_port %04x\n", (unsigned int) bases[current_base].io_port);
 #endif
 	        if ( !bases[current_base].noauto &&
 		     pas16_hw_detect( current_base ) ){
 		        io_port = bases[current_base].io_port;
 			init_board( io_port, default_irqs[ current_base ] ); 
 #if (PDEBUG & PDEBUG_INIT)
-		        printk("scsi%d : detected board.\n", hostno);
+		        printk("scsi-pas16 : detected board.\n");
 #endif
 		}
     }
 
 
 #if defined(PDEBUG) && (PDEBUG & PDEBUG_INIT)
-	printk("scsi%d : io_port = %04x\n", hostno, (unsigned int) io_port);
+	printk("scsi-pas16 : io_port = %04x\n", (unsigned int) io_port);
 #endif
 
 	if (!io_port)
 	    break;
 
-	instance = scsi_register (hostno, sizeof(struct NCR5380_hostdata));
+	instance = scsi_register (tpnt, sizeof(struct NCR5380_hostdata));
 	instance->io_port = io_port;
 
 	NCR5380_init(instance);
@@ -342,17 +342,17 @@ int pas16_detect(int hostno) {
 	if (instance->irq != IRQ_NONE) 
 	    if (irqaction (instance->irq, &pas16_sigaction)) {
 		printk("scsi%d : IRQ%d not free, interrupts disabled\n", 
-		    hostno, instance->irq);
+		    instance->host_no, instance->irq);
 		instance->irq = IRQ_NONE;
 	    } 
 
 	if (instance->irq == IRQ_NONE) {
-	    printk("scsi%d : interrupts not enabled. for better interactive performance,\n", hostno);
-	    printk("scsi%d : please jumper the board for a free IRQ.\n", hostno);
+	    printk("scsi%d : interrupts not enabled. for better interactive performance,\n", instance->host_no);
+	    printk("scsi%d : please jumper the board for a free IRQ.\n", instance->host_no);
 	}
 
 #if defined(PDEBUG) && (PDEBUG & PDEBUG_INIT)
-	printk("scsi%d : irq = %d\n", hostno, instance->irq);
+	printk("scsi%d : irq = %d\n", instance->host_no, instance->irq);
 #endif
 
 	printk("scsi%d : at 0x%04x", instance->host_no, (int) 
@@ -368,7 +368,6 @@ int pas16_detect(int hostno) {
 
 	++current_override;
 	++count;
-	++hostno;
     }
     return count;
 }

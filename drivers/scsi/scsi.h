@@ -258,7 +258,8 @@ extern const unsigned char scsi_command_size[8];
 */
 
 typedef struct scsi_device {
-	unsigned char id, lun, index;
+        struct scsi_device * next; /* Used for linked list */
+	unsigned char id, lun;
 	int access_count;	/* Count of open channels/mounts */
 	struct wait_queue * device_wait;  /* Used to wait if device is busy */
 	struct Scsi_Host * host;
@@ -406,7 +407,7 @@ typedef struct scsi_pointer {
 typedef struct scsi_cmnd {
 	struct Scsi_Host * host;
 	Scsi_Device * device;
-	unsigned char target, lun,  index;
+	unsigned char target, lun;
 	struct scsi_cmnd *next, *prev;	
 
 /* These elements define the operation we are about to perform */
@@ -493,27 +494,27 @@ extern void scsi_do_cmd (Scsi_Cmnd *, const void *cmnd ,
                   int timeout, int retries);
 
 
-extern Scsi_Cmnd * allocate_device(struct request **, int, int);
+extern Scsi_Cmnd * allocate_device(struct request **, Scsi_Device *, int);
 
-extern Scsi_Cmnd * request_queueable(struct request *, int);
+extern Scsi_Cmnd * request_queueable(struct request *, Scsi_Device *);
 extern int scsi_reset (Scsi_Cmnd *);
 
 extern int max_scsi_hosts;
 extern int MAX_SD, NR_SD, MAX_ST, NR_ST, MAX_SR, NR_SR, NR_SG, MAX_SG;
 extern unsigned long sd_init(unsigned long, unsigned long);
-extern unsigned long sd_init1(unsigned long, unsigned long);
+extern void sd_init1(void);
 extern void sd_attach(Scsi_Device *);
 
 extern unsigned long sr_init(unsigned long, unsigned long);
-extern unsigned long sr_init1(unsigned long, unsigned long);
+extern void sr_init1(void);
 extern void sr_attach(Scsi_Device *);
 
 extern unsigned long st_init(unsigned long, unsigned long);
-extern unsigned long st_init1(unsigned long, unsigned long);
+extern void st_init1(void);
 extern void st_attach(Scsi_Device *);
 
 extern unsigned long sg_init(unsigned long, unsigned long);
-extern unsigned long sg_init1(unsigned long, unsigned long);
+extern void sg_init1(void);
 extern void sg_attach(Scsi_Device *);
 
 #if defined(MAJOR_NR) && (MAJOR_NR != SCSI_TAPE_MAJOR)
@@ -560,7 +561,7 @@ static void end_scsi_request(Scsi_Cmnd * SCpnt, int uptodate, int sectors)
 			need_resched = 1;
 	}
 	req->dev = -1;
-	wake_up(&scsi_devices[SCpnt->index].device_wait);
+	wake_up(&SCpnt->device->device_wait);
 	return;
 }
 
@@ -584,17 +585,20 @@ static void end_scsi_request(Scsi_Cmnd * SCpnt, int uptodate, int sectors)
 #endif
 
 #define SCSI_SLEEP(QUEUE, CONDITION) {				\
+	long old_state;						\
 	if (CONDITION) {					\
-                struct wait_queue wait = { current, NULL};      \
+		struct wait_queue wait = { current, NULL};	\
 		add_wait_queue(QUEUE, &wait);			\
 sleep_repeat:							\
+		old_state = current->state;			\
 		current->state = TASK_UNINTERRUPTIBLE;		\
 		if (CONDITION) {				\
 			schedule();				\
 			goto sleep_repeat;			\
 		}						\
 		remove_wait_queue(QUEUE, &wait);		\
-		current->state = TASK_RUNNING;			\
+		if (current->state == TASK_UNINTERRUPTIBLE)	\
+			current->state = old_state;		\
 	}; }
 
 #endif

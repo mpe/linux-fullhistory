@@ -152,7 +152,7 @@ struct ecb {			/* Enhanced Control Block 6.1 */
 #define AHA1740CMD_RINQ  0x0a	/* Read Host Adapter Inquiry Data */
 #define AHA1740CMD_TARG  0x10	/* Target SCSI Command */
 
-int aha1740_detect(int);
+int aha1740_detect(Scsi_Host_Template *);
 int aha1740_command(Scsi_Cmnd *);
 int aha1740_queuecommand(Scsi_Cmnd *, void (*done)(Scsi_Cmnd *));
 int aha1740_abort(Scsi_Cmnd *);
@@ -167,14 +167,24 @@ int aha1740_biosparam(Disk *, int, int*);
 #define NULL 0
 #endif
 
-#define AHA1740 {"Adaptec 1740", aha1740_detect,	\
-		aha1740_info, aha1740_command,		\
-		aha1740_queuecommand,			\
-		aha1740_abort,				\
-		aha1740_reset,				\
-	        NULL,		                        \
-		aha1740_biosparam,                      \
-		AHA1740_ECBS, 7, AHA1740_SCATTER, 1, 0, 0, ENABLE_CLUSTERING}
+#define AHA1740 {NULL,					\
+		   "Adaptec 1740", 			\
+		   aha1740_detect,			\
+		   NULL,				\
+		   aha1740_info, 			\
+		   aha1740_command,			\
+		   aha1740_queuecommand,		\
+		   aha1740_abort,			\
+		   aha1740_reset,			\
+		   NULL,		                \
+		   aha1740_biosparam,                   \
+		   AHA1740_ECBS, 			\
+		   7, 					\
+		   AHA1740_SCATTER, 			\
+		   1, 					\
+		   0, 					\
+		   0, 					\
+		   ENABLE_CLUSTERING}
 
 #endif
 

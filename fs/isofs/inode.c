@@ -6,7 +6,6 @@
  *  (C) 1991  Linus Torvalds - minix filesystem
  */
 
-#include <linux/config.h>
 #include <linux/stat.h>
 #include <linux/sched.h>
 #include <linux/iso_fs.h>
@@ -20,16 +19,6 @@
 
 #include <asm/system.h>
 #include <asm/segment.h>
-
-#if defined(CONFIG_BLK_DEV_SR)
-extern int check_cdrom_media_change(int, int);
-#endif
-#if defined(CONFIG_CDU31A)
-extern int check_cdu31a_media_change(int, int);
-#endif
-#if defined(CONFIG_MCD)
-extern int check_mcd_media_change(int, int);
-#endif
 
 #ifdef LEAK_CHECK
 static int check_malloc = 0;

@@ -254,39 +254,9 @@ static struct wait_queue *cdu31a_irq_wait = NULL;
 
 static int curr_control_reg = 0; /* Current value of the control register */
 
-
-#if 1 /* This will go away as soon as the isofs code is fixed
-         to use the fops struct. */
 /*
  * This routine returns 1 if the disk has been changed since the last
- * check or 0 if it hasn't.  Setting flag to 0 resets the changed flag.
- */
-int
-check_cdu31a_media_change(int full_dev, int flag)
-{
-   int retval, target;
-
-
-   target = MINOR(full_dev);
-
-   if (target > 0) {
-      printk("Sony CD-ROM request error: invalid device.\n");
-      return 0;
-   }
-
-   retval = sony_disc_changed;
-   if (!flag)
-   {
-      sony_disc_changed = 0;
-   }
-
-   return retval;
-}
-#endif
-
-/*
- * This routine returns 1 if the disk has been changed since the last
- * check or 0 if it hasn't.  Setting flag to 0 resets the changed flag.
+ * check or 0 if it hasn't.
  */
 static int
 scd_disk_change(dev_t full_dev)

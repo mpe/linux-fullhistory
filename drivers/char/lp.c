@@ -235,7 +235,7 @@ static int lp_write_polled(struct inode * inode, struct file * file,
 			} else
 	                /* not offline or out of paper. on fire? */
 			if (!(status & LP_PERRORP)) {
-				printk("lp%d on fire\n", minor);
+				printk("lp%d reported invalid error status (on fire, eh?)\n", minor);
 				if(LP_F(minor) & LP_ABORT)
 					return temp-buf?temp-buf:-EFAULT;
 				current->state = TASK_INTERRUPTIBLE;

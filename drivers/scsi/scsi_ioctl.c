@@ -91,7 +91,7 @@ static int ioctl_internal_command(Scsi_Device *dev, char * cmd)
 	int result;
 	Scsi_Cmnd * SCpnt;
 
-	SCpnt = allocate_device(NULL, dev->index, 1);
+	SCpnt = allocate_device(NULL, dev, 1);
 	scsi_do_cmd(SCpnt,  cmd, NULL,  0,
 			scsi_ioctl_done,  MAX_TIMEOUT,
 			MAX_RETRIES);
@@ -135,7 +135,7 @@ static int ioctl_internal_command(Scsi_Device *dev, char * cmd)
 
 	result = SCpnt->result;
 	SCpnt->request.dev = -1;
-	wake_up(&scsi_devices[SCpnt->index].device_wait);
+	wake_up(&SCpnt->device->device_wait);
 	return result;
 }
 
@@ -175,7 +175,7 @@ static int ioctl_command(Scsi_Device *dev, void *buffer)
 
 #ifndef DEBUG_NO_CMD
 	
-	SCpnt = allocate_device(NULL, dev->index, 1);
+	SCpnt = allocate_device(NULL, dev, 1);
 
 	scsi_do_cmd(SCpnt,  cmd,  buf, needed,  scsi_ioctl_done,  MAX_TIMEOUT, 
 			MAX_RETRIES);
@@ -204,10 +204,10 @@ static int ioctl_command(Scsi_Device *dev, void *buffer)
 	SCpnt->request.dev = -1;  /* Mark as not busy */
 	if (buf) scsi_free(buf, buf_needed);
 
-	if(scsi_devices[SCpnt->index].scsi_request_fn)
-	  (*scsi_devices[SCpnt->index].scsi_request_fn)();
+	if(SCpnt->device->scsi_request_fn)
+	  (*SCpnt->device->scsi_request_fn)();
 
-	wake_up(&scsi_devices[SCpnt->index].device_wait);
+	wake_up(&SCpnt->device->device_wait);
 	return result;
 #else
 	{
@@ -236,8 +236,8 @@ int scsi_ioctl (Scsi_Device *dev, int cmd, void *arg)
 {
         char scsi_cmd[12];
 
-	if ((cmd != 0 && dev->index > NR_SCSI_DEVICES))
-		return -ENXIO;
+	/* No idea how this happens.... */
+	if (!dev) return -ENXIO;
 	
 	switch (cmd) {
 	        case SCSI_IOCTL_GET_IDLUN:

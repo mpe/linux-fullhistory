@@ -252,7 +252,7 @@ static int sg_write(struct inode *inode,struct file *filp,char *buf,int count)
 #ifdef DEBUG
   printk("allocating device\n");
 #endif
-  if (!(SCpnt=allocate_device(NULL,device->device->index, !(filp->f_flags & O_NONBLOCK))))
+  if (!(SCpnt=allocate_device(NULL,device->device, !(filp->f_flags & O_NONBLOCK))))
    {
     device->pending=0;
     wake_up(&device->write_wait);
@@ -317,11 +317,10 @@ unsigned long sg_init(unsigned long mem_start, unsigned long mem_end)
   return mem_start;
  }
 
-unsigned long sg_init1(unsigned long mem_start, unsigned long mem_end)
+void sg_init1()
  {
-  scsi_generics = (struct scsi_generic *) mem_start;
-  mem_start += MAX_SG * sizeof(struct scsi_generic);
-  return mem_start;
+  scsi_generics = (struct scsi_generic *) 
+    scsi_init_malloc(MAX_SG * sizeof(struct scsi_generic));
  };
 
 void sg_attach(Scsi_Device * SDp)

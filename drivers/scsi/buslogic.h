@@ -12,7 +12,7 @@
 
 #ifndef _BUSLOGIC_H
 
-int buslogic_detect(int);
+int buslogic_detect(Scsi_Host_Template *);
 int buslogic_queuecommand(Scsi_Cmnd *, void (*done)(Scsi_Cmnd *));
 int buslogic_abort(Scsi_Cmnd *);
 const char *buslogic_info(void);
@@ -21,8 +21,10 @@ int buslogic_biosparam(Disk *, int, int *);
 
 #define BUSLOGIC_CMDLUN 1	/* ??? */
 
-#define BUSLOGIC { "BusLogic",			\
+#define BUSLOGIC { NULL, 			\
+		   "BusLogic",			\
 		   buslogic_detect,		\
+		   NULL,			\
 		   buslogic_info,		\
 		   0,	/* no command func */	\
 		   buslogic_queuecommand,	\

@@ -780,7 +780,7 @@ static int aha1542_query(int base_io, int * transl)
 
 
 /* return non-zero on detection */
-int aha1542_detect(int hostnum)
+int aha1542_detect(Scsi_Host_Template * tpnt)
 {
     unsigned char dma_chan;
     unsigned char irq_level;
@@ -794,7 +794,7 @@ int aha1542_detect(int hostnum)
     
     for(indx = 0; indx < sizeof(bases)/sizeof(bases[0]); indx++)
 	    if(!check_region(bases[indx], 4)) { 
-		    shpnt = scsi_register(hostnum,
+		    shpnt = scsi_register(tpnt,
 					  sizeof(struct aha1542_hostdata));
 
 		    if(!aha1542_test_port(bases[indx], shpnt)) goto unregister;
@@ -900,7 +900,7 @@ int aha1542_detect(int hostnum)
 		    count++;
 		    continue;
 	    unregister:
-		    scsi_unregister(shpnt, sizeof(struct aha1542_hostdata));
+		    scsi_unregister(shpnt);
 		    continue;
 		    
 	    };

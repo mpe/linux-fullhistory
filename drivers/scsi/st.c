@@ -230,7 +230,7 @@ back_over_eof(int dev)
   cmd[2] = cmd[3] = cmd[4] = 0xff;  /* -1 filemarks */
   cmd[5] = 0;
 
-  SCpnt = allocate_device(NULL, (STp->device)->index, 1);
+  SCpnt = allocate_device(NULL, STp->device, 1);
   SCpnt->sense_buffer[0] = 0;
   SCpnt->request.dev = dev;
   scsi_do_cmd(SCpnt,
@@ -275,7 +275,7 @@ flush_write_buffer(int dev)
 
   result = 0;
   if (STp->dirty == 1) {
-    SCpnt = allocate_device(NULL, (STp->device)->index, 1);
+    SCpnt = allocate_device(NULL, STp->device, 1);
 
     offset = (STp->buffer)->buffer_bytes;
     transfer = ((offset + STp->block_size - 1) /
@@ -411,7 +411,7 @@ scsi_tape_open(struct inode * inode, struct file * filp)
     STp->eof_hit = 0;
     STp->recover_count = 0;
 
-    SCpnt = allocate_device(NULL, (STp->device)->index, 1);
+    SCpnt = allocate_device(NULL, STp->device, 1);
     if (!SCpnt) {
       printk("st%d: Tape request not allocated", dev);
       return (-EBUSY);
@@ -597,7 +597,7 @@ scsi_tape_close(struct inode * inode, struct file * filp)
 #endif
 
       if (result == 0 || result == (-ENOSPC)) {
-	SCpnt = allocate_device(NULL, (STp->device)->index, 1);
+	SCpnt = allocate_device(NULL, STp->device, 1);
 
 	SCpnt->sense_buffer[0] = 0;
 	memset(cmd, 0, 10);
@@ -718,7 +718,7 @@ st_write(struct inode * inode, struct file * filp, char * buf, int count)
     if (!STp->do_async_writes)
       write_threshold--;
 
-    SCpnt = allocate_device(NULL, (STp->device)->index, 1);
+    SCpnt = allocate_device(NULL, STp->device, 1);
 
     total = count;
 
@@ -925,7 +925,7 @@ st_read(struct inode * inode, struct file * filp, char * buf, int count)
 
     STp->rw = ST_READING;
 
-    SCpnt = allocate_device(NULL, (STp->device)->index, 1);
+    SCpnt = allocate_device(NULL, STp->device, 1);
 
     for (total = 0; total < count; ) {
 
@@ -1413,7 +1413,7 @@ st_int_ioctl(struct inode * inode,struct file * file,
        return (-ENOSYS);
      }
 
-   SCpnt = allocate_device(NULL, (STp->device)->index, 1);
+   SCpnt = allocate_device(NULL, STp->device, 1);
    SCpnt->sense_buffer[0] = 0;
    SCpnt->request.dev = dev;
    scsi_do_cmd(SCpnt,
@@ -1594,7 +1594,7 @@ st_ioctl(struct inode * inode,struct file * file,
      if (i)
        return i;
 
-     SCpnt = allocate_device(NULL, (STp->device)->index, 1);
+     SCpnt = allocate_device(NULL, STp->device, 1);
 
      SCpnt->sense_buffer[0]=0;
      memset (scmd, 0, 10);
@@ -1682,17 +1682,16 @@ void st_attach(Scsi_Device * SDp){
   if(NR_ST > MAX_ST) panic ("scsi_devices corrupt (st)");
 };
 
-unsigned long st_init1(unsigned long mem_start, unsigned long mem_end){
-  scsi_tapes = (Scsi_Tape *) mem_start;
-  mem_start += MAX_ST * sizeof(Scsi_Tape);
-  return mem_start;
+void st_init1(){
+  scsi_tapes = (Scsi_Tape *) scsi_init_malloc(MAX_ST * sizeof(Scsi_Tape));
 };
 
 /* Driver initialization */
 unsigned long st_init(unsigned long mem_start, unsigned long mem_end)
 {
-  int i, dev_nbr;
+  int i;
   Scsi_Tape * STp;
+  Scsi_Device * SDp;
 
   if (register_chrdev(MAJOR_NR,"st",&st_fops)) {
     printk("Unable to get major %d for SCSI tapes\n",MAJOR_NR);
@@ -1705,7 +1704,7 @@ unsigned long st_init(unsigned long mem_start, unsigned long mem_end)
 	 st_buffer_size, st_write_threshold);
 #endif
 
-  for (i=0, dev_nbr=(-1); i < NR_ST; ++i) {
+  for (i=0, SDp = scsi_devices; i < NR_ST; ++i) {
     STp = &(scsi_tapes[i]);
     STp->capacity = 0xfffff;
     STp->dirty = 0;
@@ -1726,17 +1725,18 @@ unsigned long st_init(unsigned long mem_start, unsigned long mem_end)
     mem_start += sizeof(struct mtget);
     /* Initialize status */
     memset((void *) scsi_tapes[i].mt_status, 0, sizeof(struct mtget));
-    for (dev_nbr++; dev_nbr < NR_SCSI_DEVICES; dev_nbr++)
-      if (scsi_devices[dev_nbr].type == TYPE_TAPE)
+    for (; SDp; SDp = SDp->next)
+      if (SDp->type == TYPE_TAPE)
 	break;
-    if (dev_nbr >= NR_SCSI_DEVICES)
+    if (!SDp)
       printk("st%d: ERROR: Not found in scsi chain.\n", i);
     else {
-      if (scsi_devices[dev_nbr].scsi_level <= 2)
+      if (SDp->scsi_level <= 2)
 	STp->mt_status->mt_type = MT_ISSCSI1;
       else
 	STp->mt_status->mt_type = MT_ISSCSI2;
     }
+    SDp = SDp->next;
   }
 
   /* Allocate the buffers */

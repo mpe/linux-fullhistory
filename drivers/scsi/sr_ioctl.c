@@ -43,7 +43,7 @@ static int do_ioctl(int target, unsigned char * sr_cmd, void * buffer, unsigned 
 	Scsi_Cmnd * SCpnt;
 	int result;
 
-	SCpnt = allocate_device(NULL, scsi_CDs[target].device->index, 1);
+	SCpnt = allocate_device(NULL, scsi_CDs[target].device, 1);
 	scsi_do_cmd(SCpnt,
 		    (void *) sr_cmd, buffer, buflength, sr_ioctl_done, 
 		    IOCTL_TIMEOUT, IOCTL_RETRIES);
@@ -85,7 +85,7 @@ static int do_ioctl(int target, unsigned char * sr_cmd, void * buffer, unsigned 
 
 	result = SCpnt->result;
 	SCpnt->request.dev = -1; /* Deallocate */
-	wake_up(&scsi_devices[SCpnt->index].device_wait);
+	wake_up(&SCpnt->device->device_wait);
 	/* Wake up a process waiting for device*/
       	return result;
 }

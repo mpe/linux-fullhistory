@@ -272,8 +272,9 @@ static inline void borken_wait(void) {
 
 #endif /* def SLOW_HANDSHAKE */
 
-int seagate_st0x_detect (int hostnum)
+int seagate_st0x_detect (Scsi_Host_Template * tpnt)
 	{
+     struct Scsi_Host *instance;
 #ifndef OVERRIDE
 	int i,j;
 #endif 
@@ -336,7 +337,7 @@ static struct sigaction seagate_sigaction = {
 #endif /* OVERIDE */
 	} /* (! controller_type) */
  
-	scsi_hosts[hostnum].this_id = (controller_type == SEAGATE) ? 7 : 6;
+	tpnt->this_id = (controller_type == SEAGATE) ? 7 : 6;
 
 	if (base_address)
 		{
@@ -349,7 +350,8 @@ static struct sigaction seagate_sigaction = {
  *	At all times, we will use IRQ 5.  Should also check for IRQ3 if we 
  * 	loose our first interrupt.
  */
-		hostno = hostnum;
+		instance = scsi_register(tpnt, 0);
+		hostno = instance->host_no;
 		if (irqaction((int) irq, &seagate_sigaction)) {
 			printk("scsi%d : unable to allocate IRQ%d\n",
 				hostno, (int) irq);
@@ -615,7 +617,7 @@ static int internal_command(unsigned char target, unsigned char lun, const void 
 	st0x_aborted = 0;
 
 #ifdef SLOW_HANDSHAKE
-	borken = (int) scsi_devices[SCint->index].borken;
+	borken = (int) SCint->device->borken;
 #endif
 
 #if (DEBUG & PRINT_COMMAND)

@@ -100,7 +100,6 @@ static int npart = 0;
 #endif
 
 static volatile void (*do_done[SCSI_DEBUG_MAILBOXES])(Scsi_Cmnd *) = {NULL, };
-static int scsi_debug_host = 0;
 extern void scsi_debug_interrupt();
 
 volatile Scsi_Cmnd * SCint[SCSI_DEBUG_MAILBOXES] = {NULL,};
@@ -513,9 +512,8 @@ static void scsi_debug_intr_handle(void)
 }
 
 
-int scsi_debug_detect(int hostnum)
+int scsi_debug_detect(Scsi_Host_Template * tpnt)
 {
-    scsi_debug_host = hostnum;
 #ifndef IMMEDIATE
     timer_table[SCSI_DEBUG_TIMER].fn = scsi_debug_intr_handle;
     timer_table[SCSI_DEBUG_TIMER].expires = 0;
@@ -528,7 +526,7 @@ int scsi_debug_abort(Scsi_Cmnd * SCpnt)
     int j;
     void (*my_done)(Scsi_Cmnd *);
     DEB(printk("scsi_debug_abort\n"));
-    SCpnt->result = i << 16;
+    SCpnt->result = SCpnt->abort_reason << 16;
     for(j=0;j<SCSI_DEBUG_MAILBOXES; j++) {
       if(SCpnt == SCint[j]) {
 	my_done = do_done[j];

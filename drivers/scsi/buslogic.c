@@ -912,7 +912,7 @@ static int buslogic_query(unsigned int base, int *trans)
 }
 
 /* return non-zero on detection */
-int buslogic_detect(int hostnum)
+int buslogic_detect(Scsi_Host_Template * tpnt)
 {
     unsigned char dma;
     unsigned char irq;
@@ -932,7 +932,7 @@ int buslogic_detect(int hostnum)
 
     for (indx = 0; indx < ARRAY_SIZE(bases); indx++)
 	if (!check_region(bases[indx], 3)) {
-	    SHpnt = scsi_register(hostnum, sizeof (struct hostdata));
+	    SHpnt = scsi_register(tpnt, sizeof (struct hostdata));
 
 	    base = bases[indx];
 
@@ -1085,7 +1085,7 @@ int buslogic_detect(int hostnum)
 	    count++;
 	    continue;
 	  unregister:
-	    scsi_unregister(SHpnt, sizeof (struct hostdata));
+	    scsi_unregister(SHpnt);
 	}
     return count;
 }

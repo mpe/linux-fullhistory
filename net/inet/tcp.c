@@ -155,7 +155,7 @@
 #include <asm/segment.h>
 #include <linux/mm.h>
 
-#undef TCP_FASTPATH
+#define TCP_FASTPATH
 
 #define SEQ_TICK 3
 unsigned long seq_offset;
@@ -3844,6 +3844,7 @@ tcp_rcv(struct sk_buff *skb, struct device *dev, struct options *opt,
 				}
 				if(!sk->dead)
 					sk->data_ready(sk,0);
+				release_sock(sk);
 				return 0;
 			}
 		}

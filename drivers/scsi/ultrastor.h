@@ -13,7 +13,7 @@
 #ifndef _ULTRASTOR_H
 #define _ULTRASTOR_H
 
-int ultrastor_detect(int);
+int ultrastor_detect(Scsi_Host_Template *);
 const char *ultrastor_info(void);
 int ultrastor_queuecommand(Scsi_Cmnd *, void (*done)(Scsi_Cmnd *));
 int ultrastor_abort(Scsi_Cmnd *);
@@ -29,12 +29,24 @@ int ultrastor_biosparam(Disk *, int, int *);
 #define ULTRASTOR_24F_PORT 0xC80
 
 
-#define ULTRASTOR_14F \
-    { "UltraStor 14F/24F/34F", ultrastor_detect, ultrastor_info, 0, \
-      ultrastor_queuecommand, ultrastor_abort, ultrastor_reset, \
-      0, ultrastor_biosparam, ULTRASTOR_MAX_CMDS, 0, \
-      ULTRASTOR_14F_MAX_SG, ULTRASTOR_MAX_CMDS_PER_LUN, 0, 1, \
-	ENABLE_CLUSTERING }
+#define ULTRASTOR_14F { NULL, /* Ptr for modules*/	\
+			  "UltraStor 14F/24F/34F", 	\
+			  ultrastor_detect, 		\
+			  NULL,	/* Release */		\
+			  ultrastor_info, 		\
+			  0, 				\
+			  ultrastor_queuecommand,	\
+			  ultrastor_abort, 		\
+			  ultrastor_reset,		\
+			  0,				\
+			  ultrastor_biosparam, 		\
+			  ULTRASTOR_MAX_CMDS,		\
+			  0, 				\
+			  ULTRASTOR_14F_MAX_SG, 	\
+			  ULTRASTOR_MAX_CMDS_PER_LUN, 	\
+			  0, 				\
+			  1, 				\
+			  ENABLE_CLUSTERING }
 
 
 #ifdef ULTRASTOR_PRIVATE

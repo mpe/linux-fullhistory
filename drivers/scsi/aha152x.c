@@ -503,7 +503,7 @@ static int aha152x_porttest(int port_base)
   return(i==16);
 }
 
-int aha152x_detect(int hostno)
+int aha152x_detect(Scsi_Host_Template * tpnt)
 {
   int                 i, j,  ok;
   aha152x_config      conf;
@@ -653,10 +653,10 @@ int aha152x_detect(int hostno)
     }
 
   SETPORT( SCSIID, this_host << 4 );
-  scsi_hosts[hostno].this_id=this_host;
+  tpnt->this_id=this_host;
   
   if(can_disconnect)
-    scsi_hosts[hostno].can_queue=AHA152X_MAXQUEUE;
+    tpnt->can_queue=AHA152X_MAXQUEUE;
 
   /* RESET OUT */
   SETBITS(SCSISEQ, SCSIRSTO );

@@ -108,7 +108,9 @@ static const char RCSid[] = "$Header: /usr/src/linux/kernel/blk_drv/scsi/RCS/hos
  *	idiocy.
  */
 
-Scsi_Host_Template scsi_hosts[] =
+Scsi_Host_Template * scsi_hosts = NULL;
+
+static Scsi_Host_Template builtin_scsi_hosts[] =
 	{
 #ifdef CONFIG_SCSI_ULTRASTOR
 	ULTRASTOR_14F,
@@ -152,7 +154,7 @@ Scsi_Host_Template scsi_hosts[] =
 #endif
 	};
 
-#define MAX_SCSI_HOSTS (sizeof(scsi_hosts) / sizeof(Scsi_Host_Template))
+#define MAX_SCSI_HOSTS (sizeof(builtin_scsi_hosts) / sizeof(Scsi_Host_Template))
 
 /*
  *	Our semaphores and timeout counters, where size depends on MAX_SCSI_HOSTS here. 
@@ -160,44 +162,44 @@ Scsi_Host_Template scsi_hosts[] =
 
 struct Scsi_Host * scsi_hostlist = NULL;
 
-static int scsi_init_memory_start = 0;
-
 int max_scsi_hosts = 0;
 static int next_host = 0;
 
 void
-scsi_unregister(struct Scsi_Host * sh, int j){
+scsi_unregister(struct Scsi_Host * sh){
 	struct Scsi_Host * shpnt;
+	int j;
 
-	if(((unsigned int) sh) + sizeof(struct Scsi_Host) + j != scsi_init_memory_start)
-		panic("Unable to unregister scsi host");
+	j = sh->extra_bytes;
+
 	if(scsi_hostlist == sh)
 		scsi_hostlist = NULL;
 	else {
 		shpnt = scsi_hostlist;
 		while(shpnt->next != sh) shpnt = shpnt->next;
 		shpnt->next = shpnt->next->next;
-
 	};
 	next_host--;
-	scsi_init_memory_start = (unsigned int) sh;
+	scsi_init_free((char *) sh, sizeof(struct Scsi_Host) + j);
 }
 
 /* We call this when we come across a new host adapter. We only do this
    once we are 100% sure that we want to use this host adapter -  it is a
    pain to reverse this, so we try and avoid it */
 
-struct Scsi_Host * scsi_register(int i, int j){
+struct Scsi_Host * scsi_register(Scsi_Host_Template * tpnt, int j){
 	struct Scsi_Host * retval, *shpnt;
-	retval = (struct Scsi_Host*) scsi_init_memory_start;
-	scsi_init_memory_start += sizeof(struct Scsi_Host) + j;
+	retval = scsi_init_malloc(sizeof(struct Scsi_Host) + j);
 	retval->host_busy = 0;
+	if(j > 0xffff) panic("Too many extra bytes requested\n");
+	retval->extra_bytes = j;
+	retval->loaded_as_module = scsi_loadable_module_flag;
 	retval->host_no = next_host++;
 	retval->host_queue = NULL;	
 	retval->host_wait = NULL;	
 	retval->last_reset = 0;	
 	retval->irq = 0;
-	retval->hostt = &scsi_hosts[i];	
+	retval->hostt = tpnt;	
 	retval->next = NULL;
 #ifdef DEBUG
 	printk("Register %x %x: %d %d\n", retval, retval->hostt, i, j);
@@ -205,9 +207,9 @@ struct Scsi_Host * scsi_register(int i, int j){
 
 	/* The next three are the default values which can be overridden
 	   if need be */
-	retval->this_id = scsi_hosts[i].this_id;
-	retval->sg_tablesize = scsi_hosts[i].sg_tablesize;
-	retval->unchecked_isa_dma = scsi_hosts[i].unchecked_isa_dma;
+	retval->this_id = tpnt->this_id;
+	retval->sg_tablesize = tpnt->sg_tablesize;
+	retval->unchecked_isa_dma = tpnt->unchecked_isa_dma;
 
 	if(!scsi_hostlist)
 		scsi_hostlist = retval;
@@ -221,19 +223,17 @@ struct Scsi_Host * scsi_register(int i, int j){
 	return retval;
 }
 
-unsigned int
-scsi_init(unsigned long memory_start,unsigned long memory_end)
+unsigned int scsi_init()
 {
 	static int called = 0;
 	int i, j, count, pcount;
-
+	Scsi_Host_Template * tpnt;
 	count = 0;
 
-	if(called) return memory_start;
+	if(called) return 0;
 
-	scsi_init_memory_start = memory_start;
 	called = 1;	
-	for (i = 0; i < MAX_SCSI_HOSTS; ++i)
+	for (tpnt = &builtin_scsi_hosts[0], i = 0; i < MAX_SCSI_HOSTS; ++i, tpnt++)
 	{
 		/*
 		 * Initialize our semaphores.  -1 is interpreted to mean 
@@ -241,36 +241,38 @@ scsi_init(unsigned long memory_start,unsigned long memory_end)
 		 */ 
 		
 		pcount = next_host;
-		if ((scsi_hosts[i].detect) && 
-		    (scsi_hosts[i].present = 
-		     scsi_hosts[i].detect(i)))
+		if ((tpnt->detect) && 
+		    (tpnt->present = 
+		     tpnt->detect(tpnt)))
 		{		
 			/* The only time this should come up is when people use
 			   some kind of patched driver of some kind or another. */
 			if(pcount == next_host) {
-				if(scsi_hosts[i].present > 1)
+				if(tpnt->present > 1)
 					panic("Failure to register low-level scsi driver");
 				/* The low-level driver failed to register a driver.  We
 				   can do this now. */
-				scsi_register(i,0);
+				scsi_register(tpnt,0);
 			};
-			for(j = 0; j < scsi_hosts[i].present; j++)
+			tpnt->next = scsi_hosts;
+			scsi_hosts = tpnt;
+			for(j = 0; j < tpnt->present; j++)
 				printk ("scsi%d : %s\n",
-					count++, scsi_hosts[i].name);
+					count++, tpnt->name);
 		}
 	}
 	printk ("scsi : %d hosts.\n", count);
 	
 	max_scsi_hosts = count;
-	return scsi_init_memory_start;
+	return 0;
 }
 
 #ifndef CONFIG_BLK_DEV_SD
 unsigned long sd_init(unsigned long memory_start, unsigned long memory_end){
   return memory_start;
 };
-unsigned long sd_init1(unsigned long memory_start, unsigned long memory_end){
-  return memory_start;
+void sd_init1(){
+  return;
 };
 void sd_attach(Scsi_Device * SDp){
 };
@@ -283,8 +285,8 @@ int MAX_SD=0;
 unsigned long sr_init(unsigned long memory_start, unsigned long memory_end){
   return memory_start;
 };
-unsigned long sr_init1(unsigned long memory_start, unsigned long memory_end){
-  return memory_start;
+void sr_init1(){
+  return;
 };
 void sr_attach(Scsi_Device * SDp){
 };
@@ -297,8 +299,8 @@ int MAX_SR=0;
 unsigned long st_init(unsigned long memory_start, unsigned long memory_end){
   return memory_start;
 };
-unsigned long st_init1(unsigned long memory_start, unsigned long memory_end){
-  return memory_start;
+void st_init1(){
+  return;
 };
 void st_attach(Scsi_Device * SDp){
 };
@@ -310,8 +312,8 @@ int MAX_ST=0;
 unsigned long sg_init(unsigned long memory_start, unsigned long memory_end){
   return memory_start;
 };
-unsigned long sg_init1(unsigned long memory_start, unsigned long memory_end){
-  return memory_start;
+void sg_init1(){
+  return;
 };
 void sg_attach(Scsi_Device * SDp){
 };

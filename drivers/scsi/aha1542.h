@@ -128,7 +128,7 @@ struct ccb {			/* Command Control Block 5.3 */
 				/* REQUEST SENSE */
 };
 
-int aha1542_detect(int);
+int aha1542_detect(Scsi_Host_Template *);
 int aha1542_command(Scsi_Cmnd *);
 int aha1542_queuecommand(Scsi_Cmnd *, void (*done)(Scsi_Cmnd *));
 int aha1542_abort(Scsi_Cmnd *);
@@ -144,14 +144,23 @@ int aha1542_biosparam(Disk *, int, int*);
 	#define NULL 0
 #endif
 
-#define AHA1542 {"Adaptec 1542", aha1542_detect,	\
-		aha1542_info, aha1542_command,		\
-		aha1542_queuecommand,			\
-		aha1542_abort,				\
-		aha1542_reset,				\
-	        NULL,		                        \
-		aha1542_biosparam,                      \
-		AHA1542_MAILBOXES, 7, AHA1542_SCATTER, AHA1542_CMDLUN \
-		  , 0, 1, ENABLE_CLUSTERING}
+#define AHA1542 {  NULL,				\
+		     "Adaptec 1542", 			\
+		     aha1542_detect,			\
+		     NULL,				\
+		     aha1542_info, 			\
+		     aha1542_command,			\
+		     aha1542_queuecommand,		\
+		     aha1542_abort,			\
+		     aha1542_reset,			\
+		     NULL,		                \
+		     aha1542_biosparam,                 \
+		     AHA1542_MAILBOXES, 		\
+		     7, 				\
+		     AHA1542_SCATTER, 			\
+		     AHA1542_CMDLUN, 			\
+		     0, 				\
+		     1, 				\
+		     ENABLE_CLUSTERING}
 
 #endif

@@ -425,7 +425,7 @@ void aha1740_getconfig(void)
   irq_level = intab [ inb(INTDEF)&0x7 ];
 }
 
-int aha1740_detect(int hostnum)
+int aha1740_detect(Scsi_Host_Template * tpnt)
 {
     memset(&ecb, 0, sizeof(struct ecb));
     DEB(printk("aha1740_detect: \n"));
