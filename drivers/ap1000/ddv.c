@@ -76,7 +76,7 @@ extern void ddv_load_kernel(char *opcodep);
 extern int ddv_restart_cpu(void);
 extern int ddv_mlist_available(void);
 static int ddv_revalidate(kdev_t dev, struct gendisk *gdev);
-static void ddv_geninit(struct gendisk *ignored);
+static void ddv_geninit(void);
 static void ddv_release(struct inode * inode, struct file * filp);
 static void ddv_request1(void);
 
@@ -109,19 +109,12 @@ static struct gendisk ddv_gendisk = {
 	DEVICE_NAME,		/* Major name */
 	PARTN_BITS,		/* Bits to shift to get real from partition */
 	1 << PARTN_BITS,	/* Number of partitions per real */
-	1,	        /* maximum number of real */
-#ifdef MODULE
-	NULL,		/* called from init_module */
-#else
-        ddv_geninit,     /* init function */
-#endif
 	partition_tables,/* hd struct */
 	ddv_blk_length,	/* block sizes */
 	1,		/* number */
 	(void *) NULL,	/* internal */
 	NULL		/* next */
 };
-
 
 struct ddv_geometry {
 	unsigned char heads;
@@ -738,11 +731,9 @@ static void ddv_load_opiu(void)
 	ddv_geometry.cylinders = ddv_sect_length[0] / 
 		(ddv_geometry.heads*ddv_geometry.sectors);
 
-	ddv_gendisk.part[0].start_sect = 0;
-	ddv_gendisk.part[0].nr_sects = ddv_sect_length[0];
-
-	resetup_one_dev(&ddv_gendisk, 0);
+	grok_partitions(&ddv_gendisk, 0, 1<<PARTN_BITS, ddv_sect_length[0]);
 	
+	/* FIXME. The crap below is, well, crap. Pseudo-RAID and unsafe one */
 	for (i=0;i<PARDISK_BASE;i++) {
 		ddv_sect_length[i] = ddv_gendisk.part[i].nr_sects;
 		ddv_blk_length[i] = ddv_gendisk.part[i].nr_sects >> 1;
@@ -794,8 +785,7 @@ static int ddv_revalidate(kdev_t dev, struct gendisk *gdev)
 	ddv_sect_length[start] = DiskInfo->blocks;
 	ddv_blk_length[start] = DiskInfo->blocks >> 1;
 
-	gdev->part[start].nr_sects = ddv_sect_length[start];
-	resetup_one_dev(gdev, target);
+	grok_partitions(gdev, target, 1<<PARTN_BITS, ddv_sect_length[start]);
 
 	printk("sect_length[%d]=%d blk_length[%d]=%d\n",
 	       start,ddv_sect_length[start],
@@ -936,11 +926,13 @@ int ddv_init(void)
 
 	kernel_thread(ddv_daemon, NULL, 0);
 
+	ddv_geninit();
+
 	return(0);
 }
 
 
-static void ddv_geninit(struct gendisk *ignored)
+static void ddv_geninit(void)
 {
 	int i;
 	static int done = 0;
@@ -981,10 +973,8 @@ static void ddv_geninit(struct gendisk *ignored)
 int init_module(void)
 {
 	int error = ddv_init();
-	if (!error) {
-		ddv_geninit(&(struct gendisk) { 0,0,0,0,0,0,0,0,0,0,0 });
+	if (!error)
 		printk(KERN_INFO "DDV: Loaded as module.\n");
-	}
 	return error;
 }
 

@@ -1018,8 +1018,7 @@ static void mfm_interrupt_handler(int unused, void *dev_id, struct pt_regs *regs
 
 
 /*
- * Tell the user about the drive if we decided it exists.  Also,
- * set the size of the drive.
+ * Tell the user about the drive if we decided it exists.
  */
 static void mfm_geometry (int drive)
 {
@@ -1028,8 +1027,6 @@ static void mfm_geometry (int drive)
 			mfm_info[drive].cylinders * mfm_info[drive].heads * mfm_info[drive].sectors / 4096,
 			mfm_info[drive].cylinders, mfm_info[drive].heads, mfm_info[drive].sectors,
 			mfm_info[drive].lowcurrent, mfm_info[drive].precomp);
-	mfm[drive << 6].start_sect = 0;
-	mfm[drive << 6].nr_sects = mfm_info[drive].cylinders * mfm_info[drive].heads * mfm_info[drive].sectors / 2;
 }
 
 #ifdef CONFIG_BLK_DEV_MFM_AUTODETECT
@@ -1283,6 +1280,7 @@ void mfm_setup(char *str, int *ints)
  * Set the CHS from the ADFS boot block if it is present.  This is not ideal
  * since if there are any non-ADFS partitions on the disk, this won't work!
  * Hence, I want to get rid of this...
+ * 	Please, do. It does seriously sucking things.
  */
 void xd_set_geometry(kdev_t dev, unsigned char secsptrack, unsigned char heads,
 		     unsigned long discsize, unsigned int secsize)
@@ -1308,18 +1306,16 @@ void xd_set_geometry(kdev_t dev, unsigned char secsptrack, unsigned char heads,
 		if (raw_cmd.dev == drive)
 			mfm_specify ();
 		mfm_geometry (drive);
+		mfm[drive << 6].start_sect = 0;
+		mfm[drive << 6].nr_sects = mfm_info[drive].cylinders * mfm_info[drive].heads * mfm_info[drive].sectors / 2;
 	}
 }
-
-static void mfm_geninit (struct gendisk *gdev);
 
 static struct gendisk mfm_gendisk = {
 	MAJOR_NR,		/* Major number */
 	"mfm",			/* Major name */
 	6,			/* Bits to shift to get real from partition */
 	1 << 6,			/* Number of partitions per real */
-	MFM_MAXDRIVES,		/* maximum number of real */
-	mfm_geninit,		/* init function */
 	mfm,			/* hd struct */
 	mfm_sizes,		/* block sizes */
 	0,			/* number */
@@ -1327,17 +1323,23 @@ static struct gendisk mfm_gendisk = {
 	NULL			/* next */
 };
 
-static void mfm_geninit (struct gendisk *gdev)
+static void mfm_geninit (void)
 {
 	int i;
 
+	for (i = 0; i < (MFM_MAXDRIVES << 6); i++) {
+		/* Can't increase this - if you do all hell breaks loose */
+		mfm_blocksizes[i] = 1024;
+		mfm_sectsizes[i] = 512;
+	}
+	blksize_size[MAJOR_NR] = mfm_blocksizes;
+	hardsect_size[MAJOR_NR] = mfm_sectsizes;
+
 	mfm_drives = mfm_initdrives();
 
-	printk("mfm: detected %d hard drive%s\n", mfm_drives, mfm_drives == 1 ? "" : "s");
-	gdev->nr_real = mfm_drives;
-
-	for (i = 0; i < mfm_drives; i++)
-		mfm_geometry (i);
+	printk("mfm: detected %d hard drive%s\n", mfm_drives,
+				mfm_drives == 1 ? "" : "s");
+	mfm_gendisk.nr_real = mfm_drives;
 
 	if (request_irq(mfm_irq, mfm_interrupt_handler, SA_INTERRUPT, "MFM harddisk", NULL))
 		printk("mfm: unable to get IRQ%d\n", mfm_irq);
@@ -1345,12 +1347,11 @@ static void mfm_geninit (struct gendisk *gdev)
 	if (mfm_irqenable)
 		outw(0x80, mfm_irqenable);	/* Required to enable IRQs from MFM podule */
 
-	for (i = 0; i < (MFM_MAXDRIVES << 6); i++) {
-		mfm_blocksizes[i] = 1024;	/* Can't increase this - if you do all hell breaks loose */
-		mfm_sectsizes[i] = 512;
+	for (i = 0; i < mfm_drives; i++) {
+		mfm_geometry (i);
+		grok_partitions(&mfm_gendisk, i, 1<<6, mfm_info[i].cylinders *
+				mfm_info[i].heads * mfm_info[i].sectors / 2);
 	}
-	blksize_size[MAJOR_NR] = mfm_blocksizes;
-	hardsect_size[MAJOR_NR] = mfm_sectsizes;
 }
 
 static struct block_device_operations mfm_fops =
@@ -1457,6 +1458,7 @@ int mfm_init (void)
 	Busy = 0;
 	lastspecifieddrive = -1;
 
+	mfm_geninit();
 	return 0;
 }
 
@@ -1495,10 +1497,10 @@ static int mfm_reread_partitions(kdev_t dev)
 		mfm_gendisk.part[minor].nr_sects = 0;
 	}
 
-	mfm_gendisk.part[start].nr_sects = mfm_info[target].heads *
-	    mfm_info[target].cylinders * mfm_info[target].sectors / 2;
+	/* Divide by 2, since sectors are 2 times smaller than usual ;-) */
 
-	resetup_one_dev(&mfm_gendisk, target);
+	grok_partitions(&mfm_gendisk, target, 1<<6, mfm_info[target].heads *
+		    mfm_info[target].cylinders * mfm_info[target].sectors / 2);
 
 	mfm_info[target].busy = 0;
 	wake_up (&mfm_wait_open);
@@ -1508,11 +1510,7 @@ static int mfm_reread_partitions(kdev_t dev)
 #ifdef MODULE
 int init_module(void)
 {
-	int ret;
-	ret = mfm_init();
-	if (!ret)
-		mfm_geninit(&mfm_gendisk);
-	return ret;
+	return mfm_geninit();
 }
 
 void cleanup_module(void)

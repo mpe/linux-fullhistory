@@ -132,56 +132,41 @@ printk("SIG dequeue (%s:%d): %d ", current->comm, current->pid,
 		int reset = 1;
 
 		/* Collect the siginfo appropriate to this signal.  */
-		if (sig < SIGRTMIN) {
-			/* XXX: As an extension, support queueing exactly
-			   one non-rt signal if SA_SIGINFO is set, so that
-			   we can get more detailed information about the
-			   cause of the signal.  */
-			/* Deciding not to init these couple of fields is
-			   more expensive that just initializing them.  */
+		struct signal_queue *q, **pp;
+		pp = &current->sigqueue;
+		q = current->sigqueue;
+
+		/* Find the one we're interested in ... */
+		for ( ; q ; pp = &q->next, q = q->next)
+			if (q->info.si_signo == sig)
+				break;
+		if (q) {
+			if ((*pp = q->next) == NULL)
+				current->sigqueue_tail = pp;
+			*info = q->info;
+			kmem_cache_free(signal_queue_cachep,q);
+			atomic_dec(&nr_queued_signals);
+
+			/* then see if this signal is still pending. */
+			q = *pp;
+			while (q) {
+				if (q->info.si_signo == sig) {
+					reset = 0;
+					break;
+				}
+				q = q->next;
+			}
+		} else {
+			/* Ok, it wasn't in the queue.  It must have
+			   been sent either by a non-rt mechanism and
+			   we ran out of queue space.  So zero out the
+			   info.  */
 			info->si_signo = sig;
 			info->si_errno = 0;
 			info->si_code = 0;
 			info->si_pid = 0;
 			info->si_uid = 0;
 			SET_SIGINFO_UID16(info->si_uid16, 0);
-		} else {
-			struct signal_queue *q, **pp;
-			pp = &current->sigqueue;
-			q = current->sigqueue;
-
-			/* Find the one we're interested in ... */
-			for ( ; q ; pp = &q->next, q = q->next)
-				if (q->info.si_signo == sig)
-					break;
-			if (q) {
-				if ((*pp = q->next) == NULL)
-					current->sigqueue_tail = pp;
-				*info = q->info;
-				kmem_cache_free(signal_queue_cachep,q);
-				atomic_dec(&nr_queued_signals);
-				
-				/* then see if this signal is still pending. */
-				q = *pp;
-				while (q) {
-					if (q->info.si_signo == sig) {
-						reset = 0;
-						break;
-					}
-					q = q->next;
-				}
-			} else {
-				/* Ok, it wasn't in the queue.  It must have
-				   been sent either by a non-rt mechanism and
-				   we ran out of queue space.  So zero out the
-				   info.  */
-				info->si_signo = sig;
-				info->si_errno = 0;
-				info->si_code = 0;
-				info->si_pid = 0;
-				info->si_uid = 0;
-				SET_SIGINFO_UID16(info->si_uid16, 0);
-			}
 		}
 
 		if (reset)
@@ -255,6 +240,8 @@ send_sig_info(int sig, struct siginfo *info, struct task_struct *t)
 {
 	unsigned long flags;
 	int ret;
+	struct signal_queue *q = 0;
+
 
 #if DEBUG_SIG
 printk("SIG queue (%s:%d): %d ", t->comm, t->pid, sig);
@@ -307,36 +294,31 @@ printk("SIG queue (%s:%d): %d ", t->comm, t->pid, sig);
 	if (ignored_signal(sig, t))
 		goto out;
 
-	if (sig < SIGRTMIN) {
-		/* Non-real-time signals are not queued.  */
-		/* XXX: As an extension, support queueing exactly one
-		   non-rt signal if SA_SIGINFO is set, so that we can
-		   get more detailed information about the cause of
-		   the signal.  */
-		if (sigismember(&t->signal, sig))
-			goto out;
-	} else {
-		/* Real-time signals must be queued if sent by sigqueue, or
-		   some other real-time mechanism.  It is implementation
-		   defined whether kill() does so.  We attempt to do so, on
-		   the principle of least surprise, but since kill is not
-		   allowed to fail with EAGAIN when low on memory we just
-		   make sure at least one signal gets delivered and don't
-		   pass on the info struct.  */
+	/* Support queueing exactly one non-rt signal, so that we
+	   can get more detailed information about the cause of
+	   the signal. */
+	if (sig < SIGRTMIN && sigismember(&t->signal, sig))
+		goto out;
 
-		struct signal_queue *q = 0;
+	/* Real-time signals must be queued if sent by sigqueue, or
+	   some other real-time mechanism.  It is implementation
+	   defined whether kill() does so.  We attempt to do so, on
+	   the principle of least surprise, but since kill is not
+	   allowed to fail with EAGAIN when low on memory we just
+	   make sure at least one signal gets delivered and don't
+	   pass on the info struct.  */
 
-		if (atomic_read(&nr_queued_signals) < max_queued_signals) {
-			q = (struct signal_queue *)
-			    kmem_cache_alloc(signal_queue_cachep, GFP_ATOMIC);
-		}
-		
-		if (q) {
-			atomic_inc(&nr_queued_signals);
-			q->next = NULL;
-			*t->sigqueue_tail = q;
-			t->sigqueue_tail = &q->next;
-			switch ((unsigned long) info) {
+	if (atomic_read(&nr_queued_signals) < max_queued_signals) {
+		q = (struct signal_queue *)
+			kmem_cache_alloc(signal_queue_cachep, GFP_ATOMIC);
+	}
+
+	if (q) {
+		atomic_inc(&nr_queued_signals);
+		q->next = NULL;
+		*t->sigqueue_tail = q;
+		t->sigqueue_tail = &q->next;
+		switch ((unsigned long) info) {
 			case 0:
 				q->info.si_signo = sig;
 				q->info.si_errno = 0;
@@ -356,12 +338,11 @@ printk("SIG queue (%s:%d): %d ", t->comm, t->pid, sig);
 			default:
 				q->info = *info;
 				break;
-			}
-		} else {
-			/* Queue overflow, we have to abort. */
-			ret = -EAGAIN;
-			goto out;
 		}
+	} else {
+		/* Queue overflow, we have to abort. */
+		ret = -EAGAIN;
+		goto out;
 	}
 
 	sigaddset(&t->signal, sig);

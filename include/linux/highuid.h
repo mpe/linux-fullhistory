@@ -13,14 +13,14 @@
  * kernel code should use uid_t and gid_t at all times when dealing with
  * kernel-private data.
  *
- * old_uid_t and old_gid_t are only used if CONFIG_UID16 is defined.
+ * old_uid_t and old_gid_t should only be different if CONFIG_UID16 is
+ * defined, else the platform should provide dummy typedefs for them
+ * such that they are equivalent to __kernel_{u,g}id_t.
  *
  * uid16_t and gid16_t are used on all architectures. (when dealing
  * with structures hard coded to 16 bits, such as in filesystems)
  */
 
-
-#ifdef CONFIG_UID16
 
 /*
  * This is the "overflow" UID and GID. They are used to signify uid/gid
@@ -38,6 +38,7 @@ extern int overflowgid;
 #define DEFAULT_OVERFLOWUID	65534
 #define DEFAULT_OVERFLOWGID	65534
 
+#ifdef CONFIG_UID16
 
 /* prevent uid mod 65536 effect by returning a default value for high UIDs */
 #define high2lowuid(uid) ((uid) > 65535) ? (old_uid_t)overflowuid : (old_uid_t)(uid)

@@ -77,16 +77,12 @@ static struct md_thread *md_sync_thread = NULL;
 
 int md_size[MAX_MD_DEV]={0, };
 
-static void md_geninit (struct gendisk *);
-
 static struct gendisk md_gendisk=
 {
   MD_MAJOR,
   "md",
   0,
   1,
-  MAX_MD_DEV,
-  md_geninit,
   md_hd_struct,
   md_size,
   MAX_MD_DEV,
@@ -909,21 +905,19 @@ static int md_status_read_proc(char *page, char **start, off_t off,
 }
 #endif
 
-static void md_geninit (struct gendisk *gdisk)
+static void md_geninit (void)
 {
   int i;
   
+  blksize_size[MD_MAJOR] = md_blocksizes;
+  max_readahead[MD_MAJOR] = md_maxreadahead;
   for(i=0;i<MAX_MD_DEV;i++)
   {
     md_blocksizes[i] = 1024;
     md_maxreadahead[i] = MD_DEFAULT_DISK_READAHEAD;
-    md_gendisk.part[i].start_sect=-1; /* avoid partition check */
-    md_gendisk.part[i].nr_sects=0;
     md_dev[i].pers=NULL;
+    grok_partitions(&md_gendisk, i, 1, 0);
   }
-
-  blksize_size[MD_MAJOR] = md_blocksizes;
-  max_readahead[MD_MAJOR] = md_maxreadahead;
 
 #ifdef CONFIG_PROC_FS
 	create_proc_read_entry("mdstat", 0, NULL, md_status_read_proc, NULL);
@@ -1265,6 +1259,7 @@ int __init md_init (void)
 #ifdef CONFIG_MD_RAID5
   raid5_init ();
 #endif
+  md_geninit();
   return (0);
 }
 

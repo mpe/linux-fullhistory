@@ -1,4 +1,4 @@
-/* $Id: pgalloc.h,v 1.1 1999/12/28 04:13:35 anton Exp $ */
+/* $Id: pgalloc.h,v 1.2 2000/01/15 00:51:42 anton Exp $ */
 #ifndef _SPARC_PGALLOC_H
 #define _SPARC_PGALLOC_H
 
@@ -30,10 +30,10 @@ BTFIXUPDEF_CALL(void, local_flush_tlb_page, struct vm_area_struct *, unsigned lo
 #define local_flush_tlb_range(mm,start,end) BTFIXUP_CALL(local_flush_tlb_range)(mm,start,end)
 #define local_flush_tlb_page(vma,addr) BTFIXUP_CALL(local_flush_tlb_page)(vma,addr)
 
-BTFIXUPDEF_CALL(void, local_flush_page_to_ram, struct page *)
+BTFIXUPDEF_CALL(void, local_flush_page_to_ram, unsigned long)
 BTFIXUPDEF_CALL(void, local_flush_sig_insns, struct mm_struct *, unsigned long)
 
-#define local_flush_page_to_ram(page) BTFIXUP_CALL(local_flush_page_to_ram)(page)
+#define local_flush_page_to_ram(addr) BTFIXUP_CALL(local_flush_page_to_ram)(addr)
 #define local_flush_sig_insns(mm,insn_addr) BTFIXUP_CALL(local_flush_sig_insns)(mm,insn_addr)
 
 extern void smp_flush_cache_all(void);
@@ -49,7 +49,7 @@ extern void smp_flush_tlb_range(struct mm_struct *mm,
 				  unsigned long start,
 				  unsigned long end);
 extern void smp_flush_tlb_page(struct vm_area_struct *mm, unsigned long page);
-extern void smp_flush_page_to_ram(struct page *page);
+extern void smp_flush_page_to_ram(unsigned long page);
 extern void smp_flush_sig_insns(struct mm_struct *mm, unsigned long insn_addr);
 #endif
 
@@ -74,11 +74,13 @@ BTFIXUPDEF_CALL(void, flush_tlb_page, struct vm_area_struct *, unsigned long)
 #define flush_tlb_range(mm,start,end) BTFIXUP_CALL(flush_tlb_range)(mm,start,end)
 #define flush_tlb_page(vma,addr) BTFIXUP_CALL(flush_tlb_page)(vma,addr)
 
-BTFIXUPDEF_CALL(void, flush_page_to_ram, struct page *)
+BTFIXUPDEF_CALL(void, __flush_page_to_ram, unsigned long)
 BTFIXUPDEF_CALL(void, flush_sig_insns, struct mm_struct *, unsigned long)
 
-#define flush_page_to_ram(page) BTFIXUP_CALL(flush_page_to_ram)(page)
+#define __flush_page_to_ram(addr) BTFIXUP_CALL(__flush_page_to_ram)(addr)
 #define flush_sig_insns(mm,insn_addr) BTFIXUP_CALL(flush_sig_insns)(mm,insn_addr)
+
+#define flush_page_to_ram(page)    __flush_page_to_ram(page_address(page))
 
 extern struct pgtable_cache_struct {
 	unsigned long *pgd_cache;

@@ -1,4 +1,4 @@
-/* $Id: srmmu.c,v 1.202 2000/01/09 10:46:50 anton Exp $
+/* $Id: srmmu.c,v 1.203 2000/01/15 00:51:28 anton Exp $
  * srmmu.c:  SRMMU specific routines for memory management.
  *
  * Copyright (C) 1995 David S. Miller  (davem@caip.rutgers.edu)
@@ -118,13 +118,13 @@ static inline int srmmu_device_memory(unsigned long x)
 }
 
 static unsigned long srmmu_pgd_page(pgd_t pgd)
-{ return srmmu_device_memory(pgd_val(pgd))?~0:__va((pgd_val(pgd) & SRMMU_PTD_PMASK) << 4); }
+{ return srmmu_device_memory(pgd_val(pgd))?~0:(unsigned long)__va((pgd_val(pgd) & SRMMU_PTD_PMASK) << 4); }
 
 static unsigned long srmmu_pmd_page(pmd_t pmd)
-{ return srmmu_device_memory(pmd_val(pmd))?~0:__va((pmd_val(pmd) & SRMMU_PTD_PMASK) << 4); }
+{ return srmmu_device_memory(pmd_val(pmd))?~0:(unsigned long)__va((pmd_val(pmd) & SRMMU_PTD_PMASK) << 4); }
 
 static unsigned long srmmu_pte_pagenr(pte_t pte)
-{ return srmmu_device_memory(pte_val(pte))?~0:__va((pte_val(pte) & SRMMU_PTE_PMASK) << 4); }
+{ return srmmu_device_memory(pte_val(pte))?~0:(((pte_val(pte) & SRMMU_PTE_PMASK) << 4) >> PAGE_SHIFT); }
 
 static inline int srmmu_pte_none(pte_t pte)
 { return !(pte_val(pte) & 0xFFFFFFF); }
@@ -169,8 +169,8 @@ static inline pte_t srmmu_pte_mkyoung(pte_t pte)     { return __pte(pte_val(pte)
  * Conversion functions: convert a page and protection to a page entry,
  * and a page entry and page directory to the page they refer to.
  */
-static pte_t srmmu_mk_pte(unsigned long page, pgprot_t pgprot)
-{ return __pte(((__pa(page)) >> 4) | pgprot_val(pgprot)); }
+static pte_t srmmu_mk_pte(struct page *page, pgprot_t pgprot)
+{ return __pte((((page - mem_map) << PAGE_SHIFT) >> 4) | pgprot_val(pgprot)); }
 
 static pte_t srmmu_mk_pte_phys(unsigned long page, pgprot_t pgprot)
 { return __pte(((page) >> 4) | pgprot_val(pgprot)); }
@@ -595,7 +595,7 @@ void srmmu_mapioaddr(unsigned long physaddr, unsigned long virt_addr, int bus_ty
 		tmp |= SRMMU_PRIV_RDONLY;
 	else
 		tmp |= SRMMU_PRIV;
-	flush_page_to_ram(virt_addr);
+	__flush_page_to_ram(virt_addr);
 	set_pte(ptep, __pte(tmp));
 	flush_tlb_all();
 }
@@ -1200,22 +1200,16 @@ static inline void memprobe_error(char *msg)
 	prom_halt();
 }
 
-/* Assumptions: The bank given to the kernel from the prom/bootloader
- * is part of a full bank which is at least 4MB in size and begins at
- * 0xf0000000 (ie. KERNBASE).
- */
 static inline void map_kernel(void)
 {
 	int i;
 
 	for (i = 0; sp_banks[i].num_bytes != 0; i++) {
-		map_spbank(sp_banks[i].base_addr + PAGE_OFFSET, i);
+		map_spbank(__va(sp_banks[i].base_addr), i);
 	}
 
 	init_mm.mmap->vm_start = PAGE_OFFSET;
 	BTFIXUPSET_SIMM13(user_ptrs_per_pgd, PAGE_OFFSET / SRMMU_PGDIR_SIZE);
-
-	return; /* SUCCESS! */
 }
 
 /* Paging initialization on the Sparc Reference MMU. */
@@ -1261,7 +1255,7 @@ void __init srmmu_paging_init(void)
 
 	last_valid_pfn = end_pfn = bootmem_init();
 
-	srmmu_allocate_ptable_skeleton(KERNBASE, end_of_phys_memory + PAGE_OFFSET);
+	srmmu_allocate_ptable_skeleton(KERNBASE, __va(end_of_phys_memory));
 #if CONFIG_SUN_IO
 	srmmu_allocate_ptable_skeleton(sparc_iomap.start, IOBASE_END);
 	srmmu_allocate_ptable_skeleton(DVMA_VADDR, DVMA_END);
@@ -1275,7 +1269,16 @@ void __init srmmu_paging_init(void)
 
         srmmu_inherit_prom_mappings(0xfe400000,(LINUX_OPPROM_ENDVM-PAGE_SIZE));
 	map_kernel();
-	srmmu_context_table = __alloc_bootmem(num_contexts*sizeof(ctxd_t), SMP_CACHE_BYTES, 0UL);
+
+#define BOOTMEM_BROKEN
+#ifdef BOOTMEM_BROKEN
+	srmmu_context_table = __alloc_bootmem(num_contexts*sizeof(ctxd_t)*2, SMP_CACHE_BYTES, 0UL);
+	(unsigned long)srmmu_context_table += num_contexts*sizeof(ctxd_t);
+	(unsigned long)srmmu_context_table &= ~(num_contexts*sizeof(ctxd_t)-1);
+#else
+	srmmu_context_table = __alloc_bootmem(num_contexts*sizeof(ctxd_t), num_contexts*sizeof(ctxd_t), 0UL);
+#endif
+
 	srmmu_ctx_table_phys = (ctxd_t *) __pa((unsigned long) srmmu_context_table);
 	for(i = 0; i < num_contexts; i++)
 		ctxd_set(&srmmu_context_table[i], swapper_pg_dir);
@@ -1550,7 +1553,7 @@ static void __init init_hypersparc(void)
 	BTFIXUPSET_CALL(flush_tlb_range, hypersparc_flush_tlb_range, BTFIXUPCALL_NORM);
 	BTFIXUPSET_CALL(flush_tlb_page, hypersparc_flush_tlb_page, BTFIXUPCALL_NORM);
 
-	BTFIXUPSET_CALL(flush_page_to_ram, hypersparc_flush_page_to_ram, BTFIXUPCALL_NORM);
+	BTFIXUPSET_CALL(__flush_page_to_ram, hypersparc_flush_page_to_ram, BTFIXUPCALL_NORM);
 	BTFIXUPSET_CALL(flush_sig_insns, hypersparc_flush_sig_insns, BTFIXUPCALL_NORM);
 	BTFIXUPSET_CALL(flush_page_for_dma, hypersparc_flush_page_for_dma, BTFIXUPCALL_NOP);
 
@@ -1624,7 +1627,7 @@ static void __init init_cypress_common(void)
 
 	BTFIXUPSET_CALL(flush_chunk, cypress_flush_chunk, BTFIXUPCALL_NORM); /* local flush _only_ */
 
-	BTFIXUPSET_CALL(flush_page_to_ram, cypress_flush_page_to_ram, BTFIXUPCALL_NORM);
+	BTFIXUPSET_CALL(__flush_page_to_ram, cypress_flush_page_to_ram, BTFIXUPCALL_NORM);
 	BTFIXUPSET_CALL(flush_sig_insns, cypress_flush_sig_insns, BTFIXUPCALL_NOP);
 	BTFIXUPSET_CALL(flush_page_for_dma, cypress_flush_page_for_dma, BTFIXUPCALL_NOP);
 
@@ -1738,7 +1741,7 @@ static void __init init_swift(void)
 	BTFIXUPSET_CALL(flush_tlb_page, swift_flush_tlb_page, BTFIXUPCALL_NORM);
 	BTFIXUPSET_CALL(flush_tlb_range, swift_flush_tlb_range, BTFIXUPCALL_NORM);
 
-	BTFIXUPSET_CALL(flush_page_to_ram, swift_flush_page_to_ram, BTFIXUPCALL_NORM);
+	BTFIXUPSET_CALL(__flush_page_to_ram, swift_flush_page_to_ram, BTFIXUPCALL_NORM);
 	BTFIXUPSET_CALL(flush_sig_insns, swift_flush_sig_insns, BTFIXUPCALL_NORM);
 	BTFIXUPSET_CALL(flush_page_for_dma, swift_flush_page_for_dma, BTFIXUPCALL_NORM);
 
@@ -1898,7 +1901,7 @@ static void __init init_turbosparc(void)
 	BTFIXUPSET_CALL(flush_tlb_page, turbosparc_flush_tlb_page, BTFIXUPCALL_NORM);
 	BTFIXUPSET_CALL(flush_tlb_range, turbosparc_flush_tlb_range, BTFIXUPCALL_NORM);
 
-	BTFIXUPSET_CALL(flush_page_to_ram, turbosparc_flush_page_to_ram, BTFIXUPCALL_NORM);
+	BTFIXUPSET_CALL(__flush_page_to_ram, turbosparc_flush_page_to_ram, BTFIXUPCALL_NORM);
 	BTFIXUPSET_CALL(flush_chunk, turbosparc_flush_chunk, BTFIXUPCALL_NORM);
 
 	BTFIXUPSET_CALL(flush_sig_insns, turbosparc_flush_sig_insns, BTFIXUPCALL_NOP);
@@ -1940,7 +1943,7 @@ static void __init init_tsunami(void)
 	BTFIXUPSET_CALL(flush_tlb_page, tsunami_flush_tlb_page, BTFIXUPCALL_NORM);
 	BTFIXUPSET_CALL(flush_tlb_range, tsunami_flush_tlb_range, BTFIXUPCALL_NORM);
 
-	BTFIXUPSET_CALL(flush_page_to_ram, tsunami_flush_page_to_ram, BTFIXUPCALL_NOP);
+	BTFIXUPSET_CALL(__flush_page_to_ram, tsunami_flush_page_to_ram, BTFIXUPCALL_NOP);
 	BTFIXUPSET_CALL(flush_sig_insns, tsunami_flush_sig_insns, BTFIXUPCALL_NORM);
 	BTFIXUPSET_CALL(flush_page_for_dma, tsunami_flush_page_for_dma, BTFIXUPCALL_NORM);
 
@@ -1997,7 +2000,7 @@ static void __init poke_viking(void)
 	BTFIXUPCOPY_CALL(flush_cache_mm, local_flush_cache_mm);
 	BTFIXUPCOPY_CALL(flush_cache_range, local_flush_cache_range);
 	BTFIXUPCOPY_CALL(flush_cache_page, local_flush_cache_page);
-	BTFIXUPCOPY_CALL(flush_page_to_ram, local_flush_page_to_ram);
+	BTFIXUPCOPY_CALL(__flush_page_to_ram, local_flush_page_to_ram);
 	BTFIXUPCOPY_CALL(flush_sig_insns, local_flush_sig_insns);
 	BTFIXUPCOPY_CALL(flush_page_for_dma, local_flush_page_for_dma);
 	btfixup();
@@ -2060,7 +2063,7 @@ static void __init init_viking(void)
 		BTFIXUPSET_CALL(flush_tlb_range, viking_flush_tlb_range, BTFIXUPCALL_NORM);
 	}
 
-	BTFIXUPSET_CALL(flush_page_to_ram, viking_flush_page_to_ram, BTFIXUPCALL_NOP);
+	BTFIXUPSET_CALL(__flush_page_to_ram, viking_flush_page_to_ram, BTFIXUPCALL_NOP);
 	BTFIXUPSET_CALL(flush_sig_insns, viking_flush_sig_insns, BTFIXUPCALL_NOP);
 
 	poke_srmmu = poke_viking;
@@ -2388,7 +2391,7 @@ void __init ld_mmu_srmmu(void)
 	BTFIXUPCOPY_CALL(local_flush_tlb_mm, flush_tlb_mm);
 	BTFIXUPCOPY_CALL(local_flush_tlb_range, flush_tlb_range);
 	BTFIXUPCOPY_CALL(local_flush_tlb_page, flush_tlb_page);
-	BTFIXUPCOPY_CALL(local_flush_page_to_ram, flush_page_to_ram);
+	BTFIXUPCOPY_CALL(local_flush_page_to_ram, __flush_page_to_ram);
 	BTFIXUPCOPY_CALL(local_flush_sig_insns, flush_sig_insns);
 	BTFIXUPCOPY_CALL(local_flush_page_for_dma, flush_page_for_dma);
 
@@ -2402,7 +2405,7 @@ void __init ld_mmu_srmmu(void)
 		BTFIXUPSET_CALL(flush_tlb_range, smp_flush_tlb_range, BTFIXUPCALL_NORM);
 		BTFIXUPSET_CALL(flush_tlb_page, smp_flush_tlb_page, BTFIXUPCALL_NORM);
 	}
-	BTFIXUPSET_CALL(flush_page_to_ram, smp_flush_page_to_ram, BTFIXUPCALL_NORM);
+	BTFIXUPSET_CALL(__flush_page_to_ram, smp_flush_page_to_ram, BTFIXUPCALL_NORM);
 	BTFIXUPSET_CALL(flush_sig_insns, smp_flush_sig_insns, BTFIXUPCALL_NORM);
 	BTFIXUPSET_CALL(flush_page_for_dma, smp_flush_page_for_dma, BTFIXUPCALL_NORM);
 #endif

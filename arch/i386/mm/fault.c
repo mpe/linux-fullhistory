@@ -123,6 +123,7 @@ asmlinkage void do_page_fault(struct pt_regs *regs, unsigned long error_code)
 	unsigned long page;
 	unsigned long fixup;
 	int write;
+	int si_code = SEGV_MAPERR;
 
 	/* get the address */
 	__asm__("movl %%cr2,%0":"=r" (address));
@@ -164,6 +165,8 @@ asmlinkage void do_page_fault(struct pt_regs *regs, unsigned long error_code)
  */
 good_area:
 	write = 0;
+	si_code = SEGV_ACCERR;
+
 	switch (error_code & 3) {
 		default:	/* 3: write, present */
 #ifdef TEST_VERIFY_AREA
@@ -216,10 +219,14 @@ bad_area:
 
 	/* User mode accesses just cause a SIGSEGV */
 	if (error_code & 4) {
+		struct siginfo si;
 		tsk->thread.cr2 = address;
 		tsk->thread.error_code = error_code;
 		tsk->thread.trap_no = 14;
-		force_sig(SIGSEGV, tsk);
+		si.si_signo = SIGSEGV;
+		si.si_code = si_code;
+		si.si_addr = (void*) address;
+		force_sig_info(SIGSEGV, &si, tsk);
 		return;
 	}
 

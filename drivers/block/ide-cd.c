@@ -2005,9 +2005,60 @@ int ide_cdrom_lock_door (struct cdrom_device_info *cdi, int lock)
 	return cdrom_lockdoor (drive, lock);
 }
 
+#undef __ACER50__
+
+#ifdef __ACER50__
+/*
+ * the buffer struct used by ide_cdrom_get_capabilities()
+ */
+struct get_capabilities_buf {
+	char pad[8];
+	struct atapi_capabilities_page cap;	/* this is 4 bytes short of ATAPI standard */
+	char extra_cap[4];			/* Acer 50X needs the regulation size buffer */
+};
+
+static
+int ide_cdrom_get_capabilities (struct cdrom_device_info *cdi, struct get_capabilities_buf *buf)
+{
+	int stat, attempts = 3, buflen = sizeof(*buf);
+	ide_drive_t *drive = (ide_drive_t*) cdi->handle;
+	struct cdrom_generic_command cgc;
+
+	/*
+	 * Most drives don't care about the buffer size;
+	 * they return as much info as there's room for.
+	 * But some older drives (?) had trouble with the
+	 * standard size, preferring 4 bytes less.
+	 * And the modern Acer 50X rejects anything smaller
+	 * than the standard size.
+	 */
+	if (!(drive->id && !strcmp(drive->id->model,"ATAPI CD ROM DRIVE 50X MAX")))
+		buflen -= sizeof(buf->extra_cap);	/* for all drives except Acer 50X */
+
+	do { /* we seem to get stat=0x01,err=0x00 the first time (??) */
+		stat = cdrom_mode_sense(cdi, &cgc, GPMODE_CAPABILITIES_PAGE, 0);
+		if (stat == 0) {
+			/*
+			 * The ACER/AOpen 24X cdrom has the speed
+			 * fields byte-swapped from the standard.
+			 */
+			if (!(drive->id && !drive->id->model[0] && !strncmp(drive->id->fw_rev, "241N", 4))) {
+				buf->cap.curspeed = ntohs(buf->cap.curspeed);
+				buf->cap.maxspeed = ntohs(buf->cap.maxspeed);
+			}
+			CDROM_STATE_FLAGS (drive)->current_speed = (((unsigned int)buf->cap.curspeed) + (176/2)) / 176;
+			CDROM_CONFIG_FLAGS(drive)->max_speed     = (((unsigned int)buf->cap.maxspeed) + (176/2)) / 176;
+			return 0;
+		}
+	} while (--attempts);
+	return stat;
+}
+#endif /* __ACER50__ */
+
 static
 int ide_cdrom_select_speed (struct cdrom_device_info *cdi, int speed)
 {
+#ifndef __ACER50__
         int stat, attempts = 3;
 	ide_drive_t *drive = (ide_drive_t*) cdi->handle;
 	struct cdrom_generic_command cgc;
@@ -2015,11 +2066,19 @@ int ide_cdrom_select_speed (struct cdrom_device_info *cdi, int speed)
 		char pad[8];
 		struct atapi_capabilities_page cap;
 	} buf;
+#else
+	int stat;
+	ide_drive_t *drive = (ide_drive_t*) cdi->handle;
+	struct cdrom_generic_command cgc;
+	struct get_capabilities_buf buf;
+#endif /* __ACER50__ */
 
 	if ((stat = cdrom_select_speed (drive, speed)) < 0)
 		return stat;
 
 	init_cdrom_command(&cgc, &buf, sizeof(buf));
+
+#ifndef __ACER50__
 	/* Now with that done, update the speed fields */
         do {    /* we seem to get stat=0x01,err=0x00 the first time (??) */
                 if (attempts-- <= 0)
@@ -2039,6 +2098,11 @@ int ide_cdrom_select_speed (struct cdrom_device_info *cdi, int speed)
                 CDROM_CONFIG_FLAGS (drive)->max_speed = 
 			(ntohs(buf.cap.maxspeed) + (176/2)) / 176;
         }
+#else
+	if (ide_cdrom_get_capabilities(cdi,&buf))
+		return 0;
+#endif /* __ACER50__ */
+
         cdi->speed = CDROM_STATE_FLAGS (drive)->current_speed;
         return 0;
 }
@@ -2216,12 +2280,18 @@ int ide_cdrom_probe_capabilities (ide_drive_t *drive)
 {
 	struct cdrom_info *info = drive->driver_data;
 	struct cdrom_device_info *cdi = &info->devinfo;
+#ifndef __ACER50__
 	int stat, nslots = 1, attempts = 3;
 	struct cdrom_generic_command cgc;
 	struct {
 		char pad[8];
 		struct atapi_capabilities_page cap;
 	} buf;
+#else
+	int nslots = 1;
+	struct cdrom_generic_command cgc;
+	struct get_capabilities_buf buf;
+#endif /* __ACER50__ */
 
 	if (CDROM_CONFIG_FLAGS (drive)->nec260) {
 		CDROM_CONFIG_FLAGS (drive)->no_eject = 0;                       
@@ -2238,12 +2308,17 @@ int ide_cdrom_probe_capabilities (ide_drive_t *drive)
 	 */
 	cdi->handle = (ide_drive_t *) drive;
 	cdi->ops = &ide_cdrom_dops;
+#ifndef __ACER50__
 	/* we seem to get stat=0x01,err=0x00 the first time (??) */
 	do {
 		if (attempts-- <= 0)
 			return 0;
 		stat = cdrom_mode_sense(cdi, &cgc, GPMODE_CAPABILITIES_PAGE, 0);
 	} while (stat);
+#else
+	if (ide_cdrom_get_capabilities(cdi,&buf))
+		return 0;
+#endif /* __ACER50__ */
 
 	if (buf.cap.lock == 0)
 		CDROM_CONFIG_FLAGS (drive)->no_doorlock = 1;
@@ -2282,6 +2357,7 @@ int ide_cdrom_probe_capabilities (ide_drive_t *drive)
 		}
 	}
 
+#ifndef __ACER50__
 	/* The ACER/AOpen 24X cdrom has the speed fields byte-swapped */
 	if (drive->id && !drive->id->model[0] && !strncmp(drive->id->fw_rev, "241N", 4)) {
 		CDROM_STATE_FLAGS (drive)->current_speed  = 
@@ -2294,6 +2370,7 @@ int ide_cdrom_probe_capabilities (ide_drive_t *drive)
 		CDROM_CONFIG_FLAGS (drive)->max_speed = 
 			(ntohs(buf.cap.maxspeed) + (176/2)) / 176;
 	}
+#endif /* __ACER50__ */
 
 	/* don't print speed if the drive reported 0.
 	 */

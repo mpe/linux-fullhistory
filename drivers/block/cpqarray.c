@@ -171,9 +171,8 @@ static int ida_proc_get_info(char *buffer, char **start, off_t offset,
 			     int length, int *eof, void *data) {}
 #endif
 
-static void ida_geninit(struct gendisk *g)
+static void ida_geninit(int ctlr)
 {
-	int ctlr = g-ida_gendisk;
 	int i,j;
 	drv_info_t *drv;
 
@@ -317,13 +316,6 @@ int __init init_module(void)
 	cpqarray_init();
 	if (nr_ctlr == 0)
 		return -EIO;
-
-	for(i=0; i<nr_ctlr; i++) {
-		ida_geninit(&ida_gendisk[i]); 
-		for(j=0; j<NWD; j++)	
-			if (ida_sizes[(i<<CTLR_SHIFT) + (j<<NWD_SHIFT)])
-				resetup_one_dev(&ida_gendisk[i], j);
-	}
 	return 0;
 }
 
@@ -375,7 +367,7 @@ void __init cpqarray_init(void)
 		do_ida_request4, do_ida_request5,
 		do_ida_request6, do_ida_request7,
 	};
-	int i;
+	int i,j;
 
 	/* detect controllers */
 	cpqarray_pci_detect();
@@ -460,22 +452,21 @@ void __init cpqarray_init(void)
 		hba[i]->access.set_intr_mask(hba[i], FIFO_NOT_EMPTY);
 
 		ida_procinit(i);
-		ida_gendisk[i].major = MAJOR_NR + i;
-		ida_gendisk[i].major_name = "ida";
-		ida_gendisk[i].minor_shift = NWD_SHIFT;
-		ida_gendisk[i].max_p = 16;
-		ida_gendisk[i].max_nr = 16;
-		ida_gendisk[i].init = ida_geninit;
-		ida_gendisk[i].part = ida + (i*256);
-		ida_gendisk[i].sizes = ida_sizes + (i*256);
-		/* ida_gendisk[i].nr_real is handled by getgeometry */
 	
 		blk_init_queue(BLK_DEFAULT_QUEUE(MAJOR_NR + i), request_fns[i]);
 		blk_queue_headactive(BLK_DEFAULT_QUEUE(MAJOR_NR + i), 0);
 
 		blksize_size[MAJOR_NR+i] = ida_blocksizes + (i*256);
 		hardsect_size[MAJOR_NR+i] = ida_hardsizes + (i*256);
+
 		read_ahead[MAJOR_NR+i] = READ_AHEAD;
+		ida_gendisk[i].major = MAJOR_NR + i;
+		ida_gendisk[i].major_name = "ida";
+		ida_gendisk[i].minor_shift = NWD_SHIFT;
+		ida_gendisk[i].max_p = 16;
+		ida_gendisk[i].part = ida + (i*256);
+		ida_gendisk[i].sizes = ida_sizes + (i*256);
+		/* ida_gendisk[i].nr_real is handled by getgeometry */
 
 		/* Get on the disk list */
 		ida_gendisk[i].next = gendisk_head;
@@ -487,6 +478,10 @@ void __init cpqarray_init(void)
 		hba[i]->timer.function = ida_timer;
 		add_timer(&hba[i]->timer);
 
+		ida_geninit(i);
+		for(j=0; j<NWD; j++)	
+			grok_partitions(&ida_gendisk[i], j, 16,
+					hba[i]->drv[j].nr_blks);
 	}
 	/* done ! */
 	return;
@@ -1494,7 +1489,7 @@ static int revalidate_allvol(kdev_t dev)
 	getgeometry(ctlr);
 	hba[ctlr]->access.set_intr_mask(hba[ctlr], FIFO_NOT_EMPTY);
 
-	ida_geninit(&ida_gendisk[ctlr]);
+	ida_geninit(ctlr);
 	for(i=0; i<NWD; i++)
 		if (ida_sizes[(ctlr<<CTLR_SHIFT) + (i<<NWD_SHIFT)])
 			revalidate_logvol(dev+(i<<NWD_SHIFT), 2);
@@ -1545,8 +1540,8 @@ static int revalidate_logvol(kdev_t dev, int maxusage)
 		blksize_size[MAJOR_NR+ctlr][minor] = 1024;
 	}
 
-	gdev->part[start].nr_sects =  hba[ctlr]->drv[target].nr_blks;
-	resetup_one_dev(gdev, target);
+	/* 16 minors per disk... */
+	grok_partitions(gdev, target, 16, hba[ctlr]->drv[target].nr_blks);
 	hba[ctlr]->drv[target].usage_count--;
 	return 0;
 }

@@ -1,4 +1,4 @@
-/* $Id: sun4c.c,v 1.184 2000/01/09 09:13:34 anton Exp $
+/* $Id: sun4c.c,v 1.185 2000/01/15 00:51:32 anton Exp $
  * sun4c.c: Doing in software what should be done in hardware.
  *
  * Copyright (C) 1996 David S. Miller (davem@caip.rutgers.edu)
@@ -1563,13 +1563,12 @@ static void sun4c_flush_cache_page_hw(struct vm_area_struct *vma, unsigned long 
 	}
 }
 
-static void sun4c_flush_page_to_ram_hw(struct page *page)
+static void sun4c_flush_page_to_ram_hw(unsigned long page)
 {
 	unsigned long flags;
-	unsigned long addr = page_address(page);
 
 	save_and_cli(flags);
-	sun4c_flush_page_hw(addr);
+	sun4c_flush_page_hw(page);
 	restore_flags(flags);
 }
 
@@ -1686,13 +1685,12 @@ static void sun4c_flush_cache_page_sw(struct vm_area_struct *vma, unsigned long 
 	}
 }
 
-static void sun4c_flush_page_to_ram_sw(struct page *page)
+static void sun4c_flush_page_to_ram_sw(unsigned long page)
 {
 	unsigned long flags;
-	unsigned long addr = page_address(page);
 
 	save_and_cli(flags);
-	sun4c_flush_page_sw(addr);
+	sun4c_flush_page_sw(page);
 	restore_flags(flags);
 }
 
@@ -2638,7 +2636,7 @@ void __init ld_mmu_sun4c(void)
 		BTFIXUPSET_CALL(flush_cache_mm, sun4c_flush_cache_mm_hw, BTFIXUPCALL_NORM);
 		BTFIXUPSET_CALL(flush_cache_range, sun4c_flush_cache_range_hw, BTFIXUPCALL_NORM);
 		BTFIXUPSET_CALL(flush_cache_page, sun4c_flush_cache_page_hw, BTFIXUPCALL_NORM);
-		BTFIXUPSET_CALL(flush_page_to_ram, sun4c_flush_page_to_ram_hw, BTFIXUPCALL_NORM);
+		BTFIXUPSET_CALL(__flush_page_to_ram, sun4c_flush_page_to_ram_hw, BTFIXUPCALL_NORM);
 		BTFIXUPSET_CALL(flush_tlb_mm, sun4c_flush_tlb_mm_hw, BTFIXUPCALL_NORM);
 		BTFIXUPSET_CALL(flush_tlb_range, sun4c_flush_tlb_range_hw, BTFIXUPCALL_NORM);
 		BTFIXUPSET_CALL(flush_tlb_page, sun4c_flush_tlb_page_hw, BTFIXUPCALL_NORM);
@@ -2649,7 +2647,7 @@ void __init ld_mmu_sun4c(void)
 		BTFIXUPSET_CALL(flush_cache_mm, sun4c_flush_cache_mm_sw, BTFIXUPCALL_NORM);
 		BTFIXUPSET_CALL(flush_cache_range, sun4c_flush_cache_range_sw, BTFIXUPCALL_NORM);
 		BTFIXUPSET_CALL(flush_cache_page, sun4c_flush_cache_page_sw, BTFIXUPCALL_NORM);
-		BTFIXUPSET_CALL(flush_page_to_ram, sun4c_flush_page_to_ram_sw, BTFIXUPCALL_NORM);
+		BTFIXUPSET_CALL(__flush_page_to_ram, sun4c_flush_page_to_ram_sw, BTFIXUPCALL_NORM);
 		BTFIXUPSET_CALL(flush_tlb_mm, sun4c_flush_tlb_mm_sw, BTFIXUPCALL_NORM);
 		BTFIXUPSET_CALL(flush_tlb_range, sun4c_flush_tlb_range_sw, BTFIXUPCALL_NORM);
 		BTFIXUPSET_CALL(flush_tlb_page, sun4c_flush_tlb_page_sw, BTFIXUPCALL_NORM);

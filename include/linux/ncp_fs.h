@@ -37,6 +37,20 @@ struct ncp_fs_info {
 	__u32 directory_id;
 };
 
+struct ncp_fs_info_v2 {
+	int version;
+	unsigned long mounted_uid;
+	unsigned int connection;
+	unsigned int buffer_size;
+
+	unsigned int volume_number;
+	__u32 directory_id;
+
+	__u32 dummy1;
+	__u32 dummy2;
+	__u32 dummy3;
+};
+
 struct ncp_sign_init
 {
 	char sign_root[8];
@@ -90,19 +104,15 @@ struct ncp_nls_ioctl
 };
 
 #define	NCP_IOC_NCPREQUEST		_IOR('n', 1, struct ncp_ioctl_request)
-#define	NCP_IOC_GETMOUNTUID		_IOW('n', 2, __kernel_uid_t)
-
-#if 1
-#ifdef __KERNEL__
-/* remove after ncpfs-2.0.13 gets released or at the beginning of kernel-2.1. codefreeze */
-#define	NCP_IOC_GETMOUNTUID_INT		_IOW('n', 2, unsigned int)
-#endif
-#endif
+#define	NCP_IOC_GETMOUNTUID		_IOW('n', 2, __kernel_old_uid_t)
+#define NCP_IOC_GETMOUNTUID2		_IOW('n', 2, unsigned long)
 
 #define NCP_IOC_CONN_LOGGED_IN          _IO('n', 3)
 
-#define NCP_GET_FS_INFO_VERSION (1)
+#define NCP_GET_FS_INFO_VERSION    (1)
 #define NCP_IOC_GET_FS_INFO             _IOWR('n', 4, struct ncp_fs_info)
+#define NCP_GET_FS_INFO_VERSION_V2 (2)
+#define NCP_IOC_GET_FS_INFO_V2		_IOWR('n', 4, struct ncp_fs_info_v2)
 
 #define NCP_IOC_SIGN_INIT		_IOR('n', 5, struct ncp_sign_init)
 #define NCP_IOC_SIGN_WANTED		_IOR('n', 6, int)
@@ -123,8 +133,6 @@ struct ncp_nls_ioctl
 
 #define NCP_IOC_GETDENTRYTTL		_IOW('n', 12, __u32)
 #define NCP_IOC_SETDENTRYTTL		_IOR('n', 12, __u32)
-
-#define	NCP_IOC_GETMOUNTUID32		_IOW('n', 13, __kernel_uid32_t)
 
 /*
  * The packet size to allocate. One page should be enough.

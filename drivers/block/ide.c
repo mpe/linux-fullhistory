@@ -548,24 +548,23 @@ unsigned long current_capacity (ide_drive_t *drive)
 }
 
 /*
- * ide_geninit() is called exactly *once* for each major, from genhd.c,
- * at the beginning of the initial partition check for the drives.
+ * ide_geninit() is called exactly *once* for each interface.
  */
-void ide_geninit (struct gendisk *gd)
+void ide_geninit (ide_hwif_t *hwif)
 {
 	unsigned int unit;
-	ide_hwif_t *hwif = gd->real_devices;
+	struct gendisk *gd = hwif->gd;
 
 	for (unit = 0; unit < gd->nr_real; ++unit) {
 		ide_drive_t *drive = &hwif->drives[unit];
 
-		drive->part[0].nr_sects = current_capacity(drive);
-		if (!drive->present || (drive->media != ide_disk && drive->media != ide_floppy) ||
+		grok_partitions(gd,unit,
 #ifdef CONFIG_BLK_DEV_ISAPNP
-		    (drive->forced_geom && drive->noprobe) ||
+			(drive->forced_geom && drive->noprobe) ||
 #endif /* CONFIG_BLK_DEV_ISAPNP */
-		    drive->driver == NULL || !drive->part[0].nr_sects)
-			drive->part[0].start_sect = -1; /* skip partition check */
+			(drive->media != ide_disk &&
+			 drive->media != ide_floppy) ? 1 : 1<<PARTN_BITS,
+				current_capacity(drive));
 	}
 }
 
@@ -1627,7 +1626,9 @@ void ide_intr (int irq, void *dev_id, struct pt_regs *regs)
 ide_drive_t *get_info_ptr (kdev_t i_rdev)
 {
 	int		major = MAJOR(i_rdev);
+#if 0
 	int		minor = MINOR(i_rdev) & PARTN_MASK;
+#endif
 	unsigned int	h;
 
 	for (h = 0; h < MAX_HWIFS; ++h) {
@@ -1636,10 +1637,10 @@ ide_drive_t *get_info_ptr (kdev_t i_rdev)
 			unsigned unit = DEVICE_NR(i_rdev);
 			if (unit < MAX_DRIVES) {
 				ide_drive_t *drive = &hwif->drives[unit];
-#if 1
-				if (drive->present)
-#else
+#if 0
 				if ((drive->present) && (drive->part[minor].nr_sects))
+#else
+				if (drive->present)
 #endif
 					return drive;
 			}
@@ -1775,11 +1776,10 @@ int ide_revalidate_disk (kdev_t i_rdev)
 		drive->part[p].nr_sects   = 0;
 	};
 
-	drive->part[0].nr_sects = current_capacity(drive);
-	if ((drive->media != ide_disk && drive->media != ide_floppy) ||
-	     drive->driver == NULL || !drive->part[0].nr_sects)
-		drive->part[0].start_sect = -1;
-	resetup_one_dev(HWIF(drive)->gd, drive->select.b.unit);
+	grok_partitions(HWIF(drive)->gd, drive->select.b.unit,
+			(drive->media != ide_disk &&
+			 drive->media != ide_floppy) ? 1 : 1<<PARTN_BITS,
+				current_capacity(drive));
 
 	drive->busy = 0;
 	wake_up(&drive->wqueue);
@@ -3399,7 +3399,6 @@ EXPORT_SYMBOL(ide_spin_wait_hwgroup);
 EXPORT_SYMBOL(drive_is_flashcard);
 EXPORT_SYMBOL(ide_timer_expiry);
 EXPORT_SYMBOL(ide_intr);
-EXPORT_SYMBOL(ide_geninit);
 EXPORT_SYMBOL(ide_fops);
 EXPORT_SYMBOL(ide_get_queue);
 EXPORT_SYMBOL(do_ide0_request);
@@ -3481,6 +3480,7 @@ EXPORT_SYMBOL(current_capacity);
 int __init ide_init (void)
 {
 	static char banner_printed = 0;
+	int i;
 
 	if (!banner_printed) {
 		printk(KERN_INFO "Uniform Multi-Platform E-IDE driver " REVISION "\n");
@@ -3492,6 +3492,12 @@ int __init ide_init (void)
 	initializing = 1;
 	ide_init_builtin_drivers();
 	initializing = 0;
+
+	for (i = 0; i < MAX_HWIFS; ++i) {
+		ide_hwif_t  *hwif = &ide_hwifs[i];
+		if (hwif->present)
+			ide_geninit(hwif);
+	}
 
 	return 0;
 }

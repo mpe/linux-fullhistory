@@ -1066,8 +1066,6 @@ static boolean DAC960_RegisterBlockDevice(DAC960_Controller_T *Controller)
   Controller->GenericDiskInfo.major_name = "rd";
   Controller->GenericDiskInfo.minor_shift = DAC960_MaxPartitionsBits;
   Controller->GenericDiskInfo.max_p = DAC960_MaxPartitions;
-  Controller->GenericDiskInfo.max_nr = DAC960_MaxLogicalDrives;
-  Controller->GenericDiskInfo.init = DAC960_InitializeGenericDiskInfo;
   Controller->GenericDiskInfo.nr_real = Controller->LogicalDriveCount;
   Controller->GenericDiskInfo.real_devices = Controller;
   Controller->GenericDiskInfo.next = NULL;
@@ -1166,6 +1164,7 @@ static void DAC960_InitializeController(DAC960_Controller_T *Controller)
       Controller->MonitoringTimer.function = DAC960_MonitoringTimerFunction;
       add_timer(&Controller->MonitoringTimer);
       Controller->ControllerInitialized = true;
+      DAC960_InitializeGenericDiskInfo(&Controller->GenericDiskInfo);
     }
   else DAC960_FinalizeController(Controller);
 }
@@ -2439,7 +2438,6 @@ static int DAC960_Open(Inode_T *Inode, File_T *File)
       Controller->LogicalDriveInitialState[LogicalDriveNumber] =
 	DAC960_LogicalDrive_Online;
       DAC960_InitializeGenericDiskInfo(&Controller->GenericDiskInfo);
-      resetup_one_dev(&Controller->GenericDiskInfo, LogicalDriveNumber);
     }
   if (Controller->GenericDiskInfo.sizes[MINOR(Inode->i_rdev)] == 0)
     return -ENXIO;
@@ -2573,7 +2571,13 @@ static int DAC960_IOCTL(Inode_T *Inode, File_T *File,
 	  */
 	  set_blocksize(Device, BLOCK_SIZE);
 	}
-      resetup_one_dev(&Controller->GenericDiskInfo, LogicalDriveNumber);
+      /*
+       * Leonard, I'll tie you, draw around you a pentagram
+       * and read this file. Aloud. 
+       */
+      grok_partitions(
+	&Controller->GenericDiskInfo, LogicalDriveNumber, DAC960_MaxPartitions,
+	Controller->LogicalDriveInformation[Controller->LogicalDriveInformationIndex][LogicalDriveNumber].LogicalDriveSize);
       return 0;
     }
   return -EINVAL;
@@ -2895,8 +2899,8 @@ static void DAC960_InitializeGenericDiskInfo(GenericDiskInfo_T *GenericDiskInfo)
   for (LogicalDriveNumber = 0;
        LogicalDriveNumber < Controller->LogicalDriveCount;
        LogicalDriveNumber++)
-    GenericDiskInfo->part[DAC960_MinorNumber(LogicalDriveNumber, 0)].nr_sects =
-      LogicalDriveInformation[LogicalDriveNumber].LogicalDriveSize;
+	grok_partitions(GenericDiskInfo,LogicalDriveNumber,DAC960_MaxPartitions,
+		LogicalDriveInformation[LogicalDriveNumber].LogicalDriveSize);
 }
 
 
@@ -3518,10 +3522,6 @@ int init_module(void)
       DAC960_Controller_T *Controller = DAC960_Controllers[ControllerNumber];
       if (Controller == NULL) continue;
       DAC960_InitializeGenericDiskInfo(&Controller->GenericDiskInfo);
-      for (LogicalDriveNumber = 0;
-	   LogicalDriveNumber < Controller->LogicalDriveCount;
-	   LogicalDriveNumber++)
-	resetup_one_dev(&Controller->GenericDiskInfo, LogicalDriveNumber);
     }
   return 0;
 }

@@ -757,7 +757,6 @@ int drive_is_flashcard (ide_drive_t *drive);
 int  ide_spin_wait_hwgroup(ide_drive_t *drive, unsigned long *flags);
 void ide_timer_expiry (unsigned long data);
 void ide_intr (int irq, void *dev_id, struct pt_regs *regs);
-void ide_geninit (struct gendisk *gd);
 void do_ide0_request (request_queue_t * q);
 #if MAX_HWIFS > 1
 void do_ide1_request (request_queue_t * q);

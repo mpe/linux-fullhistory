@@ -821,7 +821,6 @@ static int i2ob_install_device(struct i2o_controller *c, struct i2o_device *d, i
 	i2ob_query_device(dev, 0x0000, 6, &status, 4);
 	i2ob_sizes[unit] = (int)(size>>10);
 	i2ob_hardsizes[unit] = blocksize;
-	i2ob_gendisk.part[unit].nr_sects = i2ob_sizes[unit];
 
 	limit=4096;	/* 8 deep scatter gather */
 
@@ -869,7 +868,7 @@ static int i2ob_install_device(struct i2o_controller *c, struct i2o_device *d, i
 	printk(".\n");
 	printk("%s: Maximum sectors/read set to %d.\n", 
 		d->dev_name, i2ob_max_sectors[unit]);
-	resetup_one_dev(&i2ob_gendisk, unit>>4);
+	grok_partitions(&i2ob_gendisk, unit>>4, 1<<4, (long)(size>>9));
 	return 0;
 }
 
@@ -1013,14 +1012,6 @@ static struct block_device_operations i2ob_fops =
 	check_media_change:	i2ob_media_change,
 	revalidate:		i2ob_revalidate,
 };
-
-/*
- *	Partitioning
- */
- 
-static void i2ob_geninit(struct gendisk *gd)
-{
-}
 	
 static struct gendisk i2ob_gendisk = 
 {
@@ -1028,8 +1019,6 @@ static struct gendisk i2ob_gendisk =
 	"i2ohd",
 	4,
 	1<<4,
-	MAX_I2OB,
-	i2ob_geninit,
 	i2ob,
 	i2ob_sizes,
 	0,

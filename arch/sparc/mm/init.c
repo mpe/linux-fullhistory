@@ -1,9 +1,10 @@
-/*  $Id: init.c,v 1.72 1999/12/27 06:30:06 anton Exp $
+/*  $Id: init.c,v 1.73 2000/01/15 00:51:26 anton Exp $
  *  linux/arch/sparc/mm/init.c
  *
  *  Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
  *  Copyright (C) 1995 Eddie C. Dost (ecd@skynet.be)
  *  Copyright (C) 1998 Jakub Jelinek (jj@sunsite.mff.cuni.cz)
+ *  Copyright (C) 2000 Anton Blanchard (anton@progsoc.uts.edu.au)
  */
 
 #include <linux/config.h>
@@ -70,8 +71,7 @@ pte_t *__bad_pagetable(void)
 pte_t __bad_page(void)
 {
 	memset((void *) &empty_bad_page, 0, PAGE_SIZE);
-	return pte_mkdirty(mk_pte_phys((((unsigned long) &empty_bad_page) 
-					- PAGE_OFFSET + phys_base),
+	return pte_mkdirty(mk_pte_phys((unsigned long)__pa(&empty_bad_page) + phys_base,
 				       PAGE_SHARED));
 }
 
@@ -115,7 +115,7 @@ void __init sparc_context_init(int numctx)
 		add_to_free_ctxlist(ctx_list_pool + ctx);
 }
 
-#undef DEBUG_BOOTMEM
+#define DEBUG_BOOTMEM
 
 extern unsigned long cmdline_memory_size;
 
@@ -124,6 +124,10 @@ unsigned long __init bootmem_init(void)
 	unsigned long bootmap_size, start_pfn, end_pfn;
 	unsigned long end_of_phys_memory = 0UL;
 	int i;
+
+	/* Limit maximum memory until we implement highmem for sparc */
+	if (cmdline_memory_size > 0x9000000)
+		cmdline_memory_size = 0x9000000;
 
 	/* XXX It is a bit ambiguous here, whether we should
 	 * XXX treat the user specified mem=xxx as total wanted
@@ -161,7 +165,7 @@ unsigned long __init bootmem_init(void)
 	/* Start with page aligned address of last symbol in kernel
 	 * image.  
 	 */
-	start_pfn  = PAGE_ALIGN((unsigned long) &_end) - PAGE_OFFSET;
+	start_pfn  = (unsigned long)__pa(PAGE_ALIGN((unsigned long) &_end));
 
 	/* Adjust up to the physical address where the kernel begins. */
 	start_pfn += phys_base;
@@ -281,8 +285,8 @@ static void __init taint_real_pages(void)
 		unsigned long start, end;
 
 		start = sp_banks[i].base_addr;
-		end = start +
-			sp_banks[i].num_bytes;
+		end = start + sp_banks[i].num_bytes;
+
 		while (start < end) {
 			set_bit (start >> 20,
 				sparc_valid_addr_bitmap);
@@ -379,19 +383,17 @@ void __init mem_init(void)
 	}
 	memset(sparc_valid_addr_bitmap, 0, i << 2);
 
-	addr = KERNBASE;
-	last = PAGE_ALIGN((unsigned long)&_end);
 	/* fix this */
-	while(addr < last) {
 #ifdef CONFIG_BLK_DEV_INITRD
+	addr = __va(phys_base);
+	last = PAGE_ALIGN((unsigned long)&_end) + phys_base;
+	while(addr < last) {
 		if (initrd_below_start_ok && addr >= initrd_start && addr < initrd_end)
 			mem_map[MAP_NR(addr)].flags &= ~(1<<PG_reserved);
 		else
-#endif	
-			mem_map[MAP_NR(addr)].flags |= (1<<PG_reserved);
-		set_bit(MAP_NR(addr) >> 8, sparc_valid_addr_bitmap);
 		addr += PAGE_SIZE;
 	}
+#endif	
 
 	taint_real_pages();
 
@@ -444,9 +446,7 @@ void free_initmem (void)
 		unsigned long page;
 		struct page *p;
 
-		page = (addr +
-			((unsigned long) __va(phys_base)) -
-			PAGE_OFFSET);
+		page = addr + phys_base;
 		p = mem_map + MAP_NR(page);
 
 		ClearPageReserved(p);

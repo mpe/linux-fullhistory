@@ -258,7 +258,7 @@ ncp_delete_inode(struct inode *inode)
 struct super_block *
 ncp_read_super(struct super_block *sb, void *raw_data, int silent)
 {
-	struct ncp_mount_data *data = (struct ncp_mount_data *) raw_data;
+	struct ncp_mount_data_kernel data;
 	struct ncp_server *server;
 	struct file *ncp_filp;
 	struct inode *root_inode;
@@ -270,11 +270,50 @@ ncp_read_super(struct super_block *sb, void *raw_data, int silent)
 	struct ncp_entry_info finfo;
 
 	MOD_INC_USE_COUNT;
-	if (data == NULL)
+	if (raw_data == NULL)
 		goto out_no_data;
-	if (data->version != NCP_MOUNT_VERSION)
-		goto out_bad_mount;
-	ncp_filp = fget(data->ncp_fd);
+	switch (*(int*)raw_data) {
+		case NCP_MOUNT_VERSION:
+			{
+				struct ncp_mount_data* md = (struct ncp_mount_data*)raw_data;
+
+				data.flags = md->flags;
+				data.int_flags = NCP_IMOUNT_LOGGEDIN_POSSIBLE;
+				data.mounted_uid = md->mounted_uid;
+				data.wdog_pid = md->wdog_pid;
+				data.ncp_fd = md->ncp_fd;
+				data.time_out = md->time_out;
+				data.retry_count = md->retry_count;
+				data.uid = md->uid;
+				data.gid = md->gid;
+				data.file_mode = md->file_mode;
+				data.dir_mode = md->dir_mode;
+				memcpy(data.mounted_vol, md->mounted_vol,
+					NCP_VOLNAME_LEN+1);
+			}
+			break;
+		case NCP_MOUNT_VERSION_V4:
+			{
+				struct ncp_mount_data_v4* md = (struct ncp_mount_data_v4*)raw_data;
+
+				data.flags = md->flags;
+				data.int_flags = 0;
+				data.mounted_uid = md->mounted_uid;
+				data.wdog_pid = md->wdog_pid;
+				data.ncp_fd = md->ncp_fd;
+				data.time_out = md->time_out;
+				data.retry_count = md->retry_count;
+				data.uid = md->uid;
+				data.gid = md->gid;
+				data.file_mode = md->file_mode;
+				data.dir_mode = md->dir_mode;
+				data.mounted_vol[0] = 0;
+			}
+			break;
+		default:
+			goto out_bad_mount;
+	}
+	ncp_filp = fget(data.ncp_fd);
 	if (!ncp_filp)
 		goto out_bad_file;
 	if (!S_ISSOCK(ncp_filp->f_dentry->d_inode->i_mode))
@@ -310,7 +349,7 @@ ncp_read_super(struct super_block *sb, void *raw_data, int silent)
 /*	server->priv.len = 0;			*/
 /*	server->priv.data = NULL;		*/
 
-	server->m = *data;
+	server->m = data;
 	/* Althought anything producing this is buggy, it happens
 	   now because of PATH_MAX changes.. */
 	if (server->m.time_out < 1) {

@@ -68,7 +68,7 @@ static void reset_ctrl(void);
 
 int ps2esdi_init(void);
 
-static void ps2esdi_geninit(struct gendisk *ignored);
+static void ps2esdi_geninit(void);
 
 static void do_ps2esdi_request(request_queue_t * q);
 
@@ -160,8 +160,6 @@ static struct gendisk ps2esdi_gendisk =
 	"ed",			/* Major name */
 	6,			/* Bits to shift to get real from partition */
 	1 << 6,			/* Number of partitions per real disk */
-	MAX_HD,			/* maximum number of real disks */
-	ps2esdi_geninit,	/* init function */
 	ps2esdi,		/* hd struct */
 	ps2esdi_sizes,		/* block sizes */
 	0,			/* number */
@@ -186,8 +184,8 @@ int __init ps2esdi_init(void)
 	/* some minor housekeeping - setup the global gendisk structure */
 	ps2esdi_gendisk.next = gendisk_head;
 	gendisk_head = &ps2esdi_gendisk;
+	ps2esdi_geninit();
 	return 0;
-
 }				/* ps2esdi_init */
 
 #ifdef MODULE
@@ -291,7 +289,7 @@ static int ps2esdi_getinfo(char *buf, int slot, void *d)
 }
 
 /* ps2 esdi specific initialization - called thru the gendisk chain */
-static void __init ps2esdi_geninit(struct gendisk *ignored)
+static void __init ps2esdi_geninit(void)
 {
 	/*
 	   The first part contains the initialization code
@@ -414,20 +412,19 @@ static void __init ps2esdi_geninit(struct gendisk *ignored)
 
 	ps2esdi_gendisk.nr_real = ps2esdi_drives;
 
-	for (i = 0; i < ps2esdi_drives; i++) {
-		ps2esdi[i << 6].nr_sects =
-		    ps2esdi_info[i].head *
-		    ps2esdi_info[i].sect *
-		    ps2esdi_info[i].cyl;
-		ps2esdi_valid[i] = 1;
-	}
 	for (i = 0; i < (MAX_HD << 6); i++)
 		ps2esdi_blocksizes[i] = 1024;
 
 	request_dma(dma_arb_level, "ed");
 	request_region(io_base, 4, "ed");
 	blksize_size[MAJOR_NR] = ps2esdi_blocksizes;
-}				/* ps2esdi_geninit */
+
+	for (i = 0; i < ps2esdi_drives; i++) {
+		grok_partitions(&ps2esdi_gendisk,i,1<<6,ps2esdi_info[i].head *
+				    ps2esdi_info[i].sect * ps2esdi_info[i].cyl);
+		ps2esdi_valid[i] = 1;
+	}
+}
 
 
 static void __init ps2esdi_get_device_cfg(void)
@@ -1189,9 +1186,8 @@ static int ps2esdi_reread_partitions(kdev_t dev)
 		ps2esdi_gendisk.part[start + partition].nr_sects = 0;
 	}
 
-	ps2esdi_gendisk.part[start].nr_sects = ps2esdi_info[target].head *
-		ps2esdi_info[target].cyl * ps2esdi_info[target].sect;
-	resetup_one_dev(&ps2esdi_gendisk, target);
+	grok_partitions(&ps2esdi_gendisk, target, 1<<6, 
+		ps2esdi_info[target].head * ps2esdi_info[target].cyl * ps2esdi_info[target].sect);
 
 	ps2esdi_valid[target] = 1;
 	wake_up(&ps2esdi_wait_open);

@@ -198,259 +198,242 @@ asmlinkage int sys_ptrace(long request, long pid, long addr, long data)
 
 	switch (request) {
 	/* when I and D space are separate, these will need to be fixed. */
-		case PTRACE_PEEKTEXT: /* read word at location addr. */ 
-		case PTRACE_PEEKDATA: {
-			unsigned long tmp;
-			int copied;
+	case PTRACE_PEEKTEXT: /* read word at location addr. */ 
+	case PTRACE_PEEKDATA: {
+		unsigned long tmp;
+		int copied;
 
-			copied = access_process_vm(child, addr, &tmp, sizeof(tmp), 0);
-			ret = -EIO;
-			if (copied != sizeof(tmp))
-				goto out;
-			ret = put_user(tmp,(unsigned long *) data);
-			goto out;
-		}
+		copied = access_process_vm(child, addr, &tmp, sizeof(tmp), 0);
+		ret = -EIO;
+		if (copied != sizeof(tmp))
+			break;
+		ret = put_user(tmp,(unsigned long *) data);
+		break;
+	}
 
 	/* read the word at location addr in the USER area. */
-		case PTRACE_PEEKUSR: {
-			unsigned long tmp;
+	case PTRACE_PEEKUSR: {
+		unsigned long tmp;
 
-			ret = -EIO;
-			if ((addr & 3) || addr < 0 || 
-			    addr > sizeof(struct user) - 3)
-				goto out;
+		ret = -EIO;
+		if ((addr & 3) || addr < 0 || 
+		    addr > sizeof(struct user) - 3)
+			break;
 
-			tmp = 0;  /* Default return condition */
-			if(addr < 17*sizeof(long))
-				tmp = getreg(child, addr);
-			if(addr >= (long) &dummy->u_debugreg[0] &&
-			   addr <= (long) &dummy->u_debugreg[7]){
-				addr -= (long) &dummy->u_debugreg[0];
-				addr = addr >> 2;
-				tmp = child->thread.debugreg[addr];
-			};
-			ret = put_user(tmp,(unsigned long *) data);
-			goto out;
+		tmp = 0;  /* Default return condition */
+		if(addr < 17*sizeof(long))
+			tmp = getreg(child, addr);
+		if(addr >= (long) &dummy->u_debugreg[0] &&
+		   addr <= (long) &dummy->u_debugreg[7]){
+			addr -= (long) &dummy->u_debugreg[0];
+			addr = addr >> 2;
+			tmp = child->thread.debugreg[addr];
 		}
+		ret = put_user(tmp,(unsigned long *) data);
+		break;
+	}
 
-      /* when I and D space are separate, this will have to be fixed. */
-		case PTRACE_POKETEXT: /* write the word at location addr. */
-		case PTRACE_POKEDATA:
-			ret = 0;
-			if (access_process_vm(child, addr, &data, sizeof(data), 1) == sizeof(data))
-				goto out;
-			ret = -EIO;
-			goto out;
+	/* when I and D space are separate, this will have to be fixed. */
+	case PTRACE_POKETEXT: /* write the word at location addr. */
+	case PTRACE_POKEDATA:
+		ret = 0;
+		if (access_process_vm(child, addr, &data, sizeof(data), 1) == sizeof(data))
+			break;
+		ret = -EIO;
+		break;
 
-		case PTRACE_POKEUSR: /* write the word at location addr in the USER area */
-			ret = -EIO;
-			if ((addr & 3) || addr < 0 || 
-			    addr > sizeof(struct user) - 3)
-				goto out;
+	case PTRACE_POKEUSR: /* write the word at location addr in the USER area */
+		ret = -EIO;
+		if ((addr & 3) || addr < 0 || 
+		    addr > sizeof(struct user) - 3)
+			break;
 
-			if (addr < 17*sizeof(long)) {
-				ret = putreg(child, addr, data);
-				goto out;
-			}
+		if (addr < 17*sizeof(long)) {
+			ret = putreg(child, addr, data);
+			break;
+		}
+		/* We need to be very careful here.  We implicitly
+		   want to modify a portion of the task_struct, and we
+		   have to be selective about what portions we allow someone
+		   to modify. */
 
-		  /* We need to be very careful here.  We implicitly
-		     want to modify a portion of the task_struct, and we
-		     have to be selective about what portions we allow someone
-		     to modify. */
-
+		  ret = -EIO;
 		  if(addr >= (long) &dummy->u_debugreg[0] &&
 		     addr <= (long) &dummy->u_debugreg[7]){
 
-			  if(addr == (long) &dummy->u_debugreg[4]) return -EIO;
-			  if(addr == (long) &dummy->u_debugreg[5]) return -EIO;
+			  if(addr == (long) &dummy->u_debugreg[4]) break;
+			  if(addr == (long) &dummy->u_debugreg[5]) break;
 			  if(addr < (long) &dummy->u_debugreg[4] &&
-			     ((unsigned long) data) >= TASK_SIZE-3) return -EIO;
+			     ((unsigned long) data) >= TASK_SIZE-3) break;
 			  
-			  ret = -EIO;
 			  if(addr == (long) &dummy->u_debugreg[7]) {
 				  data &= ~DR_CONTROL_RESERVED;
 				  for(i=0; i<4; i++)
 					  if ((0x5f54 >> ((data >> (16 + 4*i)) & 0xf)) & 1)
 						  goto out;
-			  };
+			  }
 
 			  addr -= (long) &dummy->u_debugreg;
 			  addr = addr >> 2;
 			  child->thread.debugreg[addr] = data;
 			  ret = 0;
-			  goto out;
-		  };
-		  ret = -EIO;
-		  goto out;
+		  }
+		  break;
 
-		case PTRACE_SYSCALL: /* continue and stop at next (return from) syscall */
-		case PTRACE_CONT: { /* restart after signal. */
-			long tmp;
+	case PTRACE_SYSCALL: /* continue and stop at next (return from) syscall */
+	case PTRACE_CONT: { /* restart after signal. */
+		long tmp;
 
-			ret = -EIO;
-			if ((unsigned long) data > _NSIG)
-				goto out;
-			if (request == PTRACE_SYSCALL)
-				child->flags |= PF_TRACESYS;
-			else
-				child->flags &= ~PF_TRACESYS;
-			child->exit_code = data;
+		ret = -EIO;
+		if ((unsigned long) data > _NSIG)
+			break;
+		if (request == PTRACE_SYSCALL)
+			child->flags |= PF_TRACESYS;
+		else
+			child->flags &= ~PF_TRACESYS;
+		child->exit_code = data;
 	/* make sure the single step bit is not set. */
-			tmp = get_stack_long(child, EFL_OFFSET) & ~TRAP_FLAG;
-			put_stack_long(child, EFL_OFFSET,tmp);
-			wake_up_process(child);
-			ret = 0;
-			goto out;
-		}
+		tmp = get_stack_long(child, EFL_OFFSET) & ~TRAP_FLAG;
+		put_stack_long(child, EFL_OFFSET,tmp);
+		wake_up_process(child);
+		ret = 0;
+		break;
+	}
 
 /*
  * make the child exit.  Best I can do is send it a sigkill. 
  * perhaps it should be put in the status that it wants to 
  * exit.
  */
-		case PTRACE_KILL: {
-			long tmp;
+	case PTRACE_KILL: {
+		long tmp;
 
-			ret = 0;
-			if (child->state == TASK_ZOMBIE)	/* already dead */
-				goto out;
-			child->exit_code = SIGKILL;
-	/* make sure the single step bit is not set. */
-			tmp = get_stack_long(child, EFL_OFFSET) & ~TRAP_FLAG;
-			put_stack_long(child, EFL_OFFSET, tmp);
-			wake_up_process(child);
-			goto out;
+		ret = 0;
+		if (child->state == TASK_ZOMBIE)	/* already dead */
+			break;
+		child->exit_code = SIGKILL;
+		/* make sure the single step bit is not set. */
+		tmp = get_stack_long(child, EFL_OFFSET) & ~TRAP_FLAG;
+		put_stack_long(child, EFL_OFFSET, tmp);
+		wake_up_process(child);
+		break;
+	}
+
+	case PTRACE_SINGLESTEP: {  /* set the trap flag. */
+		long tmp;
+
+		ret = -EIO;
+		if ((unsigned long) data > _NSIG)
+			break;
+		child->flags &= ~PF_TRACESYS;
+		if ((child->flags & PF_DTRACE) == 0) {
+			/* Spurious delayed TF traps may occur */
+			child->flags |= PF_DTRACE;
 		}
+		tmp = get_stack_long(child, EFL_OFFSET) | TRAP_FLAG;
+		put_stack_long(child, EFL_OFFSET, tmp);
+		child->exit_code = data;
+		/* give it a chance to run. */
+		wake_up_process(child);
+		ret = 0;
+		break;
+	}
 
-		case PTRACE_SINGLESTEP: {  /* set the trap flag. */
-			long tmp;
+	case PTRACE_DETACH: { /* detach a process that was attached. */
+		long tmp;
 
+		ret = -EIO;
+		if ((unsigned long) data > _NSIG)
+			break;
+		child->flags &= ~(PF_PTRACED|PF_TRACESYS);
+		child->exit_code = data;
+		write_lock_irqsave(&tasklist_lock, flags);
+		REMOVE_LINKS(child);
+		child->p_pptr = child->p_opptr;
+		SET_LINKS(child);
+		write_unlock_irqrestore(&tasklist_lock, flags);
+		/* make sure the single step bit is not set. */
+		tmp = get_stack_long(child, EFL_OFFSET) & ~TRAP_FLAG;
+		put_stack_long(child, EFL_OFFSET, tmp);
+		wake_up_process(child);
+		ret = 0;
+		break;
+	}
+
+	case PTRACE_GETREGS: { /* Get all gp regs from the child. */
+	  	if (!access_ok(VERIFY_WRITE, (unsigned *)data, 17*sizeof(long))) {
 			ret = -EIO;
-			if ((unsigned long) data > _NSIG)
-				goto out;
-			child->flags &= ~PF_TRACESYS;
-			if ((child->flags & PF_DTRACE) == 0) {
-				/* Spurious delayed TF traps may occur */
-				child->flags |= PF_DTRACE;
-			}
-			tmp = get_stack_long(child, EFL_OFFSET) | TRAP_FLAG;
-			put_stack_long(child, EFL_OFFSET, tmp);
-			child->exit_code = data;
-	/* give it a chance to run. */
-			wake_up_process(child);
-			ret = 0;
-			goto out;
+			break;
 		}
-
-		case PTRACE_DETACH: { /* detach a process that was attached. */
-			long tmp;
-
-			ret = -EIO;
-			if ((unsigned long) data > _NSIG)
-				goto out;
-			child->flags &= ~(PF_PTRACED|PF_TRACESYS);
-			child->exit_code = data;
-			write_lock_irqsave(&tasklist_lock, flags);
-			REMOVE_LINKS(child);
-			child->p_pptr = child->p_opptr;
-			SET_LINKS(child);
-			write_unlock_irqrestore(&tasklist_lock, flags);
-	/* make sure the single step bit is not set. */
-			tmp = get_stack_long(child, EFL_OFFSET) & ~TRAP_FLAG;
-			put_stack_long(child, EFL_OFFSET, tmp);
-			wake_up_process(child);
-			ret = 0;
-			goto out;
+		for ( i = 0; i < 17*sizeof(long); i += sizeof(long) ) {
+			__put_user(getreg(child, i),(unsigned long *) data);
+			data += sizeof(long);
 		}
+		ret = 0;
+		break;
+	}
 
-		case PTRACE_GETREGS: { /* Get all gp regs from the child. */
-		  	if (!access_ok(VERIFY_WRITE, (unsigned *)data,
-				       17*sizeof(long)))
-			  {
-			    ret = -EIO;
-			    goto out;
-			  }
-			for ( i = 0; i < 17*sizeof(long); i += sizeof(long) )
-			  {
-			    __put_user(getreg(child, i),(unsigned long *) data);
-			    data += sizeof(long);
-			  }
-			ret = 0;
-			goto out;
-		  };
-
-		case PTRACE_SETREGS: { /* Set all gp regs in the child. */
-			unsigned long tmp;
-		  	if (!access_ok(VERIFY_READ, (unsigned *)data,
-				       17*sizeof(long)))
-			  {
-			    ret = -EIO;
-			    goto out;
-			  }
-			for ( i = 0; i < 17*sizeof(long); i += sizeof(long) )
-			  {
-			    __get_user(tmp, (unsigned long *) data);
-			    putreg(child, i, tmp);
-			    data += sizeof(long);
-			  }
-			ret = 0;
-			goto out;
-		  };
-
-		case PTRACE_GETFPREGS: { /* Get the child FPU state. */
-			if (!access_ok(VERIFY_WRITE, (unsigned *)data,
-				       sizeof(struct user_i387_struct)))
-			  {
-			    ret = -EIO;
-			    goto out;
-			  }
-			ret = 0;
-			if ( !child->used_math ) {
-			  /* Simulate an empty FPU. */
-			  child->thread.i387.hard.cwd = 0xffff037f;
-			  child->thread.i387.hard.swd = 0xffff0000;
-			  child->thread.i387.hard.twd = 0xffffffff;
-			}
-#ifdef CONFIG_MATH_EMULATION
-			if ( boot_cpu_data.hard_math ) {
-#endif
-				__copy_to_user((void *)data, &child->thread.i387.hard,
-						sizeof(struct user_i387_struct));
-#ifdef CONFIG_MATH_EMULATION
-			} else {
-			  save_i387_soft(&child->thread.i387.soft,
-					 (struct _fpstate *)data);
-			}
-#endif
-			goto out;
-		  };
-
-		case PTRACE_SETFPREGS: { /* Set the child FPU state. */
-			if (!access_ok(VERIFY_READ, (unsigned *)data,
-				       sizeof(struct user_i387_struct)))
-			  {
-			    ret = -EIO;
-			    goto out;
-			  }
-			child->used_math = 1;
-#ifdef CONFIG_MATH_EMULATION
-			if ( boot_cpu_data.hard_math ) {
-#endif
-			  __copy_from_user(&child->thread.i387.hard, (void *)data,
-					   sizeof(struct user_i387_struct));
-#ifdef CONFIG_MATH_EMULATION
-			} else {
-			  restore_i387_soft(&child->thread.i387.soft,
-					    (struct _fpstate *)data);
-			}
-#endif
-			ret = 0;
-			goto out;
-		  };
-
-		default:
+	case PTRACE_SETREGS: { /* Set all gp regs in the child. */
+		unsigned long tmp;
+	  	if (!access_ok(VERIFY_READ, (unsigned *)data, 17*sizeof(long))) {
 			ret = -EIO;
-			goto out;
+			break;
+		}
+		for ( i = 0; i < 17*sizeof(long); i += sizeof(long) ) {
+			__get_user(tmp, (unsigned long *) data);
+			putreg(child, i, tmp);
+			data += sizeof(long);
+		}
+		ret = 0;
+		break;
+	}
+
+	case PTRACE_GETFPREGS: { /* Get the child FPU state. */
+		if (!access_ok(VERIFY_WRITE, (unsigned *)data, sizeof(struct user_i387_struct))) {
+			ret = -EIO;
+			break;
+		}
+		ret = 0;
+		if ( !child->used_math ) {
+			/* Simulate an empty FPU. */
+			child->thread.i387.hard.cwd = 0xffff037f;
+			child->thread.i387.hard.swd = 0xffff0000;
+			child->thread.i387.hard.twd = 0xffffffff;
+		}
+#ifdef CONFIG_MATH_EMULATION
+		if ( boot_cpu_data.hard_math ) {
+#endif
+			__copy_to_user((void *)data, &child->thread.i387.hard, sizeof(struct user_i387_struct));
+#ifdef CONFIG_MATH_EMULATION
+		} else {
+			save_i387_soft(&child->thread.i387.soft, (struct _fpstate *)data);
+		}
+#endif
+		break;
+	}
+
+	case PTRACE_SETFPREGS: { /* Set the child FPU state. */
+		if (!access_ok(VERIFY_READ, (unsigned *)data, sizeof(struct user_i387_struct))) {
+			ret = -EIO;
+			break;
+		}
+		child->used_math = 1;
+#ifdef CONFIG_MATH_EMULATION
+		if ( boot_cpu_data.hard_math ) {
+#endif
+			__copy_from_user(&child->thread.i387.hard, (void *)data, sizeof(struct user_i387_struct));
+#ifdef CONFIG_MATH_EMULATION
+		} else {
+			restore_i387_soft(&child->thread.i387.soft, (struct _fpstate *)data);
+		}
+#endif
+		ret = 0;
+		break;
+	}
+
+	default:
+		ret = -EIO;
+		break;
 	}
 out:
 	unlock_kernel();

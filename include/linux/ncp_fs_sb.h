@@ -18,7 +18,7 @@
 
 struct ncp_server {
 
-	struct ncp_mount_data m;	/* Nearly all of the mount data is of
+	struct ncp_mount_data_kernel m;	/* Nearly all of the mount data is of
 					   interest for us later, so we store
 					   it completely. */
 

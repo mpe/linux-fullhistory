@@ -1,4 +1,4 @@
-/* $Id: entry.S,v 1.111 2000/01/11 17:33:29 jj Exp $
+/* $Id: entry.S,v 1.112 2000/01/14 07:12:31 davem Exp $
  * arch/sparc64/kernel/entry.S:  Sparc64 trap low-level entry points.
  *
  * Copyright (C) 1995,1997 David S. Miller (davem@caip.rutgers.edu)
@@ -768,9 +768,9 @@ sunos_getpid:
 	/* SunOS getuid() returns uid in %o0 and euid in %o1 */
 	.globl	sunos_getuid
 sunos_getuid:
-	call	sys_geteuid16
+	call	sys32_geteuid16
 	 nop
-	call	sys_getuid16
+	call	sys32_getuid16
 	 stx	%o0, [%sp + STACK_BIAS + REGWIN_SZ + PT_V9_I1]
 	b,pt	%xcc, ret_sys_call
 	 stx	%o0, [%sp + STACK_BIAS + REGWIN_SZ + PT_V9_I0]
@@ -778,9 +778,9 @@ sunos_getuid:
 	/* SunOS getgid() returns gid in %o0 and egid in %o1 */
 	.globl	sunos_getgid
 sunos_getgid:
-	call	sys_getegid16
+	call	sys32_getegid16
 	 nop
-	call	sys_getgid16
+	call	sys32_getgid16
 	 stx	%o0, [%sp + STACK_BIAS + REGWIN_SZ + PT_V9_I1]
 	b,pt	%xcc, ret_sys_call
 	 stx	%o0, [%sp + STACK_BIAS + REGWIN_SZ + PT_V9_I0]

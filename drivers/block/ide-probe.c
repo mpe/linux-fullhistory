@@ -687,9 +687,7 @@ static void init_gendisk (ide_hwif_t *hwif)
 	gd->major_name	= IDE_MAJOR_NAME;	/* treated special in genhd.c */
 	gd->minor_shift	= PARTN_BITS;		/* num bits for partitions */
 	gd->max_p	= 1<<PARTN_BITS;	/* 1 + max partitions / drive */
-	gd->max_nr	= units;		/* max num real drives */
 	gd->nr_real	= units;		/* current num real drives */
-	gd->init	= &ide_geninit;		/* initialization function */
 	gd->real_devices= hwif;			/* ptr to internal data */
 	gd->next	= NULL;			/* linked list of major devs */
 

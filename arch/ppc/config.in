@@ -2,6 +2,8 @@
 # For a description of the syntax of this configuration file,
 # see the Configure script.
 #
+define_bool CONFIG_UID16 n
+
 mainmenu_name "Linux/PowerPC Kernel Configuration"
 
 mainmenu_option next_comment

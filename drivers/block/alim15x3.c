@@ -313,7 +313,6 @@ static void ali15x3_tune_drive (ide_drive_t *drive, byte pio)
 
 static int ali15x3_tune_chipset (ide_drive_t *drive, byte speed)
 {
-	ide_hwif_t *hwif	= HWIF(drive);
 	struct pci_dev *dev	= hwif->pci_dev;
 	byte unit		= (drive->select.b.unit & 0x01);
 	byte tmpbyte		= 0x00;
@@ -325,9 +324,9 @@ static int ali15x3_tune_chipset (ide_drive_t *drive, byte speed)
 		/*
 		 * clear "ultra enable" bit
 		 */
-		pci_read_config_byte(hwif->pci_dev, m5229_udma, &tmpbyte);
+		pci_read_config_byte(dev, m5229_udma, &tmpbyte);
 		tmpbyte &= ultra_enable;
-		pci_write_config_byte(hwif->pci_dev, m5229_udma, tmpbyte);
+		pci_write_config_byte(dev, m5229_udma, tmpbyte);
 	}
 
 	err = ide_config_drive_speed(drive, speed);
@@ -339,17 +338,17 @@ static int ali15x3_tune_chipset (ide_drive_t *drive, byte speed)
 	}
 
 	if (speed >= XFER_UDMA_0) {
-		pci_read_config_byte(hwif->pci_dev, m5229_udma, &tmpbyte);
+		pci_read_config_byte(dev, m5229_udma, &tmpbyte);
 		tmpbyte &= (0x0f << ((1-unit) << 2));
 		/*
 		 * enable ultra dma and set timing
 		 */
 		tmpbyte |= ((0x08 | (4-speed)) << (unit << 2));
-		pci_write_config_byte(hwif->pci_dev, m5229_udma, tmpbyte);
+		pci_write_config_byte(dev, m5229_udma, tmpbyte);
 		if (speed >= XFER_UDMA_3) {
-			pci_read_config_byte(hwif->pci_dev, 0x4b, &tmpbyte);
+			pci_read_config_byte(dev, 0x4b, &tmpbyte);
 			tmpbyte |= 1;
-			pci_write_config_byte(hwif->pci_dev, 0x4b, tmpbyte);
+			pci_write_config_byte(dev, 0x4b, tmpbyte);
 		}
 	}
 
@@ -519,7 +518,6 @@ unsigned int __init pci_init_ali15x3 (struct pci_dev *dev, const char *name)
 
 unsigned int __init ata66_ali15x3 (ide_hwif_t *hwif)
 {
-	ide_hwif_t *hwif	= HWIF(drive);
 	struct pci_dev *dev	= hwif->pci_dev;
 	byte ata66mask		= hwif->channel ? 0x02 : 0x01;
 	unsigned int ata66	= 0;
@@ -614,7 +612,7 @@ unsigned int __init ata66_ali15x3 (ide_hwif_t *hwif)
 	 * 0x4a, bit1 is 0 => secondary channel
 	 * has 80-pin (from host view)
 	 */
-	pci_read_config_byte(hwif->pci_dev, 0x4a, &tmpbyte);
+	pci_read_config_byte(dev, 0x4a, &tmpbyte);
 	ata66 = (!(tmpbyte & ata66mask)) ? 0 : 1;
 	__restore_flags(flags);
 

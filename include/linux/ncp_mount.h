@@ -40,4 +40,50 @@ struct ncp_mount_data {
 	__kernel_mode_t dir_mode;
 };
 
+#define NCP_MOUNT_VERSION_V4	(4)
+
+struct ncp_mount_data_v4 {
+	int version;
+	unsigned long flags;	/* NCP_MOUNT_* flags */
+	/* MIPS uses long __kernel_uid_t, but... */
+	/* we neever pass -1, so it is safe */
+	unsigned long mounted_uid;	/* Who may umount() this filesystem? */
+	/* MIPS uses long __kernel_pid_t */
+	long wdog_pid;		/* Who cares for our watchdog packets? */
+
+	unsigned int ncp_fd;	/* The socket to the ncp port */
+	unsigned int time_out;	/* How long should I wait after
+				   sending a NCP request? */
+	unsigned int retry_count;	/* And how often should I retry? */
+
+	/* MIPS uses long __kernel_uid_t... */
+	/* we never pass -1, so it is safe */
+	unsigned long uid;
+	unsigned long gid;
+	/* MIPS uses unsigned long __kernel_mode_t */
+	unsigned long file_mode;
+	unsigned long dir_mode;
+};
+
+#ifdef __KERNEL__
+
+struct ncp_mount_data_kernel {
+	unsigned long    flags;		/* NCP_MOUNT_* flags */
+	unsigned int	 int_flags;	/* internal flags */
+#define NCP_IMOUNT_LOGGEDIN_POSSIBLE	0x0001
+	__kernel_uid32_t mounted_uid;	/* Who may umount() this filesystem? */
+	__kernel_pid_t   wdog_pid;		/* Who cares for our watchdog packets? */
+	unsigned int     ncp_fd;	/* The socket to the ncp port */
+	unsigned int     time_out;	/* How long should I wait after
+					   sending a NCP request? */
+	unsigned int     retry_count;	/* And how often should I retry? */
+	unsigned char	 mounted_vol[NCP_VOLNAME_LEN + 1];
+	__kernel_uid32_t uid;
+	__kernel_gid32_t gid;
+	__kernel_mode_t  file_mode;
+	__kernel_mode_t  dir_mode;
+};
+
+#endif /* __KERNEL__ */
+
 #endif

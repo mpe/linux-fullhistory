@@ -1,4 +1,4 @@
-/* $Id: viking.S,v 1.14 1999/08/14 03:51:50 anton Exp $
+/* $Id: viking.S,v 1.15 2000/01/15 00:51:36 anton Exp $
  * viking.S: High speed Viking cache/mmu operations
  *
  * Copyright (C) 1997  Eddie C. Dost  (ecd@skynet.be)
@@ -35,37 +35,14 @@ sun4dsmp_flush_tlb_spin:
 	.globl	viking_flush_tlb_all, viking_flush_tlb_mm
 	.globl	viking_flush_tlb_range, viking_flush_tlb_page
 
-	.globl	viking_c_flush_chunk, viking_s_flush_chunk
-
-viking_s_flush_chunk:
-	sethi	%hi(KERNBASE), %g2
-	ba	2f
-	 sub	%o0, %g2, %g3
-
-viking_c_flush_chunk:
-	sethi	%hi(KERNBASE), %g2
-	cmp	%o0, %g2
-	bgeu	2f
-	 sub	%o0, %g2, %g3
-	sethi	BTFIXUP_SETHI(page_contig_offset), %g2
-	ba	2f
-	 sub	%o0, %g2, %g3
-
-viking_flush_page:
 viking_flush_chunk:
-	sethi	%hi(C_LABEL(srmmu_v2p_hash)), %g2
-	srl	%o0, 24, %o1
-	or	%g2, %lo(C_LABEL(srmmu_v2p_hash)), %g2
-	sll	%o1, 2, %o1
-	ld	[%g2 + %o1], %g3
-	and	%o0, PAGE_MASK, %o0
-	cmp	%g3, -1
-	be	9f
-	 add	%o0, %g3, %g3
-2:	srl	%g3, 12, %g1		! ppage >> 12
+viking_flush_page:
+	sethi	%hi(PAGE_OFFSET), %g2
+	sub	%o0, %g2, %g3
+	srl	%g3, 12, %g1		! ppage >> 12
 
 	clr	%o1			! set counter, 0 - 127
-	sethi	%hi(KERNBASE + PAGE_SIZE - 0x80000000), %o3
+	sethi	%hi(PAGE_OFFSET + PAGE_SIZE - 0x80000000), %o3
 	sethi	%hi(0x80000000), %o4
 	sethi	%hi(VIKING_PTAG_VALID), %o5
 	sethi	%hi(2*PAGE_SIZE), %o0
@@ -85,7 +62,7 @@ viking_flush_chunk:
 
 	andcc	%g2, %o5, %g0		! ptag VALID?
 	be	7f
-	 add	%g4, %o3, %g2		! (KERNBASE + PAGE_SIZE) | (set << 5)
+	 add	%g4, %o3, %g2		! (PAGE_OFFSET + PAGE_SIZE) | (set << 5)
 	ld	[%g2], %g3
 	ld	[%g2 + %g7], %g3
 	add	%g2, %o0, %g2
@@ -113,16 +90,9 @@ viking_flush_chunk:
 	 nop
 
 viking_mxcc_flush_page:
-	sethi	%hi(C_LABEL(srmmu_v2p_hash)), %g2
-	srl	%o0, 24, %o1
-	or	%g2, %lo(C_LABEL(srmmu_v2p_hash)), %g2
-	sll	%o1, 2, %o1
-	ld	[%g2 + %o1], %g3
-	and	%o0, PAGE_MASK, %o0
-	cmp	%g3, -1
-	be	9f
-	 add	%o0, %g3, %g3
-2:	sub	%g3, -PAGE_SIZE, %g3		! ppage + PAGE_SIZE
+	sethi	%hi(PAGE_OFFSET), %g2
+	sub	%o0, %g2, %g3
+	sub	%g3, -PAGE_SIZE, %g3		! ppage + PAGE_SIZE
 	sethi	%hi(MXCC_SRCSTREAM), %o3	! assume %hi(MXCC_SRCSTREAM) == %hi(MXCC_DESTSTREAM)
 	mov	0x10, %g2			! set cacheable bit
 	or	%o3, %lo(MXCC_SRCSTREAM), %o2

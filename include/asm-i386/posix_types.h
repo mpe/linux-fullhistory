@@ -33,10 +33,8 @@ typedef unsigned short	__kernel_gid16_t;
 typedef unsigned int	__kernel_uid32_t;
 typedef unsigned int	__kernel_gid32_t;
 
-#if defined(__KERNEL__) && defined(CONFIG_UID16)
 typedef unsigned short	__kernel_old_uid_t;
 typedef unsigned short	__kernel_old_gid_t;
-#endif /* __KERNEL__ */
 
 #ifdef __GNUC__
 typedef long long	__kernel_loff_t;

@@ -234,7 +234,7 @@ int get_partition_list(char * page)
 }
 #endif
 
-void check_partition(struct gendisk *hd, kdev_t dev, int first_part_minor)
+static void check_partition(struct gendisk *hd, kdev_t dev, int first_part_minor)
 {
 	static int first_time = 1;
 	unsigned long first_sector;
@@ -272,13 +272,18 @@ void check_partition(struct gendisk *hd, kdev_t dev, int first_part_minor)
  * Much of the cleanup from the old partition tables should have already been
  * done
  */
-void resetup_one_dev(struct gendisk *dev, int drive)
+
+void grok_partitions(struct gendisk *dev, int drive, unsigned minors, long size)
 {
 	int i;
 	int first_minor	= drive << dev->minor_shift;
 	int end_minor	= first_minor + dev->max_p;
 
 	blk_size[dev->major] = NULL;
+	dev->part[first_minor].nr_sects = size;
+	/* No Such Agen^Wdevice or no minors to use for partitions */
+	if (!size || minors == 1)
+		return;
 	check_partition(dev, MKDEV(dev->major, first_minor), 1 + first_minor);
 
  	/*
@@ -292,30 +297,9 @@ void resetup_one_dev(struct gendisk *dev, int drive)
 	}
 }
 
-static inline void setup_dev(struct gendisk *dev)
-{
-	int i, drive;
-	int end_minor	= dev->max_nr * dev->max_p;
-
-	blk_size[dev->major] = NULL;
-	for (i = 0; i < end_minor; i++) {
-		dev->part[i].start_sect = 0;
-		dev->part[i].nr_sects = 0;
-		dev->sizes[i] = 0;
-	}
-	dev->init(dev);	
-	for (drive = 0 ; drive < dev->nr_real ; drive++)
-		resetup_one_dev(dev, drive);
-}
-
 int __init partition_setup(void)
 {
-	struct gendisk *p;
-
 	device_init();
-
-	for (p = gendisk_head ; p ; p=p->next)
-		setup_dev(p);
 
 #ifdef CONFIG_BLK_DEV_RAM
 #ifdef CONFIG_BLK_DEV_INITRD

@@ -135,12 +135,6 @@ static struct gendisk xd_gendisk = {
 	"xd",		/* Major name */
 	6,		/* Bits to shift to get real from partition */
 	1 << 6,		/* Number of partitions per real */
-	XD_MAXDRIVES,	/* maximum number of real */
-#ifdef MODULE
-	NULL,		/* called from init_module */
-#else
-        xd_geninit,     /* init function */
-#endif
 	xd_struct,	/* hd struct */
 	xd_sizes,	/* block sizes */
 	0,		/* number */
@@ -181,6 +175,7 @@ int __init xd_init (void)
 	read_ahead[MAJOR_NR] = 8;	/* 8 sector (4kB) read ahead */
 	xd_gendisk.next = gendisk_head;
 	gendisk_head = &xd_gendisk;
+	xd_geninit();
 
 	return 0;
 }
@@ -210,16 +205,21 @@ static u_char __init xd_detect (u_char *controller, unsigned int *address)
 
 /* xd_geninit: grab the IRQ and DMA channel, initialise the drives */
 /* and set up the "raw" device entries in the table */
-static void __init xd_geninit (struct gendisk *ignored)
+static void __init xd_geninit (void)
 {
 	u_char i,controller;
 	unsigned int address;
 
+	for(i=0;i<(XD_MAXDRIVES << 6);i++) xd_blocksizes[i] = 1024;
+	blksize_size[MAJOR_NR] = xd_blocksizes;
+
 	if (xd_detect(&controller,&address)) {
 
-		printk("Detected a%s controller (type %d) at address %06x\n",xd_sigs[controller].name,controller,address);
+		printk("Detected a%s controller (type %d) at address %06x\n",
+			xd_sigs[controller].name,controller,address);
 		if (check_region(xd_iobase,4)) {
-			printk("xd: Ports at 0x%x are not available\n",xd_iobase);
+			printk("xd: Ports at 0x%x are not available\n",
+				xd_iobase);
 			return;
 		}
 		request_region(xd_iobase,4,"xd");
@@ -227,9 +227,12 @@ static void __init xd_geninit (struct gendisk *ignored)
 			xd_sigs[controller].init_controller(address);
 		xd_drives = xd_initdrives(xd_sigs[controller].init_drive);
 		
-		printk("Detected %d hard drive%s (using IRQ%d & DMA%d)\n",xd_drives,xd_drives == 1 ? "" : "s",xd_irq,xd_dma);
+		printk("Detected %d hard drive%s (using IRQ%d & DMA%d)\n",
+			xd_drives,xd_drives == 1 ? "" : "s",xd_irq,xd_dma);
 		for (i = 0; i < xd_drives; i++)
-			printk(" xd%c: CHS=%d/%d/%d\n",'a'+i,xd_info[i].cylinders,xd_info[i].heads,xd_info[i].sectors);
+			printk(" xd%c: CHS=%d/%d/%d\n",'a'+i,
+				xd_info[i].cylinders,xd_info[i].heads,
+				xd_info[i].sectors);
 
 	}
 	if (xd_drives) {
@@ -244,14 +247,13 @@ static void __init xd_geninit (struct gendisk *ignored)
 	}
 
 	for (i = 0; i < xd_drives; i++) {
-		xd_struct[i << 6].nr_sects = xd_info[i].heads * xd_info[i].cylinders * xd_info[i].sectors;
 		xd_valid[i] = 1;
+		grok_partitions(&xd_gendisk, i, 1<<6, xd_info[i].heads *
+				xd_info[i].cylinders * xd_info[i].sectors);
 	}
 
 	xd_gendisk.nr_real = xd_drives;
 
-	for(i=0;i<(XD_MAXDRIVES << 6);i++) xd_blocksizes[i] = 1024;
-	blksize_size[MAJOR_NR] = xd_blocksizes;
 }
 
 /* xd_open: open a device */
@@ -406,8 +408,8 @@ static int xd_reread_partitions(kdev_t dev)
 		xd_gendisk.part[minor].nr_sects = 0;
 	};
 
-	xd_gendisk.part[start].nr_sects = xd_info[target].heads * xd_info[target].cylinders * xd_info[target].sectors;
-	resetup_one_dev(&xd_gendisk,target);
+	grok_partitions(&xd_gendisk, target, 1<<6,
+			xd_info[target].heads * xd_info[target].cylinders * xd_info[target].sectors);
 
 	xd_valid[target] = 1;
 	wake_up(&xd_wait_open);
@@ -1145,27 +1147,26 @@ static void xd_done (void)
 int init_module(void)
 {
 	int i,count = 0;
-	int error = xd_init();
-	if (!error)
-	{
-		printk(KERN_INFO "XD: Loaded as a module.\n");
-		for (i = 4; i > 0; i--)
-			if(((xd[i] = xd[i-1]) >= 0) && !count)
-				count = i;
-		if((xd[0] = count))
-			xd_setup(NULL, xd);
-		xd_geninit(&(struct gendisk) { 0,0,0,0,0,0,0,0,0,0,0 });
-		if (!xd_drives) {
-					/* no drives detected - unload module */
-			unregister_blkdev(MAJOR_NR, "xd");
-			xd_done();
-			return (-1);
-		}
-		for (i = 0; i < xd_drives; i++)
-			resetup_one_dev(&xd_gendisk, i);
+	int error;
+
+	for (i = 4; i > 0; i--)
+		if(((xd[i] = xd[i-1]) >= 0) && !count)
+			count = i;
+	if((xd[0] = count))
+		xd_setup(NULL, xd);
+
+	if (error = xd_init())
+		return error;
+
+	printk(KERN_INFO "XD: Loaded as a module.\n");
+	if (!xd_drives) {
+		/* no drives detected - unload module */
+		unregister_blkdev(MAJOR_NR, "xd");
+		xd_done();
+		return (-1);
 	}
         
-	return error;
+	return 0;
 }
 
 void cleanup_module(void)

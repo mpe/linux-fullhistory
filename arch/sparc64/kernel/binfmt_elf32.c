@@ -129,6 +129,13 @@ struct elf_prpsinfo32
 	char	pr_psargs[ELF_PRARGSZ];	/* initial part of arg list */
 };
 
+#include <linux/highuid.h>
+
+#undef NEW_TO_OLD_UID
+#undef NEW_TO_OLD_GID
+#define NEW_TO_OLD_UID(uid) ((uid) > 65535) ? (u16)overflowuid : (u16)(uid)
+#define NEW_TO_OLD_GID(gid) ((gid) > 65535) ? (u16)overflowgid : (u16)(gid)
+
 #define elf_addr_t	u32
 #define elf_caddr_t	u32
 #undef start_thread

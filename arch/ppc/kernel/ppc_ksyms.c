@@ -270,3 +270,4 @@ EXPORT_SYMBOL(ppc_irq_dispatch_handler);
 EXPORT_SYMBOL(decrementer_count);
 EXPORT_SYMBOL(get_wchan);
 EXPORT_SYMBOL(console_drivers);
+EXPORT_SYMBOL(do_bottom_half);

@@ -469,8 +469,6 @@ static int sd_release(struct inode *inode, struct file *file)
 	return 0;
 }
 
-static void sd_geninit(struct gendisk *);
-
 static struct block_device_operations sd_fops =
 {
 	open:			sd_open,
@@ -491,8 +489,6 @@ static struct gendisk sd_gendisk =
 	"sd",			/* Major name */
 	4,			/* Bits to shift to get real from partition */
 	1 << 4,			/* Number of partitions per real */
-	0,			/* maximum number of real */
-	sd_geninit,		/* init function */
 	NULL,			/* hd struct */
 	NULL,			/* block sizes */
 	0,			/* number */
@@ -505,13 +501,14 @@ static struct gendisk *sd_gendisks = &sd_gendisk;
 #define SD_GENDISK(i)    sd_gendisks[(i) / SCSI_DISKS_PER_MAJOR]
 #define LAST_SD_GENDISK  sd_gendisks[N_USED_SD_MAJORS - 1]
 
-static void sd_geninit(struct gendisk *ignored)
+static void sd_geninit(void)
 {
 	int i;
 
 	for (i = 0; i < sd_template.dev_max; ++i)
 		if (rscsi_disks[i].device)
-			sd[i << 4].nr_sects = rscsi_disks[i].capacity;
+			grok_partitions(&SD_GENDISK(i), i%SCSI_DISKS_PER_MAJOR,
+					1<<4, rscsi_disks[i].capacity);
 }
 
 /*
@@ -1018,8 +1015,6 @@ static int sd_init()
 		sd_gendisks[i].major_name = "sd";
 		sd_gendisks[i].minor_shift = 4;
 		sd_gendisks[i].max_p = 1 << 4;
-		sd_gendisks[i].max_nr = SCSI_DISKS_PER_MAJOR;
-		sd_gendisks[i].init = sd_geninit;
 		sd_gendisks[i].part = sd + (i * SCSI_DISKS_PER_MAJOR << 4);
 		sd_gendisks[i].sizes = sd_sizes + (i * SCSI_DISKS_PER_MAJOR << 4);
 		sd_gendisks[i].nr_real = 0;
@@ -1028,9 +1023,8 @@ static int sd_init()
 		    (void *) (rscsi_disks + i * SCSI_DISKS_PER_MAJOR);
 	}
 
-	LAST_SD_GENDISK.max_nr =
-	    (sd_template.dev_max - 1) % SCSI_DISKS_PER_MAJOR + 1;
 	LAST_SD_GENDISK.next = NULL;
+	sd_geninit();
 	return 0;
 }
 
@@ -1175,11 +1169,8 @@ int revalidate_scsidisk(kdev_t dev, int maxusage)
 	MAYBE_REINIT;
 #endif
 
-	sd_gendisks->part[start].nr_sects = CAPACITY;
-	if (!rscsi_disks[target].device)
-		return -EBUSY;
-	resetup_one_dev(&SD_GENDISK(target),
-			target % SCSI_DISKS_PER_MAJOR);
+	grok_partitions(&SD_GENDISK(target), target % SCSI_DISKS_PER_MAJOR,
+			1<<4, CAPACITY);
 
 	DEVICE_BUSY = 0;
 	return 0;

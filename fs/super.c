@@ -1173,7 +1173,7 @@ void __init mount_root(void)
 #endif
 
 	bdev = bdget(kdev_t_to_nr(ROOT_DEV));
-	if (!bdget)
+	if (!bdev)
 		panic(__FUNCTION__ ": unable to allocate root device");
 	mode = FMODE_READ;
 	if (!(root_mountflags & MS_RDONLY))

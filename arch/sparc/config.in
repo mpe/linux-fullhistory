@@ -1,8 +1,10 @@
-# $Id: config.in,v 1.79 1999/12/23 01:46:00 davem Exp $
+# $Id: config.in,v 1.80 2000/01/14 07:12:30 davem Exp $
 # For a description of the syntax of this configuration file,
 # see the Configure script.
 #
 mainmenu_name "Linux/SPARC Kernel Configuration"
+
+define_bool CONFIG_UID16 y
 
 mainmenu_option next_comment
 comment 'Code maturity level options'

@@ -2348,18 +2348,15 @@ S: Germany
 
 N: Lars Wirzenius
 E: liw@iki.fi
-D: Linux System Administrator's Guide
-D: Co-moderator, comp.os.linux.announce
+D: Linux System Administrator's Guide, author, former maintainer
+D: comp.os.linux.announce, former moderator
+D: Linux Documentation Project, co-founder
 D: Original sprintf in kernel
-D: Personal information about Linus
-D: Original kernel README
-D: Linux News (electronic magazine)
-D: Meta-FAQ, originator
+D: Original kernel README (for version 0.97)
+D: Linux News (electronic magazine, now dead), founder and former editor
+D: Meta-FAQ, originator, former maintainer
 D: INFO-SHEET, former maintainer
 D: Author of the longest-living linux bug
-S: Hernesaarenkatu 15 A 2
-S: Fin-00150 Helsinki
-S: Finland
 
 N: Jonathan Woithe
 E: jwoithe@physics.adelaide.edu.au

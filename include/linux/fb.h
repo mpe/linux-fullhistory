@@ -197,6 +197,12 @@ struct fb_con2fbmap {
 	__u32 framebuffer;
 };
 
+/* VESA Blanking Levels */
+#define VESA_NO_BLANKING        0
+#define VESA_VSYNC_SUSPEND      1
+#define VESA_HSYNC_SUSPEND      2
+#define VESA_POWERDOWN          3
+
 struct fb_monspecs {
 	__u32 hfmin;			/* hfreq lower limit (Hz) */
 	__u32 hfmax; 			/* hfreq upper limit (Hz) */
@@ -261,9 +267,13 @@ struct fb_info {
    char modename[40];			/* default video mode */
    kdev_t node;
    int flags;
+   int open;                            /* Has this been open already ? */
 #define FBINFO_FLAG_MODULE	1	/* Low-level driver is a module */
+   struct fb_var_screeninfo var;        /* Current var */
+   struct fb_fix_screeninfo fix;        /* Current fix */
+   struct fb_monspecs monspecs;         /* Current Monitor specs */
    struct fb_ops *fbops;
-   struct fb_monspecs monspecs;
+   char *screen_base;                   /* Virtual address */
    struct display *disp;		/* initial display variable */
    struct vc_data *display_fg;		/* Console visible on this display */
    char fontname[40];			/* default font name */
@@ -275,8 +285,11 @@ struct fb_info {
    void (*blank)(int, struct fb_info*);	/* tell fb to (un)blank the screen */
 					/* arg = 0: unblank */
 					/* arg > 0: VESA level (arg-1) */
-
+   void *pseudo_palette;                /* Fake palette of 16 colors and 
+					   the cursor's color for non
+                                           palette mode */
    /* From here on everything is device dependent */
+   void *par;	
 };
 
 #ifdef MODULE
@@ -382,13 +395,6 @@ extern int fb_set_cmap(struct fb_cmap *cmap, int kspc,
 		       struct fb_info *fb_info);
 extern struct fb_cmap *fb_default_cmap(int len);
 extern void fb_invert_cmaps(void);
-
-/* VESA Blanking Levels */
-#define VESA_NO_BLANKING	0
-#define VESA_VSYNC_SUSPEND	1
-#define VESA_HSYNC_SUSPEND	2
-#define VESA_POWERDOWN		3
-
 
 struct fb_videomode {
     const char *name;	/* optional */

@@ -32,24 +32,7 @@ int ncp_ioctl(struct inode *inode, struct file *filp,
 	struct ncp_server *server = NCP_SERVER(inode);
 	int result;
 	struct ncp_ioctl_request request;
-	struct ncp_fs_info info;
 	char* bouncebuffer;
-
-#ifdef NCP_IOC_GETMOUNTUID_INT
-	/* remove after ncpfs-2.0.13/2.2.0 gets released */
-	if ((NCP_IOC_GETMOUNTUID != NCP_IOC_GETMOUNTUID_INT) &&
-             (cmd == NCP_IOC_GETMOUNTUID_INT)) {
-		int tmp = server->m.mounted_uid;
-
-		if (   (permission(inode, MAY_READ) != 0)
-		    && (current->uid != server->m.mounted_uid))
-		{
-			return -EACCES;
-		}
-		if (put_user(tmp, (unsigned int*) arg)) return -EFAULT;
-		return 0;
-	}
-#endif	/* NCP_IOC_GETMOUNTUID_INT */
 
 	switch (cmd) {
 	case NCP_IOC_NCPREQUEST:
@@ -66,10 +49,6 @@ int ncp_ioctl(struct inode *inode, struct file *filp,
 		    || (request.size >
 		  NCP_PACKET_SIZE - sizeof(struct ncp_request_header))) {
 			return -EINVAL;
-		}
-		if ((result = verify_area(VERIFY_WRITE, (char *) request.data,
-					  NCP_PACKET_SIZE)) != 0) {
-			return result;
 		}
 		bouncebuffer = kmalloc(NCP_PACKET_SIZE, GFP_NFS);
 		if (!bouncebuffer)
@@ -108,53 +87,82 @@ int ncp_ioctl(struct inode *inode, struct file *filp,
 		    && (current->uid != server->m.mounted_uid)) {
 			return -EACCES;
 		}
-		if (server->root_setuped) return -EBUSY;
+		if (!(server->m.int_flags & NCP_IMOUNT_LOGGEDIN_POSSIBLE))
+			return -EINVAL;
+		if (server->root_setuped)
+			return -EBUSY;
 		server->root_setuped = 1;
 		return ncp_conn_logged_in(inode->i_sb);
 
 	case NCP_IOC_GET_FS_INFO:
+		{
+			struct ncp_fs_info info;
 
-		if ((permission(inode, MAY_WRITE) != 0)
-		    && (current->uid != server->m.mounted_uid)) {
-			return -EACCES;
+			if ((permission(inode, MAY_WRITE) != 0)
+			    && (current->uid != server->m.mounted_uid)) {
+				return -EACCES;
+			}
+			if (copy_from_user(&info, (struct ncp_fs_info *) arg, 
+				sizeof(info)))
+				return -EFAULT;
+
+			if (info.version != NCP_GET_FS_INFO_VERSION) {
+				DPRINTK("info.version invalid: %d\n", info.version);
+				return -EINVAL;
+			}
+			/* TODO: info.addr = server->m.serv_addr; */
+			info.mounted_uid	= NEW_TO_OLD_UID(server->m.mounted_uid);
+			info.connection		= server->connection;
+			info.buffer_size	= server->buffer_size;
+			info.volume_number	= NCP_FINFO(inode)->volNumber;
+			info.directory_id	= NCP_FINFO(inode)->DosDirNum;
+
+			if (copy_to_user((struct ncp_fs_info *) arg, &info, 
+				sizeof(info))) return -EFAULT;
+			return 0;
 		}
-		if ((result = verify_area(VERIFY_WRITE, (char *) arg,
-					  sizeof(info))) != 0) {
-			return result;
+
+	case NCP_IOC_GET_FS_INFO_V2:
+		{
+			struct ncp_fs_info_v2 info2;
+
+			if ((permission(inode, MAY_WRITE) != 0)
+			    && (current->uid != server->m.mounted_uid)) {
+				return -EACCES;
+			}
+			if (copy_from_user(&info2, (struct ncp_fs_info_v2 *) arg, 
+				sizeof(info2)))
+				return -EFAULT;
+
+			if (info2.version != NCP_GET_FS_INFO_VERSION_V2) {
+				DPRINTK("info.version invalid: %d\n", info2.version);
+				return -EINVAL;
+			}
+			info2.mounted_uid   = server->m.mounted_uid;
+			info2.connection    = server->connection;
+			info2.buffer_size   = server->buffer_size;
+			info2.volume_number = NCP_FINFO(inode)->volNumber;
+			info2.directory_id  = NCP_FINFO(inode)->DosDirNum;
+			info2.dummy1 = info2.dummy2 = info2.dummy3 = 0;
+
+			if (copy_to_user((struct ncp_fs_info_v2 *) arg, &info2, 
+				sizeof(info2))) return -EFAULT;
+			return 0;
 		}
-		copy_from_user(&info, (struct ncp_fs_info *) arg, sizeof(info));
 
-		if (info.version != NCP_GET_FS_INFO_VERSION) {
-			DPRINTK("info.version invalid: %d\n", info.version);
-			return -EINVAL;
+	case NCP_IOC_GETMOUNTUID2:
+		{
+			unsigned long tmp = server->m.mounted_uid;
+
+			if (   (permission(inode, MAY_READ) != 0)
+			    && (current->uid != server->m.mounted_uid))
+			{
+				return -EACCES;
+			}
+			if (put_user(tmp, (unsigned long*) arg)) 
+				return -EFAULT;
+			return 0;
 		}
-		/* TODO: info.addr = server->m.serv_addr; */
-		info.mounted_uid	= NEW_TO_OLD_UID(server->m.mounted_uid);
-		info.connection		= server->connection;
-		info.buffer_size	= server->buffer_size;
-		info.volume_number	= NCP_FINFO(inode)->volNumber;
-		info.directory_id	= NCP_FINFO(inode)->DosDirNum;
-
-		copy_to_user((struct ncp_fs_info *) arg, &info, sizeof(info));
-		return 0;
-
-	case NCP_IOC_GETMOUNTUID:
-
-		if ((permission(inode, MAY_READ) != 0)
-		    && (current->uid != server->m.mounted_uid)) {
-			return -EACCES;
-		}
-		put_user(NEW_TO_OLD_UID(server->m.mounted_uid), (old_uid_t *) arg);
-		return 0;
-
-	case NCP_IOC_GETMOUNTUID32:
-
-		if ((permission(inode, MAY_READ) != 0)
-		    && (current->uid != server->m.mounted_uid)) {
-			return -EACCES;
-		}
-		put_user(server->m.mounted_uid, (uid_t *) arg);
-		return 0;
 
 #ifdef CONFIG_NCPFS_MOUNT_SUBDIR
 	case NCP_IOC_GETROOT:
@@ -377,11 +385,6 @@ int ncp_ioctl(struct inode *inode, struct file *filp,
 			struct ncp_objectname_ioctl user;
 			int outl;
 
-			if ((result = verify_area(VERIFY_WRITE,
-					   (struct ncp_objectname_ioctl*)arg,
-					   sizeof(user))) != 0) {
-				return result;
-			}
 			if (copy_from_user(&user, 
 					   (struct ncp_objectname_ioctl*)arg,
 					   sizeof(user))) return -EFAULT;
@@ -452,11 +455,6 @@ int ncp_ioctl(struct inode *inode, struct file *filp,
 			struct ncp_privatedata_ioctl user;
 			int outl;
 
-			if ((result = verify_area(VERIFY_WRITE,
-					   (struct ncp_privatedata_ioctl*)arg,
-					   sizeof(user))) != 0) {
-				return result;
-			}
 			if (copy_from_user(&user, 
 					   (struct ncp_privatedata_ioctl*)arg,
 					   sizeof(user))) return -EFAULT;
@@ -635,7 +633,19 @@ int ncp_ioctl(struct inode *inode, struct file *filp,
 			return 0;
 		}
 
-	default:
-		return -EINVAL;
 	}
+/* #ifdef CONFIG_UID16 */
+	/* NCP_IOC_GETMOUNTUID may be same as NCP_IOC_GETMOUNTUID2,
+           so we have this out of switch */
+	if (cmd == NCP_IOC_GETMOUNTUID) {
+		if ((permission(inode, MAY_READ) != 0)
+		    && (current->uid != server->m.mounted_uid)) {
+			return -EACCES;
+		}
+		if (put_user(NEW_TO_OLD_UID(server->m.mounted_uid), (__kernel_uid_t *) arg))
+			return -EFAULT;
+		return 0;
+	}
+/* #endif */
+	return -EINVAL;
 }

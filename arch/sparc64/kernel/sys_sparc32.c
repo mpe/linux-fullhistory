@@ -1,4 +1,4 @@
-/* $Id: sys_sparc32.c,v 1.128 2000/01/11 17:33:25 jj Exp $
+/* $Id: sys_sparc32.c,v 1.130 2000/01/14 09:40:07 jj Exp $
  * sys_sparc32.c: Conversion between 32bit and 64bit native syscalls.
  *
  * Copyright (C) 1997,1998 Jakub Jelinek (jj@sunsite.mff.cuni.cz)
@@ -76,6 +76,181 @@
 		 : "0" (__x));		\
 	__ret;				\
 })
+
+extern asmlinkage long sys_chown(const char *, uid_t,gid_t);
+extern asmlinkage long sys_lchown(const char *, uid_t,gid_t);
+extern asmlinkage long sys_fchown(unsigned int, uid_t,gid_t);
+extern asmlinkage long sys_setregid(gid_t, gid_t);
+extern asmlinkage long sys_setgid(gid_t);
+extern asmlinkage long sys_setreuid(uid_t, uid_t);
+extern asmlinkage long sys_setuid(uid_t);
+extern asmlinkage long sys_setresuid(uid_t, uid_t, uid_t);
+extern asmlinkage long sys_setresgid(gid_t, gid_t, gid_t);
+extern asmlinkage long sys_setfsuid(uid_t);
+extern asmlinkage long sys_setfsgid(gid_t);
+ 
+/* For this source file, we want overflow handling. */
+
+#undef high2lowuid
+#undef high2lowgid
+#undef low2highuid
+#undef low2highgid
+#undef SET_UID16
+#undef SET_GID16
+#undef NEW_TO_OLD_UID
+#undef NEW_TO_OLD_GID
+#undef SET_OLDSTAT_UID
+#undef SET_OLDSTAT_GID
+#undef SET_STAT_UID
+#undef SET_STAT_GID
+
+#define high2lowuid(uid) ((uid) > 65535) ? (u16)overflowuid : (u16)(uid)
+#define high2lowgid(gid) ((gid) > 65535) ? (u16)overflowgid : (u16)(gid)
+#define low2highuid(uid) ((uid) == (u16)-1) ? (uid_t)-1 : (uid_t)(uid)
+#define low2highgid(gid) ((gid) == (u16)-1) ? (gid_t)-1 : (gid_t)(gid)
+#define SET_UID16(var, uid)	var = high2lowuid(uid)
+#define SET_GID16(var, gid)	var = high2lowgid(gid)
+#define NEW_TO_OLD_UID(uid)	high2lowuid(uid)
+#define NEW_TO_OLD_GID(gid)	high2lowgid(gid)
+#define SET_OLDSTAT_UID(stat, uid)	(stat).st_uid = high2lowuid(uid)
+#define SET_OLDSTAT_GID(stat, gid)	(stat).st_gid = high2lowgid(gid)
+#define SET_STAT_UID(stat, uid)		(stat).st_uid = high2lowuid(uid)
+#define SET_STAT_GID(stat, gid)		(stat).st_gid = high2lowgid(gid)
+
+asmlinkage long sys32_chown16(const char * filename, u16 user, u16 group)
+{
+	return sys_chown(filename, low2highuid(user), low2highgid(group));
+}
+
+asmlinkage long sys32_lchown16(const char * filename, u16 user, u16 group)
+{
+	return sys_lchown(filename, low2highuid(user), low2highgid(group));
+}
+
+asmlinkage long sys32_fchown16(unsigned int fd, u16 user, u16 group)
+{
+	return sys_fchown(fd, low2highuid(user), low2highgid(group));
+}
+
+asmlinkage long sys32_setregid16(u16 rgid, u16 egid)
+{
+	return sys_setregid(low2highgid(rgid), low2highgid(egid));
+}
+
+asmlinkage long sys32_setgid16(u16 gid)
+{
+	return sys_setgid((gid_t)gid);
+}
+
+asmlinkage long sys32_setreuid16(u16 ruid, u16 euid)
+{
+	return sys_setreuid(low2highuid(ruid), low2highuid(euid));
+}
+
+asmlinkage long sys32_setuid16(u16 uid)
+{
+	return sys_setuid((uid_t)uid);
+}
+
+asmlinkage long sys32_setresuid16(u16 ruid, u16 euid, u16 suid)
+{
+	return sys_setresuid(low2highuid(ruid), low2highuid(euid),
+		low2highuid(suid));
+}
+
+asmlinkage long sys32_getresuid16(u16 *ruid, u16 *euid, u16 *suid)
+{
+	int retval;
+
+	if (!(retval = put_user(high2lowuid(current->uid), ruid)) &&
+	    !(retval = put_user(high2lowuid(current->euid), euid)))
+		retval = put_user(high2lowuid(current->suid), suid);
+
+	return retval;
+}
+
+asmlinkage long sys32_setresgid16(u16 rgid, u16 egid, u16 sgid)
+{
+	return sys_setresgid(low2highgid(rgid), low2highgid(egid),
+		low2highgid(sgid));
+}
+
+asmlinkage long sys32_getresgid16(u16 *rgid, u16 *egid, u16 *sgid)
+{
+	int retval;
+
+	if (!(retval = put_user(high2lowgid(current->gid), rgid)) &&
+	    !(retval = put_user(high2lowgid(current->egid), egid)))
+		retval = put_user(high2lowgid(current->sgid), sgid);
+
+	return retval;
+}
+
+asmlinkage long sys32_setfsuid16(u16 uid)
+{
+	return sys_setfsuid((uid_t)uid);
+}
+
+asmlinkage long sys32_setfsgid16(u16 gid)
+{
+	return sys_setfsgid((gid_t)gid);
+}
+
+asmlinkage long sys32_getgroups16(int gidsetsize, u16 *grouplist)
+{
+	u16 groups[NGROUPS];
+	int i,j;
+
+	if (gidsetsize < 0)
+		return -EINVAL;
+	i = current->ngroups;
+	if (gidsetsize) {
+		if (i > gidsetsize)
+			return -EINVAL;
+		for(j=0;j<i;j++)
+			groups[j] = current->groups[j];
+		if (copy_to_user(grouplist, groups, sizeof(u16)*i))
+			return -EFAULT;
+	}
+	return i;
+}
+
+asmlinkage long sys32_setgroups16(int gidsetsize, u16 *grouplist)
+{
+	u16 groups[NGROUPS];
+	int i;
+
+	if (!capable(CAP_SETGID))
+		return -EPERM;
+	if ((unsigned) gidsetsize > NGROUPS)
+		return -EINVAL;
+	if (copy_from_user(groups, grouplist, gidsetsize * sizeof(u16)))
+		return -EFAULT;
+	for (i = 0 ; i < gidsetsize ; i++)
+		current->groups[i] = (gid_t)groups[i];
+	current->ngroups = gidsetsize;
+	return 0;
+}
+
+asmlinkage long sys32_getuid16(void)
+{
+	return high2lowuid(current->uid);
+}
+
+asmlinkage long sys32_geteuid16(void)
+{
+	return high2lowuid(current->euid);
+}
+
+asmlinkage long sys32_getgid16(void)
+{
+	return high2lowgid(current->gid);
+}
+
+asmlinkage long sys32_getegid16(void)
+{
+	return high2lowgid(current->egid);
+}
 
 /* In order to reduce some races, while at the same time doing additional
  * checking and hopefully speeding things up, we copy filenames to the
@@ -1528,11 +1703,11 @@ static void *do_ncp_super_data_conv(void *raw_data)
 
 	n->dir_mode = n32->dir_mode;
 	n->file_mode = n32->file_mode;
-	n->gid = n32->gid;
-	n->uid = n32->uid;
+	n->gid = low2highgid(n32->gid);
+	n->uid = low2highuid(n32->uid);
 	memmove (n->mounted_vol, n32->mounted_vol, (sizeof (n32->mounted_vol) + 3 * sizeof (unsigned int)));
 	n->wdog_pid = n32->wdog_pid;
-	n->mounted_uid = n32->mounted_uid;
+	n->mounted_uid = low2highuid(n32->mounted_uid);
 	return raw_data;
 }
 
@@ -1551,9 +1726,9 @@ static void *do_smb_super_data_conv(void *raw_data)
 	struct smb_mount_data32 *s32 = (struct smb_mount_data32 *)raw_data;
 
 	s->version = s32->version;
-	s->mounted_uid = s32->mounted_uid;
-	s->uid = s32->uid;
-	s->gid = s32->gid;
+	s->mounted_uid = low2highuid(s32->mounted_uid);
+	s->uid = low2highuid(s32->uid);
+	s->gid = low2highgid(s32->gid);
 	s->file_mode = s32->file_mode;
 	s->dir_mode = s32->dir_mode;
 	return raw_data;
@@ -3568,6 +3743,8 @@ static int nfs_exp32_trans(struct nfsctl_arg *karg, struct nfsctl_arg32 *arg32)
 		      &arg32->ca32_export.ex32_anon_uid);
 	err |= __get_user(karg->ca_export.ex_anon_gid,
 		      &arg32->ca32_export.ex32_anon_gid);
+	karg->ca_export.ex_anon_uid = high2lowuid(karg->ca_export.ex_anon_uid);
+	karg->ca_export.ex_anon_gid = high2lowgid(karg->ca_export.ex_anon_gid);
 	return err;
 }
 
