@@ -173,6 +173,7 @@ static int convert_pre_02b_fs (struct super_block * sb,
  * This function has been shamelessly adapted from the msdos fs
  */
 static int parse_options (char * options, unsigned long * sb_block,
+			  unsigned short *resuid, unsigned short * resgid,
 			  unsigned long * mount_options)
 {
 	char * this_char;
@@ -247,6 +248,32 @@ static int parse_options (char * options, unsigned long * sb_block,
 		else if (!strcmp (this_char, "nogrpid") ||
 			 !strcmp (this_char, "sysvgroups"))
 			clear_opt (*mount_options, GRPID);
+		else if (!strcmp (this_char, "resgid")) {
+			if (!value || !*value) {
+				printk ("EXT2-fs: the resgid option requires "
+					"an argument");
+				return 0;
+			}
+			*resgid = simple_strtoul (value, &value, 0);
+			if (*value) {
+				printk ("EXT2-fs: Invalid resgid option: %s\n",
+					value);
+				return 0;
+			}
+		}
+		else if (!strcmp (this_char, "resuid")) {
+			if (!value || !*value) {
+				printk ("EXT2-fs: the resuid option requires "
+					"an argument");
+				return 0;
+			}
+			*resuid = simple_strtoul (value, &value, 0);
+			if (*value) {
+				printk ("EXT2-fs: Invalid resuid option: %s\n",
+					value);
+				return 0;
+			}
+		}
 		else if (!strcmp (this_char, "sb")) {
 			if (!value || !*value) {
 				printk ("EXT2-fs: the sb option requires "
@@ -367,6 +394,8 @@ struct super_block * ext2_read_super (struct super_block * sb, void * data,
 	struct buffer_head * bh;
 	struct ext2_super_block * es;
 	unsigned long sb_block = 1;
+	unsigned short resuid = EXT2_DEF_RESUID;
+	unsigned short resgid = EXT2_DEF_RESGID;
 	unsigned long logic_sb_block = 1;
 	int dev = sb->s_dev;
 	int db_count;
@@ -376,7 +405,7 @@ struct super_block * ext2_read_super (struct super_block * sb, void * data,
 #endif
 
 	set_opt (sb->u.ext2_sb.s_mount_opt, CHECK_NORMAL);
-	if (!parse_options ((char *) data, &sb_block,
+	if (!parse_options ((char *) data, &sb_block, &resuid, &resgid,
 	    &sb->u.ext2_sb.s_mount_opt)) {
 		sb->s_dev = 0;
 		return NULL;
@@ -452,6 +481,14 @@ struct super_block * ext2_read_super (struct super_block * sb, void * data,
 					 sizeof (struct ext2_group_desc);
 	sb->u.ext2_sb.s_sbh = bh;
 	sb->u.ext2_sb.s_es = es;
+	if (resuid != EXT2_DEF_RESUID)
+		sb->u.ext2_sb.s_resuid = resuid;
+	else
+		sb->u.ext2_sb.s_resuid = es->s_def_resuid;
+	if (resgid != EXT2_DEF_RESGID)
+		sb->u.ext2_sb.s_resgid = resgid;
+	else
+		sb->u.ext2_sb.s_resgid = es->s_def_resgid;
 	sb->u.ext2_sb.s_mount_state = es->s_state;
 	sb->u.ext2_sb.s_rename_lock = 0;
 	sb->u.ext2_sb.s_rename_wait = NULL;
@@ -633,14 +670,22 @@ void ext2_write_super (struct super_block * sb)
 int ext2_remount (struct super_block * sb, int * flags, char * data)
 {
 	struct ext2_super_block * es;
+	unsigned short resuid = sb->u.ext2_sb.s_resuid;
+	unsigned short resgid = sb->u.ext2_sb.s_resgid;
+	unsigned long new_mount_opt;
 	unsigned long tmp;
 
 	/*
 	 * Allow the "check" option to be passed as a remount option.
 	 */
 	set_opt (sb->u.ext2_sb.s_mount_opt, CHECK_NORMAL);
-	parse_options (data, &tmp, &sb->u.ext2_sb.s_mount_opt);
+	if (!parse_options (data, &tmp, &resuid, &resgid,
+			    &new_mount_opt))
+		return -EINVAL;
 
+	sb->u.ext2_sb.s_mount_opt = new_mount_opt;
+	sb->u.ext2_sb.s_resuid = resuid;
+	sb->u.ext2_sb.s_resgid = resgid;
 	es = sb->u.ext2_sb.s_es;
 	if ((*flags & MS_RDONLY) == (sb->s_flags & MS_RDONLY))
 		return 0;

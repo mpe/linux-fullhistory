@@ -50,7 +50,9 @@ struct	mtop {
 #define MTTELL	23	/* tell block (Tandberg, etc.) */
 #define MTSETDRVBUFFER 24 /* set the drive buffering according to SCSI-2 */
 			/* ordinary buffered operation with code 1 */
-
+#define MTFSS	25	/* space forward over setmarks */
+#define MTBSS	26	/* space backward over setmarks */
+#define MTWSM	27	/* write setmarks */
 
 /* structure for MTIOCGET - mag tape get status command */
 

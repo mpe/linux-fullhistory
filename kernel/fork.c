@@ -32,7 +32,6 @@ asmlinkage void ret_from_sys_call(void) __asm__("ret_from_sys_call");
 #define MAX_TASKS_PER_USER (NR_TASKS/2)
 #define MIN_TASKS_LEFT_FOR_ROOT 4
 
-extern int shm_fork(struct task_struct *, struct task_struct *);
 long last_pid=0;
 
 static int find_empty_process(void)
@@ -104,6 +103,8 @@ static int dup_mmap(struct task_struct * tsk)
 		tmp->vm_next = NULL;
 		if (tmp->vm_inode)
 			tmp->vm_inode->i_count++;
+		if (tmp->vm_ops && tmp->vm_ops->open)
+			tmp->vm_ops->open(tmp);
 		*p = tmp;
 		p = &tmp->vm_next;
 	}
@@ -141,13 +142,12 @@ static int copy_mm(unsigned long clone_flags, struct task_struct * p)
 		p->mm->cmin_flt = p->mm->cmaj_flt = 0;
 		if (copy_page_tables(p))
 			return 1;
-		dup_mmap(p);
+		return dup_mmap(p);
 	} else {
 		if (clone_page_tables(p))
 			return 1;
-		dup_mmap(p);		/* wrong.. */
+		return dup_mmap(p);		/* wrong.. */
 	}
-	return shm_fork(current, p);
 }
 
 static void copy_fs(unsigned long clone_flags, struct task_struct * p)
@@ -243,6 +243,7 @@ asmlinkage int sys_fork(struct pt_regs regs)
 		__asm__("clts ; fnsave %0 ; frstor %0":"=m" (p->tss.i387));
 	if (copy_mm(clone_flags, p))
 		goto bad_fork_cleanup;
+	p->semundo = NULL;
 	copy_files(clone_flags, p);
 	copy_fs(clone_flags, p);
 	set_tss_desc(gdt+(nr<<1)+FIRST_TSS_ENTRY,&(p->tss));

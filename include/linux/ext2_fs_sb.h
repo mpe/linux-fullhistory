@@ -49,6 +49,8 @@ struct ext2_sb_info {
 	int s_rename_lock;
 	struct wait_queue * s_rename_wait;
 	unsigned long  s_mount_opt;
+	unsigned short s_resuid;
+	unsigned short s_resgid;
 	unsigned short s_mount_state;
 };
 

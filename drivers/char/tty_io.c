@@ -1009,6 +1009,12 @@ static void release_dev(struct file * filp)
 		(tty->ldisc.close)(tty);
 	tty->ldisc = ldiscs[N_TTY];
 	tty->termios->c_line = N_TTY;
+	if (o_tty) {
+		if (o_tty->ldisc.close)
+			(o_tty->ldisc.close)(o_tty);
+		o_tty->ldisc = ldiscs[N_TTY];
+		o_tty->termios->c_line = N_TTY;
+	}
 	
 	tty->driver.table[idx] = NULL;
 	if (tty->driver.flags & TTY_DRIVER_RESET_TERMIOS) {

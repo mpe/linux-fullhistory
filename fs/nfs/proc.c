@@ -77,25 +77,12 @@ static int nfs_stat_to_errno(int stat);
 
 static inline int *nfs_rpc_alloc(int size)
 {
-#if 0
-	/* Allow for the NFS crap as well as buffer */
-	return (int *)kmalloc(size+NFS_SLACK_SPACE,GFP_KERNEL);
-#else 
-	/* If kmalloc fails, then we will give an EIO to user level.
-	   (Please correct me, I am wron here... ??) This is not
-	   desirable, but it is also not desirable to execute the
-	   following code: Just loop until we get memory, call schedule(),
-	   so that other processes are run inbetween (and hopefully give
-	   some memory back).		Florian
-	*/
 	int *i;
 
-	while (!(i = (int *)kmalloc(size+NFS_SLACK_SPACE,GFP_KERNEL))) {
-		/* printk("NFS: call schedule\n"); */
+	while (!(i = (int *)kmalloc(size+NFS_SLACK_SPACE,GFP_NFS))) {
 		schedule();
 	}
 	return i;
-#endif
 }
 
 static inline void nfs_rpc_free(int *p)

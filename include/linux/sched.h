@@ -288,8 +288,7 @@ struct task_struct {
 /* file system info */
 	int link_count;
 	struct tty_struct *tty; /* NULL if no tty */
-/* shm stuff */
-	struct shm_desc *shm;
+/* ipc stuff */
 	struct sem_undo *semundo;
 /* ldt for this task - used by Wine.  If NULL, default_ldt is used */
 	struct desc_struct *ldt;
@@ -343,7 +342,7 @@ struct task_struct {
 /* comm */	"swapper", \
 /* vm86_info */	NULL, 0, 0, 0, 0, \
 /* fs info */	0,NULL, \
-/* ipc */	NULL, NULL, \
+/* ipc */	NULL, \
 /* ldt */	NULL, \
 /* tss */	INIT_TSS, \
 /* fs */	{ INIT_FS }, \

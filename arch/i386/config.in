@@ -107,6 +107,7 @@ if [ "$CONFIG_NET_ISA" = "y" ]; then
 	bool 'AT1500 and NE2100 (LANCE and PCnet-ISA) support' CONFIG_LANCE n
 	bool 'Cabletron E21xx support (not recommended)' CONFIG_E2100 n
 	bool 'DEPCA support' CONFIG_DEPCA n
+	bool 'EtherWorks 3 support' CONFIG_EWRK3 n
 	if [ "$CONFIG_NET_ALPHA" = "y" ]; then
 		bool 'EtherExpress support' CONFIG_EEXPRESS n
 		bool 'AT1700 support' CONFIG_AT1700 n

@@ -6,6 +6,12 @@ Changes from version 0.5 to version 0.5a
 	- The famous readdir() bug has been fixed by Stephen Tweedie.
 	- Added a revision level in the superblock.
 	- Full support for O_SYNC flag of the open system call.
+	- New mount options: `resuid=#uid' and `resgid=#gid'.  `resuid' causes
+	  ext2fs to consider user #uid like root for the reserved blocks.
+	  `resgid' acts the same way with group #gid.  New fields in the
+	  superblock contain default values for resuid and resgid and can
+	  be modified by tune2fs.
+	  Idea comes from Rene Cougnenc <cougnenc@renux.frmug.fr.net>.
 	- New mount options: `bsddf' and `minixdf'.  `bsddf' causes ext2fs
 	  to remove the blocks used for FS structures from the total block
 	  count in statfs.  With `minixdf', ext2fs mimics Minix behavior

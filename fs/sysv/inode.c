@@ -30,21 +30,6 @@
 
 #include <asm/segment.h>
 
-void _coh_wait_on_inode (struct inode * inode)
-{
-	struct wait_queue wait = { current, NULL };
-
-	add_wait_queue(&inode->u.sysv_i.i_wait, &wait);
-repeat:
-	current->state = TASK_UNINTERRUPTIBLE;
-	if (inode->u.sysv_i.i_lock) {
-		schedule();
-		goto repeat;
-	}
-	remove_wait_queue(&inode->u.sysv_i.i_wait, &wait);
-	current->state = TASK_RUNNING;
-}
-
 void sysv_put_inode(struct inode *inode)
 {
 	if (inode->i_nlink)
@@ -81,7 +66,6 @@ static void detected_bs512 (struct super_block *sb)
 	sb->sv_block_size_1 = 512-1;
 	sb->sv_block_size_bits = 9;
 	sb->sv_block_size_ratio = 2;
-	sb->sv_block_size_ratio_1 = 2-1;
 	sb->sv_block_size_ratio_bits = 1;
 	sb->sv_inodes_per_block = 512/64;
 	sb->sv_inodes_per_block_1 = 512/64-1;
@@ -94,6 +78,13 @@ static void detected_bs512 (struct super_block *sb)
 	sb->sv_ind_per_block_2_1 = (512/4)*(512/4)-1;
 	sb->sv_ind_per_block_2_bits = 2 *
 	  (sb->sv_ind_per_block_bits = 9-2);
+	sb->sv_ind_per_block_block_size_1 = (512/4)*512-1;
+	sb->sv_ind_per_block_block_size_bits = (9-2)+9;
+	sb->sv_ind_per_block_2_block_size_1 = (512/4)*(512/4)*512-1;
+	sb->sv_ind_per_block_2_block_size_bits = (9-2)+(9-2)+9;
+	sb->sv_ind0_size = 10 * 512;
+	sb->sv_ind1_size = (10 + (512/4))* 512;
+	sb->sv_ind2_size = (10 + (512/4) + (512/4)*(512/4)) * 512;
 }
 
 static void detected_bs1024 (struct super_block *sb)
@@ -102,7 +93,6 @@ static void detected_bs1024 (struct super_block *sb)
 	sb->sv_block_size_1 = 1024-1;
 	sb->sv_block_size_bits = 10;
 	sb->sv_block_size_ratio = 1;
-	sb->sv_block_size_ratio_1 = 1-1;
 	sb->sv_block_size_ratio_bits = 0;
 	sb->sv_inodes_per_block = 1024/64;
 	sb->sv_inodes_per_block_1 = 1024/64-1;
@@ -115,6 +105,13 @@ static void detected_bs1024 (struct super_block *sb)
 	sb->sv_ind_per_block_2_1 = (1024/4)*(1024/4)-1;
 	sb->sv_ind_per_block_2_bits = 2 *
 	  (sb->sv_ind_per_block_bits = 10-2);
+	sb->sv_ind_per_block_block_size_1 = (1024/4)*1024-1;
+	sb->sv_ind_per_block_block_size_bits = (10-2)+10;
+	sb->sv_ind_per_block_2_block_size_1 = (1024/4)*(1024/4)*1024-1;
+	sb->sv_ind_per_block_2_block_size_bits = (10-2)+(10-2)+10;
+	sb->sv_ind0_size = 10 * 1024;
+	sb->sv_ind1_size = (10 + (1024/4))* 1024;
+	sb->sv_ind2_size = (10 + (1024/4) + (1024/4)*(1024/4)) * 1024;
 }
 
 static const char* detect_xenix (struct super_block *sb, struct buffer_head *bh)
@@ -124,33 +121,54 @@ static const char* detect_xenix (struct super_block *sb, struct buffer_head *bh)
 	sbd = (struct xenix_super_block *) bh->b_data;
 	if (sbd->s_magic != 0x2b5544)
 		return NULL;
+	switch (sbd->s_type) {
+		case 1: detected_bs512(sb); break;
+		case 2: detected_bs1024(sb); break;
+		default: return NULL;
+	}
 	sb->sv_type = FSTYPE_XENIX;
+	return "Xenix";
+}
+static struct super_block * detected_xenix (struct super_block *sb, struct buffer_head *bh1, struct buffer_head *bh2)
+{
+	struct xenix_super_block * sbd1;
+	struct xenix_super_block * sbd2;
+
+	if (sb->sv_block_size == BLOCK_SIZE)
+		/* block size = 1024, so bh1 = bh2 */
+		sbd1 = sbd2 = (struct xenix_super_block *) bh1->b_data;
+	else {
+		/* block size = 512, so bh1 != bh2 */
+		sbd1 = (struct xenix_super_block *) bh1->b_data;
+		sbd2 = (struct xenix_super_block *) (bh2->b_data - BLOCK_SIZE/2);
+		/* sanity check */
+		if (sbd2->s_magic != 0x2b5544)
+			return NULL;
+	}
+
 	sb->sv_convert = 0;
 	sb->sv_kludge_symlinks = 1;
 	sb->sv_truncate = 1;
 	sb->sv_link_max = XENIX_LINK_MAX;
 	sb->sv_fic_size = XENIX_NICINOD;
 	sb->sv_flc_size = XENIX_NICFREE;
-	sb->sv_bh = bh;
-	sb->sv_sbd = (char *) sbd;
-	sb->sv_sb_fic_count = &sbd->s_ninode;
-	sb->sv_sb_fic_inodes = &sbd->s_inode[0];
-	sb->sv_sb_total_free_inodes = &sbd->s_tinode;
-	sb->sv_sb_flc_count = &sbd->s_nfree;
-	sb->sv_sb_flc_blocks = &sbd->s_free[0];
-	sb->sv_sb_total_free_blocks = &sbd->s_tfree;
-	sb->sv_sb_time = &sbd->s_time;
+	sb->sv_bh1 = bh1;
+	sb->sv_bh2 = bh2;
+	sb->sv_sbd1 = (char *) sbd1;
+	sb->sv_sbd2 = (char *) sbd2;
+	sb->sv_sb_fic_count = &sbd1->s_ninode;
+	sb->sv_sb_fic_inodes = &sbd1->s_inode[0];
+	sb->sv_sb_total_free_inodes = &sbd2->s_tinode;
+	sb->sv_sb_flc_count = &sbd1->s_nfree;
+	sb->sv_sb_flc_blocks = &sbd1->s_free[0];
+	sb->sv_sb_total_free_blocks = &sbd2->s_tfree;
+	sb->sv_sb_time = &sbd2->s_time;
 	sb->sv_block_base = 0;
 	sb->sv_firstinodezone = 2;
-	sb->sv_firstdatazone = sbd->s_isize;
-	sb->sv_nzones = sbd->s_fsize;
+	sb->sv_firstdatazone = sbd1->s_isize;
+	sb->sv_nzones = sbd1->s_fsize;
 	sb->sv_ndatazones = sb->sv_nzones - sb->sv_firstdatazone;
-	switch (sbd->s_type) {
-		case 1: detected_bs512(sb); break;
-		case 2: detected_bs1024(sb); break;
-		default: return NULL;
-	}
-	return "Xenix";
+	return sb;
 }
 
 static const char* detect_sysv4 (struct super_block *sb, struct buffer_head *bh)
@@ -162,15 +180,39 @@ static const char* detect_sysv4 (struct super_block *sb, struct buffer_head *bh)
 		return NULL;
 	if (sbd->s_time < 315532800) /* this is likely to happen on SystemV2 FS */
 		return NULL;
+	switch (sbd->s_type) {
+		case 1: detected_bs512(sb); break;
+		case 2: detected_bs1024(sb); break;
+		default: return NULL;
+	}
 	sb->sv_type = FSTYPE_SYSV4;
+	return "SystemV";
+}
+static struct super_block * detected_sysv4 (struct super_block *sb, struct buffer_head *bh)
+{
+	struct sysv4_super_block * sbd;
+
+	if (sb->sv_block_size == BLOCK_SIZE)
+		sbd = (struct sysv4_super_block *) (bh->b_data + BLOCK_SIZE/2);
+	else {
+		sbd = (struct sysv4_super_block *) bh->b_data;
+		/* sanity check */
+		if (sbd->s_magic != 0xfd187e20)
+			return NULL;
+		if (sbd->s_time < 315532800)
+			return NULL;
+	}
+
 	sb->sv_convert = 0;
 	sb->sv_kludge_symlinks = 0; /* ?? */
 	sb->sv_truncate = 1;
 	sb->sv_link_max = SYSV_LINK_MAX;
 	sb->sv_fic_size = SYSV_NICINOD;
 	sb->sv_flc_size = SYSV_NICFREE;
-	sb->sv_bh = bh;
-	sb->sv_sbd = (char *) sbd;
+	sb->sv_bh1 = bh;
+	sb->sv_bh2 = bh;
+	sb->sv_sbd1 = (char *) sbd;
+	sb->sv_sbd2 = (char *) sbd;
 	sb->sv_sb_fic_count = &sbd->s_ninode;
 	sb->sv_sb_fic_inodes = &sbd->s_inode[0];
 	sb->sv_sb_total_free_inodes = &sbd->s_tinode;
@@ -183,12 +225,7 @@ static const char* detect_sysv4 (struct super_block *sb, struct buffer_head *bh)
 	sb->sv_firstdatazone = sbd->s_isize;
 	sb->sv_nzones = sbd->s_fsize;
 	sb->sv_ndatazones = sb->sv_nzones - sb->sv_firstdatazone;
-	switch (sbd->s_type) {
-		case 1: detected_bs512(sb); break;
-		case 2: detected_bs1024(sb); break;
-		default: return NULL;
-	}
-	return "SystemV";
+	return sb;
 }
 
 static const char* detect_sysv2 (struct super_block *sb, struct buffer_head *bh)
@@ -200,15 +237,39 @@ static const char* detect_sysv2 (struct super_block *sb, struct buffer_head *bh)
 		return NULL;
 	if (sbd->s_time < 315532800) /* this is likely to happen on SystemV4 FS */
 		return NULL;
+	switch (sbd->s_type) {
+		case 1: detected_bs512(sb); break;
+		case 2: detected_bs1024(sb); break;
+		default: return NULL;
+	}
 	sb->sv_type = FSTYPE_SYSV2;
+	return "SystemV Release 2";
+}
+static struct super_block * detected_sysv2 (struct super_block *sb, struct buffer_head *bh)
+{
+	struct sysv2_super_block * sbd;
+
+	if (sb->sv_block_size == BLOCK_SIZE)
+		sbd = (struct sysv2_super_block *) (bh->b_data + BLOCK_SIZE/2);
+	else {
+		sbd = (struct sysv2_super_block *) bh->b_data;
+		/* sanity check */
+		if (sbd->s_magic != 0xfd187e20)
+			return NULL;
+		if (sbd->s_time < 315532800)
+			return NULL;
+	}
+
 	sb->sv_convert = 0;
 	sb->sv_kludge_symlinks = 0; /* ?? */
 	sb->sv_truncate = 1;
 	sb->sv_link_max = SYSV_LINK_MAX;
 	sb->sv_fic_size = SYSV_NICINOD;
 	sb->sv_flc_size = SYSV_NICFREE;
-	sb->sv_bh = bh;
-	sb->sv_sbd = (char *) sbd;
+	sb->sv_bh1 = bh;
+	sb->sv_bh2 = bh;
+	sb->sv_sbd1 = (char *) sbd;
+	sb->sv_sbd2 = (char *) sbd;
 	sb->sv_sb_fic_count = &sbd->s_ninode;
 	sb->sv_sb_fic_inodes = &sbd->s_inode[0];
 	sb->sv_sb_total_free_inodes = &sbd->s_tinode;
@@ -221,12 +282,7 @@ static const char* detect_sysv2 (struct super_block *sb, struct buffer_head *bh)
 	sb->sv_firstdatazone = sbd->s_isize;
 	sb->sv_nzones = sbd->s_fsize;
 	sb->sv_ndatazones = sb->sv_nzones - sb->sv_firstdatazone;
-	switch (sbd->s_type) {
-		case 1: detected_bs512(sb); break;
-		case 2: detected_bs1024(sb); break;
-		default: return NULL;
-	}
-	return "SystemV Release 2";
+	return sb;
 }
 
 static const char* detect_coherent (struct super_block *sb, struct buffer_head *bh)
@@ -237,15 +293,30 @@ static const char* detect_coherent (struct super_block *sb, struct buffer_head *
 	if ((memcmp(sbd->s_fname,"noname",6) && memcmp(sbd->s_fname,"xxxxx ",6))
 	    || (memcmp(sbd->s_fpack,"nopack",6) && memcmp(sbd->s_fpack,"xxxxx\n",6)))
 		return NULL;
+	detected_bs512(sb);
 	sb->sv_type = FSTYPE_COH;
+	return "Coherent";
+}
+static struct super_block * detected_coherent (struct super_block *sb, struct buffer_head *bh)
+{
+	struct coh_super_block * sbd;
+
+	sbd = (struct coh_super_block *) bh->b_data;
+	/* sanity check */
+	if ((memcmp(sbd->s_fname,"noname",6) && memcmp(sbd->s_fname,"xxxxx ",6))
+	    || (memcmp(sbd->s_fpack,"nopack",6) && memcmp(sbd->s_fpack,"xxxxx\n",6)))
+		return NULL;
+
 	sb->sv_convert = 1;
 	sb->sv_kludge_symlinks = 1;
 	sb->sv_truncate = 1;
 	sb->sv_link_max = COH_LINK_MAX;
 	sb->sv_fic_size = COH_NICINOD;
 	sb->sv_flc_size = COH_NICFREE;
-	sb->sv_bh = bh;
-	sb->sv_sbd = (char *) sbd;
+	sb->sv_bh1 = bh;
+	sb->sv_bh2 = bh;
+	sb->sv_sbd1 = (char *) sbd;
+	sb->sv_sbd2 = (char *) sbd;
 	sb->sv_sb_fic_count = &sbd->s_ninode;
 	sb->sv_sb_fic_inodes = &sbd->s_inode[0];
 	sb->sv_sb_total_free_inodes = &sbd->s_tinode;
@@ -258,8 +329,7 @@ static const char* detect_coherent (struct super_block *sb, struct buffer_head *
 	sb->sv_firstdatazone = sbd->s_isize;
 	sb->sv_nzones = from_coh_ulong(sbd->s_fsize);
 	sb->sv_ndatazones = sb->sv_nzones - sb->sv_firstdatazone;
-	detected_bs512(sb);
-	return "Coherent";
+	return sb;
 }
 
 struct super_block *sysv_read_super(struct super_block *sb,void *data, 
@@ -279,8 +349,7 @@ struct super_block *sysv_read_super(struct super_block *sb,void *data,
 	if (64 != sizeof (struct sysv_inode))
 		panic("sysv fs: bad i-node size");
 	lock_super(sb);
-	sb->s_blocksize = BLOCK_SIZE; /* anything else not supported by the block device drivers */
-	sb->s_blocksize_bits = BLOCK_SIZE_BITS;
+	set_blocksize(dev,BLOCK_SIZE);
 
 	/* Try to read Xenix superblock */
 	if ((bh = bread(dev, 1, BLOCK_SIZE)) != NULL) {
@@ -299,7 +368,7 @@ struct super_block *sysv_read_super(struct super_block *sb,void *data,
 			goto ok;
 		brelse(bh);
 	}
-	/* Try to recognize SystemV2 superblock */
+	/* Try to recognize SystemV superblock */
 	/* Offset by 1 track, i.e. most probably 9, 15, or 18 kilobytes. */
 	{	static int offsets[] = { 9, 15, 18, };
 		int i;
@@ -307,11 +376,11 @@ struct super_block *sysv_read_super(struct super_block *sb,void *data,
 			if ((bh = bread(dev, offsets[i], BLOCK_SIZE)) != NULL) {
 				/* Try to recognize SystemV superblock */
 				if ((found = detect_sysv4(sb,bh)) != NULL) {
-					sb->sv_block_base = offsets[i];
+					sb->sv_block_base = offsets[i] << sb->sv_block_size_ratio_bits;
 					goto ok;
 				}
 				if ((found = detect_sysv2(sb,bh)) != NULL) {
-					sb->sv_block_base = offsets[i];
+					sb->sv_block_base = offsets[i] << sb->sv_block_size_ratio_bits;
 					goto ok;
 				}
 				brelse(bh);
@@ -324,22 +393,95 @@ struct super_block *sysv_read_super(struct super_block *sb,void *data,
 	return NULL;
 
 	ok:
+	if (sb->sv_block_size == BLOCK_SIZE) {
+		switch (sb->sv_type) {
+			case FSTYPE_XENIX:
+				if (!detected_xenix(sb,bh,bh))
+					goto bad_superblock;
+				break;
+			case FSTYPE_SYSV4:
+				if (!detected_sysv4(sb,bh))
+					goto bad_superblock;
+				break;
+			case FSTYPE_SYSV2:
+				if (!detected_sysv2(sb,bh))
+					goto bad_superblock;
+				break;
+			default:
+			bad_superblock:
+				brelse(bh);
+				sb->s_dev = 0;
+				unlock_super(sb);
+				printk("SysV FS: cannot read superblock in 1024 byte mode\n");
+				return NULL;
+		}
+	} else {
+		/* Switch to another block size. Unfortunately, we have to
+		   release the 1 KB block bh and read it in two parts again. */
+		struct buffer_head *bh1, *bh2;
+		unsigned long blocknr = bh->b_blocknr << sb->sv_block_size_ratio_bits;
+
+		brelse(bh);
+		set_blocksize(dev,sb->sv_block_size);
+		bh1 = NULL; bh2 = NULL;
+		switch (sb->sv_type) {
+			case FSTYPE_XENIX:
+				if ((bh1 = bread(dev, blocknr, sb->sv_block_size)) == NULL)
+					goto bad_superblock2;
+				if ((bh2 = bread(dev, blocknr+1, sb->sv_block_size)) == NULL)
+					goto bad_superblock2;
+				if (!detected_xenix(sb,bh1,bh2))
+					goto bad_superblock2;
+				break;
+			case FSTYPE_SYSV4:
+				if ((bh2 = bread(dev, blocknr+1, sb->sv_block_size)) == NULL)
+					goto bad_superblock2;
+				if (!detected_sysv4(sb,bh2))
+					goto bad_superblock2;
+				break;
+			case FSTYPE_SYSV2:
+				if ((bh2 = bread(dev, blocknr+1, sb->sv_block_size)) == NULL)
+					goto bad_superblock2;
+				if (!detected_sysv2(sb,bh2))
+					goto bad_superblock2;
+				break;
+			case FSTYPE_COH:
+				if ((bh2 = bread(dev, blocknr+1, sb->sv_block_size)) == NULL)
+					goto bad_superblock2;
+				if (!detected_coherent(sb,bh2))
+					goto bad_superblock2;
+				break;
+			default:
+			bad_superblock2:
+				brelse(bh1);
+				brelse(bh2);
+				set_blocksize(sb->s_dev,BLOCK_SIZE);
+				sb->s_dev = 0;
+				unlock_super(sb);
+				printk("SysV FS: cannot read superblock in 512 byte mode\n");
+				return NULL;
+		}
+	}
 	sb->sv_ninodes = (sb->sv_firstdatazone - sb->sv_firstinodezone) << sb->sv_inodes_per_block_bits;
 	if (!silent)
 		printk("VFS: Found a %s FS (block size = %d) on device %d/%d\n",found,sb->sv_block_size,MAJOR(dev),MINOR(dev));
 	sb->s_magic = SYSV_MAGIC_BASE + sb->sv_type;
+	/* The buffer code now supports block size 512 as well as 1024. */
+	sb->s_blocksize = sb->sv_block_size;
+	sb->s_blocksize_bits = sb->sv_block_size_bits;
 	/* set up enough so that it can read an inode */
 	sb->s_dev = dev;
 	sb->s_op = &sysv_sops;
 	sb->s_mounted = iget(sb,SYSV_ROOT_INO);
 	unlock_super(sb);
 	if (!sb->s_mounted) {
-		brelse(bh);
-		sb->s_dev = 0;
+		sysv_put_super(sb);
 		printk("SysV FS: get root inode failed\n");
 		return NULL;
 	}
-	sb->s_dirt = 1; /* brelse(bh); occurs when the disk is unmounted. */
+	sb->s_dirt = 1;
+	/* brelse(bh);  resp.  brelse(bh1); brelse(bh2);
+	   occurs when the disk is unmounted. */
 	return sb;
 }
 
@@ -347,13 +489,14 @@ struct super_block *sysv_read_super(struct super_block *sb,void *data,
 void sysv_write_super (struct super_block *sb)
 {
 	lock_super(sb);
-	if (sb->sv_bh->b_dirt) {
+	if (sb->sv_bh1->b_dirt || sb->sv_bh2->b_dirt) {
 		/* If we are going to write out the super block,
 		   then attach current time stamp. */
 		unsigned long time = CURRENT_TIME;
 		if (sb->sv_convert)
 			time = to_coh_ulong(time);
 		*sb->sv_sb_time = time;
+		mark_buffer_dirty(sb->sv_bh2, 1);
 	}
 	sb->s_dirt = 0;
 	unlock_super(sb);
@@ -363,7 +506,11 @@ void sysv_put_super(struct super_block *sb)
 {
 	/* we can assume sysv_write_super() has already been called */
 	lock_super(sb);
-	brelse(sb->sv_bh);
+	brelse(sb->sv_bh1);
+	if (sb->sv_bh1 != sb->sv_bh2) brelse(sb->sv_bh2);
+	/* switch back to default block size */
+	if (sb->s_blocksize != BLOCK_SIZE)
+		set_blocksize(sb->s_dev,BLOCK_SIZE);
 	sb->s_dev = 0;
 	unlock_super(sb);
 }
@@ -385,10 +532,7 @@ void sysv_statfs(struct super_block *sb, struct statfs *buf)
 }
 
 
-/* bmap support for running executables and shared libraries.
-   Used only if block_size = BLOCK_SIZE. */
-
-#define IND_PER_BLOCK	(BLOCK_SIZE / sizeof(sysv_zone_t))
+/* bmap support for running executables and shared libraries. */
 
 static inline int inode_bmap(struct super_block * sb, struct inode * inode, int nr)
 {
@@ -425,40 +569,40 @@ int sysv_bmap(struct inode * inode,int block_nr)
 		return inode_bmap(sb,inode,block);
 	block -= 10;
 	convert = sb->sv_convert;
-	if (block < IND_PER_BLOCK) {
+	if (block < sb->sv_ind_per_block) {
 		i = inode_bmap(sb,inode,10);
 		if (!i)
 			return 0;
-		bh = bread(inode->i_dev,i,BLOCK_SIZE);
-		return block_bmap(sb,bh,block,convert);
+		bh = bread(inode->i_dev,i,sb->sv_block_size);
+		return block_bmap(sb, bh, block, convert);
 	}
-	block -= IND_PER_BLOCK;
-	if (block < IND_PER_BLOCK*IND_PER_BLOCK) {
+	block -= sb->sv_ind_per_block;
+	if (block < sb->sv_ind_per_block_2) {
 		i = inode_bmap(sb,inode,11);
 		if (!i)
 			return 0;
-		bh = bread(inode->i_dev,i,BLOCK_SIZE);
-		i = block_bmap(sb,bh,block/IND_PER_BLOCK,convert);
+		bh = bread(inode->i_dev,i,sb->sv_block_size);
+		i = block_bmap(sb, bh, block >> sb->sv_ind_per_block_bits, convert);
 		if (!i)
 			return 0;
-		bh = bread(inode->i_dev,i,BLOCK_SIZE);
-		return block_bmap(sb,bh,block%IND_PER_BLOCK,convert);
+		bh = bread(inode->i_dev,i,sb->sv_block_size);
+		return block_bmap(sb, bh, block & sb->sv_ind_per_block_1, convert);
 	}
-	block -= IND_PER_BLOCK*IND_PER_BLOCK;
-	if (block < IND_PER_BLOCK*IND_PER_BLOCK*IND_PER_BLOCK) {
+	block -= sb->sv_ind_per_block_2;
+	if (block < sb->sv_ind_per_block_3) {
 		i = inode_bmap(sb,inode,12);
 		if (!i)
 			return 0;
-		bh = bread(inode->i_dev,i,BLOCK_SIZE);
-		i = block_bmap(sb,bh,block/(IND_PER_BLOCK*IND_PER_BLOCK),convert);
+		bh = bread(inode->i_dev,i,sb->sv_block_size);
+		i = block_bmap(sb, bh, block >> sb->sv_ind_per_block_2_bits, convert);
 		if (!i)
 			return 0;
-		bh = bread(inode->i_dev,i,BLOCK_SIZE);
-		i = block_bmap(sb,bh,(block/IND_PER_BLOCK)%IND_PER_BLOCK,convert);
+		bh = bread(inode->i_dev,i,sb->sv_block_size);
+		i = block_bmap(sb, bh, (block >> sb->sv_ind_per_block_bits) & sb->sv_ind_per_block_1,convert);
 		if (!i)
 			return 0;
-		bh = bread(inode->i_dev,i,BLOCK_SIZE);
-		return block_bmap(sb,bh,block%IND_PER_BLOCK,convert);
+		bh = bread(inode->i_dev,i,sb->sv_block_size);
+		return block_bmap(sb, bh, block & sb->sv_ind_per_block_1, convert);
 	}
 	if ((int)block<0) {
 		printk("sysv_bmap: block<0");
@@ -473,7 +617,7 @@ int sysv_bmap(struct inode * inode,int block_nr)
 
 /* Access selected blocks of regular files (or directories) */
 
-static struct buffer_head * inode_getblk(struct inode * inode, int nr, int create, char * *start)
+static struct buffer_head * inode_getblk(struct inode * inode, int nr, int create)
 {
 	struct super_block *sb;
 	unsigned long tmp;
@@ -485,11 +629,9 @@ static struct buffer_head * inode_getblk(struct inode * inode, int nr, int creat
 repeat:
 	tmp = *p;
 	if (tmp) {
-		result = getblk(inode->i_dev, (tmp >> sb->sv_block_size_ratio_bits) + sb->sv_block_base, BLOCK_SIZE);
-		if (tmp == *p) {
-			*start = result->b_data + ((tmp & sb->sv_block_size_ratio_1) << sb->sv_block_size_bits);
+		result = sv_getblk(sb, inode->i_dev, tmp);
+		if (tmp == *p)
 			return result;
-		}
 		brelse(result);
 		goto repeat;
 	}
@@ -498,7 +640,7 @@ repeat:
 	tmp = sysv_new_block(sb);
 	if (!tmp)
 		return NULL;
-	result = getblk(inode->i_dev, (tmp >> sb->sv_block_size_ratio_bits) + sb->sv_block_base, BLOCK_SIZE);
+	result = sv_getblk(sb, inode->i_dev, tmp);
 	if (*p) {
 		sysv_free_block(sb,tmp);
 		brelse(result);
@@ -507,12 +649,11 @@ repeat:
 	*p = tmp;
 	inode->i_ctime = CURRENT_TIME;
 	inode->i_dirt = 1;
-	*start = result->b_data + ((tmp & sb->sv_block_size_ratio_1) << sb->sv_block_size_bits);
 	return result;
 }
 
 static struct buffer_head * block_getblk(struct inode * inode, 
-	struct buffer_head * bh, int nr, int create, char * *start)
+	struct buffer_head * bh, int nr, int create)
 {
 	struct super_block *sb;
 	unsigned long tmp, block;
@@ -530,16 +671,15 @@ static struct buffer_head * block_getblk(struct inode * inode,
 		}
 	}
 	sb = inode->i_sb;
-	p = nr + (sysv_zone_t *) *start;
+	p = nr + (sysv_zone_t *) bh->b_data;
 repeat:
 	block = tmp = *p;
 	if (sb->sv_convert)
 		block = from_coh_ulong(block);
 	if (tmp) {
-		result = getblk(bh->b_dev, (block >> sb->sv_block_size_ratio_bits) + sb->sv_block_base, BLOCK_SIZE);
+		result = sv_getblk(sb, bh->b_dev, block);
 		if (tmp == *p) {
 			brelse(bh);
-			*start = result->b_data + ((block & sb->sv_block_size_ratio_1) << sb->sv_block_size_bits);
 			return result;
 		}
 		brelse(result);
@@ -554,7 +694,7 @@ repeat:
 		brelse(bh);
 		return NULL;
 	}
-	result = getblk(bh->b_dev, (block >> sb->sv_block_size_ratio_bits) + sb->sv_block_base, BLOCK_SIZE);
+	result = sv_getblk(sb, bh->b_dev, block);
 	if (*p) {
 		sysv_free_block(sb,block);
 		brelse(result);
@@ -563,35 +703,33 @@ repeat:
 	*p = (sb->sv_convert ? to_coh_ulong(block) : block);
 	mark_buffer_dirty(bh, 1);
 	brelse(bh);
-	*start = result->b_data + ((block & sb->sv_block_size_ratio_1) << sb->sv_block_size_bits);
 	return result;
 }
 
-struct buffer_head * sysv_getblk(struct inode * inode, unsigned int block,
-	int create, char * *start)
+struct buffer_head * sysv_getblk(struct inode * inode, unsigned int block, int create)
 {
 	struct super_block * sb = inode->i_sb;
 	struct buffer_head * bh;
 
 	if (block < 10)
-		return inode_getblk(inode,block,create,start);
+		return inode_getblk(inode,block,create);
 	block -= 10;
 	if (block < sb->sv_ind_per_block) {
-		bh = inode_getblk(inode,10,create,start);
-		return block_getblk(inode, bh, block, create, start);
+		bh = inode_getblk(inode,10,create);
+		return block_getblk(inode, bh, block, create);
 	}
 	block -= sb->sv_ind_per_block;
 	if (block < sb->sv_ind_per_block_2) {
-		bh = inode_getblk(inode,11,create,start);
-		bh = block_getblk(inode, bh, block >> sb->sv_ind_per_block_bits, create, start);
-		return block_getblk(inode, bh, block & sb->sv_ind_per_block_1, create, start);
+		bh = inode_getblk(inode,11,create);
+		bh = block_getblk(inode, bh, block >> sb->sv_ind_per_block_bits, create);
+		return block_getblk(inode, bh, block & sb->sv_ind_per_block_1, create);
 	}
 	block -= sb->sv_ind_per_block_2;
 	if (block < sb->sv_ind_per_block_3) {
-		bh = inode_getblk(inode,12,create,start);
-		bh = block_getblk(inode, bh, block >> sb->sv_ind_per_block_2_bits, create, start);
-		bh = block_getblk(inode, bh, (block >> sb->sv_ind_per_block_bits) & sb->sv_ind_per_block_1, create, start);
-		return block_getblk(inode, bh, block & sb->sv_ind_per_block_1, create, start);
+		bh = inode_getblk(inode,12,create);
+		bh = block_getblk(inode, bh, block >> sb->sv_ind_per_block_2_bits, create);
+		bh = block_getblk(inode, bh, (block >> sb->sv_ind_per_block_bits) & sb->sv_ind_per_block_1, create);
+		return block_getblk(inode, bh, block & sb->sv_ind_per_block_1, create);
 	}
 	if ((int)block<0) {
 		printk("sysv_getblk: block<0");
@@ -601,11 +739,11 @@ struct buffer_head * sysv_getblk(struct inode * inode, unsigned int block,
 	return NULL;
 }
 
-struct buffer_head * sysv_file_bread(struct inode * inode, int block, int create, char * *start)
+struct buffer_head * sysv_file_bread(struct inode * inode, int block, int create)
 {
 	struct buffer_head * bh;
 
-	bh = sysv_getblk(inode,block,create,start);
+	bh = sysv_getblk(inode,block,create);
 	if (!bh || bh->b_uptodate)
 		return bh;
 	ll_rw_block(READ, 1, &bh);
@@ -645,7 +783,6 @@ void sysv_read_inode(struct inode * inode)
 {
 	struct super_block * sb = inode->i_sb;
 	struct buffer_head * bh;
-	char * bh_data;
 	struct sysv_inode * raw_inode;
 	unsigned int block, ino;
 	umode_t mode;
@@ -659,12 +796,12 @@ void sysv_read_inode(struct inode * inode)
 		return;
 	}
 	block = sb->sv_firstinodezone + ((ino-1) >> sb->sv_inodes_per_block_bits);
-	if (!(bh=sysv_bread(sb,inode->i_dev,block,&bh_data))) {
+	if (!(bh = sv_bread(sb,inode->i_dev,block))) {
 		printk("Major problem: unable to read inode from dev 0x%04x\n",
 			inode->i_dev);
 		return;
 	}
-	raw_inode = (struct sysv_inode *) bh_data + ((ino-1) & sb->sv_inodes_per_block_1);
+	raw_inode = (struct sysv_inode *) bh->b_data + ((ino-1) & sb->sv_inodes_per_block_1);
 	mode = raw_inode->i_mode;
 	if (sb->sv_kludge_symlinks)
 		mode = from_coh_imode(mode);
@@ -698,10 +835,7 @@ void sysv_read_inode(struct inode * inode)
 				read3byte(&raw_inode->i_a.i_addb[3*block]);
 	brelse(bh);
 	if (S_ISREG(inode->i_mode))
-		if (sb->sv_block_size_ratio_bits == 0) /* block_size == BLOCK_SIZE ? */
-			inode->i_op = &sysv_file_inode_operations_with_bmap;
-		else
-			inode->i_op = &sysv_file_inode_operations;
+		inode->i_op = &sysv_file_inode_operations;
 	else if (S_ISDIR(inode->i_mode))
 		inode->i_op = &sysv_dir_inode_operations;
 	else if (S_ISLNK(inode->i_mode))
@@ -736,7 +870,6 @@ static struct buffer_head * sysv_update_inode(struct inode * inode)
 {
 	struct super_block * sb = inode->i_sb;
 	struct buffer_head * bh;
-	char * bh_data;
 	struct sysv_inode * raw_inode;
 	unsigned int ino, block;
 	umode_t mode;
@@ -749,12 +882,12 @@ static struct buffer_head * sysv_update_inode(struct inode * inode)
 		return 0;
 	}
 	block = sb->sv_firstinodezone + ((ino-1) >> sb->sv_inodes_per_block_bits);
-	if (!(bh = sysv_bread(sb,inode->i_dev,block,&bh_data))) {
+	if (!(bh = sv_bread(sb,inode->i_dev,block))) {
 		printk("unable to read i-node block\n");
 		inode->i_dirt = 0;
 		return 0;
 	}
-	raw_inode = (struct sysv_inode *) bh_data + ((ino-1) & sb->sv_inodes_per_block_1);
+	raw_inode = (struct sysv_inode *) bh->b_data + ((ino-1) & sb->sv_inodes_per_block_1);
 	mode = inode->i_mode;
 	if (sb->sv_kludge_symlinks)
 		mode = to_coh_imode(mode);

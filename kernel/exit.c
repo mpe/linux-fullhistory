@@ -17,7 +17,6 @@
 #include <linux/malloc.h>
 
 #include <asm/segment.h>
-extern void shm_exit (void);
 extern void sem_exit (void);
 
 int getrusage(struct task_struct *, int, struct rusage *);
@@ -413,8 +412,6 @@ NORET_TYPE void do_exit(long code)
 fake_volatile:
 	if (current->semundo)
 		sem_exit();
-	if (current->shm)
-		shm_exit();
 	exit_mm();
 	exit_files();
 	exit_fs();

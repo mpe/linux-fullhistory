@@ -11,7 +11,7 @@
   Copyright 1992, 1993, 1994 Kai Makisara
 		 email makisara@vtinsx.ins.vtt.fi or Kai.Makisara@vtt.fi
 
-  Last modified: Wed Jun 22 23:37:10 1994 by root@kai.home
+  Last modified: Tue Oct 25 19:37:33 1994 by root@kai.home
 */
 
 #include <linux/fs.h>
@@ -415,7 +415,8 @@ scsi_tape_open(struct inode * inode, struct file * filp)
 
     STp->dirty = 0;
     STp->rw = ST_IDLE;
-    STp->eof = ST_NOEOF;
+    if (STp->eof != ST_EOD)  /* Save EOD across opens */
+      STp->eof = ST_NOEOF;
     STp->eof_hit = 0;
     STp->recover_count = 0;
 
@@ -450,6 +451,7 @@ scsi_tape_open(struct inode * inode, struct file * filp)
 
       if (SCpnt->request.dev == dev) sleep_on( &(STp->waiting) );
       (STp->mt_status)->mt_fileno = STp->drv_block = 0;
+      STp->eof = ST_NOEOF;
     }
 
     if ((STp->buffer)->last_result_fatal != 0) {
@@ -601,7 +603,7 @@ scsi_tape_close(struct inode * inode, struct file * filp)
 
 #ifdef DEBUG
       if (debugging)
-	printk("st%d: File length %ld bytes.\n", dev, filp->f_pos);
+	printk("st%d: File length %ld bytes.\n", dev, (long)(filp->f_pos));
 #endif
 
       if (result == 0 || result == (-ENOSPC)) {
@@ -1053,6 +1055,7 @@ st_read(struct inode * inode, struct file * filp, char * buf, int count)
 		  printk("st%d: Zero returned for first BLANK CHECK after EOF.\n",
 			 dev);
 #endif
+		STp->eof = ST_EOD;
 		return 0; /* First BLANK_CHECK after EOF */
 	      }
 	      else
@@ -1098,7 +1101,7 @@ st_read(struct inode * inode, struct file * filp, char * buf, int count)
 	STp->eof_hit = 1;
 	SCpnt->request.dev = -1;  /* Mark as not busy */
 	if (total == 0 && STp->eof == ST_FM) {
-	  STp->eof = 0;
+	  STp->eof = ST_NOEOF;
 	  STp->drv_block = 0;
 	  if (STp->moves_after_eof > 1)
 	    STp->moves_after_eof = 0;
@@ -1253,18 +1256,58 @@ st_int_ioctl(struct inode * inode,struct file * file,
        if (blkno >= 0)
 	 blkno -= arg;
        break; 
+      case MTFSS:
+       cmd[0] = SPACE;
+       cmd[1] = 0x04; /* Space Setmarks */
+       cmd[2] = (arg >> 16);
+       cmd[3] = (arg >> 8);
+       cmd[4] = arg;
+#ifdef DEBUG
+       if (debugging)
+	 printk("st%d: Spacing tape forward %d setmarks.\n", dev,
+		cmd[2] * 65536 + cmd[3] * 256 + cmd[4]);
+#endif
+       if (arg != 0)
+	 blkno = fileno = (-1);
+       break; 
+     case MTBSS:
+       cmd[0] = SPACE;
+       cmd[1] = 0x04; /* Space Setmarks */
+       ltmp = (-arg);
+       cmd[2] = (ltmp >> 16);
+       cmd[3] = (ltmp >> 8);
+       cmd[4] = ltmp;
+#ifdef DEBUG
+       if (debugging) {
+	 if (cmd[2] & 0x80)
+	   ltmp = 0xff000000;
+	 ltmp = ltmp | (cmd[2] << 16) | (cmd[3] << 8) | cmd[4];
+	 printk("st%d: Spacing tape backward %ld setmarks.\n", dev, (-ltmp));
+       }
+#endif
+       if (arg != 0)
+	 blkno = fileno = (-1);
+       break; 
      case MTWEOF:
+     case MTWSM:
        if (STp->write_prot)
 	 return (-EACCES);
        cmd[0] = WRITE_FILEMARKS;
+       if (cmd_in == MTWSM)
+	 cmd[1] = 2;
        cmd[2] = (arg >> 16);
        cmd[3] = (arg >> 8);
        cmd[4] = arg;
        timeout = ST_TIMEOUT;
 #ifdef DEBUG
-       if (debugging)
-	 printk("st%d: Writing %d filemarks.\n", dev,
-		cmd[2] * 65536 + cmd[3] * 256 + cmd[4]);
+       if (debugging) {
+	 if (cmd_in == MTWEOF)
+	   printk("st%d: Writing %d filemarks.\n", dev,
+		  cmd[2] * 65536 + cmd[3] * 256 + cmd[4]);
+	 else
+	   printk("st%d: Writing %d setmarks.\n", dev,
+		  cmd[2] * 65536 + cmd[3] * 256 + cmd[4]);
+       }
 #endif
        fileno += arg;
        blkno = 0;
@@ -1503,9 +1546,12 @@ st_int_ioctl(struct inode * inode,struct file * file,
        else
 	 STp->drv_block = (-1);
      }
+     if (STp->eof == ST_NOEOF &&
+	 (SCpnt->sense_buffer[2] & 0x0f) == BLANK_CHECK)
+       STp->eof = ST_EOD;
    }
 
-   return ioctl_result ;
+   return ioctl_result;
 }
 
 
@@ -1576,9 +1622,26 @@ st_ioctl(struct inode * inode,struct file * file,
 	 (STp->mt_status)->mt_blkno -= ((STp->buffer)->buffer_bytes +
 	   STp->block_size - 1) / STp->block_size;
      }
+
      (STp->mt_status)->mt_gstat = 0;
      if (STp->drv_write_prot)
        (STp->mt_status)->mt_gstat |= GMT_WR_PROT(0xffffffff);
+     if ((STp->mt_status)->mt_blkno == 0) {
+       if ((STp->mt_status)->mt_fileno == 0)
+	 (STp->mt_status)->mt_gstat |= GMT_BOT(0xffffffff);
+       else
+	 (STp->mt_status)->mt_gstat |= GMT_EOF(0xffffffff);
+     }
+     if (STp->eof == ST_EOM_OK || STp->eof == ST_EOM_ERROR)
+       (STp->mt_status)->mt_gstat |= GMT_EOT(0xffffffff);
+     else if (STp->eof == ST_EOD)
+       (STp->mt_status)->mt_gstat |= GMT_EOD(0xffffffff);
+     if (STp->density == 1)
+       (STp->mt_status)->mt_gstat |= GMT_D_800(0xffffffff);
+     else if (STp->density == 2)
+       (STp->mt_status)->mt_gstat |= GMT_D_1600(0xffffffff);
+     else if (STp->density == 3)
+       (STp->mt_status)->mt_gstat |= GMT_D_6250(0xffffffff);
 
      memcpy_tofs((char *)arg, (char *)(STp->mt_status),
 		 sizeof(struct mtget));

@@ -80,11 +80,12 @@ static int sysv_readdir1 (struct inode * inode, struct file * filp,
 		return -EBADF;
 	while (filp->f_pos < inode->i_size) {
 		offset = filp->f_pos & sb->sv_block_size_1;
-		bh = sysv_file_bread(inode, filp->f_pos >> sb->sv_block_size_bits, 0, &bh_data);
+		bh = sysv_file_bread(inode, filp->f_pos >> sb->sv_block_size_bits, 0);
 		if (!bh) {
 			filp->f_pos += sb->sv_block_size - offset;
 			continue;
 		}
+		bh_data = bh->b_data;
 		while (offset < sb->sv_block_size && filp->f_pos < inode->i_size) {
 			de = (struct sysv_dir_entry *) (offset + bh_data);
 			offset += SYSV_DIRSIZE;
@@ -127,10 +128,6 @@ static int sysv_readdir(struct inode * inode, struct file * filp,
 	/* compatibility */
 	if (count==1)
 		return sysv_readdir1(inode,filp,dirent);
-
-	retval = verify_area(VERIFY_WRITE, dirent, count);
-	if (retval)
-		return retval;
 
 	stored = 0;
 	while (count >= sizeof(struct dirent)) {

@@ -118,6 +118,38 @@ int permission(struct inode * inode,int mask)
 }
 
 /*
+ * get_write_access() gets write permission for a file.
+ * put_write_access() releases this write permission.
+ * This is used for regular files.
+ * We cannot support write (and maybe mmap read-write shared) accesses and
+ * MAP_DENYWRITE mmapings simultaneously.
+ */
+int get_write_access(struct inode * inode)
+{
+	struct task_struct ** p;
+
+	if ((inode->i_count > 1) && S_ISREG(inode->i_mode)) /* shortcut */
+		for (p = &LAST_TASK ; p > &FIRST_TASK ; --p) {
+		        struct vm_area_struct * mpnt;
+			if (!*p)
+				continue;
+			for(mpnt = (*p)->mm->mmap; mpnt; mpnt = mpnt->vm_next) {
+				if (inode != mpnt->vm_inode)
+					continue;
+				if (mpnt->vm_flags & VM_DENYWRITE)
+					return -ETXTBSY;
+			}
+		}
+	inode->i_wcount++;
+	return 0;
+}
+
+void put_write_access(struct inode * inode)
+{
+	inode->i_wcount--;
+}
+
+/*
  * lookup() looks up one part of a pathname, using the fs-dependent
  * routines (currently minix_lookup) for it. It also checks for
  * fathers (pseudo-roots, mount-points)
@@ -308,7 +340,6 @@ int open_namei(const char * pathname, int flag, int mode,
 	const char * basename;
 	int namelen,error;
 	struct inode * dir, *inode;
-	struct task_struct ** p;
 
 	mode &= S_IALLUGO & ~current->fs->umask;
 	mode |= S_IFREG;
@@ -380,23 +411,6 @@ int open_namei(const char * pathname, int flag, int mode,
 			return -EROFS;
 		}
 	}
- 	if ((inode->i_count > 1) && (flag & 2)) {
- 		for (p = &LAST_TASK ; p > &FIRST_TASK ; --p) {
-		        struct vm_area_struct * mpnt;
- 			if (!*p)
- 				continue;
-			for(mpnt = (*p)->mm->mmap; mpnt; mpnt = mpnt->vm_next) {
-				if (inode != mpnt->vm_inode)
-					continue;
-				if (mpnt->vm_page_prot & PAGE_RW)
-					continue;
-				if (mpnt->vm_flags & VM_DENYWRITE) {
-					iput(inode);
-					return -ETXTBSY;
-				}
-			}
- 		}
- 	}
 	/*
 	 * An append-only file must be opened in append mode for writing
 	 */
@@ -407,9 +421,14 @@ int open_namei(const char * pathname, int flag, int mode,
 	if (flag & O_TRUNC) {
 		struct iattr newattrs;
 
+		if ((error = get_write_access(inode))) {
+			iput(inode);
+			return error;
+		}
 		newattrs.ia_size = 0;
 		newattrs.ia_valid = ATTR_SIZE;
 		if ((error = notify_change(inode, &newattrs))) {
+			put_write_access(inode);
 			iput(inode);
 			return error;
 		}
@@ -417,6 +436,7 @@ int open_namei(const char * pathname, int flag, int mode,
 		if (inode->i_op && inode->i_op->truncate)
 			inode->i_op->truncate(inode);
 		inode->i_dirt = 1;
+		put_write_access(inode);
 	}
 	*res_inode = inode;
 	return 0;

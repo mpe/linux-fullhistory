@@ -38,7 +38,7 @@ static int sync_block (struct inode * inode, unsigned long * blockp, int convert
 	if (!block)
 		return 0;
 	sb = inode->i_sb;
-	bh = get_hash_table(inode->i_dev, (block >> sb->sv_block_size_ratio_bits) + sb->sv_block_base, BLOCK_SIZE);
+	bh = sv_get_hash_table(sb, inode->i_dev, block);
 	if (!bh)
 		return 0;
 	if (*blockp != tmp) {
@@ -60,7 +60,7 @@ static int sync_block (struct inode * inode, unsigned long * blockp, int convert
 
 /* Sync one block full of indirect pointers and read it because we'll need it. */
 static int sync_iblock (struct inode * inode, unsigned long * iblockp, int convert,
-			struct buffer_head * *bh, char * *bh_data, int wait)
+			struct buffer_head * *bh, int wait)
 {
 	int rc;
 	unsigned long tmp, block;
@@ -74,7 +74,7 @@ static int sync_iblock (struct inode * inode, unsigned long * iblockp, int conve
 	rc = sync_block (inode, iblockp, convert, wait);
 	if (rc)
 		return rc;
-	*bh = sysv_bread(inode->i_sb, inode->i_dev, block, bh_data);
+	*bh = sv_bread(inode->i_sb, inode->i_dev, block);
 	if (tmp != *iblockp) {
 		brelse(*bh);
 		*bh = NULL;
@@ -105,18 +105,17 @@ static int sync_indirect(struct inode *inode, unsigned long *iblockp, int conver
 {
 	int i;
 	struct buffer_head * ind_bh;
-	char * ind_bh_data;
 	int rc, err = 0;
 	struct super_block * sb;
 
-	rc = sync_iblock (inode, iblockp, convert, &ind_bh, &ind_bh_data, wait);
+	rc = sync_iblock (inode, iblockp, convert, &ind_bh, wait);
 	if (rc || !ind_bh)
 		return rc;
 
 	sb = inode->i_sb;
 	for (i = 0; i < sb->sv_ind_per_block; i++) {
 		rc = sync_block (inode,
-				 ((unsigned long *) ind_bh_data) + i, sb->sv_convert,
+				 ((unsigned long *) ind_bh->b_data) + i, sb->sv_convert,
 				 wait);
 		if (rc > 0)
 			break;
@@ -132,18 +131,17 @@ static int sync_dindirect(struct inode *inode, unsigned long *diblockp, int conv
 {
 	int i;
 	struct buffer_head * dind_bh;
-	char * dind_bh_data;
 	int rc, err = 0;
 	struct super_block * sb;
 
-	rc = sync_iblock (inode, diblockp, convert, &dind_bh, &dind_bh_data, wait);
+	rc = sync_iblock (inode, diblockp, convert, &dind_bh, wait);
 	if (rc || !dind_bh)
 		return rc;
 
 	sb = inode->i_sb;
 	for (i = 0; i < sb->sv_ind_per_block; i++) {
 		rc = sync_indirect (inode,
-				    ((unsigned long *) dind_bh_data) + i, sb->sv_convert,
+				    ((unsigned long *) dind_bh->b_data) + i, sb->sv_convert,
 				    wait);
 		if (rc > 0)
 			break;
@@ -159,18 +157,17 @@ static int sync_tindirect(struct inode *inode, unsigned long *tiblockp, int conv
 {
 	int i;
 	struct buffer_head * tind_bh;
-	char * tind_bh_data;
 	int rc, err = 0;
 	struct super_block * sb;
 
-	rc = sync_iblock (inode, tiblockp, convert, &tind_bh, &tind_bh_data, wait);
+	rc = sync_iblock (inode, tiblockp, convert, &tind_bh, wait);
 	if (rc || !tind_bh)
 		return rc;
 
 	sb = inode->i_sb;
 	for (i = 0; i < sb->sv_ind_per_block; i++) {
 		rc = sync_dindirect (inode,
-				     ((unsigned long *) tind_bh_data) + i, sb->sv_convert,
+				     ((unsigned long *) tind_bh->b_data) + i, sb->sv_convert,
 				     wait);
 		if (rc > 0)
 			break;

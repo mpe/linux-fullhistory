@@ -733,6 +733,15 @@ S: 520 Edgemont Road
 S: Charlottesville, Virginia 22903
 S: USA
 
+N: Matthias Urlichs
+E: urlichs@noris.de
+E: urlichs@smurf.sub.org
+D: Consultant, developer, kernel hacker
+D: Playing with Streams, ISDN, and BSD networking code for Linux
+S: Schleiermacherstrasse 12
+S: 90491 Nuernberg
+S: Germany
+
 N: Patrick Volkerding
 E: volkerdi@ftp.cdrom.com
 D: Produced the Slackware distribution, updated the SVGAlib
@@ -809,6 +818,7 @@ S: New York, New York 10025
 S: USA
 
 N: Eric Youngdale
+E: eric@aib.com
 E: ericy@cais.com
 D: General kernel hacker
 D: SCSI iso9660 and ELF
@@ -821,4 +831,11 @@ E: orestz@eskimo.com
 D: XFree86 and kernel development
 S: 1507 145th Place SE #B5
 S: Bellevue, Washington 98007
+S: USA
+
+N: Leonard N. Zubkoff
+E: lnz@dandelion.com
+D: XFree86 and BusLogic driver additions
+S: 3078 Sulphur Spring Court
+S: San Jose, California 95148
 S: USA

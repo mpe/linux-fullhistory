@@ -1,9 +1,13 @@
 
-	Linux kernel release 1.0
+	Linux kernel release 1.1.xx
 
-These are the release notes for linux version 1.0.  Read them carefully,
+These are the release notes for linux version 1.1.  Read them carefully,
 as they tell you what this is all about, explain how to install the
 kernel, and what to do if something goes wrong. 
+
+Warning: This is a work in progress. If you are not reasonably at ease with
+the C programming language, GCC, installing Linux, and recovering from
+system crashes, please use the 1.0 version, or wait for 1.2.
 
 WHAT IS LINUX?
 
@@ -24,20 +28,24 @@ INSTALLING the kernel:
  - If you install the full sources, do a
 
 		cd /usr/src
-		tar xvf linux-1.0.tar
+		gzip -cd linux-1.1.XX.tar.gz | tar xfv -
 
-   to get it all put in place.
+   to get it all put in place. Replace "XX" with the version number of the
+   latest kernel.
 
- - if you install by patching, you need a *clean* 0.99.15 source tree,
-   which presumably exists in /usr/src/linux.  If so, to get the kernel
-   patched, just do a
+ - Installing by patching is not worth the effort because the full set of
+   patches is bigger than a new kernel distribution. Instead, get the
+   latest full source archive and install as above. Then, get all newer
+   patch files, and do
 
 		cd /usr/src
-		patch -p0 < linux-1.0.patch
+		gzip -cd patchXX.gz | patch -p0
 
-   and you should be ok.  You may want to remove the backup files (xxx~
-   or xxx.orig), and make sure that there are no failed patches (xxx# or
-   xxx.rej).
+   (repeat xx for all versions bigger than the version of your current
+   source tree, _in_order_) and you should be ok.  You may want to remove
+   the backup files (xxx~ or xxx.orig), and make sure that there are no
+   failed patches (xxx# or xxx.rej). If there are, either you or me has
+   made a mistake.
 
  - make sure your /usr/include/linux and /usr/include/asm directories
    are just symlinks to the kernel sources:
@@ -88,10 +96,11 @@ CONFIGURING the kernel:
 
 COMPILING the kernel:
 
- - make sure you have gcc-2.4.5 or newer available.  It seems older gcc
+ - make sure you have gcc-2.5.8 or newer available.  It seems older gcc
    versions can have problems compiling newer versions of linux.  If you
    upgrade your compiler, remember to get the new binutils package too
-   (for as/ld/nm and company)
+   (for as/ld/nm and company). Do not use gcc-2.6.0; it has a few serious
+   bugs.
 
  - do a "make zImage" to create a compressed kernel image.  If you want
    to make a bootdisk (without root filesystem or lilo), insert a floppy
@@ -148,7 +157,7 @@ IF SOMETHING GOES WRONG:
 
 	unable to handle kernel paging request at address C0000010
 	Oops: 0002
-	EIP:   0010:xxxxxxxx
+	EIP:   0010:XXXXXXXX
 	eax: xxxxxxxx   ebx: xxxxxxxx   ecx: xxxxxxxx   edx: xxxxxxxx
 	esi: xxxxxxxx   edi: xxxxxxxx   ebp: xxxxxxxx
 	ds: xxxx  es: xxxx  fs: xxxx  gs: xxxx
@@ -193,4 +202,17 @@ IF SOMETHING GOES WRONG:
    If you for some reason cannot do the above (you have a pre-compiled
    kernel image or similar), telling me as much about your setup as
    possible will help. 
+
+ - alternately, you can use gdb on a running kernel. (read-only; i.e. you
+   cannot change values or set break points.) To do this, first compile the
+   kernel with -g; edit arch/i386/Makefile appropriately, then do a "make
+   clean". You'll also need to enable CONFIG_PROC_FS (via "make config").
+
+   After you've rebooted with the new kernel, do "gdb tools/zSystem
+   /proc/kcore". You can now use all the usual gdb commands. The command to
+   look up the point where your system crashed is "l *0xXXXXXXXX". (Replace
+   the XXXes with the EIP value.)
+
+   gdb'ing a non-running kernel currently fails because gdb (wrongly)
+   disregards the starting offset for which the kernel is compiled.
 

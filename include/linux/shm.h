@@ -14,8 +14,12 @@ struct shmid_ds {
 	/* the following are private */
 	unsigned short   shm_npages;	/* size of segment (pages) */
 	unsigned long   *shm_pages;	/* array of ptrs to frames -> SHMMAX */ 
-	struct shm_desc *attaches;	/* descriptors for attaches */
+	struct vm_area_struct *attaches; /* descriptors for attaches */
 };
+
+/* permission flag for shmget */
+#define SHM_R		0400	/* or S_IRUGO from <linux/stat.h> */
+#define SHM_W		0200	/* or S_IWUGO from <linux/stat.h> */
 
 /* mode for attach */
 #define	SHM_RDONLY	010000	/* read-only access */
@@ -35,7 +39,7 @@ struct	shminfo {
 };
 
 /* address range for shared memory attaches if no address passed to shmat() */
-#define SHM_RANGE_START	0x40000000
+#define SHM_RANGE_START	0x50000000
 #define SHM_RANGE_END	0x60000000
 
 /* format of page table entries that correspond to shared memory pages
@@ -87,20 +91,6 @@ struct shm_info {
 	ulong shm_swp; /* total swapped shm */
 	ulong swap_attempts;
 	ulong swap_successes;
-};
-
-
-/*
- * Per process internal structure for managing segments.
- * A shmat will add to and shmdt will remove from the list.
- */
-struct	shm_desc {
-	struct task_struct *task;     /* attacher */
-	unsigned long shm_sgn;        /* signature for this attach */
-	unsigned long start;   /* virt addr of attach, multiple of SHMLBA */
-	unsigned long end;            /* multiple of SHMLBA */
-	struct shm_desc *task_next;   /* next attach for task */
-	struct shm_desc *seg_next;    /* next attach for segment */
 };
 
 #endif /* __KERNEL__ */

@@ -43,6 +43,7 @@ volatile struct timeval xtime;		/* The current time */
 int tickadj = 500/HZ;			/* microsecs */
 
 DECLARE_TASK_QUEUE(tq_timer);
+DECLARE_TASK_QUEUE(tq_immediate);
 
 /*
  * phase-lock loop variables
@@ -589,6 +590,11 @@ void tqueue_bh(void * unused)
 	run_task_queue(&tq_timer);
 }
 
+void immediate_bh(void * unused)
+{
+	run_task_queue(&tq_immediate);
+}
+
 /*
  * The int argument is really a (struct pt_regs *), in case the
  * interrupt wants to know from where it was called. The timer
@@ -830,6 +836,7 @@ void sched_init(void)
 
 	bh_base[TIMER_BH].routine = timer_bh;
 	bh_base[TQUEUE_BH].routine = tqueue_bh;
+	bh_base[IMMEDIATE_BH].routine = immediate_bh;
 	if (sizeof(struct sigaction) != 16)
 		panic("Struct sigaction MUST be 16 bytes");
 	set_tss_desc(gdt+FIRST_TSS_ENTRY,&init_task.tss);

@@ -276,7 +276,7 @@ static int udp_send(struct sock *sk, struct sockaddr_in *sin,
 	 */
 	 
 	buff = skb->data;
-	saddr = 0;
+	saddr = sk->saddr;
 	dev = NULL;
 	tmp = sk->prot->build_header(skb, saddr, sin->sin_addr.s_addr,
 			&dev, IPPROTO_UDP, sk->opt, skb->mem_len,sk->ip_tos,sk->ip_ttl);

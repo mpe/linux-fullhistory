@@ -132,17 +132,7 @@ asmlinkage int sys_ipc (uint call, int first, int second, int third, void *ptr)
     return -ENOSYS;
 }
 
-int shm_fork (struct task_struct *p1, struct task_struct *p2)
-{
-    return 0;
-}
-
 void sem_exit (void)
-{
-    return;
-}
-
-void shm_exit (void)
 {
     return;
 }

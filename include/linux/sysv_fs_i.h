@@ -10,10 +10,6 @@ struct sysv_inode_info {
 					 * then 1 double indirection block,
 					 * then 1 triple indirection block.
 					 */
-	/* the following are only used if  block_size < BLOCK_SIZE  */
-	int i_lock;			/* lock to protect against simultaneous	*/
-	struct wait_queue * i_wait;	/* write and truncate			*/
-					/*					*/
 };
 
 #endif

@@ -26,7 +26,7 @@
 #include <linux/locks.h>
 
 /* We don't trust the value of
-   sb->sv_sbd->s_tfree = *sb->sv_sb_total_free_blocks
+   sb->sv_sbd2->s_tfree = *sb->sv_sb_total_free_blocks
    but we nevertheless keep it up to date. */
 
 void sysv_free_block(struct super_block * sb, unsigned int block)
@@ -55,16 +55,13 @@ void sysv_free_block(struct super_block * sb, unsigned int block)
 		unsigned short * flc_count;
 		unsigned long * flc_blocks;
 
-		if (sb->sv_block_size_ratio_bits > 0) /* block_size < BLOCK_SIZE ? */
-			bh = bread(sb->s_dev, (block >> sb->sv_block_size_ratio_bits) + sb->sv_block_base, BLOCK_SIZE);
-		else
-			bh = getblk(sb->s_dev, (block >> sb->sv_block_size_ratio_bits) + sb->sv_block_base, BLOCK_SIZE);
+		bh = sv_getblk(sb, sb->s_dev, block);
 		if (!bh) {
-			printk("sysv_free_block: getblk() or bread() failed\n");
+			printk("sysv_free_block: getblk() failed\n");
 			unlock_super(sb);
 			return;
 		}
-		bh_data = bh->b_data + ((block & sb->sv_block_size_ratio_1) << sb->sv_block_size_bits);
+		bh_data = bh->b_data;
 		switch (sb->sv_type) {
 			case FSTYPE_XENIX:
 				flc_count = &((struct xenix_freelist_chunk *) bh_data)->fl_nfree;
@@ -95,30 +92,24 @@ void sysv_free_block(struct super_block * sb, unsigned int block)
 	 * in this block being freed:
 	 */
 	if (*sb->sv_sb_flc_count == 0) { /* Applies only to Coherent FS */
-		if (sb->sv_block_size_ratio_bits > 0) /* block_size < BLOCK_SIZE ? */
-			bh = bread(sb->s_dev, (block >> sb->sv_block_size_ratio_bits) + sb->sv_block_base, BLOCK_SIZE);
-		else
-			bh = getblk(sb->s_dev, (block >> sb->sv_block_size_ratio_bits) + sb->sv_block_base, BLOCK_SIZE);
+		bh = sv_getblk(sb, sb->s_dev, block);
 		if (!bh) {
-			printk("sysv_free_block: getblk() or bread() failed\n");
+			printk("sysv_free_block: getblk() failed\n");
 			unlock_super(sb);
 			return;
 		}
-		bh_data = bh->b_data + ((block & sb->sv_block_size_ratio_1) << sb->sv_block_size_bits);
-		memset(bh_data, 0, sb->sv_block_size);
-		/* this implies ((struct ..._freelist_chunk *) bh_data)->flc_count = 0; */
+		memset(bh->b_data, 0, sb->sv_block_size);
+		/* this implies ((struct ..._freelist_chunk *) bh->b_data)->flc_count = 0; */
 		mark_buffer_dirty(bh, 1);
 		bh->b_uptodate = 1;
 		brelse(bh);
 		/* still *sb->sv_sb_flc_count = 0 */
 	} else {
-		if (sb->sv_block_size_ratio_bits == 0) { /* block_size == BLOCK_SIZE ? */
-			/* Throw away block's contents */
-			bh = get_hash_table(sb->s_dev, (block >> sb->sv_block_size_ratio_bits) + sb->sv_block_base, BLOCK_SIZE);
-			if (bh)
-				bh->b_dirt = 0;
-			brelse(bh);
-		}
+		/* Throw away block's contents */
+		bh = sv_get_hash_table(sb, sb->s_dev, block);
+		if (bh)
+			bh->b_dirt = 0;
+		brelse(bh);
 	}
 	if (sb->sv_convert)
 		block = to_coh_ulong(block);
@@ -128,7 +119,8 @@ void sysv_free_block(struct super_block * sb, unsigned int block)
 		  to_coh_ulong(from_coh_ulong(*sb->sv_sb_total_free_blocks) + 1);
 	else
 		*sb->sv_sb_total_free_blocks = *sb->sv_sb_total_free_blocks + 1;
-	mark_buffer_dirty(sb->sv_bh, 1); /* super-block has been modified */
+	mark_buffer_dirty(sb->sv_bh1, 1); /* super-block has been modified */
+	if (sb->sv_bh1 != sb->sv_bh2) mark_buffer_dirty(sb->sv_bh2, 1);
 	sb->s_dirt = 1; /* and needs time stamp */
 	unlock_super(sb);
 }
@@ -165,13 +157,14 @@ int sysv_new_block(struct super_block * sb)
 		unsigned short * flc_count;
 		unsigned long * flc_blocks;
 
-		if (!(bh = sysv_bread(sb, sb->s_dev, block, &bh_data))) {
+		if (!(bh = sv_bread(sb, sb->s_dev, block))) {
 			printk("sysv_new_block: cannot read free-list block\n");
 			/* retry this same block next time */
 			(*sb->sv_sb_flc_count)++;
 			unlock_super(sb);
 			return 0;
 		}
+		bh_data = bh->b_data;
 		switch (sb->sv_type) {
 			case FSTYPE_XENIX:
 				flc_count = &((struct xenix_freelist_chunk *) bh_data)->fl_nfree;
@@ -202,23 +195,18 @@ int sysv_new_block(struct super_block * sb)
 		brelse(bh);
 	}
 	/* Now the free list head in the superblock is valid again. */
-	if (sb->sv_block_size_ratio_bits > 0) /* block_size < BLOCK_SIZE ? */
-		bh = bread(sb->s_dev, (block >> sb->sv_block_size_ratio_bits) + sb->sv_block_base, BLOCK_SIZE);
-	else
-		bh = getblk(sb->s_dev, (block >> sb->sv_block_size_ratio_bits) + sb->sv_block_base, BLOCK_SIZE);
+	bh = sv_getblk(sb, sb->s_dev, block);
 	if (!bh) {
-		printk("sysv_new_block: getblk() or bread() failed\n");
+		printk("sysv_new_block: getblk() failed\n");
 		unlock_super(sb);
 		return 0;
 	}
-	bh_data = bh->b_data + ((block & sb->sv_block_size_ratio_1) << sb->sv_block_size_bits);
-	if (sb->sv_block_size_ratio_bits == 0) /* block_size == BLOCK_SIZE ? */
-		if (bh->b_count != 1) {
-			printk("sysv_new_block: block already in use\n");
-			unlock_super(sb);
-			return 0;
-		}
-	memset(bh_data, 0, sb->sv_block_size);
+	if (bh->b_count != 1) {
+		printk("sysv_new_block: block already in use\n");
+		unlock_super(sb);
+		return 0;
+	}
+	memset(bh->b_data, 0, sb->sv_block_size);
 	mark_buffer_dirty(bh, 1);
 	bh->b_uptodate = 1;
 	brelse(bh);
@@ -227,7 +215,8 @@ int sysv_new_block(struct super_block * sb)
 		  to_coh_ulong(from_coh_ulong(*sb->sv_sb_total_free_blocks) - 1);
 	else
 		*sb->sv_sb_total_free_blocks = *sb->sv_sb_total_free_blocks - 1;
-	mark_buffer_dirty(sb->sv_bh, 1); /* super-block has been modified */
+	mark_buffer_dirty(sb->sv_bh1, 1); /* super-block has been modified */
+	if (sb->sv_bh1 != sb->sv_bh2) mark_buffer_dirty(sb->sv_bh2, 1);
 	sb->s_dirt = 1; /* and needs time stamp */
 	unlock_super(sb);
 	return block;
@@ -265,10 +254,11 @@ unsigned long sysv_count_free_blocks(struct super_block * sb)
 				printk("sysv_count_free_blocks: new block %d is not in data zone\n",block);
 				break;
 			}
-			if (!(bh = sysv_bread(sb, sb->s_dev, block, &bh_data))) {
+			if (!(bh = sv_bread(sb, sb->s_dev, block))) {
 				printk("sysv_count_free_blocks: cannot read free-list block\n");
 				break;
 			}
+			bh_data = bh->b_data;
 			switch (sb->sv_type) {
 				case FSTYPE_XENIX:
 					flc_count = &((struct xenix_freelist_chunk *) bh_data)->fl_nfree;
@@ -321,7 +311,7 @@ unsigned long sysv_count_free_blocks(struct super_block * sb)
 		printk("sysv_count_free_blocks: free block count was %d, correcting to %d\n",old_count,count);
 		if (!(sb->s_flags & MS_RDONLY)) {
 			*sb->sv_sb_total_free_blocks = (sb->sv_convert ? to_coh_ulong(count) : count);
-			mark_buffer_dirty(sb->sv_bh, 1); /* super-block has been modified */
+			mark_buffer_dirty(sb->sv_bh2, 1); /* super-block has been modified */
 			sb->s_dirt = 1; /* and needs time stamp */
 		}
 	}

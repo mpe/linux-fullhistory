@@ -4,7 +4,7 @@ It implements all of
   - SystemV/386 FS,
   - Coherent FS.
 
-This is version beta 3.
+This is version beta 4.
 
 To install:
 * Answer the 'System V and Coherent filesystem support' question with 'y'

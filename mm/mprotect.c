@@ -76,6 +76,8 @@ static inline int mprotect_fixup_start(struct vm_area_struct * vma,
 	n->vm_page_prot = prot;
 	if (n->vm_inode)
 		n->vm_inode->i_count++;
+	if (n->vm_ops && n->vm_ops->open)
+		n->vm_ops->open(n);
 	insert_vm_struct(current, n);
 	merge_segments(current->mm->mmap);
 	return 0;
@@ -98,6 +100,8 @@ static inline int mprotect_fixup_end(struct vm_area_struct * vma,
 	n->vm_page_prot = prot;
 	if (n->vm_inode)
 		n->vm_inode->i_count++;
+	if (n->vm_ops && n->vm_ops->open)
+		n->vm_ops->open(n);
 	insert_vm_struct(current, n);
 	merge_segments(current->mm->mmap);
 	return 0;
@@ -129,6 +133,10 @@ static inline int mprotect_fixup_middle(struct vm_area_struct * vma,
 	vma->vm_page_prot = prot;
 	if (vma->vm_inode)
 		vma->vm_inode->i_count += 2;
+	if (vma->vm_ops && vma->vm_ops->open) {
+		vma->vm_ops->open(left);
+		vma->vm_ops->open(right);
+	}
 	insert_vm_struct(current, left);
 	insert_vm_struct(current, right);
 	merge_segments(current->mm->mmap);
@@ -210,6 +218,8 @@ asmlinkage int sys_mprotect(unsigned long start, size_t len, unsigned long prot)
 		start = tmp;
 		if (vma->vm_end <= start) {
 			vma = vma->vm_next;
+			if (vma && vma->vm_start < start)
+				vma = vma->vm_next;
 			if (!vma || vma->vm_start != start)
 				return -EFAULT;
 		}

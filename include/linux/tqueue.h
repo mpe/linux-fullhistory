@@ -57,7 +57,7 @@ typedef struct tq_struct * task_queue;
 #define DECLARE_TASK_QUEUE(q)  task_queue q = &tq_last
 
 extern struct tq_struct tq_last;
-extern task_queue tq_timer;
+extern task_queue tq_timer, tq_immediate;
 
 #ifdef INCLUDE_INLINE_FUNCS
 struct tq_struct tq_last = {

@@ -29,6 +29,7 @@
 #include <linux/serial.h>
 #include <linux/locks.h>
 #include <linux/string.h>
+#include <linux/delay.h>
 #ifdef CONFIG_INET
 #include <linux/net.h>
 #include <linux/netdevice.h>
@@ -143,6 +144,7 @@ struct symbol_table symbol_table = { 0, 0, 0, /* for stacked module support */
 	X(bh_mask),
 	X(add_timer),
 	X(del_timer),
+	X(tq_immediate),
 
 	/* dma handling */
 	X(request_dma),
@@ -157,6 +159,10 @@ struct symbol_table symbol_table = { 0, 0, 0, /* for stacked module support */
 	X(current),
 	X(jiffies),
 	X(xtime),
+	X(loops_per_sec),
+	X(kill_proc),
+	X(kill_pg),
+	X(kill_sl),
 
 	/* misc */
 	X(panic),

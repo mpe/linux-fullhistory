@@ -616,6 +616,7 @@ do { unsigned long size = PAGE_SIZE << high; \
 unsigned long __get_free_pages(int priority, unsigned long order)
 {
 	unsigned long flags;
+	int reserved_pages;
 
 	if (intr_count && priority != GFP_ATOMIC) {
 		static int count = 0;
@@ -625,10 +626,13 @@ unsigned long __get_free_pages(int priority, unsigned long order)
 			priority = GFP_ATOMIC;
 		}
 	}
+	reserved_pages = 5;
+	if (priority != GFP_NFS)
+		reserved_pages = min_free_pages;
 	save_flags(flags);
 repeat:
 	cli();
-	if ((priority==GFP_ATOMIC) || nr_free_pages > min_free_pages) {
+	if ((priority==GFP_ATOMIC) || nr_free_pages > reserved_pages) {
 		RMQUEUE(order);
 		restore_flags(flags);
 		return 0;

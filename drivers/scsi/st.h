@@ -55,6 +55,7 @@ typedef struct {
 #define	ST_FM		1
 #define	ST_EOM_OK	2
 #define ST_EOM_ERROR	3
+#define ST_EOD		4
 
 /* Values of rw */
 #define	ST_IDLE		0

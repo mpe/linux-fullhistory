@@ -176,8 +176,13 @@ void icmp_send(struct sk_buff *skb_in, int type, int code, struct device *dev)
 	 *	Build Layer 2-3 headers for message back to source. 
 	 */
 
-	offset = ip_build_header(skb, dev->pa_addr, iph->saddr,
-			   &ndev, IPPROTO_ICMP, NULL, len, skb_in->ip_hdr->tos,255);
+	{ unsigned long our_addr = dev->pa_addr;
+	if (iph->daddr != our_addr && ip_chk_addr(iph->daddr) == IS_MYADDR)
+		our_addr = iph->daddr;
+	offset = ip_build_header(skb, our_addr, iph->saddr,
+			   &ndev, IPPROTO_ICMP, NULL, len,
+			   skb_in->ip_hdr->tos,255);
+	}
 
 	if (offset < 0) 
 	{

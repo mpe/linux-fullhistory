@@ -67,42 +67,6 @@ unsigned long ip_get_mask(unsigned long addr)
   	return(0);
 }
 
-/*
- *	Perform an IP address matching operation
- */
-
-int ip_addr_match(unsigned long me, unsigned long him)
-{
-	int i;
-	unsigned long mask=0xFFFFFFFF;
-
-	/*
-	 *	Simple case
-	 */
-	if (me == him) 
-  		return(1);
-  		
-  	/*
-  	 *	Look for a match ending in all 1's 
-  	 */
-  	 
-	for (i = 0; i < 4; i++, me >>= 8, him >>= 8, mask >>= 8) 
-	{
-		if ((me & 0xFF) != (him & 0xFF)) 
-		{
-		/*
-		 * The only way this could be a match is for
-		 * the rest of addr1 to be 0 or 255.
-		 */
-			if (me != 0 && me != mask) 
-				return(0);
-			return(1);
-		}
-	}
-  	return(1);
-}
-
-
 /* 
  *	Check the address for our address, broadcasts, etc. 
  *

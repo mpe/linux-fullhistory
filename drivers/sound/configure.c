@@ -112,7 +112,7 @@ hw_entry        hw_table[] =
 
   {B (OPT_SB), B (OPT_PAS), "SBPRO", 1, 0, 1},
   {B (OPT_SB) | B (OPT_SBPRO), B (OPT_PAS), "SB16", 1, 0, 1},
-{B (OPT_PSS) | B (OPT_SB) | B (OPT_PAS) | B (OPT_GUS), 0, "AUDIO", 1, 0, 1},
+{B (OPT_PSS) | B (OPT_SB) | B (OPT_PAS) | B (OPT_GUS) | B (OPT_MSS), 0, "AUDIO", 1, 0, 1},
   {B (OPT_MPU401), 0, "MIDI_AUTO", 0, OPT_MIDI, 0},
   {B (OPT_PSS) | B (OPT_SB) | B (OPT_PAS) | B (OPT_MPU401) | B (OPT_GUS), 0, "MIDI", 1, 0, 1},
   {B (OPT_ADLIB), 0, "YM3812_AUTO", 0, OPT_YM3812, 0},

@@ -2628,7 +2628,7 @@ static int fd_ioctl(struct inode *inode, struct file *filp, unsigned int cmd,
 	case FDCLRPRM:
 		LOCK_FDC(drive,1);
 		current_type[drive] = NULL;
-		floppy_sizes[drive] = 2;
+		floppy_sizes[drive] = MAX_DISK_SIZE;
 		UDRS->keep_data = 0;
 		return invalidate_drive(device);
 	case FDFMTEND:
@@ -3159,7 +3159,6 @@ static int floppy_grab_irq_and_dma(void)
 
 static void floppy_release_irq_and_dma(void)
 {
-	int i;
 	cli();
 	if (--usage_count){
 		sti();
@@ -3170,7 +3169,9 @@ static void floppy_release_irq_and_dma(void)
 	free_dma(FLOPPY_DMA);
 	disable_irq(FLOPPY_IRQ);
 	free_irq(FLOPPY_IRQ);
-	/* switch off dma gates */
-	for(i=0; i< N_FDC; i++)
-		set_dor(i, ~8, 0);
+	set_dor(0, ~0, 8);
+#if N_FDC > 1
+	if(fdc.address != -1)
+		set_dor(1, ~8, 0);
+#endif
 }

@@ -178,12 +178,6 @@ These filesystems are rather similar. Here is a comparison with Minix FS:
 Notation: We often speak of a "block" but mean a zone (the allocation unit)
 and not the disk driver's notion of "block".
 
-Because the block size may be smaller than 1024 (which is the unit used by
-the disk drivers and the buffer code), many functions must return a pointer
-to the buffer data additionally to the buffer head pointer. One must not
-assume that the entire buffer is occupied by this single block. This makes
-the implementation of truncate() difficult.
-
 
 Bruno Haible  <haible@ma2s2.mathematik.uni-karlsruhe.de>
 

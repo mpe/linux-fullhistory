@@ -31,6 +31,7 @@ int block_write(struct inode * inode, struct file * filp, char * buf, int count)
 	unsigned int dev;
 	struct buffer_head * bh, *bufferlist[NBUF];
 	register char * p;
+	int excess;
 
 	write_error = buffercount = 0;
 	dev = inode->i_rdev;
@@ -86,8 +87,9 @@ int block_write(struct inode * inode, struct file * filp, char * buf, int count)
 		    blocks = read_ahead[MAJOR(dev)] / (blocksize >> 9) / 2;
 		    if (block + blocks > size) blocks = size - block;
 		    if (blocks > NBUF) blocks=NBUF;
-		    blocks -= (block % blocks_per_cluster);
-		    if(!blocks) blocks = 1;
+		    excess = (block + blocks) % blocks_per_cluster;
+		    if ( blocks > excess )
+			blocks -= excess;
 		    bhlist[0] = bh;
 		    for(i=1; i<blocks; i++){
 		      if(((i+block) % blocks_per_cluster) == 0) {
@@ -102,6 +104,7 @@ int block_write(struct inode * inode, struct file * filp, char * buf, int count)
 		    };
 		    ll_rw_block(READ, blocks, bhlist);
 		    for(i=1; i<blocks; i++) brelse(bhlist[i]);
+		    wait_on_buffer(bh);
 		      
 		  };
 		};
@@ -168,6 +171,7 @@ int block_read(struct inode * inode, struct file * filp, char * buf, int count)
 	loff_t size;
 	unsigned int dev;
 	int read;
+	int excess;
 
 	dev = inode->i_rdev;
 	blocksize = BLOCK_SIZE;
@@ -205,7 +209,9 @@ int block_read(struct inode * inode, struct file * filp, char * buf, int count)
 	if (filp->f_reada) {
 	        if (blocks < read_ahead[MAJOR(dev)] / (blocksize >> 9))
 			blocks = read_ahead[MAJOR(dev)] / (blocksize >> 9);
-		blocks -= (block % blocks_per_cluster);
+		excess = (block + blocks) % blocks_per_cluster;
+		if ( blocks > excess )
+			blocks -= excess;		
 		if (rblocks > blocks)
 			blocks = rblocks;
 		

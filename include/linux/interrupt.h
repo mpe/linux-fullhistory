@@ -20,6 +20,7 @@ enum {
 	TQUEUE_BH,
 	SERIAL_BH,
 	NET_BH,
+	IMMEDIATE_BH,
 	KEYBOARD_BH
 };
 

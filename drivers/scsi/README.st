@@ -1,5 +1,5 @@
 This file contains brief information about the SCSI tape driver.
-Last modified: Wed Jun 22 23:38:47 1994 by root@kai.home
+Last modified: Sun Oct 16 19:20:03 1994 by root@kai.home
 
 BASICS
 
@@ -78,7 +78,10 @@ MTBSF	Space backward over count filemarks. Tape positioned before
 MTBSFM  As above but ape positioned after filemark.
 MTFSR   Space forward over count records.
 MTBSR   Space backward over count records.
+MTFSS   Space forward over count setmarks.
+MTBSS   Space backward over coutn setmarks.
 MTWEOF  Write count filemarks.
+MTWSM   Write count setmarks.
 MTREW   Rewind tape.
 MTOFFL  Set device off line (often rewind plus eject).
 MTNOP   Do nothing except flush the buffers.
@@ -125,9 +128,8 @@ MTIOCGET Returns some status information.
         The current block size and the density code are stored in the field
         mt_dsreg (shifts for the subfields are MT_ST_BLKSIZE_SHIFT and
         MT_ST_DENSITY_SHIFT).
-	The write protect bit in mt_gstat is set if the tape is write
-	protected.
-        The other fields are empty.
+	The WR_PROT, BOT, EOF, EOT, EOD, and D_[800,1600,6250]_BPI
+	status bits reflect the tape status. The other bits are not used.
 
 
 MISCELLANEOUS COMPILE OPTIONS

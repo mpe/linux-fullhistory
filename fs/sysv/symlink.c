@@ -49,7 +49,6 @@ static int sysv_follow_link(struct inode * dir, struct inode * inode,
 {
 	int error;
 	struct buffer_head * bh;
-	char * bh_data;
 
 	*res_inode = NULL;
 	if (!dir) {
@@ -70,14 +69,14 @@ static int sysv_follow_link(struct inode * dir, struct inode * inode,
 		iput(dir);
 		return -ELOOP;
 	}
-	if (!(bh = sysv_file_bread(inode, 0, 0, &bh_data))) { /* is reading 1 block enough ?? */
+	if (!(bh = sysv_file_bread(inode, 0, 0))) { /* is reading 1 block enough ?? */
 		iput(inode);
 		iput(dir);
 		return -EIO;
 	}
 	iput(inode);
 	current->link_count++;
-	error = open_namei(bh_data,flag,mode,res_inode,dir);
+	error = open_namei(bh->b_data,flag,mode,res_inode,dir);
 	current->link_count--;
 	brelse(bh);
 	return error;
@@ -96,10 +95,11 @@ static int sysv_readlink(struct inode * inode, char * buffer, int buflen)
 	}
 	if (buflen > inode->i_sb->sv_block_size_1)
 		buflen = inode->i_sb->sv_block_size_1;
-	bh = sysv_file_bread(inode, 0, 0, &bh_data);
+	bh = sysv_file_bread(inode, 0, 0);
 	iput(inode);
 	if (!bh)
 		return 0;
+	bh_data = bh->b_data;
 	i = 0;
 	while (i<buflen && (c = bh_data[i])) {
 		i++;

@@ -50,8 +50,6 @@
 asmlinkage int sys_exit(int exit_code);
 asmlinkage int sys_brk(unsigned long);
 
-extern void shm_exit (void);
-
 static int load_aout_binary(struct linux_binprm *, struct pt_regs * regs);
 static int load_aout_library(int fd);
 static int aout_core_dump(long signr, struct pt_regs * regs);
@@ -197,6 +195,8 @@ static int aout_core_dump(long signr, struct pt_regs * regs)
 		goto end_coredump;
 	if (!inode->i_op || !inode->i_op->default_file_ops)
 		goto end_coredump;
+	if (get_write_access(inode))
+		goto end_coredump;
 	file.f_mode = 3;
 	file.f_flags = 0;
 	file.f_count = 1;
@@ -206,7 +206,7 @@ static int aout_core_dump(long signr, struct pt_regs * regs)
 	file.f_op = inode->i_op->default_file_ops;
 	if (file.f_op->open)
 		if (file.f_op->open(inode,&file))
-			goto end_coredump;
+			goto done_coredump;
 	if (!file.f_op->write)
 		goto close_coredump;
 	has_dumped = 1;
@@ -273,6 +273,8 @@ static int aout_core_dump(long signr, struct pt_regs * regs)
 close_coredump:
 	if (file.f_op->release)
 		file.f_op->release(inode,&file);
+done_coredump:
+	put_write_access(inode);
 end_coredump:
 	set_fs(fs);
 	iput(inode);
@@ -529,8 +531,6 @@ void flush_old_exec(struct linux_binprm * bprm)
 				current->comm[i++] = ch;
 	}
 	current->comm[i] = '\0';
-	if (current->shm)
-		shm_exit();
 	/* Release all of the old mmap stuff. */
 
 	mpnt = current->mm->mmap;
@@ -634,6 +634,11 @@ restart_interp:
 	if (!permission(bprm.inode, MAY_EXEC) ||
 	    (!(bprm.inode->i_mode & 0111) && fsuser())) {
 		retval = -EACCES;
+		goto exec_error2;
+	}
+	/* better not execute files which are being written to */
+	if (bprm.inode->i_wcount > 0) {
+		retval = -ETXTBSY;
 		goto exec_error2;
 	}
 	memset(bprm.buf,0,sizeof(bprm.buf));
@@ -844,17 +849,15 @@ static int load_aout_binary(struct linux_binprm * bprm, struct pt_regs * regs)
 			goto beyond_if;
 		}
 
-		if (ex.a_text) {
-			error = do_mmap(file, N_TXTADDR(ex), ex.a_text,
-				PROT_READ | PROT_EXEC,
-				MAP_FIXED | MAP_SHARED | MAP_DENYWRITE | MAP_EXECUTABLE,
-				fd_offset);
+		error = do_mmap(file, N_TXTADDR(ex), ex.a_text,
+			PROT_READ | PROT_EXEC,
+			MAP_FIXED | MAP_PRIVATE | MAP_DENYWRITE | MAP_EXECUTABLE,
+			fd_offset);
 
-			if (error != N_TXTADDR(ex)) {
-				sys_close(fd);
-				send_sig(SIGSEGV, current, 0);
-				return -EINVAL;
-			}
+		if (error != N_TXTADDR(ex)) {
+			sys_close(fd);
+			send_sig(SIGKILL, current, 0);
+			return error;
 		}
 		
  		error = do_mmap(file, N_TXTADDR(ex) + ex.a_text, ex.a_data,
@@ -863,8 +866,8 @@ static int load_aout_binary(struct linux_binprm * bprm, struct pt_regs * regs)
 				fd_offset + ex.a_text);
 		sys_close(fd);
 		if (error != N_TXTADDR(ex) + ex.a_text) {
-			send_sig(SIGSEGV, current, 0);
-			return -EINVAL;
+			send_sig(SIGKILL, current, 0);
+			return error;
 		}
 	}
 beyond_if:

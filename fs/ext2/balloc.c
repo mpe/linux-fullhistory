@@ -270,7 +270,10 @@ int ext2_new_block (struct super_block * sb, unsigned long goal,
 	}
 	lock_super (sb);
 	es = sb->u.ext2_sb.s_es;
-	if (es->s_free_blocks_count <= es->s_r_blocks_count && !fsuser()) {
+	if (es->s_free_blocks_count <= es->s_r_blocks_count &&
+	    (!fsuser() && (sb->u.ext2_sb.s_resuid != current->fsuid) &&
+	     (sb->u.ext2_sb.s_resgid == 0 ||
+	      !in_group_p (sb->u.ext2_sb.s_resgid)))) {
 		unlock_super (sb);
 		return 0;
 	}

@@ -2787,6 +2787,9 @@ cdu31a_init(unsigned long mem_start, unsigned long mem_end)
    }
    else if (sony_cd_base_io != 0)
    {
+      tmp_irq = irq_used; /* Need IRQ 0 because we can't sleep here. */
+      irq_used = 0;
+
       get_drive_configuration(sony_cd_base_io,
 			      drive_config.exec_status,
 			      &res_size);
@@ -2794,9 +2797,12 @@ cdu31a_init(unsigned long mem_start, unsigned long mem_end)
       {
 	 drive_found = 1;
       }
+
+      irq_used = tmp_irq;
    }
    else
    {
+      irq_used = 0;
       i = 0;
       while (   (cdu31a_addresses[i].base != 0)
 	     && (!drive_found))
@@ -2844,12 +2850,18 @@ cdu31a_init(unsigned long mem_start, unsigned long mem_end)
 	 tmp_irq = autoirq_report(10);
 	 disable_interrupts();
 	 
+         irq_used = 0;
 	 set_drive_params();
 	 irq_used = tmp_irq;
       }
       else
       {
+         tmp_irq = irq_used; /* Need IRQ 0 because we can't sleep here. */
+         irq_used = 0;
+
 	 set_drive_params();
+
+         irq_used = tmp_irq;
       }
       
       if (irq_used > 0)

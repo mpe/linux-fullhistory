@@ -71,6 +71,8 @@ int do_mmap(struct file * file, unsigned long addr, unsigned long len,
 		default:
 			return -EINVAL;
 		}
+		if ((flags & MAP_DENYWRITE) && (file->f_inode->i_wcount > 0))
+			return -ETXTBSY;
 	} else if ((flags & MAP_TYPE) == MAP_SHARED)
 		return -EINVAL;
 
@@ -85,23 +87,8 @@ int do_mmap(struct file * file, unsigned long addr, unsigned long len,
 		if (len > TASK_SIZE || addr > TASK_SIZE - len)
 			return -EINVAL;
 	} else {
-		struct vm_area_struct * vmm;
-
-		/* Maybe this works.. Ugly it is. */
-		addr = SHM_RANGE_START;
-		while (addr+len < SHM_RANGE_END) {
-			for (vmm = current->mm->mmap ; vmm ; vmm = vmm->vm_next) {
-				if (addr >= vmm->vm_end)
-					continue;
-				if (addr + len <= vmm->vm_start)
-					continue;
-				addr = PAGE_ALIGN(vmm->vm_end);
-				break;
-			}
-			if (!vmm)
-				break;
-		}
-		if (addr+len >= SHM_RANGE_END)
+		addr = get_unmapped_area(len);
+		if (!addr)
 			return -ENOMEM;
 	}
 
@@ -157,13 +144,36 @@ int do_mmap(struct file * file, unsigned long addr, unsigned long len,
 	
 	if (error) {
 		kfree(vma);
-		if (!current->errno)
-			current->errno = -error;
-		return -1;
+		return error;
 	}
 	insert_vm_struct(current, vma);
 	merge_segments(current->mm->mmap);
 	return addr;
+}
+
+/*
+ * Get an address range which is currently unmapped.
+ * For mmap() without MAP_FIXED and shmat() with addr=0.
+ * Return value 0 means ENOMEM.
+ */
+unsigned long get_unmapped_area(unsigned long len)
+{
+	struct vm_area_struct * vmm;
+	unsigned long gap_start = 0, gap_end;
+
+	for (vmm = current->mm->mmap; ; vmm = vmm->vm_next) {
+		if (gap_start < SHM_RANGE_START)
+			gap_start = SHM_RANGE_START;
+		if (!vmm || ((gap_end = vmm->vm_start) > SHM_RANGE_END))
+			gap_end = SHM_RANGE_END;
+		gap_start = PAGE_ALIGN(gap_start);
+		gap_end &= PAGE_MASK;
+		if ((gap_start <= gap_end) && (gap_end - gap_start >= len))
+			return gap_start;
+		if (!vmm)
+			return 0;
+		gap_start = vmm->vm_end;
+	}
 }
 
 asmlinkage int sys_mmap(unsigned long *buffer)
@@ -172,7 +182,7 @@ asmlinkage int sys_mmap(unsigned long *buffer)
 	unsigned long flags;
 	struct file * file = NULL;
 
-	error = verify_area(VERIFY_READ, buffer, 6*4);
+	error = verify_area(VERIFY_READ, buffer, 6*sizeof(long));
 	if (error)
 		return error;
 	flags = get_fs_long(buffer+3);
@@ -252,6 +262,8 @@ void unmap_fixup(struct vm_area_struct *area,
 		mpnt->vm_start = end;
 		if (mpnt->vm_inode)
 			mpnt->vm_inode->i_count++;
+		if (mpnt->vm_ops && mpnt->vm_ops->open)
+			mpnt->vm_ops->open(mpnt);
 		area->vm_end = addr;	/* Truncate area */
 		insert_vm_struct(current, mpnt);
 	}
@@ -261,6 +273,12 @@ void unmap_fixup(struct vm_area_struct *area,
 	if (!mpnt)
 		return;
 	*mpnt = *area;
+	if (mpnt->vm_ops && mpnt->vm_ops->open)
+		mpnt->vm_ops->open(mpnt);
+	if (area->vm_ops && area->vm_ops->close) {
+		area->vm_end = area->vm_start;
+		area->vm_ops->close(area);
+	}
 	insert_vm_struct(current, mpnt);
 }
 
@@ -416,7 +434,7 @@ void merge_segments(struct vm_area_struct *mpnt)
 		/*
 		 * and if we have an inode, the offsets must be contiguous..
 		 */
-		if (mpnt->vm_inode != NULL) {
+		if ((mpnt->vm_inode != NULL) || (mpnt->vm_flags & VM_SHM)) {
 			if (prev->vm_offset + prev->vm_end - prev->vm_start != mpnt->vm_offset)
 				continue;
 		}

@@ -1,10 +1,10 @@
 /* fdomain.c -- Future Domain TMC-16x0 SCSI driver
  * Created: Sun May  3 18:53:19 1992 by faith@cs.unc.edu
- * Revised: Sat Jul 30 22:06:37 1994 by faith@cs.unc.edu
+ * Revised: Wed Nov  2 16:37:58 1994 by faith@cs.unc.edu
  * Author: Rickard E. Faith, faith@cs.unc.edu
  * Copyright 1992, 1993, 1994 Rickard E. Faith
  *
- * $Id: fdomain.c,v 5.18 1994/07/31 03:09:15 faith Exp $
+ * $Id: fdomain.c,v 5.20 1994/11/02 21:38:33 root Exp $
 
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -38,9 +38,19 @@
  signature, then the driver may fail to function after the board is
  detected.
 
- The following BIOS versions are supported: 2.0, 3.0, 3.2, and 3.4.
+ The following BIOS versions are supported: 2.0, 3.0, 3.2, 3.4, and 3.5.
  The following chips are supported: TMC-1800, TMC-18C50, TMC-18C30.
  Reports suggest that the driver will also work with the 36C70 chip.
+
+ Please note that the drive ordering that Future Domain implemented in BIOS
+ versions 3.4 and 3.5 is the opposite of the order (currently) used by the
+ rest of the SCSI industry.  If you have BIOS version 3.4 or 3.5, and have
+ more then one drive, then the drive ordering will be the reverse of that
+ which you see under DOS.  For example, under DOS SCSI ID 0 will be D: and
+ SCSI ID 1 will be C: (the boot device).  Under Linux, SCSI ID 0 will be
+ /dev/sda and SCSI ID 1 will be /dev/sdb.  The Linux ordering is consistent
+ with that provided by all the other SCSI drivers for Linux.  If you want
+ this changed, send me patches that are protected by #ifdefs.
 
  If you have a TMC-8xx or TMC-9xx board, then this is not the driver for
  your board.  Please refer to the Seagate driver for more information and
@@ -119,7 +129,10 @@
  Thanks to James T. McKinley (mckinley@msupa.pa.msu.edu) for providing
  patches that support the TMC-3260, a PCI bus card with the 36C70 chip.
  The 36C70 chip appears to be "completely compatible" with the 18C30 chip.
- 
+
+ Thanks to Eric Kasten (tigger@petroglyph.cl.msu.edu) for providing the
+ patch for the version 3.5 BIOS.
+
  All of the alpha testers deserve much thanks.
 
 
@@ -133,14 +146,14 @@
  devices support parity, then you can probably get the driver to work by
  turning this option off.  I have no way of testing this, however.
 
- FIFO_COUNT: The host adapter has an 8K cache.  When this many 512 byte
- blocks are filled by the SCSI device, an interrupt will be raised.
- Therefore, this could be as low as 0, or as high as 16.  Note, however,
- that values which are too high or too low seem to prevent any interrupts
- from occuring, and thereby lock up the machine.  I have found that 2 is a
- good number, but throughput may be increased by changing this value to
- values which are close to 2.  Please let me know if you try any different
- values.
+ FIFO_COUNT: The host adapter has an 8K cache (host adapters based on the
+ 18C30 chip have a 2k cache).  When this many 512 byte blocks are filled by
+ the SCSI device, an interrupt will be raised.  Therefore, this could be as
+ low as 0, or as high as 16.  Note, however, that values which are too high
+ or too low seem to prevent any interrupts from occuring, and thereby lock
+ up the machine.  I have found that 2 is a good number, but throughput may
+ be increased by changing this value to values which are close to 2.
+ Please let me know if you try any different values.
 
  DO_DETECT: This activates some old scan code which was needed before the
  high level drivers got fixed.  If you are having trouble with the driver,
@@ -150,11 +163,11 @@
  RESELECTION: This is no longer an option, since I gave up trying to
  implement it in version 4.x of this driver.  It did not improve
  performance at all and made the driver unstable (because I never found one
- of the two race conditions which were introduced by multiple outstanding
- commands).  The instability seems a very high price to pay just so that
- you don't have to wait for the tape to rewind.  When I have time, I will
- work on this again.  In the interim, if anyone wants to work on the code,
- I can give them my latest version.
+ of the two race conditions which were introduced by the multiple
+ outstanding command code).  The instability seems a very high price to pay
+ just so that you don't have to wait for the tape to rewind.  If you want
+ this feature implemented, send me patches.  I'll be happy to send a copy
+ of my (broken) driver to anyone who would like to see a copy.
 
  **************************************************************************/
 
@@ -169,7 +182,7 @@
 #include <linux/string.h>
 #include <linux/ioport.h>
 
-#define VERSION          "$Revision: 5.18 $"
+#define VERSION          "$Revision: 5.20 $"
 
 /* START OF USER DEFINABLE OPTIONS */
 
@@ -292,7 +305,9 @@ static void *addresses[] = {
    (void *)0xc8000,
    (void *)0xca000,
    (void *)0xce000,
-   (void *)0xde000 };
+   (void *)0xde000,
+   (void *)0xd0000,		/* Extra addresses for PCI boards */
+};
 #define ADDRESS_COUNT (sizeof( addresses ) / sizeof( unsigned ))
 		       
 static unsigned short ports[] = { 0x140, 0x150, 0x160, 0x170 };
@@ -341,6 +356,7 @@ struct signature {
    { "FUTURE DOMAIN CORP. (C) 1992 V3.00.004/02/92",        5, 44,  3,  0, 0 },
    { "FUTURE DOMAIN TMC-18XX (C) 1993 V3.203/12/93",        5, 44,  3,  2, 0 },
    { "Future Domain Corp. V1.0008/18/93",                   5, 33,  3,  4, 0 },
+   { "FUTURE DOMAIN CORP.  V3.5008/18/93",                  5, 34,  3,  5, 0 },
    { "Future Domain Corp. V1.0008/18/93",                  26, 33,  3,  4, 1 },
    { "FUTURE DOMAIN TMC-18XX",                              5, 22, -1, -1, 0 },
 
@@ -459,11 +475,15 @@ static int fdomain_is_valid_port( int port )
 #endif
 
 				/* Check for board with lowest bios_base --
-				   this isn't valid for the 18c30, so just
-				   assume we have the right board. */
+				   this isn't valid for the 18c30 or for
+				   boards on the PCI bus, so just assume we
+				   have the right board. */
 
-   if (chip != tmc18c30 && addresses[ (options & 0xc0) >> 6 ] != bios_base)
-	 return 0;
+   if (chip != tmc18c30
+       && !PCI_bus
+       && addresses[ (options & 0xc0) >> 6 ] != bios_base) return 0;
+
+				/* Get the IRQ from the options. */
 
    interrupt_level = ints[ (options & 0x0e) >> 1 ];
 
@@ -587,18 +607,15 @@ int fdomain_16x0_detect( Scsi_Host_Template *tpnt )
 	 }
       } else {
 
-	 /* The proper way of doing this is to use the PCI BIOS call
-            (interrupt 0x1a) to determine the device IRQ and interrupt
-            level.  Then the port_base will be in configuration register
-            0x10 (and configuration register 0x30 will contain the value of
-            bios_base).
+	 /* The proper way of doing this is to use ask the PCI bus for the
+            device IRQ and interrupt level.
 
 	    Until the Linux kernel supports this sort of PCI bus query, we
-	    scan down a bunch of addresses (Future Domain folks say we
-	    should find the address before we get to 0xf800).  This works
-	    fine on some systems -- other systems may have to scan more
-	    addresses.  If you have to modify this section for your
-	    installation, please send mail to faith@cs.unc.edu. */
+	    scan down a bunch of addresses (Future Domain tech support says
+	    we will probably find the address before we get to 0xf800).
+	    This works fine on some systems -- other systems may have to
+	    scan more addresses.  If you have to modify this section for
+	    your installation, please send mail to faith@cs.unc.edu. */
 
 	 for (i = 0xff00; !flag && i > 0xf000; i -= 8) {
 	    port_base = i;
@@ -798,6 +815,7 @@ static int fdomain_select( int target )
 {
    int           status;
    unsigned long timeout;
+   static int    flag = 0;
 
 
    outb( 0x82, SCSI_Cntl_port ); /* Bus Enable + Select */
@@ -806,11 +824,9 @@ static int fdomain_select( int target )
    /* Stop arbitration and enable parity */
    outb( PARITY_MASK, TMC_Cntl_port ); 
 
-#if 0
-   timeout = jiffies + 25;	        /* 250mS */
-#else
-   timeout = jiffies + 35;	        /* 350mS -- because of timeouts */
-#endif
+   timeout = jiffies + 35;	        /* 350mS -- because of timeouts
+					   (was 250mS) */
+
    while (jiffies < timeout) {
       status = inb( SCSI_Status_port ); /* Read adapter status */
       if (status & 1) {		        /* Busy asserted */
@@ -825,7 +841,12 @@ static int fdomain_select( int target )
    if (!target) printk( "Selection failed\n" );
 #endif
 #if ERRORS_ONLY
-   if (!target) printk( "Future Domain: Selection failed\n" );
+   if (!target) {
+      if (chip == tmc18c30 && !flag) /* Skip first failure for 18C30 chips. */
+	    ++flag;
+      else
+	    printk( "Future Domain: Selection failed\n" );
+   }
 #endif
    return 1;
 }

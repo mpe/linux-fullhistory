@@ -349,7 +349,9 @@ struct ext2_super_block {
 	unsigned long  s_checkinterval;	/* max. time between checks */
 	unsigned long  s_creator_os;	/* OS */
 	unsigned long  s_rev_level;	/* Revision level */
-	unsigned long  s_reserved[236];	/* Padding to the end of the block */
+	unsigned short s_def_resuid;	/* Default uid for reserved blocks */
+	unsigned short s_def_resgid;	/* Default gid for reserved blocks */
+	unsigned long  s_reserved[235];	/* Padding to the end of the block */
 };
 
 #define EXT2_OS_LINUX		0
@@ -357,6 +359,9 @@ struct ext2_super_block {
 #define EXT2_OS_MASIX		2
 
 #define EXT2_CURRENT_REV	0
+
+#define	EXT2_DEF_RESUID		0
+#define	EXT2_DEF_RESGID		0
 
 /*
  * Structure of a directory entry
