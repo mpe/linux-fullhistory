@@ -84,7 +84,7 @@ extern int ip_masq_init(void);
 /*
  *	functions called from ip layer
  */
-extern void ip_fw_masquerade(struct sk_buff **, struct device *);
+extern int ip_fw_masquerade(struct sk_buff **, struct device *);
 extern int ip_fw_demasquerade(struct sk_buff **, struct device *);
 
 /*
@@ -149,6 +149,7 @@ extern int ip_masq_app_pkt_in(struct ip_masq *, struct sk_buff **skb_p, struct d
  *	service routine(s).
  */
 extern struct ip_masq * ip_masq_out_get_2(int protocol, __u32 s_addr, __u16 s_port, __u32 d_addr, __u16 d_port);
+extern struct ip_masq * ip_masq_in_get_2(int protocol, __u32 s_addr, __u16 s_port, __u32 d_addr, __u16 d_port);
 
 /*
  *	/proc/net entry

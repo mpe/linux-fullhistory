@@ -580,7 +580,7 @@ static inline int root_send_udp(struct socket *sock, void *buf, int size)
 	msg.msg_name = NULL;
 	msg.msg_iov = &iov;
 	msg.msg_iovlen = 1;
-	msg.msg_accrights = NULL;
+	msg.msg_control = NULL;
 	result = sock->ops->sendmsg(sock, &msg, size, 0, 0);
 	set_fs(oldfs);
 	return (result != size);
@@ -604,7 +604,7 @@ static inline int root_recv_udp(struct socket *sock, void *buf, int size)
 	msg.msg_name = NULL;
 	msg.msg_iov = &iov;
 	msg.msg_iovlen = 1;
-	msg.msg_accrights = NULL;
+	msg.msg_control = NULL;
 	msg.msg_namelen = 0;
 	result = sock->ops->recvmsg(sock, &msg, size, O_NONBLOCK, 0, &msg.msg_namelen);
 	set_fs(oldfs);

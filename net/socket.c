@@ -351,7 +351,7 @@ static int sock_read(struct inode *inode, struct file *file, char *ubuf, int siz
 	msg.msg_name=NULL;
 	msg.msg_iov=&iov;
 	msg.msg_iovlen=1;
-	msg.msg_accrights=NULL;
+	msg.msg_control=NULL;
 	iov.iov_base=ubuf;
 	iov.iov_len=size;
 
@@ -386,7 +386,7 @@ static int sock_write(struct inode *inode, struct file *file, const char *ubuf, 
 	msg.msg_name=NULL;
 	msg.msg_iov=&iov;
 	msg.msg_iovlen=1;
-	msg.msg_accrights=NULL;
+	msg.msg_control=NULL;
 	iov.iov_base=(void *)ubuf;
 	iov.iov_len=size;
 	
@@ -919,7 +919,7 @@ asmlinkage int sys_send(int fd, void * buff, int len, unsigned flags)
 	msg.msg_name=NULL;
 	msg.msg_iov=&iov;
 	msg.msg_iovlen=1;
-	msg.msg_accrights=NULL;
+	msg.msg_control=NULL;
 	return(sock->ops->sendmsg(sock, &msg, len, (file->f_flags & O_NONBLOCK), flags));
 }
 
@@ -959,7 +959,7 @@ asmlinkage int sys_sendto(int fd, void * buff, int len, unsigned flags,
 	msg.msg_namelen=addr_len;
 	msg.msg_iov=&iov;
 	msg.msg_iovlen=1;
-	msg.msg_accrights=NULL;
+	msg.msg_control=NULL;
 	return(sock->ops->sendmsg(sock, &msg, len, (file->f_flags & O_NONBLOCK),
 		flags));
 }
@@ -994,7 +994,7 @@ asmlinkage int sys_recv(int fd, void * ubuf, int size, unsigned flags)
 	msg.msg_name=NULL;
 	msg.msg_iov=&iov;
 	msg.msg_iovlen=1;
-	msg.msg_accrights=NULL;
+	msg.msg_control=NULL;
 	iov.iov_base=ubuf;
 	iov.iov_len=size;
 
@@ -1030,7 +1030,7 @@ asmlinkage int sys_recvfrom(int fd, void * ubuf, int size, unsigned flags,
 	if(err)
 	  	return err;
   
-  	msg.msg_accrights=NULL;
+  	msg.msg_control=NULL;
   	msg.msg_iovlen=1;
   	msg.msg_iov=&iov;
   	iov.iov_len=size;

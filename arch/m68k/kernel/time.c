@@ -137,7 +137,7 @@ void do_settimeofday(struct timeval *tv)
 
 	xtime = *tv;
 	time_state = TIME_BAD;
-	time_maxerror = 0x70000000;
-	time_esterror = 0x70000000;
+	time_maxerror = MAXPHASE;
+	time_esterror = MAXPHASE;
 	sti();
 }

@@ -1830,6 +1830,13 @@ void aha152x_intr(int irqno, void *dev_id, struct pt_regs * regs)
 #endif
 	      break;
 
+	    case RESTORE_POINTERS:
+#if defined(DEBUG_MSGI)
+		if(HOSTDATA(shpnt)->debug & debug_msgi)
+		  printk("inbound message (RESTORE DATA POINTERS), ");
+#endif
+	      break;
+
 	    case EXTENDED_MESSAGE:
 	      { 
         	  char buffer[16];

@@ -608,11 +608,11 @@ static void fd_error( void )
 	if (!CURRENT) return;
 	CURRENT->errors++;
 	if (CURRENT->errors >= MAX_ERRORS) {
-		printk( "fd%d: too many errors.\n", SelectedDrive );
+		printk(KERN_ERR "fd%d: too many errors.\n", SelectedDrive );
 		end_request( 0 );
 	}
 	else if (CURRENT->errors == RECALIBRATE_ERRORS) {
-		printk( "fd%d: recalibrating\n", SelectedDrive );
+		printk(KERN_WARNING "fd%d: recalibrating\n", SelectedDrive );
 		if (SelectedDrive != -1)
 			SUD.track = -1;
 	}
@@ -793,7 +793,7 @@ static void fd_calibrate_done( int status )
 	if (ATARIHW_PRESENT(FDCSPEED))
 		dma_wd.fdc_speed = SUDT->fdc_speed;
 	if (status & FDCSTAT_RECNF) {
-		printk( "fd%d: restore failed\n", SelectedDrive );
+		printk(KERN_ERR "fd%d: restore failed\n", SelectedDrive );
 		fd_error();
 	}
 	else {
@@ -841,7 +841,7 @@ static void fd_seek_done( int status )
 	if (ATARIHW_PRESENT(FDCSPEED))
 		dma_wd.fdc_speed = SUDT->fdc_speed;
 	if (status & FDCSTAT_RECNF) {
-		printk( "fd%d: seek error (to track %d)\n",
+		printk(KERN_ERR "fd%d: seek error (to track %d)\n",
 				SelectedDrive, ReqTrack );
 		/* we don't know exactly which track we are on now! */
 		SUD.track = -1;
@@ -1049,14 +1049,14 @@ static void fd_rwsec_done( int status )
 		dma_wd.dma_mode_status = 0x90;
 		MFPDELAY();
 		if (!(dma_wd.dma_mode_status & 0x01)) {
-			printk( "fd%d: DMA error\n", SelectedDrive );
+			printk(KERN_ERR "fd%d: DMA error\n", SelectedDrive );
 			goto err_end;
 		}
 	}
 	MFPDELAY();
 
 	if (ReqCmd == WRITE && (status & FDCSTAT_WPROT)) {
-		printk( "fd%d: is write protected\n", SelectedDrive );
+		printk(KERN_NOTICE "fd%d: is write protected\n", SelectedDrive );
 		goto err_end;
 	}	
 	if ((status & FDCSTAT_RECNF) &&
@@ -1071,7 +1071,7 @@ static void fd_rwsec_done( int status )
 			}
 			else {
 				if (SUD.flags & FTD_MSG)
-					printk( "fd%d: Auto-detected floppy type %s\n",
+					printk(KERN_INFO "fd%d: Auto-detected floppy type %s\n",
 					       SelectedDrive, SUDT->name );
 				Probing=0;
 			}
@@ -1094,17 +1094,17 @@ static void fd_rwsec_done( int status )
 			return;
 		}
 
-		printk( "fd%d: sector %d not found (side %d, track %d)\n",
+		printk(KERN_ERR "fd%d: sector %d not found (side %d, track %d)\n",
 		       SelectedDrive, FDC_READ (FDCREG_SECTOR), ReqSide, ReqTrack );
 		goto err_end;
 	}
 	if (status & FDCSTAT_CRC) {
-		printk( "fd%d: CRC error (side %d, track %d, sector %d)\n",
+		printk(KERN_ERR "fd%d: CRC error (side %d, track %d, sector %d)\n",
 		       SelectedDrive, ReqSide, ReqTrack, FDC_READ (FDCREG_SECTOR) );
 		goto err_end;
 	}
 	if (status & FDCSTAT_LOST) {
-		printk( "fd%d: lost data (side %d, track %d, sector %d)\n",
+		printk(KERN_ERR "fd%d: lost data (side %d, track %d, sector %d)\n",
 		       SelectedDrive, ReqSide, ReqTrack, FDC_READ (FDCREG_SECTOR) );
 		goto err_end;
 	}
@@ -1214,11 +1214,11 @@ static void fd_writetrack_done( int status )
 	STOP_TIMEOUT();
 
 	if (status & FDCSTAT_WPROT) {
-		printk( "fd%d: is write protected\n", SelectedDrive );
+		printk(KERN_NOTICE "fd%d: is write protected\n", SelectedDrive );
 		goto err_end;
 	}	
 	if (status & FDCSTAT_LOST) {
-		printk( "fd%d: lost data (side %d, track %d)\n",
+		printk(KERN_ERR "fd%d: lost data (side %d, track %d)\n",
 				SelectedDrive, ReqSide, ReqTrack );
 		goto err_end;
 	}
@@ -1244,7 +1244,7 @@ static void fd_times_out( unsigned long dummy )
 	FDC_WRITE( FDCREG_CMD, FDCCMD_FORCI );
 	udelay( 25 );
 	
-	printk( "floppy timeout\n" );
+	printk(KERN_ERR "floppy timeout\n" );
 	fd_error();
   end:
 	atari_enable_irq( IRQ_MFP_FDC );
@@ -1345,7 +1345,7 @@ static int check_floppy_change (kdev_t dev)
 	unsigned int drive = MINOR(dev) & 0x03;
 
 	if (MAJOR(dev) != MAJOR_NR) {
-		printk("floppy_changed: not a floppy\n");
+		printk(KERN_ERR "floppy_changed: not a floppy\n");
 		return 0;
 	}
 	
@@ -1445,7 +1445,7 @@ repeat:
 	
 	if (!UD.connected) {
 		/* drive not connected */
-		printk( "Unknown Device: fd%d\n", drive );
+		printk(KERN_ERR "Unknown Device: fd%d\n", drive );
 		end_request(0);
 		goto repeat;
 	}
@@ -1461,12 +1461,12 @@ repeat:
 	else {
 		/* user supplied disk type */
 		if (--type >= NUM_DISK_MINORS) {
-			printk( "fd%d: invalid disk format", drive );
+			printk(KERN_WARNING "fd%d: invalid disk format", drive );
 			end_request( 0 );
 			goto repeat;
 		}
 		if (minor2disktype[type].drive_types > DriveType)  {
-			printk( "fd%d: unsupported disk format", drive );
+			printk(KERN_WARNING "fd%d: unsupported disk format", drive );
 			end_request( 0 );
 			goto repeat;
 		}
@@ -1712,11 +1712,11 @@ static void config_types( void )
 	if (ATARIHW_PRESENT(FDCSPEED))
 		dma_wd.fdc_speed = 0;
 
-	printk("Probing floppy drive(s):\n");
+	printk(KERN_INFO "Probing floppy drive(s):\n");
 	for( drive = 0; drive < FD_MAX_UNITS; drive++ ) {
 		fd_probe( drive );
 		if (UD.connected) {
-			printk("fd%d\n", drive);
+			printk(KERN_INFO "fd%d\n", drive);
 			++cnt;
 		}
 	}
@@ -1789,6 +1789,8 @@ static int floppy_open( struct inode *inode, struct file *filp )
   if (filp->f_mode & 2)
     filp->f_mode |= OPEN_WRITE_BIT;
 
+  MOD_INC_USE_COUNT;
+
   if (filp->f_flags & O_NDELAY)
     return 0;
 
@@ -1821,9 +1823,11 @@ static void floppy_release( struct inode * inode, struct file * filp )
     fd_ref[drive] = 0;
   else if (!fd_ref[drive]--)
     {
-      printk("floppy_release with fd_ref == 0");
+      printk(KERN_ERR "floppy_release with fd_ref == 0");
       fd_ref[drive] = 0;
     }
+
+  MOD_DEC_USE_COUNT;
 }
 
 static struct file_operations floppy_fops = {
@@ -1847,7 +1851,7 @@ int atari_floppy_init (void)
 	int i;
 
 	if (register_blkdev(MAJOR_NR,"fd",&floppy_fops)) {
-		printk("Unable to get major %d for floppy\n",MAJOR_NR);
+		printk(KERN_ERR "Unable to get major %d for floppy\n",MAJOR_NR);
 		return -EBUSY;
 	}
 
@@ -1868,7 +1872,7 @@ int atari_floppy_init (void)
 
 	DMABuffer = kmalloc(BUFFER_SIZE + 512, GFP_KERNEL | GFP_DMA);
 	if (!DMABuffer) {
-		printk("atari_floppy_init: cannot get dma buffer\n");
+		printk(KERN_ERR "atari_floppy_init: cannot get dma buffer\n");
 		unregister_blkdev(MAJOR_NR, "fd");
 		return -ENOMEM;
 	}
@@ -1893,7 +1897,7 @@ int atari_floppy_init (void)
 	blksize_size[MAJOR_NR] = floppy_blocksizes;
 	blk_dev[MAJOR_NR].request_fn = DEVICE_REQUEST;
 
-	printk("Atari floppy driver: max. %cD, %strack buffering\n",
+	printk(KERN_INFO "Atari floppy driver: max. %cD, %strack buffering\n",
 	       DriveType == 0 ? 'D' : DriveType == 1 ? 'H' : 'E',
 	       UseTrackbuffer ? "" : "no ");
 	config_types();
@@ -1907,15 +1911,15 @@ void atari_floppy_setup( char *str, int *ints )
 	int i;
 	
 	if (ints[0] < 1) {
-		printk( "ataflop_setup: no arguments!\n" );
+		printk(KERN_ERR "ataflop_setup: no arguments!\n" );
 		return;
 	}
 	else if (ints[0] > 2+FD_MAX_UNITS) {
-		printk( "ataflop_setup: too many arguments\n" );
+		printk(KERN_ERR "ataflop_setup: too many arguments\n" );
 	}
 
 	if (ints[1] < 0 || ints[1] > 2)
-		printk( "ataflop_setup: bad drive type\n" );
+		printk(KERN_ERR "ataflop_setup: bad drive type\n" );
 	else
 		DriveType = ints[1];
 
@@ -1924,7 +1928,7 @@ void atari_floppy_setup( char *str, int *ints )
 
 	for( i = 3; i <= ints[0] && i-3 < FD_MAX_UNITS; ++i ) {
 		if (ints[i] != 2 && ints[i] != 3 && ints[i] != 6 && ints[i] != 12)
-			printk( "ataflop_setup: bad steprate\n" );
+			printk(KERN_ERR "ataflop_setup: bad steprate\n" );
 		else
 			UserSteprate[i-3] = ints[i];
 	}
@@ -1933,6 +1937,8 @@ void atari_floppy_setup( char *str, int *ints )
 #ifdef MODULE
 int init_module (void)
 {
+	if (!MACH_IS_ATARI)
+		return -ENXIO;
 	return atari_floppy_init ();
 }
 
@@ -1944,13 +1950,6 @@ void cleanup_module (void)
 	timer_active &= ~(1 << FLOPPY_TIMER);
 	timer_table[FLOPPY_TIMER].fn = 0;
 	kfree (DMABuffer);
-}
-#else
-/*
- * This is just a dummy function to keep fs/super.c happy.
- */
-void floppy_eject(void)
-{
 }
 #endif
 

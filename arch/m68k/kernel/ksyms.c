@@ -3,9 +3,12 @@
 #include <linux/linkage.h>
 #include <linux/string.h>
 #include <linux/mm.h>
+#include <linux/user.h>
+#include <linux/elfcore.h>
 
 #include <asm/bootinfo.h>
 #include <asm/pgtable.h>
+#include <asm/irq.h>
 
 asmlinkage long long __ashrdi3 (long long, int);
 extern char m68k_debug_device[];
@@ -20,6 +23,9 @@ extern void mach_amiga_syms_export (void);
 extern void mach_mac_syms_export (void);
 #endif
 
+extern void dump_thread(struct pt_regs *, struct user *);
+extern int dump_fpu(elf_fpregset_t *);
+
 static struct symbol_table arch_symbol_table = {
 #include <linux/symtab_begin.h>
 	/* platform dependent support */
@@ -32,6 +38,10 @@ static struct symbol_table arch_symbol_table = {
 	X(mm_vtop),
 	X(mm_ptov),
 	X(m68k_debug_device),
+	X(add_isr),
+	X(remove_isr),
+	X(dump_fpu),
+	X(dump_thread),
 
 	/* The following are special because they're not called
 	   explicitly (the C compiler generates them).  Fortunately,

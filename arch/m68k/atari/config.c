@@ -1054,6 +1054,7 @@ void atari_reset (void)
       jmp_addr_label040:
         __asm__ __volatile__
           ("moveq #0,%/d0\n\t"
+	   "nop\n\t"
 	   ".word 0xf4d8\n\t"		/* cinva i/d */
 	   ".word 0xf518\n\t"		/* pflusha */
            ".long 0x4e7b0003\n\t"	/* movec d0,tc */

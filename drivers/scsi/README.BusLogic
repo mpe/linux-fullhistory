@@ -1,9 +1,9 @@
 		  BusLogic MultiMaster SCSI Driver for Linux
 
-		       Version 1.2.2 for Linux 1.2.13
-		       Version 1.3.2 for Linux 1.3.88
+		       Version 1.2.3 for Linux 1.2.13
+		       Version 2.0.3 for Linux 2.0.0
 
-				 16 April 1996
+				  17 May 1996
 
 			       Leonard N. Zubkoff
 			       Dandelion Digital
@@ -114,7 +114,7 @@ o Robustness Features
   level parts of the SCSI subsystem request that a command be reset, action is
   taken to restore proper operation of the host adapter and SCSI bus.  On Linux
   1.2.13, by default a full host adapter hard reset and SCSI bus reset is
-  performed.  On Linux 1.3.x, by default a selection is made between a full
+  performed.  On Linux 2.0.x, by default a selection is made between a full
   host adapter hard reset and SCSI bus reset versus sending a bus device reset
   message to the individual target device based on the recommendation of the
   SCSI subsystem.  Error recovery strategies are selectable from the kernel
@@ -167,7 +167,7 @@ o Wide SCSI Support
   All BusLogic MultiMaster SCSI Host Adapters share a common programming
   interface, except for the inevitable improvements and extensions as new
   models are released, so support for Wide SCSI data transfer has automatically
-  been available without explicit driver support.  When used with Linux 1.3.x,
+  been available without explicit driver support.  When used with Linux 2.0.x,
   this driver adds explicit support for up to 15 target devices and 64 logical
   units per target device, to fully exploit the capabilities of the newest
   BusLogic Wide SCSI Host Adapters.
@@ -299,12 +299,14 @@ file "BusLogic.c".  The following examples may be useful as a starting point:
     such as disk drives, but should not be disabled for tape drives or other
     devices where a single command may take over a second to execute.
 
-  "BusLogic=0,0,10"
+  "BusLogic=0,0,30"
 
     This command line selects default probing and automatic tagged queue depth
-    selection, but changes the bus settle time to 10 seconds.  It may be useful
+    selection, but changes the bus settle time to 30 seconds.  It may be useful
     with SCSI devices that take an unusually long time to become ready to
-    accept commands after a SCSI bus reset.
+    accept commands after a SCSI bus reset.  Some tape drives will not respond
+    properly immediately after a SCSI bus reset, especially if a tape is
+    present in the drive.
 
   "BusLogic=TQ:Disable"
 
@@ -323,19 +325,20 @@ substantially impact performance.
 			     INSTALLATION
 
 This distribution was prepared for Linux kernel version 1.2.13
-(BusLogic-1.2.2.tar.gz) or Linux kernel version 1.3.88 (BusLogic-1.3.2.tar.gz).
+(BusLogic-1.2.3.tar.gz) or Linux kernel version 2.0.0 (BusLogic-2.0.3.tar.gz).
 Installation in later versions will probably be successful as well, though
 BusLogic.patch may not be required.  Installation in earlier versions is not
 recommended.
 
 To install the BusLogic SCSI driver, you may use the following commands,
 replacing "/usr/src" with wherever you keep your Linux kernel source tree
-(substitute '2' or '3' for 'x' in the tar command as appropriate):
+(substitute "1.2" or "2.0" for "x.y" in the tar command as appropriate):
 
   cd /usr/src
-  tar -xvzf BusLogic-1.x.2.tar.gz
+  tar -xvzf BusLogic-x.y.3.tar.gz
   mv README.* BusLogic.[ch] linux/drivers/scsi
-  patch -p < BusLogic.patch
+  patch -p < BusLogic.patch	    (on Linux 1.2.13 only)
+  patch -p < BusLogic.elf_patch	    (on Linux 1.2.13 ELF systems only)
   cd linux
   make config
   make depend

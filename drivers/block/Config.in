@@ -16,36 +16,38 @@ else
   bool '   Support removable IDE interfaces (PCMCIA)' CONFIG_BLK_DEV_IDE_PCMCIA
   bool '   CMD640 chipset bugfix/support' CONFIG_BLK_DEV_CMD640
   if [ "$CONFIG_PCI" = "y" ]; then
-    bool '   RZ1000 chipset bugfix/support' CONFIG_BLK_DEV_RZ1000
     bool '   Intel 430FX (Triton) chipset DMA support' CONFIG_BLK_DEV_TRITON
+    bool '   RZ1000 chipset bugfix/support' CONFIG_BLK_DEV_RZ1000
   fi
   bool '   Other IDE chipset support' CONFIG_IDE_CHIPSETS
   if [ "$CONFIG_IDE_CHIPSETS" = "y" ]; then
     comment 'Note: most of these also require special kernel boot parameters'
+    bool '      ALI M1439/M1445 support' CONFIG_BLK_DEV_ALI14XX
     bool '      DTC-2278        support' CONFIG_BLK_DEV_DTC2278
     bool '      Holtek HT6560B  support' CONFIG_BLK_DEV_HT6560B
+    bool '      PROMISE DC4030  support (ALPHA)' CONFIG_BLK_DEV_PROMISE
     bool '      QDI QD6580      support' CONFIG_BLK_DEV_QD6580
     bool '      UMC 8672        support' CONFIG_BLK_DEV_UMC8672
-    bool '      ALI M1439/M1445 support' CONFIG_BLK_DEV_ALI14XX
-    bool '      PROMISE DC4030  support (ALPHA)' CONFIG_BLK_DEV_PROMISE
   fi
 fi
 
-tristate 'RAM disk support' CONFIG_BLK_DEV_RAM
-if [ "$CONFIG_BLK_DEV_RAM" = "y" ]; then
-  bool '   Initial RAM disk (initrd) support' CONFIG_BLK_DEV_INITRD
-fi
+comment 'Additional Block Devices'
 
 tristate 'Loopback device support' CONFIG_BLK_DEV_LOOP
-
-if [ "$CONFIG_BLK_DEV_HD_IDE" = "y" -o "$CONFIG_BLK_DEV_HD_ONLY" = "y" ]; then
-  define_bool CONFIG_BLK_DEV_HD y
-fi
-
-tristate 'XT harddisk support' CONFIG_BLK_DEV_XD
 bool 'Multiple devices driver support' CONFIG_BLK_DEV_MD
 if [ "$CONFIG_BLK_DEV_MD" = "y" ]; then
   tristate '   Linear (append) mode' CONFIG_MD_LINEAR
   tristate '   RAID-0 (striping) mode' CONFIG_MD_STRIPED
 fi
+tristate 'RAM disk support' CONFIG_BLK_DEV_RAM
+if [ "$CONFIG_BLK_DEV_RAM" = "y" ]; then
+  bool '   Initial RAM disk (initrd) support' CONFIG_BLK_DEV_INITRD
+fi
+tristate 'XT harddisk support' CONFIG_BLK_DEV_XD
+
+
+if [ "$CONFIG_BLK_DEV_HD_IDE" = "y" -o "$CONFIG_BLK_DEV_HD_ONLY" = "y" ]; then
+  define_bool CONFIG_BLK_DEV_HD y
+fi
+
 endmenu

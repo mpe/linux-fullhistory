@@ -29,6 +29,7 @@
 			  ei_block_input() for eth_io_copy_and_sum().
   Paul Gortmaker	: exchange static int ei_pingpong for a #define,
 			  also add better Tx error handling.
+  Paul Gortmaker	: rewrite Rx overrun handling as per NS specs.
 
 
   Sources:
@@ -377,6 +378,7 @@ static void ei_tx_err(struct device *dev)
     int e8390_base = dev->base_addr;
     unsigned char txsr = inb_p(e8390_base+EN0_TSR);
     unsigned char tx_was_aborted = txsr & (ENTSR_ABT+ENTSR_FU);
+    struct ei_device *ei_local = (struct ei_device *) dev->priv;
 
 #ifdef VERBOSE_ERROR_DUMP
     printk(KERN_DEBUG "%s: transmitter error (%#2x): ", dev->name, txsr);
@@ -398,6 +400,13 @@ static void ei_tx_err(struct device *dev)
     if (tx_was_aborted)
 		ei_tx_intr(dev);
 
+    /*
+     * Note: NCR reads zero on 16 collisions so we add them
+     * in by hand. Somebody might care...
+     */
+    if (txsr & ENTSR_ABT)
+	ei_local->stat.collisions += 16;
+	
 }
 
 /* We have finished a transmit: check for errors and then trigger the next
@@ -580,43 +589,76 @@ static void ei_receive(struct device *dev)
     return;
 }
 
-/* We have a receiver overrun: we have to kick the 8390 to get it started
-   again.*/
+/* 
+ * We have a receiver overrun: we have to kick the 8390 to get it started
+ * again. Problem is that you have to kick it exactly as NS prescribes in
+ * the updated datasheets, or "the NIC may act in an unpredictable manner."
+ * This includes causing "the NIC to defer indefinitely when it is stopped
+ * on a busy network."  Ugh.
+ */
 static void ei_rx_overrun(struct device *dev)
 {
     int e8390_base = dev->base_addr;
-    int reset_start_time = jiffies;
+    unsigned long wait_start_time;
+    unsigned char was_txing, must_resend = 0;
     struct ei_device *ei_local = (struct ei_device *) dev->priv;
     
-    /* We should already be stopped and in page0.  Remove after testing. */
+    /*
+     * Record whether a Tx was in progress and then issue the
+     * stop command.
+     */
+    was_txing = inb_p(e8390_base+E8390_CMD) & E8390_TRANS;
     outb_p(E8390_NODMA+E8390_PAGE0+E8390_STOP, e8390_base+E8390_CMD);
     
     if (ei_debug > 1)
-		printk("%s: Receiver overrun.\n", dev->name);
+	printk("%s: Receiver overrun.\n", dev->name);
     ei_local->stat.rx_over_errors++;
     
-    /* The old Biro driver does dummy = inb_p( RBCR[01] ); at this point.
-       It might mean something -- magic to speed up a reset?  A 8390 bug?*/
-    
-    /* Wait for the reset to complete.	This should happen almost instantly,
-	   but could take up to 1.5msec in certain rare instances.  There is no
-	   easy way of timing something in that range, so we use 'jiffies' as
-	   a sanity check. */
-    while ((inb_p(e8390_base+EN0_ISR) & ENISR_RESET) == 0)
-		if (jiffies - reset_start_time > 2*HZ/100) {
-			printk("%s: reset did not complete at ei_rx_overrun.\n",
-				   dev->name);
-			NS8390_init(dev, 1);
-			return;
-		}
-    
-    /* Remove packets right away. */
-    ei_receive(dev);
-    
-    outb_p(ENISR_OVER, e8390_base+EN0_ISR);
-    /* Generic 8390 insns to start up again, same as in open_8390(). */
+    /* 
+     * Wait a full Tx time (1.2ms) + some guard time, NS says 1.6ms total.
+     * Early datasheets said to poll the reset bit, but now they say that
+     * it "is not a reliable indicator and subequently should be ignored."
+     * We wait at least 10ms.
+     */
+    wait_start_time = jiffies;
+    while (jiffies - wait_start_time <= 1*HZ/100)
+	barrier();
+
+    /*
+     * Reset RBCR[01] back to zero as per magic incantation.
+     */
+    outb_p(0x00, e8390_base+EN0_RCNTLO);
+    outb_p(0x00, e8390_base+EN0_RCNTHI);
+
+    /*
+     * See if any Tx was interrupted or not. According to NS, this
+     * step is vital, and skipping it will cause no end of havoc.
+     */
+    if (was_txing) { 
+	unsigned char tx_completed = inb_p(e8390_base+EN0_ISR) & (ENISR_TX+ENISR_TX_ERR);
+	if (!tx_completed) must_resend = 1;
+    }
+
+    /*
+     * Have to enter loopback mode and then restart the NIC before
+     * you are allowed to slurp packets up off the ring.
+     */
+    outb_p(E8390_TXOFF, e8390_base + EN0_TXCR);
     outb_p(E8390_NODMA + E8390_PAGE0 + E8390_START, e8390_base + E8390_CMD);
-    outb_p(E8390_TXCONFIG, e8390_base + EN0_TXCR); /* xmit on. */
+
+    /*
+     * Clear the Rx ring of all the debris, and ack the interrupt.
+     */
+    ei_receive(dev);
+    outb_p(ENISR_OVER, e8390_base+EN0_ISR);
+
+    /*
+     * Leave loopback mode, and resend any packet that got stopped.
+     */
+    outb_p(E8390_TXCONFIG, e8390_base + EN0_TXCR); 
+    if (must_resend)
+    	outb_p(E8390_NODMA + E8390_PAGE0 + E8390_START + E8390_TRANS, e8390_base + E8390_CMD);
+	
 }
 
 static struct enet_statistics *get_stats(struct device *dev)

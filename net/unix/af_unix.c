@@ -361,6 +361,9 @@ static int unix_release(struct socket *sock, struct socket *peer)
 	 *	Linux we behave like files and pipes do and wait for the last dereference.
 	 */
 	 
+	sock->data = NULL;
+	sk->socket = NULL;
+	
 	return 0;
 }
 
@@ -916,14 +919,14 @@ static int unix_sendmsg(struct socket *sock, struct msghdr *msg, int len, int no
 	/*
 	 *	A control message has been attached.
 	 */
-	if(msg->msg_accrights) 
+	if(msg->msg_control) 
 	{
-		struct cmsghdr *cm=unix_copyrights(msg->msg_accrights, 
-						msg->msg_accrightslen);
-		if(cm==NULL || msg->msg_accrightslen<sizeof(struct cmsghdr) ||
+		struct cmsghdr *cm=unix_copyrights(msg->msg_control, 
+						msg->msg_controllen);
+		if(cm==NULL || msg->msg_controllen<sizeof(struct cmsghdr) ||
 		   cm->cmsg_type!=SCM_RIGHTS ||
 		   cm->cmsg_level!=SOL_SOCKET ||
-		   msg->msg_accrightslen!=cm->cmsg_len)
+		   msg->msg_controllen!=cm->cmsg_len)
 		{
 			kfree(cm);
 		   	return -EINVAL;
@@ -1072,22 +1075,22 @@ static int unix_recvmsg(struct socket *sock, struct msghdr *msg, int size, int n
 	if(sk->err)
 		return sock_error(sk);
 
-	if(msg->msg_accrights) 
+	if(msg->msg_control) 
 	{
-		cm=unix_copyrights(msg->msg_accrights, 
-			msg->msg_accrightslen);
-		if(msg->msg_accrightslen<sizeof(struct cmsghdr)
+		cm=unix_copyrights(msg->msg_control, 
+			msg->msg_controllen);
+		if(msg->msg_controllen<sizeof(struct cmsghdr)
 #if 0 
 /*		investigate this further -- Stevens example doesn't seem to care */
 		||
 		   cm->cmsg_type!=SCM_RIGHTS ||
 		   cm->cmsg_level!=SOL_SOCKET ||
-		   msg->msg_accrightslen!=cm->cmsg_len
+		   msg->msg_controllen!=cm->cmsg_len
 #endif
 		)
 		{
 			kfree(cm);
-/*			printk("recvmsg: Bad msg_accrights\n");*/
+/*			printk("recvmsg: Bad msg_control\n");*/
 		   	return -EINVAL;
 		}
 	}
@@ -1160,7 +1163,7 @@ static int unix_recvmsg(struct socket *sock, struct msghdr *msg, int size, int n
 out:
 	up(&sk->protinfo.af_unix.readsem);
 	if(cm)
-		unix_returnrights(msg->msg_accrights,msg->msg_accrightslen,cm);
+		unix_returnrights(msg->msg_control,msg->msg_controllen,cm);
 	return copied;
 }
 

@@ -20,6 +20,15 @@
 
 extern pte_t *kernel_page_table (unsigned long *memavailp);
 
+/* Strings for `extern inline' functions in <asm/pgtable.h>.  If put
+   directly into these functions, they are output for every file that
+   includes pgtable.h */
+
+const char PgtabStr_bad_pmd[] = "Bad pmd in pte_alloc: %08lx\n";
+const char PgtabStr_bad_pgd[] = "Bad pgd in pmd_alloc: %08lx\n";
+const char PgtabStr_bad_pmdk[] = "Bad pmd in pte_alloc_kernel: %08lx\n";
+const char PgtabStr_bad_pgdk[] = "Bad pgd in pmd_alloc_kernel: %08lx\n";
+
 static struct ptable_desc {
 	struct ptable_desc *prev;
 	struct ptable_desc *next;
@@ -145,40 +154,100 @@ void free_pointer_table (pmd_t *ptable)
 	}
 }
 
-static unsigned char alloced = 0;
-extern pmd_t (*kernel_pmd_table)[PTRS_PER_PMD]; /* initialized in head.S */
+/* maximum pages used for kpointer tables */
+#define KPTR_PAGES      4
+/* # of reserved slots */
+#define RESERVED_KPTR	4
+extern pmd_tablepage kernel_pmd_table; /* reserved in head.S */
+
+static struct kpointer_pages {
+        pmd_tablepage *page[KPTR_PAGES];
+        u_char alloced[KPTR_PAGES];
+} kptr_pages;
+
+void init_kpointer_table(void) {
+	short i = KPTR_PAGES-1;
+
+	/* first page is reserved in head.S */
+	kptr_pages.page[i] = &kernel_pmd_table;
+	kptr_pages.alloced[i] = ~(0xff>>RESERVED_KPTR);
+	for (i--; i>=0; i--) {
+		kptr_pages.page[i] = NULL;
+		kptr_pages.alloced[i] = 0;
+	}
+}
 
 pmd_t *get_kpointer_table (void)
 {
 	/* For pointer tables for the kernel virtual address space,
-	 * use a page that is allocated in head.S that can hold up to
-	 * 8 pointer tables.  This allows mapping of 8 * 32M = 256M of
-	 * physical memory.  This should be sufficient for now.
+	 * use the page that is reserved in head.S that can hold up to
+	 * 8 pointer tables. 3 of these tables are always reserved
+	 * (kernel_pg_dir, swapper_pg_dir and kernel pointer table for
+	 * the first 16 MB of RAM). In addition, the 4th pointer table
+	 * in this page is reserved. On Amiga and Atari, it is used to
+	 * map in the hardware registers. It may be used for other
+	 * purposes on other 68k machines. This leaves 4 pointer tables
+	 * available for use by the kernel. 1 of them are usually used
+	 * for the vmalloc tables. This allows mapping of 3 * 32 = 96 MB
+	 * of physical memory. But these pointer tables are also used
+	 * for other purposes, like kernel_map(), so further pages can
+	 * now be allocated.
 	 */
-	pmd_t *ptable;
-	int i;
+	pmd_tablepage *page;
+	pmd_table *table;
+	long nr, offset = -8;
+	short i;
 
-	for (i = 0; i < PAGE_SIZE/(PTRS_PER_PMD*sizeof(pmd_t)); i++)
-		if ((alloced & (1 << i)) == 0) {
-			ptable = kernel_pmd_table[i];
-			memset (ptable, 0, PTRS_PER_PMD*sizeof(pmd_t));
-			alloced |= (1 << i);
-			return ptable;
+	for (i=KPTR_PAGES-1; i>=0; i--) {
+		asm volatile("bfffo %1{%2,#8},%0"
+			: "=d" (nr)
+			: "d" ((u_char)~kptr_pages.alloced[i]), "d" (offset));
+		if (nr)
+			break;
+	}
+	if (i < 0) {
+		printk("No space for kernel pointer table!\n");
+		return NULL;
+	}
+	if (!(page = kptr_pages.page[i])) {
+		if (!(page = (pmd_tablepage *)__get_free_page(GFP_KERNEL))) {
+			printk("No space for kernel pointer table!\n");
+			return NULL;
 		}
-	printk ("no space for kernel pointer table\n");
-	return NULL;
+		nocache_page((u_long)(kptr_pages.page[i] = page));
+	}
+	asm volatile("bfset %0@{%1,#1}"
+		: /* no output */
+		: "a" (&kptr_pages.alloced[i]), "d" (nr-offset));
+	table = &(*page)[nr-offset];
+	memset(table, 0, sizeof(pmd_table));
+	return ((pmd_t *)table);
 }
 
 void free_kpointer_table (pmd_t *pmdp)
 {
-	int index = (pmd_t (*)[PTRS_PER_PMD])pmdp - kernel_pmd_table;
+	pmd_table *table = (pmd_table *)pmdp;
+	pmd_tablepage *page = (pmd_tablepage *)((u_long)table & PAGE_MASK);
+	long nr;
+	short i;
 
-	if (index < 0 || index > 7 ||
-	    /* This works because kernel_pmd_table is page aligned. */
-	    ((unsigned long)pmdp & (sizeof(pmd_t) * PTRS_PER_PMD - 1)))
-		panic("attempt to free invalid kernel pointer table");
-	else
-		alloced &= ~(1 << index);
+	for (i=KPTR_PAGES-1; i>=0; i--) {
+		if (kptr_pages.page[i] == page)
+			break;
+	}
+	nr = ((u_long)table - (u_long)page) / sizeof(pmd_table);
+	if (!table || i < 0 || (i == KPTR_PAGES-1 && nr < RESERVED_KPTR)) {
+		printk("Attempt to free invalid kernel pointer table: %p\n", table);
+		return;
+	}
+	asm volatile("bfclr %0@{%1,#1}"
+		: /* no output */
+		: "a" (&kptr_pages.alloced[i]), "d" (nr));
+	if (!kptr_pages.alloced[i]) {
+		kptr_pages.page[i] = 0;
+		cache_page ((u_long)page);
+		free_page ((u_long)page);
+	}
 }
 
 /*
@@ -319,22 +388,41 @@ unsigned long mm_ptov (unsigned long paddr)
 	return paddr;
 }
 
+/* invalidate page in both caches */
 #define	clear040(paddr) __asm__ __volatile__ ("movel %0,%/a0\n\t"\
+					      "nop\n\t"\
 					      ".word 0xf4d0"\
 					      /* CINVP I/D (a0) */\
 					      : : "g" ((paddr))\
 					      : "a0")
 
+/* invalidate page in i-cache */
+#define	cleari040(paddr) __asm__ __volatile__ ("movel %0,%/a0\n\t"\
+					       /* CINVP I (a0) */\
+					       "nop\n\t"\
+					       ".word 0xf490"\
+					       : : "g" ((paddr))\
+					       : "a0")
+
+/* push page in both caches */
 #define	push040(paddr) __asm__ __volatile__ ("movel %0,%/a0\n\t"\
+					      "nop\n\t"\
 					     ".word 0xf4f0"\
 					     /* CPUSHP I/D (a0) */\
 					     : : "g" ((paddr))\
 					     : "a0")
 
+/* push and invalidate page in both caches */
 #define	pushcl040(paddr) do { push040((paddr));\
 			      if (m68k_is040or060 == 6) clear040((paddr));\
 			 } while(0)
 
+/* push page in both caches, invalidate in i-cache */
+#define	pushcli040(paddr) do { push040((paddr));\
+			       if (m68k_is040or060 == 6) cleari040((paddr));\
+			  } while(0)
+
+/* push page defined by virtual address in both caches */
 #define	pushv040(vaddr) __asm__ __volatile__ ("movel %0,%/a0\n\t"\
 					      /* ptestr (a0) */\
 					      ".word 0xf568\n\t"\
@@ -343,10 +431,12 @@ unsigned long mm_ptov (unsigned long paddr)
 					      "andw #0xf000,%/d0\n\t"\
 					      "movel %/d0,%/a0\n\t"\
 					      /* CPUSHP I/D (a0) */\
+					      "nop\n\t"\
 					      ".word 0xf4f0"\
 					      : : "g" ((vaddr))\
 					      : "a0", "d0")
 
+/* push page defined by virtual address in both caches */
 #define	pushv060(vaddr) __asm__ __volatile__ ("movel %0,%/a0\n\t"\
 					      /* plpar (a0) */\
 					      ".word 0xf5c8\n\t"\
@@ -374,6 +464,14 @@ unsigned long mm_ptov (unsigned long paddr)
  * the DPI bit in the CACR; would it cause problems with temporarily changing
  * this?). So we have to push first and then additionally to invalidate.
  */
+
+/*
+ * cache_clear() semantics: Clear any cache entries for the area in question,
+ * without writing back dirty entries first. This is useful if the data will
+ * be overwritten anyway, e.g. by DMA to memory. The range is defined by a
+ * _physical_ address.
+ */
+
 void cache_clear (unsigned long paddr, int len)
 {
     if (m68k_is040or060) {
@@ -419,6 +517,12 @@ void cache_clear (unsigned long paddr, int len)
 }
 
 
+/*
+ * cache_push() semantics: Write back any dirty cache data in the given area,
+ * and invalidate the range in the instruction cache. It needs not (but may)
+ * invalidate those entries also in the data cache. The range is defined by a
+ * _physical_ address.
+ */
 
 void cache_push (unsigned long paddr, int len)
 {
@@ -429,18 +533,18 @@ void cache_push (unsigned long paddr, int len)
 	 * the '060!
 	 */
 	while (len > PAGE_SIZE) {
-	    push040(paddr);
+	    pushcli040(paddr);
 	    len -= PAGE_SIZE;
 	    paddr += PAGE_SIZE;
 	    }
 	if (len > 0) {
-	    push040(paddr);
+	    pushcli040(paddr);
 #if 0
 	    if (((paddr + len - 1) / PAGE_SIZE) != (paddr / PAGE_SIZE)) {
 #endif
 	    if (((paddr + len - 1) ^ paddr) & PAGE_MASK) {
 		/* a page boundary gets crossed at the end */
-		push040(paddr + len - 1);
+		pushcli040(paddr + len - 1);
 		}
 	    }
 	}
@@ -462,6 +566,15 @@ void cache_push (unsigned long paddr, int len)
 		      : : "i" (FLUSH_I)
 		      : "d0");
 }
+
+
+/*
+ * cache_push_v() semantics: Write back any dirty cache data in the given
+ * area, and invalidate those entries at least in the instruction cache. This
+ * is intended to be used after data has been written that can be executed as
+ * code later. The range is defined by a _user_mode_ _virtual_ address  (or,
+ * more exactly, the space is defined by the %sfc/%dfc register.)
+ */
 
 void cache_push_v (unsigned long vaddr, int len)
 {
@@ -506,65 +619,12 @@ void cache_push_v (unsigned long vaddr, int len)
 		      : : "i" (FLUSH_I)
 		      : "d0");
 }
-#if 1
-void flush_cache_all(void)
-{
-    if (m68k_is040or060 >= 4)
-        __asm__ __volatile__ (".word 0xf478\n" ::);
-    else /* 68030 or 68020 */
-	asm volatile ("movec %/cacr,%/d0\n\t"
-		      "oriw %0,%/d0\n\t"
-		      "movec %/d0,%/cacr"
-		      : : "i" (FLUSH_I_AND_D)
-		      : "d0");
-}
-
-void flush_cache_mm(struct mm_struct *mm){
-
-    if (mm == current->mm)
-        flush_cache_all();
-}
-
-void flush_cache_range(struct mm_struct *mm, unsigned long start,
-		       unsigned long end){
-    if (mm == current->mm)
-        cache_push_v(start, end-start);
-}
-
-void flush_cache_page (struct vm_area_struct *vma, unsigned long vaddr)
-{
-    if (m68k_is040or060 >= 4)
-        pushv040(vaddr); /*
-			  * the 040 always invalidates the I-cache when
-			  * pushing its contents to ram.
-			  */
-
-    /* 68030/68020 have no writeback cache; still need to clear icache. */
-    else /* 68030 or 68020 */
-        asm volatile ("movec %/cacr,%/d0\n\t"
-		      "oriw %0,%/d0\n\t"
-		      "movec %/d0,%/cacr"
-		      : : "i" (FLUSH_I_AND_D)
-		      : "d0");
-}
-
-void flush_page_to_ram (unsigned long vaddr)
-{
-    if (m68k_is040or060 >= 4)
-        pushcl040(VTOP(vaddr));
-
-    /* 68030/68020 have no writeback cache; still need to clear icache. */
-    else /* 68030 or 68020 */
-	asm volatile ("movec %/cacr,%/d0\n\t"
-		      "oriw %0,%/d0\n\t"
-		      "movec %/d0,%/cacr"
-		      : : "i" (FLUSH_I_AND_D)
-		      : "d0");
-}
-#endif
 
 #undef clear040
+#undef cleari040
 #undef push040
+#undef pushcl040
+#undef pushcli040
 #undef pushv040
 #undef pushv060
 

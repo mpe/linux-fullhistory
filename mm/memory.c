@@ -76,7 +76,7 @@ mem_map_t * mem_map = NULL;
  */
 void oom(struct task_struct * task)
 {
-	printk("\nOut of memory for %s.\n", current->comm);
+	printk("\nOut of memory for %s.\n", task->comm);
 	task->sig->action[SIGKILL-1].sa_handler = NULL;
 	task->blocked &= ~(1<<(SIGKILL-1));
 	send_sig(SIGKILL,task,1);

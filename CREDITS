@@ -221,7 +221,12 @@ S: Stanford, California 94305, USA
 
 N: Juan Jose Ciarlante
 E: jjciarla@raiz.uncu.edu.ar
+E: juanjo@irriga.uncu.edu.ar
 D: Network driver alias support
+D: IP masq hashing and app modules
+S: Las Cuevas 2385 - Bo Guemes
+S: Las Heras, Mendoza CP 5539
+S: Argentina
 
 N: Hamish Coleman
 E: hamish@zot.apana.org.au
@@ -436,6 +441,16 @@ S: 6/1 M.Koneva bl, apt #125
 S: Poltava 314023
 S: Ukraine
 
+N: Paul Gortmaker
+E: gpg109@rsphy1.anu.edu.au
+W: http://rsphy1.anu.edu.au/~gpg109
+D: Real Time Clock driver author.
+D: 8390 net driver hacker (ne2000, wd8013, smc-ultra, 3c503, etc.) 
+D: Ethernet-HowTo and BootPrompt-HowTo author.
+D: Added many new CONFIG options (modules, ramdisk, generic-serial, etc.)
+D: Implemented 1st "official" kernel thread (moved user bdflush to kflushd)
+D: Various other random hacks, patches and utilities.
+
 N: John E. Gotts
 E: jgotts@engin.umich.edu
 D: kernel hacker
@@ -471,6 +486,14 @@ D: fixed keyboard driver to separate LED and locking status
 S: 25360 Georgia Tech Station
 S: Atlanta, Georgia 30332
 S: USA
+
+N: Angelo Haritsis
+E: ah@doc.ic.ac.uk
+D: kernel patches (serial, watchdog)
+D: xringd, vuzkern, greekXfonts
+S: 58 Henfield Close
+S: London N19 3UL
+S: United Kingdom
 
 N: Kai Harrekilde-Petersen
 E: khp@dolphinics.no
@@ -1048,6 +1071,13 @@ N: Alessandro Rubini
 E: rubini@ipvvis.unipv.it
 D: the gpm mouse server and kernel support for it
 
+N: Thomas Sailer
+E: sailer@ife.ee.ethz.ch
+D: Baycom radio modem driver
+S: Weinbergstrasse 76
+S: 8408 Winterthur
+S: Switzerland
+
 N: Robert Sanders
 E: gt8134b@prism.gatech.edu
 D: Dosemu
@@ -1156,13 +1186,14 @@ S: Willowdale, Ontario
 S: Canada M2N 2Z1
 
 N: Tommy Thorn
-E: Tommy.Thorn@daimi.aau.dk
+E: Tommy.Thorn@irisa.fr
+W: http://www.irisa.fr/prive/thorn/index.html
+P: 512/B4AFC909 BC BF 6D B1 52 26 1E D6  E3 2F A3 24 2A 84 FE 21
 D: Device driver hacker (aha1542 & plip)
-S: Aarhus University
-S: Computer Science Department
-S: Ny Munkegade 116
-S: DK-8000 Aarhus C
-S: Denmark
+S: IRISA
+S: Universit=E9 de Rennes I
+S: F-35042 Rennes Cedex
+S: FRANCE
 
 N: Jon Tombs
 E: jon@gtex02.us.es

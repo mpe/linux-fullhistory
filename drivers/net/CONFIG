@@ -59,6 +59,8 @@
 #                       For manual 100Mb/s mode selection  (DC21140) = _100Mb
 #                       The DC21040 will default to TP if TP_NW is specified
 #                       The DC21041 will default to BNC if BNC_AUI is specified
+#     DE4X5_DO_MEMCPY   Forces the Intels to use memory copies into sk_buffs
+#	                rather than straight DMA.
 #
 #  TULIP		Tulip (dc21040/dc21041/ds21140) driver
 #	TULIP_PORT	specify default if_port

@@ -155,7 +155,7 @@ extern void tcp_send_fin(struct sock *sk);
 extern void tcp_send_synack(struct sock *, struct sock *, struct sk_buff *);
 extern void tcp_send_skb(struct sock *, struct sk_buff *);
 extern void tcp_send_ack(struct sock *sk);
-extern void tcp_send_delayed_ack(struct sock *sk, int timeout);
+extern void tcp_send_delayed_ack(struct sock *sk, int max_timeout, unsigned long timeout);
 extern void tcp_send_reset(unsigned long saddr, unsigned long daddr, struct tcphdr *th,
 	  struct proto *prot, struct options *opt, struct device *dev, int tos, int ttl);
 

@@ -30,7 +30,6 @@ extern void (*mach_gettod)(int *year, int *mon, int *day, int *hour,
 			   int *min, int *sec);
 extern int (*mach_hwclk)(int, struct hwclk_time*);
 extern int (*mach_set_clock_mmss)(unsigned long);
-extern void (*mach_check_partition) (struct gendisk *hd, unsigned int dev);
 extern void (*mach_mksound)( unsigned int count, unsigned int ticks );
 extern void (*mach_reset)( void );
 extern int (*mach_floppy_init) (void);
@@ -42,5 +41,6 @@ extern long mach_max_dma_address;
 extern void (*mach_debug_init)(void);
 extern void (*mach_video_setup)(char *, int *);
 extern void (*mach_floppy_setup)(char *, int *);
+extern void (*mach_floppy_eject)(void);
 
 #endif /* _M68K_MACHDEP_H */

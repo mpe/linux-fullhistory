@@ -24,6 +24,8 @@
  *		Martin Mares	:	Echo requests may be configured to be ignored (RFC 1812).
  *		Martin Mares	:	Limitation of ICMP error message transmit rate (RFC 1812).
  *		Martin Mares	:	TOS and Precedence set correctly (RFC 1812).
+ *		Martin Mares	:	Now copying as much data from the original packet
+ *					as we can without exceeding 576 bytes (RFC 1812).
  *
  *
  *
@@ -98,7 +100,7 @@
  *   MUST initialize TTL when originating an ICMP message (OK)
  *  4.3.2.3 (Original Message Header)
  *   SHOULD copy as much data from the offending packet as possible without
- *     the length of the ICMP datagram exceeding 576 bytes (NOT YET)
+ *     the length of the ICMP datagram exceeding 576 bytes (OK)
  *   MUST leave original IP header of the offending packet, but we're not
  *     required to undo modifications made (OK)
  *  4.3.2.4 (Original Message Source Address)
@@ -171,8 +173,8 @@
  *     compile-time option)
  *   SHOULD have option for each interface for AMRe's, MUST default to NO (NOT YET)
  *   MUST NOT reply to AMRq before knows the correct AM (OK)
- *   MUST NOT respond to AMRq with source address 0.0.0.0 and the AM's for
- *     logical i-faces for the physical i-face are not the same (NOT YET)
+ *   MUST NOT respond to AMRq with source address 0.0.0.0 on physical interfaces
+ *     having multiple logical i-faces with different masks (NOT YET)
  *   SHOULD examine all AMRe's it receives and check them (NOT YET)
  *   SHOULD log invalid AMRe's (AM+sender) (NOT YET)
  *   MUST NOT use contents of AMRe to determine correct AM (OK)
@@ -188,7 +190,7 @@
  *   SHOULD choose a best-match response code (OK)
  *   SHOULD NOT generate Host Isolated codes (OK)
  *   SHOULD use Communication Administratively Prohibited when administratively
- *     filtering packets (NOT YET)
+ *     filtering packets (NOT YET -- bug-to-bug compatibility)
  *   MAY include config option for not generating the above and silently discard
  *     the packets instead (OK)
  *   MAY include config option for not generating Precedence Violation and
@@ -496,7 +498,7 @@ static void icmp_build_xmit(struct icmp_bxm *icmp_param, __u32 saddr, __u32 dadd
 /*
  *	Send an ICMP message in response to a situation
  *
- *	RFC 1122: 3.2.2	MUST send at least the IP header and 8 bytes of header. MAY send more (we don't).
+ *	RFC 1122: 3.2.2	MUST send at least the IP header and 8 bytes of header. MAY send more (we do).
  *			MUST NOT change this header information.
  *			MUST NOT reply to a multicast/broadcast IP address.
  *			MUST NOT reply to a multicast/broadcast MAC address.
@@ -507,7 +509,7 @@ void icmp_send(struct sk_buff *skb_in, int type, int code, unsigned long info, s
 {
 	struct iphdr *iph;
 	struct icmphdr *icmph;
-	int atype;
+	int atype, room;
 	struct icmp_bxm icmp_param;
 	__u32 saddr;
 	
@@ -572,25 +574,33 @@ void icmp_send(struct sk_buff *skb_in, int type, int code, unsigned long info, s
 #endif	
 
 	/*
-	 *	Tell our driver what to send
+	 *	Construct source address and options.
 	 */
 	 
 	saddr=iph->daddr;
 	if(saddr!=dev->pa_addr && ip_chk_addr(saddr)!=IS_MYADDR)
 		saddr=dev->pa_addr;
-	
+	if(ip_options_echo(&icmp_param.replyopts, NULL, saddr, iph->saddr, skb_in))
+		return;
+
+	/*
+	 *	Prepare data for ICMP header.
+	 */
+
 	icmp_param.icmph.type=type;
 	icmp_param.icmph.code=code;
 	icmp_param.icmph.un.gateway = info;
 	icmp_param.data_ptr=iph;
-	icmp_param.data_len=(iph->ihl<<2)+8;	/* RFC says return header + 8 bytes */
+	room = 576 - sizeof(struct iphdr) - icmp_param.replyopts.optlen;
+	icmp_param.data_len=(iph->ihl<<2)+skb_in->len;	/* RFC says return as much as we can without exceeding 576 bytes */
+	if (icmp_param.data_len > room)
+		icmp_param.data_len = room;
 	
 	/*
-	 *	Set it to build.
+	 *	Build and send the packet.
 	 */
 
-	if (ip_options_echo(&icmp_param.replyopts, NULL, saddr, iph->saddr, skb_in) == 0)
-	  icmp_build_xmit(&icmp_param, saddr, iph->saddr, ((iph->tos & 0x38) | 6));
+	icmp_build_xmit(&icmp_param, saddr, iph->saddr, ((iph->tos & 0x38) | 6));
 }
 
 

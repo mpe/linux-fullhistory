@@ -24,8 +24,8 @@
 */
 
 
-#define BusLogic_DriverVersion		"1.3.2"
-#define BusLogic_DriverDate		"16 April 1996"
+#define BusLogic_DriverVersion		"2.0.3"
+#define BusLogic_DriverDate		"17 May 1996"
 
 
 #include <linux/module.h>
@@ -66,6 +66,15 @@ static int
 
 static BusLogic_CommandLineEntry_T
   BusLogic_CommandLineEntries[BusLogic_MaxHostAdapters];
+
+
+/*
+  BusLogic_ProbeOptions is a bit mask of Probe Options to be applied
+  across all Host Adapters.
+*/
+
+static int
+  BusLogic_ProbeOptions =		0;
 
 
 /*
@@ -570,7 +579,7 @@ static int BusLogic_Command(BusLogic_HostAdapter_T *HostAdapter,
 
 static void BusLogic_InitializeAddressProbeList(void)
 {
-  int DestinationIndex = 0, SourceIndex = 0;
+  int ProbeAddressCount = 0, StandardAddressIndex = 0;
   /*
     If BusLogic_Setup has provided an I/O Address probe list, do not override
     the Kernel Command Line specifications.
@@ -601,31 +610,35 @@ static void BusLogic_InitializeAddressProbeList(void)
 	    (BaseAddress0 & PCI_BASE_ADDRESS_SPACE) ==
 	      PCI_BASE_ADDRESS_SPACE_IO)
 	  {
-	    BusLogic_IO_AddressProbeList[DestinationIndex] =
+	    BusLogic_IO_AddressProbeList[ProbeAddressCount] =
 	      BaseAddress0 & PCI_BASE_ADDRESS_IO_MASK;
-	    BusDeviceFunction[DestinationIndex] = (Bus << 8) | DeviceFunction;
-	    if (DestinationIndex > 0 &&
-		BusDeviceFunction[DestinationIndex] <
-		  BusDeviceFunction[DestinationIndex-1])
+	    BusDeviceFunction[ProbeAddressCount] = (Bus << 8) | DeviceFunction;
+	    if (ProbeAddressCount > 0 &&
+		BusDeviceFunction[ProbeAddressCount] <
+		  BusDeviceFunction[ProbeAddressCount-1])
 	      NonIncreasingScanningOrder = true;
-	    DestinationIndex++;
+	    ProbeAddressCount++;
 	  }
       /*
 	If there are multiple BusLogic PCI SCSI Host Adapters present and if
 	they are enumerated by the PCI BIOS in an order other than by strictly
 	increasing Bus Number and Device Number, then interrogate the setting
 	of the AutoSCSI "Use Bus And Device # For PCI Scanning Seq." option.
-	If it is ON, sort the PCI Host Adapter I/O Addresses by increasing Bus
-	Number and Device Number so that the Host Adapters are recognized in
-	the same order by the Linux kernel as by the Host Adapter's BIOS.
+	If it is ON, and if the first enumeratedBusLogic Host Adapter is a
+	BT-948/958/958D, then sort the PCI Host Adapter I/O Addresses by
+	increasing Bus Number and Device Number so that the Host Adapters are
+	recognized in the same order by the Linux kernel as by the Host
+	Adapter's BIOS.
       */
-      if (DestinationIndex > 1 && NonIncreasingScanningOrder)
+      if (ProbeAddressCount > 1 && NonIncreasingScanningOrder &&
+	  !(BusLogic_ProbeOptions & BusLogic_NoSortPCI))
 	{
+	  BusLogic_HostAdapter_T HostAdapterPrototype;
+	  BusLogic_HostAdapter_T *HostAdapter = &HostAdapterPrototype;
 	  BusLogic_FetchHostAdapterLocalRAMRequest_T
 	    FetchHostAdapterLocalRAMRequest;
 	  BusLogic_AutoSCSIByte45_T AutoSCSIByte45;
-	  BusLogic_HostAdapter_T HostAdapterPrototype;
-	  BusLogic_HostAdapter_T *HostAdapter = &HostAdapterPrototype;
+	  BusLogic_BoardID_T BoardID;
 	  HostAdapter->IO_Address = BusLogic_IO_AddressProbeList[0];
 	  FetchHostAdapterLocalRAMRequest.ByteOffset =
 	    BusLogic_AutoSCSI_BaseOffset + 45;
@@ -636,13 +649,18 @@ static void BusLogic_InitializeAddressProbeList(void)
 			   &FetchHostAdapterLocalRAMRequest,
 			   sizeof(FetchHostAdapterLocalRAMRequest),
 			   &AutoSCSIByte45, sizeof(AutoSCSIByte45));
-	  if (AutoSCSIByte45.ForceBusDeviceScanningOrder)
+	  BoardID.FirmwareVersion1stDigit = '\0';
+	  BusLogic_Command(HostAdapter, BusLogic_InquireBoardID,
+			   NULL, 0, &BoardID, sizeof(BoardID));
+	  if (BoardID.FirmwareVersion1stDigit == '5' &&
+	      AutoSCSIByte45.ForceBusDeviceScanningOrder)
 	    {
 	      /*
-		Sort the I/O Addresses such that the corresponding PCI devices
-		are in ascending order by Bus Number and Device Number.
+		Sort the I/O Addresses such that the corresponding
+		PCI devices are in ascending order by Bus Number and
+		Device Number.
 	      */
-	      int LastInterchange = DestinationIndex-1, Bound, j;
+	      int LastInterchange = ProbeAddressCount-1, Bound, j;
 	      while (LastInterchange > 0)
 		{
 		  Bound = LastInterchange;
@@ -668,11 +686,12 @@ static void BusLogic_InitializeAddressProbeList(void)
   /*
     Append the list of standard BusLogic ISA I/O Addresses.
   */
-  while (DestinationIndex < BusLogic_IO_MaxProbeAddresses &&
-	 BusLogic_IO_StandardAddresses[SourceIndex] > 0)
-    BusLogic_IO_AddressProbeList[DestinationIndex++] =
-      BusLogic_IO_StandardAddresses[SourceIndex++];
-  BusLogic_IO_AddressProbeList[DestinationIndex] = 0;
+  if (!(BusLogic_ProbeOptions & BusLogic_NoProbeISA))
+    while (ProbeAddressCount < BusLogic_IO_MaxProbeAddresses &&
+	   BusLogic_IO_StandardAddresses[StandardAddressIndex] > 0)
+      BusLogic_IO_AddressProbeList[ProbeAddressCount++] =
+	BusLogic_IO_StandardAddresses[StandardAddressIndex++];
+  BusLogic_IO_AddressProbeList[ProbeAddressCount] = 0;
 }
 
 
@@ -1871,6 +1890,7 @@ int BusLogic_DetectHostAdapter(SCSI_Host_Template_T *HostTemplate)
 {
   int BusLogicHostAdapterCount = 0, CommandLineEntryIndex = 0;
   int AddressProbeIndex = 0;
+  if (BusLogic_ProbeOptions & BusLogic_NoProbe) return 0;
   BusLogic_InitializeAddressProbeList();
   while (BusLogic_IO_AddressProbeList[AddressProbeIndex] > 0)
     {
@@ -2851,6 +2871,12 @@ static int BusLogic_SendBusDeviceReset(BusLogic_HostAdapter_T *HostAdapter,
 	  Result = SCSI_RESET_PENDING;
 	  goto Done;
 	}
+      else if (HostAdapter->BusDeviceResetPendingCCB[TargetID] != NULL)
+	{
+	  printk("scsi%d: Bus Device Reset already pending to Target %d\n",
+		 HostAdapter->HostNumber, TargetID);
+	  goto Done;
+	}
     }
   /*
     If this is a Synchronous Reset and a Bus Device Reset is already pending
@@ -2863,6 +2889,8 @@ static int BusLogic_SendBusDeviceReset(BusLogic_HostAdapter_T *HostAdapter,
       {
 	Command->reset_chain = CCB->Command;
 	CCB->Command = Command;
+	printk("scsi%d: Unable to Reset Command to Target %d - "
+	       "Reset Pending\n", HostAdapter->HostNumber, TargetID);
 	Result = SCSI_RESET_PENDING;
 	goto Done;
       }
@@ -3139,9 +3167,8 @@ int BusLogic_BIOSDiskParameters(SCSI_Disk_T *Disk, KernelDevice_T Device,
   defaults to 0.  Note that Global Options are applied across all Host
   Adapters.
 
-  The string options are used to provide control over Tagged Queuing and Error
-  Recovery. If both Tagged Queuing and Error Recovery strings are provided, the
-  Tagged Queuing specification string must come first.
+  The string options are used to provide control over Tagged Queuing, Error
+  Recovery, and Host Adapter Probing.
 
   The Tagged Queuing specification begins with "TQ:" and allows for explicitly
   specifying whether Tagged Queuing is permitted on Target Devices that support
@@ -3207,6 +3234,20 @@ int BusLogic_BIOSDiskParameters(SCSI_Disk_T *Disk, KernelDevice_T Device,
 			the sequence of "D", "H", "B", and "N" characters does
 			not cover all the possible Target Devices, unspecified
 			characters are assumed to be "D".
+
+  The Host Adapter Probing specification comprises the following strings:
+
+  NoProbe		No probing of any kind is to be performed, and hence
+			no BusLogic Host Adapters will be detected.
+
+  NoProbeISA		No probing of the standard ISA I/O Addresses will
+			be done, and hence only PCI Host Adapters will be
+			detected.
+
+  NoSortPCI		PCI Host Adapters will be enumerated in the order
+			provided by the PCI BIOS, ignoring any setting of
+			the AutoSCSI "Use Bus And Device # For PCI Scanning
+			Seq." option.
 */
 
 void BusLogic_Setup(char *Strings, int *Integers)
@@ -3277,97 +3318,120 @@ void BusLogic_Setup(char *Strings, int *Integers)
       return;
     }
   if (Strings == NULL) return;
-  if (strncmp(Strings, "TQ:", 3) == 0)
+  while (*Strings != '\0')
     {
-      Strings += 3;
-      if (strncmp(Strings, "Default", 7) == 0)
-	Strings += 7;
-      else if (strncmp(Strings, "Enable", 6) == 0)
+      if (strncmp(Strings, "TQ:", 3) == 0)
 	{
-	  Strings += 6;
-	  CommandLineEntry->TaggedQueuingPermitted = 0xFFFF;
-	  CommandLineEntry->TaggedQueuingPermittedMask = 0xFFFF;
+	  Strings += 3;
+	  if (strncmp(Strings, "Default", 7) == 0)
+	    Strings += 7;
+	  else if (strncmp(Strings, "Enable", 6) == 0)
+	    {
+	      Strings += 6;
+	      CommandLineEntry->TaggedQueuingPermitted = 0xFFFF;
+	      CommandLineEntry->TaggedQueuingPermittedMask = 0xFFFF;
+	    }
+	  else if (strncmp(Strings, "Disable", 7) == 0)
+	    {
+	      Strings += 7;
+	      CommandLineEntry->TaggedQueuingPermitted = 0x0000;
+	      CommandLineEntry->TaggedQueuingPermittedMask = 0xFFFF;
+	    }
+	  else
+	    for (TargetID = 0; TargetID < BusLogic_MaxTargetDevices; TargetID++)
+	      switch (*Strings++)
+		{
+		case 'Y':
+		  CommandLineEntry->TaggedQueuingPermitted |= 1 << TargetID;
+		  CommandLineEntry->TaggedQueuingPermittedMask |= 1 << TargetID;
+		  break;
+		case 'N':
+		  CommandLineEntry->TaggedQueuingPermittedMask |= 1 << TargetID;
+		  break;
+		case 'X':
+		  break;
+		default:
+		  Strings--;
+		  TargetID = BusLogic_MaxTargetDevices;
+		  break;
+		}
 	}
-      else if (strncmp(Strings, "Disable", 7) == 0)
+      else if (strncmp(Strings, "ER:", 3) == 0)
+	{
+	  Strings += 3;
+	  if (strncmp(Strings, "Default", 7) == 0)
+	    Strings += 7;
+	  else if (strncmp(Strings, "HardReset", 9) == 0)
+	    {
+	      Strings += 9;
+	      memset(CommandLineEntry->ErrorRecoveryStrategy,
+		     BusLogic_ErrorRecovery_HardReset,
+		     sizeof(CommandLineEntry->ErrorRecoveryStrategy));
+	    }
+	  else if (strncmp(Strings, "BusDeviceReset", 14) == 0)
+	    {
+	      Strings += 14;
+	      memset(CommandLineEntry->ErrorRecoveryStrategy,
+		     BusLogic_ErrorRecovery_BusDeviceReset,
+		     sizeof(CommandLineEntry->ErrorRecoveryStrategy));
+	    }
+	  else if (strncmp(Strings, "None", 4) == 0)
+	    {
+	      Strings += 4;
+	      memset(CommandLineEntry->ErrorRecoveryStrategy,
+		     BusLogic_ErrorRecovery_None,
+		     sizeof(CommandLineEntry->ErrorRecoveryStrategy));
+	    }
+	  else
+	    for (TargetID = 0; TargetID < BusLogic_MaxTargetDevices; TargetID++)
+	      switch (*Strings++)
+		{
+		case 'D':
+		  CommandLineEntry->ErrorRecoveryStrategy[TargetID] =
+		    BusLogic_ErrorRecovery_Default;
+		  break;
+		case 'H':
+		  CommandLineEntry->ErrorRecoveryStrategy[TargetID] =
+		    BusLogic_ErrorRecovery_HardReset;
+		  break;
+		case 'B':
+		  CommandLineEntry->ErrorRecoveryStrategy[TargetID] =
+		    BusLogic_ErrorRecovery_BusDeviceReset;
+		  break;
+		case 'N':
+		  CommandLineEntry->ErrorRecoveryStrategy[TargetID] =
+		    BusLogic_ErrorRecovery_None;
+		  break;
+		default:
+		  Strings--;
+		  TargetID = BusLogic_MaxTargetDevices;
+		  break;
+		}
+	}
+      else if (strcmp(Strings, "NoProbe") == 0 ||
+	       strcmp(Strings, "noprobe") == 0)
 	{
 	  Strings += 7;
-	  CommandLineEntry->TaggedQueuingPermitted = 0x0000;
-	  CommandLineEntry->TaggedQueuingPermittedMask = 0xFFFF;
+	  BusLogic_ProbeOptions |= BusLogic_NoProbe;
 	}
-      else
-	for (TargetID = 0; TargetID < BusLogic_MaxTargetDevices; TargetID++)
-	  switch (*Strings++)
-	    {
-	    case 'Y':
-	      CommandLineEntry->TaggedQueuingPermitted |= 1 << TargetID;
-	      CommandLineEntry->TaggedQueuingPermittedMask |= 1 << TargetID;
-	      break;
-	    case 'N':
-	      CommandLineEntry->TaggedQueuingPermittedMask |= 1 << TargetID;
-	      break;
-	    case 'X':
-	      break;
-	    default:
-	      Strings--;
-	      TargetID = BusLogic_MaxTargetDevices;
-	      break;
-	    }
-    }
-  if (*Strings == ',') Strings++;
-  if (strncmp(Strings, "ER:", 3) == 0)
-    {
-      Strings += 3;
-      if (strncmp(Strings, "Default", 7) == 0)
-	Strings += 7;
-      else if (strncmp(Strings, "HardReset", 9) == 0)
+      else if (strncmp(Strings, "NoProbeISA", 10) == 0)
+	{
+	  Strings += 10;
+	  BusLogic_ProbeOptions |= BusLogic_NoProbeISA;
+	}
+      else if (strncmp(Strings, "NoSortPCI", 9) == 0)
 	{
 	  Strings += 9;
-	  memset(CommandLineEntry->ErrorRecoveryStrategy,
-		 BusLogic_ErrorRecovery_HardReset,
-		 sizeof(CommandLineEntry->ErrorRecoveryStrategy));
-	}
-      else if (strncmp(Strings, "BusDeviceReset", 14) == 0)
-	{
-	  Strings += 14;
-	  memset(CommandLineEntry->ErrorRecoveryStrategy,
-		 BusLogic_ErrorRecovery_BusDeviceReset,
-		 sizeof(CommandLineEntry->ErrorRecoveryStrategy));
-	}
-      else if (strncmp(Strings, "None", 4) == 0)
-	{
-	  Strings += 4;
-	  memset(CommandLineEntry->ErrorRecoveryStrategy,
-		 BusLogic_ErrorRecovery_None,
-		 sizeof(CommandLineEntry->ErrorRecoveryStrategy));
+	  BusLogic_ProbeOptions |= BusLogic_NoSortPCI;
 	}
       else
-	for (TargetID = 0; TargetID < BusLogic_MaxTargetDevices; TargetID++)
-	  switch (*Strings++)
-	    {
-	    case 'D':
-	      CommandLineEntry->ErrorRecoveryStrategy[TargetID] =
-		BusLogic_ErrorRecovery_Default;
-	      break;
-	    case 'H':
-	      CommandLineEntry->ErrorRecoveryStrategy[TargetID] =
-		BusLogic_ErrorRecovery_HardReset;
-	      break;
-	    case 'B':
-	      CommandLineEntry->ErrorRecoveryStrategy[TargetID] =
-		BusLogic_ErrorRecovery_BusDeviceReset;
-	      break;
-	    case 'N':
-	      CommandLineEntry->ErrorRecoveryStrategy[TargetID] =
-		BusLogic_ErrorRecovery_None;
-	      break;
-	    default:
-	      Strings--;
-	      TargetID = BusLogic_MaxTargetDevices;
-	      break;
-	    }
+	{
+	  printk("BusLogic: Unexpected Command Line String '%s' ignored\n",
+		 Strings);
+	  break;
+	}
+      if (*Strings == ',') Strings++;
     }
-  if (*Strings != '\0')
-    printk("BusLogic: Unexpected Command Line String '%s' ignored\n", Strings);
 }
 
 

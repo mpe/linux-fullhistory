@@ -12,7 +12,7 @@
  *	Juan Jose Ciarlante	:	Added hashed lookup by proto,maddr,mport and proto,saddr,sport
  *	Juan Jose Ciarlante	:	Fixed deadlock if free ports get exhausted
  *	Juan Jose Ciarlante	:	Added NO_ADDR status flag.
- *
+ *	Nigel Metheringham	:	ICMP handling.
  *	
  */
 
@@ -27,8 +27,10 @@
 #include <linux/in.h>
 #include <linux/ip.h>
 #include <net/protocol.h>
+#include <net/icmp.h>
 #include <net/tcp.h>
 #include <net/udp.h>
+#include <net/checksum.h>
 #include <net/ip_masq.h>
 
 #define IP_MASQ_TAB_SIZE 256    /* must be power of 2 */
@@ -192,8 +194,6 @@ static __inline__ int ip_masq_unhash(struct ip_masq *ms)
 struct ip_masq *
 ip_masq_in_get(struct iphdr *iph)
 {
-        unsigned hash;
-        struct ip_masq *ms;
  	__u16 *portptr;
         int protocol;
         __u32 s_addr, d_addr;
@@ -205,6 +205,29 @@ ip_masq_in_get(struct iphdr *iph)
         s_port = portptr[0];
         d_addr = iph->daddr;
         d_port = portptr[1];
+
+        return ip_masq_in_get_2(protocol, s_addr, s_port, d_addr, d_port);
+}
+
+/*
+ *	Returns ip_masq associated with supplied parameters, either
+ *	broken out of the ip/tcp headers or directly supplied for those
+ *	pathological protocols with address/port in the data stream
+ *	(ftp, irc).  addresses and ports are in network order.
+ *	called for pkts coming from INside-to-outside the firewall.
+ *
+ * 	NB. Cannot check destination address, just for the incoming port.
+ * 	reason: archie.doc.ac.uk has 6 interfaces, you send to
+ * 	phoenix and get a reply from any other interface(==dst)!
+ *
+ * 	[Only for UDP] - AC
+ */
+
+struct ip_masq *
+ip_masq_in_get_2(int protocol, __u32 s_addr, __u16 s_port, __u32 d_addr, __u16 d_port)
+{
+        unsigned hash;
+        struct ip_masq *ms;
 
         hash = ip_masq_hash_key(protocol, d_addr, d_port);
         for(ms = ip_masq_m_tab[hash]; ms ; ms = ms->m_link) {
@@ -293,7 +316,7 @@ static void masq_expire(unsigned long data)
 #ifdef DEBUG_CONFIG_IP_MASQUERADE
 	printk("Masqueraded %s %lX:%X expired\n",
 			masq_proto_name(ms->protocol),
-			ntohl(ms->src),ntohs(ms->sport));
+			ntohl(ms->saddr),ntohs(ms->sport));
 #endif
 	
 	save_flags(flags);
@@ -424,7 +447,7 @@ static void recalc_check(struct udphdr *uh, __u32 saddr,
 		uh->check=0xFFFF;
 }
 	
-void ip_fw_masquerade(struct sk_buff **skb_ptr, struct device *dev)
+int ip_fw_masquerade(struct sk_buff **skb_ptr, struct device *dev)
 {
 	struct sk_buff  *skb=*skb_ptr;
 	struct iphdr	*iph = skb->h.iph;
@@ -438,7 +461,7 @@ void ip_fw_masquerade(struct sk_buff **skb_ptr, struct device *dev)
 	 */
 
 	if (iph->protocol!=IPPROTO_UDP && iph->protocol!=IPPROTO_TCP)
-		return;
+		return -1;
 
 	/*
 	 *	Now hunt the list to see if we have an old entry
@@ -467,7 +490,7 @@ void ip_fw_masquerade(struct sk_buff **skb_ptr, struct device *dev)
                                  iph->daddr, portptr[1],
                                  0);
                 if (ms == NULL)
-			return;
+			return -1;
  	}
 
  	/*
@@ -535,7 +558,91 @@ void ip_fw_masquerade(struct sk_buff **skb_ptr, struct device *dev)
  #ifdef DEBUG_CONFIG_IP_MASQUERADE
  	printk("O-routed from %lX:%X over %s\n",ntohl(ms->maddr),ntohs(ms->mport),dev->name);
  #endif
+
+	return 0;
  }
+
+/*
+ *	Handle ICMP messages.
+ *	Find any that might be relevant, check against existing connections,
+ *	forward to masqueraded host if relevant.
+ *	Currently handles error types - unreachable, quench, ttl exceeded
+ */
+
+int ip_fw_demasq_icmp(struct sk_buff **skb_p, struct device *dev)
+{
+        struct sk_buff 	*skb   = *skb_p;
+ 	struct iphdr	*iph   = skb->h.iph;
+	struct icmphdr  *icmph = (struct icmphdr *)((char *)iph + (iph->ihl<<2));
+	struct iphdr    *ciph;	/* The ip header contained within the ICMP */
+	__u16	*portptr;	/* port numbers from TCP/UDP contained header */
+	struct ip_masq	*ms;
+
+#ifdef DEBUG_CONFIG_IP_MASQUERADE
+ 	printk("Incoming ICMP (%d) %lX -> %lX\n",
+	        icmph->type,
+ 		ntohl(iph->saddr), ntohl(iph->daddr));
+#endif
+
+	if ((icmph->type != ICMP_DEST_UNREACH) &&
+	    (icmph->type != ICMP_SOURCE_QUENCH) &&
+	    (icmph->type != ICMP_TIME_EXCEEDED))
+		return 0;
+
+	/* Now find the contained IP header */
+	ciph = (struct iphdr *) (icmph + 1);
+
+	/* We are only interested ICMPs generated from TCP or UDP packets */
+	if ((ciph->protocol != IPPROTO_UDP) && (ciph->protocol != IPPROTO_TCP))
+		return 0;
+
+	/* 
+	 * Find the ports involved - remember this packet was 
+	 * *outgoing* so the ports are reversed (and addresses)
+	 */
+	portptr = (__u16 *)&(((char *)ciph)[ciph->ihl*4]);
+	if (ntohs(portptr[0]) < PORT_MASQ_BEGIN ||
+ 	    ntohs(portptr[0]) > PORT_MASQ_END)
+ 		return 0;
+
+#ifdef DEBUG_CONFIG_IP_MASQUERADE
+ 	printk("Handling ICMP for %lX:%X -> %lX:%X\n",
+	       ntohl(ciph->saddr), ntohs(portptr[0]),
+	       ntohl(ciph->daddr), ntohs(portptr[1]));
+#endif
+
+	/* This is pretty much what ip_masq_in_get() does, except params are wrong way round */
+	ms = ip_masq_in_get_2(ciph->protocol, ciph->daddr, portptr[1], ciph->saddr, portptr[0]);
+
+	if (ms == NULL)
+		return 0;
+
+	/* Now we do real damage to this packet...! */
+	/* First change the dest IP address, and recalc checksum */
+	iph->daddr = ms->saddr;
+	ip_send_check(iph);
+	
+	/* Now change the *source* address in the contained IP */
+	ciph->saddr = ms->saddr;
+	ip_send_check(ciph);
+	
+	/* the TCP/UDP source port - cannot redo check */
+	portptr[0] = ms->sport;
+
+	/* And finally the ICMP checksum */
+	icmph->checksum = 0;
+	icmph->checksum = ip_compute_csum((unsigned char *) icmph, 
+				      skb->len - sizeof(struct iphdr));
+
+#ifdef DEBUG_CONFIG_IP_MASQUERADE
+ 	printk("Rewrote ICMP to %lX:%X -> %lX:%X\n",
+	       ntohl(ciph->saddr), ntohs(portptr[0]),
+	       ntohl(ciph->daddr), ntohs(portptr[1]));
+#endif
+
+	return 1;
+}
+
 
  /*
   *	Check if it's an masqueraded port, look it up,
@@ -554,7 +661,8 @@ int ip_fw_demasquerade(struct sk_buff **skb_p, struct device *dev)
  	struct ip_masq	*ms;
 	unsigned short  frag;
 
- 	if (iph->protocol!=IPPROTO_UDP && iph->protocol!=IPPROTO_TCP)
+ 	if (iph->protocol!=IPPROTO_UDP && iph->protocol!=IPPROTO_TCP 
+	    && iph->protocol!=IPPROTO_ICMP)
  		return 0;
 
 	/*
@@ -567,6 +675,9 @@ int ip_fw_demasquerade(struct sk_buff **skb_p, struct device *dev)
 	{
 		return 0;
 	}
+
+	if (iph->protocol == IPPROTO_ICMP)
+		return ip_fw_demasq_icmp(skb_p, dev);
 
  	portptr = (__u16 *)&(((char *)iph)[iph->ihl*4]);
  	if (ntohs(portptr[1]) < PORT_MASQ_BEGIN ||

@@ -1,4 +1,4 @@
-/* fmv18x.c: A network device driver for  the Fujitsu FMV-181/182.
+/* fmv18x.c: A network device driver for the Fujitsu FMV-181/182/183/184.
 
 	Original: at1700.c (1993-94 by Donald Becker).
 		Copyright 1993 United States Government as represented by the
@@ -22,8 +22,8 @@
 	This software may be used and distributed according to the terms
 	of the GNU Public License, incorporated herein by reference.
 
-	This is a device driver for the Fujitsu FMV-181/182, which is a
-	straight-forward Fujitsu MB86965 implementation.
+	This is a device driver for the Fujitsu FMV-181/182/183/184, which
+	is a straight-forward Fujitsu MB86965 implementation.
 
   Sources:
     at1700.c

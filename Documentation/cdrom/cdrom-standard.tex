@@ -1,5 +1,5 @@
 \documentclass{article}
-\def\version{$Id: cdrom-standard.tex,v 0.5 1996/05/12 22:00:00 emoenke Exp $}
+\def\version{$Id: cdrom-standard.tex,v 0.6 1996/05/14 15:42:39 david Exp david $}
 
 \evensidemargin=0pt
 \oddsidemargin=0pt
@@ -9,6 +9,7 @@
 \def\linux{{\sc Linux}}
 \def\cdrom{{\sc CDrom}}
 \def\cdromc{{\tt cdrom.c}}
+\def\cdromh{{\tt cdrom.h}}
 \def\ucdrom{{\tt ucdrom.h}}
 
 \everymath{\it} \everydisplay{\it}
@@ -35,7 +36,7 @@ The vast choice and openness has lead not only to a wide support of
 hardware devices, but also to a certain divergence in behavior. Especially
 for \cdrom\ devices, the way a particular drive reacts to a `standard'
 $ioctl()$ call varies a lot from one brand to another; until today, the
-\linux \cdrom\ driver writers kept away from wilderness by a good practice:
+\linux\ \cdrom\ driver writers kept away from wilderness by a good practice:
 to evolve a new driver by copying, understanding and changing an existing
 one.
 
@@ -57,37 +58,36 @@ getting rare.
 But history has delivered us \cdrom\ support for many different interfaces.
 
 Some of the \linux\ \cdrom\ driver writers look at the existing standard
-which is expressed through <linux/cdrom.h> as to a rather wild set of
+which is expressed through \cdromh\ as to a rather wild set of
 commands and data formats and feel that any structure is lost, and from
 this point of view, this documentation shall help to achieve a common
 programming interface.
  
-Others - mainly those who used the already existing drivers not only as
-a coding example, but also as a `user interface' reference during their
-own development - have taken care that <linux/cdrom.h> reflects a
-software interface to `user programs' which is unique between all drivers
-as much as possible; these driver writers will continue to refine the
-existing <linux/cdrom.h> where it seems necessary, and they tend to look
-if any newly requested functionality isn't already there before they are
-ready to define new structures. The sbpcd driver gives an example that
-it is possible to let a robot arm play juke box - either with audio or
-with data CDs -, and that it is possible to let the juke box work on
-even if a disk has fallen upon the floor and the drive door has closed 
-without having a disk inside; without any new software layer or any
-structures which are not already present in <linux/cdrom.h>.
-This `other' group of \linux\ \cdrom\ driver writers explicitely does
-NOT support the idea to define an additional software layer between driver
-and user program.
-
+Others---mainly those who used the already existing drivers not only
+as a coding example, but also as a `user interface' reference during
+their own development---have taken care that \cdromh\ reflects a
+software interface to `user programs' which is unique between all
+drivers as much as possible; these driver writers will continue to
+refine the existing \cdromh\ where it seems necessary, and they tend
+to look if any newly requested functionality isn't already there
+before they are ready to define new structures. The sbpcd driver gives
+an example that it is possible to let a robot arm play juke
+box---either with audio or with data CDs---and that it is possible to
+let the juke box work on even if a disk has fallen upon the floor and
+the drive door has closed without having a disk inside; without any
+new software layer or any structures which are not already present in
+\cdromh.  This `other' group of \linux\ \cdrom\ driver writers
+explicitely does {\em not\/} support the idea to define an additional
+software layer between driver and user program.
 
 The following text reflects the opinion of the first mentioned \linux\ 
 \cdrom\ driver writer group only; the other group (not only the `silent
 majority') sees this text as a good base for a future documentation of the
 existing common \linux\ \cdrom\ programming interface, as it is stated 
-within <linux/cdrom.h>. Where <linux/cdrom.h> needs some external 
-explanation, this text can give it if the reader is aware that - at least
-at the moment - this text claims to be the proposal of something else than
-<linux/cdrom.h>.
+within \cdromh. Where \cdromh\ needs some external 
+explanation, this text can give it if the reader is aware that---at least
+at the moment---this text claims to be the proposal of something else than
+\cdromh.
 
 
 Apart from the somewhat unstructured interfacing with software, the
@@ -139,8 +139,8 @@ $$
 \halign{$#$\ \hfil&$#$\ \hfil&$/*$ \rm# $*/$\hfil\cr
 struct& file_operations\ cdrom_fops = \{\hidewidth\cr
         &NULL,                  & lseek \cr
-        &block_read,            & read - general\ block-dev\ read \cr
-        &block_write,           & write - general block-dev write \cr
+        &block_read,            & read---general\ block-dev\ read \cr
+        &block_write,           & write---general block-dev write \cr
         &NULL,                  & readdir \cr
         &NULL,                  & select \cr
         &cdrom_ioctl,           & ioctl \cr

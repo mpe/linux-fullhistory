@@ -7,9 +7,6 @@
 #include <asm/atarikb.h>
 #include <asm/atari_joystick.h>
 #include <asm/atari_stdma.h>
-#if 0
-#include <asm/atari_acsi.h>
-#endif
 
 static struct symbol_table mach_atari_symbol_table = {
 #include <linux/symtab_begin.h>
@@ -29,20 +26,6 @@ static struct symbol_table mach_atari_symbol_table = {
 	X(ikbd_mouse_thresh),
 	X(ikbd_mouse_rel_pos),
 	X(ikbd_mouse_disable),
-
-#if 0
-#ifdef CONFIG_ATARI_ACSI
-	X(acsi_wait_for_IRQ),
-	X(acsi_wait_for_noIRQ),
-	X(acsicmd_nodma),
-	X(acsi_getstatus),
-#ifdef CONFIG_ATARI_SLM
-	X(acsi_extstatus),
-	X(acsi_end_extstatus),
-	X(acsi_extcmd),
-#endif
-#endif
-#endif /* 0 */
 
 #include <linux/symtab_end.h>
 };

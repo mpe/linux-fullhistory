@@ -117,11 +117,17 @@ int shrink_mmap(int priority, int dma)
 	struct page * page;
 	unsigned long limit = MAP_NR(high_memory);
 	struct buffer_head *tmp, *bh;
+	int count_max, count_min;
 
-	priority = (limit<<2) >> priority;
+	count_max = (limit<<1) >> (priority>>1);
+	count_min = (limit<<1) >> (priority);
+
 	page = mem_map + clock;
 	do {
-		priority--;
+		count_max--;
+		if (page->inode || page->buffers)
+			count_min--;
+
 		if (PageLocked(page))
 			goto next;
 		if (dma && !PageDMA(page))
@@ -179,7 +185,7 @@ next:
 			clock = 0;
 			page = mem_map;
 		}
-	} while (priority > 0);
+	} while (count_max > 0 && count_min > 0);
 	return 0;
 }
 

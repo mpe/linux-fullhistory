@@ -1712,8 +1712,13 @@ void ip_rt_advice(struct rtable **rp, int advice)
 
 void ip_rt_update(int event, struct device *dev)
 {
+/*
+ *	This causes too much grief to do now.
+ */
+#ifdef COMING_IN_2_1
 	if (event == NETDEV_UP)
 		rt_add(RTF_HOST|RTF_UP, dev->pa_addr, ~0, 0, dev, 0, 0, 0, 0);
 	else if (event == NETDEV_DOWN)
 		rt_del(dev->pa_addr, ~0, dev, 0, RTF_HOST|RTF_UP, 0);
+#endif		
 }

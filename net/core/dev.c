@@ -45,6 +45,8 @@
  *		Alan Cox	:	Cleaned up the backlog initialise.
  *		Craig Metz	:	SIOCGIFCONF fix if space for under
  *					1 device.
+ *	    Thomas Bogendoerfer :	Return ENODEV for dev_open, if there
+ *					is no device open function.
  *
  */
 
@@ -236,7 +238,7 @@ extern __inline__ void dev_load(const char *name)
  
 int dev_open(struct device *dev)
 {
-	int ret = 0;
+	int ret = -ENODEV;
 
 	/*
 	 *	Call device private open method

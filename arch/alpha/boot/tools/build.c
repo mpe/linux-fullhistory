@@ -8,7 +8,7 @@
 #include <unistd.h>
 #include <fcntl.h>
 
-#include <a.out.h>
+#include <linux/a.out.h>
 
 #include <asm/system.h>
 

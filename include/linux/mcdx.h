@@ -1,7 +1,7 @@
 /*
  * Definitions for the Mitsumi CDROM interface
  * Copyright (C) 1995 Heiko Schlittermann <heiko@lotte.sax.de>
- * VERSION: 2.2
+ * VERSION: 2.3
  * 
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -40,11 +40,13 @@
  *      o       MCDX_NDRIVES  :  number of used entries of the following table
  *      o       MCDX_DRIVEMAP :  table of {i/o base, irq} per controller
  *
- *      NOTE: I didn't get a drive at irq 9(2) working.  Not even alone.
+ *      NOTE: Don't even think about connecting the drive to IRQ 9(2).
+ *	In the AT architecture this interrupt is used to cascade the two
+ *	interrupt controllers and isn't therefore usable for enything else!
  */
  /* #define I_WAS_IN_MCDX_H */
 #define MCDX_NDRIVES 1
-#define MCDX_DRIVEMAP {	{0x300, 11},	\
+#define MCDX_DRIVEMAP {	{0x230, 11},	\
 			{0x304, 05},  	\
 			{0x000, 00},  	\
 			{0x000, 00},  	\

@@ -5,6 +5,8 @@
 #ifndef LINUX_CM206_H
 #define LINUX_CM206_H
 
+#include <linux/ioctl.h>
+
 /* First, the cm260 stuff */
 /* The ports and irq used. Although CM206_BASE and CM206_IRQ are defined
    below, the values are not used unless autoprobing is turned off and 
@@ -128,13 +130,13 @@
 
 /* finally some ioctls for the driver */
 
-#define CM206CTL_GET_STAT 0x2000
-#define CM206CTL_GET_LAST_STAT 0x2001
+#define CM206CTL_GET_STAT _IO( 0x20, 0 )
+#define CM206CTL_GET_LAST_STAT _IO( 0x20, 1 )
 
 /* for kernel 1.2.n */
 #if !defined(CDROM_GET_UPC)
-#define CDROM_GET_UPC 0x5311
-#define CDROMRESET 0x5312
+#define CDROM_GET_UPC _IO( 'S', 0x11 )
+#define CDROMRESET _IO( 'S', 0x12 )
 #endif
 
 #ifdef STATISTICS

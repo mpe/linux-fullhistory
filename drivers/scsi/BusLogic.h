@@ -147,6 +147,15 @@ int BusLogic_BIOSDiskParameters(SCSI_Disk_T *, KernelDevice_T, int *);
 
 
 /*
+  Define the possible Probe Options.
+*/
+
+#define BusLogic_NoProbe			1
+#define BusLogic_NoProbeISA			2
+#define BusLogic_NoSortPCI			4
+
+
+/*
   Define the possible Global Options.
 */
 

@@ -12,7 +12,7 @@
 #include <linux/kernel.h>
 #include <linux/string.h>
 #include <linux/types.h>
-#ifdef CONFIG_BLK_DEV_INITRD
+#ifdef CONFIG_BLK_DEV_RAM
 #include <linux/blk.h>
 #endif
 
@@ -24,6 +24,7 @@
 #include <asm/machdep.h>
 
 extern void die_if_kernel(char *,struct pt_regs *,long);
+extern void init_kpointer_table(void);
 extern void show_net_buffers(void);
 extern unsigned long mm_phys_to_virt (unsigned long addr);
 extern char *rd_start;
@@ -304,6 +305,7 @@ unsigned long paging_init(unsigned long start_mem, unsigned long end_mem)
 	}
 #endif
 
+	init_kpointer_table();
 #if 0
 	/*
 	 * Setup cache bits
@@ -416,6 +418,7 @@ unsigned long paging_init(unsigned long start_mem, unsigned long end_mem)
 	printk ("before free_area_init\n");
 #endif
 
+#ifdef CONFIG_BLK_DEV_RAM
 #ifndef CONFIG_BLK_DEV_INITRD
 	/*
 	 * Since the initialization of the ramdisk's has been changed
@@ -440,6 +443,7 @@ unsigned long paging_init(unsigned long start_mem, unsigned long end_mem)
 	  start_mem += ramdisk_length;
 	  rd_doload = 1;     /* tell rd_load to load this thing */
 	}
+#endif
 #endif
 
 	return free_area_init (start_mem, end_mem);

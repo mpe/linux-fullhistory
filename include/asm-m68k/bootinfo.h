@@ -17,8 +17,6 @@
 #ifndef BOOTINFO_H
 #define BOOTINFO_H
 
-#ifndef __ASSEMBLY__
-
 #include <asm/zorro.h>
 
 /*
@@ -26,6 +24,8 @@
  */
 
 #define NUM_AUTO    16
+
+#ifndef __ASSEMBLY__
 
 #define AMIGAHW_DECLARE(name)	unsigned name : 1
 #define AMIGAHW_SET(name)	(boot_info.bi_amiga.hw_present.name = 1)
@@ -35,6 +35,10 @@ struct bi_Amiga {
   int model;				/* Amiga Model (3000?) */
   int num_autocon;			/* # of autoconfig devices found */
   struct ConfigDev autocon[NUM_AUTO];	/* up to 16 autoconfig devices */
+#ifdef HACKER_KERNEL
+  void (*exit_func)(void);		/* addr of function to exit kernel */
+  unsigned long chip_addr;		/* start of chip memory (bytes) */
+#endif
   unsigned long chip_size;		/* size of chip memory (bytes) */
   unsigned char vblank; 		/* VBLANK frequency */
   unsigned char psfreq; 		/* power supply frequency */
@@ -79,6 +83,25 @@ struct bi_Amiga {
   } hw_present;
 };
 
+#else	/* __ASSEMBLY__ */
+ 
+BI_amiga_model		= BI_un
+BI_amiga_num_autcon	= BI_amiga_model+4
+BI_amiga_autocon	= BI_amiga_num_autcon+4
+#ifdef HACKER_KERNEL
+BI_amiga_exit_func	= BI_amiga_autocon+(CD_sizeof*NUM_AUTO)
+BI_amiga_chip_addr	= BI_amiga_exit_func+4
+BI_amiga_chip_size	= BI_amiga_chip_addr+4
+#else
+BI_amiga_chip_size	= BI_amiga_autocon+(CD_sizeof*NUM_AUTO)
+#endif
+BI_amiga_vblank		= BI_amiga_chip_size+4
+BI_amiga_psfreq		= BI_amiga_vblank+1
+BI_amiga_eclock		= BI_amiga_psfreq+1
+BI_amiga_chipset	= BI_amiga_eclock+4
+BI_amiga_hw_present	= BI_amiga_chipset+4
+
+#endif	/* __ASSEMBLY__ */
 
 /* Atari specific part of bootinfo */
 
@@ -89,6 +112,8 @@ struct bi_Amiga {
  */
 
 /* ++roman 08/08/95: rewritten from ORing constants to a C bitfield */
+
+#ifndef __ASSEMBLY__
 
 #define ATARIHW_DECLARE(name)	unsigned name : 1
 #define ATARIHW_SET(name)	(boot_info.bi_atari.hw_present.name = 1)
@@ -143,38 +168,54 @@ struct bi_Atari {
 #define	ATARI_MCH_TT		2
 #define	ATARI_MCH_FALCON	3
 
-/*
- * CPU and FPU types
- */
-#define CPU_68020    (1)
-#define CPU_68030    (2)
-#define CPU_68040    (4)
-#define CPU_68060    (8)
-#define CPU_MASK     (31)
-#define FPU_68881    (32)
-#define FPU_68882    (64)
-#define FPU_68040    (128)	/* Internal FPU */
-#define FPU_68060    (256)	/* Internal FPU */
-
 struct mem_info {
   unsigned long addr;		/* physical address of memory chunk */
   unsigned long size;		/* length of memory chunk (in bytes) */
 };
 
-#define NUM_MEMINFO  4
+#else	/* __ASSEMBLY__ */
+
+MI_addr		= 0
+MI_size		= MI_addr+4
+MI_sizeof	= MI_size+4
 
 #endif /* __ASSEMBLY__ */
+
+#define NUM_MEMINFO  4
 
 #define MACH_AMIGA   1
 #define MACH_ATARI   2
 #define MACH_MAC     3
 
+/*
+ * CPU and FPU types
+ */
+
+#define CPUB_68020 0
+#define CPUB_68030 1
+#define CPUB_68040 2
+#define CPUB_68060 3
+#define FPUB_68881 5
+#define FPUB_68882 6
+#define FPUB_68040 7	/* Internal FPU */
+#define FPUB_68060 8	/* Internal FPU */
+
+#define CPU_68020    (1<<CPUB_68020)
+#define CPU_68030    (1<<CPUB_68030)
+#define CPU_68040    (1<<CPUB_68040)
+#define CPU_68060    (1<<CPUB_68060)
+#define CPU_MASK     (31)
+#define FPU_68881    (1<<FPUB_68881)
+#define FPU_68882    (1<<FPUB_68882)
+#define FPU_68040    (1<<FPUB_68040)	/* Internal FPU */
+#define FPU_68060    (1<<FPUB_68060)	/* Internal FPU */
+
+#define CL_SIZE      (256)
+
 #ifndef __ASSEMBLY__
 
 #define MACH_IS_AMIGA	(boot_info.machtype == MACH_AMIGA)
 #define MACH_IS_ATARI	(boot_info.machtype == MACH_ATARI)
-
-#define CL_SIZE      (256)
 
 struct bootinfo {
   unsigned long machtype;		/* machine type */
@@ -195,6 +236,17 @@ struct bootinfo {
 
 extern struct bootinfo
     boot_info;
+
+#else	/* __ASSEMBLY__ */
+
+BI_machtype	= 0
+BI_cputype	= BI_machtype+4
+BI_memory	= BI_cputype+4
+BI_num_memory	= BI_memory+(MI_sizeof*NUM_MEMINFO)
+BI_ramdisk_size	= BI_num_memory+4
+BI_ramdisk_addr	= BI_ramdisk_size+4
+BI_command_line	= BI_ramdisk_addr+4
+BI_un		= BI_command_line+CL_SIZE
 
 #endif /* __ASSEMBLY__ */
 

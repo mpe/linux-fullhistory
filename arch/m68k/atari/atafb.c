@@ -515,6 +515,7 @@ static int tt_encode_fix( struct fb_fix_screeninfo *fix,
 	fix->xpanstep=0;
 	fix->ypanstep=1;
 	fix->ywrapstep=0;
+	fix->line_length = 0;
 	for (i=0; i<arraysize(fix->reserved); i++)
 		fix->reserved[i]=0;
 	return 0;
@@ -832,6 +833,7 @@ static int falcon_encode_fix( struct fb_fix_screeninfo *fix,
 		fix->xpanstep = 1;
 	fix->ypanstep = 1;
 	fix->ywrapstep = 0;
+	fix->line_length = 0;
 	for (i=0; i<arraysize(fix->reserved); i++)
 		fix->reserved[i]=0;
 	return 0;
@@ -1717,6 +1719,7 @@ static int stste_encode_fix( struct fb_fix_screeninfo *fix,
 	else
 		fix->ypanstep = 0;
 	fix->ywrapstep = 0;
+	fix->line_length = 0;
 	for (i=0; i<arraysize(fix->reserved); i++)
 		fix->reserved[i]=0;
 	return 0;
@@ -2049,6 +2052,7 @@ static int ext_encode_fix( struct fb_fix_screeninfo *fix,
 	fix->xpanstep = 0;
 	fix->ypanstep = 0;
 	fix->ywrapstep = 0;
+	fix->line_length = 0;
 	for (i=0; i<arraysize(fix->reserved); i++)
 		fix->reserved[i]=0;
 	return 0;
@@ -2592,6 +2596,7 @@ atari_fb_set_disp(int con)
 	disp[con].type_aux = fix.type_aux;
 	disp[con].ypanstep = fix.ypanstep;
 	disp[con].ywrapstep = fix.ywrapstep;
+	disp[con].line_length = fix.line_length;
 	if (fix.visual != FB_VISUAL_PSEUDOCOLOR &&
 		fix.visual != FB_VISUAL_DIRECTCOLOR)
 		disp[con].can_soft_blank = 0;

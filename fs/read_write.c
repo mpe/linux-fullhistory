@@ -180,7 +180,7 @@ static int sock_readv_writev(int type, struct inode * inode, struct file * file,
 		return -EOPNOTSUPP;
 	msg.msg_name = NULL;
 	msg.msg_namelen = 0;
-	msg.msg_accrights = NULL;
+	msg.msg_control = NULL;
 	msg.msg_iov = (struct iovec *) iov;
 	msg.msg_iovlen = count;
 

@@ -221,16 +221,6 @@ asmlinkage void do_debug(struct pt_regs * regs, long error_code)
 }
 
 /*
- * Allow the process which triggered the interrupt to recover the error
- * condition.
- *  - the status word is saved in the cs selector.
- *  - the tag word is saved in the operand selector.
- *  - the status word is then cleared and the tags all set to Empty.
- *
- * This will give sufficient information for complete recovery provided that
- * the affected process knows or can deduce the code and data segments
- * which were in force when the exception condition arose.
- *
  * Note that we play around with the 'TS' bit to hopefully get
  * the correct behaviour even in the presence of the asynchronous
  * IRQ13 behaviour

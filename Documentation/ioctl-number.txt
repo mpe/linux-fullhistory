@@ -63,9 +63,10 @@ Ioctl	Include File		Comments
 0x09	linux/md.h
 0x12	linux/fs.h
 0x20	linux/cm206.h
-0x22	linux/scc.h		conflict!
+0x22	linux/scc.h		conflict! (version 2.01 of z8530drv)
 0x22	scsi/sg.h		conflict!
 'A'	linux/apm_bios.h
+'B'	linux/baycom.h
 'C'	linux/soundcard.h
 'F'	linux/fb.h
 'I'	linux/isdn.h
@@ -82,6 +83,7 @@ Ioctl	Include File		Comments
 'T'	asm/ioctls.h		conflict!
 'V'	linux/vt.h
 'Y'	linux/cyclades.h	codes in 0x004359NN
+'Z'	linux/scc.h		version 2.2 of z8530drv
 'a'	various, see http://lrcwww.epfl.ch/linux-atm/magic.html
 'c'	linux/comstats.h
 'f'	linux/ext2_fs.h

@@ -28,6 +28,7 @@
 
 /* magic marker for modules inserted from kerneld, to be auto-reaped */
 #define MOD_AUTOCLEAN 0x40000000 /* big enough, but no sign problems... */
+#define MOD_VISITED   0x20000000 /* Thanks Jacques! */
 
 /* maximum length of symbol name */
 #define SYM_MAX_NAME 60
@@ -88,9 +89,9 @@ extern int register_symtab(struct symbol_table *);
 #ifdef MODULE
 
 extern long mod_use_count_;
-#define MOD_INC_USE_COUNT      mod_use_count_++
-#define MOD_DEC_USE_COUNT      mod_use_count_--
-#define MOD_IN_USE	       ((mod_use_count_ & ~MOD_AUTOCLEAN) != 0)
+#define MOD_INC_USE_COUNT      (mod_use_count_++, mod_use_count_ |= MOD_VISITED)
+#define MOD_DEC_USE_COUNT      (mod_use_count_--, mod_use_count_ |= MOD_VISITED)
+#define MOD_IN_USE	       ((mod_use_count_ & ~(MOD_AUTOCLEAN | MOD_VISITED)) != 0)
 
 #ifndef __NO_VERSION__
 #include <linux/version.h>

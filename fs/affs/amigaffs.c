@@ -1,7 +1,7 @@
 /*
  *  linux/fs/affs/amigaffs.c
  *
- *  (c) 1996  Hans-Joachim Widmaier - Modified for larger blocks.
+ *  (c) 1996  Hans-Joachim Widmaier - rewritten
  *
  *  (C) 1993  Ray Burr - Amiga FFS filesystem.
  *
@@ -78,7 +78,7 @@ affs_fix_hash_pred(struct inode *startino, int startoffset, LONG key, LONG newke
 	retval  = -ENOENT;
 	lock_super(startino->i_sb);
 	while (1) {
-		pr_debug("AFFS: fix_hash_pred(): next key=%d, offset=%d\n", nextkey, startoffset);
+		pr_debug("AFFS: fix_hash_pred(): next key=%d, offset=%d\n",nextkey,startoffset);
 		if (nextkey == 0)
 			break;
 		if (!(bh = affs_bread(startino->i_dev,nextkey,AFFS_I2BSIZE(startino))))
@@ -128,7 +128,7 @@ affs_fix_link_pred(struct inode *startino, LONG key, LONG newkey)
 	while (1) {
 		if (nextkey == 0)
 			break;
-		pr_debug("AFFS: find_link_pred(): next key=%d\n", nextkey);
+		pr_debug("AFFS: find_link_pred(): next key=%d\n",nextkey);
 		if (!(bh = affs_bread(startino->i_dev,nextkey,AFFS_I2BSIZE(startino))))
 			break;
 		if (affs_checksum_block(AFFS_I2BSIZE(startino),bh->b_data,&ptype,&stype)

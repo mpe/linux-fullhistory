@@ -21,6 +21,10 @@
  *
  * FIXES
  *		Pedro Roque	:	Double ACK bug
+ *		Eric Schenk	:	Fixes to slow start algorithm.
+ *		Eric Schenk	:	Yet another double ACK bug.
+ *		Eric Schenk	:	Delayed ACK bug fixes.
+ *		Eric Schenk	:	Floyd style fast retrans war avoidance.
  */
 
 #include <linux/config.h>
@@ -57,7 +61,15 @@ extern __inline__ void tcp_delack_estimator(struct sock *sk)
 		if (m <= 0)
 			m = 1;
 
-		if (m > (sk->rtt >> 3)) 
+		/* Yikes. This used to test if m was larger than rtt/8.
+		 * Maybe on a long delay high speed link this would be
+	         * good initial guess, but over a slow link where the
+	         * delay is dominated by transmission time this will
+	         * be very bad, since ato will almost always be something
+		 * more like rtt/2. Better to discard data points that
+		 * are larger than the rtt estimate.
+	         */
+		if (m > sk->rtt)
 		{
 			sk->ato = sk->rtt >> 3;
 			/*
@@ -66,6 +78,11 @@ extern __inline__ void tcp_delack_estimator(struct sock *sk)
 		}
 		else 
 		{
+			/*
+		 	 * Very fast acting estimator.
+		 	 * May fluctuate too much. Probably we should be
+			 * doing something like the rtt estimator here.
+			 */
 			sk->ato = (sk->ato >> 1) + m;
 			/*
 			 * printk(KERN_DEBUG "ato: m %lu\n", sk->ato);
@@ -104,14 +121,14 @@ extern __inline__ void tcp_rtt_estimator(struct sock *sk, struct sk_buff *oskb)
 	} else {
 		/* no previous measure. */
 		sk->rtt = m<<3;		/* take the measured time to be rtt */
-		sk->mdev = m<<2;	/* make sure rto = 3*rtt */
+		sk->mdev = m<<1;	/* make sure rto = 3*rtt */
 	}
 
 	/*
 	 *	Now update timeout.  Note that this removes any backoff.
 	 */
 			 
-	sk->rto = ((sk->rtt >> 2) + sk->mdev) >> 1;
+	sk->rto = (sk->rtt >> 3) + sk->mdev;
 	if (sk->rto > 120*HZ)
 		sk->rto = 120*HZ;
 	if (sk->rto < HZ/5)	/* Was 1*HZ - keep .2 as minimum cos of the BSD delayed acks */
@@ -180,11 +197,9 @@ static void bad_tcp_sequence(struct sock *sk, struct tcphdr *th, u32 end_seq,
 	}
 
 	/*
-	 *	4.3reno machines look for these kind of acks so they can do fast
-	 *	recovery. Three identical 'old' acks lets it know that one frame has
-	 *	been lost and should be resent. Because this is before the whole window
-	 *	of data has timed out it can take one lost frame per window without
-	 *	stalling. [See Jacobson RFC1323, Stevens TCP/IP illus vol2]
+	 * 	This packet is old news. Usually this is just a resend
+	 * 	from the far end, but sometimes it means the far end lost
+	 *	an ACK we send, so we better send an ACK.
 	 */
 	tcp_send_ack(sk);
 }
@@ -398,13 +413,19 @@ static void tcp_conn_request(struct sock *sk, struct sk_buff *skb,
 	newsk->send_head = NULL;
 	newsk->send_tail = NULL;
 	skb_queue_head_init(&newsk->back_log);
-	newsk->rtt = 0;		/*TCP_CONNECT_TIME<<3*/
+	newsk->rtt = 0;
 	newsk->rto = TCP_TIMEOUT_INIT;
-	newsk->mdev = TCP_TIMEOUT_INIT<<1;
+	newsk->mdev = TCP_TIMEOUT_INIT;
 	newsk->max_window = 0;
+	/*
+	 * See draft-stevens-tcpca-spec-01 for discussion of the
+	 * initialization of these values.
+	 */
 	newsk->cong_window = 1;
 	newsk->cong_count = 0;
-	newsk->ssthresh = 0;
+	newsk->ssthresh = 0x7fffffff;
+
+	newsk->high_seq = 0;
 	newsk->backoff = 0;
 	newsk->blog = 0;
 	newsk->intr = 0;
@@ -684,7 +705,7 @@ static int tcp_ack(struct sock *sk, struct tcphdr *th, u32 ack, int len)
 		 * interpreting "new data is acked" as including data that has
 		 * been retransmitted but is just now being acked.
 		 */
-		if (sk->cong_window < sk->ssthresh)  
+		if (sk->cong_window <= sk->ssthresh)
 			/* 
 			 *	In "safe" area, increase
 			 */
@@ -720,6 +741,8 @@ static int tcp_ack(struct sock *sk, struct tcphdr *th, u32 ack, int len)
 	 * (2) it has the same window as the last ACK,
 	 * (3) we have outstanding data that has not been ACKed
 	 * (4) The packet was not carrying any data.
+	 * (5) [From Floyds paper on fast retransmit wars]
+	 *     The packet acked data after high_seq;
 	 * I've tried to order these in occurrence of most likely to fail
 	 * to least likely to fail.
 	 * [These are the rules BSD stacks use to determine if an ACK is a
@@ -729,7 +752,8 @@ static int tcp_ack(struct sock *sk, struct tcphdr *th, u32 ack, int len)
 	if (sk->rcv_ack_seq == ack
 		&& sk->window_seq == window_seq
 		&& !(flag&1)
-		&& before(ack, sk->sent_seq))
+		&& before(ack, sk->sent_seq)
+		&& after(ack, sk->high_seq))
 	{
 		/* See draft-stevens-tcpca-spec-01 for explanation
 		 * of what we are doing here.
@@ -738,12 +762,16 @@ static int tcp_ack(struct sock *sk, struct tcphdr *th, u32 ack, int len)
 		if (sk->rcv_ack_cnt == MAX_DUP_ACKS+1) {
 			sk->ssthresh = max(sk->cong_window >> 1, 2);
 			sk->cong_window = sk->ssthresh+MAX_DUP_ACKS+1;
-			tcp_do_retransmit(sk,0);
-			/* reduce the count. We don't want to be
-			* seen to be in "retransmit" mode if we
-			* are doing a fast retransmit.
-			*/
+			/* FIXME:
+			 * reduce the count. We don't want to be
+			 * seen to be in "retransmit" mode if we
+			 * are doing a fast retransmit.
+			 * This is also a signal to tcp_do_retransmit
+			 * not to set sk->high_seq.
+			 * This is a horrible ugly hack.
+			 */
 			sk->retransmits--;
+			tcp_do_retransmit(sk,0);
 		} else if (sk->rcv_ack_cnt > MAX_DUP_ACKS+1) {
 			sk->cong_window++;
 			/*
@@ -795,7 +823,18 @@ static int tcp_ack(struct sock *sk, struct tcphdr *th, u32 ack, int len)
 			 *	Recompute rto from rtt.  this eliminates any backoff.
 			 */
 
-			sk->rto = ((sk->rtt >> 2) + sk->mdev) >> 1;
+			/*
+			 * Appendix C of Van Jacobson's final version of
+			 * the SIGCOMM 88 paper states that although
+			 * the original paper suggested that
+			 *  RTO = R*2V
+			 * was the correct calculation experience showed
+			 * better results using
+			 *  RTO = R*4V
+			 * In particular this gives better performance over
+			 * slow links, and should not effect fast links.
+			 */
+			sk->rto = (sk->rtt >> 3) + sk->mdev;
 			if (sk->rto > 120*HZ)
 				sk->rto = 120*HZ;
 			if (sk->rto < HZ/5)	/* Was 1*HZ, then 1 - turns out we must allow about
@@ -827,7 +866,7 @@ static int tcp_ack(struct sock *sk, struct tcphdr *th, u32 ack, int len)
 			break;
 
 		if (sk->retransmits) 
-		{	
+		{
 			/*
 			 *	We were retransmitting.  don't count this in RTT est 
 			 */
@@ -1322,7 +1361,7 @@ static void tcp_queue(struct sk_buff * skb, struct sock * sk, struct tcphdr *th)
 			int delay = HZ/2;
 			if (th->psh)
 				delay = HZ/50;
-			tcp_send_delayed_ack(sk, delay);
+			tcp_send_delayed_ack(sk, delay, sk->ato);
 		}
 
 		/*
@@ -1357,7 +1396,15 @@ static void tcp_queue(struct sk_buff * skb, struct sock * sk, struct tcphdr *th)
 		    if(sk->debug)
 			    printk("Ack past end of seq packet.\n");
 		    tcp_send_ack(sk);
-		    tcp_send_delayed_ack(sk,HZ/2);
+		    /*
+		     * We need to be very careful here. We must
+		     * not violate Jacobsons packet conservation condition.
+		     * This means we should only send an ACK when a packet
+		     * leaves the network. We can say a packet left the
+		     * network when we see a packet leave the network, or
+		     * when an rto measure expires.
+		     */
+		    tcp_send_delayed_ack(sk,sk->rto,sk->rto);
 	    }
 	}
 }
@@ -1397,7 +1444,8 @@ static int tcp_data(struct sk_buff *skb, struct sock *sk,
 		kfree_skb(skb, FREE_READ);
 		return(0);
 	}
-	
+
+
 	/*
 	 *	We no longer have anyone receiving data on this connection.
 	 */
@@ -1454,6 +1502,11 @@ static int tcp_data(struct sk_buff *skb, struct sock *sk,
 	}
 
 #endif
+
+	/*
+  	 * We should only call this if there is data in the frame.
+ 	 */
+	tcp_delack_estimator(sk);
 
 	tcp_queue(skb, sk, th);
 
@@ -1900,8 +1953,6 @@ int tcp_rcv(struct sk_buff *skb, struct device *dev, struct options *opt,
 		return tcp_reset(sk,skb);	
 	}
 
-	tcp_delack_estimator(sk);
-	
 	/*
 	 *	Process the ACK
 	 */

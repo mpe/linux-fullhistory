@@ -25,6 +25,7 @@
  *    (Thanks to Ulrich Windl <Ulrich.Windl@rz.uni-regensburg.de>)
  * April 1996, Stephen Rothwell (Stephen.Rothwell@canb.auug.org.au)
  *    Version 1.0 and 1.1
+ * May 1996, Version 1.2
  *
  * History:
  *    0.6b: first version in official kernel, Linux 1.3.46
@@ -35,6 +36,10 @@
  *         Linux 1.3.85
  *    1.1: support user-space standby and suspend, power off after system
  *         halted, Linux 1.3.98
+ *    1.2: When resetting RTC after resume, take care so that the the time
+ *         is only incorrect by 30-60mS (vs. 1S previously) (Gabor J. Toth
+ *         <jtoth@princeton.edu>); improve interaction between
+ *         screen-blanking and gpm (Stephen Rothwell); Linux 1.99.4
  *
  * Reference:
  *
@@ -334,7 +339,7 @@ static struct apm_bios_struct *	user_list = NULL;
 
 static struct timer_list	apm_timer;
 
-static char			driver_version[] = "1.1";/* no spaces */
+static char			driver_version[] = "1.2";/* no spaces */
 
 #ifdef APM_DEBUG
 static char *	apm_event_name[] = {
@@ -625,8 +630,9 @@ static void suspend(void)
 				/* Estimate time zone so that set_time can
                                    update the clock */
 	save_flags(flags);
+	clock_cmos_diff = -get_cmos_time();
 	cli();
-	clock_cmos_diff = CURRENT_TIME - get_cmos_time();
+	clock_cmos_diff += CURRENT_TIME;
 	got_clock_diff = 1;
 	restore_flags(flags);
 	

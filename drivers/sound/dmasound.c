@@ -1534,7 +1534,7 @@ static void AtaFree(void *obj, unsigned int size)
 	order++;
 	a_size <<= 1;
     }
-    free_pages (obj, order);
+    free_pages ((unsigned long) obj, order);
 }
 
 static int AtaIrqInit(void)

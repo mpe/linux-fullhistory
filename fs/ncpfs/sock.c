@@ -41,7 +41,7 @@ static int _recvfrom(struct socket *sock, unsigned char *ubuf,
         msg.msg_namelen   = 0;
         if (addr_len)
                 msg.msg_namelen = *addr_len;
-        msg.msg_accrights = NULL;
+        msg.msg_control = NULL;
         msg.msg_iov       = &iov;
         msg.msg_iovlen    = 1;
 
@@ -61,7 +61,7 @@ static int _sendto(struct socket *sock, const void *buff,
 
         msg.msg_name      = (void *)sa;
         msg.msg_namelen   = addr_len;
-        msg.msg_accrights = NULL;
+        msg.msg_control = NULL;
         msg.msg_iov       = &iov;
         msg.msg_iovlen    = 1;
 

@@ -193,10 +193,7 @@ int init_module (void)
 
 void cleanup_module (void)
 {
-  if (MOD_IN_USE)
-    printk ("md linear : module still busy...\n");
-  else
-    unregister_md_personality (LINEAR);
+  unregister_md_personality (LINEAR);
 }
 
 #endif

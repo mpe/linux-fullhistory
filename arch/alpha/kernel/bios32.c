@@ -607,6 +607,67 @@ static inline void eb66p_fixup(void)
 
 
 /*
+ * The PC164 has 19 PCI interrupts, four from each of the four PCI
+ * slots, the SIO, PCI/IDE, and USB.
+ * 
+ * Each of the interrupts can be individually masked. This is
+ * accomplished by setting the appropriate bit in the mask register.
+ * A bit is set by writing a "1" to the desired position in the mask
+ * register and cleared by writing a "0". There are 3 mask registers
+ * located at ISA address 804h, 805h and 806h.
+ * 
+ * An I/O read at ISA address 804h, 805h, 806h will return the
+ * state of the 11 PCI interrupts and not the state of the MASKED
+ * interrupts.
+ * 
+ * Note: A write to I/O 804h, 805h, and 806h the mask register will be
+ * updated.
+ * 
+ * 
+ * 				ISA DATA<7:0>
+ * ISA     +--------------------------------------------------------------+
+ * ADDRESS |   7   |   6   |   5   |   4   |   3   |   2  |   1   |   0   |
+ *         +==============================================================+
+ * 0x804   | INTB0 |  USB  |  IDE  |  SIO  | INTA3 |INTA2 | INTA1 | INTA0 |
+ *         +--------------------------------------------------------------+
+ * 0x805   | INTD0 | INTC3 | INTC2 | INTC1 | INTC0 |INTB3 | INTB2 | INTB1 |
+ *         +--------------------------------------------------------------+
+ * 0x806   | Rsrv  | Rsrv  | Rsrv  | Rsrv  | Rsrv  |INTD3 | INTD2 | INTD1 |
+ *         +--------------------------------------------------------------+
+ *         * Rsrv = reserved bits
+ *         Note: The mask register is write-only.
+ * 
+ * IdSel	
+ *   5	 32 bit PCI option slot 2
+ *   6	 64 bit PCI option slot 0
+ *   7	 64 bit PCI option slot 1
+ *   8	 Saturn I/O
+ *   9	 32 bit PCI option slot 3
+ *  10	 USB
+ *  11	 IDE
+ * 
+ */
+
+static inline void alphapc164_fixup(void)
+{
+	char irq_tab[7][5] = {
+	  /*
+	   *      int   intA  intB   intC   intD
+	   *      ----  ----  ----   ----   ----
+	   */
+		{ 16+2, 16+2, 16+9,  16+13, 16+17},	/* IdSel  5,  slot 2, J20 */
+		{ 16+0, 16+0, 16+7,  16+11, 16+15},	/* IdSel  6,  slot 0, J29 */
+		{ 16+1, 16+1, 16+8,  16+12, 16+16},	/* IdSel  7,  slot 1, J26 */
+		{   -1,   -1,   -1,    -1,    -1},	/* IdSel  8,  SIO         */
+		{ 16+3, 16+3, 16+10, 16+14, 16+18},	/* IdSel  9,  slot 3, J19 */
+		{ 16+6, 16+6, 16+6,  16+6,  16+6},	/* IdSel 10,  USB */
+		{ 16+5, 16+5, 16+5,  16+5,  16+5}	/* IdSel 11,  IDE */
+	};
+
+	common_fixup(5, 11, 5, irq_tab, 0);
+}
+
+/*
  * The AlphaPC64 is very similar to the EB66+ except that its slots
  * are numbered differently.  In the code below, I have used slot
  * number to refer to the id select line and *not* the slot number
@@ -860,6 +921,8 @@ unsigned long pcibios_fixup(unsigned long mem_start, unsigned long mem_end)
 	sio_fixup();
 #elif defined(CONFIG_ALPHA_CABRIOLET) || defined(CONFIG_ALPHA_EB164)
 	cabriolet_fixup();
+#elif defined(CONFIG_ALPHA_PC164)
+	alphapc164_fixup();
 #elif defined(CONFIG_ALPHA_EB66P)
 	eb66p_fixup();
 #elif defined(CONFIG_ALPHA_EB66)

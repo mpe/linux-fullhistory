@@ -2,7 +2,7 @@
 
 		Andy Walker <andy@lysaker.kvaerner.no>
 
-			   15 April 1996
+			    15 May 1996
 
 
 What's New?
@@ -42,15 +42,23 @@ file with flock(). With pre 1.3.96 kernels this could result in deadlocks that,
 over time, or under a very heavy mail load, would eventually cause the kernel
 to lock solid with deadlocked processes.
 
-I have chosen the rather cruel solution of returning an error when such a
-deadlock would occur. I can't see any other way to handle this situation
-gracefully. The other options are to maintain two entirely separate lists
-for flock() and fcntl() locks, thus defeating any protection between the
-two, or to free locks placed by one method when the same process later
-tries to lock the same file by the other method. Neither option seems
-satisfactory.
+Disallow Mixed Locks
+--------------------
+I have chosen the rather cruel solution of disallowing mixed locking styles
+on a given file at a given time. Attempts to lock a file with flock() when
+fcntl() locks exist, or vice versa, return with an error status of EBUSY.
+This seemed to be the only way to avoid all possible deadlock conditions,
+as flock() locks do not strictly have one owner process and so can't be
+checked for deadlocking in the usual manner.
+
+The process that created a lock with flock() might have forked multiple
+children and exited. Previously the parent process would have been marked
+as the owner of the lock, but deadlocks could just have easily occurred in
+one or more of the children, which we would not have been able to identify
+and avoid.
 
 Some programs may break (again, groan). In particular the aforementioned
 sendmail may have problems running in 'newaliases' mode. It will no longer
 deadlock though. Recompile sendmail to use flock() and your troubles will
 be over.
+

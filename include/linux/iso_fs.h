@@ -124,21 +124,6 @@ struct iso_directory_record {
 #define ISOFS_BUFFER_BITS(INODE) ((INODE)->i_sb->s_blocksize_bits)
 #define ISOFS_ZONE_BITS(INODE)   ((INODE)->i_sb->u.isofs_sb.s_log_zone_size)
 
-#if 0
-#ifdef ISOFS_FIXED_BLOCKSIZE
-/* We use these until the buffer cache supports 2048 */
-#define ISOFS_BUFFER_BITS 10
-#define ISOFS_BUFFER_SIZE 1024
-
-#define ISOFS_BLOCK_NUMBER(X) (X<<1)
-#else
-#define ISOFS_BUFFER_BITS 11
-#define ISOFS_BUFFER_SIZE 2048
-
-#define ISOFS_BLOCK_NUMBER(X) (X)
-#endif
-#endif
-
 #define ISOFS_SUPER_MAGIC 0x9660
 #define ISOFS_FILE_UNKNOWN 0
 #define ISOFS_FILE_TEXT 1

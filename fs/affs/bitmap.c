@@ -185,7 +185,7 @@ affs_find_new_zone(struct super_block *sb,struct affs_zone *z, int minfree, int 
 				z->z_ino      = 0;
 				z->z_zone_no  = zone;
 				pr_debug("  ++ found zone (%d) in bh %d at offset %d with %d free blocks\n",
-					 zone,(zone >> (sb->s_blocksize_bits - 8)),offs,free);
+					zone,(zone >> (sb->s_blocksize_bits - 8)),offs,free);
 				break;
 			}
 			clear_bit(zone,sb->u.affs_sb.s_zonemap);

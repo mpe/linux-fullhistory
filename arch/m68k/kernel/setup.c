@@ -72,6 +72,7 @@ void (*mach_video_setup) (char *, int *);
 #ifdef CONFIG_BLK_DEV_FD
 int (*mach_floppy_init) (void) = NULL;
 void (*mach_floppy_setup) (char *, int *) = NULL;
+void (*mach_floppy_eject) (void) = NULL;
 #endif
 
 extern void config_amiga(void);
@@ -114,6 +115,12 @@ void setup_arch(char **cmdline_p,
 		m68k_is040or060 = 4;
 	else if (boot_info.cputype & CPU_68060)
 		m68k_is040or060 = 6;
+
+	/* clear the fpu if we have one */
+	if (boot_info.cputype & (FPU_68881|FPU_68882|FPU_68040|FPU_68060)) {
+		volatile int zero = 0;
+		asm __volatile__ ("frestore %0" : : "m" (zero));
+	}
 
 	memory_start = availmem;
 	memory_end = 0;
@@ -240,7 +247,7 @@ int get_cpuinfo(char * buffer)
 		   "FPU:\t\t%s\n"
 		   "Clockspeed:\t%lu.%1luMHz\n"
 		   "BogoMips:\t%lu.%02lu\n",
-		   cpu, mmu, fpu, clockfreq/1000000,
+		   cpu, mmu, fpu, (clockfreq+50000)/1000000,
 		   ((clockfreq+50000)/100000)%10, loops_per_sec/500000,
 		   (loops_per_sec/5000)%100));
 }
@@ -311,6 +318,12 @@ void floppy_setup(char *str, int *ints)
 {
 	if (mach_floppy_setup)
 		mach_floppy_setup (str, ints);
+}
+
+void floppy_eject(void)
+{
+	if (mach_floppy_eject)
+		mach_floppy_eject();
 }
 #endif
 

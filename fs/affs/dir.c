@@ -1,8 +1,8 @@
 /*
  *  linux/fs/affs/dir.c
  *
- *  (c) 1996  Hans-Joachim Widmaier - Modifications for larger blocks
- *		and hard links.
+ *  (c) 1996  Hans-Joachim Widmaier - rewritten
+ *
  *  (C) 1993  Ray Burr - Modified for Amiga FFS filesystem.
  *
  *  (C) 1992  Eric Youngdale Modified for ISO9660 filesystem.

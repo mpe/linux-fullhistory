@@ -9,7 +9,8 @@
 
 extern __inline__ void __delay(int loops)
 {
-	__asm__("\n\tmovel %0,%/d0\n1:\tsubql #1,%/d0\n\tbpls 1b\n"
+	__asm__ __volatile__ ("\n\tmovel %0,%/d0\n1:\tsubql #1,%/d0\n\t"
+			      "bpls 1b\n"
 		: /* no outputs */
 		: "g" (loops)
 		: "d0");
@@ -26,7 +27,7 @@ extern __inline__ void udelay(unsigned long usecs)
 {
 	usecs *= 0x000010c6;		/* 2**32 / 1000000 */
 
-	asm ("mulul %1,%0:%2"
+	__asm__ __volatile__ ("mulul %1,%0:%2"
 	     : "=d" (usecs)
 	     : "d" (usecs),
 	       "d" (loops_per_sec));
@@ -35,12 +36,12 @@ extern __inline__ void udelay(unsigned long usecs)
 
 extern __inline__ unsigned long muldiv(unsigned long a, unsigned long b, unsigned long c)
 {
-	__asm__("mulul %1,%/d0:%0\n\tdivul %2,%/d0:%0"
-		:"=d" (a)
-		:"d" (b),
-		"d" (c),
-		"0" (a)
-		:"d0");
+	__asm__ ("mulul %1,%/d0:%0\n\tdivul %2,%/d0:%0"
+		 :"=d" (a)
+		 :"d" (b),
+		 "d" (c),
+		 "0" (a)
+		 :"d0");
 	return a;
 }
 

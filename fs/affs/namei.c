@@ -1,7 +1,7 @@
 /*
  *  linux/fs/affs/namei.c
  *
- *  (c) 1996  Hans-Joachim Widmaier - Heavily hacked up.
+ *  (c) 1996  Hans-Joachim Widmaier - rewritten
  *
  *  (C) 1993  Ray Burr - Modified for Amiga FFS filesystem.
  *
@@ -235,9 +235,13 @@ affs_create(struct inode *dir, const char *name, int len, int mode, struct inode
 		iput (dir);
 		return -ENOSPC;
 	}
-	inode->i_op   = &affs_file_inode_operations;
 	inode->i_mode = mode;
-	error         = affs_add_entry(dir,NULL,inode,name,len,ST_FILE);
+	if (dir->i_sb->u.affs_sb.s_flags & SF_OFS)
+		inode->i_op = &affs_file_inode_operations_ofs;
+	else
+		inode->i_op = &affs_file_inode_operations;
+
+	error = affs_add_entry(dir,NULL,inode,name,len,ST_FILE);
 	if (error) {
 		iput(dir);
 		inode->i_nlink = 0;
@@ -603,7 +607,7 @@ start_up:
 		if (affs_parent_ino(old_inode) != old_dir->i_ino)
 			goto end_rename;
 	}
-	/* Unlink destination if existent */
+	/* Unlink destination if existant */
 	if (new_inode) {
 		if ((retval = affs_fix_hash_pred(new_dir,affs_hash_name(new_name,new_len,
 		                                 AFFS_I2FSTYPE(new_dir),AFFS_I2HSIZE(new_dir)) + 6,

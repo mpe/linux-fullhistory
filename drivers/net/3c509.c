@@ -784,16 +784,11 @@ init_module(void)
 void
 cleanup_module(void)
 {
-	if (MOD_IN_USE)
-		printk("3c509: device busy, remove delayed\n");
-	else
-	{
-		unregister_netdev(&dev_3c509);
-		kfree_s(dev_3c509.priv,sizeof(struct el3_private));
-		dev_3c509.priv=NULL;
-		/* If we don't do this, we can't re-insmod it later. */
-		release_region(dev_3c509.base_addr, EL3_IO_EXTENT);
-	}
+	unregister_netdev(&dev_3c509);
+	kfree_s(dev_3c509.priv,sizeof(struct el3_private));
+	dev_3c509.priv=NULL;
+	/* If we don't do this, we can't re-insmod it later. */
+	release_region(dev_3c509.base_addr, EL3_IO_EXTENT);
 }
 #endif /* MODULE */
 

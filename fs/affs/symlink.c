@@ -1,7 +1,7 @@
 /*
  *  linux/fs/affs/symlink.c
  *
- *  1995  Hans-Joachim Widmaier - modified for AFFS.
+ *  1995  Hans-Joachim Widmaier - modified for affs.
  *
  *  Copyright (C) 1991, 1992  Linus Torvalds
  *
@@ -15,7 +15,6 @@
 #include <linux/stat.h>
 #include <linux/affs_fs.h>
 #include <linux/amigaffs.h>
-
 #include <asm/segment.h>
 
 #define MIN(a,b) (((a) < (b)) ? (a) : (b))

@@ -1,7 +1,7 @@
 /*
  * The Mitsumi CDROM interface
  * Copyright (C) 1995 Heiko Schlittermann <heiko@lotte.sax.de>
- * VERSION: 2.2
+ * VERSION: 2.3
  * 
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -35,8 +35,13 @@
  * 2.2  1996/05/06 Marcin Dalecki <dalecki@namu03.gwdg.de>
  *      Mostly fixes to some silly bugs in the previous release :-).
  *      (Hi Michael Thimm! Thank's for lending me Your's double speed drive.)
+ * 2.3  1996/05/15 Marcin Dalecki <dalecki@namu03.gwdg.de>
+ *	Fixed stereo support. 
+ * NOTE:
+ *	There will be propably a 3.0 adhering to the new generic non ATAPI
+ *	cdrom interface in the unforseen future.
  */
-#define VERSION "2.2"
+#define VERSION "2.3"
 
 #include <linux/version.h>
 #include <linux/module.h>
@@ -794,7 +799,7 @@ static int mcdx_ioctl(struct inode *ip, struct file *fp,
 		memcpy_fromfs(&volctrl, (char *) arg, sizeof(volctrl));
 		/* Adjust for the wiredness of workman. */
 		volctrl.channel2 = volctrl.channel1;
-		volctrl.channel1 = volctrl.channel3 = 0xff;
+		volctrl.channel1 = volctrl.channel3 = 0x00;
 		return talk(stuffp, MCDX_CMD_SET_ATTENATOR,
 			    &volctrl, sizeof(volctrl),
 			    &volctrl, sizeof(volctrl), 2 * HZ);
@@ -1022,7 +1027,8 @@ static int mcdx_open(struct inode *ip, struct file *fp)
 	}
 	/*
 	 * Check if a disk is in.
-	 */ bang = jiffies + 10 * HZ;
+	 */ 
+	bang = jiffies + 10 * HZ;
 	while (jiffies < bang) {
 		st = issue_command(stuffp, MCDX_CMD_GET_STATUS, 5 * HZ);
 		if (st != -1 && (st & MCDX_RBIT_DISKSET))
@@ -1232,7 +1238,6 @@ int mcdx_init(void)
 #else
 	printk(KERN_INFO "Mitsumi driver version " VERSION "\n");
 #endif
-	printk("%d\n", MCDX_NDRIVES);
 	for (drive = 0; drive < MCDX_NDRIVES; drive++) {
 		struct {
 			u_char code;

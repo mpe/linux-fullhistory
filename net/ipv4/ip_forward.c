@@ -250,7 +250,15 @@ int ip_forward(struct sk_buff *skb, struct device *dev, int is_frag,
 		 * (Don't masquerade de-masqueraded fragments)
 		 */
 		if (!(is_frag&IPFWD_MASQUERADED) && fw_res==FW_MASQUERADE)
-			ip_fw_masquerade(&skb, dev2);
+			if (ip_fw_masquerade(&skb, dev2) < 0)
+			{
+				/*
+				 * Masquerading failed; silently discard this packet.
+				 */
+				if (rt)
+					ip_rt_put(rt);
+				return -1;
+			}
 #endif
 		IS_SKB(skb);
 

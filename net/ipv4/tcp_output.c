@@ -188,7 +188,7 @@ void tcp_send_skb(struct sock *sk, struct sk_buff *skb)
 		tcp_send_check(th, sk->saddr, sk->daddr, size, skb);
 
 		sk->sent_seq = sk->write_seq;
-		
+
 		/*
 		 *	This is mad. The tcp retransmit queue is put together
 		 *	by the ip layer. This causes half the problems with
@@ -527,6 +527,7 @@ void tcp_do_retransmit(struct sock *sk, int all)
 			}
 		}
 		
+
 		/*
 		 *	Count retransmissions
 		 */
@@ -535,6 +536,13 @@ void tcp_do_retransmit(struct sock *sk, int all)
 		sk->retransmits++;
 		sk->prot->retransmits++;
 		tcp_statistics.TcpRetransSegs++;
+
+		/*
+		 * Record the high sequence number to help avoid doing
+		 * to much fast retransmission.
+		 */
+		if (sk->retransmits)
+			sk->high_seq = sk->sent_seq;
 		
 
 		/*
@@ -821,20 +829,27 @@ void tcp_send_synack(struct sock * newsk, struct sock * sk, struct sk_buff * skb
  *      - delay time <= 0.5 HZ
  *      - must send at least every 2 full sized packets
  *      - we don't have a window update to send
+ *
+ * 	additional thoughts:
+ *	- we should not delay sending an ACK if we have ato > 0.5 HZ.
+ *	  My thinking about this is that in this case we will just be
+ *	  systematically skewing the RTT calculation. (The rule about
+ *	  sending every two full sized packets will never need to be
+ *	  invoked, the delayed ack will be sent before the ATO timeout
+ *	  every time. Of course, the relies on our having a good estimate
+ *	  for packet interarrival times.
  */
-void tcp_send_delayed_ack(struct sock * sk, int max_timeout)
+void tcp_send_delayed_ack(struct sock * sk, int max_timeout, unsigned long timeout)
 {
-	unsigned long timeout, now;
+	unsigned long now;
 
 	/* Calculate new timeout */
 	now = jiffies;
-	timeout = sk->ato;
-	if (timeout > max_timeout)
-		timeout = max_timeout;
-	timeout += now;
-	if (sk->bytes_rcv > sk->max_unacked) {
+	if (timeout > max_timeout || sk->bytes_rcv >= sk->max_unacked) {
 		timeout = now;
 		mark_bh(TIMER_BH);
+	} else {
+		timeout += now;
 	}
 
 	/* Use new timeout only if there wasn't a older one earlier  */
@@ -894,7 +909,7 @@ void tcp_send_ack(struct sock *sk)
 		 *	resend packets. 
 		 */
 
-		tcp_send_delayed_ack(sk, HZ/2);
+		tcp_send_delayed_ack(sk, HZ/2, HZ/2);
 		return;
 	}
 

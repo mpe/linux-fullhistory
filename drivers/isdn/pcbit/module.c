@@ -93,11 +93,6 @@ void cleanup_module(void)
 {
 	int board;
 
-	if (MOD_IN_USE) {
-		printk(KERN_WARNING "pcbit: device busy, remove cancelled\n");
-		return;
-	}
-
 	for (board = 0; board < num_boards; board++)
 		pcbit_terminate(board);
 	printk(KERN_INFO 

@@ -440,11 +440,6 @@ cleanup_module (void)
 {
   int             i;
 
-  if (MOD_IN_USE)
-    {
-      return;
-    }
-
   if (chrdev_registered)
     module_unregister_chrdev (sound_major, "sound");
 

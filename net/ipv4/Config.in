@@ -12,10 +12,14 @@ if [ "$CONFIG_IP_FORWARD" = "y" ]; then
   tristate 'IP: tunneling' CONFIG_NET_IPIP
   if [ "$CONFIG_IP_FIREWALL" = "y" ]; then
     bool 'IP: firewall packet logging' CONFIG_IP_FIREWALL_VERBOSE
-    bool 'IP: masquerading (ALPHA)' CONFIG_IP_MASQUERADE
+    if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
+      bool 'IP: masquerading (ALPHA)' CONFIG_IP_MASQUERADE
+    fi
   fi
   if [ "$CONFIG_IP_MULTICAST" = "y" ]; then
-    bool 'IP: multicast routing (EXPERIMENTAL)' CONFIG_IP_MROUTE
+      if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
+        bool 'IP: multicast routing (EXPERIMENTAL)' CONFIG_IP_MROUTE
+      fi		
   fi
 fi
 if [ "$CONFIG_NET_ALIAS" = "y" ]; then

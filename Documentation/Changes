@@ -26,6 +26,7 @@ Current Releases
 - Linux C++ Library	 2.7.1.4
 - Termcap		 2.0.8
 - Procps		 0.99a
+- Kbd			 0.91
 - Gpm			 1.06
 - SysVinit		 2.60
 - Util-linux		 2.5
@@ -188,6 +189,14 @@ the following as root:
 
    Better yet, just get the latest official Linux termcap from
 ftp://sunsite.unc.edu/pub/Linux/GCC/termcap-2.0.8.tar.gz
+
+   The console driver keeps track of the correspondence between character
+codes and glyph bitmaps loaded into the character ROM of your video card.
+Say
+
+   loadunimap def
+
+to get back to the default correspondence.
 
 Hdparm
 ======

@@ -200,7 +200,8 @@
  *					against machines running Solaris,
  *					and seems to result in general
  *					improvement.
- *
+ *	Stefan Magdalinski	:	adjusted tcp_readable() to fix FIONREAD
+ *					
  * To Fix:
  *		Fast path the code. Two things here - fix the window calculation
  *		so it doesn't iterate over the queue, also spot packets with no funny
@@ -519,11 +520,13 @@ void tcp_err(int type, int code, unsigned char *header, __u32 daddr,
 	{
 		/*
 		 * FIXME:
-		 * For now we will just trigger a linear backoff.
-		 * The slow start code should cause a real backoff here.
+		 * Follow BSD for now and just reduce cong_window to 1 again.
+		 * It is possible that we just want to reduce the
+		 * window by 1/2, or that we want to reduce ssthresh by 1/2
+		 * here as well.
 		 */
-		if (sk->cong_window > 4)
-			sk->cong_window--;
+		sk->cong_window = 1;
+		sk->high_seq = sk->sent_seq;
 		return;
 	}
 
@@ -644,7 +647,7 @@ static int tcp_readable(struct sock *sk)
 		 */
 		if (skb->h.th->urg)
 			amount--;	/* don't count urg data */
-		if (amount && skb->h.th->psh) break;
+/*		if (amount && skb->h.th->psh) break;*/
 		skb = skb->next;
 	}
 	while(skb != (struct sk_buff *)&sk->receive_queue);

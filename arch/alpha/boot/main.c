@@ -228,10 +228,11 @@ void start_kernel(void)
 
 	nbytes = dispatch(CCB_GET_ENV, ENV_BOOTED_OSFLAGS,
 			  envval, sizeof(envval));
-	if (nbytes > 0) {
-		envval[nbytes] = '\0';
-		strcpy((char*)ZERO_PAGE, envval);
+	if (nbytes < 0) {
+		nbytes = 0;
 	}
+	envval[nbytes] = '\0';
+	strcpy((char*)ZERO_PAGE, envval);
 
 	printk(" Ok\nNow booting the kernel\n");
 	runkernel();

@@ -482,7 +482,6 @@ static void floppy_start(void);
 static void process_fd_request(void);
 static void recalibrate_floppy(void);
 static void floppy_shutdown(void);
-static void unexpected_floppy_interrupt(void);
 
 static int floppy_grab_irq_and_dma(void);
 static void floppy_release_irq_and_dma(void);
@@ -525,20 +524,8 @@ static unsigned char current_drive = 0;
 static long current_count_sectors = 0;
 static unsigned char sector_t; /* sector in track */
 
-
 #ifndef fd_eject
-#ifdef __sparc__
-static int fd_eject(int drive)
-{
-	set_dor(0, ~0, 0x90);
-	udelay(500);
-	set_dor(0, ~0x80, 0);
-	udelay(500);
-	return 0;
-}
-#else
 #define fd_eject(x) -EINVAL
-#endif
 #endif
 
 
@@ -930,7 +917,7 @@ static void empty(void)
 }
 
 static struct tq_struct floppy_tq =
-{ 0, 0, (void *) (void *) unexpected_floppy_interrupt, 0 };
+{ 0, 0, 0, 0 };
 
 static struct timer_list fd_timer ={ NULL, NULL, 0, 0, 0 };
 
@@ -1660,40 +1647,22 @@ static void recal_interrupt(void)
 	floppy_ready();
 }
 
-/*
- * Unexpected interrupt - Print as much debugging info as we can...
- * All bets are off...
- */
-static void unexpected_floppy_interrupt(void)
+static void print_result(char *message, int inr)
 {
 	int i;
-	if (initialising)
-		return;
-	if (print_unex){
-		DPRINT("unexpected interrupt\n");
-		if (inr >= 0)
-			for (i=0; i<inr; i++)
-				printk("%d %x\n", i, reply_buffer[i]);
-	}
-	FDCS->reset = 0;        /* Allow SENSEI to be sent. */
-	while(1){
-		output_byte(FD_SENSEI);
-		inr=result();
-		if (inr != 2)
-			break;
-		if (print_unex){
-			printk("sensei\n");
-			for (i=0; i<inr; i++)
-				printk("%d %x\n", i, reply_buffer[i]);
-		}
-	}
-	FDCS->reset = 1;
+
+	DPRINT("%s ", message);
+	if (inr >= 0)
+		for (i=0; i<inr; i++)
+			printk("repl[%d]=%x ", i, reply_buffer[i]);
+	printk("\n");
 }
 
 /* interrupt handler */
 void floppy_interrupt(int irq, void *dev_id, struct pt_regs * regs)
 {
 	void (*handler)(void) = DEVICE_INTR;
+	int do_print;
 
 	lasthandler = handler;
 	interruptjiffies = jiffies;
@@ -1709,20 +1678,36 @@ void floppy_interrupt(int irq, void *dev_id, struct pt_regs * regs)
 		is_alive("bizarre fdc");
 		return;
 	}
+
+	FDCS->reset = 0;
+	/* We have to clear the reset flag here, because apparently on boxes
+	 * with level triggered interrupts (PS/2, Sparc, ...), it is needed to
+	 * emit SENSEI's to clear the interrupt line. And FDCS->reset blocks the
+	 * emission of the SENSEI's.
+	 * It is OK to emit floppy commands because we are in an interrupt
+	 * handler here, and thus we have to fear no interference of other
+	 * activity.
+	 */
+
+	do_print = !handler && print_unex && !initialising;
+
 	inr = result();
-	if (!handler){
-		unexpected_floppy_interrupt();
-		is_alive("unexpected");
-		return;
-	}
+	if(do_print)
+		print_result("unexpected interrupt", inr);
 	if (inr == 0){
 		do {
 			output_byte(FD_SENSEI);
 			inr = result();
+			if(do_print)
+				print_result("sensei", inr);
 		} while ((ST0 & 0x83) != UNIT(current_drive) && inr == 2);
 	}
-	floppy_tq.routine = (void *)(void *) handler;
-	queue_task_irq(&floppy_tq, &tq_timer);
+	if (handler) {
+		/* expected interrupt */
+		floppy_tq.routine = (void *)(void *) handler;
+		queue_task_irq(&floppy_tq, &tq_timer);
+	} else
+		FDCS->reset = 1;
 	is_alive("normal interrupt end");
 }
 
@@ -4098,12 +4083,13 @@ static int floppy_grab_irq_and_dma(void)
 	sti();
 	MOD_INC_USE_COUNT;
 	for (i=0; i< N_FDC; i++){
-		if (FDCS->address != -1){
+		if (fdc_state[i].address != -1){
 			fdc = i;
 			reset_fdc_info(1);
 			fd_outb(FDCS->dor, FD_DOR);
 		}
 	}
+	fdc = 0;
 	set_dor(0, ~0, 8);  /* avoid immediate interrupt */
 
 	if (fd_request_irq()) {

@@ -40,6 +40,7 @@ choice 'Alpha system type' \
 	 EB66+		CONFIG_ALPHA_EB66P		\
 	 EB64+		CONFIG_ALPHA_EB64P		\
 	 EB164		CONFIG_ALPHA_EB164		\
+	 PC164		CONFIG_ALPHA_PC164		\
 	 Jensen		CONFIG_ALPHA_JENSEN		\
 	 Noname		CONFIG_ALPHA_NONAME		\
 	 Platform2000	CONFIG_ALPHA_P2K" Cabriolet
@@ -56,14 +57,10 @@ fi
 if [ "$CONFIG_ALPHA_CABRIOLET" = "y" -o "$CONFIG_ALPHA_AVANTI" = "y" \
 	-o "$CONFIG_ALPHA_EB64P" = "y" ]
 then
-	if [ "$CONFIG_ALPHA_XL" = "n" ]
-	then
-		bool 'Using SRM as bootloader' CONFIG_ALPHA_SRM
-	fi
 	define_bool CONFIG_PCI y
 	define_bool CONFIG_ALPHA_APECS y
 fi
-if [ "$CONFIG_ALPHA_EB164" = "y" ]
+if [ "$CONFIG_ALPHA_EB164" = "y" -o "$CONFIG_ALPHA_PC164" = "y" ]
 then
 	define_bool CONFIG_PCI y
 	define_bool CONFIG_ALPHA_EV5 y
@@ -76,7 +73,10 @@ fi
 if [ "$CONFIG_ALPHA_CABRIOLET" = "y" -o "$CONFIG_ALPHA_AVANTI" = "y" \
 	-o "$CONFIG_ALPHA_EB64P" = "y" -o "$CONFIG_ALPHA_JENSEN" = "y" ]
 then
-	bool 'Using SRM as bootloader' CONFIG_ALPHA_SRM
+	if [ "$CONFIG_ALPHA_XL" = "n" ]
+	then
+		bool 'Using SRM as bootloader' CONFIG_ALPHA_SRM
+	fi
 fi
 
 bool 'Echo console messages on /dev/ttyS1' CONFIG_SERIAL_ECHO

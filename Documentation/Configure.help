@@ -1666,6 +1666,18 @@ CONFIG_SCC
   inserted in and removed from the running kernel whenever you want),
   say M here and read Documentation/modules.txt.
 
+BAYCOM ser12 and par96 kiss emulation driver for AX.25
+CONFIG_BAYCOM
+  This is an experimental driver for Baycom style simple amateur radio
+  modems that connect to either a serial interface or a parallel 
+  interface. The driver supports the ser12 and par96 designs. To configure
+  the driver, use the setbaycom utility available from
+  http://www.ife.ee.ethz.ch/~sailer/ham/ham.html#lnxbay. For informations
+  on the modems, see http://www.baycom.de.
+  If you want to compile this as a module ( = code which can be
+  inserted in and removed from the running kernel whenever you want),
+  say M here and read Documentation/modules.txt. This is recommended.
+
 PLIP (parallel port) support
 CONFIG_PLIP
   PLIP (Parallel Line Internet Protocol) is used to create a mini
@@ -2060,18 +2072,20 @@ CONFIG_AT1700
   Multiple-Ethernet-mini-HOWTO, available from
   sunsite.unc.edu:/pub/Linux/docs/HOWTO/mini.
 
-FMV-181/182 support
+FMV-181/182/183/184 support
 CONFIG_FMV18X
-  If you have a Fujitsu FMV-181/182 network (ethernet) card, say Y and
-  read the Ethernet-HOWTO, available via ftp (user: anonymous) in
-  sunsite.unc.edu:/pub/Linux/docs/HOWTO. This driver is also available
-  as a module ( = code which can be inserted in and removed from the
-  running kernel whenever you want). If you want to compile it as a
-  module, say M here and read Documentation/modules.txt as well as
+  If you have a Fujitsu FMV-181/182/183/184 network (ethernet) card,
+  say Y and read the Ethernet-HOWTO, available via ftp (user: anonymous)
+  in sunsite.unc.edu:/pub/Linux/docs/HOWTO. This driver is also
+  available as a module ( = code which can be inserted in and removed
+  from the running kernel whenever you want). If you want to compile it
+  as a module, say M here and read Documentation/modules.txt as well as
   Documentation/networking/net-modules.txt. If you plan to use more
   than one network card under linux, read the
   Multiple-Ethernet-mini-HOWTO, available from
-  sunsite.unc.edu:/pub/Linux/docs/HOWTO/mini.
+  sunsite.unc.edu:/pub/Linux/docs/HOWTO/mini. If you use FMV-183 or
+  FMV-184 and it is not working, you may need to disable Plug & Play
+  mode of the card.
 
 EtherExpressPro support
 CONFIG_EEXPRESS_PRO

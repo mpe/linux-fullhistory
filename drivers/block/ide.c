@@ -1,5 +1,5 @@
 /*
- *  linux/drivers/block/ide.c	Version 5.42  May 12, 1996
+ *  linux/drivers/block/ide.c	Version 5.43  May 14, 1996
  *
  *  Copyright (C) 1994-1996  Linus Torvalds & authors (see below)
  */
@@ -237,6 +237,7 @@
  *			disable io_32bit by default on drive reset
  * Version 5.42		simplify irq-masking after probe
  *			fix NULL pointer deref in save_match()
+ * Version 5.43		Ugh.. unexpected_intr is back: try to exterminate it
  *
  *  Some additional driver compile-time options are in ide.h
  *
@@ -2421,11 +2422,14 @@ static int try_to_identify (ide_drive_t *drive, byte cmd)
 	} else
 		rc = 2;			/* drive refused ID */
 	if (!HWIF(drive)->irq) {
-		OUT_BYTE(drive->ctl|2,IDE_CONTROL_REG); /* mask device irq */
-		udelay(5);
 		irqs = probe_irq_off(irqs);	/* get our irq number */
 		if (irqs > 0) {
 			HWIF(drive)->irq = irqs; /* save it for later */
+			irqs = probe_irq_on();
+			OUT_BYTE(drive->ctl|2,IDE_CONTROL_REG); /* mask device irq */
+			udelay(5);
+			(void) GET_STAT();	/* clear drive IRQ */
+			(void) probe_irq_off(irqs);
 		} else {	/* Mmmm.. multiple IRQs.. don't know which was ours */
 			printk("%s: IRQ probe failed (%d)\n", drive->name, irqs);
 #ifdef CONFIG_BLK_DEV_CMD640

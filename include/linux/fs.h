@@ -272,7 +272,7 @@ struct inode {
 	uid_t		i_uid;
 	gid_t		i_gid;
 	kdev_t		i_rdev;
-	off_t		i_size;
+	unsigned long	i_size;
 	time_t		i_atime;
 	time_t		i_mtime;
 	time_t		i_ctime;
@@ -359,12 +359,10 @@ extern void locks_remove_locks(struct task_struct *task, struct file *filp);
 #define FLOCK_VERIFY_READ  1
 #define FLOCK_VERIFY_WRITE 2
 
-#ifdef CONFIG_LOCK_MANDATORY	 
 extern int locks_mandatory_locked(struct inode *inode);
 extern int locks_mandatory_area(int read_write, struct inode *inode,
 				struct file *filp, unsigned int offset,
 				unsigned int count);
-#endif
 
 extern inline int locks_verify_locked(struct inode *inode)
 {

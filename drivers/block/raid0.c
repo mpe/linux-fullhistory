@@ -291,10 +291,7 @@ int init_module (void)
 
 void cleanup_module (void)
 {
-  if (MOD_IN_USE)
-    printk ("md raid0 : module still busy...\n");
-  else
-    unregister_md_personality (RAID0);
+  unregister_md_personality (RAID0);
 }
 
 #endif

@@ -593,7 +593,7 @@ SYMBOL_NAME_LABEL(sys_call_table)
 	.long SYMBOL_NAME(sys_clone)		/* 120 */
 	.long SYMBOL_NAME(sys_setdomainname)
 	.long SYMBOL_NAME(sys_newuname)
-	.long SYMBOL_NAME(sys_ni_syscall)	/* modify_ldt for i386 */
+	.long SYMBOL_NAME(sys_cacheflush)	/* modify_ldt for i386 */
 	.long SYMBOL_NAME(sys_adjtimex)
 	.long SYMBOL_NAME(sys_mprotect)		/* 125 */
 	.long SYMBOL_NAME(sys_sigprocmask)

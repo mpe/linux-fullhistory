@@ -1780,12 +1780,3 @@ int amiga_floppy_init(void)
 
   return 0;
 }
-
-#ifndef MODULE
-/*
- * This is just a dummy function to keep fs/super.c happy.
- */
-void floppy_eject(void)
-{
-}
-#endif

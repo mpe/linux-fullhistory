@@ -1950,7 +1950,7 @@ static int ax25_sendmsg(struct socket *sock, struct msghdr *msg, int len, int no
 		return sock_error(sk);
 	}
 
-	if (flags|| msg->msg_accrights)
+	if (flags|| msg->msg_control)
 		return -EINVAL;
 
 	if (sk->zapped)

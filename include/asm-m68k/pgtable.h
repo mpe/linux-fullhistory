@@ -1,6 +1,8 @@
 #ifndef _M68K_PGTABLE_H
 #define _M68K_PGTABLE_H
 
+#ifndef __ASSEMBLY__
+
 /*
  * This file contains the functions and defines necessary to modify and use
  * the m68k page table tree.
@@ -74,6 +76,18 @@ static inline void flush_tlb_range(struct mm_struct *mm,
 /* the no. of pointers that fit on a page: this will go away */
 #define PTRS_PER_PAGE	(PAGE_SIZE/sizeof(void*))
 
+typedef pgd_t pgd_table[PTRS_PER_PGD];
+typedef pmd_t pmd_table[PTRS_PER_PMD];
+typedef pte_t pte_table[PTRS_PER_PTE];
+
+#define PGD_TABLES_PER_PAGE (PAGE_SIZE/sizeof(pgd_table))
+#define PMD_TABLES_PER_PAGE (PAGE_SIZE/sizeof(pmd_table))
+#define PTE_TABLES_PER_PAGE (PAGE_SIZE/sizeof(pte_table))
+
+typedef pgd_table pgd_tablepage[PGD_TABLES_PER_PAGE];
+typedef pmd_table pmd_tablepage[PMD_TABLES_PER_PAGE];
+typedef pte_table pte_tablepage[PTE_TABLES_PER_PAGE];
+
 /* Just any arbitrary offset to the start of the vmalloc VM area: the
  * current 8MB value just means that there will be a 8MB "hole" after the
  * physical memory until the kernel virtual memory starts.  That means that
@@ -84,6 +98,8 @@ static inline void flush_tlb_range(struct mm_struct *mm,
 #define VMALLOC_OFFSET	(8*1024*1024)
 #define VMALLOC_START ((high_memory + VMALLOC_OFFSET) & ~(VMALLOC_OFFSET-1))
 #define VMALLOC_VMADDR(x) ((unsigned long)(x))
+
+#endif /* __ASSEMBLY__ */
 
 /*
  * Definitions for MMU descriptors
@@ -108,6 +124,8 @@ static inline void flush_tlb_range(struct mm_struct *mm,
 
 #define _PAGE_TABLE	(_PAGE_SHORT)
 #define _PAGE_CHG_MASK  (PAGE_MASK | _PAGE_ACCESSED | _PAGE_DIRTY | _PAGE_NOCACHE)
+
+#ifndef __ASSEMBLY__
 
 #define PAGE_NONE	__pgprot(_PAGE_PRESENT | _PAGE_RONLY | _PAGE_ACCESSED | _PAGE_CACHE040)
 #define PAGE_SHARED	__pgprot(_PAGE_PRESENT | _PAGE_ACCESSED | _PAGE_CACHE040)
@@ -230,9 +248,9 @@ extern inline int pmd_present2(pmd_t *pmd)	{ return pmd_val(*pmd) & _PAGE_TABLE;
 #define pmd_present(pmd) pmd_present2(&(pmd))
 extern inline void pmd_clear(pmd_t * pmdp)
 {
-	int i;
+	short i;
 
-	for (i = 0; i < 16; i++)
+	for (i = 15; i >= 0; i--)
 		pmdp->pmd[i] = 0;
 }
 
@@ -358,6 +376,11 @@ static inline void cache_page (unsigned long vaddr)
 }
 
 
+extern const char PgtabStr_bad_pmd[];
+extern const char PgtabStr_bad_pgd[];
+extern const char PgtabStr_bad_pmdk[];
+extern const char PgtabStr_bad_pgdk[];
+
 extern inline void pte_free(pte_t * pte)
 {
 	cache_page((unsigned long)pte);
@@ -381,7 +404,7 @@ extern inline pte_t * pte_alloc(pmd_t * pmd, unsigned long address)
 		free_page((unsigned long)page);
 	}
 	if (pmd_bad(*pmd)) {
-		printk("Bad pmd in pte_alloc: %08lx\n", pmd_val(*pmd));
+		printk(PgtabStr_bad_pmd, pmd_val(*pmd));
 		pmd_set(pmd, BAD_PAGETABLE);
 		return NULL;
 	}
@@ -414,7 +437,7 @@ extern inline pmd_t * pmd_alloc(pgd_t * pgd, unsigned long address)
 		free_pointer_table(page);
 	}
 	if (pgd_bad(*pgd)) {
-		printk("Bad pgd in pmd_alloc: %08lx\n", pgd_val(*pgd));
+		printk(PgtabStr_bad_pgd, pgd_val(*pgd));
 		pgd_set(pgd, (pmd_t *)BAD_PAGETABLE);
 		return NULL;
 	}
@@ -444,7 +467,7 @@ extern inline pte_t * pte_alloc_kernel(pmd_t * pmd, unsigned long address)
 		free_page((unsigned long) page);
 	}
 	if (pmd_bad(*pmd)) {
-		printk("Bad pmd in pte_alloc_kernel: %08lx\n", pmd_val(*pmd));
+		printk(PgtabStr_bad_pmdk, pmd_val(*pmd));
 		pmd_set(pmd, BAD_PAGETABLE);
 		return NULL;
 	}
@@ -472,7 +495,7 @@ extern inline pmd_t * pmd_alloc_kernel(pgd_t * pgd, unsigned long address)
 		free_kpointer_table(page);
 	}
 	if (pgd_bad(*pgd)) {
-		printk("Bad pgd in pmd_alloc_kernel: %08lx\n", pgd_val(*pgd));
+		printk(PgtabStr_bad_pgdk, pgd_val(*pgd));
 		pgd_set(pgd, (pmd_t *)BAD_PAGETABLE);
 		return NULL;
 	}
@@ -492,7 +515,7 @@ extern inline pgd_t * pgd_alloc(void)
 #define flush_icache() \
 do { \
 	if (m68k_is040or060) \
-		asm (".word 0xf498"); /* CINVA I */ \
+		asm ("nop; .word 0xf498 /* cinva %%ic */"); \
 	else \
 		asm ("movec %/cacr,%/d0;" \
 		     "oriw %0,%/d0;" \
@@ -521,18 +544,98 @@ extern void cache_push (unsigned long paddr, int len);
  */
 extern void cache_push_v (unsigned long vaddr, int len);
 
-/*
- * Could someone take a look at these?
- */
-extern void flush_cache_all(void);
-#define flush_cache_mm(mm)		   flush_cache_all()
-#define flush_cache_range(mm, start, end)  flush_cache_all()
-#define flush_cache_page(vma, addr)	   flush_cache_all()
-extern void flush_page_to_ram(unsigned long addr);
-
 /* cache code */
 #define FLUSH_I_AND_D	(0x00000808)
 #define FLUSH_I 	(0x00000008)
+
+/* This is needed whenever the virtual mapping of the current
+   process changes.  */
+#define __flush_cache_all()						\
+    do {								\
+	if (m68k_is040or060)					        \
+               __asm__ __volatile__ ("nop; .word 0xf478\n" ::);         \
+        else                                                            \
+	       __asm__ __volatile__ ("movec %%cacr,%%d0\n\t"		\
+				     "orw %0,%%d0\n\t"			\
+				     "movec %%d0,%%cacr"		\
+				     : : "di" (FLUSH_I_AND_D) : "d0");	\
+    } while (0)
+
+#define __flush_cache_030()						\
+    do {								\
+	if (m68k_is040or060 == 0)					\
+	       __asm__ __volatile__ ("movec %%cacr,%%d0\n\t"		\
+				     "orw %0,%%d0\n\t"			\
+				     "movec %%d0,%%cacr"		\
+				     : : "di" (FLUSH_I_AND_D) : "d0");	\
+    } while (0)
+
+#define flush_cache_all() __flush_cache_all()
+
+extern inline void flush_cache_mm(struct mm_struct *mm)
+{
+	if (mm == current->mm) __flush_cache_all();
+}
+
+extern inline void flush_cache_range(struct mm_struct *mm,
+				     unsigned long start,
+				     unsigned long end)
+{
+	if (mm == current->mm){
+	    if (m68k_is040or060)
+	        cache_push_v(start, end-start);
+	    else
+	        __flush_cache_030();
+	}
+}
+
+extern inline void flush_cache_page(struct vm_area_struct *vma,
+				    unsigned long vmaddr)
+{
+	if (vma->vm_mm == current->mm){
+	    if (m68k_is040or060)
+	        cache_push_v(vmaddr, PAGE_SIZE);
+	    else
+	        __flush_cache_030();
+	}
+}
+
+/* Push the page at kernel virtual address and clear the icache */
+extern inline void flush_page_to_ram (unsigned long address)
+{
+    if (m68k_is040or060) {
+	register unsigned long tmp __asm ("a0") = VTOP(address);
+	__asm__ __volatile__ ("nop\n\t"
+			      ".word 0xf470 /* cpushp %%dc,(%0) */\n\t"
+			      ".word 0xf490 /* cinvp %%ic,(%0) */"
+			      : : "a" (tmp));
+    }
+    else
+	__asm volatile ("movec %%cacr,%%d0\n\t"
+			"orw %0,%%d0\n\t"
+			"movec %%d0,%%cacr"
+			: : "di" (FLUSH_I) : "d0");
+}
+
+/* Push n pages at kernel virtual address and clear the icache */
+extern inline void flush_pages_to_ram (unsigned long address, int n)
+{
+    if (m68k_is040or060) {
+	while (n--) {
+	    register unsigned long tmp __asm ("a0") = VTOP(address);
+	    __asm__ __volatile__ ("nop\n\t"
+				  ".word 0xf470 /* cpushp %%dc,(%0) */\n\t"
+				  ".word 0xf490 /* cinvp %%ic,(%0) */"
+				  : : "a" (tmp));
+	    address += PAGE_SIZE;
+	}
+    }
+    else
+	__asm volatile ("movec %%cacr,%%d0\n\t"
+			"orw %0,%%d0\n\t"
+			"movec %%d0,%%cacr"
+			: : "di" (FLUSH_I) : "d0");
+}
 
 /*
  * Check if the addr/len goes up to the end of a physical
@@ -580,5 +683,7 @@ extern inline void update_mmu_cache(struct vm_area_struct * vma,
 #define SWP_OFFSET(entry) ((entry) >> PAGE_SHIFT)
 #define SWP_ENTRY(type,offset) (((type) << 2) | ((offset) << PAGE_SHIFT))
 #endif
+
+#endif /* __ASSEMBLY__ */
 
 #endif /* _M68K_PGTABLE_H */

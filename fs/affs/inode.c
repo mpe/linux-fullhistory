@@ -1,7 +1,7 @@
 /*
  *  linux/fs/affs/inode.c
  *
- *  (c) 1996  Hans-Joachim Widmaier - Modified for larger blocks.
+ *  (c) 1996  Hans-Joachim Widmaier - rewritten
  *
  *  (C) 1993  Ray Burr - Modified for Amiga FFS filesystem.
  * 
@@ -23,15 +23,16 @@
 #include <linux/locks.h>
 #include <linux/errno.h>
 #include <linux/genhd.h>
-#include <linux/major.h>
 #include <linux/amigaffs.h>
+#include <linux/major.h>
 #include <asm/system.h>
 #include <asm/segment.h>
 
 extern int *blk_size[];
 extern struct timezone sys_tz;
 
-void affs_put_super(struct super_block *sb)
+void
+affs_put_super(struct super_block *sb)
 {
 	int	 i;
 
@@ -58,7 +59,8 @@ void affs_put_super(struct super_block *sb)
 	return;
 }
 
-static void affs_write_super(struct super_block *sb)
+static void
+affs_write_super(struct super_block *sb)
 {
 	int	 i, clean = 2;
 
@@ -92,7 +94,8 @@ static struct super_operations affs_sops = {
 	NULL			/* remount */
 };
 
-int affs_parent_ino(struct inode *dir)
+int
+affs_parent_ino(struct inode *dir)
 {
 	int root_ino = (dir->i_sb->u.affs_sb.s_root_block);
 
@@ -107,9 +110,8 @@ int affs_parent_ino(struct inode *dir)
 
 
 static int
-parse_options(char *options, uid_t *uid, gid_t *gid, int *mode,
-	      int *reserved, int *root,	int *blocksize, char **prefix,
-	      char *volume, unsigned long *mount_opts)
+parse_options(char *options, uid_t *uid, gid_t *gid, int *mode, int *reserved, int *root,
+		int *blocksize, char **prefix, char *volume, unsigned long *mount_opts)
 {
 	char	*this_char, *value;
 	int	 f;
@@ -242,8 +244,7 @@ parse_options(char *options, uid_t *uid, gid_t *gid, int *mode,
 			 || !strcmp (this_char, "usrquota"))
 			;
 		else {
-			printk("AFFS: Unrecognized mount option %s\n",
-			       this_char);
+			printk("AFFS: Unrecognized mount option %s\n", this_char);
 			return 0;
 		}
 	}
@@ -319,12 +320,12 @@ affs_read_super(struct super_block *s,void *data, int silent)
 		num_bm = 4096;
 	}
 	for (blocksize = chksum; blocksize <= num_bm; blocksize <<= 1, size >>= 1) {
-		if (root_block < 0)
+	        if (root_block < 0){
 		    if (MAJOR(dev) == FLOPPY_MAJOR)
 		        s->u.affs_sb.s_root_block = size/4;
 		    else
 			s->u.affs_sb.s_root_block = (reserved + size - 1) / 2;
-		else
+		}else
 			s->u.affs_sb.s_root_block = root_block;
 		pr_debug("Trying bs=%d bytes, root at %d, size=%d blocks (%d reserved)\n",
 			blocksize,s->u.affs_sb.s_root_block,size,reserved);
@@ -461,9 +462,9 @@ affs_read_super(struct super_block *s,void *data, int silent)
 			if (bb) {
 				if (affs_checksum_block(s->s_blocksize,bb->b_data,NULL,NULL) /*&&
 				    !(s->s_flags & MS_RDONLY)*/) {
-					printk("AFFS: Bitmap (%d,key=%lu) invalid - mounting %s read only.\n",
-					       mapidx, htonl(bm[i]),
-					       kdevname(dev));
+					printk("AFFS: Bitmap (%d,key=%lu) invalid - "
+					       "mounting %s read only.\n",mapidx,htonl(bm[i]),
+						kdevname(dev));
 					s->s_flags |= MS_RDONLY;
 				}
 				if (size <= s->s_blocksize * 8 - 32) {	/* last bitmap */
@@ -487,14 +488,14 @@ affs_read_super(struct super_block *s,void *data, int silent)
 				s->u.affs_sb.s_bitmap[mapidx].bm_size     = ptype;
 				s->u.affs_sb.s_bitmap[mapidx].bm_bh       = bb;
 				s->u.affs_sb.s_bitmap[mapidx].bm_free     =
-				  affs_count_free_bits(ptype/8,bb->b_data + 4);
+						affs_count_free_bits(ptype / 8,bb->b_data + 4);
 				offset += ptype;
 			} else {
 				printk("AFFS: Can't read bitmap.\n");
 				goto out;
 			}
 		}
-		key   = htonl(bm[stype]);   /* Next block of bitmap pointers */
+		key   = htonl(bm[stype]);		/* Next block of bitmap pointers	*/
 		ptype = 0;
 		stype = s->s_blocksize / 4 - 1;
 		affs_brelse(bh);
@@ -507,11 +508,10 @@ affs_read_super(struct super_block *s,void *data, int silent)
 			bh = NULL;
 	}
 	if (mapidx != num_bm) {
-		printk("AFFS: Got only %d bitmap blocks, expected %d\n",
-		       mapidx, num_bm);
+		printk("AFFS: Got only %d bitmap blocks, expected %d\n",mapidx,num_bm);
 		goto out;
 	}
-	s->u.affs_sb.s_num_zones = ((num_bm - 1) << (s->s_blocksize_bits - 8))+
+	s->u.affs_sb.s_num_zones = ((num_bm - 1) << (s->s_blocksize_bits - 8)) +
 				   (s->u.affs_sb.s_bitmap[num_bm - 1].bm_size + 2047) / 2048;
 nobitmap:
 	s->u.affs_sb.s_bm_count  = mapidx;
@@ -547,9 +547,9 @@ nobitmap:
 			s->u.affs_sb.s_bitmap[i].bm_bh = NULL;
 		}
 	}
+		
 
-
-	pr_debug("AFFS: s_flags=%lX\n", s->s_flags);
+	pr_debug("AFFS: s_flags=%lX\n",s->s_flags);
 	return s;
 
  out: /* Kick out for various error conditions */
@@ -572,8 +572,8 @@ affs_statfs(struct super_block *sb, struct statfs *buf, int bufsiz)
 	ULONG		 free;
 	struct statfs	 tmp;
 
-	pr_debug("AFFS: statfs() partsize=%d, reserved=%d\n",
-		sb->u.affs_sb.s_partition_size, sb->u.affs_sb.s_reserved);
+	pr_debug("AFFS: statfs() partsize=%d, reserved=%d\n",sb->u.affs_sb.s_partition_size,
+	     sb->u.affs_sb.s_reserved);
 
 	free          = affs_count_free_blocks(sb);
 	tmp.f_type    = AFFS_SUPER_MAGIC;
@@ -606,7 +606,7 @@ affs_read_inode(struct inode *inode)
 	}
 	if (affs_checksum_block(AFFS_I2BSIZE(inode),bh->b_data,&ptype,&stype) || ptype != T_SHORT) {
 		printk("AFFS: read_inode(): checksum or type (ptype=%d) error on inode %d\n",
-		       ptype, block);
+		       ptype,block);
 		affs_brelse(bh);
 		return;
 	}
@@ -615,18 +615,19 @@ affs_read_inode(struct inode *inode)
 	file_end   = GET_END_PTR(struct file_end, bh->b_data,AFFS_I2BSIZE(inode));
 	prot       = (htonl(file_end->protect) & ~0x10) ^ FIBF_OWNER;
 
-	inode->u.affs_i.i_protect  = prot;
-	inode->u.affs_i.i_parent   = htonl(file_end->parent);
-	inode->u.affs_i.i_original = 0;	
-	inode->u.affs_i.i_zone     = 0;
-	inode->u.affs_i.i_hlink    = 0;
-	inode->u.affs_i.i_pa_cnt   = 0;
-	inode->u.affs_i.i_pa_next  = 0;
-	inode->u.affs_i.i_pa_last  = 0;
-	inode->u.affs_i.i_ext[0]   = 0;
-	inode->u.affs_i.i_max_ext  = 0;
-	inode->i_nlink             = 1;
-	inode->i_mode              = 0;
+	inode->u.affs_i.i_protect   = prot;
+	inode->u.affs_i.i_parent    = htonl(file_end->parent);
+	inode->u.affs_i.i_original  = 0;	
+	inode->u.affs_i.i_zone      = 0;
+	inode->u.affs_i.i_hlink     = 0;
+	inode->u.affs_i.i_pa_cnt    = 0;
+	inode->u.affs_i.i_pa_next   = 0;
+	inode->u.affs_i.i_pa_last   = 0;
+	inode->u.affs_i.i_ext[0]    = 0;
+	inode->u.affs_i.i_max_ext   = 0;
+	inode->u.affs_i.i_lastblock = -1;
+	inode->i_nlink              = 1;
+	inode->i_mode               = 0;
 
 	if (inode->i_sb->u.affs_sb.s_flags & SF_SETMODE)
 		inode->i_mode = inode->i_sb->u.affs_sb.s_mode;
@@ -691,6 +692,11 @@ affs_read_inode(struct inode *inode)
 		case ST_FILE:
 			inode->i_mode |= S_IFREG;
 			inode->i_size  = htonl(file_end->byte_size);
+			if (inode->i_sb->u.affs_sb.s_flags & SF_OFS)
+				block = AFFS_I2BSIZE(inode) - 24;
+			else
+				block = AFFS_I2BSIZE(inode);
+			inode->u.affs_i.i_lastblock = ((inode->i_size + block - 1) / block) - 1;
 			break;
 		case ST_SOFTLINK:
 			inode->i_mode |= S_IFLNK;
@@ -709,10 +715,11 @@ affs_read_inode(struct inode *inode)
 	
 	inode->i_op = NULL;
 	if (S_ISREG(inode->i_mode)) {
-		if (inode->i_sb->u.affs_sb.s_flags & SF_OFS)
+		if (inode->i_sb->u.affs_sb.s_flags & SF_OFS) {
 			inode->i_op = &affs_file_inode_operations_ofs;
-		else
+		} else {
 			inode->i_op = &affs_file_inode_operations;
+		}
 	} else if (S_ISDIR(inode->i_mode))
 		inode->i_op = &affs_dir_inode_operations;
 	else if (S_ISLNK(inode->i_mode))
@@ -768,8 +775,7 @@ affs_notify_change(struct inode *inode, struct iattr *attr)
 {
 	int error;
 
-	pr_debug("AFFS: notify_change(%lu,0x%x)\n",
-		inode->i_ino,attr->ia_valid);
+	pr_debug("AFFS: notify_change(%lu,0x%x)\n",inode->i_ino,attr->ia_valid);
 
 	error = inode_change_ok(inode,attr);
 	if (error)
@@ -795,8 +801,7 @@ affs_notify_change(struct inode *inode, struct iattr *attr)
 void
 affs_put_inode(struct inode *inode)
 {
-	pr_debug("AFFS: put_inode(ino=%lu, nlink=%u)\n",
-		inode->i_ino,inode->i_nlink);
+	pr_debug("AFFS: put_inode(ino=%lu, nlink=%u)\n",inode->i_ino,inode->i_nlink);
 	if (inode->i_nlink) {
 		return;
 	}
@@ -840,15 +845,16 @@ affs_new_inode(const struct inode *dir)
 	inode->i_blksize = 0;
 	inode->i_mtime   = inode->i_atime = inode->i_ctime = CURRENT_TIME;
 
-	inode->u.affs_i.i_original = 0;
-	inode->u.affs_i.i_parent   = dir->i_ino;
-	inode->u.affs_i.i_zone     = 0;
-	inode->u.affs_i.i_hlink    = 0;
-	inode->u.affs_i.i_pa_cnt   = 0;
-	inode->u.affs_i.i_pa_next  = 0;
-	inode->u.affs_i.i_pa_last  = 0;
-	inode->u.affs_i.i_ext[0]   = 0;
-	inode->u.affs_i.i_max_ext  = 0;
+	inode->u.affs_i.i_original  = 0;
+	inode->u.affs_i.i_parent    = dir->i_ino;
+	inode->u.affs_i.i_zone      = 0;
+	inode->u.affs_i.i_hlink     = 0;
+	inode->u.affs_i.i_pa_cnt    = 0;
+	inode->u.affs_i.i_pa_next   = 0;
+	inode->u.affs_i.i_pa_last   = 0;
+	inode->u.affs_i.i_ext[0]    = 0;
+	inode->u.affs_i.i_max_ext   = 0;
+	inode->u.affs_i.i_lastblock = -1;
 
 	insert_inode_hash(inode);
 
@@ -864,12 +870,12 @@ affs_add_entry(struct inode *dir, struct inode *link, struct inode *inode,
 	struct buffer_head	*link_bh;
 	ULONG			 hash;
 
-	pr_debug("AFFS: add_entry(dir=%lu,inode=%lu,\"%*s\",type=%ld\n",
-		dir->i_ino,inode->i_ino, len,name,type);
+	pr_debug("AFFS: add_entry(dir=%lu,inode=%lu,\"%*s\",type=%ld\n",dir->i_ino,inode->i_ino,
+		len,name,type);
 
-	dir_bh     = affs_bread(dir->i_dev,dir->i_ino,AFFS_I2BSIZE(dir));
-	inode_bh   = affs_bread(inode->i_dev,inode->i_ino,AFFS_I2BSIZE(inode));
-	link_bh    = NULL;
+	dir_bh      = affs_bread(dir->i_dev,dir->i_ino,AFFS_I2BSIZE(dir));
+	inode_bh    = affs_bread(inode->i_dev,inode->i_ino,AFFS_I2BSIZE(inode));
+	link_bh     = NULL;
 	if (!dir_bh || !inode_bh) {
 		affs_brelse(dir_bh);
 		affs_brelse(inode_bh);
@@ -896,12 +902,12 @@ affs_add_entry(struct inode *dir, struct inode *link, struct inode *inode,
 
 	lock_super(inode->i_sb);
 	DIR_END(inode_bh->b_data,inode)->hash_chain = 
-			 ((struct dir_front *)dir_bh->b_data)->hashtable[hash];
+				((struct dir_front *)dir_bh->b_data)->hashtable[hash];
 	((struct dir_front *)dir_bh->b_data)->hashtable[hash] = ntohl(inode->i_ino);
 	if (link_bh) {
 		LINK_END(inode_bh->b_data,inode)->original   = ntohl(link->i_ino);
 		LINK_END(inode_bh->b_data,inode)->link_chain = 
-				    FILE_END(link_bh->b_data,link)->link_chain;
+						FILE_END(link_bh->b_data,link)->link_chain;
 		FILE_END(link_bh->b_data,link)->link_chain   = ntohl(inode->i_ino);
 		affs_fix_checksum(AFFS_I2BSIZE(link),link_bh->b_data,5);
 		link->i_version = ++event;

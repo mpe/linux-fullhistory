@@ -2116,11 +2116,6 @@ void do_blank_screen(int nopowersave)
 {
 	int currcons;
 
-#ifdef CONFIG_APM
-	if (apm_display_blank())
-		return;
-#endif
-
 	if (console_blanked)
 		return;
 
@@ -2146,6 +2141,10 @@ void do_blank_screen(int nopowersave)
 	hide_cursor();
 	console_blanked = fg_console + 1;
 
+#ifdef CONFIG_APM
+	if (apm_display_blank())
+		return;
+#endif
 	if(!nopowersave)
 	    vesa_blank();
 }
@@ -2155,11 +2154,6 @@ void do_unblank_screen(void)
 	int currcons;
 	int resetorg;
 	long offset;
-
-#ifdef CONFIG_APM
-	if (apm_display_unblank())
-		return;
-#endif
 
 	if (!console_blanked)
 		return;
@@ -2193,6 +2187,10 @@ void do_unblank_screen(void)
 		__set_origin(blank__origin);
 
 	vesa_unblank();
+#ifdef CONFIG_APM
+	if (apm_display_unblank())
+		return;
+#endif
 }
 
 /*

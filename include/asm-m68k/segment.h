@@ -155,7 +155,7 @@ static inline void __generic_memcpy_tofs(void * to, const void * from, unsigned 
 			 : "0" (from), "1" (to)
 			 : "d0", "memory");
 	if (tmp & 1)
-		__asm__ ("moveb %0@,%/d0\n\t"
+		__asm__ __volatile__ ("moveb %0@,%/d0\n\t"
 			 "movesb %/d0,%1@\n\t"
 			 : /* no outputs */
 			 : "a" (from), "a" (to)
@@ -251,7 +251,7 @@ static inline void __generic_memcpy_fromfs(void * to, const void * from, unsigne
 			 : "0" (from), "1" (to)
 			 : "d0", "memory");
 	if (tmp & 1)
-		__asm__ ("movesb %0@,%/d0\n\t"
+		__asm__ __volatile__ ("movesb %0@,%/d0\n\t"
 			 "moveb %/d0,%1@\n\t"
 			 : /* no outputs */
 			 : "a" (from), "a" (to)

@@ -62,33 +62,8 @@ ip_fast_csum(unsigned char *iph, unsigned int ihl)
 	return ~sum;
 }
 
-
-
 /*
- * computes the checksum of the TCP/UDP pseudo-header
- * returns a 16-bit checksum, already complemented
- */
-
-static inline unsigned short int
-csum_tcpudp_magic(unsigned long saddr, unsigned long daddr, unsigned short len,
-		  unsigned short proto, unsigned int sum)
-{
-	__asm__ ("addl  %1,%0\n\t"
-		 "addxl %4,%0\n\t"
-		 "addxl %5,%0\n\t"
-		 "movl  %0,%1\n\t"
-		 "swap  %1\n\t"
-		 "addxw %1,%0\n\t"
-		 "clrw  %1\n\t"
-		 "addxw %1,%0\n\t"
-		 : "=&d" (sum), "=&d" (saddr)
-		 : "0" (daddr), "1" (saddr), "d" (len + proto),
-		   "d"(sum));
-	return ~sum;
-}
-
-/*
- *	Fold a partial checksum without adding pseudo headers
+ *	Fold a partial checksum
  */
 
 static inline unsigned int csum_fold(unsigned int sum)
@@ -103,6 +78,27 @@ static inline unsigned int csum_fold(unsigned int sum)
 	return ~sum;
 }
 
+
+/*
+ * computes the checksum of the TCP/UDP pseudo-header
+ * returns a 16-bit checksum, already complemented
+ */
+
+static inline unsigned short int
+csum_tcpudp_magic(unsigned long saddr, unsigned long daddr, unsigned short len,
+		  unsigned short proto, unsigned int sum)
+{
+	__asm__ ("addl  %1,%0\n\t"
+		 "addxl %4,%0\n\t"
+		 "addxl %5,%0\n\t"
+		 "clrl %1\n\t"
+		 "addxl %1,%0"
+		 : "=&d" (sum), "=&d" (saddr)
+		 : "0" (daddr), "1" (saddr), "d" (len + proto),
+		   "d"(sum));
+	return csum_fold(sum);
+}
+
 /*
  * this routine is used for miscellaneous IP-like checksums, mainly
  * in icmp.c
@@ -111,17 +107,7 @@ static inline unsigned int csum_fold(unsigned int sum)
 static inline unsigned short
 ip_compute_csum(unsigned char * buff, int len)
 {
-	unsigned int sum;
-	unsigned int scratch;
-
-	__asm__("movel %0,%1\n\t"
-		"swap  %1\n\t"
-		"addw  %1,%0\n\t"
-		"clrw  %1\n\t"
-		"addxw %1,%0\n\t"
-		: "=d" (sum), "=d" (scratch)
-		: "0" (csum_partial(buff, len, 0)));
-	return ~sum;
+	return csum_fold (csum_partial(buff, len, 0));
 }
 
 #endif /* _M68K_CHECKSUM_H */

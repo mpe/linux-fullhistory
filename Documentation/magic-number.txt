@@ -59,3 +59,5 @@ STL_PANELMAGIC      0x7ef621a1  stlpanel_t           include/linux/stallion.h
 STL_BOARDMAGIC      0xa2267f52  stlbrd_t             include/linux/stallion.h
 STL_PORTMAGIC       0x5a7182c9  stlport_t            include/linux/stallion.h
 PCXX_MAGIC          0x5c6df104  struct channel       drivers/char/pcxx.h
+BAYCOM_MAGIC        0x3105bac0  struct baycom_state  drivers/char/baycom.c
+

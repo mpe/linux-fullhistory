@@ -68,7 +68,11 @@
 #include <linux/config.h>
 #include <linux/module.h>
 
-/* #define NDEBUG (NDEBUG_DMA) */
+#define NDEBUG (0)
+
+#define NDEBUG_ABORT	0x800000
+#define NDEBUG_TAGS	0x1000000
+#define NDEBUG_MERGING	0x2000000
 
 #define AUTOSENSE
 /* For the Atari version, use only polled IO or REAL_DMA */
@@ -101,7 +105,7 @@
 #include <asm/atari_stdma.h>
 #include <asm/io.h>
 
-#include<linux/stat.h>
+#include <linux/stat.h>
 
 struct proc_dir_entry proc_scsi_atari = {
     PROC_SCSI_ATARI, 5, "Atari",
@@ -186,7 +190,6 @@ struct proc_dir_entry proc_scsi_atari = {
 
 #ifdef REAL_DMA
 static int scsi_dma_is_ignored_buserr( unsigned char dma_stat );
-static void scsi_dma_buserr( int irq, struct pt_regs *fp, void *dummy);
 static void atari_scsi_fetch_restbytes( void );
 static long atari_scsi_dma_residual( struct Scsi_Host *instance );
 static int falcon_classify_cmd( Scsi_Cmnd *cmd );
@@ -268,6 +271,11 @@ static int scsi_dma_is_ignored_buserr( unsigned char dma_stat )
 }
 
 
+#if 0
+/* Dead code... wasn't called anyway :-) and causes some trouble, because at
+ * end-of-DMA, both SCSI ints are triggered simultaneously, so the NCR int has
+ * to clear the DMA int pending bit before it allows other level 6 interrupts.
+ */
 static void scsi_dma_buserr (int irq, struct pt_regs *fp, void *dummy)
 {
 	unsigned char	dma_stat = tt_scsi_dma.dma_ctrl;
@@ -292,45 +300,29 @@ static void scsi_dma_buserr (int irq, struct pt_regs *fp, void *dummy)
 		printk( "SCSI DMA intr ?? -- this shouldn't happen!\n" );
 	}
 }
+#endif
 
 #endif
 
 
 static void scsi_tt_intr (int irq, struct pt_regs *fp, void *dummy)
 {
-	unsigned long	flags;
 #ifdef REAL_DMA
 	int dma_stat;
-#endif
 
-	/* If we got this interrupt, we don't need the other one from the DMA any
-	 * more. So clear it. */
-	atari_clear_pending_irq( IRQ_TT_MFP_SCSIDMA );
-	/* After this has been done, we can make this int handler "slow", i.e.
-	 * mask the NCR int and lower the IPL, as a slow int would do (see
-	 * arch/m68k/atari/ataints.c) */
-	atari_disable_irq( IRQ_TT_MFP_SCSI );
-	save_flags(flags);
-	flags &= 0xf8ff;
-	flags |= fp->sr & 0x0700;
-	restore_flags(flags);
-	
-#ifdef REAL_DMA
 	dma_stat = tt_scsi_dma.dma_ctrl;
 
-#if (NDEBUG & NDEBUG_INTR)
-	printk("scsi%d: NCR5380 interrupt, DMA status = %02x\n",
-	       atari_scsi_host->host_no, dma_stat & 0xff);
-#endif
+	INT_PRINTK("scsi%d: NCR5380 interrupt, DMA status = %02x\n",
+		   atari_scsi_host->host_no, dma_stat & 0xff);
 
 	/* Look if it was the DMA that has interrupted: First possibility
 	 * is that a bus error occurred...
 	 */
 	if (dma_stat & 0x80) {
 		if (!scsi_dma_is_ignored_buserr( dma_stat )) {
-			printk( "SCSI DMA caused bus error near 0x%08lx\n",
-					SCSI_DMA_READ_P( dma_addr ));
-			panic( "SCSI DMA bus error -- bad DMA programming!" );
+			printk(KERN_ERR "SCSI DMA caused bus error near 0x%08lx\n",
+			       SCSI_DMA_READ_P(dma_addr));
+			printk(KERN_CRIT "SCSI DMA bus error -- bad DMA programming!");
 		}
 	}
 
@@ -346,10 +338,10 @@ static void scsi_tt_intr (int irq, struct pt_regs *fp, void *dummy)
 	if ((dma_stat & 0x02) && !(dma_stat & 0x40)) {
 		atari_dma_residual = HOSTDATA_DMALEN - (SCSI_DMA_READ_P( dma_addr ) -
 												atari_dma_startaddr);
-#if (NDEBUG & NDEBUG_DMA)
-		printk( "SCSI DMA: There are %ld residual bytes.\n",
-				atari_dma_residual );
-#endif
+
+		DMA_PRINTK("SCSI DMA: There are %ld residual bytes.\n",
+			   atari_dma_residual);
+
 		if ((signed int)atari_dma_residual < 0)
 			atari_dma_residual = 0;
 		if ((dma_stat & 1) == 0) {
@@ -376,10 +368,9 @@ static void scsi_tt_intr (int irq, struct pt_regs *fp, void *dummy)
 			   other command.  These shouldn't disconnect anyway.
 			   */
 			if (atari_dma_residual & 0x1ff) {
-#if (NDEBUG & NDEBUG_DMA)
-				printk("SCSI DMA: DMA bug corrected, difference %ld bytes\n",
-				       512 - (atari_dma_residual & 0x1ff));
-#endif
+				DMA_PRINTK("SCSI DMA: DMA bug corrected, "
+					   "difference %ld bytes\n",
+					   512 - (atari_dma_residual & 0x1ff));
 				atari_dma_residual = (atari_dma_residual + 511) & ~0x1ff;
 			}
 		}
@@ -398,8 +389,10 @@ static void scsi_tt_intr (int irq, struct pt_regs *fp, void *dummy)
 	
 	NCR5380_intr (0, 0, 0);
 
+#if 0
 	/* To be sure the int is not masked */
 	atari_enable_irq( IRQ_TT_MFP_SCSI );
+#endif
 }
 
 
@@ -419,7 +412,7 @@ static void scsi_falcon_intr (int irq, struct pt_regs *fp, void *dummy)
 	 */
 	if (!(dma_stat & 0x01)) {
 		/* DMA error */
-		printk( "SCSI DMA error near 0x%08lx!\n", SCSI_DMA_GETADR() );
+		printk(KERN_CRIT "SCSI DMA error near 0x%08lx!\n", SCSI_DMA_GETADR());
 	}
 
 	/* If the DMA was active, but now bit 1 is not clear, it is some
@@ -437,14 +430,12 @@ static void scsi_falcon_intr (int irq, struct pt_regs *fp, void *dummy)
 		 * lost somewhere in outer space.
 		 */
 		if (transferred & 15)
-			printk( "SCSI DMA error: %ld bytes lost in ST-DMA fifo :-((\n",
-			       transferred & 15 );
+			printk(KERN_ERR "SCSI DMA error: %ld bytes lost in "
+			       "ST-DMA fifo\n", transferred & 15);
 
 		atari_dma_residual = HOSTDATA_DMALEN - transferred;
-#if (NDEBUG & NDEBUG_DMA)
-		printk( "SCSI DMA: There are %ld residual bytes.\n",
-		       atari_dma_residual );
-#endif
+		DMA_PRINTK("SCSI DMA: There are %ld residual bytes.\n",
+			   atari_dma_residual);
 	}
 	else
 		atari_dma_residual = 0;
@@ -477,15 +468,11 @@ static void atari_scsi_fetch_restbytes( void )
 		/* there are 'nr' bytes left for the last long address before the
 		   DMA pointer */
 		dst = (char *)( (unsigned long)dst & ~3 );
-#if (NDEBUG & NDEBUG_DMA)
-		printk( "SCSI DMA: there are %d rest bytes for phys addr 0x%08lx",
-		       nr, (long)dst );
-#endif
+		DMA_PRINTK("SCSI DMA: there are %d rest bytes for phys addr 0x%08lx",
+			   nr, (long)dst);
 		dst = (char *)PTOV(dst);  /* The content of the DMA pointer
 					   * is a physical address! */
-#if (NDEBUG & NDEBUG_DMA)
-		printk( " = virt addr 0x%08lx\n", (long)dst );
-#endif
+		DMA_PRINTK(" = virt addr 0x%08lx\n", (long)dst);
 		for( src = (char *)&tt_scsi_dma.dma_restdata; nr > 0; --nr )
 			*dst++ = *src++;
 	}
@@ -697,18 +684,10 @@ int atari_scsi_detect (Scsi_Host_Template *host)
 		/* This int is actually "pseudo-slow", i.e. it acts like a slow
 		 * interrupt after having cleared the pending flag for the DMA
 		 * interrupt. */
-		add_isr(IRQ_TT_MFP_SCSI, scsi_tt_intr, IRQ_TYPE_PRIO,
+		add_isr(IRQ_TT_MFP_SCSI, scsi_tt_intr, IRQ_TYPE_SLOW,
 			NULL, "SCSI NCR5380");
 		tt_mfp.active_edge |= 0x80;		/* SCSI int on L->H */
 #ifdef REAL_DMA
-		/* On the TT, we got a second interrupt for DMA ready and DMA buserror.
-		 * Since on DMA ready we get a "normal" interrupt, too, the service
-		 * routine for the second int just checks for buserrs.
-		 */
-		add_isr(IRQ_TT_MFP_SCSIDMA, scsi_dma_buserr, IRQ_TYPE_SLOW,
-			NULL, "SCSI DMA");
-		tt_mfp.active_edge &= ~0x20;	/* DMA int on H->L */
-
 		tt_scsi_dma.dma_ctrl = 0;
 		atari_dma_residual = 0;
 #endif /* REAL_DMA */
@@ -744,7 +723,7 @@ int atari_scsi_detect (Scsi_Host_Template *host)
 #endif
 	}
 
-	printk( "scsi%d: options CAN_QUEUE=%d CMD_PER_LUN=%d SCAT-GAT=%d "
+	printk(KERN_INFO "scsi%d: options CAN_QUEUE=%d CMD_PER_LUN=%d SCAT-GAT=%d "
 #ifdef SUPPORT_TAGS
 			"TAGGED-QUEUING=%s "
 #endif
@@ -766,12 +745,8 @@ int atari_scsi_detect (Scsi_Host_Template *host)
 #ifdef MODULE
 int atari_scsi_release (struct Scsi_Host *sh)
 {
-	if (IS_A_TT()) {
+	if (IS_A_TT())
 		remove_isr (IRQ_TT_MFP_SCSI, scsi_tt_intr);
-#ifdef REAL_DMA
-		remove_isr (IRQ_TT_MFP_SCSIDMA, scsi_dma_buserr);
-#endif
-	}
 	if (atari_dma_buffer)
 		scsi_init_free (atari_dma_buffer, STRAM_BUFFER_SIZE);
 	return 1;
@@ -926,10 +901,8 @@ unsigned long atari_scsi_dma_setup( struct Scsi_Host *instance, void *data,
 {
 	unsigned long addr = VTOP( data );
 
-#if (NDEBUG & NDEBUG_DMA)
-	printk ("scsi%d: setting up dma, data = %p, phys = %lx, count = %ld, dir = %d\n",
-		instance->host_no, data, addr, count, dir);
-#endif
+	DMA_PRINTK("scsi%d: setting up dma, data = %p, phys = %lx, count = %ld, "
+		   "dir = %d\n", instance->host_no, data, addr, count, dir);
 
 	if (!IS_A_TT() && !STRAM_ADDR(addr)) {
 		/* If we have a non-DMAable address on a Falcon, use the dribble
@@ -958,7 +931,7 @@ unsigned long atari_scsi_dma_setup( struct Scsi_Host *instance, void *data,
 	dma_cache_maintenance( addr, count, dir );
 
 	if (count == 0)
-		printk("SCSI warning: DMA programmed for 0 bytes !\n");
+		printk(KERN_NOTICE "SCSI warning: DMA programmed for 0 bytes !\n");
 
 	if (IS_A_TT()) {
 		tt_scsi_dma.dma_ctrl = dir;
@@ -1111,11 +1084,8 @@ static unsigned long atari_dma_xfer_len( unsigned long wanted_len,
 	if (possible_len > limit)
 		possible_len = limit;
 
-#if (NDEBUG & NDEBUG_DMA)
-	if (possible_len != wanted_len)
-		printk( "Sorry, must cut DMA transfer size to %ld bytes instead of %ld\n",
-				possible_len, wanted_len );
-#endif
+	DMA_PRINTK("Sorry, must cut DMA transfer size to %ld bytes instead "
+		   "of %ld\n", possible_len, wanted_len);
 
 	return( possible_len );
 }
