@@ -110,21 +110,6 @@ dst_metric(const struct dst_entry *dst, int metric)
 	return dst->metrics[metric-1];
 }
 
-static inline u32
-dst_path_metric(const struct dst_entry *dst, int metric)
-{
-	return dst->path->metrics[metric-1];
-}
-
-static inline u32
-dst_pmtu(const struct dst_entry *dst)
-{
-	u32 mtu = dst_path_metric(dst, RTAX_MTU);
-	/* Yes, _exactly_. This is paranoia. */
-	barrier();
-	return mtu;
-}
-
 static inline u32 dst_mtu(const struct dst_entry *dst)
 {
 	u32 mtu = dst_metric(dst, RTAX_MTU);
@@ -138,7 +123,7 @@ static inline u32 dst_mtu(const struct dst_entry *dst)
 static inline u32
 dst_allfrag(const struct dst_entry *dst)
 {
-	int ret = dst_path_metric(dst, RTAX_FEATURES) & RTAX_FEATURE_ALLFRAG;
+	int ret = dst_metric(dst->path, RTAX_FEATURES) & RTAX_FEATURE_ALLFRAG;
 	/* Yes, _exactly_. This is paranoia. */
 	barrier();
 	return ret;
