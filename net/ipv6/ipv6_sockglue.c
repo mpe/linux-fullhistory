@@ -7,7 +7,7 @@
  *
  *	Based on linux/net/ipv4/ip_sockglue.c
  *
- *	$Id: ipv6_sockglue.c,v 1.12 1997/04/29 09:38:45 mj Exp $
+ *	$Id: ipv6_sockglue.c,v 1.13 1997/05/15 18:55:10 davem Exp $
  *
  *	This program is free software; you can redistribute it and/or
  *      modify it under the terms of the GNU General Public License
@@ -121,7 +121,7 @@ int ipv6_setsockopt(struct sock *sk, int level, int optname, char *optval,
 		}
 		break;
 
-	case IPV6_RXINFO:
+	case IPV6_PKTINFO:
 		np->rxinfo = val;
 		retv = 0;
 		break;

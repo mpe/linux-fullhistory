@@ -5,7 +5,7 @@
  *	Authors:
  *	Pedro Roque		<roque@di.fc.ul.pt>	
  *
- *	$Id: datagram.c,v 1.11 1997/05/03 00:58:25 davem Exp $
+ *	$Id: datagram.c,v 1.12 1997/05/15 18:55:09 davem Exp $
  *
  *	This program is free software; you can redistribute it and/or
  *      modify it under the terms of the GNU General Public License
@@ -39,7 +39,7 @@ int datagram_recv_ctl(struct sock *sk, struct msghdr *msg, struct sk_buff *skb)
 
 		src_info.ipi6_ifindex = skb->dev->ifindex;
 		ipv6_addr_copy(&src_info.ipi6_addr, &skb->nh.ipv6h->daddr);
-		put_cmsg(msg, SOL_IPV6, IPV6_RXINFO, sizeof(src_info), &src_info);
+		put_cmsg(msg, SOL_IPV6, IPV6_PKTINFO, sizeof(src_info), &src_info);
 	}
 
 	if (np->rxhlim) {
@@ -67,20 +67,18 @@ int datagram_send_ctl(struct msghdr *msg, struct device **src_dev,
 
 	for (cmsg = CMSG_FIRSTHDR(msg); cmsg; cmsg = CMSG_NXTHDR(msg, cmsg)) {
 		if (cmsg->cmsg_level != SOL_IPV6) {
-			printk(KERN_DEBUG "cmsg_level %d\n", cmsg->cmsg_level);
+			printk(KERN_DEBUG "invalid cmsg_level %d\n", cmsg->cmsg_level);
 			continue;
 		}
 
 		switch (cmsg->cmsg_type) {
-
-		case IPV6_TXINFO:
-			if (cmsg->cmsg_len < (sizeof(struct cmsghdr) +
-					      sizeof(struct in6_pktinfo))) {
+ 		case IPV6_PKTINFO:
+ 			if (cmsg->cmsg_len != CMSG_LEN(sizeof(struct in6_pktinfo))) {
 				err = -EINVAL;
 				goto exit_f;
 			}
 
-			src_info = (struct in6_pktinfo *) cmsg->cmsg_data;
+			src_info = (struct in6_pktinfo *)CMSG_DATA(cmsg);
 			
 			if (src_info->ipi6_ifindex) {
 				int index = src_info->ipi6_ifindex;
@@ -104,18 +102,13 @@ int datagram_send_ctl(struct msghdr *msg, struct device **src_dev,
 			break;
 			
 		case IPV6_RXSRCRT:
-
-			len = cmsg->cmsg_len;
-
-			len -= sizeof(struct cmsghdr);
-
-			/* validate option length */
-			if (len < sizeof(struct ipv6_rt_hdr)) {
+                        if (cmsg->cmsg_len < CMSG_LEN(sizeof(struct ipv6_rt_hdr))) {
 				err = -EINVAL;
 				goto exit_f;
 			}
 
-			rthdr = (struct ipv6_rt_hdr *) cmsg->cmsg_data;
+			len = cmsg->cmsg_len - sizeof(struct cmsghdr);
+			rthdr = (struct ipv6_rt_hdr *)CMSG_DATA(cmsg);
 
 			/*
 			 *	TYPE 0
@@ -142,21 +135,16 @@ int datagram_send_ctl(struct msghdr *msg, struct device **src_dev,
 			break;
 			
 		case IPV6_HOPLIMIT:
-
-			len = cmsg->cmsg_len;
-			len -= sizeof(struct cmsghdr);
-			
-			if (len < sizeof(int)) {
+			if (cmsg->cmsg_len != CMSG_LEN(sizeof(int))) {
 				err = -EINVAL;
 				goto exit_f;
 			}
 
-			*hlimit = *((int *) cmsg->cmsg_data);
+			*hlimit = *(int *)CMSG_DATA(cmsg);
 			break;
 
 		default:
-			printk(KERN_DEBUG "invalid cmsg type: %d\n",
-			       cmsg->cmsg_type);
+			printk(KERN_DEBUG "invalid cmsg type: %d\n", cmsg->cmsg_type);
 			err = -EINVAL;
 			break;
 		};

@@ -637,7 +637,6 @@ static void do_wp_page(struct task_struct * tsk, struct vm_area_struct * vma,
 bad_wp_page:
 	printk("do_wp_page: bogus page at address %08lx (%08lx)\n",address,old_page);
 	send_sig(SIGKILL, tsk, 1);
-	goto end_wp_page;
 end_wp_page:
 	if (new_page)
 		free_page(new_page);

@@ -10,9 +10,14 @@
  *
  * ------------------------------------------------------------------------- */
 
-#include <linux/init.h>
 #include <linux/module.h>
 #include "autofs_i.h"
+
+#if LINUX_VERSION_CODE < kver(2,1,36)
+#define __initfunc(X) X
+#else
+#include <linux/init.h>
+#endif
 
 static struct file_system_type autofs_fs_type = {
 	autofs_read_super, "autofs", 0, NULL

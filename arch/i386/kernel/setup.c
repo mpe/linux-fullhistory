@@ -325,6 +325,8 @@ int get_cpuinfo(char * buffer)
 
 			sep_bug = CD(have_cpuid) &&
 			          (CD(x86_capability) & 0x800) &&
+			          !memcmp(x86_vendor_id, "GenuineIntel", 12) &&
+			          CD(x86) == 6 &&
 			          CD(x86_model) < 3 &&
 			          CD(x86_mask) < 3;
         

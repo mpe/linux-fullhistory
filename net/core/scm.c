@@ -1,6 +1,7 @@
 /* scm.c - Socket level control messages processing.
  *
  * Author:	Alexey Kuznetsov, <kuznet@ms2.inr.ac.ru>
+ *              Alignment and value checking mods by Craig Metz
  *
  *		This program is free software; you can redistribute it and/or
  *		modify it under the terms of the GNU General Public License
@@ -60,12 +61,12 @@ static int scm_fp_copy(struct cmsghdr *cmsg, struct scm_fp_list **fplp)
 	int num;
 	struct scm_fp_list *fpl = *fplp;
 	struct file **fpp;
-	int *fdp = (int*)cmsg->cmsg_data;
+	int *fdp = (int*)CMSG_DATA(cmsg);
 	int i;
 
-	num = (cmsg->cmsg_len - sizeof(struct cmsghdr))/sizeof(int);
+	num = (cmsg->cmsg_len - CMSG_ALIGN(sizeof(struct cmsghdr)))/sizeof(int);
 
-	if (!num)
+	if (num <= 0)
 		return 0;
 
 	if (num > SCM_MAX_FD)
@@ -153,9 +154,9 @@ int __scm_send(struct socket *sock, struct msghdr *msg, struct scm_cookie *p)
 				goto error;
 			break;
 		case SCM_CREDENTIALS:
-			if (cmsg->cmsg_len < sizeof(*cmsg) + sizeof(struct ucred))
+			if (cmsg->cmsg_len != CMSG_LEN(sizeof(struct ucred)))
 				goto error;
-			memcpy(&p->creds, cmsg->cmsg_data, sizeof(struct ucred));
+			memcpy(&p->creds, CMSG_DATA(cmsg), sizeof(struct ucred));
 			err = scm_check_creds(&p->creds);
 			if (err)
 				goto error;
@@ -163,9 +164,9 @@ int __scm_send(struct socket *sock, struct msghdr *msg, struct scm_cookie *p)
 		case SCM_CONNECT:
 			if (scm_flags)
 				goto error;
-			if (cmsg->cmsg_len < sizeof(*cmsg) + sizeof(int))
+			if (cmsg->cmsg_len != CMSG_LEN(sizeof(int)))
 				goto error;
-			memcpy(&acc_fd, cmsg->cmsg_data, sizeof(int));
+			memcpy(&acc_fd, CMSG_DATA(cmsg), sizeof(int));
 			p->sock = NULL;
 			if (acc_fd != -1) {
 				if (acc_fd < 0 || acc_fd >= NR_OPEN ||
@@ -207,7 +208,7 @@ error:
 void put_cmsg(struct msghdr * msg, int level, int type, int len, void *data)
 {
 	struct cmsghdr *cm = (struct cmsghdr*)msg->msg_control;
-	int cmlen = sizeof(*cm) + len;
+	int cmlen = CMSG_LEN(len);
 	int err;
 
 	if (cm==NULL || msg->msg_controllen < sizeof(*cm)) {
@@ -224,9 +225,9 @@ void put_cmsg(struct msghdr * msg, int level, int type, int len, void *data)
 	if (!err)
 		err = put_user(cmlen, &cm->cmsg_len);
 	if (!err)
-		err = copy_to_user(cm->cmsg_data, data, cmlen - sizeof(*cm));
+		err = copy_to_user(CMSG_DATA(cm), data, cmlen - sizeof(struct cmsghdr));
 	if (!err) {
-		cmlen = CMSG_ALIGN(cmlen);
+		cmlen = CMSG_SPACE(len);
 		msg->msg_control += cmlen;
 		msg->msg_controllen -= cmlen;
 	}
@@ -246,7 +247,7 @@ void scm_detach_fds(struct msghdr *msg, struct scm_cookie *scm)
 	if (fdnum < fdmax)
 		fdmax = fdnum;
 
-	for (i=0, cmfptr=(int*)cm->cmsg_data; i<fdmax; i++, cmfptr++)
+	for (i=0, cmfptr=(int*)CMSG_DATA(cm); i<fdmax; i++, cmfptr++)
 	{
 		int new_fd = get_unused_fd();
 		if (new_fd < 0)
@@ -257,7 +258,7 @@ void scm_detach_fds(struct msghdr *msg, struct scm_cookie *scm)
 
 	if (i > 0)
 	{
-		int cmlen = i*sizeof(int) + sizeof(struct cmsghdr);
+		int cmlen = CMSG_LEN(i*sizeof(int));
 		if (!err)
 			err = put_user(SOL_SOCKET, &cm->cmsg_level);
 		if (!err)
@@ -265,7 +266,7 @@ void scm_detach_fds(struct msghdr *msg, struct scm_cookie *scm)
 		if (!err)
 			err = put_user(cmlen, &cm->cmsg_len);
 		if (!err) {
-			cmlen = CMSG_ALIGN(cmlen);
+			cmlen = CMSG_SPACE(i*sizeof(int));
 			msg->msg_control += cmlen;
 			msg->msg_controllen -= cmlen;
 		}

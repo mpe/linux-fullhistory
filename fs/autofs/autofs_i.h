@@ -24,12 +24,30 @@
 #include <linux/string.h>
 #include <linux/wait.h>
 
-#if LINUX_VERSION_CODE < 0x20100
+#define kver(a,b,c) (((a) << 16) + ((b) << 8) + (c)) 
+
+#if LINUX_VERSION_CODE < kver(2,1,0)
 
 /* Segmentation stuff for pre-2.1 kernels */
 #include <asm/segment.h>
-#define copy_to_user	memcpy_tofs
-#define copy_from_user	memcpy_fromfs
+
+static inline int copy_to_user(void *dst, void *src, unsigned long len)
+{
+	int rv = verify_area(VERIFY_WRITE, dst, len);
+	if ( rv )
+		return -1;
+	memcpy_tofs(dst,src,len);
+	return 0;
+}
+
+static inline int copy_from_user(void *dst, void *src, unsigned long len)
+{
+	int rv = verify_area(VERIFY_READ, src, len);
+	if ( rv )
+		return -1;
+	memcpy_fromfs(dst,src,len);
+	return 0;
+}
 
 #else
 

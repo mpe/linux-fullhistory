@@ -104,7 +104,7 @@ struct ipv6_mreq {
  */
 
 #define IPV6_ADDRFORM		1
-#define IPV6_RXINFO		2
+#define IPV6_PKTINFO		2
 #define IPV6_RXHOPOPTS		3
 #define IPV6_RXDSTOPTS		4
 #define IPV6_RXSRCRT		5
@@ -115,8 +115,6 @@ struct ipv6_mreq {
 /*
  *	Alternative names
  */
-#define IPV6_TXINFO		IPV6_RXINFO
-#define SCM_SRCINFO		IPV6_TXINFO
 #define SCM_SRCRT		IPV6_RXSRCRT
 
 #define IPV6_UNICAST_HOPS	16

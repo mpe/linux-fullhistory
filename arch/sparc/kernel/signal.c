@@ -1,4 +1,4 @@
-/*  $Id: signal.c,v 1.73 1997/04/16 05:56:05 davem Exp $
+/*  $Id: signal.c,v 1.74 1997/05/15 19:57:09 davem Exp $
  *  linux/arch/sparc/kernel/signal.c
  *
  *  Copyright (C) 1991, 1992  Linus Torvalds
@@ -780,8 +780,10 @@ asmlinkage int do_signal(unsigned long oldmask, struct pt_regs * regs,
 			case SIGQUIT: case SIGILL: case SIGTRAP:
 			case SIGABRT: case SIGFPE: case SIGSEGV: case SIGBUS:
 				if(current->binfmt && current->binfmt->core_dump) {
+					lock_kernel();
 					if(current->binfmt->core_dump(signr, regs))
 						signr |= 0x80;
+					unlock_kernel();
 				}
 #ifdef DEBUG_SIGNALS
 				/* Very useful to debug dynamic linker problems */

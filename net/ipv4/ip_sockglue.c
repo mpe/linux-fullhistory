@@ -126,26 +126,24 @@ int ip_cmsg_send(struct msghdr *msg, struct ipcm_cookie *ipc, struct device **de
 	for (cmsg = CMSG_FIRSTHDR(msg); cmsg; cmsg = CMSG_NXTHDR(msg, cmsg)) {
 		if (cmsg->cmsg_level != SOL_IP)
 			continue;
-		switch (cmsg->cmsg_type)
-		{
+		switch (cmsg->cmsg_type) {
 		case IP_LOCALADDR:
-			if (cmsg->cmsg_len < sizeof(struct in_addr)+sizeof(*cmsg))
+			if (cmsg->cmsg_len != CMSG_LEN(sizeof(struct in_addr)))
 				return -EINVAL;
-			memcpy(&ipc->addr, cmsg->cmsg_data, 4);
+			memcpy(&ipc->addr, CMSG_DATA(cmsg), sizeof(struct in_addr));
 			break;
 		case IP_RETOPTS:
-			err = cmsg->cmsg_len - sizeof(*cmsg);
-			err = ip_options_get(&ipc->opt, cmsg->cmsg_data,
-					     err < 40 ? err : 40, 0);
+			err = cmsg->cmsg_len - CMSG_ALIGN(sizeof(struct cmsghdr));
+			err = ip_options_get(&ipc->opt, CMSG_DATA(cmsg), err < 40 ? err : 40, 0);
 			if (err)
 				return err;
 			break;
 		case IP_TXINFO:
 		{
 			struct in_pktinfo *info;
-			if (cmsg->cmsg_len < sizeof(*info)+sizeof(*cmsg))
+			if (cmsg->cmsg_len != CMSG_LEN(sizeof(struct in_pktinfo)))
 				return -EINVAL;
-			info = (struct in_pktinfo*)cmsg->cmsg_data;
+			info = (struct in_pktinfo *)CMSG_DATA(cmsg);
 			if (info->ipi_ifindex && !devp)
 				return -EINVAL;
 			if ((*devp = dev_get_by_index(info->ipi_ifindex)) == NULL)

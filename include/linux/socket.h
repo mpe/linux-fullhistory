@@ -50,7 +50,6 @@ struct cmsghdr {
 	__kernel_size_t	cmsg_len;	/* data byte count, including hdr */
         int		cmsg_level;	/* originating protocol */
         int		cmsg_type;	/* protocol-specific type */
-	unsigned char	cmsg_data[0];
 };
 
 /*
@@ -58,17 +57,13 @@ struct cmsghdr {
  *	Table 5-14 of POSIX 1003.1g
  */
 
-#define CMSG_DATA(cmsg)		(cmsg)->cmsg_data
 #define CMSG_NXTHDR(mhdr, cmsg) cmsg_nxthdr(mhdr, cmsg)
 
 #define CMSG_ALIGN(len) ( ((len)+sizeof(long)-1) & ~(sizeof(long)-1) )
 
-/* Stevens's Adv. API specifies CMSG_SPACE & CMSG_LENGTH,
- * I cannot understand, what the differenece? --ANK
- */
-
-#define CMSG_SPACE(len) CMSG_ALIGN((len)+sizeof(struct cmsghdr))
-#define CMSG_LENGTH(len) CMSG_ALIGN((len)+sizeof(struct cmsghdr))
+#define CMSG_DATA(cmsg)	((void *)(cmsg) + CMSG_ALIGN(sizeof(struct cmsghdr)))
+#define CMSG_SPACE(len) (CMSG_ALIGN(sizeof(struct cmsghdr)) + CMSG_ALIGN(len))
+#define CMSG_LEN(len) (CMSG_ALIGN(sizeof(struct cmsghdr)) + (len))
 
 #define	CMSG_FIRSTHDR(msg)	((msg)->msg_controllen >= sizeof(struct cmsghdr) ? \
 				 (struct cmsghdr *)(msg)->msg_control : \
@@ -148,6 +143,7 @@ struct ucred
 #define AF_DECNET	12	/* Reserved for DECnet project	*/
 #define AF_NETBEUI	13	/* Reserved for 802.2LLC project*/
 #define AF_SECURITY	14	/* Security callback pseudo AF */
+#define pseudo_AF_KEY   15      /* PF_KEY key management API */
 #define AF_MAX		32	/* For now.. */
 
 /* Protocol families, same as address families. */
@@ -167,6 +163,7 @@ struct ucred
 #define PF_DECNET	AF_DECNET
 #define PF_NETBEUI	AF_NETBEUI
 #define PF_SECURITY	AF_SECURITY
+#define PF_KEY          pseudo_AF_KEY
 
 #define PF_MAX		AF_MAX
 

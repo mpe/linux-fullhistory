@@ -45,7 +45,7 @@ static int autofs_write(struct file *file, const void *addr, int bytes)
 	unsigned short fs;
 	unsigned long old_signal;
 	const char *data = (const char *)addr;
-	int written;
+	int written = 0;
 
 	/** WARNING: this is not safe for writing more than PIPE_BUF bytes! **/
 

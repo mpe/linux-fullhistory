@@ -335,9 +335,16 @@ static inline int autofs_get_set_timeout(struct autofs_sb_info *sbi,
 	int rv;
 	unsigned long ntimeout;
 
+#if LINUX_VERSION_CODE < kver(2,1,0)
+	if ( (rv = verify_area(VERIFY_WRITE, p, sizeof(unsigned long))) )
+		return rv;
+	ntimeout = get_user(p);
+	put_user(sbi->exp_timeout/HZ, p);
+#else
 	if ( (rv = get_user(ntimeout, p)) ||
 	     (rv = put_user(sbi->exp_timeout/HZ, p)) )
 		return rv;
+#endif
 
 	if ( ntimeout > ULONG_MAX/HZ )
 		sbi->exp_timeout = 0;
@@ -345,6 +352,20 @@ static inline int autofs_get_set_timeout(struct autofs_sb_info *sbi,
 		sbi->exp_timeout = ntimeout * HZ;
 
 	return 0;
+}
+
+/* Return protocol version */
+static inline int autofs_get_protover(int *p)
+{
+#if LINUX_VERSION_CODE < kver(2,1,0)
+	int rv;
+	if ( (rv = verify_area(VERIFY_WRITE, p, sizeof(int))) )
+		return rv;
+	put_user(AUTOFS_PROTO_VERSION, p);
+	return 0;
+#else
+	return put_user(AUTOFS_PROTO_VERSION, p);
+#endif
 }
 
 /* Perform an expiry operation */
@@ -402,7 +423,7 @@ static int autofs_root_ioctl(struct inode *inode, struct file *filp,
 		autofs_catatonic_mode(sbi);
 		return 0;
 	case AUTOFS_IOC_PROTOVER: /* Get protocol version */
-		return put_user(AUTOFS_PROTO_VERSION, (int *)arg);
+		return autofs_get_protover((int *)arg);
 	case AUTOFS_IOC_SETTIMEOUT:
 		return autofs_get_set_timeout(sbi,(unsigned long *)arg);
 	case AUTOFS_IOC_EXPIRE:

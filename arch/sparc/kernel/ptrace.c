@@ -24,12 +24,6 @@
 
 #define MAGIC_CONSTANT 0x80000000
 
-extern void do_wp_page(struct task_struct * tsk, struct vm_area_struct * vma,
-		       unsigned long address, int write_access);
-
-extern void do_no_page(struct task_struct * tsk, struct vm_area_struct * vma,
-		       unsigned long address, int write_access);
-
 /*
  * This routine gets a long from any process space by following the page
  * tables. NOTE! You should check that the long isn't on a page boundary,
@@ -47,7 +41,7 @@ static unsigned long get_long(struct task_struct * tsk,
 repeat:
 	pgdir = pgd_offset(vma->vm_mm, addr);
 	if (pgd_none(*pgdir)) {
-		do_no_page(tsk, vma, addr, 0);
+		handle_mm_fault(tsk, vma, addr, 0);
 		goto repeat;
 	}
 	if (pgd_bad(*pgdir)) {
@@ -57,7 +51,7 @@ repeat:
 	}
 	pgmiddle = pmd_offset(pgdir, addr);
 	if (pmd_none(*pgmiddle)) {
-		do_no_page(tsk, vma, addr, 0);
+		handle_mm_fault(tsk, vma, addr, 0);
 		goto repeat;
 	}
 	if (pmd_bad(*pgmiddle)) {
@@ -67,7 +61,7 @@ repeat:
 	}
 	pgtable = pte_offset(pgmiddle, addr);
 	if (!pte_present(*pgtable)) {
-		do_no_page(tsk, vma, addr, 0);
+		handle_mm_fault(tsk, vma, addr, 0);
 		goto repeat;
 	}
 	page = pte_page(*pgtable);
@@ -100,7 +94,7 @@ static void put_long(struct task_struct * tsk, struct vm_area_struct * vma,
 repeat:
 	pgdir = pgd_offset(vma->vm_mm, addr);
 	if (!pgd_present(*pgdir)) {
-		do_no_page(tsk, vma, addr, 1);
+		handle_mm_fault(tsk, vma, addr, 1);
 		goto repeat;
 	}
 	if (pgd_bad(*pgdir)) {
@@ -110,7 +104,7 @@ repeat:
 	}
 	pgmiddle = pmd_offset(pgdir, addr);
 	if (pmd_none(*pgmiddle)) {
-		do_no_page(tsk, vma, addr, 1);
+		handle_mm_fault(tsk, vma, addr, 1);
 		goto repeat;
 	}
 	if (pmd_bad(*pgmiddle)) {
@@ -120,12 +114,12 @@ repeat:
 	}
 	pgtable = pte_offset(pgmiddle, addr);
 	if (!pte_present(*pgtable)) {
-		do_no_page(tsk, vma, addr, 1);
+		handle_mm_fault(tsk, vma, addr, 1);
 		goto repeat;
 	}
 	page = pte_page(*pgtable);
 	if (!pte_write(*pgtable)) {
-		do_wp_page(tsk, vma, addr, 1);
+		handle_mm_fault(tsk, vma, addr, 1);
 		goto repeat;
 	}
 /* this is a hack for non-kernel-mapped video buffers and similar */
