@@ -46,6 +46,10 @@ extern int check_cdu31a_media_change(int, int);
 extern int check_mcd_media_change(int, int);
 #endif
 
+static char buffersize_index[9] = {-1,  0,  1, -1,  2, -1, -1, -1, 3};
+
+#define BUFSIZE_INDEX(X) (buffersize_index[(X)>>9])
+
 static int grow_buffers(int pri, int size);
 
 static struct buffer_head * hash_table[NR_HASH];
@@ -556,42 +560,62 @@ struct buffer_head * bread(dev_t dev, int block, int size)
 
 /*
  * Ok, breada can be used as bread, but additionally to mark other
- * blocks for reading as well. End the argument list with a negative
- * number.
+ * blocks for reading as well.
  */
-struct buffer_head * breada(dev_t dev,int first, ...)
+
+#define NBUF 16
+
+struct buffer_head * breada(dev_t dev, int block, int bufsize,
+	unsigned int pos, unsigned int filesize)
 {
-	va_list args;
-	unsigned int blocksize;
-	struct buffer_head * bh, *tmp;
+	struct buffer_head * bhlist[NBUF];
+	unsigned int blocks;
+	struct buffer_head * bh;
+	int index;
+	int i, j;
 
-	va_start(args,first);
-
-	blocksize = BLOCK_SIZE;
-	if (blksize_size[MAJOR(dev)] && blksize_size[MAJOR(dev)][MINOR(dev)])
-		blocksize = blksize_size[MAJOR(dev)][MINOR(dev)];
-
-	if (!(bh = getblk(dev, first, blocksize))) {
-		printk("VFS: breada: READ error on device %d/%d\n",
-						MAJOR(dev), MINOR(dev));
+	if (pos >= filesize)
 		return NULL;
-	}
-	if (!bh->b_uptodate)
-		ll_rw_block(READ, 1, &bh);
-	while ((first=va_arg(args,int))>=0) {
-		tmp = getblk(dev, first, blocksize);
-		if (tmp) {
-			if (!tmp->b_uptodate)
-				ll_rw_block(READA, 1, &tmp);
-			tmp->b_count--;
+
+	if (block < 0 || !(bh = getblk(dev,block,bufsize)))
+		return NULL;
+
+	index = BUFSIZE_INDEX(bh->b_size);
+
+	if (bh->b_uptodate)
+		return bh;
+
+	blocks = ((filesize & (bufsize - 1)) - (pos & (bufsize - 1))) >> (9+index);
+
+	if (blocks > (read_ahead[MAJOR(dev)] >> index))
+		blocks = read_ahead[MAJOR(dev)] >> index;
+	if (blocks > NBUF)
+		blocks = NBUF;
+	
+	bhlist[0] = bh;
+	j = 1;
+	for(i=1; i<blocks; i++) {
+		bh = getblk(dev,block+i,bufsize);
+		if (bh->b_uptodate) {
+			brelse(bh);
+			break;
 		}
+		bhlist[j++] = bh;
 	}
-	va_end(args);
+
+	/* Request the read for these buffers, and then release them */
+	ll_rw_block(READ, j, bhlist);
+
+	for(i=1; i<j; i++)
+		brelse(bhlist[i]);
+
+	/* Wait for this buffer, and then continue on */
+	bh = bhlist[0];
 	wait_on_buffer(bh);
 	if (bh->b_uptodate)
 		return bh;
 	brelse(bh);
-	return (NULL);
+	return NULL;
 }
 
 /*
@@ -616,7 +640,7 @@ static void get_more_buffer_heads(void)
 	if (unused_list)
 		return;
 
-	if(! (bh = (struct buffer_head*) get_free_page(GFP_BUFFER)))
+	if (!(bh = (struct buffer_head*) get_free_page(GFP_BUFFER)))
 		return;
 
 	for (nr_buffer_heads+=i=PAGE_SIZE/sizeof*bh ; i>0; i--) {
@@ -870,7 +894,7 @@ static int grow_buffers(int pri, int size)
 		printk("VFS: grow_buffers: size = %d\n",size);
 		return 0;
 	}
-	if(!(page = __get_free_page(pri)))
+	if (!(page = __get_free_page(pri)))
 		return 0;
 	bh = create_buffers(page, size);
 	if (!bh) {

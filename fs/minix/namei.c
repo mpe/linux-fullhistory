@@ -195,7 +195,7 @@ static int minix_add_entry(struct inode * dir,
 			dir->i_mtime = dir->i_ctime = CURRENT_TIME;
 			for (i = 0; i < info->s_namelen ; i++)
 				de->name[i] = (i < namelen) ? name[i] : 0;
-			bh->b_dirt = 1;
+			dirtify_buffer(bh, 1);
 			*res_dir = de;
 			break;
 		}
@@ -238,7 +238,7 @@ int minix_create(struct inode * dir,const char * name, int len, int mode,
 		return error;
 	}
 	de->inode = inode->i_ino;
-	bh->b_dirt = 1;
+	dirtify_buffer(bh, 1);
 	brelse(bh);
 	iput(dir);
 	*result = inode;
@@ -295,7 +295,7 @@ int minix_mknod(struct inode * dir, const char * name, int len, int mode, int rd
 		return error;
 	}
 	de->inode = inode->i_ino;
-	bh->b_dirt = 1;
+	dirtify_buffer(bh, 1);
 	brelse(bh);
 	iput(dir);
 	iput(inode);
@@ -347,7 +347,7 @@ int minix_mkdir(struct inode * dir, const char * name, int len, int mode)
 	de->inode = dir->i_ino;
 	strcpy(de->name,"..");
 	inode->i_nlink = 2;
-	dir_block->b_dirt = 1;
+	dirtify_buffer(dir_block, 1);
 	brelse(dir_block);
 	inode->i_mode = S_IFDIR | (mode & 0777 & ~current->umask);
 	if (dir->i_mode & S_ISGID)
@@ -361,7 +361,7 @@ int minix_mkdir(struct inode * dir, const char * name, int len, int mode)
 		return error;
 	}
 	de->inode = inode->i_ino;
-	bh->b_dirt = 1;
+	dirtify_buffer(bh, 1);
 	dir->i_nlink++;
 	dir->i_dirt = 1;
 	iput(dir);
@@ -469,7 +469,7 @@ int minix_rmdir(struct inode * dir, const char * name, int len)
 	if (inode->i_nlink != 2)
 		printk("empty directory has nlink!=2 (%d)\n",inode->i_nlink);
 	de->inode = 0;
-	bh->b_dirt = 1;
+	dirtify_buffer(bh, 1);
 	inode->i_nlink=0;
 	inode->i_dirt=1;
 	dir->i_nlink--;
@@ -522,7 +522,7 @@ repeat:
 		inode->i_nlink=1;
 	}
 	de->inode = 0;
-	bh->b_dirt = 1;
+	dirtify_buffer(bh, 1);
 	dir->i_ctime = dir->i_mtime = CURRENT_TIME;
 	dir->i_dirt = 1;
 	inode->i_nlink--;
@@ -562,7 +562,7 @@ int minix_symlink(struct inode * dir, const char * name, int len, const char * s
 	while (i < 1023 && (c=*(symname++)))
 		name_block->b_data[i++] = c;
 	name_block->b_data[i] = 0;
-	name_block->b_dirt = 1;
+	dirtify_buffer(name_block, 1);
 	brelse(name_block);
 	inode->i_size = i;
 	inode->i_dirt = 1;
@@ -584,7 +584,7 @@ int minix_symlink(struct inode * dir, const char * name, int len, const char * s
 		return i;
 	}
 	de->inode = inode->i_ino;
-	bh->b_dirt = 1;
+	dirtify_buffer(bh, 1);
 	brelse(bh);
 	iput(dir);
 	iput(inode);
@@ -621,7 +621,7 @@ int minix_link(struct inode * oldinode, struct inode * dir, const char * name, i
 		return error;
 	}
 	de->inode = oldinode->i_ino;
-	bh->b_dirt = 1;
+	dirtify_buffer(bh, 1);
 	brelse(bh);
 	iput(dir);
 	oldinode->i_nlink++;
@@ -774,11 +774,11 @@ start_up:
 		new_inode->i_ctime = CURRENT_TIME;
 		new_inode->i_dirt = 1;
 	}
-	old_bh->b_dirt = 1;
-	new_bh->b_dirt = 1;
+	dirtify_buffer(old_bh, 1);
+	dirtify_buffer(new_bh, 1);
 	if (dir_bh) {
 		PARENT_INO(dir_bh->b_data) = new_dir->i_ino;
-		dir_bh->b_dirt = 1;
+		dirtify_buffer(dir_bh, 1);
 		old_dir->i_nlink--;
 		old_dir->i_dirt = 1;
 		if (new_inode) {

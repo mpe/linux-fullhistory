@@ -202,7 +202,7 @@ static void set_inode_dtime (struct inode * inode,
 			EXT2_INODES_PER_BLOCK(inode->i_sb));
 	raw_inode->i_links_count = 0;
 	raw_inode->i_dtime = CURRENT_TIME;
-	bh->b_dirt = 1;
+	dirtify_buffer(bh, 1);
 	if (IS_SYNC(inode)) {
 		ll_rw_block (WRITE, 1, &bh);
 		wait_on_buffer (bh);
@@ -266,12 +266,12 @@ void ext2_free_inode (struct inode * inode)
 		gdp->bg_free_inodes_count++;
 		if (S_ISDIR(inode->i_mode))
 			gdp->bg_used_dirs_count--;
-		bh2->b_dirt = 1;
+		dirtify_buffer(bh2, 1);
 		es->s_free_inodes_count++;
-		sb->u.ext2_sb.s_sbh->b_dirt = 1;
+		dirtify_buffer(sb->u.ext2_sb.s_sbh, 1);
 		set_inode_dtime (inode, gdp);
 	}
-	bh->b_dirt = 1;
+	dirtify_buffer(bh, 1);
 	if (sb->s_flags & MS_SYNC) {
 		ll_rw_block (WRITE, 1, &bh);
 		wait_on_buffer (bh);
@@ -313,7 +313,7 @@ static void inc_inode_version (struct inode * inode,
 			EXT2_INODES_PER_BLOCK(inode->i_sb));
 	raw_inode->i_version++;
 	inode->u.ext2_i.i_version = raw_inode->i_version;
-	bh->b_dirt = 1;
+	dirtify_buffer(bh, 1);
 	brelse (bh);
 }
 
@@ -438,7 +438,7 @@ repeat:
 				      "bit already set for inode %d", j);
 			goto repeat;
 		}
-		bh->b_dirt = 1;
+		dirtify_buffer(bh, 1);
 		if (sb->s_flags & MS_SYNC) {
 			ll_rw_block (WRITE, 1, &bh);
 			wait_on_buffer (bh);
@@ -466,9 +466,9 @@ repeat:
 	gdp->bg_free_inodes_count--;
 	if (S_ISDIR(mode))
 		gdp->bg_used_dirs_count++;
-	bh2->b_dirt = 1;
+	dirtify_buffer(bh2, 1);
 	es->s_free_inodes_count--;
-	sb->u.ext2_sb.s_sbh->b_dirt = 1;
+	dirtify_buffer(sb->u.ext2_sb.s_sbh, 1);
 	sb->s_dirt = 1;
 	inode->i_mode = mode;
 	inode->i_sb = sb;

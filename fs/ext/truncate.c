@@ -102,7 +102,7 @@ repeat:
 			continue;
 		}
 		*ind = 0;
-		ind_bh->b_dirt = 1;
+		dirtify_buffer(ind_bh, 1);
 		brelse(bh);
 		ext_free_block(inode->i_sb,tmp);
 	}
@@ -154,7 +154,7 @@ repeat:
 		if (!tmp)
 			continue;
 		retry |= trunc_indirect(inode,offset+(i<<8),dind);
-		dind_bh->b_dirt = 1;
+		dirtify_buffer(dind_bh, 1);
 	}
 	dind = (unsigned long *) dind_bh->b_data;
 	for (i = 0; i < 256; i++)
@@ -201,7 +201,7 @@ repeat:
 			goto repeat;
 		tind = i+(unsigned long *) tind_bh->b_data;
 		retry |= trunc_dindirect(inode,9+256+256*256+(i<<16),tind);
-		tind_bh->b_dirt = 1;
+		dirtify_buffer(tind_bh, 1);
 	}
 	tind = (unsigned long *) tind_bh->b_data;
 	for (i = 0; i < 256; i++)

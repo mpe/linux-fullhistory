@@ -44,6 +44,7 @@
  *		Linus Torvalds/ :	Memory leakage on fragmentation	
  *		Alan Cox	:	handling.
  *		Gerhard Koerting:	Forwarding uses IP priority hints
+ *		Teemu Rantanen	:	Fragment problems.
  *
  * To Fix:
  *		IP option processing is mostly not needed. ip_forward needs to know about routing rules
@@ -774,6 +775,7 @@ static struct sk_buff *ip_glue(struct ipq *qp)
    	skb->len = (len - qp->maclen);
    	skb->h.raw = skb->data;
    	skb->free = 1;
+   	skb->dev = qp->dev;
  
    	/* Copy the original MAC and IP headers into the new buffer. */
    	ptr = (unsigned char *) skb->h.raw;

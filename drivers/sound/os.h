@@ -37,6 +37,7 @@
 #include <linux/timer.h>
 #include <linux/tty.h>
 #include <linux/ctype.h>
+#include <linux/string.h>
 #include <asm/io.h>
 #include <asm/segment.h>
 #include <asm/system.h>

@@ -126,7 +126,7 @@ void rd_load(void)
 	 */
 	for (tries = 0; tries < 1000; tries += 512) {
 		block = tries;
-		bh = breada(ROOT_DEV,block+1,block,block+2,-1);
+		bh = breada(ROOT_DEV,block+1,BLOCK_SIZE, 0,  PAGE_SIZE);
 		if (!bh) {
 			printk("RAMDISK: I/O error while looking for super block!\n");
 			return;
@@ -154,7 +154,7 @@ void rd_load(void)
 		cp = rd_start;
 		while (nblocks) {
 			if (nblocks > 2) 
-				bh = breada(ROOT_DEV, block, block+1, block+2, -1);
+			        bh = breada(ROOT_DEV, block, BLOCK_SIZE, 0,  PAGE_SIZE);
 			else
 				bh = bread(ROOT_DEV, block, BLOCK_SIZE);
 			if (!bh) {

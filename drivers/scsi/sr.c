@@ -624,6 +624,7 @@ unsigned long sr_init1(unsigned long mem_start, unsigned long mem_end){
 };
 
 void sr_attach(Scsi_Device * SDp){
+  SDp->scsi_request_fn = do_sr_request;
   scsi_CDs[NR_SR++].device = SDp;
   if(NR_SR > MAX_SR) panic ("scsi_devices corrupt (sr)");
 };

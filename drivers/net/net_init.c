@@ -23,7 +23,7 @@
 #include <linux/fs.h>
 #include <linux/malloc.h>
 #include <linux/if_ether.h>
-#include <memory.h>
+#include <linux/string.h>
 #include "dev.h"
 #include "eth.h"
 

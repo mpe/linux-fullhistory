@@ -97,7 +97,8 @@ xiafs_file_read(struct inode * inode, struct file * filp, char * buf, int count)
     zones = (left+offset+XIAFS_ZSIZE(inode->i_sb)-1) >> XIAFS_ZSIZE_BITS(inode->i_sb);
     bhb = bhe = buflist;
     if (filp->f_reada) {
-        zones += read_ahead[MAJOR(inode->i_dev)] >> (1+XIAFS_ZSHIFT(inode->i_sb));
+        if(zones < read_ahead[MAJOR(inode->i_dev)] >> (1+XIAFS_ZSHIFT(inode->i_sb)))
+	  zones = read_ahead[MAJOR(inode->i_dev)] >> (1+XIAFS_ZSHIFT(inode->i_sb));
 	if (zone_nr + zones > f_zones)
 	    zones = f_zones - zone_nr;
     }
@@ -240,7 +241,7 @@ xiafs_file_write(struct inode * inode, struct file * filp, char * buf, int count
 	memcpy_fromfs(cp,buf,c);
 	buf += c;
 	bh->b_uptodate = 1;
-	bh->b_dirt = 1;
+	dirtify_buffer(bh, 0);
 	brelse(bh);
     }
     inode->i_mtime = inode->i_ctime = CURRENT_TIME;

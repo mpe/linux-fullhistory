@@ -310,10 +310,10 @@ void ext2_free_blocks (struct super_block * sb, unsigned long block,
 		}
 	}
 	
-	bh2->b_dirt = 1;
-	sb->u.ext2_sb.s_sbh->b_dirt = 1;
+	dirtify_buffer(bh2, 1);
+	dirtify_buffer(sb->u.ext2_sb.s_sbh, 1);
 
-	bh->b_dirt = 1;
+	dirtify_buffer(bh, 1);
 	if (sb->s_flags & MS_SYNC) {
 		ll_rw_block (WRITE, 1, &bh);
 		wait_on_buffer (bh);
@@ -524,7 +524,7 @@ got_block:
 
 	j = tmp;
 
-	bh->b_dirt = 1;
+	dirtify_buffer(bh, 1);
 	if (sb->s_flags & MS_SYNC) {
 		ll_rw_block (WRITE, 1, &bh);
 		wait_on_buffer (bh);
@@ -544,16 +544,16 @@ got_block:
 	}
 	clear_block (bh->b_data, sb->s_blocksize);
 	bh->b_uptodate = 1;
-	bh->b_dirt = 1;
+	dirtify_buffer(bh, 1);
 	brelse (bh);
 
 	ext2_debug ("allocating block %d. "
 		    "Goal hits %d of %d.\n", j, goal_hits, goal_attempts);
 
 	gdp->bg_free_blocks_count--;
-	bh2->b_dirt = 1;
+	dirtify_buffer(bh2, 1);
 	es->s_free_blocks_count--;
-	sb->u.ext2_sb.s_sbh->b_dirt = 1;
+	dirtify_buffer(sb->u.ext2_sb.s_sbh, 1);
 	sb->s_dirt = 1;
 	unlock_super (sb);
 	return j;

@@ -1,7 +1,7 @@
 /*
  *  linux/fs/isofs/dir.c
  *
- *  (C) 1992  Eric Youngdale Modified for ISO9660 filesystem.
+ *  (C) 1992, 1993, 1994  Eric Youngdale Modified for ISO9660 filesystem.
  *
  *  (C) 1991  Linus Torvalds - minix filesystem
  *
@@ -19,6 +19,8 @@
 #include <linux/string.h>
 #include <linux/mm.h>
 #include <linux/malloc.h>
+#include <linux/sched.h>
+#include <linux/locks.h>
 
 static int isofs_readdir(struct inode *, struct file *, struct dirent *, int);
 
@@ -81,9 +83,12 @@ static int isofs_readdir(struct inode * inode, struct file * filp,
 	
 	offset = filp->f_pos & (bufsize - 1);
 	block = isofs_bmap(inode,filp->f_pos>>bufbits);
-	if (!block || !(bh = bread(inode->i_dev,block,bufsize)))
-		return 0;
-	
+
+	if(!block) return 0;
+
+	if(!(bh = breada(inode->i_dev, block, bufsize, filp->f_pos, inode->i_size)))
+	  return 0;
+
 	while (filp->f_pos < inode->i_size) {
 #ifdef DEBUG
 		printk("Block, offset: %x %x %x\n",
@@ -103,7 +108,8 @@ static int isofs_readdir(struct inode * inode, struct file * filp,
 				       + ISOFS_BLOCK_SIZE);
 			block = isofs_bmap(inode,(filp->f_pos)>>bufbits);
 			if (!block
-			    || !(bh = bread(inode->i_dev,block,bufsize)))
+			    || !(bh = breada(inode->i_dev, block, bufsize, filp->f_pos, 
+					     inode->i_size)))
 				return 0;
 			continue;
 		}
@@ -126,7 +132,8 @@ static int isofs_readdir(struct inode * inode, struct file * filp,
 			offset = filp->f_pos & (bufsize - 1);
 			block = isofs_bmap(inode,(filp->f_pos)>> bufbits);
 			if (!block
-			    || !(bh = bread(inode->i_dev,block,bufsize))) {
+			    || !(bh = breada(inode->i_dev, block, bufsize,
+					     filp->f_pos, inode->i_size))) {
 			        kfree_s(cpnt, 1 << ISOFS_BLOCK_BITS);
 				return 0;
 			};

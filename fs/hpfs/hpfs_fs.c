@@ -16,6 +16,7 @@
 #include <linux/hpfs_fs.h>
 #include <linux/errno.h>
 #include <linux/malloc.h>
+#include <linux/kernel.h>
 #include <linux/sched.h>
 #include <linux/locks.h>
 #include <linux/stat.h>
@@ -1676,8 +1677,7 @@ static void *map_4sectors(dev_t dev, unsigned secno,
 	if (!data)
 		goto bail;
 
-	qbh->bh[0] = bh = breada(dev,
-				 secno, secno + 1, secno + 2, secno + 3, -1);
+	qbh->bh[0] = bh = breada(dev, secno, 512, 0, UINT_MAX);
 	if (!bh)
 		goto bail0;
 	memcpy(data, bh->b_data, 512);

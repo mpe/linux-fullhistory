@@ -53,6 +53,12 @@ int sd_ioctl(struct inode * inode, struct file * file, unsigned int cmd, unsigne
 			put_fs_long(sd[MINOR(inode->i_rdev)].nr_sects,
 				(long *) arg);
 			return 0;
+		case BLKRASET:
+			if(!suser())  return -EACCES;
+			if(!inode->i_rdev) return -EINVAL;
+			if(arg > 0xff) return -EINVAL;
+			read_ahead[MAJOR(inode->i_rdev)] = arg;
+			return 0;
 		case BLKFLSBUF:
 			if(!suser())  return -EACCES;
 			if(!inode->i_rdev) return -EINVAL;

@@ -306,7 +306,7 @@ repeat:
     }
     *lp = tmp;
     inode->i_blocks+=2 << XIAFS_ZSHIFT(inode->i_sb);
-    bh->b_dirt = 1;
+    dirtify_buffer(bh, 1);
     brelse(bh);
     return result;
 }
@@ -466,7 +466,7 @@ static struct buffer_head *  xiafs_update_inode(struct inode * inode)
 	                             | (inode->u.xiafs_i.i_dind_zone  & 0xffffff);
     }
     inode->i_dirt=0;
-    bh->b_dirt=1;
+    dirtify_buffer(bh, 1);
     return bh;
 }
 

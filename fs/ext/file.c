@@ -104,7 +104,8 @@ static int ext_file_read(struct inode * inode, struct file * filp, char * buf, i
 	blocks = (left + offset + BLOCK_SIZE - 1) >> BLOCK_SIZE_BITS;
 	bhb = bhe = buflist;
 	if (filp->f_reada) {
-		blocks += read_ahead[MAJOR(inode->i_dev)] / (BLOCK_SIZE >> 9);
+	        if(blocks < read_ahead[MAJOR(inode->i_dev)] / (BLOCK_SIZE >> 9))
+		  blocks = read_ahead[MAJOR(inode->i_dev)] / (BLOCK_SIZE >> 9);
 		if (block + blocks > size)
 			blocks = size - block;
 	}
@@ -247,7 +248,7 @@ static int ext_file_write(struct inode * inode, struct file * filp, char * buf, 
 		memcpy_fromfs(p,buf,c);
 		buf += c;
 		bh->b_uptodate = 1;
-		bh->b_dirt = 1;
+		dirtify_buffer(bh, 0);
 		brelse(bh);
 	}
 	inode->i_mtime = inode->i_ctime = CURRENT_TIME;

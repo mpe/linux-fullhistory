@@ -42,12 +42,12 @@ static char *version =
 #include <linux/ptrace.h>
 #include <linux/ioport.h>
 #include <linux/in.h>
+#include <linux/string.h>
 #include <asm/system.h>
 #include <asm/bitops.h>
 #include <asm/io.h>
 #include <asm/dma.h>
-#include <errno.h>
-#include <memory.h>
+#include <linux/errno.h>
 
 #include "dev.h"
 #include "eth.h"

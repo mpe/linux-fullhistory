@@ -84,7 +84,7 @@ static int coh_trunc_indirect (struct inode * inode, unsigned long blocks, unsig
 		if (!indblock)
 			continue;
 		*ind = 0;
-		bh->b_dirt = 1;
+		dirtify_buffer(bh, 1);
 		sysv_free_block(sb,indblock);
 	}
 	for (i = 0; i < sb->sv_ind_per_block; i++)
@@ -338,7 +338,7 @@ repeat:
 			continue;
 		}
 		*ind = 0;
-		indbh->b_dirt = 1;
+		dirtify_buffer(indbh, 1);
 		brelse(bh);
 		sysv_free_block(sb,block);
 	}

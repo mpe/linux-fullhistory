@@ -34,10 +34,14 @@ static const char RCSid[] = "$Header:";
 #define MAX_RETRIES 5
 
 /*
- *	Time out in seconds
+ *	Time out in seconds for disks and Magneto-opticals (which are slower).
  */
 
 #define SD_TIMEOUT 300
+#define SD_MOD_TIMEOUT 750
+
+#define CLUSTERABLE_DEVICE(SC) (SC->host->sg_tablesize < 64 && \
+			    scsi_devices[SC->index].type != TYPE_MOD)
 
 struct hd_struct * sd;
 
@@ -369,9 +373,7 @@ static void do_sd_request (void)
     };
     
     if (!SCpnt) return; /* Could not find anything to do */
-    
-    wake_up(&wait_for_request);
-    
+        
     /* Queue command */
     requeue_sd_request(SCpnt);
   };  /* While */
@@ -381,7 +383,10 @@ static void requeue_sd_request (Scsi_Cmnd * SCpnt)
 {
 	int dev, block, this_count;
 	unsigned char cmd[10];
-	char * buff;
+	int bounce_size, contiguous;
+	int max_sg;
+	struct buffer_head * bh, *bhp;
+	char * buff, *bounce_buffer;
 
 repeat:
 
@@ -440,8 +445,35 @@ repeat:
 
 	SCpnt->this_count = 0;
 
-	if (!SCpnt->request.bh || 
-	    (SCpnt->request.nr_sectors == SCpnt->request.current_nr_sectors)) {
+	/* If the host adapter can deal with very large scatter-gather
+	   requests, it is a waste of time to cluster */
+	contiguous = (!CLUSTERABLE_DEVICE(SCpnt) ? 0 :1);
+	bounce_buffer = NULL;
+	bounce_size = (SCpnt->request.nr_sectors << 9);
+
+	/* First see if we need a bounce buffer for this request.  If we do, make sure
+	   that we can allocate a buffer.  Do not waste space by allocating a bounce
+	   buffer if we are straddling the 16Mb line */
+
+	
+	if (contiguous && SCpnt->request.bh &&
+	    ((int) SCpnt->request.bh->b_data) + (SCpnt->request.nr_sectors << 9) - 1 > 
+	    ISA_DMA_THRESHOLD && SCpnt->host->unchecked_isa_dma) {
+	  if(((int) SCpnt->request.bh->b_data) > ISA_DMA_THRESHOLD)
+	    bounce_buffer = scsi_malloc(bounce_size);
+	  if(!bounce_buffer) contiguous = 0;
+	};
+
+	if(contiguous && SCpnt->request.bh && SCpnt->request.bh->b_reqnext)
+	  for(bh = SCpnt->request.bh, bhp = bh->b_reqnext; bhp; bh = bhp, 
+	      bhp = bhp->b_reqnext) {
+	    if(!CONTIGUOUS_BUFFERS(bh,bhp)) { 
+	      if(bounce_buffer) scsi_free(bounce_buffer, bounce_size);
+	      contiguous = 0;
+	      break;
+	    } 
+	  };
+	if (!SCpnt->request.bh || contiguous) {
 
 	  /* case of page request (i.e. raw device), or unlinked buffer */
 	  this_count = SCpnt->request.nr_sectors;
@@ -450,7 +482,7 @@ repeat:
 
 	} else if (SCpnt->host->sg_tablesize == 0 ||
 		   (need_isa_buffer && 
-		    dma_free_sectors < 10)) {
+		    dma_free_sectors <= 10)) {
 
 	  /* Case of host adapter that cannot scatter-gather.  We also
 	   come here if we are running low on DMA buffer memory.  We set
@@ -461,7 +493,7 @@ repeat:
 
 	  if (SCpnt->host->sg_tablesize != 0 &&
 	      need_isa_buffer && 
-	      dma_free_sectors < 10)
+	      dma_free_sectors <= 10)
 	    printk("Warning: SCSI DMA buffer space running low.  Using non scatter-gather I/O.\n");
 
 	  this_count = SCpnt->request.current_nr_sectors;
@@ -471,25 +503,41 @@ repeat:
 	} else {
 
 	  /* Scatter-gather capable host adapter */
-	  struct buffer_head * bh;
 	  struct scatterlist * sgpnt;
 	  int count, this_count_max;
+	  int counted;
+
 	  bh = SCpnt->request.bh;
 	  this_count = 0;
 	  this_count_max = (rscsi_disks[dev].ten ? 0xffff : 0xff);
 	  count = 0;
-	  while(bh && count < SCpnt->host->sg_tablesize) {
+	  bhp = NULL;
+	  while(bh) {
 	    if ((this_count + (bh->b_size >> 9)) > this_count_max) break;
+	    if(!bhp || !CONTIGUOUS_BUFFERS(bhp,bh) ||
+	       !CLUSTERABLE_DEVICE(SCpnt) ||
+	       (SCpnt->host->unchecked_isa_dma &&
+	       ((unsigned int) bh->b_data-1) == ISA_DMA_THRESHOLD)) {
+	      if (count < SCpnt->host->sg_tablesize) count++;
+	      else break;
+	    };
 	    this_count += (bh->b_size >> 9);
-	    count++;
+	    bhp = bh;
 	    bh = bh->b_reqnext;
 	  };
+#if 0
+	  if(SCpnt->host->unchecked_isa_dma &&
+	     ((unsigned int) SCpnt->request.bh->b_data-1) == ISA_DMA_THRESHOLD) count--;
+#endif
 	  SCpnt->use_sg = count;  /* Number of chains */
 	  count = 512;/* scsi_malloc can only allocate in chunks of 512 bytes*/
 	  while( count < (SCpnt->use_sg * sizeof(struct scatterlist))) 
 	    count = count << 1;
 	  SCpnt->sglist_len = count;
+	  max_sg = count / sizeof(struct scatterlist);
+	  if(SCpnt->host->sg_tablesize < max_sg) max_sg = SCpnt->host->sg_tablesize;
 	  sgpnt = (struct scatterlist * ) scsi_malloc(count);
+	  memset(sgpnt, 0, count);  /* Zero so it is easy to fill */
 	  if (!sgpnt) {
 	    printk("Warning - running *really* short on DMA buffers\n");
 	    SCpnt->use_sg = 0;  /* No memory left - bail out */
@@ -497,20 +545,25 @@ repeat:
 	    buff = SCpnt->request.buffer;
 	  } else {
 	    buff = (char *) sgpnt;
-	    count = 0;
-	    bh = SCpnt->request.bh;
-	    for(count = 0, bh = SCpnt->request.bh; count < SCpnt->use_sg; 
-		count++, bh = bh->b_reqnext) {
-	      sgpnt[count].address = bh->b_data;
-	      sgpnt[count].alt_address = NULL;
-	      sgpnt[count].length = bh->b_size;
-	      if (((int) sgpnt[count].address) + sgpnt[count].length > 
-		  ISA_DMA_THRESHOLD & (SCpnt->host->unchecked_isa_dma)) {
+	    counted = 0;
+	    for(count = 0, bh = SCpnt->request.bh, bhp = bh->b_reqnext;
+		count < SCpnt->use_sg && bh; 
+		count++, bh = bhp) {
+
+	      bhp = bh->b_reqnext;
+
+	      if(!sgpnt[count].address) sgpnt[count].address = bh->b_data;
+	      sgpnt[count].length += bh->b_size;
+	      counted += bh->b_size >> 9;
+
+	      if (((int) sgpnt[count].address) + sgpnt[count].length - 1 > 
+		  ISA_DMA_THRESHOLD && (SCpnt->host->unchecked_isa_dma) &&
+		  !sgpnt[count].alt_address) {
 		sgpnt[count].alt_address = sgpnt[count].address;
 		/* We try and avoid exhausting the DMA pool, since it is easier
 		   to control usage here.  In other places we might have a more
 		   pressing need, and we would be screwed if we ran out */
-		if(dma_free_sectors < (bh->b_size >> 9) + 5) {
+		if(dma_free_sectors < (sgpnt[count].length >> 9) + 10) {
 		  sgpnt[count].address = NULL;
 		} else {
 		  sgpnt[count].address = (char *) scsi_malloc(sgpnt[count].length);
@@ -520,6 +573,7 @@ repeat:
    ensure that all scsi operations are able to do at least a non-scatter/gather
    operation */
 		if(sgpnt[count].address == NULL){ /* Out of dma memory */
+#if 0
 		  printk("Warning: Running low on SCSI DMA buffers");
 		  /* Try switching back to a non scatter-gather operation. */
 		  while(--count >= 0){
@@ -529,30 +583,93 @@ repeat:
 		  this_count = SCpnt->request.current_nr_sectors;
 		  buff = SCpnt->request.buffer;
 		  SCpnt->use_sg = 0;
-		  scsi_free(buff, SCpnt->sglist_len);
+		  scsi_free(sgpnt, SCpnt->sglist_len);
+#endif
+		  SCpnt->use_sg = count;
+		  this_count = counted -= bh->b_size >> 9;
 		  break;
 		};
 
-		if (SCpnt->request.cmd == WRITE)
+	      };
+
+	      /* Only cluster buffers if we know that we can supply DMA buffers
+		 large enough to satisfy the request.  Do not cluster a new
+		 request if this would mean that we suddenly need to start
+		 using DMA bounce buffers */
+	      if(bhp && CONTIGUOUS_BUFFERS(bh,bhp) && CLUSTERABLE_DEVICE(SCpnt)) {
+		char * tmp;
+
+		if (((int) sgpnt[count].address) + sgpnt[count].length +
+		    bhp->b_size - 1 > ISA_DMA_THRESHOLD && 
+		    (SCpnt->host->unchecked_isa_dma) &&
+		    !sgpnt[count].alt_address) continue;
+
+		if(!sgpnt[count].alt_address) {count--; continue; }
+		if(dma_free_sectors > 10)
+		  tmp = scsi_malloc(sgpnt[count].length + bhp->b_size);
+		else {
+		  tmp = NULL;
+		  max_sg = SCpnt->use_sg;
+		};
+		if(tmp){
+		  scsi_free(sgpnt[count].address, sgpnt[count].length);
+		  sgpnt[count].address = tmp;
+		  count--;
+		  continue;
+		};
+
+		/* If we are allowed another sg chain, then increment counter so we
+		   can insert it.  Otherwise we will end up truncating */
+
+		if (SCpnt->use_sg < max_sg) SCpnt->use_sg++;
+	      };  /* contiguous buffers */
+	    }; /* for loop */
+
+	    this_count = counted; /* This is actually how many we are going to transfer */
+
+	    if(count < SCpnt->use_sg || SCpnt->use_sg > SCpnt->host->sg_tablesize){
+	      bh = SCpnt->request.bh;
+	      printk("Use sg, count %d %x %d\n", SCpnt->use_sg, count, dma_free_sectors);
+	      printk("maxsg = %x, counted = %d this_count = %d\n", max_sg, counted, this_count);
+	      while(bh){
+		printk("[%8.8x %x] ", bh->b_data, bh->b_size);
+		bh = bh->b_reqnext;
+	      };
+	      if(SCpnt->use_sg < 16)
+		for(count=0; count<SCpnt->use_sg; count++)
+		  printk("{%d:%8.8x %8.8x %d}  ", count,
+			 sgpnt[count].address,
+			 sgpnt[count].alt_address,
+			 sgpnt[count].length);
+	      panic("Ooops");
+	    };
+
+	    if (SCpnt->request.cmd == WRITE)
+	      for(count=0; count<SCpnt->use_sg; count++)
+		if(sgpnt[count].alt_address)
 		  memcpy(sgpnt[count].address, sgpnt[count].alt_address, 
 			 sgpnt[count].length);
-	      };
-	    }; /* for loop */
 	  };  /* Able to malloc sgpnt */
 	};  /* Host adapter capable of scatter-gather */
 
 /* Now handle the possibility of DMA to addresses > 16Mb */
 
 	if(SCpnt->use_sg == 0){
-	  if (((int) buff) + (this_count << 9) > ISA_DMA_THRESHOLD && 
+	  if (((int) buff) + (this_count << 9) - 1 > ISA_DMA_THRESHOLD && 
 	    (SCpnt->host->unchecked_isa_dma)) {
-	    buff = (char *) scsi_malloc(this_count << 9);
-	    if(buff == NULL) panic("Ran out of DMA buffers.");
+	    if(bounce_buffer)
+	      buff = bounce_buffer;
+	    else
+	      buff = (char *) scsi_malloc(this_count << 9);
+	    if(buff == NULL) {  /* Try backing off a bit if we are low on mem*/
+	      this_count = SCpnt->request.current_nr_sectors;
+	      buff = (char *) scsi_malloc(this_count << 9);
+	      if(!buff) panic("Ran out of DMA buffers.");
+	    };
 	    if (SCpnt->request.cmd == WRITE)
 	      memcpy(buff, (char *)SCpnt->request.buffer, this_count << 9);
 	  };
 	};
-
 #ifdef DEBUG
 	printk("sd%d : %s %d/%d 512 byte blocks.\n", MINOR(SCpnt->request.dev),
 		(SCpnt->request.cmd == WRITE) ? "writing" : "reading",
@@ -607,10 +724,12 @@ repeat:
 
         SCpnt->transfersize = rscsi_disks[dev].sector_size;
         SCpnt->underflow = this_count << 9; 
-
 	scsi_do_cmd (SCpnt, (void *) cmd, buff, 
 		     this_count * rscsi_disks[dev].sector_size,
-		     rw_intr, SD_TIMEOUT, MAX_RETRIES);
+		     rw_intr, 
+		     (scsi_devices[SCpnt->index].type == TYPE_DISK ? 
+		                     SD_TIMEOUT : SD_MOD_TIMEOUT),
+		     MAX_RETRIES);
 }
 
 int check_scsidisk_media_change(int full_dev, int flag){
@@ -857,6 +976,7 @@ static int sd_init_onedisk(int i)
 	their size, and reads partition	table entries for them.
 */
 
+
 unsigned long sd_init(unsigned long memory_start, unsigned long memory_end)
 {
 	int i;
@@ -893,7 +1013,7 @@ unsigned long sd_init(unsigned long memory_start, unsigned long memory_end)
 	   the read-ahead to 16 blocks (32 sectors).  If not, we use
 	   a two block (4 sector) read ahead. */
 	if(rscsi_disks[0].device->host->sg_tablesize)
-	  read_ahead[MAJOR_NR] = 32;
+	  read_ahead[MAJOR_NR] = 120;
 	/* 64 sector read-ahead */
 	else
 	  read_ahead[MAJOR_NR] = 4;  /* 4 sector read-ahead */
@@ -910,6 +1030,7 @@ unsigned long sd_init1(unsigned long mem_start, unsigned long mem_end){
 };
 
 void sd_attach(Scsi_Device * SDp){
+  SDp->scsi_request_fn = do_sd_request;
   rscsi_disks[NR_SD++].device = SDp;
   if(NR_SD > MAX_SD) panic ("scsi_devices corrupt (sd)");
 };
@@ -968,3 +1089,4 @@ int revalidate_scsidisk(int dev, int maxusage){
 	  DEVICE_BUSY = 0;
 	  return 0;
 }
+

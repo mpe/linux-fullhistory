@@ -415,7 +415,7 @@ void msdos_write_inode(struct inode *inode)
 	date_unix2dos(inode->i_mtime,&raw_entry->time,&raw_entry->date);
 	raw_entry->time = CT_LE_W(raw_entry->time);
 	raw_entry->date = CT_LE_W(raw_entry->date);
-	bh->b_dirt = 1;
+	dirtify_buffer(bh, 1);
 	brelse(bh);
 }
 

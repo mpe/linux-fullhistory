@@ -542,6 +542,12 @@ static int hd_ioctl(struct inode * inode, struct file * file,
 			put_fs_long(hd[MINOR(inode->i_rdev)].start_sect,
 				(long *) &loc->start);
 			return 0;
+		case BLKRASET:
+			if(!suser())  return -EACCES;
+			if(!inode->i_rdev) return -EINVAL;
+			if(arg > 0xff) return -EINVAL;
+			read_ahead[MAJOR(inode->i_rdev)] = arg;
+			return 0;
          	case BLKGETSIZE:   /* Return device size */
 			if (!arg)  return -EINVAL;
 			err = verify_area(VERIFY_WRITE, (long *) arg, sizeof(long));

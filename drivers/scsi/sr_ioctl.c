@@ -385,6 +385,12 @@ int sr_ioctl(struct inode * inode, struct file * file, unsigned int cmd, unsigne
 		case CDROMREADMODE1:
 			return -EINVAL;
 
+		case BLKRASET:
+			if(!suser())  return -EACCES;
+			if(!inode->i_rdev) return -EINVAL;
+			if(arg > 0xff) return -EINVAL;
+			read_ahead[MAJOR(inode->i_rdev)] = arg;
+			return 0;
 		RO_IOCTLS(dev,arg);
 		default:
 			return scsi_ioctl(scsi_CDs[target].device,cmd,(void *) arg);

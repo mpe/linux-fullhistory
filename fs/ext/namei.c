@@ -249,7 +249,7 @@ printk ("ext_add_entry: skipping to next block\n");
 #if 0
 					dir->i_ctime = CURRENT_TIME;
 #endif
-					bh->b_dirt = 1;
+					dirtify_buffer(bh, 1);
 				}
 				brelse (bh);
 				bh = NULL;
@@ -296,7 +296,7 @@ printk ("ext_add_entry : creating next block\n");
 			de->name_len = namelen;
 			for (i=0; i < namelen ; i++)
 				de->name[i] = name[i];
-			bh->b_dirt = 1;
+			dirtify_buffer(bh, 1);
 			*res_dir = de;
 			return bh;
 		}
@@ -334,7 +334,7 @@ int ext_create(struct inode * dir,const char * name, int len, int mode,
 		return -ENOSPC;
 	}
 	de->inode = inode->i_ino;
-	bh->b_dirt = 1;
+	dirtify_buffer(bh, 1);
 	brelse(bh);
 	iput(dir);
 	*result = inode;
@@ -393,7 +393,7 @@ int ext_mknod(struct inode * dir, const char * name, int len, int mode, int rdev
 		return -ENOSPC;
 	}
 	de->inode = inode->i_ino;
-	bh->b_dirt = 1;
+	dirtify_buffer(bh, 1);
 	brelse(bh);
 	iput(dir);
 	iput(inode);
@@ -445,7 +445,7 @@ int ext_mkdir(struct inode * dir, const char * name, int len, int mode)
 	de->name_len=2;
 	strcpy(de->name,"..");
 	inode->i_nlink = 2;
-	dir_block->b_dirt = 1;
+	dirtify_buffer(dir_block, 1);
 	brelse(dir_block);
 	inode->i_mode = S_IFDIR | (mode & 0777 & ~current->umask);
 	if (dir->i_mode & S_ISGID)
@@ -459,7 +459,7 @@ int ext_mkdir(struct inode * dir, const char * name, int len, int mode)
 		return -ENOSPC;
 	}
 	de->inode = inode->i_ino;
-	bh->b_dirt = 1;
+	dirtify_buffer(bh, 1);
 	dir->i_nlink++;
 	dir->i_dirt = 1;
 	iput(dir);
@@ -567,7 +567,7 @@ int ext_rmdir(struct inode * dir, const char * name, int len)
 	de->inode = 0;
 	de->name_len = 0;
 	ext_merge_entries (de, pde, nde);
-	bh->b_dirt = 1;
+	dirtify_buffer(bh, 1);
 	inode->i_nlink=0;
 	inode->i_dirt=1;
 	dir->i_nlink--;
@@ -610,7 +610,7 @@ int ext_unlink(struct inode * dir, const char * name, int len)
 	de->inode = 0;
 	de->name_len = 0;
 	ext_merge_entries (de, pde, nde);
-	bh->b_dirt = 1;
+	dirtify_buffer(bh, 1);
 	inode->i_nlink--;
 	inode->i_dirt = 1;
 	inode->i_ctime = CURRENT_TIME;
@@ -650,7 +650,7 @@ int ext_symlink(struct inode * dir, const char * name, int len, const char * sym
 	while (i < 1023 && (c = *(symname++)))
 		name_block->b_data[i++] = c;
 	name_block->b_data[i] = 0;
-	name_block->b_dirt = 1;
+	dirtify_buffer(name_block, 1);
 	brelse(name_block);
 	inode->i_size = i;
 	inode->i_dirt = 1;
@@ -672,7 +672,7 @@ int ext_symlink(struct inode * dir, const char * name, int len, const char * sym
 		return -ENOSPC;
 	}
 	de->inode = inode->i_ino;
-	bh->b_dirt = 1;
+	dirtify_buffer(bh, 1);
 	brelse(bh);
 	iput(dir);
 	iput(inode);
@@ -708,7 +708,7 @@ int ext_link(struct inode * oldinode, struct inode * dir, const char * name, int
 		return -ENOSPC;
 	}
 	de->inode = oldinode->i_ino;
-	bh->b_dirt = 1;
+	dirtify_buffer(bh, 1);
 	brelse(bh);
 	iput(dir);
 	oldinode->i_nlink++;
@@ -851,11 +851,11 @@ start_up:
 		new_inode->i_nlink--;
 		new_inode->i_dirt = 1;
 	}
-	old_bh->b_dirt = 1;
-	new_bh->b_dirt = 1;
+	dirtify_buffer(old_bh, 1);
+	dirtify_buffer(new_bh, 1);
 	if (dir_bh) {
 		PARENT_INO(dir_bh->b_data) = new_dir->i_ino;
-		dir_bh->b_dirt = 1;
+		dirtify_buffer(dir_bh, 1);
 		old_dir->i_nlink--;
 		new_dir->i_nlink++;
 		old_dir->i_dirt = 1;

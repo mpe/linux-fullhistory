@@ -902,7 +902,7 @@ asmlinkage void do_page_fault(struct pt_regs *regs, unsigned long error_code)
 			} else 
 				user_esp = regs->esp;
 		}
-		if (error_code & 1)
+		if (error_code & PAGE_PRESENT)
 			do_wp_page(error_code, address, current, user_esp);
 		else
 			do_no_page(error_code, address, current, user_esp);
@@ -1084,10 +1084,17 @@ void mem_init(unsigned long start_low_mem,
 	/* mark usable pages in the mem_map[] */
 	start_low_mem = PAGE_ALIGN(start_low_mem);
 	start_mem = PAGE_ALIGN(start_mem);
-	while (start_low_mem < 0xA0000) {
+
+	/*
+	 * IBM messed up *AGAIN* in their thinkpad: 0xA0000 -> 0x9F000.
+	 * They seem to have done something stupid with the floppy
+	 * controller as well..
+	 */
+	while (start_low_mem < 0x9f000) {
 		mem_map[MAP_NR(start_low_mem)] = 0;
 		start_low_mem += PAGE_SIZE;
 	}
+
 	while (start_mem < high_memory) {
 		mem_map[MAP_NR(start_mem)] = 0;
 		start_mem += PAGE_SIZE;
@@ -1133,21 +1140,18 @@ void si_meminfo(struct sysinfo *val)
 
 	i = high_memory >> PAGE_SHIFT;
 	val->totalram = 0;
-	val->freeram = 0;
 	val->sharedram = 0;
+	val->freeram = nr_free_pages << PAGE_SHIFT;
 	val->bufferram = buffermem;
 	while (i-- > 0)  {
 		if (mem_map[i] & MAP_PAGE_RESERVED)
 			continue;
 		val->totalram++;
-		if (!mem_map[i]) {
-			val->freeram++;
+		if (!mem_map[i])
 			continue;
-		}
 		val->sharedram += mem_map[i]-1;
 	}
 	val->totalram <<= PAGE_SHIFT;
-	val->freeram <<= PAGE_SHIFT;
 	val->sharedram <<= PAGE_SHIFT;
 	return;
 }

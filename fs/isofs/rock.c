@@ -1,7 +1,7 @@
 /*
  *  linux/fs/isofs/rock.c
  *
- *  (C) 1992  Eric Youngdale
+ *  (C) 1992, 1993  Eric Youngdale
  *
  *  Rock Ridge Extensions to iso9660
  */

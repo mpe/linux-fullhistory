@@ -127,6 +127,7 @@ static unsigned char generic_sense[6] = {REQUEST_SENSE, 0,0,0, 255, 0};
 static struct blist blacklist[] = 
 {
    {"CHINON","CD-ROM CDS-431","H42"},  /* Locks up if polled for lun != 0 */
+   {"CHINON","CD-ROM CDS-535","Q14"}, /* Lockup if polled for lun != 0 */
    {"DENON","DRD-25X","V"},   /* A cdrom that locks up when probed at lun != 0 */
    {"IMS", "CDD521/10","2.06"},   /* Locks-up when LUN>0 polled. */
    {"MAXTOR","XT-3280","PR02"},   /* Locks-up when LUN>0 polled. */
@@ -533,7 +534,7 @@ Scsi_Cmnd * request_queueable (struct request * req, int index)
 {
   Scsi_Cmnd * SCpnt = NULL;
   int tablesize;
-  struct buffer_head * bh;
+  struct buffer_head * bh, *bhp;
 
   if ((index < 0) ||  (index > NR_SCSI_DEVICES))
     panic ("Index number in allocate_device() is out of range.\n");
@@ -557,16 +558,17 @@ Scsi_Cmnd * request_queueable (struct request * req, int index)
   if (req) {
     memcpy(&SCpnt->request, req, sizeof(struct request));
     tablesize = scsi_devices[index].host->sg_tablesize;
-    bh = req->bh;
+    bhp = bh = req->bh;
     if(!tablesize) bh = NULL;
     /* Take a quick look through the table to see how big it is.  We already
        have our copy of req, so we can mess with that if we want to.  */
     while(req->nr_sectors && bh){
-	    tablesize--;
+	    bhp = bhp->b_reqnext;
+	    if(!bhp || !CONTIGUOUS_BUFFERS(bh,bhp)) tablesize--;
 	    req->nr_sectors -= bh->b_size >> 9;
 	    req->sector += bh->b_size >> 9;
 	    if(!tablesize) break;
-	    bh = bh->b_reqnext;
+	    bh = bhp;
     };
     if(req->nr_sectors && bh && bh->b_reqnext){  /* Any leftovers? */
       SCpnt->request.bhtail = bh;
@@ -579,9 +581,10 @@ Scsi_Cmnd * request_queueable (struct request * req, int index)
       req->current_nr_sectors = bh->b_size >> 9;
       req->buffer = bh->b_data;
       SCpnt->request.waiting = NULL; /* Wait until whole thing done */
-    } else
+    } else {
       req->dev = -1;
-      
+      wake_up(&wait_for_request);
+    };      
   } else {
     SCpnt->request.dev = 0xffff; /* Busy, but no request */
     SCpnt->request.waiting = NULL;  /* And no one is waiting for the device either */
@@ -608,7 +611,7 @@ Scsi_Cmnd * allocate_device (struct request ** reqp, int index, int wait)
   int dev = -1;
   struct request * req = NULL;
   int tablesize;
-  struct buffer_head * bh;
+  struct buffer_head * bh, *bhp;
   struct Scsi_Host * host;
   Scsi_Cmnd * SCpnt = NULL;
   Scsi_Cmnd * SCwait = NULL;
@@ -654,16 +657,17 @@ Scsi_Cmnd * allocate_device (struct request ** reqp, int index, int wait)
 	if (req) {
 	  memcpy(&SCpnt->request, req, sizeof(struct request));
 	  tablesize = scsi_devices[index].host->sg_tablesize;
-	  bh = req->bh;
+	  bhp = bh = req->bh;
 	  if(!tablesize) bh = NULL;
 	  /* Take a quick look through the table to see how big it is.  We already
 	     have our copy of req, so we can mess with that if we want to.  */
 	  while(req->nr_sectors && bh){
-	    tablesize--;
+	    bhp = bhp->b_reqnext;
+	    if(!bhp || !CONTIGUOUS_BUFFERS(bh,bhp)) tablesize--;
 	    req->nr_sectors -= bh->b_size >> 9;
 	    req->sector += bh->b_size >> 9;
 	    if(!tablesize) break;
-	    bh = bh->b_reqnext;
+	    bh = bhp;
 	  };
 	  if(req->nr_sectors && bh && bh->b_reqnext){  /* Any leftovers? */
 	    SCpnt->request.bhtail = bh;
@@ -680,6 +684,7 @@ Scsi_Cmnd * allocate_device (struct request ** reqp, int index, int wait)
 	    {
 	      req->dev = -1;
 	      *reqp = req->next;
+	      wake_up(&wait_for_request);
 	    };
 	} else {
 	  SCpnt->request.dev = 0xffff; /* Busy */
@@ -1503,8 +1508,8 @@ void *scsi_malloc(unsigned int len)
 {
   unsigned int nbits, mask;
   int i, j;
-  if((len & 0x1ff) || len > 4096)
-    panic("Inappropriate buffer size requested");
+  if((len & 0x1ff) || len > 8192)
+    return NULL;
   
   cli();
   nbits = len >> 9;
@@ -1593,6 +1598,7 @@ unsigned long scsi_dev_init (unsigned long memory_start,unsigned long memory_end
 
 	for (i=0; i< NR_SCSI_DEVICES; i++) {
 	  int j;
+	  scsi_devices[i].scsi_request_fn = NULL;
 	  switch (scsi_devices[i].type)
 	    {
 	    case TYPE_TAPE :

@@ -1,7 +1,7 @@
 /*
  *  linux/fs/isofs/file.c
  *
- *  (C) 1992  Eric Youngdale Modified for ISO9660 filesystem.
+ *  (C) 1992, 1993, 1994  Eric Youngdale Modified for ISO9660 filesystem.
  *
  *  (C) 1991  Linus Torvalds - minix filesystem
  *
@@ -146,6 +146,8 @@ static int isofs_file_read(struct inode * inode, struct file * filp, char * buf,
 	bhb = bhe = buflist;
 
 	ra_blocks = read_ahead[MAJOR(inode->i_dev)] / (BLOCK_SIZE >> 9);
+	if(ra_blocks > blocks) blocks = ra_blocks;
+
 	max_block = (inode->i_size + BLOCK_SIZE - 1)/BLOCK_SIZE;
 	nextblock = -1;
 
@@ -169,7 +171,6 @@ static int isofs_file_read(struct inode * inode, struct file * filp, char * buf,
 			if (*bhb && !(*bhb)->b_uptodate) {
 			        uptodate = 0;
 			        bhreq[bhrequest++] = *bhb;
-				nextblock = (*bhb)->b_blocknr + 1;
 			      };
 
 			if (++bhb == &buflist[NBUF])
@@ -177,37 +178,12 @@ static int isofs_file_read(struct inode * inode, struct file * filp, char * buf,
 
 			/* If the block we have on hand is uptodate, go ahead
 			   and complete processing. */
-			if(bhrequest == 0 && uptodate) break;
+			if(uptodate) break;
 
 			if (bhb == bhe)
 				break;
 		      }
 
-		if(blocks == 0 && bhrequest && filp->f_reada && bhb != bhe) { 
-		  /* If we are going to read something anyways, add in the
-		     read-ahead blocks */
-		  while(ra_blocks){
-		    if (block >= max_block) break;
-		    if(bhrequest == NBUF) break;  /* Block full */
-		    --ra_blocks;
-		    *bhb = getblk(inode->i_dev,isofs_bmap(inode, block++), ISOFS_BUFFER_SIZE(inode));
-
-		    if (*bhb && !(*bhb)->b_uptodate) {
-		      if((*bhb)->b_blocknr != nextblock) {
-			brelse(*bhb);
-			break;
-		      };
-		      nextblock = (*bhb)->b_blocknr + 1;
-		      bhreq[bhrequest++] = *bhb;
-		    };
-		    
-		    if (++bhb == &buflist[NBUF])
-		      bhb = buflist;
-		    
-		    if (bhb == bhe)
-		      break;
-		  };
-		};
 		/* Now request them all */
 		if (bhrequest)
 		  ll_rw_block(READ, bhrequest, bhreq);

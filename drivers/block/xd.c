@@ -252,6 +252,12 @@ static int xd_ioctl (struct inode *inode,struct file *file,u_int cmd,u_long arg)
 					return (0);
 				}
 				break;
+			case BLKRASET:
+			  if(!suser())  return -EACCES;
+			  if(!inode->i_rdev) return -EINVAL;
+			  if(arg > 0xff) return -EINVAL;
+			  read_ahead[MAJOR(inode->i_rdev)] = arg;
+			  return 0;
 			case BLKGETSIZE:
 				if (arg) {
 					if ((err = verify_area(VERIFY_WRITE,(long *) arg,sizeof(long))))

@@ -1,24 +1,34 @@
-/*  depca.c: A DIGITAL DEPCA ethernet driver for linux.
+/*  depca.c: A DIGITAL DEPCA  & EtherWORKS ethernet driver for linux.
 
     Written 1994 by David C. Davies.
 
-    Copyright 1994 David C. Davies and United States Government as
-    represented by the Director, National Security Agency.  This software
-    may be used and distributed according to the terms of the GNU Public
-    License, incorporated herein by reference.
+
+                      Copyright 1994 David C. Davies
+		                   and 
+			 United States Government
+	 (as represented by the Director, National Security Agency).  
+
+
+    This software may be used and distributed according to the terms of
+    the GNU Public License, incorporated herein by reference.
 
     This driver is written for the Digital Equipment Corporation series
-    of DEPCA ethernet cards:
+    of DEPCA and EtherWORKS ethernet cards:
 
-    	DE100 DEPCA
-	DE200 DEPCA Turbo
-	DE202 DEPCA Turbo (TP BNC)
-	DE210 DEPCA
+        DEPCA       (the original)
+    	DE100
+	DE200 Turbo
+	DE201 Turbo
+	DE202 Turbo (TP BNC)
+	DE210
 
-    The driver has been tested on DE100 and DE20x cards in a relatively busy 
-    network.
+    The  driver has been tested on DE100, DE200 and DE202 cards  in  a
+    relatively busy network.
 
-    The author may be reached as davies@wanton.enet.dec.com or
+    This driver  will  not work  for the DE203,  DE204  and DE205 series  of
+    cards, since they have a new custom ASIC in place of the AMD LANCE chip.
+
+    The author may be reached as davies@wanton.lkg.dec.com or
     Digital Equipment Corporation, 146 Main Street, Maynard MA 01754.
 
     =========================================================================
@@ -49,10 +59,20 @@
     the   filter bit   positions  correctly.  Hash   filtering  is  not  yet
     implemented in the current driver set.
 
-    The  DE200 series boards have   on-board 64kB RAM  for  use as a  shared
-    memory network buffer. Only  the DE100 cards  make  use of a  2kB buffer
-    mode  which has not  been implemented in  this driver (only the 32kB and
-    64kB modes are supported).
+    The original DEPCA  card requires that  the ethernet ROM address counter
+    be enabled to count and has an 8 bit NICSR.  The ROM counter enabling is
+    only done when  a 0x08 is read as  the first address octet  (to minimise
+    the chances of  writing over some other hardware's  I/O  register).  The
+    size of the NICSR is tested by a word read: if  both bytes are the same,
+    the register  is 8 bits wide.   Also,  there is a   maximum of only 48kB
+    network  RAM for   this card.  My   thanks  to Torbjorn Lindh   for help
+    debugging all this  (and holding  my  feet to the   fire until I got  it
+    right).
+
+    The DE200  series  boards have  on-board 64kB  RAM for  use  as a shared
+    memory network  buffer. Only the DE100  cards make use  of a  2kB buffer
+    mode which has not  been implemented in  this driver (only the 32kB  and
+    64kB modes are supported [16kB/48kB for the original DEPCA]).
 
     At the  most only 2 DEPCA  cards can be supported  because there is only
     provision for two I/O base addresses on the cards (0x300 and 0x200). The
@@ -73,25 +93,19 @@
     this unambiguously at the moment, since there is nothing on the cards to
     tie I/O and memory information together.
 
-    I   am unable to test    2 DEPCAs together for   now,   so this code  is
+    I am unable  to  test  2 cards   together for now,    so this  code   is
     unchecked. All reports, good or bad, are welcome.
 
     ************************************************************************
 
-    The board IRQ  setting must be  at  an unused  IRQ  which is auto-probed
-    using   Donald Becker's   autoprobe   routines. DE100   board IRQs   are
-    {2,3,4,5,7}, whereas  the DE200 is at  {5,9,10,11,15}. Note that IRQ2 is
+    The board IRQ   setting must be  at an  unused IRQ which  is auto-probed
+    using Donald Becker's autoprobe routines. DEPCA and DE100 board IRQs are
+    {2,3,4,5,7}, whereas the  DE200 is at {5,9,10,11,15}.  Note that IRQ2 is
     really IRQ9 in machines with 16 IRQ lines.
 
     No 16MB memory  limitation should exist with this  driver as DMA is  not
     used and the common memory area is in low memory on the network card (my
     current system has 20MB and I've not had problems yet).
-
-    The DE203,  DE204  and DE205 cards  may  also work  with this driver  (I
-    haven't tested  them so I don't  know). If you have  one of these cards,
-    place the name in the DEPCA_SIGNATURE string  around line 160, recompile
-    the kernel and reboot. Check if the card  is recognised and works - mail
-    me if so, so that I can add it into the list of supported cards!
 
     TO DO:
     ------
@@ -103,16 +117,21 @@
 
     Version   Date        Description
   
-      0.1   25-jan-94     Initial writing
-      0.2   27-jan-94     Added LANCE TX buffer chaining
-      0.3    1-feb-94     Added multiple DEPCA support
-      0.31   4-feb-94     Added DE202 recognition
+      0.1   25-jan-94     Initial writing.
+      0.2   27-jan-94     Added LANCE TX buffer chaining.
+      0.3    1-feb-94     Added multiple DEPCA support.
+      0.31   4-feb-94     Added DE202 recognition.
       0.32  19-feb-94     Tidy up. Improve multi-DEPCA support.
+      0.33  25-feb-94     Fix DEPCA ethernet ROM counter enable.
+                          Add jabber packet fix from murf@perftech.com
+			  and becker@super.org
+      0.34   7-mar-94     Fix DEPCA max network memory RAM & NICSR access.
+      0.35   8-mar-94     Added DE201 recognition.
 
     =========================================================================
 */
 
-static char *version = "depca.c:v0.32 2/19/94 davies@wanton.enet.dec.com\n";
+static char *version = "depca.c:v0.35 3/8/94 davies@wanton.lkg.dec.com\n";
 
 #include <stdarg.h>
 #include <linux/config.h>
@@ -129,7 +148,7 @@ static char *version = "depca.c:v0.32 2/19/94 davies@wanton.enet.dec.com\n";
 #include <asm/dma.h>
 
 #include "dev.h"
-#include "iow.h"
+#include "iow.h"                    /* left in for pl13/14 compatibility... */
 #include "eth.h"
 #include "skbuff.h"
 #include "arp.h"
@@ -155,7 +174,7 @@ int depca_debug = 1;
 #endif
 
 #ifndef DEPCA_SIGNATURE
-#define DEPCA_SIGNATURE {"DEPCA","DE100","DE200","DE202","DE210",""}
+#define DEPCA_SIGNATURE {"DEPCA","DE100","DE200","DE201","DE202","DE210",""}
 #define DEPCA_NAME_LENGTH 8
 #endif
 
@@ -241,7 +260,7 @@ struct depca_private {
     int dirty_rx, dirty_tx;	/* The ring entries to be free()ed. */
     int dma;
     struct enet_statistics stats;
-    char old_depca;
+    char depca_na;              /* NICSR access width: 0=>byte, 1=>word */
     short ringSize;             /* ring size based on available memory */
     short rmask;                /* modulus mask based on ring size */
     long rlen;                  /* log2(ringSize) for the descriptors */
@@ -275,6 +294,7 @@ static int DevicePresent(short ioaddr);
 static void SetMulticastFilter(int num_addrs, char *addrs, char *multicast_table);
 #endif
 
+static int depca_na;
 static int num_depcas = 0, num_eth = 0;;
 
 /*
@@ -283,6 +303,21 @@ static int num_depcas = 0, num_eth = 0;;
 #define STOP_DEPCA \
     outw(CSR0, DEPCA_ADDR);\
     outw(STOP, DEPCA_DATA)
+
+#define GET_NICSR(a,b) \
+    if (depca_na) { \
+      (a) = inw((b)); \
+    } else { \
+      (a) = inb((b)); \
+    }
+
+#define PUT_NICSR(a,b) \
+    if (depca_na) { \
+      outw((a), (b)); \
+    } else { \
+      outb((a), (b)); \
+    }
+
 
 
 
@@ -294,7 +329,10 @@ int depca_probe(struct device *dev)
     struct device *eth0 = (struct device *) NULL;
 
     if (base_addr > 0x1ff) {	      /* Check a single specified location. */
-		status = depca_probe1(dev, base_addr);
+      status = -ENODEV;
+      if (DevicePresent(base_addr) == 0) { /* Is DEPCA really here? */
+	status = depca_probe1(dev, base_addr);
+      }
     } else if (base_addr > 0) {	      /* Don't probe at all. */
 		status = -ENXIO;
     } else {                          /* First probe for the DEPCA test */
@@ -308,7 +346,7 @@ int depca_probe(struct device *dev)
 	if (check_region(ioaddr, DEPCA_TOTAL_SIZE))
 	    continue;
 #endif
-	if (DevicePresent(DEPCA_PROM) == 0) {
+	if (DevicePresent(ioaddr) == 0) {
 	  if (num_depcas > 0) {        /* only gets here in autoprobe */
 
 	    /*
@@ -370,17 +408,18 @@ depca_probe1(struct device *dev, short ioaddr)
     int i,j, status=0;
     unsigned long mem_start, mem_base[] = DEPCA_RAM_BASE_ADDRESSES;
     char *name=(char *)NULL;
-    int nicsr, offset;
+    unsigned int nicsr, offset, netRAM;
 
 
     /*
-    ** Stop the DEPCA. Enable the DBR ROM. Disable interrupts and remote boot
+    ** Stop the DEPCA. Enable the DBR ROM and the ethernet ROM address counter
+    ** (for the really old DEPCAs). Disable interrupts and remote boot.
     */
     STOP_DEPCA;
 
-    nicsr = inw(DEPCA_NICSR);
-    nicsr = ((nicsr & ~SHE & ~RBE & ~IEN) | IM);
-    outw(nicsr, DEPCA_NICSR);
+    GET_NICSR(nicsr, DEPCA_NICSR);
+    nicsr = ((nicsr & ~SHE & ~RBE & ~IEN) | AAC | IM);
+    PUT_NICSR(nicsr, DEPCA_NICSR);
 
     if (inw(DEPCA_DATA) == STOP) {
 
@@ -438,18 +477,27 @@ depca_probe1(struct device *dev, short ioaddr)
 	snarf_region(ioaddr, DEPCA_TOTAL_SIZE);
 #endif
 
+	/*
+	** Set up the maximum amount of network RAM(kB)
+	*/
+	if (strstr(name,"DEPCA")==(char *)NULL) {
+	  netRAM=64;
+	} else {
+	  netRAM=48;
+	}
+
 	/* 
 	 ** Determine the base address for the DEPCA RAM from the NI-CSR
 	 ** and make up a DEPCA-specific-data structure. 
         */
 
 	if (nicsr & BUF) {
-	  offset = 0x8000;              /* 32kbyte RAM */
+	  offset = 0x8000;              /* 32kbyte RAM offset*/
 	  nicsr &= ~BS;                 /* DEPCA RAM in top 32k */
-	  printk(",\n      with 32kB RAM");
+	  printk(",\n      with %dkB RAM", netRAM-(offset >> 10));
 	} else {
-	  offset = 0x0000;              /* 64kbyte RAM */
-	  printk(",\n      with 64kB RAM");
+	  offset = 0x0000;              /* 64k/48k bytes RAM */
+	  printk(",\n      with %dkB RAM", netRAM);
 	}
 
 	mem_start += offset;
@@ -459,17 +507,19 @@ depca_probe1(struct device *dev, short ioaddr)
 	 ** Enable the shadow RAM.
 	*/
 	nicsr |= SHE;
-	outw(nicsr, DEPCA_NICSR);
+	PUT_NICSR(nicsr, DEPCA_NICSR);
  
 	/*
 	** Calculate the ring size based on the available RAM
 	** found above. Allocate an equal number of buffers, each
-	** of size PKT_BUF_SZ (1544 bytes) to the Tx and Rx. Make sure
+	** of size PKT_BUF_SZ (1544 bytes) to the Tx and Rx, allowing one
+	** descriptor entry (8 bytes) for each buffer. Make sure
 	** that this ring size is <= RING_SIZE. The ring size must be
 	** a power of 2.
 	*/
 
-	j = ((0x10000 - offset) / PKT_BUF_SZ) >> 1;
+	j = (((netRAM << 10) - offset - sizeof(struct depca_private)) / 
+	                                               (PKT_BUF_SZ + 8)) >> 1;
 	for (i=0;j>1;i++) {
 	  j >>= 1;
 	}
@@ -549,10 +599,15 @@ depca_probe1(struct device *dev, short ioaddr)
 	LoadCSRs(dev);
 
 	/*
+	** Store the NICSR width for this DEPCA
+	*/
+	lp->depca_na = depca_na;
+
+	/*
 	** Enable DEPCA board interrupts for autoprobing
 	*/
 	nicsr = ((nicsr & ~IM)|IEN);
-	outw(nicsr, DEPCA_NICSR);
+	PUT_NICSR(nicsr, DEPCA_NICSR);
 
 	/* The DMA channel may be passed in on this parameter. */
 	dev->dma = 0;
@@ -646,8 +701,9 @@ depca_open(struct device *dev)
     /*
     ** Stop the DEPCA & get the board status information.  
     */
+    depca_na=lp->depca_na;
     STOP_DEPCA;
-    nicsr = inw(DEPCA_NICSR);
+    GET_NICSR(nicsr, DEPCA_NICSR);
 
     /* 
     ** Re-initialize the DEPCA... 
@@ -698,7 +754,7 @@ depca_open(struct device *dev)
     ** Enable DEPCA board interrupts
     */
     nicsr = ((nicsr & ~IM & ~LED)|SHE|IEN);
-    outw(nicsr, DEPCA_NICSR);
+    PUT_NICSR(nicsr, DEPCA_NICSR);
     outw(CSR0,DEPCA_ADDR);
 
     dev->tbusy = 0;                         
@@ -709,7 +765,8 @@ depca_open(struct device *dev)
 
     if (depca_debug > 1){
       printk("CSR0: 0x%4.4x\n",inw(DEPCA_DATA));
-      printk("nicsr: 0x%4.4x\n",inw(DEPCA_NICSR));
+      GET_NICSR(nicsr, DEPCA_NICSR);
+      printk("nicsr: 0x%4.4x\n",nicsr);
     }
 
     return 0;			          /* Always succeed */
@@ -760,7 +817,7 @@ depca_start_xmit(struct sk_buff *skb, struct device *dev)
     /* Transmitter timeout, serious problems. */
     if (dev->tbusy) {
       int tickssofar = jiffies - dev->trans_start;
-      if (tickssofar < 5) {
+      if (tickssofar < 10) {
 	status = -1;
       } else {
 	STOP_DEPCA;
@@ -921,6 +978,7 @@ depca_interrupt(int reg_ptr)
     } else {
       lp = (struct depca_private *)dev->priv;
       ioaddr = dev->base_addr;
+      depca_na = lp->depca_na;
     }
 
     if (dev->interrupt)
@@ -929,9 +987,9 @@ depca_interrupt(int reg_ptr)
     dev->interrupt = MASK_INTERRUPTS;
 
     /* mask the DEPCA board interrupts and turn on the LED */
-    nicsr = inw(DEPCA_NICSR);
+    GET_NICSR(nicsr, DEPCA_NICSR);
     nicsr |= (IM|LED);
-    outw(nicsr, DEPCA_NICSR);
+    PUT_NICSR(nicsr, DEPCA_NICSR);
 
     outw(CSR0, DEPCA_ADDR);
     csr0 = inw(DEPCA_DATA);
@@ -961,7 +1019,7 @@ depca_interrupt(int reg_ptr)
 
     /* Unmask the DEPCA board interrupts and turn off the LED */
     nicsr = (nicsr & ~IM & ~LED);
-    outw(nicsr, DEPCA_NICSR);
+    PUT_NICSR(nicsr, DEPCA_NICSR);
 
     dev->interrupt = UNMASK_INTERRUPTS;
     return;
@@ -976,9 +1034,32 @@ depca_rx(struct device *dev)
     /* If we own the next entry, it's a new packet. Send it up. */
     for (; lp->rx_ring[entry].base >= 0; entry = (++lp->cur_rx) & lp->rmask) {
 	int status = lp->rx_ring[entry].base >> 16 ;
+	int chained;
 
-	if (status & R_ERR) {	       /* There was an error. */
-	    lp->stats.rx_errors++;     /* Update the error stats. */
+	/*
+	** There is a tricky error noted by John Murphy, <murf@perftech.com>
+	** to Russ Nelson: even with full-sized buffers, it's possible for a
+	** jabber packet to use two buffers, with only the last one correctly
+	** noting the error.
+	*/
+
+	/* Check for a chaining buffer */
+	chained = 0;
+	if (status == R_STP) { 
+	  chained = 1;
+
+	  /* 
+	  ** Wait for next buffer to complete to check for errors. This
+	  ** is slow but infrequent and allows for correct hardware buffer
+	  ** chaining (whilst defeating the chaining's purpose).
+	  */
+	  while ((status=(lp->rx_ring[(entry+1)&lp->rmask].base >> 16)) < 0);
+
+	  /* NB: 'status' now comes from the buffer following 'entry'. */
+	}
+	  
+	if (status & R_ERR) {	               /* There was an error. */
+	    lp->stats.rx_errors++;             /* Update the error stats. */
 	    if (status & R_FRAM) lp->stats.rx_frame_errors++;
 	    if (status & R_OFLO) lp->stats.rx_over_errors++;
 	    if (status & R_CRC)  lp->stats.rx_crc_errors++;
@@ -1020,6 +1101,10 @@ depca_rx(struct device *dev)
 
 	/* turn over ownership of the current entry back to the LANCE */
 	lp->rx_ring[entry].base |= R_OWN;
+	if (chained && (status & R_ERR)) {          /* next entry also bad */
+	  entry = (++lp->cur_rx) & lp->rmask;
+	  lp->rx_ring[entry].base |= R_OWN;
+	}
     }
 
     /* 
@@ -1277,7 +1362,15 @@ static char *DepcaSignature(unsigned long mem_addr)
 
 /*
 ** Look for a special sequence in the Ethernet station address PROM that
-** is common across all DEPCA products.
+** is common across all DEPCA products. Note that the original DEPCA needs
+** its ROM address counter to be initialized and enabled. Only enable
+** if the first address octet is a 0x08 - this minimises the chances of
+** messing around with some other hardware, but it assumes that this DEPCA
+** card initialized itself correctly. It also assumes that all past and
+** future DEPCA/EtherWORKS cards will have ethernet addresses beginning with
+** a 0x08. The choice of byte or word addressing is made here based on whether
+** word read of the NICSR returns two identical lower and upper bytes: if so
+** the register is 8 bits wide.
 */
 
 static int DevicePresent(short ioaddr)
@@ -1285,9 +1378,40 @@ static int DevicePresent(short ioaddr)
   static short fp=1,sigLength=0;
   static char devSig[] = PROBE_SEQUENCE;
   char data;
-  int i, j, status = 0;
+  unsigned char LSB,MSB;
+  int i, j, nicsr, status = 0;
   static char asc2hex(char value);
 
+/*
+** Initialize the counter on a DEPCA card. Two reads to ensure DEPCA ethernet
+** address counter is a) cleared and b) the correct data read.
+*/
+  data = inb(DEPCA_PROM);                /* clear counter */
+  data = inb(DEPCA_PROM);                /* read data */
+
+/*
+** Determine whether a byte or word access should be made on the NICSR.
+** Since the I/O 'functions' are actually in-line code, the choice not to use
+** pointers to functions vs. just set a conditional, is made for us. This code
+** assumes that the NICSR has an asymmetric bit pattern already in it.
+*/
+  nicsr = inw(DEPCA_NICSR);
+  LSB = nicsr & 0xff;
+  MSB = (((unsigned) nicsr) >> 8) & 0xff;
+  if (MSB == LSB) {
+    depca_na = 0;        /* byte accesses */
+  } else {
+    depca_na = 1;        /* word accesses */
+  }
+
+/*
+** Enable counter
+*/
+  if (data == 0x08) {
+    nicsr |= AAC;
+    PUT_NICSR(nicsr, DEPCA_NICSR);
+  }
+  
 /* 
 ** Convert the ascii signature to a hex equivalent & pack in place 
 */
@@ -1318,7 +1442,7 @@ static int DevicePresent(short ioaddr)
 */
   if (!status) {
     for (i=0,j=0;j<sigLength && i<PROBE_LENGTH+sigLength-1;i++) {
-      data = inb(ioaddr);
+      data = inb(DEPCA_PROM);
       if (devSig[j] == data) {    /* track signature */
 	j++;
       } else {                    /* lost signature; begin search again */

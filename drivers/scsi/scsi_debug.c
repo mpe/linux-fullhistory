@@ -18,15 +18,26 @@
 
 #include <asm/system.h>
 #include <asm/io.h>
-
 #include "../block/blk.h"
 #include "scsi.h"
 #include "hosts.h"
 
+/* A few options that we want selected */
+
+/* Do not attempt to use a timer to simulate a real disk with latency */
+/* Only use this in the actual kernel, not in the simulator. */
+#define IMMEDIATE
+
+/* Skip some consistency checking.  Good for benchmarking */
+#define SPEEDY
+
 /* Number of real scsi disks that will be detected ahead of time */
 static int NR_REAL=-1;
 
-#define MAJOR_NR SCSI_DISK_MAJOR
+#define NR_BLK_DEV	12
+#ifndef MAJOR_NR
+#define MAJOR_NR 8
+#endif
 #define START_PARTITION 4
 #define SCSI_DEBUG_TIMER 20
 /* Number of jiffies to wait before completing a command */
@@ -42,6 +53,11 @@ static int npart = 0;
 #else
 #define DEB(x)
 #endif
+
+#ifdef SPEEDY
+#define VERIFY1_DEBUG(RW) 1
+#define VERIFY_DEBUG(RW) 1
+#else
 
 #define VERIFY1_DEBUG(RW)			       			\
       if (bufflen != 1024) {printk("%d", bufflen); panic("(1)Bad bufflen");};			\
@@ -79,6 +95,7 @@ static int npart = 0;
 	  panic ("Wrong bh block#");};  \
 	if (SCpnt->request.bh->b_dev != SCpnt->request.dev) panic ("Bad bh target");\
       };
+#endif
 
 static volatile void (*do_done[SCSI_DEBUG_MAILBOXES])(Scsi_Cmnd *) = {NULL, };
 static int scsi_debug_host = 0;
@@ -154,7 +171,7 @@ int scsi_debug_queuecommand(Scsi_Cmnd * SCpnt, void (*done)(Scsi_Cmnd *))
     
     buff = (unsigned char *) SCpnt->request_buffer;
 
-    if(target>=2 || SCpnt->lun != 0) {
+    if(target>=1 || SCpnt->lun != 0) {
       SCpnt->result =  DID_NO_CONNECT << 16;
       done(SCpnt);
       return 0;
@@ -187,6 +204,7 @@ int scsi_debug_queuecommand(Scsi_Cmnd * SCpnt, void (*done)(Scsi_Cmnd *))
       buff[0] = TYPE_DISK;
       buff[1] = 0x80;  /* Removable disk */
       buff[2] = 1;
+      buff[4] = 33 - 5;
       memcpy(&buff[8],"Foo Inc",7);
       memcpy(&buff[16],"XYZZY",5);
       memcpy(&buff[32],"1",1);
@@ -219,7 +237,21 @@ int scsi_debug_queuecommand(Scsi_Cmnd * SCpnt, void (*done)(Scsi_Cmnd *))
       else 
 	block = cmd[3] + (cmd[2] << 8) + ((cmd[1] & 0x1f) << 16);
       VERIFY_DEBUG(READ);
+#if defined(SCSI_SETUP_LATENCY) || defined(SCSI_DATARATE)
+      {
+	int delay = SCSI_SETUP_LATENCY;
+	double usec;
+
+	usec = 0.0;
+	usec = (SCpnt->request.nr_sectors << 9) * 1.0e6 / SCSI_DATARATE;
+	delay += usec;
+	if(delay) usleep(delay);
+      };
+#endif
+
+#ifdef DEBUG
       printk("(r%d)",SCpnt->request.nr_sectors);
+#endif
       nbytes = bufflen;
       if(SCpnt->use_sg){
 	sgcount = 0;
@@ -231,7 +263,10 @@ int scsi_debug_queuecommand(Scsi_Cmnd * SCpnt, void (*done)(Scsi_Cmnd *))
       scsi_debug_errsts = 0;
       do{
 	VERIFY1_DEBUG(READ);
+/* For the speedy test, we do not even want to fill the buffer with anything */
+#ifndef SPEEDY
 	memset(buff, 0, bufflen);
+#endif
 /* If this is block 0, then we want to read the partition table for this
    device.  Let's make one up */
 	if(block == 0 && target == 0) {
@@ -252,6 +287,8 @@ int scsi_debug_queuecommand(Scsi_Cmnd * SCpnt, void (*done)(Scsi_Cmnd *))
 	if (SCpnt->use_sg) printk("Block %x (%d %d)\n",block, SCpnt->request.nr_sectors,
 	       SCpnt->request.current_nr_sectors);
 #endif
+
+#if 0
 	/* Simulate a disk change */
 	if(block == 0xfff0) {
 	  sense_buffer[0] = 0x70;
@@ -270,14 +307,19 @@ int scsi_debug_queuecommand(Scsi_Cmnd * SCpnt, void (*done)(Scsi_Cmnd *))
 	  scsi_debug_errsts = (COMMAND_COMPLETE << 8) | (CHECK_CONDITION << 1);
 	  break;
 	} /* End phony disk change code */
-	memset(buff, 0, bufflen);
+#endif
+
+#ifndef SPEEDY
 	memcpy(buff, &target, sizeof(target));
 	memcpy(buff+sizeof(target), cmd, 24);
 	memcpy(buff+60, &block, sizeof(block));
 	memcpy(buff+64, SCpnt, sizeof(Scsi_Cmnd));
+#endif
 	nbytes -= bufflen;
 	if(SCpnt->use_sg){
+#ifndef SPEEDY
 	  memcpy(buff+128, bh, sizeof(struct buffer_head));
+#endif
 	  block += bufflen >> 9;
 	  bh = bh->b_reqnext;
 	  sgcount++;
@@ -288,6 +330,11 @@ int scsi_debug_queuecommand(Scsi_Cmnd * SCpnt, void (*done)(Scsi_Cmnd *))
 	  };
 	}
       } while(nbytes);
+
+      SCpnt->result = 0;
+      (done)(SCpnt);
+      return;
+
       if (SCpnt->use_sg && !scsi_debug_errsts)
 	if(bh) scsi_dump(SCpnt, 0);
       break;
@@ -301,7 +348,7 @@ int scsi_debug_queuecommand(Scsi_Cmnd * SCpnt, void (*done)(Scsi_Cmnd *))
       else 
 	block = cmd[3] + (cmd[2] << 8) + ((cmd[1] & 0x1f) << 16);
       VERIFY_DEBUG(WRITE);
-      printk("(w%d)",SCpnt->request.nr_sectors);
+/*      printk("(w%d)",SCpnt->request.nr_sectors); */
       if (SCpnt->use_sg){
 	if ((bufflen >> 9) != SCpnt->request.nr_sectors)
 	  panic ("Trying to write wrong number of blocks\n");
@@ -344,6 +391,10 @@ int scsi_debug_queuecommand(Scsi_Cmnd * SCpnt, void (*done)(Scsi_Cmnd *))
     else
       printk("scsi_debug_queuecommand: done cant be NULL\n");
 
+#ifdef IMMEDIATE
+    SCpnt->result = scsi_debug_errsts;
+    scsi_debug_intr_handle();  /* No timer - do this one right away */
+#else
     timeout[i] = jiffies+DISK_SPEED;
 
 /* If no timers active, then set this one */
@@ -357,6 +408,7 @@ int scsi_debug_queuecommand(Scsi_Cmnd * SCpnt, void (*done)(Scsi_Cmnd *))
 
 #if 0
     printk("Sending command (%d %x %d %d)...", i, done, timeout[i],jiffies);
+#endif
 #endif
 
     return 0;
@@ -390,18 +442,25 @@ static void scsi_debug_intr_handle(void)
     void (*my_done)(Scsi_Cmnd *); 
    int to;
 
+#ifndef IMMEDIATE
     timer_table[SCSI_DEBUG_TIMER].expires = 0;
     timer_active &= ~(1 << SCSI_DEBUG_TIMER);
+#endif
 
   repeat:
     cli();
     for(i=0;i<SCSI_DEBUG_MAILBOXES; i++) {
       if (SCint[i] == 0) continue;
+#ifndef IMMEDIATE
       if (timeout[i] == 0) continue;
       if (timeout[i] <= jiffies) break;
+#else
+      break;
+#endif
     };
 
     if(i == SCSI_DEBUG_MAILBOXES){
+#ifndef IMMEDIATE
       pending = INT_MAX;
       for(i=0;i<SCSI_DEBUG_MAILBOXES; i++) {
 	if (SCint[i] == 0) continue;
@@ -418,6 +477,7 @@ static void scsi_debug_intr_handle(void)
 	timer_active |= 1 << SCSI_DEBUG_TIMER;
       };
       sti();
+#endif
       return;
     };
 
@@ -454,8 +514,10 @@ static void scsi_debug_intr_handle(void)
 int scsi_debug_detect(int hostnum)
 {
     scsi_debug_host = hostnum;
+#ifndef IMMEDIATE
     timer_table[SCSI_DEBUG_TIMER].fn = scsi_debug_intr_handle;
     timer_table[SCSI_DEBUG_TIMER].expires = 0;
+#endif
     return 1;
 }
 
@@ -479,7 +541,7 @@ int scsi_debug_abort(Scsi_Cmnd * SCpnt,int i)
     return 0;
 }
 
-int scsi_debug_biosparam(int size, int* info){
+int scsi_debug_biosparam(int size, int dev, int* info){
   info[0] = 32;
   info[1] = 64;
   info[2] = (size + 2047) >> 11;
@@ -506,7 +568,7 @@ int scsi_debug_reset(Scsi_Cmnd * SCpnt)
     return 0;
 }
 
-char *scsi_debug_info(void)
+const char *scsi_debug_info(void)
 {
     static char buffer[] = " ";			/* looks nicer without anything here */
     return buffer;

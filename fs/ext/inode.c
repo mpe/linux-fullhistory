@@ -139,7 +139,7 @@ void ext_write_super (struct super_block *sb)
 	es->s_freeblockscount = sb->u.ext_sb.s_freeblockscount;
 	es->s_firstfreeinode = sb->u.ext_sb.s_firstfreeinodenumber;
 	es->s_freeinodescount = sb->u.ext_sb.s_freeinodescount;
-	bh->b_dirt = 1;
+	dirtify_buffer(bh, 1);
 	brelse (bh);
 	sb->s_dirt = 0;
 }
@@ -296,7 +296,7 @@ repeat:
 		goto repeat;
 	}
 	*p = tmp;
-	bh->b_dirt = 1;
+	dirtify_buffer(bh, 1);
 	brelse(bh);
 	return result;
 }
@@ -407,7 +407,7 @@ static struct buffer_head * ext_update_inode(struct inode * inode)
 		raw_inode->i_zone[0] = inode->i_rdev;
 	else for (block = 0; block < 12; block++)
 		raw_inode->i_zone[block] = inode->u.ext_i.i_data[block];
-	bh->b_dirt=1;
+	dirtify_buffer(bh, 1);
 	inode->i_dirt=0;
 	return bh;
 }

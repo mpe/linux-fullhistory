@@ -109,7 +109,7 @@ static int ext2_alloc_block (struct inode * inode, unsigned long goal)
 		}
 		clear_block (bh->b_data, inode->i_sb->s_blocksize);
 		bh->b_uptodate = 1;
-		bh->b_dirt = 1;
+		dirtify_buffer(bh, 1);
 		brelse (bh);
 	} else {
 		ext2_discard_prealloc (inode);
@@ -314,7 +314,7 @@ repeat:
 		goto repeat;
 	}
 	*p = tmp;
-	bh->b_dirt = 1;
+	dirtify_buffer(bh, 1);
 	if (IS_SYNC(inode)) {
 		ll_rw_block (WRITE, 1, &bh);
 		wait_on_buffer (bh);
@@ -549,7 +549,7 @@ static struct buffer_head * ext2_update_inode (struct inode * inode)
 		raw_inode->i_block[0] = inode->i_rdev;
 	else for (block = 0; block < EXT2_N_BLOCKS; block++)
 		raw_inode->i_block[block] = inode->u.ext2_i.i_data[block];
-	bh->b_dirt = 1;
+	dirtify_buffer(bh, 1);
 	inode->i_dirt = 0;
 	return bh;
 }

@@ -54,7 +54,8 @@ int block_write(struct inode * inode, struct file * filp, char * buf, int count)
 		if (chars == blocksize)
 			bh = getblk(dev, block, blocksize);
 		else
-			bh = breada(dev,block,block+1,block+2,-1);
+			bh = breada(dev, block, blocksize, offset, 
+				    size << blocksize_bits);
 		block++;
 		if (!bh)
 			return written?written:-EIO;
@@ -67,7 +68,7 @@ int block_write(struct inode * inode, struct file * filp, char * buf, int count)
 		p += chars;
 		buf += chars;
 		bh->b_uptodate = 1;
-		bh->b_dirt = 1;
+		dirtify_buffer(bh, 0);
 		brelse(bh);
 	}
 	return written;

@@ -351,6 +351,13 @@ S: 249 Nichols Avenue
 S: Syracuse, New York 13206
 S: USA
 
+N: Dirk Melchers
+E: dirk@merlin.nbg.sub.org
+D: 8 bit XT hard disk driver for OMTI5520
+S: Branderweg 4
+S: D-91058 Erlangen
+S: Germany
+
 N: Craig Metz
 E: cmetz@tjhsst.edu
 D: Some of PAS 16 mixer & PCM support

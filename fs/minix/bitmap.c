@@ -93,7 +93,7 @@ void minix_free_block(struct super_block * sb, int block)
 	}
 	if (!clear_bit(bit,bh->b_data))
 		printk("free_block (%04x:%d): bit already cleared\n",sb->s_dev,block);
-	bh->b_dirt = 1;
+	dirtify_buffer(bh, 1);
 	return;
 }
 
@@ -118,7 +118,7 @@ repeat:
 		printk("new_block: bit already set");
 		goto repeat;
 	}
-	bh->b_dirt = 1;
+	dirtify_buffer(bh, 1);
 	j += i*8192 + sb->u.minix_sb.s_firstdatazone-1;
 	if (j < sb->u.minix_sb.s_firstdatazone ||
 	    j >= sb->u.minix_sb.s_nzones)
@@ -129,7 +129,7 @@ repeat:
 	}
 	clear_block(bh->b_data);
 	bh->b_uptodate = 1;
-	bh->b_dirt = 1;
+	dirtify_buffer(bh, 1);
 	brelse(bh);
 	return j;
 }
@@ -175,7 +175,7 @@ void minix_free_inode(struct inode * inode)
 	clear_inode(inode);
 	if (!clear_bit(ino & 8191, bh->b_data))
 		printk("free_inode: bit %lu already cleared.\n",ino);
-	bh->b_dirt = 1;
+	dirtify_buffer(bh, 1);
 }
 
 struct inode * minix_new_inode(const struct inode * dir)
@@ -204,7 +204,7 @@ struct inode * minix_new_inode(const struct inode * dir)
 		iput(inode);
 		return NULL;
 	}
-	bh->b_dirt = 1;
+	dirtify_buffer(bh, 1);
 	j += i*8192;
 	if (!j || j >= inode->i_sb->u.minix_sb.s_ninodes) {
 		iput(inode);

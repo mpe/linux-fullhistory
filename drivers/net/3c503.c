@@ -22,6 +22,7 @@ static char *version =
 #include <linux/kernel.h>
 #include <linux/sched.h>
 #include <linux/errno.h>
+#include <linux/string.h>
 #include <asm/io.h>
 #include <asm/system.h>
 

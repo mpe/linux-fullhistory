@@ -262,6 +262,7 @@ typedef struct scsi_device {
 	int access_count;	/* Count of open channels/mounts */
 	struct wait_queue * device_wait;  /* Used to wait if device is busy */
 	struct Scsi_Host * host;
+	void (*scsi_request_fn)(void); /* Used to jumpstart things after an ioctl */
 	char type;
 	char scsi_level;
 	unsigned writeable:1;
@@ -307,10 +308,12 @@ struct scatterlist {
      char *  address; /* Location data is to be transferred to */
      char * alt_address; /* Location of actual if address is a 
 			    dma indirect buffer.  NULL otherwise */
-     unsigned short length;
+     unsigned int length;
      };
 
 #define ISA_DMA_THRESHOLD (0x00ffffff)
+#define CONTIGUOUS_BUFFERS(X,Y) ((X->b_data+X->b_size) == Y->b_data)
+
 
 void *   scsi_malloc(unsigned int);
 int      scsi_free(void *, unsigned int);
@@ -389,7 +392,6 @@ typedef struct scsi_cmnd {
 	/* Low-level done function - can be used by low-level driver to point
 	 to completion function.  Not used by mid/upper level code. */
 	void (*scsi_done)(struct scsi_cmnd *);  
-
 	void (*done)(struct scsi_cmnd *);  /* Mid-level done function */
 
 /* The following fields can be written to by the host specific code. 
@@ -426,7 +428,6 @@ extern void scsi_do_cmd (Scsi_Cmnd *, const void *cmnd ,
 extern Scsi_Cmnd * allocate_device(struct request **, int, int);
 
 extern Scsi_Cmnd * request_queueable(struct request *, int);
-
 extern int scsi_reset (Scsi_Cmnd *);
 
 extern int max_scsi_hosts;

@@ -1,7 +1,7 @@
 /*
  *  linux/fs/isofs/inode.c
  * 
- *  (C) 1992  Eric Youngdale Modified for ISO9660 filesystem.
+ *  (C) 1992, 1993, 1994  Eric Youngdale Modified for ISO9660 filesystem.
  *
  *  (C) 1991  Linus Torvalds - minix filesystem
  */
@@ -354,7 +354,7 @@ void isofs_read_inode(struct inode * inode)
 	if ((inode->i_ino & (bufsize - 1)) + *pnt > bufsize){
 		cpnt = kmalloc(1 << ISOFS_BLOCK_BITS, GFP_KERNEL);
 		if (cpnt == NULL) {
-			printk(KERN_INFO "NoMem ISO inode %d\n",inode->i_ino);
+			printk(KERN_INFO "NoMem ISO inode %lu\n",inode->i_ino);
 			brelse(bh);
 			goto fail;
 		}
@@ -600,7 +600,8 @@ int isofs_lookup_grandparent(struct inode * parent, int extent)
 			brelse(bh);
 			offset = 0;
 			block++;
-			if(block & 1) return -1;
+			if((block & 1) && (ISOFS_BLOCK_BITS - bufbits))
+			  return -1;
 			if (!block
 			    || !(bh = bread(parent->i_dev,block, bufsize)))
 				return -1;

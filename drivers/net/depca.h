@@ -34,7 +34,7 @@
 #define BS       	0x0040  /* Bank Select */
 #define BUF      	0x0020	/* BUFfer size (1->32k, 0->64k) */
 #define RBE      	0x0010	/* Remote Boot Enable (1->net boot) */
-#define AAC      	0x0008  /* for DEPCA family compatability */
+#define AAC      	0x0008  /* Address ROM Address Counter (1->enable) */
 #define IM       	0x0004	/* Interrupt Mask (1->mask) */
 #define IEN      	0x0002	/* Interrupt tristate ENable (1->enable) */
 #define LED      	0x0001	/* LED control */

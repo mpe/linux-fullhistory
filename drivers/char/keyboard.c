@@ -85,7 +85,7 @@ static int want_console = -1;
 static int last_console = 0;		/* last used VC */
 static int dead_key_next = 0;
 static int shift_state = 0;
-static int npadch = -1;		        /* -1 or number assembled on pad */
+static int npadch = -1;			/* -1 or number assembled on pad */
 static unsigned char diacr = 0;
 static char rep = 0;			/* flag telling character repeat */
 struct kbd_struct kbd_table[NR_CONSOLES];
@@ -100,7 +100,7 @@ typedef void (*k_hand)(unsigned char value, char up_flag);
 typedef void (k_handfn)(unsigned char value, char up_flag);
 
 static k_handfn
-        do_self, do_fn, do_spec, do_pad, do_dead, do_cons, do_cur, do_shift,
+	do_self, do_fn, do_spec, do_pad, do_dead, do_cons, do_cur, do_shift,
 	do_meta, do_ascii, do_lock, do_lowercase;
 
 static k_hand key_handler[] = {
@@ -196,7 +196,7 @@ static void keyboard_interrupt(int int_pt_regs)
 {
 	unsigned char scancode;
 	static unsigned int prev_scancode = 0;   /* remember E0, E1 */
-	char up_flag;		                 /* 0 or 0200 */
+	char up_flag;				 /* 0 or 0200 */
 	char raw_mode;
 
 	pt_regs = (struct pt_regs *) int_pt_regs;
@@ -214,15 +214,15 @@ static void keyboard_interrupt(int int_pt_regs)
 		goto end_kbd_intr;
 	} else if (scancode == 0) {
 #ifdef KBD_REPORT_ERR
-	        printk("keyboard buffer overflow\n");
+		printk("keyboard buffer overflow\n");
 #endif
 		goto end_kbd_intr;
 	} else if (scancode == 0xff) {
 #ifdef KBD_REPORT_ERR
-	        printk("keyboard error\n");
+		printk("keyboard error\n");
 #endif
-	        prev_scancode = 0;
-	        goto end_kbd_intr;
+		prev_scancode = 0;
+		goto end_kbd_intr;
 	}
 	tty = TTY_TABLE(0);
  	kbd = kbd_table + fg_console;
@@ -242,7 +242,7 @@ static void keyboard_interrupt(int int_pt_regs)
  	 */
 	up_flag = (scancode & 0200);
  	scancode &= 0x7f;
-  
+
 	if (prev_scancode) {
 	  /*
 	   * usually it will be 0xe0, but a Pause key generates
@@ -294,7 +294,7 @@ static void keyboard_interrupt(int int_pt_regs)
 #endif
 	  goto end_kbd_intr;
  	}
-  
+
 	/*
 	 * At this point the variable `scancode' contains the keysym.
 	 * We keep track of the up/down status of the key, and
@@ -308,15 +308,15 @@ static void keyboard_interrupt(int int_pt_regs)
 		rep = 0;
 	} else
  		rep = set_bit(scancode, key_down);
-  
+
 	if (raw_mode)
-	        goto end_kbd_intr;
+		goto end_kbd_intr;
 
  	if (vc_kbd_mode(kbd, VC_MEDIUMRAW)) {
  		put_queue(scancode + up_flag);
 		goto end_kbd_intr;
  	}
-  
+
  	/*
 	 * Small change in philosophy: earlier we defined repetition by
 	 *	 rep = scancode == prev_keysym;
@@ -330,7 +330,7 @@ static void keyboard_interrupt(int int_pt_regs)
  	 *  characters get echoed locally. This makes key repeat usable
  	 *  with slow applications and under heavy loads.
 	 */
-	if (!rep || 
+	if (!rep ||
 	    (vc_kbd_mode(kbd,VC_REPEAT) && tty &&
 	     (L_ECHO(tty) || (EMPTY(&tty->secondary) && EMPTY(&tty->read_q)))))
 	{
@@ -499,7 +499,7 @@ static void boot_it(void)
 
 static void compose(void)
 {
-        dead_key_next = 1;
+	dead_key_next = 1;
 }
 
 static void do_spec(unsigned char value, char up_flag)
@@ -523,22 +523,22 @@ static void do_spec(unsigned char value, char up_flag)
 
 static void do_lowercase(unsigned char value, char up_flag)
 {
-        printk("keyboard.c: do_lowercase was called - impossible\n");
+	printk("keyboard.c: do_lowercase was called - impossible\n");
 }
-  
+
 static void do_self(unsigned char value, char up_flag)
 {
 	if (up_flag)
 		return;		/* no action, if this is a key release */
 
-        if (diacr)
-                value = handle_diacr(value);
+	if (diacr)
+		value = handle_diacr(value);
 
-        if (dead_key_next) {
-                dead_key_next = 0;
-                diacr = value;
-                return;
-        }
+	if (dead_key_next) {
+		dead_key_next = 0;
+		diacr = value;
+		return;
+	}
 
 	put_queue(value);
 }
@@ -549,7 +549,7 @@ static void do_self(unsigned char value, char up_flag)
 #define A_TILDE  '~'
 #define A_DIAER  '"'
 static unsigned char ret_diacr[] =
-        {A_GRAVE, A_ACUTE, A_CFLEX, A_TILDE, A_DIAER };
+	{A_GRAVE, A_ACUTE, A_CFLEX, A_TILDE, A_DIAER };
 
 /* If a dead key pressed twice, output a character corresponding to it,	*/
 /* otherwise just remember the dead key.				*/
@@ -559,12 +559,12 @@ static void do_dead(unsigned char value, char up_flag)
 	if (up_flag)
 		return;
 
-        value = ret_diacr[value];
-        if (diacr == value) {   /* pressed twice */
-                diacr = 0;
-                put_queue(value);
-                return;
-        }
+	value = ret_diacr[value];
+	if (diacr == value) {   /* pressed twice */
+		diacr = 0;
+		put_queue(value);
+		return;
+	}
 	diacr = value;
 }
 
@@ -574,19 +574,20 @@ static void do_dead(unsigned char value, char up_flag)
 
 unsigned char handle_diacr(unsigned char ch)
 {
-        int d = diacr;
-        int i;
+	int d = diacr;
+	int i;
 
-        diacr = 0;
-        if (ch == ' ')
-                return d;
+	diacr = 0;
+	if (ch == ' ')
+		return d;
 
-        for (i = 0; i < accent_table_size; i++)
-          if(accent_table[i].diacr == d && accent_table[i].base == ch)
-            return accent_table[i].result;
+	for (i = 0; i < accent_table_size; i++) {
+		if (accent_table[i].diacr == d && accent_table[i].base == ch)
+			return accent_table[i].result;
+	}
 
-        put_queue(d);
-        return ch;
+	put_queue(d);
+	return ch;
 }
 
 static void do_cons(unsigned char value, char up_flag)
@@ -601,9 +602,9 @@ static void do_fn(unsigned char value, char up_flag)
 	if (up_flag)
 		return;
 	if (value < SIZE(func_table))
-	        puts_queue(func_table[value]);
+		puts_queue(func_table[value]);
 	else
-	        printk("do_fn called with value=%d\n", value);
+		printk("do_fn called with value=%d\n", value);
 }
 
 static void do_pad(unsigned char value, char up_flag)
@@ -686,7 +687,7 @@ static void do_shift(unsigned char value, char up_flag)
 	}
 
 	if (up_flag) {
-	        /* handle the case that two shift or control
+		/* handle the case that two shift or control
 		   keys are depressed simultaneously */
 		if (k_down[value])
 			k_down[value]--;
@@ -709,9 +710,9 @@ static void do_shift(unsigned char value, char up_flag)
    recompute k_down[] and shift_state from key_down[] */
 void compute_shiftstate(void)
 {
-        int i, j, k, sym, val;
+	int i, j, k, sym, val;
 
-        shift_state = 0;
+	shift_state = 0;
 	for(i=0; i < SIZE(k_down); i++)
 	  k_down[i] = 0;
 
@@ -725,7 +726,7 @@ void compute_shiftstate(void)
 		  val = KVAL(sym);
 		  k_down[val]++;
 		  shift_state |= (1<<val);
-	        }
+		}
 	      }
 	  }
 }
@@ -748,9 +749,9 @@ static void do_ascii(unsigned char value, char up_flag)
 		return;
 
 	if (npadch == -1)
-	        npadch = value;
+		npadch = value;
 	else
-	        npadch = (npadch * 10 + value) % 1000;
+		npadch = (npadch * 10 + value) % 1000;
 }
 
 static void do_lock(unsigned char value, char up_flag)

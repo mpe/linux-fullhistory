@@ -134,7 +134,7 @@ static int ioctl_internal_command(Scsi_Device *dev, char * cmd)
 	  };
 
 	result = SCpnt->result;
-	SCpnt->request.dev = -1;  /* Mark as not busy */
+	SCpnt->request.dev = -1;
 	wake_up(&scsi_devices[SCpnt->index].device_wait);
 	return result;
 }
@@ -203,6 +203,10 @@ static int ioctl_command(Scsi_Device *dev, void *buffer)
 	result = SCpnt->result;
 	SCpnt->request.dev = -1;  /* Mark as not busy */
 	if (buf) scsi_free(buf, needed);
+
+	if(scsi_devices[SCpnt->index].scsi_request_fn)
+	  (*scsi_devices[SCpnt->index].scsi_request_fn)();
+
 	wake_up(&scsi_devices[SCpnt->index].device_wait);
 	return result;
 #else
@@ -222,8 +226,6 @@ static int ioctl_command(Scsi_Device *dev, void *buffer)
 	return 0;
 #endif
 }
-
-	
 
 /*
 	the scsi_ioctl() function differs from most ioctls in that it does
@@ -302,4 +304,3 @@ int kernel_scsi_ioctl (Scsi_Device *dev, int cmd, void *arg) {
   set_fs(oldfs);
   return tmp;
 }
-

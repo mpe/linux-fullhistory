@@ -557,7 +557,7 @@ repeat:
 		goto repeat;
 	}
 	*p = (sb->sv_convert ? to_coh_ulong(block) : block);
-	bh->b_dirt = 1;
+	dirtify_buffer(bh, 1);
 	brelse(bh);
 	*start = result->b_data + ((block & sb->sv_block_size_ratio_1) << sb->sv_block_size_bits);
 	return result;
@@ -773,7 +773,7 @@ static struct buffer_head * sysv_update_inode(struct inode * inode)
 		for (block = 0; block < 10+1+1+1; block++)
 			write3byte(&raw_inode->i_a.i_addb[3*block],inode->u.sysv_i.i_data[block]);
 	inode->i_dirt=0;
-	bh->b_dirt=1;
+	dirtify_buffer(bh, 1);
 	return bh;
 }
 

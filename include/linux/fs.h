@@ -103,6 +103,7 @@ extern unsigned long file_table_init(unsigned long start, unsigned long end);
 #define BLKRRPART 4703 /* re-read partition table */
 #define BLKGETSIZE 4704 /* return device size */
 #define BLKFLSBUF 4705 /* flush buffer cache */
+#define BLKRASET 4706 /* Set read ahead for block device */
 
 /* These are a few other constants  only used by scsi  devices */
 
@@ -210,7 +211,7 @@ struct file {
 	off_t f_pos;
 	unsigned short f_flags;
 	unsigned short f_count;
-	unsigned short f_reada;
+	off_t f_reada;
 	struct file *f_next, *f_prev;
 	struct inode * f_inode;
 	struct file_operations * f_op;
@@ -359,6 +360,12 @@ extern int nr_buffers;
 extern int buffermem;
 extern int nr_buffer_heads;
 
+/* Once the full cluster diffs are in place, this will be filled out a bit. */
+extern inline void dirtify_buffer(struct buffer_head * bh, int flag)
+{
+  bh->b_dirt = 1;
+}
+
 extern void check_disk_change(dev_t dev);
 extern void invalidate_inodes(dev_t dev);
 extern void invalidate_buffers(dev_t dev);
@@ -392,7 +399,8 @@ extern void brelse(struct buffer_head * buf);
 extern void set_blocksize(dev_t dev, int size);
 extern struct buffer_head * bread(dev_t dev, int block, int size);
 extern unsigned long bread_page(unsigned long addr,dev_t dev,int b[],int size,int prot);
-extern struct buffer_head * breada(dev_t dev,int block,...);
+extern struct buffer_head * breada(dev_t dev,int block, int size, 
+				   unsigned int pos, unsigned int filesize);
 extern void put_super(dev_t dev);
 extern dev_t ROOT_DEV;
 

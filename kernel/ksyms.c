@@ -11,6 +11,11 @@
 
 #define X(name)	{ (void *) &name, "_" #name }
 
+#ifdef CONFIG_FTAPE
+extern char * ftape_big_buffer;
+extern void (*do_floppy)(void);
+#endif
+
 struct {
 	void *addr;
 	const char *name;
