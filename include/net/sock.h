@@ -845,6 +845,9 @@ extern __inline__ void skb_set_owner_r(struct sk_buff *skb, struct sock *sk)
 
 extern __inline__ int sock_queue_rcv_skb(struct sock *sk, struct sk_buff *skb)
 {
+#ifdef CONFIG_FILTER
+	struct sk_filter *filter;
+#endif
 	/* Cast skb->rcvbuf to unsigned... It's pointless, but reduces
 	   number of warnings when compiling with -W --ANK
 	 */
@@ -852,7 +855,7 @@ extern __inline__ int sock_queue_rcv_skb(struct sock *sk, struct sk_buff *skb)
                 return -ENOMEM;
 
 #ifdef CONFIG_FILTER
-	if (sk->filter && sk_filter(skb, sk->filter))
+	if ((filter = sk->filter) != NULL && sk_filter(skb, filter))
 		return -EPERM;	/* Toss packet */
 #endif /* CONFIG_FILTER */
 

@@ -39,7 +39,7 @@ static inline cycles_t get_cycles (void)
 #else
 	unsigned long eax, edx;
 
-	__asm__("rdtsc":"=a" (eax), "=d" (edx));
+	__asm__ __volatile__("rdtsc":"=a" (eax), "=d" (edx));
 	return eax;
 #endif
 }

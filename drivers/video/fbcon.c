@@ -1587,7 +1587,7 @@ static int fbcon_do_set_font(int unit, struct console_font_op *op, u8 *data, int
         if (CON_IS_VISIBLE(conp) && softback_buf) {
 	    int l = fbcon_softback_size / conp->vc_size_row;
 	    if (l > 5)
-		softback_end += l * conp->vc_size_row;
+		softback_end = softback_buf + l * conp->vc_size_row;
 	    else {
 		/* Smaller scrollback makes no sense, and 0 would screw
 		   the operation totally */

@@ -1,4 +1,4 @@
-/* $Id: ultra.S,v 1.31 1998/11/07 06:39:21 davem Exp $
+/* $Id: ultra.S,v 1.32 1999/03/28 08:39:34 davem Exp $
  * ultra.S: Don't expand these all over the place...
  *
  * Copyright (C) 1997 David S. Miller (davem@caip.rutgers.edu)
@@ -260,6 +260,21 @@ xcall_capture:
 	 nop
 	b,pt		%xcc, rtrap
 	 clr		%l6
+
+	.globl		xcall_receive_signal
+xcall_receive_signal:
+	rdpr		%pstate, %g2
+	wrpr		%g2, PSTATE_IG | PSTATE_AG, %pstate
+	rdpr		%tstate, %g1
+	andcc		%g1, TSTATE_PRIV, %g0
+	/* If we did not trap from user space, just ignore. */
+	bne,pn		%xcc, 99f
+	 sethi		%hi(109f), %g7
+	b,pt		%xcc, etrap
+109:	 or		%g7, %lo(109b), %g7
+	b,pt		%xcc, rtrap
+	 clr		%l6
+99:	retry
 
 	/* These two are not performance critical... */
 	.globl		xcall_flush_tlb_all

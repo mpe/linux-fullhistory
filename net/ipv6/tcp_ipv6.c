@@ -5,7 +5,7 @@
  *	Authors:
  *	Pedro Roque		<roque@di.fc.ul.pt>	
  *
- *	$Id: tcp_ipv6.c,v 1.100 1999/03/21 05:22:59 davem Exp $
+ *	$Id: tcp_ipv6.c,v 1.101 1999/03/28 10:18:30 davem Exp $
  *
  *	Based on: 
  *	linux/net/ipv4/tcp.c
@@ -1181,6 +1181,9 @@ static inline struct sock *tcp_v6_hnd_req(struct sock *sk, struct sk_buff *skb)
 
 static int tcp_v6_do_rcv(struct sock *sk, struct sk_buff *skb)
 {
+#ifdef CONFIG_FILTER
+	struct sk_filter *filter;
+#endif
 	int users = 0;
 
 	/* Imagine: socket is IPv6. IPv4 packet arrives,
@@ -1195,7 +1198,8 @@ static int tcp_v6_do_rcv(struct sock *sk, struct sk_buff *skb)
 		return tcp_v4_do_rcv(sk, skb);
 
 #ifdef CONFIG_FILTER
-	if (sk->filter && sk_filter(skb, sk->filter))
+	filter = sk->filter;
+	if (filter && sk_filter(skb, filter))
 		goto discard;
 #endif /* CONFIG_FILTER */
 

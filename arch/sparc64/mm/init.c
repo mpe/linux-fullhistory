@@ -1,4 +1,4 @@
-/*  $Id: init.c,v 1.124 1999/02/08 07:01:42 ecd Exp $
+/*  $Id: init.c,v 1.125 1999/03/28 08:39:33 davem Exp $
  *  arch/sparc64/mm/init.c
  *
  *  Copyright (C) 1996-1999 David S. Miller (davem@caip.rutgers.edu)
@@ -142,9 +142,9 @@ void show_mem(void)
 	printk("%d reserved pages\n",reserved);
 	printk("%d pages shared\n",shared);
 	printk("%d pages swap cached\n",cached);
-	printk("%ld pages in page table cache\n",pgtable_cache_size);
+	printk("%d pages in page table cache\n",pgtable_cache_size);
 #ifndef __SMP__
-	printk("%ld entries in page dir cache\n",pgd_cache_size);
+	printk("%d entries in page dir cache\n",pgd_cache_size);
 #endif	
 	show_buffers();
 #ifdef CONFIG_NET

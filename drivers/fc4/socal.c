@@ -73,6 +73,7 @@ static void socal_memcpy(void *d, void *s, int size)
 	}
 }
 
+#ifdef HAVE_SOCAL_UCODE
 static void socal_bzero(void *d, int size)
 {
 	u32 *dp = (u32 *)d;
@@ -81,6 +82,7 @@ static void socal_bzero(void *d, int size)
 		size -= sizeof(u32);
 	}
 }
+#endif
 
 static inline void socal_disable(struct socal *s)
 {

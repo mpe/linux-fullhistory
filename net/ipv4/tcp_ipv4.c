@@ -5,7 +5,7 @@
  *
  *		Implementation of the Transmission Control Protocol(TCP).
  *
- * Version:	$Id: tcp_ipv4.c,v 1.170 1999/03/21 05:22:47 davem Exp $
+ * Version:	$Id: tcp_ipv4.c,v 1.171 1999/03/28 10:18:26 davem Exp $
  *
  *		IPv4 specific functions
  *
@@ -1305,6 +1305,9 @@ struct sock *tcp_create_openreq_child(struct sock *sk, struct open_request *req,
 
 	if(newsk != NULL) {
 		struct tcp_opt *newtp;
+#ifdef CONFIG_FILTER
+		struct sk_filter *filter;
+#endif
 
 		memcpy(newsk, sk, sizeof(*newsk));
 		newsk->sklist_next = NULL;
@@ -1326,8 +1329,8 @@ struct sock *tcp_create_openreq_child(struct sock *sk, struct open_request *req,
 		skb_queue_head_init(&newsk->back_log);
 		skb_queue_head_init(&newsk->error_queue);
 #ifdef CONFIG_FILTER
-		if (newsk->filter)
-			sk_filter_charge(newsk, newsk->filter);
+		if ((filter = newsk->filter) != NULL)
+			sk_filter_charge(newsk, filter);
 #endif
 
 		/* Now setup tcp_opt */
@@ -1559,9 +1562,9 @@ static inline struct sock *tcp_v4_hnd_req(struct sock *sk,struct sk_buff *skb)
 
 int tcp_v4_do_rcv(struct sock *sk, struct sk_buff *skb)
 {
-
 #ifdef CONFIG_FILTER
-	if (sk->filter && sk_filter(skb, sk->filter))
+	struct sk_filter *filter = sk->filter;
+	if (filter && sk_filter(skb, filter))
 		goto discard;
 #endif /* CONFIG_FILTER */
 

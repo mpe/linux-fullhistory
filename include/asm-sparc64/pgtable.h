@@ -1,4 +1,4 @@
-/* $Id: pgtable.h,v 1.102 1999/01/22 16:19:29 jj Exp $
+/* $Id: pgtable.h,v 1.103 1999/03/28 08:40:04 davem Exp $
  * pgtable.h: SpitFire page table operations.
  *
  * Copyright 1996,1997 David S. Miller (davem@caip.rutgers.edu)
@@ -333,8 +333,8 @@ static __inline__ pte_t pte_mkdirty(pte_t _pte)
 extern struct pgtable_cache_struct {
 	unsigned long *pgd_cache;
 	unsigned long *pte_cache;
-	unsigned long pgcache_size;
-	unsigned long pgdcache_size;
+	unsigned int pgcache_size;
+	unsigned int pgdcache_size;
 } pgt_quicklists;
 #endif
 #define pgd_quicklist		(pgt_quicklists.pgd_cache)

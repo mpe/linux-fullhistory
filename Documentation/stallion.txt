@@ -2,10 +2,10 @@
 Stallion Multiport Serial Driver Readme
 ---------------------------------------
 
-Copyright (C) 1994-1998,  Stallion Technologies (support@stallion.com).
+Copyright (C) 1994-1999,  Stallion Technologies (support@stallion.com).
 
-Version:   5.4.7
-Date:      23OCT98
+Version:   5.5.1
+Date:      28MAR99
 
 
 
@@ -15,28 +15,28 @@ There are two drivers that work with the different families of Stallion
 multiport serial boards. One is for the Stallion smart boards - that is
 EasyIO, EasyConnection 8/32 and EasyConnection 8/64-PCI, the other for
 the true Stallion intelligent multiport boards - EasyConnection 8/64
-(ISA and EISA), ONboard and Brumby.
+(ISA, EISA, MCA), EasyConnection/RA-PCI, ONboard and Brumby.
 
 If you are using any of the Stallion intelligent multiport boards (Brumby,
-ONboard, EasyConnection 8/64 (ISA or EISA)) with Linux you will need to
-get the driver utility package. This package is available at most of the
-Linux archive sites (and on CD-ROMs that contain these archives). The file
-will be called stallion-X.X.X.tar.gz where X.X.X will be the version
-number. In particular this package contains the board embedded executable
-images that are required for these boards. It also contains the downloader
-program. These boards cannot be used without this.
+ONboard, EasyConnection 8/64 (ISA, EISA, MCA), EasyConnection/RA-PCI) with
+Linux you will need to get the driver utility package. This package is
+available at most of the Linux archive sites (and on CD-ROMs that contain
+these archives). The file will be called stallion-X.X.X.tar.gz where X.X.X
+will be the version number. In particular this package contains the board
+embedded executable images that are required for these boards. It also
+contains the downloader program. These boards cannot be used without this.
 
 The Stallion Technologies ftp site, ftp.stallion.com, will always have
 the latest version of the driver utility package. Other sites that usually
 have the latest version are tsx-11.mit.edu, sunsite.unc.edu and their
 mirrors.
 
-ftp.stallion.com:/drivers/ata5/Linux/v544.tar.gz
-tsx-11.mit.edu:/pub/linux/packages/stallion/stallion-5.4.4.tar.gz
-sunsite.unc.edu:/pub/Linux/kernel/patches/serial/stallion-5.4.4.tar.gz
+ftp.stallion.com:/drivers/ata5/Linux/v550.tar.gz
+tsx-11.mit.edu:/pub/linux/packages/stallion/stallion-5.5.0.tar.gz
+sunsite.unc.edu:/pub/Linux/kernel/patches/serial/stallion-5.5.0.tar.gz
 
 As of the printing of this document the latest version of the driver
-utility package is 5.4.4. If a later version is now available then you
+utility package is 5.5.0. If a later version is now available then you
 should use the latest version.
 
 If you are using the EasyIO, EasyConnection 8/32 or EasyConnection 8/64-PCI
@@ -44,7 +44,7 @@ boards then you don't need this package. Although it does have a handy
 script to create the /dev device nodes for these boards, and a serial stats
 display program.
 
-If you require DIP switch settings, EISA/MCA configuration files, or any
+If you require DIP switch settings, EISA or MCA configuration files, or any
 other information related to Stallion boards then have a look at Stallion's
 web pages at http://www.stallion.com.
 
@@ -55,12 +55,101 @@ web pages at http://www.stallion.com.
 The drivers can be used as loadable modules or compiled into the kernel.
 You can choose which when doing a "config" on the kernel.
 
-All ISA, EISA and MCA boards that you want to use need to be entered into
-the driver(s) configuration structures. All PCI boards will be automatically
-detected when you load the driver - so they do not need to be entered into
-the driver(s) configuration structure. (Note that kernel PCI BIOS32 support
-is required to use PCI boards.)
+All ISA, EISA and MCA boards that you want to use need to be configured into
+the driver(s). All PCI boards will be automatically detected when you load
+the driver - so they do not need to be entered into the driver(s)
+configuration structure. Note that kernel PCI support is required to use PCI
+boards.
 
+There are two methods of configuring ISA, EISA and MCA boards into the drivers.
+If using the driver as a loadable module then the simplist method is to pass
+the driver configuration as module arguments. The other method is to modify
+the driver source to add configuration lines for each board in use.
+
+If you have pre-built Stallion driver modules then the module argument
+configuration method should be used. A lot of Linux distributions come with
+pre-built driver modules in /lib/modules/X.Y.Z/misc for the kernel in use.
+That makes things pretty simple to get going.
+
+
+2.1 MODULE DRIVER CONFIGURATION:
+
+The simplest configuration for modules is to use the module load arguments
+to configure any ISA, EISA or MCA boards. PCI boards are automatically
+detected, so do not need any additional configuration at all.
+
+If using EasyIO, EasyConnection 8/32 ISA or MCA, or EasyConnection 8/63-PCI
+boards then use the "stallion" driver module, Otherwise if you are using
+an EasyConnection 8/64 ISA, EISA or MCA, EasyConnection/RA-PCI, ONboard,
+Brumby or original Stallion board then use the "istallion" driver module.
+
+Typically to load up the smart board driver use:
+
+    insmod stallion.o
+
+This will load the EasyIO and EasyConnection 8/32 driver. It will output a
+message to say that it loaded and print the driver version number. It will
+also print out whether it found the configured boards or not. These messages
+may not appear on the console, but typically are always logged to
+/var/adm/messages or /var/log/syslog files - depending on how the klogd and
+syslogd daemons are setup on your system.
+
+To load the intelligent board driver use:
+
+    insmod istallion.o
+
+It will output similar messages to the smart board driver.
+
+If not using an auto-detectable board type (that is a PCI board) then you
+will also need to supply command line arguments to the "insmod" command
+when loading the driver. The general form of the configuration argument is
+
+    board?=<name>[,<ioaddr>[,<addr>][,<irq>]]
+
+where:
+
+    board?  -- specifies the arbitary board number of this board,
+               can be in the range 0 to 3.
+
+    name    -- textual name of this board. The board name is the comman
+               board name, or any "shortened" version of that. The board
+               type number may also be used here.
+
+    ioaddr  -- specifies the I/O address of this board. This argument is
+               optional, but should generally be specified.
+
+    addr    -- optional second address argument. Some board types require
+               a second I/O address, some require a memory address. The
+               exact meaning of this argument depends on the board type.
+
+    irq     -- optional IRQ line used by this board.
+
+Up to 4 board configuration arguments can be specified on the load line.
+Here is some examples:
+
+    insmod stallion.o board0=easyio,0x2a0,5
+
+This configures an EasyIO board as board 0 at I/O address 0x2a0 and IRQ 5.
+
+    insmod istallion.o board3=ec8/64,0x2c0,0xcc000
+
+This configures an EasyConnection 8/64 ISA as board 3 at I/O address 0x2c0 at
+memory address 0xcc000.
+
+    insmod stallion.o board1=ec8/32-at,0x2a0,0x280,10
+
+This configures an EasyConnection 8/32 ISA board at primary I/O address 0x2a0,
+secondary address 0x280 and IRQ 10.
+
+You will probably want to enter this module load and configuration information
+into your system startup scripts so that the drivers are loaded and configured
+on each system boot. Typically the start up script would be something line
+/etc/rc.d/rc.modules.
+
+
+2.2 STATIC DRIVER CONFIGURATION:
+
+For static driver configuration you need to modify the driver source code.
 Entering ISA, EISA and MCA boards into the driver(s) configuration structure
 involves editing the driver(s) source file. It's pretty easy if you follow
 the instructions below. Both drivers can support up to 4 boards. The smart
@@ -96,14 +185,16 @@ When the new kernel is booted, or the loadable module loaded then the
 driver will emit some kernel trace messages about whether the configured
 boards were detected or not. Depending on how your system logger is set
 up these may come out on the console, or just be logged to
-/var/adm/messages. You should check the messages to confirm that all is well.
+/var/adm/messages or /var/log/syslog. You should check the messages to
+confirm that all is well.
 
 
-2.1 SHARING INTERRUPTS
+2.3 SHARING INTERRUPTS
 
 It is possible to share interrupts between multiple EasyIO and
-EasyConnection 8/32 boards in an EISA system. To do this you will need to
-do a couple of things:
+EasyConnection 8/32 boards in an EISA system. To do this you must be using
+static driver configuration, modifying the driver source code to add driver
+configuration. Then a couple of extra things are required:
 
 1. When entering the board resources into the stallion.c file you need to
    mark the boards as using level triggered interrupts. Do this by replacing
@@ -130,7 +221,7 @@ or load the driver your EasyIO and EasyConnection 8/32 boards will be
 sharing interrupts.
 
 
-2.2 USING HIGH SHARED MEMORY
+2.4 USING HIGH SHARED MEMORY
 
 The EasyConnection 8/64-EI, ONboard and Stallion boards are capable of
 using shared memory addresses above the usual 640K - 1Mb range. The ONboard
@@ -145,16 +236,18 @@ Just enter the address as you normally would for a lower than 1Mb address
 
 
 
-2.3 TROUBLE SHOOTING
+2.5 TROUBLE SHOOTING
 
 If a board is not found by the driver but is actually in the system then the
-most likely problem is that the I/O address is wrong. Change it in the driver
-stallion.c or istallion.c configuration structure and rebuild the kernel or
-modules, or change it on the board. On EasyIO and EasyConnection 8/32 boards
-the IRQ is software programmable, so if there is a conflict you may need to
-change the IRQ used for a board in the stallion.c configuration structure.
-There are no interrupts to worry about for ONboard, Brumby or EasyConnection
-8/64 (ISA, EISA and MCA) boards. The memory region on EasyConnection 8/64 and
+most likely problem is that the I/O address is wrong. Change the module load
+argument for the loadable module form. Or change it in the driver stallion.c
+or istallion.c configuration structure and rebuild the kernel or modules, or
+change it on the board.
+
+On EasyIO and EasyConnection 8/32 boards the IRQ is software programmable, so
+if there is a conflict you may need to change the IRQ used for a board. There
+are no interrupts to worry about for ONboard, Brumby or EasyConnection 8/64
+(ISA, EISA and MCA) boards. The memory region on EasyConnection 8/64 and
 ONboard boards is software programmable, but not on the Brumby boards.
 
 
@@ -167,9 +260,13 @@ The intelligent boards also need to have their "firmware" code downloaded
 to them. This is done via a user level application supplied in the driver
 utility package called "stlload". Compile this program wherever you dropped
 the package files, by typing "make". In its simplest form you can then type
+
     ./stlload -i cdk.sys
+
 in this directory and that will download board 0 (assuming board 0 is an
-EasyConnection 8/64 board). To download to an ONboard, Brumby or Stallion do:
+EasyConnection 8/64 or EasyConnection/RA board). To download to an
+ONboard, Brumby or Stallion do:
+
     ./stlload -i 2681.sys
 
 Normally you would want all boards to be downloaded as part of the standard
@@ -182,6 +279,7 @@ file in the stlload down-loader is /usr/lib/stallion. Create that directory
 and put the cdk.sys and 2681.sys files in it. (It's a convenient place to put
 them anyway). As an example your /etc/rc.d/rc.S file might have the
 following lines added to it (if you had 3 boards):
+
     /usr/sbin/stlload -b 0 -i /usr/lib/stallion/cdk.sys
     /usr/sbin/stlload -b 1 -i /usr/lib/stallion/2681.sys
     /usr/sbin/stlload -b 2 -i /usr/lib/stallion/2681.sys

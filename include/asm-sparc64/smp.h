@@ -98,8 +98,17 @@ extern __inline__ int hard_smp_processor_id(void)
 /* This needn't do anything as we do not sleep the cpu
  * inside of the idler task, so an interrupt is not needed
  * to get a clean fast response.
+ *
+ * Addendum: We do want it to do something for the signal
+ *           delivery case, we detect that by just seeing
+ *           if we are trying to send this to an idler or not.
  */
-extern __inline__ void smp_send_reschedule(int cpu) { }
+extern __inline__ void smp_send_reschedule(int cpu)
+{
+	extern void smp_receive_signal(int);
+	if(cpu_data[cpu].idle_volume == 0)
+		smp_receive_signal(cpu);
+}
 
 /* This is a nop as well because we capture all other cpus
  * anyways when making the PROM active.

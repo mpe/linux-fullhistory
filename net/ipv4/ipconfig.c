@@ -1,5 +1,5 @@
 /*
- *  $Id: ipconfig.c,v 1.19 1999/01/15 06:54:00 davem Exp $
+ *  $Id: ipconfig.c,v 1.20 1999/03/28 10:18:28 davem Exp $
  *
  *  Automatic Configuration of IP -- use BOOTP or RARP or user-supplied
  *  information to configure own IP address and routes.
@@ -825,9 +825,9 @@ int __init ip_auto_config(void)
 	 */
 	if (ic_myaddr == INADDR_NONE ||
 #ifdef CONFIG_ROOT_NFS
-	     root_server_addr == INADDR_NONE ||
+	    (root_server_addr == INADDR_NONE && ic_servaddr == INADDR_NONE) ||
 #endif
-	    (ic_first_dev && ic_first_dev->next)) {
+	    ic_first_dev->next) {
 #ifdef CONFIG_IP_PNP_DYNAMIC
 		if (ic_dynamic() < 0) {
 			printk(KERN_ERR "IP-Config: Auto-configuration of network failed.\n");

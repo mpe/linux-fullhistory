@@ -499,6 +499,7 @@ secondary_cpu_start(int cpuid, struct task_struct *idle)
 			return;
 		}
 		mdelay(1);
+		barrier();
 	}
 	DBGS(("secondary_cpu_start: SUCCESS for CPU %d!!!\n", cpuid));
 }
@@ -541,6 +542,7 @@ delay1:
 		if (!(hwrpb->txrdy & cpumask))
 			goto ready1;
 		udelay(100);
+		barrier();
 	}
 	goto timeout;
 
@@ -549,6 +551,7 @@ delay2:
 		if (!(hwrpb->txrdy & cpumask))
 			goto ready2;
 		udelay(100);
+		barrier();
 	}
 	goto timeout;
 

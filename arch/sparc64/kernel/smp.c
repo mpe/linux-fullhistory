@@ -347,6 +347,17 @@ extern unsigned long xcall_flush_tlb_all;
 extern unsigned long xcall_tlbcachesync;
 extern unsigned long xcall_flush_cache_all;
 extern unsigned long xcall_report_regs;
+extern unsigned long xcall_receive_signal;
+
+void smp_receive_signal(int cpu)
+{
+	if(smp_processors_ready &&
+	   (cpu_present_map & (1UL<<cpu)) != 0) {
+		u64 pstate, data0 = (((u64)&xcall_receive_signal) & 0xffffffff);
+		__asm__ __volatile__("rdpr %%pstate, %0" : "=r" (pstate));
+		xcall_deliver(data0, 0, 0, pstate, cpu);
+	}
+}
 
 void smp_report_regs(void)
 {

@@ -3,7 +3,7 @@
 /*
  *	istallion.c  -- stallion intelligent multiport serial driver.
  *
- *	Copyright (C) 1996-1998  Stallion Technologies (support@stallion.oz.au).
+ *	Copyright (C) 1996-1999  Stallion Technologies (support@stallion.oz.au).
  *	Copyright (C) 1994-1996  Greg Ungerer (gerg@stallion.oz.au).
  *
  *	This code is loosely based on the Linux serial driver, written by
@@ -27,28 +27,23 @@
 /*****************************************************************************/
 
 #include <linux/module.h>
-#include <linux/errno.h>
-#include <linux/sched.h>
-#include <linux/timer.h>
-#include <linux/wait.h>
+#include <linux/malloc.h>
 #include <linux/interrupt.h>
-#include <linux/termios.h>
-#include <linux/fcntl.h>
-#include <linux/tty_driver.h>
-#include <linux/tty.h>
 #include <linux/tty_flip.h>
 #include <linux/serial.h>
 #include <linux/cdk.h>
 #include <linux/comstats.h>
 #include <linux/istallion.h>
-#include <linux/string.h>
-#include <linux/malloc.h>
 #include <linux/ioport.h>
 #include <linux/delay.h>
 #include <linux/init.h>
-#include <asm/system.h>
+
 #include <asm/io.h>
 #include <asm/uaccess.h>
+
+#ifdef CONFIG_PCI
+#include <linux/pci.h>
+#endif
 
 /*****************************************************************************/
 
@@ -79,6 +74,7 @@
 #define	BRD_ECHPCI	26
 #define	BRD_ECH64PCI	27
 #define	BRD_EASYIOPCI	28
+#define	BRD_ECPPCI	29
 
 #define	BRD_BRUMBY	BRD_BRUMBY4
 
@@ -131,7 +127,7 @@ typedef struct {
 } stlconf_t;
 
 static stlconf_t	stli_brdconf[] = {
- 	{ BRD_ECP, 0x2a0, 0, 0xcc000, 0, 0 },
+	/*{ BRD_ECP, 0x2a0, 0, 0xcc000, 0, 0 },*/
 };
 
 static int	stli_nrbrds = sizeof(stli_brdconf) / sizeof(stlconf_t);
@@ -170,7 +166,7 @@ static int	stli_nrbrds = sizeof(stli_brdconf) / sizeof(stlconf_t);
  */
 static char	*stli_drvtitle = "Stallion Intelligent Multiport Serial Driver";
 static char	*stli_drvname = "istallion";
-static char	*stli_drvversion = "5.4.7";
+static char	*stli_drvversion = "5.5.1";
 static char	*stli_serialname = "ttyE";
 static char	*stli_calloutname = "cue";
 
@@ -296,7 +292,109 @@ static char	*stli_brdnames[] = {
 	"EC8/32-PCI",
 	"EC8/64-PCI",
 	"EasyIO-PCI",
+	"EC/RA-PCI",
 };
+
+/*****************************************************************************/
+
+#ifdef MODULE
+/*
+ *	Define some string labels for arguments passed from the module
+ *	load line. These allow for easy board definitions, and easy
+ *	modification of the io, memory and irq resoucres.
+ */
+
+static char	*board0[8];
+static char	*board1[8];
+static char	*board2[8];
+static char	*board3[8];
+
+static char	**stli_brdsp[] = {
+	(char **) &board0,
+	(char **) &board1,
+	(char **) &board2,
+	(char **) &board3
+};
+
+/*
+ *	Define a set of common board names, and types. This is used to
+ *	parse any module arguments.
+ */
+
+typedef struct stlibrdtype {
+	char	*name;
+	int	type;
+} stlibrdtype_t;
+
+static stlibrdtype_t	stli_brdstr[] = {
+	{ "stallion", BRD_STALLION },
+	{ "1", BRD_STALLION },
+	{ "brumby", BRD_BRUMBY },
+	{ "brumby4", BRD_BRUMBY },
+	{ "brumby/4", BRD_BRUMBY },
+	{ "brumby-4", BRD_BRUMBY },
+	{ "brumby8", BRD_BRUMBY },
+	{ "brumby/8", BRD_BRUMBY },
+	{ "brumby-8", BRD_BRUMBY },
+	{ "brumby16", BRD_BRUMBY },
+	{ "brumby/16", BRD_BRUMBY },
+	{ "brumby-16", BRD_BRUMBY },
+	{ "2", BRD_BRUMBY },
+	{ "onboard2", BRD_ONBOARD2 },
+	{ "onboard-2", BRD_ONBOARD2 },
+	{ "onboard/2", BRD_ONBOARD2 },
+	{ "onboard-mc", BRD_ONBOARD2 },
+	{ "onboard/mc", BRD_ONBOARD2 },
+	{ "onboard-mca", BRD_ONBOARD2 },
+	{ "onboard/mca", BRD_ONBOARD2 },
+	{ "3", BRD_ONBOARD2 },
+	{ "onboard", BRD_ONBOARD },
+	{ "onboardat", BRD_ONBOARD },
+	{ "4", BRD_ONBOARD },
+	{ "onboarde", BRD_ONBOARDE },
+	{ "onboard-e", BRD_ONBOARDE },
+	{ "onboard/e", BRD_ONBOARDE },
+	{ "onboard-ei", BRD_ONBOARDE },
+	{ "onboard/ei", BRD_ONBOARDE },
+	{ "7", BRD_ONBOARDE },
+	{ "ecp", BRD_ECP },
+	{ "ecpat", BRD_ECP },
+	{ "ec8/64", BRD_ECP },
+	{ "ec8/64-at", BRD_ECP },
+	{ "ec8/64-isa", BRD_ECP },
+	{ "23", BRD_ECP },
+	{ "ecpe", BRD_ECPE },
+	{ "ecpei", BRD_ECPE },
+	{ "ec8/64-e", BRD_ECPE },
+	{ "ec8/64-ei", BRD_ECPE },
+	{ "24", BRD_ECPE },
+	{ "ecpmc", BRD_ECPMC },
+	{ "ec8/64-mc", BRD_ECPMC },
+	{ "ec8/64-mca", BRD_ECPMC },
+	{ "25", BRD_ECPMC },
+	{ "ecppci", BRD_ECPPCI },
+	{ "ec/ra", BRD_ECPPCI },
+	{ "ec/ra-pc", BRD_ECPPCI },
+	{ "ec/ra-pci", BRD_ECPPCI },
+	{ "29", BRD_ECPPCI },
+};
+
+/*
+ *	Define the module agruments.
+ */
+MODULE_AUTHOR("Greg Ungerer");
+MODULE_DESCRIPTION("Stallion Intelligent Multiport Serial Driver");
+
+MODULE_PARM(board0, "1-3s");
+MODULE_PARM_DESC(board0, "Board 0 config -> name[,ioaddr[,memaddr]");
+MODULE_PARM(board1, "1-3s");
+MODULE_PARM_DESC(board1, "Board 1 config -> name[,ioaddr[,memaddr]");
+MODULE_PARM(board2, "1-3s");
+MODULE_PARM_DESC(board2, "Board 2 config -> name[,ioaddr[,memaddr]");
+MODULE_PARM(board3, "1-3s");
+MODULE_PARM_DESC(board3, "Board 3 config -> name[,ioaddr[,memaddr]");
+
+#endif
 
 /*
  *	Set up a default memory address table for EISA board probing.
@@ -317,18 +415,34 @@ static unsigned long	stli_eisamemprobeaddrs[] = {
 static int	stli_eisamempsize = sizeof(stli_eisamemprobeaddrs) / sizeof(unsigned long);
 int		stli_eisaprobe = STLI_EISAPROBE;
 
+/*
+ *	Define the Stallion PCI vendor and device IDs.
+ */
+#ifdef CONFIG_PCI
+#ifndef	PCI_VENDOR_ID_STALLION
+#define	PCI_VENDOR_ID_STALLION		0x124d
+#endif
+#ifndef PCI_DEVICE_ID_ECRA
+#define	PCI_DEVICE_ID_ECRA		0x0004
+#endif
+#endif
+
 /*****************************************************************************/
 
 /*
  *	Hardware configuration info for ECP boards. These defines apply
  *	to the directly accessible io ports of the ECP. There is a set of
- *	defines for each ECP board type, ISA, EISA and MCA.
+ *	defines for each ECP board type, ISA, EISA, MCA and PCI.
  */
 #define	ECP_IOSIZE	4
+
 #define	ECP_MEMSIZE	(128 * 1024)
+#define	ECP_PCIMEMSIZE	(256 * 1024)
+
 #define	ECP_ATPAGESIZE	(4 * 1024)
-#define	ECP_EIPAGESIZE	(64 * 1024)
 #define	ECP_MCPAGESIZE	(4 * 1024)
+#define	ECP_EIPAGESIZE	(64 * 1024)
+#define	ECP_PCIPAGESIZE	(64 * 1024)
 
 #define	STL_EISAID	0x8c4e
 
@@ -375,6 +489,14 @@ int		stli_eisaprobe = STLI_EISAPROBE;
 #define	ECP_MCSTOP	0x20
 #define	ECP_MCENABLE	0x80
 #define	ECP_MCDISABLE	0x00
+
+/*
+ *	Important defines for the PCI class of ECP board.
+ *	(It has a lot in common with the other ECP boards.)
+ */
+#define	ECP_PCIIREG	0
+#define	ECP_PCICONFR	1
+#define	ECP_PCISTOP	0x01
 
 /*
  *	Hardware configuration info for ONboard and Brumby boards. These
@@ -516,7 +638,11 @@ static unsigned int	stli_baudrates[] = {
 /*
  *	Define some handy local macros...
  */
-#define	MIN(a,b)		(((a) <= (b)) ? (a) : (b))
+#undef MIN
+#define	MIN(a,b)	(((a) <= (b)) ? (a) : (b))
+
+#undef	TOLOWER
+#define	TOLOWER(x)	((((x) >= 'A') && ((x) <= 'Z')) ? ((x) + 0x20) : (x))
 
 /*****************************************************************************/
 
@@ -527,6 +653,10 @@ static unsigned int	stli_baudrates[] = {
 #ifdef MODULE
 int		init_module(void);
 void		cleanup_module(void);
+static void	stli_argbrds(void);
+static int	stli_parsebrd(stlconf_t *confp, char **argp);
+
+static unsigned long	stli_atol(char *str);
 #endif
 
 int		stli_init(void);
@@ -583,6 +713,7 @@ static int	stli_clrportstats(stliport_t *portp, comstats_t *cp);
 static int	stli_getportstruct(unsigned long arg);
 static int	stli_getbrdstruct(unsigned long arg);
 static void	*stli_memalloc(int len);
+static stlibrd_t *stli_allocbrd(void);
 
 static void	stli_ecpinit(stlibrd_t *brdp);
 static void	stli_ecpenable(stlibrd_t *brdp);
@@ -599,6 +730,9 @@ static void	stli_ecpmcenable(stlibrd_t *brdp);
 static void	stli_ecpmcdisable(stlibrd_t *brdp);
 static char	*stli_ecpmcgetmemptr(stlibrd_t *brdp, unsigned long offset, int line);
 static void	stli_ecpmcreset(stlibrd_t *brdp);
+static void	stli_ecppciinit(stlibrd_t *brdp);
+static char	*stli_ecppcigetmemptr(stlibrd_t *brdp, unsigned long offset, int line);
+static void	stli_ecppcireset(stlibrd_t *brdp);
 
 static void	stli_onbinit(stlibrd_t *brdp);
 static void	stli_onbenable(stlibrd_t *brdp);
@@ -625,6 +759,12 @@ static inline int	stli_initonb(stlibrd_t *brdp);
 static inline int	stli_findeisabrds(void);
 static inline int	stli_eisamemprobe(stlibrd_t *brdp);
 static inline int	stli_initports(stlibrd_t *brdp);
+static inline int	stli_getbrdnr(void);
+
+#ifdef	CONFIG_PCI
+static inline int	stli_findpcibrds(void);
+static inline int	stli_initpcibrd(int brdtype, struct pci_dev *devp);
+#endif
 
 /*****************************************************************************/
 
@@ -741,8 +881,7 @@ void cleanup_module()
 		kfree_s(stli_txcookbuf, STLI_TXBUFSIZE);
 
 	for (i = 0; (i < stli_nrbrds); i++) {
-		brdp = stli_brds[i];
-		if (brdp == (stlibrd_t *) NULL)
+		if ((brdp = stli_brds[i]) == (stlibrd_t *) NULL)
 			continue;
 		for (j = 0; (j < STL_MAXPORTS); j++) {
 			portp = brdp->ports[j];
@@ -761,6 +900,114 @@ void cleanup_module()
 	}
 
 	restore_flags(flags);
+}
+
+/*****************************************************************************/
+
+/*
+ *	Check for any arguments passed in on the module load command line.
+ */
+
+static void stli_argbrds()
+{
+	stlconf_t	conf;
+	stlibrd_t	*brdp;
+	int		nrargs, i;
+
+#if DEBUG
+	printk("stli_argbrds()\n");
+#endif
+
+	nrargs = sizeof(stli_brdsp) / sizeof(char **);
+
+	for (i = stli_nrbrds; (i < nrargs); i++) {
+		memset(&conf, 0, sizeof(conf));
+		if (stli_parsebrd(&conf, stli_brdsp[i]) == 0)
+			continue;
+		if ((brdp = stli_allocbrd()) == (stlibrd_t *) NULL)
+			continue;
+		stli_nrbrds = i + 1;
+		brdp->brdnr = i;
+		brdp->brdtype = conf.brdtype;
+		brdp->iobase = conf.ioaddr1;
+		brdp->memaddr = conf.memaddr;
+		stli_brdinit(brdp);
+	}
+}
+
+/*****************************************************************************/
+
+/*
+ *	Convert an ascii string number into an unsigned long.
+ */
+
+static unsigned long stli_atol(char *str)
+{
+	unsigned long	val;
+	int		base, c;
+	char		*sp;
+
+	val = 0;
+	sp = str;
+	if ((*sp == '0') && (*(sp+1) == 'x')) {
+		base = 16;
+		sp += 2;
+	} else if (*sp == '0') {
+		base = 8;
+		sp++;
+	} else {
+		base = 10;
+	}
+
+	for (; (*sp != 0); sp++) {
+		c = (*sp > '9') ? (TOLOWER(*sp) - 'a' + 10) : (*sp - '0');
+		if ((c < 0) || (c >= base)) {
+			printk("STALLION: invalid argument %s\n", str);
+			val = 0;
+			break;
+		}
+		val = (val * base) + c;
+	}
+	return(val);
+}
+
+/*****************************************************************************/
+
+/*
+ *	Parse the supplied argument string, into the board conf struct.
+ */
+
+static int stli_parsebrd(stlconf_t *confp, char **argp)
+{
+	char	*sp;
+	int	nrbrdnames, i;
+
+#if DEBUG
+	printk("stli_parsebrd(confp=%x,argp=%x)\n", (int) confp, (int) argp);
+#endif
+
+	if ((argp[0] == (char *) NULL) || (*argp[0] == 0))
+		return(0);
+
+	for (sp = argp[0], i = 0; ((*sp != 0) && (i < 25)); sp++, i++)
+		*sp = TOLOWER(*sp);
+
+	nrbrdnames = sizeof(stli_brdstr) / sizeof(stlibrdtype_t);
+	for (i = 0; (i < nrbrdnames); i++) {
+		if (strcmp(stli_brdstr[i].name, argp[0]) == 0)
+			break;
+	}
+	if (i >= nrbrdnames) {
+		printk("STALLION: unknown board name, %s?\n", argp[0]);
+		return(0);
+	}
+
+	confp->brdtype = stli_brdstr[i].type;
+	if ((argp[1] != (char *) NULL) && (*argp[1] != 0))
+		confp->ioaddr1 = stli_atol(argp[1]);
+	if ((argp[2] != (char *) NULL) && (*argp[2] != 0))
+		confp->memaddr = stli_atol(argp[2]);
+	return(1);
 }
 
 #endif
@@ -1433,7 +1680,6 @@ static int stli_write(struct tty_struct *tty, int from_user, const unsigned char
 
 		down(&stli_tmpwritesem);
 		copy_from_user(stli_tmpwritebuf, chbuf, count);
-		up(&stli_tmpwritesem);
 		chbuf = &stli_tmpwritebuf[0];
 	}
 
@@ -1485,8 +1731,10 @@ static int stli_write(struct tty_struct *tty, int from_user, const unsigned char
 		portp->portidx;
 	*bits |= portp->portbit;
 	set_bit(ST_TXBUSY, &portp->state);
-
 	EBRDDISABLE(brdp);
+
+	if (from_user)
+		up(&stli_tmpwritesem);
 	restore_flags(flags);
 
 	return(count);
@@ -3363,6 +3611,60 @@ static void stli_ecpmcreset(stlibrd_t *brdp)
 /*****************************************************************************/
 
 /*
+ *	The following set of functions act on ECP PCI boards.
+ */
+
+static void stli_ecppciinit(stlibrd_t *brdp)
+{
+#if DEBUG
+	printk("stli_ecppciinit(brdp=%x)\n", (int) brdp);
+#endif
+
+	outb(ECP_PCISTOP, (brdp->iobase + ECP_PCICONFR));
+	udelay(10);
+	outb(0, (brdp->iobase + ECP_PCICONFR));
+	udelay(500);
+}
+
+/*****************************************************************************/
+
+static char *stli_ecppcigetmemptr(stlibrd_t *brdp, unsigned long offset, int line)
+{	
+	void		*ptr;
+	unsigned char	val;
+
+#if DEBUG
+	printk("stli_ecppcigetmemptr(brdp=%x,offset=%x,line=%d)\n",
+		(int) brdp, (int) offset, line);
+#endif
+
+	if (offset > brdp->memsize) {
+		printk("STALLION: shared memory pointer=%x out of range at "
+			"line=%d(%d), board=%d\n", (int) offset, line,
+			__LINE__, brdp->brdnr);
+		ptr = 0;
+		val = 0;
+	} else {
+		ptr = brdp->membase + (offset % ECP_PCIPAGESIZE);
+		val = (offset / ECP_PCIPAGESIZE) << 1;
+	}
+	outb(val, (brdp->iobase + ECP_PCICONFR));
+	return(ptr);
+}
+
+/*****************************************************************************/
+
+static void stli_ecppcireset(stlibrd_t *brdp)
+{	
+	outb(ECP_PCISTOP, (brdp->iobase + ECP_PCICONFR));
+	udelay(10);
+	outb(0, (brdp->iobase + ECP_PCICONFR));
+	udelay(500);
+}
+
+/*****************************************************************************/
+
+/*
  *	The following routines act on ONboards.
  */
 
@@ -3678,7 +3980,7 @@ static inline int stli_initecp(stlibrd_t *brdp)
 
 	brdp->iosize = ECP_IOSIZE;
 	if (check_region(brdp->iobase, brdp->iosize))
-		printk("STALLION: Warning, unit %d I/O address %x conflicts "
+		printk("STALLION: Warning, board %d I/O address %x conflicts "
 			"with another device\n", brdp->brdnr, brdp->iobase);
 
 /*
@@ -3727,6 +4029,20 @@ static inline int stli_initecp(stlibrd_t *brdp)
 		brdp->intr = stli_ecpintr;
 		brdp->reset = stli_ecpmcreset;
 		name = "serial(EC8/64-MCA)";
+		break;
+
+	case BRD_ECPPCI:
+		brdp->membase = (void *) brdp->memaddr;
+		brdp->memsize = ECP_PCIMEMSIZE;
+		brdp->pagesize = ECP_PCIPAGESIZE;
+		brdp->init = stli_ecppciinit;
+		brdp->enable = NULL;
+		brdp->reenable = NULL;
+		brdp->disable = NULL;
+		brdp->getmemptr = stli_ecppcigetmemptr;
+		brdp->intr = stli_ecpintr;
+		brdp->reset = stli_ecppcireset;
+		name = "serial(EC/RA-PCI)";
 		break;
 
 	default:
@@ -3817,7 +4133,7 @@ static inline int stli_initonb(stlibrd_t *brdp)
 
 	brdp->iosize = ONB_IOSIZE;
 	if (check_region(brdp->iobase, brdp->iosize))
-		printk("STALLION: Warning, unit %d I/O address %x conflicts "
+		printk("STALLION: Warning, board %d I/O address %x conflicts "
 			"with another device\n", brdp->brdnr, brdp->iobase);
 
 /*
@@ -4082,6 +4398,7 @@ __initfunc(static int stli_brdinit(stlibrd_t *brdp))
 	case BRD_ECP:
 	case BRD_ECPE:
 	case BRD_ECPMC:
+	case BRD_ECPPCI:
 		stli_initecp(brdp);
 		break;
 	case BRD_ONBOARD:
@@ -4104,20 +4421,20 @@ __initfunc(static int stli_brdinit(stlibrd_t *brdp))
 			stli_brdnames[brdp->brdtype]);
 		return(ENODEV);
 	default:
-		printk("STALLION: unit=%d is unknown board type=%d\n",
+		printk("STALLION: board=%d is unknown board type=%d\n",
 			brdp->brdnr, brdp->brdtype);
 		return(ENODEV);
 	}
 
 	if ((brdp->state & BST_FOUND) == 0) {
-		printk("STALLION: %s board not found, unit=%d io=%x mem=%x\n",
+		printk("STALLION: %s board not found, board=%d io=%x mem=%x\n",
 			stli_brdnames[brdp->brdtype], brdp->brdnr,
 			brdp->iobase, (int) brdp->memaddr);
 		return(ENODEV);
 	}
 
 	stli_initports(brdp);
-	printk("STALLION: %s found, unit=%d io=%x mem=%x "
+	printk("STALLION: %s found, board=%d io=%x mem=%x "
 		"nrpanels=%d nrports=%d\n", stli_brdnames[brdp->brdtype],
 		brdp->brdnr, brdp->iobase, (int) brdp->memaddr,
 		brdp->nrpanels, brdp->nrports);
@@ -4279,29 +4596,13 @@ static inline int stli_findeisabrds()
 			continue;
 
 /*
- *		Check that we have room for this new board in our board
- *		info table.
- */
-		if (stli_nrbrds >= STL_MAXBRDS) {
-			printk("STALLION: no room for more probed boards, "
-				"maximum supported %d\n", STL_MAXBRDS);
-			break;
-		}
-
-/*
  *		We have found a Stallion board and it is not configured already.
  *		Allocate a board structure and initialize it.
  */
-		brdp = (stlibrd_t *) stli_memalloc(sizeof(stlibrd_t));
-		if (brdp == (stlibrd_t *) NULL) {
-			printk("STALLION: failed to allocate memory "
-				"(size=%d)\n", sizeof(stlibrd_t));
+		if ((brdp = stli_allocbrd()) == (stlibrd_t *) NULL)
 			return(-ENOMEM);
-		}
-		memset(brdp, 0, sizeof(stlibrd_t));
-
-		brdp->magic = STLI_BOARDMAGIC;
-		brdp->brdnr = stli_nrbrds++;
+		if ((brdp->brdnr = stli_getbrdnr()) < 0)
+			return(-ENOMEM);
 		eid = inb(iobase + 0xc82);
 		if (eid == ECP_EISAID)
 			brdp->brdtype = BRD_ECPE;
@@ -4317,6 +4618,123 @@ static inline int stli_findeisabrds()
 	}
 
 	return(0);
+}
+
+/*****************************************************************************/
+
+/*
+ *	Find the next available board number that is free.
+ */
+
+static inline int stli_getbrdnr()
+{
+	int	i;
+
+	for (i = 0; (i < STL_MAXBRDS); i++) {
+		if (stli_brds[i] == (stlibrd_t *) NULL) {
+			if (i >= stli_nrbrds)
+				stli_nrbrds = i + 1;
+			return(i);
+		}
+	}
+	return(-1);
+}
+
+/*****************************************************************************/
+
+#ifdef	CONFIG_PCI
+
+/*
+ *	We have a Stallion board. Allocate a board structure and
+ *	initialize it. Read its IO and MEMORY resources from PCI
+ *	configuration space.
+ */
+
+static inline int stli_initpcibrd(int brdtype, struct pci_dev *devp)
+{
+	stlibrd_t	*brdp;
+
+#if DEBUG
+	printk("stli_initpcibrd(brdtype=%d,busnr=%x,devnr=%x)\n", brdtype,
+		dev->bus->number, dev->devfn);
+#endif
+
+	if ((brdp = stli_allocbrd()) == (stlibrd_t *) NULL)
+		return(-ENOMEM);
+	if ((brdp->brdnr = stli_getbrdnr()) < 0) {
+		printk("STALLION: too many boards found, "
+			"maximum supported %d\n", STL_MAXBRDS);
+		return(0);
+	}
+	brdp->brdtype = brdtype;
+
+#if DEBUG
+	printk("%s(%d): BAR[]=%x,%x,%x,%x\n", __FILE__, __LINE__,
+		devp->base_address[0], devp->base_address[1],
+		devp->base_address[2], devp->base_address[3]);
+#endif
+
+/*
+ *	We have all resources from the board, so lets setup the actual
+ *	board structure now.
+ */
+	brdp->iobase = (devp->base_address[3] & PCI_BASE_ADDRESS_IO_MASK);
+	brdp->memaddr = (devp->base_address[2] & PCI_BASE_ADDRESS_MEM_MASK);
+	stli_brdinit(brdp);
+
+	return(0);
+}
+
+/*****************************************************************************/
+
+/*
+ *	Find all Stallion PCI boards that might be installed. Initialize each
+ *	one as it is found.
+ */
+
+static inline int stli_findpcibrds()
+{
+	struct pci_dev	*dev = NULL;
+	int		rc;
+
+#if DEBUG
+	printk("stli_findpcibrds()\n");
+#endif
+
+	if (! pci_present())
+		return(0);
+
+	while ((dev = pci_find_device(PCI_VENDOR_ID_STALLION,
+	    PCI_DEVICE_ID_ECRA, dev))) {
+		if ((rc = stli_initpcibrd(BRD_ECPPCI, dev)))
+			return(rc);
+	}
+
+	return(0);
+}
+
+#endif
+
+/*****************************************************************************/
+
+/*
+ *	Allocate a new board structure. Fill out the basic info in it.
+ */
+
+static stlibrd_t *stli_allocbrd()
+{
+	stlibrd_t	*brdp;
+
+	brdp = (stlibrd_t *) stli_memalloc(sizeof(stlibrd_t));
+	if (brdp == (stlibrd_t *) NULL) {
+		printk("STALLION: failed to allocate memory (size=%d)\n",
+			sizeof(stlibrd_t));
+		return((stlibrd_t *) NULL);
+	}
+
+	memset(brdp, 0, sizeof(stlibrd_t));
+	brdp->magic = STLI_BOARDMAGIC;
+	return(brdp);
 }
 
 /*****************************************************************************/
@@ -4344,19 +4762,16 @@ static inline int stli_initbrds()
 
 /*
  *	Firstly scan the list of static boards configured. Allocate
- *	resources and initialize the boards as found.
+ *	resources and initialize the boards as found. If this is a
+ *	module then let the module args override static configuration.
  */
 	for (i = 0; (i < stli_nrbrds); i++) {
 		confp = &stli_brdconf[i];
-		brdp = (stlibrd_t *) stli_memalloc(sizeof(stlibrd_t));
-		if (brdp == (stlibrd_t *) NULL) {
-			printk("STALLION: failed to allocate memory "
-				"(size=%d)\n", sizeof(stlibrd_t));
+#ifdef MODULE
+		stli_parsebrd(confp, stli_brdsp[i]);
+#endif
+		if ((brdp = stli_allocbrd()) == (stlibrd_t *) NULL)
 			return(-ENOMEM);
-		}
-		memset(brdp, 0, sizeof(stlibrd_t));
-
-		brdp->magic = STLI_BOARDMAGIC;
 		brdp->brdnr = i;
 		brdp->brdtype = confp->brdtype;
 		brdp->iobase = confp->ioaddr1;
@@ -4365,10 +4780,17 @@ static inline int stli_initbrds()
 	}
 
 /*
- *	Now go probing for EISA boards if enabled.
+ *	Static configuration table done, so now use dynamic methods to
+ *	see if any more boards should be configured.
  */
+#ifdef MODULE
+	stli_argbrds();
+#endif
 	if (stli_eisaprobe)
 		stli_findeisabrds();
+#ifdef CONFIG_PCI
+	stli_findpcibrds();
+#endif
 
 /*
  *	All found boards are initialized. Now for a little optimization, if

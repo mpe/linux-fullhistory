@@ -3626,7 +3626,7 @@ static inline int line_info(char *buf, struct mgsl_struct *info)
 	}
 	spin_unlock_irqrestore(&info->irq_spinlock,flags);
 	
-#if LINUX_VERSION_CODE >= VERSION(2,1,0)
+#if 0 && LINUX_VERSION_CODE >= VERSION(2,1,0)
 	ret += sprintf(buf+ret, "irq_spinlock=%08X\n",
 	 		info->irq_spinlock.lock );
 #endif
