@@ -66,18 +66,33 @@ struct us_unusual_dev {
 	unsigned int flags;
 };
 
-/* Flag definitions: these entries are static */
-#define US_FL_SINGLE_LUN      0x00000001 /* allow access to only LUN 0	    */
-#define US_FL_MODE_XLATE      0          /* [no longer used]                */
-#define US_FL_NEED_OVERRIDE   0x00000004 /* unusual_devs entry is necessary */
-#define US_FL_IGNORE_SER      0		 /* [no longer used]		    */
-#define US_FL_SCM_MULT_TARG   0x00000020 /* supports multiple targets	    */
-#define US_FL_FIX_INQUIRY     0x00000040 /* INQUIRY response needs faking   */
-#define US_FL_FIX_CAPACITY    0x00000080 /* READ CAPACITY response too big  */
-#define US_FL_IGNORE_RESIDUE  0x00000100 /* reported residue is wrong	    */
-#define US_FL_BULK32          0x00000200 /* Uses 32-byte CBW length         */
-#define US_FL_NOT_LOCKABLE    0x00000400 /* PREVENT/ALLOW not supported     */
-#define US_FL_GO_SLOW         0x00000800 /* Need delay after Command phase  */
+/*
+ * Static flag definitions.  We use this roundabout technique so that the
+ * proc_info() routine can automatically display a message for each flag.
+ */
+#define US_DO_ALL_FLAGS						\
+	US_FLAG(SINGLE_LUN,	0x00000001)			\
+		/* allow access to only LUN 0 */		\
+	US_FLAG(NEED_OVERRIDE,	0x00000002)			\
+		/* unusual_devs entry is necessary */		\
+	US_FLAG(SCM_MULT_TARG,	0x00000004)			\
+		/* supports multiple targets */			\
+	US_FLAG(FIX_INQUIRY,	0x00000008)			\
+		/* INQUIRY response needs faking */		\
+	US_FLAG(FIX_CAPACITY,	0x00000010)			\
+		/* READ CAPACITY response too big */		\
+	US_FLAG(IGNORE_RESIDUE,	0x00000020)			\
+		/* reported residue is wrong */			\
+	US_FLAG(BULK32,		0x00000040)			\
+		/* Uses 32-byte CBW length */			\
+	US_FLAG(NOT_LOCKABLE,	0x00000080)			\
+		/* PREVENT/ALLOW not supported */		\
+	US_FLAG(GO_SLOW,	0x00000100)			\
+		/* Need delay after Command phase */		\
+
+#define US_FLAG(name, value)	US_FL_##name = value ,
+enum { US_DO_ALL_FLAGS };
+#undef US_FLAG
 
 /* Dynamic flag definitions: used in set_bit() etc. */
 #define US_FLIDX_URB_ACTIVE	18  /* 0x00040000  current_urb is in use  */

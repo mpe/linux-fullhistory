@@ -336,8 +336,6 @@ void usb_stor_report_device_reset(struct us_data *us)
 #undef SPRINTF
 #define SPRINTF(args...) \
 	do { if (pos < buffer+length) pos += sprintf(pos, ## args); } while (0)
-#define DO_FLAG(a) \
-	do { if (us->flags & US_FL_##a) pos += sprintf(pos, " " #a); } while(0)
 
 static int proc_info (struct Scsi_Host *hostptr, char *buffer, char **start, off_t offset,
 		int length, int inout)
@@ -384,10 +382,10 @@ static int proc_info (struct Scsi_Host *hostptr, char *buffer, char **start, off
 	if (pos < buffer + length) {
 		pos += sprintf(pos, "       Quirks:");
 
-		DO_FLAG(SINGLE_LUN);
-		DO_FLAG(SCM_MULT_TARG);
-		DO_FLAG(FIX_INQUIRY);
-		DO_FLAG(FIX_CAPACITY);
+#define US_FLAG(name, value) \
+	if (us->flags & value) pos += sprintf(pos, " " #name);
+US_DO_ALL_FLAGS
+#undef US_FLAG
 
 		*(pos++) = '\n';
 	}
