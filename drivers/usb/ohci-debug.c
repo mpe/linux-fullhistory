@@ -119,10 +119,9 @@ void show_ohci_td(struct ohci_td *td)
 		(td_toggle < 2) ? " " :
 		(td_toggle & 1) ? "Data1" : "Data0",
 		"ErrorCnt ", td_errcnt);
-	printk(KERN_DEBUG "        ComplCode 0x%x, %sAccessed, %sActive\n",
+	printk(KERN_DEBUG "        ComplCode 0x%x, %sAccessed\n",
 		td_cc,
-		td_cc_accessed(*td) ? "" : "Not ",
-		td_active(*td) ? "" : "Not ");
+		td_cc_accessed(*td) ? "" : "Not ");
 
 	printk(KERN_DEBUG "        %s%s\n",
 		td_allocated(*td) ? "Allocated" : "Free",
@@ -159,7 +158,7 @@ void show_ohci_td_chain(struct ohci_td *td)
 		if (td_dummy(*cur_td)) break;
 	}
 
-	printk(KERN_DEBUG "--- End  TD Chain %lx: ---\n", virt_to_bus(td));
+	printk(KERN_DEBUG "--- End  TD Chain %lx. ---\n", virt_to_bus(td));
 } /* show_ohci_td_chain () */
 
 

@@ -36,10 +36,7 @@ KMod
 ----
 
 If you use kmod, you will find it useful to edit /etc/conf.modules.
-When a driver needs to use the parport subsystem for the first time, a
-module by the name of parport_lowlevel will be automatically loaded
-via kmod.  No module actually exists with that name; it's just an
-alias.  Here is an example of the lines that need to be added:
+Here is an example of the lines that need to be added:
 
 	post-install parport modprobe -k parport_pc
 	options parport_pc io=0x378,0x278 irq=7,auto

@@ -135,242 +135,18 @@ put_reg(struct task_struct *task, unsigned long regno, long data)
 	return 0;
 }
 
-/*
- * This routine gets a long from any process space by following the page
- * tables. NOTE! You should check that the long isn't on a page boundary,
- * and that it is in the task area before calling this: this routine does
- * no checking.
- */
-static unsigned long
-get_long(struct task_struct * tsk, struct vm_area_struct * vma,
-	 unsigned long addr)
+static inline int
+read_int(struct task_struct *task, unsigned long addr, int * data)
 {
-	pgd_t * pgdir;
-	pmd_t * pgmiddle;
-	pte_t * pgtable;
-	unsigned long page;
-
-	DBG(DBG_MEM_ALL, ("getting long at 0x%lx\n", addr));
- repeat:
-	pgdir = pgd_offset(vma->vm_mm, addr);
-	if (pgd_none(*pgdir)) {
-		handle_mm_fault(tsk, vma, addr, 0);
-		goto repeat;
-	}
-	if (pgd_bad(*pgdir)) {
-		printk("ptrace: bad page directory %08lx\n", pgd_val(*pgdir));
-		pgd_clear(pgdir);
-		return 0;
-	}
-	pgmiddle = pmd_offset(pgdir, addr);
-	if (pmd_none(*pgmiddle)) {
-		handle_mm_fault(tsk, vma, addr, 0);
-		goto repeat;
-	}
-	if (pmd_bad(*pgmiddle)) {
-		printk("ptrace: bad page middle %08lx\n", pmd_val(*pgmiddle));
-		pmd_clear(pgmiddle);
-		return 0;
-	}
-	pgtable = pte_offset(pgmiddle, addr);
-	if (!pte_present(*pgtable)) {
-		handle_mm_fault(tsk, vma, addr, 0);
-		goto repeat;
-	}
-	page = pte_page(*pgtable);
-	/* this is a hack for non-kernel-mapped video buffers and similar */
-	if (MAP_NR(page) >= max_mapnr)
-		return 0;
-	page += addr & ~PAGE_MASK;
-	return *(unsigned long *) page;
+	int copied = access_process_vm(task, addr, data, sizeof(int), 0);
+	return (copied == sizeof(int)) ? 0 : -EIO;
 }
 
-/*
- * This routine puts a long into any process space by following the page
- * tables. NOTE! You should check that the long isn't on a page boundary,
- * and that it is in the task area before calling this: this routine does
- * no checking.
- *
- * Now keeps R/W state of page so that a text page stays readonly
- * even if a debugger scribbles breakpoints into it.  -M.U-
- */
-static void
-put_long(struct task_struct * tsk, struct vm_area_struct * vma,
-	 unsigned long addr, unsigned long data)
+static inline int
+write_int(struct task_struct *task, unsigned long addr, int data)
 {
-	pgd_t *pgdir;
-	pmd_t *pgmiddle;
-	pte_t *pgtable;
-	unsigned long page;
-
- repeat:
-	pgdir = pgd_offset(vma->vm_mm, addr);
-	if (!pgd_present(*pgdir)) {
-		handle_mm_fault(tsk, vma, addr, 1);
-		goto repeat;
-	}
-	if (pgd_bad(*pgdir)) {
-		printk("ptrace: bad page directory %08lx\n", pgd_val(*pgdir));
-		pgd_clear(pgdir);
-		return;
-	}
-	pgmiddle = pmd_offset(pgdir, addr);
-	if (pmd_none(*pgmiddle)) {
-		handle_mm_fault(tsk, vma, addr, 1);
-		goto repeat;
-	}
-	if (pmd_bad(*pgmiddle)) {
-		printk("ptrace: bad page middle %08lx\n", pmd_val(*pgmiddle));
-		pmd_clear(pgmiddle);
-		return;
-	}
-	pgtable = pte_offset(pgmiddle, addr);
-	if (!pte_present(*pgtable)) {
-		handle_mm_fault(tsk, vma, addr, 1);
-		goto repeat;
-	}
-	page = pte_page(*pgtable);
-	if (!pte_write(*pgtable)) {
-		handle_mm_fault(tsk, vma, addr, 1);
-		goto repeat;
-	}
-
-	/* This is a hack for non-kernel-mapped video buffers and similar.  */
-	if (MAP_NR(page) < max_mapnr)
-		*(unsigned long *) (page + (addr & ~PAGE_MASK)) = data;
-
-	/* We're bypassing pagetables, so we have to set the dirty bit
-	   ourselves.  This should also re-instate whatever read-only
-	   mode there was before.  */
-	set_pte(pgtable, pte_mkdirty(mk_pte(page, vma->vm_page_prot)));
-	flush_tlb();
-}
-
-/*
- * This routine checks the page boundaries, and that the offset is
- * within the task area. It then calls get_long() to read a long.
- */
-static int
-read_long(struct task_struct * tsk, unsigned long addr, unsigned long * result)
-{
-	struct vm_area_struct * vma = find_extend_vma(tsk, addr);
-
-	DBG(DBG_MEM_ALL, ("in read_long\n"));
-	if (!vma)
-		return -EIO;
-	if ((addr & ~PAGE_MASK) > (PAGE_SIZE - sizeof(long))) {
-		struct vm_area_struct * vma_high = vma;
-		unsigned long low, align;
-
-		if (addr + sizeof(long) >= vma->vm_end) {
-			vma_high = vma->vm_next;
-			if (!vma_high || vma_high->vm_start != vma->vm_end)
-				return -EIO;
-		}
-		align = addr & (sizeof(long) - 1);
-		addr -= align;
-		low = get_long(tsk, vma, addr);
-		if (align) {
-			unsigned long high;
-
-			high = get_long(tsk, vma_high, addr + sizeof(long));
-			low >>= align * 8;
-			low  |= high << (64 - align * 8);
-		}
-		*result = low;
-	} else {
-	        long l = get_long(tsk, vma, addr);
-
-		DBG(DBG_MEM_ALL, ("value is 0x%lx\n", l));
-		*result = l;
-	}
-	return 0;
-}
-
-/*
- * This routine checks the page boundaries, and that the offset is
- * within the task area. It then calls put_long() to write a long.
- */
-static int
-write_long(struct task_struct * tsk, unsigned long addr, unsigned long data)
-{
-	struct vm_area_struct * vma = find_extend_vma(tsk, addr);
-
-	if (!vma)
-		return -EIO;
-	if ((addr & ~PAGE_MASK) > PAGE_SIZE-sizeof(long)) {
-		unsigned long low, high, align;
-		struct vm_area_struct * vma_high = vma;
-
-		if (addr + sizeof(long) >= vma->vm_end) {
-			vma_high = vma->vm_next;
-			if (!vma_high || vma_high->vm_start != vma->vm_end)
-				return -EIO;
-		}
-		align = addr & (sizeof(long) - 1);
-		addr -= align;
-		low  = get_long(tsk, vma, addr);
-		high = get_long(tsk, vma_high, addr + sizeof(long));
-		low  &= ~0UL >> (64 - align * 8);
-		high &= ~0UL << (align * 8);
-		low  |= data << (align * 8);
-		high |= data >> (64 - align * 8);
-		put_long(tsk, vma, addr, low);
-		put_long(tsk, vma_high, addr + sizeof(long), high);
-	} else
-		put_long(tsk, vma, addr, data);
-	return 0;
-}
-
-/*
- * Read a 32bit int from address space TSK.
- */
-static int
-read_int(struct task_struct * tsk, unsigned long addr, unsigned int *data)
-{
-	unsigned long l, align;
-	int res;
-
-	align = addr & 0x7;
-	addr &= ~0x7;
-
-	res = read_long(tsk, addr, &l);
-	if (res < 0)
-		return res;
-
-	if (align == 0) {
-		*data = l;
-	} else {
-		*data = l >> 32;
-	}
-	return 0;
-}
-
-/*
- * Write a 32bit word to address space TSK.
- *
- * For simplicity, do a read-modify-write of the 64bit word that
- * contains the 32bit word that we are about to write.
- */
-static int
-write_int(struct task_struct * tsk, unsigned long addr, unsigned int data)
-{
-	unsigned long l, align;
-	int res;
-
-	align = addr & 0x7;
-	addr &= ~0x7;
-
-	res = read_long(tsk, addr, &l);
-	if (res < 0)
-		return res;
-
-	if (align == 0) {
-		l = (l & 0xffffffff00000000UL) | ((unsigned long) data <<  0);
-	} else {
-		l = (l & 0x00000000ffffffffUL) | ((unsigned long) data << 32);
-	}
-	return write_long(tsk, addr, l);
+	int copied = access_process_vm(task, addr, &data, sizeof(int), 1);
+	return (copied == sizeof(int)) ? 0 : -EIO;
 }
 
 /*
@@ -521,16 +297,17 @@ sys_ptrace(long request, long pid, long addr, long data,
 	switch (request) {
 	/* When I and D space are separate, these will need to be fixed.  */
 	case PTRACE_PEEKTEXT: /* read word at location addr. */
-	case PTRACE_PEEKDATA:
-		down(&child->mm->mmap_sem);
-		ret = read_long(child, addr, &tmp);
-		up(&child->mm->mmap_sem);
-		DBG(DBG_MEM, ("peek %#lx->%#lx\n", addr, tmp));
-		if (ret < 0)
+	case PTRACE_PEEKDATA: {
+		unsigned long tmp;
+		int copied = access_process_vm(child, addr, &tmp, sizeof(tmp), 0);
+		ret = -EIO;
+		if (copied != sizeof(tmp))
 			goto out;
+		
 		regs.r0 = 0;	/* special return: no errors */
 		ret = tmp;
 		goto out;
+	}
 
 	/* Read register number ADDR. */
 	case PTRACE_PEEKUSR:
@@ -541,12 +318,12 @@ sys_ptrace(long request, long pid, long addr, long data,
 
 	/* When I and D space are separate, this will have to be fixed.  */
 	case PTRACE_POKETEXT: /* write the word at location addr. */
-	case PTRACE_POKEDATA:
-		DBG(DBG_MEM, ("poke %#lx<-%#lx\n", addr, data));
-		down(&child->mm->mmap_sem);
-		ret = write_long(child, addr, data);
-		up(&child->mm->mmap_sem);
+	case PTRACE_POKEDATA: {
+		unsigned long tmp = data;
+		int copied = access_process_vm(child, addr, &tmp, sizeof(tmp), 1);
+		ret = (copied == sizeof(tmp)) ? 0 : -EIO;
 		goto out;
+	}
 
 	case PTRACE_POKEUSR: /* write the specified register */
 		DBG(DBG_MEM, ("poke $%ld<-%#lx\n", addr, data));

@@ -3406,7 +3406,7 @@ static int __init happy_meal_pci_init(struct device *dev, struct pci_dev *pdev)
 	/* Set the latency timer and cache line size as well,
 	 * PROM leaves it at zero.
 	 */
-	pci_write_config_byte(pdev, PCI_LATENCY_TIMER, 128);
+	pci_write_config_byte(pdev, PCI_LATENCY_TIMER, 64);
 #ifdef __sparc_v9__
 	/* NOTE: Cache line size is in 32-bit word units. */
 	pci_write_config_byte(pdev, PCI_CACHE_LINE_SIZE, 0x10);

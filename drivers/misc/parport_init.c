@@ -184,7 +184,7 @@ EXPORT_SYMBOL(parport_default_proc_register);
 EXPORT_SYMBOL(parport_default_proc_unregister);
 EXPORT_SYMBOL(parport_parse_irqs);
 EXPORT_SYMBOL(parport_parse_dmas);
-#ifdef CONFIG_PARPORT_12843
+#ifdef CONFIG_PARPORT_1284
 EXPORT_SYMBOL(parport_open);
 EXPORT_SYMBOL(parport_close);
 EXPORT_SYMBOL(parport_device_id);

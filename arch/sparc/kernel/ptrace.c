@@ -24,202 +24,6 @@
 
 #define MAGIC_CONSTANT 0x80000000
 
-/*
- * This routine gets a long from any process space by following the page
- * tables. NOTE! You should check that the long isn't on a page boundary,
- * and that it is in the task area before calling this: this routine does
- * no checking.
- */
-static unsigned long get_long(struct task_struct * tsk,
-	struct vm_area_struct * vma, unsigned long addr)
-{
-	pgd_t * pgdir;
-	pmd_t * pgmiddle;
-	pte_t * pgtable;
-	unsigned long page, retval;
-
-repeat:
-	pgdir = pgd_offset(vma->vm_mm, addr);
-	if (pgd_none(*pgdir)) {
-		handle_mm_fault(tsk, vma, addr, 0);
-		goto repeat;
-	}
-	if (pgd_bad(*pgdir)) {
-		printk("ptrace: bad page directory %08lx\n", pgd_val(*pgdir));
-		pgd_clear(pgdir);
-		return 0;
-	}
-	pgmiddle = pmd_offset(pgdir, addr);
-	if (pmd_none(*pgmiddle)) {
-		handle_mm_fault(tsk, vma, addr, 0);
-		goto repeat;
-	}
-	if (pmd_bad(*pgmiddle)) {
-		printk("ptrace: bad page middle %08lx\n", pmd_val(*pgmiddle));
-		pmd_clear(pgmiddle);
-		return 0;
-	}
-	pgtable = pte_offset(pgmiddle, addr);
-	if (!pte_present(*pgtable)) {
-		handle_mm_fault(tsk, vma, addr, 0);
-		goto repeat;
-	}
-	page = pte_page(*pgtable);
-/* this is a hack for non-kernel-mapped video buffers and similar */
-	if (MAP_NR(page) >= max_mapnr)
-		return 0;
-	page += addr & ~PAGE_MASK;
-	retval = *(unsigned long *) page;
-	flush_page_to_ram(page);
-	return retval;
-}
-
-/*
- * This routine puts a long into any process space by following the page
- * tables. NOTE! You should check that the long isn't on a page boundary,
- * and that it is in the task area before calling this: this routine does
- * no checking.
- *
- * Now keeps R/W state of page so that a text page stays readonly
- * even if a debugger scribbles breakpoints into it.  -M.U-
- */
-static void put_long(struct task_struct * tsk, struct vm_area_struct * vma,
-	unsigned long addr, unsigned long data)
-{
-	pgd_t *pgdir;
-	pmd_t *pgmiddle;
-	pte_t *pgtable;
-	unsigned long page;
-
-repeat:
-	pgdir = pgd_offset(vma->vm_mm, addr);
-	if (!pgd_present(*pgdir)) {
-		handle_mm_fault(tsk, vma, addr, 1);
-		goto repeat;
-	}
-	if (pgd_bad(*pgdir)) {
-		printk("ptrace: bad page directory %08lx\n", pgd_val(*pgdir));
-		pgd_clear(pgdir);
-		return;
-	}
-	pgmiddle = pmd_offset(pgdir, addr);
-	if (pmd_none(*pgmiddle)) {
-		handle_mm_fault(tsk, vma, addr, 1);
-		goto repeat;
-	}
-	if (pmd_bad(*pgmiddle)) {
-		printk("ptrace: bad page middle %08lx\n", pmd_val(*pgmiddle));
-		pmd_clear(pgmiddle);
-		return;
-	}
-	pgtable = pte_offset(pgmiddle, addr);
-	if (!pte_present(*pgtable)) {
-		handle_mm_fault(tsk, vma, addr, 1);
-		goto repeat;
-	}
-	page = pte_page(*pgtable);
-	if (!pte_write(*pgtable)) {
-		handle_mm_fault(tsk, vma, addr, 1);
-		goto repeat;
-	}
-/* this is a hack for non-kernel-mapped video buffers and similar */
-	flush_cache_page(vma, addr);
-	if (MAP_NR(page) < max_mapnr) {
-		*(unsigned long *) (page + (addr & ~PAGE_MASK)) = data;
-		flush_page_to_ram(page);
-	}
-/* we're bypassing pagetables, so we have to set the dirty bit ourselves */
-/* this should also re-instate whatever read-only mode there was before */
-	set_pte(pgtable, pte_mkdirty(mk_pte(page, vma->vm_page_prot)));
-	flush_tlb_page(vma, addr);
-}
-
-/*
- * This routine checks the page boundaries, and that the offset is
- * within the task area. It then calls get_long() to read a long.
- */
-static int read_long(struct task_struct * tsk, unsigned long addr,
-		     unsigned long * result)
-{
-	struct vm_area_struct * vma = find_extend_vma(tsk, addr);
-
-	if (!vma)
-		return -EIO;
-	*result = get_long(tsk, vma, addr);
-	return 0;
-}
-
-static int read_byte(struct task_struct *tsk, unsigned long addr,
-		     unsigned char *result)
-{
-	struct vm_area_struct *vma = find_extend_vma(tsk, addr&~3);
-	unsigned long tmp;
-
-	if(!vma)
-		return -EIO;
-	tmp = get_long(tsk, vma, (addr & ~3));
-	switch(addr & 3) {
-	case 0:
-		*result = (tmp & 0xff000000)>>24;
-		break;
-	case 1:
-		*result = (tmp & 0x00ff0000)>>16;
-		break;
-	case 2:
-		*result = (tmp & 0x0000ff00)>>8;
-		break;
-	case 3:
-		*result = (tmp & 0x000000ff);
-		break;
-	}
-	return 0;
-}
-
-/*
- * This routine checks the page boundaries, and that the offset is
- * within the task area. It then calls put_long() to write a long.
- */
-static int write_long(struct task_struct * tsk, unsigned long addr,
-		      unsigned long data)
-{
-	struct vm_area_struct * vma = find_extend_vma(tsk, addr);
-
-	if (!vma)
-		return -EIO;
-	put_long(tsk, vma, addr, data);
-	return 0;
-}
-
-static int write_byte(struct task_struct * tsk, unsigned long addr,
-		      unsigned char data)
-{
-	struct vm_area_struct * vma = find_extend_vma(tsk, (addr & ~3));
-	unsigned long tmp;
-
-	if (!vma)
-		return -EIO;
-	tmp = get_long(tsk, vma, (addr & ~3));
-	switch(addr & 3) {
-	case 0:
-		tmp &= 0x00ffffff;
-		tmp |= (data << 24);
-		break;
-	case 1:
-		tmp &= 0xff00ffff;
-		tmp |= ((data << 16) & 0x00ff0000);
-		break;
-	case 2:
-		tmp &= 0xffff00ff;
-		tmp |= ((data << 8) & 0x0000ff00);
-		break;
-	case 3:
-		tmp &= 0xffffff00;
-		tmp |= (data & 0x000000ff);
-		break;
-	}
-	put_long(tsk, vma, (addr & ~3), tmp);
-	return 0;
-}
 
 /* Returning from ptrace is a bit tricky because the syscall return
  * low level code assumes any value returned which is negative and
@@ -737,56 +541,31 @@ asmlinkage void do_ptrace(struct pt_regs *regs)
 
 	case PTRACE_READTEXT:
 	case PTRACE_READDATA: {
-		unsigned char *dest = (unsigned char *) addr2;
-		unsigned long src = addr;
-		unsigned char tmp;
-		int res, len = data;
+		int res = ptrace_readdata(child, addr, (void *) addr2, data);
 
-		res = verify_area(VERIFY_WRITE, dest, len);
-		if(res) {
-			pt_error_return(regs, -res);
+		if (res == data) {
+			pt_succ_return(regs, 0);
 			goto out;
 		}
-		while(len) {
-			down(&child->mm->mmap_sem);
-			res = read_byte(child, src, &tmp);
-			up(&child->mm->mmap_sem);
-			if(res < 0) {
-				pt_error_return(regs, -res);
-				goto out;
-			}
-			__put_user(tmp, dest);
-			src++; dest++; len--;
-		}
-		pt_succ_return(regs, 0);
+		/* Partial read is an IO failure */
+		if (res >= 0)
+			res = -EIO;
+		pt_error_return(regs, -res);
 		goto out;
 	}
 
 	case PTRACE_WRITETEXT:
 	case PTRACE_WRITEDATA: {
-		unsigned char *src = (unsigned char *) addr2;
-		unsigned long dest = addr;
-		int res, len = data;
+		int res = ptrace_writedata(child, (void *) addr2, addr, data);
 
-		res = verify_area(VERIFY_READ, src, len);
-		if(res) {
-			pt_error_return(regs, -res);
+		if (res == data) {
+			pt_succ_return(regs, 0);
 			goto out;
 		}
-		while(len) {
-			unsigned long tmp;
-
-			__get_user(tmp, src);
-			down(&child->mm->mmap_sem);
-			res = write_byte(child, dest, tmp);
-			up(&child->mm->mmap_sem);
-			if(res < 0) {
-				pt_error_return(regs, -res);
-				goto out;
-			}
-			src++; dest++; len--;
-		}
-		pt_succ_return(regs, 0);
+		/* Partial write is an IO failure */
+		if (res >= 0)
+			res = -EIO;
+		pt_error_return(regs, -res);
 		goto out;
 	}
 

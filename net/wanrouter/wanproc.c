@@ -123,13 +123,16 @@ static struct inode_operations router_inode =
 	NULL,			/* rmdir */
 	NULL,			/* mknod */
 	NULL,			/* rename */
-	NULL,			/* follow link */
 	NULL,			/* readlink */
+	NULL,			/* follow_link */
+	NULL,			/* get_block */
 	NULL,			/* readpage */
 	NULL,			/* writepage */
-	NULL,			/* get_block */
+	NULL,			/* flushpage */
 	NULL,			/* truncate */
-	router_proc_perms
+	router_proc_perms,	/* permission */
+	NULL,			/* smap */
+	NULL			/* revalidate */
 };
 
 /*
@@ -165,15 +168,18 @@ static struct inode_operations wandev_inode =
 	NULL,			/* rename */
 	NULL,			/* readlink */
 	NULL,			/* follow_link */
+	NULL,			/* get_block */
 	NULL,			/* readpage */
 	NULL,			/* writepage */
-	NULL,			/* get_block */
+	NULL,			/* flushpage */
 	NULL,			/* truncate */
-	router_proc_perms
+	router_proc_perms,	/* permission */
+	NULL,			/* smap */
+	NULL			/* revalidate */
 };
 
 /*
- * Proc filesystem derectory entries.
+ * Proc filesystem directory entries.
  */
 
 /*

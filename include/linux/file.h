@@ -16,7 +16,7 @@ extern inline struct file * fcheck_task(struct task_struct *p, unsigned int fd)
 {
 	struct file * file = NULL;
 
-	if (p->files && fd < p->files->max_fds)
+	if (fd < p->files->max_fds)
 		file = p->files->fd[fd];
 	return file;
 }
@@ -29,10 +29,17 @@ extern inline struct file * fcheck(unsigned int fd)
 	struct file * file = NULL;
 	struct files_struct *files = current->files;
 
-	read_lock(&files->file_lock);
 	if (fd < files->max_fds)
 		file = files->fd[fd];
-	read_unlock(&files->file_lock);
+	return file;
+}
+
+extern inline struct file * frip(unsigned int fd)
+{
+	struct file * file = NULL;
+
+	if (fd < current->files->max_fds)
+		file = xchg(&current->files->fd[fd], NULL);
 	return file;
 }
 
@@ -42,11 +49,9 @@ extern inline struct file * fget(unsigned int fd)
 	struct files_struct *files = current->files;
 
 	read_lock(&files->file_lock);
-	if (fd < files->max_fds) {
-		file = files->fd[fd];
-		if (file)
-			atomic_inc(&file->f_count);
-	}
+	file = fcheck(fd);
+	if (file)
+		get_file(file);
 	read_unlock(&files->file_lock);
 	return file;
 }

@@ -166,11 +166,9 @@ static inline void close_files(struct files_struct * files)
 			break;
 		while (set) {
 			if (set & 1) {
-				struct file * file = files->fd[i];
-				if (file) {
-					files->fd[i] = NULL;
+				struct file * file = xchg(&files->fd[i], NULL);
+				if (file)
 					filp_close(file, files);
-				}
 			}
 			i++;
 			set >>= 1;
@@ -182,10 +180,9 @@ extern kmem_cache_t *files_cachep;
 
 static inline void __exit_files(struct task_struct *tsk)
 {
-	struct files_struct * files = tsk->files;
+	struct files_struct * files = xchg(&tsk->files, NULL);
 
 	if (files) {
-		tsk->files = NULL;
 		if (atomic_dec_and_test(&files->count)) {
 			close_files(files);
 			/*

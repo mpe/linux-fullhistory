@@ -1313,16 +1313,15 @@ static int __init parport_EPP_supported(struct parport *pb)
 	clear_epp_timeout(pb);
 	udelay(30); /* Wait for possible EPP timeout */
 
-	/* Enable outputs. */
+	/* We must enable the outputs to be able to read the address
+       register. */
+
 	parport_pc_data_forward (pb);
+
 	outb (0x55, EPPADDR (pb));
 
 	clear_epp_timeout(pb);
 	udelay(30); /* Wait for possible EPP timeout */
-
-	/* We must enable the outputs to be able to read the address
-           register. */
-	parport_pc_data_forward (pb);
 
 	if (inb (EPPADDR (pb)) == 0x55) {
 		clear_epp_timeout(pb);
@@ -1594,8 +1593,8 @@ static int __init probe_one_port(unsigned long int base,
 
 	parport_PS2_supported (p);
 
-       	if (!(p = parport_register_port(base, PARPORT_IRQ_NONE,
-					PARPORT_DMA_NONE, &parport_pc_ops))) {
+	if (!(p = parport_register_port(base, PARPORT_IRQ_NONE,
+									PARPORT_DMA_NONE, &parport_pc_ops))) {
 		kfree (priv);
 		return 0;
 	}
@@ -1663,7 +1662,9 @@ static int __init probe_one_port(unsigned long int base,
 		printk("%s: irq %d detected\n", p->name, probedirq);
 	parport_proc_register(p);
 
-	request_region (p->base, p->size, p->name);
+	request_region (p->base, 3, p->name);
+	if (p->size > 3)
+		request_region (p->base + 3, p->size - 3, p->name);
 	if (p->modes & PARPORT_MODE_ECP)
 		request_region (p->base_hi, 3, p->name);
 
@@ -1915,7 +1916,9 @@ void cleanup_module(void)
 				free_dma(p->dma);
 			if (p->irq != PARPORT_IRQ_NONE)
 				free_irq(p->irq, p);
-			release_region(p->base, p->size);
+			release_region(p->base, 3);
+			if (p->size > 3);
+				release_region(p->base + 3, p->size - 3);
 			if (p->modes & PARPORT_MODE_ECP)
 				release_region(p->base_hi, 3);
 			parport_proc_unregister(p);

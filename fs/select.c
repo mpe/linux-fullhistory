@@ -64,9 +64,9 @@ void __pollwait(struct file * filp, wait_queue_head_t * wait_address, poll_table
 		if (p->nr < __MAX_POLL_TABLE_ENTRIES) {
 			struct poll_table_entry * entry;
 ok_table:
-			entry = p->entry + p->nr;
-			entry->filp = filp;
-			atomic_inc(&filp->f_count);
+		 	entry = p->entry + p->nr;
+		 	get_file(filp);
+		 	entry->filp = filp;
 			entry->wait_address = wait_address;
 			init_waitqueue_entry(&entry->wait, current);
 			add_wait_queue(wait_address,&entry->wait);
@@ -164,9 +164,11 @@ int do_select(int n, fd_set_bits *fds, long *timeout)
 		wait = wait_table;
 	}
 
-	lock_kernel();
-
+	read_lock(&current->files->file_lock);
 	retval = max_select_fd(n, fds);
+	read_unlock(&current->files->file_lock);
+
+	lock_kernel();
 	if (retval < 0)
 		goto out;
 	n = retval;

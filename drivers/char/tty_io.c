@@ -1790,6 +1790,10 @@ int tty_ioctl(struct inode * inode, struct file * file,
  * have to coordinate with the init process, since all processes associated
  * with the current tty must be dead before the new getty is allowed
  * to spawn.
+ *
+ * Now, if it would be correct ;-/ The current code has a nasty hole -
+ * it doesn't catch files in flight. We may send the descriptor to ourselves
+ * via AF_UNIX socket, close it and later fetch from socket. FIXME.
  */
 void do_SAK( struct tty_struct *tty)
 {
@@ -1814,6 +1818,7 @@ void do_SAK( struct tty_struct *tty)
 		    ((session > 0) && (p->session == session)))
 			send_sig(SIGKILL, p, 1);
 		else if (p->files) {
+			read_lock(&p->files->file_lock);
 			for (i=0; i < p->files->max_fds; i++) {
 				filp = fcheck_task(p, i);
 				if (filp && (filp->f_op == &tty_fops) &&
@@ -1822,6 +1827,7 @@ void do_SAK( struct tty_struct *tty)
 					break;
 				}
 			}
+			read_unlock(&p->files->file_lock);
 		}
 	}
 	read_unlock(&tasklist_lock);

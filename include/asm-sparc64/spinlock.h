@@ -42,7 +42,7 @@ do {	barrier(); \
  * irq-safe write-lock, but readers can get non-irqsafe
  * read-locks.
  */
-typedef unsigned long rwlock_t;
+typedef unsigned int rwlock_t;
 #define RW_LOCK_UNLOCKED (rwlock_t) { 0 }
 
 #define read_lock(lock)		do { } while(0)
@@ -255,90 +255,44 @@ extern int _spin_trylock (spinlock_t *lock);
 
 #ifndef SPIN_LOCK_DEBUG
 
-typedef unsigned long rwlock_t;
+typedef unsigned int rwlock_t;
 #define RW_LOCK_UNLOCKED	0
 
-extern __inline__ void read_lock(rwlock_t *rw)
-{
-	__asm__ __volatile__("
-1:	ldx		[%0], %%g5
-	brlz,pn		%%g5, 2f
-4:	 add		%%g5, 1, %%g7
-	casx		[%0], %%g5, %%g7
-	cmp		%%g5, %%g7
-	bne,pn		%%xcc, 1b
-	 membar		#StoreLoad | #StoreStore
-	.subsection	2
-2:	ldx		[%0], %%g5
-	brlz,pt		%%g5, 2b
-	 membar		#LoadLoad
-	b,a,pt		%%xcc, 4b
-	.previous
-"	: /* no outputs */
-	: "r" (rw)
-	: "g5", "g7", "cc", "memory");
-}
+#define read_lock(__rw_lck) \
+do {	register rwlock_t *__X asm("g1"); \
+	__asm__ __volatile__("sethi	%%hi(__read_lock), %%g3\n\t" \
+			     "jmpl	%%g3 + %%lo(__read_lock), %%g3\n\t" \
+			     " nop\n1:" \
+	: : "r" (__X = (__rw_lck)) \
+	  : "g3", "g5", "g7", "cc", "memory"); \
+} while(0)
 
-extern __inline__ void read_unlock(rwlock_t *rw)
-{
-	__asm__ __volatile__("
-1:	ldx		[%0], %%g5
-	sub		%%g5, 1, %%g7
-	casx		[%0], %%g5, %%g7
-	cmp		%%g5, %%g7
-	bne,pn		%%xcc, 1b
-	 membar		#StoreLoad | #StoreStore
-"	: /* no outputs */
-	: "r" (rw)
-	: "g5", "g7", "cc", "memory");
-}
+#define read_unlock(__rw_lck) \
+do {	register rwlock_t *__X asm("g1"); \
+	__asm__ __volatile__("sethi	%%hi(__read_unlock), %%g3\n\t" \
+			     "jmpl	%%g3 + %%lo(__read_unlock), %%g3\n\t" \
+			     " nop\n1:" \
+	: : "r" (__X = (__rw_lck)) \
+	  : "g3", "g5", "g7", "cc", "memory"); \
+} while(0)
 
-extern __inline__ void write_lock(rwlock_t *rw)
-{
-	__asm__ __volatile__("
-	sethi		%%uhi(0x8000000000000000), %%g3
-	sllx		%%g3, 32, %%g3
-1:	ldx		[%0], %%g5
-	brlz,pn		%%g5, 5f
-4:	 or		%%g5, %%g3, %%g7
-	casx		[%0], %%g5, %%g7
-	cmp		%%g5, %%g7
-	bne,pn		%%xcc, 1b
-	 andncc		%%g7, %%g3, %%g0
-	bne,pn		%%xcc, 7f
-	 membar		#StoreLoad | #StoreStore
-	.subsection	2
-7:	ldx		[%0], %%g5
-	andn		%%g5, %%g3, %%g7
-	casx		[%0], %%g5, %%g7
-	cmp		%%g5, %%g7
-	bne,pn		%%xcc, 7b
-	 membar		#StoreLoad | #StoreStore
-5:	ldx		[%0], %%g5
-	brnz,pt		%%g5, 5b
-	 membar		#LoadLoad
-	b,a,pt		%%xcc, 4b
-	.previous
-"	: /* no outputs */
-	: "r" (rw)
-	: "g3", "g5", "g7", "memory", "cc");
-}
+#define write_lock(__rw_lck) \
+do {	register rwlock_t *__X asm("g1"); \
+	__asm__ __volatile__("sethi	%%hi(__write_lock), %%g3\n\t" \
+			     "jmpl	%%g3 + %%lo(__write_lock), %%g3\n\t" \
+			     " nop\n1:" \
+	: : "r" (__X = (__rw_lck)) \
+	  : "g2", "g3", "g5", "g7", "cc", "memory"); \
+} while(0)
 
-extern __inline__ void write_unlock(rwlock_t *rw)
-{
-	__asm__ __volatile__("
-	sethi		%%uhi(0x8000000000000000), %%g3
-	sllx		%%g3, 32, %%g3
-1:	ldx		[%0], %%g5
-	andn		%%g5, %%g3, %%g7
-	casx		[%0], %%g5, %%g7
-	cmp		%%g5, %%g7
-	bne,pn		%%xcc, 1b
-	 membar		#StoreLoad | #StoreStore
-"	: /* no outputs */
-	: "r" (rw)
-	: "g3", "g5", "g7", "memory", "cc");
-}
+#define write_unlock(__rw_lck) \
+do {	register rwlock_t *__X asm("g1"); \
+	__asm__ __volatile__("sethi	%%hi(__write_unlock), %%g3\n\t" \
+			     "jmpl	%%g3 + %%lo(__write_unlock), %%g3\n\t" \
+			     " nop\n1:" \
+	: : "r" (__X = (__rw_lck)) \
+	  : "g2", "g3", "g5", "g7", "cc", "memory"); \
+} while(0)
 
 #define read_lock_irq(lock)	do { __cli(); read_lock(lock); } while (0)
 #define read_unlock_irq(lock)	do { read_unlock(lock); __sti(); } while (0)

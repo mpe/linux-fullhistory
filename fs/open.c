@@ -42,24 +42,18 @@ asmlinkage int sys_fstatfs(unsigned int fd, struct statfs * buf)
 	struct super_block * sb;
 	int error;
 
-	lock_kernel();
 	error = -EBADF;
 	file = fget(fd);
 	if (!file)
 		goto out;
-	error = -ENOENT;
-	if (!(dentry = file->f_dentry))
-		goto out_putf;
-	if (!(inode = dentry->d_inode))
-		goto out_putf;
 	error = -ENODEV;
-	sb = inode->i_sb;
+	sb = file->f_dentry->d_inode->i_sb;
+	lock_kernel();
 	if (sb && sb->s_op && sb->s_op->statfs)
 		error = sb->s_op->statfs(sb, buf, sizeof(struct statfs));
-out_putf:
+	unlock_kernel();
 	fput(file);
 out:
-	unlock_kernel();
 	return error;
 }
 
@@ -143,7 +137,6 @@ asmlinkage int sys_ftruncate(unsigned int fd, unsigned long length)
 	struct file * file;
 	int error;
 
-	lock_kernel();
 	error = -EBADF;
 	file = fget(fd);
 	if (!file)
@@ -162,12 +155,13 @@ asmlinkage int sys_ftruncate(unsigned int fd, unsigned long length)
 	error = locks_verify_area(FLOCK_VERIFY_WRITE, inode, file,
 				  length<inode->i_size ? length : inode->i_size,
 				  abs(inode->i_size - length));
+	lock_kernel();
 	if (!error)
 		error = do_truncate(dentry, length);
+	unlock_kernel();
 out_putf:
 	fput(file);
 out:
-	unlock_kernel();
 	return error;
 }
 
@@ -361,8 +355,6 @@ asmlinkage int sys_fchdir(unsigned int fd)
 	struct inode *inode;
 	int error;
 
-	lock_kernel();
-
 	error = -EBADF;
 	file = fget(fd);
 	if (!file)
@@ -378,16 +370,17 @@ asmlinkage int sys_fchdir(unsigned int fd)
 	if (!S_ISDIR(inode->i_mode))
 		goto out_putf;
 
+	lock_kernel();
 	error = permission(inode, MAY_EXEC);
 	if (!error) {
 		struct dentry *tmp = current->fs->pwd;
 		current->fs->pwd = dget(dentry);
 		dput(tmp);
 	}
+	unlock_kernel();
 out_putf:
 	fput(file);
 out:
-	unlock_kernel();
 	return error;
 }
 
@@ -439,7 +432,6 @@ asmlinkage int sys_fchmod(unsigned int fd, mode_t mode)
 	int err = -EBADF;
 	struct iattr newattrs;
 
-	lock_kernel();
 	file = fget(fd);
 	if (!file)
 		goto out;
@@ -460,12 +452,13 @@ asmlinkage int sys_fchmod(unsigned int fd, mode_t mode)
 		mode = inode->i_mode;
 	newattrs.ia_mode = (mode & S_IALLUGO) | (inode->i_mode & ~S_IALLUGO);
 	newattrs.ia_valid = ATTR_MODE | ATTR_CTIME;
+	lock_kernel();
 	err = notify_change(dentry, &newattrs);
+	unlock_kernel();
 
 out_putf:
 	fput(file);
 out:
-	unlock_kernel();
 	return err;
 }
 
@@ -601,17 +594,17 @@ asmlinkage int sys_fchown(unsigned int fd, uid_t user, gid_t group)
 	struct file * file;
 	int error = -EBADF;
 
-	lock_kernel();
 	file = fget(fd);
 	if (!file)
 		goto out;
 	error = -ENOENT;
+	lock_kernel();
 	if ((dentry = file->f_dentry) != NULL)
 		error = chown_common(dentry, user, group);
+	unlock_kernel();
 	fput(file);
 
 out:
-	unlock_kernel();
 	return error;
 }
 
@@ -695,6 +688,8 @@ int get_unused_fd(void)
 	int fd, error;
 
 	error = -EMFILE;
+
+	write_lock(&files->file_lock);
 	fd = find_first_zero_bit(&files->open_fds, NR_OPEN);
 	/*
 	 * N.B. For clone tasks sharing a files structure, this test
@@ -717,12 +712,15 @@ int get_unused_fd(void)
 	error = fd;
 
 out:
+	write_unlock(&files->file_lock);
 	return error;
 }
 
 inline void put_unused_fd(unsigned int fd)
 {
+	write_lock(&current->files->file_lock);
 	FD_CLR(fd, &current->files->open_fds);
+	write_unlock(&current->files->file_lock);
 }
 
 asmlinkage int sys_open(const char * filename, int flags, int mode)
@@ -733,17 +731,18 @@ asmlinkage int sys_open(const char * filename, int flags, int mode)
 	tmp = getname(filename);
 	fd = PTR_ERR(tmp);
 	if (!IS_ERR(tmp)) {
-		lock_kernel();
 		fd = get_unused_fd();
 		if (fd >= 0) {
-			struct file * f = filp_open(tmp, flags, mode);
+			struct file * f;
+			lock_kernel();
+			f = filp_open(tmp, flags, mode);
+			unlock_kernel();
 			error = PTR_ERR(f);
 			if (IS_ERR(f))
 				goto out_error;
 			fd_install(fd, f);
 		}
 out:
-		unlock_kernel();
 		putname(tmp);
 	}
 	return fd;
@@ -792,7 +791,7 @@ int filp_close(struct file *filp, fl_owner_t id)
 	int retval;
 	struct dentry *dentry = filp->f_dentry;
 
-	if (!atomic_read(&filp->f_count)) {
+	if (!file_count(filp)) {
 		printk("VFS: Close: file count is 0\n");
 		return 0;
 	}
@@ -814,19 +813,24 @@ asmlinkage int sys_close(unsigned int fd)
 {
 	int error;
 	struct file * filp;
+	struct files_struct * files = current->files;
 
-	lock_kernel();
 	error = -EBADF;
-	filp = fcheck(fd);
-	if (filp) {
-		struct files_struct * files = current->files;
-		files->fd[fd] = NULL;
-		put_unused_fd(fd);
-		FD_CLR(fd, &files->close_on_exec);
-		error = filp_close(filp, files);
-	}
+	write_lock(&files->file_lock);
+	filp = frip(fd);
+	if (!filp)
+		goto out_unlock;
+	FD_CLR(fd, &files->close_on_exec);
+	write_unlock(&files->file_lock);
+	put_unused_fd(fd);
+	lock_kernel();
+	error = filp_close(filp, files);
 	unlock_kernel();
+out:
 	return error;
+out_unlock:
+	write_unlock(&files->file_lock);
+	goto out;
 }
 
 /*
@@ -837,14 +841,14 @@ asmlinkage int sys_vhangup(void)
 {
 	int ret = -EPERM;
 
-	lock_kernel();
 	if (!capable(CAP_SYS_TTY_CONFIG))
 		goto out;
 	/* If there is a controlling tty, hang it up */
+	lock_kernel();
 	if (current->tty)
 		tty_vhangup(current->tty);
+	unlock_kernel();
 	ret = 0;
 out:
-	unlock_kernel();
 	return ret;
 }

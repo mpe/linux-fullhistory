@@ -71,7 +71,6 @@ struct ohci_td {
 #define td_cc_notaccessed(td)	((le32_to_cpup(&(td).info) >> 29) == 7)
 #define td_cc_accessed(td)	((le32_to_cpup(&(td).info) >> 29) != 7)
 #define td_cc_noerror(td)	(((le32_to_cpup(&(td).info)) & OHCI_TD_CC) == 0)
-#define td_active(td)	(!td_cc_noerror((td)) && (td_errorcount((td)) < 3))
 #define td_done(td)	(td_cc_noerror((td)) || (td_errorcount((td)) == 3))
 
 /*

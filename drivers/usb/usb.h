@@ -97,16 +97,16 @@ typedef struct {
 #define USB_RT_HIDD			(USB_TYPE_CLASS | USB_RECIP_INTERFACE)
 
 /* 
- * Status codes 
+ * Status codes (these follow an OHCI controllers condition codes)
  */
 #define USB_ST_NOERROR		0x0
 #define USB_ST_CRC		0x1
 #define USB_ST_BITSTUFF		0x2
-#define USB_ST_DTMISMATCH	0x3
+#define USB_ST_DTMISMATCH	0x3	/* data toggle mismatch */
 #define USB_ST_STALL		0x4
-#define USB_ST_TIMEOUT		0x5
-#define USB_ST_PIDCHECK		0x6
-#define USB_ST_PIDUNDEF		0x7
+#define USB_ST_NORESPONSE	0x5	/* device not responding/handshaking */
+#define USB_ST_PIDCHECK		0x6	/* Check bits on PID failed */
+#define USB_ST_PIDUNDEF		0x7	/* PID unexpected/undefined */
 #define USB_ST_DATAOVERRUN	0x8
 #define USB_ST_DATAUNDERRUN	0x9
 #define USB_ST_RESERVED1	0xA
@@ -118,6 +118,7 @@ typedef struct {
 
 /* internal errors */
 #define USB_ST_REMOVED		0x100
+#define USB_ST_TIMEOUT		0x110
 #define USB_ST_INTERNALERROR	-1
 
 /*

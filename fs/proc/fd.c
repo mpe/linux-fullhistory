@@ -104,7 +104,7 @@ static struct dentry *proc_lookupfd(struct inode * dir, struct dentry * dentry)
 	read_lock(&tasklist_lock);
 	file = NULL;
 	p = find_task_by_pid(pid);
-	if (p)
+	if (p && p->files)
 		file = fcheck_task(p, fd);
 	read_unlock(&tasklist_lock);
 
@@ -114,7 +114,7 @@ static struct dentry *proc_lookupfd(struct inode * dir, struct dentry * dentry)
 	 *	is NULL
 	 */
 
-	if (!file || !file->f_dentry)
+	if (!file)
 		goto out;
 
 	ino = (pid << 16) + PROC_PID_FD_DIR + fd;
@@ -161,10 +161,9 @@ static int proc_readfd(struct file * filp, void * dirent, filldir_t filldir)
 
 	for (fd -= 2 ; p->files && fd < p->files->max_fds; fd++, filp->f_pos++)
 	{
-		struct file * file = fcheck_task(p, fd);
 		unsigned int i,j;
 
-		if (!file || !file->f_dentry)
+		if (!fcheck_task(p, fd))
 			continue;
 
 		j = NUMBUF;

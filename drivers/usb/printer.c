@@ -166,7 +166,6 @@ static ssize_t write_printer(struct file * file,
 	do {
 		char *obuf = p->obuf;
 		unsigned long thistime;
-		partial = 0;
 
 		thistime = copy_size = (count > p->maxout) ? p->maxout : count;
 		if (copy_from_user(p->obuf, buffer, copy_size))
@@ -303,7 +302,11 @@ static int printer_probe(struct usb_device *dev)
 	minor_data[i] = PPDATA(dev->private);
 	minor_data[i]->minor = i;
 	minor_data[i]->pusb_dev = dev;
-	minor_data[i]->maxout = interface->endpoint[0].wMaxPacketSize * 16;
+	/* The max packet size can't be more than 64 (& will be 64 for
+	 * any decent bulk device); this calculation was silly.  -greg
+	 * minor_data[i]->maxout = interface->endpoint[0].wMaxPacketSize * 16;
+	 */
+	minor_data[i]->maxout = 8192;
 	if (minor_data[i]->maxout > PAGE_SIZE) {
                 minor_data[i]->maxout = PAGE_SIZE;
 	}

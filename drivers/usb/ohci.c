@@ -179,27 +179,27 @@ static struct ohci_td *ohci_add_td_chain_to_ed(struct ohci_td *td, struct ohci_e
 /* .......... */
 
 
-inline void ohci_start_control(struct ohci *ohci)
+void ohci_start_control(struct ohci *ohci)
 {
 	/* tell the HC to start processing the control list */
 	writel_set(OHCI_USB_CLE, &ohci->regs->control);
 	writel_set(OHCI_CMDSTAT_CLF, &ohci->regs->cmdstatus);
 }
 
-inline void ohci_start_bulk(struct ohci *ohci)
+void ohci_start_bulk(struct ohci *ohci)
 {
 	/* tell the HC to start processing the bulk list */
 	writel_set(OHCI_USB_BLE, &ohci->regs->control);
 	writel_set(OHCI_CMDSTAT_BLF, &ohci->regs->cmdstatus);
 }
 
-inline void ohci_start_periodic(struct ohci *ohci)
+void ohci_start_periodic(struct ohci *ohci)
 {
 	/* enable processing periodic (intr) transfers starting next frame */
 	writel_set(OHCI_USB_PLE, &ohci->regs->control);
 }
 
-inline void ohci_start_isoc(struct ohci *ohci)
+void ohci_start_isoc(struct ohci *ohci)
 {
 	/* enable processing isoc. transfers starting next frame */
 	writel_set(OHCI_USB_IE, &ohci->regs->control);
@@ -658,7 +658,7 @@ void ohci_free_ed(struct ohci_ed *ed)
  * 	dir = OHCI_TD_D_IN, OHCI_TD_D_OUT, or OHCI_TD_D_SETUP
  * 	toggle = TOGGLE_AUTO, TOGGLE_DATA0, TOGGLE_DATA1
  */
-inline struct ohci_td *ohci_fill_new_td(struct ohci_td *td, int dir, int toggle, __u32 flags, void *data, __u32 len, void *dev_id, usb_device_irq completed)
+struct ohci_td *ohci_fill_new_td(struct ohci_td *td, int dir, int toggle, __u32 flags, void *data, __u32 len, void *dev_id, usb_device_irq completed)
 {
 	/* hardware fields */
 	td->info = cpu_to_le32(OHCI_TD_CC_NEW |
@@ -846,16 +846,20 @@ static __u16 ohci_td_bytes_done(struct ohci_td *td)
 		return 0;
 
 	/* if cur_buf is 0, all data has been transferred */
-	bus_data_end = td->cur_buf ? td->cur_buf : td->buf_end;
+	if (!td->cur_buf) {
+		return td->buf_end - bus_data_start + 1;
+	}
+
+	bus_data_end = td->cur_buf;
 
 	/* is it on the same page? */
 	if ((bus_data_start & ~0xfff) == (bus_data_end & ~0xfff)) {
-		result = bus_data_end - bus_data_start + 1;
+		result = bus_data_end - bus_data_start;
 	} else {
 		/* compute the amount transferred on the first page */
 		result = 0x1000 - (bus_data_start & 0xfff);
 		/* add the amount done in the second page */
-		result += (bus_data_end & 0xfff) + 1;
+		result += (bus_data_end & 0xfff);
 	}
 
 	return result;
@@ -1190,16 +1194,12 @@ static int ohci_bulk_td_handler(int stats, void *buffer, int len, void *dev_id)
 	if (stats == USB_ST_NOERROR)
 		req->_bytes_done += len;
 
-#ifdef OHCI_DEBUG
-	printk(KERN_DEBUG "ohci_bulk_td_handler %d bytes done\n", req->_bytes_done);
-#endif
-
 	/* call the real completion handler when done or on an error */
 	if ((stats != USB_ST_NOERROR) ||
 	    (req->_bytes_done >= req->length && req->completion != NULL)) {
 		*req->bytes_transferred_p += req->_bytes_done;
 #ifdef OHCI_DEBUG
-		printk(KERN_DEBUG "usb-ohci: bulk request %p ending after %d bytes\n", req, req->_bytes_done);
+		printk(KERN_DEBUG "usb-ohci: bulk request %p ending\n", req);
 #endif
 		req->completion(stats, buffer, req->_bytes_done, req->dev_id);
 	}
@@ -1282,13 +1282,13 @@ static struct ohci_ed* ohci_request_bulk(struct ohci_bulk_request_state *bulk_re
 
 
 #ifdef OHCI_DEBUG
-/*	if (MegaDebug) { */
-	/* complete transaction debugging output (before) */
+	if (MegaDebug) {
+	/* complete request debugging output (before) */
 	printk(KERN_DEBUG " Bulk ED %lx:\n", virt_to_bus(bulk_ed));
 	show_ohci_ed(bulk_ed);
 	printk(KERN_DEBUG " Bulk TDs %lx:\n", virt_to_bus(head_td));
 	show_ohci_td_chain(head_td);
-/*	} */
+	}
 #endif
 
 	/* Give the ED to the HC */
@@ -1303,6 +1303,9 @@ static DECLARE_WAIT_QUEUE_HEAD(bulk_wakeup);
 
 static int ohci_bulk_msg_completed(int stats, void *buffer, int len, void *dev_id)
 {
+#ifdef OHCI_DEBUG
+	printk("ohci_bulk_msg_completed %x, %p, %d, %p\n", stats, buffer, len, dev_id);
+#endif
 	if (dev_id != NULL) {
 		int *completion_status = (int *)dev_id;
 		*completion_status = stats;
@@ -1320,12 +1323,15 @@ static int ohci_bulk_msg(struct usb_device *usb_dev, unsigned int pipe, void *da
 	struct ohci_bulk_request_state req;
 	struct ohci_ed *req_ed;
 
-	/* ....... */
-
 #ifdef OHCI_DEBUG 
 	printk(KERN_DEBUG "ohci_bulk_msg %p pipe %x, data %p, len %d, bytes_transferred %p\n", usb_dev, pipe, data, len, bytes_transferred_p);
 #endif
 
+	/* initialize bytes transferred to nothing */
+	*bytes_transferred_p = 0;
+
+	/* Hopefully this is similar to the "URP" (USB Request Packet) code
+	 * that michael gee is working on... */
 	req.usb_dev = usb_dev;
 	req.pipe = pipe;
 	req.data = data;
@@ -1345,9 +1351,44 @@ static int ohci_bulk_msg(struct usb_device *usb_dev, unsigned int pipe, void *da
 	/* FIXME this should to wait for a caller specified time... */
 	schedule_timeout(HZ*5);
 
+	/* it'll only stay in this state of the request never finished */
+	if (completion_status == USB_ST_INTERNALERROR) {
+		struct ohci_device *dev = usb_to_ohci(usb_dev);
+		struct ohci_regs *regs = dev->ohci->regs;
+
 #ifdef OHCI_DEBUG
-	printk(KERN_DEBUG "ohci_bulk_msg request completed or timed out w/ status %x\n", completion_status);
+		printk(KERN_DEBUG "ohci_bulk_msg timing out\n");
 #endif
+		/* XXX This code should go into a function used to stop
+		 * a previously requested bulk transfer. -greg */
+
+		/* stop the transfer & collect the number of bytes */
+		ohci_wait_for_ed_safe(regs, req_ed, HCD_ED_BULK);
+
+		/* Get the number of bytes transferred out of the head TD
+		 * on the ED if it didn't finish while we were waiting. */
+		if ( ed_head_td(req_ed) &&
+		     (ed_head_td(req_ed) != ed_tail_td(req_ed)) ) {
+			struct ohci_td *partial_td;
+			partial_td = bus_to_virt(ed_head_td(req_ed));
+
+#ifdef OHCI_DEBUG
+			if (MegaDebug) {
+			show_ohci_td(partial_td);
+			}
+#endif
+			/* Record the bytes as transferred */
+			*bytes_transferred_p += ohci_td_bytes_done(partial_td);
+			
+			/* If there was an unreported error, return it.
+			 * Otherwise return a timeout */
+			completion_status = OHCI_TD_CC_GET(partial_td->info);
+			if (completion_status == USB_ST_NOERROR) {
+				completion_status = USB_ST_TIMEOUT;
+			}
+		}
+
+	}
 
 	remove_wait_queue(&bulk_wakeup, &wait);
 
@@ -1356,7 +1397,7 @@ static int ohci_bulk_msg(struct usb_device *usb_dev, unsigned int pipe, void *da
 	ohci_free_ed(req_ed);	 /* return it to the pool */
 
 #ifdef OHCI_DEBUG
-	printk(KERN_DEBUG "ohci_bulk_msg done.\n");
+	printk(KERN_DEBUG "ohci_bulk_msg done, status %x (bytes_transferred = %ld).\n", completion_status, *bytes_transferred_p);
 #endif
 
 	return completion_status;
@@ -1761,7 +1802,7 @@ static void ohci_reap_donelist(struct ohci *ohci)
 	struct ohci_td *td;		/* used for walking the list */
 
 	/* um... isn't this dangerous to do in an interrupt handler? -greg */
-	spin_lock(&ohci_edtd_lock);
+//	spin_lock(&ohci_edtd_lock);
 
 	/* create the FIFO ordered donelist */
 	td = ohci_reverse_donelist(ohci);
@@ -1832,6 +1873,7 @@ static void ohci_reap_donelist(struct ohci *ohci)
 
 			/* insert it back on its ED */
 			ohci_add_td_to_ed(td, td, td->ed);
+			ohci_unhalt_ed(td->ed);
 		} else {
 			/* return it to the pool of free TDs */
 			if (can_auto_free(*td))
@@ -1841,7 +1883,7 @@ static void ohci_reap_donelist(struct ohci *ohci)
 		td = next_td;
 	}
 
-	spin_unlock(&ohci_edtd_lock);
+//	spin_unlock(&ohci_edtd_lock);
 } /* ohci_reap_donelist() */
 
 

@@ -12,27 +12,19 @@
 
 extern int sock_fcntl (struct file *, unsigned int cmd, unsigned long arg);
 
-static inline int dupfd(unsigned int fd, unsigned int arg)
+static inline int dupfd(struct file *file, unsigned int arg)
 {
 	struct files_struct * files = current->files;
-	struct file * file;
 	int error;
 
-	error = -EINVAL;
-	if (arg >= NR_OPEN)
-		goto out;
-
-	error = -EBADF;
-	file = fget(fd);
-	if (!file)
-		goto out;
-
 	error = -EMFILE;
+	write_lock(&files->file_lock);
 	arg = find_next_zero_bit(&files->open_fds, NR_OPEN, arg);
 	if (arg >= current->rlim[RLIMIT_NOFILE].rlim_cur)
 		goto out_putf;
 	FD_SET(arg, &files->open_fds);
 	FD_CLR(arg, &files->close_on_exec);
+	write_unlock(&files->file_lock);
 	fd_install(arg, file);
 	error = arg;
 out:
@@ -46,31 +38,35 @@ out_putf:
 asmlinkage int sys_dup2(unsigned int oldfd, unsigned int newfd)
 {
 	int err = -EBADF;
+	struct file * file;
 
-	lock_kernel();
-	if (!fcheck(oldfd))
-		goto out;
+	read_lock(&current->files->file_lock);
+	if (!(file = fcheck(oldfd)))
+		goto out_unlock;
 	err = newfd;
 	if (newfd == oldfd)
-		goto out;
+		goto out_unlock;
 	err = -EBADF;
 	if (newfd >= NR_OPEN)
-		goto out;	/* following POSIX.1 6.2.1 */
+		goto out_unlock;	/* following POSIX.1 6.2.1 */
+	get_file(file);
+	read_unlock(&current->files->file_lock);
 
 	sys_close(newfd);
-	err = dupfd(oldfd, newfd);
+	err = dupfd(file, newfd);
 out:
-	unlock_kernel();
 	return err;
+out_unlock:
+	read_unlock(&current->files->file_lock);
+	goto out;
 }
 
 asmlinkage int sys_dup(unsigned int fildes)
 {
-	int ret;
-
-	lock_kernel();
-	ret = dupfd(fildes, 0);
-	unlock_kernel();
+	int ret = -EBADF;
+	struct file * file = fget(fildes);
+	if (file)
+		ret = dupfd(file, 0);
 	return ret;
 }
 
@@ -107,14 +103,18 @@ asmlinkage long sys_fcntl(unsigned int fd, unsigned int cmd, unsigned long arg)
 	struct file * filp;
 	long err = -EBADF;
 
-	lock_kernel();
 	filp = fget(fd);
 	if (!filp)
 		goto out;
 	err = 0;
+	lock_kernel();
 	switch (cmd) {
 		case F_DUPFD:
-			err = dupfd(fd, arg);
+			err = -EINVAL;
+			if (arg < NR_OPEN) {
+				get_file(filp);
+				err = dupfd(filp, arg);
+			}
 			break;
 		case F_GETFD:
 			err = FD_ISSET(fd, &current->files->close_on_exec);
@@ -178,8 +178,8 @@ asmlinkage long sys_fcntl(unsigned int fd, unsigned int cmd, unsigned long arg)
 			break;
 	}
 	fput(filp);
-out:
 	unlock_kernel();
+out:
 	return err;
 }
 

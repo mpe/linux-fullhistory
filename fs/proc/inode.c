@@ -400,9 +400,12 @@ void proc_read_inode(struct inode * inode)
 	if (ino & PROC_PID_FD_DIR) {
 		struct file * file;
 		ino &= 0x7fff;
+		if (!p->files)	/* can we ever get here if that's the case? */
+			goto out_unlock;
+		read_lock(&p->files->file_lock);
 		file = fcheck_task(p, ino);
 		if (!file)
-			goto out_unlock;
+			goto out_unlock2;
 
 		inode->i_op = &proc_link_inode_operations;
 		inode->i_size = 64;
@@ -411,6 +414,8 @@ void proc_read_inode(struct inode * inode)
 			inode->i_mode |= S_IRUSR | S_IXUSR;
 		if (file->f_mode & 2)
 			inode->i_mode |= S_IWUSR | S_IXUSR;
+out_unlock2:
+		read_unlock(&p->files->file_lock);
 	}
 out_unlock:
 	/* Defer unlocking until we're done with the task */

@@ -174,6 +174,17 @@ S: ul. Koscielna 12a
 S: 62-300 Wrzesnia
 S: Poland
 
+N: Carlos Henrique Bauer
+E: chbauer@acm.org
+E: bauer@atlas.unisinos.tche.br
+D: A test for detection of EPP-1.7 and ECP/EPP parports.
+D: Some new sysctl entries for the parport driver.
+S: Universidade do Vale do Rio dos Sinos - UNISINOS
+S: DSI/IDASI
+S: Av. Unisinos, 950
+S: 93022000 Sao Leopoldo RS
+S: Brazil
+
 N: Peter Bauer
 E: 100136.3530@compuserve.com
 D: Driver for depca-ethernet-board

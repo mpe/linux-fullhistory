@@ -1,4 +1,4 @@
-/* $Id: fault.c,v 1.34 1999/03/16 12:12:28 jj Exp $
+/* $Id: fault.c,v 1.36 1999/07/04 04:35:56 davem Exp $
  * arch/sparc64/mm/fault.c: Page fault handlers for the 64-bit Sparc.
  *
  * Copyright (C) 1996 David S. Miller (davem@caip.rutgers.edu)

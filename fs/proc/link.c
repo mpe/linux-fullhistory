@@ -119,10 +119,14 @@ static struct dentry * proc_follow_link(struct dentry *dentry,
 			if (ino & PROC_PID_FD_DIR) {
 				struct file * file;
 				ino &= 0x7fff;
+				if (!p->files) /* shouldn't happen here */
+					goto out_unlock;
+				read_lock(&p->files->file_lock);
 				file = fcheck_task(p, ino);
 				if (!file || !file->f_dentry)
 					goto out_unlock;
 				result = file->f_dentry;
+				read_unlock(&p->files->file_lock);
 				goto out_dget;
 			}
 	}

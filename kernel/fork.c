@@ -249,7 +249,7 @@ static inline int dup_mmap(struct mm_struct * mm)
 		tmp->vm_next = NULL;
 		file = tmp->vm_file;
 		if (file) {
-			atomic_inc(&file->f_count);
+			get_file(file);
 			if (tmp->vm_flags & VM_DENYWRITE)
 				file->f_dentry->d_inode->i_writecount--;
       
@@ -479,17 +479,18 @@ static int copy_files(unsigned long clone_flags, struct task_struct * tsk)
 	atomic_set(&newf->count, 1);
 	newf->max_fds = NR_OPEN;
 	newf->fd = new_fds;
+	read_lock(&oldf->file_lock);
 	newf->close_on_exec = oldf->close_on_exec;
 	i = copy_fdset(&newf->open_fds, &oldf->open_fds);
 
 	old_fds = oldf->fd;
 	for (; i != 0; i--) {
 		struct file *f = *old_fds++;
-		*new_fds = f;
 		if (f)
-			atomic_inc(&f->f_count);
-		new_fds++;
+			get_file(f);
+		*new_fds++ = f;
 	}
+	read_unlock(&oldf->file_lock);
 	/* This is long word aligned thus could use a optimized version */ 
 	memset(new_fds, 0, (char *)newf->fd + size - (char *)new_fds); 
       

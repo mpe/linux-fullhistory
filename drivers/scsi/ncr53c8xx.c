@@ -9858,7 +9858,7 @@ static int ncr53c8xx_pci_init(Scsi_Host_Template *tpnt,
 	}
 
 	if (!latency_timer) {
-		latency_timer = 128;
+		latency_timer = 64;
 		if (initverbose >= 2)
 			printk("ncr53c8xx: setting PCI_LATENCY_TIMER to %d bus clocks (fixup)\n", latency_timer);
 		pcibios_write_config_byte(bus, device_fn,

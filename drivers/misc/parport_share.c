@@ -14,11 +14,8 @@
 #undef PARPORT_DEBUG_SHARING		/* undef for production */
 
 #include <linux/config.h>
-
 #include <linux/string.h>
-
 #include <linux/tasks.h>
-
 #include <linux/parport.h>
 #include <linux/delay.h>
 #include <linux/errno.h>
@@ -30,10 +27,6 @@
 
 #include <asm/spinlock.h>
 #include <asm/irq.h>
-
-#ifdef CONFIG_KMOD
-#include <linux/kmod.h>
-#endif
 
 #undef PARPORT_PARANOID
 
@@ -97,11 +90,6 @@ void parport_unregister_driver (struct parport_driver *arg)
 /* Return a list of all the ports we know about. */
 struct parport *parport_enumerate(void)
 {
-#ifdef CONFIG_KMOD
-	if (portlist == NULL) {
-		request_module("parport_lowlevel");
-	}
-#endif /* CONFIG_KMOD */
 	return portlist;
 }
 

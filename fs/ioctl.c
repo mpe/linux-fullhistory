@@ -52,11 +52,11 @@ asmlinkage int sys_ioctl(unsigned int fd, unsigned int cmd, unsigned long arg)
 	unsigned int flag;
 	int on, error = -EBADF;
 
-	lock_kernel();
 	filp = fget(fd);
 	if (!filp)
 		goto out;
 	error = 0;
+	lock_kernel();
 	switch (cmd) {
 		case FIOCLEX:
 			FD_SET(fd, &current->files->close_on_exec);
@@ -107,8 +107,8 @@ asmlinkage int sys_ioctl(unsigned int fd, unsigned int cmd, unsigned long arg)
 				error = filp->f_op->ioctl(filp->f_dentry->d_inode, filp, cmd, arg);
 	}
 	fput(filp);
+	unlock_kernel();
 
 out:
-	unlock_kernel();
 	return error;
 }

@@ -480,6 +480,7 @@ struct inode_operations pipe_inode_operations = {
 	NULL,			/* mknod */
 	NULL,			/* rename */
 	NULL,			/* readlink */
+	NULL,			/* follow_link */
 	NULL,			/* get_block */
 	NULL,			/* readpage */
 	NULL,			/* writepage */

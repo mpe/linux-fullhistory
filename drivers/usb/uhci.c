@@ -70,7 +70,7 @@ static int uhci_map_status(int status, int dir_out)
     	    return USB_ST_BITSTUFF;
     if (status & 0x04)	{			/* CRC/Timeout */
 	if (dir_out)
-    	    return USB_ST_TIMEOUT;
+    	    return USB_ST_NORESPONSE;
 	else
 	    return USB_ST_CRC;
     }

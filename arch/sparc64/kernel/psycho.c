@@ -1,4 +1,4 @@
-/* $Id: psycho.c,v 1.85 1999/04/02 14:54:28 davem Exp $
+/* $Id: psycho.c,v 1.86 1999/07/01 10:39:43 davem Exp $
  * psycho.c: Ultra/AX U2P PCI controller support.
  *
  * Copyright (C) 1997 David S. Miller (davem@caipfs.rutgers.edu)
@@ -757,13 +757,15 @@ static void __init apb_init(struct linux_psycho *sabre)
 	unsigned short stmp;
 	unsigned int itmp;
 
+#if 0
 	for(pdev = pci_devices; pdev; pdev = pdev->next) {
 		if(pdev->vendor == PCI_VENDOR_ID_SUN &&
 		   pdev->device == PCI_DEVICE_ID_SUN_SABRE) {
-			pci_write_config_byte(pdev, PCI_LATENCY_TIMER, 128);
+			pci_write_config_byte(pdev, PCI_LATENCY_TIMER, 64);
 			break;
 		}
 	}
+#endif
 	for (pdev = sabre->pci_bus->devices; pdev; pdev = pdev->sibling) {
 		if (pdev->vendor == PCI_VENDOR_ID_SUN &&
 		    pdev->device == PCI_DEVICE_ID_SUN_SIMBA) {
@@ -795,13 +797,14 @@ static void __init apb_init(struct linux_psycho *sabre)
 			pci_read_config_dword(pdev, APB_PCI_CONTROL_LOW, &itmp);
 			itmp = APB_PCI_CTL_LOW_ERRINT_EN | 0x0f;
 			pci_write_config_dword(pdev, APB_PCI_CONTROL_LOW, itmp);
-
+#if 0
 			/* Don't mess with the retry limit and PIO/DMA latency
 			 * timer settings.  But do set primary and secondary
 			 * latency timers.
 			 */
-			pci_write_config_byte(pdev, PCI_LATENCY_TIMER, 128);
-			pci_write_config_byte(pdev, PCI_SEC_LATENCY_TIMER, 128);
+			pci_write_config_byte(pdev, PCI_LATENCY_TIMER, 64);
+			pci_write_config_byte(pdev, PCI_SEC_LATENCY_TIMER, 64);
+#endif
 		}
 	}
 }

@@ -1,4 +1,4 @@
-/* $Id: atomic.h,v 1.18 1997/08/07 03:38:31 davem Exp $
+/* $Id: atomic.h,v 1.19 1999/07/03 22:11:17 davem Exp $
  * atomic.h: Thankfully the V9 is at least reasonable for this
  *           stuff.
  *
@@ -20,66 +20,34 @@ typedef struct { int counter; } atomic_t;
 #define atomic_read(v)		((v)->counter)
 #define atomic_set(v, i)	(((v)->counter) = i)
 
-extern __inline__ void atomic_add(int i, atomic_t *v)
-{
-	__asm__ __volatile__("
-1:	lduw		[%1], %%g5
-	add		%%g5, %0, %%g7
-	cas		[%1], %%g5, %%g7
-	sub		%%g5, %%g7, %%g5
-	brnz,pn		%%g5, 1b
-	 nop"
-	: /* No outputs */
-	: "HIr" (i), "r" (__atomic_fool_gcc(v))
-	: "g5", "g7", "memory");
-}
+#define atomic_add_return(__i, __v) \
+({	register atomic_t *__V asm("g1"); \
+	register int __I asm("g2"); \
+	__V = (__v); __I = (__i); \
+	__asm__ __volatile__("sethi	%%hi(__atomic_add), %%g3\n\t" \
+			     "jmpl	%%g3 + %%lo(__atomic_add), %%g3\n\t" \
+			     " nop\n1:" \
+			     : "=&r" (__I) \
+			     : "0" (__I), "r" (__V) \
+			     : "g3", "g5", "g7", "cc", "memory"); \
+	__I; \
+})
 
-extern __inline__ void atomic_sub(int i, atomic_t *v)
-{
-	__asm__ __volatile__("
-1:	lduw		[%1], %%g5
-	sub		%%g5, %0, %%g7
-	cas		[%1], %%g5, %%g7
-	sub		%%g5, %%g7, %%g5
-	brnz,pn		%%g5, 1b
-	 nop"
-	: /* No outputs */
-	: "HIr" (i), "r" (__atomic_fool_gcc(v))
-	: "g5", "g7", "memory");
-}
+#define atomic_sub_return(__i, __v) \
+({	register atomic_t *__V asm("g1"); \
+	register int __I asm("g2"); \
+	__V = (__v); __I = (__i); \
+	__asm__ __volatile__("sethi	%%hi(__atomic_sub), %%g3\n\t" \
+			     "jmpl	%%g3 + %%lo(__atomic_sub), %%g3\n\t" \
+			     " nop\n1:" \
+			     : "=&r" (__I) \
+			     : "0" (__I), "r" (__V) \
+			     : "g3", "g5", "g7", "cc", "memory"); \
+	__I; \
+})
 
-/* Same as above, but return the result value. */
-extern __inline__ int atomic_add_return(int i, atomic_t *v)
-{
-	unsigned long oldval;
-	__asm__ __volatile__("
-1:	lduw		[%2], %%g5
-	add		%%g5, %1, %%g7
-	cas		[%2], %%g5, %%g7
-	sub		%%g5, %%g7, %%g5
-	brnz,pn		%%g5, 1b
-	 add		%%g7, %1, %0"
-	: "=&r" (oldval)
-	: "HIr" (i), "r" (__atomic_fool_gcc(v))
-	: "g5", "g7", "memory");
-	return (int)oldval;
-}
-
-extern __inline__ int atomic_sub_return(int i, atomic_t *v)
-{
-	unsigned long oldval;
-	__asm__ __volatile__("
-1:	lduw		[%2], %%g5
-	sub		%%g5, %1, %%g7
-	cas		[%2], %%g5, %%g7
-	sub		%%g5, %%g7, %%g5
-	brnz,pn		%%g5, 1b
-	 sub		%%g7, %1, %0"
-	: "=&r" (oldval)
-	: "HIr" (i), "r" (__atomic_fool_gcc(v))
-	: "g5", "g7", "memory");
-	return (int)oldval;
-}
+#define atomic_add(i, v) atomic_add_return(i, v)
+#define atomic_sub(i, v) atomic_sub_return(i, v)
 
 #define atomic_dec_return(v) atomic_sub_return(1,(v))
 #define atomic_inc_return(v) atomic_add_return(1,(v))

@@ -73,6 +73,7 @@ typedef enum {
 /* The rest is for the kernel only */
 #ifdef __KERNEL__
 
+#include <linux/wait.h>
 #include <asm/system.h>
 #include <asm/ptrace.h>
 #include <asm/spinlock.h>
