@@ -274,7 +274,7 @@ xfs_dir2_leaf_addname(
 	 * How many bytes do we need in the leaf block?
 	 */
 	needbytes =
-		(!INT_ISZERO(leaf->hdr.stale, ARCH_CONVERT) ? 0 : (uint)sizeof(leaf->ents[0])) +
+		(leaf->hdr.stale ? 0 : (uint)sizeof(leaf->ents[0])) +
 		(use_block != -1 ? 0 : (uint)sizeof(leaf->bests[0]));
 	/*
 	 * Now kill use_block if it refers to a missing block, so we
@@ -456,7 +456,7 @@ xfs_dir2_leaf_addname(
 	 * Now we need to make room to insert the leaf entry.
 	 * If there are no stale entries, we just insert a hole at index.
 	 */
-	if (INT_ISZERO(leaf->hdr.stale, ARCH_CONVERT)) {
+	if (!leaf->hdr.stale) {
 		/*
 		 * lep is still good as the index leaf entry.
 		 */
@@ -625,7 +625,7 @@ xfs_dir2_leaf_compact(
 	int		to;		/* target leaf index */
 
 	leaf = bp->data;
-	if (INT_ISZERO(leaf->hdr.stale, ARCH_CONVERT)) {
+	if (!leaf->hdr.stale) {
 		return;
 	}
 	/*
@@ -649,7 +649,7 @@ xfs_dir2_leaf_compact(
 	 */
 	ASSERT(INT_GET(leaf->hdr.stale, ARCH_CONVERT) == from - to);
 	INT_MOD(leaf->hdr.count, ARCH_CONVERT, -(INT_GET(leaf->hdr.stale, ARCH_CONVERT)));
-	INT_ZERO(leaf->hdr.stale, ARCH_CONVERT);
+	leaf->hdr.stale = 0;
 	xfs_dir2_leaf_log_header(args->trans, bp);
 	if (loglow != -1)
 		xfs_dir2_leaf_log_ents(args->trans, bp, loglow, to - 1);
@@ -1192,10 +1192,10 @@ xfs_dir2_leaf_init(
 	 * Initialize the header.
 	 */
 	INT_SET(leaf->hdr.info.magic, ARCH_CONVERT, magic);
-	INT_ZERO(leaf->hdr.info.forw, ARCH_CONVERT);
-	INT_ZERO(leaf->hdr.info.back, ARCH_CONVERT);
-	INT_ZERO(leaf->hdr.count, ARCH_CONVERT);
-	INT_ZERO(leaf->hdr.stale, ARCH_CONVERT);
+	leaf->hdr.info.forw = 0;
+	leaf->hdr.info.back = 0;
+	leaf->hdr.count = 0;
+	leaf->hdr.stale = 0;
 	xfs_dir2_leaf_log_header(tp, bp);
 	/*
 	 * If it's a leaf-format directory initialize the tail.
@@ -1204,7 +1204,7 @@ xfs_dir2_leaf_init(
 	 */
 	if (magic == XFS_DIR2_LEAF1_MAGIC) {
 		ltp = XFS_DIR2_LEAF_TAIL_P(mp, leaf);
-		INT_ZERO(ltp->bestcount, ARCH_CONVERT);
+		ltp->bestcount = 0;
 		xfs_dir2_leaf_log_tail(tp, bp);
 	}
 	*bpp = bp;
@@ -1658,7 +1658,7 @@ xfs_dir2_leaf_search_hash(
 
 	leaf = lbp->data;
 #ifndef __KERNEL__
-	if (INT_ISZERO(leaf->hdr.count, ARCH_CONVERT))
+	if (!leaf->hdr.count)
 		return 0;
 #endif
 	/*
@@ -1835,7 +1835,7 @@ xfs_dir2_node_to_leaf(
 	}
 	free = fbp->data;
 	ASSERT(INT_GET(free->hdr.magic, ARCH_CONVERT) == XFS_DIR2_FREE_MAGIC);
-	ASSERT(INT_ISZERO(free->hdr.firstdb, ARCH_CONVERT));
+	ASSERT(!free->hdr.firstdb);
 	/*
 	 * Now see if the leafn and free data will fit in a leaf1.
 	 * If not, release the buffer and give up.

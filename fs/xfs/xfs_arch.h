@@ -202,12 +202,6 @@
     } \
 }
 
-#define INT_ISZERO(reference,arch) \
-    ((reference) == 0)
-
-#define INT_ZERO(reference,arch) \
-    ((reference) = 0)
-
 #define DIRINO4_GET_ARCH(pointer,arch) \
     ( ((arch) == ARCH_NOCONVERT) \
 	? \

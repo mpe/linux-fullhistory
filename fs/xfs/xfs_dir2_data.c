@@ -106,16 +106,16 @@ xfs_dir2_data_check(
 	/*
 	 * Account for zero bestfree entries.
 	 */
-	if (INT_ISZERO(bf[0].length, ARCH_CONVERT)) {
-		ASSERT(INT_ISZERO(bf[0].offset, ARCH_CONVERT));
+	if (!bf[0].length) {
+		ASSERT(!bf[0].offset);
 		freeseen |= 1 << 0;
 	}
-	if (INT_ISZERO(bf[1].length, ARCH_CONVERT)) {
-		ASSERT(INT_ISZERO(bf[1].offset, ARCH_CONVERT));
+	if (!bf[1].length) {
+		ASSERT(!bf[1].offset);
 		freeseen |= 1 << 1;
 	}
-	if (INT_ISZERO(bf[2].length, ARCH_CONVERT)) {
-		ASSERT(INT_ISZERO(bf[2].offset, ARCH_CONVERT));
+	if (!bf[2].length) {
+		ASSERT(!bf[2].offset);
 		freeseen |= 1 << 2;
 	}
 	ASSERT(INT_GET(bf[0].length, ARCH_CONVERT) >= INT_GET(bf[1].length, ARCH_CONVERT));
@@ -217,8 +217,8 @@ xfs_dir2_data_freefind(
 	for (dfp = &d->hdr.bestfree[0], seenzero = matched = 0;
 	     dfp < &d->hdr.bestfree[XFS_DIR2_DATA_FD_COUNT];
 	     dfp++) {
-		if (INT_ISZERO(dfp->offset, ARCH_CONVERT)) {
-			ASSERT(INT_ISZERO(dfp->length, ARCH_CONVERT));
+		if (!dfp->offset) {
+			ASSERT(!dfp->length);
 			seenzero = 1;
 			continue;
 		}
@@ -247,7 +247,7 @@ xfs_dir2_data_freefind(
 	for (dfp = &d->hdr.bestfree[0];
 	     dfp < &d->hdr.bestfree[XFS_DIR2_DATA_FD_COUNT];
 	     dfp++) {
-		if (INT_ISZERO(dfp->offset, ARCH_CONVERT))
+		if (!dfp->offset)
 			return NULL;
 		if (INT_GET(dfp->offset, ARCH_CONVERT) == off)
 			return dfp;
@@ -334,8 +334,8 @@ xfs_dir2_data_freeremove(
 	/*
 	 * Clear the 3rd entry, must be zero now.
 	 */
-	INT_ZERO(d->hdr.bestfree[2].length, ARCH_CONVERT);
-	INT_ZERO(d->hdr.bestfree[2].offset, ARCH_CONVERT);
+	d->hdr.bestfree[2].length = 0;
+	d->hdr.bestfree[2].offset = 0;
 	*loghead = 1;
 }
 
@@ -440,8 +440,8 @@ xfs_dir2_data_init(
 	INT_SET(d->hdr.magic, ARCH_CONVERT, XFS_DIR2_DATA_MAGIC);
 	INT_SET(d->hdr.bestfree[0].offset, ARCH_CONVERT, (xfs_dir2_data_off_t)sizeof(d->hdr));
 	for (i = 1; i < XFS_DIR2_DATA_FD_COUNT; i++) {
-		INT_ZERO(d->hdr.bestfree[i].length, ARCH_CONVERT);
-		INT_ZERO(d->hdr.bestfree[i].offset, ARCH_CONVERT);
+		d->hdr.bestfree[i].length = 0;
+		d->hdr.bestfree[i].offset = 0;
 	}
 	/*
 	 * Set up an unused entry for the block's body.
@@ -608,7 +608,7 @@ xfs_dir2_data_make_free(
 		 * since the third bestfree is there, there might be more
 		 * entries.
 		 */
-		needscan = !INT_ISZERO(d->hdr.bestfree[2].length, ARCH_CONVERT);
+		needscan = d->hdr.bestfree[2].length;
 		/*
 		 * Fix up the new big freespace.
 		 */
@@ -637,8 +637,8 @@ xfs_dir2_data_make_free(
 			dfp = xfs_dir2_data_freeinsert(d, prevdup, needlogp);
 			ASSERT(dfp == &d->hdr.bestfree[0]);
 			ASSERT(INT_GET(dfp->length, ARCH_CONVERT) == INT_GET(prevdup->length, ARCH_CONVERT));
-			ASSERT(INT_ISZERO(dfp[1].length, ARCH_CONVERT));
-			ASSERT(INT_ISZERO(dfp[2].length, ARCH_CONVERT));
+			ASSERT(!dfp[1].length);
+			ASSERT(!dfp[2].length);
 		}
 	}
 	/*
@@ -754,7 +754,7 @@ xfs_dir2_data_use_free(
 	 */
 	if (matchfront && matchback) {
 		if (dfp) {
-			needscan = !INT_ISZERO(d->hdr.bestfree[2].offset, ARCH_CONVERT);
+			needscan = d->hdr.bestfree[2].offset;
 			if (!needscan)
 				xfs_dir2_data_freeremove(d, dfp, needlogp);
 		}
@@ -841,7 +841,7 @@ xfs_dir2_data_use_free(
 		 * the 2 new will work.
 		 */
 		if (dfp) {
-			needscan = !INT_ISZERO(d->hdr.bestfree[2].length, ARCH_CONVERT);
+			needscan = d->hdr.bestfree[2].length;
 			if (!needscan) {
 				xfs_dir2_data_freeremove(d, dfp, needlogp);
 				(void)xfs_dir2_data_freeinsert(d, newdup,

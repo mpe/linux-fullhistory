@@ -135,11 +135,11 @@ xfs_inobp_check(
 	for (i = 0; i < j; i++) {
 		dip = (xfs_dinode_t *)xfs_buf_offset(bp,
 					i * mp->m_sb.sb_inodesize);
-		if (INT_ISZERO(dip->di_next_unlinked, ARCH_CONVERT))  {
+		if (!dip->di_next_unlinked)  {
 			xfs_fs_cmn_err(CE_ALERT, mp,
 				"Detected a bogus zero next_unlinked field in incore inode buffer 0x%p.  About to pop an ASSERT.",
 				bp);
-			ASSERT(!INT_ISZERO(dip->di_next_unlinked, ARCH_CONVERT));
+			ASSERT(dip->di_next_unlinked);
 		}
 	}
 }
@@ -176,7 +176,7 @@ xfs_inobp_bwcheck(xfs_buf_t *bp)
 			xfs_fs_cmn_err(CE_WARN, mp,
 				"corrupt, unmount and run xfs_repair");
 		}
-		if (INT_ISZERO(dip->di_next_unlinked, ARCH_CONVERT))  {
+		if (!dip->di_next_unlinked)  {
 			cmn_err(CE_WARN,
 "Bad next_unlinked field (0) in XFS inode buffer 0x%p, starting blockno %Ld, offset 0x%x",
 				(__uint64_t)(__psunsigned_t) bp,
@@ -976,7 +976,7 @@ xfs_iread(
 	 * specific information.
 	 * Otherwise, just get the truly permanent information.
 	 */
-	if (!INT_ISZERO(dip->di_core.di_mode, ARCH_CONVERT)) {
+	if (dip->di_core.di_mode) {
 		xfs_xlate_dinode_core((xfs_caddr_t)&dip->di_core,
 		     &(ip->i_d), 1);
 		error = xfs_iformat(ip, dip);
@@ -1933,7 +1933,7 @@ xfs_iunlink(
 	agino = XFS_INO_TO_AGINO(mp, ip->i_ino);
 	ASSERT(agino != 0);
 	bucket_index = agino % XFS_AGI_UNLINKED_BUCKETS;
-	ASSERT(!INT_ISZERO(agi->agi_unlinked[bucket_index], ARCH_CONVERT));
+	ASSERT(agi->agi_unlinked[bucket_index]);
 	ASSERT(INT_GET(agi->agi_unlinked[bucket_index], ARCH_CONVERT) != agino);
 
 	if (INT_GET(agi->agi_unlinked[bucket_index], ARCH_CONVERT) != NULLAGINO) {
@@ -1948,7 +1948,7 @@ xfs_iunlink(
 			return error;
 		}
 		ASSERT(INT_GET(dip->di_next_unlinked, ARCH_CONVERT) == NULLAGINO);
-		ASSERT(!INT_ISZERO(dip->di_next_unlinked, ARCH_CONVERT));
+		ASSERT(dip->di_next_unlinked);
 		/* both on-disk, don't endian flip twice */
 		dip->di_next_unlinked = agi->agi_unlinked[bucket_index];
 		offset = ip->i_boffset +
@@ -2041,7 +2041,7 @@ xfs_iunlink_remove(
 	ASSERT(agino != 0);
 	bucket_index = agino % XFS_AGI_UNLINKED_BUCKETS;
 	ASSERT(INT_GET(agi->agi_unlinked[bucket_index], ARCH_CONVERT) != NULLAGINO);
-	ASSERT(!INT_ISZERO(agi->agi_unlinked[bucket_index], ARCH_CONVERT));
+	ASSERT(agi->agi_unlinked[bucket_index]);
 
 	if (INT_GET(agi->agi_unlinked[bucket_index], ARCH_CONVERT) == agino) {
 		/*
@@ -3506,7 +3506,7 @@ xfs_iflush_int(
 			ip->i_d.di_version = XFS_DINODE_VERSION_2;
 			INT_SET(dip->di_core.di_version, ARCH_CONVERT, XFS_DINODE_VERSION_2);
 			ip->i_d.di_onlink = 0;
-			INT_ZERO(dip->di_core.di_onlink, ARCH_CONVERT);
+			dip->di_core.di_onlink = 0;
 			memset(&(ip->i_d.di_pad[0]), 0, sizeof(ip->i_d.di_pad));
 			memset(&(dip->di_core.di_pad[0]), 0,
 			      sizeof(dip->di_core.di_pad));

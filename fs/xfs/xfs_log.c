@@ -1728,9 +1728,9 @@ xlog_write(xfs_mount_t *	mp,
 		logop_head		= (xlog_op_header_t *)ptr;
 		INT_SET(logop_head->oh_tid, ARCH_CONVERT, ticket->t_tid);
 		logop_head->oh_clientid = ticket->t_clientid;
-		INT_ZERO(logop_head->oh_len, ARCH_CONVERT);
+		logop_head->oh_len	= 0;
 		logop_head->oh_flags    = XLOG_START_TRANS;
-		INT_ZERO(logop_head->oh_res2, ARCH_CONVERT);
+		logop_head->oh_res2	= 0;
 		ticket->t_flags		&= ~XLOG_TIC_INITED;	/* clear bit */
 		record_cnt++;
 
@@ -1742,7 +1742,7 @@ xlog_write(xfs_mount_t *	mp,
 	    logop_head			= (xlog_op_header_t *)ptr;
 	    INT_SET(logop_head->oh_tid, ARCH_CONVERT, ticket->t_tid);
 	    logop_head->oh_clientid	= ticket->t_clientid;
-	    INT_ZERO(logop_head->oh_res2, ARCH_CONVERT);
+	    logop_head->oh_res2		= 0;
 
 	    /* header copied directly */
 	    xlog_write_adv_cnt(ptr, len, log_offset, sizeof(xlog_op_header_t));
@@ -1888,10 +1888,10 @@ xlog_state_clean_log(xlog_t *log)
 				 */
 				changed = 2;
 			}
-			INT_ZERO(iclog->ic_header.h_num_logops, ARCH_CONVERT);
+			iclog->ic_header.h_num_logops = 0;
 			memset(iclog->ic_header.h_cycle_data, 0,
 			      sizeof(iclog->ic_header.h_cycle_data));
-			INT_ZERO(iclog->ic_header.h_lsn, ARCH_CONVERT);
+			iclog->ic_header.h_lsn = 0;
 		} else if (iclog->ic_state == XLOG_STATE_ACTIVE)
 			/* do nothing */;
 		else

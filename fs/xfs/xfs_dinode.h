@@ -209,7 +209,7 @@ int xfs_cfork_q(xfs_dinode_core_t *dcp);
 #define	XFS_CFORK_Q_DISK(dcp)               xfs_cfork_q_disk(dcp)
 #define	XFS_CFORK_Q(dcp)                    xfs_cfork_q(dcp)
 #else
-#define	XFS_CFORK_Q_DISK(dcp)		    (!INT_ISZERO((dcp)->di_forkoff, ARCH_CONVERT))
+#define	XFS_CFORK_Q_DISK(dcp)		    ((dcp)->di_forkoff != 0)
 #define XFS_CFORK_Q(dcp)                    ((dcp)->di_forkoff != 0)
 
 #endif

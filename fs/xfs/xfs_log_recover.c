@@ -2047,11 +2047,11 @@ xfs_qm_dqcheck(
 		errs++;
 	}
 
-	if (! errs && !INT_ISZERO(ddq->d_id, ARCH_CONVERT)) {
+	if (!errs && ddq->d_id) {
 		if (INT_GET(ddq->d_blk_softlimit, ARCH_CONVERT) &&
 		    INT_GET(ddq->d_bcount, ARCH_CONVERT) >=
 				INT_GET(ddq->d_blk_softlimit, ARCH_CONVERT)) {
-			if (INT_ISZERO(ddq->d_btimer, ARCH_CONVERT)) {
+			if (!ddq->d_btimer) {
 				if (flags & XFS_QMOPT_DOWARN)
 					cmn_err(CE_ALERT,
 					"%s : Dquot ID 0x%x (0x%p) "
@@ -2064,7 +2064,7 @@ xfs_qm_dqcheck(
 		if (INT_GET(ddq->d_ino_softlimit, ARCH_CONVERT) &&
 		    INT_GET(ddq->d_icount, ARCH_CONVERT) >=
 				INT_GET(ddq->d_ino_softlimit, ARCH_CONVERT)) {
-			if (INT_ISZERO(ddq->d_itimer, ARCH_CONVERT)) {
+			if (!ddq->d_itimer) {
 				if (flags & XFS_QMOPT_DOWARN)
 					cmn_err(CE_ALERT,
 					"%s : Dquot ID 0x%x (0x%p) "
@@ -2077,7 +2077,7 @@ xfs_qm_dqcheck(
 		if (INT_GET(ddq->d_rtb_softlimit, ARCH_CONVERT) &&
 		    INT_GET(ddq->d_rtbcount, ARCH_CONVERT) >=
 				INT_GET(ddq->d_rtb_softlimit, ARCH_CONVERT)) {
-			if (INT_ISZERO(ddq->d_rtbtimer, ARCH_CONVERT)) {
+			if (!ddq->d_rtbtimer) {
 				if (flags & XFS_QMOPT_DOWARN)
 					cmn_err(CE_ALERT,
 					"%s : Dquot ID 0x%x (0x%p) "
@@ -3438,7 +3438,7 @@ xlog_unpack_data_checksum(
 		up++;
 	}
 	if (chksum != INT_GET(rhead->h_chksum, ARCH_CONVERT)) {
-	    if (!INT_ISZERO(rhead->h_chksum, ARCH_CONVERT) ||
+	    if (rhead->h_chksum ||
 		((log->l_flags & XLOG_CHKSUM_MISMATCH) == 0)) {
 		    cmn_err(CE_DEBUG,
 			"XFS: LogR chksum mismatch: was (0x%x) is (0x%x)",
@@ -3501,7 +3501,7 @@ xlog_valid_rec_header(
 		return XFS_ERROR(EFSCORRUPTED);
 	}
 	if (unlikely(
-	    (INT_ISZERO(rhead->h_version, ARCH_CONVERT) ||
+	    (!rhead->h_version ||
 	    (INT_GET(rhead->h_version, ARCH_CONVERT) &
 			(~XLOG_VERSION_OKBITS)) != 0))) {
 		xlog_warn("XFS: %s: unrecognised log version (%d).",
