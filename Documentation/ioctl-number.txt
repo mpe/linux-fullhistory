@@ -74,8 +74,7 @@ Code	Seq#	Include File		Comments
 'P'	all	linux/soundcard.h
 'Q'	all	linux/soundcard.h
 'R'	all	linux/random.h
-'S'	00-1F	linux/cdrom.h
-'S'	20-7F	linux/ucdrom.h
+'S'	00-7F	linux/cdrom.h
 'S'	80-81	scsi/scsi_ioctl.h
 'S'	82-FF	scsi/scsi.h
 'T'	all	linux/soundcard.h	conflict!

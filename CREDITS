@@ -33,6 +33,16 @@ S: Klaproosstraat 72 c 10
 S: B-2610 Wilrijk-Antwerpen
 S: Belgium
 
+N: Erik Andersen
+E: andersee@debian.org
+W: http://www.inconnect.com/~andersen
+P: 1024/FC4CFFED 78 3C 6A 19 FA 5D 92 5A  FB AC 7B A5 A5 E1 FF 8E
+D: Maintainer of ide-cd and Uniform CD-ROM driver, 
+D: ATAPI CD-Changer support, Major 2.1.x CD-ROM update.
+S: 4538 South Carnegie Tech St.
+S: West Valley City, UT 84120
+S: USA
+
 N: H. Peter Anvin
 E: hpa@zytor.com
 W: http://www.zytor.com/~hpa/
@@ -1753,10 +1763,11 @@ S: Fin-00150 Helsinki
 S: Finland
 
 N: Roger E. Wolff
-E: wolff@dutecai.et.tudelft.nl
+E: R.E.Wolff@BitWizard.nl
 D: Written kmalloc/kfree
-S: Oosterstraat 23
-S: 2611 TT Delft
+D: Written Specialix IO8+ driver
+S: van Bronckhorststraat 12
+S: 2612 XV Delft
 S: The Netherlands
 
 N: David Woodhouse

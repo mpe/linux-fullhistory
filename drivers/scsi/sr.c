@@ -31,7 +31,6 @@
 #include <linux/string.h>
 #include <linux/errno.h>
 #include <linux/cdrom.h>
-#include <linux/ucdrom.h>
 #include <linux/interrupt.h>
 #include <linux/config.h>
 #include <asm/system.h>
@@ -90,7 +89,6 @@ static struct cdrom_device_ops sr_dops = {
         sr_open,                      /* open */
         sr_release,                   /* release */
         sr_drive_status,              /* drive status */
-        sr_disk_status,               /* disc status */
         sr_media_change,              /* media changed */
         sr_tray_move,                 /* tray move */
         sr_lock_door,                 /* lock door */
@@ -102,7 +100,8 @@ static struct cdrom_device_ops sr_dops = {
         sr_audio_ioctl,               /* audio ioctl */
         sr_dev_ioctl,                 /* device-specific ioctl */
         CDC_CLOSE_TRAY | CDC_OPEN_TRAY| CDC_LOCK | CDC_SELECT_SPEED |
-        CDC_MULTI_SESSION | CDC_MCN | CDC_MEDIA_CHANGED | CDC_PLAY_AUDIO,
+        CDC_MULTI_SESSION | CDC_MCN | CDC_MEDIA_CHANGED | CDC_PLAY_AUDIO |
+        CDC_RESET | CDC_IOCTLS | CDC_DRIVE_STATUS,
         0
 };
 
@@ -1022,6 +1021,7 @@ static int sr_init()
 void sr_finish()
 {
     int i;
+    char name[6];
 
     blk_dev[MAJOR_NR].request_fn = DEVICE_REQUEST;
     blk_size[MAJOR_NR] = sr_sizes;
@@ -1052,7 +1052,10 @@ void sr_finish()
 	scsi_CDs[i].cdi.dev        = MKDEV(MAJOR_NR,i);
 	scsi_CDs[i].cdi.mask       = 0;
 	get_capabilities(i);
-	register_cdrom(&scsi_CDs[i].cdi, "sr");
+
+	sprintf(name, "sr%d", i);
+	strcpy(scsi_CDs[i].cdi.name, name);
+	register_cdrom(&scsi_CDs[i].cdi);
     }
 
 

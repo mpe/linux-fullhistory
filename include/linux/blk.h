@@ -36,7 +36,9 @@
 #endif /* IDE_DRIVER */
 
 #define SUBSECTOR(block) (CURRENT->current_nr_sectors > 0)
-
+#ifdef CONFIG_CDROM
+extern int cdrom_init(void);
+#endif CONFIG_CDROM 
 #ifdef CONFIG_CDU31A
 extern int cdu31a_init(void);
 #endif CONFIG_CDU31A

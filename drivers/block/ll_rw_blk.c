@@ -654,7 +654,6 @@ void ll_rw_swap_file(int rw, kdev_t dev, unsigned int *b, int nb, char *buf)
 		}
 	}
 }
-
 #ifdef CONFIG_BLK_DEV_EZ
 extern void ez_init( void );
 #endif
@@ -694,9 +693,12 @@ __initfunc(int blk_dev_init(void))
 #ifdef CONFIG_BLK_DEV_LOOP
 	loop_init();
 #endif
-#ifdef CONFIG_CDI_INIT
-	cdi_init();		/* this MUST precede ide_init */
-#endif CONFIG_CDI_INIT
+#ifdef CONFIG_CDROM		/* this must precede all CD-ROM drivers */
+	cdrom_init();
+#endif CONFIG_CDROM
+#ifdef CONFIG_ISP16_CDI
+	isp16_init();
+#endif CONFIG_ISP16_CDI
 #ifdef CONFIG_BLK_DEV_IDE
 	ide_init();		/* this MUST precede hd_init */
 #endif

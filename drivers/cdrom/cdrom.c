@@ -1,12 +1,58 @@
-/* cdrom.c. Common ioctl and open routines for various Linux cdrom drivers. -*- linux-c -*-
+/* linux/drivers/cdrom/cdrom.c. 
    Copyright (c) 1996, 1997 David A. van Leeuwen.
+   Copyright (c) 1997 Erik Andersen (andersee@debian.org)
 
-   The routines in the file should provide an interface between
-   software accessing cdroms and the various drivers that implement
-   specific hardware devices.
+   May be copied or modified under the terms of the GNU General Public
+   License.  See linux/COPYING for more information.
+
+   Uniform CD-ROM driver for Linux.
+   See Documentation/cdrom/cdrom-standard.tex for usage information.
+
+   The routines in the file provide a uniform interface between the
+   software that uses CD-ROMs and the various low-level drivers that
+   actually talk to actual hardware devices. Suggestions are welcome.
+   Patches that work are more welcome though.  ;-)
+
+
+  Recent Changes:
+  ----------------------------------
+
+  New maintainer! As David A. van Leeuwen has been too busy to activly
+  maintain and improve this driver, I am now carrying on the torch. If
+  you have a problem with this driver, please feel free to contact me.
+
+  Added (rudimentary) sysctl interface. I realize this is really weak
+  right now, and is _very_ badly implemented. It will be improved... I
+  plan on having one directory per drive, with entries for outputing
+  general drive information, and sysctl based tunable parameters such
+  as whether the tray should auto-close for that drive. Suggestions (or
+  patches) for improvements are very welcome.
+
+  Modified CDROM_DISC_STATUS so that it is now incorporated into
+  the Uniform CD-ROM driver via the cdrom_count_tracks function.
+  The cdrom_count_tracks function helps resolve some of the false
+  assumptions of the CDROM_DISC_STATUS ioctl, and is also used to check
+  for the correct media type when mounting or playing audio from a CD.
+
+  Remove the calls to verify_area and only use the copy_from_user and
+  copy_to_user stuff, since these calls now provide their own memory
+  checking with the 2.1.x kernels.
+
+  Major update to return codes so that errors from low-level drivers
+  are passed on through (thanks to Gerd Knorr for pointing out this
+  problem).
+
+  Made it so if a function isn't implemented in a low-level driver,
+  ENOSYS is now returned instead of EINVAL.
+
+  Simplified some complex logic so that the source code is easier to read.
+
+  Other stuff I probably forgot to mention (lots of changes).
 
  */
 
+
+#include <linux/config.h>
 #include <linux/module.h>
 #include <linux/fs.h>
 #include <linux/major.h>
@@ -14,36 +60,50 @@
 #include <linux/errno.h>
 #include <linux/kernel.h>
 #include <linux/mm.h>
+#include <linux/malloc.h> 
+#include <linux/cdrom.h>
+#include <linux/sysctl.h>
 #include <asm/fcntl.h>
 #include <asm/segment.h>
 #include <asm/uaccess.h>
 
-#include <linux/cdrom.h>
-#include <linux/ucdrom.h>
 
-/* define CHECKTYPE if you want to check for audio/data cdrom. You
-   must use cd player programs that respect the O_NONBLOCK option for
-   opening the cdrom-device for ioctl-commanding only. (See
-   Documentation/cdrom/cdrom-standard.tex). Patches for a number of cd
-   players (CDplayer-2.0, cd-console-1.1, workbone-2.3, cdtool-1.0,
-   cdp-0.33, cdplayer-0.4, cdthing-1.4, lyn0.8a, playcd-1.0) can be
-   found in directory
-
-	ftp://ftp.gwdg.de/pub/linux/cdrom/drivers/cm206/
-
-   A runtime configuration program "checktype.c" to allow for cdrom
-   medium type checking can be found at the same location.
-
-   In order to be able to get neat system errors like "No medium
-   found" or "Wrong medium type" upon attempting to mount/play an
-   empty slot, mount an audio disc or play a data disc, you need to
-   have a new libc.5.so.  */
-#undef CHECKTYPE
-
+#define VERSION "$Id: cdrom.c,v 2.0 1997/11/20 01:58:03 erik Exp $"
+#define REVISION "revision 2.0"
 #define FM_WRITE	0x2                 /* file mode write bit */
 
-#define VERSION "$Id: cdrom.c,v 1.7 1997/02/27 22:14:26 david Exp $"
-#define REVISION "$Revision: 1.7 $"
+/* When VERBOSE_STATUS_INFO is not defined, the debugging printks don't 
+   get compiled in */
+#define VERBOSE_STATUS_INFO
+
+/* I use an error-log mask to give fine grain control over the type of
+   error messages dumped to the system logs.  The available masks include: */
+#define CD_WARNING	0x1
+#define CD_REG_UNREG	0x2
+#define CD_DO_IOCTL	0x4
+#define CD_OPEN		0x8
+#define CD_CLOSE	0x10
+
+#define ERRLOGMASK (CD_WARNING) 
+/* #define ERRLOGMASK (CD_WARNING|CD_OPEN|CD_CLOSE) */
+/* #define ERRLOGMASK (CD_WARNING|CD_REG_UNREG|CD_DO_IOCTL|CD_OPEN|CD_CLOSE) */
+
+#ifdef VERBOSE_STATUS_INFO
+#define cdinfo(type, fmt, args...) \
+	if (ERRLOGMASK & type) printk(KERN_INFO "cdrom: " fmt, ## args)
+#else
+#define cdinfo(type, fmt, args...) 
+#endif
+
+
+/* These are used to simplify getting data in from and back to user land */
+#define IOCTL_IN(arg, type, in) { \
+            int ret=copy_from_user(&in, (type *) arg, sizeof in); \
+            if (ret) return ret; }
+
+#define IOCTL_OUT(arg, type, out) { \
+            int ret=copy_to_user((type *) arg, &out, sizeof out); \
+            if (ret) return ret; }
 
 /* Not-exported routines. */
 static int cdrom_open(struct inode *ip, struct file *fp);
@@ -51,6 +111,23 @@ static int cdrom_release(struct inode *ip, struct file *fp);
 static int cdrom_ioctl(struct inode *ip, struct file *fp,
 				unsigned int cmd, unsigned long arg);
 static int cdrom_media_changed(kdev_t dev);
+static int cdrom_sysctl_info(ctl_table *ctl, int write, struct file * filp,
+                           void *buffer, size_t *lenp);
+static int open_for_data(struct cdrom_device_info * cdi);
+static int check_for_audio_disc(struct cdrom_device_info * cdi,
+			 struct cdrom_device_ops * cdo);
+static void sanitize_format(union cdrom_addr *addr, 
+		u_char * curr, u_char requested);
+typedef struct {
+	int data;
+	int audio;
+	int cdi;
+	int xa;
+	long error;
+} tracktype;
+
+static void cdrom_count_tracks(struct cdrom_device_info *cdi,tracktype* tracks);
+static struct cdrom_device_info *topCdromPtr = NULL;
 
 struct file_operations cdrom_fops =
 {
@@ -69,47 +146,45 @@ struct file_operations cdrom_fops =
 	NULL                            /* revalidate */
 };
 
-static struct cdrom_device_info *cdromdevs[MAX_BLKDEV] = {
-	NULL,
-};
+void cdrom_init(void) {
+	if (!topCdromPtr)
+	    printk(KERN_INFO "Uniform CD-ROM driver " REVISION "\n");
+}
 
 /* This macro makes sure we don't have to check on cdrom_device_ops
  * existence in the run-time routines below. Change_capability is a
  * hack to have the capability flags defined const, while we can still
  * change it here without gcc complaining at every line.
  */
-
 #define ENSURE(call, bits) if (cdo->call == NULL) *change_capability &= ~(bits)
 
-/* We don't use $name$ yet, but it could be used for the /proc
- * filesystem in the future, or for other purposes.
- */
-int register_cdrom(struct cdrom_device_info *cdi, char *name)
+int register_cdrom(struct cdrom_device_info *cdi)
 {
 	int major = MAJOR (cdi->dev);
-	struct cdrom_device_ops *cdo = cdi->ops;
-	int *change_capability = (int *)&cdo->capability; /* hack */
+        struct cdrom_device_ops *cdo = cdi->ops;
+        int *change_capability = (int *)&cdo->capability; /* hack */
 
 	if (major < 0 || major >= MAX_BLKDEV)
 		return -1;
 	if (cdo->open == NULL || cdo->release == NULL)
 		return -2;
+	ENSURE(drive_status, CDC_DRIVE_STATUS );
+	ENSURE(media_changed, CDC_MEDIA_CHANGED);
 	ENSURE(tray_move, CDC_CLOSE_TRAY | CDC_OPEN_TRAY);
 	ENSURE(lock_door, CDC_LOCK);
 	ENSURE(select_speed, CDC_SELECT_SPEED);
 	ENSURE(select_disc, CDC_SELECT_DISC);
 	ENSURE(get_last_session, CDC_MULTI_SESSION);
+	ENSURE(get_mcn, CDC_MCN);
+	ENSURE(reset, CDC_RESET);
 	ENSURE(audio_ioctl, CDC_PLAY_AUDIO);
-	ENSURE(media_changed, CDC_MEDIA_CHANGED);
-	if (cdromdevs[major]==NULL) cdo->n_minors = 0;
-	else cdo->n_minors++;
-	cdi->next = cdromdevs[major];
-	cdromdevs[major] = cdi;
-	cdi->options = CDO_AUTO_CLOSE | CDO_USE_FFLAGS | CDO_LOCK;
-#ifdef CHECKTYPE
-	cdi->options |= CDO_CHECK_TYPE;
-#endif
+	ENSURE(dev_ioctl, CDC_IOCTLS);
+	cdi->options = CDO_AUTO_CLOSE | CDO_USE_FFLAGS | CDO_LOCK | CDO_CHECK_TYPE;
 	cdi->mc_flags = 0;
+	cdo->n_minors = 0;
+	cdinfo(CD_REG_UNREG, "drive \"/dev/%s\" registered\n", cdi->name);
+	cdi->next = topCdromPtr; 	
+	topCdromPtr = cdi;
 	return 0;
 }
 #undef ENSURE
@@ -123,7 +198,7 @@ int unregister_cdrom(struct cdrom_device_info *unreg)
 		return -1;
 
 	prev = NULL;
-	cdi = cdromdevs[major];
+	cdi = topCdromPtr;
 	while (cdi != NULL && cdi->dev != unreg->dev) {
 		prev = cdi;
 		cdi = cdi->next;
@@ -134,16 +209,18 @@ int unregister_cdrom(struct cdrom_device_info *unreg)
 	if (prev)
 		prev->next = cdi->next;
 	else
-		cdromdevs[major] = cdi->next;
+		topCdromPtr = cdi->next;
 	cdi->ops->n_minors--;
+	cdinfo(CD_REG_UNREG, "drive \"/dev/%s\" unregistered\n", cdi->name);
 	return 0;
 }
 
 static
 struct cdrom_device_info *cdrom_find_device (kdev_t dev)
 {
-	struct cdrom_device_info *cdi = cdromdevs[MAJOR (dev)];
+	struct cdrom_device_info *cdi;
 
+	cdi = topCdromPtr;
 	while (cdi != NULL && cdi->dev != dev)
 		cdi = cdi->next;
 	return cdi;
@@ -158,9 +235,6 @@ struct cdrom_device_info *cdrom_find_device (kdev_t dev)
  * this way.
  */
 static
-int open_for_data(struct cdrom_device_info * cdi);
-
-static
 int cdrom_open(struct inode *ip, struct file *fp)
 {
 	kdev_t dev = ip->i_rdev;
@@ -168,6 +242,7 @@ int cdrom_open(struct inode *ip, struct file *fp)
 	int purpose = !!(fp->f_flags & O_NONBLOCK);
 	int ret=0;
 
+	cdinfo(CD_OPEN, "entering cdrom_open\n"); 
 	if (cdi == NULL)
 		return -ENODEV;
 	if (fp->f_mode & FM_WRITE)
@@ -178,6 +253,7 @@ int cdrom_open(struct inode *ip, struct file *fp)
 	else
 		ret = open_for_data(cdi);
 	if (!ret) cdi->use_count++;
+	cdinfo(CD_OPEN, "Use count for \"/dev/%s\" now %d\n", cdi->name, cdi->use_count);
 	return ret;
 }
 
@@ -186,36 +262,145 @@ int open_for_data(struct cdrom_device_info * cdi)
 {
 	int ret;
 	struct cdrom_device_ops *cdo = cdi->ops;
+	tracktype tracks;
+	cdinfo(CD_OPEN, "entering open_for_data\n");
+	/* Check if the driver can report drive status.  If it can we
+	   can do clever things.  If it can't, well, we at least tried! */
 	if (cdo->drive_status != NULL) {
-		int ds = cdo->drive_status(cdi, CDSL_CURRENT);
-		if (ds == CDS_TRAY_OPEN) {
+		ret = cdo->drive_status(cdi, CDSL_CURRENT);
+		cdinfo(CD_OPEN, "drive_status=%d\n", ret); 
+		if (ret == CDS_TRAY_OPEN) {
+			cdinfo(CD_WARNING, "tray is open...\n"); 
 			/* can/may i close it? */
 			if (cdo->capability & ~cdi->mask & CDC_CLOSE_TRAY &&
 			    cdi->options & CDO_AUTO_CLOSE) {
-				if (cdo->tray_move(cdi,0))
-					return -EIO;
-			} else
-				return -ENOMEDIUM; /* can't close: too bad */
-			ds = cdo->drive_status(cdi, CDSL_CURRENT);
-			if (ds == CDS_NO_DISC)
-				return -ENOMEDIUM;
+				ret=cdo->tray_move(cdi,0);
+				if (ret) {
+					cdinfo(CD_WARNING, "bummer. tried to close tray but failed.\n"); 
+					/* Ignore the error from the low
+					level driver.  We don't care why it
+					couldn't close the tray.  We only care 
+					that there is no disc in the drive, 
+					since that is the _REAL_ problem here.*/
+					ret=-ENOMEDIUM;
+					goto clean_up_and_return;
+				}
+			} else {
+				cdinfo(CD_WARNING, "this driver can't close the tray.\n"); 
+				ret=-ENOMEDIUM;
+				goto clean_up_and_return;
+			}
+			/* Ok, the door should be closed now.. Check again */
+			ret = cdo->drive_status(cdi, CDSL_CURRENT);
+			cdinfo(CD_OPEN, "tried again. drive_status=%d\n", ret); 
+			if ((ret == CDS_NO_DISC) || (ret==CDS_TRAY_OPEN)) {
+				ret=-ENOMEDIUM;
+				goto clean_up_and_return;
+			}
 		}
+		if (ret!=CDS_DISC_OK)
+			goto clean_up_and_return;
 	}
-	if (cdo->disc_status != NULL) {
-		int ds = cdo->disc_status(cdi);
-		if (ds == CDS_NO_DISC)
-			return -ENOMEDIUM;
-		if (cdi->options & CDO_CHECK_TYPE &&
-		    ds != CDS_DATA_1)
-			return -EMEDIUMTYPE;
+	cdrom_count_tracks(cdi, &tracks);
+	if (tracks.error == CDS_NO_DISC) {
+		cdinfo(CD_OPEN, "bummer. no disc...\n");
+		ret=-ENOMEDIUM;
+		goto clean_up_and_return;
 	}
-	/* all is well, we can open the device */
+	if (cdi->options & CDO_CHECK_TYPE && tracks.data==0) {
+		cdinfo(CD_OPEN, "bummer. wrong media type...\n"); 
+		ret=-EMEDIUMTYPE;
+		goto clean_up_and_return;
+	}
+
+	cdinfo(CD_OPEN, "all seems well, opening the device...\n"); 
+
+	/* all seems well, we can open the device */
 	ret = cdo->open(cdi, 0); /* open for data */
-	if (cdo->capability & ~cdi->mask & CDC_LOCK &&
-	    cdi->options & CDO_LOCK)
-		cdo->lock_door(cdi, 1);
+	cdinfo(CD_OPEN, "opening the device gave me %d.\n", ret); 
+	/* After all this careful checking, we shouldn't have problems
+	   opening the device, but we don't want the device locked if 
+	   this somehow fails... */
+	if (ret) {
+		cdinfo(CD_OPEN, "open device failed...\n"); 
+		goto clean_up_and_return;
+	}
+	if (cdo->capability & ~cdi->mask & CDC_LOCK && 
+		cdi->options & CDO_LOCK) {
+			cdo->lock_door(cdi, 1);
+			cdinfo(CD_OPEN, "door locked.\n");
+	}	
+	cdinfo(CD_OPEN, "device opened sucessfully.\n"); 
+	return ret;
+
+	/* Something failed.  Try to unlock the drive, because some drivers
+	(notably ide-cd) lock the drive after every command.  This produced
+	a nasty bug where after mount failed, the drive would remain locked!  
+	This ensures that the drive gets unlocked after a mount fails.  This 
+	is a goto to avoid adding bloating the driver with redundant code. */ 
+clean_up_and_return:
+	cdinfo(CD_WARNING, "failed to open the device.\n"); 
+	if (cdo->capability & ~cdi->mask & CDC_LOCK && 
+		cdi->options & CDO_LOCK) {
+			cdo->lock_door(cdi, 0);
+			cdinfo(CD_WARNING, "door unlocked.\n");
+	}
 	return ret;
 }
+
+/* This code is similar to that in open_for_data. The routine is called
+   in case a audio play operation is requested. It doesn't make much sense
+   to do this on a data disc.
+*/
+int check_for_audio_disc(struct cdrom_device_info * cdi,
+			 struct cdrom_device_ops * cdo)
+{
+        int ret;
+	tracktype tracks;
+	cdinfo(CD_OPEN, "entering check_for_audio_disc\n");
+	if (!(cdi->options & CDO_CHECK_TYPE))
+		return 0;
+	if (cdo->drive_status != NULL) {
+		ret = cdo->drive_status(cdi, CDSL_CURRENT);
+		cdinfo(CD_OPEN, "drive_status=%d\n", ret); 
+		if (ret == CDS_TRAY_OPEN) {
+			cdinfo(CD_WARNING, "tray is open...\n"); 
+			/* can/may i close it? */
+			if (cdo->capability & ~cdi->mask & CDC_CLOSE_TRAY &&
+			    cdi->options & CDO_AUTO_CLOSE) {
+				ret=cdo->tray_move(cdi,0);
+				if (ret) {
+					cdinfo(CD_WARNING, "bummer. tried to close tray but failed.\n"); 
+					/* Ignore the error from the low
+					level driver.  We don't care why it
+					couldn't close the tray.  We only care 
+					that there is no disc in the drive, 
+					since that is the _REAL_ problem here.*/
+					return -ENOMEDIUM;
+				}
+			} else {
+				cdinfo(CD_WARNING, "this driver can't close the tray.\n"); 
+				return -ENOMEDIUM;
+			}
+			/* Ok, the door should be closed now.. Check again */
+			ret = cdo->drive_status(cdi, CDSL_CURRENT);
+			cdinfo(CD_OPEN, "tried again. drive_status=%d\n", ret); 
+			if ((ret == CDS_NO_DISC) || (ret==CDS_TRAY_OPEN))
+				return -ENOMEDIUM;
+			if (ret!=CDS_DISC_OK)
+				return -EIO;
+		}	
+	}
+	cdrom_count_tracks(cdi, &tracks);
+	if (tracks.error) 
+		return(tracks.error);
+
+	if (tracks.audio==0)
+		return -EMEDIUMTYPE;
+
+	return 0;
+}
+
 
 /* Admittedly, the logic below could be performed in a nicer way. */
 static
@@ -223,21 +408,23 @@ int cdrom_release(struct inode *ip, struct file *fp)
 {
 	kdev_t dev = ip->i_rdev;
 	struct cdrom_device_info *cdi = cdrom_find_device (dev);
-	struct cdrom_device_ops *cdo;
+	struct cdrom_device_ops *cdo = cdi->ops;
 	int opened_for_data;
 
+	cdinfo(CD_CLOSE, "entering cdrom_release\n"); 
 	if (cdi == NULL)
 		return 0;
+	if (cdi->use_count > 0) cdi->use_count--;
+	if (cdi->use_count == 0)
+		cdinfo(CD_CLOSE, "Use count for \"/dev/%s\" now zero\n", cdi->name);
+	if (cdi->use_count == 0 &&      /* last process that closes dev*/
+	    cdo->capability & CDC_LOCK) {
+		cdinfo(CD_CLOSE, "Unlocking door!\n");
+		cdo->lock_door(cdi, 0);
+		}
 	opened_for_data = !(cdi->options & CDO_USE_FFLAGS) ||
 		!(fp && fp->f_flags & O_NONBLOCK);
-	cdo = cdi->ops;
-	if (cdi->use_count == 1 &&      /* last process that closes dev*/
-	    opened_for_data &&
-	    cdi->options & CDO_LOCK &&
-	    cdo->capability & ~cdi->mask & CDC_LOCK)
-		cdo->lock_door(cdi, 0);
 	cdo->release(cdi);
-	if (cdi->use_count > 0) cdi->use_count--;
 	if (cdi->use_count == 0) {      /* last process that closes dev*/
 		sync_dev(dev);
 		invalidate_buffers(dev);
@@ -277,9 +464,56 @@ int cdrom_media_changed(kdev_t dev)
 	if (cdi == NULL)
 		return -ENODEV;
 	if (cdi->ops->media_changed == NULL)
-		return -EINVAL;
+		return -ENOSYS;
 	return media_changed(cdi, 0);
 }
+
+static
+void cdrom_count_tracks(struct cdrom_device_info *cdi, tracktype* tracks)
+{
+	struct cdrom_tochdr header;
+	struct cdrom_tocentry entry;
+	int ret, i;
+	tracks->data=0;
+	tracks->audio=0;
+	tracks->cdi=0;
+	tracks->xa=0;
+	tracks->error=0;
+	cdinfo(CD_OPEN, "entering cdrom_count_tracks\n"); 
+        if (!(cdi->ops->capability & CDC_PLAY_AUDIO)) { 
+                tracks->error=CDS_NO_INFO;
+                return;
+        }        
+	/* Grab the TOC header so we can see how many tracks there are */
+	ret=cdi->ops->audio_ioctl(cdi, CDROMREADTOCHDR, &header);
+	if (ret) {
+		tracks->error=(ret == -ENOMEDIUM) ? CDS_NO_DISC : CDS_NO_INFO;
+		return;
+	}	
+	/* check what type of tracks are on this disc */
+	entry.cdte_format = CDROM_MSF;
+	for (i = header.cdth_trk0; i <= header.cdth_trk1; i++) {
+		entry.cdte_track  = i;
+		if (cdi->ops->audio_ioctl(cdi, CDROMREADTOCENTRY, &entry)) {
+			tracks->error=CDS_NO_INFO;
+			return;
+		}	
+		if (entry.cdte_ctrl & CDROM_DATA_TRACK) {
+		    if (entry.cdte_format == 0x10)
+			tracks->cdi++;
+		    else if (entry.cdte_format == 0x20) 
+			tracks->xa++;
+		    else
+			tracks->data++;
+		} else
+		    tracks->audio++;
+		cdinfo(CD_OPEN, "track %d: format=%d, ctrl=%d\n",
+		       i, entry.cdte_format, entry.cdte_ctrl);
+	}	
+	cdinfo(CD_OPEN, "disc has %d tracks: %d=audio %d=data %d=Cd-I %d=XA\n", 
+		header.cdth_trk1, tracks->audio, tracks->data, 
+		tracks->cdi, tracks->xa);
+}	
 
 /* Requests to the low-level drivers will /always/ be done in the
    following format convention:
@@ -317,21 +551,6 @@ void sanitize_format(union cdrom_addr *addr,
 	*curr = requested;
 }
 
-/* All checking and format change makes this code really hard to read!
- * So let's make some check and memory move macros.  These macros are
- * a little inefficient when both used in the same piece of code, as
- * verify_area is used twice, but who cares, as ioctl() calls
- * shouldn't be in inner loops.
- */
-#define GETARG(type, x) { \
-	int ret=verify_area(VERIFY_READ, (void *) arg, sizeof x); \
-	    if (ret) return ret; \
-	    copy_from_user(&x, (type *) arg, sizeof x); }
-#define PUTARG(type, x) { \
-	    int ret=verify_area(VERIFY_WRITE, (void *) arg, sizeof x); \
-	    if (ret) return ret; \
-	    copy_to_user((type *) arg, &x, sizeof x); }
-
 /* Some of the cdrom ioctls are not implemented here, because these
  * appear to be either too device-specific, or it is not clear to me
  * what use they are. These are (number of drivers that support them
@@ -346,10 +565,6 @@ void sanitize_format(union cdrom_addr *addr,
  * memory-verification is performed for these ioctls.
  */
 static
-int check_for_audio_disc(struct cdrom_device_info * cdi,
-			 struct cdrom_device_ops * cdo);
-
-static
 int cdrom_ioctl(struct inode *ip, struct file *fp,
 		unsigned int cmd, unsigned long arg)
 {
@@ -360,85 +575,103 @@ int cdrom_ioctl(struct inode *ip, struct file *fp,
 	if (cdi == NULL)
 		return -ENODEV;
 	cdo = cdi->ops;
-	/* the first few commands do not deal with audio capabilities, but
+
+	/* the first few commands do not deal with audio drive_info, but
 	   only with routines in cdrom device operations. */
 	switch (cmd) {
 		/* maybe we should order cases after statistics of use? */
 
-	case CDROMMULTISESSION:
-	{
+	case CDROMMULTISESSION: {
+		int ret;
 		struct cdrom_multisession ms_info;
 		u_char requested_format;
-		if (!(cdo->capability & CDC_MULTI_SESSION))
-			return -EINVAL;
-		GETARG(struct cdrom_multisession, ms_info);
+		cdinfo(CD_DO_IOCTL, "entering CDROMMULTISESSION\n"); 
+                if (!(cdo->capability & CDC_MULTI_SESSION))
+                        return -ENOSYS;
+		IOCTL_IN(arg, struct cdrom_multisession, ms_info);
 		requested_format = ms_info.addr_format;
+		if (!((requested_format == CDROM_MSF) ||
+			(requested_format == CDROM_LBA)))
+				return -EINVAL;
 		ms_info.addr_format = CDROM_LBA;
-		cdo->get_last_session(cdi, &ms_info);
+		if ((ret=cdo->get_last_session(cdi, &ms_info)))
+			return ret;
 		sanitize_format(&ms_info.addr, &ms_info.addr_format,
 				requested_format);
-		PUTARG(struct cdrom_multisession, ms_info);
+		IOCTL_OUT(arg, struct cdrom_multisession, ms_info);
+		cdinfo(CD_DO_IOCTL, "CDROMMULTISESSION sucessful\n"); 
 		return 0;
-	}
+		}
 
-	case CDROMEJECT:
-		if (cdo->capability & ~cdi->mask & CDC_OPEN_TRAY) {
-			if (cdi->use_count == 1) {
-				if (cdo->capability & ~cdi->mask & CDC_LOCK)
-					cdo->lock_door(cdi, 0);
-				return cdo->tray_move(cdi, 1);
-			} else
-				return -EBUSY;
-		} else
-			return -EINVAL;
+	case CDROMEJECT: {
+		int ret;
+		cdinfo(CD_DO_IOCTL, "entering CDROMEJECT\n"); 
+		if (!(cdo->capability & ~cdi->mask & CDC_OPEN_TRAY))
+			return -ENOSYS;
+		if (cdi->use_count != 1) 
+			return -EBUSY;
+		if (cdo->capability & ~cdi->mask & CDC_LOCK) {
+			if ((ret=cdo->lock_door(cdi, 0)))
+				return ret;
+			}
+		return cdo->tray_move(cdi, 1);
+		}
 
 	case CDROMCLOSETRAY:
-		if (cdo->capability & ~cdi->mask & CDC_CLOSE_TRAY)
-			return cdo->tray_move(cdi, 0);
-		else
-			return -EINVAL;
+		cdinfo(CD_DO_IOCTL, "entering CDROMCLOSETRAY\n"); 
+		if (!(cdo->capability & ~cdi->mask & CDC_OPEN_TRAY))
+			return -ENOSYS;
+		return cdo->tray_move(cdi, 0);
 
 	case CDROMEJECT_SW:
+		cdinfo(CD_DO_IOCTL, "entering CDROMEJECT_SW\n"); 
 		cdi->options &= ~(CDO_AUTO_CLOSE | CDO_AUTO_EJECT);
 		if (arg)
 			cdi->options |= CDO_AUTO_CLOSE | CDO_AUTO_EJECT;
 		return 0;
 
-	case CDROM_MEDIA_CHANGED:
-		if (cdo->capability & ~cdi->mask & CDC_MEDIA_CHANGED) {
-			if (!(cdo->capability & ~cdi->mask & CDC_SELECT_DISC)
-			    || arg == CDSL_CURRENT)
-				/* cannot select disc or select current disc */
-				return media_changed(cdi, 1);
-			if ((unsigned int)arg < cdi->capacity)
-				return cdo->media_changed (cdi, arg);
+	case CDROM_MEDIA_CHANGED: {
+		cdinfo(CD_DO_IOCTL, "entering CDROM_MEDIA_CHANGED\n"); 
+		if (!(cdo->capability & ~cdi->mask & CDC_MEDIA_CHANGED))
+			return -ENOSYS;
+		if (!(cdo->capability & ~cdi->mask & CDC_SELECT_DISC)
+		    || arg == CDSL_CURRENT)
+			/* cannot select disc or select current disc */
+			return media_changed(cdi, 1);
+		if ((unsigned int)arg >= cdi->capacity)
 			return -EINVAL;
-		} else
-			return -EINVAL;
+		return cdo->media_changed (cdi, arg);
+		}
 
 	case CDROM_SET_OPTIONS:
+		cdinfo(CD_DO_IOCTL, "entering CDROM_SET_OPTIONS\n"); 
 		cdi->options |= (int) arg;
 		return cdi->options;
 
 	case CDROM_CLEAR_OPTIONS:
+		cdinfo(CD_DO_IOCTL, "entering CDROM_CLEAR_OPTIONS\n"); 
 		cdi->options &= ~(int) arg;
 		return cdi->options;
 
-	case CDROM_SELECT_SPEED:
-		if ((int)arg <= cdi->speed &&
-		    cdo->capability & ~cdi->mask & CDC_SELECT_SPEED)
-			return cdo->select_speed(cdi, arg);
-		else
+	case CDROM_SELECT_SPEED: {
+		cdinfo(CD_DO_IOCTL, "entering CDROM_SELECT_SPEED\n"); 
+		if (!(cdo->capability & ~cdi->mask & CDC_SELECT_SPEED))
+			return -ENOSYS;
+		if ((int)arg > cdi->speed )
 			return -EINVAL;
+		return cdo->select_speed(cdi, arg);
+		}
 
-	case CDROM_SELECT_DISC:
-		if ((arg == CDSL_CURRENT) || (arg == CDSL_NONE))
+	case CDROM_SELECT_DISC: {
+		cdinfo(CD_DO_IOCTL, "entering CDROM_SELECT_DISC\n"); 
+		if (!(cdo->capability & ~cdi->mask & CDC_SELECT_DISC))
+			return -ENOSYS;
+                if ((arg == CDSL_CURRENT) || (arg == CDSL_NONE)) 
 			return cdo->select_disc(cdi, arg);
-		if ((int)arg < cdi->capacity &&
-		    cdo->capability & ~cdi->mask & CDC_SELECT_DISC)
-			return cdo->select_disc(cdi, arg);
-		else
-			return -EINVAL;
+		if ((int)arg >= cdi->capacity)
+			return -EDRIVE_CANT_DO_THIS;
+		return cdo->select_disc(cdi, arg);
+		}
 
 /* The following function is implemented, although very few audio
  * discs give Universal Product Code information, which should just be
@@ -446,51 +679,82 @@ int cdrom_ioctl(struct inode *ip, struct file *fp,
  * is written on the CD is /not/ uniform across all discs!
  */
 	case CDROM_GET_MCN: {
+		int ret;
 		struct cdrom_mcn mcn;
+		cdinfo(CD_DO_IOCTL, "entering CDROM_GET_MCN\n"); 
 		if (!(cdo->capability & CDC_MCN))
-			return -EINVAL;
-		if (!cdo->get_mcn(cdi, &mcn)) {
-			PUTARG(struct cdrom_mcn, mcn);
-			return 0;
+			return -ENOSYS;
+		if ((ret=cdo->get_mcn(cdi, &mcn)))
+			return ret;
+		IOCTL_OUT(arg, struct cdrom_mcn, mcn);
+		cdinfo(CD_DO_IOCTL, "CDROM_GET_MCN sucessful\n"); 
+		return 0;
 		}
-		return -EINVAL;
-	}
 
-	case CDROM_DRIVE_STATUS:
-		if ((arg == CDSL_CURRENT) || (arg == CDSL_NONE))
+	case CDROM_DRIVE_STATUS: {
+		cdinfo(CD_DO_IOCTL, "entering CDROM_DRIVE_STATUS\n"); 
+		if (!(cdo->capability & CDC_DRIVE_STATUS))
+			return -ENOSYS;
+                if ((arg == CDSL_CURRENT) || (arg == CDSL_NONE)) 
 			return cdo->drive_status(cdi, arg);
-		if (cdo->drive_status == NULL ||
-			    ((cdo->capability & ~cdi->mask & CDC_SELECT_DISC)
-			    && (int)arg >= cdi->capacity))
+                if (((int)arg > cdi->capacity))
 			return -EINVAL;
-		else
-			return cdo->drive_status(cdi, arg);
+		return cdo->drive_status(cdi, arg);
+		}
 
-	case CDROM_DISC_STATUS:
-		if (cdo->disc_status == NULL)
-			return -EINVAL;
-		else
-			return cdo->disc_status(cdi);
+	/* Ok, this is where problems start.  The current interface for the
+	   CDROM_DISC_STATUS ioctl is flawed.  It makes the false assumption
+	   that CDs are all CDS_DATA_1 or all CDS_AUDIO, etc.  Unfortunatly,
+	   while this is often the case, it is also very common for CDs to
+	   have some tracks with data, and some tracks with audio.  Just 
+	   because I feel like it, I declare the following to be the best
+	   way to cope.  If the CD has ANY data tracks on it, it will be
+	   returned as a data CD.  If it has any XA tracks, I will return
+	   it as that.  Now I could simplify this interface by combining these 
+	   returns with the above, but this more clearly demonstrates
+	   the problem with the current interface.  Too bad this wasn't 
+	   designed to use bitmasks...         -Erik 
+	*/
+	case CDROM_DISC_STATUS: {
+		tracktype tracks;
+		cdinfo(CD_DO_IOCTL, "entering CDROM_DISC_STATUS\n"); 
+		cdrom_count_tracks(cdi, &tracks);
+		if (tracks.error) 
+			return(tracks.error);
+
+		/* Policy mode on */
+		if (tracks.audio>0 && tracks.data==0 && tracks.cdi==0 && tracks.xa==0) 
+			return CDS_AUDIO;
+		if (tracks.cdi>0) return CDS_XA_2_2;
+		if (tracks.xa>0) return CDS_XA_2_1;
+		if (tracks.data>0) return CDS_DATA_1;
+		/* Policy mode off */
+
+		cdinfo(CD_WARNING,"This disc doesn't have any tracks I recognise!\n");
+		return CDS_NO_INFO;
+		}
 
 	case CDROM_CHANGER_NSLOTS:
-		return cdi->capacity;
+		cdinfo(CD_DO_IOCTL, "entering CDROM_CHANGER_NSLOTS\n"); 
+	return cdi->capacity;
 
 /* The following is not implemented, because there are too many
- * different data type. We could support /1/ raw mode, that is large
+ * different data types. We could support /1/ raw mode, that is large
  * enough to hold everything.
  */
 
 #if 0
 	case CDROMREADMODE1: {
+		int ret;
 		struct cdrom_msf msf;
 		char buf[CD_FRAMESIZE];
-		GETARG(struct cdrom_msf, msf);
-		if (!cdo->read_audio(dev, cmd, &msf, &buf, cdi)) {
-			PUTARG(char *, buf);
-			return 0;
+		cdinfo(CD_DO_IOCTL, "entering CDROMREADMODE1\n"); 
+		IOCTL_IN(arg, struct cdrom_msf, msf);
+		if (ret=cdo->read_audio(dev, cmd, &msf, &buf, cdi))
+			return ret;
+		IOCTL_OUT(arg, __typeof__(buf), buf);
+		return 0;
 		}
-		return -EINVAL;
-	}
 #endif
 	} /* switch */
 
@@ -499,144 +763,231 @@ int cdrom_ioctl(struct inode *ip, struct file *fp,
 
 #define CHECKAUDIO if ((ret=check_for_audio_disc(cdi, cdo))) return ret
 
-	if (cdo->capability & CDC_PLAY_AUDIO) {
-		int ret;
+	if (!(cdo->capability & CDC_PLAY_AUDIO))
+		return -ENOSYS;
+	else {
 		switch (cmd) {
-		case CDROMSUBCHNL:
-		{
+		case CDROMSUBCHNL: {
+			int ret;
 			struct cdrom_subchnl q;
 			u_char requested, back;
-			GETARG(struct cdrom_subchnl, q);
+			/* comment out the cdinfo calls here because they
+			   fill up the sys logs when CD players poll the drive*/
+			/* cdinfo(CD_DO_IOCTL,"entering CDROMSUBCHNL\n");*/ 
+			IOCTL_IN(arg, struct cdrom_subchnl, q);
 			requested = q.cdsc_format;
+                        if (!((requested == CDROM_MSF) ||
+                                (requested == CDROM_LBA)))
+                                        return -EINVAL;
 			q.cdsc_format = CDROM_MSF;
-			if (!cdo->audio_ioctl(cdi, cmd, &q)) {
-				back = q.cdsc_format; /* local copy */
-				sanitize_format(&q.cdsc_absaddr, &back,
-				requested);
-				sanitize_format(&q.cdsc_reladdr,
-				&q.cdsc_format, requested);
-				PUTARG(struct cdrom_subchnl, q);
-				return 0;
-			} else
-				return -EINVAL;
-		}
+			if ((ret=cdo->audio_ioctl(cdi, cmd, &q)))
+				return ret;
+			back = q.cdsc_format; /* local copy */
+			sanitize_format(&q.cdsc_absaddr, &back, requested);
+			sanitize_format(&q.cdsc_reladdr, &q.cdsc_format, requested);
+			IOCTL_OUT(arg, struct cdrom_subchnl, q);
+			/* cdinfo(CD_DO_IOCTL, "CDROMSUBCHNL sucessful\n"); */ 
+			return 0;
+			}
 		case CDROMREADTOCHDR: {
+			int ret;
 			struct cdrom_tochdr header;
-			GETARG(struct cdrom_tochdr, header);
-			CHECKAUDIO;
-			if (!cdo->audio_ioctl(cdi, cmd, &header)) {
-				PUTARG(struct cdrom_tochdr, header);
-				return 0;
-			} else
-				return -EINVAL;
-		}
+			/* comment out the cdinfo calls here because they
+			   fill up the sys logs when CD players poll the drive*/
+			/* cdinfo(CD_DO_IOCTL, "entering CDROMREADTOCHDR\n"); */ 
+			IOCTL_IN(arg, struct cdrom_tochdr, header);
+			if ((ret=cdo->audio_ioctl(cdi, cmd, &header)))
+				return ret;
+			IOCTL_OUT(arg, struct cdrom_tochdr, header);
+			/* cdinfo(CD_DO_IOCTL, "CDROMREADTOCHDR sucessful\n"); */ 
+			return 0;
+			}
 		case CDROMREADTOCENTRY: {
+			int ret;
 			struct cdrom_tocentry entry;
 			u_char requested_format;
-			GETARG(struct cdrom_tocentry, entry);
+			/* comment out the cdinfo calls here because they
+			   fill up the sys logs when CD players poll the drive*/
+			/* cdinfo(CD_DO_IOCTL, "entering CDROMREADTOCENTRY\n"); */ 
+			IOCTL_IN(arg, struct cdrom_tocentry, entry);
 			requested_format = entry.cdte_format;
+			if (!((requested_format == CDROM_MSF) || 
+				(requested_format == CDROM_LBA)))
+					return -EINVAL;
 			/* make interface to low-level uniform */
 			entry.cdte_format = CDROM_MSF;
-			if (!(cdo->audio_ioctl(cdi, cmd, &entry))) {
-				sanitize_format(&entry.cdte_addr,
-				&entry.cdte_format, requested_format);
-				PUTARG(struct cdrom_tocentry, entry);
-				return 0;
-			} else
-				return -EINVAL;
-		}
+			if ((ret=cdo->audio_ioctl(cdi, cmd, &entry)))
+				return ret;
+			sanitize_format(&entry.cdte_addr,
+			&entry.cdte_format, requested_format);
+			IOCTL_OUT(arg, struct cdrom_tocentry, entry);
+			/* cdinfo(CD_DO_IOCTL, "CDROMREADTOCENTRY sucessful\n"); */ 
+			return 0;
+			}
 		case CDROMPLAYMSF: {
+			int ret;
 			struct cdrom_msf msf;
-			GETARG(struct cdrom_msf, msf);
+			cdinfo(CD_DO_IOCTL, "entering CDROMPLAYMSF\n"); 
+			IOCTL_IN(arg, struct cdrom_msf, msf);
 			CHECKAUDIO;
 			return cdo->audio_ioctl(cdi, cmd, &msf);
-		}
+			}
 		case CDROMPLAYTRKIND: {
-			struct cdrom_ti track_index;
-			GETARG(struct cdrom_ti, track_index);
+			int ret;
+			struct cdrom_ti ti;
+			cdinfo(CD_DO_IOCTL, "entering CDROMPLAYTRKIND\n"); 
+			IOCTL_IN(arg, struct cdrom_ti, ti);
 			CHECKAUDIO;
-			return cdo->audio_ioctl(cdi, cmd, &track_index);
-		}
+			return cdo->audio_ioctl(cdi, cmd, &ti);
+			}
 		case CDROMVOLCTRL: {
 			struct cdrom_volctrl volume;
-			GETARG(struct cdrom_volctrl, volume);
+			cdinfo(CD_DO_IOCTL, "entering CDROMVOLCTRL\n"); 
+			IOCTL_IN(arg, struct cdrom_volctrl, volume);
 			return cdo->audio_ioctl(cdi, cmd, &volume);
-		}
-		case CDROMVOLREAD: {
-			struct cdrom_volctrl volume;
-			if (!cdo->audio_ioctl(cdi, cmd, &volume)) {
-				PUTARG(struct cdrom_volctrl, volume);
-				return 0;
 			}
-			return -EINVAL;
-		}
+		case CDROMVOLREAD: {
+			int ret;
+			struct cdrom_volctrl volume;
+			cdinfo(CD_DO_IOCTL, "entering CDROMVOLREAD\n"); 
+			if ((ret=cdo->audio_ioctl(cdi, cmd, &volume)))
+				return ret;
+			IOCTL_OUT(arg, struct cdrom_volctrl, volume);
+			return 0;
+			}
 		case CDROMSTART:
-			CHECKAUDIO;
 		case CDROMSTOP:
 		case CDROMPAUSE:
-		case CDROMRESUME:
+		case CDROMRESUME: {
+			int ret;
+			cdinfo(CD_DO_IOCTL, "doing audio ioctl (start/stop/pause/resume)\n"); 
+			CHECKAUDIO;
 			return cdo->audio_ioctl(cdi, cmd, NULL);
+			}
 		} /* switch */
 	}
 
-	if (cdo->dev_ioctl != NULL)     /* device specific ioctls? */
+	/* device specific ioctls? */
+	if (!(cdo->capability & CDC_IOCTLS))
+		return -ENOSYS;
+	else 
 		return cdo->dev_ioctl(cdi, cmd, arg);
-	return -EINVAL;
-}
-
-/* This code is similar to that in open_for_data. The routine is called
-   in case a audio play operation is requested. It doesn't make much sense
-   do do this on a data disc.
- */
-int check_for_audio_disc(struct cdrom_device_info * cdi,
-			 struct cdrom_device_ops * cdo)
-{
-	if (!(cdi->options & CDO_CHECK_TYPE))
-		return 0;
-	if (cdo->drive_status != NULL) {
-		int ds = cdo->drive_status(cdi, CDSL_CURRENT);
-		if (ds == CDS_TRAY_OPEN) {
-			/* can/may i close it? */
-			if (cdo->capability & ~cdi->mask & CDC_CLOSE_TRAY &&
-			    cdi->options & CDO_AUTO_CLOSE) {
-				if (cdo->tray_move(cdi,0))
-					return -EIO;
-			} else
-				return -ENOMEDIUM; /* can't close: too bad */
-			ds = cdo->drive_status(cdi, CDSL_CURRENT);
-			if (ds == CDS_NO_DISC)
-				return -ENOMEDIUM;
-		}
-		if (cdo->disc_status != NULL) {
-			ds = cdo->disc_status(cdi);
-			if (ds == CDS_NO_DISC)
-				return -ENOMEDIUM;
-			if (ds != CDS_AUDIO)
-				return -EMEDIUMTYPE;
-		}
-	}
-	return 0;
 }
 
 EXPORT_SYMBOL(register_cdrom);
 EXPORT_SYMBOL(unregister_cdrom);
 EXPORT_SYMBOL(cdrom_fops);
 
+#ifdef CONFIG_SYSCTL
+#define CDROM_STR_SIZE 1000
+static char cdrom_drive_info[CDROM_STR_SIZE]="info\n";
+
+#ifdef MODULE
+
+static struct ctl_table_header *cdrom_sysctl_header;
+
+static void cdrom_sysctl_register(void)
+{
+	cdrom_sysctl_header = register_sysctl_table(cdrom_root_table, 0);
+}
+
+static void cdrom_sysctl_unregister(void)
+{
+	unregister_sysctl_table(cdrom_sysctl_header);
+}
+
+#endif
+
+/* Place files in /proc/sys/dev/cdrom */
+ctl_table cdrom_table[] = {
+	{DEV_CDROM_INFO, "info", &cdrom_drive_info, 
+		CDROM_STR_SIZE*sizeof(char), 0444, NULL, &cdrom_sysctl_info},
+	{0}
+	};
+
+ctl_table cdrom_cdrom_table[] = {
+	{DEV_CDROM, "cdrom", NULL, 0, 0555, cdrom_table},
+	{0}
+	};
+
+/* Make sure that /proc/sys/dev is there */
+ctl_table cdrom_root_table[] = {
+	{CTL_DEV, "dev", NULL, 0, 0555, cdrom_cdrom_table},
+	{0}
+	};
+
+
+int cdrom_sysctl_info(ctl_table *ctl, int write, struct file * filp,
+                           void *buffer, size_t *lenp)
+{
+        int retv;
+	char buf[40];
+	struct cdrom_device_info *cdi;
+
+        sprintf(cdrom_drive_info, "CD-ROM information\n\n");
+	for (cdi=topCdromPtr;cdi!=NULL;cdi=cdi->next){
+           sprintf(buf, "drive name:\t\t%s\n", cdi->name);
+           strcat(cdrom_drive_info, buf);
+           sprintf(buf, "drive speed:\t\t%d\n", cdi->speed);
+           strcat(cdrom_drive_info, buf);
+           sprintf(buf, "drive # of slots:\t%d\n", cdi->capacity);
+           strcat(cdrom_drive_info, buf);
+           sprintf(buf, "Can close tray:\t\t%d\n", ((cdi->ops->capability & CDC_CLOSE_TRAY)!=0));
+           strcat(cdrom_drive_info, buf);
+           sprintf(buf, "Can open tray:\t\t%d\n", ((cdi->ops->capability & CDC_OPEN_TRAY)!=0));
+           strcat(cdrom_drive_info, buf);
+           sprintf(buf, "Can lock tray:\t\t%d\n", ((cdi->ops->capability & CDC_LOCK)!=0));
+           strcat(cdrom_drive_info, buf);
+           sprintf(buf, "Can change speed:\t%d\n", ((cdi->ops->capability & CDC_SELECT_SPEED)!=0));
+           strcat(cdrom_drive_info, buf);
+           sprintf(buf, "Can select disk:\t%d\n", ((cdi->ops->capability & CDC_SELECT_DISC)!=0));
+           strcat(cdrom_drive_info, buf);
+           sprintf(buf, "Can read multisession:\t%d\n", ((cdi->ops->capability & CDC_MULTI_SESSION)!=0));
+           strcat(cdrom_drive_info, buf);
+           sprintf(buf, "Can read MCN:\t\t%d\n", ((cdi->ops->capability & CDC_MCN)!=0));
+           strcat(cdrom_drive_info, buf);
+           sprintf(buf, "Reports media changed:\t%d\n", ((cdi->ops->capability & CDC_MEDIA_CHANGED)!=0));
+           strcat(cdrom_drive_info, buf);
+           sprintf(buf, "Can play audio:\t\t%d\n", ((cdi->ops->capability & CDC_PLAY_AUDIO)!=0));
+           strcat(cdrom_drive_info, buf);
+           strcat(cdrom_drive_info, "\n\n");
+	}
+	*lenp=sizeof(cdrom_drive_info);
+
+        if (!write) {
+        	retv = proc_dostring(ctl, write, filp, buffer, lenp);
+        }
+        else
+        	retv = proc_dostring(ctl, write, filp, buffer, lenp);
+        return retv;
+}
+
+
+#endif /* endif CONFIG_SYSCTL */
+
+
 #ifdef MODULE
 int init_module(void)
 {
-	printk(KERN_INFO "Module cdrom: Generic CDROM driver " REVISION "\n");
+	cdrom_init();
+#ifdef CONFIG_SYSCTL
+	cdrom_sysctl_register();
+#endif /* CONFIG_SYSCTL */ 
 	return 0;
 }
 
 void cleanup_module(void)
 {
-	/*
-	printk(KERN_INFO "Module cdrom removed\n");
-	*/
+	printk(KERN_INFO "Uniform CD-ROM driver unloaded\n");
+#ifdef CONFIG_SYSCTL
+	cdrom_sysctl_unregister();
+#endif /* CONFIG_SYSCTL */ 
 }
 
-#endif
+#endif /* endif MODULE */
+
+
+
 /*
  * Local variables:
  * comment-column: 40

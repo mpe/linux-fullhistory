@@ -94,7 +94,7 @@ KERN_INFO "Compiled for Linux version %s"
 #ifdef MODULE
 	while (ftape_set_nr_buffers(CONFIG_FT_NR_BUFFERS) < 0) {
 		ftape_sleep(FT_SECOND/20);
-		if (current->signal & ~current->blocked) {
+		if (signal_pending(current)) {
 			(void)ftape_set_nr_buffers(0);
 			TRACE(ft_t_bug,
 			      "Killed by signal while allocating buffers.");

@@ -15,7 +15,6 @@
 #include <linux/fs.h>
 #include <linux/blkdev.h>
 #include <linux/cdrom.h>
-#include <linux/ucdrom.h>
 #include <linux/sched.h>
 #include <linux/kernel_stat.h>
 #include <linux/mm.h>

@@ -55,7 +55,7 @@ flush_signals(struct task_struct *t)
 {
 	struct signal_queue *q, *n;
 
-	t->flags &= ~PF_SIGPENDING;
+	t->sigpending = 0;
 	sigemptyset(&t->signal);
 	q = t->sigqueue;
 	t->sigqueue = NULL;
@@ -75,7 +75,15 @@ flush_signals(struct task_struct *t)
 void
 flush_signal_handlers(struct task_struct *t)
 {
-	memset(t->sig->action, 0, sizeof(t->sig->action));
+	int i;
+	struct k_sigaction *ka = &t->sig->action[0];
+	for (i = _NSIG ; i != 0 ; i--) {
+		if (ka->sa.sa_handler != SIG_IGN)
+			ka->sa.sa_handler = SIG_DFL;
+		ka->sa.sa_flags = 0;
+		sigemptyset(&ka->sa.sa_mask);
+		ka++;
+	}
 }
 
 /*
@@ -93,7 +101,7 @@ dequeue_signal(sigset_t *mask, siginfo_t *info)
 
 #if DEBUG_SIG
 printk("SIG dequeue (%s:%d): %d ", current->comm, current->pid,
-	(current->flags & PF_SIGPENDING) != 0);
+	signal_pending(current));
 #endif
 
 	/* Find the first desired signal that is pending.  */
@@ -186,15 +194,14 @@ printk("SIG dequeue (%s:%d): %d ", current->comm, current->pid,
 		   "process" as well.  */
 
 		/* Sanity check... */
-		if (mask == &current->blocked &&
-		    (current->flags & PF_SIGPENDING) != 0) {
+		if (mask == &current->blocked && signal_pending(current)) {
 			printk(KERN_CRIT "SIG: sigpending lied\n");
-			current->flags &= ~PF_SIGPENDING;
+			current->sigpending = 0;
 		}
 	}
 
 #if DEBUG_SIG
-printk(" %d -> %d\n", (current->flags & PF_SIGPENDING) != 0, sig);
+printk(" %d -> %d\n", signal_pending(current), sig);
 #endif
 
 	return sig;
@@ -331,7 +338,7 @@ printk("SIG queue (%s:%d): %d ", t->comm, t->pid, sig);
 
 	sigaddset(&t->signal, sig);
 	if (!sigismember(&t->blocked, sig))
-		t->flags |= PF_SIGPENDING;
+		t->sigpending = 1;
 
 out:
 	spin_unlock_irqrestore(&t->sigmask_lock, flags);
@@ -340,7 +347,7 @@ out:
 
 out_nolock:
 #if DEBUG_SIG
-printk(" %d -> %d\n", (t->flags & PF_SIGPENDING) != 0, ret);
+printk(" %d -> %d\n", signal_pending(t), ret);
 #endif
 
 	return ret;

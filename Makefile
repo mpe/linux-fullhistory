@@ -1,6 +1,6 @@
 VERSION = 2
 PATCHLEVEL = 1
-SUBLEVEL = 69
+SUBLEVEL = 70
 
 ARCH := $(shell uname -m | sed -e s/i.86/i386/ -e s/sun4u/sparc64/)
 
@@ -133,7 +133,7 @@ ifeq ($(CONFIG_SCSI),y)
 DRIVERS := $(DRIVERS) drivers/scsi/scsi.a
 endif
 
-ifneq ($(CONFIG_CD_NO_IDESCSI)$(CONFIG_BLK_DEV_IDECD)$(CONFIG_BLK_DEV_SR),)
+ifeq ($(CONFIG_CDROM),y)
 DRIVERS := $(DRIVERS) drivers/cdrom/cdrom.a
 endif
 

@@ -16,7 +16,7 @@ O_OBJS    = open.o read_write.o devices.o file_table.o buffer.o \
 		inode.o dcache.o attr.o bad_inode.o $(BINFMTS) 
 
 MOD_LIST_NAME := FS_MODULES
-ALL_SUB_DIRS = minix ext2 fat msdos vfat proc isofs nfs umsdos \
+ALL_SUB_DIRS = coda minix ext2 fat msdos vfat proc isofs nfs umsdos \
 		hpfs sysv smbfs ncpfs ufs affs romfs autofs lockd nfsd nls
 
 ifeq ($(CONFIG_QUOTA),y)
@@ -27,6 +27,14 @@ endif
 
 ifeq ($(CONFIG_TRANS_NAMES),y)
 O_OBJS += nametrans.o
+endif
+
+ifeq ($(CONFIG_CODA_FS),y)
+SUB_DIRS += coda
+else
+  ifeq ($(CONFIG_CODA_FS),m)
+  MOD_SUB_DIRS += coda
+  endif
 endif
 
 ifeq ($(CONFIG_MINIX_FS),y)

@@ -264,7 +264,6 @@ EXPORT_SYMBOL(xrlim_allow);
 #endif
 
 #ifdef CONFIG_PACKET_MODULE
-EXPORT_SYMBOL(memcpy_toiovec);
 EXPORT_SYMBOL(dev_set_allmulti);
 EXPORT_SYMBOL(dev_set_promiscuity);
 EXPORT_SYMBOL(dev_mc_delete);

@@ -790,50 +790,85 @@ repeat:
 	}	
 
 	/*
-	 * If we achieved at least half of our goal, return now.
+	 * If there are dirty buffers, do a non-blocking wake-up.
+	 * This increases the chances of having buffers available
+	 * for the next call ...
 	 */
-	if (obtained >= (needed >> 1))
+	if (nr_buffers_type[BUF_DIRTY])
+		wakeup_bdflush(0);
+
+	/*
+	 * Allocate buffers to reach half our goal, if possible.
+	 * Since the allocation doesn't block, there's no reason
+	 * to search the buffer lists again. Then return if there
+	 * are _any_ free buffers.
+	 */
+	while (obtained < (needed >> 1) &&
+	       nr_free_pages > min_free_pages + 5 &&
+	       grow_buffers(GFP_BUFFER, size))
+		obtained += PAGE_SIZE;
+
+	if (free_list[BUFSIZE_INDEX(size)])
 		return;
-	
-	/* Too bad, that was not enough. Try a little harder to grow some. */
-	if (nr_free_pages > min_free_pages + 5) {
-		if (grow_buffers(GFP_BUFFER, size)) {
-			obtained += PAGE_SIZE;
+
+	/*
+	 * If there are dirty buffers, wait while bdflush writes
+	 * them out. The buffers become locked, but we can just
+	 * wait for one to unlock ...
+	 */
+	if (nr_buffers_type[BUF_DIRTY])
+		wakeup_bdflush(1);
+
+	/*
+	 * In order to prevent a buffer shortage from exhausting
+	 * the system's reserved pages, we force tasks to wait 
+	 * before using reserved pages for buffers.  This is easily
+	 * accomplished by waiting on an unused locked buffer.
+	 */
+	if ((bh = lru_list[BUF_LOCKED]) != NULL) {
+		for (i = nr_buffers_type[BUF_LOCKED]; i--; bh = bh->b_next_free)
+		{
+			if (bh->b_size != size)
+				continue;
+			if (bh->b_count)
+				continue;
+			if (!buffer_locked(bh))
+				continue;
+			if (buffer_dirty(bh) || buffer_protected(bh))
+				continue;
+			/*
+			 * We've found an unused, locked, non-dirty buffer of
+			 * the correct size.  Claim it so no one else can, 
+			 * then wait for it to unlock.
+			 */
+			bh->b_count++;
+			wait_on_buffer(bh);
+			bh->b_count--;
+			/*
+			 * Loop back to harvest this (and maybe other) buffers.
+			 */
 			goto repeat;
 		}
 	}
 
 	/*
-	 * Make one more attempt to allocate some buffers.
+	 * Convert a reserved page into buffers ... should happen only rarely.
 	 */
-	if (grow_buffers(GFP_ATOMIC, size))
-		obtained += PAGE_SIZE;
-
-	/*
-	 * If we got any buffers, or another task freed some, 
-	 * return now to let this task proceed.
-	 */
-	if (obtained || free_list[BUFSIZE_INDEX(size)]) {
+	if (nr_free_pages > (min_free_pages >> 1) &&
+	    grow_buffers(GFP_ATOMIC, size)) {
 #ifdef BUFFER_DEBUG
-printk("refill_freelist: obtained %d of %d, free list=%d\n", 
-obtained, needed, free_list[BUFSIZE_INDEX(size)] != NULL);
+printk("refill_freelist: used reserve page\n");
 #endif
 		return;
 	}
 
 	/*
-	 * System is _very_ low on memory ... wake up bdflush and wait.
+	 * System is _very_ low on memory ... sleep and try later.
 	 */
 #ifdef BUFFER_DEBUG
-printk("refill_freelist: waking bdflush\n");
+printk("refill_freelist: task %s waiting for buffers\n", current->comm);
 #endif
-	wakeup_bdflush(1);
-	/*
-	 * While we slept, other tasks may have needed buffers and entered
-	 * refill_freelist.  This could be a big problem ... reset the 
-	 * needed amount to the absolute minimum.
-	 */
-	needed = size;
+	schedule();
 	goto repeat;
 }
 

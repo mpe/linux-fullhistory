@@ -159,7 +159,7 @@ typedef union {
 #  undef  CONFIG_FT_FDC_DMA
 #  define CONFIG_FT_FDC_DMA 3
 # endif
-#elif CONIFG_FT_MACH2 == 1    /* CONFIG_FT_PROBE_FC10 == 1 */
+#elif CONFIG_FT_MACH2 == 1    /* CONFIG_FT_PROBE_FC10 == 1 */
 # if CONFIG_FT_FDC_BASE == 0
 #  undef  CONFIG_FT_FDC_BASE
 #  define CONFIG_FT_FDC_BASE 0x1E0

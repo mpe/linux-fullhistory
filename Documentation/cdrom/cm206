@@ -116,7 +116,7 @@ If module parameters and LILO config options don't work
 -------------------------------------------------------
 If autoprobing does not work, you can hard-wire the default values
 of the base port address (CM206_BASE) and interrupt request line
-(CM206_IRQ) into the file ./include/linux/cm206.h. Change
+(CM206_IRQ) into the file /usr/src/linux/drivers/cdrom/cm206.h. Change
 the defines of CM206_IRQ and CM206_BASE.
 
 

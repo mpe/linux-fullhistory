@@ -73,7 +73,10 @@ static const char *mcdx_c_version
 
 /* for compatible parameter passing with "insmod" */
 #define	mcdx_drive_map mcdx
-#include <linux/mcdx.h>
+#include "mcdx.h"
+
+#define MCDX_QUIET 0
+
 
 #ifndef HZ
 #error HZ not defined
@@ -106,8 +109,6 @@ static const char *mcdx_c_version
    needed */
 const int REQUEST_SIZE = 800;	/* should be less then 255 * 4 */
 const int DIRECT_SIZE = 400;	/* should be less then REQUEST_SIZE */
-
-const unsigned long ACLOSE_INHIBIT = 800;  /* 1/100 s of autoclose inhibit */
 
 enum drivemodes { TOC, DATA, RAW, COOKED };
 enum datamodes { MODE0, MODE1, MODE2 };
@@ -160,8 +161,6 @@ struct s_drive_stuff {
     volatile int introk;	/* status of last irq operation */
     volatile int busy;		/* drive performs an operation */
     volatile int lock;		/* exclusive usage */
-    int eject_sw;           /* 1 - eject on last close (default 0) */
-    int autoclose;          /* 1 - close the door on open (default 1) */
 
 	/* cd infos */
 	struct s_diskinfo di;
@@ -197,7 +196,6 @@ struct s_drive_stuff {
     unsigned char playcmd;  /* play should always be single speed */
     unsigned int xxx;      /* set if changed, reset while open */
     unsigned int yyy;      /* set if changed, reset by media_changed */
-    unsigned long ejected;  /* time we called the eject function */
     int users;				/* keeps track of open/close */
     int lastsector;			/* last block accessible */
     int status;				/* last operation's error / status */
@@ -214,22 +212,25 @@ struct s_drive_stuff {
 /* declared in blk.h */
 int mcdx_init(void);
 void do_mcdx_request(void);
-int check_mcdx_media_change(kdev_t);
 
 /* already declared in init/main */
 void mcdx_setup(char *, int *);
 
 /*	Indirect exported functions. These functions are exported by their
 	addresses, such as mcdx_open and mcdx_close in the
-	structure fops. */
+	structure mcdx_dops. */
 
 /* ???  exported by the mcdx_sigaction struct */
 static void mcdx_intr(int, void *, struct pt_regs*);
 
 /* exported by file_ops */
-static int mcdx_open(struct inode*, struct file*);
-static int mcdx_close(struct inode*, struct file*);
-static int mcdx_ioctl(struct inode*, struct file*, unsigned int, unsigned long);
+static int mcdx_open(struct cdrom_device_info * cdi, int purpose);
+static void mcdx_close(struct cdrom_device_info * cdi);
+static int mcdx_media_changed(struct cdrom_device_info * cdi, int disc_nr);
+static int mcdx_tray_move(struct cdrom_device_info * cdi, int position);
+static int mcdx_lockdoor(struct cdrom_device_info * cdi, int lock);
+static int mcdx_audio_ioctl(struct cdrom_device_info * cdi, unsigned int cmd,
+                      void * arg);
 
 /* misc internal support functions */
 static void log2msf(unsigned int, struct cdrom_msf0*);
@@ -243,13 +244,10 @@ static int mcdx_transfer(struct s_drive_stuff*, char* buf, int sector, int nr_se
 static int mcdx_xfer(struct s_drive_stuff*, char* buf, int sector, int nr_sectors);
 
 static int mcdx_config(struct s_drive_stuff*, int);
-static int mcdx_closedoor(struct s_drive_stuff*, int);
 static int mcdx_requestversion(struct s_drive_stuff*, struct s_version*, int);
-static int mcdx_lockdoor(struct s_drive_stuff*, int, int);
 static int mcdx_stop(struct s_drive_stuff*, int);
 static int mcdx_hold(struct s_drive_stuff*, int);
 static int mcdx_reset(struct s_drive_stuff*, enum resetmodes, int);
-static int mcdx_eject(struct s_drive_stuff*, int);
 static int mcdx_setdrivemode(struct s_drive_stuff*, enum drivemodes, int);
 static int mcdx_setdatamode(struct s_drive_stuff*, enum datamodes, int);
 static int mcdx_requestsubqcode(struct s_drive_stuff*, struct s_subqcode*, int);
@@ -276,37 +274,79 @@ static struct s_drive_stuff* mcdx_irq_map[16] =
 		0, 0, 0, 0, 0, 0, 0, 0};
 MODULE_PARM(mcdx, "1-4i");
 
-static struct file_operations mcdx_fops = {
-	NULL,			/* lseek - use kernel default */
-	block_read,		/* read - general block-dev read */
-	block_write,	/* write - general block-dev write */
-	NULL,			/* no readdir */
-	NULL,			/* no poll */
-	mcdx_ioctl,		/* ioctl() */
-	NULL,			/* no mmap */
-	mcdx_open,		/* open() */
-	mcdx_close,		/* close() */
-	NULL,			/* fsync */
-	NULL,                     /* fasync */
-	check_mcdx_media_change,  /* media_change */
-	NULL                      /* revalidate */
+static struct cdrom_device_ops mcdx_dops = {
+  mcdx_open,                   /* open */
+  mcdx_close,                  /* release */
+  NULL,           /* drive status */
+  mcdx_media_changed,         /* media changed */
+  mcdx_tray_move,             /* tray move */
+  mcdx_lockdoor,              /* lock door */
+  NULL,                       /* select speed */
+  NULL,                       /* select disc */
+  NULL,                       /* get last session */
+  NULL,                       /* get universal product code */
+  NULL,                       /* hard reset */
+  mcdx_audio_ioctl,            /* audio ioctl */
+  NULL,                  /* device-specific ioctl */
+  CDC_OPEN_TRAY | CDC_MEDIA_CHANGED | CDC_PLAY_AUDIO
+  | CDC_DRIVE_STATUS, /* capability */
+  0,                            /* number of minor devices */
 };
+
+static struct cdrom_device_info mcdx_info = {
+  &mcdx_dops,                    /* device operations */
+  NULL,                         /* link */
+  NULL,                         /* handle */
+  MKDEV(MAJOR_NR,0),            /* dev */
+  0,                            /* mask */
+  2,                            /* maximum speed */
+  1,                            /* number of discs */
+  0,                            /* options, not owned */
+  0,                            /* mc_flags, not owned */
+  0,                            /* use count, not owned */
+  "mcdx",                         /* name of the device type */
+};
+
+
 
 /* KERNEL INTERFACE FUNCTIONS **************************************/
 
-static int
-mcdx_ioctl(
-	struct inode* ip, struct file* fp,
-	unsigned int cmd, unsigned long arg)
+
+static int mcdx_audio_ioctl(struct cdrom_device_info * cdi, unsigned int cmd,
+                      void * arg)
 {
-	struct s_drive_stuff *stuffp = mcdx_stuffp[MINOR(ip->i_rdev)];
+	struct s_drive_stuff *stuffp = mcdx_stuffp[MINOR(cdi->dev)];
 
 	if (!stuffp->present) return -ENXIO;
-	if (!ip) return -EINVAL;
+
+	if (stuffp->xxx)
+	{
+		if(-1 == mcdx_requesttocdata(stuffp, &stuffp->di, 1))
+		{
+			stuffp->lastsector = -1;
+		}
+		else
+		{
+			stuffp->lastsector = (CD_FRAMESIZE / 512)
+					* msf2log(&stuffp->di.msf_leadout) - 1;
+		}
+
+		if (stuffp->toc)
+		{
+			kfree(stuffp->toc);
+			stuffp->toc = NULL;
+			if (-1 == mcdx_readtoc(stuffp)) return -1;
+		}
+
+		stuffp->xxx=0;
+	}
 
 	switch (cmd) {
-		case CDROMSTART: {
-			xtrace(IOCTL, "ioctl() START\n");
+		case CDROMSTART: {       
+			     xtrace(IOCTL, "ioctl() START\n");
+		        /* Spin up the drive.  Don't think we can do this.
+                 * For now, ignore it.
+                 */
 			return 0;
 		}
 
@@ -319,51 +359,40 @@ mcdx_ioctl(
 		}
 
 		case CDROMPLAYTRKIND: {
-			int ans;
-			struct cdrom_ti ti;
+			struct cdrom_ti *ti=(struct cdrom_ti *) arg;
 
 			xtrace(IOCTL, "ioctl() PLAYTRKIND\n");
-			if ((ans = verify_area(VERIFY_READ, (void*) arg, sizeof(ti))))
-				return ans;
-			copy_from_user(&ti, (void*) arg, sizeof(ti));
-			if ((ti.cdti_trk0 < stuffp->di.n_first)
-					|| (ti.cdti_trk0 > stuffp->di.n_last)
-					|| (ti.cdti_trk1 < stuffp->di.n_first))
-				return -EINVAL;
-			if (ti.cdti_trk1 > stuffp->di.n_last) ti.cdti_trk1 = stuffp->di.n_last;
-            xtrace(PLAYTRK, "ioctl() track %d to %d\n", ti.cdti_trk0, ti.cdti_trk1);
-
-            return mcdx_playtrk(stuffp, &ti);
+			if ((ti->cdti_trk0 < stuffp->di.n_first)
+					|| (ti->cdti_trk0 > stuffp->di.n_last)
+					|| (ti->cdti_trk1 < stuffp->di.n_first))
+			return -EINVAL;
+			if (ti->cdti_trk1 > stuffp->di.n_last)
+					ti->cdti_trk1 = stuffp->di.n_last;
+            xtrace(PLAYTRK, "ioctl() track %d to %d\n", ti->cdti_trk0, ti->cdti_trk1);
+            return mcdx_playtrk(stuffp, ti);
         }
 
         case CDROMPLAYMSF: {
-            int ans;
-            struct cdrom_msf msf;
+            struct cdrom_msf *msf=(struct cdrom_msf *) arg;
 
             xtrace(IOCTL, "ioctl() PLAYMSF\n");
 
             if ((stuffp->audiostatus == CDROM_AUDIO_PLAY)
                 && (-1 == mcdx_hold(stuffp, 1))) return -EIO;
 
-            if ((ans = verify_area(
-                    VERIFY_READ, (void*) arg, sizeof(struct cdrom_msf))))
-                return ans;
+            msf->cdmsf_min0 = uint2bcd(msf->cdmsf_min0);
+            msf->cdmsf_sec0 = uint2bcd(msf->cdmsf_sec0);
+            msf->cdmsf_frame0 = uint2bcd(msf->cdmsf_frame0);
 
-            copy_from_user(&msf, (void*) arg, sizeof msf);
+            msf->cdmsf_min1 = uint2bcd(msf->cdmsf_min1);
+            msf->cdmsf_sec1 = uint2bcd(msf->cdmsf_sec1);
+            msf->cdmsf_frame1 = uint2bcd(msf->cdmsf_frame1);
 
-            msf.cdmsf_min0 = uint2bcd(msf.cdmsf_min0);
-            msf.cdmsf_sec0 = uint2bcd(msf.cdmsf_sec0);
-            msf.cdmsf_frame0 = uint2bcd(msf.cdmsf_frame0);
+            stuffp->stop.dt.minute = msf->cdmsf_min1;
+            stuffp->stop.dt.second = msf->cdmsf_sec1;
+            stuffp->stop.dt.frame = msf->cdmsf_frame1;
 
-            msf.cdmsf_min1 = uint2bcd(msf.cdmsf_min1);
-            msf.cdmsf_sec1 = uint2bcd(msf.cdmsf_sec1);
-            msf.cdmsf_frame1 = uint2bcd(msf.cdmsf_frame1);
-
-            stuffp->stop.dt.minute = msf.cdmsf_min1;
-            stuffp->stop.dt.second = msf.cdmsf_sec1;
-            stuffp->stop.dt.frame = msf.cdmsf_frame1;
-
-            return mcdx_playmsf(stuffp, &msf);
+            return mcdx_playmsf(stuffp, msf);
         }
 
         case CDROMRESUME: {
@@ -372,103 +401,70 @@ mcdx_ioctl(
         }
 
 		case CDROMREADTOCENTRY: {
-			struct cdrom_tocentry entry;
+			struct cdrom_tocentry *entry=(struct cdrom_tocentry *) arg;
 			struct s_subqcode *tp = NULL;
-			int ans;
-
 			xtrace(IOCTL, "ioctl() READTOCENTRY\n");
 
             if (-1 == mcdx_readtoc(stuffp)) return -1;
-
-			if ((ans = verify_area(VERIFY_WRITE, (void *) arg, sizeof(entry)))) return ans;
-			copy_from_user(&entry, (void *) arg, sizeof(entry));
-
-			if (entry.cdte_track == CDROM_LEADOUT)
+			if (entry->cdte_track == CDROM_LEADOUT)
 				tp = &stuffp->toc[stuffp->di.n_last - stuffp->di.n_first + 1];
-			else if (entry.cdte_track > stuffp->di.n_last
-					|| entry.cdte_track < stuffp->di.n_first) return -EINVAL;
-			else tp = &stuffp->toc[entry.cdte_track - stuffp->di.n_first];
+			else if (entry->cdte_track > stuffp->di.n_last
+					|| entry->cdte_track < stuffp->di.n_first) return -EINVAL;
+			else tp = &stuffp->toc[entry->cdte_track - stuffp->di.n_first];
 
-			if (NULL == tp) xwarn("FATAL.\n");
-
-			entry.cdte_adr = tp->control;
-			entry.cdte_ctrl = tp->control >> 4;
-
-			if (entry.cdte_format == CDROM_MSF) {
-				entry.cdte_addr.msf.minute = bcd2uint(tp->dt.minute);
-				entry.cdte_addr.msf.second = bcd2uint(tp->dt.second);
-				entry.cdte_addr.msf.frame = bcd2uint(tp->dt.frame);
-			} else if (entry.cdte_format == CDROM_LBA)
-				entry.cdte_addr.lba = msf2log(&tp->dt);
-			else return -EINVAL;
-
-			copy_to_user((void*) arg, &entry, sizeof(entry));
-
+			if (NULL == tp) 
+				return -EIO;
+			entry->cdte_adr = tp->control;
+			entry->cdte_ctrl = tp->control >> 4;
+            /* Always return stuff in MSF, and let the Uniform cdrom driver
+                worry about what the user actually wants */
+			entry->cdte_addr.msf.minute = bcd2uint(tp->dt.minute);
+			entry->cdte_addr.msf.second = bcd2uint(tp->dt.second);
+			entry->cdte_addr.msf.frame = bcd2uint(tp->dt.frame);
 			return 0;
 		}
 
 		case CDROMSUBCHNL: {
-			int ans;
-			struct cdrom_subchnl sub;
+			struct cdrom_subchnl *sub= (struct cdrom_subchnl *)arg;
 			struct s_subqcode q;
 
 			xtrace(IOCTL, "ioctl() SUBCHNL\n");
 
-			if ((ans = verify_area(VERIFY_WRITE,
-                    (void*) arg, sizeof(sub)))) return ans;
-
-			copy_from_user(&sub, (void*) arg, sizeof(sub));
-
-			if (-1 == mcdx_requestsubqcode(stuffp, &q, 2)) return -EIO;
+			if (-1 == mcdx_requestsubqcode(stuffp, &q, 2)) 
+				return -EIO;
 
             xtrace(SUBCHNL, "audiostatus: %x\n", stuffp->audiostatus);
-			sub.cdsc_audiostatus = stuffp->audiostatus;
-			sub.cdsc_adr = q.control;
-			sub.cdsc_ctrl = q.control >> 4;
-			sub.cdsc_trk = bcd2uint(q.tno);
-			sub.cdsc_ind = bcd2uint(q.index);
+			sub->cdsc_audiostatus = stuffp->audiostatus;
+			sub->cdsc_adr = q.control;
+			sub->cdsc_ctrl = q.control >> 4;
+			sub->cdsc_trk = bcd2uint(q.tno);
+			sub->cdsc_ind = bcd2uint(q.index);
 
             xtrace(SUBCHNL, "trk %d, ind %d\n",
-                    sub.cdsc_trk, sub.cdsc_ind);
-
-			if (sub.cdsc_format == CDROM_LBA) {
-				sub.cdsc_absaddr.lba = msf2log(&q.dt);
-				sub.cdsc_reladdr.lba = msf2log(&q.tt);
-                xtrace(SUBCHNL, "lba: abs %d, rel %d\n",
-                    sub.cdsc_absaddr.lba,
-                    sub.cdsc_reladdr.lba);
-			} else if (sub.cdsc_format == CDROM_MSF) {
-				sub.cdsc_absaddr.msf.minute = bcd2uint(q.dt.minute);
-				sub.cdsc_absaddr.msf.second = bcd2uint(q.dt.second);
-				sub.cdsc_absaddr.msf.frame = bcd2uint(q.dt.frame);
-				sub.cdsc_reladdr.msf.minute = bcd2uint(q.tt.minute);
-				sub.cdsc_reladdr.msf.second = bcd2uint(q.tt.second);
-				sub.cdsc_reladdr.msf.frame = bcd2uint(q.tt.frame);
-                xtrace(SUBCHNL,
-                        "msf: abs %02d:%02d:%02d, rel %02d:%02d:%02d\n",
-                        sub.cdsc_absaddr.msf.minute,
-                        sub.cdsc_absaddr.msf.second,
-                        sub.cdsc_absaddr.msf.frame,
-                        sub.cdsc_reladdr.msf.minute,
-                        sub.cdsc_reladdr.msf.second,
-                        sub.cdsc_reladdr.msf.frame);
-			} else return -EINVAL;
-
-			copy_to_user((void*) arg, &sub, sizeof(sub));
+                    sub->cdsc_trk, sub->cdsc_ind);
+            /* Always return stuff in MSF, and let the Uniform cdrom driver
+                worry about what the user actually wants */
+			sub->cdsc_absaddr.msf.minute = bcd2uint(q.dt.minute);
+			sub->cdsc_absaddr.msf.second = bcd2uint(q.dt.second);
+			sub->cdsc_absaddr.msf.frame = bcd2uint(q.dt.frame);
+			sub->cdsc_reladdr.msf.minute = bcd2uint(q.tt.minute);
+			sub->cdsc_reladdr.msf.second = bcd2uint(q.tt.second);
+			sub->cdsc_reladdr.msf.frame = bcd2uint(q.tt.frame);
+			xtrace(SUBCHNL,
+					"msf: abs %02d:%02d:%02d, rel %02d:%02d:%02d\n",
+					sub->cdsc_absaddr.msf.minute, sub->cdsc_absaddr.msf.second,
+					sub->cdsc_absaddr.msf.frame, sub->cdsc_reladdr.msf.minute,
+					sub->cdsc_reladdr.msf.second, sub->cdsc_reladdr.msf.frame);
 
 			return 0;
 		}
 
 		case CDROMREADTOCHDR: {
-			struct cdrom_tochdr toc;
-			int ans;
+			struct cdrom_tochdr *toc=(struct cdrom_tochdr *) arg;
 
 			xtrace(IOCTL, "ioctl() READTOCHDR\n");
-			if ((ans = verify_area(VERIFY_WRITE, (void*) arg, sizeof toc)))
-				return ans;
-			toc.cdth_trk0 = stuffp->di.n_first;
-			toc.cdth_trk1 = stuffp->di.n_last;
-			copy_to_user((void*) arg, &toc, sizeof toc);
+			toc->cdth_trk0 = stuffp->di.n_first;
+			toc->cdth_trk1 = stuffp->di.n_last;
 			xtrace(TOCHDR, "ioctl() track0 = %d, track1 = %d\n",
 					stuffp->di.n_first, stuffp->di.n_last);
 			return 0;
@@ -485,78 +481,41 @@ mcdx_ioctl(
 		}
 
 		case CDROMMULTISESSION: {
-			int ans;
-			struct cdrom_multisession ms;
+			struct cdrom_multisession *ms=(struct cdrom_multisession *) arg;
 			xtrace(IOCTL, "ioctl() MULTISESSION\n");
-			if (0 != (ans = verify_area(VERIFY_WRITE, (void*) arg,
-					sizeof(struct cdrom_multisession))))
-				return ans;
-
-			copy_from_user(&ms, (void*) arg, sizeof(struct cdrom_multisession));
-			if (ms.addr_format == CDROM_MSF) {
-				ms.addr.msf.minute = bcd2uint(stuffp->multi.msf_last.minute);
-				ms.addr.msf.second = bcd2uint(stuffp->multi.msf_last.second);
-				ms.addr.msf.frame = bcd2uint(stuffp->multi.msf_last.frame);
-			} else if (ms.addr_format == CDROM_LBA)
-				ms.addr.lba = msf2log(&stuffp->multi.msf_last);
-			else
-				return -EINVAL;
-			ms.xa_flag = !!stuffp->multi.multi;
-
-			copy_to_user((void*) arg, &ms, sizeof(struct cdrom_multisession));
-			if (ms.addr_format == CDROM_MSF) {
-				xtrace(MS,
-						"ioctl() (%d, %02x:%02x.%02x [%02x:%02x.%02x])\n",
-						ms.xa_flag,
-						ms.addr.msf.minute,
-						ms.addr.msf.second,
-						ms.addr.msf.frame,
-						stuffp->multi.msf_last.minute,
-						stuffp->multi.msf_last.second,
-						stuffp->multi.msf_last.frame);
-			} else {
-			    xtrace(MS,
-					"ioctl() (%d, 0x%08x [%02x:%02x.%02x])\n",
-					ms.xa_flag,
-					ms.addr.lba,
-					stuffp->multi.msf_last.minute,
-					stuffp->multi.msf_last.second,
-					stuffp->multi.msf_last.frame);
-			  }
+			/* Always return stuff in LBA, and let the Uniform cdrom driver
+				worry about what the user actually wants */
+			ms->addr.lba = msf2log(&stuffp->multi.msf_last);
+			ms->xa_flag = !!stuffp->multi.multi;
+			xtrace(MS, "ioctl() (%d, 0x%08x [%02x:%02x.%02x])\n",
+				ms->xa_flag, ms->addr.lba, stuffp->multi.msf_last.minute,
+                    stuffp->multi.msf_last.second,stuffp->multi.msf_last.frame);
+ 
 			return 0;
 		}
 
 		case CDROMEJECT: {
 			xtrace(IOCTL, "ioctl() EJECT\n");
 			if (stuffp->users > 1) return -EBUSY;
-			if (-1 == mcdx_eject(stuffp, 1)) return -EIO;
-			return 0;
+			return(mcdx_tray_move(cdi, 1));
 		}
 
-        case CDROMEJECT_SW: {
-            stuffp->eject_sw = arg;
-            return 0;
+        case CDROMCLOSETRAY: {
+            xtrace(IOCTL, "ioctl() CDROMCLOSETRAY\n");
+            return(mcdx_tray_move(cdi, 0));
         }
 
         case CDROMVOLCTRL: {
-            int ans;
-            struct cdrom_volctrl volctrl;
-
+			struct cdrom_volctrl *volctrl=(struct cdrom_volctrl *)arg;
             xtrace(IOCTL, "ioctl() VOLCTRL\n");
-            if ((ans = verify_area(
-                    VERIFY_READ,
-                    (void*) arg,
-                    sizeof(volctrl))))
-                return ans;
 
-            copy_from_user(&volctrl, (char *) arg, sizeof(volctrl));
 #if 0		/* not tested! */
 			/* adjust for the weirdness of workman (md) */
 			/* can't test it (hs) */
 			volctrl.channel2 = volctrl.channel1;
 			volctrl.channel1 = volctrl.channel3 = 0x00;
 #endif
-            return mcdx_setattentuator(stuffp, &volctrl, 2);
+            return mcdx_setattentuator(stuffp, volctrl, 2);
         }
 
 		default:
@@ -645,19 +604,12 @@ void do_mcdx_request()
     goto again;
 }
 
-static int
-mcdx_open(struct inode *ip, struct file *fp)
-/*  actions done on open:
- *  1)  get the drives status
- *  2)  set the stuffp.readcmd if a CD is in.
- *  (return no error if no CD is found, since ioctl()
- *  needs an opened device */
+static int 
+mcdx_open(struct cdrom_device_info * cdi, int purpose)
 {
     struct s_drive_stuff *stuffp;
-
 	xtrace(OPENCLOSE, "open()\n");
-
-    stuffp = mcdx_stuffp[MINOR(ip->i_rdev)];
+    stuffp = mcdx_stuffp[MINOR(cdi->dev)];
     if (!stuffp->present) return -ENXIO;
 
 	/* Make the modules looking used ... (thanx bjorn).
@@ -665,248 +617,154 @@ mcdx_open(struct inode *ip, struct file *fp)
 	 * on error return */
 	MOD_INC_USE_COUNT;
 
-#if 0
-	/* We don't allow multiple users of a drive.  In case of data CDs
-     * they'll be used by mounting, which ensures anyway exclusive
-	 * usage. In case of audio CDs it's meaningless to try playing to
-	 * different tracks at once! (md)
-	 * - Hey, what about cat /dev/cdrom? Why shouldn't it called by
-	 * more then one process at any time?  (hs) */
-	if (stuffp->users) {
-		MOD_DEC_USE_COUNT;
-		return -EBUSY;
-	}
-#endif
-
     /* this is only done to test if the drive talks with us */
     if (-1 == mcdx_getstatus(stuffp, 1)) {
 		MOD_DEC_USE_COUNT;
 		return -EIO;
 	}
 
-	/* close the door,
-	 * This should be explained ...
-	 * - If the door is open and its last close is too recent the
-	 *   autoclose wouldn't probably be what we want.
-	 * - If we didn't try to close the door yet, close it and go on.
-	 * - If we autoclosed the door and couldn't succeed in find a valid
-	 *   CD we shouldn't try autoclose any longer (until a valid CD is
-	 *   in.) */
+    if (stuffp->xxx) {
 
-	if (inb((unsigned int) stuffp->rreg_status) & MCDX_RBIT_DOOR) {
-        if (jiffies - stuffp->ejected < ACLOSE_INHIBIT) {
-			MOD_DEC_USE_COUNT;
-			return -EIO;
-		}
-        if (stuffp->autoclose) mcdx_closedoor(stuffp, 1);
-		else {
-			MOD_DEC_USE_COUNT;
-			return -EIO;
-		}
-    }
-
-	/* if the media changed we will have to do a little more */
-	if (stuffp->xxx) {
-
-		xtrace(OPENCLOSE, "open() media changed\n");
-        /* but wait - the time of media change will be set at the
-         * very last of this block - it seems, some of the following
-         * talk() will detect a media change ... (I think, config()
-         * is the reason. */
-
+        xtrace(OPENCLOSE, "open() media changed\n");
         stuffp->audiostatus = CDROM_AUDIO_INVALID;
-		stuffp->readcmd = 0;
-
-		/* get the multisession information */
-		xtrace(OPENCLOSE, "open() Request multisession info\n");
-		if (-1 == mcdx_requestmultidiskinfo(
-				stuffp, &stuffp->multi, 6)) {
-			xinfo("No multidiskinfo\n");
-			stuffp->autoclose = 0;
-			/*
-			MOD_DEC_USE_COUNT;
-			stuffp->xxx = 0;
-			return -EIO;
-			*/
+        stuffp->readcmd = 0;
+        xtrace(OPENCLOSE, "open() Request multisession info\n");
+        if (-1 == mcdx_requestmultidiskinfo( stuffp, &stuffp->multi, 6))
+            	xinfo("No multidiskinfo\n");
 		} else {
-			/* we succeeded, so on next open(2) we could try auto close
-			 * again */
-			stuffp->autoclose = 1;
+            /* multisession ? */
+            if (!stuffp->multi.multi)
+                stuffp->multi.msf_last.second = 2;
 
-#if !MCDX_QUIET
-			if (stuffp->multi.multi > 2)
-				xinfo("open() unknown multisession value (%d)\n",
-						stuffp->multi.multi);
-#endif
+            xtrace(OPENCLOSE, "open() MS: %d, last @ %02x:%02x.%02x\n",
+                    stuffp->multi.multi,
+                    stuffp->multi.msf_last.minute,
+                    stuffp->multi.msf_last.second,
+                    stuffp->multi.msf_last.frame);
 
-			/* multisession ? */
-			if (!stuffp->multi.multi)
-				stuffp->multi.msf_last.second = 2;
+        { ; } /* got multisession information */
+        /* request the disks table of contents (aka diskinfo) */
+        if (-1 == mcdx_requesttocdata(stuffp, &stuffp->di, 1)) {
 
-			xtrace(OPENCLOSE, "open() MS: %d, last @ %02x:%02x.%02x\n",
-					stuffp->multi.multi,
-					stuffp->multi.msf_last.minute,
-					stuffp->multi.msf_last.second,
-					stuffp->multi.msf_last.frame);
+            stuffp->lastsector = -1;
 
-		{ ; } /* got multisession information */
+        } else {
 
-		/* request the disks table of contents (aka diskinfo) */
-		if (-1 == mcdx_requesttocdata(stuffp, &stuffp->di, 1)) {
+            stuffp->lastsector = (CD_FRAMESIZE / 512)
+                    * msf2log(&stuffp->di.msf_leadout) - 1;
 
-			stuffp->lastsector = -1;
+            xtrace(OPENCLOSE, "open() start %d (%02x:%02x.%02x) %d\n",
+                    stuffp->di.n_first,
+                    stuffp->di.msf_first.minute,
+                    stuffp->di.msf_first.second,
+                    stuffp->di.msf_first.frame,
+                    msf2log(&stuffp->di.msf_first));
+            xtrace(OPENCLOSE, "open() last %d (%02x:%02x.%02x) %d\n",
+                    stuffp->di.n_last,
+                    stuffp->di.msf_leadout.minute,
+                    stuffp->di.msf_leadout.second,
+                    stuffp->di.msf_leadout.frame,
+                    msf2log(&stuffp->di.msf_leadout));
+        }
+      
+        if (stuffp->toc) {
+            xtrace(MALLOC, "open() free old toc @ %p\n", stuffp->toc);
+            kfree(stuffp->toc);
 
-		} else {
+            stuffp->toc = NULL;
+        }
 
-			stuffp->lastsector = (CD_FRAMESIZE / 512)
-					* msf2log(&stuffp->di.msf_leadout) - 1;
-
-			xtrace(OPENCLOSE, "open() start %d (%02x:%02x.%02x) %d\n",
-					stuffp->di.n_first,
-					stuffp->di.msf_first.minute,
-					stuffp->di.msf_first.second,
-					stuffp->di.msf_first.frame,
-					msf2log(&stuffp->di.msf_first));
-			xtrace(OPENCLOSE, "open() last %d (%02x:%02x.%02x) %d\n",
-					stuffp->di.n_last,
-					stuffp->di.msf_leadout.minute,
-					stuffp->di.msf_leadout.second,
-					stuffp->di.msf_leadout.frame,
-					msf2log(&stuffp->di.msf_leadout));
-		}
-
-		if (stuffp->toc) {
-			xtrace(MALLOC, "open() free old toc @ %p\n", stuffp->toc);
-			kfree(stuffp->toc);
-
-			stuffp->toc = NULL;
-		}
-
-		xtrace(OPENCLOSE, "open() init irq generation\n");
-		if (-1 == mcdx_config(stuffp, 1)) {
-			MOD_DEC_USE_COUNT;
-			return -EIO;
-		}
+        xtrace(OPENCLOSE, "open() init irq generation\n");
+        if (-1 == mcdx_config(stuffp, 1)) {
+            MOD_DEC_USE_COUNT;
+            return -EIO;
+        }
 
 #if FALLBACK
-		/* Set the read speed */
-		xwarn("AAA %x AAA\n", stuffp->readcmd);
-		if (stuffp->readerrs) stuffp->readcmd = READ1X;
-		else stuffp->readcmd =
-				stuffp->present | SINGLE ? READ1X : READ2X;
-		xwarn("XXX %x XXX\n", stuffp->readcmd);
+        /* Set the read speed */
+        xwarn("AAA %x AAA\n", stuffp->readcmd);
+        if (stuffp->readerrs) stuffp->readcmd = READ1X;
+        else stuffp->readcmd =
+                stuffp->present | SINGLE ? READ1X : READ2X;
+        xwarn("XXX %x XXX\n", stuffp->readcmd);
 #else
-		stuffp->readcmd = stuffp->present | SINGLE ? READ1X : READ2X;
+        stuffp->readcmd = stuffp->present | SINGLE ? READ1X : READ2X;
 #endif
 
-		/* try to get the first sector, iff any ... */
-		if (stuffp->lastsector >= 0) {
-			char buf[512];
-			int ans;
-			int tries;
+        /* try to get the first sector, iff any ... */
+        if (stuffp->lastsector >= 0) {
+            char buf[512];
+            int ans;
+            int tries;
 
-			stuffp->xa = 0;
-			stuffp->audio = 0;
+            stuffp->xa = 0;
+            stuffp->audio = 0;
 
-			for (tries = 6; tries; tries--) {
+            for (tries = 6; tries; tries--) {
 
-				stuffp->introk = 1;
+                stuffp->introk = 1;
 
-				xtrace(OPENCLOSE, "open() try as %s\n",
-					stuffp->xa ? "XA" : "normal");
+                xtrace(OPENCLOSE, "open() try as %s\n",
+                    stuffp->xa ? "XA" : "normal");
+                /* set data mode */
+                if (-1 == (ans = mcdx_setdatamode(stuffp,
+                        stuffp->xa ? MODE2 : MODE1, 1))) {
+                    /* MOD_DEC_USE_COUNT, return -EIO; */
+                    stuffp->xa = 0;
+                    break;
+                }
 
-				/* set data mode */
-				if (-1 == (ans = mcdx_setdatamode(stuffp,
-						stuffp->xa ? MODE2 : MODE1, 1))) {
-					/* MOD_DEC_USE_COUNT, return -EIO; */
-					stuffp->xa = 0;
-					break;
-				}
+                if ((stuffp->audio = e_audio(ans))) break;
 
-				if ((stuffp->audio = e_audio(ans))) break;
+                while (0 == (ans = mcdx_transfer(stuffp, buf, 0, 1)))
+                    ;
 
-				while (0 == (ans = mcdx_transfer(stuffp, buf, 0, 1)))
-					;
-
-				if (ans == 1) break;
-				stuffp->xa = !stuffp->xa;
-			}
-			/* if (!tries) MOD_DEC_USE_COUNT, return -EIO; */
-		}
-
-		/* xa disks will be read in raw mode, others not */
-		if (-1 == mcdx_setdrivemode(stuffp,
-				stuffp->xa ? RAW : COOKED, 1)) {
-			MOD_DEC_USE_COUNT;
-			return -EIO;
-		}
-
-		if (stuffp->audio) {
-			xinfo("open() audio disk found\n");
-		} else if (stuffp->lastsector >= 0) {
-			xinfo("open() %s%s disk found\n",
-					stuffp->xa ? "XA / " : "",
-					stuffp->multi.multi ? "Multi Session" : "Single Session");
-		}
-
-        /* stuffp->xxx = 0; */
-	}
-
-    /* lock the door if not already done */
-    if (0 == stuffp->users && (-1 == mcdx_lockdoor(stuffp, 1, 1)))  {
-		MOD_DEC_USE_COUNT;
-        return -EIO;
-	}
-	}
-
+                if (ans == 1) break;
+                stuffp->xa = !stuffp->xa;
+            }
+        }
+        /* xa disks will be read in raw mode, others not */
+        if (-1 == mcdx_setdrivemode(stuffp,
+                stuffp->xa ? RAW : COOKED, 1)) {
+            MOD_DEC_USE_COUNT;
+            return -EIO;
+        }
+        if (stuffp->audio) {
+            xinfo("open() audio disk found\n");
+        } else if (stuffp->lastsector >= 0) {
+            xinfo("open() %s%s disk found\n",
+                    stuffp->xa ? "XA / " : "",
+                    stuffp->multi.multi ? "Multi Session" : "Single Session");
+        }
+    }
 	stuffp->xxx = 0;
     stuffp->users++;
     return 0;
-
 }
 
-static int
-mcdx_close(struct inode *ip, struct file *fp)
+static void mcdx_close(struct cdrom_device_info * cdi)
 {
     struct s_drive_stuff *stuffp;
 
     xtrace(OPENCLOSE, "close()\n");
 
-    stuffp = mcdx_stuffp[MINOR(ip->i_rdev)];
+    stuffp = mcdx_stuffp[MINOR(cdi->dev)];
 
-    if (0 == --stuffp->users) {
-		sync_dev(ip->i_rdev);	/* needed for r/o device? */
-
-		/* invalidate_inodes(ip->i_rdev); */
-		invalidate_buffers(ip->i_rdev);
-
-
-#if !MCDX_QUIET
-		if (-1 == mcdx_lockdoor(stuffp, 0, 3))
-				xinfo("close() Cannot unlock the door\n");
-#else
-		mcdx_lockdoor(stuffp, 0, 3);
-#endif
-
-        /* eject if wished */
-        if (stuffp->eject_sw) mcdx_eject(stuffp, 1);
-
-    }
+    --stuffp->users;
 
     MOD_DEC_USE_COUNT;
-    return 0;
 }
 
-int check_mcdx_media_change(kdev_t full_dev)
+static int mcdx_media_changed(struct cdrom_device_info * cdi, int disc_nr) 
 /*	Return: 1 if media changed since last call to this function
 			0 otherwise */
 {
     struct s_drive_stuff *stuffp;
 
-    xinfo("check_mcdx_media_change called for device %s\n",
-	  kdevname(full_dev));
+    xinfo("mcdx_media_changed called for device %s\n",
+	  kdevname(cdi->dev));
 
-	stuffp = mcdx_stuffp[MINOR(full_dev)];
+	stuffp = mcdx_stuffp[MINOR(cdi->dev)];
 	mcdx_getstatus(stuffp, 1);
 
 	if (stuffp->yyy == 0) return 0;
@@ -1140,6 +998,10 @@ void cleanup_module(void)
 
     for (i = 0; i < MCDX_NDRIVES; i++) {
 		struct s_drive_stuff *stuffp;
+        if (unregister_cdrom(&mcdx_info)) {
+			printk(KERN_WARNING "Can't unregister cdrom mcdx\n");
+			return;
+		}
 		stuffp = mcdx_stuffp[i];
 		if (!stuffp) continue;
 		release_region((unsigned long) stuffp->wreg_data, MCDX_IO_SIZE);
@@ -1153,7 +1015,7 @@ void cleanup_module(void)
 		kfree(stuffp);
     }
 
-    if (unregister_blkdev(MAJOR_NR, DEVICE_NAME) != 0) {
+    if (unregister_blkdev(MAJOR_NR, "mcdx") != 0) {
         xwarn("cleanup() unregister_blkdev() failed\n");
     }
 #if !MCDX_QUIET
@@ -1168,7 +1030,7 @@ void cleanup_module(void)
 __initfunc(int mcdx_init(void))
 {
 	int drive;
-
+	char msg[80];
 #ifdef MODULE
 	xwarn("Version 2.14(hs) for " UTS_RELEASE "\n");
 #else
@@ -1204,7 +1066,6 @@ __initfunc(int mcdx_init(void))
 
 		/* set default values */
 		memset(stuffp, 0, sizeof(*stuffp));
-        stuffp->autoclose = 1;      /* close the door on open(2) */
 
 		stuffp->present = 0;		/* this should be 0 already */
 		stuffp->toc = NULL;			/* this should be NULL already */
@@ -1274,7 +1135,7 @@ __initfunc(int mcdx_init(void))
 		}
 
 		xtrace(INIT, "init() register blkdev\n");
-		if (register_blkdev(MAJOR_NR, DEVICE_NAME, &mcdx_fops) != 0) {
+		if (register_blkdev(MAJOR_NR, "mcdx", &cdrom_fops) != 0) {
             xwarn("%s=0x%3p,%d: Init failed. Can't get major %d.\n",
                     MCDX,
                     stuffp->wreg_data, stuffp->irq, MAJOR_NR);
@@ -1289,7 +1150,7 @@ __initfunc(int mcdx_init(void))
 
 		xtrace(INIT, "init() subscribe irq and i/o\n");
 		mcdx_irq_map[stuffp->irq] = stuffp;
-		if (request_irq(stuffp->irq, mcdx_intr, SA_INTERRUPT, DEVICE_NAME, NULL)) {
+		if (request_irq(stuffp->irq, mcdx_intr, SA_INTERRUPT, "mcdx", NULL)) {
             xwarn("%s=0x%3p,%d: Init failed. Can't get irq (%d).\n",
                     MCDX,
                     stuffp->wreg_data, stuffp->irq, stuffp->irq);
@@ -1299,7 +1160,7 @@ __initfunc(int mcdx_init(void))
 		}
 		request_region((unsigned int) stuffp->wreg_data,
                 MCDX_IO_SIZE,
-                DEVICE_NAME);
+                "mcdx");
 
 		xtrace(INIT, "init() get garbage\n");
 		{
@@ -1318,15 +1179,23 @@ __initfunc(int mcdx_init(void))
 
 		stuffp->minor = drive;
 
-		xwarn("(%s) installed at 0x%3p, irq %d."
-			   " (Firmware version %c %x)\n",
-			   DEVICE_NAME,
+		sprintf(msg, " mcdx: Mitsumi CD-ROM installed at 0x%3p, irq %d."
+			   " (Firmware version %c %x)\n", 
 			   stuffp->wreg_data, stuffp->irq, version.code,
                version.ver);
 		mcdx_stuffp[drive] = stuffp;
 		xtrace(INIT, "init() mcdx_stuffp[%d] = %p\n", drive, stuffp);
+        if (register_cdrom(&mcdx_info) != 0) {
+              printk("Cannot register Mitsumi CD-ROM!\n");
+        	  release_region((unsigned long) stuffp->wreg_data, MCDX_IO_SIZE);
+        	  free_irq(stuffp->irq, NULL);
+              kfree(stuffp);
+              if (unregister_blkdev(MAJOR_NR, "mcdx") != 0)
+        		xwarn("cleanup() unregister_blkdev() failed\n");
+			  return -EIO;
+        }
+        printk(msg);
 	}
-
 	return 0;
 }
 
@@ -1539,7 +1408,7 @@ static unsigned int uint2bcd(unsigned int ival)
 
 static void log2msf(unsigned int l, struct cdrom_msf0* pmsf)
 {
-    l += CD_BLOCK_OFFSET;
+    l += CD_MSF_OFFSET;
     pmsf->minute = uint2bcd(l / 4500), l %= 4500;
     pmsf->second = uint2bcd(l / 75);
     pmsf->frame = uint2bcd(l % 75);
@@ -1550,7 +1419,7 @@ static unsigned int msf2log(const struct cdrom_msf0* pmsf)
     return bcd2uint(pmsf->frame)
     + bcd2uint(pmsf->second) * 75
     + bcd2uint(pmsf->minute) * 4500
-    - CD_BLOCK_OFFSET;
+    - CD_MSF_OFFSET;
 }
 
 int mcdx_readtoc(struct s_drive_stuff* stuffp)
@@ -1712,12 +1581,20 @@ mcdx_playtrk(struct s_drive_stuff* stuffp, const struct cdrom_ti* ti)
 /* Drive functions ************************************************/
 
 static int
-mcdx_closedoor(struct s_drive_stuff *stuffp, int tries)
+mcdx_tray_move(struct cdrom_device_info * cdi, int position)
 {
-	if (stuffp->present & DOOR)
-		return mcdx_talk(stuffp, "\xf8", 1, NULL, 1, 5 * HZ, tries);
-	else
-		return 0;
+    struct s_drive_stuff *stuffp = mcdx_stuffp[MINOR(cdi->dev)];
+
+    if (!stuffp->present) 
+		return -ENXIO;
+	if (!(stuffp->present & DOOR))
+		return -ENOSYS; 
+
+ 	if (position)                /* 1: eject */
+        	return mcdx_talk(stuffp, "\xf6", 1, NULL, 1, 5 * HZ, 3);
+	else /* 0: close */
+			return mcdx_talk(stuffp, "\xf8", 1, NULL, 1, 5 * HZ, 3);
+    return 1;
 }
 
 static int
@@ -1727,15 +1604,6 @@ mcdx_stop(struct s_drive_stuff *stuffp, int tries)
 static int
 mcdx_hold(struct s_drive_stuff *stuffp, int tries)
 { return mcdx_talk(stuffp, "\x70", 1, NULL, 1, 2 * HZ, tries); }
-
-static int
-mcdx_eject(struct s_drive_stuff *stuffp, int tries)
-{
-	if (stuffp->present & DOOR) {
-        stuffp->ejected = jiffies;
-		return mcdx_talk(stuffp, "\xf6", 1, NULL, 1, 5 * HZ, tries);
-    } else return 0;
-}
 
 static int
 mcdx_requestsubqcode(struct s_drive_stuff *stuffp,
@@ -1886,13 +1754,16 @@ mcdx_reset(struct s_drive_stuff *stuffp, enum resetmodes mode, int tries)
 	} else return mcdx_talk(stuffp, "\x60", 1, NULL, 1, 5 * HZ, tries);
 }
 
-static int
-mcdx_lockdoor(struct s_drive_stuff *stuffp, int lock, int tries)
+static int mcdx_lockdoor(struct cdrom_device_info * cdi, int lock)
 {
+    struct s_drive_stuff *stuffp = mcdx_stuffp[MINOR(cdi->dev)];
 	char cmd[2] = { 0xfe };
+
+    if (!(stuffp->present & DOOR))
+		return -ENOSYS;
     if (stuffp->present & DOOR) {
         cmd[1] = lock ? 0x01 : 0x00;
-        return mcdx_talk(stuffp, cmd, sizeof(cmd), NULL, 1, 5 * HZ, tries);
+        return mcdx_talk(stuffp, cmd, sizeof(cmd), NULL, 1, 5 * HZ, 3);
     } else return 0;
 }
 

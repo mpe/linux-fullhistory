@@ -88,7 +88,7 @@ Mozart card - I simply had to add
 to configure the CDROM interface for type "Panasonic" (LaserMate) and address
 0x340.
 
-The interface type has to get configured in /usr/include/linux/sbpcd.h, 
+The interface type has to get configured in linux/drivers/cdrom/sbpcd.h, 
 because the register layout is different between the "SoundBlaster" and the
 "LaserMate" type.
 
@@ -176,7 +176,7 @@ This release consists of
 - this README file
 - the driver file linux/drivers/cdrom/sbpcd.c
 - the stub files linux/drivers/cdrom/sbpcd[234].c
-- the header file linux/include/linux/sbpcd.h.
+- the header file linux/drivers/cdrom/sbpcd.h.
 
 
 To install:
@@ -189,7 +189,7 @@ To install:
    correct if you can mount a data CD. There is no choice for you with the
    type; only one is the right, the others are deadly wrong.
 
-   a. Go into /usr/src/linux/include/linux/sbpcd.h and configure it for your
+   a. Go into /usr/src/linux/drivers/cdrom/sbpcd.h and configure it for your
       hardware (near the beginning):
       a1. Set it up for the appropriate type of interface board.
           "Original" CreativeLabs sound cards need "SBPRO 1".
@@ -568,10 +568,10 @@ Appendix -- the "cdtester" utility:
 #include <linux/cdrom.h>
 
 #ifdef AZT_PRIVATE_IOCTLS
-#include <linux/aztcd.h>
+#include <linux/../../drivers/cdrom/aztcd.h>
 #endif AZT_PRIVATE_IOCTLS
 #ifdef SBP_PRIVATE_IOCTLS
-#include <linux/sbpcd.h>
+#include <linux/../../drivers/cdrom/sbpcd.h>
 #include <linux/fs.h>
 #endif SBP_PRIVATE_IOCTLS
 

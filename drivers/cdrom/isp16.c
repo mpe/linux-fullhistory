@@ -47,9 +47,9 @@
 #include <linux/kernel.h>
 #include <linux/string.h>
 #include <linux/ioport.h>
-#include <linux/isp16.h>
 #include <linux/init.h>
 #include <asm/io.h>
+#include "isp16.h"
 
 static short isp16_detect(void);
 static short isp16_c928__detect(void);

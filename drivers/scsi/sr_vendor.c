@@ -44,7 +44,6 @@
 #include <scsi/scsi_ioctl.h>
 
 #include <linux/cdrom.h>
-#include <linux/ucdrom.h>
 #include "sr.h"
 
 #if 0
@@ -231,7 +230,7 @@ int sr_cd_check(struct cdrom_device_info *cdi)
 		frame  = BCD_TO_BIN(buffer[3]);
 		sector = min*CD_SECS*CD_FRAMES + sec*CD_FRAMES + frame;
 		if (sector)
-			sector -= CD_BLOCK_OFFSET;
+			sector -= CD_MSF_OFFSET;
 		break;
 
 	case VENDOR_HP_4020:

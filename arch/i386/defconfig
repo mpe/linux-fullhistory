@@ -200,6 +200,7 @@ CONFIG_EEXPRESS_PRO100=y
 # CD-ROM drivers (not for SCSI or IDE/ATAPI drives)
 #
 # CONFIG_CD_NO_IDESCSI is not set
+CONFIG_CDROM=y
 
 #
 # Filesystems
@@ -219,6 +220,7 @@ CONFIG_NFS_FS=y
 CONFIG_NFSD=y
 CONFIG_SUNRPC=y
 CONFIG_LOCKD=y
+# CONFIG_CODA_FS is not set
 # CONFIG_SMB_FS is not set
 # CONFIG_HPFS_FS is not set
 # CONFIG_SYSV_FS is not set

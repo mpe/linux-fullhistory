@@ -551,13 +551,17 @@ int attach_awe(void)
 	INIT_TABLE(samples, max_samples, AWE_MAX_SAMPLES, awe_sample_list);
 	INIT_TABLE(infos, max_infos, AWE_MAX_INFOS, awe_voice_list);
 
-	if ((my_dev=sound_alloc_synthdev())!=-1)
+	my_dev = sound_alloc_synthdev();
+	if (my_dev == -1) {
+		my_free(voices);
+		my_free(channels);
 		printk(KERN_WARNING "AWE32 Error: too many synthesizers\n");
-	else {
-		voice_alloc = &awe_operations.alloc;
-		voice_alloc->max_voice = awe_max_voices;
-		synth_devs[my_dev] = &awe_operations;
+		return 0;
 	}
+
+	voice_alloc = &awe_operations.alloc;
+	voice_alloc->max_voice = awe_max_voices;
+	synth_devs[my_dev] = &awe_operations;
 
 #ifdef CONFIG_AWE32_MIXER
 	if ((my_mixerdev=sound_alloc_mixerdev())!=-1) {

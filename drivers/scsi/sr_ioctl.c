@@ -12,7 +12,6 @@
 #include <scsi/scsi_ioctl.h>
 
 #include <linux/cdrom.h>
-#include <linux/ucdrom.h>
 #include "sr.h"
 
 #if 0
@@ -729,7 +728,7 @@ int sr_dev_ioctl(struct cdrom_device_info *cdi,
                 return -ENOMEM;
 
 	lba = (((msf.cdmsf_min0 * CD_SECS) + msf.cdmsf_sec0)
-			* CD_FRAMES + msf.cdmsf_frame0) - CD_BLOCK_OFFSET;
+			* CD_FRAMES + msf.cdmsf_frame0) - CD_MSF_OFFSET;
         if (lba < 0 || lba >= scsi_CDs[target].capacity)
             return -EINVAL;
 
@@ -757,7 +756,7 @@ int sr_dev_ioctl(struct cdrom_device_info *cdi,
             lba = ra.addr.lba;
         else
             lba = (((ra.addr.msf.minute * CD_SECS) + ra.addr.msf.second)
-                   * CD_FRAMES + ra.addr.msf.frame) - CD_BLOCK_OFFSET;
+                   * CD_FRAMES + ra.addr.msf.frame) - CD_MSF_OFFSET;
 
         if (lba < 0 || lba >= scsi_CDs[target].capacity)
             return -EINVAL;

@@ -1970,6 +1970,9 @@ __initfunc(int tty_init(void))
 #ifdef CONFIG_RISCOM8
 	riscom8_init();
 #endif
+#ifdef CONFIG_SPECIALIX
+	specialix_init();
+#endif
 	pty_init();
 #ifdef CONFIG_VT
 	vcs_init();

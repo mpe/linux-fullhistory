@@ -302,6 +302,14 @@ enum {
 /* CTL_DEBUG names: */
 
 /* CTL_DEV names: */
+enum {
+	DEV_CDROM = 1,
+};
+
+/* /proc/sys/dev/cdrom */
+enum {
+	DEV_CDROM_INFO = 1,
+};
 
 #ifdef __KERNEL__
 

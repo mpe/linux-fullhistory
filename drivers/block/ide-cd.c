@@ -1,15 +1,46 @@
-/* #define VERBOSE_IDE_CD_ERRORS 1 */
+#define VERBOSE_IDE_CD_ERRORS 1
 /*
  * linux/drivers/block/ide-cd.c
- * ATAPI cd-rom driver.  To be used with ide.c.
+ * Copyright (C) 1994, 1995, 1996  scott snyder  <snyder@fnald0.fnal.gov>
+ * Copyright (C) 1996, 1997  Erik Andersen <andersee@debian.org>
+ * May be copied or modified under the terms of the GNU General Public
+ * License.  See linux/COPYING for more information.
+ *
+ * ATAPI CD-ROM driver.  To be used with ide.c.
  * See Documentation/cdrom/ide-cd for usage information.
  *
- * Copyright (C) 1994, 1995, 1996  scott snyder  <snyder@fnald0.fnal.gov>
- * Copyright (C) 1996  Erik Andersen <andersee@et.byu.edu>
+ * Suggestions are welcome. Patches that work are more welcome though.
+ * For those wishing to work on this driver, please be sure you download
+ * and comply with the latest ATAPI standard. This document can be
+ * obtained by anonymous ftp from fission.dt.wdc.com in directory:
+ * /pub/standards/SFF_atapi/spec/SFF8020-r2.6/PDF/8020r26.pdf
  *
- * May be copied or modified under the terms of the GNU General Public License
- * see linux/COPYING for more information.
+ * Drives that deviate from the ATAPI standard will be accomodated as much
+ * as possible via compile options.  Since I only have a few drives, you you
+ * generally need to send me patches...
  *
+ * ----------------------------------
+ * TO DO LIST:
+ * -Avoid printing error messages for expected errors from the drive.
+ *    (If you are using a cd changer, you may get errors in the kernel
+ *     logs that are completly expected.  Don't complain to me about this,
+ *     unless you have a patch to fix it.  I am working on it...)
+ * -Implement ide_cdrom_select_speed using the generic cdrom interface
+ * -Fix ide_cdrom_reset so that it works (it does nothing right now)
+ * -When trying to mount a cdrom with the tray open, you get an billion
+ *     "tray open or drive not ready" messages until the tray gets closed.
+ *     This is because ide-cd does not properly return drive_status immediatly,
+ *     but instead waits for the drive to close first (bad, bad, bad)
+ *     and keeps on trying, and failing...  This bug was revealed by the 
+ *     recent changes to the Uniform CD-ROm driver, and I havn't had a 
+ *     chance to fix it yet.
+ *
+ * MOSTLY DONE LIST:
+ *  Query the drive to find what features are available
+ *   before trying to use them.
+ *
+ *
+ * ----------------------------------
  * 1.00  Oct 31, 1994 -- Initial version.
  * 1.01  Nov  2, 1994 -- Fixed problem with starting request in
  *                       cdrom_check_status.
@@ -121,7 +152,7 @@
  *                       
  *                       
  * 4.00  Nov 5, 1996   -- New ide-cd maintainer,
- *                                 Erik B. Andersen <andersee@et.byu.edu>
+ *                                 Erik B. Andersen <andersee@debian.org>
  *                     -- Newer Creative drives don't always set the error
  *                          register correctly.  Make sure we see media changes
  *                          regardless.
@@ -147,32 +178,16 @@
  * 4.04  Dec 29, 1996  -- Added CDROMREADRAW ioclt based on patch 
  *                          by Ales Makarov (xmakarov@sun.felk.cvut.cz)
  *
+ * 4.05  Nov 20, 1997  -- Modified to print more drive info on init
+ *                        Minor other changes
+ *                        Fix errors on CDROMSTOP (If you have a "Dolphin",
+ *                          you must define IHAVEADOLPHIN)
+ *                        Added identifier so new Sanyo CD-changer works
+ *                        Better detection if door locking isn't supported
  *
- * MOSTLY DONE LIST:
- *  Query the drive to find what features are available
- *   before trying to use them.
- *
- * TO DO LIST:
- *  Avoid printing error messages for expected errors from the drive.
- *    (If you are using a cd changer, you may get errors in the kernel
- *     logs that are completly expected.  Don't complain to me about this,
- *     unless you have a patch to fix it.  I am working on it...)
- *  Reset unlocks drive?
- *  Implement ide_cdrom_disc_status using the generic cdrom interface
- *  Implement ide_cdrom_select_speed using the generic cdrom interface
- *  Fix ide_cdrom_reset so that it works (it does nothing right now)
- *
- *  -- Suggestions are welcome.  Patches that work are more welcome though.
- *       For those wishing to work on this driver, please be sure you download
- *       and comply with the latest ATAPI standard.  This document can be
- *       obtained by anonymous ftp from fission.dt.wdc.com in directory:
- *       /pub/standards/atapi/spec/SFF8020-r2.6/PDF/8020r26.pdf
- *
- */
+ *************************************************************************/
 
-
-/***************************************************************************/
-
+#include <linux/config.h>
 #include <linux/module.h>
 #include <linux/types.h>
 #include <linux/kernel.h>
@@ -185,7 +200,6 @@
 #include <linux/errno.h>
 #include <linux/hdreg.h>
 #include <linux/cdrom.h>
-#include <linux/ucdrom.h>
 #include <asm/irq.h>
 #include <asm/io.h>
 #include <asm/byteorder.h>
@@ -463,13 +477,16 @@ static int cdrom_decode_status (ide_drive_t *drive, int good_stat,
 				   because workman constantly polls the drive
 				   with this command, and we don't want
 				   to uselessly fill up the syslog. */
-				if (pc->c[0] != SCMD_READ_SUBCHANNEL)
+				if (pc->c[0] != SCMD_READ_SUBCHANNEL) {
 					printk ("%s: tray open or drive not ready\n",
 						drive->name);
+					return 1;
+				}
 			} else if (sense_key == UNIT_ATTENTION) {
 				/* Check for media change. */
 				cdrom_saw_media_change (drive);
-				printk ("%s: media changed\n", drive->name);
+				printk (" %s: media changed\n", drive->name);
+				return 0;
 			} else {
 				/* Otherwise, print an error. */
 				ide_dump_status (drive, "packet command error",
@@ -1094,8 +1111,13 @@ static void cdrom_pc_intr (ide_drive_t *drive)
 		if (pc->buflen == 0)
 			cdrom_end_request (1, drive);
 		else {
+			/* Comment this out, because this always happins 
+			   right after a reset occurs, and it is annoying to 
+			   always print expected stuff.  */
+			/*
 			printk ("%s: cdrom_pc_intr: data underrun %d\n",
 				drive->name, pc->buflen);
+			*/
 			pc->stat = 1;
 			cdrom_end_request (1, drive);
 		}
@@ -1355,7 +1377,7 @@ void msf_from_bcd (struct atapi_msf *msf)
 static inline
 void lba_to_msf (int lba, byte *m, byte *s, byte *f)
 {
-	lba += CD_BLOCK_OFFSET;
+	lba += CD_MSF_OFFSET;
 	lba &= 0xffffff;  /* negative lbas use only 24 bits */
 	*m = lba / (CD_SECS * CD_FRAMES);
 	lba %= (CD_SECS * CD_FRAMES);
@@ -1367,7 +1389,7 @@ void lba_to_msf (int lba, byte *m, byte *s, byte *f)
 static inline
 int msf_to_lba (byte m, byte s, byte f)
 {
-	return (((m * CD_SECS) + s) * CD_FRAMES + f) - CD_BLOCK_OFFSET;
+	return (((m * CD_SECS) + s) * CD_FRAMES + f) - CD_MSF_OFFSET;
 }
 
 
@@ -1421,7 +1443,7 @@ cdrom_lockdoor (ide_drive_t *drive, int lockflag,
 	   probably cannot lock the door. */
 	if (stat != 0 &&
 	    reqbuf->sense_key == ILLEGAL_REQUEST &&
-	    reqbuf->asc == 0x24) {
+	    (reqbuf->asc == 0x24 || reqbuf->asc == 0x20)) {
 		printk ("%s: door locking not supported\n",
 			drive->name);
 		CDROM_CONFIG_FLAGS (drive)->no_doorlock = 1;
@@ -2325,12 +2347,17 @@ int ide_cdrom_audio_ioctl (struct cdrom_device_info *cdi,
 		return cdrom_startstop (drive, 1, NULL);
 
 	case CDROMSTOP: {
-		int stat;
-
-		stat = cdrom_startstop (drive, 0, NULL);
-		if (stat) return stat;
-		/* pit says the Dolphin needs this. */
-		return cdrom_eject (drive, 1, NULL);
+#ifdef IHAVEADOLPHIN
+               /*  Certain Drives require this.  Most don't
+                   and will produce errors upon CDROMSTOP
+                   pit says the Dolphin needs this.  If you
+                   own a dolphin, just define IHAVEADOLPHIN somewhere */
+                int stat;
+                stat = cdrom_startstop (drive, 0, NULL);
+                if (stat) return stat;
+                return cdrom_eject (drive, 1, NULL);
+#endif /* end of IHAVEADOLPHIN  */
+               return cdrom_startstop (drive, 0, NULL);
 	}
 
 	case CDROMPAUSE:
@@ -2360,7 +2387,7 @@ int ide_cdrom_reset (struct cdrom_device_info *cdi)
 	return ide_do_drive_cmd (drive, &req, ide_wait);
 #endif
 
-/* For now, just return 0, as if things worked...	*/
+/* For now, just return 0, as if things had worked...	*/
 	return 0;
 
 
@@ -2399,10 +2426,8 @@ int ide_cdrom_select_disc (struct cdrom_device_info *cdi, int slot)
 	int stat;
 	int nslots, curslot;
 
-	if ( ! CDROM_CONFIG_FLAGS (drive)->is_changer) {
-		printk ("%s: Not a changer.", drive->name);
-		return -EINVAL;
-	}
+	if ( ! CDROM_CONFIG_FLAGS (drive)->is_changer) 
+		return -EDRIVE_CANT_DO_THIS;
 
 #if ! STANDARD_ATAPI
 	if (CDROM_STATE_FLAGS (drive)->sanyo_slot > 0) {
@@ -2436,7 +2461,7 @@ int ide_cdrom_select_disc (struct cdrom_device_info *cdi, int slot)
 
 	stat = cdrom_check_status (drive, &my_reqbuf);
 	if (stat && my_reqbuf.sense_key == NOT_READY)
-		return (-ENOENT);
+		return -ENOENT;
 
 	if (slot == CDSL_NONE) {
 		(void) cdrom_load_unload (drive, -1, NULL);
@@ -2449,11 +2474,8 @@ int ide_cdrom_select_disc (struct cdrom_device_info *cdi, int slot)
 #if ! STANDARD_ATAPI
 		    CDROM_STATE_FLAGS (drive)->sanyo_slot == 0 &&
 #endif
-		    info->changer_info->slots[slot].disc_present
-		    == 0) {
-			printk ("%s: Requested slot does not contain a CD.\n",
-				drive->name);
-			return (-ENOENT);
+		    info->changer_info->slots[slot].disc_present == 0) {
+			return -ENOMEDIUM;
 		}
 
 		stat = cdrom_load_unload (drive, slot, NULL);
@@ -2518,7 +2540,6 @@ int ide_cdrom_drive_status (struct cdrom_device_info *cdi, int slot_nr)
 			return CDS_NO_DISC;
 	}
 }
-
 
 static
 int ide_cdrom_get_last_session (struct cdrom_device_info *cdi,
@@ -2628,16 +2649,16 @@ void ide_cdrom_release_real (struct cdrom_device_info *cdi)
 /****************************************************************************
  * Device initialization.
  */
+
 static
 struct cdrom_device_ops ide_cdrom_dops = {
 	ide_cdrom_open_real,    /* open */
 	ide_cdrom_release_real, /* release */
 	ide_cdrom_drive_status, /* drive_status */
-	0, /* disc_status */
 	ide_cdrom_check_media_change_real, /* media_changed */
 	ide_cdrom_tray_move,    /* tray_move */
 	ide_cdrom_lock_door,    /* lock_door */
-	0, /* select_speed */
+	NULL, /* select_speed */
 	ide_cdrom_select_disc, /* select_disc */
 	ide_cdrom_get_last_session, /* get_last_session */
 	ide_cdrom_get_mcn, /* get_mcn */
@@ -2646,10 +2667,10 @@ struct cdrom_device_ops ide_cdrom_dops = {
 	ide_cdrom_dev_ioctl,   /* dev_ioctl */
 	CDC_CLOSE_TRAY | CDC_OPEN_TRAY | CDC_LOCK
 	| CDC_SELECT_DISC | CDC_MULTI_SESSION | CDC_MCN
-	| CDC_MEDIA_CHANGED | CDC_PLAY_AUDIO,  /* capability */
+	| CDC_MEDIA_CHANGED | CDC_PLAY_AUDIO | CDC_RESET 
+	| CDC_IOCTLS | CDC_DRIVE_STATUS,  /* capability */
 	0 /* n_minors */
 };
-
 
 static int ide_cdrom_register (ide_drive_t *drive, int nslots)
 {
@@ -2660,11 +2681,11 @@ static int ide_cdrom_register (ide_drive_t *drive, int nslots)
 	devinfo->dev = MKDEV (HWIF(drive)->major, minor);
 	devinfo->ops = &ide_cdrom_dops;
 	devinfo->mask = 0;
-	*(int *)&devinfo->speed = 0;
+	*(int *)&devinfo->speed = CDROM_CONFIG_FLAGS (drive)->max_speed;
 	*(int *)&devinfo->capacity = nslots;
 	devinfo->handle = (void *) drive;
-
-	return register_cdrom (devinfo, drive->name);
+	strcpy(devinfo->name, drive->name);
+	return register_cdrom (devinfo);
 }
 
 
@@ -2690,6 +2711,11 @@ int ide_cdrom_probe_capabilities (ide_drive_t *drive)
 	if (buf.cap.lock == 0)
 		CDROM_CONFIG_FLAGS (drive)->no_doorlock = 1;
 
+	if (buf.cap.cd_r_write)
+		CDROM_CONFIG_FLAGS (drive)->cd_r = 1;
+	if (buf.cap.cd_rw_write)
+		CDROM_CONFIG_FLAGS (drive)->cd_rw = 1;
+
 #if ! STANDARD_ATAPI
 	if (CDROM_STATE_FLAGS (drive)->sanyo_slot > 0) {
 		CDROM_CONFIG_FLAGS (drive)->is_changer = 1;
@@ -2711,9 +2737,23 @@ int ide_cdrom_probe_capabilities (ide_drive_t *drive)
 		}
 	}
 
-	if (CDROM_CONFIG_FLAGS (drive)->is_changer)
-		printk (" %s: ATAPI CDROM changer with %d slots\n", 
-			drive->name, nslots);
+	CDROM_STATE_FLAGS (drive)->curent_speed  = ntohs(buf.cap.curspeed)/176;
+	CDROM_CONFIG_FLAGS (drive)->max_speed = ntohs(buf.cap.maxspeed)/176;
+
+        stat=0;
+        printk ("%s: ATAPI %dx CDROM", 
+        	drive->name, CDROM_CONFIG_FLAGS (drive)->max_speed);
+        if (CDROM_CONFIG_FLAGS (drive)->cd_r|CDROM_CONFIG_FLAGS (drive)->cd_rw) 
+        	printk (" CD%s%s", 
+        	(CDROM_CONFIG_FLAGS (drive)->cd_r)? "-R" : "", 
+        	(CDROM_CONFIG_FLAGS (drive)->cd_rw)? "/RW" : "");
+        if (CDROM_CONFIG_FLAGS (drive)->is_changer) 
+        	printk (" changer w/%d slots", nslots);
+        else 	
+        	printk (" drive");
+	printk (" %s/%dkB Cache\n", 
+		(CDROM_CONFIG_FLAGS (drive)->is_changer)? "&" : "w",  
+        	ntohs(buf.cap.buffer_size) );
 
 	return nslots;
 }
@@ -2751,6 +2791,8 @@ int ide_cdrom_setup (ide_drive_t *drive)
 		CDROM_CONFIG_FLAGS (drive)->drq_interrupt = 0;
 
 	CDROM_CONFIG_FLAGS (drive)->is_changer = 0;
+	CDROM_CONFIG_FLAGS (drive)->cd_r = 0;
+	CDROM_CONFIG_FLAGS (drive)->cd_rw = 0;
 	CDROM_CONFIG_FLAGS (drive)->supp_disc_present = 0;
 
 #if ! STANDARD_ATAPI
@@ -2802,13 +2844,15 @@ int ide_cdrom_setup (ide_drive_t *drive)
 			CDROM_CONFIG_FLAGS (drive)->subchan_as_bcd = 1;
 		}
 
-		/* Sanyo 3 CD changer uses a non-standard command 
-                   for CD changing. */
-                else if ((strcmp(drive->id->model, "CD-ROM CDR-C3 G") == 0) ||
-                         (strcmp(drive->id->model, "CD-ROM CDR-C3G") == 0)) {
-			/* uses CD in slot 0 when value is set to 3 */
-			CDROM_STATE_FLAGS (drive)->sanyo_slot = 3;
-		}
+                /* Sanyo 3 CD changer uses a non-standard command
+                    for CD changing */
+                 else if ((strcmp(drive->id->model, "CD-ROM CDR-C3 G") == 0) ||
+                         (strcmp(drive->id->model, "CD-ROM CDR-C3G") == 0) ||
+                         (strcmp(drive->id->model, "CD-ROM CDR_C36") == 0)) {
+                        /* uses CD in slot 0 when value is set to 3 */
+                        CDROM_STATE_FLAGS (drive)->sanyo_slot = 3;
+                }
+
 
 	}
 #endif /* not STANDARD_ATAPI */

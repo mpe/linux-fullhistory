@@ -23,7 +23,7 @@ drive interface is compatible, too.
 Installation
 ------------
 
-Change to '/usr/src/linux/include/linux' and edit the file 'gscd.h'. Insert
+Change to '/usr/src/linux/drivers/cdrom' and edit the file 'gscd.h'. Insert
 the i/o address of your interface card.
 
 The default base address is 0x340. This will work for most applications. 

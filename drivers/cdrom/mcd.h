@@ -29,16 +29,28 @@
 
 /* *** make the following line uncommented, if you're sure,
  * *** all configuration is done */
+
 /* #define I_WAS_HERE */
 
+
+
+
 /* Increase this if you get lots of timeouts */
-#define MCD_STATUS_DELAY	200
+#define MCD_STATUS_DELAY	1000
 
 /* number of times to retry a command before giving up */
-#define MCD_RETRY_ATTEMPTS      5
+#define MCD_RETRY_ATTEMPTS      10
 
 /* port access macro */
 #define MCDPORT(x)		(mcd_port + (x))
+
+/* How many sectors to read at 1x when an error at 2x speed occurs. */
+/* You can change this to anything from 2 to 32767, but 30 seems to */
+/* work best for me.  I have found that when the drive has problems */
+/* reading one sector, it will have troubles reading the next few.  */
+#define SINGLE_HOLD_SECTORS 30	
+
+#define MCMD_2X_READ 0xC1	/* Double Speed Read DON'T TOUCH! */
 
 /* status bits */
 

@@ -64,7 +64,7 @@
 #define MAJOR_NR GOLDSTAR_CDROM_MAJOR
 #include <linux/blk.h>
 #define gscd_port gscd /* for compatible parameter passing with "insmod" */
-#include <linux/gscd.h>
+#include "gscd.h"
 
 
 static int gscdPresent            = 0;
@@ -1072,7 +1072,7 @@ int result;
 
 static void gscd_hsg2msf (long hsg, struct msf *msf)
 {
-	hsg += CD_BLOCK_OFFSET;
+	hsg += CD_MSF_OFFSET;
 	msf -> min = hsg / (CD_FRAMES*CD_SECS);
 	hsg %= CD_FRAMES*CD_SECS;
 	msf -> sec = hsg / CD_FRAMES;
@@ -1100,7 +1100,7 @@ static long gscd_msf2hsg (struct msf *mp)
 	return gscd_bcd2bin(mp -> frame)
 		+ gscd_bcd2bin(mp -> sec) * CD_FRAMES
 		+ gscd_bcd2bin(mp -> min) * CD_FRAMES * CD_SECS
-		- CD_BLOCK_OFFSET;
+		- CD_MSF_OFFSET;
 }
 
 static int gscd_bcd2bin (unsigned char bcd)

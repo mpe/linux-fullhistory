@@ -1,4 +1,4 @@
-/* $Id: parport_probe.c,v 1.1.2.9 1997/03/29 21:08:16 phil Exp $ 
+/* $Id: parport_probe.c,v 1.3 1997/10/19 18:18:46 phil Exp $ 
  * Parallel port device probing code
  * 
  * Authors:    Carsten Gross, carsten@sol.wohnheim.uni-ulm.de
@@ -28,9 +28,9 @@ static inline int read_nibble(struct parport *port)
 {
 	unsigned char i;
 	i = parport_read_status(port)>>3;
-	i&=~8;
-	if ( ( i & 0x10) == 0) i|=8;
-	return(i & 0x0f);
+	i &= ~8;
+	if ((i & 0x10) == 0) i |= 8;
+	return (i & 0x0f);
 }
 
 static void read_terminate(struct parport *port) {
@@ -44,7 +44,6 @@ static void read_terminate(struct parport *port) {
 	parport_wait_peripheral(port, 0x80, 0x80);
 	/* no timeout possible, Autofeed low, SelectIN high */
 	parport_write_control(port, (parport_read_control(port) & ~2) | 8);
-	return;
 }
 
 static long read_polled(struct parport *port, char *buf, 
@@ -94,7 +93,6 @@ static void wakeup(void *ref)
 		return;
 
 	wake_up(&wait_q);
-	return;
 }
 
 int parport_probe(struct parport *port, char *buffer, int len)
@@ -221,9 +219,11 @@ static void parse_data(struct parport *port, char *str)
 
 static void pretty_print(struct parport *port)
 {
-	printk(KERN_INFO "%s: %s", port->name, classes[port->probe_info.class].descr);
+	printk(KERN_INFO "%s: %s", port->name,
+	       classes[port->probe_info.class].descr);
 	if (port->probe_info.class) {
-		printk(", %s (%s)", port->probe_info.model, port->probe_info.mfr);
+		printk(", %s %s", port->probe_info.mfr, 
+		       port->probe_info.model);
 	}
 	printk("\n");
 }
@@ -267,12 +267,16 @@ void parport_probe_one(struct parport *port)
 int init_module(void)
 {
 	struct parport *p;
+	MOD_INC_USE_COUNT;
 	for (p = parport_enumerate(); p; p = p->next) 
 		parport_probe_one(p);
+	parport_probe_hook = &parport_probe_one;
+	MOD_DEC_USE_COUNT;
 	return 0;
 }
 
 void cleanup_module(void)
 {
+	parport_probe_hook = NULL;
 }
 #endif

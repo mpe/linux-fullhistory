@@ -123,6 +123,14 @@ else
   endif
 endif
 
+ifeq ($(CONFIG_SPECIALIX),y)
+L_OBJS += specialix.o
+else
+  ifeq ($(CONFIG_SPECIALIX),m)
+  M_OBJS += specialix.o
+  endif
+endif
+
 ifeq ($(CONFIG_ATIXL_BUSMOUSE),y)
 M = y
 L_OBJS += atixlmouse.o

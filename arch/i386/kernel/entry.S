@@ -74,6 +74,7 @@ state		=  0
 counter		=  4
 priority	=  8
 flags		= 12
+sigpending	= 16
 dbgreg6		= 44
 dbgreg7		= 48
 exec_domain	= 52
@@ -169,7 +170,7 @@ ret_from_sys_call:
 ret_with_reschedule:
 	cmpl $0,SYMBOL_NAME(need_resched)
 	jne reschedule
-	testb $0x8,flags(%ebx)		# PF_SIGPENDING
+	cmpl $0,sigpending(%ebx)
 	jne signal_return
 	RESTORE_ALL
 	ALIGN

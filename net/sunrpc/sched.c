@@ -878,7 +878,7 @@ rpciod_down(void)
 	 * Usually rpciod will exit very quickly, so we
 	 * wait briefly before checking the process id.
 	 */
-	current->flags &= ~PF_SIGPENDING;
+	current->sigpending = 0;
 	current->state = TASK_INTERRUPTIBLE;
 	current->timeout = jiffies + 1;
 	schedule();

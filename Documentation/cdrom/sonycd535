@@ -36,7 +36,7 @@ REQUIREMENTS
 	  recognized
 
 	- you must enter your interface address into 
-          /usr/src/linux/include/linux/sonycd535.h and build the
+          /usr/src/linux/drivers/cdrom/sonycd535.h and build the
           appropriate kernel or use the "kernel command line" parameter
                 sonycd535=0x320
           with the correct interface address.

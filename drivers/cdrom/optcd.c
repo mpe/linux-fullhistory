@@ -72,7 +72,7 @@
 #include <linux/blk.h>
 
 #include <linux/cdrom.h>
-#include <linux/optcd.h>
+#include "optcd.h"
 
 #include <asm/uaccess.h>
 
@@ -1838,7 +1838,7 @@ static int opt_ioctl(struct inode *ip, struct file *fp,
 	case CDROMMULTISESSION:	retval = cdrommultisession(arg); break;
 #endif
 
-	case CDROM_GET_UPC:	retval = -EINVAL; break; /* not implemented */
+	case CDROM_GET_MCN:	retval = -EINVAL; break; /* not implemented */
 	case CDROMVOLREAD:	retval = -EINVAL; break; /* not implemented */
 
 	case CDROMREADRAW:

@@ -3951,7 +3951,7 @@ CONFIG_DEFXX
   This is support for the DIGITAL series of EISA (DEFEA) and PCI
   (DEFPA) controllers which can connect you to a local FDDI network.
 
-Support non-SCSI/IDE/ATAPI drives
+Support CDROM drives that are not SCSI or IDE/ATAPI
 CONFIG_CD_NO_IDESCSI
   If you have a CDROM drive that is neither SCSI nor IDE/ATAPI, say Y
   here, otherwise N. Read the CDROM-HOWTO, available via ftp (user:
@@ -3963,7 +3963,7 @@ CONFIG_CD_NO_IDESCSI
   For each of these drivers, a file Documentation/cdrom/<driver_name>
   exists. Especially in cases where you do not know exactly which kind
   of drive you have you should read there.
-  Most of these drivers use a file include/linux/<driver_name>.h where
+  Most of these drivers use a file drivers/cdrom/<driver_name>.h where
   you can define your interface parameters and switch some internal
   goodies.
   All these CDROM drivers are also usable as a module (= code which can
@@ -4004,7 +4004,7 @@ CONFIG_MCD
   (PhotoCDs).  There is a new driver (next question) which can do
   this. If you want that one, say N here.
   If the driver doesn't work out of the box, you might want to have a
-  look at linux/include/linux/mcd.h.  If you say Y here, you should
+  look at linux/drivers/cdrom/mcd.h.  If you say Y here, you should
   also say Y to "ISO9660 cdrom filesystem support" below, because
   that's the filesystem used on CDROMs. Please also read the file
   Documentation/cdrom/mcd. This driver is also available as a module (
@@ -4048,7 +4048,7 @@ CONFIG_SBPCD
   are not sure, but can consume some time during the boot process if
   none of the supported drives gets found.
   Once your drive got found, you should enter the reported parameters 
-  into linux/include/linux/sbpcd.h and set "DISTRIBUTION 0" there.
+  into linux/drivers/cdrom/sbpcd.h and set "DISTRIBUTION 0" there.
   This driver can support up to four CDROM interface cards, and each
   card can support up to four CDROM drives; if you say Y here, you
   will be asked how many controllers you have. If compiled as a
@@ -4067,7 +4067,7 @@ CONFIG_SBPCD2
   Say Y here only if you have two CDROM controller boards of this type
   (usually only if you have more than four drives). You should enter
   the parameters for the second, third and fourth interface card into
-  linux/include/linux/sbpcd.h before compiling the new kernel. Read
+  linux/drivers/cdrom/sbpcd.h before compiling the new kernel. Read
   the file Documentation/cdrom/sbpcd.
 
 Aztech/Orchid/Okano/Wearnes/TXC/CyDROM  CDROM support
@@ -4099,9 +4099,9 @@ Goldstar R420 CDROM support
 CONFIG_GSCD
   If this is your CDROM drive, say Y here.  As described in
   linux/Documentation/cdrom/gscd, you might have to change a setting
-  in the file include/linux/gscd.h before compiling the kernel. Please
-  read the file Documentation/cdrom/gscd. If you say Y here, you
-  should also say Y to "ISO9660 cdrom filesystem support" below,
+  in the file linux/drivers/cdrom/gscd.h before compiling the kernel. 
+  Please read the file Documentation/cdrom/gscd. If you say Y here, 
+  you should also say Y to "ISO9660 cdrom filesystem support" below,
   because that's the filesystem used on CDROMs. This driver is also
   available as a module ( = code which can be inserted in and removed
   from the running kernel whenever you want). The module will be
@@ -4827,6 +4827,18 @@ CONFIG_SMB_FS
   Documentation/modules.txt. The module will be called smbfs.o. Most
   people say N, however.
 
+Coda filesystem support
+CONFIG_CODA_FS
+  CODA is an advanced network filesystem.  It has support for disconnected
+  operation for laptops, read/write server replication, persistent client
+  caches and write back caching. 
+  By choosing this option you are compiling kernel support for Coda clients
+  into the Linux kernel.  You will need user level code as well, both for 
+  the client and server. Server's are currently user level, i.e. need
+  no kernel support. For further information see
+  http://www.coda.cs.cmu.edu or contact Peter Braam <braam@cs.cmu.edu>. 
+
+
 SMB Win95 bug work-around
 CONFIG_SMB_WIN95
   If you want to connect to a share exported by Windows 95, you should
@@ -4972,6 +4984,23 @@ CONFIG_RISCOM8
   and read the file Documentation/riscom8.txt. Also it's possible to
   say M here and compile this driver as kernel loadable module; the
   module will be called riscom8.o.
+
+Specialix IO8+ card support
+CONFIG_SPECIALIX
+  This is a driver for the Specialix IO8+ multiport card, that give 
+  you many serial ports. You would need something like this to 
+  connect more than two modems to your linux box, for instance in
+  order to become a BBS. If you have a card like that, say Y here and
+  read the file Documentation/specialix.txt. Also it's possible to say
+  M here and compile this driver as kernel loadable module.
+
+Specialix DTR/RTS pin is RTS
+CONFIG_SPECIALIX_RTSCTS
+  The Specialix card can only support either RTS or DTR. When this
+  option is off, the driver will use the pin as "DTR" when the tty is
+  in software handshake mode. When this option is on or hardware 
+  handshake is on, it will always be RTS. Read the file 
+  Documentation/specialix.txt for more information. 
 
 Cyclades async mux support
 CONFIG_CYCLADES

@@ -455,6 +455,21 @@ static inline int make_private_signals(void)
 }
 	
 /*
+ * If make_private_signals() made a copy of the signal table, decrement the
+ * refcount of the original table, and free it if necessary.
+ * We don't do that in make_private_signals() so that we can back off
+ * in flush_old_exec() if an error occurs after calling make_private_signals().
+ */
+
+static inline void release_old_signals(struct signal_struct * oldsig)
+{
+	if (current->sig == oldsig)
+		return;
+	if (atomic_dec_and_test(&oldsig->count))
+		kfree(oldsig);
+}
+
+/*
  * These functions flushes out all traces of the currently running executable
  * so that a new one can be started
  */
@@ -504,6 +519,9 @@ int flush_old_exec(struct linux_binprm * bprm)
 	 */
 	retval = exec_mmap();
 	if (retval) goto flush_failed;
+
+	/* This is the point of no return */
+	release_old_signals(oldsig);
 
 	if (current->euid == current->uid && current->egid == current->gid)
 		current->dumpable = 1;

@@ -133,12 +133,6 @@
 #define CM206CTL_GET_STAT _IO( 0x20, 0 )
 #define CM206CTL_GET_LAST_STAT _IO( 0x20, 1 )
 
-/* for kernel 1.2.n */
-#if !defined(CDROM_GET_UPC)
-#define CDROM_GET_UPC _IO( 'S', 0x11 )
-#define CDROMRESET _IO( 'S', 0x12 )
-#endif
-
 #ifdef STATISTICS
 
 /* This is an ugly way to guarantee that the names of the statistics

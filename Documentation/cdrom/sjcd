@@ -39,7 +39,7 @@ through the use of command line options: type at the "boot:" prompt:
 file /etc/lilo.conf). You could also use 'append="sjcd=<configuration_info>"'
 in the appropriate section of /etc/lilo.conf
 If you're building a kernel yourself you can set your default base
-i/o address with SJCD_BASE_ADDR in include/linux/sjcd.h.
+i/o address with SJCD_BASE_ADDR in /usr/src/linux/drivers/cdrom/sjcd.h.
 
 The sjcd driver supports being loaded as a module. The following
 command will set the base i/o address on the fly (assuming you

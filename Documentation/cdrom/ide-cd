@@ -379,12 +379,14 @@ f. Data corruption.
  * interface by Erik Andersen <andersee@et.byu.edu>.
  */
 
+#include <stdio.h>
 #include <stdlib.h>
 #include <errno.h>
 #include <string.h>
 #include <unistd.h>
-#include <stdio.h>
-#include <linux/ucdrom.h>
+#include <fcntl.h>
+#include <sys/ioctl.h>
+#include <linux/cdrom.h>
 
 
 int
@@ -395,7 +397,7 @@ main (int argc, char **argv)
 	int fd;           /* file descriptor for CD-ROM device */
 	int status;       /* return status for system calls */
 	int verbose = 0;
-	int x_slot = -1;
+	int slot=-1, x_slot;
 	int total_slots_available;
 
 	program = argv[0];
@@ -419,10 +421,10 @@ main (int argc, char **argv)
 	device = argv[0];
  
 	if (argc == 2)
-		x_slot = atoi (argv[1]) - 1;
+		slot = atoi (argv[1]) - 1;
 
 	/* open device */ 
-	fd = open (device, 0);
+	fd = open(device, O_RDONLY | O_NONBLOCK);
 	if (fd < 0) {
 		fprintf (stderr, "%s: open failed for `%s': %s\n",
 			 program, device, strerror (errno));
@@ -437,8 +439,8 @@ main (int argc, char **argv)
 		exit (1);
 	}
 
-	if (x_slot >= 0) {
-		if (x_slot >= total_slots_available) {
+	if (slot >= 0) {
+		if (slot >= total_slots_available) {
 			fprintf (stderr, "Bad slot number.  "
 				 "Should be 1 -- %d.\n",
 				 total_slots_available);
@@ -446,19 +448,33 @@ main (int argc, char **argv)
 		}
 
 		/* load */ 
-		status = ioctl (fd, CDROM_SELECT_DISC, x_slot);
+		slot=ioctl (fd, CDROM_SELECT_DISC, slot);
+		if (slot<0) {
+			fflush(stdout);
+				perror ("CDROM_SELECT_DISC ");
+			exit(1);
+		}
 	}
 
-	if (x_slot < 0 || verbose) {
+	if (slot < 0 || verbose) {
 
-		status = ioctl (fd, CDROM_SELECT_DISC, CDSL_CURRENT);
+		status=ioctl (fd, CDROM_SELECT_DISC, CDSL_CURRENT);
+		if (status<0) {
+			fflush(stdout);
+			perror (" CDROM_SELECT_DISC");
+			exit(1);
+		}
+		slot=status;
 
-		printf ("Current slot: %d\n", status+1);
+		printf ("Current slot: %d\n", slot+1);
 		printf ("Total slots available: %d\n",
 			total_slots_available);
 
 		printf ("Drive status: ");
-		switch (ioctl (fd, CDROM_DRIVE_STATUS, CDSL_CURRENT)) {
+                status = ioctl (fd, CDROM_DRIVE_STATUS, CDSL_CURRENT);
+                if (status<0) {
+                  perror(" CDROM_DRIVE_STATUS");
+                } else switch(status) {
 		case CDS_DISC_OK:
 			printf ("Ready.\n");
 			break;
@@ -475,23 +491,58 @@ main (int argc, char **argv)
 
 		for (x_slot=0; x_slot<total_slots_available; x_slot++) {
 			printf ("Slot %2d: ", x_slot+1);
-			switch (ioctl (fd, CDROM_DRIVE_STATUS, x_slot)) {
+             		status = ioctl (fd, CDROM_DRIVE_STATUS, x_slot);
+             		if (status<0) {
+             		     perror(" CDROM_DRIVE_STATUS");
+             		} else switch(status) {
 			case CDS_DISC_OK:
 				printf ("Disc present.");
 				break;
 			case CDS_NO_DISC: 
 				printf ("Empty slot.");
 				break;
+			case CDS_TRAY_OPEN:
+				printf ("CD-ROM tray open.\n");
+				break;
+			case CDS_DRIVE_NOT_READY:
+				printf ("CD-ROM drive not ready.\n");
+				break;
 			case CDS_NO_INFO:
-				printf ("No Information.");
+				printf ("No Information available.");
 				break;
 			default:
 				printf ("This Should not happen!\n");
 				break;
 			}
-			switch (ioctl (fd, CDROM_MEDIA_CHANGED, x_slot)) {
+		  if (slot == x_slot) {
+                  status = ioctl (fd, CDROM_DISC_STATUS);
+                  if (status<0) {
+			perror(" CDROM_DISC_STATUS");
+                  }
+		  switch (status) {
+			case CDS_AUDIO:
+				printf ("\tAudio disc.\t");
+				break;
+			case CDS_DATA_1:
+			case CDS_DATA_2:
+				printf ("\tData disc type %d.\t", status-CDS_DATA_1+1);
+				break;
+			case CDS_XA_2_1:
+			case CDS_XA_2_2:
+				printf ("\tXA data disc type %d.\t", status-CDS_XA_2_1+1);
+				break;
+			default:
+				printf ("\tUnknown disc type 0x%x!\t", status);
+				break;
+			}
+			}
+                  	status = ioctl (fd, CDROM_MEDIA_CHANGED, x_slot);
+                  	if (status<0) {
+				perror(" CDROM_MEDIA_CHANGED");
+                  	}
+		  	switch (status) {
 			case 1:
-				printf ("\t\tChanged.\n");
+				printf ("Changed.\n");
 				break;
 			default:
 				printf ("\n");

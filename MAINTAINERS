@@ -414,6 +414,13 @@ L:	linux-kernel@vger.rutgers.edu
 W:	http://www.nyx.net/~arobinso
 S:	Maintainted
 
+SPECIALIX IO8+ MULTIPORT SERIAL CARD DRIVER
+P:	Roger Wolff
+M:	R.E.Wolff@BitWizard.nl
+M:	io8-linux@specialix.co.uk
+L:	linux-kernel@vger.rutgers.edu ?
+S:	Supported
+
 MOUSE AND MISC DEVICES [GENERAL]
 P:	Alessandro Rubini
 M:	rubini@ipvvis.unipv.it
@@ -463,6 +470,12 @@ S:	Maintained
 NON-IDE/NON-SCSI CDROM DRIVERS [GENERAL] (come on, crew - mark your responsibility)
 P:	Eberhard Moenkeberg
 M:	emoenke@gwdg.de
+L:	linux-kernel@vger.rutgers.edu
+S:	Maintained
+
+UNIFORM CDROM DRIVER 
+P:	Erik Andersen
+M:	andersee@debian.org
 L:	linux-kernel@vger.rutgers.edu
 S:	Maintained
 

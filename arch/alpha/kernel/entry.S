@@ -33,11 +33,11 @@
 #define TASK_COUNTER	8
 #define TASK_PRIORITY	16
 #define TASK_FLAGS	24
+#define TASK_SIGPENDING	32	
 
 /*
  * task flags (must match include/linux/sched.h):
  */
-#define PF_SIGPENDING	0x00000008
 #define	PF_PTRACED	0x00000010
 
 /*
@@ -543,9 +543,8 @@ ret_from_reschedule:
 	lda	$4,init_task_union
 	bne	$2,reschedule
 	xor	$4,$8,$4
-	ldq	$5,TASK_FLAGS($8)
+	ldl	$5,TASK_SIGPENDING($8)
 	beq	$4,restore_all
-	and	$5,PF_SIGPENDING,$5
 	bne	$5,signal_return
 restore_all:
 	RESTORE_ALL

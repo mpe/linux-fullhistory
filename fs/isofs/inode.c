@@ -33,6 +33,7 @@
  * wrong information within the volume descriptors.
  */
 #define IGNORE_WRONG_MULTI_VOLUME_SPECS
+#define BEQUIET
 
 #ifdef LEAK_CHECK
 static int check_malloc = 0;
@@ -500,7 +501,8 @@ struct super_block *isofs_read_super(struct super_block *s,void *data,
 	s->s_flags |= MS_RDONLY /* | MS_NODEV | MS_NOSUID */;
 
 	brelse(bh);
-
+	
+#ifndef BEQUIET
 	printk(KERN_DEBUG "Max size:%ld   Log zone size:%ld\n",
 	       s->u.isofs_sb.s_max_size,
 	       1UL << s->u.isofs_sb.s_log_zone_size);
@@ -509,6 +511,7 @@ struct super_block *isofs_read_super(struct super_block *s,void *data,
 	       (isonum_733(rootp->extent) + isonum_711(rootp->ext_attr_length))
 			<< s -> u.isofs_sb.s_log_zone_size);
 	if(high_sierra) printk(KERN_DEBUG "Disc in High Sierra format.\n");
+#endif
 	unlock_super(s);
 	/* set up enough so that it can read an inode */
 
@@ -541,7 +544,9 @@ struct super_block *isofs_read_super(struct super_block *s,void *data,
 	      }
 	    }
 	    set_blocksize(dev, opt.blocksize);
+#ifndef BEQUIET
 	    printk(KERN_DEBUG "Forcing new log zone size:%d\n", opt.blocksize);
+#endif
 	  }
 
 #ifdef CONFIG_JOLIET

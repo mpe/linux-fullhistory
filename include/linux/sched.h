@@ -182,7 +182,7 @@ struct task_struct {
 	long counter;
 	long priority;
 	unsigned long flags;	/* per process flags, defined below */
-	int errno;
+	int sigpending;
 	long debugreg[8];  /* Hardware debugging registers */
 	struct exec_domain *exec_domain;
 /* various fields */
@@ -273,7 +273,6 @@ struct task_struct {
 					/* Not implemented yet, only for 486*/
 #define PF_STARTING	0x00000002	/* being created */
 #define PF_EXITING	0x00000004	/* getting shut down */
-#define PF_SIGPENDING	0x00000008	/* at least on unblocked sig ready */
 #define PF_PTRACED	0x00000010	/* set if ptrace (0) has been called */
 #define PF_TRACESYS	0x00000020	/* tracing system calls */
 #define PF_FORKNOEXEC	0x00000040	/* forked but didn't exec */
@@ -467,7 +466,7 @@ extern int do_sigaction(int sig, const struct k_sigaction *act,
 
 extern inline int signal_pending(struct task_struct *p)
 {
-	return (p->flags & PF_SIGPENDING) != 0;
+	return (p->sigpending != 0);
 }
 
 /* Reevaluate whether the task has signals pending delivery.
@@ -476,7 +475,7 @@ extern inline int signal_pending(struct task_struct *p)
 
 static inline void recalc_sigpending(struct task_struct *t)
 {
-	unsigned long ready, nflags;
+	unsigned long ready;
 	long i;
 
 	switch (_NSIG_WORDS) {
@@ -498,12 +497,7 @@ static inline void recalc_sigpending(struct task_struct *t)
 	case 1: ready  = t->signal.sig[0] &~ t->blocked.sig[0];
 	}
 
-	/* Poor gcc has trouble with conditional moves... */
-	nflags = t->flags &~ PF_SIGPENDING;
-	if (ready)
-		nflags = t->flags | PF_SIGPENDING;
-
-	t->flags = nflags;
+	t->sigpending = (ready != 0);
 }
 
 

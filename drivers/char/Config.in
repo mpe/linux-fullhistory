@@ -31,6 +31,10 @@ if [ "$CONFIG_SERIAL_NONSTANDARD" = "y" ]; then
      tristate '  Stallion EC8/64, ONboard, Brumby support' CONFIG_ISTALLION
    fi
    tristate 'SDL RISCom/8 card support' CONFIG_RISCOM8
+   tristate 'Specialix IO8+ card support' CONFIG_SPECIALIX
+   if [ "$CONFIG_SPECIALIX" = "y" -o  "$CONFIG_SPECIALIX" = "m" ]; then
+     bool 'Specialix DTR/RTS pin is RTS' CONFIG_SPECIALIX_RTSCTS
+   fi 
    tristate 'Hayes ESP serial port support' CONFIG_ESPSERIAL
    if [ "$CONFIG_ESPSERIAL" = "y" -o "$CONFIG_ESPSERIAL" = "m" ]; then
      int '  DMA channel' CONFIG_ESPSERIAL_DMA_CHANNEL 1

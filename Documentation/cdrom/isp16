@@ -82,7 +82,7 @@ The default values are
   dma=0
   drive_type=Sanyo
 reflecting my own configuration. The defaults can be changed in
-the file ~/include/linux/ips16.h.
+the file linux/drivers/cdrom/ips16.h.
 
 The cdrom interface can be configured at run time by loading the
 initialisation driver as a module. In that case, the interface

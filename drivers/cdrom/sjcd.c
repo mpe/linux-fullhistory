@@ -73,7 +73,7 @@
 
 #define MAJOR_NR SANYO_CDROM_MAJOR
 #include <linux/blk.h>
-#include <linux/sjcd.h>
+#include "sjcd.h"
 
 static int sjcd_present = 0;
 

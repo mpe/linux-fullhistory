@@ -163,7 +163,7 @@
 #define MAJOR_NR AZTECH_CDROM_MAJOR 
 
 #include <linux/blk.h>
-#include <linux/aztcd.h>
+#include "aztcd.h"
 
 #include <linux/module.h>
 #include <linux/errno.h>
@@ -2266,7 +2266,7 @@ static void azt_hsg2msf(long hsg, struct msf *msf)
 
 static long azt_msf2hsg(struct msf *mp)
 { return azt_bcd2bin(mp -> frame) + azt_bcd2bin(mp -> sec) * 75
-		                  + azt_bcd2bin(mp -> min) * 4500 - CD_BLOCK_OFFSET;
+		                  + azt_bcd2bin(mp -> min) * 4500 - CD_MSF_OFFSET;
 }
 
 static void azt_bin2bcd(unsigned char *p)

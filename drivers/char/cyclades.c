@@ -2339,7 +2339,7 @@ block_til_ready(struct tty_struct *tty, struct file * filp,
 			break;
 		}
 	    restore_flags(flags);
-	    if (current->signal & ~current->blocked) {
+	    if (signal_pending(current))  {
 		retval = -ERESTARTSYS;
 		break;
 	    }
@@ -2397,7 +2397,7 @@ block_til_ready(struct tty_struct *tty, struct file * filp,
 	      || (cy_readl(&ch_ctrl[channel].rs_status) & C_RS_DCD))) {
 		break;
 	    }
-	    if (current->signal & ~current->blocked) {
+	    if (signal_pending(current)) {
 		retval = -ERESTARTSYS;
 		break;
 	    }

@@ -459,7 +459,8 @@ int do_fork(unsigned long clone_flags, unsigned long usp, struct pt_regs *regs)
 	p->did_exec = 0;
 	p->swappable = 0;
 	p->state = TASK_UNINTERRUPTIBLE;
-	p->flags &= ~(PF_PTRACED|PF_TRACESYS|PF_SUPERPRIV|PF_SIGPENDING);
+	p->flags &= ~(PF_PTRACED|PF_TRACESYS|PF_SUPERPRIV);
+	p->sigpending = 0;
 	p->flags |= PF_FORKNOEXEC;
 	p->pid = get_pid(clone_flags);
 	p->next_run = NULL;
@@ -467,7 +468,7 @@ int do_fork(unsigned long clone_flags, unsigned long usp, struct pt_regs *regs)
 	p->p_pptr = p->p_opptr = current;
 	p->p_cptr = NULL;
 	init_waitqueue(&p->wait_chldexit);
-	sigemptyset(&current->signal);
+	sigemptyset(&p->signal);
 	p->sigqueue = NULL;
 	p->sigqueue_tail = &p->sigqueue;
 	p->it_real_value = p->it_virt_value = p->it_prof_value = 0;

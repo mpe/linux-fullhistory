@@ -382,7 +382,9 @@ static int ddv_daemon(void *unused)
 		save_flags(flags); cli();
 
 		while (!rem_queue) {
-			current->signal = 0;
+			spin_lock_irq(&current->sigmask_lock);
+			flush_signals(current);
+			spin_unlock_irq(&current->sigmask_lock);
 			interruptible_sleep_on(&ddv_daemon_wait);
 		}
 

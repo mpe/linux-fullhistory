@@ -103,7 +103,7 @@ void ftape_sleep(unsigned int time)
 			}
 			/*  Mmm. Isn't current->blocked == 0xffffffff ?
 			 */
-			if (current->signal & ~current->blocked) {
+			if (signal_pending(current)) {
 				TRACE(ft_t_err,
 				      "awoken by non-blocked signal :-(");
 				break;	/* exit on signal */

@@ -279,7 +279,7 @@ int parport_claim(struct pardevice *dev)
 
 	/* Swap the IRQ handlers. */
 	if (dev->port->irq != PARPORT_IRQ_NONE) {
-		free_irq(dev->port->irq, dev->port);
+		free_irq(dev->port->irq, pd1?pd1->private:NULL);
 		request_irq(dev->port->irq, dev->irq_func ? dev->irq_func :
 			    parport_null_intr_func, SA_INTERRUPT, dev->name,
 			    dev->private);
@@ -307,7 +307,7 @@ void parport_release(struct pardevice *dev)
 
 	/* Point IRQs somewhere harmless. */
 	if (dev->port->irq != PARPORT_IRQ_NONE) {
-		free_irq(dev->port->irq, dev->port);
+		free_irq(dev->port->irq, dev->private);
 		request_irq(dev->port->irq, parport_null_intr_func,
 			    SA_INTERRUPT, dev->port->name, NULL);
  	}

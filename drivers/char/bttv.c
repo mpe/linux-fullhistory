@@ -54,6 +54,7 @@
 static unsigned int remap=0;
 static unsigned int vidmem=0;
 static unsigned int tuner=0;	/* Default tuner */
+MODULE_PARM(tuner,"i");
 
 static int find_vga(void);
 static void bt848_set_risc_jmps(struct bttv *btv);
@@ -603,7 +604,7 @@ static long bttv_read(struct video_device *v, char *buf, unsigned long count, in
 			}
 			interruptible_sleep_on(&btv->vbiq);
 			sti();
-			if(current->signal & ~current->blocked)
+			if(signal_pending(current))
 			{
 				if(todo==count)
 					return -EINTR;

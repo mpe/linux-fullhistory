@@ -987,9 +987,11 @@ int md_thread(void * arg)
 		cli();
 		if (!test_bit(THREAD_WAKEUP, &thread->flags)) {
 			do {
-				current->signal = 0;
-				interruptible_sleep_on(&thread->wqueue);
-			} while (current->signal);
+			         spin_lock_irq(&current->sigmask_lock);
+				 flush_signals(current);
+				 spin_unlock_irq(&current->sigmask_lock);
+				 interruptible_sleep_on(&thread->wqueue);
+			} while (signal_pending(current));
 		}
 	}
 }

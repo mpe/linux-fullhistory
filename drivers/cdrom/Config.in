@@ -19,9 +19,6 @@ tristate 'Mitsumi [XA/MultiSession] CDROM support' CONFIG_MCDX
 tristate 'Optics Storage DOLPHIN 8000AT CDROM support' CONFIG_OPTCD
 tristate 'Philips/LMS CM206 CDROM support' CONFIG_CM206
 tristate 'Sanyo CDR-H94A CDROM support' CONFIG_SJCD
-bool 'Soft configurable cdrom interface card support' CONFIG_CDI_INIT
-if [ "$CONFIG_CDI_INIT" = "y" ]; then
-  tristate 'ISP16/MAD16/Mozart soft configurable cdrom interface support' CONFIG_ISP16_CDI
-fi
+tristate 'ISP16/MAD16/Mozart soft configurable cdrom interface support' CONFIG_ISP16_CDI
 tristate 'Sony CDU31A/CDU33A CDROM support' CONFIG_CDU31A
 tristate 'Sony CDU535 CDROM support' CONFIG_CDU535

@@ -73,6 +73,9 @@
 #define MKISS_MAJOR	55
 #define DSP56K_MAJOR    55   /* DSP56001 processor device */
 
+#define SPECIALIX_NORMAL_MAJOR 75
+#define SPECIALIX_CALLOUT_MAJOR 76
+
 /*
  * Tests for SCSI devices.
  */

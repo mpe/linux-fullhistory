@@ -1,7 +1,7 @@
-/* $Id: aztcd.h,v 2.60 1997/11/29 09:51:22 root Exp root $
+/* $Id: aztcd.h,v 2.50 1996/05/17 16:15:43 root Exp root $
  *
  * Definitions for a AztechCD268 CD-ROM interface
- *	Copyright (C) 1994-98  Werner Zimmermann
+ *	Copyright (C) 1994, 1995  Werner Zimmermann
  *
  *	based on Mitsumi CDROM driver by Martin Harriss
  *
@@ -20,16 +20,11 @@
  *  Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  *
  *  History:	W.Zimmermann adaption to Aztech CD268-01A Version 1.3
- *		October 1994 Email: Werner.Zimmermann@fht-esslingen.de
+ *		October 1994 Email: zimmerma@rz.fht-esslingen.de
  */
 
-/* *** change this to set the I/O port address of your CD-ROM drive,
-       set to '-1', if you want autoprobing */
-#define AZT_BASE_ADDR		-1
-
-/* list of autoprobing addresses (not more than 15), last value must be 0x000
-   Note: Autoprobing is only enabled, if AZT_BASE_ADDR is set to '-1' ! */
-#define AZT_BASE_AUTO 		{ 0x320, 0x300, 0x310, 0x330, 0x000 }
+/* *** change this to set the I/O port address of your CD-ROM drive*/
+#define AZT_BASE_ADDR		0x320
 
 /* Uncomment this, if your CDROM is connected to a Soundwave32-soundcard
    and configure AZT_BASE_ADDR and AZT_SW32_BASE_ADDR */
@@ -59,9 +54,6 @@
   chapter '5.1 Multisession support' in README.aztcd for details. Normally it's 
   uncritical to leave this setting untouched */
 #define AZT_MULTISESSION        1
-
-/*Uncomment this, if you are using a linux kernel version prior to 2.1.0 */
-/*#define AZT_KERNEL_PRIOR_2_1 */
 
 /*---------------------------------------------------------------------------*/
 /*-----nothing to be configured for normal applications below this line------*/

@@ -43,6 +43,7 @@ if [ "$CONFIG_INET" = "y" ]; then
       define_bool CONFIG_LOCKD n
     fi
   fi
+  tristate 'Coda filesystem support (advanced network fs)' CONFIG_CODA_FS
   tristate 'SMB filesystem support (to mount WfW shares etc..)' CONFIG_SMB_FS
   if [ "$CONFIG_SMB_FS" != "n" ]; then
     bool 'SMB Win95 bug work-around' CONFIG_SMB_WIN95

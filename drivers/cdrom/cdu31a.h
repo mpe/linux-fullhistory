@@ -96,10 +96,10 @@
 #define SONY_REQ_SUBCODE_ADDRESS_CMD    0x21    /* Returns s_sony_subcode */
 #define SONY_REQ_UPC_EAN_CMD            0x22
 #define SONY_REQ_ISRC_CMD               0x23
-#define SONY_REQ_TOC_DATA_SPEC_CMD      0x24
+#define SONY_REQ_TOC_DATA_SPEC_CMD      0x24    /* Returns s_sony_session_toc */
 
 /* Commands to request information from the drive */
-#define SONY_READ_TOC_CMD               0x30
+#define SONY_READ_TOC_CMD               0x30    /* let the drive firmware grab the TOC */
 #define SONY_SEEK_CMD                   0x31
 #define SONY_READ_CMD                   0x32
 #define SONY_READ_BLKERR_STAT_CMD       0x34
@@ -273,6 +273,28 @@ struct s_sony_session_toc
    unsigned char controlc0      :4;
    unsigned char pointc0;
    unsigned char dummyc0[7];
+   struct
+   {
+      unsigned char address     :4;
+      unsigned char control     :4;
+      unsigned char track;
+      unsigned char track_start_msf[3];
+   } tracks[MAX_TRACKS];
+
+   unsigned int start_track_lba;
+   unsigned int lead_out_start_lba;
+   unsigned int mint;
+   unsigned int maxt;
+};
+
+struct s_all_sessions_toc
+{
+   unsigned char sessions;
+   unsigned int track_entries;
+   unsigned char first_track_num;
+   unsigned char last_track_num;
+   unsigned char disk_type;
+   unsigned char lead_out_start_msf[3];
    struct
    {
       unsigned char address     :4;

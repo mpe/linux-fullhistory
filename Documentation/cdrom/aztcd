@@ -55,8 +55,8 @@ old kernel, in order to reboot if something goes wrong!
 
 2. INSTALLATION
 The driver consists of a header file 'aztcd.h', which normally should reside 
-in /usr/include/linux and the source code 'aztcd.c', which normally resides in
-/usr/src/linux/drivers/cdrom. It uses /dev/aztcd (/dev/aztcd0 in some distri-
+in /usr/src/linux/drivers/cdrom and the source code 'aztcd.c', which normally 
+resides in the same place. It uses /dev/aztcd (/dev/aztcd0 in some distri-
 butions), which must be a valid block device with major number 29 and reside 
 in directory /dev. To mount a CD-ROM, your kernel needs to have the ISO9660-
 filesystem support included.
@@ -157,7 +157,7 @@ your boot kernel is not the same than the source kernel version, from which
 you create the modules. So rebuild your kernel, if necessary. 
 
 Now edit the base address of your AZTECH interface card in
-/usr/src/linux/include/linux/aztcd.h to the appropriate value. 
+/usr/src/linux/drivers/cdrom/aztcd.h to the appropriate value. 
 aztcd may be configured to use autoprobing the base address by setting
 AZT_BASE_ADDR to '-1'. In that case aztcd probes the addresses listed 
 under AZT_BASE_AUTO. But please remember, that autoprobing always may 
@@ -191,7 +191,7 @@ should try to boot DOS first and let their DOS drivers initialize the
 soundcard and CDROM, then warm boot (or use loadlin) their PC to start
 Linux.
 Support for the CDROM-interface of SoundWave32-soundcards is directly
-implemented in the AZTECH driver. Please edit /usr/src/linux/include/aztdc.h,
+implemented in the AZTECH driver. Please edit linux/drivers/cdrom/aztdc.h,
 uncomment line '#define AZT_SW32' and set the appropriate value for
 AZT_BASE_ADDR and AZT_SW32_BASE_ADDR. This support was tested with an Orchid
 CDS-3110 connected to a SoundWave32.
@@ -563,7 +563,7 @@ History:  V0.1  W.Zimmermann: First release. Nov. 8, 1994
 #include <fcntl.h>
 #include <unistd.h>
 #include <linux/cdrom.h>
-#include <linux/aztcd.h>
+#include <linux/../../drivers/cdrom/aztcd.h>
 
 void help(void)
 { printf("Available Commands:  STOP         s      EJECT/CLOSE  e       QUIT         q\n");

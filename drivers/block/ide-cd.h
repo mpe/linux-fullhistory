@@ -115,8 +115,11 @@ struct ide_cd_config_flags {
 	__u8 toctracks_as_bcd : 1; /* TOC track numbers are in BCD. */
 	__u8 subchan_as_bcd   : 1; /* Subchannel info is in BCD. */
 	__u8 is_changer       : 1; /* Drive is a changer. */
+	__u8 cd_r             : 1; /* Drive can write to CD-R media . */
+	__u8 cd_rw            : 1; /* Drive can write to CD-R/W media . */
 	__u8 supp_disc_present: 1; /* Changer can report exact contents
 				      of slots. */
+	__u8 max_speed        : 4; /* Max speed of the drive */
 	__u8 seeking          : 1; /* Seeking in progress */
 	__u8 reserved         : 6;
 };
@@ -130,6 +133,7 @@ struct ide_cd_state_flags {
 	__u8 toc_valid     : 1; /* Saved TOC information is current. */
 	__u8 door_locked   : 1; /* We think that the drive door is locked. */
 	__u8 sanyo_slot    : 2; /* Sanyo 3 CD changer support */
+	__u8 curent_speed  : 4; /* Current speed of the drive */
 	__u8 reserved      : 3;
 };
 #define CDROM_STATE_FLAGS(drive)  ((struct ide_cd_state_flags *)&((drive)->bios_head))
@@ -239,16 +243,16 @@ struct atapi_capabilities_page {
 
 	/* Drive supports read from CD-R discs (orange book, part II) */
         unsigned cd_r_read           : 1; /* reserved in 1.2 */
-	/* Drive supports read from CD-E discs (orange book, part III) */
-        unsigned cd_e_read           : 1; /* reserved in 1.2 */
+	/* Drive supports read from CD-R/W (CD-E) discs (orange book, part III) */
+        unsigned cd_rw_read           : 1; /* reserved in 1.2 */
 	/* Drive supports reading CD-R discs with addressing method 2 */
 	unsigned method2             : 1; /* reserved in 1.2 */
 	unsigned reserved2           : 5;
 
 	/* Drive supports write to CD-R discs (orange book, part II) */
         unsigned cd_r_write          : 1; /* reserved in 1.2 */
-	/* Drive supports write to CD-E discs (orange book, part III) */
-        unsigned cd_e_write          : 1; /* reserved in 1.2 */
+	/* Drive supports write to CD-R/W (CD-E) discs (orange book, part III) */
+        unsigned cd_rw_write          : 1; /* reserved in 1.2 */
 	unsigned reserved3           : 6;
 
 	/* Drive supports audio play operations. */

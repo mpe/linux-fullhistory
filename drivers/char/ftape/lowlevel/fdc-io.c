@@ -445,7 +445,7 @@ int fdc_interrupt_wait(unsigned int time)
 		fdc_reset();
 		resetting = 0;
 	}
-	TRACE_EXIT (current->signal & ~current->blocked) ? -EINTR : -ETIME;
+	TRACE_EXIT (signal_pending(current)) ? -EINTR : -ETIME;
 }
 
 /*      Start/stop drive motor. Enable DMA mode.

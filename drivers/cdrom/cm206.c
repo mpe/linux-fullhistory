@@ -70,9 +70,9 @@ History:
 	      open only for ioctl operation, e.g., for operation of
 	      tray etc.
  4 apr 1996:  0.97 First implementation of layer between VFS and cdrom
-              driver, a generic interface. Much of the functionality
+              driver, a Uniform interface. Much of the functionality
 	      of cm206_open() and cm206_ioctl() is transferred to a
-	      new file cdrom.c and its header ucdrom.h. 
+	      new file cdrom.c and its header cdrom.h. 
 
 	      Upgrade to Linux kernel 1.3.78. 
 
@@ -140,8 +140,6 @@ History:
 #include <linux/malloc.h>
 #include <linux/init.h>
 
-#include <linux/ucdrom.h>
-
 #include <asm/io.h>
 
 #define MAJOR_NR CM206_CDROM_MAJOR
@@ -152,7 +150,7 @@ History:
 #undef AUTO_PROBE_MODULE
 #define USE_INSW
 
-#include <linux/cm206.h>
+#include "cm206.h"
 
 /* This variable defines whether or not to probe for adapter base port 
    address and interrupt request. It can be overridden by the boot 
@@ -990,7 +988,7 @@ int cm206_media_changed(struct cdrom_device_info * cdi, int disc_nr)
   else return -EIO;
 }
 
-/* The new generic cdrom support. Routines should be concise, most of
+/* The new Uniform cdrom support. Routines should be concise, most of
    the logic should be in cdrom.c */
 
 /* returns number of times device is in use */
@@ -1021,24 +1019,6 @@ int cm206_drive_status(struct cdrom_device_info * cdi, int slot_nr)
   return CDS_DISC_OK;
 }
  
-/* gives current state of disc in drive */
-int cm206_disc_status(struct cdrom_device_info * cdi)
-{
-  uch xa;
-  get_drive_status();
-  if ((cd->dsb & dsb_not_useful) | !(cd->dsb & dsb_disc_present))
-    return CDS_NO_DISC;
-  get_disc_status();
-  if (DISC_STATUS & cds_all_audio) return CDS_AUDIO;
-  xa = DISC_STATUS >> 4;
-  switch (xa) {
-  case 0: return CDS_DATA_1;	/* can we detect CDS_DATA_2? */
-  case 1: return CDS_XA_2_1;	/* untested */
-  case 2: return CDS_XA_2_2;
-  }
-  return 0;
-}
-
 /* locks or unlocks door lock==1: lock; return 0 upon success */
 int cm206_lock_door(struct cdrom_device_info * cdi, int lock)
 {
@@ -1049,7 +1029,7 @@ int cm206_lock_door(struct cdrom_device_info * cdi, int lock)
 }
   
 /* Although a session start should be in LBA format, we return it in 
-   MSF format because it is slightly easier, and the new generic ioctl
+   MSF format because it is slightly easier, and the new Uniform ioctl
    will take care of the necessary conversion. */
 int cm206_get_last_session(struct cdrom_device_info * cdi, 
 			   struct cdrom_multisession * mssp) 
@@ -1123,7 +1103,6 @@ static struct cdrom_device_ops cm206_dops = {
   cm206_open,			/* open */
   cm206_release,		/* release */
   cm206_drive_status,		/* drive status */
-  cm206_disc_status,		/* disc status */
   cm206_media_changed,		/* media changed */
   cm206_tray_move,		/* tray move */
   cm206_lock_door,		/* lock door */
@@ -1150,7 +1129,8 @@ static struct cdrom_device_info cm206_info = {
   1,				/* number of discs */
   0,				/* options, not owned */
   0,				/* mc_flags, not owned */
-  0				/* use count, not owned */
+  0,				/* use count, not owned */
+  "cm206"			/* name of the device type */
 };
 
 /* This routine gets called during initialization if thing go wrong,
@@ -1281,7 +1261,7 @@ __initfunc(int cm206_init(void))
     cleanup(3);
     return -EIO;
   }
-  if (register_cdrom(&cm206_info, "cm206") != 0) {
+  if (register_cdrom(&cm206_info) != 0) {
     printk("Cannot register for cdrom %d!\n", MAJOR_NR);
     cleanup(3);
     return -EIO;
