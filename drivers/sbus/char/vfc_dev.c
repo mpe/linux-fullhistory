@@ -129,9 +129,9 @@ int init_vfc_hw(struct vfc_dev *dev)
 int init_vfc_devstruct(struct vfc_dev *dev, int instance) 
 {
 	dev->instance=instance;
-	dev->device_lock_sem=MUTEX;
+	init_MUTEX(&dev->device_lock_sem);
 	dev->control_reg=0;
-	dev->poll_wait=NULL;
+	init_waitqueue_head(&dev->poll_wait);
 	dev->busy=0;
 	return 0;
 }
@@ -203,7 +203,6 @@ static int vfc_debug(struct vfc_dev *dev, int cmd, unsigned long arg)
 {
 	struct vfc_debug_inout inout;
 	unsigned char *buffer;
-	int ret;
 
 	if(!capable(CAP_SYS_ADMIN)) return -EPERM;
 

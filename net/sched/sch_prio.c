@@ -178,7 +178,7 @@ static int prio_tune(struct Qdisc *sch, struct rtattr *opt)
 			return -EINVAL;
 	}
 
-	start_bh_atomic();
+	sch_tree_lock(sch);
 	q->bands = qopt->bands;
 	memcpy(q->prio2band, qopt->priomap, TC_PRIO_MAX+1);
 
@@ -187,7 +187,7 @@ static int prio_tune(struct Qdisc *sch, struct rtattr *opt)
 		if (child != &noop_qdisc)
 			qdisc_destroy(child);
 	}
-	end_bh_atomic();
+	sch_tree_unlock(sch);
 
 	for (i=0; i<=TC_PRIO_MAX; i++) {
 		int band = q->prio2band[i];
@@ -195,11 +195,12 @@ static int prio_tune(struct Qdisc *sch, struct rtattr *opt)
 			struct Qdisc *child;
 			child = qdisc_create_dflt(sch->dev, &pfifo_qdisc_ops);
 			if (child) {
+				sch_tree_lock(sch);
 				child = xchg(&q->queues[band], child);
-				synchronize_bh();
 
 				if (child != &noop_qdisc)
 					qdisc_destroy(child);
+				sch_tree_unlock(sch);
 			}
 		}
 	}
@@ -265,7 +266,11 @@ static int prio_graft(struct Qdisc *sch, unsigned long arg, struct Qdisc *new,
 	if (new == NULL)
 		new = &noop_qdisc;
 
-	*old = xchg(&q->queues[band], new);
+	sch_tree_lock(sch);
+	*old = q->queues[band];
+	q->queues[band] = new;
+	qdisc_reset(*old);
+	sch_tree_unlock(sch);
 
 	return 0;
 }

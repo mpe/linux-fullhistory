@@ -1,8 +1,8 @@
-/* $Id: pcikbd.c,v 1.29 1999/05/16 13:47:53 ecd Exp $
+/* $Id: pcikbd.c,v 1.30 1999/06/03 15:02:36 davem Exp $
  * pcikbd.c: Ultra/AX PC keyboard support.
  *
  * Copyright (C) 1997  Eddie C. Dost  (ecd@skynet.be)
- * JavaStation(MrCoffee) support by Pete A. Zaitcev.
+ * JavaStation support by Pete A. Zaitcev.
  *
  * This code is mainly put together from various places in
  * drivers/char, please refer to these sources for credits
@@ -30,13 +30,16 @@
 #include <asm/io.h>
 #include <asm/uaccess.h>
 
-#ifdef __sparc_v9__
-#define	PCI_KB_NAME	"kb_ps2"
-#define PCI_MS_NAME	"kdmouse"
-#else
-#define PCI_KB_NAME	"keyboard"
-#define PCI_MS_NAME	"mouse"
-#endif
+/*
+ * Different platforms provide different permutations of names.
+ * AXi - kb_ps2, kdmouse.
+ * MrCoffee - keyboard, mouse.
+ * Espresso - keyboard, kdmouse.
+ */
+#define	PCI_KB_NAME1	"kb_ps2"
+#define PCI_KB_NAME2	"keyboard"
+#define PCI_MS_NAME1	"kdmouse"
+#define PCI_MS_NAME2	"mouse"
 
 #include "pcikbd.h"
 #include "sunserial.h"
@@ -502,7 +505,8 @@ __initfunc(void pcikbd_init_hw(void))
 			for_each_ebusdev(edev, ebus) {
 				if(!strcmp(edev->prom_name, "8042")) {
 					for_each_edevchild(edev, child) {
-                                                if (!strcmp(child->prom_name, PCI_KB_NAME))
+                                                if (strcmp(child->prom_name, PCI_KB_NAME1) == 0 ||
+						    strcmp(child->prom_name, PCI_KB_NAME2) == 0)
 							goto found;
 					}
 				}
@@ -513,12 +517,14 @@ __initfunc(void pcikbd_init_hw(void))
 
 found:
 		pcikbd_iobase = child->base_address[0];
+#ifdef __sparc_v9__
 		if (check_region(pcikbd_iobase, sizeof(unsigned long))) {
 			printk("8042: can't get region %lx, %d\n",
 			       pcikbd_iobase, (int)sizeof(unsigned long));
 			return;
 		}
 		request_region(pcikbd_iobase, sizeof(unsigned long), "8042 controller");
+#endif
 
 		pcikbd_irq = child->irqs[0];
 		if (request_irq(pcikbd_irq, &pcikbd_interrupt,
@@ -548,7 +554,7 @@ ebus_done:
 	 * XXX: my 3.1.3 PROM does not give me the beeper node for the audio
 	 *      auxio register, though I know it is there... (ecd)
 	 *
-	 * Both JE1 & MrCoffe have no beeper. How about Krups? --zaitcev
+	 * JavaStations appear not to have beeper. --zaitcev
 	 */
 	if (!edev)
 		pcibeep_iobase = (pcikbd_iobase & ~(0xffffff)) | 0x722000;
@@ -573,7 +579,6 @@ ebus_done:
 	if(msg)
 		printk("8042: keyboard init failure [%s]\n", msg);
 }
-
 
 
 /*
@@ -955,7 +960,8 @@ __initfunc(int pcimouse_init(void))
 			for_each_ebusdev(edev, ebus) {
 				if(!strcmp(edev->prom_name, "8042")) {
 					for_each_edevchild(edev, child) {
-							if (!strcmp(child->prom_name, PCI_MS_NAME))
+							if (strcmp(child->prom_name, PCI_MS_NAME1) == 0 ||
+							    strcmp(child->prom_name, PCI_MS_NAME2) == 0)
 							goto found;
 					}
 				}
@@ -1023,7 +1029,7 @@ found:
 
 __initfunc(int ps2kbd_probe(unsigned long *memory_start))
 {
-	int pnode, enode, node, dnode;
+	int pnode, enode, node, dnode, xnode;
 	int kbnode = 0, msnode = 0, bnode = 0;
 	int devices = 0;
 	char prop[128];
@@ -1103,18 +1109,20 @@ __initfunc(int ps2kbd_probe(unsigned long *memory_start))
 			 * For each '8042' on this EBus...
 			 */
 			while (node) {
+				dnode = prom_getchild(node);
+
 				/*
 				 * Does it match?
 				 */
-				dnode = prom_getchild(node);
-				dnode = prom_searchsiblings(dnode, PCI_KB_NAME);
-				if (dnode == kbnode) {
+				if ((xnode = prom_searchsiblings(dnode, PCI_KB_NAME1)) == kbnode) {
+					++devices;
+				} else if ((xnode = prom_searchsiblings(dnode, PCI_KB_NAME2)) == kbnode) {
 					++devices;
 				}
 
-				dnode = prom_getchild(node);
-				dnode = prom_searchsiblings(dnode, PCI_MS_NAME);
-				if (dnode == msnode) {
+				if ((xnode = prom_searchsiblings(dnode, PCI_MS_NAME1)) == msnode) {
+					++devices;
+				} else if ((xnode = prom_searchsiblings(dnode, PCI_MS_NAME2)) == msnode) {
 					++devices;
 				}
 

@@ -53,6 +53,7 @@
 #include <linux/kernel.h>
 #include <linux/init.h>
 #include <linux/tqueue.h>
+#include <linux/delay.h>
 
 #include <asm/io.h>
 #include <asm/irq.h>
@@ -60,7 +61,6 @@
 #include <asm/system.h>
 #include <asm/segment.h>
 #include <asm/bitops.h>
-#include <asm/delay.h>
 #include <asm/kdebug.h>
 #include <asm/sbus.h>
 #include <asm/uaccess.h>

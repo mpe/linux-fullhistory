@@ -3,7 +3,7 @@
  *	
  *		Alan Cox, <alan@redhat.com>
  *
- *	Version: $Id: icmp.c,v 1.54 1999/05/30 01:16:22 davem Exp $
+ *	Version: $Id: icmp.c,v 1.57 1999/06/09 10:10:50 davem Exp $
  *
  *	This program is free software; you can redistribute it and/or
  *	modify it under the terms of the GNU General Public License
@@ -699,8 +699,8 @@ static void icmp_unreach(struct icmphdr *icmph, struct sk_buff *skb, int len)
 			case ICMP_FRAG_NEEDED:
 				if (ipv4_config.no_pmtu_disc) {
 					if (net_ratelimit())
-						printk(KERN_INFO "ICMP: %s: fragmentation needed and DF set.\n",
-					       in_ntoa(iph->daddr));
+						printk(KERN_INFO "ICMP: %d.%d.%d.%d: fragmentation needed and DF set.\n",
+						       NIPQUAD(iph->daddr));
 				} else {
 					unsigned short new_mtu;
 					new_mtu = ip_rt_frag_needed(iph, ntohs(icmph->un.frag.mtu));
@@ -711,7 +711,7 @@ static void icmp_unreach(struct icmphdr *icmph, struct sk_buff *skb, int len)
 				break;
 			case ICMP_SR_FAILED:
 				if (net_ratelimit())
-					printk(KERN_INFO "ICMP: %s: Source Route Failed.\n", in_ntoa(iph->daddr));
+					printk(KERN_INFO "ICMP: %d.%d.%d.%d: Source Route Failed.\n", NIPQUAD(iph->daddr));
 				break;
 			default:
 				break;
@@ -741,8 +741,8 @@ static void icmp_unreach(struct icmphdr *icmph, struct sk_buff *skb, int len)
 		if (inet_addr_type(iph->daddr) == RTN_BROADCAST)
 		{
 			if (net_ratelimit())
-				printk(KERN_WARNING "%s sent an invalid ICMP error to a broadcast.\n",
-			       	in_ntoa(skb->nh.iph->saddr));
+				printk(KERN_WARNING "%d.%d.%d.%d sent an invalid ICMP error to a broadcast.\n",
+			       	NIPQUAD(skb->nh.iph->saddr));
 			return; 
 		}
 	}

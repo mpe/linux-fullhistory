@@ -1,4 +1,4 @@
-/* $Id: io.h,v 1.19 1999/05/14 07:26:09 davem Exp $ */
+/* $Id: io.h,v 1.20 1999/06/03 15:02:50 davem Exp $ */
 #ifndef __SPARC_IO_H
 #define __SPARC_IO_H
 
@@ -161,6 +161,15 @@ static __inline__ void *sparc_dvma_malloc(int size, char *name, __u32 *dvmaaddr_
 
 #define virt_to_phys(x) __pa((unsigned long)(x))
 #define phys_to_virt(x) __va((unsigned long)(x))
+
+/*
+ * At the moment, we do not use CMOS_READ anywhere outside of rtc.c,
+ * so rtc_port is static in it. This should not change unless a new
+ * hardware pops up.
+ */
+
+#define RTC_PORT(x)   (rtc_port + (x))
+#define RTC_ALWAYS_BCD  0
 
 /* Nothing to do */
 

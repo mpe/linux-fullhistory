@@ -5,7 +5,7 @@
  *
  *		IPv4 Forwarding Information Base: FIB frontend.
  *
- * Version:	$Id: fib_frontend.c,v 1.15 1999/03/21 05:22:31 davem Exp $
+ * Version:	$Id: fib_frontend.c,v 1.16 1999/06/09 10:10:42 davem Exp $
  *
  * Authors:	Alexey Kuznetsov, <kuznet@ms2.inr.ac.ru>
  *
@@ -123,13 +123,11 @@ fib_get_procinfo(char *buffer, char **start, off_t offset, int length, int dummy
 		first = 0;
   	}
 
-	/* rtnl_shlock(); -- it is pointless at the moment --ANK */
 	if (main_table && count > 0) {
 		int n = main_table->tb_get_info(main_table, ptr, first, count);
 		count -= n;
 		ptr += n*128;
 	}
-	/* rtnl_shunlock(); */
 	len = ptr - *start;
 	if (len >= length)
 		return length;

@@ -35,13 +35,6 @@
 
 #define RT_HASH_DIVISOR	    	256
 
-/*
- * Prevents LRU trashing, entries considered equivalent,
- * if the difference between last use times is less then this number.
- */
-#define RT_CACHE_BUBBLE_THRESHOLD	(5*HZ)
-
-
 #define RTO_ONLINK	0x01
 #define RTO_TPROXY	0x80000000
 
@@ -103,6 +96,7 @@ struct ip_rt_acct
 };
 
 extern struct ip_rt_acct ip_rt_acct[256];
+extern rwlock_t ip_rt_acct_lock;
 
 extern void		ip_rt_init(void);
 extern void		ip_rt_redirect(u32 old_gw, u32 dst, u32 new_gw,

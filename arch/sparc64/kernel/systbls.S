@@ -1,4 +1,4 @@
-/* $Id: systbls.S,v 1.53 1999/04/07 17:14:11 davem Exp $
+/* $Id: systbls.S,v 1.54 1999/06/02 12:06:31 jj Exp $
  * systbls.S: System call entry point tables for OS compatibility.
  *            The native Linux system call table lives here also.
  *
@@ -115,7 +115,7 @@ sys_call_table:
 /*180*/	.word sys_nis_syscall, sys_nis_syscall, sys_nis_syscall, sys_sigpending, sys_query_module
 	.word sys_setpgid, sys_nis_syscall, sys_nis_syscall, sys_nis_syscall, sys_newuname
 /*190*/	.word sys_init_module, sys_personality, sys_nis_syscall, sys_nis_syscall, sys_nis_syscall
-	.word sys_nis_syscall, sys_nis_syscall, sys_getppid, sys_sigaction, sys_sgetmask
+	.word sys_nis_syscall, sys_nis_syscall, sys_getppid, sys_nis_syscall, sys_sgetmask
 /*200*/	.word sys_ssetmask, sys_sigsuspend, sys_newlstat, sys_uselib, sys_nis_syscall
 	.word sys_nis_syscall, sys_socketcall, sys_syslog, sys_nis_syscall, sys_nis_syscall
 /*210*/	.word sys_idle, sys_nis_syscall, sys_waitpid, sys_swapoff, sys_sysinfo

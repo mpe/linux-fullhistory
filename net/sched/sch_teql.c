@@ -125,9 +125,11 @@ teql_dequeue(struct Qdisc* sch)
 	if (skb == NULL) {
 		struct device *m = dat->m->dev.qdisc->dev;
 		if (m) {
-			m->tbusy = 0;
 			dat->m->slaves = sch;
+			spin_lock(&m->queue_lock);
+			m->tbusy = 0;
 			qdisc_restart(m);
+			spin_unlock(&m->queue_lock);
 		}
 	}
 	sch->q.qlen = dat->q.qlen + dat->m->dev.qdisc->q.qlen;
@@ -167,7 +169,9 @@ teql_destroy(struct Qdisc* sch)
 					master->slaves = NEXT_SLAVE(q);
 					if (q == master->slaves) {
 						master->slaves = NULL;
+						spin_lock_bh(&master->dev.queue_lock);
 						qdisc_reset(master->dev.qdisc);
+						spin_unlock_bh(&master->dev.queue_lock);
 					}
 				}
 				skb_queue_purge(&dat->q);
@@ -189,6 +193,9 @@ static int teql_qdisc_init(struct Qdisc *sch, struct rtattr *opt)
 
 	if (dev->hard_header_len > m->dev.hard_header_len)
 		return -EINVAL;
+
+	if (&m->dev == dev)
+		return -ELOOP;
 
 	q->m = m;
 
@@ -244,7 +251,11 @@ __teql_resolve(struct sk_buff *skb, struct sk_buff *skb_res, struct device *dev)
 			return -ENOBUFS;
 	}
 	if (neigh_event_send(n, skb_res) == 0) {
-		if (dev->hard_header(skb, dev, ntohs(skb->protocol), n->ha, NULL, skb->len) < 0) {
+		int err;
+		read_lock(&n->lock);
+		err = dev->hard_header(skb, dev, ntohs(skb->protocol), n->ha, NULL, skb->len);
+		read_unlock(&n->lock);
+		if (err < 0) {
 			neigh_release(n);
 			return -EINVAL;
 		}
@@ -295,19 +306,24 @@ restart:
 			continue;
 		}
 
-		if (q->h.forw == NULL) {
-			q->h.forw = qdisc_head.forw;
-			qdisc_head.forw = &q->h;
-		}
+		if (!qdisc_on_runqueue(q))
+			qdisc_run(q);
 
 		switch (teql_resolve(skb, skb_res, slave)) {
 		case 0:
-			if (slave->hard_start_xmit(skb, slave) == 0) {
-				master->slaves = NEXT_SLAVE(q);
-				dev->tbusy = 0;
-				master->stats.tx_packets++;
-				master->stats.tx_bytes += len;
+			if (spin_trylock(&slave->xmit_lock)) {
+				slave->xmit_lock_owner = smp_processor_id();
+				if (slave->hard_start_xmit(skb, slave) == 0) {
+					slave->xmit_lock_owner = -1;
+					spin_unlock(&slave->xmit_lock);
+					master->slaves = NEXT_SLAVE(q);
+					dev->tbusy = 0;
+					master->stats.tx_packets++;
+					master->stats.tx_bytes += len;
 					return 0;
+				}
+				slave->xmit_lock_owner = -1;
+				spin_unlock(&slave->xmit_lock);
 			}
 			if (dev->tbusy)
 				busy = 1;

@@ -68,6 +68,7 @@ static struct dentry * ext2_follow_link(struct dentry * dentry,
 		}
 		link = bh->b_data;
 	}
+	UPDATE_ATIME(inode);
 	base = lookup_dentry(link, base, follow);
 	if (bh)
 		brelse(bh);
@@ -101,7 +102,6 @@ static int ext2_readlink (struct dentry * dentry, char * buffer, int buflen)
 		i++;
 	if (copy_to_user(buffer, link, i))
 		i = -EFAULT;
- 	UPDATE_ATIME(inode);
 	if (bh)
 		brelse (bh);
 	return i;

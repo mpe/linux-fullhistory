@@ -16,6 +16,7 @@
 #include <linux/errno.h>
 #include <linux/netdevice.h>
 #include <linux/skbuff.h>
+#include <linux/init.h>
 
 #include <net/dst.h>
 
@@ -39,16 +40,16 @@ static void dst_run_gc(unsigned long);
 static struct timer_list dst_gc_timer =
 	{ NULL, NULL, DST_GC_MIN, 0L, dst_run_gc };
 
-#if RT_CACHE_DEBUG >= 2
-atomic_t hh_count;
-#endif
 
 static void dst_run_gc(unsigned long dummy)
 {
 	int    delayed = 0;
 	struct dst_entry * dst, **dstp;
 
-	spin_lock(&dst_lock);
+	if (!spin_trylock(&dst_lock)) {
+		mod_timer(&dst_gc_timer, jiffies + HZ/10);
+		return;
+	}
 
 	del_timer(&dst_gc_timer);
 	dstp = &dst_garbage_list;
@@ -159,4 +160,37 @@ void dst_destroy(struct dst_entry * dst)
 		dst->ops->destroy(dst);
 	atomic_dec(&dst_total);
 	kfree(dst);
+}
+
+static int dst_dev_event(struct notifier_block *this, unsigned long event, void *ptr)
+{
+	struct device *dev = ptr;
+	struct dst_entry *dst;
+
+	switch (event) {
+	case NETDEV_UNREGISTER:
+	case NETDEV_DOWN:
+		spin_lock_bh(&dst_lock);
+		for (dst = dst_garbage_list; dst; dst = dst->next) {
+			if (dst->dev == dev) {
+				dst->input = dst_discard;
+				dst->output = dst_blackhole;
+				dst->dev = &loopback_dev;
+			}
+		}
+		spin_unlock_bh(&dst_lock);
+		break;
+	}
+	return NOTIFY_DONE;
+}
+
+struct notifier_block dst_dev_notifier = {
+	dst_dev_event,
+	NULL,
+	0
+};
+
+__initfunc(void dst_init(void))
+{
+	register_netdevice_notifier(&dst_dev_notifier);
 }

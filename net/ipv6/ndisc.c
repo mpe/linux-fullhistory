@@ -268,14 +268,21 @@ ndisc_build_ll_hdr(struct sk_buff *skb, struct device *dev,
 			ndisc_mc_map(daddr, ha, dev, 1);
 			h_dest = ha;
 		} else if (neigh) {
-			h_dest = neigh->ha;
+			read_lock_bh(&neigh->lock);
+			if (neigh->nud_state&NUD_VALID) {
+				memcpy(ha, neigh->ha, dev->addr_len);
+				h_dest = ha;
+			}
+			read_unlock_bh(&neigh->lock);
 		} else {
 			neigh = neigh_lookup(&nd_tbl, daddr, dev);
 			if (neigh) {
+				read_lock_bh(&neigh->lock);
 				if (neigh->nud_state&NUD_VALID) {
 					memcpy(ha, neigh->ha, dev->addr_len);
 					h_dest = ha;
 				}
+				read_unlock_bh(&neigh->lock);
 				neigh_release(neigh);
 			}
 		}
@@ -362,6 +369,7 @@ void ndisc_send_ns(struct device *dev, struct neighbour *neigh,
         struct sock *sk = ndisc_socket->sk;
         struct sk_buff *skb;
         struct nd_msg *msg;
+	struct in6_addr addr_buf;
         int len;
 	int err;
 
@@ -377,13 +385,8 @@ void ndisc_send_ns(struct device *dev, struct neighbour *neigh,
 	}
 
 	if (saddr == NULL) {
-		struct inet6_ifaddr *ifa;
-
-		/* use link local address */
-		ifa = ipv6_get_lladdr(dev);
-
-		if (ifa)
-			saddr = &ifa->addr;
+		if (!ipv6_get_lladdr(dev, &addr_buf))
+			saddr = &addr_buf;
 	}
 
 	if (ndisc_build_ll_hdr(skb, dev, daddr, neigh, len) == 0) {
@@ -501,13 +504,15 @@ static void ndisc_error_report(struct neighbour *neigh, struct sk_buff *skb)
 	kfree_skb(skb);
 }
 
+/* Called with locked neigh: either read or both */
+
 static void ndisc_solicit(struct neighbour *neigh, struct sk_buff *skb)
 {
 	struct in6_addr *saddr = NULL;
 	struct in6_addr mcaddr;
 	struct device *dev = neigh->dev;
 	struct in6_addr *target = (struct in6_addr *)&neigh->primary_key;
-	int probes = neigh->probes;
+	int probes = atomic_read(&neigh->probes);
 
 	if (skb && ipv6_chk_addr(&skb->nh.ipv6h->saddr, dev, 0))
 		saddr = &skb->nh.ipv6h->saddr;
@@ -774,8 +779,8 @@ void ndisc_send_redirect(struct sk_buff *skb, struct neighbour *neigh,
 	struct sock *sk = ndisc_socket->sk;
 	int len = sizeof(struct icmp6hdr) + 2 * sizeof(struct in6_addr);
 	struct sk_buff *buff;
-	struct inet6_ifaddr *ifp;
 	struct icmp6hdr *icmph;
+	struct in6_addr saddr_buf;
 	struct in6_addr *addrp;
 	struct device *dev;
 	struct rt6_info *rt;
@@ -817,12 +822,10 @@ void ndisc_send_redirect(struct sk_buff *skb, struct neighbour *neigh,
 	rd_len &= ~0x7;
 	len += rd_len;
 
-	ifp = ipv6_get_lladdr(dev);
-
-	if (ifp == NULL) {
-		ND_PRINTK1("redirect: no link_local addr for dev\n");
-		return;
-	}
+	if (ipv6_get_lladdr(dev, &saddr_buf)) {
+ 		ND_PRINTK1("redirect: no link_local addr for dev\n");
+ 		return;
+ 	}
 
 	buff = sock_alloc_send_skb(sk, MAX_HEADER + len + dev->hard_header_len + 15,
 				   0, 0, &err);
@@ -838,7 +841,7 @@ void ndisc_send_redirect(struct sk_buff *skb, struct neighbour *neigh,
 		return;
 	}
 
-	ip6_nd_hdr(sk, buff, dev, &ifp->addr, &skb->nh.ipv6h->saddr,
+	ip6_nd_hdr(sk, buff, dev, &saddr_buf, &skb->nh.ipv6h->saddr,
 		   IPPROTO_ICMPV6, len);
 
 	icmph = (struct icmp6hdr *) skb_put(buff, len);
@@ -875,7 +878,7 @@ void ndisc_send_redirect(struct sk_buff *skb, struct neighbour *neigh,
 
 	memcpy(opt, skb->nh.ipv6h, rd_len - 8);
 
-	icmph->icmp6_cksum = csum_ipv6_magic(&ifp->addr, &skb->nh.ipv6h->saddr,
+	icmph->icmp6_cksum = csum_ipv6_magic(&saddr_buf, &skb->nh.ipv6h->saddr,
 					     len, IPPROTO_ICMPV6,
 					     csum_partial((u8 *) icmph, len, 0));
 
@@ -1034,7 +1037,7 @@ int ndisc_rcv(struct sk_buff *skb, unsigned long len)
 				   ifp->idev->dev->name);
 			return 0;
 		}
-		neigh = __neigh_lookup(&nd_tbl, &msg->target, skb->dev, 0);
+		neigh = neigh_lookup(&nd_tbl, &msg->target, skb->dev);
 
 		if (neigh) {
 			if (neigh->flags & NTF_ROUTER) {
@@ -1083,11 +1086,10 @@ int ndisc_get_info(char *buffer, char **start, off_t offset, int length, int dum
 	unsigned long now = jiffies;
 	int i;
 
-	neigh_table_lock(&nd_tbl);
-
 	for (i = 0; i <= NEIGH_HASHMASK; i++) {
 		struct neighbour *neigh;
 
+		read_lock_bh(&nd_tbl.lock);
 		for (neigh = nd_tbl.hash_buckets[i]; neigh; neigh = neigh->next) {
 			int j;
 
@@ -1097,6 +1099,7 @@ int ndisc_get_info(char *buffer, char **start, off_t offset, int length, int dum
 				size += 2;
 			}
 
+			read_lock(&neigh->lock);
 			size += sprintf(buffer+len+size,
 				       " %02x %02x %02x %02x %08lx %08lx %08x %04x %04x %04x %8s ", i,
 				       128,
@@ -1118,19 +1121,22 @@ int ndisc_get_info(char *buffer, char **start, off_t offset, int length, int dum
 			} else {
                                 size += sprintf(buffer+len+size, "000000000000");
 			}
+			read_unlock(&neigh->lock);
 			size += sprintf(buffer+len+size, "\n");
 			len += size;
 			pos += size;
 		  
 			if (pos <= offset)
 				len=0;
-			if (pos >= offset+length)
+			if (pos >= offset+length) {
+				read_unlock_bh(&nd_tbl.lock);
 				goto done;
+			}
 		}
+		read_unlock_bh(&nd_tbl.lock);
 	}
 
 done:
-	neigh_table_unlock(&nd_tbl);
 
 	*start = buffer+len-(pos-offset);	/* Start of wanted data */
 	len = pos-offset;			/* Start slop */

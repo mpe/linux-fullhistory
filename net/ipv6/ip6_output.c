@@ -5,7 +5,7 @@
  *	Authors:
  *	Pedro Roque		<roque@di.fc.ul.pt>	
  *
- *	$Id: ip6_output.c,v 1.17 1999/04/22 10:07:42 davem Exp $
+ *	$Id: ip6_output.c,v 1.20 1999/06/09 10:11:12 davem Exp $
  *
  *	Based on linux/net/ipv4/ip_output.c
  *
@@ -75,19 +75,10 @@ int ip6_output(struct sk_buff *skb)
 	}
 
 	if (hh) {
-#ifdef __alpha__
-		/* Alpha has disguisting memcpy. Help it. */
-	        u64 *aligned_hdr = (u64*)(skb->data - 16);
-		u64 *aligned_hdr0 = hh->hh_data;
-		read_lock_irq(&hh->hh_lock);
-		aligned_hdr[0] = aligned_hdr0[0];
-		aligned_hdr[1] = aligned_hdr0[1];
-#else
-		read_lock_irq(&hh->hh_lock);
+		read_lock_bh(&hh->hh_lock);
 		memcpy(skb->data - 16, hh->hh_data, 16);
-#endif
-		read_unlock_irq(&hh->hh_lock);
-	        skb_push(skb, dev->hard_header_len);
+		read_unlock_bh(&hh->hh_lock);
+	        skb_push(skb, hh->hh_len);
 		return hh->hh_output(skb);
 	} else if (dst->neighbour)
 		return dst->neighbour->output(skb);

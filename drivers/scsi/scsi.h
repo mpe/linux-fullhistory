@@ -296,6 +296,7 @@ extern const char *const scsi_device_types[MAX_SCSI_DEVICE_CODE];
 #define SCSI_1          1
 #define SCSI_1_CCS      2
 #define SCSI_2          3
+#define SCSI_3          4
 
 /*
  *  Every SCSI command starts with a one byte OP-code.

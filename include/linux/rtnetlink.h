@@ -515,9 +515,6 @@ enum
 
 #ifdef __KERNEL__
 
-extern atomic_t rtnl_rlockct;
-extern wait_queue_head_t rtnl_wait;
-
 extern __inline__ int rtattr_strcmp(struct rtattr *rta, char *str)
 {
 	int len = strlen(str) + 1;
@@ -544,127 +541,31 @@ extern void __rta_fill(struct sk_buff *skb, int attrtype, int attrlen, const voi
 #define RTA_PUT(skb, attrtype, attrlen, data) \
 ({ if (skb_tailroom(skb) < (int)RTA_SPACE(attrlen)) goto rtattr_failure; \
    __rta_fill(skb, attrtype, attrlen, data); })
-
-extern unsigned long rtnl_wlockct;
-
-/* NOTE: these locks are not interrupt safe, are not SMP safe,
- * they are even not atomic. 8)8)8) ... and it is not a bug.
- * Really, if these locks will be programmed correctly,
- * all the addressing/routing machine would become SMP safe,
- * but is absolutely useless at the moment, because all the kernel
- * is not reenterable in any case. --ANK
- *
- * Well, atomic_* and set_bit provide the only thing here:
- * gcc is confused not to overoptimize them, that's all.
- * I remember as gcc splitted ++ operation, but cannot reproduce
- * it with gcc-2.7.*. --ANK
- *
- * One more note: rwlock facility should be written and put
- * to a kernel wide location: f.e. current implementation of semaphores
- * (especially, for x86) looks like a wonder. It would be good
- * to have something similar for rwlock. Recursive lock could be also
- * useful thing. --ANK
- */
-
-extern __inline__ int rtnl_shlock_nowait(void)
-{
-	atomic_inc(&rtnl_rlockct);
-	if (test_bit(0, &rtnl_wlockct)) {
-		atomic_dec(&rtnl_rlockct);
-		return -EAGAIN;
-	}
-	return 0;
-}
-
-extern __inline__ void rtnl_shlock(void)
-{
-	while (rtnl_shlock_nowait())
-		sleep_on(&rtnl_wait);
-}
-
-/* Check for possibility to PROMOTE shared lock to exclusive.
-   Shared lock must be already grabbed with rtnl_shlock*().
- */
-
-extern __inline__ int rtnl_exlock_nowait(void)
-{
-	if (atomic_read(&rtnl_rlockct) > 1)
-		return -EAGAIN;
-	if (test_and_set_bit(0, &rtnl_wlockct))
-		return -EAGAIN;
-	return 0;
-}
-
-extern __inline__ void rtnl_exlock(void)
-{
-	while (rtnl_exlock_nowait())
-		sleep_on(&rtnl_wait);
-}
-
-#if 0
-extern __inline__ void rtnl_shunlock(void)
-{
-	atomic_dec(&rtnl_rlockct);
-	if (atomic_read(&rtnl_rlockct) <= 1) {
-		wake_up(&rtnl_wait);
-		if (rtnl && rtnl->receive_queue.qlen)
-			rtnl->data_ready(rtnl, 0);
-	}
-}
-#else
-
-/* The problem: inline requires to include <net/sock.h> and, hence,
-   almost all of net includes :-(
- */
-
-#define rtnl_shunlock() ({ \
-	atomic_dec(&rtnl_rlockct); \
-	if (atomic_read(&rtnl_rlockct) <= 1) { \
-		wake_up(&rtnl_wait); \
-		if (rtnl && rtnl->receive_queue.qlen) \
-			rtnl->data_ready(rtnl, 0); \
-	} \
-})
 #endif
 
-/* Release exclusive lock. Note, that we do not wake up rtnetlink socket,
- * it will be done later after releasing shared lock.
- */
+extern struct semaphore rtnl_sem;
 
-extern __inline__ void rtnl_exunlock(void)
-{
-	clear_bit(0, &rtnl_wlockct);
-	wake_up(&rtnl_wait);
-}
+#define rtnl_exlock()		do { } while(0)
+#define rtnl_exunlock()		do { } while(0)
+#define rtnl_exlock_nowait()	(0)
 
+#define rtnl_shlock()		down(&rtnl_sem)
+#define rtnl_shlock_nowait()	down_trylock(&rtnl_sem)
+
+#ifndef CONFIG_RTNETLINK
+#define rtnl_shunlock()	up(&rtnl_sem)
 #else
-
-extern __inline__ void rtnl_shlock(void)
-{
-	while (atomic_read(&rtnl_rlockct))
-		sleep_on(&rtnl_wait);
-	atomic_inc(&rtnl_rlockct);
-}
-
-extern __inline__ void rtnl_shunlock(void)
-{
-	if (atomic_dec_and_test(&rtnl_rlockct))
-		wake_up(&rtnl_wait);
-}
-
-extern __inline__ void rtnl_exlock(void)
-{
-}
-
-extern __inline__ void rtnl_exunlock(void)
-{
-}
-
+#define rtnl_shunlock()	do { up(&rtnl_sem); \
+		             if (rtnl && rtnl->receive_queue.qlen) \
+				     rtnl->data_ready(rtnl, 0); \
+		        } while(0)
 #endif
 
 extern void rtnl_lock(void);
 extern void rtnl_unlock(void);
 extern void rtnetlink_init(void);
+
+
 
 #endif /* __KERNEL__ */
 

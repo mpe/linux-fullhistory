@@ -1,4 +1,4 @@
-/* $Id: sys_sparc32.c,v 1.108 1999/05/16 10:50:32 davem Exp $
+/* $Id: sys_sparc32.c,v 1.109 1999/06/03 07:11:31 davem Exp $
  * sys_sparc32.c: Conversion between 32bit and 64bit native syscalls.
  *
  * Copyright (C) 1997,1998 Jakub Jelinek (jj@sunsite.mff.cuni.cz)
@@ -2776,42 +2776,46 @@ static int count32(u32 * argv)
  * memory to free pages in kernel mem. These are in a format ready
  * to be put directly into the top of new user memory.
  */
-static unsigned long
-copy_strings32(int argc,u32 * argv,unsigned long *page,
-	       unsigned long p)
+static int copy_strings32(int argc, u32 * argv, struct linux_binprm *bprm)
 {
-	u32 str;
-
-	if (!p) return 0;	/* bullet-proofing */
 	while (argc-- > 0) {
+		u32 str;
 		int len;
 		unsigned long pos;
 
-		get_user(str, argv+argc);
-		if (!str) panic("VFS: argc is wrong");
-		len = strlen_user((char *)A(str));	/* includes the '\0' */
-		if (p < len)	/* this shouldn't happen - 128kB */
-			return 0;
-		p -= len; pos = p;
+		if (get_user(str, argv + argc) ||
+		    !str ||
+		    !(len = strlen_user((char *)A(str))))
+			return -EFAULT;
+		if (bprm->p < len)
+			return -E2BIG;
+
+		bprm->p -= len;
+
+		pos = bprm->p;
 		while (len) {
 			char *pag;
 			int offset, bytes_to_copy;
 
 			offset = pos % PAGE_SIZE;
-			if (!(pag = (char *) page[pos/PAGE_SIZE]) &&
-			    !(pag = (char *) page[pos/PAGE_SIZE] =
+			if (!(pag = (char *) bprm->page[pos/PAGE_SIZE]) &&
+			    !(pag = (char *) bprm->page[pos/PAGE_SIZE] =
 			      (unsigned long *) get_free_page(GFP_USER)))
-				return 0;
+				return -ENOMEM;
+
 			bytes_to_copy = PAGE_SIZE - offset;
 			if (bytes_to_copy > len)
 				bytes_to_copy = len;
-			copy_from_user(pag + offset, (char *)A(str), bytes_to_copy);
+
+			if (copy_from_user(pag + offset, (char *)A(str), bytes_to_copy))
+				return -EFAULT;
+
 			pos += bytes_to_copy;
 			str += bytes_to_copy;
 			len -= bytes_to_copy;
 		}
 	}
-	return p;
+	return 0;
 }
 
 /*
@@ -2850,29 +2854,36 @@ do_execve32(char * filename, u32 * argv, u32 * envp, struct pt_regs * regs)
 	}
 
 	retval = prepare_binprm(&bprm);
+	if (retval < 0)
+		goto out;
 	
-	if(retval>=0) {
-		bprm.p = copy_strings(1, &bprm.filename, bprm.page, bprm.p, 2);
-		bprm.exec = bprm.p;
-		bprm.p = copy_strings32(bprm.envc,envp,bprm.page,bprm.p);
-		bprm.p = copy_strings32(bprm.argc,argv,bprm.page,bprm.p);
-		if (!bprm.p)
-			retval = -E2BIG;
-	}
+	retval = copy_strings_kernel(1, &bprm.filename, &bprm);
+	if (retval < 0)
+		goto out;
 
-	if(retval>=0)
-		retval = search_binary_handler(&bprm,regs);
-	if(retval>=0)
+	bprm.exec = bprm.p;
+	retval = copy_strings32(bprm.envc, envp, &bprm);
+	if (retval < 0)
+		goto out;
+
+	retval = copy_strings32(bprm.argc, argv, &bprm);
+	if (retval < 0)
+		goto out;
+
+	retval = search_binary_handler(&bprm, regs);
+	if (retval >= 0)
 		/* execve success */
 		return retval;
 
+out:
 	/* Something went wrong, return the inode and free the argument pages*/
-	if(bprm.dentry)
+	if (bprm.dentry)
 		dput(bprm.dentry);
 
 	for (i=0 ; i<MAX_ARG_PAGES ; i++)
 		free_page(bprm.page[i]);
-	return(retval);
+
+	return retval;
 }
 
 /*

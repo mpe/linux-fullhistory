@@ -1,4 +1,4 @@
-# $Id: Makefile,v 1.35 1999/01/02 16:45:50 davem Exp $
+# $Id: Makefile,v 1.37 1999/06/04 13:29:10 jj Exp $
 # sparc64/Makefile
 #
 # Makefile for the architecture dependent flags and dependencies on the
@@ -15,7 +15,7 @@ SHELL  =/bin/bash
 CC		:= sparc64-linux-gcc -D__KERNEL__ -I$(TOPDIR)/include
 
 CC_HAS_ARGS := $(shell if echo "$(CC)" | grep '\(__KERNEL__\| 	\)' > /dev/null; then echo y; else echo n; fi)
-IS_EGCS := $(shell if $(CC) --version 2>&1 | grep 'egcs' > /dev/null; then echo y; else echo n; fi)
+IS_EGCS := $(shell if $(CC) -c -m64 -mcmodel=medlow -o _tmp.o arch/sparc64/math-emu/fnegq.c >/dev/null 2>&1; then echo y; else echo n; fi; rm -f _tmp.o)
 NEW_GAS := $(shell if $(LD) --version 2>&1 | grep 'elf64_sparc' > /dev/null; then echo y; else echo n; fi)
 
 ifneq ($(CC_HAS_ARGS),y)

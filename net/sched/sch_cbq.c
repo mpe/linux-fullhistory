@@ -1417,6 +1417,7 @@ static int cbq_init(struct Qdisc *sch, struct rtattr *opt)
 	q->link.ewma_log = TC_CBQ_DEF_EWMA;
 	q->link.avpkt = q->link.allot/2;
 	q->link.minidle = -0x7FFFFFFF;
+	q->link.stats.lock = &sch->dev->queue_lock;
 
 	init_timer(&q->wd_timer);
 	q->wd_timer.data = (unsigned long)sch;
@@ -1558,6 +1559,16 @@ static int cbq_dump_attr(struct sk_buff *skb, struct cbq_class *cl)
 	return 0;
 }
 
+int cbq_copy_xstats(struct sk_buff *skb, struct tc_cbq_xstats *st)
+{
+	RTA_PUT(skb, TCA_STATS, sizeof(*st), st);
+	return 0;
+
+rtattr_failure:
+	return -1;
+}
+
+
 static int cbq_dump(struct Qdisc *sch, struct sk_buff *skb)
 {
 	struct cbq_sched_data *q = (struct cbq_sched_data*)sch->data;
@@ -1569,8 +1580,13 @@ static int cbq_dump(struct Qdisc *sch, struct sk_buff *skb)
 	if (cbq_dump_attr(skb, &q->link) < 0)
 		goto rtattr_failure;
 	rta->rta_len = skb->tail - b;
+	spin_lock_bh(&sch->dev->queue_lock);
 	q->link.xstats.avgidle = q->link.avgidle;
-	RTA_PUT(skb, TCA_XSTATS, sizeof(q->link.xstats), &q->link.xstats);
+	if (cbq_copy_xstats(skb, &q->link.xstats)) {
+		spin_unlock_bh(&sch->dev->queue_lock);
+		goto rtattr_failure;
+	}
+	spin_unlock_bh(&sch->dev->queue_lock);
 	return skb->len;
 
 rtattr_failure:
@@ -1600,12 +1616,19 @@ cbq_dump_class(struct Qdisc *sch, unsigned long arg,
 		goto rtattr_failure;
 	rta->rta_len = skb->tail - b;
 	cl->stats.qlen = cl->q->q.qlen;
-	RTA_PUT(skb, TCA_STATS, sizeof(cl->stats), &cl->stats);
+	if (qdisc_copy_stats(skb, &cl->stats))
+		goto rtattr_failure;
+	spin_lock_bh(&sch->dev->queue_lock);
 	cl->xstats.avgidle = cl->avgidle;
 	cl->xstats.undertime = 0;
 	if (!PSCHED_IS_PASTPERFECT(cl->undertime))
 		cl->xstats.undertime = PSCHED_TDIFF(cl->undertime, q->now);
-	RTA_PUT(skb, TCA_XSTATS, sizeof(cl->xstats), &cl->xstats);
+	q->link.xstats.avgidle = q->link.avgidle;
+	if (cbq_copy_xstats(skb, &cl->xstats)) {
+		spin_unlock_bh(&sch->dev->queue_lock);
+		goto rtattr_failure;
+	}
+	spin_unlock_bh(&sch->dev->queue_lock);
 
 	return skb->len;
 
@@ -1631,8 +1654,11 @@ static int cbq_graft(struct Qdisc *sch, unsigned long arg, struct Qdisc *new,
 				new->reshape_fail = cbq_reshape_fail;
 #endif
 		}
-		if ((*old = xchg(&cl->q, new)) != NULL)
-			qdisc_reset(*old);
+		sch_tree_lock(sch);
+		*old = cl->q;
+		cl->q = new;
+		qdisc_reset(*old);
+		sch_tree_unlock(sch);
 
 		return 0;
 	}
@@ -1710,16 +1736,16 @@ static void cbq_put(struct Qdisc *sch, unsigned long arg)
 	struct cbq_sched_data *q = (struct cbq_sched_data *)sch->data;
 	struct cbq_class *cl = (struct cbq_class*)arg;
 
-	start_bh_atomic();
 	if (--cl->refcnt == 0) {
 #ifdef CONFIG_NET_CLS_POLICE
+		spin_lock_bh(&sch->dev->queue_lock);
 		if (q->rx_class == cl)
 			q->rx_class = NULL;
+		spin_unlock_bh(&sch->dev->queue_lock);
 #endif
+
 		cbq_destroy_class(cl);
 	}
-	end_bh_atomic();
-	return;
 }
 
 static int
@@ -1780,7 +1806,7 @@ cbq_change_class(struct Qdisc *sch, u32 classid, u32 parentid, struct rtattr **t
 		}
 
 		/* Change class parameters */
-		start_bh_atomic();
+		sch_tree_lock(sch);
 
 		if (cl->next_alive != NULL)
 			cbq_deactivate_class(cl);
@@ -1812,7 +1838,7 @@ cbq_change_class(struct Qdisc *sch, u32 classid, u32 parentid, struct rtattr **t
 		if (cl->q->q.qlen)
 			cbq_activate_class(cl);
 
-		end_bh_atomic();
+		sch_tree_lock(sch);
 
 #ifdef CONFIG_NET_ESTIMATOR
 		if (tca[TCA_RATE-1]) {
@@ -1878,8 +1904,9 @@ cbq_change_class(struct Qdisc *sch, u32 classid, u32 parentid, struct rtattr **t
 	cl->allot = parent->allot;
 	cl->quantum = cl->allot;
 	cl->weight = cl->R_tab->rate.rate;
+	cl->stats.lock = &sch->dev->queue_lock;
 
-	start_bh_atomic();
+	sch_tree_lock(sch);
 	cbq_link_class(cl);
 	cl->borrow = cl->tparent;
 	if (cl->tparent != &q->link)
@@ -1903,7 +1930,7 @@ cbq_change_class(struct Qdisc *sch, u32 classid, u32 parentid, struct rtattr **t
 #endif
 	if (tb[TCA_CBQ_FOPT-1])
 		cbq_set_fopt(cl, RTA_DATA(tb[TCA_CBQ_FOPT-1]));
-	end_bh_atomic();
+	sch_tree_unlock(sch);
 
 #ifdef CONFIG_NET_ESTIMATOR
 	if (tca[TCA_RATE-1])
@@ -1926,7 +1953,7 @@ static int cbq_delete(struct Qdisc *sch, unsigned long arg)
 	if (cl->filters || cl->children || cl == &q->link)
 		return -EBUSY;
 
-	start_bh_atomic();
+	sch_tree_lock(sch);
 
 	if (cl->next_alive)
 		cbq_deactivate_class(cl);
@@ -1948,11 +1975,10 @@ static int cbq_delete(struct Qdisc *sch, unsigned long arg)
 	cbq_sync_defmap(cl);
 
 	cbq_rmprio(q, cl);
+	sch_tree_unlock(sch);
 
 	if (--cl->refcnt == 0)
 		cbq_destroy_class(cl);
-
-	end_bh_atomic();
 
 	return 0;
 }

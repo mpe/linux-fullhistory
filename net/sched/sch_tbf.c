@@ -308,7 +308,7 @@ static int tbf_change(struct Qdisc* sch, struct rtattr *opt)
 	if (rtab->data[max_size>>qopt->rate.cell_log] > qopt->buffer)
 		goto done;
 
-	start_bh_atomic();
+	sch_tree_lock(sch);
 	q->limit = qopt->limit;
 	q->mtu = qopt->mtu;
 	q->max_size = max_size;
@@ -317,7 +317,7 @@ static int tbf_change(struct Qdisc* sch, struct rtattr *opt)
 	q->ptokens = q->mtu;
 	rtab = xchg(&q->R_tab, rtab);
 	ptab = xchg(&q->P_tab, ptab);
-	end_bh_atomic();
+	sch_tree_unlock(sch);
 	err = 0;
 done:
 	if (rtab)

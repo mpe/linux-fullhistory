@@ -997,7 +997,7 @@ static void probeLptPort(unsigned idx)
       instances[idx].enhanced = 0;
       instances[idx].direction = 0;
       instances[idx].mode = COMPATIBILITY;
-      instances[idx].wait_queue = 0;
+      init_waitqueue_head(&instances[idx].wait_queue);
       instances[idx].run_length = 0;
       instances[idx].run_flag = 0;
       init_timer(&instances[idx].timer_list);

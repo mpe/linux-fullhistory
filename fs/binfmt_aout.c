@@ -383,7 +383,7 @@ static inline int do_load_aout_binary(struct linux_binprm * bprm, struct pt_regs
 	if (N_MAGIC(ex) == OMAGIC) {
 #if defined(__alpha__) || defined(__sparc__)
 		do_brk(N_TXTADDR(ex) & PAGE_MASK,
-			ex.a_text+ex.a_data + PAGE_SIZE - 1)
+			ex.a_text+ex.a_data + PAGE_SIZE - 1);
 		read_exec(bprm->dentry, fd_offset, (char *) N_TXTADDR(ex),
 			  ex.a_text+ex.a_data, 0);
 #else

@@ -387,7 +387,7 @@ static int sfq_change(struct Qdisc *sch, struct rtattr *opt)
 	if (opt->rta_len < RTA_LENGTH(sizeof(*ctl)))
 		return -EINVAL;
 
-	start_bh_atomic();
+	sch_tree_lock(sch);
 	q->quantum = ctl->quantum ? : psched_mtu(sch->dev);
 	q->perturb_period = ctl->perturb_period*HZ;
 
@@ -396,7 +396,7 @@ static int sfq_change(struct Qdisc *sch, struct rtattr *opt)
 		q->perturb_timer.expires = jiffies + q->perturb_period;
 		add_timer(&q->perturb_timer);
 	}
-	end_bh_atomic();
+	sch_tree_unlock(sch);
 	return 0;
 }
 

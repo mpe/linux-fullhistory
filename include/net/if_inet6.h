@@ -44,6 +44,7 @@ struct inet6_ifaddr
 	__u32			valid_lft;
 	__u32			prefered_lft;
 	unsigned long		tstamp;
+	atomic_t		refcnt;
 
 	__u8			probes;
 	__u8			flags;
@@ -108,6 +109,7 @@ struct inet6_dev
 
 	struct inet6_ifaddr	*addr_list;
 	struct ifmcaddr6	*mc_list;
+	rwlock_t		lock;
 	__u32			if_flags;
 
 	struct neigh_parms	*nd_parms;

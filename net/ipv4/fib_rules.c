@@ -5,7 +5,7 @@
  *
  *		IPv4 Forwarding Information Base: policy rules.
  *
- * Version:	$Id: fib_rules.c,v 1.10 1999/05/27 00:38:03 davem Exp $
+ * Version:	$Id: fib_rules.c,v 1.11 1999/06/09 10:10:47 davem Exp $
  *
  * Authors:	Alexey Kuznetsov, <kuznet@ms2.inr.ac.ru>
  *
@@ -88,7 +88,6 @@ int inet_rtm_delrule(struct sk_buff *skb, struct nlmsghdr* nlh, void *arg)
 	struct fib_rule *r, **rp;
 	int err = -ESRCH;
 
-	write_lock_bh(&fib_rules_lock);
 	for (rp=&fib_rules; (r=*rp) != NULL; rp=&r->r_next) {
 		if ((!rta[RTA_SRC-1] || memcmp(RTA_DATA(rta[RTA_SRC-1]), &r->r_src, 4) == 0) &&
 		    rtm->rtm_src_len == r->r_src_len &&
@@ -106,14 +105,15 @@ int inet_rtm_delrule(struct sk_buff *skb, struct nlmsghdr* nlh, void *arg)
 			if (r == &local_rule)
 				break;
 
+			write_lock_bh(&fib_rules_lock);
 			*rp = r->r_next;
+			write_unlock_bh(&fib_rules_lock);
 			if (r != &default_rule && r != &main_rule)
 				kfree(r);
 			err = 0;
 			break;
 		}
 	}
-	write_unlock_bh(&fib_rules_lock);
 	return err;
 }
 
@@ -192,7 +192,6 @@ int inet_rtm_newrule(struct sk_buff *skb, struct nlmsghdr* nlh, void *arg)
 		memcpy(&new_r->r_tclassid, RTA_DATA(rta[RTA_FLOW-1]), 4);
 #endif
 
-	write_lock_bh(&fib_rules_lock);
 	rp = &fib_rules;
 	if (!new_r->r_preference) {
 		r = fib_rules;
@@ -210,6 +209,7 @@ int inet_rtm_newrule(struct sk_buff *skb, struct nlmsghdr* nlh, void *arg)
 	}
 
 	new_r->r_next = r;
+	write_lock_bh(&fib_rules_lock);
 	*rp = new_r;
 	write_unlock_bh(&fib_rules_lock);
 	return 0;
@@ -255,24 +255,26 @@ static void fib_rules_detach(struct device *dev)
 {
 	struct fib_rule *r;
 
-	write_lock_bh(&fib_rules_lock);
 	for (r=fib_rules; r; r=r->r_next) {
-		if (r->r_ifindex == dev->ifindex)
+		if (r->r_ifindex == dev->ifindex) {
+			write_lock_bh(&fib_rules_lock);
 			r->r_ifindex = -1;
+			write_unlock_bh(&fib_rules_lock);
+		}
 	}
-	write_unlock_bh(&fib_rules_lock);
 }
 
 static void fib_rules_attach(struct device *dev)
 {
 	struct fib_rule *r;
 
-	write_lock_bh(&fib_rules_lock);
 	for (r=fib_rules; r; r=r->r_next) {
-		if (r->r_ifindex == -1 && strcmp(dev->name, r->r_ifname) == 0)
+		if (r->r_ifindex == -1 && strcmp(dev->name, r->r_ifname) == 0) {
+			write_lock_bh(&fib_rules_lock);
 			r->r_ifindex = dev->ifindex;
+			write_unlock_bh(&fib_rules_lock);
+		}
 	}
-	write_unlock_bh(&fib_rules_lock);
 }
 
 int fib_lookup(const struct rt_key *key, struct fib_result *res)
@@ -285,7 +287,7 @@ int fib_lookup(const struct rt_key *key, struct fib_result *res)
 	u32 saddr = key->src;
 
 FRprintk("Lookup: %08x <- %08x ", key->dst, key->src);
-	read_lock_bh(&fib_rules_lock);
+	read_lock(&fib_rules_lock);
 	for (r = fib_rules; r; r=r->r_next) {
 		if (((saddr^r->r_src) & r->r_srcmask) ||
 		    ((daddr^r->r_dst) & r->r_dstmask) ||
@@ -305,14 +307,14 @@ FRprintk("tb %d r %d ", r->r_table, r->r_action);
 			policy = r;
 			break;
 		case RTN_UNREACHABLE:
-			read_unlock_bh(&fib_rules_lock);
+			read_unlock(&fib_rules_lock);
 			return -ENETUNREACH;
 		default:
 		case RTN_BLACKHOLE:
-			read_unlock_bh(&fib_rules_lock);
+			read_unlock(&fib_rules_lock);
 			return -EINVAL;
 		case RTN_PROHIBIT:
-			read_unlock_bh(&fib_rules_lock);
+			read_unlock(&fib_rules_lock);
 			return -EACCES;
 		}
 
@@ -322,16 +324,16 @@ FRprintk("tb %d r %d ", r->r_table, r->r_action);
 		if (err == 0) {
 FRprintk("ok\n");
 			res->r = policy;
-			read_unlock_bh(&fib_rules_lock);
+			read_unlock(&fib_rules_lock);
 			return 0;
 		}
 		if (err < 0 && err != -EAGAIN) {
-			read_unlock_bh(&fib_rules_lock);
+			read_unlock(&fib_rules_lock);
 			return err;
 		}
 	}
 FRprintk("FAILURE\n");
-	read_unlock_bh(&fib_rules_lock);
+	read_unlock(&fib_rules_lock);
 	return -ENETUNREACH;
 }
 
@@ -418,14 +420,14 @@ int inet_dump_rules(struct sk_buff *skb, struct netlink_callback *cb)
 	int s_idx = cb->args[0];
 	struct fib_rule *r;
 
-	read_lock_bh(&fib_rules_lock);
+	read_lock(&fib_rules_lock);
 	for (r=fib_rules, idx=0; r; r = r->r_next, idx++) {
 		if (idx < s_idx)
 			continue;
 		if (inet_fill_rule(skb, r, cb) < 0)
 			break;
 	}
-	read_unlock_bh(&fib_rules_lock);
+	read_unlock(&fib_rules_lock);
 	cb->args[0] = idx;
 
 	return skb->len;

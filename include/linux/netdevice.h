@@ -152,6 +152,7 @@ struct hh_cache
 	struct hh_cache *hh_next;	/* Next entry			     */
 	atomic_t	hh_refcnt;	/* number of users                   */
 	unsigned short  hh_type;	/* protocol identifier, f.e ETH_P_IP */
+	int		hh_len;		/* length of header */
 	int		(*hh_output)(struct sk_buff *skb);
 	rwlock_t	hh_lock;
 	/* cached hardware header; allow for machine alignment needs.        */
@@ -260,6 +261,7 @@ struct device
 	void 			*atalk_ptr;	/* AppleTalk link 	*/
 	void			*ip_ptr;	/* IPv4 specific data	*/  
 	void                    *dn_ptr;        /* DECnet specific data */
+	void                    *ip6_ptr;       /* IPv6 specific data */
 
 	struct Qdisc		*qdisc;
 	struct Qdisc		*qdisc_sleeping;
@@ -268,6 +270,13 @@ struct device
 
 	/* hard_start_xmit synchronizer */
 	spinlock_t		xmit_lock;
+	/* cpu id of processor entered to hard_start_xmit or -1,
+	   if nobody entered there.
+	 */
+	int			xmit_lock_owner;
+	/* device queue lock */
+	spinlock_t		queue_lock;
+	atomic_t		refcnt;
 
 	/* Pointers to interface service routines.	*/
 	int			(*open)(struct device *dev);

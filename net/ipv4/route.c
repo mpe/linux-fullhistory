@@ -5,7 +5,7 @@
  *
  *		ROUTE - implementation of the IP router.
  *
- * Version:	$Id: route.c,v 1.68 1999/05/27 00:37:54 davem Exp $
+ * Version:	$Id: route.c,v 1.69 1999/06/09 10:11:02 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -1996,6 +1996,7 @@ ctl_table ipv4_route_table[] = {
 
 #ifdef CONFIG_NET_CLS_ROUTE
 struct ip_rt_acct ip_rt_acct[256];
+rwlock_t ip_rt_acct_lock = RW_LOCK_UNLOCKED;
 
 #ifdef CONFIG_PROC_FS
 static int ip_rt_acct_read(char *buffer, char **start, off_t offset,
@@ -2008,9 +2009,9 @@ static int ip_rt_acct_read(char *buffer, char **start, off_t offset,
 		*eof = 1;
 	}
 	if (length > 0) {
-		start_bh_atomic();
+		read_lock_bh(&ip_rt_acct_lock);
 		memcpy(buffer, ((u8*)&ip_rt_acct)+offset, length);
-		end_bh_atomic();
+		read_unlock_bh(&ip_rt_acct_lock);
 		return length;
 	}
 	return 0;

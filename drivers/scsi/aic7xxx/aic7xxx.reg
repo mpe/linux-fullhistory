@@ -214,6 +214,25 @@ register STCNT {
 }
 
 /*
+ * Option Mode Register (Alternate Mode) (p. 5-198)
+ * This register is used to set certain options on Ultra3 based chips.
+ * The chip must be in alternate mode (bit ALT_MODE in SFUNCT must be set)
+ */
+register OPTIONMODE {
+	address			0x008
+	access_mode RW
+	bit	AUTORATEEN	0x80
+	bit	AUTOACKEN	0x40
+	bit	ATNMGMNTEN	0x20
+	bit	BUSFREEREV	0x10
+	bit	EXPPHASEDIS	0x08
+	bit	SCSIDATL_IMGEN	0x04
+	bit	AUTO_MSGOUT_DE	0x02
+	bit	DIS_MSGIN_DUALEDGE	0x01
+}
+
+
+/*
  * Clear SCSI Interrupt 0 (p. 3-20)
  * Writing a 1 to a bit clears the associated SCSI Interrupt in SSTAT0.
  */
@@ -285,7 +304,13 @@ register SSTAT2 {
 	address			0x00d
 	access_mode RO
 	bit	OVERRUN		0x80
+	bit	SHVALID		0x40
+	bit	WIDE_RES	0x20
 	bit	EXP_ACTIVE	0x10	/* SCSI Expander Active */
+	bit	CRCVALERR	0x08	/* CRC Value Error */
+	bit	CRCENDERR	0x04	/* CRC End Error */
+	bit	CRCREQERR	0x02	/* CRC REQ Error */
+	bit	DUAL_EDGE_ERROR	0x01	/* Invalid pins for Dual Edge phase */
 	mask	SFCNT		0x1f
 }
 
@@ -709,6 +734,7 @@ register ERROR {
 	bit	SQPARERR	0x08
 	bit	ILLOPCODE	0x04
 	bit	ILLSADDR	0x02
+	bit	DSCTMOUT	0x02	/* Ultra3 only */
 	bit	ILLHADDR	0x01
 }
 
@@ -788,12 +814,38 @@ register QINCNT	{
 }
 
 /*
+ * SCSIDATL IMAGE Register (p. 5-104)
+ * Write to this register also go to SCSIDATL but this register will preserve
+ * the data for later reading as long as the SCSIDATL_IMGEN bit in the
+ * OPTIONMODE register is set.
+ */
+register SCSIDATL_IMG {
+	address			0x09c
+	access_mode RW
+}
+
+/*
  * Queue Out FIFO (p. 3-61)
  * Queue of SCBs that have completed and await the host
  */
 register QOUTFIFO {
 	address			0x09d
 	access_mode WO
+}
+
+/*
+ * CRC Control 1 Register (p. 5-105)
+ * Control bits for the Ultra 160/m CRC facilities
+ */
+register CRCCONTROL1 {
+	address			0x09d
+	access_mode RW
+	bit	CRCONSEEN	0x80 /* CRC ON Single Edge ENable */
+	bit	CRCVALCHKEN	0x40 /* CRC Value Check Enable */
+	bit	CRCENDCHKEN	0x20 /* CRC End Check Enable */
+	bit	CRCREQCHKEN	0x10
+	bit	TARGCRCENDEN	0x08 /* Enable End CRC transfer when target */
+	bit	TARGCRCCNTEN	0x40 /* Enable CRC transfer when target */
 }
 
 /*
@@ -806,11 +858,27 @@ register QOUTCNT {
 }
 
 /*
+ * SCSI Phase Register (p. 5-106)
+ * Current bus phase
+ */
+register SCSIPHASE {
+	address			0x09e
+	access_mode RO
+	bit	SP_STATUS		0x20
+	bit	SP_COMMAND		0x10
+	bit	SP_MSG_IN		0x08
+	bit	SP_MSG_OUT		0x04
+	bit	SP_DATA_IN		0x02
+	bit	SP_DATA_OUT	0x01
+}
+
+/*
  * Special Function
  */
 register SFUNCT {
 	address			0x09f
 	access_mode RW
+	bit	ALT_MODE	0x80
 }
 
 /*
@@ -960,8 +1028,16 @@ register HNSCB_QOFF {
 	address			0x0F4
 }
 
+register HESCB_QOFF {
+	address			0x0F5
+}
+
 register SNSCB_QOFF {
 	address			0x0F6
+}
+
+register SESCB_QOFF {
+	address			0x0F7
 }
 
 register SDSCB_QOFF {
@@ -970,9 +1046,11 @@ register SDSCB_QOFF {
 
 register QOFF_CTLSTA {
 	address			0x0FA
+	bit	ESTABLISH_SCB_AVAIL	0x80
 	bit	SCB_AVAIL	0x40
 	bit	SNSCB_ROLLOVER	0x20
 	bit	SDSCB_ROLLOVER	0x10
+	bit	SESCB_ROLLOVER	0x08
 	mask	SCB_QSIZE	0x07
 	mask	SCB_QSIZE_256	0x06
 }

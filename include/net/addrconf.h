@@ -56,7 +56,7 @@ extern struct inet6_ifaddr *	ipv6_chk_addr(struct in6_addr *addr,
 extern int			ipv6_get_saddr(struct dst_entry *dst, 
 					       struct in6_addr *daddr,
 					       struct in6_addr *saddr);
-extern struct inet6_ifaddr *	ipv6_get_lladdr(struct device *dev);
+extern int			ipv6_get_lladdr(struct device *dev, struct in6_addr *);
 
 /*
  *	multicast prototypes (mcast.c)
@@ -68,6 +68,7 @@ extern int			ipv6_sock_mc_drop(struct sock *sk,
 						  int ifindex, 
 						  struct in6_addr *addr);
 extern void			ipv6_sock_mc_close(struct sock *sk);
+extern int			inet6_mc_check(struct sock *sk, struct in6_addr *addr);
 
 extern int			ipv6_dev_mc_inc(struct device *dev,
 						struct in6_addr *addr);

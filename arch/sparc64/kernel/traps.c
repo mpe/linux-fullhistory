@@ -1,4 +1,4 @@
-/* $Id: traps.c,v 1.59 1999/05/18 16:57:10 jj Exp $
+/* $Id: traps.c,v 1.60 1999/06/02 19:19:55 jj Exp $
  * arch/sparc64/kernel/traps.c
  *
  * Copyright (C) 1995,1997 David S. Miller (davem@caip.rutgers.edu)
@@ -282,11 +282,16 @@ void instruction_access_exception (struct pt_regs *regs,
 				   unsigned long sfsr, unsigned long sfar)
 {
 	lock_kernel();
+	if (regs->tstate & TSTATE_PRIV) {
 #if 1
-	printk("instruction_access_exception: Shit SFSR[%016lx] SFAR[%016lx], going.\n",
-	       sfsr, sfar);
+		printk("instruction_access_exception: Shit SFSR[%016lx] SFAR[%016lx], going.\n",
+		       sfsr, sfar);
 #endif
-	die_if_kernel("Iax", regs);
+		die_if_kernel("Iax", regs);
+	}
+	current->tss.sig_desc = SUBSIG_ILLINST;
+	current->tss.sig_address = regs->tpc;
+	force_sig(SIGILL, current);
 	unlock_kernel();
 }
 

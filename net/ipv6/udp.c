@@ -7,7 +7,7 @@
  *
  *	Based on linux/ipv4/udp.c
  *
- *	$Id: udp.c,v 1.41 1999/05/27 00:38:18 davem Exp $
+ *	$Id: udp.c,v 1.42 1999/06/09 10:11:24 davem Exp $
  *
  *	This program is free software; you can redistribute it and/or
  *      modify it under the terms of the GNU General Public License
@@ -499,18 +499,6 @@ static inline int udpv6_queue_rcv_skb(struct sock * sk, struct sk_buff *skb)
 	}
   	ipv6_statistics.Ip6InDelivers++;
 	udp_stats_in6.UdpInDatagrams++;
-	return 0;
-}
-
-static __inline__ int inet6_mc_check(struct sock *sk, struct in6_addr *addr)
-{
-	struct ipv6_mc_socklist *mc;
-		
-	for (mc = sk->net_pinfo.af_inet6.ipv6_mc_list; mc; mc=mc->next) {
-		if (ipv6_addr_cmp(&mc->addr, addr) == 0)
-			return 1;
-	}
-
 	return 0;
 }
 

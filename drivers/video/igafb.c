@@ -630,6 +630,7 @@ __initfunc(void igafb_init(void))
         struct fb_info_iga *info;
         unsigned long addr;
         extern int con_is_present(void);
+	int iga2000 = 0;
 
         /* Do not attach when we have a serial console. */
         if (!con_is_present())
@@ -637,8 +638,13 @@ __initfunc(void igafb_init(void))
 
         pdev = pci_find_device(PCI_VENDOR_ID_INTERG, 
                                PCI_DEVICE_ID_INTERG_1682, 0);
-        if(pdev == NULL)
-                return;
+	if (pdev == NULL) {
+        	pdev = pci_find_device(PCI_VENDOR_ID_INTERG, 
+                               0x2000, 0);
+        	if(pdev == NULL)
+        	        return;
+		iga2000 = 1;
+	}
 
         info = kmalloc(sizeof(struct fb_info_iga), GFP_ATOMIC);
         if (!info) {
@@ -648,8 +654,10 @@ __initfunc(void igafb_init(void))
         memset(info, 0, sizeof(struct fb_info_iga));
 
 	info->frame_buffer = pdev->base_address[0];
-	if (!info->frame_buffer)
+	if (!info->frame_buffer) {
+		kfree(info);
 		return;
+	}
 
         pcibios_read_config_dword(0, pdev->devfn,
                                   PCI_BASE_ADDRESS_0, 
@@ -659,12 +667,23 @@ __initfunc(void igafb_init(void))
 	info->frame_buffer_phys = addr & PCI_BASE_ADDRESS_MEM_MASK;
 
 #ifdef __sparc__
-	
+
 	info->io_base_phys = info->frame_buffer_phys;
-	
-	/* Obtain virtual address and correct physical by PCIC shift */
-	info->io_base = pcic_alloc_io(&info->io_base_phys);
+
+	/*
+	 * The right test would be to look if there is a base I/O address.
+	 * But it appears that IGA 1682 reuses _memory_ address as a base
+	 * for I/O accesses.
+	 */
+	if (iga2000) {
+		info->io_base = (int) sparc_alloc_io(info->frame_buffer_phys |
+		    0x00800000, NULL, 0x1000, "iga", 0, 0);
+	} else {
+		/* Obtain virtual address and correct physical by PCIC shift */
+		info->io_base = pcic_alloc_io(&info->io_base_phys);
+	}
 	if (!info->io_base) {
+                kfree(info);
 		return;
 	}
 
@@ -679,6 +698,7 @@ __initfunc(void igafb_init(void))
 	info->mmap_map = kmalloc(4 * sizeof(*info->mmap_map), GFP_ATOMIC);
 	if (!info->mmap_map) {
                 printk("igafb_init: can't alloc mmap_map\n");
+		/* XXX Here we left I/O allocated */
                 kfree(info);
 		return;
 	}
@@ -730,11 +750,11 @@ __initfunc(void igafb_init(void))
             }
 
 #endif
-            if (!iga_init(info)) {
-		    if (info->mmap_map)
-			    kfree(info->mmap_map);
-		    kfree(info);
-            }
+        if (!iga_init(info)) {
+		if (info->mmap_map)
+			kfree(info->mmap_map);
+		kfree(info);
+        }
 
 #ifdef __sparc__
 	    /*

@@ -76,6 +76,7 @@ extern void acq_init(void);
 extern void dtlk_init(void);
 extern void pcwatchdog_init(void);
 extern int rtc_init(void);
+extern int rtc_sun_init(void);		/* Combines MK48T02 and MK48T08 */
 extern int rtc_DP8570A_init(void);
 extern int rtc_MK48T08_init(void);
 extern int dsp56k_init(void);
@@ -247,7 +248,10 @@ int __init misc_init(void)
 #ifdef CONFIG_BVME6000
 	rtc_DP8570A_init();
 #endif
-#if defined(CONFIG_RTC) || defined(CONFIG_SUN_MOSTEK_RTC)
+#if defined(CONFIG_SUN_MOSTEK_RTC)
+	rtc_sun_init();
+#endif
+#if defined(CONFIG_RTC)
 	rtc_init();
 #endif
 #ifdef CONFIG_ATARI_DSP56K

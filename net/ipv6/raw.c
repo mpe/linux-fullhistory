@@ -7,7 +7,7 @@
  *
  *	Adapted from linux/net/ipv4/raw.c
  *
- *	$Id: raw.c,v 1.25 1999/05/27 00:38:16 davem Exp $
+ *	$Id: raw.c,v 1.26 1999/06/09 10:11:18 davem Exp $
  *
  *	This program is free software; you can redistribute it and/or
  *      modify it under the terms of the GNU General Public License
@@ -99,17 +99,6 @@ static void raw_v6_rehash(struct sock *sk)
 	SOCKHASH_UNLOCK_WRITE();
 }
 
-static __inline__ int inet6_mc_check(struct sock *sk, struct in6_addr *addr)
-{
-	struct ipv6_mc_socklist *mc;
-		
-	for (mc = sk->net_pinfo.af_inet6.ipv6_mc_list; mc; mc=mc->next) {
-		if (ipv6_addr_cmp(&mc->addr, addr) == 0)
-			return 1;
-	}
-
-	return 0;
-}
 
 /* Grumble... icmp and ip_input want to get at this... */
 struct sock *raw_v6_lookup(struct sock *sk, unsigned short num,

@@ -5,7 +5,7 @@
  *	Authors:
  *	Pedro Roque		<roque@di.fc.ul.pt>	
  *
- *	$Id: reassembly.c,v 1.11 1998/08/26 12:05:16 davem Exp $
+ *	$Id: reassembly.c,v 1.13 1999/06/09 08:29:40 davem Exp $
  *
  *	Based on: net/ipv4/ip_fragment.c
  *

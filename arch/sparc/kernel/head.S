@@ -1,11 +1,13 @@
-/* $Id: head.S,v 1.95 1999/04/13 07:40:34 anton Exp $
+/* $Id: head.S,v 1.96 1999/06/03 15:02:15 davem Exp $
  * head.S: The initial boot code for the Sparc port of Linux.
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
- * Copyright (C) 1995 Peter Zaitcev   (Zaitcev@ipmce.su)
+ * Copyright (C) 1995,1999 Pete Zaitcev   (zaitcev@metabyte.com)
  * Copyright (C) 1996 Miguel de Icaza (miguel@nuclecu.unam.mx)
  * Copyright (C) 1997 Jakub Jelinek   (jj@sunsite.mff.cuni.cz)
  * Copyright (C) 1997 Michael A. Griffith (grif@acm.org)
+ *
+ * CompactPCI platform by Eric Brower, 1999.
  */
 
 #include <linux/version.h>
@@ -116,10 +118,10 @@ t_irq11:TRAP_ENTRY_INTERRUPT(11)            /* IRQ Floppy Intr.              */
 t_irq12:TRAP_ENTRY_INTERRUPT(12)            /* IRQ Zilog serial chip         */
 t_irq13:TRAP_ENTRY_INTERRUPT(13)            /* IRQ Audio Intr.               */
 t_irq14:TRAP_ENTRY_INTERRUPT(14)            /* IRQ Timer #2                  */
+	.globl	t_nmi
 #ifndef __SMP__
 t_nmi:	NMI_TRAP                            /* Level 15 (NMI)                */
 #else
-	.globl	t_nmi
 t_nmi:	TRAP_ENTRY(0x1f, linux_trap_ipi15_sun4m)
 #endif
 t_racc:	TRAP_ENTRY(0x20, do_reg_access)     /* General Register Access Error */
@@ -842,6 +844,8 @@ got_prop:
 		be	1f
 		 cmp	%l1, 'm'
 		be	1f
+		 cmp	%l1, 's'
+		be	1f
 		 cmp	%l1, 'd'
 		be	1f
 		 cmp	%l1, 'e'
@@ -853,6 +857,8 @@ got_prop:
 1:		set	C_LABEL(cputypval), %l1
 		ldub	[%l1 + 0x4], %l1
 		cmp	%l1, 'm'		! Test for sun4d, sun4e ?
+		be	sun4m_init
+		 cmp	%l1, 's'		! Treat sun4s as sun4m
 		be	sun4m_init
 		 cmp	%l1, 'd'		! Let us see how the beast will die
 		be	sun4d_init

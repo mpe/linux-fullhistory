@@ -50,21 +50,21 @@
 #include <net/sock.h>
 #include <net/pkt_sched.h>
 
-atomic_t rtnl_rlockct;
-DECLARE_WAIT_QUEUE_HEAD(rtnl_wait);
+DECLARE_MUTEX(rtnl_sem);
 
-
-void rtnl_lock()
+void rtnl_lock(void)
 {
 	rtnl_shlock();
 	rtnl_exlock();
 }
-
-void rtnl_unlock()
+ 
+void rtnl_unlock(void)
 {
 	rtnl_exunlock();
 	rtnl_shunlock();
 }
+
+
 
 int rtattr_parse(struct rtattr *tb[], int maxattr, struct rtattr *rta, int len)
 {
@@ -81,8 +81,6 @@ int rtattr_parse(struct rtattr *tb[], int maxattr, struct rtattr *rta, int len)
 
 #ifdef CONFIG_RTNETLINK
 struct sock *rtnl;
-
-unsigned long rtnl_wlockct;
 
 struct rtnetlink_link * rtnetlink_links[NPROTO];
 
@@ -189,14 +187,14 @@ int rtnetlink_dump_ifinfo(struct sk_buff *skb, struct netlink_callback *cb)
 	int s_idx = cb->args[0];
 	struct device *dev;
 
-	read_lock_bh(&dev_base_lock);
+	read_lock(&dev_base_lock);
 	for (dev=dev_base, idx=0; dev; dev = dev->next, idx++) {
 		if (idx < s_idx)
 			continue;
 		if (rtnetlink_fill_ifinfo(skb, dev, RTM_NEWLINK, NETLINK_CB(cb->skb).pid, cb->nlh->nlmsg_seq) <= 0)
 			break;
 	}
-	read_unlock_bh(&dev_base_lock);
+	read_unlock(&dev_base_lock);
 	cb->args[0] = idx;
 
 	return skb->len;
@@ -218,9 +216,7 @@ int rtnetlink_dump_all(struct sk_buff *skb, struct netlink_callback *cb)
 			continue;
 		if (idx > s_idx)
 			memset(&cb->args[0], 0, sizeof(cb->args));
-		if (rtnetlink_links[idx][type].dumpit(skb, cb) == 0)
-			continue;
-		if (skb_tailroom(skb) < 256)
+		if (rtnetlink_links[idx][type].dumpit(skb, cb))
 			break;
 	}
 	cb->family = idx;
@@ -247,8 +243,6 @@ void rtmsg_ifinfo(int type, struct device *dev)
 
 static int rtnetlink_done(struct netlink_callback *cb)
 {
-	if (cap_raised(NETLINK_CB(cb->skb).eff_cap, CAP_NET_ADMIN) && cb->nlh->nlmsg_flags&NLM_F_ATOMIC)
-		rtnl_shunlock();
 	return 0;
 }
 
@@ -316,15 +310,9 @@ rtnetlink_rcv_msg(struct sk_buff *skb, struct nlmsghdr *nlh, int *errp)
 		if (link->dumpit == NULL)
 			goto err_inval;
 
-		/* Super-user locks all the tables to get atomic snapshot */
-		if (cap_raised(NETLINK_CB(skb).eff_cap, CAP_NET_ADMIN)
-		    && nlh->nlmsg_flags&NLM_F_ATOMIC)
-			atomic_inc(&rtnl_rlockct);
 		if ((*errp = netlink_dump_start(rtnl, skb, nlh,
 						link->dumpit,
 						rtnetlink_done)) != 0) {
-			if (cap_raised(NETLINK_CB(skb).eff_cap, CAP_NET_ADMIN) && nlh->nlmsg_flags&NLM_F_ATOMIC)
-				atomic_dec(&rtnl_rlockct);
 			return -1;
 		}
 		rlen = NLMSG_ALIGN(nlh->nlmsg_len);

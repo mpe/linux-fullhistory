@@ -1,4 +1,4 @@
-/* $Id: sfp-util.h,v 1.1 1999/05/28 13:43:07 jj Exp $
+/* $Id: sfp-util.h,v 1.2 1999/06/07 18:24:15 jj Exp $
  * arch/sparc64/math-emu/sfp-util.h
  *
  * Copyright (C) 1999 Jakub Jelinek (jj@ultra.linux.cz)
@@ -55,7 +55,7 @@
 		    srlx %7,32,%5
 		    mulx %3,%5,%3
 		    mulx %2,%5,%5
-		    sethi 0x80000000,%2
+		    sethi %%hi(0x80000000),%2
 		    addcc %4,%3,%4
 		    srlx %4,32,%4
 		    add %2,%2,%2

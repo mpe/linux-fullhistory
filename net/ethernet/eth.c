@@ -248,6 +248,7 @@ int eth_header_cache(struct neighbour *neigh, struct hh_cache *hh)
 	eth->h_proto = type;
 	memcpy(eth->h_source, dev->dev_addr, dev->addr_len);
 	memcpy(eth->h_dest, neigh->ha, dev->addr_len);
+	hh->hh_len = ETH_HLEN;
 	return 0;
 }
 

@@ -23,7 +23,7 @@ __mips_lookup_dentry(const char *name, int lookup_flags)
 
 	base = lookup_dentry (IRIX32_EMUL,
 			dget (current->fs->root), 
-			(LOOKUP_FOLLOW | LOOKUP_DIRECTORY | LOOKUP_SLASHOK));
+			(LOOKUP_FOLLOW | LOOKUP_DIRECTORY));
 			
 	if (IS_ERR (base)) return base;
 	

@@ -1,4 +1,4 @@
-/*  $Id: setup.c,v 1.106 1999/05/28 16:03:18 anton Exp $
+/*  $Id: setup.c,v 1.107 1999/06/03 15:02:20 davem Exp $
  *  linux/arch/sparc/kernel/setup.c
  *
  *  Copyright (C) 1995  David S. Miller (davem@caip.rutgers.edu)
@@ -313,6 +313,7 @@ __initfunc(void setup_arch(char **cmdline_p,
 	if(!strcmp(&cputypval,"sun4 ")) { sparc_cpu_model=sun4; }
 	if(!strcmp(&cputypval,"sun4c")) { sparc_cpu_model=sun4c; }
 	if(!strcmp(&cputypval,"sun4m")) { sparc_cpu_model=sun4m; }
+	if(!strcmp(&cputypval,"sun4s")) { sparc_cpu_model=sun4m; }  /* CP-1200 with PROM 2.30 -E */
 	if(!strcmp(&cputypval,"sun4d")) { sparc_cpu_model=sun4d; }
 	if(!strcmp(&cputypval,"sun4e")) { sparc_cpu_model=sun4e; }
 	if(!strcmp(&cputypval,"sun4u")) { sparc_cpu_model=sun4u; }

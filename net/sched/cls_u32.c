@@ -307,7 +307,7 @@ static int u32_destroy_key(struct tcf_proto *tp, struct tc_u_knode *n)
 {
 	unsigned long cl;
 
-	if ((cl = cls_set_class(&n->res.class, 0)) != 0)
+	if ((cl = __cls_set_class(&n->res.class, 0)) != 0)
 		tp->q->ops->cl_ops->unbind_tcf(tp->q, cl);
 #ifdef CONFIG_NET_CLS_POLICE
 	tcf_police_release(n->police);
@@ -326,8 +326,9 @@ static int u32_delete_key(struct tcf_proto *tp, struct tc_u_knode* key)
 	if (ht) {
 		for (kp = &ht->ht[TC_U32_HASH(key->handle)]; *kp; kp = &(*kp)->next) {
 			if (*kp == key) {
+				tcf_tree_lock(tp);
 				*kp = key->next;
-				synchronize_bh();
+				tcf_tree_unlock(tp);
 
 				u32_destroy_key(tp, key);
 				return 0;
@@ -346,7 +347,6 @@ static void u32_clear_hnode(struct tcf_proto *tp, struct tc_u_hnode *ht)
 	for (h=0; h<=ht->divisor; h++) {
 		while ((n = ht->ht[h]) != NULL) {
 			ht->ht[h] = n->next;
-			synchronize_bh();
 
 			u32_destroy_key(tp, n);
 		}
@@ -465,8 +465,9 @@ static int u32_set_parms(struct Qdisc *q, unsigned long base,
 			ht_down->refcnt++;
 		}
 
+		sch_tree_lock(q);
 		ht_down = xchg(&n->ht_down, ht_down);
-		synchronize_bh();
+		sch_tree_unlock(q);
 
 		if (ht_down)
 			ht_down->refcnt--;
@@ -475,7 +476,9 @@ static int u32_set_parms(struct Qdisc *q, unsigned long base,
 		unsigned long cl;
 
 		n->res.classid = *(u32*)RTA_DATA(tb[TCA_U32_CLASSID-1]);
-		cl = cls_set_class(&n->res.class, q->ops->cl_ops->bind_tcf(q, base, n->res.classid));
+		sch_tree_lock(q);
+		cl = __cls_set_class(&n->res.class, q->ops->cl_ops->bind_tcf(q, base, n->res.classid));
+		sch_tree_unlock(q);
 		if (cl)
 			q->ops->cl_ops->unbind_tcf(q, cl);
 	}
@@ -483,8 +486,9 @@ static int u32_set_parms(struct Qdisc *q, unsigned long base,
 	if (tb[TCA_U32_POLICE-1]) {
 		struct tcf_police *police = tcf_police_locate(tb[TCA_U32_POLICE-1], est);
 
+		sch_tree_lock(q);
 		police = xchg(&n->police, police);
-		synchronize_bh();
+		sch_tree_lock(q);
 
 		tcf_police_release(police);
 	}
@@ -682,7 +686,8 @@ static int u32_dump(struct tcf_proto *tp, unsigned long fh,
 	rta->rta_len = skb->tail - b;
 #ifdef CONFIG_NET_CLS_POLICE
 	if (TC_U32_KEY(n->handle) && n->police) {
-		RTA_PUT(skb, TCA_STATS, sizeof(struct tc_stats), &n->police->stats);
+		if (qdisc_copy_stats(skb, &n->police->stats))
+			goto rtattr_failure;
 	}
 #endif
 	return skb->len;

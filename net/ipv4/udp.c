@@ -5,7 +5,7 @@
  *
  *		The User Datagram Protocol (UDP).
  *
- * Version:	$Id: udp.c,v 1.67 1999/05/27 00:37:50 davem Exp $
+ * Version:	$Id: udp.c,v 1.69 1999/06/09 11:15:31 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -173,7 +173,7 @@ static inline int udp_lport_inuse(u16 num)
 	return 0;
 }
 
-/* Shared by v4/v6 tcp. */
+/* Shared by v4/v6 udp. */
 unsigned short udp_good_socknum(void)
 {
 	int result;

@@ -96,7 +96,8 @@ struct neighbour
 	__u8			flags;
 	__u8			nud_state;
 	__u8			type;
-	__u8			probes;
+	atomic_t		probes;
+	rwlock_t		lock;
 	unsigned char		ha[MAX_ADDR_LEN];
 	struct hh_cache		*hh;
 	atomic_t		refcnt;
@@ -155,7 +156,7 @@ struct neigh_table
 	struct timer_list 	proxy_timer;
 	struct sk_buff_head	proxy_queue;
 	int			entries;
-	atomic_t		lock;
+	rwlock_t		lock;
 	unsigned long		last_rand;
 	struct neigh_parms	*parms_list;
 	struct neigh_statistics	stats;
@@ -165,9 +166,12 @@ struct neigh_table
 
 extern void			neigh_table_init(struct neigh_table *tbl);
 extern int			neigh_table_clear(struct neigh_table *tbl);
-extern struct neighbour		*__neigh_lookup(struct neigh_table *tbl,
-					       const void *pkey, struct device *dev,
-					       int creat);
+extern struct neighbour *	neigh_lookup(struct neigh_table *tbl,
+					     const void *pkey,
+					     struct device *dev);
+extern struct neighbour *	neigh_create(struct neigh_table *tbl,
+					     const void *pkey,
+					     struct device *dev);
 extern void			neigh_destroy(struct neighbour *neigh);
 extern int			__neigh_event_send(struct neighbour *neigh, struct sk_buff *skb);
 extern int			neigh_update(struct neighbour *neigh, u8 *lladdr, u8 new, int override, int arp);
@@ -226,16 +230,6 @@ extern __inline__ void neigh_confirm(struct neighbour *neigh)
 		neigh->confirmed = jiffies;
 }
 
-extern __inline__ struct neighbour *
-neigh_lookup(struct neigh_table *tbl, const void *pkey, struct device *dev)
-{
-	struct neighbour *neigh;
-	start_bh_atomic();
-	neigh = __neigh_lookup(tbl, pkey, dev, 0);
-	end_bh_atomic();
-	return neigh;
-}
-
 extern __inline__ int neigh_is_connected(struct neighbour *neigh)
 {
 	return neigh->nud_state&NUD_CONNECTED;
@@ -254,17 +248,16 @@ extern __inline__ int neigh_event_send(struct neighbour *neigh, struct sk_buff *
 	return 0;
 }
 
-extern __inline__ void neigh_table_lock(struct neigh_table *tbl)
+extern __inline__ struct neighbour *
+__neigh_lookup(struct neigh_table *tbl, const void *pkey, struct device *dev, int creat)
 {
-	atomic_inc(&tbl->lock);
-	synchronize_bh();
-}
+	struct neighbour *n = neigh_lookup(tbl, pkey, dev);
 
-extern __inline__ void neigh_table_unlock(struct neigh_table *tbl)
-{
-	atomic_dec(&tbl->lock);
-}
+	if (n || !creat)
+		return n;
 
+	return neigh_create(tbl, pkey, dev);
+}
 
 #endif
 #endif

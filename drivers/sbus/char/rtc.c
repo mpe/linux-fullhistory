@@ -1,4 +1,4 @@
-/* $Id: rtc.c,v 1.13 1998/08/26 10:29:44 davem Exp $
+/* $Id: rtc.c,v 1.14 1999/06/03 15:02:38 davem Exp $
  *
  * Linux/SPARC Real Time Clock Driver
  * Copyright (C) 1996 Thomas K. Dyas (tdyas@eden.rutgers.edu)
@@ -107,6 +107,7 @@ static int rtc_ioctl(struct inode *inode, struct file *file, unsigned int cmd,
 
 static int rtc_open(struct inode *inode, struct file *file)
 {
+
 	if (rtc_busy)
 		return -EBUSY;
 
@@ -144,14 +145,20 @@ EXPORT_NO_SYMBOLS;
 #ifdef MODULE
 int init_module(void)
 #else
-__initfunc(int rtc_init(void))
+__initfunc(int rtc_sun_init(void))
 #endif
 {
 	int error;
 
+	if (mstk48t02_regs == 0) {
+		/* This diagnostic is a debugging aid... But a useful one. */
+		printk(KERN_ERR "rtc: no Mostek in this computer\n");
+		return -ENODEV;
+	}
+
 	error = misc_register(&rtc_dev);
 	if (error) {
-		printk(KERN_ERR "rtc: unable to get misc minor\n");
+		printk(KERN_ERR "rtc: unable to get misc minor for Mostek\n");
 		return error;
 	}
 

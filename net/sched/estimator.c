@@ -97,29 +97,38 @@ struct qdisc_estimator_head
 
 static struct qdisc_estimator_head elist[EST_MAX_INTERVAL+1];
 
+/* Estimator array lock */
+static rwlock_t est_lock = RW_LOCK_UNLOCKED;
+
 static void est_timer(unsigned long arg)
 {
 	int idx = (int)arg;
 	struct qdisc_estimator *e;
 
+	read_lock(&est_lock);
 	for (e = elist[idx].list; e; e = e->next) {
-		u64 nbytes = e->stats->bytes;
-		u32 npackets = e->stats->packets;
+		struct tc_stats *st = e->stats;
+		u64 nbytes;
+		u32 npackets;
 		u32 rate;
-		
+
+		spin_lock(st->lock);
+		nbytes = st->bytes;
+		npackets = st->packets;
 		rate = (nbytes - e->last_bytes)<<(7 - idx);
 		e->last_bytes = nbytes;
 		e->avbps += ((long)rate - (long)e->avbps) >> e->ewma_log;
-		e->stats->bps = (e->avbps+0xF)>>5;
+		st->bps = (e->avbps+0xF)>>5;
 
 		rate = (npackets - e->last_packets)<<(12 - idx);
 		e->last_packets = npackets;
 		e->avpps += ((long)rate - (long)e->avpps) >> e->ewma_log;
 		e->stats->pps = (e->avpps+0x1FF)>>10;
+		spin_unlock(st->lock);
 	}
 
-	elist[idx].timer.expires = jiffies + ((HZ/4)<<idx);
-	add_timer(&elist[idx].timer);
+	mod_timer(&elist[idx].timer, jiffies + ((HZ/4)<<idx));
+	read_unlock(&est_lock);
 }
 
 int qdisc_new_estimator(struct tc_stats *stats, struct rtattr *opt)
@@ -154,7 +163,9 @@ int qdisc_new_estimator(struct tc_stats *stats, struct rtattr *opt)
 		elist[est->interval].timer.function = est_timer;
 		add_timer(&elist[est->interval].timer);
 	}
+	write_lock_bh(&est_lock);
 	elist[est->interval].list = est;
+	write_unlock_bh(&est_lock);
 	return 0;
 }
 
@@ -172,8 +183,9 @@ void qdisc_kill_estimator(struct tc_stats *stats)
 				continue;
 			}
 
+			write_lock_bh(&est_lock);
 			*pest = est->next;
-			synchronize_bh();
+			write_unlock_bh(&est_lock);
 
 			kfree(est);
 			killed++;

@@ -1,4 +1,4 @@
-/* $Id: sys_sparc.c,v 1.26 1999/01/07 19:07:01 jj Exp $
+/* $Id: sys_sparc.c,v 1.27 1999/06/02 12:06:34 jj Exp $
  * linux/arch/sparc64/kernel/sys_sparc.c
  *
  * This file contains various random system calls that
@@ -325,39 +325,6 @@ long sparc_memory_ordering(unsigned long model, struct pt_regs *regs)
 		return -EINVAL;
 	regs->tstate = (regs->tstate & ~TSTATE_MM) | (model << 14);
 	return 0;
-}
-
-asmlinkage int
-sys_sigaction(int sig, const struct old_sigaction *act,
-	      struct old_sigaction *oact)
-{
-	struct k_sigaction new_ka, old_ka;
-	int ret;
-
-	if (act) {
-		old_sigset_t mask;
-		if (verify_area(VERIFY_READ, act, sizeof(*act)) ||
-		    __get_user(new_ka.sa.sa_handler, &act->sa_handler) ||
-		    __get_user(new_ka.sa.sa_restorer, &act->sa_restorer))
-			return -EFAULT;
-		__get_user(new_ka.sa.sa_flags, &act->sa_flags);
-		__get_user(mask, &act->sa_mask);
-		siginitset(&new_ka.sa.sa_mask, mask);
-		new_ka.ka_restorer = NULL;
-	}
-
-	ret = do_sigaction(sig, act ? &new_ka : NULL, oact ? &old_ka : NULL);
-
-	if (!ret && oact) {
-		if (verify_area(VERIFY_WRITE, oact, sizeof(*oact)) ||
-		    __put_user(old_ka.sa.sa_handler, &oact->sa_handler) ||
-		    __put_user(old_ka.sa.sa_restorer, &oact->sa_restorer))
-			return -EFAULT;
-		__put_user(old_ka.sa.sa_flags, &oact->sa_flags);
-		__put_user(old_ka.sa.sa_mask.sig[0], &oact->sa_mask);
-	}
-
-	return ret;
 }
 
 asmlinkage int

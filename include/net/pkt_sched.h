@@ -66,9 +66,12 @@ struct Qdisc_ops
 struct Qdisc_head
 {
 	struct Qdisc_head *forw;
+	struct Qdisc_head *back;
 };
 
 extern struct Qdisc_head qdisc_head;
+extern spinlock_t qdisc_runqueue_lock;
+extern rwlock_t qdisc_tree_lock;
 
 struct Qdisc
 {
@@ -105,6 +108,46 @@ struct qdisc_rate_table
 	struct qdisc_rate_table *next;
 	int		refcnt;
 };
+
+extern __inline__ void sch_tree_lock(struct Qdisc *q)
+{
+	write_lock(&qdisc_tree_lock);
+	spin_lock_bh(&q->dev->queue_lock);
+}
+
+extern __inline__ void sch_tree_unlock(struct Qdisc *q)
+{
+	spin_unlock_bh(&q->dev->queue_lock);
+	write_unlock(&qdisc_tree_lock);
+}
+
+extern __inline__ void tcf_tree_lock(struct tcf_proto *tp)
+{
+	write_lock(&qdisc_tree_lock);
+	spin_lock_bh(&tp->q->dev->queue_lock);
+}
+
+extern __inline__ void tcf_tree_unlock(struct tcf_proto *tp)
+{
+	spin_unlock_bh(&tp->q->dev->queue_lock);
+	write_unlock(&qdisc_tree_lock);
+}
+
+
+extern __inline__ unsigned long
+cls_set_class(struct tcf_proto *tp, unsigned long *clp, unsigned long cl)
+{
+	tcf_tree_lock(tp);
+	cl = xchg(clp, cl);
+	tcf_tree_unlock(tp);
+	return cl;
+}
+
+extern __inline__ unsigned long
+__cls_set_class(unsigned long *clp, unsigned long cl)
+{
+	return xchg(clp, cl);
+}
 
 
 /* 
@@ -343,12 +386,14 @@ struct tcf_police
 	u32		toks;
 	u32		ptoks;
 	psched_time_t	t_c;
+	spinlock_t	lock;
 	struct qdisc_rate_table *R_tab;
 	struct qdisc_rate_table *P_tab;
 
 	struct tc_stats	stats;
 };
 
+extern int qdisc_copy_stats(struct sk_buff *skb, struct tc_stats *st);
 extern void tcf_police_destroy(struct tcf_police *p);
 extern struct tcf_police * tcf_police_locate(struct rtattr *rta, struct rtattr *est);
 extern int tcf_police_dump(struct sk_buff *skb, struct tcf_police *p);
@@ -384,20 +429,56 @@ int teql_init(void);
 int tc_filter_init(void);
 int pktsched_init(void);
 
-void qdisc_run_queues(void);
-int qdisc_restart(struct device *dev);
+extern void qdisc_run_queues(void);
+extern int qdisc_restart(struct device *dev);
+
+extern spinlock_t qdisc_runqueue_lock;
+
+/* Is it on run list? Reliable only under qdisc_runqueue_lock. */
+
+extern __inline__ int qdisc_on_runqueue(struct Qdisc *q)
+{
+	return q->h.forw != NULL;
+}
+
+/* Is run list not empty? Reliable only under qdisc_runqueue_lock. */
+
+extern __inline__ int qdisc_pending(void)
+{
+	return qdisc_head.forw != &qdisc_head;
+}
+
+/* Add qdisc to tail of run list. Called with BH, disabled on this CPU */
+
+extern __inline__ void qdisc_run(struct Qdisc *q)
+{
+	spin_lock(&qdisc_runqueue_lock);
+	if (!qdisc_on_runqueue(q)) {
+		q->h.forw = &qdisc_head;
+		q->h.back = qdisc_head.back;
+		qdisc_head.back->forw = &q->h;
+		qdisc_head.back = &q->h;
+	}
+	spin_unlock(&qdisc_runqueue_lock);
+}
+
+/* If the device is not throttled, restart it and add to run list.
+ * BH must be disabled on this CPU.
+ */
 
 extern __inline__ void qdisc_wakeup(struct device *dev)
 {
 	if (!dev->tbusy) {
-		struct Qdisc *q = dev->qdisc;
-		if (qdisc_restart(dev) && q->h.forw == NULL) {
-			q->h.forw = qdisc_head.forw;
-			qdisc_head.forw = &q->h;
-		}
+		spin_lock(&dev->queue_lock);
+		if (qdisc_restart(dev))
+			qdisc_run(dev->qdisc);
+		spin_unlock(&dev->queue_lock);
 	}
 }
 
+/* Calculate maximal size of packet seen by hard_start_xmit
+   routine of this device.
+ */
 extern __inline__ unsigned psched_mtu(struct device *dev)
 {
 	unsigned mtu = dev->mtu;

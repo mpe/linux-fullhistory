@@ -27,13 +27,11 @@
 #include "constants.h"
 
 #include "sd.h"
+#include <scsi/scsicam.h>
 /*
  * This source file contains the symbol table used by scsi loadable
  * modules.
  */
-extern int scsicam_bios_param (Disk * disk,
-                               int dev,	int *ip	); 
-
 
 extern void print_command (unsigned char *command);
 extern void print_sense(const char * devclass, Scsi_Cmnd * SCpnt);
@@ -47,6 +45,7 @@ EXPORT_SYMBOL(scsi_malloc);
 EXPORT_SYMBOL(scsi_register);
 EXPORT_SYMBOL(scsi_unregister);
 EXPORT_SYMBOL(scsicam_bios_param);
+EXPORT_SYMBOL(scsi_partsize);
 EXPORT_SYMBOL(scsi_allocate_device);
 EXPORT_SYMBOL(scsi_do_cmd);
 EXPORT_SYMBOL(scsi_command_size);

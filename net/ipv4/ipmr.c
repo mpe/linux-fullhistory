@@ -9,7 +9,7 @@
  *	as published by the Free Software Foundation; either version
  *	2 of the License, or (at your option) any later version.
  *
- *	Version: $Id: ipmr.c,v 1.40 1999/03/25 10:04:25 davem Exp $
+ *	Version: $Id: ipmr.c,v 1.43 1999/06/09 10:10:59 davem Exp $
  *
  *	Fixes:
  *	Michael Chastain	:	Incorrect size of copying.
@@ -23,6 +23,8 @@
  *	Brad Parker		:	Better behaviour on mrouted upcall
  *					overflow.
  *      Carlos Picoto           :       PIMv1 Support
+ *	Pavlin Ivanov Radoslavov:	PIMv2 Registers must checksum only PIM header
+ *					Relax this requrement to work with older peers.
  *
  */
 
@@ -431,7 +433,7 @@ static void ipmr_cache_resolve(struct mfc_cache *cache)
 				skb_trim(skb, nlh->nlmsg_len);
 				((struct nlmsgerr*)NLMSG_DATA(nlh))->error = -EMSGSIZE;
 			}
-			err = netlink_unicast(rtnl, skb, NETLINK_CB(skb).pid, MSG_DONTWAIT);
+			err = netlink_unicast(rtnl, skb, NETLINK_CB(skb).dst_pid, MSG_DONTWAIT);
 		} else
 #endif
 			ip_mr_forward(skb, cache, 0);
@@ -1343,7 +1345,8 @@ int pim_rcv(struct sk_buff * skb, unsigned short len)
 	    pim->type != ((PIM_VERSION<<4)|(PIM_REGISTER)) ||
 	    (pim->flags&PIM_NULL_REGISTER) ||
 	    reg_dev == NULL ||
-	    ip_compute_csum((void *)pim, len)) {
+	    (ip_compute_csum((void *)pim, sizeof(*pim)) != 0 &&
+	     ip_compute_csum((void *)pim, len))) {
 		kfree_skb(skb);
                 return -EINVAL;
         }

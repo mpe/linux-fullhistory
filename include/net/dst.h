@@ -170,6 +170,9 @@ extern __inline__ void dst_set_expires(struct dst_entry *dst, int timeout)
 	if (dst->expires == 0 || (long)(dst->expires - expires) > 0)
 		dst->expires = expires;
 }
+
+extern void		dst_init(void);
+
 #endif
 
 #endif /* _NET_DST_H */

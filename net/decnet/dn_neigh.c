@@ -561,12 +561,13 @@ int dn_neigh_get_info(char *buffer, char **start, off_t offset, int length, int 
 
 	len += sprintf(buffer + len, "Addr    Flags State Use Blksize Dev\n");
 
-	neigh_table_lock(&dn_neigh_table);
 	for(i=0;i <= NEIGH_HASHMASK; i++) {
+		read_lock_bh(&dn_neigh_table.lock);
 		n = dn_neigh_table.hash_buckets[i];
 		for(; n != NULL; n = n->next) {
 			struct dn_neigh *dn = (struct dn_neigh *)n;
 
+			read_lock(&n->lock);
 			len += sprintf(buffer+len, "%-7s %s%s%s   %02x    %02d  %07ld %-8s\n",
 					dn_addr2asc(dn_ntohs(dn_eth2dn(dn->addr)), buf),
 					(dn->flags&DN_NDFLAG_R1) ? "1" : "-",
@@ -576,6 +577,7 @@ int dn_neigh_get_info(char *buffer, char **start, off_t offset, int length, int 
 					atomic_read(&dn->n.refcnt),
 					dn->blksize,
 					(dn->n.dev) ? dn->n.dev->name : "?");
+			read_unlock(&n->lock);
 
 			pos = begin + len;
 
@@ -584,11 +586,15 @@ int dn_neigh_get_info(char *buffer, char **start, off_t offset, int length, int 
                         	begin = pos;
                 	}
 
-                	if (pos > offset + length)
-                       		break;
+                	if (pos > offset + length) {
+				read_unlock_bh(&dn_neigh_table.lock);
+                       		goto done;
+			}
 		}
+		read_unlock_bh(&dn_neigh_table.lock);
 	}
-	neigh_table_unlock(&dn_neigh_table);
+
+done:
 
         *start = buffer + (offset - begin);
         len   -= offset - begin;

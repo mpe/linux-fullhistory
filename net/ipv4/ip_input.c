@@ -5,7 +5,7 @@
  *
  *		The Internet Protocol (IP) module.
  *
- * Version:	$Id: ip_input.c,v 1.39 1999/05/30 01:16:25 davem Exp $
+ * Version:	$Id: ip_input.c,v 1.40 1999/06/09 10:10:55 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -392,21 +392,17 @@ int ip_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
 	if (skb->dst == NULL) {
 		if (ip_route_input(skb, iph->daddr, iph->saddr, iph->tos, dev))
 			goto drop; 
-#ifdef CONFIG_CPU_IS_SLOW
-		if (net_cpu_congestion > 10 && !(iph->tos&IPTOS_RELIABILITY) &&
-		    IPTOS_PREC(iph->tos) < IPTOS_PREC_INTERNETCONTROL) {
-			goto drop;
-		}
-#endif
 	}
 
 #ifdef CONFIG_NET_CLS_ROUTE
 	if (skb->dst->tclassid) {
 		u32 idx = skb->dst->tclassid;
+		write_lock(&ip_rt_acct_lock);
 		ip_rt_acct[idx&0xFF].o_packets++;
 		ip_rt_acct[idx&0xFF].o_bytes+=skb->len;
 		ip_rt_acct[(idx>>16)&0xFF].i_packets++;
 		ip_rt_acct[(idx>>16)&0xFF].i_bytes+=skb->len;
+		write_unlock(&ip_rt_acct_lock);
 	}
 #endif
 

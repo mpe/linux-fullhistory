@@ -12,4 +12,10 @@ if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
   tristate 'Bidirectional parallel port support (EXPERIMENTAL)' CONFIG_SUN_BPP
   tristate 'Videopix Frame Grabber (EXPERIMENTAL)' CONFIG_SUN_VIDEOPIX
   tristate 'Aurora Multiboard 1600se (EXPERIMENTAL)' CONFIG_SUN_AURORA
+
+  # XXX Why don't we do "source drivers/char/Config.in" somewhere?
+  if [ "$CONFIG_PCI" = "y" ]; then
+    define_bool CONFIG_APM_RTC_IS_GMT y		# no shit
+    bool 'PC-style RTC' CONFIG_RTC
+  fi
 fi

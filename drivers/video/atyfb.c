@@ -1,4 +1,4 @@
-/*  $Id: atyfb.c,v 1.106 1999/04/16 11:20:49 geert Exp $
+/*  $Id: atyfb.c,v 1.107 1999/06/08 19:59:03 geert Exp $
  *  linux/drivers/video/atyfb.c -- Frame buffer device for ATI Mach64
  *
  *	Copyright (C) 1997-1998  Geert Uytterhoeven
@@ -200,6 +200,7 @@ struct fb_info_aty {
     struct atyfb_par default_par;
     struct atyfb_par current_par;
     u32 total_vram;
+    u32 ref_clk_per;
     u32 pll_per;
     u32 mclk_per;
     u16 chip_type;
@@ -326,9 +327,7 @@ static void reset_engine(const struct fb_info_aty *info);
 static void init_engine(const struct atyfb_par *par, struct fb_info_aty *info);
 static void aty_st_514(int offset, u8 val, const struct fb_info_aty *info);
 static void aty_st_pll(int offset, u8 val, const struct fb_info_aty *info);
-#if defined(__sparc__) || defined(DEBUG)
 static u8 aty_ld_pll(int offset, const struct fb_info_aty *info);
-#endif
 static void aty_set_crtc(const struct fb_info_aty *info,
 			 const struct crtc *crtc);
 static int aty_var_to_crtc(const struct fb_info_aty *info,
@@ -341,7 +340,8 @@ static void aty_set_pll_gx(const struct fb_info_aty *info,
 			   const struct pll_gx *pll);
 static int aty_var_to_pll_18818(u32 vclk_per, struct pll_gx *pll);
 static int aty_var_to_pll_514(u32 vclk_per, struct pll_gx *pll);
-static int aty_pll_gx_to_var(const struct pll_gx *pll, u32 *vclk_per);
+static int aty_pll_gx_to_var(const struct pll_gx *pll, u32 *vclk_per,
+			     const struct fb_info_aty *info);
 static void aty_set_pll_ct(const struct fb_info_aty *info,
 			   const struct pll_ct *pll);
 static int aty_dsp_gt(const struct fb_info_aty *info, u8 mclk_fb_div,
@@ -349,7 +349,8 @@ static int aty_dsp_gt(const struct fb_info_aty *info, u8 mclk_fb_div,
 		      u8 bpp, struct pll_ct *pll);
 static int aty_var_to_pll_ct(const struct fb_info_aty *info, u32 vclk_per,
 			     u8 bpp, struct pll_ct *pll);
-static int aty_pll_ct_to_var(const struct pll_ct *pll, u32 *vclk_per);
+static int aty_pll_ct_to_var(const struct pll_ct *pll, u32 *vclk_per,
+			     const struct fb_info_aty *info);
 static void atyfb_set_par(const struct atyfb_par *par,
 			  struct fb_info_aty *info);
 static int atyfb_decode_var(const struct fb_var_screeninfo *var,
@@ -404,8 +405,6 @@ static char noaccel __initdata = 0;
 static u32 default_vram __initdata = 0;
 static int default_pll __initdata = 0;
 static int default_mclk __initdata = 0;
-
-static const u32 ref_clk_per = 1000000000000ULL/14318180;
 
 #if defined(CONFIG_PPC)
 static int default_vmode __initdata = VMODE_NVRAM;
@@ -689,7 +688,6 @@ static void aty_st_pll(int offset, u8 val, const struct fb_info_aty *info)
     aty_st_8(CLOCK_CNTL + 1, (offset << 2) & ~PLL_WR_EN, info);
 }
 
-#if defined(__sparc__) || defined(DEBUG)
 static u8 aty_ld_pll(int offset, const struct fb_info_aty *info)
 {
     u8 res;
@@ -702,7 +700,6 @@ static u8 aty_ld_pll(int offset, const struct fb_info_aty *info)
     eieio();
     return res;
 }
-#endif
 
 #if defined(CONFIG_PPC)
 
@@ -1455,7 +1452,8 @@ static int aty_var_to_pll_514(u32 vclk_per, struct pll_gx *pll)
 
     /* FIXME: ATI18818?? */
 
-static int aty_pll_gx_to_var(const struct pll_gx *pll, u32 *vclk_per)
+static int aty_pll_gx_to_var(const struct pll_gx *pll, u32 *vclk_per,
+			     const struct fb_info_aty *info)
 {
     u8 df, vco_div_count, ref_div_count;
 
@@ -1463,7 +1461,7 @@ static int aty_pll_gx_to_var(const struct pll_gx *pll, u32 *vclk_per)
     vco_div_count = pll->m & 0x3f;
     ref_div_count = pll->n;
 
-    *vclk_per = ((ref_clk_per*ref_div_count)<<(3-df))/(vco_div_count+65);
+    *vclk_per = ((info->ref_clk_per*ref_div_count)<<(3-df))/(vco_div_count+65);
 
     return 0;
 }
@@ -1579,10 +1577,10 @@ static int aty_var_to_pll_ct(const struct fb_info_aty *info, u32 vclk_per,
 
     pll->pll_vclk_cntl = 0x03;	/* VCLK = PLL_VCLK/VCLKx_POST */
 
-    pll_ref_div = info->pll_per*2*255/ref_clk_per;
+    pll_ref_div = info->pll_per*2*255/info->ref_clk_per;
 
     /* FIXME: use the VTB/GTB /3 post divider if it's better suited */
-    q = ref_clk_per*pll_ref_div*4/info->mclk_per;	/* actually 8*q */
+    q = info->ref_clk_per*pll_ref_div*4/info->mclk_per;	/* actually 8*q */
     if (q < 16*8 || q > 255*8)
 	FAIL("mclk out of range");
     else if (q < 32*8)
@@ -1596,7 +1594,7 @@ static int aty_var_to_pll_ct(const struct fb_info_aty *info, u32 vclk_per,
     mclk_fb_div = q*mclk_post_div/8;
 
     /* FIXME: use the VTB/GTB /{3,6,12} post dividers if they're better suited */
-    q = ref_clk_per*pll_ref_div*4/vclk_per;	/* actually 8*q */
+    q = info->ref_clk_per*pll_ref_div*4/vclk_per;	/* actually 8*q */
     if (q < 16*8 || q > 255*8)
 	FAIL("vclk out of range");
     else if (q < 32*8)
@@ -1677,7 +1675,8 @@ static int aty_var_to_pll_ct(const struct fb_info_aty *info, u32 vclk_per,
     return 0;
 }
 
-static int aty_pll_ct_to_var(const struct pll_ct *pll, u32 *vclk_per)
+static int aty_pll_ct_to_var(const struct pll_ct *pll, u32 *vclk_per,
+			     const struct fb_info_aty *info)
 {
     u8 pll_ref_div = pll->pll_ref_div;
     u8 vclk_fb_div = pll->vclk_fb_div;
@@ -1691,7 +1690,7 @@ static int aty_pll_ct_to_var(const struct pll_ct *pll, u32 *vclk_per)
 				    (vclk_post_div & 3)];
     if (vpostdiv == 0)
 	return -EINVAL;
-    *vclk_per = pll_ref_div*vpostdiv*ref_clk_per/vclk_fb_div/2;
+    *vclk_per = pll_ref_div*vpostdiv*info->ref_clk_per/vclk_fb_div/2;
     return 0;
 }
 
@@ -1845,9 +1844,9 @@ static int atyfb_encode_var(struct fb_var_screeninfo *var,
     if ((err = aty_crtc_to_var(&par->crtc, var)))
 	return err;
     if ((Gx == GX_CHIP_ID) || (Gx == CX_CHIP_ID))
-	err = aty_pll_gx_to_var(&par->pll.gx, &var->pixclock);
+	err = aty_pll_gx_to_var(&par->pll.gx, &var->pixclock, info);
     else
-	err = aty_pll_ct_to_var(&par->pll.ct, &var->pixclock);
+	err = aty_pll_ct_to_var(&par->pll.ct, &var->pixclock, info);
     if (err)
 	return err;
 
@@ -2432,11 +2431,12 @@ __initfunc(static int aty_init(struct fb_info_aty *info, const char *name))
     int j, k;
     struct fb_var_screeninfo var;
     struct display *disp;
-    const char *chipname = NULL, *ramname = NULL;
+    const char *chipname = NULL, *ramname = NULL, *xtal;
     int pll, mclk, gtb_memsize;
 #if defined(CONFIG_PPC)
     int sense;
 #endif
+    u8 pll_ref_div;
 
     info->aty_cmap_regs = (struct aty_cmap_regs *)(info->ati_regbase+0xc0);
     chip_id = aty_ld_le32(CONFIG_CHIP_ID, info);
@@ -2524,6 +2524,25 @@ __initfunc(static int aty_init(struct fb_info_aty *info, const char *name))
 	}
     }
 
+    info->ref_clk_per = 1000000000000ULL/14318180;
+    xtal = "14.31818";
+    if (!(Gx == GX_CHIP_ID || Gx == CX_CHIP_ID || Gx == CT_CHIP_ID ||
+	  Gx == ET_CHIP_ID ||
+	  ((Gx == VT_CHIP_ID || Gx == GT_CHIP_ID) && !(Rev & 0x07))) &&
+	(pll_ref_div = aty_ld_pll(PLL_REF_DIV, info))) {
+	int diff1, diff2;
+	diff1 = 510*14/pll_ref_div-pll;
+	diff2 = 510*29/pll_ref_div-pll;
+	if (diff1 < 0)
+	    diff1 = -diff1;
+	if (diff2 < 0)
+	    diff2 = -diff2;
+	if (diff2 < diff1) {
+	    info->ref_clk_per = 1000000000000ULL/29498928;
+	    xtal = "29.498928";
+	}
+    }
+
     i = aty_ld_le32(MEM_CNTL, info);
     gtb_memsize = !(Gx == GX_CHIP_ID || Gx == CX_CHIP_ID || Gx == CT_CHIP_ID ||
 		    Gx == ET_CHIP_ID ||
@@ -2602,9 +2621,9 @@ __initfunc(static int aty_init(struct fb_info_aty *info, const char *name))
     if (default_mclk)
 	mclk = default_mclk;
 
-    printk("%d%c %s, %d MHz PLL, %d Mhz MCLK\n", 
+    printk("%d%c %s, %s MHz XTAL, %d MHz PLL, %d Mhz MCLK\n", 
     	   info->total_vram == 0x80000 ? 512 : (info->total_vram >> 20), 
-    	   info->total_vram == 0x80000 ? 'K' : 'M', ramname, pll, mclk);
+    	   info->total_vram == 0x80000 ? 'K' : 'M', ramname, xtal, pll, mclk);
 
     if (mclk < 44)
 	info->mem_refresh_rate = 0;	/* 000 = 10 Mhz - 43 Mhz */

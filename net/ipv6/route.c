@@ -5,7 +5,7 @@
  *	Authors:
  *	Pedro Roque		<roque@di.fc.ul.pt>	
  *
- *	$Id: route.c,v 1.35 1999/03/21 05:22:57 davem Exp $
+ *	$Id: route.c,v 1.36 1999/06/09 10:11:21 davem Exp $
  *
  *	This program is free software; you can redistribute it and/or
  *      modify it under the terms of the GNU General Public License
@@ -1607,7 +1607,7 @@ static int fib6_dump_node(struct fib6_walker_t *w)
 	return 0;
 }
 
-static int fib6_dump_done(struct netlink_callback *cb)
+static void fib6_dump_end(struct netlink_callback *cb)
 {
 	struct fib6_walker_t *w = (void*)cb->args[0];
 
@@ -1622,6 +1622,11 @@ static int fib6_dump_done(struct netlink_callback *cb)
 		cb->done = (void*)cb->args[1];
 		cb->args[1] = 0;
 	}
+}
+
+static int fib6_dump_done(struct netlink_callback *cb)
+{
+	fib6_dump_end(cb);
 	return cb->done(cb);
 }
 
@@ -1668,11 +1673,15 @@ int inet6_dump_fib(struct sk_buff *skb, struct netlink_callback *cb)
 	if (res <= 0 && skb->len == 0)
 		RT6_TRACE("%p>dump end\n", w);
 #endif
+	res = res < 0 ? res : skb->len;
 	/* res < 0 is an error. (really, impossible)
 	   res == 0 means that dump is complete, but skb still can contain data.
 	   res > 0 dump is not complete, but frame is full.
 	 */
-	return res < 0 ? res : skb->len;
+	/* Destroy walker, if dump of this table is complete. */
+	if (res <= 0)
+		fib6_dump_end(cb);
+	return res;
 }
 
 int inet6_rtm_getroute(struct sk_buff *in_skb, struct nlmsghdr* nlh, void *arg)

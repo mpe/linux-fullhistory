@@ -17,6 +17,10 @@ linux-1.1.x and fairly stable since linux-1.2.x, and are also in FreeBSD
     AHA-274xT               
     AHA-2842
     AHA-2910B               
+    AHA-2920C
+    AHA-2930
+    AHA-2930U
+    AHA-2930U2
     AHA-2940               
     AHA-2940W              
     AHA-2940U              
@@ -77,8 +81,8 @@ linux-1.1.x and fairly stable since linux-1.2.x, and are also in FreeBSD
     Adaptec Cards
     ----------------------------
     AHA-2920 (Only the cards that use the Future Domain chipset are not
-              supported, any 2920 cards based on Adaptec AIC chipsets are
-	      supported)
+              supported, any 2920 cards based on Adaptec AIC chipsets,
+	      such as the 2920C, are supported)
     AAA-13x Raid Adapters
     AAA-113x Raid Port Card
 
@@ -108,7 +112,7 @@ linux-1.1.x and fairly stable since linux-1.2.x, and are also in FreeBSD
     Jess Johnson    jester@frenzy.com
       (AIC7xxx FAQ author)
     Doug Ledford    dledford@redhat.com
-      (Current Linux aic7xxx-5.x.x Driver/Patch/FTP/FAQ maintainer)
+      (Current Linux aic7xxx-5.x.x Driver/Patch/FTP maintainer)
     
     Special thanks go to John Aycock (aycock@cpsc.ucalgary.ca), the original
     author of the driver. John has since retired from the project. Thanks
@@ -325,11 +329,12 @@ linux-1.1.x and fairly stable since linux-1.2.x, and are also in FreeBSD
 	list and someone can help you out.
 
     "aic7xxx=tag_info:{{8,8..},{8,8..},..}" - This option is used to disable
-        tagged queueing on specific devices.  As of driver version 5.1.8, we
-        now globally enable tagged queueing by default.  In order to
-        disable tagged queueing for certian devices at boot time, a user may
-        use this boot param.  The driver will then parse this message out
-        and disable the specific device entries that are present based upon
+        or enable Tagged Command Queueing (TCQ) on specific devices.  As of
+	driver version 5.1.11, TCQ is now either on or off by default
+	according to the setting you choose during the make config process.
+	In order to en/disable TCQ for certian devices at boot time, a user
+	may use this boot param.  The driver will then parse this message out
+        and en/disable the specific device entries that are present based upon
         the value given.  The param line is parsed in the following manner:
 
           { - first instance indicates the start of this parameter values
@@ -419,10 +424,10 @@ linux-1.1.x and fairly stable since linux-1.2.x, and are also in FreeBSD
     see this documentation, you need to use one of the advanced configuration
     programs (menuconfig and xconfig).  If you are using the "make menuconfig"
     method of configuring your kernel, then you would simply highlight the
-    option in question and hit the F1 key.  If you are using the "make xconfig"
-    method of configuring your kernel, then simply click on the help button next
-    to the option you have questions about.  The help information from the
-    Configure.help file will then get automatically displayed.
+    option in question and hit the ? key.  If you are using the "make xconfig"
+    method of configuring your kernel, then simply click on the help button
+    next to the option you have questions about.  The help information from
+    the Configure.help file will then get automatically displayed.
 
   /proc support
   ------------------------------

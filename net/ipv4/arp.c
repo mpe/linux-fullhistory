@@ -1,6 +1,6 @@
 /* linux/net/inet/arp.c
  *
- * Version:	$Id: arp.c,v 1.77 1999/03/21 05:22:30 davem Exp $
+ * Version:	$Id: arp.c,v 1.78 1999/06/09 10:10:36 davem Exp $
  *
  * Copyright (C) 1994 by Florian  La Roche
  *
@@ -118,6 +118,11 @@
 
 #include <asm/system.h>
 #include <asm/uaccess.h>
+
+#if defined(CONFIG_AX25) || defined(CONFIG_AX25_MODULE)
+static char *ax2asc2(ax25_address *a, char *buf);
+#endif
+
 
 /*
  *	Interface to generic neighbour cache.
@@ -304,7 +309,7 @@ static void arp_solicit(struct neighbour *neigh, struct sk_buff *skb)
 	u8  *dst_ha = NULL;
 	struct device *dev = neigh->dev;
 	u32 target = *(u32*)neigh->primary_key;
-	int probes = neigh->probes;
+	int probes = atomic_read(&neigh->probes);
 
 	if (skb && inet_addr_type(skb->nh.iph->saddr) == RTN_LOCAL)
 		saddr = skb->nh.iph->saddr;
@@ -315,6 +320,7 @@ static void arp_solicit(struct neighbour *neigh, struct sk_buff *skb)
 		if (!(neigh->nud_state&NUD_VALID))
 			printk(KERN_DEBUG "trying to ucast probe in NUD_INVALID\n");
 		dst_ha = neigh->ha;
+		read_lock_bh(&neigh->lock);
 	} else if ((probes -= neigh->parms->app_probes) < 0) {
 #ifdef CONFIG_ARPD
 		neigh_app_ns(neigh);
@@ -324,6 +330,8 @@ static void arp_solicit(struct neighbour *neigh, struct sk_buff *skb)
 
 	arp_send(ARPOP_REQUEST, ETH_P_ARP, target, dev, saddr,
 		 dst_ha, dev->dev_addr, NULL);
+	if (dst_ha)
+		read_unlock_bh(&neigh->lock);
 }
 
 /* OBSOLETE FUNCTIONS */
@@ -372,29 +380,25 @@ int arp_find(unsigned char *haddr, struct sk_buff *skb)
 	if (arp_set_predefined(inet_addr_type(paddr), haddr, paddr, dev))
 		return 0;
 
-	start_bh_atomic();
 	n = __neigh_lookup(&arp_tbl, &paddr, dev, 1);
 
 	if (n) {
 		n->used = jiffies;
 		if (n->nud_state&NUD_VALID || neigh_event_send(n, skb) == 0) {
-			memcpy(haddr, n->ha, dev->addr_len);
+			read_lock_bh(&n->lock);
+ 			memcpy(haddr, n->ha, dev->addr_len);
+			read_unlock_bh(&n->lock);
 			neigh_release(n);
-			end_bh_atomic();
 			return 0;
 		}
+		neigh_release(n);
 	} else
 		kfree_skb(skb);
-	neigh_release(n);
-	end_bh_atomic();
 	return 1;
 }
 
 /* END OF OBSOLETE FUNCTIONS */
 
-/*
- * Note: requires bh_atomic locking.
- */
 int arp_bind_neighbour(struct dst_entry *dst)
 {
 	struct device *dev = dst->dev;
@@ -672,7 +676,8 @@ int arp_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
 			    (addr_type == RTN_UNICAST  && rt->u.dst.dev != dev &&
 			     (IN_DEV_PROXY_ARP(in_dev) || pneigh_lookup(&arp_tbl, &tip, dev, 0)))) {
 				n = neigh_event_ns(&arp_tbl, sha, &sip, dev);
-				neigh_release(n);
+				if (n)
+					neigh_release(n);
 
 				if (skb->stamp.tv_sec == 0 ||
 				    skb->pkt_type == PACKET_HOST ||
@@ -785,7 +790,6 @@ int arp_req_set(struct arpreq *r, struct device * dev)
 		return -EINVAL;
 
 	err = -ENOBUFS;
-	start_bh_atomic();
 	neigh = __neigh_lookup(&arp_tbl, &ip, dev, 1);
 	if (neigh) {
 		unsigned state = NUD_STALE;
@@ -795,7 +799,6 @@ int arp_req_set(struct arpreq *r, struct device * dev)
 				   r->arp_ha.sa_data : NULL, state, 1, 0);
 		neigh_release(neigh);
 	}
-	end_bh_atomic();
 	return err;
 }
 
@@ -819,17 +822,17 @@ static int arp_req_get(struct arpreq *r, struct device *dev)
 	struct neighbour *neigh;
 	int err = -ENXIO;
 
-	start_bh_atomic();
-	neigh = __neigh_lookup(&arp_tbl, &ip, dev, 0);
+	neigh = neigh_lookup(&arp_tbl, &ip, dev);
 	if (neigh) {
+		read_lock_bh(&neigh->lock);
 		memcpy(r->arp_ha.sa_data, neigh->ha, dev->addr_len);
+		r->arp_flags = arp_state_to_flags(neigh);
+		read_unlock_bh(&neigh->lock);
 		r->arp_ha.sa_family = dev->type;
 		strncpy(r->arp_dev, dev->name, sizeof(r->arp_dev));
-		r->arp_flags = arp_state_to_flags(neigh);
 		neigh_release(neigh);
 		err = 0;
 	}
-	end_bh_atomic();
 	return err;
 }
 
@@ -867,14 +870,12 @@ int arp_req_delete(struct arpreq *r, struct device * dev)
 			return -EINVAL;
 	}
 	err = -ENXIO;
-	start_bh_atomic();
-	neigh = __neigh_lookup(&arp_tbl, &ip, dev, 0);
+	neigh = neigh_lookup(&arp_tbl, &ip, dev);
 	if (neigh) {
 		if (neigh->nud_state&~NUD_NOARP)
 			err = neigh_update(neigh, NULL, NUD_FAILED, 1, 0);
 		neigh_release(neigh);
 	}
-	end_bh_atomic();
 	return err;
 }
 
@@ -961,16 +962,16 @@ int arp_get_info(char *buffer, char **start, off_t offset, int length, int dummy
 	char hbuffer[HBUFFERLEN];
 	int i,j,k;
 	const char hexbuf[] =  "0123456789ABCDEF";
+	char abuf[16];
 
 	size = sprintf(buffer,"IP address       HW type     Flags       HW address            Mask     Device\n");
 
 	pos+=size;
 	len+=size;
 
-	neigh_table_lock(&arp_tbl);
-
-	for(i=0; i<=NEIGH_HASHMASK; i++)	{
+	for(i=0; i<=NEIGH_HASHMASK; i++) {
 		struct neighbour *n;
+		read_lock_bh(&arp_tbl.lock);
 		for (n=arp_tbl.hash_buckets[i]; n; n=n->next) {
 			struct device *dev = n->dev;
 			int hatype = dev->type;
@@ -979,17 +980,14 @@ int arp_get_info(char *buffer, char **start, off_t offset, int length, int dummy
 			if (!(n->nud_state&~NUD_NOARP))
 				continue;
 
-			/* I'd get great pleasure deleting
-			   this ugly code. Let's output it in hexadecimal format.
-			   "arp" utility will eventually repaired  --ANK
-			 */
-#if 1 /* UGLY CODE */
+			read_lock(&n->lock);
+
 /*
  *	Convert hardware address to XX:XX:XX:XX ... form.
  */
 #if defined(CONFIG_AX25) || defined(CONFIG_AX25_MODULE)
 			if (hatype == ARPHRD_AX25 || hatype == ARPHRD_NETROM)
-			     strcpy(hbuffer,ax2asc((ax25_address *)n->ha));
+				ax2asc2((ax25_address *)n->ha, hbuffer);
 			else {
 #endif
 			for (k=0,j=0;k<HBUFFERLEN-3 && j<dev->addr_len;j++) {
@@ -998,37 +996,33 @@ int arp_get_info(char *buffer, char **start, off_t offset, int length, int dummy
 				hbuffer[k++]=':';
 			}
 			hbuffer[--k]=0;
-	
+
 #if defined(CONFIG_AX25) || defined(CONFIG_AX25_MODULE)
 		}
-#endif
-#else
-			if ((neigh->nud_state&NUD_VALID) && dev->addr_len) {
-				int j;
-				for (j=0; j < dev->addr_len; j++)
-					sprintf(hbuffer+2*j, "%02x", neigh->ha[j]);
-			} else
-				sprintf(hbuffer, "0");
 #endif
 
 			size = sprintf(buffer+len,
 				"%-17s0x%-10x0x%-10x%s",
-				in_ntoa(*(u32*)n->primary_key),
+				in_ntoa2(*(u32*)n->primary_key, abuf),
 				hatype,
 				arp_state_to_flags(n), 
 				hbuffer);
 			size += sprintf(buffer+len+size,
 				 "     %-17s %s\n",
 				 "*", dev->name);
+			read_unlock(&n->lock);
 
 			len += size;
 			pos += size;
 		  
 			if (pos <= offset)
 				len=0;
-			if (pos >= offset+length)
-				goto done;
+			if (pos >= offset+length) {
+				read_unlock_bh(&arp_tbl.lock);
+ 				goto done;
+			}
 		}
+		read_unlock_bh(&arp_tbl.lock);
 	}
 
 	for (i=0; i<=PNEIGH_HASHMASK; i++) {
@@ -1039,7 +1033,7 @@ int arp_get_info(char *buffer, char **start, off_t offset, int length, int dummy
 
 			size = sprintf(buffer+len,
 				"%-17s0x%-10x0x%-10x%s",
-				in_ntoa(*(u32*)n->key),
+				in_ntoa2(*(u32*)n->key, abuf),
 				hatype,
  				ATF_PUBL|ATF_PERM,
 				"00:00:00:00:00:00");
@@ -1058,7 +1052,6 @@ int arp_get_info(char *buffer, char **start, off_t offset, int length, int dummy
 	}
 
 done:
-	neigh_table_unlock(&arp_tbl);
   
 	*start = buffer+len-(pos-offset);	/* Start of wanted data */
 	len = pos-offset;			/* Start slop */
@@ -1117,14 +1110,13 @@ __initfunc(void arp_init (void))
 }
 
 
-#ifdef CONFIG_AX25_MODULE
+#if defined(CONFIG_AX25) || defined(CONFIG_AX25_MODULE)
 
 /*
  *	ax25 -> ASCII conversion
  */
-char *ax2asc(ax25_address *a)
+char *ax2asc2(ax25_address *a, char *buf)
 {
-	static char buf[11];
 	char c, *s;
 	int n;
 

@@ -3958,34 +3958,49 @@ CONFIG_SCSI_AIC7XXX
   say M here and read Documentation/modules.txt. The module will be
   called aic7xxx.o.
 
-Override driver defaults for commands per LUN
-CONFIG_OVERRIDE_CMDS
-  Say Y here if you want to override the default maximum number of
-  commands that a single device on the aic7xxx controller is allowed
-  to have active at one time. This option only affects tagged queueing
-  capable devices. The driver uses a value of 24 by default.
-  If you say Y here, you can adjust the number of commands per LUN
-  with the following configuration option.
+Enable or Disable Tagged Command Queueing by default
+CONFIG_AIC7XXX_TCQ_ON_BY_DEFAULT
+  This option causes the aic7xxx driver to attempt to use tagged command
+  queueing on any devices that claim to support it.  If this is set to yes,
+  you can still turn off TCQ on troublesome devices with the use of the
+  tag_info boot parameter.  See /usr/src/linux/drivers/scsi/README.aic7xxx
+  for more information on that and other aic7xxx setup commands.  If this
+  option is turned off, you may still enable TCQ on known good devices by
+  use of the tag_info boot parameter.
   
-  If unsure, say N.
+  If you are unsure about your devices then it is safest to say N here.
+  
+  However, TCQ can increase performance on some hard drives by as much
+  as 50% or more, so I would recommend that if you say N here, that you
+  at least read the README.aic7xxx file so you will know how to enable
+  this option manually should your drives prove to be safe in regards
+  to TCQ.
 
-Maximum number of commands per LUN
-CONFIG_AIC7XXX_CMDS_PER_LUN
-  Specify the maximum number of commands you would like to allocate
-  per LUN (a LUN is a Logical Unit Number -- some physical SCSI
-  devices, e.g. CD jukeboxes, act logically as several separate units,
-  each of which gets its own number).
+  Conversely, certain drives are known to lock up or cause bus resets when
+  TCQ is enabled on them.  If you have a Western Digital Enterprise SCSI
+  drive for instance, then don't even bother to enable TCQ on it as the
+  drive will become unreliable, and it will actually reduce performance.
 
-  Reasonable figures are in the range of 14 to 32 commands per device,
+Default number of TCQ commands per device
+CONFIG_AIC7XXX_CMDS_PER_DEVICE
+  Specify the number of commands you would like to allocate per SCSI
+  device when Tagged Command Queueing (TCQ) is enabled on that device.
+
+  Reasonable figures are in the range of 8 to 24 commands per device,
   but depending on hardware could be increased or decreased from that
   figure. If the number is too high for any particular device, the
   driver will automatically compensate usually after only 10 minutes
-  of uptime and will issue a message to alert you to the fact that the
-  number of commands for that device has been reduced. It will not
-  hinder performance if some of your devices eventually have their
-  commands per LUN reduced, but is a waste of memory if all of your
-  devices end up reducing this number down to a more reasonable
-  figure. Default: 24
+  of uptime. It will not hinder performance if some of your devices
+  eventually have their command depth reduced, but is a waste of memory
+  if all of your devices end up reducing this number down to a more
+  reasonable figure.
+  
+  NOTE: Certain very broken drives are known to lock up when given more
+  commands than they like to deal with.  Quantum Fireball drives are the
+  most common in this category.  For the Quantum Fireball drives I would
+  suggest no more than 8 commands per device.
+
+  Default: 8
 
 Collect statistics to report in /proc
 CONFIG_AIC7XXX_PROC_STATS
@@ -8950,8 +8965,8 @@ CONFIG_FT_ALPHA_CLOCK
 
 Zilog serial support
 CONFIG_SUN_ZS
-  This driver does not exist at this point, so you might as well 
-  say N.
+  If you are asked this question, something is wrong with config scripts.
+  Zilog serial driver is always enabled in sparc architecture.
 
 Double Talk PC internal speech card support
 CONFIG_DTLK
@@ -10352,8 +10367,14 @@ CONFIG_SUN_OPENPROMIO
   inserted in and removed from the running kernel whenever you want),
   say M and read Documentation/modules.txt. If unsure, say Y.
 
-#Mostek real time clock support
-#CONFIG_SUN_MOSTEK_RTC
+Mostek real time clock support
+CONFIG_SUN_MOSTEK_RTC
+  The Mostek RTC chip is used on all knows Sun computers except
+  some JavaStation-s. For a JavaStation you need to say Y both here
+  and to CONFIG_RTC.
+
+  Say Y here unless you are building a special purpose kernel.
+
 #
 #Siemens SAB82532 serial support
 #CONFIG_SAB82532

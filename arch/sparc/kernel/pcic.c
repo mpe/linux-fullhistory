@@ -1,10 +1,13 @@
-/* $Id: pcic.c,v 1.5 1999/03/16 00:15:20 davem Exp $
+/* $Id: pcic.c,v 1.6 1999/06/03 15:02:18 davem Exp $
  * pcic.c: Sparc/PCI controller support
  *
  * Copyright (C) 1998 V. Roganov and G. Raiko
  *
  * Code is derived from Ultra/PCI PSYCHO controller support, see that
  * for author info.
+ *
+ * Support for diverse IIep based platforms by Pete Zaitcev.
+ * CP-1200 by Eric Brower.
  */
 
 #include <linux/config.h>
@@ -16,6 +19,7 @@
 
 #include <asm/ebus.h>
 #include <asm/sbus.h> /* for sanity check... */
+#include <asm/swift.h> /* for cache flushing. */
 
 #include <asm/io.h>
 
@@ -69,8 +73,98 @@ asmlinkage int sys_pciconfig_write(unsigned long bus,
 
 #else
 
+unsigned int pcic_pin_to_irq(unsigned int pin, char *name);
+
+/*
+ * I studied different documents and many live PROMs both from 2.30
+ * family and 3.xx versions. I came to the amazing conclusion: there is
+ * absolutely no way to route interrupts in IIep systems relying on
+ * information which PROM presents. We must hardcode interrupt routing
+ * schematics. And this actually sucks.   -- zaitcev 1999/05/12
+ *
+ * To find irq for a device we determine which routing map
+ * is in effect or, in other words, on which machine we are running.
+ * We use PROM name for this although other techniques may be used
+ * in special cases (Gleb reports a PROMless IIep based system).
+ * Once we know the map we take device configuration address and
+ * find PCIC pin number where INT line goes. Then we may either program
+ * preferred irq into the PCIC or supply the preexisting irq to the device.
+ *
+ * XXX Entries for JE-1 are completely bogus. Gleb, Vladimir, please fill them.
+ */
+struct pcic_ca2irq {
+	unsigned char busno;		/* PCI bus number */
+	unsigned char devfn;		/* Configuration address */
+	unsigned char pin;		/* PCIC external interrupt pin */
+	unsigned char irq;		/* Preferred IRQ (mappable in PCIC) */
+	unsigned int force;		/* Enforce preferred IRQ */
+};
+
+struct pcic_sn2list {
+	char *sysname;
+	struct pcic_ca2irq *intmap;
+	int mapdim;
+};
+
+/*
+ * XXX JE-1 is a little known beast.
+ * One rumor has the map this way: pin 0 - parallel, audio;
+ * pin 1 - Ethernet; pin 2 - su; pin 3 - PS/2 kbd and mouse.
+ * All other comparable systems tie serial and keyboard together,
+ * so we do not code this rumor just yet.
+ */
+static struct pcic_ca2irq pcic_i_je1[] = {
+	{ 0, 0x01, 1,  6, 1 },		/* Happy Meal */
+};
+
+/* XXX JS-E entry is incomplete - PCI Slot 2 address (pin 7)? */
+static struct pcic_ca2irq pcic_i_jse[] = {
+	{ 0, 0x00, 0, 13, 0 },		/* Ebus - serial and keyboard */
+	{ 0, 0x01, 1,  6, 0 },		/* hme */
+	{ 0, 0x08, 2,  9, 0 },		/* VGA - we hope not used :) */
+	{ 0, 0x18, 6,  8, 0 },		/* PCI INTA# in Slot 1 */
+	{ 0, 0x38, 4,  9, 0 },		/* All ISA devices. Read 8259. */
+	{ 0, 0x80, 5, 11, 0 },		/* EIDE */
+	/* {0,0x88, 0,0,0} - unknown device... PMU? Probably no interrupt. */
+	{ 0, 0xA0, 4,  9, 0 },		/* USB */
+	/*
+	 * Some pins belong to non-PCI devices, we hardcode them in drivers.
+	 * sun4m timers - irq 10, 14
+	 * PC style RTC - pin 7, irq 4 ?
+	 * Smart card, Parallel - pin 4 shared with USB, ISA
+	 * audio - pin 3, irq 5 ?
+	 */
+};
+
+/* SPARCengine-6 was the original release name of CP1200.
+ * The documentation differs between the two versions
+ */
+static struct pcic_ca2irq pcic_i_se6[] = {
+	{ 0, 0x08, 0,  2, 0 },		/* SCSI	*/
+	{ 0, 0x01, 1,  6, 0 },		/* HME	*/
+	{ 0, 0x00, 3, 13, 0 },		/* EBus	*/
+};
+
+/*
+ * Several entries in this list may point to the same routing map
+ * as several PROMs may be installed on the same physical board.
+ */
+#define SN2L_INIT(name, map)	\
+  { name, map, sizeof(map)/sizeof(struct pcic_ca2irq) }
+
+static struct pcic_sn2list pcic_known_sysnames[] = {
+	SN2L_INIT("JE-1-name", pcic_i_je1),  /* XXX Gleb, put name here, pls */
+	SN2L_INIT("SUNW,JS-E", pcic_i_jse),	/* PROLL JavaStation-E */
+	SN2L_INIT("SUNW,SPARCengine-6", pcic_i_se6), /* SPARCengine-6/CP-1200 */
+	{ NULL, NULL, 0 }
+};
+
 static struct linux_pcic PCIC;
 static struct linux_pcic *pcic = NULL;
+
+unsigned int pcic_regs;
+volatile int pcic_speculative;
+volatile int pcic_trapped;
 
 static void pci_do_gettimeofday(struct timeval *tv);
 static void pci_do_settimeofday(struct timeval *tv);
@@ -149,6 +243,37 @@ __initfunc(void pcic_probe(void))
 	pbm->prom_node = node;
 	prom_getstring(node, "name", namebuf, sizeof(namebuf));
 	strcpy(pbm->prom_name, namebuf);
+
+	{
+		extern volatile int t_nmi[1];
+		extern int pcic_nmi_trap_patch[1];
+
+		t_nmi[0] = pcic_nmi_trap_patch[0];
+		t_nmi[1] = pcic_nmi_trap_patch[1];
+		t_nmi[2] = pcic_nmi_trap_patch[2];
+		t_nmi[3] = pcic_nmi_trap_patch[3];
+		swift_flush_dcache();
+		pcic_regs = pcic->pcic_regs;
+	}
+
+	prom_getstring(prom_root_node, "name", namebuf, sizeof(namebuf));
+	{
+		struct pcic_sn2list *p;
+
+		for (p = pcic_known_sysnames; p->sysname != NULL; p++) {
+			if (strcmp(namebuf, p->sysname) == 0)
+				break;
+		}
+		pcic->pcic_imap = p->intmap;
+		pcic->pcic_imdim = p->mapdim;
+	}
+	if (pcic->pcic_imap == NULL) {
+		/*
+		 * We do not panic here for the sake of embedded systems.
+		 */
+		printk("PCIC: System %s is unknown, cannot route interrupts\n",
+		    namebuf);
+	}
 }
 
 __initfunc(void pcibios_init(void))
@@ -166,20 +291,15 @@ __initfunc(void pcibios_init(void))
 	       pcic->pcic_regs, pcic->pcic_io);
 
 	/*
-	 * FIXME:
 	 *      Switch off IOTLB translation.
-	 *      It'll be great to use IOMMU to handle HME's rings
-	 *      but we couldn't. Thus, we have to flush CPU cache
-	 *      in HME.
 	 */
 	writeb(PCI_DVMA_CONTROL_IOTLB_DISABLE, 
 	       pcic->pcic_regs+PCI_DVMA_CONTROL);
 
 	/*
-	 * FIXME:
 	 *      Increase mapped size for PCI memory space (DMA access).
 	 *      Should be done in that order (size first, address second).
-	 *      Why we couldn't set up 4GB and forget about it ?
+	 *      Why we couldn't set up 4GB and forget about it? XXX
 	 */
 	writel(0xF0000000UL, pcic->pcic_regs+PCI_SIZE_0);
 	writel(0+PCI_BASE_ADDRESS_SPACE_MEMORY, 
@@ -204,7 +324,7 @@ __initfunc(static int pdev_to_pnode(struct linux_pbm_info *pbm,
 		if(err != 0 && err != -1) {
 			unsigned long devfn = (regs[0].which_io >> 8) & 0xff;
 			if(devfn == pdev->devfn)
-				return node; /* Match */
+				return node;
 		}
 		node = prom_getsibling(node);
 	}
@@ -216,9 +336,9 @@ static inline struct pcidev_cookie *pci_devcookie_alloc(void)
 	return kmalloc(sizeof(struct pcidev_cookie), GFP_ATOMIC);
 }
 
-
-static void pcic_map_pci_device (struct pci_dev *dev) {
-	int node, pcinode;
+static void pcic_map_pci_device (struct pci_dev *dev, int node) {
+	struct linux_prom_pci_assigned_addresses addrs[6];
+	int addrlen;
 	int i, j;
 
 	/* Is any valid address present ? */
@@ -227,74 +347,132 @@ static void pcic_map_pci_device (struct pci_dev *dev) {
 		if (dev->base_address[j]) i++;
 	if (!i) return; /* nothing to do */
 
+	if (node == 0 || node == -1) {
+		printk("PCIC: no prom node for device ID (%x,%x)\n",
+		    dev->device, dev->vendor);
+		return;
+	}
+
 	/*
 	 * find related address and get it's window length
 	 */
-	pcinode = prom_getchild(prom_root_node);
-	pcinode = prom_searchsiblings(pcinode, "pci");
-	if (!pcinode)
-		panic("PCIC: failed to locate 'pci' node");
-
-
-	for (node = prom_getchild(pcinode); node;
-	     node = prom_getsibling(node)) {
-		struct linux_prom_pci_assigned_addresses addrs[6];
-		int addrlen = prom_getproperty(node,"assigned-addresses",
+	addrlen = prom_getproperty(node,"assigned-addresses",
 					       (char*)addrs, sizeof(addrs));
-		if (addrlen == -1)
+	if (addrlen == -1) {
+		printk("PCIC: no \"assigned-addresses\" for device (%x,%x)\n",
+		    dev->device, dev->vendor);
+		return;
+	}
+
+	addrlen /= sizeof(struct linux_prom_pci_assigned_addresses);
+	for (i = 0; i < addrlen; i++ )
+	    for (j = 0; j < 6; j++) {
+		if (!dev->base_address[j] || !addrs[i].phys_lo)
 			continue;
+		if (addrs[i].phys_lo == dev->base_address[j]) {
+			unsigned long address = dev->base_address[j];
+			int length  = addrs[i].size_lo;
+			char namebuf[128] = { 0, };
+			unsigned long mapaddr, addrflags;
 
-		addrlen /= sizeof(struct linux_prom_pci_assigned_addresses);
-		for (i = 0; i < addrlen; i++ )
-		    for (j = 0; j < 6; j++) {
-			if (!dev->base_address[j] || !addrs[i].phys_lo)
-				continue;
-			if (addrs[i].phys_lo == dev->base_address[j]) {
-			    unsigned long address = dev->base_address[j];
-			    int length  = addrs[i].size_lo;
-			    char namebuf[128] = { 0, };
-			    unsigned long mapaddr, addrflags;
-	    
-			    prom_getstring(node, "name",
-					   namebuf,  sizeof(namebuf));
+			prom_getstring(node, "name", namebuf, sizeof(namebuf));
 
-			    /* FIXME:
-			     *      failure in allocation too large space
-			     */
-			    if (length > 0x200000) {
+			/*
+			 *      failure in allocation too large space
+			 */
+			if (length > 0x200000) {
 				length = 0x200000;
 				prom_printf("PCIC: map window for device '%s' "
 					    "reduced to 2MB !\n", namebuf);
-			    }
+			}
 
-			    /*
-			     *  Be careful with MEM/IO address flags
-			     */
-			    if ((address & PCI_BASE_ADDRESS_SPACE) ==
+			/*
+			 *  Be careful with MEM/IO address flags
+			 */
+			if ((address & PCI_BASE_ADDRESS_SPACE) ==
 				 PCI_BASE_ADDRESS_SPACE_IO) {
 				mapaddr = address & PCI_BASE_ADDRESS_IO_MASK;
-			    } else {
+			} else {
 				mapaddr = address & PCI_BASE_ADDRESS_MEM_MASK;
-			    }
-			    addrflags = address ^ mapaddr;
+			}
+			addrflags = address ^ mapaddr;
 
-			    dev->base_address[j] =
+			dev->base_address[j] =
 				(unsigned long)sparc_alloc_io(address, 0, 
 							      length,
 							      namebuf, 0, 0);
-			    if ( dev->base_address[j] == 0 )
+			if ( dev->base_address[j] == 0 )
 				panic("PCIC: failed make mapping for "
 				      "pci device '%s' with address %lx\n",
 				       namebuf, address);
 
-			    dev->base_address[j] ^= addrflags;
-			    return;
-			}
+			dev->base_address[j] ^= addrflags;
+			return;
 		}
+	    }
+
+	printk("PCIC: unable to match addresses for device (%x,%x)\n",
+	    dev->device, dev->vendor);
+}
+
+static void pcic_fill_irq(struct pci_dev *dev, int node) {
+	struct pcic_ca2irq *p;
+	int i, ivec;
+	char namebuf[64];  /* P3 remove */
+
+	if (node == -1) {
+		strcpy(namebuf, "???");
+	} else {
+		prom_getstring(node, "name", namebuf, sizeof(namebuf)); /* P3 remove */
 	}
 
-	panic("PCIC: unable to locate prom node for pci device (%x,%x) \n",
-	      dev->device, dev->vendor);
+	if ((p = pcic->pcic_imap) == 0) {
+		dev->irq = 0;
+		return;
+	}
+	for (i = 0; i < pcic->pcic_imdim; i++) {
+		if (p->busno == dev->bus->number && p->devfn == dev->devfn)
+			break;
+		p++;
+	}
+	if (i >= pcic->pcic_imdim) {
+		printk("PCIC: device %s devfn %02x:%02x not found in %d\n",
+		    namebuf, dev->bus->number, dev->devfn, pcic->pcic_imdim);
+		dev->irq = 0;
+		return;
+	}
+
+	i = p->pin;
+	if (i >= 0 && i < 4) {
+		ivec = readw(pcic->pcic_regs+PCI_INT_SELECT_LO);
+		dev->irq = ivec >> (i << 2) & 0xF;
+	} else if (i >= 4 && i < 8) {
+		ivec = readw(pcic->pcic_regs+PCI_INT_SELECT_HI);
+		dev->irq = ivec >> ((i-4) << 2) & 0xF;
+	} else {					/* Corrupted map */
+		printk("PCIC: BAD PIN %d\n", i); for (;;) {}
+	}
+/* P3 remove later */ printk("PCIC: device %s pin %d ivec 0x%x irq %x\n", namebuf, i, ivec, dev->irq);
+
+	/*
+	 * dev->irq=0 means PROM did not bothered to program the upper
+	 * half of PCIC. This happens on JS-E with PROM 3.11, for instance.
+	 */
+	if (dev->irq == 0 || p->force) {
+		if (p->irq == 0 || p->irq >= 15) {	/* Corrupted map */
+			printk("PCIC: BAD IRQ %d\n", p->irq); for (;;) {}
+		}
+		printk("PCIC: setting irq %x for device (%x,%x)\n",
+		    p->irq, dev->device, dev->vendor);
+		dev->irq = p->irq;
+
+		ivec = readw(pcic->pcic_regs+PCI_INT_SELECT_HI);
+		ivec &= ~(0xF << ((p->pin - 4) << 2));
+		ivec |= p->irq << ((p->pin - 4) << 2);
+		writew(ivec, pcic->pcic_regs+PCI_INT_SELECT_HI);
+	}
+
+	return;
 }
 
 /*
@@ -317,9 +495,10 @@ unsigned long pcic_alloc_io( unsigned long* addr )
 		writeb((pcic->pcic_io_phys>>24) & PCI_SIBAR_ADDRESS_MASK,
 		       pcic->pcic_regs+PCI_SIBAR);
 		writeb(PCI_ISIZE_16M, pcic->pcic_regs+PCI_ISIZE);
+
 	}
 	if(paddr < pcic->pcic_mapped_io ||
-	   paddr > pcic->pcic_mapped_io + PCI_SPACE_SIZE)
+	   paddr >= pcic->pcic_mapped_io + 0x10000)
 		return 0;
 	offset = paddr - pcic->pcic_mapped_io;
 	*addr = pcic->pcic_io_phys + offset;
@@ -334,6 +513,9 @@ __initfunc(void pcibios_fixup(void))
   struct pci_dev *dev;
   int i, has_io, has_mem;
   unsigned short cmd;
+	struct linux_pbm_info* pbm = &pcic->pbm;
+	int node;
+	struct pcidev_cookie *pcp;
 
 	if(pcic == NULL) {
 		prom_printf("PCI: Error, PCIC not found.\n");
@@ -359,45 +541,59 @@ __initfunc(void pcibios_fixup(void))
 		}
 		pci_read_config_word(dev, PCI_COMMAND, &cmd);
 		if (has_io && !(cmd & PCI_COMMAND_IO)) {
-			printk("PCI: Enabling I/O for device %02x:%02x\n",
+			printk("PCIC: Enabling I/O for device %02x:%02x\n",
 				dev->bus->number, dev->devfn);
 			cmd |= PCI_COMMAND_IO;
 			pci_write_config_word(dev, PCI_COMMAND, cmd);
 		}
 		if (has_mem && !(cmd & PCI_COMMAND_MEMORY)) {
-			printk("PCI: Enabling memory for device %02x:%02x\n",
+			printk("PCIC: Enabling memory for device %02x:%02x\n",
 				dev->bus->number, dev->devfn);
 			cmd |= PCI_COMMAND_MEMORY;
 			pci_write_config_word(dev, PCI_COMMAND, cmd);
 		}    
 
-		/* cookies */
-		{
-			struct pcidev_cookie *pcp;
-			struct linux_pbm_info* pbm = &pcic->pbm;
-			int node = pdev_to_pnode(pbm, dev);
+		node = pdev_to_pnode(pbm, dev);
+		if(node == 0)
+			node = -1;
 
-			if(node == 0)
-				node = -1;
-			pcp = pci_devcookie_alloc();
-			pcp->pbm = pbm;
-			pcp->prom_node = node;
-			dev->sysdata = pcp;
-		}
+		/* cookies */
+		pcp = pci_devcookie_alloc();
+		pcp->pbm = pbm;
+		pcp->prom_node = node;
+		dev->sysdata = pcp;
 
 		/* memory mapping */
-		if (!(dev->vendor == PCI_VENDOR_ID_SUN &&
-		      dev->device == PCI_DEVICE_ID_SUN_EBUS)) {
-			pcic_map_pci_device(dev);
-		}
+		if ((dev->class>>16) != PCI_BASE_CLASS_BRIDGE)
+			pcic_map_pci_device(dev, node);
 
-		/* irq */
-#define SETIRQ(vend,devid,irqn) \
-	if (dev->vendor==vend && dev->device==devid) dev->irq = irqn;
-
-		SETIRQ(PCI_VENDOR_ID_SUN,PCI_DEVICE_ID_SUN_HAPPYMEAL,3);
+		pcic_fill_irq(dev, node);
 	}
+
 	ebus_init();
+}
+
+/*
+ * pcic_pin_to_irq() is exported to ebus.c.
+ */
+unsigned int
+pcic_pin_to_irq(unsigned int pin, char *name)
+{
+	unsigned int irq;
+	unsigned int ivec;
+
+	if (pin < 4) {
+		ivec = readw(pcic->pcic_regs+PCI_INT_SELECT_LO);
+		irq = ivec >> (pin << 2) & 0xF;
+	} else if (pin < 8) {
+		ivec = readw(pcic->pcic_regs+PCI_INT_SELECT_HI);
+		irq = ivec >> ((pin-4) << 2) & 0xF;
+	} else {					/* Corrupted map */
+		printk("PCIC: BAD PIN %d FOR %s\n", pin, name);
+		for (;;) {}	/* XXX Cannot panic properly in case of PROLL */
+	}
+/* P3 remove later */ printk("PCIC: dev %s pin %d ivec 0x%x irq %x\n", name, pin, ivec, irq);
+	return irq;
 }
 
 /* Makes compiler happy */
@@ -539,26 +735,38 @@ int pcibios_read_config_dword (unsigned char bus, unsigned char device_fn,
 			       unsigned char where, unsigned int *value)
 {
 	unsigned long flags;
-	if (where&3) return PCIBIOS_BAD_REGISTER_NUMBER;
-	if (bus != 0 || 
-	    (device_fn != 0 && device_fn != 1 && device_fn != 0x80)) {
-		*value = 0xffffffff;
-		return PCIBIOS_SUCCESSFUL;
-	}
 
-	/* FIXME: IGA haven't got high config memory addresses !!! */
-	if (device_fn == 0x80 && where > PCI_INTERRUPT_LINE) {
-		*value = 0xffffffff;
-		return PCIBIOS_SUCCESSFUL;
-	}
+	if (where&3) return PCIBIOS_BAD_REGISTER_NUMBER;
 
 	save_and_cli(flags);
+#if 0
+	pcic_speculative = 1;
+	pcic_trapped = 0;
+#endif
 	writel(CONFIG_CMD(bus,device_fn,where), pcic->pcic_config_space_addr);
+#if 0
+	nop();
+	if (pcic_trapped) {
+		restore_flags(flags);
+		*value = ~0;
+		return PCIBIOS_SUCCESSFUL;
+	}
+#endif
+	pcic_speculative = 2;
+	pcic_trapped = 0;
 	*value = readl(pcic->pcic_config_space_data + (where&4));
+	nop();
+	if (pcic_trapped) {
+		pcic_speculative = 0;
+		restore_flags(flags);
+		*value = ~0;
+		return PCIBIOS_SUCCESSFUL;
+	}
+	pcic_speculative = 0;
 	restore_flags(flags);
 	return PCIBIOS_SUCCESSFUL;
 }
-    
+
 int pcibios_write_config_byte (unsigned char bus, unsigned char devfn,
 			       unsigned char where, unsigned char value)
 {
@@ -586,8 +794,8 @@ int pcibios_write_config_dword (unsigned char bus, unsigned char devfn,
 				unsigned char where, unsigned int value)
 {
 	unsigned long flags;
-	if ((where&3) || bus != 0 || (devfn != 0 && devfn != 1 && devfn != 0x80))
-		return PCIBIOS_BAD_REGISTER_NUMBER;
+
+	if (where&3) return PCIBIOS_BAD_REGISTER_NUMBER;
 
 	save_and_cli(flags);
 	writel(CONFIG_CMD(bus,devfn,where),pcic->pcic_config_space_addr);
@@ -599,6 +807,29 @@ int pcibios_write_config_dword (unsigned char bus, unsigned char devfn,
 __initfunc(char *pcibios_setup(char *str))
 {
 	return str;
+}
+
+/*
+ * NMI
+ */
+void pcic_nmi(unsigned int pend, struct pt_regs *regs)
+{
+
+	pend = flip_dword(pend);
+
+	if (!pcic_speculative || (pend & PCI_SYS_INT_PENDING_PIO) == 0) {
+		/*
+		 * XXX On CP-1200 PCI #SERR may happen, we do not know
+		 * what to do about it yet.
+		 */
+		printk("Aiee, NMI pend 0x%x pc 0x%x spec %d, hanging\n",
+		    pend, (int)regs->pc, pcic_speculative);
+		for (;;) { }
+	}
+	pcic_speculative = 0;
+	pcic_trapped = 1;
+	regs->pc = regs->npc;
+	regs->npc += 4;
 }
 
 /*

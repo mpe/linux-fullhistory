@@ -543,13 +543,13 @@ struct device *rose_dev_first(void)
 {
 	struct device *dev, *first = NULL;
 
-	read_lock_bh(&dev_base_lock);
+	read_lock(&dev_base_lock);
 	for (dev = dev_base; dev != NULL; dev = dev->next) {
 		if ((dev->flags & IFF_UP) && dev->type == ARPHRD_ROSE)
 			if (first == NULL || strncmp(dev->name, first->name, 3) < 0)
 				first = dev;
 	}
-	read_unlock_bh(&dev_base_lock);
+	read_unlock(&dev_base_lock);
 
 	return first;
 }
@@ -561,13 +561,13 @@ struct device *rose_dev_get(rose_address *addr)
 {
 	struct device *dev;
 
-	read_lock_bh(&dev_base_lock);
+	read_lock(&dev_base_lock);
 	for (dev = dev_base; dev != NULL; dev = dev->next) {
 		if ((dev->flags & IFF_UP) && dev->type == ARPHRD_ROSE && rosecmp(addr, (rose_address *)dev->dev_addr) == 0)
 			goto out;
 	}
 out:
-	read_unlock_bh(&dev_base_lock);
+	read_unlock(&dev_base_lock);
 	return dev;
 }
 

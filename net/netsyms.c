@@ -170,7 +170,6 @@ EXPORT_SYMBOL(sk_run_filter);
 
 EXPORT_SYMBOL(neigh_table_init);
 EXPORT_SYMBOL(neigh_table_clear);
-EXPORT_SYMBOL(__neigh_lookup);
 EXPORT_SYMBOL(neigh_resolve_output);
 EXPORT_SYMBOL(neigh_connected_output);
 EXPORT_SYMBOL(neigh_update);
@@ -388,8 +387,7 @@ EXPORT_SYMBOL(neigh_dump_info);
 EXPORT_SYMBOL(dev_set_allmulti);
 EXPORT_SYMBOL(dev_set_promiscuity);
 EXPORT_SYMBOL(sklist_remove_socket);
-EXPORT_SYMBOL(rtnl_wait);
-EXPORT_SYMBOL(rtnl_rlockct);
+EXPORT_SYMBOL(rtnl_sem);
 EXPORT_SYMBOL(rtnl_lock);
 EXPORT_SYMBOL(rtnl_unlock);
 

@@ -349,11 +349,16 @@ beyond_if:
 
 	set_brk(current->mm->start_brk, current->mm->brk);
 
-	p = setup_arg_pages(p, bprm);
+	retval = setup_arg_pages(bprm);
+	if (retval < 0) { 
+		/* Someone check-me: is this error path enough? */ 
+		send_sig(SIGKILL, current, 0); 
+		return retval;
+	}
 
-	p = (unsigned long) create_aout32_tables((char *)p, bprm);
-	current->mm->start_stack = p;
-	start_thread32(regs, ex.a_entry, p);
+	current->mm->start_stack =
+		(unsigned long) create_aout32_tables((char *)bprm->p, bprm);
+	start_thread32(regs, ex.a_entry, current->mm->start_stack);
 	if (current->flags & PF_PTRACED)
 		send_sig(SIGTRAP, current, 0);
 	return 0;

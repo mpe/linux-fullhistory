@@ -7,7 +7,7 @@
  *
  *	Adapted from linux/net/ipv4/af_inet.c
  *
- *	$Id: af_inet6.c,v 1.43 1999/04/22 10:07:39 davem Exp $
+ *	$Id: af_inet6.c,v 1.44 1999/06/09 08:29:29 davem Exp $
  *
  *	This program is free software; you can redistribute it and/or
  *      modify it under the terms of the GNU General Public License

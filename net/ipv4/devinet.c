@@ -1,7 +1,7 @@
 /*
  *	NET3	IP device support routines.
  *
- *	Version: $Id: devinet.c,v 1.30 1999/06/01 07:49:59 davem Exp $
+ *	Version: $Id: devinet.c,v 1.32 1999/06/09 11:15:33 davem Exp $
  *
  *		This program is free software; you can redistribute it and/or
  *		modify it under the terms of the GNU General Public License
@@ -636,10 +636,10 @@ inet_gifconf(struct device *dev, char *buf, int len)
 	return done;
 }
 
-u32 inet_select_addr(struct device *dev, u32 dst, int scope)
+u32 inet_select_addr(const struct device *dev, u32 dst, int scope)
 {
 	u32 addr = 0;
-	struct in_device *in_dev = dev->ip_ptr;
+	const struct in_device *in_dev = dev->ip_ptr;
 
 	if (in_dev == NULL)
 		return 0;
@@ -659,19 +659,19 @@ u32 inet_select_addr(struct device *dev, u32 dst, int scope)
 	   in this case. It is importnat that lo is the first interface
 	   in dev_base list.
 	 */
-	read_lock_bh(&dev_base_lock);
+	read_lock(&dev_base_lock);
 	for (dev=dev_base; dev; dev=dev->next) {
 		if ((in_dev=dev->ip_ptr) == NULL)
 			continue;
 
 		for_primary_ifa(in_dev) {
 			if (ifa->ifa_scope <= scope) {
-				read_unlock_bh(&dev_base_lock);
+				read_unlock(&dev_base_lock);
 				return ifa->ifa_local;
 			}
 		} endfor_ifa(in_dev);
 	}
-	read_unlock_bh(&dev_base_lock);
+	read_unlock(&dev_base_lock);
 
 	return 0;
 }
@@ -792,7 +792,7 @@ static int inet_dump_ifaddr(struct sk_buff *skb, struct netlink_callback *cb)
 
 	s_idx = cb->args[0];
 	s_ip_idx = ip_idx = cb->args[1];
-	read_lock_bh(&dev_base_lock);
+	read_lock(&dev_base_lock);
 	for (dev=dev_base, idx=0; dev; dev = dev->next, idx++) {
 		if (idx < s_idx)
 			continue;
@@ -810,7 +810,7 @@ static int inet_dump_ifaddr(struct sk_buff *skb, struct netlink_callback *cb)
 		}
 	}
 done:
-	read_unlock_bh(&dev_base_lock);
+	read_unlock(&dev_base_lock);
 	cb->args[0] = idx;
 	cb->args[1] = ip_idx;
 
@@ -885,13 +885,13 @@ void inet_forward_change()
 	ipv4_devconf.accept_redirects = !on;
 	ipv4_devconf_dflt.forwarding = on;
 
-	read_lock_bh(&dev_base_lock);
+	read_lock(&dev_base_lock);
 	for (dev = dev_base; dev; dev = dev->next) {
 		struct in_device *in_dev = dev->ip_ptr;
 		if (in_dev)
 			in_dev->cnf.forwarding = on;
 	}
-	read_unlock_bh(&dev_base_lock);
+	read_unlock(&dev_base_lock);
 
 	rt_cache_flush(0);
 

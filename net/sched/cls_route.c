@@ -83,11 +83,11 @@ static __inline__ int route4_fastmap_hash(u32 id, int iif)
 	return id&0xF;
 }
 
-static void route4_reset_fastmap(struct route4_head *head, u32 id)
+static void route4_reset_fastmap(struct device *dev, struct route4_head *head, u32 id)
 {
-	start_bh_atomic();
+	spin_lock_bh(&dev->queue_lock);
 	memset(head->fastmap, 0, sizeof(head->fastmap));
-	end_bh_atomic();
+	spin_unlock_bh(&dev->queue_lock);
 }
 
 static void __inline__
@@ -297,7 +297,7 @@ static void route4_destroy(struct tcf_proto *tp)
 					unsigned long cl;
 
 					b->ht[h2] = f->next;
-					if ((cl = cls_set_class(&f->res.class, 0)) != 0)
+					if ((cl = __cls_set_class(&f->res.class, 0)) != 0)
 						tp->q->ops->cl_ops->unbind_tcf(tp->q, cl);
 #ifdef CONFIG_NET_CLS_POLICE
 					tcf_police_release(f->police);
@@ -329,12 +329,13 @@ static int route4_delete(struct tcf_proto *tp, unsigned long arg)
 		if (*fp == f) {
 			unsigned long cl;
 
+			tcf_tree_lock(tp);
 			*fp = f->next;
-			synchronize_bh();
+			tcf_tree_unlock(tp);
 
-			route4_reset_fastmap(head, f->id);
+			route4_reset_fastmap(tp->q->dev, head, f->id);
 
-			if ((cl = cls_set_class(&f->res.class, 0)) != 0)
+			if ((cl = cls_set_class(tp, &f->res.class, 0)) != 0)
 				tp->q->ops->cl_ops->unbind_tcf(tp->q, cl);
 
 #ifdef CONFIG_NET_CLS_POLICE
@@ -349,8 +350,9 @@ static int route4_delete(struct tcf_proto *tp, unsigned long arg)
 					return 0;
 
 			/* OK, session has no flows */
+			tcf_tree_lock(tp);
 			head->table[to_hash(h)] = NULL;
-			synchronize_bh();
+			tcf_tree_unlock(tp);
 
 			kfree(b);
 			return 0;
@@ -387,7 +389,7 @@ static int route4_change(struct tcf_proto *tp, unsigned long base,
 			unsigned long cl;
 
 			f->res.classid = *(u32*)RTA_DATA(tb[TCA_ROUTE4_CLASSID-1]);
-			cl = cls_set_class(&f->res.class, tp->q->ops->cl_ops->bind_tcf(tp->q, base, f->res.classid));
+			cl = cls_set_class(tp, &f->res.class, tp->q->ops->cl_ops->bind_tcf(tp->q, base, f->res.classid));
 			if (cl)
 				tp->q->ops->cl_ops->unbind_tcf(tp->q, cl);
 		}
@@ -395,8 +397,9 @@ static int route4_change(struct tcf_proto *tp, unsigned long base,
 		if (tb[TCA_ROUTE4_POLICE-1]) {
 			struct tcf_police *police = tcf_police_locate(tb[TCA_ROUTE4_POLICE-1], tca[TCA_RATE-1]);
 
+			tcf_tree_lock(tp);
 			police = xchg(&f->police, police);
-			synchronize_bh();
+			tcf_tree_unlock(tp);
 
 			tcf_police_release(police);
 		}
@@ -412,8 +415,9 @@ static int route4_change(struct tcf_proto *tp, unsigned long base,
 			return -ENOBUFS;
 		memset(head, 0, sizeof(struct route4_head));
 
+		tcf_tree_lock(tp);
 		tp->root = head;
-		synchronize_bh();
+		tcf_tree_unlock(tp);
 	}
 
 	f = kmalloc(sizeof(struct route4_filter), GFP_KERNEL);
@@ -475,8 +479,9 @@ static int route4_change(struct tcf_proto *tp, unsigned long base,
 			goto errout;
 		memset(b, 0, sizeof(*b));
 
+		tcf_tree_lock(tp);
 		head->table[h1] = b;
-		synchronize_bh();
+		tcf_tree_unlock(tp);
 	}
 	f->bkt = b;
 
@@ -489,17 +494,18 @@ static int route4_change(struct tcf_proto *tp, unsigned long base,
 			goto errout;
 	}
 
-	cls_set_class(&f->res.class, tp->q->ops->cl_ops->bind_tcf(tp->q, base, f->res.classid));
+	cls_set_class(tp, &f->res.class, tp->q->ops->cl_ops->bind_tcf(tp->q, base, f->res.classid));
 #ifdef CONFIG_NET_CLS_POLICE
 	if (tb[TCA_ROUTE4_POLICE-1])
 		f->police = tcf_police_locate(tb[TCA_ROUTE4_POLICE-1], tca[TCA_RATE-1]);
 #endif
 
 	f->next = f1;
-	wmb();
+	tcf_tree_lock(tp);
 	*ins_f = f;
+	tcf_tree_unlock(tp);
 
-	route4_reset_fastmap(head, f->id);
+	route4_reset_fastmap(tp->q->dev, head, f->id);
 	*arg = (unsigned long)f;
 	return 0;
 
@@ -589,7 +595,8 @@ static int route4_dump(struct tcf_proto *tp, unsigned long fh,
 	rta->rta_len = skb->tail - b;
 #ifdef CONFIG_NET_CLS_POLICE
 	if (f->police) {
-		RTA_PUT(skb, TCA_STATS, sizeof(struct tc_stats), &f->police->stats);
+		if (qdisc_copy_stats(skb, &f->police->stats))
+			goto rtattr_failure;
 	}
 #endif
 	return skb->len;

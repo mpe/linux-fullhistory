@@ -885,7 +885,7 @@ static int csz_change(struct Qdisc *sch, u32 handle, u32 parent, struct rtattr *
 
 		a = &q->flow[cl];
 
-		start_bh_atomic();	
+		spin_lock_bh(&sch->dev->queue_lock);
 #if 0
 		a->rate_log = copt->rate_log;
 #endif
@@ -899,7 +899,7 @@ static int csz_change(struct Qdisc *sch, u32 handle, u32 parent, struct rtattr *
 		if (tb[TCA_CSZ_RTAB-1])
 			memcpy(a->L_tab, RTA_DATA(tb[TCA_CSZ_RTAB-1]), 1024);
 
-		end_bh_atomic();
+		spin_unlock_bh(&sch->dev->queue_lock);
 		return 0;
 	}
 	/* NI */
@@ -920,14 +920,14 @@ static int csz_delete(struct Qdisc *sch, unsigned long cl)
 
 	a = &q->flow[cl];
 
-	start_bh_atomic();
+	spin_lock_bh(&sch->dev->queue_lock);
 	a->fprev->fnext = a->fnext;
 	a->fnext->fprev = a->fprev;
 	a->sprev->snext = a->snext;
 	a->snext->sprev = a->sprev;
 	a->start = a->finish = 0;
 	kfree(xchg(&q->flow[cl].L_tab, NULL));
-	end_bh_atomic();
+	spin_unlock_bh(&sch->dev->queue_lock);
 
 	return 0;
 }

@@ -298,7 +298,7 @@ void proc_print_scsidevice(Scsi_Device *scd, char *buffer, int *size, int len)
 		     scd->type < MAX_SCSI_DEVICE_CODE ? 
 		     scsi_device_types[(int)scd->type] : "Unknown          " );
     y += sprintf(buffer + len + y, "               ANSI"
-		     " SCSI revision: %02x", (scd->scsi_level < 3)?1:2);
+		     " SCSI revision: %02x", (scd->scsi_level - 1)?scd->scsi_level - 1:1);
     if (scd->scsi_level == 2)
 	y += sprintf(buffer + len + y, " CCS\n");
     else

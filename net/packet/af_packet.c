@@ -5,7 +5,7 @@
  *
  *		PACKET - implements raw packet sockets.
  *
- * Version:	$Id: af_packet.c,v 1.19 1999/03/21 05:23:03 davem Exp $
+ * Version:	$Id: af_packet.c,v 1.20 1999/06/09 10:11:32 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -286,26 +286,27 @@ static int packet_sendmsg_spkt(struct socket *sock, struct msghdr *msg, int len,
 	else
 		return(-ENOTCONN);	/* SOCK_PACKET must be sent giving an address */
 
+	dev_lock_list();
+
 	/*
 	 *	Find the device first to size check it 
 	 */
 
 	saddr->spkt_device[13] = 0;
 	dev = dev_get(saddr->spkt_device);
-	if (dev == NULL) 
-	{
-		return(-ENODEV);
-  	}
+	err = -ENODEV;
+	if (dev == NULL)
+		goto out_unlock;
 	
 	/*
 	 *	You may not queue a frame bigger than the mtu. This is the lowest level
 	 *	raw protocol and you must do your own fragmentation at this level.
 	 */
 	 
-	if(len>dev->mtu+dev->hard_header_len)
-  		return -EMSGSIZE;
+	err = -EMSGSIZE;
+ 	if(len>dev->mtu+dev->hard_header_len)
+		goto out_unlock;
 
-	dev_lock_list();
 	err = -ENOBUFS;
 	skb = sock_wmalloc(sk, len+dev->hard_header_len+15, 0, GFP_KERNEL);
 
@@ -351,8 +352,8 @@ static int packet_sendmsg_spkt(struct socket *sock, struct msghdr *msg, int len,
 	 *	Now send it
 	 */
 
-	dev_unlock_list();
 	dev_queue_xmit(skb);
+	dev_unlock_list();
 	return(len);
 
 out_free:
@@ -455,16 +456,18 @@ static int packet_sendmsg(struct socket *sock, struct msghdr *msg, int len,
 		addr	= saddr->sll_addr;
 	}
 
+	dev_lock_list();
 	dev = dev_get_by_index(ifindex);
+	err = -ENXIO;
 	if (dev == NULL)
-		return -ENXIO;
+		goto out_unlock;
 	if (sock->type == SOCK_RAW)
 		reserve = dev->hard_header_len;
 
+	err = -EMSGSIZE;
 	if (len > dev->mtu+reserve)
-  		return -EMSGSIZE;
+		goto out_unlock;
 
-	dev_lock_list();
 
 	skb = sock_alloc_send_skb(sk, len+dev->hard_header_len+15, 0, 
 				msg->msg_flags & MSG_DONTWAIT, &err);
@@ -501,8 +504,8 @@ static int packet_sendmsg(struct socket *sock, struct msghdr *msg, int len,
 	 *	Now send it
 	 */
 
-	dev_unlock_list();
 	dev_queue_xmit(skb);
+	dev_unlock_list();
 	return(len);
 
 out_free:

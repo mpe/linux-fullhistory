@@ -38,6 +38,10 @@
 
 static u32 idx_gen;
 static struct tcf_police *tcf_police_ht[16];
+/* Policer hash table lock */
+static rwlock_t police_lock = RW_LOCK_UNLOCKED;
+
+/* Each policer is serialized by its individual spinlock */
 
 static __inline__ unsigned tcf_police_hash(u32 index)
 {
@@ -48,11 +52,13 @@ static __inline__ struct tcf_police * tcf_police_lookup(u32 index)
 {
 	struct tcf_police *p;
 
+	read_lock(&police_lock);
 	for (p = tcf_police_ht[tcf_police_hash(index)]; p; p = p->next) {
 		if (p->index == index)
-			return p;
+			break;
 	}
-	return NULL;
+	read_unlock(&police_lock);
+	return p;
 }
 
 static __inline__ u32 tcf_police_new_index(void)
@@ -73,7 +79,9 @@ void tcf_police_destroy(struct tcf_police *p)
 	
 	for (p1p = &tcf_police_ht[h]; *p1p; p1p = &(*p1p)->next) {
 		if (*p1p == p) {
+			write_lock_bh(&police_lock);
 			*p1p = p->next;
+			write_unlock_bh(&police_lock);
 #ifdef CONFIG_NET_ESTIMATOR
 			qdisc_kill_estimator(&p->stats);
 #endif
@@ -114,6 +122,8 @@ struct tcf_police * tcf_police_locate(struct rtattr *rta, struct rtattr *est)
 
 	memset(p, 0, sizeof(*p));
 	p->refcnt = 1;
+	spin_lock_init(&p->lock);
+	p->stats.lock = &p->lock;
 	if (parm->rate.rate) {
 		if ((p->R_tab = qdisc_get_rtab(&parm->rate, tb[TCA_POLICE_RATE-1])) == NULL)
 			goto failure;
@@ -144,8 +154,10 @@ struct tcf_police * tcf_police_locate(struct rtattr *rta, struct rtattr *est)
 		qdisc_new_estimator(&p->stats, est);
 #endif
 	h = tcf_police_hash(p->index);
+	write_lock_bh(&police_lock);
 	p->next = tcf_police_ht[h];
 	tcf_police_ht[h] = p;
+	write_unlock_bh(&police_lock);
 	return p;
 
 failure:
@@ -161,19 +173,24 @@ int tcf_police(struct sk_buff *skb, struct tcf_police *p)
 	long toks;
 	long ptoks = 0;
 
+	spin_lock(&p->lock);
+
 	p->stats.bytes += skb->len;
 	p->stats.packets++;
 
 #ifdef CONFIG_NET_ESTIMATOR
 	if (p->ewma_rate && p->stats.bps >= p->ewma_rate) {
 		p->stats.overlimits++;
+		spin_unlock(&p->lock);
 		return p->action;
 	}
 #endif
 
 	if (skb->len <= p->mtu) {
-		if (p->R_tab == NULL)
+		if (p->R_tab == NULL) {
+			spin_unlock(&p->lock);
 			return p->result;
+		}
 
 		PSCHED_GET_TIME(now);
 
@@ -194,11 +211,13 @@ int tcf_police(struct sk_buff *skb, struct tcf_police *p)
 			p->t_c = now;
 			p->toks = toks;
 			p->ptoks = ptoks;
+			spin_unlock(&p->lock);
 			return p->result;
 		}
 	}
 
 	p->stats.overlimits++;
+	spin_unlock(&p->lock);
 	return p->action;
 }
 

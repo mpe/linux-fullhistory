@@ -39,20 +39,24 @@
 
 static struct tcf_proto_ops *tcf_proto_base;
 
+/* Protects list of registered TC modules. It is pure SMP lock. */
+static rwlock_t cls_mod_lock = RW_LOCK_UNLOCKED;
 
 /* Find classifier type by string name */
 
 struct tcf_proto_ops * tcf_proto_lookup_ops(struct rtattr *kind)
 {
-	struct tcf_proto_ops *t;
+	struct tcf_proto_ops *t = NULL;
 
 	if (kind) {
+		read_lock(&cls_mod_lock);
 		for (t = tcf_proto_base; t; t = t->next) {
 			if (rtattr_strcmp(kind, t->kind) == 0)
-				return t;
+				break;
 		}
+		read_unlock(&cls_mod_lock);
 	}
-	return NULL;
+	return t;
 }
 
 /* Register(unregister) new classifier type */
@@ -61,12 +65,17 @@ int register_tcf_proto_ops(struct tcf_proto_ops *ops)
 {
 	struct tcf_proto_ops *t, **tp;
 
-	for (tp = &tcf_proto_base; (t=*tp) != NULL; tp = &t->next)
-		if (strcmp(ops->kind, t->kind) == 0)
+	write_lock(&cls_mod_lock);
+	for (tp = &tcf_proto_base; (t=*tp) != NULL; tp = &t->next) {
+		if (strcmp(ops->kind, t->kind) == 0) {
+			write_unlock(&cls_mod_lock);
 			return -EEXIST;
+		}
+	}
 
 	ops->next = NULL;
 	*tp = ops;
+	write_unlock(&cls_mod_lock);
 	return 0;
 }
 
@@ -74,13 +83,17 @@ int unregister_tcf_proto_ops(struct tcf_proto_ops *ops)
 {
 	struct tcf_proto_ops *t, **tp;
 
+	write_lock(&cls_mod_lock);
 	for (tp = &tcf_proto_base; (t=*tp) != NULL; tp = &t->next)
 		if (t == ops)
 			break;
 
-	if (!t)
+	if (!t) {
+		write_unlock(&cls_mod_lock);
 		return -ENOENT;
+	}
 	*tp = t->next;
+	write_unlock(&cls_mod_lock);
 	return 0;
 }
 
@@ -217,8 +230,12 @@ static int tc_ctl_tfilter(struct sk_buff *skb, struct nlmsghdr *n, void *arg)
 			kfree(tp);
 			goto errout;
 		}
+		write_lock(&qdisc_tree_lock);
+		spin_lock_bh(&dev->queue_lock);
 		tp->next = *back;
 		*back = tp;
+		spin_unlock_bh(&dev->queue_lock);
+		write_unlock(&qdisc_tree_lock);
 	} else if (tca[TCA_KIND-1] && rtattr_strcmp(tca[TCA_KIND-1], tp->ops->kind))
 		goto errout;
 
@@ -226,8 +243,11 @@ static int tc_ctl_tfilter(struct sk_buff *skb, struct nlmsghdr *n, void *arg)
 
 	if (fh == 0) {
 		if (n->nlmsg_type == RTM_DELTFILTER && t->tcm_handle == 0) {
+			write_lock(&qdisc_tree_lock);
+			spin_lock_bh(&dev->queue_lock);
 			*back = tp->next;
-			synchronize_bh();
+			spin_unlock_bh(&dev->queue_lock);
+			write_unlock(&qdisc_tree_lock);
 
 			tp->ops->destroy(tp);
 			kfree(tp);
@@ -344,12 +364,16 @@ static int tc_dump_tfilter(struct sk_buff *skb, struct netlink_callback *cb)
 		return skb->len;
 	if ((dev = dev_get_by_index(tcm->tcm_ifindex)) == NULL)
 		return skb->len;
+
+	read_lock(&qdisc_tree_lock);
 	if (!tcm->tcm_parent)
 		q = dev->qdisc_sleeping;
 	else
 		q = qdisc_lookup(dev, TC_H_MAJ(tcm->tcm_parent));
-	if (q == NULL)
+	if (q == NULL) {
+		read_unlock(&qdisc_tree_lock);
 		return skb->len;
+	}
 	if ((cops = q->ops->cl_ops) == NULL)
 		goto errout;
 	if (TC_H_MIN(tcm->tcm_parent)) {
@@ -400,6 +424,7 @@ errout:
 	if (cl)
 		cops->put(q, cl);
 
+	read_unlock(&qdisc_tree_lock);
 	return skb->len;
 }
 

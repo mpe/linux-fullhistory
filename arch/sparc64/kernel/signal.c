@@ -1,4 +1,4 @@
-/*  $Id: signal.c,v 1.38 1998/10/16 03:19:04 davem Exp $
+/*  $Id: signal.c,v 1.40 1999/06/02 19:19:52 jj Exp $
  *  arch/sparc64/kernel/signal.c
  *
  *  Copyright (C) 1991, 1992  Linus Torvalds
@@ -491,7 +491,7 @@ segv:
 /* Checks if the fp is valid */
 static int invalid_frame_pointer(void *fp, int fplen)
 {
-	if ((((unsigned long) fp) & 7) || ((unsigned long)fp) > 0x80000000000ULL - fplen)
+	if (((unsigned long) fp) & 7)
 		return 1;
 	return 0;
 }
@@ -554,8 +554,10 @@ new_setup_frame(struct k_sigaction *ka, struct pt_regs *regs,
 		goto sigill;
 
 	if (current->tss.w_saved != 0) {
+#ifdef DEBUG_SIGNALS
 		printk ("%s[%d]: Invalid user stack frame for "
 			"signal delivery.\n", current->comm, current->pid);
+#endif
 		goto sigill;
 	}
 
@@ -590,35 +592,7 @@ new_setup_frame(struct k_sigaction *ka, struct pt_regs *regs,
 	regs->tnpc = (regs->tpc + 4);
 
 	/* 4. return to kernel instructions */
-	if (ka->ka_restorer)
-		regs->u_regs[UREG_I7] = (unsigned long)ka->ka_restorer;
-	else {
-		/* Flush instruction space. */
-		unsigned long address = ((unsigned long)&(sf->insns[0]));
-		pgd_t *pgdp = pgd_offset(current->mm, address);
-		pmd_t *pmdp = pmd_offset(pgdp, address);
-		pte_t *ptep = pte_offset(pmdp, address);
-
-		regs->u_regs[UREG_I7] = (unsigned long) (&(sf->insns[0]) - 2);
-		
-		/* mov __NR_sigreturn, %g1 */
-		err |= __put_user(0x821020d8, &sf->insns[0]);
-
-		/* t 0x6d */
-		err |= __put_user(0x91d0206d, &sf->insns[1]);
-		if (err)
-			goto sigsegv;
-
-		if(pte_present(*ptep)) {
-			unsigned long page = pte_page(*ptep);
-
-			__asm__ __volatile__("
-			membar	#StoreStore
-			flush	%0 + %1"
-			: : "r" (page), "r" (address & (PAGE_SIZE - 1))
-			: "memory");
-		}
-	}
+	regs->u_regs[UREG_I7] = (unsigned long)ka->ka_restorer;
 	return;
 
 sigill:
@@ -650,8 +624,10 @@ setup_rt_frame(struct k_sigaction *ka, struct pt_regs *regs,
 		goto sigill;
 
 	if (current->tss.w_saved != 0) {
+#ifdef DEBUG_SIGNALS
 		printk ("%s[%d]: Invalid user stack frame for "
 			"signal delivery.\n", current->comm, current->pid);
+#endif
 		goto sigill;
 	}
 
@@ -690,35 +666,7 @@ setup_rt_frame(struct k_sigaction *ka, struct pt_regs *regs,
 	regs->tnpc = (regs->tpc + 4);
 
 	/* 4. return to kernel instructions */
-	if (ka->ka_restorer)
-		regs->u_regs[UREG_I7] = (unsigned long)ka->ka_restorer;
-	else {
-		/* Flush instruction space. */
-		unsigned long address = ((unsigned long)&(sf->insns[0]));
-		pgd_t *pgdp = pgd_offset(current->mm, address);
-		pmd_t *pmdp = pmd_offset(pgdp, address);
-		pte_t *ptep = pte_offset(pmdp, address);
-
-		regs->u_regs[UREG_I7] = (unsigned long) (&(sf->insns[0]) - 2);
-		
-		/* mov __NR_rt_sigreturn, %g1 */
-		err |= __put_user(0x82102065, &sf->insns[0]);
-
-		/* t 0x6d */
-		err |= __put_user(0x91d0206d, &sf->insns[1]);
-		if (err)
-			goto sigsegv;
-
-		if(pte_present(*ptep)) {
-			unsigned long page = pte_page(*ptep);
-
-			__asm__ __volatile__("
-			membar	#StoreStore
-			flush	%0 + %1"
-			: : "r" (page), "r" (address & (PAGE_SIZE - 1))
-			: "memory");
-		}
-	}
+	regs->u_regs[UREG_I7] = (unsigned long)ka->ka_restorer;
 	return;
 
 sigill:

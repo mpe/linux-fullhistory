@@ -69,6 +69,8 @@ CONFIG_OBP_FLASH=m
 # CONFIG_SUN_BPP is not set
 # CONFIG_SUN_VIDEOPIX is not set
 CONFIG_SUN_AURORA=m
+CONFIG_APM_RTC_IS_GMT=y
+# CONFIG_RTC is not set
 
 #
 # Linux/SPARC audio subsystem (EXPERIMENTAL)

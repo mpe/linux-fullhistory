@@ -1,4 +1,4 @@
-/* $Id: pcic.h,v 1.1 1998/09/22 05:54:39 jj Exp $
+/* $Id: pcic.h,v 1.2 1999/06/03 15:02:51 davem Exp $
  * pcic.h: JavaEngine 1 specific PCI definitions.
  *
  * Copyright (C) 1998 V. Roganov and G. Raiko
@@ -6,6 +6,8 @@
 
 #ifndef __SPARC_PCIC_H
 #define __SPARC_PCIC_H
+
+#ifndef __ASSEMBLY__
 
 #include <linux/types.h>
 #include <linux/smp.h>
@@ -21,13 +23,17 @@ struct linux_pcic {
         unsigned long           pcic_config_space_addr;
         unsigned long           pcic_config_space_data;
         struct linux_pbm_info   pbm;
+	struct pcic_ca2irq	*pcic_imap;
+	int			pcic_imdim;
 };
 
 extern unsigned long pcic_alloc_io(unsigned long* addr);
 extern void pcic_probe(void);
 extern void sun4m_pci_init_IRQ(void);
 
-/* Size of PCI Space */
+#endif
+
+/* Size of PCI I/O space which we relocate. */
 #define PCI_SPACE_SIZE                  0x1000000       /* 16 MB */
 
 /* PCIC Register Set. */
@@ -50,10 +56,18 @@ extern void sun4m_pci_init_IRQ(void);
 #define PCI_SOFTWARE_INT_CLEAR          0x6a    /* 16 bits */
 #define PCI_SOFTWARE_INT_SET            0x6e    /* 16 bits */
 #define PCI_SYS_INT_PENDING             0x70    /* 32 bits */
+#define  PCI_SYS_INT_PENDING_PIO		0x40000000
+#define  PCI_SYS_INT_PENDING_DMA		0x20000000
+#define  PCI_SYS_INT_PENDING_PCI		0x10000000
+#define  PCI_SYS_INT_PENDING_APSR		0x08000000
 #define PCI_SYS_INT_TARGET_MASK         0x74    /* 32 bits */
 #define PCI_SYS_INT_TARGET_MASK_CLEAR   0x78    /* 32 bits */
 #define PCI_SYS_INT_TARGET_MASK_SET     0x7c    /* 32 bits */
 #define PCI_SYS_INT_PENDING_CLEAR       0x83    /* 8  bits */
+#define  PCI_SYS_INT_PENDING_CLEAR_ALL		0x80
+#define  PCI_SYS_INT_PENDING_CLEAR_PIO		0x40
+#define  PCI_SYS_INT_PENDING_CLEAR_DMA		0x20
+#define  PCI_SYS_INT_PENDING_CLEAR_PCI		0x10
 #define PCI_IOTLB_CONTROL               0x84    /* 8  bits */
 #define PCI_INT_SELECT_LO               0x88    /* 16 bits */
 #define PCI_ARBITRATION_SELECT          0x8a    /* 16 bits */

@@ -74,7 +74,7 @@ extern int		devinet_ioctl(unsigned int cmd, void *);
 extern void		devinet_init(void);
 extern struct in_device *inetdev_init(struct device *dev);
 extern struct in_device	*inetdev_by_index(int);
-extern u32		inet_select_addr(struct device *dev, u32 dst, int scope);
+extern u32		inet_select_addr(const struct device *dev, u32 dst, int scope);
 extern struct in_ifaddr *inet_ifa_byprefix(struct in_device *in_dev, u32 prefix, u32 mask);
 extern void		inet_forward_change(void);
 

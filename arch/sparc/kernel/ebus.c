@@ -1,9 +1,10 @@
-/* $Id: ebus.c,v 1.2 1998/10/07 11:35:16 jj Exp $
+/* $Id: ebus.c,v 1.3 1999/06/03 15:02:09 davem Exp $
  * ebus.c: PCI to EBus bridge device.
  *
  * Copyright (C) 1997  Eddie C. Dost  (ecd@skynet.be)
  *
  * Adopted for sparc by V. Roganov and G. Raiko.
+ * Fixes for different platforms by Pete Zaitcev.
  */
 
 #include <linux/config.h>
@@ -25,9 +26,9 @@
 #undef DEBUG_FILL_EBUS_DEV
 
 #ifdef PROM_DEBUG
-#define dprintf prom_printf
+#define dprintk prom_printf
 #else
-#define dprintf printk
+#define dprintk printk
 #endif
 
 struct linux_ebus *ebus_chain = 0;
@@ -48,6 +49,9 @@ extern int flash_init(void);
 extern int envctrl_init(void);
 #endif
 
+/* We are together with pcic.c under CONFIG_PCI. */
+extern unsigned int pcic_pin_to_irq(unsigned int, char *name);
+
 static inline unsigned long ebus_alloc(size_t size)
 {
 	return (unsigned long)kmalloc(size, GFP_ATOMIC);
@@ -66,6 +70,7 @@ __initfunc(void fill_ebus_child(int node, struct linux_prom_registers *preg,
 	strcpy(dev->prom_name, lbuf);
 
 	len = prom_getproperty(node, "reg", (void *)regs, sizeof(regs));
+	if (len == -1) len = 0;
 	dev->num_addrs = len / sizeof(regs[0]);
 
 	for (i = 0; i < dev->num_addrs; i++) {
@@ -77,22 +82,36 @@ __initfunc(void fill_ebus_child(int node, struct linux_prom_registers *preg,
 		dev->base_address[i] = dev->parent->base_address[regs[i]];
 	}
 
+	/*
+	 * Houston, we have a problem...
+	 * Sometimes PROM supplies absolutely meaningless properties.
+	 * Still, we take what it gives since we have nothing better.
+	 * Children of ebus may be wired on any input pin of PCIC.
+	 */
 	len = prom_getproperty(node, "interrupts", (char *)&irqs, sizeof(irqs));
 	if ((len == -1) || (len == 0)) {
 		dev->num_irqs = 0;
-		/*
-		 * Oh, well, some PROMs don't export interrupts
-		 * property to children of EBus devices...
-		 *
-		 * Be smart about PS/2 keyboard and mouse.
-		 */
-		if (!strcmp(dev->parent->prom_name, "8042")) {
+		dev->irqs[0] = 0;
+		if (dev->parent->num_irqs != 0) {
 			dev->num_irqs = 1;
 			dev->irqs[0] = dev->parent->irqs[0];
+/* P3 remove */ printk("EBUS: dev %s irq %d from parent\n", dev->prom_name, dev->irqs[0]);
 		}
 	} else {
 		dev->num_irqs = len / sizeof(irqs[0]);
-		printk("FIXME: %s irq(%d)\n", dev->prom_name, irqs[0]);
+		if (irqs[0] == 0 || irqs[0] >= 8) {
+			/*
+			 * XXX Zero is a valid pin number...
+			 * This works as long as Ebus is not wired to INTA#.
+			 */
+			printk("EBUS: %s got bad irq %d from PROM\n",
+			    dev->prom_name, irqs[0]);
+			dev->num_irqs = 0;
+			dev->irqs[0] = 0;
+		} else {
+			dev->irqs[0] = pcic_pin_to_irq(irqs[0], dev->prom_name);
+/* P3 remove */ printk("EBUS: dev %s irq %d from PROM\n", dev->prom_name, dev->irqs[0]);
+		}
 	}
 
 #ifdef DEBUG_FILL_EBUS_DEV
@@ -131,7 +150,30 @@ __initfunc(void fill_ebus_device(int node, struct linux_ebus_device *dev))
 	dev->num_addrs = len / sizeof(struct linux_prom_registers);
 
 	for (i = 0; i < dev->num_addrs; i++) {
-		n = (regs[i].which_io - 0x10) >> 2;
+		/*
+		 * XXX Collect JE-1 PROM
+		 * 
+		 * Example - JS-E with 3.11:
+		 *  /ebus
+		 *      regs 
+		 *        0x00000000, 0x0, 0x00000000, 0x0, 0x00000000,
+		 *        0x82000010, 0x0, 0xf0000000, 0x0, 0x01000000,
+		 *        0x82000014, 0x0, 0x38800000, 0x0, 0x00800000,
+		 *      ranges
+		 *        0x00, 0x00000000, 0x02000010, 0x0, 0x0, 0x01000000,
+		 *        0x01, 0x01000000, 0x02000014, 0x0, 0x0, 0x00800000,
+		 *  /ebus/8042
+		 *      regs
+		 *        0x00000001, 0x00300060, 0x00000008,
+		 *        0x00000001, 0x00300060, 0x00000008,
+		 */
+		n = regs[i].which_io;
+		if (n >= 4) {
+			/* XXX This is copied from old JE-1 by Gleb. */
+			n = (regs[i].which_io - 0x10) >> 2;
+		} else {
+			;
+		}
 
 		dev->base_address[i] = dev->bus->self->base_address[n];
 		dev->base_address[i] += regs[i].phys_addr;
@@ -141,8 +183,14 @@ __initfunc(void fill_ebus_device(int node, struct linux_ebus_device *dev))
 		       (unsigned long)sparc_alloc_io (dev->base_address[i], 0,
 						      regs[i].reg_size,
 						      dev->prom_name, 0, 0);
+#if 0
+/*
+ * This release_region() screwes those who do sparc_alloc_io().
+ * Change drivers which do check_region(). See drivers/block/floppy.c.
+ */
 		    /* Some drivers call 'check_region', so we release it */
                     release_region(dev->base_address[i] & PAGE_MASK, PAGE_SIZE);
+#endif
 
 		    if (dev->base_address[i] == 0 ) {
 			panic("ebus: unable sparc_alloc_io for dev %s",
@@ -154,12 +202,22 @@ __initfunc(void fill_ebus_device(int node, struct linux_ebus_device *dev))
 	len = prom_getproperty(node, "interrupts", (char *)&irqs, sizeof(irqs));
 	if ((len == -1) || (len == 0)) {
 		dev->num_irqs = 0;
+		if ((dev->irqs[0] = dev->bus->self->irq) != 0) {
+			 dev->num_irqs = 1;
+/* P3 remove */ printk("EBUS: child %s irq %d from parent\n", dev->prom_name, dev->irqs[0]);
+		}
 	} else {
-		dev->num_irqs = len / sizeof(irqs[0]);
-
-#define IRQ_8042 7
-		if (irqs[0] == 4) dev->irqs[0] = IRQ_8042;
-		printk("FIXME: %s irq(%d)\n", dev->prom_name, irqs[0]);
+		dev->num_irqs = 1;  /* dev->num_irqs = len / sizeof(irqs[0]); */
+		if (irqs[0] == 0 || irqs[0] >= 8) {
+			/* See above for the parent. XXX */
+			printk("EBUS: %s got bad irq %d from PROM\n",
+			    dev->prom_name, irqs[0]);
+			dev->num_irqs = 0;
+			dev->irqs[0] = 0;
+		} else {
+			dev->irqs[0] = pcic_pin_to_irq(irqs[0], dev->prom_name);
+/* P3 remove */ printk("EBUS: child %s irq %d from PROM\n", dev->prom_name, dev->irqs[0]);
+		}
 	}
 
 #ifdef DEBUG_FILL_EBUS_DEV

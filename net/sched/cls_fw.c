@@ -136,7 +136,7 @@ static void fw_destroy(struct tcf_proto *tp)
 			unsigned long cl;
 			head->ht[h] = f->next;
 
-			if ((cl = cls_set_class(&f->res.class, 0)) != 0)
+			if ((cl = __cls_set_class(&f->res.class, 0)) != 0)
 				tp->q->ops->cl_ops->unbind_tcf(tp->q, cl);
 #ifdef CONFIG_NET_CLS_POLICE
 			tcf_police_release(f->police);
@@ -161,10 +161,11 @@ static int fw_delete(struct tcf_proto *tp, unsigned long arg)
 		if (*fp == f) {
 			unsigned long cl;
 
+			tcf_tree_lock(tp);
 			*fp = f->next;
-			synchronize_bh();
+			tcf_tree_unlock(tp);
 
-			if ((cl = cls_set_class(&f->res.class, 0)) != 0)
+			if ((cl = cls_set_class(tp, &f->res.class, 0)) != 0)
 				tp->q->ops->cl_ops->unbind_tcf(tp->q, cl);
 #ifdef CONFIG_NET_CLS_POLICE
 			tcf_police_release(f->police);
@@ -203,7 +204,7 @@ static int fw_change(struct tcf_proto *tp, unsigned long base,
 
 			f->res.classid = *(u32*)RTA_DATA(tb[TCA_FW_CLASSID-1]);
 			cl = tp->q->ops->cl_ops->bind_tcf(tp->q, base, f->res.classid);
-			cl = cls_set_class(&f->res.class, cl);
+			cl = cls_set_class(tp, &f->res.class, cl);
 			if (cl)
 				tp->q->ops->cl_ops->unbind_tcf(tp->q, cl);
 		}
@@ -211,8 +212,9 @@ static int fw_change(struct tcf_proto *tp, unsigned long base,
 		if (tb[TCA_FW_POLICE-1]) {
 			struct tcf_police *police = tcf_police_locate(tb[TCA_FW_POLICE-1], tca[TCA_RATE-1]);
 
+			tcf_tree_lock(tp);
 			police = xchg(&f->police, police);
-			synchronize_bh();
+			tcf_tree_unlock(tp);
 
 			tcf_police_release(police);
 		}
@@ -229,8 +231,9 @@ static int fw_change(struct tcf_proto *tp, unsigned long base,
 			return -ENOBUFS;
 		memset(head, 0, sizeof(*head));
 
+		tcf_tree_lock(tp);
 		tp->root = head;
-		synchronize_bh();
+		tcf_tree_unlock(tp);
 	}
 
 	f = kmalloc(sizeof(struct fw_filter), GFP_KERNEL);
@@ -245,7 +248,7 @@ static int fw_change(struct tcf_proto *tp, unsigned long base,
 		if (RTA_PAYLOAD(tb[TCA_FW_CLASSID-1]) != 4)
 			goto errout;
 		f->res.classid = *(u32*)RTA_DATA(tb[TCA_FW_CLASSID-1]);
-		cls_set_class(&f->res.class, tp->q->ops->cl_ops->bind_tcf(tp->q, base, f->res.classid));
+		cls_set_class(tp, &f->res.class, tp->q->ops->cl_ops->bind_tcf(tp->q, base, f->res.classid));
 	}
 
 #ifdef CONFIG_NET_CLS_POLICE
@@ -254,8 +257,9 @@ static int fw_change(struct tcf_proto *tp, unsigned long base,
 #endif
 
 	f->next = head->ht[fw_hash(handle)];
-	wmb();
+	tcf_tree_lock(tp);
 	head->ht[fw_hash(handle)] = f;
+	tcf_tree_unlock(tp);
 
 	*arg = (unsigned long)f;
 	return 0;
@@ -335,7 +339,8 @@ static int fw_dump(struct tcf_proto *tp, unsigned long fh,
 	rta->rta_len = skb->tail - b;
 #ifdef CONFIG_NET_CLS_POLICE
 	if (f->police) {
-		RTA_PUT(skb, TCA_STATS, sizeof(struct tc_stats), &f->police->stats);
+		if (qdisc_copy_stats(skb, &f->police->stats))
+			goto rtattr_failure;
 	}
 #endif
 	return skb->len;
