@@ -76,14 +76,6 @@ static inline int uncached_access(struct file *file, unsigned long addr)
 	 * On ia64, we ignore O_SYNC because we cannot tolerate memory attribute aliases.
 	 */
 	return !(efi_mem_attributes(addr) & EFI_MEMORY_WB);
-#elif defined(CONFIG_PPC64)
-	/* On PPC64, we always do non-cacheable access to the IO hole and
-	 * cacheable elsewhere. Cache paradox can checkstop the CPU and
-	 * the high_memory heuristic below is wrong on machines with memory
-	 * above the IO hole... Ah, and of course, XFree86 doesn't pass
-	 * O_SYNC when mapping us to tap IO space. Surprised ?
-	 */
-	return !page_is_ram(addr >> PAGE_SHIFT);
 #else
 	/*
 	 * Accessing memory above the top the kernel knows about or through a file pointer
@@ -238,7 +230,13 @@ static ssize_t write_mem(struct file * file, const char __user * buf,
 
 static int mmap_mem(struct file * file, struct vm_area_struct * vma)
 {
-#ifdef pgprot_noncached
+#if defined(__HAVE_PHYS_MEM_ACCESS_PROT)
+	unsigned long offset = vma->vm_pgoff << PAGE_SHIFT;
+
+	vma->vm_page_prot = phys_mem_access_prot(file, offset,
+						 vma->vm_end - vma->vm_start,
+						 vma->vm_page_prot);
+#elif defined(pgprot_noncached)
 	unsigned long offset = vma->vm_pgoff << PAGE_SHIFT;
 	int uncached;
 

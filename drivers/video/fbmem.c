@@ -957,7 +957,9 @@ fb_mmap(struct file *file, struct vm_area_struct * vma)
 	}
 #endif
 #elif defined(__powerpc__)
-	pgprot_val(vma->vm_page_prot) |= _PAGE_NO_CACHE|_PAGE_GUARDED;
+	vma->vm_page_prot = phys_mem_access_prot(file, off,
+						 vma->vm_end - vma->vm_start,
+						 vma->vm_page_prot);
 #elif defined(__alpha__)
 	/* Caching is off in the I/O space quadrant by design.  */
 #elif defined(__i386__) || defined(__x86_64__)
