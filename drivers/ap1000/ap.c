@@ -53,7 +53,7 @@ static void ap_release(struct inode * inode, struct file * filp)
 	MOD_DEC_USE_COUNT;
 }
 
-static void ap_request(void)
+static void ap_request(request_queue_t * q)
 {
   struct cap_request creq;
   unsigned int minor;
@@ -160,7 +160,7 @@ void ap_complete(struct cap_request *creq)
 #endif
   end_request(1);
   request_count--;
-  ap_request();
+  ap_request(NULL);
 }
 
 
@@ -271,7 +271,7 @@ int ap_init(void)
     return -1;
   }
   printk("ap_init: register dev %d\n", MAJOR_NR);
-  blk_dev[MAJOR_NR].request_fn = &ap_request;
+  blk_init_queue(BLK_DEFAULT_QUEUE(MAJOR_NR), &ap_request);
 
   for (i=0;i<NUM_APDEVS;i++) {
     ap_blocksizes[i] = AP_BLOCK_SIZE;
@@ -307,7 +307,7 @@ void cleanup_module(void)
 		invalidate_buffers(MKDEV(MAJOR_NR, i));
 
 	unregister_blkdev( MAJOR_NR, "apblock" );
-	blk_dev[MAJOR_NR].request_fn = 0;
+	blk_cleanup_queue(BLK_DEFAULT_QUEUE(MAJOR_NR));
 }
 
 #endif  /* MODULE */

@@ -1484,7 +1484,7 @@ static void redo_fd_request(void)
 	goto repeat;
 }
 
-static void do_fd_request(void)
+static void do_fd_request(request_queue_t * q)
 {
 	redo_fd_request();
 }
@@ -1869,7 +1869,7 @@ int __init amiga_floppy_init(void)
 	post_write_timer.data = 0;
 	post_write_timer.function = post_write;
   
-	blk_dev[MAJOR_NR].request_fn = DEVICE_REQUEST;
+	blk_init_queue(BLK_DEFAULT_QUEUE(MAJOR_NR), DEVICE_REQUEST);
 	blksize_size[MAJOR_NR] = floppy_blocksizes;
 	blk_size[MAJOR_NR] = floppy_sizes;
 
@@ -1911,7 +1911,7 @@ void cleanup_module(void)
 	amiga_chip_free(raw_buf);
 	blk_size[MAJOR_NR] = NULL;
 	blksize_size[MAJOR_NR] = NULL;
-	blk_dev[MAJOR_NR].request_fn = NULL;
+	blk_cleanup_queue(BLK_DEFAULT_QUEUE(MAJOR_NR));
 	unregister_blkdev(MAJOR_NR, "fd");
 }
 #endif

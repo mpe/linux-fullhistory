@@ -154,8 +154,10 @@ typedef struct page {
 #define PG_error		 1
 #define PG_referenced		 2
 #define PG_uptodate		 3
+#define PG__unused_00		 4
 #define PG_decr_after		 5
-#define PG_DMA			 7
+#define PG_unused_01		 6
+#define PG__unused_02		 7
 #define PG_slab			 8
 #define PG_swap_cache		 9
 #define PG_skip			10
@@ -181,7 +183,7 @@ typedef struct page {
 #define ClearPageError(page)	clear_bit(PG_error, &(page)->flags)
 #define PageReferenced(page)	test_bit(PG_referenced, &(page)->flags)
 #define PageDecrAfter(page)	test_bit(PG_decr_after, &(page)->flags)
-#define PageDMA(page)		test_bit(PG_DMA, &(page)->flags)
+#define PageDMA(page)		(contig_page_data.node_zones + ZONE_DMA == (page)->zone)
 #define PageSlab(page)		test_bit(PG_slab, &(page)->flags)
 #define PageSwapCache(page)	test_bit(PG_swap_cache, &(page)->flags)
 #define PageReserved(page)	test_bit(PG_reserved, &(page)->flags)
@@ -218,8 +220,8 @@ typedef struct page {
  * PG_reserved is set for a page which must never be accessed (which
  * may not even be present).
  *
- * PG_DMA is set for those pages which lie in the range of
- * physical addresses capable of carrying DMA transfers.
+ * PG_DMA has been removed, page->zone now tells exactly wether the
+ * page is suited to do DMAing into.
  *
  * Multiple processes may "see" the same page. E.g. for untouched
  * mappings of /dev/null, all processes see the same page full of
@@ -517,6 +519,25 @@ extern struct vm_area_struct *find_extend_vma(struct task_struct *tsk, unsigned 
 #define vmlist_access_unlock(mm)	spin_unlock(&mm->page_table_lock)
 #define vmlist_modify_lock(mm)		vmlist_access_lock(mm)
 #define vmlist_modify_unlock(mm)	vmlist_access_unlock(mm)
+
+extern spinlock_t mm_lock;
+#define mmlist_access_lock()		spin_lock(&mm_lock)
+#define mmlist_access_unlock()		spin_unlock(&mm_lock)
+#define mmlist_modify_lock()		mmlist_access_lock()
+#define mmlist_modify_unlock()		mmlist_access_unlock()
+
+#define for_each_mm(mm) \
+	for (mm = list_entry(init_mm.mmlist.next, struct mm_struct, mmlist); \
+		(mm != &init_mm);  \
+		(mm = list_entry(mm->mmlist.next, struct mm_struct, mmlist)))
+
+static inline void mmlist_set_pgdir(unsigned long address, pgd_t entry)
+{
+	struct mm_struct *mm;
+
+	for_each_mm(mm)
+		*pgd_offset(mm,address) = entry;
+}
 
 #endif /* __KERNEL__ */
 

@@ -493,8 +493,8 @@ void ide_end_request (byte uptodate, ide_hwgroup_t *hwgroup)
 
 	if (!end_that_request_first(rq, uptodate, hwgroup->drive->name)) {
 		add_blkdev_randomness(MAJOR(rq->rq_dev));
-		hwgroup->drive->queue = rq->next;
-        	blk_dev[MAJOR(rq->rq_dev)].current_request = NULL;
+		hwgroup->drive->queue.current_request = rq->next;
+		blk_dev[MAJOR(rq->rq_dev)].request_queue.current_request = NULL;
         	hwgroup->rq = NULL;
 		end_that_request_last(rq);
 	}
@@ -755,8 +755,8 @@ void ide_end_drive_cmd (ide_drive_t *drive, byte stat, byte err)
 		}
 	}
 	spin_lock_irqsave(&io_request_lock, flags);
-	drive->queue = rq->next;
-	blk_dev[MAJOR(rq->rq_dev)].current_request = NULL;
+	drive->queue.current_request = rq->next;
+	blk_dev[MAJOR(rq->rq_dev)].request_queue.current_request = NULL;
 	HWGROUP(drive)->rq = NULL;
 	rq->rq_status = RQ_INACTIVE;
 	spin_unlock_irqrestore(&io_request_lock, flags);
@@ -1059,7 +1059,7 @@ static ide_startstop_t start_request (ide_drive_t *drive)
 {
 	ide_startstop_t startstop;
 	unsigned long block, blockend;
-	struct request *rq = drive->queue;
+	struct request *rq = drive->queue.current_request;
 	unsigned int minor = MINOR(rq->rq_dev), unit = minor >> PARTN_BITS;
 	ide_hwif_t *hwif = HWIF(drive);
 
@@ -1142,13 +1142,13 @@ repeat:
 	best = NULL;
 	drive = hwgroup->drive;
 	do {
-		if (drive->queue && (!drive->sleep || 0 <= (signed long)(jiffies - drive->sleep))) {
+		if (drive->queue.current_request && (!drive->sleep || 0 <= (signed long)(jiffies - drive->sleep))) {
 			if (!best
 			 || (drive->sleep && (!best->sleep || 0 < (signed long)(best->sleep - drive->sleep)))
 			 || (!best->sleep && 0 < (signed long)(WAKEUP(best) - WAKEUP(drive))))
 			{
 				struct blk_dev_struct *bdev = &blk_dev[HWIF(drive)->major];
-				if (bdev->current_request != &bdev->plug)
+				if( !bdev->request_queue.plugged )
 					best = drive;
 			}
 		}
@@ -1228,8 +1228,8 @@ static void ide_do_request (ide_hwgroup_t *hwgroup)
 			drive = hwgroup->drive;
 			do {
 				bdev = &blk_dev[HWIF(drive)->major];
-				if (bdev->current_request != &bdev->plug)	/* FIXME: this will do for now */
-					bdev->current_request = NULL;		/* (broken since patch-2.1.15) */
+				if( !bdev->request_queue.plugged )
+					bdev->request_queue.current_request = NULL;		/* (broken since patch-2.1.15) */
 				if (drive->sleep && (!sleep || 0 < (signed long)(sleep - drive->sleep)))
 					sleep = drive->sleep;
 			} while ((drive = drive->next) != hwgroup->drive);
@@ -1267,9 +1267,9 @@ static void ide_do_request (ide_hwgroup_t *hwgroup)
 		drive->service_start = jiffies;
 
 		bdev = &blk_dev[hwif->major];
-		if (bdev->current_request == &bdev->plug)	/* FIXME: paranoia */
+		if( bdev->request_queue.plugged )	/* FIXME: paranoia */
 			printk("%s: Huh? nuking plugged queue\n", drive->name);
-		bdev->current_request = hwgroup->rq = drive->queue;
+		bdev->request_queue.current_request = hwgroup->rq = drive->queue.current_request;
 		spin_unlock(&io_request_lock);
 		if (!hwif->serialized)	/* play it safe with buggy hardware */
 			ide__sti();
@@ -1283,76 +1283,76 @@ static void ide_do_request (ide_hwgroup_t *hwgroup)
 /*
  * ide_get_queue() returns the queue which corresponds to a given device.
  */
-struct request **ide_get_queue (kdev_t dev)
+request_queue_t *ide_get_queue (kdev_t dev)
 {
 	ide_hwif_t *hwif = (ide_hwif_t *)blk_dev[MAJOR(dev)].data;
 
 	return &hwif->drives[DEVICE_NR(dev) & 1].queue;
 }
 
-void do_ide0_request (void)
+void do_ide0_request (request_queue_t *q)
 {
 	ide_do_request (ide_hwifs[0].hwgroup);
 }
 
 #if MAX_HWIFS > 1
-void do_ide1_request (void)
+void do_ide1_request (request_queue_t *q)
 {
 	ide_do_request (ide_hwifs[1].hwgroup);
 }
 #endif /* MAX_HWIFS > 1 */
 
 #if MAX_HWIFS > 2
-void do_ide2_request (void)
+void do_ide2_request (request_queue_t *q)
 {
 	ide_do_request (ide_hwifs[2].hwgroup);
 }
 #endif /* MAX_HWIFS > 2 */
 
 #if MAX_HWIFS > 3
-void do_ide3_request (void)
+void do_ide3_request (request_queue_t *q)
 {
 	ide_do_request (ide_hwifs[3].hwgroup);
 }
 #endif /* MAX_HWIFS > 3 */
 
 #if MAX_HWIFS > 4
-void do_ide4_request (void)
+void do_ide4_request (request_queue_t *q)
 {
 	ide_do_request (ide_hwifs[4].hwgroup);
 }
 #endif /* MAX_HWIFS > 4 */
 
 #if MAX_HWIFS > 5
-void do_ide5_request (void)
+void do_ide5_request (request_queue_t *q)
 {
 	ide_do_request (ide_hwifs[5].hwgroup);
 }
 #endif /* MAX_HWIFS > 5 */
 
 #if MAX_HWIFS > 6
-void do_ide6_request (void)
+void do_ide6_request (request_queue_t *q)
 {
 	ide_do_request (ide_hwifs[6].hwgroup);
 }
 #endif /* MAX_HWIFS > 6 */
 
 #if MAX_HWIFS > 7
-void do_ide7_request (void)
+void do_ide7_request (request_queue_t *q)
 {
 	ide_do_request (ide_hwifs[7].hwgroup);
 }
 #endif /* MAX_HWIFS > 7 */
 
 #if MAX_HWIFS > 8
-void do_ide8_request (void)
+void do_ide8_request (request_queue_t *q)
 {
 	ide_do_request (ide_hwifs[8].hwgroup);
 }
 #endif /* MAX_HWIFS > 8 */
 
 #if MAX_HWIFS > 9
-void do_ide9_request (void)
+void do_ide9_request (request_queue_t *q)
 {
 	ide_do_request (ide_hwifs[9].hwgroup);
 }
@@ -1576,10 +1576,12 @@ void ide_intr (int irq, void *dev_id, struct pt_regs *regs)
 	hwgroup->handler = NULL;
 	del_timer(&hwgroup->timer);
 	spin_unlock(&io_request_lock);
+
 	if (drive->unmask)
 		ide__sti();	/* local CPU only */
 	startstop = handler(drive);		/* service this interrupt, may set handler for next interrupt */
 	spin_lock_irq(&io_request_lock);
+
 	/*
 	 * Note that handler() may have set things up for another
 	 * interrupt to occur soon, but it cannot happen until
@@ -1683,10 +1685,10 @@ int ide_do_drive_cmd (ide_drive_t *drive, struct request *rq, ide_action_t actio
 	if (action == ide_wait)
 		rq->sem = &sem;
 	spin_lock_irqsave(&io_request_lock, flags);
-	cur_rq = drive->queue;
+	cur_rq = drive->queue.current_request;
 	if (cur_rq == NULL || action == ide_preempt) {
 		rq->next = cur_rq;
-		drive->queue = rq;
+		drive->queue.current_request = rq;
 		if (action == ide_preempt)
 			hwgroup->rq = NULL;
 	} else {
@@ -1993,7 +1995,7 @@ void ide_unregister (unsigned int index)
 	kfree(blksize_size[hwif->major]);
 	kfree(max_sectors[hwif->major]);
 	kfree(max_readahead[hwif->major]);
-	blk_dev[hwif->major].request_fn = NULL;
+	blk_cleanup_queue(BLK_DEFAULT_QUEUE(hwif->major));
 	blk_dev[hwif->major].data = NULL;
 	blk_dev[hwif->major].queue = NULL;
 	blksize_size[hwif->major] = NULL;

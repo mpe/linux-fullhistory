@@ -696,8 +696,6 @@ struct Scsi_Host * scsi_register(Scsi_Host_Template * tpnt, int j){
     atomic_set(&retval->host_active,0);
     retval->host_busy = 0;
     retval->host_failed = 0;
-    retval->block = NULL;
-    retval->wish_block = 0;
     if(j > 0xffff) panic("Too many extra bytes requested\n");
     retval->extra_bytes = j;
     retval->loaded_as_module = scsi_loadable_module_flag;
@@ -723,11 +721,8 @@ struct Scsi_Host * scsi_register(Scsi_Host_Template * tpnt, int j){
     retval->ehandler = NULL;    /* Initial value until the thing starts up. */
     retval->eh_notify   = NULL;    /* Who we notify when we exit. */
 
-    /*
-     * Initialize the fields used for mid-level queueing.
-     */
-    retval->pending_commands = NULL;
-    retval->host_busy = FALSE;
+
+    retval->host_blocked = FALSE;
 
 #ifdef DEBUG
     printk("Register %x %x: %d\n", (int)retval, (int)retval->hostt, j);
@@ -783,6 +778,7 @@ static void launch_error_handler_thread(struct Scsi_Host * shpnt)
 
             kernel_thread((int (*)(void *))scsi_error_handler, 
                           (void *) shpnt, 0);
+
             /*
              * Now wait for the kernel error thread to initialize itself
              * as it might be needed when we scan the bus.
@@ -873,7 +869,6 @@ unsigned int __init scsi_init(void)
     printk ("scsi : %d host%s.\n", next_scsi_host,
 	    (next_scsi_host == 1) ? "" : "s");
     
-    scsi_make_blocked_list();
     
     /* Now attach the high level drivers */
 #ifdef CONFIG_BLK_DEV_SD

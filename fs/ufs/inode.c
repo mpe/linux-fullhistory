@@ -631,7 +631,9 @@ void ufs_read_inode (struct inode * inode)
 	else if (S_ISDIR(inode->i_mode))
 		inode->i_op = &ufs_dir_inode_operations;
 	else if (S_ISLNK(inode->i_mode))
-		inode->i_op = &ufs_symlink_inode_operations;
+		inode->i_op = inode->i_blocks
+				?&ufs_symlink_inode_operations
+				:&ufs_fast_symlink_inode_operations;
 	else
 		init_special_inode(inode, inode->i_mode,
 				   SWAB32(ufs_inode->ui_u2.ui_addr.ui_db[0]));

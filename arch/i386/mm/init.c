@@ -36,6 +36,7 @@
 #include <asm/e820.h>
 
 unsigned long highstart_pfn, highend_pfn;
+unsigned long *pgd_quicklist = (unsigned long *)0;
 static unsigned long totalram_pages = 0;
 static unsigned long totalhigh_pages = 0;
 
@@ -162,7 +163,10 @@ int do_check_pgt_cache(int low, int high)
 	if(pgtable_cache_size > high) {
 		do {
 			if(pgd_quicklist)
-				free_pgd_slow(get_pgd_fast()), freed++;
+				mmlist_modify_lock(),  \
+				free_pgd_slow(get_pgd_fast()), \
+				mmlist_modify_unlock(), \
+				freed++;
 			if(pmd_quicklist)
 				free_pmd_slow(get_pmd_fast()), freed++;
 			if(pte_quicklist)

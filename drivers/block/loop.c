@@ -164,7 +164,7 @@ static void figure_loop_size(struct loop_device *lo)
 	loop_sizes[lo->lo_number] = size;
 }
 
-static void do_lo_request(void)
+static void do_lo_request(request_queue_t * q)
 {
 	int	real_block, block, offset, len, blksize, size;
 	char	*dest_addr;
@@ -754,7 +754,7 @@ int __init loop_init(void)
 		return -ENOMEM;
 	}		
 
-	blk_dev[MAJOR_NR].request_fn = DEVICE_REQUEST;
+	blk_init_queue(BLK_DEFAULT_QUEUE(MAJOR_NR), DEVICE_REQUEST);
 	for (i=0; i < max_loop; i++) {
 		memset(&loop_dev[i], 0, sizeof(struct loop_device));
 		loop_dev[i].lo_number = i;

@@ -86,7 +86,8 @@ static void gscd_bin2bcd          (unsigned char *p);
 
 /* Schnittstellen zum Kern/FS */
 
-static void do_gscd_request       (void);
+static void do_gscd_request       (request_queue_t *);
+static void __do_gscd_request     (void);
 static int  gscd_ioctl            (struct inode *, struct file *, unsigned int, unsigned long);
 static int  gscd_open             (struct inode *, struct file *);
 static int  gscd_release          (struct inode *, struct file *);
@@ -260,7 +261,12 @@ long offs;
  * I/O request routine called from Linux kernel.
  */
 
-static void do_gscd_request (void)
+static void do_gscd_request (request_queue_t * q)
+{
+  __do_gscd_request();
+}
+
+static void __do_gscd_request (void)
 {
 unsigned int block,dev;
 unsigned int nsect;
@@ -355,7 +361,7 @@ char   cmd[] = { CMD_READ, 0x80, 0,0,0, 0,1 }; /* cmd mode M-S-F secth sectl */
               end_request(1);
 	   }
 	}
-	SET_TIMER(do_gscd_request, 1);
+	SET_TIMER(__do_gscd_request, 1);
 }
 
 
@@ -1060,7 +1066,7 @@ int result;
 		return -EIO;
 	}
 
-	blk_dev[MAJOR_NR].request_fn = DEVICE_REQUEST;
+	blk_init_queue(BLK_DEFAULT_QUEUE(MAJOR_NR), DEVICE_REQUEST);
 	blksize_size[MAJOR_NR] = gscd_blocksizes;
 	read_ahead[MAJOR_NR] = 4;
         

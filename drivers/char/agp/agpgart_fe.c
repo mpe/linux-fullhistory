@@ -1,8 +1,8 @@
 /*
  * AGPGART module frontend version 0.99
  * Copyright (C) 1999 Jeff Hartmann
- * Copyright (C) 1999 Precision Insight
- * Copyright (C) 1999 Xi Graphics
+ * Copyright (C) 1999 Precision Insight, Inc.
+ * Copyright (C) 1999 Xi Graphics, Inc.
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -25,7 +25,6 @@
  */
 
 #define __NO_VERSION__
-#include <linux/config.h>
 #include <linux/version.h>
 #include <linux/types.h>
 #include <linux/kernel.h>
@@ -44,7 +43,6 @@
 #include <linux/agpgart.h>
 #include <asm/system.h>
 #include <asm/uaccess.h>
-#include <asm/system.h>
 #include <asm/io.h>
 #include <asm/page.h>
 #include <asm/mman.h>
@@ -187,7 +185,8 @@ static int agp_create_segment(agp_client * client, agp_region * region)
 	agp_segment *user_seg;
 	int i;
 
-	seg = kmalloc((sizeof(agp_segment_priv) * region->seg_count), GFP_KERNEL);
+	seg = kmalloc((sizeof(agp_segment_priv) * region->seg_count),
+		      GFP_KERNEL);
 	if (seg == NULL) {
 		kfree(region->seg_list);
 		return -ENOMEM;
@@ -373,8 +372,8 @@ static void agp_remove_all_clients(agp_controller * controller)
 		priv = agp_find_private(temp->pid);
 
 		if (priv != NULL) {
-			clear_bit(AGP_FF_IS_VALID, &(priv->access_flags));
-			clear_bit(AGP_FF_IS_CLIENT, &(priv->access_flags));
+			clear_bit(AGP_FF_IS_VALID, &priv->access_flags);
+			clear_bit(AGP_FF_IS_CLIENT, &priv->access_flags);
 		}
 		client = client->next;
 		kfree(temp);
@@ -439,8 +438,8 @@ static void agp_controller_make_current(agp_controller * controller)
 		priv = agp_find_private(clients->pid);
 
 		if (priv != NULL) {
-			set_bit(AGP_FF_IS_VALID, &(priv->access_flags));
-			set_bit(AGP_FF_IS_CLIENT, &(priv->access_flags));
+			set_bit(AGP_FF_IS_VALID, &priv->access_flags);
+			set_bit(AGP_FF_IS_CLIENT, &priv->access_flags);
 		}
 		clients = clients->next;
 	}
@@ -453,7 +452,7 @@ static void agp_controller_release_current(agp_controller * controller,
 {
 	agp_client *clients;
 
-	clear_bit(AGP_FF_IS_VALID, &(controller_priv->access_flags));
+	clear_bit(AGP_FF_IS_VALID, &controller_priv->access_flags);
 	clients = controller->clients;
 
 	while (clients != NULL) {
@@ -462,7 +461,7 @@ static void agp_controller_release_current(agp_controller * controller,
 		priv = agp_find_private(clients->pid);
 
 		if (priv != NULL) {
-			clear_bit(AGP_FF_IS_VALID, &(priv->access_flags));
+			clear_bit(AGP_FF_IS_VALID, &priv->access_flags);
 		}
 		clients = clients->next;
 	}
@@ -610,7 +609,7 @@ static int agp_mmap(struct file *file, struct vm_area_struct *vma)
 		AGP_UNLOCK();
 		return -EPERM;
 	}
-	if (!(test_bit(AGP_FF_IS_VALID, &(priv->access_flags)))) {
+	if (!(test_bit(AGP_FF_IS_VALID, &priv->access_flags))) {
 		AGP_UNLOCK();
 		return -EPERM;
 	}
@@ -620,7 +619,7 @@ static int agp_mmap(struct file *file, struct vm_area_struct *vma)
 	current_size = current_size * 0x100000;
 	offset = vma->vm_pgoff << PAGE_SHIFT;
 
-	if (test_bit(AGP_FF_IS_CLIENT, &(priv->access_flags))) {
+	if (test_bit(AGP_FF_IS_CLIENT, &priv->access_flags)) {
 		if ((size + offset) > current_size) {
 			AGP_UNLOCK();
 			return -EINVAL;
@@ -631,11 +630,13 @@ static int agp_mmap(struct file *file, struct vm_area_struct *vma)
 			AGP_UNLOCK();
 			return -EPERM;
 		}
-		if (!agp_find_seg_in_client(client, offset, size, vma->vm_page_prot)) {
+		if (!agp_find_seg_in_client(client, offset,
+					    size, vma->vm_page_prot)) {
 			AGP_UNLOCK();
 			return -EINVAL;
 		}
-		if (remap_page_range(vma->vm_start, (kerninfo.aper_base + offset),
+		if (remap_page_range(vma->vm_start,
+				     (kerninfo.aper_base + offset),
 				     size, vma->vm_page_prot)) {
 			AGP_UNLOCK();
 			return -EAGAIN;
@@ -643,7 +644,7 @@ static int agp_mmap(struct file *file, struct vm_area_struct *vma)
 		AGP_UNLOCK();
 		return 0;
 	}
-	if (test_bit(AGP_FF_IS_CONTROLLER, &(priv->access_flags))) {
+	if (test_bit(AGP_FF_IS_CONTROLLER, &priv->access_flags)) {
 		if (size != current_size) {
 			AGP_UNLOCK();
 			return -EINVAL;
@@ -666,19 +667,20 @@ static int agp_release(struct inode *inode, struct file *file)
 
 	AGP_LOCK();
 
-	if (test_bit(AGP_FF_IS_CONTROLLER, &(priv->access_flags))) {
+	if (test_bit(AGP_FF_IS_CONTROLLER, &priv->access_flags)) {
 		agp_controller *controller;
 
 		controller = agp_find_controller_by_pid(priv->my_pid);
 
 		if (controller != NULL) {
 			if (controller == agp_fe.current_controller) {
-				agp_controller_release_current(controller, priv);
+				agp_controller_release_current(controller,
+							       priv);
 			}
 			agp_remove_controller(controller);
 		}
 	}
-	if (test_bit(AGP_FF_IS_CLIENT, &(priv->access_flags))) {
+	if (test_bit(AGP_FF_IS_CLIENT, &priv->access_flags)) {
 		agp_remove_client(priv->my_pid);
 	}
 	agp_remove_file_private(priv);
@@ -707,18 +709,18 @@ static int agp_open(struct inode *inode, struct file *file)
 		return -ENOMEM;
 	}
 	memset(priv, 0, sizeof(agp_file_private));
-	set_bit(AGP_FF_ALLOW_CLIENT, &(priv->access_flags));
+	set_bit(AGP_FF_ALLOW_CLIENT, &priv->access_flags);
 	priv->my_pid = current->pid;
 
 	if ((current->uid == 0) || (current->suid == 0)) {
 		/* Root priv, can be controller */
-		set_bit(AGP_FF_ALLOW_CONTROLLER, &(priv->access_flags));
+		set_bit(AGP_FF_ALLOW_CONTROLLER, &priv->access_flags);
 	}
 	client = agp_find_client_by_pid(current->pid);
 
 	if (client != NULL) {
-		set_bit(AGP_FF_IS_CLIENT, &(priv->access_flags));
-		set_bit(AGP_FF_IS_VALID, &(priv->access_flags));
+		set_bit(AGP_FF_IS_CLIENT, &priv->access_flags);
+		set_bit(AGP_FF_IS_VALID, &priv->access_flags);
 	}
 	file->private_data = (void *) priv;
 	agp_insert_file_private(priv);
@@ -754,7 +756,8 @@ static int agpioc_info_wrap(agp_file_private * priv, unsigned long arg)
 
 	userinfo.version.major = kerninfo.version.major;
 	userinfo.version.minor = kerninfo.version.minor;
-	userinfo.bridge_id = kerninfo.device->vendor | (kerninfo.device->device << 16);
+	userinfo.bridge_id = kerninfo.device->vendor |
+	    (kerninfo.device->device << 16);
 	userinfo.agp_mode = kerninfo.mode;
 	userinfo.aper_base = kerninfo.aper_base;
 	userinfo.aper_size = kerninfo.aper_size;
@@ -770,7 +773,7 @@ static int agpioc_info_wrap(agp_file_private * priv, unsigned long arg)
 static int agpioc_acquire_wrap(agp_file_private * priv, unsigned long arg)
 {
 	agp_controller *controller;
-	if (!(test_bit(AGP_FF_ALLOW_CONTROLLER, &(priv->access_flags)))) {
+	if (!(test_bit(AGP_FF_ALLOW_CONTROLLER, &priv->access_flags))) {
 		return -EPERM;
 	}
 	if (agp_fe.current_controller != NULL) {
@@ -798,8 +801,8 @@ static int agpioc_acquire_wrap(agp_file_private * priv, unsigned long arg)
 		agp_controller_make_current(controller);
 	}
 
-	set_bit(AGP_FF_IS_CONTROLLER, &(priv->access_flags));
-	set_bit(AGP_FF_IS_VALID, &(priv->access_flags));
+	set_bit(AGP_FF_IS_CONTROLLER, &priv->access_flags);
+	set_bit(AGP_FF_IS_VALID, &priv->access_flags);
 	return 0;
 }
 
@@ -837,8 +840,10 @@ static int agpioc_reserve_wrap(agp_file_private * priv, unsigned long arg)
 		client_priv = agp_find_private(reserve.pid);
 
 		if (client_priv != NULL) {
-			set_bit(AGP_FF_IS_CLIENT, &(client_priv->access_flags));
-			set_bit(AGP_FF_IS_VALID, &(client_priv->access_flags));
+			set_bit(AGP_FF_IS_CLIENT,
+				&client_priv->access_flags);
+			set_bit(AGP_FF_IS_VALID,
+				&client_priv->access_flags);
 		}
 		if (client == NULL) {
 			/* client is already removed */
@@ -848,12 +853,14 @@ static int agpioc_reserve_wrap(agp_file_private * priv, unsigned long arg)
 	} else {
 		agp_segment *segment;
 
-		segment = kmalloc((sizeof(agp_segment) * reserve.seg_count), GFP_KERNEL);
+		segment = kmalloc((sizeof(agp_segment) * reserve.seg_count),
+				  GFP_KERNEL);
 
 		if (segment == NULL) {
 			return -ENOMEM;
 		}
-		if (copy_from_user(segment, (void *) reserve.seg_list, GFP_KERNEL)) {
+		if (copy_from_user(segment, (void *) reserve.seg_list,
+				   GFP_KERNEL)) {
 			kfree(segment);
 			return -EFAULT;
 		}
@@ -870,8 +877,10 @@ static int agpioc_reserve_wrap(agp_file_private * priv, unsigned long arg)
 			client_priv = agp_find_private(reserve.pid);
 
 			if (client_priv != NULL) {
-				set_bit(AGP_FF_IS_CLIENT, &(client_priv->access_flags));
-				set_bit(AGP_FF_IS_VALID, &(client_priv->access_flags));
+				set_bit(AGP_FF_IS_CLIENT,
+					&client_priv->access_flags);
+				set_bit(AGP_FF_IS_VALID,
+					&client_priv->access_flags);
 			}
 			return agp_create_segment(client, &reserve);
 		} else {
@@ -972,10 +981,12 @@ static int agp_ioctl(struct inode *inode, struct file *file,
 		return -EBUSY;
 	}
 	if (cmd != AGPIOC_ACQUIRE) {
-		if (!(test_bit(AGP_FF_IS_CONTROLLER, &(curr_priv->access_flags)))) {
+		if (!(test_bit(AGP_FF_IS_CONTROLLER,
+			       &curr_priv->access_flags))) {
 			return -EPERM;
 		}
-		/* Use the original pid of the controller, in case it's threaded */
+		/* Use the original pid of the controller,
+		 * in case it's threaded */
 
 		if (agp_fe.current_controller->pid != curr_priv->my_pid) {
 			return -EBUSY;

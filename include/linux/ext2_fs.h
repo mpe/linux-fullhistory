@@ -615,6 +615,7 @@ extern struct inode_operations ext2_file_inode_operations;
 
 /* symlink.c */
 extern struct inode_operations ext2_symlink_inode_operations;
+extern struct inode_operations ext2_fast_symlink_inode_operations;
 
 #endif	/* __KERNEL__ */
 

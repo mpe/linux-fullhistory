@@ -1,6 +1,6 @@
 /*
  *  hosts.h Copyright (C) 1992 Drew Eckhardt
- *          Copyright (C) 1993, 1994, 1995 Eric Youngdale
+ *          Copyright (C) 1993, 1994, 1995, 1998, 1999 Eric Youngdale
  *
  *  mid to low-level SCSI driver interface header
  *      Initial versions: Drew Eckhardt
@@ -8,7 +8,7 @@
  *
  *  <drew@colorado.edu>
  *
- *	 Modified by Eric Youngdale eric@aib.com to
+ *	 Modified by Eric Youngdale eric@andante.org to
  *	 add scatter-gather, multiple outstanding request, and other
  *	 enhancements.
  *
@@ -301,13 +301,7 @@ struct Scsi_Host
      */
     struct Scsi_Host      * next;
     Scsi_Device           * host_queue;
-    /*
-     * List of commands that have been rejected because either the host
-     * or the device was busy.  These need to be retried relatively quickly,
-     * but we need to hold onto it for a short period until the host/device
-     * is available.
-     */
-    Scsi_Cmnd             * pending_commands;
+
 
     struct task_struct    * ehandler;  /* Error recovery thread. */
     struct semaphore      * eh_wait;   /* The error recovery thread waits on
@@ -340,13 +334,6 @@ struct Scsi_Host
     unsigned int max_lun;
     unsigned int max_channel;
 
-    /*
-     * Pointer to a circularly linked list - this indicates the hosts
-     * that should be locked out of performing I/O while we have an active
-     * command on this host.
-     */
-    struct Scsi_Host * block;
-    unsigned wish_block:1;
 
     /* These parameters should be set by the detect routine */
     unsigned long base;
@@ -391,9 +378,14 @@ struct Scsi_Host
      * Host uses correct SCSI ordering not PC ordering. The bit is
      * set for the minority of drivers whose authors actually read the spec ;)
      */
-
     unsigned reverse_ordering:1;
-    
+
+    /*
+     * Indicates that one or more devices on this host were starved, and
+     * when the device becomes less busy that we need to feed them.
+     */
+    unsigned some_device_starved:1;
+   
     void (*select_queue_depths)(struct Scsi_Host *, Scsi_Device *);
 
     /*
@@ -411,7 +403,6 @@ extern struct Scsi_Device_Template * scsi_devicelist;
 extern Scsi_Host_Template * scsi_hosts;
 
 extern void build_proc_dir_entries(Scsi_Host_Template  *);
-
 
 /*
  *  scsi_init initializes the scsi hosts.
@@ -456,6 +447,7 @@ struct Scsi_Device_Template
     void (*finish)(void);	  /* Perform initialization after attachment */
     int (*attach)(Scsi_Device *); /* Attach devices to arrays */
     void (*detach)(Scsi_Device *);
+    int (*init_command)(Scsi_Cmnd *);     /* Used by new queueing code. */
 };
 
 extern struct Scsi_Device_Template sd_template;

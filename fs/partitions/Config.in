@@ -18,7 +18,8 @@ else
     define_bool CONFIG_MSDOS_PARTITION y
   fi
 fi
-if [ "$CONFIG_MSDOS_PARTITION" = "y" ]; then
+if [ "$CONFIG_PARTITION_ADVANCED" = "y" -a \
+     "$CONFIG_MSDOS_PARTITION" = "y" ]; then
   bool '  BSD disklabel (FreeBSD partition tables) support' CONFIG_BSD_DISKLABEL
   bool '  Solaris (x86) partition table support' CONFIG_SOLARIS_X86_PARTITION
   bool '  Unixware slices support' CONFIG_UNIXWARE_DISKLABEL

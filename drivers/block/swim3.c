@@ -219,7 +219,7 @@ static unsigned short write_postamble[] = {
 static void swim3_select(struct floppy_state *fs, int sel);
 static void swim3_action(struct floppy_state *fs, int action);
 static int swim3_readbit(struct floppy_state *fs, int bit);
-static void do_fd_request(void);
+static void do_fd_request(request_queue_t * q);
 static void start_request(struct floppy_state *fs);
 static void set_timeout(struct floppy_state *fs, int nticks,
 			void (*proc)(unsigned long));
@@ -290,7 +290,7 @@ static int swim3_readbit(struct floppy_state *fs, int bit)
 	return (stat & DATA) == 0;
 }
 
-static void do_fd_request(void)
+static void do_fd_request(request_queue_t * q)
 {
 	int i;
 	for(i=0;i<floppy_count;i++)
@@ -1089,7 +1089,7 @@ int swim3_init(void)
 			       MAJOR_NR);
 			return -EBUSY;
 		}
-		blk_dev[MAJOR_NR].request_fn = DEVICE_REQUEST;
+		blk_init_queue(BLK_DEFAULT_QUEUE(MAJOR_NR), DEVICE_REQUEST);
 		blksize_size[MAJOR_NR] = floppy_blocksizes;
 		blk_size[MAJOR_NR] = floppy_sizes;
 	}

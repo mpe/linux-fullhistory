@@ -13,7 +13,7 @@
  *      Tommy Thorn <tthorn>
  *      Thomas Wuensche <tw@fgb1.fgb.mw.tu-muenchen.de>
  *
- *  Modified by Eric Youngdale eric@aib.com to
+ *  Modified by Eric Youngdale eric@andante.org to
  *  add scatter-gather, multiple outstanding request, and other
  *  enhancements.
  *
@@ -84,13 +84,15 @@ static int scsi_reset(Scsi_Cmnd *, unsigned int);
 extern void scsi_old_done(Scsi_Cmnd * SCpnt);
 int update_timeout(Scsi_Cmnd *, int);
 extern void scsi_old_times_out(Scsi_Cmnd * SCpnt);
-extern void internal_cmnd(Scsi_Cmnd * SCpnt);
+
+extern int scsi_dispatch_cmd(Scsi_Cmnd * SCpnt);
 
 extern volatile struct Scsi_Host *host_active;
 #define SCSI_BLOCK(HOST) ((HOST->block && host_active && HOST != host_active) \
 			  || (HOST->can_queue && HOST->host_busy >= HOST->can_queue))
 
-static unsigned char generic_sense[6] = {REQUEST_SENSE, 0, 0, 0, 255, 0};
+static unsigned char generic_sense[6] =
+{REQUEST_SENSE, 0, 0, 0, 255, 0};
 
 /*
  *  This is the number  of clock ticks we should wait before we time out
@@ -232,7 +234,13 @@ static void scsi_request_sense(Scsi_Cmnd * SCpnt)
 	SCpnt->use_sg = 0;
 	SCpnt->cmd_len = COMMAND_SIZE(SCpnt->cmnd[0]);
 	SCpnt->result = 0;
-	internal_cmnd(SCpnt);
+        /*
+         * Ugly, ugly.  The newer interfaces all assume that the lock
+         * isn't held.  Mustn't disappoint, or we deadlock the system.
+         */
+        spin_unlock_irq(&io_request_lock);
+	scsi_dispatch_cmd(SCpnt);
+        spin_lock_irq(&io_request_lock);
 }
 
 
@@ -443,7 +451,7 @@ void scsi_old_done(Scsi_Cmnd * SCpnt)
 							       __LINE__);
 						}
 					}
-					/* end WAS_SENSE */ 
+					/* end WAS_SENSE */
 					else {
 #ifdef DEBUG
 						printk("COMMAND COMPLETE message returned, "
@@ -628,7 +636,14 @@ void scsi_old_done(Scsi_Cmnd * SCpnt)
 			SCpnt->use_sg = SCpnt->old_use_sg;
 			SCpnt->cmd_len = SCpnt->old_cmd_len;
 			SCpnt->result = 0;
-			internal_cmnd(SCpnt);
+                        /*
+                         * Ugly, ugly.  The newer interfaces all
+                         * assume that the lock isn't held.  Mustn't
+                         * disappoint, or we deadlock the system.  
+                         */
+                        spin_unlock_irq(&io_request_lock);
+			scsi_dispatch_cmd(SCpnt);
+                        spin_lock_irq(&io_request_lock);
 		}
 		break;
 	default:
@@ -641,22 +656,18 @@ void scsi_old_done(Scsi_Cmnd * SCpnt)
 #endif
 		host->host_busy--;	/* Indicate that we are free */
 
-		if (host->block && host->host_busy == 0) {
-			host_active = NULL;
-
-			/* For block devices "wake_up" is done in end_scsi_request */
-			if (!SCSI_BLK_MAJOR(MAJOR(SCpnt->request.rq_dev))) {
-				struct Scsi_Host *next;
-
-				for (next = host->block; next != host; next = next->block)
-					wake_up(&next->host_wait);
-			}
-		}
-		wake_up(&host->host_wait);
 		SCpnt->result = result | ((exit & 0xff) << 24);
 		SCpnt->use_sg = SCpnt->old_use_sg;
 		SCpnt->cmd_len = SCpnt->old_cmd_len;
+                /*
+                 * The upper layers assume the lock isn't held.  We mustn't
+                 * disappoint them.  When the new error handling code is in
+                 * use, the upper code is run from a bottom half handler, so
+                 * it isn't an issue.
+                 */
+                spin_unlock_irq(&io_request_lock);
 		SCpnt->done(SCpnt);
+                spin_lock_irq(&io_request_lock);
 	}
 #undef CMD_FINISHED
 #undef REDO
@@ -925,8 +936,7 @@ static int scsi_reset(Scsi_Cmnd * SCpnt, unsigned int reset_flags)
 				if (host->last_reset - jiffies > 20UL * HZ)
 					host->last_reset = jiffies;
 			} else {
-				if (!host->block)
-					host->host_busy++;
+				host->host_busy++;
 				host->last_reset = jiffies;
 				host->resetting = 1;
 				SCpnt->flags |= (WAS_RESET | IS_RESETTING);
@@ -939,8 +949,7 @@ static int scsi_reset(Scsi_Cmnd * SCpnt, unsigned int reset_flags)
 				if (time_before(host->last_reset, jiffies) ||
 				    (time_after(host->last_reset, jiffies + 20 * HZ)))
 					host->last_reset = jiffies;
-				if (!host->block)
-					host->host_busy--;
+				host->host_busy--;
 			}
 			if (reset_flags & SCSI_RESET_SYNCHRONOUS)
 				SCpnt->flags &= ~SYNC_RESET;

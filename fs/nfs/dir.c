@@ -418,7 +418,7 @@ static int nfs_readdir(struct file *filp, void *dirent, filldir_t filldir)
 {
 	struct dentry *dentry = filp->f_dentry;
 	struct inode *inode = dentry->d_inode;
-	struct page *page, **hash;
+	struct page *page;
 	long offset;
 	int res;
 
@@ -432,8 +432,7 @@ static int nfs_readdir(struct file *filp, void *dirent, filldir_t filldir)
 	if ((offset = nfs_readdir_offset(inode, filp->f_pos)) < 0)
 		goto no_dirent_page;
 
-	hash = page_hash(&inode->i_data, offset);
-	page = __find_get_page(&inode->i_data, offset, hash);
+	page = find_get_page(&inode->i_data, offset);
 	if (!page)
 		goto no_dirent_page;
 	if (!Page_Uptodate(page))

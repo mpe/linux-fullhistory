@@ -826,7 +826,7 @@ static inline int port_detect \
       }
    else {
       unsigned long flags;
-      sh[j]->wish_block = TRUE;
+//FIXME//      sh[j]->wish_block = TRUE;
       sh[j]->unchecked_isa_dma = TRUE;
       
       flags=claim_dma_lock();

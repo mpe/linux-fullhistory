@@ -9,7 +9,7 @@
  *
  *      <drew@colorado.edu>
  *
- *       Modified by Eric Youngdale eric@aib.com to
+ *       Modified by Eric Youngdale eric@andante.org to
  *       add scatter-gather, multiple outstanding request, and other
  *       enhancements.
  */
@@ -21,15 +21,12 @@
 
 typedef struct {
 	unsigned capacity;	/* size in blocks                       */
-	unsigned sector_size;	/* size in bytes                        */
 	Scsi_Device *device;
 	unsigned int vendor;	/* vendor code, see sr_vendor.c         */
 	unsigned long ms_offset;	/* for reading multisession-CD's        */
 	unsigned char sector_bit_size;	/* sector size = 2^sector_bit_size      */
 	unsigned char sector_bit_shift;		/* sectors/FS block = 2^sector_bit_shift */
 	unsigned needs_sector_size:1;	/* needs to get sector size */
-	unsigned ten:1;		/* support ten byte commands            */
-	unsigned remap:1;	/* support remapping                    */
 	unsigned use:1;		/* is this device still supportable     */
 	unsigned xa_flag:1;	/* CD has XA sectors ? */
 	unsigned readcd_known:1;	/* drive supports READ_CD (0xbe) */

@@ -31,6 +31,8 @@
  *						new PCI BIOS interface.
  *	Alan Cox	<alan@redhat.com>:	Fixed the out of memory
  *						handling.
+ *      
+ *	Torben Mathiasen <torben.mathiasen@compaq.com> New Maintainer!
  *
  ********************************************************************/
 
@@ -468,9 +470,6 @@ extern int tlan_probe( struct net_device *dev )
 
 	priv = (TLanPrivateInfo *) dev->priv;
 
-	dev->name = priv->devName;
-	strcpy( priv->devName, "    " );
-
 	dev = init_etherdev( dev, sizeof(TLanPrivateInfo) );
 
 	dev->base_addr = io_base;
@@ -489,7 +488,7 @@ extern int tlan_probe( struct net_device *dev )
 	}
 	priv->sa_int =     dev->mem_start & 0x02;
 	priv->debug =      dev->mem_end;
-
+	spin_lock_init(&priv->lock);
 
 	printk("TLAN %d.%d:  %s irq=%2d io=%04x, %s, Rev. %d\n",
 		TLanVersionMajor,

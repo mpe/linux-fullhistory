@@ -223,6 +223,7 @@ struct mm_struct {
 	unsigned long cpu_vm_mask;
 	unsigned long swap_cnt;	/* number of pages to swap on next pass */
 	unsigned long swap_address;
+	struct list_head mmlist;		/* active mm list */
 	/*
 	 * This is an architecture-specific pointer: the portable
 	 * part of Linux does not know about any segments.
@@ -241,7 +242,8 @@ struct mm_struct {
 		0, 0, 0, 				\
 		0, 0, 0, 0,				\
 		0, 0, 0,				\
-		0, 0, 0, 0, NULL }
+		0, 0, 0, 0, 				\
+		LIST_HEAD_INIT(init_mm.mmlist), NULL }
 
 struct signal_struct {
 	atomic_t		count;

@@ -16,6 +16,7 @@
 #include <linux/proc_fs.h>
 #include <linux/smp_lock.h>
 #include <linux/quotaops.h>
+#include <linux/pagemap.h>
 
 #include <asm/uaccess.h>
 #include <asm/unaligned.h>
@@ -1418,4 +1419,86 @@ asmlinkage long sys_rename(const char * oldname, const char * newname)
 	}
 	unlock_kernel();
 	return error;
+}
+
+int vfs_readlink(struct dentry *dentry, char *buffer, int buflen, char *link)
+{
+	u32 len;
+
+	len = PTR_ERR(link);
+	if (IS_ERR(link))
+		goto out;
+
+	len = strlen(link);
+	if (len > buflen)
+		len = buflen;
+	copy_to_user(buffer, link, len);
+out:
+	return len;
+}
+
+struct dentry *
+vfs_follow_link(struct dentry *dentry, struct dentry *base,
+unsigned int follow, char *link)
+{
+	struct dentry *result;
+	UPDATE_ATIME(dentry->d_inode);
+
+	if (IS_ERR(link))
+		goto fail;
+
+	result = lookup_dentry(link, base, follow);
+	return result;
+
+fail:
+	dput(base);
+	return (struct dentry *)link;
+}
+
+/* get the link contents into pagecache */
+static char *page_getlink(struct dentry * dentry, struct page **ppage)
+{
+	struct page * page;
+	page = read_cache_page(&dentry->d_inode->i_data, 0,
+				(filler_t *)dentry->d_inode->i_op->readpage,
+				dentry);
+	if (IS_ERR(page))
+		goto sync_fail;
+	wait_on_page(page);
+	if (!Page_Uptodate(page))
+		goto async_fail;
+	*ppage = page;
+	return (char*) kmap(page);
+
+async_fail:
+	page_cache_release(page);
+	return ERR_PTR(-EIO);
+
+sync_fail:
+	return (char*)page;
+}
+
+int page_readlink(struct dentry *dentry, char *buffer, int buflen)
+{
+	struct page *page = NULL;
+	char *s = page_getlink(dentry, &page);
+	int res = vfs_readlink(dentry,buffer,buflen,s);
+	if (page) {
+		kunmap(page);
+		page_cache_release(page);
+	}
+	return res;
+}
+
+struct dentry *
+page_follow_link(struct dentry *dentry, struct dentry *base, unsigned int follow)
+{
+	struct page *page = NULL;
+	char *s = page_getlink(dentry, &page);
+	struct dentry *res = vfs_follow_link(dentry,base,follow,s);
+	if (page) {
+		kunmap(page);
+		page_cache_release(page);
+	}
+	return res;
 }

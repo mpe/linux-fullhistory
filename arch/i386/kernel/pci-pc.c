@@ -342,7 +342,7 @@ static unsigned long bios32_service(unsigned long service)
 	unsigned long flags;
 
 	__save_flags(flags); __cli();
-	__asm__("lcall (%%edi)"
+	__asm__("lcall (%%edi); cld"
 		: "=a" (return_code),
 		  "=b" (address),
 		  "=c" (length),
@@ -383,7 +383,7 @@ static int __init check_pcibios(void)
 
 		__save_flags(flags); __cli();
 		__asm__(
-			"lcall (%%edi)\n\t"
+			"lcall (%%edi); cld\n\t"
 			"jc 1f\n\t"
 			"xor %%ah, %%ah\n"
 			"1:"
@@ -427,7 +427,7 @@ static int __init pci_bios_find_device (unsigned short vendor, unsigned short de
 	unsigned short bx;
 	unsigned short ret;
 
-	__asm__("lcall (%%edi)\n\t"
+	__asm__("lcall (%%edi); cld\n\t"
 		"jc 1f\n\t"
 		"xor %%ah, %%ah\n"
 		"1:"
@@ -448,7 +448,7 @@ static int pci_bios_read_config_byte(struct pci_dev *dev, int where, u8 *value)
 	unsigned long ret;
 	unsigned long bx = (dev->bus->number << 8) | dev->devfn;
 
-	__asm__("lcall (%%esi)\n\t"
+	__asm__("lcall (%%esi); cld\n\t"
 		"jc 1f\n\t"
 		"xor %%ah, %%ah\n"
 		"1:"
@@ -466,7 +466,7 @@ static int pci_bios_read_config_word(struct pci_dev *dev, int where, u16 *value)
 	unsigned long ret;
 	unsigned long bx = (dev->bus->number << 8) | dev->devfn;
 
-	__asm__("lcall (%%esi)\n\t"
+	__asm__("lcall (%%esi); cld\n\t"
 		"jc 1f\n\t"
 		"xor %%ah, %%ah\n"
 		"1:"
@@ -484,7 +484,7 @@ static int pci_bios_read_config_dword(struct pci_dev *dev, int where, u32 *value
 	unsigned long ret;
 	unsigned long bx = (dev->bus->number << 8) | dev->devfn;
 
-	__asm__("lcall (%%esi)\n\t"
+	__asm__("lcall (%%esi); cld\n\t"
 		"jc 1f\n\t"
 		"xor %%ah, %%ah\n"
 		"1:"
@@ -502,7 +502,7 @@ static int pci_bios_write_config_byte(struct pci_dev *dev, int where, u8 value)
 	unsigned long ret;
 	unsigned long bx = (dev->bus->number << 8) | dev->devfn;
 
-	__asm__("lcall (%%esi)\n\t"
+	__asm__("lcall (%%esi); cld\n\t"
 		"jc 1f\n\t"
 		"xor %%ah, %%ah\n"
 		"1:"
@@ -520,7 +520,7 @@ static int pci_bios_write_config_word(struct pci_dev *dev, int where, u16 value)
 	unsigned long ret;
 	unsigned long bx = (dev->bus->number << 8) | dev->devfn;
 
-	__asm__("lcall (%%esi)\n\t"
+	__asm__("lcall (%%esi); cld\n\t"
 		"jc 1f\n\t"
 		"xor %%ah, %%ah\n"
 		"1:"
@@ -538,7 +538,7 @@ static int pci_bios_write_config_dword(struct pci_dev *dev, int where, u32 value
 	unsigned long ret;
 	unsigned long bx = (dev->bus->number << 8) | dev->devfn;
 
-	__asm__("lcall (%%esi)\n\t"
+	__asm__("lcall (%%esi); cld\n\t"
 		"jc 1f\n\t"
 		"xor %%ah, %%ah\n"
 		"1:"
@@ -702,7 +702,7 @@ static struct irq_routing_table * __init pcibios_get_irq_routing_table(void)
 	__asm__("push %%es\n\t"
 		"push %%ds\n\t"
 		"pop  %%es\n\t"
-		"lcall (%%esi)\n\t"
+		"lcall (%%esi); cld\n\t"
 		"pop %%es\n\t"
 		"jc 1f\n\t"
 		"xor %%ah, %%ah\n"

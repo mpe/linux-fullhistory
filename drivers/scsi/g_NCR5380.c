@@ -16,6 +16,9 @@
  * DTC3181E extensions (c) 1997, Ronald van Cuijlenborg
  * ronald.van.cuijlenborg@tip.nl or nutty@dds.nl
  *
+ * Added ISAPNP support for DTC436 adapters,
+ * Thomas Sailer, sailer@ife.ee.ethz.ch
+ *
  * ALPHA RELEASE 1. 
  *
  * For more information, please consult 
@@ -117,7 +120,8 @@
 #include "sd.h"
 #include <linux/stat.h>
 #include <linux/init.h>
-#include<linux/ioport.h>
+#include <linux/ioport.h>
+#include <linux/isapnp.h>
 
 #define NCR_NOT_SET 0
 static int ncr_irq=NCR_NOT_SET;
@@ -279,6 +283,36 @@ int __init generic_NCR5380_detect(Scsi_Host_Template * tpnt){
         overrides[0].board=BOARD_NCR53C400A;
     else if (dtc_3181e != NCR_NOT_SET)
         overrides[0].board=BOARD_DTC3181E;
+
+    if (!current_override && isapnp_present()) {
+	    struct pci_dev *dev = NULL;
+	    count = 0;
+	    while ((dev = isapnp_find_dev(NULL, ISAPNP_VENDOR('D','T','C'), ISAPNP_FUNCTION(0x436e), dev))) {
+		    if (count >= NO_OVERRIDES)
+			    break;
+		    if (!dev->active && dev->prepare(dev) < 0) {
+			    printk(KERN_ERR "dtc436e probe: prepare failed\n");
+			    continue;
+		    }
+		    if (!(dev->resource[0].flags & IORESOURCE_IO))
+			    continue;
+		    if (!dev->active && dev->activate(dev) < 0) {
+			    printk(KERN_ERR "dtc436e probe: activate failed\n");
+			    continue;
+		    }
+		    if (dev->irq_resource[0].flags & IORESOURCE_IRQ)
+			    overrides[count].irq=dev->irq_resource[0].start;
+		    else
+			    overrides[count].irq=IRQ_NONE;
+		    if (dev->dma_resource[0].flags & IORESOURCE_DMA)
+			    overrides[count].dma=dev->dma_resource[0].start;
+		    else
+			    overrides[count].dma=DMA_NONE;
+		    overrides[count].NCR5380_map_name=(NCR5380_map_type)dev->resource[0].start;
+		    overrides[count].board=BOARD_DTC3181E;
+		    count++;
+	    }
+    }
 
     tpnt->proc_name = "g_NCR5380";
 

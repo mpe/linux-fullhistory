@@ -36,47 +36,59 @@ void mydlyu(unsigned int);
  *   static const char RCSid[] = "$Header: /usr/src/linux/kernel/blk_drv/scsi/RCS/atp870u.c,v 1.0 1997/05/07 15:22:00 root Exp root $";
  */
 
-static unsigned char admaxu = 1, host_idu[2], chip_veru[2], scam_on[2], global_map[2];
-static unsigned short int active_idu[2], wide_idu[2], sync_idu, ultra_map[2];
-static int workingu[2] = {0, 0};
+static unsigned char admaxu = 1;
+static unsigned short int sync_idu;
 
-static Scsi_Cmnd *querequ[2][qcnt], *curr_req[2][16];
-
-static unsigned char devspu[2][16] = {
-	{0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20,
-	 0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20},
-	{0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20,
-	 0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20}
-};
-
-static unsigned char dirctu[2][16], last_cmd[2], in_snd[2], in_int[2];
-static unsigned char ata_cdbu[2][16];
-static unsigned int ioportu[2] = {0, 0};
 static unsigned int irqnumu[2] = {0, 0};
-static unsigned short int pciportu[2];
-static unsigned long prdaddru[2][16], tran_lenu[2][16], last_lenu[2][16];
-static unsigned char prd_tableu[2][16][1024];
-static unsigned char *prd_posu[2][16];
-static unsigned char quhdu[2], quendu[2];
 
-static unsigned char devtypeu[2][16] =
+struct atp_unit
 {
-	{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
-	{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
+	unsigned long ioport;
+	unsigned long irq;
+	unsigned long pciport;
+	unsigned char last_cmd;
+	unsigned char in_snd;
+	unsigned char in_int;
+	unsigned char quhdu;
+	unsigned char quendu;
+	unsigned char scam_on;
+	unsigned char global_map;
+	unsigned char chip_veru;
+	unsigned char host_idu;
+	int working;
+	unsigned short wide_idu;
+	unsigned short active_idu;
+	unsigned short ultra_map;
+	unsigned char ata_cdbu[16];
+	Scsi_Cmnd *querequ[qcnt];
+	struct atp_id
+	{
+		unsigned char dirctu;
+		unsigned char devspu;
+		unsigned char devtypeu;
+		unsigned long prdaddru;
+		unsigned long tran_lenu;
+		unsigned long last_lenu;
+		unsigned char *prd_posu;
+		unsigned char *prd_tableu;
+		Scsi_Cmnd *curr_req;
+	} id[16];
 };
 
 static struct Scsi_Host *atp_host[2] = {NULL, NULL};
+static struct atp_unit atp_unit[2];
 
 static void atp870u_intr_handle(int irq, void *dev_id, struct pt_regs *regs)
 {
 	unsigned long flags;
 	unsigned short int tmpcip, id;
-	unsigned char i, j, h, tarid, lun;
+	unsigned char i, j, h, target_id, lun;
 	unsigned char *prd;
 	Scsi_Cmnd *workrequ;
 	unsigned int workportu, tmport;
 	unsigned long adrcntu, k;
 	int errstus;
+	struct atp_unit *dev = dev_id;
 
 	for (h = 0; h < 2; h++) {
 		if (irq == irqnumu[h]) {
@@ -85,59 +97,84 @@ static void atp870u_intr_handle(int irq, void *dev_id, struct pt_regs *regs)
 	}
 	return;
 irq_numok:
-	in_int[h] = 1;
-	workportu = ioportu[h];
+	dev->in_int = 1;
+	workportu = dev->ioport;
 	tmport = workportu;
-
-	if (workingu[h] != 0) 
+	
+	if (dev->working != 0) 
 	{
 		tmport += 0x1f;
 		j = inb(tmport);
 
-		tmpcip = pciportu[h];
+		tmpcip = dev->pciport;
 		if ((inb(tmpcip) & 0x08) != 0) 
 		{
 			tmpcip += 0x2;
-			while ((inb(tmpcip) & 0x08) != 0);
+			for (k=0; k < 1000; k++)
+			{
+				if ((inb(tmpcip) & 0x08) == 0)
+				{
+					goto stop_dma;
+				}
+				if ((inb(tmpcip) & 0x01) == 0)
+				{
+					goto stop_dma;
+				}    
+			}
 		}
-		tmpcip = pciportu[h];
+stop_dma:
+		tmpcip = dev->pciport;
 		outb(0x00, tmpcip);
 		tmport -= 0x08;
 
 		i = inb(tmport);
 		if ((j & 0x40) == 0) 
 		{
-			if ((last_cmd[h] & 0x40) == 0) 
+			if ((dev->last_cmd & 0x40) == 0) 
 			{
-				last_cmd[h] = 0xff;
+				dev->last_cmd = 0xff;
 			}
 		}
-		else last_cmd[h] |= 0x40;
+		else dev->last_cmd |= 0x40;
 
 		tmport -= 0x02;
-		tarid = inb(tmport);
+		target_id = inb(tmport);
 		tmport += 0x02;
 
-		if ((tarid & 0x40) != 0) {
-			tarid = (tarid & 0x07) | 0x08;
+		/*
+		 *	Remap wide devices onto id numbers
+		 */
+		 
+		if ((target_id & 0x40) != 0) {
+			target_id = (target_id & 0x07) | 0x08;
 		} else {
-			tarid &= 0x07;
+			target_id &= 0x07;
 		}
+		
 		if (i == 0x85) 
 		{
-			if (wide_idu[h] != 0) 
+			/*
+			 *	Flip wide
+			 */
+			if (dev->wide_idu != 0) 
 			{
 				tmport = workportu + 0x1b;
 				j = inb(tmport) & 0x0e;
 				j |= 0x01;
 				outb(j, tmport);
 			}
-			if (((quhdu[h] != quendu[h]) || (last_cmd[h] != 0xff)) &&
-			    (in_snd[h] == 0)) 
+			/*
+			 *	Issue more commands
+			 */
+			if (((dev->quhdu != dev->quendu) || (dev->last_cmd != 0xff)) &&
+			    (dev->in_snd == 0)) 
 			{
 				send_s870(h);
 			}
-			in_int[h] = 0;
+			/*
+			 *	Done
+			 */
+			dev->in_int = 0;
 			return;
 		}
 		if (i == 0x21) 
@@ -147,15 +184,15 @@ irq_numok:
 			((unsigned char *) &adrcntu)[2] = inb(tmport++);
 			((unsigned char *) &adrcntu)[1] = inb(tmport++);
 			((unsigned char *) &adrcntu)[0] = inb(tmport);
-			k = last_lenu[h][tarid];
+			k = dev->id[target_id].last_lenu;
 			k -= adrcntu;
-			tran_lenu[h][tarid] = k;
-			last_lenu[h][tarid] = adrcntu;
+			dev->id[target_id].tran_lenu = k;
+			dev->id[target_id].last_lenu = adrcntu;
 			tmport -= 0x04;
 			outb(0x41, tmport);
 			tmport += 0x08;
 			outb(0x08, tmport);
-			in_int[h] = 0;
+			dev->in_int = 0;
 			return;
 		}
 		if ((i == 0x80) || (i == 0x8f)) 
@@ -163,7 +200,7 @@ irq_numok:
 			lun = 0;
 			tmport -= 0x07;
 			j = inb(tmport);
-			if (j == 0x44) {
+			if (j == 0x44 || i==0x80) {
 				tmport += 0x0d;
 				lun = inb(tmport) & 0x07;
 			} else {
@@ -174,71 +211,80 @@ irq_numok:
 					((unsigned char *) &adrcntu)[2] = inb(tmport++);
 					((unsigned char *) &adrcntu)[1] = inb(tmport++);
 					((unsigned char *) &adrcntu)[0] = inb(tmport);
-					k = last_lenu[h][tarid];
+					k = dev->id[target_id].last_lenu;
 					k -= adrcntu;
-					tran_lenu[h][tarid] = k;
-					last_lenu[h][tarid] = adrcntu;
+					dev->id[target_id].tran_lenu = k;
+					dev->id[target_id].last_lenu = adrcntu;
 					tmport += 0x04;
 					outb(0x08, tmport);
-					in_int[h] = 0;
+					dev->in_int = 0;
 					return;
 				}
 				else 
 				{
 					outb(0x46, tmport);
-					dirctu[h][tarid] = 0x00;
+					dev->id[target_id].dirctu = 0x00;
 					tmport += 0x02;
 					outb(0x00, tmport++);
 					outb(0x00, tmport++);
 					outb(0x00, tmport++);
 					tmport += 0x03;
 					outb(0x08, tmport);
-					in_int[h] = 0;
+					dev->in_int = 0;
 					return;
 				}
 			}
 			tmport = workportu + 0x10;
 			outb(0x45, tmport);
 			tmport += 0x06;
-			tarid = inb(tmport);
-			if ((tarid & 0x10) != 0) 
+			target_id = inb(tmport);
+			/*
+			 *	Remap wide identifiers
+			 */
+			if ((target_id & 0x10) != 0) 
 			{
-				tarid = (tarid & 0x07) | 0x08;
+				target_id = (target_id & 0x07) | 0x08;
 			} else {
-				tarid &= 0x07;
+				target_id &= 0x07;
 			}
-			workrequ = curr_req[h][tarid];
+			workrequ = dev->id[target_id].curr_req;
 			tmport = workportu + 0x0f;
 			outb(lun, tmport);
 			tmport += 0x02;
-			outb(devspu[h][tarid], tmport++);
-			adrcntu = tran_lenu[h][tarid];
-			k = last_lenu[h][tarid];
+			outb(dev->id[target_id].devspu, tmport++);
+			adrcntu = dev->id[target_id].tran_lenu;
+			k = dev->id[target_id].last_lenu;
 			outb(((unsigned char *) &k)[2], tmport++);
 			outb(((unsigned char *) &k)[1], tmport++);
 			outb(((unsigned char *) &k)[0], tmport++);
-			j = tarid;
-			if (tarid > 7) {
+			/* Remap wide */
+			j = target_id;
+			if (target_id > 7) {
 				j = (j & 0x07) | 0x40;
 			}
-			j |= dirctu[h][tarid];
+			/* Add direction */
+			j |= dev->id[target_id].dirctu;
 			outb(j, tmport++);
 			outb(0x80, tmport);
 			tmport = workportu + 0x1b;
 			j = inb(tmport) & 0x0e;
 			id = 1;
-			id = id << tarid;
-			if ((id & wide_idu[h]) != 0) {
+			id = id << target_id;
+			/*
+			 *	Is this a wide device
+			 */
+			if ((id & dev->wide_idu) != 0) {
 				j |= 0x01;
 			}
 			outb(j, tmport);
-			if (last_lenu[h][tarid] == 0) {
+			
+			if (dev->id[target_id].last_lenu == 0) {
 				tmport = workportu + 0x18;
 				outb(0x08, tmport);
-				in_int[h] = 0;
+				dev->in_int = 0;
 				return;
 			}
-			prd = prd_posu[h][tarid];
+			prd = dev->id[target_id].prd_posu;
 			while (adrcntu != 0) 
 			{
 				id = ((unsigned short int *) (prd))[2];
@@ -252,35 +298,44 @@ irq_numok:
 					    (k - adrcntu);
 					((unsigned long *) (prd))[0] += adrcntu;
 					adrcntu = 0;
-					prd_posu[h][tarid] = prd;
+					dev->id[target_id].prd_posu = prd;
 				} else {
 					adrcntu -= k;
-					prdaddru[h][tarid] += 0x08;
+					dev->id[target_id].prdaddru += 0x08;
 					prd += 0x08;
 					if (adrcntu == 0) {
-						prd_posu[h][tarid] = prd;
+						dev->id[target_id].prd_posu = prd;
 					}
 				}
 			}
-			tmpcip = pciportu[h] + 0x04;
-			outl(prdaddru[h][tarid], tmpcip);
+			tmpcip = dev->pciport + 0x04;
+			outl(dev->id[target_id].prdaddru, tmpcip);
 			tmpcip -= 0x02;
 			outb(0x06, tmpcip);
 			outb(0x00, tmpcip);
 			tmpcip -= 0x02;
 			tmport = workportu + 0x18;
-			if (dirctu[h][tarid] != 0) {
+			/*
+			 *	Check transfer direction
+			 */
+			if (dev->id[target_id].dirctu != 0) {
 				outb(0x08, tmport);
 				outb(0x01, tmpcip);
-				in_int[h] = 0;
+				dev->in_int = 0;
 				return;
 			}
 			outb(0x08, tmport);
 			outb(0x09, tmpcip);
-			in_int[h] = 0;
+			dev->in_int = 0;
 			return;
 		}
-		workrequ = curr_req[h][tarid];
+		
+		/*
+		 *	Current scsi request on this target
+		 */
+		 
+		workrequ = dev->id[target_id].curr_req;
+		
 		if (i == 0x42) {
 			errstus = 0x02;
 			workrequ->result = errstus;
@@ -293,24 +348,36 @@ irq_numok:
 			errstus = inb(tmport);
 			workrequ->result = errstus;
 go_42:
+			/*
+			 *	Complete the command
+			 */
 			spin_lock_irqsave(&io_request_lock, flags);
 			(*workrequ->scsi_done) (workrequ);
 			spin_unlock_irqrestore(&io_request_lock, flags);
 
-			curr_req[h][tarid] = 0;
-			workingu[h]--;
-			if (wide_idu[h] != 0) {
+			/*
+			 *	Clear it off the queue
+			 */
+			dev->id[target_id].curr_req = 0;
+			dev->working--;
+			/*
+			 *	Take it back wide
+			 */
+			if (dev->wide_idu != 0) {
 				tmport = workportu + 0x1b;
 				j = inb(tmport) & 0x0e;
 				j |= 0x01;
 				outb(j, tmport);
 			}
-			if (((last_cmd[h] != 0xff) || (quhdu[h] != quendu[h])) &&
-			    (in_snd[h] == 0)) 
+			/*
+			 *	If there is stuff to send and nothing going then send it
+			 */
+			if (((dev->last_cmd != 0xff) || (dev->quhdu != dev->quendu)) &&
+			    (dev->in_snd == 0)) 
 			{
 				send_s870(h);
 			}
-			in_int[h] = 0;
+			dev->in_int = 0;
 			return;
 		}
 		if (i == 0x4f) {
@@ -319,23 +386,23 @@ go_42:
 		i &= 0x0f;
 		if (i == 0x09) {
 			tmpcip = tmpcip + 4;
-			outl(prdaddru[h][tarid], tmpcip);
+			outl(dev->id[target_id].prdaddru, tmpcip);
 			tmpcip = tmpcip - 2;
 			outb(0x06, tmpcip);
 			outb(0x00, tmpcip);
 			tmpcip = tmpcip - 2;
 			tmport = workportu + 0x10;
 			outb(0x41, tmport);
-			dirctu[h][tarid] = 0x00;
+			dev->id[target_id].dirctu = 0x00;
 			tmport += 0x08;
 			outb(0x08, tmport);
 			outb(0x09, tmpcip);
-			in_int[h] = 0;
+			dev->in_int = 0;
 			return;
 		}
 		if (i == 0x08) {
 			tmpcip = tmpcip + 4;
-			outl(prdaddru[h][tarid], tmpcip);
+			outl(dev->id[target_id].prdaddru, tmpcip);
 			tmpcip = tmpcip - 2;
 			outb(0x06, tmpcip);
 			outb(0x00, tmpcip);
@@ -344,11 +411,11 @@ go_42:
 			outb(0x41, tmport);
 			tmport += 0x05;
 			outb((unsigned char) (inb(tmport) | 0x20), tmport);
-			dirctu[h][tarid] = 0x20;
+			dev->id[target_id].dirctu = 0x20;
 			tmport += 0x03;
 			outb(0x08, tmport);
 			outb(0x01, tmpcip);
-			in_int[h] = 0;
+			dev->in_int = 0;
 			return;
 		}
 		tmport -= 0x07;
@@ -357,20 +424,20 @@ go_42:
 		} else {
 			outb(0x46, tmport);
 		}
-		dirctu[h][tarid] = 0x00;
+		dev->id[target_id].dirctu = 0x00;
 		tmport += 0x02;
 		outb(0x00, tmport++);
 		outb(0x00, tmport++);
 		outb(0x00, tmport++);
 		tmport += 0x03;
 		outb(0x08, tmport);
-		in_int[h] = 0;
+		dev->in_int = 0;
 		return;
 	} else {
 		tmport = workportu + 0x17;
 		inb(tmport);
-		workingu[h] = 0;
-		in_int[h] = 0;
+		dev->working = 0;
+		dev->in_int = 0;
 		return;
 	}
 }
@@ -381,6 +448,7 @@ int atp870u_queuecommand(Scsi_Cmnd * req_p, void (*done) (Scsi_Cmnd *))
 	unsigned long flags;
 	unsigned short int m;
 	unsigned int tmport;
+	struct atp_unit *dev;
 
 	for (h = 0; h <= admaxu; h++) {
 		if (req_p->host == atp_host[h]) {
@@ -394,9 +462,15 @@ host_ok:
 		done(req_p);
 		return 0;
 	}
+	dev = &atp_unit[h];
 	m = 1;
 	m = m << req_p->target;
-	if ((m & active_idu[h]) == 0) {
+
+	/*
+	 *	Fake a timeout for missing targets
+	 */
+	 
+	if ((m & dev->active_idu) == 0) {
 		req_p->result = 0x00040000;
 		done(req_p);
 		return 0;
@@ -404,30 +478,36 @@ host_ok:
 	if (done) {
 		req_p->scsi_done = done;
 	} else {
-		printk("atp870u_queuecommand: done can't be NULL\n");
+		printk(KERN_WARNING "atp870u_queuecommand: done can't be NULL\n");
 		req_p->result = 0;
 		done(req_p);
 		return 0;
 	}
-	quendu[h]++;
-	if (quendu[h] >= qcnt) {
-		quendu[h] = 0;
+	/*
+	 *	Count new command
+	 */
+	dev->quendu++;
+	if (dev->quendu >= qcnt) {
+		dev->quendu = 0;
 	}
+	/*
+	 *	Check queue state
+	 */
 wait_que_empty:
-	if (quhdu[h] == quendu[h]) {
+	if (dev->quhdu == dev->quendu) {
 		goto wait_que_empty;
 	}
 	save_flags(flags);
 	cli();
-	querequ[h][quendu[h]] = req_p;
-	if (quendu[h] == 0) {
+	dev->querequ[dev->quendu] = req_p;
+	if (dev->quendu == 0) {
 		i = qcnt - 1;
 	} else {
-		i = quendu[h] - 1;
+		i = dev->quendu - 1;
 	}
-	tmport = ioportu[h] + 0x1c;
+	tmport = dev->ioport + 0x1c;
 	restore_flags(flags);
-	if ((inb(tmport) == 0) && (in_int[h] == 0) && (in_snd[h] == 0)) {
+	if ((inb(tmport) == 0) && (dev->in_int == 0) && (dev->in_snd == 0)) {
 		send_s870(h);
 	}
 	return 0;
@@ -447,44 +527,45 @@ void send_s870(unsigned char h)
 	Scsi_Cmnd *workrequ;
 	unsigned long flags;
 	unsigned int i;
-	unsigned char j, tarid;
+	unsigned char j, target_id;
 	unsigned char *prd;
 	unsigned short int tmpcip, w;
 	unsigned long l, bttl;
 	unsigned int workportu;
 	struct scatterlist *sgpnt;
+	struct atp_unit *dev = &atp_unit[h];
 
 	save_flags(flags);
 	cli();
-	if (in_snd[h] != 0) {
+	if (dev->in_snd != 0) {
 		restore_flags(flags);
 		return;
 	}
-	in_snd[h] = 1;
-	if ((last_cmd[h] != 0xff) && ((last_cmd[h] & 0x40) != 0)) {
-		last_cmd[h] &= 0x0f;
-		workrequ = curr_req[h][last_cmd[h]];
+	dev->in_snd = 1;
+	if ((dev->last_cmd != 0xff) && ((dev->last_cmd & 0x40) != 0)) {
+		dev->last_cmd &= 0x0f;
+		workrequ = dev->id[dev->last_cmd].curr_req;
 		goto cmd_subp;
 	}
-	workingu[h]++;
-	j = quhdu[h];
-	quhdu[h]++;
-	if (quhdu[h] >= qcnt) {
-		quhdu[h] = 0;
+	dev->working++;
+	j = dev->quhdu;
+	dev->quhdu++;
+	if (dev->quhdu >= qcnt) {
+		dev->quhdu = 0;
 	}
-	workrequ = querequ[h][quhdu[h]];
-	if (curr_req[h][workrequ->target] == 0) {
-		curr_req[h][workrequ->target] = workrequ;
-		last_cmd[h] = workrequ->target;
+	workrequ = dev->querequ[dev->quhdu];
+	if (dev->id[workrequ->target].curr_req == 0) {
+		dev->id[workrequ->target].curr_req = workrequ;
+		dev->last_cmd = workrequ->target;
 		goto cmd_subp;
 	}
-	quhdu[h] = j;
-	workingu[h]--;
-	in_snd[h] = 0;
+	dev->quhdu = j;
+	dev->working--;
+	dev->in_snd = 0;
 	restore_flags(flags);
 	return;
 cmd_subp:
-	workportu = ioportu[h];
+	workportu = dev->ioport;
 	tmport = workportu + 0x1f;
 	if ((inb(tmport) & 0xb0) != 0) {
 		goto abortsnd;
@@ -494,43 +575,63 @@ cmd_subp:
 		goto oktosend;
 	}
 abortsnd:
-	last_cmd[h] |= 0x40;
-	in_snd[h] = 0;
+	dev->last_cmd |= 0x40;
+	dev->in_snd = 0;
 	restore_flags(flags);
 	return;
 oktosend:
-	memcpy(&ata_cdbu[h][0], &workrequ->cmnd[0], workrequ->cmd_len);
-	if (ata_cdbu[h][0] == 0x25) {
+	memcpy(&dev->ata_cdbu[0], &workrequ->cmnd[0], workrequ->cmd_len);
+	if (dev->ata_cdbu[0] == READ_CAPACITY) {
 		if (workrequ->request_bufflen > 8) {
 			workrequ->request_bufflen = 0x08;
 		}
 	}
-	if (ata_cdbu[h][0] == 0x12) {
+	/*
+	 *	Why limit this ????
+	 */
+	if (dev->ata_cdbu[0] == INQUIRY) {
 		if (workrequ->request_bufflen > 0x24) {
 			workrequ->request_bufflen = 0x24;
-			ata_cdbu[h][4] = 0x24;
+			dev->ata_cdbu[4] = 0x24;
 		}
 	}
+	
 	tmport = workportu + 0x1b;
 	j = inb(tmport) & 0x0e;
-	tarid = workrequ->target;
+	target_id = workrequ->target;
+	
+	/*
+	 *	Wide ?
+	 */
 	w = 1;
-	w = w << tarid;
-	if ((w & wide_idu[h]) != 0) {
+	w = w << target_id;
+	if ((w & dev->wide_idu) != 0) {
 		j |= 0x01;
-	}
+	}	
 	outb(j, tmport);
+	
+	/*
+	 *	Write the command
+	 */
+	 
 	tmport = workportu;
 	outb(workrequ->cmd_len, tmport++);
 	outb(0x2c, tmport++);
 	outb(0xcf, tmport++);
 	for (i = 0; i < workrequ->cmd_len; i++) {
-		outb(ata_cdbu[h][i], tmport++);
+		outb(dev->ata_cdbu[i], tmport++);
 	}
 	tmport = workportu + 0x0f;
-	outb(0x00, tmport);
+	outb(workrequ->lun, tmport);
 	tmport += 0x02;
-	outb(devspu[h][tarid], tmport++);
+	/*
+	 *	Write the target
+	 */
+	outb(dev->id[target_id].devspu, tmport++);
+	
+	/*
+	 *	Figure out the transfer size
+	 */
 	if (workrequ->use_sg) 
 	{
 		l = 0;
@@ -546,38 +647,54 @@ oktosend:
 	} else {
 		l = workrequ->request_bufflen;
 	}
+	/*
+	 *	Write transfer size
+	 */
 	outb((unsigned char) (((unsigned char *) (&l))[2]), tmport++);
 	outb((unsigned char) (((unsigned char *) (&l))[1]), tmport++);
 	outb((unsigned char) (((unsigned char *) (&l))[0]), tmport++);
-	j = tarid;
-	last_lenu[h][j] = l;
-	tran_lenu[h][j] = 0;
+	j = target_id;
+	dev->id[j].last_lenu = l;
+	dev->id[j].tran_lenu = 0;
+	/*
+	 *	Flip the wide bits
+	 */
 	if ((j & 0x08) != 0) {
 		j = (j & 0x07) | 0x40;
 	}
-	if ((ata_cdbu[h][0] == 0x0a) || (ata_cdbu[h][0] == 0x2a) ||
-	    (ata_cdbu[h][0] == 0xaa) || (ata_cdbu[h][0] == 0x15)) {
+	/*
+	 *	Check transfer direction
+	 */
+	if ((dev->ata_cdbu[0] == WRITE_6) || (dev->ata_cdbu[0] == WRITE_10) ||
+	    (dev->ata_cdbu[0] == WRITE_12) || (dev->ata_cdbu[0] == MODE_SELECT)) {
 		outb((unsigned char) (j | 0x20), tmport++);
 	} else {
 		outb(j, tmport++);
 	}
+	outb((unsigned char)(inb(tmport) | 0x80),tmport);
 	outb(0x80, tmport);
 	tmport = workportu + 0x1c;
-	dirctu[h][tarid] = 0;
+	dev->id[target_id].dirctu = 0;
 	if (l == 0) {
 		if (inb(tmport) == 0) {
 			tmport = workportu + 0x18;
 			outb(0x08, tmport);
 		} else {
-			last_cmd[h] |= 0x40;
+			dev->last_cmd |= 0x40;
 		}
-		in_snd[h] = 0;
+		dev->in_snd = 0;
 		restore_flags(flags);
 		return;
 	}
-	tmpcip = pciportu[h];
-	prd = &prd_tableu[h][tarid][0];
-	prd_posu[h][tarid] = prd;
+	tmpcip = dev->pciport;
+	prd = dev->id[target_id].prd_tableu;
+	dev->id[target_id].prd_posu = prd;
+	
+	/*
+	 *	Now write the request list. Either as scatter/gather or as
+	 *	a linear chain.
+	 */
+	 
 	if (workrequ->use_sg) 
 	{
 		sgpnt = (struct scatterlist *) workrequ->request_buffer;
@@ -590,6 +707,9 @@ oktosend:
 		}
 		(unsigned short int) (((unsigned short int *) (prd))[i - 1]) = 0x8000;
 	} else {
+		/*
+		 *	For a linear request write a chain of blocks
+		 */
 		bttl = virt_to_bus(workrequ->request_buffer);
 		l = workrequ->request_bufflen;
 		i = 0;
@@ -606,24 +726,24 @@ oktosend:
 		(unsigned long) (((unsigned long *) (prd))[i >> 1]) = bttl;
 	}
 	tmpcip = tmpcip + 4;
-	prdaddru[h][tarid] = virt_to_bus(&prd_tableu[h][tarid][0]);
-	outl(prdaddru[h][tarid], tmpcip);
+	dev->id[target_id].prdaddru = virt_to_bus(dev->id[target_id].prd_tableu);
+	outl(dev->id[target_id].prdaddru, tmpcip);
 	tmpcip = tmpcip - 2;
 	outb(0x06, tmpcip);
 	outb(0x00, tmpcip);
 	tmpcip = tmpcip - 2;
-	if ((ata_cdbu[h][0] == 0x0a) || (ata_cdbu[h][0] == 0x2a) ||
-	    (ata_cdbu[h][0] == 0xaa) || (ata_cdbu[h][0] == 0x15)) 
+	if ((dev->ata_cdbu[0] == WRITE_6) || (dev->ata_cdbu[0] == WRITE_10) ||
+	    (dev->ata_cdbu[0] == WRITE_12) || (dev->ata_cdbu[0] == MODE_SELECT)) 
 	{
-		dirctu[h][tarid] = 0x20;
+		dev->id[target_id].dirctu = 0x20;
 		if (inb(tmport) == 0) {
 			tmport = workportu + 0x18;
 			outb(0x08, tmport);
 			outb(0x01, tmpcip);
 		} else {
-			last_cmd[h] |= 0x40;
+			dev->last_cmd |= 0x40;
 		}
-		in_snd[h] = 0;
+		dev->in_snd = 0;
 		restore_flags(flags);
 		return;
 	}
@@ -633,9 +753,9 @@ oktosend:
 		outb(0x08, tmport);
 		outb(0x09, tmpcip);
 	} else {
-		last_cmd[h] |= 0x40;
+		dev->last_cmd |= 0x40;
 	}
-	in_snd[h] = 0;
+	dev->in_snd = 0;
 	restore_flags(flags);
 	return;
 
@@ -657,13 +777,13 @@ int atp870u_command(Scsi_Cmnd * SCpnt)
 	return SCpnt->result;
 }
 
-unsigned char fun_scam(unsigned char host, unsigned short int *val)
+unsigned char fun_scam(struct atp_unit *dev, unsigned short int *val)
 {
 	unsigned int tmport;
 	unsigned short int i, k;
 	unsigned char j;
 
-	tmport = ioportu[host] + 0x1c;
+	tmport = dev->ioport + 0x1c;
 	outw(*val, tmport);
 FUN_D7:
 	for (i = 0; i < 10; i++) {	/* stable >= bus settle delay(400 ns)  */
@@ -706,32 +826,34 @@ void tscam(unsigned char host)
 	unsigned long n;
 	unsigned short int m, assignid_map, val;
 	unsigned char mbuf[33], quintet[2];
-	static unsigned char g2q_tab[8] =
-	{0x38, 0x31, 0x32, 0x2b, 0x34, 0x2d, 0x2e, 0x27};
+	struct atp_unit *dev = &atp_unit[host];
+	static unsigned char g2q_tab[8] = {
+		0x38, 0x31, 0x32, 0x2b, 0x34, 0x2d, 0x2e, 0x27
+	};
 
 
 	for (i = 0; i < 0x10; i++) {
 		mydlyu(0xffff);
 	}
 
-	tmport = ioportu[host] + 1;
+	tmport = dev->ioport + 1;
 	outb(0x08, tmport++);
 	outb(0x7f, tmport);
-	tmport = ioportu[host] + 0x11;
+	tmport = dev->ioport + 0x11;
 	outb(0x20, tmport);
 
-	if ((scam_on[host] & 0x40) == 0) {
+	if ((dev->scam_on & 0x40) == 0) {
 		return;
 	}
 	m = 1;
-	m <<= host_idu[host];
+	m <<= dev->host_idu;
 	j = 16;
-	if (chip_veru[host] < 4) {
+	if (dev->chip_veru < 4) {
 		m |= 0xff00;
 		j = 8;
 	}
 	assignid_map = m;
-	tmport = ioportu[host] + 0x02;
+	tmport = dev->ioport + 0x02;
 	outb(0x02, tmport++);	/* 2*2=4ms,3EH 2/32*3E=3.9ms */
 	outb(0, tmport++);
 	outb(0, tmport++);
@@ -746,7 +868,7 @@ void tscam(unsigned char host)
 		if ((m & assignid_map) != 0) {
 			continue;
 		}
-		tmport = ioportu[host] + 0x0f;
+		tmport = dev->ioport + 0x0f;
 		outb(0, tmport++);
 		tmport += 0x02;
 		outb(0, tmport++);
@@ -758,14 +880,14 @@ void tscam(unsigned char host)
 			k = i;
 		}
 		outb(k, tmport++);
-		tmport = ioportu[host] + 0x1b;
-		if (chip_veru[host] == 4) {
+		tmport = dev->ioport + 0x1b;
+		if (dev->chip_veru == 4) {
 			outb((unsigned char) ((inb(tmport) & 0x0e) | 0x01), tmport);
 		} else {
 			outb((unsigned char) (inb(tmport) & 0x0e), tmport);
 		}
 wait_rdyok:
-		tmport = ioportu[host] + 0x18;
+		tmport = dev->ioport + 0x18;
 		outb(0x09, tmport);
 		tmport += 0x07;
 
@@ -776,22 +898,22 @@ wait_rdyok:
 			if ((k == 0x85) || (k == 0x42)) {
 				continue;
 			}
-			tmport = ioportu[host] + 0x10;
+			tmport = dev->ioport + 0x10;
 			outb(0x41, tmport);
 			goto wait_rdyok;
 		}
 		assignid_map |= m;
 
 	}
-	tmport = ioportu[host] + 0x02;
+	tmport = dev->ioport + 0x02;
 	outb(0x7f, tmport);
-	tmport = ioportu[host] + 0x1b;
+	tmport = dev->ioport + 0x1b;
 	outb(0x02, tmport);
 
 	outb(0, 0x80);
 
 	val = 0x0080;		/* bsy  */
-	tmport = ioportu[host] + 0x1c;
+	tmport = dev->ioport + 0x1c;
 	outw(val, tmport);
 	val |= 0x0040;		/* sel  */
 	outw(val, tmport);
@@ -836,7 +958,7 @@ TCM_SYNC:
 	if ((inb(tmport) & 0x80) == 0x00) {	/* bsy ? */
 		outw(0, tmport--);
 		outb(0, tmport);
-		tmport = ioportu[host] + 0x15;
+		tmport = dev->ioport + 0x15;
 		outb(0, tmport);
 		tmport += 0x03;
 		outb(0x09, tmport);
@@ -848,11 +970,11 @@ TCM_SYNC:
 	}
 	val &= 0x00ff;		/* synchronization  */
 	val |= 0x3f00;
-	fun_scam(host, &val);
+	fun_scam(dev, &val);
 	outb(3, 0x80);
 	val &= 0x00ff;		/* isolation        */
 	val |= 0x2000;
-	fun_scam(host, &val);
+	fun_scam(dev, &val);
 	outb(4, 0x80);
 	i = 8;
 	j = 0;
@@ -863,7 +985,7 @@ TCM_ID:
 	outb(5, 0x80);
 	val &= 0x00ff;		/* get ID_STRING */
 	val |= 0x2000;
-	k = fun_scam(host, &val);
+	k = fun_scam(dev, &val);
 	if ((k & 0x03) == 0) {
 		goto TCM_5;
 	}
@@ -927,11 +1049,11 @@ G2Q_QUIN:		/* k=binID#,       */
 	val &= 0x00ff;		/* AssignID 1stQuintet,AH=001xxxxx  */
 	m = quintet[0] << 8;
 	val |= m;
-	fun_scam(host, &val);
+	fun_scam(dev, &val);
 	val &= 0x00ff;		/* AssignID 2ndQuintet,AH=001xxxxx */
 	m = quintet[1] << 8;
 	val |= m;
-	fun_scam(host, &val);
+	fun_scam(dev, &val);
 
 	goto TCM_SYNC;
 
@@ -949,25 +1071,26 @@ void is870(unsigned long host, unsigned int wkport)
 	static unsigned char synu[6] =	{0x80, 1, 3, 1, 0x0c, 0x0e};
 	static unsigned char synw[6] =	{0x80, 1, 3, 1, 0x0c, 0x07};
 	static unsigned char wide[6] =  {0x80, 1, 2, 3, 1, 0};
+	struct atp_unit *dev = &atp_unit[host];
 
 	sync_idu = 0;
 	tmport = wkport + 0x3a;
 	outb((unsigned char) (inb(tmport) | 0x10), tmport);
 
 	for (i = 0; i < 16; i++) {
-		if ((chip_veru[host] != 4) && (i > 7)) {
+		if ((dev->chip_veru != 4) && (i > 7)) {
 			break;
 		}
 		m = 1;
 		m = m << i;
-		if ((m & active_idu[host]) != 0) {
+		if ((m & dev->active_idu) != 0) {
 			continue;
 		}
-		if (i == host_idu[host]) {
-			printk("         ID: %2d  Host Adapter\n", host_idu[host]);
+		if (i == dev->host_idu) {
+			printk(KERN_INFO "         ID: %2d  Host Adapter\n", dev->host_idu);
 			continue;
 		}
-		if (chip_veru[host] == 4) {
+		if (dev->chip_veru == 4) {
 			tmport = wkport + 0x1b;
 			j = (inb(tmport) & 0x0e) | 0x01;
 			outb(j, tmport);
@@ -984,7 +1107,7 @@ void is870(unsigned long host, unsigned int wkport)
 		tmport += 0x06;
 		outb(0, tmport);
 		tmport += 0x02;
-		outb(devspu[host][i], tmport++);
+		outb(dev->id[i].devspu, tmport++);
 		outb(0, tmport++);
 		outb(satn[6], tmport++);
 		outb(satn[7], tmport++);
@@ -1003,7 +1126,7 @@ void is870(unsigned long host, unsigned int wkport)
 			continue;
 		}
 		while (inb(tmport) != 0x8e);
-		active_idu[host] |= m;
+		dev->active_idu |= m;
 
 		tmport = wkport + 0x10;
 		outb(0x30, tmport);
@@ -1033,7 +1156,7 @@ sel_ok:
 		tmport += 0x07;
 		outb(0, tmport);
 		tmport += 0x02;
-		outb(devspu[host][i], tmport++);
+		outb(dev->id[i].devspu, tmport++);
 		outb(0, tmport++);
 		outb(inqd[6], tmport++);
 		outb(inqd[7], tmport++);
@@ -1046,7 +1169,7 @@ sel_ok:
 			continue;
 		}
 		while (inb(tmport) != 0x8e);
-		if (chip_veru[host] == 4) {
+		if (dev->chip_veru == 4) {
 			tmport = wkport + 0x1b;
 			j = inb(tmport) & 0x0e;
 			outb(j, tmport);
@@ -1087,16 +1210,16 @@ rd_inq_data:
 		}
 inq_ok:
 		mbuf[36] = 0;
-		printk("         ID: %2d  %s\n", i, &mbuf[8]);
-		devtypeu[host][i] = mbuf[0];
+		printk(KERN_INFO "         ID: %2d  %s\n", i, &mbuf[8]);
+		dev->id[i].devtypeu = mbuf[0];
 		rmb = mbuf[1];
-		if (chip_veru[host] != 4) {
+		if (dev->chip_veru != 4) {
 			goto not_wide;
 		}
 		if ((mbuf[7] & 0x60) == 0) {
 			goto not_wide;
 		}
-		if ((global_map[host] & 0x20) == 0) {
+		if ((dev->global_map & 0x20) == 0) {
 			goto not_wide;
 		}
 		tmport = wkport + 0x1b;
@@ -1112,7 +1235,7 @@ inq_ok:
 		tmport += 0x06;
 		outb(0, tmport);
 		tmport += 0x02;
-		outb(devspu[host][i], tmport++);
+		outb(dev->id[i].devspu, tmport++);
 		outb(0, tmport++);
 		outb(satn[6], tmport++);
 		outb(satn[7], tmport++);
@@ -1238,16 +1361,16 @@ widep_cmd:
 		}
 		m = 1;
 		m = m << i;
-		wide_idu[host] |= m;
+		dev->wide_idu |= m;
 not_wide:
-		if ((devtypeu[host][i] == 0x00) || (devtypeu[host][i] == 0x07)) {
+		if ((dev->id[i].devtypeu == 0x00) || (dev->id[i].devtypeu == 0x07)) {
 			goto set_sync;
 		}
 		continue;
 set_sync:
 		tmport = wkport + 0x1b;
 		j = inb(tmport) & 0x0e;
-		if ((m & wide_idu[host]) != 0) {
+		if ((m & dev->wide_idu) != 0) {
 			j |= 0x01;
 		}
 		outb(j, tmport);
@@ -1261,7 +1384,7 @@ set_sync:
 		tmport += 0x06;
 		outb(0, tmport);
 		tmport += 0x02;
-		outb(devspu[host][i], tmport++);
+		outb(dev->id[i].devspu, tmport++);
 		outb(0, tmport++);
 		outb(satn[6], tmport++);
 		outb(satn[7], tmport++);
@@ -1289,10 +1412,10 @@ try_sync:
 				if (rmb != 0) {
 					outb(synn[j++], tmport);
 				} else {
-					if ((m & wide_idu[host]) != 0) {
+					if ((m & dev->wide_idu) != 0) {
 						outb(synw[j++], tmport);
 					} else {
-						if ((m & ultra_map[host]) != 0) {
+						if ((m & dev->ultra_map) != 0) {
 							outb(synu[j++], tmport);
 						} else {
 							outb(synn[j++], tmport);
@@ -1407,7 +1530,7 @@ tar_dcons:
 		if (mbuf[4] > 0x0c) {
 			mbuf[4] = 0x0c;
 		}
-		devspu[host][i] = mbuf[4];
+		dev->id[i].devspu = mbuf[4];
 		if ((mbuf[3] < 0x0d) && (rmb == 0)) {
 			j = 0xa0;
 			goto set_syn_ok;
@@ -1426,7 +1549,7 @@ tar_dcons:
 		}
 		j = 0x60;
 	      set_syn_ok:
-		devspu[host][i] = (devspu[host][i] & 0x0f) | j;
+		dev->id[i].devspu = (dev->id[i].devspu & 0x0f) | j;
 	}
 	tmport = wkport + 0x3a;
 	outb((unsigned char) (inb(tmport) & 0xef), tmport);
@@ -1439,124 +1562,124 @@ int atp870u_detect(Scsi_Host_Template * tpnt)
 	unsigned long flags;
 	unsigned int base_io, error, tmport;
 	unsigned short index = 0;
-	unsigned char pci_bus[3], pci_device_fn[3], chip_ver[3], host_id;
+	struct pci_dev *pdev[3];
+	unsigned char chip_ver[3], host_id;
 	struct Scsi_Host *shpnt = NULL;
+	int tmpcnt = 0;
 	int count = 0;
-	static unsigned short devid[7] =
-	{0x8002, 0x8010, 0x8020, 0x8030, 0x8040, 0x8050, 0};
-	static struct pci_dev *pdev = NULL, *acard_pdev[3];
+	int result;
+	
+	static unsigned short devid[7] = {
+		0x8002, 0x8010, 0x8020, 0x8030, 0x8040, 0x8050, 0
+	};
 
-	printk("aec671x_detect: \n");
+	printk(KERN_INFO "aec671x_detect: \n");
 	if (!pci_present()) {
-		printk("   NO BIOS32 SUPPORT.\n");
+		printk(KERN_INFO"   NO PCI SUPPORT.\n");
 		return count;
 	}
 	tpnt->proc_name = "atp870u";
 
 	for (h = 0; h < 2; h++) {
-		active_idu[h] = 0;
-		wide_idu[h] = 0;
-		host_idu[h] = 0x07;
-		quhdu[h] = 0;
-		quendu[h] = 0;
-		pci_bus[h] = 0;
-		pci_device_fn[h] = 0xff;
-		chip_ver[h] = 0;
-		last_cmd[h] = 0xff;
-		in_snd[h] = 0;
-		in_int[h] = 0;
+		struct atp_unit *dev = &atp_unit[h];
+		for(k=0;k<16;k++)
+		{
+			dev->id[k].prd_tableu = kmalloc(1024, GFP_KERNEL);
+			dev->id[k].devspu=0x20;
+			dev->id[k].devtypeu = 0;
+			dev->id[k].curr_req = NULL;
+		}
+		dev->active_idu = 0;
+		dev->wide_idu = 0;
+		dev->host_idu = 0x07;
+		dev->quhdu = 0;
+		dev->quendu = 0;
+		pdev[h]=NULL;
+		pdev[2]=NULL;
+		dev->chip_veru = 0;
+		dev->last_cmd = 0xff;
+		dev->in_snd = 0;
+		dev->in_int = 0;
 		for (k = 0; k < qcnt; k++) {
-			querequ[h][k] = 0;
+			dev->querequ[k] = 0;
 		}
 		for (k = 0; k < 16; k++) {
-			curr_req[h][k] = 0;
+			dev->id[k].curr_req = 0;
 		}
 	}
 	h = 0;
 	while (devid[h] != 0) {
-		pdev = pci_find_device(0x1191, devid[h], pdev);
-		if (pdev == NULL) {
+		pdev[2] = pci_find_device(0x1191, devid[h], pdev[2]);
+		if (pdev[2] == NULL) {
 			h++;
 			index = 0;
 			continue;
 		}
 		chip_ver[2] = 0;
 
-		/* To avoid messing with the things below...  */
-		acard_pdev[2] = pdev;
-		pci_device_fn[2] = pdev->devfn;
-		pci_bus[2] = pdev->bus->number;
-
 		if (devid[h] == 0x8002) {
-			error = pci_read_config_byte(pdev, 0x08, &chip_ver[2]);
+			error = pci_read_config_byte(pdev[2], 0x08, &chip_ver[2]);
 			if (chip_ver[2] < 2) {
 				goto nxt_devfn;
 			}
 		}
-		if (devid[h] == 0x8010) {
+		if (devid[h] == 0x8010 || devid[h] == 0x8050) {
 			chip_ver[2] = 0x04;
 		}
-		if (pci_device_fn[2] < pci_device_fn[0]) {
-			acard_pdev[1] = acard_pdev[0];
-			pci_bus[1] = pci_bus[0];
-			pci_device_fn[1] = pci_device_fn[0];
-			chip_ver[1] = chip_ver[0];
-			acard_pdev[0] = acard_pdev[2];
-			pci_bus[0] = pci_bus[2];
-			pci_device_fn[0] = pci_device_fn[2];
-			chip_ver[0] = chip_ver[2];
-		} else if (pci_device_fn[2] < pci_device_fn[1]) {
-			acard_pdev[1] = acard_pdev[2];
-			pci_bus[1] = pci_bus[2];
-			pci_device_fn[1] = pci_device_fn[2];
-			chip_ver[1] = chip_ver[2];
-		}
+		pdev[tmpcnt] = pdev[2];
+		chip_ver[tmpcnt] = chip_ver[2];
+		tmpcnt++;
 	      nxt_devfn:
 		index++;
 		if (index > 3) {
 			index = 0;
 			h++;
 		}
+		if(tmpcnt>1)
+			break;
 	}
 	for (h = 0; h < 2; h++) {
-		if (pci_device_fn[h] == 0xff) {
+		struct atp_unit *dev=&atp_unit[h];
+		if (pdev[h]==NULL) {
 			return count;
 		}
-		pdev = acard_pdev[h];
-		pdev->devfn = pci_device_fn[h];
-		pdev->bus->number = pci_bus[h];
 
 		/* Found an atp870u/w. */
-		error = pci_read_config_dword(pdev, 0x10, &base_io);
-		error += pci_read_config_byte(pdev, 0x3c, &irq);
-		error += pci_read_config_byte(pdev, 0x49, &host_id);
+		base_io = pdev[h]->resource[0].start;
+		irq = pdev[h]->irq;
+		error = pci_read_config_byte(pdev[h],0x49,&host_id);
 
 		base_io &= 0xfffffff8;
-		printk("   ACARD AEC-671X PCI Ultra/W SCSI-3 Host Adapter: %d    IO:%x, IRQ:%d.\n"
+
+		if (check_region(base_io,0x40) != 0)
+		{  
+			return 0;
+		}
+		printk(KERN_INFO "   ACARD AEC-671X PCI Ultra/W SCSI-3 Host Adapter: %d    IO:%x, IRQ:%d.\n"
 		       ,h, base_io, irq);
-		ioportu[h] = base_io;
-		pciportu[h] = base_io + 0x20;
+		dev->ioport = base_io;
+		dev->pciport = base_io + 0x20;
 		irqnumu[h] = irq;
 		host_id &= 0x07;
-		host_idu[h] = host_id;
-		chip_veru[h] = chip_ver[h];
+		dev->host_idu = host_id;
+		dev->chip_veru = chip_ver[h];
 
 		tmport = base_io + 0x22;
-		scam_on[h] = inb(tmport);
+		dev->scam_on = inb(tmport);
 		tmport += 0x0b;
-		global_map[h] = inb(tmport++);
-		ultra_map[h] = inw(tmport);
-		if (ultra_map[h] == 0) {
-			scam_on[h] = 0x00;
-			global_map[h] = 0x20;
-			ultra_map[h] = 0xffff;
+		dev->global_map = inb(tmport++);
+		dev->ultra_map = inw(tmport);
+		if (dev->ultra_map == 0) {
+			dev->scam_on = 0x00;
+			dev->global_map = 0x20;
+			dev->ultra_map = 0xffff;
 		}
 		shpnt = scsi_register(tpnt, 4);
 
 		save_flags(flags);
 		cli();
-		if (request_irq(irq, atp870u_intr_handle, 0, "atp870u", NULL)) {
-			printk("Unable to allocate IRQ for Acard controller.\n");
+		if (request_irq(irq, atp870u_intr_handle, SA_SHIRQ, "atp870u", dev)) {
+			printk(KERN_ERR "Unable to allocate IRQ for Acard controller.\n");
 			goto unregister;
 		}
 		tmport = base_io + 0x3a;
@@ -1584,9 +1707,11 @@ int atp870u_detect(Scsi_Host_Template * tpnt)
 		is870(h, base_io);
 		tmport = base_io + 0x3a;
 		outb((inb(tmport) & 0xef), tmport);
+		tmport++;
+		outb((inb(tmport) | 0x20),tmport);
 
 		atp_host[h] = shpnt;
-		if (chip_ver[h] == 4) {
+		if (dev->chip_veru == 4) {
 			shpnt->max_id = 16;
 		}
 		shpnt->this_id = host_id;
@@ -1617,7 +1742,7 @@ int atp870u_abort(Scsi_Cmnd * SCpnt)
 {
 	unsigned char h, j;
 	unsigned int tmport;
-/*    printk(" atp870u_abort: \n");   */
+	struct atp_unit *dev;
 	for (h = 0; h <= admaxu; h++) {
 		if (SCpnt->host == atp_host[h]) {
 			goto find_adp;
@@ -1625,20 +1750,23 @@ int atp870u_abort(Scsi_Cmnd * SCpnt)
 	}
 	panic("Abort host not found !");
 find_adp:
-	printk(" workingu=%x last_cmd=%x ", workingu[h], last_cmd[h]);
-	printk(" quhdu=%x quendu=%x ", quhdu[h], quendu[h]);
-	tmport = ioportu[h];
+	dev=&atp_unit[h];
+	printk(KERN_DEBUG "working=%x last_cmd=%x ", dev->working, dev->last_cmd);
+	printk(" quhdu=%x quendu=%x ", dev->quhdu, dev->quendu);
+	tmport = dev->ioport;
 	for (j = 0; j < 0x17; j++) {
 		printk(" r%2x=%2x", j, inb(tmport++));
 	}
 	tmport += 0x05;
 	printk(" r1c=%2x", inb(tmport));
 	tmport += 0x03;
-	printk(" r1f=%2x in_snd=%2x ", inb(tmport), in_snd[h]);
+	printk(" r1f=%2x in_snd=%2x ", inb(tmport), dev->in_snd);
 	tmport++;
 	printk(" r20=%2x", inb(tmport));
 	tmport += 0x02;
-	printk(" r22=%2x \n", inb(tmport));
+	printk(" r22=%2x", inb(tmport));
+	tmport += 0x18;
+	printk(" r3a=%2x \n",inb(tmport));
 	return (SCSI_ABORT_SNOOZE);
 }
 
@@ -1648,7 +1776,6 @@ int atp870u_reset(Scsi_Cmnd * SCpnt, unsigned int reset_flags)
 	/*
 	 * See if a bus reset was suggested.
 	 */
-/*	printk("atp870u_reset: \n");    */
 	for (h = 0; h <= admaxu; h++) {
 		if (SCpnt->host == atp_host[h]) {
 			goto find_host;
@@ -1658,9 +1785,9 @@ int atp870u_reset(Scsi_Cmnd * SCpnt, unsigned int reset_flags)
 find_host:
 /*      SCpnt->result = 0x00080000;
 	SCpnt->scsi_done(SCpnt);
-	workingu[h]=0;
-	quhdu[h]=0;
-	quendu[h]=0;
+	dev->working=0;
+	dev->quhdu=0;
+	dev->quendu=0;
 	return (SCSI_RESET_SUCCESS | SCSI_RESET_BUS_RESET);  */
 	return (SCSI_RESET_SNOOZE);
 }
@@ -1669,14 +1796,14 @@ const char *atp870u_info(struct Scsi_Host *notused)
 {
 	static char buffer[128];
 
-	strcpy(buffer, "ACARD AEC-6710/6712 PCI Ultra/W SCSI-3 Adapter Driver V1.0 ");
+	strcpy(buffer, "ACARD AEC-6710/6712 PCI Ultra/W SCSI-3 Adapter Driver V2.0+ac ");
 
 	return buffer;
 }
 
 int atp870u_set_info(char *buffer, int length, struct Scsi_Host *HBAptr)
 {
-	return (-ENOSYS);	/* Currently this is a no-op */
+	return -ENOSYS;		/* Currently this is a no-op */
 }
 
 #define BLS buffer + len + size
@@ -1714,7 +1841,7 @@ int atp870u_proc_info(char *buffer, char **start, off_t offset, int length,
 	if (offset == 0) {
 		memset(buff, 0, sizeof(buff));
 	}
-	size += sprintf(BLS, "ACARD AEC-671X Driver Version: 1.0\n");
+	size += sprintf(BLS, "ACARD AEC-671X Driver Version: 2.0+ac\n");
 	len += size;
 	pos = begin + len;
 	size = 0;
@@ -1727,7 +1854,7 @@ int atp870u_proc_info(char *buffer, char **start, off_t offset, int length,
 	pos = begin + len;
 	size = 0;
 
-      stop_output:
+stop_output:
 	*start = buffer + (offset - begin);	/* Start of wanted data */
 	len -= (offset - begin);	/* Start slop */
 	if (len > length) {
@@ -1756,6 +1883,26 @@ int atp870u_biosparam(Scsi_Disk * disk, kdev_t dev, int *ip)
 	ip[2] = cylinders;
 
 	return 0;
+}
+
+
+int atp870u_release (struct Scsi_Host *pshost)
+{
+	int h;
+	for (h = 0; h <= admaxu; h++) 
+	{
+		if (pshost == atp_host[h]) {
+			int k;
+			free_irq (pshost->irq, &atp_unit[h]);
+			release_region (pshost->io_port, pshost->n_io_port);
+			scsi_unregister(pshost);
+			for(k=0;k<16;k++)
+				kfree(atp_unit[h].id[k].prd_tableu);
+			return 0;
+		}
+	}
+	panic("atp870u: bad scsi host passed.\n");
+		
 }
 
 #ifdef MODULE

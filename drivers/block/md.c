@@ -761,7 +761,7 @@ int md_make_request (int minor, int rw, struct buffer_head * bh)
 	}
 }
 
-static void do_md_request (void)
+static void do_md_request (request_queue_t * q)
 {
   printk ("Got md request, not good...");
   return;
@@ -1274,8 +1274,7 @@ int __init md_init (void)
     return (-1);
   }
 
-  blk_dev[MD_MAJOR].request_fn=DEVICE_REQUEST;
-  blk_dev[MD_MAJOR].current_request=NULL;
+  blk_init_queue(BLK_DEFAULT_QUEUE(MAJOR_NR), DEVICE_REQUEST);
   read_ahead[MD_MAJOR]=INT_MAX;
   memset(md_dev, 0, MAX_MD_DEV * sizeof (struct md_dev));
   md_gendisk.next=gendisk_head;

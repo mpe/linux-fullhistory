@@ -14,6 +14,10 @@
  *
  ** This file is best viewed/edited with tabstop=4, colums>=132
  *
+ *  
+ *  Dec 10, 1999	Torben Mathiasen <torben.mathiasen@compaq.com>
+ *			New Maintainer
+ *
  ********************************************************************/
 
 

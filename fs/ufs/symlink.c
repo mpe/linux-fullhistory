@@ -23,116 +23,29 @@
  *  ext2 symlink handling code
  */
 
-#include <asm/uaccess.h>
-
-#include <linux/errno.h>
 #include <linux/fs.h>
 #include <linux/ufs_fs.h>
-#include <linux/sched.h>
-#include <linux/mm.h>
-#include <linux/stat.h>
 
-
-#undef UFS_SYMLINK_DEBUG
-
-#ifdef UFS_SYMLINK_DEBUG
-#define UFSD(x) printk("(%s, %d), %s:", __FILE__, __LINE__, __FUNCTION__); printk x;
-#else
-#define UFSD(x)
-#endif
-
-
-static struct dentry * ufs_follow_link(struct dentry * dentry,
-	struct dentry * base, unsigned int follow)
+static int ufs_readlink(struct dentry *dentry, char *buffer, int buflen)
 {
-	struct inode * inode;
-	struct buffer_head * bh;
-	int error;
-	char * link;
-
-	UFSD(("ENTER\n"))
-
-	inode = dentry->d_inode;
-	bh = NULL;
-	/* slow symlink */	    
-	if (inode->i_blocks) {
-		if (!(bh = ufs_bread (inode, 0, 0, &error))) {
-			dput(base);
-			return ERR_PTR(-EIO);
-		}
-		link = bh->b_data;
-	}
-	/* fast symlink */
-	else {
-		link = (char *) inode->u.ufs_i.i_u1.i_symlink;
-	}
-	UPDATE_ATIME(inode);
-	base = lookup_dentry(link, base, follow);
-	if (bh)
-		brelse(bh);
-	UFSD(("EXIT\n"))
-	return base;
+	char *s = (char *)dentry->d_inode->u.ufs_i.i_u1.i_symlink;
+	return vfs_readlink(dentry, buffer, buflen, s);
 }
 
-static int ufs_readlink (struct dentry * dentry, char * buffer, int buflen)
+static struct dentry *ufs_follow_link(struct dentry *dentry, struct dentry *base, unsigned flags)
 {
-	struct super_block * sb;
-	struct inode * inode;
-	struct buffer_head * bh;
-	char * link;
-	int i;
-
-	UFSD(("ENTER\n"))
-
-	inode = dentry->d_inode;
-	sb = inode->i_sb;
-	bh = NULL;
-	if (buflen > sb->s_blocksize - 1)
-		buflen = sb->s_blocksize - 1;
-	/* slow symlink */
-	if (inode->i_blocks) {
-		int err;
-		bh = ufs_bread (inode, 0, 0, &err);
-		if (!bh) {
-			if(err < 0) /* indicate type of error */
-				return err;
-			return 0;
-		}
-		link = bh->b_data;
-	}
-	/* fast symlink */
-	else {
-		link = (char *) inode->u.ufs_i.i_u1.i_symlink;
-	}
-	i = 0;
-	while (i < buflen && link[i])
-		i++;
-	if (copy_to_user(buffer, link, i))
-		i = -EFAULT;
-	UPDATE_ATIME(inode);
-	if (bh)
-		brelse (bh);
-	UFSD(("ENTER\n"))
-	return i;
+	char *s = (char *)dentry->d_inode->u.ufs_i.i_u1.i_symlink;
+	return vfs_follow_link(dentry, base, flags, s);
 }
+
+struct inode_operations ufs_fast_symlink_inode_operations = {
+	readlink:	ufs_readlink,
+	follow_link:	ufs_follow_link,
+};
 
 struct inode_operations ufs_symlink_inode_operations = {
-	NULL,			/* no file-operations */
-	NULL,			/* create */
-	NULL,			/* lookup */
-	NULL,			/* link */
-	NULL,			/* unlink */
-	NULL,			/* symlink */
-	NULL,			/* mkdir */
-	NULL,			/* rmdir */
-	NULL,			/* mknod */
-	NULL,			/* rename */
-	ufs_readlink,		/* readlink */
-	ufs_follow_link,	/* follow_link */
-	NULL,			/* get_block */
-	NULL,			/* readpage */
-	NULL,			/* writepage */
-	NULL,			/* truncate */
-	NULL,			/* permission */
-	NULL			/* revalidate */
+	readlink:	page_readlink,
+	follow_link:	page_follow_link,
+	get_block:	ufs_getfrag_block,
+	readpage:	block_read_full_page
 };

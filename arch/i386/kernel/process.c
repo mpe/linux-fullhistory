@@ -462,7 +462,7 @@ int copy_thread(int nr, unsigned long clone_flags, unsigned long esp,
 	struct pt_regs * childregs;
 
 	childregs = ((struct pt_regs *) (THREAD_SIZE + (unsigned long) p)) - 1;
-	*childregs = *regs;
+	struct_cpy(childregs, regs);
 	childregs->eax = 0;
 	childregs->esp = esp;
 
@@ -475,7 +475,7 @@ int copy_thread(int nr, unsigned long clone_flags, unsigned long esp,
 	savesegment(gs,p->thread.gs);
 
 	unlazy_fpu(current);
-	p->thread.i387 = current->thread.i387;
+	struct_cpy(&p->thread.i387, &current->thread.i387);
 
 	return 0;
 }

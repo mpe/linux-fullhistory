@@ -142,14 +142,49 @@ static inline int get_max_segments(kdev_t dev)
  * NOTE: the device-specific queue() functions
  * have to be atomic!
  */
-static inline struct request **get_queue(kdev_t dev)
+static inline request_queue_t *get_queue(kdev_t dev)
 {
 	int major = MAJOR(dev);
 	struct blk_dev_struct *bdev = blk_dev + major;
 
 	if (bdev->queue)
 		return bdev->queue(dev);
-	return &blk_dev[major].current_request;
+	return &blk_dev[major].request_queue;
+}
+
+void blk_cleanup_queue(request_queue_t * q)
+{
+	memset(q, 0, sizeof(*q));
+}
+
+void blk_queue_headactive(request_queue_t * q, int active)
+{
+	q->head_active     = active;
+}
+
+void blk_queue_pluggable(request_queue_t * q, int use_plug)
+{
+	q->use_plug        = use_plug;
+}
+
+void blk_init_queue(request_queue_t * q, request_fn_proc * rfn)
+{
+	q->request_fn      = rfn;
+	q->current_request = NULL;
+	q->merge_fn        = NULL;
+	q->merge_requests_fn = NULL;
+	q->plug_tq.sync    = 0;
+	q->plug_tq.routine = &unplug_device;
+	q->plug_tq.data    = q;
+	q->plugged         = 0;
+	/*
+	 * These booleans describe the queue properties.  We set the
+	 * default (and most common) values here.  Other drivers can
+	 * use the appropriate functions to alter the queue properties.
+	 * as appropriate.
+	 */
+	q->use_plug        = 1;
+	q->head_active     = 1;
 }
 
 /*
@@ -157,22 +192,18 @@ static inline struct request **get_queue(kdev_t dev)
  */
 void unplug_device(void * data)
 {
-	struct blk_dev_struct * dev = (struct blk_dev_struct *) data;
-	int queue_new_request=0;
+	request_queue_t * q = (request_queue_t *) data;
 	unsigned long flags;
 
 	spin_lock_irqsave(&io_request_lock,flags);
-	if (dev->current_request == &dev->plug) {
-		struct request * next = dev->plug.next;
-		dev->current_request = next;
-		if (next || dev->queue) {
-			dev->plug.next = NULL;
-			queue_new_request = 1;
+	if( q->plugged )
+	{
+	        q->plugged = 0;
+		if( q->current_request != NULL )
+		{
+			(q->request_fn)(q);
 		}
 	}
-	if (queue_new_request)
-		(dev->request_fn)();
-
 	spin_unlock_irqrestore(&io_request_lock,flags);
 }
 
@@ -184,12 +215,13 @@ void unplug_device(void * data)
  * This is called with interrupts off and no requests on the queue.
  * (and with the request spinlock aquired)
  */
-static inline void plug_device(struct blk_dev_struct * dev)
+static inline void plug_device(request_queue_t * q)
 {
-	if (dev->current_request)
+	if (q->current_request)
 		return;
-	dev->current_request = &dev->plug;
-	queue_task(&dev->plug_tq, &tq_disk);
+
+	q->plugged = 1;
+	queue_task(&q->plug_tq, &tq_disk);
 }
 
 /*
@@ -221,6 +253,7 @@ static inline struct request * get_request(int n, kdev_t dev)
 	prev_found = req;
 	req->rq_status = RQ_ACTIVE;
 	req->rq_dev = dev;
+	req->special = NULL;
 	return req;
 }
 
@@ -335,12 +368,11 @@ static inline void drive_stat_acct(struct request *req,
  * which is important for drive_stat_acct() above.
  */
 
-void add_request(struct blk_dev_struct * dev, struct request * req)
+static void add_request(request_queue_t * q, struct request * req)
 {
 	int major = MAJOR(req->rq_dev);
-	struct request * tmp, **current_request;
+	struct request * tmp;
 	unsigned long flags;
-	int queue_new_request = 0;
 
 	drive_stat_acct(req, req->nr_sectors, 1);
 	req->next = NULL;
@@ -349,12 +381,9 @@ void add_request(struct blk_dev_struct * dev, struct request * req)
 	 * We use the goto to reduce locking complexity
 	 */
 	spin_lock_irqsave(&io_request_lock,flags);
-	current_request = get_queue(req->rq_dev);
 
-	if (!(tmp = *current_request)) {
-		*current_request = req;
-		if (dev->current_request != &dev->plug)
-			queue_new_request = 1;
+	if (!(tmp = q->current_request)) {
+		q->current_request = req;
 		goto out;
 	}
 	for ( ; tmp->next ; tmp = tmp->next) {
@@ -372,26 +401,34 @@ void add_request(struct blk_dev_struct * dev, struct request * req)
 	req->next = tmp->next;
 	tmp->next = req;
 
-/* for SCSI devices, call request_fn unconditionally */
-	if (scsi_blk_major(major))
-		queue_new_request = 1;
-	if (major >= COMPAQ_SMART2_MAJOR+0 &&
-	    major <= COMPAQ_SMART2_MAJOR+7)
-		queue_new_request = 1;
+	/*
+	 * FIXME(eric) I don't understand why there is a need for this
+	 * special case code.  It clearly doesn't fit any more with
+	 * the new queueing architecture, and it got added in 2.3.10.  
+	 * I am leaving this in here until I hear back from the COMPAQ
+	 * people.
+	 */
+	if (major >= COMPAQ_SMART2_MAJOR+0 && major <= COMPAQ_SMART2_MAJOR+7)
+	{
+		(q->request_fn)(q);
+	}
+
 	if (major >= DAC960_MAJOR+0 && major <= DAC960_MAJOR+7)
-		queue_new_request = 1;
+	{
+		(q->request_fn)(q);
+	}
+
 out:
-	if (queue_new_request)
-		(dev->request_fn)();
 	spin_unlock_irqrestore(&io_request_lock,flags);
 }
 
 /*
  * Has to be called with the request spinlock aquired
  */
-static inline void attempt_merge (struct request *req,
-				int max_sectors,
-				int max_segments)
+static inline void attempt_merge (request_queue_t * q,
+				  struct request *req, 
+				  int max_sectors,
+				  int max_segments)
 {
 	struct request *next = req->next;
 	int total_segments;
@@ -407,16 +444,37 @@ static inline void attempt_merge (struct request *req,
 		total_segments--;
 	if (total_segments > max_segments)
 		return;
+
+	if( q->merge_requests_fn != NULL )
+	{
+		/*
+		 * If we are not allowed to merge these requests, then
+		 * return.  If we are allowed to merge, then the count
+		 * will have been updated to the appropriate number,
+		 * and we shouldn't do it here too.
+		 */
+		if( !(q->merge_requests_fn)(q, req, next) )
+		{
+			return;
+		}
+	}
+	else
+	{
+		req->nr_segments = total_segments;
+	}
+
 	req->bhtail->b_reqnext = next->bh;
 	req->bhtail = next->bhtail;
 	req->nr_sectors += next->nr_sectors;
-	req->nr_segments = total_segments;
 	next->rq_status = RQ_INACTIVE;
 	req->next = next->next;
 	wake_up (&wait_for_request);
 }
 
-void make_request(int major,int rw, struct buffer_head * bh)
+static void __make_request(request_queue_t * q,
+			   int major,
+			   int rw, 
+			   struct buffer_head * bh)
 {
 	unsigned int sector, count;
 	struct request * req;
@@ -519,13 +577,20 @@ void make_request(int major,int rw, struct buffer_head * bh)
 	 * not to schedule or do something nonatomic
 	 */
 	spin_lock_irqsave(&io_request_lock,flags);
-	req = *get_queue(bh->b_rdev);
+	req = q->current_request;
 	if (!req) {
 		/* MD and loop can't handle plugging without deadlocking */
 		if (major != MD_MAJOR && major != LOOP_MAJOR && 
-		    major != DDV_MAJOR && major != NBD_MAJOR)
-			plug_device(blk_dev + major); /* is atomic */
+		    major != DDV_MAJOR && major != NBD_MAJOR
+		    && q->use_plug)
+			plug_device(q); /* is atomic */
 	} else switch (major) {
+	     /*
+	      * FIXME(eric) - this entire switch statement is going away
+	      * soon, and we will instead key off of q->head_active to decide
+	      * whether the top request in the queue is active on the device
+	      * or not.
+	      */
 	     case IDE0_MAJOR:	/* same as HD_MAJOR */
 	     case IDE1_MAJOR:
 	     case FLOPPY_MAJOR:
@@ -548,7 +613,7 @@ void make_request(int major,int rw, struct buffer_head * bh)
 		 * All other drivers need to jump over the first entry, as that
 		 * entry may be busy being processed and we thus can't change it.
 		 */
-		if (req == blk_dev[major].current_request)
+		if (req == q->current_request)
 	        	req = req->next;
 		if (!req)
 			break;
@@ -592,25 +657,71 @@ void make_request(int major,int rw, struct buffer_head * bh)
 				continue;
 			/* Can we add it to the end of this request? */
 			if (req->sector + req->nr_sectors == sector) {
-				if (req->bhtail->b_data + req->bhtail->b_size
-				    != bh->b_data) {
-					if (req->nr_segments < max_segments)
-						req->nr_segments++;
-					else continue;
+				/*
+				 * The merge_fn is a more advanced way
+				 * of accomplishing the same task.  Instead
+				 * of applying a fixed limit of some sort
+				 * we instead define a function which can
+				 * determine whether or not it is safe to
+				 * merge the request or not.
+				 */
+				if( q->merge_fn == NULL )
+				{
+					if (req->bhtail->b_data + req->bhtail->b_size
+					    != bh->b_data) {
+						if (req->nr_segments < max_segments)
+							req->nr_segments++;
+						else continue;
+					}
+				}
+				else
+				{
+					/*
+					 * See if this queue has rules that
+					 * may suggest that we shouldn't merge
+					 * this 
+					 */
+					if( !(q->merge_fn)(q, req, bh) )
+					{
+						continue;
+					}
 				}
 				req->bhtail->b_reqnext = bh;
 				req->bhtail = bh;
 			    	req->nr_sectors += count;
 				drive_stat_acct(req, count, 0);
 				/* Can we now merge this req with the next? */
-				attempt_merge(req, max_sectors, max_segments);
+				attempt_merge(q, req, max_sectors, max_segments);
 			/* or to the beginning? */
 			} else if (req->sector - count == sector) {
-				if (bh->b_data + bh->b_size
-				    != req->bh->b_data) {
-					if (req->nr_segments < max_segments)
-						req->nr_segments++;
-					else continue;
+				/*
+				 * The merge_fn is a more advanced way
+				 * of accomplishing the same task.  Instead
+				 * of applying a fixed limit of some sort
+				 * we instead define a function which can
+				 * determine whether or not it is safe to
+				 * merge the request or not.
+				 */
+				if( q->merge_fn == NULL )
+				{
+					if (bh->b_data + bh->b_size
+					    != req->bh->b_data) {
+						if (req->nr_segments < max_segments)
+							req->nr_segments++;
+						else continue;
+					}
+				}
+				else
+				{
+					/*
+					 * See if this queue has rules that
+					 * may suggest that we shouldn't merge
+					 * this 
+					 */
+					if( !(q->merge_fn)(q, req, bh) )
+					{
+						continue;
+					}
 				}
 			    	bh->b_reqnext = req->bh;
 			    	req->bh = bh;
@@ -645,19 +756,36 @@ void make_request(int major,int rw, struct buffer_head * bh)
 	req->errors = 0;
 	req->sector = sector;
 	req->nr_sectors = count;
-	req->nr_segments = 1;
 	req->current_nr_sectors = count;
+	req->nr_segments = 1; /* Always 1 for a new request. */
 	req->buffer = bh->b_data;
 	req->sem = NULL;
 	req->bh = bh;
 	req->bhtail = bh;
 	req->next = NULL;
-	add_request(major+blk_dev,req);
+	add_request(q, req);
 	return;
 
 end_io:
 	bh->b_end_io(bh, test_bit(BH_Uptodate, &bh->b_state));
 }
+
+void make_request(int major,int rw,  struct buffer_head * bh)
+{
+	request_queue_t * q;
+	unsigned long flags;
+	
+	q = get_queue(bh->b_dev);
+
+	__make_request(q, major, rw, bh);
+
+	spin_lock_irqsave(&io_request_lock,flags);
+	if( !q->plugged )
+		(q->request_fn)(q);
+	spin_unlock_irqrestore(&io_request_lock,flags);
+}
+
+
 
 /* This function can be used to request a number of buffers from a block
    device. Currently the only restriction is that all buffers must belong to
@@ -667,13 +795,13 @@ void ll_rw_block(int rw, int nr, struct buffer_head * bh[])
 {
 	unsigned int major;
 	int correct_size;
-	struct blk_dev_struct * dev;
+	request_queue_t		* q;
+	unsigned long flags;
 	int i;
 
-	dev = NULL;
-	if ((major = MAJOR(bh[0]->b_dev)) < MAX_BLKDEV)
-		dev = blk_dev + major;
-	if (!dev || !dev->request_fn) {
+
+	major = MAJOR(bh[0]->b_dev);
+	if (!(q = get_queue(bh[0]->b_dev))) {
 		printk(KERN_ERR
 	"ll_rw_block: Trying to read nonexistent block-device %s (%ld)\n",
 		kdevname(bh[0]->b_dev), bh[0]->b_blocknr);
@@ -726,8 +854,15 @@ void ll_rw_block(int rw, int nr, struct buffer_head * bh[])
 			continue;
 		}
 #endif
-		make_request(MAJOR(bh[i]->b_rdev), rw, bh[i]);
+		__make_request(q, MAJOR(bh[i]->b_rdev), rw, bh[i]);
 	}
+
+	spin_lock_irqsave(&io_request_lock,flags);
+	if( !q->plugged )
+	{
+		(q->request_fn)(q);
+	}
+	spin_unlock_irqrestore(&io_request_lock,flags);
 	return;
 
       sorry:
@@ -801,15 +936,8 @@ int __init blk_dev_init(void)
 	struct blk_dev_struct *dev;
 
 	for (dev = blk_dev + MAX_BLKDEV; dev-- != blk_dev;) {
-		dev->request_fn      = NULL;
 		dev->queue           = NULL;
-		dev->current_request = NULL;
-		dev->plug.rq_status  = RQ_INACTIVE;
-		dev->plug.cmd        = -1;
-		dev->plug.next       = NULL;
-		dev->plug_tq.sync    = 0;
-		dev->plug_tq.routine = &unplug_device;
-		dev->plug_tq.data    = dev;
+		blk_init_queue(&dev->request_queue, NULL);
 	}
 
 	req = all_requests + NR_REQUEST;
@@ -924,3 +1052,6 @@ int __init blk_dev_init(void)
 EXPORT_SYMBOL(io_request_lock);
 EXPORT_SYMBOL(end_that_request_first);
 EXPORT_SYMBOL(end_that_request_last);
+EXPORT_SYMBOL(blk_init_queue);
+EXPORT_SYMBOL(blk_cleanup_queue);
+EXPORT_SYMBOL(blk_queue_headactive);

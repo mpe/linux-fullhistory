@@ -94,6 +94,11 @@ void umsdos_setup_dir(struct dentry *dir)
 		printk(KERN_ERR "umsdos_setup_dir: %s/%s not a dir!\n",
 			dir->d_parent->d_name.name, dir->d_name.name);
 
+	init_waitqueue_head (&inode->u.umsdos_i.dir_info.p);
+	inode->u.umsdos_i.dir_info.looking = 0;
+	inode->u.umsdos_i.dir_info.creating = 0;
+	inode->u.umsdos_i.dir_info.pid = 0;
+
 	inode->i_op = &umsdos_rdir_inode_operations;
 	if (umsdos_have_emd(dir)) {
 Printk((KERN_DEBUG "umsdos_setup_dir: %s/%s using EMD\n",
@@ -311,7 +316,7 @@ static struct super_operations umsdos_sops =
 	NULL,			/* write_super */
 	fat_statfs,		/* statfs */
 	NULL,			/* remount_fs */
-	fat_clear_inode,	/* clear_inode */
+	fat_clear_inode		/* clear_inode */
 };
 
 /*
@@ -333,7 +338,7 @@ struct super_block *UMSDOS_read_super (struct super_block *sb, void *data,
 	if (!res)
 		goto out_fail;
 
-	printk (KERN_INFO "UMSDOS 0.85 "
+	printk (KERN_INFO "UMSDOS 0.86 "
 		"(compatibility level %d.%d, fast msdos)\n", 
 		UMSDOS_VERSION, UMSDOS_RELEASE);
 

@@ -187,7 +187,6 @@ extern inline char * strrchr(const char * s, int c)
 int	d0, d1;
 register char * __res;
 __asm__ __volatile__(
-	"cld\n\t"
 	"movb %%al,%%ah\n"
 	"1:\tlodsb\n\t"
 	"cmpb %%ah,%%al\n\t"
@@ -206,7 +205,6 @@ extern inline size_t strspn(const char * cs, const char * ct)
 int	d0, d1;
 register char * __res;
 __asm__ __volatile__(
-	"cld\n\t"
 	"movl %6,%%edi\n\t"
 	"repne\n\t"
 	"scasb\n\t"
@@ -234,7 +232,6 @@ extern inline size_t strcspn(const char * cs, const char * ct)
 int	d0, d1;
 register char * __res;
 __asm__ __volatile__(
-	"cld\n\t"
 	"movl %6,%%edi\n\t"
 	"repne\n\t"
 	"scasb\n\t"
@@ -263,7 +260,6 @@ extern inline char * strpbrk(const char * cs,const char * ct)
 int	d0, d1;
 register char * __res;
 __asm__ __volatile__(
-	"cld\n\t"
 	"movl %6,%%edi\n\t"
 	"repne\n\t"
 	"scasb\n\t"
@@ -296,7 +292,6 @@ extern inline char * strstr(const char * cs,const char * ct)
 int	d0, d1;
 register char * __res;
 __asm__ __volatile__(
-	"cld\n\t" \
 	"movl %6,%%edi\n\t"
 	"repne\n\t"
 	"scasb\n\t"
@@ -378,7 +373,6 @@ __asm__ __volatile__(
 	"1:\txorl %0,%0\n\t"
 	"movl $-1,%%ecx\n\t"
 	"xorl %%eax,%%eax\n\t"
-	"cld\n\t"
 	"movl %4,%%edi\n\t"
 	"repne\n\t"
 	"scasb\n\t"
@@ -474,7 +468,6 @@ extern inline void * __memcpy_g(void * to, const void * from, size_t n)
 int	d0, d1, d2;
 register void *tmp = (void *)to;
 __asm__ __volatile__ (
-	"cld\n\t"
 	"shrl $1,%%ecx\n\t"
 	"jnc 1f\n\t"
 	"movsb\n"
@@ -554,7 +547,6 @@ int	d0, d1, d2;
 register void *tmp = (void *)dest;
 if (dest<src)
 __asm__ __volatile__ (
-	"cld\n\t"
 	"rep\n\t"
 	"movsb"
 	:"=&c" (d0), "=&S" (d1), "=&D" (d2)
@@ -577,7 +569,6 @@ extern inline int memcmp(const void * cs,const void * ct,size_t count)
 int	d0, d1, d2;
 register int __res;
 __asm__ __volatile__(
-	"cld\n\t"
 	"repe\n\t"
 	"cmpsb\n\t"
 	"je 1f\n\t"
@@ -597,7 +588,6 @@ register void * __res;
 if (!count)
 	return NULL;
 __asm__ __volatile__(
-	"cld\n\t"
 	"repne\n\t"
 	"scasb\n\t"
 	"je 1f\n\t"
@@ -753,8 +743,7 @@ extern inline void * memscan(void * addr, int c, size_t size)
 {
 	if (!size)
 		return addr;
-	__asm__("cld
-		repnz; scasb
+	__asm__("repnz; scasb
 		jnz 1f
 		dec %%edi
 1:		"

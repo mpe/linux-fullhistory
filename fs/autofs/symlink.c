@@ -10,49 +10,21 @@
  *
  * ------------------------------------------------------------------------- */
 
-#include <linux/string.h>
-#include <linux/sched.h>
 #include "autofs_i.h"
 
 static int autofs_readlink(struct dentry *dentry, char *buffer, int buflen)
 {
-	struct autofs_symlink *sl;
-	int len;
-
-	sl = (struct autofs_symlink *)dentry->d_inode->u.generic_ip;
-	len = sl->len;
-	if (len > buflen) len = buflen;
-	copy_to_user(buffer, sl->data, len);
-	return len;
+	char *s=((struct autofs_symlink *)dentry->d_inode->u.generic_ip)->data;
+	return vfs_readlink(dentry, buffer, buflen, s);
 }
 
-static struct dentry * autofs_follow_link(struct dentry *dentry,
-					struct dentry *base,
-					unsigned int follow)
+static struct dentry *autofs_follow_link(struct dentry *dentry, struct dentry *base, unsigned flags)
 {
-	struct autofs_symlink *sl;
-
-	sl = (struct autofs_symlink *)dentry->d_inode->u.generic_ip;
-	return lookup_dentry(sl->data, base, follow);
+	char *s=((struct autofs_symlink *)dentry->d_inode->u.generic_ip)->data;
+	return vfs_follow_link(dentry, base, flags, s);
 }
 
 struct inode_operations autofs_symlink_inode_operations = {
-	NULL,			/* file operations */
-	NULL,			/* create */
-	NULL,			/* lookup */
-	NULL,			/* link */
-	NULL,			/* unlink */
-	NULL,			/* symlink */
-	NULL,			/* mkdir */
-	NULL,			/* rmdir */
-	NULL,			/* mknod */
-	NULL,			/* rename */
-	autofs_readlink,	/* readlink */
-	autofs_follow_link,	/* follow_link */
-	NULL,			/* get_block */
-	NULL,			/* readpage */
-	NULL,			/* writepage */
-	NULL,			/* truncate */
-	NULL,			/* permission */
-	NULL			/* revalidate */
+	readlink:	autofs_readlink,
+	follow_link:	autofs_follow_link
 };

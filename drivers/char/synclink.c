@@ -1,7 +1,7 @@
 /*
  * linux/drivers/char/synclink.c
  *
- * ==FILEDATE 19990901==
+ * ==FILEDATE 19991207==
  *
  * Device driver for Microgate SyncLink ISA and PCI
  * high speed multiprotocol serial adapters.
@@ -925,7 +925,7 @@ MODULE_PARM(maxframe,"1-" __MODULE_STRING(MAX_TOTAL_DEVICES) "i");
 #endif
 
 static char *driver_name = "SyncLink serial driver";
-static char *driver_version = "1.14";
+static char *driver_version = "1.15";
 
 static struct tty_driver serial_driver, callout_driver;
 static int serial_refcount;
@@ -6981,7 +6981,6 @@ BOOLEAN mgsl_register_test( struct mgsl_struct *info )
 
 	spin_lock_irqsave(&info->irq_spinlock,flags);
 	usc_reset(info);
-	spin_unlock_irqrestore(&info->irq_spinlock,flags);
 
 	/* Verify the reset state of some registers. */
 
@@ -7015,7 +7014,6 @@ BOOLEAN mgsl_register_test( struct mgsl_struct *info )
 		}
 	}
 
-	spin_lock_irqsave(&info->irq_spinlock,flags);
 	usc_reset(info);
 	spin_unlock_irqrestore(&info->irq_spinlock,flags);
 
@@ -7035,7 +7033,6 @@ BOOLEAN mgsl_irq_test( struct mgsl_struct *info )
 
 	spin_lock_irqsave(&info->irq_spinlock,flags);
 	usc_reset(info);
-	spin_unlock_irqrestore(&info->irq_spinlock,flags);
 
 	/*
 	 * Setup 16C32 to interrupt on TxC pin (14MHz clock) transition. 
@@ -7056,6 +7053,8 @@ BOOLEAN mgsl_irq_test( struct mgsl_struct *info )
 	
 	usc_UnlatchIostatusBits(info, MISCSTATUS_TXC_LATCHED);
 	usc_EnableStatusIrqs(info, SICR_TXC_ACTIVE + SICR_TXC_INACTIVE);
+
+	spin_unlock_irqrestore(&info->irq_spinlock,flags);
 
 	EndTime=100;
 	while( EndTime-- && !info->irq_occurred ) {
@@ -7359,7 +7358,9 @@ BOOLEAN mgsl_dma_test( struct mgsl_struct *info )
 		}
 	}
 
+	spin_lock_irqsave(&info->irq_spinlock,flags);
 	usc_reset( info );
+	spin_unlock_irqrestore(&info->irq_spinlock,flags);
 
 	/* restore current port options */
 	memcpy(&info->params,&tmp_params,sizeof(MGSL_PARAMS));

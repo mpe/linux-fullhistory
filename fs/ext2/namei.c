@@ -677,48 +677,32 @@ end_unlink:
 
 int ext2_symlink (struct inode * dir, struct dentry *dentry, const char * symname)
 {
-	struct ext2_dir_entry_2 * de;
 	struct inode * inode;
-	struct buffer_head * bh = NULL, * name_block = NULL;
-	char * link;
-	int i, l, err = -EIO;
-	char c;
+	struct ext2_dir_entry_2 * de;
+	struct buffer_head * bh = NULL;
+	int l, err;
 
-	if (!(inode = ext2_new_inode (dir, S_IFLNK, &err))) {
-		return err;
-	}
+	err = -ENAMETOOLONG;
+	l = strlen(symname)+1;
+	if (l > dir->i_sb->s_blocksize)
+		goto out;
+
+	err = -EIO;
+	if (!(inode = ext2_new_inode (dir, S_IFLNK, &err)))
+		goto out;
+
 	inode->i_mode = S_IFLNK | S_IRWXUGO;
-	inode->i_op = &ext2_symlink_inode_operations;
-	for (l = 0; l < inode->i_sb->s_blocksize - 1 &&
-	     symname [l]; l++)
-		;
-	if (l >= sizeof (inode->u.ext2_i.i_data)) {
 
-		ext2_debug ("l=%d, normal symlink\n", l);
-
-		name_block = ext2_bread (inode, 0, 1, &err);
-		if (!name_block) {
-			inode->i_nlink--;
-			mark_inode_dirty(inode);
-			iput (inode);
-			return err;
-		}
-		link = name_block->b_data;
+	if (l > sizeof (inode->u.ext2_i.i_data)) {
+		inode->i_op = &ext2_symlink_inode_operations;
+		err = block_symlink(inode, symname, l);
+		if (err)
+			goto out_no_entry;
 	} else {
-		link = (char *) inode->u.ext2_i.i_data;
-
-		ext2_debug ("l=%d, fast symlink\n", l);
-
+		inode->i_op = &ext2_fast_symlink_inode_operations;
+		memcpy((char*)&inode->u.ext2_i.i_data,symname,l);
+		inode->i_size = l-1;
 	}
-	i = 0;
-	while (i < inode->i_sb->s_blocksize - 1 && (c = *(symname++)))
-		link[i++] = c;
-	link[i] = 0;
-	if (name_block) {
-		mark_buffer_dirty(name_block, 1);
-		brelse (name_block);
-	}
-	inode->i_size = i;
 	mark_inode_dirty(inode);
 
 	bh = ext2_add_entry (dir, dentry->d_name.name, dentry->d_name.len, &de, &err);

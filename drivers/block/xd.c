@@ -185,7 +185,7 @@ int __init xd_init (void)
 		printk("xd: Unable to get major number %d\n",MAJOR_NR);
 		return -1;
 	}
-	blk_dev[MAJOR_NR].request_fn = DEVICE_REQUEST;
+	blk_init_queue(BLK_DEFAULT_QUEUE(MAJOR_NR), DEVICE_REQUEST);
 	read_ahead[MAJOR_NR] = 8;	/* 8 sector (4kB) read ahead */
 	xd_gendisk.next = gendisk_head;
 	gendisk_head = &xd_gendisk;
@@ -284,7 +284,7 @@ static int xd_open (struct inode *inode,struct file *file)
 }
 
 /* do_xd_request: handle an incoming request */
-static void do_xd_request (void)
+static void do_xd_request (request_queue_t * q)
 {
 	u_int block,count,retry;
 	int code;
@@ -1143,7 +1143,7 @@ static void xd_done (void)
 	struct gendisk ** gdp;
 	
 	blksize_size[MAJOR_NR] = NULL;
-	blk_dev[MAJOR_NR].request_fn = NULL;
+	blk_cleanup_queue(BLK_DEFAULT_QUEUE(MAJOR_NR));
 	blk_size[MAJOR_NR] = NULL;
 	hardsect_size[MAJOR_NR] = NULL;
 	read_ahead[MAJOR_NR] = 0;

@@ -557,7 +557,6 @@ void __init free_area_init_core(int nid, pg_data_t *pgdat, struct page **gmap,
 	 */
 	for (p = lmem_map; p < lmem_map + totalpages; p++) {
 		set_page_count(p, 0);
-		p->flags = (1 << PG_DMA);
 		SetPageReserved(p);
 		init_waitqueue_head(&p->wait);
 		memlist_init(&p->list);

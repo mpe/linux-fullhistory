@@ -121,6 +121,10 @@ ifdef CONFIG_DRM
 DRIVERS += drivers/char/drm/drm.o
 endif
 
+ifdef CONFIG_AGP
+DRIVERS += drivers/char/agp/agp.o
+endif
+
 ifdef CONFIG_NUBUS
 DRIVERS := $(DRIVERS) drivers/nubus/nubus.a
 endif

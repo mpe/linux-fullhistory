@@ -360,7 +360,7 @@ static void acsi_times_out( unsigned long dummy );
 static void copy_to_acsibuffer( void );
 static void copy_from_acsibuffer( void );
 static void do_end_requests( void );
-static void do_acsi_request( void );
+static void do_acsi_request( request_queue_t * );
 static void redo_acsi_request( void );
 static int acsi_ioctl( struct inode *inode, struct file *file, unsigned int
                        cmd, unsigned long arg );
@@ -938,7 +938,7 @@ static void do_end_requests( void )
  *
  ***********************************************************************/
 
-static void do_acsi_request( void )
+static void do_acsi_request( request_queue_t * q )
 
 {
 	stdma_lock( acsi_interrupt, NULL );
@@ -1808,7 +1808,7 @@ int acsi_init( void )
 	phys_acsi_buffer = virt_to_phys( acsi_buffer );
 	STramMask = ATARIHW_PRESENT(EXTD_DMA) ? 0x00000000 : 0xff000000;
 	
-	blk_dev[MAJOR_NR].request_fn = DEVICE_REQUEST;
+	blk_init_queue(BLK_DEFAULT_QUEUE(MAJOR_NR), DEVICE_REQUEST);
 	read_ahead[MAJOR_NR] = 8;		/* 8 sector (4kB) read-ahead */
 	acsi_gendisk.next = gendisk_head;
 	gendisk_head = &acsi_gendisk;
@@ -1838,7 +1838,7 @@ void cleanup_module(void)
 	struct gendisk ** gdp;
 
 	del_timer( &acsi_timer );
-	blk_dev[MAJOR_NR].request_fn = 0;
+	blk_cleanup_queue(BLK_DEFAULT_QUEUE(MAJOR_NR));
 	atari_stram_free( acsi_buffer );
 
 	if (unregister_blkdev( MAJOR_NR, "ad" ) != 0)

@@ -22,35 +22,6 @@
 #include <linux/malloc.h>
 #include <linux/string.h>
 
-#include <asm/uaccess.h>
-
-static int nfs_readlink(struct dentry *, char *, int);
-static struct dentry *nfs_follow_link(struct dentry *, struct dentry *, unsigned int);
-
-/*
- * symlinks can't do much...
- */
-struct inode_operations nfs_symlink_inode_operations = {
-	NULL,			/* no file-operations */
-	NULL,			/* create */
-	NULL,			/* lookup */
-	NULL,			/* link */
-	NULL,			/* unlink */
-	NULL,			/* symlink */
-	NULL,			/* mkdir */
-	NULL,			/* rmdir */
-	NULL,			/* mknod */
-	NULL,			/* rename */
-	nfs_readlink,		/* readlink */
-	nfs_follow_link,	/* follow_link */
-	NULL,			/* get_block */
-	NULL,			/* readpage */
-	NULL,			/* writepage */
-	NULL,			/* truncate */
-	NULL,			/* permission */
-	NULL			/* revalidate */
-};
-
 /* Symlink caching in the page cache is even more simplistic
  * and straight-forward than readdir caching.
  */
@@ -91,12 +62,12 @@ static char *nfs_getlink(struct dentry *dentry, struct page **ppage)
 	if (IS_ERR(page))
 		goto read_failed;
 	if (!Page_Uptodate(page))
-		goto followlink_read_error;
+		goto getlink_read_error;
 	*ppage = page;
 	p = (u32 *) kmap(page);
 	return (char*)(p+1);
 		
-followlink_read_error:
+getlink_read_error:
 	page_cache_release(page);
 	return ERR_PTR(-EIO);
 read_failed:
@@ -106,41 +77,31 @@ read_failed:
 static int nfs_readlink(struct dentry *dentry, char *buffer, int buflen)
 {
 	struct page *page = NULL;
-	u32 len;
-	char *s = nfs_getlink(dentry, &page);
-	UPDATE_ATIME(dentry->d_inode);
-
-	len = PTR_ERR(s);
-	if (IS_ERR(s))
-		goto out;
-
-	len = strlen(s);
-	if (len > buflen)
-		len = buflen;
-	copy_to_user(buffer, s, len);
-	kunmap(page);
-	page_cache_release(page);
-out:
-	return len;
+	int res = vfs_readlink(dentry,buffer,buflen,nfs_getlink(dentry,&page));
+	if (page) {
+		kunmap(page);
+		page_cache_release(page);
+	}
+	return res;
 }
 
 static struct dentry *
 nfs_follow_link(struct dentry *dentry, struct dentry *base, unsigned int follow)
 {
-	struct dentry *result;
 	struct page *page = NULL;
-	char *s = nfs_getlink(dentry, &page);
-	UPDATE_ATIME(dentry->d_inode);
-
-	if (IS_ERR(s))
-		goto fail;
-
-	result = lookup_dentry(s, base, follow);
-
-	kunmap(page);
-	page_cache_release(page);
-	return result;
-
-fail:
-	return (struct dentry *)s;
+	struct dentry *res = vfs_follow_link(dentry, base, follow,
+					     nfs_getlink(dentry, &page));
+	if (page) {
+		kunmap(page);
+		page_cache_release(page);
+	}
+	return res;
 }
+
+/*
+ * symlinks can't do much...
+ */
+struct inode_operations nfs_symlink_inode_operations = {
+	readlink:	nfs_readlink,
+	follow_link:	nfs_follow_link,
+};

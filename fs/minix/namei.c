@@ -461,46 +461,43 @@ int minix_symlink(struct inode * dir, struct dentry *dentry,
 {
 	struct minix_dir_entry * de;
 	struct inode * inode = NULL;
-	struct buffer_head * bh = NULL, * name_block = NULL;
+	struct buffer_head * bh = NULL;
 	int i;
-	char c;
+	int err;
 
-	inode = minix_new_inode(dir, &i);
-	if (i)
-		return i;
+	err = -ENAMETOOLONG;
+	i = strlen(symname)+1;
+	if (i>1024)
+		goto out;
+	inode = minix_new_inode(dir, &err);
+	if (err)
+		goto out;
+	err = -ENOSPC;
 	if (!inode)
-		return -ENOSPC;
+		goto out;
 
 	inode->i_mode = S_IFLNK | 0777;
 	inode->i_op = &minix_symlink_inode_operations;
-	name_block = minix_bread(inode,0,1);
-	if (!name_block) {
-		inode->i_nlink--;
-	        mark_inode_dirty(inode);
-		iput(inode);
-		return -ENOSPC;
-	}
-	i = 0;
-	while (i < 1023 && (c=*(symname++)))
-		name_block->b_data[i++] = c;
-	name_block->b_data[i] = 0;
-	mark_buffer_dirty(name_block, 1);
-	brelse(name_block);
-	inode->i_size = i;
-	mark_inode_dirty(inode);
-	i = minix_add_entry(dir, dentry->d_name.name,
+	err = block_symlink(inode, symname, i);
+	if (err)
+		goto fail;
+
+	err = minix_add_entry(dir, dentry->d_name.name,
 			    dentry->d_name.len, &bh, &de);
-	if (i) {
-		inode->i_nlink--;
-		mark_inode_dirty(inode);
-		iput(inode);
-		return i;
-	}
+	if (err)
+		goto fail;
+
 	de->inode = inode->i_ino;
 	mark_buffer_dirty(bh, 1);
 	brelse(bh);
 	d_instantiate(dentry, inode);
-	return 0;
+out:
+	return err;
+fail:
+	inode->i_nlink--;
+	mark_inode_dirty(inode);
+	iput(inode);
+	goto out;
 }
 
 int minix_link(struct dentry * old_dentry, struct inode * dir,

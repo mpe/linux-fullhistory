@@ -19,7 +19,7 @@
 #include <scsi/scsi_ioctl.h>
 
 #define NORMAL_RETRIES			5
-#define NORMAL_TIMEOUT			(10 * HZ)
+#define IOCTL_NORMAL_TIMEOUT			(10 * HZ)
 #define FORMAT_UNIT_TIMEOUT		(2 * 60 * 60 * HZ)
 #define START_STOP_TIMEOUT		(60 * HZ)
 #define MOVE_MEDIUM_TIMEOUT		(5 * 60 * HZ)
@@ -69,7 +69,7 @@ static int ioctl_probe(struct Scsi_Host *host, void *buffer)
 /*
 
  * The SCSI_IOCTL_SEND_COMMAND ioctl sends a command out to the SCSI host.
- * The NORMAL_TIMEOUT and NORMAL_RETRIES  variables are used.  
+ * The IOCTL_NORMAL_TIMEOUT and NORMAL_RETRIES  variables are used.  
  * 
  * dev is the SCSI device struct ptr, *(int *) arg is the length of the
  * input data, if any, not including the command string & counts, 
@@ -105,22 +105,18 @@ static void scsi_ioctl_done(Scsi_Cmnd * SCpnt)
 static int ioctl_internal_command(Scsi_Device * dev, char *cmd,
 				  int timeout, int retries)
 {
-	unsigned long flags;
 	int result;
 	Scsi_Cmnd *SCpnt;
 	Scsi_Device *SDpnt;
 
-	spin_lock_irqsave(&io_request_lock, flags);
 
 	SCSI_LOG_IOCTL(1, printk("Trying ioctl with scsi command %d\n", cmd[0]));
-	SCpnt = scsi_allocate_device(NULL, dev, 1);
+	SCpnt = scsi_allocate_device(dev, 1);
 	{
 		DECLARE_MUTEX_LOCKED(sem);
 		SCpnt->request.sem = &sem;
 		scsi_do_cmd(SCpnt, cmd, NULL, 0, scsi_ioctl_done, timeout, retries);
-		spin_unlock_irqrestore(&io_request_lock, flags);
 		down(&sem);
-		spin_lock_irqsave(&io_request_lock, flags);
 		SCpnt->request.sem = NULL;
 	}
 
@@ -167,11 +163,8 @@ static int ioctl_internal_command(Scsi_Device * dev, char *cmd,
 	scsi_release_command(SCpnt);
 	SCpnt = NULL;
 
-	if (!SDpnt->was_reset && SDpnt->scsi_request_fn)
-		(*SDpnt->scsi_request_fn) ();
 
 	wake_up(&SDpnt->device_wait);
-	spin_unlock_irqrestore(&io_request_lock, flags);
 	return result;
 }
 
@@ -183,34 +176,33 @@ static int ioctl_internal_command(Scsi_Device * dev, char *cmd,
  * The structure that we are passed should look like:
  *
  * struct sdata {
- *  unsigned int inlen;	     [i] Length of data to be written to device 
+ *  unsigned int inlen;      [i] Length of data to be written to device 
  *  unsigned int outlen;     [i] Length of data to be read from device 
  *  unsigned char cmd[x];    [i] SCSI command (6 <= x <= 12).
- *			     [o] Data read from device starts here.
- *			     [o] On error, sense buffer starts here.
+ *                           [o] Data read from device starts here.
+ *                           [o] On error, sense buffer starts here.
  *  unsigned char wdata[y];  [i] Data written to device starts here.
  * };
  * Notes:
- *   -	The SCSI command length is determined by examining the 1st byte
- *	of the given command. There is no way to override this.
- *   -	Data transfers are limited to PAGE_SIZE (4K on i386, 8K on alpha).
- *   -	The length (x + y) must be at least OMAX_SB_LEN bytes long to
- *	accomodate the sense buffer when an error occurs.
- *	The sense buffer is truncated to OMAX_SB_LEN (16) bytes so that
- *	old code will not be surprised.
- *   -	If a Unix error occurs (e.g. ENOMEM) then the user will receive
- *	a negative return and the Unix error code in 'errno'. 
- *	If the SCSI command succeeds then 0 is returned.
- *	Positive numbers returned are the compacted SCSI error codes (4 
- *	bytes in one int) where the lowest byte is the SCSI status.
- *	See the drivers/scsi/scsi.h file for more information on this.
+ *   -  The SCSI command length is determined by examining the 1st byte
+ *      of the given command. There is no way to override this.
+ *   -  Data transfers are limited to PAGE_SIZE (4K on i386, 8K on alpha).
+ *   -  The length (x + y) must be at least OMAX_SB_LEN bytes long to
+ *      accomodate the sense buffer when an error occurs.
+ *      The sense buffer is truncated to OMAX_SB_LEN (16) bytes so that
+ *      old code will not be surprised.
+ *   -  If a Unix error occurs (e.g. ENOMEM) then the user will receive
+ *      a negative return and the Unix error code in 'errno'. 
+ *      If the SCSI command succeeds then 0 is returned.
+ *      Positive numbers returned are the compacted SCSI error codes (4 
+ *      bytes in one int) where the lowest byte is the SCSI status.
+ *      See the drivers/scsi/scsi.h file for more information on this.
  *
  */
-#define OMAX_SB_LEN 16   /* Old sense buffer length */
+#define OMAX_SB_LEN 16		/* Old sense buffer length */
 
 int scsi_ioctl_send_command(Scsi_Device * dev, Scsi_Ioctl_Command * sic)
 {
-	unsigned long flags;
 	char *buf;
 	unsigned char cmd[12];
 	char *cmd_in;
@@ -251,9 +243,7 @@ int scsi_ioctl_send_command(Scsi_Device * dev, Scsi_Ioctl_Command * sic)
 		buf_needed = (buf_needed + 511) & ~511;
 		if (buf_needed > MAX_BUF)
 			buf_needed = MAX_BUF;
-		spin_lock_irqsave(&io_request_lock, flags);
 		buf = (char *) scsi_malloc(buf_needed);
-		spin_unlock_irqrestore(&io_request_lock, flags);
 		if (!buf)
 			return -ENOMEM;
 		memset(buf, 0, buf_needed);
@@ -299,23 +289,21 @@ int scsi_ioctl_send_command(Scsi_Device * dev, Scsi_Ioctl_Command * sic)
 		retries = NORMAL_RETRIES;
 		break;
 	default:
-		timeout = NORMAL_TIMEOUT;
+		timeout = IOCTL_NORMAL_TIMEOUT;
 		retries = NORMAL_RETRIES;
 		break;
 	}
 
 #ifndef DEBUG_NO_CMD
 
-	spin_lock_irqsave(&io_request_lock, flags);
 
-	SCpnt = scsi_allocate_device(NULL, dev, 1);
+	SCpnt = scsi_allocate_device(dev, 1);
 
 	{
 		DECLARE_MUTEX_LOCKED(sem);
 		SCpnt->request.sem = &sem;
 		scsi_do_cmd(SCpnt, cmd, buf, needed, scsi_ioctl_done,
 			    timeout, retries);
-		spin_unlock_irqrestore(&io_request_lock, flags);
 		down(&sem);
 		SCpnt->request.sem = NULL;
 	}
@@ -339,7 +327,6 @@ int scsi_ioctl_send_command(Scsi_Device * dev, Scsi_Ioctl_Command * sic)
 	}
 	result = SCpnt->result;
 
-	spin_lock_irqsave(&io_request_lock, flags);
 
 	wake_up(&SCpnt->device->device_wait);
 	SDpnt = SCpnt->device;
@@ -349,10 +336,7 @@ int scsi_ioctl_send_command(Scsi_Device * dev, Scsi_Ioctl_Command * sic)
 	if (buf)
 		scsi_free(buf, buf_needed);
 
-	if (SDpnt->scsi_request_fn)
-		(*SDpnt->scsi_request_fn) ();
 
-	spin_unlock_irqrestore(&io_request_lock, flags);
 	return result;
 #else
 	{
@@ -445,7 +429,7 @@ int scsi_ioctl(Scsi_Device * dev, int cmd, void *arg)
 		scsi_cmd[2] = scsi_cmd[3] = scsi_cmd[5] = 0;
 		scsi_cmd[4] = SCSI_REMOVAL_PREVENT;
 		return ioctl_internal_command((Scsi_Device *) dev, scsi_cmd,
-					 NORMAL_TIMEOUT, NORMAL_RETRIES);
+				   IOCTL_NORMAL_TIMEOUT, NORMAL_RETRIES);
 		break;
 	case SCSI_IOCTL_DOORUNLOCK:
 		if (!dev->removable || !dev->lockable)
@@ -455,14 +439,14 @@ int scsi_ioctl(Scsi_Device * dev, int cmd, void *arg)
 		scsi_cmd[2] = scsi_cmd[3] = scsi_cmd[5] = 0;
 		scsi_cmd[4] = SCSI_REMOVAL_ALLOW;
 		return ioctl_internal_command((Scsi_Device *) dev, scsi_cmd,
-					 NORMAL_TIMEOUT, NORMAL_RETRIES);
+				   IOCTL_NORMAL_TIMEOUT, NORMAL_RETRIES);
 	case SCSI_IOCTL_TEST_UNIT_READY:
 		scsi_cmd[0] = TEST_UNIT_READY;
 		scsi_cmd[1] = dev->lun << 5;
 		scsi_cmd[2] = scsi_cmd[3] = scsi_cmd[5] = 0;
 		scsi_cmd[4] = 0;
 		return ioctl_internal_command((Scsi_Device *) dev, scsi_cmd,
-					 NORMAL_TIMEOUT, NORMAL_RETRIES);
+				   IOCTL_NORMAL_TIMEOUT, NORMAL_RETRIES);
 		break;
 	case SCSI_IOCTL_START_UNIT:
 		scsi_cmd[0] = START_STOP;

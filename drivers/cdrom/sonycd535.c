@@ -781,7 +781,7 @@ size_to_buf(unsigned int size, Byte *buf)
  * data access on a CD is done sequentially, this saves a lot of operations.
  */
 static void
-do_cdu535_request(void)
+do_cdu535_request(request_queue_t * q)
 {
 	unsigned int dev;
 	unsigned int read_size;
@@ -1601,7 +1601,7 @@ sony535_init(void)
 							MAJOR_NR, CDU535_MESSAGE_NAME);
 					return -EIO;
 				}
-				blk_dev[MAJOR_NR].request_fn = DEVICE_REQUEST;
+				blk_init_queue(BLK_DEFAULT_QUEUE(MAJOR_NR), DEVICE_REQUEST);
 				blksize_size[MAJOR_NR] = &sonycd535_block_size;
 				read_ahead[MAJOR_NR] = 8;	/* 8 sector (4kB) read-ahead */
 

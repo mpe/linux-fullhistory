@@ -563,6 +563,7 @@ extern void ufs_write_super (struct super_block *);
 
 /* symlink.c */
 extern struct inode_operations ufs_symlink_inode_operations;
+extern struct inode_operations ufs_fast_symlink_inode_operations;
 
 /* truncate.c */
 extern void ufs_truncate (struct inode *);

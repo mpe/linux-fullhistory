@@ -1,8 +1,8 @@
 /*
  * AGPGART module version 0.99
  * Copyright (C) 1999 Jeff Hartmann
- * Copyright (C) 1999 Precision Insight
- * Copyright (C) 1999 Xi Graphics
+ * Copyright (C) 1999 Precision Insight, Inc.
+ * Copyright (C) 1999 Xi Graphics, Inc.
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -46,11 +46,7 @@
 #include <asm/page.h>
 
 #include <linux/agp_backend.h>
-#include "agp_backendP.h"
-
-static struct agp_bridge_data agp_bridge;
-
-#define CACHE_FLUSH agp_bridge.cache_flush
+#include "agp.h"
 
 MODULE_AUTHOR("Jeff Hartmann <jhartmann@precisioninsight.com>");
 MODULE_PARM(agp_try_unsupported, "1i");
@@ -63,36 +59,13 @@ EXPORT_SYMBOL(agp_enable);
 EXPORT_SYMBOL(agp_backend_acquire);
 EXPORT_SYMBOL(agp_backend_release);
 
-static int agp_try_unsupported __initdata = 0;
+static void flush_cache(void);
 
+static struct agp_bridge_data agp_bridge;
+static int agp_try_unsupported __initdata = 0;
 #ifdef __SMP__
 static atomic_t cpus_waiting;
-#endif
 
-int agp_backend_acquire(void)
-{
-	atomic_inc(&(agp_bridge.agp_in_use));
-
-	if (atomic_read(&(agp_bridge.agp_in_use)) != 1) {
-		atomic_dec(&(agp_bridge.agp_in_use));
-		return -EBUSY;
-	}
-	MOD_INC_USE_COUNT;
-	return 0;
-}
-
-void agp_backend_release(void)
-{
-	atomic_dec(&(agp_bridge.agp_in_use));
-	MOD_DEC_USE_COUNT;
-}
-
-static void flush_cache(void)
-{
-	asm volatile ("wbinvd":::"memory");
-}
-
-#ifdef __SMP__
 static void ipi_handler(void *null)
 {
 	flush_cache();
@@ -110,7 +83,34 @@ static void smp_flush_cache(void)
 	while (atomic_read(&cpus_waiting) > 0)
 		barrier();
 }
-#endif
+#define global_cache_flush smp_flush_cache
+#else				/* __SMP__ */
+#define global_cache_flush flush_cache
+#endif				/* __SMP__ */
+
+static void flush_cache(void)
+{
+	asm volatile ("wbinvd":::"memory");
+}
+
+
+int agp_backend_acquire(void)
+{
+	atomic_inc(&agp_bridge.agp_in_use);
+
+	if (atomic_read(&agp_bridge.agp_in_use) != 1) {
+		atomic_dec(&agp_bridge.agp_in_use);
+		return -EBUSY;
+	}
+	MOD_INC_USE_COUNT;
+	return 0;
+}
+
+void agp_backend_release(void)
+{
+	atomic_dec(&agp_bridge.agp_in_use);
+	MOD_DEC_USE_COUNT;
+}
 
 /* 
  * Basic Page Allocation Routines -
@@ -121,30 +121,32 @@ static void smp_flush_cache(void)
  * against a maximum value.
  */
 
-static void *agp_alloc_page(void)
+static unsigned long agp_alloc_page(void)
 {
 	void *pt;
 
 	pt = (void *) __get_free_page(GFP_KERNEL);
 	if (pt == NULL) {
-		return NULL;
+		return 0;
 	}
-	atomic_inc(&(mem_map[MAP_NR(pt)].count));
+	atomic_inc(&mem_map[MAP_NR(pt)].count);
 	set_bit(PG_locked, &mem_map[MAP_NR(pt)].flags);
-	atomic_inc(&(agp_bridge.current_memory_agp));
-	return pt;
+	atomic_inc(&agp_bridge.current_memory_agp);
+	return (unsigned long) pt;
 }
 
-static void agp_destroy_page(void *pt)
+static void agp_destroy_page(unsigned long page)
 {
-	if (pt == NULL)
-		return;
+	void *pt = (void *) page;
 
-	atomic_dec(&(mem_map[MAP_NR(pt)].count));
+	if (pt == NULL) {
+		return;
+	}
+	atomic_dec(&mem_map[MAP_NR(pt)].count);
 	clear_bit(PG_locked, &mem_map[MAP_NR(pt)].flags);
 	wake_up(&mem_map[MAP_NR(pt)].wait);
 	free_page((unsigned long) pt);
-	atomic_dec(&(agp_bridge.current_memory_agp));
+	atomic_dec(&agp_bridge.current_memory_agp);
 }
 
 /* End Basic Page Allocation Routines */
@@ -155,7 +157,6 @@ static void agp_destroy_page(void *pt)
  * brunt of the work.
  */
 
-#define MAXKEY (4096 * 32)
 
 static void agp_free_key(int key)
 {
@@ -225,7 +226,8 @@ void agp_free_memory(agp_memory * curr)
 	if (curr->page_count != 0) {
 		for (i = 0; i < curr->page_count; i++) {
 			curr->memory[i] &= ~(0x00000fff);
-			agp_destroy_page((void *) phys_to_virt(curr->memory[i]));
+			agp_destroy_page((unsigned long)
+					 phys_to_virt(curr->memory[i]));
 		}
 	}
 	agp_free_key(curr->key);
@@ -242,7 +244,7 @@ agp_memory *agp_allocate_memory(size_t page_count, u32 type)
 	agp_memory *new;
 	int i;
 
-	if ((atomic_read(&(agp_bridge.current_memory_agp)) + page_count) >
+	if ((atomic_read(&agp_bridge.current_memory_agp) + page_count) >
 	    agp_bridge.max_memory_agp) {
 		return NULL;
 	}
@@ -258,15 +260,17 @@ agp_memory *agp_allocate_memory(size_t page_count, u32 type)
 		return NULL;
 	}
 	for (i = 0; i < page_count; i++) {
-		new->memory[i] = (unsigned long) agp_alloc_page();
+		new->memory[i] = agp_alloc_page();
 
-		if ((void *) new->memory[i] == NULL) {
+		if (new->memory[i] == 0) {
 			/* Free this structure */
 			agp_free_memory(new);
 			return NULL;
 		}
 		new->memory[i] =
-		    agp_bridge.mask_memory(virt_to_phys((void *) new->memory[i]), type);
+		    agp_bridge.mask_memory(
+				   virt_to_phys((void *) new->memory[i]),
+						  type);
 		new->page_count++;
 	}
 
@@ -285,16 +289,16 @@ static int agp_return_size(void)
 
 	switch (agp_bridge.size_type) {
 	case U8_APER_SIZE:
-		current_size = ((aper_size_info_8 *) temp)->size;
+		current_size = A_SIZE_8(temp)->size;
 		break;
 	case U16_APER_SIZE:
-		current_size = ((aper_size_info_16 *) temp)->size;
+		current_size = A_SIZE_16(temp)->size;
 		break;
 	case U32_APER_SIZE:
-		current_size = ((aper_size_info_32 *) temp)->size;
+		current_size = A_SIZE_32(temp)->size;
 		break;
 	case FIXED_APER_SIZE:
-		current_size = ((aper_size_info_fixed *) temp)->size;
+		current_size = A_SIZE_FIX(temp)->size;
 		break;
 	default:
 		current_size = 0;
@@ -396,7 +400,8 @@ static void agp_generic_agp_enable(u32 mode)
 	 *        AGP devices and collect their data.
 	 */
 
-	while ((device = pci_find_class(PCI_CLASS_DISPLAY_VGA << 8, device)) != NULL) {
+	while ((device = pci_find_class(PCI_CLASS_DISPLAY_VGA << 8,
+					device)) != NULL) {
 		pci_read_config_dword(device, 0x04, &scratch);
 
 		if (!(scratch & 0x00100000))
@@ -406,7 +411,8 @@ static void agp_generic_agp_enable(u32 mode)
 
 		if (cap_ptr != 0x00) {
 			do {
-				pci_read_config_dword(device, cap_ptr, &cap_id);
+				pci_read_config_dword(device,
+						      cap_ptr, &cap_id);
 
 				if ((cap_id & 0xff) != 0x02)
 					cap_ptr = (cap_id >> 8) & 0xff;
@@ -415,8 +421,8 @@ static void agp_generic_agp_enable(u32 mode)
 		}
 		if (cap_ptr != 0x00) {
 			/*
-			 * Ok, here we have a AGP device. Disable impossible settings,
-			 * and adjust the readqueue to the minimum.
+			 * Ok, here we have a AGP device. Disable impossible 
+			 * settings, and adjust the readqueue to the minimum.
 			 */
 
 			pci_read_config_dword(device, cap_ptr + 4, &scratch);
@@ -424,23 +430,35 @@ static void agp_generic_agp_enable(u32 mode)
 			/* adjust RQ depth */
 			command =
 			    ((command & ~0xff000000) |
-			     min((mode & 0xff000000), min((command & 0xff000000), (scratch & 0xff000000))));
+			     min((mode & 0xff000000),
+				 min((command & 0xff000000),
+				     (scratch & 0xff000000))));
 
 			/* disable SBA if it's not supported */
-			if (!((command & 0x00000200) && (scratch & 0x00000200) && (mode & 0x00000200)))
+			if (!((command & 0x00000200) &&
+			      (scratch & 0x00000200) &&
+			      (mode & 0x00000200)))
 				command &= ~0x00000200;
 
 			/* disable FW if it's not supported */
-			if (!((command & 0x00000010) && (scratch & 0x00000010) && (mode & 0x00000010)))
+			if (!((command & 0x00000010) &&
+			      (scratch & 0x00000010) &&
+			      (mode & 0x00000010)))
 				command &= ~0x00000010;
 
-			if (!((command & 4) && (scratch & 4) && (mode & 4)))
+			if (!((command & 4) &&
+			      (scratch & 4) &&
+			      (mode & 4)))
 				command &= ~0x00000004;
 
-			if (!((command & 2) && (scratch & 2) && (mode & 2)))
+			if (!((command & 2) &&
+			      (scratch & 2) &&
+			      (mode & 2)))
 				command &= ~0x00000002;
 
-			if (!((command & 1) && (scratch & 1) && (mode & 1)))
+			if (!((command & 1) &&
+			      (scratch & 1) &&
+			      (mode & 1)))
 				command &= ~0x00000001;
 		}
 	}
@@ -469,7 +487,8 @@ static void agp_generic_agp_enable(u32 mode)
 	 *        command registers.
 	 */
 
-	while ((device = pci_find_class(PCI_CLASS_DISPLAY_VGA << 8, device)) != NULL) {
+	while ((device = pci_find_class(PCI_CLASS_DISPLAY_VGA << 8,
+					device)) != NULL) {
 		pci_read_config_dword(device, 0x04, &scratch);
 
 		if (!(scratch & 0x00100000))
@@ -479,7 +498,8 @@ static void agp_generic_agp_enable(u32 mode)
 
 		if (cap_ptr != 0x00) {
 			do {
-				pci_read_config_dword(device, cap_ptr, &cap_id);
+				pci_read_config_dword(device,
+						      cap_ptr, &cap_id);
 
 				if ((cap_id & 0xff) != 0x02)
 					cap_ptr = (cap_id >> 8) & 0xff;
@@ -510,52 +530,58 @@ static int agp_generic_create_gatt_table(void)
 		do {
 			switch (agp_bridge.size_type) {
 			case U8_APER_SIZE:
-				size = ((aper_size_info_8 *) temp)->size;
-				page_order = ((aper_size_info_8 *) temp)->page_order;
-				num_entries = ((aper_size_info_8 *) temp)->num_entries;
+				size = A_SIZE_8(temp)->size;
+				page_order =
+				    A_SIZE_8(temp)->page_order;
+				num_entries =
+				    A_SIZE_8(temp)->num_entries;
 				break;
 			case U16_APER_SIZE:
-				size = ((aper_size_info_16 *) temp)->size;
-				page_order = ((aper_size_info_16 *) temp)->page_order;
-				num_entries = ((aper_size_info_16 *) temp)->num_entries;
+				size = A_SIZE_16(temp)->size;
+				page_order = A_SIZE_16(temp)->page_order;
+				num_entries = A_SIZE_16(temp)->num_entries;
 				break;
 			case U32_APER_SIZE:
-				size = ((aper_size_info_32 *) temp)->size;
-				page_order = ((aper_size_info_32 *) temp)->page_order;
-				num_entries = ((aper_size_info_32 *) temp)->num_entries;
+				size = A_SIZE_32(temp)->size;
+				page_order = A_SIZE_32(temp)->page_order;
+				num_entries = A_SIZE_32(temp)->num_entries;
 				break;
-				/* This case will never really happen */
+				/* This case will never really happen. */
 			case FIXED_APER_SIZE:
 			default:
 				size = page_order = num_entries = 0;
 				break;
 			}
 
-			table = (char *) __get_free_pages(GFP_KERNEL, page_order);
+			table = (char *) __get_free_pages(GFP_KERNEL,
+							  page_order);
 
 			if (table == NULL) {
 				i++;
-
 				switch (agp_bridge.size_type) {
 				case U8_APER_SIZE:
-					agp_bridge.current_size = (((aper_size_info_8 *) agp_bridge.aperture_sizes) + i);
+					agp_bridge.current_size = A_IDX8();
 					break;
 				case U16_APER_SIZE:
-					agp_bridge.current_size = (((aper_size_info_16 *) agp_bridge.aperture_sizes) + i);
+					agp_bridge.current_size = A_IDX16();
 					break;
 				case U32_APER_SIZE:
-					agp_bridge.current_size = (((aper_size_info_32 *) agp_bridge.aperture_sizes) + i);
+					agp_bridge.current_size = A_IDX32();
 					break;
-					/* This case will never really happen */
+					/* This case will never really 
+					 * happen. 
+					 */
 				case FIXED_APER_SIZE:
 				default:
-					size = page_order = num_entries = 0;
+					agp_bridge.current_size =
+					    agp_bridge.current_size;
 					break;
 				}
 			} else {
 				agp_bridge.aperture_size_idx = i;
 			}
-		} while ((table == NULL) && (i < agp_bridge.num_aperture_sizes));
+		} while ((table == NULL) &&
+			 (i < agp_bridge.num_aperture_sizes));
 	} else {
 		size = ((aper_size_info_fixed *) temp)->size;
 		page_order = ((aper_size_info_fixed *) temp)->page_order;
@@ -590,7 +616,8 @@ static int agp_generic_create_gatt_table(void)
 	agp_bridge.gatt_bus_addr = virt_to_phys(agp_bridge.gatt_table_real);
 
 	for (i = 0; i < num_entries; i++) {
-		agp_bridge.gatt_table[i] = (unsigned long) agp_bridge.scratch_page;
+		agp_bridge.gatt_table[i] =
+		    (unsigned long) agp_bridge.scratch_page;
 	}
 
 	return 0;
@@ -607,16 +634,16 @@ static int agp_generic_free_gatt_table(void)
 
 	switch (agp_bridge.size_type) {
 	case U8_APER_SIZE:
-		page_order = ((aper_size_info_8 *) temp)->page_order;
+		page_order = A_SIZE_8(temp)->page_order;
 		break;
 	case U16_APER_SIZE:
-		page_order = ((aper_size_info_16 *) temp)->page_order;
+		page_order = A_SIZE_16(temp)->page_order;
 		break;
 	case U32_APER_SIZE:
-		page_order = ((aper_size_info_32 *) temp)->page_order;
+		page_order = A_SIZE_32(temp)->page_order;
 		break;
 	case FIXED_APER_SIZE:
-		page_order = ((aper_size_info_fixed *) temp)->page_order;
+		page_order = A_SIZE_FIX(temp)->page_order;
 		break;
 	default:
 		page_order = 0;
@@ -650,16 +677,16 @@ static int agp_generic_insert_memory(agp_memory * mem,
 
 	switch (agp_bridge.size_type) {
 	case U8_APER_SIZE:
-		num_entries = ((aper_size_info_8 *) temp)->num_entries;
+		num_entries = A_SIZE_8(temp)->num_entries;
 		break;
 	case U16_APER_SIZE:
-		num_entries = ((aper_size_info_16 *) temp)->num_entries;
+		num_entries = A_SIZE_16(temp)->num_entries;
 		break;
 	case U32_APER_SIZE:
-		num_entries = ((aper_size_info_32 *) temp)->num_entries;
+		num_entries = A_SIZE_32(temp)->num_entries;
 		break;
 	case FIXED_APER_SIZE:
-		num_entries = ((aper_size_info_fixed *) temp)->num_entries;
+		num_entries = A_SIZE_FIX(temp)->num_entries;
 		break;
 	default:
 		num_entries = 0;
@@ -704,7 +731,8 @@ static int agp_generic_remove_memory(agp_memory * mem, off_t pg_start,
 		return -EINVAL;
 	}
 	for (i = pg_start; i < (mem->page_count + pg_start); i++) {
-		agp_bridge.gatt_table[i] = (unsigned long) agp_bridge.scratch_page;
+		agp_bridge.gatt_table[i] =
+		    (unsigned long) agp_bridge.scratch_page;
 	}
 
 	agp_bridge.tlb_flush(mem);
@@ -732,8 +760,7 @@ void agp_enable(u32 mode)
 
 /* End - Generic Agp routines */
 
-#ifdef AGP_BUILD_INTEL_I810
-
+#ifdef CONFIG_AGP_I810
 static aper_size_info_fixed intel_i810_sizes[] =
 {
 	{64, 16384, 4},
@@ -751,7 +778,7 @@ static gatt_mask intel_i810_masks[] =
 
 static struct _intel_i810_private {
 	struct pci_dev *i810_dev;	/* device one */
-	volatile unsigned char *registers;
+	volatile u8 *registers;
 	int num_dcache_entries;
 } intel_i810_private;
 
@@ -761,7 +788,7 @@ static int intel_i810_fetch_size(void)
 	aper_size_info_fixed *values;
 
 	pci_read_config_dword(agp_bridge.dev, I810_SMRAM_MISCC, &smram_miscc);
-	values = (aper_size_info_fixed *) agp_bridge.aperture_sizes;
+	values = A_SIZE_FIX(agp_bridge.aperture_sizes);
 
 	if ((smram_miscc & I810_GMS) == I810_GMS_DISABLE) {
 		printk("agpgart: i810 is disabled\n");
@@ -788,18 +815,19 @@ static int intel_i810_configure(void)
 	u32 temp;
 	int i;
 
-	current_size = (aper_size_info_fixed *) agp_bridge.current_size;
+	current_size = A_SIZE_FIX(agp_bridge.current_size);
 
 	pci_read_config_dword(intel_i810_private.i810_dev, I810_MMADDR, &temp);
 	temp &= 0xfff80000;
 
 	intel_i810_private.registers =
-	    (volatile unsigned char *) ioremap(temp, 128 * 4096);
+	    (volatile u8 *) ioremap(temp, 128 * 4096);
 
 	if ((INREG32(intel_i810_private.registers, I810_DRAM_CTL)
 	     & I810_DRAM_ROW_0) == I810_DRAM_ROW_0_SDRAM) {
 		/* This will need to be dynamically assigned */
-		printk("agpgart: detected 4MB dedicated video ram.\n");
+		printk(KERN_INFO
+		       "agpgart: detected 4MB dedicated video ram.\n");
 		intel_i810_private.num_dcache_entries = 1024;
 	}
 	pci_read_config_dword(intel_i810_private.i810_dev, I810_GMADDR, &temp);
@@ -810,7 +838,8 @@ static int intel_i810_configure(void)
 
 	if (agp_bridge.needs_scratch_page == TRUE) {
 		for (i = 0; i < current_size->num_entries; i++) {
-			OUTREG32(intel_i810_private.registers, I810_PTE_BASE + (i * 4),
+			OUTREG32(intel_i810_private.registers,
+				 I810_PTE_BASE + (i * 4),
 				 agp_bridge.scratch_page);
 		}
 	}
@@ -840,7 +869,7 @@ static int intel_i810_insert_entries(agp_memory * mem, off_t pg_start,
 	void *temp;
 
 	temp = agp_bridge.current_size;
-	num_entries = ((aper_size_info_fixed *) temp)->num_entries;
+	num_entries = A_SIZE_FIX(temp)->num_entries;
 
 	if ((pg_start + mem->page_count) > num_entries) {
 		return -EINVAL;
@@ -856,9 +885,12 @@ static int intel_i810_insert_entries(agp_memory * mem, off_t pg_start,
 		    (mem->type == AGP_DCACHE_MEMORY)) {
 			/* special insert */
 
-			for (i = pg_start; i < (pg_start + mem->page_count); i++) {
-				OUTREG32(intel_i810_private.registers, I810_PTE_BASE + (i * 4),
-					 (i * 4096) | I810_PTE_LOCAL | I810_PTE_VALID);
+			for (i = pg_start;
+			     i < (pg_start + mem->page_count); i++) {
+				OUTREG32(intel_i810_private.registers,
+					 I810_PTE_BASE + (i * 4),
+					 (i * 4096) | I810_PTE_LOCAL |
+					 I810_PTE_VALID);
 			}
 
 			agp_bridge.tlb_flush(mem);
@@ -885,7 +917,8 @@ static int intel_i810_remove_entries(agp_memory * mem, off_t pg_start,
 	int i;
 
 	for (i = pg_start; i < (mem->page_count + pg_start); i++) {
-		OUTREG32(intel_i810_private.registers, I810_PTE_BASE + (i * 4),
+		OUTREG32(intel_i810_private.registers,
+			 I810_PTE_BASE + (i * 4),
 			 agp_bridge.scratch_page);
 	}
 
@@ -944,11 +977,7 @@ static void intel_i810_setup(struct pci_dev *i810_dev)
 	agp_bridge.tlb_flush = intel_i810_tlbflush;
 	agp_bridge.mask_memory = intel_i810_mask_memory;
 	agp_bridge.agp_enable = intel_i810_agp_enable;
-#ifdef __SMP__
-	agp_bridge.cache_flush = smp_flush_cache;
-#else
-	agp_bridge.cache_flush = flush_cache;
-#endif
+	agp_bridge.cache_flush = global_cache_flush;
 	agp_bridge.create_gatt_table = agp_generic_create_gatt_table;
 	agp_bridge.free_gatt_table = agp_generic_free_gatt_table;
 	agp_bridge.insert_memory = intel_i810_insert_entries;
@@ -959,7 +988,7 @@ static void intel_i810_setup(struct pci_dev *i810_dev)
 
 #endif
 
-#ifdef AGP_BUILD_INTEL_GENERIC
+#ifdef CONFIG_AGP_INTEL
 
 static int intel_fetch_size(void)
 {
@@ -968,7 +997,7 @@ static int intel_fetch_size(void)
 	aper_size_info_16 *values;
 
 	pci_read_config_word(agp_bridge.dev, INTEL_APSIZE, &temp);
-	(void *) values = agp_bridge.aperture_sizes;
+	values = A_SIZE_16(agp_bridge.aperture_sizes);
 
 	for (i = 0; i < agp_bridge.num_aperture_sizes; i++) {
 		if (temp == values[i].size_value) {
@@ -993,10 +1022,11 @@ static void intel_cleanup(void)
 	u16 temp;
 	aper_size_info_16 *previous_size;
 
-	previous_size = (aper_size_info_16 *) agp_bridge.previous_size;
+	previous_size = A_SIZE_16(agp_bridge.previous_size);
 	pci_read_config_word(agp_bridge.dev, INTEL_NBXCFG, &temp);
 	pci_write_config_word(agp_bridge.dev, INTEL_NBXCFG, temp & ~(1 << 9));
-	pci_write_config_word(agp_bridge.dev, INTEL_APSIZE, previous_size->size_value);
+	pci_write_config_word(agp_bridge.dev, INTEL_APSIZE,
+			      previous_size->size_value);
 }
 
 static int intel_configure(void)
@@ -1005,24 +1035,27 @@ static int intel_configure(void)
 	u16 temp2;
 	aper_size_info_16 *current_size;
 
-	current_size = (aper_size_info_16 *) agp_bridge.current_size;
+	current_size = A_SIZE_16(agp_bridge.current_size);
 
 	/* aperture size */
-	pci_write_config_word(agp_bridge.dev, INTEL_APSIZE, current_size->size_value);
+	pci_write_config_word(agp_bridge.dev, INTEL_APSIZE,
+			      current_size->size_value);
 
 	/* address to map to */
 	pci_read_config_dword(agp_bridge.dev, INTEL_APBASE, &temp);
 	agp_bridge.gart_bus_addr = (temp & PCI_BASE_ADDRESS_MEM_MASK);
 
 	/* attbase - aperture base */
-	pci_write_config_dword(agp_bridge.dev, INTEL_ATTBASE, agp_bridge.gatt_bus_addr);
+	pci_write_config_dword(agp_bridge.dev, INTEL_ATTBASE,
+			       agp_bridge.gatt_bus_addr);
 
 	/* agpctrl */
 	pci_write_config_dword(agp_bridge.dev, INTEL_AGPCTRL, 0x2280);
 
 	/* paccfg/nbxcfg */
 	pci_read_config_word(agp_bridge.dev, INTEL_NBXCFG, &temp2);
-	pci_write_config_word(agp_bridge.dev, INTEL_NBXCFG, (temp2 & ~(1 << 10)) | (1 << 9));
+	pci_write_config_word(agp_bridge.dev, INTEL_NBXCFG,
+			      (temp2 & ~(1 << 10)) | (1 << 9));
 	/* clear any possible error conditions */
 	pci_write_config_byte(agp_bridge.dev, INTEL_ERRSTS + 1, 7);
 	return 0;
@@ -1068,11 +1101,7 @@ static void intel_generic_setup(void)
 	agp_bridge.tlb_flush = intel_tlbflush;
 	agp_bridge.mask_memory = intel_mask_memory;
 	agp_bridge.agp_enable = agp_generic_agp_enable;
-#ifdef __SMP__
-	agp_bridge.cache_flush = smp_flush_cache;
-#else
-	agp_bridge.cache_flush = flush_cache;
-#endif
+	agp_bridge.cache_flush = global_cache_flush;
 	agp_bridge.create_gatt_table = agp_generic_create_gatt_table;
 	agp_bridge.free_gatt_table = agp_generic_free_gatt_table;
 	agp_bridge.insert_memory = agp_generic_insert_memory;
@@ -1083,7 +1112,7 @@ static void intel_generic_setup(void)
 
 #endif
 
-#ifdef AGP_BUILD_VIA_GENERIC
+#ifdef CONFIG_AGP_VIA
 
 static int via_fetch_size(void)
 {
@@ -1091,7 +1120,7 @@ static int via_fetch_size(void)
 	u8 temp;
 	aper_size_info_8 *values;
 
-	(void *) values = agp_bridge.aperture_sizes;
+	values = A_SIZE_8(agp_bridge.aperture_sizes);
 	pci_read_config_byte(agp_bridge.dev, VIA_APSIZE, &temp);
 	for (i = 0; i < agp_bridge.num_aperture_sizes; i++) {
 		if (temp == values[i].size_value) {
@@ -1110,9 +1139,10 @@ static int via_configure(void)
 	u32 temp;
 	aper_size_info_8 *current_size;
 
-	current_size = (aper_size_info_8 *) agp_bridge.current_size;
+	current_size = A_SIZE_8(agp_bridge.current_size);
 	/* aperture size */
-	pci_write_config_byte(agp_bridge.dev, VIA_APSIZE, current_size->size_value);
+	pci_write_config_byte(agp_bridge.dev, VIA_APSIZE,
+			      current_size->size_value);
 	/* address to map too */
 	pci_read_config_dword(agp_bridge.dev, VIA_APBASE, &temp);
 	agp_bridge.gart_bus_addr = (temp & PCI_BASE_ADDRESS_MEM_MASK);
@@ -1130,9 +1160,10 @@ static void via_cleanup(void)
 {
 	aper_size_info_8 *previous_size;
 
-	previous_size = (aper_size_info_8 *) agp_bridge.previous_size;
+	previous_size = A_SIZE_8(agp_bridge.previous_size);
 	pci_write_config_dword(agp_bridge.dev, VIA_ATTBASE, 0);
-	pci_write_config_byte(agp_bridge.dev, VIA_APSIZE, previous_size->size_value);
+	pci_write_config_byte(agp_bridge.dev, VIA_APSIZE,
+			      previous_size->size_value);
 }
 
 static void via_tlbflush(agp_memory * mem)
@@ -1179,11 +1210,7 @@ static void via_generic_setup(void)
 	agp_bridge.tlb_flush = via_tlbflush;
 	agp_bridge.mask_memory = via_mask_memory;
 	agp_bridge.agp_enable = agp_generic_agp_enable;
-#ifdef __SMP__
-	agp_bridge.cache_flush = smp_flush_cache;
-#else
-	agp_bridge.cache_flush = flush_cache;
-#endif
+	agp_bridge.cache_flush = global_cache_flush;
 	agp_bridge.create_gatt_table = agp_generic_create_gatt_table;
 	agp_bridge.free_gatt_table = agp_generic_free_gatt_table;
 	agp_bridge.insert_memory = agp_generic_insert_memory;
@@ -1194,7 +1221,7 @@ static void via_generic_setup(void)
 
 #endif
 
-#ifdef AGP_BUILD_SIS_GENERIC
+#ifdef CONFIG_AGP_SIS
 
 static int sis_fetch_size(void)
 {
@@ -1203,10 +1230,11 @@ static int sis_fetch_size(void)
 	aper_size_info_8 *values;
 
 	pci_read_config_byte(agp_bridge.dev, SIS_APSIZE, &temp_size);
-	(void *) values = agp_bridge.aperture_sizes;
+	values = A_SIZE_8(agp_bridge.aperture_sizes);
 	for (i = 0; i < agp_bridge.num_aperture_sizes; i++) {
 		if ((temp_size == values[i].size_value) ||
-		    ((temp_size & ~(0x03)) == (values[i].size_value & ~(0x03)))) {
+		    ((temp_size & ~(0x03)) ==
+		     (values[i].size_value & ~(0x03)))) {
 			agp_bridge.previous_size =
 			    agp_bridge.current_size = (void *) (values + i);
 
@@ -1229,12 +1257,14 @@ static int sis_configure(void)
 	u32 temp;
 	aper_size_info_8 *current_size;
 
-	current_size = (aper_size_info_8 *) agp_bridge.current_size;
+	current_size = A_SIZE_8(agp_bridge.current_size);
 	pci_write_config_byte(agp_bridge.dev, SIS_TLBCNTRL, 0x05);
 	pci_read_config_dword(agp_bridge.dev, SIS_APBASE, &temp);
 	agp_bridge.gart_bus_addr = (temp & PCI_BASE_ADDRESS_MEM_MASK);
-	pci_write_config_dword(agp_bridge.dev, SIS_ATTBASE, agp_bridge.gatt_bus_addr);
-	pci_write_config_byte(agp_bridge.dev, SIS_APSIZE, current_size->size_value);
+	pci_write_config_dword(agp_bridge.dev, SIS_ATTBASE,
+			       agp_bridge.gatt_bus_addr);
+	pci_write_config_byte(agp_bridge.dev, SIS_APSIZE,
+			      current_size->size_value);
 	return 0;
 }
 
@@ -1242,8 +1272,9 @@ static void sis_cleanup(void)
 {
 	aper_size_info_8 *previous_size;
 
-	previous_size = (aper_size_info_8 *) agp_bridge.previous_size;
-	pci_write_config_byte(agp_bridge.dev, SIS_APSIZE, (previous_size->size_value & ~(0x03)));
+	previous_size = A_SIZE_8(agp_bridge.previous_size);
+	pci_write_config_byte(agp_bridge.dev, SIS_APSIZE,
+			      (previous_size->size_value & ~(0x03)));
 }
 
 static unsigned long sis_mask_memory(unsigned long addr, int type)
@@ -1284,11 +1315,7 @@ static void sis_generic_setup(void)
 	agp_bridge.tlb_flush = sis_tlbflush;
 	agp_bridge.mask_memory = sis_mask_memory;
 	agp_bridge.agp_enable = agp_generic_agp_enable;
-#ifdef __SMP__
-	agp_bridge.cache_flush = smp_flush_cache;
-#else
-	agp_bridge.cache_flush = flush_cache;
-#endif
+	agp_bridge.cache_flush = global_cache_flush;
 	agp_bridge.create_gatt_table = agp_generic_create_gatt_table;
 	agp_bridge.free_gatt_table = agp_generic_free_gatt_table;
 	agp_bridge.insert_memory = agp_generic_insert_memory;
@@ -1299,10 +1326,10 @@ static void sis_generic_setup(void)
 
 #endif
 
-#ifdef AGP_BUILD_AMD_IRONGATE
+#ifdef CONFIG_AGP_AMD
 
 static struct _amd_irongate_private {
-	volatile unsigned char *registers;
+	volatile u8 *registers;
 } amd_irongate_private;
 
 static int amd_irongate_fetch_size(void)
@@ -1313,7 +1340,7 @@ static int amd_irongate_fetch_size(void)
 
 	pci_read_config_dword(agp_bridge.dev, AMD_APSIZE, &temp);
 	temp = (temp & 0x0000000e);
-	(void *) values = agp_bridge.aperture_sizes;
+	values = A_SIZE_32(agp_bridge.aperture_sizes);
 	for (i = 0; i < agp_bridge.num_aperture_sizes; i++) {
 		if (temp == values[i].size_value) {
 			agp_bridge.previous_size =
@@ -1333,15 +1360,16 @@ static int amd_irongate_configure(void)
 	u32 temp;
 	u16 enable_reg;
 
-	current_size = (aper_size_info_32 *) agp_bridge.current_size;
+	current_size = A_SIZE_32(agp_bridge.current_size);
 
 	/* Get the memory mapped registers */
 	pci_read_config_dword(agp_bridge.dev, AMD_MMBASE, &temp);
 	temp = (temp & PCI_BASE_ADDRESS_MEM_MASK);
-	amd_irongate_private.registers = (volatile unsigned char *) ioremap(temp, 4096);
+	amd_irongate_private.registers = (volatile u8 *) ioremap(temp, 4096);
 
 	/* Write out the address of the gatt table */
-	OUTREG32(amd_irongate_private.registers, AMD_ATTBASE, agp_bridge.gatt_bus_addr);
+	OUTREG32(amd_irongate_private.registers, AMD_ATTBASE,
+		 agp_bridge.gatt_bus_addr);
 
 	/* Write the Sync register */
 	pci_write_config_byte(agp_bridge.dev, AMD_MODECNTL, 0x80);
@@ -1353,7 +1381,8 @@ static int amd_irongate_configure(void)
 
 	/* Write out the size register */
 	pci_read_config_dword(agp_bridge.dev, AMD_APSIZE, &temp);
-	temp = (((temp & ~(0x0000000e)) | current_size->size_value) | 0x00000001);
+	temp = (((temp & ~(0x0000000e)) | current_size->size_value)
+		| 0x00000001);
 	pci_write_config_dword(agp_bridge.dev, AMD_APSIZE, temp);
 
 	/* Flush the tlb */
@@ -1372,7 +1401,7 @@ static void amd_irongate_cleanup(void)
 	u32 temp;
 	u16 enable_reg;
 
-	previous_size = (aper_size_info_32 *) agp_bridge.previous_size;
+	previous_size = A_SIZE_32(agp_bridge.previous_size);
 
 	enable_reg = INREG16(amd_irongate_private.registers, AMD_GARTENABLE);
 	enable_reg = (enable_reg & ~(0x0004));
@@ -1436,11 +1465,7 @@ static void amd_irongate_setup(void)
 	agp_bridge.tlb_flush = amd_irongate_tlbflush;
 	agp_bridge.mask_memory = amd_irongate_mask_memory;
 	agp_bridge.agp_enable = agp_generic_agp_enable;
-#ifdef __SMP__
-	agp_bridge.cache_flush = smp_flush_cache;
-#else
-	agp_bridge.cache_flush = flush_cache;
-#endif
+	agp_bridge.cache_flush = global_cache_flush;
 	agp_bridge.create_gatt_table = agp_generic_create_gatt_table;
 	agp_bridge.free_gatt_table = agp_generic_free_gatt_table;
 	agp_bridge.insert_memory = agp_generic_insert_memory;
@@ -1451,7 +1476,7 @@ static void amd_irongate_setup(void)
 
 #endif
 
-#ifdef AGP_BUILD_ALI_M1541
+#ifdef CONFIG_AGP_ALI
 
 static int ali_fetch_size(void)
 {
@@ -1461,7 +1486,7 @@ static int ali_fetch_size(void)
 
 	pci_read_config_dword(agp_bridge.dev, ALI_ATTBASE, &temp);
 	temp &= ~(0xfffffff0);
-	(void *) values = agp_bridge.aperture_sizes;
+	values = A_SIZE_32(agp_bridge.aperture_sizes);
 
 	for (i = 0; i < agp_bridge.num_aperture_sizes; i++) {
 		if (temp == values[i].size_value) {
@@ -1491,12 +1516,13 @@ static void ali_cleanup(void)
 	aper_size_info_32 *previous_size;
 	u32 temp;
 
-	previous_size = (aper_size_info_32 *) agp_bridge.previous_size;
+	previous_size = A_SIZE_32(agp_bridge.previous_size);
 
 	pci_read_config_dword(agp_bridge.dev, ALI_TLBCTRL, &temp);
 	pci_write_config_dword(agp_bridge.dev, ALI_TLBCTRL,
 			       ((temp & 0xffffff00) | 0x00000090));
-	pci_write_config_dword(agp_bridge.dev, ALI_ATTBASE, previous_size->size_value);
+	pci_write_config_dword(agp_bridge.dev, ALI_ATTBASE,
+			       previous_size->size_value);
 }
 
 static int ali_configure(void)
@@ -1504,7 +1530,7 @@ static int ali_configure(void)
 	u32 temp;
 	aper_size_info_32 *current_size;
 
-	current_size = (aper_size_info_32 *) agp_bridge.current_size;
+	current_size = A_SIZE_32(agp_bridge.current_size);
 
 	/* aperture size and gatt addr */
 	pci_write_config_dword(agp_bridge.dev, ALI_ATTBASE,
@@ -1561,11 +1587,7 @@ static void ali_generic_setup(void)
 	agp_bridge.tlb_flush = ali_tlbflush;
 	agp_bridge.mask_memory = ali_mask_memory;
 	agp_bridge.agp_enable = agp_generic_agp_enable;
-#ifdef __SMP__
-	agp_bridge.cache_flush = smp_flush_cache;
-#else
-	agp_bridge.cache_flush = flush_cache;
-#endif
+	agp_bridge.cache_flush = global_cache_flush;
 	agp_bridge.create_gatt_table = agp_generic_create_gatt_table;
 	agp_bridge.free_gatt_table = agp_generic_free_gatt_table;
 	agp_bridge.insert_memory = agp_generic_insert_memory;
@@ -1593,7 +1615,7 @@ static void agp_find_supported_device(void)
 	agp_bridge.dev = dev;
 
 	/* Need to test for I810 here */
-#ifdef AGP_BUILD_INTEL_I810
+#ifdef CONFIG_AGP_I810
 	if (dev->vendor == PCI_VENDOR_ID_INTEL) {
 		struct pci_dev *i810_dev;
 
@@ -1603,11 +1625,14 @@ static void agp_find_supported_device(void)
 					       PCI_DEVICE_ID_INTEL_810_1,
 						   NULL);
 			if (i810_dev == NULL) {
-				printk("agpgart: Detected an Intel i810, but could not find the secondary device.\n");
+				printk("agpgart: Detected an Intel i810,"
+				       " but could not find the secondary"
+				       " device.\n");
 				agp_bridge.type = NOT_SUPPORTED;
 				return;
 			}
-			printk("agpgart: Detected an Intel i810 Chipset.\n");
+			printk(KERN_INFO "agpgart: Detected an Intel "
+			       "i810 Chipset.\n");
 			agp_bridge.type = INTEL_I810;
 			agp_bridge.intel_i810_setup(i810_dev);
 			return;
@@ -1617,11 +1642,14 @@ static void agp_find_supported_device(void)
 					 PCI_DEVICE_ID_INTEL_810_DC100_1,
 						   NULL);
 			if (i810_dev == NULL) {
-				printk("agpgart: Detected an Intel i810 DC100, but could not find the secondary device.\n");
+				printk("agpgart: Detected an Intel i810 "
+				       "DC100, but could not find the "
+				       "secondary device.\n");
 				agp_bridge.type = NOT_SUPPORTED;
 				return;
 			}
-			printk("agpgart: Detected an Intel i810 DC100 Chipset.\n");
+			printk(KERN_INFO "agpgart: Detected an Intel i810 "
+			       "DC100 Chipset.\n");
 			agp_bridge.type = INTEL_I810;
 			agp_bridge.intel_i810_setup(i810_dev);
 			return;
@@ -1631,11 +1659,14 @@ static void agp_find_supported_device(void)
 					     PCI_DEVICE_ID_INTEL_810_E_1,
 						   NULL);
 			if (i810_dev == NULL) {
-				printk("agpgart: Detected an Intel i810 E, but could not find the secondary device.\n");
+				printk("agpgart: Detected an Intel i810 E"
+				    ", but could not find the secondary "
+				       "device.\n");
 				agp_bridge.type = NOT_SUPPORTED;
 				return;
 			}
-			printk("agpgart: Detected an Intel i810 E Chipset.\n");
+			printk(KERN_INFO "agpgart: Detected an Intel i810 E "
+			       "Chipset.\n");
 			agp_bridge.type = INTEL_I810;
 			agp_bridge.intel_i810_setup(i810_dev);
 			return;
@@ -1674,35 +1705,42 @@ static void agp_find_supported_device(void)
 			      &agp_bridge.mode);
 
 	switch (dev->vendor) {
-#ifdef AGP_BUILD_INTEL_GENERIC
+#ifdef CONFIG_AGP_INTEL
 	case PCI_VENDOR_ID_INTEL:
 		switch (dev->device) {
 		case PCI_DEVICE_ID_INTEL_82443LX_0:
 			agp_bridge.type = INTEL_LX;
-			printk("agpgart: Detected an Intel 440LX Chipset.\n");
+			printk(KERN_INFO "agpgart: Detected an Intel 440LX"
+			       " Chipset.\n");
 			agp_bridge.intel_generic_setup();
 			return;
 
 		case PCI_DEVICE_ID_INTEL_82443BX_0:
 			agp_bridge.type = INTEL_BX;
-			printk("agpgart: Detected an Intel 440BX Chipset.\n");
+			printk(KERN_INFO "agpgart: Detected an Intel 440BX "
+			       "Chipset.\n");
 			agp_bridge.intel_generic_setup();
 			return;
 
 		case PCI_DEVICE_ID_INTEL_82443GX_0:
 			agp_bridge.type = INTEL_GX;
-			printk("agpgart: Detected an Intel 440GX Chipset.\n");
+			printk(KERN_INFO "agpgart: Detected an Intel 440GX "
+			       "Chipset.\n");
 			agp_bridge.intel_generic_setup();
 			return;
 
 		default:
 			if (agp_try_unsupported != 0) {
-				printk("agpgart: Trying generic intel routines for device id: %x\n", dev->device);
+				printk("agpgart: Trying generic intel "
+				       "routines for device id: %x\n",
+				       dev->device);
 				agp_bridge.type = INTEL_GENERIC;
 				agp_bridge.intel_generic_setup();
 				return;
 			} else {
-				printk("agpgart: Unsupported intel chipset, you might want to try agp_try_unsupported=1.\n");
+				printk("agpgart: Unsupported intel chipset,"
+				       " you might want to try "
+				       "agp_try_unsupported=1.\n");
 				agp_bridge.type = NOT_SUPPORTED;
 				return;
 			}
@@ -1710,35 +1748,41 @@ static void agp_find_supported_device(void)
 		break;
 #endif
 
-#ifdef AGP_BUILD_VIA_GENERIC
+#ifdef CONFIG_AGP_VIA
 	case PCI_VENDOR_ID_VIA:
 		switch (dev->device) {
 		case PCI_DEVICE_ID_VIA_82C597_0:
 			agp_bridge.type = VIA_VP3;
-			printk("agpgart: Detected a VIA VP3 Chipset.\n");
+			printk(KERN_INFO "agpgart: Detected a VIA VP3 "
+			       "Chipset.\n");
 			agp_bridge.via_generic_setup();
 			return;
 
 		case PCI_DEVICE_ID_VIA_82C598_0:
 			agp_bridge.type = VIA_MVP3;
-			printk("agpgart: Detected a VIA MVP3 Chipset.\n");
+			printk(KERN_INFO "agpgart: Detected a VIA MVP3 "
+			       "Chipset.\n");
 			agp_bridge.via_generic_setup();
 			return;
 
 		case PCI_DEVICE_ID_VIA_82C691_0:
 			agp_bridge.type = VIA_APOLLO_PRO;
-			printk("agpgart: Detected a VIA Apollo Pro Chipset.\n");
+			printk(KERN_INFO "agpgart: Detected a VIA Apollo "
+			       "Pro Chipset.\n");
 			agp_bridge.via_generic_setup();
 			return;
 
 		default:
 			if (agp_try_unsupported != 0) {
-				printk("agpgart: Trying generic VIA routines for device id: %x\n", dev->device);
+				printk("agpgart: Trying generic VIA routines"
+				    " for device id: %x\n", dev->device);
 				agp_bridge.type = VIA_GENERIC;
 				agp_bridge.via_generic_setup();
 				return;
 			} else {
-				printk("agpgart: Unsupported VIA chipset, you might want to try agp_try_unsupported=1.\n");
+				printk("agpgart: Unsupported VIA chipset,"
+				       " you might want to try "
+				       "agp_try_unsupported=1.\n");
 				agp_bridge.type = NOT_SUPPORTED;
 				return;
 			}
@@ -1746,18 +1790,23 @@ static void agp_find_supported_device(void)
 		break;
 #endif
 
-#ifdef AGP_BUILD_SIS_GENERIC
+#ifdef CONFIG_AGP_SIS
 	case PCI_VENDOR_ID_SI:
 		switch (dev->device) {
-			/* ToDo need to find out the specific devices supported */
+			/* ToDo need to find out the
+			 * specific devices supported.
+			 */
 		default:
 			if (agp_try_unsupported != 0) {
-				printk("agpgart: Trying generic SiS routines for device id: %x\n", dev->device);
+				printk("agpgart: Trying generic SiS routines"
+				    " for device id: %x\n", dev->device);
 				agp_bridge.type = SIS_GENERIC;
 				agp_bridge.sis_generic_setup();
 				return;
 			} else {
-				printk("agpgart: Unsupported SiS chipset, you might want to try agp_try_unsupported=1.\n");
+				printk("agpgart: Unsupported SiS chipset, "
+				       "you might want to try "
+				       "agp_try_unsupported=1.\n");
 				agp_bridge.type = NOT_SUPPORTED;
 				return;
 			}
@@ -1765,23 +1814,28 @@ static void agp_find_supported_device(void)
 		break;
 #endif
 
-#ifdef AGP_BUILD_AMD_IRONGATE
+#ifdef CONFIG_AGP_AMD
 	case PCI_VENDOR_ID_AMD:
 		switch (dev->device) {
 		case PCI_DEVICE_ID_AMD_IRONGATE_0:
 			agp_bridge.type = AMD_IRONGATE;
-			printk("agpgart: Detected an AMD Irongate Chipset.\n");
+			printk(KERN_INFO "agpgart: Detected an AMD Irongate"
+			       " Chipset.\n");
 			agp_bridge.amd_irongate_setup();
 			return;
 
 		default:
 			if (agp_try_unsupported != 0) {
-				printk("agpgart: Trying Amd irongate routines for device id: %x\n", dev->device);
+				printk("agpgart: Trying Amd irongate"
+				       " routines for device id: %x\n",
+				       dev->device);
 				agp_bridge.type = AMD_GENERIC;
 				agp_bridge.amd_irongate_setup();
 				return;
 			} else {
-				printk("agpgart: Unsupported Amd chipset, you might want to try agp_try_unsupported=1.\n");
+				printk("agpgart: Unsupported Amd chipset,"
+				       " you might want to try "
+				       "agp_try_unsupported=1.\n");
 				agp_bridge.type = NOT_SUPPORTED;
 				return;
 			}
@@ -1789,22 +1843,26 @@ static void agp_find_supported_device(void)
 		break;
 #endif
 
-#ifdef AGP_BUILD_ALI_M1541
+#ifdef CONFIG_AGP_ALI
 	case PCI_VENDOR_ID_AL:
 		switch (dev->device) {
 		case PCI_DEVICE_ID_AL_M1541_0:
 			agp_bridge.type = ALI_M1541;
-			printk("agpgart: Detected an ALi M1541 Chipset\n");
+			printk(KERN_INFO "agpgart: Detected an ALi M1541"
+			       " Chipset\n");
 			agp_bridge.ali_generic_setup();
 			return;
 		default:
 			if (agp_try_unsupported != 0) {
-				printk("agpgart: Trying ALi generic routines for device id: %x\n", dev->device);
+				printk("agpgart: Trying ALi generic routines"
+				    " for device id: %x\n", dev->device);
 				agp_bridge.type = ALI_GENERIC;
 				agp_bridge.ali_generic_setup();
 				return;
 			} else {
-				printk("agpgart: Unsupported ALi chipset, you might want to type agp_try_unsupported=1.\n");
+				printk("agpgart: Unsupported ALi chipset,"
+				       " you might want to type "
+				       "agp_try_unsupported=1.\n");
 				agp_bridge.type = NOT_SUPPORTED;
 				return;
 			}
@@ -1822,7 +1880,7 @@ struct agp_max_table {
 	int agp;
 };
 
-static struct agp_max_table agp_maxes_table[9] =
+static struct agp_max_table maxes_table[9] =
 {
 	{0, 0},
 	{32, 4},
@@ -1845,18 +1903,19 @@ static int agp_find_max(void)
 	memory = virt_to_phys(high_memory) / 0x100000;
 	index = 0;
 
-	while ((memory > agp_maxes_table[index].mem) &&
+	while ((memory > maxes_table[index].mem) &&
 	       (index < 8)) {
 		index++;
 	}
 
-	t = (memory - agp_maxes_table[index - 1].mem) /
-	    (agp_maxes_table[index].mem - agp_maxes_table[index - 1].mem);
+	t = (memory - maxes_table[index - 1].mem) /
+	    (maxes_table[index].mem - maxes_table[index - 1].mem);
 
-	result = agp_maxes_table[index - 1].agp +
-	    (t * (agp_maxes_table[index].agp - agp_maxes_table[index - 1].agp));
+	result = maxes_table[index - 1].agp +
+	    (t * (maxes_table[index].agp - maxes_table[index - 1].agp));
 
-	printk("agpgart: Maximum main memory to use for agp memory: %dM\n", result);
+	printk(KERN_INFO "agpgart: Maximum main memory to use "
+	       "for agp memory: %dM\n", result);
 	result = (result * 0x100000) / 4096;
 	return result;
 }
@@ -1876,22 +1935,22 @@ static int agp_backend_initialize(void)
 
 	memset(&agp_bridge, 0, sizeof(struct agp_bridge_data));
 	agp_bridge.type = NOT_SUPPORTED;
-#ifdef AGP_BUILD_INTEL_GENERIC
+#ifdef CONFIG_AGP_INTEL
 	agp_bridge.intel_generic_setup = intel_generic_setup;
 #endif
-#ifdef AGP_BUILD_INTEL_I810
+#ifdef CONFIG_AGP_I810
 	agp_bridge.intel_i810_setup = intel_i810_setup;
 #endif
-#ifdef AGP_BUILD_VIA_GENERIC
+#ifdef CONFIG_AGP_VIA
 	agp_bridge.via_generic_setup = via_generic_setup;
 #endif
-#ifdef AGP_BUILD_SIS_GENERIC
+#ifdef CONFIG_AGP_SIS
 	agp_bridge.sis_generic_setup = sis_generic_setup;
 #endif
-#ifdef AGP_BUILD_AMD_IRONGATE
+#ifdef CONFIG_AGP_AMD
 	agp_bridge.amd_irongate_setup = amd_irongate_setup;
 #endif
-#ifdef AGP_BUILD_ALI_M1541
+#ifdef CONFIG_AGP_ALI
 	agp_bridge.ali_generic_setup = ali_generic_setup;
 #endif
 	agp_bridge.max_memory_agp = agp_find_max();
@@ -1899,14 +1958,17 @@ static int agp_backend_initialize(void)
 	agp_find_supported_device();
 
 	if (agp_bridge.needs_scratch_page == TRUE) {
-		agp_bridge.scratch_page = (unsigned long) agp_alloc_page();
+		agp_bridge.scratch_page = agp_alloc_page();
 
-		if ((void *) (agp_bridge.scratch_page) == NULL) {
-			printk("agpgart: unable to get memory for scratch page.\n");
+		if (agp_bridge.scratch_page == 0) {
+			printk("agpgart: unable to get memory for "
+			       "scratch page.\n");
 			return -ENOMEM;
 		}
-		agp_bridge.scratch_page = virt_to_phys((void *) agp_bridge.scratch_page);
-		agp_bridge.scratch_page = agp_bridge.mask_memory(agp_bridge.scratch_page, 0);
+		agp_bridge.scratch_page =
+		    virt_to_phys((void *) agp_bridge.scratch_page);
+		agp_bridge.scratch_page =
+		    agp_bridge.mask_memory(agp_bridge.scratch_page, 0);
 	}
 	if (agp_bridge.type == NOT_SUPPORTED) {
 		printk("agpgart: no supported devices found.\n");
@@ -1919,7 +1981,8 @@ static int agp_backend_initialize(void)
 		return -EINVAL;
 	}
 	if (agp_bridge.create_gatt_table()) {
-		printk("agpgart: unable to get memory for graphics translation table.\n");
+		printk("agpgart: unable to get memory for graphics "
+		       "translation table.\n");
 		return -ENOMEM;
 	}
 	agp_bridge.key_list = vmalloc(PAGE_SIZE * 4);
@@ -1937,8 +2000,10 @@ static int agp_backend_initialize(void)
 		vfree(agp_bridge.key_list);
 		return -EINVAL;
 	}
-	printk("agpgart: Physical address of the agp aperture: 0x%lx\n", agp_bridge.gart_bus_addr);
-	printk("agpgart: Agp aperture is %dM in size.\n", size_value);
+	printk(KERN_INFO "agpgart: Physical address of the agp aperture:"
+	       " 0x%lx\n", agp_bridge.gart_bus_addr);
+	printk(KERN_INFO "agpgart: Agp aperture is %dM in size.\n",
+	       size_value);
 	return 0;
 }
 
@@ -1950,19 +2015,19 @@ static void agp_backend_cleanup(void)
 
 	if (agp_bridge.needs_scratch_page == TRUE) {
 		agp_bridge.scratch_page &= ~(0x00000fff);
-		agp_destroy_page((void *) phys_to_virt(agp_bridge.scratch_page));
+		agp_destroy_page((unsigned long)
+				 phys_to_virt(agp_bridge.scratch_page));
 	}
 }
 
 extern int agp_frontend_initialize(void);
 extern void agp_frontend_cleanup(void);
 
-#ifdef MODULE
-int init_module(void)
+static int __init agp_init(void)
 {
 	int ret_val;
 
-	printk("Linux agpgart interface v%d.%d (c) Jeff Hartmann\n",
+	printk(KERN_INFO "Linux agpgart interface v%d.%d (c) Jeff Hartmann\n",
 	       AGPGART_VERSION_MAJOR, AGPGART_VERSION_MINOR);
 	ret_val = agp_backend_initialize();
 
@@ -1978,10 +2043,11 @@ int init_module(void)
 	return 0;
 }
 
-void cleanup_module(void)
+static void __exit agp_cleanup(void)
 {
 	agp_frontend_cleanup();
 	agp_backend_cleanup();
 }
 
-#endif
+module_init(agp_init);
+module_exit(agp_cleanup);

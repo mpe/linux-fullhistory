@@ -217,14 +217,11 @@ dentry->d_parent->d_name.name, dentry->d_name.name, cmd, data_ptr));
 		 * 
 		 * Return 0 if success.
 		 */
-		extern struct inode_operations umsdos_rdir_inode_operations;
 
 		ret = umsdos_make_emd(dentry);
 Printk(("UMSDOS_ioctl_dir: INIT_EMD %s/%s, ret=%d\n",
 dentry->d_parent->d_name.name, dentry->d_name.name, ret));
-		dir->i_op = (ret == 0)
-		    ? &umsdos_dir_inode_operations
-		    : &umsdos_rdir_inode_operations;
+		umsdos_setup_dir (dentry);
 		goto out;
 	}
 
@@ -280,6 +277,8 @@ printk("umsdos_ioctl: renaming %s/%s to %s/%s\n",
 old_dentry->d_parent->d_name.name, old_dentry->d_name.name,
 new_dentry->d_parent->d_name.name, new_dentry->d_name.name);
 			ret = msdos_rename (dir, old_dentry, dir, new_dentry);
+			d_drop(new_dentry);
+			d_drop(old_dentry);
 			dput(new_dentry);
 		}
 		dput(old_dentry);

@@ -157,9 +157,7 @@ static void floppy_off(unsigned int nr);
 #elif (SCSI_DISK_MAJOR(MAJOR_NR))
 
 #define DEVICE_NAME "scsidisk"
-#define DEVICE_INTR do_sd  
 #define TIMEOUT_VALUE (2*HZ)
-#define DEVICE_REQUEST do_sd_request
 #define DEVICE_NR(device) (((MAJOR(device) & SD_MAJOR_MASK) << (8 - 4)) + (MINOR(device) >> 4))
 #define DEVICE_ON(device)
 #define DEVICE_OFF(device)
@@ -184,8 +182,6 @@ static void floppy_off(unsigned int nr);
 #elif (MAJOR_NR == SCSI_CDROM_MAJOR)
 
 #define DEVICE_NAME "CD-ROM"
-#define DEVICE_INTR do_sr
-#define DEVICE_REQUEST do_sr_request
 #define DEVICE_NR(device) (MINOR(device))
 #define DEVICE_ON(device)
 #define DEVICE_OFF(device)
@@ -387,7 +383,7 @@ static void floppy_off(unsigned int nr);
 #if !defined(IDE_DRIVER)
 
 #ifndef CURRENT
-#define CURRENT (blk_dev[MAJOR_NR].current_request)
+#define CURRENT (blk_dev[MAJOR_NR].request_queue.current_request)
 #endif
 
 #ifndef DEVICE_NAME
@@ -421,7 +417,9 @@ else \
 
 #endif /* DEVICE_TIMEOUT */
 
-static void (DEVICE_REQUEST)(void);
+#ifdef DEVICE_REQUEST
+static void (DEVICE_REQUEST)(request_queue_t *);
+#endif 
   
 #ifdef DEVICE_INTR
 #define CLEAR_INTR SET_INTR(NULL)

@@ -648,7 +648,7 @@ mcd_interrupt(int irq, void *dev_id, struct pt_regs * regs)
 
 
 static void
-do_mcd_request(void)
+do_mcd_request(request_queue_t * q)
 {
 #ifdef TEST2
   printk(" do_mcd_request(%ld+%ld)\n", CURRENT -> sector, CURRENT -> nr_sectors);
@@ -1179,7 +1179,7 @@ int __init mcd_init(void)
 	}
 
 	blksize_size[MAJOR_NR] = mcd_blocksizes;
-	blk_dev[MAJOR_NR].request_fn = DEVICE_REQUEST;
+	blk_init_queue(BLK_DEFAULT_QUEUE(MAJOR_NR), DEVICE_REQUEST);
 	read_ahead[MAJOR_NR] = 4;
 
 	/* check for card */

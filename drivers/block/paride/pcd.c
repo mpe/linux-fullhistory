@@ -220,7 +220,7 @@ static int pcd_packet(struct cdrom_device_info *cdi,
 static int 	pcd_detect(void);
 static void 	pcd_probe_capabilities(void);
 static void     do_pcd_read_drq(void);
-static void 	do_pcd_request(void);
+static void 	do_pcd_request(request_queue_t * q);
 static void 	do_pcd_read(void);
 
 static int pcd_blocksizes[PCD_UNITS];
@@ -343,7 +343,7 @@ int pcd_init (void)	/* preliminary initialisation */
 	for (unit=0;unit<PCD_UNITS;unit++)
 		if (PCD.present) register_cdrom(&PCD.info);
 
-	blk_dev[MAJOR_NR].request_fn = DEVICE_REQUEST;
+	blk_init_queue(BLK_DEFAULT_QUEUE(MAJOR_NR), DEVICE_REQUEST);
 	read_ahead[MAJOR_NR] = 8;	/* 8 sector (4kB) read ahead */
 
 	for (i=0;i<PCD_UNITS;i++) pcd_blocksizes[i] = 1024;
@@ -750,7 +750,7 @@ static int pcd_detect( void )
 
 /* I/O request processing */
 
-static void do_pcd_request (void)
+static void do_pcd_request (request_queue_t * q)
 
 {       int unit;
 
@@ -814,7 +814,7 @@ static void pcd_start( void )
 		spin_lock_irqsave(&io_request_lock,saved_flags);
 		pcd_busy = 0;
 		end_request(0);
-		do_pcd_request();
+		do_pcd_request(NULL);
 		spin_unlock_irqrestore(&io_request_lock,saved_flags);
 		return;
 	}
@@ -838,7 +838,7 @@ static void do_pcd_read( void )
 		spin_lock_irqsave(&io_request_lock,saved_flags);
 		end_request(1);
 		pcd_busy = 0;
-		do_pcd_request();
+		do_pcd_request(NULL);
 		spin_unlock_irqrestore(&io_request_lock,saved_flags);
 		return;
 	}
@@ -862,14 +862,14 @@ static void do_pcd_read_drq( void )
 		pcd_busy = 0;
 		pcd_bufblk = -1;
 		end_request(0);
-		do_pcd_request();
+		do_pcd_request(NULL);
 		spin_unlock_irqrestore(&io_request_lock,saved_flags);
 		return;
 	}
 
 	do_pcd_read();
 	spin_lock_irqsave(&io_request_lock,saved_flags);
-	do_pcd_request();
+	do_pcd_request(NULL);
 	spin_unlock_irqrestore(&io_request_lock,saved_flags); 
 }
 

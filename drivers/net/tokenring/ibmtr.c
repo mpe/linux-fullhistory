@@ -238,7 +238,7 @@ static void __init HWPrtChanID (__u32 pcid, short stride)
 {
 	short i, j;
 	for (i=0, j=0; i<24; i++, j+=stride)
-		printk("%1x", ((int)readb(pcid + j)) & 0x0f);
+		printk("%1x", ((int)isa_readb(pcid + j)) & 0x0f);
 	printk("\n");
 }
 
@@ -267,14 +267,8 @@ int __init ibmtr_probe(struct net_device *dev)
  		 */
  		 
 	        if (ibmtr_probe1(dev, base_addr)) 
-	        {
-#ifndef MODULE
-#ifndef PCMCIA
-		       tr_freedev(dev);
-#endif
-#endif
 		       return -ENODEV;
-		} else
+		else
 		       return 0;
 	}
         else if (base_addr != 0)   /* Don't probe at all. */
@@ -285,13 +279,7 @@ int __init ibmtr_probe(struct net_device *dev)
 	        int ioaddr = ibmtr_portlist[i];
 		if (check_region(ioaddr, IBMTR_IO_EXTENT))
 		        continue;
-                if (ibmtr_probe1(dev, ioaddr)) {
-#ifndef MODULE
-#ifndef PCMCIA
-		        tr_freedev(dev);
-#endif
-#endif
-		} else
+		if (!ibmtr_probe1(dev, ioaddr))
 			return 0;
         }
 
@@ -351,7 +339,7 @@ static int __init ibmtr_probe1(struct net_device *dev, int PIOaddr)
 	 *	Suboptimize knowing first byte different
 	 */
 
-	ctemp = readb(cd_chanid) & 0x0f;
+	ctemp = isa_readb(cd_chanid) & 0x0f;
 	if (ctemp != *tchanid) { /* NOT ISA card, try MCA */
 		tchanid=mcchannelid;
 		cardpresent=TR_MCA;
@@ -366,7 +354,7 @@ static int __init ibmtr_probe1(struct net_device *dev, int PIOaddr)
 		 */
 		for (i=2,j=1; i<=46; i=i+2,j++) 
 		{
-			if ((readb(cd_chanid+i) & 0x0f) != tchanid[j]) {
+			if ((isa_readb(cd_chanid+i) & 0x0f) != tchanid[j]) {
 				cardpresent=NOTOK;   /* match failed, not TR card */
 				break;
 			}
@@ -378,7 +366,7 @@ static int __init ibmtr_probe1(struct net_device *dev, int PIOaddr)
 	 *	as it has different IRQ settings 
 	 */
 
-	if (cardpresent == TR_ISA && (readb(AIPFID + t_mmio)==0x0e))
+	if (cardpresent == TR_ISA && (isa_readb(AIPFID + t_mmio)==0x0e))
 	        cardpresent=TR_ISAPNP;
 
 	if (cardpresent == NOTOK) { /* "channel_id" did not match, report */
@@ -461,14 +449,14 @@ static int __init ibmtr_probe1(struct net_device *dev, int PIOaddr)
 			if (intr==3)
 				irq=11;
 			timeout = jiffies + TR_SPIN_INTERVAL;
-			while(!readb(ti->mmio + ACA_OFFSET + ACA_RW + RRR_EVEN))
+			while(!isa_readb(ti->mmio + ACA_OFFSET + ACA_RW + RRR_EVEN))
 				if (time_after(jiffies, timeout)) {
 					DPRINTK("Hardware timeout during initialization.\n");
 					kfree_s(ti, sizeof(struct tok_info));
 					return -ENODEV;
 			        }
 
-			ti->sram=((__u32)readb(ti->mmio + ACA_OFFSET + ACA_RW + RRR_EVEN)<<12);
+			ti->sram=((__u32)isa_readb(ti->mmio + ACA_OFFSET + ACA_RW + RRR_EVEN)<<12);
 			ti->global_int_enable=PIOaddr+ADAPTINTREL;
 			ti->adapter_int_enable=PIOaddr+ADAPTINTREL;
 			break;
@@ -492,7 +480,7 @@ static int __init ibmtr_probe1(struct net_device *dev, int PIOaddr)
 	for (i=0; i<0x18; i=i+2) 
 	{
 		/* technical reference states to do this */
-		temp = readb(ti->mmio + AIP + i) & 0x0f;
+		temp = isa_readb(ti->mmio + AIP + i) & 0x0f;
 #if !TR_NEWFORMAT
 		printk("%1X",ti->hw_address[j]=temp);
 #else
@@ -507,13 +495,13 @@ static int __init ibmtr_probe1(struct net_device *dev, int PIOaddr)
 #endif
 
 	/* get Adapter type:  'F' = Adapter/A, 'E' = 16/4 Adapter II,...*/
-	ti->adapter_type = readb(ti->mmio + AIPADAPTYPE);
+	ti->adapter_type = isa_readb(ti->mmio + AIPADAPTYPE);
 
 	/* get Data Rate:  F=4Mb, E=16Mb, D=4Mb & 16Mb ?? */
-	ti->data_rate = readb(ti->mmio + AIPDATARATE);
+	ti->data_rate = isa_readb(ti->mmio + AIPDATARATE);
 
 	/* Get Early Token Release support?: F=no, E=4Mb, D=16Mb, C=4&16Mb */
-	ti->token_release = readb(ti->mmio + AIPEARLYTOKEN);
+	ti->token_release = isa_readb(ti->mmio + AIPEARLYTOKEN);
 
 	/* How much shared RAM is on adapter ? */
 #ifdef PCMCIA
@@ -524,10 +512,10 @@ static int __init ibmtr_probe1(struct net_device *dev, int PIOaddr)
 #endif
 	/* We need to set or do a bunch of work here based on previous results.. */
 	/* Support paging?  What sizes?:  F=no, E=16k, D=32k, C=16 & 32k */
-	ti->shared_ram_paging = readb(ti->mmio + AIPSHRAMPAGE);
+	ti->shared_ram_paging = isa_readb(ti->mmio + AIPSHRAMPAGE);
 
         /* Available DHB  4Mb size:   F=2048, E=4096, D=4464 */
-	switch (readb(ti->mmio + AIP4MBDHB)) {
+	switch (isa_readb(ti->mmio + AIP4MBDHB)) {
 	case 0xe : 
 		ti->dhb_size4mb = 4096;
 		break; 
@@ -540,7 +528,7 @@ static int __init ibmtr_probe1(struct net_device *dev, int PIOaddr)
 	}
 
 	/* Available DHB 16Mb size:  F=2048, E=4096, D=8192, C=16384, B=17960 */
-	switch (readb(ti->mmio + AIP16MBDHB)) {
+	switch (isa_readb(ti->mmio + AIP16MBDHB)) {
 	case 0xe : 
 		ti->dhb_size16mb = 4096;
 		break; 
@@ -576,7 +564,7 @@ static int __init ibmtr_probe1(struct net_device *dev, int PIOaddr)
 	/*
 	 *	determine how much of total RAM is mapped into PC space 
 	 */
-	ti->mapped_ram_size=1<<((((readb(ti->mmio+ ACA_OFFSET + ACA_RW + RRR_ODD)) >>2) & 0x03) + 4);
+	ti->mapped_ram_size=1<<((((isa_readb(ti->mmio+ ACA_OFFSET + ACA_RW + RRR_ODD)) >>2) & 0x03) + 4);
 	ti->page_mask=0;
 	if (ti->shared_ram_paging == 0xf) { /* No paging in adapter */
 		ti->mapped_ram_size = ti->avail_shared_ram;
@@ -635,7 +623,7 @@ static int __init ibmtr_probe1(struct net_device *dev, int PIOaddr)
 		static __u32 ram_bndry_mask[]={0xffffe000, 0xffffc000, 0xffff8000, 0xffff0000};
 		__u32 new_base, rrr_32, chk_base, rbm;
 
-		rrr_32 = ((readb(ti->mmio+ ACA_OFFSET + ACA_RW + RRR_ODD))>>2) & 0x00000003;
+		rrr_32 = ((isa_readb(ti->mmio+ ACA_OFFSET + ACA_RW + RRR_ODD))>>2) & 0x00000003;
 		rbm = ram_bndry_mask[rrr_32];
 		new_base = (ibmtr_mem_base + (~rbm)) & rbm; /* up to boundary */
 		chk_base = new_base + (ti->mapped_ram_size<<9);
@@ -765,11 +753,11 @@ static unsigned char __init get_sram_size(struct tok_info *adapt_info)
 	   'B' - 64KB less 512 bytes at top
 	   (WARNING ... must zero top bytes in INIT */
 
-	avail_sram_code=0xf-readb(adapt_info->mmio + AIPAVAILSHRAM);
+	avail_sram_code=0xf-isa_readb(adapt_info->mmio + AIPAVAILSHRAM);
 	if (avail_sram_code)
 		return size_code[avail_sram_code];
 	else  /* for code 'F', must compute size from RRR(3,2) bits */
-		return 1<<((readb(adapt_info->mmio+ ACA_OFFSET + ACA_RW + RRR_ODD)>>2)+4);
+		return 1<<((isa_readb(adapt_info->mmio+ ACA_OFFSET + ACA_RW + RRR_ODD)>>2)+4);
 }
 
 static int __init trdev_init(struct net_device *dev)
@@ -816,20 +804,20 @@ static void tok_set_multicast_list(struct net_device *dev)
 	}
 	SET_PAGE(ti->srb);
 	for (i=0; i<sizeof(struct srb_set_funct_addr); i++)
-		writeb(0, ti->srb+i);
+		isa_writeb(0, ti->srb+i);
 
-	writeb(DIR_SET_FUNC_ADDR, 
+	isa_writeb(DIR_SET_FUNC_ADDR, 
                ti->srb + offsetof(struct srb_set_funct_addr, command));
 
 	DPRINTK("Setting functional address: ");
 
 	for (i=0; i<4; i++)
 	{
-		writeb(address[i], 
+		isa_writeb(address[i], 
 		ti->srb + offsetof(struct srb_set_funct_addr, funct_address)+i);
 		printk("%02X ", address[i]);
 	}
-	writeb(CMD_IN_SRB, ti->mmio + ACA_OFFSET + ACA_SET + ISRA_ODD);
+	isa_writeb(CMD_IN_SRB, ti->mmio + ACA_OFFSET + ACA_SET + ISRA_ODD);
 	printk("\n");
 }
 
@@ -838,7 +826,7 @@ static int tok_open(struct net_device *dev)
 	struct tok_info *ti=(struct tok_info *)dev->priv;
 
 	/* init the spinlock */
-	ti->lock = (spinlock_t) SPIN_LOCK_UNLOCKED;
+	spin_lock_init(&ti->lock);
 
 	if (ti->open_status==CLOSED) tok_init_card(dev);
 
@@ -862,17 +850,17 @@ static int tok_close(struct net_device *dev)
 
 	struct tok_info *ti=(struct tok_info *) dev->priv;
 
-	writeb(DIR_CLOSE_ADAPTER,
+	isa_writeb(DIR_CLOSE_ADAPTER,
 	       ti->srb + offsetof(struct srb_close_adapter, command));
-	writeb(CMD_IN_SRB, ti->mmio + ACA_OFFSET + ACA_SET + ISRA_ODD);
+	isa_writeb(CMD_IN_SRB, ti->mmio + ACA_OFFSET + ACA_SET + ISRA_ODD);
 
 	ti->open_status=CLOSED;
 
 	sleep_on(&ti->wait_for_tok_int);
 
-	if (readb(ti->srb + offsetof(struct srb_close_adapter, ret_code)))
+	if (isa_readb(ti->srb + offsetof(struct srb_close_adapter, ret_code)))
 		DPRINTK("close adapter failed: %02X\n",
-			(int)readb(ti->srb + offsetof(struct srb_close_adapter, ret_code)));
+			(int)isa_readb(ti->srb + offsetof(struct srb_close_adapter, ret_code)));
 
         dev->start = 0;
 #ifdef PCMCIA
@@ -899,7 +887,7 @@ void tok_interrupt (int irq, void *dev_id, struct pt_regs *regs)
 
       	/* Disable interrupts till processing is finished */
 	dev->interrupt=1;
-	writeb((~INT_ENABLE), ti->mmio + ACA_OFFSET + ACA_RESET + ISRP_EVEN);
+	isa_writeb((~INT_ENABLE), ti->mmio + ACA_OFFSET + ACA_RESET + ISRP_EVEN);
 
 	/* Reset interrupt for ISA boards */
         if (ti->adapter_int_enable)
@@ -916,7 +904,7 @@ void tok_interrupt (int irq, void *dev_id, struct pt_regs *regs)
 		    the extra levels of logic and call depth for the
 		    original solution.   */
 
-		status=readb(ti->mmio + ACA_OFFSET + ACA_RW + ISRP_ODD);
+		status=isa_readb(ti->mmio + ACA_OFFSET + ACA_RW + ISRP_ODD);
 #ifdef PCMCIA
       		/* Check if the PCMCIA card was pulled. */
     		if (status == 0xFF)
@@ -928,7 +916,7 @@ void tok_interrupt (int irq, void *dev_id, struct pt_regs *regs)
        		}
 
     	        /* Check ISRP EVEN too. */
-      	        if ( readb (ti->mmio + ACA_OFFSET + ACA_RW + ISRP_EVEN) == 0xFF)
+      	        if ( isa_readb (ti->mmio + ACA_OFFSET + ACA_RW + ISRP_EVEN) == 0xFF)
     	        {
          		 DPRINTK("PCMCIA card removed.\n");
 			 spin_unlock(&(ti->lock));
@@ -943,26 +931,26 @@ void tok_interrupt (int irq, void *dev_id, struct pt_regs *regs)
 			int i;
 			__u32 check_reason;
 
-			check_reason=ti->mmio + ntohs(readw(ti->sram + ACA_OFFSET + ACA_RW +WWCR_EVEN));
+			check_reason=ti->mmio + ntohs(isa_readw(ti->sram + ACA_OFFSET + ACA_RW +WWCR_EVEN));
 
 			DPRINTK("Adapter check interrupt\n");
 			DPRINTK("8 reason bytes follow: ");
 			for(i=0; i<8; i++, check_reason++)
-				printk("%02X ", (int)readb(check_reason));
+				printk("%02X ", (int)isa_readb(check_reason));
 			printk("\n");
 
-			writeb((~ADAP_CHK_INT), ti->mmio + ACA_OFFSET + ACA_RESET + ISRP_ODD);
-			writeb(INT_ENABLE, ti->mmio + ACA_OFFSET + ACA_SET  + ISRP_EVEN);
+			isa_writeb((~ADAP_CHK_INT), ti->mmio + ACA_OFFSET + ACA_RESET + ISRP_ODD);
+			isa_writeb(INT_ENABLE, ti->mmio + ACA_OFFSET + ACA_SET  + ISRP_EVEN);
 			dev->interrupt=0;
 
-		} else if (readb(ti->mmio + ACA_OFFSET + ACA_RW + ISRP_EVEN)
+		} else if (isa_readb(ti->mmio + ACA_OFFSET + ACA_RW + ISRP_EVEN)
 				 & (TCR_INT | ERR_INT | ACCESS_INT)) {
 
 			DPRINTK("adapter error: ISRP_EVEN : %02x\n",
-				(int)readb(ti->mmio + ACA_OFFSET + ACA_RW + ISRP_EVEN));
-			writeb(~(TCR_INT | ERR_INT | ACCESS_INT),
+				(int)isa_readb(ti->mmio + ACA_OFFSET + ACA_RW + ISRP_EVEN));
+			isa_writeb(~(TCR_INT | ERR_INT | ACCESS_INT),
 			       ti->mmio + ACA_OFFSET + ACA_RESET + ISRP_EVEN);
-			writeb(INT_ENABLE, ti->mmio + ACA_OFFSET + ACA_SET  + ISRP_EVEN);
+			isa_writeb(INT_ENABLE, ti->mmio + ACA_OFFSET + ACA_SET  + ISRP_EVEN);
 			dev->interrupt=0;
 
 		} else if (status
@@ -971,12 +959,12 @@ void tok_interrupt (int irq, void *dev_id, struct pt_regs *regs)
 
 			if (status & SRB_RESP_INT) { /* SRB response */
 
-				switch(readb(ti->srb)) { /* SRB command check */
+				switch(isa_readb(ti->srb)) { /* SRB command check */
 
 				      case XMIT_DIR_FRAME: {
 					      unsigned char xmit_ret_code;
 
-					      xmit_ret_code=readb(ti->srb + offsetof(struct srb_xmit, ret_code));
+					      xmit_ret_code=isa_readb(ti->srb + offsetof(struct srb_xmit, ret_code));
 					      if (xmit_ret_code != 0xff) {
 						      DPRINTK("error on xmit_dir_frame request: %02X\n",
 							      xmit_ret_code);
@@ -993,7 +981,7 @@ void tok_interrupt (int irq, void *dev_id, struct pt_regs *regs)
 				      case XMIT_UI_FRAME: {
 					      unsigned char xmit_ret_code;
 
-					      xmit_ret_code=readb(ti->srb + offsetof(struct srb_xmit, ret_code));
+					      xmit_ret_code=isa_readb(ti->srb + offsetof(struct srb_xmit, ret_code));
 					      if (xmit_ret_code != 0xff) {
 						      DPRINTK("error on xmit_ui_frame request: %02X\n",
 							      xmit_ret_code);
@@ -1011,14 +999,14 @@ void tok_interrupt (int irq, void *dev_id, struct pt_regs *regs)
 					      unsigned char open_ret_code;
 					      __u16 open_error_code;
 
-					      ti->srb=ti->sram+ntohs(readw(ti->init_srb +offsetof(struct srb_open_response, srb_addr)));
-					      ti->ssb=ti->sram+ntohs(readw(ti->init_srb +offsetof(struct srb_open_response, ssb_addr)));
-					      ti->arb=ti->sram+ntohs(readw(ti->init_srb +offsetof(struct srb_open_response, arb_addr)));
-					      ti->asb=ti->sram+ntohs(readw(ti->init_srb +offsetof(struct srb_open_response, asb_addr)));
+					      ti->srb=ti->sram+ntohs(isa_readw(ti->init_srb +offsetof(struct srb_open_response, srb_addr)));
+					      ti->ssb=ti->sram+ntohs(isa_readw(ti->init_srb +offsetof(struct srb_open_response, ssb_addr)));
+					      ti->arb=ti->sram+ntohs(isa_readw(ti->init_srb +offsetof(struct srb_open_response, arb_addr)));
+					      ti->asb=ti->sram+ntohs(isa_readw(ti->init_srb +offsetof(struct srb_open_response, asb_addr)));
 					      ti->current_skb=NULL;
 
-					      open_ret_code = readb(ti->init_srb +offsetof(struct srb_open_response, ret_code));
-					      open_error_code = ntohs(readw(ti->init_srb +offsetof(struct srb_open_response, error_code)));
+					      open_ret_code = isa_readb(ti->init_srb +offsetof(struct srb_open_response, ret_code));
+					      open_error_code = ntohs(isa_readw(ti->init_srb +offsetof(struct srb_open_response, error_code)));
 
 					      if (open_ret_code==7) {
 
@@ -1049,9 +1037,9 @@ void tok_interrupt (int irq, void *dev_id, struct pt_regs *regs)
 #else
 						      DPRINTK("Adapter initialized and opened.\n");
 #endif
-						      writeb(~(SRB_RESP_INT),
+						      isa_writeb(~(SRB_RESP_INT),
 							     ti->mmio + ACA_OFFSET + ACA_RESET + ISRP_ODD);
-						      writeb(~(CMD_IN_SRB),
+						      isa_writeb(~(CMD_IN_SRB),
 							     ti->mmio + ACA_OFFSET + ACA_RESET + ISRA_ODD);
 						      open_sap(EXTENDED_SAP,dev);
 
@@ -1073,13 +1061,13 @@ void tok_interrupt (int irq, void *dev_id, struct pt_regs *regs)
 					break;
 
 				      case DLC_OPEN_SAP:
-					if (readb(ti->srb+offsetof(struct dlc_open_sap, ret_code))) {
+					if (isa_readb(ti->srb+offsetof(struct dlc_open_sap, ret_code))) {
 						DPRINTK("open_sap failed: ret_code = %02X,retrying\n",
-							(int)readb(ti->srb+offsetof(struct dlc_open_sap, ret_code)));
+							(int)isa_readb(ti->srb+offsetof(struct dlc_open_sap, ret_code)));
 						ibmtr_reset_timer(&(ti->tr_timer), dev);
 					} else {
 						ti->exsap_station_id=
-							readw(ti->srb+offsetof(struct dlc_open_sap, station_id));
+							isa_readw(ti->srb+offsetof(struct dlc_open_sap, station_id));
 						ti->open_status=SUCCESS; /* TR adapter is now available */
 						wake_up(&ti->wait_for_reset);
 					}
@@ -1090,16 +1078,16 @@ void tok_interrupt (int irq, void *dev_id, struct pt_regs *regs)
 				      case DIR_SET_GRP_ADDR:
 				      case DIR_SET_FUNC_ADDR:
 				      case DLC_CLOSE_SAP:
-					if (readb(ti->srb+offsetof(struct srb_interrupt, ret_code)))
+					if (isa_readb(ti->srb+offsetof(struct srb_interrupt, ret_code)))
 						DPRINTK("error on %02X: %02X\n",
-							(int)readb(ti->srb+offsetof(struct srb_interrupt, command)),
-							(int)readb(ti->srb+offsetof(struct srb_interrupt, ret_code)));
+							(int)isa_readb(ti->srb+offsetof(struct srb_interrupt, command)),
+							(int)isa_readb(ti->srb+offsetof(struct srb_interrupt, ret_code)));
 					break;
 
 				      case DIR_READ_LOG:
-					if (readb(ti->srb+offsetof(struct srb_read_log, ret_code)))
+					if (isa_readb(ti->srb+offsetof(struct srb_read_log, ret_code)))
 						DPRINTK("error on dir_read_log: %02X\n",
-							(int)readb(ti->srb+offsetof(struct srb_read_log, ret_code)));
+							(int)isa_readb(ti->srb+offsetof(struct srb_read_log, ret_code)));
 					else
 					    if (IBMTR_DEBUG_MESSAGES) {
 						DPRINTK(
@@ -1107,24 +1095,24 @@ void tok_interrupt (int irq, void *dev_id, struct pt_regs *regs)
 							"A/C errors %02X, Abort delimiters %02X, Lost frames %02X\n"
 							"Receive congestion count %02X, Frame copied errors %02X\n"
 							"Frequency errors %02X, Token errors %02X\n",
-							(int)readb(ti->srb+offsetof(struct srb_read_log,
+							(int)isa_readb(ti->srb+offsetof(struct srb_read_log,
 										    line_errors)),
-							(int)readb(ti->srb+offsetof(struct srb_read_log,
+							(int)isa_readb(ti->srb+offsetof(struct srb_read_log,
 										    internal_errors)),
-							(int)readb(ti->srb+offsetof(struct srb_read_log,
+							(int)isa_readb(ti->srb+offsetof(struct srb_read_log,
 										    burst_errors)),
-							(int)readb(ti->srb+offsetof(struct srb_read_log, A_C_errors)),
-							(int)readb(ti->srb+offsetof(struct srb_read_log,
+							(int)isa_readb(ti->srb+offsetof(struct srb_read_log, A_C_errors)),
+							(int)isa_readb(ti->srb+offsetof(struct srb_read_log,
 										    abort_delimiters)),
-							(int)readb(ti->srb+offsetof(struct srb_read_log,
+							(int)isa_readb(ti->srb+offsetof(struct srb_read_log,
 										    lost_frames)),
-							(int)readb(ti->srb+offsetof(struct srb_read_log,
+							(int)isa_readb(ti->srb+offsetof(struct srb_read_log,
 												    recv_congest_count)),
-							(int)readb(ti->srb+offsetof(struct srb_read_log,
+							(int)isa_readb(ti->srb+offsetof(struct srb_read_log,
 										    frame_copied_errors)),
-							(int)readb(ti->srb+offsetof(struct srb_read_log,
+							(int)isa_readb(ti->srb+offsetof(struct srb_read_log,
 										    frequency_errors)),
-							(int)readb(ti->srb+offsetof(struct srb_read_log,
+							(int)isa_readb(ti->srb+offsetof(struct srb_read_log,
 												    token_errors)));
 					    }
 					dev->tbusy=0;
@@ -1132,19 +1120,19 @@ void tok_interrupt (int irq, void *dev_id, struct pt_regs *regs)
 
 				      default:
 					DPRINTK("Unknown command %02X encountered\n",
-						(int)readb(ti->srb));
+						(int)isa_readb(ti->srb));
 
 				} /* SRB command check */
 
-				writeb(~CMD_IN_SRB, ti->mmio + ACA_OFFSET + ACA_RESET + ISRA_ODD);
-				writeb(~SRB_RESP_INT, ti->mmio + ACA_OFFSET + ACA_RESET + ISRP_ODD);
+				isa_writeb(~CMD_IN_SRB, ti->mmio + ACA_OFFSET + ACA_RESET + ISRA_ODD);
+				isa_writeb(~SRB_RESP_INT, ti->mmio + ACA_OFFSET + ACA_RESET + ISRP_ODD);
 
 			  skip_reset:
 			} /* SRB response */
 
 			if (status & ASB_FREE_INT) { /* ASB response */
 
-				switch(readb(ti->asb)) { /* ASB command check */
+				switch(isa_readb(ti->asb)) { /* ASB command check */
 
 				      case REC_DATA:
 				      case XMIT_UI_FRAME:
@@ -1153,25 +1141,25 @@ void tok_interrupt (int irq, void *dev_id, struct pt_regs *regs)
 
 				      default:
 					DPRINTK("unknown command in asb %02X\n",
-						(int)readb(ti->asb));
+						(int)isa_readb(ti->asb));
 
 				} /* ASB command check */
 
-				if (readb(ti->asb+2)!=0xff) /* checks ret_code */
+				if (isa_readb(ti->asb+2)!=0xff) /* checks ret_code */
 				    DPRINTK("ASB error %02X in cmd %02X\n",
-					    (int)readb(ti->asb+2),(int)readb(ti->asb));
-				writeb(~ASB_FREE_INT, ti->mmio + ACA_OFFSET + ACA_RESET + ISRP_ODD);
+					    (int)isa_readb(ti->asb+2),(int)isa_readb(ti->asb));
+				isa_writeb(~ASB_FREE_INT, ti->mmio + ACA_OFFSET + ACA_RESET + ISRP_ODD);
 
 			} /* ASB response */
 
 			if (status & ARB_CMD_INT) { /* ARB response */
 
-				switch (readb(ti->arb)) { /* ARB command check */
+				switch (isa_readb(ti->arb)) { /* ARB command check */
 
 				      case DLC_STATUS:
 					DPRINTK("DLC_STATUS new status: %02X on station %02X\n",
-						ntohs(readw(ti->arb + offsetof(struct arb_dlc_status, status))),
-						ntohs(readw(ti->arb
+						ntohs(isa_readw(ti->arb + offsetof(struct arb_dlc_status, status))),
+						ntohs(isa_readw(ti->arb
 									    +offsetof(struct arb_dlc_status, station_id))));
 					break;
 
@@ -1182,7 +1170,7 @@ void tok_interrupt (int irq, void *dev_id, struct pt_regs *regs)
 				      case RING_STAT_CHANGE: {
 					      unsigned short ring_status;
 
-					      ring_status=ntohs(readw(ti->arb
+					      ring_status=ntohs(isa_readw(ti->arb
 								      +offsetof(struct arb_ring_stat_change, ring_status)));
 
 					      if (ring_status & (SIGNAL_LOSS | LOBE_FAULT)) {
@@ -1209,46 +1197,46 @@ void tok_interrupt (int irq, void *dev_id, struct pt_regs *regs)
 
 				      default:
 					DPRINTK("Unknown command %02X in arb\n",
-						(int)readb(ti->arb));
+						(int)isa_readb(ti->arb));
 					break;
 
 				} /* ARB command check */
 
-				writeb(~ARB_CMD_INT, ti->mmio + ACA_OFFSET + ACA_RESET + ISRP_ODD);
-				writeb(ARB_FREE, ti->mmio + ACA_OFFSET + ACA_SET + ISRA_ODD);
+				isa_writeb(~ARB_CMD_INT, ti->mmio + ACA_OFFSET + ACA_RESET + ISRP_ODD);
+				isa_writeb(ARB_FREE, ti->mmio + ACA_OFFSET + ACA_SET + ISRA_ODD);
 
 			} /* ARB response */
 
 			if (status & SSB_RESP_INT) { /* SSB response */
 				unsigned char retcode;
-				switch (readb(ti->ssb)) { /* SSB command check */
+				switch (isa_readb(ti->ssb)) { /* SSB command check */
 				      
 				      case XMIT_DIR_FRAME:
 				      case XMIT_UI_FRAME:
-					retcode = readb(ti->ssb+2);
+					retcode = isa_readb(ti->ssb+2);
 					if (retcode && (retcode != 0x22)) /* checks ret_code */
 						DPRINTK("xmit ret_code: %02X xmit error code: %02X\n",
-							(int)retcode, (int)readb(ti->ssb+6));
+							(int)retcode, (int)isa_readb(ti->ssb+6));
 					else ti->tr_stats.tx_packets++;
 					break;
 
 				      case XMIT_XID_CMD:
-					DPRINTK("xmit xid ret_code: %02X\n", (int)readb(ti->ssb+2));
+					DPRINTK("xmit xid ret_code: %02X\n", (int)isa_readb(ti->ssb+2));
 
 				      default:
-					DPRINTK("Unknown command %02X in ssb\n", (int)readb(ti->ssb));
+					DPRINTK("Unknown command %02X in ssb\n", (int)isa_readb(ti->ssb));
 
 				} /* SSB command check */
 
-				writeb(~SSB_RESP_INT, ti->mmio + ACA_OFFSET + ACA_RESET + ISRP_ODD);
-				writeb(SSB_FREE, ti->mmio + ACA_OFFSET + ACA_SET + ISRA_ODD);
+				isa_writeb(~SSB_RESP_INT, ti->mmio + ACA_OFFSET + ACA_RESET + ISRP_ODD);
+				isa_writeb(SSB_FREE, ti->mmio + ACA_OFFSET + ACA_SET + ISRA_ODD);
 
 			} /* SSB response */
 
 		}	 /* SRB, ARB, ASB or SSB response */
 
 		dev->interrupt=0;
-		writeb(INT_ENABLE, ti->mmio + ACA_OFFSET + ACA_SET + ISRP_EVEN);
+		isa_writeb(INT_ENABLE, ti->mmio + ACA_OFFSET + ACA_SET + ISRP_EVEN);
 		break;
 
 	      case FIRST_INT:
@@ -1278,12 +1266,12 @@ static void initial_tok_int(struct net_device *dev)
 
 	/* we assign the shared-ram address for ISA devices */
 	if(!ti->sram) {
-		writeb(ti->sram_base, ti->mmio + ACA_OFFSET + ACA_RW + RRR_EVEN);
+		isa_writeb(ti->sram_base, ti->mmio + ACA_OFFSET + ACA_RW + RRR_EVEN);
 		ti->sram=((__u32)ti->sram_base << 12);
 	}
 	ti->init_srb=ti->sram
-		+ntohs((unsigned short)readw(ti->mmio+ ACA_OFFSET + WRBR_EVEN));
-	SET_PAGE(ntohs((unsigned short)readw(ti->mmio+ACA_OFFSET + WRBR_EVEN)));
+		+ntohs((unsigned short)isa_readw(ti->mmio+ ACA_OFFSET + WRBR_EVEN));
+	SET_PAGE(ntohs((unsigned short)isa_readw(ti->mmio+ACA_OFFSET + WRBR_EVEN)));
 
 	dev->mem_start = ti->sram;
 	dev->mem_end = ti->sram + (ti->mapped_ram_size<<9) - 1;
@@ -1292,12 +1280,12 @@ static void initial_tok_int(struct net_device *dev)
 	{
 		int i;
 		DPRINTK("init_srb(%p):", ti->init_srb);
-		for (i=0;i<17;i++) printk("%02X ", (int)readb(ti->init_srb+i));
+		for (i=0;i<17;i++) printk("%02X ", (int)isa_readb(ti->init_srb+i));
 		printk("\n");
 	}
 #endif
 
-	hw_encoded_addr = readw(ti->init_srb
+	hw_encoded_addr = isa_readw(ti->init_srb
 				+ offsetof(struct srb_init_response, encoded_address));
 
 #if !TR_NEWFORMAT
@@ -1307,7 +1295,7 @@ static void initial_tok_int(struct net_device *dev)
 #endif
 
 	encoded_addr=(ti->sram + ntohs(hw_encoded_addr));
-	ti->ring_speed = readb(ti->init_srb+offsetof(struct srb_init_response, init_status)) & 0x01 ? 16 : 4;
+	ti->ring_speed = isa_readb(ti->init_srb+offsetof(struct srb_init_response, init_status)) & 0x01 ? 16 : 4;
 #if !TR_NEWFORMAT
 	DPRINTK("encoded addr (%04X,%04X,%08X): ", hw_encoded_addr,
 		ntohs(hw_encoded_addr), encoded_addr);
@@ -1316,12 +1304,12 @@ static void initial_tok_int(struct net_device *dev)
 		ti->ring_speed, ti->sram);
 #endif
 
-	ti->auto_ringspeedsave=readb(ti->init_srb
+	ti->auto_ringspeedsave=isa_readb(ti->init_srb
 				     +offsetof(struct srb_init_response, init_status_2)) & 0x4 ? TRUE : FALSE;
 
 #if !TR_NEWFORMAT
 	for(i=0;i<TR_ALEN;i++) {
-		dev->dev_addr[i]=readb(encoded_addr + i);
+		dev->dev_addr[i]=isa_readb(encoded_addr + i);
 		printk("%02X%s", dev->dev_addr[i], (i==TR_ALEN-1) ? "" : ":" );
 	}
 	printk("\n");
@@ -1346,10 +1334,10 @@ static int tok_init_card(struct net_device *dev)
 
 #ifdef ENABLE_PAGING
 	if(ti->page_mask)
-		writeb(SRPR_ENABLE_PAGING, ti->mmio + ACA_OFFSET + ACA_RW + SRPR_EVEN);
+		isa_writeb(SRPR_ENABLE_PAGING, ti->mmio + ACA_OFFSET + ACA_RW + SRPR_EVEN);
 #endif
 
-	writeb(~INT_ENABLE, ti->mmio + ACA_OFFSET + ACA_RESET + ISRP_EVEN);
+	isa_writeb(~INT_ENABLE, ti->mmio + ACA_OFFSET + ACA_RESET + ISRP_EVEN);
 
 #if !TR_NEWFORMAT
 	DPRINTK("resetting card\n");
@@ -1364,7 +1352,7 @@ static int tok_init_card(struct net_device *dev)
 #endif
 
 	ti->open_status=IN_PROGRESS;
-	writeb(INT_ENABLE, ti->mmio + ACA_OFFSET + ACA_SET + ISRP_EVEN);
+	isa_writeb(INT_ENABLE, ti->mmio + ACA_OFFSET + ACA_SET + ISRP_EVEN);
 	return 0;
 }
 
@@ -1375,18 +1363,18 @@ static void open_sap(unsigned char type,struct net_device *dev)
 
 	SET_PAGE(ti->srb);
 	for (i=0; i<sizeof(struct dlc_open_sap); i++)
-		writeb(0, ti->srb+i);
+		isa_writeb(0, ti->srb+i);
 
-	writeb(DLC_OPEN_SAP, ti->srb + offsetof(struct dlc_open_sap, command));
-	writew(htons(MAX_I_FIELD),
+	isa_writeb(DLC_OPEN_SAP, ti->srb + offsetof(struct dlc_open_sap, command));
+	isa_writew(htons(MAX_I_FIELD),
 	       ti->srb + offsetof(struct dlc_open_sap, max_i_field));
-	writeb(SAP_OPEN_IND_SAP | SAP_OPEN_PRIORITY,
+	isa_writeb(SAP_OPEN_IND_SAP | SAP_OPEN_PRIORITY,
 	       ti->srb + offsetof(struct dlc_open_sap, sap_options));
-	writeb(SAP_OPEN_STATION_CNT,
+	isa_writeb(SAP_OPEN_STATION_CNT,
 	       ti->srb + offsetof(struct dlc_open_sap, station_count));
-	writeb(type, ti->srb + offsetof(struct dlc_open_sap, sap_value));
+	isa_writeb(type, ti->srb + offsetof(struct dlc_open_sap, sap_value));
 
-	writeb(CMD_IN_SRB, ti->mmio + ACA_OFFSET + ACA_SET + ISRA_ODD);
+	isa_writeb(CMD_IN_SRB, ti->mmio + ACA_OFFSET + ACA_SET + ISRA_ODD);
 
 }
 
@@ -1403,42 +1391,42 @@ void tok_open_adapter(unsigned long dev_addr)
 	DPRINTK("now opening the board...\n");
 #endif
 
-	writeb(~SRB_RESP_INT, ti->mmio + ACA_OFFSET + ACA_RESET + ISRP_ODD);
-	writeb(~CMD_IN_SRB, ti->mmio + ACA_OFFSET + ACA_RESET + ISRA_ODD);
+	isa_writeb(~SRB_RESP_INT, ti->mmio + ACA_OFFSET + ACA_RESET + ISRP_ODD);
+	isa_writeb(~CMD_IN_SRB, ti->mmio + ACA_OFFSET + ACA_RESET + ISRA_ODD);
 
 	for (i=0; i<sizeof(struct dir_open_adapter); i++)
-		writeb(0, ti->init_srb+i);
+		isa_writeb(0, ti->init_srb+i);
 
-	writeb(DIR_OPEN_ADAPTER,
+	isa_writeb(DIR_OPEN_ADAPTER,
 	       ti->init_srb + offsetof(struct dir_open_adapter, command));
-	writew(htons(OPEN_PASS_BCON_MAC),
+	isa_writew(htons(OPEN_PASS_BCON_MAC),
 	       ti->init_srb + offsetof(struct dir_open_adapter, open_options));
 	if (ti->ring_speed == 16) {
-		writew(htons(ti->dhb_size16mb),
+		isa_writew(htons(ti->dhb_size16mb),
 		       ti->init_srb + offsetof(struct dir_open_adapter, dhb_length));
-		writew(htons(ti->rbuf_cnt16),
+		isa_writew(htons(ti->rbuf_cnt16),
 		       ti->init_srb + offsetof(struct dir_open_adapter, num_rcv_buf));
-		writew(htons(ti->rbuf_len16),
+		isa_writew(htons(ti->rbuf_len16),
 		       ti->init_srb + offsetof(struct dir_open_adapter, rcv_buf_len));
 	} else {
-		writew(htons(ti->dhb_size4mb),
+		isa_writew(htons(ti->dhb_size4mb),
 		       ti->init_srb + offsetof(struct dir_open_adapter, dhb_length));
-		writew(htons(ti->rbuf_cnt4),
+		isa_writew(htons(ti->rbuf_cnt4),
 		       ti->init_srb + offsetof(struct dir_open_adapter, num_rcv_buf));
-		writew(htons(ti->rbuf_len4),
+		isa_writew(htons(ti->rbuf_len4),
 		       ti->init_srb + offsetof(struct dir_open_adapter, rcv_buf_len));
 	}
-	writeb(NUM_DHB, /* always 2 */ 
+	isa_writeb(NUM_DHB, /* always 2 */ 
 	       ti->init_srb + offsetof(struct dir_open_adapter, num_dhb));
-	writeb(DLC_MAX_SAP,
+	isa_writeb(DLC_MAX_SAP,
 	       ti->init_srb + offsetof(struct dir_open_adapter, dlc_max_sap));
-	writeb(DLC_MAX_STA,
+	isa_writeb(DLC_MAX_STA,
 	       ti->init_srb + offsetof(struct dir_open_adapter, dlc_max_sta));
 
 	ti->srb=ti->init_srb; /* We use this one in the interrupt handler */
 
-	writeb(INT_ENABLE, ti->mmio + ACA_OFFSET + ACA_SET + ISRP_EVEN);
-	writeb(CMD_IN_SRB, ti->mmio + ACA_OFFSET + ACA_SET + ISRA_ODD);
+	isa_writeb(INT_ENABLE, ti->mmio + ACA_OFFSET + ACA_SET + ISRP_EVEN);
+	isa_writeb(CMD_IN_SRB, ti->mmio + ACA_OFFSET + ACA_SET + ISRA_ODD);
 
 }
 
@@ -1452,7 +1440,7 @@ static void tr_tx(struct net_device *dev)
 	int i;
 	struct trllc	*llc;
 
-	if (readb(ti->asb + offsetof(struct asb_xmit_resp, ret_code))!=0xFF)
+	if (isa_readb(ti->asb + offsetof(struct asb_xmit_resp, ret_code))!=0xFF)
 		DPRINTK("ASB not free !!!\n");
 
 	/* in providing the transmit interrupts,
@@ -1461,7 +1449,7 @@ static void tr_tx(struct net_device *dev)
 	   to stuff with data.  Here we compute the
 	   effective address where we will place data.*/
 	dhb=ti->sram
-		+ntohs(readw(ti->arb + offsetof(struct arb_xmit_req, dhb_address)));
+		+ntohs(isa_readw(ti->arb + offsetof(struct arb_xmit_req, dhb_address)));
 	
 	/* Figure out the size of the 802.5 header */
 	if (!(trhdr->saddr[0] & 0x80)) /* RIF present? */
@@ -1472,28 +1460,28 @@ static void tr_tx(struct net_device *dev)
 
 	llc = (struct trllc *)(ti->current_skb->data + hdr_len);
 
-	xmit_command = readb(ti->srb + offsetof(struct srb_xmit, command));
+	xmit_command = isa_readb(ti->srb + offsetof(struct srb_xmit, command));
 
-	writeb(xmit_command, ti->asb + offsetof(struct asb_xmit_resp, command));
-	writew(readb(ti->srb + offsetof(struct srb_xmit, station_id)),
+	isa_writeb(xmit_command, ti->asb + offsetof(struct asb_xmit_resp, command));
+	isa_writew(isa_readb(ti->srb + offsetof(struct srb_xmit, station_id)),
 	       ti->asb + offsetof(struct asb_xmit_resp, station_id));
-	writeb(llc->ssap, ti->asb + offsetof(struct asb_xmit_resp, rsap_value));
-	writeb(readb(ti->srb + offsetof(struct srb_xmit, cmd_corr)),
+	isa_writeb(llc->ssap, ti->asb + offsetof(struct asb_xmit_resp, rsap_value));
+	isa_writeb(isa_readb(ti->srb + offsetof(struct srb_xmit, cmd_corr)),
 	       ti->asb + offsetof(struct asb_xmit_resp, cmd_corr));
-	writeb(0, ti->asb + offsetof(struct asb_xmit_resp, ret_code));
+	isa_writeb(0, ti->asb + offsetof(struct asb_xmit_resp, ret_code));
 
 	if ((xmit_command==XMIT_XID_CMD) || (xmit_command==XMIT_TEST_CMD)) {
 
-		writew(htons(0x11),
+		isa_writew(htons(0x11),
 		       ti->asb + offsetof(struct asb_xmit_resp, frame_length));
-		writeb(0x0e, ti->asb + offsetof(struct asb_xmit_resp, hdr_length));
-		writeb(AC, dhb);
-		writeb(LLC_FRAME, dhb+1);
+		isa_writeb(0x0e, ti->asb + offsetof(struct asb_xmit_resp, hdr_length));
+		isa_writeb(AC, dhb);
+		isa_writeb(LLC_FRAME, dhb+1);
 
-		for (i=0; i<TR_ALEN; i++) writeb((int)0x0FF, dhb+i+2);
-		for (i=0; i<TR_ALEN; i++) writeb(0, dhb+i+TR_ALEN+2);
+		for (i=0; i<TR_ALEN; i++) isa_writeb((int)0x0FF, dhb+i+2);
+		for (i=0; i<TR_ALEN; i++) isa_writeb(0, dhb+i+TR_ALEN+2);
 
-		writeb(RESP_IN_ASB, ti->mmio + ACA_OFFSET + ACA_SET + ISRA_ODD);
+		isa_writeb(RESP_IN_ASB, ti->mmio + ACA_OFFSET + ACA_SET + ISRA_ODD);
 		return;
 
 	}
@@ -1502,13 +1490,13 @@ static void tr_tx(struct net_device *dev)
 	 *      the token ring packet is copied from sk_buff to the adapter
 	 *      buffer identified in the command data received with the interrupt.
 	 */
-	writeb(hdr_len, ti->asb + offsetof(struct asb_xmit_resp, hdr_length));
-	writew(htons(ti->current_skb->len),
+	isa_writeb(hdr_len, ti->asb + offsetof(struct asb_xmit_resp, hdr_length));
+	isa_writew(htons(ti->current_skb->len),
 	       ti->asb + offsetof(struct asb_xmit_resp, frame_length));
 
-	memcpy_toio(dhb, ti->current_skb->data, ti->current_skb->len);
+	isa_memcpy_toio(dhb, ti->current_skb->data, ti->current_skb->len);
 
-	writeb(RESP_IN_ASB, ti->mmio + ACA_OFFSET + ACA_SET + ISRA_ODD);
+	isa_writeb(RESP_IN_ASB, ti->mmio + ACA_OFFSET + ACA_SET + ISRA_ODD);
 	ti->tr_stats.tx_bytes+=ti->current_skb->len;
 	dev->tbusy=0;
 	dev_kfree_skb(ti->current_skb);
@@ -1531,19 +1519,19 @@ static void tr_rx(struct net_device *dev)
 	struct iphdr *iph;
 
 	rbuffer=(ti->sram
-		 +ntohs(readw(ti->arb + offsetof(struct arb_rec_req, rec_buf_addr))))+2;
+		 +ntohs(isa_readw(ti->arb + offsetof(struct arb_rec_req, rec_buf_addr))))+2;
  
-	if(readb(ti->asb + offsetof(struct asb_rec, ret_code))!=0xFF)
+	if(isa_readb(ti->asb + offsetof(struct asb_rec, ret_code))!=0xFF)
 		DPRINTK("ASB not free !!!\n");
 
-	writeb(REC_DATA,
+	isa_writeb(REC_DATA,
 	       ti->asb + offsetof(struct asb_rec, command));
-	writew(readw(ti->arb + offsetof(struct arb_rec_req, station_id)),
+	isa_writew(isa_readw(ti->arb + offsetof(struct arb_rec_req, station_id)),
 	       ti->asb + offsetof(struct asb_rec, station_id));
-	writew(readw(ti->arb + offsetof(struct arb_rec_req, rec_buf_addr)),
+	isa_writew(isa_readw(ti->arb + offsetof(struct arb_rec_req, rec_buf_addr)),
 	       ti->asb + offsetof(struct asb_rec, rec_buf_addr));
 
-	lan_hdr_len=readb(ti->arb + offsetof(struct arb_rec_req, lan_hdr_len));
+	lan_hdr_len=isa_readb(ti->arb + offsetof(struct arb_rec_req, lan_hdr_len));
 	hdr_len = lan_hdr_len + sizeof(struct trllc) + sizeof(struct iphdr);
 	
 	llc=(rbuffer + offsetof(struct rec_buf, data) + lan_hdr_len);
@@ -1552,28 +1540,28 @@ static void tr_rx(struct net_device *dev)
 	DPRINTK("offsetof data: %02X lan_hdr_len: %02X\n",
 		(unsigned int)offsetof(struct rec_buf,data), (unsigned int)lan_hdr_len);
 	DPRINTK("llc: %08X rec_buf_addr: %04X ti->sram: %p\n", llc,
-		ntohs(readw(ti->arb + offsetof(struct arb_rec_req, rec_buf_addr))),
+		ntohs(isa_readw(ti->arb + offsetof(struct arb_rec_req, rec_buf_addr))),
 		ti->sram);
 	DPRINTK("dsap: %02X, ssap: %02X, llc: %02X, protid: %02X%02X%02X, "
 		"ethertype: %04X\n",
-		(int)readb(llc + offsetof(struct trllc, dsap)),
-		(int)readb(llc + offsetof(struct trllc, ssap)),
-		(int)readb(llc + offsetof(struct trllc, llc)),
-		(int)readb(llc + offsetof(struct trllc, protid)),
-		(int)readb(llc + offsetof(struct trllc, protid)+1),
-		(int)readb(llc + offsetof(struct trllc, protid)+2),
-		(int)readw(llc + offsetof(struct trllc, ethertype)));
+		(int)isa_readb(llc + offsetof(struct trllc, dsap)),
+		(int)isa_readb(llc + offsetof(struct trllc, ssap)),
+		(int)isa_readb(llc + offsetof(struct trllc, llc)),
+		(int)isa_readb(llc + offsetof(struct trllc, protid)),
+		(int)isa_readb(llc + offsetof(struct trllc, protid)+1),
+		(int)isa_readb(llc + offsetof(struct trllc, protid)+2),
+		(int)isa_readw(llc + offsetof(struct trllc, ethertype)));
 #endif
-	if (readb(llc + offsetof(struct trllc, llc))!=UI_CMD) {
-		writeb(DATA_LOST, ti->asb + offsetof(struct asb_rec, ret_code));
+	if (isa_readb(llc + offsetof(struct trllc, llc))!=UI_CMD) {
+		isa_writeb(DATA_LOST, ti->asb + offsetof(struct asb_rec, ret_code));
 		ti->tr_stats.rx_dropped++;
-		writeb(RESP_IN_ASB, ti->mmio + ACA_OFFSET + ACA_SET + ISRA_ODD);
+		isa_writeb(RESP_IN_ASB, ti->mmio + ACA_OFFSET + ACA_SET + ISRA_ODD);
 		return;
 	}
 
-	length = ntohs(readw(ti->arb+offsetof(struct arb_rec_req, frame_len)));
-       	if ((readb(llc + offsetof(struct trllc, dsap))==EXTENDED_SAP) &&
-       	    (readb(llc + offsetof(struct trllc, ssap))==EXTENDED_SAP) &&
+	length = ntohs(isa_readw(ti->arb+offsetof(struct arb_rec_req, frame_len)));
+       	if ((isa_readb(llc + offsetof(struct trllc, dsap))==EXTENDED_SAP) &&
+       	    (isa_readb(llc + offsetof(struct trllc, ssap))==EXTENDED_SAP) &&
 		(length>=hdr_len)) {
        		IPv4_p = 1;
        	}
@@ -1588,20 +1576,20 @@ static void tr_rx(struct net_device *dev)
        		DPRINTK("Probably non-IP frame received.\n");
        		DPRINTK("ssap: %02X dsap: %02X saddr: %02X:%02X:%02X:%02X:%02X:%02X "
        			"daddr: %02X:%02X:%02X:%02X:%02X:%02X\n",
-       			(int)readb(llc + offsetof(struct trllc, ssap)),
-       			(int)readb(llc + offsetof(struct trllc, dsap)),
-       			(int)readb(trhhdr + offsetof(struct trh_hdr, saddr)),
-       			(int)readb(trhhdr + offsetof(struct trh_hdr, saddr)+1),
-       			(int)readb(trhhdr + offsetof(struct trh_hdr, saddr)+2),
-       			(int)readb(trhhdr + offsetof(struct trh_hdr, saddr)+3),
-       			(int)readb(trhhdr + offsetof(struct trh_hdr, saddr)+4),
-       			(int)readb(trhhdr + offsetof(struct trh_hdr, saddr)+5),
-       			(int)readb(trhhdr + offsetof(struct trh_hdr, daddr)),
-       			(int)readb(trhhdr + offsetof(struct trh_hdr, daddr)+1),
-       			(int)readb(trhhdr + offsetof(struct trh_hdr, daddr)+2),
-       			(int)readb(trhhdr + offsetof(struct trh_hdr, daddr)+3),
-       			(int)readb(trhhdr + offsetof(struct trh_hdr, daddr)+4),
-       			(int)readb(trhhdr + offsetof(struct trh_hdr, daddr)+5));
+       			(int)isa_readb(llc + offsetof(struct trllc, ssap)),
+       			(int)isa_readb(llc + offsetof(struct trllc, dsap)),
+       			(int)isa_readb(trhhdr + offsetof(struct trh_hdr, saddr)),
+       			(int)isa_readb(trhhdr + offsetof(struct trh_hdr, saddr)+1),
+       			(int)isa_readb(trhhdr + offsetof(struct trh_hdr, saddr)+2),
+       			(int)isa_readb(trhhdr + offsetof(struct trh_hdr, saddr)+3),
+       			(int)isa_readb(trhhdr + offsetof(struct trh_hdr, saddr)+4),
+       			(int)isa_readb(trhhdr + offsetof(struct trh_hdr, saddr)+5),
+       			(int)isa_readb(trhhdr + offsetof(struct trh_hdr, daddr)),
+       			(int)isa_readb(trhhdr + offsetof(struct trh_hdr, daddr)+1),
+       			(int)isa_readb(trhhdr + offsetof(struct trh_hdr, daddr)+2),
+       			(int)isa_readb(trhhdr + offsetof(struct trh_hdr, daddr)+3),
+       			(int)isa_readb(trhhdr + offsetof(struct trh_hdr, daddr)+4),
+       			(int)isa_readb(trhhdr + offsetof(struct trh_hdr, daddr)+5));
        	}
 #endif
 
@@ -1610,8 +1598,8 @@ static void tr_rx(struct net_device *dev)
        	if (!(skb=dev_alloc_skb(skb_size))) {
        		DPRINTK("out of memory. frame dropped.\n");
        		ti->tr_stats.rx_dropped++;
-       		writeb(DATA_LOST, ti->asb + offsetof(struct asb_rec, ret_code));
-       		writeb(RESP_IN_ASB, ti->mmio + ACA_OFFSET + ACA_SET + ISRA_ODD);
+       		isa_writeb(DATA_LOST, ti->asb + offsetof(struct asb_rec, ret_code));
+       		isa_writeb(RESP_IN_ASB, ti->mmio + ACA_OFFSET + ACA_SET + ISRA_ODD);
        		return;
        	}
 
@@ -1619,12 +1607,12 @@ static void tr_rx(struct net_device *dev)
 	skb_reserve(skb, sizeof(struct trh_hdr)-lan_hdr_len+sizeof(struct trllc));
        	skb->dev=dev;
        	data=skb->data;
-	rbuffer_len=ntohs(readw(rbuffer + offsetof(struct rec_buf, buf_len)));
+	rbuffer_len=ntohs(isa_readw(rbuffer + offsetof(struct rec_buf, buf_len)));
 	rbufdata = rbuffer + offsetof(struct rec_buf,data);
 
 	if (IPv4_p) {
                 /* Copy the headers without checksumming */
-		memcpy_fromio(data, rbufdata, hdr_len);
+		isa_memcpy_fromio(data, rbufdata, hdr_len);
 
 		/* Watch for padded packets and bogons */
 		iph=(struct iphdr*)(data + lan_hdr_len + sizeof(struct trllc));
@@ -1644,20 +1632,20 @@ static void tr_rx(struct net_device *dev)
 						   length < rbuffer_len ? length : rbuffer_len,
 						   chksum);
 		else
-			memcpy_fromio(data, rbufdata, rbuffer_len);
-		rbuffer = ntohs(readw(rbuffer));
+			isa_memcpy_fromio(data, rbufdata, rbuffer_len);
+		rbuffer = ntohs(isa_readw(rbuffer));
 		if (!rbuffer)
 			break;
 		length -= rbuffer_len;
 		data += rbuffer_len;
 		rbuffer += ti->sram;
-		rbuffer_len = ntohs(readw(rbuffer + offsetof(struct rec_buf, buf_len)));
+		rbuffer_len = ntohs(isa_readw(rbuffer + offsetof(struct rec_buf, buf_len)));
 		rbufdata = rbuffer + offsetof(struct rec_buf, data);
 	}
 
-       	writeb(0, ti->asb + offsetof(struct asb_rec, ret_code));
+       	isa_writeb(0, ti->asb + offsetof(struct asb_rec, ret_code));
 
-       	writeb(RESP_IN_ASB, ti->mmio + ACA_OFFSET + ACA_SET + ISRA_ODD);
+       	isa_writeb(RESP_IN_ASB, ti->mmio + ACA_OFFSET + ACA_SET + ISRA_ODD);
 
 	ti->tr_stats.rx_bytes += skb->len;
        	ti->tr_stats.rx_packets++;
@@ -1696,10 +1684,10 @@ static int tok_send_packet(struct sk_buff *skb, struct net_device *dev)
 
 		/* Save skb; we'll need it when the adapter asks for the data */
 		ti->current_skb=skb;
-		writeb(XMIT_UI_FRAME, ti->srb + offsetof(struct srb_xmit, command));
-		writew(ti->exsap_station_id, ti->srb
+		isa_writeb(XMIT_UI_FRAME, ti->srb + offsetof(struct srb_xmit, command));
+		isa_writew(ti->exsap_station_id, ti->srb
 		       +offsetof(struct srb_xmit, station_id));
-		writeb(CMD_IN_SRB, (ti->mmio + ACA_OFFSET + ACA_SET + ISRA_ODD));
+		isa_writeb(CMD_IN_SRB, (ti->mmio + ACA_OFFSET + ACA_SET + ISRA_ODD));
 		spin_unlock_irqrestore(&(ti->lock), flags);
 
 		dev->trans_start=jiffies;
@@ -1721,9 +1709,9 @@ void ibmtr_readlog(struct net_device *dev) {
 	 ti=(struct tok_info *) dev->priv;
 
 	 ti->readlog_pending = 0;
-	 writeb(DIR_READ_LOG, ti->srb);
-	 writeb(INT_ENABLE, ti->mmio + ACA_OFFSET + ACA_SET + ISRP_EVEN);
-	 writeb(CMD_IN_SRB, ti->mmio + ACA_OFFSET + ACA_SET + ISRA_ODD);
+	 isa_writeb(DIR_READ_LOG, ti->srb);
+	 isa_writeb(INT_ENABLE, ti->mmio + ACA_OFFSET + ACA_SET + ISRP_EVEN);
+	 isa_writeb(CMD_IN_SRB, ti->mmio + ACA_OFFSET + ACA_SET + ISRA_ODD);
 	 dev->tbusy=1; /* really srb busy... */
 }
 

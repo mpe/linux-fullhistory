@@ -60,6 +60,14 @@ void check_page_tables (void)
 
 #if UMS_DEBUG
 /*
+ * check for wait queue in 2.3.x
+ */
+inline void uq_log (char *txt, struct inode *inode)
+{
+	printk (KERN_ERR "%s: (%lu) magic=%lu creator=%lu lock=%u\n", txt, inode->i_ino, inode->u.umsdos_i.dir_info.p.__magic, inode->u.umsdos_i.dir_info.p.__creator, inode->u.umsdos_i.dir_info.p.lock.lock);
+}
+
+/*
  * check a superblock
  */
 
@@ -213,6 +221,7 @@ void check_dentry_path (struct dentry *dentry, const char *desc)
 	}
 }
 #else
+inline void uq_log (char *txt, struct inode *inode) {};
 void check_sb (struct super_block *sb, const char c) {};
 void check_inode (struct inode *inode) {};
 void checkd_inode (struct inode *inode) {};

@@ -355,7 +355,6 @@ static ssize_t sg_read(struct file * filp, char * buf,
 static ssize_t sg_write(struct file * filp, const char * buf, 
                         size_t count, loff_t *ppos)
 {
-    unsigned long         flags;
     int                   mxsize, cmd_size, k;
     unsigned char         cmnd[MAX_COMMAND_SIZE];
     int                   input_size;
@@ -432,8 +431,9 @@ static ssize_t sg_write(struct file * filp, const char * buf,
         return k;    /* probably out of space --> ENOMEM */
     }
 /*  SCSI_LOG_TIMEOUT(7, printk("sg_write: allocating device\n")); */
-    if (! (SCpnt = scsi_allocate_device(NULL, sdp->device, 
-                                        !(filp->f_flags & O_NONBLOCK)))) {
+    if (! (SCpnt = scsi_allocate_device(sdp->device, 
+                                        !(filp->f_flags & O_NONBLOCK)))) 
+    {
         sg_finish_rem_req(srp, NULL, 0);
         return -EAGAIN;   /* No available command blocks at the moment */
     }
@@ -448,7 +448,6 @@ static ssize_t sg_write(struct file * filp, const char * buf,
     cmnd[1]= (cmnd[1] & 0x1f) | (sdp->device->lun << 5);
 
 /*  SCSI_LOG_TIMEOUT(7, printk("sg_write: do cmd\n")); */
-    spin_lock_irqsave(&io_request_lock, flags);
     SCpnt->use_sg = srp->data.use_sg;
     SCpnt->sglist_len = srp->data.sglist_len;
     SCpnt->bufflen = srp->data.bufflen;
@@ -467,7 +466,6 @@ static ssize_t sg_write(struct file * filp, const char * buf,
                 (void *)SCpnt->buffer, mxsize,
                 sg_command_done, sfp->timeout, SG_DEFAULT_RETRIES);
     /* 'mxsize' overwrites SCpnt->bufflen, hence need for b_malloc_len */
-    spin_unlock_irqrestore(&io_request_lock, flags);
 /*  SCSI_LOG_TIMEOUT(6, printk("sg_write: sent scsi cmd to mid-level\n")); */
     return count;
 }
@@ -1116,7 +1114,9 @@ static void sg_shorten_timeout(Scsi_Cmnd * scpnt)
         scsi_add_timer(scpnt, scpnt->timeout_per_command,
                        scsi_old_times_out);
 #else
+    spin_unlock_irq(&io_request_lock);
     scsi_sleep(HZ); /* just sleep 1 second and hope ... */
+    spin_lock_irq(&io_request_lock);
 #endif
 }
 

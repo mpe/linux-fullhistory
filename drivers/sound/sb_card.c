@@ -233,38 +233,42 @@ int init_module(void)
 	if (mad16 == 0 && trix == 0 && pas2 == 0 && support == 0)
 	{
 #ifdef CONFIG_ISAPNP			
-		if (sb_probe_isapnp(&config, &config_mpu)<0)
+		if (isapnp == 1 && sb_probe_isapnp(&config, &config_mpu)<0)
 		{
 			printk(KERN_ERR "sb_card: No ISAPnP cards found\n");
 			return -EINVAL;
 		}
+		else
+		{
+#endif			
+			if (io == -1 || dma == -1 || irq == -1)
+			{
+				printk(KERN_ERR "sb_card: I/O, IRQ, and DMA are mandatory\n");
+				return -EINVAL;
+			}
+			config.io_base = io;
+			config.irq = irq;
+			config.dma = dma;
+			config.dma2 = dma16;
+			config.card_subtype = type;
+#ifdef CONFIG_ISAPNP
+		}
 #endif
-	} 
-	if (io == -1 || dma == -1 || irq == -1)
-	{
-		printk(KERN_ERR "sb_card: I/O, IRQ, and DMA are mandatory\n");
-		return -EINVAL;
-	}
-	config.io_base = io;
-	config.irq = irq;
-	config.dma = dma;
-	config.dma2 = dma16;
-	config.card_subtype = type;
-
-	if (!probe_sb(&config))
-		return -ENODEV;
-	attach_sb_card(&config);
+		if (!probe_sb(&config))
+			return -ENODEV;
+		attach_sb_card(&config);
 	
-	if(config.slots[0]==-1)
-		return -ENODEV;
+		if(config.slots[0]==-1)
+			return -ENODEV;
 #ifdef CONFIG_MIDI
-	if (isapnp == 0) 
-	  config_mpu.io_base = mpu_io;
-	if (probe_sbmpu(&config_mpu))
-		sbmpu = 1;
-	if (sbmpu)
-		attach_sbmpu(&config_mpu);
+		if (isapnp == 0) 
+			config_mpu.io_base = mpu_io;
+		if (probe_sbmpu(&config_mpu))
+			sbmpu = 1;
+		if (sbmpu)
+			attach_sbmpu(&config_mpu);
 #endif
+	}
 	SOUND_LOCK;
 	return 0;
 }

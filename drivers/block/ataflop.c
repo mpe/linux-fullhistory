@@ -1529,7 +1529,7 @@ repeat:
 }
 
 
-void do_fd_request(void)
+void do_fd_request(request_queue_t * q)
 {
  	unsigned long flags;
 
@@ -2051,7 +2051,7 @@ int __init atari_floppy_init (void)
 
 	blk_size[MAJOR_NR] = floppy_sizes;
 	blksize_size[MAJOR_NR] = floppy_blocksizes;
-	blk_dev[MAJOR_NR].request_fn = DEVICE_REQUEST;
+	blk_init_queue(BLK_DEFAULT_QUEUE(MAJOR_NR), DEVICE_REQUEST);
 
 	printk(KERN_INFO "Atari floppy driver: max. %cD, %strack buffering\n",
 	       DriveType == 0 ? 'D' : DriveType == 1 ? 'H' : 'E',
@@ -2103,7 +2103,7 @@ void cleanup_module (void)
 {
 	unregister_blkdev(MAJOR_NR, "fd");
 
-	blk_dev[MAJOR_NR].request_fn = 0;
+	blk_cleanup_queue(BLK_DEFAULT_QUEUE(MAJOR_NR));
 	timer_active &= ~(1 << FLOPPY_TIMER);
 	timer_table[FLOPPY_TIMER].fn = 0;
 	atari_stram_free( DMABuffer );

@@ -273,16 +273,16 @@ extern __inline__ pgd_t *get_pgd_slow(void)
 {
 	pgd_t *ret = (pgd_t *)__get_free_page(GFP_KERNEL);
 
-	if (ret) {
-		/* Clear User space */
+	if (ret)
 		memset(ret, 0, USER_PTRS_PER_PGD * sizeof(pgd_t));
-
-		/* XXX: Copy vmalloc-ed space??? */
-		memcpy(ret + USER_PTRS_PER_PGD,
-		       swapper_pg_dir + USER_PTRS_PER_PGD,
-		       (PTRS_PER_PGD - USER_PTRS_PER_PGD) * sizeof(pgd_t));
-	}
 	return ret;
+}
+
+extern __inline__ void get_pgd_uptodate(pgd_t *pgd)
+{
+	/* XXX: Copy vmalloc-ed space??? */
+	memcpy(pgd + USER_PTRS_PER_PGD, swapper_pg_dir + USER_PTRS_PER_PGD,
+		(PTRS_PER_PGD - USER_PTRS_PER_PGD) * sizeof(pgd_t));
 }
 
 extern __inline__ pgd_t *get_pgd_fast(void)
@@ -293,8 +293,7 @@ extern __inline__ pgd_t *get_pgd_fast(void)
 		pgd_quicklist = (unsigned long *)(*ret);
 		ret[0] = 0;
 		pgtable_cache_size--;
-	} else
-		ret = (unsigned long *)get_pgd_slow();
+	}
 	return (pgd_t *)ret;
 }
 
@@ -340,7 +339,6 @@ extern __inline__ void free_pte_slow(pte_t *pte)
 #define pte_free_kernel(pte)    free_pte_slow(pte)
 #define pte_free(pte)           free_pte_slow(pte)
 #define pgd_free(pgd)           free_pgd_slow(pgd)
-#define pgd_alloc()             get_pgd_fast()
 
 extern __inline__ pte_t * pte_alloc_kernel(pmd_t * pmd, unsigned long address)
 {
@@ -398,18 +396,13 @@ extern int do_check_pgt_cache(int, int);
 
 extern inline void set_pgdir(unsigned long address, pgd_t entry)
 {
-	struct task_struct * p;
 	pgd_t *pgd;
         
-	read_lock(&tasklist_lock);
-	for_each_task(p) {
-		if (!p->mm)
-			continue;
-		*pgd_offset(p->mm,address) = entry;
-	}
-	read_unlock(&tasklist_lock);
+	mmlist_access_lock();
+	mmlist_set_pgdir(address, entry);
 	for (pgd = (pgd_t *)pgd_quicklist; pgd; pgd = (pgd_t *)*(unsigned long *)pgd)
 		pgd[address >> PGDIR_SHIFT] = entry;
+	mmlist_access_unlock();
 }
 
 extern pgd_t swapper_pg_dir[1024];

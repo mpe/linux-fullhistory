@@ -1360,7 +1360,7 @@ static void poll(void)
 }
 
 
-static void do_optcd_request(void)
+static void do_optcd_request(request_queue_t * q)
 {
 	DEBUG((DEBUG_REQUEST, "do_optcd_request(%ld+%ld)",
 	       CURRENT -> sector, CURRENT -> nr_sectors));
@@ -2067,7 +2067,7 @@ int __init optcd_init(void)
 
 	hardsect_size[MAJOR_NR] = &hsecsize;
 	blksize_size[MAJOR_NR] = &blksize;
-	blk_dev[MAJOR_NR].request_fn = DEVICE_REQUEST;
+	blk_init_queue(BLK_DEFAULT_QUEUE(MAJOR_NR), DEVICE_REQUEST);
 	read_ahead[MAJOR_NR] = 4;
 	request_region(optcd_port, 4, "optcd");
 

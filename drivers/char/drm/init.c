@@ -97,3 +97,13 @@ void drm_parse_options(char *s)
 	}
 }
 
+/* drm_cpu_valid returns non-zero if the DRI will run on this CPU, and 0
+ * otherwise. */
+
+int drm_cpu_valid(void)
+{
+#if defined(__i386__)
+	if (boot_cpu_data.x86 == 3) return 0; /* No cmpxchg on a 386 */
+#endif
+	return 1;
+}

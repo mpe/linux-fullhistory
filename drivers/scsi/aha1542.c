@@ -1292,7 +1292,9 @@ int aha1542_bus_reset(Scsi_Cmnd * SCpnt)
      * check for timeout, and if we are doing something like this
      * we are pretty desperate anyways.
      */
+    spin_unlock_irq(&io_request_lock);
     scsi_sleep(4*HZ);
+    spin_lock_irq(&io_request_lock);
 
     WAIT(STATUS(SCpnt->host->io_port), 
 	 STATMASK, INIT|IDLE, STST|DIAGF|INVDCMD|DF|CDF);
@@ -1359,7 +1361,9 @@ int aha1542_host_reset(Scsi_Cmnd * SCpnt)
      * check for timeout, and if we are doing something like this
      * we are pretty desperate anyways.
      */
+    spin_unlock_irq(&io_request_lock);
     scsi_sleep(4*HZ);
+    spin_lock_irq(&io_request_lock);
 
     WAIT(STATUS(SCpnt->host->io_port), 
 	 STATMASK, INIT|IDLE, STST|DIAGF|INVDCMD|DF|CDF);

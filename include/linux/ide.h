@@ -231,7 +231,7 @@ typedef union {
 } special_t;
 
 typedef struct ide_drive_s {
-	struct request		*queue;	/* request queue */
+	request_queue_t		 queue;	/* request queue */
 	struct ide_drive_s 	*next;	/* circular list of hwgroup drives */
 	unsigned long sleep;		/* sleep until this time */
 	unsigned long service_start;	/* time we started last request */
@@ -744,7 +744,7 @@ void ide_stall_queue (ide_drive_t *drive, unsigned long timeout);
 /*
  * ide_get_queue() returns the queue which corresponds to a given device.
  */
-struct request **ide_get_queue (kdev_t dev);
+request_queue_t *ide_get_queue (kdev_t dev);
 
 /*
  * CompactFlash cards and their brethern pretend to be removable hard disks,
@@ -757,33 +757,33 @@ int  ide_spin_wait_hwgroup(ide_drive_t *drive, unsigned long *flags);
 void ide_timer_expiry (unsigned long data);
 void ide_intr (int irq, void *dev_id, struct pt_regs *regs);
 void ide_geninit (struct gendisk *gd);
-void do_ide0_request (void);
+void do_ide0_request (request_queue_t * q);
 #if MAX_HWIFS > 1
-void do_ide1_request (void);
+void do_ide1_request (request_queue_t * q);
 #endif
 #if MAX_HWIFS > 2
-void do_ide2_request (void);
+void do_ide2_request (request_queue_t * q);
 #endif
 #if MAX_HWIFS > 3
-void do_ide3_request (void);
+void do_ide3_request (request_queue_t * q);
 #endif
 #if MAX_HWIFS > 4
-void do_ide4_request (void);
+void do_ide4_request (request_queue_t * q);
 #endif
 #if MAX_HWIFS > 5
-void do_ide5_request (void);
+void do_ide5_request (request_queue_t * q);
 #endif
 #if MAX_HWIFS > 6
-void do_ide6_request (void);
+void do_ide6_request (request_queue_t * q);
 #endif
 #if MAX_HWIFS > 7
-void do_ide7_request (void);
+void do_ide7_request (request_queue_t * q);
 #endif
 #if MAX_HWIFS > 8
-void do_ide8_request (void);
+void do_ide8_request (request_queue_t * q);
 #endif
 #if MAX_HWIFS > 9
-void do_ide9_request (void);
+void do_ide9_request (request_queue_t * q);
 #endif
 void ide_init_subdrivers (void);
 

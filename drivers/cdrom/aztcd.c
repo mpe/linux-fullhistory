@@ -355,7 +355,7 @@ void        aztcd_setup(char *str, int *ints);
 static int  check_aztcd_media_change(kdev_t full_dev);
 static int  aztcd_ioctl(struct inode *ip, struct file *fp, unsigned int cmd, unsigned long arg);
 static void azt_transfer(void);
-static void do_aztcd_request(void);
+static void do_aztcd_request(request_queue_t *);
 static void azt_invalidate_buffers(void);
 int         aztcd_open(struct inode *ip, struct file *fp);
 
@@ -1478,7 +1478,7 @@ static void azt_transfer(void)
   }
 }
 
-static void do_aztcd_request(void)
+static void do_aztcd_request(request_queue_t * q)
 {
 #ifdef AZT_TEST
   printk(" do_aztcd_request(%ld+%ld) Time:%li\n", CURRENT -> sector, CURRENT -> nr_sectors,jiffies);
@@ -1798,7 +1798,7 @@ int __init aztcd_init(void)
 		       MAJOR_NR);
                 return -EIO;
 	}
-	blk_dev[MAJOR_NR].request_fn = DEVICE_REQUEST;
+	blk_init_queue(BLK_DEFAULT_QUEUE(MAJOR_NR), DEVICE_REQUEST);
 #ifndef AZT_KERNEL_PRIOR_2_1
 	blksize_size[MAJOR_NR] = aztcd_blocksizes;
 #endif

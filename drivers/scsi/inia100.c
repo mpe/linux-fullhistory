@@ -351,6 +351,7 @@ int inia100_detect(Scsi_Host_Template * tpnt)
 		pHCB->pSRB_head = NULL;		/* Initial SRB save queue       */
 		pHCB->pSRB_tail = NULL;		/* Initial SRB save queue       */
 		pHCB->pSRB_lock = SPIN_LOCK_UNLOCKED; /* SRB save queue lock */
+		pHCB->BitAllocFlagLock = SPIN_LOCK_UNLOCKED;
 		/* Get total memory needed for SCB */
 		sz = orc_num_scb * sizeof(ORC_SCB);
 		if ((pHCB->HCS_virScbArray = (PVOID) kmalloc(sz, GFP_ATOMIC | GFP_DMA)) == NULL) {

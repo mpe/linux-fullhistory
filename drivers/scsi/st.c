@@ -286,15 +286,13 @@ static Scsi_Cmnd *
  st_do_scsi(Scsi_Cmnd * SCpnt, Scsi_Tape * STp, unsigned char *cmd, int bytes,
 	    int timeout, int retries, int do_wait)
 {
-	unsigned long flags;
 	unsigned char *bp;
 
-	spin_lock_irqsave(&io_request_lock, flags);
 	if (SCpnt == NULL)
-		if ((SCpnt = scsi_allocate_device(NULL, STp->device, 1)) == NULL) {
+		SCpnt = scsi_allocate_device(STp->device, 1);
+		if (SCpnt == NULL) {
 			printk(KERN_ERR "st%d: Can't get SCSI request.\n",
                                TAPE_NR(STp->devt));
-			spin_unlock_irqrestore(&io_request_lock, flags);
 			return NULL;
 		}
 
@@ -315,7 +313,6 @@ static Scsi_Cmnd *
 
 	scsi_do_cmd(SCpnt, (void *) cmd, bp, bytes,
 		    st_sleep_done, timeout, retries);
-	spin_unlock_irqrestore(&io_request_lock, flags);
 
 	if (do_wait) {
 		down(SCpnt->request.sem);

@@ -26,7 +26,6 @@ struct ntfs_sb_info{
 	int clusterfactor;
 	int clustersize;
 	int mft_recordsize;
-	int mft_recordbits;
 	int mft_clusters_per_record;
 	int index_recordsize;
 	int index_clusters_per_record;

@@ -188,6 +188,7 @@ EXPORT_SYMBOL(block_read_full_page);
 EXPORT_SYMBOL(block_write_full_page);
 EXPORT_SYMBOL(block_write_partial_page);
 EXPORT_SYMBOL(block_write_cont_page);
+EXPORT_SYMBOL(block_write_zero_range);
 EXPORT_SYMBOL(generic_file_read);
 EXPORT_SYMBOL(do_generic_file_read);
 EXPORT_SYMBOL(generic_file_write);
@@ -218,6 +219,11 @@ EXPORT_SYMBOL(__find_get_page);
 EXPORT_SYMBOL(__find_lock_page);
 EXPORT_SYMBOL(grab_cache_page);
 EXPORT_SYMBOL(read_cache_page);
+EXPORT_SYMBOL(vfs_readlink);
+EXPORT_SYMBOL(vfs_follow_link);
+EXPORT_SYMBOL(page_readlink);
+EXPORT_SYMBOL(page_follow_link);
+EXPORT_SYMBOL(block_symlink);
 
 #if !defined(CONFIG_NFSD) && defined(CONFIG_NFSD_MODULE)
 EXPORT_SYMBOL(do_nfsservctl);

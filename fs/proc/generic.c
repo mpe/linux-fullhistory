@@ -199,40 +199,21 @@ static int make_inode_number(void)
 	return PROC_DYNAMIC_FIRST + i;
 }
 
-static int proc_readlink(struct dentry * dentry, char * buffer, int buflen)
+static int proc_readlink(struct dentry *dentry, char *buffer, int buflen)
 {
-	struct inode *inode = dentry->d_inode;
-	struct proc_dir_entry * de;
-	int len;
-	de = (struct proc_dir_entry *) inode->u.generic_ip;
-	len = de->size+1;
-	if (len > buflen)
-		len = buflen;
-	copy_to_user(buffer, de->data, len);
-	return len;
+	char *s=((struct proc_dir_entry *)dentry->d_inode->u.generic_ip)->data;
+	return vfs_readlink(dentry, buffer, buflen, s);
 }
 
-struct dentry * proc_follow_link(struct dentry * dentry, struct dentry *base, unsigned int follow)
+static struct dentry *proc_follow_link(struct dentry *dentry, struct dentry *base, unsigned flags)
 {
-	struct inode *inode = dentry->d_inode;
-	struct proc_dir_entry * de;
-	de = (struct proc_dir_entry *) inode->u.generic_ip;
-	return lookup_dentry(de->data, base, follow);
+	char *s=((struct proc_dir_entry *)dentry->d_inode->u.generic_ip)->data;
+	return vfs_follow_link(dentry, base, flags, s);
 }
 
 static struct inode_operations proc_link_inode_operations = {
-	NULL,			/* no file-ops */
-	NULL,			/* create */
-	NULL,			/* lookup */
-	NULL,			/* link */
-	NULL,			/* unlink */
-	NULL,			/* symlink */
-	NULL,			/* mkdir */
-	NULL,			/* rmdir */
-	NULL,			/* mknod */
-	NULL,			/* rename */
-	proc_readlink,		/* readlink */
-	proc_follow_link,	/* follow_link */
+	readlink:	proc_readlink,
+	follow_link:	proc_follow_link
 };
 
 /*

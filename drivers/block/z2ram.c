@@ -68,7 +68,7 @@ static int list_count       = 0;
 static int current_device   = -1;
 
 static void
-do_z2_request( void )
+do_z2_request( request_queue_t * q )
 {
     u_long start, len, addr, size;
 
@@ -373,7 +373,7 @@ z2_init( void )
 	    }
     }    
    
-    blk_dev[ MAJOR_NR ].request_fn = DEVICE_REQUEST;
+    blk_init_queue(BLK_DEFAULT_QUEUE(MAJOR_NR), DEVICE_REQUEST);
     blksize_size[ MAJOR_NR ] = z2_blocksizes;
     blk_size[ MAJOR_NR ] = z2_sizes;
 

@@ -4794,7 +4794,7 @@ static inline void sbpcd_end_request(struct request *req, int uptodate) {
 /*
  *  I/O request routine, called from Linux kernel.
  */
-static void DO_SBPCD_REQUEST(void)
+static void DO_SBPCD_REQUEST(request_queue_t * q)
 {
 	u_int block;
 	u_int nsect;
@@ -5725,7 +5725,7 @@ int __init SBPCD_INIT(void)
 		goto init_done;
 #endif MODULE
 	}
-	blk_dev[MAJOR_NR].request_fn = DEVICE_REQUEST;
+	blk_init_queue(BLK_DEFAULT_QUEUE(MAJOR_NR), DEVICE_REQUEST);
 	read_ahead[MAJOR_NR] = buffers * (CD_FRAMESIZE / 512);
 	
 	request_region(CDo_command,4,major_name);

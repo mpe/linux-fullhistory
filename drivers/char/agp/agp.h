@@ -1,8 +1,8 @@
 /*
  * AGPGART module version 0.99
  * Copyright (C) 1999 Jeff Hartmann
- * Copyright (C) 1999 Precision Insight
- * Copyright (C) 1999 Xi Graphics
+ * Copyright (C) 1999 Precision Insight, Inc.
+ * Copyright (C) 1999 Xi Graphics, Inc.
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -97,7 +97,7 @@ struct agp_bridge_data {
 
 	/* Links to driver specific functions */
 
-	int (*fetch_size) (void);	/* returns the index into the size table */
+	int (*fetch_size) (void);
 	int (*configure) (void);
 	void (*agp_enable) (u32);
 	void (*cleanup) (void);
@@ -112,22 +112,22 @@ struct agp_bridge_data {
 	void (*free_by_type) (agp_memory *);
 
 	/* Links to vendor/device specific setup functions */
-#ifdef AGP_BUILD_INTEL_GENERIC
+#ifdef CONFIG_AGP_INTEL
 	void (*intel_generic_setup) (void);
 #endif
-#ifdef AGP_BUILD_INTEL_I810
+#ifdef CONFIG_AGP_I810
 	void (*intel_i810_setup) (struct pci_dev *);
 #endif
-#ifdef AGP_BUILD_VIA_GENERIC
+#ifdef CONFIG_AGP_VIA
 	void (*via_generic_setup) (void);
 #endif
-#ifdef AGP_BUILD_SIS_GENERIC
+#ifdef CONFIG_AGP_SIS
 	void (*sis_generic_setup) (void);
 #endif
-#ifdef AGP_BUILD_AMD_IRONGATE
+#ifdef CONFIG_AGP_AMD
 	void (*amd_irongate_setup) (void);
 #endif
-#ifdef AGP_BUILD_ALI_M1541
+#ifdef CONFIG_AGP_ALI
 	void (*ali_generic_setup) (void);
 #endif
 };
@@ -140,8 +140,19 @@ struct agp_bridge_data {
 #define INREG16(mmap, addr)         *(volatile u16 *)(mmap + (addr))
 #define INREG8 (mmap, addr)         *(volatile u8 *) (mmap + (addr))
 
+#define CACHE_FLUSH	agp_bridge.cache_flush
+#define A_SIZE_8(x)	((aper_size_info_8 *) x)
+#define A_SIZE_16(x)	((aper_size_info_16 *) x)
+#define A_SIZE_32(x)	((aper_size_info_32 *) x)
+#define A_SIZE_FIX(x)	((aper_size_info_fixed *) x)
+#define A_IDX8()	(A_SIZE_8(agp_bridge.aperture_sizes) + i)
+#define A_IDX16()	(A_SIZE_16(agp_bridge.aperture_sizes) + i)
+#define A_IDX32()	(A_SIZE_32(agp_bridge.aperture_sizes) + i)
+#define A_IDXFIX()	(A_SIZE_FIX(agp_bridge.aperture_sizes) + i)
+#define MAXKEY		(4096 * 32)
+
 #ifndef min
-#define min(a,b) (((a)<(b))?(a):(b))
+#define min(a,b)	(((a)<(b))?(a):(b))
 #endif
 
 #define PGE_EMPTY(p) (!(p) || (p) == (unsigned long) agp_bridge.scratch_page)

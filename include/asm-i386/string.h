@@ -1,6 +1,7 @@
 #ifndef _I386_STRING_H_
 #define _I386_STRING_H_
 
+#ifdef __KERNEL__
 /*
  * On a 486 or Pentium, we are better off not using the
  * byte string operations. But on a 386 or a PPro the
@@ -32,7 +33,6 @@ extern inline char * strcpy(char * dest,const char *src)
 {
 int d0, d1, d2;
 __asm__ __volatile__(
-	"cld\n"
 	"1:\tlodsb\n\t"
 	"stosb\n\t"
 	"testb %%al,%%al\n\t"
@@ -47,7 +47,6 @@ extern inline char * strncpy(char * dest,const char *src,size_t count)
 {
 int d0, d1, d2, d3;
 __asm__ __volatile__(
-	"cld\n"
 	"1:\tdecl %2\n\t"
 	"js 2f\n\t"
 	"lodsb\n\t"
@@ -67,7 +66,6 @@ extern inline char * strcat(char * dest,const char * src)
 {
 int d0, d1, d2, d3;
 __asm__ __volatile__(
-	"cld\n\t"
 	"repne\n\t"
 	"scasb\n\t"
 	"decl %1\n"
@@ -85,7 +83,6 @@ extern inline char * strncat(char * dest,const char * src,size_t count)
 {
 int d0, d1, d2, d3;
 __asm__ __volatile__(
-	"cld\n\t"
 	"repne\n\t"
 	"scasb\n\t"
 	"decl %1\n\t"
@@ -110,7 +107,6 @@ extern inline int strcmp(const char * cs,const char * ct)
 int d0, d1;
 register int __res;
 __asm__ __volatile__(
-	"cld\n"
 	"1:\tlodsb\n\t"
 	"scasb\n\t"
 	"jne 2f\n\t"
@@ -132,7 +128,6 @@ extern inline int strncmp(const char * cs,const char * ct,size_t count)
 register int __res;
 int d0, d1, d2;
 __asm__ __volatile__(
-	"cld\n"
 	"1:\tdecl %3\n\t"
 	"js 2f\n\t"
 	"lodsb\n\t"
@@ -156,7 +151,6 @@ extern inline char * strchr(const char * s, int c)
 int d0;
 register char * __res;
 __asm__ __volatile__(
-	"cld\n\t"
 	"movb %%al,%%ah\n"
 	"1:\tlodsb\n\t"
 	"cmpb %%ah,%%al\n\t"
@@ -176,7 +170,6 @@ extern inline char * strrchr(const char * s, int c)
 int d0, d1;
 register char * __res;
 __asm__ __volatile__(
-	"cld\n\t"
 	"movb %%al,%%ah\n"
 	"1:\tlodsb\n\t"
 	"cmpb %%ah,%%al\n\t"
@@ -194,7 +187,6 @@ extern inline size_t strlen(const char * s)
 int d0;
 register int __res;
 __asm__ __volatile__(
-	"cld\n\t"
 	"repne\n\t"
 	"scasb\n\t"
 	"notl %0\n\t"
@@ -207,7 +199,6 @@ extern inline void * __memcpy(void * to, const void * from, size_t n)
 {
 int d0, d1, d2;
 __asm__ __volatile__(
-	"cld\n\t"
 	"rep ; movsl\n\t"
 	"testb $2,%b4\n\t"
 	"je 1f\n\t"
@@ -273,7 +264,6 @@ extern inline void * __constant_memcpy(void * to, const void * from, size_t n)
 	}
 #define COMMON(x) \
 __asm__ __volatile__( \
-	"cld\n\t" \
 	"rep ; movsl" \
 	x \
 	: "=&c" (d0), "=&D" (d1), "=&S" (d2) \
@@ -343,13 +333,28 @@ extern __inline__ void *__memcpy3d(void *to, const void *from, size_t len)
 
 #endif
 
+/*
+ * struct_cpy(x,y), copy structure *x into (matching structure) *y.
+ *
+ * We get link-time errors if the structure sizes do not match.
+ * There is no runtime overhead, it's all optimized away at
+ * compile time.
+ */
+extern void __struct_cpy_bug (void);
+
+#define struct_cpy(x,y) 			\
+({						\
+	if (sizeof(*(x)) != sizeof(*(y))) 	\
+		__struct_cpy_bug;		\
+	memcpy(x, y, sizeof(*(x)));		\
+})
+
 #define __HAVE_ARCH_MEMMOVE
 extern inline void * memmove(void * dest,const void * src, size_t n)
 {
 int d0, d1, d2;
 if (dest<src)
 __asm__ __volatile__(
-	"cld\n\t"
 	"rep\n\t"
 	"movsb"
 	: "=&c" (d0), "=&S" (d1), "=&D" (d2)
@@ -379,7 +384,6 @@ register void * __res;
 if (!count)
 	return NULL;
 __asm__ __volatile__(
-	"cld\n\t"
 	"repne\n\t"
 	"scasb\n\t"
 	"je 1f\n\t"
@@ -393,7 +397,6 @@ extern inline void * __memset_generic(void * s, char c,size_t count)
 {
 int d0, d1;
 __asm__ __volatile__(
-	"cld\n\t"
 	"rep\n\t"
 	"stosb"
 	: "=&c" (d0), "=&D" (d1)
@@ -414,7 +417,6 @@ extern inline void * __constant_c_memset(void * s, unsigned long c, size_t count
 {
 int d0, d1;
 __asm__ __volatile__(
-	"cld\n\t"
 	"rep ; stosl\n\t"
 	"testb $2,%b3\n\t"
 	"je 1f\n\t"
@@ -475,7 +477,7 @@ extern inline void * __constant_c_and_count_memset(void * s, unsigned long patte
 			return s;
 	}
 #define COMMON(x) \
-__asm__  __volatile__("cld\n\t" \
+__asm__  __volatile__( \
 	"rep ; stosl" \
 	x \
 	: "=&c" (d0), "=&D" (d1) \
@@ -518,8 +520,7 @@ extern inline void * memscan(void * addr, int c, size_t size)
 {
 	if (!size)
 		return addr;
-	__asm__("cld
-		repnz; scasb
+	__asm__("repnz; scasb
 		jnz 1f
 		dec %%edi
 1:		"
@@ -527,6 +528,8 @@ extern inline void * memscan(void * addr, int c, size_t size)
 		: "0" (addr), "1" (size), "a" (c));
 	return addr;
 }
+
+#endif /* __KERNEL__ */
 
 #endif
 #endif

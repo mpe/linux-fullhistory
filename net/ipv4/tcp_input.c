@@ -2760,7 +2760,7 @@ static int tcp_rcv_synsent_state_process(struct sock *sk, struct sk_buff *skb,
 
 		if(!sk->dead) {
 			wake_up_interruptible(sk->sleep);
-			sock_wake_async(sk->socket, 0, POLL_IN);
+			sock_wake_async(sk->socket, 0, POLL_OUT);
 		}
 		return -1;
 	}

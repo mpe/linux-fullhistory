@@ -1,13 +1,13 @@
 /*
  *  scsi.h Copyright (C) 1992 Drew Eckhardt 
- *         Copyright (C) 1993, 1994, 1995 Eric Youngdale
+ *         Copyright (C) 1993, 1994, 1995, 1998, 1999 Eric Youngdale
  *  generic SCSI package header file by
  *      Initial versions: Drew Eckhardt
  *      Subsequent revisions: Eric Youngdale
  *
  *  <drew@colorado.edu>
  *
- *       Modified by Eric Youngdale eric@aib.com to
+ *       Modified by Eric Youngdale eric@andante.org to
  *       add scatter-gather, multiple outstanding request, and other
  *       enhancements.
  */
@@ -47,6 +47,21 @@ extern const char *const scsi_device_types[MAX_SCSI_DEVICE_CODE];
 #define SCSI_TIMEOUT (5*HZ)
 #else
 #define SCSI_TIMEOUT (2*HZ)
+#endif
+
+/*
+ * Used for debugging the new queueing code.  We want to make sure
+ * that the lock state is consistent with design.  Only do this in
+ * the user space simulator.
+ */
+#define ASSERT_LOCK(_LOCK, _COUNT)
+
+#if defined(__SMP__) && defined(CONFIG_USER_DEBUG)
+#undef ASSERT_LOCK
+#define ASSERT_LOCK(_LOCK,_COUNT)       \
+        { if( (_LOCK)->lock != _COUNT )   \
+                panic("Lock count inconsistent %s %d\n", __FILE__, __LINE__); \
+                                                                                       }
 #endif
 
 /*
@@ -378,6 +393,18 @@ extern int scsi_sense_valid(Scsi_Cmnd *);
 extern int scsi_decide_disposition(Scsi_Cmnd * SCpnt);
 extern int scsi_block_when_processing_errors(Scsi_Device *);
 extern void scsi_sleep(int);
+extern int  scsi_partsize(struct buffer_head *bh, unsigned long capacity,
+                    unsigned int *cyls, unsigned int *hds,
+                    unsigned int *secs);
+
+/*
+ * Prototypes for functions in scsi_lib.c
+ */
+extern void initialize_merge_fn(Scsi_Device * SDpnt);
+extern void scsi_request_fn(request_queue_t * q);
+
+extern int scsi_insert_special_cmd(Scsi_Cmnd * SCpnt, int);
+extern int scsi_dispatch_cmd(Scsi_Cmnd * SCpnt);
 
 /*
  *  scsi_abort aborts the current command that is executing on host host.
@@ -386,17 +413,18 @@ extern void scsi_sleep(int);
  */
 
 extern void scsi_do_cmd(Scsi_Cmnd *, const void *cmnd,
-			 void *buffer, unsigned bufflen, 
-			 void (*done)(struct scsi_cmnd *),
-			 int timeout, int retries);
-
-extern void scsi_wait_cmd (Scsi_Cmnd *, const void *cmnd ,
 			void *buffer, unsigned bufflen,
 			void (*done) (struct scsi_cmnd *),
 			int timeout, int retries);
 
+extern void scsi_wait_cmd(Scsi_Cmnd *, const void *cmnd,
+			  void *buffer, unsigned bufflen,
+			  void (*done) (struct scsi_cmnd *),
+			  int timeout, int retries);
 
-extern Scsi_Cmnd *scsi_allocate_device(struct request **, Scsi_Device *, int);
+extern void scsi_request_fn(request_queue_t * q);
+
+extern Scsi_Cmnd *scsi_allocate_device(Scsi_Device *, int);
 
 extern Scsi_Cmnd *scsi_request_queueable(struct request *, Scsi_Device *);
 
@@ -428,9 +456,10 @@ struct scsi_device {
 	wait_queue_head_t device_wait;	/* Used to wait if
 					   device is busy */
 	struct Scsi_Host *host;
+	request_queue_t request_queue;
 	volatile unsigned short device_busy;	/* commands actually active on low-level */
-	void (*scsi_request_fn) (void);		/* Used to jumpstart things after an 
-						   * ioctl */
+	int (*scsi_init_io_fn) (Scsi_Cmnd *);	/* Used to initialize
+						   new request */
 	Scsi_Cmnd *device_queue;	/* queue of SCSI Command structures */
 
 /* public: */
@@ -438,6 +467,8 @@ struct scsi_device {
 
 	unsigned int manufacturer;	/* Manufacturer of device, for using 
 					 * vendor-specific cmd's */
+	unsigned sector_size;	/* size in bytes */
+
 	int attached;		/* # of high level drivers attached to 
 				 * this */
 	int access_count;	/* Count of open channels/mounts */
@@ -475,6 +506,10 @@ struct scsi_device {
 	unsigned expecting_cc_ua:1;	/* Expecting a CHECK_CONDITION/UNIT_ATTN
 					 * because we did a bus reset. */
 	unsigned device_blocked:1;	/* Device returned QUEUE_FULL. */
+	unsigned ten:1;		/* support ten byte read / write */
+	unsigned remap:1;	/* support remapping  */
+	unsigned starved:1;	/* unable to process commands because
+				   host busy */
 };
 
 
@@ -577,16 +612,16 @@ struct scsi_cmnd {
 				   reconnects.   Probably == sector
 				   size */
 
-	int	resid;		/* Number of bytes requested to be
+	int resid;		/* Number of bytes requested to be
 				   transferred less actual number
 				   transferred (0 if not supported) */
 
 	struct request request;	/* A copy of the command we are
 				   working on */
 
-	unsigned char sense_buffer[64];  /* obtained by REQUEST SENSE when
-					    CHECK CONDITION is received on
-					    original command (auto-sense) */
+	unsigned char sense_buffer[64];		/* obtained by REQUEST SENSE when
+						   CHECK CONDITION is received on
+						   original command (auto-sense) */
 
 	unsigned flags;
 
@@ -630,6 +665,14 @@ struct scsi_cmnd {
 	unsigned long pid;	/* Process ID, starts at 0 */
 };
 
+/*
+ *  Flag bits for the internal_timeout array
+ */
+#define NORMAL_TIMEOUT 0
+#define IN_ABORT  1
+#define IN_RESET  2
+#define IN_RESET2 4
+#define IN_RESET3 8
 
 /*
  * Definitions and prototypes used for scsi mid-level queue.
@@ -640,60 +683,15 @@ struct scsi_cmnd {
 extern int scsi_mlqueue_insert(Scsi_Cmnd * cmd, int reason);
 extern int scsi_mlqueue_finish(struct Scsi_Host *host, Scsi_Device * device);
 
+extern Scsi_Cmnd *scsi_end_request(Scsi_Cmnd * SCpnt, int uptodate,
+				   int sectors);
+
+extern void scsi_io_completion(Scsi_Cmnd * SCpnt, int good_sectors,
+			       int block_sectors);
+
 
 #if defined(MAJOR_NR) && (MAJOR_NR != SCSI_TAPE_MAJOR)
 #include "hosts.h"
-
-static Scsi_Cmnd *end_scsi_request(Scsi_Cmnd * SCpnt, int uptodate, int sectors)
-{
-	struct request *req;
-	struct buffer_head *bh;
-
-	req = &SCpnt->request;
-	req->errors = 0;
-	if (!uptodate) {
-		printk(DEVICE_NAME " I/O error: dev %s, sector %lu\n",
-		       kdevname(req->rq_dev), req->sector);
-	}
-	do {
-		if ((bh = req->bh) != NULL) {
-			req->bh = bh->b_reqnext;
-			req->nr_sectors -= bh->b_size >> 9;
-			req->sector += bh->b_size >> 9;
-			bh->b_reqnext = NULL;
-			bh->b_end_io(bh, uptodate);
-			sectors -= bh->b_size >> 9;
-			if ((bh = req->bh) != NULL) {
-				req->current_nr_sectors = bh->b_size >> 9;
-				if (req->nr_sectors < req->current_nr_sectors) {
-					req->nr_sectors = req->current_nr_sectors;
-					printk("end_scsi_request: buffer-list destroyed\n");
-				}
-			}
-		}
-	} while (sectors && bh);
-	if (req->bh) {
-		req->buffer = bh->b_data;
-		return SCpnt;
-	}
-	DEVICE_OFF(req->rq_dev);
-	if (req->sem != NULL) {
-		up(req->sem);
-	}
-	add_blkdev_randomness(MAJOR(req->rq_dev));
-
-	if (SCpnt->host->block) {
-		struct Scsi_Host *next;
-
-		for (next = SCpnt->host->block; next != SCpnt->host;
-		     next = next->block)
-			wake_up(&next->host_wait);
-	}
-	wake_up(&wait_for_request);
-	wake_up(&SCpnt->device->device_wait);
-	scsi_release_command(SCpnt);
-	return NULL;
-}
 
 
 /* This is just like INIT_REQUEST, but we need to be aware of the fact

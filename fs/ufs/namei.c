@@ -751,55 +751,42 @@ end_unlink:
 int ufs_symlink (struct inode * dir, struct dentry * dentry,
 	const char * symname)
 {
-	struct super_block * sb;
+	struct super_block * sb = dir->i_sb;
 	struct ufs_dir_entry * de;
 	struct inode * inode;
-	struct buffer_head * bh, * name_block;
-	char * link;
-	unsigned i, l;
+	struct buffer_head * bh = NULL;
+	unsigned l;
 	int err;
-	char c;
-	unsigned swab;
+	unsigned swab = sb->u.ufs_sb.s_swab;
 	
 	UFSD(("ENTER\n"))
 	
-	sb = dir->i_sb;
-	swab = sb->u.ufs_sb.s_swab;
-	bh = name_block = NULL;
+
+	err = -ENAMETOOLONG;
+	l = strlen(symname)+1;
+	if (l > dir->i_sb->s_blocksize)
+		goto out;
+
 	err = -EIO;
 	
 	if (!(inode = ufs_new_inode (dir, S_IFLNK, &err))) {
 		return err;
 	}
 	inode->i_mode = S_IFLNK | S_IRWXUGO;
-	inode->i_op = &ufs_symlink_inode_operations;
-	for (l = 0; l < sb->s_blocksize - 1 && symname [l]; l++);
 
-	/***if (l >= sizeof (inode->u.ufs_i.i_data)) {***/
+	/***if (l > sizeof (inode->u.ufs_i.i_data)) {***/
 	if (1) {
 		/* slow symlink */
-		name_block = ufs_bread (inode, 0, 1, &err);
-		if (!name_block) {
-			inode->i_nlink--;
-			mark_inode_dirty(inode);
-			iput (inode);
-			return err;
-		}
-		link = name_block->b_data;
-		
+		inode->i_op = &ufs_symlink_inode_operations;
+		err = block_symlink(inode, symname, l);
+		if (err)
+			goto out_no_entry;
 	} else {
 		/* fast symlink */
-		link = (char *) inode->u.ufs_i.i_u1.i_data;
+		inode->i_op = &ufs_fast_symlink_inode_operations;
+		memcpy((char*)&inode->u.ufs_i.i_u1.i_data,symname,l);
+		inode->i_size = l-1;
 	}
-	i = 0;
-	while (i < sb->s_blocksize - 1 && (c = *(symname++)))
-		link[i++] = c;
-	link[i] = 0;
-	if (name_block) {
-		mark_buffer_dirty(name_block, 1);
-		brelse (name_block);
-	}
-	inode->i_size = i;
 	mark_inode_dirty(inode);
 
 	bh = ufs_add_entry (dir, dentry->d_name.name, dentry->d_name.len, &de, &err);
@@ -828,16 +815,12 @@ out_no_entry:
 int ufs_link (struct dentry * old_dentry, struct inode * dir,
 	struct dentry *dentry)
 {
-	struct super_block * sb;
 	struct inode *inode = old_dentry->d_inode;
+	struct super_block * sb = inode->i_sb;
 	struct ufs_dir_entry * de;
 	struct buffer_head * bh;
 	int err;
-	unsigned swab;
-
-	inode = old_dentry->d_inode;
-	sb = inode->i_sb;
-	swab = sb->u.ufs_sb.s_swab;
+	unsigned swab = sb->u.ufs_sb.s_swab;
 	
 	if (S_ISDIR(inode->i_mode))
 		return -EPERM;

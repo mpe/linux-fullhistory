@@ -112,7 +112,7 @@ static u_char xd_initdrives (void (*init_drive)(u_char drive));
 static void xd_geninit (struct gendisk *);
 
 static int xd_open (struct inode *inode,struct file *file);
-static void do_xd_request (void);
+static void do_xd_request (request_queue_t * q);
 static int xd_ioctl (struct inode *inode,struct file *file,unsigned int cmd,unsigned long arg);
 static int xd_release (struct inode *inode,struct file *file);
 static int xd_reread_partitions (kdev_t dev);

@@ -4081,6 +4081,16 @@ CONFIG_CHR_DEV_SG
   Documentation/scsi.txt. The module will be called sg.o. If unsure,
   say N.
 
+Debug new queueing code for SCSI
+CONFIG_SCSI_DEBUG_QUEUES
+  This option turns on a lot of additional consistency checking for the new
+  queueing code.   This will adversely affect performance, but it is likely
+  that bugs will be caught sooner if this is turned on.   This will typically
+  cause the kernel to panic if an error is detected, but it would have probably
+  crashed if the panic weren't there.   Comments/questions/problems to
+  linux-scsi mailing list please.  See http://www.andante.org/scsi_queue.html
+  for more uptodate information.
+
 Probe all LUNs on each SCSI device
 CONFIG_SCSI_MULTI_LUN
   If you have a SCSI device that supports more than one LUN (Logical
@@ -8307,6 +8317,10 @@ CONFIG_UMSDOS_FS
   MSDOS floppies. You will need a program called umssync in order to
   make use of umsdos; read Documentation/filesystems/umsdos.txt. 
 
+  To get utilities for initializing/checking UMSDOS filesystem, or
+  latest patches and/or information, visit UMSDOS homepage at
+  http://www.voyager.hr/~mnalis/umsdos/ .
+
   This option enlarges your kernel by about 28 KB and it only works if
   you said Y to both "fat fs support" and "msdos fs support" above. If
   you want to compile this as a module ( = code which can be inserted
@@ -8406,14 +8420,6 @@ CONFIG_NFSD
   inserted in and removed from the running kernel whenever you want).
   The module is called nfsd.o. If you want to compile it as a module,
   say M here and read Documentation/modules.txt. If unsure, say N.
-
-Emulate SUN NFS server
-CONFIG_NFSD_SUN
-  If you would like for the server to allow clients to access
-  directories that are mount points on the local filesystem (this is
-  how nfsd behaves on Sun systems), say Y here. 
-  If you use Tru64 clients, say Y.
-  If unsure, say N.
 
 Provide NFSv3 server support (EXPERIMENTAL)
 CONFIG_NFSD_V3

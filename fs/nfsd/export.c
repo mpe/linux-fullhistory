@@ -105,20 +105,6 @@ out:
 	return exp;
 }
 
-/*
- * Check whether there are any exports for a device.
- */
-static int
-exp_device_in_use(kdev_t dev)
-{
-	struct svc_client *clp;
-
-	for (clp = clients; clp; clp = clp->cl_next) {
-		if (exp_find(clp, dev))
-			return 1;
-	}
-	return 0;
-}
 
 /*
  * Look up the device of the parent fs.
@@ -286,6 +272,12 @@ exp_export(struct nfsctl_export *nxp)
 		goto finish;
 
 	err = -EINVAL;
+	if (!(inode->i_sb->s_type->fs_flags & FS_REQUIRES_DEV) ||
+	    inode->i_sb->s_op->read_inode == NULL) {
+		dprintk("exp_export: export of invalid fs type.\n");
+		goto finish;
+	}
+
 	if ((parent = exp_child(clp, dev, dentry)) != NULL) {
 		dprintk("exp_export: export not valid (Rule 3).\n");
 		goto finish;

@@ -2208,14 +2208,14 @@ DAC960_V3_ReadStatusRegister(void *ControllerBaseAddress)
 
 static void DAC960_FinalizeController(DAC960_Controller_T *);
 static int DAC960_Finalize(NotifierBlock_T *, unsigned long, void *);
-static void DAC960_RequestFunction0(void);
-static void DAC960_RequestFunction1(void);
-static void DAC960_RequestFunction2(void);
-static void DAC960_RequestFunction3(void);
-static void DAC960_RequestFunction4(void);
-static void DAC960_RequestFunction5(void);
-static void DAC960_RequestFunction6(void);
-static void DAC960_RequestFunction7(void);
+static void DAC960_RequestFunction0(request_queue_t *);
+static void DAC960_RequestFunction1(request_queue_t *);
+static void DAC960_RequestFunction2(request_queue_t *);
+static void DAC960_RequestFunction3(request_queue_t *);
+static void DAC960_RequestFunction4(request_queue_t *);
+static void DAC960_RequestFunction5(request_queue_t *);
+static void DAC960_RequestFunction6(request_queue_t *);
+static void DAC960_RequestFunction7(request_queue_t *);
 static void DAC960_InterruptHandler(int, void *, Registers_T *);
 static void DAC960_QueueMonitoringCommand(DAC960_Command_T *);
 static void DAC960_MonitoringTimerFunction(unsigned long);

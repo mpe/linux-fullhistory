@@ -209,6 +209,8 @@ static int auto_probe=1;	/* Yes, why not? */
 
 static int cm206_base = CM206_BASE;
 static int cm206_irq = CM206_IRQ; 
+static int cm206[2] = {0,0};	/* for compatible `insmod' parameter passing */
+
 MODULE_PARM(cm206_base, "i");	/* base */
 MODULE_PARM(cm206_irq, "i");	/* irq */
 MODULE_PARM(cm206, "1-2i");	/* base,irq or irq,base */
@@ -801,7 +803,7 @@ int try_adapter(int sector)
 /* This is not a very smart implementation. We could optimize for 
    consecutive block numbers. I'm not convinced this would really
    bring down the processor load. */
-static void do_cm206_request(void)
+static void do_cm206_request(request_queue_t * q)
 {
   long int i, cd_sec_no;
   int quarter, error; 
@@ -1394,7 +1396,7 @@ int __init cm206_init(void)
     cleanup(3);
     return -EIO;
   }    
-  blk_dev[MAJOR_NR].request_fn = DEVICE_REQUEST;
+  blk_init_queue(BLK_DEFAULT_QUEUE(MAJOR_NR), DEVICE_REQUEST);
   blksize_size[MAJOR_NR] = cm206_blocksizes;
   read_ahead[MAJOR_NR] = 16;	/* reads ahead what? */
   init_bh(CM206_BH, cm206_bh);
@@ -1411,7 +1413,6 @@ int __init cm206_init(void)
 
 #ifdef MODULE
 
-static int cm206[2] = {0,0};	/* for compatible `insmod' parameter passing */
 
 void __init parse_options(void)
 {

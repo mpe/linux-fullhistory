@@ -6,7 +6,7 @@
 #include <asm/fixmap.h>
 #include <linux/threads.h>
 
-#define pgd_quicklist (current_cpu_data.pgd_quick)
+extern unsigned long *pgd_quicklist;
 #define pmd_quicklist (current_cpu_data.pmd_quick)
 #define pte_quicklist (current_cpu_data.pte_quick)
 #define pgtable_cache_size (current_cpu_data.pgtable_cache_sz)
@@ -35,9 +35,14 @@ extern __inline__ pgd_t *get_pgd_slow(void)
 #else
 		memset(ret, 0, USER_PTRS_PER_PGD * sizeof(pgd_t));
 #endif
-		memcpy(ret + USER_PTRS_PER_PGD, swapper_pg_dir + USER_PTRS_PER_PGD, (PTRS_PER_PGD - USER_PTRS_PER_PGD) * sizeof(pgd_t));
 	}
 	return ret;
+}
+
+extern __inline__ void get_pgd_uptodate(pgd_t *pgd)
+{
+	memcpy(pgd + USER_PTRS_PER_PGD, swapper_pg_dir + USER_PTRS_PER_PGD, 
+		(PTRS_PER_PGD - USER_PTRS_PER_PGD) * sizeof(pgd_t));
 }
 
 extern __inline__ pgd_t *get_pgd_fast(void)
@@ -48,8 +53,7 @@ extern __inline__ pgd_t *get_pgd_fast(void)
 		pgd_quicklist = (unsigned long *)(*ret);
 		ret[0] = 0;
 		pgtable_cache_size--;
-	} else
-		ret = (unsigned long *)get_pgd_slow();
+	}
 	return (pgd_t *)ret;
 }
 
@@ -94,8 +98,7 @@ extern __inline__ void free_pte_slow(pte_t *pte)
 
 #define pte_free_kernel(pte)    free_pte_slow(pte)
 #define pte_free(pte)	   free_pte_slow(pte)
-#define pgd_free(pgd)	   free_pgd_slow(pgd)
-#define pgd_alloc()	     get_pgd_fast()
+#define pgd_free(pgd)	   free_pgd_fast(pgd)
 
 extern inline pte_t * pte_alloc_kernel(pmd_t * pmd, unsigned long address)
 {
@@ -154,29 +157,14 @@ extern int do_check_pgt_cache(int, int);
 
 extern inline void set_pgdir(unsigned long address, pgd_t entry)
 {
-	struct task_struct * p;
 	pgd_t *pgd;
-#ifdef __SMP__
-	int i;
-#endif	
 
-	read_lock(&tasklist_lock);
-	for_each_task(p) {
-		if (!p->mm)
-			continue;
-		*pgd_offset(p->mm,address) = entry;
-	}
-	read_unlock(&tasklist_lock);
-#ifndef __SMP__
-	for (pgd = (pgd_t *)pgd_quicklist; pgd; pgd = (pgd_t *)*(unsigned long *)pgd)
+	mmlist_access_lock();
+	mmlist_set_pgdir(address, entry);
+	for (pgd = (pgd_t *)pgd_quicklist; pgd; pgd = (pgd_t *)*(unsigned 
+								long *)pgd)
 		pgd[address >> PGDIR_SHIFT] = entry;
-#else
-	/* To pgd_alloc/pgd_free, one holds master kernel lock and so does our callee, so we can
-	   modify pgd caches of other CPUs as well. -jj */
-	for (i = 0; i < NR_CPUS; i++)
-		for (pgd = (pgd_t *)cpu_data[i].pgd_quick; pgd; pgd = (pgd_t *)*(unsigned long *)pgd)
-			pgd[address >> PGDIR_SHIFT] = entry;
-#endif
+	mmlist_access_unlock();
 }
 
 /*

@@ -747,7 +747,7 @@ static void internal_done (Scsi_Cmnd * cmd)
 static int device_inquiry(int host_index, int ldn)
 {
    int retries;
-   Scsi_Cmnd cmd;
+   Scsi_Cmnd *cmd;
    struct im_scb *scb;
    struct im_tsb *tsb;
    unsigned char *buf;
@@ -757,12 +757,18 @@ static int device_inquiry(int host_index, int ldn)
    buf = (unsigned char *)(&(ld(host_index)[ldn].buf));
    ld(host_index)[ldn].tsb.dev_status = 0; /* prepare stusblock */
 
+   cmd = kmalloc(sizeof(*cmd), GFP_KERNEL|GFP_DMA);
+   if(cmd==NULL)
+   {
+   	printk(KERN_ERR "ibmmca: out of memory for inquiry.\n");
+   	return 0;
+   }
    if (bypass_controller)
      { /* fill the commonly known field for device-inquiry SCSI cmnd */
-	cmd.cmd_len = 6;
-        memset (&(cmd.cmnd), 0x0, sizeof(char) * cmd.cmd_len);
-	cmd.cmnd[0] = INQUIRY; /* device inquiry */
-	cmd.cmnd[4] = 0xff; /* return buffer size = 255 */
+	cmd->cmd_len = 6;
+        memset (&(cmd->cmnd), 0x0, sizeof(char) * cmd->cmd_len);
+	cmd->cmnd[0] = INQUIRY; /* device inquiry */
+	cmd->cmnd[4] = 0xff; /* return buffer size = 255 */
      }
    for (retries = 0; retries < 3; retries++)
      {
@@ -770,8 +776,8 @@ static int device_inquiry(int host_index, int ldn)
 	  { /* bypass the hardware integrated command set */
 	     scb->command = IM_OTHER_SCSI_CMD_CMD;
 	     scb->enable |= IM_READ_CONTROL | IM_SUPRESS_EXCEPTION_SHORT;
-	     scb->u1.scsi_cmd_length = cmd.cmd_len;
-	     memcpy (scb->u2.scsi_command, &(cmd.cmnd), cmd.cmd_len);
+	     scb->u1.scsi_cmd_length = cmd->cmd_len;
+	     memcpy (scb->u2.scsi_command, &(cmd->cmnd), cmd->cmd_len);
 	     last_scsi_command(host_index)[ldn] = INQUIRY;
 	     last_scsi_type(host_index)[ldn] = IM_SCB;
 	  }
@@ -800,6 +806,7 @@ static int device_inquiry(int host_index, int ldn)
 	     return 1;
 	  }
      }
+   kfree(cmd);
 
    /*if all three retries failed, return "no device at this ldn" */
    if (retries >= 3)
@@ -1406,7 +1413,7 @@ static int ibmmca_getinfo (char *buf, int slot, void *dev)
      }
    else if (special == INTEGRATED_SCSI)
      { /* if the integrated subsystem has been found automatically: */
-	len += sprintf (buf + len, "Adapter cathegory: integrated\n");
+	len += sprintf (buf + len, "Adapter category: integrated\n");
 	len += sprintf (buf + len, "Chip revision level: %d\n",
 			((pos2 & 0xf0) >> 4));
 	len += sprintf (buf + len, "Chip status: %s\n",
@@ -1417,7 +1424,7 @@ static int ibmmca_getinfo (char *buf, int slot, void *dev)
    else if ((special>=0)&&
 	   (special<(sizeof(subsys_list)/sizeof(struct subsys_list_struct))))
      { /* if the subsystem is a slot adapter */
-	len += sprintf (buf + len, "Adapter cathegory: slot-card\n");
+	len += sprintf (buf + len, "Adapter category: slot-card\n");
 	len += sprintf (buf + len, "Chip revision level: %d\n",
 			((pos2 & 0xf0) >> 4));
 	len += sprintf (buf + len, "Chip status: %s\n",
@@ -1427,14 +1434,14 @@ static int ibmmca_getinfo (char *buf, int slot, void *dev)
      }
    else
      {
-	len += sprintf (buf + len, "Adapter cathegory: unknown\n");
+	len += sprintf (buf + len, "Adapter category: unknown\n");
      }
    /* common subsystem information to write to the slotn file */
    len += sprintf (buf + len, "Subsystem PUN: %d\n", shpnt->this_id);
    len += sprintf (buf + len, "I/O base address range: 0x%x-0x%x",
 		   (unsigned int)(shpnt->io_port), 
 		   (unsigned int)(shpnt->io_port+7));
-   /* Now make sure, the bufferlength is devideable by 4 to avoid
+   /* Now make sure, the bufferlength is divisible by 4 to avoid
     * paging problems of the buffer. */
    while ( len % sizeof( int ) != ( sizeof ( int ) - 1 ) )
      {
@@ -1483,7 +1490,7 @@ int ibmmca_detect (Scsi_Host_Template * scsi_template)
 	     ((struct ibmmca_hostdata *)shpnt->hostdata)->_pos3 = 0;
 	     ((struct ibmmca_hostdata *)shpnt->hostdata)->_special =
 	       FORCED_DETECTION;
-	     mca_set_adapter_name(MCA_INTEGSCSI, "forced detected SCSI Adapter");
+	     mca_set_adapter_name(MCA_INTEGSCSI, "forcibly detected SCSI Adapter");
 	     mca_set_adapter_procfn(MCA_INTEGSCSI, (MCA_ProcFn) ibmmca_getinfo,
 				    shpnt);
 	     mca_mark_as_used(MCA_INTEGSCSI);

@@ -585,7 +585,7 @@ repeat:
 	panic("unknown hd-command");
 }
 
-static void do_hd_request (void)
+static void do_hd_request (request_queue_t * q)
 {
 	disable_irq(HD_IRQ);
 	hd_request();
@@ -813,7 +813,7 @@ int __init hd_init(void)
 		printk("hd: unable to get major %d for hard disk\n",MAJOR_NR);
 		return -1;
 	}
-	blk_dev[MAJOR_NR].request_fn = DEVICE_REQUEST;
+	blk_init_queue(BLK_DEFAULT_QUEUE(MAJOR_NR), DEVICE_REQUEST);
 	read_ahead[MAJOR_NR] = 8;		/* 8 sector (4kB) read-ahead */
 	hd_gendisk.next = gendisk_head;
 	gendisk_head = &hd_gendisk;

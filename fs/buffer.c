@@ -1378,11 +1378,10 @@ out:
 	return err;
 }
 
-int block_write_range(struct dentry *dentry, struct page *page,
+int block_write_zero_range(struct inode *inode, struct page *page,
 		unsigned zerofrom, unsigned from, unsigned to,
 		const char * buf)
 {
-	struct inode *inode = dentry->d_inode;
 	unsigned zeroto = 0, block_start, block_end;
 	unsigned long block;
 	int err = 0, partial = 0, need_balance_dirty = 0;
@@ -1504,7 +1503,7 @@ out:
 
 int block_write_partial_page(struct file *file, struct page *page, unsigned long offset, unsigned long bytes, const char * buf)
 {
-	struct dentry *dentry = file->f_dentry;
+	struct inode *inode = file->f_dentry->d_inode;
 	int err;
 
 	if (!PageLocked(page))
@@ -1514,7 +1513,7 @@ int block_write_partial_page(struct file *file, struct page *page, unsigned long
 	if (bytes+offset < 0 || bytes+offset > PAGE_SIZE)
 		BUG();
 
-	err = block_write_range(dentry, page, offset,offset,offset+bytes, buf);
+	err = block_write_range(inode, page, offset, bytes, buf);
 	return err ? err : bytes;
 }
 
@@ -1525,8 +1524,7 @@ int block_write_partial_page(struct file *file, struct page *page, unsigned long
 
 int block_write_cont_page(struct file *file, struct page *page, unsigned long offset, unsigned long bytes, const char * buf)
 {
-	struct dentry *dentry = file->f_dentry;
-	struct inode *inode = dentry->d_inode;
+	struct inode *inode = file->f_dentry->d_inode;
 	int err;
 	unsigned zerofrom = offset;
 
@@ -1535,7 +1533,8 @@ int block_write_cont_page(struct file *file, struct page *page, unsigned long of
 	else if (page->index == (inode->i_size >> PAGE_CACHE_SHIFT) &&
 		 offset > (inode->i_size & ~PAGE_CACHE_MASK))
 		zerofrom = inode->i_size & ~PAGE_CACHE_MASK;
-	err = block_write_range(dentry, page, zerofrom,offset,offset+bytes,buf);
+	err = block_write_zero_range(inode, page, zerofrom,offset,offset+bytes,
+					buf);
 	return err ? err : bytes;
 }
 
@@ -1829,9 +1828,8 @@ int brw_page(int rw, struct page *page, kdev_t dev, int b[], int size)
  * mark_buffer_uptodate() functions propagate buffer state into the
  * page struct once IO has completed.
  */
-int block_read_full_page(struct dentry * dentry, struct page * page)
+static inline int __block_read_full_page(struct inode *inode, struct page *page)
 {
-	struct inode *inode = dentry->d_inode;
 	unsigned long iblock;
 	struct buffer_head *bh, *head, *arr[MAX_BUF_PER_PAGE];
 	unsigned int blocksize, blocks;
@@ -1888,6 +1886,47 @@ int block_read_full_page(struct dentry * dentry, struct page * page)
 	if (kaddr)
 		kunmap(page);
 	return 0;
+}
+
+int block_read_full_page(struct dentry *dentry, struct page *page)
+{
+	return __block_read_full_page(dentry->d_inode, page);
+}
+
+int block_symlink(struct inode *inode, const char *symname, int len)
+{
+	struct page *page = grab_cache_page(&inode->i_data, 0);
+	mm_segment_t fs;
+	int err = -ENOMEM;
+
+	if (!page)
+		goto fail;
+	fs = get_fs();
+	set_fs(KERNEL_DS);
+	err = block_write_range(inode, page, 0, len-1, symname);
+	set_fs(fs);
+	inode->i_size = len-1;
+	if (err)
+		goto fail_write;
+	/*
+	 * Notice that we are _not_ going to block here - end of page is
+	 * unmapped, so this will only try to map the rest of page, see
+	 * that it is unmapped (typically even will not look into inode -
+	 * ->i_size will be enough for everything) and zero it out.
+	 * OTOH it's obviously correct and should make the page up-to-date.
+	 */
+	err = __block_read_full_page(inode, page);
+	wait_on_page(page);
+	page_cache_release(page);
+	if (err < 0)
+		goto fail;
+	mark_inode_dirty(inode);
+	return 0;
+fail_write:
+	UnlockPage(page);
+	page_cache_release(page);
+fail:
+	return err;
 }
 
 /*

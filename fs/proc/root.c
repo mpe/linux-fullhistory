@@ -27,14 +27,9 @@ struct proc_dir_entry *proc_sys_root;
  */
 static int proc_self_readlink(struct dentry *dentry, char *buffer, int buflen)
 {
-	int len;
 	char tmp[30];
-
-	len = sprintf(tmp, "%d", current->pid);
-	if (buflen < len)
-		len = buflen;
-	copy_to_user(buffer, tmp, len);
-	return len;
+	sprintf(tmp, "%d", current->pid);
+	return vfs_readlink(dentry,buffer,buflen,tmp);
 }
 
 static struct dentry * proc_self_follow_link(struct dentry *dentry,
@@ -42,24 +37,13 @@ static struct dentry * proc_self_follow_link(struct dentry *dentry,
 						unsigned int follow)
 {
 	char tmp[30];
-
 	sprintf(tmp, "%d", current->pid);
-	return lookup_dentry(tmp, base, follow);
+	return vfs_follow_link(dentry,base,follow,tmp);
 }	
 
 static struct inode_operations proc_self_inode_operations = {
-	NULL,			/* no file-ops */
-	NULL,			/* create */
-	NULL,			/* lookup */
-	NULL,			/* link */
-	NULL,			/* unlink */
-	NULL,			/* symlink */
-	NULL,			/* mkdir */
-	NULL,			/* rmdir */
-	NULL,			/* mknod */
-	NULL,			/* rename */
-	proc_self_readlink,	/* readlink */
-	proc_self_follow_link,	/* follow_link */
+	readlink:	proc_self_readlink,
+	follow_link:	proc_self_follow_link
 };
 
 static struct proc_dir_entry proc_root_self = {

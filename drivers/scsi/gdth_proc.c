@@ -934,10 +934,8 @@ static void gdth_do_cmd(Scsi_Cmnd *scp,gdth_cmd_str *gdtcmd,int timeout)
     scp->request.rq_status = RQ_SCSI_BUSY;
     scp->request.sem = &sem;
     scp->SCp.this_residual = IOCTL_PRI;
-    GDTH_LOCK_SCSI_DOCMD();
     scsi_do_cmd(scp, cmnd, gdtcmd, sizeof(gdth_cmd_str), 
                 gdth_scsi_done, timeout*HZ, 1);
-    GDTH_UNLOCK_SCSI_DOCMD();
     down(&sem);
 }
 

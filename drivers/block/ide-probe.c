@@ -704,7 +704,8 @@ static void init_gendisk (ide_hwif_t *hwif)
 
 static int hwif_init (ide_hwif_t *hwif)
 {
-	void (*rfn)(void);
+	ide_drive_t *drive;
+	void (*rfn)(request_queue_t *);
 	
 	if (!hwif->present)
 		return 0;
@@ -786,10 +787,23 @@ static int hwif_init (ide_hwif_t *hwif)
 	
 	init_gendisk(hwif);
 	blk_dev[hwif->major].data = hwif;
-	blk_dev[hwif->major].request_fn = rfn;
 	blk_dev[hwif->major].queue = ide_get_queue;
 	read_ahead[hwif->major] = 8;	/* (4kB) */
 	hwif->present = 1;	/* success */
+
+	/*
+	 * FIXME(eric) - This needs to be tested.  I *think* that this
+	 * is correct.   Also, I believe that there is no longer any
+	 * reason to have multiple functions (do_ide[0-7]_request)
+	 * functions - the queuedata field could be used to indicate
+	 * the correct hardware group - either this, or we could add
+	 * a new field to request_queue_t to hold this information.
+	 */
+	drive = &hwif->drives[0];
+	blk_init_queue(&drive->queue, rfn);
+
+	drive = &hwif->drives[1];
+	blk_init_queue(&drive->queue, rfn);
 
 #if (DEBUG_SPINLOCK > 0)
 {

@@ -545,8 +545,7 @@ static struct vm_area_struct * unmap_fixup(struct vm_area_struct *area,
 		mpnt->vm_page_prot = area->vm_page_prot;
 		mpnt->vm_flags = area->vm_flags;
 		mpnt->vm_ops = area->vm_ops;
-		mpnt->vm_pgoff = area->vm_pgoff;
-		area->vm_pgoff += (end - area->vm_start) >> PAGE_SHIFT;
+		mpnt->vm_pgoff = area->vm_pgoff + ((end - area->vm_start) >> PAGE_SHIFT);
 		mpnt->vm_file = area->vm_file;
 		mpnt->vm_private_data = area->vm_private_data;
 		if (mpnt->vm_file)

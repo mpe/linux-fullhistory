@@ -620,7 +620,7 @@ static void ddv_request1(void)
 }
 
 
-static void ddv_request(void)
+static void ddv_request(request_queue_t * q)
 {
 	cli();
 	ddv_request1();
@@ -932,7 +932,7 @@ int ddv_init(void)
 	}
 
 	printk("ddv_init: register dev %d\n", MAJOR_NR);
-	blk_dev[MAJOR_NR].request_fn = DEVICE_REQUEST;
+	blk_init_queue(BLK_DEFAULT_QUEUE(MAJOR_NR), DEVICE_REQUEST);
 	read_ahead[MAJOR_NR] = DDV_READ_AHEAD;
 	
 	bif_add_debug_key('d',ddv_status,"DDV status");
@@ -1016,7 +1016,7 @@ void cleanup_module(void)
 	if (*gdp)
 		*gdp = (*gdp)->next;
 	free_irq(APOPT0_IRQ, NULL);
-	blk_dev[MAJOR_NR].request_fn = 0;
+	blk_cleanup_queue(BLK_DEFAULT_QUEUE(MAJOR_NR));
 }
 
 #endif  /* MODULE */

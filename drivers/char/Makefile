@@ -636,9 +636,15 @@ else
   endif
 endif
 
-ifeq ($(CONFIG_AGP), m)
+ifeq ($(CONFIG_AGP), y)
+  SUB_DIRS += agp
   ALL_SUB_DIRS += agp
   MOD_SUB_DIRS += agp
+else
+  ifeq ($(CONFIG_AGP), m)
+    ALL_SUB_DIRS += agp
+    MOD_SUB_DIRS += agp
+  endif
 endif
 
 include $(TOPDIR)/Rules.make

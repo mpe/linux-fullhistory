@@ -242,7 +242,10 @@ int ide_multwrite (ide_drive_t *drive, unsigned int mcount)
 		rq->sector += nsect;
 #endif
 		if ((rq->nr_sectors -= nsect) <= 0)
+		{
+	                spin_unlock_irqrestore(&io_request_lock, flags);
 			break;
+		}
 		if ((rq->current_nr_sectors -= nsect) == 0) {
 			if ((rq->bh = rq->bh->b_reqnext) != NULL) {
 				rq->current_nr_sectors = rq->bh->b_size>>9;

@@ -116,7 +116,6 @@ typedef struct wait_queue *wait_queue_head_t;
 #endif
 
 				/* Generic cmpxchg added in 2.3.x */
-#if CPU != 386
 #ifndef __HAVE_ARCH_CMPXCHG
 				/* Include this here so that driver can be
                                    used with older kernels. */
@@ -150,10 +149,6 @@ static inline unsigned long __cmpxchg(volatile void *ptr, unsigned long old,
 #define cmpxchg(ptr,o,n)						\
   ((__typeof__(*(ptr)))__cmpxchg((ptr),(unsigned long)(o),		\
 				 (unsigned long)(n),sizeof(*(ptr))))
-#endif
-#else
-				/* Compiling for a 386 proper... */
-#error DRI not supported on Intel 80386
 #endif
 
 				/* Macros to make printk easier */
@@ -468,6 +463,7 @@ typedef struct drm_device {
 				/* Misc. support (init.c) */
 extern int	     drm_flags;
 extern void	     drm_parse_options(char *s);
+extern int           drm_cpu_valid(void);
 
 
 				/* Device support (fops.c) */

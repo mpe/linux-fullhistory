@@ -440,59 +440,41 @@ end_unlink:
 int sysv_symlink(struct inode * dir, struct dentry * dentry, 
 		 const char * symname)
 {
-	struct sysv_dir_entry * de;
 	struct inode * inode;
-	struct buffer_head * name_block;
-	char * name_block_data;
-	struct super_block * sb;
-	int i;
-	char c;
+	struct sysv_dir_entry * de;
 	struct buffer_head * bh;
+	int err;
+	int l;
 
+	err = -ENAMETOOLONG;
+	l = strlen(symname)+1;
+	if (l > dir->i_sb->sv_block_size_1)
+		goto out;
+	err = -ENOSPC;
 	if (!(inode = sysv_new_inode(dir)))
-		return -ENOSPC;
+		goto out;
 
 	inode->i_mode = S_IFLNK | 0777;
 	inode->i_op = &sysv_symlink_inode_operations;
-	name_block = sysv_file_bread(inode, 0, 1);
-	if (!name_block) {
-		inode->i_nlink--;
-		mark_inode_dirty(inode);
-		iput(inode);
-		return -ENOSPC;
-	}
-	sb = inode->i_sb;
-	name_block_data = name_block->b_data;
-	i = 0;
-	while (i < sb->sv_block_size_1 && (c = *(symname++)))
-		name_block_data[i++] = c;
-	name_block_data[i] = 0;
-	mark_buffer_dirty(name_block, 1);
-	brelse(name_block);
-	inode->i_size = i;
+	err = block_symlink(inode, symname, l);
+	if (err)
+		goto out_no_entry;
 	mark_inode_dirty(inode);
-	bh = sysv_find_entry(dir, dentry->d_name.name,
-                             dentry->d_name.len, &de);
-	if (bh) {
-		inode->i_nlink--;
-		mark_inode_dirty(inode);
-		iput(inode);
-		brelse(bh);
-		return -EEXIST;
-	}
-	i = sysv_add_entry(dir, dentry->d_name.name,
+	err = sysv_add_entry(dir, dentry->d_name.name,
                            dentry->d_name.len, &bh, &de);
-	if (i) {
-		inode->i_nlink--;
-		mark_inode_dirty(inode);
-		iput(inode);
-		return i;
-	}
+	if (err)
+		goto out_no_entry;
 	de->inode = inode->i_ino;
 	mark_buffer_dirty(bh, 1);
 	brelse(bh);
         d_instantiate(dentry, inode);
-	return 0;
+out:
+	return err;
+out_no_entry:
+	inode->i_nlink--;
+	mark_inode_dirty(inode);
+	iput(inode);
+	goto out;
 }
 
 int sysv_link(struct dentry * old_dentry, struct inode * dir, 

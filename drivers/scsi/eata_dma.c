@@ -1297,7 +1297,7 @@ short register_HBA(u32 base, struct get_conf *gc, Scsi_Host_Template * tpnt,
     else
 	hd->primary = TRUE;
     
-    sh->wish_block = FALSE;	   
+//FIXME//    sh->wish_block = FALSE;	   
     
     if (hd->bustype != IS_ISA) {
 	sh->unchecked_isa_dma = FALSE;

@@ -1,5 +1,5 @@
-/* $Id: advansys.c,v 1.67 1999/11/18 20:13:15 bobf Exp bobf $ */
-#define ASC_VERSION "3.2K"    /* AdvanSys Driver Version */
+/* $Id: advansys.c,v 1.68 1999/11/19 01:57:47 bobf Exp bobf $ */
+#define ASC_VERSION "3.2L"    /* AdvanSys Driver Version */
 
 /*
  * advansys.c - Linux Host Driver for AdvanSys SCSI Adapters
@@ -667,6 +667,11 @@
          3. Add ifdef handling for /proc changes added in v2.3.28.
          4. Increase Wide board scatter-gather list maximum length to
             255 when the driver is compiled into the kernel.
+
+     3.2L (11/18/99):
+         1. Fix bug in adv_get_sglist() that caused an assertion failure
+            at line 7475. The reqp->sgblkp pointer must be initialized
+            to NULL in adv_get_sglist().
 
   J. Known Problems/Fix List (XXX)
 
@@ -7471,8 +7476,8 @@ adv_get_sglist(asc_board_t *boardp, adv_req_t *reqp, Scsi_Cmnd *scp)
     slp = (struct scatterlist *) scp->request_buffer;
     sg_elem_cnt = scp->use_sg;
     prev_sg_block = NULL;
+    reqp->sgblkp == NULL;
 
-    ASC_ASSERT(reqp->sgblkp == NULL);
     do
     {
         /*

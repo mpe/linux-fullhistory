@@ -127,26 +127,6 @@ fh_lock_parent(struct svc_fh *parent_fh, struct dentry *dchild)
 	return nfserr_noent;
 }
 
-/*
- * Deny access to certain file systems
- */
-static inline int
-fs_off_limits(struct super_block *sb)
-{
-	return !sb || sb->s_magic == NFS_SUPER_MAGIC
-	           || sb->s_magic == PROC_SUPER_MAGIC;
-}
-
-/*
- * Check whether directory is a mount point, but it is all right if
- * this is precisely the local mount point being exported.
- */
-static inline int
-nfsd_iscovered(struct dentry *dentry, struct svc_export *exp)
-{
-	return (dentry != dentry->d_covers &&
-		dentry != exp->ex_dentry);
-}
 
 /*
  * Look up one component of a pathname.
@@ -183,12 +163,7 @@ nfsd_lookup(struct svc_rqst *rqstp, struct svc_fh *fhp, const char *name,
 	if (err)
 		goto out;
 #endif
-	err = nfserr_noent;
-	if (fs_off_limits(dparent->d_sb))
-		goto out;
 	err = nfserr_acces;
-	if (nfsd_iscovered(dparent, exp))
-		goto out;
 
 	/* Lookup the name, but don't follow links */
 	dchild = lookup_dentry(name, dget(dparent), 0);
@@ -1203,8 +1178,6 @@ nfsd_symlink(struct svc_rqst *rqstp, struct svc_fh *fhp,
 	dentry = fhp->fh_dentry;
 
 	err = nfserr_perm;
-	if (nfsd_iscovered(dentry, fhp->fh_export))
-		goto out;
 	dirp = dentry->d_inode;
 	if (!dirp->i_op	|| !dirp->i_op->symlink)
 		goto out;
@@ -1297,10 +1270,7 @@ nfsd_link(struct svc_rqst *rqstp, struct svc_fh *ffhp,
 	dold = tfhp->fh_dentry;
 	dest = dold->d_inode;
 
-	err = nfserr_acces;
-	if (nfsd_iscovered(ddir, ffhp->fh_export))
-		goto out_unlock;
-	/* FIXME: nxdev for NFSv3 */
+	err = (rqstp->rq_vers == 2) ? nfserr_acces : nfserr_xdev;
 	if (dirp->i_dev != dest->i_dev)
 		goto out_unlock;
 
@@ -1379,6 +1349,10 @@ nfsd_rename(struct svc_rqst *rqstp, struct svc_fh *ffhp, char *fname, int flen,
 
 	tdentry = tfhp->fh_dentry;
 	tdir = tdentry->d_inode;
+
+	err = (rqstp->rq_vers == 2) ? nfserr_acces : nfserr_xdev;
+	if (fdir->i_dev != tdir->i_dev)
+		goto out;
 
 	/* N.B. We shouldn't need this ... dentry layer handles it */
 	err = nfserr_perm;
@@ -1691,17 +1665,10 @@ nfsd_permission(struct svc_export *exp, struct dentry *dentry, int acc)
 	dprintk("      owner %d/%d user %d/%d\n",
 		inode->i_uid, inode->i_gid, current->fsuid, current->fsgid);
 #endif
-#ifndef CONFIG_NFSD_SUN
-        if (dentry->d_mounts != dentry) {
-		return nfserr_perm;
-	}
-#endif
 
 	if (acc & (MAY_WRITE | MAY_SATTR | MAY_TRUNC)) {
 		if (EX_RDONLY(exp) || IS_RDONLY(inode))
 			return nfserr_rofs;
-		if (S_ISDIR(inode->i_mode) && nfsd_iscovered(dentry, exp))
-			return nfserr_perm;
 		if (/* (acc & MAY_WRITE) && */ IS_IMMUTABLE(inode))
 			return nfserr_perm;
 	}

@@ -32,16 +32,18 @@
 
 /* A few options that we want selected */
 
-#define NR_HOSTS_PRESENT 20
-#define NR_FAKE_DISKS   6
-#define N_HEAD          32
-#define N_SECTOR        64
-#define DISK_READONLY(TGT)      (1)
+#define NR_HOSTS_PRESENT 1
+#define NR_FAKE_DISKS   3
+#define N_HEAD          255
+#define N_SECTOR        63
+#define N_CYLINDER      524
+#define DISK_READONLY(TGT)      (0)
 #define DISK_REMOVEABLE(TGT)    (1)
+#define DEVICE_TYPE(TGT) (TGT == 2 ? TYPE_TAPE : TYPE_DISK);
 
 /* Do not attempt to use a timer to simulate a real disk with latency */
 /* Only use this in the actual kernel, not in the simulator. */
-/* #define IMMEDIATE */
+#define IMMEDIATE
 
 /* Skip some consistency checking.  Good for benchmarking */
 #define SPEEDY
@@ -58,11 +60,15 @@ static int NR_REAL = -1;
 #define START_PARTITION 4
 
 /* Time to wait before completing a command */
-#define DISK_SPEED     (HZ/10)   /* 100ms */
-#define CAPACITY (0x80000)
+#define DISK_SPEED     (HZ/10)	/* 100ms */
+#define CAPACITY (N_HEAD * N_SECTOR * N_CYLINDER)
+#define SIZE(TGT) (TGT == 2 ? 2248 : 512)
 
 static int starts[] =
-{N_HEAD, N_HEAD * N_SECTOR, 50000, CAPACITY, 0};
+{N_SECTOR,
+ N_HEAD * N_SECTOR,		/* Single cylinder */
+ N_HEAD * N_SECTOR * 4,
+ CAPACITY, 0};
 static int npart = 0;
 
 #include "scsi_debug.h"
@@ -112,21 +118,25 @@ static int npart = 0;
 
 typedef void (*done_fct_t) (Scsi_Cmnd *);
 
-static volatile done_fct_t do_done[SCSI_DEBUG_MAILBOXES] = {NULL,};
+static volatile done_fct_t do_done[SCSI_DEBUG_MAILBOXES] =
+{NULL,};
 
 static void scsi_debug_intr_handle(unsigned long);
 
 static struct timer_list timeout[SCSI_DEBUG_MAILBOXES];
 
-Scsi_Cmnd *SCint[SCSI_DEBUG_MAILBOXES]  = {NULL,};
-static char SCrst[SCSI_DEBUG_MAILBOXES] = {0,};
+Scsi_Cmnd *SCint[SCSI_DEBUG_MAILBOXES] =
+{NULL,};
+static char SCrst[SCSI_DEBUG_MAILBOXES] =
+{0,};
 
 /*
  * Semaphore used to simulate bus lockups.
  */
 static int scsi_debug_lockup = 0;
 
-static char sense_buffer[128] = {0,};
+static char sense_buffer[128] =
+{0,};
 
 static void scsi_dump(Scsi_Cmnd * SCpnt, int flag)
 {
@@ -197,6 +207,14 @@ int scsi_debug_queuecommand(Scsi_Cmnd * SCpnt, void (*done) (Scsi_Cmnd *))
 	sgcount = 0;
 	sgpnt = NULL;
 
+        /*
+         * The io_request_lock *must* be held at this point.
+         */
+        if( io_request_lock.lock == 0 )
+        {
+                printk("Warning - io_request_lock is not held in queuecommand\n");
+        }
+
 	/*
 	 * If we are being notified of the mid-level reposessing a command due to timeout,
 	 * just return.
@@ -242,6 +260,10 @@ int scsi_debug_queuecommand(Scsi_Cmnd * SCpnt, void (*done) (Scsi_Cmnd *))
 		SCpnt->result = 0;
 		done(SCpnt);
 		return 0;
+	case START_STOP:
+		SCSI_LOG_LLQUEUE(3, printk("START_STOP\n"));
+		scsi_debug_errsts = 0;
+		break;
 	case ALLOW_MEDIUM_REMOVAL:
 		if (cmd[4]) {
 			SCSI_LOG_LLQUEUE(2, printk("Medium removal inhibited..."));
@@ -253,7 +275,7 @@ int scsi_debug_queuecommand(Scsi_Cmnd * SCpnt, void (*done) (Scsi_Cmnd *))
 	case INQUIRY:
 		SCSI_LOG_LLQUEUE(3, printk("Inquiry...(%p %d)\n", buff, bufflen));
 		memset(buff, 0, bufflen);
-		buff[0] = TYPE_DISK;
+		buff[0] = DEVICE_TYPE(target);
 		buff[1] = DISK_REMOVEABLE(target) ? 0x80 : 0;	/* Removable disk */
 		buff[2] = 1;
 		buff[4] = 33 - 5;
@@ -277,7 +299,10 @@ int scsi_debug_queuecommand(Scsi_Cmnd * SCpnt, void (*done) (Scsi_Cmnd *))
 		buff[1] = (CAPACITY >> 16) & 0xff;
 		buff[2] = (CAPACITY >> 8) & 0xff;
 		buff[3] = CAPACITY & 0xff;
-		buff[6] = 2;	/* 512 byte sectors */
+		buff[4] = 0;
+		buff[5] = 0;
+		buff[6] = (SIZE(target) >> 8) & 0xff;	/* 512 byte sectors */
+		buff[7] = SIZE(target) & 0xff;
 		scsi_debug_errsts = 0;
 		break;
 	case READ_10:
@@ -327,15 +352,23 @@ int scsi_debug_queuecommand(Scsi_Cmnd * SCpnt, void (*done) (Scsi_Cmnd *))
 				p = (struct partition *) (buff + 0x1be);
 				i = 0;
 				while (starts[i + 1]) {
+					int start_cyl, end_cyl;
+
+					start_cyl = starts[i] / N_HEAD / N_SECTOR;
+					end_cyl = (starts[i + 1] - 1) / N_HEAD / N_SECTOR;
+					p->boot_ind = 0;
+
+					p->head = (i == 0 ? 1 : 0);
+					p->sector = 1 | ((start_cyl >> 8) << 6);
+					p->cyl = (start_cyl & 0xff);
+
+					p->end_head = N_HEAD - 1;
+					p->end_sector = N_SECTOR | ((end_cyl >> 8) << 6);
+					p->end_cyl = (end_cyl & 0xff);
+
 					p->start_sect = starts[i];
 					p->nr_sects = starts[i + 1] - starts[i];
 					p->sys_ind = 0x81;	/* Linux partition */
-					p->head = (i == 0 ? 1 : 0);
-					p->sector = 1;
-					p->cyl = starts[i] / N_HEAD / N_SECTOR;
-					p->end_head = N_HEAD - 1;
-					p->end_sector = N_SECTOR;
-					p->end_cyl = starts[i + 1] / N_HEAD / N_SECTOR;
 					p++;
 					i++;
 				};
@@ -465,6 +498,8 @@ int scsi_debug_queuecommand(Scsi_Cmnd * SCpnt, void (*done) (Scsi_Cmnd *))
 #ifdef IMMEDIATE
 	if (!scsi_debug_lockup) {
 		SCpnt->result = scsi_debug_errsts;
+		SCint[i] = SCpnt;
+		do_done[i] = done;
 		scsi_debug_intr_handle(i);	/* No timer - do this one right away */
 	}
 	restore_flags(flags);
@@ -488,24 +523,6 @@ int scsi_debug_queuecommand(Scsi_Cmnd * SCpnt, void (*done) (Scsi_Cmnd *))
 #endif
 
 	return 0;
-}
-
-volatile static int internal_done_flag = 0;
-volatile static int internal_done_errcode = 0;
-static void internal_done(Scsi_Cmnd * SCpnt)
-{
-	internal_done_errcode = SCpnt->result;
-	++internal_done_flag;
-}
-
-int scsi_debug_command(Scsi_Cmnd * SCpnt)
-{
-	DEB(printk("scsi_debug_command: ..calling scsi_debug_queuecommand\n"));
-	scsi_debug_queuecommand(SCpnt, internal_done);
-
-	while (!internal_done_flag);
-	internal_done_flag = 0;
-	return internal_done_errcode;
 }
 
 /* A "high" level interrupt handler.  This should be called once per jiffy
@@ -589,7 +606,7 @@ int scsi_debug_biosparam(Disk * disk, kdev_t dev, int *info)
 	int size = disk->capacity;
 	info[0] = N_HEAD;
 	info[1] = N_SECTOR;
-	info[2] = (size + 2047) >> 11;
+	info[2] = N_CYLINDER;
 	if (info[2] >= 1024)
 		info[2] = 1024;
 	return 0;
@@ -683,6 +700,21 @@ int scsi_debug_proc_info(char *buffer, char **start, off_t offset,
 
 	return (len);
 }
+
+#ifdef CONFIG_USER_DEBUG
+/*
+ * This is a hack for the user space emulator.  It allows us to
+ * "insert" arbitrary numbers of additional drivers.
+ */
+void *scsi_debug_get_handle(void)
+{
+	static Scsi_Host_Template driver_copy = SCSI_DEBUG;
+	void *rtn;
+	rtn = kmalloc(sizeof(driver_copy), GFP_ATOMIC);
+	memcpy(rtn, (void *) &driver_copy, sizeof(driver_copy));
+	return rtn;
+}
+#endif
 
 #ifdef MODULE
 /* Eventually this will go into an include file, but this will be later */

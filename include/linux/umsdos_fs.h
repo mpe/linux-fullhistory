@@ -2,7 +2,7 @@
 #define LINUX_UMSDOS_FS_H
 
 
-#define UMS_DEBUG 1	/* define for check_* functions */
+/*#define UMS_DEBUG 1	// define for check_* functions */
 /*#define UMSDOS_DEBUG 1*/
 #define UMSDOS_PARANOIA 1
 

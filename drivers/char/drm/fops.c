@@ -40,6 +40,7 @@ int drm_open_helper(struct inode *inode, struct file *filp, drm_device_t *dev)
 	drm_file_t   *priv;
 
 	if (filp->f_flags & O_EXCL)   return -EBUSY; /* No exclusive opens */
+	if (!drm_cpu_valid())         return -EINVAL;
 
 	DRM_DEBUG("pid = %d, minor = %d\n", current->pid, minor);
 

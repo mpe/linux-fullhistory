@@ -208,7 +208,7 @@ struct s_drive_stuff {
 
 /* declared in blk.h */
 int mcdx_init(void);
-void do_mcdx_request(void);
+void do_mcdx_request(request_queue_t * q);
 
 /* already declared in init/main */
 void mcdx_setup(char *, int *);
@@ -521,7 +521,7 @@ static int mcdx_audio_ioctl(struct cdrom_device_info * cdi, unsigned int cmd,
 	}
 }
 
-void do_mcdx_request()
+void do_mcdx_request(request_queue_t * q)
 {
     int dev;
     struct s_drive_stuff *stuffp;
@@ -1116,7 +1116,7 @@ int __init mcdx_init_drive(int drive)
 		return 1;
 	}
 
-	blk_dev[MAJOR_NR].request_fn = DEVICE_REQUEST;
+	blk_init_queue(BLK_DEFAULT_QUEUE(MAJOR_NR), DEVICE_REQUEST);
 	read_ahead[MAJOR_NR] = READ_AHEAD;
 	blksize_size[MAJOR_NR] = mcdx_blocksizes;
 

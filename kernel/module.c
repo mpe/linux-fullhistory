@@ -13,6 +13,7 @@
  * 0.99.14 version by Jon Tombs <jon@gtex02.us.es>,
  * Heavily modified by Bjorn Ekwall <bj0rn@blox.se> May 1994 (C)
  * Rewritten by Richard Henderson <rth@tamu.edu> Dec 1996
+ * Add MOD_INITIALIZING Keith Owens <kaos@ocs.com.au> Nov 1999
  *
  * This source is covered by the GNU GPL, the same as all kernel sources.
  */
@@ -323,16 +324,18 @@ sys_init_module(const char *name_user, struct module *mod_user)
 	put_mod_name(name);
 
 	/* Initialize the module.  */
+	mod->flags |= MOD_INITIALIZING;
 	atomic_set(&mod->uc.usecount,1);
 	if (mod->init && mod->init() != 0) {
 		atomic_set(&mod->uc.usecount,0);
+		mod->flags &= ~MOD_INITIALIZING;
 		error = -EBUSY;
 		goto err0;
 	}
 	atomic_dec(&mod->uc.usecount);
 
 	/* And set it running.  */
-	mod->flags |= MOD_RUNNING;
+	mod->flags = (mod->flags | MOD_RUNNING) & ~MOD_INITIALIZING;
 	error = 0;
 	goto err0;
 
@@ -456,7 +459,7 @@ qm_deps(struct module *mod, char *buf, size_t bufsize, size_t *ret)
 
 	if (mod == &kernel_module)
 		return -EINVAL;
-	if ((mod->flags & (MOD_RUNNING | MOD_DELETED)) != MOD_RUNNING)
+	if (!MOD_CAN_QUERY(mod))
 		if (put_user(0, ret))
 			return -EFAULT;
 		else
@@ -500,7 +503,7 @@ qm_refs(struct module *mod, char *buf, size_t bufsize, size_t *ret)
 
 	if (mod == &kernel_module)
 		return -EINVAL;
-	if ((mod->flags & (MOD_RUNNING | MOD_DELETED)) != MOD_RUNNING)
+	if (!MOD_CAN_QUERY(mod))
 		if (put_user(0, ret))
 			return -EFAULT;
 		else
@@ -544,7 +547,7 @@ qm_symbols(struct module *mod, char *buf, size_t bufsize, size_t *ret)
 	char *strings;
 	unsigned long *vals;
 
-	if ((mod->flags & (MOD_RUNNING | MOD_DELETED)) != MOD_RUNNING)
+	if (!MOD_CAN_QUERY(mod))
 		if (put_user(0, ret))
 			return -EFAULT;
 		else
@@ -710,7 +713,7 @@ sys_get_kernel_syms(struct kernel_sym *table)
 		struct module_symbol *msym;
 		unsigned int j;
 
-		if ((mod->flags & (MOD_RUNNING|MOD_DELETED)) != MOD_RUNNING)
+		if (!MOD_CAN_QUERY(mod))
 			continue;
 
 		/* magic: write module info as a pseudo symbol */
@@ -859,7 +862,10 @@ int get_module_list(char *p)
 				safe_copy_cstr(" (autoclean)");
 			if (!(mod->flags & MOD_USED_ONCE))
 				safe_copy_cstr(" (unused)");
-		} else
+		}
+		else if (mod->flags & MOD_INITIALIZING)
+			safe_copy_cstr(" (initializing)");
+		else
 			safe_copy_cstr(" (uninitialized)");
 
 		if ((ref = mod->refs) != NULL) {
@@ -903,7 +909,7 @@ get_ksyms_list(char *buf, char **start, off_t offset, int length)
 		unsigned i;
 		struct module_symbol *sym;
 
-		if (!(mod->flags & MOD_RUNNING) || (mod->flags & MOD_DELETED))
+		if (!MOD_CAN_QUERY(mod))
 			continue;
 
 		for (i = mod->nsyms, sym = mod->syms; i > 0; --i, ++sym) {
@@ -951,7 +957,7 @@ get_module_symbol(char *modname, char *symname)
 
 	for (mp = module_list; mp; mp = mp->next) {
 		if (((modname == NULL) || (strcmp(mp->name, modname) == 0)) &&
-			(mp->flags & (MOD_RUNNING | MOD_DELETED)) == MOD_RUNNING &&
+			MOD_CAN_QUERY(mp) &&
 			(mp->nsyms > 0)) {
 			for (i = mp->nsyms, sym = mp->syms;
 				i > 0; --i, ++sym) {

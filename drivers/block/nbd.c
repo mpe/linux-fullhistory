@@ -290,7 +290,7 @@ void nbd_clear_que(struct nbd_device *lo)
 #undef FAIL
 #define FAIL( s ) { printk( KERN_ERR "NBD, minor %d: " s "\n", dev ); goto error_out; }
 
-static void do_nbd_request(void)
+static void do_nbd_request(request_queue_t * q)
 {
 	struct request *req;
 	int dev;
@@ -488,7 +488,7 @@ int nbd_init(void)
 #endif
 	blksize_size[MAJOR_NR] = nbd_blksizes;
 	blk_size[MAJOR_NR] = nbd_sizes;
-	blk_dev[MAJOR_NR].request_fn = do_nbd_request;
+	blk_init_queue(BLK_DEFAULT_QUEUE(MAJOR_NR), do_nbd_request);
 	for (i = 0; i < MAX_NBD; i++) {
 		nbd_dev[i].refcnt = 0;
 		nbd_dev[i].file = NULL;

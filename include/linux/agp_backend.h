@@ -1,8 +1,8 @@
 /*
  * AGPGART module version 0.99
  * Copyright (C) 1999 Jeff Hartmann
- * Copyright (C) 1999 Precision Insight
- * Copyright (C) 1999 Xi Graphics
+ * Copyright (C) 1999 Precision Insight, Inc.
+ * Copyright (C) 1999 Xi Graphics, Inc.
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -103,7 +103,7 @@ typedef struct _agp_memory {
 extern void agp_free_memory(agp_memory *);
 
 /*
- * void agp_free_memory(agp_memory *curr) :
+ * agp_free_memory :
  * 
  * This function frees memory associated with
  * an agp_memory pointer.  It is the only function
@@ -118,7 +118,7 @@ extern void agp_free_memory(agp_memory *);
 extern agp_memory *agp_allocate_memory(size_t, u32);
 
 /*
- * agp_memory *agp_allocate_memory(size_t page_count, u32 type) :
+ * agp_allocate_memory :
  * 
  * This function allocates a group of pages of
  * a certain type.
@@ -136,7 +136,7 @@ extern agp_memory *agp_allocate_memory(size_t, u32);
 extern void agp_copy_info(agp_kern_info *);
 
 /*
- * void agp_copy_info(agp_kern_info *info) :
+ * agp_copy_info :
  * 
  * This function copies information about the
  * agp bridge device and the state of the agp
@@ -151,7 +151,7 @@ extern void agp_copy_info(agp_kern_info *);
 extern int agp_bind_memory(agp_memory *, off_t);
 
 /*
- * int agp_bind_memory(agp_memory *curr, off_t pg_start) :
+ * agp_bind_memory :
  * 
  * This function binds an agp_memory structure
  * into the graphics aperture translation table.
@@ -168,7 +168,7 @@ extern int agp_bind_memory(agp_memory *, off_t);
 extern int agp_unbind_memory(agp_memory *);
 
 /* 
- * int agp_unbind_memory(agp_memory *curr) :
+ * agp_unbind_memory :
  * 
  * This function removes an agp_memory structure
  * from the graphics aperture translation table.
@@ -185,7 +185,7 @@ extern int agp_unbind_memory(agp_memory *);
 extern void agp_enable(u32);
 
 /* 
- * void agp_enable(u32 mode) :
+ * agp_enable :
  * 
  * This function initializes the agp point-to-point
  * connection.
@@ -197,7 +197,7 @@ extern void agp_enable(u32);
 extern int agp_backend_acquire(void);
 
 /*
- * int agp_backend_acquire(void) :
+ * agp_backend_acquire :
  * 
  * This Function attempts to acquire the agp
  * backend.
@@ -209,7 +209,7 @@ extern int agp_backend_acquire(void);
 extern void agp_backend_release(void);
 
 /*
- * void agp_backend_release(void) :
+ * agp_backend_release :
  * 
  * This Function releases the lock on the agp
  * backend.

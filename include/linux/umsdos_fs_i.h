@@ -47,15 +47,13 @@ struct dir_locking_info {
 				 *  Only one at a time, although one
 				 *  may recursively lock, so it is a counter
 				 */
-	long pid;		/* pid of the process owning the creation */
-	/* lock */
+	long pid;		/* pid of the process owning the creation
+				 * lock */
 };
 
 struct umsdos_inode_info {
-	union {
-		struct msdos_inode_info msdos_info;
-		struct dir_locking_info dir_info;
-	} u;
+	struct msdos_inode_info msdos_info;
+	struct dir_locking_info dir_info;
 	int i_patched;			/* Inode has been patched */
 	int i_is_hlink;			/* Resolved hardlink inode? */
 	unsigned long i_emd_owner;	/* Is this the EMD file inode? */

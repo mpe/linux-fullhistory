@@ -35,11 +35,13 @@
 #include "hosts.h"
 #include "constants.h"
 
-#ifdef MODULE
+/*
+ * We must always allow SHUTDOWN_SIGS.  Even if we are not a module,
+ * the host drivers that we are using may be loaded as modules, and
+ * when we unload these,  we need to ensure that the error handler thread
+ * can be shut down.
+ */
 #define SHUTDOWN_SIGS	(sigmask(SIGKILL)|sigmask(SIGINT)|sigmask(SIGTERM))
-#else
-#define SHUTDOWN_SIGS	(0UL)
-#endif
 
 #ifdef DEBUG
 #define SENSE_TIMEOUT SCSI_TIMEOUT
@@ -128,7 +130,9 @@ void scsi_add_timer(Scsi_Cmnd * SCset,
  *
  * Arguments:   SCset   - command that we are canceling timer for.
  *
- * Returns:     Amount of time remaining before command would have timed out.
+ * Returns:     1 if we were able to detach the timer.  0 if we
+ *              blew it, and the timer function has already started
+ *              to run.
  *
  * Notes:       This should be turned into an inline function.
  */
@@ -136,8 +140,7 @@ int scsi_delete_timer(Scsi_Cmnd * SCset)
 {
 	int rtn;
 
-	rtn = jiffies - SCset->eh_timeout.expires;
-	del_timer(&SCset->eh_timeout);
+	rtn = del_timer(&SCset->eh_timeout);
 
 	SCSI_LOG_ERROR_RECOVERY(5, printk("Clearing timer for command %p\n", SCset));
 
@@ -415,6 +418,7 @@ STATIC int scsi_request_sense(Scsi_Cmnd * SCpnt)
 	{REQUEST_SENSE, 0, 0, 0, 255, 0};
 	unsigned char scsi_result0[256], *scsi_result = NULL;
 
+	ASSERT_LOCK(&io_request_lock, 1);
 
 	memcpy((void *) SCpnt->cmnd, (void *) generic_sense,
 	       sizeof(generic_sense));
@@ -563,10 +567,7 @@ void scsi_sleep(int timeout)
 
 	add_timer(&timer);
 
-	spin_unlock_irq(&io_request_lock);
 	down(&sem);
-	spin_lock_irq(&io_request_lock);
-
 	del_timer(&timer);
 }
 
@@ -582,6 +583,8 @@ void scsi_sleep(int timeout)
 STATIC void scsi_send_eh_cmnd(Scsi_Cmnd * SCpnt, int timeout)
 {
 	struct Scsi_Host *host;
+
+	ASSERT_LOCK(&io_request_lock, 1);
 
 	host = SCpnt->host;
 
@@ -811,7 +814,9 @@ STATIC int scsi_try_bus_reset(Scsi_Cmnd * SCpnt)
 	 * If we had a successful bus reset, mark the command blocks to expect
 	 * a condition code of unit attention.
 	 */
+	spin_unlock_irq(&io_request_lock);
 	scsi_sleep(BUS_RESET_SETTLE_TIME);
+	spin_lock_irq(&io_request_lock);
 	if (SCpnt->eh_state == SUCCESS) {
 		Scsi_Device *SDloop;
 		for (SDloop = SCpnt->host->host_queue; SDloop; SDloop = SDloop->next) {
@@ -854,7 +859,9 @@ STATIC int scsi_try_host_reset(Scsi_Cmnd * SCpnt)
 	 * If we had a successful host reset, mark the command blocks to expect
 	 * a condition code of unit attention.
 	 */
+	spin_unlock_irq(&io_request_lock);
 	scsi_sleep(HOST_RESET_SETTLE_TIME);
+	spin_lock_irq(&io_request_lock);
 	if (SCpnt->eh_state == SUCCESS) {
 		Scsi_Device *SDloop;
 		for (SDloop = SCpnt->host->host_queue; SDloop; SDloop = SDloop->next) {
@@ -1164,6 +1171,8 @@ STATIC int scsi_check_sense(Scsi_Cmnd * SCpnt)
  *
  * Arguments:   host  - host that we are restarting
  *
+ * Lock status: Assumed that locks are not held upon entry.
+ *
  * Returns:     Nothing
  *
  * Notes:       When we entered the error handler, we blocked all further
@@ -1172,6 +1181,9 @@ STATIC int scsi_check_sense(Scsi_Cmnd * SCpnt)
 STATIC void scsi_restart_operations(struct Scsi_Host *host)
 {
 	Scsi_Device *SDpnt;
+	unsigned long flags;
+
+	ASSERT_LOCK(&io_request_lock, 0);
 
 	/*
 	 * Next free up anything directly waiting upon the host.  This will be
@@ -1183,18 +1195,23 @@ STATIC void scsi_restart_operations(struct Scsi_Host *host)
 	wake_up(&host->host_wait);
 
 	/*
-	 * Finally, block devices need an extra kick in the pants.  This is because
-	 * the request queueing mechanism may have queued lots of pending requests
-	 * and there won't be a process waiting in a place where we can simply wake
-	 * it up.  Thus we simply go through and call the request function to goose
-	 * the various top level drivers and get things moving again.
+	 * Finally we need to re-initiate requests that may be pending.  We will
+	 * have had everything blocked while error handling is taking place, and
+	 * now that error recovery is done, we will need to ensure that these
+	 * requests are started.
 	 */
+	spin_lock_irqsave(&io_request_lock, flags);
 	for (SDpnt = host->host_queue; SDpnt; SDpnt = SDpnt->next) {
-		SCSI_LOG_ERROR_RECOVERY(5, printk("Calling request function to restart things...\n"));
-
-		if (SDpnt->scsi_request_fn != NULL)
-			(*SDpnt->scsi_request_fn) ();
+		request_queue_t *q;
+		if ((host->can_queue > 0 && (host->host_busy >= host->can_queue))
+		    || (host->host_blocked)
+		    || (SDpnt->device_blocked)) {
+			break;
+		}
+		q = &SDpnt->request_queue;
+		q->request_fn(q);
 	}
+	spin_unlock_irqrestore(&io_request_lock, flags);
 }
 
 /*
@@ -1240,6 +1257,8 @@ STATIC int scsi_unjam_host(struct Scsi_Host *host)
 	Scsi_Device *SDloop;
 	Scsi_Cmnd *SCdone;
 	int timed_out;
+
+	ASSERT_LOCK(&io_request_lock, 1);
 
 	SCdone = NULL;
 
@@ -1524,7 +1543,9 @@ STATIC int scsi_unjam_host(struct Scsi_Host *host)
 						 * Due to the spinlock, we will never get out of this
 						 * loop without a proper wait (DB)
 						 */
+						spin_unlock_irq(&io_request_lock);
 						scsi_sleep(1 * HZ);
+						spin_lock_irq(&io_request_lock);
 
 						goto next_device;
 					}
@@ -1617,7 +1638,9 @@ STATIC int scsi_unjam_host(struct Scsi_Host *host)
 				 * Due to the spinlock, we will never get out of this
 				 * loop without a proper wait. (DB)
 				 */
+				spin_unlock_irq(&io_request_lock);
 				scsi_sleep(1 * HZ);
+				spin_lock_irq(&io_request_lock);
 
 				goto next_device2;
 			}
@@ -1768,11 +1791,11 @@ void scsi_error_handler(void *data)
 	lock_kernel();
 
 	/*
-	 *	Flush resources
+	 *    Flush resources
 	 */
-	 
+
 	daemonize();
-	
+
 	/*
 	 * Set the name of this process.
 	 */
@@ -1821,6 +1844,9 @@ void scsi_error_handler(void *data)
 
 		host->eh_active = 0;
 
+		/* The spinlock is really needed up to this point. (DB) */
+		spin_unlock_irqrestore(&io_request_lock, flags);
+
 		/*
 		 * Note - if the above fails completely, the action is to take
 		 * individual devices offline and flush the queue of any
@@ -1830,8 +1856,6 @@ void scsi_error_handler(void *data)
 		 */
 		scsi_restart_operations(host);
 
-		/* The spinlock is really needed up to this point. (DB) */
-		spin_unlock_irqrestore(&io_request_lock, flags);
 	}
 
 	SCSI_LOG_ERROR_RECOVERY(1, printk("Error handler exiting\n"));

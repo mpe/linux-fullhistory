@@ -181,7 +181,7 @@ __setup("ramdisk_size=", ramdisk_size2);
  *  allocated size, we must get rid of it...
  *
  */
-static void rd_request(void)
+static void rd_request(request_queue_t * q)
 {
 	unsigned int minor;
 	unsigned long offset, len;
@@ -350,7 +350,7 @@ static void __exit rd_cleanup (void)
 		invalidate_buffers(MKDEV(MAJOR_NR, i));
 
 	unregister_blkdev( MAJOR_NR, "ramdisk" );
-	blk_dev[MAJOR_NR].request_fn = 0;
+	blk_cleanup_queue(BLK_DEFAULT_QUEUE(MAJOR_NR));
 }
 
 /* This is the registration and initialization section of the RAM disk driver */
@@ -371,7 +371,7 @@ int __init rd_init (void)
 		return -EIO;
 	}
 
-	blk_dev[MAJOR_NR].request_fn = &rd_request;
+	blk_init_queue(BLK_DEFAULT_QUEUE(MAJOR_NR), &rd_request);
 
 	for (i = 0; i < NUM_RAMDISKS; i++) {
 		/* rd_size is given in kB */

@@ -70,7 +70,7 @@ int ps2esdi_init(void);
 
 static void ps2esdi_geninit(struct gendisk *ignored);
 
-static void do_ps2esdi_request(void);
+static void do_ps2esdi_request(request_queue_t * q);
 
 static void ps2esdi_readwrite(int cmd, u_char drive, u_int block, u_int count);
 
@@ -188,7 +188,7 @@ int __init ps2esdi_init(void)
 		return -1;
 	}
 	/* set up some global information - indicating device specific info */
-	blk_dev[MAJOR_NR].request_fn = DEVICE_REQUEST;
+	blk_init_queue(BLK_DEFAULT_QUEUE(MAJOR_NR), DEVICE_REQUEST);
 	read_ahead[MAJOR_NR] = 8;	/* 8 sector (4kB) read ahead */
 
 	/* some minor housekeeping - setup the global gendisk structure */
@@ -464,7 +464,7 @@ static void __init ps2esdi_get_device_cfg(void)
 }
 
 /* strategy routine that handles most of the IO requests */
-static void do_ps2esdi_request(void)
+static void do_ps2esdi_request(request_queue_t * q)
 {
 	u_int block, count;
 	/* since, this routine is called with interrupts cleared - they 
@@ -487,7 +487,7 @@ static void do_ps2esdi_request(void)
 		printk("%s: DMA above 16MB not supported\n", DEVICE_NAME);
 		end_request(FAIL);
 		if (CURRENT)
-			do_ps2esdi_request();
+			do_ps2esdi_request(q);
 		return;
 	}			/* check for above 16Mb dmas */
 	if ((CURRENT_DEV < ps2esdi_drives) &&
@@ -521,7 +521,7 @@ static void do_ps2esdi_request(void)
 			printk("%s: Unknown command\n", DEVICE_NAME);
 			end_request(FAIL);
 			if (CURRENT)
-				do_ps2esdi_request();
+				do_ps2esdi_request(q);
 			break;
 		}		/* handle different commands */
 	}
@@ -531,7 +531,7 @@ static void do_ps2esdi_request(void)
 		       CURRENT->sector, ps2esdi[MINOR(CURRENT->rq_dev)].nr_sects);
 		end_request(FAIL);
 		if (CURRENT)
-			do_ps2esdi_request();
+			do_ps2esdi_request(q);
 	}
 
 }				/* main strategy routine */
@@ -598,11 +598,11 @@ static void ps2esdi_readwrite(int cmd, u_char drive, u_int block, u_int count)
 	if (ps2esdi_out_cmd_blk(cmd_blk)) {
 		printk("%s: Controller failed\n", DEVICE_NAME);
 		if ((++CURRENT->errors) < MAX_RETRIES)
-			return do_ps2esdi_request();
+			return do_ps2esdi_request(NULL);
 		else {
 			end_request(FAIL);
 			if (CURRENT)
-				do_ps2esdi_request();
+				do_ps2esdi_request(NULL);
 		}
 	}
 	/* check for failure to put out the command block */ 
@@ -901,11 +901,11 @@ static void ps2esdi_normal_interrupt_handler(u_int int_ret_code)
 			outb((int_ret_code & 0xe0) | ATT_EOI, ESDI_ATTN);
 			outb(CTRL_ENABLE_INTR, ESDI_CONTROL);
 			if ((++CURRENT->errors) < MAX_RETRIES)
-				do_ps2esdi_request();
+				do_ps2esdi_request(NULL);
 			else {
 				end_request(FAIL);
 				if (CURRENT)
-					do_ps2esdi_request();
+					do_ps2esdi_request(NULL);
 			}
 			break;
 		}
@@ -947,11 +947,11 @@ static void ps2esdi_normal_interrupt_handler(u_int int_ret_code)
 		outb((int_ret_code & 0xe0) | ATT_EOI, ESDI_ATTN);
 		outb(CTRL_ENABLE_INTR, ESDI_CONTROL);
 		if ((++CURRENT->errors) < MAX_RETRIES)
-			do_ps2esdi_request();
+			do_ps2esdi_request(NULL);
 		else {
 			end_request(FAIL);
 			if (CURRENT)
-				do_ps2esdi_request();
+				do_ps2esdi_request(NULL);
 		}
 		break;
 
@@ -961,7 +961,7 @@ static void ps2esdi_normal_interrupt_handler(u_int int_ret_code)
 		outb(CTRL_ENABLE_INTR, ESDI_CONTROL);
 		end_request(FAIL);
 		if (CURRENT)
-			do_ps2esdi_request();
+			do_ps2esdi_request(NULL);
 		break;
 
 	case INT_CMD_FORMAT:
@@ -993,11 +993,11 @@ static void ps2esdi_continue_request(void)
 	if (CURRENT->nr_sectors -= CURRENT->current_nr_sectors) {
 		CURRENT->buffer += CURRENT->current_nr_sectors * SECT_SIZE;
 		CURRENT->sector += CURRENT->current_nr_sectors;
-		do_ps2esdi_request();
+		do_ps2esdi_request(NULL);
 	} else {
 		end_request(SUCCES);
 		if (CURRENT)
-			do_ps2esdi_request();
+			do_ps2esdi_request(NULL);
 	}
 }
 

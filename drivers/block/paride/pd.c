@@ -265,7 +265,7 @@ void cleanup_module( void );
 #endif
 static void pd_geninit(struct gendisk *ignored);
 static int pd_open(struct inode *inode, struct file *file);
-static void do_pd_request(void);
+static void do_pd_request(request_queue_t * q);
 static int pd_ioctl(struct inode *inode,struct file *file,
                     unsigned int cmd, unsigned long arg);
 static int pd_release (struct inode *inode, struct file *file);
@@ -404,7 +404,7 @@ int pd_init (void)
                         name,major);
                 return -1;
         }
-        blk_dev[MAJOR_NR].request_fn = DEVICE_REQUEST;
+	blk_init_queue(BLK_DEFAULT_QUEUE(MAJOR_NR), DEVICE_REQUEST);
         read_ahead[MAJOR_NR] = 8;       /* 8 sector (4kB) read ahead */
         
 	pd_gendisk.major = major;
@@ -894,7 +894,7 @@ static int pd_ready( void )
 	return (!(RR(1,6) & STAT_BUSY)) ;
 }
 
-static void do_pd_request (void)
+static void do_pd_request (request_queue_t * q)
 
 {       struct buffer_head * bh;
 	struct request * req;
@@ -992,7 +992,7 @@ static void do_pd_read_start( void )
 		spin_lock_irqsave(&io_request_lock,saved_flags);
                 end_request(0);
                 pd_busy = 0;
-                do_pd_request();
+		do_pd_request(NULL);
 		spin_unlock_irqrestore(&io_request_lock,saved_flags);
                 return;
         }
@@ -1016,7 +1016,7 @@ static void do_pd_read_drq( void )
 		spin_lock_irqsave(&io_request_lock,saved_flags);
                 end_request(0);
                 pd_busy = 0;
-                do_pd_request();
+		do_pd_request(NULL);
 		spin_unlock_irqrestore(&io_request_lock,saved_flags);
                 return;
             }
@@ -1031,7 +1031,7 @@ static void do_pd_read_drq( void )
 	spin_lock_irqsave(&io_request_lock,saved_flags);
         end_request(1);
         pd_busy = 0;
-        do_pd_request();
+	do_pd_request(NULL);
 	spin_unlock_irqrestore(&io_request_lock,saved_flags);
 }
 
@@ -1058,7 +1058,7 @@ static void do_pd_write_start( void )
 		spin_lock_irqsave(&io_request_lock,saved_flags);
                 end_request(0);
                 pd_busy = 0;
-                do_pd_request();
+		do_pd_request(NULL);
 		spin_unlock_irqrestore(&io_request_lock,saved_flags);
                 return;
         }
@@ -1074,7 +1074,7 @@ static void do_pd_write_start( void )
 		spin_lock_irqsave(&io_request_lock,saved_flags);
                 end_request(0);
                 pd_busy = 0;
-                do_pd_request();
+		do_pd_request(NULL);
                 spin_unlock_irqrestore(&io_request_lock,saved_flags);
 		return;
             }
@@ -1103,7 +1103,7 @@ static void do_pd_write_done( void )
 		spin_lock_irqsave(&io_request_lock,saved_flags);
                 end_request(0);
                 pd_busy = 0;
-                do_pd_request();
+		do_pd_request(NULL);
 		spin_unlock_irqrestore(&io_request_lock,saved_flags);
                 return;
         }
@@ -1111,7 +1111,7 @@ static void do_pd_write_done( void )
 	spin_lock_irqsave(&io_request_lock,saved_flags);
         end_request(1);
         pd_busy = 0;
-        do_pd_request();
+	do_pd_request(NULL);
 	spin_unlock_irqrestore(&io_request_lock,saved_flags);
 }
 

@@ -1641,7 +1641,7 @@ read_data_block(char          *buffer,
  * data access on a CD is done sequentially, this saves a lot of operations.
  */
 static void
-do_cdu31a_request(void)
+do_cdu31a_request(request_queue_t * q)
 {
    int block;
    int nblock;
@@ -3497,7 +3497,7 @@ cdu31a_init(void)
 
       is_a_cdu31a = strcmp("CD-ROM CDU31A", drive_config.product_id) == 0;
 
-      blk_dev[MAJOR_NR].request_fn = DEVICE_REQUEST;
+      blk_init_queue(BLK_DEFAULT_QUEUE(MAJOR_NR), DEVICE_REQUEST);
       read_ahead[MAJOR_NR] = CDU31A_READAHEAD;
       cdu31a_block_size = 1024; /* 1kB default block size */
       /* use 'mount -o block=2048' */

@@ -24,10 +24,11 @@ int atp870u_queuecommand(Scsi_Cmnd *, void (*done) (Scsi_Cmnd *));
 int atp870u_abort(Scsi_Cmnd *);
 int atp870u_reset(Scsi_Cmnd *, unsigned int);
 int atp870u_biosparam(Disk *, kdev_t, int *);
+int atp870u_release(struct Scsi_Host *);
 void send_s870(unsigned char);
 
-#define qcnt            32
-#define ATP870U_SCATTER 127
+#define qcnt		32
+#define ATP870U_SCATTER 128
 #define ATP870U_CMDLUN 1
 
 #ifndef NULL
@@ -38,31 +39,33 @@ extern const char *atp870u_info(struct Scsi_Host *);
 
 extern int atp870u_proc_info(char *, char **, off_t, int, int, int);
 
-#define ATP870U {  						\
-	proc_name:			"atp870u",		\
-	proc_info:			atp870u_proc_info,      \
-	name:				NULL,			\
-	detect:                 	atp870u_detect,		\
-	release:               	 	NULL,                   \
-	info:                   	atp870u_info,           \
-	command:                	atp870u_command,	\
-        queuecommand:           	atp870u_queuecommand,	\
-        eh_strategy_handler: 		NULL,			\
-        eh_abort_handler: 		NULL,			\
-        eh_device_reset_handler:	NULL,			\
-        eh_bus_reset_handler:		NULL,			\
-        eh_host_reset_handler:		NULL,			\
-	abort:				atp870u_abort,          \
-	reset:				atp870u_reset,       	\
-	slave_attach:               	NULL,                   \
-	bios_param:                     atp870u_biosparam,	\
-	can_queue:                     	qcnt,                   \
-	this_id:                     	1,			\
-	sg_tablesize:                   ATP870U_SCATTER,        \
-	cmd_per_lun:                    ATP870U_CMDLUN,         \
-	present:                     	0,                      \
-	unchecked_isa_dma:              0,                      \
-	use_clustering:                 ENABLE_CLUSTERING,	\
-	use_new_eh_code:		0			\
+#define ATP870U {						\
+	next: NULL,						\
+	module: NULL,						\
+	proc_info: atp870u_proc_info,				\
+	name: NULL,						\
+	detect: atp870u_detect, 				\
+	release: atp870u_release,				\
+	info: atp870u_info,					\
+	command: atp870u_command,				\
+	queuecommand: atp870u_queuecommand,			\
+	eh_strategy_handler: NULL,				\
+	eh_abort_handler: NULL, 				\
+	eh_device_reset_handler: NULL,				\
+	eh_bus_reset_handler: NULL,				\
+	eh_host_reset_handler: NULL,				\
+	abort: atp870u_abort,					\
+	reset: atp870u_reset,					\
+	slave_attach: NULL,					\
+	bios_param: atp870u_biosparam,				\
+	can_queue: qcnt,	 /* max simultaneous cmds      */\
+	this_id: 7,	       /* scsi id of host adapter    */\
+	sg_tablesize: ATP870U_SCATTER,	/* max scatter-gather cmds    */\
+	cmd_per_lun: ATP870U_CMDLUN,	/* cmds per lun (linked cmds) */\
+	present: 0,		/* number of 7xxx's present   */\
+	unchecked_isa_dma: 0,	/* no memory DMA restrictions */\
+	use_clustering: ENABLE_CLUSTERING,			\
+	use_new_eh_code: 0					\
 }
+
 #endif

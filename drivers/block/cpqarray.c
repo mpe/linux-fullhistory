@@ -140,14 +140,14 @@ static void do_ida_request(int i);
  */
 #define DO_IDA_REQUEST(x) { do_ida_request(x); }
 
-static void do_ida_request0(void) DO_IDA_REQUEST(0);
-static void do_ida_request1(void) DO_IDA_REQUEST(1);
-static void do_ida_request2(void) DO_IDA_REQUEST(2);
-static void do_ida_request3(void) DO_IDA_REQUEST(3);
-static void do_ida_request4(void) DO_IDA_REQUEST(4);
-static void do_ida_request5(void) DO_IDA_REQUEST(5);
-static void do_ida_request6(void) DO_IDA_REQUEST(6);
-static void do_ida_request7(void) DO_IDA_REQUEST(7);
+static void do_ida_request0(request_queue_t * q) DO_IDA_REQUEST(0);
+static void do_ida_request1(request_queue_t * q) DO_IDA_REQUEST(1);
+static void do_ida_request2(request_queue_t * q) DO_IDA_REQUEST(2);
+static void do_ida_request3(request_queue_t * q) DO_IDA_REQUEST(3);
+static void do_ida_request4(request_queue_t * q) DO_IDA_REQUEST(4);
+static void do_ida_request5(request_queue_t * q) DO_IDA_REQUEST(5);
+static void do_ida_request6(request_queue_t * q) DO_IDA_REQUEST(6);
+static void do_ida_request7(request_queue_t * q) DO_IDA_REQUEST(7);
 
 static void start_io(ctlr_info_t *h);
 
@@ -379,7 +379,7 @@ void cleanup_module(void)
  */
 void __init cpqarray_init(void)
 {
-	void (*request_fns[MAX_CTLR])(void) = {
+	void (*request_fns[MAX_CTLR])(request_queue_t *) = {
 		do_ida_request0, do_ida_request1,
 		do_ida_request2, do_ida_request3,
 		do_ida_request4, do_ida_request5,
@@ -480,7 +480,9 @@ void __init cpqarray_init(void)
 		ida_gendisk[i].sizes = ida_sizes + (i*256);
 		/* ida_gendisk[i].nr_real is handled by getgeometry */
 	
-		blk_dev[MAJOR_NR+i].request_fn = request_fns[i];
+		blk_init_queue(BLK_DEFAULT_QUEUE(MAJOR_NR + i), request_fns[i]);
+		blk_queue_headactive(BLK_DEFAULT_QUEUE(MAJOR_NR + i), 0);
+
 		blksize_size[MAJOR_NR+i] = ida_blocksizes + (i*256);
 		hardsect_size[MAJOR_NR+i] = ida_hardsizes + (i*256);
 		read_ahead[MAJOR_NR+i] = READ_AHEAD;
@@ -894,10 +896,13 @@ static void do_ida_request(int ctlr)
 	cmdlist_t *c;
 	int seg, sect;
 	char *lastdataend;
+	request_queue_t * q;
 	struct buffer_head *bh;
 	struct request *creq;
 
-	creq = blk_dev[MAJOR_NR+ctlr].current_request;
+	q = &blk_dev[MAJOR_NR+ctlr].request_queue;
+
+	creq = q->current_request;
 	if (creq == NULL || creq->rq_status == RQ_INACTIVE)
 		goto doreq_done;
 
@@ -974,7 +979,7 @@ DBGPX(		printk("More to do on same request %p\n", creq); );
 	} else {
 DBGPX(		printk("Done with %p, queueing %p\n", creq, creq->next); );
 		creq->rq_status = RQ_INACTIVE;
-		blk_dev[MAJOR_NR+ctlr].current_request = creq->next;
+		q->current_request = creq->next;
 		wake_up(&wait_for_request);
 	}
 

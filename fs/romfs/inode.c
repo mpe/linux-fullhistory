@@ -444,63 +444,6 @@ romfs_readpage(struct dentry * dentry, struct page * page)
 	return result;
 }
 
-static int
-romfs_readlink(struct dentry *dentry, char *buffer, int len)
-{
-	struct inode *inode = dentry->d_inode;
-	int mylen;
-	char buf[ROMFS_MAXFN];		/* XXX dynamic */
-
-	if (!inode || !S_ISLNK(inode->i_mode)) {
-		mylen = -EBADF;
-		goto out;
-	}
-
-	mylen = min(sizeof(buf), inode->i_size);
-
-	if (romfs_copyfrom(inode, buf, inode->u.romfs_i.i_dataoffset, mylen) <= 0) {
-		mylen = -EIO;
-		goto out;
-	}
-	copy_to_user(buffer, buf, mylen);
-
-out:
-	return mylen;
-}
-
-static struct dentry *romfs_follow_link(struct dentry *dentry,
-					struct dentry *base,
-					unsigned int follow)
-{
-	struct inode *inode = dentry->d_inode;
-	char *link;
-	int len, cnt;
-
-	len = inode->i_size;
-
-	dentry = ERR_PTR(-EAGAIN);			/* correct? */
-	if (!(link = kmalloc(len+1, GFP_KERNEL)))
-		goto outnobuf;
-
-	cnt = romfs_copyfrom(inode, link, inode->u.romfs_i.i_dataoffset, len);
-	if (len != cnt) {
-		dentry = ERR_PTR(-EIO);
-		goto out;
-	} else
-		link[len] = 0;
-
-	dentry = lookup_dentry(link, base, follow);
-	kfree(link);
-
-	if (0) {
-out:
-		kfree(link);
-outnobuf:
-		dput(base);
-	}
-	return dentry;
-}
-
 /* Mapping from our types to the kernel */
 
 static struct file_operations romfs_file_operations = {
@@ -584,24 +527,9 @@ static struct inode_operations romfs_dir_inode_operations = {
 };
 
 static struct inode_operations romfs_link_inode_operations = {
-	NULL,			/* no file operations on symlinks */
-	NULL,			/* create */
-	NULL,			/* lookup */
-	NULL,			/* link */
-	NULL,			/* unlink */
-	NULL,			/* symlink */
-	NULL,			/* mkdir */
-	NULL,			/* rmdir */
-	NULL,			/* mknod */
-	NULL,			/* rename */
-	romfs_readlink,		/* readlink */
-	romfs_follow_link,	/* follow_link */
-	NULL,			/* get_block */
-	NULL,			/* readpage */
-	NULL,			/* writepage */
-	NULL,			/* truncate */
-	NULL,			/* permission */
-	NULL			/* revalidate */
+	readlink:	page_readlink,
+	follow_link:	page_follow_link,
+	readpage:	romfs_readpage
 };
 
 static mode_t romfs_modemap[] =

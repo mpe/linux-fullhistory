@@ -102,6 +102,7 @@ struct module_info
 #define MOD_VISITED  		8
 #define MOD_USED_ONCE		16
 #define MOD_JUST_FREED		32
+#define MOD_INITIALIZING	64
 
 /* Values for query_module's which.  */
 
@@ -110,6 +111,9 @@ struct module_info
 #define QM_REFS		3
 #define QM_SYMBOLS	4
 #define QM_INFO		5
+
+/* Can the module be queried? */
+#define MOD_CAN_QUERY(mod) (((mod)->flags & (MOD_RUNNING | MOD_INITIALIZING)) && !((mod)->flags & MOD_DELETED))
 
 /* When struct module is extended, we must test whether the new member
    is present in the header received from insmod before we can use it.  

@@ -162,7 +162,7 @@
 #define ACA_RW 0x00
 
 #ifdef ENABLE_PAGING
-#define SET_PAGE(x) (writeb(((x>>8)&ti.page_mask), \
+#define SET_PAGE(x) (isa_writeb(((x>>8)&ti.page_mask), \
   ti->mmio + ACA_OFFSET + ACA_RW + SRPR_EVEN))
 #else
 #define SET_PAGE(x)

@@ -235,8 +235,6 @@ static unsigned long __init free_all_bootmem_core(int nid, bootmem_data_t *bdata
 			count++;
 			ClearPageReserved(page);
 			set_page_count(page, 1);
-			if ((i+(bdata->node_boot_start >> PAGE_SHIFT)) >= (virt_to_phys((char *)MAX_DMA_ADDRESS) >> PAGE_SHIFT))
-				clear_bit(PG_DMA, &page->flags);
 			__free_page(page);
 		}
 	}

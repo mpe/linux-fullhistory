@@ -883,8 +883,10 @@ M:	kgb@manjak.knm.org.pl
 S:	Maintained
 
 TLAN NETWORK DRIVER
+P:	Torben Mathiasen
+M:	torben.mathiasen@compaq.com
 L:	tlan@vuser.vu.union.edu
-S:	Orphan
+S:	Maintained
 
 TOKEN-RING NETWORK DRIVER
 P:	Paul Norton
@@ -917,8 +919,9 @@ S:	Maintained
 
 UMSDOS FILESYSTEM
 P:	Matija Nalis
-M:	mnalis@jagor.srce.hr
+M:	Matija Nalis <mnalis-umsdos@voyager.hr>
 L:	linux-kernel@vger.rutgers.edu
+W:	http://www.voyager.hr/~mnalis/umsdos/
 S:	Maintained
 
 UNIFORM CDROM DRIVER

@@ -1,8 +1,8 @@
 /*
  * AGPGART module version 0.99
  * Copyright (C) 1999 Jeff Hartmann
- * Copyright (C) 1999 Precision Insight
- * Copyright (C) 1999 Xi Graphics
+ * Copyright (C) 1999 Precision Insight, Inc.
+ * Copyright (C) 1999 Xi Graphics, Inc.
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),

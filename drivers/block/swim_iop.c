@@ -121,7 +121,7 @@ static void release_drive(struct floppy_state *fs);
 static void set_timeout(struct floppy_state *fs, int nticks,
 			void (*proc)(unsigned long));
 static void fd_request_timeout(unsigned long);
-static void do_fd_request(void);
+static void do_fd_request(request_queue_t * q);
 static void start_request(struct floppy_state *fs);
 
 static struct file_operations floppy_fops = {
@@ -163,7 +163,7 @@ int swimiop_init(void)
 		       MAJOR_NR);
 		return -EBUSY;
 	}
-	blk_dev[MAJOR_NR].request_fn = DEVICE_REQUEST;
+	blk_init_queue(BLK_DEFAULT_QUEUE(MAJOR_NR), DEVICE_REQUEST);
 	blksize_size[MAJOR_NR] = floppy_blocksizes;
 	blk_size[MAJOR_NR] = floppy_sizes;
 
@@ -566,7 +566,7 @@ static void set_timeout(struct floppy_state *fs, int nticks,
 	restore_flags(flags);
 }
 
-static void do_fd_request(void)
+static void do_fd_request(request_queue_t * q)
 {
 	int i;
 

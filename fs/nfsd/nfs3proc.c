@@ -37,8 +37,8 @@ static int	nfs3_ftypes[] = {
 	S_IFBLK,		/* NF3BLK */
 	S_IFCHR,		/* NF3CHR */
 	S_IFLNK,		/* NF3LNK */
-	S_IFIFO,		/* NF3FIFO */
 	S_IFSOCK,		/* NF3SOCK */
+	S_IFIFO,		/* NF3FIFO */
 };
 
 /*
@@ -344,7 +344,7 @@ nfsd3_proc_mknod(struct svc_rqst *rqstp, struct nfsd3_mknodargs *argp,
 			return nfserr_inval;
 		rdev = ((argp->major) << 8) | (argp->minor);
 	} else
-		if (argp->ftype != NF3SOCK || argp->ftype != NF3FIFO)
+		if (argp->ftype != NF3SOCK && argp->ftype != NF3FIFO)
 			return nfserr_inval;
 
 	type = nfs3_ftypes[argp->ftype];

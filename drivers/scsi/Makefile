@@ -40,8 +40,8 @@ ifeq ($(CONFIG_SCSI),y)
     OX_OBJS  := scsi_syms.o
   endif
   L_OBJS += scsi_n_syms.o hosts.o scsi_ioctl.o constants.o scsicam.o
-  L_OBJS += scsi_error.o scsi_obsolete.o scsi_queue.o
-  L_OBJS += scsi_proc.o
+  L_OBJS += scsi_error.o scsi_obsolete.o scsi_queue.o scsi_lib.o 
+  L_OBJS += scsi_merge.o scsi_proc.o
 else
   ifeq ($(CONFIG_SCSI),m)
     MIX_OBJS += scsi_syms.o
@@ -721,10 +721,11 @@ megaraid.o: megaraid.c
 	$(CC) $(CFLAGS) -c megaraid.c
 
 scsi_mod.o: $(MIX_OBJS) hosts.o scsi.o scsi_ioctl.o constants.o \
-		scsicam.o scsi_proc.o scsi_error.o scsi_obsolete.o scsi_queue.o
+		scsicam.o scsi_proc.o scsi_error.o scsi_obsolete.o \
+		scsi_queue.o scsi_lib.o scsi_merge.o
 	$(LD) $(LD_RFLAG) -r -o $@ $(MIX_OBJS) hosts.o scsi.o scsi_ioctl.o \
-		constants.o scsicam.o scsi_proc.o               \
-		scsi_error.o scsi_obsolete.o scsi_queue.o \
+		constants.o scsicam.o scsi_proc.o scsi_merge.o     \
+		scsi_error.o scsi_obsolete.o scsi_queue.o scsi_lib.o
 
 sr_mod.o: sr.o sr_ioctl.o sr_vendor.o
 	$(LD) $(LD_RFLAG) -r -o $@ sr.o sr_ioctl.o sr_vendor.o

@@ -1,6 +1,6 @@
 #! /bin/sh
 # Script to apply kernel patches.
-#   usage: patch-kernel [ sourcedir [ patchdir ] ]
+#   usage: patch-kernel [ sourcedir [ patchdir [ stopversion ] ] ]
 #     The source directory defaults to /usr/src/linux, and the patch
 #     directory defaults to the current directory.
 #
@@ -16,10 +16,15 @@
 # gzip, bzip, bzip2, zip, compress, and plaintext. 
 #
 #       Adam Sulmicki <adam@cfar.umd.edu>, 1st January 1997.
+#
+# Added ability to stop at a given version number
+# Put the full version number (i.e. 2.3.31) as the last parameter
+#       Dave Gilbert <linux@treblig.org>, 11th December 1999.
 
 # Set directories from arguments, or use defaults.
 sourcedir=${1-/usr/src/linux}
 patchdir=${2-.}
+stopvers=${3-imnotaversion}
 
 # set current VERSION, PATCHLEVEL, SUBLEVEL
 eval `sed -n 's/^\([A-Z]*\) = \([0-9]*\)$/\1=\2/p' $sourcedir/Makefile`
@@ -34,7 +39,9 @@ echo "Current kernel version is $VERSION.$PATCHLEVEL.$SUBLEVEL"
 while :
 do
     SUBLEVEL=`expr $SUBLEVEL + 1`
-    patch=patch-$VERSION.$PATCHLEVEL.$SUBLEVEL 
+    FULLVERSION="$VERSION.$PATCHLEVEL.$SUBLEVEL"
+
+    patch=patch-$FULLVERSION
     if [ -r $patchdir/${patch}.gz ]; then
         ext=".gz"
         name="gzip"
@@ -78,4 +85,10 @@ do
     fi
     # Remove backup files
     find $sourcedir/ '(' -name '*.orig' -o -name '.*.orig' ')' -exec rm -f {} \;
+
+    if [ $stopvers = $FULLVERSION ]
+    then
+        echo "Stoping at $FULLVERSION as requested. Enjoy."
+        break
+    fi
 done

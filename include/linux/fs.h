@@ -478,8 +478,8 @@ struct file_lock {
 	struct file *fl_file;
 	unsigned char fl_flags;
 	unsigned char fl_type;
-	off_t fl_start;
-	off_t fl_end;
+	loff_t fl_start;
+	loff_t fl_end;
 
 	void (*fl_notify)(struct file_lock *);	/* unblock callback */
 
@@ -494,6 +494,9 @@ extern struct file_lock			*file_lock_table;
 
 extern int fcntl_getlk(unsigned int, struct flock *);
 extern int fcntl_setlk(unsigned int, unsigned int, struct flock *);
+
+extern int fcntl_getlk64(unsigned int fd, struct flock64 *l);
+extern int fcntl_setlk64(unsigned int fd, unsigned int cmd, struct flock64 *l);
 
 /* fs/locks.c */
 extern void locks_remove_posix(struct file *, fl_owner_t);
@@ -946,12 +949,24 @@ extern int block_read_full_page(struct dentry *, struct page *);
 extern int block_write_full_page (struct dentry *, struct page *);
 extern int block_write_partial_page (struct file *, struct page *, unsigned long, unsigned long, const char *);
 extern int block_write_cont_page (struct file *, struct page *, unsigned long, unsigned long, const char *);
+extern int block_write_zero_range(struct inode *, struct page *, unsigned, unsigned, unsigned, const char *);
+extern inline int block_write_range(struct inode *inode, struct page *page,
+				unsigned from, unsigned len,const char *buf) 
+{
+	return block_write_zero_range(inode, page, from, from, from+len, buf);
+}
 extern int block_flushpage(struct page *, unsigned long);
+extern int block_symlink(struct inode *, const char *, int);
 
 extern int generic_file_mmap(struct file *, struct vm_area_struct *);
 extern ssize_t generic_file_read(struct file *, char *, size_t, loff_t *);
 extern ssize_t generic_file_write(struct file *, const char *, size_t, loff_t *, writepage_t);
-extern void do_generic_file_read(struct file * filp, loff_t *ppos, read_descriptor_t * desc, read_actor_t actor);
+extern void do_generic_file_read(struct file *, loff_t *, read_descriptor_t *, read_actor_t);
+
+extern int vfs_readlink(struct dentry *, char *, int, char *);
+extern struct dentry *vfs_follow_link(struct dentry *, struct dentry *, unsigned, char *);
+extern int page_readlink(struct dentry *, char *, int);
+extern struct dentry *page_follow_link(struct dentry *, struct dentry *, unsigned);
 
 extern struct super_block *get_super(kdev_t);
 struct super_block *get_empty_super(void);

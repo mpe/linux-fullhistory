@@ -17,6 +17,7 @@
 #include <asm/uaccess.h>
 #include <asm/io.h>
 
+#include <video/fbcon.h>
 
 static int currcon = 0;
 

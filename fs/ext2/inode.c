@@ -713,7 +713,9 @@ void ext2_read_inode (struct inode * inode)
 	else if (S_ISDIR(inode->i_mode))
 		inode->i_op = &ext2_dir_inode_operations;
 	else if (S_ISLNK(inode->i_mode))
-		inode->i_op = &ext2_symlink_inode_operations;
+		inode->i_op = inode->i_blocks
+				?&ext2_symlink_inode_operations
+				:&ext2_fast_symlink_inode_operations;
 	else 
 		init_special_inode(inode, inode->i_mode,
 				   le32_to_cpu(raw_inode->i_block[0]));

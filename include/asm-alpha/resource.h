@@ -18,6 +18,13 @@
 
 #define RLIM_NLIMITS	10
 
+/*
+ * SuS says limits have to be unsigned.  Fine, it's unsigned, but
+ * we retain the old value for compatibility, especially with DU. 
+ * When you run into the 2^63 barrier, you call me.
+ */
+#define RLIM_INFINITY	0x7ffffffffffffffful
+
 #ifdef __KERNEL__
 
 #define INIT_RLIMITS							\

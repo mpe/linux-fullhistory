@@ -22,7 +22,20 @@
 #include <linux/umsdos_fs.h>
 #include <linux/malloc.h>
 
-#if 1
+#define UMSDOS_DIR_LOCK
+
+#ifdef UMSDOS_DIR_LOCK
+
+static inline void u_sleep_on (struct inode *dir)
+{
+	sleep_on (&dir->u.umsdos_i.dir_info.p);
+}
+
+static inline void u_wake_up (struct inode *dir)
+{
+    	wake_up (&dir->u.umsdos_i.dir_info.p);
+}
+
 /*
  * Wait for creation exclusivity.
  * Return 0 if the dir was already available.
@@ -34,9 +47,10 @@ static int umsdos_waitcreate (struct inode *dir)
 {
 	int ret = 0;
 
-	if (dir->u.umsdos_i.u.dir_info.creating
-	    && dir->u.umsdos_i.u.dir_info.pid != current->pid) {
-		sleep_on (&dir->u.umsdos_i.u.dir_info.p);
+	if (dir->u.umsdos_i.dir_info.creating
+	    && dir->u.umsdos_i.dir_info.pid != current->pid) {
+	    	PRINTK (("creating && dir_info.pid=%lu, current->pid=%u\n", dir->u.umsdos_i.dir_info.pid, current->pid));
+	    	u_sleep_on (dir);
 		ret = 1;
 	}
 	return ret;
@@ -47,8 +61,8 @@ static int umsdos_waitcreate (struct inode *dir)
  */
 static void umsdos_waitlookup (struct inode *dir)
 {
-	while (dir->u.umsdos_i.u.dir_info.looking) {
-		sleep_on (&dir->u.umsdos_i.u.dir_info.p);
+	while (dir->u.umsdos_i.dir_info.looking) {
+	    	u_sleep_on (dir);
 	}
 }
 
@@ -90,8 +104,8 @@ void umsdos_lockcreate (struct inode *dir)
 	 * if we (the process) own the lock
 	 */
 	while (umsdos_waitcreate (dir) != 0);
-	dir->u.umsdos_i.u.dir_info.creating++;
-	dir->u.umsdos_i.u.dir_info.pid = current->pid;
+	dir->u.umsdos_i.dir_info.creating++;
+	dir->u.umsdos_i.dir_info.pid = current->pid;
 	umsdos_waitlookup (dir);
 }
 
@@ -110,10 +124,10 @@ static void umsdos_lockcreate2 (struct inode *dir1, struct inode *dir2)
 		if (umsdos_waitcreate (dir1) == 0
 		    && umsdos_waitcreate (dir2) == 0) {
 			/* We own both now */
-			dir1->u.umsdos_i.u.dir_info.creating++;
-			dir1->u.umsdos_i.u.dir_info.pid = current->pid;
-			dir2->u.umsdos_i.u.dir_info.creating++;
-			dir2->u.umsdos_i.u.dir_info.pid = current->pid;
+			dir1->u.umsdos_i.dir_info.creating++;
+			dir1->u.umsdos_i.dir_info.pid = current->pid;
+			dir2->u.umsdos_i.dir_info.creating++;
+			dir2->u.umsdos_i.dir_info.pid = current->pid;
 			break;
 		}
 	}
@@ -127,7 +141,7 @@ static void umsdos_lockcreate2 (struct inode *dir1, struct inode *dir2)
 void umsdos_startlookup (struct inode *dir)
 {
 	while (umsdos_waitcreate (dir) != 0);
-	dir->u.umsdos_i.u.dir_info.looking++;
+	dir->u.umsdos_i.dir_info.looking++;
 }
 
 /*
@@ -135,12 +149,12 @@ void umsdos_startlookup (struct inode *dir)
  */
 void umsdos_unlockcreate (struct inode *dir)
 {
-	dir->u.umsdos_i.u.dir_info.creating--;
-	if (dir->u.umsdos_i.u.dir_info.creating < 0) {
-		printk ("UMSDOS: dir->u.umsdos_i.u.dir_info.creating < 0: %d"
-			,dir->u.umsdos_i.u.dir_info.creating);
+	dir->u.umsdos_i.dir_info.creating--;
+	if (dir->u.umsdos_i.dir_info.creating < 0) {
+		printk ("UMSDOS: dir->u.umsdos_i.dir_info.creating < 0: %d"
+			,dir->u.umsdos_i.dir_info.creating);
 	}
-	wake_up (&dir->u.umsdos_i.u.dir_info.p);
+    	u_wake_up (dir);
 }
 
 /*
@@ -148,12 +162,12 @@ void umsdos_unlockcreate (struct inode *dir)
  */
 void umsdos_endlookup (struct inode *dir)
 {
-	dir->u.umsdos_i.u.dir_info.looking--;
-	if (dir->u.umsdos_i.u.dir_info.looking < 0) {
-		printk ("UMSDOS: dir->u.umsdos_i.u.dir_info.looking < 0: %d"
-			,dir->u.umsdos_i.u.dir_info.looking);
+	dir->u.umsdos_i.dir_info.looking--;
+	if (dir->u.umsdos_i.dir_info.looking < 0) {
+		printk ("UMSDOS: dir->u.umsdos_i.dir_info.looking < 0: %d"
+			,dir->u.umsdos_i.dir_info.looking);
 	}
-	wake_up (&dir->u.umsdos_i.u.dir_info.p);
+    	u_wake_up (dir);
 }
 
 #else
@@ -474,8 +488,6 @@ out:
  * 
  * Let's go for simplicity...
  */
-
-extern struct inode_operations umsdos_symlink_inode_operations;
 
 /*
  * AV. Should be called with dir->i_sem down.
