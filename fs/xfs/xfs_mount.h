@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2000-2004 Silicon Graphics, Inc.  All Rights Reserved.
+ * Copyright (c) 2000-2005 Silicon Graphics, Inc.  All Rights Reserved.
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of version 2 of the GNU General Public License as
@@ -418,6 +418,8 @@ typedef struct xfs_mount {
 #define XFS_MOUNT_IDELETE	0x00040000	/* delete empty inode clusters*/
 #define XFS_MOUNT_SWALLOC	0x00080000	/* turn on stripe width
 						 * allocation */
+#define XFS_MOUNT_IHASHSIZE	0x00100000	/* inode hash table size */
+#define XFS_MOUNT_DIRSYNC	0x00200000	/* synchronous directory ops */
 
 /*
  * Default minimum read and write sizes.
@@ -554,8 +556,7 @@ extern void	xfs_freesb(xfs_mount_t *);
 extern void	xfs_do_force_shutdown(bhv_desc_t *, int, char *, int);
 extern int	xfs_syncsub(xfs_mount_t *, int, int, int *);
 extern xfs_agnumber_t	xfs_initialize_perag(xfs_mount_t *, xfs_agnumber_t);
-extern void	xfs_xlatesb(void *, struct xfs_sb *, int, xfs_arch_t,
-			__int64_t);
+extern void	xfs_xlatesb(void *, struct xfs_sb *, int, __int64_t);
 
 extern struct vfsops xfs_vfsops;
 extern struct vnodeops xfs_vnodeops;

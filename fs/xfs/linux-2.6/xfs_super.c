@@ -76,7 +76,6 @@
 STATIC struct quotactl_ops linvfs_qops;
 STATIC struct super_operations linvfs_sops;
 STATIC kmem_zone_t *linvfs_inode_zone;
-STATIC kmem_shaker_t xfs_inode_shaker;
 
 STATIC struct xfs_mount_args *
 xfs_args_allocate(
@@ -91,6 +90,10 @@ xfs_args_allocate(
 	/* Copy the already-parsed mount(2) flags we're interested in */
 	if (sb->s_flags & MS_NOATIME)
 		args->flags |= XFSMNT_NOATIME;
+	if (sb->s_flags & MS_DIRSYNC)
+		args->flags |= XFSMNT_DIRSYNC;
+	if (sb->s_flags & MS_SYNCHRONOUS)
+		args->flags |= XFSMNT_WSYNC;
 
 	/* Default to 32 bit inodes on Linux all the time */
 	args->flags |= XFSMNT_32BITINODES;
@@ -284,18 +287,6 @@ linvfs_destroy_inode(
 	struct inode		*inode)
 {
 	kmem_cache_free(linvfs_inode_zone, LINVFS_GET_VP(inode));
-}
-
-STATIC int
-xfs_inode_shake(
-	int		priority,
-	unsigned int	gfp_mask)
-{
-	int		pages;
-
-	pages = kmem_zone_shrink(linvfs_inode_zone);
-	pages += kmem_zone_shrink(xfs_inode_zone);
-	return pages;
 }
 
 STATIC void
@@ -885,12 +876,6 @@ init_xfs_fs( void )
 	uuid_init();
 	vfs_initquota();
 
-	xfs_inode_shaker = kmem_shake_register(xfs_inode_shake);
-	if (!xfs_inode_shaker) {
-		error = -ENOMEM;
-		goto undo_shaker;
-	}
-
 	error = register_filesystem(&xfs_fs_type);
 	if (error)
 		goto undo_register;
@@ -898,9 +883,6 @@ init_xfs_fs( void )
 	return 0;
 
 undo_register:
-	kmem_shake_deregister(xfs_inode_shaker);
-
-undo_shaker:
 	pagebuf_terminate();
 
 undo_pagebuf:
@@ -916,7 +898,6 @@ exit_xfs_fs( void )
 	vfs_exitquota();
 	XFS_DM_EXIT(&xfs_fs_type);
 	unregister_filesystem(&xfs_fs_type);
-	kmem_shake_deregister(xfs_inode_shaker);
 	xfs_cleanup();
 	pagebuf_terminate();
 	destroy_inodecache();

@@ -102,29 +102,6 @@ config TUN
 
 	  If you don't know what to use this for, you don't need it.
 
-config ETHERTAP
-	tristate "Ethertap network tap"
-	depends on NETDEVICES && EXPERIMENTAL && NETLINK_DEV
-	---help---
-	  If you say Y here (and have said Y to "Kernel/User network link
-	  driver", above) and create a character special file /dev/tap0 with
-	  major number 36 and minor number 16 using mknod ("man mknod"), you
-	  will be able to have a user space program read and write raw
-	  Ethernet frames from/to that special file.  tap0 can be configured
-	  with ifconfig and route like any other Ethernet device but it is not
-	  connected to any physical LAN; everything written by the user to
-	  /dev/tap0 is treated by the kernel as if it had come in from a LAN
-	  to the device tap0; everything the kernel wants to send out over the
-	  device tap0 can instead be read by the user from /dev/tap0: the user
-	  mode program replaces the LAN that would be attached to an ordinary
-	  Ethernet device. Please read the file
-	  <file:Documentation/networking/ethertap.txt> for more information.
-
-	  To compile this driver as a module, choose M here: the module
-	  will be called ethertap.
-
-	  If you don't know what to use this for, you don't need it.
-
 config NET_SB1000
 	tristate "General Instruments Surfboard 1000"
 	depends on NETDEVICES && PNP

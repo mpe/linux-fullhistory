@@ -387,12 +387,17 @@ drm_agp_head_t *drm_agp_init(drm_device_t *dev)
 	if (!(head = drm_alloc(sizeof(*head), DRM_MEM_AGPLISTS)))
 		return NULL;
 	memset((void *)head, 0, sizeof(*head));
-	if (!(head->bridge = agp_backend_acquire(dev->pdev))) {
-		drm_free(head, sizeof(*head), DRM_MEM_AGPLISTS);
-		return NULL;
+	head->bridge = agp_find_bridge(dev->pdev);
+	if (!head->bridge) {
+		if (!(head->bridge = agp_backend_acquire(dev->pdev))) {
+			drm_free(head, sizeof(*head), DRM_MEM_AGPLISTS);
+			return NULL;
+		}
+		agp_copy_info(head->bridge, &head->agp_info);
+		agp_backend_release(head->bridge);
+	} else {
+		agp_copy_info(head->bridge, &head->agp_info);
 	}
-	agp_copy_info(head->bridge, &head->agp_info);
-	agp_backend_release(head->bridge);
 	if (head->agp_info.chipset == NOT_SUPPORTED) {
 		drm_free(head, sizeof(*head), DRM_MEM_AGPLISTS);
 		return NULL;

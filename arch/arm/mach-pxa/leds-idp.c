@@ -66,12 +66,12 @@ void idp_leds_event(led_event_t evt)
 #ifdef CONFIG_LEDS_CPU
 	case led_idle_start:
 		if (!(led_state & LED_STATE_CLAIMED))
-			hw_led_state |= IDP_BUSY_LED;
+			hw_led_state &= ~IDP_BUSY_LED;
 		break;
 
 	case led_idle_end:
 		if (!(led_state & LED_STATE_CLAIMED))
-			hw_led_state &= ~IDP_BUSY_LED;
+			hw_led_state |= IDP_BUSY_LED;
 		break;
 #endif
 
@@ -80,12 +80,12 @@ void idp_leds_event(led_event_t evt)
 
 	case led_green_on:
 		if (led_state & LED_STATE_CLAIMED)
-			hw_led_state &= ~IDP_HB_LED;
+			hw_led_state |= IDP_HB_LED;
 		break;
 
 	case led_green_off:
 		if (led_state & LED_STATE_CLAIMED)
-			hw_led_state |= IDP_HB_LED;
+			hw_led_state &= ~IDP_HB_LED;
 		break;
 
 	case led_amber_on:
@@ -96,12 +96,12 @@ void idp_leds_event(led_event_t evt)
 
 	case led_red_on:
 		if (led_state & LED_STATE_CLAIMED)
-			hw_led_state &= ~IDP_BUSY_LED;
+			hw_led_state |= IDP_BUSY_LED;
 		break;
 
 	case led_red_off:
 		if (led_state & LED_STATE_CLAIMED)
-			hw_led_state |= IDP_BUSY_LED;
+			hw_led_state &= ~IDP_BUSY_LED;
 		break;
 
 	default:
@@ -109,7 +109,9 @@ void idp_leds_event(led_event_t evt)
 	}
 
 	if  (led_state & LED_STATE_ENABLED)
-		IDP_WRITE_LEDS(hw_led_state);
+		IDP_CPLD_LED_CONTROL = ( (IDP_CPLD_LED_CONTROL | IDP_LEDS_MASK) & ~hw_led_state);
+	else
+		IDP_CPLD_LED_CONTROL |= IDP_LEDS_MASK;
 
 	local_irq_restore(flags);
 }

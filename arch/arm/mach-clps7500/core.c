@@ -358,9 +358,9 @@ static struct platform_device serial_device = {
 	},
 };
 
-static int __init clps7500_init(void)
+static void __init clps7500_init(void)
 {
-	return platform_device_register(&serial_device);
+	platform_device_register(&serial_device);
 }
 
 MACHINE_START(CLPS7500, "CL-PS7500")

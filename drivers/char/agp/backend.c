@@ -57,6 +57,7 @@ struct agp_bridge_data *agp_bridge;
 LIST_HEAD(agp_bridges);
 EXPORT_SYMBOL(agp_bridge);
 EXPORT_SYMBOL(agp_bridges);
+EXPORT_SYMBOL(agp_find_bridge);
 
 /**
  *	agp_backend_acquire  -  attempt to acquire an agp backend.

@@ -76,6 +76,16 @@
 #define MMC_APP_CMD              55   /* ac   [31:16] RCA        R1  */
 #define MMC_GEN_CMD              56   /* adtc [0] RD/WR          R1b */
 
+/* SD commands                           type  argument     response */
+  /* class 8 */
+/* This is basically the same command as for MMC with some quirks. */
+#define SD_SEND_RELATIVE_ADDR     3   /* ac                      R6  */
+
+  /* Application commands */
+#define SD_APP_SET_BUS_WIDTH      6   /* ac   [1:0] bus width    R1  */
+#define SD_APP_OP_COND           41   /* bcr  [31:0] OCR         R3  */
+#define SD_APP_SEND_SCR          51   /* adtc                    R1  */
+
 /*
   MMC status in R1
   Type
@@ -113,7 +123,7 @@
 #define R1_STATUS(x)            (x & 0xFFFFE000)
 #define R1_CURRENT_STATE(x)    	((x & 0x00001E00) >> 9)	/* sx, b (4 bits) */
 #define R1_READY_FOR_DATA	(1 << 8)	/* sx, a */
-#define R1_APP_CMD		(1 << 7)	/* sr, c */
+#define R1_APP_CMD		(1 << 5)	/* sr, c */
 
 /* These are unpacked versions of the actual responses */
 

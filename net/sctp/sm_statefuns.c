@@ -268,7 +268,7 @@ sctp_disposition_t sctp_sf_do_5_1B_init(const struct sctp_endpoint *ep,
 	 */
 	if (!sctp_sstate(sk, LISTENING) ||
 	    (sctp_style(sk, TCP) &&
-	     (sk->sk_ack_backlog >= sk->sk_max_ack_backlog)))
+	     sk_acceptq_is_full(sk)))
 		return sctp_sf_tabort_8_4_8(ep, asoc, type, arg, commands);
 
 	/* 3.1 A packet containing an INIT chunk MUST have a zero Verification

@@ -133,6 +133,22 @@ static struct uart_port ixp2000_serial_port = {
 
 void __init ixp2000_map_io(void)
 {
+	extern unsigned int processor_id;
+
+	/*
+	 * On IXP2400 CPUs we need to use MT_IXP2000_DEVICE for
+	 * tweaking the PMDs so XCB=101. On IXP2800s we use the normal
+	 * PMD flags.
+	 */
+	if ((processor_id & 0xfffffff0) == 0x69054190) {
+		int i;
+
+		printk(KERN_INFO "Enabling IXP2400 erratum #66 workaround\n");
+
+		for(i=0;i<ARRAY_SIZE(ixp2000_io_desc);i++)
+			ixp2000_io_desc[i].type = MT_IXP2000_DEVICE;
+	}
+
 	iotable_init(ixp2000_io_desc, ARRAY_SIZE(ixp2000_io_desc));
 	early_serial_setup(&ixp2000_serial_port);
 
@@ -187,7 +203,7 @@ void __init ixp2000_init_time(unsigned long tick_rate)
 	ticks_per_jiffy = (tick_rate + HZ/2) / HZ;
 	ticks_per_usec = tick_rate / 1000000;
 
-	ixp2000_reg_write(IXP2000_T1_CLD, ticks_per_jiffy);
+	ixp2000_reg_write(IXP2000_T1_CLD, ticks_per_jiffy - 1);
 	ixp2000_reg_write(IXP2000_T1_CTL, (1 << 7));
 
 	/*
@@ -195,7 +211,7 @@ void __init ixp2000_init_time(unsigned long tick_rate)
 	 */
 	ixp2000_reg_write(IXP2000_T4_CLD, -1);
 	ixp2000_reg_write(IXP2000_T4_CTL, (1 << 7));
- 	next_jiffy_time = 0xffffffff - ticks_per_jiffy;
+ 	next_jiffy_time = 0xffffffff;
 
 	/* register for interrupt */
 	setup_irq(IRQ_IXP2000_TIMER1, &ixp2000_timer_irq);
@@ -360,7 +376,9 @@ void __init ixp2000_init_irq(void)
 	set_irq_chained_handler(IRQ_IXP2000_GPIO, ixp2000_GPIO_irq_handler);
 
 	/*
-	 * Enable PCI irq
+	 * Enable PCI irqs.  The actual PCI[AB] decoding is done in
+	 * entry-macro.S, so we don't need a chained handler for the
+	 * PCI interrupt source.
 	 */
 	ixp2000_reg_write(IXP2000_IRQ_ENABLE_SET, (1 << IRQ_IXP2000_PCI));
 	for (irq = IRQ_IXP2000_PCIA; irq <= IRQ_IXP2000_PCIB; irq++) {
