@@ -1405,93 +1405,238 @@ static int do_get_ps_info(unsigned long arg)
 }
 #endif
 
+static int tiocsti(struct tty_struct *tty, char * arg)
+{
+	char ch, mbz = 0;
+
+	if ((current->tty != tty) && !suser())
+		return -EPERM;
+	if (get_user(ch, arg))
+		return -EFAULT;
+	tty->ldisc.receive_buf(tty, &ch, &mbz, 1);
+	return 0;
+}
+
+static int tiocgwinsz(struct tty_struct *tty, struct winsize * arg)
+{
+	if (copy_to_user(arg, &tty->winsize, sizeof(*arg)))
+		return -EFAULT;
+	return 0;
+}
+
+static int tiocswinsz(struct tty_struct *tty, struct tty_struct *real_tty,
+	struct winsize * arg)
+{
+	struct winsize tmp_ws;
+
+	if (copy_from_user(&tmp_ws, arg, sizeof(*arg)))
+		return -EFAULT;
+	if (!memcmp(&tmp_ws, &tty->winsize, sizeof(*arg)))
+		return 0;
+	if (tty->pgrp > 0)
+		kill_pg(tty->pgrp, SIGWINCH, 1);
+	if ((real_tty->pgrp != tty->pgrp) && (real_tty->pgrp > 0))
+		kill_pg(real_tty->pgrp, SIGWINCH, 1);
+	tty->winsize = tmp_ws;
+	real_tty->winsize = tmp_ws;
+	return 0;
+}
+
+static int tioccons(struct tty_struct *tty, struct tty_struct *real_tty)
+{
+	if (tty->driver.type == TTY_DRIVER_TYPE_CONSOLE) {
+		if (!suser())
+			return -EPERM;
+		redirect = NULL;
+		return 0;
+	}
+	if (redirect)
+		return -EBUSY;
+	redirect = real_tty;
+	return 0;
+}
+
+
+static int fionbio(struct file *file, int *arg)
+{
+	int nonblock;
+
+	if (get_user(nonblock, arg))
+		return -EFAULT;
+
+	if (nonblock)
+		file->f_flags |= O_NONBLOCK;
+	else
+		file->f_flags &= ~O_NONBLOCK;
+	return 0;
+}
+
+static int tiocsctty(struct tty_struct *tty, int arg)
+{
+	if (current->leader &&
+	    (current->session == tty->session))
+		return 0;
+	/*
+	 * The process must be a session leader and
+	 * not have a controlling tty already.
+	 */
+	if (!current->leader || current->tty)
+		return -EPERM;
+	if (tty->session > 0) {
+		/*
+		 * This tty is already the controlling
+		 * tty for another session group!
+		 */
+		if ((arg == 1) && suser()) {
+			/*
+			 * Steal it away
+			 */
+			struct task_struct *p;
+
+			for_each_task(p)
+				if (p->tty == tty)
+					p->tty = NULL;
+		} else
+			return -EPERM;
+	}
+	current->tty = tty;
+	current->tty_old_pgrp = 0;
+	tty->session = current->session;
+	tty->pgrp = current->pgrp;
+	return 0;
+}
+
+static int tiocgpgrp(struct tty_struct *tty, struct tty_struct *real_tty, pid_t *arg)
+{
+	/*
+	 * (tty == real_tty) is a cheap way of
+	 * testing if the tty is NOT a master pty.
+	 */
+	if (tty == real_tty && current->tty != real_tty)
+		return -ENOTTY;
+	return put_user(real_tty->pgrp, arg);
+}
+
+static int tiocspgrp(struct tty_struct *tty, struct tty_struct *real_tty, pid_t *arg)
+{
+	pid_t pgrp;
+	int retval = tty_check_change(real_tty);
+
+	if (retval == -EIO)
+		return -ENOTTY;
+	if (retval)
+		return retval;
+	if (!current->tty ||
+	    (current->tty != real_tty) ||
+	    (real_tty->session != current->session))
+		return -ENOTTY;
+	get_user(pgrp, (pid_t *) arg);
+	if (pgrp < 0)
+		return -EINVAL;
+	if (session_of_pgrp(pgrp) != current->session)
+		return -EPERM;
+	real_tty->pgrp = pgrp;
+	return 0;
+}
+
+static int tioclinux(struct tty_struct *tty, unsigned long arg)
+{
+	char type, data;
+
+	if (tty->driver.type != TTY_DRIVER_TYPE_CONSOLE)
+		return -EINVAL;
+	if (current->tty != tty && !suser())
+		return -EPERM;
+	if (get_user(type, (char *)arg))
+		return -EFAULT;
+	switch (type)
+	{
+		case 2:
+			return set_selection(arg, tty, 1);
+		case 3:
+			return paste_selection(tty);
+		case 4:
+			do_unblank_screen();
+			return 0;
+		case 5:
+			return sel_loadlut(arg);
+		case 6:
+			
+	/*
+	 * Make it possible to react to Shift+Mousebutton.
+	 * Note that 'shift_state' is an undocumented
+	 * kernel-internal variable; programs not closely
+	 * related to the kernel should not use this.
+	 */
+	 		data = shift_state;
+			return put_user(data, (char *) arg);
+		case 7:
+			data = mouse_reporting();
+			return put_user(data, (char *) arg);
+		case 10:
+			set_vesa_blanking(arg);
+			return 0;
+		case 11:	/* set kmsg redirect */
+			if (!suser())
+				return -EPERM;
+			if (get_user(data, (char *)arg+1))
+					return -EFAULT;
+			kmsg_redirect = data;
+			return 0;
+		case 12:	/* get fg_console */
+			return fg_console;
+	}
+	return -EINVAL;
+}
+
+static int tiocttygstruct(struct tty_struct *tty, struct tty_struct *arg)
+{
+	if (copy_to_user(arg, tty, sizeof(*arg)))
+		return -EFAULT;
+	return 0;
+}
+
+static int tiocsetd(struct tty_struct *tty, int *arg)
+{
+	int retval, ldisc;
+
+	retval = tty_check_change(tty);
+	if (retval)
+		return retval;
+	retval = get_user(ldisc, arg);
+	if (retval)
+		return retval;
+	return tty_set_ldisc(tty, ldisc);
+}
+
+/*
+ * Split this up, as gcc can choke on it otherwise..
+ */
 static int tty_ioctl(struct inode * inode, struct file * file,
 		     unsigned int cmd, unsigned long arg)
 {
-	int	retval;
-	struct tty_struct * tty;
-	struct tty_struct * real_tty;
-	struct winsize tmp_ws;
-	pid_t pgrp;
-	unsigned char	ch;
-	char	mbz = 0;
+	struct tty_struct *tty, *real_tty;
 	
 	tty = (struct tty_struct *)file->private_data;
 	if (tty_paranoia_check(tty, inode->i_rdev, "tty_ioctl"))
 		return -EINVAL;
 
+	real_tty = tty;
 	if (tty->driver.type == TTY_DRIVER_TYPE_PTY &&
 	    tty->driver.subtype == PTY_TYPE_MASTER)
 		real_tty = tty->link;
-	else
-		real_tty = tty;
 
 	switch (cmd) {
 		case TIOCSTI:
-			if ((current->tty != tty) && !suser())
-				return -EPERM;
-			retval = verify_area(VERIFY_READ, (void *) arg, 1);
-			if (retval)
-				return retval;
-			ch = get_user((char *) arg);
-			tty->ldisc.receive_buf(tty, &ch, &mbz, 1);
-			return 0;
+			return tiocsti(tty, (char *)arg);
 		case TIOCGWINSZ:
-			retval = verify_area(VERIFY_WRITE, (void *) arg,
-					     sizeof (struct winsize));
-			if (retval)
-				return retval;
-			if (exception())
-				return -EFAULT;
-			memcpy_tofs((struct winsize *) arg, &tty->winsize,
-				    sizeof (struct winsize));
-			end_exception();
-			return 0;
+			return tiocgwinsz(tty, (struct winsize *) arg);
 		case TIOCSWINSZ:
-			retval = verify_area(VERIFY_READ, (void *) arg,
-					     sizeof (struct winsize));
-			if (retval)
-				return retval;
-			if (exception())
-				return -EFAULT;
-			memcpy_fromfs(&tmp_ws, (struct winsize *) arg,
-				      sizeof (struct winsize));
-			end_exception();
-			if (memcmp(&tmp_ws, &tty->winsize,
-				   sizeof(struct winsize))) {
-				if (tty->pgrp > 0)
-					kill_pg(tty->pgrp, SIGWINCH, 1);
-				if ((real_tty->pgrp != tty->pgrp) &&
-				    (real_tty->pgrp > 0))
-					kill_pg(real_tty->pgrp, SIGWINCH, 1);
-			}
-			tty->winsize = tmp_ws;
-			real_tty->winsize = tmp_ws;
-			return 0;
+			return tiocswinsz(tty, real_tty, (struct winsize *) arg);
 		case TIOCCONS:
-			if (tty->driver.type == TTY_DRIVER_TYPE_CONSOLE) {
-				if (!suser())
-					return -EPERM;
-				redirect = NULL;
-				return 0;
-			}
-			if (redirect)
-				return -EBUSY;
-			redirect = real_tty;
-			return 0;
+			return tioccons(tty, real_tty);
 		case FIONBIO:
-			retval = verify_area(VERIFY_READ, (void *) arg, sizeof(int));
-			if (retval)
-				return retval;
-			if (exception())
-				return -EFAULT;
-			arg = get_user((unsigned int *) arg);
-			end_exception();
-			if (arg)
-				file->f_flags |= O_NONBLOCK;
-			else
-				file->f_flags &= ~O_NONBLOCK;
-			return 0;
+			return fionbio(file, (int *) arg);
 		case TIOCEXCL:
 			set_bit(TTY_EXCLUSIVE, &tty->flags);
 			return 0;
@@ -1506,185 +1651,31 @@ static int tty_ioctl(struct inode * inode, struct file * file,
 			current->tty = NULL;
 			return 0;
 		case TIOCSCTTY:
-			if (current->leader &&
-			    (current->session == tty->session))
-				return 0;
-			/*
-			 * The process must be a session leader and
-			 * not have a controlling tty already.
-			 */
-			if (!current->leader || current->tty)
-				return -EPERM;
-			if (tty->session > 0) {
-				/*
-				 * This tty is already the controlling
-				 * tty for another session group!
-				 */
-				if ((arg == 1) && suser()) {
-					/*
-					 * Steal it away
-					 */
-					struct task_struct *p;
-
-					for_each_task(p)
-						if (p->tty == tty)
-							p->tty = NULL;
-				} else
-					return -EPERM;
-			}
-			current->tty = tty;
-			current->tty_old_pgrp = 0;
-			tty->session = current->session;
-			tty->pgrp = current->pgrp;
-			return 0;
+			return tiocsctty(tty, arg);
 		case TIOCGPGRP:
-			/*
-			 * (tty == real_tty) is a cheap way of
-			 * testing if the tty is NOT a master pty.
-			 */
-			if (tty == real_tty && current->tty != real_tty)
-				return -ENOTTY;
-			retval = verify_area(VERIFY_WRITE, (void *) arg,
-					     sizeof (pid_t));
-			if (retval)
-				return retval;
-			if (exception())
-				return -EFAULT;
-			put_user(real_tty->pgrp, (pid_t *) arg);
-			end_exception();
-			return 0;
+			return tiocgpgrp(tty, real_tty, (pid_t *) arg);
 		case TIOCSPGRP:
-			retval = tty_check_change(real_tty);
-			if (retval == -EIO)
-				return -ENOTTY;
-			if (retval)
-				return retval;
-			if (!current->tty ||
-			    (current->tty != real_tty) ||
-			    (real_tty->session != current->session))
-				return -ENOTTY;
-			pgrp = get_user((pid_t *) arg);
-			if (pgrp < 0)
-				return -EINVAL;
-			if (session_of_pgrp(pgrp) != current->session)
-				return -EPERM;
-			real_tty->pgrp = pgrp;
-			return 0;
+			return tiocspgrp(tty, real_tty, (pid_t *) arg);
 		case TIOCGETD:
-			retval = verify_area(VERIFY_WRITE, (void *) arg,
-					     sizeof (int));
-			if (retval)
-				return retval;
-			if (exception())
-				return -EFAULT;
-			put_user(tty->ldisc.num, (int *) arg);
-			end_exception();
-			return 0;
+			return put_user(tty->ldisc.num, (int *) arg);
 		case TIOCSETD:
-			retval = tty_check_change(tty);
-			if (retval)
-				return retval;
-			retval = verify_area(VERIFY_READ, (void *) arg,
-					     sizeof (int));
-			if (retval)
-				return retval;
-			if (exception())
-				return -EFAULT;
-			arg = get_user((int *) arg);
-			end_exception();
-			return tty_set_ldisc(tty, arg);
+			return tiocsetd(tty, (int *) arg);
 		case TIOCLINUX:
-			if (tty->driver.type != TTY_DRIVER_TYPE_CONSOLE)
-				return -EINVAL;
-			if (current->tty != tty && !suser())
-				return -EPERM;
-			retval = verify_area(VERIFY_READ, (void *) arg, 1);
-			if (retval)
-				return retval;
-			if (exception())
-				return -EFAULT;
-			retval = get_user((char *)arg);
-			end_exception();
-			switch (retval)
-			{
-				case 0:
-				case 8:
-				case 9:
-					printk("TIOCLINUX (0/8/9) ioctl is gone - use /dev/vcs\n");
-					return -EINVAL;
-#if 0
-				case 1:
-					printk("Deprecated TIOCLINUX (1) ioctl\n");
-					return do_get_ps_info(arg);
-#endif
-				case 2:
-					return set_selection(arg, tty, 1);
-				case 3:
-					return paste_selection(tty);
-				case 4:
-					do_unblank_screen();
-					return 0;
-				case 5:
-					return sel_loadlut(arg);
-				case 6:
-			/*
-			 * Make it possible to react to Shift+Mousebutton.
-			 * Note that 'shift_state' is an undocumented
-			 * kernel-internal variable; programs not closely
-			 * related to the kernel should not use this.
-			 */
-					retval = verify_area(VERIFY_WRITE, (void *) arg, 1);
-					if (retval)
-						return retval;
-					put_user(shift_state,(char *) arg);
-					return 0;
-				case 7:
-					retval = verify_area(VERIFY_WRITE, (void *) arg, 1);
-					if (retval)
-						return retval;
-					put_user(mouse_reporting(),(char *) arg);
-					return 0;
-				case 10:
-					set_vesa_blanking(arg);
-					return 0;
-				case 11:	/* set kmsg redirect */
-					if (!suser())
-						return -EPERM;
-					retval = verify_area(VERIFY_READ,
-						(void *) arg+1, 1);
-					if (retval)
-						return retval;
-					kmsg_redirect = get_user((char *)arg+1);
-					return 0;
-				case 12:	/* get fg_console */
-					return fg_console;
-				default: 
-					return -EINVAL;
-			}
-
+			return tioclinux(tty, arg);
 		case TIOCTTYGSTRUCT:
-			retval = verify_area(VERIFY_WRITE, (void *) arg,
-						sizeof(struct tty_struct));
-			if (retval)
-				return retval;
-			memcpy_tofs((struct tty_struct *) arg,
-				    tty, sizeof(struct tty_struct));
-			return 0;
-		default:
-			if (tty->driver.ioctl) {
-				retval = (tty->driver.ioctl)(tty, file,
-							     cmd, arg);
-				if (retval != -ENOIOCTLCMD)
-					return retval;
-			}
-			if (tty->ldisc.ioctl) {
-				retval = (tty->ldisc.ioctl)(tty, file,
-							    cmd, arg);
-				if (retval != -ENOIOCTLCMD)
-					return retval;
-			}
-			return -EINVAL;
-		}
+			return tiocttygstruct(tty, (struct tty_struct *) arg);
+	}
+	if (tty->driver.ioctl) {
+		int retval = (tty->driver.ioctl)(tty, file, cmd, arg);
+		if (retval != -ENOIOCTLCMD)
+			return retval;
+	}
+	if (tty->ldisc.ioctl) {
+		int retval = (tty->ldisc.ioctl)(tty, file, cmd, arg);
+		if (retval != -ENOIOCTLCMD)
+			return retval;
+	}
+	return -EINVAL;
 }
 
 

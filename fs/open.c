@@ -181,8 +181,8 @@ asmlinkage int sys_utime(char * filename, struct utimbuf * times)
 			iput(inode);
 			return error;
 		}
-		newattrs.ia_atime = get_user(&times->actime);
-		newattrs.ia_mtime = get_user(&times->modtime);
+		get_user(newattrs.ia_atime, &times->actime);
+		get_user(newattrs.ia_mtime, &times->modtime);
 		newattrs.ia_valid |= ATTR_ATIME_SET | ATTR_MTIME_SET;
 	} else {
 		if (current->fsuid != inode->i_uid &&
@@ -224,7 +224,7 @@ asmlinkage int sys_utimes(char * filename, struct timeval * utimes)
 			iput(inode);
 			return error;
 		}
-		memcpy_fromfs(&times, utimes, sizeof(times));
+		copy_from_user(&times, utimes, sizeof(times));
 		newattrs.ia_atime = times[0].tv_sec;
 		newattrs.ia_mtime = times[1].tv_sec;
 		newattrs.ia_valid |= ATTR_ATIME_SET | ATTR_MTIME_SET;

@@ -655,6 +655,8 @@ int scan_scsis_single (int channel, int dev, int lun, int *max_dev_lun,
     SDpnt->manufacturer = SCSI_MAN_PIONEER;
   else if (!strncmp (scsi_result + 8, "MATSHITA", 8))
     SDpnt->manufacturer = SCSI_MAN_MATSHITA;
+  else if (!strncmp (scsi_result + 8, "HP", 2))
+    SDpnt->manufacturer = SCSI_MAN_HP;
   else
     SDpnt->manufacturer = SCSI_MAN_UNKNOWN;
 

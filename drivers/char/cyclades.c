@@ -405,7 +405,7 @@ struct cyclades_card	*IRQ_cards[16];
 
 /*
  * tmp_buf is used as a temporary buffer by serial_write.  We need to
- * lock it in case the memcpy_fromfs blocks while swapping in a page,
+ * lock it in case the copy_from_user blocks while swapping in a page,
  * and some other program tries to do a serial write at the same time.
  * Since the lock will only come under contention when the system is
  * swapping and available memory is low, it makes sense to share one
@@ -1666,7 +1666,7 @@ cy_write(struct tty_struct * tty, int from_user,
 
 	if (from_user) {
 	    down(&tmp_buf_sem);
-	    memcpy_fromfs(tmp_buf, buf, c);
+	    copy_from_user(tmp_buf, buf, c);
 	    c = MIN(c, MIN(SERIAL_XMIT_SIZE - info->xmit_cnt - 1,
 		       SERIAL_XMIT_SIZE - info->xmit_head));
 	    memcpy(info->xmit_buf + info->xmit_head, tmp_buf, c);
@@ -1854,7 +1854,7 @@ get_serial_info(struct cyclades_port * info,
     tmp.close_delay = info->close_delay;
     tmp.custom_divisor = 0;     /*!!!*/
     tmp.hub6 = 0;               /*!!!*/
-    memcpy_tofs(retinfo,&tmp,sizeof(*retinfo));
+    copy_to_user(retinfo,&tmp,sizeof(*retinfo));
     return 0;
 } /* get_serial_info */
 
@@ -1867,7 +1867,7 @@ set_serial_info(struct cyclades_port * info,
 
     if (!new_info)
 	    return -EFAULT;
-    memcpy_fromfs(&new_serial,new_info,sizeof(new_serial));
+    copy_from_user(&new_serial,new_info,sizeof(new_serial));
     old_info = *info;
 
     if (!suser()) {
@@ -2040,7 +2040,7 @@ static int
 get_mon_info(struct cyclades_port * info, struct cyclades_monitor * mon)
 {
 
-   memcpy_tofs(mon, &info->mon, sizeof(struct cyclades_monitor));
+   copy_to_user(mon, &info->mon, sizeof(struct cyclades_monitor));
    info->mon.int_count  = 0;
    info->mon.char_count = 0;
    info->mon.char_max   = 0;

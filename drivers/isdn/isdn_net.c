@@ -2195,7 +2195,7 @@ int isdn_net_getphones(isdn_net_ioctl_phone * phone, char *phones)
 			restore_flags(flags);
 			return ret;
 		}
-		memcpy_tofs(phones, n->num, strlen(n->num) + 1);
+		copy_to_user(phones, n->num, strlen(n->num) + 1);
 		phones += strlen(n->num);
 		count += strlen(n->num);
 		more = 1;

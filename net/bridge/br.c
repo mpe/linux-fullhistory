@@ -1448,7 +1448,7 @@ int br_ioctl(unsigned int cmd, void *arg)
 				return err;
 			memcpy(&br_stats.bridge_data, &bridge_info, sizeof(Bridge_data));
 			memcpy(&br_stats.port_data, &port_info, sizeof(Port_data)*No_of_ports);
-			memcpy_tofs(arg, &br_stats, sizeof(struct br_stat));
+			copy_to_user(arg, &br_stats, sizeof(struct br_stat));
 			return(0);
 		case SIOCSIFBR:
 			if (!suser())
@@ -1457,7 +1457,7 @@ int br_ioctl(unsigned int cmd, void *arg)
 				sizeof(struct br_cf));
 			if(err)
 				return err;
-			memcpy_fromfs(&bcf, arg, sizeof(struct br_cf));
+			copy_from_user(&bcf, arg, sizeof(struct br_cf));
 			switch (bcf.cmd) {
 				case BRCMD_BRIDGE_ENABLE:
 					if (br_stats.flags & BR_UP)

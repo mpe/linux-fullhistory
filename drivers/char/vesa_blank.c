@@ -273,7 +273,7 @@ void set_vesa_blanking(const unsigned long arg)
 	if (verify_area(VERIFY_READ, argp, 1))
 		return;
 
-	mode = get_user(argp);
+	get_user(mode, argp);
 	vesa_blanking_mode = suspend_vesa_blanking_mode =
 		((mode <= VESA_POWERDOWN) ? mode : DEFAULT_VESA_BLANKING_MODE);
 }

@@ -169,6 +169,8 @@
 #define __NR_sched_rr_get_interval	161
 #define __NR_nanosleep		162
 #define __NR_mremap		163
+#define __NR_setresuid		164
+#define __NR_getresuid		165
 
 /* user-visible error numbers are in the range -1 - -122: see <asm-i386/errno.h> */
 

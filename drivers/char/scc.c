@@ -2122,7 +2122,7 @@ scc_ioctl(struct tty_struct *tty, struct file * file, unsigned int cmd, unsigned
 			if (Nchips >= MAXSCC) 
 				return -EINVAL;
 			
-			memcpy_fromfs(&hwcfg, (void *) arg, sizeof(hwcfg));
+			copy_from_user(&hwcfg, (void *) arg, sizeof(hwcfg));
 			
 			if (hwcfg.irq == 2) hwcfg.irq = 9;
 			
@@ -2228,7 +2228,7 @@ scc_ioctl(struct tty_struct *tty, struct file * file, unsigned int cmd, unsigned
 			if (!suser())
 				return -EPERM;
 			
-			memcpy_fromfs(&scc->modem, (void *) arg, sizeof(struct scc_modem));
+			copy_from_user(&scc->modem, (void *) arg, sizeof(struct scc_modem));
 			
 			/* default KISS Params */
 		
@@ -2330,7 +2330,7 @@ scc_ioctl(struct tty_struct *tty, struct file * file, unsigned int cmd, unsigned
 		if (!arg) 
 			return -EFAULT;
 			
-		memcpy_tofs((void *) arg, scc->tty->termios, sizeof(struct termios));
+		copy_to_user((void *) arg, scc->tty->termios, sizeof(struct termios));
 		return 0;
 		
 	case TCSETS:
@@ -2339,7 +2339,7 @@ scc_ioctl(struct tty_struct *tty, struct file * file, unsigned int cmd, unsigned
 		if (!arg)
 			return -EFAULT;
 		
-		memcpy_fromfs(scc->tty->termios, (void *) arg, sizeof(struct termios));
+		copy_from_user(scc->tty->termios, (void *) arg, sizeof(struct termios));
 		scc_change_speed(scc);
 		return 0;
 		
@@ -2347,7 +2347,7 @@ scc_ioctl(struct tty_struct *tty, struct file * file, unsigned int cmd, unsigned
 		if (!arg)
 			return -EFAULT;
 			
-		memcpy_fromfs(&memcfg, (void *) arg, sizeof(struct scc_mem_config));
+		copy_from_user(&memcfg, (void *) arg, sizeof(struct scc_mem_config));
 		
 		save_flags(flags); cli();
 		
@@ -2369,7 +2369,7 @@ scc_ioctl(struct tty_struct *tty, struct file * file, unsigned int cmd, unsigned
 		if (!arg)
 			return -EFAULT;
 			
-		memcpy_tofs((void *) arg, &scc->stat, sizeof(struct scc_stat));
+		copy_to_user((void *) arg, &scc->stat, sizeof(struct scc_stat));
 		return 0;
 		
 #define TICKS (100/TPS)
@@ -2386,7 +2386,7 @@ scc_ioctl(struct tty_struct *tty, struct file * file, unsigned int cmd, unsigned
 		if (!arg)
 			return -EFAULT;
 			
-		memcpy_fromfs(&kiss_cmd, (void *) arg, sizeof(struct ioctl_command));
+		copy_from_user(&kiss_cmd, (void *) arg, sizeof(struct ioctl_command));
 
 		switch (kiss_cmd.command)
 		{
@@ -2412,7 +2412,7 @@ scc_ioctl(struct tty_struct *tty, struct file * file, unsigned int cmd, unsigned
 		
 		kiss_cmd.param = r;
 		
-		memcpy_tofs((void *) arg, &kiss_cmd, sizeof(struct ioctl_command));
+		copy_to_user((void *) arg, &kiss_cmd, sizeof(struct ioctl_command));
 		return 0;
 		break;
 		
@@ -2420,7 +2420,7 @@ scc_ioctl(struct tty_struct *tty, struct file * file, unsigned int cmd, unsigned
 		if (!arg)
 			return -EFAULT;
 
-		memcpy_fromfs(&kiss_cmd, (void *) arg, sizeof(struct ioctl_command));
+		copy_from_user(&kiss_cmd, (void *) arg, sizeof(struct ioctl_command));
 		
 		switch (kiss_cmd.command)
 		{
@@ -2487,7 +2487,7 @@ int scc_write(struct tty_struct *tty, int from_user, const unsigned char *buf, i
 		if (from_user)
 		{
 			down(&scc_sem);
-			memcpy_fromfs(scc_wbuf, buf, cnt);
+			copy_from_user(scc_wbuf, buf, cnt);
 			up(&scc_sem);
 		}
 		else

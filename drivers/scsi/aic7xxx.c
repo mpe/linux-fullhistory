@@ -41,7 +41,7 @@
  *
  *    -- Daniel M. Eischen, deischen@iworks.InterWorks.org, 07/07/96
  *
- *  $Id: aic7xxx.c,v 3.4 1996/08/09 15:56:31 deang Exp $
+ *  $Id: aic7xxx.c,v 4.0 1996/10/13 08:23:42 deang Exp $
  *-M*************************************************************************/
 
 #ifdef MODULE
@@ -50,6 +50,7 @@
 
 #include <stdarg.h>
 #include <asm/io.h>
+#include <asm/irq.h>
 #include <linux/string.h>
 #include <linux/errno.h>
 #include <linux/kernel.h>
@@ -66,15 +67,22 @@
 #include "aic7xxx.h"
 #include "aic7xxx_reg.h"
 #include <linux/stat.h>
+#include <linux/malloc.h>	/* for kmalloc() */
 
 #include <linux/config.h>	/* for CONFIG_PCI */
+
+/*
+ * To generate the correct addresses for the controller to issue
+ * on the bus.  Originally added for DEC Alpha support.
+ */
+#define VIRT_TO_BUS(a) (unsigned int)virt_to_bus((void *)(a))
 
 struct proc_dir_entry proc_scsi_aic7xxx = {
     PROC_SCSI_AIC7XXX, 7, "aic7xxx",
     S_IFDIR | S_IRUGO | S_IXUGO, 2
 };
 
-#define AIC7XXX_C_VERSION  "$Revision: 3.4 $"
+#define AIC7XXX_C_VERSION  "$Revision: 4.0 $"
 
 #define NUMBER(arr)     (sizeof(arr) / sizeof(arr[0]))
 #define MIN(a,b)        ((a < b) ? a : b)
@@ -133,12 +141,13 @@ struct proc_dir_entry proc_scsi_aic7xxx = {
  *   o 3985 support - The 3985 adapter is much like the 3940, but
  *     has three 7870 controllers as opposed to two for the 3940.
  *     It will get probed and recognized as three different adapters,
- *     but all three controllers share the same bank of 255 SCBs
- *     instead of each controller having their own bank (like the
- *     controllers on the 3940).  For this reason, it is important
- *     that all devices be resident on just one channel of the 3985.
- *     In the near future, we'll modify the driver to reserve 1/3
- *     of the SCBs for each controller.
+ *     but all three controllers can share the same external bank of
+ *     255 SCBs.  If you enable AIC7XXX_SHARE_SCBS, then the driver
+ *     will attempt to share the common bank of SCBs between the three
+ *     controllers of the 3985.  This is experimental and hasn't
+ *     been tested.  By default, we do not share the bank of SCBs,
+ *     and force the controllers to use their own internal bank of
+ *     16 SCBs.  Please let us know if sharing the SCB array works.
  *
  *   o SCB paging support - SCB paging is enabled by defining
  *     AIC7XXX_PAGE_ENABLE.  Support for this was taken from the
@@ -173,6 +182,7 @@ struct proc_dir_entry proc_scsi_aic7xxx = {
  * Uncomment the following define for collection of SCSI transfer statistics
  * for the /proc filesystem.
  *
+ * NOTE: Do NOT enable this when running on kernels version 1.2.x and below.
  * NOTE: This does affect performance since it has to maintain statistics.
  */
 /* #define AIC7XXX_PROC_STATS */
@@ -181,6 +191,12 @@ struct proc_dir_entry proc_scsi_aic7xxx = {
  * Uncomment the following to enable SCB paging.
  */
 /* #define AIC7XXX_PAGE_ENABLE */
+
+/*
+ * Uncomment the following to enable sharing of the external bank
+ * of 255 SCBs for the 3985.
+ */
+#define AIC7XXX_SHARE_SCBS
 
 /*
  * For debugging the abort/reset code.
@@ -203,6 +219,7 @@ typedef enum {
   AIC_7850,	/* PCI  aic7850 */
   AIC_7855,	/* PCI  aic7855 */
   AIC_7860,	/* PCI  aic7860 (7850 Ultra) */
+  AIC_7861,     /* PCI  aic7861 on 2940AU */
   AIC_7870,	/* PCI  aic7870 on motherboard */
   AIC_7871,	/* PCI  aic7871 on 294x */
   AIC_7872,	/* PCI  aic7872 on 3940 */
@@ -257,6 +274,7 @@ static const char *board_names[] = {
   "AIC-7850",			/* AIC_7850 */
   "AIC-7855",			/* AIC_7855 */
   "AIC-7850 Ultra",		/* AIC_7860 */
+  "AHA-2940A Ultra",		/* AIC_7861 */
   "AIC-7870",			/* AIC_7870 */
   "AHA-2940",			/* AIC_7871 */
   "AHA-3940",			/* AIC_7872 */
@@ -296,7 +314,6 @@ static const char *board_names[] = {
 #define MINSLOT		1
 #define MAXSLOT		15
 #define SLOTBASE(x)	((x) << 12)
-#define MAXIRQ		15
 
 /*
  * Standard EISA Host ID regs  (Offset from slot base)
@@ -347,6 +364,18 @@ static const char *board_names[] = {
 #define		DACEN		0x00000004ul
 #define		STPWLEVEL	0x00000002ul
 #define		DIFACTNEGEN	0x00000001ul	/* aic7870 only */
+
+
+/*
+ * Define the different types of SEEPROMs on aic7xxx adapters
+ * and make it also represent the address size used in accessing
+ * its registers.  The 93C46 chips have 1024 bits organized into
+ * 64 16-bit words, while the 93C56 chips have 2048 bits organized
+ * into 128 16-bit words.  The C46 chips use 6 bits to address
+ * each word, while the C56 and C66 (4096 bits) use 8 bits to
+ * address each word.
+ */
+typedef enum {c46 = 6, c56_66 = 8} seeprom_chip_type;
 
 /*
  *
@@ -466,18 +495,6 @@ struct seeprom_config {
 #define aic7xxx_position(cmd)	((cmd)->SCp.have_data_in)
 
 /*
- * Since the sequencer code DMAs the scatter-gather structures
- * directly from memory, we use this macro to assert that the
- * kernel structure hasn't changed.
- */
-#define SG_STRUCT_CHECK(sg) \
-  ((char *) &(sg).address - (char *) &(sg) != 0 ||  \
-   (char *) &(sg).length  - (char *) &(sg) != 8 ||  \
-   sizeof((sg).address) != 4 ||                   \
-   sizeof((sg).length)  != 4 ||                   \
-   sizeof(sg)           != 12)
-
-/*
  * "Static" structures. Note that these are NOT initialized
  * to zero inside the kernel - we have to initialize them all
  * explicitly.
@@ -487,7 +504,7 @@ struct seeprom_config {
  * use the IRQ as an index into aic7xxx_boards[] to locate the card
  * information.
  */
-static struct Scsi_Host *aic7xxx_boards[MAXIRQ + 1];
+static struct Scsi_Host *aic7xxx_boards[NR_IRQS + 1];
 
 /*
  * When we detect and register the card, it is possible to
@@ -526,6 +543,21 @@ static int aic7xxx_spurious_count;
  * for driver level bookkeeping.
  */
 
+/*
+ * As of Linux 2.1, the mid-level SCSI code uses virtual addresses
+ * in the scatter-gather lists.  We need to convert the virtual
+ * addresses to physical addresses.
+ */
+struct hw_scatterlist {
+  unsigned int address;
+  unsigned int length;
+};
+
+/*
+ * Maximum number of SG segments these cards can support.
+ */
+#define	MAX_SG 256
+
 struct aic7xxx_scb {
 /* ------------    Begin hardware supported fields    ---------------- */
 /* 0*/  unsigned char control;
@@ -534,9 +566,9 @@ struct aic7xxx_scb {
 /* 3*/  unsigned char SG_segment_count;
 /* 4*/  unsigned char SG_list_pointer[4] __attribute__ ((packed));
 /* 8*/  unsigned char residual_SG_segment_count;
-/* 9*/  unsigned char residual_data_count[3];
+/* 9*/  unsigned char residual_data_count[3] __attribute__ ((packed));
 /*12*/  unsigned char data_pointer[4] __attribute__ ((packed));
-/*16*/  unsigned long data_count;
+/*16*/  unsigned int  data_count __attribute__ ((packed)); /* must be 32 bits */
 /*20*/  unsigned char SCSI_cmd_pointer[4] __attribute__ ((packed));
 /*24*/  unsigned char SCSI_cmd_length;
 /*25*/	u_char tag;			/* Index into our kernel SCB array.
@@ -566,8 +598,7 @@ struct aic7xxx_scb {
                                 SCB_WAITINGQ | SCB_ASSIGNEDQ)
 	int                 state;          /* current state of scb */
 	unsigned int        position;       /* Position in scb array */
-	struct scatterlist  sg;
-	struct scatterlist  sense_sg;
+	struct hw_scatterlist  sg_list[MAX_SG]; /* SG list in adapter format */
 	unsigned char       sense_cmd[6];   /* Allocate 6 characters for sense command */
 };
 
@@ -592,6 +623,15 @@ static struct {
 static unsigned char
 generic_sense[] = { REQUEST_SENSE, 0, 0, 0, 255, 0 };
 
+typedef struct {
+  scb_queue_type free_scbs;        /*
+                                    * SCBs assigned to free slot on
+                                    * card (no paging required)
+                                    */
+  int            numscbs;          /* current number of scbs */
+  int            activescbs;       /* active scbs */
+} scb_usage_type;
+
 /*
  * The maximum number of SCBs we could have for ANY type
  * of card. DON'T FORGET TO CHANGE THE SCB MASK IN THE
@@ -608,8 +648,6 @@ struct aic7xxx_host {
   int                      base;             /* card base address */
   int                      maxhscbs;         /* hardware SCBs */
   int                      maxscbs;          /* max SCBs (including pageable) */
-  int                      numscbs;          /* current number of scbs */
-  int                      activescbs;       /* active scbs */
 #define A_SCANNED              0x0001
 #define B_SCANNED              0x0002
 #define EXTENDED_TRANSLATION   0x0004
@@ -638,15 +676,11 @@ struct aic7xxx_host {
   unsigned char            qcntmask;
   struct seeprom_config    seeprom;
   struct Scsi_Host        *next;             /* allow for multiple IRQs */
-  struct aic7xxx_scb       scb_array[AIC7XXX_MAXSCB];  /* active commands */
+  struct aic7xxx_scb      *scb_array[AIC7XXX_MAXSCB];  /* active commands */
   struct aic7xxx_scb      *pagedout_ntscbs[16];  /*
                                                   * paged-out, non-tagged scbs
                                                   * indexed by target.
                                                   */
-  scb_queue_type           free_scbs;        /*
-                                              * SCBs assigned to free slot on
-                                              * card (no paging required)
-                                              */
   scb_queue_type           page_scbs;        /*
                                               * SCBs that will require paging
                                               * before use (no assigned slot)
@@ -660,6 +694,9 @@ struct aic7xxx_host {
                                               * have now been assigned a slot
                                               * by aic7xxx_free_scb
                                               */
+  scb_usage_type           scb_usage;
+  scb_usage_type          *scb_link;
+
   struct aic7xxx_cmd_queue {
     Scsi_Cmnd *head;
     Scsi_Cmnd *tail;
@@ -750,6 +787,9 @@ static int num_aic7xxx_syncrates =
 #ifdef CONFIG_PCI
 static int number_of_3940s = 0;
 static int number_of_3985s = 0;
+#ifdef AIC7XXX_SHARE_SCBS
+static scb_usage_type *shared_3985_scbs = NULL;
+#endif
 #endif CONFIG_PCI
 
 #ifdef AIC7XXX_DEBUG
@@ -802,6 +842,7 @@ debug_config(struct aic7xxx_host_config *p)
     case AIC_7850:
     case AIC_7855:
     case AIC_7860:
+    case AIC_7861:
     case AIC_7870:
     case AIC_7871:
     case AIC_7872:
@@ -877,7 +918,10 @@ debug_scb(struct aic7xxx_scb *scb)
          scb->SCSI_cmd_length);
   printk("reserved 0x%x, target status 0x%x, resid SG count %d, resid data count %d\n",
          (scb->RESERVED[1] << 8) | scb->RESERVED[0], scb->target_status,
-         scb->residual_SG_segment_count, scb->residual_data_count);
+         scb->residual_SG_segment_count,
+         ((scb->residual_data_count[2] << 16) |
+          (scb->residual_data_count[1] <<  8) |
+          (scb->residual_data_count[0]));
   printk("data ptr 0x%x, data count %d, next waiting %d\n",
          (scb->data_pointer[3] << 24) | (scb->data_pointer[2] << 16) |
          (scb->data_pointer[1] << 8) | scb->data_pointer[0],
@@ -911,6 +955,8 @@ static int aic7xxx_irq_trigger = -1;         /*
                                               *  0 use edge triggered
                                               *  1 use level triggered
                                               */
+static int aic7xxx_enable_ultra = 0;         /* enable ultra SCSI speeds */
+
 /*+F*************************************************************************
  * Function:
  *   aic7xxx_setup
@@ -933,6 +979,7 @@ aic7xxx_setup(char *s, int *dummy)
     { "extended",    &aic7xxx_extended },
     { "no_reset",    &aic7xxx_no_reset },
     { "irq_trigger", &aic7xxx_irq_trigger },
+    { "ultra",       &aic7xxx_enable_ultra },
     { NULL,          NULL }
   };
 
@@ -1123,7 +1170,7 @@ aic7xxx_length(Scsi_Cmnd *cmd, int sg_last)
   struct scatterlist *sg;
 
   segments = cmd->use_sg - sg_last;
-  sg = (struct scatterlist *) cmd->buffer;
+  sg = (struct scatterlist *) cmd->request_buffer;
 
   if (cmd->use_sg)
   {
@@ -1155,53 +1202,60 @@ aic7xxx_scsirate(struct aic7xxx_host *p, unsigned char *scsirate,
   unsigned long ultra_enb_addr;
   unsigned char ultra_enb, sxfrctl0;
 
-  for (i = 0; i < num_aic7xxx_syncrates; i++)
+  /*
+   * If the offset is 0, then the device is requesting asynchronous
+   * transfers.
+   */
+  if (offset != 0)
   {
-    if ((aic7xxx_syncrates[i].period - period) >= 0)
+    for (i = 0; i < num_aic7xxx_syncrates; i++)
     {
-      /*
-       * Watch out for Ultra speeds when ultra is not enabled and
-       * vice-versa.
-       */
-      if (!(p->flags & ULTRA_ENABLED) &&
-          (aic7xxx_syncrates[i].rate & ULTRA_SXFR))
+      if ((aic7xxx_syncrates[i].period - period) >= 0)
       {
         /*
-         * This should only happen if the drive is the first to negotiate
-         * and chooses a high rate.   We'll just move down the table until
-         * we hit a non ultra speed.
+         * Watch out for Ultra speeds when ultra is not enabled and
+         * vice-versa.
          */
-        continue;
-      }
-      *scsirate = (aic7xxx_syncrates[i].rate) | (offset & 0x0F);
+        if (!(p->flags & ULTRA_ENABLED) &&
+            (aic7xxx_syncrates[i].rate & ULTRA_SXFR))
+        {
+          /*
+           * This should only happen if the drive is the first to negotiate
+           * and chooses a high rate.   We'll just move down the table until
+           * we hit a non ultra speed.
+           */
+          continue;
+        }
+        *scsirate = (aic7xxx_syncrates[i].rate) | (offset & 0x0F);
 
-      /*
-       * Ensure Ultra mode is set properly for this target.
-       */
-      ultra_enb_addr = ULTRA_ENB;
-      if ((channel == 'B') || (target > 7))
-      {
-        ultra_enb_addr++;
-      }
-      ultra_enb = inb(p->base + ultra_enb_addr);
-      sxfrctl0 = inb(p->base + SXFRCTL0);
-      if (aic7xxx_syncrates[i].rate & ULTRA_SXFR)
-      {
-        ultra_enb |= 0x01 << (target & 0x07);
-        sxfrctl0 |= ULTRAEN;
-      }
-      else
-      {
-        ultra_enb &= ~(0x01 << (target & 0x07));
-        sxfrctl0 &= ~ULTRAEN;
-      }
-      outb(ultra_enb, p->base + ultra_enb_addr);
-      outb(sxfrctl0, p->base + SXFRCTL0);
+        /*
+         * Ensure Ultra mode is set properly for this target.
+         */
+        ultra_enb_addr = ULTRA_ENB;
+        if ((channel == 'B') || (target > 7))
+        {
+          ultra_enb_addr++;
+        }
+        ultra_enb = inb(p->base + ultra_enb_addr);
+        sxfrctl0 = inb(p->base + SXFRCTL0);
+        if (aic7xxx_syncrates[i].rate & ULTRA_SXFR)
+        {
+          ultra_enb |= 0x01 << (target & 0x07);
+          sxfrctl0 |= ULTRAEN;
+        }
+        else
+        {
+          ultra_enb &= ~(0x01 << (target & 0x07));
+          sxfrctl0 &= ~ULTRAEN;
+        }
+        outb(ultra_enb, p->base + ultra_enb_addr);
+        outb(sxfrctl0, p->base + SXFRCTL0);
 
-      printk("scsi%d: Target %d, channel %c, now synchronous at %sMHz, "
-             "offset %d.\n", p->host_no, target, channel,
-	     aic7xxx_syncrates[i].english, offset);
-      return;
+        printk("scsi%d: Target %d, channel %c, now synchronous at %sMHz, "
+               "offset %d.\n", p->host_no, target, channel,
+               aic7xxx_syncrates[i].english, offset);
+        return;
+      }
     }
   }
 
@@ -1433,10 +1487,10 @@ aic7xxx_allocate_scb(struct aic7xxx_host *p)
   struct aic7xxx_scb *scbp = NULL;
   int maxscbs;
 
-  scbp = p->free_scbs.head;
+  scbp = p->scb_link->free_scbs.head;
   if (scbp != NULL)
   {
-    scbq_remove_head(&p->free_scbs);
+    scbq_remove_head(&p->scb_link->free_scbs);
   }
   else
   {
@@ -1459,23 +1513,30 @@ aic7xxx_allocate_scb(struct aic7xxx_host *p)
         maxscbs = p->maxscbs;
       else
         maxscbs = p->maxhscbs;
-      if (p->numscbs < maxscbs)
+      if (p->scb_link->numscbs < maxscbs)
       {
-        scbp = &(p->scb_array[p->numscbs]);
-        memset(scbp, 0, sizeof(*scbp));
-        scbp->tag = p->numscbs;
-        if (p->numscbs < p->maxhscbs)
-	  scbp->position = p->numscbs;
-        else
-	  scbp->position = SCB_LIST_NULL;
-        p->numscbs++;
+        int scb_index = p->scb_link->numscbs;
+        int scb_size = sizeof(struct aic7xxx_scb);
+
+        p->scb_array[scb_index] = kmalloc(scb_size, GFP_ATOMIC | GFP_DMA);
+        scbp = (p->scb_array[scb_index]);
+        if (scbp != NULL)
+        {
+          memset(scbp, 0, sizeof(*scbp));
+          scbp->tag = scb_index;
+          if (scb_index < p->maxhscbs)
+            scbp->position = scb_index;
+          else
+	    scbp->position = SCB_LIST_NULL;
+          p->scb_link->numscbs++;
+        }
       }
     }
   }
   if (scbp != NULL)
   {
 #ifdef AIC7XXX_DEBUG
-    p->activescbs++;
+    p->scb_link->activescbs++;
 #endif
   }
   return (scbp);
@@ -1568,10 +1629,10 @@ aic7xxx_free_scb(struct aic7xxx_host *p, struct aic7xxx_scb *scb)
     }
     else
     {
-      scbq_insert_head(&p->free_scbs, scb);
+      scbq_insert_head(&p->scb_link->free_scbs, scb);
     }
 #ifdef AIC7XXX_DEBUG
-    p->activescbs--;  /* For debugging purposes. */
+    p->scb_link->activescbs--;  /* For debugging purposes. */
 #endif
   }
 }
@@ -1608,9 +1669,9 @@ aic7xxx_done_aborted_scbs(struct aic7xxx_host *p)
   struct aic7xxx_scb *scb;
   int i;
 
-  for (i = 0; i < p->numscbs; i++)
+  for (i = 0; i < p->scb_link->numscbs; i++)
   {
-    scb = &(p->scb_array[i]);
+    scb = (p->scb_array[i]);
     if (scb->state & SCB_QUEUED_FOR_DONE)
     {
 #ifdef AIC7XXX_DEBUG_ABORT
@@ -1749,7 +1810,7 @@ aic7xxx_reset_device(struct aic7xxx_host *p, int target, char channel)
     {
       saved_queue[i] = inb(QINFIFO + base);
       outb(saved_queue[i], SCBPTR + base);
-      scb = &(p->scb_array[inb(SCB_TAG + base)]);
+      scb = (p->scb_array[inb(SCB_TAG + base)]);
       if (aic7xxx_match_scb(scb, target, channel))
       {
         /*
@@ -1787,7 +1848,7 @@ aic7xxx_reset_device(struct aic7xxx_host *p, int target, char channel)
     while (next != SCB_LIST_NULL)
     {
       outb(next, SCBPTR + base);
-      scb = &(p->scb_array[inb(SCB_TAG + base)]);
+      scb = (p->scb_array[inb(SCB_TAG + base)]);
       /*
        * Select the SCB.
        */
@@ -1809,9 +1870,9 @@ aic7xxx_reset_device(struct aic7xxx_host *p, int target, char channel)
    * for this target that are active.  These are other (most likely
    * tagged) commands that were disconnected when the reset occurred.
    */
-  for (i = 0; i < p->numscbs; i++)
+  for (i = 0; i < p->scb_link->numscbs; i++)
   {
-    scb = &(p->scb_array[i]);
+    scb = (p->scb_array[i]);
     if ((scb->state & SCB_ACTIVE) && aic7xxx_match_scb(scb, target, channel))
     {
       /*
@@ -1964,9 +2025,10 @@ aic7xxx_reset_channel(struct aic7xxx_host *p, char channel, int initiate_reset)
   }
 
   /*
-   * Delay by the bus settle time.
+   * Cause the mid-level SCSI code to delay any further 
+   * queueing by the bus settle time for us.
    */
-  aic7xxx_delay(AIC7XXX_RESET_DELAY);
+  p->host->last_reset = (jiffies + (AIC7XXX_RESET_DELAY * HZ));
 
   /*
    * Now loop through all the SCBs that have been marked for abortion,
@@ -2028,7 +2090,7 @@ static inline void
 aic7xxx_run_waiting_queues(struct aic7xxx_host *p)
 {
   struct aic7xxx_scb *scb;
-  u_char cur_scb;
+  u_char cur_scb, intstat;
   u_long base = p->base;
   long flags;
 
@@ -2040,6 +2102,7 @@ aic7xxx_run_waiting_queues(struct aic7xxx_host *p)
 
   PAUSE_SEQUENCER(p);
   cur_scb = inb(SCBPTR + base);
+  intstat = inb(INTSTAT + base);
 
   /*
    * First handle SCBs that are waiting but have been assigned a slot.
@@ -2097,7 +2160,7 @@ aic7xxx_run_waiting_queues(struct aic7xxx_host *p)
          * Find the in-core SCB for the one we're paging out.
          */
         out_scbi = inb(SCB_TAG + base); 
-        out_scbp = &(p->scb_array[out_scbi]);
+        out_scbp = (p->scb_array[out_scbi]);
 
         /* Do the page out and mark the paged in SCB as active. */
         aic7xxx_page_scb(p, out_scbp, scb);
@@ -2132,7 +2195,15 @@ aic7xxx_run_waiting_queues(struct aic7xxx_host *p)
   }
   /* Restore old position */
   outb(cur_scb, SCBPTR + base);
-  UNPAUSE_SEQUENCER(p);
+
+  /*
+   * Guard against unpausing the sequencer if there is an interrupt
+   * waiting to happen.
+   */
+  if (!(intstat & (BRKADRINT | SEQINT | SCSIINT)))
+  {
+    UNPAUSE_SEQUENCER(p);
+  }
 
   restore_flags(flags);
 }
@@ -2159,7 +2230,7 @@ aic7xxx_isr(int irq, void *dev_id, struct pt_regs *regs)
   unsigned char max_offset, rej_byte;
   unsigned short target_mask;
   char channel;
-  void *addr;
+  unsigned int addr; /* must be 32 bits */
   Scsi_Cmnd *cmd;
 
   p = (struct aic7xxx_host *) aic7xxx_boards[irq]->hostdata;
@@ -2278,7 +2349,7 @@ aic7xxx_isr(int irq, void *dev_id, struct pt_regs *regs)
     	    scb = p->pagedout_ntscbs[index];
     	  }
     	  else
-    	    scb = &(p->scb_array[arg_1]);
+    	    scb = (p->scb_array[arg_1]);
 
           if (!(scb->state & SCB_PAGED_OUT))
           {
@@ -2296,10 +2367,10 @@ aic7xxx_isr(int irq, void *dev_id, struct pt_regs *regs)
            * assigned SCB, an SCB that just completed, or the first one
            * on the disconnected SCB list.
     	   */
-    	  if (p->free_scbs.head != NULL)
+    	  if (p->scb_link->free_scbs.head != NULL)
           {
-    	    outscb = p->free_scbs.head;
-    	    scbq_remove_head(&p->free_scbs);
+    	    outscb = p->scb_link->free_scbs.head;
+    	    scbq_remove_head(&p->scb_link->free_scbs);
     	    scb->position = outscb->position;
     	    outscb->position = SCB_LIST_NULL;
     	    scbq_insert_head(&p->page_scbs, outscb);
@@ -2329,7 +2400,7 @@ aic7xxx_isr(int irq, void *dev_id, struct pt_regs *regs)
             {
               intstat &= ~CMDCMPLT;
             }
-            outscb = &(p->scb_array[scb_index]);
+            outscb = (p->scb_array[scb_index]);
             if (!(outscb->state & SCB_ACTIVE))
             {
 	      printk(KERN_WARNING "scsi%d: No command for completed SCB %d "
@@ -2370,7 +2441,7 @@ aic7xxx_isr(int irq, void *dev_id, struct pt_regs *regs)
             {
     	      outb(disc_scb, SCBPTR + base);
     	      tag = inb(SCB_TAG + base);
-    	      outscb = &(p->scb_array[tag]);
+    	      outscb = (p->scb_array[tag]);
     	      next = inb(SCB_NEXT + base);
     	      if (next != SCB_LIST_NULL)
               {
@@ -2387,7 +2458,7 @@ aic7xxx_isr(int irq, void *dev_id, struct pt_regs *regs)
               disc_scb = inb(QINFIFO + base);
               outb(disc_scb, SCBPTR + base);
               tag = inb(SCB_TAG + base);
-              outscb = &p->scb_array[tag];
+              outscb = (p->scb_array[tag]);
               if ((outscb->control & 0x23) != TAG_ENB)
               {
                 /*
@@ -2418,7 +2489,7 @@ aic7xxx_isr(int irq, void *dev_id, struct pt_regs *regs)
 
                 outb(saved_queue[queued], SCBPTR + base);
                 tag = inb(SCB_TAG + base);
-                outscb = &p->scb_array[tag];
+                outscb = (p->scb_array[tag]);
               }
               scb->position = outscb->position;
               outscb->position = SCB_LIST_NULL;
@@ -2459,7 +2530,7 @@ aic7xxx_isr(int irq, void *dev_id, struct pt_regs *regs)
         if ((rej_byte & 0xF0) == 0x20)
         {
           scb_index = inb(SCB_TAG + base);
-          scb = &(p->scb_array[scb_index]);
+          scb = (p->scb_array[scb_index]);
           printk(KERN_WARNING "scsi%d: Tagged message received without identify."
                  "Disabling tagged commands for target %d channel %c.\n",
                   p->host_no, scsi_id, channel);
@@ -2511,13 +2582,39 @@ aic7xxx_isr(int irq, void *dev_id, struct pt_regs *regs)
 	outb(scratch, TARG_SCRATCH + base + scratch_offset);
 	outb(scratch, SCSIRATE + base);
 	if ((scratch & 0x0F) == 0)
-	{ /*
-	   * The requested rate was so low that asynchronous transfers
-	   * are faster (not to mention the controller won't support
-	   * them), so we issue a reject to ensure we go to asynchronous
-	   * transfers.
-	   */
-	   outb(SEND_REJ, RETURN_1 + base);
+	{
+          /*
+           * One of two things happened.  Either the device requested
+           * asynchronous data transfers, or it requested a synchronous
+           * data transfer rate that was so low that asynchronous
+           * transfers are faster (not to mention the controller won't
+           * support them).  In both cases the synchronous data transfer
+           * rate and the offset are set to 0 indicating asynchronous
+           * transfers.
+           *
+           * If the device requested an asynchronous transfer, then
+           * accept the request.  If the device is being forced to
+           * asynchronous data transfers and this is the first time
+           * we've seen the request, accept the request.  If we've
+           * already seen the request, then attempt to force
+           * asynchronous data transfers by rejecting the message.
+           */
+          if ((offset == 0) || (p->sdtr_pending & target_mask))
+          {
+            /*
+             * Device requested asynchronous transfers or we're
+             * forcing asynchronous transfers for the first time.
+             */
+            outb(0, RETURN_1 + base);
+          }
+          else
+          {
+            /*
+	     * The first time in forcing asynchronous transfers
+             * failed, so we try sending a reject message.
+	     */
+	    outb(SEND_REJ, RETURN_1 + base);
+          }
 	}
 	else
 	{
@@ -2667,13 +2764,13 @@ aic7xxx_isr(int irq, void *dev_id, struct pt_regs *regs)
          */
 
 	scb_index = inb(SCB_TAG + base);
-	scb = &(p->scb_array[scb_index]);
+	scb = (p->scb_array[scb_index]);
 	outb(0, RETURN_1 + base);   /* CHECK_CONDITION may change this */
 	if (!(scb->state & SCB_ACTIVE) || (scb->cmd == NULL))
 	{
 	  printk(KERN_WARNING "scsi%d: Referenced SCB not valid during "
-		 "SEQINT 0x%x, scb %d, state 0x%x, cmd 0x%x.\n", p->host_no,
-		 intstat, scb_index, scb->state, (unsigned int) scb->cmd);
+		 "SEQINT 0x%x, scb %d, state 0x%x, cmd 0x%lx.\n", p->host_no,
+		 intstat, scb_index, scb->state, (unsigned long) scb->cmd);
 	}
 	else
 	{
@@ -2693,7 +2790,7 @@ aic7xxx_isr(int irq, void *dev_id, struct pt_regs *regs)
 	      if ((aic7xxx_error(cmd) == 0) && !(cmd->flags & WAS_SENSE))
 	      {
                 unsigned char tcl;
-		void         *req_buf;
+		unsigned int  req_buf; /* must be 32 bits */
 
                 tcl = scb->target_channel_lun;
 
@@ -2707,22 +2804,23 @@ aic7xxx_isr(int irq, void *dev_id, struct pt_regs *regs)
 		scb->sense_cmd[1] = (cmd->lun << 5);
 		scb->sense_cmd[4] = sizeof(cmd->sense_buffer);
 
-		scb->sense_sg.address = (char *) &cmd->sense_buffer;
-		scb->sense_sg.length = sizeof(cmd->sense_buffer);
-		req_buf = &scb->sense_sg;
+		scb->sg_list[0].address = VIRT_TO_BUS(&cmd->sense_buffer);
+		scb->sg_list[0].length = sizeof(cmd->sense_buffer);
+		req_buf = VIRT_TO_BUS(&scb->sg_list[0]);
 		cmd->cmd_len = COMMAND_SIZE(cmd->cmnd[0]);
 
                 scb->control = scb->control & DISCENB;
 		scb->target_channel_lun = tcl;
-		addr = scb->sense_cmd;
+		addr = VIRT_TO_BUS(scb->sense_cmd);
 		scb->SCSI_cmd_length = COMMAND_SIZE(scb->sense_cmd[0]);
 		memcpy(scb->SCSI_cmd_pointer, &addr,
 		       sizeof(scb->SCSI_cmd_pointer));
 		scb->SG_segment_count = 1;
 		memcpy(scb->SG_list_pointer, &req_buf,
-			sizeof(scb->SG_list_pointer));
-                scb->data_count = scb->sense_sg.length;
-		memcpy(scb->data_pointer, &(scb->sense_sg.address), 4);
+		       sizeof(scb->SG_list_pointer));
+                scb->data_count = scb->sg_list[0].length;
+		memcpy(scb->data_pointer, &(scb->sg_list[0].address),
+		       sizeof(scb->data_pointer));
 
                 aic7xxx_putscb(p, scb);
                 /*
@@ -2749,7 +2847,17 @@ aic7xxx_isr(int irq, void *dev_id, struct pt_regs *regs)
                      p->host_no, scb->target_channel_lun);
 	      if (!aic7xxx_error(cmd))
 	      {
-		aic7xxx_error(cmd) = DID_BUS_BUSY;
+                /* The error code here used to be DID_BUS_BUSY,
+                 * but after extensive testing, it has been determined
+                 * that a DID_BUS_BUSY return is a waste of time.  If
+                 * the problem is something that will go away, then it
+                 * will, if it isn't, then you don't want the endless
+                 * looping that you get with a DID_BUS_BUSY.  Better
+                 * to be on the safe side and specify an error condition
+                 * that will eventually lead to a reset or abort of some
+                 * sort instead of an endless loop.
+                 */
+	        aic7xxx_error(cmd) = DID_RETRY_COMMAND;
 	      }
 	      break;
 
@@ -2773,12 +2881,12 @@ aic7xxx_isr(int irq, void *dev_id, struct pt_regs *regs)
 
       case RESIDUAL:
 	scb_index = inb(SCB_TAG + base);
-	scb = &(p->scb_array[scb_index]);
+	scb = (p->scb_array[scb_index]);
 	if (!(scb->state & SCB_ACTIVE) || (scb->cmd == NULL))
 	{
 	  printk(KERN_WARNING "scsi%d: Referenced SCB not valid during "
-		 "SEQINT 0x%x, scb %d, state 0x%x, cmd 0x%x.\n", p->host_no,
-		 intstat, scb_index, scb->state, (unsigned int) scb->cmd);
+		 "SEQINT 0x%x, scb %d, state 0x%x, cmd 0x%lx.\n", p->host_no,
+		 intstat, scb_index, scb->state, (unsigned long) scb->cmd);
 	}
 	else
 	{
@@ -2816,12 +2924,12 @@ aic7xxx_isr(int irq, void *dev_id, struct pt_regs *regs)
 
       case ABORT_TAG:
 	scb_index = inb(SCB_TAG + base);
-	scb = &(p->scb_array[scb_index]);
+	scb = (p->scb_array[scb_index]);
 	if (!(scb->state & SCB_ACTIVE) || (scb->cmd == NULL))
 	{
 	  printk(KERN_WARNING "scsi%d: Referenced SCB not valid during "
-		 "SEQINT 0x%x, scb %d, state 0x%x, cmd 0x%x\n", p->host_no,
-		 intstat, scb_index, scb->state, (unsigned int) scb->cmd);
+		 "SEQINT 0x%x, scb %d, state 0x%x, cmd 0x%lx\n", p->host_no,
+		 intstat, scb_index, scb->state, (unsigned long) scb->cmd);
 	}
 	else
 	{
@@ -2841,12 +2949,12 @@ aic7xxx_isr(int irq, void *dev_id, struct pt_regs *regs)
 
       case AWAITING_MSG:
 	scb_index = inb(SCB_TAG + base);
-	scb = &(p->scb_array[scb_index]);
+	scb = (p->scb_array[scb_index]);
 	if (!(scb->state & SCB_ACTIVE) || (scb->cmd == NULL))
 	{
 	  printk(KERN_WARNING "scsi%d: Referenced SCB not valid during "
-		 "SEQINT 0x%x, scb %d, state 0x%x, cmd 0x%x.\n", p->host_no,
-		 intstat, scb_index, scb->state, (unsigned int) scb->cmd);
+		 "SEQINT 0x%x, scb %d, state 0x%x, cmd 0x%lx.\n", p->host_no,
+		 intstat, scb_index, scb->state, (unsigned long) scb->cmd);
 	}
 	else
 	{
@@ -2874,7 +2982,7 @@ aic7xxx_isr(int irq, void *dev_id, struct pt_regs *regs)
 
       case IMMEDDONE:
         scb_index = inb(SCB_TAG + base);
-	scb = &(p->scb_array[scb_index]);
+	scb = (p->scb_array[scb_index]);
 #ifdef AIC7XXX_DEBUG_ABORT
   printk("aic7xxx: received IMMEDDONE for target %d, scb %d, state %d\n",
          scsi_id, scb_index, scb->state);
@@ -2911,7 +3019,7 @@ aic7xxx_isr(int irq, void *dev_id, struct pt_regs *regs)
       {
         unsigned int overrun;
 
-        scb = &p->scb_array[inb(base + SCB_TAG)];
+        scb = (p->scb_array[inb(base + SCB_TAG)]);
         overrun = inb(base + STCNT0) | (inb(base + STCNT1) << 8) |
                   (inb(base + STCNT2) << 16);
         overrun =0x00FFFFFF - overrun;
@@ -2953,7 +3061,7 @@ aic7xxx_isr(int irq, void *dev_id, struct pt_regs *regs)
     }
 
     scb_index = inb(SCB_TAG + base);
-    scb = &(p->scb_array[scb_index]);
+    scb = (p->scb_array[scb_index]);
     if (status & SCSIRSTI)
     {
       PAUSE_SEQUENCER(p);
@@ -3103,13 +3211,13 @@ aic7xxx_isr(int irq, void *dev_id, struct pt_regs *regs)
     do {
       complete = inb(QOUTFIFO + base);
 
-      scb = &(p->scb_array[complete]);
+      scb = (p->scb_array[complete]);
       if (!(scb->state & SCB_ACTIVE) || (scb->cmd == NULL))
       {
 	printk(KERN_WARNING "scsi%d: CMDCMPLT without command for SCB %d.\n"
-	       "       QOUTCNT %d, QINCNT %d, SCB state 0x%x, cmd 0x%x, "
+	       "       QOUTCNT %d, QINCNT %d, SCB state 0x%x, cmd 0x%lx, "
                "pos(%d).\n", p->host_no, complete, inb(QOUTCNT + base),
-               inb(QINCNT + base), scb->state, (unsigned int) scb->cmd,
+               inb(QINCNT + base), scb->state, (unsigned long) scb->cmd,
                scb->position);
 	outb(CLRCMDINT, CLRINT + base);
 	continue;
@@ -3201,13 +3309,12 @@ static void aic7xxx_select_queue_depth(struct Scsi_Host *host,
 {
   Scsi_Device *device = scsi_devs;
   int tq_depth = 2;
+  struct aic7xxx_host *p = (struct aic7xxx_host *) host->hostdata;
 
 #ifdef AIC7XXX_CMDS_PER_LUN
   tq_depth = AIC7XXX_CMDS_PER_LUN;
 #else
   {
-    struct aic7xxx_host *p = (struct aic7xxx_host *) host->hostdata;
-
     if (p->maxhscbs <= 4)
     {
       tq_depth = 4;  /* Not many SCBs to work with. */
@@ -3227,14 +3334,26 @@ static void aic7xxx_select_queue_depth(struct Scsi_Host *host,
 #ifdef AIC7XXX_TAGGED_QUEUEING
       if (device->tagged_supported)
       {
-        device->queue_depth = tq_depth;
-        if (device->tagged_queue == 0)
+        unsigned short target_mask = (1 << device->id) | device->channel;
+
+        if (!(p->discenable & target_mask))
         {
-          printk(KERN_INFO "scsi%d: Enabled tagged queuing for target %d, "
-	         "channel %d, LUN %d, queue depth %d.\n", host->host_no,
-                 device->id, device->channel, device->lun, device->queue_depth);
-          device->tagged_queue = 1;
-          device->current_tag = SCB_LIST_NULL;
+          printk(KERN_INFO "scsi%d: Disconnection disabled, unable to enable "
+                 "tagged queueing for target %d, channel %d, LUN %d.\n",
+                 host->host_no, device->id, device->channel, device->lun);
+        }
+        else
+        {
+          device->queue_depth = tq_depth;
+          if (device->tagged_queue == 0)
+          {
+            printk(KERN_INFO "scsi%d: Enabled tagged queuing for target %d, "
+	           "channel %d, LUN %d, queue depth %d.\n", host->host_no,
+                   device->id, device->channel, device->lun,
+                   device->queue_depth);
+            device->tagged_queue = 1;
+            device->current_tag = SCB_LIST_NULL;
+          }
         }
       }
 #endif
@@ -3473,7 +3592,7 @@ read_2840_seeprom(int base, struct seeprom_config *sc)
  *   Reads the serial EEPROM and returns 1 if successful and 0 if
  *   not successful.
  *
- *   The instruction set of the 93C46 chip is as follows:
+ *   The instruction set of the 93C46/56/66 chips is as follows:
  *
  *               Start  OP
  *     Function   Bit  Code  Address    Data     Description
@@ -3489,6 +3608,8 @@ read_2840_seeprom(int base, struct seeprom_config *sc)
  *     EWDS        1    00   00XXXX              Disables all programming
  *                                               instructions
  *     *Note: A value of X for address is a don't care condition.
+ *     *Note: The 93C56 and 93C66 have 8 address bits.
+ * 
  *
  *   The 93C46 has a four wire interface: clock, chip select, data in, and
  *   data out.  In order to perform one of the above functions, you need
@@ -3515,7 +3636,8 @@ read_2840_seeprom(int base, struct seeprom_config *sc)
  *
  *-F*************************************************************************/
 static int
-read_seeprom(int base, int offset, struct seeprom_config *sc)
+read_seeprom(int base, int offset, struct seeprom_config *sc,
+    seeprom_chip_type chip)
 {
   int i = 0, k;
   unsigned long timeout;
@@ -3583,7 +3705,7 @@ read_seeprom(int base, int offset, struct seeprom_config *sc)
     /*
      * Send the 6 bit address (MSB first, LSB last).
      */
-    for (i = 5; i >= 0; i--)
+    for (i = ((int) chip - 1); i >= 0; i--)
     {
       temp = k + offset;
       temp = (temp >> i) & 1;  /* Mask out all but lower bit. */
@@ -3925,6 +4047,7 @@ aic7xxx_register(Scsi_Host_Template *template,
       break;
 
     case AIC_7860:
+    case AIC_7861:
     case AIC_7880:
     case AIC_7881:
     case AIC_7882:
@@ -3934,7 +4057,7 @@ aic7xxx_register(Scsi_Host_Template *template,
        * Remember if Ultra was enabled in case there is no SEEPROM.
        * Fall through to the rest of the AIC_78xx code.
        */
-      if (inb(SXFRCTL0 + base) & ULTRAEN)
+      if ((inb(SXFRCTL0 + base) & ULTRAEN) || aic7xxx_enable_ultra)
         config->flags |= ULTRA_ENABLED;
 
     case AIC_7850:
@@ -3957,7 +4080,16 @@ aic7xxx_register(Scsi_Host_Template *template,
       config->parity = AIC_ENABLED;
 
       printk(KERN_INFO "aic7xxx: Reading SEEPROM...");
-      have_seeprom = read_seeprom(base, config->chan_num * (sizeof(sc) / 2), &sc);
+      if ((config->type == AIC_7873) || (config->type == AIC_7883))
+      {
+        have_seeprom = read_seeprom(base, config->chan_num * (sizeof(sc) / 2),
+                                    &sc, c56_66);
+      }
+      else
+      {
+        have_seeprom = read_seeprom(base, config->chan_num * (sizeof(sc) / 2),
+                                    &sc, c46);
+      }
       if (!have_seeprom)
       {
         for (sram = base + TARG_SCRATCH; sram < base + 0x60; sram++)
@@ -4142,25 +4274,6 @@ aic7xxx_register(Scsi_Host_Template *template,
   debug_config(config);
 
   /*
-   * Before registry, make sure that the offsets of the
-   * struct scatterlist are what the sequencer will expect,
-   * otherwise disable scatter-gather altogether until someone
-   * can fix it. This is important since the sequencer will
-   * DMA elements of the SG array in while executing commands.
-   */
-  if (template->sg_tablesize != SG_NONE)
-  {
-    struct scatterlist sg;
-
-    if (SG_STRUCT_CHECK(sg))
-    {
-      printk(KERN_WARNING "aic7xxx: Warning - Kernel scatter-gather structures "
-             "changed, disabling it.\n");
-      template->sg_tablesize = SG_NONE;
-    }
-  }
-
-  /*
    * Register each "host" and fill in the returned Scsi_Host
    * structure as best we can. Some of the parameters aren't
    * really relevant for bus types beyond ISA, and none of the
@@ -4175,7 +4288,7 @@ aic7xxx_register(Scsi_Host_Template *template,
   host->this_id = config->scsi_id;
   host->io_port = config->base;
   host->n_io_port = 0xFF;
-  host->base = (char *)config->mbase;
+  host->base = (unsigned char *)config->mbase;
   host->irq = config->irq;
   if (config->bus_type == AIC_WIDE)
   {
@@ -4195,18 +4308,26 @@ aic7xxx_register(Scsi_Host_Template *template,
   p->maxscbs = config->maxscbs;
   p->maxhscbs = config->maxhscbs;
   p->qcntmask = config->qcntmask;
-  p->numscbs = 0;
   p->mbase = (char *)config->mbase;
   p->type = config->type;
   p->chip_type = config->chip_type;
   p->flags = config->flags;
   p->chan_num = config->chan_num;
+  p->scb_link = &(p->scb_usage);
+#ifdef AIC7XXX_SHARE_SCBS
+  if ((p->chan_num == 0) && ((p->type == AIC_7873) | (p->type == AIC_7883)))
+  {
+    shared_3985_scbs = &(p->scb_usage);
+    p->scb_link = &(p->scb_usage);
+  }
+#endif
+  p->scb_link->numscbs = 0;
   p->bus_type = config->bus_type;
   p->seeprom = sc;
   p->next = NULL;
   p->completeq.head = NULL;
   p->completeq.tail = NULL;
-  scbq_init(&p->free_scbs);
+  scbq_init(&p->scb_link->free_scbs);
   scbq_init(&p->page_scbs);
   scbq_init(&p->waiting_scbs);
   scbq_init(&p->assigned_scbs);
@@ -4567,7 +4688,7 @@ aic7xxx_detect(Scsi_Host_Template *template)
    * a NULL entry to indicate that no prior hosts have
    * been found/registered for that IRQ.
    */
-  for (i = 0; i <= MAXIRQ; i++)
+  for (i = 0; i <= NUMBER(aic7xxx_boards); i++)
   {
     aic7xxx_boards[i] = NULL;
   }
@@ -4643,6 +4764,7 @@ aic7xxx_detect(Scsi_Host_Template *template)
       {PCI_VENDOR_ID_ADAPTEC, PCI_DEVICE_ID_ADAPTEC_7850, AIC_7850, AIC_785x},
       {PCI_VENDOR_ID_ADAPTEC, PCI_DEVICE_ID_ADAPTEC_7855, AIC_7855, AIC_785x},
       {PCI_VENDOR_ID_ADAPTEC, PCI_DEVICE_ID_ADAPTEC_7860, AIC_7860, AIC_785x},
+      {PCI_VENDOR_ID_ADAPTEC, PCI_DEVICE_ID_ADAPTEC_7861, AIC_7861, AIC_785x},
       {PCI_VENDOR_ID_ADAPTEC, PCI_DEVICE_ID_ADAPTEC_7870, AIC_7870, AIC_787x},
       {PCI_VENDOR_ID_ADAPTEC, PCI_DEVICE_ID_ADAPTEC_7871, AIC_7871, AIC_787x},
       {PCI_VENDOR_ID_ADAPTEC, PCI_DEVICE_ID_ADAPTEC_7872, AIC_7872, AIC_787x},
@@ -4690,6 +4812,7 @@ aic7xxx_detect(Scsi_Host_Template *template)
             case AIC_7850:
             case AIC_7855:
             case AIC_7860:
+            case AIC_7861:
               config.bios = AIC_DISABLED;
               config.flags |= USE_DEFAULTS;
               config.bus_speed = DFTHRSH_100;
@@ -4703,7 +4826,7 @@ aic7xxx_detect(Scsi_Host_Template *template)
 
             case AIC_7873:  /* 3985 */
             case AIC_7883:  /* 3985-Ultra */
-              config.chan_num = number_of_3985s & 0x3;  /* Has 3 controllers */
+              config.chan_num = number_of_3985s;  /* Has 3 controllers */
               number_of_3985s++;
               if (number_of_3985s == 3)
               {
@@ -4773,7 +4896,12 @@ aic7xxx_detect(Scsi_Host_Template *template)
           config.high_term = AIC_UNKNOWN;
           if (aic7xxx_extended)
             config.flags |= EXTENDED_TRANSLATION;
+#ifdef AIC7XXX_SHARE_SCBs
           if (devconfig & RAMPSM)
+#else
+          if ((devconfig & RAMPSM) && (config.type != AIC_7873) &&
+              (config.type != AIC_7883))
+#endif
           {
             /*
              * External SRAM present.  The probe will walk the SCBs to see
@@ -4827,9 +4955,8 @@ static void
 aic7xxx_buildscb(struct aic7xxx_host *p, Scsi_Cmnd *cmd,
     struct aic7xxx_scb *scb)
 {
-  void *addr;
+  unsigned int addr; /* must be 32 bits */
   unsigned short mask;
-  struct scatterlist *sg;
 
   mask = (0x01 << TARGET_INDEX(cmd));
   /*
@@ -4900,27 +5027,43 @@ aic7xxx_buildscb(struct aic7xxx_host *p, Scsi_Cmnd *cmd,
    * XXX - this relies on the host data being stored in a
    *       little-endian format.
    */
-  addr = cmd->cmnd;
+  addr = VIRT_TO_BUS(cmd->cmnd);
   scb->SCSI_cmd_length = cmd->cmd_len;
   memcpy(scb->SCSI_cmd_pointer, &addr, sizeof(scb->SCSI_cmd_pointer));
 
   if (cmd->use_sg)
   {
+    struct scatterlist *sg;  /* Must be mid-level SCSI code scatterlist */
+
+    /*
+     * We must build an SG list in adapter format, as the kernel's SG list
+     * cannot be used directly because of data field size (__alpha__)
+     * differences and the kernel SG list uses virtual addresses where
+     * we need physical addresses.
+     */
+    int i;
+
+    sg = (struct scatterlist *)cmd->request_buffer;
+    for (i = 0; i < cmd->use_sg; i++)
+    {
+      scb->sg_list[i].address = VIRT_TO_BUS(sg[i].address);
+      scb->sg_list[i].length = (unsigned int) sg[i].length;
+    }
     scb->SG_segment_count = cmd->use_sg;
-    memcpy(scb->SG_list_pointer, &cmd->request_buffer,
-	   sizeof(scb->SG_list_pointer));
-    memcpy(&sg, &cmd->request_buffer, sizeof(sg));
-    memcpy(scb->data_pointer, &(sg[0].address), sizeof(scb->data_pointer));
-    scb->data_count = sg[0].length;
+    addr = VIRT_TO_BUS(scb->sg_list);
+    memcpy(scb->SG_list_pointer, &addr, sizeof(scb->SG_list_pointer));
+    memcpy(scb->data_pointer, &(scb->sg_list[0].address),
+           sizeof(scb->data_pointer));
+    scb->data_count = scb->sg_list[0].length;
 #if 0
-    debug("aic7xxx: (build_scb) SG segs(%d), length(%u), sg[0].length(%d).\n",
+    printk("aic7xxx: (build_scb) SG segs(%d), length(%u), sg[0].length(%d).\n",
            cmd->use_sg, aic7xxx_length(cmd, 0), scb->data_count);
 #endif
   }
   else
   {
 #if 0
-  debug("aic7xxx: (build_scb) Creating scatterlist, addr(0x%lx) length(%d).\n",
+  printk("aic7xxx: (build_scb) Creating scatterlist, addr(0x%lx) length(%d).\n",
 	(unsigned long) cmd->request_buffer, cmd->request_bufflen);
 #endif
     if (cmd->request_bufflen == 0)
@@ -4938,12 +5081,13 @@ aic7xxx_buildscb(struct aic7xxx_host *p, Scsi_Cmnd *cmd,
     else
     {
       scb->SG_segment_count = 1;
-      scb->sg.address = (char *) cmd->request_buffer;
-      scb->sg.length = cmd->request_bufflen;
-      addr = &scb->sg;
+      scb->sg_list[0].address = VIRT_TO_BUS(cmd->request_buffer);
+      scb->sg_list[0].length = cmd->request_bufflen;
+      addr = VIRT_TO_BUS(&scb->sg_list[0]);
       memcpy(scb->SG_list_pointer, &addr, sizeof(scb->SG_list_pointer));
-      scb->data_count = scb->sg.length;
-      memcpy(scb->data_pointer, &cmd->request_buffer, sizeof(scb->data_pointer));
+      scb->data_count = scb->sg_list[0].length;
+      addr = VIRT_TO_BUS(cmd->request_buffer);
+      memcpy(scb->data_pointer, &addr, sizeof(scb->data_pointer));
     }
   }
 }
@@ -4958,12 +5102,17 @@ aic7xxx_buildscb(struct aic7xxx_host *p, Scsi_Cmnd *cmd,
 int
 aic7xxx_queue(Scsi_Cmnd *cmd, void (*fn)(Scsi_Cmnd *))
 {
-  long flags;
+  long processor_flags;
   struct aic7xxx_host *p;
   struct aic7xxx_scb *scb;
-  u_char curscb;
+  u_char curscb, intstat;
 
   p = (struct aic7xxx_host *) cmd->host->hostdata;
+  if (p->host != cmd->host)
+  {
+    printk(KERN_INFO "scsi%d: Internal host structure != scsi.c host "
+      "structure.\n", p->host_no);
+  }
 
   /*
    * Check to see if channel was scanned.
@@ -4983,19 +5132,28 @@ aic7xxx_queue(Scsi_Cmnd *cmd, void (*fn)(Scsi_Cmnd *))
   }
 
 #if 0
-  debug("aic7xxx: (queue) cmd(0x%x) size(%u), target %d, channel %d, lun %d.\n",
+  printk("aic7xxx: (queue) cmd(0x%x) size(%u), target %d, channel %d, lun %d.\n",
 	cmd->cmnd[0], cmd->cmd_len, cmd->target, cmd->channel,
 	cmd->lun & 0x07);
 #endif
 
   /*
-   * This is a critical section, since we don't want the
-   * interrupt routine mucking with the host data or the
-   * card. Since the kernel documentation is vague on
-   * whether or not we are in a cli/sti pair already, save
-   * the flags to be on the safe side.
+   * This is a critical section, since we don't want the interrupt
+   * routine mucking with the host data or the card.  For this reason
+   * it is nice to know that this function can only be called in one
+   * of two ways from scsi.c  First, as part of a routine queue command,
+   * in which case, the irq for our card is disabled before this
+   * function is called.  This doesn't help us if there is more than
+   * one card using more than one IRQ in our system, therefore, we
+   * should disable all interrupts on these grounds alone.  Second,
+   * this can be called as part of the scsi_done routine, in which case
+   * we are in the aic7xxx_isr routine already and interrupts are
+   * disabled, therefore we should saveflags first, then disable the
+   * interrupts, do our work, then restore the CPU flags. If it weren't
+   * for the possibility of more than one card using more than one IRQ
+   * in our system, we wouldn't have to touch the interrupt flags at all.
    */
-  save_flags(flags);
+  save_flags(processor_flags);
   cli();
 
   scb = aic7xxx_allocate_scb(p);
@@ -5018,7 +5176,7 @@ aic7xxx_queue(Scsi_Cmnd *cmd, void (*fn)(Scsi_Cmnd *))
     aic7xxx_buildscb(p, cmd, scb);
 
 #if 0
-    if (scb != &p->scb_array[scb->position])
+    if (scb != (p->scb_array[scb->position]))
     {
       printk("aic7xxx: (queue) Address of SCB by position does not match SCB "
              "address.\n");
@@ -5057,6 +5215,7 @@ aic7xxx_queue(Scsi_Cmnd *cmd, void (*fn)(Scsi_Cmnd *))
          * XXX - should the interrupts be left on while doing this?
          */
         PAUSE_SEQUENCER(p);
+        intstat = inb(INTSTAT + p->base);
 
         /*
          * Save the SCB pointer and put our own pointer in - this
@@ -5071,7 +5230,14 @@ aic7xxx_queue(Scsi_Cmnd *cmd, void (*fn)(Scsi_Cmnd *))
         outb(scb->position, QINFIFO + p->base);
         scb->state |= SCB_ACTIVE;
 
-        UNPAUSE_SEQUENCER(p);
+        /*
+         * Guard against unpausing the sequencer if there is an interrupt
+         * waiting to happen.
+         */
+        if (!(intstat & (BRKADRINT | SEQINT | SCSIINT)))
+        {
+          UNPAUSE_SEQUENCER(p);
+        }
       }
     }
     else
@@ -5088,7 +5254,7 @@ aic7xxx_queue(Scsi_Cmnd *cmd, void (*fn)(Scsi_Cmnd *))
     printk("aic7xxx: (queue) After - cmd(0x%lx) scb->cmd(0x%lx) pos(%d).\n",
            (long) cmd, (long) scb->cmd, scb->position);
 #endif;
-    restore_flags(flags);
+    restore_flags(processor_flags);
   }
   return (0);
 }
@@ -5108,20 +5274,16 @@ static int
 aic7xxx_bus_device_reset(struct aic7xxx_host *p, Scsi_Cmnd *cmd)
 {
   struct aic7xxx_scb  *scb;
-  long flags;
   unsigned char bus_state;
   int base, result = -1;
   char channel;
 
-  scb = &(p->scb_array[aic7xxx_position(cmd)]);
+  scb = (p->scb_array[aic7xxx_position(cmd)]);
   base = p->base;
 
   channel = scb->target_channel_lun & SELBUSB ? 'B': 'A';
   if ((cmd == scb->cmd) && (scb->state & SCB_IN_PROGRESS))
   {
-
-    save_flags(flags);
-    cli();
 
     if (scb->state & SCB_IN_PROGRESS)
     {
@@ -5203,7 +5365,7 @@ aic7xxx_bus_device_reset(struct aic7xxx_host *p, Scsi_Cmnd *cmd)
 	 * too much time, so we try the bus device reset there first.
 	 */
 	active_scb = inb(SCBPTR + base);
-	active_scbp = &(p->scb_array[inb(SCB_TAG + base)]);
+	active_scbp = (p->scb_array[inb(SCB_TAG + base)]);
 	control = inb(SCB_CONTROL + base);
 
 	/*
@@ -5303,7 +5465,11 @@ aic7xxx_bus_device_reset(struct aic7xxx_host *p, Scsi_Cmnd *cmd)
 	}
       }
     }
-    restore_flags(flags);
+  }
+  /* Make sure the sequencer is unpaused upon return. */
+  if (result == -1)
+  {
+    UNPAUSE_SEQUENCER(p);
   }
   return (result);
 }
@@ -5324,7 +5490,7 @@ aic7xxx_abort(Scsi_Cmnd *cmd)
   int    base, result;
 
   p = (struct aic7xxx_host *) cmd->host->hostdata;
-  scb = &(p->scb_array[aic7xxx_position(cmd)]);
+  scb = (p->scb_array[aic7xxx_position(cmd)]);
   base = p->base;
 
 #ifdef AIC7XXX_DEBUG_ABORT
@@ -5369,9 +5535,10 @@ aic7xxx_reset(Scsi_Cmnd *cmd, unsigned int flags)
   struct aic7xxx_host *p;
   int    base, found, tindex, min_target, max_target, result = -1;
   char   channel = 'A';
+  unsigned long processor_flags;
 
   p = (struct aic7xxx_host *) cmd->host->hostdata;
-  scb = &(p->scb_array[aic7xxx_position(cmd)]);
+  scb = (p->scb_array[aic7xxx_position(cmd)]);
   base = p->base;
   channel = cmd->channel ? 'B': 'A';
   tindex = (cmd->channel << 4) | cmd->target;
@@ -5380,10 +5547,20 @@ aic7xxx_reset(Scsi_Cmnd *cmd, unsigned int flags)
   printk("aic7xxx: (reset) target/channel %d/%d\n", cmd->target, cmd->channel);
 #endif
 
+  /* 
+   * This routine is called by scsi.c, in which case the interrupts
+   * very well may be on when we are called.  As such, we need to save
+   * the flags to be sure, then turn interrupts off, and then call our
+   * various method funtions which all assume interrupts are off.
+   */
+  save_flags(processor_flags);
+  cli();
+
   if (scb->cmd != cmd)
     scb = NULL;
 
-  if (!(flags & SCSI_RESET_SUGGEST_HOST_RESET) && (scb != NULL))
+  if (!(flags & (SCSI_RESET_SUGGEST_HOST_RESET | SCSI_RESET_SUGGEST_BUS_RESET)) 
+      && (scb != NULL))
   {
     /*
      * Attempt a bus device reset if commands have completed successfully
@@ -5439,7 +5616,8 @@ aic7xxx_reset(Scsi_Cmnd *cmd, unsigned int flags)
     /*
      * The bus device reset failed; try resetting the channel.
      */
-    if (flags & SCSI_RESET_ASYNCHRONOUS)
+    if (!(flags & (SCSI_RESET_SUGGEST_BUS_RESET | SCSI_RESET_SUGGEST_HOST_RESET))
+        && (flags & SCSI_RESET_ASYNCHRONOUS))
     {
       if (scb == NULL)
       {
@@ -5458,6 +5636,10 @@ aic7xxx_reset(Scsi_Cmnd *cmd, unsigned int flags)
 
     if (result == -1)
     {
+      /*
+       * The reset channel function assumes that the sequencer is paused.
+       */
+      PAUSE_SEQUENCER(p);
       found = aic7xxx_reset_channel(p, channel, TRUE);
 
       /*
@@ -5506,6 +5688,7 @@ aic7xxx_reset(Scsi_Cmnd *cmd, unsigned int flags)
       result = SCSI_RESET_SUCCESS | SCSI_RESET_HOST_RESET;
     }
   }
+  restore_flags(processor_flags);
   return (result);
 }
 

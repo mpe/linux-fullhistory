@@ -107,7 +107,6 @@ struct symbol_table symbol_table = {
 #endif
 
 	/* process memory management */
-	X(__verify_write),
 	X(do_mmap),
 	X(do_munmap),
 	X(exit_mm),

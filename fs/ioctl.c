@@ -28,9 +28,9 @@ static int file_ioctl(struct file *filp,unsigned int cmd,unsigned long arg)
 			error = verify_area(VERIFY_WRITE,(void *) arg,4);
 			if (error)
 				return error;
-			block = get_fs_long((long *) arg);
+			get_user(block, (int *) arg);
 			block = filp->f_inode->i_op->bmap(filp->f_inode,block);
-			put_fs_long(block,(long *) arg);
+			put_user(block,(int *) arg);
 			return 0;
 		case FIGETBSZ:
 			if (filp->f_inode->i_sb == NULL)
@@ -38,15 +38,13 @@ static int file_ioctl(struct file *filp,unsigned int cmd,unsigned long arg)
 			error = verify_area(VERIFY_WRITE,(void *) arg,4);
 			if (error)
 				return error;
-			put_fs_long(filp->f_inode->i_sb->s_blocksize,
-			    (long *) arg);
+			put_user(filp->f_inode->i_sb->s_blocksize, (int *) arg);
 			return 0;
 		case FIONREAD:
 			error = verify_area(VERIFY_WRITE,(void *) arg,sizeof(int));
 			if (error)
 				return error;
-			put_fs_long(filp->f_inode->i_size - filp->f_pos,
-			    (int *) arg);
+			put_user(filp->f_inode->i_size - filp->f_pos, (int *) arg);
 			return 0;
 	}
 	if (filp->f_op && filp->f_op->ioctl)
@@ -76,7 +74,7 @@ asmlinkage int sys_ioctl(unsigned int fd, unsigned int cmd, unsigned long arg)
 				sizeof(unsigned int));
 			if(on)	
 				return on;
-			on = get_user((unsigned int *) arg);
+			get_user(on, (unsigned int *) arg);
 			if (on)
 				filp->f_flags |= O_NONBLOCK;
 			else
@@ -89,7 +87,7 @@ asmlinkage int sys_ioctl(unsigned int fd, unsigned int cmd, unsigned long arg)
 				sizeof(unsigned int));
 			if(on)	
 				return on;
-			on = get_user ((unsigned int *) arg);
+			get_user(on, (unsigned int *) arg);
 			if (on)
 				filp->f_flags |= O_SYNC;
 			else

@@ -226,7 +226,7 @@ void nfs_statfs(struct super_block *sb, struct statfs *buf, int bufsiz)
 	tmp.f_files = 0;
 	tmp.f_ffree = 0;
 	tmp.f_namelen = NAME_MAX;
-	memcpy_tofs(buf, &tmp, bufsiz);
+	copy_to_user(buf, &tmp, bufsiz);
 }
 
 /*

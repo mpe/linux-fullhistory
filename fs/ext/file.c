@@ -169,7 +169,7 @@ static long ext_file_read(struct inode * inode, struct file * filp,
 			left -= chars;
 			read += chars;
 			if (*bhe) {
-				memcpy_tofs(buf,offset+(*bhe)->b_data,chars);
+				copy_to_user(buf,offset+(*bhe)->b_data,chars);
 				brelse(*bhe);
 				buf += chars;
 			} else {
@@ -244,7 +244,7 @@ static long ext_file_write(struct inode * inode, struct file * filp,
 			}
 		}
 		p = (pos % BLOCK_SIZE) + bh->b_data;
-		memcpy_fromfs(p,buf,c);
+		copy_from_user(p,buf,c);
 		update_vm_cache(inode, pos, p, c);
 		pos += c;
 		if (pos > inode->i_size) {

@@ -384,12 +384,18 @@ static void rw_intr (Scsi_Cmnd * SCpnt)
  *   - SONY:	Same as Nec.
  *
  *   - PIONEER: works with SONY code (may be others too ?)
+ *
+ * 19961011
+ *
+ *   - HP:      reportedly working.
  */
 
 void sr_photocd(struct inode *inode)
 {
     unsigned long   sector,min,sec,frame;
     unsigned char   buf[40];    /* the buffer for the ioctl */
+    Scsi_Ioctl_Command *sic = (Scsi_Ioctl_Command *) buf;
+#define CLEAR_CMD_BUFFER memset (buf, 0, sizeof buf);
     unsigned char   *cmd;       /* the scsi-command */
     unsigned char   *send;      /* the data we send to the drive ... */
     unsigned char   *rec;       /* ... and get back */
@@ -419,7 +425,7 @@ void sr_photocd(struct inode *inode)
     sector   = 0;
     is_xa    = 0;
     no_multi = 0;
-    cmd = rec = &buf[8];
+    cmd = rec = sic->data;
     
     switch(scsi_CDs[MINOR(inode->i_rdev)].device->manufacturer) {
 	
@@ -427,14 +433,14 @@ void sr_photocd(struct inode *inode)
 #ifdef DEBUG
 	printk(KERN_DEBUG "sr_photocd: use NEC code\n");
 #endif
-	memset(buf,0,40);
-	*((unsigned int*)buf)   = 0x0;   /* we send nothing...     */
-	*((unsigned int*)buf+1) = 0x16;  /* and receive 0x16 bytes */
+	CLEAR_CMD_BUFFER;
+	sic->inlen  = 0x0;   /* we send nothing...     */
+	sic->outlen = 0x16;  /* and receive 0x16 bytes */
 	cmd[0] = 0xde;
 	cmd[1] = 0x03;
 	cmd[2] = 0xb0;
 	rc = kernel_scsi_ioctl(scsi_CDs[MINOR(inode->i_rdev)].device,
-			   SCSI_IOCTL_SEND_COMMAND, buf);
+			   SCSI_IOCTL_SEND_COMMAND, sic);
 	if (rc != 0) {
             if (rc != 0x28000002) /* drop "not ready" */
                 printk(KERN_WARNING"sr_photocd: ioctl error (NEC): 0x%x\n",rc);
@@ -450,11 +456,6 @@ void sr_photocd(struct inode *inode)
 	frame = (unsigned long) rec[17]/16*10 + (unsigned long) rec[17]%16;
 	sector = min*CD_SECS*CD_FRAMES + sec*CD_FRAMES + frame;
 	is_xa  = (rec[14] == 0xb0);
-#ifdef DEBUG
-	if (sector) {
-	    printk(KERN_DEBUG "sr_photocd: multisession CD detected. start: %lu\n",sector);
-	}
-#endif
 	break;
 	
     case SCSI_MAN_TOSHIBA:
@@ -464,13 +465,13 @@ void sr_photocd(struct inode *inode)
 	
 	/* we request some disc information (is it a XA-CD ?,
 	 * where starts the last session ?) */
-	memset(buf,0,40);
-	*((unsigned int*)buf)   = (unsigned int) 0;
-	*((unsigned int*)buf+1) = (unsigned int) 4;  /* receive 4 bytes */
+	CLEAR_CMD_BUFFER;
+	sic->inlen  = 0; /* we send nothing...  */
+	sic->outlen = 4; /* and receive 4 bytes */
 	cmd[0]                  = (unsigned char) 0x00c7;
 	cmd[1]                  = (unsigned char) 3;
 	rc = kernel_scsi_ioctl(scsi_CDs[MINOR(inode->i_rdev)].device,
-			       SCSI_IOCTL_SEND_COMMAND, buf);
+			       SCSI_IOCTL_SEND_COMMAND, sic);
 	if (rc != 0) {
 	    if (rc == 0x28000002) {
 		/* Got a "not ready" - error. No chance to find out if this is
@@ -491,22 +492,18 @@ void sr_photocd(struct inode *inode)
 	sec    = (unsigned long) rec[2]/16*10 + (unsigned long) rec[2]%16;
 	frame  = (unsigned long) rec[3]/16*10 + (unsigned long) rec[3]%16;
 	sector = min*CD_SECS*CD_FRAMES + sec*CD_FRAMES + frame;
-	if (sector) {
+	if (sector)
 	    sector -= CD_BLOCK_OFFSET;
-#ifdef DEBUG
-	    printk(KERN_DEBUG "sr_photocd: multisession CD detected: start: %lu\n",sector);
-#endif
-	}
 	
 	/* now we do a get_density... */
-	memset(buf,0,40);
-	*((unsigned int*)buf)   = (unsigned int) 0;
-	*((unsigned int*)buf+1) = (unsigned int) 12;
+	CLEAR_CMD_BUFFER;
+	sic->inlen  = 0;  /* we send nothing...  */
+	sic->outlen = 12; /* and receive 12 bytes */
 	cmd[0]                  = (unsigned char) MODE_SENSE;
 	cmd[2]                  = (unsigned char) 1;
 	cmd[4]                  = (unsigned char) 12;
 	rc = kernel_scsi_ioctl(scsi_CDs[MINOR(inode->i_rdev)].device,
-			       SCSI_IOCTL_SEND_COMMAND, buf);
+			       SCSI_IOCTL_SEND_COMMAND, sic);
 	if (rc != 0) {
 	    printk(KERN_WARNING "sr_photocd: ioctl error (TOSHIBA #2): 0x%x\n",rc);
 	    break;
@@ -520,9 +517,9 @@ void sr_photocd(struct inode *inode)
 #ifdef DEBUG
 	    printk(KERN_DEBUG "sr_photocd: doing set_density\n");
 #endif
-	    memset(buf,0,40);
-	    *((unsigned int*)buf)   = (unsigned int) 12;  /* send 12 bytes */
-	    *((unsigned int*)buf+1) = (unsigned int) 0;
+	    CLEAR_CMD_BUFFER;
+	    sic->inlen  = 12; /* we send 12 bytes... */
+	    sic->outlen = 0;  /* and receive nothing */
 	    cmd[0]                  = (unsigned char) MODE_SELECT;
 	    cmd[1]                  = (unsigned char) (1 << 4);
 	    cmd[4]                  = (unsigned char) 12;
@@ -533,7 +530,7 @@ void sr_photocd(struct inode *inode)
                                     (unsigned char) 0x81 : (unsigned char) 0;  
             send[10]                = (unsigned char) 0x08;
 	    rc = kernel_scsi_ioctl(scsi_CDs[MINOR(inode->i_rdev)].device,
-				   SCSI_IOCTL_SEND_COMMAND, buf);
+				   SCSI_IOCTL_SEND_COMMAND, sic);
 	    if (rc != 0) {
 		printk(KERN_WARNING "sr_photocd: ioctl error (TOSHIBA #3): 0x%x\n",rc);
 	    }
@@ -550,14 +547,15 @@ void sr_photocd(struct inode *inode)
 	printk(KERN_DEBUG "sr_photocd: use SONY/PIONEER/MATSHITA code\n");
 #endif
 	get_sectorsize(MINOR(inode->i_rdev));	/* spinup (avoid timeout) */
-	memset(buf,0,40);
-	*((unsigned int*)buf)   = 0x0;   /* we send nothing...     */
-	*((unsigned int*)buf+1) = 0x0c;  /* and receive 0x0c bytes */
+	CLEAR_CMD_BUFFER;
+	sic->inlen  = 0x0;  /* we send nothing...     */
+	sic->outlen = 0x0c; /* and receive 0x0c bytes */
+        
 	cmd[0] = READ_TOC;
 	cmd[8] = 0x0c;
 	cmd[9] = 0x40;
 	rc = kernel_scsi_ioctl(scsi_CDs[MINOR(inode->i_rdev)].device,
-			       SCSI_IOCTL_SEND_COMMAND, buf);
+			       SCSI_IOCTL_SEND_COMMAND, sic);
 	
 	if (rc != 0) {
             if (rc != 0x28000002) /* drop "not ready" */
@@ -571,12 +569,56 @@ void sr_photocd(struct inode *inode)
 	}
 	sector = rec[11] + (rec[10] << 8) + (rec[9] << 16) + (rec[8] << 24);
 	is_xa = !!sector;
-#ifdef DEBUG
-	if (sector)
-	    printk (KERN_DEBUG "sr_photocd: multisession CD detected. start: %lu\n",sector);
-#endif
 	break;
+    case SCSI_MAN_HP:
+#define DEBUG
+#ifdef DEBUG
+        printk(KERN_DEBUG "sr_photocd: use HP code\n");
+#endif
+        CLEAR_CMD_BUFFER;
+	sic->inlen  = 0x0; /* we send nothing...  */
+	sic->outlen = 0x4; /* and receive 4 bytes */
+        cmd[0] = 0x43; /* Read TOC */
+        cmd[8] = 0x04;
+        cmd[9] = 0x40;
+        rc = kernel_scsi_ioctl(scsi_CDs[MINOR(inode->i_rdev)].device,
+                               SCSI_IOCTL_SEND_COMMAND, sic);
+        if (rc != 0) {
+            if (rc != 0x28000002) /* drop "not ready" */
+                printk(KERN_WARNING "sr_photocd: ioctl error (HP-1): 0x%x\n",rc);
+	break;
+        }
 		
+        if ((rc = rec[2]) == 0) {
+          printk (KERN_WARNING "sr_photocd: (HP) No finished session");
+          break;
+        }
+        CLEAR_CMD_BUFFER;
+	sic->inlen  = 0x0;  /* we send nothing...     */
+	sic->outlen = 0x0c; /* and receive 0x0c bytes */
+        cmd[0] = 0x43; /* Read TOC */
+        cmd[6] = rc & 0x7f;  /* number of last session */
+        cmd[8] = 0x0c;
+        cmd[9] = 0x40;
+        rc = kernel_scsi_ioctl(scsi_CDs[MINOR(inode->i_rdev)].device,
+                               SCSI_IOCTL_SEND_COMMAND, sic);
+        if (rc != 0) {
+            if (rc != 0x28000002) /* drop "not ready" */
+                printk(KERN_WARNING "sr_photocd: ioctl error (HP-2): 0x%x\n",rc);
+            break;
+        }
+#undef STRICT_HP
+#ifdef STRICT_HP
+        sector = rec[11] + (rec[10] << 8) + (rec[9] << 16);
+        /* HP documentation states that Logical Start Address is
+           returned as three (!) bytes, and that rec[8] is
+           reserved. This is strange, because a LBA usually is
+           4 bytes long. */
+#else
+	sector = rec[11] + (rec[10] << 8) + (rec[9] << 16) + (rec[8] << 24);
+#endif
+        is_xa = !!sector;
+        break;
     case SCSI_MAN_NEC_OLDCDR:
     case SCSI_MAN_UNKNOWN:
     default:
@@ -584,6 +626,12 @@ void sr_photocd(struct inode *inode)
 	no_multi = 1;
 	break; }
     
+#ifdef DEBUG
+    if (sector)
+        printk (KERN_DEBUG "sr_photocd: multisession CD detected. start: %lu\n",sector);
+#endif
+#undef DEBUG
+
     scsi_CDs[MINOR(inode->i_rdev)].mpcd_sector = sector;
     if (is_xa)
 	scsi_CDs[MINOR(inode->i_rdev)].xa_flags |= 0x01;

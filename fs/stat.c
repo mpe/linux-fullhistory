@@ -39,7 +39,7 @@ static void cp_old_stat(struct inode * inode, struct __old_kernel_stat * statbuf
 	tmp.st_atime = inode->i_atime;
 	tmp.st_mtime = inode->i_mtime;
 	tmp.st_ctime = inode->i_ctime;
-	memcpy_tofs(statbuf,&tmp,sizeof(tmp));
+	copy_to_user(statbuf,&tmp,sizeof(tmp));
 }
 
 #endif
@@ -99,7 +99,7 @@ static void cp_new_stat(struct inode * inode, struct stat * statbuf)
 		tmp.st_blocks = inode->i_blocks;
 		tmp.st_blksize = inode->i_blksize;
 	}
-	memcpy_tofs(statbuf,&tmp,sizeof(tmp));
+	copy_to_user(statbuf,&tmp,sizeof(tmp));
 }
 
 #ifndef __alpha__

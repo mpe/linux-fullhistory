@@ -2844,7 +2844,7 @@ static int fd_copyout(void *param, const void *address, int size)
 	int ret;
 
 	ECALL(verify_area(VERIFY_WRITE,param,size));
-	memcpy_tofs(param,(void *) address, size);
+	copy_to_user(param,(void *) address, size);
 	return 0;
 }
 
@@ -2853,7 +2853,7 @@ static int fd_copyin(void *param, void *address, int size)
 	int ret;
 
 	ECALL(verify_area(VERIFY_READ,param,size));
-	memcpy_fromfs((void *) address, param, size);
+	copy_from_user((void *) address, param, size);
 	return 0;
 }
 

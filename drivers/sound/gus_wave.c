@@ -1083,7 +1083,7 @@ guswave_ioctl (int dev,
     {
     case SNDCTL_SYNTH_INFO:
       gus_info.nr_voices = nr_voices;
-      memcpy_tofs (&((char *) arg)[0], &gus_info, sizeof (gus_info));
+      copy_to_user (&((char *) arg)[0], &gus_info, sizeof (gus_info));
       return 0;
       break;
 
@@ -1732,7 +1732,7 @@ guswave_load_patch (int dev, int format, const char *addr,
    * been transferred already.
    */
 
-  memcpy_fromfs (&((char *) &patch)[offs], &(addr)[offs], sizeof_patch - offs);
+  copy_from_user (&((char *) &patch)[offs], &(addr)[offs], sizeof_patch - offs);
 
   instr = patch.instr_no;
 
@@ -1885,7 +1885,7 @@ guswave_load_patch (int dev, int format, const char *addr,
 	   * OK, move now. First in and then out.
 	   */
 
-	  memcpy_fromfs (audio_devs[gus_devnum]->dmap_out->raw_buf, &(addr)[sizeof_patch + src_offs], blk_sz);
+	  copy_from_user (audio_devs[gus_devnum]->dmap_out->raw_buf, &(addr)[sizeof_patch + src_offs], blk_sz);
 
 	  save_flags (flags);
 	  cli ();
@@ -2637,7 +2637,7 @@ gus_copy_from_user (int dev, char *localbuf, int localoffs,
 {
   if (gus_audio_channels == 1)
     {
-      memcpy_fromfs (&localbuf[localoffs], &(userbuf)[useroffs], len);
+      copy_from_user (&localbuf[localoffs], &(userbuf)[useroffs], len);
     }
   else if (gus_audio_bits == 8)
     {

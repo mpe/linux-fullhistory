@@ -171,7 +171,7 @@ static inline int lp_write_interrupt(unsigned int minor, const char * buf, int c
 	do {
 		bytes_written = 0;
 		copy_size = (count <= LP_BUFFER_SIZE ? count : LP_BUFFER_SIZE);
-		memcpy_fromfs(lp->lp_buffer, buf, copy_size);
+		copy_from_user(lp->lp_buffer, buf, copy_size);
 
 		while (copy_size) {
 			if (lp_char_interrupt(lp->lp_buffer[bytes_written], minor)) {
@@ -237,7 +237,7 @@ static inline int lp_write_polled(unsigned int minor, const char * buf, int coun
 
 	temp = buf;
 	while (count > 0) {
-		c = get_user(temp);
+		get_user(c, temp);
 		retval = lp_char_polled(c, minor);
 		/* only update counting vars if character was printed */
 		if (retval) {
@@ -479,7 +479,7 @@ static int lp_ioctl(struct inode *inode, struct file *file,
 			    sizeof(int));
 		    	if (retval)
 		    		return retval;
-			memcpy_tofs((int *) arg, &LP_IRQ(minor), sizeof(int));
+			copy_to_user((int *) arg, &LP_IRQ(minor), sizeof(int));
 			break;
 		case LPGETSTATUS:
 			retval = verify_area(VERIFY_WRITE, (void *) arg,
@@ -488,7 +488,7 @@ static int lp_ioctl(struct inode *inode, struct file *file,
 		    		return retval;
 			else {
 				int status = LP_S(minor);
-				memcpy_tofs((int *) arg, &status, sizeof(int));
+				copy_to_user((int *) arg, &status, sizeof(int));
 			}
 			break;
 		case LPRESET:
@@ -500,7 +500,7 @@ static int lp_ioctl(struct inode *inode, struct file *file,
 		    	if (retval)
 		    		return retval;
 			else {
-				memcpy_tofs((int *) arg, &LP_STAT(minor), sizeof(struct lp_stats));
+				copy_to_user((int *) arg, &LP_STAT(minor), sizeof(struct lp_stats));
 				if (suser())
 					memset(&LP_STAT(minor), 0, sizeof(struct lp_stats));
 			}
@@ -512,7 +512,7 @@ static int lp_ioctl(struct inode *inode, struct file *file,
  		    		return retval;
  			else {
  				int status = LP_F(minor);
-				memcpy_tofs((int *) arg, &status, sizeof(int));
+				copy_to_user((int *) arg, &status, sizeof(int));
 			}
 			break;
 		default:

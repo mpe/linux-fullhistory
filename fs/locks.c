@@ -94,12 +94,10 @@
  *  Made the block list a circular list to minimise searching in the list.
  *  Andy Walker (andy@lysaker.kvaerner.no), Sep 25, 1996.
  *
- *  TODO: Do not honour mandatory locks on remote file systems. This matches
- *        the SVR4 semantics and neatly sidesteps a pile of awkward issues that
- *        would otherwise have to be addressed.
+ *  Made mandatory locking a mount option. Default is not to allow mandatory
+ *  locking.
+ *  Andy Walker (andy@lysaker.kvaerner.no), Oct 04, 1996.
  */
-
-#include <linux/config.h>
 
 #include <linux/malloc.h>
 #include <linux/sched.h>
@@ -273,7 +271,7 @@ int fcntl_getlk(unsigned int fd, struct flock *l)
 	if (error)
 		return (error);
 
-	memcpy_fromfs(&flock, l, sizeof(flock));
+	copy_from_user(&flock, l, sizeof(flock));
 	if ((flock.l_type == F_UNLCK) || (flock.l_type == F_EXLCK) ||
 	    (flock.l_type == F_SHLCK))
 		return (-EINVAL);
@@ -290,7 +288,7 @@ int fcntl_getlk(unsigned int fd, struct flock *l)
 					fl->fl_end - fl->fl_start + 1;
 				flock.l_whence = 0;
 				flock.l_type = fl->fl_type;
-				memcpy_tofs(l, &flock, sizeof(flock));
+				copy_to_user(l, &flock, sizeof(flock));
 				return (0);
 			}
 			fl = fl->fl_next;
@@ -298,7 +296,7 @@ int fcntl_getlk(unsigned int fd, struct flock *l)
 	}
 
 	flock.l_type = F_UNLCK;			/* no conflict found */
-	memcpy_tofs(l, &flock, sizeof(flock));
+	copy_to_user(l, &flock, sizeof(flock));
 	return (0);
 }
 
@@ -328,11 +326,11 @@ int fcntl_setlk(unsigned int fd, unsigned int cmd, struct flock *l)
 	if (!(inode = filp->f_inode))
 		return (-EINVAL);
 	
-#ifdef CONFIG_LOCK_MANDATORY
 	/* Don't allow mandatory locks on files that may be memory mapped
 	 * and shared.
 	 */
-	if ((inode->i_mode & (S_ISGID | S_IXGRP)) == S_ISGID &&
+	if (IS_MANDLOCK(inode) &&
+	    (inode->i_mode & (S_ISGID | S_IXGRP)) == S_ISGID &&
 	    inode->i_mmap) {
 		struct vm_area_struct *vma = inode->i_mmap;
 		do {
@@ -341,9 +339,8 @@ int fcntl_setlk(unsigned int fd, unsigned int cmd, struct flock *l)
 			vma = vma->vm_next_share;
 		} while (vma != inode->i_mmap);
 	}
-#endif
 
-	memcpy_fromfs(&flock, l, sizeof(flock));
+	copy_from_user(&flock, l, sizeof(flock));
 	if (!posix_make_lock(filp, &file_lock, &flock))
 		return (-EINVAL);
 	
@@ -432,33 +429,30 @@ static void flock_remove_locks(struct file_lock **before, struct file *filp)
 
 int locks_verify_locked(struct inode *inode)
 {
-#ifdef CONFIG_LOCK_MANDATORY
 	/* Candidates for mandatory locking have the setgid bit set
 	 * but no group execute bit -  an otherwise meaningless combination.
 	 */
-	if ((inode->i_mode & (S_ISGID | S_IXGRP)) == S_ISGID)
+	if (IS_MANDLOCK(inode) &&
+	    (inode->i_mode & (S_ISGID | S_IXGRP)) == S_ISGID)
 		return (locks_mandatory_locked(inode));
-#endif
 	return (0);
 }
 
 int locks_verify_area(int read_write, struct inode *inode, struct file *filp,
 		      unsigned int offset, unsigned int count)
 {
-#ifdef CONFIG_LOCK_MANDATORY
 	/* Candidates for mandatory locking have the setgid bit set
 	 * but no group execute bit -  an otherwise meaningless combination.
 	 */
-	if ((inode->i_mode & (S_ISGID | S_IXGRP)) == S_ISGID)
+	if (IS_MANDLOCK(inode) &&
+	    (inode->i_mode & (S_ISGID | S_IXGRP)) == S_ISGID)
 		return (locks_mandatory_area(read_write, inode, filp, offset,
 					     count));
-#endif
 	return (0);
 }
 
 int locks_mandatory_locked(struct inode *inode)
 {
-#ifdef CONFIG_LOCK_MANDATORY	
 	struct file_lock *fl;
 
 	/* Search the lock list for this inode for any POSIX locks.
@@ -471,7 +465,6 @@ int locks_mandatory_locked(struct inode *inode)
 			return (-EAGAIN);
 		fl = fl->fl_next;
 	}
-#endif
 	return (0);
 }
 
@@ -479,7 +472,6 @@ int locks_mandatory_area(int read_write, struct inode *inode,
 			 struct file *filp, unsigned int offset,
 			 unsigned int count)
 {
-#ifdef CONFIG_LOCK_MANDATORY	
 	struct file_lock *fl;
 	struct file_lock tfl;
 
@@ -532,7 +524,6 @@ repeat:
 		}
 		fl = fl->fl_next;
 	}
-#endif
 	return (0);
 }
 
@@ -1035,16 +1026,12 @@ static char *lock_get_status(struct file_lock *fl, char *p, int id, char *pfx)
 
 	p += sprintf(p, "%d:%s ", id, pfx);
 	if (fl->fl_flags & FL_POSIX) {
-#ifdef CONFIG_LOCK_MANDATORY	 
 		p += sprintf(p, "%s %s ",
 			     (fl->fl_flags & FL_ACCESS) ? "ACCESS" :
 			     ((fl->fl_flags & FL_BROKEN) ? "BROKEN" : "POSIX "),
-			     ((inode->i_mode & (S_IXGRP | S_ISGID)) == S_ISGID) ?
+			     (IS_MANDLOCK(inode) &&
+			      (inode->i_mode & (S_IXGRP | S_ISGID)) == S_ISGID) ?
 			     "MANDATORY" : "ADVISORY ");
-#else
-		p += sprintf(p, "%s ADVISORY ",
-			     (fl->fl_flags & FL_BROKEN) ? "BROKEN" : "POSIX ");
-#endif
 	}
 	else {
 		p += sprintf(p, "FLOCK  ADVISORY  ");

@@ -122,7 +122,7 @@ static long mem_read(struct inode * inode, struct file * file,
 		i = PAGE_SIZE-(addr & ~PAGE_MASK);
 		if (i > count)
 			i = count;
-		memcpy_tofs(tmp, page, i);
+		copy_to_user(tmp, page, i);
 		addr += i;
 		tmp += i;
 		count -= i;
@@ -178,7 +178,7 @@ static long mem_write(struct inode * inode, struct file * file,
 		i = PAGE_SIZE-(addr & ~PAGE_MASK);
 		if (i > count)
 			i = count;
-		memcpy_fromfs(page, tmp, i);
+		copy_from_user(page, tmp, i);
 		addr += i;
 		tmp += i;
 		count -= i;

@@ -316,7 +316,7 @@ read_status (char *buf, int count)
   if (l <= 0)
     return 0;
 
-  memcpy_tofs (&(buf)[0], &status_buf[status_ptr], l);
+  copy_to_user (&(buf)[0], &status_buf[status_ptr], l);
   status_ptr += l;
 
   return l;
@@ -515,7 +515,7 @@ get_mixer_info (int dev, caddr_t arg)
   strcpy (info.id, mixer_devs[dev]->id);
   strcpy (info.name, mixer_devs[dev]->name);
 
-  memcpy_tofs (&((char *) arg)[0], (char *) &info, sizeof (info));
+  copy_to_user (&((char *) arg)[0], (char *) &info, sizeof (info));
   return 0;
 }
 

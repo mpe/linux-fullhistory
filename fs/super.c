@@ -224,7 +224,7 @@ static int fs_name(unsigned int index, char * buf)
 	err = verify_area(VERIFY_WRITE, buf, len);
 	if (err)
 		return err;
-	memcpy_tofs(buf, tmp->name, len);
+	copy_to_user(buf, tmp->name, len);
 	return 0;
 }
 
@@ -275,6 +275,7 @@ static struct proc_fs_info {
 	{ MS_NOSUID, ",nosuid" },
 	{ MS_NODEV, ",nodev" },
 	{ MS_SYNCHRONOUS, ",sync" },
+	{ MS_MANDLOCK, ",mand" },
 #ifdef MS_NOSUB			/* Can't find this except in mount.c */
 	{ MS_NOSUB, ",nosub" },
 #endif
@@ -495,7 +496,7 @@ asmlinkage int sys_ustat(dev_t dev, struct ustat * ubuf)
         tmp.f_tfree = sbuf.f_bfree;
         tmp.f_tinode = sbuf.f_ffree;
 
-        memcpy_tofs(ubuf,&tmp,sizeof(struct ustat));
+        copy_to_user(ubuf,&tmp,sizeof(struct ustat));
         return 0;
 }
 
@@ -805,7 +806,7 @@ static int copy_mount_options (const void * data, unsigned long *where)
 	if (!(page = __get_free_page(GFP_KERNEL))) {
 		return -ENOMEM;
 	}
-	memcpy_fromfs((void *) page,data,i);
+	copy_from_user((void *) page,data,i);
 	*where = page;
 	return 0;
 }

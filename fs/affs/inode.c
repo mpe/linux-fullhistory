@@ -614,7 +614,7 @@ affs_statfs(struct super_block *sb, struct statfs *buf, int bufsiz)
 	tmp.f_bavail  = free;
 	tmp.f_files   = 0;
 	tmp.f_ffree   = 0;
-	memcpy_tofs(buf,&tmp,bufsiz);
+	copy_to_user(buf,&tmp,bufsiz);
 }
 
 void

@@ -118,7 +118,7 @@ opl3_ioctl (int dev,
       {
 	struct sbi_instrument ins;
 
-	memcpy_fromfs ((char *) &ins, &((char *) arg)[0], sizeof (ins));
+	copy_from_user ((char *) &ins, &((char *) arg)[0], sizeof (ins));
 
 	if (ins.channel < 0 || ins.channel >= SBFM_MAXINSTR)
 	  {
@@ -134,7 +134,7 @@ opl3_ioctl (int dev,
     case SNDCTL_SYNTH_INFO:
       devc->fm_info.nr_voices = (devc->nr_voice == 12) ? 6 : devc->nr_voice;
 
-      memcpy_tofs (&((char *) arg)[0], &devc->fm_info, sizeof (devc->fm_info));
+      copy_to_user (&((char *) arg)[0], &devc->fm_info, sizeof (devc->fm_info));
       return 0;
       break;
 
@@ -876,7 +876,7 @@ opl3_load_patch (int dev, int format, const char *addr,
       return -(EINVAL);
     }
 
-  memcpy_fromfs (&((char *) &ins)[offs], &(addr)[offs], sizeof (ins) - offs);
+  copy_from_user (&((char *) &ins)[offs], &(addr)[offs], sizeof (ins) - offs);
 
   if (ins.channel < 0 || ins.channel >= SBFM_MAXINSTR)
     {

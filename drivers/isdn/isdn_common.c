@@ -795,7 +795,7 @@ int isdn_readbchan(int di, int channel, u_char * buf, u_char * fp, int len, int 
                         }
                         count_put = count_pull;
                         if (user)
-                                memcpy_tofs(cp, skb->data, count_put);
+                                copy_to_user(cp, skb->data, count_put);
                         else
                                 memcpy(cp, skb->data, count_put);
                         cp += count_put;
@@ -923,7 +923,7 @@ static int isdn_read(struct inode *inode, struct file *file, char *buf, int coun
 		p = isdn_statstr();
 		file->private_data = 0;
 		if ((len = strlen(p)) <= count) {
-			memcpy_tofs(buf, p, len);
+			copy_to_user(buf, p, len);
 			file->f_pos += len;
 			return len;
 		}
@@ -1076,7 +1076,7 @@ static int isdn_set_allcfg(char *src)
 		restore_flags(flags);
 		return ret;
 	}
-	memcpy_fromfs((char *) &i, src, sizeof(int));
+	copy_from_user((char *) &i, src, sizeof(int));
         src += sizeof(int);
 	while (i) {
 		char *c;
@@ -1086,7 +1086,7 @@ static int isdn_set_allcfg(char *src)
 			restore_flags(flags);
 			return ret;
 		}
-		memcpy_fromfs((char *) &cfg, src, sizeof(cfg));
+		copy_from_user((char *) &cfg, src, sizeof(cfg));
 		src += sizeof(cfg);
 		if (!isdn_net_new(cfg.name, NULL)) {
 			restore_flags(flags);
@@ -1100,7 +1100,7 @@ static int isdn_set_allcfg(char *src)
 			restore_flags(flags);
 			return ret;
 		}
-		memcpy_fromfs(buf, src, sizeof(buf));
+		copy_from_user(buf, src, sizeof(buf));
 		src += sizeof(buf);
 		c = buf;
 		while (*c) {
@@ -1122,7 +1122,7 @@ static int isdn_set_allcfg(char *src)
 			restore_flags(flags);
 			return ret;
 		}
-		memcpy_fromfs(buf, src, sizeof(buf));
+		copy_from_user(buf, src, sizeof(buf));
 		src += sizeof(buf);
 		c = buf;
 		while (*c) {
@@ -1179,9 +1179,9 @@ static int isdn_get_allcfg(char *dest)
 		cfg.callback = (p->local.flags & ISDN_NET_CALLBACK) ? 1 : 0;
 		cfg.chargehup = (p->local.hupflags & 4) ? 1 : 0;
 		cfg.ihup = (p->local.hupflags & 8) ? 1 : 0;
-		memcpy_tofs(dest, p->local.name, 10);
+		copy_to_user(dest, p->local.name, 10);
 		dest += 10;
-		memcpy_tofs(dest, (char *) &cfg, sizeof(cfg));
+		copy_to_user(dest, (char *) &cfg, sizeof(cfg));
 		dest += sizeof(cfg);
 		strcpy(phone.name, p->local.name);
 		phone.outgoing = 0;
@@ -1261,14 +1261,14 @@ static int isdn_ioctl(struct inode *inode, struct file *file, uint cmd, ulong ar
                                 if (arg) {
                                         if ((ret = verify_area(VERIFY_READ, (void *) arg, sizeof(name))))
                                                 return ret;
-                                        memcpy_fromfs(name, (char *) arg, sizeof(name));
+                                        copy_from_user(name, (char *) arg, sizeof(name));
                                         s = name;
                                 } else
                                         s = NULL;
                                 if ((s = isdn_net_new(s, NULL))) {
                                         if ((ret = verify_area(VERIFY_WRITE, (void *) arg, strlen(s) + 1)))
                                                 return ret;
-                                        memcpy_tofs((char *) arg, s, strlen(s) + 1);
+                                        copy_to_user((char *) arg, s, strlen(s) + 1);
                                         return 0;
                                 } else
                                         return -ENODEV;
@@ -1277,13 +1277,13 @@ static int isdn_ioctl(struct inode *inode, struct file *file, uint cmd, ulong ar
                                 if (arg) {
                                         if ((ret = verify_area(VERIFY_READ, (void *) arg, sizeof(bname))))
                                                 return ret;
-                                        memcpy_fromfs(bname, (char *) arg, sizeof(bname));
+                                        copy_from_user(bname, (char *) arg, sizeof(bname));
                                 } else
                                         return -EINVAL;
                                 if ((s = isdn_net_newslave(bname))) {
                                         if ((ret = verify_area(VERIFY_WRITE, (void *) arg, strlen(s) + 1)))
                                                 return ret;
-                                        memcpy_tofs((char *) arg, s, strlen(s) + 1);
+                                        copy_to_user((char *) arg, s, strlen(s) + 1);
                                         return 0;
                                 } else
                                         return -ENODEV;
@@ -1292,7 +1292,7 @@ static int isdn_ioctl(struct inode *inode, struct file *file, uint cmd, ulong ar
                                 if (arg) {
                                         if ((ret = verify_area(VERIFY_READ, (void *) arg, sizeof(name))))
                                                 return ret;
-                                        memcpy_fromfs(name, (char *) arg, sizeof(name));
+                                        copy_from_user(name, (char *) arg, sizeof(name));
                                         return isdn_net_rm(name);
                                 } else
                                         return -EINVAL;
@@ -1301,7 +1301,7 @@ static int isdn_ioctl(struct inode *inode, struct file *file, uint cmd, ulong ar
                                 if (arg) {
                                         if ((ret = verify_area(VERIFY_READ, (void *) arg, sizeof(cfg))))
                                                 return ret;
-                                        memcpy_fromfs((char *) &cfg, (char *) arg, sizeof(cfg));
+                                        copy_from_user((char *) &cfg, (char *) arg, sizeof(cfg));
                                         return isdn_net_setcfg(&cfg);
                                 } else
                                         return -EINVAL;
@@ -1310,11 +1310,11 @@ static int isdn_ioctl(struct inode *inode, struct file *file, uint cmd, ulong ar
                                 if (arg) {
                                         if ((ret = verify_area(VERIFY_READ, (void *) arg, sizeof(cfg))))
                                                 return ret;
-                                        memcpy_fromfs((char *) &cfg, (char *) arg, sizeof(cfg));
+                                        copy_from_user((char *) &cfg, (char *) arg, sizeof(cfg));
                                         if (!(ret = isdn_net_getcfg(&cfg))) {
                                                 if ((ret = verify_area(VERIFY_WRITE, (void *) arg, sizeof(cfg))))
                                                         return ret;
-                                                memcpy_tofs((char *) arg, (char *) &cfg, sizeof(cfg));
+                                                copy_to_user((char *) arg, (char *) &cfg, sizeof(cfg));
                                         }
                                         return ret;
                                 } else
@@ -1324,7 +1324,7 @@ static int isdn_ioctl(struct inode *inode, struct file *file, uint cmd, ulong ar
                                 if (arg) {
                                         if ((ret = verify_area(VERIFY_READ, (void *) arg, sizeof(phone))))
                                                 return ret;
-                                        memcpy_fromfs((char *) &phone, (char *) arg, sizeof(phone));
+                                        copy_from_user((char *) &phone, (char *) arg, sizeof(phone));
                                         return isdn_net_addphone(&phone);
                                 } else
                                         return -EINVAL;
@@ -1333,7 +1333,7 @@ static int isdn_ioctl(struct inode *inode, struct file *file, uint cmd, ulong ar
                                 if (arg) {
                                         if ((ret = verify_area(VERIFY_READ, (void *) arg, sizeof(phone))))
                                                 return ret;
-                                        memcpy_fromfs((char *) &phone, (char *) arg, sizeof(phone));
+                                        copy_from_user((char *) &phone, (char *) arg, sizeof(phone));
                                         return isdn_net_getphones(&phone, (char *) arg);
                                 } else
                                         return -EINVAL;
@@ -1342,7 +1342,7 @@ static int isdn_ioctl(struct inode *inode, struct file *file, uint cmd, ulong ar
                                 if (arg) {
                                         if ((ret = verify_area(VERIFY_READ, (void *) arg, sizeof(phone))))
                                                 return ret;
-                                        memcpy_fromfs((char *) &phone, (char *) arg, sizeof(phone));
+                                        copy_from_user((char *) &phone, (char *) arg, sizeof(phone));
                                         return isdn_net_delphone(&phone);
                                 } else
                                         return -EINVAL;
@@ -1351,7 +1351,7 @@ static int isdn_ioctl(struct inode *inode, struct file *file, uint cmd, ulong ar
                                 if (arg) {
                                         if ((ret = verify_area(VERIFY_READ, (void *) arg, sizeof(name))))
                                                 return ret;
-                                        memcpy_fromfs(name, (char *) arg, sizeof(name));
+                                        copy_from_user(name, (char *) arg, sizeof(name));
                                         return isdn_net_force_dial(name);
                                 } else
                                         return -EINVAL;
@@ -1364,7 +1364,7 @@ static int isdn_ioctl(struct inode *inode, struct file *file, uint cmd, ulong ar
                                                 return ret;
                                 } else
                                         return -EINVAL;
-                                memcpy_fromfs(name,(char*)arg,sizeof(name));
+                                copy_from_user(name,(char*)arg,sizeof(name));
                                 return isdn_ppp_dial_slave(name);
                         case IIOCNETDLN:
                                 if(arg) {
@@ -1374,7 +1374,7 @@ static int isdn_ioctl(struct inode *inode, struct file *file, uint cmd, ulong ar
                                                 return ret;
                                 } else
                                         return -EINVAL;
-                                memcpy_fromfs(name,(char*)arg,sizeof(name));
+                                copy_from_user(name,(char*)arg,sizeof(name));
                                 return isdn_ppp_hangup_slave(name);
 #endif
                         case IIOCNETHUP:
@@ -1382,7 +1382,7 @@ static int isdn_ioctl(struct inode *inode, struct file *file, uint cmd, ulong ar
                                 if (arg) {
                                         if ((ret = verify_area(VERIFY_READ, (void *) arg, sizeof(name))))
                                                 return ret;
-                                        memcpy_fromfs(name, (char *) arg, sizeof(name));
+                                        copy_from_user(name, (char *) arg, sizeof(name));
                                         return isdn_net_force_hangup(name);
                                 } else
                                         return -EINVAL;
@@ -1408,7 +1408,7 @@ static int isdn_ioctl(struct inode *inode, struct file *file, uint cmd, ulong ar
                                         if ((ret = verify_area(VERIFY_READ, (void *) arg,
                                                                sizeof(isdn_ioctl_struct))))
                                                 return ret;
-                                        memcpy_fromfs((char *) &iocts, (char *) arg,
+                                        copy_from_user((char *) &iocts, (char *) arg,
                                                       sizeof(isdn_ioctl_struct));
                                         if (strlen(iocts.drvid)) {
                                                 if ((p = strchr(iocts.drvid, ',')))
@@ -1457,10 +1457,10 @@ static int isdn_ioctl(struct inode *inode, struct file *file, uint cmd, ulong ar
                                                 return ret;
                                         
                                         for (i = 0; i < ISDN_MAX_CHANNELS; i++) {
-                                                memcpy_tofs(p, dev->mdm.info[i].emu.profile,
+                                                copy_to_user(p, dev->mdm.info[i].emu.profile,
                                                             ISDN_MODEM_ANZREG);
                                                 p += ISDN_MODEM_ANZREG;
-                                                memcpy_tofs(p, dev->mdm.info[i].emu.pmsn, ISDN_MSNLEN);
+                                                copy_to_user(p, dev->mdm.info[i].emu.pmsn, ISDN_MSNLEN);
                                                 p += ISDN_MSNLEN;
                                         }
                                         return (ISDN_MODEM_ANZREG + ISDN_MSNLEN) * ISDN_MAX_CHANNELS;
@@ -1479,10 +1479,10 @@ static int isdn_ioctl(struct inode *inode, struct file *file, uint cmd, ulong ar
                                                 return ret;
                                         
                                         for (i = 0; i < ISDN_MAX_CHANNELS; i++) {
-                                                memcpy_fromfs(dev->mdm.info[i].emu.profile, p,
+                                                copy_from_user(dev->mdm.info[i].emu.profile, p,
                                                               ISDN_MODEM_ANZREG);
                                                 p += ISDN_MODEM_ANZREG;
-                                                memcpy_fromfs(dev->mdm.info[i].emu.pmsn, p, ISDN_MSNLEN);
+                                                copy_from_user(dev->mdm.info[i].emu.pmsn, p, ISDN_MSNLEN);
                                                 p += ISDN_MSNLEN;
                                         }
                                         return 0;
@@ -1500,7 +1500,7 @@ static int isdn_ioctl(struct inode *inode, struct file *file, uint cmd, ulong ar
                                         if ((ret = verify_area(VERIFY_READ, (void *) arg,
                                                                sizeof(isdn_ioctl_struct))))
                                                 return ret;
-                                        memcpy_fromfs((char *) &iocts, (char *) arg, sizeof(isdn_ioctl_struct));
+                                        copy_from_user((char *) &iocts, (char *) arg, sizeof(isdn_ioctl_struct));
                                         if (strlen(iocts.drvid)) {
                                                 drvidx = -1;
                                                 for (i = 0; i < ISDN_MAX_DRIVERS; i++)
@@ -1515,7 +1515,7 @@ static int isdn_ioctl(struct inode *inode, struct file *file, uint cmd, ulong ar
                                         if (cmd == IIOCSETMAP) {
                                                 if ((ret = verify_area(VERIFY_READ, (void *) iocts.arg, 255)))
                                                         return ret;
-                                                memcpy_fromfs(nstring, (char *) iocts.arg, 255);
+                                                copy_from_user(nstring, (char *) iocts.arg, 255);
                                                 memset(dev->drv[drvidx]->msn2eaz, 0,
                                                        sizeof(dev->drv[drvidx]->msn2eaz));
                                                 p = strtok(nstring, ",");
@@ -1534,7 +1534,7 @@ static int isdn_ioctl(struct inode *inode, struct file *file, uint cmd, ulong ar
                                                 if ((ret = verify_area(VERIFY_WRITE, (void *) iocts.arg,
                                                                        strlen(nstring) + 1)))
                                                         return ret;
-                                                memcpy_tofs((char *) iocts.arg, nstring, strlen(nstring) + 1);
+                                                copy_to_user((char *) iocts.arg, nstring, strlen(nstring) + 1);
                                         }
                                         return 0;
                                 } else
@@ -1543,7 +1543,7 @@ static int isdn_ioctl(struct inode *inode, struct file *file, uint cmd, ulong ar
                                 if (arg) {
                                         if ((ret = verify_area(VERIFY_WRITE, (void *) arg, sizeof(ulong))))
                                                 return ret;
-                                        memcpy_tofs((char *) arg, (char *) &dev, sizeof(ulong));
+                                        copy_to_user((char *) arg, (char *) &dev, sizeof(ulong));
                                         return 0;
                                 } else
                                         return -EINVAL;
@@ -1559,7 +1559,7 @@ static int isdn_ioctl(struct inode *inode, struct file *file, uint cmd, ulong ar
                                         if ((ret = verify_area(VERIFY_READ, (void *) arg,
                                                                sizeof(isdn_ioctl_struct))))
                                                 return ret;
-                                        memcpy_fromfs((char *) &iocts, (char *) arg, sizeof(isdn_ioctl_struct));
+                                        copy_from_user((char *) &iocts, (char *) arg, sizeof(isdn_ioctl_struct));
                                         if (strlen(iocts.drvid)) {
                                                 if ((p = strchr(iocts.drvid, ',')))
                                                         *p = 0;
@@ -1582,7 +1582,7 @@ static int isdn_ioctl(struct inode *inode, struct file *file, uint cmd, ulong ar
                                         memcpy(c.num, (char *) &iocts.arg, sizeof(ulong));
                                         ret = dev->drv[drvidx]->interface->command(&c);
                                         memcpy((char *) &iocts.arg, c.num, sizeof(ulong));
-                                        memcpy_tofs((char *) arg, &iocts, sizeof(isdn_ioctl_struct));
+                                        copy_to_user((char *) arg, &iocts, sizeof(isdn_ioctl_struct));
                                         return ret;
                                 } else
                                         return -EINVAL;
@@ -1891,7 +1891,7 @@ int isdn_writebuf_stub(int drvidx, int chan, const u_char *buf, int len,
                 skb->free = 1;
 
                 if (user)
-                        memcpy_fromfs(skb_put(skb, len), buf, len);
+                        copy_from_user(skb_put(skb, len), buf, len);
                 else
                         memcpy(skb_put(skb, len), buf, len);
 

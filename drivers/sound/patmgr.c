@@ -104,7 +104,7 @@ pmgr_read (int dev, struct fileinfo *file, char *buf, int count)
 
       if (mbox[dev] && msg_direction[dev] == A_TO_S)
 	{
-	  memcpy_tofs (&(buf)[0], (char *) mbox[dev], count);
+	  copy_to_user (&(buf)[0], (char *) mbox[dev], count);
 	  msg_direction[dev] = 0;
 	  ok = 1;
 	}
@@ -129,7 +129,7 @@ pmgr_write (int dev, struct fileinfo *file, const char *buf, int count)
       return -(EIO);
     }
 
-  memcpy_fromfs ((char *) mbox[dev], &(buf)[0], 4);
+  copy_from_user ((char *) mbox[dev], &(buf)[0], 4);
 
   if (*(unsigned char *) mbox[dev] == SEQ_FULLSIZE)
     {
@@ -159,7 +159,7 @@ pmgr_write (int dev, struct fileinfo *file, const char *buf, int count)
 
   if (mbox[dev] && !msg_direction[dev])
     {
-      memcpy_fromfs (&((char *) mbox[dev])[4], &(buf)[4], count - 4);
+      copy_from_user (&((char *) mbox[dev])[4], &(buf)[4], count - 4);
       msg_direction[dev] = S_TO_A;
 
       if ((appl_wait_flag.flags & WK_SLEEP))

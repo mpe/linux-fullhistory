@@ -191,7 +191,10 @@ static int count(char ** argv)
 		error = verify_area(VERIFY_READ, tmp, sizeof(char *));
 		if (error)
 			return error;
-		while ((p = get_user(tmp++)) != NULL) {
+		for (;;) {
+			get_user(p,tmp++);
+			if (!p)
+				break;
 			i++;
 			error = verify_area(VERIFY_READ, p, 1);
 			if (error)
@@ -234,11 +237,18 @@ unsigned long copy_strings(int argc,char ** argv,unsigned long *page,
 	while (argc-- > 0) {
 		if (from_kmem == 1)
 			set_fs(new_fs);
-		if (!(tmp1 = tmp = get_user(argv+argc)))
+		get_user(tmp, argv+argc);
+		if (!tmp)
 			panic("VFS: argc is wrong");
+		tmp1 = tmp;
 		if (from_kmem == 1)
 			set_fs(old_fs);
-		while (get_user(tmp++));
+		for (;;) {
+			char c;
+			get_user(c,tmp++);
+			if (!c)
+				break;
+		}
 		len = tmp - tmp1;
 		if (p < len) {	/* this shouldn't happen - 128kB */
 			set_fs(old_fs);
@@ -259,14 +269,14 @@ unsigned long copy_strings(int argc,char ** argv,unsigned long *page,
 
 			}
 			if (len == 0 || offset == 0)
-			  *(pag + offset) = get_user(tmp);
+				get_user(*(pag + offset), tmp);
 			else {
 			  int bytes_to_copy = (len > offset) ? offset : len;
 			  tmp -= bytes_to_copy;
 			  p -= bytes_to_copy;
 			  offset -= bytes_to_copy;
 			  len -= bytes_to_copy;
-			  memcpy_fromfs(pag + offset, tmp, bytes_to_copy + 1);
+			  copy_from_user(pag + offset, tmp, bytes_to_copy + 1);
 			}
 		}
 	}

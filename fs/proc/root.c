@@ -226,7 +226,7 @@ static int proc_self_readlink(struct inode * inode, char * buffer, int buflen)
 	len = 1 + sprintf(tmp, "%d", current->pid);
 	if (buflen < len)
 		len = buflen;
-	memcpy_tofs(buffer, tmp, len);
+	copy_to_user(buffer, tmp, len);
 	return len;
 }
 

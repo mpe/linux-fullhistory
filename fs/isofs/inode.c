@@ -466,7 +466,7 @@ void isofs_statfs (struct super_block *sb, struct statfs *buf, int bufsiz)
 	tmp.f_files = sb->u.isofs_sb.s_ninodes;
 	tmp.f_ffree = 0;
 	tmp.f_namelen = NAME_MAX;
-	memcpy_tofs(buf, &tmp, bufsiz);
+	copy_to_user(buf, &tmp, bufsiz);
 }
 
 int isofs_bmap(struct inode * inode,int block)

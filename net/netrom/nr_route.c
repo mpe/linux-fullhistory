@@ -578,7 +578,7 @@ int nr_rt_ioctl(unsigned int cmd, void *arg)
 		case SIOCADDRT:
 			if ((err = verify_area(VERIFY_READ, arg, sizeof(struct nr_route_struct))) != 0)
 				return err;
-			memcpy_fromfs(&nr_route, arg, sizeof(struct nr_route_struct));
+			copy_from_user(&nr_route, arg, sizeof(struct nr_route_struct));
 			if ((dev = nr_ax25_dev_get(nr_route.device)) == NULL)
 				return -EINVAL;
 			switch (nr_route.type) {
@@ -598,7 +598,7 @@ int nr_rt_ioctl(unsigned int cmd, void *arg)
 		case SIOCDELRT:
 			if ((err = verify_area(VERIFY_READ, arg, sizeof(struct nr_route_struct))) != 0)
 				return err;
-			memcpy_fromfs(&nr_route, arg, sizeof(struct nr_route_struct));
+			copy_from_user(&nr_route, arg, sizeof(struct nr_route_struct));
 			if ((dev = nr_ax25_dev_get(nr_route.device)) == NULL)
 				return -EINVAL;
 			switch (nr_route.type) {

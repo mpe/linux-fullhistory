@@ -65,7 +65,7 @@ static void
 ncp_add_mem_fromfs(struct ncp_server *server, const char *source, int size)
 {
 	assert_server_locked(server);
-	memcpy_fromfs(&(server->packet[server->current_size]), source, size);
+	copy_from_user(&(server->packet[server->current_size]), source, size);
 	server->current_size += size;
 	return;
 }
@@ -593,7 +593,7 @@ ncp_read(struct ncp_server *server, const char *file_id,
 
 	*bytes_read = ntohs(ncp_reply_word(server, 0));
 
-	memcpy_tofs(target, ncp_reply_data(server, 2+(offset&1)), *bytes_read);
+	copy_to_user(target, ncp_reply_data(server, 2+(offset&1)), *bytes_read);
 
 	ncp_unlock_server(server);
 	return 0;

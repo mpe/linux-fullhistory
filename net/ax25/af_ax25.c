@@ -548,7 +548,7 @@ static int ax25_ctl_ioctl(const unsigned int cmd, void *arg)
 	if ((err = verify_area(VERIFY_READ, arg, sizeof(ax25_ctl))) != 0)
 		return err;
 
-	memcpy_fromfs(&ax25_ctl, arg, sizeof(ax25_ctl));
+	copy_from_user(&ax25_ctl, arg, sizeof(ax25_ctl));
 	
 	if ((dev = ax25rtr_get_dev(&ax25_ctl.port_addr)) == NULL)
 		return -ENODEV;
@@ -2150,12 +2150,12 @@ static int ax25_ioctl(struct socket *sock, unsigned int cmd, unsigned long arg)
 
 	switch (cmd) {
 		case TIOCOUTQ:
-			if ((err = verify_area(VERIFY_WRITE, (void *)arg, sizeof(unsigned long))) != 0)
+			if ((err = verify_area(VERIFY_WRITE, (void *)arg, sizeof(int))) != 0)
 				return err;
 			amount = sk->sndbuf - sk->wmem_alloc;
 			if (amount < 0)
 				amount = 0;
-			put_fs_long(amount, (unsigned long *)arg);
+			put_user(amount, (int *)arg);
 			return 0;
 
 		case TIOCINQ: {
@@ -2163,9 +2163,9 @@ static int ax25_ioctl(struct socket *sock, unsigned int cmd, unsigned long arg)
 			/* These two are safe on a single CPU system as only user tasks fiddle here */
 			if ((skb = skb_peek(&sk->receive_queue)) != NULL)
 				amount = skb->len;
-			if ((err = verify_area(VERIFY_WRITE, (void *)arg, sizeof(unsigned long))) != 0)
+			if ((err = verify_area(VERIFY_WRITE, (void *)arg, sizeof(int))) != 0)
 				return err;
-			put_fs_long(amount, (unsigned long *)arg);
+			put_user(amount, (int *)arg);
 			return 0;
 		}
 
@@ -2175,7 +2175,7 @@ static int ax25_ioctl(struct socket *sock, unsigned int cmd, unsigned long arg)
 					return -ENOENT;
 				if ((err = verify_area(VERIFY_WRITE,(void *)arg,sizeof(struct timeval))) != 0)
 					return err;
-				memcpy_tofs((void *)arg, &sk->stamp, sizeof(struct timeval));
+				copy_to_user((void *)arg, &sk->stamp, sizeof(struct timeval));
 				return 0;
 			}
 			return -EINVAL;
@@ -2186,7 +2186,7 @@ static int ax25_ioctl(struct socket *sock, unsigned int cmd, unsigned long arg)
 			struct sockaddr_ax25 sax25;
 			if ((err = verify_area(VERIFY_READ, (void *)arg, sizeof(struct sockaddr_ax25))) != 0)
 				return err;
-			memcpy_fromfs(&sax25, (void *)arg, sizeof(sax25));
+			copy_from_user(&sax25, (void *)arg, sizeof(sax25));
 			return ax25_uid_ioctl(cmd, &sax25);
 		}
 

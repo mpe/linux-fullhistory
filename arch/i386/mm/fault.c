@@ -30,7 +30,7 @@ int __verify_write(const void * addr, unsigned long size)
 	unsigned long start = (unsigned long) addr;
 
 	if (!size)
-		return 0;
+		return 1;
 
 	vma = find_vma(current->mm, start);
 	if (!vma)
@@ -60,7 +60,7 @@ good_area:
 		if (!(vma->vm_flags & VM_WRITE))
 			goto bad_area;;
 	}
-	return 0;
+	return 1;
 
 check_stack:
 	if (!(vma->vm_flags & VM_GROWSDOWN))
@@ -69,7 +69,7 @@ check_stack:
 		goto good_area;
 
 bad_area:
-	return -EFAULT;
+	return 0;
 }
 
 /*
@@ -161,7 +161,14 @@ good_area:
  */
 bad_area:
 	up(&mm->mmap_sem);
-	handle_exception(&tsk->tss.ex);
+	/* is there valid exception data? Return to indicated handler if so */
+	if (tsk->tss.ex.count == 0) {
+		printk("Exception at %lx (%lx)\n", regs->eip, regs->edx);
+		tsk->tss.ex.count--;
+		regs->eip = regs->edx;
+		regs->edx = -EFAULT;
+		return;
+	}
 	if (error_code & 4) {
 		tsk->tss.cr2 = address;
 		tsk->tss.error_code = error_code;

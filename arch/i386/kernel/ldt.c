@@ -32,7 +32,7 @@ static int read_ldt(void * ptr, unsigned long bytecount)
 	error = verify_area(VERIFY_WRITE, ptr, size);
 	if (error)
 		return error;
-	memcpy_tofs(ptr, address, size);
+	copy_to_user(ptr, address, size);
 	return size;
 }
 
@@ -73,7 +73,7 @@ static int write_ldt(void * ptr, unsigned long bytecount)
 	if (error)
 		return error;
 
-	memcpy_fromfs(&ldt_info, ptr, sizeof(ldt_info));
+	copy_from_user(&ldt_info, ptr, sizeof(ldt_info));
 
 	if (ldt_info.contents == 3 || ldt_info.entry_number >= LDT_ENTRIES)
 		return -EINVAL;

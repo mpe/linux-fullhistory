@@ -493,7 +493,7 @@ pss_coproc_ioctl (void *dev_info, unsigned int cmd, caddr_t arg, int local)
 	if (buf == NULL)
 	  return -(ENOSPC);
 
-	memcpy_fromfs ((char *) buf, &((char *) arg)[0], sizeof (*buf));
+	copy_from_user ((char *) buf, &((char *) arg)[0], sizeof (*buf));
 	err = download_boot_block (dev_info, buf);
 	vfree (buf);
 	return err;
@@ -511,7 +511,7 @@ pss_coproc_ioctl (void *dev_info, unsigned int cmd, caddr_t arg, int local)
 	if (buf == NULL)
 	  return -(ENOSPC);
 
-	memcpy_fromfs ((char *) buf, &((char *) arg)[0], sizeof (*buf));
+	copy_from_user ((char *) buf, &((char *) arg)[0], sizeof (*buf));
 
 	data = (unsigned short *) (buf->data);
 
@@ -524,7 +524,7 @@ pss_coproc_ioctl (void *dev_info, unsigned int cmd, caddr_t arg, int local)
 	      {
 		restore_flags (flags);
 		buf->len = i;	/* feed back number of WORDs sent */
-		memcpy_tofs (&((char *) arg)[0], &buf, sizeof (buf));
+		copy_to_user (&((char *) arg)[0], &buf, sizeof (buf));
 		vfree (buf);
 		return -(EIO);
 	      }
@@ -569,7 +569,7 @@ pss_coproc_ioctl (void *dev_info, unsigned int cmd, caddr_t arg, int local)
 
 	restore_flags (flags);
 
-	memcpy_tofs (&((char *) arg)[0], &buf, sizeof (buf));
+	copy_to_user (&((char *) arg)[0], &buf, sizeof (buf));
 	vfree (buf);
 
 	return err;
@@ -583,7 +583,7 @@ pss_coproc_ioctl (void *dev_info, unsigned int cmd, caddr_t arg, int local)
 	unsigned long   flags;
 	unsigned short  tmp;
 
-	memcpy_fromfs ((char *) &buf, &((char *) arg)[0], sizeof (buf));
+	copy_from_user ((char *) &buf, &((char *) arg)[0], sizeof (buf));
 
 	save_flags (flags);
 	cli ();
@@ -608,7 +608,7 @@ pss_coproc_ioctl (void *dev_info, unsigned int cmd, caddr_t arg, int local)
 	buf.parm1 = tmp;
 	restore_flags (flags);
 
-	memcpy_tofs (&((char *) arg)[0], &buf, sizeof (buf));
+	copy_to_user (&((char *) arg)[0], &buf, sizeof (buf));
 	return 0;
       }
       break;
@@ -619,7 +619,7 @@ pss_coproc_ioctl (void *dev_info, unsigned int cmd, caddr_t arg, int local)
 	unsigned long   flags;
 	unsigned short  tmp;
 
-	memcpy_fromfs ((char *) &buf, &((char *) arg)[0], sizeof (buf));
+	copy_from_user ((char *) &buf, &((char *) arg)[0], sizeof (buf));
 
 	save_flags (flags);
 	cli ();
@@ -653,7 +653,7 @@ pss_coproc_ioctl (void *dev_info, unsigned int cmd, caddr_t arg, int local)
 	unsigned long   flags;
 	unsigned short  tmp;
 
-	memcpy_fromfs ((char *) &buf, &((char *) arg)[0], sizeof (buf));
+	copy_from_user ((char *) &buf, &((char *) arg)[0], sizeof (buf));
 
 	save_flags (flags);
 	cli ();
@@ -694,7 +694,7 @@ pss_coproc_ioctl (void *dev_info, unsigned int cmd, caddr_t arg, int local)
 	unsigned long   flags;
 	unsigned short  tmp;
 
-	memcpy_fromfs ((char *) &buf, &((char *) arg)[0], sizeof (buf));
+	copy_from_user ((char *) &buf, &((char *) arg)[0], sizeof (buf));
 
 	save_flags (flags);
 	cli ();
@@ -728,7 +728,7 @@ pss_coproc_ioctl (void *dev_info, unsigned int cmd, caddr_t arg, int local)
 
 	restore_flags (flags);
 
-	memcpy_tofs (&((char *) arg)[0], &buf, sizeof (buf));
+	copy_to_user (&((char *) arg)[0], &buf, sizeof (buf));
 	return 0;
       }
       break;

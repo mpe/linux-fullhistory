@@ -1,4 +1,12 @@
 
+UPDATE NEWS: version 1.30 - 14 Oct 96
+
+   Fixed a bug in the code that sets the transfer direction
+   bit (DESTID_DPD in the WD_DESTINATION_ID register). There
+   are quite a few SCSI commands that do a write-to-device;
+   now we deal with all of them correctly. Thanks to Joerg
+   Dorchain for catching this one.
+
 UPDATE NEWS: version 1.29 - 24 Sep 96
 
    The memory-mapped hardware on the card is now accessed via

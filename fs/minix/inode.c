@@ -316,7 +316,7 @@ void minix_statfs(struct super_block *sb, struct statfs *buf, int bufsiz)
 	tmp.f_files = sb->u.minix_sb.s_ninodes;
 	tmp.f_ffree = minix_count_free_inodes(sb);
 	tmp.f_namelen = sb->u.minix_sb.s_namelen;
-	memcpy_tofs(buf, &tmp, bufsiz);
+	copy_to_user(buf, &tmp, bufsiz);
 }
 
 /*

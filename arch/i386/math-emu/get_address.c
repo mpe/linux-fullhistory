@@ -56,12 +56,16 @@ static int reg_offset_vm86[] = {
 #define VM86_REG_(x) (*(unsigned short *) \
 		      (reg_offset_vm86[((unsigned)x)]+(char *) FPU_info))
 
+/* These are dummy, fs and gs are not saved on the stack. */
+#define ___FS ___ds
+#define ___GS ___ds
+
 static int reg_offset_pm[] = {
 	offsetof(struct info,___cs),
 	offsetof(struct info,___ds),
 	offsetof(struct info,___es),
-	offsetof(struct info,___fs),
-	offsetof(struct info,___gs),
+	offsetof(struct info,___FS),
+	offsetof(struct info,___GS),
 	offsetof(struct info,___ss),
 	offsetof(struct info,___ds)
       };
@@ -78,7 +82,7 @@ static int sib(int mod, unsigned long *fpu_eip)
 
   RE_ENTRANT_CHECK_OFF;
   FPU_code_verify_area(1);
-  base = get_fs_byte((char *) (*fpu_eip));   /* The SIB byte */
+  get_user(base, (unsigned char *) (*fpu_eip));   /* The SIB byte */
   RE_ENTRANT_CHECK_ON;
   (*fpu_eip)++;
   ss = base >> 6;
@@ -105,18 +109,22 @@ static int sib(int mod, unsigned long *fpu_eip)
   if (mod == 1)
     {
       /* 8 bit signed displacement */
+      long displacement;
       RE_ENTRANT_CHECK_OFF;
       FPU_code_verify_area(1);
-      offset += (signed char) get_fs_byte((char *) (*fpu_eip));
+      get_user(displacement, (signed char *) (*fpu_eip));
+      offset += displacement;
       RE_ENTRANT_CHECK_ON;
       (*fpu_eip)++;
     }
   else if (mod == 2 || base == 5) /* The second condition also has mod==0 */
     {
       /* 32 bit displacement */
+      long displacement;
       RE_ENTRANT_CHECK_OFF;
       FPU_code_verify_area(4);
-      offset += (signed) get_fs_long((unsigned long *) (*fpu_eip));
+      get_user(displacement, (signed long *) (*fpu_eip));
+      offset += displacement;
       RE_ENTRANT_CHECK_ON;
       (*fpu_eip) += 4;
     }
@@ -149,7 +157,9 @@ static long pm_address(unsigned char FPU_modrm, unsigned char segment,
   unsigned long base_address, limit, address, seg_top;
 
   segment--;
+
 #ifdef PARANOID
+  /* segment is unsigned, so this also detects if segment was 0: */
   if ( segment > PREFIX_SS_ )
     {
       EXCEPTION(EX_INTERNAL|0x132);
@@ -157,7 +167,19 @@ static long pm_address(unsigned char FPU_modrm, unsigned char segment,
     }
 #endif PARANOID
 
-  *selector = PM_REG_(segment);
+  switch ( segment )
+    {
+      /* fs and gs aren't used by the kernel, so they still have their
+	 user-space values. */
+    case PREFIX_FS_-1:
+      __asm__("mov %%fs,%0":"=r" (*selector));
+      break;
+    case PREFIX_GS_-1:
+      __asm__("mov %%gs,%0":"=r" (*selector));
+      break;
+    default:
+      *selector = PM_REG_(segment);
+    }
 
   descriptor = LDT_DESCRIPTOR(PM_REG_(segment));
   base_address = SEG_BASE_ADDR(descriptor);
@@ -248,7 +270,7 @@ void *get_address(unsigned char FPU_modrm, unsigned long *fpu_eip,
 	      /* Special case: disp32 */
 	      RE_ENTRANT_CHECK_OFF;
 	      FPU_code_verify_area(4);
-	      address = get_fs_long((unsigned long *) (*fpu_eip));
+	      get_user(address, (unsigned long *) (*fpu_eip));
 	      (*fpu_eip) += 4;
 	      RE_ENTRANT_CHECK_ON;
 	      addr->offset = address;
@@ -265,7 +287,7 @@ void *get_address(unsigned char FPU_modrm, unsigned long *fpu_eip,
 	  /* 8 bit signed displacement */
 	  RE_ENTRANT_CHECK_OFF;
 	  FPU_code_verify_area(1);
-	  address = (signed char) get_fs_byte((char *) (*fpu_eip));
+	  get_user(address, (signed char *) (*fpu_eip));
 	  RE_ENTRANT_CHECK_ON;
 	  (*fpu_eip)++;
 	  break;
@@ -273,7 +295,7 @@ void *get_address(unsigned char FPU_modrm, unsigned long *fpu_eip,
 	  /* 32 bit displacement */
 	  RE_ENTRANT_CHECK_OFF;
 	  FPU_code_verify_area(4);
-	  address = (signed) get_fs_long((unsigned long *) (*fpu_eip));
+	  get_user(address, (long *) (*fpu_eip));
 	  (*fpu_eip) += 4;
 	  RE_ENTRANT_CHECK_ON;
 	  break;
@@ -336,7 +358,7 @@ void *get_address_16(unsigned char FPU_modrm, unsigned long *fpu_eip,
 	  /* Special case: disp16 */
 	  RE_ENTRANT_CHECK_OFF;
 	  FPU_code_verify_area(2);
-	  address = (unsigned short)get_fs_word((unsigned short *) (*fpu_eip));
+	  get_user(address, (unsigned short *) (*fpu_eip));
 	  (*fpu_eip) += 2;
 	  RE_ENTRANT_CHECK_ON;
 	  goto add_segment;
@@ -346,7 +368,7 @@ void *get_address_16(unsigned char FPU_modrm, unsigned long *fpu_eip,
       /* 8 bit signed displacement */
       RE_ENTRANT_CHECK_OFF;
       FPU_code_verify_area(1);
-      address = (signed char) get_fs_byte((signed char *) (*fpu_eip));
+      get_user(address, (signed char *) (*fpu_eip));
       RE_ENTRANT_CHECK_ON;
       (*fpu_eip)++;
       break;
@@ -354,7 +376,7 @@ void *get_address_16(unsigned char FPU_modrm, unsigned long *fpu_eip,
       /* 16 bit displacement */
       RE_ENTRANT_CHECK_OFF;
       FPU_code_verify_area(2);
-      address = (unsigned) get_fs_word((unsigned short *) (*fpu_eip));
+      get_user(address, (unsigned short *) (*fpu_eip));
       (*fpu_eip) += 2;
       RE_ENTRANT_CHECK_ON;
       break;

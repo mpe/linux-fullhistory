@@ -29,7 +29,7 @@ extern void __up(struct semaphore * sem);
  * "down_failed" is a special asm handler that calls the C
  * routine that actually waits. See arch/i386/lib/semaphore.S
  */
-extern inline void down(struct semaphore * sem)
+extern __inline__ void down(struct semaphore * sem)
 {
 	__asm__ __volatile__(
 		"# atomic down operation\n\t"
@@ -51,7 +51,7 @@ extern inline void down(struct semaphore * sem)
  * The default case (no contention) will result in NO
  * jumps for both down() and up().
  */
-extern inline void up(struct semaphore * sem)
+extern __inline__ void up(struct semaphore * sem)
 {
 	__asm__ __volatile__(
 		"# atomic up operation\n\t"

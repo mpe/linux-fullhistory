@@ -743,7 +743,7 @@ static inline void copy_from_read_buf(struct tty_struct *tty,
 	n = MIN(*nr, MIN(tty->read_cnt, N_TTY_BUF_SIZE - tty->read_tail));
 	if (!n)
 		return;
-	memcpy_tofs(*b, &tty->read_buf[tty->read_tail], n);
+	copy_to_user(*b, &tty->read_buf[tty->read_tail], n);
 	tty->read_tail = (tty->read_tail + n) & (N_TTY_BUF_SIZE-1);
 	tty->read_cnt -= n;
 	*b += n;
@@ -809,9 +809,6 @@ do_it_again:
 	}
 
 	add_wait_queue(&tty->read_wait, &wait);
-
-	if (exception())
-		goto user_fault;
 
 	disable_bh(TQUEUE_BH);
 	while (1) {
@@ -908,7 +905,6 @@ do_it_again:
 			current->timeout = time + jiffies;
 	}
 	enable_bh(TQUEUE_BH);
-	end_exception();
 	remove_wait_queue(&tty->read_wait, &wait);
 
 	if (!waitqueue_active(&tty->read_wait))
@@ -924,12 +920,6 @@ do_it_again:
 	if (!size && !retval)
 	        clear_bit(TTY_PUSH, &tty->flags);
 	return (size ? size : retval);
-
-user_fault:
-	enable_bh(TQUEUE_BH);
-	remove_wait_queue(&tty->read_wait, &wait);
-	current->timeout = 0;
-	return -EFAULT;
 }
 
 static int write_chan(struct tty_struct * tty, struct file * file,
@@ -959,17 +949,12 @@ static int write_chan(struct tty_struct * tty, struct file * file,
 			break;
 		}
 		if (O_OPOST(tty)) {
-			if (exception()) {
-				retval = -EFAULT;
-				break;
-			}
 			while (nr > 0) {
-				c = get_user(b);
+				get_user(c, b);
 				if (opost(c, tty) < 0)
 					break;
 				b++; nr--;
 			}
-			end_exception();
 			if (tty->driver.flush_chars)
 				tty->driver.flush_chars(tty);
 		} else {

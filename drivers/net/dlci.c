@@ -296,7 +296,7 @@ int dlci_config(struct device *dev, struct dlci_conf *conf, int get)
       if (err)
          return(err);
 
-      memcpy_fromfs(&config, conf, sizeof(struct dlci_conf));
+      copy_from_user(&config, conf, sizeof(struct dlci_conf));
       if (config.flags & ~DLCI_VALID_FLAGS)
          return(-EINVAL);
       memcpy(&dlp->config, &config, sizeof(struct dlci_conf));
@@ -313,7 +313,7 @@ int dlci_config(struct device *dev, struct dlci_conf *conf, int get)
       if (err)
          return(err);
 
-      memcpy_tofs(conf, &dlp->config, sizeof(struct dlci_conf));
+      copy_to_user(conf, &dlp->config, sizeof(struct dlci_conf));
    }
 
    return(0);
@@ -340,7 +340,7 @@ int dlci_dev_ioctl(struct device *dev, struct ifreq *ifr, int cmd)
          if (err)
             return err;
 
-         memcpy_tofs(ifr->ifr_slave, dlp->slave->name, len);
+         copy_to_user(ifr->ifr_slave, dlp->slave->name, len);
          break;
 
       case DLCI_GET_CONF:
@@ -556,7 +556,7 @@ int dlci_ioctl(unsigned int cmd, void *arg)
    if (err)
       return(err);
 
-   memcpy_fromfs(&add, arg, sizeof(struct dlci_add));
+   copy_from_user(&add, arg, sizeof(struct dlci_add));
 
    switch (cmd)
    {
@@ -568,7 +568,7 @@ int dlci_ioctl(unsigned int cmd, void *arg)
          err = dlci_add(&add);
 
          if (!err)
-            memcpy_tofs(arg, &add, sizeof(struct dlci_add));
+            copy_to_user(arg, &add, sizeof(struct dlci_add));
          break;
 
       case SIOCDELDLCI:

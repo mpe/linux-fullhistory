@@ -89,56 +89,58 @@ asmlinkage int do_sigsuspend(unsigned long mask, struct pt_regs * regs, struct s
 asmlinkage void do_sigreturn(struct sigcontext * sc, 
 	struct pt_regs * regs, struct switch_stack * sw)
 {
-	unsigned long mask;
+	unsigned long mask, ps, usp;
 	int i;
 
 	/* verify that it's a good sigcontext before using it */
 	if (verify_area(VERIFY_READ, sc, sizeof(*sc)))
 		do_exit(SIGSEGV);
-	if (get_fs_quad(&sc->sc_ps) != 8)
+	get_user(ps, &sc->sc_ps);
+	if (ps != 8)
 		do_exit(SIGSEGV);
-	mask = get_fs_quad(&sc->sc_mask);
+	get_user(mask, &sc->sc_mask);
 	if (mask & ~_BLOCKABLE)
 		do_exit(SIGSEGV);
 
 	/* ok, looks fine, start restoring */
-	wrusp(get_fs_quad(sc->sc_regs+30));
-	regs->pc = get_fs_quad(&sc->sc_pc);
+	get_user(usp, sc->sc_regs+30);
+	wrusp(usp);
+	get_user(regs->pc, &sc->sc_pc);
 	sw->r26 = (unsigned long) ret_from_sys_call;
 	current->blocked = mask;
 
-	regs->r0  = get_fs_quad(sc->sc_regs+0);
-	regs->r1  = get_fs_quad(sc->sc_regs+1);
-	regs->r2  = get_fs_quad(sc->sc_regs+2);
-	regs->r3  = get_fs_quad(sc->sc_regs+3);
-	regs->r4  = get_fs_quad(sc->sc_regs+4);
-	regs->r5  = get_fs_quad(sc->sc_regs+5);
-	regs->r6  = get_fs_quad(sc->sc_regs+6);
-	regs->r7  = get_fs_quad(sc->sc_regs+7);
-	regs->r8  = get_fs_quad(sc->sc_regs+8);
-	sw->r9    = get_fs_quad(sc->sc_regs+9);
-	sw->r10   = get_fs_quad(sc->sc_regs+10);
-	sw->r11   = get_fs_quad(sc->sc_regs+11);
-	sw->r12   = get_fs_quad(sc->sc_regs+12);
-	sw->r13   = get_fs_quad(sc->sc_regs+13);
-	sw->r14   = get_fs_quad(sc->sc_regs+14);
-	sw->r15   = get_fs_quad(sc->sc_regs+15);
-	regs->r16 = get_fs_quad(sc->sc_regs+16);
-	regs->r17 = get_fs_quad(sc->sc_regs+17);
-	regs->r18 = get_fs_quad(sc->sc_regs+18);
-	regs->r19 = get_fs_quad(sc->sc_regs+19);
-	regs->r20 = get_fs_quad(sc->sc_regs+20);
-	regs->r21 = get_fs_quad(sc->sc_regs+21);
-	regs->r22 = get_fs_quad(sc->sc_regs+22);
-	regs->r23 = get_fs_quad(sc->sc_regs+23);
-	regs->r24 = get_fs_quad(sc->sc_regs+24);
-	regs->r25 = get_fs_quad(sc->sc_regs+25);
-	regs->r26 = get_fs_quad(sc->sc_regs+26);
-	regs->r27 = get_fs_quad(sc->sc_regs+27);
-	regs->r28 = get_fs_quad(sc->sc_regs+28);
-	regs->gp  = get_fs_quad(sc->sc_regs+29);
+	get_user(regs->r0, sc->sc_regs+0);
+	get_user(regs->r1, sc->sc_regs+1);
+	get_user(regs->r2, sc->sc_regs+2);
+	get_user(regs->r3, sc->sc_regs+3);
+	get_user(regs->r4, sc->sc_regs+4);
+	get_user(regs->r5, sc->sc_regs+5);
+	get_user(regs->r6, sc->sc_regs+6);
+	get_user(regs->r7, sc->sc_regs+7);
+	get_user(regs->r8, sc->sc_regs+8);
+	get_user(sw->r9, sc->sc_regs+9);
+	get_user(sw->r10, sc->sc_regs+10);
+	get_user(sw->r11, sc->sc_regs+11);
+	get_user(sw->r12, sc->sc_regs+12);
+	get_user(sw->r13, sc->sc_regs+13);
+	get_user(sw->r14, sc->sc_regs+14);
+	get_user(sw->r15, sc->sc_regs+15);
+	get_user(regs->r16, sc->sc_regs+16);
+	get_user(regs->r17, sc->sc_regs+17);
+	get_user(regs->r18, sc->sc_regs+18);
+	get_user(regs->r19, sc->sc_regs+19);
+	get_user(regs->r20, sc->sc_regs+20);
+	get_user(regs->r21, sc->sc_regs+21);
+	get_user(regs->r22, sc->sc_regs+22);
+	get_user(regs->r23, sc->sc_regs+23);
+	get_user(regs->r24, sc->sc_regs+24);
+	get_user(regs->r25, sc->sc_regs+25);
+	get_user(regs->r26, sc->sc_regs+26);
+	get_user(regs->r27, sc->sc_regs+27);
+	get_user(regs->r28, sc->sc_regs+28);
+	get_user(regs->gp, sc->sc_regs+29);
 	for (i = 0; i < 31; i++)
-		sw->fp[i] = get_fs_quad(sc->sc_fpregs+i);
+		get_user(sw->fp[i], sc->sc_fpregs+i);
 
 	/* send SIGTRAP if we're single-stepping: */
 	if (ptrace_cancel_bpt (current))
@@ -166,43 +168,43 @@ static void setup_frame(struct sigaction * sa,
 
 	wrusp((unsigned long) sc);
 
-	put_fs_quad(oldmask, &sc->sc_mask);
-	put_fs_quad(8, &sc->sc_ps);
-	put_fs_quad(regs->pc, &sc->sc_pc);
-	put_fs_quad(oldsp, sc->sc_regs+30);
+	put_user(oldmask, &sc->sc_mask);
+	put_user(8, &sc->sc_ps);
+	put_user(regs->pc, &sc->sc_pc);
+	put_user(oldsp, sc->sc_regs+30);
 
-	put_fs_quad(regs->r0 , sc->sc_regs+0);
-	put_fs_quad(regs->r1 , sc->sc_regs+1);
-	put_fs_quad(regs->r2 , sc->sc_regs+2);
-	put_fs_quad(regs->r3 , sc->sc_regs+3);
-	put_fs_quad(regs->r4 , sc->sc_regs+4);
-	put_fs_quad(regs->r5 , sc->sc_regs+5);
-	put_fs_quad(regs->r6 , sc->sc_regs+6);
-	put_fs_quad(regs->r7 , sc->sc_regs+7);
-	put_fs_quad(regs->r8 , sc->sc_regs+8);
-	put_fs_quad(sw->r9   , sc->sc_regs+9);
-	put_fs_quad(sw->r10  , sc->sc_regs+10);
-	put_fs_quad(sw->r11  , sc->sc_regs+11);
-	put_fs_quad(sw->r12  , sc->sc_regs+12);
-	put_fs_quad(sw->r13  , sc->sc_regs+13);
-	put_fs_quad(sw->r14  , sc->sc_regs+14);
-	put_fs_quad(sw->r15  , sc->sc_regs+15);
-	put_fs_quad(regs->r16, sc->sc_regs+16);
-	put_fs_quad(regs->r17, sc->sc_regs+17);
-	put_fs_quad(regs->r18, sc->sc_regs+18);
-	put_fs_quad(regs->r19, sc->sc_regs+19);
-	put_fs_quad(regs->r20, sc->sc_regs+20);
-	put_fs_quad(regs->r21, sc->sc_regs+21);
-	put_fs_quad(regs->r22, sc->sc_regs+22);
-	put_fs_quad(regs->r23, sc->sc_regs+23);
-	put_fs_quad(regs->r24, sc->sc_regs+24);
-	put_fs_quad(regs->r25, sc->sc_regs+25);
-	put_fs_quad(regs->r26, sc->sc_regs+26);
-	put_fs_quad(regs->r27, sc->sc_regs+27);
-	put_fs_quad(regs->r28, sc->sc_regs+28);
-	put_fs_quad(regs->gp , sc->sc_regs+29);
+	put_user(regs->r0 , sc->sc_regs+0);
+	put_user(regs->r1 , sc->sc_regs+1);
+	put_user(regs->r2 , sc->sc_regs+2);
+	put_user(regs->r3 , sc->sc_regs+3);
+	put_user(regs->r4 , sc->sc_regs+4);
+	put_user(regs->r5 , sc->sc_regs+5);
+	put_user(regs->r6 , sc->sc_regs+6);
+	put_user(regs->r7 , sc->sc_regs+7);
+	put_user(regs->r8 , sc->sc_regs+8);
+	put_user(sw->r9   , sc->sc_regs+9);
+	put_user(sw->r10  , sc->sc_regs+10);
+	put_user(sw->r11  , sc->sc_regs+11);
+	put_user(sw->r12  , sc->sc_regs+12);
+	put_user(sw->r13  , sc->sc_regs+13);
+	put_user(sw->r14  , sc->sc_regs+14);
+	put_user(sw->r15  , sc->sc_regs+15);
+	put_user(regs->r16, sc->sc_regs+16);
+	put_user(regs->r17, sc->sc_regs+17);
+	put_user(regs->r18, sc->sc_regs+18);
+	put_user(regs->r19, sc->sc_regs+19);
+	put_user(regs->r20, sc->sc_regs+20);
+	put_user(regs->r21, sc->sc_regs+21);
+	put_user(regs->r22, sc->sc_regs+22);
+	put_user(regs->r23, sc->sc_regs+23);
+	put_user(regs->r24, sc->sc_regs+24);
+	put_user(regs->r25, sc->sc_regs+25);
+	put_user(regs->r26, sc->sc_regs+26);
+	put_user(regs->r27, sc->sc_regs+27);
+	put_user(regs->r28, sc->sc_regs+28);
+	put_user(regs->gp , sc->sc_regs+29);
 	for (i = 0; i < 31; i++)
-		put_fs_quad(sw->fp[i], sc->sc_fpregs+i);
+		put_user(sw->fp[i], sc->sc_fpregs+i);
 
 	/*
 	 * The following is:
@@ -213,8 +215,8 @@ static void setup_frame(struct sigaction * sa,
 	 *
 	 * ie, "sigreturn(stack-pointer)"
 	 */
-	put_fs_quad(0x43ecf40047de0410, sc->sc_retcode+0);
-	put_fs_quad(0x0000000000000083, sc->sc_retcode+1);
+	put_user(0x43ecf40047de0410, sc->sc_retcode+0);
+	put_user(0x0000000000000083, sc->sc_retcode+1);
 	imb();
 
 	/* "return" to the handler */

@@ -234,14 +234,20 @@ static unsigned long * create_aout_tables(char * p, struct linux_binprm * bprm)
 	put_user(argc,--sp);
 	current->mm->arg_start = (unsigned long) p;
 	while (argc-->0) {
+		char c;
 		put_user(p,argv++);
-		while (get_user(p++)) /* nothing */ ;
+		do {
+			get_user(c,p++);
+		} while (c);
 	}
 	put_user(NULL,argv);
 	current->mm->arg_end = current->mm->env_start = (unsigned long) p;
 	while (envc-->0) {
+		char c;
 		put_user(p,envp++);
-		while (get_user(p++)) /* nothing */ ;
+		do {
+			get_user(c,p++);
+		} while (c);
 	}
 	put_user(NULL,envp);
 	current->mm->env_end = (unsigned long) p;

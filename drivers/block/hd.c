@@ -878,7 +878,7 @@ static int hd_ioctl(struct inode * inode, struct file * file,
 			err = verify_area(VERIFY_WRITE, (char *) arg, sizeof(struct hd_driveid));
 			if (err)
 				return err;
-			memcpy_tofs((char *)arg, (char *) hd_ident_info[dev], sizeof(struct hd_driveid));
+			copy_to_user((char *)arg, (char *) hd_ident_info[dev], sizeof(struct hd_driveid));
 			return 0;
 
 		RO_IOCTLS(inode->i_rdev,arg);

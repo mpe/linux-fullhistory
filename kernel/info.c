@@ -36,6 +36,6 @@ asmlinkage int sys_sysinfo(struct sysinfo *info)
 	si_meminfo(&val);
 	si_swapinfo(&val);
 
-	memcpy_tofs(info, &val, sizeof(struct sysinfo));
+	copy_to_user(info, &val, sizeof(struct sysinfo));
 	return 0;
 }

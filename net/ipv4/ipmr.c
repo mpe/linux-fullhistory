@@ -449,8 +449,12 @@ int ip_mroute_setsockopt(struct sock *sk,int optname,char *optval,int optlen)
 				return -ENOPROTOOPT;
 			if((err=verify_area(VERIFY_READ,optval,sizeof(int)))<0)
 				return err;
-			if(get_user((int *)optval)!=1)
-				return -ENOPROTOOPT;
+			{
+				int opt;
+				get_user(opt,(int *)optval);
+				if (opt != 1)
+					return -ENOPROTOOPT;
+			}
 			if(mroute_socket)
 				return -EADDRINUSE;
 			mroute_socket=sk;
@@ -466,7 +470,7 @@ int ip_mroute_setsockopt(struct sock *sk,int optname,char *optval,int optlen)
 				return -EINVAL;
 			if((err=verify_area(VERIFY_READ, optval, sizeof(vif)))<0)
 				return err;
-			memcpy_fromfs(&vif,optval,sizeof(vif));
+			copy_from_user(&vif,optval,sizeof(vif));
 			if(vif.vifc_vifi > MAXVIFS)
 				return -ENFILE;
 			if(optname==MRT_ADD_VIF)
@@ -544,7 +548,7 @@ int ip_mroute_setsockopt(struct sock *sk,int optname,char *optval,int optlen)
 			err=verify_area(VERIFY_READ, optval, sizeof(mfc));
 			if(err)
 				return err;
-			memcpy_fromfs(&mfc,optval, sizeof(mfc));
+			copy_from_user(&mfc,optval, sizeof(mfc));
 			return ipmr_mfc_modify(optname, &mfc);
 		/*
 		 *	Control PIM assert.
@@ -579,7 +583,7 @@ int ip_mroute_getsockopt(struct sock *sk,int optname,char *optval,int *optlen)
 	if(optname!=MRT_VERSION && optname!=MRT_ASSERT)
 		return -EOPNOTSUPP;
 	
-	olr=get_user(optlen);
+	get_user(olr, optlen);
 	if(olr!=sizeof(int))
 		return -EINVAL;
 	err=verify_area(VERIFY_WRITE, optval,sizeof(int));
@@ -610,7 +614,7 @@ int ipmr_ioctl(struct sock *sk, int cmd, unsigned long arg)
 			err=verify_area(VERIFY_WRITE, (void *)arg, sizeof(vr));
 			if(err)
 				return err;
-			memcpy_fromfs(&vr,(void *)arg,sizeof(vr));
+			copy_from_user(&vr,(void *)arg,sizeof(vr));
 			if(vr.vifi>=MAXVIFS)
 				return -EINVAL;
 			vif=&vif_table[vr.vifi];
@@ -620,7 +624,7 @@ int ipmr_ioctl(struct sock *sk, int cmd, unsigned long arg)
 				vr.ocount=vif->pkt_out;
 				vr.ibytes=vif->bytes_in;
 				vr.obytes=vif->bytes_out;
-				memcpy_tofs((void *)arg,&vr,sizeof(vr));
+				copy_to_user((void *)arg,&vr,sizeof(vr));
 				return 0;
 			}
 			return -EADDRNOTAVAIL;
@@ -628,8 +632,8 @@ int ipmr_ioctl(struct sock *sk, int cmd, unsigned long arg)
 			err=verify_area(VERIFY_WRITE, (void *)arg, sizeof(sr));
 			if(err)
 				return err;
-			memcpy_fromfs(&sr,(void *)arg,sizeof(sr));
-			memcpy_tofs((void *)arg,&sr,sizeof(sr));
+			copy_from_user(&sr,(void *)arg,sizeof(sr));
+			copy_to_user((void *)arg,&sr,sizeof(sr));
 			return 0;
 		default:
 			return -EINVAL;

@@ -99,8 +99,11 @@ bad_area:
 	up(&mm->mmap_sem);
 	/* Did we have an exception handler installed? */
 	if (current->tss.ex.count == 1) {
+		printk("Taking exception at %lx (%lx)\n", regs.pc, regs.r28);
 		current->tss.ex.count = 0;
-		__handle_exception(&current->tss.ex);
+		/* return to the address in r28 */
+		(&regs)->pc = regs.r28;
+		return;
 	}
 	if (user_mode(&regs)) {
 		printk("%s: memory violation at pc=%08lx rp=%08lx (bad address = %08lx)\n",

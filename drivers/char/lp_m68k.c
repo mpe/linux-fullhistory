@@ -191,7 +191,7 @@ static int lp_write_interrupt(struct inode *inode, struct file *file,
     lp_table[dev].bytes_written = 0;	/* init buffer read-pointer */
     lp_error = 0;
     lp_table[dev].copy_size = (count <= LP_BUFFER_SIZE ? count : LP_BUFFER_SIZE);
-    memcpy_fromfs(lp_table[dev].lp_buffer, buf, lp_table[dev].copy_size);
+    copy_from_user(lp_table[dev].lp_buffer, buf, lp_table[dev].copy_size);
     while (lp_table[dev].copy_size) {
       save_flags(flags);
       cli();				/* no interrupts now */

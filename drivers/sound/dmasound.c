@@ -717,7 +717,7 @@ static long ata_ct_s8(const u_char *userPtr, long userCount, u_char frame[],
     if (sound.soft.stereo)
 	count &= ~1;
     used = count;
-    memcpy_fromfs(p, userPtr, count);
+    copy_from_user(p, userPtr, count);
     *frameUsed += used;
     return(used);
 }
@@ -771,7 +771,7 @@ static long ata_ct_s16be(const u_char *userPtr, long userCount, u_char frame[],
 	void *p = (u_short *)&frame[*frameUsed];
 	count = min(userCount, frameLeft) & ~3;
 	used = count;
-	memcpy_fromfs(p, userPtr, count);
+	copy_from_user(p, userPtr, count);
 	*frameUsed += used;
     }
     return(used);
@@ -1265,7 +1265,7 @@ static long ami_ct_s8(const u_char *userPtr, long userCount, u_char frame[],
 	void *p = &frame[*frameUsed];
 	count = min(userCount, frameLeft) & ~1;
 	used = count;
-	memcpy_fromfs(p, userPtr, count);
+	copy_from_user(p, userPtr, count);
     } else {
 	u_char *left = &frame[*frameUsed>>1];
 	u_char *right = left+sq.block_size_half;
@@ -2908,7 +2908,7 @@ static int state_read(char *dest, int count)
 	n = count;
     if (n <= 0)
 	return(0);
-    memcpy_tofs(dest, &state.buf[state.ptr], n);
+    copy_to_user(dest, &state.buf[state.ptr], n);
     state.ptr += n;
     return(n);
 }

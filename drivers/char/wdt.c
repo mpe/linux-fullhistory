@@ -140,7 +140,7 @@ static int wdt_read(struct inode *inode, struct file *file, char *buf, int count
 			c*=11;
 			c/=15;
 			cp=c+7;
-			memcpy_tofs(buf,&cp,1);
+			copy_to_user(buf,&cp,1);
 			return 1;
 		default:
 			return -EINVAL;

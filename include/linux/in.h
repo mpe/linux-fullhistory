@@ -115,13 +115,12 @@ struct sockaddr_in {
 #define INADDR_ALLHOSTS_GROUP 	0xe0000001      /* 224.0.0.1   */
 #define INADDR_MAX_LOCAL_GROUP  0xe00000ff      /* 224.0.0.255 */
 
-/* <asm/byteorder.h> contains the htonl type stuff.. */
+#ifdef __KERNEL__
 
+/* <asm/byteorder.h> contains the htonl type stuff.. */
 #include <asm/byteorder.h> 
 
 /* Some random defines to make it easier in the kernel.. */
-#ifdef __KERNEL__
-
 #define LOOPBACK(x)	(((x) & htonl(0xff000000)) == htonl(0x7f000000))
 #define MULTICAST(x)	(((x) & htonl(0xf0000000)) == htonl(0xe0000000))
 

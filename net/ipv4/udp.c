@@ -286,7 +286,7 @@ static void udp_getfrag_nosum(const void *p, __u32 saddr, char * to, unsigned in
  		src = ufh->from;
 		dst = to+sizeof(struct udphdr);
 	}
-	memcpy_fromfs(dst,src,len);
+	copy_from_user(dst,src,len);
 	if (offset == 0) 
 		memcpy(to, ufh, sizeof(struct udphdr));
 }
@@ -487,7 +487,7 @@ int udp_ioctl(struct sock *sk, int cmd, unsigned long arg)
 					sizeof(unsigned long));
 			if(err)
 				return(err);
-			put_fs_long(amount,(unsigned long *)arg);
+			put_user(amount, (int *)arg);
 			return(0);
 		}
 
@@ -511,7 +511,7 @@ int udp_ioctl(struct sock *sk, int cmd, unsigned long arg)
 						sizeof(unsigned long));
 			if(err)
 				return(err);
-			put_fs_long(amount,(unsigned long *)arg);
+			put_user(amount, (int *)arg);
 			return(0);
 		}
 

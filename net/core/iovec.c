@@ -53,7 +53,7 @@ int verify_iovec(struct msghdr *m, struct iovec *iov, char *address, int mode)
 		err=verify_area(VERIFY_READ, &m->msg_iov[ct], sizeof(struct iovec));
 		if(err)
 			return err;
-		memcpy_fromfs(&iov[ct], &m->msg_iov[ct], sizeof(struct iovec));
+		copy_from_user(&iov[ct], &m->msg_iov[ct], sizeof(struct iovec));
 		err=verify_area(mode, iov[ct].iov_base, iov[ct].iov_len);
 		if(err)
 			return err;
@@ -74,7 +74,7 @@ void memcpy_toiovec(struct iovec *iov, unsigned char *kdata, int len)
 		if(iov->iov_len)
 		{
 			int copy = min(iov->iov_len,len);
-			memcpy_tofs(iov->iov_base,kdata,copy);
+			copy_to_user(iov->iov_base,kdata,copy);
 			kdata+=copy;
 			len-=copy;
 			iov->iov_len-=copy;
@@ -95,7 +95,7 @@ void memcpy_fromiovec(unsigned char *kdata, struct iovec *iov, int len)
 		if(iov->iov_len)
 		{
 			int copy=min(len,iov->iov_len);
-			memcpy_fromfs(kdata, iov->iov_base, copy);
+			copy_from_user(kdata, iov->iov_base, copy);
 			len-=copy;
 			kdata+=copy;
 			iov->iov_base+=copy;

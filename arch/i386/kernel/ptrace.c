@@ -423,7 +423,7 @@ asmlinkage int sys_ptrace(long request, long pid, long addr, long data)
 				return res;
 			res = verify_area(VERIFY_WRITE, (void *) data, sizeof(long));
 			if (!res)
-				put_fs_long(tmp,(unsigned long *) data);
+				put_user(tmp,(unsigned long *) data);
 			return res;
 		}
 
@@ -448,7 +448,7 @@ asmlinkage int sys_ptrace(long request, long pid, long addr, long data)
 				addr = addr >> 2;
 				tmp = child->debugreg[addr];
 			};
-			put_fs_long(tmp,(unsigned long *) data);
+			put_user(tmp,(unsigned long *) data);
 			return 0;
 		}
 

@@ -220,7 +220,7 @@ static int __get_fd_set(unsigned long nr, int * fs_pointer, int * fdset)
 		int error = verify_area(VERIFY_WRITE,fs_pointer,nr*sizeof(int));
 		if (!error) {
 			while (nr) {
-				*fdset = get_user(fs_pointer);
+				get_user(*fdset, fs_pointer);
 				nr--;
 				fs_pointer++;
 				fdset++;
@@ -301,8 +301,13 @@ asmlinkage int sys_select(int n, fd_set *inp, fd_set *outp, fd_set *exp, struct 
 		error = verify_area(VERIFY_WRITE, tvp, sizeof(*tvp));
 		if (error)
 			goto out;
-		timeout = ROUND_UP(get_user(&tvp->tv_usec),(1000000/HZ));
-		timeout += get_user(&tvp->tv_sec) * (unsigned long) HZ;
+		get_user(timeout, &tvp->tv_usec);
+		timeout = ROUND_UP(timeout,(1000000/HZ));
+		{
+			unsigned long tmp;
+			get_user(tmp, &tvp->tv_sec);
+			timeout += tmp * (unsigned long) HZ;
+		}
 		if (timeout)
 			timeout += jiffies + 1;
 	}

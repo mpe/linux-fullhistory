@@ -400,12 +400,14 @@ static long write_aux(struct inode * inode, struct file * file,
 		disable_bh(KEYBOARD_BH);
 
 		do {
+			char c;
 			if (!poll_aux_status())
 				break;
 			outb_p(AUX_MAGIC_WRITE,AUX_COMMAND);
 			if (!poll_aux_status())
 				break;
-			outb_p(get_user(buffer++),AUX_OUTPUT_PORT);
+			get_user(c, buffer++);
+			outb_p(c, AUX_OUTPUT_PORT);
 			written++;
 		} while (--count);
 		/* reenable kbd bh */
@@ -432,9 +434,11 @@ static long write_qp(struct inode * inode, struct file * file,
 	int i = count;
 
 	while (i--) {
+		char c;
 		if (!poll_qp_status())
 			return -EIO;
-		outb_p(get_user(buffer++), qp_data);
+		get_user(c, buffer++);
+		outb_p(c, qp_data);
 	}
 	inode->i_mtime = CURRENT_TIME;
 	return count;

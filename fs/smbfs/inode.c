@@ -337,7 +337,7 @@ smb_statfs(struct super_block *sb, struct statfs *buf, int bufsiz)
 	tmp.f_files = -1;
 	tmp.f_ffree = -1;
 	tmp.f_namelen = SMB_MAXPATHLEN;
-	memcpy_tofs(buf, &tmp, bufsiz);
+	copy_to_user(buf, &tmp, bufsiz);
 }
 
 /* DO MORE */

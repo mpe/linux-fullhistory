@@ -297,7 +297,7 @@ static int nr_ctl_ioctl(const unsigned int cmd, void *arg)
 	if ((err = verify_area(VERIFY_READ, arg, sizeof(nr_ctl))) != 0)
 		return err;
 
-	memcpy_fromfs(&nr_ctl, arg, sizeof(nr_ctl));
+	copy_from_user(&nr_ctl, arg, sizeof(nr_ctl));
 	
 	if ((sk = nr_find_socket(nr_ctl.index, nr_ctl.id)) == NULL)
 		return -ENOTCONN;
@@ -457,12 +457,12 @@ static int nr_getsockopt(struct socket *sock, int level, int optname,
 	if ((err = verify_area(VERIFY_WRITE, optlen, sizeof(int))) != 0)
 		return err;
 
-	put_fs_long(sizeof(int), (unsigned long *)optlen);
+	put_user(sizeof(int), optlen);
 
 	if ((err = verify_area(VERIFY_WRITE, optval, sizeof(int))) != 0)
 		return err;
 
-	put_fs_long(val, (unsigned long *)optval);
+	put_user(val, (int *)optval);
 
 	return 0;
 }
@@ -1234,12 +1234,12 @@ static int nr_ioctl(struct socket *sock, unsigned int cmd, unsigned long arg)
 
 	switch (cmd) {
 		case TIOCOUTQ:
-			if ((err = verify_area(VERIFY_WRITE, (void *)arg, sizeof(unsigned long))) != 0)
+			if ((err = verify_area(VERIFY_WRITE, (void *)arg, sizeof(int))) != 0)
 				return err;
 			amount = sk->sndbuf - sk->wmem_alloc;
 			if (amount < 0)
 				amount = 0;
-			put_fs_long(amount, (unsigned long *)arg);
+			put_user(amount, (int *)arg);
 			return 0;
 
 		case TIOCINQ: {
@@ -1247,9 +1247,9 @@ static int nr_ioctl(struct socket *sock, unsigned int cmd, unsigned long arg)
 			/* These two are safe on a single CPU system as only user tasks fiddle here */
 			if ((skb = skb_peek(&sk->receive_queue)) != NULL)
 				amount = skb->len - 20;
-			if ((err = verify_area(VERIFY_WRITE, (void *)arg, sizeof(unsigned long))) != 0)
+			if ((err = verify_area(VERIFY_WRITE, (void *)arg, sizeof(int))) != 0)
 				return err;
-			put_fs_long(amount, (unsigned long *)arg);
+			put_user(amount, (int *)arg);
 			return 0;
 		}
 
@@ -1259,7 +1259,7 @@ static int nr_ioctl(struct socket *sock, unsigned int cmd, unsigned long arg)
 					return -ENOENT;
 				if ((err = verify_area(VERIFY_WRITE,(void *)arg,sizeof(struct timeval))) != 0)
 					return err;
-				memcpy_tofs((void *)arg, &sk->stamp, sizeof(struct timeval));
+				copy_to_user((void *)arg, &sk->stamp, sizeof(struct timeval));
 				return 0;
 			}
 			return -EINVAL;
@@ -1287,9 +1287,9 @@ static int nr_ioctl(struct socket *sock, unsigned int cmd, unsigned long arg)
 			struct nr_parms_struct nr_parms;
 			if ((err = verify_area(VERIFY_WRITE, (void *)arg, sizeof(struct nr_parms_struct))) != 0)
 				return err;
-			memcpy_fromfs(&nr_parms, (void *)arg, sizeof(struct nr_parms_struct));
+			copy_from_user(&nr_parms, (void *)arg, sizeof(struct nr_parms_struct));
 			nr_parms = nr_default;
-			memcpy_tofs((void *)arg, &nr_parms, sizeof(struct nr_parms_struct));
+			copy_to_user((void *)arg, &nr_parms, sizeof(struct nr_parms_struct));
 			return 0;
 		}
 
@@ -1298,7 +1298,7 @@ static int nr_ioctl(struct socket *sock, unsigned int cmd, unsigned long arg)
 			if (!suser()) return -EPERM;
 			if ((err = verify_area(VERIFY_READ, (void *)arg, sizeof(struct nr_parms_struct))) != 0)
 				return err;
-			memcpy_fromfs(&nr_parms, (void *)arg, sizeof(struct nr_parms_struct));
+			copy_from_user(&nr_parms, (void *)arg, sizeof(struct nr_parms_struct));
 			nr_default = nr_parms;
 			return 0;
 		}

@@ -138,7 +138,7 @@ int move_addr_to_kernel(void *uaddr, int ulen, void *kaddr)
 		return 0;
 	if((err=verify_area(VERIFY_READ,uaddr,ulen))<0)
 		return err;
-	memcpy_fromfs(kaddr,uaddr,ulen);
+	copy_from_user(kaddr,uaddr,ulen);
 	return 0;
 }
 
@@ -150,7 +150,7 @@ int move_addr_to_user(void *kaddr, int klen, void *uaddr, int *ulen)
 		
 	if((err=verify_area(VERIFY_WRITE,ulen,sizeof(*ulen)))<0)
 		return err;
-	len=get_user(ulen);
+	get_user(len,ulen);
 	if(len>klen)
 		len=klen;
 	if(len<0 || len> MAX_SOCK_ADDR)
@@ -159,7 +159,7 @@ int move_addr_to_user(void *kaddr, int klen, void *uaddr, int *ulen)
 	{
 		if((err=verify_area(VERIFY_WRITE,uaddr,len))<0)
 			return err;
-		memcpy_tofs(uaddr,kaddr,len);
+		copy_to_user(uaddr,kaddr,len);
 	}
  	put_user(len,ulen);
  	return 0;
@@ -1134,7 +1134,7 @@ asmlinkage int sys_sendmsg(int fd, struct msghdr *msg, unsigned int flags)
 	if(err)
 		return err;
 
-	memcpy_fromfs(&msg_sys,msg,sizeof(struct msghdr));
+	copy_from_user(&msg_sys,msg,sizeof(struct msghdr));
 
 	/* do not move before msg_sys is valid */
 	if(msg_sys.msg_iovlen>UIO_MAXIOV)
@@ -1179,7 +1179,7 @@ asmlinkage int sys_recvmsg(int fd, struct msghdr *msg, unsigned int flags)
 	err=verify_area(VERIFY_READ, msg,sizeof(struct msghdr));
 	if(err)
 		return err;
-	memcpy_fromfs(&msg_sys,msg,sizeof(struct msghdr));
+	copy_from_user(&msg_sys,msg,sizeof(struct msghdr));
 	if(msg_sys.msg_iovlen>UIO_MAXIOV)
 		return -EINVAL;
 
@@ -1242,7 +1242,7 @@ asmlinkage int sys_socketcall(int call, unsigned long *args)
 	int er;
 	unsigned char nargs[18]={0,3,3,3,2,3,3,3,
 				 4,4,4,6,6,2,5,5,3,3};
-
+	unsigned long a[6];
 	unsigned long a0,a1;
 				 
 	if(call<1||call>SYS_RECVMSG)
@@ -1251,81 +1251,82 @@ asmlinkage int sys_socketcall(int call, unsigned long *args)
 	er=verify_area(VERIFY_READ, args, nargs[call] * sizeof(unsigned long));
 	if(er)
 		return er;
+	copy_from_user(a, args, nargs[call] * sizeof(unsigned long));
 		
-	a0=get_user(args);
-	a1=get_user(args+1);
+	a0=a[0];
+	a1=a[1];
 	
 		
 	switch(call) 
 	{
 		case SYS_SOCKET:
-			return(sys_socket(a0,a1,get_user(args+2)));
+			return(sys_socket(a0,a1,a[2]));
 		case SYS_BIND:
 			return(sys_bind(a0,(struct sockaddr *)a1,
-					get_user(args+2)));
+					a[2]));
 		case SYS_CONNECT:
 			return(sys_connect(a0, (struct sockaddr *)a1,
-					   get_user(args+2)));
+					   a[2]));
 		case SYS_LISTEN:
 			return(sys_listen(a0,a1));
 		case SYS_ACCEPT:
 			return(sys_accept(a0,(struct sockaddr *)a1,
-					  (int *)get_user(args+2)));
+					  (int *)a[2]));
 		case SYS_GETSOCKNAME:
 			return(sys_getsockname(a0,(struct sockaddr *)a1,
-					       (int *)get_user(args+2)));
+					       (int *)a[2]));
 		case SYS_GETPEERNAME:
 			return(sys_getpeername(a0, (struct sockaddr *)a1,
-					       (int *)get_user(args+2)));
+					       (int *)a[2]));
 		case SYS_SOCKETPAIR:
 			return(sys_socketpair(a0,a1,
-					      get_user(args+2),
-					      (int *)get_user(args+3)));
+					      a[2],
+					      (int *)a[3]));
 		case SYS_SEND:
 			return(sys_send(a0,
 				(void *)a1,
-				get_user(args+2),
-				get_user(args+3)));
+				a[2],
+				a[3]));
 		case SYS_SENDTO:
 			return(sys_sendto(a0,(void *)a1,
-				get_user(args+2),
-				get_user(args+3),
-				(struct sockaddr *)get_user(args+4),
-				get_user(args+5)));
+				a[2],
+				a[3],
+				(struct sockaddr *)a[4],
+				a[5]));
 		case SYS_RECV:
 			return(sys_recv(a0,
 				(void *)a1,
-				get_user(args+2),
-				get_user(args+3)));
+				a[2],
+				a[3]));
 		case SYS_RECVFROM:
 			return(sys_recvfrom(a0,
 				(void *)a1,
-				get_user(args+2),
-				get_user(args+3),
-				(struct sockaddr *)get_user(args+4),
-				(int *)get_user(args+5)));
+				a[2],
+				a[3],
+				(struct sockaddr *)a[4],
+				(int *)a[5]));
 		case SYS_SHUTDOWN:
 			return(sys_shutdown(a0,a1));
 		case SYS_SETSOCKOPT:
 			return(sys_setsockopt(a0,
 				a1,
-				get_user(args+2),
-				(char *)get_user(args+3),
-				get_user(args+4)));
+				a[2],
+				(char *)a[3],
+				a[4]));
 		case SYS_GETSOCKOPT:
 			return(sys_getsockopt(a0,
 				a1,
-				get_user(args+2),
-				(char *)get_user(args+3),
-				(int *)get_user(args+4)));
+				a[2],
+				(char *)a[3],
+				(int *)a[4]));
 		case SYS_SENDMSG:
 				return sys_sendmsg(a0,
 					(struct msghdr *) a1,
-					get_user(args+2));
+					a[2]);
 		case SYS_RECVMSG:
 				return sys_recvmsg(a0,
 					(struct msghdr *) a1,
-					get_user(args+2));
+					a[2]);
 	}
 	return -EINVAL; /* to keep gcc happy */
 }

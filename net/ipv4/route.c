@@ -1699,7 +1699,7 @@ int ip_rt_ioctl(unsigned int cmd, void *arg)
 			err=verify_area(VERIFY_READ, arg, sizeof(struct rtentry));
 			if (err)
 				return err;
-			memcpy_fromfs(&rt, arg, sizeof(struct rtentry));
+			copy_from_user(&rt, arg, sizeof(struct rtentry));
 			return (cmd == SIOCDELRT) ? ip_rt_kill(&rt) : ip_rt_new(&rt);
 	}
 

@@ -2675,7 +2675,7 @@ static int strip_ioctl(struct tty_struct *tty, struct file *file,
             err = verify_area(VERIFY_WRITE, (void*)arg, 16);
             if (err)
                 return -err;
-            memcpy_tofs((void*)arg, strip_info->dev.name,
+            copy_to_user((void*)arg, strip_info->dev.name,
                 strlen(strip_info->dev.name) + 1);
             return 0;
 

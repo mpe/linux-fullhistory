@@ -30,11 +30,14 @@
  *                      Terry Murphy, of 3Com Network Adapter Division
  *              Linux 1.3.0 changes by
  *                      Alan Cox <Alan.Cox@linux.org>
- *              More debugging and DMA version by Philip Blundell
+ *              More debugging, DMA support, currently maintained by
+ *                      Philip Blundell <Philip.Blundell@pobox.com>
+ *              Multicard/soft configurable dma channel/rev 2 hardware support
+ *                      by Christopher Collins <ccollins@pcug.org.au>
  */
 
 /* Theory of operation:
-
+ *
  * The 3c505 is quite an intelligent board.  All communication with it is done
  * by means of Primary Command Blocks (PCBs); these are transferred using PIO
  * through the command register.  The card has 256k of on-board RAM, which is
@@ -42,7 +45,9 @@
  * are better, but in fact this isn't true.  From my tests, it seems that
  * more than about 10 buffers are unnecessary, and there is a noticeable
  * performance hit in having more active on the card.  So the majority of the
- * card's memory isn't, in fact, used.
+ * card's memory isn't, in fact, used.  Sadly, the card only has one transmit
+ * buffer and, short of loading our own firmware into it (which is what some
+ * drivers resort to) there's nothing we can do about this.
  *
  * We keep up to 4 "receive packet" commands active on the board at a time.
  * When a packet comes in, so long as there is a receive command active, the
@@ -71,11 +76,13 @@
  * is blocked.  In practice, this doesn't seem to happen very often.
  */
 
-/* This driver will not work with revision 2 hardware, because the host
- * control register is write-only.  It should be fairly easy to arrange to
- * keep our own soft-copy of the intended contents of this register, if
- * somebody has the time.  There may be firmware differences that cause
- * other problems, though, and I don't have an old card to test.
+/* This driver may now work with revision 2.x hardware, since all the read
+ * operations on the HCR have been removed (we now keep our own softcopy).
+ * But I don't have an old card to test it on.  
+ * 
+ * This has had the bad effect that the autoprobe routine is now a bit
+ * less friendly to other devices.  However, it was never very good.
+ * before, so I doubt it will hurt anybody.  
  */
 
 /* The driver is a mess.  I took Craig's and Juha's code, and hacked it firstly
@@ -103,9 +110,6 @@
 #include <linux/skbuff.h>
 
 #include "3c505.h"
-
-#define ELP_DMA      6		/* DMA channel to use */
-#define ELP_RX_PCBS  4
 
 /*********************************************************
  *
@@ -174,7 +178,7 @@ static const int elp_debug = 0;
  * Last element MUST BE 0!
  *****************************************************************/
 
-const int addr_list[] = {0x300, 0x280, 0x310, 0};
+static const int addr_list[] = {0x300, 0x280, 0x310, 0};
 
 /* Dma Memory related stuff */
 
@@ -211,20 +215,18 @@ static inline unsigned char inb_status(unsigned int base_addr)
 	return inb(base_addr + PORT_STATUS);
 }
 
-static inline unsigned char inb_control(unsigned int base_addr)
-{
-	return inb(base_addr + PORT_CONTROL);
-}
-
 static inline int inb_command(unsigned int base_addr)
 {
 	return inb(base_addr + PORT_COMMAND);
 }
 
-static inline void outb_control(unsigned char val, unsigned int base_addr)
+static inline void outb_control(unsigned char val, struct device *dev)
 {
-	outb(val, base_addr + PORT_CONTROL);
+	outb(val, dev->base_addr + PORT_CONTROL);
+	((elp_device *)(dev->priv))->hcr_val = val;
 }
+
+#define HCR_VAL(x)   (((elp_device *)((x)->priv))->hcr_val)
 
 static inline void outb_command(unsigned char val, unsigned int base_addr)
 {
@@ -240,48 +242,6 @@ static inline void outw_data(unsigned int val, unsigned int base_addr)
 {
 	outw(val, base_addr + PORT_DATA);
 }
-
-
-/*****************************************************************
- *
- *  structure to hold context information for adapter
- *
- *****************************************************************/
-
-#define DMA_BUFFER_SIZE  1600
-#define BACKLOG_SIZE      4
-
-typedef struct {
-	volatile short got[NUM_TRANSMIT_CMDS];	/* flags for command completion */
-	pcb_struct tx_pcb;	/* PCB for foreground sending */
-	pcb_struct rx_pcb;	/* PCB for foreground receiving */
-	pcb_struct itx_pcb;	/* PCB for background sending */
-	pcb_struct irx_pcb;	/* PCB for background receiving */
-	struct enet_statistics stats;
-
-	void *dma_buffer;
-
-	struct {
-		unsigned int length[BACKLOG_SIZE];
-		unsigned int in;
-		unsigned int out;
-	} rx_backlog;
-
-	struct {
-		unsigned int direction;
-		unsigned int length;
-		unsigned int copy_flag;
-		struct sk_buff *skb;
-		long int start_time;
-	} current_dma;
-
-	/* flags */
-	unsigned long send_pcb_semaphore;
-	unsigned int dmaing;
-	unsigned long busy;
-
-	unsigned int rx_active;  /* number of receive PCBs */
-} elp_device;
 
 static inline unsigned int backlog_next(unsigned int n)
 {
@@ -315,10 +275,10 @@ static inline int get_status(unsigned int base_addr)
 	return stat1;
 }
 
-static inline void set_hsf(unsigned int base_addr, int hsf)
+static inline void set_hsf(struct device *dev, int hsf)
 {
 	cli();
-	outb_control((inb_control(base_addr) & ~HSF_PCB_MASK) | hsf, base_addr);
+	outb_control((HCR_VAL(dev) & ~HSF_PCB_MASK) | hsf, dev);
 	sti();
 }
 
@@ -327,11 +287,10 @@ static int start_receive(struct device *, pcb_struct *);
 inline static void adapter_reset(struct device *dev)
 {
 	int timeout;
-	unsigned char orig_hcr = inb_control(dev->base_addr);
-
 	elp_device *adapter = dev->priv;
+	unsigned char orig_hcr = adapter->hcr_val;
 
-	outb_control(0, dev->base_addr);
+	outb_control(0, dev);
 
 	if (inb_status(dev->base_addr) & ACRF) {
 		do {
@@ -339,29 +298,29 @@ inline static void adapter_reset(struct device *dev)
 			timeout = jiffies + 2;
 			while ((jiffies <= timeout) && !(inb_status(dev->base_addr) & ACRF));
 		} while (inb_status(dev->base_addr) & ACRF);
-		set_hsf(dev->base_addr, HSF_PCB_NAK);
+		set_hsf(dev, HSF_PCB_NAK);
 	}
-	outb_control(inb_control(dev->base_addr) | ATTN | DIR, dev->base_addr);
+	outb_control(adapter->hcr_val | ATTN | DIR, dev);
 	timeout = jiffies + 1;
 	while (jiffies <= timeout);
-	outb_control(inb_control(dev->base_addr) & ~ATTN, dev->base_addr);
+	outb_control(adapter->hcr_val & ~ATTN, dev);
 	timeout = jiffies + 1;
 	while (jiffies <= timeout);
-	outb_control(inb_control(dev->base_addr) | FLSH, dev->base_addr);
+	outb_control(adapter->hcr_val | FLSH, dev);
 	timeout = jiffies + 1;
 	while (jiffies <= timeout);
-	outb_control(inb_control(dev->base_addr) & ~FLSH, dev->base_addr);
+	outb_control(adapter->hcr_val & ~FLSH, dev);
 	timeout = jiffies + 1;
 	while (jiffies <= timeout);
 
-	outb_control(orig_hcr, dev->base_addr);
+	outb_control(orig_hcr, dev);
 	if (!start_receive(dev, &adapter->tx_pcb))
 		printk("%s: start receive command failed \n", dev->name);
 }
 
-/* Check to make sure that a DMA transfer hasn't timed out.  This should never happen
- * in theory, but seems to occur occasionally if the card gets prodded at the wrong
- * time.
+/* Check to make sure that a DMA transfer hasn't timed out.  This should
+ * never happen in theory, but seems to occur occasionally if the card gets
+ * prodded at the wrong time.
  */
 static inline void check_dma(struct device *dev)
 {
@@ -376,7 +335,7 @@ static inline void check_dma(struct device *dev)
 		disable_dma(dev->dma);
 		if (adapter->rx_active)
 			adapter->rx_active--;
-		outb_control(inb_control(dev->base_addr) & ~(DMAE | TCEN | DIR), dev->base_addr);
+		outb_control(adapter->hcr_val & ~(DMAE | TCEN | DIR), dev);
 		restore_flags(flags);
 	}
 }
@@ -463,7 +422,7 @@ static int send_pcb(struct device *dev, pcb_struct * pcb)
 	 * wait for the HCRE bit to indicate the adapter
 	 * had read the byte
 	 */
-	set_hsf(dev->base_addr, 0);
+	set_hsf(dev, 0);
 
 	if (send_pcb_slow(dev->base_addr, pcb->command))
 		goto abort;
@@ -478,7 +437,7 @@ static int send_pcb(struct device *dev, pcb_struct * pcb)
 			goto sti_abort;
 	}
 
-	outb_control(inb_control(dev->base_addr) | 3, dev->base_addr);	/* signal end of PCB */
+	outb_control(adapter->hcr_val | 3, dev);	/* signal end of PCB */
 	outb_command(2 + pcb->length, dev->base_addr);
 
 	/* now wait for the acknowledgement */
@@ -530,7 +489,7 @@ static int receive_pcb(struct device *dev, pcb_struct * pcb)
 
 	elp_device *adapter = dev->priv;
 
-	set_hsf(dev->base_addr, 0);
+	set_hsf(dev, 0);
 
 	/* get the command code */
 	timeout = jiffies + 2;
@@ -578,14 +537,14 @@ static int receive_pcb(struct device *dev, pcb_struct * pcb)
 	if (total_length != (pcb->length + 2)) {
 		if (elp_debug >= 2)
 			printk("%s: mangled PCB received\n", dev->name);
-		set_hsf(dev->base_addr, HSF_PCB_NAK);
+		set_hsf(dev, HSF_PCB_NAK);
 		return FALSE;
 	}
 
 	if (pcb->command == CMD_RECEIVE_PACKET_COMPLETE) {
 		if (set_bit(0, (void *) &adapter->busy)) {
 			if (backlog_next(adapter->rx_backlog.in) == adapter->rx_backlog.out) {
-				set_hsf(dev->base_addr, HSF_PCB_NAK);
+				set_hsf(dev, HSF_PCB_NAK);
 				printk("%s: PCB rejected, transfer in progress and backlog full\n", dev->name);
 				pcb->command = 0;
 				return TRUE;
@@ -594,7 +553,7 @@ static int receive_pcb(struct device *dev, pcb_struct * pcb)
 			}
 		}
 	}
-	set_hsf(dev->base_addr, HSF_PCB_ACK);
+	set_hsf(dev, HSF_PCB_ACK);
 	return TRUE;
 }
 
@@ -637,25 +596,27 @@ static void receive_packet(struct device *dev, int len)
 {
 	int rlen;
 	elp_device *adapter = dev->priv;
-	unsigned long target;
+	void *target;
 	struct sk_buff *skb;
 
 	rlen = (len + 1) & ~1;
 	skb = dev_alloc_skb(rlen + 2);
 
-	adapter->current_dma.copy_flag = 0;
-
 	if (!skb) {
-	  printk("%s: memory squeeze, dropping packet\n", dev->name);
-	  target = virt_to_bus(adapter->dma_buffer);
+		printk("%s: memory squeeze, dropping packet\n", dev->name);
+		target = adapter->dma_buffer;
+		adapter->current_dma.target = NULL;
 	} else {
-	  skb_reserve(skb, 2);
-	  target = virt_to_bus(skb_put(skb, rlen));
-	  if ((target + rlen) >= MAX_DMA_ADDRESS) {
-	    target = virt_to_bus(adapter->dma_buffer);
-	    adapter->current_dma.copy_flag = 1;
-	  }
+		skb_reserve(skb, 2);
+		target = skb_put(skb, rlen);
+		if (virt_to_bus(target + rlen) >= MAX_DMA_ADDRESS) {
+			adapter->current_dma.target = target;
+			target = adapter->dma_buffer;
+		} else {
+			adapter->current_dma.target = NULL;
+		}
 	}
+
 	/* if this happens, we die */
 	if (set_bit(0, (void *) &adapter->dmaing))
 		printk("%s: rx blocked, DMA in progress, dir %d\n", dev->name, adapter->current_dma.direction);
@@ -665,18 +626,19 @@ static void receive_packet(struct device *dev, int len)
 	adapter->current_dma.skb = skb;
 	adapter->current_dma.start_time = jiffies;
 
-	outb_control(inb_control(dev->base_addr) | DIR | TCEN | DMAE, dev->base_addr);
+	outb_control(adapter->hcr_val | DIR | TCEN | DMAE, dev);
 
 	disable_dma(dev->dma);
 	clear_dma_ff(dev->dma);
 	set_dma_mode(dev->dma, 0x04);	/* dma read */
-	set_dma_addr(dev->dma, target);
+	set_dma_addr(dev->dma, virt_to_bus(target));
 	set_dma_count(dev->dma, rlen);
 	enable_dma(dev->dma);
 
 	if (elp_debug >= 3) {
 		printk("%s: rx DMA transfer started\n", dev->name);
 	}
+
 	if (adapter->rx_active)
 		adapter->rx_active--;
 
@@ -729,15 +691,17 @@ static void elp_interrupt(int irq, void *dev_id, struct pt_regs *reg_ptr)
 				printk("%s: %s DMA complete, status %02x\n", dev->name, adapter->current_dma.direction ? "tx" : "rx", inb_status(dev->base_addr));
 			}
 
-			outb_control(inb_control(dev->base_addr) & ~(DMAE | TCEN | DIR), dev->base_addr);
+			outb_control(adapter->hcr_val & ~(DMAE | TCEN | DIR),
+				     dev);
 			if (adapter->current_dma.direction) {
 				dev_kfree_skb(adapter->current_dma.skb, FREE_WRITE);
 			} else {
 				struct sk_buff *skb = adapter->current_dma.skb;
 				if (skb) {
 				  skb->dev = dev;
-				  if (adapter->current_dma.copy_flag) {
-				    memcpy(skb_put(skb, adapter->current_dma.length), adapter->dma_buffer, adapter->current_dma.length);
+				  if (adapter->current_dma.target) {
+				    /* have already done the skb_put() */
+				    memcpy(adapter->current_dma.target, adapter->dma_buffer, adapter->current_dma.length);
 				  }
 				  skb->protocol = eth_type_trans(skb,dev);
 				  netif_rx(skb);
@@ -929,7 +893,7 @@ static int elp_open(struct device *dev)
 	/*
 	 * disable interrupts on the board
 	 */
-	outb_control(0x00, dev->base_addr);
+	outb_control(0, dev);
 
 	/*
 	 * clear any pending interrupts
@@ -982,12 +946,7 @@ static int elp_open(struct device *dev)
 	/*
 	 * enable interrupts on the board
 	 */
-	outb_control(CMDE, dev->base_addr);
-
-	/*
-	 * device is now officially open!
-	 */
-	dev->start = 1;
+	outb_control(CMDE, dev);
 
 	/*
 	 * configure adapter memory: we need 10 multicast addresses, default==0
@@ -1032,7 +991,7 @@ static int elp_open(struct device *dev)
 	}
 
 	/* enable burst-mode DMA */
-	outb(0x1, dev->base_addr + PORT_AUXDMA);
+	/* outb(0x1, dev->base_addr + PORT_AUXDMA); */
 
 	/*
 	 * queue receive commands to provide buffering
@@ -1040,6 +999,11 @@ static int elp_open(struct device *dev)
 	prime_rx(dev);
 	if (elp_debug >= 3)
 		printk("%s: %d receive PCBs active\n", dev->name, adapter->rx_active);
+
+	/*
+	 * device is now officially open!
+	 */
+	dev->start = 1;
 
 	MOD_INC_USE_COUNT;
 
@@ -1100,11 +1064,11 @@ static int send_packet(struct device *dev, struct sk_buff *skb)
 	cli();
 	disable_dma(dev->dma);
 	clear_dma_ff(dev->dma);
-	set_dma_mode(dev->dma, 0x08);	/* dma memory -> io */
+	set_dma_mode(dev->dma, 0x48);	/* dma memory -> io */
 	set_dma_addr(dev->dma, target);
 	set_dma_count(dev->dma, nlen);
+	outb_control(adapter->hcr_val | DMAE | TCEN, dev);
 	enable_dma(dev->dma);
-	outb_control(inb_control(dev->base_addr) | DMAE | TCEN, dev->base_addr);
 	if (elp_debug >= 3)
 		printk("%s: DMA transfer started\n", dev->name);
 
@@ -1247,7 +1211,7 @@ static int elp_close(struct device *dev)
 	/*
 	 * disable interrupts on the board
 	 */
-	outb_control(0x00, dev->base_addr);
+	outb_control(0, dev);
 
 	/*
 	 *  flag transmitter as busy (i.e. not available)
@@ -1385,22 +1349,20 @@ static int elp_sense(struct device *dev)
 	int addr = dev->base_addr;
 	const char *name = dev->name;
 	long flags;
-	byte orig_HCR, orig_HSR;
+	byte orig_HSR;
 
 	if (check_region(addr, 0xf))
 		return -1;
 
-	orig_HCR = inb_control(addr);
 	orig_HSR = inb_status(addr);
 
 	if (elp_debug > 0)
 		printk(search_msg, name, addr);
 
-	if (((orig_HCR == 0xff) && (orig_HSR == 0xff)) ||
-	    ((orig_HCR & DIR) != (orig_HSR & DIR))) {
+	if (orig_HSR == 0xff) {
 		if (elp_debug > 0)
 			printk(notfound_msg, 1);
-		return -1;	/* It can't be 3c505 if HCR.DIR != HSR.DIR */
+		return -1;	
 	}
 	/* Enable interrupts - we need timers! */
 	save_flags(flags);
@@ -1409,34 +1371,32 @@ static int elp_sense(struct device *dev)
 	/* Wait for a while; the adapter may still be booting up */
 	if (elp_debug > 0)
 		printk(stilllooking_msg);
-	if (orig_HCR & DIR) {
+
+	if (orig_HSR & DIR) {
 		/* If HCR.DIR is up, we pull it down. HSR.DIR should follow. */
-		outb_control(orig_HCR & ~DIR, addr);
+		outb(0, dev->base_addr + PORT_CONTROL);
 		timeout = jiffies + 30;
 		while (jiffies < timeout);
 		restore_flags(flags);
 		if (inb_status(addr) & DIR) {
-			outb_control(orig_HCR, addr);
 			if (elp_debug > 0)
 				printk(notfound_msg, 2);
 			return -1;
 		}
 	} else {
 		/* If HCR.DIR is down, we pull it up. HSR.DIR should follow. */
-		outb_control(orig_HCR | DIR, addr);
+		outb(DIR, dev->base_addr + PORT_CONTROL);
 		timeout = jiffies + 30;
 		while (jiffies < timeout);
 		restore_flags(flags);
 		if (!(inb_status(addr) & DIR)) {
-			outb_control(orig_HCR, addr);
 			if (elp_debug > 0)
 				printk(notfound_msg, 3);
 			return -1;
 		}
 	}
 	/*
-	 * It certainly looks like a 3c505. If it has DMA enabled, it needs
-	 * a hard reset. Also, do a hard reset if selected at the compile time.
+	 * It certainly looks like a 3c505.
 	 */
 	if (elp_debug > 0)
 		printk(found_msg);
@@ -1516,8 +1476,10 @@ int elplus_probe(struct device *dev)
 		return -ENODEV;
         }
 
+	adapter->send_pcb_semaphore = 0;
+
 	for (tries1 = 0; tries1 < 3; tries1++) {
-		outb_control((inb_control(dev->base_addr) | CMDE) & ~DIR, dev->base_addr);
+		outb_control((adapter->hcr_val | CMDE) & ~DIR, dev);
 		/* First try to write just one byte, to see if the card is
 		 * responding at all normally.
 		 */
@@ -1549,8 +1511,8 @@ int elplus_probe(struct device *dev)
 					okay = 1;  /* It started */
 				}
 			} else {
-				/* Otherwise, it must just be in a strange state.  We probably
-				 * need to kick it.
+				/* Otherwise, it must just be in a strange
+				 * state.  We probably need to kick it.
 				 */
 				printk("3c505 is sulking\n");
 			}
@@ -1586,8 +1548,8 @@ int elplus_probe(struct device *dev)
 		 * and try again.
 		 */
 		printk(KERN_INFO "%s: resetting adapter\n", dev->name);
-		outb_control(inb_control(dev->base_addr) | FLSH | ATTN, dev->base_addr);
-		outb_control(inb_control(dev->base_addr) & ~(FLSH | ATTN), dev->base_addr);
+		outb_control(adapter->hcr_val | FLSH | ATTN, dev);
+		outb_control(adapter->hcr_val & ~(FLSH | ATTN), dev);
 	}
 	printk("%s: failed to initialise 3c505\n", dev->name);
 	return -ENODEV;
@@ -1597,15 +1559,14 @@ int elplus_probe(struct device *dev)
 		int rpt = autoirq_report(0);
 		if (dev->irq != rpt) {
 			printk("%s: warning, irq %d configured but %d detected\n", dev->name, dev->irq, rpt);
-			return -ENODEV;
 		}
 		/* if dev->irq == autoirq_report(0), all is well */
-	} else			/* No preset IRQ; just use what we can detect */
+	} else		       /* No preset IRQ; just use what we can detect */
 		dev->irq = autoirq_report(0);
-	switch (dev->irq) {	/* Legal, sane? */
+	switch (dev->irq) {    /* Legal, sane? */
 	case 0:
-		printk("%s: No IRQ reported by autoirq_report().\n", dev->name);
-		printk("%s: Check the jumpers of your 3c505 board.\n", dev->name);
+		printk("%s: IRQ probe failed: check 3c505 jumpers.\n",
+		       dev->name);
 		return -ENODEV;
 	case 1:
 	case 6:
@@ -1619,7 +1580,7 @@ int elplus_probe(struct device *dev)
 	 *  Now we have the IRQ number so we can disable the interrupts from
 	 *  the board until the board is opened.
 	 */
-	outb_control(inb_control(dev->base_addr) & ~CMDE, dev->base_addr);
+	outb_control(adapter->hcr_val & ~CMDE, dev);
 
 	/*
 	 * copy ethernet address into structure
@@ -1627,8 +1588,16 @@ int elplus_probe(struct device *dev)
 	for (i = 0; i < 6; i++)
 		dev->dev_addr[i] = adapter->rx_pcb.data.eth_addr[i];
 
-	/* set up the DMA channel */
-	dev->dma = ELP_DMA;
+	/* find a DMA channel */
+	if (!dev->dma) {
+		if (dev->mem_start) {
+			dev->dma = dev->mem_start & 7;
+		}
+		else {
+			printk(KERN_WARNING "%s: warning, DMA channel not specified, using default\n", dev->name); 
+			dev->dma = ELP_DMA;
+		}
+	}
 
 	/*
 	 * print remainder of startup message
@@ -1649,7 +1618,7 @@ int elplus_probe(struct device *dev)
 	    !receive_pcb(dev, &adapter->rx_pcb) ||
 	    (adapter->rx_pcb.command != CMD_ADAPTER_INFO_RESPONSE) ||
 	    (adapter->rx_pcb.length != 10)) {
-		printk("%s: not responding to second PCB\n", dev->name);
+		printk("not responding to second PCB\n");
 	}
 	printk("rev %d.%d, %dk\n", adapter->rx_pcb.data.info.major_vers, adapter->rx_pcb.data.info.minor_vers, adapter->rx_pcb.data.info.RAM_sz);
 
@@ -1687,46 +1656,61 @@ int elplus_probe(struct device *dev)
 }
 
 #ifdef MODULE
-static char devicename[9] = {0,};
-static struct device dev_3c505 =
+#define NAMELEN 9
+static char devicename[ELP_MAX_CARDS][NAMELEN] = {0,};
+static struct device dev_3c505[ELP_MAX_CARDS] =
 {
-	devicename,		/* device name is inserted by linux/drivers/net/net_init.c */
+	NULL,		/* device name is inserted by net_init.c */
 	0, 0, 0, 0,
 	0, 0,
 	0, 0, 0, NULL, elplus_probe};
 
-int io = 0x300;
-int irq = 0;
+static int io[ELP_MAX_CARDS] = { 0, };
+static int irq[ELP_MAX_CARDS] = { 0, };
+static int dma[ELP_MAX_CARDS] = { 0, };
 
 int init_module(void)
 {
-	if (io == 0)
-		printk("3c505: You should not use auto-probing with insmod!\n");
-	dev_3c505.base_addr = io;
-	dev_3c505.irq = irq;
-	if (register_netdev(&dev_3c505) != 0) {
-		return -EIO;
+	int this_dev, found = 0;
+
+	for (this_dev = 0; this_dev < ELP_MAX_CARDS; this_dev++) {
+		struct device *dev = &dev_3c505[this_dev];
+		dev->name = devicename[this_dev];
+		dev->irq = irq[this_dev];
+		dev->base_addr = io[this_dev];
+		if (dma[this_dev]) {
+			dev->dma = dma[this_dev];
+		} else {
+			dev->dma = ELP_DMA;
+			printk(KERN_WARNING "3c505.c: warning, using default DMA channel,\n");
+		}
+		if (io[this_dev] == 0) {
+			if (this_dev) break;
+			printk(KERN_NOTICE "3c505.c: module autoprobe not recommended, give io=xx.\n");
+		}
+		if (register_netdev(dev) != 0) {
+			printk(KERN_WARNING "3c505.c: Failed to register card at 0x%x.\n", io[this_dev]);
+			if (found != 0) return 0;
+			return -ENXIO;
+		}
+		found++;
 	}
 	return 0;
 }
 
 void cleanup_module(void)
 {
-	unregister_netdev(&dev_3c505);
-	kfree(dev_3c505.priv);
-	dev_3c505.priv = NULL;
-
-	/* If we don't do this, we can't re-insmod it later. */
-	release_region(dev_3c505.base_addr, ELP_IO_EXTENT);
+	int this_dev;
+        
+	for (this_dev = 0; this_dev < ELP_MAX_CARDS; this_dev++) {
+		struct device *dev = &dev_3c505[this_dev];
+		if (dev->priv != NULL) {
+			kfree(dev->priv);
+			dev->priv = NULL;
+			release_region(dev->base_addr, ELP_IO_EXTENT);
+			unregister_netdev(dev);
+		}
+	}
 }
 
 #endif				/* MODULE */
-
-
-/*
- * Local Variables:
- *  c-file-style: "linux"
- *  tab-width: 8
- *  compile-command: "gcc -D__KERNEL__ -I/discs/bibble/src/linux-1.3.69/include  -Wall -Wstrict-prototypes -O2 -fomit-frame-pointer -fno-strength-reduce -pipe -m486 -DCPU=486 -DMODULE  -c 3c505.c"
- * End:
- */

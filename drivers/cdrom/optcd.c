@@ -1447,7 +1447,7 @@ static int cdromplaymsf(unsigned long arg)
 	status = verify_area(VERIFY_READ, (void *) arg, sizeof msf);
 	if (status)
 		return status;
-	memcpy_fromfs(&msf, (void *) arg, sizeof msf);
+	copy_from_user(&msf, (void *) arg, sizeof msf);
 
 	bin2bcd(&msf);
 	status = exec_long_cmd(COMPLAY, &msf);
@@ -1471,7 +1471,7 @@ static int cdromplaytrkind(unsigned long arg)
 	status = verify_area(VERIFY_READ, (void *) arg, sizeof ti);
 	if (status)
 		return status;
-	memcpy_fromfs(&ti, (void *) arg, sizeof ti);
+	copy_from_user(&ti, (void *) arg, sizeof ti);
 
 	if (ti.cdti_trk0 < disk_info.first
 	    || ti.cdti_trk0 > disk_info.last
@@ -1520,7 +1520,7 @@ static int cdromreadtochdr(unsigned long arg)
 	tochdr.cdth_trk0 = disk_info.first;
 	tochdr.cdth_trk1 = disk_info.last;
 
-	memcpy_tofs((void *) arg, &tochdr, sizeof tochdr);
+	copy_to_user((void *) arg, &tochdr, sizeof tochdr);
 	return 0;
 }
 
@@ -1534,7 +1534,7 @@ static int cdromreadtocentry(unsigned long arg)
 	status = verify_area(VERIFY_WRITE, (void *) arg, sizeof entry);
 	if (status)
 		return status;
-	memcpy_fromfs(&entry, (void *) arg, sizeof entry);
+	copy_from_user(&entry, (void *) arg, sizeof entry);
 
 	if (entry.cdte_track == CDROM_LEADOUT)
 		tocptr = &toc[disk_info.last + 1];
@@ -1556,7 +1556,7 @@ static int cdromreadtocentry(unsigned long arg)
 	else if (entry.cdte_format != CDROM_MSF)
 		return -EINVAL;
 
-	memcpy_tofs((void *) arg, &entry, sizeof entry);
+	copy_to_user((void *) arg, &entry, sizeof entry);
 	return 0;
 }
 
@@ -1570,7 +1570,7 @@ static int cdromvolctrl(unsigned long arg)
 	status = verify_area(VERIFY_READ, (void *) arg, sizeof volctrl);
 	if (status)
 		return status;
-	memcpy_fromfs(&volctrl, (char *) arg, sizeof volctrl);
+	copy_from_user(&volctrl, (char *) arg, sizeof volctrl);
 
 	msf.cdmsf_min0 = 0x10;
 	msf.cdmsf_sec0 = 0x32;
@@ -1596,7 +1596,7 @@ static int cdromsubchnl(unsigned long arg)
 	status = verify_area(VERIFY_WRITE, (void *) arg, sizeof subchnl);
 	if (status)
 		return status;
-	memcpy_fromfs(&subchnl, (void *) arg, sizeof subchnl);
+	copy_from_user(&subchnl, (void *) arg, sizeof subchnl);
 
 	if (subchnl.cdsc_format != CDROM_LBA
 	    && subchnl.cdsc_format != CDROM_MSF)
@@ -1608,7 +1608,7 @@ static int cdromsubchnl(unsigned long arg)
 		return -EIO;
 	}
 
-	memcpy_tofs((void *) arg, &subchnl, sizeof subchnl);
+	copy_to_user((void *) arg, &subchnl, sizeof subchnl);
 	return 0;
 }
 
@@ -1622,7 +1622,7 @@ static int cdromread(unsigned long arg, int blocksize, int cmd)
 	status = verify_area(VERIFY_WRITE, (void *) arg, blocksize);
 	if (status)
 		return status;
-	memcpy_fromfs(&msf, (void *) arg, sizeof msf);
+	copy_from_user(&msf, (void *) arg, sizeof msf);
 
 	bin2bcd(&msf);
 	msf.cdmsf_min1 = 0;
@@ -1636,7 +1636,7 @@ static int cdromread(unsigned long arg, int blocksize, int cmd)
 		return -EIO;
 	fetch_data(buf, blocksize);
 
-	memcpy_tofs((void *) arg, &buf, blocksize);
+	copy_to_user((void *) arg, &buf, blocksize);
 	return 0;
 }
 
@@ -1649,7 +1649,7 @@ static int cdromseek(unsigned long arg)
 	status = verify_area(VERIFY_READ, (void *) arg, sizeof msf);
 	if (status)
 		return status;
-	memcpy_fromfs(&msf, (void *) arg, sizeof msf);
+	copy_from_user(&msf, (void *) arg, sizeof msf);
 
 	bin2bcd(&msf);
 	status = exec_seek_cmd(COMSEEK, &msf);
@@ -1671,7 +1671,7 @@ static int cdrommultisession(unsigned long arg)
 	status = verify_area(VERIFY_WRITE, (void*) arg, sizeof ms);
 	if (status)
 		return status;
-	memcpy_fromfs(&ms, (void*) arg, sizeof ms);
+	copy_from_user(&ms, (void*) arg, sizeof ms);
 
 	ms.addr.msf.minute = disk_info.last_session.minute;
 	ms.addr.msf.second = disk_info.last_session.second;
@@ -1685,7 +1685,7 @@ static int cdrommultisession(unsigned long arg)
 
 	ms.xa_flag = disk_info.xa;
 
-  	memcpy_tofs((void*) arg, &ms,
+  	copy_to_user((void*) arg, &ms,
 		sizeof(struct cdrom_multisession));
 
 #if DEBUG_MULTIS

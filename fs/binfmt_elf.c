@@ -152,14 +152,20 @@ unsigned long * create_elf_tables(char *p, int argc, int envc,
 	put_user((unsigned long)argc,--sp);
 	current->mm->arg_start = (unsigned long) p;
 	while (argc-->0) {
+		char c;
 		put_user(p,argv++);
-		while (get_user(p++)) /* nothing */ ;
+		do {
+			get_user(c,p++);
+		} while (c);
 	}
 	put_user(NULL, argv);
 	current->mm->arg_end = current->mm->env_start = (unsigned long) p;
 	while (envc-->0) {
+		char c;
 		put_user(p,envp++);
-		while (get_user(p++)) /* nothing */ ;
+		do {
+			get_user(c,p++);
+		} while (c);
 	}
 	put_user(NULL, envp);
 	current->mm->env_end = (unsigned long) p;
@@ -1142,7 +1148,7 @@ static int elf_core_dump(long signr, struct pt_regs * regs)
 		
 		len = current->mm->arg_end - current->mm->arg_start;
 		len = len >= ELF_PRARGSZ ? ELF_PRARGSZ : len;
-		memcpy_fromfs(&psinfo.pr_psargs,
+		copy_from_user(&psinfo.pr_psargs,
 			      (const char *)current->mm->arg_start, len);
 		for(i = 0; i < len; i++)
 			if (psinfo.pr_psargs[i] == 0)

@@ -14,6 +14,7 @@
 #include <linux/shm.h>
 #include <linux/stat.h>
 #include <linux/mman.h>
+#include <linux/file.h>
 
 #include <asm/segment.h>
 #include <asm/ipc.h>
@@ -33,8 +34,8 @@ asmlinkage int sys_pipe(unsigned long * fildes)
 	error = do_pipe(fd);
 	if (error)
 		return error;
-	put_fs_long(fd[0],0+fildes);
-	put_fs_long(fd[1],1+fildes);
+	put_user(fd[0],0+fildes);
+	put_user(fd[1],1+fildes);
 	return 0;
 }
 
@@ -44,45 +45,49 @@ asmlinkage int sys_pipe(unsigned long * fildes)
  * 4 system call parameters, so these system calls used a memory
  * block for parameter passing..
  */
-asmlinkage int old_mmap(unsigned long *buffer)
+struct mmap_arg_struct {
+	unsigned long addr;
+	unsigned long len;
+	unsigned long prot;
+	unsigned long flags;
+	unsigned long fd;
+	unsigned long offset;
+};
+
+asmlinkage int old_mmap(struct mmap_arg_struct *arg)
 {
 	int error;
-	unsigned long flags;
 	struct file * file = NULL;
+	struct mmap_arg_struct a;
 
-	error = verify_area(VERIFY_READ, buffer, 6*sizeof(long));
+	error = verify_area(VERIFY_READ, arg, sizeof(*arg));
 	if (error)
 		return error;
-	flags = get_user(buffer+3);
-	if (!(flags & MAP_ANONYMOUS)) {
-		unsigned long fd = get_user(buffer+4);
-		if (fd >= NR_OPEN || !(file = current->files->fd[fd]))
+	copy_from_user(&a, arg, sizeof(a));
+	if (!(a.flags & MAP_ANONYMOUS)) {
+		if (a.fd >= NR_OPEN || !(file = current->files->fd[a.fd]))
 			return -EBADF;
 	}
-	flags &= ~(MAP_EXECUTABLE | MAP_DENYWRITE);
-	return do_mmap(file, get_user(buffer), get_user(buffer+1),
-		       get_user(buffer+2), flags, get_user(buffer+5));
+	a.flags &= ~(MAP_EXECUTABLE | MAP_DENYWRITE);
+	error = do_mmap(file, a.addr, a.len, a.prot, a.flags, a.offset);
+	return error;
 }
 
 extern asmlinkage int sys_select(int, fd_set *, fd_set *, fd_set *, struct timeval *);
 
-asmlinkage int old_select(unsigned long *buffer)
-{
-	int n;
-	fd_set *inp;
-	fd_set *outp;
-	fd_set *exp;
+struct sel_arg_struct {
+	unsigned long n;
+	fd_set *inp, *outp, *exp;
 	struct timeval *tvp;
+};
 
-	n = verify_area(VERIFY_READ, buffer, 5*sizeof(unsigned long));
-	if (n)
-		return n;
-	n = get_user(buffer);
-	inp = (fd_set *) get_user(buffer+1);
-	outp = (fd_set *) get_user(buffer+2);
-	exp = (fd_set *) get_user(buffer+3);
-	tvp = (struct timeval *) get_user(buffer+4);
-	return sys_select(n, inp, outp, exp, tvp);
+asmlinkage int old_select(struct sel_arg_struct *arg)
+{
+	struct sel_arg_struct a;
+
+	if (copy_from_user(&a, arg, sizeof(a)))
+		return -EFAULT;
+	return sys_select(a.n, a.inp, a.outp, a.exp, a.tvp);
 }
 
 /*
@@ -110,7 +115,7 @@ asmlinkage int sys_ipc (uint call, int first, int second, int third, void *ptr, 
 				return -EINVAL;
 			if ((err = verify_area (VERIFY_READ, ptr, sizeof(long))))
 				return err;
-			fourth.__pad = (void *) get_fs_long(ptr);
+			get_user(fourth.__pad, (void **) ptr);
 			return sys_semctl (first, second, third, fourth);
 			}
 		default:
@@ -130,8 +135,7 @@ asmlinkage int sys_ipc (uint call, int first, int second, int third, void *ptr, 
 					return -EINVAL;
 				if ((err = verify_area (VERIFY_READ, ptr, sizeof(tmp))))
 					return err;
-				memcpy_fromfs (&tmp,(struct ipc_kludge *) ptr,
-					       sizeof (tmp));
+				copy_from_user(&tmp,(struct ipc_kludge *) ptr, sizeof (tmp));
 				return sys_msgrcv (first, tmp.msgp, second, tmp.msgtyp, third);
 				}
 			case 1: default:
@@ -156,7 +160,7 @@ asmlinkage int sys_ipc (uint call, int first, int second, int third, void *ptr, 
 				err = sys_shmat (first, (char *) ptr, second, &raddr);
 				if (err)
 					return err;
-				put_fs_long (raddr, (ulong *) third);
+				put_user (raddr, (ulong *) third);
 				return 0;
 				}
 			case 1:	/* iBCS2 emulator entry point */

@@ -108,7 +108,7 @@ static long minix_file_write(struct inode * inode, struct file * filp,
 			}
 		}
 		p = (pos % BLOCK_SIZE) + bh->b_data;
-		memcpy_fromfs(p,buf,c);
+		copy_from_user(p,buf,c);
 		update_vm_cache(inode, pos, p, c);
 		mark_buffer_uptodate(bh, 1);
 		mark_buffer_dirty(bh, 0);

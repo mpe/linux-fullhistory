@@ -72,7 +72,7 @@ static long proc_readnet(struct inode * inode, struct file * file,
 		/*
  		 *	Copy the bytes
 		 */
-		memcpy_tofs(buf+copied, start, length);
+		copy_to_user(buf+copied, start, length);
 		file->f_pos += length;	/* Move down the file */
 		bytes  -= length;
 		copied += length;

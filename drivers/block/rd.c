@@ -188,7 +188,7 @@ static long initrd_read(struct inode *inode,struct file *file,
 	left = initrd_end-initrd_start-file->f_pos;
 	if (count > left) count = left;
 	if (count == 0) return 0;
-	memcpy_tofs(buf,(char *) initrd_start+file->f_pos,count);
+	copy_to_user(buf,(char *) initrd_start+file->f_pos,count);
 	file->f_pos += count;
 	return count;
 }

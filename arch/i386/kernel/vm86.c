@@ -59,8 +59,8 @@ asmlinkage struct pt_regs * save_v86_state(struct vm86_regs * regs)
 		do_exit(SIGSEGV);
 	}
 	set_flags(regs->eflags, VEFLAGS, VIF_MASK | current->tss.v86mask);
-	memcpy_tofs(&current->tss.vm86_info->regs,regs,sizeof(*regs));
-	put_fs_long(current->tss.screen_bitmap,&current->tss.vm86_info->screen_bitmap);
+	copy_to_user(&current->tss.vm86_info->regs,regs,sizeof(*regs));
+	put_user(current->tss.screen_bitmap,&current->tss.vm86_info->screen_bitmap);
 	tmp = current->tss.esp0;
 	current->tss.esp0 = current->saved_kernel_stack;
 	current->saved_kernel_stack = 0;
@@ -112,7 +112,7 @@ asmlinkage int sys_vm86(struct vm86_struct * v86)
 	error = verify_area(VERIFY_WRITE,v86,sizeof(*v86));
 	if (error)
 		return error;
-	memcpy_fromfs(&info,v86,sizeof(info));
+	copy_from_user(&info,v86,sizeof(info));
 /*
  * make sure the vm86() system call doesn't try to do anything silly
  */
@@ -309,7 +309,7 @@ static void do_int(struct vm86_regs *regs, int i, unsigned char * ssp, unsigned 
 	intr_ptr = (unsigned short *) (i << 2);
 	if (verify_area(VERIFY_READ, intr_ptr, 4) < 0)
 		goto cannot_handle;
-	seg = get_fs_word(intr_ptr+1);
+	get_user(seg, intr_ptr+1);
 	if (seg == BIOSSEG)
 		goto cannot_handle;
 	pushw(ssp, sp, get_vflags(regs));
@@ -317,7 +317,7 @@ static void do_int(struct vm86_regs *regs, int i, unsigned char * ssp, unsigned 
 	pushw(ssp, sp, IP(regs));
 	regs->cs = seg;
 	SP(regs) -= 6;
-	IP(regs) = get_fs_word(intr_ptr+0);
+	get_user(IP(regs), intr_ptr+0);
 	clear_TF(regs);
 	clear_IF(regs);
 	return;

@@ -138,7 +138,7 @@ int ax25_rt_ioctl(unsigned int cmd, void *arg)
 		case SIOCADDRT:
 			if ((err = verify_area(VERIFY_READ, arg, sizeof(route))) != 0)
 				return err;		
-			memcpy_fromfs(&route, arg, sizeof(route));
+			copy_from_user(&route, arg, sizeof(route));
 			if ((dev = ax25rtr_get_dev(&route.port_addr)) == NULL)
 				return -EINVAL;
 			if (route.digi_count > AX25_MAX_DIGIS)
@@ -190,7 +190,7 @@ int ax25_rt_ioctl(unsigned int cmd, void *arg)
 		case SIOCDELRT:
 			if ((err = verify_area(VERIFY_READ, arg, sizeof(route))) != 0)
 				return err;
-			memcpy_fromfs(&route, arg, sizeof(route));
+			copy_from_user(&route, arg, sizeof(route));
 			if ((dev = ax25rtr_get_dev(&route.port_addr)) == NULL)
 				return -EINVAL;
 			ax25_rt = ax25_route;
@@ -221,7 +221,7 @@ int ax25_rt_ioctl(unsigned int cmd, void *arg)
 		case SIOCAX25OPTRT:
 			if ((err = verify_area(VERIFY_READ, arg, sizeof(rt_option))) != 0)
 				return err;
-			memcpy_fromfs(&rt_option, arg, sizeof(rt_option));
+			copy_from_user(&rt_option, arg, sizeof(rt_option));
 			if ((dev = ax25rtr_get_dev(&rt_option.port_addr)) == NULL)
 				return -EINVAL;
 			for (ax25_rt = ax25_route; ax25_rt != NULL; ax25_rt = ax25_rt->next) {
@@ -608,7 +608,7 @@ int ax25_dev_ioctl(unsigned int cmd, void *arg)
 				return -EPERM;
 			if ((err = verify_area(VERIFY_READ, arg, sizeof(ax25_parms))) != 0)
 				return err;
-			memcpy_fromfs(&ax25_parms, arg, sizeof(ax25_parms));
+			copy_from_user(&ax25_parms, arg, sizeof(ax25_parms));
 			if ((dev = ax25rtr_get_dev(&ax25_parms.port_addr)) == NULL)
 				return -EINVAL;
 			if ((ax25_dev = ax25_dev_get_dev(dev)) == NULL)
@@ -666,7 +666,7 @@ int ax25_dev_ioctl(unsigned int cmd, void *arg)
 		case SIOCAX25GETPARMS:
 			if ((err = verify_area(VERIFY_WRITE, arg, sizeof(struct ax25_parms_struct))) != 0)
 				return err;
-			memcpy_fromfs(&ax25_parms, arg, sizeof(ax25_parms));
+			copy_from_user(&ax25_parms, arg, sizeof(ax25_parms));
 			if ((dev = ax25rtr_get_dev(&ax25_parms.port_addr)) == NULL)
 				return -EINVAL;
 			if ((ax25_dev = ax25_dev_get_dev(dev)) == NULL)
@@ -677,7 +677,7 @@ int ax25_dev_ioctl(unsigned int cmd, void *arg)
 			ax25_parms.values[AX25_VALUES_T2] /= PR_SLOWHZ;
 			ax25_parms.values[AX25_VALUES_T3] /= PR_SLOWHZ;
 			ax25_parms.values[AX25_VALUES_IDLE] /= PR_SLOWHZ * 60;
-			memcpy_tofs(arg, &ax25_parms, sizeof(ax25_parms));
+			copy_to_user(arg, &ax25_parms, sizeof(ax25_parms));
 			break;
 	}
 
@@ -751,7 +751,7 @@ int ax25_bpq_ioctl(unsigned int cmd, void *arg)
 		case SIOCAX25BPQADDR:
 			if ((err = verify_area(VERIFY_READ, arg, sizeof(bpqaddr))) != 0)
 				return err;
-			memcpy_fromfs(&bpqaddr, arg, sizeof(bpqaddr));
+			copy_from_user(&bpqaddr, arg, sizeof(bpqaddr));
 			if ((dev = dev_get(bpqaddr.dev)) == NULL)
 				return -EINVAL;
 			if (dev->type != ARPHRD_ETHER)

@@ -1367,8 +1367,18 @@ static void con_start(struct tty_struct *tty)
 	set_leds();
 }
 
-static int con_write(struct tty_struct * tty, int from_user,
-		     const unsigned char *buf, int count)
+static void con_flush_chars(struct tty_struct *tty)
+{
+	unsigned int currcons;
+	struct vt_struct *vt = (struct vt_struct *)tty->driver_data;
+
+	currcons = vt->vc_num;
+	if (vcmode != KD_GRAPHICS)
+		set_cursor(currcons);
+}	
+
+static int do_con_write(struct tty_struct * tty, int from_user,
+			const unsigned char *buf, int count)
 {
 	int c, tc, ok, n = 0;
 	unsigned int currcons;
@@ -1391,12 +1401,10 @@ static int con_write(struct tty_struct * tty, int from_user,
 	disable_bh(CONSOLE_BH);
 	while (!tty->stopped &&	count) {
 		enable_bh(CONSOLE_BH);
-		if (exception()) {
-			n = -EFAULT;
-			break;
-		}
-		c = from_user ? get_user(buf) : *buf;
-		end_exception();
+		if (from_user)
+			get_user(c, buf);
+		else
+			c = *buf;
 		buf++; n++; count--;
 		disable_bh(CONSOLE_BH);
 
@@ -1827,10 +1835,24 @@ static int con_write(struct tty_struct * tty, int from_user,
 				vc_state = ESnormal;
 		}
 	}
-	if (vcmode != KD_GRAPHICS)
-		set_cursor(currcons);
 	enable_bh(CONSOLE_BH);
 	return n;
+}
+
+static int con_write(struct tty_struct * tty, int from_user,
+		     const unsigned char *buf, int count)
+{
+	int	retval;
+	
+	retval = do_con_write(tty, from_user, buf, count);
+	con_flush_chars(tty);
+	
+	return retval;
+}
+
+static void con_put_char(struct tty_struct *tty, unsigned char ch)
+{
+	do_con_write(tty, 0, &ch, 1);
 }
 
 static int con_write_room(struct tty_struct *tty)
@@ -2019,6 +2041,8 @@ unsigned long con_init(unsigned long kmem_start)
 	console_driver.open = con_open;
 	console_driver.write = con_write;
 	console_driver.write_room = con_write_room;
+	console_driver.put_char = con_put_char;
+	console_driver.flush_chars = con_flush_chars;
 	console_driver.chars_in_buffer = con_chars_in_buffer;
 	console_driver.ioctl = vt_ioctl;
 	console_driver.stop = con_stop;

@@ -2182,7 +2182,7 @@ int arp_ioctl(unsigned int cmd, void *arg)
 			err = verify_area(VERIFY_READ, arg, sizeof(struct arpreq));
 			if (err)
 				return err;
-			memcpy_fromfs(&r, arg, sizeof(struct arpreq));
+			copy_from_user(&r, arg, sizeof(struct arpreq));
 			break;
 		case OLD_SIOCDARP:
 		case OLD_SIOCSARP:
@@ -2192,7 +2192,7 @@ int arp_ioctl(unsigned int cmd, void *arg)
 			err = verify_area(VERIFY_READ, arg, sizeof(struct arpreq_old));
 			if (err)
 				return err;
-			memcpy_fromfs(&r, arg, sizeof(struct arpreq_old));
+			copy_from_user(&r, arg, sizeof(struct arpreq_old));
 			memset(&r.arp_dev, 0, sizeof(r.arp_dev));
 			break;
 		default:
@@ -2255,7 +2255,7 @@ int arp_ioctl(unsigned int cmd, void *arg)
 				return err;
 			err = arp_req_get(&r, dev);
 			if (!err)
-				memcpy_tofs(arg, &r, sizeof(r));
+				copy_to_user(arg, &r, sizeof(r));
 			return err;
 		case OLD_SIOCGARP:
 			err = verify_area(VERIFY_WRITE, arg, sizeof(struct arpreq_old));
@@ -2269,7 +2269,7 @@ int arp_ioctl(unsigned int cmd, void *arg)
 				err = arp_req_get(&r, dev);
 			}
 			if (!err)
-				memcpy_tofs(arg, &r, sizeof(struct arpreq_old));
+				copy_to_user(arg, &r, sizeof(struct arpreq_old));
 			return err;
 	}
 	/*NOTREACHED*/

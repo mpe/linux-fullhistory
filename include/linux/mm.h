@@ -21,13 +21,7 @@ extern void * high_memory;
 
 extern inline int verify_area(int type, const void * addr, unsigned long size)
 {
-	int retval = 0;
-	if (get_fs() != KERNEL_DS) {
-		retval = -EFAULT;
-		if (size <= TASK_SIZE && TASK_SIZE-size >= (unsigned long) addr)
-			retval = verify_write(type,addr,size);
-	}
-	return retval;
+	return access_ok(type,addr,size)?0:-EFAULT;
 }
 
 /*
@@ -251,7 +245,7 @@ extern inline unsigned long get_free_page(int priority)
 
 	page = __get_free_page(priority);
 	if (page)
-		memset((void *) page, 0, PAGE_SIZE);
+		clear_page(page);
 	return page;
 }
 

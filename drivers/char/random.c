@@ -996,7 +996,7 @@ static int extract_entropy(struct random_bucket *r, char * buf,
 		/* Copy data to destination buffer */
 		i = MIN(nbytes, HASH_BUFFER_SIZE*sizeof(__u32)/2);
 		if (to_user)
-			memcpy_tofs(buf, (__u8 const *)tmp, i);
+			copy_to_user(buf, (__u8 const *)tmp, i);
 		else
 			memcpy(buf, (__u8 const *)tmp, i);
 		nbytes -= i;
@@ -1115,12 +1115,12 @@ random_write(struct inode * inode, struct file * file,
 	for (i = count, p = (__u32 *)buffer;
 	     i >= sizeof(__u32);
 	     i-= sizeof(__u32), p++) {
-		memcpy_fromfs(&word, p, sizeof(__u32));
+		copy_from_user(&word, p, sizeof(__u32));
 		add_entropy_word(&random_state, word);
 	}
 	if (i) {
 		word = 0;
-		memcpy_fromfs(&word, p, i);
+		copy_from_user(&word, p, i);
 		add_entropy_word(&random_state, word);
 	}
 	if (inode) {
@@ -1165,7 +1165,7 @@ random_ioctl(struct inode * inode, struct file * file,
 		retval = verify_area(VERIFY_READ, (void *) arg, sizeof(int));
 		if (retval)
 			return(retval);
-		ent_count = get_user((int *) arg);
+		get_user(ent_count, (int *) arg);
 		/*
 		 * Add i to entropy_count, limiting the result to be
 		 * between 0 and POOLBITS.
@@ -1200,7 +1200,7 @@ random_ioctl(struct inode * inode, struct file * file,
 		retval = verify_area(VERIFY_WRITE, (void *) p, sizeof(int));
 		if (retval)
 			return(retval);
-		size = get_user(p);
+		get_user(size, p);
 		put_user(POOLWORDS, p++);
 		if (size < 0)
 			return -EINVAL;
@@ -1210,7 +1210,7 @@ random_ioctl(struct inode * inode, struct file * file,
 				     size * sizeof(__u32));
 		if (retval)
 			return retval;
-		memcpy_tofs(p, random_state.pool, size*sizeof(__u32));
+		copy_to_user(p, random_state.pool, size*sizeof(__u32));
 		return 0;
 	case RNDADDENTROPY:
 		if (!suser())
@@ -1219,10 +1219,10 @@ random_ioctl(struct inode * inode, struct file * file,
 		retval = verify_area(VERIFY_READ, (void *) p, 2*sizeof(int));
 		if (retval)
 			return(retval);
-		ent_count = get_user(p++);
+		get_user(ent_count, p++);
 		if (ent_count < 0)
 			return -EINVAL;
-		size = get_user(p++);
+		get_user(size, p++);
 		retval = verify_area(VERIFY_READ, (void *) p, size);
 		if (retval)
 			return retval;

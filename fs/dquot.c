@@ -593,7 +593,7 @@ static int set_dqblk(kdev_t dev, int id, short type, int flags, struct dqblk *dq
 	if (flags & QUOTA_SYSCALL) {
 		if ((error = verify_area(VERIFY_READ, dqblk, sizeof(struct dqblk))) != 0)
 			return(error);
-		memcpy_fromfs(&dq_dqblk, dqblk, sizeof(struct dqblk));
+		copy_from_user(&dq_dqblk, dqblk, sizeof(struct dqblk));
 	} else {
 		memcpy(&dq_dqblk, dqblk, sizeof(struct dqblk));
 	}
@@ -653,7 +653,7 @@ static int get_quota(kdev_t dev, int id, short type, struct dqblk *dqblk)
 			return(error);
 
 		if ((dquot = dqget(dev, id, type)) != NODQUOT) {
-			memcpy_tofs(dqblk, (char *)&dquot->dq_dqb, sizeof(struct dqblk));
+			copy_to_user(dqblk, (char *)&dquot->dq_dqb, sizeof(struct dqblk));
 			dqput(dquot);
 			return(0);
 		}
@@ -670,7 +670,7 @@ static int get_stats(caddr_t addr)
 
 	dqstats.allocated_dquots = nr_dquots;
 	dqstats.free_dquots = nr_free_dquots;
-	memcpy_tofs(addr, (caddr_t)&dqstats, sizeof(struct dqstats));
+	copy_to_user(addr, (caddr_t)&dqstats, sizeof(struct dqstats));
 	return(0);
 }
 

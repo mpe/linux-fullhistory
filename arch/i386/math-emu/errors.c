@@ -46,13 +46,13 @@ void Un_impl(void)
     {
       while ( 1 )
 	{
-	  byte1 = get_fs_byte((unsigned char *) address);
+	  get_user(byte1, (unsigned char *) address);
 	  if ( (byte1 & 0xf8) == 0xd8 ) break;
 	  printk("[%02x]", byte1);
 	  address++;
 	}
       printk("%02x ", byte1);
-      FPU_modrm = get_fs_byte(1 + (unsigned char *) address);
+      get_user(FPU_modrm, 1 + (unsigned char *) address);
       
       if (FPU_modrm >= 0300)
 	printk("%02x (%02x+%d)\n", FPU_modrm, FPU_modrm & 0xf8, FPU_modrm & 7);
@@ -98,7 +98,7 @@ void emu_printall(void)
 #define MAX_PRINTED_BYTES 20
       for ( i = 0; i < MAX_PRINTED_BYTES; i++ )
 	{
-	  byte1 = get_fs_byte((unsigned char *) address);
+	  get_user(byte1, (unsigned char *) address);
 	  if ( (byte1 & 0xf8) == 0xd8 )
 	    {
 	      printk(" %02x", byte1);
@@ -111,7 +111,7 @@ void emu_printall(void)
 	printk(" [more..]\n");
       else
 	{
-	  FPU_modrm = get_fs_byte(1 + (unsigned char *) address);
+	  get_user(FPU_modrm, 1 + (unsigned char *) address);
 	  
 	  if (FPU_modrm >= 0300)
 	    printk(" %02x (%02x+%d)\n", FPU_modrm, FPU_modrm & 0xf8, FPU_modrm & 7);

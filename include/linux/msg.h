@@ -20,8 +20,8 @@ struct msqid_ds {
 	unsigned short msg_cbytes;	/* current number of bytes on queue */
 	unsigned short msg_qnum;	/* number of messages in queue */
 	unsigned short msg_qbytes;	/* max number of bytes on queue */
-	__kernel_pid_t msg_lspid;	/* pid of last msgsnd */
-	__kernel_pid_t msg_lrpid;	/* last receive pid */
+	__kernel_ipc_pid_t msg_lspid;	/* pid of last msgsnd */
+	__kernel_ipc_pid_t msg_lrpid;	/* last receive pid */
 };
 
 /* message buffer for msgsnd and msgrcv calls */

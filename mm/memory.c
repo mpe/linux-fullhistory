@@ -58,13 +58,13 @@ void * high_memory = NULL;
  * a common occurrence (no need to read the page to know
  * that it's zero - better for the cache and memory subsystem).
  */
-static inline void copy_page(unsigned long from, unsigned long to)
+static inline void copy_cow_page(unsigned long from, unsigned long to)
 {
 	if (from == ZERO_PAGE) {
-		memset((void *) to, 0, PAGE_SIZE);
+		clear_page(to);
 		return;
 	}
-	memcpy((void *) to, (void *) from, PAGE_SIZE);
+	copy_page(to, from);
 }
 
 #define USER_PTRS_PER_PGD (TASK_SIZE / PGDIR_SIZE)
@@ -636,7 +636,7 @@ void do_wp_page(struct task_struct * tsk, struct vm_area_struct * vma,
 		if (new_page) {
 			if (PageReserved(mem_map + MAP_NR(old_page)))
 				++vma->vm_mm->rss;
-			copy_page(old_page,new_page);
+			copy_cow_page(old_page,new_page);
 			flush_page_to_ram(old_page);
 			flush_page_to_ram(new_page);
 			flush_cache_page(vma, address);
@@ -850,7 +850,7 @@ anonymous_page:
 		unsigned long page = __get_free_page(GFP_KERNEL);
 		if (!page)
 			goto sigbus;
-		memset((void *) page, 0, PAGE_SIZE);
+		clear_page(page);
 		entry = pte_mkwrite(pte_mkdirty(mk_pte(page, vma->vm_page_prot)));
 		vma->vm_mm->rss++;
 		tsk->min_flt++;

@@ -449,7 +449,7 @@ affs_file_read_ofs(struct inode *inode, struct file *filp, char *buf, int count)
 		data = bh->b_data + 24;
 		size = MIN(blocksize - offset,left);
 		filp->f_pos += size;
-		memcpy_tofs(buf,data + offset,size);
+		copy_to_user(buf,data + offset,size);
 		buf += size;
 		affs_brelse(bh);
 	}
@@ -519,7 +519,7 @@ affs_file_write(struct inode *inode, struct file *filp, const char *buf, int cou
 			}
 		}
 		p = (pos % blocksize) + bh->b_data;
-		memcpy_fromfs(p,buf,c);
+		copy_from_user(p,buf,c);
 		update_vm_cache(inode,pos,p,c);
 		mark_buffer_uptodate(bh,1);
 		mark_buffer_dirty(bh,0);
@@ -600,7 +600,7 @@ affs_file_write_ofs(struct inode *inode, struct file *filp, const char *buf, int
 			}
 		}
 		p = (pos % blocksize) + bh->b_data + 24;
-		memcpy_fromfs(p,buf,c);
+		copy_from_user(p,buf,c);
 		update_vm_cache(inode,pos,p,c);
 
 		pos     += c;

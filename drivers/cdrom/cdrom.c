@@ -268,11 +268,11 @@ void sanitize_format(union cdrom_addr *addr,
 #define GETARG(type, x) { \
         int ret=verify_area(VERIFY_READ, (void *) arg, sizeof x); \
 	    if (ret) return ret; \
-	    memcpy_fromfs(&x, (type *) arg, sizeof x); }
+	    copy_from_user(&x, (type *) arg, sizeof x); }
 #define PUTARG(type, x) { \
 	    int ret=verify_area(VERIFY_WRITE, (void *) arg, sizeof x); \
 	    if (ret) return ret; \
-	    memcpy_tofs((type *) arg, &x, sizeof x); }
+	    copy_to_user((type *) arg, &x, sizeof x); }
 
 /* Some of the cdrom ioctls are not implemented here, because these
  * appear to be either too device-specific, or it is not clear to me

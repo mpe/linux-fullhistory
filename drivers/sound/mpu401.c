@@ -780,7 +780,7 @@ mpu401_ioctl (int dev, unsigned cmd, caddr_t arg)
   switch (cmd)
     {
     case 1:
-      memcpy_fromfs ((char *) init_sequence, &((char *) arg)[0], sizeof (init_sequence));
+      copy_from_user ((char *) init_sequence, &((char *) arg)[0], sizeof (init_sequence));
       return 0;
       break;
 
@@ -799,12 +799,12 @@ mpu401_ioctl (int dev, unsigned cmd, caddr_t arg)
 	int             ret;
 	mpu_command_rec rec;
 
-	memcpy_fromfs ((char *) &rec, &((char *) arg)[0], sizeof (rec));
+	copy_from_user ((char *) &rec, &((char *) arg)[0], sizeof (rec));
 
 	if ((ret = mpu401_command (dev, &rec)) < 0)
 	  return ret;
 
-	memcpy_tofs (&((char *) arg)[0], (char *) &rec, sizeof (rec));
+	copy_to_user (&((char *) arg)[0], (char *) &rec, sizeof (rec));
 	return 0;
       }
       break;
@@ -845,7 +845,7 @@ mpu_synth_ioctl (int dev,
     {
 
     case SNDCTL_SYNTH_INFO:
-      memcpy_tofs (&((char *) arg)[0], &mpu_synth_info[midi_dev], sizeof (struct synth_info));
+      copy_to_user (&((char *) arg)[0], &mpu_synth_info[midi_dev], sizeof (struct synth_info));
 
       return 0;
       break;

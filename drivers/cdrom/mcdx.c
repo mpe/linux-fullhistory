@@ -322,7 +322,7 @@ mcdx_ioctl(
 			xtrace(IOCTL, "ioctl() PLAYTRKIND\n");
 			if ((ans = verify_area(VERIFY_READ, (void*) arg, sizeof(ti))))
 				return ans;
-			memcpy_fromfs(&ti, (void*) arg, sizeof(ti));
+			copy_from_user(&ti, (void*) arg, sizeof(ti));
 			if ((ti.cdti_trk0 < stuffp->di.n_first)
 					|| (ti.cdti_trk0 > stuffp->di.n_last)
 					|| (ti.cdti_trk1 < stuffp->di.n_first))
@@ -346,7 +346,7 @@ mcdx_ioctl(
                     VERIFY_READ, (void*) arg, sizeof(struct cdrom_msf)))) 
                 return ans;
 
-            memcpy_fromfs(&msf, (void*) arg, sizeof msf);
+            copy_from_user(&msf, (void*) arg, sizeof msf);
 
             msf.cdmsf_min0 = uint2bcd(msf.cdmsf_min0);
             msf.cdmsf_sec0 = uint2bcd(msf.cdmsf_sec0);
@@ -374,7 +374,7 @@ mcdx_ioctl(
             if (-1 == mcdx_readtoc(stuffp)) return -1;
 
 			if ((ans = verify_area(VERIFY_WRITE, (void *) arg, sizeof(entry)))) return ans;
-			memcpy_fromfs(&entry, (void *) arg, sizeof(entry));
+			copy_from_user(&entry, (void *) arg, sizeof(entry));
 
 			if (entry.cdte_track == CDROM_LEADOUT) 
 				tp = &stuffp->toc[stuffp->di.n_last - stuffp->di.n_first + 1];
@@ -395,7 +395,7 @@ mcdx_ioctl(
 				entry.cdte_addr.lba = msf2log(&tp->dt);
 			else return -EINVAL;
 
-			memcpy_tofs((void*) arg, &entry, sizeof(entry));
+			copy_to_user((void*) arg, &entry, sizeof(entry));
 
 			return 0;
 		}
@@ -410,7 +410,7 @@ mcdx_ioctl(
 			if ((ans = verify_area(VERIFY_WRITE,
                     (void*) arg, sizeof(sub)))) return ans;
 
-			memcpy_fromfs(&sub, (void*) arg, sizeof(sub));
+			copy_from_user(&sub, (void*) arg, sizeof(sub));
 
 			if (-1 == mcdx_requestsubqcode(stuffp, &q, 2)) return -EIO;
 
@@ -447,7 +447,7 @@ mcdx_ioctl(
                         sub.cdsc_reladdr.msf.frame);
 			} else return -EINVAL;
 
-			memcpy_tofs((void*) arg, &sub, sizeof(sub));
+			copy_to_user((void*) arg, &sub, sizeof(sub));
 
 			return 0;
 		}
@@ -461,7 +461,7 @@ mcdx_ioctl(
 				return ans;
 			toc.cdth_trk0 = stuffp->di.n_first;
 			toc.cdth_trk1 = stuffp->di.n_last;
-			memcpy_tofs((void*) arg, &toc, sizeof toc);
+			copy_to_user((void*) arg, &toc, sizeof toc);
 			xtrace(TOCHDR, "ioctl() track0 = %d, track1 = %d\n",
 					stuffp->di.n_first, stuffp->di.n_last);
 			return 0;
@@ -485,7 +485,7 @@ mcdx_ioctl(
 					sizeof(struct cdrom_multisession))))
 				return ans;
 				
-			memcpy_fromfs(&ms, (void*) arg, sizeof(struct cdrom_multisession));
+			copy_from_user(&ms, (void*) arg, sizeof(struct cdrom_multisession));
 			if (ms.addr_format == CDROM_MSF) {
 				ms.addr.msf.minute = bcd2uint(stuffp->multi.msf_last.minute);
 				ms.addr.msf.second = bcd2uint(stuffp->multi.msf_last.second);
@@ -496,7 +496,7 @@ mcdx_ioctl(
 				return -EINVAL;
 			ms.xa_flag = !!stuffp->multi.multi;
 
-			memcpy_tofs((void*) arg, &ms, sizeof(struct cdrom_multisession));
+			copy_to_user((void*) arg, &ms, sizeof(struct cdrom_multisession));
 			if (ms.addr_format == CDROM_MSF) {
 				xtrace(MS, 
 						"ioctl() (%d, %02x:%02x.%02x [%02x:%02x.%02x])\n",
@@ -542,7 +542,7 @@ mcdx_ioctl(
                     sizeof(volctrl))))
                 return ans;
 
-            memcpy_fromfs(&volctrl, (char *) arg, sizeof(volctrl));
+            copy_from_user(&volctrl, (char *) arg, sizeof(volctrl));
 #if 0		/* not tested! */
 			/* adjust for the weirdness of workman (md) */
 			/* can't test it (hs) */

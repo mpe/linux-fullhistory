@@ -126,8 +126,8 @@ int ip_setsockopt(struct sock *sk, int level, int optname, char *optval, int opt
 		err=verify_area(VERIFY_READ, optval, sizeof(int));
 		if(err)
 			return err;
-		val = get_user((int *) optval);
-		ucval=get_user((unsigned char *) optval);
+		get_user(val, (int *) optval);
+		get_user(ucval, (unsigned char *) optval);
 	}
 	
 	if(level!=SOL_IP)
@@ -155,7 +155,7 @@ int ip_setsockopt(struct sock *sk, int level, int optname, char *optval, int opt
 			  	return -ENOMEM;
 			  memset(opt, 0, sizeof(struct options));
 			  if (optlen)
-			  	memcpy_fromfs(opt->__data, optval, optlen);
+			  	copy_from_user(opt->__data, optval, optlen);
 			  while (optlen & 3)
 			  	opt->__data[optlen++] = IPOPT_END;
 			  opt->optlen = optlen;
@@ -233,7 +233,7 @@ int ip_setsockopt(struct sock *sk, int level, int optname, char *optval, int opt
 			if(err)
 				return err;
 				
-			memcpy_fromfs(&addr,optval,sizeof(addr));
+			copy_from_user(&addr,optval,sizeof(addr));
 			
 			
 			/*
@@ -282,7 +282,7 @@ int ip_setsockopt(struct sock *sk, int level, int optname, char *optval, int opt
 			if(err)
 				return err;
 
-			memcpy_fromfs(&mreq,optval,sizeof(mreq));
+			copy_from_user(&mreq,optval,sizeof(mreq));
 
 			/* 
 			 *	Get device for use later
@@ -337,7 +337,7 @@ int ip_setsockopt(struct sock *sk, int level, int optname, char *optval, int opt
 			if(err)
 				return err;
 
-			memcpy_fromfs(&mreq,optval,sizeof(mreq));
+			copy_from_user(&mreq,optval,sizeof(mreq));
 
 			/*
 			 *	Get device for use later 
@@ -402,7 +402,7 @@ int ip_setsockopt(struct sock *sk, int level, int optname, char *optval, int opt
 			err=verify_area(VERIFY_READ,optval,optlen);
 			if(err)
 				return err;
-			memcpy_fromfs(&tmp_fw,optval,optlen);
+			copy_from_user(&tmp_fw,optval,optlen);
 			err=ip_fw_ctl(optname, &tmp_fw,optlen);
 			return -err;	/* -0 is 0 after all */
 			
@@ -420,7 +420,7 @@ int ip_setsockopt(struct sock *sk, int level, int optname, char *optval, int opt
 			err=verify_area(VERIFY_READ,optval,optlen);
 			if(err)
 				return err;
-			memcpy_fromfs(&tmp_fw, optval,optlen);
+			copy_from_user(&tmp_fw, optval,optlen);
 			err=ip_acct_ctl(optname, &tmp_fw,optlen);
 			return -err;	/* -0 is 0 after all */
 #endif
@@ -468,7 +468,7 @@ int ip_getsockopt(struct sock *sk, int level, int optname, char *optval, int *op
 				sti();
 				if (opt->optlen == 0) 
 				{
-					put_fs_long(0,(unsigned long *) optlen);
+					put_user(0, optlen);
 					return 0;
 				}
 				err = verify_area(VERIFY_WRITE, optval, opt->optlen);
@@ -503,8 +503,8 @@ int ip_getsockopt(struct sock *sk, int level, int optname, char *optval, int *op
 						optptr[2] -= 4;
 					}
 				}
-				put_fs_long(opt->optlen, (unsigned long *) optlen);
-				memcpy_tofs(optval, opt->__data, opt->optlen);
+				put_user(opt->optlen, optlen);
+				copy_to_user(optval, opt->__data, opt->optlen);
 			}
 			return 0;
 		case IP_TOS:
@@ -531,8 +531,8 @@ int ip_getsockopt(struct sock *sk, int level, int optname, char *optval, int *op
   			err=verify_area(VERIFY_WRITE, optval, len);
 		  	if(err)
   				return err;
-  			put_user(len,(int *) optlen);
-			memcpy_tofs((void *)optval,sk->ip_mc_name, len);
+  			put_user(len, optlen);
+			copy_to_user((void *)optval,sk->ip_mc_name, len);
 			return 0;
 #endif
 		default:
@@ -541,7 +541,7 @@ int ip_getsockopt(struct sock *sk, int level, int optname, char *optval, int *op
 	err=verify_area(VERIFY_WRITE, optlen, sizeof(int));
 	if(err)
 		return err;
-	put_user(sizeof(int),(int *) optlen);
+	put_user(sizeof(int), optlen);
 
 	err=verify_area(VERIFY_WRITE, optval, sizeof(int));
 	if(err)

@@ -102,7 +102,7 @@ smb_encode_vblock(byte *p, const byte *data, word len, int fs)
 	*p ++ = 5;
 	p = smb_encode_word(p, len);
 	if (fs)
-		memcpy_fromfs(p, data, len);
+		copy_from_user(p, data, len);
 	else
 		memcpy(p, data, len);
 	return p + len;
@@ -122,7 +122,7 @@ smb_decode_data(byte *p, byte *data, word *data_len, int fs)
         p += 3;
 
         if (fs)
-                memcpy_tofs(data, p, len);
+                copy_to_user(data, p, len);
         else
                 memcpy(data, p, len);
 
@@ -622,7 +622,7 @@ smb_proc_close(struct smb_server *server,
    file-id would not be valid after a reconnection. */
 
 /* smb_proc_read: fs indicates if it should be copied with
-   memcpy_tofs. */
+   copy_to_user. */
 
 int
 smb_proc_read(struct smb_server *server, struct smb_dirent *finfo, 
@@ -702,7 +702,7 @@ smb_proc_write(struct smb_server *server, struct smb_dirent *finfo,
 
         *p++ = 1;
         WSET(p, 0, count);
-        memcpy_fromfs(p+2, data, count);
+        copy_from_user(p+2, data, count);
 
 	if ((res = smb_request_ok(server, SMBwrite, 1, 0)) >= 0) {
                 res = WVAL(buf, smb_vwv0);

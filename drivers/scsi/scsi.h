@@ -133,6 +133,7 @@ extern const unsigned char scsi_command_size[8];
 #define SCSI_MAN_SONY        4
 #define SCSI_MAN_PIONEER     5
 #define SCSI_MAN_MATSHITA    6
+#define SCSI_MAN_HP          7
 
 /*
  *  As the scsi do command functions are intelligent, and may need to

@@ -344,7 +344,8 @@ static int vfat_ioctl_fill(
 	int len, slen;
 	int dotdir;
 
-	if (get_user(&d1->d_reclen) != 0) {
+	get_user(len, &d1->d_reclen);
+	if (len != 0) {
 		return -1;
 	}
 
@@ -357,19 +358,19 @@ static int vfat_ioctl_fill(
 		len = strlen(name);
 	}
 	if (len != name_len) {
-		memcpy_tofs(d2->d_name, name, len);
+		copy_to_user(d2->d_name, name, len);
 		put_user(0, d2->d_name + len);
 		put_user(len, &d2->d_reclen);
 		put_user(ino, &d2->d_ino);
 		put_user(offset, &d2->d_off);
 		slen = name_len - len;
-		memcpy_tofs(d1->d_name, name+len+1, slen);
+		copy_to_user(d1->d_name, name+len+1, slen);
 		put_user(0, d1->d_name+slen);
 		put_user(slen, &d1->d_reclen);
 	} else {
 		put_user(0, d2->d_name);
 		put_user(0, &d2->d_reclen);
-		memcpy_tofs(d1->d_name, name, len);
+		copy_to_user(d1->d_name, name, len);
 		put_user(0, d1->d_name+len);
 		put_user(len, &d1->d_reclen);
 	}

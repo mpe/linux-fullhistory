@@ -1927,10 +1927,10 @@ int fdomain_16x0_reset( Scsi_Cmnd *SCpnt )
 int fdomain_16x0_biosparam( Scsi_Disk *disk, kdev_t dev, int *info_array )
 {
    int              drive;
-   unsigned char    buf[512 + sizeof( int ) * 2];
+   unsigned char    buf[512 + sizeof (Scsi_Ioctl_Command)];
+   Scsi_Ioctl_Command *sic = (Scsi_Ioctl_Command *) buf;
    int		    size      = disk->capacity;
-   int              *sizes    = (int *)buf;
-   unsigned char    *data     = (unsigned char *)(sizes + 2);
+   unsigned char    *data     = sic->data;
    unsigned char    do_read[] = { READ_6, 0, 0, 0, 1, 0 };
    int              retcode;
    unsigned long    offset;
@@ -2017,12 +2017,12 @@ int fdomain_16x0_biosparam( Scsi_Disk *disk, kdev_t dev, int *info_array )
    } else {			/* 3.4 BIOS (and up?) */
       /* This algorithm was provided by Future Domain (much thanks!). */
 
-      sizes[0] = 0;		/* zero bytes out */
-      sizes[1] = 512;		/* one sector in */
+      sic->inlen  = 0;		/* zero bytes out */
+      sic->outlen = 512;		/* one sector in */
       memcpy( data, do_read, sizeof( do_read ) );
       retcode = kernel_scsi_ioctl( disk->device,
 				   SCSI_IOCTL_SEND_COMMAND,
-				   (void *)buf );
+				   sic );
       if (!retcode				    /* SCSI command ok */
 	  && data[511] == 0xaa && data[510] == 0x55 /* Partition table valid */
 	  && data[0x1c2]) {			    /* Partition type */

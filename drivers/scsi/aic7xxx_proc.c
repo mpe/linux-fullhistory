@@ -24,7 +24,7 @@
  *
  *  Dean W. Gehnert, deang@teleport.com, 05/01/96
  *
- *  $Id: aic7xxx_proc.c,v 3.2 1996/07/23 03:37:26 deang Exp $
+ *  $Id: aic7xxx_proc.c,v 4.0 1996/10/13 08:23:42 deang Exp $
  *-M*************************************************************************/
 
 #define BLS buffer + len + size
@@ -172,7 +172,7 @@ aic7xxx_proc_info(char *buffer, char **start, off_t offset, int length,
   size += sprintf(BLS, "               Base IO: %#.4x\n", p->base);
   size += sprintf(BLS, "                   IRQ: %d\n", HBAptr->irq);
   size += sprintf(BLS, "                  SCBs: Used %d, HW %d, Page %d\n",
-      p->numscbs, p->maxhscbs, p->maxscbs);
+      p->scb_link->numscbs, p->maxhscbs, p->maxscbs);
   size += sprintf(BLS, "            Interrupts: %d", p->isr_count);
   if (p->chip_type == AIC_777x)
   {

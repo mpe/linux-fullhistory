@@ -391,8 +391,11 @@ set_get_font(char * arg, int set, int ch512)
 	if (arg)
 	  {
 	    if (set)
-	      for (i=0; i<cmapsz ; i++)
-		scr_writeb(get_user(arg + i), charmap + i);
+	      for (i=0; i<cmapsz ; i++) {
+	      	char c;
+	      	get_user(c, arg + i);
+		scr_writeb(c, charmap + i);
+	      }
 	    else
 	      for (i=0; i<cmapsz ; i++)
 		put_user(scr_readb(charmap + i), arg + i);
@@ -408,8 +411,11 @@ set_get_font(char * arg, int set, int ch512)
 		charmap += 2*cmapsz;
 		arg += cmapsz;
 		if (set)
-		  for (i=0; i<cmapsz ; i++)
-		    scr_writeb(get_user(arg+i), charmap+i);
+		  for (i=0; i<cmapsz ; i++) {
+		    char c;
+		    get_user(c, arg+i);
+		    scr_writeb(c, charmap+i);
+		  }
 		else
 		  for (i=0; i<cmapsz ; i++)
 		    put_user(scr_readb(charmap+i), arg+i);
@@ -553,9 +559,9 @@ set_get_cmap(unsigned char * arg, int set) {
 
 	for (i=0; i<16; i++) {
 		if (set) {
-			default_red[i] = get_user(arg++) ;
-			default_grn[i] = get_user(arg++) ;
-			default_blu[i] = get_user(arg++) ;
+			get_user(default_red[i], arg++) ;
+			get_user(default_grn[i], arg++) ;
+			get_user(default_blu[i], arg++) ;
 		} else {
 			put_user (default_red[i], arg++) ;
 			put_user (default_grn[i], arg++) ;

@@ -4,7 +4,7 @@ Written by Gerard Roudier <groudier@club-internet.fr>
 21 Rue Carnot
 95170 DEUIL LA BARRE - FRANCE
 
-12 June 1995
+13 October 1996
 ===============================================================================
 
 1.  Introduction
@@ -29,7 +29,6 @@ Written by Gerard Roudier <groudier@club-internet.fr>
 14. Control commands under linux-1.2.13
 15. Known problems
       15.1 Tagged commands with Iomega Jaz device
-      15.2 Tagged command queueing cannot be disabled at run time
 
 ===============================================================================
 
@@ -82,7 +81,8 @@ Chip   SDMS BIOS   Wide   Ultra SCSI   the driver      the driver
 815        Y         N        N            Y             Y
 825        Y         Y        N            Y             Y
 825A       Y         Y        N            Y             Not yet
-875        Y         Y        Y(1)         Y             Not yet
+860        N         Y        N            Y             Y
+875        Y         Y        Y(1)         Y             Y
 
 (1) Ultra SCSI extensions will be supported in a future release of the 
     driver.
@@ -106,13 +106,6 @@ Since linux-1.3.x, memory mapped I/O is used rather than normal I/O.
 Memory mapped I/O seems to work fine on most hardware configurations, but some 
 poorly designed motherboards may break this feature.
 
-During the initialization phase, the driver first tries to use memory mapped
-I/O.  If nothing seems wrong, it will use memory mapped I/O.
-If a flaw is detected, it will use normal I/O.
-
-However, it's possible that memory mapped I/O does not work properly and the 
-driver has not detected the problem.
-
 The configuration option CONFIG_SCSI_NCR53C8XX_IOMAPPED forces the 
 driver to use normal I/O in all cases.
 
@@ -127,6 +120,23 @@ described further in this text.
 Once you are sure that all your devices properly support tagged command queuing,
 you can enable it by default with the CONFIG_SCSI_NCR53C8XX_TAGGED_QUEUE 
 configuration option.
+
+The maximum number of simultaneous tagged commands queued to a device is 
+currently set to 4 by default. It is defined in the file ncr53c8xx.h by 
+SCSI_NCR_MAX_TAGS. This value is suitable for most scsi disks.
+With large scsi disks (> 2GB, cache > 512KB average seek time < 10 ms),  
+8 tagged commands may give better performance.
+
+In some special conditions, some scsi disk firmwares may return a QUEUE FULL 
+status for a scsi command. This behaviour is managed by the driver by the 
+following heuristic:
+
+- Each time a QUEUE FULL status is returned, tagged command queueing is 
+  temporarily disabled. 
+
+- Every 100 successfully completed scsi commands, if allowed by the current 
+  limit, the maximum number of queueable commands is incremented and tagged 
+  command queueing is reenabled.
 
 
 6. Parity checking
@@ -292,7 +302,6 @@ Available commands:
     target:    target number
     tags:      number of concurrent tagged commands
                must not be greater than SCSI_NCR_MAX_TAGS (default: 4)
-               must not be lower that 1 (see: known problems)
 
 8.4 Set order type for tagged command
 
@@ -367,6 +376,11 @@ Some of these are defined from the configuration parameters.
 To change other "defines", you must edit the header file.
 Do that only if you know what you are doing.
 
+SCSI_NCR_TRUST_BIOS_SETTING	(default: not defined)
+	If defined, the driver will preserve features bits in 
+	dmode/dcntl/ctest3/ctest4 io register.
+	Else, it will enable features according to chip and revision id.
+
 SCSI_NCR_IOMAPPED		(default: not defined)
 	If defined, normal I/O is forced.
 
@@ -376,6 +390,10 @@ SCSI_NCR_SHARE_IRQ		(default: defined)
 SCSI_NCR_MAX_TAGS		(default: 4)
 	Maximum number of simultaneous tagged commands to a device.
 	Can be changed by "settags <target> <maxtags>"
+
+SCSI_NCR_DEFAULT_TAGS		(default: 4)
+	Default number of simultaneous tagged commands to a device.
+	< 1 means tagged command queuing disabled at start-up.
 
 SCSI_NCR_ALWAYS_SIMPLE_TAG	(default: defined)
 	Use SIMPLE TAG for read and write commands.
@@ -407,6 +425,7 @@ SCSI_NCR_MAX_SCATTER		(default: 128)
 SCSI_NCR_SEGMENT_SIZE		(default: 512)
 	If defined, the driver will try to use scatter segments of this size.
 	If not defined, the Linux scatter list is used as is.
+	Not defined by default.
 
 SCSI_NCR_MAX_TARGET		(default: 16)
 	Max number of targets per host.
@@ -446,28 +465,25 @@ Driver and common files:
 	scsitag.c		: command tool to enable tagged queue
 	conf.modules		: sample of /etc/conf.modules
 
-Installation procedure 1 replacing the standard NCR53c7,8xx driver:
+Installation procedure 1 replacing the NCR53c7,8xx driver:
 
-	Install.ncr53c8xx	: installation script
-	Uninstall.ncr53c8xx	: uninstallation script
+	Install1.ncr53c8xx	: installation script
+	Uninstall1.ncr53c8xx	: uninstallation script
 	53c7,8xx.h		: included by hosts.c, override the standard driver
 
 	Patch-1.2.13.ncr53c8xx     : patch for linux-1.2.13
 	Patch-1.3.45-49.ncr53c8xx  : patch for linux-1.3.45 to linux-1.3.49
 	Patch-1.3.50-100.ncr53c8xx : patch for linux-1.3.50 to linux-1.3.100
 
-Installation procedure 2 adding the driver to the kernel tree:
+Installation procedure 2 replacing the previous version of the driver:
 
 	Install2.ncr53c8xx	   : installation script
-
-	Patch2-2.0.0-1.ncr53c8xx   : patch for linux-2.0.0 and linux-2.0.1
-	Patch2-Current.ncr53c8xx   : patch used for sub-levels > 1
 
 Prior to installing the driver, you must untar the distribution, as follow:
 
 	mkdir ncrB2L
 	cd ncrB2L
-	tar zxvf ncrBsd2Linux-1.12a-src.tar.gz
+	tar zxvf ncrBsd2Linux-1.14a-src.tar.gz
 
 
 12. Installation procedure for Linux version 1
@@ -481,10 +497,10 @@ The standard driver can be restored with Uninstall.ncr53c8xx
 
 	If your linux directory is at the standard location
 	"/usr/src/linux", just enter:
-		Install.ncr53c8xx
+		Install1.ncr53c8xx
 
 	Else enter:
-		Install.ncr53c8xx <your_linux_directory>
+		Install1.ncr53c8xx <your_linux_directory>
 
 	Make the kernel:
 		Change to linux source directory
@@ -501,19 +517,16 @@ The standard driver can be restored with Uninstall.ncr53c8xx
 
 	If you prefer the standard NCR driver of Linux:
 	just enter:
-		Uninstall.ncr53c8xx
+		Uninstall1.ncr53c8xx
 	or
-		Uninstall.ncr53c8xx <your_linux_directory>
+		Uninstall1.ncr53c8xx <your_linux_directory>
 	if your linux root is not /usr/src/linux.
 
 
 13. Installation procedure for Linux version 2
 
-This procedure adds the driver to the kernel tree.
-Using "make config" you can choose between the standard driver and the BSD one.
-It is possible to configure both drivers as modules and to switch from one 
-to the other at run time.
-Take care to unload the current driver module before loading the other one.
+This install script only supports linux-2.0.3 and above.
+This procedure copy the new driver files to the kernel tree.
 
 	If your linux directory is at the standard location
 	"/usr/src/linux", just enter:
@@ -524,7 +537,8 @@ Take care to unload the current driver module before loading the other one.
 
 	Make the kernel:
 		Change to linux source directory
-		Configure with NCR53C8XX support (Y or m)
+		Configure with NCR53C7,8XX support = N
+		Configure with NCR53C8XX   support = Y (or m)
 		Make dependancies
 		Make the kernel (use make zdisk first)
 		Make and install modules if you have configured with 'm'
@@ -558,13 +572,6 @@ to spin down.
 The other problem that may appear is timeouts. The only way to avoid timeouts 
 seems to edit linux/drivers/scsi/sd.c and to increase the current timeout 
 values.
-
-15.2 Tagged command queuing cannot be disabled at run time
-
-Once Tagged command queuing has been enabled, the driver will not allow you to 
-disable this feature ("settags <target> 0" is not supported).
-This problem is due to some limitations of the code added to the Linux version 
-of the driver.
 
 ===============================================================================
 End of NCR53C8XX driver README file

@@ -174,7 +174,7 @@ static int rtc_read(struct inode *inode, struct file *file, char *buf, int count
 		data = rtc_irq_data;
 		rtc_irq_data = 0;
 		restore_flags(flags);
-		memcpy_tofs(buf, &data, sizeof(unsigned long));
+		copy_to_user(buf, &data, sizeof(unsigned long));
 		retval = sizeof(unsigned long);
 	}
 
@@ -254,7 +254,7 @@ static int rtc_ioctl(struct inode *inode, struct file *file, unsigned int cmd,
 
 			get_rtc_alm_time(&alm_tm);
 
-			memcpy_tofs((struct rtc_time*)arg, &alm_tm, sizeof(struct rtc_time));
+			copy_to_user((struct rtc_time*)arg, &alm_tm, sizeof(struct rtc_time));
 			
 			return 0;
 		}
@@ -273,7 +273,7 @@ static int rtc_ioctl(struct inode *inode, struct file *file, unsigned int cmd,
 			if (retval != 0 )
 				return retval;
 
-			memcpy_fromfs(&alm_tm, (struct rtc_time*)arg, sizeof(struct rtc_time));
+			copy_from_user(&alm_tm, (struct rtc_time*)arg, sizeof(struct rtc_time));
 
 			hrs = alm_tm.tm_hour;
 			min = alm_tm.tm_min;
@@ -314,7 +314,7 @@ static int rtc_ioctl(struct inode *inode, struct file *file, unsigned int cmd,
 				return retval;
 
 			get_rtc_time(&rtc_tm);
-			memcpy_tofs((struct rtc_time*)arg, &rtc_tm, sizeof(struct rtc_time));
+			copy_to_user((struct rtc_time*)arg, &rtc_tm, sizeof(struct rtc_time));
 			return 0;
 		}
 		case RTC_SET_TIME:	/* Set the RTC */
@@ -333,7 +333,7 @@ static int rtc_ioctl(struct inode *inode, struct file *file, unsigned int cmd,
 			if (retval !=0 )
 				return retval;
 
-			memcpy_fromfs(&rtc_tm, (struct rtc_time*)arg, sizeof(struct rtc_time));
+			copy_from_user(&rtc_tm, (struct rtc_time*)arg, sizeof(struct rtc_time));
 
 			yrs = rtc_tm.tm_year + 1900;
 			mon = rtc_tm.tm_mon + 1;   /* tm_mon starts at zero */
@@ -400,7 +400,7 @@ static int rtc_ioctl(struct inode *inode, struct file *file, unsigned int cmd,
 			if (retval != 0)
 				return retval;
 
-			memcpy_tofs((unsigned long*)arg, &rtc_freq, sizeof(unsigned long));
+			copy_to_user((unsigned long*)arg, &rtc_freq, sizeof(unsigned long));
 			return 0;
 		}
 		case RTC_IRQP_SET:	/* Set periodic IRQ rate.	*/

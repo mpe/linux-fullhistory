@@ -240,7 +240,7 @@ audio_write (int dev, struct fileinfo *file, const char *buf, int count)
 	{			/*
 				 * No device specific copy routine
 				 */
-	  memcpy_fromfs (&dma_buf[buf_ptr], &(buf)[p], l);
+	  copy_from_user (&dma_buf[buf_ptr], &(buf)[p], l);
 	}
       else
 	audio_devs[dev]->d->copy_from_user (dev,
@@ -326,7 +326,7 @@ audio_read (int dev, struct fileinfo *file, char *buf, int count)
 	  translate_bytes (dsp_ulaw, (unsigned char *) dmabuf, l);
 	}
 
-      memcpy_tofs (&(buf)[p], dmabuf, l);
+      copy_to_user (&(buf)[p], dmabuf, l);
 
       DMAbuf_rmchars (dev, buf_no, l);
 
@@ -397,7 +397,7 @@ audio_ioctl (int dev, struct fileinfo *file,
 	  if (err < 0)
 	    return err;
 
-	  memcpy_tofs (&((char *) arg)[0], (char *) &info, sizeof (info));
+	  copy_to_user (&((char *) arg)[0], (char *) &info, sizeof (info));
 	  return 0;
 	}
 
@@ -420,7 +420,7 @@ audio_ioctl (int dev, struct fileinfo *file,
 	  if (DMAbuf_get_curr_buffer (dev, &buf_no, &dma_buf, &buf_ptr, &buf_size) >= 0)
 	    info.bytes -= buf_ptr;
 
-	  memcpy_tofs (&((char *) arg)[0], (char *) &info, sizeof (info));
+	  copy_to_user (&((char *) arg)[0], (char *) &info, sizeof (info));
 	  return 0;
 	}
 
@@ -447,7 +447,7 @@ audio_ioctl (int dev, struct fileinfo *file,
 
 	  info |= DSP_CAP_MMAP;
 
-	  memcpy_tofs (&((char *) arg)[0], (char *) &info, sizeof (info));
+	  copy_to_user (&((char *) arg)[0], (char *) &info, sizeof (info));
 	  return 0;
 	}
 	break;

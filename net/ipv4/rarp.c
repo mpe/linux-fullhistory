@@ -290,7 +290,7 @@ static int rarp_req_set(struct arpreq *req)
 	struct rtable *rt;
 	struct device * dev;
   
-	memcpy_fromfs(&r, req, sizeof(r));
+	copy_from_user(&r, req, sizeof(r));
   
 	/*
 	 *	We only understand about IP addresses... 
@@ -395,7 +395,7 @@ static int rarp_req_get(struct arpreq *req)
  *	We only understand about IP addresses...
  */
         
-	memcpy_fromfs(&r, req, sizeof(r));
+	copy_from_user(&r, req, sizeof(r));
   
 	if (r.arp_pa.sa_family != AF_INET)
 		return -EPFNOSUPPORT;
@@ -430,7 +430,7 @@ static int rarp_req_get(struct arpreq *req)
  *        Copy the information back
  */
   
-	memcpy_tofs(req, &r, sizeof(r));
+	copy_to_user(req, &r, sizeof(r));
 	return 0;
 }
 
@@ -453,7 +453,7 @@ int rarp_ioctl(unsigned int cmd, void *arg)
 			err = verify_area(VERIFY_READ, arg, sizeof(struct arpreq));
 			if(err)
 				return err;
-			memcpy_fromfs(&r, arg, sizeof(r));
+			copy_from_user(&r, arg, sizeof(r));
 			if (r.arp_pa.sa_family != AF_INET)
 				return -EPFNOSUPPORT;
 			si = (struct sockaddr_in *) &r.arp_pa;

@@ -764,7 +764,7 @@ static void hpfs_statfs(struct super_block *s, struct statfs *buf, int bufsiz)
 	tmp.f_files = s->s_hpfs_dirband_size;
 	tmp.f_ffree = s->s_hpfs_n_free_dnodes;
 	tmp.f_namelen = 254;
-	memcpy_tofs(buf, &tmp, bufsiz);
+	copy_to_user(buf, &tmp, bufsiz);
 }
 
 /*
@@ -930,7 +930,7 @@ static long hpfs_file_read(struct inode *inode, struct file *filp,
 			 * regular copy, output length is same as input
 			 * length
 			 */
-			memcpy_tofs(buf, block + r, n);
+			copy_to_user(buf, block + r, n);
 			n0 = n;
 		}
 		else {

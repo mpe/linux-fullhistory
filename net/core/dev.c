@@ -803,7 +803,7 @@ static int dev_ifconf(char *arg)
 	err=verify_area(VERIFY_WRITE, arg, sizeof(struct ifconf));
 	if(err)
 	  	return err;
-	memcpy_fromfs(&ifc, arg, sizeof(struct ifconf));
+	copy_from_user(&ifc, arg, sizeof(struct ifconf));
 	len = ifc.ifc_len;
 	pos = ifc.ifc_buf;
 
@@ -841,7 +841,7 @@ static int dev_ifconf(char *arg)
 		 *	Write this block to the caller's space. 
 		 */
 		 
-		memcpy_tofs(pos, &ifr, sizeof(struct ifreq));
+		copy_to_user(pos, &ifr, sizeof(struct ifreq));
 		pos += sizeof(struct ifreq);
 		len -= sizeof(struct ifreq);		
   	}
@@ -852,7 +852,7 @@ static int dev_ifconf(char *arg)
 	 
 	ifc.ifc_len = (pos - ifc.ifc_buf);
 	ifc.ifc_req = (struct ifreq *) ifc.ifc_buf;
-	memcpy_tofs(arg, &ifc, sizeof(struct ifconf));
+	copy_to_user(arg, &ifc, sizeof(struct ifconf));
 	
 	/*
 	 *	Report how much was filled in
@@ -972,7 +972,7 @@ static int dev_ifsioc(void *arg, unsigned int getset)
 	if(err)
 		return err;
 	
-	memcpy_fromfs(&ifr, arg, sizeof(struct ifreq));
+	copy_from_user(&ifr, arg, sizeof(struct ifreq));
 
 	/*
 	 *	See which interface the caller is talking about. 
@@ -1273,7 +1273,7 @@ static int dev_ifsioc(void *arg, unsigned int getset)
 				if(dev->do_ioctl==NULL)
 					return -EOPNOTSUPP;
 				ret=dev->do_ioctl(dev, &ifr, getset);
-				memcpy_tofs(arg,&ifr,sizeof(struct ifreq));
+				copy_to_user(arg,&ifr,sizeof(struct ifreq));
 				break;
 			}
 			
@@ -1284,7 +1284,7 @@ static int dev_ifsioc(void *arg, unsigned int getset)
  *	The load of calls that return an ifreq and ok (saves memory).
  */
 rarok:
-	memcpy_tofs(arg, &ifr, sizeof(struct ifreq));
+	copy_to_user(arg, &ifr, sizeof(struct ifreq));
 	return 0;
 }
 

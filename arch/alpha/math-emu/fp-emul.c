@@ -173,7 +173,7 @@ alpha_fp_emul (unsigned long pc)
 	unsigned long va, vb, vc, res, fpcr;
 	__u32 insn;
 
-	insn = get_user((__u32*)pc);
+	get_user(insn, (__u32*)pc);
 	fc     = (insn >>  0) &  0x1f;	/* destination register */
 	func   = (insn >>  5) & 0x7ff;
 	fb     = (insn >> 16) &  0x1f;
@@ -338,7 +338,7 @@ alpha_fp_emul_imprecise (struct pt_regs *regs, unsigned long write_mask)
 	 * up to the first occurrence of such an instruction.
 	 */
 	while (write_mask) {
-		insn = get_user((__u32*)(trigger_pc));
+		get_user(insn, (__u32*)(trigger_pc));
 		opcode = insn >> 26;
 		rc = insn & 0x1f;
 

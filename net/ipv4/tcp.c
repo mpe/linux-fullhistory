@@ -922,12 +922,7 @@ static int fill_in_partial_skb(struct sock *sk, struct sk_buff *skb,
 		send = tcp_enqueue_partial;
 		copy = seglen;
 	}
-	if (exception()) {
-		tcp_enqueue_partial(sk, skb);
-		return -EFAULT;
-	}
-	memcpy_fromfs(skb->tail, from, copy);
-	end_exception();
+	copy_from_user(skb->tail, from, copy);
 	tcp_size += copy;
 	skb->tail += copy;
 	skb->len += copy;
@@ -1172,11 +1167,8 @@ static int do_tcp_sendmsg(struct sock *sk,
 				skb->h.th->urg_ptr = ntohs(copy);
 			}
 
-			if (exception())
-				goto bad_access;
 			skb->csum = csum_partial_copy_fromuser(from,
 				skb->tail, copy, 0);
-			end_exception();
 			skb->tail += copy;
 			skb->len += copy;
 			from += copy;
@@ -1187,12 +1179,7 @@ static int do_tcp_sendmsg(struct sock *sk,
 			skb->free = 0;
 
 			send(sk, skb);
-			continue;
-
-bad_access:
-			sock_wfree(sk, skb);
-			return -EFAULT;
-			}
+		}
 	}
 	sk->err = 0;
 
@@ -1552,7 +1539,7 @@ static int tcp_recvmsg(struct sock *sk, struct msghdr *msg,
 		*seq += used;
 
 		/*
-		 *	This memcpy_tofs can sleep. If it sleeps and we
+		 *	This copy_to_user can sleep. If it sleeps and we
 		 *	do a second read it relies on the skb->users to avoid
 		 *	a crash when cleanup_rbuf() gets called.
 		 */
@@ -2146,7 +2133,7 @@ int tcp_setsockopt(struct sock *sk, int level, int optname, char *optval, int op
   	if(err)
   		return err;
 
-  	val = get_user((int *)optval);
+	get_user(val, (int *)optval);
 
 	switch(optname)
 	{

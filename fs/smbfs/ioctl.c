@@ -25,7 +25,7 @@ smb_ioctl (struct inode * inode, struct file * filp,
                                           sizeof(uid_t))) != 0) {
                         return result;
                 }
-                put_fs_word(SMB_SERVER(inode)->m.mounted_uid, (uid_t*) arg);
+                put_user(SMB_SERVER(inode)->m.mounted_uid, (uid_t*) arg);
                 return 0;
         default:
 		return -EINVAL;

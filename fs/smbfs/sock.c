@@ -266,7 +266,7 @@ smb_receive_raw(struct socket *sock, unsigned char *target,
 	}
 
         if (want_header != 0) {
-                memcpy_tofs(target, peek_buf, 4);
+                copy_to_user(target, peek_buf, 4);
                 target += 4;
         }
 

@@ -88,7 +88,7 @@ static int netlink_write(struct inode * inode, struct file * file, const char * 
 	struct sk_buff *skb;
 	skb=alloc_skb(count, GFP_KERNEL);
 	skb->free=1;
-	memcpy_fromfs(skb_put(skb,count),buf, count);
+	copy_from_user(skb_put(skb,count),buf, count);
 	return (netlink_handler[minor])(skb);
 }
 
@@ -119,7 +119,7 @@ static int netlink_read(struct inode * inode, struct file * file, char * buf, in
 	sti();
 	if(skb->len<count)
 		count=skb->len;
-	memcpy_tofs(buf,skb->data,count);
+	copy_to_user(buf,skb->data,count);
 	kfree_skb(skb, FREE_READ);
 	return count;
 }

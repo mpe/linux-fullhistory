@@ -1099,12 +1099,12 @@ wic_ioctl(struct device *dev, struct ifreq *rq, int cmd)
 	err=verify_area(VERIFY_WRITE, rq->ifr_data, sizeof(struct wicconf));
 	if (err)
 		return err;
-	memcpy_fromfs(&wc, rq->ifr_data, sizeof(struct wicconf));
+	copy_from_user(&wc, rq->ifr_data, sizeof(struct wicconf));
 	switch(wc.pcmd) {
 		case WIC_AYT:
 			strcpy(wc.data, version);
 			wc.len = strlen(wc.data);
-			memcpy_tofs(rq->ifr_data, &wc, sizeof(struct wicconf));
+			copy_to_user(rq->ifr_data, &wc, sizeof(struct wicconf));
 			/* return 0; */
 			break;
 		case WIC_RESET:
@@ -1162,7 +1162,7 @@ wic_ioctl(struct device *dev, struct ifreq *rq, int cmd)
 		outb(save, PAR_CONTROL(dev));
 		enable_irq(dev->irq);
 		wc.len = (len <0) ? 0 : len;
-		memcpy_tofs(rq->ifr_data, &wc, sizeof(struct wicconf));
+		copy_to_user(rq->ifr_data, &wc, sizeof(struct wicconf));
 	} else {
 		save |= 0x10; /* enable */
 		outb(save, PAR_CONTROL(dev));

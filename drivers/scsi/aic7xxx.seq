@@ -28,7 +28,7 @@
  *
  *-M*************************************************************************/
 
-VERSION AIC7XXX_SEQ_VER "$Id: aic7xxx.seq,v 3.1 1996/07/23 03:37:26 deang Exp $"
+VERSION AIC7XXX_SEQ_VER "$Id: aic7xxx.seq,v 4.0 1996/10/13 08:23:42 deang Exp $"
 
 #ifdef linux
 #include "aic7xxx_reg.h"
@@ -402,18 +402,8 @@ dma_finish2:
 	test	DFCNTRL,HDMAENACK jnz dma_finish2
 
 /*
- * Copy data from FIFO into SCB data pointer and data count.  This assumes
- * that the struct scatterlist has this structure (this and sizeof(struct
- * scatterlist) == 12 are asserted in aic7xxx.c for the Linux driver):
- *
- *	struct scatterlist {
- *		char *address;		four bytes, little-endian order
- *		...			four bytes, ignored
- *		unsigned short length;	two bytes, little-endian order
- *	}
- *
- *
- * In FreeBSD, the scatter list entry is only 8 bytes.
+ * Copy data from FIFO into SCB data pointer and data count.  In
+ * both FreeBSD and Linux, the scatter list entry is 8 bytes.
  * 
  * struct ahc_dma_seg {
  *       physaddr addr;                  four bytes, little-endian order
@@ -425,16 +415,6 @@ dma_finish2:
 	mov	HADDR1,DFDAT
 	mov	HADDR2,DFDAT
 	mov	HADDR3,DFDAT
-/*
- * For Linux, we must throw away four bytes since there is a 32bit gap
- * in the middle of a struct scatterlist.
- */
-#ifdef linux
-	mov	NONE,DFDAT
-	mov	NONE,DFDAT
-	mov	NONE,DFDAT
-	mov	NONE,DFDAT
-#endif
 	mov	HCNT0,DFDAT
 	mov	HCNT1,DFDAT
 	mov	HCNT2,DFDAT

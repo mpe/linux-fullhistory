@@ -8,7 +8,7 @@
 #define __ASM_ALPHA_PROCESSOR_H
 
 /*
- * We have a 41-bit user address space: 2TB user VM...
+ * We have a 42-bit user address space: 4TB user VM...
  */
 #define TASK_SIZE (0x40000000000UL)
 
@@ -21,30 +21,13 @@
 #define MCA_bus__is_a_macro /* for versions in ksyms.c */
 
 /*
- * The VM exception save area. We need to save
- *	return address (r26)
- *	PC (r30)
- *	function-call-saved regs (r9-r15)
- * Count is used to do some basic sanity checking, and
- * to handle the case where a kernel service itself sets
- * up exceptions while another exception is active.
- *
- * NOTE: Exceptions are not "recursive": in the case above
- * the oldest exception is the one that is left active, but
- * the VM fault handler will notice a count != 1 and abort
- * because exceptions within exceptions are an error.
+ * The VM exception save area. We need to save only the
+ * exception count, so that the exception handling can know
+ * whether the system is set up to handle exceptions..
  */
 struct exception_struct {
 	unsigned long count;
-	unsigned long r9, r10, r11, r12, r13, r14, r15;
-	unsigned long r26, r30;
 };
-
-extern int __exception(struct exception_struct *);
-extern void __handle_exception(struct exception_struct *) __attribute__((noreturn));
-
-#define exception()	__exception(&current->tss.ex)
-#define end_exception()	(current->tss.ex.count--)
 
 struct thread_struct {
 	/* the fields below are used by PALcode and must match struct pcb: */
@@ -78,7 +61,7 @@ struct thread_struct {
 	0, 0, 0, \
 	0, 0, 0, \
 	0, \
-	{ 0, } \
+	{ 0 } \
 }
 
 #define alloc_kernel_stack()    __get_free_page(GFP_KERNEL)

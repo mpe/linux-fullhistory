@@ -135,7 +135,7 @@ int sr_ioctl(struct inode * inode, struct file * file, unsigned int cmd, unsigne
         err = verify_area (VERIFY_READ, (void *) arg, sizeof (msf));
         if (err) return err;
 
-	memcpy_fromfs(&msf, (void *) arg, sizeof(msf));
+	copy_from_user(&msf, (void *) arg, sizeof(msf));
 	
 	sr_cmd[0] = SCMD_PLAYAUDIO_MSF;
 	sr_cmd[1] = scsi_CDs[target].device->lun << 5;
@@ -159,7 +159,7 @@ int sr_ioctl(struct inode * inode, struct file * file, unsigned int cmd, unsigne
         err = verify_area (VERIFY_READ, (void *) arg, sizeof (blk));
         if (err) return err;
 
-	memcpy_fromfs(&blk, (void *) arg, sizeof(blk));
+	copy_from_user(&blk, (void *) arg, sizeof(blk));
 	
 	sr_cmd[0] = SCMD_PLAYAUDIO10;
 	sr_cmd[1] = scsi_CDs[target].device->lun << 5;
@@ -183,7 +183,7 @@ int sr_ioctl(struct inode * inode, struct file * file, unsigned int cmd, unsigne
         err = verify_area (VERIFY_READ, (void *) arg, sizeof (ti));
         if (err) return err;
 
-	memcpy_fromfs(&ti, (void *) arg, sizeof(ti));
+	copy_from_user(&ti, (void *) arg, sizeof(ti));
 	
 	sr_cmd[0] = SCMD_PLAYAUDIO_TI;
 	sr_cmd[1] = scsi_CDs[target].device->lun << 5;
@@ -227,7 +227,7 @@ int sr_ioctl(struct inode * inode, struct file * file, unsigned int cmd, unsigne
 	err = verify_area (VERIFY_WRITE, (void *) arg, sizeof (struct cdrom_tochdr));
 	if (err)
 	    return err;
-	memcpy_tofs ((void *) arg, &tochdr, sizeof (struct cdrom_tochdr));
+	copy_to_user ((void *) arg, &tochdr, sizeof (struct cdrom_tochdr));
 	
 	return result;
     }
@@ -240,7 +240,7 @@ int sr_ioctl(struct inode * inode, struct file * file, unsigned int cmd, unsigne
         err = verify_area (VERIFY_READ, (void *) arg, sizeof (struct cdrom_tocentry));
         if (err) return err;
 
-	memcpy_fromfs (&tocentry, (void *) arg, sizeof (struct cdrom_tocentry));
+	copy_from_user (&tocentry, (void *) arg, sizeof (struct cdrom_tocentry));
 	
 	sr_cmd[0] = SCMD_READ_TOC;
 	sr_cmd[1] = ((scsi_CDs[target].device->lun) << 5) |
@@ -273,7 +273,7 @@ int sr_ioctl(struct inode * inode, struct file * file, unsigned int cmd, unsigne
 	err = verify_area (VERIFY_WRITE, (void *) arg, sizeof (struct cdrom_tocentry));
 	if (err)
 	    return err;
-	memcpy_tofs ((void *) arg, &tocentry, sizeof (struct cdrom_tocentry));
+	copy_to_user ((void *) arg, &tocentry, sizeof (struct cdrom_tocentry));
 	
 	return result;
     }
@@ -345,7 +345,7 @@ int sr_ioctl(struct inode * inode, struct file * file, unsigned int cmd, unsigne
         err = verify_area (VERIFY_READ, (void *) arg, sizeof (struct cdrom_volctrl));
         if (err) return err;
 
-	memcpy_fromfs (&volctrl, (void *) arg, sizeof (struct cdrom_volctrl));
+	copy_from_user (&volctrl, (void *) arg, sizeof (struct cdrom_volctrl));
 	
 	/* First we get the current params so we can just twiddle the volume */
 	
@@ -436,7 +436,7 @@ int sr_ioctl(struct inode * inode, struct file * file, unsigned int cmd, unsigne
 	volctrl.channel2 = buffer[25];
 	volctrl.channel3 = buffer[27];
 
-	memcpy_tofs ((void *) arg, &volctrl, sizeof (struct cdrom_volctrl));
+	copy_to_user ((void *) arg, &volctrl, sizeof (struct cdrom_volctrl));
 
 	scsi_free(buffer, 512);
 
@@ -481,7 +481,7 @@ int sr_ioctl(struct inode * inode, struct file * file, unsigned int cmd, unsigne
 	err = verify_area (VERIFY_WRITE, (void *) arg, sizeof (struct cdrom_subchnl));
 	if (err)
 	    return err;
-	memcpy_tofs ((void *) arg, &subchnl, sizeof (struct cdrom_subchnl));
+	copy_to_user ((void *) arg, &subchnl, sizeof (struct cdrom_subchnl));
 	return result;
     }
 	
@@ -513,7 +513,7 @@ int sr_ioctl(struct inode * inode, struct file * file, unsigned int cmd, unsigne
 	err = verify_area (VERIFY_WRITE, (void *) arg, sizeof (struct cdrom_mcn));
 	if (err)
 	    return err;
-	memcpy_tofs ((void *) arg, &mcn, sizeof (struct cdrom_mcn));
+	copy_to_user ((void *) arg, &mcn, sizeof (struct cdrom_mcn));
 	return result;
     }
 	
@@ -532,7 +532,7 @@ int sr_ioctl(struct inode * inode, struct file * file, unsigned int cmd, unsigne
 			  sizeof(struct cdrom_multisession));
 	if (err) return (err);
 	
-	memcpy_fromfs(&ms_info, (void *) arg, sizeof(struct cdrom_multisession));
+	copy_from_user(&ms_info, (void *) arg, sizeof(struct cdrom_multisession));
 	
 	if (ms_info.addr_format==CDROM_MSF) { /* MSF-bin requested */
 	    lba = scsi_CDs[target].mpcd_sector+CD_BLOCK_OFFSET;
@@ -550,7 +550,7 @@ int sr_ioctl(struct inode * inode, struct file * file, unsigned int cmd, unsigne
 			sizeof(struct cdrom_multisession));
 	if (err) return (err);
 	
-	memcpy_tofs((void *) arg, &ms_info, sizeof(struct cdrom_multisession));
+	copy_to_user((void *) arg, &ms_info, sizeof(struct cdrom_multisession));
 	return (0);
     }
 	

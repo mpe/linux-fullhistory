@@ -1018,7 +1018,7 @@ DMAbuf_ioctl (int dev, unsigned int cmd, caddr_t arg, int local)
 	info.ptr = get_buffer_pointer (dev, audio_devs[dev]->dmachan2, audio_devs[dev]->dmap_in);
 	info.blocks = audio_devs[dev]->dmap_in->qlen;
 	info.bytes += info.ptr;
-	memcpy_tofs (&((char *) arg)[0], (char *) &info, sizeof (info));
+	copy_to_user (&((char *) arg)[0], (char *) &info, sizeof (info));
 
 	if (audio_devs[dev]->dmap_in->mapping_flags & DMA_MAP_MAPPED)
 	  audio_devs[dev]->dmap_in->qlen = 0;	/* Acknowledge interrupts */
@@ -1041,7 +1041,7 @@ DMAbuf_ioctl (int dev, unsigned int cmd, caddr_t arg, int local)
 	info.ptr = get_buffer_pointer (dev, audio_devs[dev]->dmachan1, audio_devs[dev]->dmap_out);
 	info.blocks = audio_devs[dev]->dmap_out->qlen;
 	info.bytes += info.ptr;
-	memcpy_tofs (&((char *) arg)[0], (char *) &info, sizeof (info));
+	copy_to_user (&((char *) arg)[0], (char *) &info, sizeof (info));
 
 	if (audio_devs[dev]->dmap_out->mapping_flags & DMA_MAP_MAPPED)
 	  audio_devs[dev]->dmap_out->qlen = 0;	/* Acknowledge interrupts */

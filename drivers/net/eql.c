@@ -447,7 +447,7 @@ static int eql_enslave(struct device *dev, slaving_request_t *srqp)
 #endif  
 		return err;
 	  }
-	memcpy_fromfs (&srq, srqp, sizeof (slaving_request_t));
+	copy_from_user (&srq, srqp, sizeof (slaving_request_t));
 
 #ifdef EQL_DEBUG
 	if (eql_debug >= 20)
@@ -504,7 +504,7 @@ static int eql_emancipate(struct device *dev, slaving_request_t *srqp)
 	if (err) 
 		return err;
 
-	memcpy_fromfs (&srq, srqp, sizeof (slaving_request_t));
+	copy_from_user (&srq, srqp, sizeof (slaving_request_t));
 #ifdef EQL_DEBUG
 	if (eql_debug >= 20)
 		printk ("%s: emancipate `%s`\n", dev->name, srq.slave_name);
@@ -535,7 +535,7 @@ static int eql_g_slave_cfg(struct device *dev, slave_config_t *scp)
 	if (err) 
 		return err;
 
-	memcpy_fromfs (&sc, scp, sizeof (slave_config_t));
+	copy_from_user (&sc, scp, sizeof (slave_config_t));
 #ifdef EQL_DEBUG
 	if (eql_debug >= 20)
 		printk ("%s: get config for slave `%s'\n", dev->name, sc.slave_name);
@@ -552,7 +552,7 @@ static int eql_g_slave_cfg(struct device *dev, slave_config_t *scp)
 			err = verify_area(VERIFY_WRITE, (void *)scp, sizeof (slave_config_t));
 			if (err) 
 				return err;
-			memcpy_tofs (scp, &sc, sizeof (slave_config_t));
+			copy_to_user (scp, &sc, sizeof (slave_config_t));
 			return 0;
 		}
 	}
@@ -577,7 +577,7 @@ static int eql_s_slave_cfg(struct device *dev, slave_config_t *scp)
 		printk ("%s: set config for slave `%s'\n", dev->name, sc.slave_name);
 #endif
   
-	memcpy_fromfs (&sc, scp, sizeof (slave_config_t));
+	copy_from_user (&sc, scp, sizeof (slave_config_t));
 
 	eql = (equalizer_t *) dev->priv;
 	slave_dev = dev_get (sc.slave_name);
@@ -616,7 +616,7 @@ static int eql_g_master_cfg(struct device *dev, master_config_t *mcp)
 		eql = (equalizer_t *) dev->priv;
 		mc.max_slaves = eql->max_slaves;
 		mc.min_slaves = eql->min_slaves;
-		memcpy_tofs (mcp, &mc, sizeof (master_config_t));
+		copy_to_user (mcp, &mc, sizeof (master_config_t));
 		return 0;
 	}
 	return -EINVAL;
@@ -636,7 +636,7 @@ static int eql_s_master_cfg(struct device *dev, master_config_t *mcp)
 	if (eql_debug >= 20)
 		printk ("%s: set master config\n", dev->name);
 #endif
-	memcpy_fromfs (&mc, mcp, sizeof (master_config_t));
+	copy_from_user (&mc, mcp, sizeof (master_config_t));
 	if ( eql_is_master (dev) )
 	{
 		eql = (equalizer_t *) dev->priv;

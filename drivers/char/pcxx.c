@@ -674,7 +674,7 @@ static int pcxe_write(struct tty_struct * tty, int from_user, const unsigned cha
 		if (count) {
 			if (verify_area(VERIFY_READ, (char*)buf, count))
 				count=0;
-			else memcpy_fromfs(ch->tmp_buf, buf, count);
+			else copy_from_user(ch->tmp_buf, buf, count);
 		}
 		buf = ch->tmp_buf;
 		memoff(ch);
@@ -2077,7 +2077,7 @@ static int pcxe_ioctl(struct tty_struct *tty, struct file * file,
 			if((error=verify_area(VERIFY_WRITE, (char*)arg, sizeof(digi_t))))
 				return(error);
 
-			memcpy_tofs((char*)arg, &ch->digiext, sizeof(digi_t));
+			copy_to_user((char*)arg, &ch->digiext, sizeof(digi_t));
 			break;
 
 		case DIGI_SETAW:
@@ -2097,7 +2097,7 @@ static int pcxe_ioctl(struct tty_struct *tty, struct file * file,
 			if((error=verify_area(VERIFY_READ, (char*)arg,sizeof(digi_t))))
 				return(error);
 
-			memcpy_fromfs(&ch->digiext, (char*)arg, sizeof(digi_t));
+			copy_from_user(&ch->digiext, (char*)arg, sizeof(digi_t));
 #ifdef DEBUG_IOCTL
 			printk("ioctl(DIGI_SETA): flags = %x\n", ch->digiext.digi_flags);
 #endif
@@ -2134,7 +2134,7 @@ static int pcxe_ioctl(struct tty_struct *tty, struct file * file,
 			if((error=verify_area(VERIFY_WRITE, (char*)arg,sizeof(dflow))))
 				return(error);
 
-			memcpy_tofs((char*)arg, &dflow, sizeof(dflow));
+			copy_to_user((char*)arg, &dflow, sizeof(dflow));
 			break;
 
 		case DIGI_SETAFLOW:
@@ -2150,7 +2150,7 @@ static int pcxe_ioctl(struct tty_struct *tty, struct file * file,
 			if((error=verify_area(VERIFY_READ, (char*)arg,sizeof(dflow))))
 				return(error);
 
-			memcpy_fromfs(&dflow, (char*)arg, sizeof(dflow));
+			copy_from_user(&dflow, (char*)arg, sizeof(dflow));
 
 			if(dflow.startc != startc || dflow.stopc != stopc) {
 				cli();

@@ -233,8 +233,11 @@ int con_set_trans_old(unsigned char * arg)
 	if (i)
 		return i;
 
-	for (i=0; i<E_TABSZ ; i++)
-		p[i] = UNI_DIRECT_BASE | get_user(arg+i);
+	for (i=0; i<E_TABSZ ; i++) {
+		unsigned char uc;
+		get_user(uc, arg+i);
+		p[i] = UNI_DIRECT_BASE | uc;
+	}
 
 	set_inverse_transl(USER_MAP);
 	return 0;
@@ -267,8 +270,11 @@ int con_set_trans_new(ushort * arg)
 	if (i)
 		return i;
 
-	for (i=0; i<E_TABSZ ; i++)
-	  p[i] = get_user(arg+i);
+	for (i=0; i<E_TABSZ ; i++) {
+		unsigned short us;
+		get_user(us, arg+i);
+		p[i] = us;
+	}
 
 	set_inverse_transl(USER_MAP);
 	return 0;
@@ -374,8 +380,10 @@ con_set_unimap(ushort ct, struct unipair *list)
 
   while( ct-- )
     {
-      if ( (err1 = con_insert_unipair(get_user(&list->unicode),
-				      get_user(&list->fontpos))) != 0 )
+      unsigned short unicode, fontpos;
+      get_user(unicode, &list->unicode);
+      get_user(fontpos, &list->fontpos);
+      if ( (err1 = con_insert_unipair(unicode,fontpos)) != 0 )
 	err = err1;
       list++;
     }

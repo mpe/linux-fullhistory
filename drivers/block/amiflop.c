@@ -1447,7 +1447,7 @@ static int fd_ioctl(struct inode *inode, struct file *filp,
 	    getprm.head=unit[drive].type->heads;
 	    getprm.sect=unit[drive].sects;
 	    getprm.size=unit[drive].blocks;
-	    memcpy_tofs((void *)param,(void *)&getprm,sizeof(struct floppy_struct));
+	    copy_to_user((void *)param,(void *)&getprm,sizeof(struct floppy_struct));
 	    break;
 	  case BLKGETSIZE:
             error = verify_area(VERIFY_WRITE, (void *)param,
@@ -1471,7 +1471,7 @@ static int fd_ioctl(struct inode *inode, struct file *filp,
 	      unit[drive].type->read_size);
 	    if (error)
 	      return error;
-	    memcpy_tofs((void *)param, raw_buf, unit[drive].type->read_size);
+	    copy_to_user((void *)param, raw_buf, unit[drive].type->read_size);
 	    return unit[drive].type->read_size;
 #endif
 	  default:

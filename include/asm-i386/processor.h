@@ -47,51 +47,8 @@ extern int EISA_bus;
  */
 struct exception_struct {
 	unsigned long count;
-	unsigned long ebx;
-	unsigned long esi;
-	unsigned long edi;
-	unsigned long ebp;
-	unsigned long esp;
 	unsigned long eip;
 };
-
-extern inline int __exception(struct exception_struct *ex)
-{
-	int result;
-	__asm__("incl 0(%2)\n\t"
-		"jne 1f\n\t"
-		"movl %%ebx,4(%2)\n\t"
-		"movl %%esi,8(%2)\n\t"
-		"movl %%edi,12(%2)\n\t"
-		"movl %%ebp,16(%2)\n\t"
-		"movl %%esp,20(%2)\n\t"
-		"movl $1f,24(%2)\n"
-		"1:"
-		:"=a" (result)
-		:"0" (0), "d" (ex)
-		:"cx","memory");
-	return result;
-}
-
-extern inline void handle_exception(struct exception_struct *ex)
-{
-	if (!ex->count) {
-		ex->count--;
-		__asm__("movl  4(%0),%%ebx\n\t"
-			"movl  8(%0),%%esi\n\t"
-			"movl 12(%0),%%edi\n\t"
-			"movl 16(%0),%%ebp\n\t"
-			"movl 20(%0),%%esp\n\t"
-			"movl 24(%0),%%eax\n\t"
-			"jmp *%%eax"
-			: /* no outputs */
-			:"d" (ex)
-			:"memory");
-	}
-}
-
-#define exception()	__exception(&current->tss.ex)
-#define end_exception()	(current->tss.ex.count--)
 
 /*
  * Size of io_bitmap in longwords: 32 is ports 0-0x3ff.

@@ -545,7 +545,7 @@ void sysv_statfs(struct super_block *sb, struct statfs *buf, int bufsiz)
 	tmp.f_ffree = sysv_count_free_inodes(sb);	/* free file nodes in fs */
 	tmp.f_namelen = SYSV_NAMELEN;
 	/* Don't know what value to put in tmp.f_fsid */ /* file system id */
-	memcpy_tofs(buf, &tmp, bufsiz);
+	copy_to_user(buf, &tmp, bufsiz);
 }
 
 

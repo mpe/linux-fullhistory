@@ -275,7 +275,7 @@ midi_synth_ioctl (int dev,
     {
 
     case SNDCTL_SYNTH_INFO:
-      memcpy_tofs (&((char *) arg)[0], synth_devs[dev]->info, sizeof (struct synth_info));
+      copy_to_user (&((char *) arg)[0], synth_devs[dev]->info, sizeof (struct synth_info));
 
       return 0;
       break;
@@ -519,7 +519,7 @@ midi_synth_load_patch (int dev, int format, const char *addr,
    * been transferred already.
    */
 
-  memcpy_fromfs (&((char *) &sysex)[offs], &(addr)[offs], hdr_size - offs);
+  copy_from_user (&((char *) &sysex)[offs], &(addr)[offs], hdr_size - offs);
 
   if (count < sysex.len)
     {

@@ -42,6 +42,38 @@
 #ifndef NCR53C8XX_H
 #define NCR53C8XX_H
 
+/*
+**	If SCSI_NCR_SPECIAL_FEATURES is defined,
+**	the driver enables or not the following features according to chip id 
+**	revision id:
+**	DMODE   0xce
+**		0x02	burst op-code fetch
+**		0x04	enable read multiple
+**		0x08	enable read line
+**		0xc0	burst length 16/8/2
+**	DCNTL   0xa0
+**		0x20	enable pre-fetch
+**		0x80	enable cache line size
+**	CTEST3  0x01
+**		0x01	set write and invalidate
+**	CTEST4  0x80
+**		0x80	burst disabled
+**
+**	If SCSI_NCR_TRUST_BIOS_SETTING is defined, the driver will use the 
+**	initial value of corresponding bit fields, assuming they have been 
+**	set by the SDMS BIOS.
+**	When Linux is booted from another O/S, these assertion is false and 
+**	the driver will not be able to guess it. 
+*/
+
+#if 0
+#define SCSI_NCR_TRUST_BIOS_SETTING
+#endif
+
+#if 0
+#define SCSI_NCR_SPECIAL_FEATURES
+#endif
+
 /*********** LINUX SPECIFIC SECTION ******************/
 
 /*
@@ -118,8 +150,10 @@
 #define	SCSI_NCR_IOMAPPED
 #endif
 
-#ifndef CONFIG_SCSI_NCR53C8XX_TAGGED_QUEUE
-#define SCSI_NCR_TAGGED_QUEUE_DISABLED
+#ifdef CONFIG_SCSI_NCR53C8XX_TAGGED_QUEUE
+#define SCSI_NCR_DEFAULT_TAGS	SCSI_NCR_MAX_TAGS
+#else
+#define SCSI_NCR_DEFAULT_TAGS	(0)
 #endif
 
 #ifdef CONFIG_SCSI_NCR53C8XX_NO_DISCONNECT
@@ -196,7 +230,7 @@ int ncr53c8xx_release(struct Scsi_Host *);
 
 #if	LINUX_VERSION_CODE >= LinuxVersionCode(1,3,0)
 
-#define NCR53C8XX {NULL,NULL,NULL,NULL,"ncr53c8xx (rel 1.12c)", ncr53c8xx_detect,\
+#define NCR53C8XX {NULL,NULL,NULL,NULL,"ncr53c8xx (rel 1.14a)", ncr53c8xx_detect,\
     	ncr53c8xx_release, /* info */ NULL, /* command, deprecated */ NULL, 		\
 	ncr53c8xx_queue_command, ncr53c8xx_abort, ncr53c8xx_reset,	\
         NULL /* slave attach */, scsicam_bios_param, /* can queue */ SCSI_NCR_CAN_QUEUE,\
@@ -207,7 +241,7 @@ int ncr53c8xx_release(struct Scsi_Host *);
 #else
 
 
-#define NCR53C8XX {NULL, NULL, "ncr53c8xx (rel 1.12c)", ncr53c8xx_detect,\
+#define NCR53C8XX {NULL, NULL, "ncr53c8xx (rel 1.14a)", ncr53c8xx_detect,\
     	ncr53c8xx_release, /* info */ NULL, /* command, deprecated */ NULL, 		\
 	ncr53c8xx_queue_command, ncr53c8xx_abort, ncr53c8xx_reset,	\
         NULL /* slave attach */, scsicam_bios_param, /* can queue */ SCSI_NCR_CAN_QUEUE,\
@@ -339,6 +373,18 @@ int ncr53c8xx_release(struct Scsi_Host *);
 
 #ifndef PCI_DEVICE_ID_NCR_53C875
 #define PCI_DEVICE_ID_NCR_53C875 0xf
+#endif
+
+#ifndef PCI_DEVICE_ID_NCR_53C885
+#define PCI_DEVICE_ID_NCR_53C885 0xd
+#endif
+
+#ifndef PCI_DEVICE_ID_NCR_53C895
+#define PCI_DEVICE_ID_NCR_53C895 0xc
+#endif
+
+#ifndef PCI_DEVICE_ID_NCR_53C896
+#define PCI_DEVICE_ID_NCR_53C896 0xb
 #endif
 
 /**************** ORIGINAL CONTENT of ncrreg.h from FreeBSD ******************/
@@ -494,6 +540,9 @@ struct ncr_reg {
 /*4c*/  u_char    nc_stest0;
 
 /*4d*/  u_char    nc_stest1;
+	#define   DBLEN   0x08	/* clock doubler running		*/
+	#define   DBLSEL  0x04	/* clock doubler selected		*/
+  
 
 /*4e*/  u_char    nc_stest2;
 	#define   ROF     0x40	/* reset scsi offset (after gross error!) */

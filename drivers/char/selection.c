@@ -91,7 +91,7 @@ int sel_loadlut(const unsigned long arg)
 	int i = verify_area(VERIFY_READ, (char *) arg, 36);
 	if (i)
 		return i;
-	memcpy_fromfs(inwordLut, (u32 *)(arg+4), 32);
+	copy_from_user(inwordLut, (u32 *)(arg+4), 32);
 	return 0;
 }
 
@@ -127,18 +127,19 @@ int set_selection(const unsigned long arg, struct tty_struct *tty, int user)
 		  err = verify_area(VERIFY_READ, args, sizeof(short) * 5);
 		  if (err)
 		  	return err;
-		  xs = get_user(args++) - 1;
-		  ys = get_user(args++) - 1;
-		  xe = get_user(args++) - 1;
-		  ye = get_user(args++) - 1;
-		  sel_mode = get_user(args);
+		  get_user(xs, args++);
+		  get_user(ys, args++);
+		  get_user(xe, args++);
+		  get_user(ye, args++);
+		  get_user(sel_mode, args);
 	  } else {
-		  xs = *(args++) - 1; /* set selection from kernel */
-		  ys = *(args++) - 1;
-		  xe = *(args++) - 1;
-		  ye = *(args++) - 1;
+		  xs = *(args++); /* set selection from kernel */
+		  ys = *(args++);
+		  xe = *(args++);
+		  ye = *(args++);
 		  sel_mode = *args;
 	  }
+	  xs--; ys--; xe--; ye--;
 	  xs = limit(xs, video_num_columns - 1);
 	  ys = limit(ys, video_num_lines - 1);
 	  xe = limit(xe, video_num_columns - 1);

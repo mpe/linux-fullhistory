@@ -1380,7 +1380,7 @@ static int stli_write(struct tty_struct *tty, int from_user, const unsigned char
 		EBRDDISABLE(brdp);
 
 		down(&stli_tmpwritesem);
-		memcpy_fromfs(stli_tmpwritebuf, chbuf, count);
+		copy_from_user(stli_tmpwritebuf, chbuf, count);
 		up(&stli_tmpwritesem);
 		chbuf = &stli_tmpwritebuf[0];
 		restore_flags(flags);
@@ -1706,7 +1706,7 @@ static void stli_getserial(stliport_t *portp, struct serial_struct *sp)
 	if (brdp != (stlibrd_t *) NULL)
 		sio.port = brdp->iobase;
 		
-	memcpy_tofs(sp, &sio, sizeof(struct serial_struct));
+	copy_to_user(sp, &sio, sizeof(struct serial_struct));
 }
 
 /*****************************************************************************/
@@ -1726,7 +1726,7 @@ static int stli_setserial(stliport_t *portp, struct serial_struct *sp)
 	printk("stli_setserial(portp=%x,sp=%x)\n", (int) portp, (int) sp);
 #endif
 
-	memcpy_fromfs(&sio, sp, sizeof(struct serial_struct));
+	copy_from_user(&sio, sp, sizeof(struct serial_struct));
 	if (!suser()) {
 		if ((sio.baud_base != portp->baud_base) ||
 				(sio.close_delay != portp->close_delay) ||
@@ -4076,7 +4076,7 @@ static long stli_memread(struct inode *ip, struct file *fp,
 	while (size > 0) {
 		memptr = (void *) EBRDGETMEMPTR(brdp, fp->f_pos);
 		n = MIN(size, (brdp->pagesize - (((unsigned long) fp->f_pos) % brdp->pagesize)));
-		memcpy_tofs(buf, memptr, n);
+		copy_to_user(buf, memptr, n);
 		fp->f_pos += n;
 		buf += n;
 		size -= n;
@@ -4128,7 +4128,7 @@ static long stli_memwrite(struct inode *ip, struct file *fp,
 	while (size > 0) {
 		memptr = (void *) EBRDGETMEMPTR(brdp, fp->f_pos);
 		n = MIN(size, (brdp->pagesize - (((unsigned long) fp->f_pos) % brdp->pagesize)));
-		memcpy_fromfs(memptr, chbuf, n);
+		copy_from_user(memptr, chbuf, n);
 		fp->f_pos += n;
 		chbuf += n;
 		size -= n;
@@ -4150,7 +4150,7 @@ static int stli_getbrdstats(combrd_t *bp)
 	stlibrd_t	*brdp;
 	int		i;
 
-	memcpy_fromfs(&stli_brdstats, bp, sizeof(combrd_t));
+	copy_from_user(&stli_brdstats, bp, sizeof(combrd_t));
 	if (stli_brdstats.brd >= STL_MAXBRDS)
 		return(-ENODEV);
 	brdp = stli_brds[stli_brdstats.brd];
@@ -4172,7 +4172,7 @@ static int stli_getbrdstats(combrd_t *bp)
 		stli_brdstats.panels[i].nrports = brdp->panels[i];
 	}
 
-	memcpy_tofs(bp, &stli_brdstats, sizeof(combrd_t));
+	copy_to_user(bp, &stli_brdstats, sizeof(combrd_t));
 	return(0);
 }
 
@@ -4214,7 +4214,7 @@ static int stli_getportstats(stliport_t *portp, comstats_t *cp)
 	int		rc;
 
 	if (portp == (stliport_t *) NULL) {
-		memcpy_fromfs(&stli_comstats, cp, sizeof(comstats_t));
+		copy_from_user(&stli_comstats, cp, sizeof(comstats_t));
 		portp = stli_getport(stli_comstats.brd, stli_comstats.panel, stli_comstats.port);
 		if (portp == (stliport_t *) NULL)
 			return(-ENODEV);
@@ -4274,7 +4274,7 @@ static int stli_getportstats(stliport_t *portp, comstats_t *cp)
 	stli_comstats.hwid = stli_cdkstats.hwid;
 	stli_comstats.signals = stli_mktiocm(stli_cdkstats.signals);
 
-	memcpy_tofs(cp, &stli_comstats, sizeof(comstats_t));
+	copy_to_user(cp, &stli_comstats, sizeof(comstats_t));
 	return(0);
 }
 
@@ -4290,7 +4290,7 @@ static int stli_clrportstats(stliport_t *portp, comstats_t *cp)
 	int		rc;
 
 	if (portp == (stliport_t *) NULL) {
-		memcpy_fromfs(&stli_comstats, cp, sizeof(comstats_t));
+		copy_from_user(&stli_comstats, cp, sizeof(comstats_t));
 		portp = stli_getport(stli_comstats.brd, stli_comstats.panel, stli_comstats.port);
 		if (portp == (stliport_t *) NULL)
 			return(-ENODEV);
@@ -4310,7 +4310,7 @@ static int stli_clrportstats(stliport_t *portp, comstats_t *cp)
 	stli_comstats.panel = portp->panelnr;
 	stli_comstats.port = portp->portnr;
 
-	memcpy_tofs(cp, &stli_comstats, sizeof(comstats_t));
+	copy_to_user(cp, &stli_comstats, sizeof(comstats_t));
 	return(0);
 }
 
@@ -4324,12 +4324,12 @@ static int stli_getportstruct(unsigned long arg)
 {
 	stliport_t	*portp;
 
-	memcpy_fromfs(&stli_dummyport, (void *) arg, sizeof(stliport_t));
+	copy_from_user(&stli_dummyport, (void *) arg, sizeof(stliport_t));
 	portp = stli_getport(stli_dummyport.brdnr, stli_dummyport.panelnr,
 		 stli_dummyport.portnr);
 	if (portp == (stliport_t *) NULL)
 		return(-ENODEV);
-	memcpy_tofs((void *) arg, portp, sizeof(stliport_t));
+	copy_to_user((void *) arg, portp, sizeof(stliport_t));
 	return(0);
 }
 
@@ -4343,13 +4343,13 @@ static int stli_getbrdstruct(unsigned long arg)
 {
 	stlibrd_t	*brdp;
 
-	memcpy_fromfs(&stli_dummybrd, (void *) arg, sizeof(stlibrd_t));
+	copy_from_user(&stli_dummybrd, (void *) arg, sizeof(stlibrd_t));
 	if ((stli_dummybrd.brdnr < 0) || (stli_dummybrd.brdnr >= STL_MAXBRDS))
 		return(-ENODEV);
 	brdp = stli_brds[stli_dummybrd.brdnr];
 	if (brdp == (stlibrd_t *) NULL)
 		return(-ENODEV);
-	memcpy_tofs((void *) arg, brdp, sizeof(stlibrd_t));
+	copy_to_user((void *) arg, brdp, sizeof(stlibrd_t));
 	return(0);
 }
 

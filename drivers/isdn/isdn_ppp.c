@@ -353,7 +353,7 @@ static int get_arg(void *b, unsigned long *val)
 	int r;
 	if ((r = verify_area(VERIFY_READ, (void *) b, sizeof(unsigned long))))
 		 return r;
-	memcpy_fromfs((void *) val, b, sizeof(unsigned long));
+	copy_from_user((void *) val, b, sizeof(unsigned long));
 	return 0;
 }
 
@@ -365,7 +365,7 @@ static int set_arg(void *b, unsigned long val)
 	int r;
 	if ((r = verify_area(VERIFY_WRITE, b, sizeof(unsigned long))))
 		 return r;
-	memcpy_tofs(b, (void *) &val, sizeof(unsigned long));
+	copy_to_user(b, (void *) &val, sizeof(unsigned long));
 	return 0;
 }
 
@@ -607,7 +607,7 @@ int isdn_ppp_read(int min, struct file *file, char *buf, int count)
 	}
 	if (b->len < count)
 		count = b->len;
-	memcpy_tofs(buf, b->buf, count);
+	copy_to_user(buf, b->buf, count);
 	kfree(b->buf);
 	b->buf = NULL;
 	is->first = b;
@@ -650,7 +650,7 @@ int isdn_ppp_write(int min, struct file *file,  const char *buf, int count)
 				return count;
 			}
 			skb->free = 1;
-			memcpy_fromfs(skb_put(skb, count), buf, count);
+			copy_from_user(skb_put(skb, count), buf, count);
 			if(isdn_writebuf_skb_stub(lp->isdn_device,lp->isdn_channel,skb) != count) {
 				if(lp->sav_skb) {
 					dev_kfree_skb(lp->sav_skb,FREE_WRITE);
@@ -1475,7 +1475,7 @@ static int isdn_ppp_dev_ioctl_stats(int slot,struct ifreq *ifr,struct device *de
 		}
 #endif
 	}
-	memcpy_tofs (res, &t, sizeof (struct ppp_stats));
+	copy_to_user (res, &t, sizeof (struct ppp_stats));
 	return 0;
 
 }
@@ -1500,7 +1500,7 @@ int isdn_ppp_dev_ioctl(struct device *dev, struct ifreq *ifr, int cmd)
 			len = strlen(PPP_VERSION) + 1;
 			error = verify_area(VERIFY_WRITE, r, len);
 			if (!error)
-				memcpy_tofs(r, PPP_VERSION, len);
+				copy_to_user(r, PPP_VERSION, len);
 			break;
 		case SIOCGPPPSTATS:
 			error = isdn_ppp_dev_ioctl_stats (lp->ppp_slot, ifr, dev);

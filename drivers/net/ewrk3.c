@@ -1675,7 +1675,7 @@ static int ewrk3_ioctl(struct device *dev, struct ifreq *rq, int cmd)
     }
     ioc->len = ETH_ALEN;
     if (!(status = verify_area(VERIFY_WRITE, (void *)ioc->data, ioc->len))) {
-      memcpy_tofs(ioc->data, tmp.addr, ioc->len);
+      copy_to_user(ioc->data, tmp.addr, ioc->len);
     }
 
     break;
@@ -1686,7 +1686,7 @@ static int ewrk3_ioctl(struct device *dev, struct ifreq *rq, int cmd)
 	csr |= (CSR_TXD|CSR_RXD);
 	outb(csr, EWRK3_CSR);                  /* Disable the TX and RX */
 
-	memcpy_fromfs(tmp.addr,ioc->data,ETH_ALEN);
+	copy_from_user(tmp.addr,ioc->data,ETH_ALEN);
 	for (i=0; i<ETH_ALEN; i++) {
 	  dev->dev_addr[i] = tmp.addr[i];
 	  outb(tmp.addr[i], EWRK3_PAR0 + i);
@@ -1739,7 +1739,7 @@ static int ewrk3_ioctl(struct device *dev, struct ifreq *rq, int cmd)
 	memcpy_fromio(tmp.addr, (char *)(lp->shmem_base + PAGE0_HTE), (HASH_TABLE_LEN >> 3));
       }
       ioc->len = (HASH_TABLE_LEN >> 3);
-      memcpy_tofs(ioc->data, tmp.addr, ioc->len); 
+      copy_to_user(ioc->data, tmp.addr, ioc->len); 
     }
     lp->lock = 0;                               /* Unlock the page register */
 
@@ -1747,7 +1747,7 @@ static int ewrk3_ioctl(struct device *dev, struct ifreq *rq, int cmd)
   case EWRK3_SET_MCA:                /* Set a multicast address */
     if (suser()) {
       if (!(status=verify_area(VERIFY_READ, ioc->data, ETH_ALEN*ioc->len))) {
-	memcpy_fromfs(tmp.addr, ioc->data, ETH_ALEN * ioc->len);
+	copy_from_user(tmp.addr, ioc->data, ETH_ALEN * ioc->len);
 	set_multicast_list(dev);
       }
     } else {
@@ -1778,7 +1778,7 @@ static int ewrk3_ioctl(struct device *dev, struct ifreq *rq, int cmd)
     cli();
     ioc->len = sizeof(lp->pktStats);
     if (!(status=verify_area(VERIFY_WRITE, ioc->data, ioc->len))) {
-      memcpy_tofs(ioc->data, &lp->pktStats, ioc->len); 
+      copy_to_user(ioc->data, &lp->pktStats, ioc->len); 
     }
     sti();
 
@@ -1797,14 +1797,14 @@ static int ewrk3_ioctl(struct device *dev, struct ifreq *rq, int cmd)
     tmp.addr[0] = inb(EWRK3_CSR);
     ioc->len = 1;
     if (!(status=verify_area(VERIFY_WRITE, ioc->data, ioc->len))) {
-      memcpy_tofs(ioc->data, tmp.addr, ioc->len);
+      copy_to_user(ioc->data, tmp.addr, ioc->len);
     }
 
     break;
   case EWRK3_SET_CSR:                /* Set the CSR Register contents */
     if (suser()) {
       if (!(status=verify_area(VERIFY_READ, ioc->data, 1))) {
-	memcpy_fromfs(tmp.addr, ioc->data, 1);
+	copy_from_user(tmp.addr, ioc->data, 1);
 	outb(tmp.addr[0], EWRK3_CSR);
       }
     } else {
@@ -1824,7 +1824,7 @@ static int ewrk3_ioctl(struct device *dev, struct ifreq *rq, int cmd)
       }
       ioc->len = EEPROM_MAX + 1 + ETH_ALEN;
       if (!(status=verify_area(VERIFY_WRITE, ioc->data, ioc->len))) {
-	memcpy_tofs(ioc->data, tmp.addr, ioc->len);
+	copy_to_user(ioc->data, tmp.addr, ioc->len);
       }
     } else {
       status = -EPERM;
@@ -1834,7 +1834,7 @@ static int ewrk3_ioctl(struct device *dev, struct ifreq *rq, int cmd)
   case EWRK3_SET_EEPROM:             /* Set the EEPROM contents */
     if (suser()) {
       if (!(status=verify_area(VERIFY_READ, ioc->data, EEPROM_MAX))) {
-	memcpy_fromfs(tmp.addr, ioc->data, EEPROM_MAX);
+	copy_from_user(tmp.addr, ioc->data, EEPROM_MAX);
 	for (i=0; i<(EEPROM_MAX>>1); i++) {
 	  Write_EEPROM(tmp.val[i], iobase, i);
 	}
@@ -1848,7 +1848,7 @@ static int ewrk3_ioctl(struct device *dev, struct ifreq *rq, int cmd)
     tmp.addr[0] = inb(EWRK3_CMR);
     ioc->len = 1;
     if (!(status=verify_area(VERIFY_WRITE, ioc->data, ioc->len))) {
-      memcpy_tofs(ioc->data, tmp.addr, ioc->len);
+      copy_to_user(ioc->data, tmp.addr, ioc->len);
     }
 
     break;

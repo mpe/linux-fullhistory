@@ -170,7 +170,7 @@ void skb_free_datagram(struct sock * sk, struct sk_buff *skb)
 
 void skb_copy_datagram(struct sk_buff *skb, int offset, char *to, int size)
 {
-	memcpy_tofs(to,skb->h.raw+offset,size);
+	copy_to_user(to,skb->h.raw+offset,size);
 }
 
 

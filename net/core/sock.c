@@ -149,7 +149,7 @@ int sock_setsockopt(struct sock *sk, int level, int optname,
   	if(err)
   		return err;
   	
-  	val = get_user((int *)optval);
+	get_user(val, (int *)optval);
   	valbool = val?1:0;
   	
   	switch(optname) 
@@ -219,7 +219,7 @@ int sock_setsockopt(struct sock *sk, int level, int optname,
 			err=verify_area(VERIFY_READ,optval,sizeof(ling));
 			if(err)
 				return err;
-			memcpy_fromfs(&ling,optval,sizeof(ling));
+			copy_from_user(&ling,optval,sizeof(ling));
 			if(ling.l_onoff==0)
 				sk->linger=0;
 			else
@@ -305,10 +305,10 @@ int sock_getsockopt(struct sock *sk, int level, int optname,
 			err=verify_area(VERIFY_WRITE,optlen,sizeof(int));
 			if(err)
 				return err;
-			put_fs_long(sizeof(ling),(unsigned long *)optlen);
+			put_user(sizeof(ling), optlen);
 			ling.l_onoff=sk->linger;
 			ling.l_linger=sk->lingertime;
-			memcpy_tofs(optval,&ling,sizeof(ling));
+			copy_to_user(optval,&ling,sizeof(ling));
 			return 0;
 		
 		case SO_BSDCOMPAT:
@@ -321,12 +321,12 @@ int sock_getsockopt(struct sock *sk, int level, int optname,
 	err=verify_area(VERIFY_WRITE, optlen, sizeof(int));
 	if(err)
   		return err;
-  	put_fs_long(sizeof(int),(unsigned long *) optlen);
+  	put_user(sizeof(int), optlen);
 
   	err=verify_area(VERIFY_WRITE, optval, sizeof(int));
   	if(err)
   		return err;
-  	put_fs_long(val,(unsigned long *)optval);
+  	put_user(val,(unsigned int *)optval);
 
   	return(0);
 }

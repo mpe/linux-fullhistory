@@ -89,8 +89,9 @@ Card/Module List - Configurable Parameters and Default Values
 	(Probes ports: 0x300, 0x310, 0x330, 0x350, 0x250, 0x280, 0x2A0, 0x2E0)
 
 3c505.c:
-	io = 0x300
+	io = 0
 	irq = 0
+	dma = 6         (not autoprobed)
 	(Probes ports: 0x300, 0x280, 0x310)
 
 3c507.c:

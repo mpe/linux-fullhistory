@@ -886,7 +886,7 @@ static int stl_write(struct tty_struct *tty, int from_user, const unsigned char 
 		save_flags(flags);
 		cli();
 		down(&stl_tmpwritesem);
-		memcpy_fromfs(stl_tmpwritebuf, chbuf, count);
+		copy_from_user(stl_tmpwritebuf, chbuf, count);
 		up(&stl_tmpwritesem);
 		restore_flags(flags);
 		chbuf = &stl_tmpwritebuf[0];
@@ -1081,7 +1081,7 @@ static void stl_getserial(stlport_t *portp, struct serial_struct *sp)
 	if (brdp != (stlbrd_t *) NULL)
 		sio.irq = brdp->irq;
 
-	memcpy_tofs(sp, &sio, sizeof(struct serial_struct));
+	copy_to_user(sp, &sio, sizeof(struct serial_struct));
 }
 
 /*****************************************************************************/
@@ -1100,7 +1100,7 @@ static int stl_setserial(stlport_t *portp, struct serial_struct *sp)
 	printk("stl_setserial(portp=%x,sp=%x)\n", (int) portp, (int) sp);
 #endif
 
-	memcpy_fromfs(&sio, sp, sizeof(struct serial_struct));
+	copy_from_user(&sio, sp, sizeof(struct serial_struct));
 	if (!suser()) {
 		if ((sio.baud_base != portp->baud_base) ||
 				(sio.close_delay != portp->close_delay) ||
@@ -2882,7 +2882,7 @@ static int stl_getbrdstats(combrd_t *bp)
 	stlpanel_t	*panelp;
 	int		i;
 
-	memcpy_fromfs(&stl_brdstats, bp, sizeof(combrd_t));
+	copy_from_user(&stl_brdstats, bp, sizeof(combrd_t));
 	if (stl_brdstats.brd >= STL_MAXBRDS)
 		return(-ENODEV);
 	brdp = stl_brds[stl_brdstats.brd];
@@ -2906,7 +2906,7 @@ static int stl_getbrdstats(combrd_t *bp)
 		stl_brdstats.panels[i].nrports = panelp->nrports;
 	}
 
-	memcpy_tofs(bp, &stl_brdstats, sizeof(combrd_t));
+	copy_to_user(bp, &stl_brdstats, sizeof(combrd_t));
 	return(0);
 }
 
@@ -2950,7 +2950,7 @@ static int stl_getportstats(stlport_t *portp, comstats_t *cp)
 	unsigned long	flags;
 
 	if (portp == (stlport_t *) NULL) {
-		memcpy_fromfs(&stl_comstats, cp, sizeof(comstats_t));
+		copy_from_user(&stl_comstats, cp, sizeof(comstats_t));
 		portp = stl_getport(stl_comstats.brd, stl_comstats.panel, stl_comstats.port);
 		if (portp == (stlport_t *) NULL)
 			return(-ENODEV);
@@ -2989,7 +2989,7 @@ static int stl_getportstats(stlport_t *portp, comstats_t *cp)
 
 	portp->stats.signals = (unsigned long) stl_getsignals(portp);
 
-	memcpy_tofs(cp, &portp->stats, sizeof(comstats_t));
+	copy_to_user(cp, &portp->stats, sizeof(comstats_t));
 	return(0);
 }
 
@@ -3002,7 +3002,7 @@ static int stl_getportstats(stlport_t *portp, comstats_t *cp)
 static int stl_clrportstats(stlport_t *portp, comstats_t *cp)
 {
 	if (portp == (stlport_t *) NULL) {
-		memcpy_fromfs(&stl_comstats, cp, sizeof(comstats_t));
+		copy_from_user(&stl_comstats, cp, sizeof(comstats_t));
 		portp = stl_getport(stl_comstats.brd, stl_comstats.panel, stl_comstats.port);
 		if (portp == (stlport_t *) NULL)
 			return(-ENODEV);
@@ -3012,7 +3012,7 @@ static int stl_clrportstats(stlport_t *portp, comstats_t *cp)
 	portp->stats.brd = portp->brdnr;
 	portp->stats.panel = portp->panelnr;
 	portp->stats.port = portp->portnr;
-	memcpy_tofs(cp, &portp->stats, sizeof(comstats_t));
+	copy_to_user(cp, &portp->stats, sizeof(comstats_t));
 	return(0);
 }
 
@@ -3026,12 +3026,12 @@ static int stl_getportstruct(unsigned long arg)
 {
 	stlport_t	*portp;
 
-	memcpy_fromfs(&stl_dummyport, (void *) arg, sizeof(stlport_t));
+	copy_from_user(&stl_dummyport, (void *) arg, sizeof(stlport_t));
 	portp = stl_getport(stl_dummyport.brdnr, stl_dummyport.panelnr,
 		 stl_dummyport.portnr);
 	if (portp == (stlport_t *) NULL)
 		return(-ENODEV);
-	memcpy_tofs((void *) arg, portp, sizeof(stlport_t));
+	copy_to_user((void *) arg, portp, sizeof(stlport_t));
 	return(0);
 }
 
@@ -3045,13 +3045,13 @@ static int stl_getbrdstruct(unsigned long arg)
 {
 	stlbrd_t	*brdp;
 
-	memcpy_fromfs(&stl_dummybrd, (void *) arg, sizeof(stlbrd_t));
+	copy_from_user(&stl_dummybrd, (void *) arg, sizeof(stlbrd_t));
 	if ((stl_dummybrd.brdnr < 0) || (stl_dummybrd.brdnr >= STL_MAXBRDS))
 		return(-ENODEV);
 	brdp = stl_brds[stl_dummybrd.brdnr];
 	if (brdp == (stlbrd_t *) NULL)
 		return(-ENODEV);
-	memcpy_tofs((void *) arg, brdp, sizeof(stlbrd_t));
+	copy_to_user((void *) arg, brdp, sizeof(stlbrd_t));
 	return(0);
 }
 

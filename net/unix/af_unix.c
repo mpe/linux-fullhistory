@@ -686,7 +686,7 @@ static struct cmsghdr *unix_copyrights(void *userp, int len)
 	if(len>256|| len <=0)
 		return NULL;
 	cm=kmalloc(len, GFP_KERNEL);
-	memcpy_fromfs(cm, userp, len);
+	copy_from_user(cm, userp, len);
 	return cm;
 }
 
@@ -696,7 +696,7 @@ static struct cmsghdr *unix_copyrights(void *userp, int len)
  
 static void unix_returnrights(void *userp, int len, struct cmsghdr *cm)
 {
-	memcpy_tofs(userp, cm, len);
+	copy_to_user(userp, cm, len);
 	kfree(cm);
 }
 
@@ -1127,7 +1127,7 @@ static int unix_recvmsg(struct socket *sock, struct msghdr *msg, int size, int n
 			}
 
 			num=min(skb->len,len-done);
-			memcpy_tofs(sp, skb->data, num);
+			copy_to_user(sp, skb->data, num);
 
 			if (skb->h.filp!=NULL)
 				unix_detach_fds(skb,cm);
@@ -1198,13 +1198,13 @@ static int unix_ioctl(struct socket *sock, unsigned int cmd, unsigned long arg)
 	{
 	
 		case TIOCOUTQ:
-			err=verify_area(VERIFY_WRITE,(void *)arg,sizeof(unsigned long));
+			err=verify_area(VERIFY_WRITE,(void *)arg,sizeof(int));
 			if(err)
 				return err;
 			amount=sk->sndbuf-sk->wmem_alloc;
 			if(amount<0)
 				amount=0;
-			put_fs_long(amount,(unsigned long *)arg);
+			put_user(amount, (int *)arg);
 			return 0;
 		case TIOCINQ:
 		{
@@ -1214,10 +1214,10 @@ static int unix_ioctl(struct socket *sock, unsigned int cmd, unsigned long arg)
 			/* These two are safe on a single CPU system as only user tasks fiddle here */
 			if((skb=skb_peek(&sk->receive_queue))!=NULL)
 				amount=skb->len;
-			err=verify_area(VERIFY_WRITE,(void *)arg,sizeof(unsigned long));
+			err=verify_area(VERIFY_WRITE,(void *)arg,sizeof(int));
 			if(err)
 				return err;
-			put_fs_long(amount,(unsigned long *)arg);
+			put_user(amount, (int *)arg);
 			return 0;
 		}
 

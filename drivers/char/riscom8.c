@@ -1226,7 +1226,7 @@ static int rc_write(struct tty_struct * tty, int from_user,
 			break;
 
 		if (from_user) {
-			memcpy_fromfs(tmp_buf, buf, c);
+			copy_from_user(tmp_buf, buf, c);
 			c = MIN(c, MIN(SERIAL_XMIT_SIZE - port->xmit_cnt - 1,
 				       SERIAL_XMIT_SIZE - port->xmit_head));
 			memcpy(port->xmit_buf + port->xmit_head, tmp_buf, c);
@@ -1430,7 +1430,7 @@ extern inline int rc_set_serial_info(struct riscom_port * port,
 	error = verify_area(VERIFY_READ, (void *) newinfo, sizeof(tmp));
 	if (error)
 		return error;
-	memcpy_fromfs(&tmp, newinfo, sizeof(tmp));
+	copy_from_user(&tmp, newinfo, sizeof(tmp));
 	
 #if 0	
 	if ((tmp.irq != bp->irq) ||
@@ -1489,7 +1489,7 @@ extern inline int rc_get_serial_info(struct riscom_port * port,
 	tmp.close_delay = port->close_delay * HZ/100;
 	tmp.closing_wait = port->closing_wait * HZ/100;
 	tmp.xmit_fifo_size = CD180_NFIFO;
-	memcpy_tofs(retinfo, &tmp, sizeof(tmp));
+	copy_to_user(retinfo, &tmp, sizeof(tmp));
 	return 0;
 }
 

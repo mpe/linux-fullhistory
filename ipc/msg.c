@@ -104,7 +104,8 @@ static int real_msgsnd (int msqid, struct msgbuf *msgp, size_t msgsz, int msgflg
 		err = verify_area (VERIFY_READ, msgp->mtext, msgsz);
 		if (err) 
 			return err;
-		if ((mtype = get_user (&msgp->mtype)) < 1)
+		get_user(mtype, &msgp->mtype);
+		if (mtype < 1)
 			return -EINVAL;
 	}
 	id = (unsigned int) msqid % MSGMNI;
@@ -165,7 +166,7 @@ static int real_msgsnd (int msqid, struct msgbuf *msgp, size_t msgsz, int msgflg
 		memcpy(msgh->msg_spot + KDHDR, kdmp->text, msgsz - KDHDR); 
 	}
 	else
-		memcpy_fromfs (msgh->msg_spot, msgp->mtext, msgsz); 
+		copy_from_user (msgh->msg_spot, msgp->mtext, msgsz); 
 	
 	if (msgque[id] == IPC_UNUSED || msgque[id] == IPC_NOID
 		|| msq->msg_perm.seq != (unsigned int) msqid / MSGMNI) {
@@ -370,7 +371,7 @@ static int real_msgrcv (int msqid, struct msgbuf *msgp, size_t msgsz, long msgty
 			}
 			else {
 				put_user (nmsg->msg_type, &msgp->mtype);
-				memcpy_tofs (msgp->mtext, nmsg->msg_spot, msgsz);
+				copy_to_user (msgp->mtext, nmsg->msg_spot, msgsz);
 			}
 			kfree(nmsg);
 			return msgsz;
@@ -566,7 +567,7 @@ asmlinkage int sys_msgctl (int msqid, int cmd, struct msqid_ds *buf)
 		err = verify_area (VERIFY_WRITE, buf, sizeof (struct msginfo));
 		if (err)
 			return err;
-		memcpy_tofs (buf, &msginfo, sizeof(struct msginfo));
+		copy_to_user (buf, &msginfo, sizeof(struct msginfo));
 		return max_msqid;
 	}
 	case MSG_STAT:
@@ -592,7 +593,7 @@ asmlinkage int sys_msgctl (int msqid, int cmd, struct msqid_ds *buf)
 		tbuf.msg_qbytes = msq->msg_qbytes;
 		tbuf.msg_lspid  = msq->msg_lspid;
 		tbuf.msg_lrpid  = msq->msg_lrpid;
-		memcpy_tofs (buf, &tbuf, sizeof(*buf));
+		copy_to_user (buf, &tbuf, sizeof(*buf));
 		return id;
 	case IPC_SET:
 		if (!buf)
@@ -600,7 +601,7 @@ asmlinkage int sys_msgctl (int msqid, int cmd, struct msqid_ds *buf)
 		err = verify_area (VERIFY_READ, buf, sizeof (*buf));
 		if (err)
 			return err;
-		memcpy_fromfs (&tbuf, buf, sizeof (*buf));
+		copy_from_user (&tbuf, buf, sizeof (*buf));
 		break;
 	case IPC_STAT:
 		if (!buf)
@@ -632,7 +633,7 @@ asmlinkage int sys_msgctl (int msqid, int cmd, struct msqid_ds *buf)
 		tbuf.msg_qbytes = msq->msg_qbytes;
 		tbuf.msg_lspid  = msq->msg_lspid;
 		tbuf.msg_lrpid  = msq->msg_lrpid;
-		memcpy_tofs (buf, &tbuf, sizeof (*buf));
+		copy_to_user (buf, &tbuf, sizeof (*buf));
 		return 0;
 	case IPC_SET:
 		if (!suser() && current->euid != ipcp->cuid && 

@@ -1977,7 +1977,7 @@ sony_get_subchnl_info(long arg)
          verify_area(VERIFY_WRITE, (char *) arg, sizeof(schi));
    if (err) return err;
 
-   memcpy_fromfs(&schi, (char *) arg, sizeof(schi));
+   copy_from_user(&schi, (char *) arg, sizeof(schi));
    
    switch (sony_audio_status)
    {
@@ -1994,7 +1994,7 @@ sony_get_subchnl_info(long arg)
 
    case CDROM_AUDIO_NO_STATUS:
       schi.cdsc_audiostatus = sony_audio_status;
-      memcpy_tofs((char *) arg, &schi, sizeof(schi));
+      copy_to_user((char *) arg, &schi, sizeof(schi));
       return 0;
       break;
 
@@ -2025,7 +2025,7 @@ sony_get_subchnl_info(long arg)
       schi.cdsc_reladdr.lba = msf_to_log(last_sony_subcode.rel_msf);
    }
    
-   memcpy_tofs((char *) arg, &schi, sizeof(schi));
+   copy_to_user((char *) arg, &schi, sizeof(schi));
    return 0;
 }
 
@@ -2292,7 +2292,7 @@ read_audio(struct cdrom_read_audio *ra,
             }
             else
             {
-               memcpy_tofs((char *) (ra->buf + (CD_FRAMESIZE_RAW * cframe)),
+               copy_to_user((char *) (ra->buf + (CD_FRAMESIZE_RAW * cframe)),
                            (char *) readahead_buffer,
                            CD_FRAMESIZE_RAW);
             }
@@ -2308,7 +2308,7 @@ read_audio(struct cdrom_read_audio *ra,
       }
       else
       {
-         memcpy_tofs((char *) (ra->buf + (CD_FRAMESIZE_RAW * cframe)),
+         copy_to_user((char *) (ra->buf + (CD_FRAMESIZE_RAW * cframe)),
                      (char *) readahead_buffer,
                      CD_FRAMESIZE_RAW);
       }
@@ -2449,7 +2449,7 @@ static int scd_ioctl(struct inode *inode,
       if(i)
       	return i;
       do_sony_cd_cmd(SONY_SPIN_UP_CMD, NULL, 0, res_reg, &res_size);
-      memcpy_fromfs(&(params[1]), (void *) arg, 6);
+      copy_from_user(&(params[1]), (void *) arg, 6);
       
       /* The parameters are given in int, must be converted */
       for (i=1; i<7; i++)
@@ -2484,7 +2484,7 @@ static int scd_ioctl(struct inode *inode,
          	return i;
          loc_hdr.cdth_trk0 = bcd_to_int(sony_toc.first_track_num);
          loc_hdr.cdth_trk1 = bcd_to_int(sony_toc.last_track_num);
-         memcpy_tofs(hdr, &loc_hdr, sizeof(*hdr));
+         copy_to_user(hdr, &loc_hdr, sizeof(*hdr));
       }
       return 0;
 
@@ -2509,7 +2509,7 @@ static int scd_ioctl(struct inode *inode,
          if(i<0)
          	return i;
          
-         memcpy_fromfs(&loc_entry, entry, sizeof(loc_entry));
+         copy_from_user(&loc_entry, entry, sizeof(loc_entry));
          
          /* Lead out is handled separately since it is special. */
          if (loc_entry.cdte_track == CDROM_LEADOUT)
@@ -2542,7 +2542,7 @@ static int scd_ioctl(struct inode *inode,
             loc_entry.cdte_addr.msf.second = bcd_to_int(*(msf_val+1));
             loc_entry.cdte_addr.msf.frame = bcd_to_int(*(msf_val+2));
          }
-         memcpy_tofs(entry, &loc_entry, sizeof(*entry));
+         copy_to_user(entry, &loc_entry, sizeof(*entry));
       }
       return 0;
       break;
@@ -2562,7 +2562,7 @@ static int scd_ioctl(struct inode *inode,
          if(i<0)
          	return i;
          
-         memcpy_fromfs(&ti, (char *) arg, sizeof(ti));
+         copy_from_user(&ti, (char *) arg, sizeof(ti));
          if (   (ti.cdti_trk0 < sony_toc.first_track_num)
              || (ti.cdti_trk0 > sony_toc.last_track_num)
              || (ti.cdti_trk1 < ti.cdti_trk0))
@@ -2631,7 +2631,7 @@ static int scd_ioctl(struct inode *inode,
          if(i<0)
          	return i;
          
-         memcpy_fromfs(&volctrl, (char *) arg, sizeof(volctrl));
+         copy_from_user(&volctrl, (char *) arg, sizeof(volctrl));
          params[0] = SONY_SD_AUDIO_VOLUME;
          params[1] = volctrl.channel0;
          params[2] = volctrl.channel1;
@@ -2659,7 +2659,7 @@ static int scd_ioctl(struct inode *inode,
          i=verify_area(VERIFY_READ, (char *) arg, sizeof(ra));
          if(i<0)
          	return i;
-         memcpy_fromfs(&ra, (char *) arg, sizeof(ra));
+         copy_from_user(&ra, (char *) arg, sizeof(ra));
 
          i=verify_area(VERIFY_WRITE, ra.buf, CD_FRAMESIZE_RAW * ra.nframes);
          if(i<0)

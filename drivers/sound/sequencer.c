@@ -139,7 +139,7 @@ sequencer_read (int dev, struct fileinfo *file, char *buf, int count)
   while (iqlen && c >= ev_len)
     {
 
-      memcpy_tofs (&(buf)[p], (char *) &iqueue[iqhead * IEV_SZ], ev_len);
+      copy_to_user (&(buf)[p], (char *) &iqueue[iqhead * IEV_SZ], ev_len);
       p += ev_len;
       c -= ev_len;
 
@@ -267,7 +267,7 @@ sequencer_write (int dev, struct fileinfo *file, const char *buf, int count)
 
   while (c >= 4)
     {
-      memcpy_fromfs ((char *) event_rec, &(buf)[p], 4);
+      copy_from_user ((char *) event_rec, &(buf)[p], 4);
       ev_code = event_rec[0];
 
       if (ev_code == SEQ_FULLSIZE)
@@ -305,7 +305,7 @@ sequencer_write (int dev, struct fileinfo *file, const char *buf, int count)
 	      return count - c;
 	    }
 
-	  memcpy_fromfs ((char *) &event_rec[4], &(buf)[p + 4], 4);
+	  copy_from_user ((char *) &event_rec[4], &(buf)[p + 4], 4);
 
 	}
       else
@@ -1710,7 +1710,7 @@ sequencer_ioctl (int dev, struct fileinfo *file,
 	struct synth_info inf;
 	int             dev;
 
-	memcpy_fromfs ((char *) &inf, &((char *) arg)[0], sizeof (inf));
+	copy_from_user ((char *) &inf, &((char *) arg)[0], sizeof (inf));
 	dev = inf.device;
 
 	if (dev < 0 || dev >= max_synthdev)
@@ -1728,7 +1728,7 @@ sequencer_ioctl (int dev, struct fileinfo *file,
 	struct seq_event_rec event_rec;
 	unsigned long   flags;
 
-	memcpy_fromfs ((char *) &event_rec, &((char *) arg)[0], sizeof (event_rec));
+	copy_from_user ((char *) &event_rec, &((char *) arg)[0], sizeof (event_rec));
 
 	save_flags (flags);
 	cli ();
@@ -1744,13 +1744,13 @@ sequencer_ioctl (int dev, struct fileinfo *file,
 	struct midi_info inf;
 	int             dev;
 
-	memcpy_fromfs ((char *) &inf, &((char *) arg)[0], sizeof (inf));
+	copy_from_user ((char *) &inf, &((char *) arg)[0], sizeof (inf));
 	dev = inf.device;
 
 	if (dev < 0 || dev >= max_mididev)
 	  return -(ENXIO);
 
-	memcpy_tofs (&((char *) arg)[0], (char *) &(midi_devs[dev]->info), sizeof (inf));
+	copy_to_user (&((char *) arg)[0], (char *) &(midi_devs[dev]->info), sizeof (inf));
 	return 0;
       }
       break;
@@ -1766,7 +1766,7 @@ sequencer_ioctl (int dev, struct fileinfo *file,
 	    return -(EIO);
 	  }
 
-	memcpy_fromfs ((char *) inf, &((char *) arg)[0], sizeof (*inf));
+	copy_from_user ((char *) inf, &((char *) arg)[0], sizeof (*inf));
 	dev = inf->device;
 
 	if (dev < 0 || dev >= num_synths)
@@ -1787,7 +1787,7 @@ sequencer_ioctl (int dev, struct fileinfo *file,
 	    return err;
 	  }
 
-	memcpy_tofs (&((char *) arg)[0], (char *) inf, sizeof (*inf));
+	copy_to_user (&((char *) arg)[0], (char *) inf, sizeof (*inf));
 	vfree (inf);
 	return 0;
       }
@@ -1804,7 +1804,7 @@ sequencer_ioctl (int dev, struct fileinfo *file,
 	    return -(EIO);
 	  }
 
-	memcpy_fromfs ((char *) inf, &((char *) arg)[0], sizeof (*inf));
+	copy_from_user ((char *) inf, &((char *) arg)[0], sizeof (*inf));
 	dev = inf->device;
 
 	if (dev < 0 || dev >= num_synths)
@@ -1825,7 +1825,7 @@ sequencer_ioctl (int dev, struct fileinfo *file,
 	    return err;
 	  }
 
-	memcpy_tofs (&((char *) arg)[0], (char *) inf, sizeof (*inf));
+	copy_to_user (&((char *) arg)[0], (char *) inf, sizeof (*inf));
 	vfree (inf);
 	return 0;
       }

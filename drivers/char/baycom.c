@@ -437,7 +437,7 @@ static int store_packet(struct packet_buffer *buf, unsigned char *data,
 	if(free < needed) return 0;		/* buffer overrun */
 	hdr = (struct packet_hdr *)(buf->buffer+buf->wr);
 	if (from_user) 
-		memcpy_fromfs(hdr+1,data,len);
+		copy_from_user(hdr+1,data,len);
 	else
 		memcpy(hdr+1,data,len);
 	hdr->len = len;
@@ -1847,7 +1847,7 @@ static int baycom_ioctl(struct tty_struct *tty, struct file * file,
 		par.slottime = bc->ch_params.slottime;
 		par.ppersist = bc->ch_params.ppersist;
 		par.fulldup = bc->ch_params.fulldup;
-		memcpy_tofs((void *)arg, &par, sizeof(par));
+		copy_to_user((void *)arg, &par, sizeof(par));
 		return 0;
 
 	case BAYCOMCTL_SETPARAMS:
@@ -1857,7 +1857,7 @@ static int baycom_ioctl(struct tty_struct *tty, struct file * file,
 				sizeof(par));
 		if (i)
 			return i;
-		memcpy_fromfs(&par, (void *)arg, sizeof(par));
+		copy_from_user(&par, (void *)arg, sizeof(par));
 		printk(KERN_INFO "baycom: changing hardware type: modem %u "
 		       "iobase 0x%x irq %u options 0x%x\n", par.modem_type,
 		       par.iobase, par.irq, par.options);
@@ -1877,7 +1877,7 @@ static int baycom_ioctl(struct tty_struct *tty, struct file * file,
 				sizeof(struct baycom_statistics));
 		if (i)
 			return i;
-		memcpy_tofs((void *)arg, &bc->stat, 
+		copy_to_user((void *)arg, &bc->stat, 
 			    sizeof(struct baycom_statistics));
 		return 0;
 		

@@ -186,11 +186,13 @@ int do_sysctl (int *name, int nlen,
 	error = verify_area(VERIFY_READ,name,nlen*sizeof(int));
 	if (error) return error;
 	if (oldval) {
+		int old_len;
 		if (!oldlenp)
 			return -EFAULT;
 		error = verify_area(VERIFY_WRITE,oldlenp,sizeof(size_t));
 		if (error) return error;
-		error = verify_area(VERIFY_WRITE,oldval,get_user(oldlenp));
+		get_user(old_len, oldlenp);
+		error = verify_area(VERIFY_WRITE,oldval,old_len);
 		if (error) return error;
 	}
 	if (newval) {
@@ -218,7 +220,7 @@ extern asmlinkage int sys_sysctl(struct __sysctl_args *args)
 	error = verify_area(VERIFY_READ, args, sizeof(*args));
 	if (error)
 		return error;
-	memcpy_fromfs(&tmp, args, sizeof(tmp));
+	copy_from_user(&tmp, args, sizeof(tmp));
 	return do_sysctl(tmp.name, tmp.nlen, tmp.oldval, tmp.oldlenp, 
 			 tmp.newval, tmp.newlen);
 }
@@ -267,7 +269,9 @@ repeat:
 		return -ENOTDIR;
 
 	for ( ; table->ctl_name; table++) {
-		if (get_user(name) == table->ctl_name ||
+		int n;
+		get_user(n,name);
+		if (n == table->ctl_name ||
 		    table->ctl_name == CTL_ANY) {
 			if (table->child) {
 				if (ctl_perm(table, 001))
@@ -321,18 +325,20 @@ int do_sysctl_strategy (ctl_table *table,
 	/* If there is no strategy routine, or if the strategy returns
 	 * zero, proceed with automatic r/w */
 	if (table->data && table->maxlen) {
-		if (oldval && oldlenp && get_user(oldlenp)) {
-			len = get_user(oldlenp);
-			if (len > table->maxlen)
-				len = table->maxlen;
-			memcpy_tofs(oldval, table->data, len);
-			put_user(len, oldlenp);
+		if (oldval && oldlenp) {
+			get_user(len, oldlenp);
+			if (len) {
+				if (len > table->maxlen)
+					len = table->maxlen;
+				copy_to_user(oldval, table->data, len);
+				put_user(len, oldlenp);
+			}
 		}
 		if (newval && newlen) {
 			len = newlen;
 			if (len > table->maxlen)
 				len = table->maxlen;
-			memcpy_fromfs(table->data, newval, len);
+			copy_from_user(table->data, newval, len);
 		}
 	}
 	return 0;
@@ -353,7 +359,7 @@ static int do_securelevel_strategy (ctl_table *table,
 	if (newval && newlen) {
 		if (newlen != sizeof (int))
 			return -EINVAL;
-		memcpy_fromfs (&level, newval, newlen);
+		copy_from_user (&level, newval, newlen);
 		if (level < securelevel && current->pid != 1)
 			return -EPERM;
 	}
@@ -518,12 +524,15 @@ int proc_dostring(ctl_table *table, int write, struct file *filp,
 	if (write) {
 		len = 0;
 		p = buffer;
-		while (len < *lenp && 
-		       (c = get_user(p++)) != 0 && c != '\n')
+		while (len < *lenp) {
+			get_user(c, p++);
+			if (c == 0 || c == '\n')
+				break;
 			len++;
+		}
 		if (len >= table->maxlen)
 			len = table->maxlen-1;
-		memcpy_fromfs(table->data, buffer, len);
+		copy_from_user(table->data, buffer, len);
 		((char *) table->data)[len] = 0;
 		filp->f_pos += *lenp;
 	} else {
@@ -533,7 +542,7 @@ int proc_dostring(ctl_table *table, int write, struct file *filp,
 		if (len > *lenp)
 			len = *lenp;
 		if (len)
-			memcpy_tofs(buffer, table->data, len);
+			copy_to_user(buffer, table->data, len);
 		if (len < *lenp) {
 			put_user('\n', ((char *) buffer) + len);
 			len++;
@@ -563,15 +572,21 @@ int proc_dointvec(ctl_table *table, int write, struct file *filp,
 	
 	for (; left && vleft--; i++, first=0) {
 		if (write) {
-			while (left && isspace(get_user((char *) buffer)))
-				left--, ((char *) buffer)++;
+			while (left) {
+				char c;
+				get_user(c,(char *) buffer);
+				if (!isspace(c))
+					break;
+				left--;
+				((char *) buffer)++;
+			}
 			if (!left)
 				break;
 			neg = 0;
 			len = left;
 			if (len > TMPBUFLEN-1)
 				len = TMPBUFLEN-1;
-			memcpy_fromfs(buf, buffer, len);
+			copy_from_user(buf, buffer, len);
 			buf[len] = 0;
 			p = buf;
 			if (*p == '-' && left > 1) {
@@ -597,7 +612,7 @@ int proc_dointvec(ctl_table *table, int write, struct file *filp,
 			len = strlen(buf);
 			if (len > left)
 				len = left;
-			memcpy_tofs(buffer, buf, len);
+			copy_to_user(buffer, buf, len);
 			left -= len;
 			buffer += len;
 		}
@@ -609,8 +624,13 @@ int proc_dointvec(ctl_table *table, int write, struct file *filp,
 	}
 	if (write) {
 		p = (char *) buffer;
-		while (left && isspace(get_user(p++)))
+		while (left) {
+			char c;
+			get_user(c, p++);
+			if (!isspace(c))
+				break;
 			left--;
+		}
 	}
 	if (write && first)
 		return -EINVAL;
@@ -640,15 +660,21 @@ int proc_dointvec_minmax(ctl_table *table, int write, struct file *filp,
 	
 	for (; left && vleft--; i++, first=0) {
 		if (write) {
-			while (left && isspace(get_user((char *) buffer)))
-				left--, ((char *) buffer)++;
+			while (left) {
+				char c;
+				get_user(c, (char *) buffer);
+				if (!isspace(c))
+					break;
+				left--;
+				((char *) buffer)++;
+			}
 			if (!left)
 				break;
 			neg = 0;
 			len = left;
 			if (len > TMPBUFLEN-1)
 				len = TMPBUFLEN-1;
-			memcpy_fromfs(buf, buffer, len);
+			copy_from_user(buf, buffer, len);
 			buf[len] = 0;
 			p = buf;
 			if (*p == '-' && left > 1) {
@@ -679,7 +705,7 @@ int proc_dointvec_minmax(ctl_table *table, int write, struct file *filp,
 			len = strlen(buf);
 			if (len > left)
 				len = left;
-			memcpy_tofs(buffer, buf, len);
+			copy_to_user(buffer, buf, len);
 			left -= len;
 			buffer += len;
 		}
@@ -691,8 +717,13 @@ int proc_dointvec_minmax(ctl_table *table, int write, struct file *filp,
 	}
 	if (write) {
 		p = (char *) buffer;
-		while (left && isspace(get_user(p++)))
+		while (left) {
+			char c;
+			get_user(c, p++);
+			if (!isspace(c))
+				break;
 			left--;
+		}
 	}
 	if (write && first)
 		return -EINVAL;
@@ -738,21 +769,23 @@ int sysctl_string(ctl_table *table, int *name, int nlen,
 	if (!table->data || !table->maxlen) 
 		return -ENOTDIR;
 	
-	if (oldval && oldlenp && get_user(oldlenp)) {
-		len = get_user(oldlenp);
-		l = strlen(table->data);
-		if (len > l) len = l;
-		if (len >= table->maxlen)
-			len = table->maxlen;
-		memcpy_tofs(oldval, table->data, len);
-		put_user(0, ((char *) oldval) + len);
-		put_user(len, oldlenp);
+	if (oldval && oldlenp) {
+		get_user(len, oldlenp);
+		if (len) {
+			l = strlen(table->data);
+			if (len > l) len = l;
+			if (len >= table->maxlen)
+				len = table->maxlen;
+			copy_to_user(oldval, table->data, len);
+			put_user(0, ((char *) oldval) + len);
+			put_user(len, oldlenp);
+		}
 	}
 	if (newval && newlen) {
 		len = newlen;
 		if (len > table->maxlen)
 			len = table->maxlen;
-		memcpy_fromfs(table->data, newval, len);
+		copy_from_user(table->data, newval, len);
 		if (len == table->maxlen)
 			len--;
 		((char *) table->data)[len] = 0;
@@ -787,7 +820,8 @@ int sysctl_intvec(ctl_table *table, int *name, int nlen,
 		max = (int *) table->extra2;
 
 		for (i = 0; i < length; i++) {
-			int value = get_user(vec + i);
+			int value;
+			get_user(value, vec + i);
 			if (min && value < min[i])
 				return -EINVAL;
 			if (max && value > max[i])
@@ -807,13 +841,15 @@ int do_string (
 	if (newval && newlen >= max)
 		return -EINVAL;
 	if (oldval) {
-		if (l > get_user(oldlenp))
+		int old_l;
+		get_user(old_l, oldlenp);
+		if (l > old_l)
 			return -ENOMEM;
 		put_user(l, oldlenp);
-		memcpy_tofs(oldval, data, l);
+		copy_to_user(oldval, data, l);
 	}
 	if (newval) {
-		memcpy_fromfs(data, newval, newlen);
+		copy_from_user(data, newval, newlen);
 		data[newlen] = 0;
 	}
 	return 0;
@@ -828,13 +864,15 @@ int do_int (
 	if (newval && newlen != sizeof(int))
 		return -EINVAL;
 	if (oldval) {
-		if (get_user(oldlenp) < sizeof(int))
+		int old_l;
+		get_user(old_l, oldlenp);
+		if (old_l < sizeof(int))
 			return -ENOMEM;
 		put_user(sizeof(int), oldlenp);
-		memcpy_tofs(oldval, data, sizeof(int));
+		copy_to_user(oldval, data, sizeof(int));
 	}
 	if (newval)
-		memcpy_fromfs(data, newval, sizeof(int));
+		copy_from_user(data, newval, sizeof(int));
 	return 0;
 }
 
@@ -847,13 +885,15 @@ int do_struct (
 	if (newval && newlen != len)
 		return -EINVAL;
 	if (oldval) {
-		if (get_user(oldlenp) < len)
+		int old_l;
+		get_user(old_l, oldlenp);
+		if (old_l < len)
 			return -ENOMEM;
 		put_user(len, oldlenp);
-		memcpy_tofs(oldval, data, len);
+		copy_to_user(oldval, data, len);
 	}
 	if (newval)
-		memcpy_fromfs(data, newval, len);
+		copy_from_user(data, newval, len);
 	return 0;
 }
 

@@ -92,7 +92,7 @@ static long read_core(struct inode * inode, struct file * file,
 		if (p + count1 > sizeof(struct user))
 			count1 = sizeof(struct user)-p;
 		pnt = (char *) &dump + p;
-		memcpy_tofs(buf,(void *) pnt, count1);
+		copy_to_user(buf,(void *) pnt, count1);
 		buf += count1;
 		p += count1;
 		count -= count1;
@@ -106,7 +106,7 @@ static long read_core(struct inode * inode, struct file * file,
 		count--;
 		read++;
 	}
-	memcpy_tofs(buf, (void *) (PAGE_OFFSET + p - PAGE_SIZE), count);
+	copy_to_user(buf, (void *) (PAGE_OFFSET + p - PAGE_SIZE), count);
 	read += count;
 	file->f_pos += read;
 	return read;
@@ -147,7 +147,7 @@ static long read_profile(struct inode *inode, struct file *file,
 		buf++; p++; count--; read++;
 	}
 	pnt = (char *)prof_buffer + p - sizeof(unsigned int);
-	memcpy_tofs(buf,(void *)pnt,count);
+	copy_to_user(buf,(void *)pnt,count);
 	read += count;
 	file->f_pos += read;
 	return read;
@@ -936,7 +936,7 @@ static long read_maps (int pid, struct file * file,
 		i = len-column;
 		if (i > count)
 			i = count;
-		memcpy_tofs(destptr, line+column, i);
+		copy_to_user(destptr, line+column, i);
 		destptr += i; count -= i;
 		column += i;
 		if (column >= len) {
@@ -1115,7 +1115,7 @@ static long array_read(struct inode * inode, struct file * file,
 	}
 	if (start != NULL) {
 		/* We have had block-adjusting processing! */
-		memcpy_tofs(buf, start, length);
+		copy_to_user(buf, start, length);
 		file->f_pos += length;
 		count = length;
 	} else {
@@ -1127,7 +1127,7 @@ static long array_read(struct inode * inode, struct file * file,
 		if (count + file->f_pos > length)
 			count = length - file->f_pos;
 		end = count + file->f_pos;
-		memcpy_tofs(buf, (char *) page + file->f_pos, count);
+		copy_to_user(buf, (char *) page + file->f_pos, count);
 		file->f_pos = end;
 	}
 	free_page(page);

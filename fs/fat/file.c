@@ -238,7 +238,7 @@ long fat_file_read(
 		size = MIN(SECTOR_SIZE-offset,left_in_file);
 		if (MSDOS_I(inode)->i_binary) {
 			size = MIN(size,end-buf);
-			memcpy_tofs(buf,data,size);
+			copy_to_user(buf,data,size);
 			buf += size;
 			filp->f_pos += size;
 		}else{
@@ -329,7 +329,7 @@ long fat_file_write(
 			break;
 		}
 		if (binary_mode) {
-			memcpy_fromfs(bh->b_data+offset,buf,written = size);
+			copy_from_user(bh->b_data+offset,buf,written = size);
 			buf += size;
 		} else {
 			written = left = SECTOR_SIZE-offset;
@@ -340,7 +340,8 @@ long fat_file_write(
 				carry = 0;
 			}
 			for (size = 0; size < count && left; size++) {
-				if ((ch = get_user(buf++)) == '\n') {
+				get_user(ch, buf++);
+				if (ch == '\n') {
 					*to++ = '\r';
 					left--;
 				}

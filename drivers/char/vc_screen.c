@@ -20,7 +20,7 @@
 #include <linux/major.h>
 #include <linux/errno.h>
 #include <linux/tty.h>
-#include <linux/fs.h>
+#include <linux/sched.h>
 #include <asm/segment.h>
 #include "vt_kern.h"
 #include "selection.h"
@@ -148,8 +148,9 @@ vcs_write(struct inode *inode, struct file *file, const char *buf, unsigned long
 	if (!attr) {
 		org = screen_pos(cons, p, viewed);
 		while (count-- > 0) {
-			scr_writew((scr_readw(org) & 0xff00) |
-				   get_user((const unsigned char*)buf++), org);
+			unsigned char c;
+			get_user(c, (const unsigned char*)buf++);
+			scr_writew((scr_readw(org) & 0xff00) | c, org);
 			org++;
 		}
 	} else {
@@ -157,25 +158,31 @@ vcs_write(struct inode *inode, struct file *file, const char *buf, unsigned long
 			char header[HEADER_SIZE];
 			getconsxy(cons, header+2);
 			while (p < HEADER_SIZE && count-- > 0)
-				header[p++] = get_user(buf++);
+				get_user(header[p++], buf++);
 			if (!viewed)
 				putconsxy(cons, header+2);
 		}
 		p -= HEADER_SIZE;
 		org = screen_pos(cons, p/2, viewed);
 		if ((p & 1) && count-- > 0) {
-			scr_writew((get_user(buf++) << 8) |
+			char c;
+			get_user(c,buf++);
+			scr_writew((c << 8) |
 				   (scr_readw(org) & 0xff), org);
 			org++;
 		}
 		while (count > 1) {
-			scr_writew(get_user((const unsigned short *) buf), org++);
+			unsigned short w;
+			get_user(w, (const unsigned short *) buf);
+			scr_writew(w, org++);
 			buf += 2;
 			count -= 2;
 		}
-		if (count > 0)
-			scr_writew((scr_readw(org) & 0xff00) |
-				   get_user((const unsigned char*)buf++), org);
+		if (count > 0) {
+			unsigned char c;
+			get_user(c, (const unsigned char*)buf++);
+			scr_writew((scr_readw(org) & 0xff00) | c, org);
+		}
 	}
 	written = buf - buf0;
 	file->f_pos += written;

@@ -2078,7 +2078,7 @@ static int ide_ioctl (struct inode *inode, struct file *file,
 				return -ENOMSG;
 			err = verify_area(VERIFY_WRITE, (char *)arg, sizeof(*drive->id));
 			if (!err)
-				memcpy_tofs((char *)arg, (char *)drive->id, sizeof(*drive->id));
+				copy_to_user((char *)arg, (char *)drive->id, sizeof(*drive->id));
 			return err;
 
 			case HDIO_GET_NOWERR:
@@ -2169,7 +2169,7 @@ static int ide_ioctl (struct inode *inode, struct file *file,
 			if (NULL == (void *) arg) {
 				err = ide_do_drive_cmd(drive, &rq, ide_wait);
 			} else if (!(err = verify_area(VERIFY_READ,(void *)arg, 4))) {
-				memcpy_fromfs(args, (void *)arg, 4);
+				copy_from_user(args, (void *)arg, 4);
 				if (args[3]) {
 					argsize = 4 + (SECTOR_WORDS * 4 * args[3]);
 					argbuf = kmalloc(argsize, GFP_KERNEL);
@@ -2183,7 +2183,7 @@ static int ide_ioctl (struct inode *inode, struct file *file,
 				if (!(err = verify_area(VERIFY_WRITE,(void *)arg, argsize))) {
 					rq.buffer = argbuf;
 					err = ide_do_drive_cmd(drive, &rq, ide_wait);
-					memcpy_tofs((void *)arg, argbuf, argsize);
+					copy_to_user((void *)arg, argbuf, argsize);
 				}
 				if (argsize > 4)
 					kfree(argbuf);

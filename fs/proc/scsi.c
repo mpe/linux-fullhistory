@@ -139,7 +139,7 @@ static long proc_readscsi(struct inode * inode, struct file * file,
 	/*
 	 *  Copy the bytes
 	 */
-	memcpy_tofs(buf + copied, start, length);
+	copy_to_user(buf + copied, start, length);
 	file->f_pos += length;	/* Move down the file */
 	bytes -= length;
 	copied += length;
@@ -167,7 +167,7 @@ static long proc_writescsi(struct inode * inode, struct file * file,
     if(dispatch_scsi_info_ptr != NULL) {
         if (!(page = (char *) __get_free_page(GFP_KERNEL)))
             return(-ENOMEM);
-	memcpy_fromfs(page, buf, count);
+	copy_from_user(page, buf, count);
 	ret = dispatch_scsi_info_ptr(inode->i_ino, page, 0, 0, count, 1);
     } else 
 	return(-ENOPKG);	  /* Nothing here */

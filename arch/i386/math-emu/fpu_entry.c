@@ -264,7 +264,7 @@ do_another_FPU_instruction:
 
   RE_ENTRANT_CHECK_OFF;
   FPU_code_verify_area(1);
-  FPU_modrm = get_fs_byte((unsigned char *) FPU_EIP);
+  get_user(FPU_modrm, (unsigned char *) FPU_EIP);
   RE_ENTRANT_CHECK_ON;
   FPU_EIP++;
 
@@ -591,7 +591,7 @@ static int valid_prefix(unsigned char *Byte, unsigned char **fpu_eip,
 
   RE_ENTRANT_CHECK_OFF;
   FPU_code_verify_area(1);
-  byte = get_fs_byte(ip);
+  get_user(byte, ip);
   RE_ENTRANT_CHECK_ON;
 
   while ( 1 )
@@ -637,7 +637,7 @@ static int valid_prefix(unsigned char *Byte, unsigned char **fpu_eip,
 	  ip++;
 	  RE_ENTRANT_CHECK_OFF;
 	  FPU_code_verify_area(1);
-	  byte = get_fs_byte(ip);
+	  get_user(byte, ip);
 	  RE_ENTRANT_CHECK_ON;
 	  break;
 	case FWAIT_OPCODE:

@@ -415,7 +415,7 @@ ncp_statfs(struct super_block *sb, struct statfs *buf, int bufsiz)
 	tmp.f_files = -1;
 	tmp.f_ffree = -1;
 	tmp.f_namelen = 12;
-	memcpy_tofs(buf, &tmp, bufsiz);
+	copy_to_user(buf, &tmp, bufsiz);
 }
 
 static int

@@ -26,7 +26,7 @@
 
 #include <asm/dma.h>
 #include <asm/system.h> /* for cli()/sti() */
-#include <asm/segment.h> /* for memcpy_to/fromfs */
+#include <asm/segment.h> /* for copy_to/from_user */
 #include <asm/bitops.h>
 #include <asm/pgtable.h>
 

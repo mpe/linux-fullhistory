@@ -1705,14 +1705,14 @@ static int depca_ioctl(struct device *dev, struct ifreq *rq, int cmd)
     }
     ioc->len = ETH_ALEN;
     if (!(status = verify_area(VERIFY_WRITE, (void *)ioc->data, ioc->len))) {
-      memcpy_tofs(ioc->data, tmp.addr, ioc->len);
+      copy_to_user(ioc->data, tmp.addr, ioc->len);
     }
 
     break;
   case DEPCA_SET_HWADDR:             /* Set the hardware address */
     if (suser()) {
       if (!(status = verify_area(VERIFY_READ, (void *)ioc->data, ETH_ALEN))) {
-	memcpy_fromfs(tmp.addr,ioc->data,ETH_ALEN);
+	copy_from_user(tmp.addr,ioc->data,ETH_ALEN);
 	for (i=0; i<ETH_ALEN; i++) {
 	  dev->dev_addr[i] = tmp.addr[i];
 	}
@@ -1774,14 +1774,14 @@ static int depca_ioctl(struct device *dev, struct ifreq *rq, int cmd)
   case DEPCA_GET_MCA:                /* Get the multicast address table */
     ioc->len = (HASH_TABLE_LEN >> 3);
     if (!(status = verify_area(VERIFY_WRITE, ioc->data, ioc->len))) {
-      memcpy_tofs(ioc->data, lp->init_block.mcast_table, ioc->len); 
+      copy_to_user(ioc->data, lp->init_block.mcast_table, ioc->len); 
     }
 
     break;
   case DEPCA_SET_MCA:                /* Set a multicast address */
     if (suser()) {
       if (!(status=verify_area(VERIFY_READ, ioc->data, ETH_ALEN*ioc->len))) {
-	memcpy_fromfs(tmp.addr, ioc->data, ETH_ALEN * ioc->len);
+	copy_from_user(tmp.addr, ioc->data, ETH_ALEN * ioc->len);
 	set_multicast_list(dev);
       }
     } else {
@@ -1809,7 +1809,7 @@ static int depca_ioctl(struct device *dev, struct ifreq *rq, int cmd)
     cli();
     ioc->len = sizeof(lp->pktStats);
     if (!(status=verify_area(VERIFY_WRITE, ioc->data, ioc->len))) {
-      memcpy_tofs(ioc->data, &lp->pktStats, ioc->len); 
+      copy_to_user(ioc->data, &lp->pktStats, ioc->len); 
     }
     sti();
 
@@ -1832,7 +1832,7 @@ static int depca_ioctl(struct device *dev, struct ifreq *rq, int cmd)
     memcpy(&tmp.sval[i], &lp->init_block, sizeof(struct depca_init));
     ioc->len = i+sizeof(struct depca_init);
     if (!(status=verify_area(VERIFY_WRITE, ioc->data, ioc->len))) {
-      memcpy_tofs(ioc->data, tmp.addr, ioc->len);
+      copy_to_user(ioc->data, tmp.addr, ioc->len);
     }
 
     break;

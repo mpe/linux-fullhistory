@@ -847,7 +847,7 @@ repeat:
 	i = count;
 	while ((i >= sizeof(event)) && !queue_empty(as)) {
 		event = get_queued_event(as);
-		memcpy_tofs(buf, &event, sizeof(event));
+		copy_to_user(buf, &event, sizeof(event));
 		switch (event) {
 		case APM_SYS_SUSPEND:
 		case APM_USER_SUSPEND:

@@ -1,3 +1,68 @@
+Sun Oct 13 19:00 1996 Gerard Roudier (groudier@club-internet.fr)
+	* ncr53c8xx.c ncr53c8xx.h - revision 1.14a
+	Enabling some special features makes problems with some hardware.
+	So, disable them by default.
+	Add SCSI_NCR_SPECIAL_FEATURES define to play with.
+ 
+Sun Oct 13 14:00 1996 Gerard Roudier (groudier@club-internet.fr)
+	* ncr53c8xx.c ncr53c8xx.h
+	Incorporate Stefan's patch for clock frequency detection.
+	(Committed in FreeBSD/ncr.c rev. 1.81).
+	The driver then does about the following:
+	    Assume 40 MHz clock for all ncr chips except:
+	    - NCR53C860 chips:
+	        Assume 80 Mhz clock.
+	    - NCR53C875 chips:
+	        If clock doubler enabled, disable it and assume 40 Mhz clock.
+	        Else if (scntl3&7)=0 measure scsi clock frequency.
+	        Else trust bios setting of scntl3&7 (3=40 Mhz, 5=80Mhz).
+
+Wed Oct 9 22:00 1996 Gerard Roudier (groudier@club-internet.fr)
+	* ncr53c8xx.c - release 1.14
+	For now, just change the clock detection as follow:
+	- If clock doubler selected by BIOS, assume 40 MHz clock since 
+	  clock doubler will be disabled by chip reset.
+	- Else if NCR53C860 assume 80 MHz clock.
+	- Else trust BIOS setting if (scntl3&7 >= 3)
+	- Else assume 40 MHz clock.
+
+Sat Oct 05  17:00 1996 Gerard Roudier (groudier@club-internet.fr)
+	* ncr53c8xx.c
+	Stefan sent me a patch that improves the clock frequency detection 
+	of the driver. Stefan uses the general timer register stime1 in 
+	order to measure as accurately as possible the scsi clock.
+	Works ok with my 825, but needs still testing. So will be 
+	released later.
+
+Sun Sep 29  17:00 1996 Gerard Roudier (groudier@club-internet.fr)
+	* ncr53c8xx.c
+	Preserve dcntl/dmode/ctest3/ctest4 features bits at start-up.
+	Add the define option SCSI_NCR_TRUST_BIOS_SETTING.
+	- If this option is defined, the driver will preserve the 
+	  corresponding bits of io registers.
+	- Else, the driver will set features bits according to chip 
+	  and revision ids.
+
+Sun Sep 22  17:00 1996 Gerard Roudier (groudier@club-internet.fr)
+	* ncr53c8xx.c
+	Remove useless fields and code and so spare cpu:
+	- profile data are accumulated in jiffies ticks and converted 
+	  to milli-seconds when read through proc fs.
+	- when IOMAPPED is not defined, try only MMIO.
+	  (avoid testing a value in order to choose between IO and MMIO)
+
+Sun Sep 01  20:00 1996 Gerard Roudier (groudier@club-internet.fr)
+	* ncr53c8xx.h, ncr53c8xx.c - Version 1.13
+	Adaptation of the tagged command queuing depth control of the 
+	FreeBSD driver to Linux. Now, tagged command queueing can be 
+	disabled at run time by a "settags N 0" control command.
+	Add the following heuristic in order to manage intelligently (perhaps) 
+	QUEUE_FULL status:
+	- Each time a QUEUE FULL status is returned by a device, disable tagged 
+	  command queuing for that device.
+	- Every 100 successfully complete commands, increment the maximum 
+	  queuable commands (up to the allowed limit).
+
 Fri Aug 30  10:00 1996 Gerard Roudier (groudier@club-internet.fr)
 	* ncr53c8xx.c - Version 1.12c
 	Incorporate the changes of FreeBSD/ncr.c revision 1.76.

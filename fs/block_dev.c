@@ -121,7 +121,7 @@ long block_write(struct inode * inode, struct file * filp,
 		filp->f_pos += chars;
 		written += chars;
 		count -= chars;
-		memcpy_fromfs(p,buf,chars);
+		copy_from_user(p,buf,chars);
 		p += chars;
 		buf += chars;
 		mark_buffer_uptodate(bh, 1);
@@ -290,7 +290,7 @@ long block_read(struct inode * inode, struct file * filp,
 			left -= chars;
 			read += chars;
 			if (*bhe) {
-				memcpy_tofs(buf,offset+(*bhe)->b_data,chars);
+				copy_to_user(buf,offset+(*bhe)->b_data,chars);
 				brelse(*bhe);
 				buf += chars;
 			} else {

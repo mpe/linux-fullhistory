@@ -1123,7 +1123,7 @@ static int sdla_config(struct device *dev, struct frad_conf *conf, int get)
       if (err)
          return(err);
 
-      memcpy_fromfs(&data.config, conf, sizeof(struct frad_conf));
+      copy_from_user(&data.config, conf, sizeof(struct frad_conf));
 
       if (data.config.station & ~FRAD_STATION_NODE)
          return(-EINVAL);
@@ -1201,7 +1201,7 @@ static int sdla_config(struct device *dev, struct frad_conf *conf, int get)
       memcpy(&flp->config, &data.config, sizeof(struct frad_conf));
       data.config.flags &= FRAD_VALID_FLAGS;
       data.config.mtu -= data.config.mtu > sizeof(struct frhdr) ? sizeof(struct frhdr) : data.config.mtu;
-      memcpy_tofs(conf, &data.config, sizeof(struct frad_conf));
+      copy_to_user(conf, &data.config, sizeof(struct frad_conf));
    }
 
    return(0);
@@ -1217,7 +1217,7 @@ static int sdla_xfer(struct device *dev, struct sdla_mem *info, int read)
    if (err)
       return(err);
 
-   memcpy_fromfs(&mem, info, sizeof(mem));
+   copy_from_user(&mem, info, sizeof(mem));
    if (read)
    {
       err = verify_area(VERIFY_WRITE, mem.data, mem.len);
@@ -1228,7 +1228,7 @@ static int sdla_xfer(struct device *dev, struct sdla_mem *info, int read)
       if (!temp)
          return(-ENOMEM);
       sdla_read(dev, mem.addr, temp, mem.len);
-      memcpy_tofs(mem.data, temp, mem.len);
+      copy_to_user(mem.data, temp, mem.len);
       kfree(temp);
    }
    else
@@ -1240,7 +1240,7 @@ static int sdla_xfer(struct device *dev, struct sdla_mem *info, int read)
       temp = kmalloc(mem.len, GFP_KERNEL);
       if (!temp)
          return(-ENOMEM);
-      memcpy_fromfs(temp, mem.data, mem.len);
+      copy_from_user(temp, mem.data, mem.len);
       sdla_write(dev, mem.addr, temp, mem.len);
       kfree(temp);
    }

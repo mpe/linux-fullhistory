@@ -388,7 +388,7 @@ int vt_ioctl(struct tty_struct *tty, struct file * file,
 		i = verify_area(VERIFY_WRITE, (void *)a, sizeof(struct kbkeycode));
 		if (i)
 			return i;
-		sc = get_user(&a->scancode);
+		get_user(sc, &a->scancode);
 		kc = getkeycode(sc);
 		if (kc < 0)
 			return kc;
@@ -406,8 +406,8 @@ int vt_ioctl(struct tty_struct *tty, struct file * file,
 		i = verify_area(VERIFY_READ, (void *)a, sizeof(struct kbkeycode));
 		if (i)
 			return i;
-		sc = get_user(&a->scancode);
-		kc = get_user(&a->keycode);
+		get_user(sc, &a->scancode);
+		get_user(kc, &a->keycode);
 		return setkeycode(sc, kc);
 	}
 
@@ -420,9 +420,11 @@ int vt_ioctl(struct tty_struct *tty, struct file * file,
 		i = verify_area(VERIFY_WRITE, (void *)a, sizeof(struct kbentry));
 		if (i)
 			return i;
-		if ((i = get_user(&a->kb_index)) >= NR_KEYS)
+		get_user(i, &a->kb_index);
+		if (i >= NR_KEYS)
 			return -EINVAL;
-		if ((s = get_user(&a->kb_table)) >= MAX_NR_KEYMAPS)
+		get_user(s, &a->kb_table);
+		if (s >= MAX_NR_KEYMAPS)
 			return -EINVAL;
 		key_map = key_maps[s];
 		if (key_map) {
@@ -447,11 +449,13 @@ int vt_ioctl(struct tty_struct *tty, struct file * file,
 		i = verify_area(VERIFY_READ, (const void *)a, sizeof(struct kbentry));
 		if (i)
 			return i;
-		if ((i = get_user(&a->kb_index)) >= NR_KEYS)
+		get_user(i, &a->kb_index);
+		if (i >= NR_KEYS)
 			return -EINVAL;
-		if ((s = get_user(&a->kb_table)) >= MAX_NR_KEYMAPS)
+		get_user(s, &a->kb_table);
+		if (s >= MAX_NR_KEYMAPS)
 			return -EINVAL;
-		v = get_user(&a->kb_value);
+		get_user(v, &a->kb_value);
 		if (!i && v == K_NOSUCHMAP) {
 			/* disallocate map */
 			key_map = key_maps[s];
@@ -517,7 +521,8 @@ int vt_ioctl(struct tty_struct *tty, struct file * file,
 		i = verify_area(VERIFY_WRITE, (void *)a, sizeof(struct kbsentry));
 		if (i)
 			return i;
-		if ((i = get_user(&a->kb_func)) >= MAX_NR_FUNC || i < 0)
+		get_user(i, &a->kb_func);
+		if (i >= MAX_NR_FUNC || i < 0)
 			return -EINVAL;
 		sz = sizeof(a->kb_string) - 1; /* sz should have been
 						  a struct member */
@@ -544,7 +549,8 @@ int vt_ioctl(struct tty_struct *tty, struct file * file,
 		i = verify_area(VERIFY_READ, (void *)a, sizeof(struct kbsentry));
 		if (i)
 			return i;
-		if ((i = get_user(&a->kb_func)) >= MAX_NR_FUNC)
+		get_user(i, &a->kb_func);
+		if (i >= MAX_NR_FUNC)
 			return -EINVAL;
 		q = func_table[i];
 
@@ -558,8 +564,13 @@ int vt_ioctl(struct tty_struct *tty, struct file * file,
 		delta = (q ? -strlen(q) : 1);
 		sz = sizeof(a->kb_string); 	/* sz should have been
 						   a struct member */
-		for (p = a->kb_string; get_user(p) && sz; p++,sz--)
+		for (p = a->kb_string; sz; p++,sz--) {
+			unsigned char uc;
+			get_user(uc, p);
+			if (!uc)
+				break;
 			delta++;
+		}
 		if (!sz)
 			return -EOVERFLOW;
 		if (delta <= funcbufleft) { 	/* it fits in current buf */
@@ -600,9 +611,11 @@ int vt_ioctl(struct tty_struct *tty, struct file * file,
 		    funcbufleft = funcbufleft - delta + sz - funcbufsize;
 		    funcbufsize = sz;
 		}
-		for (p = a->kb_string, q = func_table[i]; ; p++, q++)
-			if (!(*q = get_user(p)))
+		for (p = a->kb_string, q = func_table[i]; ; p++, q++) {
+			get_user(*q, p);
+			if (!*q)
 				break;
+		}
 		return 0;
 	}
 
@@ -614,7 +627,7 @@ int vt_ioctl(struct tty_struct *tty, struct file * file,
 		if (i)
 			return i;
 		put_user(accent_table_size, &a->kb_cnt);
-		memcpy_tofs(a->kbdiacr, accent_table,
+		copy_to_user(a->kbdiacr, accent_table,
 			    accent_table_size*sizeof(struct kbdiacr));
 		return 0;
 	}
@@ -629,11 +642,11 @@ int vt_ioctl(struct tty_struct *tty, struct file * file,
 		i = verify_area(VERIFY_READ, (void *) a, sizeof(struct kbdiacrs));
 		if (i)
 			return i;
-		ct = get_user(&a->kb_cnt);
+		get_user(ct,&a->kb_cnt);
 		if (ct >= MAX_DIACR)
 			return -EINVAL;
 		accent_table_size = ct;
-		memcpy_fromfs(accent_table, a->kbdiacr, ct*sizeof(struct kbdiacr));
+		copy_from_user(accent_table, a->kbdiacr, ct*sizeof(struct kbdiacr));
 		return 0;
 	}
 
@@ -704,13 +717,13 @@ int vt_ioctl(struct tty_struct *tty, struct file * file,
 		i = verify_area(VERIFY_READ, (void *)vtmode, sizeof(struct vt_mode));
 		if (i)
 			return i;
-		mode = get_user(&vtmode->mode);
+		get_user(mode, &vtmode->mode);
 		if (mode != VT_AUTO && mode != VT_PROCESS)
 			return -EINVAL;
 		vt_cons[console]->vt_mode.mode = mode;
-		vt_cons[console]->vt_mode.waitv = get_user(&vtmode->waitv);
-		vt_cons[console]->vt_mode.relsig = get_user(&vtmode->relsig);
-		vt_cons[console]->vt_mode.acqsig = get_user(&vtmode->acqsig);
+		get_user(vt_cons[console]->vt_mode.waitv, &vtmode->waitv);
+		get_user(vt_cons[console]->vt_mode.relsig, &vtmode->relsig);
+		get_user(vt_cons[console]->vt_mode.acqsig, &vtmode->acqsig);
 		/* the frsig is ignored, so we set it to 0 */
 		vt_cons[console]->vt_mode.frsig = 0;
 		vt_cons[console]->vt_pid = current->pid;
@@ -896,8 +909,8 @@ int vt_ioctl(struct tty_struct *tty, struct file * file,
 		i = verify_area(VERIFY_READ, (void *)vtsizes, sizeof(struct vt_sizes));
 		if (i)
 			return i;
-		ll = get_user(&vtsizes->v_rows);
-		cc = get_user(&vtsizes->v_cols);
+		get_user(ll, &vtsizes->v_rows);
+		get_user(cc, &vtsizes->v_cols);
 		i = vc_resize(ll, cc);
 		return i ? i : 	kd_size_changed(ll, cc);
 	}
@@ -911,12 +924,12 @@ int vt_ioctl(struct tty_struct *tty, struct file * file,
 		i = verify_area(VERIFY_READ, (void *)vtconsize, sizeof(struct vt_consize));
 		if (i)
 			return i;
-		ll = get_user(&vtconsize->v_rows);
-		cc = get_user(&vtconsize->v_cols);
-		vlin = get_user(&vtconsize->v_vlin);
-		clin = get_user(&vtconsize->v_clin);
-		vcol = get_user(&vtconsize->v_vcol);
-		ccol = get_user(&vtconsize->v_ccol);
+		get_user(ll, &vtconsize->v_rows);
+		get_user(cc, &vtconsize->v_cols);
+		get_user(vlin, &vtconsize->v_vlin);
+		get_user(clin, &vtconsize->v_clin);
+		get_user(vcol, &vtconsize->v_vcol);
+		get_user(ccol, &vtconsize->v_ccol);
 		vlin = vlin ? vlin : video_scan_lines;
 		if ( clin )
 		  {
@@ -991,7 +1004,7 @@ int vt_ioctl(struct tty_struct *tty, struct file * file,
 		i = verify_area(VERIFY_READ, (void *)arg,
 				sizeof(struct consolefontdesc));
 		if (i) return i;
-		memcpy_fromfs(&cfdarg, (void *)arg,
+		copy_from_user(&cfdarg, (void *)arg,
 			      sizeof(struct consolefontdesc)); 
 		
 		if ( cfdarg.charcount == 256 ||
@@ -1040,12 +1053,12 @@ int vt_ioctl(struct tty_struct *tty, struct file * file,
 		i = verify_area(VERIFY_WRITE, (void *)arg,
 			sizeof(struct consolefontdesc));
 		if (i) return i;	
-		memcpy_fromfs(&cfdarg, (void *) arg,
+		copy_from_user(&cfdarg, (void *) arg,
 			      sizeof(struct consolefontdesc)); 
 		i = cfdarg.charcount;
 		cfdarg.charcount = nchar = video_mode_512ch ? 512 : 256;
 		cfdarg.charheight = video_font_height;
-		memcpy_tofs((void *) arg, &cfdarg,
+		copy_to_user((void *) arg, &cfdarg,
 			    sizeof(struct consolefontdesc)); 
 		if ( cfdarg.chardata )
 		{
@@ -1079,7 +1092,7 @@ int vt_ioctl(struct tty_struct *tty, struct file * file,
 		i = verify_area(VERIFY_READ, (void *)arg, sizeof(struct unimapinit));
 		if (i)
 		  return i;
-		memcpy_fromfs(&ui, (void *)arg, sizeof(struct unimapinit));
+		copy_from_user(&ui, (void *)arg, sizeof(struct unimapinit));
 		con_clear_unimap(&ui);
 		return 0;
 	      }
@@ -1094,8 +1107,8 @@ int vt_ioctl(struct tty_struct *tty, struct file * file,
 		i = verify_area(VERIFY_READ, (void *)arg, sizeof(struct unimapdesc));
 		if (i == 0) {
 		    ud = (struct unimapdesc *) arg;
-		    ct = get_user(&ud->entry_ct);
-		    list = get_user(&ud->entries);
+		    get_user(ct, &ud->entry_ct);
+		    get_user(list, &ud->entries);
 		    i = verify_area(VERIFY_READ, (void *) list,
 				    ct*sizeof(struct unipair));
 		}
@@ -1112,8 +1125,8 @@ int vt_ioctl(struct tty_struct *tty, struct file * file,
 		i = verify_area(VERIFY_WRITE, (void *)arg, sizeof(struct unimapdesc));
 		if (i == 0) {
 		    ud = (struct unimapdesc *) arg;
-		    ct = get_user(&ud->entry_ct);
-		    list = get_user(&ud->entries);
+		    get_user(ct, &ud->entry_ct);
+		    get_user(list, &ud->entries);
 		    if (ct)
 		      i = verify_area(VERIFY_WRITE, (void *) list,
 				      ct*sizeof(struct unipair));

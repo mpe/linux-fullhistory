@@ -169,13 +169,13 @@ static long ext2_file_write (struct inode * inode, struct file * filp,
 				break;
 			}
 		}
-		if (exception()) {
+		c -= copy_from_user (bh->b_data + offset, buf, c);
+		if (!c) {
 			brelse(bh);
-			written = -EFAULT;
+			if (!written)
+				written = -EFAULT;
 			break;
 		}
-		memcpy_fromfs (bh->b_data + offset, buf, c);
-		end_exception();
 		update_vm_cache(inode, pos, bh->b_data + offset, c);
 		pos2 += c;
 		pos += c;

@@ -2039,7 +2039,7 @@ static long qic02_tape_read(struct inode * inode, struct file * filp,
 			}
 			/* copy buffer to user-space in one go */
 			if (bytes_done>0)
-				memcpy_tofs( (void *) buf, (void *) buffaddr, bytes_done);
+				copy_to_user( (void *) buf, (void *) buffaddr, bytes_done);
 #if 1
 			/* Checks Ton's patch below */
 			if ((return_read_eof == NO) && (status_eof_detected == YES)) {
@@ -2167,7 +2167,7 @@ static long qic02_tape_write(struct inode * inode, struct file * filp,
 
 		/* copy from user to DMA buffer and initiate transfer. */
 		if (bytes_todo>0) {
-			memcpy_fromfs( (void *) buffaddr, (const void *) buf, bytes_todo);
+			copy_from_user( (void *) buffaddr, (const void *) buf, bytes_todo);
 
 /****************** similar problem with read() at FM could happen here at EOT.
  ******************/

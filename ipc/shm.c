@@ -212,7 +212,7 @@ asmlinkage int sys_shmctl (int shmid, int cmd, struct shmid_ds *buf)
 		err = verify_area (VERIFY_READ, buf, sizeof (*buf));
 		if (err)
 			return err;
-		memcpy_fromfs (&tbuf, buf, sizeof (*buf));
+		copy_from_user (&tbuf, buf, sizeof (*buf));
 	}
 
 	switch (cmd) { /* replace with proc interface ? */
@@ -229,7 +229,7 @@ asmlinkage int sys_shmctl (int shmid, int cmd, struct shmid_ds *buf)
 		err = verify_area (VERIFY_WRITE, buf, sizeof (struct shminfo));
 		if (err)
 			return err;
-		memcpy_tofs (buf, &shminfo, sizeof(struct shminfo));
+		copy_to_user (buf, &shminfo, sizeof(struct shminfo));
 		return max_shmid;
 	}
 	case SHM_INFO:
@@ -246,7 +246,7 @@ asmlinkage int sys_shmctl (int shmid, int cmd, struct shmid_ds *buf)
 		shm_info.shm_swp = shm_swp;
 		shm_info.swap_attempts = swap_attempts;
 		shm_info.swap_successes = swap_successes;
-		memcpy_tofs (buf, &shm_info, sizeof(shm_info));
+		copy_to_user (buf, &shm_info, sizeof(shm_info));
 		return max_shmid;
 	}
 	case SHM_STAT:
@@ -271,7 +271,7 @@ asmlinkage int sys_shmctl (int shmid, int cmd, struct shmid_ds *buf)
 		tbuf.shm_cpid   = shp->shm_cpid;
 		tbuf.shm_lpid   = shp->shm_lpid;
 		tbuf.shm_nattch = shp->shm_nattch;
-		memcpy_tofs (buf, &tbuf, sizeof(*buf));
+		copy_to_user (buf, &tbuf, sizeof(*buf));
 		return id;
 	}
 
@@ -316,7 +316,7 @@ asmlinkage int sys_shmctl (int shmid, int cmd, struct shmid_ds *buf)
 		tbuf.shm_cpid   = shp->shm_cpid;
 		tbuf.shm_lpid   = shp->shm_lpid;
 		tbuf.shm_nattch = shp->shm_nattch;
-		memcpy_tofs (buf, &tbuf, sizeof(*buf));
+		copy_to_user (buf, &tbuf, sizeof(*buf));
 		break;
 	case IPC_SET:
 		if (suser() || current->euid == shp->shm_perm.uid ||

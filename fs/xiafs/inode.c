@@ -178,7 +178,7 @@ void xiafs_statfs(struct super_block *sb, struct statfs *buf, int bufsiz)
 	tmp.f_files = sb->u.xiafs_sb.s_ninodes;
 	tmp.f_ffree = xiafs_count_free_inodes(sb);
 	tmp.f_namelen = _XIAFS_NAME_LEN;
-	memcpy_tofs(buf, &tmp, bufsiz);
+	copy_to_user(buf, &tmp, bufsiz);
 }
 
 static int zone_bmap(struct buffer_head * bh, int nr)

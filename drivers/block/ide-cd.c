@@ -2080,7 +2080,7 @@ int ide_cdrom_ioctl (ide_drive_t *drive, struct inode *inode,
 		stat = verify_area (VERIFY_READ, (void *)arg, sizeof (msf));
 		if (stat) return stat;
 
-		memcpy_fromfs (&msf, (void *) arg, sizeof(msf));
+		copy_from_user (&msf, (void *) arg, sizeof(msf));
 
 		lba_start = msf_to_lba (msf.cdmsf_min0, msf.cdmsf_sec0,
 					msf.cdmsf_frame0);
@@ -2102,7 +2102,7 @@ int ide_cdrom_ioctl (ide_drive_t *drive, struct inode *inode,
 		stat = verify_area (VERIFY_READ, (void *)arg, sizeof (ti));
 		if (stat) return stat;
 
-		memcpy_fromfs (&ti, (void *) arg, sizeof(ti));
+		copy_from_user (&ti, (void *) arg, sizeof(ti));
 
 		stat = cdrom_get_toc_entry (drive, ti.cdti_trk0, &first_toc,
 					    NULL);
@@ -2137,7 +2137,7 @@ int ide_cdrom_ioctl (ide_drive_t *drive, struct inode *inode,
 		tochdr.cdth_trk0 = toc->hdr.first_track;
 		tochdr.cdth_trk1 = toc->hdr.last_track;
 
-		memcpy_tofs ((void *) arg, &tochdr, sizeof (tochdr));
+		copy_to_user ((void *) arg, &tochdr, sizeof (tochdr));
 
 		return stat;
 	}
@@ -2151,7 +2151,7 @@ int ide_cdrom_ioctl (ide_drive_t *drive, struct inode *inode,
 				    sizeof (tocentry));
 		if (stat) return stat;
 
-		memcpy_fromfs (&tocentry, (void *) arg, sizeof (tocentry));
+		copy_from_user (&tocentry, (void *) arg, sizeof (tocentry));
 
 		stat = cdrom_get_toc_entry (drive, tocentry.cdte_track, &toce,
 					    NULL);
@@ -2169,7 +2169,7 @@ int ide_cdrom_ioctl (ide_drive_t *drive, struct inode *inode,
 		} else
 			tocentry.cdte_addr.lba = toce->addr.lba;
 
-		memcpy_tofs ((void *) arg, &tocentry, sizeof (tocentry));
+		copy_to_user ((void *) arg, &tocentry, sizeof (tocentry));
 
 		return stat;
 	}
@@ -2183,7 +2183,7 @@ int ide_cdrom_ioctl (ide_drive_t *drive, struct inode *inode,
 				    sizeof (subchnl));
 		if (stat) return stat;
 
-		memcpy_fromfs (&subchnl, (void *) arg, sizeof (subchnl));
+		copy_from_user (&subchnl, (void *) arg, sizeof (subchnl));
 
 		stat = cdrom_read_subchannel (drive, 1, /* current position */
 					      (char *)&scbuf, sizeof (scbuf),
@@ -2229,7 +2229,7 @@ int ide_cdrom_ioctl (ide_drive_t *drive, struct inode *inode,
 		subchnl.cdsc_trk  = scbuf.acdsc_trk;
 		subchnl.cdsc_ind  = scbuf.acdsc_ind;
 
-		memcpy_tofs ((void *) arg, &subchnl, sizeof (subchnl));
+		copy_to_user ((void *) arg, &subchnl, sizeof (subchnl));
 
 		return stat;
 	}
@@ -2242,7 +2242,7 @@ int ide_cdrom_ioctl (ide_drive_t *drive, struct inode *inode,
 		stat = verify_area (VERIFY_READ, (void *) arg,
 				    sizeof (volctrl));
 		if (stat) return stat;
-		memcpy_fromfs (&volctrl, (void *) arg, sizeof (volctrl));
+		copy_from_user (&volctrl, (void *) arg, sizeof (volctrl));
 
 		stat = cdrom_mode_sense (drive, 0x0e, 0, buffer,
 					 sizeof (buffer), NULL);
@@ -2280,7 +2280,7 @@ int ide_cdrom_ioctl (ide_drive_t *drive, struct inode *inode,
 		volctrl.channel2 = buffer[21];
 		volctrl.channel3 = buffer[23];
 
-		memcpy_tofs ((void *) arg, &volctrl, sizeof (volctrl));
+		copy_to_user ((void *) arg, &volctrl, sizeof (volctrl));
 
 		return 0;
 	}
@@ -2294,7 +2294,7 @@ int ide_cdrom_ioctl (ide_drive_t *drive, struct inode *inode,
 				    sizeof (ms_info));
 		if (stat) return stat;
 
-		memcpy_fromfs (&ms_info, (void *)arg, sizeof (ms_info));
+		copy_from_user (&ms_info, (void *)arg, sizeof (ms_info));
 
 		/* Make sure the TOC information is valid. */
 		stat = cdrom_read_toc (drive, NULL);
@@ -2314,7 +2314,7 @@ int ide_cdrom_ioctl (ide_drive_t *drive, struct inode *inode,
 
 		ms_info.xa_flag = toc->xa_flag;
 
-		memcpy_tofs ((void *)arg, &ms_info, sizeof (ms_info));
+		copy_to_user ((void *)arg, &ms_info, sizeof (ms_info));
 
 		return 0;
 	}
@@ -2335,7 +2335,7 @@ int ide_cdrom_ioctl (ide_drive_t *drive, struct inode *inode,
 		stat = verify_area (VERIFY_READ, (char *)arg, sizeof (ra));
 		if (stat) return stat;
 
-		memcpy_fromfs (&ra, (void *)arg, sizeof (ra));
+		copy_from_user (&ra, (void *)arg, sizeof (ra));
 
 		if (ra.nframes < 0 || ra.nframes > toc->capacity)
 			return -EINVAL;
@@ -2372,7 +2372,7 @@ int ide_cdrom_ioctl (ide_drive_t *drive, struct inode *inode,
 				 buf, this_nblocks * CD_FRAMESIZE_RAW, NULL);
 			if (stat) break;
 
-			memcpy_tofs (ra.buf, buf,
+			copy_to_user (ra.buf, buf,
 				     this_nblocks * CD_FRAMESIZE_RAW);
 			ra.buf += this_nblocks * CD_FRAMESIZE_RAW;
 			ra.nframes -= this_nblocks;
@@ -2401,7 +2401,7 @@ int ide_cdrom_ioctl (ide_drive_t *drive, struct inode *inode,
 		stat = verify_area (VERIFY_WRITE, (char *)arg, blocksize);
 		if (stat) return stat;
 
-		memcpy_fromfs (&msf, (void *)arg, sizeof (msf));
+		copy_from_user (&msf, (void *)arg, sizeof (msf));
 
 		lba = msf_to_lba (msf.cdmsf_min0,
 				  msf.cdmsf_sec0,
@@ -2423,7 +2423,7 @@ int ide_cdrom_ioctl (ide_drive_t *drive, struct inode *inode,
 		stat = cdrom_read_block (drive, format, lba, 1, buf, blocksize,
 					 NULL);
 		if (stat == 0)
-			memcpy_tofs ((char *)arg, buf, blocksize);
+			copy_to_user ((char *)arg, buf, blocksize);
 
 		kfree (buf);
 		return stat;
@@ -2448,7 +2448,7 @@ int ide_cdrom_ioctl (ide_drive_t *drive, struct inode *inode,
 		mcn.medium_catalog_number[sizeof (mcn.medium_catalog_number)-1]
 			= '\0';
 
-		memcpy_tofs ((void *) arg, &mcn, sizeof (mcn));
+		copy_to_user ((void *) arg, &mcn, sizeof (mcn));
 
 		return stat;
 	}
@@ -2503,12 +2503,12 @@ int ide_cdrom_ioctl (ide_drive_t *drive, struct inode *inode,
 
 		stat = verify_area (VERIFY_READ, (void *) arg, sizeof (pc.c));
 		if (stat) return stat;
-		memcpy_fromfs (&pc.c, (void *) arg, sizeof (pc.c));
+		copy_from_user (&pc.c, (void *) arg, sizeof (pc.c));
 		arg += sizeof (pc.c);
 
 		stat = verify_area (VERIFY_READ, (void *) arg, sizeof (len));
 		if (stat) return stat;
-		memcpy_fromfs (&len, (void *) arg , sizeof (len));
+		copy_from_user (&len, (void *) arg , sizeof (len));
 		arg += sizeof (len);
 
 		if (len > 0) {
@@ -2529,7 +2529,7 @@ int ide_cdrom_ioctl (ide_drive_t *drive, struct inode *inode,
 			stat = cdrom_queue_packet_command (drive, &pc);
 
 			if (len > 0)
-				memcpy_tofs ((void *)arg, buf, len);
+				copy_to_user ((void *)arg, buf, len);
 		}
 
 		return stat;

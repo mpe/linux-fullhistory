@@ -127,7 +127,6 @@ CONFIG_EL3=y
 # Filesystems
 #
 # CONFIG_QUOTA is not set
-# CONFIG_LOCK_MANDATORY is not set
 CONFIG_MINIX_FS=y
 # CONFIG_EXT_FS is not set
 CONFIG_EXT2_FS=y

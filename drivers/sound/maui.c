@@ -315,7 +315,7 @@ maui_load_patch (int dev, int format, const char *addr,
    * been transferred already.
    */
 
-  memcpy_fromfs (&((char *) &header)[offs], &(addr)[offs], hdr_size - offs);
+  copy_from_user (&((char *) &header)[offs], &(addr)[offs], hdr_size - offs);
 
   if (count < header.len)
     {

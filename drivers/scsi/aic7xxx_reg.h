@@ -20,7 +20,7 @@
  *
  * This version corresponds to version 1.12 of FreeBSDs aic7xxx_reg.h
  *
- * $Id: aic7xxx_reg.h,v 3.1 1996/07/23 03:37:26 deang Exp $
+ * $Id: aic7xxx_reg.h,v 4.0 1996/10/13 08:23:42 deang Exp $
  *-M*************************************************************************/
 
 /*
@@ -558,11 +558,7 @@
 #define	SCB_NEXT		0x0ba
 #define	SCB_PREV		0x0bb
 
-#ifdef linux
-#define	SG_SIZEOF		0x0c		/* sizeof(struct scatterlist) */
-#else
 #define	SG_SIZEOF		0x08		/* sizeof(struct ahc_dma) */
-#endif
 
 /* --------------------- AHA-2840-only definitions -------------------- */
 

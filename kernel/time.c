@@ -48,10 +48,8 @@ asmlinkage int sys_time(int * tloc)
 
 	i = CURRENT_TIME;
 	if (tloc) {
-		int error = verify_area(VERIFY_WRITE, tloc, sizeof(*tloc));
-		if (error)
-			return error;
-		put_user(i,tloc);
+		if (put_user(i,tloc))
+			i = -EFAULT;
 	}
 	return i;
 }
@@ -64,14 +62,12 @@ asmlinkage int sys_time(int * tloc)
  */
 asmlinkage int sys_stime(int * tptr)
 {
-	int error, value;
+	int value;
 
 	if (!suser())
 		return -EPERM;
-	error = verify_area(VERIFY_READ, tptr, sizeof(*tptr));
-	if (error)
-		return error;
-	value = get_user(tptr);
+	if (get_user(value, tptr))
+		return -EFAULT;
 	cli();
 	xtime.tv_sec = value;
 	xtime.tv_usec = 0;
@@ -86,21 +82,15 @@ asmlinkage int sys_stime(int * tptr)
 
 asmlinkage int sys_gettimeofday(struct timeval *tv, struct timezone *tz)
 {
-	int error;
-
 	if (tv) {
 		struct timeval ktv;
-		error = verify_area(VERIFY_WRITE, tv, sizeof *tv);
-		if (error)
-			return error;
 		do_gettimeofday(&ktv);
-		memcpy_tofs(tv, &ktv, sizeof(ktv));
+		if (copy_to_user(tv, &ktv, sizeof(ktv)))
+			return -EFAULT;
 	}
 	if (tz) {
-		error = verify_area(VERIFY_WRITE, tz, sizeof *tz);
-		if (error)
-			return error;
-		memcpy_tofs(tz, &sys_tz, sizeof(sys_tz));
+		if (copy_to_user(tz, &sys_tz, sizeof(sys_tz)))
+			return -EFAULT;
 	}
 	return 0;
 }
@@ -147,18 +137,12 @@ asmlinkage int sys_settimeofday(struct timeval *tv, struct timezone *tz)
 	if (!suser())
 		return -EPERM;
 	if (tv) {
-		int error = verify_area(VERIFY_READ, tv, sizeof(*tv));
-		if (error)
-			return error;
-		memcpy_fromfs(&new_tv, tv, sizeof(*tv));
+		if (copy_from_user(&new_tv, tv, sizeof(*tv)))
+			return -EFAULT;
 	}
 	if (tz) {
-		int error = verify_area(VERIFY_READ, tz, sizeof(*tz));
-		if (error)
-			return error;
-		memcpy_fromfs(&new_tz, tz, sizeof(*tz));
-	}
-	if (tz) {
+		if (copy_from_user(&new_tz, tz, sizeof(*tz)))
+			return -EFAULT;
 		sys_tz = new_tz;
 		if (firsttime) {
 			firsttime = 0;
@@ -208,7 +192,7 @@ asmlinkage int sys_adjtimex(struct timex *txc_p)
 	 * structure. But bear in mind that the structures
 	 * may change
 	 */
-	memcpy_fromfs(&txc, txc_p, sizeof(struct timex));
+	copy_from_user(&txc, txc_p, sizeof(struct timex));
 
 	/* In order to modify anything, you gotta be super-user! */
 	if (txc.modes && !suser())
@@ -343,6 +327,6 @@ asmlinkage int sys_adjtimex(struct timex *txc_p)
 
 	sti();
 
-	memcpy_tofs(txc_p, &txc, sizeof(struct timex));
+	copy_to_user(txc_p, &txc, sizeof(struct timex));
 	return time_state;
 }

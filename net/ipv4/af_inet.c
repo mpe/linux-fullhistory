@@ -1246,7 +1246,7 @@ static int inet_ioctl(struct socket *sock, unsigned int cmd, unsigned long arg)
 			err=verify_area(VERIFY_READ,(int *)arg,sizeof(long));
 			if(err)
 				return err;
-			pid = get_user((int *) arg);
+			get_user(pid, (int *) arg);
 			/* see inet_fcntl */
 			if (current->pid != pid && current->pgrp != -pid && !suser())
 				return -EPERM;
@@ -1254,10 +1254,10 @@ static int inet_ioctl(struct socket *sock, unsigned int cmd, unsigned long arg)
 			return(0);
 		case FIOGETOWN:
 		case SIOCGPGRP:
-			err=verify_area(VERIFY_WRITE,(void *) arg, sizeof(long));
+			err=verify_area(VERIFY_WRITE,(void *) arg, sizeof(int));
 			if(err)
 				return err;
-			put_fs_long(sk->proc,(int *)arg);
+			put_user(sk->proc, (int *)arg);
 			return(0);			
 		case SIOCGSTAMP:
 			if(sk->stamp.tv_sec==0)
@@ -1265,7 +1265,7 @@ static int inet_ioctl(struct socket *sock, unsigned int cmd, unsigned long arg)
 			err=verify_area(VERIFY_WRITE,(void *)arg,sizeof(struct timeval));
 			if(err)
 				return err;
-			memcpy_tofs((void *)arg,&sk->stamp,sizeof(struct timeval));
+			copy_to_user((void *)arg,&sk->stamp,sizeof(struct timeval));
 			return 0;
 		case SIOCADDRT:
 		case SIOCDELRT:

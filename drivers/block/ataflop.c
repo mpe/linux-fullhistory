@@ -1532,7 +1532,7 @@ static int fd_ioctl(struct inode *inode, struct file *filp,
 #define IOCTL_MODE_BIT 8
 #define OPEN_WRITE_BIT 16
 #define IOCTL_ALLOWED (filp && (filp->f_mode & IOCTL_MODE_BIT))
-#define COPYIN(x) (memcpy_fromfs( &(x), (void *) param, sizeof(x)))
+#define COPYIN(x) (copy_from_user( &(x), (void *) param, sizeof(x)))
 
 	int drive, type, error;
 	kdev_t device;
@@ -1573,7 +1573,7 @@ static int fd_ioctl(struct inode *inode, struct file *filp,
 		getprm.head = 2;
 		getprm.track = dtp->blocks/dtp->spt/2;
 		getprm.stretch = dtp->stretch;
-		memcpy_tofs((void *)param, &getprm, sizeof(struct floppy_struct));
+		copy_to_user((void *)param, &getprm, sizeof(struct floppy_struct));
 		return 0;
 	}
 	if (!IOCTL_ALLOWED)

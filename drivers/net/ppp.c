@@ -2124,7 +2124,7 @@ ppp_tty_write (struct tty_struct *tty, struct file *file, const __u8 * data,
 		return status;
 	}
 
-	memcpy_fromfs (new_data, data, count);
+	copy_from_user (new_data, data, count);
 /*
  * Change the LQR frame
  */
@@ -2155,7 +2155,7 @@ ppp_set_compression (struct ppp *ppp, struct ppp_option_data *odp)
  */
 	error = verify_area (VERIFY_READ, odp, sizeof (data));
 	if (error == 0) {
-		memcpy_fromfs (&data, odp, sizeof (data));
+		copy_from_user (&data, odp, sizeof (data));
 		nb  = data.length;
 		ptr = data.ptr;
 		if ((__u32) nb >= (__u32)CCP_MAX_OPTION_LENGTH)
@@ -2167,7 +2167,7 @@ ppp_set_compression (struct ppp *ppp, struct ppp_option_data *odp)
 	if (error != 0)
 		return error;
 
-	memcpy_fromfs (ccp_option, ptr, nb);
+	copy_from_user (ccp_option, ptr, nb);
 
 	if (ccp_option[1] < 2)	/* preliminary check on the length byte */
 		return (-EINVAL);
@@ -2408,7 +2408,7 @@ ppp_tty_ioctl (struct tty_struct *tty, struct file * file,
 			/* change absolute times to relative times. */
 			cur_ddinfo.xmit_idle = (cur_jiffies - ppp->ddinfo.xmit_idle) / HZ;
 			cur_ddinfo.recv_idle = (cur_jiffies - ppp->ddinfo.recv_idle) / HZ;
-			memcpy_tofs ((void *) param3, &cur_ddinfo,
+			copy_to_user ((void *) param3, &cur_ddinfo,
 				     sizeof (cur_ddinfo));
 			if (ppp->flags & SC_DEBUG)
 				printk (KERN_INFO
@@ -2423,7 +2423,7 @@ ppp_tty_ioctl (struct tty_struct *tty, struct file * file,
 				     (void *) param3,
 				     sizeof (ppp->xmit_async_map));
 		if (error == 0) {
-			memcpy_tofs ((void *) param3,
+			copy_to_user ((void *) param3,
 				     ppp->xmit_async_map,
 				     sizeof (ppp->xmit_async_map));
 
@@ -2442,7 +2442,7 @@ ppp_tty_ioctl (struct tty_struct *tty, struct file * file,
 		if (error == 0) {
 			__u32 temp_tbl[8];
 
-			memcpy_fromfs (temp_tbl, (void *) param3,
+			copy_from_user (temp_tbl, (void *) param3,
 				       sizeof (ppp->xmit_async_map));
 			temp_tbl[1]  =	0x00000000;
 			temp_tbl[2] &= ~0x40000000;
@@ -2498,7 +2498,7 @@ ppp_tty_ioctl (struct tty_struct *tty, struct file * file,
 				     sizeof (struct npioctl));
 		if (error == 0) {
 			struct npioctl npi;
-			memcpy_fromfs (&npi,
+			copy_from_user (&npi,
 				       (void *) param3,
 				       sizeof (npi));
 
@@ -2521,7 +2521,7 @@ ppp_tty_ioctl (struct tty_struct *tty, struct file * file,
 				if (error != 0)
 					break;
 
-				memcpy_tofs ((void *) param3,
+				copy_to_user ((void *) param3,
 					     &npi,
 					     sizeof (npi));
 				break;
@@ -2721,7 +2721,7 @@ ppp_dev_ioctl_version (struct ppp *ppp, struct ifreq *ifr)
  * Move the version data
  */
 	if (error == 0)
-		memcpy_tofs (result, szVersion, len);
+		copy_to_user (result, szVersion, len);
 
 	return error;
 }
@@ -2763,7 +2763,7 @@ ppp_dev_ioctl_stats (struct ppp *ppp, struct ifreq *ifr, struct device *dev)
 	}
 
 	if (error == 0)
-		memcpy_tofs (result, &temp, sizeof (temp));
+		copy_to_user (result, &temp, sizeof (temp));
 	return error;
 }
 
@@ -2800,7 +2800,7 @@ ppp_dev_ioctl_comp_stats (struct ppp *ppp, struct ifreq *ifr, struct device *dev
  * Move the data to the caller's buffer
  */
 	if (error == 0)
-		memcpy_tofs (result, &temp, sizeof (temp));
+		copy_to_user (result, &temp, sizeof (temp));
 	return error;
 }
 

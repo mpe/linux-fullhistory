@@ -135,7 +135,8 @@ asmlinkage void do_entIF(unsigned long type, unsigned long a1,
 			unsigned int opcode;
 
 			/* get opcode of faulting instruction: */
-			opcode = get_user((__u32*)(regs.pc - 4)) >> 26;
+			get_user(opcode, (__u32*)(regs.pc - 4));
+			opcode >>= 26;
 			if (opcode == 0x16) {
 				/*
 				 * It's a FLTI instruction, emulate it

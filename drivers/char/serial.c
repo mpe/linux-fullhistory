@@ -216,7 +216,7 @@ static struct termios *serial_termios_locked[NR_PORTS];
 
 /*
  * tmp_buf is used as a temporary buffer by serial_write.  We need to
- * lock it in case the memcpy_fromfs blocks while swapping in a page,
+ * lock it in case the copy_from_user blocks while swapping in a page,
  * and some other program tries to do a serial write at the same time.
  * Since the lock will only come under contention when the system is
  * swapping and available memory is low, it makes sense to share one
@@ -1376,7 +1376,7 @@ static int rs_write(struct tty_struct * tty, int from_user,
 			break;
 
 		if (from_user) {
-			memcpy_fromfs(tmp_buf, buf, c);
+			copy_from_user(tmp_buf, buf, c);
 			c = MIN(c, MIN(SERIAL_XMIT_SIZE - info->xmit_cnt - 1,
 				       SERIAL_XMIT_SIZE - info->xmit_head));
 			memcpy(info->xmit_buf + info->xmit_head, tmp_buf, c);
@@ -1518,7 +1518,7 @@ static int get_serial_info(struct async_struct * info,
 	tmp.closing_wait = info->closing_wait;
 	tmp.custom_divisor = info->custom_divisor;
 	tmp.hub6 = info->hub6;
-	memcpy_tofs(retinfo,&tmp,sizeof(*retinfo));
+	copy_to_user(retinfo,&tmp,sizeof(*retinfo));
 	return 0;
 }
 
@@ -1532,7 +1532,7 @@ static int set_serial_info(struct async_struct * info,
 
 	if (!new_info)
 		return -EFAULT;
-	memcpy_fromfs(&new_serial,new_info,sizeof(new_serial));
+	copy_from_user(&new_serial,new_info,sizeof(new_serial));
 	old_info = *info;
 
 	change_irq = new_serial.irq != info->irq;
@@ -1666,7 +1666,7 @@ static int set_modem_info(struct async_struct * info, unsigned int cmd,
 	error = verify_area(VERIFY_READ, value, sizeof(int));
 	if (error)
 		return error;
-	arg = get_user(value);
+	get_user(arg, value);
 	switch (cmd) {
 	case TIOCMBIS: 
 		if (arg & TIOCM_RTS) {
@@ -1817,7 +1817,7 @@ static int get_multiport_struct(struct async_struct * info,
 
 	ret.irq = info->irq;
 
-	memcpy_tofs(retinfo,&ret,sizeof(*retinfo));
+	copy_to_user(retinfo,&ret,sizeof(*retinfo));
 	return 0;
 	
 }
@@ -1835,7 +1835,7 @@ static int set_multiport_struct(struct async_struct * info,
 		return -EPERM;
 	if (!in_multi)
 		return -EFAULT;
-	memcpy_fromfs(&new_multi, in_multi,
+	copy_from_user(&new_multi, in_multi,
 		      sizeof(struct serial_multiport_struct));
 
 	if (new_multi.irq != info->irq || info->irq == 0 ||
@@ -1940,14 +1940,13 @@ static int rs_ioctl(struct tty_struct *tty, struct file * file,
 			error = verify_area(VERIFY_WRITE, (void *) arg,sizeof(long));
 			if (error)
 				return error;
-			put_fs_long(C_CLOCAL(tty) ? 1 : 0,
-				    (unsigned long *) arg);
+			put_user(C_CLOCAL(tty) ? 1 : 0, (int *) arg);
 			return 0;
 		case TIOCSSOFTCAR:
 			error = verify_area(VERIFY_READ, (void *) arg,sizeof(long));
 			if (error)
 				return error;
-			arg = get_fs_long((unsigned long *) arg);
+			get_user(arg, (unsigned int *) arg);
 			tty->termios->c_cflag =
 				((tty->termios->c_cflag & ~CLOCAL) |
 				 (arg ? CLOCAL : 0));
@@ -1984,7 +1983,7 @@ static int rs_ioctl(struct tty_struct *tty, struct file * file,
 					    sizeof(int));
 			if (error)
 				return error;
-			put_fs_long(rs_wild_int_mask, (unsigned long *) arg);
+			put_user(rs_wild_int_mask, (unsigned int *) arg);
 			return 0;
 
 		case TIOCSERGETLSR: /* Get line status register */
@@ -2001,7 +2000,7 @@ static int rs_ioctl(struct tty_struct *tty, struct file * file,
 			error = verify_area(VERIFY_READ, (void *) arg,sizeof(long));
 			if (error)
 				return error;
-			rs_wild_int_mask = get_fs_long((unsigned long *) arg);
+			get_user(rs_wild_int_mask, (unsigned int *) arg);
 			if (rs_wild_int_mask < 0)
 				rs_wild_int_mask = check_wild_interrupts(0);
 			return 0;
@@ -2011,7 +2010,7 @@ static int rs_ioctl(struct tty_struct *tty, struct file * file,
 						sizeof(struct async_struct));
 			if (error)
 				return error;
-			memcpy_tofs((struct async_struct *) arg,
+			copy_to_user((struct async_struct *) arg,
 				    info, sizeof(struct async_struct));
 			return 0;
 			

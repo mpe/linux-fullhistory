@@ -1605,7 +1605,7 @@ static int pi_ioctl(struct device *dev, struct ifreq *ifr, int cmd)
     if(cmd!=SIOCDEVPRIVATE)
     	return -EINVAL;
 
-    memcpy_fromfs(&rq, ifr->ifr_data, sizeof(struct pi_req));
+    copy_from_user(&rq, ifr->ifr_data, sizeof(struct pi_req));
 
     switch (rq.cmd) {
     case SIOCSPIPARAM:
@@ -1661,7 +1661,7 @@ static int pi_ioctl(struct device *dev, struct ifreq *ifr, int cmd)
 	rq.clockmode = lp->clockmode;
 	rq.dmachan = lp->dmachan;
 	rq.irq = dev->irq;
-	memcpy_tofs(ifr->ifr_data, &rq, sizeof(struct pi_req));
+	copy_to_user(ifr->ifr_data, &rq, sizeof(struct pi_req));
 	ret = 0;
 	break;
 

@@ -109,7 +109,7 @@ static int nfs_readlink(struct inode *inode, char *buffer, int buflen)
 		&res, &len, buflen);
 	iput(inode);
 	if (! error) {
-		memcpy_tofs(buffer, res, len);
+		copy_to_user(buffer, res, len);
 		put_user('\0', buffer + len);
 		error = len;
 	}

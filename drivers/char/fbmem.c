@@ -72,7 +72,7 @@ fb_read(struct inode *inode, struct file *file, char *buf, int count)
 	fb->fb_get_fix(&fix,PROC_CONSOLE());
 	base_addr=(char *) fix.smem_start;
 	copy_size=(count + p <= fix.smem_len ? count : fix.smem_len - p);
-	memcpy_tofs(buf, base_addr+p, copy_size);
+	copy_to_user(buf, base_addr+p, copy_size);
 	file->f_pos += copy_size;
 	return copy_size;
 }
@@ -93,7 +93,7 @@ fb_write(struct inode *inode, struct file *file, const char *buf, int count)
 	fb->fb_get_fix(&fix, PROC_CONSOLE());
 	base_addr=(char *) fix.smem_start;
 	copy_size=(count + p <= fix.smem_len ? count : fix.smem_len - p);
-	memcpy_fromfs(base_addr+p, buf, copy_size); 
+	copy_from_user(base_addr+p, buf, copy_size); 
 	file->f_pos += copy_size;
 	return copy_size;
 }
@@ -123,15 +123,15 @@ fb_ioctl(struct inode *inode, struct file *file, unsigned int cmd,
 			i=fb->fb_get_var(&var, PROC_CONSOLE());
 		else
 			var=registered_fb_var[fbidx][vidx-1];
-		memcpy_tofs((void *) arg, &var, sizeof(var));
+		copy_to_user((void *) arg, &var, sizeof(var));
 		return i;
 	case FBIOPUT_VSCREENINFO:
 		i = verify_area(VERIFY_WRITE, (void *) arg, 
 				sizeof(struct fb_var_screeninfo));
 		if (i) return i;
-		memcpy_fromfs(&var, (void *) arg, sizeof(var));
+		copy_from_user(&var, (void *) arg, sizeof(var));
 		i=fb->fb_set_var(&var, PROC_CONSOLE());
-		memcpy_tofs((void *) arg, &var, sizeof(var));
+		copy_to_user((void *) arg, &var, sizeof(var));
 		fbidx=GET_FB_IDX(inode->i_rdev);
 		vidx=GET_FB_VAR_IDX(inode->i_rdev);
 		if (! i && vidx)
@@ -142,13 +142,13 @@ fb_ioctl(struct inode *inode, struct file *file, unsigned int cmd,
 				sizeof(struct fb_fix_screeninfo));
 		if (i)	return i;
 		i=fb->fb_get_fix(&fix, PROC_CONSOLE());
-		memcpy_tofs((void *) arg, &fix, sizeof(fix));
+		copy_to_user((void *) arg, &fix, sizeof(fix));
 		return i;
 	case FBIOPUTCMAP:
 		i = verify_area(VERIFY_READ, (void *) arg,
 				sizeof(struct fb_cmap));
 		if (i) return i;
-		memcpy_fromfs(&cmap, (void *) arg, sizeof(cmap));
+		copy_from_user(&cmap, (void *) arg, sizeof(cmap));
 		i = verify_area(VERIFY_READ, (void *) cmap.red, 
 				cmap.len * sizeof(unsigned short));
 		if (i) return i;
@@ -168,7 +168,7 @@ fb_ioctl(struct inode *inode, struct file *file, unsigned int cmd,
 		i = verify_area(VERIFY_READ, (void *) arg,
 				sizeof(struct fb_cmap));
 		if (i)	return i;
-		memcpy_fromfs(&cmap, (void *) arg, sizeof(cmap));
+		copy_from_user(&cmap, (void *) arg, sizeof(cmap));
 		i = verify_area(VERIFY_WRITE, (void *) cmap.red, 
 				cmap.len * sizeof(unsigned short));
 		if (i) return i;
@@ -188,9 +188,9 @@ fb_ioctl(struct inode *inode, struct file *file, unsigned int cmd,
 		i = verify_area(VERIFY_WRITE, (void *) arg, 
 				sizeof(struct fb_var_screeninfo));
 		if (i) return i;
-		memcpy_fromfs(&var, (void *) arg, sizeof(var));
+		copy_from_user(&var, (void *) arg, sizeof(var));
 		i=fb->fb_pan_display(&var, PROC_CONSOLE());
-		memcpy_tofs((void *) arg, &var, sizeof(var));
+		copy_to_user((void *) arg, &var, sizeof(var));
 		fbidx=GET_FB_IDX(inode->i_rdev);
 		vidx=GET_FB_VAR_IDX(inode->i_rdev);
 		if (! i && vidx)

@@ -1222,7 +1222,7 @@ static int setscheduler(pid_t pid, int policy,
 	error = verify_area(VERIFY_READ, param, sizeof(struct sched_param));
 	if (error)
 		return error;
-	memcpy_fromfs(&lp, param, sizeof(struct sched_param));
+	copy_from_user(&lp, param, sizeof(struct sched_param));
 
 	p = find_process_by_pid(pid);
 	if (!p)
@@ -1303,7 +1303,7 @@ asmlinkage int sys_sched_getparam(pid_t pid, struct sched_param *param)
 		return -ESRCH;
 
 	lp.sched_priority = p->rt_priority;
-	memcpy_tofs(param, &lp, sizeof(struct sched_param));
+	copy_to_user(param, &lp, sizeof(struct sched_param));
 
 	return 0;
 }
@@ -1354,7 +1354,7 @@ asmlinkage int sys_sched_rr_get_interval(pid_t pid, struct timespec *interval)
 	t.tv_sec = 0;
 	t.tv_nsec = 0;   /* <-- Linus, please fill correct value in here */
 	return -ENOSYS;  /* and then delete this line. Thanks!           */
-	memcpy_tofs(interval, &t, sizeof(struct timespec));
+	copy_to_user(interval, &t, sizeof(struct timespec));
 
 	return 0;
 }
@@ -1391,7 +1391,7 @@ asmlinkage int sys_nanosleep(struct timespec *rqtp, struct timespec *rmtp)
 	error = verify_area(VERIFY_READ, rqtp, sizeof(struct timespec));
 	if (error)
 		return error;
-	memcpy_fromfs(&t, rqtp, sizeof(struct timespec));
+	copy_from_user(&t, rqtp, sizeof(struct timespec));
 	if (rmtp) {
 		error = verify_area(VERIFY_WRITE, rmtp,
 				    sizeof(struct timespec));
@@ -1421,7 +1421,7 @@ asmlinkage int sys_nanosleep(struct timespec *rqtp, struct timespec *rmtp)
 		if (rmtp) {
 			jiffiestotimespec(expire - jiffies -
 					  (expire > jiffies + 1), &t);
-			memcpy_tofs(rmtp, &t, sizeof(struct timespec));
+			copy_to_user(rmtp, &t, sizeof(struct timespec));
 		}
 		return -EINTR;
 	}

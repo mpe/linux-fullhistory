@@ -573,6 +573,8 @@ long generic_file_read(struct inode * inode, struct file * filp,
 	unsigned long pos, ppos, page_cache;
 	int reada_ok;
 
+	if (!access_ok(VERIFY_WRITE, buf,count))
+		return -EFAULT;
 	error = 0;
 	read = 0;
 	page_cache = 0;
@@ -658,17 +660,17 @@ success:
 	{
 		unsigned long offset, nr;
 
-		if (exception())
-			goto page_read_exception;
 		offset = pos & ~PAGE_MASK;
 		nr = PAGE_SIZE - offset;
 		if (nr > count)
 			nr = count;
 		if (nr > inode->i_size - pos)
 			nr = inode->i_size - pos;
-		memcpy_tofs(buf, (void *) (page_address(page) + offset), nr);
-		end_exception();
+		nr -= copy_to_user(buf, (void *) (page_address(page) + offset), nr);
 		release_page(page);
+		error = -EFAULT;
+		if (!nr)
+			break;
 		buf += nr;
 		pos += nr;
 		read += nr;
@@ -741,23 +743,18 @@ page_read_error:
 		}
 		release_page(page);
 		break;
-
-page_read_exception:
-		error = -EFAULT;
-		release_page(page);
-		break;
 	}
 
 	filp->f_pos = pos;
 	filp->f_reada = 1;
 	if (page_cache)
 		free_page(page_cache);
+	if (!read)
+		return error;
 	if (!IS_RDONLY(inode)) {
 		inode->i_atime = CURRENT_TIME;
 		inode->i_dirt = 1;
 	}
-	if (!read)
-		read = error;
 	return read;
 }
 
@@ -826,7 +823,7 @@ success:
 		if (!new_page)
 			goto failure;
 	}
-	memcpy((void *) new_page, (void *) old_page, PAGE_SIZE);
+	copy_page(new_page, old_page);
 	flush_page_to_ram(new_page);
 	release_page(page);
 	return new_page;

@@ -4,6 +4,10 @@
  *
  *****************************************************************/
 
+#define ELP_DMA       6
+#define ELP_RX_PCBS   4
+#define ELP_MAX_CARDS 4
+
 /*
  * I/O register offsets
  */
@@ -243,3 +247,46 @@ typedef struct {
 #define NO_LOOPBACK	0x00
 #define INT_LOOPBACK	0x08
 #define EXT_LOOPBACK	0x10
+
+/*****************************************************************
+ *
+ *  structure to hold context information for adapter
+ *
+ *****************************************************************/
+
+#define DMA_BUFFER_SIZE  1600
+#define BACKLOG_SIZE      4
+
+typedef struct {
+	volatile short got[NUM_TRANSMIT_CMDS];	/* flags for
+						   command completion */
+	pcb_struct tx_pcb;	/* PCB for foreground sending */
+	pcb_struct rx_pcb;	/* PCB for foreground receiving */
+	pcb_struct itx_pcb;	/* PCB for background sending */
+	pcb_struct irx_pcb;	/* PCB for background receiving */
+	struct enet_statistics stats;
+
+	void *dma_buffer;
+
+	struct {
+		unsigned int length[BACKLOG_SIZE];
+		unsigned int in;
+		unsigned int out;
+	} rx_backlog;
+
+	struct {
+		unsigned int direction;
+		unsigned int length;
+		struct sk_buff *skb;
+	        void *target;
+		long int start_time;
+	} current_dma;
+
+	/* flags */
+	unsigned long send_pcb_semaphore;
+	unsigned int dmaing;
+	unsigned long busy;
+
+	unsigned int rx_active;  /* number of receive PCBs */
+        volatile unsigned char hcr_val;  /* what we think the HCR contains */
+} elp_device;

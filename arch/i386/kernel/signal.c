@@ -57,7 +57,7 @@ static inline void restore_i387_hard(struct _fpstate *buf)
 #endif
 	current->used_math = 1;
 	current->flags &= ~PF_USEDFPU;
-	memcpy_fromfs(&current->tss.i387.hard, buf, sizeof(*buf));
+	copy_from_user(&current->tss.i387.hard, buf, sizeof(*buf));
 }
 
 static void restore_i387(struct _fpstate *buf)
@@ -142,7 +142,7 @@ static inline struct _fpstate * save_i387_hard(struct _fpstate * buf)
 	}
 #endif
 	current->tss.i387.hard.status = current->tss.i387.hard.swd;
-	memcpy_tofs(buf, &current->tss.i387.hard, sizeof(*buf));
+	copy_to_user(buf, &current->tss.i387.hard, sizeof(*buf));
 	current->used_math = 0;
 	return buf;
 }

@@ -3866,7 +3866,7 @@ de4x5_ioctl(struct device *dev, struct ifreq *rq, int cmd)
 	for (i=0; i<ETH_ALEN; i++) {
 	    tmp.addr[i] = dev->dev_addr[i];
 	}
-	memcpy_tofs(ioc->data, tmp.addr, ioc->len);
+	copy_to_user(ioc->data, tmp.addr, ioc->len);
 	
 	break;
       case DE4X5_SET_HWADDR:           /* Set the hardware address */
@@ -3877,7 +3877,7 @@ de4x5_ioctl(struct device *dev, struct ifreq *rq, int cmd)
 	if (!suser())
 	  break;
 	status = 0;
-	memcpy_fromfs(tmp.addr, ioc->data, ETH_ALEN);
+	copy_from_user(tmp.addr, ioc->data, ETH_ALEN);
 	for (i=0; i<ETH_ALEN; i++) {
 	    dev->dev_addr[i] = tmp.addr[i];
 	}
@@ -3919,7 +3919,7 @@ de4x5_ioctl(struct device *dev, struct ifreq *rq, int cmd)
 	ioc->len = (HASH_TABLE_LEN >> 3);
 	status = verify_area(VERIFY_WRITE, ioc->data, ioc->len);
 	if (!status) {
-	    memcpy_tofs(ioc->data, lp->setup_frame, ioc->len); 
+	    copy_to_user(ioc->data, lp->setup_frame, ioc->len); 
 	}
 	
 	break;
@@ -3928,7 +3928,7 @@ de4x5_ioctl(struct device *dev, struct ifreq *rq, int cmd)
 	    /******* FIX ME! ********/
 	    if (ioc->len != HASH_TABLE_LEN) {         /* MCA changes */
 		if (!(status = verify_area(VERIFY_READ, (void *)ioc->data, ETH_ALEN * ioc->len))) {
-		    memcpy_fromfs(tmp.addr, ioc->data, ETH_ALEN * ioc->len);
+		    copy_from_user(tmp.addr, ioc->data, ETH_ALEN * ioc->len);
 		    set_multicast_list(dev);
 		}
 	    } else {
@@ -3965,7 +3965,7 @@ de4x5_ioctl(struct device *dev, struct ifreq *rq, int cmd)
 	  break;
 	
 	cli();
-	memcpy_tofs(ioc->data, &lp->pktStats, ioc->len); 
+	copy_to_user(ioc->data, &lp->pktStats, ioc->len); 
 	sti();
 	
 	break;
@@ -3982,14 +3982,14 @@ de4x5_ioctl(struct device *dev, struct ifreq *rq, int cmd)
       case DE4X5_GET_OMR:              /* Get the OMR Register contents */
 	tmp.addr[0] = inl(DE4X5_OMR);
 	if (!(status = verify_area(VERIFY_WRITE, (void *)ioc->data, 1))) {
-	    memcpy_tofs(ioc->data, tmp.addr, 1);
+	    copy_to_user(ioc->data, tmp.addr, 1);
 	}
 	
 	break;
       case DE4X5_SET_OMR:              /* Set the OMR Register contents */
 	if (suser()) {
 	    if (!(status = verify_area(VERIFY_READ, (void *)ioc->data, 1))) {
-		memcpy_fromfs(tmp.addr, ioc->data, 1);
+		copy_from_user(tmp.addr, ioc->data, 1);
 		outl(tmp.addr[0], DE4X5_OMR);
 	    }
 	} else {
@@ -4009,7 +4009,7 @@ de4x5_ioctl(struct device *dev, struct ifreq *rq, int cmd)
 	tmp.lval[7] = inl(DE4X5_SIGR); j+=4;
 	ioc->len = j;
 	if (!(status = verify_area(VERIFY_WRITE, (void *)ioc->data, ioc->len))) {
-	    memcpy_tofs(ioc->data, tmp.addr, ioc->len);
+	    copy_to_user(ioc->data, tmp.addr, ioc->len);
 	}
 	break;
 	
@@ -4100,7 +4100,7 @@ de4x5_ioctl(struct device *dev, struct ifreq *rq, int cmd)
 	
 	ioc->len = j;
 	if (!(status = verify_area(VERIFY_WRITE, (void *)ioc->data, ioc->len))) {
-	    memcpy_tofs(ioc->data, tmp.addr, ioc->len);
+	    copy_to_user(ioc->data, tmp.addr, ioc->len);
 	}
 	
 	break;

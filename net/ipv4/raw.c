@@ -182,7 +182,7 @@ int raw_rcv(struct sock *sk, struct sk_buff *skb, struct device *dev, __u32 sadd
   
 static void raw_getfrag(const void *p, __u32 saddr, char *to, unsigned int offset, unsigned int fraglen)
 {
-	memcpy_fromfs(to, (const unsigned char *)p+offset, fraglen);
+	copy_from_user(to, (const unsigned char *)p+offset, fraglen);
 }
 
 /*
@@ -191,7 +191,7 @@ static void raw_getfrag(const void *p, __u32 saddr, char *to, unsigned int offse
  
 static void raw_getrawfrag(const void *p, __u32 saddr, char *to, unsigned int offset, unsigned int fraglen)
 {
-	memcpy_fromfs(to, (const unsigned char *)p+offset, fraglen);
+	copy_from_user(to, (const unsigned char *)p+offset, fraglen);
 	if(offset==0)
 	{
 		struct iphdr *iph=(struct iphdr *)to;

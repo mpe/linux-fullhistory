@@ -58,7 +58,7 @@ ncp_ioctl (struct inode * inode, struct file * filp,
 			return result;
 		}
 
-		memcpy_fromfs(&request, (struct ncp_ioctl_request *)arg,
+		copy_from_user(&request, (struct ncp_ioctl_request *)arg,
 			      sizeof(request));
 
 		if (   (request.function > 255)
@@ -81,13 +81,13 @@ ncp_ioctl (struct inode * inode, struct file * filp,
 
 		server->has_subfunction = 0;
 		server->current_size = request.size;
-		memcpy_fromfs(server->packet, request.data, request.size);
+		copy_from_user(server->packet, request.data, request.size);
 
 		ncp_request(server, request.function);
 
 		DPRINTK("ncp_ioctl: copy %d bytes\n",
 			server->reply_size);
-		memcpy_tofs(request.data, server->packet, server->reply_size);
+		copy_to_user(request.data, server->packet, server->reply_size);
 
 		ncp_unlock_server(server);
 
@@ -117,7 +117,7 @@ ncp_ioctl (struct inode * inode, struct file * filp,
 			return result;
 		}
 
-		memcpy_fromfs(&info, (struct ncp_fs_info *)arg,
+		copy_from_user(&info, (struct ncp_fs_info *)arg,
 			      sizeof(info));
 
 		if (info.version != NCP_GET_FS_INFO_VERSION)
@@ -133,7 +133,7 @@ ncp_ioctl (struct inode * inode, struct file * filp,
 		info.volume_number = NCP_ISTRUCT(inode)->volNumber;
 		info.directory_id  = NCP_ISTRUCT(inode)->DosDirNum;
 
-		memcpy_tofs((struct ncp_fs_info *)arg, &info, sizeof(info));
+		copy_to_user((struct ncp_fs_info *)arg, &info, sizeof(info));
 		return 0;		
 
         case NCP_IOC_GETMOUNTUID:
@@ -149,7 +149,7 @@ ncp_ioctl (struct inode * inode, struct file * filp,
 		{
                         return result;
                 }
-                put_fs_word(server->m.mounted_uid, (uid_t*) arg);
+                put_user(server->m.mounted_uid, (uid_t *) arg);
                 return 0;
 
 	default:

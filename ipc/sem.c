@@ -393,7 +393,7 @@ asmlinkage int sys_semctl (int semid, int semnum, int cmd, union semun arg)
 		i = verify_area(VERIFY_WRITE, tmp, sizeof(struct seminfo));
 		if (i)
 			return i;
-		memcpy_tofs (tmp, &seminfo, sizeof(struct seminfo));
+		copy_to_user (tmp, &seminfo, sizeof(struct seminfo));
 		return max_semid;
 	}
 
@@ -414,7 +414,7 @@ asmlinkage int sys_semctl (int semid, int semnum, int cmd, union semun arg)
 		tbuf.sem_otime  = sma->sem_otime;
 		tbuf.sem_ctime  = sma->sem_ctime;
 		tbuf.sem_nsems  = sma->sem_nsems;
-		memcpy_tofs (buf, &tbuf, sizeof(*buf));
+		copy_to_user (buf, &tbuf, sizeof(*buf));
 		return id;
 	}
 
@@ -474,7 +474,7 @@ asmlinkage int sys_semctl (int semid, int semnum, int cmd, union semun arg)
 		array = arg.array;
 		if ((i = verify_area (VERIFY_READ, array, nsems*sizeof(ushort))))
 			return i;
-		memcpy_fromfs (sem_io, array, nsems*sizeof(ushort));
+		copy_from_user (sem_io, array, nsems*sizeof(ushort));
 		for (i = 0; i < nsems; i++)
 			if (sem_io[i] > SEMVMX)
 				return -ERANGE;
@@ -488,7 +488,7 @@ asmlinkage int sys_semctl (int semid, int semnum, int cmd, union semun arg)
 		buf = arg.buf;
 		if ((i = verify_area (VERIFY_READ, buf, sizeof (*buf))))
 			return i;
-		memcpy_fromfs (&tbuf, buf, sizeof (*buf));
+		copy_from_user (&tbuf, buf, sizeof (*buf));
 		break;
 	}
 
@@ -503,7 +503,7 @@ asmlinkage int sys_semctl (int semid, int semnum, int cmd, union semun arg)
 			return -EACCES;
 		for (i = 0; i < sma->sem_nsems; i++)
 			sem_io[i] = sma->sem_base[i].semval;
-		memcpy_tofs (array, sem_io, nsems*sizeof(ushort));
+		copy_to_user (array, sem_io, nsems*sizeof(ushort));
 		break;
 	case SETVAL:
 		if (ipcperms (ipcp, S_IWUGO))
@@ -532,7 +532,7 @@ asmlinkage int sys_semctl (int semid, int semnum, int cmd, union semun arg)
 		tbuf.sem_otime  = sma->sem_otime;
 		tbuf.sem_ctime  = sma->sem_ctime;
 		tbuf.sem_nsems  = sma->sem_nsems;
-		memcpy_tofs (buf, &tbuf, sizeof(*buf));
+		copy_to_user (buf, &tbuf, sizeof(*buf));
 		break;
 	case SETALL:
 		if (ipcperms (ipcp, S_IWUGO))
@@ -568,7 +568,7 @@ asmlinkage int sys_semop (int semid, struct sembuf *tsops, unsigned nsops)
 		return -EFAULT;
 	if ((i = verify_area (VERIFY_READ, tsops, nsops * sizeof(*tsops))))
 		return i;
-	memcpy_fromfs (sops, tsops, nsops * sizeof(*tsops));
+	copy_from_user (sops, tsops, nsops * sizeof(*tsops));
 	id = (unsigned int) semid % SEMMNI;
 	if ((sma = semary[id]) == IPC_UNUSED || sma == IPC_NOID)
 		return -EINVAL;

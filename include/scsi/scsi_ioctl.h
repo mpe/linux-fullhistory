@@ -18,6 +18,21 @@
 extern int scsi_ioctl (Scsi_Device *dev, int cmd, void *arg);
 extern int kernel_scsi_ioctl (Scsi_Device *dev, int cmd, void *arg);
 
+/*
+ * Structures used for scsi_ioctl et al.
+ */
+
+typedef struct scsi_ioctl_command {
+	unsigned int inlen;
+	unsigned int outlen;
+	unsigned char data[0];
+} Scsi_Ioctl_Command;
+
+typedef struct scsi_idlun {
+	__u32 dev_id;
+	__u32 host_unique_id;
+} Scsi_Idlun;
+
 #endif
 
 #endif

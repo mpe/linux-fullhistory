@@ -160,7 +160,7 @@ xiafs_file_read(struct inode * inode, struct file * filp, char * buf, unsigned l
 	    left -= chars;
 	    read += chars;
 	    if (*bhe) {
-	        memcpy_tofs(buf,offset+(*bhe)->b_data,chars);
+	        copy_to_user(buf,offset+(*bhe)->b_data,chars);
 		brelse(*bhe);
 		buf += chars;
 	    } else {
@@ -235,7 +235,7 @@ xiafs_file_write(struct inode * inode, struct file * filp, const char * buf, uns
 	    }
 	}
 	cp = (pos & (XIAFS_ZSIZE(inode->i_sb)-1)) + bh->b_data;
-	memcpy_fromfs(cp,buf,c);
+	copy_from_user(cp,buf,c);
 	update_vm_cache(inode,pos,cp,c);
 	pos += c;
 	if (pos > inode->i_size) {

@@ -371,7 +371,7 @@ mcd_ioctl(struct inode *ip, struct file *fp, unsigned int cmd,
 		if (st)
 			return st;
 
-		memcpy_fromfs(&ti, (void *) arg, sizeof ti);
+		copy_from_user(&ti, (void *) arg, sizeof ti);
 
 		if (ti.cdti_trk0 < DiskInfo.first
 			|| ti.cdti_trk0 > DiskInfo.last
@@ -414,7 +414,7 @@ printk("play: %02x:%02x.%02x to %02x:%02x.%02x\n",
 		if (st)
 			return st;
 
-		memcpy_fromfs(&msf, (void *) arg, sizeof msf);
+		copy_from_user(&msf, (void *) arg, sizeof msf);
 
 		/* convert to bcd */
 
@@ -455,7 +455,7 @@ mcd_Play.end.min, mcd_Play.end.sec, mcd_Play.end.frame);
 
 		tocHdr.cdth_trk0 = DiskInfo.first;
 		tocHdr.cdth_trk1 = DiskInfo.last;
-		memcpy_tofs((void *) arg, &tocHdr, sizeof tocHdr);
+		copy_to_user((void *) arg, &tocHdr, sizeof tocHdr);
 		return 0;
 
 	case CDROMREADTOCENTRY:      /* Read an entry in the table of contents */
@@ -464,7 +464,7 @@ mcd_Play.end.min, mcd_Play.end.sec, mcd_Play.end.frame);
 		if (st)
 			return st;
 
-		memcpy_fromfs(&entry, (void *) arg, sizeof entry);
+		copy_from_user(&entry, (void *) arg, sizeof entry);
 		if (entry.cdte_track == CDROM_LEADOUT)
 			/* XXX */
 			tocPtr = &Toc[DiskInfo.last + 1];
@@ -492,7 +492,7 @@ mcd_Play.end.min, mcd_Play.end.sec, mcd_Play.end.frame);
 		else
 			return -EINVAL;
 
-		memcpy_tofs((void *) arg, &entry, sizeof entry);
+		copy_to_user((void *) arg, &entry, sizeof entry);
 		return 0;
 
 	case CDROMSUBCHNL:   /* Get subchannel info */
@@ -501,7 +501,7 @@ mcd_Play.end.min, mcd_Play.end.sec, mcd_Play.end.frame);
 		if (st)
 			return st;
 
-		memcpy_fromfs(&subchnl, (void *) arg, sizeof subchnl);
+		copy_from_user(&subchnl, (void *) arg, sizeof subchnl);
 
 		if (GetQChannelInfo(&qInfo) < 0)
 			return -EIO;
@@ -532,7 +532,7 @@ mcd_Play.end.min, mcd_Play.end.sec, mcd_Play.end.frame);
 		else
 			return -EINVAL;
 
-		memcpy_tofs((void *) arg, &subchnl, sizeof subchnl);
+		copy_to_user((void *) arg, &subchnl, sizeof subchnl);
 		return 0;
 
 	case CDROMVOLCTRL:   /* Volume control */
@@ -540,7 +540,7 @@ mcd_Play.end.min, mcd_Play.end.sec, mcd_Play.end.frame);
 		if (st)
 			return st;
 
-		memcpy_fromfs(&volctrl, (char *) arg, sizeof(volctrl));
+		copy_from_user(&volctrl, (char *) arg, sizeof(volctrl));
 		outb(MCMD_SET_VOLUME, MCDPORT(0));
 		outb(volctrl.channel0, MCDPORT(0));
 		outb(255, MCDPORT(0));

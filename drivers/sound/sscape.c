@@ -650,7 +650,7 @@ sscape_coproc_ioctl (void *dev_info, unsigned int cmd, caddr_t arg, int local)
 	buf = (copr_buffer *) vmalloc (sizeof (copr_buffer));
 	if (buf == NULL)
 	  return -(ENOSPC);
-	memcpy_fromfs ((char *) buf, &((char *) arg)[0], sizeof (*buf));
+	copy_from_user ((char *) buf, &((char *) arg)[0], sizeof (*buf));
 	err = download_boot_block (dev_info, buf);
 	vfree (buf);
 	return err;

@@ -1018,7 +1018,7 @@ st_write(struct inode * inode, struct file * filp, const char * buf, int count)
 	if (do_count > count)
 	  do_count = count;
       }
-      memcpy_fromfs((STp->buffer)->b_data +
+      copy_from_user((STp->buffer)->b_data +
 		    (STp->buffer)->buffer_bytes, b_point, do_count);
 
       if (STp->block_size == 0)
@@ -1108,7 +1108,7 @@ st_write(struct inode * inode, struct file * filp, const char * buf, int count)
     }
     if (count != 0) {
       STp->dirty = 1;
-      memcpy_fromfs((STp->buffer)->b_data +
+      copy_from_user((STp->buffer)->b_data +
 		    (STp->buffer)->buffer_bytes,b_point,count);
       filp->f_pos += count;
       (STp->buffer)->buffer_bytes += count;
@@ -1401,7 +1401,7 @@ st_read(struct inode * inode, struct file * filp, char * buf, int count)
 #endif
 	transfer = (STp->buffer)->buffer_bytes < count - total ?
 	  (STp->buffer)->buffer_bytes : count - total;
-	memcpy_tofs(buf, (STp->buffer)->b_data +
+	copy_to_user(buf, (STp->buffer)->b_data +
 		    (STp->buffer)->read_pointer,transfer);
 	filp->f_pos += transfer;
 	buf += transfer;
@@ -2529,7 +2529,7 @@ st_ioctl(struct inode * inode,struct file * file,
      if (i)
 	return i;
 
-     memcpy_fromfs((char *) &mtc, (char *)arg, sizeof(struct mtop));
+     copy_from_user((char *) &mtc, (char *)arg, sizeof(struct mtop));
 
      if (mtc.mt_op == MTSETDRVBUFFER && !suser()) {
        printk(KERN_WARNING "st%d: MTSETDRVBUFFER only allowed for root.\n", dev);
@@ -2702,7 +2702,7 @@ st_ioctl(struct inode * inode,struct file * file,
 	 STp->drv_buffer != 0)
        (STp->mt_status)->mt_gstat |= GMT_IM_REP_EN(0xffffffff);
 
-     memcpy_tofs((char *)arg, (char *)(STp->mt_status),
+     copy_to_user((char *)arg, (char *)(STp->mt_status),
 		 sizeof(struct mtget));
 
      (STp->mt_status)->mt_erreg = 0;  /* Clear after read */
@@ -2718,7 +2718,7 @@ st_ioctl(struct inode * inode,struct file * file,
      if (i)
 	return i;
      mt_pos.mt_blkno = blk;
-     memcpy_tofs((char *)arg, (char *) (&mt_pos), sizeof(struct mtpos));
+     copy_to_user((char *)arg, (char *) (&mt_pos), sizeof(struct mtpos));
      return 0;
    }
 

@@ -90,19 +90,17 @@ asmlinkage int sys_llseek(unsigned int fd, unsigned long offset_high,
 	if (origin > 2)
 		goto bad;
 
-	retval = verify_area(VERIFY_WRITE, result, sizeof(offset));
-	if (retval)
-		goto bad;
-
 	offset = llseek(inode, file,
 		(((unsigned long long) offset_high << 32) | offset_low),
 		origin);
 
 	retval = offset;
 	if (offset >= 0) {
-		put_user(offset, result);
-		retval = 0;
+		retval = copy_to_user(result, &offset, sizeof(offset));
+		if (retval)
+			retval = -EFAULT;
 	}
+
 bad:
 	return retval;
 }
@@ -125,9 +123,6 @@ asmlinkage long sys_read(unsigned int fd, char * buf, unsigned long count)
 	if (!(file->f_mode & 1))
 		goto out;
 	error = locks_verify_area(FLOCK_VERIFY_READ,inode,file,file->f_pos,count);
-	if (error)
-		goto out;
-	error = verify_area(VERIFY_WRITE,buf,count);
 	if (error)
 		goto out;
 	error = -EINVAL;
@@ -157,9 +152,6 @@ asmlinkage long sys_write(unsigned int fd, const char * buf, unsigned long count
 	if (!(file->f_mode & 2))
 		goto out;
 	error = locks_verify_area(FLOCK_VERIFY_WRITE,inode,file,file->f_pos,count);
-	if (error)
-		goto out;
-	error = verify_area(VERIFY_READ,buf,count);
 	if (error)
 		goto out;
 	error = -EINVAL;
@@ -220,17 +212,11 @@ static long do_readv_writev(int type, struct inode * inode, struct file * file,
 		return 0;
 	if (count > UIO_MAXIOV)
 		return -EINVAL;
-	retval = verify_area(VERIFY_READ, vector, count*sizeof(*vector));
-	if (retval)
-		return retval;
-	memcpy_fromfs(iov, vector, count*sizeof(*vector));
+	if (copy_from_user(iov, vector, count*sizeof(*vector)))
+		return -EFAULT;
 	tot_len = 0;
-	for (i = 0 ; i < count ; i++) {
+	for (i = 0 ; i < count ; i++)
 		tot_len += iov[i].iov_len;
-		retval = verify_area(type, iov[i].iov_base, iov[i].iov_len);
-		if (retval)
-			return retval;
-	}
 
 	retval = locks_verify_area(type == VERIFY_READ ? FLOCK_VERIFY_READ : FLOCK_VERIFY_WRITE,
 				   inode, file, file->f_pos, tot_len);

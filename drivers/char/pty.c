@@ -37,7 +37,7 @@ struct pty_struct {
 
 /*
  * tmp_buf is used as a temporary buffer by pty_write.  We need to
- * lock it in case the memcpy_fromfs blocks while swapping in a page,
+ * lock it in case the copy_from_user blocks while swapping in a page,
  * and some other program tries to do a pty write at the same time.
  * Since the lock will only come under contention when the system is
  * swapping and available memory is low, it makes sense to share one
@@ -123,13 +123,9 @@ static int pty_write(struct tty_struct * tty, int from_user,
 		down(&tmp_buf_sem);
 		temp_buffer = tmp_buf +
 			((tty->driver.subtype-1) * PTY_BUF_SIZE);
-		if (exception()) {
-			up(&tmp_buf_sem);
-			return -EFAULT;
-		}
 		while (count > 0) {
 			n = MIN(count, PTY_BUF_SIZE);
-			memcpy_fromfs(temp_buffer, buf, n);
+			copy_from_user(temp_buffer, buf, n);
 			r = to->ldisc.receive_room(to);
 			if (r <= 0)
 				break;
@@ -138,7 +134,6 @@ static int pty_write(struct tty_struct * tty, int from_user,
 			buf += n;  c+= n;
 			count -= n;
 		}
-		end_exception();
 		up(&tmp_buf_sem);
 	} else {
 		c = MIN(count, to->ldisc.receive_room(to));

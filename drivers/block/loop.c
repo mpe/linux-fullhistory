@@ -349,7 +349,7 @@ static int loop_set_status(struct loop_device *lo, struct loop_info *arg)
 	err = verify_area(VERIFY_READ, arg, sizeof(info));
 	if (err)
 		return err;
-	memcpy_fromfs(&info, arg, sizeof(info));
+	copy_from_user(&info, arg, sizeof(info));
 	if ((unsigned int) info.lo_encrypt_key_size > LO_KEY_SIZE)
 		return -EINVAL;
 	switch (info.lo_encrypt_type) {
@@ -423,7 +423,7 @@ static int loop_get_status(struct loop_device *lo, struct loop_info *arg)
 		memcpy(info.lo_encrypt_key, lo->lo_encrypt_key,
 		       lo->lo_encrypt_key_size);
 	}
-	memcpy_tofs(arg, &info, sizeof(info));
+	copy_to_user(arg, &info, sizeof(info));
 	return 0;
 }
 

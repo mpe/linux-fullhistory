@@ -76,7 +76,7 @@ static int sg_ioctl(struct inode * inode,struct file * file,
         result = verify_area(VERIFY_READ, (const void *)arg, sizeof(int));
         if (result) return result;
 
-	scsi_generics[dev].timeout=get_user((int *) arg);
+	get_user(scsi_generics[dev].timeout, (int *) arg);
 	return 0;
     case SG_GET_TIMEOUT:
 	return scsi_generics[dev].timeout;
@@ -233,12 +233,12 @@ static long sg_read(struct inode *inode,struct file *filp,char *buf,unsigned lon
 
     if (count>=sizeof(struct sg_header))
     {
-	memcpy_tofs(buf,&device->header,sizeof(struct sg_header));
+	copy_to_user(buf,&device->header,sizeof(struct sg_header));
 	buf+=sizeof(struct sg_header);
 	if (count>device->header.pack_len)
 	    count=device->header.pack_len;
 	if (count > sizeof(struct sg_header)) {
-	    memcpy_tofs(buf,device->buff,count-sizeof(struct sg_header));
+	    copy_to_user(buf,device->buff,count-sizeof(struct sg_header));
 	}
     }
     else
@@ -360,7 +360,7 @@ static long sg_write(struct inode *inode,struct file *filp,const char *buf,unsig
      */
     device->pending=1;
     device->complete=0;
-    memcpy_fromfs(&device->header,buf,sizeof(struct sg_header));
+    copy_from_user(&device->header,buf,sizeof(struct sg_header));
 
     device->header.pack_len=count;
     buf+=sizeof(struct sg_header);
@@ -368,7 +368,7 @@ static long sg_write(struct inode *inode,struct file *filp,const char *buf,unsig
     /*
      * Now we need to grab the command itself from the user's buffer.
      */
-    opcode = get_user(buf);
+    get_user(opcode, buf);
     size=COMMAND_SIZE(opcode);
     if (opcode >= 0xc0 && device->header.twelve_byte) size = 12;
 
@@ -447,7 +447,7 @@ static long sg_write(struct inode *inode,struct file *filp,const char *buf,unsig
     /*
      * Now copy the SCSI command from the user's address space.
      */
-    memcpy_fromfs(cmnd,buf,size);
+    copy_from_user(cmnd,buf,size);
     buf+=size;
 
     /*
@@ -455,7 +455,7 @@ static long sg_write(struct inode *inode,struct file *filp,const char *buf,unsig
      * field also includes the length of the header and the command,
      * so we need to subtract these off.
      */
-    if (input_size > 0) memcpy_fromfs(device->buff, buf, input_size);
+    if (input_size > 0) copy_from_user(device->buff, buf, input_size);
     
     /*
      * Set the LUN field in the command structure.

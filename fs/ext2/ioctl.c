@@ -35,7 +35,7 @@ int ext2_ioctl (struct inode * inode, struct file * filp, unsigned int cmd,
 		err = verify_area(VERIFY_READ, (int *) arg, sizeof(int));
 		if (err)
 			return err;
-		flags = get_user((int *) arg);
+		get_user(flags, (int *) arg);
 		/*
 		 * The IMMUTABLE and APPEND_ONLY flags can only be changed by
 		 * the super user when the security level is zero.
@@ -77,7 +77,7 @@ int ext2_ioctl (struct inode * inode, struct file * filp, unsigned int cmd,
 		err = verify_area(VERIFY_READ, (int *) arg, sizeof(int));
 		if (err)
 			return err;
-		inode->u.ext2_i.i_version = get_user((int *) arg);
+		get_user(inode->u.ext2_i.i_version, (int *) arg);
 		inode->i_ctime = CURRENT_TIME;
 		inode->i_dirt = 1;
 		return 0;

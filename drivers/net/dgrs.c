@@ -693,7 +693,7 @@ dgrs_ioctl(struct device *dev, struct ifreq *ifr, int cmd)
 	if (rc) return (rc);
 	if (cmd != DGRSIOCTL) return -EINVAL;
 
-	memcpy_fromfs(&ioc, ifr->ifr_data, sizeof(DGRS_IOCTL));
+	copy_from_user(&ioc, ifr->ifr_data, sizeof(DGRS_IOCTL));
 
 	switch (ioc.cmd)
 	{
@@ -702,7 +702,7 @@ dgrs_ioctl(struct device *dev, struct ifreq *ifr, int cmd)
 			return -EINVAL;
 		rc = verify_area(VERIFY_WRITE, (void *) ioc.data, ioc.len);
 		if (rc) return (rc);
-		memcpy_tofs(ioc.data, &dev->mem_start, ioc.len);
+		copy_to_user(ioc.data, &dev->mem_start, ioc.len);
 		return (0);
 	case DGRS_SETFILTER:
 		rc = verify_area(VERIFY_READ, (void *) ioc.data, ioc.len);
@@ -730,7 +730,7 @@ dgrs_ioctl(struct device *dev, struct ifreq *ifr, int cmd)
 		
 		if (ioc.len)
 		{
-			memcpy_fromfs(S2H(priv->bcomm->bc_filter_area),
+			copy_from_user(S2H(priv->bcomm->bc_filter_area),
 					ioc.data, ioc.len);
 			priv->bcomm->bc_filter_cmd = BC_FILTER_SET;
 		}

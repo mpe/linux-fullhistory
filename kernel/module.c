@@ -154,7 +154,7 @@ sys_init_module(char *module_name, char *code, unsigned codesize,
 		return error;
 	pr_debug("initializing module `%s', %d (0x%x) bytes\n",
 		name, codesize, codesize);
-	memcpy_fromfs(&rt, routines, sizeof rt);
+	copy_from_user(&rt, routines, sizeof rt);
 	if ((mp = find_module(name)) == NULL)
 		return -ENOENT;
 	if (codesize & MOD_AUTOCLEAN) {
@@ -167,7 +167,7 @@ sys_init_module(char *module_name, char *code, unsigned codesize,
 	}
 	if ((codesize + sizeof (long) + PAGE_SIZE - 1) / PAGE_SIZE > mp->size)
 		return -EINVAL;
-	memcpy_fromfs((char *)mp->addr + sizeof (long), code, codesize);
+	copy_from_user((char *)mp->addr + sizeof (long), code, codesize);
 	memset((char *)mp->addr + sizeof (long) + codesize, 0,
 		mp->size * PAGE_SIZE - (codesize + sizeof (long)));
 	pr_debug("module init entry = 0x%08lx, cleanup entry = 0x%08lx\n",
@@ -184,7 +184,7 @@ sys_init_module(char *module_name, char *code, unsigned codesize,
 
 		if ((error = verify_area(VERIFY_READ, &symtab->size, sizeof(symtab->size))))
 			return error;
-		size = get_user(&symtab->size);
+		get_user(size, &symtab->size);
 
 		if ((newtab = (struct symbol_table*) kmalloc(size, GFP_KERNEL)) == NULL) {
 			return -ENOMEM;
@@ -194,7 +194,7 @@ sys_init_module(char *module_name, char *code, unsigned codesize,
 			kfree_s(newtab, size);
 			return error;
 		}
-		memcpy_fromfs((char *)(newtab), symtab, size);
+		copy_from_user((char *)(newtab), symtab, size);
 
 		/* sanity check */
 		legal_start = sizeof(struct symbol_table) +
@@ -359,7 +359,7 @@ sys_get_kernel_syms(struct kernel_sym *table)
 				/* magic: write module info as a pseudo symbol */
 				isym.value = (unsigned long)mp;
 				sprintf(isym.name, "#%s", mp->name);
-				memcpy_tofs(to, &isym, sizeof isym);
+				copy_to_user(to, &isym, sizeof isym);
 				++to;
 
 				if (mp->symtab != NULL) {
@@ -369,7 +369,7 @@ sys_get_kernel_syms(struct kernel_sym *table)
 
 						isym.value = (unsigned long)from->addr;
 						strncpy(isym.name, from->name, sizeof isym.name);
-						memcpy_tofs(to, &isym, sizeof isym);
+						copy_to_user(to, &isym, sizeof isym);
 					}
 				}
 			}
@@ -389,7 +389,10 @@ get_mod_name(char *user_name, char *buf)
 	int i;
 
 	i = 0;
-	for (i = 0 ; (buf[i] = get_user(user_name + i)) != '\0' ; ) {
+	for (;;) {
+		get_user(buf[i], user_name + i);
+		if (buf[i] == '\0')
+			break;
 		if (++i >= MOD_MAX_NAME)
 			return -E2BIG;
 	}

@@ -3722,7 +3722,7 @@ int idetape_chrdev_read (struct inode *inode, struct file *file, char *buf, int 
 		}
 #endif /* IDETAPE_DEBUG_BUGS */
 		actually_read=IDETAPE_MIN (tape->merge_buffer_size,count);
-		memcpy_tofs (buf_ptr,tape->merge_buffer+tape->merge_buffer_offset,actually_read);
+		copy_to_user (buf_ptr,tape->merge_buffer+tape->merge_buffer_offset,actually_read);
 		buf_ptr+=actually_read;tape->merge_buffer_size-=actually_read;
 		count-=actually_read;tape->merge_buffer_offset+=actually_read;
 	}
@@ -3731,7 +3731,7 @@ int idetape_chrdev_read (struct inode *inode, struct file *file, char *buf, int 
 		bytes_read=idetape_add_chrdev_read_request (drive,tape->capabilities.ctl,tape->merge_buffer);
 		if (bytes_read <= 0)
 			return (actually_read);
-		memcpy_tofs (buf_ptr,tape->merge_buffer,bytes_read);
+		copy_to_user (buf_ptr,tape->merge_buffer,bytes_read);
 		buf_ptr+=bytes_read;count-=bytes_read;actually_read+=bytes_read;
 	}
 
@@ -3740,7 +3740,7 @@ int idetape_chrdev_read (struct inode *inode, struct file *file, char *buf, int 
 		if (bytes_read <= 0)
 			return (actually_read);
 		temp=IDETAPE_MIN (count,bytes_read);
-		memcpy_tofs (buf_ptr,tape->merge_buffer,temp);
+		copy_to_user (buf_ptr,tape->merge_buffer,temp);
 		actually_read+=temp;
 		tape->merge_buffer_offset=temp;
 		tape->merge_buffer_size=bytes_read-temp;
@@ -3789,7 +3789,7 @@ int idetape_chrdev_write (struct inode *inode, struct file *file, const char *bu
 #endif /* IDETAPE_DEBUG_BUGS */
 
 		actually_written=IDETAPE_MIN (tape->data_buffer_size-tape->merge_buffer_size,count);
-		memcpy_fromfs (tape->merge_buffer+tape->merge_buffer_size,buf_ptr,actually_written);
+		copy_from_user (tape->merge_buffer+tape->merge_buffer_size,buf_ptr,actually_written);
 		buf_ptr+=actually_written;tape->merge_buffer_size+=actually_written;count-=actually_written;
 
 		if (tape->merge_buffer_size == tape->data_buffer_size) {
@@ -3801,7 +3801,7 @@ int idetape_chrdev_write (struct inode *inode, struct file *file, const char *bu
 	}
 
 	while (count >= tape->data_buffer_size) {
-		memcpy_fromfs (tape->merge_buffer,buf_ptr,tape->data_buffer_size);
+		copy_from_user (tape->merge_buffer,buf_ptr,tape->data_buffer_size);
 		buf_ptr+=tape->data_buffer_size;count-=tape->data_buffer_size;
 		retval=idetape_add_chrdev_write_request (drive,tape->capabilities.ctl,tape->merge_buffer);
 		actually_written+=tape->data_buffer_size;
@@ -3811,7 +3811,7 @@ int idetape_chrdev_write (struct inode *inode, struct file *file, const char *bu
 
 	if (count) {
 		actually_written+=count;
-		memcpy_fromfs (tape->merge_buffer,buf_ptr,count);
+		copy_from_user (tape->merge_buffer,buf_ptr,count);
 		tape->merge_buffer_size+=count;
 	}
 	return (actually_written);
@@ -3879,13 +3879,13 @@ int idetape_chrdev_ioctl (struct inode *inode, struct file *file, unsigned int c
 		case MTIOCTOP:
 			retval=verify_area (VERIFY_READ,(char *) arg,sizeof (struct mtop));
 			if (retval) return (retval);
-			memcpy_fromfs ((char *) &mtop, (char *) arg, sizeof (struct mtop));
+			copy_from_user ((char *) &mtop, (char *) arg, sizeof (struct mtop));
 			return (idetape_mtioctop (drive,mtop.mt_op,mtop.mt_count));
 		case MTIOCGET:
 			mtget.mt_dsreg=(tape->data_buffer_size << MT_ST_BLKSIZE_SHIFT) & MT_ST_BLKSIZE_MASK;
 			retval=verify_area (VERIFY_WRITE,(char *) arg,sizeof (struct mtget));
 			if (retval) return (retval);
-			memcpy_tofs ((char *) arg,(char *) &mtget, sizeof (struct mtget));
+			copy_to_user ((char *) arg,(char *) &mtget, sizeof (struct mtget));
 			return (0);
 		case MTIOCPOS:
 			idetape_create_read_position_cmd (&pc);
@@ -3894,7 +3894,7 @@ int idetape_chrdev_ioctl (struct inode *inode, struct file *file, unsigned int c
 			mtpos.mt_blkno=tape->block_address;
 			retval=verify_area (VERIFY_WRITE,(char *) arg,sizeof (struct mtpos));
 			if (retval) return (retval);
-			memcpy_tofs ((char *) arg,(char *) &mtpos, sizeof (struct mtpos));
+			copy_to_user ((char *) arg,(char *) &mtpos, sizeof (struct mtpos));
 			return (0);
 		default:
 			return (idetape_blkdev_ioctl (drive,inode,file,cmd,arg));

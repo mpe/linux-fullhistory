@@ -35,7 +35,8 @@ asmlinkage int sys_sigprocmask(int how, sigset_t *set, sigset_t *oset)
 		error = verify_area(VERIFY_READ, set, sizeof(sigset_t));
 		if (error)
 			return error;
-		new_set = get_user(set) & _BLOCKABLE;
+		get_user(new_set, set);
+		new_set &= _BLOCKABLE;
 		switch (how) {
 		case SIG_BLOCK:
 			current->blocked |= new_set;
@@ -161,7 +162,7 @@ asmlinkage int sys_sigaction(int signum, const struct sigaction * action,
 			return err;
 		if (signum==SIGKILL || signum==SIGSTOP)
 			return -EINVAL;
-		memcpy_fromfs(&new_sa, action, sizeof(struct sigaction));
+		copy_from_user(&new_sa, action, sizeof(struct sigaction));
 		if (new_sa.sa_handler != SIG_DFL && new_sa.sa_handler != SIG_IGN) {
 			err = verify_area(VERIFY_READ, new_sa.sa_handler, 1);
 			if (err)
@@ -172,7 +173,7 @@ asmlinkage int sys_sigaction(int signum, const struct sigaction * action,
 		int err = verify_area(VERIFY_WRITE, oldaction, sizeof(*oldaction));
 		if (err)
 			return err;
-		memcpy_tofs(oldaction, p, sizeof(struct sigaction));
+		copy_to_user(oldaction, p, sizeof(struct sigaction));
 	}
 	if (action) {
 		*p = new_sa;

@@ -141,7 +141,7 @@ ipxcfg_get_config_data(ipx_config_data *arg)
 	
 	vals.ipxcfg_auto_create_interfaces = ipxcfg_auto_create_interfaces;
 	vals.ipxcfg_auto_select_primary = ipxcfg_auto_select_primary;
-	memcpy_tofs(arg, &vals, sizeof(vals));
+	copy_to_user(arg, &vals, sizeof(vals));
 	return 0;
 }
 
@@ -1046,7 +1046,7 @@ ipxitf_ioctl_real(unsigned int cmd, void *arg)
 			err=verify_area(VERIFY_READ,arg,sizeof(ifr));
 			if(err)
 				return err;
-			memcpy_fromfs(&ifr,arg,sizeof(ifr));
+			copy_from_user(&ifr,arg,sizeof(ifr));
 			sipx=(struct sockaddr_ipx *)&ifr.ifr_addr;
 			if(sipx->sipx_family!=AF_IPX)
 				return -EINVAL;
@@ -1069,7 +1069,7 @@ ipxitf_ioctl_real(unsigned int cmd, void *arg)
 			err=verify_area(VERIFY_WRITE,arg,sizeof(ifr));
 			if(err)
 				return err;
-			memcpy_fromfs(&ifr,arg,sizeof(ifr));
+			copy_from_user(&ifr,arg,sizeof(ifr));
 			sipx=(struct sockaddr_ipx *)&ifr.ifr_addr;
 			dev=dev_get(ifr.ifr_name);
 			if(!dev)
@@ -1080,7 +1080,7 @@ ipxitf_ioctl_real(unsigned int cmd, void *arg)
 			sipx->sipx_family=AF_IPX;
 			sipx->sipx_network=ipxif->if_netnum;
 			memcpy(sipx->sipx_node, ipxif->if_node, sizeof(sipx->sipx_node));
-			memcpy_tofs(arg,&ifr,sizeof(ifr));
+			copy_to_user(arg,&ifr,sizeof(ifr));
 			return 0;
 		}
 		case SIOCAIPXITFCRT:
@@ -1389,7 +1389,7 @@ static int ipxrtr_ioctl(unsigned int cmd, void *arg)
 	if(err)
 		return err;
 		
-	memcpy_fromfs(&rt,arg,sizeof(rt));
+	copy_from_user(&rt,arg,sizeof(rt));
 	
 	sg=(struct sockaddr_ipx *)&rt.rt_gateway;
 	st=(struct sockaddr_ipx *)&rt.rt_dst;
@@ -1681,10 +1681,10 @@ static int ipx_getsockopt(struct socket *sock, int level, int optname,
 	err=verify_area(VERIFY_WRITE,optlen,sizeof(int));
 	if(err)
 		return err;
-	put_fs_long(sizeof(int),(unsigned long *)optlen);
+	put_user(sizeof(int), optlen);
 	err=verify_area(VERIFY_WRITE,optval,sizeof(int));
 	if (err) return err;
-	put_fs_long(val,(unsigned long *)optval);
+	put_user(val, (int *)optval);
 	return(0);
 }
 
@@ -2204,13 +2204,13 @@ static int ipx_ioctl(struct socket *sock,unsigned int cmd, unsigned long arg)
 	switch(cmd)
 	{
 		case TIOCOUTQ:
-			err=verify_area(VERIFY_WRITE,(void *)arg,sizeof(unsigned long));
+			err=verify_area(VERIFY_WRITE,(void *)arg,sizeof(int));
 			if(err)
 				return err;
 			amount=sk->sndbuf-sk->wmem_alloc;
 			if(amount<0)
 				amount=0;
-			put_fs_long(amount,(unsigned long *)arg);
+			put_user(amount, (int *)arg);
 			return 0;
 		case TIOCINQ:
 		{
@@ -2218,10 +2218,10 @@ static int ipx_ioctl(struct socket *sock,unsigned int cmd, unsigned long arg)
 			/* These two are safe on a single CPU system as only user tasks fiddle here */
 			if((skb=skb_peek(&sk->receive_queue))!=NULL)
 				amount=skb->len-sizeof(struct ipx_packet);
-			err=verify_area(VERIFY_WRITE,(void *)arg,sizeof(unsigned long));
+			err=verify_area(VERIFY_WRITE,(void *)arg,sizeof(int));
 			if(err)
 				return err;
-			put_fs_long(amount,(unsigned long *)arg);
+			put_user(amount, (int *)arg);
 			return 0;
 		}
 		case SIOCADDRT:
@@ -2251,7 +2251,7 @@ static int ipx_ioctl(struct socket *sock,unsigned int cmd, unsigned long arg)
 				err=verify_area(VERIFY_WRITE,(void *)arg,sizeof(struct timeval));
 				if(err)
 					return err;
-				memcpy_tofs((void *)arg,&sk->stamp,sizeof(struct timeval));
+				copy_to_user((void *)arg,&sk->stamp,sizeof(struct timeval));
 				return 0;
 			}
 			return -EINVAL;

@@ -201,7 +201,7 @@ int load_store_instr(unsigned char type, fpu_addr_modes addr_modes,
     case 024:     /* fldcw */
       RE_ENTRANT_CHECK_OFF;
       FPU_verify_area(VERIFY_READ, data_address, 2);
-      control_word = get_fs_word((unsigned short *) data_address);
+      get_user(control_word, (unsigned short *) data_address);
       RE_ENTRANT_CHECK_ON;
       if ( partial_status & ~control_word & CW_Exceptions )
 	partial_status |= (SW_Summary | SW_Backward);
@@ -234,7 +234,7 @@ int load_store_instr(unsigned char type, fpu_addr_modes addr_modes,
     case 034:      /* fstcw m16int */
       RE_ENTRANT_CHECK_OFF;
       FPU_verify_area(VERIFY_WRITE,data_address,2);
-      put_fs_word(control_word, (short *) data_address);
+      put_user(control_word, (unsigned short *) data_address);
       RE_ENTRANT_CHECK_ON;
       return 1;
     case 035:      /* fstp m80real */
@@ -246,7 +246,7 @@ int load_store_instr(unsigned char type, fpu_addr_modes addr_modes,
     case 036:      /* fstsw m2byte */
       RE_ENTRANT_CHECK_OFF;
       FPU_verify_area(VERIFY_WRITE,data_address,2);
-      put_fs_word(status_word(),(short *) data_address);
+      put_user(status_word(),(unsigned short *) data_address);
       RE_ENTRANT_CHECK_ON;
       return 1;
     case 037:      /* fistp m64int */

@@ -148,7 +148,7 @@ static inline int *xdr_encode_data(int *p, const char *data, int len)
 	
 	p[quadlen] = 0;
 	*p++ = htonl(len);
-	memcpy_fromfs(p, data, len);
+	copy_from_user(p, data, len);
 	return p + quadlen;
 }
 

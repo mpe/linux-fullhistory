@@ -4030,7 +4030,7 @@ static int sbpcd_ioctl(struct inode *inode, struct file *file, u_int cmd,
 		}
 		st=verify_area(VERIFY_READ, (void *) arg, sizeof(struct cdrom_msf));
 		if (st) RETURN_UP(st);
-		memcpy_fromfs(&msf, (void *) arg, sizeof(struct cdrom_msf));
+		copy_from_user(&msf, (void *) arg, sizeof(struct cdrom_msf));
 		/* values come as msf-bin */
 		D_S[d].pos_audio_start = (msf.cdmsf_min0<<16) |
                         (msf.cdmsf_sec0<<8) |
@@ -4071,7 +4071,7 @@ static int sbpcd_ioctl(struct inode *inode, struct file *file, u_int cmd,
 			msg(DBG_IOX,"CDROMPLAYTRKIND: verify_area error.\n");
 			RETURN_UP(st);
 		}
-		memcpy_fromfs(&ti,(void *) arg,sizeof(struct cdrom_ti));
+		copy_from_user(&ti,(void *) arg,sizeof(struct cdrom_ti));
 		msg(DBG_IOX,"ioctl: trk0: %d, ind0: %d, trk1:%d, ind1:%d\n",
 		    ti.cdti_trk0,ti.cdti_ind0,ti.cdti_trk1,ti.cdti_ind1);
 		if (ti.cdti_trk0<D_S[d].n_first_track) RETURN_UP(-EINVAL);
@@ -4097,14 +4097,14 @@ static int sbpcd_ioctl(struct inode *inode, struct file *file, u_int cmd,
 		tochdr.cdth_trk1=D_S[d].n_last_track;
 		st=verify_area(VERIFY_WRITE, (void *) arg, sizeof(struct cdrom_tochdr));
 		if (st) RETURN_UP(st);
-		memcpy_tofs((void *) arg, &tochdr, sizeof(struct cdrom_tochdr));
+		copy_to_user((void *) arg, &tochdr, sizeof(struct cdrom_tochdr));
 		RETURN_UP(0);
 		
 	case CDROMREADTOCENTRY:      /* Read an entry in the table of contents */
 		msg(DBG_IOC,"ioctl: CDROMREADTOCENTRY entered.\n");
 		st=verify_area(VERIFY_WRITE,(void *) arg, sizeof(struct cdrom_tocentry));
 		if (st) RETURN_UP(st);
-		memcpy_fromfs(&tocentry, (void *) arg, sizeof(struct cdrom_tocentry));
+		copy_from_user(&tocentry, (void *) arg, sizeof(struct cdrom_tocentry));
 		i=tocentry.cdte_track;
 		if (i==CDROM_LEADOUT) i=D_S[d].n_last_track+1;
 		else if (i<D_S[d].n_first_track||i>D_S[d].n_last_track)
@@ -4121,7 +4121,7 @@ static int sbpcd_ioctl(struct inode *inode, struct file *file, u_int cmd,
 		else if (tocentry.cdte_format==CDROM_LBA) /* blk required */
 			tocentry.cdte_addr.lba=msf2blk(D_S[d].TocBuffer[i].address);
 		else RETURN_UP(-EINVAL);
-		memcpy_tofs((void *) arg, &tocentry, sizeof(struct cdrom_tocentry));
+		copy_to_user((void *) arg, &tocentry, sizeof(struct cdrom_tocentry));
 		RETURN_UP(0);
 		
 	case CDROMRESET:      /* hard reset the drive */
@@ -4170,7 +4170,7 @@ static int sbpcd_ioctl(struct inode *inode, struct file *file, u_int cmd,
 		msg(DBG_IOC,"ioctl: CDROMVOLCTRL entered.\n");
 		st=verify_area(VERIFY_READ,(void *) arg,sizeof(volctrl));
 		if (st) RETURN_UP(st);
-		memcpy_fromfs(&volctrl,(char *) arg,sizeof(volctrl));
+		copy_from_user(&volctrl,(char *) arg,sizeof(volctrl));
 		D_S[d].vol_chan0=0;
 		D_S[d].vol_ctrl0=volctrl.channel0;
 		D_S[d].vol_chan1=1;
@@ -4188,7 +4188,7 @@ static int sbpcd_ioctl(struct inode *inode, struct file *file, u_int cmd,
 		volctrl.channel1=D_S[d].vol_ctrl1;
 		volctrl.channel2=0;
 		volctrl.channel2=0;
-		memcpy_tofs((void *)arg,&volctrl,sizeof(volctrl));
+		copy_to_user((void *)arg,&volctrl,sizeof(volctrl));
 		RETURN_UP(0);
 
 	case CDROMSUBCHNL:   /* Get subchannel info */
@@ -4199,7 +4199,7 @@ static int sbpcd_ioctl(struct inode *inode, struct file *file, u_int cmd,
 		}
 		st=verify_area(VERIFY_WRITE, (void *) arg, sizeof(struct cdrom_subchnl));
 		if (st)	RETURN_UP(st);
-		memcpy_fromfs(&SC, (void *) arg, sizeof(struct cdrom_subchnl));
+		copy_from_user(&SC, (void *) arg, sizeof(struct cdrom_subchnl));
 		switch (D_S[d].audio_state)
 		{
 		case audio_playing:
@@ -4230,7 +4230,7 @@ static int sbpcd_ioctl(struct inode *inode, struct file *file, u_int cmd,
 			SC.cdsc_reladdr.msf.second=(D_S[d].SubQ_run_trk>>8)&0x00FF;
 			SC.cdsc_reladdr.msf.frame=D_S[d].SubQ_run_trk&0x00FF;
 		}
-		memcpy_tofs((void *) arg, &SC, sizeof(struct cdrom_subchnl));
+		copy_to_user((void *) arg, &SC, sizeof(struct cdrom_subchnl));
 		msg(DBG_IOS,"CDROMSUBCHNL: %1X %02X %08X %08X %02X %02X %06X %06X\n",
 		    SC.cdsc_format,SC.cdsc_audiostatus,
 		    SC.cdsc_adr,SC.cdsc_ctrl,
@@ -4298,7 +4298,7 @@ static int sbpcd_ioctl(struct inode *inode, struct file *file, u_int cmd,
 		if (D_S[d].aud_buf==NULL) RETURN_UP(-EINVAL);
 		i=verify_area(VERIFY_READ, (void *) arg, sizeof(struct cdrom_read_audio));
 		if (i) RETURN_UP(i);
-		memcpy_fromfs(&read_audio, (void *) arg, sizeof(struct cdrom_read_audio));
+		copy_from_user(&read_audio, (void *) arg, sizeof(struct cdrom_read_audio));
 		if (read_audio.nframes>D_S[d].sbp_audsiz) RETURN_UP(-EINVAL);
 		i=verify_area(VERIFY_WRITE, read_audio.buf,
 			      read_audio.nframes*CD_FRAMESIZE_RAW);
@@ -4473,10 +4473,10 @@ static int sbpcd_ioctl(struct inode *inode, struct file *file, u_int cmd,
 				msg(DBG_AUD,"read_audio: cc_ReadError was necessary after read: %02X\n",i);
 				continue;
 			}
-			memcpy_tofs((u_char *) read_audio.buf,
+			copy_to_user((u_char *) read_audio.buf,
 				    (u_char *) D_S[d].aud_buf,
 				    read_audio.nframes*CD_FRAMESIZE_RAW);
-			msg(DBG_AUD,"read_audio: memcpy_tofs done.\n");
+			msg(DBG_AUD,"read_audio: copy_to_user done.\n");
 			break;
 		}
 		cc_ModeSelect(CD_FRAMESIZE);
@@ -4498,7 +4498,7 @@ static int sbpcd_ioctl(struct inode *inode, struct file *file, u_int cmd,
 		msg(DBG_IOC,"ioctl: CDROMMULTISESSION entered.\n");
 		st=verify_area(VERIFY_WRITE,(void *) arg, sizeof(struct cdrom_multisession));
 		if (st) RETURN_UP(st);
-		memcpy_fromfs(&ms_info, (void *) arg, sizeof(struct cdrom_multisession));
+		copy_from_user(&ms_info, (void *) arg, sizeof(struct cdrom_multisession));
 		if (ms_info.addr_format==CDROM_MSF) /* MSF-bin requested */
 			lba2msf(D_S[d].lba_multi,&ms_info.addr.msf.minute);
 		else if (ms_info.addr_format==CDROM_LBA) /* lba requested */
@@ -4506,7 +4506,7 @@ static int sbpcd_ioctl(struct inode *inode, struct file *file, u_int cmd,
 		else RETURN_UP(-EINVAL);
 		if (D_S[d].f_multisession) ms_info.xa_flag=1; /* valid redirection address */
 		else ms_info.xa_flag=0; /* invalid redirection address */
-		memcpy_tofs((void *) arg, &ms_info, sizeof(struct cdrom_multisession));
+		copy_to_user((void *) arg, &ms_info, sizeof(struct cdrom_multisession));
 		msg(DBG_MUL,"ioctl: CDROMMULTISESSION done (%d, %08X).\n",
 		    ms_info.xa_flag, ms_info.addr.lba);
 		RETURN_UP(0);

@@ -70,7 +70,7 @@ static long read_mem(struct inode * inode, struct file * file,
 		read++;
 	}
 #endif
-	memcpy_tofs(buf, __va(p), count);
+	copy_to_user(buf, __va(p), count);
 	read += count;
 	file->f_pos += read;
 	return read;
@@ -100,7 +100,7 @@ static long write_mem(struct inode * inode, struct file * file,
 		written++;
 	}
 #endif
-	memcpy_fromfs(__va(p), buf, count);
+	copy_from_user(__va(p), buf, count);
 	written += count;
 	file->f_pos += written;
 	return count;
@@ -167,7 +167,9 @@ static long write_port(struct inode * inode, struct file * file,
 	const char * tmp = buf;
 
 	while (count-- > 0 && i < 65536) {
-		outb(get_user(tmp),i);
+		char c;
+		get_user(c, tmp);
+		outb(c,i);
 		i++;
 		tmp++;
 	}

@@ -378,7 +378,7 @@ MIDIbuf_write (int dev, struct fileinfo *file, const char *buf, int count)
 
       for (i = 0; i < n; i++)
 	{
-	  memcpy_fromfs ((char *) &tmp_data, &(buf)[c], 1);
+	  copy_from_user ((char *) &tmp_data, &(buf)[c], 1);
 	  QUEUE_BYTE (midi_out_buf[dev], tmp_data);
 	  c++;
 	}
@@ -441,7 +441,7 @@ MIDIbuf_read (int dev, struct fileinfo *file, char *buf, int count)
       while (c < n)
 	{
 	  REMOVE_BYTE (midi_in_buf[dev], tmp_data);
-	  memcpy_tofs (&(buf)[c], (char *) &tmp_data, 1);
+	  copy_to_user (&(buf)[c], (char *) &tmp_data, 1);
 	  c++;
 	}
     }

@@ -1137,7 +1137,7 @@ static int aztcd_ioctl(struct inode *ip, struct file *fp, unsigned int cmd, unsi
 #endif
 		  st = verify_area(VERIFY_WRITE, (void*) arg, sizeof(struct cdrom_multisession));
 		  if (st) return st;
-		  memcpy_fromfs(&ms, (void*) arg, sizeof(struct cdrom_multisession));
+		  copy_from_user(&ms, (void*) arg, sizeof(struct cdrom_multisession));
 		  if (ms.addr_format == CDROM_MSF) 
 		     { ms.addr.msf.minute = azt_bcd2bin(DiskInfo.lastSession.min);
 		       ms.addr.msf.second = azt_bcd2bin(DiskInfo.lastSession.sec);
@@ -1148,7 +1148,7 @@ static int aztcd_ioctl(struct inode *ip, struct file *fp, unsigned int cmd, unsi
 		  else
 		       return -EINVAL;
 		  ms.xa_flag = DiskInfo.xa;
-	  	  memcpy_tofs((void*) arg, &ms, sizeof(struct cdrom_multisession));
+	  	  copy_to_user((void*) arg, &ms, sizeof(struct cdrom_multisession));
 #ifdef AZT_DEBUG 
  		  if (ms.addr_format == CDROM_MSF) 
                       printk("aztcd multisession xa:%d, msf:%02x:%02x.%02x [%02x:%02x.%02x])\n",
@@ -1165,7 +1165,7 @@ static int aztcd_ioctl(struct inode *ip, struct file *fp, unsigned int cmd, unsi
 	case CDROMPLAYTRKIND:     /* Play a track.  This currently ignores index. */
 		st = verify_area(VERIFY_READ, (void *) arg, sizeof ti);
 		if (st) return st;
-		memcpy_fromfs(&ti, (void *) arg, sizeof ti);
+		copy_from_user(&ti, (void *) arg, sizeof ti);
 		if (ti.cdti_trk0 < DiskInfo.first
 			|| ti.cdti_trk0 > DiskInfo.last
 			|| ti.cdti_trk1 < ti.cdti_trk0)
@@ -1196,7 +1196,7 @@ printk("aztcd play: %02x:%02x.%02x to %02x:%02x.%02x\n",
 */
 		st = verify_area(VERIFY_READ, (void *) arg, sizeof msf);
 		if (st) return st;
-		memcpy_fromfs(&msf, (void *) arg, sizeof msf);
+		copy_from_user(&msf, (void *) arg, sizeof msf);
 		/* convert to bcd */
 		azt_bin2bcd(&msf.cdmsf_min0);
 		azt_bin2bcd(&msf.cdmsf_sec0);
@@ -1228,12 +1228,12 @@ azt_Play.end.min, azt_Play.end.sec, azt_Play.end.frame);
 		if (st) return st;
 		tocHdr.cdth_trk0 = DiskInfo.first;
 		tocHdr.cdth_trk1 = DiskInfo.last;
-		memcpy_tofs((void *) arg, &tocHdr, sizeof tocHdr);
+		copy_to_user((void *) arg, &tocHdr, sizeof tocHdr);
 		break;
 	case CDROMREADTOCENTRY:      /* Read an entry in the table of contents */
 		st = verify_area(VERIFY_WRITE, (void *) arg, sizeof entry);
 		if (st) return st;
-		memcpy_fromfs(&entry, (void *) arg, sizeof entry);
+		copy_from_user(&entry, (void *) arg, sizeof entry);
 		if ((!aztTocUpToDate)||aztDiskChanged) aztUpdateToc();
 		if (entry.cdte_track == CDROM_LEADOUT)
 		  tocPtr = &Toc[DiskInfo.last + 1];
@@ -1255,7 +1255,7 @@ azt_Play.end.min, azt_Play.end.sec, azt_Play.end.frame);
 		else
 		{ return -EINVAL;
 		}
-		memcpy_tofs((void *) arg, &entry, sizeof entry);
+		copy_to_user((void *) arg, &entry, sizeof entry);
 		break;
 	case CDROMSUBCHNL:   /* Get subchannel info */
 		st = verify_area(VERIFY_WRITE, (void *) arg, sizeof(struct cdrom_subchnl));
@@ -1265,7 +1265,7 @@ azt_Play.end.min, azt_Play.end.sec, azt_Play.end.frame);
 #endif
 		          return st;
 		        }  
-		memcpy_fromfs(&subchnl, (void *) arg, sizeof (struct cdrom_subchnl));
+		copy_from_user(&subchnl, (void *) arg, sizeof (struct cdrom_subchnl));
 		if (aztGetQChannelInfo(&qInfo) < 0)
 		if (st) { 
 #ifdef AZT_DEBUG
@@ -1291,7 +1291,7 @@ azt_Play.end.min, azt_Play.end.sec, azt_Play.end.frame);
 		  subchnl.cdsc_reladdr.msf.second = azt_bcd2bin(qInfo.trackTime.sec);
 		  subchnl.cdsc_reladdr.msf.frame  = azt_bcd2bin(qInfo.trackTime.frame);
 		}
-		memcpy_tofs((void *) arg, &subchnl, sizeof (struct cdrom_subchnl));
+		copy_to_user((void *) arg, &subchnl, sizeof (struct cdrom_subchnl));
 		break;
 	case CDROMVOLCTRL:   /* Volume control 
 	 * With my Aztech CD268-01A volume control does not work, I can only
@@ -1299,7 +1299,7 @@ azt_Play.end.min, azt_Play.end.sec, azt_Play.end.frame);
            works better with your drive */
                 st=verify_area(VERIFY_READ,(void *) arg, sizeof(volctrl));
                 if (st) return (st);
-                memcpy_fromfs(&volctrl,(char *) arg,sizeof(volctrl));
+                copy_from_user(&volctrl,(char *) arg,sizeof(volctrl));
 		azt_Play.start.min = 0x21;
 		azt_Play.start.sec = 0x84;
 		azt_Play.start.frame = volctrl.channel0;
@@ -1339,7 +1339,7 @@ azt_Play.end.min, azt_Play.end.sec, azt_Play.end.frame);
 	case CDROMREADRAW:    /*read data in mode 2 (2336 Bytes)*/
 		{ st = verify_area(VERIFY_WRITE, (void *) arg, sizeof buf);
 		  if (st) return st;
-		  memcpy_fromfs(&msf, (void *) arg, sizeof msf);
+		  copy_from_user(&msf, (void *) arg, sizeof msf);
 		  /* convert to bcd */
 		  azt_bin2bcd(&msf.cdmsf_min0);
 		  azt_bin2bcd(&msf.cdmsf_sec0);
@@ -1361,21 +1361,21 @@ azt_Play.end.min, azt_Play.end.sec, azt_Play.end.frame);
 		       { if (sendAztCmd(ACMD_PLAY_READ_RAW, &azt_Play)) return -1;
 		         DTEN_LOW;
 		         insb(DATA_PORT,buf,CD_FRAMESIZE_RAW);
-		         memcpy_tofs((void *) arg, &buf, CD_FRAMESIZE_RAW);
+		         copy_to_user((void *) arg, &buf, CD_FRAMESIZE_RAW);
 		       }  
 		  }
 		  else /*CDROMREADCOOKED*/
 		  { if (sendAztCmd(ACMD_PLAY_READ, &azt_Play)) return -1;
 		    DTEN_LOW;
 		    insb(DATA_PORT,buf,CD_FRAMESIZE);
-		    memcpy_tofs((void *) arg, &buf, CD_FRAMESIZE);
+		    copy_to_user((void *) arg, &buf, CD_FRAMESIZE);
 		  }
 		 } 
                 break;
 	case CDROMSEEK:    /*seek msf address*/
 		st = verify_area(VERIFY_READ,  (void *) arg, sizeof msf);
 		if (st) return st;
-		memcpy_fromfs(&msf, (void *) arg, sizeof msf);
+		copy_from_user(&msf, (void *) arg, sizeof msf);
 		/* convert to bcd */
 		azt_bin2bcd(&msf.cdmsf_min0);
 		azt_bin2bcd(&msf.cdmsf_sec0);

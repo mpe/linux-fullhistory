@@ -307,7 +307,7 @@ void ufs_statfs(struct super_block * sb, struct statfs * buf, int bufsiz)
 	tmp.f_fsid.val[1] = ufs_swab32(sb->u.ufs_sb.s_raw_sb->fs_id[1]);
 	tmp.f_namelen = UFS_MAXNAMLEN;
 
-	memcpy_tofs(buf, &tmp, bufsiz);
+	copy_to_user(buf, &tmp, bufsiz);
 	return;
 }
 

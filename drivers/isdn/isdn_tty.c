@@ -375,7 +375,7 @@ static int isdn_tty_end_vrx(const char *buf, int c, int from_user)
                 return 1;
         }
 	if (from_user) {
-		memcpy_fromfs(tmpbuf, buf, c);
+		copy_from_user(tmpbuf, buf, c);
                 p = tmpbuf;
         } else
                 p = (char *)buf;
@@ -836,7 +836,7 @@ static int isdn_tty_write(struct tty_struct *tty, int from_user, const u_char * 
                                                    &(m->lastplus),
                                                    from_user);
                         if (from_user)
-                                memcpy_fromfs(&(info->xmit_buf[info->xmit_count]), buf, c);
+                                copy_from_user(&(info->xmit_buf[info->xmit_count]), buf, c);
                         else
                                 memcpy(&(info->xmit_buf[info->xmit_count]), buf, c);
 #ifdef CONFIG_ISDN_AUDIO
@@ -1840,7 +1840,7 @@ static void isdn_tty_check_esc(const u_char * p, u_char plus, int count, int *pl
 		*pluscount = 0;
 	}
 	if (from_user) {
-		memcpy_fromfs(cbuf, p, count);
+		copy_from_user(cbuf, p, count);
 		p = cbuf;
 	}
 	while (count > 0) {

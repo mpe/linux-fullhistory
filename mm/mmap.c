@@ -281,7 +281,8 @@ unsigned long do_mmap(struct file * file, unsigned long addr, unsigned long len,
 		unsigned long start = addr;
 		mm->locked_vm += len >> PAGE_SHIFT;
 		do {
-			char c = get_user((char *) start);
+			char c;
+			get_user(c,(char *) start);
 			len -= PAGE_SIZE;
 			start += PAGE_SIZE;
 			__asm__ __volatile__("": :"r" (c));

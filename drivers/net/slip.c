@@ -1019,7 +1019,7 @@ sl_set_mac_address(struct device *dev, void *addr)
 		return err;
 	}
 
-	memcpy_fromfs(dev->dev_addr, addr, AX25_ADDR_LEN);	/* addr is an AX.25 shifted ASCII mac address */
+	copy_from_user(dev->dev_addr, addr, AX25_ADDR_LEN);	/* addr is an AX.25 shifted ASCII mac address */
 
 	return 0;
 }
@@ -1053,7 +1053,7 @@ slip_ioctl(struct tty_struct *tty, void *file, int cmd, void *arg)
 		if (err)  {
 			return err;
 		}
-		memcpy_tofs(arg, sl->dev->name, strlen(sl->dev->name) + 1);
+		copy_to_user(arg, sl->dev->name, strlen(sl->dev->name) + 1);
 		return 0;
 
 	case SIOCGIFENCAP:

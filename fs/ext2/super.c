@@ -736,5 +736,5 @@ void ext2_statfs (struct super_block * sb, struct statfs * buf, int bufsiz)
 	tmp.f_files = sb->u.ext2_sb.s_es->s_inodes_count;
 	tmp.f_ffree = ext2_count_free_inodes (sb);
 	tmp.f_namelen = EXT2_NAME_LEN;
-	memcpy_tofs(buf, &tmp, bufsiz);
+	copy_to_user(buf, &tmp, bufsiz);
 }

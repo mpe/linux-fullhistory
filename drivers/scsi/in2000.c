@@ -128,8 +128,8 @@
 #endif
 
 
-#define IN2000_VERSION    "1.29"
-#define IN2000_DATE       "24/Sep/1996"
+#define IN2000_VERSION    "1.30"
+#define IN2000_DATE       "14/Oct/1996"
 
 #define PROC_INTERFACE     /* add code for /proc/scsi/in2000/xxx interface */
 #define SYNC_DEBUG         /* extra info on sync negotiation printed */
@@ -146,10 +146,6 @@
 #define DB(f,a)
 #define CHECK_NULL(p,s)
 #endif
-
-#define IS_DIR_OUT(cmd) ((cmd)->cmnd[0] == WRITE_6  || \
-                         (cmd)->cmnd[0] == WRITE_10 || \
-                         (cmd)->cmnd[0] == WRITE_12)
 
 
 /*
@@ -306,6 +302,32 @@ unsigned long value;
    value |= read1_io(IO_WD_DATA) << 8;
    value |= read1_io(IO_WD_DATA);
    return value;
+}
+
+
+/* The 33c93 needs to be told which direction a command transfers its
+ * data; we use this function to figure it out. Returns true if there
+ * will be a DATA_OUT phase with this command, false otherwise.
+ * (Thanks to Joerg Dorchain for the research and suggestion.)
+ */
+static int is_dir_out(Scsi_Cmnd *cmd)
+{
+   switch (cmd->cmnd[0]) {
+      case WRITE_6:           case WRITE_10:          case WRITE_12:
+      case WRITE_LONG:        case WRITE_SAME:        case WRITE_BUFFER:
+      case WRITE_VERIFY:      case WRITE_VERIFY_12:
+      case COMPARE:           case COPY:              case COPY_VERIFY:
+      case SEARCH_EQUAL:      case SEARCH_HIGH:       case SEARCH_LOW:
+      case SEARCH_EQUAL_12:   case SEARCH_HIGH_12:    case SEARCH_LOW_12:
+      case FORMAT_UNIT:       case REASSIGN_BLOCKS:   case RESERVE:
+      case MODE_SELECT:       case MODE_SELECT_10:    case LOG_SELECT:
+      case SEND_DIAGNOSTIC:   case CHANGE_DEFINITION: case UPDATE_BLOCK:
+      case SET_WINDOW:        case MEDIUM_SCAN:       case SEND_VOLUME_TAG:
+      case 0xea:
+         return 1;
+      default:
+         return 0;
+      }
 }
 
 
@@ -504,7 +526,7 @@ DB(DB_EXECUTE,printk(")EX-1 "))
  * Start the selection process
  */
 
-   if (IS_DIR_OUT(cmd))
+   if (is_dir_out(cmd))
       write_3393(hostdata,WD_DESTINATION_ID, cmd->target);
    else
       write_3393(hostdata,WD_DESTINATION_ID, cmd->target | DSTID_DPD);
@@ -654,7 +676,7 @@ no:
          write_3393(hostdata,WD_CONTROL, CTRL_IDI | CTRL_EDI | CTRL_BUS);
          write1_io(0, IO_FIFO_WRITE);  /* clear fifo counter, write mode */
 
-         if (IS_DIR_OUT(cmd)) {
+         if (is_dir_out(cmd)) {
             hostdata->fifo = FI_FIFO_WRITING;
             if ((i = cmd->SCp.this_residual) > (IN2000_FIFO_SIZE - 16) )
                i = IN2000_FIFO_SIZE - 16;
@@ -1600,7 +1622,7 @@ DB(DB_INTR,printk("RESEL"))
     * But we DO need to fix the DPD bit so it's correct for this command.
     */
 
-         if (IS_DIR_OUT(cmd))
+         if (is_dir_out(cmd))
             write_3393(hostdata,WD_DESTINATION_ID,cmd->target);
          else
             write_3393(hostdata,WD_DESTINATION_ID,cmd->target | DSTID_DPD);

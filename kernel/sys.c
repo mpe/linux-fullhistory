@@ -501,6 +501,48 @@ asmlinkage int sys_setuid(uid_t uid)
 	return(0);
 }
 
+
+/*
+ * This function implementes a generic ability to update ruid, euid,
+ * and suid.  This allows you to implement the 4.4 compatible seteuid().
+ */
+asmlinkage int sys_setresuid(uid_t ruid, uid_t euid, uid_t suid)
+{
+	uid_t old_ruid, old_euid, old_suid;
+
+	old_ruid = current->uid;
+	old_euid = current->euid;
+	old_suid = current->suid;
+
+	if ((ruid != (uid_t) -1) && (ruid != current->uid) &&
+	    (ruid != current->euid) && (ruid != current->suid))
+		return -EPERM;
+	if ((euid != (uid_t) -1) && (euid != current->uid) &&
+	    (euid != current->euid) && (euid != current->suid))
+		return -EPERM;
+	if ((suid != (uid_t) -1) && (suid != current->uid) &&
+	    (suid != current->euid) && (suid != current->suid))
+		return -EPERM;
+	if (ruid != (uid_t) -1)
+		current->uid = ruid;
+	if (euid != (uid_t) -1)
+		current->euid = euid;
+	if (suid != (uid_t) -1)
+		current->suid = suid;
+	return 0;
+}
+
+asmlinkage int sys_getresuid(uid_t *ruid, uid_t *euid, uid_t *suid)
+{
+	int retval;
+
+	if (!(retval = put_user(current->uid, ruid)) &&
+	    !(retval = put_user(current->euid, euid)))
+		retval = put_user(current->suid, suid);
+	return retval;
+}
+
+
 /*
  * "setfsuid()" sets the fsuid - the uid used for filesystem checks. This
  * is used for "access()" and for the NFS daemon (letting nfsd stay at
@@ -693,7 +735,7 @@ asmlinkage int sys_setgroups(int gidsetsize, gid_t *grouplist)
 	if (i)
 		return i;
 	for (i = 0; i < gidsetsize; i++, grouplist++) {
-		current->groups[i] = get_user(grouplist);
+		get_user(current->groups[i], grouplist);
 	}
 	if (i < NGROUPS)
 		current->groups[i] = NOGROUP;
@@ -718,14 +760,11 @@ int in_group_p(gid_t grp)
 
 asmlinkage int sys_newuname(struct new_utsname * name)
 {
-	int error;
-
 	if (!name)
 		return -EFAULT;
-	error = verify_area(VERIFY_WRITE, name, sizeof *name);
-	if (!error)
-		memcpy_tofs(name,&system_utsname,sizeof *name);
-	return error;
+	if (copy_to_user(name,&system_utsname,sizeof *name))
+		return -EFAULT;
+	return 0;
 }
 
 #ifndef __alpha__
@@ -736,23 +775,21 @@ asmlinkage int sys_newuname(struct new_utsname * name)
  */
 asmlinkage int sys_uname(struct old_utsname * name)
 {
-	int error;
-	if (!name)
-		return -EFAULT;
-	error = verify_area(VERIFY_WRITE, name,sizeof *name);
-	if (error)
-		return error;
-	memcpy_tofs(&name->sysname,&system_utsname.sysname,
-		sizeof (system_utsname.sysname));
-	memcpy_tofs(&name->nodename,&system_utsname.nodename,
-		sizeof (system_utsname.nodename));
-	memcpy_tofs(&name->release,&system_utsname.release,
-		sizeof (system_utsname.release));
-	memcpy_tofs(&name->version,&system_utsname.version,
-		sizeof (system_utsname.version));
-	memcpy_tofs(&name->machine,&system_utsname.machine,
-		sizeof (system_utsname.machine));
-	return 0;
+	int error = -EFAULT;;
+	if (!name &&
+	    !copy_to_user(&name->sysname,&system_utsname.sysname,
+		sizeof (system_utsname.sysname)) &&
+	    !copy_to_user(&name->nodename,&system_utsname.nodename,
+		sizeof (system_utsname.nodename)) &&
+	    !copy_to_user(&name->release,&system_utsname.release,
+		sizeof (system_utsname.release)) &&
+	    !copy_to_user(&name->version,&system_utsname.version,
+		sizeof (system_utsname.version)) &&
+	    !copy_to_user(&name->machine,&system_utsname.machine,
+		sizeof (system_utsname.machine))
+	)
+		error = 0;
+	return error;
 }
 
 asmlinkage int sys_olduname(struct oldold_utsname * name)
@@ -763,15 +800,15 @@ asmlinkage int sys_olduname(struct oldold_utsname * name)
 	error = verify_area(VERIFY_WRITE, name,sizeof *name);
 	if (error)
 		return error;
-	memcpy_tofs(&name->sysname,&system_utsname.sysname,__OLD_UTS_LEN);
+	copy_to_user(&name->sysname,&system_utsname.sysname,__OLD_UTS_LEN);
 	put_user(0,name->sysname+__OLD_UTS_LEN);
-	memcpy_tofs(&name->nodename,&system_utsname.nodename,__OLD_UTS_LEN);
+	copy_to_user(&name->nodename,&system_utsname.nodename,__OLD_UTS_LEN);
 	put_user(0,name->nodename+__OLD_UTS_LEN);
-	memcpy_tofs(&name->release,&system_utsname.release,__OLD_UTS_LEN);
+	copy_to_user(&name->release,&system_utsname.release,__OLD_UTS_LEN);
 	put_user(0,name->release+__OLD_UTS_LEN);
-	memcpy_tofs(&name->version,&system_utsname.version,__OLD_UTS_LEN);
+	copy_to_user(&name->version,&system_utsname.version,__OLD_UTS_LEN);
 	put_user(0,name->version+__OLD_UTS_LEN);
-	memcpy_tofs(&name->machine,&system_utsname.machine,__OLD_UTS_LEN);
+	copy_to_user(&name->machine,&system_utsname.machine,__OLD_UTS_LEN);
 	put_user(0,name->machine+__OLD_UTS_LEN);
 	return 0;
 }
@@ -789,7 +826,7 @@ asmlinkage int sys_sethostname(char *name, int len)
 	error = verify_area(VERIFY_READ, name, len);
 	if (error)
 		return error;
-	memcpy_fromfs(system_utsname.nodename, name, len);
+	copy_from_user(system_utsname.nodename, name, len);
 	system_utsname.nodename[len] = 0;
 	return 0;
 }
@@ -806,7 +843,7 @@ asmlinkage int sys_gethostname(char *name, int len)
 	i = 1+strlen(system_utsname.nodename);
 	if (i > len)
 		i = len;
-	memcpy_tofs(name, system_utsname.nodename, i);
+	copy_to_user(name, system_utsname.nodename, i);
 	return 0;
 }
 
@@ -825,7 +862,7 @@ asmlinkage int sys_setdomainname(char *name, int len)
 	error = verify_area(VERIFY_READ, name, len);
 	if (error)
 		return error;
-	memcpy_fromfs(system_utsname.domainname, name, len);
+	copy_from_user(system_utsname.domainname, name, len);
 	system_utsname.domainname[len] = 0;
 	return 0;
 }
@@ -839,7 +876,7 @@ asmlinkage int sys_getrlimit(unsigned int resource, struct rlimit *rlim)
 	error = verify_area(VERIFY_WRITE,rlim,sizeof *rlim);
 	if (error)
 		return error;
-	memcpy_tofs(rlim, current->rlim + resource, sizeof(*rlim));
+	copy_to_user(rlim, current->rlim + resource, sizeof(*rlim));
 	return 0;	
 }
 
@@ -853,7 +890,7 @@ asmlinkage int sys_setrlimit(unsigned int resource, struct rlimit *rlim)
 	err = verify_area(VERIFY_READ, rlim, sizeof(*rlim));
 	if (err)
 		return err;
-	memcpy_fromfs(&new_rlim, rlim, sizeof(*rlim));
+	copy_from_user(&new_rlim, rlim, sizeof(*rlim));
 	old_rlim = current->rlim + resource;
 	if (((new_rlim.rlim_cur > old_rlim->rlim_max) ||
 	     (new_rlim.rlim_max > old_rlim->rlim_max)) &&
@@ -913,7 +950,7 @@ int getrusage(struct task_struct *p, int who, struct rusage *ru)
 			r.ru_nswap = p->nswap + p->cnswap;
 			break;
 	}
-	memcpy_tofs(ru, &r, sizeof(r));
+	copy_to_user(ru, &r, sizeof(r));
 	return 0;
 }
 

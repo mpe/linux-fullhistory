@@ -37,7 +37,7 @@ static int umsdos_ioctl_fill(
 	int ret = -EINVAL;
 	struct UMSDOS_DIR_ONCE *d = (struct UMSDOS_DIR_ONCE *)buf;
 	if (d->count == 0){
-		memcpy_tofs (d->ent->d_name,name,name_len);
+		copy_to_user (d->ent->d_name,name,name_len);
 		put_user ('\0',d->ent->d_name+name_len);
 		put_user (name_len,&d->ent->d_reclen);
 		put_user (ino,&d->ent->d_ino);
@@ -106,8 +106,8 @@ int UMSDOS_ioctl_dir (
 
 				Return always 0.
 			*/
-			put_fs_byte (UMSDOS_VERSION,&idata->version);
-			put_fs_byte (UMSDOS_RELEASE,&idata->release);
+			put_user(UMSDOS_VERSION,&idata->version);
+			put_user(UMSDOS_RELEASE,&idata->release);
 			ret = 0;
 		}else if (cmd == UMSDOS_READDIR_DOS){
 			/* #Specification: ioctl / UMSDOS_READDIR_DOS
@@ -152,9 +152,9 @@ int UMSDOS_ioctl_dir (
 							umsdos_parse (entry.name,entry.name_len,&info);
 							info.f_pos = f_pos;
 							umsdos_manglename(&info);
-							memcpy_tofs(&idata->umsdos_dirent,&entry
+							copy_to_user(&idata->umsdos_dirent,&entry
 								,sizeof(entry));
-							memcpy_tofs(&idata->dos_dirent.d_name
+							copy_to_user(&idata->dos_dirent.d_name
 								,info.fake.fname,info.fake.len+1);
 							break;
 						}
@@ -187,7 +187,7 @@ int UMSDOS_ioctl_dir (
 				: &umsdos_rdir_inode_operations;
 		}else{
 			struct umsdos_ioctl data;
-			memcpy_fromfs (&data,idata,sizeof(data));
+			copy_from_user (&data,idata,sizeof(data));
 			if (cmd == UMSDOS_CREAT_EMD){
 				/* #Specification: ioctl / UMSDOS_CREAT_EMD
 					The umsdos_dirent field of the struct umsdos_ioctl is used
@@ -281,7 +281,7 @@ int UMSDOS_ioctl_dir (
 					data.stat.st_atime = inode->i_atime;
 					data.stat.st_ctime = inode->i_ctime;
 					data.stat.st_mtime = inode->i_mtime;
-					memcpy_tofs (&idata->stat,&data.stat,sizeof(data.stat));
+					copy_to_user (&idata->stat,&data.stat,sizeof(data.stat));
 					iput (inode);
 				}
 			}else if (cmd == UMSDOS_DOS_SETUP){

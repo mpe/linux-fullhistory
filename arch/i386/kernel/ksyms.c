@@ -5,6 +5,7 @@
 
 #include <asm/semaphore.h>
 #include <asm/processor.h>
+#include <asm/segment.h>
 #include <asm/io.h>
 
 extern void dump_thread(struct pt_regs *, struct user *);
@@ -15,6 +16,7 @@ static struct symbol_table arch_symbol_table = {
 	/* platform dependent support */
 	X(EISA_bus),
 	X(wp_works_ok),
+	X(__verify_write),
 	X(dump_thread),
 	X(dump_fpu),
 	X(ioremap),

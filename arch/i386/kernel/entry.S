@@ -618,4 +618,6 @@ ENTRY(sys_call_table)
 	.long SYMBOL_NAME(sys_sched_rr_get_interval)
 	.long SYMBOL_NAME(sys_nanosleep)
 	.long SYMBOL_NAME(sys_mremap)
-	.space (NR_syscalls-163)*4
+	.long SYMBOL_NAME(sys_setresuid)
+	.long SYMBOL_NAME(sys_getresuid)
+	.space (NR_syscalls-165)*4

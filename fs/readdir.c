@@ -48,7 +48,7 @@ static int fillonedir(void * __buf, const char * name, int namlen, off_t offset,
 	put_user(ino, &dirent->d_ino);
 	put_user(offset, &dirent->d_offset);
 	put_user(namlen, &dirent->d_namlen);
-	memcpy_tofs(dirent->d_name, name, namlen);
+	copy_to_user(dirent->d_name, name, namlen);
 	put_user(0, dirent->d_name + namlen);
 	return 0;
 }
@@ -108,7 +108,7 @@ static int filldir(void * __buf, const char * name, int namlen, off_t offset, in
 	buf->previous = dirent;
 	put_user(ino, &dirent->d_ino);
 	put_user(reclen, &dirent->d_reclen);
-	memcpy_tofs(dirent->d_name, name, namlen);
+	copy_to_user(dirent->d_name, name, namlen);
 	put_user(0, dirent->d_name + namlen);
 	((char *) dirent) += reclen;
 	buf->current_dir = dirent;

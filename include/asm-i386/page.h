@@ -10,6 +10,9 @@
 
 #define STRICT_MM_TYPECHECKS
 
+#define clear_page(page)	memset((void *)(page), 0, PAGE_SIZE)
+#define copy_page(to,from)	memcpy((void *)(to), (void *)(from), PAGE_SIZE)
+
 #ifdef STRICT_MM_TYPECHECKS
 /*
  * These are used to make use of C type-checking..
