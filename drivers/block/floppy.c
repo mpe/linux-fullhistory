@@ -91,7 +91,7 @@
 
 #include <linux/config.h>
 
-/* do print messages for unexpected interupts */
+/* do print messages for unexpected interrupts */
 static int print_unex=1;
 
 #ifndef FD_MODULE
@@ -3205,7 +3205,7 @@ static char get_fdc_version(void)
 
 /* we make the invert_dcl function global. One day, somebody might
 want to centralize all thinkpad related options into one lilo option,
-there are just so many thinpad related quirks! */
+there are just so many thinkpad related quirks! */
 void floppy_invert_dcl(int *ints,int param)
 {
 	int i;

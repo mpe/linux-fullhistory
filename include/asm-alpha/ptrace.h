@@ -36,7 +36,7 @@ struct pt_regs {
 	unsigned long r26;
 	unsigned long r27;
 	unsigned long r28;
-	unsigned long padding;
+	unsigned long hae;
 /* These are saved by PAL-code: */
 	unsigned long ps;
 	unsigned long pc;

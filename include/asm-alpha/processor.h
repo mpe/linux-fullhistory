@@ -77,4 +77,13 @@ extern inline void end_bh_atomic(void)
 		: "0" (0));
 }
 
+/*
+ * Do necessary setup to start up a newly executed thread.
+ */
+static inline void start_thread(struct pt_regs * regs, unsigned long pc, unsigned long sp)
+{
+	regs->pc = pc;
+	wrusp(sp);
+}
+
 #endif /* __ASM_ALPHA_PROCESSOR_H */

@@ -1,3 +1,4 @@
+#define THREE_LEVEL
 /*
  *  linux/mm/vmalloc.c
  *
@@ -32,7 +33,7 @@ static inline void set_pgdir(unsigned long address, pgd_t entry)
 	struct task_struct * p;
 
 	for_each_task(p)
-		*PAGE_DIR_OFFSET(p,address) = entry;
+		*pgd_offset(p,address) = entry;
 }
 
 static inline void free_area_pte(pmd_t * pmd, unsigned long address, unsigned long size)
@@ -152,7 +153,7 @@ static int alloc_area_pages(unsigned long address, unsigned long size)
 	pgd_t * dir;
 	unsigned long end = address + size;
 
-	dir = PAGE_DIR_OFFSET(&init_task, address);
+	dir = pgd_offset(&init_task, address);
 	while (address < end) {
 		pmd_t *pmd = pmd_alloc_kernel(dir, address);
 		if (!pmd)

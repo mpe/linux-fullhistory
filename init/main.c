@@ -105,6 +105,9 @@ extern void sbpcd_setup(char *str, int *ints);
 #ifdef CONFIG_CDU31A
 extern void cdu31a_setup(char *str, int *ints);
 #endif CONFIG_CDU31A
+#ifdef CONFIG_CDU535
+extern void sonycd535_setup(char *str, int *ints);
+#endif CONFIG_CDU535
 void ramdisk_setup(char *str, int *ints);
 
 #ifdef CONFIG_SYSVIPC
@@ -222,6 +225,9 @@ struct {
 #ifdef CONFIG_AZTCD
 	{ "aztcd=", aztcd_setup },
 #endif
+#ifdef CONFIG_CDU535
+	{ "sonycd535=", sonycd535_setup },
+#endif CONFIG_CDU535
 #ifdef CONFIG_SOUND
 	{ "sound=", sound_setup },
 #endif

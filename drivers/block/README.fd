@@ -71,7 +71,7 @@ restore the default behaviour.
 	Tells the floppy driver that you don't have a Thinkpad.
 
  floppy=<drive>,<type>,cmos
-	Sets the cmos type of <drive> to <type>. Additionnaly, this drive is
+	Sets the cmos type of <drive> to <type>. Additionally, this drive is
 	allowed in the bitmask. This is useful if you have more than two
 	floppy drives (only two can be described in the physical cmos), or if
 	your BIOS uses non-standard CMOS types. The CMOS types are:

@@ -47,15 +47,6 @@ void show_regs(struct pt_regs * regs)
 }
 
 /*
- * Do necessary setup to start up a newly executed thread.
- */
-void start_thread(struct pt_regs * regs, unsigned long pc, unsigned long sp)
-{
-	regs->pc = pc;
-	wrusp(sp);
-}
-
-/*
  * Free current thread data structures etc..
  */
 void exit_thread(void)

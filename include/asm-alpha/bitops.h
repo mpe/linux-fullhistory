@@ -32,7 +32,7 @@ extern __inline__ unsigned long set_bit(unsigned long nr, void * addr)
 		 "=&r" (oldbit)
 		:"r" (1UL << (nr & 63)),
 		 "m" (((unsigned long *) addr)[nr >> 6]));
-	return oldbit;
+	return oldbit != 0;
 }
 
 extern __inline__ unsigned long clear_bit(unsigned long nr, void * addr)
@@ -54,7 +54,7 @@ extern __inline__ unsigned long clear_bit(unsigned long nr, void * addr)
 		 "=&r" (oldbit)
 		:"r" (1UL << (nr & 63)),
 		 "m" (((unsigned long *) addr)[nr >> 6]));
-	return oldbit;
+	return oldbit != 0;
 }
 
 extern __inline__ unsigned long change_bit(unsigned long nr, void * addr)
@@ -74,7 +74,7 @@ extern __inline__ unsigned long change_bit(unsigned long nr, void * addr)
 		 "=&r" (oldbit)
 		:"r" (1UL << (nr & 63)),
 		 "m" (((unsigned long *) addr)[nr >> 6]));
-	return oldbit;
+	return oldbit != 0;
 }
 
 extern __inline__ unsigned long test_bit(int nr, void * addr)

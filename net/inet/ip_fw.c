@@ -1005,38 +1005,23 @@ static int ip_chain_procinfo(int stage, char *buffer, char **start,
 
 #ifdef CONFIG_IP_ACCT
 
-int ip_acct_procinfo(char *buffer, char **start, off_t offset, int length)
+int ip_acct_procinfo(char *buffer, char **start, off_t offset, int length, int reset)
 {
-	return ip_chain_procinfo(IP_INFO_ACCT, buffer,start,offset,length,0);
-}
-
-int ip_acct0_procinfo(char *buffer, char **start, off_t offset, int length)
-{
-	return ip_chain_procinfo(IP_INFO_ACCT, buffer,start,offset,length,1);
+	return ip_chain_procinfo(IP_INFO_ACCT,buffer,start,offset,length,reset);
 }
 
 #endif
 
 #ifdef CONFIG_IP_FIREWALL
 
-int ip_fw_blk_procinfo(char *buffer, char **start, off_t offset, int length)
+int ip_fw_blk_procinfo(char *buffer, char **start, off_t offset, int length, int reset)
 {
-	return ip_chain_procinfo(IP_INFO_BLK, buffer,start,offset,length,0);
+	return ip_chain_procinfo(IP_INFO_BLK,buffer,start,offset,length,reset);
 }
 
-int ip_fw_blk0_procinfo(char *buffer, char **start, off_t offset, int length)
+int ip_fw_fwd_procinfo(char *buffer, char **start, off_t offset, int length, int reset)
 {
-	return ip_chain_procinfo(IP_INFO_BLK, buffer,start,offset,length,1);
-}
-
-int ip_fw_fwd_procinfo(char *buffer, char **start, off_t offset, int length)
-{
-	return ip_chain_procinfo(IP_INFO_FWD, buffer,start,offset,length,0);
-}
-
-int ip_fw_fwd0_procinfo(char *buffer, char **start, off_t offset, int length)
-{
-	return ip_chain_procinfo(IP_INFO_FWD, buffer,start,offset,length,1);
+	return ip_chain_procinfo(IP_INFO_FWD,buffer,start,offset,length,reset);
 }
 
 #endif

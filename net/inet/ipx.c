@@ -544,7 +544,12 @@ ipxitf_rcv(ipx_interface *intrfc, struct sk_buff *skb)
 	ipx_interface	*i;
 
 	/* See if we should update our network number */
-	if ((intrfc->if_netnum == 0L) && (ipx->ipx_tctrl == 0)) {
+	if ((intrfc->if_netnum == 0L) && 
+		(ipx->ipx_source.net == ipx->ipx_dest.net)) {
+		/* NB: NetWare servers lie about their hop count so we
+		 * dropped the test based on it.  This is the best way
+		 * to determine this is a 0 hop count packet.
+		 */
 		if ((i=ipxitf_find_using_net(ipx->ipx_source.net))==NULL) {
 			intrfc->if_netnum = ipx->ipx_source.net;
 			(void) ipxitf_add_local_route(intrfc);
@@ -558,8 +563,15 @@ ipxitf_rcv(ipx_interface *intrfc, struct sk_buff *skb)
 		}
 	}
 
-	if (intrfc->if_netnum != ipx->ipx_dest.net)
-		return ipxrtr_route_skb(skb);
+	if (intrfc->if_netnum != ipx->ipx_dest.net) {
+		/* We only route point-to-point packets. */
+		if ((skb->pkt_type != PACKET_BROADCAST) &&
+			(skb->pkt_type != PACKET_MULTICAST))
+			return ipxrtr_route_skb(skb);
+		
+		kfree_skb(skb,FREE_READ);
+		return 0;
+	}
 
 	/* see if we should keep it */
 	if ((memcmp(ipx_broadcast_node, ipx->ipx_dest.node, IPX_NODE_LEN) == 0) 

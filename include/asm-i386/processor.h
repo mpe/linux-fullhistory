@@ -39,7 +39,7 @@ extern int EISA_bus;
  * User space process size: 3GB. This is hardcoded into a few places,
  * so don't change it unless you know what you are doing.
  */
-#define TASK_SIZE	0xc0000000
+#define TASK_SIZE	(0xC0000000UL)
 
 /*
  * Size of io_bitmap in longwords: 32 is ports 0-0x3ff.
@@ -126,6 +126,14 @@ struct thread_struct {
 	_TSS(0), 0, 0,0, \
 	{ { 0, }, },  /* 387 state */ \
 	NULL, 0, 0, 0, 0 /* vm86_info */ \
+}
+
+static inline void start_thread(struct pt_regs * regs, unsigned long eip, unsigned long esp)
+{
+	regs->cs = USER_CS;
+	regs->ds = regs->es = regs->ss = regs->fs = regs->gs = USER_DS;
+	regs->eip = eip;
+	regs->esp = esp;
 }
 
 #endif /* __ASM_I386_PROCESSOR_H */

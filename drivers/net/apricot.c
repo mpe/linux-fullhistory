@@ -547,7 +547,7 @@ i596_open(struct device *dev)
 
     irq2dev_map[dev->irq] = dev;
 
-     i = init_rx_bufs(dev, RX_RING_SIZE);
+    i = init_rx_bufs(dev, RX_RING_SIZE);
 
     if ((i = init_rx_bufs(dev, RX_RING_SIZE)) < RX_RING_SIZE)
         printk("%s: only able to allocate %d receive buffers\n", dev->name, i);
@@ -743,6 +743,7 @@ int apricot_probe(struct device *dev)
     dev->priv = (void *)((dev->mem_start + 0xf) & 0xfffffff0);
 
     lp = (struct i596_private *)dev->priv;
+    memset((void *)lp, 0, sizeof(struct i596_private));
     lp->scb.command = 0;
     lp->scb.cmd = (struct i596_cmd *) I596_NULL;
     lp->scb.rfd = (struct i596_rfd *)I596_NULL;

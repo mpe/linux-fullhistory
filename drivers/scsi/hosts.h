@@ -243,6 +243,7 @@ struct Scsi_Host
 		   that should be locked out of performing I/O while we have an active
 		   command on this host. */
 		struct Scsi_Host * block;
+		unsigned wish_block:1;
 
 		/* These parameters should be set by the detect routine */
 		unsigned char *base;

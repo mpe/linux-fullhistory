@@ -79,6 +79,11 @@ OBJS := $(OBJS) xd.o
 SRCS := $(SRCS) xd.c
 endif
 
+ifdef CONFIG_CDU535
+OBJS := $(OBJS) sonycd535.o
+SRCS := $(SRCS) sonycd535.c
+endif
+
 all: block.a
 
 block.a: $(OBJS)

@@ -114,17 +114,6 @@ void show_regs(struct pt_regs * regs)
 }
 
 /*
- * Do necessary setup to start up a newly executed thread.
- */
-void start_thread(struct pt_regs * regs, unsigned long eip, unsigned long esp)
-{
-	regs->cs = USER_CS;
-	regs->ds = regs->es = regs->ss = regs->fs = regs->gs = USER_DS;
-	regs->eip = eip;
-	regs->esp = esp;
-}
-
-/*
  * Free current thread data structures etc..
  */
 void exit_thread(void)

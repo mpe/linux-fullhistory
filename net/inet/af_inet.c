@@ -26,6 +26,8 @@
  *					this fixed and the accept bug fixed 
  *					some RPC stuff seems happier.
  *		Niibe Yutaka	:	4.4BSD style write async I/O
+ *		Alan Cox, 
+ *		Tony Gale 	:	Fixed reuse semantics.
  *
  *		This program is free software; you can redistribute it and/or
  *		modify it under the terms of the GNU General Public License
@@ -854,7 +856,7 @@ outside_loop:
 			destroy_sock(sk2);
 			goto outside_loop;
 		}
-		if (!sk->reuse) 
+		if (!sk->reuse || sk2->state==TCP_LISTEN) 
 		{
 			sti();
 			return(-EADDRINUSE);

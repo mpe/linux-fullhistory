@@ -1,8 +1,11 @@
 /*
  *      u14-34f.c - Low-level driver for UltraStor 14F/34F SCSI host adapters.
  *
+ *       9 Feb 1995 rev. 1.16 for linux 1.1.90
+ *          Use host->wish_block instead of host->block.
+ *
  *       8 Feb 1995 rev. 1.15 for linux 1.1.89
- *          Cleared target_time_out counter while preforming a reset.
+ *          Cleared target_time_out counter while performing a reset.
  *
  *      28 Jan 1995 rev. 1.14 for linux 1.1.86
  *          Added module support.
@@ -111,7 +114,7 @@
  *    The new firmware has fixed all the above problems.
  *
  *  In order to support multiple ISA boards in a reliable way,
- *  the driver sets host->block = TRUE for all ISA boards.
+ *  the driver sets host->wish_block = TRUE for all ISA boards.
  */
 
 #if defined(MODULE)
@@ -428,7 +431,7 @@ static inline int port_detect(ushort *port_base, unsigned int j,
       sprintf(BN(j), "U34F%d", j);
       }
    else {
-      sh[j]->block = sh[j];
+      sh[j]->wish_block = TRUE;
 
 #if defined (HAVE_OLD_U14F_FIRMWARE)
       sh[j]->hostt->use_clustering = DISABLE_CLUSTERING;

@@ -212,10 +212,7 @@ void scsi_make_blocked_list(void)  {
 
   /*
    * Create a circular linked list from the scsi hosts which have
-   * the "block" field in the Scsi_Host structure set to any value
-   * different from NULL.
-   * If there is only one host such that host->block != NULL, the list is
-   * empty and host->block is reset to NULL.
+   * the "wish_block" field in the Scsi_Host structure set.
    * The blocked list should include all the scsi hosts using ISA DMA.
    * In some systems, using two dma channels simultaneously causes
    * unpredictable results.
@@ -243,10 +240,10 @@ void scsi_make_blocked_list(void)  {
       * Useful to put into the blocked list all the hosts whose driver
       * does not know about the host->block feature.
       */
-     if (shpnt->unchecked_isa_dma) shpnt->block = shpnt;
+     if (shpnt->unchecked_isa_dma) shpnt->wish_block = 1;
 #endif
 
-     if (shpnt->block) sh[block_count++] = shpnt;
+     if (shpnt->wish_block) sh[block_count++] = shpnt;
      }
 
   if (block_count == 1) sh[0]->block = NULL;

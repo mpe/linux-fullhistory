@@ -67,6 +67,7 @@ extern int sys_tz;
 extern int request_dma(unsigned int dmanr, char * deviceID);
 extern void free_dma(unsigned int dmanr);
 
+extern int close_fp(struct file *filp, unsigned int fd);
 extern void (* iABI_hook)(struct pt_regs * regs);
 
 struct symbol_table symbol_table = {
@@ -128,6 +129,7 @@ struct symbol_table symbol_table = {
 	X(namei),
 	X(lnamei),
 	X(open_namei),
+	X(close_fp),
 	X(check_disk_change),
 	X(invalidate_buffers),
 	X(fsync_dev),

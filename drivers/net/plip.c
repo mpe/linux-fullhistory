@@ -1,4 +1,4 @@
-/* $Id: plip.c,v 1.10 1995/02/08 05:47:12 gniibe Exp $ */
+/* $Id: plip.c,v 1.12 1995/02/11 10:26:05 gniibe Exp $ */
 /* PLIP: A parallel port "network" driver for Linux. */
 /* This driver is for parallel port with 5-bit cable (LapLink (R) cable). */
 /*
@@ -163,7 +163,29 @@ enum plip_nibble_state {
 struct plip_local {
 	enum plip_packet_state state;
 	enum plip_nibble_state nibble;
-	unsigned short length;
+	union {
+		struct {
+#if defined(__i386__)
+			unsigned char lsb;
+			unsigned char msb;
+#elif defined(__mc68000__)
+			unsigned char msb;
+			unsigned char lsb;
+#elif defined(__MIPSEL__)
+			unsigned char lsb;
+			unsigned char msb;
+#elif defined(__MIPSEB__)
+			unsigned char msb;
+			unsigned char lsb;
+#elif defined(__alpha__)
+			unsigned char lsb;
+			unsigned char msb;
+#else
+#error	"Adjust this structure to match your CPU"
+#endif						
+		} b;
+		unsigned short h;
+	} length;
 	unsigned short byte;
 	unsigned char  checksum;
 	unsigned char  data;
@@ -178,10 +200,11 @@ struct net_local {
 	struct plip_local rcv_data;
 	unsigned long  trigger;
 	unsigned long  nibble;
-	unsigned long  unit;
 	enum plip_connection_state connection;
 	unsigned short timeout_count;
 	char is_deferred;
+	int (*orig_rebuild_header)(void *eth, struct device *dev,
+				   unsigned long raddr, struct sk_buff *skb);
 };
 
 /* Entry point of PLIP driver.
@@ -235,24 +258,27 @@ plip_init(struct device *dev)
 	ether_setup(dev);
 
 	/* Then, override parts of it */
-	dev->rebuild_header 	= plip_rebuild_header;
 	dev->hard_start_xmit	= plip_tx_packet;
 	dev->open		= plip_open;
 	dev->stop		= plip_close;
 	dev->get_stats 		= plip_get_stats;
 	dev->set_config		= plip_config;
 	dev->do_ioctl		= plip_ioctl;
-	dev->flags	        = IFF_POINTOPOINT;
+	dev->flags	        = IFF_POINTOPOINT|IFF_NOARP;
 
 	/* Set the private structure */
 	dev->priv = kmalloc(sizeof (struct net_local), GFP_KERNEL);
+	if (dev->priv == NULL)
+		return EAGAIN;
 	memset(dev->priv, 0, sizeof(struct net_local));
 	nl = (struct net_local *) dev->priv;
+
+	nl->orig_rebuild_header = dev->rebuild_header;
+	dev->rebuild_header 	= plip_rebuild_header;
 
 	/* Initialize constants */
 	nl->trigger	= PLIP_TRIGGER_WAIT;
 	nl->nibble	= PLIP_NIBBLE_WAIT;
-	nl->unit	= PLIP_DELAY_UNIT;
 
 	/* Initialize task queue structures */
 	nl->immediate.next = &tq_last;
@@ -407,8 +433,7 @@ plip_none(struct device *dev, struct net_local *nl,
 /* PLIP_RECEIVE --- receive a byte(two nibbles)
    Returns OK on success, TIMEOUT on timeout */
 inline static int
-plip_receive(unsigned short nibble_timeout, unsigned short unit,
-	     unsigned short status_addr, unsigned short data_addr,
+plip_receive(unsigned short nibble_timeout, unsigned short status_addr,
 	     enum plip_nibble_state *ns_p, unsigned char *data_p)
 {
 	unsigned char c0, c1;
@@ -419,7 +444,7 @@ plip_receive(unsigned short nibble_timeout, unsigned short unit,
 		cx = nibble_timeout;
 		while (1) {
 			c0 = inb(status_addr);
-			udelay(unit);
+			udelay(PLIP_DELAY_UNIT);
 			if ((c0 & 0x80) == 0) {
 				c1 = inb(status_addr);
 				if (c0 == c1)
@@ -429,14 +454,15 @@ plip_receive(unsigned short nibble_timeout, unsigned short unit,
 				return TIMEOUT;
 		}
 		*data_p = (c0 >> 3) & 0x0f;
-		outb(0x10, data_addr); /* send ACK */
+		outb(0x10, --status_addr); /* send ACK */
+		status_addr++;
 		*ns_p = PLIP_NB_1;
 
 	case PLIP_NB_1:
 		cx = nibble_timeout;
 		while (1) {
 			c0 = inb(status_addr);
-			udelay(unit);
+			udelay(PLIP_DELAY_UNIT);
 			if (c0 & 0x80) {
 				c1 = inb(status_addr);
 				if (c0 == c1)
@@ -446,7 +472,8 @@ plip_receive(unsigned short nibble_timeout, unsigned short unit,
 				return TIMEOUT;
 		}
 		*data_p |= (c0 << 1) & 0xf0;
-		outb(0x00, data_addr); /* send ACK */
+		outb(0x00, --status_addr); /* send ACK */
+		status_addr++;
 		*ns_p = PLIP_NB_BEGIN;
 		return OK;
 
@@ -459,9 +486,8 @@ static int
 plip_receive_packet(struct device *dev, struct net_local *nl,
 		    struct plip_local *snd, struct plip_local *rcv)
 {
-	unsigned short data_addr = PAR_DATA(dev),
-	               status_addr = PAR_STATUS(dev);
-	unsigned short nibble_timeout = nl->nibble, unit = nl->unit;
+	unsigned short status_addr = PAR_STATUS(dev);
+	unsigned short nibble_timeout = nl->nibble;
 	unsigned char *lbuf;
 
 	switch (rcv->state) {
@@ -477,9 +503,8 @@ plip_receive_packet(struct device *dev, struct net_local *nl,
 
 	case PLIP_PK_LENGTH_LSB:
 		if (snd->state != PLIP_PK_DONE) {
-			if (plip_receive(nl->trigger, unit,
-					 status_addr, data_addr, &rcv->nibble,
-					 (unsigned char *)&rcv->length)) {
+			if (plip_receive(nl->trigger, status_addr,
+					 &rcv->nibble, &rcv->length.b.lsb)) {
 				/* collision, here dev->tbusy == 1 */
 				rcv->state = PLIP_PK_DONE;
 				nl->is_deferred = 1;
@@ -490,29 +515,27 @@ plip_receive_packet(struct device *dev, struct net_local *nl,
 				return OK;
 			}
 		} else {
-			if (plip_receive(nibble_timeout, unit,
-					 status_addr, data_addr, &rcv->nibble,
-					 (unsigned char *)&rcv->length))
+			if (plip_receive(nibble_timeout, status_addr,
+					 &rcv->nibble, &rcv->length.b.lsb))
 				return TIMEOUT;
 		}
 		rcv->state = PLIP_PK_LENGTH_MSB;
 
 	case PLIP_PK_LENGTH_MSB:
-		if (plip_receive(nibble_timeout, unit,
-				 status_addr, data_addr, &rcv->nibble,
-				 (unsigned char *)&rcv->length+1))
+		if (plip_receive(nibble_timeout, status_addr,
+				 &rcv->nibble, &rcv->length.b.msb))
 			return TIMEOUT;
-		if (rcv->length > dev->mtu || rcv->length < 8) {
-			printk("%s: bogus packet size %d.\n", dev->name, rcv->length);
+		if (rcv->length.h > dev->mtu || rcv->length.h < 8) {
+			printk("%s: bogus packet size %d.\n", dev->name, rcv->length.h);
 			return ERROR;
 		}
 		/* Malloc up new buffer. */
-		rcv->skb = alloc_skb(rcv->length, GFP_ATOMIC);
+		rcv->skb = alloc_skb(rcv->length.h, GFP_ATOMIC);
 		if (rcv->skb == NULL) {
 			printk("%s: Memory squeeze.\n", dev->name);
 			return ERROR;
 		}
-		rcv->skb->len = rcv->length;
+		rcv->skb->len = rcv->length.h;
 		rcv->skb->dev = dev;
 		rcv->state = PLIP_PK_DATA;
 		rcv->byte = 0;
@@ -520,18 +543,19 @@ plip_receive_packet(struct device *dev, struct net_local *nl,
 
 	case PLIP_PK_DATA:
 		lbuf = rcv->skb->data;
-		do {
-			if (plip_receive(nibble_timeout, unit,
-					 status_addr, data_addr,
+		do
+			if (plip_receive(nibble_timeout, status_addr, 
 					 &rcv->nibble, &lbuf[rcv->byte]))
 				return TIMEOUT;
-			rcv->checksum += lbuf[rcv->byte];
-		} while (++rcv->byte < rcv->length);
+		while (++rcv->byte < rcv->length.h);
+		do
+			rcv->checksum += lbuf[--rcv->byte];
+		while (rcv->byte);
 		rcv->state = PLIP_PK_CHECKSUM;
 
 	case PLIP_PK_CHECKSUM:
-		if (plip_receive(nibble_timeout, unit, status_addr,
-				 data_addr, &rcv->nibble, &rcv->data))
+		if (plip_receive(nibble_timeout, status_addr,
+				 &rcv->nibble, &rcv->data))
 			return TIMEOUT;
 		if (rcv->data != rcv->checksum) {
 			nl->enet_stats.rx_crc_errors++;
@@ -573,8 +597,7 @@ plip_receive_packet(struct device *dev, struct net_local *nl,
 /* PLIP_SEND --- send a byte (two nibbles) 
    Returns OK on success, TIMEOUT when timeout    */
 inline static int
-plip_send(unsigned short nibble_timeout, unsigned short unit,
-	  unsigned short status_addr, unsigned short data_addr,
+plip_send(unsigned short nibble_timeout, unsigned short data_addr,
 	  enum plip_nibble_state *ns_p, unsigned char data)
 {
 	unsigned char c0;
@@ -588,28 +611,31 @@ plip_send(unsigned short nibble_timeout, unsigned short unit,
 	case PLIP_NB_1:
 		outb(0x10 | (data & 0x0f), data_addr);
 		cx = nibble_timeout;
+		data_addr++;
 		while (1) {
-			c0 = inb(status_addr);
+			c0 = inb(data_addr);
 			if ((c0 & 0x80) == 0) 
 				break;
 			if (--cx == 0)
 				return TIMEOUT;
-			udelay(unit);
+			udelay(PLIP_DELAY_UNIT);
 		}
-		outb(0x10 | (data >> 4), data_addr);
+		outb(0x10 | (data >> 4), --data_addr);
 		*ns_p = PLIP_NB_2;
 
 	case PLIP_NB_2:
 		outb((data >> 4), data_addr);
+		data_addr++;
 		cx = nibble_timeout;
 		while (1) {
-			c0 = inb(status_addr);
+			c0 = inb(data_addr);
 			if (c0 & 0x80)
 				break;
 			if (--cx == 0)
 				return TIMEOUT;
-			udelay(unit);
+			udelay(PLIP_DELAY_UNIT);
 		}
+		data_addr--;
 		*ns_p = PLIP_NB_BEGIN;
 		return OK;
 	}
@@ -620,9 +646,8 @@ static int
 plip_send_packet(struct device *dev, struct net_local *nl,
 		 struct plip_local *snd, struct plip_local *rcv)
 {
-	unsigned short data_addr = PAR_DATA(dev),
-		       status_addr = PAR_STATUS(dev);
-	unsigned short nibble_timeout = nl->nibble, unit = nl->unit;
+	unsigned short data_addr = PAR_DATA(dev);
+	unsigned short nibble_timeout = nl->nibble;
 	unsigned char *lbuf;
 	unsigned char c0;
 	unsigned int cx;
@@ -637,10 +662,10 @@ plip_send_packet(struct device *dev, struct net_local *nl,
 	switch (snd->state) {
 	case PLIP_PK_TRIGGER:
 		/* Trigger remote rx interrupt. */
-		outb(0x08, PAR_DATA(dev));
+		outb(0x08, data_addr);
 		cx = nl->trigger;
 		while (1) {
-			udelay(nl->unit);
+			udelay(PLIP_DELAY_UNIT);
 			cli();
 			if (nl->connection == PLIP_CN_RECEIVE) {
 				sti();
@@ -664,37 +689,38 @@ plip_send_packet(struct device *dev, struct net_local *nl,
 			}
 			sti();
 			if (--cx == 0) {
-				outb(0x00, PAR_DATA(dev));
+				outb(0x00, data_addr);
 				return TIMEOUT;
 			}
 		}
 
 	case PLIP_PK_LENGTH_LSB:
-		if (plip_send(nibble_timeout, unit, status_addr, data_addr,
-			      &snd->nibble, snd->length & 0xff))
+		if (plip_send(nibble_timeout, data_addr,
+			      &snd->nibble, snd->length.b.lsb))
 			return TIMEOUT;
 		snd->state = PLIP_PK_LENGTH_MSB;
 
 	case PLIP_PK_LENGTH_MSB:
-		if (plip_send(nibble_timeout, unit, status_addr, data_addr,
-			      &snd->nibble, snd->length >> 8))
+		if (plip_send(nibble_timeout, data_addr,
+			      &snd->nibble, snd->length.b.msb))
 			return TIMEOUT;
 		snd->state = PLIP_PK_DATA;
 		snd->byte = 0;
 		snd->checksum = 0;
 
 	case PLIP_PK_DATA:
-		do {
-			if (plip_send(nibble_timeout, unit,
-				      status_addr, data_addr,
+		do
+			if (plip_send(nibble_timeout, data_addr,
 				      &snd->nibble, lbuf[snd->byte]))
 				return TIMEOUT;
-			snd->checksum += lbuf[snd->byte];
-		} while (++snd->byte < snd->length);
+		while (++snd->byte < snd->length.h);
+		do
+			snd->checksum += lbuf[--snd->byte];
+		while (snd->byte);
 		snd->state = PLIP_PK_CHECKSUM;
 
 	case PLIP_PK_CHECKSUM:
-		if (plip_send(nibble_timeout, unit, status_addr, data_addr,
+		if (plip_send(nibble_timeout, data_addr,
 			      &snd->nibble, snd->checksum))
 			return TIMEOUT;
 
@@ -704,7 +730,7 @@ plip_send_packet(struct device *dev, struct net_local *nl,
 
 	case PLIP_PK_DONE:
 		/* Close the connection */
-		outb (0x00, PAR_DATA(dev));
+		outb (0x00, data_addr);
 		snd->skb = NULL;
 		if (net_debug > 2)
 			printk("%s: send end\n", dev->name);
@@ -816,8 +842,12 @@ static int
 plip_rebuild_header(void *buff, struct device *dev, unsigned long dst,
 		    struct sk_buff *skb)
 {
+	struct net_local *nl = (struct net_local *)dev->priv;
 	struct ethhdr *eth = (struct ethhdr *)buff;
 	int i;
+
+	if ((dev->flags & IFF_NOARP)==0)
+		return nl->orig_rebuild_header(buff, dev, dst, skb);
 
 	if (eth->h_proto != htons(ETH_P_IP)) {
 		printk("plip_rebuild_header: Don't know how to resolve type %d addresses?\n", (int)eth->h_proto);
@@ -865,7 +895,7 @@ plip_tx_packet(struct sk_buff *skb, struct device *dev)
 	cli();
 	dev->trans_start = jiffies;
 	snd->skb = skb;
-	snd->length = skb->len;
+	snd->length.h = skb->len;
 	snd->state = PLIP_PK_TRIGGER;
 	if (nl->connection == PLIP_CN_NONE) {
 		nl->connection = PLIP_CN_SEND;
@@ -997,12 +1027,10 @@ plip_ioctl(struct device *dev, struct ifreq *rq, int cmd)
 	case PLIP_GET_TIMEOUT:
 		pc->trigger = nl->trigger;
 		pc->nibble  = nl->nibble;
-		pc->unit    = nl->unit;
 		break;
 	case PLIP_SET_TIMEOUT:
 		nl->trigger = pc->trigger;
 		nl->nibble  = pc->nibble;
-		nl->unit    = pc->unit;
 		break;
 	default:
 		return -EOPNOTSUPP;

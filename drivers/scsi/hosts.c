@@ -241,6 +241,7 @@ struct Scsi_Host * scsi_register(Scsi_Host_Template * tpnt, int j){
 						      (tpnt->unchecked_isa_dma && j ? GFP_DMA : 0) | GFP_ATOMIC);
 	retval->host_busy = 0;
 	retval->block = NULL;
+	retval->wish_block = 0;
 	if(j > 0xffff) panic("Too many extra bytes requested\n");
 	retval->extra_bytes = j;
 	retval->loaded_as_module = scsi_loadable_module_flag;

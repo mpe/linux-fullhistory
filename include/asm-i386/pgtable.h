@@ -29,9 +29,6 @@
 #define PTRS_PER_PMD	1
 #define PTRS_PER_PGD	1024
 
-/* the no. of pointers that fit on a page: this will go away */
-#define PTRS_PER_PAGE	(PAGE_SIZE/sizeof(void*))
-
 /* Just any arbitrary offset to the start of the vmalloc VM area: the
  * current 8MB value just means that there will be a 8MB "hole" after the
  * physical memory until the kernel virtual memory starts.  That means that
@@ -133,17 +130,36 @@ extern unsigned long high_memory;
 
 extern inline int pte_none(pte_t pte)		{ return !pte_val(pte); }
 extern inline int pte_present(pte_t pte)	{ return pte_val(pte) & _PAGE_PRESENT; }
+extern inline int pte_inuse(pte_t *ptep)	{ return mem_map[MAP_NR(ptep)] > 1; }
 extern inline void pte_clear(pte_t *ptep)	{ pte_val(*ptep) = 0; }
 
 extern inline int pmd_none(pmd_t pmd)		{ return !pmd_val(pmd); }
 extern inline int pmd_bad(pmd_t pmd)		{ return (pmd_val(pmd) & ~PAGE_MASK) != _PAGE_TABLE || pmd_val(pmd) > high_memory; }
 extern inline int pmd_present(pmd_t pmd)	{ return pmd_val(pmd) & _PAGE_PRESENT; }
+extern inline int pmd_inuse(pmd_t *pmdp)	{ return 0; }
 extern inline void pmd_clear(pmd_t * pmdp)	{ pmd_val(*pmdp) = 0; }
 
+#ifdef THREE_LEVEL
+/*
+ * The "pgd_xxx()" functions here are trivial for a folded two-level
+ * setup: the pgd is never bad, and a pmd always exists (as it's folded
+ * into the pgd entry)
+ */
+extern inline int pgd_none(pgd_t pgd)		{ return 0; }
+extern inline int pgd_bad(pgd_t pgd)		{ return 0; }
+extern inline int pgd_present(pgd_t pgd)	{ return 1; }
+extern inline int pgd_inuse(pgd_t * pgdp)	{ return mem_map[MAP_NR(pgdp)] > 1; }
+extern inline void pgd_clear(pgd_t * pgdp)	{ }
+#else
+/*
+ * These are the old (and incorrect) ones needed for code that doesn't
+ * know about three-level yet..
+ */
 extern inline int pgd_none(pgd_t pgd)		{ return !pgd_val(pgd); }
 extern inline int pgd_bad(pgd_t pgd)		{ return (pgd_val(pgd) & ~PAGE_MASK) != _PAGE_TABLE || pgd_val(pgd) > high_memory; }
 extern inline int pgd_present(pgd_t pgd)	{ return pgd_val(pgd) & _PAGE_PRESENT; }
 extern inline void pgd_clear(pgd_t * pgdp)	{ pgd_val(*pgdp) = 0; }
+#endif
 
 /*
  * The following only work if pte_present() is true.
@@ -185,6 +201,8 @@ extern inline unsigned long pte_page(pte_t pte)
 extern inline unsigned long pmd_page(pmd_t pmd)
 { return pmd_val(pmd) & PAGE_MASK; }
 
+#ifndef THREE_LEVEL
+
 extern inline unsigned long pgd_page(pgd_t pgd)
 { return pgd_val(pgd) & PAGE_MASK; }
 
@@ -192,6 +210,11 @@ extern inline void pgd_set(pgd_t * pgdp, pte_t * ptep)
 { pgd_val(*pgdp) = _PAGE_TABLE | (unsigned long) ptep; }
 
 #define PAGE_DIR_OFFSET(tsk,address) pgd_offset((tsk),(address))
+
+/* the no. of pointers that fit on a page: this will go away */
+#define PTRS_PER_PAGE	(PAGE_SIZE/sizeof(void*))
+
+#endif
 
 /* to find an entry in a page-table-directory */
 extern inline pgd_t * pgd_offset(struct task_struct * tsk, unsigned long address)
@@ -298,6 +321,16 @@ extern inline void pmd_free(pmd_t * pmd)
 extern inline pmd_t * pmd_alloc(pgd_t * pgd, unsigned long address)
 {
 	return (pmd_t *) pgd;
+}
+
+extern inline void pgd_free(pgd_t * pgd)
+{
+	free_page((unsigned long) pgd);
+}
+
+extern inline pgd_t * pgd_alloc(void)
+{
+	return (pgd_t *) get_free_page(GFP_KERNEL);
 }
 
 extern pgd_t swapper_pg_dir[1024];

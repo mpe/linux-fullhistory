@@ -194,11 +194,13 @@ ifdef CONFIG_ATP
 NETDRV_OBJS := $(NETDRV_OBJS) atp.o
 endif
 
-ifdef CONFIG_DE4x5
+ifdef CONFIG_DE4X5
 NETDRV_OBJS := $(NETDRV_OBJS) de4x5.o
+else
+MODULES := $(MODULES) de4x5.o
+endif
 de4x5.o: de4x5.c CONFIG
 	$(CC) $(CPPFLAGS) $(CFLAGS) $(DE4x5_OPTS) -c $<
-endif
 
 ifdef CONFIG_NI52
 NETDRV_OBJS := $(NETDRV_OBJS) ni52.o
@@ -252,7 +254,7 @@ endif
 
 net.a: $(NETDRV_OBJS)
 	rm -f net.a
-	ar rcs net.a $(NETDRV_OBJS)
+	$(AR) rcs net.a $(NETDRV_OBJS)
 
 clean:
 	rm -f core *.o *.a *.s

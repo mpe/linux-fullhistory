@@ -43,7 +43,7 @@ comment 'Networking options'
 bool 'TCP/IP networking' CONFIG_INET y
 if [ "$CONFIG_INET" = "y" ]; then
 bool 'IP forwarding/gatewaying' CONFIG_IP_FORWARD n
-bool 'IP multicasting (ALPHA)' CONFIG_IP_MULTICAST n
+bool 'IP multicasting' CONFIG_IP_MULTICAST n
 bool 'IP firewalling' CONFIG_IP_FIREWALL n
 bool 'IP accounting' CONFIG_IP_ACCT n
 comment '(it is safe to leave these untouched)'
@@ -119,7 +119,6 @@ if [ "$CONFIG_SLIP" = "y" ]; then
 fi
 bool 'PPP (point-to-point) support' CONFIG_PPP n
 bool 'PLIP (parallel port) support' CONFIG_PLIP n
-bool 'Load balancing support (experimental)' CONFIG_SLAVE_BALANCING n
 bool 'Do you want to be offered ALPHA test drivers' CONFIG_NET_ALPHA n
 bool 'Western Digital/SMC cards' CONFIG_NET_VENDOR_SMC n
 if [ "$CONFIG_NET_VENDOR_SMC" = "y" ]; then
@@ -162,7 +161,7 @@ if [ "$CONFIG_NET_EISA" = "y" ]; then
 		bool 'Ansel Communications EISA 3200 support' CONFIG_AC3200 n
 	fi
 	bool 'Apricot Xen-II on board ethernet' CONFIG_APRICOT n
-	bool 'DE425, DE434, DE435 support' CONFIG_DE4x5 n
+	bool 'DE425, DE434, DE435 support' CONFIG_DE4X5 n
 #	bool 'DEC 21040 PCI support' CONFIG_DEC_ELCP n
 #	bool 'LPL T100V 100Mbs support' CONFIG_LPL_T100 n
 #	bool 'PCnet32 (32 bit VLB and PCI LANCE) support' CONFIG_PCNET32 n
@@ -195,6 +194,7 @@ if [ "$CONFIG_SBPCD" = "y" ]; then
   fi
 fi
 bool 'Aztech/Orchid/Okano/Wearnes (non IDE) CDROM support' CONFIG_AZTCD n
+bool 'Sony CDU535 CDROM driver support' CONFIG_CDU535 n
 
 comment 'Filesystems'
 
@@ -210,7 +210,7 @@ bool '/proc filesystem support' CONFIG_PROC_FS y
 if [ "$CONFIG_INET" = "y" ]; then
 bool 'NFS filesystem support' CONFIG_NFS_FS y
 fi
-if [ "$CONFIG_BLK_DEV_SR" = "y" -o "$CONFIG_CDU31A" = "y" -o "$CONFIG_MCD" = "y" -o "$CONFIG_SBPCD" = "y" -o "$CONFIG_BLK_DEV_IDECD" = "y" -o "$CONFIG_AZTCD" = "y" ]; then
+if [ "$CONFIG_BLK_DEV_SR" = "y" -o "$CONFIG_CDU31A" = "y" -o "$CONFIG_MCD" = "y" -o "$CONFIG_SBPCD" = "y" -o "$CONFIG_BLK_DEV_IDECD" = "y" -o "$CONFIG_AZTCD" = "y" -o "$CONFIG_CDU535" = "y" ]; then
 	bool 'ISO9660 cdrom filesystem support' CONFIG_ISO9660_FS y
 else
 	bool 'ISO9660 cdrom filesystem support' CONFIG_ISO9660_FS n

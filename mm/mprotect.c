@@ -53,6 +53,7 @@ static void change_protection(unsigned long start, unsigned long end, pgprot_t n
 				*page_table = pte_modify(entry, newprot);
 			++page_table;
 		} while (--offset);
+		dir++;
 	}
 	return;
 }

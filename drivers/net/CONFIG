@@ -42,6 +42,8 @@
 #  DE4x5		The DIGITAL series of PCI/EISA Ethernet Cards,
 #			DE425, DE434 and DE435
 #       DE4x5_DEBUG	Set the desired debug level
+#	IS_ZYNX         May allow driver to work with Zynx cards - 
+#			see linux/drivers/net/README.de4x5
 #
 
 # The following options exist, but cannot be set in this file.

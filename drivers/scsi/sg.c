@@ -374,7 +374,7 @@ static void sg_init()
    memset(scsi_generics, 0, (sg_template.dev_noticed + SG_EXTRA_DEVS)
 	  * sizeof(struct scsi_generic));
 
-   sg_template.dev_max = sg_template.dev_noticed;
+   sg_template.dev_max = sg_template.dev_noticed + SG_EXTRA_DEVS;
  }
 
 static int sg_attach(Scsi_Device * SDp)

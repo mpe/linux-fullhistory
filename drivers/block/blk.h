@@ -47,6 +47,9 @@ extern unsigned long mcd_init(unsigned long mem_start, unsigned long mem_end);
 #ifdef CONFIG_AZTCD
 extern unsigned long aztcd_init(unsigned long mem_start, unsigned long mem_end);
 #endif
+#ifdef CONFIG_CDU535
+extern unsigned long sony535_init(unsigned long mem_start, unsigned long mem_end);
+#endif
 #ifdef CONFIG_BLK_DEV_HD
 extern unsigned long hd_init(unsigned long mem_start, unsigned long mem_end);
 #endif
@@ -177,6 +180,15 @@ static void floppy_off(unsigned int nr);
 
 #define DEVICE_NAME "Aztech CD-ROM"
 #define DEVICE_REQUEST do_aztcd_request
+#define DEVICE_NR(device) (MINOR(device))
+#define DEVICE_ON(device)
+#define DEVICE_OFF(device)
+
+#elif (MAJOR_NR == CDU535_CDROM_MAJOR)
+
+#define DEVICE_NAME "SONY-CDU535"
+#define DEVICE_INTR do_cdu535
+#define DEVICE_REQUEST do_cdu535_request
 #define DEVICE_NR(device) (MINOR(device))
 #define DEVICE_ON(device)
 #define DEVICE_OFF(device)

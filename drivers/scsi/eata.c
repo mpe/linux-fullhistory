@@ -1,8 +1,12 @@
 /*
  *      eata.c - Low-level driver for EATA/DMA SCSI host adapters.
  *
+ *       9 Feb 1995 rev. 1.16 for linux 1.1.90
+ *          Use host->wish_block instead of host->block.
+ *          New list of Data Out SCSI commands.
+ *
  *       8 Feb 1995 rev. 1.15 for linux 1.1.89
- *          Cleared target_time_out counter while preforming a reset.
+ *          Cleared target_time_out counter while performing a reset.
  *          All external symbols renamed to avoid possible name conflicts.
  *
  *      28 Jan 1995 rev. 1.14 for linux 1.1.86
@@ -88,7 +92,7 @@
  *  CACHE             : DISABLED
  *
  *  In order to support multiple ISA boards in a reliable way,
- *  the driver sets host->block = TRUE for all ISA boards.
+ *  the driver sets host->wish_block = TRUE for all ISA boards.
  */
 
 #if defined(MODULE)
@@ -166,6 +170,8 @@
 #define SEND_CP_DMA       0xff
 #define ASOK              0x00
 #define ASST              0x01
+
+#define ARRAY_SIZE(arr) (sizeof (arr) / sizeof (arr)[0])
 
 /* "EATA", in Big Endian format */
 #define EATA_SIGNATURE 0x41544145
@@ -466,7 +472,7 @@ static inline int port_detect(ushort *port_base, unsigned int j,
    if (HD(j)->subversion == ESA)
       sh[j]->unchecked_isa_dma = FALSE;
    else {
-      sh[j]->block = sh[j];
+      sh[j]->wish_block = TRUE;
       sh[j]->unchecked_isa_dma = TRUE;
       disable_dma(dma_channel);
       clear_dma_ff(dma_channel);
@@ -562,6 +568,12 @@ int eata2x_queuecommand (Scsi_Cmnd *SCpnt, void (*done)(Scsi_Cmnd *)) {
    struct mscp *cpp;
    struct mssp *spp;
 
+   static const unsigned char data_out_cmds[] = {
+      0x0a, 0x2a, 0x15, 0x55, 0x04, 0x07, 0x0b, 0x10, 0x16, 0x18, 0x1d, 
+      0x24, 0x2b, 0x2e, 0x30, 0x31, 0x32, 0x38, 0x39, 0x3a, 0x3b, 0x3d, 
+      0x3f, 0x40, 0x41, 0x4c, 0xaa, 0xae, 0xb0, 0xb1, 0xb2, 0xb6, 0xea
+      };
+
    save_flags(flags);
    cli();
    /* j is the board number */
@@ -619,11 +631,13 @@ int eata2x_queuecommand (Scsi_Cmnd *SCpnt, void (*done)(Scsi_Cmnd *)) {
    if (do_trace) printk("%s: qcomm, mbox %d, target %d, pid %ld.\n",
                         BN(j), i, SCpnt->target, SCpnt->pid);
 
-   if (SCpnt->cmnd[0] == WRITE_10 || SCpnt->cmnd[0] == WRITE_6)
-      cpp->dout = TRUE;
-   else
-      cpp->din = TRUE;
+   for (k = 0; k < ARRAY_SIZE(data_out_cmds); k++)
+     if (SCpnt->cmnd[0] == data_out_cmds[k]) {
+        cpp->dout = TRUE;
+        break;
+        }
 
+   cpp->din = !cpp->dout;
    cpp->reqsen = TRUE;
    cpp->dispri = TRUE;
    cpp->one = TRUE;

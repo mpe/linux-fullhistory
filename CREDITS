@@ -682,6 +682,11 @@ S: Stresemannstr. 62
 S: 10963 Berlin
 S: Germany
 
+N: Ken Pizzini
+E: ken@halcyon.com
+D: CDROM driver "sonycd535" (Sony CDU-535/531)
+S: 
+
 N: Stefan Probst
 E: snprobst@immd4.informatik.uni-erlangen.de
 D: The Linux Support Team Erlangen

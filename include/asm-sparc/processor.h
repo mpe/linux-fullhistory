@@ -27,7 +27,7 @@
  *
  * "this is gonna have to change to 1gig for the sparc" - David S. Miller
  */
-#define TASK_SIZE	(0xc0000000UL)
+#define TASK_SIZE	(0xC0000000UL)
 
 /*
  * Size of io_bitmap in longwords: 32 is ports 0-0x3ff.

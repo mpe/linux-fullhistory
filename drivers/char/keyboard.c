@@ -91,7 +91,8 @@ unsigned char kbd_read_mask = 0x01;	/* modified by psaux.c */
 /* shift state counters.. */
 static unsigned char k_down[NR_SHIFT] = {0, };
 /* keyboard key bitmap */
-static unsigned long key_down[8] = { 0, };
+#define BITS_PER_LONG (8*sizeof(unsigned long))
+static unsigned long key_down[256/BITS_PER_LONG] = { 0, };
 
 extern int last_console;
 static int want_console = -1;
@@ -954,8 +955,8 @@ void compute_shiftstate(void)
 
 	for(i=0; i < SIZE(key_down); i++)
 	  if(key_down[i]) {	/* skip this word if not a single bit on */
-	    k = (i<<5);
-	    for(j=0; j<32; j++,k++)
+	    k = i*BITS_PER_LONG;
+	    for(j=0; j<BITS_PER_LONG; j++,k++)
 	      if(test_bit(k, key_down)) {
 		sym = U(plain_map[k]);
 		if(KTYP(sym) == KT_SHIFT) {

@@ -21,6 +21,16 @@ theoretical ethernet rate.
     The cause is under investigation.
     ************************************************************************
 
+ZYNX  cards,  which   use  the PCI  DECchip  DC21040,  are  not specifically
+supported in this driver because
+
+a) I have  no information on them.   
+b) I cannot test  them with the driver.
+c) Donald Becker's 'tulip.c' driver  works with them....well one person says
+   they do and another doesn't, so take your pick!
+
+This driver can be made to work with the ZYNX  (and may be  the SMC) card by
+setting a compile time flag in linux/drivers/net/CONFIG
 
 Enjoy!
 

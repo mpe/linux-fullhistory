@@ -301,7 +301,8 @@ void ip_rt_add(short flags, unsigned long dst, unsigned long mask,
 	rp = &rt_base;
 	while ((r = *rp) != NULL) 
 	{
-		if (r->rt_dst != dst) 
+		if (r->rt_dst != dst || 
+		    r->rt_mask != mask) 
 		{
 			rp = &r->rt_next;
 			continue;

@@ -269,7 +269,6 @@ extern int request_irq(unsigned int irq,void (*handler)(int, struct pt_regs *),
 extern void free_irq(unsigned int irq);
 
 extern unsigned long copy_thread(int, unsigned long, struct task_struct *, struct pt_regs *);
-extern void start_thread(struct pt_regs *, unsigned long pc, unsigned long sp);
 extern void flush_thread(void);
 extern void exit_thread(void);
 

@@ -137,7 +137,7 @@
 
     To unload a module, turn off the associated interface 
     'ifconfig eth?? down' then 'rmmod depca'.
-    
+
     [Alan Cox: Changed to split off the module values as ints for insmod
      
      you can now do insmod depca.c irq=7 io=0x200 ]
@@ -168,20 +168,24 @@
       0.37    22-jul-94   Added MODULE support
       0.38    15-aug-94   Added DBR ROM switch in depca_close(). 
                           Multi DEPCA bug fix.
-      0.38axp 15-sep-94   Special version for Alpha AXP Linux V1.0
-      0.381   12-dec-94   Added DE101 recognition, fix multicast bug
+      0.38axp 15-sep-94   Special version for Alpha AXP Linux V1.0.
+      0.381   12-dec-94   Added DE101 recognition, fix multicast bug.
+      0.382    9-feb-95   Fix recognition bug reported by <bkm@star.rl.ac.uk>.
 
     =========================================================================
 */
 
-static char *version = "depca.c:v0.381 12/12/94 davies@wanton.lkg.dec.com\n";
+static char *version = "depca.c:v0.382 2/9/94 davies@wanton.lkg.dec.com\n";
 
+#include <linux/config.h>
 #ifdef MODULE
 #include <linux/module.h>
 #include <linux/version.h>
+#else
+#define MOD_INC_USE_COUNT
+#define MOD_DEC_USE_COUNT
 #endif /* MODULE */
 
-#include <stdarg.h>
 #include <linux/kernel.h>
 #include <linux/sched.h>
 #include <linux/string.h>
@@ -210,9 +214,7 @@ static int depca_debug = 1;
 #define PROBE_LENGTH    32
 #endif
 
-#ifndef PROBE_SEQUENCE
-#define PROBE_SEQUENCE "FF0055AAFF0055AA"
-#endif
+#define ETH_PROM_SIG    0xAA5500FFUL
 
 #ifndef DEPCA_SIGNATURE
 #define DEPCA_SIGNATURE {"DEPCA",\
@@ -274,13 +276,13 @@ static short mem_chkd = 0;               /* holds which base addrs have been */
 ** The DEPCA Rx and Tx ring descriptors. 
 */
 struct depca_rx_head {
-    long base;
+    volatile long base;
     short buf_length;		/* This length is negative 2's complement! */
     short msg_length;		/* This length is "normal". */
 };
 
 struct depca_tx_head {
-    long base;
+    volatile long base;
     short length;		/* This length is negative 2's complement! */
     short misc;                 /* Errors and TDR info */
 };
@@ -479,9 +481,7 @@ depca_probe1(struct device *dev, short ioaddr)
 	  j=inb(DEPCA_PROM);
 	}
 
-#ifdef HAVE_PORTRESERVE
-	request_region(ioaddr, DEPCA_TOTAL_SIZE,"depca");
-#endif
+	request_region(ioaddr, DEPCA_TOTAL_SIZE, dev->name);
 
 	/*
 	** Set up the maximum amount of network RAM(kB)
@@ -762,9 +762,7 @@ depca_open(struct device *dev)
       printk("nicsr: 0x%02x\n",inb(DEPCA_NICSR));
     }
 
-#ifdef MODULE
-  MOD_INC_USE_COUNT;
-#endif       
+    MOD_INC_USE_COUNT;
 
     return 0;			          /* Always succeed */
 }
@@ -1176,9 +1174,7 @@ depca_close(struct device *dev)
 
   irq2dev_map[dev->irq] = 0;
 
-#ifdef MODULE
   MOD_DEC_USE_COUNT;
-#endif    
 
   return 0;
 }
@@ -1452,56 +1448,8 @@ static char *DepcaSignature(unsigned long mem_addr)
 ** its ROM address counter to be initialized and enabled. Only enable
 ** if the first address octet is a 0x08 - this minimises the chances of
 ** messing around with some other hardware, but it assumes that this DEPCA
-** card initialized itself correctly. It also assumes that all past and
-** future DEPCA/EtherWORKS cards will have ethernet addresses beginning with
-** a 0x08.
-*/
-
-static int DevicePresent(short ioaddr)
-{
-  static short fp=1,sigLength=0;
-  static char devSig[] = PROBE_SEQUENCE;
-  char data;
-  int i, j, nicsr, status = 0;
-  static char asc2hex(char value);
-
-/*
-** Initialize the counter on a DEPCA card. Two reads to ensure DEPCA ethernet
-** address counter is a) cleared and b) the correct data read.
-*/
-  data = inb(DEPCA_PROM);                /* clear counter */
-  data = inb(DEPCA_PROM);                /* read data */
-
-/*
-** Enable counter
-*/
-  if (data == 0x08) {
-    nicsr = inb(DEPCA_NICSR);
-    nicsr |= AAC;
-    outb(nicsr, DEPCA_NICSR);
-  }
-  
-/* 
-** Convert the ascii signature to a hex equivalent & pack in place 
-*/
-  if (fp) {                               /* only do this once!... */
-    for (i=0,j=0;devSig[i] != '\0' && !status;i+=2,j++) {
-      if ((devSig[i]=asc2hex(devSig[i]))>=0) {
-	devSig[i]<<=4;
-	if((devSig[i+1]=asc2hex(devSig[i+1]))>=0){
-	  devSig[j]=devSig[i]+devSig[i+1];
-	} else {
-	  status= -1;
-	}
-      } else {
-	status= -1;
-      }
-    }
-    sigLength=j;
-    fp = 0;
-  }
-
-/* 
+** card initialized itself correctly.
+** 
 ** Search the Ethernet address ROM for the signature. Since the ROM address
 ** counter can start at an arbitrary point, the search must include the entire
 ** probe sequence length plus the (length_of_the_signature - 1).
@@ -1509,39 +1457,50 @@ static int DevicePresent(short ioaddr)
 ** PROM address counter is correctly positioned at the start of the
 ** ethernet address for later read out.
 */
-  if (!status) {
-    for (i=0,j=0;j<sigLength && i<PROBE_LENGTH+sigLength-1;i++) {
-      data = inb(DEPCA_PROM);
-      if (devSig[j] == data) {    /* track signature */
-	j++;
-      } else {                    /* lost signature; begin search again */
+static int DevicePresent(short ioaddr)
+{
+  union {
+    struct {
+      u_long a;
+      u_long b;
+    } llsig;
+    char Sig[sizeof(long) << 1];
+  } dev;
+  short sigLength=0;
+  char data;
+  int i, j, nicsr, status = 0;
+
+  data = inb(DEPCA_PROM);                /* clear counter on DEPCA */
+  data = inb(DEPCA_PROM);                /* read data */
+
+  if (data == 0x08) {                    /* Enable counter on DEPCA */
+    nicsr = inb(DEPCA_NICSR);
+    nicsr |= AAC;
+    outb(nicsr, DEPCA_NICSR);
+  }
+  
+  dev.llsig.a = ETH_PROM_SIG;
+  dev.llsig.b = ETH_PROM_SIG;
+  sigLength = sizeof(long) << 1;
+
+  for (i=0,j=0;j<sigLength && i<PROBE_LENGTH+sigLength-1;i++) {
+    data = inb(DEPCA_PROM);
+    if (dev.Sig[j] == data) {    /* track signature */
+      j++;
+    } else {                    /* lost signature; begin search again */
+      if (data == dev.Sig[0]) {  /* rare case.... */
+	j=1;
+      } else {
 	j=0;
       }
     }
+  }
 
-    if (j!=sigLength) {
-      status = -ENODEV;           /* search failed */
-    }
+  if (j!=sigLength) {
+    status = -ENODEV;           /* search failed */
   }
 
   return status;
-}
-
-static char asc2hex(char value)
-{
-  value -= 0x30;                  /* normalise to 0..9 range */
-  if (value >= 0) {
-    if (value > 9) {              /* but may not be 10..15 */
-      value &= 0x1f;              /* make A..F & a..f be the same */
-      value -= 0x07;              /* normalise to 10..15 range */
-      if ((value < 0x0a) || (value > 0x0f)) { /* if outside range then... */
-	value = -1;               /* ...signal error */
-      }
-    }
-  } else {                        /* outside 0..9 range... */
-    value = -1;                   /* ...signal error */
-  }
-  return value;                   /* return hex char or error */
 }
 
 #ifdef MODULE
@@ -1576,6 +1535,7 @@ cleanup_module(void)
   if (MOD_IN_USE) {
     printk("%s: device busy, remove delayed\n",thisDepca.name);
   } else {
+    release_region(thisDepca.base_addr, DEPCA_TOTAL_SIZE);
     unregister_netdev(&thisDepca);
   }
 }
