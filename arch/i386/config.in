@@ -59,29 +59,30 @@ comment 'General setup'
 
 bool 'BIGMEM support' CONFIG_BIGMEM
 bool 'Networking support' CONFIG_NET
-bool 'PCI support' CONFIG_PCI
-if [ "$CONFIG_PCI" = "y" ]; then
-  choice 'PCI access mode' \
-	"BIOS		CONFIG_PCI_GOBIOS	\
-	 Direct		CONFIG_PCI_GODIRECT	\
-	 Any		CONFIG_PCI_GOANY"	Any
-  if [ "$CONFIG_PCI_GOBIOS" = "y" -o "$CONFIG_PCI_GOANY" = "y" ]; then
-    define_bool CONFIG_PCI_BIOS y
-  fi
-  if [ "$CONFIG_PCI_GODIRECT" = "y" -o "$CONFIG_PCI_GOANY" = "y" ]; then
-    define_bool CONFIG_PCI_DIRECT y
-  fi
-fi
-bool 'MCA support' CONFIG_MCA
 bool 'SGI Visual Workstation support' CONFIG_VISWS
 if [ "$CONFIG_VISWS" = "y" ]; then
   define_bool CONFIG_X86_VISWS_APIC y
   define_bool CONFIG_X86_LOCAL_APIC y
+  define_bool CONFIG_PCI y
 else
   if [ "$CONFIG_SMP" = "y" ]; then
     define_bool CONFIG_X86_IO_APIC y
     define_bool CONFIG_X86_LOCAL_APIC y
   fi
+  bool 'PCI support' CONFIG_PCI
+  if [ "$CONFIG_PCI" = "y" ]; then
+    choice 'PCI access mode' \
+	"BIOS		CONFIG_PCI_GOBIOS	\
+	 Direct		CONFIG_PCI_GODIRECT	\
+	 Any		CONFIG_PCI_GOANY"	Any
+    if [ "$CONFIG_PCI_GOBIOS" = "y" -o "$CONFIG_PCI_GOANY" = "y" ]; then
+      define_bool CONFIG_PCI_BIOS y
+    fi
+    if [ "$CONFIG_PCI_GODIRECT" = "y" -o "$CONFIG_PCI_GOANY" = "y" ]; then
+      define_bool CONFIG_PCI_DIRECT y
+    fi
+  fi
+  bool 'MCA support' CONFIG_MCA
 fi
 
 source drivers/pcmcia/Config.in

@@ -31,7 +31,6 @@
 
 #include "ncplib_kernel.h"
 
-static void ncp_read_inode(struct inode *);
 static void ncp_put_inode(struct inode *);
 static void ncp_delete_inode(struct inode *);
 static void ncp_put_super(struct super_block *);
@@ -39,7 +38,7 @@ static int  ncp_statfs(struct super_block *, struct statfs *, int);
 
 static struct super_operations ncp_sops =
 {
-	ncp_read_inode,		/* read inode */
+	NULL,			/* read inode */
 	NULL,			/* write inode */
 	ncp_put_inode,		/* put inode */
 	ncp_delete_inode,       /* delete inode */
@@ -55,9 +54,6 @@ extern struct dentry_operations ncp_dentry_operations;
 extern struct inode_operations ncp_symlink_inode_operations;
 extern int ncp_symlink(struct inode*, struct dentry*, const char*);
 #endif
-
-static struct ncp_entry_info *read_nwinfo = NULL;
-static DECLARE_MUTEX(read_sem);
 
 /*
  * Fill in the ncpfs-specific information in the inode.
@@ -216,33 +212,7 @@ static void ncp_set_attr(struct inode *inode, struct ncp_entry_info *nwinfo)
 }
 
 /*
- * This is called from iget() with the read semaphore held. 
- * The global ncp_entry_info structure has been set up by ncp_iget.
- */
-static void ncp_read_inode(struct inode *inode)
-{
-	if (read_nwinfo == NULL) {
-		printk(KERN_ERR "ncp_read_inode: invalid call\n");
-		return;
-	}
-
-	ncp_set_attr(inode, read_nwinfo);
-
-	if (S_ISREG(inode->i_mode)) {
-		inode->i_op = &ncp_file_inode_operations;
-	} else if (S_ISDIR(inode->i_mode)) {
-		inode->i_op = &ncp_dir_inode_operations;
-#ifdef CONFIG_NCPFS_EXTRAS
-	} else if (S_ISLNK(inode->i_mode)) {
-		inode->i_op = &ncp_symlink_inode_operations;
-#endif
-	} else {
-		inode->i_op = NULL;
-	}
-}
-
-/*
- * Set up the ncp_entry_info pointer and get a new inode.
+ * Get a new inode.
  */
 struct inode * 
 ncp_iget(struct super_block *sb, struct ncp_entry_info *info)
@@ -254,12 +224,23 @@ ncp_iget(struct super_block *sb, struct ncp_entry_info *info)
 		return NULL;
 	}
 
-	down(&read_sem);
-	read_nwinfo = info;
-	inode = iget(sb, info->ino);
-	read_nwinfo = NULL;
-	up(&read_sem);
-	if (!inode)
+	inode = get_empty_inode();
+	if (inode) {
+		inode->i_sb = sb;
+		inode->i_dev = sb->s_dev;
+		inode->i_ino = info->ino;
+		ncp_set_attr(inode, info);
+		if (S_ISREG(inode->i_mode)) {
+			inode->i_op = &ncp_file_inode_operations;
+		} else if (S_ISDIR(inode->i_mode)) {
+			inode->i_op = &ncp_dir_inode_operations;
+#ifdef CONFIG_NCPFS_EXTRAS
+		} else if (S_ISLNK(inode->i_mode)) {
+			inode->i_op = &ncp_symlink_inode_operations;
+#endif
+		}
+		insert_inode_hash(inode);
+	} else
 		printk(KERN_ERR "ncp_iget: iget failed!\n");
 	return inode;
 }
@@ -709,9 +690,6 @@ EXPORT_NO_SYMBOLS;
 int init_module(void)
 {
 	DPRINTK(KERN_DEBUG "ncpfs: init_module called\n");
-
-	init_MUTEX(&read_sem);
-	read_nwinfo = NULL;
 
 #ifdef DEBUG_NCP_MALLOC
 	ncp_malloced = 0;

@@ -223,6 +223,8 @@
     19990819   Alan Cox <alan@redhat.com>
                Tested Zoltan's changes on a pre production Athlon - 100%
                success.
+    19991008   Manfred Spraul <manfreds@colorfullife.com>
+    	       replaced spin_lock_reschedule() with a normal semaphore.
 */
 #include <linux/types.h>
 #include <linux/errno.h>
@@ -303,8 +305,6 @@ typedef u8 mtrr_type;
 						       TRUE)
 #endif
 
-#define spin_lock_reschedule(lock) while (!spin_trylock(lock)) schedule ();
-
 #ifndef CONFIG_PROC_FS
 #  define compute_ascii() while (0)
 #endif
@@ -314,7 +314,7 @@ static char *ascii_buffer = NULL;
 static unsigned int ascii_buf_bytes = 0;
 #endif
 static unsigned int *usage_table = NULL;
-static spinlock_t main_lock = SPIN_LOCK_UNLOCKED;
+static DECLARE_MUTEX(main_lock);
 
 /*  Private functions  */
 #ifdef CONFIG_PROC_FS
@@ -1172,7 +1172,7 @@ int mtrr_add (unsigned long base, unsigned long size, unsigned int type,
     increment = increment ? 1 : 0;
     max = get_num_var_ranges ();
     /*  Search for existing MTRR  */
-    spin_lock_reschedule (&main_lock);
+    down(&main_lock);
     for (i = 0; i < max; ++i)
     {
 	(*get_mtrr) (i, &lbase, &lsize, &ltype);
@@ -1181,7 +1181,7 @@ int mtrr_add (unsigned long base, unsigned long size, unsigned int type,
 	/*  At this point we know there is some kind of overlap/enclosure  */
 	if ( (base < lbase) || (base + size > lbase + lsize) )
 	{
-	    spin_unlock (&main_lock);
+	    up(&main_lock);
 	    printk ("mtrr: 0x%lx,0x%lx overlaps existing 0x%lx,0x%lx\n",
 		    base, size, lbase, lsize);
 	    return -EINVAL;
@@ -1190,14 +1190,14 @@ int mtrr_add (unsigned long base, unsigned long size, unsigned int type,
 	if (ltype != type)
 	{
 	    if (type == MTRR_TYPE_UNCACHABLE) continue;
-	    spin_unlock (&main_lock);
+	    up(&main_lock);
 	    printk ( "mtrr: type mismatch for %lx,%lx old: %s new: %s\n",
 		     base, size, attrib_to_str (ltype), attrib_to_str (type) );
 	    return -EINVAL;
 	}
 	if (increment) ++usage_table[i];
 	compute_ascii ();
-	spin_unlock (&main_lock);
+	up(&main_lock);
 	return i;
     }
     /*  Search for an empty MTRR  */
@@ -1211,7 +1211,7 @@ int mtrr_add (unsigned long base, unsigned long size, unsigned int type,
     set_mtrr (i, base, size, type);
     usage_table[i] = 1;
     compute_ascii ();
-    spin_unlock (&main_lock);
+    up(&main_lock);
     return i;
 }   /*  End Function mtrr_add  */
 
@@ -1232,7 +1232,7 @@ int mtrr_del (int reg, unsigned long base, unsigned long size)
 
     if ( !(boot_cpu_data.x86_capability & X86_FEATURE_MTRR) ) return -ENODEV;
     max = get_num_var_ranges ();
-    spin_lock_reschedule (&main_lock);
+    down(&main_lock);
     if (reg < 0)
     {
 	/*  Search for existing MTRR  */
@@ -1247,14 +1247,14 @@ int mtrr_del (int reg, unsigned long base, unsigned long size)
 	}
 	if (reg < 0)
 	{
-	    spin_unlock (&main_lock);
+	    up(&main_lock);
 	    printk ("mtrr: no MTRR for %lx,%lx found\n", base, size);
 	    return -EINVAL;
 	}
     }
     if (reg >= max)
     {
-	spin_unlock (&main_lock);
+	up(&main_lock);
 	printk ("mtrr: register: %d too big\n", reg);
 	return -EINVAL;
     }
@@ -1262,7 +1262,7 @@ int mtrr_del (int reg, unsigned long base, unsigned long size)
     {
 	if ((reg == 3) && arr3_protected)
 	{
-	    spin_unlock (&main_lock);
+	    up(&main_lock);
 	    printk ("mtrr: ARR3 cannot be changed\n");
 	    return -EINVAL;
 	}
@@ -1270,19 +1270,19 @@ int mtrr_del (int reg, unsigned long base, unsigned long size)
     (*get_mtrr) (reg, &lbase, &lsize, &ltype);
     if (lsize < 1)
     {
-	spin_unlock (&main_lock);
+	up(&main_lock);
 	printk ("mtrr: MTRR %d not used\n", reg);
 	return -EINVAL;
     }
     if (usage_table[reg] < 1)
     {
-	spin_unlock (&main_lock);
+	up(&main_lock);
 	printk ("mtrr: reg: %d has count=0\n", reg);
 	return -EINVAL;
     }
     if (--usage_table[reg] < 1) set_mtrr (reg, 0, 0, 0);
     compute_ascii ();
-    spin_unlock (&main_lock);
+    up(&main_lock);
     return reg;
 }   /*  End Function mtrr_del  */
 

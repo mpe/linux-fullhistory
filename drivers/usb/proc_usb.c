@@ -286,9 +286,12 @@ static int usb_dump_desc (const struct usb_device *dev, char *buf, int *len)
 static int usb_hcd_bandwidth (const struct usb_device *dev, char *buf, int *len)
 {
 	*len += sprintf (buf + *len, format_bandwidth,
-			dev->bus->bandwidth_allocated, FRAME_TIME_MAX_USECS_ALLOC,
-			100 * dev->bus->bandwidth_allocated / FRAME_TIME_MAX_USECS_ALLOC,
-			dev->bus->bandwidth_int_reqs, dev->bus->bandwidth_isoc_reqs
+			dev->bus->bandwidth_allocated,
+			FRAME_TIME_MAX_USECS_ALLOC,
+			(100 * dev->bus->bandwidth_allocated + FRAME_TIME_MAX_USECS_ALLOC / 2) /
+				FRAME_TIME_MAX_USECS_ALLOC,
+			dev->bus->bandwidth_int_reqs,
+			dev->bus->bandwidth_isoc_reqs
 			);
 
 	return (*len >= DUMP_LIMIT) ? -1 : 0;
@@ -360,12 +363,12 @@ static int usb_device_dump (char *buf, int *len,
 	if (*len >= DUMP_LIMIT)
 		return -1;
 
-	if (usbdev->devnum > 0) {	/* for any except root hub */
-		if (usb_dump_desc (usbdev, buf, len) < 0)
+	if ((level == 0) && (usbdev->devnum < 0)) {	/* for root hub */
+		if (usb_hcd_bandwidth (usbdev, buf, len) < 0)
 			return -1;
 	}
-	else {		/* for a host controller */
-		if (usb_hcd_bandwidth (usbdev, buf, len) < 0)
+	else {	/* for anything but a root hub */
+		if (usb_dump_desc (usbdev, buf, len) < 0)
 			return -1;
 	}
 

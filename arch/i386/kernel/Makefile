@@ -19,7 +19,12 @@ OX_OBJS  := i386_ksyms.o
 MX_OBJS  :=
 
 ifdef CONFIG_PCI
-O_OBJS += bios32.o
+O_OBJS += pci-i386.o
+ifdef CONFIG_VISWS
+O_OBJS += pci-visws.o
+else
+O_OBJS += pci-pc.o
+endif
 endif
 
 ifdef CONFIG_MCA

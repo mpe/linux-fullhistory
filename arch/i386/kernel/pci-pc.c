@@ -1,124 +1,26 @@
 /*
- * bios32.c - Low-Level PCI Access
+ *	Low-Level PCI Support for PC
  *
- * $Id: bios32.c,v 1.48 1998/09/26 08:06:55 mj Exp $
- *
- * Copyright 1993, 1994 Drew Eckhardt
- *      Visionary Computing
- *      (Unix and Linux consulting and custom programming)
- *      Drew@Colorado.EDU
- *      +1 (303) 786-7975
- *
- * Drew's work was sponsored by:
- *	iX Multiuser Multitasking Magazine
- *	Hannover, Germany
- *	hm@ix.de
- *
- * Copyright 1997--1999 Martin Mares <mj@atrey.karlin.mff.cuni.cz>
- *
- * For more information, please consult the following manuals (look at
- * http://www.pcisig.com/ for how to get them):
- *
- * PCI BIOS Specification
- * PCI Local Bus Specification
- * PCI to PCI Bridge Specification
- * PCI System Design Guide
- *
- *
- * CHANGELOG :
- * Jun 17, 1994 : Modified to accommodate the broken pre-PCI BIOS SPECIFICATION
- *	Revision 2.0 present on <thys@dennis.ee.up.ac.za>'s ASUS mainboard.
- *
- * Jan 5,  1995 : Modified to probe PCI hardware at boot time by Frederic
- *     Potter, potter@cao-vlsi.ibp.fr
- *
- * Jan 10, 1995 : Modified to store the information about configured pci
- *      devices into a list, which can be accessed via /proc/pci by
- *      Curtis Varner, cvarner@cs.ucr.edu
- *
- * Jan 12, 1995 : CPU-PCI bridge optimization support by Frederic Potter.
- *	Alpha version. Intel & UMC chipset support only.
- *
- * Apr 16, 1995 : Source merge with the DEC Alpha PCI support. Most of the code
- *	moved to drivers/pci/pci.c.
- *
- * Dec 7, 1996  : Added support for direct configuration access of boards
- *      with Intel compatible access schemes (tsbogend@alpha.franken.de)
- *
- * Feb 3, 1997  : Set internal functions to static, save/restore flags
- *	avoid dead locks reading broken PCI BIOS, werner@suse.de 
- *
- * Apr 26, 1997 : Fixed case when there is BIOS32, but not PCI BIOS
- *	(mj@atrey.karlin.mff.cuni.cz)
- *
- * May 7,  1997 : Added some missing cli()'s. [mj]
- * 
- * Jun 20, 1997 : Corrected problems in "conf1" type accesses.
- *      (paubert@iram.es)
- *
- * Aug 2,  1997 : Split to PCI BIOS handling and direct PCI access parts
- *	and cleaned it up...     Martin Mares <mj@atrey.karlin.mff.cuni.cz>
- *
- * Feb 6,  1998 : No longer using BIOS to find devices and device classes. [mj]
- *
- * May 1,  1998 : Support for peer host bridges. [mj]
- *
- * Jun 19, 1998 : Changed to use spinlocks, so that PCI configuration space
- *	can be accessed from interrupts even on SMP systems. [mj]
- *
- * August  1998 : Better support for peer host bridges and more paranoid
- *	checks for direct hardware access. Ugh, this file starts to look as
- *	a large gallery of common hardware bug workarounds (watch the comments)
- *	-- the PCI specs themselves are sane, but most implementors should be
- *	hit hard with \hammer scaled \magstep5. [mj]
- *
- * Jan 23, 1999 : More improvements to peer host bridge logic. i450NX fixup. [mj]
- *
- * Feb 8,  1999 : Added UM8886BF I/O address fixup. [mj]
- *
- * August  1999 : New resource management and configuration access stuff. [mj]
- *
- * Sep 19, 1999 : Use PCI IRQ routing tables for detection of peer host bridges.
- *		  Based on ideas by Chris Frantz and David Hinds. [mj]
+ *	(c) 1999 Martin Mares <mj@ucw.cz>
  */
 
 #include <linux/config.h>
 #include <linux/types.h>
 #include <linux/kernel.h>
+#include <linux/sched.h>
 #include <linux/pci.h>
 #include <linux/init.h>
-#include <linux/ioport.h>
 #include <linux/malloc.h>
-#include <linux/smp_lock.h>
+#include <linux/interrupt.h>
 #include <linux/irq.h>
-#include <linux/spinlock.h>
-#include <linux/mm.h>
 
-#include <asm/page.h>
 #include <asm/segment.h>
-#include <asm/system.h>
 #include <asm/io.h>
 #include <asm/smp.h>
 
-#undef DEBUG
+#include "pci-i386.h"
 
-#ifdef DEBUG
-#define DBG(x...) printk(x)
-#else
-#define DBG(x...)
-#endif
-
-#define PCI_PROBE_BIOS 1
-#define PCI_PROBE_CONF1 2
-#define PCI_PROBE_CONF2 4
-#define PCI_NO_SORT 0x100
-#define PCI_BIOS_SORT 0x200
-#define PCI_NO_CHECKS 0x400
-#define PCI_NO_PEER_FIXUP 0x800
-#define PCI_ASSIGN_ROMS 0x1000
-#define PCI_NO_IRQ_SCAN 0x2000
-
-static unsigned int pci_probe = PCI_PROBE_BIOS | PCI_PROBE_CONF1 | PCI_PROBE_CONF2;
+unsigned int pci_probe = PCI_PROBE_BIOS | PCI_PROBE_CONF1 | PCI_PROBE_CONF2;
 
 /*
  * IRQ routing table provided by the BIOS
@@ -161,55 +63,55 @@ struct irq_routing_table {
 
 static int pci_conf1_read_config_byte(struct pci_dev *dev, int where, u8 *value)
 {
-    outl(CONFIG_CMD(dev,where), 0xCF8);
-    *value = inb(0xCFC + (where&3));
-    return PCIBIOS_SUCCESSFUL;
+	outl(CONFIG_CMD(dev,where), 0xCF8);
+	*value = inb(0xCFC + (where&3));
+	return PCIBIOS_SUCCESSFUL;
 }
 
 static int pci_conf1_read_config_word(struct pci_dev *dev, int where, u16 *value)
 {
-    outl(CONFIG_CMD(dev,where), 0xCF8);    
-    *value = inw(0xCFC + (where&2));
-    return PCIBIOS_SUCCESSFUL;    
+	outl(CONFIG_CMD(dev,where), 0xCF8);    
+	*value = inw(0xCFC + (where&2));
+	return PCIBIOS_SUCCESSFUL;    
 }
 
 static int pci_conf1_read_config_dword(struct pci_dev *dev, int where, u32 *value)
 {
-    outl(CONFIG_CMD(dev,where), 0xCF8);
-    *value = inl(0xCFC);
-    return PCIBIOS_SUCCESSFUL;    
+	outl(CONFIG_CMD(dev,where), 0xCF8);
+	*value = inl(0xCFC);
+	return PCIBIOS_SUCCESSFUL;    
 }
 
 static int pci_conf1_write_config_byte(struct pci_dev *dev, int where, u8 value)
 {
-    outl(CONFIG_CMD(dev,where), 0xCF8);    
-    outb(value, 0xCFC + (where&3));
-    return PCIBIOS_SUCCESSFUL;
+	outl(CONFIG_CMD(dev,where), 0xCF8);    
+	outb(value, 0xCFC + (where&3));
+	return PCIBIOS_SUCCESSFUL;
 }
 
 static int pci_conf1_write_config_word(struct pci_dev *dev, int where, u16 value)
 {
-    outl(CONFIG_CMD(dev,where), 0xCF8);
-    outw(value, 0xCFC + (where&2));
-    return PCIBIOS_SUCCESSFUL;
+	outl(CONFIG_CMD(dev,where), 0xCF8);
+	outw(value, 0xCFC + (where&2));
+	return PCIBIOS_SUCCESSFUL;
 }
 
 static int pci_conf1_write_config_dword(struct pci_dev *dev, int where, u32 value)
 {
-    outl(CONFIG_CMD(dev,where), 0xCF8);
-    outl(value, 0xCFC);
-    return PCIBIOS_SUCCESSFUL;
+	outl(CONFIG_CMD(dev,where), 0xCF8);
+	outl(value, 0xCFC);
+	return PCIBIOS_SUCCESSFUL;
 }
 
 #undef CONFIG_CMD
 
 static struct pci_ops pci_direct_conf1 = {
-      pci_conf1_read_config_byte,
-      pci_conf1_read_config_word,
-      pci_conf1_read_config_dword,
-      pci_conf1_write_config_byte,
-      pci_conf1_write_config_word,
-      pci_conf1_write_config_dword
+	pci_conf1_read_config_byte,
+	pci_conf1_read_config_word,
+	pci_conf1_read_config_dword,
+	pci_conf1_write_config_byte,
+	pci_conf1_write_config_word,
+	pci_conf1_write_config_dword
 };
 
 /*
@@ -224,50 +126,50 @@ static struct pci_ops pci_direct_conf1 = {
 
 static int pci_conf2_read_config_byte(struct pci_dev *dev, int where, u8 *value)
 {
-    SET(dev);
-    *value = inb(IOADDR(dev->devfn,where));
-    outb (0, 0xCF8);
-    return PCIBIOS_SUCCESSFUL;
+	SET(dev);
+	*value = inb(IOADDR(dev->devfn,where));
+	outb (0, 0xCF8);
+	return PCIBIOS_SUCCESSFUL;
 }
 
 static int pci_conf2_read_config_word(struct pci_dev *dev, int where, u16 *value)
 {
-    SET(dev);
-    *value = inw(IOADDR(dev->devfn,where));
-    outb (0, 0xCF8);
-    return PCIBIOS_SUCCESSFUL;
+	SET(dev);
+	*value = inw(IOADDR(dev->devfn,where));
+	outb (0, 0xCF8);
+	return PCIBIOS_SUCCESSFUL;
 }
 
 static int pci_conf2_read_config_dword(struct pci_dev *dev, int where, u32 *value)
 {
-    SET(dev);
-    *value = inl (IOADDR(dev->devfn,where));    
-    outb (0, 0xCF8);    
-    return PCIBIOS_SUCCESSFUL;
+	SET(dev);
+	*value = inl (IOADDR(dev->devfn,where));    
+	outb (0, 0xCF8);    
+	return PCIBIOS_SUCCESSFUL;
 }
 
 static int pci_conf2_write_config_byte(struct pci_dev *dev, int where, u8 value)
 {
-    SET(dev);
-    outb (value, IOADDR(dev->devfn,where));
-    outb (0, 0xCF8);    
-    return PCIBIOS_SUCCESSFUL;
+	SET(dev);
+	outb (value, IOADDR(dev->devfn,where));
+	outb (0, 0xCF8);    
+	return PCIBIOS_SUCCESSFUL;
 }
 
 static int pci_conf2_write_config_word(struct pci_dev *dev, int where, u16 value)
 {
-    SET(dev);
-    outw (value, IOADDR(dev->devfn,where));
-    outb (0, 0xCF8);    
-    return PCIBIOS_SUCCESSFUL;
+	SET(dev);
+	outw (value, IOADDR(dev->devfn,where));
+	outb (0, 0xCF8);    
+	return PCIBIOS_SUCCESSFUL;
 }
 
 static int pci_conf2_write_config_dword(struct pci_dev *dev, int where, u32 value)
 {
-    SET(dev);
-    outl (value, IOADDR(dev->devfn,where));    
-    outb (0, 0xCF8);    
-    return PCIBIOS_SUCCESSFUL;
+	SET(dev);
+	outl (value, IOADDR(dev->devfn,where));    
+	outb (0, 0xCF8);    
+	return PCIBIOS_SUCCESSFUL;
 }
 
 #undef SET
@@ -275,12 +177,12 @@ static int pci_conf2_write_config_dword(struct pci_dev *dev, int where, u32 valu
 #undef FUNC
 
 static struct pci_ops pci_direct_conf2 = {
-      pci_conf2_read_config_byte,
-      pci_conf2_read_config_word,
-      pci_conf2_read_config_dword,
-      pci_conf2_write_config_byte,
-      pci_conf2_write_config_word,
-      pci_conf2_write_config_dword
+	pci_conf2_read_config_byte,
+	pci_conf2_read_config_word,
+	pci_conf2_read_config_dword,
+	pci_conf2_write_config_byte,
+	pci_conf2_write_config_word,
+	pci_conf2_write_config_dword
 };
 
 /*
@@ -298,10 +200,6 @@ static int __init pci_sanity_check(struct pci_ops *o)
 	u16 x;
 	struct pci_bus bus;		/* Fake bus and device */
 	struct pci_dev dev;
-
-#ifdef CONFIG_VISWS
-	return 1;       /* Lithium PCI Bridges are non-standard */
-#endif
 
 	if (pci_probe & PCI_NO_CHECKS)
 		return 1;
@@ -461,7 +359,7 @@ static unsigned long bios32_service(unsigned long service)
 			printk("bios32_service(0x%lx): not present\n", service);
 			return 0;
 		default: /* Shouldn't happen */
-			printk("bios32_service(0x%lx): returned 0x%x, report to <mj@ucw.cz>.\n",
+			printk("bios32_service(0x%lx): returned 0x%x -- BIOS bug!\n",
 				service, return_code);
 			return 0;
 	}
@@ -830,59 +728,6 @@ static struct irq_routing_table * __init pcibios_get_irq_routing_table(void)
 #endif
 
 /*
- * Assign new address to PCI resource.  We hope our resource information
- * is complete.  On the PC, we don't re-assign resources unless we are
- * forced to do so.
- *
- * Expects start=0, end=size-1, flags=resource type.
- */
-
-static int __init pcibios_assign_resource(struct pci_dev *dev, int i)
-{
-	struct resource *r = &dev->resource[i];
-	struct resource *pr = pci_find_parent_resource(dev, r);
-	unsigned long size = r->end + 1;
-	u32 new, check;
-
-	if (!pr) {
-		printk(KERN_ERR "PCI: Cannot find parent resource for device %s\n", dev->slot_name);
-		return -EINVAL;
-	}
-	if (r->flags & IORESOURCE_IO) {
-		/*
-		 * We need to avoid collisions with `mirrored' VGA ports and other strange
-		 * ISA hardware, so we always want the addresses kilobyte aligned.
-		 */
-		if (size > 0x100) {
-			printk(KERN_ERR "PCI: I/O Region %s/%d too large (%ld bytes)\n", dev->slot_name, i, size);
-			return -EFBIG;
-		}
-		if (allocate_resource(pr, r, size, 0x1000, ~0, 1024)) {
-			printk(KERN_ERR "PCI: Allocation of I/O region %s/%d (%ld bytes) failed\n", dev->slot_name, i, size);
-			return -EBUSY;
-		}
-	} else {
-		if (allocate_resource(pr, r, size, 0x10000000, ~0, size)) {
-			printk(KERN_ERR "PCI: Allocation of memory region %s/%d (%ld bytes) failed\n", dev->slot_name, i, size);
-			return -EBUSY;
-		}
-	}
-	if (i < 6) {
-		int reg = PCI_BASE_ADDRESS_0 + 4*i;
-		new = r->start | (r->flags & PCI_REGION_FLAG_MASK);
-		pci_write_config_dword(dev, reg, new);
-		pci_read_config_dword(dev, reg, &check);
-		if (new != check)
-			printk(KERN_ERR "PCI: Error while updating region %s/%d (%08x != %08x)\n", dev->slot_name, i, new, check);
-	} else if (i == PCI_ROM_RESOURCE) {
-		r->flags |= PCI_ROM_ADDRESS_ENABLE;
-		pci_write_config_dword(dev, dev->rom_base_reg, r->start | (r->flags & PCI_REGION_FLAG_MASK));
-	}
-	printk("PCI: Assigned addresses %08lx-%08lx to region %s/%d\n", r->start, r->end, dev->slot_name, i);
-	return 0;
-}
-
-/*
  * Several buggy motherboards address only 16 devices and mirror
  * them to next 16 IDs. We try to detect this `feature' on all
  * primary buses (those containing host bridges as they are
@@ -942,11 +787,6 @@ static void __init pcibios_fixup_peer_bridges(void)
 	int n, cnt=-1;
 	struct pci_dev *d;
 	struct pci_ops *ops = pci_root->ops;
-
-#ifdef CONFIG_VISWS
-	pci_scan_bus(1, ops, NULL);
-	return;
-#endif
 
 #ifdef CONFIG_PCI_DIRECT
 	/*
@@ -1053,17 +893,14 @@ static void __init pci_fixup_ide_bases(struct pci_dev *d)
 	 */
 	if ((d->class >> 8) != PCI_CLASS_STORAGE_IDE)
 		return;
-/* This just can't be right even with the fixes */
-#if 0
 	DBG("PCI: IDE base address fixup for %s\n", d->slot_name);
 	for(i=0; i<4; i++) {
 		struct resource *r = &d->resource[i];
 		if ((r->start & ~0x80) == 0x374) {
-			r->start += 2;
+			r->start |= 2;
 			r->end = r->start;
 		}
 	}
-#endif
 }
 
 struct pci_fixup pcibios_fixups[] = {
@@ -1072,170 +909,6 @@ struct pci_fixup pcibios_fixups[] = {
 	{ PCI_FIXUP_HEADER,	PCI_ANY_ID,		PCI_ANY_ID,			pci_fixup_ide_bases },
 	{ 0 }
 };
-
-/*
- *  Handle resources of PCI devices.  If the world were perfect, we could
- *  just allocate all the resource regions and do nothing more.  It isn't.
- *  On the other hand, we cannot just re-allocate all devices, as it would
- *  require us to know lots of host bridge internals.  So we attempt to
- *  keep as much of the original configuration as possible, but tweak it
- *  when it's found to be wrong.
- *
- *  Known BIOS problems we have to work around:
- *	- I/O or memory regions not configured
- *	- regions configured, but not enabled in the command register
- *	- bogus I/O addresses above 64K used
- *	- expansion ROMs left enabled (this may sound harmless, but given
- *	  the fact the PCI specs explicitly allow address decoders to be
- *	  shared between expansion ROMs and other resource regions, it's
- *	  at least dangerous)
- *
- *  Our solution:
- *	(1) Allocate resources for all buses behind PCI-to-PCI bridges.
- *	    This gives us fixed barriers on where we can allocate.
- *	(2) Allocate resources for all enabled devices.  If there is
- *	    a collision, just mark the resource as unallocated. Also
- *	    disable expansion ROMs during this step.
- *	(3) Try to allocate resources for disabled devices.  If the
- *	    resources were assigned correctly, everything goes well,
- *	    if they weren't, they won't disturb allocation of other
- *	    resources.
- *	(4) Assign new addresses to resources which were either
- *	    not configured at all or misconfigured.  If explicitly
- *	    requested by the user, configure expansion ROM address
- *	    as well.  Finally enable the I/O and Memory bits.
- */
-
-static void __init pcibios_allocate_bus_resources(struct pci_bus *bus)
-{
-	struct pci_dev *dev;
-	int idx;
-	struct resource *r, *pr;
-
-	/* Depth-First Search on bus tree */
-	while (bus) {
-		if ((dev = bus->self)) {
-			for (idx = PCI_BRIDGE_RESOURCES; idx < PCI_NUM_RESOURCES; idx++) {
-				r = &dev->resource[idx];
-				if (!r->start)
-					continue;
-				pr = pci_find_parent_resource(dev, r);
-				if (!pr || request_resource(pr, r) < 0)
-					printk(KERN_ERR "PCI: Cannot allocate resource region %d of bridge %s\n", idx, dev->slot_name);
-			}
-		}
-		if (bus->children)
-			pcibios_allocate_bus_resources(bus->children);
-		bus = bus->next;
-	}
-}
-
-static void __init pcibios_allocate_resources(int pass)
-{
-	struct pci_dev *dev;
-	int idx, disabled;
-	u16 command;
-	struct resource *r, *pr;
-
-	for(dev=pci_devices; dev; dev=dev->next) {
-		pci_read_config_word(dev, PCI_COMMAND, &command);
-		for(idx = 0; idx < 6; idx++) {
-			r = &dev->resource[idx];
-			if (r->parent)		/* Already allocated */
-				continue;
-			if (!r->start)		/* Address not assigned at all */
-				continue;
-			if (r->flags & IORESOURCE_IO)
-				disabled = !(command & PCI_COMMAND_IO);
-			else
-				disabled = !(command & PCI_COMMAND_MEMORY);
-			if (pass == disabled) {
-				DBG("PCI: Resource %08lx-%08lx (f=%lx, d=%d, p=%d)\n",
-				    r->start, r->end, r->flags, disabled, pass);
-				pr = pci_find_parent_resource(dev, r);
-				if (!pr || request_resource(pr, r) < 0) {
-					printk(KERN_ERR "PCI: Cannot allocate resource region %d of device %s\n", idx, dev->slot_name);
-					/* We'll assign a new address later */
-					r->start -= r->end;
-					r->start = 0;
-				}
-			}
-		}
-		if (!pass) {
-			r = &dev->resource[PCI_ROM_RESOURCE];
-			if (r->flags & PCI_ROM_ADDRESS_ENABLE) {
-				/* Turn the ROM off, leave the resource region, but keep it unregistered. */
-				u32 reg;
-				DBG("PCI: Switching off ROM of %s\n", dev->slot_name);
-				r->flags &= ~PCI_ROM_ADDRESS_ENABLE;
-				pci_read_config_dword(dev, dev->rom_base_reg, &reg);
-				pci_write_config_dword(dev, dev->rom_base_reg, reg & ~PCI_ROM_ADDRESS_ENABLE);
-			}
-		}
-	}
-}
-
-static void __init pcibios_assign_resources(void)
-{
-	struct pci_dev *dev;
-	u16 cmd, old_cmd;
-	int idx;
-	int fault = 0;
-	struct resource *r;
-
-	for(dev=pci_devices; dev; dev=dev->next) {
-		pci_read_config_word(dev, PCI_COMMAND, &cmd);
-		old_cmd = cmd;
-		for(idx=0; idx<6; idx++) {
-			r = &dev->resource[idx];
-			if (((dev->class >> 8) == PCI_CLASS_STORAGE_IDE && idx < 4) ||
-			    ((dev->class >> 8) == PCI_CLASS_DISPLAY_VGA && (r->flags & IORESOURCE_IO)))
-				/*
-				 *  Don't touch IDE controllers and I/O ports of video cards!
-				 *  Neither enable anything in their command registers.
-				 */
-				continue;
-			if (!r->start && r->end) {
-				/*
-				 *  We shall assign a new address to this resource, either because
-				 *  the BIOS forgot to do so or because we have decided the old
-				 *  address was unusable for some reason.
-				 */
-				if (pcibios_assign_resource(dev, idx) < 0)
-					fault = 1;
-			}
-			if (r->flags & IORESOURCE_IO)
-				cmd |= PCI_COMMAND_IO;
-			if (r->flags & IORESOURCE_MEM)
-				cmd |= PCI_COMMAND_MEMORY;
-		}
-
-		if (cmd != old_cmd) {
-			if (fault)
-				printk("PCI: Not enabling device %s because of resource collisions\n", dev->slot_name);
-			else {
-				printk("PCI: Enabling device %s (%04x -> %04x)\n", dev->slot_name, old_cmd, cmd);
-				pci_write_config_word(dev, PCI_COMMAND, cmd);
-			}
-		}
-
-		if (pci_probe & PCI_ASSIGN_ROMS) {
-			r = &dev->resource[PCI_ROM_RESOURCE];
-			r->end -= r->start;
-			r->start = 0;
-			if (r->end)
-				pcibios_assign_resource(dev, PCI_ROM_RESOURCE);
-		}
-	}
-}
-
-static void __init pcibios_resource_survey(void)
-{
-	pcibios_allocate_bus_resources(pci_root);
-	pcibios_allocate_resources(0);
-	pcibios_allocate_resources(1);
-	pcibios_assign_resources();
-}
 
 /*
  *  Fix up IRQs of all PCI devices.
@@ -1309,7 +982,7 @@ static void __init pcibios_irq_peer_trick(struct irq_routing_table *rt)
  *  table, but unfortunately we have to know the interrupt router chip.
  */
 
-static int __init pcibios_lookup_irq(struct pci_dev *dev, struct irq_routing_table *rt, int pin)
+static char * __init pcibios_lookup_irq(struct pci_dev *dev, struct irq_routing_table *rt, int pin)
 {
 	struct irq_info *q;
 	struct pci_dev *router;
@@ -1330,13 +1003,13 @@ static int __init pcibios_lookup_irq(struct pci_dev *dev, struct irq_routing_tab
 		;
 	if (!i) {
 		DBG(" -> not found in routing table\n");
-		return 0;
+		return NULL;
 	}
 	pirq = q->irq[pin].link;
 	mask = q->irq[pin].bitmap;
 	if (!pirq) {
 		DBG(" -> not routed\n");
-		return 0;
+		return NULL;
 	}
 	DBG(" -> PIRQ %02x, mask %04x", pirq, mask);
 	if ((dev->class >> 8) == PCI_CLASS_DISPLAY_VGA)
@@ -1345,7 +1018,7 @@ static int __init pcibios_lookup_irq(struct pci_dev *dev, struct irq_routing_tab
 		;
 	if (!(router = pci_find_slot(rt->rtr_bus, rt->rtr_devfn))) {
 		DBG(" -> router not found\n");
-		return 0;
+		return NULL;
 	}
 #define ID(x,y) ((x << 16) | y)
 	rtrid = ID(rt->rtr_vendor, rt->rtr_device);
@@ -1367,17 +1040,24 @@ static int __init pcibios_lookup_irq(struct pci_dev *dev, struct irq_routing_tab
 		pci_read_config_byte(router, pirq, &x);
 		if (x < 16) {
 			DBG(" -> [PIIX] %02x\n", x);
-			return x;
+			dev->irq = x;
+			return "PIIX";
 		} else if (newirq) {
 			DBG(" -> [PIIX] set to %02x\n", newirq);
 			pci_write_config_byte(router, pirq, newirq);
-			return newirq;
+			dev->irq = newirq;
+			return "PIIX-NEW";
 		}
 		DBG(" -> [PIIX] sink\n");
-		return 0;
+		return NULL;
 	default:
 		DBG(" -> unknown router %04x/%04x\n", rt->rtr_vendor, rt->rtr_device);
-		return 0;
+		if (newirq && mask == (1 << newirq)) {
+			/* Only one IRQ available -> use it */
+			dev->irq = newirq;
+			return "guess";
+		}
+		return NULL;
 	}
 #undef ID
 }
@@ -1435,9 +1115,9 @@ static void __init pcibios_fixup_irqs(void)
 		if (dev->irq >= NR_IRQS)
 			dev->irq = 0;
 		if (pin && !dev->irq && rtable && rtable->version) {
-			dev->irq = pcibios_lookup_irq(dev, rtable, pin);
-			if (dev->irq)
-				printk("PCI: Assigned IRQ %d to device %s\n", dev->irq, dev->slot_name);
+			char *msg = pcibios_lookup_irq(dev, rtable, pin);
+			if (msg)
+				printk("PCI: Assigned IRQ %d to device %s [%s]\n", dev->irq, dev->slot_name, msg);
 		}
 	}
 

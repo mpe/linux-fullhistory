@@ -22,6 +22,7 @@
 #include <linux/malloc.h>
 #include <linux/mm.h>
 #include <linux/ioport.h>
+#include <linux/init.h>
 #include <asm/io.h>
 #include <linux/sched.h>
 #include <linux/videodev.h>

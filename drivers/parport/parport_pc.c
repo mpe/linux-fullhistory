@@ -1758,6 +1758,8 @@ static int __init parport_pc_init_pci (int irq, int dma)
 		  { { 0, -1 }, } },
 		{ PCI_VENDOR_ID_LAVA, PCI_DEVICE_ID_LAVA_DUAL_PAR_B, 1,
 		  { { 0, -1 }, } },
+		{ PCI_VENDOR_ID_EXSYS, PCI_DEVICE_ID_EXSYS_4014, 2,
+		  { { 2, -1 }, { 3, -1 }, } },
 		{ 0, }
 	};
 

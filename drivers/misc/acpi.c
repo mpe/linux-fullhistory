@@ -51,6 +51,10 @@
 static struct acpi_facp *acpi_facp = NULL;
 static unsigned long acpi_facp_addr = 0;
 static unsigned long acpi_dsdt_addr = 0;
+
+static volatile u32 acpi_pm1_status = 0;
+static volatile u32 acpi_gpe_status = 0;
+static volatile u32 acpi_gpe_level = 0;
 static DECLARE_WAIT_QUEUE_HEAD(acpi_wait_event);
 
 /*
@@ -75,6 +79,19 @@ static void acpi_write_pm1_status(struct acpi_facp *facp, u32 value)
 	if (facp->pm1b_evt) {
 		outw(value, facp->pm1b_evt);
 	}
+}
+
+/*
+ * Get the value of the fixed event enable register
+ */
+static u32 acpi_read_pm1_enable(struct acpi_facp *facp)
+{
+	int offset = facp->pm1_evt_len >> 1;
+	u32 value = inw(facp->pm1a_evt + offset);
+	if (facp->pm1b_evt) {
+		value |= inw(facp->pm1b_evt + offset);
+	}
+	return value;
 }
 
 /*
@@ -133,6 +150,28 @@ static void acpi_write_gpe_status(struct acpi_facp *facp, u32 value)
 }
 
 /*
+ * Get the value of the general-purpose event enable register
+ */
+static u32 acpi_read_gpe_enable(struct acpi_facp *facp)
+{
+	u32 value = 0;
+	int i, size, offset;
+	
+	offset = facp->gpe0_len >> 1;
+	if (facp->gpe1) {
+		size = facp->gpe1_len >> 1;
+		for (i = size - 1; i >= 0; i--) {
+			value = (value << 8) | inb(facp->gpe1 + offset + i);
+		}
+	}
+	size = facp->gpe0_len >> 1;
+	for (i = size - 1; i >= 0; i--) {
+		value = (value << 8) | inb(facp->gpe0 + offset + i);
+	}
+	return value;
+}
+
+/*
  * Set the value of the general-purpose event enable register (enable events)
  */
 static void acpi_write_gpe_enable(struct acpi_facp *facp, u32 value)
@@ -162,7 +201,8 @@ static struct acpi_table *__init acpi_map_table(u32 addr)
 	if (addr) {
 		// map table header to determine size
 		table = (struct acpi_table *)
-		    ioremap_nocache((unsigned long) addr, sizeof(struct acpi_table));
+		    ioremap_nocache((unsigned long) addr,
+				    sizeof(struct acpi_table));
 		if (table) {
 			unsigned long table_size = table->length;
 			iounmap(table);
@@ -206,10 +246,13 @@ static int __init acpi_map_tables(void)
 			// strip trailing space and print OEM identifier
 			memcpy_fromio(oem, rsdp->oem, 6);
 			oem[6] = '\0';
-			for (j = 5; j > 0 && (oem[j] == '\0' || oem[j] == ' '); j--) {
+			for (j = 5;
+			     j > 0 && (oem[j] == '\0' || oem[j] == ' ');
+			     j--) {
 				oem[j] = '\0';
 			}
-			printk(KERN_INFO "ACPI: \"%s\" found at 0x%p\n", oem, (void *) i);
+			printk(KERN_INFO "ACPI: \"%s\" found at 0x%p\n",
+			       oem, (void *) i);
 
 			break;
 		}
@@ -269,17 +312,32 @@ static void acpi_unmap_tables(void)
  */
 static void acpi_irq(int irq, void *dev_id, struct pt_regs *regs)
 {
-	u32 status;
-
-	// detect and disable any fixed events
-	status = acpi_read_pm1_status(acpi_facp);
-	acpi_write_pm1_enable(acpi_facp, ~status);
-
-	// detect and disable any general-purpose events
-	status = acpi_read_gpe_status(acpi_facp);
-	acpi_write_gpe_enable(acpi_facp, ~status);
-
+	u32 pm1_status, gpe_status, gpe_level, gpe_edge;
+	// detect and clear fixed events
+	pm1_status = (acpi_read_pm1_status(acpi_facp)
+		      & acpi_read_pm1_enable(acpi_facp));
+	acpi_write_pm1_status(acpi_facp, pm1_status);
+	
+	// detect and handle general-purpose events
+	gpe_status = (acpi_read_gpe_status(acpi_facp)
+		      & acpi_read_gpe_enable(acpi_facp));
+	gpe_level = gpe_status & acpi_gpe_level;
+	if (gpe_level) {
+		// disable level-triggered events
+		acpi_write_gpe_enable(
+			acpi_facp,
+			acpi_read_gpe_enable(acpi_facp) & ~gpe_level);
+	}
+	gpe_edge = gpe_status & ~gpe_level;
+	if (gpe_edge) {
+		// clear edge-triggered events
+		while (acpi_read_gpe_status(acpi_facp) & gpe_edge)
+			acpi_write_gpe_status(acpi_facp, gpe_edge);
+	}
+	
 	// notify process reading /dev/acpi
+	acpi_pm1_status |= pm1_status;
+	acpi_gpe_status |= gpe_status;
 	wake_up_interruptible(&acpi_wait_event);
 }
 
@@ -317,17 +375,79 @@ static int acpi_ioctl(struct inode *inode,
 				     (void *) arg,
 				     sizeof(struct acpi_find_tables));
 		if (!status) {
-			struct acpi_find_tables *rqst = (struct acpi_find_tables *) arg;
+			struct acpi_find_tables *rqst
+				= (struct acpi_find_tables *) arg;
 			put_user(acpi_facp_addr, &rqst->facp);
 			put_user(acpi_dsdt_addr, &rqst->dsdt);
 			status = 0;
 		}
 		break;
+	case ACPI_ENABLE_EVENT:
+		status = verify_area(VERIFY_READ,
+				     (void *) arg,
+				     sizeof(struct acpi_enable_event));
+		if (!status) {
+			struct acpi_enable_event *rqst
+				= (struct acpi_enable_event *) arg;
+			u32 pm1_enable, gpe_enable, gpe_level;
+			u32 pm1_enabling, gpe_enabling;
+			
+			get_user(pm1_enable, &rqst->pm1_enable);
+			get_user(gpe_enable, &rqst->gpe_enable);
+			get_user(gpe_level, &rqst->gpe_level);
+			gpe_level &= gpe_enable;
+			
+			// clear previously disabled events before enabling
+			pm1_enabling = (pm1_enable
+					& ~acpi_read_pm1_enable(acpi_facp));
+			acpi_write_pm1_status(acpi_facp, pm1_enabling);
+			gpe_enabling = (gpe_enable &
+					~acpi_read_gpe_enable(acpi_facp));
+			while (acpi_read_gpe_status(acpi_facp) & gpe_enabling)
+				acpi_write_gpe_status(acpi_facp, gpe_enabling);
+			
+			acpi_write_pm1_enable(acpi_facp, pm1_enable);
+			acpi_write_gpe_enable(acpi_facp, gpe_enable);
+			acpi_gpe_level = gpe_level;
+			
+			status = 0;
+		}
+		break;
 	case ACPI_WAIT_EVENT:
-		interruptible_sleep_on(&acpi_wait_event);
-		if (signal_pending(current))
-			return -ERESTARTSYS;
-		status = 0;
+		status = verify_area(VERIFY_WRITE,
+				     (void *) arg,
+				     sizeof(struct acpi_wait_event));
+		if (!status) {
+			struct acpi_wait_event *rqst
+				= (struct acpi_wait_event *) arg;
+			u32 pm1_status = 0;
+			u32 gpe_status = 0;
+			
+			for (;;) {
+				unsigned long flags;
+				
+				// we need an atomic exchange here
+				save_flags(flags);
+				cli();
+				pm1_status = acpi_pm1_status;
+				acpi_pm1_status = 0;
+				gpe_status = acpi_gpe_status;
+				acpi_gpe_status = 0;
+				restore_flags(flags);
+
+				if (pm1_status || gpe_status)
+					break;
+
+				// wait for an event to arrive
+				interruptible_sleep_on(&acpi_wait_event);
+				if (signal_pending(current))
+					return -ERESTARTSYS;
+			}
+
+			put_user(pm1_status, &rqst->pm1_status);
+			put_user(gpe_status, &rqst->gpe_status);
+			status = 0;
+		}
 		break;
 	}
 	return status;
@@ -448,7 +568,8 @@ static void __exit acpi_exit(void)
 	// disable and clear any pending events
 	acpi_write_gpe_enable(acpi_facp, 0);
 	while (acpi_read_gpe_status(acpi_facp)) {
-		acpi_write_gpe_status(acpi_facp, acpi_read_gpe_status(acpi_facp));
+		acpi_write_gpe_status(acpi_facp,
+				      acpi_read_gpe_status(acpi_facp));
 	}
 	acpi_write_pm1_enable(acpi_facp, 0);
 	acpi_write_pm1_status(acpi_facp, acpi_read_pm1_status(acpi_facp));
@@ -464,6 +585,7 @@ static void __exit acpi_exit(void)
 
 module_init(acpi_init)
 module_exit(acpi_exit)
+
 #else
 
 __initcall(acpi_init);

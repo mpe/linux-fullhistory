@@ -683,7 +683,7 @@ int init_module(void)
 
 void cleanup_module(void)
 {
-	tty_unregister_driver(&acm_tty_driver);
+	tty_unregister_driver(&serial_tty_driver);
 	usb_deregister(&usb_serial_driver);
 }
 

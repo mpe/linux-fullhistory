@@ -507,7 +507,7 @@ check_if_enabled:
 		if ((hwif = ide_match_hwif(base, d->bootable, d->name)) == NULL)
 			continue;	/* no room in ide_hwifs[] */
 		if (hwif->io_ports[IDE_DATA_OFFSET] != base) {
-			ide_init_hwif_ports(&hwif->hw, base, (ctl + 2), NULL);
+			ide_init_hwif_ports(&hwif->hw, base, (ctl | 2), NULL);
 			memcpy(hwif->io_ports, hwif->hw.io_ports, sizeof(hwif->io_ports));
 			hwif->noprobe = !hwif->io_ports[IDE_DATA_OFFSET];
 		}

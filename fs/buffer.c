@@ -1512,8 +1512,8 @@ int block_write_cont_page(struct file *file, struct page *page, unsigned long of
 	char * target_buf, *target_data;
 	unsigned long data_offset = offset;
 
-	offset = page->offset-inode->i_size;
-	if (offset < 0) 
+	offset = inode->i_size - page->offset;
+	if (page->offset>inode->i_size)
 		offset = 0;
 	else if (offset >= data_offset)
 		offset = data_offset;

@@ -151,8 +151,6 @@ static void parport_ieee1284_terminate (struct parport *port)
 {
 	port = port->physport;
 
-	port->ieee1284.phase = IEEE1284_PH_TERMINATE;
-
 	/* EPP terminates differently. */
 	switch (port->ieee1284.mode) {
 	case IEEE1284_MODE_EPP:
@@ -171,7 +169,32 @@ static void parport_ieee1284_terminate (struct parport *port)
 				      PARPORT_CONTROL_SELECT
 				      | PARPORT_CONTROL_INIT);
 		break;
-		
+
+	case IEEE1284_MODE_ECP:
+	case IEEE1284_MODE_ECPRLE:
+	case IEEE1284_MODE_ECPSWE:
+		/* In ECP we can only terminate from fwd idle phase. */
+		if (port->ieee1284.phase != IEEE1284_PH_FWD_IDLE) {
+			/* Event 47: Set nInit high */
+			parport_frob_control (port,
+					      PARPORT_CONTROL_INIT
+					      | PARPORT_CONTROL_AUTOFD,
+					      PARPORT_CONTROL_INIT
+					      | PARPORT_CONTROL_AUTOFD);
+
+			/* Event 49: PError goes high */
+			parport_wait_peripheral (port,
+						 PARPORT_STATUS_PAPEROUT,
+						 PARPORT_STATUS_PAPEROUT);
+
+			parport_data_forward (port);
+			DPRINTK (KERN_DEBUG "%s: ECP direction: forward\n",
+				 port->name);
+			port->ieee1284.phase = IEEE1284_PH_FWD_IDLE;
+		}
+
+		/* fall-though.. */
+
 	default:
 		/* Terminate from all other modes. */
 

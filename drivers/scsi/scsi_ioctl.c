@@ -176,10 +176,38 @@ static int ioctl_internal_command(Scsi_Device * dev, char *cmd,
 }
 
 /*
- * This interface is depreciated - users should use the scsi generics
+ * This interface is depreciated - users should use the scsi generic (sg)
  * interface instead, as this is a more flexible approach to performing
  * generic SCSI commands on a device.
+ *
+ * The structure that we are passed should look like:
+ *
+ * struct sdata {
+ *  unsigned int inlen;	     [i] Length of data to be written to device 
+ *  unsigned int outlen;     [i] Length of data to be read from device 
+ *  unsigned char cmd[x];    [i] SCSI command (6 <= x <= 12).
+ *			     [o] Data read from device starts here.
+ *			     [o] On error, sense buffer starts here.
+ *  unsigned char wdata[y];  [i] Data written to device starts here.
+ * };
+ * Notes:
+ *   -	The SCSI command length is determined by examining the 1st byte
+ *	of the given command. There is no way to override this.
+ *   -	Data transfers are limited to PAGE_SIZE (4K on i386, 8K on alpha).
+ *   -	The length (x + y) must be at least OMAX_SB_LEN bytes long to
+ *	accomodate the sense buffer when an error occurs.
+ *	The sense buffer is truncated to OMAX_SB_LEN (16) bytes so that
+ *	old code will not be surprised.
+ *   -	If a Unix error occurs (e.g. ENOMEM) then the user will receive
+ *	a negative return and the Unix error code in 'errno'. 
+ *	If the SCSI command succeeds then 0 is returned.
+ *	Positive numbers returned are the compacted SCSI error codes (4 
+ *	bytes in one int) where the lowest byte is the SCSI status.
+ *	See the drivers/scsi/scsi.h file for more information on this.
+ *
  */
+#define OMAX_SB_LEN 16   /* Old sense buffer length */
+
 int scsi_ioctl_send_command(Scsi_Device * dev, Scsi_Ioctl_Command * sic)
 {
 	unsigned long flags;
@@ -195,8 +223,6 @@ int scsi_ioctl_send_command(Scsi_Device * dev, Scsi_Ioctl_Command * sic)
 
 	if (!sic)
 		return -EINVAL;
-
-
 	/*
 	 * Verify that we can read at least this much.
 	 */
@@ -204,23 +230,13 @@ int scsi_ioctl_send_command(Scsi_Device * dev, Scsi_Ioctl_Command * sic)
 	if (result)
 		return result;
 
-	/*
-	 * The structure that we are passed should look like:
-	 *
-	 * struct sdata {
-	 *  unsigned int inlen;
-	 *  unsigned int outlen;
-	 *  unsigned char  cmd[];  # However many bytes are used for cmd.
-	 *  unsigned char  data[];
-	 * };
-	 */
 	get_user(inlen, &sic->inlen);
 	get_user(outlen, &sic->outlen);
 
 	/*
 	 * We do not transfer more than MAX_BUF with this interface.
 	 * If the user needs to transfer more data than this, they
-	 * should use scsi_generics instead.
+	 * should use scsi_generics (sg) instead.
 	 */
 	if (inlen > MAX_BUF)
 		return -EINVAL;
@@ -249,19 +265,16 @@ int scsi_ioctl_send_command(Scsi_Device * dev, Scsi_Ioctl_Command * sic)
 	 */
 	cmdlen = COMMAND_SIZE(opcode);
 
-	result = verify_area(VERIFY_READ, cmd_in,
-		    cmdlen + inlen > MAX_BUF ? MAX_BUF : cmdlen + inlen);
+	result = verify_area(VERIFY_READ, cmd_in, cmdlen + inlen);
 	if (result)
 		return result;
 
-	copy_from_user((void *) cmd, cmd_in, cmdlen);
+	copy_from_user(cmd, cmd_in, cmdlen);
 
 	/*
 	 * Obtain the data to be sent to the device (if any).
 	 */
-	copy_from_user((void *) buf,
-		       (void *) (cmd_in + cmdlen),
-		       inlen);
+	copy_from_user(buf, cmd_in + cmdlen, inlen);
 
 	/*
 	 * Set the lun field to the correct value.
@@ -311,19 +324,18 @@ int scsi_ioctl_send_command(Scsi_Device * dev, Scsi_Ioctl_Command * sic)
 	 * If there was an error condition, pass the info back to the user. 
 	 */
 	if (SCpnt->result) {
-		result = verify_area(VERIFY_WRITE,
-				     cmd_in,
-				     sizeof(SCpnt->sense_buffer));
+		int sb_len = sizeof(SCpnt->sense_buffer);
+
+		sb_len = (sb_len > OMAX_SB_LEN) ? OMAX_SB_LEN : sb_len;
+		result = verify_area(VERIFY_WRITE, cmd_in, sb_len);
 		if (result)
 			return result;
-		copy_to_user((void *) cmd_in,
-			     SCpnt->sense_buffer,
-			     sizeof(SCpnt->sense_buffer));
+		copy_to_user(cmd_in, SCpnt->sense_buffer, sb_len);
 	} else {
 		result = verify_area(VERIFY_WRITE, cmd_in, outlen);
 		if (result)
 			return result;
-		copy_to_user((void *) cmd_in, buf, outlen);
+		copy_to_user(cmd_in, buf, outlen);
 	}
 	result = SCpnt->result;
 

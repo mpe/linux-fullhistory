@@ -60,7 +60,7 @@ struct inode_operations fat_file_inode_operations = {
 	fat_get_block,		/* get_block */
 	block_read_full_page,	/* readpage */
 	NULL,			/* writepage */
-	NULL,			/* flushpage */
+	block_flushpage,	/* flushpage */
 	fat_truncate,		/* truncate */
 	NULL,			/* permission */
 	NULL,			/* smap */
@@ -118,7 +118,7 @@ static int fat_write_partial_page(struct file *file, struct page *page, unsigned
 	unsigned long page_cache = 0;
 	long status;
 
-	pgpos = inode->i_size & PAGE_CACHE_MASK;
+	pgpos = MSDOS_I(inode)->i_realsize & PAGE_CACHE_MASK;
 	while (pgpos < page->offset) {
 		hash = page_hash(inode, pgpos);
 repeat_find:	new_page = __find_lock_page(inode, pgpos, hash);

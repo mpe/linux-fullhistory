@@ -49,6 +49,15 @@
 #define USB_DIR_OUT			0
 #define USB_DIR_IN			0x80
 
+#define USB_ENDPOINT_NUMBER_MASK	0x0f	/* in bEndpointAddress */
+#define USB_ENDPOINT_DIR_MASK		0x80
+
+#define USB_ENDPOINT_XFERTYPE_MASK	0x03	/* in bmAttributes */
+#define USB_ENDPOINT_XFER_CONTROL	0
+#define USB_ENDPOINT_XFER_ISOC		1
+#define USB_ENDPOINT_XFER_BULK		2
+#define USB_ENDPOINT_XFER_INT		3
+
 /*
  * USB Packet IDs (PIDs)
  */
@@ -706,7 +715,7 @@ void usb_show_string(struct usb_device *dev, char *id, int index);
 #ifdef USB_DEBUG
 #define PRINTD(format, args...) printk("usb: " format "\n" , ## args);
 #else /* NOT DEBUGGING */
-#define PRINTD(fmt, arg...) do {} while (0) /**/
+#define PRINTD(fmt, arg...) do {} while (0)
 #endif /* USB_DEBUG */
 /* A simple way to change one line from DEBUG to NOT DEBUG: */
 #define XPRINTD(fmt, arg...)	do {} while (0)
