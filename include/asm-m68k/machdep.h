@@ -20,7 +20,8 @@ extern void (*mach_kbd_leds) (unsigned int);
 extern void (*mach_init_INTS) (void);
 extern int (*mach_add_isr) (unsigned long source, isrfunc handler,
 			    int pri, void *data, char *name);
-extern int (*mach_remove_isr) (unsigned long source, isrfunc handler);
+extern int (*mach_remove_isr) (unsigned long source, isrfunc handler,
+			       void *data);
 extern int (*mach_get_irq_list)(char *buf, int len);
 extern void (*mach_process_int) (int level, struct pt_regs *fp);
 extern void (*mach_enable_irq) (unsigned);

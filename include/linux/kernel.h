@@ -29,15 +29,9 @@
 #define	KERN_INFO	"<6>"	/* informational			*/
 #define	KERN_DEBUG	"<7>"	/* debug-level messages			*/
 
-#if __GNUC__ < 2 || (__GNUC__ == 2 && __GNUC_MINOR__ < 5)
-# define NORET_TYPE    __volatile__
-# define ATTRIB_NORET  /**/
-# define NORET_AND     /**/
-#else
 # define NORET_TYPE    /**/
 # define ATTRIB_NORET  __attribute__((noreturn))
 # define NORET_AND     noreturn,
-#endif
 
 extern void math_error(void);
 NORET_TYPE void panic(const char * fmt, ...)

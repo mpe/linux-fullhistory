@@ -279,7 +279,7 @@ void ufs_statfs(struct super_block * sb, struct statfs * buf, int bufsiz)
 	tmp.f_ffree = sb->u.ufs_sb.s_raw_sb->fs_cstotal.cs_nifree;
 	tmp.f_fsid.val[0] = sb->u.ufs_sb.s_raw_sb->fs_id[0];
 	tmp.f_fsid.val[1] = sb->u.ufs_sb.s_raw_sb->fs_id[1];
-	tmp.f_namelen = MAXNAMLEN;
+	tmp.f_namelen = UFS_MAXNAMLEN;
 /*        tmp.f_spare[6] */
 
 	memcpy_tofs(buf, &tmp, bufsiz);

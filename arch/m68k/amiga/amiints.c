@@ -2,7 +2,7 @@
  * amiints.c -- Amiga Linux interrupt handling code
  *
  * This file is subject to the terms and conditions of the GNU General Public
- * License.  See the file README.legal in the main directory of this archive
+ * License.  See the file COPYING in the main directory of this archive
  * for more details.
  *
  */
@@ -336,6 +336,8 @@ int amiga_add_isr (unsigned long source, isrfunc isr, int pri, void
     }
 
     p = new_isr_node();
+    if (p == NULL)
+	return 0;
     p->isr = isr;
     p->pri = pri;
     p->data = data;
@@ -356,6 +358,84 @@ int amiga_add_isr (unsigned long source, isrfunc isr, int pri, void
 
     return 1;
 }
+
+int amiga_remove_isr (unsigned long source, isrfunc isr, void *data)
+{
+    unsigned long amiga_source = source & ~IRQ_MACHSPEC;
+
+    if (amiga_source > NUM_AMIGA_SOURCES) {
+	printk ("amiga_remove_isr: Unknown interrupt source %ld\n", source);
+	return 0;
+    }
+
+    delete_isr (&ami_lists[amiga_source], isr, data);
+
+    if (ami_lists[amiga_source] == NULL) {
+	/* disable the interrupt */
+	custom.intena = ami_intena_vals[amiga_source];
+
+	/* if a CIAA interrupt, disable the appropriate CIA ICR bit */
+	if (source >= IRQ_AMIGA_CIAA_TA && source <= IRQ_AMIGA_CIAA_FLG)
+	    ciaa.icr = 1 << (source - IRQ_AMIGA_CIAA_TA);
+
+	/* if a CIAB interrupt, disable the appropriate CIA ICR bit */
+	if (source >= IRQ_AMIGA_CIAB_TA && source <= IRQ_AMIGA_CIAB_FLG)
+	    ciab.icr = 1 << (source - IRQ_AMIGA_CIAB_TA);
+    }
+
+    return 1;
+}
+
+
+/*
+ * Enable/disable a particular machine specific interrupt source.
+ * Note that this may affect other interrupts in case of a shared interrupt.
+ */
+
+void amiga_enable_irq(unsigned int source)
+{
+    unsigned long amiga_source = source & ~IRQ_MACHSPEC;
+
+    if (amiga_source > NUM_AMIGA_SOURCES) {
+	printk("amiga_enable_irq: Unknown interrupt source %d\n", source);
+	return;
+    }
+
+    /* enable the interrupt */
+    custom.intena = IF_SETCLR | ami_intena_vals[amiga_source];
+
+    /* if a CIAA interrupt, enable the appropriate CIA ICR bit */
+    if (source >= IRQ_AMIGA_CIAA_TA && source <= IRQ_AMIGA_CIAA_FLG)
+	ciaa.icr = 0x80 | (1 << (source - IRQ_AMIGA_CIAA_TA));
+
+    /* if a CIAB interrupt, enable the appropriate CIA ICR bit */
+    if (source >= IRQ_AMIGA_CIAB_TA && source <= IRQ_AMIGA_CIAB_FLG)
+	ciab.icr = 0x80 | (1 << (source - IRQ_AMIGA_CIAB_TA));
+
+}
+
+void amiga_disable_irq(unsigned int source)
+{
+    unsigned long amiga_source = source & ~IRQ_MACHSPEC;
+
+    if (amiga_source > NUM_AMIGA_SOURCES) {
+	printk("amiga_disable_irq: Unknown interrupt source %d\n", source);
+	return;
+    }
+
+    /* disable the interrupt */
+    custom.intena = ami_intena_vals[amiga_source];
+
+    /* if a CIAA interrupt, disable the appropriate CIA ICR bit */
+    if (source >= IRQ_AMIGA_CIAA_TA && source <= IRQ_AMIGA_CIAA_FLG)
+	ciaa.icr = 1 << (source - IRQ_AMIGA_CIAA_TA);
+
+    /* if a CIAB interrupt, disable the appropriate CIA ICR bit */
+    if (source >= IRQ_AMIGA_CIAB_TA && source <= IRQ_AMIGA_CIAB_FLG)
+	ciab.icr = 1 << (source - IRQ_AMIGA_CIAB_TA);
+
+}
+
 
 int amiga_get_irq_list( char *buf, int len )
 {	int			i;

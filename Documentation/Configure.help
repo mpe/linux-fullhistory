@@ -831,6 +831,9 @@ CONFIG_IP_FIREWALL
   completely invisible and avoids the need to allocate valid IP host
   addresses for the machines on the local net) or to use the ip packet
   accounting to see what is using all your network bandwidth.
+  This option is also needed when you want to enable the transparent
+  proxying support (via which non-local connections can be redirected
+  to local proxy servers).
 
 IP: accounting
 CONFIG_IP_ACCT
@@ -863,6 +866,13 @@ CONFIG_IP_FIREWALL_VERBOSE
   packets it received. The information is handled by the klogd demon
   which is responsible for kernel messages ("man klogd").
 
+IP: transparent proxying (ALPHA)
+CONFIG_IP_TRANSPARENT_PROXY
+  This enables you to redirect any network traffic to a local server,
+  acting as a "transparent proxy server".  Redirection is activated
+  by defining special input firewall rules (using the ipfwadm utility)
+  and/or by doing an appropriate bind() system call.
+
 IP: masquerading (ALPHA)
 CONFIG_IP_MASQUERADE
   If one of the computers on your local network for which your Linux
@@ -886,6 +896,20 @@ CONFIG_IP_MASQUERADE
   ALPHA code, which means that it need not be completely stable; it
   has nothing to do with the computer architecture of the same
   name. If you want this, say Y.
+
+IP: always defragment
+CONFIG_IP_ALWAYS_DEFRAG
+   This option means that all incoming fragments will be reassembled
+   (defragmented) before being processed, even if those packets
+   should be forwarded.  This option is highly recommended if you
+   have enabled CONFIG_IP_MASQUERADE, because these facilities requires
+   that second and further fragments can be related to TCP or UDP port
+   numbers, which are only stored in the first fragment.  When using
+   CONFIG_IP_FIREWALL, you might also want to enable this option, to
+   have a more reliable firewall (otherwise second and further fragments
+   will always be accepted by the firewall).  When using transparent
+   proxying (CONFIG_IP_TRANSPARENT_PROXY), this option is implicit,
+   although it is safe to say Y here.
 
 IP: aliasing support
 CONFIG_IP_ALIAS
@@ -1062,22 +1086,20 @@ CONFIG_AX25
   use a low speed TNC (a Terminal Node Controller acts as a kind of
   modem connecting your computer's serial port to your radio's
   microphone input and speaker output) supporting the KISS protocol or
-  the  various SCC cards that are supported by the Ottawa PI, the
-  Gracilis Packetwin and the generic Z8530 driver. 
-  At the moment there is no driver for the Baycom modem serial and parallel
-  port hacks although one is being written (see the HAM-HOWTO). The other
-  Baycom cards (SCC) are supported by the Z8530 driver.
-  In order to use AX.25, you need to get a set of all the software for 
-  Linux amateur radio users as well as information about how to 
-  configure an AX.25 port is contained in the HAM-HOWTO, available via
-  ftp (user: anonymous) in sunsite.unc.edu:/pub/Linux/docs/HOWTO. You
-  might also want to check out the file Documentation/networking/ax25.txt
-  in the kernel source. More information about digital amateur radio
-  in general is on the WWW at  
+  the various SCC cards that are supported by the Ottowa PI, the
+  Gracilis Packetwin and the generic Z8530 driver. Another option are
+  the Baycom modem serial and parallel port hacks (supported by their
+  own driver) and the other baycom cards (SCC) (supported by the Z8530
+  driver).  Information about where to get supporting software for
+  Linux amateur radio as well as information about how to configure an
+  AX.25 port is contained in the HAM-HOWTO, available via ftp (user:
+  anonymous) in sunsite.unc.edu:/pub/Linux/docs/HOWTO. You might also
+  want to check out the file Documentation/networking/ax25.txt in the
+  kernel source. More information about digital amateur radio in
+  general is on the WWW at
   http://www.cis.ohio-state.edu/hypertext/faq/usenet/radio/ham-radio/digital-faq/faq.html
   (To browse the WWW, you need to have access to a machine on the
-  Internet that has one of the programs lynx, netscape or
-  Mosaic). 
+  Internet that has one of the programs lynx, netscape or Mosaic).
 
 Amateur Radio NET/ROM
 CONFIG_NETROM
@@ -1428,10 +1450,28 @@ CONFIG_SCSI_PAS16
   sunsite.unc.edu:/pub/Linux/docs/HOWTO. If it doesn't work out of the
   box, you may have to change some settings in drivers/scsi/pas16.h.
  
-QLOGIC SCSI support
-CONFIG_SCSI_QLOGIC
-  Information about this SCSI driver is contained in
-  drivers/scsi/README.qlogic. You should also read the SCSI-HOWTO,
+Qlogic FAS SCSI support
+CONFIG_SCSI_QLOGIC_FAS
+  This driver works only with the ISA, VLB, and PCMCIA versions of the
+  Qlogic FastSCSI! cards as well as any other card based on the FASXX
+  chip (including the Control Concepts SCSI/IDE/SIO/PIO/FDC cards); it
+  does NOT support the PCI version. The PCI versions are supported by
+  the Qlogic ISP driver though.  Information about this driver is
+  contained in drivers/scsi/README.qlogicfas.  You should also read
+  the SCSI-HOWTO, available via ftp (user: anonymous) at
+  sunsite.unc.edu:/pub/Linux/docs/HOWTO. This driver is also available
+  as a module ( = code which can be inserted in and removed from the
+  running kernel whenever you want). If you want to compile it as a
+  module, say M here and read Documentation/modules.txt.
+
+Qlogic ISP SCSI support (EXPERIMENTAL)
+CONFIG_SCSI_QLOGIC_ISP
+  This driver works for all QLogic PCI SCSI host adaptors (IQ-PCI,
+  IQ-PCI-10, IQ_PCI-D) except for the PCI-basic card. (This latter
+  card is supported by the "AM53/79C974 PCI SCSI" driver). If you say
+  Y here, make sure to say Y to "PCI BIOS support" as well. More
+  information is contained in the file
+  drivers/scsi/README.qlogicisp. You should also read the SCSI-HOWTO,
   available via ftp (user: anonymous) at
   sunsite.unc.edu:/pub/Linux/docs/HOWTO. This driver is also available
   as a module ( = code which can be inserted in and removed from the
@@ -1721,14 +1761,15 @@ CONFIG_SCC
 BAYCOM ser12 and par96 kiss emulation driver for AX.25
 CONFIG_BAYCOM
   This is an experimental driver for Baycom style simple amateur radio
-  modems that connect to either a serial interface or a parallel 
-  interface. The driver supports the ser12 and par96 designs. To configure
-  the driver, use the setbaycom utility available from
-  http://www.ife.ee.ethz.ch/~sailer/ham/ham.html#lnxbay. For informations
-  on the modems, see http://www.baycom.de.
-  If you want to compile this as a module ( = code which can be
-  inserted in and removed from the running kernel whenever you want),
-  say M here and read Documentation/modules.txt. This is recommended.
+  modems that connect to either a serial interface or a parallel
+  interface. The driver supports the ser12 and par96 designs. To
+  configure the driver, use the setbaycom utility available from
+  http://www.ife.ee.ethz.ch/~sailer/ham/ham.html#lnxbay. For
+  informations on the modems, see http://www.baycom.de and
+  drivers/char/README.baycom.  If you want to compile this as a module
+  ( = code which can be inserted in and removed from the running
+  kernel whenever you want), say M here and read
+  Documentation/modules.txt. This is recommended.
 
 PLIP (parallel port) support
 CONFIG_PLIP
@@ -2625,6 +2666,14 @@ CONFIG_QUOTA
   use it. Probably this is only useful for multi user systems. If
   unsure, say N.
 
+Mandatory lock support
+CONFIG_LOCK_MANDATORY
+  Mandatory locking is used by some System 5 style database
+  applications.  To use this option safely you must have newer NFS
+  daemons, new samba, new netatalk, new mars-nwe and other file
+  servers. At the time of writing none of these are available. Unless
+  you need this feature say N.
+
 Minix fs support
 CONFIG_MINIX_FS
   Minix is a simple operating system used in many classes about
@@ -2664,12 +2713,12 @@ CONFIG_EXT2_FS
   which doesn't require ext2fs is a diskless Linux box which mounts
   all files over the network using NFS (in this case it's sufficient
   to enable NFS filesystem support below; if you are planning to do
-  this, have a look at the package
-  /pub/Linux/system/Linux-boot/netboot-nfs.tar.gz, available via ftp
-  (user: anonymous) from sunsite.unc.edu, extract with "tar xzvf
-  filename"). There is a short ext2fs-FAQ, available via ftp
-  (user: anonymous) in sunsite.unc.edu:/pub/Linux/docs/faqs. This
-  option will enlarge your kernel by about 41 kB. Default is Y.
+  this, have a look at the netboot package in
+  /pub/Linux/system/Linux-boot/, available via ftp (user: anonymous)
+  from sunsite.unc.edu, extract with "tar xzvf filename"). There is a
+  short ext2fs-FAQ, available via ftp (user: anonymous) in
+  sunsite.unc.edu:/pub/Linux/docs/faqs. This option will enlarge your
+  kernel by about 41 kB. Default is Y.
 
 xiafs filesystem support
 CONFIG_XIA_FS
@@ -3338,6 +3387,143 @@ CONFIG_SOUND
   sunsite.unc.edu:/pub/Linux/kernel/patches/console/pcsndrv-X.X.tar.gz,
   to be extracted with "tar xzvf filename".
 
+ProAudioSpectrum 16 support
+CONFIG_PAS
+  Answer Y only if you have a Pro Audio Spectrum 16, ProAudio Studio
+  16 or Logitech SoundMan 16.  Don't answer 'y' if you have some other
+  card made by Media Vision or Logitech since they are not PAS16
+  compatible.
+
+SoundBlaster (SB, SBPro, SB16, clones) support
+CONFIG_SB
+  Answer "y" if you have an original SoundBlaster card made by
+  Creative Labs or a 100% hardware compatible clone (like the
+  Thunderboard or SM Games). If your card was in the list of supported
+  cards look at the card specific instructions in the
+  drivers/sound/Readme.cards file before answering this question. For
+  an unknown card you may answer Y if the card claims to be
+  SoundBlaster compatible.
+
+Generic OPL2/OPL3 FM synthesizer support
+CONFIG_ADLIB
+  Answer Y if your card has a FM chip made by Yamaha (OPL2/OPL3/OPL4).
+  Answering Y is usually a safe and recommended choice, however some
+  cards may have software (TSR) FM emulation. Enabling FM support with
+  these cards may cause trouble (I don't currently know of any such
+  cards, however).
+
+Gravis Ultrasound support
+CONFIG_GUS
+  Enable this option for any type of Gravis Ultrasound card, including
+  the GUS or GUS MAX.
+
+MPU-401 support (NOT for SB16)
+CONFIG_MPU401
+  Be careful with this question. The MPU401 interface is supported by
+  all soundcards. However, some natively supported cards have their
+  own driver for MPU401. Enabling the MPU401 option with these cards
+  will cause a conflict. Also, enabling MPU401 on a system that
+  doesn't really have a MPU401 could cause some trouble. If your card
+  was in the list of supported cards, look at the card specific
+  instructions in the drivers/sound/Readme.cards file. It's safe to
+  answer Y if you have a true MPU401 MIDI interface card.
+
+6850 UART Midi support
+CONFIG_UART6850
+  This option enables support for MIDI interfaces based on the 6850
+  UART chip. This interface is rarely found on sound cards.  It's safe
+  to answer N to this question.
+
+PSS (ECHO-ADI2111) support
+CONFIG_PSS
+  Answer Y only if you have Orchid SW32, Cardinal DSP16 or some other
+  card based on the PSS chipset (AD1848 codec + ADSP-2115 DSP chip +
+  Echo ESC614 ASIC CHIP).
+
+16 bit sampling option of GUS (_NOT_ GUS MAX)
+CONFIG_GUS16
+  Answer Y if you have installed the 16 bit sampling daughtercard on
+  your GUS.  Answer N if you have a GUS MAX, since enabling this
+  option disables GUS MAX support.
+
+GUS MAX support
+CONFIG_GUSMAX
+  Answer Y only if you have a Gravis Ultrasound MAX.
+
+Microsoft Sound System support
+CONFIG_MSS
+  Again think carefully before answering Y to this question.  It's
+  safe to answer Y if you have the original Windows Sound System card
+  made by Microsoft or Aztech SG 16 Pro (or NX16 Pro).  Also you may
+  answer Y in case your card is NOT among these:
+     ATI Stereo F/X, AdLib, Audio Excell DSP16, Cardinal DSP16,
+     Ensoniq SoundScape (and compatibles made by Reveal and Spea),
+     Gravis Ultrasound, Gravis Ultrasound ACE, Gravis Ultrasound Max,
+     Gravis Ultrasound with 16 bit option, Logitech Sound Man 16,
+     Logitech SoundMan Games, Logitech SoundMan Wave, MAD16 Pro (OPTi
+     82C929), Media Vision Jazz16, MediaTriX AudioTriX Pro, Microsoft
+     Windows Sound System (MSS/WSS), Mozart (OAK OTI-601), Orchid
+     SW32, Personal Sound System (PSS), Pro Audio Spectrum 16, Pro
+     Audio Studio 16, Pro Sonic 16, Roland MPU-401 MIDI interface,
+     Sound Blaster 1.0, Sound Blaster 16, Sound Blaster 16ASP, Sound
+     Blaster 2.0, Sound Blaster AWE32, Sound Blaster Pro, TI TM4000M
+     notebook, ThunderBoard, Turtle Beach Tropez, Yamaha FM
+     synthesizers (OPL2, OPL3 and OPL4), 6850 UART MIDI Interface.
+  For cards having native support in VoxWare, consult the card
+  specific instructions in drivers/sound/Readme.cards. Some drivers
+  have their own MSS support and enabling this option will cause a
+  conflict.
+
+Ensoniq Soundscape support
+CONFIG_SSCAPE
+  Answer Y if you have a soundcard based on the Ensoniq SoundScape
+  chipset. Such cards are being manufactured at least by Ensoniq, Spea
+  and Reveal (Reveal makes also other cards).
+
+MediaTriX AudioTriX Pro support
+CONFIG_TRIX
+  Answer Y if you have the AudioTriX Pro sound card manufactured
+  by MediaTrix.
+
+Support for MAD16 and/or Mozart based cards
+CONFIG_MAD16
+  Answer Y if your card has a Mozart (OAK OTI-601) or MAD16
+  (OPTi 82C928 or 82C929) audio interface chip. These chips are
+  currently quite common so it's possible that many no-name cards
+  have one of them. In addition the MAD16 chip is used in some
+  cards made by known manufacturers such as Turtle Beach (Tropez),
+  Reveal (some models) and Diamond (latest ones).
+
+Support for Crystal CS4232 based (PnP) cards
+CONFIG_CS4232
+  Enable this if you have a card based on the Crystal CS4232 chip set.
+
+Support for Turtle Beach Wave Front (Maui, Tropez) synthesizers
+CONFIG_MAUI
+  Enable this option if you have a Turtle Beach Wave Front, Maui, or 
+  Tropez sound card.
+
+Support for Crystal CS4232 based (PnP) cards
+CONFIG_CS4232
+  Use this option to enable experimental support for cards that use
+  the Plug and Play protocol.
+
+/dev/dsp and /dev/audio support
+CONFIG_AUDIO
+  Answering N disables /dev/dsp and /dev/audio, the A/D and D/A
+  converter devices.  Answer Y only if you know you will not need
+  the option.  They are usually required.  Answer Y.
+
+MIDI interface support
+CONFIG_MIDI
+  Answering N disables /dev/midixx devices and access to any MIDI
+  ports using /dev/sequencer and /dev/music. This option also affects
+  any MPU401 and/or General MIDI compatible devices.  Answer Y.
+
+FM synthesizer (YM3812/OPL-3) support
+CONFIG_YM3812
+  Answer Y here, unless you know you will not need the option.
+
 Sun Audio support
 CONFIG_SUN_AUDIO
   This is support for the soundcards on Sun workstations. The code
@@ -3405,7 +3591,7 @@ CONFIG_ISDN_AUDIO
   With this option enabled, the modem-emulator supports a subset
   of the EIA Class 8 Voice commands. Using a getty with voice-support
   (mgetty+sendfax by gert@greenie.muc.de with an extension, available
-  with the ISDN utily package for example), you will be able
+  with the ISDN utility package for example), you will be able
   to use your Linux box as an ISDN-answering machine. Of course, this
   must be supported by the lowlevel driver also. Currently, the Teles
   driver is the only voice-supporting one.
@@ -3520,6 +3706,6 @@ CONFIG_AP1000
 # LocalWords:  NeXTstep disklabel disklabels SMD FFS tm AmigaOS diskfiles Un
 # LocalWords:  Bernd informatik rwth aachen uae affs multihosting bytecode java
 # LocalWords:  applets applet JDK ncsa cabi SNI Alphatronix readme LANs scarab
-# LocalWords:  winsock RNIS caltech OSPF honour Honouring Mbit Localtalk Ottowa
+# LocalWords:  winsock RNIS caltech OSPF honour Honouring Mbit Localtalk
 # LocalWords:  localtalk download Packetwin Baycom baycom interwork ascii JNT
 # LocalWords:  Camtec

@@ -151,7 +151,7 @@
         V2.40   Reorganized the placement of functions in the source code file
                 to reflect the layered approach; did not actually change code
                 Werner Zimmermann, May 1, 96
-        V2.50   Heiko Eissfeld suggested to remove some VERIFY_READs in 
+        V2.50   Heiko Eissfeldt suggested to remove some VERIFY_READs in 
                 aztcd_ioctl; check_aztcd_media_change modified 
                 Werner Zimmermann, May 16, 96       
 */

@@ -1,8 +1,11 @@
+Intro
+=====
+
 This document contains a list of the latest releases of the most
 important packages for Linux as well as instructions for newcomers to
 the 1.3.x series of kernels.  By glancing through it, you should be
-able to find out what you need to upgrade to successfully run the
-latest kernels.
+able to find out what you need to upgrade in order to successfully run
+the latest kernels.
 
    It was originally based on material from the linux-kernel mailing
 list, Jared Mauch's web page "Software Victims of the 1.3 Kernel
@@ -11,13 +14,13 @@ Boldt's (boldt@math.ucsb.edu) Configure.help file, among other sources,
 and was originally written and maintained by Alessandro Sigala
 (ssigala@globalnet.it).
 
-Last updated: May 10, 1996.
+Last updated: May 20, 1996.
 Current Author: Chris Ricker (gt1355b@prism.gatech.edu).
 
 Current Releases
 ****************
 
-- Kernel modules	 Stable: 1.3.57, Exp: 1.3.69g
+- Kernel modules	 Stable: 1.3.57, Exp: 1.3.69k
 - PPP daemon		 Stable: 2.2.0f
 - Dynamic linker (ld.so) 1.7.14
 - GNU CC		 2.7.2
@@ -26,15 +29,21 @@ Current Releases
 - Linux C++ Library	 2.7.1.4
 - Termcap		 2.0.8
 - Procps		 0.99a
-- Kbd			 0.91
 - Gpm			 1.06
 - SysVinit		 2.60
 - Util-linux		 2.5
-- Mtools		 3.0
-- Fdutils		 4.3
 
 Upgrade notes
 *************
+
+Network errors with recent kernels
+==================================
+
+   Many default network scripts are set up add a route to the localhost
+at 127.0.0.1 at startup.  However, they do this incorrectly.  To fix
+the error, which is now spotted by the kernel, look for a line like
+`route add -net 127.0.0.1' in your network configuration files and
+change it to `route add -net 127.0.0.0'.
 
 The Linux C Library
 ===================
@@ -92,9 +101,9 @@ Procps utilities
    In the latest 1.3.x kernel releases the /proc file system structure
 was changed, so you need to upgrade the procps package to version
 0.99a.  In the very latest kernels, /proc has changed again.  There's
-not yet an officially updated version of procps, so make do with
-0.99a; you might want to look for one of the patches floating around to
-update 0.99a for use with 1.3.94 and later kernels.
+not yet an officially updated version of procps, so use 0.99a; you
+might want to look for one of the patches floating around to update
+0.99a for use with 1.3.94 and later kernels.
 
 Kernel Modules
 ==============
@@ -102,19 +111,19 @@ Kernel Modules
    1.3.x is almost completely modularized, and kerneld is now
 incorporated into the kernel.  To take advantage of this, you'll need
 the latest version of the module support apps.  The latest non-beta is
-modules-1.3.57.tar.gz, and the latest beta is modules-1.3.69g.tar.gz.
+modules-1.3.57.tar.gz, and the latest beta is modules-1.3.69k.tar.gz.
 These should be available at the same place you picked up your kernel
-(ftp://ftp.cc.gatech.edu/pub/linux/kernel/) and the home page is
+(ftp://ftp.funet.fi/pub/Linux/kernel/src/) and the home page is
 http://www.pi.se/blox/modules/index.html.  Note:  If you try to load a
 module and get a message like
 
    `gcc2_compiled, undefined Failed to load module!  The symbols from
 kernel 1.3.foo don't match 1.3.foo'
 
-   where `foo' is a number between 1 and 100, then it's time to upgrade
-module utilities from 1.3.57 to 1.3.69g; you'll only get this error if
-you're running the latest binutils, so most people don't need to upgrade
-past 1.3.57.
+   where `foo' is a number for a recent kernel, then it's time to
+upgrade module utilities from 1.3.57 to the latest beta 1.3.69; you'll
+only get this error if you're running the latest binutils, so most
+people don't need to upgrade past 1.3.57.
 
    Another little tip: you can't have both a.out *and* ELF support
 compiled as modules.  Otherwise, you get a nice Catch-22 when you try
@@ -149,9 +158,8 @@ fix, upgrade to
 ftp://ftp.cistron.nl/pub/people/miquels/debian/sysvinit-2.60.tar.gz.
 
    If you're trying to run NCSA httpd, you have to set pre-spawning of
-daemons to zero, as it incorrectly assumes SunOS behavior.  Some people
-have said that the Apache httpd has problems with the new named pipes,
-but I've never noticed any.
+daemons to zero, as it incorrectly assumes SunOS behavior.  I recommend
+you just switch to Apache httpd.
 
    The new named pipe behavior also causes problems with Hylafax.  If
 you're running the hylafax daemon, it will just keep eating up CPU time
@@ -165,8 +173,8 @@ with the Hylafax distribution and change the line
    CONFIG_OPENFIFO="O_RDWR"
 
    A similar method (finding all named pipes opened read-only and
-changing them to read-write) will fix any program that broke because of
-this change.
+changing them to read-write) will fix any program that is broken
+because of this change.
 
 Uugetty
 =======
@@ -190,14 +198,6 @@ the following as root:
    Better yet, just get the latest official Linux termcap from
 ftp://sunsite.unc.edu/pub/Linux/GCC/termcap-2.0.8.tar.gz
 
-   The console driver keeps track of the correspondence between character
-codes and glyph bitmaps loaded into the character ROM of your video card.
-Say
-
-   loadunimap def
-
-to get back to the default correspondence.
-
 Hdparm
 ======
 
@@ -208,9 +208,44 @@ ftp://sunsite.unc.edu/pub/Linux/kernel/patches/diskdrives/hdparm-2.7.tar.gz.
 IP Accounting
 =============
 
-   IP accounting has now been integrated into the kernel.  To use this,
-you'll need to get ipfwadm from ftp://ftp.xos.nl/pub/linux/ipfwadm.  Get
-ipfwadm-2.0beta2.tar.gz if your kernel is 1.3.66 or later.
+   All IP packets coming in or going out via one of the network
+interfaces are now passing the accounting chain.  So, packets being
+forwarded are passing this chain twice.  Since pre2.0.7 (aka 1.99.7),
+accounting rules can be defined so that they will only match in one
+direction (either incoming or outgoing).
+
+   There also exists a possibility to match on device names and/or
+device addresses, so that only packets coming in/going out via that
+device (network interface) match with a rule.
+
+   You'll need to get ipfwadm from ftp://ftp.xos.nl/pub/linux/ipfwadm. 
+Use ipfwadm-2.1.tar.gz if your kernel is 1.3.66 or later.
+
+IP Firewalls
+============
+
+   The IP firewall code has been changed drastically during 1.3.x.
+There are now 3 categories of firewall rules: one for incoming packets,
+one for outgoing packets, and one for packets being forwarded.
+
+   There also exists a possibility to match on device names and/or
+device addresses, so that only packets coming in/going out via that
+device (network interface) match with a rule.  This is especially
+useful to prevent spoofing.
+
+   You'll need to get ipfwadm from ftp://ftp.xos.nl/pub/linux/ipfwadm. 
+Use ipfwadm-2.1.tar.gz if your kernel is 1.3.66 or later.
+
+IP Masquerading
+===============
+
+   IP masquerading is now part of the standard kernel.  Note that you
+always need to load separate modules (ip_masq_ftp.o and/or ip_masq_irc.o)
+if you are going to use FTP or IRC in combination with masquerading.
+Use "make modules" to generated them.
+
+   You'll need to get ipfwadm from ftp://ftp.xos.nl/pub/linux/ipfwadm. 
+Use ipfwadm-2.1.tar.gz if your kernel is 1.3.66 or later.
 
 Networking
 ==========
@@ -222,7 +257,7 @@ official release there is net-tools-1.2.0.tar.gz, and the latest
 release is net-tools-1.3.6-BETA5.tar.gz.  If you need the upgrade, you
 probably need the latest beta release.
 
-xntpd
+Xntpd
 =====
 
    Older versions of xntpd will not work with the latest kernels.
@@ -236,7 +271,7 @@ Sound driver
 To fix this problem, get a new version of the sndkit from
 ftp://ftp.best.com/pub/front/tasd/snd-util-3.5.tar.gz
 
-tcsh
+Tcsh
 ====
 
    If tcsh acts funny, get the source from
@@ -299,7 +334,7 @@ APM support
 as well.  APM, which is primarily of use in laptops, provides access to
 battery status information and may help to conserve battery power.  The
 support files can be found in
-ftp://tsx-11.mit.edu/pub/linux/packages/laptops/apm/apmd-2.2.tar.gz
+ftp://tsx-11.mit.edu/pub/linux/packages/laptops/apm/apmd-2.4.tar.gz
 
 iBCS and Dosemu
 ===============
@@ -311,37 +346,40 @@ ftp://tsx-11.mit.edu/pub/linux/BETA/ibcs2/ibcs-1.3-960404-ALPHA.tar.gz
 ever works ;-), get
 ftp://tsx-11.mit.edu/pub/linux/ALPHA/dosemu/Development/dosemu-0.63.1.8.tgz.
 
-Please send info about any other packages that 1.3.x "broke" or about
-any new features of 1.3.x that require extra or new packages for use to
-Chris Ricker (gt1355b@prism.gatech.edu).
-
-Mtools and fdutils
+Mtools and Fdutils
 ==================
 
-   The floppy ioctl numbering scheme has changed in 1.3.x. For
-backwards compatibility, the old numbering scheme was supported
-throughout 1.3.x. A warning will be printed in 2.0.x when the old
-numbers are used, and their use will be discontinued entirely in 2.1.x
+   The floppy ioctl numbering scheme has changed in 1.3.x.  For
+backwards compatibility, the old system was supported through 1.3.x and
+will generate a warning in 2.0.  In 2.1.x, the old scheme will
+disappear entirely.
 
-   In order to avoid trouble, you need to recompile any programs that
-emit floppy ioctls. These include mtools, fdutils and dosemu. You can
-get mtools at:
-
-ftp://ftp.imag.fr/pub/Linux/ZLIBC/mtools/mtools-3.0.src.tar.gz
+   To avoid trouble (or at least annoying messages), you'll need to
+recompile any programs which emit floppy ioctls, including mtools and
+fdutils.  For mtools, get
 ftp://sunsite.unc.edu/pub/Linux/utils/disk-management/mtools-3.0.src.tar.gz
-ftp://tsx-11.mit.edu/pub/linux/sources/usr.bin/mtools-3.0.src.tar.gz
+and for fdutils, get
+ftp://sunsite.unc.edu/pub/Linux/system/Misc/fdutils-4.3.src.tar.gz.
 
-You can get fdutils at:
+   In the future, fdformat might disappear entirely, so get used to
+using superformat instead.
 
-ftp://ftp.imag.fr/pub/Linux/ZLIBC/fdutils/fdutils-4.3.src.tar.gz
-ftp://sunsite.unc.edu/pub/Linux/system/Misc/fdutils-4.3.src.tar.gz
-ftp://tsx-11.mit.edu/pub/linux/sources/sbin/fdutils-4.3.src.tar.gz
+Please send info about any other packages that 1.3.x "broke" or about
+any new features of 1.3.x that require extra or new packages for use to
+Chris Ricker (gt1355b@prism.gatech.edu).  I generate this from a
+modified texinfo setup, so you don't need to bother generating a diff
+against the current version before you send the additional information
+to me.
 
-   For dosemu, see above.
+nfsd daemon doesn't work anymore
+================================
+   The RedHat distribution 2.x and 3.x have a bug that they do
+route add -net 127.0.0.1 at startup. That is wrong. Correct is 
+route add -net 127.0.0.0. 
 
-   In the future, the ioctl used by fdformat might be discontinued
-altogether. Please use superformat (included in fdutils) instead.
-
+Workaround: Change in /etc/sysconfig/network-scripts/ifcup-lo
+the "route add -net ${IPADDR}" into "route add -net 127.0.0.0"
+  
 How to know the version of the installed programs
 *************************************************
 
@@ -385,7 +423,7 @@ ftp://sunsite.unc.edu/pub/Linux/GCC/release.libc-5.2.18
 
 The latest 5.3.12 release:
 ftp://sunsite.unc.edu/pub/Linux/GCC/libc-5.3.12.bin.tar.gz
-Installation notes for 5.2.18:
+Installation notes for 5.3.12:
 ftp://sunsite.unc.edu/pub/Linux/GCC/release.libc-5.3.12
 
 Patched make sources:
@@ -438,7 +476,6 @@ ftp://sunsite.unc.edu/pub/Linux/system/Daemons/gpm-1.06.tar.gz
 SysVinit utilities
 ==================
 
-At the time of writing:
 ftp://sunsite.unc.edu/pub/Linux/system/Daemons/init/sysvinit-2.60.tar.gz
 
 Util-linux
@@ -449,13 +486,27 @@ ftp://sunsite.unc.edu/pub/Linux/system/Misc/util-linux-2.5.tar.gz
 Mtools
 ======
 
-ftp://ftp.imag.fr/pub/Linux/ZLIBC/mtools/mtools-3.0.src.tar.gz
 ftp://sunsite.unc.edu/pub/Linux/utils/disk-management/mtools-3.0.src.tar.gz
-ftp://tsx-11.mit.edu/pub/linux/sources/usr.bin/mtools-3.0.src.tar.gz
 
 Fdutils
 =======
 
-ftp://ftp.imag.fr/pub/Linux/ZLIBC/fdutils/fdutils-4.3.src.tar.gz
 ftp://sunsite.unc.edu/pub/Linux/system/Misc/fdutils-4.3.src.tar.gz
-ftp://tsx-11.mit.edu/pub/linux/sources/sbin/fdutils-4.3.src.tar.gz
+
+Other Info
+==========
+
+   Please remember that most of these utils are available on your
+favorite local linux mirror.  If you can, please get them from a closer
+site before checking sunsite.
+
+   Also, for those of you running Red Hat, most of these are available
+in RPM format.  Check around your favorite Red Hat mirror site before
+installing the non-RPM version.  Remember, you might need to use the
+-force option to get the upgrade to install.
+
+
+isdn-utils
+==========
+
+ftp://ftp.franken.de/pub/isdn4linux/isdn4k-utils-1.3.97.tar.gz

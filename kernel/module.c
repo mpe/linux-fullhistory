@@ -149,14 +149,6 @@ sys_init_module(char *module_name, char *code, unsigned codesize,
 		symtab = NULL;
 	}
 #endif
-
-	/*
-	 * First reclaim any memory from dead modules that where not
-	 * freed when deleted. Should I think be done by timers when
-	 * the module was deleted - Jon.
-	 */
-	free_modules();
-
 	if ((error = get_mod_name(module_name, name)) != 0)
 		return error;
 	pr_debug("initializing module `%s', %d (0x%x) bytes\n",
@@ -291,7 +283,9 @@ sys_delete_module(char *module_name)
 	}
 	/* for automatic reaping */
 	else {
-		for (mp = module_list; mp != &kernel_module; mp = mp->next) {
+		struct module *mp_next;
+		for (mp = module_list; mp != &kernel_module; mp = mp_next) {
+			mp_next = mp->next;
 			if ((mp->ref == NULL) && (mp->state == MOD_RUNNING) &&
 			    ((GET_USE_COUNT(mp) & ~MOD_VISITED) == MOD_AUTOCLEAN)) {
 			    	if ((GET_USE_COUNT(mp) & MOD_VISITED)) {
@@ -302,10 +296,10 @@ sys_delete_module(char *module_name)
 					GET_USE_COUNT(mp) &= ~(MOD_AUTOCLEAN | MOD_VISITED);
 					(*mp->cleanup)();
 					mp->state = MOD_DELETED;
+					free_modules();
 				}
 			}
 		}
-		free_modules();
 	}
 	return 0;
 }
@@ -525,8 +519,8 @@ int get_module_list(char *buf)
 		while (*q)
 			*p++ = *q++;
 
+		*p++ = '\t';
 		if ((ref = mp->ref) != NULL) {
-			*p++ = '\t';
 			*p++ = '[';
 			for (; ref; ref = ref->next) {
 				q = ref->module->name;
@@ -627,7 +621,7 @@ int get_ksyms_list(char *buf, char **start, off_t offset, int length)
 static struct symbol_table nulltab;
 
 int
-register_symtab(struct symbol_table *intab)
+register_symtab_from(struct symbol_table *intab, long *from)
 {
 	struct module *mp;
 	struct module *link;
@@ -644,13 +638,12 @@ register_symtab(struct symbol_table *intab)
 			intab->n_symbols +=1;
 	}
 
-	for (mp = module_list; intab && mp != &kernel_module; mp = mp->next) {
+	for (mp = module_list; mp != &kernel_module; mp = mp->next) {
 		/*
-		 * New table stored within memory belonging to a module?
-		 * (Always true for a module)
+		 * "from" points to "mod_use_count_" (== start of module)
+		 * or is == 0 if called from a non-module
 		 */
-		if (((unsigned long)(mp->addr) < (unsigned long)intab) &&
-		    ((unsigned long)intab < ((unsigned long)(mp->addr) + mp->size * PAGE_SIZE)))
+		if ((unsigned long)(mp->addr) == (unsigned long)from)
 			break;
 	}
 
@@ -782,7 +775,7 @@ asmlinkage int sys_get_kernel_syms(void)
 	return -ENOSYS;
 }
 
-int register_symtab(struct symbol_table *intab)
+int register_symtab_from(struct symbol_table *intab, long *from)
 {
 	return 0;
 }

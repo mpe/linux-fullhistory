@@ -672,7 +672,7 @@ static int rt_flush_list(struct fib_node ** fp, struct device *dev)
  *	discard it too.
  */
 		if (f->fib_info->fib_dev != dev &&
-		    (dev != &loopback_dev || f->fib_dst != dev->pa_addr)) {
+		    (f->fib_info->fib_dev != &loopback_dev || f->fib_dst != dev->pa_addr)) {
 			fp = &f->fib_next;
 			continue;
 		}

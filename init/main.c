@@ -5,6 +5,7 @@
  *
  *  GK 2/5/95  -  Changed to support mounting root fs via NFS
  *  Added initrd & change_root: Werner Almesberger & Hans Lermen, Feb '96
+ *  Moan early if gcc is old, avoiding bogus kernels - Paul Gortmaker, May '96
  */
 
 #define __KERNEL_SYSCALLS__
@@ -37,6 +38,16 @@
 #endif
 
 #include <asm/bugs.h>
+
+/*
+ * Versions of gcc older than that listed below may actually compile
+ * and link okay, but the end product can have subtle run time bugs.
+ * To avoid associated bogus bug reports, we flatly refuse to compile
+ * with a gcc that is known to be too old from the very beginning.
+ */
+#if __GNUC__ < 2 || (__GNUC__ == 2 && __GNUC_MINOR__ < 6)
+#error sorry, your GCC is too old. It builds incorrect kernels.
+#endif
 
 extern char _stext, _etext;
 extern char *linux_banner;

@@ -75,9 +75,6 @@ struct mod_routines {
 	void (*cleanup)(void);		/* cleanup routine */
 };
 
-/* insert new symbol table */
-extern int register_symtab(struct symbol_table *);
-
 /*
  * The first word of the module contains the use count.
  */
@@ -108,6 +105,14 @@ int Using_Versions; /* gcc will handle this global (used as a flag) correctly */
 #define MOD_DEC_USE_COUNT	do { } while (0)
 #define MOD_IN_USE		1
 
+#endif
+
+/* insert new symbol table */
+extern int register_symtab_from(struct symbol_table *, long *);
+#ifdef MODULE
+#define register_symtab(symtab) register_symtab_from(symtab, &mod_use_count_)
+#else
+#define register_symtab(symtab) register_symtab_from(symtab, 0)
 #endif
 
 #endif

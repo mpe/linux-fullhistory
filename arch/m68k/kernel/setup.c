@@ -53,7 +53,7 @@ int (*mach_kbdrate) (struct kbd_repeat *) = NULL;
 void (*mach_kbd_leds) (unsigned int) = NULL;
 void (*mach_init_INTS) (void);
 int (*mach_add_isr) (unsigned long, isrfunc, int, void *, char *);
-int (*mach_remove_isr) (unsigned long, isrfunc);
+int (*mach_remove_isr) (unsigned long, isrfunc, void *);
 void (*mach_process_int) (int, struct pt_regs *) = NULL;
 void (*mach_enable_irq) (unsigned) = NULL;
 void (*mach_disable_irq) (unsigned) = NULL;

@@ -95,7 +95,7 @@ extern int add_isr (unsigned long source, isrfunc isr, int pri, void
 /*
  * This routine will remove an isr for the specified interrupt source.
  */
-extern int remove_isr (unsigned long source, isrfunc isr);
+extern int remove_isr (unsigned long source, isrfunc isr, void *data);
 
 /*
  * This routine will insert an isr_node_t into a chain of nodes, using
@@ -106,7 +106,7 @@ extern void insert_isr (isr_node_t **listp, isr_node_t *node);
 /*
  * This routine will delete the isr node for isr from a chain of nodes
  */
-extern void delete_isr (isr_node_t **listp, isrfunc isr);
+extern void delete_isr (isr_node_t **listp, isrfunc isr, void *data);
 
 /*
  * This routine may be used to call the isr routines in the passed list.

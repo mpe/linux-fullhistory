@@ -230,7 +230,7 @@ struct MessageType mt_n1[] =
 	{MT_N1_FAC_CAN, "FACility CANcel"},
 	{MT_N1_FAC_REG, "FACility REGister"},
 	{MT_N1_FAC_REJ, "FACility REJect"},
-	{MT_N1_INFO, "INFOmation"},
+	{MT_N1_INFO, "INFOrmation"},
 	{MT_N1_REG_ACK, "REGister ACKnowledge"},
 	{MT_N1_REG_REJ, "REGister REJect"},
 	{MT_N1_STAT, "STATus"}

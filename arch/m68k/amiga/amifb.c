@@ -30,7 +30,7 @@
  *
  *
  * This file is subject to the terms and conditions of the GNU General Public
- * License.  See the file README.legal in the main directory of this archive
+ * License.  See the file COPYING in the main directory of this archive
  * for more details.
  */
 
@@ -527,16 +527,16 @@ static u_short pwrsave = 0;      /* VESA suspend mode (not for PAL/NTSC) */
 
 
    /*
-    *    Chip RAM we reserve for the Frame Buffer
+    *    Chip RAM we reserve for the Frame Buffer (must be a multiple of 4K!)
     *
     *    This defines the Maximum Virtual Screen Size
     */
 
-#define VIDEOMEMSIZE_AGA_2M   (1280*1024)    /* AGA (2MB) : max 1280*1024*256 */
-#define VIDEOMEMSIZE_AGA_1M   (1024*768)     /* AGA (1MB) : max 1024*768*256 */
-#define VIDEOMEMSIZE_ECS_2M   (1280*1024/2)  /* ECS (2MB) : max 1280*1024*16 */
-#define VIDEOMEMSIZE_ECS_1M   (1024*768/2)   /* ECS (1MB) : max 1024*768*16 */
-#define VIDEOMEMSIZE_OCS      (800*600/2)    /* OCS      : max 800*600*16 */
+#define VIDEOMEMSIZE_AGA_2M   (1310720)   /* AGA (2MB) : max 1280*1024*256 */
+#define VIDEOMEMSIZE_AGA_1M    (393216)   /* AGA (1MB) : max 1024*768*256 */
+#define VIDEOMEMSIZE_ECS_2M    (655360)   /* ECS (2MB) : max 1280*1024*16 */
+#define VIDEOMEMSIZE_ECS_1M    (393216)   /* ECS (1MB) : max 1024*768*16 */
+#define VIDEOMEMSIZE_OCS       (262144)   /* OCS       : max ca. 800*600*16 */
 
 
 static u_long videomemory;
@@ -682,9 +682,10 @@ static int node;        /* node of the /dev/fb?current file */
 
    /*
     *    The minimum period for audio depends on htotal (for OCS/ECS/AGA)
+    *    (Imported from arch/m68k/amiga/amisound.c)
     */
 
-volatile u_short amiga_audio_min_period = 124;   /* Default for pre-OCS */
+extern volatile u_short amiga_audio_min_period;
 
 
    /*
@@ -1133,7 +1134,7 @@ static void check_default_mode(void);
  *  Copyright (C) 1994 Martin Schaller & Roman Hodek & Geert Uytterhoeven
  *  
  * This file is subject to the terms and conditions of the GNU General Public
- * License.  See the file README.legal in the main directory of this archive
+ * License.  See the file COPYING in the main directory of this archive
  * for more details.
  *
  * History:
@@ -3189,7 +3190,7 @@ static int aga_decode_var(struct fb_var_screeninfo *var,
    u_long diwstrt_h, diwstrt_v, diwstop_h, diwstop_v;
    u_long hsstrt, vsstrt, hsstop, vsstop, htotal, vtotal;
    u_long ddfmin, ddfmax, ddfstrt, ddfstop, hscroll;
-   double hrate, vrate;
+   u_long hrate, vrate;
    u_short loopcnt = 0;
 
    /*
@@ -3342,8 +3343,8 @@ aga_calculate_timings:
       hsstop = hsstrt+hslen_n;
       diwstop_h = htotal+hsstrt-right_n+1;
       diwstrt_h = diwstop_h-xres_n-1;
-      hrate = (double)amiga_masterclock/htotal;
-      vrate = hrate/vtotal;
+      hrate = (amiga_masterclock+htotal/2)/htotal;
+      vrate = (amiga_masterclock+htotal*vtotal/2)/(htotal*vtotal);
       par->bplcon3 |= BPC3_BRDRBLNK | BPC3_EXTBLKEN;
       par->beamcon0 = BMC0_HARDDIS | BMC0_VARVBEN | BMC0_LOLDIS |
                       BMC0_VARVSYEN | BMC0_VARHSYEN | BMC0_VARBEAMEN |
@@ -3748,6 +3749,13 @@ void aga_do_vmode(void)
       }
       custom.bplcon3 = par->bplcon3;
       full_vmode_change = 0;
+
+      /*
+       *    The minimum period for audio depends on htotal (for OCS/ECS/AGA)
+       */
+
+      if (boot_info.bi_amiga.chipset != CS_STONEAGE)
+         amiga_audio_min_period = (par->htotal>>1)+1;
    }
    custom.ddfstrt = par->ddfstrt;
    custom.ddfstop = par->ddfstop;
@@ -3760,13 +3768,6 @@ void aga_do_vmode(void)
     */
 
    aga_update_clist_hdr(clist_hdr, par);
-
-   /*
-    *    The minimum period for audio depends on htotal (for OCS/ECS/AGA)
-    */
-
-   if ((boot_info.bi_amiga.chipset != CS_STONEAGE) && full_vmode_change)
-      amiga_audio_min_period = (par->htotal>>1)+1;
 }
 
 
@@ -4887,9 +4888,23 @@ default_chipset:
     *    Calculate the Pixel Clock Values for this Machine
     */
 
-   pixclock[TAG_SHRES-1] = 25E9/amiga_eclock;   /* SHRES:  35 ns / 28 MHz */
-   pixclock[TAG_HIRES-1] = 50E9/amiga_eclock;   /* HIRES:  70 ns / 14 MHz */
-   pixclock[TAG_LORES-1] = 100E9/amiga_eclock;  /* LORES: 140 ns /  7 MHz */
+   __asm("movel %3,%%d0;"
+         "movel #0x00000005,%%d1;"     /*  25E9: SHRES:  35 ns / 28 MHz */
+         "movel #0xd21dba00,%%d2;"
+         "divul %%d0,%%d1,%%d2;"
+         "movel %%d2,%0;"
+         "movel #0x0000000b,%%d1;"     /*  50E9: HIRES:  70 ns / 14 MHz */
+         "movel #0xa43b7400,%%d2;"
+         "divul %%d0,%%d1,%%d2;"
+         "movel %%d2,%1;"
+         "movel #0x00000017,%%d1;"     /* 100E9: LORES: 140 ns /  7 MHz */
+         "movel #0x4876e800,%%d2;"
+         "divul %%d0,%%d1,%%d2;"
+         "movel %%d2,%2"
+         : "=r" (pixclock[TAG_SHRES-1]), "=r" (pixclock[TAG_HIRES-1]),
+           "=r" (pixclock[TAG_LORES-1])
+         : "r" (amiga_eclock)
+         : "%%d0", "%%d1", "%%d2");
 
    /*
     *    Replace the Tag Values with the Real Pixel Clock Values

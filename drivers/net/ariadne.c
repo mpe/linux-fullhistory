@@ -23,7 +23,7 @@
  *  ----------------------------------------------------------------------------------
  *
  *  This file is subject to the terms and conditions of the GNU General Public
- *  License.  See the file README.legal in the main directory of the Linux/m68k
+ *  License.  See the file COPYING in the main directory of the Linux
  *  distribution for more details.
  *
  *  ----------------------------------------------------------------------------------
@@ -36,8 +36,8 @@
  *	- an MC68230 Parallel Interface/Timer configured as 2 parallel ports
  */
 
-#include <stddef.h>
-
+#include <linux/module.h>
+#include <linux/stddef.h>
 #include <linux/kernel.h>
 #include <linux/sched.h>
 #include <linux/string.h>
@@ -107,6 +107,7 @@ struct ariadne_private {
     struct enet_statistics stats;
     char tx_full;
     unsigned long lock;
+    int key;
 };
 
 
@@ -145,7 +146,7 @@ static void memcpyw(u_short *dest, u_short *src, int len)
 }
 
 
-int long ariadne_probe(struct device *dev)
+int ariadne_probe(struct device *dev)
 {
     int key;
     struct ConfigDev *cd;
@@ -174,6 +175,7 @@ int long ariadne_probe(struct device *dev)
 	    memset(priv, 0, sizeof(struct ariadne_private));
 
 	    priv->board = (struct AriadneBoard *)ZTWO_VADDR(board);
+	    priv->key = key;
 
 	    dev->open = &ariadne_open;
 	    dev->stop = &ariadne_close;
@@ -193,7 +195,6 @@ static int ariadne_open(struct device *dev)
 {
     struct ariadne_private *priv = (struct ariadne_private *)dev->priv;
     struct AriadneBoard *board = priv->board;
-    static int interruptinstalled = 0;
     struct lancedata *lancedata;
     u_short in;
     u_long version;
@@ -290,15 +291,14 @@ static int ariadne_open(struct device *dev)
     dev->interrupt = 0;
     dev->start = 1;
 
-    if (!interruptinstalled) {
-	if (!add_isr(IRQ_AMIGA_PORTS, ariadne_interrupt, 0, dev,
-		     "Ariadne Ethernet"))
-	    return(-EAGAIN);
-	interruptinstalled = 1;
-    }
+    if (!add_isr(IRQ_AMIGA_PORTS, ariadne_interrupt, 0, dev,
+    		 "Ariadne Ethernet"))
+	return(-EAGAIN);
 
     board->Lance.RAP = CSR0;	/* PCnet-ISA Controller Status */
     board->Lance.RDP = INEA|STRT;
+
+    MOD_INC_USE_COUNT;
 
     return(0);
 }
@@ -372,6 +372,10 @@ static int ariadne_close(struct device *dev)
 
     /* We stop the LANCE here -- it occasionally polls memory if we don't. */
     board->Lance.RDP = STOP;
+
+    remove_isr(IRQ_AMIGA_PORTS, ariadne_interrupt, dev);
+
+    MOD_DEC_USE_COUNT;
 
     return(0);
 }
@@ -834,3 +838,38 @@ static void set_multicast_list(struct device *dev)
     board->Lance.RAP = CSR0;		/* PCnet-ISA Controller Status */
     board->Lance.RDP = INEA|STRT|IDON;	/* Resume normal operation. */
 }
+
+
+#ifdef MODULE
+static char devicename[9] = { 0, };
+
+static struct device ariadne_dev =
+{
+    devicename,				/* filled in by register_netdev() */
+    0, 0, 0, 0,				/* memory */
+    0, 0,				/* base, irq */
+    0, 0, 0, NULL, ariadne_probe,
+};
+
+int init_module(void)
+{
+    int err;
+
+    if ((err = register_netdev(&ariadne_dev))) {
+	if (err == -EIO)
+	    printk("No Ariadne board found. Module not loaded.\n");
+	return(err);
+    }
+    return(0);
+}
+
+void cleanup_module(void)
+{
+    struct ariadne_private *priv = (struct ariadne_private *)ariadne_dev.priv;
+
+    unregister_netdev(&ariadne_dev);
+    zorro_unconfig_board(priv->key, 0);
+    kfree(priv);
+}
+
+#endif /* MODULE */

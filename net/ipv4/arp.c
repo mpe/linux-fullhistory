@@ -262,7 +262,7 @@ static struct arp_table *arp_req_backlog;
 static void arp_run_bh(void);
 static void arp_check_expire (unsigned long);  
 static int  arp_update (u32 sip, char *sha, struct device * dev,
-	    struct arp_table *ientry, int grat);
+	    unsigned long updated, struct arp_table *ientry, int grat);
 
 static struct timer_list arp_timer =
 	{ NULL, NULL, ARP_CHECK_INTERVAL, 0L, &arp_check_expire };
@@ -680,17 +680,8 @@ static int arpd_callback(struct sk_buff *skb)
 	else
 	{
 		arp_fast_lock();
-		arp_update(retreq->ip, retreq->ha, dev, NULL, 0);
+		arp_update(retreq->ip, retreq->ha, dev, retreq->updated, NULL, 0);
 		arp_unlock();
-
-/*
- *	Old mapping: we cannot trust it, send ARP broadcast to confirm it.
- *	If it will answer, the entry will be updated,
- *	if not ... we are lost. We will use it for ARP_CONFIRM_INTERVAL.
- */
-		if (jiffies - retreq->updated < ARPD_TIMEOUT)
-			arp_send(ARPOP_REQUEST, ETH_P_ARP, retreq->ip, dev, dev->pa_addr, NULL, 
-				 dev->dev_addr, NULL);
 	}
 
 	kfree_skb(skb, FREE_READ);
@@ -1137,10 +1128,17 @@ static void arp_send_q(struct arp_table *entry)
 
 static int
 arp_update (u32 sip, char *sha, struct device * dev,
-	    struct arp_table *ientry, int grat)
+	    unsigned long updated, struct arp_table *ientry, int grat)
 {
 	struct arp_table * entry;
 	unsigned long hash;
+	int do_arpd = 0;
+
+	if (updated == 0)
+	{
+		updated = jiffies;
+		do_arpd = 1;
+	}
 
 	hash = HASH(sip);
 
@@ -1156,14 +1154,15 @@ arp_update (u32 sip, char *sha, struct device * dev,
 		if (!(entry->flags & ATF_PERM)) 
 		{
 			del_timer(&entry->timer);
-			entry->last_updated = jiffies;
+			entry->last_updated = updated;
 			if (memcmp(entry->ha, sha, dev->addr_len)!=0)
 			{
 				memcpy(entry->ha, sha, dev->addr_len);
 				if (entry->flags & ATF_COM)
 					arp_update_hhs(entry);
 			}
-			arpd_update(entry);
+			if (do_arpd)
+				arpd_update(entry);
 		}
 
 		if (!(entry->flags & ATF_COM))
@@ -1204,8 +1203,10 @@ arp_update (u32 sip, char *sha, struct device * dev,
 		entry->dev = dev;
 	}
 
-	entry->last_updated = entry->last_used = jiffies;
-	arpd_update(entry);
+	entry->last_updated = updated;
+	entry->last_used = jiffies;
+	if (do_arpd)
+		arpd_update(entry);
 
 	if (!ARP_LOCKED())
 	{
@@ -1548,7 +1549,7 @@ static void arp_run_bh()
 		while ((entry = arp_dequeue(&arp_backlog)) != NULL)
 		{
 			restore_flags(flags);
-			if (arp_update(entry->ip, entry->ha, entry->dev, entry, 0))
+			if (arp_update(entry->ip, entry->ha, entry->dev, 0, entry, 0))
 				arp_free_entry(entry);
 			cli();
 		}
@@ -1919,14 +1920,14 @@ int arp_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
  *	Handle gratuitous arp.
  */
 		arp_fast_lock();
-		arp_update(sip, sha, dev, NULL, 1);
+		arp_update(sip, sha, dev, 0, NULL, 1);
 		arp_unlock();
 		kfree_skb(skb, FREE_READ);
 		return 0;
 	}
 
 	arp_fast_lock();
-	arp_update(sip, sha, dev, NULL, ip_chk_addr(tip) != IS_MYADDR);
+	arp_update(sip, sha, dev, 0, NULL, ip_chk_addr(tip) != IS_MYADDR);
 	arp_unlock();
 	kfree_skb(skb, FREE_READ);
 	return 0;

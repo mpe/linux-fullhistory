@@ -451,7 +451,8 @@ extern unsigned short		get_new_socknum(struct proto *,
 extern void			put_sock(unsigned short, struct sock *); 
 extern struct sock		*get_sock(struct proto *, unsigned short,
 					  unsigned long, unsigned short,
-					  unsigned long);
+					  unsigned long,
+					  unsigned long, unsigned short);
 extern struct sock		*get_sock_mcast(struct sock *, unsigned short,
 					  unsigned long, unsigned short,
 					  unsigned long);

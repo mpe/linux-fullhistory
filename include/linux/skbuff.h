@@ -111,6 +111,7 @@ struct sk_buff
 	unsigned char	*tail;			/* Tail pointer					*/
 	unsigned char 	*end;			/* End pointer					*/
 	void 		(*destructor)(struct sk_buff *);	/* Destruct function		*/
+	__u16		redirport;		/* Redirect port				*/
 };
 
 #ifdef CONFIG_SKB_LARGE

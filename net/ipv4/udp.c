@@ -48,6 +48,7 @@
  *		Jon Peatfield	:	Minor efficiency fix to sendto().
  *		Mike Shaver	:	RFC1122 checks.
  *		Alan Cox	:	Nonblocking error fix.
+ *	Willy Konynenberg	:	Transparent proxying support.
  *
  *
  *		This program is free software; you can redistribute it and/or
@@ -161,7 +162,7 @@ void udp_err(int type, int code, unsigned char *header, __u32 daddr,
 	
 	uh = (struct udphdr *)header;  
    
-	sk = get_sock(&udp_prot, uh->source, daddr, uh->dest, saddr);
+	sk = get_sock(&udp_prot, uh->source, daddr, uh->dest, saddr, 0, 0);
 
 	if (sk == NULL) 
 	  	return;	/* No socket for error */
@@ -315,6 +316,29 @@ static int udp_send(struct sock *sk, struct sockaddr_in *sin,
 	ufh.from = from;
 	ufh.wcheck = 0;
 
+#ifdef CONFIG_IP_TRANSPARENT_PROXY
+	if (rt&MSG_PROXY)
+	{
+		/*
+		 * We map the first 8 bytes of a second sockaddr_in
+		 * into the last 8 (unused) bytes of a sockaddr_in.
+		 * This _is_ ugly, but it's the only way to do it
+		 * easily,  without adding system calls.
+		 */
+		struct sockaddr_in *sinfrom =
+			(struct sockaddr_in *) sin->sin_zero;
+
+		if (!suser())
+			return(-EPERM);
+		if (sinfrom->sin_family && sinfrom->sin_family != AF_INET)
+			return(-EINVAL);
+		if (sinfrom->sin_port == 0)
+			return(-EINVAL);
+		saddr = sinfrom->sin_addr.s_addr;
+		ufh.uh.source = sinfrom->sin_port;
+	}
+#endif
+
 	/* RFC1122: OK.  Provides the checksumming facility (MUST) as per */
 	/* 4.1.3.4. It's configurable by the application via setsockopt() */
 	/* (MAY) and it defaults to on (MUST).  Almost makes up for the */
@@ -344,7 +368,11 @@ static int udp_sendto(struct sock *sk, const unsigned char *from, int len, int n
 	 *	Check the flags. We support no flags for UDP sending
 	 */
 
+#ifdef CONFIG_IP_TRANSPARENT_PROXY
+	if (flags&~(MSG_DONTROUTE|MSG_PROXY))
+#else
 	if (flags&~MSG_DONTROUTE) 
+#endif
 	  	return(-EINVAL);
 	/*
 	 *	Get and verify the address. 
@@ -361,6 +389,11 @@ static int udp_sendto(struct sock *sk, const unsigned char *from, int len, int n
 	} 
 	else 
 	{
+#ifdef CONFIG_IP_TRANSPARENT_PROXY
+		/* We need to provide a sockaddr_in when using MSG_PROXY. */
+		if (flags&MSG_PROXY)
+			return(-EINVAL);
+#endif
 		if (sk->state != TCP_ESTABLISHED) 
 			return(-EINVAL);
 		sin.sin_family = AF_INET;
@@ -535,6 +568,23 @@ int udp_recvmsg(struct sock *sk, struct msghdr *msg, int len,
 		sin->sin_family = AF_INET;
 		sin->sin_port = skb->h.uh->source;
 		sin->sin_addr.s_addr = skb->daddr;
+#ifdef CONFIG_IP_TRANSPARENT_PROXY
+		if (flags&MSG_PROXY)
+		{
+			/*
+			 * We map the first 8 bytes of a second sockaddr_in
+			 * into the last 8 (unused) bytes of a sockaddr_in.
+			 * This _is_ ugly, but it's the only way to do it
+			 * easily,  without adding system calls.
+			 */
+			struct sockaddr_in *sinto =
+				(struct sockaddr_in *) sin->sin_zero;
+
+			sinto->sin_family = AF_INET;
+			sinto->sin_port = skb->h.uh->dest;
+			sinto->sin_addr.s_addr = skb->saddr;
+		}
+#endif
   	}
   
   	skb_free_datagram(sk, skb);
@@ -613,6 +663,27 @@ static inline void udp_deliver(struct sock *sk, struct sk_buff *skb)
 	}
 	udp_queue_rcv_skb(sk, skb);
 }
+
+#ifdef CONFIG_IP_TRANSPARENT_PROXY
+/*
+ *	Check whether a received UDP packet might be for one of our
+ *	sockets.
+ */
+
+int udp_chkaddr(struct sk_buff *skb)
+{
+	struct iphdr *iph = skb->h.iph;
+	struct udphdr *uh = (struct udphdr *)(skb->h.raw + iph->ihl*4);
+	struct sock *sk;
+
+	sk = get_sock(&udp_prot, uh->dest, iph->saddr, uh->source, iph->daddr, 0, 0);
+
+	if (!sk) return 0;
+	/* 0 means accept all LOCAL addresses here, not all the world... */
+	if (sk->rcv_saddr == 0) return 0;
+	return 1;
+}
+#endif
 
 /*
  *	All we need to do is get the socket, and then do a checksum. 
@@ -709,7 +780,7 @@ int udp_rcv(struct sk_buff *skb, struct device *dev, struct options *opt,
 	skb_trim(skb,len);
 
 #ifdef CONFIG_IP_MULTICAST
-	if (addr_type!=IS_MYADDR)
+	if (addr_type==IS_BROADCAST || addr_type==IS_MULTICAST)
 	{
 		/*
 		 *	Multicasts and broadcasts go to each listener.
@@ -743,7 +814,7 @@ int udp_rcv(struct sk_buff *skb, struct device *dev, struct options *opt,
 		sk=(struct sock *)uh_cache_sk;
 	else
 	{
-	  	sk = get_sock(&udp_prot, uh->dest, saddr, uh->source, daddr);
+	  	sk = get_sock(&udp_prot, uh->dest, saddr, uh->source, daddr, dev->pa_addr, skb->redirport);
   		uh_cache_saddr=saddr;
   		uh_cache_daddr=daddr;
   		uh_cache_dport=uh->dest;
@@ -754,7 +825,7 @@ int udp_rcv(struct sk_buff *skb, struct device *dev, struct options *opt,
 	if (sk == NULL) 
   	{
   		udp_statistics.UdpNoPorts++;
-		if (addr_type == IS_MYADDR) 
+		if (addr_type != IS_BROADCAST && addr_type != IS_MULTICAST) 
 		{
 			icmp_send(skb, ICMP_DEST_UNREACH, ICMP_PORT_UNREACH, 0, dev);
 		}

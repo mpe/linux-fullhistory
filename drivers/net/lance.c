@@ -283,6 +283,7 @@ static unsigned char pci_irq_line = 0;
 static unsigned char lance_need_isa_bounce_buffers = 1;
 
 static int lance_open(struct device *dev);
+static int lance_open_fail(struct device *dev);
 static void lance_init_ring(struct device *dev);
 static int lance_start_xmit(struct sk_buff *skb, struct device *dev);
 static int lance_rx(struct device *dev);
@@ -422,6 +423,7 @@ void lance_probe1(int ioaddr)
 	}
 
 	dev = init_etherdev(0, 0);
+	dev->open = lance_open_fail;
 	chipname = chip_table[lance_version].name;
 	printk("%s: %s at %#3x,", dev->name, chipname, ioaddr);
 
@@ -588,14 +590,21 @@ void lance_probe1(int ioaddr)
 		printk(version);
 
 	/* The LANCE-specific entries in the device structure. */
-	dev->open = &lance_open;
-	dev->hard_start_xmit = &lance_start_xmit;
-	dev->stop = &lance_close;
-	dev->get_stats = &lance_get_stats;
-	dev->set_multicast_list = &set_multicast_list;
+	dev->open = lance_open;
+	dev->hard_start_xmit = lance_start_xmit;
+	dev->stop = lance_close;
+	dev->get_stats = lance_get_stats;
+	dev->set_multicast_list = set_multicast_list;
 
 	return;
 }
+
+static int
+lance_open_fail(struct device *dev)
+{
+	return -ENODEV;
+}
+
 
 
 static int

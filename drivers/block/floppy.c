@@ -3817,19 +3817,9 @@ static char get_fdc_version(void)
 	}
 	switch (reply_buffer[0] >> 5) {
 		case 0x0:
-			output_byte(FD_SAVE);
-			r = result();
-			if (r != 16) {
-				printk("FDC %d init: SAVE: unexpected return of %d bytes.\n", fdc, r);
-				return FDC_UNKNOWN;
-			}
-			if (!(reply_buffer[0] & 0x40)) {
-				printk(KERN_INFO "FDC %d is a 3Volt 82078SL.\n",fdc);
-				return FDC_82078;
-			}
 			/* Either a 82078-1 or a 82078SL running at 5Volt */
-			printk(KERN_INFO "FDC %d is an 82078-1.\n",fdc);
-			return FDC_82078_1;
+			printk(KERN_INFO "FDC %d is an 82078.\n",fdc);
+			return FDC_82078;
 		case 0x1:
 			printk(KERN_INFO "FDC %d is a 44pin 82078\n",fdc);
 			return FDC_82078;

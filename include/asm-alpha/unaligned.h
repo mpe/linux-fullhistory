@@ -26,13 +26,12 @@ extern inline unsigned long __uldq(const unsigned long * r11)
 	__asm__("ldq_u %0,%3\n\t"
 		"ldq_u %1,%4\n\t"
 		"extql %0,%2,%0\n\t"
-		"extqh %1,%2,%1\n\t"
-		"bis %1,%0,%0"
+		"extqh %1,%2,%1"
 		:"=&r" (r1), "=&r" (r2)
 		:"r" (r11),
 		 "m" (*r11),
 		 "m" (*(const unsigned long *)(7+(char *) r11)));
-	return r1;
+	return r1 | r2;
 }
 
 extern inline unsigned long __uldl(const unsigned int * r11)
@@ -41,13 +40,12 @@ extern inline unsigned long __uldl(const unsigned int * r11)
 	__asm__("ldq_u %0,%3\n\t"
 		"ldq_u %1,%4\n\t"
 		"extll %0,%2,%0\n\t"
-		"extlh %1,%2,%1\n\t"
-		"bis %1,%0,%0"
+		"extlh %1,%2,%1"
 		:"=&r" (r1), "=&r" (r2)
 		:"r" (r11),
 		 "m" (*r11),
 		 "m" (*(const unsigned long *)(3+(char *) r11)));
-	return r1;
+	return r1 | r2;
 }
 
 extern inline unsigned long __uldw(const unsigned short * r11)
@@ -56,13 +54,12 @@ extern inline unsigned long __uldw(const unsigned short * r11)
 	__asm__("ldq_u %0,%3\n\t"
 		"ldq_u %1,%4\n\t"
 		"extwl %0,%2,%0\n\t"
-		"extwh %1,%2,%1\n\t"
-		"bis %1,%0,%0"
+		"extwh %1,%2,%1"
 		:"=&r" (r1), "=&r" (r2)
 		:"r" (r11),
 		 "m" (*r11),
 		 "m" (*(const unsigned long *)(1+(char *) r11)));
-	return r1;
+	return r1 | r2;
 }
 
 /*

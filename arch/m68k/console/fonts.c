@@ -5,7 +5,7 @@
  *    Created 1995 by Geert Uytterhoeven
  *
  * This file is subject to the terms and conditions of the GNU General Public
- * License.  See the file README.legal in the main directory of this archive
+ * License.  See the file COPYING in the main directory of this archive
  * for more details.
  */
 
@@ -13,6 +13,7 @@
 #include <linux/types.h>
 #include <linux/string.h>
 #include <asm/font.h>
+#include <asm/bootinfo.h>
 
 
    /*
@@ -29,6 +30,11 @@ extern char fontname_8x16[];
 extern int fontwidth_8x16, fontheight_8x16;
 extern u_char fontdata_8x16[];
 
+/* PEARL8x8 */
+extern char fontname_pearl8x8[];
+extern int fontwidth_pearl8x8, fontheight_pearl8x8;
+extern u_char fontdata_pearl8x8[];
+
 
    /*
     *    Font Descriptor Array
@@ -41,9 +47,15 @@ struct softfontdesc {
    u_char *data;
 };
 
+#define VGA8x8_IDX	0
+#define VGA8x16_IDX	1
+#define PEARL8x8_IDX	2
+
 static struct softfontdesc softfonts[] = {
    { fontname_8x8, &fontwidth_8x8, &fontheight_8x8, fontdata_8x8 },
-   { fontname_8x16, &fontwidth_8x16, &fontheight_8x16, fontdata_8x16 }
+   { fontname_8x16, &fontwidth_8x16, &fontheight_8x16, fontdata_8x16 },
+   { fontname_pearl8x8, &fontwidth_pearl8x8, &fontheight_pearl8x8,
+     fontdata_pearl8x8 },
 };
 
 static u_long numsoftfonts = sizeof(softfonts)/sizeof(*softfonts);
@@ -78,23 +90,19 @@ int findsoftfont(char *name, int *width, int *height, u_char *data[])
 void getdefaultfont(int xres, int yres, char *name[], int *width, int *height,
                     u_char *data[])
 {
-   if (yres < 400) {
-      if (name)
-   	   *name = fontname_8x8;
-   	if (width)
-   	   *width = fontwidth_8x8;
-   	if (height)
-   	   *height = fontheight_8x8;
-   	if (data)
-         *data = fontdata_8x8;
-	} else {
-      if (name)
-   	   *name = fontname_8x16;
-   	if (width)
-   	   *width = fontwidth_8x16;
-   	if (height)
-   	   *height = fontheight_8x16;
-   	if (data)
-         *data = fontdata_8x16;
-	}
+    int i;
+    
+    if (yres < 400)
+	i = MACH_IS_AMIGA ? PEARL8x8_IDX : VGA8x8_IDX;
+    else
+	i = VGA8x16_IDX;
+
+    if (name)
+	*name = softfonts[i].name;
+    if (width)
+	*width = *softfonts[i].width;
+    if (height)
+	*height = *softfonts[i].height;
+    if (data)
+	*data = softfonts[i].data;
 }

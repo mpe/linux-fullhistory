@@ -2,7 +2,7 @@
  * ints.c -- 680x0 Linux general interrupt handling code
  *
  * This file is subject to the terms and conditions of the GNU General Public
- * License.  See the file README.legal in the main directory of this archive
+ * License.  See the file COPYING in the main directory of this archive
  * for more details.
  *
  * 07/03/96: Timer initialization, and thus mach_sched_init(),
@@ -76,7 +76,7 @@ void insert_isr (isr_node_t **listp, isr_node_t *node)
     restore_flags(spl);
 }
 
-void delete_isr (isr_node_t **listp, isrfunc isr)
+void delete_isr (isr_node_t **listp, isrfunc isr, void *data)
 {
     unsigned long flags;
     isr_node_t *np;
@@ -84,7 +84,7 @@ void delete_isr (isr_node_t **listp, isrfunc isr)
     save_flags(flags);
     cli();
     for (np = *listp; np; listp = &np->next, np = *listp) {
-	if (np->isr == isr) {
+	if (np->isr == isr && np->data == data) {
 	    *listp = np->next;
 	    /* Mark it as free. */
 	    np->isr = NULL;
@@ -138,17 +138,17 @@ int add_isr (unsigned long source, isrfunc isr, int pri, void *data,
     return 1;
 }
 
-int remove_isr (unsigned long source, isrfunc isr)
+int remove_isr (unsigned long source, isrfunc isr, void *data)
 {
     if (source & IRQ_MACHSPEC)
-	return mach_remove_isr (source, isr);
+	return mach_remove_isr (source, isr, data);
 
     if (source < IRQ1 || source > IRQ7) {
 	printk ("remove_isr: Incorrect IRQ source %ld\n", source);
 	return 0;
     }
 
-    delete_isr (&isr_list[source - 1], isr);
+    delete_isr (&isr_list[source - 1], isr, data);
     return 1;
 }
 

@@ -29,7 +29,7 @@
  * Added flags for DLE handling.
  *
  * Revision 1.8  1996/05/11 21:49:55  fritz
- * Removed queue mamagement variables.
+ * Removed queue management variables.
  * Changed queue management to use sk_buffs.
  *
  * Revision 1.7  1996/05/07 09:10:06  fritz

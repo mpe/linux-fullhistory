@@ -29,15 +29,13 @@
 #define REGISTER_DEV _IO (MD_MAJOR, 1)
 #define START_MD     _IO (MD_MAJOR, 2)
 #define STOP_MD      _IO (MD_MAJOR, 3)
-#define MD_INVALID   _IO (MD_MAJOR, 4)
-#define MD_VALID     _IO (MD_MAJOR, 5)
 
 /*
    personalities :
    Byte 0 : Chunk size factor
    Byte 1 : Fault tolerance count for each physical device
             (   0 means no fault tolerance,
-             0xFF means always tolerate faults)
+             0xFF means always tolerate faults), not used by now.
    Byte 2 : Personality
    Byte 3 : Reserved.
  */
@@ -52,7 +50,6 @@
 #define MD_RESERVED       0	/* Not used by now */
 #define LINEAR            (1UL << PERSONALITY_SHIFT)
 #define STRIPED           (2UL << PERSONALITY_SHIFT)
-#define STRIPPED          STRIPED /* Long lasting spelling mistake... */
 #define RAID0             STRIPED
 #define RAID1             (3UL << PERSONALITY_SHIFT)
 #define RAID5             (4UL << PERSONALITY_SHIFT)
@@ -73,18 +70,6 @@
 
 #define FACTOR_SHIFT(a) (PAGE_SHIFT + (a) - 10)
 
-/* Invalidation modes */
-#define VALID          0
-#define INVALID_NEXT   1
-#define INVALID_ALWAYS 2
-#define INVALID        3	/* Only useful to md_valid_device */
-
-/* Return values from personalities to md driver */
-#define REDIRECTED_BHREQ 0 /* Redirected individual buffers
-			      (shouldn't be used anymore since 0.31) */
-#define REDIRECTED_REQ   1 /* Redirected whole request */
-#define REDIRECT_FAILED -1 /* For RAID-1 */
-
 struct real_dev
 {
   kdev_t dev;			/* Device number */
@@ -92,12 +77,6 @@ struct real_dev
   int offset;			/* Real device offset (in blocks) in md dev
 				   (only used in linear mode) */
   struct inode *inode;		/* Lock inode */
-  int fault_count;		/* Fault counter for invalidation */
-  int invalid;			/* Indicate if the device is disabled :
-				   VALID          - valid
-				   INVALID_NEXT   - disabled for next access
-				   INVALID_ALWAYS - permanently disabled
-				   (for redundancy modes only) */
 };
 
 struct md_dev;
@@ -117,15 +96,14 @@ struct md_personality
 
 struct md_dev
 {
+  struct real_dev devices[MAX_REAL];
   struct md_personality *pers;
   int repartition;
-  int invalid_dev_count;
   int busy;
   int nb_dev;
   void *private;
 };
 
-extern struct real_dev devices[MAX_MD_DEV][MAX_REAL];
 extern struct md_dev md_dev[MAX_MD_DEV];
 extern int md_size[MAX_MD_DEV];
 

@@ -86,6 +86,7 @@ struct msghdr
 #define MSG_PEEK	2
 #define MSG_DONTROUTE	4
 /*#define MSG_CTRUNC	8	- We need to support this for BSD oddments */
+#define MSG_PROXY	16	/* Supply or ask second address. */
 
 /* Setsockoptions(2) level. Thanks to BSD these must match IPPROTO_xxx */
 #define SOL_IP		0

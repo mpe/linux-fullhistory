@@ -64,19 +64,19 @@
 /* XXX - this can be optimized if s_ipg is a power of 2. */
 #define ufs_ino2cg(inode)  ((inode)->i_ino/(inode)->i_sb->u.ufs_sb.s_ipg)
 
-#define	MAXNAMLEN 255
+#define	UFS_MAXNAMLEN 255
 
-struct direct {
+struct ufs_direct {
 	__u32  d_ino;			/* inode number of this entry */
 	__u16  d_reclen;		/* length of this entry */
 	__u16  d_namlen;		/* actual length of d_name */
-	char   d_name[MAXNAMLEN + 1];	/* file name */
+	char   d_name[UFS_MAXNAMLEN + 1];	/* file name */
 };
 
 #define MAXMNTLEN 512
 #define MAXCSBUFS 32
 
-struct csum {
+struct ufs_csum {
 	__u32	cs_ndir;	/* number of directories */
 	__u32	cs_nbfree;	/* number of free blocks */
 	__u32	cs_nifree;	/* number of free inodes */
@@ -138,14 +138,14 @@ struct ufs_superblock {
 	__u32	fs_cpg;
 	__u32	fs_ipg;
 	__u32	fs_fpg;
-	struct csum fs_cstotal;
+	struct ufs_csum fs_cstotal;
 	__u8	fs_fmod;
 	__u8	fs_clean;
 	__u8	fs_ronly;
 	__u8	fs_flags;
 	__u8	fs_fsmnt[MAXMNTLEN];
 	__u32	fs_cgrotor;
-	struct csum * fs_csp[MAXCSBUFS];
+	struct ufs_csum * fs_csp[MAXCSBUFS];
 	__u32	fs_cpc;
 	__u16	fs_opostbl[16][8];	/* old rotation block list head */
 	__s32	fs_sparecon[55];	/* reserved for future constants */

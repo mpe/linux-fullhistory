@@ -25,7 +25,7 @@
  *
  * Revision 1.21  1996/05/02 04:01:20  fritz
  * Bugfix:
- *  - icn_addcard() evalueated wrong driverId.
+ *  - icn_addcard() evaluated wrong driverId.
  *
  * Revision 1.20  1996/05/02 00:40:27  fritz
  * Major rewrite to support more than one card
@@ -273,7 +273,7 @@ static inline int icn_trymaplock_channel(icn_card *card, int channel)
 }
 
 /*
- * Release currend card/channel lock,
+ * Release current card/channel lock,
  * then map same or other channel without locking.
  */
 static inline void icn_maprelease_channel(icn_card *card, int channel)

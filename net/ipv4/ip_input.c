@@ -96,6 +96,7 @@
  *		A.N.Kuznetsov	:	IP_OPTIONS support throughout the kernel
  *		Alan Cox	:	Multicast routing hooks
  *		Jos Vos		:	Do accounting *before* call_in_firewall
+ *	Willy Konynenberg	:	Transparent proxying support
  *
  *  
  *
@@ -189,6 +190,27 @@ int ip_ioctl(struct sock *sk, int cmd, unsigned long arg)
 	}
 }
 
+#ifdef CONFIG_IP_TRANSPARENT_PROXY
+/*
+ *	Check the packet against our socket administration to see
+ *	if it is related to a connection on our system.
+ *	Needed for transparent proxying.
+ */
+
+int ip_chksock(struct sk_buff *skb)
+{
+	switch (skb->h.iph->protocol) {
+	case IPPROTO_ICMP:
+		return icmp_chkaddr(skb);
+	case IPPROTO_TCP:
+		return tcp_chkaddr(skb);
+	case IPPROTO_UDP:
+		return udp_chkaddr(skb);
+	default:
+		return 0;
+	}
+}
+#endif
 
 
 /*
@@ -211,7 +233,8 @@ int ip_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
 	__u32 daddr;
 
 #ifdef CONFIG_FIREWALL
-	int err;
+	int fwres;
+	__u16 rport;
 #endif	
 #ifdef CONFIG_IP_MROUTE
 	int mroute_pkt=0;
@@ -227,6 +250,15 @@ int ip_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
 #endif		
 
 	ip_statistics.IpInReceives++;
+
+	/*
+	 *	Account for the packet (even if the packet is
+	 *	not accepted by the firewall!).
+	 */
+
+#ifdef CONFIG_IP_ACCT
+	ip_fw_chk(iph,dev,NULL,ip_acct_chain,IP_FW_F_ACCEPT,IP_FW_MODE_ACCT_IN);
+#endif	
 
 	/*
 	 *	Tag the ip header of this packet so we can find it
@@ -289,31 +321,82 @@ int ip_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
 #endif					
 	}
 	
+#if defined(CONFIG_IP_TRANSPARENT_PROXY) && !defined(CONFIG_IP_ALWAYS_DEFRAG)
+#define CONFIG_IP_ALWAYS_DEFRAG 1
+#endif
+#ifdef CONFIG_IP_ALWAYS_DEFRAG
 	/*
-	 *	Account for the packet (even if the packet is
-	 *	not accepted by the firewall!).
+	 * Defragment all incoming traffic before even looking at it.
+	 * If you have forwarding enabled, this makes the system a
+	 * defragmenting router.  Not a common thing.
+	 * You probably DON'T want to enable this unless you have to.
+	 * You NEED to use this if you want to use transparent proxying,
+	 * otherwise, we can't vouch for your sanity.
 	 */
 
-#ifdef CONFIG_IP_ACCT
-	ip_fw_chk(iph,dev,ip_acct_chain,IP_FW_F_ACCEPT,1);
-#endif	
+	/*
+	 *	See if the frame is fragmented.
+	 */
+	 
+	if(iph->frag_off)
+	{
+		if (iph->frag_off & htons(IP_MF))
+			is_frag|=IPFWD_FRAGMENT;
+		/*
+		 *	Last fragment ?
+		 */
+	
+		if (iph->frag_off & htons(IP_OFFSET))
+			is_frag|=IPFWD_LASTFRAG;
+	
+		/*
+		 *	Reassemble IP fragments.
+		 */
 
+		if(is_frag)
+		{
+			/* Defragment. Obtain the complete packet if there is one */
+			skb=ip_defrag(iph,skb,dev);
+			if(skb==NULL)
+				return 0;
+			skb->dev = dev;
+			iph=skb->h.iph;
+			is_frag = 0;
+			/*
+			 * When the reassembled packet gets forwarded, the ip
+			 * header checksum should be correct.
+			 * For better performance, this should actually only
+			 * be done in that particular case, i.e. set a flag
+			 * here and calculate the checksum in ip_forward.
+			 */
+			ip_send_check(iph);
+		}
+	}
+
+#endif
 	/*
 	 *	See if the firewall wants to dispose of the packet. 
 	 */
 	
 #ifdef	CONFIG_FIREWALL
 
-	if ((err=call_in_firewall(PF_INET, skb->dev, iph))<FW_ACCEPT)
+	if ((fwres=call_in_firewall(PF_INET, skb->dev, iph, &rport))<FW_ACCEPT)
 	{
-		if(err==FW_REJECT)
+		if(fwres==FW_REJECT)
 			icmp_send(skb, ICMP_DEST_UNREACH, ICMP_PORT_UNREACH, 0, dev);
 		kfree_skb(skb, FREE_WRITE);
 		return 0;	
 	}
 
+#ifdef	CONFIG_IP_TRANSPARENT_PROXY
+	if (fwres==FW_REDIRECT)
+		skb->redirport = rport;
+	else
+#endif
+		skb->redirport = 0;
 #endif
 	
+#ifndef CONFIG_IP_ALWAYS_DEFRAG
 	/*
 	 *	Remember if the frame is fragmented.
 	 */
@@ -330,6 +413,7 @@ int ip_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
 			is_frag|=IPFWD_LASTFRAG;
 	}
 	
+#endif
 	/*
 	 *	Do any IP forwarding required.  chk_addr() is expensive -- avoid it someday.
 	 *
@@ -342,7 +426,14 @@ int ip_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
 	 *	function entry.
 	 */
 	daddr = iph->daddr;
+#ifdef CONFIG_IP_TRANSPARENT_PROXY
+	/*
+	 *	ip_chksock adds still more overhead for forwarded traffic...
+	 */
+	if ( iph->daddr == skb->dev->pa_addr || skb->redirport || (brd = ip_chk_addr(iph->daddr)) != 0 || ip_chksock(skb))
+#else
 	if ( iph->daddr == skb->dev->pa_addr || (brd = ip_chk_addr(iph->daddr)) != 0)
+#endif
 	{
 		if (opt && opt->srr) 
 	        {
@@ -422,19 +513,7 @@ int ip_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
 		}
 #endif
 
-#ifdef CONFIG_IP_MASQUERADE
-		/*
-		 * Do we need to de-masquerade this fragment?
-		 */
-		if (ip_fw_demasquerade(&skb,dev)) 
-		{
-			struct iphdr *iph=skb->h.iph;
-			if (ip_forward(skb, dev, is_frag|IPFWD_MASQUERADED, iph->daddr))
-				kfree_skb(skb, FREE_WRITE);
-			return(0);
-		}
-#endif
-
+#ifndef CONFIG_IP_ALWAYS_DEFRAG
 		/*
 		 *	Reassemble IP fragments.
 		 */
@@ -447,16 +526,29 @@ int ip_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
 				return 0;
 			skb->dev = dev;
 			iph=skb->h.iph;
-#ifdef CONFIG_IP_MASQUERADE
-			if (ip_fw_demasquerade(&skb,dev))
-			{
-				struct iphdr *iph=skb->h.iph;
-				if (ip_forward(skb, dev, IPFWD_MASQUERADED, iph->daddr))
-					kfree_skb(skb, FREE_WRITE);
-				return 0;
-			}
-#endif
 		}
+
+#endif
+#ifdef CONFIG_IP_MASQUERADE
+	{
+		/*
+		 * Do we need to de-masquerade this packet?
+		 */
+		int ret = ip_fw_demasquerade(&skb,dev);
+		if (ret < 0) {
+			kfree_skb(skb, FREE_WRITE);
+			return 0;
+		}
+
+		if (ret)
+		{
+			struct iphdr *iph=skb->h.iph;
+			if (ip_forward(skb, dev, IPFWD_MASQUERADED, iph->daddr))
+				kfree_skb(skb, FREE_WRITE);
+			return 0;
+		}
+	}
+#endif
 
 		/*
 		 *	Point into the IP datagram, just past the header.

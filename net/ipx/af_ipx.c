@@ -43,6 +43,7 @@
  *			protocol private area for ipx data.
  *	Revision 0.34:	Module support. <Jim Freeman>
  *	Revision 0.35:  Checksum support. <Neil Turton>, hooked in by <Alan Cox>
+ *			Handles WIN95 discovery packets <Volker Lendecke>
  *
  *	Protect the module by a MOD_INC_USE_COUNT/MOD_DEC_USE_COUNT
  *	pair. Also, now usage count is managed this way
@@ -732,7 +733,7 @@ static int ipxitf_rcv(ipx_interface *intrfc, struct sk_buff *skb)
 	 *	We firewall first, ask questions later.
 	 */
 	 
-	if (call_in_firewall(PF_IPX, skb->dev, ipx)!=FW_ACCEPT)
+	if (call_in_firewall(PF_IPX, skb->dev, ipx, NULL)!=FW_ACCEPT)
 	{
 		kfree_skb(skb, FREE_READ);
 		return 0;
@@ -776,7 +777,7 @@ static int ipxitf_rcv(ipx_interface *intrfc, struct sk_buff *skb)
 		/*
 		 *	See if we are allowed to firewall forward
 		 */
-		if (call_fw_firewall(PF_IPX, skb->dev, ipx)!=FW_ACCEPT)
+		if (call_fw_firewall(PF_IPX, skb->dev, ipx, NULL)!=FW_ACCEPT)
 		{
 			kfree_skb(skb, FREE_READ);
 			return 0;
@@ -1344,7 +1345,7 @@ static int ipxrtr_route_packet(ipx_socket *sk, struct sockaddr_ipx *usipx, struc
 		ipx->ipx_checksum=ipx_set_checksum(ipx, len+sizeof(ipx_packet));
 
 #ifdef CONFIG_FIREWALL	
-	if(call_out_firewall(PF_IPX, skb->dev, ipx)!=FW_ACCEPT)
+	if(call_out_firewall(PF_IPX, skb->dev, ipx, NULL)!=FW_ACCEPT)
 	{
 		kfree_skb(skb, FREE_WRITE);
 		return -EPERM;
@@ -2068,7 +2069,9 @@ int ipx_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
 	intrfc = ipxitf_find_using_phys(dev, pt->type);
 	if (intrfc == NULL) 
 	{
-		if (ipxcfg_auto_create_interfaces) {
+		if (ipxcfg_auto_create_interfaces &&
+		    ntohl(ipx->ipx_dest.net)!=0L) 
+		{
 			intrfc = ipxitf_auto_create(dev, pt->type);
 		}
 

@@ -2,7 +2,7 @@
  *
  * $Log: llglue.c,v $
  * Revision 1.3  1996/05/01 14:19:57  fritz
- * Added ISDN_FEADTURE_L2_TRANS
+ * Added ISDN_FEATURE_L2_TRANS
  *
  * Revision 1.2  1996/04/29 23:01:46  fritz
  * Added driverId and channel to readstatus().

@@ -6,7 +6,7 @@ Q02: error message "this systems lacks PPP support"
 Q03: strange information using 'ifconfig'
 Q04: MPPP?? What's that and how can I use it ...
 Q05: I tried MPPP but it doesn't work 
-Q06: can I use asynchronous PPP encapuslation with network devices
+Q06: can I use asynchronous PPP encapsulation with network devices
 Q07: A SunISDN machine can't connect to my i4l system
 Q08: I wanna talk to several machines, which need different configs
 Q09: Starting the ipppd, I get only error messages from i4l
@@ -18,7 +18,7 @@ Q12: How can I reduce login delay?
 
 Q01: pppd,ipppd, syncPPP , asyncPPP .. what is that ?
    what should I use?
-A: The pppd is for asynchronous PPP .. asynchron means
+A: The pppd is for asynchronous PPP .. asynchronous means
    here, the framing is character based. (e.g when
    using ttyI* or tty* devices)
 
@@ -27,7 +27,7 @@ A: The pppd is for asynchronous PPP .. asynchron means
    in isdn4linux pushes all IP packets direct
    to the network layer and all PPP protocol
    frames to the /dev/ippp* device. 
-   So, the ipppd is a simple externel network
+   So, the ipppd is a simple external network
    protocol handler.
 
    If you login into a remote machine using the
@@ -39,7 +39,7 @@ A: The pppd is for asynchronous PPP .. asynchron means
    syncPPP machine .. use the network device part
    of isdn4linux with the 'syncppp' encapsulation
    and make sure, that the ipppd is running and 
-   conneted to at least one /dev/ippp*. Check the 
+   connected to at least one /dev/ippp*. Check the 
    isdn4linux manual on how to configure a network device.
 
 --
@@ -62,7 +62,7 @@ A: Maybe you have compiled the ipppd with another
 Q03: when I list the netdevices with ifconfig I see, that
    my ISDN interface has a HWaddr and IRQ=0 and Base 
    address = 0 
-A: The device is a fake ethernetdevice .. ignore IRQ and baseaddr
+A: The device is a fake ethernet device .. ignore IRQ and baseaddr
    You need the HWaddr only for ethernet encapsulation.
    
 --
@@ -79,12 +79,12 @@ A: MPPP or MP or MPP (Warning: MP is also an
    every additional channel. (see the i4l manual
    for more)
    To use channel bundling you must first activate
-   the 'master' or inital call. Now you can add 
+   the 'master' or initial call. Now you can add 
    the slave channels with the command:
        isdnctrl addlink <device>
    e.g:
        isdnctrl addlink ippp0
-   This is different to other encapsualtions of
+   This is different from other encapsulations of
    isdn4linux! With syncPPP, there is no automatic
    activation of slave devices.
 
@@ -100,7 +100,7 @@ A: you forgot to compile MPPP/RFC1717 support into the
 
 --
 
-Q06: can I use asynchronous PPP encapuslation
+Q06: can I use asynchronous PPP encapsulation
    over the network interface of isdn4linux ..
 
 A: No .. that's not possible .. Use the standard
@@ -131,7 +131,7 @@ Q08: A wanna talk to remote machines, which need
 
 A: you must bind a network interface explicitly to
    an ippp device, where you can connect a (for this
-   interface) individualy configured ipppd.
+   interface) individually configured ipppd.
 
 --
 
@@ -171,7 +171,7 @@ A: You must know, how the ipppd gets the addresses it wanna
    tries to negotiate the local host address!
    With the option 'noipdefault' it requests an address
    from the remote machine. With 'useifip' it gets the
-   addresses from the net interface. Or you set the addresse
+   addresses from the net interface. Or you set the address
    on the option line with the <a.b.c.d:e.f.g.h> option.
    Note: the IP address of the remote machine must be configured
    locally or the remote machine must send it in an IPCP request.
@@ -205,7 +205,7 @@ A: A good help log is the debug output from the ipppd...
    - there are at least a few RECV messages in the log:
      -> fine: your card is dialing and your remote machine
         tries to talk with you. Maybe only a missing 
-        authentification. Check your ipppd configuration again.
+        authentication. Check your ipppd configuration again.
    - the ipppd exits for some reason:
      -> not good ... check /var/adm/syslog and /var/adm/daemon.
         Could be a bug in the ipppd.

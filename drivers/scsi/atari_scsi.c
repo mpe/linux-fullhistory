@@ -9,7 +9,7 @@
  *    - lots of extensions and bug fixes.
  *
  * This file is subject to the terms and conditions of the GNU General Public
- * License.  See the file README.legal in the main directory of this archive
+ * License.  See the file COPYING in the main directory of this archive
  * for more details.
  *
  */
@@ -746,7 +746,7 @@ int atari_scsi_detect (Scsi_Host_Template *host)
 int atari_scsi_release (struct Scsi_Host *sh)
 {
 	if (IS_A_TT())
-		remove_isr (IRQ_TT_MFP_SCSI, scsi_tt_intr);
+		remove_isr (IRQ_TT_MFP_SCSI, scsi_tt_intr, NULL);
 	if (atari_dma_buffer)
 		scsi_init_free (atari_dma_buffer, STRAM_BUFFER_SIZE);
 	return 1;

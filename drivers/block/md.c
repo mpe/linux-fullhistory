@@ -65,7 +65,6 @@ static struct gendisk md_gendisk=
 
 static struct md_personality *pers[MAX_PERSONALITY]={NULL, };
 
-struct real_dev devices[MAX_MD_DEV][MAX_REAL];
 struct md_dev md_dev[MAX_MD_DEV];
 
 static struct gendisk *find_gendisk (kdev_t dev)
@@ -84,7 +83,6 @@ static struct gendisk *find_gendisk (kdev_t dev)
 }
 
 
-/* Picked up from genhd.c */
 char *partition_name (kdev_t dev)
 {
   static char name[40];		/* This should be long
@@ -112,21 +110,171 @@ static void set_ra (void)
       continue;
     
     for (j=0; j<md_dev[i].nb_dev; j++)
-      if (read_ahead[MAJOR(devices[i][j].dev)]<minra)
-	minra=read_ahead[MAJOR(devices[i][j].dev)];
+      if (read_ahead[MAJOR(md_dev[i].devices[j].dev)]<minra)
+	minra=read_ahead[MAJOR(md_dev[i].devices[j].dev)];
   }
   
   read_ahead[MD_MAJOR]=minra;
 }
 
 
+static int do_md_run (int minor, int repart)
+{
+  int pnum, i, min, current_ra, err;
+  
+  if (!md_dev[minor].nb_dev)
+    return -EINVAL;
+  
+  if (md_dev[minor].pers)
+    return -EBUSY;
+  
+  md_dev[minor].repartition=repart;
+  
+  if ((pnum=PERSONALITY(md_dev+minor) >> (PERSONALITY_SHIFT))
+      >= MAX_PERSONALITY)
+    return -EINVAL;
+  
+  if (!pers[pnum])
+  {
+#ifdef CONFIG_KERNELD
+    char module_name[80];
+    sprintf (module_name, "md-personality-%d", pnum);
+    request_module (module_name);
+    if (!pers[pnum])
+#endif
+      return -EINVAL;
+  }
+  
+  min=1 << FACTOR_SHIFT(FACTOR((md_dev+minor)));
+  
+  for (i=0; i<md_dev[minor].nb_dev; i++)
+    if (md_dev[minor].devices[i].size<min)
+    {
+      printk ("Dev %s smaller than %dk, cannot shrink\n",
+	      partition_name (md_dev[minor].devices[i].dev), min);
+      return -EINVAL;
+    }
+  
+  /* Resize devices according to the factor. It is used to align
+     partitions size on a given chunk size. */
+  md_size[minor]=0;
+  
+  for (i=0; i<md_dev[minor].nb_dev; i++)
+  {
+    md_dev[minor].devices[i].size &= ~(min - 1);
+    md_size[minor] += md_dev[minor].devices[i].size;
+  }
+
+  md_dev[minor].pers=pers[pnum];
+  
+  if ((err=md_dev[minor].pers->run (minor, md_dev+minor)))
+  {
+    md_dev[minor].pers=NULL;
+    return (err);
+  }
+  
+  /* FIXME : We assume here we have blocks
+     that are twice as large as sectors.
+     THIS MAY NOT BE TRUE !!! */
+  md_hd_struct[minor].start_sect=0;
+  md_hd_struct[minor].nr_sects=md_size[minor]<<1;
+  
+  /* It would be better to have a per-md-dev read_ahead. Currently,
+     we only use the smallest read_ahead among md-attached devices */
+  
+  current_ra=read_ahead[MD_MAJOR];
+  
+  for (i=0; i<md_dev[minor].nb_dev; i++)
+    if (current_ra>read_ahead[MAJOR(md_dev[minor].devices[i].dev)])
+      current_ra=read_ahead[MAJOR(md_dev[minor].devices[i].dev)];
+  
+  read_ahead[MD_MAJOR]=current_ra;
+  
+  printk ("START_DEV md%x %s\n", minor, md_dev[minor].pers->name);
+  return (0);
+}
+
+
+static int do_md_stop (int minor, struct inode *inode)
+{
+  int i;
+  
+  if (inode->i_count>1 || md_dev[minor].busy>1) /* ioctl : one open channel */
+  {
+    printk ("STOP_MD md%x failed : i_count=%d, busy=%d\n", minor, inode->i_count, md_dev[minor].busy);
+    return -EBUSY;
+  }
+  
+  if (md_dev[minor].pers)
+  {
+    /*  The device won't exist anymore -> flush it now */
+    fsync_dev (inode->i_rdev);
+    invalidate_buffers (inode->i_rdev);
+    md_dev[minor].pers->stop (minor, md_dev+minor);
+  }
+  
+  /* Remove locks. */
+  for (i=0; i<md_dev[minor].nb_dev; i++)
+    clear_inode (md_dev[minor].devices[i].inode);
+  
+  md_dev[minor].nb_dev=md_size[minor]=0;
+  md_dev[minor].pers=NULL;
+  
+  set_ra ();			/* calculate new read_ahead */
+  
+  printk ("STOP_DEV md%x\n", minor);
+  return (0);
+}
+
+
+static int do_md_add (int minor, kdev_t dev)
+{
+  struct gendisk *gen_real;
+  int i;
+  
+  if (MAJOR(dev)==MD_MAJOR || md_dev[minor].nb_dev==MAX_REAL)
+    return -EINVAL;
+  
+  if (!fs_may_mount (dev) || md_dev[minor].pers)
+    return -EBUSY;
+  
+  if (!(gen_real=find_gendisk (dev)))
+    return -ENOENT;
+  
+  i=md_dev[minor].nb_dev++;
+  md_dev[minor].devices[i].dev=dev;
+  
+  /* Lock the device by inserting a dummy inode. This doesn't
+     smell very good, but I need to be consistent with the
+     mount stuff, specially with fs_may_mount. If someone have
+     a better idea, please help ! */
+  
+  md_dev[minor].devices[i].inode=get_empty_inode ();
+  md_dev[minor].devices[i].inode->i_dev=dev; /* don't care about
+						other fields */
+  insert_inode_hash (md_dev[minor].devices[i].inode);
+  
+  /* Sizes are now rounded at run time */
+  
+  md_dev[minor].devices[i].size=gen_real->sizes[MINOR(dev)];
+  md_dev[minor].devices[i].offset=i ?
+    (md_dev[minor].devices[i-1].offset + md_dev[minor].devices[i-1].size) : 0;
+  
+  if (!i)
+    md_size[minor]=0;
+  
+  md_size[minor]+=md_dev[minor].devices[i].size;
+  
+  printk ("REGISTER_DEV %s to md%x done\n", partition_name(dev), minor);
+  return (0);
+}
+
+
 static int md_ioctl (struct inode *inode, struct file *file,
                      unsigned int cmd, unsigned long arg)
 {
-  int minor, index, err, current_ra;
-  struct gendisk *gen_real;
+  int minor, err;
   struct hd_geometry *loc = (struct hd_geometry *) arg;
-  kdev_t dev;
 
   if (!suser())
     return -EACCES;
@@ -143,145 +291,14 @@ static int md_ioctl (struct inode *inode, struct file *file,
   switch (cmd)
   {
     case REGISTER_DEV:
-    dev=to_kdev_t ((dev_t) arg);
-    if (MAJOR(dev)==MD_MAJOR || md_dev[minor].nb_dev==MAX_REAL)
-      return -EINVAL;
-
-    if (!fs_may_mount (dev) || md_dev[minor].pers)
-      return -EBUSY;
-
-    if (!(gen_real=find_gendisk (dev)))
-      return -ENOENT;
-
-    index=md_dev[minor].nb_dev++;
-    devices[minor][index].dev=dev;
-
-    /* Lock the device by inserting a dummy inode. This doesn't
-       smell very good, but I need to be consistent with the
-       mount stuff, specially with fs_may_mount. If someone have
-       a better idea, please help ! */
-    
-    devices[minor][index].inode=get_empty_inode ();
-    devices[minor][index].inode->i_dev=dev; /* don't care about
-					       other fields */
-    insert_inode_hash (devices[minor][index].inode);
-    
-    /* Devices sizes are rounded to a multiple of page (needed for
-       paging). This is NOT done by fdisk when partitioning,
-       but that's a DOS thing anyway... */
-    
-    devices[minor][index].size=gen_real->sizes[MINOR(dev)] & ~((PAGE_SIZE >> 10)-1);
-    devices[minor][index].offset=index ?
-      (devices[minor][index-1].offset + devices[minor][index-1].size) : 0;
-
-    if (!index)
-      md_size[minor]=devices[minor][index].size;
-    else
-      md_size[minor]+=devices[minor][index].size;
-
-    printk("REGISTER_DEV %s to md%x done\n", partition_name(dev), minor);
-    break;
+      return do_md_add (minor, to_kdev_t ((dev_t) arg));
 
     case START_MD:
-    if (!md_dev[minor].nb_dev)
-      return -EINVAL;
-
-    if (md_dev[minor].pers)
-      return -EBUSY;
-
-    md_dev[minor].repartition=(int) arg;
-    
-    if ((index=PERSONALITY(md_dev+minor) >> (PERSONALITY_SHIFT))
-	>= MAX_PERSONALITY)
-      return -EINVAL;
-
-    if (!pers[index])
-    {
-#ifdef CONFIG_KERNELD
-      char module_name[80];
-      sprintf (module_name, "md-personality-%d", index);
-      request_module (module_name);
-      if (!pers[index])
-#endif
-	return -EINVAL;
-    }
-
-    md_dev[minor].pers=pers[index];
-
-    if ((err=md_dev[minor].pers->run (minor, md_dev+minor)))
-    {
-      md_dev[minor].pers=NULL;
-      return (err);
-    }
-
-    /* FIXME : We assume here we have blocks
-       that are twice as large as sectors.
-       THIS MAY NOT BE TRUE !!! */
-    md_hd_struct[minor].start_sect=0;
-    md_hd_struct[minor].nr_sects=md_size[minor]<<1;
-
-    /* It would be better to have a per-md-dev read_ahead. Currently,
-       we only use the smallest read_ahead among md-attached devices */
-
-    current_ra=read_ahead[MD_MAJOR];
-    
-    for (index=0; index<md_dev[minor].nb_dev; index++)
-    {
-      if (current_ra>read_ahead[MAJOR(devices[minor][index].dev)])
-	current_ra=read_ahead[MAJOR(devices[minor][index].dev)];
-
-      devices[minor][index].fault_count=0;
-      devices[minor][index].invalid=VALID;
-    }
-
-    read_ahead[MD_MAJOR]=current_ra;
-
-    printk ("START_DEV md%x %s\n", minor, md_dev[minor].pers->name);
-    break;
+      return do_md_run (minor, (int) arg);
 
     case STOP_MD:
-    if (inode->i_count>1 || md_dev[minor].busy>1) /* ioctl : one open channel */
-    {
-      printk ("STOP_MD md%x failed : i_count=%d, busy=%d\n", minor, inode->i_count, md_dev[minor].busy);
-      return -EBUSY;
-    }
-
-    if (md_dev[minor].pers)
-    {
-      /*  The device won't exist anymore -> flush it now */
-      fsync_dev (inode->i_rdev);
-      invalidate_buffers (inode->i_rdev);
-      md_dev[minor].pers->stop (minor, md_dev+minor);
-    }
-
-    /* Remove locks. */
-    for (index=0; index<md_dev[minor].nb_dev; index++)
-      clear_inode (devices[minor][index].inode);
-
-    md_dev[minor].nb_dev=md_size[minor]=0;
-    md_dev[minor].pers=NULL;
-
-    set_ra ();			/* calculate new read_ahead */
-    
-    printk ("STOP_DEV md%x\n", minor);
-    break;
-
-#if defined(CONFIG_MD_SUPPORT_RAID1) || defined(CONFIG_MD_SUPPORT_RAID5)
-    case MD_INVALID:
-    dev=to_kdev_t ((dev_t) arg);
-    if (!(err=md_valid_device (minor, dev, INVALID_ALWAYS)))
-      printk ("md%d : %s disabled\n", minor, partition_name (dev));
-
-    return (err);
-
-    case MD_VALID:
-    dev=to_kdev_t ((dev_t) arg);
-    if (!(err=md_valid_device (minor, dev, VALID)))
-      printk ("md%d : %s enabled\n", minor, partition_name (dev));
-
-    return (err);
-#endif
-    
+      return do_md_stop (minor, inode);
+      
     case BLKGETSIZE:   /* Return device size */
     if  (!arg)  return -EINVAL;
     err=verify_area (VERIFY_WRITE, (long *) arg, sizeof(long));
@@ -309,6 +326,11 @@ static int md_ioctl (struct inode *inode, struct file *file,
     put_user (read_ahead[MAJOR(inode->i_rdev)], (long *) arg);
     break;
 
+    /* We have a problem here : there is no easy way to give a CHS
+       virtual geometry. We currently pretend that we have a 2 heads
+       4 sectors (with a BIG number of cylinders...). This drives dosfs
+       just mad... ;-) */
+    
     case HDIO_GETGEO:
     if (!loc)  return -EINVAL;
     err = verify_area(VERIFY_WRITE, loc, sizeof(*loc));
@@ -392,16 +414,10 @@ static struct symbol_table md_symbol_table=
 {
 #include <linux/symtab_begin.h>
 
-  X(devices),
   X(md_size),
   X(register_md_personality),
   X(unregister_md_personality),
   X(partition_name),
-
-#if defined(CONFIG_MD_SUPPORT_RAID1) || defined(CONFIG_MD_SUPPORT_RAID5)
-  X(md_valid_device),
-  X(md_can_reemit),
-#endif
 
 #include <linux/symtab_end.h>
 };
@@ -414,11 +430,8 @@ static void md_geninit (struct gendisk *gdisk)
   for(i=0;i<MAX_MD_DEV;i++)
   {
     md_blocksizes[i] = 1024;
-    md_gendisk.part[i].start_sect=-1;
+    md_gendisk.part[i].start_sect=-1; /* avoid partition check */
     md_dev[i].pers=NULL;
-#ifdef MD_COUNT_SIZES
-    md_dev[i].smallest_count=md_dev[i].biggest_count=md_dev[i].equal_count=0;
-#endif
   }
 
   blksize_size[MAJOR_NR] = md_blocksizes;
@@ -458,10 +471,8 @@ int get_md_status (char *page)
       sz+=sprintf (page+sz, " %s", md_dev[i].pers->name);
 
     for (j=0; j<md_dev[i].nb_dev; j++)
-      sz+=sprintf (page+sz, " %s%s%s",
-		   (devices[i][j].invalid==VALID) ? "" : "(",
-		   partition_name(devices[i][j].dev),
-		   (devices[i][j].invalid==VALID) ? "" : ")");
+      sz+=sprintf (page+sz, " %s",
+		   partition_name(md_dev[i].devices[j].dev));
     
     if (md_dev[i].nb_dev)
       sz+=sprintf (page+sz, " %d blocks", md_size[i]);
@@ -475,11 +486,10 @@ int get_md_status (char *page)
     if (md_dev[i].pers->max_invalid_dev)
       sz+=sprintf (page+sz, " maxfault=%ld", MAX_FAULT(md_dev+i));
 
-    if (md_dev[i].pers != pers[(LINEAR>>PERSONALITY_SHIFT)])
-    {
-      sz+=sprintf (page+sz, " %dk chunks", 1<<FACTOR_SHIFT(FACTOR(md_dev+i)));
-    }
-    sz+=sprintf (page+sz, "\n");
+    sz+=sprintf (page+sz, " %dk %s\n", 1<<FACTOR_SHIFT(FACTOR(md_dev+i)),
+		 md_dev[i].pers == pers[LINEAR>>PERSONALITY_SHIFT] ?
+		 "rounding" : "chunks");
+
     sz+=md_dev[i].pers->status (page+sz, i, md_dev+i);
   }
 

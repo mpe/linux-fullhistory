@@ -1,7 +1,7 @@
 /*
  * Definitions for the Mitsumi CDROM interface
- * Copyright (C) 1995 Heiko Schlittermann <heiko@lotte.sax.de>
- * VERSION: 2.3
+ * (H) Hackright 1996 by Marcin Dalecki <dalecki@namu03.gwdg.de>
+ * VERSION: 2.5
  * 
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -16,20 +16,6 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; see the file COPYING.  If not, write to
  * the Free Software Foundation, 675 Mass Ave, Cambridge, MA 02139, USA.
- *
- * Thanks to
- *  The Linux Community at all and ...
- *  Martin Harris (he wrote the first Mitsumi Driver)
- *  Eberhard Moenkeberg (he gave me much support and the initial kick)
- *  Bernd Huebner, Ruediger Helsch (Unifix-Software Gmbh, they
- *      improved the original driver)
- *  Jon Tombs, Bjorn Ekwall (module support)
- *  Daniel v. Mosnenck (he sent me the Technical and Programming Reference)
- *  Gerd Knorr (he lent me his PhotoCD)
- *  Nils Faerber and Roger E. Wolff (extensively tested the LU portion)
- *  Andreas Kies (testing the mysterious hangups)
- *  ... somebody forgotten?
- *  
  */
 
 #ifndef __MCDX_H
@@ -121,11 +107,7 @@
 #define MCDX_CMD_CLOSE_DOOR		0xf8
 #define MCDX_CMD_LOCK_DOOR		0xfe
 
-#define READ_AHEAD			4	/* 8 Sectors (4K) */
-
-#define MCDX_CDBLK	2048	/* 2048 cooked data each blk */
-
-#define MCDX_DATA_TIMEOUT	(HZ/10)		/* 0.1 second */
+#define READ_AHEAD			8	/* 16 Sectors (4K) */
 
 #ifndef I_WAS_IN_MCDX_H
 #warning You have not edited mcdx.h

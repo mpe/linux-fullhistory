@@ -267,7 +267,7 @@ parse_options(char *options, uid_t *uid, gid_t *gid, int *mode, int *reserved, i
 	return 1;
 }
 
-/* This function definately needs to be split up. Some fine day I'll
+/* This function definitely needs to be split up. Some fine day I'll
  * hopefully have the guts to do so. Until then: sorry for the mess.
  */
 

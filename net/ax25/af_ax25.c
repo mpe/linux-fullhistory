@@ -1599,7 +1599,7 @@ static int ax25_rcv(struct sk_buff *skb, struct device *dev, ax25_address *dev_a
 	skb->h.raw = skb->data;
 	
 #ifdef CONFIG_FIREWALL
-	if (call_in_firewall(PF_AX25, skb->dev, skb->h.raw) != FW_ACCEPT) {
+	if (call_in_firewall(PF_AX25, skb->dev, skb->h.raw, NULL) != FW_ACCEPT) {
 		kfree_skb(skb, FREE_READ);
 		return 0;
 	}
@@ -1657,7 +1657,7 @@ static int ax25_rcv(struct sk_buff *skb, struct device *dev, ax25_address *dev_a
 
 			build_ax25_addr(skb->data, &src, &dest, &dp, type, MODULUS);
 #ifdef CONFIG_FIREWALL
-			if (call_fw_firewall(PF_AX25, skb->dev, skb->data) != FW_ACCEPT) {
+			if (call_fw_firewall(PF_AX25, skb->dev, skb->data, NULL) != FW_ACCEPT) {
 				kfree_skb(skb, FREE_READ);
 				return 0;
 			}
@@ -2439,7 +2439,7 @@ void ax25_queue_xmit(struct sk_buff *skb, struct device *dev, int pri)
 	unsigned char *ptr;
 	
 #ifdef CONFIG_FIREWALL
-	if (call_out_firewall(PF_AX25, skb->dev, skb->data) != FW_ACCEPT) {
+	if (call_out_firewall(PF_AX25, skb->dev, skb->data, NULL) != FW_ACCEPT) {
 		dev_kfree_skb(skb, FREE_WRITE);
 		return;
 	}

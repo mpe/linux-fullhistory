@@ -16,7 +16,7 @@
  *    atari_sched_init fixed to get precise clock.
  *
  * This file is subject to the terms and conditions of the GNU General Public
- * License.  See the file README.legal in the main directory of this archive
+ * License.  See the file COPYING in the main directory of this archive
  * for more details.
  */
 
@@ -49,7 +49,7 @@ extern int atari_kbdrate (struct kbd_repeat *);
 extern void atari_kbd_leds (unsigned int);
 extern void atari_init_INTS (void);
 extern int atari_add_isr (unsigned long, isrfunc, int, void *, char *);
-extern int atari_remove_isr (unsigned long, isrfunc);
+extern int atari_remove_isr (unsigned long, isrfunc, void *);
 extern void atari_enable_irq (unsigned);
 extern void atari_disable_irq (unsigned);
 extern int atari_get_irq_list (char *buf, int len);

@@ -24,10 +24,10 @@ if [ "$CONFIG_SLIP" != "n" ]; then
 fi
 bool 'Radio network interfaces' CONFIG_NET_RADIO
 if [ "$CONFIG_NET_RADIO" != "n" ]; then
+  if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
+    tristate 'BAYCOM ser12 and par96 kiss emulation driver for AX.25' CONFIG_BAYCOM
+  fi
   if [ "$CONFIG_AX25" = "y" ]; then
-    if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
-      tristate 'BAYCOM ser12 and par96 kiss emulation driver for AX.25' CONFIG_BAYCOM
-    fi
     bool 'Gracilis PackeTwin support' CONFIG_PT
     bool 'Ottawa PI and PI/2 support' CONFIG_PI
   fi

@@ -4,7 +4,7 @@
  *  Copyright (C) 1993 Hamish Macdonald
  *
  * This file is subject to the terms and conditions of the GNU General Public
- * License.  See the file README.legal in the main directory of this archive
+ * License.  See the file COPYING in the main directory of this archive
  * for more details.
  */
 
@@ -40,7 +40,7 @@ extern int amiga_keyb_init(void);
 extern int amiga_kbdrate (struct kbd_repeat *);
 extern void amiga_init_INTS (void);
 extern int amiga_add_isr (unsigned long, isrfunc, int, void *, char *);
-extern int amiga_remove_isr (unsigned long, isrfunc);
+extern int amiga_remove_isr (unsigned long, isrfunc, void *);
 extern int amiga_get_irq_list (char *, int);
 extern void amiga_enable_irq(unsigned int);
 extern void amiga_disable_irq(unsigned int);
@@ -259,11 +259,9 @@ void config_amiga(void)
   mach_kbdrate         = amiga_kbdrate;
   mach_init_INTS       = amiga_init_INTS;
   mach_add_isr         = amiga_add_isr;
-#if 0 /* ++1.3++ */
   mach_remove_isr      = amiga_remove_isr;
   mach_enable_irq      = amiga_enable_irq;
   mach_disable_irq     = amiga_disable_irq;
-#endif
   mach_get_irq_list    = amiga_get_irq_list;
   mach_gettimeoffset   = amiga_gettimeoffset;
   if (AMIGAHW_PRESENT(A3000_CLK)){

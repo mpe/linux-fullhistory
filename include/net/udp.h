@@ -49,4 +49,7 @@ extern int	udp_rcv(struct sk_buff *skb, struct device *dev,
 extern int	udp_ioctl(struct sock *sk, int cmd, unsigned long arg);
 extern void	udp_cache_zap(void);	/* Remove udp last socket cache */
 
+/* CONFIG_IP_TRANSPARENT_PROXY */
+extern int	udp_chkaddr(struct sk_buff *skb);
+
 #endif	/* _UDP_H */

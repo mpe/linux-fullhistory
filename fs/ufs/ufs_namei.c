@@ -18,9 +18,9 @@ extern unsigned int ufs_bmap(struct inode * inode, int block); /* XXX */
  * NOTE! unlike strncmp, ext2_match returns 1 for success, 0 for failure.
  * stolen from ext2fs
  */
-static int ufs_match (int len, const char * const name, struct direct * d)
+static int ufs_match (int len, const char * const name, struct ufs_direct * d)
 {
-	if (!d || len > MAXNAMLEN) /* XXX - name space */
+	if (!d || len > UFS_MAXNAMLEN)
 		return 0;
 	/*
 	 * "" means "." ---> so paths like "/usr/lib//libc.a" work
@@ -39,7 +39,7 @@ int ufs_lookup (struct inode * dir, const char * name, int len,
 {
 	unsigned long int lfragno, fragno;
 	struct buffer_head * bh;
-	struct direct * d;
+	struct ufs_direct * d;
 
 	/*
 	 * Touching /xyzzy in a filesystem toggles debugging messages.
@@ -107,7 +107,7 @@ int ufs_lookup (struct inode * dir, const char * name, int len,
 	                       dir->i_ino, lfragno);
 	                return(-EIO);
 	        }
-	        d = (struct direct *)(bh->b_data);
+	        d = (struct ufs_direct *)(bh->b_data);
 	        while (((char *)d - bh->b_data + d->d_reclen) <=
 	               dir->i_sb->s_blocksize) {
 	                /* XXX - skip block if d_reclen or d_namlen is 0 */
@@ -136,7 +136,7 @@ int ufs_lookup (struct inode * dir, const char * name, int len,
 	                                       name, len, d->d_name, d->d_namlen);
 	                        }
 	                }
-	                d = (struct direct *)((char *)d + d->d_reclen);
+	                d = (struct ufs_direct *)((char *)d + d->d_reclen);
 	        }
 	        brelse(bh);
 	}

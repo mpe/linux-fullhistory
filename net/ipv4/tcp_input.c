@@ -146,14 +146,14 @@ void tcp_cache_zap(void)
  *	right...
  */
 
-static inline struct sock * get_tcp_sock(u32 saddr, u16 sport, u32 daddr, u16 dport)
+static inline struct sock * get_tcp_sock(u32 saddr, u16 sport, u32 daddr, u16 dport, u32 paddr, u16 pport)
 {
 	struct sock * sk;
 
 	sk = (struct sock *) th_cache_sk;
 	if (!sk || saddr != th_cache_saddr || daddr != th_cache_daddr ||
 	    sport != th_cache_sport || dport != th_cache_dport) {
-		sk = get_sock(&tcp_prot, dport, saddr, sport, daddr);
+		sk = get_sock(&tcp_prot, dport, saddr, sport, daddr, paddr, pport);
 		if (sk) {
 			th_cache_saddr=saddr;
 			th_cache_daddr=daddr;
@@ -461,6 +461,14 @@ static void tcp_conn_request(struct sock *sk, struct sk_buff *skb,
 	newsk->dummy_th.source = skb->h.th->dest;
 	newsk->dummy_th.dest = skb->h.th->source;
 	
+#ifdef CONFIG_IP_TRANSPARENT_PROXY
+	/* 
+	 *	Deal with possibly redirected traffic by setting num to
+	 *	the intended destination port of the received packet.
+	 */
+	newsk->num = ntohs(skb->h.th->dest);
+
+#endif
 	/*
 	 *	Swap these two, they are from our point of view. 
 	 */
@@ -1628,6 +1636,27 @@ static void prune_queue(struct sk_buff_head * list)
 	}
 }
 
+#ifdef CONFIG_IP_TRANSPARENT_PROXY
+/*
+ *	Check whether a received TCP packet might be for one of our
+ *	connections.
+ */
+
+int tcp_chkaddr(struct sk_buff *skb)
+{
+	struct iphdr *iph = skb->h.iph;
+	struct tcphdr *th = (struct tcphdr *)(skb->h.raw + iph->ihl*4);
+	struct sock *sk;
+
+	sk = get_sock(&tcp_prot, th->dest, iph->saddr, th->source, iph->daddr, 0, 0);
+
+	if (!sk) return 0;
+	/* 0 means accept all LOCAL addresses here, not all the world... */
+	if (sk->rcv_saddr == 0) return 0;
+	return 1;
+}
+#endif
+
 /*
  *	A TCP packet has arrived.
  *		skb->h.raw is the TCP header.
@@ -1640,6 +1669,9 @@ int tcp_rcv(struct sk_buff *skb, struct device *dev, struct options *opt,
 	struct tcphdr *th;
 	struct sock *sk;
 	int syn_ok=0;
+#ifdef CONFIG_IP_TRANSPARENT_PROXY
+	int r;
+#endif
 
 	/*
 	 * "redo" is 1 if we have already seen this skb but couldn't
@@ -1673,7 +1705,7 @@ int tcp_rcv(struct sk_buff *skb, struct device *dev, struct options *opt,
 			default:
 				/* CHECKSUM_UNNECESSARY */
 		}
-		sk = get_tcp_sock(saddr, th->source, daddr, th->dest);
+		sk = get_tcp_sock(saddr, th->source, daddr, th->dest, dev->pa_addr, skb->redirport);
 		if (!sk)
 			goto no_tcp_socket;
 		skb->sk = sk;
@@ -1753,7 +1785,16 @@ int tcp_rcv(struct sk_buff *skb, struct device *dev, struct options *opt,
 			 *	this problem so I'm ignoring it 
 			 */
 			   
+#ifdef CONFIG_IP_TRANSPARENT_PROXY
+			/*
+			 * We may get non-local addresses and still want to
+			 * handle them locally, due to transparent proxying.
+			 * Thus, narrow down the test to what is really meant.
+			 */
+			if(th->rst || !th->syn || th->ack || (r = ip_chk_addr(daddr) == IS_BROADCAST || r == IS_MULTICAST))
+#else
 			if(th->rst || !th->syn || th->ack || ip_chk_addr(daddr)!=IS_MYADDR)
+#endif
 			{
 				kfree_skb(skb, FREE_READ);
 				return 0;
@@ -1904,7 +1945,7 @@ int tcp_rcv(struct sk_buff *skb, struct device *dev, struct options *opt,
 			sk->err=ECONNRESET;
 			tcp_set_state(sk, TCP_CLOSE);
 			sk->shutdown = SHUTDOWN_MASK;
-			sk=get_sock(&tcp_prot, th->dest, saddr, th->source, daddr);
+			sk=get_sock(&tcp_prot, th->dest, saddr, th->source, daddr, dev->pa_addr, skb->redirport);
 			/* this is not really correct: we should check sk->users */
 			if (sk && sk->state==TCP_LISTEN)
 			{

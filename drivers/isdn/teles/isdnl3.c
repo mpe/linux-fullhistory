@@ -571,7 +571,7 @@ l3down(struct PStack *st,
 				  break;
 		  if (i == downsllen) {
 			  if (DEBUG_1TR6 > 0) {
-				  printk(KERN_INFO "isdnl3down unhandled E-DSS1 state %d primitiv %x\n", st->l3.state, pr);
+				  printk(KERN_INFO "isdnl3down unhandled E-DSS1 state %d primitive %x\n", st->l3.state, pr);
 			  }
 		  } else
 			  downstatelist[i].rout(st, pr, ibh);

@@ -4,7 +4,7 @@
  * amiga sound driver for 680x0 Linux
  *
  * This file is subject to the terms and conditions of the GNU General Public
- * License.  See the file README.legal in the main directory of this archive
+ * License.  See the file COPYING in the main directory of this archive
  * for more details.
  */
 
@@ -22,8 +22,12 @@ static const signed char sine_data[] = {
 };
 #define DATA_SIZE	(sizeof(sine_data)/sizeof(sine_data[0]))
 
-/* Imported from arch/m68k/amiga/amifb.c */
-extern volatile u_short amiga_audio_min_period;
+    /*
+     * The minimum period for audio may be modified by the frame buffer
+     * device since it depends on htotal (for OCS/ECS/AGA)
+     */
+
+volatile u_short amiga_audio_min_period = 124;	/* Default for pre-OCS */
 
 #define MAX_PERIOD	(65535)
 
@@ -78,18 +82,18 @@ void amiga_mksound( unsigned int hz, unsigned int ticks )
 			period = MAX_PERIOD;
 
 		/* setup pointer to data, period, length and volume */
-		custom.aud[0].audlc = snd_data;
-		custom.aud[0].audlen = sizeof(sine_data)/2;
-		custom.aud[0].audper = (u_short)period;
-		custom.aud[0].audvol = 64; /* maxvol */
+		custom.aud[2].audlc = snd_data;
+		custom.aud[2].audlen = sizeof(sine_data)/2;
+		custom.aud[2].audper = (u_short)period;
+		custom.aud[2].audvol = 64; /* maxvol */
 	
 		if (ticks) {
 			sound_timer.expires = jiffies + ticks;
 			add_timer( &sound_timer );
 		}
 
-		/* turn on DMA for audio channel 0 */
-		custom.dmacon = DMAF_SETCLR | DMAF_AUD0;
+		/* turn on DMA for audio channel 2 */
+		custom.dmacon = DMAF_SETCLR | DMAF_AUD2;
 
 		restore_flags(flags);
 		return;
@@ -103,8 +107,8 @@ void amiga_mksound( unsigned int hz, unsigned int ticks )
 
 static void nosound( unsigned long ignored )
 {
-	/* turn off DMA for audio channel 0 */
-	custom.dmacon = DMAF_AUD0;
+	/* turn off DMA for audio channel 2 */
+	custom.dmacon = DMAF_AUD2;
 	/* restore period to previous value after beeping */
-	custom.aud[0].audper = amiga_audio_period;
+	custom.aud[2].audper = amiga_audio_period;
 }	

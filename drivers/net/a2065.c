@@ -26,7 +26,7 @@
  * ----------------------------------------------------------------------------
  *
  * This file is subject to the terms and conditions of the GNU General Public
- * License.  See the file README.legal in the main directory of the Linux/68k
+ * License.  See the file COPYING in the main directory of the Linux
  * distribution for more details.
  *
  * ----------------------------------------------------------------------------
@@ -37,8 +37,8 @@
  *	  both 10BASE-2 (thin coax) and AUI (DB-15) connectors
  */
 
-#include <stddef.h>
-
+#include <linux/module.h>
+#include <linux/stddef.h>
 #include <linux/kernel.h>
 #include <linux/sched.h>
 #include <linux/string.h>
@@ -100,6 +100,7 @@ struct a2065_private {
 	struct enet_statistics stats;
 	char tx_full;
 	unsigned long lock;
+	int key;
 };
 
 
@@ -166,6 +167,7 @@ int a2065_probe(struct device *dev)
 			memset(priv, 0, sizeof(struct a2065_private));
 
 			priv->board = (struct A2065Board *)ZTWO_VADDR(board);
+			priv->key = key1 ? key1 : key2;
 
 			dev->open = &a2065_open;
 			dev->stop = &a2065_close;
@@ -185,7 +187,6 @@ static int a2065_open(struct device *dev)
 {
 	struct a2065_private *priv = (struct a2065_private *)dev->priv;
 	struct A2065Board *board = priv->board;
-	static int interruptinstalled = 0;
 	struct lancedata *lancedata;		/* LANCE point of view */
 	struct lancedata *alancedata;		/* Amiga point of view */
 
@@ -235,12 +236,8 @@ static int a2065_open(struct device *dev)
 
 
 	/* Install the Interrupt handler */
-	if (!interruptinstalled) {
-		if (!add_isr(IRQ_AMIGA_PORTS, a2065_interrupt, 0, dev,
-					 "a2065 Ethernet"))
-			return(-EAGAIN);
-		interruptinstalled = 1;
-	}
+	if (!add_isr(IRQ_AMIGA_PORTS, a2065_interrupt, 0, dev, "a2065 Ethernet"))
+		return(-EAGAIN);
 
 	/* Make the LANCE read the Init Block */
 	board->Lance.RAP = CSR0;		/* LANCE Controller Status */
@@ -249,6 +246,8 @@ static int a2065_open(struct device *dev)
 	dev->tbusy = 0;
 	dev->interrupt = 0;
 	dev->start = 1;
+
+	MOD_INC_USE_COUNT;
 
 	return(0);
 }
@@ -324,6 +323,10 @@ static int a2065_close(struct device *dev)
 
 	/* We stop the LANCE here - it occasionally polls memory if we don't */
 	board->Lance.RDP = STOP;
+
+	remove_isr(IRQ_AMIGA_PORTS, a2065_interrupt, dev);
+
+	MOD_DEC_USE_COUNT;
 
 	return(0);
 }
@@ -796,3 +799,38 @@ static void set_multicast_list(struct device *dev)
 	board->Lance.RAP = CSR0;	        /* LANCE Controller Status */
 	board->Lance.RDP = INEA|STRT|IDON|INIT;	/* Resume normal operation. */
 }
+
+
+#ifdef MODULE
+static char devicename[9] = { 0, };
+
+static struct device a2065_dev =
+{
+	devicename,			/* filled in by register_netdev() */
+	0, 0, 0, 0,			/* memory */
+	0, 0,				/* base, irq */
+	0, 0, 0, NULL, a2065_probe,
+};
+
+int init_module(void)
+{
+	int err;
+
+	if ((err = register_netdev(&a2065_dev))) {
+		if (err == -EIO)
+			printk("No A2065 board found. Module not loaded.\n");
+		return(err);
+	}
+	return(0);
+}
+
+void cleanup_module(void)
+{
+	struct a2065_private *priv = (struct a2065_private *)a2065_dev.priv;
+
+	unregister_netdev(&a2065_dev);
+	zorro_unconfig_board(priv->key, 0);
+	kfree(priv);
+}
+
+#endif /* MODULE */

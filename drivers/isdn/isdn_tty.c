@@ -102,7 +102,7 @@ char *isdn_tty_revision        = "$Revision: 1.11 $";
  * This routine MUST be called with interrupts off.
  * Return:
  *  1 = Success
- *  0 = Failure, data has to be bufferd and later processed by
+ *  0 = Failure, data has to be buffered and later processed by
  *      isdn_tty_readmodem().
  */
 #define DLE 0x10
@@ -237,7 +237,7 @@ static void isdn_tty_senddown(modem_info * info)
 
                         /* For now, ifmt is fixed to 1 (alaw), since this
                          * is used with ISDN everywhere in the world, except
-                         * US, Canadia and Japan.
+                         * US, Canada and Japan.
                          * Later, when US-ISDN protocols are implemented,
                          * this setting will depend on the D-channel protocol.
                          */
@@ -304,7 +304,7 @@ static void isdn_tty_senddown(modem_info * info)
  *
  ************************************************************/
 
-/* The nex routine is called once from within timer-interrupt
+/* The next routine is called once from within timer-interrupt
  * triggered within isdn_tty_modem_ncarrier(). It calls
  * isdn_tty_modem_result() to stuff a "NO CARRIER" Message
  * into the tty's flip-buffer.
@@ -332,7 +332,7 @@ static void isdn_tty_modem_ncarrier(modem_info * info)
 }
 
 /* isdn_tty_dial() performs dialing of a tty an the necessary
- * setup of the lower levels befor that.
+ * setup of the lower levels before that.
  */
 static void isdn_tty_dial(char *n, modem_info * info, atemu * m)
 {
@@ -600,7 +600,7 @@ int isdn_tty_countDLE(unsigned char *buf, int len)
         return count;
 }
 
-/* This routine is called wrom within isdn_tty_write() to perform
+/* This routine is called from within isdn_tty_write() to perform
  * DLE-decoding when sending audio-data.
  */
 static int isdn_tty_handleDLEdown(modem_info *info, atemu *m, struct sk_buff *skb)
@@ -683,7 +683,7 @@ static int isdn_tty_end_vrx(const char *buf, int c, int from_user)
  * to the lower level. Additional tasks done here:
  *  - If online, check for escape-sequence (+++)
  *  - If sending audio-data, call isdn_tty_DLEdown() to parse DLE-codes.
- *  - If receiving audio-data, call isdn_tty_end_vrx() to abor if needed.
+ *  - If receiving audio-data, call isdn_tty_end_vrx() to abort if needed.
  *  - If dialing, abort dial.
  */
 static int isdn_tty_write(struct tty_struct *tty, int from_user, const u_char * buf, int count)
@@ -1043,7 +1043,7 @@ static int isdn_tty_ioctl(struct tty_struct *tty, struct file *file,
                         return isdn_tty_set_modem_info(info, cmd, (uint *) arg);
                 case TIOCSERGETLSR:	/* Get line status register */
 #ifdef ISDN_DEBUG_MODEM_IOCTL
-                        printk(KERN_DEBUG "ttyI%d ioctl TIOSERGETLSR\n", info->line);
+                        printk(KERN_DEBUG "ttyI%d ioctl TIOCSERGETLSR\n", info->line);
 #endif
                         error = verify_area(VERIFY_WRITE, (void *) arg, sizeof(uint));
                         if (error)

@@ -38,7 +38,7 @@ static void create_strip_zones (int minor, struct md_dev *mddev)
   for (i=1; i<mddev->nb_dev; i++)
   {
     for (j=0; j<i; j++)
-      if (devices[minor][i].size==devices[minor][j].size)
+      if (mddev->devices[i].size==mddev->devices[j].size)
       {
 	c=1;
 	break;
@@ -62,12 +62,12 @@ static void create_strip_zones (int minor, struct md_dev *mddev)
     c=0;
 
     for (j=0; j<mddev->nb_dev; j++)
-      if (devices[minor][j].size>current_offset)
+      if (mddev->devices[j].size>current_offset)
       {
-	data->strip_zone[i].dev[c++]=devices[minor]+j;
+	data->strip_zone[i].dev[c++]=mddev->devices+j;
 	if (!smallest_by_zone ||
-	    smallest_by_zone->size > devices[minor][j].size)
-	  smallest_by_zone=devices[minor]+j;
+	    smallest_by_zone->size > mddev->devices[j].size)
+	  smallest_by_zone=mddev->devices+j;
       }
 
     data->strip_zone[i].nb_dev=c;
@@ -85,29 +85,10 @@ static void create_strip_zones (int minor, struct md_dev *mddev)
 
 static int raid0_run (int minor, struct md_dev *mddev)
 {
-  int cur=0, i=0, size, zone0_size, nb_zone, min;
+  int cur=0, i=0, size, zone0_size, nb_zone;
   struct raid0_data *data;
 
-  min=1 << FACTOR_SHIFT(FACTOR(mddev));
-
-  for (i=0; i<mddev->nb_dev; i++)
-    if (devices[minor][i].size<min)
-    {
-      printk ("Cannot use %dk chunks on dev %s\n", min,
-	      partition_name (devices[minor][i].dev));
-      return -EINVAL;
-    }
-  
   MOD_INC_USE_COUNT;
-  
-  /* Resize devices according to the factor */
-  md_size[minor]=0;
-  
-  for (i=0; i<mddev->nb_dev; i++)
-  {
-    devices[minor][i].size &= ~((1 << FACTOR_SHIFT(FACTOR(mddev))) - 1);
-    md_size[minor] += devices[minor][i].size;
-  }
 
   mddev->private=kmalloc (sizeof (struct raid0_data), GFP_KERNEL);
   data=(struct raid0_data *) mddev->private;

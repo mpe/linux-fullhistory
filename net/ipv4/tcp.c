@@ -201,6 +201,7 @@
  *					and seems to result in general
  *					improvement.
  *	Stefan Magdalinski	:	adjusted tcp_readable() to fix FIONREAD
+ *	Willy Konynenberg	:	Transparent proxying support.
  *					
  * To Fix:
  *		Fast path the code. Two things here - fix the window calculation
@@ -511,7 +512,7 @@ void tcp_err(int type, int code, unsigned char *header, __u32 daddr,
 	struct iphdr *iph=(struct iphdr *)(header-sizeof(struct iphdr));
 #endif
 	th =(struct tcphdr *)header;
-	sk = get_sock(&tcp_prot, th->source, daddr, th->dest, saddr);
+	sk = get_sock(&tcp_prot, th->source, daddr, th->dest, saddr, 0, 0);
 
 	if (sk == NULL)
 		return;

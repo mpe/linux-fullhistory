@@ -119,9 +119,9 @@ if [ ! "$CONFIG_PPP" = "n" ]; then
 fi
 tristate 'EQL (serial line load balancing) support' CONFIG_EQUALIZER
 if [ "$CONFIG_AMIGA" = "y" ]; then
-  bool 'Ariadne support' CONFIG_ARIADNE
-  bool 'A2065 support' CONFIG_A2065
-  bool 'Hydra support' CONFIG_HYDRA
+  tristate 'Ariadne support' CONFIG_ARIADNE
+  tristate 'A2065 support' CONFIG_A2065
+  tristate 'Hydra support' CONFIG_HYDRA
 fi
 if [ "$CONFIG_ATARI" = "y" ]; then
   bool 'Atari Lance support' CONFIG_ATARILANCE

@@ -37,4 +37,7 @@ extern int	icmp_ioctl(struct sock *sk, int cmd,
 			   unsigned long arg);
 extern void	icmp_init(struct proto_ops *ops);
 
+/* CONFIG_IP_TRANSPARENT_PROXY */
+extern int	icmp_chkaddr(struct sk_buff *skb);
+
 #endif	/* _ICMP_H */

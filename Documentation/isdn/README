@@ -192,7 +192,7 @@ README for the ISDN-subsystem
                                   Layer-2-protocol is automatically
                                   changed to 4 regardless of the setting
                                   of register 14. On outgoing calls,
-                                  the most significant 1-bit is choosen to
+                                  the most significant 1-bit is chosen to
                                   select the outgoing service octet.
              19   0         Service-Octet-2
              20   0         Bit coded register (readonly)

@@ -33,7 +33,7 @@ static int linear_run (int minor, struct md_dev *mddev)
   struct linear_data *data;
 
   MOD_INC_USE_COUNT;
-  
+
   mddev->private=kmalloc (sizeof (struct linear_data), GFP_KERNEL);
   data=(struct linear_data *) mddev->private;
 
@@ -43,10 +43,10 @@ static int linear_run (int minor, struct md_dev *mddev)
      I moved it here... Any comment ? ;-)
    */
 
-  data->smallest=devices[minor];
+  data->smallest=mddev->devices;
   for (i=1; i<mddev->nb_dev; i++)
-    if (data->smallest->size > devices[minor][i].size)
-      data->smallest=devices[minor]+i;
+    if (data->smallest->size > mddev->devices[i].size)
+      data->smallest=mddev->devices+i;
   
   nb_zone=data->nr_zones=
     md_size[minor]/data->smallest->size +
@@ -54,12 +54,12 @@ static int linear_run (int minor, struct md_dev *mddev)
   
   data->hash_table=kmalloc (sizeof (struct linear_hash)*nb_zone, GFP_KERNEL);
 
-  size=devices[minor][cur].size;
+  size=mddev->devices[cur].size;
 
   i=0;
   while (cur<mddev->nb_dev)
   {
-    data->hash_table[i].dev0=devices[minor]+cur;
+    data->hash_table[i].dev0=mddev->devices+cur;
 
     if (size>=data->smallest->size) /* If we completely fill the slot */
     {
@@ -69,7 +69,7 @@ static int linear_run (int minor, struct md_dev *mddev)
       if (!size)
       {
 	if (++cur==mddev->nb_dev) continue;
-	size=devices[minor][cur].size;
+	size=mddev->devices[cur].size;
       }
 
       continue;
@@ -82,8 +82,8 @@ static int linear_run (int minor, struct md_dev *mddev)
     }
 
     dev0_size=size;		/* Here, we use a 2nd dev to fill the slot */
-    size=devices[minor][cur].size;
-    data->hash_table[i++].dev1=devices[minor]+cur;
+    size=mddev->devices[cur].size;
+    data->hash_table[i++].dev1=mddev->devices+cur;
     size-=(data->smallest->size - dev0_size);
   }
 

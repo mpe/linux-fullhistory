@@ -428,15 +428,9 @@ struct ext2_dir_entry {
  * Ok, these declarations are also in <linux/kernel.h> but none of the
  * ext2 source programs needs to include it so they are duplicated here.
  */
-#if __GNUC__ < 2 || (__GNUC__ == 2 && __GNUC_MINOR__ < 5)
-# define NORET_TYPE    __volatile__
-# define ATTRIB_NORET  /**/
-# define NORET_AND     /**/
-#else
 # define NORET_TYPE    /**/
 # define ATTRIB_NORET  __attribute__((noreturn))
 # define NORET_AND     noreturn,
-#endif
 
 /* acl.c */
 extern int ext2_permission (struct inode *, int);

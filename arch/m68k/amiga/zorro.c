@@ -4,7 +4,7 @@
  *    Copyright (C) 1995 Geert Uytterhoeven
  *
  *    This file is subject to the terms and conditions of the GNU General Public
- *    License.  See the file README.legal in the main directory of this archive
+ *    License.  See the file COPYING in the main directory of this archive
  *    for more details.
  */
 
@@ -139,6 +139,7 @@ BEGIN_PROD(GVP)
    PROD("Series II SCSI Controller", GVPIISCSI)
    PROD("Series II SCSI Controller", GVPIISCSI_2)
    PROD("Series II RAM", GVPIIRAM)
+   PROD("A2000 68030 Turbo Board", GVP_A2000_030)
    PROD("GFORCE 040 with SCSI Controller", GFORCE_040_SCSI)
    PROD("IV-24 Graphics Board", GVPIV_24)
 /*
@@ -193,6 +194,10 @@ END
 
 BEGIN_PROD(HARDITAL_SYNTHES)
    PROD("SCSI Controller", HARDITAL_SCSI)
+END
+
+BEGIN_PROD(HARDITAL2)
+   PROD("TQM 68030+68882 Turbo Board", TQM)
 END
 
 BEGIN_PROD(BSC2)
@@ -287,6 +292,7 @@ END
 BEGIN_PROD(PHASE5)
    PROD("FastLane RAM", FASTLANE_RAM)
    PROD("FastLane/Blizzard 1230-II SCSI Controller", FASTLANE_SCSI)
+   PROD("CyberStorm Fast SCSI-II Controller", CYBERSTORM_SCSI)
    PROD("Blizzard 1230-III Turbo Board", BLIZZARD_1230_III)
    PROD("Blizzard 1230-IV Turbo Board", BLIZZARD_1230_IV)
    PROD("CyberVision64 Graphics Board", CYBERVISION)
@@ -308,6 +314,7 @@ BEGIN_PROD(MACROSYSTEMS2)
    PROD("Retina Z2 Graphics Board", RETINA_Z2)
    PROD("MultiEvolution", MULTI_EVOLUTION)
    PROD("Retina Z3 Graphics Board", RETINA_Z3)
+   PROD("Falcon '040 Turbo Board", FALCON_040)
 END
 
 BEGIN_MANUF
@@ -330,6 +337,7 @@ BEGIN_MANUF
    MANUF("Checkpoint Technologies", CHECKPOINT)
    MANUF("Golem", GOLEM)
    MANUF("Hardital Synthesis", HARDITAL_SYNTHES)
+   MANUF("Hardital Synthesis", HARDITAL2)
    MANUF("BSC", BSC2)
    MANUF("Advanced Systems & Software", ADV_SYS_SOFT)
    MANUF("IVS", IVS)

@@ -58,15 +58,13 @@
 #define FEATUREMAP2		0
 #endif
 
-
-#ifdef CONFIG_WDT500		/* Minimal board */
-#define FEATUREMAP1		(WDC_SR_TGOOD|WDC_SR_FANGOOD)
-#define FEATUREMAP2		(WDC_SR_PSUOVER|WDC_SR_PSUUNDR)
+#ifndef CONFIG_WDT_501
+#define CONFIG_WDT_500
 #endif
 
-#ifdef CONFIG_SOFT_WATCHDOG
-#define FEATUREMAP1            0
-#define FEATUREMAP2            0
+#ifdef CONFIG_WDT_500		/* Minimal board */
+#define FEATUREMAP1		(WDC_SR_TGOOD|WDC_SR_FANGOOD)
+#define FEATUREMAP2		(WDC_SR_PSUOVER|WDC_SR_PSUUNDR)
 #endif
 
 #ifndef FEATUREMAP1

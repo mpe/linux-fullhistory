@@ -88,8 +88,8 @@ int dummy_init(struct device *dev)
 	dev->get_stats		= dummy_get_stats;
 #endif
 
-	dev->open = &dummy_open;
-	dev->stop = &dummy_close;
+	dev->open = dummy_open;
+	dev->stop = dummy_close;
 
 	/* Fill in the fields of the device structure with ethernet-generic values. */
 	ether_setup(dev);

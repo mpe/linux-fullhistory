@@ -74,7 +74,7 @@
 
 #define MODULE			0
 
-/*  Macros used for debuging */
+/*  Macros used for debugging */
 
 #define DEBUG_ISP1020		0
 #define DEBUG_ISP1020_INT	0
@@ -454,7 +454,7 @@ struct host_param {
  *  7   Disconnect Privilege
  *  6   Parity Checking
  *  5   Wide Data Transfers
- *  4   Syncronous Data Transfers
+ *  4   Synchronous Data Transfers
  *  3   Tagged Queuing
  *  2   Automatic Request Sense
  *  1   Stop Queue on Check Condition
@@ -823,9 +823,9 @@ int isp1020_reset_hardware(struct isp1020_hostdata *hostdata)
             }
         }
     }
-#endif /* RELOAD_FIRMEARE */
+#endif /* RELOAD_FIRMWARE */
 
-    DEBUG(printk("qlogicisp : verifing checksum\n");)
+    DEBUG(printk("qlogicisp : verifying checksum\n");)
 
     param[0] = MBOX_VERIFY_CHECKSUM;
     param[1] = risc_code_addr01;
@@ -1473,7 +1473,7 @@ void isp1020_print_status_entry(struct Status_Entry *status)
 
     printk("qlogicisp : entry count = 0x%02x, type = 0x%02x, flags = 0x%02x\n",
         status->hdr.entry_cnt, status->hdr.entry_type, status->hdr.flags);
-    printk("qlogicisp : scsi status = 0x%04x, compeltion status = 0x%04x\n",
+    printk("qlogicisp : scsi status = 0x%04x, completion status = 0x%04x\n",
         status->scsi_status, status->completion_status);
     printk("qlogicisp : state flags = 0x%04x, status flags = 0x%04x\n",
         status->state_flags, status->status_flags);

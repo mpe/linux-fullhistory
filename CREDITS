@@ -683,6 +683,15 @@ N: Rudolf Koenig
 E: rfkoenig@immd4.informatik.uni-erlangen.de
 D: The Linux Support Team Erlangen
 
+N: Willy Konynenberg
+E: willy@xos.nl
+W: http://www.xos.nl/
+D: IP transparent proxy support
+S: X/OS Experts in Open Systems BV
+S: Kruislaan 419
+S: 1098 VA Amsterdam 
+S: The Netherlands
+
 N: Gero Kuhlmann
 E: gero@gkminix.han.de
 D: mounting root via NFS
@@ -1188,11 +1197,13 @@ S: DK-1860 Frederiksberg C
 S: Denmark
 
 N: Drew Sullivan
-E: drew@lethe.north.net
+W: http://www.ss.org/
+E: drew@ss.org
 D: iBCS2 developer
 S: 22 Irvington Cres.
 S: Willowdale, Ontario
 S: Canada M2N 2Z1
+P: 1024/ACFFA969 5A 9C 42 AB E4 24 82 31  99 56 00 BF D3 2B 25 46
 
 N: Tommy Thorn
 E: Tommy.Thorn@irisa.fr
@@ -1330,6 +1341,15 @@ D: patches for ghostscript, worked on color 'ls', etc.
 S: 301 15th Street S.
 S: Moorhead, Minnesota 56560
 S: USA 
+
+N: Jos Vos
+E: jos@xos.nl
+W: http://www.xos.nl/
+D: Various IP firewall updates, ipfwadm
+S: X/OS Experts in Open Systems BV
+S: Kruislaan 419
+S: 1098 VA Amsterdam 
+S: The Netherlands
 
 N: Juergen Weigert
 E: jnweiger@immd4.informatik.uni-erlangen.de

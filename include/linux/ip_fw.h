@@ -21,6 +21,8 @@
  *					commands to replace "add" commands,
  *					add ICMP header to struct ip_fwpkt.
  *	Jos Vos			:	Add support for matching device names.
+ *	Willy Konynenberg	:	Add transparent proxying support.
+ *	Jos Vos			:	Add options for input/output accounting.
  *
  *	All the real work was done by .....
  */
@@ -79,31 +81,34 @@ struct ip_fw
  *	Values for "flags" field .
  */
 
-#define IP_FW_F_ALL	0x000	/* This is a universal packet firewall*/
-#define IP_FW_F_TCP	0x001	/* This is a TCP packet firewall      */
-#define IP_FW_F_UDP	0x002	/* This is a UDP packet firewall      */
-#define IP_FW_F_ICMP	0x003	/* This is a ICMP packet firewall     */
-#define IP_FW_F_KIND	0x003	/* Mask to isolate firewall kind      */
-#define IP_FW_F_ACCEPT	0x004	/* This is an accept firewall (as     *
+#define IP_FW_F_ALL	0x0000	/* This is a universal packet firewall*/
+#define IP_FW_F_TCP	0x0001	/* This is a TCP packet firewall      */
+#define IP_FW_F_UDP	0x0002	/* This is a UDP packet firewall      */
+#define IP_FW_F_ICMP	0x0003	/* This is a ICMP packet firewall     */
+#define IP_FW_F_KIND	0x0003	/* Mask to isolate firewall kind      */
+#define IP_FW_F_ACCEPT	0x0004	/* This is an accept firewall (as     *
 				 *         opposed to a deny firewall)*
 				 *                                    */
-#define IP_FW_F_SRNG	0x008	/* The first two src ports are a min  *
+#define IP_FW_F_SRNG	0x0008	/* The first two src ports are a min  *
 				 * and max range (stored in host byte *
 				 * order).                            *
 				 *                                    */
-#define IP_FW_F_DRNG	0x010	/* The first two dst ports are a min  *
+#define IP_FW_F_DRNG	0x0010	/* The first two dst ports are a min  *
 				 * and max range (stored in host byte *
 				 * order).                            *
 				 * (ports[0] <= port <= ports[1])     *
 				 *                                    */
-#define IP_FW_F_PRN	0x020	/* In verbose mode print this firewall*/
-#define IP_FW_F_BIDIR	0x040	/* For bidirectional firewalls        */
-#define IP_FW_F_TCPSYN	0x080	/* For tcp packets-check SYN only     */
-#define IP_FW_F_ICMPRPL 0x100	/* Send back icmp unreachable packet  */
-#define IP_FW_F_MASQ	0x200	/* Masquerading			      */
-#define IP_FW_F_TCPACK	0x400	/* For tcp-packets match if ACK is set*/
+#define IP_FW_F_PRN	0x0020	/* In verbose mode print this firewall*/
+#define IP_FW_F_BIDIR	0x0040	/* For bidirectional firewalls        */
+#define IP_FW_F_TCPSYN	0x0080	/* For tcp packets-check SYN only     */
+#define IP_FW_F_ICMPRPL 0x0100	/* Send back icmp unreachable packet  */
+#define IP_FW_F_MASQ	0x0200	/* Masquerading			      */
+#define IP_FW_F_TCPACK	0x0400	/* For tcp-packets match if ACK is set*/
+#define IP_FW_F_REDIR	0x0800	/* Redirect to local port fw_pts[n]   */
+#define IP_FW_F_ACCTIN  0x1000	/* Account incoming packets only.     */
+#define IP_FW_F_ACCTOUT 0x2000	/* Account outgoing packets only.     */
 
-#define IP_FW_F_MASK	0x7FF	/* All possible flag bits mask        */
+#define IP_FW_F_MASK	0x3FFF	/* All possible flag bits mask        */
 
 /*    
  *	New IP firewall options for [gs]etsockopt at the RAW IP level.
@@ -186,6 +191,12 @@ struct ip_fw_masq;
 
 #ifdef __KERNEL__
 
+/* Modes used in the ip_fw_chk() routine. */
+#define IP_FW_MODE_FW		0x00	/* kernel firewall check */
+#define IP_FW_MODE_ACCT_IN	0x01	/* accounting (incoming) */
+#define IP_FW_MODE_ACCT_OUT	0x02	/* accounting (outgoing) */
+#define IP_FW_MODE_CHK		0x04	/* check requested by user */
+
 #include <linux/config.h>
 #ifdef CONFIG_IP_FIREWALL
 extern struct ip_fw *ip_fw_in_chain;
@@ -198,14 +209,11 @@ extern int ip_fw_ctl(int, void *, int);
 #endif
 #ifdef CONFIG_IP_ACCT
 extern struct ip_fw *ip_acct_chain;
-extern void ip_acct_cnt(struct iphdr *, struct device *, struct ip_fw *);
 extern int ip_acct_ctl(int, void *, int);
 #endif
 
-
-extern int ip_fw_chk(struct iphdr *, struct device *rif,struct ip_fw *, int, int);
+extern int ip_fw_chk(struct iphdr *, struct device *, __u16 *, struct ip_fw *, int, int);
 extern void ip_fw_init(void);
 #endif /* KERNEL */
-
 
 #endif /* _IP_FW_H */

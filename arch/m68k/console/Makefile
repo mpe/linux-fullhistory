@@ -9,7 +9,7 @@
 EXTRA_CFLAGS := -Wa,-m68030
 
 L_TARGET = console.a
-L_OBJS = fbcon.o fonts.o font_8x16.o font_8x8.o
+L_OBJS = fbcon.o fonts.o font_8x16.o font_8x8.o pearl_8x8.o
 M_OBJS =
 
 include $(TOPDIR)/Rules.make

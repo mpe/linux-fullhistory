@@ -334,7 +334,7 @@ int init_module(void)
 
 void cleanup_module(void)
 {
-  remove_isr(IRQ_AMIGA_VERTB, mouse_interrupt);
+  remove_isr(IRQ_AMIGA_VERTB, mouse_interrupt, NULL);
   misc_deregister(&amiga_mouse);
 }
 #endif

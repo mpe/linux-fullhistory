@@ -94,12 +94,12 @@ BEGIN{
 		LASTFILE=FILENAME
 		depname=FILENAME
 		relpath=FILENAME
-		sub("\\.c",".o: ",depname)
-		sub("\\.S",".o: ",depname)
+		sub("\\.c$",".o: ",depname)
+		sub("\\.S$",".o: ",depname)
 		if (depname==FILENAME) {
 			cmd="\n\t@touch "depname
 		}
-		sub("\\.h",".h: ",depname)
+		sub("\\.h$",".h: ",depname)
 		if(relpath ~ "^\\." ) {
 			sub("[^/]*$","",  relpath)
 			relpath=relpath"/"
@@ -114,21 +114,28 @@ BEGIN{
 	if (fname=="linux/config.h") {
 		hasconfig=1
 	}
-	if(fileExists(relpath""fname)) {
+	rfname=relpath""fname
+	if(fileExists(rfname)) {
 		found=1
 		if (!hasdep) {
 			printf "%s", depname
 		}
 		hasdep=1
-		printf " \\\n   %s", relpath""fname
+		printf " \\\n   %s", rfname
 		if(fname ~ "^\\." ) {
-			if(!relpath in ARGV) {
-				ARGV[ARGC]=relpath""fname
+			fnd=0;
+			for(i in ARGV) {
+				if(ARGV[i]==rfname) {
+					fnd=1
+				}
+			}
+			if(fnd==0) {
+				ARGV[ARGC]=rfname
 				++ARGC
 			}
 		}
 	} else {
-		for(path in  parray) {
+		for(path in parray) {
 			if(fileExists(parray[path]"/"fname)) {
 				shortp=parray[path]
 				found=1

@@ -34,12 +34,8 @@ void amiga_chip_init (void)
 
   /* initialize start boundary */
 
-  custom.color[0] = 0xfff;
-
   dp = DP(chipaddr);
   dp->first = 1;
-
-  custom.color[0] = 0x0f00;
 
   dp->alloced = 0;
   dp->length = chipsize - 2*sizeof(*dp);
@@ -48,12 +44,8 @@ void amiga_chip_init (void)
   dp = DP(chipaddr + chipsize) - 1;
   dp->last = 1;
   
-  custom.color[0] = 0x00f0;
-
   dp->alloced = 0;
   dp->length = chipsize - 2*sizeof(*dp);
-
-  custom.color[0] = 0x000f;
 
 #ifdef DEBUG
   printk ("chipram end boundary is %p, length is %d\n", dp,

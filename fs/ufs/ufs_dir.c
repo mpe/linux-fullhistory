@@ -28,7 +28,7 @@ ufs_readdir (struct inode * inode, struct file * filp, void * dirent,
 	unsigned long offset, lblk, blk;
 	int i, stored;
 	struct buffer_head * bh;
-	struct direct * de;
+	struct ufs_direct * de;
 	struct super_block * sb;
 
 	if (!inode || !S_ISDIR(inode->i_mode))
@@ -66,7 +66,7 @@ revalidate:
 		 * to make sure. */
 		if (filp->f_version != inode->i_version) {
 			for (i = 0; i < sb->s_blocksize && i < offset; ) {
-				de = (struct direct *) 
+				de = (struct ufs_direct *) 
 					(bh->b_data + i);
 				/* It's too expensive to do a full
 				 * dirent test each time round this
@@ -86,7 +86,7 @@ revalidate:
 		
 		while (!error && filp->f_pos < inode->i_size 
 		       && offset < sb->s_blocksize) {
-			de = (struct direct *) (bh->b_data + offset);
+			de = (struct ufs_direct *) (bh->b_data + offset);
 	                /* XXX - put in a real ufs_check_dir_entry() */
 	                if ((de->d_reclen == 0) || (de->d_namlen == 0)) {
 	                        filp->f_pos = (filp->f_pos & (sb->s_blocksize - 1)) + sb->s_blocksize;

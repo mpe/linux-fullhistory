@@ -49,10 +49,10 @@ struct affs_sb_info {
 	int s_bm_count;			/* Number of bitmap blocks. */
 	int s_nextzone;			/* Next zone to look for free blocks. */
 	int s_num_az;			/* Total number of alloc zones. */
-	struct affs_zone *s_zones;	/* The zones themselfes. */
+	struct affs_zone *s_zones;	/* The zones themselves. */
 	struct affs_alloc_zone *s_alloc;/* The allocation zones. */
 	char *s_zonemap;		/* Bitmap for allocation zones. */
-	char *s_prefix;			/* Prefix for volumes and assignes. */
+	char *s_prefix;			/* Prefix for volumes and assigns. */
 	int s_prefix_len;		/* Length of prefix. */
 	char s_volume[32];		/* Volume prefix for absolute symlinks. */
 };

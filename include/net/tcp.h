@@ -165,6 +165,9 @@ extern struct sk_buff * tcp_dequeue_partial(struct sock *);
 /* tcp_input.c */
 extern void tcp_cache_zap(void);
 
+/* CONFIG_IP_TRANSPARENT_PROXY */
+extern int tcp_chkaddr(struct sk_buff *);
+
 /* tcp_timer.c */
 #define     tcp_reset_msl_timer(x,y,z)	reset_timer(x,y,z)
 extern void tcp_reset_xmit_timer(struct sock *, int, unsigned long);

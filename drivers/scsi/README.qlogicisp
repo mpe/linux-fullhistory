@@ -11,7 +11,7 @@ The QLogic Corporation produces several PCI SCSI adapters:
 	IQ-PCI-10
 	IQ-PCI-D
 
-This driver should work for all these adpaters, except for the PCI-basic which
+This driver should work for all these adapters, except for the PCI-basic which
 does not use the ISP1020 chip.  If you have the QLogic PCI-basic there is a
 an am53c974 driver that supports your adapter.
 

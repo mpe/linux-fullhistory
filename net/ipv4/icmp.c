@@ -26,6 +26,7 @@
  *		Martin Mares	:	TOS and Precedence set correctly (RFC 1812).
  *		Martin Mares	:	Now copying as much data from the original packet
  *					as we can without exceeding 576 bytes (RFC 1812).
+ *	Willy Konynenberg	:	Transparent proxying support.
  *
  *
  *
@@ -232,6 +233,7 @@
 #include <net/protocol.h>
 #include <net/icmp.h>
 #include <net/tcp.h>
+#include <net/udp.h>
 #include <net/snmp.h>
 #include <linux/skbuff.h>
 #include <net/sock.h>
@@ -768,9 +770,9 @@ static void icmp_redirect(struct icmphdr *icmph, struct sk_buff *skb, struct dev
 	 */
 
 #if defined(CONFIG_IP_FORWARD) && !defined(CONFIG_IP_DUMB_ROUTER)
-	printk(KERN_INFO "icmp: ICMP redirect ignored. dest = %s, "
-	       "orig gw = %s, \"new\" gw = %s, device = %s.\n", in_ntoa(ip),
-		in_ntoa(source), in_ntoa(icmph->un.gateway), dev->name);
+	NETDEBUG(printk(KERN_INFO "icmp: ICMP redirect ignored. dest = %lX, "
+	       "orig gw = %lX, \"new\" gw = %lX, device = %s.\n", ntohl(ip),
+		ntohl(source), ntohl(icmph->un.gateway), dev->name));
 #else	
 	switch(icmph->code & 7) 
 	{
@@ -919,6 +921,63 @@ static void icmp_discard(struct icmphdr *icmph, struct sk_buff *skb, struct devi
 	kfree_skb(skb, FREE_READ);
 }
 
+#ifdef CONFIG_IP_TRANSPARENT_PROXY
+/*
+ *	Check incoming icmp packets not addressed locally, to check whether
+ *	they relate to a (proxying) socket on our system.
+ *	Needed for transparent proxying.
+ *
+ *	This code is presently ugly and needs cleanup.
+ *	Probably should add a chkaddr entry to ipprot to call a chk routine
+ *	in udp.c or tcp.c...
+ */
+
+int icmp_chkaddr(struct sk_buff *skb)
+{
+	struct icmphdr *icmph=(struct icmphdr *)(skb->h.raw + skb->h.iph->ihl*4);
+	struct iphdr *iph = (struct iphdr *) (icmph + 1);
+	void (*handler)(struct icmphdr *icmph, struct sk_buff *skb, struct device *dev, __u32 saddr, __u32 daddr, int len) = icmp_pointers[icmph->type].handler;
+
+	if (handler == icmp_unreach || handler == icmp_redirect) {
+		struct sock *sk;
+
+		switch (iph->protocol) {
+		case IPPROTO_TCP:
+			{
+			struct tcphdr *th = (struct tcphdr *)(((unsigned char *)iph)+(iph->ihl<<2));
+
+			sk = get_sock(&tcp_prot, th->source, iph->daddr,
+						th->dest, iph->saddr, 0, 0);
+			if (!sk) return 0;
+			if (sk->saddr != iph->saddr) return 0;
+			if (sk->daddr != iph->daddr) return 0;
+			if (sk->dummy_th.dest != th->dest) return 0;
+			/*
+			 * This packet came from us.
+			 */
+			return 1;
+			}
+		case IPPROTO_UDP:
+			{
+			struct udphdr *uh = (struct udphdr *)(((unsigned char *)iph)+(iph->ihl<<2));
+
+			sk = get_sock(&udp_prot, uh->source, iph->daddr,
+						uh->dest, iph->saddr, 0, 0);
+			if (!sk) return 0;
+			if (sk->saddr != iph->saddr && ip_chk_addr(iph->saddr) != IS_MYADDR)
+				return 0;
+			/*
+			 * This packet may have come from us.
+			 * Assume it did.
+			 */
+			return 1;
+			}
+		}
+	}
+	return 0;
+}
+
+#endif
 /* 
  *	Deal with incoming ICMP packets. 
  */
@@ -928,6 +987,9 @@ int icmp_rcv(struct sk_buff *skb, struct device *dev, struct options *opt,
 	 __u32 saddr, int redo, struct inet_protocol *protocol)
 {
 	struct icmphdr *icmph=(void *)skb->h.raw;
+#ifdef CONFIG_IP_TRANSPARENT_PROXY
+	int r;
+#endif
 	icmp_statistics.IcmpInMsgs++;
 	
   	/*
@@ -960,7 +1022,16 @@ int icmp_rcv(struct sk_buff *skb, struct device *dev, struct options *opt,
 	 *	Parse the ICMP message 
 	 */
 
+#ifdef CONFIG_IP_TRANSPARENT_PROXY
+	/*
+	 *	We may get non-local addresses and still want to handle them
+	 *	locally, due to transparent proxying.
+	 *	Thus, narrow down the test to what is really meant.
+	 */
+	if (daddr!=dev->pa_addr && ((r = ip_chk_addr(daddr)) == IS_BROADCAST || r == IS_MULTICAST))
+#else
 	if (daddr!=dev->pa_addr && ip_chk_addr(daddr) != IS_MYADDR)
+#endif
 	{
 		/*
 		 *	RFC 1122: 3.2.2.6 An ICMP_ECHO to broadcast MAY be silently ignored (we don't as it is used

@@ -25,7 +25,7 @@
  *  below.
  *
  * This file is subject to the terms and conditions of the GNU General Public
- * License.  See the file README.legal in the main directory of this archive
+ * License.  See the file COPYING in the main directory of this archive
  * for more details.
  *
  */
@@ -511,7 +511,7 @@ int atari_add_isr(unsigned long source, isrfunc isr, int type, void
 }
 
 
-int atari_remove_isr(unsigned long source, isrfunc isr)
+int atari_remove_isr(unsigned long source, isrfunc isr, void *data)
 {
 	unsigned long flags;
 	int vector;
@@ -533,7 +533,8 @@ int atari_remove_isr(unsigned long source, isrfunc isr)
 
 	if (irq_handler[source].isr != atari_call_isr_list) {
 		/* It's the only handler for the interrupt */
-		if (irq_handler[source].isr != isr) {
+		if (irq_handler[source].isr != isr &&
+		    irq_handler[source].data != data) {
 			restore_flags(flags);
 			goto not_found;
 		}

@@ -745,7 +745,7 @@ static inline unsigned long fill_page(struct inode * inode, unsigned long offset
 	if (page)
 		goto found_page;
 	if (!new_page)
-		return 0;
+		goto failure;
 	page = mem_map + MAP_NR(new_page);
 	new_page = 0;
 	add_to_page_cache(page, inode, offset);
@@ -757,7 +757,20 @@ found_page:
 		free_page(new_page);
 found_page_dont_free:
 	wait_on_page(page);
-	return page_address(page);
+	if (PageUptodate(page)) {
+success:	
+		return page_address(page);
+	}
+	/* If not marked as error, try _once_ to read it again */
+	if (!PageError(page)) {
+		inode->i_op->readpage(inode, page);
+		wait_on_page(page);
+		if (PageUptodate(page))
+			goto success;
+	}
+	page->count--;
+failure:
+	return 0;
 }
 
 /*

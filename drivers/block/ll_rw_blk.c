@@ -489,8 +489,11 @@ void ll_rw_block(int rw, int nr, struct buffer_head * bh[])
 #ifdef CONFIG_BLK_DEV_MD
 		if (major==MD_MAJOR &&
 		    md_map (MINOR(bh[i]->b_dev), &bh[i]->b_rdev,
-			    &bh[i]->b_rsector, bh[i]->b_size >> 9))
+			    &bh[i]->b_rsector, bh[i]->b_size >> 9)) {
+		        printk (KERN_ERR
+				"Bad md_map in ll_rw_block\n");
 		        goto sorry;
+		}
 #endif
 	}
 
@@ -561,7 +564,7 @@ void ll_rw_swap_file(int rw, kdev_t dev, unsigned int *b, int nb, char *buf)
 			    md_map (MINOR(dev), &rdev,
 				    &rsector, buffersize >> 9)) {
 			        printk (KERN_ERR
-                                        "Bad md_map in ll_rw_page_size\n");
+                                        "Bad md_map in ll_rw_swap_file\n");
 				return;
 			}
 #endif

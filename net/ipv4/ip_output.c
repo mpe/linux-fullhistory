@@ -379,7 +379,7 @@ void ip_queue_xmit(struct sock *sk, struct device *dev,
 	skb->free = free;
 
 #ifdef CONFIG_FIREWALL
-	if(call_out_firewall(PF_INET, skb->dev, iph) < FW_ACCEPT) {
+	if(call_out_firewall(PF_INET, skb->dev, iph, NULL) < FW_ACCEPT) {
 		/* just don't send this packet */
 		/* and free socket buffers ;) <aldem@barnet.kharkov.ua> */
 		if (free)
@@ -471,7 +471,7 @@ void ip_queue_xmit(struct sock *sk, struct device *dev,
 	 
 	ip_statistics.IpOutRequests++;
 #ifdef CONFIG_IP_ACCT
-	ip_fw_chk(iph,dev,ip_acct_chain,IP_FW_F_ACCEPT,1);
+	ip_fw_chk(iph,dev,NULL,ip_acct_chain,IP_FW_F_ACCEPT,IP_FW_MODE_ACCT_OUT);
 #endif	
 	
 #ifdef CONFIG_IP_MULTICAST	
@@ -712,14 +712,14 @@ int ip_build_xmit(struct sock *sk,
 			getfrag(frag,saddr,(void *)iph,0,length);
 		dev_unlock_list();
 #ifdef CONFIG_FIREWALL
-		if(call_out_firewall(PF_INET, skb->dev, iph)< FW_ACCEPT)
+		if(call_out_firewall(PF_INET, skb->dev, iph, NULL)< FW_ACCEPT)
 		{
 			kfree_skb(skb, FREE_WRITE);
 			return -EPERM;
 		}
 #endif
 #ifdef CONFIG_IP_ACCT
-		ip_fw_chk(iph,dev,ip_acct_chain, IP_FW_F_ACCEPT,1);
+		ip_fw_chk(iph,dev,NULL,ip_acct_chain, IP_FW_F_ACCEPT,IP_FW_MODE_ACCT_OUT);
 #endif		
 		if(dev->flags&IFF_UP)
 			dev_queue_xmit(skb,dev,sk->priority);
@@ -916,7 +916,7 @@ int ip_build_xmit(struct sock *sk,
 		 */
 		 
 #ifdef CONFIG_FIREWALL
-		if(!offset && call_out_firewall(PF_INET, skb->dev, iph) < FW_ACCEPT)
+		if(!offset && call_out_firewall(PF_INET, skb->dev, iph, NULL) < FW_ACCEPT)
 		{
 			kfree_skb(skb, FREE_WRITE);
 			dev_unlock_list();
@@ -925,7 +925,7 @@ int ip_build_xmit(struct sock *sk,
 #endif		
 #ifdef CONFIG_IP_ACCT
 		if(!offset)
-			ip_fw_chk(iph, dev, ip_acct_chain, IP_FW_F_ACCEPT, 1);
+			ip_fw_chk(iph, dev, NULL, ip_acct_chain, IP_FW_F_ACCEPT, IP_FW_MODE_ACCT_OUT);
 #endif	
 		offset -= (maxfraglen-fragheaderlen);
 		fraglen = maxfraglen;
