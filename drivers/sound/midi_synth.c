@@ -4,7 +4,7 @@
  * High level midi sequencer manager for dumb MIDI interfaces.
  */
 /*
- * Copyright (C) by Hannu Savolainen 1993-1996
+ * Copyright (C) by Hannu Savolainen 1993-1997
  *
  * OSS/Free for Linux is distributed under the GNU GENERAL PUBLIC LICENSE (GPL)
  * Version 2 (June 1991). See the "COPYING" file distributed with this software
@@ -275,10 +275,7 @@ midi_synth_ioctl (int dev,
     {
 
     case SNDCTL_SYNTH_INFO:
-      {
-	char           *fixit = (char *) synth_devs[dev]->info;
-	copy_to_user (&((char *) arg)[0], fixit, sizeof (struct synth_info));
-      };
+      memcpy ((&((char *) arg)[0]), (char *) synth_devs[dev]->info, sizeof (struct synth_info));
 
       return 0;
       break;

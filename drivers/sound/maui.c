@@ -4,7 +4,7 @@
  * The low level driver for Turtle Beach Maui and Tropez.
  */
 /*
- * Copyright (C) by Hannu Savolainen 1993-1996
+ * Copyright (C) by Hannu Savolainen 1993-1997
  *
  * OSS/Free for Linux is distributed under the GNU GENERAL PUBLIC LICENSE (GPL)
  * Version 2 (June 1991). See the "COPYING" file distributed with this software
@@ -127,7 +127,7 @@ maui_write (unsigned char data)
   return 0;
 }
 
-void
+static void
 mauiintr (int irq, void *dev_id, struct pt_regs *dummy)
 {
   irq_ok = 1;
@@ -286,7 +286,7 @@ maui_short_wait (int mask)
   return 0;
 }
 
-int
+static int
 maui_load_patch (int dev, int format, const char *addr,
 		 int offs, int count, int pmgr_flag)
 {
@@ -459,6 +459,7 @@ attach_maui (struct address_info *hw_config)
        */
 
       synth = midi_devs[this_dev]->converter;
+      synth->id = "MAUI";
 
       if (synth != NULL)
 	{

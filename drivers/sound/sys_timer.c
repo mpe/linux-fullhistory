@@ -5,7 +5,7 @@
  * Uses the (1/HZ sec) timer of kernel.
  */
 /*
- * Copyright (C) by Hannu Savolainen 1993-1996
+ * Copyright (C) by Hannu Savolainen 1993-1997
  *
  * OSS/Free for Linux is distributed under the GNU GENERAL PUBLIC LICENSE (GPL)
  * Version 2 (June 1991). See the "COPYING" file distributed with this software
@@ -14,7 +14,6 @@
 #include <linux/config.h>
 
 
-#define SEQUENCER_C
 #include "sound_config.h"
 
 #ifdef CONFIG_SEQUENCER
@@ -192,7 +191,7 @@ def_tmr_ioctl (int dev,
   switch (cmd)
     {
     case SNDCTL_TMR_SOURCE:
-      return ioctl_out (arg, TMR_INTERNAL);
+      return (*(int *) arg = TMR_INTERNAL);
       break;
 
     case SNDCTL_TMR_START:
@@ -215,7 +214,7 @@ def_tmr_ioctl (int dev,
       {
 	int             val;
 
-	get_user (val, (int *) arg);
+	val = *(int *) arg;
 
 	if (val)
 	  {
@@ -226,7 +225,7 @@ def_tmr_ioctl (int dev,
 	    curr_timebase = val;
 	  }
 
-	return ioctl_out (arg, curr_timebase);
+	return (*(int *) arg = curr_timebase);
       }
       break;
 
@@ -234,7 +233,7 @@ def_tmr_ioctl (int dev,
       {
 	int             val;
 
-	get_user (val, (int *) arg);
+	val = *(int *) arg;
 
 	if (val)
 	  {
@@ -248,7 +247,7 @@ def_tmr_ioctl (int dev,
 	    curr_tempo = val;
 	  }
 
-	return ioctl_out (arg, curr_tempo);
+	return (*(int *) arg = curr_tempo);
       }
       break;
 
@@ -256,16 +255,16 @@ def_tmr_ioctl (int dev,
       {
 	int             val;
 
-	get_user (val, (int *) arg);
+	val = *(int *) arg;
 	if (val != 0)		/* Can't change */
 	  return -EINVAL;
 
-	return ioctl_out (arg, ((curr_tempo * curr_timebase) + 30) / 60);
+	return (*(int *) arg = ((curr_tempo * curr_timebase) + 30) / 60);
       }
       break;
 
     case SNDCTL_SEQ_GETTIME:
-      return ioctl_out (arg, curr_ticks);
+      return (*(int *) arg = curr_ticks);
       break;
 
     case SNDCTL_TMR_METRONOME:

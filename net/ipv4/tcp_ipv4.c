@@ -22,6 +22,12 @@
  *      2 of the License, or (at your option) any later version.
  */
 
+/*
+ * Changes:
+ *		David S. Miller	:	New socket lookup architecture.
+ *					This code is dedicated to John Dyson.
+ */
+
 #include <linux/config.h>
 #include <linux/types.h>
 #include <linux/fcntl.h>
@@ -38,43 +44,359 @@ static void tcp_v4_send_reset(struct sk_buff *skb);
 void tcp_v4_send_check(struct sock *sk, struct tcphdr *th, int len, 
 		       struct sk_buff *skb);
 
-/*
- *	Cached last hit socket
+/* This is for sockets with full identity only.  Sockets here will always
+ * be without wildcards and will have the following invariant:
+ *          TCP_ESTABLISHED <= sk->state < TCP_CLOSE
  */
- 
-static volatile unsigned long 	th_cache_saddr, th_cache_daddr;
-static volatile unsigned short  th_cache_dport, th_cache_sport;
-static volatile struct sock	*th_cache_sk;
+struct sock *tcp_established_hash[TCP_HTABLE_SIZE];
 
-void tcp_cache_zap(void)
+/* All sockets in TCP_LISTEN state will be in here.  This is the only table
+ * where wildcard'd TCP sockets can exist.  Hash function here is just local
+ * port number.  XXX Fix or we'll lose with thousands of IP aliases...
+ */
+struct sock *tcp_listening_hash[TCP_LHTABLE_SIZE];
+
+/* Ok, let's try this, I give up, we do need a local binding
+ * TCP hash as well as the others for fast bind/connect.
+ */
+struct sock *tcp_bound_hash[TCP_BHTABLE_SIZE];
+
+static __inline__ int tcp_hashfn(__u32 laddr, __u16 lport,
+				 __u32 faddr, __u16 fport)
 {
-	th_cache_sk=NULL;
+	return ((laddr ^ lport) ^ (faddr ^ fport)) & (TCP_HTABLE_SIZE - 1);
 }
 
-/*
- *	Find the socket, using the last hit cache if applicable.
- *	The cache is not quite right...
- */
-
-static inline struct sock * get_tcp_sock(u32 saddr, u16 sport,
-					 u32 daddr, u16 dport)
+static __inline__ int tcp_sk_hashfn(struct sock *sk)
 {
-	struct sock * sk;
+	__u32 laddr = sk->rcv_saddr;
+	__u16 lport = sk->num;
+	__u32 faddr = sk->daddr;
+	__u16 fport = sk->dummy_th.dest;
 
-	sk = (struct sock *) th_cache_sk;
-	if (!sk || saddr != th_cache_saddr || daddr != th_cache_daddr ||
-	    sport != th_cache_sport || dport != th_cache_dport) {
-		sk = get_sock(&tcp_prot, dport, saddr, sport, daddr);
-		if (sk) {
-			th_cache_saddr=saddr;
-			th_cache_daddr=daddr;
-  			th_cache_dport=dport;
-			th_cache_sport=sport;
-			th_cache_sk=sk;
+	return tcp_hashfn(laddr, lport, faddr, fport);
+}
+
+static int tcp_v4_verify_bind(struct sock *sk, unsigned short snum)
+{
+	struct sock *sk2;
+	int retval = 0, sk_reuse = sk->reuse;
+
+	SOCKHASH_LOCK();
+	sk2 = tcp_bound_hash[tcp_bhashfn(snum)];
+	for(; sk2 != NULL; sk2 = sk2->prev) {
+		if((sk2->num == snum) && (sk2 != sk)) {
+			unsigned char state = sk2->state;
+			int sk2_reuse = sk2->reuse;
+
+			if(!sk2->rcv_saddr || !sk->rcv_saddr) {
+				if((!sk2_reuse)			||
+				   (!sk_reuse)			||
+				   (state != TCP_LISTEN)) {
+					retval = 1;
+					break;
+				}
+			} else if(sk2->rcv_saddr == sk->rcv_saddr) {
+				if((!sk_reuse)			||
+				   (!sk2_reuse)			||
+				   (state == TCP_LISTEN)) {
+					retval = 1;
+					break;
+				}
+			}
 		}
 	}
+	SOCKHASH_UNLOCK();
+
+	return retval;
+}
+
+static __inline__ int tcp_lport_inuse(int num)
+{
+	struct sock *sk = tcp_bound_hash[tcp_bhashfn(num)];
+
+	for(; sk != NULL; sk = sk->prev) {
+		if(sk->num == num)
+			return 1;
+	}
+	return 0;
+}
+
+/* Find a "good" local port, this is family independant.
+ * There are several strategies working in unison here to
+ * get the best possible performance.  The current socket
+ * load is kept track of, if it is zero there is a strong
+ * likely hood that there is a zero length chain we will
+ * find with a small amount of searching, else the load is
+ * what we shoot for for when the chains all have at least
+ * one entry.  The base helps us walk the chains in an
+ * order such that a good chain is found as quickly as possible.  -DaveM
+ */
+unsigned short tcp_good_socknum(void)
+{
+	static int start = PROT_SOCK;
+	static int binding_contour = 0;
+	int best = 0;
+	int size = 32767; /* a big num. */
+	int retval = 0, i, end, bc;
+
+	SOCKHASH_LOCK();
+	i = tcp_bhashfn(start);
+	end = i + TCP_BHTABLE_SIZE;
+	bc = binding_contour;
+	do {
+		struct sock *sk = tcp_bound_hash[tcp_bhashfn(i)];
+		if(!sk) {
+			retval = (start + i);
+			start  = (retval + 1);
+
+			/* Check for decreasing load. */
+			if(bc != 0)
+				binding_contour = 0;
+			goto done;
+		} else {
+			int j = 0;
+			do { sk = sk->prev; } while(++j < size && sk);
+			if(j < size) {
+				best = (start + i);
+				size = j;
+				if(bc && size <= bc) {
+					start = best + 1;
+					goto verify;
+				}
+			}
+		}
+	} while(++i != end);
+
+	/* Socket load is increasing, adjust our load average. */
+	binding_contour = size;
+verify:
+	if(size < binding_contour)
+		binding_contour = size;
+
+	if(best > 32767)
+		best -= (32768 - PROT_SOCK);
+
+	while(tcp_lport_inuse(best))
+		best += TCP_BHTABLE_SIZE;
+	retval = best;
+done:
+	if(start > 32767)
+		start -= (32768 - PROT_SOCK);
+
+	SOCKHASH_UNLOCK();
+
+	return retval;
+}
+
+static void tcp_v4_hash(struct sock *sk)
+{
+	unsigned char state;
+
+	SOCKHASH_LOCK();
+	state = sk->state;
+	if(state != TCP_CLOSE || !sk->dead) {
+		struct sock **htable;
+
+		if(state == TCP_LISTEN) {
+			sk->hashent = tcp_sk_listen_hashfn(sk);
+			htable = &tcp_listening_hash[0];
+		} else {
+			sk->hashent = tcp_sk_hashfn(sk);
+			htable = &tcp_established_hash[0];
+		}
+		sk->next = htable[sk->hashent];
+		htable[sk->hashent] = sk;
+		sk->hashtable = htable;
+		tcp_sk_bindify(sk);
+	}
+	SOCKHASH_UNLOCK();
+}
+
+static void tcp_v4_unhash(struct sock *sk)
+{
+	struct sock **htable;
+
+	SOCKHASH_LOCK();
+	htable = sk->hashtable;
+	if(htable) {
+		struct sock **skp = &(htable[sk->hashent]);
+		while(*skp != NULL) {
+			if(*skp == sk) {
+				*skp = sk->next;
+				break;
+			}
+			skp = &((*skp)->next);
+		}
+		sk->hashtable = NULL;
+	}
+	if(sk->state == TCP_CLOSE && sk->dead)
+		tcp_sk_unbindify(sk);
+	SOCKHASH_UNLOCK();
+}
+
+static void tcp_v4_rehash(struct sock *sk)
+{
+	struct sock **htable;
+	unsigned char state;
+
+	SOCKHASH_LOCK();
+	htable = &(sk->hashtable[sk->hashent]);
+	state = sk->state;
+	if(htable) {
+		while(*htable != NULL) {
+			if(*htable == sk) {
+				*htable = sk->next;
+				break;
+			}
+			htable = &((*htable)->next);
+		}
+	}
+	tcp_sk_unbindify(sk);
+	htable = NULL;
+	if(state != TCP_CLOSE || !sk->dead) {
+		if(state == TCP_LISTEN) {
+			sk->hashent = tcp_sk_listen_hashfn(sk);
+			htable = &tcp_listening_hash[0];
+		} else {
+			sk->hashent = tcp_sk_hashfn(sk);
+			htable = &tcp_established_hash[0];
+		}
+		sk->next = htable[sk->hashent];
+		htable[sk->hashent] = sk;
+		tcp_sk_bindify(sk);
+	}
+	sk->hashtable = htable;
+	SOCKHASH_UNLOCK();
+}
+
+/* Don't inline this cruft.  Here are some nice properties to
+ * exploit here.  The BSD API does not allow a listening TCP
+ * to specify the remote port nor the remote address for the
+ * connection.  So always assume those are both wildcarded
+ * during the search since they can never be otherwise.
+ *
+ * XXX Later on, hash on both local port _and_ local address,
+ * XXX to handle a huge IP alias'd box.  Keep in mind that
+ * XXX such a scheme will require us to run through the listener
+ * XXX hash twice, once for local addresses bound, and once for
+ * XXX the local address wildcarded (because the hash is different).
+ */
+static struct sock *tcp_v4_lookup_longway(u32 daddr, unsigned short hnum)
+{
+	struct sock *sk = tcp_listening_hash[tcp_lhashfn(hnum)];
+	struct sock *result = NULL;
+
+	for(; sk; sk = sk->next) {
+		if(sk->num == hnum) {
+			__u32 rcv_saddr = sk->rcv_saddr;
+
+			if(rcv_saddr) {
+				if(rcv_saddr == daddr)
+					return sk; /* Best possible match. */
+			} else if(!result)
+				result = sk;
+		}
+	}
+	return result;
+}
+
+/* Sockets in TCP_CLOSE state are _always_ taken out of the hash, so
+ * we need not check it for TCP lookups anymore, thanks Alexey. -DaveM
+ */
+static inline struct sock *__tcp_v4_lookup(struct tcphdr *th,
+					   u32 saddr, u16 sport, u32 daddr, u16 dport)
+{
+	unsigned short hnum = ntohs(dport);
+	struct sock *sk;
+
+	/* Optimize here for direct hit, only listening connections can
+	 * have wildcards anyways.  It is assumed that this code only
+	 * gets called from within NET_BH.
+	 */
+	sk = tcp_established_hash[tcp_hashfn(daddr, hnum, saddr, sport)];
+	for(; sk; sk = sk->next)
+		if(sk->daddr		== saddr		&& /* remote address */
+		   sk->dummy_th.dest	== sport		&& /* remote port    */
+		   sk->num		== hnum			&& /* local port     */
+		   sk->rcv_saddr	== daddr)		   /* local address  */
+			goto hit; /* You sunk my battleship! */
+	sk = tcp_v4_lookup_longway(daddr, hnum);
+hit:
 	return sk;
 }
+
+__inline__ struct sock *tcp_v4_lookup(u32 saddr, u16 sport, u32 daddr, u16 dport)
+{
+	return __tcp_v4_lookup(0, saddr, sport, daddr, dport);
+}
+
+#ifdef CONFIG_IP_TRANSPARENT_PROXY
+#define secondlist(hpnum, sk, fpass) \
+({ struct sock *s1; if(!(sk) && (fpass)--) \
+	s1 = tcp_bound_hash[tcp_bhashfn(hpnum)]; \
+   else \
+	s1 = (sk); \
+   s1; \
+})
+
+#define tcp_v4_proxy_loop_init(hnum, hpnum, sk, fpass) \
+	secondlist((hpnum), tcp_bound_hash[tcp_bhashfn(hnum)],(fpass))
+
+#define tcp_v4_proxy_loop_next(hnum, hpnum, sk, fpass) \
+	secondlist((hpnum),(sk)->next,(fpass))
+
+struct sock *tcp_v4_proxy_lookup(unsigned short num, unsigned long raddr,
+				 unsigned short rnum, unsigned long laddr,
+				 unsigned long paddr, unsigned short pnum)
+{
+	struct sock *s, *result = NULL;
+	int badness = -1;
+	unsigned short hnum = ntohs(num);
+	unsigned short hpnum = ntohs(pnum);
+	int firstpass = 1;
+
+	/* This code must run only from NET_BH. */
+	for(s = tcp_v4_proxy_loop_init(hnum, hpnum, s, firstpass);
+	    s != NULL;
+	    s = tcp_v4_proxy_loop_next(hnum, hpnum, s, firstpass)) {
+		if(s->num == hnum || s->num == hpnum) {
+			int score = 0;
+			if(s->dead && (s->state == TCP_CLOSE))
+				continue;
+			if(s->rcv_saddr) {
+				if((s->num != hpnum || s->rcv_saddr != paddr) &&
+				   (s->num != hnum || s->rcv_saddr != laddr))
+					continue;
+				score++;
+			}
+			if(s->daddr) {
+				if(s->daddr != raddr)
+					continue;
+				score++;
+			}
+			if(s->dummy_th.dest) {
+				if(s->dummy_th.dest != rnum)
+					continue;
+				score++;
+			}
+			if(score == 3 && s->num == hnum) {
+				result = s;
+				break;
+			} else if(score > badness && (s->num == hpnum || s->rcv_saddr)) {
+					result = s;
+					badness = score;
+			}
+		}
+	}
+	return result;
+}
+
+#undef secondlist
+#undef tcp_v4_proxy_loop_init
+#undef tcp_v4_proxy_loop_next
+
+#endif
 
 static __u32 tcp_v4_init_sequence(struct sock *sk, struct sk_buff *skb)
 {
@@ -94,27 +416,24 @@ static __u32 tcp_v4_init_sequence(struct sock *sk, struct sk_buff *skb)
 
 static int tcp_unique_address(u32 saddr, u16 snum, u32 daddr, u16 dnum)
 {
-	int retval = 1;
+	int retval = 1, hashent = tcp_hashfn(saddr, snum, daddr, dnum);
 	struct sock * sk;
 
-	/* Make sure we are allowed to connect here. */
-	cli();
-	for (sk = tcp_prot.sock_array[snum & (SOCK_ARRAY_SIZE -1)];
-			sk != NULL; sk = sk->next)
-	{
-		/* hash collision? */
-		if (sk->num != snum)
-			continue;
-		if (sk->saddr != saddr)
-			continue;
-		if (sk->daddr != daddr)
-			continue;
-		if (sk->dummy_th.dest != dnum)
-			continue;
-		retval = 0;
-		break;
+	/* Make sure we are allowed to connect here.
+	 * But freeze the hash while we snoop around.
+	 */
+	SOCKHASH_LOCK();
+	sk = tcp_established_hash[hashent];
+	for (; sk != NULL; sk = sk->next) {
+		if(sk->daddr		== daddr		&& /* remote address */
+		   sk->dummy_th.dest	== dnum			&& /* remote port */
+		   sk->num		== snum			&& /* local port */
+		   sk->saddr		== saddr) {		   /* local address */
+			retval = 0;
+			break;
+		}
 	}
-	sti();
+	SOCKHASH_UNLOCK();
 	return retval;
 }
 
@@ -184,6 +503,7 @@ int tcp_v4_connect(struct sock *sk, struct sockaddr *uaddr, int addr_len)
 		sk->priority = rt->u.dst.priority;
 
 	sk->dummy_th.dest = usin->sin_port;
+
 	sk->write_seq = secure_tcp_sequence_number(sk->saddr, sk->daddr,
 						   sk->dummy_th.source,
 						   usin->sin_port);
@@ -262,13 +582,12 @@ int tcp_v4_connect(struct sock *sk, struct sockaddr *uaddr, int addr_len)
 	buff->csum = csum_partial(ptr, 4, 0);
 	tcp_v4_send_check(sk, t1, sizeof(struct tcphdr) + 4, buff);
 
-	/*
-	 *	This must go first otherwise a really quick response 
-	 *	will get reset.
-	 */
-
-	tcp_cache_zap();
 	tcp_set_state(sk,TCP_SYN_SENT);
+
+	/* Socket identity change complete, no longer
+	 * in TCP_CLOSE, so rehash.
+	 */
+	tcp_v4_rehash(sk);
 
 	tp->rto = rt->u.dst.rtt;
 
@@ -348,7 +667,7 @@ void tcp_v4_err(struct sk_buff *skb, unsigned char *dp)
 	int code = skb->h.icmph->code;
 	struct sock *sk;
 
-	sk = get_sock(&tcp_prot, th->source, iph->daddr, th->dest, iph->saddr);
+	sk = tcp_v4_lookup(iph->saddr, th->source, iph->daddr, th->dest);
 
 	if (sk == NULL)
 		return;
@@ -402,39 +721,13 @@ void tcp_v4_err(struct sk_buff *skb, unsigned char *dp)
 	}
 }
 
-/*
- *	This routine computes a TCP checksum.
- *
- *	Modified January 1995 from a go-faster DOS routine by
- *	Jorge Cwik <jorge@laser.satlink.net>
- */
+/* This routine computes an IPv4 TCP checksum. */
 void tcp_v4_send_check(struct sock *sk, struct tcphdr *th, int len, 
 		       struct sk_buff *skb)
 {
-	__u32 saddr = sk->saddr;
-	__u32 daddr = sk->daddr;
-#ifdef DEBUG_TCP_CHECK
-	u16 check;
-#endif
 	th->check = 0;
-	th->check = tcp_v4_check(th, len, saddr, daddr,
-				 csum_partial((char *)th, sizeof(*th), 
-					      skb->csum));
-
-#ifdef DEBUG_TCP_CHECK
-	check = th->check;
-	th->check = 0;
-	th->check = tcp_v4_check(th, len, saddr, daddr,
-		csum_partial((char *)th,len,0));
-	if (check != th->check) {
-		static int count = 0;
-		if (++count < 10) {
-			printk("Checksum %x (%x) from %p\n", th->check, check,
-			       __builtin_return_address(0));
-			printk("TCP=<off:%d a:%d s:%d f:%d> len=%d\n", th->doff*4, th->ack, th->syn, th->fin, len);
-		}
-	}
-#endif
+	th->check = tcp_v4_check(th, len, sk->saddr, sk->daddr,
+				 csum_partial((char *)th, sizeof(*th), skb->csum));
 }
 
 /*
@@ -504,7 +797,7 @@ int tcp_chkaddr(struct sk_buff *skb)
 	struct tcphdr *th = (struct tcphdr *)(skb->nh.raw + iph->ihl*4);
 	struct sock *sk;
 
-	sk = get_sock(&tcp_prot, th->dest, iph->saddr, th->source, iph->daddr);
+	sk = tcp_v4_lookup(iph->saddr, th->source, iph->daddr, th->dest);
 
 	if (!sk)
 		return 0;
@@ -717,6 +1010,10 @@ struct sock * tcp_v4_syn_recv_sock(struct sock *sk, struct sk_buff *skb,
 	}
 
 	memcpy(newsk, sk, sizeof(*newsk));
+
+	/* Or else we die! -DaveM */
+	newsk->sklist_next = NULL;
+
 	newsk->opt = NULL;
 	newsk->dst_cache  = NULL;
 	skb_queue_head_init(&newsk->write_queue);
@@ -833,10 +1130,8 @@ struct sock * tcp_v4_syn_recv_sock(struct sock *sk, struct sk_buff *skb,
 	
 	newsk->mss = min(req->mss, snd_mss);
 	
-	inet_put_sock(newsk->num, newsk);
-
-	tcp_cache_zap();
-
+	tcp_v4_hash(newsk);
+	add_to_prot_sklist(newsk);
 	return newsk;
 }
 
@@ -1009,11 +1304,11 @@ int tcp_v4_rcv(struct sk_buff *skb, unsigned short len)
 
 #ifdef CONFIG_IP_TRANSPARENT_PROXY
 	if (IPCB(skb)->redirport)
-		sk = get_sock_proxy(&tcp_prot, th->dest, saddr, th->source, daddr, skb->dev->pa_addr, IPCB(skb)->redirport);
+		sk = tcp_v4_proxy_lookup(th->dest, saddr, th->source, daddr,
+					 skb->dev->pa_addr, IPCB(skb)->redirport);
 	else
 #endif
-	sk = get_tcp_sock(saddr, th->source, daddr, th->dest);
-
+	sk = __tcp_v4_lookup(th, saddr, th->source, daddr, th->dest);
 	if (!sk)
 		goto no_tcp_socket;
 
@@ -1084,9 +1379,8 @@ int tcp_v4_rebuild_header(struct sock *sk, struct sk_buff *skb)
 
 static struct sock * tcp_v4_get_sock(struct sk_buff *skb, struct tcphdr *th)
 {
-	struct sock *sk;
-	sk = get_tcp_sock(skb->nh.iph->saddr, th->source, skb->nh.iph->daddr, th->dest);
-	return sk;
+	return tcp_v4_lookup(skb->nh.iph->saddr, th->source,
+			     skb->nh.iph->daddr, th->dest);
 }
 
 static void v4_addr2sockaddr(struct sock *sk, struct sockaddr * uaddr)
@@ -1197,26 +1491,33 @@ static int tcp_v4_destroy_sock(struct sock *sk)
 }
 
 struct proto tcp_prot = {
-	tcp_close,
-	tcp_v4_connect,
-	tcp_accept,
-	NULL,
-	tcp_write_wakeup,
-	tcp_read_wakeup,
-	tcp_poll,
-	tcp_ioctl,
-	tcp_v4_init_sock,
-	tcp_v4_destroy_sock,
-	tcp_shutdown,
-	tcp_setsockopt,
-	tcp_getsockopt,
-	tcp_v4_sendmsg,
-	tcp_recvmsg,
-	NULL,		/* No special bind()	*/
-	tcp_v4_backlog_rcv,
-	128,
-	0,
-	"TCP",
-	0, 0,
-	NULL
+	(struct sock *)&tcp_prot,	/* sklist_next */
+	(struct sock *)&tcp_prot,	/* sklist_prev */
+	tcp_close,			/* close */
+	tcp_v4_connect,			/* connect */
+	tcp_accept,			/* accept */
+	NULL,				/* retransmit */
+	tcp_write_wakeup,		/* write_wakeup */
+	tcp_read_wakeup,		/* read_wakeup */
+	tcp_poll,			/* poll */
+	tcp_ioctl,			/* ioctl */
+	tcp_v4_init_sock,		/* init */
+	tcp_v4_destroy_sock,		/* destroy */
+	tcp_shutdown,			/* shutdown */
+	tcp_setsockopt,			/* setsockopt */
+	tcp_getsockopt,			/* getsockopt */
+	tcp_v4_sendmsg,			/* sendmsg */
+	tcp_recvmsg,			/* recvmsg */
+	NULL,				/* bind */
+	tcp_v4_backlog_rcv,		/* backlog_rcv */
+	tcp_v4_hash,			/* hash */
+	tcp_v4_unhash,			/* unhash */
+	tcp_v4_rehash,			/* rehash */
+	tcp_good_socknum,		/* good_socknum */
+	tcp_v4_verify_bind,		/* verify_bind */
+	128,				/* max_header */
+	0,				/* retransmits */
+	"TCP",				/* name */
+	0,				/* inuse */
+	0				/* highestinuse */
 };

@@ -16,6 +16,8 @@ extern int attach_aci(void);
 extern void unload_aci(void);
 extern int attach_awe(void);
 extern void unload_awe(void);
+extern int init_aedsp16(void);
+extern void uninit_aedsp16(void);
 
 /*
  * There are two places where you can insert initialization calls of
@@ -26,6 +28,9 @@ extern void unload_awe(void);
 void
 sound_preinit_lowlevel_drivers(void)
 {
+#ifdef CONFIG_AEDSP16
+   init_aedsp16();
+#endif
 }
 
 void
@@ -50,5 +55,10 @@ sound_unload_lowlevel_drivers(void)
 #ifdef CONFIG_AWE32_SYNTH
    unload_awe();
 #endif
+
+#ifdef CONFIG_AEDSP16
+   uninit_aedsp16();
+#endif
+
 }
 #endif

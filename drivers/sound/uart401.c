@@ -4,7 +4,7 @@
  * MPU-401 UART driver (formerly uart401_midi.c)
  */
 /*
- * Copyright (C) by Hannu Savolainen 1993-1996
+ * Copyright (C) by Hannu Savolainen 1993-1997
  *
  * OSS/Free for Linux is distributed under the GNU GENERAL PUBLIC LICENSE (GPL)
  * Version 2 (June 1991). See the "COPYING" file distributed with this software
@@ -263,6 +263,7 @@ attach_uart401 (struct address_info *hw_config)
 
 
   devc = (uart401_devc *) (sound_mem_blocks[sound_nblocks] = vmalloc (sizeof (uart401_devc)));
+  sound_mem_sizes[sound_nblocks] = sizeof (uart401_devc);
   if (sound_nblocks < 1024)
     sound_nblocks++;;
   if (devc == NULL)
@@ -290,7 +291,7 @@ attach_uart401 (struct address_info *hw_config)
     if (snd_set_irq_handler (devc->irq, uart401intr, "uart401", devc->osp) < 0)
       {
 	printk ("uart401: Failed to allocate IRQ%d\n", devc->irq);
-	return;
+	devc->share_irq = 1;
       }
 
   irq2devc[devc->irq] = devc;
@@ -311,6 +312,7 @@ attach_uart401 (struct address_info *hw_config)
 
 
   midi_devs[num_midis] = (struct midi_operations *) (sound_mem_blocks[sound_nblocks] = vmalloc (sizeof (struct midi_operations)));
+  sound_mem_sizes[sound_nblocks] = sizeof (struct midi_operations);
 
   if (sound_nblocks < 1024)
     sound_nblocks++;;
@@ -327,6 +329,7 @@ attach_uart401 (struct address_info *hw_config)
 
 
   midi_devs[num_midis]->converter = (struct synth_operations *) (sound_mem_blocks[sound_nblocks] = vmalloc (sizeof (struct synth_operations)));
+  sound_mem_sizes[sound_nblocks] = sizeof (struct synth_operations);
 
   if (sound_nblocks < 1024)
     sound_nblocks++;;
@@ -341,6 +344,7 @@ attach_uart401 (struct address_info *hw_config)
 	  sizeof (struct synth_operations));
 
   strcpy (midi_devs[num_midis]->info.name, name);
+  midi_devs[num_midis]->converter->id = "UART401";
   num_midis++;
   devc->opened = 0;
 }
@@ -397,6 +401,7 @@ int
 probe_uart401 (struct address_info *hw_config)
 {
   int             ok = 0;
+  unsigned long   flags;
 
   static uart401_devc hw_info;
   uart401_devc   *devc = &hw_info;
@@ -417,7 +422,10 @@ probe_uart401 (struct address_info *hw_config)
   devc->my_dev = 0;
   devc->share_irq = 0;
 
+  save_flags (flags);
+  cli ();
   ok = reset_uart401 (devc);
+  restore_flags (flags);
 
   if (ok)
     detected_devc = devc;

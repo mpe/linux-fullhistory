@@ -4,7 +4,7 @@
  * Common routines for Sound Blaster compatible cards.
  */
 /*
- * Copyright (C) by Hannu Savolainen 1993-1996
+ * Copyright (C) by Hannu Savolainen 1993-1997
  *
  * OSS/Free for Linux is distributed under the GNU GENERAL PUBLIC LICENSE (GPL)
  * Version 2 (June 1991). See the "COPYING" file distributed with this software
@@ -47,8 +47,8 @@ static unsigned char jazz16_bits = 0;	/* I/O relocation bits */
 #ifdef SMW_MIDI0001_INCLUDED
 #include "smw-midi0001.h"
 #else
-unsigned char  *smw_ucode = NULL;
-int             smw_ucodeLen = 0;
+static unsigned char *smw_ucode = NULL;
+static int      smw_ucodeLen = 0;
 
 #endif
 
@@ -83,7 +83,7 @@ sb_dsp_command (sb_devc * devc, unsigned char val)
   return 0;
 }
 
-int
+static int
 sb_dsp_get_byte (sb_devc * devc)
 {
   int             i;
@@ -122,7 +122,7 @@ ess_read (sb_devc * devc, unsigned char reg)
   return sb_dsp_get_byte (devc);
 }
 
-void
+static void
 sbintr (int irq, void *dev_id, struct pt_regs *dummy)
 {
   int             status;
@@ -315,8 +315,6 @@ sb16_set_irq_hw (sb_devc * devc, int level)
       ival = 8;
       break;
     default:
-      if (devc->type == MDL_SBPNP)
-	return 1;
       printk ("SB16 IRQ%d is not possible\n", level);
       return 0;
     }
@@ -430,6 +428,7 @@ init_Jazz16 (sb_devc * devc, struct address_info *hw_config)
 
 
   hw_config->name = (char *) (sound_mem_blocks[sound_nblocks] = vmalloc (strlen (name + 1)));
+  sound_mem_sizes[sound_nblocks] = strlen (name + 1);
   if (sound_nblocks < 1024)
     sound_nblocks++;;
   if (hw_config->name != NULL)
@@ -496,6 +495,7 @@ ess_init (sb_devc * devc, struct address_info *hw_config)
   devc->submodel = ess_minor & 0x0f;
 
   hw_config->name = (char *) (sound_mem_blocks[sound_nblocks] = vmalloc (strlen (name + 1)));
+  sound_mem_sizes[sound_nblocks] = strlen (name + 1);
   if (sound_nblocks < 1024)
     sound_nblocks++;;
   if (hw_config->name != NULL)
@@ -621,19 +621,21 @@ sb_dsp_detect (struct address_info *hw_config)
     dsp_get_vers (devc);
 
   if (devc->major == 3 && devc->minor == 1)
-    if (devc->type == MDL_AZTECH)	/* SG Washington? */
-      {
-	if (sb_dsp_command (devc, 0x09))
-	  if (sb_dsp_command (devc, 0x00))	/* Enter WSS mode */
-	    {
-	      int             i;
+    {
+      if (devc->type == MDL_AZTECH)	/* SG Washington? */
+	{
+	  if (sb_dsp_command (devc, 0x09))
+	    if (sb_dsp_command (devc, 0x00))	/* Enter WSS mode */
+	      {
+		int             i;
 
-	      /* Have some delay */
-	      for (i = 0; i < 10000; i++)
-		inb (DSP_DATA_AVAIL);
-	      devc->caps = SB_NO_AUDIO | SB_NO_MIDI;	/* Mixer only */
-	    }
-      }
+		/* Have some delay */
+		for (i = 0; i < 10000; i++)
+		  inb (DSP_DATA_AVAIL);
+		devc->caps = SB_NO_AUDIO | SB_NO_MIDI;	/* Mixer only */
+	      }
+	}
+    }
 
 /*
  * Save device information for sb_dsp_init()
@@ -641,6 +643,7 @@ sb_dsp_detect (struct address_info *hw_config)
 
 
   detected_devc = (sb_devc *) (sound_mem_blocks[sound_nblocks] = vmalloc (sizeof (sb_devc)));
+  sound_mem_sizes[sound_nblocks] = sizeof (sb_devc);
   if (sound_nblocks < 1024)
     sound_nblocks++;;
 
@@ -724,6 +727,10 @@ sb_dsp_init (struct address_info *hw_config)
 	      }
 	}
 
+#ifdef __SMP__
+      /* Skip IRQ detection if SMP (doesn't work) */
+      devc->irq_ok = 1;
+#else
       if (devc->major == 4 && devc->minor <= 11)	/* Won't work */
 	devc->irq_ok = 1;
       else
@@ -738,15 +745,16 @@ sb_dsp_init (struct address_info *hw_config)
 
 	  if (!devc->irq_ok)
 	    {
-	      printk ("sb: Interrupt test on IRQ%d failed - Propable IRQ conflict\n", devc->irq);
+	      printk ("sb: Interrupt test on IRQ%d failed - Probable IRQ conflict\n", devc->irq);
 	    }
 	  else
 	    {
 	      DDB (printk ("IRQ test OK (IRQ%d)\n", devc->irq));
 	    }
 
-	}			/* IRQ setup */
-    }
+	}
+#endif /* __SMP__ */
+    }				/* IRQ setup */
 
   request_region (hw_config->io_base, 16, "soundblaster");
 

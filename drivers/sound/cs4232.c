@@ -7,9 +7,14 @@
  * interfaces. This is just a temporary driver until full PnP support
  * gets implemented. Just the WSS codec, FM synth and the MIDI ports are
  * supported. Other interfaces are left uninitialized.
+ *
+ * Supported chips are:
+ *      CS4232
+ *      CS4236
+ *      CS4236B
  */
 /*
- * Copyright (C) by Hannu Savolainen 1993-1996
+ * Copyright (C) by Hannu Savolainen 1993-1997
  *
  * OSS/Free for Linux is distributed under the GNU GENERAL PUBLIC LICENSE (GPL)
  * Version 2 (June 1991). See the "COPYING" file distributed with this software
@@ -24,8 +29,6 @@
 
 #define KEY_PORT	0x279	/* Same as LPT1 status port */
 #define CSN_NUM		0x99	/* Just a random number */
-
-static int     *osp;
 
 static void 
 CS_OUT (unsigned char a)
@@ -48,7 +51,7 @@ probe_cs4232_mpu (struct address_info *hw_config)
   mpu_base = hw_config->io_base;
   mpu_irq = hw_config->irq;
 
-  return 0;
+  return 1;
 }
 
 void
@@ -181,7 +184,7 @@ probe_cs4232 (struct address_info *hw_config)
  * Initialize logical device 3 (MPU)
  */
 
-#if (defined(CONFIG_MPU401) || defined(CONFIG_MPU_EMU)) && defined(CONFIG_MIDI)
+#if defined(CONFIG_UART401) && defined(CONFIG_MIDI)
       if (mpu_base != 0 && mpu_irq != 0)
 	{
 	  CS_OUT2 (0x15, 0x03);	/* Select logical device 3 (MPU) */
@@ -253,7 +256,7 @@ attach_cs4232 (struct address_info *hw_config)
   if (dma2 == -1)
     dma2 = dma1;
 
-  ad1848_init ("CS4232", base,
+  ad1848_init ("Crystal audio controller", base,
 	       irq,
 	       dma1,		/* Playback DMA */
 	       dma2,		/* Capture DMA */
@@ -267,7 +270,7 @@ attach_cs4232 (struct address_info *hw_config)
       AD1848_REROUTE (SOUND_MIXER_LINE3, SOUND_MIXER_SYNTH);	/* FM synth */
     }
 
-#if (defined(CONFIG_MPU401) || defined(CONFIG_MPU_EMU)) && defined(CONFIG_MIDI)
+#if defined(CONFIG_UART401) && defined(CONFIG_MIDI)
   if (mpu_base != 0 && mpu_irq != 0)
     {
       static struct address_info hw_config2 =
@@ -283,10 +286,10 @@ attach_cs4232 (struct address_info *hw_config)
       hw_config2.driver_use_2 = 0;
       hw_config2.card_subtype = 0;
 
-      if (probe_mpu401 (&hw_config2))
+      if (probe_uart401 (&hw_config2))
 	{
 	  mpu_detected = 1;
-	  attach_mpu401 (&hw_config2);
+	  attach_uart401 (&hw_config2);
 	}
       else
 	{
@@ -311,7 +314,7 @@ unload_cs4232 (struct address_info *hw_config)
 		 dma2,		/* Capture DMA */
 		 0);
 
-#if (defined(CONFIG_MPU401) || defined(CONFIG_MPU_EMU)) && defined(CONFIG_MIDI)
+#if defined(CONFIG_UART401) && defined(CONFIG_MIDI)
   if (mpu_base != 0 && mpu_irq != 0 && mpu_detected)
     {
       static struct address_info hw_config2 =
@@ -327,7 +330,7 @@ unload_cs4232 (struct address_info *hw_config)
       hw_config2.driver_use_2 = 0;
       hw_config2.card_subtype = 0;
 
-      unload_mpu401 (&hw_config2);
+      unload_uart401 (&hw_config2);
     }
 #endif
 }

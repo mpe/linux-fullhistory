@@ -4,7 +4,7 @@
  * Audio routines for Sound Blaster compatible cards.
  */
 /*
- * Copyright (C) by Hannu Savolainen 1993-1996
+ * Copyright (C) by Hannu Savolainen 1993-1997
  *
  * OSS/Free for Linux is distributed under the GNU GENERAL PUBLIC LICENSE (GPL)
  * Version 2 (June 1991). See the "COPYING" file distributed with this software
@@ -67,8 +67,8 @@ sb_audio_close (int dev)
 {
   sb_devc        *devc = audio_devs[dev]->devc;
 
-  audio_devs[dev]->dmachan1 =
-    audio_devs[dev]->dmachan2 =
+  audio_devs[dev]->dmap_in->dma =
+    audio_devs[dev]->dmap_out->dma =
     devc->dma8;
 
   if (devc->dma16 != -1 && devc->dma16 != devc->dma8)
@@ -79,27 +79,24 @@ sb_audio_close (int dev)
 
 static void
 sb_set_output_parms (int dev, unsigned long buf, int nr_bytes,
-		     int intrflag, int restart_dma)
+		     int intrflag)
 {
   sb_devc        *devc = audio_devs[dev]->devc;
 
   devc->trg_buf = buf;
   devc->trg_bytes = nr_bytes;
   devc->trg_intrflag = intrflag;
-  devc->trg_restart = restart_dma;
   devc->irq_mode = IMODE_OUTPUT;
 }
 
 static void
-sb_set_input_parms (int dev, unsigned long buf, int count, int intrflag,
-		    int restart_dma)
+sb_set_input_parms (int dev, unsigned long buf, int count, int intrflag)
 {
   sb_devc        *devc = audio_devs[dev]->devc;
 
   devc->trg_buf = buf;
   devc->trg_bytes = count;
   devc->trg_intrflag = intrflag;
-  devc->trg_restart = restart_dma;
   devc->irq_mode = IMODE_INPUT;
 }
 
@@ -109,15 +106,15 @@ sb_set_input_parms (int dev, unsigned long buf, int count, int intrflag,
 
 static void
 sb1_audio_output_block (int dev, unsigned long buf, int nr_bytes,
-			int intrflag, int restart_dma)
+			int intrflag)
 {
   unsigned long   flags;
   int             count = nr_bytes;
   sb_devc        *devc = audio_devs[dev]->devc;
 
-  DMAbuf_start_dma (dev, buf, count, DMA_MODE_WRITE);
+  /* DMAbuf_start_dma (dev, buf, count, DMA_MODE_WRITE); */
 
-  if (audio_devs[dev]->dmachan1 > 3)
+  if (audio_devs[dev]->dmap_out->dma > 3)
     count >>= 1;
   count--;
 
@@ -137,8 +134,7 @@ sb1_audio_output_block (int dev, unsigned long buf, int nr_bytes,
 }
 
 static void
-sb1_audio_start_input (int dev, unsigned long buf, int nr_bytes, int intrflag,
-		       int restart_dma)
+sb1_audio_start_input (int dev, unsigned long buf, int nr_bytes, int intrflag)
 {
   unsigned long   flags;
   int             count = nr_bytes;
@@ -148,9 +144,9 @@ sb1_audio_start_input (int dev, unsigned long buf, int nr_bytes, int intrflag,
    * Start a DMA input to the buffer pointed by dmaqtail
    */
 
-  DMAbuf_start_dma (dev, buf, count, DMA_MODE_READ);
+  /* DMAbuf_start_dma (dev, buf, count, DMA_MODE_READ); */
 
-  if (audio_devs[dev]->dmachan1 > 3)
+  if (audio_devs[dev]->dmap_out->dma > 3)
     count >>= 1;
   count--;
 
@@ -185,12 +181,12 @@ sb1_audio_trigger (int dev, int bits)
 	{
 	case IMODE_INPUT:
 	  sb1_audio_start_input (dev, devc->trg_buf, devc->trg_bytes,
-				 devc->trg_intrflag, devc->trg_restart);
+				 devc->trg_intrflag);
 	  break;
 
 	case IMODE_OUTPUT:
 	  sb1_audio_output_block (dev, devc->trg_buf, devc->trg_bytes,
-				  devc->trg_intrflag, devc->trg_restart);
+				  devc->trg_intrflag);
 	  break;
 	}
     }
@@ -279,9 +275,13 @@ sb1_audio_set_bits (int dev, unsigned int bits)
 static void
 sb1_audio_halt_xfer (int dev)
 {
+  unsigned long   flags;
   sb_devc        *devc = audio_devs[dev]->devc;
 
+  save_flags (flags);
+  cli ();
   sb_dsp_reset (devc);
+  restore_flags (flags);
 }
 
 /*
@@ -290,16 +290,16 @@ sb1_audio_halt_xfer (int dev)
 
 static void
 sb20_audio_output_block (int dev, unsigned long buf, int nr_bytes,
-			 int intrflag, int restart_dma)
+			 int intrflag)
 {
   unsigned long   flags;
   int             count = nr_bytes;
   sb_devc        *devc = audio_devs[dev]->devc;
   unsigned char   cmd;
 
-  DMAbuf_start_dma (dev, buf, count, DMA_MODE_WRITE);
+  /* DMAbuf_start_dma (dev, buf, count, DMA_MODE_WRITE); */
 
-  if (audio_devs[dev]->dmachan1 > 3)
+  if (audio_devs[dev]->dmap_out->dma > 3)
     count >>= 1;
   count--;
 
@@ -328,8 +328,7 @@ sb20_audio_output_block (int dev, unsigned long buf, int nr_bytes,
 }
 
 static void
-sb20_audio_start_input (int dev, unsigned long buf, int nr_bytes, int intrflag,
-			int restart_dma)
+sb20_audio_start_input (int dev, unsigned long buf, int nr_bytes, int intrflag)
 {
   unsigned long   flags;
   int             count = nr_bytes;
@@ -340,9 +339,9 @@ sb20_audio_start_input (int dev, unsigned long buf, int nr_bytes, int intrflag,
    * Start a DMA input to the buffer pointed by dmaqtail
    */
 
-  DMAbuf_start_dma (dev, buf, count, DMA_MODE_READ);
+  /* DMAbuf_start_dma (dev, buf, count, DMA_MODE_READ); */
 
-  if (audio_devs[dev]->dmachan1 > 3)
+  if (audio_devs[dev]->dmap_out->dma > 3)
     count >>= 1;
   count--;
 
@@ -385,12 +384,12 @@ sb20_audio_trigger (int dev, int bits)
 	{
 	case IMODE_INPUT:
 	  sb20_audio_start_input (dev, devc->trg_buf, devc->trg_bytes,
-				  devc->trg_intrflag, devc->trg_restart);
+				  devc->trg_intrflag);
 	  break;
 
 	case IMODE_OUTPUT:
 	  sb20_audio_output_block (dev, devc->trg_buf, devc->trg_bytes,
-				   devc->trg_intrflag, devc->trg_restart);
+				   devc->trg_intrflag);
 	  break;
 	}
     }
@@ -444,8 +443,8 @@ sbpro_audio_prepare_for_input (int dev, int bsize, int bcount)
   unsigned char   bits = 0;
 
   if (devc->dma16 >= 0 && devc->dma16 != devc->dma8)
-    audio_devs[dev]->dmachan1 =
-      audio_devs[dev]->dmachan2 =
+    audio_devs[dev]->dmap_out->dma =
+      audio_devs[dev]->dmap_in->dma =
       devc->bits == 16 ? devc->dma16 : devc->dma8;
 
   if (devc->model == MDL_JAZZ || devc->model == MDL_SMW)
@@ -476,9 +475,11 @@ sbpro_audio_prepare_for_output (int dev, int bsize, int bcount)
   unsigned char   bits = 0;
 
   if (devc->dma16 >= 0 && devc->dma16 != devc->dma8)
-    audio_devs[dev]->dmachan1 =
-      audio_devs[dev]->dmachan2 =
+    audio_devs[dev]->dmap_out->dma =
+      audio_devs[dev]->dmap_in->dma =
       devc->bits == 16 ? devc->dma16 : devc->dma8;
+  if (devc->model == MDL_SBPRO)
+    sb_mixer_set_stereo (devc, devc->channels == 2);
 
   save_flags (flags);
   cli ();
@@ -747,18 +748,15 @@ ess_audio_prepare_for_output (int dev, int bsize, int bcount)
 
 static void
 ess_audio_output_block (int dev, unsigned long buf, int nr_bytes,
-			int intrflag, int restart_dma)
+			int intrflag)
 {
   int             count = nr_bytes;
   sb_devc        *devc = audio_devs[dev]->devc;
   short           c = -nr_bytes;
 
-  if (!restart_dma)
-    return;
+  /* DMAbuf_start_dma (dev, buf, count, DMA_MODE_WRITE); */
 
-  DMAbuf_start_dma (dev, buf, count, DMA_MODE_WRITE);
-
-  if (audio_devs[dev]->dmachan1 > 3)
+  if (audio_devs[dev]->dmap_out->dma > 3)
     count >>= 1;
   count--;
 
@@ -772,23 +770,19 @@ ess_audio_output_block (int dev, unsigned long buf, int nr_bytes,
 }
 
 static void
-ess_audio_start_input (int dev, unsigned long buf, int nr_bytes, int intrflag,
-		       int restart_dma)
+ess_audio_start_input (int dev, unsigned long buf, int nr_bytes, int intrflag)
 {
   int             count = nr_bytes;
   sb_devc        *devc = audio_devs[dev]->devc;
   short           c = -nr_bytes;
 
-  if (!restart_dma)
-    return;
-
   /*
    * Start a DMA input to the buffer pointed by dmaqtail
    */
 
-  DMAbuf_start_dma (dev, buf, count, DMA_MODE_READ);
+  /* DMAbuf_start_dma (dev, buf, count, DMA_MODE_READ); */
 
-  if (audio_devs[dev]->dmachan1 > 3)
+  if (audio_devs[dev]->dmap_out->dma > 3)
     count >>= 1;
   count--;
 
@@ -816,12 +810,12 @@ ess_audio_trigger (int dev, int bits)
 	{
 	case IMODE_INPUT:
 	  ess_audio_start_input (dev, devc->trg_buf, devc->trg_bytes,
-				 devc->trg_intrflag, devc->trg_restart);
+				 devc->trg_intrflag);
 	  break;
 
 	case IMODE_OUTPUT:
 	  ess_audio_output_block (dev, devc->trg_buf, devc->trg_bytes,
-				  devc->trg_intrflag, devc->trg_restart);
+				  devc->trg_intrflag);
 	  break;
 	}
     }
@@ -871,8 +865,8 @@ sb16_audio_prepare_for_input (int dev, int bsize, int bcount)
 {
   sb_devc        *devc = audio_devs[dev]->devc;
 
-  audio_devs[dev]->dmachan1 =
-    audio_devs[dev]->dmachan2 =
+  audio_devs[dev]->dmap_out->dma =
+    audio_devs[dev]->dmap_in->dma =
     devc->bits == AFMT_S16_LE ? devc->dma16 : devc->dma8;
 
   devc->trigger_bits = 0;
@@ -884,8 +878,8 @@ sb16_audio_prepare_for_output (int dev, int bsize, int bcount)
 {
   sb_devc        *devc = audio_devs[dev]->devc;
 
-  audio_devs[dev]->dmachan1 =
-    audio_devs[dev]->dmachan2 =
+  audio_devs[dev]->dmap_out->dma =
+    audio_devs[dev]->dmap_in->dma =
     devc->bits == AFMT_S16_LE ? devc->dma16 : devc->dma8;
 
   devc->trigger_bits = 0;
@@ -894,16 +888,13 @@ sb16_audio_prepare_for_output (int dev, int bsize, int bcount)
 
 static void
 sb16_audio_output_block (int dev, unsigned long buf, int count,
-			 int intrflag, int restart_dma)
+			 int intrflag)
 {
   unsigned long   flags, cnt;
   sb_devc        *devc = audio_devs[dev]->devc;
 
   devc->irq_mode = IMODE_OUTPUT;
   devc->intr_active = 1;
-
-  if (!restart_dma)
-    return;
 
   cnt = count;
   if (devc->bits == AFMT_S16_LE)
@@ -913,8 +904,7 @@ sb16_audio_output_block (int dev, unsigned long buf, int count,
   save_flags (flags);
   cli ();
 
-  if (restart_dma)
-    DMAbuf_start_dma (dev, buf, count, DMA_MODE_WRITE);
+  /* DMAbuf_start_dma (dev, buf, count, DMA_MODE_WRITE); */
 
   sb_dsp_command (devc, 0x41);
   sb_dsp_command (devc, (unsigned char) ((devc->speed >> 8) & 0xff));
@@ -930,17 +920,13 @@ sb16_audio_output_block (int dev, unsigned long buf, int count,
 }
 
 static void
-sb16_audio_start_input (int dev, unsigned long buf, int count, int intrflag,
-			int restart_dma)
+sb16_audio_start_input (int dev, unsigned long buf, int count, int intrflag)
 {
   unsigned long   flags, cnt;
   sb_devc        *devc = audio_devs[dev]->devc;
 
   devc->irq_mode = IMODE_INPUT;
   devc->intr_active = 1;
-
-  if (!restart_dma)
-    return;
 
   cnt = count;
   if (devc->bits == AFMT_S16_LE)
@@ -950,8 +936,7 @@ sb16_audio_start_input (int dev, unsigned long buf, int count, int intrflag,
   save_flags (flags);
   cli ();
 
-  if (restart_dma)
-    DMAbuf_start_dma (dev, buf, count, DMA_MODE_READ);
+  /* DMAbuf_start_dma (dev, buf, count, DMA_MODE_READ); */
 
   sb_dsp_command (devc, 0x42);
   sb_dsp_command (devc, (unsigned char) ((devc->speed >> 8) & 0xff));
@@ -981,12 +966,12 @@ sb16_audio_trigger (int dev, int bits)
 	{
 	case IMODE_INPUT:
 	  sb16_audio_start_input (dev, devc->trg_buf, devc->trg_bytes,
-				  devc->trg_intrflag, devc->trg_restart);
+				  devc->trg_intrflag);
 	  break;
 
 	case IMODE_OUTPUT:
 	  sb16_audio_output_block (dev, devc->trg_buf, devc->trg_bytes,
-				   devc->trg_intrflag, devc->trg_restart);
+				   devc->trg_intrflag);
 	  break;
 	}
     }
@@ -995,21 +980,9 @@ sb16_audio_trigger (int dev, int bits)
 }
 
 static int
-sb_audio_ioctl (int dev, unsigned int cmd, caddr_t arg, int local)
+sb_audio_ioctl (int dev, unsigned int cmd, caddr_t arg)
 {
   return -EINVAL;
-}
-
-static void
-sb_audio_reset (int dev)
-{
-  unsigned long   flags;
-  sb_devc        *devc = audio_devs[dev]->devc;
-
-  save_flags (flags);
-  cli ();
-  sb_dsp_reset (devc);
-  restore_flags (flags);
 }
 
 static struct audio_driver sb1_audio_driver =	/* SB1.x */
@@ -1021,7 +994,6 @@ static struct audio_driver sb1_audio_driver =	/* SB1.x */
   sb_audio_ioctl,
   sb1_audio_prepare_for_input,
   sb1_audio_prepare_for_output,
-  sb_audio_reset,
   sb1_audio_halt_xfer,
   NULL,				/* local_qlen */
   NULL,				/* copy_from_user */
@@ -1042,7 +1014,6 @@ static struct audio_driver sb20_audio_driver =	/* SB2.0 */
   sb_audio_ioctl,
   sb1_audio_prepare_for_input,
   sb1_audio_prepare_for_output,
-  sb_audio_reset,
   sb1_audio_halt_xfer,
   NULL,				/* local_qlen */
   NULL,				/* copy_from_user */
@@ -1063,7 +1034,6 @@ static struct audio_driver sb201_audio_driver =		/* SB2.01 */
   sb_audio_ioctl,
   sb1_audio_prepare_for_input,
   sb1_audio_prepare_for_output,
-  sb_audio_reset,
   sb1_audio_halt_xfer,
   NULL,				/* local_qlen */
   NULL,				/* copy_from_user */
@@ -1084,7 +1054,6 @@ static struct audio_driver sbpro_audio_driver =		/* SB Pro */
   sb_audio_ioctl,
   sbpro_audio_prepare_for_input,
   sbpro_audio_prepare_for_output,
-  sb_audio_reset,
   sb1_audio_halt_xfer,
   NULL,				/* local_qlen */
   NULL,				/* copy_from_user */
@@ -1105,7 +1074,6 @@ static struct audio_driver jazz16_audio_driver =	/* Jazz16 and SM Wave */
   sb_audio_ioctl,
   sbpro_audio_prepare_for_input,
   sbpro_audio_prepare_for_output,
-  sb_audio_reset,
   sb1_audio_halt_xfer,
   NULL,				/* local_qlen */
   NULL,				/* copy_from_user */
@@ -1126,7 +1094,6 @@ static struct audio_driver sb16_audio_driver =	/* SB16 */
   sb_audio_ioctl,
   sb16_audio_prepare_for_input,
   sb16_audio_prepare_for_output,
-  sb_audio_reset,
   sb1_audio_halt_xfer,
   NULL,				/* local_qlen */
   NULL,				/* copy_from_user */
@@ -1147,7 +1114,6 @@ static struct audio_driver ess_audio_driver =	/* ESS ES688/1688 */
   sb_audio_ioctl,
   ess_audio_prepare_for_input,
   ess_audio_prepare_for_output,
-  sb_audio_reset,
   sb1_audio_halt_xfer,
   NULL,				/* local_qlen */
   NULL,				/* copy_from_user */

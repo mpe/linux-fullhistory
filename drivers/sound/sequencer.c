@@ -4,14 +4,13 @@
  * The sequencer personality manager.
  */
 /*
- * Copyright (C) by Hannu Savolainen 1993-1996
+ * Copyright (C) by Hannu Savolainen 1993-1997
  *
  * OSS/Free for Linux is distributed under the GNU GENERAL PUBLIC LICENSE (GPL)
  * Version 2 (June 1991). See the "COPYING" file distributed with this software
  * for more info.
  */
 #include <linux/config.h>
-#include <linux/poll.h>
 
 
 #define SEQUENCER_C
@@ -200,6 +199,7 @@ sequencer_midi_input (int dev, unsigned char data)
     return;
 
   tstamp = jiffies - seq_time;
+
   if (tstamp != prev_input_time)
     {
       tstamp = (tstamp << 8) | SEQ_WAIT;
@@ -267,7 +267,7 @@ sequencer_write (int dev, struct fileinfo *file, const char *buf, int count)
 
       if (ev_code == SEQ_FULLSIZE)
 	{
-	  int             err;
+	  int             err, fmt;
 
 	  dev = *(unsigned short *) &event_rec[2];
 	  if (dev < 0 || dev >= max_synthdev)
@@ -276,7 +276,8 @@ sequencer_write (int dev, struct fileinfo *file, const char *buf, int count)
 	  if (!(synth_open_mask & (1 << dev)))
 	    return -ENXIO;
 
-	  err = synth_devs[dev]->load_patch (dev, *(short *) &event_rec[0], buf, p + 4, c, 0);
+	  fmt = (*(short *) &event_rec[0]) & 0xffff;
+	  err = synth_devs[dev]->load_patch (dev, fmt, buf, p + 4, c, 0);
 	  if (err < 0)
 	    return err;
 
@@ -364,9 +365,7 @@ sequencer_write (int dev, struct fileinfo *file, const char *buf, int count)
   if (!seq_playing)
     seq_startplay ();
 
-  return count;			/* This will "eat" chunks shorter than 4 bytes (if written
-				   * alone) Should we really do that ?
-				 */
+  return count;
 }
 
 static int
@@ -429,6 +428,11 @@ extended_event (unsigned char *q)
       if (q[4] > 127 && q[4] != 255)
 	return 0;
 
+      if (q[5] == 0)
+	{
+	  synth_devs[dev]->kill_note (dev, q[3], q[4], q[5]);
+	  break;
+	}
       synth_devs[dev]->start_note (dev, q[3], q[4], q[5]);
       break;
 
@@ -545,13 +549,7 @@ seq_chn_voice_event (unsigned char *event_rec)
 	    {
 	      synth_devs[dev]->set_instr (dev, voice, 128 + note);
 	      synth_devs[dev]->chn_info[chn].pgm_num = 128 + note;
-	      note = 60;	/* Middle C */
-
 	    }
-	}
-
-      if (seq_mode == SEQ_2)
-	{
 	  synth_devs[dev]->setup_voice (dev, voice, chn);
 	}
 
@@ -573,6 +571,7 @@ seq_chn_voice_event (unsigned char *event_rec)
     default:;
     }
 }
+
 
 static void
 seq_chn_common_event (unsigned char *event_rec)
@@ -806,13 +805,13 @@ seq_sysex_message (unsigned char *event_rec)
     return;
   if (!synth_devs[dev])
     return;
-  if (!synth_devs[dev]->send_sysex)
-    return;
 
   l = 0;
   for (i = 0; i < 6 && buf[i] != 0xff; i++)
     l = i + 1;
 
+  if (!synth_devs[dev]->send_sysex)
+    return;
   if (l > 0)
     synth_devs[dev]->send_sysex (dev, buf, l);
 }
@@ -890,7 +889,7 @@ play_event (unsigned char *q)
       break;
 
     case SEQ_SYNCTIMER:	/*
-				   * Reset timer
+				 * Reset timer
 				 */
       seq_time = jiffies;
       prev_input_time = 0;
@@ -1044,6 +1043,9 @@ setup_mode2 (void)
     {
       int             chn;
 
+      synth_devs[dev]->sysex_ptr = 0;
+      synth_devs[dev]->emulation = 0;
+
       for (chn = 0; chn < 16; chn++)
 	{
 	  synth_devs[dev]->chn_info[chn].pgm_num = 0;
@@ -1051,6 +1053,7 @@ setup_mode2 (void)
 			     synth_devs[dev]->chn_info[chn].controllers,
 			     0);
 	  synth_devs[dev]->chn_info[chn].bender_value = (1 << 7);	/* Neutral */
+	  synth_devs[dev]->chn_info[chn].bender_range = 200;
 	}
     }
 
@@ -1064,6 +1067,9 @@ sequencer_open (int dev, struct fileinfo *file)
   int             retval, mode, i;
   int             level, tmp;
   unsigned long   flags;
+
+  if (!sequencer_ok)
+    sequencer_init ();
 
   level = ((dev & 0x0f) == SND_DEV_SEQ2) ? 2 : 1;
 
@@ -1082,6 +1088,14 @@ sequencer_open (int dev, struct fileinfo *file)
     {
       return -ENXIO;
     }
+
+  if (mode == OPEN_READ)
+    if (!num_midis)
+      {
+	printk ("Sequencer: No MIDI devices. Input not possible\n");
+	sequencer_busy = 0;
+	return -ENXIO;
+      }
 
   save_flags (flags);
   cli ();
@@ -1133,14 +1147,6 @@ sequencer_open (int dev, struct fileinfo *file)
       setup_mode2 ();
     }
 
-  if (seq_mode == SEQ_1 && mode == OPEN_READ)
-    if (!max_mididev)
-      {
-	printk ("Sequencer: No Midi devices. Input not possible\n");
-	sequencer_busy = 0;
-	return -ENXIO;
-      }
-
   if (!max_synthdev && !max_mididev)
     return -ENXIO;
 
@@ -1152,28 +1158,24 @@ sequencer_open (int dev, struct fileinfo *file)
       midi_written[i] = 0;
     }
 
-  /*
-   * if (mode == OPEN_WRITE || mode == OPEN_READWRITE)
-   */
-  for (i = 0; i < max_synthdev; i++)	/*
-					 * Open synth devices
-					 */
-    if ((tmp = synth_devs[i]->open (i, mode)) < 0)
-      {
-	printk ("Sequencer: Warning! Cannot open synth device #%d (%d)\n", i, tmp);
-	if (synth_devs[i]->midi_dev)
-	  printk ("(Maps to MIDI dev #%d)\n", synth_devs[i]->midi_dev);
-      }
-    else
-      {
-	synth_open_mask |= (1 << i);
-	if (synth_devs[i]->midi_dev)	/*
-					 * Is a midi interface
-					 */
-	  midi_opened[synth_devs[i]->midi_dev] = 1;
-      }
+  for (i = 0; i < max_synthdev; i++)
+    {
+      if ((tmp = synth_devs[i]->open (i, mode)) < 0)
+	{
+	  printk ("Sequencer: Warning! Cannot open synth device #%d (%d)\n", i, tmp);
+	  if (synth_devs[i]->midi_dev)
+	    printk ("(Maps to MIDI dev #%d)\n", synth_devs[i]->midi_dev);
+	}
+      else
+	{
+	  synth_open_mask |= (1 << i);
+	  if (synth_devs[i]->midi_dev)
+	    midi_opened[synth_devs[i]->midi_dev] = 1;
+	}
+    }
 
   seq_time = jiffies;
+
   prev_input_time = 0;
   prev_event_time = 0;
 
@@ -1260,7 +1262,7 @@ sequencer_release (int dev, struct fileinfo *file)
   DEB (printk ("sequencer_release(dev=%d)\n", dev));
 
   /*
-   * * Wait until the queue is empty (if we don't have nonblock)
+   * Wait until the queue is empty (if we don't have nonblock)
    */
 
   if (mode != OPEN_READ && !(file->flags & (O_NONBLOCK) ?
@@ -1268,6 +1270,23 @@ sequencer_release (int dev, struct fileinfo *file)
     while (!(current->signal & ~current->blocked) && qlen > 0)
       {
 	seq_sync ();
+
+	{
+	  unsigned long   tlimit;
+
+	  if (3 * HZ)
+	    current->timeout = tlimit = jiffies + (3 * HZ);
+	  else
+	    tlimit = (unsigned long) -1;
+	  seq_sleep_flag.opts = WK_SLEEP;
+	  interruptible_sleep_on (&seq_sleeper);
+	  if (!(seq_sleep_flag.opts & WK_WAKEUP))
+	    {
+	      if (jiffies >= tlimit)
+		seq_sleep_flag.opts |= WK_TIMEOUT;
+	    }
+	  seq_sleep_flag.opts &= ~WK_SLEEP;
+	};			/* Extra delay */
       }
 
   if (mode != OPEN_READ)
@@ -1397,6 +1416,7 @@ seq_reset (void)
   unsigned long   flags;
 
   sound_stop_timer ();
+
   seq_time = jiffies;
   prev_input_time = 0;
   prev_event_time = 0;
@@ -1519,7 +1539,7 @@ sequencer_ioctl (int dev, struct fileinfo *file,
 
       if (seq_mode != SEQ_2)
 	return -EINVAL;
-      get_user (pending_timer, (int *) arg);
+      pending_timer = *(int *) arg;
 
       if (pending_timer < 0 || pending_timer >= num_sound_timers)
 	{
@@ -1527,7 +1547,7 @@ sequencer_ioctl (int dev, struct fileinfo *file,
 	  return -EINVAL;
 	}
 
-      return ioctl_out (arg, pending_timer);
+      return (*(int *) arg = pending_timer);
       break;
 
     case SNDCTL_SEQ_PANIC:
@@ -1553,7 +1573,7 @@ sequencer_ioctl (int dev, struct fileinfo *file,
       break;
 
     case SNDCTL_SEQ_TESTMIDI:
-      get_user (midi_dev, (int *) arg);
+      midi_dev = *(int *) arg;
       if (midi_dev < 0 || midi_dev >= max_mididev)
 	return -ENXIO;
 
@@ -1576,21 +1596,21 @@ sequencer_ioctl (int dev, struct fileinfo *file,
     case SNDCTL_SEQ_GETINCOUNT:
       if (mode == OPEN_WRITE)
 	return 0;
-      return ioctl_out (arg, iqlen);
+      return (*(int *) arg = iqlen);
       break;
 
     case SNDCTL_SEQ_GETOUTCOUNT:
 
       if (mode == OPEN_READ)
 	return 0;
-      return ioctl_out (arg, SEQ_MAX_QUEUE - qlen);
+      return (*(int *) arg = SEQ_MAX_QUEUE - qlen);
       break;
 
     case SNDCTL_SEQ_GETTIME:
       if (seq_mode == SEQ_2)
 	return tmr->ioctl (tmr_no, cmd, arg);
 
-      return ioctl_out (arg, jiffies - seq_time);
+      return (*(int *) arg = jiffies - seq_time);
       break;
 
     case SNDCTL_SEQ_CTRLRATE:
@@ -1600,18 +1620,18 @@ sequencer_ioctl (int dev, struct fileinfo *file,
       if (seq_mode == SEQ_2)
 	return tmr->ioctl (tmr_no, cmd, arg);
 
-      get_user (val, (int *) arg);
+      val = *(int *) arg;
       if (val != 0)
 	return -EINVAL;
 
-      return ioctl_out (arg, HZ);
+      return (*(int *) arg = HZ);
       break;
 
     case SNDCTL_SEQ_RESETSAMPLES:
       {
 	int             err;
 
-	get_user (dev, (int *) arg);
+	dev = *(int *) arg;
 	if (dev < 0 || dev >= num_synths)
 	  {
 	    return -ENXIO;
@@ -1628,18 +1648,18 @@ sequencer_ioctl (int dev, struct fileinfo *file,
       break;
 
     case SNDCTL_SEQ_NRSYNTHS:
-      return ioctl_out (arg, max_synthdev);
+      return (*(int *) arg = max_synthdev);
       break;
 
     case SNDCTL_SEQ_NRMIDIS:
-      return ioctl_out (arg, max_mididev);
+      return (*(int *) arg = max_mididev);
       break;
 
     case SNDCTL_SYNTH_MEMAVL:
       {
 	int             dev;
 
-	get_user (dev, (int *) arg);
+	dev = *(int *) arg;
 
 	if (dev < 0 || dev >= num_synths)
 	  return -ENXIO;
@@ -1647,7 +1667,7 @@ sequencer_ioctl (int dev, struct fileinfo *file,
 	if (!(synth_open_mask & (1 << dev)) && !orig_dev)
 	  return -EBUSY;
 
-	return ioctl_out (arg, synth_devs[dev]->ioctl (dev, cmd, arg));
+	return (*(int *) arg = synth_devs[dev]->ioctl (dev, cmd, arg));
       }
       break;
 
@@ -1655,7 +1675,7 @@ sequencer_ioctl (int dev, struct fileinfo *file,
       {
 	int             dev;
 
-	get_user (dev, (int *) arg);
+	dev = *(int *) arg;
 
 	if (dev < 0 || dev >= num_synths)
 	  return -ENXIO;
@@ -1673,7 +1693,7 @@ sequencer_ioctl (int dev, struct fileinfo *file,
 	struct synth_info inf;
 	int             dev;
 
-	copy_from_user ((char *) &inf, &((char *) arg)[0], sizeof (inf));
+	memcpy ((char *) &inf, (&((char *) arg)[0]), sizeof (inf));
 	dev = inf.device;
 
 	if (dev < 0 || dev >= max_synthdev)
@@ -1686,12 +1706,35 @@ sequencer_ioctl (int dev, struct fileinfo *file,
       }
       break;
 
+
+      /* Like SYNTH_INFO but returns ID in the name field */
+    case SNDCTL_SYNTH_ID:
+      {
+	struct synth_info inf;
+	int             dev;
+
+	memcpy ((char *) &inf, (&((char *) arg)[0]), sizeof (inf));
+	dev = inf.device;
+
+	if (dev < 0 || dev >= max_synthdev)
+	  return -ENXIO;
+
+	if (!(synth_open_mask & (1 << dev)) && !orig_dev)
+	  return -EBUSY;
+
+	memcpy ((char *) &inf, (char *) synth_devs[dev]->info, sizeof (inf));
+	strcpy (inf.name, synth_devs[dev]->id);
+	memcpy ((&((char *) arg)[0]), (char *) &inf, sizeof (inf));
+	return 0;
+      }
+      break;
+
     case SNDCTL_SEQ_OUTOFBAND:
       {
 	struct seq_event_rec event_rec;
 	unsigned long   flags;
 
-	copy_from_user ((char *) &event_rec, &((char *) arg)[0], sizeof (event_rec));
+	memcpy ((char *) &event_rec, (&((char *) arg)[0]), sizeof (event_rec));
 
 	save_flags (flags);
 	cli ();
@@ -1708,18 +1751,14 @@ sequencer_ioctl (int dev, struct fileinfo *file,
 	int             dev;
 	char           *pp;
 
-	copy_from_user ((char *) &inf, &((char *) arg)[0], sizeof (inf));
+	memcpy ((char *) &inf, (&((char *) arg)[0]), sizeof (inf));
 	dev = inf.device;
 
 	if (dev < 0 || dev >= max_mididev)
 	  return -ENXIO;
 
 	pp = (char *) &midi_devs[dev]->info;
-	{
-	  char           *fixit = pp;
-
-	  copy_to_user (&((char *) arg)[0], fixit, sizeof (inf));
-	};
+	memcpy ((&((char *) arg)[0]), pp, sizeof (inf));
 	return 0;
       }
       break;
@@ -1728,7 +1767,7 @@ sequencer_ioctl (int dev, struct fileinfo *file,
       {
 	int             tmp;
 
-	get_user (tmp, (int *) arg);
+	tmp = *(int *) arg;
 
 	if (tmp < 1)
 	  tmp = 1;
@@ -1743,14 +1782,14 @@ sequencer_ioctl (int dev, struct fileinfo *file,
       {
 	int             val;
 
-	get_user (val, (int *) arg);
+	val = *(int *) arg;
 
 	if (val < 0)
 	  val = 0;
 
 	val = (HZ * val) / 10;
 	pre_event_timeout = val;
-	return ioctl_out (arg, val);
+	return (*(int *) arg = val);
       }
       break;
 
@@ -1769,28 +1808,50 @@ sequencer_ioctl (int dev, struct fileinfo *file,
   return -EINVAL;
 }
 
-unsigned int
-sequencer_poll (kdev_t dev, struct fileinfo *file, poll_table * wait)
+int
+sequencer_select (int dev, struct fileinfo *file, int sel_type, poll_table * wait)
 {
-  unsigned int	  mask = 0;
   unsigned long   flags;
 
-  save_flags (flags);
-  cli ();
+  dev = dev >> 4;
 
-  midi_sleep_flag.opts = WK_SLEEP;
-  poll_wait (&midi_sleeper, wait);
-  seq_sleep_flag.opts = WK_SLEEP;
-  poll_wait (&seq_sleeper, wait);
+  switch (sel_type)
+    {
+    case SEL_IN:
+      save_flags (flags);
+      cli ();
+      if (!iqlen)
+	{
 
-  restore_flags (flags);
+	  midi_sleep_flag.opts = WK_SLEEP;
+	  poll_wait (&midi_sleeper, wait);
+	  restore_flags (flags);
+	  return 0;
+	}
+      restore_flags (flags);
+      return 1;
+      break;
 
-  if (iqlen)
-    mask |= POLLIN | POLLRDNORM;
-  if ((SEQ_MAX_QUEUE - qlen) >= output_threshold)
-    mask |= POLLOUT | POLLWRNORM;
+    case SEL_OUT:
+      save_flags (flags);
+      cli ();
+      if ((SEQ_MAX_QUEUE - qlen) < output_threshold)
+	{
 
-  return mask;
+	  seq_sleep_flag.opts = WK_SLEEP;
+	  poll_wait (&seq_sleeper, wait);
+	  restore_flags (flags);
+	  return 0;
+	}
+      restore_flags (flags);
+      return 1;
+      break;
+
+    case SEL_EX:
+      return 0;
+    }
+
+  return 0;
 }
 
 
@@ -1835,7 +1896,8 @@ note_to_freq (int note_num)
 }
 
 unsigned long
-compute_finetune (unsigned long base_freq, int bend, int range)
+compute_finetune (unsigned long base_freq, int bend, int range,
+		  int vibrato_cents)
 {
   unsigned long   amount;
   int             negative, semitones, cents, multiplier = 1;
@@ -1851,7 +1913,9 @@ compute_finetune (unsigned long base_freq, int bend, int range)
   if (range >= 8192)
     range = 8192;
 
-  bend = bend * range / 8192;
+  bend = bend * range / 8192;	/* Convert to cents */
+  bend += vibrato_cents;
+
   if (!bend)
     return base_freq;
 
@@ -1888,9 +1952,12 @@ compute_finetune (unsigned long base_freq, int bend, int range)
 void
 sequencer_init (void)
 {
+  if (sequencer_ok)
+    return;
 
 
   queue = (unsigned char *) (sound_mem_blocks[sound_nblocks] = vmalloc (SEQ_MAX_QUEUE * EV_SZ));
+  sound_mem_sizes[sound_nblocks] = SEQ_MAX_QUEUE * EV_SZ;
   if (sound_nblocks < 1024)
     sound_nblocks++;;
   if (queue == NULL)
@@ -1901,6 +1968,7 @@ sequencer_init (void)
 
 
   iqueue = (unsigned char *) (sound_mem_blocks[sound_nblocks] = vmalloc (SEQ_MAX_QUEUE * IEV_SZ));
+  sound_mem_sizes[sound_nblocks] = SEQ_MAX_QUEUE * IEV_SZ;
   if (sound_nblocks < 1024)
     sound_nblocks++;;
   if (queue == NULL)
@@ -1908,6 +1976,7 @@ sequencer_init (void)
       printk ("Sound: Can't allocate memory for sequencer input queue\n");
       return;
     }
+
 
   sequencer_ok = 1;
 }

@@ -5,7 +5,7 @@
  *	Authors:
  *	Pedro Roque		<roque@di.fc.ul.pt>	
  *
- *	$Id: tcp_ipv6.c,v 1.7 1997/01/26 07:14:57 davem Exp $
+ *	$Id: tcp_ipv6.c,v 1.11 1997/03/03 18:27:31 davem Exp $
  *
  *	Based on: 
  *	linux/net/ipv4/tcp.c
@@ -54,6 +54,192 @@ static int tcp_v6_build_header(struct sock *sk, struct sk_buff *skb);
 
 static struct tcp_func ipv6_mapped;
 static struct tcp_func ipv6_specific;
+
+/* I have no idea if this is a good hash for v6 or not. -DaveM */
+static __inline__ int tcp_v6_hashfn(struct in6_addr *laddr, u16 lport,
+				    struct in6_addr *faddr, u16 fport)
+{
+	int hashent = (lport ^ fport);
+
+	hashent ^= (laddr->s6_addr32[0] ^ laddr->s6_addr32[1]);
+	hashent ^= (faddr->s6_addr32[0] ^ faddr->s6_addr32[1]);
+	return (hashent & (TCP_HTABLE_SIZE - 1));
+}
+
+static __inline__ int tcp_v6_sk_hashfn(struct sock *sk)
+{
+	struct in6_addr *laddr = &sk->net_pinfo.af_inet6.rcv_saddr;
+	struct in6_addr *faddr = &sk->net_pinfo.af_inet6.daddr;
+	__u16 lport = sk->num;
+	__u16 fport = sk->dummy_th.dest;
+	return tcp_v6_hashfn(laddr, lport, faddr, fport);
+}
+
+/* Grrr, addr_type already calculated by caller, but I don't want
+ * to add some silly "cookie" argument to this method just for that.
+ */
+static int tcp_v6_verify_bind(struct sock *sk, unsigned short snum)
+{
+	struct sock *sk2;
+	int addr_type = ipv6_addr_type(&sk->net_pinfo.af_inet6.rcv_saddr);
+	int retval = 0, sk_reuse = sk->reuse;
+
+	SOCKHASH_LOCK();
+	sk2 = tcp_bound_hash[tcp_sk_bhashfn(sk)];
+	for(; sk2 != NULL; sk2 = sk2->prev) {
+		if((sk2->num == snum) && (sk2 != sk)) {
+			unsigned char state = sk2->state;
+			int sk2_reuse = sk2->reuse;
+			if(addr_type == IPV6_ADDR_ANY || (!sk2->rcv_saddr)) {
+				if((!sk2_reuse)			||
+				   (!sk_reuse)			||
+				   (state != TCP_LISTEN)) {
+					retval = 1;
+					break;
+				}
+			} else if(!ipv6_addr_cmp(&sk->net_pinfo.af_inet6.rcv_saddr,
+						 &sk2->net_pinfo.af_inet6.rcv_saddr)) {
+				if((!sk_reuse)			||
+				   (!sk2_reuse)			||
+				   (state == TCP_LISTEN)) {
+					retval = 1;
+					break;
+				}
+			}
+		}
+	}
+	SOCKHASH_UNLOCK();
+
+	return retval;
+}
+
+static void tcp_v6_hash(struct sock *sk)
+{
+	unsigned char state;
+
+	SOCKHASH_LOCK();
+	state = sk->state;
+	if(state != TCP_CLOSE) {
+		struct sock **htable;
+
+		if(state == TCP_LISTEN) {
+			sk->hashent = tcp_sk_listen_hashfn(sk);
+			htable = &tcp_listening_hash[0];
+		} else {
+			sk->hashent = tcp_v6_sk_hashfn(sk);
+			htable = &tcp_established_hash[0];
+		}
+		sk->next = htable[sk->hashent];
+		htable[sk->hashent] = sk;
+		sk->hashtable = htable;
+		tcp_sk_bindify(sk);
+	}
+	SOCKHASH_UNLOCK();
+}
+
+static void tcp_v6_unhash(struct sock *sk)
+{
+	struct sock **htable;
+
+	SOCKHASH_LOCK();
+	htable = sk->hashtable;
+	if(htable) {
+		struct sock **skp = &(htable[sk->hashent]);
+		while(*skp != NULL) {
+			if(*skp == sk) {
+				*skp = sk->next;
+				break;
+			}
+			skp = &((*skp)->next);
+		}
+		sk->hashtable = NULL;
+		tcp_sk_unbindify(sk);
+	}
+	SOCKHASH_UNLOCK();
+}
+
+static void tcp_v6_rehash(struct sock *sk)
+{
+	struct sock **htable;
+	unsigned char state;
+
+	SOCKHASH_LOCK();
+	htable = &(sk->hashtable[sk->hashent]);
+	state = sk->state;
+	if(htable) {
+		while(*htable != NULL) {
+			if(*htable == sk) {
+				*htable = sk->next;
+				break;
+			}
+			htable = &((*htable)->next);
+		}
+	}
+	htable = NULL;
+	if(state != TCP_CLOSE) {
+		if(state == TCP_LISTEN) {
+			sk->hashent = tcp_sk_listen_hashfn(sk);
+			htable = &tcp_listening_hash[0];
+		} else {
+			sk->hashent = tcp_v6_sk_hashfn(sk);
+			htable = &tcp_established_hash[0];
+		}
+		sk->next = htable[sk->hashent];
+		htable[sk->hashent] = sk;
+	} else {
+		tcp_sk_unbindify(sk);
+	}
+	sk->hashtable = htable;
+	SOCKHASH_UNLOCK();
+}
+
+static struct sock *tcp_v6_lookup_longway(struct in6_addr *daddr, unsigned short hnum)
+{
+	struct sock *sk = tcp_listening_hash[tcp_lhashfn(hnum)];
+	struct sock *result = NULL;
+
+	for(; sk; sk = sk->next) {
+		if((sk->num == hnum) && (sk->family == AF_INET6)) {
+			struct ipv6_pinfo *np = &sk->net_pinfo.af_inet6;
+			if(!ipv6_addr_any(&np->rcv_saddr)) {
+				if(!ipv6_addr_cmp(&np->rcv_saddr, daddr))
+					return sk; /* Best possible match. */
+			} else if(!result)
+				result = sk;
+		}
+	}
+	return result;
+}
+
+/* Sockets in TCP_CLOSE state are _always_ taken out of the hash, so
+ * we need not check it for TCP lookups anymore, thanks Alexey. -DaveM
+ */
+static inline struct sock *__tcp_v6_lookup(struct tcphdr *th,
+					   struct in6_addr *saddr, u16 sport,
+					   struct in6_addr *daddr, u16 dport)
+{
+	unsigned short hnum = ntohs(dport);
+	struct sock *sk;
+
+	/* Optimize here for direct hit, only listening connections can
+	 * have wildcards anyways.  It is assumed that this code only
+	 * gets called from within NET_BH.
+	 */
+	sk = tcp_established_hash[tcp_v6_hashfn(daddr, hnum, saddr, sport)];
+	for(; sk; sk = sk->next)
+		/* For IPV6 do the cheaper port and family tests first. */
+		if(sk->num		== hnum			&& /* local port     */
+		   sk->family		== AF_INET6		&& /* address family */
+		   sk->dummy_th.dest	== sport		&& /* remote port    */
+		   !ipv6_addr_cmp(&sk->net_pinfo.af_inet6.daddr, saddr)	&&
+		   !ipv6_addr_cmp(&sk->net_pinfo.af_inet6.rcv_saddr, daddr))
+			goto hit; /* You sunk my battleship! */
+	sk = tcp_v6_lookup_longway(daddr, hnum);
+hit:
+	return sk;
+}
+
+#define tcp_v6_lookup(sa, sp, da, dp) __tcp_v6_lookup((0),(sa),(sp),(da),(dp))
 
 static __inline__ u16 tcp_v6_check(struct tcphdr *th, int len,
 				   struct in6_addr *saddr, 
@@ -264,6 +450,11 @@ static int tcp_v6_connect(struct sock *sk, struct sockaddr *uaddr,
 	
 	tcp_set_state(sk, TCP_SYN_SENT);
 	
+	/* Socket identity change complete, no longer
+	 * in TCP_CLOSE, so rehash.
+	 */
+	sk->prot->rehash(sk);
+
 	/* FIXME: should use dcache->rtt if availiable */
 	tp->rto = TCP_TIMEOUT_INIT;
 
@@ -340,7 +531,7 @@ void tcp_v6_err(int type, int code, unsigned char *header, __u32 info,
 	int err;
 	int opening;
 
-	sk = inet6_get_sock(&tcpv6_prot, daddr, saddr, th->source, th->dest);
+	sk = tcp_v6_lookup(saddr, th->source, daddr, th->dest);
 
 	if (sk == NULL)
 	{
@@ -602,6 +793,10 @@ static struct sock * tcp_v6_syn_recv_sock(struct sock *sk, struct sk_buff *skb,
 	}
 
 	memcpy(newsk, sk, sizeof(*newsk));
+
+	/* Or else we die! -DaveM */
+	newsk->sklist_next = NULL;
+
 	newsk->opt = NULL;
 	newsk->dst_cache  = NULL;
 	skb_queue_head_init(&newsk->write_queue);
@@ -706,7 +901,7 @@ static struct sock * tcp_v6_syn_recv_sock(struct sock *sk, struct sk_buff *skb,
 	newsk->saddr	= LOOPBACK4_IPV6;
 	newsk->rcv_saddr= LOOPBACK4_IPV6;
 	
-	inet_put_sock(newsk->num, newsk);
+	newsk->prot->hash(newsk);
 
 	return newsk;
 
@@ -907,8 +1102,7 @@ int tcp_v6_rcv(struct sk_buff *skb, struct device *dev,
 
 		tcp_statistics.TcpInSegs++;
 		
-		sk = inet6_get_sock(&tcpv6_prot, daddr, saddr, 
-				    th->dest, th->source);
+		sk = __tcp_v6_lookup(th, saddr, th->source, daddr, th->dest);
 
 		if (!sk) 
 		{
@@ -1057,7 +1251,7 @@ static struct sock * tcp_v6_get_sock(struct sk_buff *skb, struct tcphdr *th)
 	saddr = &skb->nh.ipv6h->saddr;
 	daddr = &skb->nh.ipv6h->daddr;
 
-	sk = inet6_get_sock(&tcpv6_prot, daddr, saddr, th->source, th->dest);
+	sk = tcp_v6_lookup(saddr, th->source, daddr, th->dest);
 
 	return sk;
 }
@@ -1229,28 +1423,35 @@ static int tcp_v6_destroy_sock(struct sock *sk)
 
 
 struct proto tcpv6_prot = {
-	tcp_close,
-	tcp_v6_connect,
-	tcp_accept,
-	NULL,
-	tcp_write_wakeup,
-	tcp_read_wakeup,
-	tcp_poll,
-	tcp_ioctl,
-	tcp_v6_init_sock,
-	tcp_v6_destroy_sock,
-	tcp_shutdown,
-	tcp_setsockopt,
-	tcp_getsockopt,
-	tcp_v6_sendmsg,
-	tcp_recvmsg,
-	NULL,			/* No special bind()	*/
-	tcp_v6_backlog_rcv,
-	128,
-	0,
-	"TCPv6",
-	0, 0,
-	NULL
+	(struct sock *)&tcpv6_prot,	/* sklist_next */
+	(struct sock *)&tcpv6_prot,	/* sklist_prev */
+	tcp_close,			/* close */
+	tcp_v6_connect,			/* connect */
+	tcp_accept,			/* accept */
+	NULL,				/* retransmit */
+	tcp_write_wakeup,		/* write_wakeup */
+	tcp_read_wakeup,		/* read_wakeup */
+	tcp_poll,			/* poll */
+	tcp_ioctl,			/* ioctl */
+	tcp_v6_init_sock,		/* init */
+	tcp_v6_destroy_sock,		/* destroy */
+	tcp_shutdown,			/* shutdown */
+	tcp_setsockopt,			/* setsockopt */
+	tcp_getsockopt,			/* getsockopt */
+	tcp_v6_sendmsg,			/* sendmsg */
+	tcp_recvmsg,			/* recvmsg */
+	NULL,				/* bind */
+	tcp_v6_backlog_rcv,		/* backlog_rcv */
+	tcp_v6_hash,			/* hash */
+	tcp_v6_unhash,			/* unhash */
+	tcp_v6_rehash,			/* rehash */
+	tcp_good_socknum,		/* good_socknum */
+	tcp_v6_verify_bind,		/* verify_bind */
+	128,				/* max_header */
+	0,				/* retransmits */
+	"TCPv6",			/* name */
+	0,				/* inuse */
+	0				/* highestinuse */
 };
 
 static struct inet6_protocol tcpv6_protocol = 

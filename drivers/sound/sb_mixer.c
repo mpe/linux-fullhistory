@@ -5,7 +5,7 @@
  * The low level mixer driver for the Sound Blaster compatible cards.
  */
 /*
- * Copyright (C) by Hannu Savolainen 1993-1996
+ * Copyright (C) by Hannu Savolainen 1993-1997
  *
  * OSS/Free for Linux is distributed under the GNU GENERAL PUBLIC LICENSE (GPL)
  * Version 2 (June 1991). See the "COPYING" file distributed with this software
@@ -24,7 +24,7 @@
 
 static int      sbmixnum = 1;
 
-void            sb_mixer_reset (sb_devc * devc);
+static void     sb_mixer_reset (sb_devc * devc);
 
 void
 sb_mixer_set_stereo (sb_devc * devc, int mode)
@@ -311,7 +311,7 @@ sb_mixer_ioctl (int dev, unsigned int cmd, caddr_t arg)
     {
       int             tmp;
 
-      get_user (tmp, (int *) arg);
+      tmp = *(int *) arg;
 
       sb_setmixer (devc, 0x43, (~tmp) & 0x01);
       return 0;
@@ -319,48 +319,48 @@ sb_mixer_ioctl (int dev, unsigned int cmd, caddr_t arg)
 
   if (((cmd >> 8) & 0xff) == 'M')
     {
-      if (_IOC_DIR (cmd) & _IOC_WRITE)
+      if (_SIOC_DIR (cmd) & _SIOC_WRITE)
 	switch (cmd & 0xff)
 	  {
 	  case SOUND_MIXER_RECSRC:
-	    get_user (val, (int *) arg);
-	    return ioctl_out (arg, set_recmask (devc, val));
+	    val = *(int *) arg;
+	    return (*(int *) arg = set_recmask (devc, val));
 	    break;
 
 	  default:
 
-	    get_user (val, (int *) arg);
-	    return ioctl_out (arg, sb_mixer_set (devc, cmd & 0xff, val));
+	    val = *(int *) arg;
+	    return (*(int *) arg = sb_mixer_set (devc, cmd & 0xff, val));
 	  }
       else
 	switch (cmd & 0xff)
 	  {
 
 	  case SOUND_MIXER_RECSRC:
-	    return ioctl_out (arg, devc->recmask);
+	    return (*(int *) arg = devc->recmask);
 	    break;
 
 	  case SOUND_MIXER_DEVMASK:
-	    return ioctl_out (arg, devc->supported_devices);
+	    return (*(int *) arg = devc->supported_devices);
 	    break;
 
 	  case SOUND_MIXER_STEREODEVS:
 	    if (devc->model == MDL_JAZZ || devc->model == MDL_SMW)
-	      return ioctl_out (arg, devc->supported_devices);
+	      return (*(int *) arg = devc->supported_devices);
 	    else
-	      return ioctl_out (arg, devc->supported_devices & ~(SOUND_MASK_MIC | SOUND_MASK_SPEAKER | SOUND_MASK_IMIX));
+	      return (*(int *) arg = devc->supported_devices & ~(SOUND_MASK_MIC | SOUND_MASK_SPEAKER | SOUND_MASK_IMIX));
 	    break;
 
 	  case SOUND_MIXER_RECMASK:
-	    return ioctl_out (arg, devc->supported_rec_devices);
+	    return (*(int *) arg = devc->supported_rec_devices);
 	    break;
 
 	  case SOUND_MIXER_CAPS:
-	    return ioctl_out (arg, devc->mixer_caps);
+	    return (*(int *) arg = devc->mixer_caps);
 	    break;
 
 	  default:
-	    return ioctl_out (arg, sb_mixer_get (devc, cmd & 0xff));
+	    return (*(int *) arg = sb_mixer_get (devc, cmd & 0xff));
 	  }
     }
   else
@@ -374,7 +374,7 @@ static struct mixer_operations sb_mixer_operations =
   sb_mixer_ioctl
 };
 
-void
+static void
 sb_mixer_reset (sb_devc * devc)
 {
   char            name[32];
@@ -445,6 +445,7 @@ sb_mixer_init (sb_devc * devc)
 
 
   mixer_devs[num_mixers] = (struct mixer_operations *) (sound_mem_blocks[sound_nblocks] = vmalloc (sizeof (struct mixer_operations)));
+  sound_mem_sizes[sound_nblocks] = sizeof (struct mixer_operations);
 
   if (sound_nblocks < 1024)
     sound_nblocks++;;

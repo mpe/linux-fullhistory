@@ -4,7 +4,7 @@
  *	Global definitions for device call tables
  */
 /*
- * Copyright (C) by Hannu Savolainen 1993-1996
+ * Copyright (C) by Hannu Savolainen 1993-1997
  *
  * OSS/Free for Linux is distributed under the GNU GENERAL PUBLIC LICENSE (GPL)
  * Version 2 (June 1991). See the "COPYING" file distributed with this software
@@ -15,7 +15,6 @@
 #ifndef _DEV_TABLE_H_
 #define _DEV_TABLE_H_
 
-#include <linux/config.h>
 
 /*
  * Sound card numbers 27 to 999. (1 to 26 are defined in soundcard.h)
@@ -84,7 +83,7 @@ struct dma_buffparms {
 #define DMA_EMPTY	0x00000010	
 #define DMA_ALLOC_DONE	0x00000020
 #define DMA_SYNCING	0x00000040
-#define DMA_CLEAN	0x00000080
+#define DMA_DIRTY	0x00000080
 #define DMA_POST	0x00000100
 
 	int      open_mode;
@@ -102,20 +101,25 @@ struct dma_buffparms {
 	int      subdivision;
 
 	int      fragment_size;
+        int	 needs_reorg;
 	int	 max_fragments;
 
 	int	 bytes_in_use;
 
 	int	 underrun_count;
-	int	 byte_counter;
+	unsigned long	 byte_counter;
+	unsigned long	 user_counter;
 	int	 data_rate; /* Bytes/second */
 
 	int	 mapping_flags;
 #define			DMA_MAP_MAPPED		0x00000001
 	char	neutral_byte;
+	int	dma;		/* DMA channel */
+
 #ifdef OS_DMA_PARMS
 	OS_DMA_PARMS
 #endif
+	int     applic_profile;	/* Application profile (APF_*) */
 };
 
 /*
@@ -136,14 +140,13 @@ struct audio_driver {
 	int (*open) (int dev, int mode);
 	void (*close) (int dev);
 	void (*output_block) (int dev, unsigned long buf, 
-			      int count, int intrflag, int dma_restart);
+			      int count, int intrflag);
 	void (*start_input) (int dev, unsigned long buf, 
-			     int count, int intrflag, int dma_restart);
-	int (*ioctl) (int dev, unsigned int cmd, caddr_t arg, int local);
+			     int count, int intrflag);
+	int (*ioctl) (int dev, unsigned int cmd, caddr_t arg);
 	int (*prepare_for_input) (int dev, int bufsize, int nbufs);
 	int (*prepare_for_output) (int dev, int bufsize, int nbufs);
-	void (*reset) (int dev);
-	void (*halt_xfer) (int dev);
+	void (*halt_io) (int dev);
 	int (*local_qlen)(int dev);
         void (*copy_user)(int dev, char *localbuf, int localoffs,
                                const char *userbuf, int useroffs, int len);
@@ -156,7 +159,7 @@ struct audio_driver {
 };
 
 struct audio_operations {
-        char name[64];
+        char name[128];
 	int flags;
 #define NOTHING_SPECIAL 	0x00
 #define NEEDS_RESTART		0x01
@@ -165,11 +168,12 @@ struct audio_operations {
 #define DMA_PSEUDO_AUTOMODE	0x08
 #define DMA_HARDSTOP		0x10
 #define DMA_NODMA		0x20
+#define DMA_EXACT		0x40
 	int  format_mask;	/* Bitmask for supported audio formats */
 	void *devc;		/* Driver specific info */
 	struct audio_driver *d;
+	void *portc;		/* Driver spesific info */
 	long buffsize;
-	int dmachan1, dmachan2;
 	struct dma_buffparms *dmap_in, *dmap_out;
 	struct coproc_operations *coproc;
 	int mixer_dev;
@@ -177,6 +181,7 @@ struct audio_operations {
  	int open_mode;
 	int go;
 	int min_fragment;	/* 0 == unlimited */
+	int parent_dev;		/* 0 -> no parent, 1 to n -> parent=parent_dev+1 */
 };
 
 int *load_mixer_volumes(char *name, int *levels, int present);
@@ -191,6 +196,7 @@ struct mixer_operations {
 };
 
 struct synth_operations {
+	char *id;	/* Unique identifier (ASCII) max 29 char */
 	struct synth_info *info;
 	int midi_dev;
 	int synth_type;
@@ -217,6 +223,12 @@ struct synth_operations {
 
  	struct voice_alloc_info alloc;
  	struct channel_info chn_info[16];
+	int emulation;
+#define	EMU_GM			1	/* General MIDI */
+#define	EMU_XG			2	/* Yamaha XG */
+#define MAX_SYSEX_BUF	64
+	unsigned char sysex_buf[MAX_SYSEX_BUF];
+	int sysex_ptr;
 };
 
 struct midi_input_info { /* MIDI input scanner variables */
@@ -255,6 +267,7 @@ struct midi_operations {
 
 struct sound_lowlev_timer {
 		int dev;
+		int priority;
 		unsigned int (*tmr_start)(int dev, unsigned int usecs);
 		void (*tmr_disable)(int dev);
 		void (*tmr_restart)(int dev);
@@ -279,7 +292,7 @@ struct sound_timer_operations {
 	struct synth_operations *synth_devs[MAX_SYNTH_DEV+MAX_MIDI_DEV] = {NULL}; int num_synths = 0;
 	struct midi_operations *midi_devs[MAX_MIDI_DEV] = {NULL}; int num_midis = 0;
 
-#ifdef CONFIG_SEQUENCER
+#if defined(CONFIG_SEQUENCER) && !defined(EXCLUDE_TIMERS)
 	extern struct sound_timer_operations default_sound_timer;
 	struct sound_timer_operations *sound_timer_devs[MAX_TIMER_DEV] = 
 		{&default_sound_timer, NULL}; 
@@ -369,8 +382,6 @@ struct sound_timer_operations {
 
 	int num_sound_drivers =
 	    sizeof(sound_drivers) / sizeof (struct driver_info);
-	int max_sound_drivers =
-	    sizeof(sound_drivers) / sizeof (struct driver_info);
 
 
 #ifndef FULL_SOUND
@@ -429,12 +440,12 @@ struct sound_timer_operations {
 
 #ifdef CONFIG_MSS
 #	ifdef DESKPROXL
-		{SNDCARD_DESKPROXL, {MSS_BASE, MSS_IRQ, MSS_DMA, -1}, SND_DEFAULT_ENABLE},
+		{SNDCARD_DESKPROXL, {MSS_BASE, MSS_IRQ, MSS_DMA, MSS_DMA2}, SND_DEFAULT_ENABLE},
 #	else
-		{SNDCARD_MSS, {MSS_BASE, MSS_IRQ, MSS_DMA, -1}, SND_DEFAULT_ENABLE},
+		{SNDCARD_MSS, {MSS_BASE, MSS_IRQ, MSS_DMA, MSS_DMA2}, SND_DEFAULT_ENABLE},
 #	endif
 #	ifdef MSS2_BASE
-		{SNDCARD_MSS, {MSS2_BASE, MSS2_IRQ, MSS2_DMA, -1}, SND_DEFAULT_ENABLE},
+		{SNDCARD_MSS, {MSS2_BASE, MSS2_IRQ, MSS2_DMA, MSS2_DMA2}, SND_DEFAULT_ENABLE},
 #	endif
 #endif
 
@@ -497,23 +508,20 @@ struct sound_timer_operations {
 
 	int num_sound_cards =
 	    sizeof(snd_installed_cards) / sizeof (struct card_info);
-	int max_sound_cards =
+	static int max_sound_cards =
 	    sizeof(snd_installed_cards) / sizeof (struct card_info);
 
 #else
 	int num_sound_cards = 0;
 	struct card_info snd_installed_cards[20] = {{0}};
-	int max_sound_cards = 20;
+	static int max_sound_cards = 20;
 #endif
 
 #if defined(MODULE) || (!defined(linux) && !defined(_AIX))
 	int trace_init = 0;
-#else
+#   else
 	int trace_init = 1;
-#endif
-#ifdef MODULE_PARM
-MODULE_PARM(trace_init, "i");
-#endif
+#   endif
 
 #else
 	extern struct audio_operations * audio_devs[MAX_AUDIO_DEV]; extern int num_audiodevs;
@@ -524,10 +532,8 @@ MODULE_PARM(trace_init, "i");
 
 	extern struct driver_info sound_drivers[];
 	extern int num_sound_drivers;
-	extern int max_sound_drivers;
 	extern struct card_info snd_installed_cards[];
 	extern int num_sound_cards;
-	extern int max_sound_cards;
 
 	extern int trace_init;
 #endif	/* _DEV_TABLE_C_ */

@@ -21,12 +21,6 @@
  */
 
 /*
- *	TODO
- *		- A better sock cache
- *
- */
-
-/*
  * Changes:
  *		Pedro Roque	:	Fast Retransmit/Recovery.
  *					Two receive queues.
@@ -1333,7 +1327,6 @@ int tcp_rcv_established(struct sock *sk, struct sk_buff *skb,
 
 	if(th->syn && skb->seq != sk->syn_seq)
 	{
-		printk(KERN_DEBUG "syn in established state\n");
 		tcp_reset(sk, skb);
 		kfree_skb(skb, FREE_READ);
 		return 1;
@@ -1409,7 +1402,7 @@ int tcp_rcv_state_process(struct sock *sk, struct sk_buff *skb,
 
 	/*
 	 *	state == CLOSED
-	 *	tested in tcp_v{4,6}_rcv
+	 *	Hash lookup always fails, so no worries. -DaveM 
 	 */
 
 	switch (sk->state) {

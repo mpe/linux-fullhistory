@@ -1,4 +1,4 @@
-OSS Lite version 3.7-beta release notes
+OSS Lite version 3.8-beta release notes
 ---------------------------------------
 
 Most up to date information about this driver is available from 
@@ -12,11 +12,11 @@ sites). It gives instructions about using sound with Linux. It's bit out of
 date but still very useful. Information about bug fixes and such things
 is available from the web page (see below).
 
-New Programmer's Guide is currently under work (June/July 96). Please
-check http://www.4front-tech.com/pguide for more info.
+Please check http://www.4front-tech.com/pguide for more info about programming
+with OSS.
 
    ====================================================
--  THIS VERSION ____REQUIRES____ Linux 2.1.5 OR LATER.
+-  THIS VERSION ____REQUIRES____ Linux 2.1.26 OR LATER.
    ====================================================
 
 Packages "snd-util-3.7.tar.gz" and "snd-data-0.1.tar.Z"

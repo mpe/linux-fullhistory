@@ -3,7 +3,7 @@
  * A driver for Soundcards, misc configuration parameters.
  */
 /*
- * Copyright (C) by Hannu Savolainen 1993-1996
+ * Copyright (C) by Hannu Savolainen 1993-1997
  *
  * OSS/Free for Linux is distributed under the GNU GENERAL PUBLIC LICENSE (GPL)
  * Version 2 (June 1991). See the "COPYING" file distributed with this software
@@ -95,9 +95,9 @@
 
 #define MAX_AUDIO_DEV	5
 #define MAX_MIXER_DEV	5
-#define MAX_SYNTH_DEV	3
+#define MAX_SYNTH_DEV	5
 #define MAX_MIDI_DEV	6
-#define MAX_TIMER_DEV	3
+#define MAX_TIMER_DEV	4
 
 struct fileinfo {
        	  int mode;	      /* Open mode */
@@ -132,6 +132,7 @@ struct voice_alloc_info {
 struct channel_info {
 		int pgm_num;
 		int bender_value;
+		int bender_range;
 		unsigned char controllers[128];
 	};
 

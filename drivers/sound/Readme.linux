@@ -72,6 +72,15 @@ Please check http://www.4front-tech.com/osslite for more info.
 Hannu Savolainen
 hannu@voxware.pp.fi
 
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+NOTE!
+
+Running the script enclosed below is usually not required. All known Linux
+distributions build them automaticly during installation. You need to run
+this script only if "ls /dev/sndstat" displays "No such file or directory".
+In case of any other error message you should start looking for the reason
+from somewhere else (see above).
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 ----------------- cut here ------------------------------
 #!/bin/sh
 # *****************************************

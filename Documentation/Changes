@@ -26,7 +26,7 @@ HTML-ized shopping list.
 http://www.datanet.hu/generations/linux/Changes2.html is an
 English-language HTML version.
 
-Last updated: February 11, 1997.
+Last updated: February 27, 1997.
 Current Author: Chris Ricker (gt1355b@prism.gatech.edu).
 
 Current Minimal Requirements
@@ -38,7 +38,7 @@ encountered a bug!
 - Kernel modules	 modutils-2.1.23
 - Gnu C 		 2.7.2.1
 - Binutils		 2.7.0.3
-- Linux C Library	 5.4.17
+- Linux C Library	 5.4.23
 - Dynamic Linker (ld.so) 1.8.5
 - Linux C++ Library	 2.7.2.1
 - Procps		 1.01
@@ -73,7 +73,7 @@ accordingly.
    For modules to work, you need to be running libc-5.4.x or greater.
 Since updates to libc fix other problems as well (security flaws, for
 example) and since 5.4.7 is missing a few needed symbols, try to get
-the latest 5.4.x you can.  Currently, libc-5.4.17 is the latest public
+the latest 5.4.x you can.  Currently, libc-5.4.23 is the latest public
 release.
 
    If you upgrade to libc-5.4.x, you also have to upgrade your dynamic
@@ -112,12 +112,6 @@ information to them if you need to replace the automatic routes.
    Also note that some routes, such as loopback routes, do not show up
 in some standard tools.  Check in /proc/net/rt_local to verify their
 presence.
-
-SysVinit
-========
-
-   To avoid an oops while shutting down or rebooting the computer,
-upgrade to SysVinit 2.69.
 
 RPM
 ===
@@ -160,8 +154,6 @@ Libc++: ls -l /usr/lib/libg++.so.*
 Modutils: insmod -V
 Mount: mount --version
 Procps: ps --version
-SysVinit: strings `egrep -li INIT_VERSION=sysvinit- /proc/*/environ | head
--1` | egrep -i INIT_VERSION=sysvinit-
 RPM:  rpm --version
 Sh-utils:  expr --v
 
@@ -191,12 +183,12 @@ ftp://sunsite.unc.edu/pub/Linux/GCC/release.gcc-2.7.2.1
 Linux C Library
 ===============
 
-The 5.4.17 release:
-ftp://tsx-11.mit.edu/pub/linux/packages/GCC/libc-5.4.17.bin.tar.gz
-ftp://sunsite.unc.edu/pub/Linux/GCC/libc-5.4.17.bin.tar.gz
-Installation notes for 5.4.17:
-ftp://tsx-11.mit.edu/pub/linux/packages/GCC/release.libc-5.4.17
-ftp://sunsite.unc.edu/pub/Linux/GCC/release.libc-5.4.13
+The 5.4.23 release:
+ftp://tsx-11.mit.edu/pub/linux/packages/GCC/libc-5.4.23.bin.tar.gz
+ftp://sunsite.unc.edu/pub/Linux/GCC/libc-5.4.23.bin.tar.gz
+Installation notes for 5.4.23:
+ftp://tsx-11.mit.edu/pub/linux/packages/GCC/release.libc-5.4.23
+ftp://sunsite.unc.edu/pub/Linux/GCC/release.libc-5.4.23
 
 Linux C++ Library
 =================
@@ -227,14 +219,7 @@ Procps utilities
 
 The 1.01 release:
 ftp://tsx-11.mit.edu/pub/linux/sources/usr.bin/procps-1.01.tgz
-ftp://sunsite.unc.edu/pub/Linux/system/Status/ps/procps-1.01.tgz
-
-SysVinit utilities
-==================
-
-The 2.69 release (when it gets there):
-ftp://tsx-11.mit.edu/pub/linux/sources/sbin/sysvinit-2.69.tar.gz
-ftp://sunsite.unc.edu/pub/Linux/system/Daemons/init/sysvinit-2.69.tar.gz
+ftp://sunsite.unc.edu/pub/Linux/system/status/ps/procps-1.01.tgz
 
 RPM utilities
 =============
@@ -254,7 +239,7 @@ DOSEMU
 
 The 0.64.3.1 release:
 ftp://tsx-11.mit.edu/pub/linux/ALPHA/dosemu/dosemu0.64.3.1.tgz
-ftp://sunsite.unc.edu/pub/Linux/system/Emulators/dosemu0.64.3.1.tgz
+ftp://sunsite.unc.edu/pub/Linux/system/emulators/dosemu0.64.3.1.tgz
 
 Loadlin
 =======

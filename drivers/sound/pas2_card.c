@@ -1,4 +1,3 @@
-#define _PAS2_CARD_C_
 /*
  * sound/pas2_card.c
  *
@@ -55,7 +54,7 @@ pas_write (unsigned char data, int ioaddr)
 
 /******************* Begin of the Interrupt Handler ********************/
 
-void
+static void
 pasintr (int irq, void *dev_id, struct pt_regs *dummy)
 {
   int             status;
@@ -107,7 +106,7 @@ pas_remove_intr (int mask)
 
 /******************* Begin of the Initialization Code ******************/
 
-int
+static int
 config_pas_hw (struct address_info *hw_config)
 {
   char            ok = 1;
@@ -116,26 +115,11 @@ config_pas_hw (struct address_info *hw_config)
   pas_irq = hw_config->irq;
 
   pas_write (0x00, 0x0B8B);
-
-  pas_write (0x36, 0x138B);	/*
-				   * Local timer control *
-				   * register
-				 */
-
-  pas_write (0x36, 0x1388);	/*
-				   * Sample rate timer (16 bit)
-				 */
+  pas_write (0x36, 0x138B);
+  pas_write (0x36, 0x1388);
   pas_write (0, 0x1388);
-
-  pas_write (0x74, 0x138B);	/*
-				   * Local timer control *
-				   * register
-				 */
-
-  pas_write (0x74, 0x1389);	/*
-				   * Sample count register (16
-				   * * bit)
-				 */
+  pas_write (0x74, 0x138B);
+  pas_write (0x74, 0x1389);
   pas_write (0, 0x1389);
 
   pas_write (0x80 | 0x40 | 0x20 | 1, 0x0B8A);
@@ -153,7 +137,7 @@ config_pas_hw (struct address_info *hw_config)
 
   if (pas_irq < 0 || pas_irq > 15)
     {
-      printk ("PAS2: Invalid IRQ %d", pas_irq);
+      printk ("PAS16: Invalid IRQ %d", pas_irq);
       ok = 0;
     }
   else
@@ -163,7 +147,7 @@ config_pas_hw (struct address_info *hw_config)
       pas_write (int_ptrs, 0xF38A);
       if (!irq_bits[pas_irq])
 	{
-	  printk ("PAS2: Invalid IRQ %d", pas_irq);
+	  printk ("PAS16: Invalid IRQ %d", pas_irq);
 	  ok = 0;
 	}
       else
@@ -175,7 +159,7 @@ config_pas_hw (struct address_info *hw_config)
 
   if (hw_config->dma < 0 || hw_config->dma > 7)
     {
-      printk ("PAS2: Invalid DMA selection %d", hw_config->dma);
+      printk ("PAS16: Invalid DMA selection %d", hw_config->dma);
       ok = 0;
     }
   else
@@ -183,7 +167,7 @@ config_pas_hw (struct address_info *hw_config)
       pas_write (dma_bits[hw_config->dma], 0xF389);
       if (!dma_bits[hw_config->dma])
 	{
-	  printk ("PAS2: Invalid DMA selection %d", hw_config->dma);
+	  printk ("PAS16: Invalid DMA selection %d", hw_config->dma);
 	  ok = 0;
 	}
       else
@@ -268,7 +252,7 @@ config_pas_hw (struct address_info *hw_config)
   return ok;
 }
 
-int
+static int
 detect_pas_hw (struct address_info *hw_config)
 {
   unsigned char   board_id, foo;
@@ -291,8 +275,8 @@ detect_pas_hw (struct address_info *hw_config)
     return 0;
 
   /*
-   * We probably have a PAS-series board, now check for a PAS2-series board
-   * by trying to change the board revision bits. PAS2-series hardware won't
+   * We probably have a PAS-series board, now check for a PAS16-series board
+   * by trying to change the board revision bits. PAS16-series hardware won't
    * let you do this - the bits are read-only.
    */
 
@@ -302,9 +286,7 @@ detect_pas_hw (struct address_info *hw_config)
   foo = inb (0x0B8B);
   pas_write (board_id, 0x0B8B);
 
-  if (board_id != foo)		/*
-				 * Not a PAS2
-				 */
+  if (board_id != foo)
     return 0;
 
   pas_model = pas_read (0xFF88);
@@ -332,7 +314,6 @@ attach_pas_card (struct address_info *hw_config)
 
       if (config_pas_hw (hw_config))
 	{
-
 #ifdef CONFIG_AUDIO
 	  pas_pcm_init (hw_config);
 #endif
@@ -342,15 +323,12 @@ attach_pas_card (struct address_info *hw_config)
 	  sb_dsp_disable_midi (pas_sb_base);	/* No MIDI capability */
 #endif
 
-
 #ifdef CONFIG_MIDI
 	  pas_midi_init ();
 #endif
-
 	  pas_init_mixer ();
 	}
     }
-
 }
 
 int

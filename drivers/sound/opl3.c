@@ -4,7 +4,7 @@
  * A low level driver for Yamaha YM3812 and OPL-3 -chips
  */
 /*
- * Copyright (C) by Hannu Savolainen 1993-1996
+ * Copyright (C) by Hannu Savolainen 1993-1997
  *
  * OSS/Free for Linux is distributed under the GNU GENERAL PUBLIC LICENSE (GPL)
  * Version 2 (June 1991). See the "COPYING" file distributed with this software
@@ -68,20 +68,12 @@ opl_devinfo;
 
 static struct opl_devinfo *devc = NULL;
 
-static int      force_opl3_mode = 0;
-
 static int      detected_model;
 
 static int      store_instr (int instr_no, struct sbi_instrument *instr);
 static void     freq_to_fnum (int freq, int *block, int *fnum);
 static void     opl3_command (int io_addr, unsigned int addr, unsigned int val);
 static int      opl3_kill_note (int dev, int voice, int note, int velocity);
-
-void
-enable_opl3_mode (int left, int right, int both)
-{
-  force_opl3_mode = 1;
-}
 
 static void
 enter_4op_mode (void)
@@ -119,7 +111,7 @@ opl3_ioctl (int dev,
       {
 	struct sbi_instrument ins;
 
-	copy_from_user ((char *) &ins, &((char *) arg)[0], sizeof (ins));
+	memcpy ((char *) &ins, (&((char *) arg)[0]), sizeof (ins));
 
 	if (ins.channel < 0 || ins.channel >= SBFM_MAXINSTR)
 	  {
@@ -134,11 +126,7 @@ opl3_ioctl (int dev,
     case SNDCTL_SYNTH_INFO:
       devc->fm_info.nr_voices = (devc->nr_voice == 12) ? 6 : devc->nr_voice;
 
-      {
-	char           *fixit = (char *) &devc->fm_info;
-
-	copy_to_user (&((char *) arg)[0], fixit, sizeof (devc->fm_info));
-      };
+      memcpy ((&((char *) arg)[0]), (char *) &devc->fm_info, sizeof (devc->fm_info));
       return 0;
       break;
 
@@ -180,6 +168,7 @@ opl3_detect (int ioaddr, int *osp)
 
 
   devc = (struct opl_devinfo *) (sound_mem_blocks[sound_nblocks] = vmalloc (sizeof (*devc)));
+  sound_mem_sizes[sound_nblocks] = sizeof (*devc);
   if (sound_nblocks < 1024)
     sound_nblocks++;;
 
@@ -200,17 +189,18 @@ opl3_detect (int ioaddr, int *osp)
 
   signature = stat1 = inb (ioaddr);	/* Status register */
 
-  if (signature != 0x00 && signature != 0x06 && signature != 0x02)
+  if (signature != 0x00 && signature != 0x06 && signature != 0x02 &&
+      signature != 0x0f)
     {
       DDB (printk ("OPL3 not detected %x\n", signature));
       return 0;
     }
 
-  if (signature == 0x06 && !force_opl3_mode)	/* OPL2 */
+  if (signature == 0x06)	/* OPL2 */
     {
       detected_model = 2;
     }
-  else if (signature == 0x00)	/* OPL3 or OPL4 */
+  else if (signature == 0x00 || signature == 0x0f)	/* OPL3 or OPL4 */
     {
       unsigned char   tmp;
 
@@ -341,7 +331,7 @@ opl3_set_instr (int dev, int voice, int instr_no)
  * volume -8 it was implemented as a table because it is only 128 bytes and
  * it saves a lot of log() calculations. (RH)
  */
-char            fm_volume_table[128] =
+static char     fm_volume_table[128] =
 {-64, -48, -40, -35, -32, -29, -27, -26,
  -24, -23, -21, -20, -19, -18, -18, -17,
  -16, -15, -15, -14, -13, -13, -12, -12,
@@ -664,7 +654,7 @@ opl3_start_note (int dev, int voice, int note, int volume)
    * have to calculate the bending now.
    */
 
-  freq = compute_finetune (devc->voc[voice].orig_freq, devc->voc[voice].bender, devc->voc[voice].bender_range);
+  freq = compute_finetune (devc->voc[voice].orig_freq, devc->voc[voice].bender, devc->voc[voice].bender_range, 0);
   devc->voc[voice].current_freq = freq;
 
   freq_to_fnum (freq, &block, &fnum);
@@ -741,7 +731,7 @@ opl3_command (int io_addr, unsigned int addr, unsigned int val)
 
   outb (((unsigned char) (addr & 0xff)), io_addr);
 
-  if (!devc->model != 2)
+  if (devc->model != 2)
     tenmicrosec (devc->osp);
   else
     for (i = 0; i < 2; i++)
@@ -973,7 +963,7 @@ bend_pitch (int dev, int voice, int value)
 				 * Not keyed on
 				 */
 
-  freq = compute_finetune (devc->voc[voice].orig_freq, devc->voc[voice].bender, devc->voc[voice].bender_range);
+  freq = compute_finetune (devc->voc[voice].orig_freq, devc->voc[voice].bender, devc->voc[voice].bender_range, 0);
   devc->voc[voice].current_freq = freq;
 
   freq_to_fnum (freq, &block, &fnum);
@@ -1099,7 +1089,8 @@ opl3_setup_voice (int dev, int voice, int chn)
   opl3_set_instr (dev, voice,
 		  info->pgm_num);
 
-  devc->voc[voice].bender = info->bender_value;
+  devc->voc[voice].bender = 0;
+  devc->voc[voice].bender_range = info->bender_range;
   devc->voc[voice].volume =
     info->controllers[CTL_MAIN_VOLUME];
   devc->voc[voice].panning = (info->controllers[CTL_PAN] * 2) - 128;
@@ -1107,6 +1098,7 @@ opl3_setup_voice (int dev, int voice, int chn)
 
 static struct synth_operations opl3_operations =
 {
+  "OPL",
   NULL,
   0,
   SYNTH_TYPE_FM,

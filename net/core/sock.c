@@ -328,17 +328,14 @@ int sock_getsockopt(struct socket *sock, int level, int optname,
 		
 		case SO_LINGER:	
 		  {
-		        int err;
 			len=min(len,sizeof(ling));
 			if (put_user(len, optlen)) 
-			if (!err) {
-				ling.l_onoff=sk->linger;
-				ling.l_linger=sk->lingertime;
-				err = copy_to_user(optval,&ling,len);
-				if (err)
-				    err = -EFAULT;
-			}
-			return err;
+				return -EFAULT;
+			ling.l_onoff=sk->linger;
+			ling.l_linger=sk->lingertime;
+			if (copy_to_user(optval,&ling,len))
+				return -EFAULT;
+			return 0;
 		  }
 		
 		case SO_BSDCOMPAT:

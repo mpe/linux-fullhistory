@@ -4,7 +4,7 @@
  * Soundcard driver for Linux
  */
 /*
- * Copyright (C) by Hannu Savolainen 1993-1996
+ * Copyright (C) by Hannu Savolainen 1993-1997
  *
  * OSS/Free for Linux is distributed under the GNU GENERAL PUBLIC LICENSE (GPL)
  * Version 2 (June 1991). See the "COPYING" file distributed with this software
@@ -14,11 +14,23 @@
 
 
 #include "sound_config.h"
+#include <linux/types.h>
+#include <linux/errno.h>
+#include <linux/signal.h>
+#include <linux/fcntl.h>
+#include <linux/ctype.h>
+#ifdef __KERNEL__
+#include <asm/io.h>
+#include <asm/segment.h>
+#include <linux/wait.h>
+#include <linux/malloc.h>
+#include <linux/ioport.h>
+#endif /* __KERNEL__ */
+#include <linux/delay.h>
 
 #include <linux/major.h>
 
 
-int            *sound_osp = NULL;
 static int      chrdev_registered = 0;
 static int      sound_major = SOUND_MAJOR;
 
@@ -28,6 +40,7 @@ static int      is_unloading = 0;
  * Table for permanently allocated memory (used when unloading the module)
  */
 caddr_t         sound_mem_blocks[1024];
+int             sound_mem_sizes[1024];
 int             sound_nblocks = 0;
 
 static int      soundcard_configured = 0;
@@ -42,31 +55,6 @@ static char     dma_alloc_map[8] =
 #define DMA_MAP_BUSY		2
 
 
-int
-ioctl_in (caddr_t arg)
-{
-  int             xx;
-
-  get_user (xx, (int *) arg);
-  return xx;
-}
-
-int
-ioctl_out (caddr_t arg, int result)
-{
-  put_user (result, (int *) arg);
-  return 0;
-}
-
-int
-snd_ioctl_return (int *addr, int value)
-{
-  if (value < 0)
-    return value;
-
-  put_user (value, (int *) &((addr)[0]));
-  return 0;
-}
 
 static long
 sound_read (struct inode *inode, struct file *file, char *buf, unsigned long count)
@@ -159,27 +147,37 @@ sound_ioctl (struct inode *inode, struct file *file,
 	     unsigned int cmd, unsigned long arg)
 {
   int             dev, err;
+  int             len = 0;
+  int             alloced = 0;
+  char           *ptr = (char *) arg;
 
   dev = MINOR (inode->i_rdev);
 
   files[dev].flags = file->f_flags;
 
-  if (_IOC_DIR (cmd) != _IOC_NONE)
+  if (_SIOC_DIR (cmd) != _SIOC_NONE)
     {
       /*
          * Have to validate the address given by the process.
        */
-      int             len;
 
-      len = _IOC_SIZE (cmd);
+      len = _SIOC_SIZE (cmd);
+      if (len < 1 || len > 65536 || arg == 0)
+	return -EFAULT;
 
-      if (_IOC_DIR (cmd) & _IOC_WRITE)
+      ptr = vmalloc (len);
+      alloced = 1;
+      if (ptr == NULL)
+	return -EFAULT;
+
+      if (_SIOC_DIR (cmd) & _SIOC_WRITE)
 	{
 	  if ((err = verify_area (VERIFY_READ, (void *) arg, len)) < 0)
 	    return err;
+	  copy_from_user (ptr, (char *) arg, len);
 	}
 
-      if (_IOC_DIR (cmd) & _IOC_READ)
+      if (_SIOC_DIR (cmd) & _SIOC_READ)
 	{
 	  if ((err = verify_area (VERIFY_WRITE, (void *) arg, len)) < 0)
 	    return err;
@@ -187,34 +185,42 @@ sound_ioctl (struct inode *inode, struct file *file,
 
     }
 
-  err = sound_ioctl_sw (dev, &files[dev], cmd, (caddr_t) arg);
+  err = sound_ioctl_sw (dev, &files[dev], cmd, (caddr_t) ptr);
+
+  if (_SIOC_DIR (cmd) & _SIOC_READ)
+    {
+      copy_to_user ((char *) arg, ptr, len);
+    }
+
+  if (ptr != NULL && alloced)
+    vfree (ptr);
 
   return err;
 }
 
-static unsigned int
-sound_poll (struct file *file, poll_table * wait)
+static int
+sound_select (struct inode *inode, struct file *file, int sel_type, poll_table * wait)
 {
   int             dev;
 
-  dev = MINOR (file->f_inode->i_rdev);
+  dev = MINOR (inode->i_rdev);
 
   files[dev].flags = file->f_flags;
 
-  DEB (printk ("sound_poll(dev=%d)\n", dev));
+  DEB (printk ("sound_select(dev=%d, type=0x%x)\n", dev, sel_type));
 
   switch (dev & 0x0f)
     {
 #ifdef CONFIG_SEQUENCER
     case SND_DEV_SEQ:
     case SND_DEV_SEQ2:
-      return sequencer_poll (dev, &files[dev], wait);
+      return sequencer_select (dev, &files[dev], sel_type, wait);
       break;
 #endif
 
 #ifdef CONFIG_MIDI
     case SND_DEV_MIDIN:
-      return MIDIbuf_poll (dev, &files[dev], wait);
+      return MIDIbuf_select (dev, &files[dev], sel_type, wait);
       break;
 #endif
 
@@ -222,7 +228,7 @@ sound_poll (struct file *file, poll_table * wait)
     case SND_DEV_DSP:
     case SND_DEV_DSP16:
     case SND_DEV_AUDIO:
-      return audio_poll (dev, &files[dev], wait);
+      return audio_select (dev, &files[dev], sel_type, wait);
       break;
 #endif
 
@@ -231,6 +237,21 @@ sound_poll (struct file *file, poll_table * wait)
     }
 
   return 0;
+}
+
+static unsigned int
+sound_poll (struct file *file, poll_table * wait)
+{
+  struct inode   *inode;
+  int             ret = 0;
+
+  inode = file->f_inode;
+
+  if (sound_select (inode, file, SEL_IN, wait))
+    ret |= POLLIN;
+  if (sound_select (inode, file, SEL_OUT, wait))
+    ret |= POLLOUT;
+  return ret;
 }
 
 static int
@@ -334,7 +355,11 @@ static struct file_operations sound_fops =
   sound_release
 };
 
+#ifdef MODULE
+static void
+#else
 void
+#endif
 soundcard_init (void)
 {
 #ifndef MODULE
@@ -444,6 +469,11 @@ cleanup_module (void)
 {
   int             i;
 
+  if (MOD_IN_USE)
+    {
+      return;
+    }
+
   if (chrdev_registered)
     unregister_chrdev (sound_major, "sound");
 
@@ -460,9 +490,6 @@ cleanup_module (void)
 #endif
   sound_unload_drivers ();
 
-  for (i = 0; i < sound_nblocks; i++)
-    vfree (sound_mem_blocks[i]);
-
   free_all_irqs ();		/* If something was left allocated by accident */
 
   for (i = 0; i < 8; i++)
@@ -473,16 +500,18 @@ cleanup_module (void)
       }
 
 
+  for (i = 0; i < sound_nblocks; i++)
+    {
+      vfree (sound_mem_blocks[i]);
+    }
+
 }
 #endif
 
 void
 tenmicrosec (int *osp)
 {
-  int             i;
-
-  for (i = 0; i < 16; i++)
-    inb (0x80);
+  udelay (10);
 }
 
 int
@@ -493,7 +522,7 @@ snd_set_irq_handler (int interrupt_level, void (*iproc) (int, void *, struct pt_
 
   save_flags (flags);
   cli ();
-  retcode = request_irq (interrupt_level, iproc, 0 /* SA_INTERRUPT */ , name, NULL);
+  retcode = request_irq (interrupt_level, iproc, 0, name, NULL);
   if (retcode < 0)
     {
       printk ("Sound: IRQ%d already in use\n", interrupt_level);
@@ -544,7 +573,7 @@ sound_open_dma (int chn, char *deviceID)
 
   if (dma_alloc_map[chn] != DMA_MAP_FREE)
     {
-      printk ("sound_open_dma: DMA channel %d busy or not allocated\n", chn);
+      printk ("sound_open_dma: DMA channel %d busy or not allocated (%d)\n", chn, dma_alloc_map[chn]);
       restore_flags (flags);
       return 1;
     }
@@ -557,7 +586,7 @@ sound_open_dma (int chn, char *deviceID)
 void
 sound_free_dma (int chn)
 {
-  if (dma_alloc_map[chn] != DMA_MAP_FREE)
+  if (dma_alloc_map[chn] == DMA_MAP_UNAVAIL)
     {
       /* printk ("sound_free_dma: Bad access to DMA channel %d\n", chn); */
       return;
@@ -628,14 +657,7 @@ sound_stop_timer (void)
 
 #ifdef CONFIG_AUDIO
 
-#ifdef KMALLOC_DMA_BROKEN
-fatal_error__This_version_is_not_compatible_with_this_kernel;
-#endif
-
 static int      dma_buffsize = DSP_BUFFSIZE;
-#ifdef MODULE_PARM
-MODULE_PARM(dma_buffsize, "i");
-#endif
 
 int
 sound_alloc_dmap (int dev, struct dma_buffparms *dmap, int chan)
@@ -753,15 +775,6 @@ sound_free_dmap (int dev, struct dma_buffparms *dmap, int chan)
   dmap->raw_buf = NULL;
 }
 
-int
-sound_map_buffer (int dev, struct dma_buffparms *dmap, buffmem_desc * info)
-{
-  printk ("Entered sound_map_buffer()\n");
-  printk ("Exited sound_map_buffer()\n");
-  return -EINVAL;
-}
-#endif
-
 void
 conf_printf (char *name, struct address_info *hw_config)
 {
@@ -803,3 +816,29 @@ conf_printf2 (char *name, int base, int irq, int dma, int dma2)
 
   printk ("\n");
 }
+
+/* Intel version !!!!!!!!! */
+int 
+sound_start_dma (int dev, struct dma_buffparms *dmap, int chan,
+		 unsigned long physaddr,
+		 int count, int dma_mode, int autoinit)
+{
+  unsigned long   flags;
+
+/* printk("Start DMA %d, %d\n", (int)(physaddr-dmap->raw_buf_phys), count); */
+  if (autoinit)
+    dma_mode |= DMA_AUTOINIT;
+  save_flags (flags);
+  cli ();
+  disable_dma (chan);
+  clear_dma_ff (chan);
+  set_dma_mode (chan, dma_mode);
+  set_dma_addr (chan, physaddr);
+  set_dma_count (chan, count);
+  enable_dma (chan);
+  restore_flags (flags);
+
+  return 0;
+}
+
+#endif

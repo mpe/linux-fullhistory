@@ -4,14 +4,13 @@
  * Device file manager for /dev/midi#
  */
 /*
- * Copyright (C) by Hannu Savolainen 1993-1996
+ * Copyright (C) by Hannu Savolainen 1993-1997
  *
  * OSS/Free for Linux is distributed under the GNU GENERAL PUBLIC LICENSE (GPL)
  * Version 2 (June 1991). See the "COPYING" file distributed with this software
  * for more info.
  */
 #include <linux/config.h>
-#include <linux/poll.h>
 
 
 #include "sound_config.h"
@@ -84,7 +83,7 @@ static volatile int open_devs = 0;
 	  restore_flags(flags); \
 	}
 
-void
+static void
 drain_midi_queue (int dev)
 {
 
@@ -484,13 +483,13 @@ MIDIbuf_ioctl (int dev, struct fileinfo *file,
       {
 
       case SNDCTL_MIDI_PRETIME:
-	get_user (val, (int *) arg);
+	val = *(int *) arg;
 	if (val < 0)
 	  val = 0;
 
 	val = (HZ * val) / 10;
 	parms[dev].prech_timeout = val;
-	return ioctl_out (arg, val);
+	return (*(int *) arg = val);
 	break;
 
       default:
@@ -498,21 +497,40 @@ MIDIbuf_ioctl (int dev, struct fileinfo *file,
       }
 }
 
-unsigned int
-MIDIbuf_poll (kdev_t dev, struct fileinfo *file, poll_table * wait)
+int
+MIDIbuf_select (int dev, struct fileinfo *file, int sel_type, poll_table * wait)
 {
-  unsigned int mask = 0;
+  dev = dev >> 4;
 
-  input_sleep_flag[dev].opts = WK_SLEEP;
-  poll_wait (&input_sleeper[dev], wait);
-  midi_sleep_flag[dev].opts = WK_SLEEP;
-  poll_wait (&midi_sleeper[dev], wait);
+  switch (sel_type)
+    {
+    case SEL_IN:
+      if (!DATA_AVAIL (midi_in_buf[dev]))
+	{
 
-  if (DATA_AVAIL (midi_in_buf[dev]))
-    mask |= POLLIN | POLLRDNORM;
-  if (!SPACE_AVAIL (midi_out_buf[dev]))
-    mask |= POLLOUT | POLLWRNORM;
-  return mask;
+	  input_sleep_flag[dev].opts = WK_SLEEP;
+	  poll_wait (&input_sleeper[dev], wait);
+	  return 0;
+	}
+      return 1;
+      break;
+
+    case SEL_OUT:
+      if (SPACE_AVAIL (midi_out_buf[dev]))
+	{
+
+	  midi_sleep_flag[dev].opts = WK_SLEEP;
+	  poll_wait (&midi_sleeper[dev], wait);
+	  return 0;
+	}
+      return 1;
+      break;
+
+    case SEL_EX:
+      return 0;
+    }
+
+  return 0;
 }
 
 

@@ -22,6 +22,7 @@ static struct synth_info std_synth_info =
 
 static struct synth_operations std_midi_synth =
 {
+  "MIDI",
   &std_synth_info,
   0,
   SYNTH_TYPE_MIDI,

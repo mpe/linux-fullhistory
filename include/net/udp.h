@@ -24,6 +24,15 @@
 
 #include <linux/udp.h>
 
+#define UDP_HTABLE_SIZE		128
+
+/* udp.c: This needs to be shared by v4 and v6 because the lookup
+ *        and hashing code needs to work with different AF's yet
+ *        the port space is shared.
+ */
+extern struct sock *udp_hash[UDP_HTABLE_SIZE];
+
+extern unsigned short udp_good_socknum(void);
 
 #define UDP_NO_CHECK	0
 
@@ -39,7 +48,6 @@ extern int	udp_sendmsg(struct sock *sk, struct msghdr *msg, int len);
 
 extern int	udp_rcv(struct sk_buff *skb, unsigned short len);
 extern int	udp_ioctl(struct sock *sk, int cmd, unsigned long arg);
-extern void	udp_cache_zap(void);	/* Remove udp last socket cache */
 
 /* CONFIG_IP_TRANSPARENT_PROXY */
 extern int	udp_chkaddr(struct sk_buff *skb);

@@ -5,7 +5,7 @@
  */
 
 /*
- * Copyright (C) by Hannu Savolainen 1993-1996
+ * Copyright (C) by Hannu Savolainen 1993-1997
  *
  * OSS/Free for Linux is distributed under the GNU GENERAL PUBLIC LICENSE (GPL)
  * Version 2 (June 1991). See the "COPYING" file distributed with this software
@@ -78,7 +78,7 @@ typedef mixer_ent mixer_ents[2];
 #define MIX_ENT(name, reg_l, pola_l, pos_l, len_l, reg_r, pola_r, pos_r, len_r)	\
 	{{reg_l, pola_l, pos_l, len_l}, {reg_r, pola_r, pos_r, len_r}}
 
-mixer_ents ad1848_mix_devices[32] = {
+static mixer_ents ad1848_mix_devices[32] = {
 MIX_ENT(SOUND_MIXER_VOLUME,	27, 1, 0, 4,	29, 1, 0, 4),
 MIX_ENT(SOUND_MIXER_BASS,	 0, 0, 0, 0,	 0, 0, 0, 0),
 MIX_ENT(SOUND_MIXER_TREBLE,	 0, 0, 0, 0,	 0, 0, 0, 0),
@@ -98,7 +98,7 @@ MIX_ENT(SOUND_MIXER_LINE2,	 4, 1, 0, 5,	 5, 1, 0, 5),
 MIX_ENT(SOUND_MIXER_LINE3,	18, 1, 0, 5,	19, 1, 0, 5)
 };
 
-mixer_ents iwave_mix_devices[32] = {
+static mixer_ents iwave_mix_devices[32] = {
 MIX_ENT(SOUND_MIXER_VOLUME,	25, 1, 0, 5,	27, 1, 0, 5),
 MIX_ENT(SOUND_MIXER_BASS,	 0, 0, 0, 0,	 0, 0, 0, 0),
 MIX_ENT(SOUND_MIXER_TREBLE,	 0, 0, 0, 0,	 0, 0, 0, 0),
@@ -108,7 +108,7 @@ MIX_ENT(SOUND_MIXER_SPEAKER,	26, 1, 0, 4,	 0, 0, 0, 0),
 MIX_ENT(SOUND_MIXER_LINE,	18, 1, 0, 5,	19, 1, 0, 5),
 MIX_ENT(SOUND_MIXER_MIC,	 0, 0, 5, 1,	 1, 0, 5, 1),
 MIX_ENT(SOUND_MIXER_CD,	 	 2, 1, 0, 5,	 3, 1, 0, 5),
-MIX_ENT(SOUND_MIXER_IMIX,	13, 1, 2, 6,	 0, 0, 0, 0),
+MIX_ENT(SOUND_MIXER_IMIX,	16, 1, 0, 5,	17, 1, 0, 5),
 MIX_ENT(SOUND_MIXER_ALTPCM,	 0, 0, 0, 0,	 0, 0, 0, 0),
 MIX_ENT(SOUND_MIXER_RECLEV,	 0, 0, 0, 0,	 0, 0, 0, 0),
 MIX_ENT(SOUND_MIXER_IGAIN,	 0, 0, 0, 4,	 1, 0, 0, 4),
@@ -123,7 +123,7 @@ MIX_ENT(SOUND_MIXER_LINE3,	18, 1, 0, 5,	19, 1, 0, 5)
  * VOLUME, SYNTH, LINE, CD are not enabled above.
  * MIC is level of mic monitoring direct to output. Same for CD, LINE, etc.
  */
-mixer_ents c930_mix_devices[32] = {
+static mixer_ents c930_mix_devices[32] = {
 MIX_ENT(SOUND_MIXER_VOLUME,	22, 1, 0, 5,	23, 1, 0, 5),
 MIX_ENT(SOUND_MIXER_BASS,	 0, 0, 0, 0,	 0, 0, 0, 0),
 MIX_ENT(SOUND_MIXER_TREBLE,	 0, 0, 0, 0,	 0, 0, 0, 0),

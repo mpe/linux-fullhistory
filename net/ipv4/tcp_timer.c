@@ -348,28 +348,29 @@ static __inline__ int tcp_keepopen_proc(struct sock *sk)
  */
 #define MAX_KA_PROBES	5
 
+/* Keepopen's are only valid for "established" TCP's, nicely our listener
+ * hash gets rid of most of the useless testing, so we run through a couple
+ * of the established hash chains each clock tick.  -DaveM
+ */
 static void tcp_keepalive(unsigned long data)
 {
-	struct sock *sk;
+	static int chain_start = 0;
 	int count = 0;
 	int i;
 	
-	for(i=0; i < SOCK_ARRAY_SIZE; i++)
-	{
-		sk = tcp_prot.sock_array[i];
-		while (sk)
-		{
-			if (sk->keepopen)
-			{
+	for(i = chain_start; i < (chain_start + (TCP_HTABLE_SIZE >> 2)); i++) {
+		struct sock *sk = tcp_established_hash[i];
+		while(sk) {
+			if(sk->keepopen) {
 				count += tcp_keepopen_proc(sk);
+				if(count == MAX_KA_PROBES)
+					goto out;
 			}
-
-			if (count == MAX_KA_PROBES)
-				return;
-			
-			sk = sk->next;	    
+			sk = sk->next;
 		}
 	}
+out:
+	chain_start = ((chain_start + (TCP_HTABLE_SIZE>>2)) & (TCP_HTABLE_SIZE - 1));
 }
 
 /*
@@ -457,26 +458,24 @@ void tcp_retransmit_timer(unsigned long data)
  *	Slow timer for SYN-RECV sockets
  */
 
+/* This now scales very nicely. -DaveM */
 static void tcp_syn_recv_timer(unsigned long data)
 {
 	struct sock *sk;
 	unsigned long now = jiffies;
 	int i;
 
-	for(i=0; i < SOCK_ARRAY_SIZE; i++)
-	{
-		sk = tcp_prot.sock_array[i];
-		while (sk)
-		{
+	for(i = 0; i < TCP_LHTABLE_SIZE; i++) {
+		sk = tcp_listening_hash[i];
+
+		while(sk) {
 			struct tcp_opt *tp = &sk->tp_pinfo.af_tcp;
 			
-			if (sk->state == TCP_LISTEN && !sk->users &&
-			    tp->syn_wait_queue)
-			{
+			/* TCP_LISTEN is implied. */
+			if (!sk->users && tp->syn_wait_queue) {
 				struct open_request *req;
 
 				req = tp->syn_wait_queue;
-
 				do {
 					struct open_request *conn;
 				  
@@ -484,17 +483,13 @@ static void tcp_syn_recv_timer(unsigned long data)
 					req = req->dl_next;
 
 					if (conn->sk)
-					{
 						continue;
-					}
-					
+
 					if ((long)(now - conn->expires) <= 0)
 						break;
 
 					tcp_synq_unlink(tp, conn);
-					
-					if (conn->retrans >= TCP_RETR1)
-					{
+					if (conn->retrans >= TCP_RETR1) {
 #ifdef TCP_DEBUG
 						printk(KERN_DEBUG "syn_recv: "
 						       "too many retransmits\n");
@@ -506,16 +501,15 @@ static void tcp_syn_recv_timer(unsigned long data)
 
 						if (!tp->syn_wait_queue)
 							break;
-					}
-					else
-					{
+					} else {
 						__u32 timeo;
-						
+
 						(*conn->class->rtx_syn_ack)(sk, conn);
 
 						conn->retrans++;
 #ifdef TCP_DEBUG
-						printk(KERN_DEBUG "syn_ack rtx %d\n", conn->retrans);
+						printk(KERN_DEBUG "syn_ack rtx %d\n",
+						       conn->retrans);
 #endif
 						timeo = min((TCP_TIMEOUT_INIT 
 							     << conn->retrans),
@@ -525,7 +519,6 @@ static void tcp_syn_recv_timer(unsigned long data)
 					}
 				} while (req != tp->syn_wait_queue);
 			}
-			
 			sk = sk->next;
 		}
 	}

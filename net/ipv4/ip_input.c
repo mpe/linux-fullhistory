@@ -245,39 +245,34 @@ int ip_local_deliver(struct sk_buff *skb)
 	 *	RFC 1122: SHOULD pass TOS value up to the transport layer.
 	 */
  
-	hash = iph->protocol & (SOCK_ARRAY_SIZE-1);
+	/* Note: See raw.c and net/raw.h, RAWV4_HTABLE_SIZE==MAX_INET_PROTOS */
+	hash = iph->protocol & (MAX_INET_PROTOS - 1);
 
 	/* 
 	 *	If there maybe a raw socket we must check - if not we don't care less 
 	 */
 		 
-	if((raw_sk=raw_prot.sock_array[hash])!=NULL)
-	{
-		struct sock *sknext=NULL;
+	if((raw_sk = raw_v4_htable[hash]) != NULL) {
+		struct sock *sknext = NULL;
 		struct sk_buff *skb1;
-		raw_sk=get_sock_raw(raw_sk, iph->protocol,  iph->saddr, iph->daddr);
-		if(raw_sk)	/* Any raw sockets */
-		{
-			do
-			{
+		raw_sk = raw_v4_lookup(raw_sk, iph->protocol, iph->saddr, iph->daddr);
+		if(raw_sk) {	/* Any raw sockets */
+			do {
 				/* Find the next */
-				sknext=get_sock_raw(raw_sk->next, iph->protocol, iph->saddr, iph->daddr);
+				sknext = raw_v4_lookup(raw_sk->next, iph->protocol,
+						       iph->saddr, iph->daddr);
 				if(sknext)
-					skb1=skb_clone(skb, GFP_ATOMIC);
+					skb1 = skb_clone(skb, GFP_ATOMIC);
 				else
 					break;	/* One pending raw socket left */
 				if(skb1)
 					raw_rcv(raw_sk, skb1);
-				raw_sk=sknext;
-			}
-			while(raw_sk!=NULL);
+				raw_sk = sknext;
+			} while(raw_sk!=NULL);
 				
-			/*
-			 *	Here either raw_sk is the last raw socket, or NULL if none 
-			 */
-			
-			/*
-			 *	We deliver to the last raw socket AFTER the protocol checks as it avoids a surplus copy 
+			/*	Here either raw_sk is the last raw socket, or NULL if
+			 *	none.  We deliver to the last raw socket AFTER the
+			 *	protocol checks as it avoids a surplus copy.
 			 */
 		}
 	}
@@ -286,7 +281,6 @@ int ip_local_deliver(struct sk_buff *skb)
 	 *	skb->h.raw now points at the protocol beyond the IP header.
 	 */
 	
-	hash = iph->protocol & (MAX_INET_PROTOS -1);
 	for (ipprot = (struct inet_protocol *)inet_protos[hash];ipprot != NULL;ipprot=(struct inet_protocol *)ipprot->next)
 	{
 		struct sk_buff *skb2;

@@ -3,9 +3,6 @@
 
 extern struct proto_ops		inet_stream_ops;
 extern struct proto_ops		inet_dgram_ops;
-extern struct sock *		tcp_sock_array[SOCK_ARRAY_SIZE];
-extern struct sock *		udp_sock_array[SOCK_ARRAY_SIZE];
-
 
 /*
  *	INET4 prototypes used by INET6

@@ -1,3 +1,61 @@
+ver.0.3.1a
+	- Fix a bug to reset voice counter in awe_reset
+	- Fix voice balance on GUS mode
+	- Make symlink on /usr/include/asm in install script
+
+ver.0.3.1
+	- Remove zero size arrays from awe_voice.h
+	- Fix init_fm routine
+	- Remove all samples except primary samples in REMOVE_LAST_SAMPLES
+
+ver.0.3.0a
+	- Add AWE_NOTEOFF_ALL control
+	- Remove AWE_INIT_ATTEN control
+
+ver.0.3.0
+	- Fix decay time table
+	- Add exclusive sounds mode
+	- Add capability to get current status
+
+ver.0.2.99e
+	- Add #ifdef for all sounds/notes off controls.
+	- Fix bugs on searching the default drumset/preset.
+	- Fix usslite patch to modify the default Config.in.
+
+ver.0.2.99d
+	- Fix bugs of attack/hold parameters
+	- Fix attack & decay time table
+
+ver.0.2.99c
+	- Change volume control messages (main & expression volume)
+	  to accesspt normal MIDI parameters in channel mode.
+	- Use channel mode in SEQ2 controls.
+
+ver.0.2.99b
+	- #ifdef patch manager functions (for OSS-3.7)
+
+ver.0.2.99a
+	- Fix sustain bug
+
+ver.0.2.99 (0.3 beta)
+	- Support multiple instruments
+
+ver.0.2.0c
+	- Add copyright notice
+	- FreeBSD 2.2-ALPHA integration
+
+ver.0.2.0b
+	- Remove buffered reading appended in v0.2.0a
+	- Remove SMAxW register check on writing
+	- Support Linux 2.1.x kernel
+	- Rewrite installation script
+
+ver.0.2.0a
+	- Define SEQUENCER_C for tuning.h for FreeBSD system
+	- Improvement of sample loading speed
+	- Fix installation script
+	- Add PnP driver functions for ISA PnP driver support
+
 ver.0.2.0
 	- Includes FreeBSD port
 	- Can load GUS compatible patches

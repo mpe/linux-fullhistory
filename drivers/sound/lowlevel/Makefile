@@ -1,6 +1,6 @@
 all:	lowlevel.o
 
-ALLOBJS = init.o aci.o awe_wave.o
+ALLOBJS = init.o aci.o awe_wave.o aedsp16.o
 OBJS = init.o
 
 ifdef CONFIG_LOWLEVEL_SOUND
@@ -9,6 +9,9 @@ OBJS := $(OBJS) aci.o
 endif
 ifdef CONFIG_AWE32_SYNTH
 OBJS := $(OBJS) awe_wave.o
+endif
+ifdef CONFIG_AEDSP16
+OBJS := $(OBJS) aedsp16.o
 endif
 endif
 
@@ -27,8 +30,20 @@ manual_config.h:
 	@exit 1
 
 clean:
-	rm -f core x y z *~ *.o module
+	rm -f core x y z *~ *.o module .depend
+
+dep:
+	$(CPP) -M $(CFLAGS) -I. *.c > .depend
 
 ifdef HOSTCC
 include $(TOPDIR)/Rules.make
+else
+USE_DEPEND=y
+endif
+
+ifdef USE_DEPEND
+# include a dependency file if one exists
+ifeq (.depend,$(wildcard .depend))
+include .depend
+endif
 endif

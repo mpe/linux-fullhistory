@@ -491,27 +491,33 @@ int packet_recvmsg(struct sock *sk, struct msghdr *msg, int len,
  
 struct proto packet_prot = 
 {
-	packet_close,
-	NULL,
-	NULL,			/* accept */
-	NULL,
-	NULL,
-	NULL,
-	datagram_poll,
-	NULL,			/* No ioctl */
-	packet_init,
-	NULL,
-	NULL,
-	NULL,			/* No set/get socket options */
-	NULL,
-	packet_sendmsg,		/* Sendmsg */
-	packet_recvmsg,		/* Recvmsg */
-	packet_bind,		/* Bind */
-	NULL,			/* Backlog_rcv */
-	128,
-	0,
-	"PACKET",
-	0, 0
+	(struct sock *)&packet_prot,	/* sklist_next */
+	(struct sock *)&packet_prot,	/* sklist_prev */
+	packet_close,			/* close */
+	NULL,				/* connect */
+	NULL,				/* accept */
+	NULL,				/* retransmit */
+	NULL,				/* write_wakeup */
+	NULL,				/* read_wakeup */
+	datagram_poll,			/* poll */
+	NULL,				/* ioctl */
+	packet_init,			/* init */
+	NULL,				/* destroy */
+	NULL,				/* shutdown */
+	NULL,				/* setsockopt */
+	NULL,				/* getsockopt */
+	packet_sendmsg,			/* Sendmsg */
+	packet_recvmsg,			/* Recvmsg */
+	packet_bind,			/* bind */
+	NULL,				/* backlog_rcv */
+	NULL,				/* hash */
+	NULL,				/* unhash */
+	NULL,				/* rehash */
+	NULL,				/* good_socknum */
+	NULL,				/* verify_bind */
+	128,				/* max_header */
+	0,				/* retransmits */
+	"PACKET",			/* name */
+	0,				/* inuse */
+	0				/* highestinuse */
 };
-
-	

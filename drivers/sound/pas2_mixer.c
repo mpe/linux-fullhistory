@@ -1,5 +1,3 @@
-#define _PAS2_MIXER_C_
-
 /*
  * sound/pas2_mixer.c
  *
@@ -7,7 +5,7 @@
  */
 
 /*
- * Copyright (C) by Hannu Savolainen 1993-1996
+ * Copyright (C) by Hannu Savolainen 1993-1997
  *
  * OSS/Free for Linux is distributed under the GNU GENERAL PUBLIC LICENSE (GPL)
  * Version 2 (June 1991). See the "COPYING" file distributed with this software
@@ -85,17 +83,13 @@ mixer_output (int right_vol, int left_vol, int div, int bits,
 
 
   if (bits & 0x10)
-    {				/*
-				 * Select input or output mixer
-				 */
+    {
       left |= mixer;
       right |= mixer;
     }
 
   if (bits == 0x03 || bits == 0x04)
-    {				/*
-				 * Bass and treble are mono devices
-				 */
+    {
       mix_write (0x80 | bits, 0x078B);
       mix_write (left, 0x078B);
       right_vol = left_vol;
@@ -111,7 +105,7 @@ mixer_output (int right_vol, int left_vol, int div, int bits,
   return (left_vol | (right_vol << 8));
 }
 
-void
+static void
 set_mode (int new_mode)
 {
   mix_write (0x80 | 0x05, 0x078B);
@@ -219,7 +213,7 @@ pas_mixer_reset (void)
   set_mode (0x04 | 0x01);
 }
 
-int
+static int
 pas_mixer_ioctl (int dev, unsigned int cmd, caddr_t arg)
 {
   DEB (printk ("pas2_mixer.c: int pas_mixer_ioctl(unsigned int cmd = %X, unsigned int arg = %X)\n", cmd, arg));
@@ -228,14 +222,14 @@ pas_mixer_ioctl (int dev, unsigned int cmd, caddr_t arg)
     {
       int             level;
 
-      get_user (level, (int *) arg);
+      level = *(int *) arg;
 
       if (level == -1)		/* Return current settings */
 	{
 	  if (mode_control & 0x04)
-	    return ioctl_out (arg, 1);
+	    return (*(int *) arg = 1);
 	  else
-	    return ioctl_out (arg, 0);
+	    return (*(int *) arg = 0);
 	}
       else
 	{
@@ -243,7 +237,7 @@ pas_mixer_ioctl (int dev, unsigned int cmd, caddr_t arg)
 	  if (level)
 	    mode_control |= 0x04;
 	  set_mode (mode_control);
-	  return ioctl_out (arg, !!level);	/* 0 or 1 */
+	  return (*(int *) arg = !!level);	/* 0 or 1 */
 	}
     }
 
@@ -252,13 +246,13 @@ pas_mixer_ioctl (int dev, unsigned int cmd, caddr_t arg)
     {
       int             level;
 
-      get_user (level, (int *) arg);
+      level = *(int *) arg;
 
       if (level == -1)		/* Return current settings */
 	{
 	  if (!(mode_control & 0x03))
-	    return ioctl_out (arg, 0);
-	  return ioctl_out (arg, ((mode_control & 0x03) + 1) * 20);
+	    return (*(int *) arg = 0);
+	  return (*(int *) arg = ((mode_control & 0x03) + 1) * 20);
 	}
       else
 	{
@@ -283,11 +277,11 @@ pas_mixer_ioctl (int dev, unsigned int cmd, caddr_t arg)
     {
       int             level;
 
-      get_user (level, (int *) arg);
+      level = *(int *) arg;
 
       if (level == -1)		/* Return current settings */
 	{
-	  return ioctl_out (arg, !(pas_read (0x0B8A) & 0x20));
+	  return (*(int *) arg = !(pas_read (0x0B8A) & 0x20));
 	}
       else
 	{
@@ -306,41 +300,39 @@ pas_mixer_ioctl (int dev, unsigned int cmd, caddr_t arg)
     {
       int             v;
 
-      get_user (v, (int *) arg);
+      v = *(int *) arg;
 
-      if (_IOC_DIR (cmd) & _IOC_WRITE)
-	return ioctl_out (arg, pas_mixer_set (cmd & 0xff, v));
+      if (_SIOC_DIR (cmd) & _SIOC_WRITE)
+	return (*(int *) arg = pas_mixer_set (cmd & 0xff, v));
       else
-	{			/*
-				 * Read parameters
-				 */
+	{
 
 	  switch (cmd & 0xff)
 	    {
 
 	    case SOUND_MIXER_RECSRC:
-	      return ioctl_out (arg, rec_devices);
+	      return (*(int *) arg = rec_devices);
 	      break;
 
 	    case SOUND_MIXER_STEREODEVS:
-	      return ioctl_out (arg, SUPPORTED_MIXER_DEVICES & ~(SOUND_MASK_BASS | SOUND_MASK_TREBLE));
+	      return (*(int *) arg = SUPPORTED_MIXER_DEVICES & ~(SOUND_MASK_BASS | SOUND_MASK_TREBLE));
 	      break;
 
 	    case SOUND_MIXER_DEVMASK:
-	      return ioctl_out (arg, SUPPORTED_MIXER_DEVICES);
+	      return (*(int *) arg = SUPPORTED_MIXER_DEVICES);
 	      break;
 
 	    case SOUND_MIXER_RECMASK:
-	      return ioctl_out (arg, POSSIBLE_RECORDING_DEVICES & SUPPORTED_MIXER_DEVICES);
+	      return (*(int *) arg = POSSIBLE_RECORDING_DEVICES & SUPPORTED_MIXER_DEVICES);
 	      break;
 
 	    case SOUND_MIXER_CAPS:
-	      return ioctl_out (arg, 0);	/* No special capabilities */
+	      return (*(int *) arg = 0);	/* No special capabilities */
 	      break;
 
 
 	    default:
-	      return ioctl_out (arg, levels[cmd & 0xff]);
+	      return (*(int *) arg = levels[cmd & 0xff]);
 	    }
 	}
     }

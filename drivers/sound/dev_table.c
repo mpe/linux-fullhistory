@@ -4,7 +4,7 @@
  * Device call tables.
  */
 /*
- * Copyright (C) by Hannu Savolainen 1993-1996
+ * Copyright (C) by Hannu Savolainen 1993-1997
  *
  * OSS/Free for Linux is distributed under the GNU GENERAL PUBLIC LICENSE (GPL)
  * Version 2 (June 1991). See the "COPYING" file distributed with this software
@@ -131,6 +131,7 @@ sndtable_init (void)
   start_cards ();
 }
 
+
 void
 sound_unload_drivers (void)
 {
@@ -143,14 +144,19 @@ sound_unload_drivers (void)
   if (trace_init)
     printk ("Sound unload started\n");
 
+
   for (i = 0; i < n && snd_installed_cards[i].card_type; i++)
     if (snd_installed_cards[i].enabled)
-      if ((drv = snd_find_driver (snd_installed_cards[i].card_type)) != -1)
-	if (sound_drivers[drv].unload)
+      {
+	if ((drv = snd_find_driver (snd_installed_cards[i].card_type)) != -1)
 	  {
-	    sound_drivers[drv].unload (&snd_installed_cards[i].config);
-	    snd_installed_cards[i].enabled = 0;
+	    if (sound_drivers[drv].unload)
+	      {
+		sound_drivers[drv].unload (&snd_installed_cards[i].config);
+		snd_installed_cards[i].enabled = 0;
+	      }
 	  }
+      }
 
   if (trace_init)
     printk ("Sound unload complete\n");
@@ -162,6 +168,7 @@ sound_unload_driver (int type)
   int             i, drv = -1, n = num_sound_cards;
 
   unsigned long   flags;
+
 
   DEB (printk ("unload driver %d: ", type));
 
@@ -450,11 +457,13 @@ sound_install_audiodrv (int vers,
 
 
   d = (struct audio_driver *) (sound_mem_blocks[sound_nblocks] = vmalloc (sizeof (struct audio_driver)));
+  sound_mem_sizes[sound_nblocks] = sizeof (struct audio_driver);
 
   if (sound_nblocks < 1024)
     sound_nblocks++;;
 
   op = (struct audio_operations *) (sound_mem_blocks[sound_nblocks] = vmalloc (sizeof (struct audio_operations)));
+  sound_mem_sizes[sound_nblocks] = sizeof (struct audio_operations);
 
   if (sound_nblocks < 1024)
     sound_nblocks++;;
@@ -480,8 +489,6 @@ sound_install_audiodrv (int vers,
   op->flags = flags;
   op->format_mask = format_mask;
   op->devc = devc;
-  op->dmachan1 = dma1;
-  op->dmachan2 = dma2;
 
 /*
  *    Hardcoded defaults
@@ -490,6 +497,11 @@ sound_install_audiodrv (int vers,
 
   audio_devs[num_audiodevs] = op;
   num = num_audiodevs++;
+
+  DMAbuf_init ();
+
+  op->dmap_out->dma = dma1;
+  op->dmap_in->dma = dma2;
 
   DMAbuf_init ();
   audio_init_devices ();
@@ -524,6 +536,7 @@ sound_install_mixer (int vers,
 
 
   op = (struct mixer_operations *) (sound_mem_blocks[sound_nblocks] = vmalloc (sizeof (struct mixer_operations)));
+  sound_mem_sizes[sound_nblocks] = sizeof (struct mixer_operations);
 
   if (sound_nblocks < 1024)
     sound_nblocks++;;

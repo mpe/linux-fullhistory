@@ -817,6 +817,7 @@ int tcp_do_sendmsg(struct sock *sk, int iovlen, struct iovec *iov,
 		
 		if (sk->state != TCP_SYN_SENT && sk->state != TCP_SYN_RECV)
 		{
+			printk("tcp_do_sendmsg1: EPIPE dude...\n");
 			if (sk->keepopen)
 				send_sig(SIGPIPE, current, 0);
 			return -EPIPE;
@@ -869,6 +870,7 @@ int tcp_do_sendmsg(struct sock *sk, int iovlen, struct iovec *iov,
 			{
 				if (copied)
 					return copied;
+				printk("tcp_do_sendmsg2: SEND_SHUTDOWN, EPIPE...\n");
 				send_sig(SIGPIPE,current,0);
 				return -EPIPE;
 			}
@@ -1613,7 +1615,6 @@ void tcp_close(struct sock *sk, unsigned long timeout)
 
 	lock_sock(sk);
 
-	tcp_cache_zap();
 	if(sk->state == TCP_LISTEN)
 	{
 		/* Special case */
@@ -1621,6 +1622,7 @@ void tcp_close(struct sock *sk, unsigned long timeout)
 		tcp_close_pending(sk);
 		release_sock(sk);
 		sk->dead = 1;
+		sk->prot->unhash(sk);
 		return;
 	}
 
@@ -1667,12 +1669,6 @@ void tcp_close(struct sock *sk, unsigned long timeout)
 		sti();
 	}
 
-	/*
-	 * This will destroy it. The timers will take care of actually
-	 * free'ing up the memory.
-	 */
-	tcp_cache_zap();	/* Kill the cache again. */
-
 	/* Now that the socket is dead, if we are in the FIN_WAIT2 state
 	 * we may need to set up a timer.
          */
@@ -1687,6 +1683,9 @@ void tcp_close(struct sock *sk, unsigned long timeout)
 
 	release_sock(sk);
 	sk->dead = 1;
+
+	if(sk->state == TCP_CLOSE)
+		sk->prot->unhash(sk);
 }
 
 

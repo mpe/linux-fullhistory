@@ -1,7 +1,25 @@
-Changelog for version 3.7-beta10
---------------------------------
+Changelog for version 3.8-beta8
+-------------------------------
 
-Since 3.5-beta5
+Since 3.8-beta6
+- Fixed the famous Quake delay bug.
+
+Since 3.8-beta5
+- Fixed many bugs in audio playback.
+
+Since 3.8-beta4
+- Just minor changes.
+
+Since 3.8-beta1
+- Major rewrite of audio playback handling.
+- Added AWE32 support by Takashi Iwai (in ./lowlevel/).
+
+Since 3.7-beta#
+- Passing of ioctl() parameters between soundcard.c and other modules has been
+changed so that arg always points to kernel space.
+- Some bugfixes.
+
+Since 3.7-beta5
 - Disabled MIDI input with GUS PnP (Interwave). There seems to be constant
 stream of received 0x00 bytes when the MIDI receiver is enabled.
 

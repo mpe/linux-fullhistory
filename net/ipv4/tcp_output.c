@@ -27,6 +27,8 @@
  *				:	AF independence
  *
  *		Linus Torvalds	:	send_delayed_ack
+ *		David S. Miller	:	Charge memory using the right skb
+ *					during syn/ack processing.
  *
  */
 
@@ -905,7 +907,7 @@ int tcp_send_synack(struct sock *sk)
 	skb->when = jiffies;
 	buff = skb_clone(skb, GFP_ATOMIC);
 
-	skb_set_owner_w(skb, sk);
+	skb_set_owner_w(buff, sk);
 
 	tp->af_specific->queue_xmit(buff);
 

@@ -1,14 +1,14 @@
 /*
  *     PnP soundcard support is not included in this version.
  *
- *     There is a separately distributed patch available for AEDSP16.
+ *       AESDP16 driver is now included in the lowlevel directory.
  */
-#define DISABLED_OPTIONS 	(B(OPT_SPNP)|B(OPT_AEDSP16)|B(OPT_UNUSED1)|B(OPT_UNUSED2)|B(OPT_UNUSED3)|B(OPT_UNUSED4)|B(OPT_UNUSED5))
+#define DISABLED_OPTIONS 	(B(OPT_SPNP)|B(OPT_AEDSP16)|B(OPT_UNUSED1)|B(OPT_UNUSED2)|B(OPT_UNUSED3)|B(OPT_UNUSED4)|B(OPT_UNUSED5)|B(OPT_UART6850))
 /*
  * sound/configure.c  - Configuration program for the Linux Sound Driver
  */
 /*
- * Copyright (C) by Hannu Savolainen 1993-1996
+ * Copyright (C) by Hannu Savolainen 1993-1997
  *
  * OSS/Free for Linux is distributed under the GNU GENERAL PUBLIC LICENSE (GPL)
  * Version 2 (June 1991). See the "COPYING" file distributed with this software
@@ -75,7 +75,7 @@
 		     B(OPT_SSCAPE)|B(OPT_TRIX)|B(OPT_MAD16)|B(OPT_CS4232)|\
 		     B(OPT_SPNP))
 #define SBDSP_DEVS (B(OPT_SB)|B(OPT_SPNP)|B(OPT_MAD16)|B(OPT_TRIX))
-#define SEQUENCER_DEVS (MIDI_CARDS|B(OPT_YM3812)|B(OPT_ADLIB)|B(OPT_GUS)|B(OPT_MAUI))
+#define SEQUENCER_DEVS 0x7fffffff
 /*
  * Options that have been disabled for some reason (incompletely implemented
  * and/or tested). Don't remove from this list before looking at file
@@ -145,7 +145,7 @@ hw_entry        hw_table[] =
 char           *questions[] =
 {
   "ProAudioSpectrum 16 support",
-  "Sound Blaster (SB, SBPro, SB16, clones) support",
+  "_TRUE_ Sound Blaster (SB, SBPro, SB16/32/64, ESS, Jazz16) support",
   "Generic OPL2/OPL3 FM synthesizer support",
   "Gravis Ultrasound support",
   "MPU-401 support (NOT for SB16)",
@@ -991,6 +991,12 @@ ask_parameters (void)
 		  3,
 		  "0, 1 or 3");
 
+  ask_int_choice (B (OPT_MSS), "MSS_DMA2",
+		  "MSS/WSS second DMA (if possible)",
+		  FMT_INT,
+		  -1,
+		  "0, 1 or 3");
+
   ask_int_choice (B (OPT_SSCAPE), "SSCAPE_BASE",
 		  "SoundScape MIDI I/O base",
 		  FMT_HEX,
@@ -1037,7 +1043,7 @@ ask_parameters (void)
     }
 
   if (dump_only)
-    show_comment (B (OPT_MAUI),
+    show_comment (B (OPT_TRIX),
     "ERROR! You have to use old sound configuration method with AudioTrix.");
 
   ask_int_choice (B (OPT_TRIX), "TRIX_BASE",

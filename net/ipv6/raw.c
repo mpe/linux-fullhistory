@@ -7,7 +7,7 @@
  *
  *	Adapted from linux/net/ipv4/raw.c
  *
- *	$Id: raw.c,v 1.7 1997/01/26 07:14:56 davem Exp $
+ *	$Id: raw.c,v 1.8 1997/02/28 09:56:34 davem Exp $
  *
  *	This program is free software; you can redistribute it and/or
  *      modify it under the terms of the GNU General Public License
@@ -39,7 +39,150 @@
 #include <net/addrconf.h>
 #include <net/transp_v6.h>
 
+#include <net/rawv6.h>
+
 #include <asm/uaccess.h>
+
+struct sock *raw_v6_htable[RAWV6_HTABLE_SIZE];
+
+static void raw_v6_hash(struct sock *sk)
+{
+	struct sock **skp;
+	int num = sk->num;
+
+	num &= (RAWV6_HTABLE_SIZE - 1);
+	skp = &raw_v6_htable[num];
+	SOCKHASH_LOCK();
+	sk->next = *skp;
+	*skp = sk;
+	sk->hashent = num;
+	SOCKHASH_UNLOCK();
+}
+
+static void raw_v6_unhash(struct sock *sk)
+{
+	struct sock **skp;
+	int num = sk->num;
+
+	num &= (RAWV6_HTABLE_SIZE - 1);
+	skp = &raw_v6_htable[num];
+
+	SOCKHASH_LOCK();
+	while(*skp != NULL) {
+		if(*skp == sk) {
+			*skp = sk->next;
+			break;
+		}
+		skp = &((*skp)->next);
+	}
+	SOCKHASH_UNLOCK();
+}
+
+static void raw_v6_rehash(struct sock *sk)
+{
+	struct sock **skp;
+	int num = sk->num;
+	int oldnum = sk->hashent;
+
+	num &= (RAWV6_HTABLE_SIZE - 1);
+	skp = &raw_v6_htable[oldnum];
+
+	SOCKHASH_LOCK();
+	while(*skp != NULL) {
+		if(*skp == sk) {
+			*skp = sk->next;
+			break;
+		}
+		skp = &((*skp)->next);
+	}
+	sk->next = raw_v6_htable[num];
+	raw_v6_htable[num] = sk;
+	sk->hashent = num;
+	SOCKHASH_UNLOCK();
+}
+
+static int __inline__ inet6_mc_check(struct sock *sk, struct in6_addr *addr)
+{
+	struct ipv6_mc_socklist *mc;
+		
+	for (mc = sk->net_pinfo.af_inet6.ipv6_mc_list; mc; mc=mc->next) {
+		if (ipv6_addr_cmp(&mc->addr, addr) == 0)
+			return 1;
+	}
+
+	return 0;
+}
+
+/* Grumble... icmp and ip_input want to get at this... */
+struct sock *raw_v6_lookup(struct sock *sk, unsigned short num,
+			   struct in6_addr *loc_addr, struct in6_addr *rmt_addr)
+{
+	struct sock *s = sk;
+	int addr_type = ipv6_addr_type(loc_addr);
+
+	for(s = sk; s; s = s->next) {
+		if((s->num == num) 		&&
+		   !(s->dead && (s->state == TCP_CLOSE))) {
+			struct ipv6_pinfo *np = &s->net_pinfo.af_inet6;
+
+			if (!ipv6_addr_any(&np->daddr) &&
+			    ipv6_addr_cmp(&np->daddr, rmt_addr))
+				continue;
+
+			if (!ipv6_addr_any(&np->rcv_saddr)) {
+				if (ipv6_addr_cmp(&np->rcv_saddr, loc_addr) == 0)
+					return(s);
+				if ((addr_type & IPV6_ADDR_MULTICAST) &&
+				    inet6_mc_check(s, loc_addr))
+					return (s);
+				continue;
+			}
+			return(s);
+		}
+	}
+	return NULL;
+}
+
+/* This cleans up af_inet6 a bit. -DaveM */
+static int rawv6_bind(struct sock *sk, struct sockaddr *uaddr, int addr_len)
+{
+	struct sockaddr_in6 *addr = (struct sockaddr_in6 *) uaddr;
+	__u32 v4addr = 0;
+	int addr_type;
+
+	/* Check these errors. */
+	if (sk->state != TCP_CLOSE || (addr_len < sizeof(struct sockaddr_in6)))
+		return -EINVAL;
+
+	addr_type = ipv6_addr_type(&addr->sin6_addr);
+
+	/* Check if the address belongs to the host. */
+	if (addr_type == IPV6_ADDR_MAPPED) {
+		v4addr = addr->sin6_addr.s6_addr32[3];
+		if (__ip_chk_addr(v4addr) != IS_MYADDR)
+			return(-EADDRNOTAVAIL);
+	} else {
+		if (addr_type != IPV6_ADDR_ANY) {
+			/* ipv4 addr of the socket is invalid.  Only the
+			 * unpecified and mapped address have a v4 equivalent.
+			 */
+			v4addr = LOOPBACK4_IPV6;
+			if (!(addr_type & IPV6_ADDR_MULTICAST))	{
+				if (ipv6_chk_addr(&addr->sin6_addr) == NULL)
+					return(-EADDRNOTAVAIL);
+			}
+		}
+	}
+
+	sk->rcv_saddr = v4addr;
+	sk->saddr = v4addr;
+	memcpy(&sk->net_pinfo.af_inet6.rcv_saddr, &addr->sin6_addr, 
+	       sizeof(struct in6_addr));
+	if (!(addr_type & IPV6_ADDR_MULTICAST))
+		memcpy(&sk->net_pinfo.af_inet6.saddr, &addr->sin6_addr, 
+		       sizeof(struct in6_addr));
+	return 0;
+}
 
 void rawv6_err(struct sock *sk, int type, int code, unsigned char *buff,
 	       struct in6_addr *saddr, struct in6_addr *daddr)
@@ -443,28 +586,35 @@ static int rawv6_init_sk(struct sock *sk)
 }
 
 struct proto rawv6_prot = {
-	rawv6_close,
-	udpv6_connect,
-	NULL,
-	NULL,
-	NULL,
-	NULL,
-	datagram_poll,
-	NULL,
-	rawv6_init_sk,
-	NULL,
-	NULL,
-	rawv6_setsockopt,
-	ipv6_getsockopt,		/* FIXME */
-	rawv6_sendmsg,
-	rawv6_recvmsg,
-	NULL,		/* No special bind */
-	rawv6_rcv_skb,
-	128,
-	0,
-	"RAW",
-	0, 0,
-	NULL
+	(struct sock *)&rawv6_prot,	/* sklist_next */
+	(struct sock *)&rawv6_prot,	/* sklist_prev */
+	rawv6_close,			/* close */
+	udpv6_connect,			/* connect */
+	NULL,				/* accept */
+	NULL,				/* retransmit */
+	NULL,				/* write_wakeup */
+	NULL,				/* read_wakeup */
+	datagram_poll,			/* poll */
+	NULL,				/* ioctl */
+	rawv6_init_sk,			/* init */
+	NULL,				/* destroy */
+	NULL,				/* shutdown */
+	rawv6_setsockopt,		/* setsockopt */
+	ipv6_getsockopt,		/* getsockopt - FIXME */
+	rawv6_sendmsg,			/* sendmsg */
+	rawv6_recvmsg,			/* recvmsg */
+	rawv6_bind,			/* bind */
+	rawv6_rcv_skb,			/* backlog_rcv */
+	raw_v6_hash,			/* hash */
+	raw_v6_unhash,			/* unhash */
+	raw_v6_rehash,			/* rehash */
+	NULL,				/* good_socknum */
+	NULL,				/* verify_bind */
+	128,				/* max_header */
+	0,				/* retransmits */
+	"RAW",				/* name */
+	0,				/* inuse */
+	0				/* highestinuse */
 };
 
 /*

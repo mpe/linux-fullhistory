@@ -4,7 +4,7 @@
  * The low level driver for Roland MPU-401 compatible Midi cards.
  */
 /*
- * Copyright (C) by Hannu Savolainen 1993-1996
+ * Copyright (C) by Hannu Savolainen 1993-1997
  *
  * OSS/Free for Linux is distributed under the GNU GENERAL PUBLIC LICENSE (GPL)
  * Version 2 (June 1991). See the "COPYING" file distributed with this software
@@ -785,7 +785,7 @@ mpu401_ioctl (int dev, unsigned cmd, caddr_t arg)
 	  printk ("MPU-401: Intelligent mode not supported by the HW\n");
 	  return -EINVAL;
 	}
-      get_user (val, (int *) arg);
+      val = *(int *) arg;
       set_uart_mode (dev, devc, !val);
       return 0;
       break;
@@ -795,16 +795,12 @@ mpu401_ioctl (int dev, unsigned cmd, caddr_t arg)
 	int             ret;
 	mpu_command_rec rec;
 
-	copy_from_user ((char *) &rec, &((char *) arg)[0], sizeof (rec));
+	memcpy ((char *) &rec, (&((char *) arg)[0]), sizeof (rec));
 
 	if ((ret = mpu401_command (dev, &rec)) < 0)
 	  return ret;
 
-	{
-	  char           *fixit = (char *) &rec;
-
-	  copy_to_user (&((char *) arg)[0], fixit, sizeof (rec));
-	};
+	memcpy ((&((char *) arg)[0]), (char *) &rec, sizeof (rec));
 	return 0;
       }
       break;
@@ -845,10 +841,7 @@ mpu_synth_ioctl (int dev,
     {
 
     case SNDCTL_SYNTH_INFO:
-      {
-	char           *fixit = (char *) &mpu_synth_info[midi_dev];
-	copy_to_user (&((char *) arg)[0], fixit, sizeof (struct synth_info));
-      };
+      memcpy ((&((char *) arg)[0]), (char *) &mpu_synth_info[midi_dev], sizeof (struct synth_info));
 
       return 0;
       break;
@@ -954,6 +947,7 @@ mpu_synth_close (int dev)
 
 static struct synth_operations mpu401_synth_proto =
 {
+  "MPU401",
   NULL,
   0,
   SYNTH_TYPE_MIDI,
@@ -1104,6 +1098,7 @@ attach_mpu401 (struct address_info *hw_config)
 
 
   mpu401_synth_operations[num_midis] = (struct synth_operations *) (sound_mem_blocks[sound_nblocks] = vmalloc (sizeof (struct synth_operations)));
+  sound_mem_sizes[sound_nblocks] = sizeof (struct synth_operations);
 
   if (sound_nblocks < 1024)
     sound_nblocks++;;
@@ -1594,7 +1589,7 @@ mpu_timer_ioctl (int dev,
       {
 	int             parm;
 
-	get_user (parm, (int *) arg);
+	parm = *(int *) arg;
 	parm &= timer_caps;
 
 	if (parm != 0)
@@ -1607,7 +1602,7 @@ mpu_timer_ioctl (int dev,
 	      mpu_cmd (midi_dev, 0x3d, 0);	/* Use SMPTE sync */
 	  }
 
-	return ioctl_out (arg, timer_mode);
+	return (*(int *) arg = timer_mode);
       }
       break;
 
@@ -1635,11 +1630,11 @@ mpu_timer_ioctl (int dev,
       {
 	int             val;
 
-	get_user (val, (int *) arg);
+	val = *(int *) arg;
 	if (val)
 	  set_timebase (midi_dev, val);
 
-	return ioctl_out (arg, curr_timebase);
+	return (*(int *) arg = curr_timebase);
       }
       break;
 
@@ -1648,7 +1643,7 @@ mpu_timer_ioctl (int dev,
 	int             val;
 	int             ret;
 
-	get_user (val, (int *) arg);
+	val = *(int *) arg;
 
 	if (val)
 	  {
@@ -1665,7 +1660,7 @@ mpu_timer_ioctl (int dev,
 	    curr_tempo = val;
 	  }
 
-	return ioctl_out (arg, curr_tempo);
+	return (*(int *) arg = curr_tempo);
       }
       break;
 
@@ -1673,20 +1668,20 @@ mpu_timer_ioctl (int dev,
       {
 	int             val;
 
-	get_user (val, (int *) arg);
+	val = *(int *) arg;
 	if (val != 0)		/* Can't change */
 	  return -EINVAL;
 
-	return ioctl_out (arg, ((curr_tempo * curr_timebase) + 30) / 60);
+	return (*(int *) arg = ((curr_tempo * curr_timebase) + 30) / 60);
       }
       break;
 
     case SNDCTL_SEQ_GETTIME:
-      return ioctl_out (arg, curr_ticks);
+      return (*(int *) arg = curr_ticks);
       break;
 
     case SNDCTL_TMR_METRONOME:
-      get_user (metronome_mode, (int *) arg);
+      metronome_mode = *(int *) arg;
       setup_metronome (midi_dev);
       return 0;
       break;

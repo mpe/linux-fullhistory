@@ -22,6 +22,73 @@
 #include <linux/tcp.h>
 #include <net/checksum.h>
 
+/* This is for all connections with a full identity, no wildcards. */
+#define TCP_HTABLE_SIZE		128
+
+/* This is for listening sockets, thus all sockets which possess wildcards. */
+#define TCP_LHTABLE_SIZE	16	/* Yes, really, this is all you need. */
+
+/* This is for all sockets, to keep track of the local port allocations. */
+#define TCP_BHTABLE_SIZE	64
+
+/* tcp_ipv4.c: These need to be shared by v4 and v6 because the lookup
+ *             and hashing code needs to work with different AF's yet
+ *             the port space is shared.
+ */
+extern struct sock *tcp_established_hash[TCP_HTABLE_SIZE];
+extern struct sock *tcp_listening_hash[TCP_LHTABLE_SIZE];
+extern struct sock *tcp_bound_hash[TCP_BHTABLE_SIZE];
+
+/* These are AF independant. */
+static __inline__ int tcp_bhashfn(__u16 lport)
+{
+	return (lport ^ (lport >> 7)) & (TCP_BHTABLE_SIZE - 1);
+}
+
+static __inline__ int tcp_sk_bhashfn(struct sock *sk)
+{
+	__u16 lport = sk->num;
+	return tcp_bhashfn(lport);
+}
+
+/* These can have wildcards, don't try too hard.
+ * XXX deal with thousands of IP aliases for listening ports later
+ */
+static __inline__ int tcp_lhashfn(unsigned short num)
+{
+	return num & (TCP_LHTABLE_SIZE - 1);
+}
+
+static __inline__ int tcp_sk_listen_hashfn(struct sock *sk)
+{
+	return tcp_lhashfn(sk->num);
+}
+
+/* Only those holding the sockhash lock call these two things here.
+ * Note the slightly gross overloading of sk->prev, AF_UNIX is the
+ * only other main benefactor of that member of SK, so who cares.
+ */
+static __inline__ void tcp_sk_bindify(struct sock *sk)
+{
+	int hashent = tcp_sk_bhashfn(sk);
+
+	sk->prev = tcp_bound_hash[hashent];
+	tcp_bound_hash[hashent] = sk;
+}
+
+static __inline__ void tcp_sk_unbindify(struct sock *sk)
+{
+	int hashent = tcp_sk_bhashfn(sk);
+	struct sock **htable = &tcp_bound_hash[hashent];
+
+	while(*htable) {
+		if(*htable == sk) {
+			*htable = sk->prev;
+			break;
+		}
+		htable = &((*htable)->prev);
+	}
+}
 
 #if defined(CONFIG_IPV6) || defined(CONFIG_IPV6_MODULE)
 #define NETHDR_SIZE	sizeof(struct ipv6hdr)
@@ -80,9 +147,9 @@
 #define TCP_PROBEWAIT_LEN (1*HZ)/* time to wait between probes when
 				 * I've got something to write and
 				 * there is no window			*/
-#define TCP_KEEPALIVE_TIME (180*60*HZ)	/* two hours */
-#define TCP_KEEPALIVE_PROBES	9	/* Max of 9 keepalive probes	*/
-#define TCP_KEEPALIVE_PERIOD (75*HZ)	/* period of keepalive check	*/
+#define TCP_KEEPALIVE_TIME (180*60*HZ)		/* two hours */
+#define TCP_KEEPALIVE_PROBES	9		/* Max of 9 keepalive probes	*/
+#define TCP_KEEPALIVE_PERIOD ((75*HZ)>>2)	/* period of keepalive check	*/
 #define TCP_NO_CHECK	0	/* turn to one if you want the default
 				 * to be no checksum			*/
 
@@ -236,6 +303,8 @@ extern __inline int between(__u32 seq1, __u32 seq2, __u32 seq3)
 extern struct proto tcp_prot;
 extern struct tcp_mib tcp_statistics;
 
+extern unsigned short		tcp_good_socknum(void);
+
 extern void			tcp_v4_err(struct sk_buff *skb,
 					   unsigned char *);
 
@@ -324,9 +393,6 @@ extern int  tcp_send_synack(struct sock *);
 extern int  tcp_send_skb(struct sock *, struct sk_buff *);
 extern void tcp_send_ack(struct sock *sk);
 extern void tcp_send_delayed_ack(struct sock *sk, int max_timeout);
-
-/* tcp_input.c */
-extern void tcp_cache_zap(void);
 
 /* CONFIG_IP_TRANSPARENT_PROXY */
 extern int tcp_chkaddr(struct sk_buff *);
@@ -443,7 +509,6 @@ static __inline__ void tcp_set_state(struct sock *sk, int state)
 		break;
 
 	case TCP_CLOSE:
-		tcp_cache_zap();
 		/* Should be about 2 rtt's */
 		net_reset_timer(sk, TIME_DONE, min(tp->srtt * 2, TCP_DONE_TIME));
 		/* fall through */

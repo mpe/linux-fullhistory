@@ -7,7 +7,7 @@
  *
  *	Adapted from linux/net/ipv4/af_inet.c
  *
- *	$Id: af_inet6.c,v 1.8 1997/01/26 07:14:56 davem Exp $
+ *	$Id: af_inet6.c,v 1.12 1997/03/02 06:14:44 davem Exp $
  *
  *	This program is free software; you can redistribute it and/or
  *      modify it under the terms of the GNU General Public License
@@ -61,8 +61,6 @@
 #include <linux/ip_fw.h>
 #include <net/addrconf.h>
 
-struct sock * rawv6_sock_array[SOCK_ARRAY_SIZE];
-
 extern struct proto_ops inet6_stream_ops;
 extern struct proto_ops inet6_dgram_ops;
 
@@ -70,62 +68,37 @@ static int inet6_create(struct socket *sock, int protocol)
 {
 	struct sock *sk;
 	struct proto *prot;
-	int err;
 
 	sk = sk_alloc(GFP_KERNEL);
 	if (sk == NULL) 
-		return(-ENOBUFS);
+		goto do_oom;
 
-	/*
-	 *	Note for tcp that also wiped the dummy_th block for us.
-	 */
-
-	switch(sock->type) 
-	{
-		case SOCK_STREAM:
-		case SOCK_SEQPACKET:
-			if (protocol && protocol != IPPROTO_TCP) 
-			{
-				sk_free(sk);
-				return(-EPROTONOSUPPORT);
-			}
-			protocol = IPPROTO_TCP;
-			sk->no_check = TCP_NO_CHECK;
-			prot = &tcpv6_prot;
-			sock->ops = &inet6_stream_ops;
-			break;
-
-		case SOCK_DGRAM:
-			if (protocol && protocol != IPPROTO_UDP) 
-			{
-				sk_free(sk);
-				return(-EPROTONOSUPPORT);
-			}
-			protocol = IPPROTO_UDP;
-			sk->no_check = UDP_NO_CHECK;
-			prot=&udpv6_prot;
-			sock->ops = &inet6_dgram_ops;
-			break;
-      
-		case SOCK_RAW:
-			if (!suser()) 
-			{
-				sk_free(sk);
-				return(-EPERM);
-			}
-			if (!protocol) 
-			{
-				sk_free(sk);
-				return(-EPROTONOSUPPORT);
-			}
-			prot = &rawv6_prot;
-			sock->ops = &inet6_dgram_ops;
-			sk->reuse = 1;
-			sk->num = protocol;
-			break;
-		default:
-			sk_free(sk);
-			return(-ESOCKTNOSUPPORT);
+	/* Note for tcp that also wiped the dummy_th block for us. */
+	if(sock->type == SOCK_STREAM || sock->type == SOCK_SEQPACKET) {
+		if (protocol && protocol != IPPROTO_TCP) 
+			goto free_and_noproto;
+		protocol = IPPROTO_TCP;
+		sk->no_check = TCP_NO_CHECK;
+		prot = &tcpv6_prot;
+		sock->ops = &inet6_stream_ops;
+	} else if(sock->type == SOCK_DGRAM) {
+		if (protocol && protocol != IPPROTO_UDP) 
+			goto free_and_noproto;
+		protocol = IPPROTO_UDP;
+		sk->no_check = UDP_NO_CHECK;
+		prot=&udpv6_prot;
+		sock->ops = &inet6_dgram_ops;
+	} else if(sock->type == SOCK_RAW) {
+		if (!suser()) 
+			goto free_and_badperm;
+		if (!protocol) 
+			goto free_and_noproto;
+		prot = &rawv6_prot;
+		sock->ops = &inet6_dgram_ops;
+		sk->reuse = 1;
+		sk->num = protocol;
+	} else {
+		goto free_and_badtype;
 	}
 	
 	sock_init_data(sock,sk);
@@ -145,11 +118,9 @@ static int inet6_create(struct socket *sock, int protocol)
 	sk->net_pinfo.af_inet6.mcast_hops = IPV6_DEFAULT_MCASTHOPS;
 	sk->net_pinfo.af_inet6.mc_loop	  = 1;
 
-	/*
-	 *	init the ipv4 part of the socket since
-	 *	we can have sockets using v6 API for ipv4
+	/* Init the ipv4 part of the socket since we can have sockets
+	 * using v6 API for ipv4.
 	 */
-
 	sk->ip_ttl=64;
 
 	sk->ip_mc_loop=1;
@@ -157,34 +128,41 @@ static int inet6_create(struct socket *sock, int protocol)
 	sk->ip_mc_index=0;
 	sk->ip_mc_list=NULL;
 
-
 	if (sk->type==SOCK_RAW && protocol==IPPROTO_RAW)
 		sk->ip_hdrincl=1;
 
-	if (sk->num) 
-	{
-		/*
-		 * It assumes that any protocol which allows
+	if (sk->num) {
+		/* It assumes that any protocol which allows
 		 * the user to assign a number at socket
-		 * creation time automatically
-		 * shares.
+		 * creation time automatically shares.
 		 */
-
-		inet_put_sock(sk->num, sk);
 		sk->dummy_th.source = ntohs(sk->num);
+		if(sk->prot->hash)
+			sk->prot->hash(sk);
+		add_to_prot_sklist(sk);
 	}
 
-	if (sk->prot->init) 
-	{
-		err = sk->prot->init(sk);
-		if (err != 0) 
-		{
+	if (sk->prot->init) {
+		int err = sk->prot->init(sk);
+		if (err != 0) {
 			destroy_sock(sk);
 			return(err);
 		}
 	}
 	MOD_INC_USE_COUNT;
 	return(0);
+
+free_and_badtype:
+	sk_free(sk);
+	return -ESOCKTNOSUPPORT;
+free_and_badperm:
+	sk_free(sk);
+	return -EPERM;
+free_and_noproto:
+	sk_free(sk);
+	return -EPROTONOSUPPORT;
+do_oom:
+	return -ENOBUFS;
 }
 
 static int inet6_dup(struct socket *newsock, struct socket *oldsock)
@@ -192,80 +170,47 @@ static int inet6_dup(struct socket *newsock, struct socket *oldsock)
 	return(inet6_create(newsock, oldsock->sk->protocol));
 }
 
-
-/*
- *	bind for INET6 API	
- */
-
-static int inet6_bind(struct socket *sock, struct sockaddr *uaddr,
-		      int addr_len)
+/* bind for INET6 API */
+static int inet6_bind(struct socket *sock, struct sockaddr *uaddr, int addr_len)
 {
 	struct sockaddr_in6 *addr=(struct sockaddr_in6 *)uaddr;
-	struct sock *sk = sock->sk, *sk2;
+	struct sock *sk = sock->sk;
 	__u32 v4addr = 0;
 	unsigned short snum = 0;
 	int addr_type = 0;
 
-	/*
-	 *	If the socket has its own bind function then use it.
-	 */
-	 
+	/* If the socket has its own bind function then use it. */
 	if(sk->prot->bind)
 		return sk->prot->bind(sk, uaddr, addr_len);
 		
-	/* check this error. */
-	if (sk->state != TCP_CLOSE)
-		return(-EINVAL);
-
-	if(addr_len < sizeof(struct sockaddr_in6))
+	/* Check these errors (active socket, bad address length, double bind). */
+	if ((sk->state != TCP_CLOSE)			||
+	    (addr_len < sizeof(struct sockaddr_in6))	||
+	    (sk->num != 0))
 		return -EINVAL;
 		
-	if(sock->type != SOCK_RAW)
-	{
-		if (sk->num != 0) 
-			return(-EINVAL);
-
-		snum = ntohs(addr->sin6_port);
-		
-		if (snum == 0) 
-			snum = get_new_socknum(sk->prot, 0);
-
-		if (snum < PROT_SOCK && !suser()) 
-			return(-EACCES);
-	}
+	snum = ntohs(addr->sin6_port);
+	if (snum == 0) 
+		snum = sk->prot->good_socknum();
+	if (snum < PROT_SOCK && !suser()) 
+		return(-EACCES);
 	
 	addr_type = ipv6_addr_type(&addr->sin6_addr);
-
 	if ((addr_type & IPV6_ADDR_MULTICAST) && sock->type == SOCK_STREAM)
-	{
 		return(-EINVAL);
-	}
 
-	/*
-	 *	check if the address belongs to the host
-	 */
-
-	if (addr_type == IPV6_ADDR_MAPPED)
-	{
+	/* Check if the address belongs to the host. */
+	if (addr_type == IPV6_ADDR_MAPPED) {
 		v4addr = addr->sin6_addr.s6_addr32[3];
-
 		if (__ip_chk_addr(v4addr) != IS_MYADDR)
 			return(-EADDRNOTAVAIL);
-	}
-	else
-	{
-		if (addr_type != IPV6_ADDR_ANY)
-		{
-			/* 
-			 *	ipv4 addr of the socket is invalid.
-			 *	only the unpecified and mapped address	
-			 *	have a v4 equivalent.
+	} else {
+		if (addr_type != IPV6_ADDR_ANY) {
+			/* ipv4 addr of the socket is invalid.  Only the
+			 * unpecified and mapped address have a v4 equivalent.
 			 */
-
 			v4addr = LOOPBACK4_IPV6;
-
-			if (!(addr_type & IPV6_ADDR_MULTICAST))
-			{
+			if (!(addr_type & IPV6_ADDR_MULTICAST))	{
 				if (ipv6_chk_addr(&addr->sin6_addr) == NULL)
 					return(-EADDRNOTAVAIL);
 			}
@@ -282,82 +227,16 @@ static int inet6_bind(struct socket *sock, struct sockaddr *uaddr,
 		memcpy(&sk->net_pinfo.af_inet6.saddr, &addr->sin6_addr, 
 		       sizeof(struct in6_addr));
 
-	if(sock->type != SOCK_RAW)
-	{
-		/* Make sure we are allowed to bind here. */
-		cli();
-		for(sk2 = sk->prot->sock_array[snum & (SOCK_ARRAY_SIZE -1)];
-					sk2 != NULL; sk2 = sk2->next) 
-		{
-			/*
-			 *	Hash collision or real match ?
-			 */
-			 
-			if (sk2->num != snum) 
-				continue;
-				
-			/*
-			 *	Either bind on the port is wildcard means
-			 *	they will overlap and thus be in error.
-			 *	We use the sk2 v4 address to test the 
-			 *	other socket since addr_any in av4 implies
-			 *	addr_any in v6
-			 */			
-			 
-			if (addr_type == IPV6_ADDR_ANY || (!sk2->rcv_saddr))
-			{
-				/*
-				 *	Allow only if both are setting reuse.
-				 */
-				if(sk2->reuse && sk->reuse && sk2->state!=TCP_LISTEN)
-					continue;
-				sti();
-				return(-EADDRINUSE);
-			}
+	/* Make sure we are allowed to bind here. */
+	if(sk->prot->verify_bind(sk, snum))
+		return -EADDRINUSE;
 
-			/*
-			 *	Two binds match ?
-			 */
-
-			if (ipv6_addr_cmp(&sk->net_pinfo.af_inet6.rcv_saddr,
-					  &sk2->net_pinfo.af_inet6.rcv_saddr))
-
-				continue;
-			/*
-			 *	Reusable port ?
-			 */
-
-			if (!sk->reuse)
-			{
-				sti();
-				return(-EADDRINUSE);
-			}
-			
-			/*
-			 *	Reuse ?
-			 */
-			 
-			if (!sk2->reuse || sk2->state==TCP_LISTEN) 
-			{
-				sti();
-				return(-EADDRINUSE);
-			}
-		}
-		sti();
-
-		inet_remove_sock(sk);
-		
-		/*
-		if(sock->type==SOCK_DGRAM)
-			udp_cache_zap();
-		if(sock->type==SOCK_STREAM)
-			tcp_cache_zap();
-			*/
-		inet_put_sock(snum, sk);
-		sk->dummy_th.source = ntohs(sk->num);
-		sk->dummy_th.dest = 0;
-		sk->daddr = 0;
-	}
+	sk->num = snum;
+	sk->dummy_th.source = ntohs(sk->num);
+	sk->dummy_th.dest = 0;
+	sk->daddr = 0;
+	sk->prot->rehash(sk);
+	add_to_prot_sklist(sk);
 
 	return(0);
 }
@@ -385,31 +264,24 @@ static int inet6_getname(struct socket *sock, struct sockaddr *uaddr,
   
 	sin->sin6_family = AF_INET6;
 	sk = sock->sk;
-	if (peer) 
-	{
+	if (peer) {
 		if (!tcp_connected(sk->state))
 			return(-ENOTCONN);
 		sin->sin6_port = sk->dummy_th.dest;
 		memcpy(&sin->sin6_addr, &sk->net_pinfo.af_inet6.daddr,
 		       sizeof(struct in6_addr));
-	} 
-	else 
-	{
-		if (ipv6_addr_type(&sk->net_pinfo.af_inet6.rcv_saddr) ==
-		    IPV6_ADDR_ANY)
+	} else {
+		if (ipv6_addr_type(&sk->net_pinfo.af_inet6.rcv_saddr) == IPV6_ADDR_ANY)
 			memcpy(&sin->sin6_addr, 
 			       &sk->net_pinfo.af_inet6.saddr,
 			       sizeof(struct in6_addr));
-
 		else
 			memcpy(&sin->sin6_addr, 
 			       &sk->net_pinfo.af_inet6.rcv_saddr,
 			       sizeof(struct in6_addr));
 
 		sin->sin6_port = sk->dummy_th.source;
-
 	}
-	
 	*uaddr_len = sizeof(*sin);	
 	return(0);
 }
@@ -510,214 +382,6 @@ static int inet6_ioctl(struct socket *sock, unsigned int cmd, unsigned long arg)
 	return(0);
 }
 
-/*
- * This routine must find a socket given a TCP or UDP header.
- * Everything is assumed to be in net order.
- *
- * We give priority to more closely bound ports: if some socket
- * is bound to a particular foreign address, it will get the packet
- * rather than somebody listening to any address..
- */
-
-struct sock *inet6_get_sock(struct proto *prot, 
-			    struct in6_addr *loc_addr, 
-			    struct in6_addr *rmt_addr, 			   
-			    unsigned short loc_port,
-			    unsigned short rmt_port)
-{
-	struct sock *s;
-	struct sock *result = NULL;
-	int badness = -1;
-	unsigned short hnum;
-	struct ipv6_pinfo *np;
-	hnum = ntohs(loc_port);
-
-	/*
-	 * SOCK_ARRAY_SIZE must be a power of two.  This will work better
-	 * than a prime unless 3 or more sockets end up using the same
-	 * array entry.  This should not be a problem because most
-	 * well known sockets don't overlap that much, and for
-	 * the other ones, we can just be careful about picking our
-	 * socket number when we choose an arbitrary one.
-	 */
-
-	for(s = prot->sock_array[hnum & (SOCK_ARRAY_SIZE - 1)];
-			s != NULL; s = s->next) 
-	{
-		int score = 0;
-		
-		if ((s->num != hnum) || s->family != AF_INET6)
-			continue;
-
-		if(s->dead && (s->state == TCP_CLOSE))
-		{
-			printk(KERN_DEBUG "dead or closed socket\n");
-			continue;
-		}
-
-		np = &s->net_pinfo.af_inet6;
-
-		/* remote port matches? */
-
-		if (s->dummy_th.dest) {
-			if (s->dummy_th.dest != rmt_port)
-			{
-				continue;
-			}
-			score++;
-		}
-
-		/* local address matches? */
-
-		if (!ipv6_addr_any(&np->rcv_saddr))
-		{
-			if (ipv6_addr_cmp(&np->rcv_saddr, loc_addr))
-			{
-				continue;
-			}
-			score++;
-		}
-
-		/* remote address matches? */
-		if (!ipv6_addr_any(&np->daddr))
-		{
-			if (ipv6_addr_cmp(&np->daddr, rmt_addr))
-			{
-				continue;
-			}
-			score++;
-		}
-
-		/* perfect match? */
-		if (score == 3)
-			return s;
-		/* no, check if this is the best so far.. */
-		if (score <= badness)
-			continue;
-		result = s;
-		badness = score;
-  	}
-  	return result;
-}
-
-static int __inline__ inet6_mc_check(struct sock *sk, struct in6_addr *addr)
-{
-	struct ipv6_mc_socklist *mc;
-		
-	for (mc = sk->net_pinfo.af_inet6.ipv6_mc_list; mc; mc=mc->next)
-	{
-		if (ipv6_addr_cmp(&mc->addr, addr) == 0)
-			return 1;
-	}
-
-	return 0;
-}
-
-/*
- *	Deliver a datagram to raw sockets.
- */
- 
-struct sock *inet6_get_sock_raw(struct sock *sk, unsigned short num,
-				struct in6_addr *loc_addr, 
-				struct in6_addr *rmt_addr)
-			  
-{
-	struct sock *s;
-	struct ipv6_pinfo *np;
-	int addr_type = 0;
-
-	s=sk;
-
-	addr_type = ipv6_addr_type(loc_addr);
-
-	for(; s != NULL; s = s->next) 
-	{
-		if (s->num != num) 
-			continue;
-
-		if(s->dead && (s->state == TCP_CLOSE))
-			continue;
-
-		np = &s->net_pinfo.af_inet6;
-
-		if (!ipv6_addr_any(&np->daddr) &&
-		    ipv6_addr_cmp(&np->daddr, rmt_addr))
-		{
-			continue;
-		}
-
-		if (!ipv6_addr_any(&np->rcv_saddr))
-		{
-			if (ipv6_addr_cmp(&np->rcv_saddr, loc_addr) == 0)
-				return(s);
-		
-			if ((addr_type & IPV6_ADDR_MULTICAST) &&
-			    inet6_mc_check(s, loc_addr))
-				return (s);
-			
-			continue;
-		}
-
-		return(s);
-  	}
-  	return(NULL);
-}
-
-/*
- *	inet6_get_sock_mcast for UDP sockets.
- */
-
-struct sock *inet6_get_sock_mcast(struct sock *sk, 
-				  unsigned short num, unsigned short rmt_port,
-				  struct in6_addr *loc_addr, 
-				  struct in6_addr *rmt_addr)
-{	
-	struct sock *s;
-	struct ipv6_pinfo *np;
-
-	s=sk;
-
-	for(; s != NULL; s = s->next) 
-	{
-		if (s->num != num) 
-			continue;
-
-		if(s->dead && (s->state == TCP_CLOSE))
-			continue;
-
-		np = &s->net_pinfo.af_inet6;
-
-		if (s->dummy_th.dest) {
-			if (s->dummy_th.dest != rmt_port)
-			{
-				continue;
-			}
-		}
-
-		if (!ipv6_addr_any(&np->daddr) &&
-		    ipv6_addr_cmp(&np->daddr, rmt_addr))
-		{
-			continue;
-		}
-
-
-		if (!ipv6_addr_any(&np->rcv_saddr))
-		{
-			if (ipv6_addr_cmp(&np->rcv_saddr, loc_addr) == 0)
-				return(s);
-		}
-		
-		if (!inet6_mc_check(s, loc_addr))
-		{
-			continue;
-		}
-
-		return(s);
-  	}
-  	return(NULL);
-}
-	
-
 struct proto_ops inet6_stream_ops = {
 	AF_INET6,
 
@@ -773,7 +437,6 @@ int init_module(void)
 void inet6_proto_init(struct net_proto *pro)
 #endif
 {
-	int i;
 	struct sk_buff *dummy_skb;
 
 	printk(KERN_INFO "IPv6 v0.1 for NET3.037\n");
@@ -786,30 +449,13 @@ void inet6_proto_init(struct net_proto *pro)
 
   	(void) sock_register(&inet6_family_ops);
 	
-	for(i = 0; i < SOCK_ARRAY_SIZE; i++) 
-	{
-		rawv6_sock_array[i] = NULL;
-  	}
-
 	/*
 	 *	ipngwg API draft makes clear that the correct semantics
 	 *	for TCP and UDP is to consider one TCP and UDP instance
 	 *	in a host availiable by both INET and INET6 APIs and
-	 *	hable to communicate via both network protocols.
+	 *	able to communicate via both network protocols.
 	 */
-	
-	tcpv6_prot.inuse = 0;
-	tcpv6_prot.highestinuse = 0;       
-	tcpv6_prot.sock_array = tcp_sock_array;
 
-	udpv6_prot.inuse = 0;
-	udpv6_prot.highestinuse = 0;
-	udpv6_prot.sock_array = udp_sock_array;
-
-	rawv6_prot.inuse = 0;
-	rawv6_prot.highestinuse = 0;
-	rawv6_prot.sock_array = rawv6_sock_array;
-	
 	ipv6_init();
 
 	icmpv6_init(&inet6_family_ops);

@@ -4,7 +4,7 @@
  * The system call switch handler
  */
 /*
- * Copyright (C) by Hannu Savolainen 1993-1996
+ * Copyright (C) by Hannu Savolainen 1993-1997
  *
  * OSS/Free for Linux is distributed under the GNU GENERAL PUBLIC LICENSE (GPL)
  * Version 2 (June 1991). See the "COPYING" file distributed with this software
@@ -73,15 +73,11 @@ set_mixer_levels (caddr_t arg)
   if ((buf = (mixer_vol_table *) vmalloc (sizeof (mixer_vol_table))) == NULL)
     return -ENOSPC;
 
-  copy_from_user ((char *) buf, &((char *) arg)[0], sizeof (*buf));
+  memcpy ((char *) buf, (&((char *) arg)[0]), sizeof (*buf));
 
   load_mixer_volumes (buf->name, buf->levels, 0);
 
-  {
-    char           *fixit = (char *) buf;
-
-    copy_to_user (&((char *) arg)[0], fixit, sizeof (*buf));
-  };
+  memcpy ((&((char *) arg)[0]), (char *) buf, sizeof (*buf));
   vfree (buf);
 
   return err;
@@ -96,7 +92,7 @@ get_mixer_levels (caddr_t arg)
   if ((buf = (mixer_vol_table *) vmalloc (sizeof (mixer_vol_table))) == NULL)
     return -ENOSPC;
 
-  copy_from_user ((char *) buf, &((char *) arg)[0], sizeof (*buf));
+  memcpy ((char *) buf, (&((char *) arg)[0]), sizeof (*buf));
 
   n = buf->num;
   if (n < 0 || n >= num_mixer_volumes)
@@ -106,11 +102,7 @@ get_mixer_levels (caddr_t arg)
       memcpy ((char *) buf, (char *) &mixer_vols[n], sizeof (*buf));
     }
 
-  {
-    char           *fixit = (char *) buf;
-
-    copy_to_user (&((char *) arg)[0], fixit, sizeof (*buf));
-  };
+  memcpy ((&((char *) arg)[0]), (char *) buf, sizeof (*buf));
   vfree (buf);
 
   return err;
@@ -358,7 +350,7 @@ init_status (void)
     }
 #endif
 
-#ifdef CONFIG_MIDI
+#ifdef CONFIG_SEQUENCER
   if (!put_status ("\nTimers:\n"))
     return;
 
@@ -612,11 +604,7 @@ get_mixer_info (int dev, caddr_t arg)
   strcpy (info.name, mixer_devs[dev]->name);
   info.modify_counter = mixer_devs[dev]->modify_counter;
 
-  {
-    char           *fixit = (char *) &info;
-
-    copy_to_user (&((char *) arg)[0], fixit, sizeof (info));
-  };
+  memcpy ((&((char *) arg)[0]), (char *) &info, sizeof (info));
   return 0;
 }
 
@@ -631,11 +619,7 @@ get_old_mixer_info (int dev, caddr_t arg)
   strcpy (info.id, mixer_devs[dev]->id);
   strcpy (info.name, mixer_devs[dev]->name);
 
-  {
-    char           *fixit = (char *) &info;
-
-    copy_to_user (&((char *) arg)[0], fixit, sizeof (info));
-  };
+  memcpy ((&((char *) arg)[0]), (char *) &info, sizeof (info));
   return 0;
 }
 
@@ -648,7 +632,7 @@ sound_mixer_ioctl (int mixdev,
   if (cmd == SOUND_OLD_MIXER_INFO)
     return get_old_mixer_info (mixdev, arg);
 
-  if (_IOC_DIR (cmd) & _IOC_WRITE)
+  if (_SIOC_DIR (cmd) & _SIOC_WRITE)
     mixer_devs[mixdev]->modify_counter++;
 
   return mixer_devs[mixdev]->ioctl (mixdev, cmd, arg);
@@ -661,7 +645,7 @@ sound_ioctl_sw (int dev, struct fileinfo *file,
   DEB (printk ("sound_ioctl_sw(dev=%d, cmd=0x%x, arg=0x%x)\n", dev, cmd, arg));
 
   if (cmd == OSS_GETVERSION)
-    return ioctl_out (arg, SOUND_VERSION);
+    return (*(int *) arg = SOUND_VERSION);
 
 
   if (((cmd >> 8) & 0xff) == 'M' && num_mixers > 0)	/* Mixer ioctl */

@@ -171,17 +171,17 @@ int ip_setsockopt(struct sock *sk, int level, int optname, char *optval, int opt
 {
 	int val=0,err;
 	unsigned char ucval = 0;
-	int len;
 #if defined(CONFIG_IP_FIREWALL) || defined(CONFIG_IP_ACCT)
 	struct ip_fw tmp_fw;
 #endif	
 
-	if(get_user(len, optval))
-		return -EFAULT;
-	if(len>=sizeof(int) && get_user(val, (int *) optval))
-		return -EFAULT;
-	if(len>=sizeof(char) && get_user(ucval, (unsigned char *) optval))
-		return -EFAULT;
+	if(optlen>=sizeof(int)) {
+		if(get_user(val, (int *) optval))
+			return -EFAULT;
+	} else if(optlen>=sizeof(char)) {
+		if(get_user(ucval, (unsigned char *) optval))
+			return -EFAULT;
+	}
 	
 	if(level!=SOL_IP)
 		return -ENOPROTOOPT;

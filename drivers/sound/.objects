@@ -8,10 +8,6 @@ ifdef CONFIG_YM3812
 	OBJS := $(OBJS)  adlib_card.o
 endif
 
-ifdef CONFIG_AEDSP16
-	OBJS := $(OBJS)  aedsp16.o
-endif
-
 ifdef CONFIG_AUDIO
 	OBJS := $(OBJS)  audio.o
 endif

@@ -274,6 +274,25 @@ static inline int goodness(struct task_struct * p, struct task_struct * prev, in
 	return weight;
 }
 
+void allow_interrupts(void)
+{
+#if defined(__SMP__) && defined(__i386__)
+/* UGH UGH UGH. Damn broken IRQ handling test-fix for x86.. */
+	int this_cpu=smp_processor_id();
+	int lock_depth = current_set[this_cpu]->lock_depth;
+	if (lock_depth) {
+		cli();
+		current_set[this_cpu]->lock_depth = 0;
+		active_kernel_processor = NO_PROC_ID;
+		__asm__ __volatile__("lock ; btrl    $0, kernel_flag");
+		sti();
+		/* interrupts should work here */
+		lock_kernel();
+		current_set[this_cpu]->lock_depth += lock_depth-1;
+	}
+#endif
+}		
+
 /*
  *  'schedule()' is the scheduler function. It's a very simple and nice
  * scheduler: it's not perfect, but certainly works for most things.
@@ -293,7 +312,7 @@ asmlinkage void schedule(void)
 	int this_cpu=smp_processor_id();
 
 /* check alarm, wake up any interruptible tasks that have got a signal */
-
+	allow_interrupts();
 	lock_kernel();
 	if (intr_count)
 		goto scheduling_in_interrupt;

@@ -4,7 +4,7 @@
  * Driver for the Gravis UltraSound wave table synth.
  */
 /*
- * Copyright (C) by Hannu Savolainen 1993-1996
+ * Copyright (C) by Hannu Savolainen 1993-1997
  *
  * OSS/Free for Linux is distributed under the GNU GENERAL PUBLIC LICENSE (GPL)
  * Version 2 (June 1991). See the "COPYING" file distributed with this software
@@ -33,6 +33,7 @@ struct voice_info
     unsigned long   orig_freq;
     unsigned long   current_freq;
     unsigned long   mode;
+    int             fixed_pitch;
     int             bender;
     int             bender_range;
     int             panning;
@@ -128,7 +129,7 @@ static int      pcm_current_intrflag;
 
 extern int     *gus_osp;
 
-struct voice_info voices[32];
+static struct voice_info voices[32];
 
 static int      freq_div_table[] =
 {
@@ -261,7 +262,7 @@ gus_write8 (int reg, unsigned int data)
   restore_flags (flags);
 }
 
-unsigned char
+static unsigned char
 gus_read8 (int reg)
 {				/* Reads from an indirect register (8 bit). Offset 0x80. */
   unsigned long   flags;
@@ -276,7 +277,7 @@ gus_read8 (int reg)
   return val;
 }
 
-unsigned char
+static unsigned char
 gus_look8 (int reg)
 {				/* Reads from an indirect register (8 bit). No additional offset. */
   unsigned long   flags;
@@ -291,7 +292,7 @@ gus_look8 (int reg)
   return val;
 }
 
-void
+static void
 gus_write16 (int reg, unsigned int data)
 {				/* Writes to an indirect register (16 bit) */
   unsigned long   flags;
@@ -307,7 +308,7 @@ gus_write16 (int reg, unsigned int data)
   restore_flags (flags);
 }
 
-unsigned short
+static unsigned short
 gus_read16 (int reg)
 {				/* Reads from an indirect register (16 bit). Offset 0x80. */
   unsigned long   flags;
@@ -326,7 +327,7 @@ gus_read16 (int reg)
   return ((hi << 8) & 0xff00) | lo;
 }
 
-unsigned short
+static unsigned short
 gus_look16 (int reg)
 {				/* Reads from an indirect register (16 bit). No additional offset. */
   unsigned long   flags;
@@ -345,7 +346,7 @@ gus_look16 (int reg)
   return ((hi << 8) & 0xff00) | lo;
 }
 
-void
+static void
 gus_write_addr (int reg, unsigned long address, int frac, int is16bit)
 {				/* Writes an 24 bit memory address */
   unsigned long   hold_address;
@@ -541,6 +542,7 @@ gus_voice_init2 (int voice)
   voices[voice].patch_vol = 127;
   voices[voice].expression_vol = 127;
   voices[voice].sample_pending = -1;
+  voices[voice].fixed_pitch = 0;
 }
 
 static void
@@ -1107,11 +1109,7 @@ guswave_ioctl (int dev,
     {
     case SNDCTL_SYNTH_INFO:
       gus_info.nr_voices = nr_voices;
-      {
-	char           *fixit = (char *) &gus_info;
-
-	copy_to_user (&((char *) arg)[0], fixit, sizeof (gus_info));
-      };
+      memcpy ((&((char *) arg)[0]), (char *) &gus_info, sizeof (gus_info));
       return 0;
       break;
 
@@ -1362,7 +1360,7 @@ guswave_controller (int dev, int voice, int ctrl_num, int value)
       if (voices[voice].volume_irq_mode != VMODE_START_NOTE)
 	{
 	  freq = compute_finetune (voices[voice].orig_freq, value,
-				   voices[voice].bender_range);
+				   voices[voice].bender_range, 0);
 	  voices[voice].current_freq = freq;
 
 	  save_flags (flags);
@@ -1494,10 +1492,17 @@ guswave_start_note2 (int dev, int voice, int note_num, int volume)
 
   sample_map[voice] = sample;
 
-  base_note = samples[sample].base_note / 100;	/* Try to avoid overflows */
-  note_freq /= 100;
+  if (voices[voice].fixed_pitch)	/* Fixed pitch */
+    {
+      freq = samples[sample].base_freq;
+    }
+  else
+    {
+      base_note = samples[sample].base_note / 100;
+      note_freq /= 100;
 
-  freq = samples[sample].base_freq * note_freq / base_note;
+      freq = samples[sample].base_freq * note_freq / base_note;
+    }
 
   voices[voice].orig_freq = freq;
 
@@ -1507,7 +1512,7 @@ guswave_start_note2 (int dev, int voice, int note_num, int volume)
    */
 
   freq = compute_finetune (voices[voice].orig_freq, voices[voice].bender,
-			   voices[voice].bender_range);
+			   voices[voice].bender_range, 0);
   voices[voice].current_freq = freq;
 
   pan = (samples[sample].panning + voices[voice].panning) / 32;
@@ -1894,7 +1899,6 @@ guswave_load_patch (int dev, int format, const char *addr,
 	    {
 	      get_user (data, (unsigned char *) &((addr)[sizeof_patch + i]));
 	      if (patch.mode & WAVE_UNSIGNED)
-
 		if (!(patch.mode & WAVE_16_BITS) || (i & 0x01))
 		  data ^= 0x80;	/* Convert to signed */
 	      gus_poke (target + i, data);
@@ -1932,7 +1936,7 @@ guswave_load_patch (int dev, int format, const char *addr,
 
 	  address = target;
 
-	  if (audio_devs[gus_devnum]->dmachan1 > 3)
+	  if (audio_devs[gus_devnum]->dmap_out->dma > 3)
 	    {
 	      hold_address = address;
 	      address = address >> 1;
@@ -1951,7 +1955,7 @@ guswave_load_patch (int dev, int format, const char *addr,
 	    dma_command |= 0x80;	/* Invert MSB */
 	  if (patch.mode & WAVE_16_BITS)
 	    dma_command |= 0x40;	/* 16 bit _DATA_ */
-	  if (audio_devs[gus_devnum]->dmachan1 > 3)
+	  if (audio_devs[gus_devnum]->dmap_out->dma > 3)
 	    dma_command |= 0x04;	/* 16 bit DMA _channel_ */
 
 	  gus_write8 (0x41, dma_command);	/* Lets go luteet (=bugs) */
@@ -2217,63 +2221,49 @@ gus_audio_set_bits (int bits)
 }
 
 static int
-gus_audio_ioctl (int dev, unsigned int cmd, caddr_t arg, int local)
+gus_audio_ioctl (int dev, unsigned int cmd, caddr_t arg)
 {
   int             val;
 
   switch (cmd)
     {
     case SOUND_PCM_WRITE_RATE:
-      if (local)
-	return gus_audio_set_speed ((int) arg);
-      get_user (val, (int *) arg);
-      return ioctl_out (arg, gus_audio_set_speed (val));
+      val = *(int *) arg;
+      return (*(int *) arg = gus_audio_set_speed (val));
       break;
 
     case SOUND_PCM_READ_RATE:
-      if (local)
-	return gus_audio_speed;
-      return ioctl_out (arg, gus_audio_speed);
+      return (*(int *) arg = gus_audio_speed);
       break;
 
     case SNDCTL_DSP_STEREO:
-      if (local)
-	return gus_audio_set_channels ((int) arg + 1) - 1;
-      get_user (val, (int *) arg);
-      return ioctl_out (arg, gus_audio_set_channels (val + 1) - 1);
+      val = *(int *) arg;
+      return (*(int *) arg = gus_audio_set_channels (val + 1) - 1);
       break;
 
     case SOUND_PCM_WRITE_CHANNELS:
-      if (local)
-	return gus_audio_set_channels ((int) arg);
-      get_user (val, (int *) arg);
-      return ioctl_out (arg, gus_audio_set_channels (val));
+      val = *(int *) arg;
+      return (*(int *) arg = gus_audio_set_channels (val));
       break;
 
     case SOUND_PCM_READ_CHANNELS:
-      if (local)
-	return gus_audio_channels;
-      return ioctl_out (arg, gus_audio_channels);
+      return (*(int *) arg = gus_audio_channels);
       break;
 
     case SNDCTL_DSP_SETFMT:
-      if (local)
-	return gus_audio_set_bits ((int) arg);
-      get_user (val, (int *) arg);
-      return ioctl_out (arg, gus_audio_set_bits (val));
+      val = *(int *) arg;
+      return (*(int *) arg = gus_audio_set_bits (val));
       break;
 
     case SOUND_PCM_READ_BITS:
-      if (local)
-	return gus_audio_bits;
-      return ioctl_out (arg, gus_audio_bits);
+      return (*(int *) arg = gus_audio_bits);
 
     case SOUND_PCM_WRITE_FILTER:	/* NOT POSSIBLE */
-      return ioctl_out (arg, -EINVAL);
+      return (*(int *) arg = -EINVAL);
       break;
 
     case SOUND_PCM_READ_FILTER:
-      return ioctl_out (arg, -EINVAL);
+      return (*(int *) arg = -EINVAL);
       break;
 
     }
@@ -2530,7 +2520,7 @@ gus_transfer_output_block (int dev, unsigned long buf,
   address = this_one * pcm_bsize;
   address += chn * pcm_banksize;
 
-  if (audio_devs[dev]->dmachan1 > 3)
+  if (audio_devs[dev]->dmap_out->dma > 3)
     {
       hold_address = address;
       address = address >> 1;
@@ -2547,7 +2537,7 @@ gus_transfer_output_block (int dev, unsigned long buf,
   else
     dma_command |= 0x80;	/* Invert MSB */
 
-  if (audio_devs[dev]->dmachan1 > 3)
+  if (audio_devs[dev]->dmap_out->dma > 3)
     dma_command |= 0x04;	/* 16 bit DMA channel */
 
   gus_write8 (0x41, dma_command);	/* Kick start */
@@ -2578,7 +2568,7 @@ gus_transfer_output_block (int dev, unsigned long buf,
 
 static void
 gus_audio_output_block (int dev, unsigned long buf, int total_count,
-			int intrflag, int restart_dma)
+			int intrflag)
 {
   pcm_current_buf = buf;
   pcm_current_count = total_count;
@@ -2589,7 +2579,7 @@ gus_audio_output_block (int dev, unsigned long buf, int total_count,
 
 static void
 gus_audio_start_input (int dev, unsigned long buf, int count,
-		       int intrflag, int restart_dma)
+		       int intrflag)
 {
   unsigned long   flags;
   unsigned char   mode;
@@ -2597,11 +2587,11 @@ gus_audio_start_input (int dev, unsigned long buf, int count,
   save_flags (flags);
   cli ();
 
-  DMAbuf_start_dma (dev, buf, count, DMA_MODE_READ);
+  /* DMAbuf_start_dma (dev, buf, count, DMA_MODE_READ); */
 
   mode = 0xa0;			/* DMA IRQ enabled, invert MSB */
 
-  if (audio_devs[dev]->dmachan2 > 3)
+  if (audio_devs[dev]->dmap_in->dma > 3)
     mode |= 0x04;		/* 16 bit DMA channel */
   if (gus_audio_channels > 1)
     mode |= 0x02;		/* Stereo */
@@ -2657,6 +2647,7 @@ gus_audio_prepare_for_output (int dev, int bsize, int bcount)
 
   if (gus_audio_bits != 8 && pcm_banksize == (256 * 1024))
     pcm_nblk--;
+  gus_write8 (0x41, 0);		/* Disable GF1 DMA */
 
   return 0;
 }
@@ -2728,18 +2719,8 @@ static struct audio_driver gus_audio_driver =
   gus_audio_prepare_for_input,
   gus_audio_prepare_for_output,
   gus_audio_reset,
-  gus_audio_reset,
   gus_local_qlen,
   gus_copy_from_user
-};
-
-static struct audio_operations gus_audio_operations =
-{
-  "Gravis UltraSound",
-  NEEDS_RESTART,
-  AFMT_U8 | AFMT_S16_LE,
-  NULL,
-  &gus_audio_driver
 };
 
 static void
@@ -2756,7 +2737,11 @@ guswave_setup_voice (int dev, int voice, int chn)
     (info->controllers[CTL_MAIN_VOLUME] * 100) / (unsigned) 128;
   voices[voice].panning =
     (info->controllers[CTL_PAN] * 2) - 128;
-  voices[voice].bender = info->bender_value;
+  voices[voice].bender = 0;
+  voices[voice].bender_range = info->bender_range;
+
+  if (chn == 9)
+    voices[voice].fixed_pitch = 1;
 }
 
 static void
@@ -2767,7 +2752,7 @@ guswave_bender (int dev, int voice, int value)
 
   voices[voice].bender = value - 8192;
   freq = compute_finetune (voices[voice].orig_freq, value - 8192,
-			   voices[voice].bender_range);
+			   voices[voice].bender_range, 0);
   voices[voice].current_freq = freq;
 
   save_flags (flags);
@@ -2825,6 +2810,7 @@ guswave_alloc (int dev, int chn, int note, struct voice_alloc_info *alloc)
 
 static struct synth_operations guswave_operations =
 {
+  "GUS",
   &gus_info,
   0,
   SYNTH_TYPE_SAMPLE,
@@ -2894,23 +2880,23 @@ gus_default_mixer_ioctl (int dev, unsigned int cmd, caddr_t arg)
 			 SOUND_MASK_SYNTH|SOUND_MASK_PCM)
   if (((cmd >> 8) & 0xff) == 'M')
     {
-      if (_IOC_DIR (cmd) & _IOC_WRITE)
+      if (_SIOC_DIR (cmd) & _SIOC_WRITE)
 	switch (cmd & 0xff)
 	  {
 	  case SOUND_MIXER_RECSRC:
-	    get_user (gus_recmask, (int *) arg);
+	    gus_recmask = *(int *) arg;
 	    gus_recmask &= MIX_DEVS;
 	    if (!(gus_recmask & (SOUND_MASK_MIC | SOUND_MASK_LINE)))
 	      gus_recmask = SOUND_MASK_MIC;
 	    /* Note! Input volumes are updated during next open for recording */
-	    return ioctl_out (arg, gus_recmask);
+	    return (*(int *) arg = gus_recmask);
 	    break;
 
 	  case SOUND_MIXER_MIC:
 	    {
 	      int             vol;
 
-	      get_user (vol, (int *) arg);
+	      vol = *(int *) arg;
 	      vol &= 0xff;
 
 	      if (vol < 0)
@@ -2919,7 +2905,7 @@ gus_default_mixer_ioctl (int dev, unsigned int cmd, caddr_t arg)
 		vol = 100;
 	      gus_mic_vol = vol;
 	      set_input_volumes ();
-	      return ioctl_out (arg, vol | (vol << 8));
+	      return (*(int *) arg = vol | (vol << 8));
 	    }
 	    break;
 
@@ -2927,7 +2913,7 @@ gus_default_mixer_ioctl (int dev, unsigned int cmd, caddr_t arg)
 	    {
 	      int             vol;
 
-	      get_user (vol, (int *) arg);
+	      vol = *(int *) arg;
 	      vol &= 0xff;
 
 	      if (vol < 0)
@@ -2936,26 +2922,26 @@ gus_default_mixer_ioctl (int dev, unsigned int cmd, caddr_t arg)
 		vol = 100;
 	      gus_line_vol = vol;
 	      set_input_volumes ();
-	      return ioctl_out (arg, vol | (vol << 8));
+	      return (*(int *) arg = vol | (vol << 8));
 	    }
 	    break;
 
 	  case SOUND_MIXER_PCM:
-	    get_user (gus_pcm_volume, (int *) arg);
+	    gus_pcm_volume = *(int *) arg;
 	    gus_pcm_volume &= 0xff;
 	    if (gus_pcm_volume < 0)
 	      gus_pcm_volume = 0;
 	    if (gus_pcm_volume > 100)
 	      gus_pcm_volume = 100;
 	    gus_audio_update_volume ();
-	    return ioctl_out (arg, gus_pcm_volume | (gus_pcm_volume << 8));
+	    return (*(int *) arg = gus_pcm_volume | (gus_pcm_volume << 8));
 	    break;
 
 	  case SOUND_MIXER_SYNTH:
 	    {
 	      int             voice;
 
-	      get_user (gus_wave_volume, (int *) arg);
+	      gus_wave_volume = *(int *) arg;
 	      gus_wave_volume &= 0xff;
 
 	      if (gus_wave_volume < 0)
@@ -2967,7 +2953,7 @@ gus_default_mixer_ioctl (int dev, unsigned int cmd, caddr_t arg)
 		for (voice = 0; voice < nr_voices; voice++)
 		  dynamic_volume_change (voice);	/* Apply the new vol */
 
-	      return ioctl_out (arg, gus_wave_volume | (gus_wave_volume << 8));
+	      return (*(int *) arg = gus_wave_volume | (gus_wave_volume << 8));
 	    }
 	    break;
 
@@ -2981,39 +2967,39 @@ gus_default_mixer_ioctl (int dev, unsigned int cmd, caddr_t arg)
 	  {
 
 	  case SOUND_MIXER_RECSRC:
-	    return ioctl_out (arg, gus_recmask);
+	    return (*(int *) arg = gus_recmask);
 	    break;
 
 	  case SOUND_MIXER_DEVMASK:
-	    return ioctl_out (arg, MIX_DEVS);
+	    return (*(int *) arg = MIX_DEVS);
 	    break;
 
 	  case SOUND_MIXER_STEREODEVS:
-	    return ioctl_out (arg, 0);
+	    return (*(int *) arg = 0);
 	    break;
 
 	  case SOUND_MIXER_RECMASK:
-	    return ioctl_out (arg, SOUND_MASK_MIC | SOUND_MASK_LINE);
+	    return (*(int *) arg = SOUND_MASK_MIC | SOUND_MASK_LINE);
 	    break;
 
 	  case SOUND_MIXER_CAPS:
-	    return ioctl_out (arg, 0);
+	    return (*(int *) arg = 0);
 	    break;
 
 	  case SOUND_MIXER_MIC:
-	    return ioctl_out (arg, gus_mic_vol | (gus_mic_vol << 8));
+	    return (*(int *) arg = gus_mic_vol | (gus_mic_vol << 8));
 	    break;
 
 	  case SOUND_MIXER_LINE:
-	    return ioctl_out (arg, gus_line_vol | (gus_line_vol << 8));
+	    return (*(int *) arg = gus_line_vol | (gus_line_vol << 8));
 	    break;
 
 	  case SOUND_MIXER_PCM:
-	    return ioctl_out (arg, gus_pcm_volume | (gus_pcm_volume << 8));
+	    return (*(int *) arg = gus_pcm_volume | (gus_pcm_volume << 8));
 	    break;
 
 	  case SOUND_MIXER_SYNTH:
-	    return ioctl_out (arg, gus_wave_volume | (gus_wave_volume << 8));
+	    return (*(int *) arg = gus_wave_volume | (gus_wave_volume << 8));
 	    break;
 
 	  default:
@@ -3214,6 +3200,7 @@ gus_wave_init (struct address_info *hw_config)
 
 
   samples = (struct patch_info *) (sound_mem_blocks[sound_nblocks] = vmalloc ((MAX_SAMPLE + 1) * sizeof (*samples)));
+  sound_mem_sizes[sound_nblocks] = (MAX_SAMPLE + 1) * sizeof (*samples);
   if (sound_nblocks < 1024)
     sound_nblocks++;;
   if (samples == NULL)
@@ -3224,7 +3211,7 @@ gus_wave_init (struct address_info *hw_config)
 
   conf_printf (tmp2, hw_config);
   tmp2[sizeof (gus_info.name) - 1] = 0;
-  strncpy (gus_info.name, tmp2, strlen (tmp2));
+  strcpy (gus_info.name, tmp2);
 
   if (num_synths >= MAX_SYNTH_DEV)
     printk ("GUS Error: Too many synthesizers\n");
@@ -3244,15 +3231,23 @@ gus_wave_init (struct address_info *hw_config)
   if (gus_mem_size > 0)
     if (num_audiodevs < MAX_AUDIO_DEV)
       {
-	audio_devs[gus_devnum = num_audiodevs++] = &gus_audio_operations;
-	audio_devs[gus_devnum]->dmachan1 = dma;
-	audio_devs[gus_devnum]->dmachan2 = dma2;
-	audio_devs[gus_devnum]->buffsize = DSP_BUFFSIZE;
+
+	if ((gus_devnum = sound_install_audiodrv (AUDIO_DRIVER_VERSION,
+						  "Ultrasound",
+						  &gus_audio_driver,
+					       sizeof (struct audio_driver),
+						  NEEDS_RESTART |
+			                      ((dma2 != dma && dma2 != -1) ?
+					       DMA_DUPLEX : 0),
+						  AFMT_U8 | AFMT_S16_LE,
+						  NULL,
+						  dma,
+						  dma2)) < 0)
+	                  return;
+
 	audio_devs[gus_devnum]->min_fragment = 9;
 	audio_devs[gus_devnum]->mixer_dev = num_mixers;		/* Next mixer# */
 	audio_devs[gus_devnum]->flags |= DMA_HARDSTOP;
-	if (dma2 != dma && dma2 != -1)
-	  audio_devs[gus_devnum]->flags |= DMA_DUPLEX;
       }
     else
       printk ("GUS: Too many audio devices available\n");
@@ -3518,12 +3513,14 @@ guswave_dma_irq (void)
 	break;
 
       case GUS_DEV_PCM_CONTINUE:	/* Left channel data transferred */
+	gus_write8 (0x41, 0);	/* Disable GF1 DMA */
 	gus_transfer_output_block (pcm_current_dev, pcm_current_buf,
 				   pcm_current_count,
 				   pcm_current_intrflag, 1);
 	break;
 
       case GUS_DEV_PCM_DONE:	/* Right or mono channel data transferred */
+	gus_write8 (0x41, 0);	/* Disable GF1 DMA */
 	if (pcm_qlen < pcm_nblk)
 	  {
 	    int             flag = (1 - dma_active) * 2;	/* 0 or 2 */
@@ -3641,6 +3638,7 @@ gus_tmr_restart (int dev)
 static struct sound_lowlev_timer gus_tmr =
 {
   0,
+  1,
   gus_tmr_start,
   gus_tmr_disable,
   gus_tmr_restart

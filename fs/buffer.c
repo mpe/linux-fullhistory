@@ -1,3 +1,4 @@
+extern void allow_interrupts(void);
 /*
  *  linux/fs/buffer.c
  *
@@ -625,6 +626,7 @@ static void refill_freelist(int size)
 	}
 
 repeat:
+	allow_interrupts();
 	/* OK, we cannot grow the buffer cache, now try to get some
 	   from the lru list */
 
@@ -706,6 +708,7 @@ struct buffer_head * getblk(kdev_t dev, int block, int size)
 	   now so as to ensure that there are still clean buffers available
 	   for user processes to use (and dirty) */
 repeat:
+	allow_interrupts();
 	bh = get_hash_table(dev, block, size);
 	if (bh) {
 		if (!buffer_dirty(bh)) {
@@ -717,7 +720,10 @@ repeat:
 		return bh;
 	}
 
-	while(!free_list[isize]) refill_freelist(size);
+	while(!free_list[isize]) {
+		allow_interrupts();
+		refill_freelist(size);
+	}
 	
 	if (find_buffer(dev,block,size))
 		 goto repeat;
@@ -1510,6 +1516,8 @@ asmlinkage int sync_old_buffers(void)
 		ndirty = 0;
 		nwritten = 0;
 	repeat:
+		allow_interrupts();
+	
 		bh = lru_list[nlist];
 		if(bh) 
 			 for (i = nr_buffers_type[nlist]; i-- > 0; bh = next) {
@@ -1651,6 +1659,8 @@ int bdflush(void * unused)
 			 ndirty = 0;
 			 refilled = 0;
 		 repeat:
+		 	allow_interrupts();
+		 	
 			 bh = lru_list[nlist];
 			 if(bh) 
 				  for (i = nr_buffers_type[nlist]; i-- > 0 && ndirty < bdf_prm.b_un.ndirty; 
@@ -1711,7 +1721,6 @@ int bdflush(void * unused)
 		
 		/* If there are still a lot of dirty buffers around, skip the sleep
 		   and flush some more */
-		
 		if(nr_buffers_type[BUF_DIRTY] <= nr_buffers * bdf_prm.b_un.nfract/100) {
 			current->signal = 0;
 			interruptible_sleep_on(&bdflush_wait);

@@ -5,7 +5,7 @@
  * (MT-0002-PC Control Chip)
  */
 /*
- * Copyright (C) by Hannu Savolainen 1993-1996
+ * Copyright (C) by Hannu Savolainen 1993-1997
  *
  * OSS/Free for Linux is distributed under the GNU GENERAL PUBLIC LICENSE (GPL)
  * Version 2 (June 1991). See the "COPYING" file distributed with this software
@@ -201,7 +201,12 @@ probe_trix_wss (struct address_info *hw_config)
   ret = ad1848_detect (hw_config->io_base + 4, NULL, hw_config->osp);
 
   if (ret)
-    request_region (0x390, 2, "AudioTrix");
+    {
+#ifdef TRIX_ENABLE_JOYSTICK
+      trix_write (0x15, 0x80);
+#endif
+      request_region (0x390, 2, "AudioTrix");
+    }
 
   return ret;
 }

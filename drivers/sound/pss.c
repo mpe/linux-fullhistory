@@ -4,7 +4,7 @@
  * The low level driver for the Personal Sound System (ECHO ESC614).
  */
 /*
- * Copyright (C) by Hannu Savolainen 1993-1996
+ * Copyright (C) by Hannu Savolainen 1993-1997
  *
  * OSS/Free for Linux is distributed under the GNU GENERAL PUBLIC LICENSE (GPL)
  * Version 2 (June 1991). See the "COPYING" file distributed with this software
@@ -348,7 +348,7 @@ attach_pss (struct address_info *hw_config)
   /*
      * Disable all emulations. Will be enabled later (if required).
    */
-  outw (0x0000, REG (CONF_PSS));
+  outw (0x0000, REG (CONF_PSS));	/* 0x0400 enables joystick */
   outw (0x0000, REG (CONF_WSS));
   outw (0x0000, REG (CONF_SB));
   outw (0x0000, REG (CONF_MIDI));
@@ -536,7 +536,7 @@ pss_coproc_ioctl (void *dev_info, unsigned int cmd, caddr_t arg, int local)
 	if (buf == NULL)
 	  return -ENOSPC;
 
-	copy_from_user ((char *) buf, &((char *) arg)[0], sizeof (*buf));
+	memcpy ((char *) buf, (&((char *) arg)[0]), sizeof (*buf));
 	err = download_boot_block (dev_info, buf);
 	vfree (buf);
 	return err;
@@ -554,7 +554,7 @@ pss_coproc_ioctl (void *dev_info, unsigned int cmd, caddr_t arg, int local)
 	if (buf == NULL)
 	  return -ENOSPC;
 
-	copy_from_user ((char *) buf, &((char *) arg)[0], sizeof (*buf));
+	memcpy ((char *) buf, (&((char *) arg)[0]), sizeof (*buf));
 
 	data = (unsigned short *) (buf->data);
 
@@ -567,11 +567,7 @@ pss_coproc_ioctl (void *dev_info, unsigned int cmd, caddr_t arg, int local)
 	      {
 		restore_flags (flags);
 		buf->len = i;	/* feed back number of WORDs sent */
-		{
-		  char           *fixit = (char *) buf;
-
-		  copy_to_user (&((char *) arg)[0], fixit, sizeof (*buf));
-		};
+		memcpy ((&((char *) arg)[0]), (char *) buf, sizeof (*buf));
 		vfree (buf);
 		return -EIO;
 	      }
@@ -616,11 +612,7 @@ pss_coproc_ioctl (void *dev_info, unsigned int cmd, caddr_t arg, int local)
 
 	restore_flags (flags);
 
-	{
-	  char           *fixit = (char *) buf;
-
-	  copy_to_user (&((char *) arg)[0], fixit, sizeof (*buf));
-	};
+	memcpy ((&((char *) arg)[0]), (char *) buf, sizeof (*buf));
 	vfree (buf);
 
 	return err;
@@ -634,7 +626,7 @@ pss_coproc_ioctl (void *dev_info, unsigned int cmd, caddr_t arg, int local)
 	unsigned long   flags;
 	unsigned short  tmp;
 
-	copy_from_user ((char *) &buf, &((char *) arg)[0], sizeof (buf));
+	memcpy ((char *) &buf, (&((char *) arg)[0]), sizeof (buf));
 
 	save_flags (flags);
 	cli ();
@@ -659,11 +651,7 @@ pss_coproc_ioctl (void *dev_info, unsigned int cmd, caddr_t arg, int local)
 	buf.parm1 = tmp;
 	restore_flags (flags);
 
-	{
-	  char           *fixit = (char *) &buf;
-
-	  copy_to_user (&((char *) arg)[0], fixit, sizeof (buf));
-	};
+	memcpy ((&((char *) arg)[0]), (char *) &buf, sizeof (buf));
 	return 0;
       }
       break;
@@ -674,7 +662,7 @@ pss_coproc_ioctl (void *dev_info, unsigned int cmd, caddr_t arg, int local)
 	unsigned long   flags;
 	unsigned short  tmp;
 
-	copy_from_user ((char *) &buf, &((char *) arg)[0], sizeof (buf));
+	memcpy ((char *) &buf, (&((char *) arg)[0]), sizeof (buf));
 
 	save_flags (flags);
 	cli ();
@@ -708,7 +696,7 @@ pss_coproc_ioctl (void *dev_info, unsigned int cmd, caddr_t arg, int local)
 	unsigned long   flags;
 	unsigned short  tmp;
 
-	copy_from_user ((char *) &buf, &((char *) arg)[0], sizeof (buf));
+	memcpy ((char *) &buf, (&((char *) arg)[0]), sizeof (buf));
 
 	save_flags (flags);
 	cli ();
@@ -749,7 +737,7 @@ pss_coproc_ioctl (void *dev_info, unsigned int cmd, caddr_t arg, int local)
 	unsigned long   flags;
 	unsigned short  tmp;
 
-	copy_from_user ((char *) &buf, &((char *) arg)[0], sizeof (buf));
+	memcpy ((char *) &buf, (&((char *) arg)[0]), sizeof (buf));
 
 	save_flags (flags);
 	cli ();
@@ -783,11 +771,7 @@ pss_coproc_ioctl (void *dev_info, unsigned int cmd, caddr_t arg, int local)
 
 	restore_flags (flags);
 
-	{
-	  char           *fixit = (char *) &buf;
-
-	  copy_to_user (&((char *) arg)[0], fixit, sizeof (buf));
-	};
+	memcpy ((&((char *) arg)[0]), (char *) &buf, sizeof (buf));
 	return 0;
       }
       break;

@@ -737,20 +737,16 @@ static void icmp_unreach(struct icmphdr *icmph, struct sk_buff *skb, int len)
 	/* Deliver ICMP message to raw sockets. Pretty useless feature?
 	 */
 
-	hash = iph->protocol & (SOCK_ARRAY_SIZE-1);
-	if ((raw_sk=raw_prot.sock_array[hash]) != NULL) {
-		raw_sk = get_sock_raw(raw_sk, iph->protocol, iph->saddr, iph->daddr);
+	/* Note: See raw.c and net/raw.h, RAWV4_HTABLE_SIZE==MAX_INET_PROTOS */
+	hash = iph->protocol & (MAX_INET_PROTOS - 1);
+	if ((raw_sk = raw_v4_htable[hash]) != NULL) {
+		raw_sk = raw_v4_lookup(raw_sk, iph->protocol, iph->saddr, iph->daddr);
 		while (raw_sk) {
 			raw_err(raw_sk, skb);
-			raw_sk=get_sock_raw(raw_sk->next, iph->protocol, iph->saddr, iph->daddr);
+			raw_sk = raw_v4_lookup(raw_sk->next, iph->protocol,
+					       iph->saddr, iph->daddr);
 		}
 	}
-
-	/*
-	 *	Get the protocol(s).
-	 */
-	 
-	hash = iph->protocol & (MAX_INET_PROTOS -1);
 
 	/*
 	 *	This can't change while we are doing it. 
@@ -981,6 +977,10 @@ static void icmp_discard(struct icmphdr *icmph, struct sk_buff *skb, int len)
  *	in udp.c or tcp.c...
  */
 
+/* This should work with the new hashes now. -DaveM */
+extern struct sock *tcp_v4_lookup(u32 saddr, u16 sport, u32 daddr, u16 dport);
+extern struct sock *udp_v4_lookup(u32 saddr, u16 sport, u32 daddr, u16 dport);
+
 int icmp_chkaddr(struct sk_buff *skb)
 {
 	struct icmphdr *icmph=(struct icmphdr *)(skb->nh.raw + skb->nh.iph->ihl*4);
@@ -995,8 +995,7 @@ int icmp_chkaddr(struct sk_buff *skb)
 			{
 			struct tcphdr *th = (struct tcphdr *)(((unsigned char *)iph)+(iph->ihl<<2));
 
-			sk = get_sock(&tcp_prot, th->source, iph->daddr,
-						th->dest, iph->saddr);
+			sk = tcp_v4_lookup(iph->saddr, th->source, iph->daddr, th->dest);
 			if (!sk) return 0;
 			if (sk->saddr != iph->saddr) return 0;
 			if (sk->daddr != iph->daddr) return 0;
@@ -1010,8 +1009,7 @@ int icmp_chkaddr(struct sk_buff *skb)
 			{
 			struct udphdr *uh = (struct udphdr *)(((unsigned char *)iph)+(iph->ihl<<2));
 
-			sk = get_sock(&udp_prot, uh->source, iph->daddr,
-						uh->dest, iph->saddr);
+			sk = udp_v4_lookup(iph->saddr, uh->source, iph->daddr, uh->dest);
 			if (!sk) return 0;
 			if (sk->saddr != iph->saddr && __ip_chk_addr(iph->saddr) != IS_MYADDR)
 				return 0;

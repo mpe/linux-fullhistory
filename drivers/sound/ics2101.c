@@ -4,7 +4,7 @@
  * Driver for the ICS2101 mixer of GUS v3.7.
  */
 /*
- * Copyright (C) by Hannu Savolainen 1993-1996
+ * Copyright (C) by Hannu Savolainen 1993-1997
  *
  * OSS/Free for Linux is distributed under the GNU GENERAL PUBLIC LICENSE (GPL)
  * Version 2 (June 1991). See the "COPYING" file distributed with this software
@@ -120,11 +120,11 @@ ics2101_mixer_ioctl (int dev, unsigned int cmd, caddr_t arg)
 {
   if (((cmd >> 8) & 0xff) == 'M')
     {
-      if (_IOC_DIR (cmd) & _IOC_WRITE)
+      if (_SIOC_DIR (cmd) & _SIOC_WRITE)
 	{
 	  int             val;
 
-	  get_user (val, (int *) arg);
+	  val = *(int *) arg;
 
 	  switch (cmd & 0xff)
 	    {
@@ -133,23 +133,23 @@ ics2101_mixer_ioctl (int dev, unsigned int cmd, caddr_t arg)
 	      break;
 
 	    case SOUND_MIXER_MIC:
-	      return ioctl_out (arg, set_volumes (DEV_MIC, val));
+	      return (*(int *) arg = set_volumes (DEV_MIC, val));
 	      break;
 
 	    case SOUND_MIXER_CD:
-	      return ioctl_out (arg, set_volumes (DEV_CD, val));
+	      return (*(int *) arg = set_volumes (DEV_CD, val));
 	      break;
 
 	    case SOUND_MIXER_LINE:
-	      return ioctl_out (arg, set_volumes (DEV_LINE, val));
+	      return (*(int *) arg = set_volumes (DEV_LINE, val));
 	      break;
 
 	    case SOUND_MIXER_SYNTH:
-	      return ioctl_out (arg, set_volumes (DEV_GF1, val));
+	      return (*(int *) arg = set_volumes (DEV_GF1, val));
 	      break;
 
 	    case SOUND_MIXER_VOLUME:
-	      return ioctl_out (arg, set_volumes (DEV_VOL, val));
+	      return (*(int *) arg = set_volumes (DEV_VOL, val));
 	      break;
 
 	    default:
@@ -167,39 +167,39 @@ ics2101_mixer_ioctl (int dev, unsigned int cmd, caddr_t arg)
 	    break;
 
 	  case SOUND_MIXER_DEVMASK:
-	    return ioctl_out (arg, MIX_DEVS);
+	    return (*(int *) arg = MIX_DEVS);
 	    break;
 
 	  case SOUND_MIXER_STEREODEVS:
-	    return ioctl_out (arg, SOUND_MASK_LINE | SOUND_MASK_CD | SOUND_MASK_SYNTH | SOUND_MASK_VOLUME | SOUND_MASK_MIC);
+	    return (*(int *) arg = SOUND_MASK_LINE | SOUND_MASK_CD | SOUND_MASK_SYNTH | SOUND_MASK_VOLUME | SOUND_MASK_MIC);
 	    break;
 
 	  case SOUND_MIXER_RECMASK:
-	    return ioctl_out (arg, SOUND_MASK_MIC | SOUND_MASK_LINE);
+	    return (*(int *) arg = SOUND_MASK_MIC | SOUND_MASK_LINE);
 	    break;
 
 	  case SOUND_MIXER_CAPS:
-	    return ioctl_out (arg, 0);
+	    return (*(int *) arg = 0);
 	    break;
 
 	  case SOUND_MIXER_MIC:
-	    return ioctl_out (arg, volumes[DEV_MIC]);
+	    return (*(int *) arg = volumes[DEV_MIC]);
 	    break;
 
 	  case SOUND_MIXER_LINE:
-	    return ioctl_out (arg, volumes[DEV_LINE]);
+	    return (*(int *) arg = volumes[DEV_LINE]);
 	    break;
 
 	  case SOUND_MIXER_CD:
-	    return ioctl_out (arg, volumes[DEV_CD]);
+	    return (*(int *) arg = volumes[DEV_CD]);
 	    break;
 
 	  case SOUND_MIXER_VOLUME:
-	    return ioctl_out (arg, volumes[DEV_VOL]);
+	    return (*(int *) arg = volumes[DEV_VOL]);
 	    break;
 
 	  case SOUND_MIXER_SYNTH:
-	    return ioctl_out (arg, volumes[DEV_GF1]);
+	    return (*(int *) arg = volumes[DEV_GF1]);
 	    break;
 
 	  default:

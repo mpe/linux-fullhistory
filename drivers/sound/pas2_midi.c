@@ -4,7 +4,7 @@
  * The low level driver for the PAS Midi Interface.
  */
 /*
- * Copyright (C) by Hannu Savolainen 1993-1996
+ * Copyright (C) by Hannu Savolainen 1993-1997
  *
  * OSS/Free for Linux is distributed under the GNU GENERAL PUBLIC LICENSE (GPL)
  * Version 2 (June 1991). See the "COPYING" file distributed with this software
@@ -39,7 +39,7 @@ pas_midi_open (int dev, int mode,
 
   if (midi_busy)
     {
-      printk ("PAS2: Midi busy\n");
+      printk ("PAS16: Midi busy\n");
       return -EBUSY;
     }
 

@@ -4,7 +4,7 @@
  * The low level driver for the Sound Blaster DS chips.
  */
 /*
- * Copyright (C) by Hannu Savolainen 1993-1996
+ * Copyright (C) by Hannu Savolainen 1993-1997
  *
  * OSS/Free for Linux is distributed under the GNU GENERAL PUBLIC LICENSE (GPL)
  * Version 2 (June 1991). See the "COPYING" file distributed with this software
@@ -28,7 +28,6 @@
  * future version of this driver.
  */
 
-void            (*midi_input_intr) (int dev, unsigned char data);
 
 static int
 sb_midi_open (int dev, int mode,
@@ -188,6 +187,7 @@ sb_dsp_midi_init (sb_devc * devc)
 
 
   midi_devs[num_midis] = (struct midi_operations *) (sound_mem_blocks[sound_nblocks] = vmalloc (sizeof (struct midi_operations)));
+  sound_mem_sizes[sound_nblocks] = sizeof (struct midi_operations);
 
   if (sound_nblocks < 1024)
     sound_nblocks++;;
@@ -204,6 +204,7 @@ sb_dsp_midi_init (sb_devc * devc)
 
 
   midi_devs[num_midis]->converter = (struct synth_operations *) (sound_mem_blocks[sound_nblocks] = vmalloc (sizeof (struct synth_operations)));
+  sound_mem_sizes[sound_nblocks] = sizeof (struct synth_operations);
 
   if (sound_nblocks < 1024)
     sound_nblocks++;;
@@ -217,6 +218,7 @@ sb_dsp_midi_init (sb_devc * devc)
   memcpy ((char *) midi_devs[num_midis]->converter, (char *) &std_midi_synth,
 	  sizeof (struct synth_operations));
 
+  midi_devs[num_midis]->converter->id = "SBMIDI";
   num_midis++;
 }
 

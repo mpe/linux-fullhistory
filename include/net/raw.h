@@ -21,7 +21,17 @@
 extern struct proto raw_prot;
 
 
-extern int 	raw_err(struct sock *, struct sk_buff *);
+extern void 	raw_err(struct sock *, struct sk_buff *);
 extern int 	raw_rcv(struct sock *, struct sk_buff *);
+
+/* Note: v4 ICMP wants to get at this stuff, if you change the
+ *       hashing mechanism, make sure you update icmp.c as well.
+ */
+#define RAWV4_HTABLE_SIZE	MAX_INET_PROTOS
+extern struct sock *raw_v4_htable[RAWV4_HTABLE_SIZE];
+
+
+extern struct sock *raw_v4_lookup(struct sock *sk, unsigned short num,
+				  unsigned long raddr, unsigned long laddr);
 
 #endif	/* _RAW_H */

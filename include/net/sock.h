@@ -22,6 +22,7 @@
  *		Alan Cox	:	New fields for options
  *	Pauline Middelink	:	identd support
  *		Alan Cox	:	Eliminate low level recv/recvfrom
+ *		David S. Miller	:	New socket lookup architecture.
  *
  *		This program is free software; you can redistribute it and/or
  *		modify it under the terms of the GNU General Public License
@@ -72,10 +73,6 @@
 #include <linux/igmp.h>
 
 #include <asm/atomic.h>
-
-/* Think big (also on some systems a byte is faster) */
-#define SOCK_ARRAY_SIZE	256
-
 
 /*
  *	The AF_UNIX specific socket options
@@ -307,6 +304,10 @@ struct tcp_opt
 
 struct sock 
 {
+	/* This must be first. */
+	struct sock		*sklist_next;
+	struct sock		*sklist_prev;
+
 	atomic_t		wmem_alloc;
 	atomic_t		rmem_alloc;
 	unsigned long		allocation;		/* Allocation mode */
@@ -341,8 +342,11 @@ struct sock
 				bsdism;
 	unsigned long	        lingertime;
 	int			proc;
+
+	struct sock             **hashtable;
+	int			hashent;
 	struct sock		*next;
-	struct sock		*prev; /* Doubly linked chain.. */
+	struct sock		*prev;
 	struct sock		*pair;
 
 	struct sk_buff		* send_head;
@@ -528,6 +532,10 @@ struct inet_options {
  
 struct proto 
 {
+	/* These must be first. */
+	struct sock		*sklist_next;
+	struct sock		*sklist_prev;
+
 	void			(*close)(struct sock *sk, 
 					unsigned long timeout);
 	int			(*connect)(struct sock *sk,
@@ -562,11 +570,17 @@ struct proto
 	int			(*backlog_rcv) (struct sock *sk, 
 						struct sk_buff *skb);
 
+	/* Keeping track of sk's, looking them up, and port selection methods. */
+	void			(*hash)(struct sock *sk);
+	void			(*unhash)(struct sock *sk);
+	void			(*rehash)(struct sock *sk);
+	unsigned short		(*good_socknum)(void);
+	int			(*verify_bind)(struct sock *sk, unsigned short snum);
+
 	unsigned short		max_header;
 	unsigned long		retransmits;
 	char			name[32];
 	int			inuse, highestinuse;
-	struct sock **		sock_array;
 };
 
 #define TIME_WRITE	1	/* Not yet used */
@@ -593,6 +607,46 @@ struct proto
 #define SHUTDOWN_MASK	3
 #define RCV_SHUTDOWN	1
 #define SEND_SHUTDOWN	2
+
+/* Per-protocol hash table implementations use this to make sure
+ * nothing changes.
+ */
+#define SOCKHASH_LOCK()		start_bh_atomic()
+#define SOCKHASH_UNLOCK()	end_bh_atomic()
+
+/* Some things in the kernel just want to get at a protocols
+ * entire socket list commensurate, thus...
+ */
+static __inline__ void add_to_prot_sklist(struct sock *sk)
+{
+	SOCKHASH_LOCK();
+	if(!sk->sklist_next) {
+		struct proto *p = sk->prot;
+
+		sk->sklist_prev = (struct sock *) p;
+		sk->sklist_next = p->sklist_next;
+		p->sklist_next->sklist_prev = sk;
+		p->sklist_next = sk;
+
+		/* Charge the protocol. */
+		sk->prot->inuse += 1;
+		if(sk->prot->highestinuse < sk->prot->inuse)
+			sk->prot->highestinuse = sk->prot->inuse;
+	}
+	SOCKHASH_UNLOCK();
+}
+
+static __inline__ void del_from_prot_sklist(struct sock *sk)
+{
+	SOCKHASH_LOCK();
+	if(sk->sklist_next) {
+		sk->sklist_next->sklist_prev = sk->sklist_prev;
+		sk->sklist_prev->sklist_next = sk->sklist_next;
+		sk->sklist_next = NULL;
+		sk->prot->inuse--;
+	}
+	SOCKHASH_UNLOCK();
+}
 
 /*
  * Used by processes to "lock" a socket state, so that
@@ -660,21 +714,6 @@ static __inline__ int max(unsigned int a, unsigned int b)
 extern struct sock *		sk_alloc(int priority);
 extern void			sk_free(struct sock *sk);
 extern void			destroy_sock(struct sock *sk);
-extern unsigned short		get_new_socknum(struct proto *,
-						unsigned short);
-extern void			inet_put_sock(unsigned short, struct sock *); 
-extern struct sock		*get_sock(struct proto *, unsigned short,
-					  unsigned long, unsigned short,
-					  unsigned long);
-extern struct sock		*get_sock_proxy(struct proto *, unsigned short,
-					  unsigned long, unsigned short,
-					  unsigned long,
-					  unsigned long, unsigned short);
-extern struct sock		*get_sock_mcast(struct sock *, unsigned short,
-					  unsigned long, unsigned short,
-					  unsigned long);
-extern struct sock		*get_sock_raw(struct sock *, unsigned short,
-					  unsigned long, unsigned long);
 
 extern struct sk_buff		*sock_wmalloc(struct sock *sk,
 					      unsigned long size, int force,

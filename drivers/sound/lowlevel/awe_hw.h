@@ -1,26 +1,29 @@
-/*================================================================
- * AWE32 access routines
- *================================================================*/
+/*
+ * sound/awe_hw.h
+ *
+ * Access routines and definitions for the low level driver for the 
+ * AWE32/Sound Blaster 32 wave table synth.
+ *   version 0.3.1; Jan. 21, 1997
+ *
+ * Copyright (C) 1996,1997 Takashi Iwai
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
+ */
 
 #ifndef AWE_HW_H_DEF
 #define AWE_HW_H_DEF
-
-/*
- * user configuration:
- * if auto detection can't work properly, define the following values
- * for your machine.
- */
-/*#define AWE_DEFAULT_BASE_ADDR	0x620*/	/* base port address */
-/*#define AWE_DEFAULT_MEM_SIZE	512*/	/* kbytes */
-
-
-/*
- * maximum size of sample table:
- * if your data overflow, increase the following values.
- */
-#define AWE_MAX_SAMPLES		400
-#define AWE_MAX_INFOS		900	/* GS presets has 801 infos! */
-
 
 /*
  * Emu-8000 control registers
@@ -45,6 +48,7 @@
 #define AWE_HWCF4	awe_cmd_idx(1,9),  Data1	/* DW: config dw 4 */
 #define AWE_HWCF5	awe_cmd_idx(1,10), Data1	/* DW: config dw 5 */
 #define AWE_HWCF6	awe_cmd_idx(1,13), Data1	/* DW: config dw 6 */
+#define AWE_HWCF7	awe_cmd_idx(1,14), Data1	/* DW: config dw 7? (not documented) */
 #define AWE_SMALR	awe_cmd_idx(1,20), Data1	/* DW: sound memory address for left read */
 #define AWE_SMARR	awe_cmd_idx(1,21), Data1	/* DW:    for right read */
 #define AWE_SMALW	awe_cmd_idx(1,22), Data1	/* DW: sound memory address for left write */
@@ -76,7 +80,7 @@
 #define AWE_TREMFRQ(ch)	awe_cmd_idx(4,ch), Data3	/* W: LFO#1 tremolo amount and freq */
 #define AWE_FM2FRQ2(ch)	awe_cmd_idx(5,ch), Data3	/* W: LFO#2 vibrato amount and freq */
 
-/*  used during detection (returns ROM version ?)                    */
+/* used during detection (returns ROM version?; not documented in ADIP) */
 #define AWE_U1		0xE0, Data3	  /* (R)(W) used in initialization */
 #define AWE_U2(ch)	0xC0+(ch), Data3  /* (W)(W) used in init envelope  */
 
@@ -84,6 +88,11 @@
 #define AWE_MAX_VOICES		32
 #define AWE_NORMAL_VOICES	30	/*30&31 are reserved for DRAM refresh*/
 
+#define AWE_MAX_CHANNELS	32	/* max midi channels (must >= voices) */
+
 #define AWE_DRAM_OFFSET		0x200000
+#define AWE_MAX_DRAM_SIZE	(28 * 1024)	/* 28 MB is max onboard memory */
+
+#define AWE_DEFAULT_ATTENUATION	32	/* 12dB below */
 
 #endif

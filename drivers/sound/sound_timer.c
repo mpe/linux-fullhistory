@@ -2,7 +2,7 @@
  * sound/sound_timer.c
  */
 /*
- * Copyright (C) by Hannu Savolainen 1993-1996
+ * Copyright (C) by Hannu Savolainen 1993-1997
  *
  * OSS/Free for Linux is distributed under the GNU GENERAL PUBLIC LICENSE (GPL)
  * Version 2 (June 1991). See the "COPYING" file distributed with this software
@@ -11,7 +11,6 @@
 #include <linux/config.h>
 
 
-#define SEQUENCER_C
 #include "sound_config.h"
 
 #if defined(CONFIG_SEQUENCER)
@@ -31,7 +30,7 @@ static unsigned long
 tmr2ticks (int tmr_value)
 {
   /*
-     *    Convert timer ticks to MIDI ticks
+   *    Convert timer ticks to MIDI ticks
    */
 
   unsigned long   tmp;
@@ -195,7 +194,7 @@ timer_ioctl (int dev,
   switch (cmd)
     {
     case SNDCTL_TMR_SOURCE:
-      return ioctl_out (arg, TMR_INTERNAL);
+      return (*(int *) arg = TMR_INTERNAL);
       break;
 
     case SNDCTL_TMR_START:
@@ -215,7 +214,7 @@ timer_ioctl (int dev,
       break;
 
     case SNDCTL_TMR_TIMEBASE:
-      get_user (val, (int *) arg);
+      val = *(int *) arg;
 
       if (val)
 	{
@@ -226,11 +225,11 @@ timer_ioctl (int dev,
 	  curr_timebase = val;
 	}
 
-      return ioctl_out (arg, curr_timebase);
+      return (*(int *) arg = curr_timebase);
       break;
 
     case SNDCTL_TMR_TEMPO:
-      get_user (val, (int *) arg);
+      val = *(int *) arg;
 
       if (val)
 	{
@@ -245,20 +244,20 @@ timer_ioctl (int dev,
 	  reprogram_timer ();
 	}
 
-      return ioctl_out (arg, curr_tempo);
+      return (*(int *) arg = curr_tempo);
       break;
 
     case SNDCTL_SEQ_CTRLRATE:
-      get_user (val, (int *) arg);
+      val = *(int *) arg;
 
       if (val != 0)		/* Can't change */
 	return -EINVAL;
 
-      return ioctl_out (arg, ((curr_tempo * curr_timebase) + 30) / 60);
+      return (*(int *) arg = ((curr_tempo * curr_timebase) + 30) / 60);
       break;
 
     case SNDCTL_SEQ_GETTIME:
-      return ioctl_out (arg, curr_ticks);
+      return (*(int *) arg = curr_ticks);
       break;
 
     case SNDCTL_TMR_METRONOME:
@@ -286,7 +285,7 @@ timer_arm (int dev, long time)
 
 static struct sound_timer_operations sound_timer =
 {
-  {"GUS Timer", 0},
+  {"Sound Timer", 0},
   1,				/* Priority */
   0,				/* Local device link */
   timer_open,
@@ -323,10 +322,15 @@ sound_timer_init (struct sound_lowlev_timer *t, char *name)
 {
   int             n;
 
-  if (initialized || t == NULL)
-    return;			/* There is already a similar timer */
-
+  if (initialized)
+    {
+      if (t->priority <= tmr->priority)
+	return;			/* There is already a similar or better timer */
+      tmr = t;
+      return;
+    }
   initialized = 1;
+
   tmr = t;
 
   if (num_sound_timers >= MAX_TIMER_DEV)

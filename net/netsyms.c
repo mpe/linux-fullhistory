@@ -95,6 +95,9 @@ EXPORT_SYMBOL(sock_wake_async);
 EXPORT_SYMBOL(sock_alloc_send_skb);
 EXPORT_SYMBOL(sock_init_data);
 EXPORT_SYMBOL(sock_no_fcntl);
+EXPORT_SYMBOL(sock_no_listen);
+EXPORT_SYMBOL(sock_no_getsockopt);
+EXPORT_SYMBOL(sock_no_setsockopt);
 EXPORT_SYMBOL(sock_rfree);
 EXPORT_SYMBOL(sock_wfree);
 EXPORT_SYMBOL(skb_recv_datagram);
@@ -136,7 +139,6 @@ EXPORT_SYMBOL(sklist_insert_socket);
 
 #ifdef CONFIG_INET
 /* Internet layer registration */
-EXPORT_SYMBOL(get_new_socknum);
 EXPORT_SYMBOL(inet_add_protocol);
 EXPORT_SYMBOL(inet_del_protocol);
 EXPORT_SYMBOL(rarp_ioctl_hook);
@@ -156,7 +158,6 @@ EXPORT_SYMBOL(inet_family_ops);
 /* inet functions common to v4 and v6 */
 EXPORT_SYMBOL(inet_stream_ops);
 EXPORT_SYMBOL(inet_dgram_ops);
-EXPORT_SYMBOL(inet_remove_sock);
 EXPORT_SYMBOL(inet_release);
 EXPORT_SYMBOL(inet_stream_connect);
 EXPORT_SYMBOL(inet_dgram_connect);
@@ -168,24 +169,28 @@ EXPORT_SYMBOL(inet_setsockopt);
 EXPORT_SYMBOL(inet_getsockopt);
 EXPORT_SYMBOL(inet_sendmsg);
 EXPORT_SYMBOL(inet_recvmsg);
-EXPORT_SYMBOL(tcp_sock_array);
-EXPORT_SYMBOL(udp_sock_array);
+
+/* Socket demultiplexing. */
+EXPORT_SYMBOL(tcp_good_socknum);
+EXPORT_SYMBOL(tcp_established_hash);
+EXPORT_SYMBOL(tcp_listening_hash);
+EXPORT_SYMBOL(tcp_bound_hash);
+EXPORT_SYMBOL(udp_good_socknum);
+EXPORT_SYMBOL(udp_hash);
+
 EXPORT_SYMBOL(destroy_sock);
 EXPORT_SYMBOL(ip_queue_xmit);
 EXPORT_SYMBOL(csum_partial);
 EXPORT_SYMBOL(dev_lockct);
 EXPORT_SYMBOL(ndisc_eth_hook);
 EXPORT_SYMBOL(memcpy_fromiovecend);
-EXPORT_SYMBOL(csum_partial_copy);
 EXPORT_SYMBOL(csum_partial_copy_fromiovecend);
 EXPORT_SYMBOL(__release_sock);
 EXPORT_SYMBOL(net_timer);
-EXPORT_SYMBOL(inet_put_sock);
 /* UDP/TCP exported functions for TCPv6 */
 EXPORT_SYMBOL(udp_ioctl);
 EXPORT_SYMBOL(udp_connect);
 EXPORT_SYMBOL(udp_sendmsg);
-EXPORT_SYMBOL(tcp_cache_zap);
 EXPORT_SYMBOL(tcp_close);
 EXPORT_SYMBOL(tcp_accept);
 EXPORT_SYMBOL(tcp_write_wakeup);

@@ -356,7 +356,7 @@ static void icmpv6_notify(int type, int code, unsigned char *buff, int len,
 		len -= hdrlen;
 	}
 
-	hash = nexthdr & (MAX_INET_PROTOS -1);
+	hash = nexthdr & (MAX_INET_PROTOS - 1);
 
 	for (ipprot = (struct inet6_protocol *) inet6_protos[hash]; 
 	     ipprot != NULL; 
@@ -375,15 +375,14 @@ static void icmpv6_notify(int type, int code, unsigned char *buff, int len,
 
 	/* delivery to upper layer protocols failed. try raw sockets */
 
-	sk = rawv6_prot.sock_array[hash];
+	sk = raw_v6_htable[hash];
 
 	if (sk == NULL)
 	{
 		return;
 	}
 
-	while ((sk = inet6_get_sock_raw(sk, nexthdr, daddr, saddr)))
-	{
+	while((sk = raw_v6_lookup(sk, nexthdr, daddr, saddr))) {
 		rawv6_err(sk, type, code, pbuff, saddr, daddr);
 		sk = sk->next;
 	}

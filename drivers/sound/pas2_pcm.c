@@ -1,11 +1,15 @@
-#define _PAS2_PCM_C_
 /*
- * sound/pas2_pcm.c
- *
- * The low level driver for the Pro Audio Spectrum ADC/DAC.
+ * pas2_pcm.c Audio routines for PAS16
  */
-
+/*
+ * Copyright (C) by Hannu Savolainen 1993-1997
+ *
+ * OSS/Free for Linux is distributed under the GNU GENERAL PUBLIC LICENSE (GPL)
+ * Version 2 (June 1991). See the "COPYING" file distributed with this software
+ * for more info.
+ */
 #include <linux/config.h>
+
 #include "sound_config.h"
 
 #if defined(CONFIG_PAS) && defined(CONFIG_AUDIO)
@@ -34,7 +38,7 @@ static int      pcm_busy = 0;
 int             pas_audiodev = 0;
 static int      open_mode = 0;
 
-int
+static int
 pcm_set_speed (int arg)
 {
   int             foo, tmp;
@@ -106,7 +110,7 @@ pcm_set_speed (int arg)
   return pcm_speed;
 }
 
-int
+static int
 pcm_set_channels (int arg)
 {
 
@@ -118,15 +122,13 @@ pcm_set_channels (int arg)
       pas_write (pas_read (0xF8A) ^ 0x20, 0xF8A);
 
       pcm_channels = arg;
-      pcm_set_speed (pcm_speed);	/*
-					   * The speed must be reinitialized
-					 */
+      pcm_set_speed (pcm_speed);	/* The speed must be reinitialized */
     }
 
   return pcm_channels;
 }
 
-int
+static int
 pcm_set_bits (int arg)
 {
   if (arg == 0)
@@ -146,7 +148,7 @@ pcm_set_bits (int arg)
 }
 
 static int
-pas_audio_ioctl (int dev, unsigned int cmd, caddr_t arg, int local)
+pas_audio_ioctl (int dev, unsigned int cmd, caddr_t arg)
 {
   int             val;
 
@@ -155,62 +157,35 @@ pas_audio_ioctl (int dev, unsigned int cmd, caddr_t arg, int local)
   switch (cmd)
     {
     case SOUND_PCM_WRITE_RATE:
-      if (local)
-	return pcm_set_speed ((int) arg);
-      get_user (val, (int *) arg);
-      return ioctl_out (arg, pcm_set_speed (val));
+      val = *(int *) arg;
+      return (*(int *) arg = pcm_set_speed (val));
       break;
 
     case SOUND_PCM_READ_RATE:
-      if (local)
-	return pcm_speed;
-      return ioctl_out (arg, pcm_speed);
+      return (*(int *) arg = pcm_speed);
       break;
 
     case SNDCTL_DSP_STEREO:
-      if (local)
-	return pcm_set_channels ((int) arg + 1) - 1;
-      get_user (val, (int *) arg);
-      return ioctl_out (arg, pcm_set_channels (val + 1) - 1);
+      val = *(int *) arg;
+      return (*(int *) arg = pcm_set_channels (val + 1) - 1);
       break;
 
     case SOUND_PCM_WRITE_CHANNELS:
-      if (local)
-	return pcm_set_channels ((int) arg);
-      get_user (val, (int *) arg);
-      return ioctl_out (arg, pcm_set_channels (val));
+      val = *(int *) arg;
+      return (*(int *) arg = pcm_set_channels (val));
       break;
 
     case SOUND_PCM_READ_CHANNELS:
-      if (local)
-	return pcm_channels;
-      return ioctl_out (arg, pcm_channels);
+      return (*(int *) arg = pcm_channels);
       break;
 
     case SNDCTL_DSP_SETFMT:
-      if (local)
-	return pcm_set_bits ((int) arg);
-      get_user (val, (int *) arg);
-      return ioctl_out (arg, pcm_set_bits (val));
+      val = *(int *) arg;
+      return (*(int *) arg = pcm_set_bits (val));
       break;
 
     case SOUND_PCM_READ_BITS:
-      if (local)
-	return pcm_bits;
-      return ioctl_out (arg, pcm_bits);
-
-    case SOUND_PCM_WRITE_FILTER:	/*
-					 * NOT YET IMPLEMENTED
-					 */
-      get_user (val, (int *) arg);
-      if (val > 1)
-	return -EINVAL;
-      pcm_filter = val;
-      break;
-
-    case SOUND_PCM_READ_FILTER:
-      return ioctl_out (arg, pcm_filter);
-      break;
+      return (*(int *) arg = pcm_bits);
 
     default:
       return -EINVAL;
@@ -224,7 +199,7 @@ pas_audio_reset (int dev)
 {
   DEB (printk ("pas2_pcm.c: static void pas_audio_reset(void)\n"));
 
-  pas_write (pas_read (0xF8A) & ~0x40, 0xF8A);
+  pas_write (pas_read (0xF8A) & ~0x40, 0xF8A);	/* Disable PCM */
 }
 
 static int
@@ -276,22 +251,20 @@ pas_audio_close (int dev)
 
 static void
 pas_audio_output_block (int dev, unsigned long buf, int count,
-			int intrflag, int restart_dma)
+			int intrflag)
 {
   unsigned long   flags, cnt;
 
   DEB (printk ("pas2_pcm.c: static void pas_audio_output_block(char *buf = %P, int count = %X)\n", buf, count));
 
   cnt = count;
-  if (audio_devs[dev]->dmachan1 > 3)
+  if (audio_devs[dev]->dmap_out->dma > 3)
     cnt >>= 1;
 
   if (audio_devs[dev]->flags & DMA_AUTOMODE &&
       intrflag &&
       cnt == pcm_count)
-    return;			/*
-				 * Auto mode on. No need to react
-				 */
+    return;
 
   save_flags (flags);
   cli ();
@@ -299,10 +272,9 @@ pas_audio_output_block (int dev, unsigned long buf, int count,
   pas_write (pas_read (0xF8A) & ~0x40,
 	     0xF8A);
 
-  if (restart_dma)
-    DMAbuf_start_dma (dev, buf, count, DMA_MODE_WRITE);
+  /* DMAbuf_start_dma (dev, buf, count, DMA_MODE_WRITE); */
 
-  if (audio_devs[dev]->dmachan1 > 3)
+  if (audio_devs[dev]->dmap_out->dma > 3)
     count >>= 1;
 
   if (count != pcm_count)
@@ -327,7 +299,7 @@ pas_audio_output_block (int dev, unsigned long buf, int count,
 
 static void
 pas_audio_start_input (int dev, unsigned long buf, int count,
-		       int intrflag, int restart_dma)
+		       int intrflag)
 {
   unsigned long   flags;
   int             cnt;
@@ -335,23 +307,20 @@ pas_audio_start_input (int dev, unsigned long buf, int count,
   DEB (printk ("pas2_pcm.c: static void pas_audio_start_input(char *buf = %P, int count = %X)\n", buf, count));
 
   cnt = count;
-  if (audio_devs[dev]->dmachan1 > 3)
+  if (audio_devs[dev]->dmap_out->dma > 3)
     cnt >>= 1;
 
   if (audio_devs[pas_audiodev]->flags & DMA_AUTOMODE &&
       intrflag &&
       cnt == pcm_count)
-    return;			/*
-				 * Auto mode on. No need to react
-				 */
+    return;
 
   save_flags (flags);
   cli ();
 
-  if (restart_dma)
-    DMAbuf_start_dma (dev, buf, count, DMA_MODE_READ);
+  /* DMAbuf_start_dma (dev, buf, count, DMA_MODE_READ); */
 
-  if (audio_devs[dev]->dmachan1 > 3)
+  if (audio_devs[dev]->dmap_out->dma > 3)
     count >>= 1;
 
   if (count != pcm_count)
@@ -398,12 +367,14 @@ pas_audio_trigger (int dev, int state)
 static int
 pas_audio_prepare_for_input (int dev, int bsize, int bcount)
 {
+  pas_audio_reset (dev);
   return 0;
 }
 
 static int
 pas_audio_prepare_for_output (int dev, int bsize, int bcount)
 {
+  pas_audio_reset (dev);
   return 0;
 }
 
@@ -417,21 +388,11 @@ static struct audio_driver pas_audio_driver =
   pas_audio_prepare_for_input,
   pas_audio_prepare_for_output,
   pas_audio_reset,
-  pas_audio_reset,
   NULL,
   NULL,
   NULL,
   NULL,
   pas_audio_trigger
-};
-
-static struct audio_operations pas_audio_operations =
-{
-  "Pro Audio Spectrum",
-  DMA_AUTOMODE,
-  AFMT_U8 | AFMT_S16_LE,
-  NULL,
-  &pas_audio_driver
 };
 
 void
@@ -447,20 +408,28 @@ pas_pcm_init (struct address_info *hw_config)
 
   if (num_audiodevs < MAX_AUDIO_DEV)
     {
-      audio_devs[pas_audiodev = num_audiodevs++] = &pas_audio_operations;
-      audio_devs[pas_audiodev]->dmachan1 = hw_config->dma;
-      audio_devs[pas_audiodev]->buffsize = DSP_BUFFSIZE;
+
+      if ((pas_audiodev = sound_install_audiodrv (AUDIO_DRIVER_VERSION,
+						  "Pro Audio Spectrum",
+						  &pas_audio_driver,
+					       sizeof (struct audio_driver),
+						  DMA_AUTOMODE,
+						  AFMT_U8 | AFMT_S16_LE,
+						  NULL,
+						  hw_config->dma,
+						  hw_config->dma)) < 0)
+	{
+	  return;
+	}
     }
   else
-    printk ("PAS2: Too many PCM devices available\n");
+    printk ("PAS16: Too many PCM devices available\n");
 }
 
 void
 pas_pcm_interrupt (unsigned char status, int cause)
 {
-  if (cause == 1)		/*
-				 * PCM buffer done
-				 */
+  if (cause == 1)
     {
       /*
        * Halt the PCM first. Otherwise we don't have time to start a new

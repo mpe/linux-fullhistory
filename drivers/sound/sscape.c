@@ -4,7 +4,7 @@
  * Low level driver for Ensoniq SoundScape
  */
 /*
- * Copyright (C) by Hannu Savolainen 1993-1996
+ * Copyright (C) by Hannu Savolainen 1993-1997
  *
  * OSS/Free for Linux is distributed under the GNU GENERAL PUBLIC LICENSE (GPL)
  * Version 2 (June 1991). See the "COPYING" file distributed with this software
@@ -284,45 +284,6 @@ get_board_type (struct sscape_info *devc)
   return tmp;
 }
 
-void
-sscapeintr (int irq, void *dev_id, struct pt_regs *dummy)
-{
-  unsigned char   bits, tmp;
-  static int      debug = 0;
-
-  bits = sscape_read (devc, GA_INTSTAT_REG);
-  if ((sscape_sleep_flag.opts & WK_SLEEP))
-    {
-      {
-	sscape_sleep_flag.opts = WK_WAKEUP;
-	wake_up (&sscape_sleeper);
-      };
-    }
-
-  if (bits & 0x02)		/* Host interface interrupt */
-    {
-      printk ("SSCAPE: Host interrupt, data=%02x\n", host_read (devc));
-    }
-
-#if defined(CONFIG_MPU_EMU) && defined(CONFIG_MIDI)
-  if (bits & 0x01)
-    {
-      mpuintr (irq, NULL, NULL);
-      if (debug++ > 10)		/* Temporary debugging hack */
-	{
-	  sscape_write (devc, GA_INTENA_REG, 0x00);	/* Disable all interrupts */
-	}
-    }
-#endif
-
-  /*
-     * Acknowledge interrupts (toggle the interrupt bits)
-   */
-
-  tmp = sscape_read (devc, GA_INTENA_REG);
-  sscape_write (devc, GA_INTENA_REG, (~bits & 0x0e) | (tmp & 0xf1));
-
-}
 
 
 static void
@@ -652,7 +613,7 @@ sscape_coproc_ioctl (void *dev_info, unsigned int cmd, caddr_t arg, int local)
 	buf = (copr_buffer *) vmalloc (sizeof (copr_buffer));
 	if (buf == NULL)
 	  return -ENOSPC;
-	copy_from_user ((char *) buf, &((char *) arg)[0], sizeof (*buf));
+	memcpy ((char *) buf, (&((char *) arg)[0]), sizeof (*buf));
 	err = download_boot_block (dev_info, buf);
 	vfree (buf);
 	return err;

@@ -5,27 +5,30 @@
 int DMAbuf_open(int dev, int mode);
 int DMAbuf_release(int dev, int mode);
 int DMAbuf_getwrbuffer(int dev, char **buf, int *size, int dontblock);
-int DMAbuf_get_curr_buffer(int dev, int *buff_no, char **dma_buf, int *buff_ptr, int *buff_size);
 int DMAbuf_getrdbuffer(int dev, char **buf, int *len, int dontblock);
 int DMAbuf_rmchars(int dev, int buff_no, int c);
 int DMAbuf_start_output(int dev, int buff_no, int l);
-int DMAbuf_set_count(int dev, int buff_no, int l);
-int DMAbuf_ioctl(int dev, unsigned int cmd, caddr_t arg, int local);
+int DMAbuf_move_wrpointer(int dev, int l);
+/* int DMAbuf_ioctl(int dev, unsigned int cmd, caddr_t arg, int local); */
 void DMAbuf_init(void);
+void DMAbuf_deinit(int dev);
 int DMAbuf_start_dma (int dev, unsigned long physaddr, int count, int dma_mode);
 int DMAbuf_open_dma (int dev);
 void DMAbuf_close_dma (int dev);
-void DMAbuf_reset_dma (int dev);
 void DMAbuf_inputintr(int dev);
 void DMAbuf_outputintr(int dev, int underflow_flag);
-unsigned int DMAbuf_poll(kdev_t dev, struct fileinfo *file, poll_table * wait);
-void DMAbuf_start_device(int dev);
+struct dma_buffparms;
+int DMAbuf_space_in_queue (int dev);
+int DMAbuf_activate_recording (int dev, struct dma_buffparms *dmap);
+int DMAbuf_get_buffer_pointer (int dev, struct dma_buffparms *dmap);
+void DMAbuf_launch_output(int dev, struct dma_buffparms *dmap);
+int DMAbuf_select(int dev, struct fileinfo *file, int sel_type, poll_table * wait);
 void DMAbuf_start_devices(unsigned int devmask);
 void DMAbuf_reset (int dev);
 int DMAbuf_sync (int dev);
 
 /*
- *	System calls for /dev/dsp and /dev/audio
+ *	System calls for /dev/dsp and /dev/audio (audio.c)
  */
 
 int audio_read (int dev, struct fileinfo *file, char *buf, int count);
@@ -36,7 +39,8 @@ int audio_ioctl (int dev, struct fileinfo *file,
 	   unsigned int cmd, caddr_t arg);
 void audio_init_devices (void);
 
-unsigned int audio_poll(kdev_t dev, struct fileinfo *file, poll_table * wait);
+int audio_select(int dev, struct fileinfo *file, int sel_type, poll_table * wait);
+void reorganize_buffers (int dev, struct dma_buffparms *dmap, int recording);
 
 /*
  *	System calls for the /dev/sequencer
@@ -52,11 +56,12 @@ int sequencer_lseek (int dev, struct fileinfo *file, off_t offset, int orig);
 void sequencer_init (void);
 void sequencer_timer(unsigned long dummy);
 int note_to_freq(int note_num);
-unsigned long compute_finetune(unsigned long base_freq, int bend, int range);
+unsigned long compute_finetune(unsigned long base_freq, int bend, int range,
+			       int vibrato_bend);
 void seq_input_event(unsigned char *event, int len);
 void seq_copy_to_input (unsigned char *event, int len);
 
-unsigned int sequencer_poll(kdev_t dev, struct fileinfo *file, poll_table * wait);
+int sequencer_select(int dev, struct fileinfo *file, int sel_type, poll_table * wait);
 
 /*
  *	System calls for the /dev/midi
@@ -72,7 +77,7 @@ int MIDIbuf_lseek (int dev, struct fileinfo *file, off_t offset, int orig);
 void MIDIbuf_bytes_received(int dev, unsigned char *buf, int count);
 void MIDIbuf_init(void);
 
-unsigned int MIDIbuf_poll(kdev_t dev, struct fileinfo *file, poll_table * wait);
+int MIDIbuf_select(int dev, struct fileinfo *file, int sel_type, poll_table * wait);
 
 /*
  *
@@ -80,11 +85,9 @@ unsigned int MIDIbuf_poll(kdev_t dev, struct fileinfo *file, poll_table * wait);
  */
 
 /*	From soundcard.c	*/
-void soundcard_init(void);
 void tenmicrosec(int *osp);
 void request_sound_timer (int count);
 void sound_stop_timer(void);
-int snd_ioctl_return(int *addr, int value);
 int snd_set_irq_handler (int interrupt_level, void(*iproc)(int, void*, struct pt_regs *), char *name, int *osp);
 void snd_release_irq(int vect);
 void sound_dma_malloc(int dev);
@@ -159,7 +162,6 @@ int gus_wave_detect(int baseaddr);
 void gus_wave_init(struct address_info *hw_config);
 void gus_wave_unload (void);
 void gus_voice_irq(void);
-unsigned char gus_read8 (int reg);
 void gus_write8(int reg, unsigned int data);
 void guswave_dma_irq(void);
 void gus_delay(void);

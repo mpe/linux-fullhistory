@@ -1,7 +1,7 @@
 #ifndef SOUNDCARD_H
 #define SOUNDCARD_H
 /*
- * Copyright by Hannu Savolainen 1993-1996
+ * Copyright by Hannu Savolainen 1993-1997
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are
@@ -33,7 +33,7 @@
  * Use ioctl(fd, OSS_GETVERSION, &int) to get the version number of
  * the currently active driver.
  */
-#define SOUND_VERSION	0x030700
+#define SOUND_VERSION	0x0307f1
 #define OPEN_SOUND_SYSTEM
 
 /* In Linux we need to be prepared for cross compiling */
@@ -76,13 +76,18 @@
  */
 
 #ifndef _SIOWR
-#if defined(_IOWR) && !defined(sun)
+#if defined(_IOWR) && !defined(sun) && !defined(sparc)
 /* Use already defined ioctl defines if they exist (except with Sun) */
 #define	SIOCPARM_MASK	IOCPARM_MASK
 #define	SIOC_VOID	IOC_VOID
 #define	SIOC_OUT	IOC_OUT
 #define	SIOC_IN		IOC_IN
 #define	SIOC_INOUT	IOC_INOUT
+#define _SIOC_SIZE	_IOC_SIZE
+#define _SIOC_DIR	_IOC_DIR
+#define _SIOC_NONE	_IOC_NONE
+#define _SIOC_READ	_IOC_READ
+#define _SIOC_WRITE	_IOC_WRITE
 #define	_SIO		_IO
 #define	_SIOR		_IOR
 #define	_SIOW		_IOW
@@ -93,7 +98,7 @@
  * and the size of any in or out parameters in the upper
  * word.  The high 2 bits of the upper word are used
  * to encode the in/out status of the parameter; for now
- * we restrict parameters to at most 128 bytes.
+ * we restrict parameters to at most 8191 bytes.
  */
 /* #define	SIOCTYPE		(0xff<<8) */
 #define	SIOCPARM_MASK	0x1fff		/* parameters must be < 8192 bytes */
@@ -107,6 +112,11 @@
 #define	_SIOW(x,y,t)	((int)(SIOC_IN|((sizeof(t)&SIOCPARM_MASK)<<16)|(x<<8)|y))
 /* this should be _SIORW, but stdio got there first */
 #define	_SIOWR(x,y,t)	((int)(SIOC_INOUT|((sizeof(t)&SIOCPARM_MASK)<<16)|(x<<8)|y))
+#define _SIOC_SIZE(x)	((x>>16)&SIOCPARM_MASK)	
+#define _SIOC_DIR(x)	(x & 0xf0000000)
+#define _SIOC_NONE	SIOC_VOID
+#define _SIOC_READ	SIOC_OUT
+#define _SIOC_WRITE	SIOC_IN
 #  endif /* _IOWR */
 #endif  /* !_SIOWR */
 
@@ -129,6 +139,7 @@
 #define SNDCTL_SEQ_PANIC		_SIO  ('Q',17)
 #define SNDCTL_SEQ_OUTOFBAND		_SIOW ('Q',18, struct seq_event_rec)
 #define SNDCTL_SEQ_GETTIME		_SIOR ('Q',19, int)
+#define SNDCTL_SYNTH_ID			_SIOWR('Q',20, struct synth_info)
 
 	struct seq_event_rec {
 			unsigned char arr[8];
@@ -166,13 +177,13 @@
  *	Sample loading mechanism for internal synthesizers (/dev/sequencer)
  *	The following patch_info structure has been designed to support
  *	Gravis UltraSound. It tries to be universal format for uploading
- *	sample based patches but is propably too limited.
+ *	sample based patches but is probably too limited.
  */
 
 struct patch_info {
-		unsigned short key;		/* Use GUS_PATCH here */
-#define GUS_PATCH	_PATCHKEY(0x04)
-#define OBSOLETE_GUS_PATCH	_PATCHKEY(0x02)
+		unsigned short key;		/* Use WAVE_PATCH here */
+#define WAVE_PATCH	_PATCHKEY(0x04)
+#define GUS_PATCH	WAVE_PATCH
 
 		short device_no;	/* Synthesizer number */
 		short instr_no;		/* Midi pgm# */
@@ -189,6 +200,7 @@ struct patch_info {
 #define WAVE_LOOP_BACK	0x10	/* bit 4 = Set is looping backward. */
 #define WAVE_SUSTAIN_ON	0x20	/* bit 5 = Turn sustaining on. (Env. pts. 3)*/
 #define WAVE_ENVELOPES	0x40	/* bit 6 = Enable envelopes - 1 */
+#define WAVE_FAST_RELEASE 0x80	/* bit 7 = Shut off immediately after note off */
 				/* 	(use the env_rate/env_offs fields). */
 /* Linux specific bits */
 #define WAVE_VIBRATO	0x00010000	/* The vibrato info is valid */
@@ -257,7 +269,7 @@ struct patch_info {
 	};
 
 struct sysex_info {
-		short key;		/* Use GUS_PATCH here */
+		short key;		/* Use SYSEX_PATCH or MAUI_PATCH here */
 #define SYSEX_PATCH	_PATCHKEY(0x05)
 #define MAUI_PATCH	_PATCHKEY(0x06)
 		short device_no;	/* Synthesizer number */
@@ -413,8 +425,8 @@ struct sysex_info {
  *	Set the key field of the structure to FM_PATCH. The device field is used to
  *	route the patch to the corresponding device.
  *
- *	For Gravis UltraSound use struct patch_info. Initialize the key field
- *      to GUS_PATCH.
+ *	For wave table use struct patch_info. Initialize the key field
+ *      to WAVE_PATCH.
  */
 #define SEQ_PRIVATE		0xfe	/* Low level HW dependent events (8 bytes) */
 #define SEQ_EXTENDED		0xff	/* Extended events (8 bytes) OBSOLETE */
@@ -447,7 +459,8 @@ struct synth_info {	/* Read only */
 #define FM_TYPE_OPL3			0x01
 #define MIDI_TYPE_MPU401		0x401
 
-#define SAMPLE_TYPE_GUS			0x10
+#define SAMPLE_TYPE_BASIC		0x10
+#define SAMPLE_TYPE_GUS			SAMPLE_TYPE_BASIC
 
 		int	perc_mode;	/* No longer supported */
 		int	nr_voices;
@@ -571,6 +584,22 @@ typedef struct buffmem_desc {
 #define SNDCTL_DSP_MAPOUTBUF		_SIOR ('P', 20, buffmem_desc)
 #define SNDCTL_DSP_SETSYNCRO		_SIO  ('P', 21)
 #define SNDCTL_DSP_SETDUPLEX		_SIO  ('P', 22)
+
+/*
+ * Application's profile defines the way how playback underrun situations should be handled.
+ * 
+ *	APF_NORMAL (the default) and APF_NETWORK make the driver to cleanup the
+ *	playback buffer whenever an underrun occurs. This consumes some time
+ *	preven's looping the existing buffer.
+ *	APF_CPUINTENS is intended to be set by CPU intensive applications which
+ *	are likely to run out of time occasionally. In this mode the buffer cleanup is
+ *	disabled which saves CPU time but also let's the previous buffer content to
+ *	be played during the "pause" after the underrun.
+ */
+#define SNDCTL_DSP_PROFILE		_SIOW ('P', 23, int)
+#define	  APF_NORMAL	0	/* Normal applications */
+#define	  APF_NETWORK	1	/* Underruns probably caused by an "external" delay */
+#define   APF_CPUINTENS 2	/* Underruns probably caused by "overheating" the CPU */
 
 #define SOUND_PCM_READ_RATE		_SIOR ('P', 2, int)
 #define SOUND_PCM_READ_CHANNELS		_SIOR ('P', 6, int)
@@ -928,10 +957,45 @@ typedef struct mixer_vol_table {
  *
  *	These macros define the API which should be used when possible.
  */
+#define SEQ_DECLAREBUF()		SEQ_USE_EXTBUF()
 
-#ifndef USE_SIMPLE_MACROS
 void seqbuf_dump(void);	/* This function must be provided by programs */
 
+extern int OSS_init(int seqfd, int buflen);
+extern void OSS_seqbuf_dump(int fd, unsigned char *buf, int buflen);
+extern void OSS_seq_advbuf(int len, int fd, unsigned char *buf, int buflen);
+extern void OSS_seq_needbuf(int len, int fd, unsigned char *buf, int buflen);
+extern void OSS_patch_caching(int dev, int chn, int patch,
+			      int fd, unsigned char *buf, int buflen);
+extern void OSS_drum_caching(int dev, int chn, int patch,
+			      int fd, unsigned char *buf, int buflen);
+extern void OSS_write_patch(int fd, unsigned char *buf, int len);
+extern int OSS_write_patch2(int fd, unsigned char *buf, int len);
+
+#define SEQ_PM_DEFINES int __foo_bar___
+#ifdef OSSLIB
+#  define SEQ_USE_EXTBUF() \
+		extern unsigned char *_seqbuf; \
+		extern int _seqbuflen;extern int _seqbufptr
+#  define SEQ_DEFINEBUF(len) SEQ_USE_EXTBUF();static int _requested_seqbuflen=len
+#  define _SEQ_ADVBUF(len) OSS_seq_advbuf(len, seqfd, _seqbuf, _seqbuflen)
+#  define _SEQ_NEEDBUF(len) OSS_seq_needbuf(len, seqfd, _seqbuf, _seqbuflen)
+#  define SEQ_DUMPBUF() OSS_seqbuf_dump(seqfd, _seqbuf, _seqbuflen)
+
+#  define SEQ_LOAD_GMINSTR(dev, instr) \
+		OSS_patch_caching(dev, -1, instr, seqfd, _seqbuf, _seqbuflen)
+#  define SEQ_LOAD_GMDRUM(dev, drum) \
+		OSS_drum_caching(dev, -1, drum, seqfd, _seqbuf, _seqbuflen)
+#else /* !OSSLIB */
+
+#  define SEQ_LOAD_GMINSTR(dev, instr)
+#  define SEQ_LOAD_GMDRUM(dev, drum)
+
+#  define SEQ_USE_EXTBUF() \
+		extern unsigned char _seqbuf[]; \
+		extern int _seqbuflen;extern int _seqbufptr
+
+#ifndef USE_SIMPLE_MACROS
 /* Sample seqbuf_dump() implementation:
  *
  *	SEQ_DEFINEBUF (2048);	-- Defines a buffer for 2048 bytes
@@ -952,8 +1016,6 @@ void seqbuf_dump(void);	/* This function must be provided by programs */
  */
 
 #define SEQ_DEFINEBUF(len)		unsigned char _seqbuf[len]; int _seqbuflen = len;int _seqbufptr = 0
-#define SEQ_USE_EXTBUF()		extern unsigned char _seqbuf[]; extern int _seqbuflen;extern int _seqbufptr
-#define SEQ_DECLAREBUF()		SEQ_USE_EXTBUF()
 #define _SEQ_NEEDBUF(len)		if ((_seqbufptr+(len)) > _seqbuflen) seqbuf_dump()
 #define _SEQ_ADVBUF(len)		_seqbufptr += len
 #define SEQ_DUMPBUF			seqbuf_dump
@@ -974,6 +1036,7 @@ void seqbuf_dump(void);	/* This function must be provided by programs */
  */
 #define _SEQ_NEEDBUF(len)	/* empty */
 #endif
+#endif /* !OSSLIB */
 
 #define SEQ_VOLUME_MODE(dev, mode)	{_SEQ_NEEDBUF(8);\
 					_seqbuf[_seqbufptr] = SEQ_EXTENDED;\
@@ -1041,18 +1104,30 @@ void seqbuf_dump(void);	/* This function must be provided by programs */
  * cause fatal problems with some other devices (such as MPU401).
  */
 #define SEQ_SYSEX(dev, buf, len) \
-					{int i, l=(len); if (l>6)l=6;\
+					{int ii, ll=(len); \
+					 unsigned char *bufp=buf;\
+					 if (ll>6)ll=6;\
 					_SEQ_NEEDBUF(8);\
 					_seqbuf[_seqbufptr] = EV_SYSEX;\
-					for(i=0;i<l;i++)_seqbuf[_seqbufptr+i+1] = (buf)[i];\
-					for(i=l;i<6;i++)_seqbuf[_seqbufptr+i+1] = 0xff;\
+					_seqbuf[_seqbufptr+1] = (dev);\
+					for(ii=0;ii<ll;ii++)\
+					   _seqbuf[_seqbufptr+ii+2] = bufp[ii];\
+					for(ii=ll;ii<6;ii++)\
+					   _seqbuf[_seqbufptr+ii+2] = 0xff;\
 					_SEQ_ADVBUF(8);}
 
 #define SEQ_CHN_PRESSURE(dev, chn, pressure) \
 		_CHN_COMMON(dev, MIDI_CHN_PRESSURE, chn, pressure, 0, 0)
 
-#define SEQ_SET_PATCH(dev, chn, patch) \
+#define SEQ_SET_PATCH SEQ_PGM_CHANGE
+#ifdef OSSLIB
+#   define SEQ_PGM_CHANGE(dev, chn, patch) \
+		{OSS_patch_caching(dev, chn, patch, seqfd, _seqbuf, _seqbuflen); \
+		 _CHN_COMMON(dev, MIDI_PGM_CHANGE, chn, patch, 0, 0);}
+#else
+#   define SEQ_PGM_CHANGE(dev, chn, patch) \
 		_CHN_COMMON(dev, MIDI_PGM_CHANGE, chn, patch, 0, 0)
+#endif
 
 #define SEQ_CONTROL(dev, chn, controller, value) \
 		_CHN_COMMON(dev, MIDI_CTL_CHANGE, chn, controller, 0, value)
@@ -1130,10 +1205,19 @@ void seqbuf_dump(void);	/* This function must be provided by programs */
 /*
  * Patch loading.
  */
-#define SEQ_WRPATCH(patchx, len)		{if (_seqbufptr) seqbuf_dump();\
-					if (write(seqfd, (char*)(patchx), len)==-1) \
-					   perror("Write patch: /dev/sequencer");}
-#define SEQ_WRPATCH2(patchx, len)	(seqbuf_dump(), write(seqfd, (char*)(patchx), len))
+#ifdef OSSLIB
+#   define SEQ_WRPATCH(patchx, len) \
+		OSS_write_patch(seqfd, (char*)(patchx), len)
+#   define SEQ_WRPATCH2(patchx, len) \
+		OSS_write_patch2(seqfd, (char*)(patchx), len)
+#else
+#   define SEQ_WRPATCH(patchx, len) \
+		{if (_seqbufptr) SEQ_DUMPBUF();\
+		 if (write(seqfd, (char*)(patchx), len)==-1) \
+		    perror("Write patch: /dev/sequencer");}
+#   define SEQ_WRPATCH2(patchx, len) \
+		(SEQ_DUMPBUF(), write(seqfd, (char*)(patchx), len))
+#endif
 
 #endif
 #endif

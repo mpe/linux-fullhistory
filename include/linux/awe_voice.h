@@ -1,10 +1,29 @@
+/*
+ * sound/awe_voice.h
+ *
+ * Voice information definitions for the low level driver for the 
+ * AWE32/Sound Blaster 32 wave table synth.
+ *   version 0.3.1b; Jan. 21, 1997
+ *
+ * Copyright (C) 1996,1997 Takashi Iwai
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
+ */
+
 #ifndef AWE_VOICE_H
 #define AWE_VOICE_H
-/*================================================================
- * awe_voice.h -- voice information for AWE32 wave table synth
- *	ver.0.2.0; Oct. 16, 1996
- *	copyright (c) 1996  by Takashi Iwai
- *================================================================*/
 
 #ifndef SAMPLE_TYPE_AWE32
 #define SAMPLE_TYPE_AWE32	0x20
@@ -31,10 +50,18 @@ typedef struct awe_patch_info {
 	short type;			/* following data type */
 #define AWE_LOAD_INFO		0
 #define AWE_LOAD_DATA		1
+#define AWE_APPEND_DATA		0x00
+#define AWE_REPLACE_DATA	0x80
 
 	short reserved;			/* word alignment data */
-	char data[0];			/* patch data follows here */
+
+	/* the actual patch data begins after this */
+#if defined(AWE_COMPAT_030) && AWE_COMPAT_030
+	char data[0];
+#endif
 } awe_patch_info;
+
+#define AWE_PATCH_INFO_SIZE	16
 
 
 /*----------------------------------------------------------------
@@ -66,6 +93,9 @@ typedef struct _awe_voice_parm {
 	unsigned short reserved[4];	/* not used */
 } awe_voice_parm;
 
+#define AWE_VOICE_PARM_SIZE	48
+
+
 /* wave table parameters: 92 bytes */
 typedef struct _awe_voice_info {
 	unsigned short sf_id;		/* file id (should be zero) */
@@ -94,13 +124,33 @@ typedef struct _awe_voice_info {
 	short index;			/* internal index (set by driver) */
 } awe_voice_info;
 
+#define AWE_VOICE_INFO_SIZE	92
+
+/*----------------------------------------------------------------*/
+
+/* The info entry of awe_voice_rec is changed from 0 to 1
+ * for some compilers refusing zero size array.
+ * Due to this change, sizeof(awe_voice_rec) becomes different
+ * from older versions.
+ * Use AWE_VOICE_REC_SIZE instead.
+ */
+#if defined(AWE_COMPAT_030) && AWE_COMPAT_030
+#define AWE_INFOARRAY_SIZE	0
+#else
+#define AWE_INFOARRAY_SIZE	1
+#endif
+
 /* instrument info header: 4 bytes */
 typedef struct _awe_voice_rec {
 	unsigned char bank;		/* midi bank number */
 	unsigned char instr;		/* midi preset number */
 	short nvoices;			/* number of voices */
-	awe_voice_info info[0];		/* voice information follows here */
+
+	/* voice information follows here */
+	awe_voice_info info[AWE_INFOARRAY_SIZE];
 } awe_voice_rec;
+
+#define AWE_VOICE_REC_SIZE	4
 
 
 /*----------------------------------------------------------------
@@ -123,14 +173,37 @@ typedef struct awe_sample_info {
 #define AWE_SAMPLE_BIDIR_LOOP	16	/* bidirectional looping */
 #define AWE_SAMPLE_STEREO_LEFT	32	/* stereo left sound */
 #define AWE_SAMPLE_STEREO_RIGHT	64	/* stereo right sound */
+#define AWE_SAMPLE_REVERSE_LOOP 128	/* reverse looping */
 	unsigned long checksum;		/* check sum */
+#if defined(AWE_COMPAT_030) && AWE_COMPAT_030
 	unsigned short data[0];		/* sample data follows here */
+#endif
 } awe_sample_info;
+
+#define AWE_SAMPLE_INFO_SIZE	32
 
 
 /*----------------------------------------------------------------
  * awe hardware controls
  *----------------------------------------------------------------*/
+
+typedef struct _awe_mode_rec {
+	int base_addr;
+	long mem_size; /* word size */
+	int max_voices, max_infos, max_samples;
+	unsigned short current_sf_id;
+	long free_mem; /* word offset */
+	int free_info;
+	int free_sample;
+	short reverb_mode;
+	short chorus_mode;
+	unsigned short init_atten;
+	short channel_mode;
+	short gus_bank;
+	short exclusive_sound;
+	unsigned long drum_flags;
+	int debug_mode;
+} awe_mode_rec;
 
 #define _AWE_DEBUG_MODE			0x00
 #define _AWE_REVERB_MODE		0x01
@@ -142,6 +215,12 @@ typedef struct awe_sample_info {
 #define _AWE_TERMINATE_ALL		0x07
 #define _AWE_INITIAL_VOLUME		0x08
 #define _AWE_SET_GUS_BANK		0x09
+#define _AWE_CHANNEL_MODE		0x0a	/* v0.3 features */
+#define _AWE_DRUM_CHANNELS		0x0b	/* v0.3 features */
+#define _AWE_EXCLUSIVE_SOUND		0x0c	/* v0.3 features */
+#define _AWE_INITIAL_ATTEN	_AWE_INITIAL_VOLUME
+#define _AWE_NOTEOFF_ALL		0x0e
+#define _AWE_GET_CURRENT_MODE		0x10	/* v0.3 features */
 
 #define _AWE_MODE_FLAG			0x80
 #define _AWE_COOKED_FLAG		0x40	/* not supported */
@@ -164,8 +243,25 @@ typedef struct awe_sample_info {
 #define AWE_SEND_EFFECT(dev,voice,type,value) _AWE_CMD(dev,voice,_AWE_SEND_EFFECT,type,value)
 #define AWE_TERMINATE_CHANNEL(dev,voice) _AWE_CMD(dev,voice,_AWE_TERMINATE_CHANNEL,0,0)
 #define AWE_TERMINATE_ALL(dev) _AWE_CMD(dev, 0, _AWE_TERMINATE_ALL, 0, 0)
+#define AWE_NOTEOFF_ALL(dev) _AWE_CMD(dev, 0, _AWE_NOTEOFF_ALL, 0, 0)
 #define AWE_INITIAL_VOLUME(dev,atten) _AWE_CMD(dev, 0, _AWE_INITIAL_VOLUME, atten, 0)
+#define AWE_INITIAL_ATTEN  AWE_INITIAL_VOLUME
 #define AWE_SET_GUS_BANK(dev,bank) _AWE_CMD(dev, 0, _AWE_SET_GUS_BANK, bank, 0)
+#define AWE_SET_CHANNEL_MODE(dev,mode) _AWE_CMD(dev, 0, _AWE_CHANNEL_MODE, mode, 0)
+#define AWE_DRUM_CHANNELS(dev,channels) _AWE_CMD(dev, 0, _AWE_DRUM_CHANNELS, channels, 0)
+#define AWE_EXCLUSIVE_SOUND(dev,mode) _AWE_CMD(dev, 0, _AWE_EXCLUSIVE_SOUND, mode, 0)
+
+/* it must be direct access */
+#define AWE_GET_CURRENT_MODE(dev,addr) \
+{char tmpbuf[8];\
+ tmpbuf[0] = SEQ_PRIVATE; tmpbuf[1] = dev;\
+ tmpbuf[2] = _AWE_MODE_FLAG|_AWE_GET_CURRENT_MODE;\
+ tmpbuf[3] = 0; *(awe_mode_rec**)(tmpbuf +4) = (awe_mode_rec*)(addr);\
+ write(seqfd, tmpbuf, 8);}
+
+/* extended pressure controls; not portable with other sound drivers */
+#define AWE_KEY_PRESSURE(dev,ch,note,vel) SEQ_START_NOTE(dev,ch,(note)+128,vel)
+#define AWE_CHN_PRESSURE(dev,ch,vel) SEQ_START_NOTE(dev,(ch)+128,0,vel)
 
 /* reverb mode */
 #define	AWE_REVERB_ROOM1	0

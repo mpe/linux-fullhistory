@@ -8,7 +8,7 @@
  *
  *	Based in linux/net/ipv4/ip_input.c
  *
- *	$Id: ipv6_input.c,v 1.13 1996/10/11 16:03:06 roque Exp $
+ *	$Id: ipv6_input.c,v 1.4 1997/02/28 09:56:33 davem Exp $
  *
  *	This program is free software; you can redistribute it and/or
  *      modify it under the terms of the GNU General Public License
@@ -212,10 +212,9 @@ static struct sock * ipv6_raw_deliver(struct sk_buff *skb,
 	struct sock *sk, *sk2;
 	__u8 hash;
 
-	hash = nexthdr & (SOCK_ARRAY_SIZE-1);
+	hash = nexthdr & (MAX_INET_PROTOS - 1);
 
-	sk = rawv6_prot.sock_array[hash];
-	
+	sk = raw_v6_htable[hash];
 
 	/*
 	 *	The first socket found will be delivered after
@@ -225,14 +224,13 @@ static struct sock * ipv6_raw_deliver(struct sk_buff *skb,
 	if (sk == NULL)
 		return NULL;
 	
-	sk = inet6_get_sock_raw(sk, nexthdr, daddr, saddr);
+	sk = raw_v6_lookup(sk, nexthdr, daddr, saddr);
 
 	if (sk)
 	{
 		sk2 = sk;
 
-		while ((sk2 = inet6_get_sock_raw(sk2->next, nexthdr, 
-						 daddr, saddr)))
+		while ((sk2 = raw_v6_lookup(sk2->next, nexthdr, daddr, saddr)))
 		{
 			struct sk_buff *buff;
 

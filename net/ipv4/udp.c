@@ -49,6 +49,9 @@
  *		Mike Shaver	:	RFC1122 checks.
  *		Alan Cox	:	Nonblocking error fix.
  *	Willy Konynenberg	:	Transparent proxying support.
+ *		David S. Miller	:	New socket lookup architecture.
+ *					Last socket cache retained as it
+ *					does have a high hit rate.
  *
  *
  *		This program is free software; you can redistribute it and/or
@@ -115,29 +118,295 @@
 
 struct udp_mib		udp_statistics;
 
-/*
- *	Cached last hit socket
- */
- 
-volatile unsigned long 	uh_cache_saddr,uh_cache_daddr;
-volatile unsigned short  uh_cache_dport, uh_cache_sport;
-volatile struct sock *uh_cache_sk;
+struct sock *udp_hash[UDP_HTABLE_SIZE];
 
-void udp_cache_zap(void)
+static int udp_v4_verify_bind(struct sock *sk, unsigned short snum)
 {
-	unsigned long flags;
-	save_flags(flags);
-	cli();
-	uh_cache_saddr=0;
-	uh_cache_daddr=0;
-	uh_cache_dport=0;
-	uh_cache_sport=0;
-	uh_cache_sk=NULL;
-	restore_flags(flags);
+	struct sock *sk2;
+	int retval = 0;
+
+	SOCKHASH_LOCK();
+	for(sk2 = udp_hash[snum & (UDP_HTABLE_SIZE - 1)]; sk2 != NULL; sk2 = sk2->next) {
+		if((sk2->num == snum) && (sk2 != sk)) {
+			if(!sk2->rcv_saddr || !sk->rcv_saddr) {
+				if(sk->reuse && sk->reuse && (sk2->state != TCP_LISTEN))
+					continue;
+				retval = 1;
+				break;
+			}
+			if((sk2->rcv_saddr == sk->rcv_saddr) &&
+			   (!sk->reuse || !sk2->reuse || (sk2->state == TCP_LISTEN))) {
+				retval = 1;
+				break;
+			}
+		}
+	}
+	SOCKHASH_UNLOCK();
+	return retval;
+}
+
+static inline int udp_lport_inuse(int num)
+{
+	struct sock *sk = udp_hash[num & (UDP_HTABLE_SIZE - 1)];
+
+	for(; sk != NULL; sk = sk->next) {
+		if(sk->num == num)
+			return 1;
+	}
+	return 0;
+}
+
+/* Shared by v4/v6 tcp. */
+unsigned short udp_good_socknum(void)
+{
+	static int start = 0;
+	unsigned short base;
+	int i, best = 0, size = 32767; /* a big num. */
+	int result;
+
+	base = PROT_SOCK + (start & 1023) + 1;
+
+	SOCKHASH_LOCK();
+	for(i = 0; i < UDP_HTABLE_SIZE; i++) {
+		struct sock *sk = udp_hash[i];
+		if(!sk) {
+			start = (i + 1 + start) & 1023;
+			result = i + base + 1;
+			goto out;
+		} else {
+			int j = 0;
+			do {
+				if(++j >= size)
+					goto next;
+			} while((sk = sk->next));
+			best = i;
+			size = j;
+		}
+	next:
+	}
+
+	while(udp_lport_inuse(base + best + 1))
+		best += UDP_HTABLE_SIZE;
+	result = (best + base + 1);
+out:
+	SOCKHASH_UNLOCK();
+	return result;
+}
+
+/* Last hit UDP socket cache, this is ipv4 specific so make it static. */
+static u32 uh_cache_saddr, uh_cache_daddr;
+static u16 uh_cache_dport, uh_cache_sport;
+static struct sock *uh_cache_sk = NULL;
+
+static void udp_v4_hash(struct sock *sk)
+{
+	struct sock **skp;
+	int num = sk->num;
+
+	num &= (UDP_HTABLE_SIZE - 1);
+	skp = &udp_hash[num];
+
+	SOCKHASH_LOCK();
+	sk->next = *skp;
+	*skp = sk;
+	sk->hashent = num;
+	SOCKHASH_UNLOCK();
+}
+
+static void udp_v4_unhash(struct sock *sk)
+{
+	struct sock **skp;
+	int num = sk->num;
+
+	num &= (UDP_HTABLE_SIZE - 1);
+	skp = &udp_hash[num];
+
+	SOCKHASH_LOCK();
+	while(*skp != NULL) {
+		if(*skp == sk) {
+			*skp = sk->next;
+			break;
+		}
+		skp = &((*skp)->next);
+	}
+	if(uh_cache_sk == sk)
+		uh_cache_sk = NULL;
+	SOCKHASH_UNLOCK();
+}
+
+static void udp_v4_rehash(struct sock *sk)
+{
+	struct sock **skp;
+	int num = sk->num;
+	int oldnum = sk->hashent;
+
+	num &= (UDP_HTABLE_SIZE - 1);
+	skp = &udp_hash[oldnum];
+
+	SOCKHASH_LOCK();
+	while(*skp != NULL) {
+		if(*skp == sk) {
+			*skp = sk->next;
+			break;
+		}
+		skp = &((*skp)->next);
+	}
+	sk->next = udp_hash[num];
+	udp_hash[num] = sk;
+	sk->hashent = num;
+	if(uh_cache_sk == sk)
+		uh_cache_sk = NULL;
+	SOCKHASH_UNLOCK();
+}
+
+/* UDP is nearly always wildcards out the wazoo, it makes no sense to try
+ * harder than this here plus the last hit cache. -DaveM
+ */
+struct sock *udp_v4_lookup_longway(u32 saddr, u16 sport, u32 daddr, u16 dport)
+{
+	struct sock *sk, *result = NULL;
+	unsigned short hnum = ntohs(dport);
+	int badness = -1;
+
+	for(sk = udp_hash[hnum & (UDP_HTABLE_SIZE - 1)]; sk != NULL; sk = sk->next) {
+		if((sk->num == hnum) && !(sk->dead && (sk->state == TCP_CLOSE))) {
+			int score = 0;
+			if(sk->rcv_saddr) {
+				if(sk->rcv_saddr != daddr)
+					continue;
+				score++;
+			}
+			if(sk->daddr) {
+				if(sk->daddr != saddr)
+					continue;
+				score++;
+			}
+			if(sk->dummy_th.dest) {
+				if(sk->dummy_th.dest != sport)
+					continue;
+				score++;
+			}
+			if(score == 3) {
+				result = sk;
+				break;
+			} else if(score > badness) {
+				result = sk;
+				badness = score;
+			}
+		}
+	}
+	return result;
+}
+
+__inline__ struct sock *udp_v4_lookup(u32 saddr, u16 sport, u32 daddr, u16 dport)
+{
+	struct sock *sk;
+
+	if(uh_cache_sk			&&
+	   uh_cache_saddr == saddr	&&
+	   uh_cache_sport == sport	&&
+	   uh_cache_dport == dport	&&
+	   uh_cache_daddr == daddr)
+		return uh_cache_sk;
+
+	sk = udp_v4_lookup_longway(saddr, sport, daddr, dport);
+	uh_cache_sk	= sk;
+	uh_cache_saddr	= saddr;
+	uh_cache_daddr	= daddr;
+	uh_cache_sport	= sport;
+	uh_cache_dport	= dport;
+	return sk;
+}
+
+#ifdef CONFIG_IP_TRANSPARENT_PROXY
+#define secondlist(hpnum, sk, fpass) \
+({ struct sock *s1; if(!(sk) && (fpass)--) \
+	s1 = udp_hash[(hpnum) & (TCP_HTABLE_SIZE - 1)]; \
+   else \
+	s1 = (sk); \
+   s1; \
+})
+
+#define udp_v4_proxy_loop_init(hnum, hpnum, sk, fpass) \
+	secondlist((hpnum), udp_hash[(hnum)&(TCP_HTABLE_SIZE-1)],(fpass))
+
+#define udp_v4_proxy_loop_next(hnum, hpnum, sk, fpass) \
+	secondlist((hpnum),(sk)->next,(fpass))
+
+struct sock *udp_v4_proxy_lookup(unsigned short num, unsigned long raddr,
+				 unsigned short rnum, unsigned long laddr,
+				 unsigned long paddr, unsigned short pnum)
+{
+	struct sock *s, *result = NULL;
+	int badness = -1;
+	unsigned short hnum = ntohs(num);
+	unsigned short hpnum = ntohs(pnum);
+	int firstpass = 1;
+
+	SOCKHASH_LOCK();
+	for(s = udp_v4_proxy_loop_init(hnum, hpnum, s, firstpass);
+	    s != NULL;
+	    s = udp_v4_proxy_loop_next(hnum, hpnum, s, firstpass)) {
+		if(s->num == hnum || s->num == hpnum) {
+			int score = 0;
+			if(s->dead && (s->state == TCP_CLOSE))
+				continue;
+			if(s->rcv_saddr) {
+				if((s->num != hpnum || s->rcv_saddr != paddr) &&
+				   (s->num != hnum || s->rcv_saddr != laddr))
+					continue;
+				score++;
+			}
+			if(s->daddr) {
+				if(s->daddr != raddr)
+					continue;
+				score++;
+			}
+			if(s->dummy_th.dest) {
+				if(s->dummy_th.dest != rnum)
+					continue;
+				score++;
+			}
+			if(score == 3 && s->num == hnum) {
+				result = s;
+				break;
+			} else if(score > badness && (s->num == hpnum || s->rcv_saddr)) {
+					result = s;
+					badness = score;
+			}
+		}
+	}
+	SOCKHASH_UNLOCK();
+	return result;
+}
+
+#undef secondlist
+#undef udp_v4_proxy_loop_init
+#undef udp_v4_proxy_loop_next
+
+#endif
+
+static inline struct sock *udp_v4_mcast_next(struct sock *sk,
+					     unsigned short num,
+					     unsigned long raddr,
+					     unsigned short rnum,
+					     unsigned long laddr)
+{
+	struct sock *s = sk;
+	unsigned short hnum = ntohs(num);
+	for(; s; s = s->next) {
+		if ((s->num != hnum)					||
+		    (s->dead && (s->state == TCP_CLOSE))		||
+		    (s->daddr && s->daddr!=raddr)			||
+		    (s->dummy_th.dest != rnum && s->dummy_th.dest != 0) ||
+		    (s->rcv_saddr  && s->rcv_saddr != laddr))
+			continue;
+		break;
+  	}
+  	return s;
 }
 
 #define min(a,b)	((a)<(b)?(a):(b))
-
 
 /*
  * This routine is called by the ICMP module when it gets some
@@ -158,8 +427,7 @@ void udp_err(struct sk_buff *skb, unsigned char *dp)
 	int code = skb->h.icmph->code;
 	struct sock *sk;
 
-	sk = get_sock(&udp_prot, uh->source, iph->daddr, uh->dest, iph->saddr);
-
+	sk = udp_v4_lookup(iph->saddr, uh->source, iph->daddr, uh->dest);
 	if (sk == NULL)
 	  	return;	/* No socket for error */
 
@@ -234,9 +502,10 @@ struct udpfakehdr
 };
 
 /*
- *	Copy and checksum a UDP packet from user space into a buffer. We still have to do the planning to
- *	get ip_build_xmit to spot direct transfer to network card and provide an additional callback mode
- *	for direct user->board I/O transfers. That one will be fun.
+ *	Copy and checksum a UDP packet from user space into a buffer. We still have
+ *	to do the planning to get ip_build_xmit to spot direct transfer to network
+ *	card and provide an additional callback mode for direct user->board I/O
+ *	transfers. That one will be fun.
  */
  
 static int udp_getfrag(const void *p, char * to, unsigned int offset, unsigned int fraglen) 
@@ -271,9 +540,9 @@ static int udp_getfrag(const void *p, char * to, unsigned int offset, unsigned i
 
 /*
  *	Unchecksummed UDP is sufficiently critical to stuff like ATM video conferencing
- *	that we use two routines for this for speed. Probably we ought to have a CONFIG_FAST_NET
- *	set for >10Mb/second boards to activate this sort of coding. Timing needed to verify if
- *	this is a valid decision.
+ *	that we use two routines for this for speed. Probably we ought to have a
+ *	CONFIG_FAST_NET set for >10Mb/second boards to activate this sort of coding.
+ *	Timing needed to verify if this is a valid decision.
  */
  
 static int udp_getfrag_nosum(const void *p, char * to, unsigned int offset, unsigned int fraglen) 
@@ -616,7 +885,8 @@ int udp_connect(struct sock *sk, struct sockaddr *uaddr, int addr_len)
 		sk->rcv_saddr=INADDR_ANY;
 		sk->daddr=INADDR_ANY;
 		sk->state = TCP_CLOSE;
-		udp_cache_zap();
+		if(uh_cache_sk == sk)
+			uh_cache_sk = NULL;
 		return 0;
 	}
 
@@ -638,7 +908,8 @@ int udp_connect(struct sock *sk, struct sockaddr *uaddr, int addr_len)
 	sk->daddr = rt->rt_dst;
 	sk->dummy_th.dest = usin->sin_port;
 	sk->state = TCP_ESTABLISHED;
-	udp_cache_zap();
+	if(uh_cache_sk == sk)
+		uh_cache_sk = NULL;
 	ip_rt_put(rt);
 	return(0);
 }
@@ -648,8 +919,8 @@ static void udp_close(struct sock *sk, unsigned long timeout)
 {
 	lock_sock(sk);
 	sk->state = TCP_CLOSE;
-	if(uh_cache_sk==sk)
-		udp_cache_zap();
+	if(uh_cache_sk == sk)
+		uh_cache_sk = NULL;
 	release_sock(sk);
 	sk->dead = 1;
 	destroy_sock(sk);
@@ -682,6 +953,41 @@ static inline void udp_deliver(struct sock *sk, struct sk_buff *skb)
 	udp_queue_rcv_skb(sk, skb);
 }
 
+/*
+ *	Multicasts and broadcasts go to each listener.
+ */
+static int udp_v4_mcast_deliver(struct sk_buff *skb, struct udphdr *uh,
+				 u32 saddr, u32 daddr)
+{
+	struct sock *sk;
+	int given = 0;
+
+	SOCKHASH_LOCK();
+	sk = udp_hash[ntohs(uh->dest) & (UDP_HTABLE_SIZE - 1)];
+	sk = udp_v4_mcast_next(sk, uh->dest, saddr, uh->source, daddr);
+	if(sk) {
+		struct sock *sknext = NULL;
+
+		do {
+			struct sk_buff *skb1 = skb;
+
+			sknext = udp_v4_mcast_next(sk->next, uh->dest, saddr,
+						   uh->source, daddr);
+			if(sknext)
+				skb1 = skb_clone(skb, GFP_ATOMIC);
+
+			if(skb1)
+				udp_deliver(sk, skb1);
+			sk = sknext;
+		} while(sknext);
+		given = 1;
+	}
+	SOCKHASH_UNLOCK();
+	if(!given)
+		kfree_skb(skb, FREE_READ);
+	return 0;
+}
+
 #ifdef CONFIG_IP_TRANSPARENT_PROXY
 /*
  *	Check whether a received UDP packet might be for one of our
@@ -694,34 +1000,17 @@ int udp_chkaddr(struct sk_buff *skb)
 	struct udphdr *uh = (struct udphdr *)(skb->nh.raw + iph->ihl*4);
 	struct sock *sk;
 
-	sk = get_sock(&udp_prot, uh->dest, iph->saddr, uh->source, iph->daddr);
+	sk = udp_v4_lookup(iph->saddr, uh->source, iph->daddr, uh->dest);
+	if (!sk)
+		return 0;
 
-	if (!sk) return 0;
 	/* 0 means accept all LOCAL addresses here, not all the world... */
-	if (sk->rcv_saddr == 0) return 0;
+	if (sk->rcv_saddr == 0)
+		return 0;
+
 	return 1;
 }
 #endif
-
-
-static __inline__ struct sock *
-get_udp_sock(unsigned short dport, unsigned long saddr, unsigned short sport,
-	     unsigned long daddr)
-{
-	struct sock *sk;
-
-	if (saddr==uh_cache_saddr && daddr==uh_cache_daddr &&
-	    dport==uh_cache_dport && sport==uh_cache_sport)
-		 return (struct sock *)uh_cache_sk;
-	sk = get_sock(&udp_prot, dport, saddr, sport, daddr);
-	uh_cache_saddr=saddr;
-	uh_cache_daddr=daddr;
-	uh_cache_dport=dport;
-	uh_cache_sport=sport;
-	uh_cache_sk=sk;
-	return sk;
-}
-
 
 /*
  *	All we need to do is get the socket, and then do a checksum. 
@@ -769,12 +1058,10 @@ int udp_rcv(struct sk_buff *skb, unsigned short len)
 	/* FIXME list for IP, though, so I wouldn't worry about it. */
 	/* (That's the Right Place to do it, IMHO.) -- MS */
 
-	if (uh->check && (
-		( (skb->ip_summed == CHECKSUM_HW) && udp_check(uh, len, saddr, daddr, skb->csum ) ) ||
-		( (skb->ip_summed == CHECKSUM_NONE) && udp_check(uh, len, saddr, daddr,csum_partial((char*)uh, len, 0)))
-			  /* skip if CHECKSUM_UNNECESSARY */
-		         )
-	   ) {
+	if (uh->check &&
+	    (((skb->ip_summed==CHECKSUM_HW)&&udp_check(uh,len,saddr,daddr,skb->csum)) ||
+	     ((skb->ip_summed==CHECKSUM_NONE) &&
+	      (udp_check(uh,len,saddr,daddr, csum_partial((char*)uh, len, 0)))))) {
 		/* <mea@utu.fi> wants to know, who sent it, to
 		   go and stomp on the garbage sender... */
 
@@ -802,38 +1089,17 @@ int udp_rcv(struct sk_buff *skb, unsigned short len)
 	skb_trim(skb,len);
 
 
-	if (rt->rt_flags&(RTF_BROADCAST|RTF_MULTICAST))
-	{
-		/*
-		 *	Multicasts and broadcasts go to each listener.
-		 */
-		struct sock *sknext=NULL;
-		sk=get_sock_mcast(udp_prot.sock_array[ntohs(uh->dest)&(SOCK_ARRAY_SIZE-1)], uh->dest,
-				saddr, uh->source, daddr);
-		if(sk) {		
-			do {
-				struct sk_buff *skb1;
-
-				sknext=get_sock_mcast(sk->next, uh->dest, saddr, uh->source, daddr);
-				if(sknext)
-					skb1=skb_clone(skb,GFP_ATOMIC);
-				else
-					skb1=skb;
-				if(skb1)
-					udp_deliver(sk, skb1);
-				sk=sknext;
-			} while(sknext!=NULL);
-		} else
-			kfree_skb(skb, FREE_READ);
-		return 0;
-	}
+	if(rt->rt_flags & (RTF_BROADCAST|RTF_MULTICAST))
+		return udp_v4_mcast_deliver(skb, uh, saddr, daddr);
 
 #ifdef CONFIG_IP_TRANSPARENT_PROXY
 	if (IPCB(skb)->redirport)
-		sk = get_sock_proxy(&udp_prot, uh->dest, saddr, uh->source, daddr, skb->dev->pa_addr, IPCB(skb)->redirport);
+		sk = udp_v4_proxy_lookup(uh->dest, saddr, uh->source,
+					 daddr, skb->dev->pa_addr,
+					 IPCB(skb)->redirport);
 	else
 #endif
-	sk = get_udp_sock(uh->dest, saddr, uh->source, daddr);
+	sk = udp_v4_lookup(saddr, uh->source, daddr, uh->dest);
 	
 	if (sk == NULL) {
   		udp_statistics.UdpNoPorts++;
@@ -851,26 +1117,33 @@ int udp_rcv(struct sk_buff *skb, unsigned short len)
 }
 
 struct proto udp_prot = {
-	udp_close,
-	udp_connect,
-	NULL,
-	NULL,
-	NULL,
-	NULL,
-	datagram_poll,
-	udp_ioctl,
-	NULL,
-	NULL,
-	NULL,
-	ip_setsockopt,
-	ip_getsockopt,
-	udp_sendmsg,
-	udp_recvmsg,
-	NULL,		/* No special bind function */
-	udp_queue_rcv_skb,
-	128,
-	0,
-	"UDP",
-	0, 0,
-	NULL,
+	(struct sock *)&udp_prot,	/* sklist_next */
+	(struct sock *)&udp_prot,	/* sklist_prev */
+	udp_close,			/* close */
+	udp_connect,			/* connect */
+	NULL,				/* accept */
+	NULL,				/* retransmit */
+	NULL,				/* write_wakeup */
+	NULL,				/* read_wakeup */
+	datagram_poll,			/* poll */
+	udp_ioctl,			/* ioctl */
+	NULL,				/* init */
+	NULL,				/* destroy */
+	NULL,				/* shutdown */
+	ip_setsockopt,			/* setsockopt */
+	ip_getsockopt,			/* getsockopt */
+	udp_sendmsg,			/* sendmsg */
+	udp_recvmsg,			/* recvmsg */
+	NULL,				/* bind */
+	udp_queue_rcv_skb,		/* backlog_rcv */
+	udp_v4_hash,			/* hash */
+	udp_v4_unhash,			/* unhash */
+	udp_v4_rehash,			/* rehash */
+	udp_good_socknum,		/* good_socknum */
+	udp_v4_verify_bind,		/* verify_bind */
+	128,				/* max_header */
+	0,				/* retransmits */
+	"UDP",				/* name */
+	0,				/* inuse */
+	0				/* highestinuse */
 };
