@@ -940,35 +940,8 @@ match_who(struct nfs4_ace *ace, uid_t owner, gid_t group, uid_t who)
 	}
 }
 
-/* 0 = granted, -EACCES = denied; mask is an nfsv4 mask, not mode bits */
-int
-nfs4_acl_permission(struct nfs4_acl *acl, uid_t owner, gid_t group,
-			uid_t who, u32 mask)
-{
-	struct nfs4_ace *ace;
-	u32 allowed = 0;
-
-	list_for_each_entry(ace, &acl->ace_head, l_ace) {
-		if (!match_who(ace, group, owner, who))
-			continue;
-		switch (ace->type) {
-			case NFS4_ACE_ACCESS_ALLOWED_ACE_TYPE:
-				allowed |= ace->access_mask;
-				if ((allowed & mask) == mask)
-					return 0;
-				break;
-			case NFS4_ACE_ACCESS_DENIED_ACE_TYPE:
-				if (ace->access_mask & mask)
-					return -EACCES;
-				break;
-		}
-	}
-	return -EACCES;
-}
-
 EXPORT_SYMBOL(nfs4_acl_new);
 EXPORT_SYMBOL(nfs4_acl_free);
 EXPORT_SYMBOL(nfs4_acl_add_ace);
 EXPORT_SYMBOL(nfs4_acl_get_whotype);
 EXPORT_SYMBOL(nfs4_acl_write_who);
-EXPORT_SYMBOL(nfs4_acl_permission);
