@@ -364,8 +364,7 @@ int ncp_ioctl(struct inode *inode, struct file *filp,
 
 #ifdef CONFIG_NCPFS_NDS_DOMAINS
 	case NCP_IOC_GETOBJECTNAME:
-		if (   (permission(inode, MAY_READ) != 0)
-		    && (current->uid != server->m.mounted_uid)) {
+		if (current->uid != server->m.mounted_uid) {
 			return -EACCES;
 		}
 		{
@@ -396,8 +395,7 @@ int ncp_ioctl(struct inode *inode, struct file *filp,
 			return 0;
 		}
 	case NCP_IOC_SETOBJECTNAME:
-		if (   (permission(inode, MAY_WRITE) != 0)
-		    && (current->uid != server->m.mounted_uid)) {
+		if (current->uid != server->m.mounted_uid) {
 			return -EACCES;
 		}
 		{
@@ -441,8 +439,7 @@ int ncp_ioctl(struct inode *inode, struct file *filp,
 			return 0;
 		}
 	case NCP_IOC_GETPRIVATEDATA:
-		if (   (permission(inode, MAY_READ) != 0)
-		    && (current->uid != server->m.mounted_uid)) {
+		if (current->uid != server->m.mounted_uid) {
 			return -EACCES;
 		}
 		{
@@ -471,8 +468,7 @@ int ncp_ioctl(struct inode *inode, struct file *filp,
 			return 0;
 		}
 	case NCP_IOC_SETPRIVATEDATA:
-		if (   (permission(inode, MAY_WRITE) != 0)
-		    && (current->uid != server->m.mounted_uid)) {
+		if (current->uid != server->m.mounted_uid) {
 			return -EACCES;
 		}
 		{

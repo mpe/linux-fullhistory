@@ -84,6 +84,7 @@ obj-$(CONFIG_SOUND_ES1370)	+= es1370.o
 obj-$(CONFIG_SOUND_ES1371)	+= es1371.o
 obj-$(CONFIG_SOUND_ESSSOLO1)	+= esssolo1.o
 obj-$(CONFIG_SOUND_MAESTRO)	+= maestro.o
+obj-$(CONFIG_SOUND_TRIDENT)	+= trident.o
 
 # Declare multi-part drivers.
 

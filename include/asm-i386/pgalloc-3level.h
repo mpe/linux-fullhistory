@@ -54,7 +54,7 @@ extern inline pmd_t * pmd_alloc(pgd_t *pgd, unsigned long address)
 			page = get_pmd_slow();
 		if (page) {
 			if (pgd_none(*pgd)) {
-				pgd_val(*pgd) = 1 + __pa(page);
+				set_pgd(pgd, __pgd(1 + __pa(page)));
 				__flush_tlb();
 				return page + address;
 			} else

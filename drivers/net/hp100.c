@@ -2,11 +2,11 @@
 ** hp100.c 
 ** HP CASCADE Architecture Driver for 100VG-AnyLan Network Adapters
 **
-** $Id: hp100.c,v 1.58 1999/11/30 17:20:20 perex Exp perex $
+** $Id: hp100.c,v 1.57 1998/04/10 16:27:23 perex Exp perex $
 **
 ** Based on the HP100 driver written by Jaroslav Kysela <perex@jcu.cz>
 ** Extended for new busmaster capable chipsets by 
-** Siegfried "Frieder" Loeffler (dg1sek) <loeffler@cdi.fr>
+** Siegfried "Frieder" Loeffler (dg1sek) <floeff@mathematik.uni-stuttgart.de>
 **
 ** Maintained by: Jaroslav Kysela <perex@jcu.cz>
 ** 
@@ -45,8 +45,6 @@
 **   along with this program; if not, write to the Free Software
 **   Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
 **
-** 1.57 -> 1.58
-**   - 'no connection found' message is time limited now
 **
 ** 1.56 -> 1.57
 **   - updates for new PCI interface for 2.1 kernels
@@ -1670,20 +1668,7 @@ static int hp100_start_xmit_bm( struct sk_buff *skb, struct net_device *dev )
 	  hp100_stop_interface( dev );
 	  if ( ( lp->lan_type = hp100_sense_lan( dev ) ) < 0 )
 	    {
-              /* Added Mon Nov 1 06:13:19 1999 by Brian Moore
-               * (mooreb@iname.com) to prevent too much kernel IO
-               * in the case of not having a network connection
-               */
-              {
-                int thistime = jiffies;
-                static int delaytime = 10*HZ;
-                static int lasttime = thistime - delaytime;
-                // We don't worry about rollover
-                if(thistime >= (lasttime + delaytime)) {
-                  printk( "hp100: %s: no connection found - check wire\n", dev->name );
-                  lasttime = thistime;
-                }
-              }
+	      printk( "hp100: %s: no connection found - check wire\n", dev->name );
 	      hp100_start_interface( dev );  /* 10Mb/s RX pkts maybe handled */
 	      return -EIO;
 	    }

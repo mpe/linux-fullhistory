@@ -1,15 +1,26 @@
-TLAN driver for Linux, version 1.0
-README
 
-Well, I'm back.  The TLAN driver seems pretty stable, so I'm
-declaring this cycle of development finished, and calling the
-driver 1.0.  I will, of course continue to work on improving
-the driver, and work towards a 2.0 release.
 
+I haven't had any time to do anything for a long time, and this isn't
+likely to change.  So there's a driver here for anyone looking to
+carry forward a project :)
+
+For those who are looking for help, I can't.  I haven't looked at
+a kernel since the early 2.0 series, so I won't know what's going on.
+Your best chance at help would be joining the TLAN mailing list and
+posting your question there.
+
+You can join by sending "subscribe tlan" in the body of an email to
+majordomo@vuser.vu.union.edu.
+
+Thanks to those who have (and who will ;) put work in to keep the TLAN
+driver working as the kernel moves on.
 
 James
 james@sovereign.org
 
+
+TLAN driver for Linux, version 1.0
+README
 
 
 I.  Supported Devices.

@@ -107,7 +107,7 @@ extern inline pte_t * pte_alloc_kernel(pmd_t * pmd, unsigned long address)
 		
 		if (!page)
 			return get_pte_kernel_slow(pmd, address);
-		pmd_val(*pmd) = _KERNPG_TABLE + __pa(page);
+		set_pmd(pmd, __pmd(_KERNPG_TABLE + __pa(page)));
 		return page + address;
 	}
 	if (pmd_bad(*pmd)) {
@@ -132,7 +132,7 @@ getnew:
 	
 	if (!page)
 		return get_pte_slow(pmd, address);
-	pmd_val(*pmd) = _PAGE_TABLE + __pa(page);
+	set_pmd(pmd, __pmd(_PAGE_TABLE + __pa(page)));
 	return (pte_t *)page + address;
 }
 fix:

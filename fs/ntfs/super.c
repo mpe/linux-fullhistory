@@ -91,12 +91,13 @@ int ntfs_init_volume(ntfs_volume *vol,char *boot)
 	if(vol->mft_clusters_per_record<0 && vol->mft_clusters_per_record!=-10)
 		ntfs_error("Unexpected data #4 in boot block\n");
 
-	vol->clustersize=vol->blocksize*vol->clusterfactor;
-	if(vol->mft_clusters_per_record>0)
-		vol->mft_recordsize=
-			vol->clustersize*vol->mft_clusters_per_record;
+	vol->clustersize = vol->blocksize * vol->clusterfactor;
+	if (vol->mft_clusters_per_record > 0)
+		vol->mft_recordbits = vol->clustersize * vol->mft_clusters_per_record;
 	else
-		vol->mft_recordsize=1<<(-vol->mft_clusters_per_record);
+		vol->mft_recordbits = -vol->mft_clusters_per_record;
+
+	vol->mft_recordsize = 1 << vol->mft_recordbits;
 	vol->index_recordsize=vol->clustersize*vol->index_clusters_per_record;
 	/* FIXME: long long value */
 	vol->mft_cluster=NTFS_GETU64(boot+0x30);

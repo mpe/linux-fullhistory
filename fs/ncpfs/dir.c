@@ -487,7 +487,7 @@ static int ncp_readdir(struct file *filp, void *dirent, filldir_t filldir)
 		filp->f_pos = 2;
 	}
 
-	page = find_lock_page(&inode->i_data, 0);
+	page = grab_cache_page(&inode->i_data, 0);
 	if (!page)
 		goto read_really;
 
@@ -516,7 +516,7 @@ static int ncp_readdir(struct file *filp, void *dirent, filldir_t filldir)
 
 	for (;;) {
 		if (ctl.ofs != 0) {
-			ctl.page = grab_cache_page(&inode->i_data, ctl.ofs);
+			ctl.page = find_lock_page(&inode->i_data, ctl.ofs);
 			if (!ctl.page)
 				goto invalid_cache;
 			ctl.cache = (union ncp_dir_cache *)
@@ -661,7 +661,7 @@ ncp_fill_cache(struct file *filp, void *dirent, filldir_t filldir,
 		ctl.cache = NULL;
 		ctl.idx  -= NCP_DIRCACHE_SIZE;
 		ctl.ofs  += 1;
-		ctl.page  = find_lock_page(&inode->i_data, ctl.ofs);
+		ctl.page  = grab_cache_page(&inode->i_data, ctl.ofs);
 		if (ctl.page)
 			ctl.cache = (union ncp_dir_cache *)
 					kmap(ctl.page);

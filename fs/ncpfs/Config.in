@@ -10,6 +10,6 @@ if [ "$CONFIG_NCPFS_OS2_NS" = "y" ]; then
    bool '    Lowercase DOS filenames' CONFIG_NCPFS_SMALLDOS
 fi
 bool '  Allow mounting of volume subdirectories' CONFIG_NCPFS_MOUNT_SUBDIR
-# bool '  NDS interserver authentication support' CONFIG_NCPFS_NDS_DOMAINS
+bool '  NDS authentication support' CONFIG_NCPFS_NDS_DOMAINS
 bool '  Use Native Language Support' CONFIG_NCPFS_NLS
 bool '  Enable symbolic links and execute flags' CONFIG_NCPFS_EXTRAS

@@ -426,12 +426,6 @@ IBM ServeRAID RAID DRIVER
 P:      Keith Mitchell
 M:      ipslinux@us.ibm.com
 W:      http://www.developer.ibm.com/welcome/netfinity/serveraid_beta.html
-S:      Supported
-
-IBM ServeRAID RAID DRIVER
-P:      Keith Mitchell
-M:      ipslinux@us.ibm.com
-W:      http://www.developer.ibm.com/welcome/netfinity/serveraid_beta.html
 S:      Supported 
 
 IDE DRIVER [GENERAL]
@@ -889,10 +883,8 @@ M:	kgb@manjak.knm.org.pl
 S:	Maintained
 
 TLAN NETWORK DRIVER
-P:	James Banks
-M:	james@sovereign.org
 L:	tlan@vuser.vu.union.edu
-S:	Maintained
+S:	Orphan
 
 TOKEN-RING NETWORK DRIVER
 P:	Paul Norton

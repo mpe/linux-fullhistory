@@ -1640,7 +1640,7 @@ aic7xxx_setup(char *s)
   }
 }
 
-__setup("aic7xxx=", aix7xxx_setup);
+__setup("aic7xxx=", aic7xxx_setup);
 
 /*+F*************************************************************************
  * Function:

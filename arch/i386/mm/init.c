@@ -76,7 +76,7 @@ static pmd_t * get_bad_pmd_table(void)
 	pmd_t v;
 	int i;
 
-	pmd_val(v) = _PAGE_TABLE + __pa(empty_bad_pte_table);
+	set_pmd(&v, __pmd(_PAGE_TABLE + __pa(empty_bad_pte_table)));
 
 	for (i = 0; i < PAGE_SIZE/sizeof(pmd_t); i++)
 		empty_bad_pmd_table[i] = v;
@@ -103,13 +103,13 @@ static pte_t * get_bad_pte_table(void)
 void __handle_bad_pmd(pmd_t *pmd)
 {
 	pmd_ERROR(*pmd);
-	pmd_val(*pmd) = _PAGE_TABLE + __pa(get_bad_pte_table());
+	set_pmd(pmd, __pmd(_PAGE_TABLE + __pa(get_bad_pte_table())));
 }
 
 void __handle_bad_pmd_kernel(pmd_t *pmd)
 {
 	pmd_ERROR(*pmd);
-	pmd_val(*pmd) = _KERNPG_TABLE + __pa(get_bad_pte_table());
+	set_pmd(pmd, __pmd(_KERNPG_TABLE + __pa(get_bad_pte_table())));
 }
 
 pte_t *get_pte_kernel_slow(pmd_t *pmd, unsigned long offset)
@@ -120,10 +120,10 @@ pte_t *get_pte_kernel_slow(pmd_t *pmd, unsigned long offset)
 	if (pmd_none(*pmd)) {
 		if (pte) {
 			clear_page(pte);
-			pmd_val(*pmd) = _KERNPG_TABLE + __pa(pte);
+			set_pmd(pmd, __pmd(_KERNPG_TABLE + __pa(pte)));
 			return pte + offset;
 		}
-		pmd_val(*pmd) = _KERNPG_TABLE + __pa(get_bad_pte_table());
+		set_pmd(pmd, __pmd(_KERNPG_TABLE + __pa(get_bad_pte_table())));
 		return NULL;
 	}
 	free_page((unsigned long)pte);
@@ -142,10 +142,10 @@ pte_t *get_pte_slow(pmd_t *pmd, unsigned long offset)
 	if (pmd_none(*pmd)) {
 		if (pte) {
 			clear_page((void *)pte);
-			pmd_val(*pmd) = _PAGE_TABLE + __pa(pte);
+			set_pmd(pmd, __pmd(_PAGE_TABLE + __pa(pte)));
 			return (pte_t *)pte + offset;
 		}
-		pmd_val(*pmd) = _PAGE_TABLE + __pa(get_bad_pte_table());
+		set_pmd(pmd, __pmd(_PAGE_TABLE + __pa(get_bad_pte_table())));
 		return NULL;
 	}
 	free_page(pte);
@@ -268,7 +268,7 @@ void set_fixmap (enum fixed_addresses idx, unsigned long phys)
 		printk("Invalid set_fixmap\n");
 		return;
 	}
-	set_pte_phys (address,phys);
+	set_pte_phys(address,phys);
 }
 
 static void __init fixrange_init (unsigned long start, unsigned long end, pgd_t *pgd_base)
@@ -286,7 +286,7 @@ static void __init fixrange_init (unsigned long start, unsigned long end, pgd_t 
 #if CONFIG_X86_PAE
 		if (pgd_none(*pgd)) {
 			pmd = (pmd_t *) alloc_bootmem_low_pages(PAGE_SIZE);
-			pgd_val(*pgd) = __pa(pmd) + 0x1;
+			set_pgd(pgd, __pgd(__pa(pmd) + 0x1));
 			if (pmd != pmd_offset(pgd, start))
 				BUG();
 		}
@@ -297,7 +297,7 @@ static void __init fixrange_init (unsigned long start, unsigned long end, pgd_t 
 		for (; (j < PTRS_PER_PMD) && start; pmd++, j++) {
 			if (pmd_none(*pmd)) {
 				pte = (pte_t *) alloc_bootmem_low_pages(PAGE_SIZE);
-				pmd_val(*pmd) = _KERNPG_TABLE + __pa(pte);
+				set_pmd(pmd, __pmd(_KERNPG_TABLE + __pa(pte)));
 				if (pte != pte_offset(pmd, 0))
 					BUG();
 			}
@@ -326,7 +326,7 @@ static void __init pagetable_init(void)
 		vaddr = i*PGDIR_SIZE;
 #if CONFIG_X86_PAE
 		pmd = (pmd_t *) alloc_bootmem_low_pages(PAGE_SIZE);
-		pgd_val(*pgd) = __pa(pmd) + 0x1;
+		set_pgd(pgd, __pgd(__pa(pmd) + 0x1));
 #else
 		pmd = (pmd_t *)pgd;
 #endif
@@ -345,12 +345,12 @@ static void __init pagetable_init(void)
 					set_in_cr4(X86_CR4_PGE);
 					__pe += _PAGE_GLOBAL;
 				}
-				pmd_val(*pmd) = __pe;
+				set_pmd(pmd, __pmd(__pe));
 				continue;
 			}
 
 			pte = (pte_t *) alloc_bootmem_low_pages(PAGE_SIZE);
-			pmd_val(*pmd) = _KERNPG_TABLE + __pa(pte);
+			set_pmd(pmd, __pmd(_KERNPG_TABLE + __pa(pte)));
 
 			if (pte != pte_offset(pmd, 0))
 				BUG();
@@ -412,7 +412,7 @@ void __init zap_low_mappings (void)
 #if CONFIG_X86_PAE
 		pgd_clear(swapper_pg_dir+i);
 #else
-		pgd_val(swapper_pg_dir[i]) = 0;
+		set_pgd(swapper_pg_dir+i, __pgd(0));
 #endif
 	flush_tlb_all();
 }

@@ -35,11 +35,22 @@
 
 /*
  * Subtle, in PAE mode we cannot have zeroes in the top level
- * page directory, the CPU enforces this.
+ * page directory, the CPU enforces this. (ie. the PGD entry
+ * always has to have the present bit set.) The CPU caches
+ * the 4 pgd entries internally, so there is no extra memory
+ * load on TLB miss, despite one more level of indirection.
  */
 #define pgd_none(x)	(pgd_val(x) == 1ULL)
 extern inline int pgd_bad(pgd_t pgd)		{ return 0; }
 extern inline int pgd_present(pgd_t pgd)	{ return !pgd_none(pgd); }
+
+#define set_pte(pteptr,pteval) \
+		set_64bit((unsigned long long *)(pteptr),pte_val(pteval))
+#define set_pmd(pmdptr,pmdval) \
+		set_64bit((unsigned long long *)(pmdptr),pmd_val(pmdval))
+#define set_pgd(pgdptr,pgdval) \
+		set_64bit((unsigned long long *)(pgdptr),pgd_val(pgdval))
+
 /*
  * Pentium-II errata A13: in PAE mode we explicitly have to flush
  * the TLB via cr3 if the top-level pgd is changed... This was one tough
@@ -48,7 +59,7 @@ extern inline int pgd_present(pgd_t pgd)	{ return !pgd_none(pgd); }
  */
 extern inline void __pgd_clear (pgd_t * pgd)
 {
-	pgd_val(*pgd) = 1; // no zero allowed!
+	set_pgd(pgd, __pgd(1ULL));
 }
 
 extern inline void pgd_clear (pgd_t * pgd)

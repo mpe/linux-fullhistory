@@ -53,7 +53,7 @@ static struct pc110pad_params current_params;
 static wait_queue_head_t queue;
 static struct fasync_struct *asyncptr;
 static int active=0;	/* number of concurrent open()s */
-static struct semaphore read_lock;
+static struct semaphore reader_lock;
 
 /*
  * Utility to reset a timer to go off some time in the future.
@@ -561,7 +561,7 @@ static ssize_t read_pad(struct file * file, char * buffer, size_t count, loff_t 
 {
 	int r;
 
-	down(&read_lock);
+	down(&reader_lock);
 	for(r=0; r<count; r++)
 	{
 		if(!read_byte_count)
@@ -573,7 +573,7 @@ static ssize_t read_pad(struct file * file, char * buffer, size_t count, loff_t 
 		}
 		read_byte_count = (read_byte_count+1)%3;
 	}
-	up(&read_lock);
+	up(&reader_lock);
 	return r;
 }
 
@@ -691,7 +691,7 @@ static void pc110pad_unload(void)
 
 int init_module(void)
 {
-	init_MUTEX(&read_lock);
+	init_MUTEX(&reader_lock);
 	return pc110pad_init();
 }
 

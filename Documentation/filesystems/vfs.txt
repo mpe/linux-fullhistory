@@ -4,7 +4,7 @@
 
 		Richard Gooch <rgooch@atnf.csiro.au>
 
-			      23-APR-1999
+			      5-JUL-1999
 
 
 Conventions used in this document                                     <section>
@@ -41,10 +41,11 @@ mounted.
 Opening a File                                                     <subsection>
 --------------
 
-The VFS implements the open(2) system call. The pathname argument is
-used by the VFS to search through the directory entry cache (dentry
-cache or "dcache"). This provides a very fast lookup mechanism to
-translate a pathname (filename) into a specific dentry.
+The VFS implements the open(2), stat(2), chmod(2) and similar system
+calls. The pathname argument is used by the VFS to search through the
+directory entry cache (dentry cache or "dcache"). This provides a very
+fast lookup mechanism to translate a pathname (filename) into a
+specific dentry.
 
 An individual dentry usually has a pointer to an inode. Inodes are the
 things that live on disc drives, and can be regular files (you know:
@@ -53,7 +54,8 @@ beasts. Dentries live in RAM and are never saved to disc: they exist
 only for performance. Inodes live on disc and are copied into memory
 when required. Later any changes are written back to disc. The inode
 that lives in RAM is a VFS inode, and it is this which the dentry
-points to.
+points to. A single inode can be pointed to by multiple dentries
+(think about hardlinks).
 
 The dcache is meant to be a view into your entire filespace. Unlike
 Linus, most of us losers can't fit enough dentries into RAM to cover
@@ -76,10 +78,10 @@ back to userspace.
 Opening a file requires another operation: allocation of a file
 structure (this is the kernel-side implementation of file
 descriptors). The freshly allocated file structure is initialised with
-a pointer to the dentry and a set of file operation member
-functions. These are taken from the inode data. The open() file method
-is then called so the specific filesystem implementation can do it's
-work. You can see that this is another switch performed by the VFS.
+a pointer to the dentry and a set of file operation member functions.
+These are taken from the inode data. The open() file method is then
+called so the specific filesystem implementation can do it's work. You
+can see that this is another switch performed by the VFS.
 
 The file structure is placed into the file descriptor table for the
 process.
@@ -91,6 +93,14 @@ function to do whatever is required.
 
 For as long as the file is open, it keeps the dentry "open" (in use),
 which in turn means that the VFS inode is still in use.
+
+All VFS system calls (i.e. open(2), stat(2), read(2), write(2),
+chmod(2) and so on) are called from a process context. You should
+assume that these calls are made without any kernel locks being
+held. This means that the processes may be executing the same piece of
+filesystem or driver code at the same time, on different
+processors. You should ensure that access to shared resources is
+protected by appropriate locks.
 
 Registering and Mounting a Filesystem                              <subsection>
 -------------------------------------
@@ -249,8 +259,11 @@ struct inode_operations {
 	int (*revalidate) (struct dentry *);
 };
 
+Again, all methods are called without any locks being held, unless
+otherwise noted.
+
   default_file_ops: this is a pointer to a "struct file_operations"
-	which describes how to manipulate open files
+	which describes how to open and then manipulate open files
 
   create: called by the open(2) and creat(2) system calls. Only
 	required if you want to support regular files. The dentry you
@@ -270,7 +283,7 @@ struct inode_operations {
 	If you wish to overload the dentry methods then you should
 	initialise the "d_dop" field in the dentry; this is a pointer
 	to a struct "dentry_operations".
-	This method is called with the directory semaphore held
+	This method is called with the directory inode semaphore held
 
   link: called by the link(2) system call. Only required if you want
 	to support hard links. You will probably need to call
@@ -327,17 +340,20 @@ struct file_operations {
 	int (*lock) (struct file *, int, struct file_lock *);
 };
 
+Again, all methods are called without any locks being held, unless
+otherwise noted.
+
   llseek: called when the VFS needs to move the file position index
 
-  read: called by the read(2) system call
+  read: called by read(2) and related system calls
 
-  write: called by the write(2) system call
+  write: called by write(2) and related system calls
 
   readdir: called when the VFS needs to read the directory contents
 
   poll: called by the VFS when a process wants to check if there is
 	activity on this file and (optionally) go to sleep until there
-	is activity
+	is activity. Called by the select(2) and poll(2) system calls
 
   ioctl: called by the ioctl(2) system call
 
@@ -380,7 +396,9 @@ struct dentry_operations                                              <section>
 This describes how a filesystem can overload the standard dentry
 operations. Dentries and the dcache are the domain of the VFS and the
 individual filesystem implementations. Device drivers have no business
-here. As of kernel 2.1.99, the following members are defined:
+here. These methods may be set to NULL, as they are either optional or
+the VFS uses a default. As of kernel 2.1.99, the following members are
+defined:
 
 struct dentry_operations {
 	int (*d_revalidate)(struct dentry *);
@@ -391,7 +409,10 @@ struct dentry_operations {
 	void (*d_iput)(struct dentry *, struct inode *);
 };
 
-  d_revalidate: called when the VFS needs to revalidate a dentry
+  d_revalidate: called when the VFS needs to revalidate a dentry. This
+	is called whenever a name lookup finds a dentry in the
+	dcache. Most filesystems leave this as NULL, because all their
+	dentries in the dcache are valid
 
   d_hash: called when the VFS adds a dentry to the hash table
 
@@ -401,7 +422,7 @@ struct dentry_operations {
 	deleted. This means no-one is using the dentry, however it is
 	still valid and in the dcache
 
-  d_release: called when a dentry is deallocated
+  d_release: called when a dentry is really deallocated
 
   d_iput: called when a dentry looses its inode (just prior to its
 	being deallocated). The default when this is NULL is that the

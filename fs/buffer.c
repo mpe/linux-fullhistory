@@ -1449,6 +1449,8 @@ int block_write_range(struct dentry *dentry, struct page *page,
 		err = copy_from_user(kaddr+from, buf, to-from);
 	if (to < zeroto)
 		memset(kaddr+to, 0, zeroto-to);
+	else
+		zeroto = to;
 	if (err < 0)
 		goto out;
 	/*
