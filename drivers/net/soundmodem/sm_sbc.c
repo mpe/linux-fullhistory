@@ -1,7 +1,7 @@
 /*****************************************************************************/
 
 /*
- *	sm_sbc.h  -- soundcard radio modem driver soundblaster hardware driver
+ *	sm_sbc.c  -- soundcard radio modem driver soundblaster hardware driver
  *
  *	Copyright (C) 1996  Thomas Sailer (sailer@ife.ee.ethz.ch)
  *
@@ -80,9 +80,12 @@ extern inline int copy_to_user(void *to, const void *from, unsigned long n)
 struct sc_state_sbc {
 	unsigned char revhi, revlo;
 	unsigned char fmt[2];
+	unsigned int sr[2];
 	unsigned int dmabuflen;
 	unsigned char *dmabuf;
+	unsigned char *dmabuf2;
 	unsigned char dmabufidx;
+	unsigned char dma2bufidx;
 	unsigned char ptt;
 };
 
@@ -99,6 +102,7 @@ struct sc_state_sbc {
 #define DSP_DATA_AVAIL(iobase)   (iobase+0xe)
 #define DSP_MIXER_ADDR(iobase)   (iobase+0x4)
 #define DSP_MIXER_DATA(iobase)   (iobase+0x5)
+#define DSP_INTACK_16BIT(iobase) (iobase+0xf)
 #define SBC_EXTENT               16
 
 /* --------------------------------------------------------------------- */
@@ -122,6 +126,8 @@ struct sc_state_sbc {
 #define SBC_DMA_ON             0xd0
 #define SBC_DMA_OFF            0xd4
 #define SBC_SAMPLE_RATE        0x40
+#define SBC_SAMPLE_RATE_OUT    0x41
+#define SBC_SAMPLE_RATE_IN     0x42
 #define SBC_MONO_8BIT          0xa0
 #define SBC_MONO_16BIT         0xa4
 #define SBC_STEREO_8BIT        0xa8
@@ -130,6 +136,9 @@ struct sc_state_sbc {
 #define SBC4_OUT8_AI           0xc6
 #define SBC4_IN8_AI            0xce
 #define SBC4_MODE_UNS_MONO     0x00
+
+#define SBC4_OUT16_AI          0xb6
+#define SBC4_IN16_AI           0xbe
 
 /* --------------------------------------------------------------------- */
 
@@ -179,9 +188,98 @@ static int inline read_dsp(struct device *dev, unsigned char *data)
 
 /* --------------------------------------------------------------------- */
 
-static void inline sbc_int_ack(struct device *dev)
+static int config_resources(struct device *dev, struct sm_state *sm, int fdx)
+{
+	unsigned char irqreg = 0, dmareg = 0, realirq, realdma;
+	unsigned long flags;
+
+	switch (dev->irq) {
+	case 2:
+	case 9:
+		irqreg |= 0x01;
+		break;
+
+	case 5:
+		irqreg |= 0x02;
+		break;
+
+	case 7:
+		irqreg |= 0x04;
+		break;
+
+	case 10:
+		irqreg |= 0x08;
+		break;
+		
+	default:
+		return -ENODEV;
+	}
+
+	switch (dev->dma) {
+	case 0:
+		dmareg |= 0x01;
+		break;
+
+	case 1:
+		dmareg |= 0x02;
+		break;
+
+	case 3:
+		dmareg |= 0x08;
+		break;
+
+	default:
+		return -ENODEV;
+	}
+		
+	if (fdx) {
+		switch (sm->hdrv.ptt_out.dma2) {
+		case 5:
+			dmareg |= 0x20;
+			break;
+			
+		case 6:
+			dmareg |= 0x40;
+			break;
+			
+		case 7:
+			dmareg |= 0x80;
+			break;
+			
+		default:
+			return -ENODEV;
+		}
+	}
+	save_flags(flags);
+	cli();
+	outb(0x80, DSP_MIXER_ADDR(dev->base_addr));
+	outb(irqreg, DSP_MIXER_DATA(dev->base_addr));
+	realirq = inb(DSP_MIXER_DATA(dev->base_addr));
+	outb(0x81, DSP_MIXER_ADDR(dev->base_addr));
+	outb(dmareg, DSP_MIXER_DATA(dev->base_addr));
+	realdma = inb(DSP_MIXER_DATA(dev->base_addr));
+	restore_flags(flags);
+	if ((~realirq) & irqreg || (~realdma) & dmareg) {
+		printk(KERN_ERR "%s: sbc resource registers cannot be set; "
+		       "PnP device and IRQ/DMA specified wrongly?\n",
+		       sm_drvname);
+		return -EINVAL;
+	}
+	return 0;
+}
+
+/* --------------------------------------------------------------------- */
+
+static void inline sbc_int_ack_8bit(struct device *dev)
 {
 	inb(DSP_DATA_AVAIL(dev->base_addr));
+}
+
+/* --------------------------------------------------------------------- */
+
+static void inline sbc_int_ack_16bit(struct device *dev)
+{
+	inb(DSP_INTACK_16BIT(dev->base_addr));
 }
 
 /* --------------------------------------------------------------------- */
@@ -209,7 +307,7 @@ static void setup_dma_dsp(struct device *dev, struct sm_state *sm, int send)
                 panic("sm: DMA buffer violates DMA boundary!");
         save_flags(flags);
         cli();
-        sbc_int_ack(dev);
+        sbc_int_ack_8bit(dev);
         write_dsp(dev, SBC_SAMPLE_RATE); /* set sampling rate */
         write_dsp(dev, SCSTATE->fmt[send]);
         write_dsp(dev, sbcskr[send]); 
@@ -219,7 +317,7 @@ static void setup_dma_dsp(struct device *dev, struct sm_state *sm, int send)
         set_dma_addr(dev->dma, dmabufaddr);
         set_dma_count(dev->dma, SCSTATE->dmabuflen);
         enable_dma(dev->dma);
-        sbc_int_ack(dev);
+        sbc_int_ack_8bit(dev);
 	if (SCSTATE->revhi >= 4) {
 		write_dsp(dev, sbc4mode[send]);
 		write_dsp(dev, SBC4_MODE_UNS_MONO);
@@ -247,7 +345,7 @@ static void sbc_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 	if (!dev || !sm || sm->hdrv.magic != HDLCDRV_MAGIC)
 		return;
 	new_ptt = hdlcdrv_ptt(&sm->hdrv);
- 	sbc_int_ack(dev);
+ 	sbc_int_ack_8bit(dev);
  	buf = SCSTATE->dmabuf;
 	if (SCSTATE->dmabufidx)
 		buf += SCSTATE->dmabuflen/2;
@@ -294,6 +392,8 @@ static void sbc_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 
 static int sbc_open(struct device *dev, struct sm_state *sm) 
 {
+	int err;
+
 	if (sizeof(sm->m) < sizeof(struct sc_state_sbc)) {
 		printk(KERN_ERR "sm sbc: sbc state too big: %d > %d\n", 
 		       sizeof(struct sc_state_sbc), sizeof(sm->m));
@@ -326,6 +426,11 @@ static int sbc_open(struct device *dev, struct sm_state *sm)
 		       "old, at least 3.00 required\n", sm_drvname,
 		       dev->base_addr, SCSTATE->revhi, SCSTATE->revlo);
 		return -ENODEV;
+	}
+	if (SCSTATE->revhi >= 4 && 
+	    (err = config_resources(dev, sm, 0))) {
+		printk(KERN_ERR "%s: invalid IRQ and/or DMA specified\n", sm_drvname);
+		return err;
 	}
 	/*
 	 * initialize some variables
@@ -521,6 +626,282 @@ static int sbc_ioctl(struct device *dev, struct sm_state *sm, struct ifreq *ifr,
 const struct hardware_info sm_hw_sbc = {
 	"sbc", sizeof(struct sc_state_sbc), 
 	sbc_open, sbc_close, sbc_ioctl, sbc_sethw
+};
+
+/* --------------------------------------------------------------------- */
+
+static void setup_dma_fdx_dsp(struct device *dev, struct sm_state *sm)
+{
+        unsigned long flags;
+	unsigned long dmabufaddr = virt_to_bus(SCSTATE->dmabuf);
+	unsigned long dmabuf2addr = virt_to_bus(SCSTATE->dmabuf2);
+
+        if (!reset_dsp(dev)) {
+                printk(KERN_ERR "%s: sbc: cannot reset sb dsp\n", sm_drvname);
+                return;
+        }
+        if (((dmabufaddr & 0xffff) + SCSTATE->dmabuflen > 0x10000) ||
+	    ((dmabuf2addr & 0xffff) + 2*(SCSTATE->dmabuflen) > 0x10000))
+		panic("sm: DMA buffer violates DMA boundary!");
+        save_flags(flags);
+        cli();
+        sbc_int_ack_8bit(dev);
+        sbc_int_ack_16bit(dev);
+	/* should eventually change to set rates individually by SBC_SAMPLE_RATE_{IN/OUT} */
+        write_dsp(dev, SBC_SAMPLE_RATE); /* set sampling rate */
+        write_dsp(dev, SCSTATE->fmt[0]);
+        write_dsp(dev, SBC_SPEAKER_ON);
+	/*
+	 * DMA channel 1 (8bit) does input (capture),
+	 * DMA channel 2 (16bit) does output (playback)
+	 */
+        disable_dma(dev->dma);
+        disable_dma(sm->hdrv.ptt_out.dma2);
+        clear_dma_ff(dev->dma);
+        set_dma_mode(dev->dma, DMA_MODE_READ | DMA_MODE_AUTOINIT);
+        set_dma_addr(dev->dma, dmabufaddr);
+        set_dma_count(dev->dma, SCSTATE->dmabuflen);
+        clear_dma_ff(sm->hdrv.ptt_out.dma2);
+        set_dma_mode(sm->hdrv.ptt_out.dma2, DMA_MODE_WRITE | DMA_MODE_AUTOINIT);
+        set_dma_addr(sm->hdrv.ptt_out.dma2, dmabuf2addr);
+        set_dma_count(sm->hdrv.ptt_out.dma2, SCSTATE->dmabuflen);
+        enable_dma(dev->dma);
+        enable_dma(sm->hdrv.ptt_out.dma2);
+        sbc_int_ack_8bit(dev);
+        sbc_int_ack_16bit(dev);
+	write_dsp(dev, SBC4_IN8_AI);
+	write_dsp(dev, SBC4_MODE_UNS_MONO);
+	write_dsp(dev, ((SCSTATE->dmabuflen >> 1) - 1) & 0xff);
+	write_dsp(dev, ((SCSTATE->dmabuflen >> 1) - 1) >> 8);
+	write_dsp(dev, SBC4_OUT16_AI);
+	write_dsp(dev, SBC4_MODE_UNS_MONO);
+	write_dsp(dev, ((SCSTATE->dmabuflen >> 1) - 1) & 0xff);
+	write_dsp(dev, ((SCSTATE->dmabuflen >> 1) - 1) >> 8);
+        restore_flags(flags);
+}
+
+/* --------------------------------------------------------------------- */
+
+static void sbcfdx_interrupt(int irq, void *dev_id, struct pt_regs *regs)
+{
+	struct device *dev = (struct device *)dev_id;
+	struct sm_state *sm = (struct sm_state *)dev->priv;
+	unsigned char *buf;
+	unsigned char *buf2;
+	unsigned char intsrc;
+
+	if (!dev || !sm || sm->hdrv.magic != HDLCDRV_MAGIC)
+		return;
+	buf = SCSTATE->dmabuf;
+	buf2 = SCSTATE->dmabuf2;
+	outb(0x82, DSP_MIXER_ADDR(dev->base_addr));
+	intsrc = inb(DSP_MIXER_DATA(dev->base_addr));
+	if (intsrc & 0x01) {
+		sbc_int_ack_8bit(dev);
+		if (SCSTATE->dmabufidx)
+			buf += SCSTATE->dmabuflen/2;
+		SCSTATE->dmabufidx = !SCSTATE->dmabufidx;
+	}
+	if (intsrc & 0x02) {
+		sbc_int_ack_16bit(dev);
+		if (SCSTATE->dma2bufidx)
+			buf2 += SCSTATE->dmabuflen/2;
+		SCSTATE->dma2bufidx = !SCSTATE->dma2bufidx;
+	}
+	sm_int_freq(sm);
+	sti();
+	if (intsrc & 0x02) {
+		if ((SCSTATE->ptt = hdlcdrv_ptt(&sm->hdrv))) 
+			time_exec(sm->debug_vals.mod_cyc, 
+				  sm->mode_tx->modulator(sm, buf2, SCSTATE->dmabuflen/2));
+		else
+			time_exec(sm->debug_vals.mod_cyc, 
+				  memset(buf2, 0x80, SCSTATE->dmabuflen/2));
+	}
+	if (intsrc & 0x01) {
+		time_exec(sm->debug_vals.demod_cyc, 
+			  sm->mode_rx->demodulator(sm, buf, SCSTATE->dmabuflen/2));
+		hdlcdrv_arbitrate(dev, &sm->hdrv);
+	}
+	sm_output_status(sm);
+	hdlcdrv_transmitter(dev, &sm->hdrv);
+	hdlcdrv_receiver(dev, &sm->hdrv);
+}
+
+/* --------------------------------------------------------------------- */
+
+static int sbcfdx_open(struct device *dev, struct sm_state *sm) 
+{
+	int err;
+
+	if (sizeof(sm->m) < sizeof(struct sc_state_sbc)) {
+		printk(KERN_ERR "sm sbc: sbc state too big: %d > %d\n", 
+		       sizeof(struct sc_state_sbc), sizeof(sm->m));
+		return -ENODEV;
+	}
+	if (!dev || !sm)
+		return -ENXIO;
+	if (dev->base_addr <= 0 || dev->base_addr > 0x1000-SBC_EXTENT || 
+	    dev->irq < 2 || dev->irq > 15 || dev->dma > 3)
+		return -ENXIO;
+	if (check_region(dev->base_addr, SBC_EXTENT))
+		return -EACCES;
+	/*
+	 * check if a card is available
+	 */
+	if (!reset_dsp(dev))
+		return -ENODEV;
+	write_dsp(dev, SBC_GET_REVISION);
+	if (!read_dsp(dev, &SCSTATE->revhi) || 
+	    !read_dsp(dev, &SCSTATE->revlo))
+		return -ENODEV;
+	if (SCSTATE->revhi < 4) {
+		printk(KERN_ERR "%s: at least DSP rev 4.00 required\n", sm_drvname);
+		return -ENODEV;
+	}
+	if ((err = config_resources(dev, sm, 1))) {
+		printk(KERN_ERR "%s: invalid IRQ and/or DMA specified\n", sm_drvname);
+		return err;
+	}
+	/*
+	 * initialize some variables
+	 */
+	if (!(SCSTATE->dmabuf = kmalloc(SCSTATE->dmabuflen, GFP_KERNEL | GFP_DMA)))
+		return -ENOMEM;
+	if (!(SCSTATE->dmabuf2 = kmalloc(SCSTATE->dmabuflen, GFP_KERNEL | GFP_DMA))) {
+		kfree_s(SCSTATE->dmabuf, SCSTATE->dmabuflen);
+		return -ENOMEM;
+	}
+	SCSTATE->dmabufidx = SCSTATE->dma2bufidx = SCSTATE->ptt = 0;
+
+	memset(&sm->m, 0, sizeof(sm->m));
+	memset(&sm->d, 0, sizeof(sm->d));
+	if (sm->mode_tx->init)
+		sm->mode_tx->init(sm);
+	if (sm->mode_rx->init)
+		sm->mode_rx->init(sm);
+
+	if (request_dma(dev->dma, sm->hwdrv->hw_name)) {
+		kfree_s(SCSTATE->dmabuf, SCSTATE->dmabuflen);
+		kfree_s(SCSTATE->dmabuf2, SCSTATE->dmabuflen);
+		return -EBUSY;
+	}
+	if (request_dma(sm->hdrv.ptt_out.dma2, sm->hwdrv->hw_name)) {
+		kfree_s(SCSTATE->dmabuf, SCSTATE->dmabuflen);
+		kfree_s(SCSTATE->dmabuf2, SCSTATE->dmabuflen);
+		free_dma(dev->dma);
+		return -EBUSY;
+	}
+	if (request_irq(dev->irq, sbcfdx_interrupt, SA_INTERRUPT, 
+			sm->hwdrv->hw_name, dev)) {
+		kfree_s(SCSTATE->dmabuf, SCSTATE->dmabuflen);
+		kfree_s(SCSTATE->dmabuf2, SCSTATE->dmabuflen);
+		free_dma(dev->dma);
+		free_dma(sm->hdrv.ptt_out.dma2);
+		return -EBUSY;
+	}
+	request_region(dev->base_addr, SBC_EXTENT, sm->hwdrv->hw_name);
+	setup_dma_fdx_dsp(dev, sm);
+	return 0;
+}
+
+/* --------------------------------------------------------------------- */
+
+static int sbcfdx_close(struct device *dev, struct sm_state *sm) 
+{
+	if (!dev || !sm)
+		return -EINVAL;
+	/*
+	 * disable interrupts
+	 */
+	disable_dma(dev->dma);
+	disable_dma(sm->hdrv.ptt_out.dma2);
+	reset_dsp(dev);	
+	free_irq(dev->irq, dev);	
+	free_dma(dev->dma);	
+	free_dma(sm->hdrv.ptt_out.dma2);	
+	release_region(dev->base_addr, SBC_EXTENT);
+	kfree_s(SCSTATE->dmabuf, SCSTATE->dmabuflen);
+	kfree_s(SCSTATE->dmabuf2, SCSTATE->dmabuflen);
+	return 0;
+}
+
+/* --------------------------------------------------------------------- */
+
+static int sbcfdx_sethw(struct device *dev, struct sm_state *sm, char *mode)
+{
+	char *cp = strchr(mode, '.');
+	const struct modem_tx_info **mtp = sm_modem_tx_table;
+	const struct modem_rx_info **mrp;
+	int dv;
+
+	if (!strcmp(mode, "off")) {
+		sm->mode_tx = NULL;
+		sm->mode_rx = NULL;
+		return 0;
+	}
+	if (cp)
+		*cp++ = '\0';
+	else
+		cp = mode;
+	for (; *mtp; mtp++) {
+		if ((*mtp)->loc_storage > sizeof(sm->m)) {
+			printk(KERN_ERR "%s: insufficient storage for modulator %s (%d)\n",
+			       sm_drvname, (*mtp)->name, (*mtp)->loc_storage);
+			continue;
+		}
+		if (!(*mtp)->name || strcmp((*mtp)->name, mode))
+			continue;
+		if ((*mtp)->srate < 5000 || (*mtp)->srate > 44100)
+			continue;
+		for (mrp = sm_modem_rx_table; *mrp; mrp++) {
+			if ((*mrp)->loc_storage > sizeof(sm->d)) {
+				printk(KERN_ERR "%s: insufficient storage for demodulator %s (%d)\n",
+				       sm_drvname, (*mrp)->name, (*mrp)->loc_storage);
+				continue;
+			}
+			if ((*mrp)->name && !strcmp((*mrp)->name, cp) &&
+			    (*mtp)->srate >= 5000 && (*mtp)->srate <= 44100 &&
+			    (*mrp)->srate == (*mtp)->srate) {
+				sm->mode_tx = *mtp;
+				sm->mode_rx = *mrp;
+				SCSTATE->sr[0] = sm->mode_rx->srate;
+				SCSTATE->sr[1] = sm->mode_tx->srate;
+				dv = lcm(sm->mode_tx->dmabuflenmodulo, 
+					 sm->mode_rx->dmabuflenmodulo);
+				if (dv & 1)
+					dv <<= 1; /* dmabuflen must be a multiple of 4 */
+				SCSTATE->dmabuflen = sm->mode_rx->srate/100+dv-1;
+				SCSTATE->dmabuflen /= dv;
+				SCSTATE->dmabuflen *= 2*dv; /* make sure DMA buf is even */
+				return 0;
+			}
+		}
+	}
+	return -EINVAL;
+}
+
+/* --------------------------------------------------------------------- */
+
+static int sbcfdx_ioctl(struct device *dev, struct sm_state *sm, struct ifreq *ifr, 
+			struct hdlcdrv_ioctl *hi, int cmd)
+{
+	if (cmd != SIOCDEVPRIVATE)
+		return -ENOIOCTLCMD;
+
+	if (hi->cmd == HDLCDRVCTL_MODEMPARMASK)
+		return HDLCDRV_PARMASK_IOBASE | HDLCDRV_PARMASK_IRQ | 
+			HDLCDRV_PARMASK_DMA | HDLCDRV_PARMASK_DMA2 | HDLCDRV_PARMASK_SERIOBASE | 
+			HDLCDRV_PARMASK_PARIOBASE | HDLCDRV_PARMASK_MIDIIOBASE;
+
+	return sbc_ioctl(dev, sm, ifr, hi, cmd);
+}
+
+/* --------------------------------------------------------------------- */
+
+const struct hardware_info sm_hw_sbcfdx = {
+	"sbcfdx", sizeof(struct sc_state_sbc), 
+	sbcfdx_open, sbcfdx_close, sbcfdx_ioctl, sbcfdx_sethw
 };
 
 /* --------------------------------------------------------------------- */

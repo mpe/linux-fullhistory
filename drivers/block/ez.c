@@ -176,7 +176,7 @@ static int ez_open(struct inode *inode, struct file *file);
 static void do_ez_request(void);
 static int ez_ioctl(struct inode *inode,struct file *file,
                     unsigned int cmd, unsigned long arg);
-static void ez_release (struct inode *inode, struct file *file);
+static int ez_release (struct inode *inode, struct file *file);
 static int ez_revalidate(kdev_t dev);
 static int ez_check_media(kdev_t dev);
 static void ez_get_capacity( void );
@@ -387,7 +387,7 @@ static int ez_ioctl(struct inode *inode,struct file *file,
 	}
 }
 
-static void ez_release (struct inode *inode, struct file *file)
+static int ez_release (struct inode *inode, struct file *file)
 
 {	kdev_t devp;
 
@@ -400,6 +400,7 @@ static void ez_release (struct inode *inode, struct file *file)
 		if (!ez_access) ez_doorlock(IDE_DOORUNLOCK);
 		MOD_DEC_USE_COUNT;
 	}
+	return 0;
 }
 
 static int ez_check_media( kdev_t dev)

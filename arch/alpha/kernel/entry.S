@@ -247,6 +247,7 @@ __kernel_thread:
 	bis $10,$10,$16		/* get arg */
 	bic $30,$8,$8		/* get current */
 	jsr $26,($27)
+	ldgp	$29,0($26)
 	bis $0,$0,$16
 	jsr $26,sys_exit
 	call_pal PAL_halt
@@ -519,6 +520,7 @@ entSys:
 	beq	$4,1f
 	ldq	$27,0($5)
 1:	jsr	$26,($27),do_entSys
+	ldgp	$29,0($26)
 	blt	$0,syscall_error	/* the call failed */
 	stq	$0,0($30)
 	stq	$31,72($30)		/* a3=0 => no error */
@@ -578,6 +580,7 @@ strace:
 	beq	$1,1f
 	ldq	$27,0($2)
 1:	jsr	$26,($27),do_entSys
+	ldgp	$29,0($26)
 
 	/* check return.. */
 	blt	$0,strace_error	/* the call failed */

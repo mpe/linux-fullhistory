@@ -14,12 +14,9 @@
 #define	ROSE_T2		3
 #define	ROSE_T3		4
 #define	ROSE_IDLE	5
-#define	ROSE_HDRINCL	6
+#define	ROSE_QBITINCL	6
 #define	ROSE_HOLDBACK	7
 
-#define	ROSE_KILL	99
-
-#define	SIOCRSCTLCON		(SIOCPROTOPRIVATE+1)
 #define	SIOCRSL2CALL		(SIOCPROTOPRIVATE+2)
 
 typedef struct {
@@ -41,13 +38,6 @@ struct rose_route_struct {
 	char		device[16];
 	unsigned char	ndigis;
 	ax25_address	digipeaters[AX25_MAX_DIGIS];
-};
-
-struct rose_ctl_struct {
-	unsigned int	lci;
-	char		dev[20];
-	unsigned int	cmd;
-	unsigned long	arg;
 };
 
 #endif

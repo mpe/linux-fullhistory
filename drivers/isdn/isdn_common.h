@@ -1,4 +1,4 @@
-/* $Id: isdn_common.h,v 1.5 1997/02/10 10:05:45 fritz Exp $
+/* $Id: isdn_common.h,v 1.6 1997/02/28 02:32:44 fritz Exp $
 
  * header for Linux ISDN subsystem, common used functions and debugging-switches (linklevel).
  *
@@ -21,6 +21,11 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  *
  * $Log: isdn_common.h,v $
+ * Revision 1.6  1997/02/28 02:32:44  fritz
+ * Cleanup: Moved some tty related stuff from isdn_common.c
+ *          to isdn_tty.c
+ * Bugfix:  Bisync protocol did not behave like documented.
+ *
  * Revision 1.5  1997/02/10 10:05:45  fritz
  * More changes for Kernel 2.1.X
  * Symbol information moved to isdn_syms.c
@@ -45,6 +50,7 @@
 #undef  ISDN_DEBUG_MODEM_HUP
 #undef  ISDN_DEBUG_MODEM_ICALL
 #undef  ISDN_DEBUG_MODEM_DUMP
+#undef  ISDN_DEBUG_MODEM_VOICE
 #undef  ISDN_DEBUG_AT
 #undef  ISDN_DEBUG_NET_DUMP
 #undef  ISDN_DEBUG_NET_DIAL

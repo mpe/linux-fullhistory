@@ -1,4 +1,4 @@
-/* $Id: blockops.S,v 1.6 1997/05/03 02:01:54 davem Exp $
+/* $Id: blockops.S,v 1.7 1997/05/20 07:58:28 jj Exp $
  * blockops.S: Common block zero optimized routines.
  *
  * Copyright (C) 1996 David S. Miller (davem@caip.rutgers.edu)
@@ -45,8 +45,11 @@
 
 	.text
 	.align	4
+	.globl	C_LABEL(bzero_1page), C_LABEL(__copy_1page)
 
-generic_bzero_1page:
+C_LABEL(bzero_1page):
+/* NOTE: If you change the number of insns of this routine, please check
+ * arch/sparc/mm/hypersparc.S */
 	/* %o0 = buf */
 	or	%g0, %g0, %g1
 	or	%o0, %g0, %o1
@@ -63,7 +66,9 @@ generic_bzero_1page:
 	retl
 	 nop
 
-__generic_copy_1page:
+C_LABEL(__copy_1page):
+/* NOTE: If you change the number of insns of this routine, please check
+ * arch/sparc/mm/hypersparc.S */
 	/* %o0 = dst, %o1 = src */
 	or	%g0, 0x10, %g1
 1:
@@ -82,9 +87,3 @@ __generic_copy_1page:
 
 	retl
 	 nop
-
-	.data
-	.align 4
-	.globl	C_LABEL(bzero_1page), C_LABEL(__copy_1page)
-C_LABEL(bzero_1page):	.word	generic_bzero_1page
-C_LABEL(__copy_1page):	.word	__generic_copy_1page

@@ -1,9 +1,6 @@
 /*
  *	AX.25 release 036
  *
- *	This is ALPHA test software. This code may break your machine, randomly fail to work with new 
- *	releases, misbehave and/or generally screw up. It might even work. 
- *
  *	This code REQUIRES 2.1.15 or higher/ NET3.038
  *
  *	This module:
@@ -99,15 +96,15 @@ void ax25_rt_device_down(struct device *dev)
 			if (ax25_route_list == s) {
 				ax25_route_list = s->next;
 				if (s->digipeat != NULL)
-					kfree_s(s->digipeat, sizeof(ax25_digi));
-				kfree_s(s, sizeof(ax25_route));
+					kfree(s->digipeat);
+				kfree(s);
 			} else {
 				for (t = ax25_route_list; t != NULL; t = t->next) {
 					if (t->next == s) {
 						t->next = s->next;
 						if (s->digipeat != NULL)
-							kfree_s(s->digipeat, sizeof(ax25_digi));
-						kfree_s(s, sizeof(ax25_route));
+							kfree(s->digipeat);
+						kfree(s);
 						break;
 					}
 				}
@@ -137,7 +134,7 @@ int ax25_rt_ioctl(unsigned int cmd, void *arg)
 			for (ax25_rt = ax25_route_list; ax25_rt != NULL; ax25_rt = ax25_rt->next) {
 				if (ax25cmp(&ax25_rt->callsign, &route.dest_addr) == 0 && ax25_rt->dev == ax25_dev->dev) {
 					if (ax25_rt->digipeat != NULL) {
-						kfree_s(ax25_rt->digipeat, sizeof(ax25_digi));
+						kfree(ax25_rt->digipeat);
 						ax25_rt->digipeat = NULL;
 					}
 					if (route.digi_count != 0) {
@@ -161,7 +158,7 @@ int ax25_rt_ioctl(unsigned int cmd, void *arg)
 			ax25_rt->ip_mode      = ' ';
 			if (route.digi_count != 0) {
 				if ((ax25_rt->digipeat = kmalloc(sizeof(ax25_digi), GFP_ATOMIC)) == NULL) {
-					kfree_s(ax25_rt, sizeof(ax25_route));
+					kfree(ax25_rt);
 					return -ENOMEM;
 				}
 				ax25_rt->digipeat->lastrepeat = -1;
@@ -191,15 +188,15 @@ int ax25_rt_ioctl(unsigned int cmd, void *arg)
 					if (ax25_route_list == s) {
 						ax25_route_list = s->next;
 						if (s->digipeat != NULL)
-							kfree_s(s->digipeat, sizeof(ax25_digi));
-						kfree_s(s, sizeof(ax25_route));
+							kfree(s->digipeat);
+						kfree(s);
 					} else {
 						for (t = ax25_route_list; t != NULL; t = t->next) {
 							if (t->next == s) {
 								t->next = s->next;
 								if (s->digipeat != NULL)
-									kfree_s(s->digipeat, sizeof(ax25_digi));
-								kfree_s(s, sizeof(ax25_route));
+									kfree(s->digipeat);
+								kfree(s);
 								break;
 							}
 						}				
@@ -413,8 +410,9 @@ void ax25_rt_build_path(ax25_cb *ax25, ax25_address *addr, struct device *dev)
 	ax25_adjust_path(addr, ax25->digipeat);
 }
 
-void ax25_dg_build_path(struct sk_buff *skb, ax25_address *addr, struct device *dev)
+struct sk_buff *ax25_dg_build_path(struct sk_buff *skb, ax25_address *addr, struct device *dev)
 {
+	struct sk_buff *skbn;
 	ax25_route *ax25_rt;
 	ax25_digi digipeat;
 	ax25_address src, dest;
@@ -424,10 +422,10 @@ void ax25_dg_build_path(struct sk_buff *skb, ax25_address *addr, struct device *
 	skb_pull(skb, 1);	/* skip KISS command */
 
 	if ((ax25_rt = ax25_find_route(addr, dev)) == NULL)
-		return;
+		return skb;
 
 	if (ax25_rt->digipeat == NULL)
-		return;
+		return skb;
 
 	digipeat = *ax25_rt->digipeat;
 
@@ -436,8 +434,17 @@ void ax25_dg_build_path(struct sk_buff *skb, ax25_address *addr, struct device *
 	len = ax25_rt->digipeat->ndigi * AX25_ADDR_LEN;
 
 	if (skb_headroom(skb) < len) {
-		printk(KERN_CRIT "ax25_dg_build_path: not enough headroom for digis in skb\n");
-		return;
+		if ((skbn = skb_realloc_headroom(skb, len)) == NULL) {
+			printk(KERN_CRIT "AX.25: ax25_dg_build_path - out of memory\n");
+			return NULL;
+		}
+
+		if (skb->sk != NULL)
+			skb_set_owner_w(skbn, skb->sk);
+
+		kfree_skb(skb, FREE_WRITE);
+
+		skb = skbn;
 	}
 
 	memcpy(&dest, skb->data + 0, AX25_ADDR_LEN);
@@ -446,6 +453,8 @@ void ax25_dg_build_path(struct sk_buff *skb, ax25_address *addr, struct device *
 	bp = skb_push(skb, len);
 
 	ax25_addr_build(bp, &src, &dest, ax25_rt->digipeat, AX25_COMMAND, AX25_MODULUS);
+
+	return skb;
 }
 
 /*
@@ -476,9 +485,9 @@ void ax25_rt_free(void)
 		ax25_rt = ax25_rt->next;
 
 		if (s->digipeat != NULL)
-			kfree_s(s->digipeat, sizeof(ax25_digi));
+			kfree(s->digipeat);
 
-		kfree_s(s, sizeof(ax25_route));
+		kfree(s);
 	}
 }
 

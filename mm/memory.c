@@ -44,6 +44,8 @@
 #include <linux/mman.h>
 #include <linux/mm.h>
 #include <linux/swap.h>
+#include <linux/smp.h>
+#include <linux/smp_lock.h>
 
 #include <asm/system.h>
 #include <asm/uaccess.h>
@@ -863,6 +865,9 @@ static inline void handle_pte_fault(struct task_struct *tsk,
 	do_wp_page(tsk, vma, address, write_access, pte);
 }
 
+/*
+ * By the time we get here, we already have the mm semaphore.
+ */
 void handle_mm_fault(struct task_struct *tsk, struct vm_area_struct * vma,
 	unsigned long address, int write_access)
 {
@@ -877,8 +882,10 @@ void handle_mm_fault(struct task_struct *tsk, struct vm_area_struct * vma,
 	pte = pte_alloc(pmd, address);
 	if (!pte)
 		goto no_memory;
+	lock_kernel();		/* Horrible */
 	handle_pte_fault(tsk, vma, address, write_access, pte);
 	update_mmu_cache(vma, address, *pte);
+	unlock_kernel();	/* Horrible */
 	return;
 no_memory:
 	oom(tsk);

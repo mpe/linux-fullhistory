@@ -1,9 +1,6 @@
 /*
  *	AX.25 release 036
  *
- *	This is ALPHA test software. This code may break your machine, randomly fail to work with new
- *	releases, misbehave and/or generally screw up. It might even work.
- *
  *	This code REQUIRES 2.1.15 or higher/ NET3.038
  *
  *	This module:
@@ -110,14 +107,14 @@ int ax25_uid_ioctl(int cmd, struct sockaddr_ax25 *sax)
 			if ((s = ax25_uid_list) == ax25_uid) {
 				ax25_uid_list = s->next;
 				restore_flags(flags);
-				kfree_s(ax25_uid, sizeof(ax25_uid_assoc));
+				kfree(ax25_uid);
 				return 0;
 			}
 			while (s != NULL && s->next != NULL) {
 				if (s->next == ax25_uid) {
 					s->next = ax25_uid->next;
 					restore_flags(flags);
-					kfree_s(ax25_uid, sizeof(ax25_uid_assoc));
+					kfree(ax25_uid);
 					return 0;
 				}
 				s = s->next;
@@ -180,7 +177,7 @@ void ax25_uid_free(void)
 		s        = ax25_uid;
 		ax25_uid = ax25_uid->next;
 
-		kfree_s(s, sizeof(ax25_uid_assoc));
+		kfree(s);
 	}
 }
 

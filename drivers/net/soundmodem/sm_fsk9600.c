@@ -1,7 +1,7 @@
 /*****************************************************************************/
 
 /*
- *	sm_fsk9600.h  --  soundcard radio modem driver, 
+ *	sm_fsk9600.c  --  soundcard radio modem driver, 
  *                        9600 baud G3RUH compatible FSK modem
  *
  *	Copyright (C) 1996  Thomas Sailer (sailer@ife.ee.ethz.ch)

@@ -844,7 +844,7 @@ static int dgrs_ioctl(struct device *devN, struct ifreq *ifr, int cmd)
 {
 	DGRS_PRIV	*privN = (DGRS_PRIV *) devN->priv;
 	DGRS_IOCTL	ioc;
-	int		i, rc;
+	int		i;
 
 	if (cmd != DGRSIOCTL)
 		return -EINVAL;

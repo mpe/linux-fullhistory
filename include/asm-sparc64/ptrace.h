@@ -1,4 +1,4 @@
-/* $Id: ptrace.h,v 1.7 1997/03/04 16:27:32 jj Exp $ */
+/* $Id: ptrace.h,v 1.8 1997/05/27 19:30:27 jj Exp $ */
 #ifndef _SPARC64_PTRACE_H
 #define _SPARC64_PTRACE_H
 
@@ -250,5 +250,21 @@ extern void show_regs(struct pt_regs *);
 #define SF_XARG4  0x54
 #define SF_XARG5  0x58
 #define SF_XXARG  0x5c
+
+/* Stuff for the ptrace system call */
+#define PTRACE_SUNATTACH          10
+#define PTRACE_SUNDETACH          11
+#define PTRACE_GETREGS            12
+#define PTRACE_SETREGS            13
+#define PTRACE_GETFPREGS          14
+#define PTRACE_SETFPREGS          15
+#define PTRACE_READDATA           16
+#define PTRACE_WRITEDATA          17
+#define PTRACE_READTEXT           18
+#define PTRACE_WRITETEXT          19
+#define PTRACE_GETFPAREGS         20
+#define PTRACE_SETFPAREGS         21
+
+#define PTRACE_GETUCODE           29  /* stupid bsd-ism */
 
 #endif /* !(_SPARC64_PTRACE_H) */

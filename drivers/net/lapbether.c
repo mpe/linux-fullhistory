@@ -1,10 +1,6 @@
 /*
  *	"LAPB via ethernet" driver release 001
  *
- *	This is ALPHA test software. This code may break your machine, randomly 
- *	fail to work with new releases, misbehave and/or generally screw up. 
- *	It might even work. 
- *
  *	This code REQUIRES 2.1.15 or higher/ NET3.038
  *
  *	This module:
@@ -226,7 +222,7 @@ static int lapbeth_xmit(struct sk_buff *skb, struct device *dev)
 	 */
 	if (!dev->start) {
 		lapbeth_check_devices(dev);
-		dev_kfree_skb(skb, FREE_WRITE);
+		kfree_skb(skb, FREE_WRITE);
 		return -ENODEV;
 	}
 
@@ -427,7 +423,7 @@ static int lapbeth_new_device(struct device *dev)
 	unsigned char *buf;
 	struct lapbethdev *lapbeth, *lapbeth2;
 	
-	if ((lapbeth = (struct lapbethdev *)kmalloc(sizeof(struct lapbethdev), GFP_KERNEL)) == NULL)
+	if ((lapbeth = kmalloc(sizeof(struct lapbethdev), GFP_KERNEL)) == NULL)
 		return -ENOMEM;
 		
 	memset(lapbeth, 0, sizeof(struct lapbethdev));
@@ -438,7 +434,7 @@ static int lapbeth_new_device(struct device *dev)
 	strncpy(lapbeth->ethname, dev->name, sizeof(lapbeth->ethname)-1);
 
 	dev = &lapbeth->axdev;
-	buf = (unsigned char *)kmalloc(14, GFP_KERNEL);
+	buf = kmalloc(14, GFP_KERNEL);
 
 	for (k = 0; k < MAXLAPBDEV; k++) {
 		struct device *odev;
@@ -474,12 +470,13 @@ static int lapbeth_new_device(struct device *dev)
 
 	/* preset with reasonable values */
 
-#if CONFIG_INET
 	dev->flags      = 0;
 	dev->family     = AF_INET;
-	dev->pa_addr    = 0;
-	dev->pa_brdaddr = 0;
-	dev->pa_mask    = 0;
+
+#ifdef CONFIG_INET
+	dev->pa_addr    = in_aton("192.168.0.1");
+	dev->pa_brdaddr = in_aton("192.168.0.255");
+	dev->pa_mask    = in_aton("255.255.255.0");
 	dev->pa_alen    = 4;
 #endif
 
@@ -561,6 +558,9 @@ int lapbeth_init(void)
 
 #ifdef MODULE
 EXPORT_NO_SYMBOLS;
+
+MODULE_AUTHOR("Jonathan Naylor <g4klx@g4klx.demon.co.uk>");
+MODULE_DESCRIPTION("The unofficial LAPB over Ethernet driver");
 
 int init_module(void)
 {

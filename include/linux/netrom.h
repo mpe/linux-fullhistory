@@ -13,14 +13,10 @@
 #define NETROM_T1	1
 #define NETROM_T2	2
 #define NETROM_N2	3
-#define	NETROM_HDRINCL	4
 #define	NETROM_T4	6
 #define	NETROM_IDLE	7
 
-#define	NETROM_KILL	99
-
 #define	SIOCNRDECOBS		(SIOCPROTOPRIVATE+2)
-#define	SIOCNRCTLCON		(SIOCPROTOPRIVATE+4)
 
 struct nr_route_struct {
 #define	NETROM_NEIGH	0
@@ -34,13 +30,6 @@ struct nr_route_struct {
 	unsigned int	obs_count;
 	unsigned int	ndigis;
 	ax25_address	digipeaters[AX25_MAX_DIGIS];
-};
-
-struct nr_ctl_struct {
-	unsigned char	index;
-	unsigned char	id;
-	unsigned int	cmd;
-	unsigned long	arg;
 };
 
 #endif

@@ -1,4 +1,4 @@
-/*  $Id: init.c,v 1.28 1997/05/18 04:16:53 davem Exp $
+/*  $Id: init.c,v 1.29 1997/05/27 06:28:13 davem Exp $
  *  arch/sparc64/mm/init.c
  *
  *  Copyright (C) 1996,1997 David S. Miller (davem@caip.rutgers.edu)
@@ -269,10 +269,14 @@ void mmu_get_scsi_sgl(struct mmu_sglist *sg, int sz, struct linux_sbus *sbus)
 	}
 }
 
+static char sfmmuinfo[512];
+
 char *mmu_info(void)
 {
-	/* XXX */
-	return "MMU Type: Spitfire\n\tFIXME: Write this\n";
+	/* We'll do the rest later to make it nice... -DaveM */
+	sprintf(sfmmuinfo, "MMU Type\t: Spitfire\n");
+
+	return sfmmuinfo;
 }
 
 static unsigned long mempool;

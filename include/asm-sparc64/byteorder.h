@@ -1,17 +1,17 @@
-/* $Id: byteorder.h,v 1.3 1997/03/14 21:05:31 jj Exp $ */
+/* $Id: byteorder.h,v 1.4 1997/05/26 23:37:47 davem Exp $ */
 #ifndef _SPARC64_BYTEORDER_H
 #define _SPARC64_BYTEORDER_H
 
-#define ntohl(x) (x)
-#define ntohs(x) (x)
-#define htonl(x) (x)
-#define htons(x) (x)
+#define ntohl(x) ((unsigned long int)(x))
+#define ntohs(x) ((unsigned short int)(x))
+#define htonl(x) ((unsigned long int)(x))
+#define htons(x) ((unsigned short int)(x))
 
 /* Some programs depend upon these being around. */
-#define __constant_ntohl(x) (x)
-#define __constant_ntohs(x) (x)
-#define __constant_htonl(x) (x)
-#define __constant_htons(x) (x)
+#define __constant_ntohl(x) ((unsigned long int)(x))
+#define __constant_ntohs(x) ((unsigned short int)(x))
+#define __constant_htonl(x) ((unsigned long int)(x))
+#define __constant_htons(x) ((unsigned short int)(x))
 
 #ifndef __BIG_ENDIAN
 #define __BIG_ENDIAN 4321

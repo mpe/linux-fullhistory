@@ -1,10 +1,6 @@
 /*
  *	G8BPQ compatible "AX.25 via ethernet" driver release 003
  *
- *	This is ALPHA test software. This code may break your machine, randomly
- *	fail to work with new releases, misbehave and/or generally screw up.
- *	It might even work.
- *
  *	This code REQUIRES 2.0.0 or higher/ NET3.029
  *
  *	This module:
@@ -268,6 +264,7 @@ static int bpq_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *
  */
 static int bpq_xmit(struct sk_buff *skb, struct device *dev)
 {
+	struct sk_buff *newskb;
 	unsigned char *ptr;
 	struct bpqdev *bpq;
 	int size;
@@ -278,7 +275,7 @@ static int bpq_xmit(struct sk_buff *skb, struct device *dev)
 	 */
 	if (!dev->start) {
 		bpq_check_devices(dev);
-		dev_kfree_skb(skb, FREE_WRITE);
+		kfree_skb(skb, FREE_WRITE);
 		return -ENODEV;
 	}
 
@@ -290,21 +287,16 @@ static int bpq_xmit(struct sk_buff *skb, struct device *dev)
 	 * sendto() does not.
 	 */
 	if (skb_headroom(skb) < AX25_BPQ_HEADER_LEN) {	/* Ough! */
-		struct sk_buff *newskb = alloc_skb(skb->len + AX25_BPQ_HEADER_LEN, GFP_ATOMIC);
-
-		if (newskb == NULL) {			/* Argh! */
-			printk(KERN_WARNING "bpq_xmit: not enough space to add BPQ Ether header\n");
-			dev_kfree_skb(skb, FREE_WRITE);
+		if ((newskb = skb_realloc_headroom(skb, AX25_BPQ_HEADER_LEN)) == NULL) {
+			printk(KERN_WARNING "bpqether: out of memory\n");
+			kfree_skb(skb, FREE_WRITE);
 			return -ENOMEM;
 		}
 
-		newskb->arp  = 1;
-		if (skb->sk)
+		if (skb->sk != NULL)
 			skb_set_owner_w(newskb, skb->sk);
 
-		skb_reserve(newskb, AX25_BPQ_HEADER_LEN);
-		memcpy(skb_put(newskb, size), skb->data, size);
-		dev_kfree_skb(skb, FREE_WRITE);
+		kfree_skb(skb, FREE_WRITE);
 		skb = newskb;
 	}
 
@@ -319,7 +311,7 @@ static int bpq_xmit(struct sk_buff *skb, struct device *dev)
 
 	if ((dev = bpq_get_ether_dev(dev)) == NULL) {
 		bpq->stats.tx_dropped++;
-		dev_kfree_skb(skb, FREE_WRITE);
+		kfree_skb(skb, FREE_WRITE);
 		return -ENODEV;
 	}
 
@@ -509,7 +501,7 @@ static int bpq_new_device(struct device *dev)
 	unsigned char *buf;
 	struct bpqdev *bpq, *bpq2;
 
-	if ((bpq = (struct bpqdev *)kmalloc(sizeof(struct bpqdev), GFP_KERNEL)) == NULL)
+	if ((bpq = kmalloc(sizeof(struct bpqdev), GFP_KERNEL)) == NULL)
 		return -ENOMEM;
 
 	memset(bpq, 0, sizeof(struct bpqdev));
@@ -523,7 +515,7 @@ static int bpq_new_device(struct device *dev)
 	memcpy(bpq->acpt_addr, bcast_addr, sizeof(bpq_eth_addr));
 
 	dev = &bpq->axdev;
-	buf = (unsigned char *)kmalloc(14, GFP_KERNEL);
+	buf = kmalloc(14, GFP_KERNEL);
 
 	for (k = 0; k < MAXBPQDEV; k++) {
 		struct device *odev;
@@ -562,12 +554,13 @@ static int bpq_new_device(struct device *dev)
 
 	/* preset with reasonable values */
 
-#if CONFIG_INET
 	dev->flags      = 0;
 	dev->family     = AF_INET;
-	dev->pa_addr    = 0;
-	dev->pa_brdaddr = 0;
-	dev->pa_mask    = 0;
+
+#ifdef CONFIG_INET
+	dev->pa_addr    = in_aton("192.168.0.1");
+	dev->pa_brdaddr = in_aton("192.168.0.255");
+	dev->pa_mask    = in_aton("255.255.255.0");
 	dev->pa_alen    = 4;
 #endif
 
@@ -663,6 +656,9 @@ __initfunc(int bpq_init(void))
 
 #ifdef MODULE
 EXPORT_NO_SYMBOLS;
+
+MODULE_AUTHOR("Joerg Reuter DL1BKE <jreuter@lykos.oche.de>");
+MODULE_DESCRIPTION("Transmit and receive AX.25 packets over Ethernet");
 
 int init_module(void)
 {

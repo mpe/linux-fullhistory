@@ -16,7 +16,7 @@
 #define AX25_T2		5
 #define	AX25_BACKOFF	6
 #define	AX25_EXTSEQ	7
-#define	AX25_HDRINCL	8
+#define	AX25_PIDINCL	8
 #define AX25_IDLE	9
 #define AX25_PACLEN	10
 #define AX25_IAMDIGI	12

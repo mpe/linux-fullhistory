@@ -1,9 +1,6 @@
 /*
  *	AX.25 release 036
  *
- *	This is ALPHA test software. This code may break your machine, randomly fail to work with new 
- *	releases, misbehave and/or generally screw up. It might even work. 
- *
  *	This code REQUIRES 2.1.15 or higher/ NET3.038
  *
  *	This module:
@@ -73,7 +70,6 @@
 static int ax25_rx_fragment(ax25_cb *ax25, struct sk_buff *skb)
 {
 	struct sk_buff *skbn, *skbo;
-	int hdrlen, nhdrlen;
 
 	if (ax25->fragno != 0) {
 		if (!(*skb->data & AX25_SEG_FIRST)) {
@@ -92,29 +88,16 @@ static int ax25_rx_fragment(ax25_cb *ax25, struct sk_buff *skb)
 						return 1;
 					}
 
-					skbn->dev = ax25->ax25_dev->dev;
-
 					skb_reserve(skbn, AX25_MAX_HEADER_LEN);
 
-					/* Get first fragment from queue */
-					skbo = skb_dequeue(&ax25->frag_queue);
-					hdrlen  = skbo->data - skbo->h.raw;
-					nhdrlen = hdrlen - 2;
-
-					skb_push(skbo, hdrlen);
-					skb_push(skbn, nhdrlen);
+					skbn->dev   = ax25->ax25_dev->dev;
 					skbn->h.raw = skbn->data;
 
-					/* Copy AX.25 headers */
-					memcpy(skbn->data, skbo->data, nhdrlen);
-					skb_pull(skbn, nhdrlen);
-					skb_pull(skbo, hdrlen);
-
 					/* Copy data from the fragments */
-					do {
+					while ((skbo = skb_dequeue(&ax25->frag_queue)) != NULL) {
 						memcpy(skb_put(skbn, skbo->len), skbo->data, skbo->len);
 						kfree_skb(skbo, FREE_READ);
-					} while ((skbo = skb_dequeue(&ax25->frag_queue)) != NULL);
+					}
 
 					ax25->fraglen = 0;
 
@@ -188,11 +171,13 @@ int ax25_rx_iframe(ax25_cb *ax25, struct sk_buff *skb)
 		return (*func)(skb, ax25);
 	}
 
-	if (ax25->sk != NULL && ax25->ax25_dev->values[AX25_VALUES_CONMODE] == 2 && ax25->sk->protocol == pid) {
-		if (sock_queue_rcv_skb(ax25->sk, skb) == 0)
-			queued = 1;
-		else
-			ax25->condition |= AX25_COND_OWN_RX_BUSY;
+	if (ax25->sk != NULL && ax25->ax25_dev->values[AX25_VALUES_CONMODE] == 2) {
+		if ((!ax25->pidincl && ax25->sk->protocol == pid) || ax25->pidincl) {
+			if (sock_queue_rcv_skb(ax25->sk, skb) == 0)
+				queued = 1;
+			else
+				ax25->condition |= AX25_COND_OWN_RX_BUSY;
+		}
 	}
 
 	return queued;
@@ -256,7 +241,7 @@ static int ax25_rcv(struct sk_buff *skb, struct device *dev, ax25_address *dev_a
 		return 0;
 	}
 
-	if (call_in_firewall(PF_AX25, skb->dev, skb->h.raw, NULL,&skb) != FW_ACCEPT) {
+	if (call_in_firewall(PF_AX25, skb->dev, skb->h.raw, NULL, &skb) != FW_ACCEPT) {
 		kfree_skb(skb, FREE_READ);
 		return 0;
 	}
@@ -400,7 +385,7 @@ static int ax25_rcv(struct sk_buff *skb, struct device *dev, ax25_address *dev_a
 		sk = ax25_find_listener(next_digi, 1, dev, SOCK_SEQPACKET);
 
 	if (sk != NULL) {
-		if (sk->ack_backlog == sk->max_ack_backlog || (make = ax25_make_new(sk, dev)) == NULL) {
+		if (sk->ack_backlog == sk->max_ack_backlog || (make = ax25_make_new(sk, ax25_dev)) == NULL) {
 			if (mine) ax25_return_dm(dev, &src, &dest, &dp);
 			kfree_skb(skb, FREE_READ);
 			return 0;
@@ -445,7 +430,7 @@ static int ax25_rcv(struct sk_buff *skb, struct device *dev, ax25_address *dev_a
 
 	if (dp.ndigi == 0) {
 		if (ax25->digipeat != NULL) {
-			kfree_s(ax25->digipeat, sizeof(ax25_digi));
+			kfree(ax25->digipeat);
 			ax25->digipeat = NULL;
 		}
 	} else {

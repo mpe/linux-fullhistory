@@ -1,7 +1,7 @@
 /*****************************************************************************/
 
 /*
- *	sm_hapn4800.h  -- soundcard radio modem driver, 4800 baud HAPN modem
+ *	sm_hapn4800.c  -- soundcard radio modem driver, 4800 baud HAPN modem
  *
  *	Copyright (C) 1996  Thomas Sailer (sailer@ife.ee.ethz.ch)
  *

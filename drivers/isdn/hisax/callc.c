@@ -1,4 +1,4 @@
-/* $Id: callc.c,v 1.20 1997/02/17 00:32:47 keil Exp $
+/* $Id: callc.c,v 1.29 1997/04/23 20:09:49 fritz Exp $
 
  * Author       Karsten Keil (keil@temic-ech.spacenet.de)
  *              based on the teles driver from Jan den Ouden
@@ -7,6 +7,34 @@
  *              Fritz Elfert
  *
  * $Log: callc.c,v $
+ * Revision 1.29  1997/04/23 20:09:49  fritz
+ * Removed tmp, used by removed debugging code.
+ *
+ * Revision 1.28  1997/04/21 13:42:25  keil
+ * Remove unneeded debug
+ *
+ * Revision 1.27  1997/04/16 14:21:01  keil
+ * remove unused variable
+ *
+ * Revision 1.26  1997/04/13 19:55:21  keil
+ * Changes in debugging code
+ *
+ * Revision 1.25  1997/04/06 22:54:08  keil
+ * Using SKB's
+ *
+ * Revision 1.24  1997/03/05 11:28:03  keil
+ * fixed undefined l2tei procedure
+ * a layer1 release delete now the drel timer
+ *
+ * Revision 1.23  1997/03/04 23:07:42  keil
+ * bugfix dial parameter
+ *
+ * Revision 1.22  1997/02/27 13:51:55  keil
+ * Reset B-channel (dlc) statemachine in every release
+ *
+ * Revision 1.21  1997/02/19 09:24:27  keil
+ * Bugfix: Hangup to LL if a ttyI rings
+ *
  * Revision 1.20  1997/02/17 00:32:47  keil
  * Bugfix: No Busy reported to LL
  *
@@ -81,7 +109,7 @@ extern long mod_use_count_;
 #endif
 #endif				/* MODULE */
 
-const char *l4_revision = "$Revision: 1.20 $";
+const char *l4_revision = "$Revision: 1.29 $";
 
 extern struct IsdnCard cards[];
 extern int nrcards;
@@ -304,18 +332,18 @@ static inline void
 l4_deliver_cause(struct Channel *chanp)
 {
 	isdn_ctrl ic;
-	
-	if (chanp->para.cause<0)
+
+	if (chanp->para.cause < 0)
 		return;
 	ic.driver = chanp->sp->myid;
 	ic.command = ISDN_STAT_CAUSE;
 	ic.arg = chanp->chan;
 	if (chanp->sp->protocol == ISDN_PTYPE_EURO)
-		sprintf(ic.parm.num, "E%02X%02X", chanp->para.loc,
-			chanp->para.cause);
+		sprintf(ic.parm.num, "E%02X%02X", chanp->para.loc & 0x7f,
+			chanp->para.cause & 0x7f);
 	else
-		sprintf(ic.parm.num, "%02X%02X", chanp->para.loc,
-			chanp->para.cause);
+		sprintf(ic.parm.num, "%02X%02X", chanp->para.loc & 0x7f,
+			chanp->para.cause & 0x7f);
 	chanp->sp->iif.statcallb(&ic);
 }
 
@@ -325,15 +353,11 @@ l4_deliver_cause(struct Channel *chanp)
 static void
 l4_prep_dialout(struct FsmInst *fi, int event, void *arg)
 {
-	isdn_ctrl *ic = arg;
 	struct Channel *chanp = fi->userdata;
 
 	FsmChangeState(fi, ST_OUT_WAIT_D);
 	FsmDelTimer(&chanp->drel_timer, 60);
 	FsmDelTimer(&chanp->dial_timer, 73);
-	chanp->para.setup = ic->parm.setup;
-	if (!strcmp(chanp->para.setup.eazmsn, "0"))
-		chanp->para.setup.eazmsn[0] = '\0';
 
 	chanp->l2_active_protocol = chanp->l2_protocol;
 	chanp->incoming = 0;
@@ -614,8 +638,9 @@ l4_go_null(struct FsmInst *fi, int event, void *arg)
 {
 	struct Channel *chanp = fi->userdata;
 
-	chanp->Flags = 0;
 	FsmChangeState(fi, ST_NULL);
+	chanp->Flags = 0;
+	FsmDelTimer(&chanp->drel_timer, 63);
 }
 
 static void
@@ -718,11 +743,9 @@ l4_received_d_rel(struct FsmInst *fi, int event, void *arg)
 		release_ds(chanp);
 		RESBIT(chanp->Flags, FLG_START_B);
 	}
-	if (chanp->Flags & (FLG_LL_DCONN | FLG_CALL_SEND)) {
+	if (chanp->Flags & (FLG_LL_DCONN | FLG_CALL_SEND | FLG_CALL_ALERT)) {
 		if (chanp->debug & 1)
 			link_debug(chanp, "STAT_DHUP", 0);
-		RESBIT(chanp->Flags, FLG_LL_DCONN);
-		RESBIT(chanp->Flags, FLG_CALL_SEND);
 		l4_deliver_cause(chanp);
 		ic.driver = chanp->sp->myid;
 		ic.command = ISDN_STAT_DHUP;
@@ -734,6 +757,8 @@ l4_received_d_rel(struct FsmInst *fi, int event, void *arg)
 	RESBIT(chanp->Flags, FLG_DISC_SEND);
 	RESBIT(chanp->Flags, FLG_CALL_REC);
 	RESBIT(chanp->Flags, FLG_CALL_ALERT);
+	RESBIT(chanp->Flags, FLG_LL_DCONN);
+	RESBIT(chanp->Flags, FLG_CALL_SEND);
 }
 
 static void
@@ -762,11 +787,9 @@ l4_received_d_relcnf(struct FsmInst *fi, int event, void *arg)
 		release_ds(chanp);
 		RESBIT(chanp->Flags, FLG_START_B);
 	}
-	if (chanp->Flags & (FLG_LL_DCONN | FLG_CALL_SEND)) {
+	if (chanp->Flags & (FLG_LL_DCONN | FLG_CALL_SEND | FLG_CALL_ALERT)) {
 		if (chanp->debug & 1)
 			link_debug(chanp, "STAT_DHUP", 0);
-		RESBIT(chanp->Flags, FLG_LL_DCONN);
-		RESBIT(chanp->Flags, FLG_CALL_SEND);
 		l4_deliver_cause(chanp);
 		ic.driver = chanp->sp->myid;
 		ic.command = ISDN_STAT_DHUP;
@@ -778,6 +801,8 @@ l4_received_d_relcnf(struct FsmInst *fi, int event, void *arg)
 	RESBIT(chanp->Flags, FLG_DISC_SEND);
 	RESBIT(chanp->Flags, FLG_CALL_REC);
 	RESBIT(chanp->Flags, FLG_CALL_ALERT);
+	RESBIT(chanp->Flags, FLG_LL_DCONN);
+	RESBIT(chanp->Flags, FLG_CALL_SEND);
 }
 
 static void
@@ -802,18 +827,17 @@ l4_received_d_disc(struct FsmInst *fi, int event, void *arg)
 		release_ds(chanp);
 		RESBIT(chanp->Flags, FLG_START_B);
 	}
-	if (chanp->Flags & (FLG_LL_DCONN | FLG_CALL_SEND)) {
+	if (chanp->Flags & (FLG_LL_DCONN | FLG_CALL_SEND | FLG_CALL_ALERT)) {
 		if (chanp->debug & 1)
 			link_debug(chanp, "STAT_DHUP", 0);
-		RESBIT(chanp->Flags, FLG_LL_DCONN);
-		RESBIT(chanp->Flags, FLG_CALL_SEND);
-		RESBIT(chanp->Flags, FLG_CALL_ALERT);
 		l4_deliver_cause(chanp);
 		ic.driver = chanp->sp->myid;
 		ic.command = ISDN_STAT_DHUP;
 		ic.arg = chanp->chan;
 		chanp->sp->iif.statcallb(&ic);
 	}
+	RESBIT(chanp->Flags, FLG_LL_DCONN);
+	RESBIT(chanp->Flags, FLG_CALL_SEND);
 	RESBIT(chanp->Flags, FLG_CALL_ALERT);
 	chanp->is.l4.l4l3(&chanp->is, CC_RELEASE_REQ, NULL);
 }
@@ -964,11 +988,11 @@ l4_active_dlrl(struct FsmInst *fi, int event, void *arg)
 			link_debug(chanp, "STAT_DHUP", 0);
 		RESBIT(chanp->Flags, FLG_LL_DCONN);
 		if (chanp->sp->protocol == ISDN_PTYPE_EURO) {
-			chanp->para.cause  = 0x2f;
-			chanp->para.loc    = 0;
+			chanp->para.cause = 0x2f;
+			chanp->para.loc = 0;
 		} else {
-			chanp->para.cause  = 0x70;
-			chanp->para.loc    = 0;
+			chanp->para.cause = 0x70;
+			chanp->para.loc = 0;
 		}
 		l4_deliver_cause(chanp);
 		ic.driver = chanp->sp->myid;
@@ -986,6 +1010,7 @@ static struct FsmNode fnlist[] =
 	{ST_NULL,		EV_DIAL,		l4_prep_dialout},
 	{ST_NULL,		EV_SETUP_IND,		l4_start_dchan},
 	{ST_NULL,		EV_SHUTDOWN_D,		l4_shutdown_d},
+	{ST_NULL,		EV_DLRL,		l4_go_null},
 	{ST_OUT_WAIT_D,		EV_DLEST,		l4_do_dialout},
 	{ST_OUT_WAIT_D,		EV_DLRL,		l4_no_dchan},
 	{ST_OUT_WAIT_D,		EV_HANGUP,		l4_no_dchan},
@@ -1053,10 +1078,6 @@ static struct FsmNode fnlist[] =
 	{ST_WAIT_DSHUTDOWN,	EV_SETUP_IND,		l4_start_dchan},
 };
 /* *INDENT-ON* */
-
-
-
-
 
 
 
@@ -1194,6 +1215,9 @@ static struct FsmNode LcFnList[] =
 
 
 
+
+
+
 #define LC_FN_COUNT (sizeof(LcFnList)/sizeof(struct FsmNode))
 
 void
@@ -1240,6 +1264,9 @@ release_ds(struct Channel *chanp)
 			releasestack_transl2(st);
 			break;
 	}
+	/* Reset B-Channel Statemachine */
+	FsmDelTimer(&chanp->lc_b.act_timer, 79);
+	FsmChangeState(&chanp->lc_b.lcfi, ST_LC_NULL);
 }
 
 static void
@@ -1306,8 +1333,18 @@ dcc_l2man(struct PStack *st, int pr, void *arg)
 }
 
 static void
-ll_handler(struct PStack *st, int pr,
-	   struct BufHeader *ibh)
+l2tei_dummy(struct PStack *st, int pr, void *arg)
+{
+	struct Channel *chanp = (struct Channel *) st->l4.userdata;
+	char tmp[64], tm[32];
+
+	jiftime(tm, jiffies);
+	sprintf(tmp, "%s Channel %d Warning! Dummy l2tei called pr=%d\n", tm, chanp->chan, pr);
+	HiSax_putstatus(chanp->sp, tmp);
+}
+
+static void
+ll_handler(struct PStack *st, int pr, void *arg)
 {
 	struct Channel *chanp = (struct Channel *) st->l4.userdata;
 	char tmp[64], tm[32];
@@ -1347,9 +1384,12 @@ ll_handler(struct PStack *st, int pr,
 			FsmEvent(&chanp->fi, EV_RELEASE_ERR, NULL);
 			break;
 		default:
-			jiftime(tm, jiffies);
-			sprintf(tmp, "%s Channel %d L3->L4 unknown primitiv %d\n", tm, chanp->chan, pr);
-			HiSax_putstatus(chanp->sp, tmp);
+			if (chanp->debug & 2048) {
+				jiftime(tm, jiffies);
+				sprintf(tmp, "%s Channel %d L3->L4 unknown primitiv %d\n",
+					tm, chanp->chan, pr);
+				HiSax_putstatus(chanp->sp, tmp);
+			}
 	}
 }
 
@@ -1525,7 +1565,6 @@ release_is(struct Channel *chanp)
 	releasestack_isdnl2(st);
 	releasestack_isdnl3(st);
 	HiSax_rmlist(st->l1.hardware, st);
-	BufQueueRelease(&st->l2.i_queue);
 }
 
 void
@@ -1546,23 +1585,19 @@ CallcFreeChan(struct IsdnCardState *csta)
 }
 
 static void
-lldata_handler(struct PStack *st, int pr,
-	       void *arg)
+lldata_handler(struct PStack *st, int pr, void *arg)
 {
 	struct Channel *chanp = (struct Channel *) st->l4.userdata;
-	byte *ptr;
-	int size;
-	struct BufHeader *ibh = arg;
+	struct sk_buff *skb = arg;
 
 	switch (pr) {
 		case (DL_DATA):
-			if (chanp->data_open) {
-				ptr = DATAPTR(ibh);
-				ptr += chanp->ds.l2.ihsize;
-				size = ibh->datasize - chanp->ds.l2.ihsize;
-				chanp->sp->iif.rcvcallb(chanp->sp->myid, chanp->chan, ptr, size);
+			if (chanp->data_open)
+				chanp->sp->iif.rcvcallb_skb(chanp->sp->myid, chanp->chan, skb);
+			else {
+				SET_SKB_FREE(skb);
+				dev_kfree_skb(skb, FREE_READ);
 			}
-			BufPoolRelease(ibh);
 			break;
 		default:
 			printk(KERN_WARNING "lldata_handler unknown primitive %d\n",
@@ -1572,19 +1607,19 @@ lldata_handler(struct PStack *st, int pr,
 }
 
 static void
-lltrans_handler(struct PStack *st, int pr,
-		struct BufHeader *ibh)
+lltrans_handler(struct PStack *st, int pr, void *arg)
 {
 	struct Channel *chanp = (struct Channel *) st->l4.userdata;
-	byte *ptr;
+	struct sk_buff *skb = arg;
 
 	switch (pr) {
 		case (PH_DATA):
-			if (chanp->data_open) {
-				ptr = DATAPTR(ibh);
-				chanp->sp->iif.rcvcallb(chanp->sp->myid, chanp->chan, ptr, ibh->datasize);
+			if (chanp->data_open)
+				chanp->sp->iif.rcvcallb_skb(chanp->sp->myid, chanp->chan, skb);
+			else {
+				SET_SKB_FREE(skb);
+				dev_kfree_skb(skb, FREE_READ);
 			}
-			BufPoolRelease(ibh);
 			break;
 		default:
 			printk(KERN_WARNING "lltrans_handler unknown primitive %d\n",
@@ -1616,7 +1651,6 @@ init_ds(struct Channel *chanp, int incoming)
 	st->l1.hardware = sp;
 
 	hsp->mode = 2;
-	hsp->transbufsize = 4000;
 
 	if (setstack_hscx(st, hsp))
 		return (-1);
@@ -1637,6 +1671,7 @@ init_ds(struct Channel *chanp, int incoming)
 			st->l2.l2l3 = lldata_handler;
 			st->l1.l1man = dcc_l1man;
 			st->l2.l2man = dcc_l2man;
+			st->l2.l2tei = l2tei_dummy;
 			st->l4.userdata = chanp;
 			st->l4.l1writewakeup = NULL;
 			st->l4.l2writewakeup = ll_writewakeup;
@@ -1726,16 +1761,19 @@ HiSax_command(isdn_ctrl * ic)
 			if (chanp->debug & 1) {
 				sprintf(tmp, "DIAL %s -> %s (%d,%d)",
 					ic->parm.setup.eazmsn, ic->parm.setup.phone,
-					ic->parm.setup.si1, ic->parm.setup.si2);
+				 ic->parm.setup.si1, ic->parm.setup.si2);
 				link_debug(chanp, tmp, 1);
 			}
+			chanp->para.setup = ic->parm.setup;
+			if (!strcmp(chanp->para.setup.eazmsn, "0"))
+				chanp->para.setup.eazmsn[0] = '\0';
 			/* this solution is dirty and may be change, if
 			 * we make a callreference based callmanager */
 			if (chanp->fi.state == ST_NULL) {
-				FsmEvent(&chanp->fi, EV_DIAL, ic);
+				FsmEvent(&chanp->fi, EV_DIAL, NULL);
 			} else {
 				FsmDelTimer(&chanp->dial_timer, 70);
-				FsmAddTimer(&chanp->dial_timer, 50, EV_DIAL, ic, 71);
+				FsmAddTimer(&chanp->dial_timer, 50, EV_DIAL, NULL, 71);
 			}
 			break;
 		case (ISDN_CMD_ACCEPTB):
@@ -1849,7 +1887,7 @@ HiSax_command(isdn_ctrl * ic)
 				case (11):
 					csta->debug = *(unsigned int *) ic->parm.num;
 					sprintf(tmp, "l1 debugging flags card %d set to %x\n",
-						csta->cardnr + 1, csta->debug);
+					  csta->cardnr + 1, csta->debug);
 					HiSax_putstatus(cards[0].sp, tmp);
 					printk(KERN_DEBUG "HiSax: %s", tmp);
 					break;
@@ -1875,14 +1913,14 @@ HiSax_command(isdn_ctrl * ic)
 }
 
 int
-HiSax_writebuf(int id, int chan, const u_char * buf, int count, int user)
+HiSax_writebuf_skb(int id, int chan, struct sk_buff *skb)
 {
 	struct IsdnCardState *csta = hisax_findcard(id);
 	struct Channel *chanp;
 	struct PStack *st;
-	struct BufHeader *ibh;
-	int err, i;
-	byte *ptr;
+	int len = skb->len;
+	unsigned long flags;
+	struct sk_buff *nskb;
 	char tmp[64];
 
 	if (!csta) {
@@ -1896,51 +1934,38 @@ HiSax_writebuf(int id, int chan, const u_char * buf, int count, int user)
 		link_debug(chanp, "writebuf: channel not open", 1);
 		return -EIO;
 	}
-	err = BufPoolGet(&ibh, st->l1.sbufpool, GFP_ATOMIC, st, 21);
-	if (err) {
-		/* Must return 0 here, since this is not an error
-		 * but a temporary lack of resources.
-		 */
-		if (chanp->debug & 1) {
-			sprintf(tmp, "writebuf: no buffers for %d bytes", count);
-			link_debug(chanp, tmp, 1);
-		}
-		return 0;
-	}
-#if 0
-	if (chanp->debug & 1) {
-		sprintf(tmp, "writebuf: %d bytes", count);
-		link_debug(chanp, tmp, 1);
-	}
-#endif
-	ptr = DATAPTR(ibh);
-	if (chanp->lc_b.l2_establish)
-		i = st->l2.ihsize;
-	else
-		i = 0;
-
-	if ((count + i) > BUFFER_SIZE(HSCX_SBUF_ORDER, HSCX_SBUF_BPPS)) {
-		sprintf(tmp, "writebuf: packet too large (%d bytes)", count + i);
+	if (len > MAX_DATA_SIZE) {
+		sprintf(tmp, "writebuf: packet too large (%d bytes)", len);
 		printk(KERN_WARNING "HiSax_%s !\n", tmp);
 		link_debug(chanp, tmp, 1);
-		return (-EINVAL);
+		return -EINVAL;
 	}
-	ptr += i;
-
-	if (user)
-		copy_from_user(ptr, buf, count);
-	else
-		memcpy(ptr, buf, count);
-	ibh->datasize = count + i;
-
-	if (chanp->data_open) {
-		if (chanp->lc_b.l2_establish)
-			chanp->ds.l3.l3l2(&chanp->ds, DL_DATA, ibh);
-		else
-			chanp->ds.l2.l2l1(&chanp->ds, PH_DATA, ibh);
-		return (count);
-	} else {
-		BufPoolRelease(ibh);
-		return (0);
+	if (len) {
+		if ((len + csta->hs[chanp->hscx].tx_cnt) > MAX_DATA_MEM) {
+			/* Must return 0 here, since this is not an error
+			 * but a temporary lack of resources.
+			 */
+			if (chanp->debug & 2048) {
+				sprintf(tmp, "writebuf: no buffers for %d bytes", len);
+				link_debug(chanp, tmp, 1);
+			}
+			return 0;
+		}
+		save_flags(flags);
+		cli();
+		nskb = skb_clone(skb, GFP_ATOMIC);
+		if (nskb) {
+			if (chanp->lc_b.l2_establish) {
+				csta->hs[chanp->hscx].tx_cnt += len + st->l2.ihsize;
+				chanp->ds.l3.l3l2(&chanp->ds, DL_DATA, nskb);
+			} else {
+				csta->hs[chanp->hscx].tx_cnt += len;
+				chanp->ds.l2.l2l1(&chanp->ds, PH_DATA, nskb);
+			}
+			dev_kfree_skb(skb, FREE_WRITE);
+		} else
+			len = 0;
+		restore_flags(flags);
 	}
+	return (len);
 }

@@ -1,4 +1,4 @@
-/* $Id: hypersparc.S,v 1.7 1997/05/03 05:09:12 davem Exp $
+/* $Id: hypersparc.S,v 1.10 1997/05/27 19:29:58 jj Exp $
  * hypersparc.S: High speed Hypersparc mmu/cache operations.
  *
  * Copyright (C) 1997 David S. Miller (davem@caip.rutgers.edu)
@@ -9,6 +9,7 @@
 #include <asm/asi.h>
 #include <asm/page.h>
 #include <asm/pgtsrmmu.h>
+#include <linux/init.h>
 
 #define WINDOW_FLUSH(tmp1, tmp2)					\
 	mov	0, tmp1;						\
@@ -335,17 +336,19 @@ hypersparc_flush_tlb_page_out:
 	retl
 	 sta	%g5, [%g1] ASI_M_MMUREGS
 
+	__INIT
+	
 	/* High speed page clear/copy. */
-	.globl	hypersparc_bzero_1page, hypersparc_copy_1page
 hypersparc_bzero_1page:
+/* NOTE: This routine has to be shorter than 40insns --jj */
 	clr	%g1
 	mov	32, %g2
-	add	%g2, %g2, %g3
-	add	%g2, %g3, %g4
-	add	%g2, %g4, %g5
-	add	%g2, %g5, %g7
-	add	%g2, %g7, %o2
-	add	%g2, %o2, %o3
+	mov	64, %g3
+	mov	96, %g4
+	mov	128, %g5
+	mov	160, %g7
+	mov	192, %o2
+	mov	224, %o3
 	mov	16, %o1
 1:
 	stda	%g0, [%o0 + %g0] ASI_M_BFILL
@@ -364,6 +367,7 @@ hypersparc_bzero_1page:
 	 nop
 
 hypersparc_copy_1page:
+/* NOTE: This routine has to be shorter than 70insns --jj */
 	sub	%o1, %o0, %o2		! difference
 	mov	16, %g1
 1:
@@ -386,5 +390,37 @@ hypersparc_copy_1page:
 	bne	1b
 	 add	%o0, 32, %o0
 
+	retl
+	 nop
+
+	.globl	hypersparc_setup_blockops
+hypersparc_setup_blockops:
+	sethi	%hi(bzero_1page), %o0
+	or	%o0, %lo(bzero_1page), %o0
+	sethi	%hi(hypersparc_bzero_1page), %o1
+	or	%o1, %lo(hypersparc_bzero_1page), %o1
+	sethi	%hi(hypersparc_copy_1page), %o2
+	or	%o2, %lo(hypersparc_copy_1page), %o2
+	ld	[%o1], %o4
+1:
+	add	%o1, 4, %o1
+	st	%o4, [%o0]
+	add	%o0, 4, %o0
+	cmp	%o1, %o2
+	bne	1b
+	 ld	[%o1], %o4
+	sethi	%hi(__copy_1page), %o0
+	or	%o0, %lo(__copy_1page), %o0
+	sethi	%hi(hypersparc_setup_blockops), %o2
+	or	%o2, %lo(hypersparc_setup_blockops), %o2
+	ld	[%o1], %o4
+1:
+	add	%o1, 4, %o1
+	st	%o4, [%o0]
+	add	%o0, 4, %o0
+	cmp	%o1, %o2
+	bne	1b
+	 ld	[%o1], %o4
+	sta	%g0, [%g0] ASI_M_FLUSH_IWHOLE
 	retl
 	 nop

@@ -1,6 +1,6 @@
 SUB_DIRS     :=
 MOD_SUB_DIRS :=
-ALL_SUB_DIRS := icn pcbit hisax
+ALL_SUB_DIRS := icn pcbit hisax avmb1
 
 L_OBJS :=
 LX_OBJS :=
@@ -73,6 +73,26 @@ ifeq ($(CONFIG_ISDN_DRV_SC),y)
 else
   ifeq ($(CONFIG_ISDN_DRV_SC),m)
     MOD_SUB_DIRS += sc
+  endif
+endif
+
+ifeq ($(CONFIG_ISDN_DRV_AVMB1),y)
+  L_OBJS += avmb1/avmb1.o
+  SUB_DIRS += avmb1
+  MOD_SUB_DIRS += avmb1
+else
+  ifeq ($(CONFIG_ISDN_DRV_AVMB1),m)
+    MOD_SUB_DIRS += avmb1
+  endif
+endif
+
+ifeq ($(CONFIG_ISDN_DRV_LOOP),y)
+  L_OBJS += isdnloop/isdnloop.o
+  SUB_DIRS += isdnloop
+  MOD_SUB_DIRS += isdnloop
+else
+  ifeq ($(CONFIG_ISDN_DRV_LOOP),m)
+    MOD_SUB_DIRS += isdnloop
   endif
 endif
 

@@ -10,12 +10,13 @@ README.audio
 	- info for running audio over ISDN.
 README.icn
 	- info on the ICN-ISDN-card and its driver.
+README.HiSax
+	- info on the HiSax driver which replaces the old teles.
 README.pcbit
 	- info on the PCBIT-D ISDN adapter and driver.
 README.syncppp
 	- info on running Sync PPP over ISDN.
-README.teles
-	- info on driver for Teles compatible ISDN cards.
 syncPPP.FAQ
 	- frequently asked questions about running PPP over ISDN.
-
+README.avmb1
+	- info on driver for AVM-B1 ISDN card

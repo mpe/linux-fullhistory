@@ -2450,7 +2450,7 @@ static inline int stli_hostcmd(stlibrd_t *brdp, stliport_t *portp)
 					if (! ((portp->flags & ASYNC_CALLOUT_ACTIVE) &&
 							(portp->flags & ASYNC_CALLOUT_NOHUP))) {
 						if (tty != (struct tty_struct *) NULL)
-							queue_task_irq_off(&portp->tqhangup, &tq_scheduler);
+							queue_task(&portp->tqhangup, &tq_scheduler);
 					}
 				}
 			}

@@ -1,4 +1,4 @@
-/* $Id: isdn_ppp.c,v 1.25 1997/02/12 20:37:35 hipp Exp $
+/* $Id: isdn_ppp.c,v 1.27 1997/03/30 16:51:17 calle Exp $
  *
  * Linux ISDN subsystem, functions for synchronous PPP (linklevel).
  *
@@ -19,6 +19,15 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  *
  * $Log: isdn_ppp.c,v $
+ * Revision 1.27  1997/03/30 16:51:17  calle
+ * changed calls to copy_from_user/copy_to_user and removed verify_area
+ * were possible.
+ *
+ * Revision 1.26  1997/02/23 16:53:44  hipp
+ * minor cleanup
+ * some initial changes for future PPP compresion
+ * added AC,PC compression for outgoing frames
+ *
  * Revision 1.25  1997/02/12 20:37:35  hipp
  * New ioctl() PPPIOCGCALLINFO, minor cleanup
  *
@@ -138,6 +147,7 @@ static int isdn_ppp_closewait(int slot);
 static void isdn_ppp_push_higher(isdn_net_dev * net_dev, isdn_net_local * lp,
 				 struct sk_buff *skb, int proto);
 static int isdn_ppp_if_get_unit(char *namebuf);
+static int isdn_ppp_set_compressor(struct ippp_struct *is,int num);
 
 #ifdef CONFIG_ISDN_MPP
 static int isdn_ppp_bundle(struct ippp_struct *, int unit);
@@ -150,9 +160,10 @@ static int isdn_ppp_fill_mpqueue(isdn_net_dev *, struct sk_buff **skb,
 static void isdn_ppp_free_mpqueue(isdn_net_dev *);
 #endif
 
-char *isdn_ppp_revision = "$Revision: 1.25 $";
+char *isdn_ppp_revision = "$Revision: 1.27 $";
 
 static struct ippp_struct *ippp_table[ISDN_MAX_CHANNELS];
+static struct isdn_ppp_compressor *ipc_head = NULL;
 
 extern int isdn_net_force_dial_lp(isdn_net_local *);
 
@@ -371,6 +382,7 @@ isdn_ppp_open(int min, struct file *file)
 	if (is->debug & 0x1)
 		printk(KERN_DEBUG "ippp, open, slot: %d, minor: %d, state: %04x\n", slot, min, is->state);
 
+	is->compressor = NULL;
 	is->lp = NULL;
 	is->mp_seqno = 0;       /* MP sequence number */
 	is->pppcfg = 0;         /* ppp configuration */
@@ -451,9 +463,8 @@ get_arg(void *b, void *val, int len)
 	int r;
 	if (len <= 0)
 		len = sizeof(unsigned long);
-	if ((r = verify_area(VERIFY_READ, (void *) b, len)))
+	if ((r = copy_from_user((void *) val, b, len)))
 		return r;
-	copy_from_user((void *) val, b, len);
 	return 0;
 }
 
@@ -465,13 +476,11 @@ set_arg(void *b, unsigned long val, void *str)
 {
 	int r;
 	if (!str) {
-		if ((r = verify_area(VERIFY_WRITE, b, 4)))
+		if ((r = copy_to_user(b, (void *) &val, 4)))
 			return r;
-		copy_to_user(b, (void *) &val, 4);
 	} else {
-		if ((r = verify_area(VERIFY_WRITE, b, val)))
+		if ((r = copy_to_user(b, str, val)))
 			return r;
-		copy_to_user(b, str, val);
 	}
 	return 0;
 }
@@ -483,7 +492,7 @@ int
 isdn_ppp_ioctl(int min, struct file *file, unsigned int cmd, unsigned long arg)
 {
 	unsigned long val;
-	int r;
+	int num,r;
 	struct ippp_struct *is;
 	isdn_net_local *lp;
 
@@ -592,16 +601,22 @@ isdn_ppp_ioctl(int min, struct file *file, unsigned int cmd, unsigned long arg)
 				return r;
 			is->debug = val;
 			break;
-		case PPPIOCSCOMPRESS:
-#if 0
+		case PPPIOCGCOMPRESSORS:
 			{
-				struct ppp_option_data pod;
-				r = get_arg((void *) arg, &pod, sizeof(struct ppp_option_data));
-				if (r)
+				unsigned long protos = 0;
+				struct isdn_ppp_compressor *ipc = ipc_head;
+				while(ipc) {
+					protos |= (0x1<<ipc->num);
+					ipc = ipc->next;
+				}
+				if ((r = set_arg((void *) arg, protos, 0)))
 					return r;
-				ippp_set_compression(is, &pod);
 			}
-#endif
+			break;
+		case PPPIOCSCOMPRESSOR:
+			if ((r = get_arg((void *) arg, &num, sizeof(int))))
+				return r;
+			return isdn_ppp_set_compressor(is, num);
 			break;
 		case PPPIOCGCALLINFO:
 			{
@@ -789,9 +804,6 @@ isdn_ppp_read(int min, struct file *file, char *buf, int count)
 	if (!(is->state & IPPP_OPEN))
 		return 0;
 
-	if ((r = verify_area(VERIFY_WRITE, (void *) buf, count)))
-		return r;
-
 	save_flags(flags);
 	cli();
 
@@ -802,7 +814,10 @@ isdn_ppp_read(int min, struct file *file, char *buf, int count)
 	}
 	if (b->len < count)
 		count = b->len;
-	copy_to_user(buf, b->buf, count);
+	if ((r = copy_to_user(buf, b->buf, count))) {
+		restore_flags(flags);
+		return r;
+	}
 	kfree(b->buf);
 	b->buf = NULL;
 	is->first = b;
@@ -839,7 +854,8 @@ isdn_ppp_write(int min, struct file *file, const char *buf, int count)
 		 * Don't reset huptimer for
 		 * LCP packets. (Echo requests).
 		 */
-		copy_from_user(protobuf, buf, 4);
+		if (copy_from_user(protobuf, buf, 4))
+			return -EFAULT;
 		proto = PPP_PROTOCOL(protobuf);
 		if (proto != PPP_LCP)
 			lp->huptimer = 0;
@@ -857,7 +873,8 @@ isdn_ppp_write(int min, struct file *file, const char *buf, int count)
 				return count;
 			}
 			SET_SKB_FREE(skb);
-			copy_from_user(skb_put(skb, count), buf, count);
+			if (copy_from_user(skb_put(skb, count), buf, count))
+				return -EFAULT;
 			if (is->debug & 0x40) {
 				printk(KERN_DEBUG "ppp xmit: len %d\n", (int) skb->len);
 				isdn_ppp_frame_log("xmit", skb->data, skb->len, 32);
@@ -1209,7 +1226,7 @@ isdn_ppp_xmit(struct sk_buff *skb, struct device *dev)
 	isdn_net_local *lp,
 	*mlp;
 	isdn_net_dev *nd;
-	int proto = PPP_IP;     /* 0x21 */
+	unsigned int proto = PPP_IP;     /* 0x21 */
 	struct ippp_struct *ipt,
 	*ipts;
 
@@ -1240,7 +1257,8 @@ isdn_ppp_xmit(struct sk_buff *skb, struct device *dev)
 			if (ipts->old_pa_addr != mdev->pa_addr) {
 				struct iphdr *ipfr;
 				ipfr = (struct iphdr *) skb->data;
-				printk(KERN_DEBUG "IF-address changed from %lx to %lx\n", ipts->old_pa_addr, mdev->pa_addr);
+				if(ipts->debug & 0x4)
+					printk(KERN_DEBUG "IF-address changed from %lx to %lx\n", ipts->old_pa_addr, mdev->pa_addr);
 				if (ipfr->version == 4) {
 					if (ipfr->saddr == ipts->old_pa_addr) {
 						printk(KERN_DEBUG "readdressing %lx to %lx\n", ipfr->saddr, mdev->pa_addr);
@@ -1248,7 +1266,7 @@ isdn_ppp_xmit(struct sk_buff *skb, struct device *dev)
 					}
 				}
 			}
-			/* dstaddr change not so improtant */
+			/* dstaddr change not so important */
 #endif
 			break;
 		case ETH_P_IPX:
@@ -1331,27 +1349,36 @@ isdn_ppp_xmit(struct sk_buff *skb, struct device *dev)
 		ipts->mp_seqno++;
 		nd->queue = nd->queue->next;
 		if (ipt->mpppcfg & SC_OUT_SHORT_SEQ) {
-			skb_push(skb, 3);
+			unsigned char *data = skb_push(skb, 3);
 			mp_seqno &= 0xfff;
-			skb->data[0] = MP_BEGIN_FRAG | MP_END_FRAG | (mp_seqno >> 8);	/* (B)egin & (E)ndbit .. */
-			skb->data[1] = mp_seqno & 0xff;
-			skb->data[2] = proto;	/* PID compression */
+			data[0] = MP_BEGIN_FRAG | MP_END_FRAG | (mp_seqno >> 8);	/* (B)egin & (E)ndbit .. */
+			data[1] = mp_seqno & 0xff;
+			data[2] = proto;	/* PID compression */
 		} else {
-			skb_push(skb, 5);
-			skb->data[0] = MP_BEGIN_FRAG | MP_END_FRAG;	/* (B)egin & (E)ndbit .. */
-			skb->data[1] = (mp_seqno >> 16) & 0xff;	/* sequence number: 24bit */
-			skb->data[2] = (mp_seqno >> 8) & 0xff;
-			skb->data[3] = (mp_seqno >> 0) & 0xff;
-			skb->data[4] = proto;	/* PID compression */
+			unsigned char *data = skb_push(skb, 5);
+			data[0] = MP_BEGIN_FRAG | MP_END_FRAG;	/* (B)egin & (E)ndbit .. */
+			data[1] = (mp_seqno >> 16) & 0xff;	/* sequence number: 24bit */
+			data[2] = (mp_seqno >> 8) & 0xff;
+			data[3] = (mp_seqno >> 0) & 0xff;
+			data[4] = proto;	/* PID compression */
 		}
 		proto = PPP_MP; /* MP Protocol, 0x003d */
 	}
 #endif
-	skb_push(skb, 4);
-	skb->data[0] = 0xff;    /* All Stations */
-	skb->data[1] = 0x03;    /* Unnumbered information */
-	skb->data[2] = proto >> 8;
-	skb->data[3] = proto & 0xff;
+	if( (ipt->pppcfg & SC_COMP_PROT) && (proto <= 0xff) ) {
+		unsigned char *data = skb_push(skb,1);
+		data[0] = proto & 0xff;
+	}
+	else {
+		unsigned char *data = skb_push(skb,2);
+		data[0] = (proto >> 8) & 0xff;
+		data[1] = proto & 0xff;
+	}
+	if(!(ipt->pppcfg & SC_COMP_AC)) {
+		unsigned char *data = skb_push(skb,2);
+		data[0] = 0xff;    /* All Stations */
+		data[1] = 0x03;    /* Unnumbered information */
+	}
 
 	/* tx-stats are now updated via BSENT-callback */
 
@@ -1755,9 +1782,7 @@ isdn_ppp_dev_ioctl_stats(int slot, struct ifreq *ifr, struct device *dev)
 		}
 #endif
 	}
-	copy_to_user(res, &t, sizeof(struct ppp_stats));
-	return 0;
-
+	return copy_to_user(res, &t, sizeof(struct ppp_stats));
 }
 
 int
@@ -1779,9 +1804,7 @@ isdn_ppp_dev_ioctl(struct device *dev, struct ifreq *ifr, int cmd)
 		case SIOCGPPPVER:
 			r = (char *) ifr->ifr_ifru.ifru_data;
 			len = strlen(PPP_VERSION) + 1;
-			error = verify_area(VERIFY_WRITE, r, len);
-			if (!error)
-				copy_to_user(r, PPP_VERSION, len);
+		        error = copy_to_user(r, PPP_VERSION, len);
 			break;
 		case SIOCGPPPSTATS:
 			error = isdn_ppp_dev_ioctl_stats(lp->ppp_slot, ifr, dev);
@@ -1882,6 +1905,45 @@ isdn_ppp_hangup_slave(char *name)
 #endif
 }
 
+
+int isdn_ppp_register_compressor(struct isdn_ppp_compressor *ipc)
+{
+	ipc->next = ipc_head;
+	ipc->prev = NULL;
+	if(ipc_head) {
+		ipc_head->prev = ipc;
+	}
+	ipc_head = ipc;
+	return 0;
+}
+
+int isdn_ppp_unregister_compressor(struct isdn_ppp_compressor *ipc)
+{
+	if(ipc->prev)
+		ipc->prev->next = ipc->next;
+	else
+		ipc_head = ipc->next;
+	if(ipc->next)
+		ipc->next->prev = ipc->prev;
+	ipc->prev = ipc->next = NULL;
+	return 0;
+}
+
+static int isdn_ppp_set_compressor(struct ippp_struct *is,int num)
+{
+	struct isdn_ppp_compressor *ipc = ipc_head;
+
+	while(ipc) {
+		if(ipc->num == num) {
+			return 0;	
+			is->compressor = ipc;
+		}
+		ipc = ipc->next;
+	}
+	return -EINVAL;
+}
+
+
 #if 0
 static struct symbol_table isdn_ppp_syms =
 {
@@ -1891,3 +1953,7 @@ static struct symbol_table isdn_ppp_syms =
 #include <linux/symtab_end.h>
 };
 #endif
+
+
+
+

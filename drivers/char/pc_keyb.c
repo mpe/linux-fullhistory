@@ -24,7 +24,6 @@
 #include <linux/signal.h>
 #include <linux/ioport.h>
 #include <linux/init.h>
-#include <linux/config.h>
 
 #include <asm/keyboard.h>
 #include <asm/bitops.h>

@@ -21,6 +21,8 @@
 #include <asm/system.h>
 #include <asm/pgtable.h>
 
+extern int do_munmap(unsigned long addr, size_t len);
+
 static inline pte_t *get_one_pte(struct mm_struct *mm, unsigned long addr)
 {
 	pgd_t * pgd;
@@ -166,7 +168,7 @@ asmlinkage unsigned long sys_mremap(unsigned long addr,
 	struct vm_area_struct *vma;
 	unsigned long ret = -EINVAL;
 
-	lock_kernel();
+	down(&current->mm->mmap_sem);
 	if (addr & ~PAGE_MASK)
 		goto out;
 	old_len = PAGE_ALIGN(old_len);
@@ -231,6 +233,6 @@ asmlinkage unsigned long sys_mremap(unsigned long addr,
 	else
 		ret = -ENOMEM;
 out:
-	unlock_kernel();
+	up(&current->mm->mmap_sem);
 	return ret;
 }

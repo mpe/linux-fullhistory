@@ -1,8 +1,14 @@
-/* $Id: hisax.h,v 1.11 1997/02/11 01:36:02 keil Exp $
+/* $Id: hisax.h,v 1.13 1997/04/06 22:54:12 keil Exp $
 
  *   Basic declarations, defines and prototypes
  *
  * $Log: hisax.h,v $
+ * Revision 1.13  1997/04/06 22:54:12  keil
+ * Using SKB's
+ *
+ * Revision 1.12  1997/03/23 21:45:45  keil
+ * Add support for ELSA PCMCIA
+ *
  * Revision 1.11  1997/02/11 01:36:02  keil
  * New Param structure
  *
@@ -182,36 +188,12 @@ struct HscxIoctlArg {
 
 #undef DEBUG_MAGIC
 
-#define HSCX_SBUF_ORDER     1
-#define HSCX_SBUF_BPPS      2
-#define HSCX_SBUF_MAXPAGES  3
-
-#define HSCX_RBUF_ORDER     1
-#define HSCX_RBUF_BPPS      2
-#define HSCX_RBUF_MAXPAGES  3
-
-#define HSCX_SMALLBUF_ORDER     0
-#define HSCX_SMALLBUF_BPPS      40
-#define HSCX_SMALLBUF_MAXPAGES  1
-
-#define ISAC_SBUF_ORDER     0
-#define ISAC_SBUF_BPPS      16
-#define ISAC_SBUF_MAXPAGES  1
-
-#define ISAC_RBUF_ORDER     0
-#define ISAC_RBUF_BPPS      16
-#define ISAC_RBUF_MAXPAGES  1
-
-#define ISAC_SMALLBUF_ORDER     0
-#define ISAC_SMALLBUF_BPPS      40
-#define ISAC_SMALLBUF_MAXPAGES  1
-
-#define byte unsigned char
-
-#define MAX_WINDOW 8
-
-byte *Smalloc(int size, int pr, char *why);
-void Sfree(byte * ptr);
+#define MAX_DFRAME_LEN	3072
+#define HSCX_BUFMAX	4096
+#define MAX_DATA_SIZE	(HSCX_BUFMAX - 4)
+#define MAX_DATA_MEM    (HSCX_BUFMAX * 2)
+#define MAX_HEADER_LEN	4
+#define MAX_WINDOW	8
 
 /*
  * Statemachine
@@ -249,48 +231,12 @@ struct L3Timer {
 	int event;
 };
 
-struct BufHeader {
-#ifdef DEBUG_MAGIC
-	int magic;
-#endif
-	struct BufHeader *next;
-	struct BufPool *bp;
-	int datasize;
-	byte primitive, where;
-	void *heldby;
-};
-
-struct Pages {
-	struct Pages *next;
-};
-
-struct BufPool {
-#ifdef DEBUG_MAGIC
-	int magic;
-#endif
-	struct BufHeader *freelist;
-	struct Pages *pageslist;
-	int pageorder;
-	int pagescount;
-	int bpps;
-	int bufsize;
-	int maxpages;
-};
-
-struct BufQueue {
-#ifdef DEBUG_MAGIC
-	int magic;
-#endif
-	struct BufHeader *head, *tail;
-};
-
 struct Layer1 {
 	void *hardware;
 	int hscx;
-	struct BufPool *sbufpool, *rbufpool, *smallpool;
 	struct PStack **stlistp;
 	int act_state;
-	void (*l1l2) (struct PStack *, int, struct BufHeader *);
+	void (*l1l2) (struct PStack *, int, void *);
 	void (*l1man) (struct PStack *, int, void *);
 	int hscxmode, hscxchannel, requestpull;
 };
@@ -300,14 +246,14 @@ struct Layer2 {
 	int extended, laptype;
 	int uihsize, ihsize;
 	int vs, va, vr;
-	struct BufQueue i_queue;
+	struct sk_buff_head i_queue;
 	int window, orig;
 	int rejexp;
 	int debug;
-	struct BufHeader *windowar[MAX_WINDOW];
+	struct sk_buff *windowar[MAX_WINDOW];
 	int sow;
 	struct FsmInst l2m;
-	void (*l2l1) (struct PStack *, int, struct BufHeader *);
+	void (*l2l1) (struct PStack *, int, void *);
 	void (*l2l1discardq) (struct PStack *, int, void *, int);
 	void (*l2man) (struct PStack *, int, void *);
 	void (*l2l3) (struct PStack *, int, void *);
@@ -319,7 +265,7 @@ struct Layer2 {
 };
 
 struct Layer3 {
-	void (*l3l4) (struct PStack *, int, struct BufHeader *);
+	void (*l3l4) (struct PStack *, int, void *);
 	void (*l3l2) (struct PStack *, int, void *);
 	int state, callref;
 	struct L3Timer timer;
@@ -347,7 +293,7 @@ struct Param {
 	int loc;
 	int bchannel;
 	int callref;		/* Callreferenz Number */
-	setup_parm setup;       /* from isdnif.h numbers and Serviceindicator */
+	setup_parm setup;	/* from isdnif.h numbers and Serviceindicator */
 	int chargeinfo;		/* Charge Info - only for 1tr6 in
 				 * the moment
 				 */
@@ -367,17 +313,18 @@ struct PStack {
 
 struct HscxState {
 	int inuse, init, active;
-	struct BufPool sbufpool, rbufpool, smallpool;
 	struct IsdnCardState *sp;
 	int hscx, mode;
-	int transbufsize, receive;
-	struct BufHeader *rcvibh, *xmtibh;
-	int rcvptr, sendptr;
+	u_char *rcvbuf;		/* B-Channel receive Buffer */
+	int rcvidx;		/* B-Channel receive Buffer Index */
+	struct sk_buff *tx_skb;	/* B-Channel transmit Buffer */
+	int tx_cnt;		/* B-Channel transmit counter */
+	int count;		/* Current skb sent count */
+	struct sk_buff_head rqueue;	/* B-Channel receive Queue */
+	struct sk_buff_head squeue;	/* B-Channel receive Queue */
 	struct PStack *st;
 	struct tq_struct tqueue;
 	int event;
-	struct BufQueue rq, sq;
-	int releasebuf;
 #ifdef DEBUG_MAGIC
 	int magic;		/* 301270 */
 #endif
@@ -431,27 +378,26 @@ struct IsdnCardState {
 	unsigned int isac;
 	unsigned int hscx[2];
 	unsigned int counter;
-	int	     myid;
-	isdn_if	     iif;
-	byte	*status_buf;
-	byte    *status_read;
-	byte    *status_write;
-	byte    *status_end;
-	struct BufHeader *mon_rx, *mon_tx;
-	int mon_rxp, mon_txp, mon_flg;
+	int myid;
+	isdn_if iif;
+	u_char *status_buf;
+	u_char *status_read;
+	u_char *status_write;
+	u_char *status_end;
 	void (*ph_command) (struct IsdnCardState *, unsigned int);
 	void (*modehscx) (struct HscxState *, int, int);
 	void (*hscx_fill_fifo) (struct HscxState *);
 	void (*isac_fill_fifo) (struct IsdnCardState *);
-	struct BufPool sbufpool, rbufpool, smallpool;
 	struct Channel channel[2];
 	struct PStack *stlist;
-	struct BufHeader *xmtibh, *rcvibh;
-	int rcvptr, sendptr;
+	u_char *rcvbuf;
+	int rcvidx;
+	struct sk_buff *tx_skb;
+	int tx_cnt;
 	int event;
 	struct tq_struct tqueue;
 	int ph_active;
-	struct BufQueue rq, sq;
+	struct sk_buff_head rq, sq; /* D-channel queues */
 	int cardnr;
 	int ph_state;
 	struct PStack *teistack;
@@ -459,7 +405,6 @@ struct IsdnCardState {
 	int dlogflag;
 	char *dlogspace;
 	int debug;
-	int releasebuf;
 	unsigned int CallFlags;
 };
 
@@ -505,6 +450,15 @@ struct IsdnCardState {
 #define  CARD_ELSA  0
 #endif
 
+#ifdef	CONFIG_HISAX_ELSA_PCMCIA
+#if CARD_ELSA
+#error "You can't use a ELSA ISA card and a ELSA PCMCIA card with the same driver"
+#else
+#undef CARD_ELSA
+#define CARD_ELSA (1<< ISDN_CTYPE_ELSA_QS1000)
+#endif
+#endif
+
 #ifdef	CONFIG_HISAX_IX1MICROR2
 #define	CARD_IX1MICROR2 (1 << ISDN_CTYPE_IX1MICROR2)
 #else
@@ -521,37 +475,20 @@ struct IsdnCard {
 	struct IsdnCardState *sp;
 };
 
-#define DATAPTR(x) ((byte *)x+sizeof(struct BufHeader))
 
 #define LAPD 0
 #define LAPB 1
 
-void BufPoolInit(struct BufPool *bp, int order, int bpps,
-		 int maxpages);
-int BufPoolAdd(struct BufPool *bp, int priority);
-void BufPoolFree(struct BufPool *bp);
-int BufPoolGet(struct BufHeader **bh, struct BufPool *bp,
-	       int priority, void *heldby, int where);
-void BufPoolRelease(struct BufHeader *bh);
-void BufQueueLink(struct BufQueue *bq, struct BufHeader *bh);
-int BufQueueUnlink(struct BufHeader **bh, struct BufQueue *bq);
-void BufQueueInit(struct BufQueue *bq);
-void BufQueueRelease(struct BufQueue *bq);
-void BufQueueDiscard(struct BufQueue *q, int pr, void *heldby,
-		     int releasetoo);
-int BufQueueLength(struct BufQueue *bq);
-void BufQueueLinkFront(struct BufQueue *bq, struct BufHeader *bh);
-
-void l2down(struct PStack *st, byte pr, struct BufHeader *ibh);
-void l2up(struct PStack *st, byte pr, struct BufHeader *ibh);
-void acceptph(struct PStack *st, struct BufHeader *ibh);
+void l2down(struct PStack *st, u_char pr, struct sk_buff *skb);
+void l2up(struct PStack *st, u_char pr, struct sk_buff *skb);
+void acceptph(struct PStack *st, struct sk_buff *skb);
 void setstack_isdnl2(struct PStack *st, char *debug_id);
 int HiSax_inithardware(void);
 void HiSax_closehardware(void);
 
 void setstack_HiSax(struct PStack *st, struct IsdnCardState *sp);
 unsigned int randomces(void);
-void setstack_isdnl3(struct PStack *st, struct Channel *chanp );
+void setstack_isdnl3(struct PStack *st, struct Channel *chanp);
 void HiSax_addlist(struct IsdnCardState *sp, struct PStack *st);
 void releasestack_isdnl2(struct PStack *st);
 void releasestack_isdnl3(struct PStack *st);
@@ -559,8 +496,8 @@ void HiSax_rmlist(struct IsdnCardState *sp, struct PStack *st);
 void newcallref(struct PStack *st);
 
 int setstack_hscx(struct PStack *st, struct HscxState *hs);
-byte *findie(byte * p, int size, byte ie, int wanted_set);
-int getcallref(byte * p);
+u_char *findie(u_char * p, int size, u_char ie, int wanted_set);
+int getcallref(u_char * p);
 
 void FsmNew(struct Fsm *fsm, struct FsmNode *fnlist, int fncount);
 void FsmFree(struct Fsm *fsm);
@@ -574,26 +511,17 @@ int FsmTimerRunning(struct FsmTimer *ft);
 void jiftime(char *s, long mark);
 
 int HiSax_command(isdn_ctrl * ic);
-int HiSax_writebuf(int id, int chan, const u_char * buf, int count, int user);
+int HiSax_writebuf_skb(int id, int chan, struct sk_buff *skb);
 void HiSax_putstatus(struct IsdnCardState *csta, char *buf);
 void HiSax_reportcard(int cardnr);
-int ListLength(struct BufHeader *ibh);
-int QuickHex(char *txt, byte * p, int cnt);
-void LogFrame(struct IsdnCardState *sp, byte * p, int size);
-void dlogframe(struct IsdnCardState *sp, byte * p, int size, char *comment);
-void iecpy(byte * dest, byte * iestart, int ieoffset);
+int QuickHex(char *txt, u_char * p, int cnt);
+void LogFrame(struct IsdnCardState *sp, u_char * p, int size);
+void dlogframe(struct IsdnCardState *sp, u_char * p, int size, char *comment);
+void iecpy(u_char * dest, u_char * iestart, int ieoffset);
 void setstack_transl2(struct PStack *st);
 void releasestack_transl2(struct PStack *st);
 void close_hscxstate(struct HscxState *);
 void setstack_tei(struct PStack *st);
-
-
-
-
-#define PART_SIZE(order,bpps) (( (PAGE_SIZE<<order) -\
-  sizeof(void *))/bpps)
-#define BUFFER_SIZE(order,bpps) (PART_SIZE(order,bpps)-\
-  sizeof(struct BufHeader))
 
 #endif				/* __KERNEL__ */
 

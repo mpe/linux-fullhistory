@@ -1,4 +1,4 @@
-/* $Id: pgtable.h,v 1.31 1997/05/18 21:11:42 davem Exp $
+/* $Id: pgtable.h,v 1.32 1997/05/26 23:39:20 davem Exp $
  * pgtable.h: SpitFire page table operations.
  *
  * Copyright 1996,1997 David S. Miller (davem@caip.rutgers.edu)
@@ -440,7 +440,7 @@ extern inline void SET_PAGE_DIR(struct task_struct *tsk, pgd_t *pgdir)
 
 	paddr = __pa(pgdir);
 
-	if(tsk->mm == current->mm) {
+	if(tsk == current) {
 		__asm__ __volatile__ ("
 			rdpr		%%pstate, %%o4
 			wrpr		%%o4, %1, %%pstate

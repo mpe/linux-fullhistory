@@ -1,4 +1,4 @@
-/* $Id: head.h,v 1.19 1997/05/18 08:42:18 davem Exp $ */
+/* $Id: head.h,v 1.21 1997/05/27 06:28:17 davem Exp $ */
 #ifndef _SPARC64_HEAD_H
 #define _SPARC64_HEAD_H
 
@@ -143,9 +143,15 @@
 
 #define BTRAPTL1(lvl) TRAPTL1_ARG(bad_trap_tl1, lvl)
 
-#define FLUSH_WINDOW_TRAP					\
-	flushw;							\
-	done; nop; nop; nop; nop; nop; nop;
+#define FLUSH_WINDOW_TRAP						\
+	ba,pt	%xcc, etrap;						\
+	 rd	%pc, %g7;						\
+	flushw;								\
+	ldx	[%sp + STACK_BIAS + REGWIN_SZ + PT_V9_TNPC], %l1;	\
+	add	%l1, 4, %l2;						\
+	stx	%l1, [%sp + STACK_BIAS + REGWIN_SZ + PT_V9_TPC];	\
+	ba,pt	%xcc, rtrap;						\
+	 stx	%l2, [%sp + STACK_BIAS + REGWIN_SZ + PT_V9_TNPC];
 	        
 /* Before touching these macros, you owe it to yourself to go and
  * see how arch/sparc64/kernel/winfixup.S works... -DaveM

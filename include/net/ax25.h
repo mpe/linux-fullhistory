@@ -46,31 +46,11 @@
 #define	AX25_COND_REJECT		0x02
 #define	AX25_COND_PEER_RX_BUSY		0x04
 #define	AX25_COND_OWN_RX_BUSY		0x08
+#define	AX25_COND_DAMA_MODE		0x10
 
 #ifndef _LINUX_NETDEVICE_H
 #include <linux/netdevice.h>
 #endif
-
-/*
- * These headers are taken from the KA9Q package by Phil Karn. These specific
- * files have been placed under the GPL (not the whole package) by Phil.
- *
- *
- * Copyright 1991 Phil Karn, KA9Q
- *
- * This program is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation; version 2 dated June, 1991.
- * 
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- * 
- * You should have received a copy of the GNU General Public License
- * along with this program;  if not, write to the Free Software
- * Foundation, Inc., 675 Mass Ave., Cambridge, MA 02139, USA.
- */
 
 /* Upper sub-layer (LAPB) definitions */
 
@@ -149,7 +129,7 @@ enum {
 #define	AX25_DEF_T2		(3 * AX25_SLOWHZ)	/* T2=3s  */
 #define	AX25_DEF_T3		(300 * AX25_SLOWHZ)	/* T3=300s */
 #define	AX25_DEF_N2		10			/* N2=10 */
-#define AX25_DEF_IDLE		(20 * 60 * AX25_SLOWHZ)	/* Idle=20 mins */		
+#define AX25_DEF_IDLE		(0 * 60 * AX25_SLOWHZ)	/* Idle=None */
 #define AX25_DEF_PACLEN		256			/* Paclen=256 */
 #define	AX25_DEF_PROTOCOL	AX25_PROTO_STD_SIMPLEX	/* Standard AX.25 */
 #define AX25_DEF_DS_TIMEOUT	(3 * 60 * AX25_SLOWHZ)  /* DAMA timeout 3 minutes */
@@ -202,17 +182,13 @@ typedef struct ax25_cb {
 	ax25_digi		*digipeat;
 	ax25_dev		*ax25_dev;
 	unsigned char		iamdigi;
-	unsigned char		state, modulus, hdrincl;
+	unsigned char		state, modulus, pidincl;
 	unsigned short		vs, vr, va;
 	unsigned char		condition, backoff;
 	unsigned char		n2, n2count;
-#ifdef CONFIG_AX25_DAMA_SLAVE
-	unsigned char		dama_slave;
-#endif
 	unsigned short		t1, t2, t3, idle, rtt;
 	unsigned short		t1timer, t2timer, t3timer, idletimer;
-	unsigned short		paclen;
-	unsigned short		fragno, fraglen;
+	unsigned short		paclen, fragno, fraglen;
 	struct sk_buff_head	write_queue;
 	struct sk_buff_head	reseq_queue;
 	struct sk_buff_head	ack_queue;
@@ -235,7 +211,7 @@ extern void ax25_destroy_socket(ax25_cb *);
 extern ax25_cb *ax25_create_cb(void);
 extern void ax25_fillin_cb(ax25_cb *, ax25_dev *);
 extern int  ax25_create(struct socket *, int);
-extern struct sock *ax25_make_new(struct sock *, struct device *);
+extern struct sock *ax25_make_new(struct sock *, struct ax25_dev *);
 
 /* ax25_addr.c */
 extern ax25_address null_ax25_address;
@@ -313,7 +289,7 @@ extern int  ax25_rt_ioctl(unsigned int, void *);
 extern int  ax25_rt_get_info(char *, char **, off_t, int, int);
 extern int  ax25_rt_autobind(ax25_cb *, ax25_address *);
 extern void ax25_rt_build_path(ax25_cb *, ax25_address *, struct device *);
-extern void ax25_dg_build_path(struct sk_buff *, ax25_address *, struct device *);
+extern struct sk_buff *ax25_dg_build_path(struct sk_buff *, ax25_address *, struct device *);
 extern char ax25_ip_mode_get(ax25_address *, struct device *);
 extern void ax25_rt_free(void);
 

@@ -1,4 +1,4 @@
-/* $Id: isdn_tty.h,v 1.8 1997/02/10 20:12:50 fritz Exp $
+/* $Id: isdn_tty.h,v 1.10 1997/03/02 14:29:26 fritz Exp $
 
  * header for Linux ISDN subsystem, tty related functions (linklevel).
  *
@@ -20,6 +20,14 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  *
  * $Log: isdn_tty.h,v $
+ * Revision 1.10  1997/03/02 14:29:26  fritz
+ * More ttyI related cleanup.
+ *
+ * Revision 1.9  1997/02/28 02:32:49  fritz
+ * Cleanup: Moved some tty related stuff from isdn_common.c
+ *          to isdn_tty.c
+ * Bugfix:  Bisync protocol did not behave like documented.
+ *
  * Revision 1.8  1997/02/10 20:12:50  fritz
  * Changed interface for reporting incoming calls.
  *
@@ -46,15 +54,12 @@
  *
  */
 
-extern void isdn_tty_modem_result(int, modem_info *);
 extern void isdn_tty_modem_escape(void);
 extern void isdn_tty_modem_ring(void);
 extern void isdn_tty_modem_xmit(void);
-extern void isdn_tty_modem_hup(modem_info *, int);
 extern int isdn_tty_modem_init(void);
 extern void isdn_tty_readmodem(void);
-extern int isdn_tty_try_read(modem_info *, struct sk_buff *);
 extern int isdn_tty_find_icall(int, int, setup_parm);
-extern int isdn_tty_countDLE(unsigned char *, int);
-extern void isdn_tty_bsent(int, int);
 extern void isdn_tty_cleanup_xmit(modem_info *);
+extern int isdn_tty_stat_callback(int, isdn_ctrl *);
+extern int isdn_tty_rcv_skb(int, int, int, struct sk_buff *);

@@ -1,9 +1,6 @@
 /*
  *	AX.25 release 036
  *
- *	This is ALPHA test software. This code may break your machine, randomly fail to work with new 
- *	releases, misbehave and/or generally screw up. It might even work. 
- *
  *	This code REQUIRES 2.1.15 or higher/ NET3.038
  *
  *	This module:
@@ -98,7 +95,7 @@ void ax25_protocol_release(unsigned int pid)
 	if (protocol->pid == pid) {
 		protocol_list = protocol->next;
 		restore_flags(flags);
-		kfree_s(protocol, sizeof(struct protocol_struct));
+		kfree(protocol);
 		return;
 	}
 
@@ -107,7 +104,7 @@ void ax25_protocol_release(unsigned int pid)
 			s = protocol->next;
 			protocol->next = protocol->next->next;
 			restore_flags(flags);
-			kfree_s(s, sizeof(struct protocol_struct));
+			kfree(s);
 			return;
 		}
 
@@ -152,7 +149,7 @@ void ax25_linkfail_release(void (*func)(ax25_address *, struct device *))
 	if (linkfail->func == func) {
 		linkfail_list = linkfail->next;
 		restore_flags(flags);
-		kfree_s(linkfail, sizeof(struct linkfail_struct));
+		kfree(linkfail);
 		return;
 	}
 
@@ -161,7 +158,7 @@ void ax25_linkfail_release(void (*func)(ax25_address *, struct device *))
 			s = linkfail->next;
 			linkfail->next = linkfail->next->next;
 			restore_flags(flags);
-			kfree_s(s, sizeof(struct linkfail_struct));
+			kfree(s);
 			return;
 		}
 
@@ -210,7 +207,7 @@ void ax25_listen_release(ax25_address *callsign, struct device *dev)
 	if (ax25cmp(&listen->callsign, callsign) == 0 && listen->dev == dev) {
 		listen_list = listen->next;
 		restore_flags(flags);
-		kfree_s(listen, sizeof(struct listen_struct));
+		kfree(listen);
 		return;
 	}
 
@@ -219,7 +216,7 @@ void ax25_listen_release(ax25_address *callsign, struct device *dev)
 			s = listen->next;
 			listen->next = listen->next->next;
 			restore_flags(flags);
-			kfree_s(s, sizeof(struct listen_struct));
+			kfree(s);
 			return;
 		}
 

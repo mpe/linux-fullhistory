@@ -337,7 +337,7 @@ extern inline void rc_mark_event(struct riscom_port * port, int event)
 	 * Still hope this will be changed in near future.
          */
 	set_bit(event, &port->event);
-	queue_task_irq_off(&port->tqueue, &tq_riscom);
+	queue_task(&port->tqueue, &tq_riscom);
 	mark_bh(RISCOM8_BH);
 }
 
@@ -419,7 +419,7 @@ extern inline void rc_receive_exc(struct riscom_board const * bp)
 	
 	*tty->flip.char_buf_ptr++ = ch;
 	tty->flip.count++;
-	queue_task_irq_off(&tty->flip.tqueue, &tq_timer);
+	queue_task(&tty->flip.tqueue, &tq_timer);
 }
 
 extern inline void rc_receive(struct riscom_board const * bp)
@@ -449,7 +449,7 @@ extern inline void rc_receive(struct riscom_board const * bp)
 		*tty->flip.flag_buf_ptr++ = 0;
 		tty->flip.count++;
 	}
-	queue_task_irq_off(&tty->flip.tqueue, &tq_timer);
+	queue_task(&tty->flip.tqueue, &tq_timer);
 }
 
 extern inline void rc_transmit(struct riscom_board const * bp)
@@ -538,8 +538,7 @@ extern inline void rc_check_modem(struct riscom_board const * bp)
 			wake_up_interruptible(&port->open_wait);
 		else if (!((port->flags & ASYNC_CALLOUT_ACTIVE) &&
 			   (port->flags & ASYNC_CALLOUT_NOHUP)))
-			queue_task_irq_off(&port->tqueue_hangup,  
-					   &tq_scheduler);      
+			queue_task(&port->tqueue_hangup,  &tq_scheduler);      
 	}
 	
 #ifdef RISCOM_BRAIN_DAMAGED_CTS

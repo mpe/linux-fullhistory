@@ -1,4 +1,4 @@
-/* $Id: sunserial.c,v 1.41 1997/05/14 20:46:51 davem Exp $
+/* $Id: sunserial.c,v 1.42 1997/05/26 20:10:20 davem Exp $
  * serial.c: Serial port driver for the Sparc.
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
@@ -1062,7 +1062,7 @@ static void rs_fair_output(void)
 /*
  * zs_console_print is registered for printk.
  */
-static void zs_console_print(const char *s, int count)
+static void zs_console_print(const char *s, unsigned count)
 {
 	int i;
 
@@ -1867,7 +1867,7 @@ int rs_open(struct tty_struct *tty, struct file * filp)
 
 static void show_serial_version(void)
 {
-	char *revision = "$Revision: 1.41 $";
+	char *revision = "$Revision: 1.42 $";
 	char *version, *p;
 
 	version = strchr(revision, ' ');
@@ -2198,7 +2198,7 @@ rs_cons_check(struct sun_serial *ss, int channel)
 		o = 1;
 		/* double whee.. */
 		if(!consout_registered) {
-			extern void serial_finish_init (void (*)(const char *, int count));
+			extern void serial_finish_init (void (*)(const char *, unsigned count));
 
 			serial_finish_init (zs_console_print);
 			register_console(&console);

@@ -1,6 +1,9 @@
-/* $Id: isdnl1.h,v 1.3 1996/12/08 19:41:55 keil Exp $
+/* $Id: isdnl1.h,v 1.4 1997/04/06 22:55:52 keil Exp $
  *
  * $Log: isdnl1.h,v $
+ * Revision 1.4  1997/04/06 22:55:52  keil
+ * Using SKB's
+ *
  * Revision 1.3  1996/12/08 19:41:55  keil
  * L2FRAME_DEBUG
  *
@@ -36,10 +39,13 @@
 #define HSCX_XMTBUFREADY 1
 
 extern void debugl1(struct IsdnCardState *sp, char *msg);
-extern char *HscxVersion(byte v);
-extern char *ISACVersion(byte v);
+extern char *HscxVersion(u_char v);
+extern char *ISACVersion(u_char v);
 extern void hscx_sched_event(struct HscxState *hsp, int event);
 extern void isac_sched_event(struct IsdnCardState *sp, int event);
 extern void isac_new_ph(struct IsdnCardState *sp);
 extern get_irq(int cardnr, void *routine);
-extern void Logl2Frame(struct IsdnCardState *sp, struct BufHeader *ibh, char *buf, int dir);
+
+#ifdef L2FRAME_DEBUG
+extern void Logl2Frame(struct IsdnCardState *sp, struct sk_buff *skb, char *buf, int dir);
+#endif

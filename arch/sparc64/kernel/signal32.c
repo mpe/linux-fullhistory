@@ -1,4 +1,4 @@
-/*  $Id: signal32.c,v 1.8 1997/05/18 08:42:15 davem Exp $
+/*  $Id: signal32.c,v 1.10 1997/05/27 06:28:07 davem Exp $
  *  arch/sparc64/kernel/signal32.c
  *
  *  Copyright (C) 1991, 1992  Linus Torvalds
@@ -398,8 +398,15 @@ new_setup_frame32(struct sigaction *sa, struct pt_regs *regs,
 	regs->tnpc = (regs->tpc + 4);
 
 	/* Flush instruction space. */
-	__asm__ __volatile__ ("flush %0; flush %0 + 4" : : "r" (&(sf->insns[0])));
-		
+	__asm__ __volatile__("
+	membar		#StoreStore
+	stxa		%%g0, [%0] %2
+	stxa		%%g0, [%1] %2
+	flush		%%g4
+	" : /* no outputs */
+	  : "r" (((unsigned long)&(sf->insns[0])) & ~(PAGE_MASK)),
+	    "r" ((((unsigned long)&(sf->insns[0])) & ~(PAGE_MASK)) + PAGE_SIZE),
+	    "i" (ASI_IC_TAG));
 }
 
 /* Setup a Solaris stack frame */
@@ -677,7 +684,7 @@ asmlinkage int do_signal32(unsigned long oldmask, struct pt_regs * regs,
 	
 	while ((signr = current->signal & mask) != 0) {
 		signr = ffz(~signr);
-		clear_bit(signr, &current->signal);
+		clear_bit(signr + 32, &current->signal);
 		sa = current->sig->action + signr;
 		signr++;
 		if ((current->flags & PF_PTRACED) && signr != SIGKILL) {

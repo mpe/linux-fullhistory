@@ -1,9 +1,6 @@
 /*
  *	AX.25 release 036
  *
- *	This is ALPHA test software. This code may break your machine, randomly fail to work with new 
- *	releases, misbehave and/or generally screw up. It might even work. 
- *
  *	This code REQUIRES 2.1.15 or higher/ NET3.038
  *
  *	This module:
@@ -87,15 +84,13 @@ static void ax25_ds_timeout(unsigned long arg)
 	if (ax25_dev == NULL || !ax25_dev->dama.slave)
 		return;			/* Yikes! */
 	
-	if (!ax25_dev->dama.slave_timeout || --ax25_dev->dama.slave_timeout)
-	{
+	if (!ax25_dev->dama.slave_timeout || --ax25_dev->dama.slave_timeout) {
 		ax25_ds_set_timer(ax25_dev);
 		return;
 	}
 	
-	for (ax25=ax25_list; ax25 != NULL; ax25 = ax25->next)
-	{
-		if (ax25->ax25_dev != ax25_dev || !ax25->dama_slave)
+	for (ax25=ax25_list; ax25 != NULL; ax25 = ax25->next) {
+		if (ax25->ax25_dev != ax25_dev || !(ax25->condition & AX25_COND_DAMA_MODE))
 			continue;
 
 		ax25_link_failed(&ax25->dest_addr, ax25_dev->dev);
@@ -103,8 +98,7 @@ static void ax25_ds_timeout(unsigned long arg)
 		ax25_send_control(ax25, AX25_DISC, AX25_POLLON, AX25_COMMAND);
 		ax25->state = AX25_STATE_0;
 
-		if (ax25->sk != NULL)
-		{
+		if (ax25->sk != NULL) {
 			SOCK_DEBUG(ax25->sk, "AX.25 DAMA Slave Timeout\n");
 			ax25->sk->state     = TCP_CLOSE;
 			ax25->sk->err       = ETIMEDOUT;
@@ -119,7 +113,6 @@ static void ax25_ds_timeout(unsigned long arg)
 	
 	ax25_dev_dama_off(ax25_dev);
 }
-
 
 /*
  *	AX.25 TIMER 
@@ -141,7 +134,6 @@ void ax25_ds_timer(ax25_cb *ax25)
 			break;
 
 		case AX25_STATE_3:
-		case AX25_STATE_4:
 			/*
 			 * Check the state of the receive buffer.
 			 */
@@ -279,12 +271,7 @@ void ax25_ds_t1_timeout(ax25_cb *ax25)
 			}
 			break;
 
-		case AX25_STATE_3: 
-			ax25->n2count = 1;
-			ax25->state   = AX25_STATE_4;
-			break;
-
-		case AX25_STATE_4:
+		case AX25_STATE_3:
 			if (ax25->n2count == ax25->n2) {
 				ax25_link_failed(&ax25->dest_addr, ax25->ax25_dev->dev);
 				ax25_clear_queues(ax25);

@@ -332,11 +332,6 @@ static void tdelay(struct pi_local *lp, int time)
     wrtscc(lp->cardbase, lp->base + CTL, R0, RES_EXT_INT);
 }
 
-static void free_p(struct sk_buff *skb)
-{
-	dev_kfree_skb(skb, FREE_WRITE);
-}
-
 static void a_txint(struct pi_local *lp)
 {
     int cmd;
@@ -413,7 +408,7 @@ static void a_exint(struct pi_local *lp)
     }
     switch (lp->tstate) {
     case ACTIVE:
-	free_p(lp->sndbuf);
+	kfree_skb(lp->sndbuf, FREE_WRITE);
 	lp->sndbuf = NULL;
 	lp->tstate = FLAGOUT;
 	tdelay(lp, lp->squeldelay);
@@ -731,7 +726,7 @@ static void b_txint(struct pi_local *lp)
 	    /* stuffing a char satisfies Interrupt condition */
 	} else {
 	    /* No more to send */
-	    free_p(lp->sndbuf);
+	    kfree_skb(lp->sndbuf, FREE_WRITE);
 	    lp->sndbuf = NULL;
 	    if ((rdscc(lp->cardbase, cmd, R0) & 0x40)) {
 		/* Did we underrun? */
@@ -783,7 +778,7 @@ static void b_exint(struct pi_local *lp)
 
     switch (lp->tstate) {
     case ACTIVE:		/* Unexpected underrun */
-	free_p(lp->sndbuf);
+	kfree_skb(lp->sndbuf, FREE_WRITE);
 	lp->sndbuf = NULL;
 	wrtscc(lp->cardbase, cmd, R0, SEND_ABORT);
 	lp->tstate = FLAGOUT;
@@ -1565,7 +1560,7 @@ static int pi_close(struct device *dev)
 
     /* Free any buffers left in the hardware transmit queue */
     while ((ptr = skb_dequeue(&lp->sndq)) != NULL)
-	free_p(ptr);
+	kfree_skb(ptr, FREE_WRITE);
 
     restore_flags(flags);
 
@@ -1665,6 +1660,9 @@ static struct net_device_stats *pi_get_stats(struct device *dev)
 #ifdef MODULE
 EXPORT_NO_SYMBOLS;
 
+MODULE_AUTHOR("David Perry <dp@hydra.carleton.ca>");
+MODULE_DESCRIPTION("AX.25 driver for the Ottawa PI and PI/2 HDLC cards");
+
 int init_module(void)
 {
     return pi_init();
@@ -1685,12 +1683,3 @@ void cleanup_module(void)
     unregister_netdev(&pi0b);
 }
 #endif
-
-/*
- * Local variables:
- *  compile-command: "gcc -D__KERNEL__ -I/usr/src/linux/net/inet -Wall -Wstrict-prototypes -O6 -m486 -c skeleton.c"
- *  version-control: t
- *  kept-new-versions: 5
- *  tab-width: 4
- * End:
- */

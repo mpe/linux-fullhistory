@@ -60,7 +60,7 @@ README for the ISDN-subsystem
   A raw-control-device with the following functions:
      write: raw D-channel-messages (format: depends on driver).
      read:  raw D-channel-messages (format: depends on driver).
-     ioctl: depends on driver, for the ICN-driver, the base-address of
+     ioctl: depends on driver, i.e. for the ICN-driver, the base-address of
             the ports and the shared memory on the card can be set and read
             also the boot-code an the protocol software can be loaded into 
             the card.
@@ -107,7 +107,7 @@ README for the ISDN-subsystem
 	       ATZ      Load registers and EAZ/MSN from Profile.
 	       AT&Bx    Set Send-Packet-size to x (max. 4000)
                         The real packet-size may be limited by the
-                        low-level-driver used. i.e.: the Teles-Module-
+                        low-level-driver used. i.e.: the HiSax-Module-
                         limit is 2000. You will get NO Error-Message,
                         if you set it to higher Values, because at the
                         time of giving this command the corresponding
@@ -120,8 +120,7 @@ README for the ISDN-subsystem
                AT&D3    Same as AT&D2 but also resets all registers.
 	       AT&Ex    Set the EAZ/MSN for this channel to x.
 	       AT&F     Reset all registers and profile to "factory-defaults"
-	       AT&Sx    Set window-size for Teles-driver (x = 1..8) (not yet
-                        implemented)
+	       AT&Sx    Set window-size (x = 1..8) (not yet implemented)
 	       AT&V     Show all settings.
                AT&W0    Write registers and EAZ/MSN to profile. See also
                         iprofd (5.c in this README).
@@ -194,7 +193,7 @@ README for the ISDN-subsystem
              15   0         Layer-3 protocol: (at the moment always 0)
                                       0 = transparent
 	     16   250       Send-Packet-size/16
-             17   8         Window-size for Teles-driver (not yet implemented)
+             17   8         Window-size (not yet implemented)
              18   4         Bit coded register, Service-Octet-1 to accept,
                             or to be used on dialout:
                             Bit 0:    Service 1 (audio) when set.
@@ -271,111 +270,8 @@ README for the ISDN-subsystem
  
 3. Lowlevel-driver configuration.
 
-   Configuration depends on how the drivers are built.
-
-   3.1 Drivers built into the kernel.
-
-     3.1.1 Teles driver.
-
-       The Teles driver can be configured using the commandline-feature
-       while loading the kernel with LILO or LOADLIN. It accepts the
-       following syntax:
-
-       teles=p0,i0,m0,d0[,p1,i1,m1,d1 ... ,pn,in,mn,dn][,idstring]
-
-       where
-
-         p0 = portbase of 1st card.                           (default: 0xd80)
-         i0 = irq of 1st card.                                (default: 15)
-         m0 = shared memory of 1st card.                      (default: 0xd0000)
-         d0 = D-channel protocol of 1st card. 1=1TR6, 2=EDSS1 (default: 2)
-
-         p1,i1,m1,d1 = Parameters of second card (defaults: none)
-         pn,in,mn,d1 = Parameters of n'th card (up to 16 cards are supported)
-
-         idstring = Driver-Id for accessing with utilities and identification
-                    when using a Line-monitor. (default: none)
-                    idstring must start with a character!
-
-         The type of the card is determined by the port, irq and shared memory:
-
-           port == 0, shared memory != 0          -> Teles S0-8
-           port != 0, shared memory != 0          -> Teles S0-16.0
-           port != 0, shared memory == 0          -> Teles S0-16.3
-
-       ATTENTION:
-
-       Due to limited hardware-capabilities, there is no way to check the
-       existence of a card. Therefore you need to be sure your card's setup
-       is correct. Also there are bugs in the printed manual of some newer
-       16.3 cards. Have a look to the kernel-syslog. With most of the cards,
-       you should see a line "HSCX version A:5 B:5" there.
-       
-     3.1.2 ICN driver.
-
-       The ICN driver can be configured using the commandline-feature while
-       loading the kernel with LILO or LOADLIN. It accepts the following
-       syntax
-
-       icn=p,m[,idstring1[,idstring2]]
-
-       where
-
-         p = portbase      (default: 0x320)
-         m = shared memory (default: 0xd0000)
-
-       When using the ICN double card, you MUST define TWO idstrings.
-       idstring must start with a character!
-
-       If you like to use more than one card, you can use the program
-       "icnctrl" from the utility-package to configure additional cards.
-       You need to configure shared memory only once, since the icn-driver
-       maps all cards into the same address-space.
-
-       Using the "icnctrl"-utility, portbase and shared memory can also be
-       changed during runtime.
-
-       The D-channel protocol is configured by loading different firmware
-       into the card's memory using the "icnctrl"-utility.
-
-
-   3.2 Drivers built as modules.
-
-     3.2.1 Teles driver.
-
-       The module teles.o can be configured during "insmod'ing" it by
-       appending its parameters to the insmod-commandline. The following
-       syntax is accepted:
-
-       io=m0,i0,p0,d0[,m1,i1,p1,d1 ... ,mn,in,pn,dn] teles_id=idstring
-
-       where
-
-         m0,i0,p0,d0 ... mn,in,pn,dn have the same meanings like the
-                                     parameters described for the kernel-
-                                     version above. Watch out: different
-                                     sequence!
-
-     3.2.2 ICN driver.
-
-       The module icn.o can be configured during "insmod'ing" it by
-       appending its parameters to the insmod-commandline. The following
-       syntax is accepted:
-
-       portbase=p membase=m icn_id=idstring icn_id2=idstring2
-
-       where p, m, idstring1 and idstring2 have the same meanings like
-                                           parameters described for the kernel-
-                                           version above.
-      
-       When using the ICN double card, you MUST define TWO idstrings.
-       idstring must start with a character!
-
-       Using the "icnctrl"-utility, the same features apply to the modularized
-       version like to the kernel-builtin one.
-
-       The D-channel protocol is configured by loading different firmware
-       into the card's memory using the "icnctrl"-utility.
+   Configuration depends on how the drivers are built. See the
+   README.<yourDriver> for information on driver-specific setup.
 
 4. Device-inodes
 
@@ -386,26 +282,11 @@ README for the ISDN-subsystem
      44 for the ISDN-callout-tty's.
      45 for control/info/debug devices.
 
-
 5. Application
 
-   a) (Only for ICN-cards) Load the firmware into the card:
-
-       cd icn
-     For 1TR6:
-       icnctrl [-d IDstring] load download/loadpg.bin download/pc_1t_ca.bin
-     For Euro-ISDN:
-       icnctrl [-d IDstring] load download/loadpg.bin download/pc_eu_ca.bin
-
-     When using the ICN-4B, the protocol-software for the second half of
-     the card must be appended to the command line.
-
-     -> The two LEDs at the back cover of the card (ICN-4B: 4 LEDs) must be
-        blinking intermittently now. If a connection is up, the corresponding
-        led is lit continuously.
-
-     For loading pcbit-firmware, refer to Documentation/isdn/README.pcbit
-     and the pcbit manpage, included in the utility-package.
+   a) For some card-types, firmware has to be loaded into the cards, before
+      proceeding with device-independant setup. See README.<yourDriver>
+      for how to do that.
 
    b) If you only intend to use ttys, you are nearly ready now.
 
@@ -437,8 +318,7 @@ README for the ISDN-subsystem
 
    h) additionally you may activate charge-hang-up (= Hang up before 
       next charge-info, this only works, if your isdn-provider transmits
-      the charge-info during and after the connection, it does NOT work
-      with the Teles on an EDSS1-Line.):
+      the charge-info during and after the connection):
        isdnctrl chargehup isdn0 on
 
    i) Setup the interface with ifconfig as usual, and set a route to it.
@@ -542,7 +422,7 @@ README for the ISDN-subsystem
 
    "isdnctrl l2_prot <InterfaceName> <L2-ProtocolName>" 
    Selects a layer-2-protocol. 
-   (With the ICN-driver and the Teles-driver, "x75i" and "hdlc" is available.
+   (With the ICN-driver and the HiSax-driver, "x75i" and "hdlc" is available.
    With other drivers, "x75ui", "x75bui" may be possible too.)
 
    isdnctrl l3_prot <InterfaceName> <L3-ProtocolName> 

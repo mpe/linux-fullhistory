@@ -5,6 +5,7 @@
  * Added /proc/sys/net/ax25 directory entry (empty =) ). [MS]
  */
 
+#include <linux/config.h>
 #include <linux/mm.h>
 #include <linux/sysctl.h>
 #include <linux/config.h>
@@ -123,7 +124,7 @@ void ax25_register_sysctl(void)
 		ax25_table[n].proc_handler = NULL;
 
 		memcpy(ax25_dev->systable, ax25_param_table, sizeof(ax25_dev->systable));
-		
+
 #ifndef CONFIG_AX25_DAMA_SLAVE
 		/* 
 		 * We do not wish to have a representation of this parameter
@@ -151,7 +152,7 @@ void ax25_unregister_sysctl(void)
 {
 	unregister_sysctl_table(ax25_table_header);
 
-	kfree_s(ax25_table, ax25_table_size);
+	kfree(ax25_table);
 
 	ax25_dir_table[0].child = NULL;
 }

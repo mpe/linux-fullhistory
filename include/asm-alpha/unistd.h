@@ -352,10 +352,10 @@ static inline void idle(void)
 	sys_idle();
 }
 
-extern int sys_setup(void);
-static inline int setup(void)
+extern int sys_setup(int);
+static inline int setup(int magic)
 {
-	return sys_setup();
+	return sys_setup(magic);
 }
 
 extern int sys_open(const char *, int, int);

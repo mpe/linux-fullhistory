@@ -1,5 +1,5 @@
 #
-#  $Id: Makefile,v 1.2 1997/05/01 08:53:47 davem Exp $
+#  $Id: Makefile,v 1.3 1997/05/27 23:25:01 fritz Exp $
 #  Copyright (C) 1996  SpellCaster Telecommunications Inc.
 #
 #  This program is free software; you can redistribute it and/or modify

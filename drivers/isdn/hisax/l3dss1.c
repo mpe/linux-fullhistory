@@ -1,4 +1,4 @@
-/* $Id: l3dss1.c,v 1.12 1997/02/17 00:34:26 keil Exp $
+/* $Id: l3dss1.c,v 1.15 1997/04/17 11:50:48 keil Exp $
 
  * EURO/DSS1 D-channel protocol
  *
@@ -9,6 +9,15 @@
  *              Fritz Elfert
  *
  * $Log: l3dss1.c,v $
+ * Revision 1.15  1997/04/17 11:50:48  keil
+ * pa->loc was undefined, if it was not send by the exchange
+ *
+ * Revision 1.14  1997/04/06 22:54:20  keil
+ * Using SKB's
+ *
+ * Revision 1.13  1997/03/13 20:37:28  keil
+ * CLIR and channel request added
+ *
  * Revision 1.12  1997/02/17 00:34:26  keil
  * Bugfix: Wrong cause delivered
  *
@@ -52,9 +61,10 @@
 #define __NO_VERSION__
 #include "hisax.h"
 #include "isdnl3.h"
+#include <linux/ctype.h>
 
 extern char *HiSax_getrev(const char *revision);
-const char *dss1_revision = "$Revision: 1.12 $";
+const char *dss1_revision = "$Revision: 1.15 $";
 
 #define	MsgHead(ptr, cref, mty) \
 	*ptr++ = 0x8; \
@@ -63,23 +73,20 @@ const char *dss1_revision = "$Revision: 1.12 $";
 	*ptr++ = mty
 
 static void
-l3dss1_message(struct PStack *st, byte mt)
+l3dss1_message(struct PStack *st, u_char mt)
 {
-	struct BufHeader *dibh;
-	byte *p;
+	struct sk_buff *skb;
+	u_char *p;
 
-	BufPoolGet(&dibh, st->l1.sbufpool, GFP_ATOMIC, (void *) st, 18);
-	p = DATAPTR(dibh);
-	p += st->l2.ihsize;
-
+	if (!(skb = l3_alloc_skb(4)))
+		return;
+	p = skb_put(skb, 4);
 	MsgHead(p, st->l3.callref, mt);
-
-	dibh->datasize = p - DATAPTR(dibh);
-	st->l3.l3l2(st, DL_DATA, dibh);
+	st->l3.l3l2(st, DL_DATA, skb);
 }
 
 static void
-l3dss1_release_req(struct PStack *st, byte pr, void *arg)
+l3dss1_release_req(struct PStack *st, u_char pr, void *arg)
 {
 	StopAllL3Timer(st);
 	newl3state(st, 19);
@@ -88,21 +95,22 @@ l3dss1_release_req(struct PStack *st, byte pr, void *arg)
 }
 
 static void
-l3dss1_release_cmpl(struct PStack *st, byte pr, void *arg)
+l3dss1_release_cmpl(struct PStack *st, u_char pr, void *arg)
 {
-	byte *p;
-	struct BufHeader *ibh = arg;
+	u_char *p;
+	struct sk_buff *skb = arg;
 	int cause = -1;
 
-	p = DATAPTR(ibh);
-	if ((p = findie(p + st->l2.ihsize, ibh->datasize - st->l2.ihsize,
-			IE_CAUSE, 0))) {
+	p = skb->data;
+	st->pa->loc = 0;
+	if ((p = findie(p, skb->len, IE_CAUSE, 0))) {
 		p++;
-		if (*p++ == 2) 
+		if (*p++ == 2)
 			st->pa->loc = *p++;
 		cause = *p & 0x7f;
 	}
-	BufPoolRelease(ibh);
+	SET_SKB_FREE(skb);
+	dev_kfree_skb(skb, FREE_READ);
 	StopAllL3Timer(st);
 	st->pa->cause = cause;
 	newl3state(st, 0);
@@ -110,179 +118,217 @@ l3dss1_release_cmpl(struct PStack *st, byte pr, void *arg)
 }
 
 static void
-l3dss1_setup_req(struct PStack *st, byte pr,
+l3dss1_setup_req(struct PStack *st, u_char pr,
 		 void *arg)
 {
-	struct BufHeader *dibh;
-	byte *p;
-	char *teln;
+	struct sk_buff *skb;
+	u_char tmp[128];
+	u_char *p = tmp;
+	u_char channel = 0;
+	u_char screen = 0;
+	u_char *teln;
+	u_char *msn;
+	int l;
 
 	st->l3.callref = st->pa->callref;
-	BufPoolGet(&dibh, st->l1.sbufpool, GFP_ATOMIC, (void *) st, 19);
-	p = DATAPTR(dibh);
-	p += st->l2.ihsize;
-
 	MsgHead(p, st->l3.callref, MT_SETUP);
 
 	/*
 	 * Set Bearer Capability, Map info from 1TR6-convention to EDSS1
 	 */
-	*p++ = 0xa1;
+	*p++ = 0xa1;		/* complete indicator */
 	switch (st->pa->setup.si1) {
-	case 1:		/* Telephony                               */
-		*p++ = 0x4;	/* BC-IE-code                              */
-		*p++ = 0x3;	/* Length                                  */
-		*p++ = 0x90;	/* Coding Std. CCITT, 3.1 kHz audio     */
-		*p++ = 0x90;	/* Circuit-Mode 64kbps                     */
-		*p++ = 0xa3;	/* A-Law Audio                             */
-		break;
-	case 5:		/* Datatransmission 64k, BTX               */
-	case 7:		/* Datatransmission 64k                    */
-	default:
-		*p++ = 0x4;	/* BC-IE-code                              */
-		*p++ = 0x2;	/* Length                                  */
-		*p++ = 0x88;	/* Coding Std. CCITT, unrestr. dig. Inform. */
-		*p++ = 0x90;	/* Circuit-Mode 64kbps                      */
-		break;
+		case 1:	/* Telephony                               */
+			*p++ = 0x4;	/* BC-IE-code                              */
+			*p++ = 0x3;	/* Length                                  */
+			*p++ = 0x90;	/* Coding Std. CCITT, 3.1 kHz audio     */
+			*p++ = 0x90;	/* Circuit-Mode 64kbps                     */
+			*p++ = 0xa3;	/* A-Law Audio                             */
+			break;
+		case 5:	/* Datatransmission 64k, BTX               */
+		case 7:	/* Datatransmission 64k                    */
+		default:
+			*p++ = 0x4;	/* BC-IE-code                              */
+			*p++ = 0x2;	/* Length                                  */
+			*p++ = 0x88;	/* Coding Std. CCITT, unrestr. dig. Inform. */
+			*p++ = 0x90;	/* Circuit-Mode 64kbps                      */
+			break;
 	}
 	/*
 	 * What about info2? Mapping to High-Layer-Compatibility?
 	 */
-	if (st->pa->setup.eazmsn[0]) {
+	teln = st->pa->setup.phone;
+	if (*teln) {
+		/* parse number for special things */
+		if (!isdigit(*teln)) {
+			switch (0x5f & *teln) {
+				case 'C':
+					channel = 0x08;
+				case 'P':
+					channel |= 0x80;
+					teln++;
+					if (*teln == '1')
+						channel |= 0x01;
+					else
+						channel |= 0x02;
+					break;
+				case 'R':
+					screen = 0xA0;
+					break;
+				case 'D':
+					screen = 0x80;
+					break;
+				default:
+					if (st->l3.debug & L3_DEB_WARN)
+						l3_debug(st, "Wrong MSN Code");
+					break;
+			}
+			teln++;
+		}
+	}
+	if (channel) {
+		*p++ = 0x18;	/* channel indicator */
+		*p++ = 1;
+		*p++ = channel;
+	}
+	msn = st->pa->setup.eazmsn;
+	if (*msn) {
 		*p++ = 0x6c;
-		*p++ = strlen(st->pa->setup.eazmsn) + 1;
+		*p++ = strlen(msn) + (screen ? 2 : 1);
 		/* Classify as AnyPref. */
-		*p++ = 0x81;	/* Ext = '1'B, Type = '000'B, Plan = '0001'B. */
-		teln = st->pa->setup.eazmsn;
-		while (*teln)
-			*p++ = *teln++ & 0x7f;
+		if (screen) {
+			*p++ = 0x01;	/* Ext = '0'B, Type = '000'B, Plan = '0001'B. */
+			*p++ = screen;
+		} else
+			*p++ = 0x81;	/* Ext = '1'B, Type = '000'B, Plan = '0001'B. */
+		while (*msn)
+			*p++ = *msn++ & 0x7f;
 	}
 	*p++ = 0x70;
-	*p++ = strlen(st->pa->setup.phone) + 1;
+	*p++ = strlen(teln) + 1;
 	/* Classify as AnyPref. */
 	*p++ = 0x81;		/* Ext = '1'B, Type = '000'B, Plan = '0001'B. */
 
-	teln = st->pa->setup.phone;
 	while (*teln)
 		*p++ = *teln++ & 0x7f;
 
-
-	dibh->datasize = p - DATAPTR(dibh);
+	l = p - tmp;
+	if (!(skb = l3_alloc_skb(l)))
+		return;
+	memcpy(skb_put(skb, l), tmp, l);
 	L3DelTimer(&st->l3.timer);
 	L3AddTimer(&st->l3.timer, st->l3.t303, CC_T303);
 	newl3state(st, 1);
-	st->l3.l3l2(st, DL_DATA, dibh);
+	st->l3.l3l2(st, DL_DATA, skb);
 
 }
 
 static void
-l3dss1_call_proc(struct PStack *st, byte pr, void *arg)
+l3dss1_call_proc(struct PStack *st, u_char pr, void *arg)
 {
-	byte *p;
-	struct BufHeader *ibh = arg;
+	u_char *p;
+	struct sk_buff *skb = arg;
 
 	L3DelTimer(&st->l3.timer);
-	p = DATAPTR(ibh);
-	if ((p = findie(p + st->l2.ihsize, ibh->datasize - st->l2.ihsize,
-			0x18, 0))) {
+	p = skb->data;
+	if ((p = findie(p, skb->len, 0x18, 0))) {
 		st->pa->bchannel = p[2] & 0x3;
 		if ((!st->pa->bchannel) && (st->l3.debug & L3_DEB_WARN))
 			l3_debug(st, "setup answer without bchannel");
 	} else if (st->l3.debug & L3_DEB_WARN)
 		l3_debug(st, "setup answer without bchannel");
-	BufPoolRelease(ibh);
+	SET_SKB_FREE(skb);
+	dev_kfree_skb(skb, FREE_READ);
 	newl3state(st, 3);
 	L3AddTimer(&st->l3.timer, st->l3.t310, CC_T310);
 	st->l3.l3l4(st, CC_PROCEEDING_IND, NULL);
 }
 
 static void
-l3dss1_setup_ack(struct PStack *st, byte pr, void *arg)
+l3dss1_setup_ack(struct PStack *st, u_char pr, void *arg)
 {
-	byte *p;
-	struct BufHeader *ibh = arg;
+	u_char *p;
+	struct sk_buff *skb = arg;
 
 	L3DelTimer(&st->l3.timer);
-	p = DATAPTR(ibh);
-	if ((p = findie(p + st->l2.ihsize, ibh->datasize - st->l2.ihsize,
-			0x18, 0))) {
+	p = skb->data;
+	if ((p = findie(p, skb->len, 0x18, 0))) {
 		st->pa->bchannel = p[2] & 0x3;
 		if ((!st->pa->bchannel) && (st->l3.debug & L3_DEB_WARN))
 			l3_debug(st, "setup answer without bchannel");
 	} else if (st->l3.debug & L3_DEB_WARN)
 		l3_debug(st, "setup answer without bchannel");
-
-	BufPoolRelease(ibh);
+	SET_SKB_FREE(skb);
+	dev_kfree_skb(skb, FREE_READ);
 	newl3state(st, 2);
 	L3AddTimer(&st->l3.timer, st->l3.t304, CC_T304);
 	st->l3.l3l4(st, CC_MORE_INFO, NULL);
 }
 
 static void
-l3dss1_disconnect(struct PStack *st, byte pr, void *arg)
+l3dss1_disconnect(struct PStack *st, u_char pr, void *arg)
 {
-	byte *p;
-	struct BufHeader *ibh = arg;
+	u_char *p;
+	struct sk_buff *skb = arg;
 	int cause = -1;
 
 	StopAllL3Timer(st);
-	p = DATAPTR(ibh);
-	if ((p = findie(p + st->l2.ihsize, ibh->datasize - st->l2.ihsize,
-			IE_CAUSE, 0))) {
+	p = skb->data;
+	st->pa->loc = 0;
+	if ((p = findie(p, skb->len, IE_CAUSE, 0))) {
 		p++;
 		if (*p++ == 2)
 			st->pa->loc = *p++;
 		cause = *p & 0x7f;
 	}
-	BufPoolRelease(ibh);
+	SET_SKB_FREE(skb);
+	dev_kfree_skb(skb, FREE_READ);
 	newl3state(st, 12);
 	st->pa->cause = cause;
 	st->l3.l3l4(st, CC_DISCONNECT_IND, NULL);
 }
 
-
 static void
-l3dss1_connect(struct PStack *st, byte pr, void *arg)
+l3dss1_connect(struct PStack *st, u_char pr, void *arg)
 {
-	struct BufHeader *ibh = arg;
+	struct sk_buff *skb = arg;
 
-
-	BufPoolRelease(ibh);
+	SET_SKB_FREE(skb);
+	dev_kfree_skb(skb, FREE_READ);
 	L3DelTimer(&st->l3.timer);	/* T310 */
 	newl3state(st, 10);
 	st->l3.l3l4(st, CC_SETUP_CNF, NULL);
 }
 
 static void
-l3dss1_alerting(struct PStack *st, byte pr, void *arg)
+l3dss1_alerting(struct PStack *st, u_char pr, void *arg)
 {
-	struct BufHeader *ibh = arg;
+	struct sk_buff *skb = arg;
 
-	BufPoolRelease(ibh);
+	SET_SKB_FREE(skb);
+	dev_kfree_skb(skb, FREE_READ);
 	L3DelTimer(&st->l3.timer);	/* T304 */
 	newl3state(st, 4);
 	st->l3.l3l4(st, CC_ALERTING_IND, NULL);
 }
 
 static void
-l3dss1_setup(struct PStack *st, byte pr, void *arg)
+l3dss1_setup(struct PStack *st, u_char pr, void *arg)
 {
-	byte *p;
+	u_char *p;
 	int bcfound = 0;
 	char tmp[80];
-	struct BufHeader *ibh = arg;
+	struct sk_buff *skb = arg;
 
-	p = DATAPTR(ibh);
-	p += st->l2.uihsize;
+	p = skb->data;
 	st->pa->callref = getcallref(p);
 	st->l3.callref = 0x80 + st->pa->callref;
 
 	/*
 	 * Channel Identification
 	 */
-	p = DATAPTR(ibh);
-	if ((p = findie(p + st->l2.uihsize, ibh->datasize - st->l2.uihsize,
-			0x18, 0))) {
+	p = skb->data;
+	if ((p = findie(p, skb->len, 0x18, 0))) {
 		st->pa->bchannel = p[2] & 0x3;
 		if (st->pa->bchannel)
 			bcfound++;
@@ -291,51 +337,49 @@ l3dss1_setup(struct PStack *st, byte pr, void *arg)
 	} else if (st->l3.debug & L3_DEB_WARN)
 		l3_debug(st, "setup without bchannel");
 
-	p = DATAPTR(ibh);
 	/*
 	   * Bearer Capabilities
 	 */
-	if ((p = findie(p + st->l2.uihsize, ibh->datasize - st->l2.uihsize, 0x04, 0))) {
+	p = skb->data;
+	if ((p = findie(p, skb->len, 0x04, 0))) {
 		st->pa->setup.si2 = 0;
 		switch (p[2] & 0x1f) {
-		case 0x00:
-			/* Speech */
-		case 0x10:
-			/* 3.1 Khz audio */
-			st->pa->setup.si1 = 1;
-			break;
-		case 0x08:
-			/* Unrestricted digital information */
-			st->pa->setup.si1 = 7;
-			break;
-		case 0x09:
-			/* Restricted digital information */
-			st->pa->setup.si1 = 2;
-			break;
-		case 0x11:
-			/* Unrestr. digital information  with tones/announcements */
-			st->pa->setup.si1 = 3;
-			break;
-		case 0x18:
-			/* Video */
-			st->pa->setup.si1 = 4;
-			break;
-		default:
-			st->pa->setup.si1 = 0;
+			case 0x00:
+				/* Speech */
+			case 0x10:
+				/* 3.1 Khz audio */
+				st->pa->setup.si1 = 1;
+				break;
+			case 0x08:
+				/* Unrestricted digital information */
+				st->pa->setup.si1 = 7;
+				break;
+			case 0x09:
+				/* Restricted digital information */
+				st->pa->setup.si1 = 2;
+				break;
+			case 0x11:
+				/* Unrestr. digital information  with tones/announcements */
+				st->pa->setup.si1 = 3;
+				break;
+			case 0x18:
+				/* Video */
+				st->pa->setup.si1 = 4;
+				break;
+			default:
+				st->pa->setup.si1 = 0;
 		}
 	} else if (st->l3.debug & L3_DEB_WARN)
 		l3_debug(st, "setup without bearer capabilities");
 
-	p = DATAPTR(ibh);
-	if ((p = findie(p + st->l2.uihsize, ibh->datasize - st->l2.uihsize,
-			0x70, 0)))
+	p = skb->data;
+	if ((p = findie(p, skb->len, 0x70, 0)))
 		iecpy(st->pa->setup.eazmsn, p, 1);
 	else
 		st->pa->setup.eazmsn[0] = 0;
 
-	p = DATAPTR(ibh);
-	if ((p = findie(p + st->l2.uihsize, ibh->datasize - st->l2.uihsize,
-			0x6c, 0))) {
+	p = skb->data;
+	if ((p = findie(p, skb->len, 0x6c, 0))) {
 		st->pa->setup.plan = p[2];
 		if (p[2] & 0x80) {
 			iecpy(st->pa->setup.phone, p, 1);
@@ -349,7 +393,8 @@ l3dss1_setup(struct PStack *st, byte pr, void *arg)
 		st->pa->setup.plan = 0;
 		st->pa->setup.screen = 0;
 	}
-	BufPoolRelease(ibh);
+	SET_SKB_FREE(skb);
+	dev_kfree_skb(skb, FREE_READ);
 
 	if (bcfound) {
 		if ((st->pa->setup.si1 != 7) && (st->l3.debug & L3_DEB_WARN)) {
@@ -364,14 +409,14 @@ l3dss1_setup(struct PStack *st, byte pr, void *arg)
 }
 
 static void
-l3dss1_reset(struct PStack *st, byte pr, void *arg)
+l3dss1_reset(struct PStack *st, u_char pr, void *arg)
 {
 	StopAllL3Timer(st);
 	newl3state(st, 0);
 }
 
 static void
-l3dss1_setup_rsp(struct PStack *st, byte pr,
+l3dss1_setup_rsp(struct PStack *st, u_char pr,
 		 void *arg)
 {
 	newl3state(st, 8);
@@ -381,30 +426,30 @@ l3dss1_setup_rsp(struct PStack *st, byte pr,
 }
 
 static void
-l3dss1_connect_ack(struct PStack *st, byte pr, void *arg)
+l3dss1_connect_ack(struct PStack *st, u_char pr, void *arg)
 {
-	struct BufHeader *ibh = arg;
+	struct sk_buff *skb = arg;
 
-	BufPoolRelease(ibh);
+	SET_SKB_FREE(skb);
+	dev_kfree_skb(skb, FREE_READ);
 	newl3state(st, 10);
 	L3DelTimer(&st->l3.timer);
 	st->l3.l3l4(st, CC_SETUP_COMPLETE_IND, NULL);
 }
 
 static void
-l3dss1_disconnect_req(struct PStack *st, byte pr, void *arg)
+l3dss1_disconnect_req(struct PStack *st, u_char pr, void *arg)
 {
-	struct BufHeader *dibh;
-	byte *p;
-	byte cause = 0x10;
+	struct sk_buff *skb;
+	u_char tmp[16];
+	u_char *p = tmp;
+	int l;
+	u_char cause = 0x10;
 
 	if (st->pa->cause > 0)
 		cause = st->pa->cause;
 
 	StopAllL3Timer(st);
-	BufPoolGet(&dibh, st->l1.sbufpool, GFP_ATOMIC, (void *) st, 20);
-	p = DATAPTR(dibh);
-	p += st->l2.ihsize;
 
 	MsgHead(p, st->l3.callref, MT_DISCONNECT);
 
@@ -413,25 +458,26 @@ l3dss1_disconnect_req(struct PStack *st, byte pr, void *arg)
 	*p++ = 0x80;
 	*p++ = cause | 0x80;
 
-	dibh->datasize = p - DATAPTR(dibh);
+	l = p - tmp;
+	if (!(skb = l3_alloc_skb(l)))
+		return;
+	memcpy(skb_put(skb, l), tmp, l);
 	newl3state(st, 11);
-	st->l3.l3l2(st, DL_DATA, dibh);
+	st->l3.l3l2(st, DL_DATA, skb);
 	L3AddTimer(&st->l3.timer, st->l3.t305, CC_T305);
 }
 
 static void
-l3dss1_reject_req(struct PStack *st, byte pr, void *arg)
+l3dss1_reject_req(struct PStack *st, u_char pr, void *arg)
 {
-	struct BufHeader *dibh;
-	byte *p;
-	byte cause = 0x95;
+	struct sk_buff *skb;
+	u_char tmp[16];
+	u_char *p = tmp;
+	int l;
+	u_char cause = 0x95;
 
 	if (st->pa->cause > 0)
 		cause = st->pa->cause;
-
-	BufPoolGet(&dibh, st->l1.sbufpool, GFP_ATOMIC, (void *) st, 20);
-	p = DATAPTR(dibh);
-	p += st->l2.ihsize;
 
 	MsgHead(p, st->l3.callref, MT_RELEASE_COMPLETE);
 
@@ -440,28 +486,31 @@ l3dss1_reject_req(struct PStack *st, byte pr, void *arg)
 	*p++ = 0x80;
 	*p++ = cause;
 
-	dibh->datasize = p - DATAPTR(dibh);
+	l = p - tmp;
+	if (!(skb = l3_alloc_skb(l)))
+		return;
+	memcpy(skb_put(skb, l), tmp, l);
 	newl3state(st, 0);
-	st->l3.l3l2(st, DL_DATA, dibh);
+	st->l3.l3l2(st, DL_DATA, skb);
 	st->l3.l3l4(st, CC_RELEASE_IND, NULL);
 }
 
 static void
-l3dss1_release(struct PStack *st, byte pr, void *arg)
+l3dss1_release(struct PStack *st, u_char pr, void *arg)
 {
-	byte *p;
-	struct BufHeader *ibh = arg;
+	u_char *p;
+	struct sk_buff *skb = arg;
 	int cause = -1;
 
-	p = DATAPTR(ibh);
-	if ((p = findie(p + st->l2.ihsize, ibh->datasize - st->l2.ihsize,
-			IE_CAUSE, 0))) {
+	p = skb->data;
+	if ((p = findie(p, skb->len, IE_CAUSE, 0))) {
 		p++;
 		if (*p++ == 2)
 			st->pa->loc = *p++;
 		cause = *p & 0x7f;
 	}
-	BufPoolRelease(ibh);
+	SET_SKB_FREE(skb);
+	dev_kfree_skb(skb, FREE_READ);
 	StopAllL3Timer(st);
 	st->pa->cause = cause;
 	newl3state(st, 0);
@@ -470,7 +519,7 @@ l3dss1_release(struct PStack *st, byte pr, void *arg)
 }
 
 static void
-l3dss1_alert_req(struct PStack *st, byte pr,
+l3dss1_alert_req(struct PStack *st, u_char pr,
 		 void *arg)
 {
 	newl3state(st, 7);
@@ -478,16 +527,15 @@ l3dss1_alert_req(struct PStack *st, byte pr,
 }
 
 static void
-l3dss1_status_enq(struct PStack *st, byte pr, void *arg)
+l3dss1_status_enq(struct PStack *st, u_char pr, void *arg)
 {
-	struct BufHeader *dibh = arg;
-	byte *p;
+	u_char tmp[16];
+	u_char *p = tmp;
+	int l;
+	struct sk_buff *skb = arg;
 
-	BufPoolRelease(dibh);
-
-	BufPoolGet(&dibh, st->l1.sbufpool, GFP_ATOMIC, (void *) st, 22);
-	p = DATAPTR(dibh);
-	p += st->l2.ihsize;
+	SET_SKB_FREE(skb);
+	dev_kfree_skb(skb, FREE_READ);
 
 	MsgHead(p, st->l3.callref, MT_STATUS);
 
@@ -500,12 +548,15 @@ l3dss1_status_enq(struct PStack *st, byte pr, void *arg)
 	*p++ = 0x1;
 	*p++ = st->l3.state & 0x3f;
 
-	dibh->datasize = p - DATAPTR(dibh);
-	st->l3.l3l2(st, DL_DATA, dibh);
+	l = p - tmp;
+	if (!(skb = l3_alloc_skb(l)))
+		return;
+	memcpy(skb_put(skb, l), tmp, l);
+	st->l3.l3l2(st, DL_DATA, skb);
 }
 
 static void
-l3dss1_t303(struct PStack *st, byte pr, void *arg)
+l3dss1_t303(struct PStack *st, u_char pr, void *arg)
 {
 	if (st->l3.n_t303 > 0) {
 		st->l3.n_t303--;
@@ -520,7 +571,7 @@ l3dss1_t303(struct PStack *st, byte pr, void *arg)
 }
 
 static void
-l3dss1_t304(struct PStack *st, byte pr, void *arg)
+l3dss1_t304(struct PStack *st, u_char pr, void *arg)
 {
 	L3DelTimer(&st->l3.timer);
 	st->pa->cause = 0xE6;
@@ -530,19 +581,17 @@ l3dss1_t304(struct PStack *st, byte pr, void *arg)
 }
 
 static void
-l3dss1_t305(struct PStack *st, byte pr, void *arg)
+l3dss1_t305(struct PStack *st, u_char pr, void *arg)
 {
-	struct BufHeader *dibh;
-	byte *p;
-	byte cause = 0x90;
+	u_char tmp[16];
+	u_char *p = tmp;
+	int l;
+	struct sk_buff *skb;
+	u_char cause = 0x90;
 
 	L3DelTimer(&st->l3.timer);
 	if (st->pa->cause > 0)
 		cause = st->pa->cause;
-
-	BufPoolGet(&dibh, st->l1.sbufpool, GFP_ATOMIC, (void *) st, 20);
-	p = DATAPTR(dibh);
-	p += st->l2.ihsize;
 
 	MsgHead(p, st->l3.callref, MT_RELEASE);
 
@@ -551,14 +600,17 @@ l3dss1_t305(struct PStack *st, byte pr, void *arg)
 	*p++ = 0x80;
 	*p++ = cause;
 
-	dibh->datasize = p - DATAPTR(dibh);
+	l = p - tmp;
+	if (!(skb = l3_alloc_skb(l)))
+		return;
+	memcpy(skb_put(skb, l), tmp, l);
 	newl3state(st, 19);
-	st->l3.l3l2(st, DL_DATA, dibh);
+	st->l3.l3l2(st, DL_DATA, skb);
 	L3AddTimer(&st->l3.timer, st->l3.t308, CC_T308_1);
 }
 
 static void
-l3dss1_t310(struct PStack *st, byte pr, void *arg)
+l3dss1_t310(struct PStack *st, u_char pr, void *arg)
 {
 	L3DelTimer(&st->l3.timer);
 	st->pa->cause = 0xE6;
@@ -567,7 +619,7 @@ l3dss1_t310(struct PStack *st, byte pr, void *arg)
 }
 
 static void
-l3dss1_t313(struct PStack *st, byte pr, void *arg)
+l3dss1_t313(struct PStack *st, u_char pr, void *arg)
 {
 	L3DelTimer(&st->l3.timer);
 	st->pa->cause = 0xE6;
@@ -576,7 +628,7 @@ l3dss1_t313(struct PStack *st, byte pr, void *arg)
 }
 
 static void
-l3dss1_t308_1(struct PStack *st, byte pr, void *arg)
+l3dss1_t308_1(struct PStack *st, u_char pr, void *arg)
 {
 	newl3state(st, 19);
 	L3DelTimer(&st->l3.timer);
@@ -585,13 +637,13 @@ l3dss1_t308_1(struct PStack *st, byte pr, void *arg)
 }
 
 static void
-l3dss1_t308_2(struct PStack *st, byte pr, void *arg)
+l3dss1_t308_2(struct PStack *st, u_char pr, void *arg)
 {
 	newl3state(st, 0);
 	L3DelTimer(&st->l3.timer);
 	st->l3.l3l4(st, CC_RELEASE_ERR, NULL);
 }
-
+/* *INDENT-OFF* */
 static struct stateentry downstatelist[] =
 {
 	{SBIT(0),
@@ -647,60 +699,45 @@ static struct stateentry datastatelist[] =
 	{SBIT(0) | SBIT(1) | SBIT(2) | SBIT(3) | SBIT(4) | SBIT(7) | SBIT(8) | SBIT(10) |
 	 SBIT(11) | SBIT(12) | SBIT(15) | SBIT(17) | SBIT(19),
 	 MT_RELEASE, l3dss1_release},
-   {SBIT(1) | SBIT(2) | SBIT(3) | SBIT(4) | SBIT(7) | SBIT(8) | SBIT(10),
-    MT_DISCONNECT, l3dss1_disconnect},
+	{SBIT(1) | SBIT(2) | SBIT(3) | SBIT(4) | SBIT(7) | SBIT(8) | SBIT(10),
+	 MT_DISCONNECT, l3dss1_disconnect},
 	{SBIT(1) | SBIT(2) | SBIT(3) | SBIT(4),
 	 MT_CONNECT, l3dss1_connect},
 	{SBIT(8),
 	 MT_CONNECT_ACKNOWLEDGE, l3dss1_connect_ack},
 };
+/* *INDENT-ON* */
+
 
 static int datasllen = sizeof(datastatelist) /
 sizeof(struct stateentry);
 
 static void
-dss1up(struct PStack *st,
-       int pr, void *arg)
+dss1up(struct PStack *st, int pr, void *arg)
 {
-	int i, mt, size;
-	byte *ptr;
-	struct BufHeader *ibh = arg;
+	int i, mt;
+	struct sk_buff *skb = arg;
 	char tmp[80];
 
-	if (pr == DL_DATA) {
-		ptr = DATAPTR(ibh);
-		ptr += st->l2.ihsize;
-		size = ibh->datasize - st->l2.ihsize;
-	} else if (pr == DL_UNIT_DATA) {
-		ptr = DATAPTR(ibh);
-		ptr += st->l2.uihsize;
-		size = ibh->datasize - st->l2.uihsize;
-	} else {
-		if (st->l3.debug & L3_DEB_WARN) {
-			sprintf(tmp, "dss1up unknown data typ %d state %d",
-				pr, st->l3.state);
-			l3_debug(st, tmp);
-		}
-		BufPoolRelease(ibh);
-		return;
-	}
-	if (ptr[0] != PROTO_DIS_EURO) {
+	if (skb->data[0] != PROTO_DIS_EURO) {
 		if (st->l3.debug & L3_DEB_PROTERR) {
-			sprintf(tmp, "dss1up%sunexpected discriminator %x message len %d state %d",
+			sprintf(tmp, "dss1up%sunexpected discriminator %x message len %ld state %d",
 				(pr == DL_DATA) ? " " : "(broadcast) ",
-				ptr[0], size, st->l3.state);
+				skb->data[0], skb->len, st->l3.state);
 			l3_debug(st, tmp);
 		}
-		BufPoolRelease(ibh);
+		SET_SKB_FREE(skb);
+		dev_kfree_skb(skb, FREE_READ);
 		return;
 	}
-	mt = ptr[3];
+	mt = skb->data[skb->data[1] + 2];
 	for (i = 0; i < datasllen; i++)
 		if ((mt == datastatelist[i].primitive) &&
 		    ((1 << st->l3.state) & datastatelist[i].state))
 			break;
 	if (i == datasllen) {
-		BufPoolRelease(ibh);
+		SET_SKB_FREE(skb);
+		dev_kfree_skb(skb, FREE_READ);
 		if (st->l3.debug & L3_DEB_STATE) {
 			sprintf(tmp, "dss1up%sstate %d mt %x unhandled",
 				(pr == DL_DATA) ? " " : "(broadcast) ",
@@ -715,16 +752,14 @@ dss1up(struct PStack *st,
 				st->l3.state, mt);
 			l3_debug(st, tmp);
 		}
-		datastatelist[i].rout(st, pr, ibh);
+		datastatelist[i].rout(st, pr, skb);
 	}
 }
 
 static void
-dss1down(struct PStack *st,
-	 int pr, void *arg)
+dss1down(struct PStack *st, int pr, void *arg)
 {
 	int i;
-	struct BufHeader *ibh = arg;
 	char tmp[80];
 
 	for (i = 0; i < downsllen; i++)
@@ -743,7 +778,7 @@ dss1down(struct PStack *st,
 				st->l3.state, pr);
 			l3_debug(st, tmp);
 		}
-		downstatelist[i].rout(st, pr, ibh);
+		downstatelist[i].rout(st, pr, arg);
 	}
 }
 

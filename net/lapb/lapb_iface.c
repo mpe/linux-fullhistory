@@ -50,7 +50,7 @@ static lapb_cb *volatile lapb_list = NULL;
  */
 static void lapb_free_cb(lapb_cb *lapb)
 {
-	kfree_s(lapb, sizeof(lapb_cb));
+	kfree(lapb);
 
 	MOD_DEC_USE_COUNT;
 }
@@ -123,7 +123,7 @@ static lapb_cb *lapb_create_cb(void)
 {
 	lapb_cb *lapb;
 
-	if ((lapb = (lapb_cb *)kmalloc(sizeof(*lapb), GFP_ATOMIC)) == NULL)
+	if ((lapb = kmalloc(sizeof(*lapb), GFP_ATOMIC)) == NULL)
 		return NULL;
 
 	MOD_INC_USE_COUNT;
@@ -404,6 +404,9 @@ __initfunc(void lapb_proto_init(struct net_proto *pro))
 }
 
 #ifdef MODULE
+MODULE_AUTHOR("Jonathan Naylor <g4klx@g4klx.demon.co.uk>");
+MODULE_DESCRIPTION("The X.25 Link Access Procedure B link layer protocol");
+
 int init_module(void)
 {
 	lapb_proto_init(NULL);

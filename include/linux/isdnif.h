@@ -1,4 +1,4 @@
-/* $Id: isdnif.h,v 1.17 1997/02/10 21:12:53 fritz Exp $
+/* $Id: isdnif.h,v 1.20 1997/05/27 15:18:06 fritz Exp $
  *
  * Linux ISDN subsystem
  *
@@ -22,6 +22,20 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA. 
  *
  * $Log: isdnif.h,v $
+ * Revision 1.20  1997/05/27 15:18:06  fritz
+ * Added changes for recent 2.1.x kernels:
+ *   changed return type of isdn_close
+ *   queue_task_* -> queue_task
+ *   clear/set_bit -> test_and_... where apropriate.
+ *   changed type of hard_header_cache parameter.
+ *
+ * Revision 1.19  1997/03/25 23:13:56  keil
+ * NI-1 US protocol
+ *
+ * Revision 1.18  1997/03/04 22:09:18  calle
+ * Change macros copy_from_user and copy_to_user in inline function.
+ * These are now correct replacements of the functions for 2.1.xx
+ *
  * Revision 1.17  1997/02/10 21:12:53  fritz
  * More setup-interface changes.
  *
@@ -89,6 +103,7 @@
 #define ISDN_PTYPE_1TR6      1   /* german 1TR6-protocol */
 #define ISDN_PTYPE_EURO      2   /* EDSS1-protocol       */
 #define ISDN_PTYPE_LEASED    3   /* for leased lines     */
+#define ISDN_PTYPE_NI1       4   /* US NI-1 protocol     */
 
 /*
  * Values for Layer-2-protocol-selection
@@ -169,6 +184,7 @@
 #define ISDN_FEATURE_P_UNKNOWN  (0x1000 << ISDN_PTYPE_UNKNOWN)
 #define ISDN_FEATURE_P_1TR6     (0x1000 << ISDN_PTYPE_1TR6)
 #define ISDN_FEATURE_P_EURO     (0x1000 << ISDN_PTYPE_EURO)
+#define ISDN_FEATURE_P_NI1      (0x1000 << ISDN_PTYPE_NI1)
 
 typedef struct setup_parm {
     char phone[32];         /* Remote Phone-Number */
@@ -346,14 +362,30 @@ extern int register_isdn(isdn_if*);
 #endif
 #if (LINUX_VERSION_CODE < 0x020100)
 #include <linux/mm.h>
-#define copy_from_user memcpy_fromfs
-#define copy_to_user memcpy_tofs
+
+static inline unsigned long copy_from_user(void *to, const void *from, unsigned long n)
+{
+	int i;
+	if ((i = verify_area(VERIFY_READ, from, n)) != 0)
+		return i;
+	memcpy_fromfs(to, from, n);
+	return 0;
+}
+
+static inline unsigned long copy_to_user(void *to, const void *from, unsigned long n)
+{
+	int i;
+	if ((i = verify_area(VERIFY_WRITE, to, n)) != 0)
+		return i;
+	memcpy_tofs(to, from, n);
+	return 0;
+}
+
 #define GET_USER(x, addr) ( x = get_user(addr) )
 #define RWTYPE int
 #define LSTYPE int
 #define RWARG int
 #define LSARG off_t
-#define SET_SKB_FREE(x) ( x->free = 1 )
 #else
 #include <asm/uaccess.h>
 #define GET_USER get_user
@@ -362,11 +394,25 @@ extern int register_isdn(isdn_if*);
 #define LSTYPE long long
 #define RWARG unsigned long
 #define LSARG long long
+#endif
+
 #if (LINUX_VERSION_CODE < 0x02010F)
 #define SET_SKB_FREE(x) ( x->free = 1 )
 #else
 #define SET_SKB_FREE(x)
 #endif
+
+#if (LINUX_VERSION_CODE < 0x02011F)
+#define CLOSETYPE void
+#define CLOSEVAL
+#else
+#define CLOSETYPE int
+#define CLOSEVAL (0)
+#endif
+
+#if (LINUX_VERSION_CODE < 0x020125)
+#define test_and_clear_bit clear_bit
+#define test_and_set_bit set_bit
 #endif
 
 #endif /* __KERNEL__ */

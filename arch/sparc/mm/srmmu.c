@@ -1,4 +1,4 @@
-/* $Id: srmmu.c,v 1.146 1997/05/18 21:11:09 davem Exp $
+/* $Id: srmmu.c,v 1.147 1997/05/20 07:58:42 jj Exp $
  * srmmu.c:  SRMMU specific routines for memory management.
  *
  * Copyright (C) 1995 David S. Miller  (davem@caip.rutgers.edu)
@@ -1239,8 +1239,7 @@ extern void hypersparc_flush_tlb_all(void);
 extern void hypersparc_flush_tlb_mm(struct mm_struct *mm);
 extern void hypersparc_flush_tlb_range(struct mm_struct *mm, unsigned long start, unsigned long end);
 extern void hypersparc_flush_tlb_page(struct vm_area_struct *vma, unsigned long page);
-extern void hypersparc_bzero_1page(void *);
-extern void hypersparc_copy_1page(void *, const void *);
+extern void hypersparc_setup_blockops(void);
 
 static void srmmu_set_pte_nocache_hyper(pte_t *ptep, pte_t pteval)
 {
@@ -2411,13 +2410,7 @@ __initfunc(static void init_hypersparc(void))
 	sparc_update_rootmmu_dir = hypersparc_update_rootmmu_dir;
 	poke_srmmu = poke_hypersparc;
 
-	/* High performance page copy/clear. */
-	{	extern void (*__copy_1page)(void *, const void *);
-		extern void (*bzero_1page)(void *);
-
-		__copy_1page = hypersparc_copy_1page;
-		bzero_1page = hypersparc_bzero_1page;
-	}
+	hypersparc_setup_blockops();
 }
 
 static void poke_cypress(void)

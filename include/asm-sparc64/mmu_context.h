@@ -1,4 +1,4 @@
-/* $Id: mmu_context.h,v 1.8 1997/05/18 20:44:23 davem Exp $ */
+/* $Id: mmu_context.h,v 1.10 1997/05/23 09:35:55 jj Exp $ */
 #ifndef __SPARC64_MMU_CONTEXT_H
 #define __SPARC64_MMU_CONTEXT_H
 
@@ -20,8 +20,6 @@
 
 extern unsigned long tlb_context_cache;
 
-#define MAX_CTX			PAGE_SIZE
-
 #define CTX_VERSION_SHIFT	PAGE_SHIFT
 #define CTX_VERSION_MASK	((~0UL) << CTX_VERSION_SHIFT)
 #define CTX_FIRST_VERSION	((1UL << CTX_VERSION_SHIFT) + 1UL)
@@ -29,7 +27,7 @@ extern unsigned long tlb_context_cache;
 extern __inline__ void get_new_mmu_context(struct mm_struct *mm,
 					   unsigned long ctx)
 {
-	if((ctx & ~CTX_VERSION_MASK) > MAX_CTX) {
+	if((ctx & ~(CTX_VERSION_MASK)) == 0) {
 		unsigned long flags;
 		int entry;
 
@@ -68,7 +66,9 @@ extern __inline__ void get_mmu_context(struct task_struct *tsk)
 		flushw_user();
 		if((mm->context ^ ctx) & CTX_VERSION_MASK)
 			get_new_mmu_context(mm, ctx);
-		spitfire_set_secondary_context(mm->context);
+		tsk->tss.ctx = (mm->context & 0x1fff);
+		spitfire_set_secondary_context(tsk->tss.current_ds ?
+			mm->context : 0);
 		paddr = __pa(mm->pgd);
 		__asm__ __volatile__("
 			rdpr		%%pstate, %%o4

@@ -25,6 +25,7 @@ EXPORT_SYMBOL(drive_info);
 #endif
 
 /* platform dependent support */
+EXPORT_SYMBOL(x86);
 EXPORT_SYMBOL(EISA_bus);
 EXPORT_SYMBOL(MCA_bus);
 EXPORT_SYMBOL(wp_works_ok);

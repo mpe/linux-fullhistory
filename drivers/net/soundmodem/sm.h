@@ -325,6 +325,7 @@ extern const struct modem_rx_info sm_fsk9600_4_rx;
 extern const struct modem_rx_info sm_fsk9600_5_rx;
 
 extern const struct hardware_info sm_hw_sbc;
+extern const struct hardware_info sm_hw_sbcfdx;
 extern const struct hardware_info sm_hw_wss;
 extern const struct hardware_info sm_hw_wssfdx;
 

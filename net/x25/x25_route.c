@@ -59,7 +59,7 @@ static int x25_add_route(x25_address *address, unsigned int sigdigits, struct de
 		if (memcmp(&x25_route->address, address, sigdigits) == 0 && x25_route->sigdigits == sigdigits)
 			return -EINVAL;
 
-	if ((x25_route = (struct x25_route *)kmalloc(sizeof(*x25_route), GFP_ATOMIC)) == NULL)
+	if ((x25_route = kmalloc(sizeof(*x25_route), GFP_ATOMIC)) == NULL)
 		return -ENOMEM;
 
 	strcpy(x25_route->address.x25_addr, "000000000000000");
@@ -87,7 +87,7 @@ static void x25_remove_route(struct x25_route *x25_route)
 	if ((s = x25_route_list) == x25_route) {
 		x25_route_list = x25_route->next;
 		restore_flags(flags);
-		kfree_s(x25_route, sizeof(struct x25_route));
+		kfree(x25_route);
 		return;
 	}
 
@@ -95,7 +95,7 @@ static void x25_remove_route(struct x25_route *x25_route)
 		if (s->next == x25_route) {
 			s->next = x25_route->next;
 			restore_flags(flags);
-			kfree_s(x25_route, sizeof(struct x25_route));
+			kfree(x25_route);
 			return;
 		}
 

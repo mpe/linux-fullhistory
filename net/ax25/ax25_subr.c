@@ -1,9 +1,6 @@
 /*
  *	AX.25 release 036
  *
- *	This is ALPHA test software. This code may break your machine, randomly fail to work with new 
- *	releases, misbehave and/or generally screw up. It might even work. 
- *
  *	This code REQUIRES 2.1.15 or higher/ NET3.038
  *
  *	This module:
@@ -289,6 +286,9 @@ unsigned short ax25_calculate_t1(ax25_cb *ax25)
  */
 void ax25_calculate_rtt(ax25_cb *ax25)
 {
+	if (ax25->backoff == 0)
+		return;
+
 	if (ax25->t1timer > 0 && ax25->n2count == 0)
 		ax25->rtt = (9 * ax25->rtt + ax25->t1 - ax25->t1timer) / 10;
 

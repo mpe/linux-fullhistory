@@ -3301,7 +3301,7 @@ static void stl_cd1400txisr(stlpanel_t *panelp, int ioaddr)
 	len = (head >= tail) ? (head - tail) : (STL_TXBUFSIZE - (tail - head));
 	if ((len == 0) || ((len < STL_TXBUFLOW) && (test_bit(ASYI_TXLOW, &portp->istate) == 0))) {
 		set_bit(ASYI_TXLOW, &portp->istate);
-		queue_task_irq_off(&portp->tqueue, &tq_scheduler);
+		queue_task(&portp->tqueue, &tq_scheduler);
 	}
 
 	if (len == 0) {
@@ -3479,7 +3479,7 @@ static void stl_cd1400mdmisr(stlpanel_t *panelp, int ioaddr)
 	misr = inb(ioaddr + EREG_DATA);
 	if (misr & MISR_DCD) {
 		set_bit(ASYI_DCDCHANGE, &portp->istate);
-		queue_task_irq_off(&portp->tqueue, &tq_scheduler);
+		queue_task(&portp->tqueue, &tq_scheduler);
 		portp->stats.modem++;
 	}
 
@@ -4159,7 +4159,7 @@ static void stl_sc26198txisr(stlport_t *portp)
 	len = (head >= tail) ? (head - tail) : (STL_TXBUFSIZE - (tail - head));
 	if ((len == 0) || ((len < STL_TXBUFLOW) && (test_bit(ASYI_TXLOW, &portp->istate) == 0))) {
 		set_bit(ASYI_TXLOW, &portp->istate);
-		queue_task_irq_off(&portp->tqueue, &tq_scheduler);
+		queue_task(&portp->tqueue, &tq_scheduler);
 	}
 
 	if (len == 0) {
@@ -4377,7 +4377,7 @@ static void stl_sc26198otherisr(stlport_t *portp, unsigned int iack)
 		ipr = stl_sc26198getreg(portp, IPR);
 		if (ipr & IPR_DCDCHANGE) {
 			set_bit(ASYI_DCDCHANGE, &portp->istate);
-			queue_task_irq_off(&portp->tqueue, &tq_scheduler);
+			queue_task(&portp->tqueue, &tq_scheduler);
 			portp->stats.modem++;
 		}
 		break;

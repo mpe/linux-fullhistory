@@ -10,28 +10,16 @@ breakpoint:	retl;nop
 do_cee:	retl;nop
 	.globl	do_cee_tl1
 do_cee_tl1:	retl;nop
-	.globl	do_dae
-do_dae:	retl;nop
 	.globl	do_dae_tl1
 do_dae_tl1:	retl;nop
-	.globl	do_div0
-do_div0:	retl;nop
 	.globl	do_div0_tl1
 do_div0_tl1:	retl;nop
-	.globl	do_fpdis
-do_fpdis:	retl;nop
 	.globl	do_fpdis_tl1
 do_fpdis_tl1:	retl;nop
-	.globl	do_fpieee
-do_fpieee:	retl;nop
 	.globl	do_fpieee_tl1
 do_fpieee_tl1:	retl;nop
-	.globl	do_fpother
-do_fpother:	retl;nop
 	.globl	do_fpother_tl1
 do_fpother_tl1:	retl;nop
-	.globl	do_iae
-do_iae:	retl;nop
 	.globl	do_iae_tl1
 do_iae_tl1:	retl;nop
 	.globl	do_ill_tl1
@@ -50,16 +38,10 @@ do_mna_tl1:	retl;nop
 do_paw:	retl;nop
 	.globl	do_paw_tl1
 do_paw_tl1:	retl;nop
-	.globl	do_privact
-do_privact:	retl;nop
-	.globl	do_privop
-do_privop:	retl;nop
 	.globl	do_stdfmna
 do_stdfmna:	retl;nop
 	.globl	do_stdfmna_tl1
 do_stdfmna_tl1:	retl;nop
-	.globl	do_tof
-do_tof:	retl;nop
 	.globl	do_tof_tl1
 do_tof_tl1:	retl;nop
 	.globl	do_vaw
@@ -190,9 +172,3 @@ sunos_wait4:	retl;nop
 sunos_write:	retl;nop
 	.globl	sunos_writev
 sunos_writev:	retl;nop
-	.globl	sys_ptrace
-sys_ptrace:	retl;nop
-	.globl	syscall_trace
-syscall_trace:	retl;nop
-	.globl	sys32_ptrace
-sys32_ptrace:	retl;nop

@@ -12,7 +12,7 @@
 
 /* Internal header file for autofs */
 
-#define DEBUG_WAITLIST 1
+/* #define DEBUG_WAITLIST 1 */
 
 #include <linux/auto_fs.h>
 

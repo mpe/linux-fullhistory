@@ -1,9 +1,6 @@
 /*
  *	AX.25 release 036
  *
- *	This is ALPHA test software. This code may break your machine, randomly fail to work with new 
- *	releases, misbehave and/or generally screw up. It might even work. 
- *
  *	This code REQUIRES 2.1.15 or higher/ NET3.038
  *
  *	This module:
@@ -77,7 +74,7 @@ void ax25_dev_device_up(struct device *dev)
 	unsigned long flags;
 
 	if ((ax25_dev = kmalloc(sizeof(*ax25_dev), GFP_ATOMIC)) == NULL) {
-		printk(KERN_ERR "ax25_dev_device_up out of memory\n");
+		printk(KERN_ERR "AX.25: ax25_dev_device_up - out of memory\n");
 		return;
 	}
 
@@ -102,11 +99,7 @@ void ax25_dev_device_up(struct device *dev)
 	ax25_dev->values[AX25_VALUES_IDLE]	= AX25_DEF_IDLE;
 	ax25_dev->values[AX25_VALUES_N2]        = AX25_DEF_N2;
 	ax25_dev->values[AX25_VALUES_PACLEN]	= AX25_DEF_PACLEN;
-#ifdef CONFIG_AX25_DAMA_SLAVE
-	ax25_dev->values[AX25_VALUES_PROTOCOL]	= AX25_PROTO_DAMA_SLAVE;
-#else
 	ax25_dev->values[AX25_VALUES_PROTOCOL]  = AX25_DEF_PROTOCOL;
-#endif
 	ax25_dev->values[AX25_VALUES_DS_TIMEOUT]= AX25_DEF_DS_TIMEOUT;
 
 	save_flags(flags); cli();
@@ -147,7 +140,7 @@ void ax25_dev_device_down(struct device *dev)
 	if ((s = ax25_dev_list) == ax25_dev) {
 		ax25_dev_list = s->next;
 		restore_flags(flags);
-		kfree_s(ax25_dev, sizeof(ax25_dev));
+		kfree(ax25_dev);
 #ifdef CONFIG_SYSCTL
 		ax25_register_sysctl();
 #endif
@@ -158,7 +151,7 @@ void ax25_dev_device_down(struct device *dev)
 		if (s->next == ax25_dev) {
 			s->next = ax25_dev->next;
 			restore_flags(flags);
-			kfree_s(ax25_dev, sizeof(ax25_dev));
+			kfree(ax25_dev);
 #ifdef CONFIG_SYSCTL
 			ax25_register_sysctl();
 #endif
@@ -229,7 +222,7 @@ void ax25_dev_free(void)
 		s        = ax25_dev;
 		ax25_dev = ax25_dev->next;
 
-		kfree_s(s, sizeof(ax25_dev));
+		kfree(s);
 	}
 }
 

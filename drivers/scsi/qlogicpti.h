@@ -328,6 +328,7 @@ struct Status_Entry {
 #define CS_ID_MSG_FAILED		0x0013
 #define CS_UNEXP_BUS_FREE		0x0014
 #define CS_DATA_UNDERRUN		0x0015
+#define CS_BUS_RESET			0x001c
 
 /* status entry state flag definitions */
 #define SF_GOT_BUS			0x0100

@@ -136,7 +136,7 @@ asmlinkage int sys_shmget (key_t key, int size, int shmflg)
 	struct shmid_ds *shp;
 	int err, id = 0;
 
-	lock_kernel();
+	down(&current->mm->mmap_sem);
 	if (size < 0 || size > SHMMAX) {
 		err = -EINVAL;
 	} else if (key == IPC_PRIVATE) {
@@ -159,7 +159,7 @@ asmlinkage int sys_shmget (key_t key, int size, int shmflg)
 		else
 			err = (int) shp->shm_perm.seq * SHMMNI + id;
 	}
-	unlock_kernel();
+	up(&current->mm->mmap_sem);
 	return err;
 }
 
@@ -482,7 +482,7 @@ asmlinkage int sys_shmat (int shmid, char *shmaddr, int shmflg, ulong *raddr)
 	unsigned long addr;
 	unsigned long len;
 
-	lock_kernel();
+	down(&current->mm->mmap_sem);
 	if (shmid < 0) {
 		/* printk("shmat() -> EINVAL because shmid = %d < 0\n",shmid); */
 		goto out;
@@ -575,7 +575,7 @@ asmlinkage int sys_shmat (int shmid, char *shmaddr, int shmflg, ulong *raddr)
 	*raddr = addr;
 	err = 0;
 out:
-	unlock_kernel();
+	up(&current->mm->mmap_sem);
 	return err;
 }
 
@@ -626,12 +626,14 @@ asmlinkage int sys_shmdt (char *shmaddr)
 {
 	struct vm_area_struct *shmd, *shmdnext;
 
+	down(&current->mm->mmap_sem);
 	for (shmd = current->mm->mmap; shmd; shmd = shmdnext) {
 		shmdnext = shmd->vm_next;
 		if (shmd->vm_ops == &shm_vm_ops
 		    && shmd->vm_start - shmd->vm_offset == (ulong) shmaddr)
 			do_munmap(shmd->vm_start, shmd->vm_end - shmd->vm_start);
 	}
+	up(&current->mm->mmap_sem);
 	return 0;
 }
 

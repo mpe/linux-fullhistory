@@ -1,5 +1,5 @@
 /* -*- linux-c -*-
- * sysctl_net_rose.c: sysctl interface to net Rose subsystem.
+ * sysctl_net_rose.c: sysctl interface to net ROSE subsystem.
  *
  * Begun April 1, 1996, Mike Shaver.
  * Added /proc/sys/net/rose directory entry (empty =) ). [MS]
@@ -18,6 +18,8 @@ static int max_idle[]   = {65535 * ROSE_SLOWHZ};
 static int min_route[]  = {0}, max_route[] = {1};
 static int min_ftimer[] = {60 * ROSE_SLOWHZ};
 static int max_ftimer[] = {600 * ROSE_SLOWHZ};
+static int min_maxvcs[] = {1}, max_maxvcs[] = {254};
+static int min_window[] = {1}, max_window[] = {7};
 
 static struct ctl_table_header *rose_table_header;
 
@@ -46,6 +48,12 @@ static ctl_table rose_table[] = {
         {NET_ROSE_LINK_FAIL_TIMEOUT, "link_fail_timeout",
          &sysctl_rose_link_fail_timeout, sizeof(int), 0644, NULL,
          &proc_dointvec_minmax, &sysctl_intvec, NULL, &min_ftimer, &max_ftimer},
+        {NET_ROSE_MAX_VCS, "maximum_virtual_circuits",
+         &sysctl_rose_maximum_vcs, sizeof(int), 0644, NULL,
+         &proc_dointvec_minmax, &sysctl_intvec, NULL, &min_maxvcs, &max_maxvcs},
+        {NET_ROSE_WINDOW_SIZE, "window_size",
+         &sysctl_rose_window_size, sizeof(int), 0644, NULL,
+         &proc_dointvec_minmax, &sysctl_intvec, NULL, &min_window, &max_window},
 	{0}
 };
 

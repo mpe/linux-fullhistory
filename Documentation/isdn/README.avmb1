@@ -1,0 +1,62 @@
+The driver provides a kernel capi2.0 Interface (kernelcapi) and
+on top of this a User-Level-CAPI2.0-interface (capi)
+and a driver to connect isdn4linux with CAPI2.0 (capidrv).
+
+The Author can be reached at calle@calle.in-berlin.de
+The command avmcapictrl is part of the isdn4linux-utils.
+t4-files can be found at ftp.avm.de.
+
+Installing
+----------
+
+You need at least /dev/capi20 to load the firmware.
+
+mknod /dev/capi20 c 68 0
+mknod /dev/capi20.00 c 68 1
+mknod /dev/capi20.01 c 68 2
+.
+.
+.
+mknod /dev/capi20.19 c 68 20
+
+Running
+-------
+
+To use the card you need the t4-files to download the firmware.
+AVM GmbH provides several t4-files for the different D-channel
+protocols (b1.t4 for Euro-ISDN). Install these file in /lib/isdn.
+
+If you not compile the driver as modules, you have to add the
+card(s) and load them after booting:
+
+avmcapictrl add 0x150 15
+avmcapictrl load /lib/isdn/b1.t4 1
+
+if you configure as modules you have two possibilities:
+
+insmod /lib/modules/current/misc/capiutil.o
+insmod /lib/modules/current/misc/kernelcapi.o portbase=0x150 irq=15
+insmod /lib/modules/current/misc/capidrv.o
+insmod /lib/modules/current/misc/capi.o
+avmcapictrl load /lib/isdn/b1.t4
+
+or
+
+insmod /lib/modules/current/misc/capiutil.o
+insmod /lib/modules/current/misc/kernelcapi.o
+insmod /lib/modules/current/misc/capidrv.o
+insmod /lib/modules/current/misc/capi.o
+avmcapictrl add 0x150 15
+avmcapictrl load /lib/isdn/b1.t4
+
+Questions
+---------
+Check out the FAQ (ftp.franken.de).
+
+Bugs 
+----
+If you find any please let me know. 
+
+Enjoy,
+
+Carsten Paeth (calle@calle.in-berlin.de)

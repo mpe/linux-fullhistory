@@ -1,4 +1,4 @@
-/* $Id: avm_a1.c,v 1.4 1997/01/27 15:50:21 keil Exp $
+/* $Id: avm_a1.c,v 1.6 1997/04/13 19:54:07 keil Exp $
 
  * avm_a1.c     low level stuff for AVM A1 (Fritz) isdn cards
  *
@@ -6,6 +6,12 @@
  *
  *
  * $Log: avm_a1.c,v $
+ * Revision 1.6  1997/04/13 19:54:07  keil
+ * Change in IRQ check delay for SMP
+ *
+ * Revision 1.5  1997/04/06 22:54:10  keil
+ * Using SKB's
+ *
  * Revision 1.4  1997/01/27 15:50:21  keil
  * SMP proof,cosmetics
  *
@@ -28,32 +34,32 @@
 #include <linux/kernel_stat.h>
 
 extern const char *CardType[];
-const char *avm_revision = "$Revision: 1.4 $";
+const char *avm_revision = "$Revision: 1.6 $";
 
 #define byteout(addr,val) outb_p(val,addr)
 #define bytein(addr) inb_p(addr)
 
-static inline byte
-readreg(unsigned int adr, byte off)
+static inline u_char
+readreg(unsigned int adr, u_char off)
 {
 	return (bytein(adr + off));
 }
 
 static inline void
-writereg(unsigned int adr, byte off, byte data)
+writereg(unsigned int adr, u_char off, u_char data)
 {
 	byteout(adr + off, data);
 }
 
 
 static inline void
-read_fifo(unsigned int adr, byte * data, int size)
+read_fifo(unsigned int adr, u_char * data, int size)
 {
 	insb(adr - 0x400, data, size);
 }
 
 static void
-write_fifo(unsigned int adr, byte * data, int size)
+write_fifo(unsigned int adr, u_char * data, int size)
 {
 	outsb(adr - 0x400, data, size);
 }
@@ -84,8 +90,9 @@ waitforXFW(int adr)
 	if (!to)
 		printk(KERN_WARNING "AVM A1: waitforXFW timeout\n");
 }
+
 static inline void
-writehscxCMDR(int adr, byte data)
+writehscxCMDR(int adr, u_char data)
 {
 	long flags;
 
@@ -127,25 +134,22 @@ avm_a1_report(struct IsdnCardState *sp)
 static void
 hscx_empty_fifo(struct HscxState *hsp, int count)
 {
-	byte *ptr;
+	u_char *ptr;
 	struct IsdnCardState *sp = hsp->sp;
-	struct BufHeader *ibh = hsp->rcvibh;
 	long flags;
 
 	if ((sp->debug & L1_DEB_HSCX) && !(sp->debug & L1_DEB_HSCX_FIFO))
 		debugl1(sp, "hscx_empty_fifo");
 
-	if (hsp->rcvptr + count > BUFFER_SIZE(HSCX_RBUF_ORDER,
-					      HSCX_RBUF_BPPS)) {
+	if (hsp->rcvidx + count > HSCX_BUFMAX) {
 		if (sp->debug & L1_DEB_WARN)
 			debugl1(sp, "hscx_empty_fifo: incoming packet too large");
 		writehscxCMDR(sp->hscx[hsp->hscx], 0x80);
+		hsp->rcvidx = 0;
 		return;
 	}
-	ptr = DATAPTR(ibh);
-	ptr += hsp->rcvptr;
-
-	hsp->rcvptr += count;
+	ptr = hsp->rcvbuf + hsp->rcvidx;
+	hsp->rcvidx += count;
 	save_flags(flags);
 	cli();
 	read_fifo(sp->hscx[hsp->hscx], ptr, count);
@@ -166,34 +170,32 @@ static void
 hscx_fill_fifo(struct HscxState *hsp)
 {
 	struct IsdnCardState *sp = hsp->sp;
-	struct BufHeader *ibh;
 	int more, count;
-	byte *ptr;
+	u_char *ptr;
 	long flags;
 
 	if ((sp->debug & L1_DEB_HSCX) && !(sp->debug & L1_DEB_HSCX_FIFO))
 		debugl1(sp, "hscx_fill_fifo");
 
-	ibh = hsp->xmtibh;
-	if (!ibh)
+	if (!hsp->tx_skb)
 		return;
-
-	count = ibh->datasize - hsp->sendptr;
-	if (count <= 0)
+	if (hsp->tx_skb->len <= 0)
 		return;
 
 	more = (hsp->mode == 1) ? 1 : 0;
-	if (count > 32) {
+	if (hsp->tx_skb->len > 32) {
 		more = !0;
 		count = 32;
-	}
-	ptr = DATAPTR(ibh);
-	ptr += hsp->sendptr;
-	hsp->sendptr += count;
+	} else
+		count = hsp->tx_skb->len;
 
 	waitforXFW(sp->hscx[hsp->hscx]);
 	save_flags(flags);
 	cli();
+	ptr = hsp->tx_skb->data;
+	skb_pull(hsp->tx_skb, count);
+	hsp->tx_cnt -= count;
+	hsp->count += count;
 	write_fifo(sp->hscx[hsp->hscx], ptr, count);
 	writehscxCMDR(sp->hscx[hsp->hscx], more ? 0x8 : 0xa);
 	restore_flags(flags);
@@ -209,11 +211,12 @@ hscx_fill_fifo(struct HscxState *hsp)
 }
 
 static inline void
-hscx_interrupt(struct IsdnCardState *sp, byte val, byte hscx)
+hscx_interrupt(struct IsdnCardState *sp, u_char val, u_char hscx)
 {
-	byte r;
+	u_char r;
 	struct HscxState *hsp = sp->hs + hscx;
-	int count, err;
+	struct sk_buff *skb;
+	int count;
 	char tmp[32];
 
 	if (!hsp->init)
@@ -235,79 +238,57 @@ hscx_interrupt(struct IsdnCardState *sp, byte val, byte hscx)
 			if (!r & 0x20)
 				if (sp->debug & L1_DEB_WARN)
 					debugl1(sp, "HSCX CRC error");
-			if (hsp->rcvibh)
-				BufPoolRelease(hsp->rcvibh);
-			hsp->rcvibh = NULL;
 			writehscxCMDR(sp->hscx[hsp->hscx], 0x80);
-			goto afterRME;
+		} else {
+			count = readreg(sp->hscx[hsp->hscx], HSCX_RBCL) & 0x1f;
+			if (count == 0)
+				count = 32;
+			hscx_empty_fifo(hsp, count);
+			if ((count = hsp->rcvidx - 1) > 0) {
+				if (!(skb = dev_alloc_skb(count)))
+					printk(KERN_WARNING "AVM: receive out of memory\n");
+				else {
+					memcpy(skb_put(skb, count), hsp->rcvbuf, count);
+					skb_queue_tail(&hsp->rqueue, skb);
+				}
+			}
 		}
-		if (!hsp->rcvibh)
-			if (BufPoolGet(&hsp->rcvibh, &hsp->rbufpool,
-				       GFP_ATOMIC, (void *) 1, 1)) {
-				if (sp->debug & L1_DEB_WARN)
-					debugl1(sp, "HSCX RME out of buffers");
-				writehscxCMDR(sp->hscx[hsp->hscx], 0x80);
-				goto afterRME;
-			} else
-				hsp->rcvptr = 0;
-
-		count = readreg(sp->hscx[hsp->hscx], HSCX_RBCL) & 0x1f;
-		if (count == 0)
-			count = 32;
-		hscx_empty_fifo(hsp, count);
-		hsp->rcvibh->datasize = hsp->rcvptr - 1;
-		BufQueueLink(&hsp->rq, hsp->rcvibh);
-		hsp->rcvibh = NULL;
+		hsp->rcvidx = 0;
 		hscx_sched_event(hsp, HSCX_RCVBUFREADY);
 	}
-      afterRME:
 	if (val & 0x40) {	/* RPF */
-		if (!hsp->rcvibh) {
-			if (hsp->mode == 1)
-				err = BufPoolGet(&hsp->rcvibh, &hsp->smallpool,
-					      GFP_ATOMIC, (void *) 1, 2);
-			else
-				err = BufPoolGet(&hsp->rcvibh, &hsp->rbufpool,
-					      GFP_ATOMIC, (void *) 1, 2);
-
-			if (err) {
-				if (sp->debug & L1_DEB_WARN)
-					debugl1(sp, "HSCX RPF out of buffers");
-				writehscxCMDR(sp->hscx[hsp->hscx], 0x80);
-				goto afterRPF;
-			} else
-				hsp->rcvptr = 0;
-		}
 		hscx_empty_fifo(hsp, 32);
 		if (hsp->mode == 1) {
 			/* receive audio data */
-			hsp->rcvibh->datasize = hsp->rcvptr;
-			BufQueueLink(&hsp->rq, hsp->rcvibh);
-			hsp->rcvibh = NULL;
+			if (!(skb = dev_alloc_skb(32)))
+				printk(KERN_WARNING "AVM: receive out of memory\n");
+			else {
+				memcpy(skb_put(skb, 32), hsp->rcvbuf, 32);
+				skb_queue_tail(&hsp->rqueue, skb);
+			}
+			hsp->rcvidx = 0;
 			hscx_sched_event(hsp, HSCX_RCVBUFREADY);
 		}
 	}
-      afterRPF:
 	if (val & 0x10) {	/* XPR */
-		if (hsp->xmtibh)
-			if (hsp->xmtibh->datasize > hsp->sendptr) {
+		if (hsp->tx_skb)
+			if (hsp->tx_skb->len) {
 				hscx_fill_fifo(hsp);
-				goto afterXPR;
+				return;
 			} else {
-				if (hsp->releasebuf)
-					BufPoolRelease(hsp->xmtibh);
-				hsp->sendptr = 0;
+				SET_SKB_FREE(hsp->tx_skb);
+				dev_kfree_skb(hsp->tx_skb, FREE_WRITE);
+				hsp->count = 0;
 				if (hsp->st->l4.l1writewakeup)
 					hsp->st->l4.l1writewakeup(hsp->st);
-				hsp->xmtibh = NULL;
+				hsp->tx_skb = NULL;
 			}
-		if (!BufQueueUnlink(&hsp->xmtibh, &hsp->sq)) {
-			hsp->releasebuf = !0;
+		if ((hsp->tx_skb = skb_dequeue(&hsp->squeue))) {
+			hsp->count = 0;
 			hscx_fill_fifo(hsp);
 		} else
 			hscx_sched_event(hsp, HSCX_XMTBUFREADY);
 	}
-      afterXPR:
 }
 
 /*
@@ -317,26 +298,26 @@ hscx_interrupt(struct IsdnCardState *sp, byte val, byte hscx)
 static void
 isac_empty_fifo(struct IsdnCardState *sp, int count)
 {
-	byte *ptr;
-	struct BufHeader *ibh = sp->rcvibh;
+	u_char *ptr;
 	long flags;
 
 	if ((sp->debug & L1_DEB_ISAC) && !(sp->debug & L1_DEB_ISAC_FIFO))
 		if (sp->debug & L1_DEB_ISAC)
 			debugl1(sp, "isac_empty_fifo");
 
-	if (sp->rcvptr >= 3072) {
+	if ((sp->rcvidx + count) >= MAX_DFRAME_LEN) {
 		if (sp->debug & L1_DEB_WARN) {
 			char tmp[40];
-			sprintf(tmp, "isac_empty_fifo rcvptr %d", sp->rcvptr);
+			sprintf(tmp, "isac_empty_fifo overrun %d",
+				sp->rcvidx + count);
 			debugl1(sp, tmp);
 		}
+		writereg(sp->isac, ISAC_CMDR, 0x80);
+		sp->rcvidx = 0;
 		return;
 	}
-	ptr = DATAPTR(ibh);
-	ptr += sp->rcvptr;
-	sp->rcvptr += count;
-
+	ptr = sp->rcvbuf + sp->rcvidx;
+	sp->rcvidx += count;
 	save_flags(flags);
 	cli();
 	read_fifo(sp->isac, ptr, count);
@@ -355,22 +336,18 @@ isac_empty_fifo(struct IsdnCardState *sp, int count)
 static void
 isac_fill_fifo(struct IsdnCardState *sp)
 {
-	struct BufHeader *ibh;
 	int count, more;
-	byte *ptr;
+	u_char *ptr;
 	long flags;
 
 	if ((sp->debug & L1_DEB_ISAC) && !(sp->debug & L1_DEB_ISAC_FIFO))
 		debugl1(sp, "isac_fill_fifo");
 
-	ibh = sp->xmtibh;
-	if (!ibh)
+	if (!sp->tx_skb)
 		return;
 
-	count = ibh->datasize - sp->sendptr;
+	count = sp->tx_skb->len;
 	if (count <= 0)
-		return;
-	if (count >= 3072)
 		return;
 
 	more = 0;
@@ -378,12 +355,11 @@ isac_fill_fifo(struct IsdnCardState *sp)
 		more = !0;
 		count = 32;
 	}
-	ptr = DATAPTR(ibh);
-	ptr += sp->sendptr;
-	sp->sendptr += count;
-
 	save_flags(flags);
 	cli();
+	ptr = sp->tx_skb->data;
+	skb_pull(sp->tx_skb, count);
+	sp->tx_cnt += count;
 	write_fifo(sp->isac, ptr, count);
 	writereg(sp->isac, ISAC_CMDR, more ? 0x8 : 0xa);
 	restore_flags(flags);
@@ -410,9 +386,10 @@ ph_command(struct IsdnCardState *sp, unsigned int command)
 
 
 static inline void
-isac_interrupt(struct IsdnCardState *sp, byte val)
+isac_interrupt(struct IsdnCardState *sp, u_char val)
 {
-	byte exval;
+	u_char exval;
+	struct sk_buff *skb;
 	unsigned int count;
 	char tmp[32];
 
@@ -429,62 +406,45 @@ isac_interrupt(struct IsdnCardState *sp, byte val)
 			if (!exval & 0x20)
 				if (sp->debug & L1_DEB_WARN)
 					debugl1(sp, "ISAC CRC error");
-			if (sp->rcvibh)
-				BufPoolRelease(sp->rcvibh);
-			sp->rcvibh = NULL;
 			writereg(sp->isac, ISAC_CMDR, 0x80);
-			goto afterRME;
+		} else {
+			count = readreg(sp->isac, ISAC_RBCL) & 0x1f;
+			if (count == 0)
+				count = 32;
+			isac_empty_fifo(sp, count);
+			if ((count = sp->rcvidx) > 0) {
+				if (!(skb = alloc_skb(count, GFP_ATOMIC)))
+					printk(KERN_WARNING "AVM: D receive out of memory\n");
+				else {
+					memcpy(skb_put(skb, count), sp->rcvbuf, count);
+					skb_queue_tail(&sp->rq, skb);
+				}
+			}
 		}
-		if (!sp->rcvibh)
-			if (BufPoolGet(&(sp->rcvibh), &(sp->rbufpool),
-				       GFP_ATOMIC, (void *) 1, 3)) {
-				if (sp->debug & L1_DEB_WARN)
-					debugl1(sp, "ISAC RME out of buffers!");
-				writereg(sp->isac, ISAC_CMDR, 0x80);
-				goto afterRME;
-			} else
-				sp->rcvptr = 0;
-		count = readreg(sp->isac, ISAC_RBCL) & 0x1f;
-		if (count == 0)
-			count = 32;
-		isac_empty_fifo(sp, count);
-		sp->rcvibh->datasize = sp->rcvptr;
-		BufQueueLink(&(sp->rq), sp->rcvibh);
-		sp->rcvibh = NULL;
+		sp->rcvidx = 0;
 		isac_sched_event(sp, ISAC_RCVBUFREADY);
 	}
-      afterRME:
 	if (val & 0x40) {	/* RPF */
-		if (!sp->rcvibh)
-			if (BufPoolGet(&(sp->rcvibh), &(sp->rbufpool),
-				       GFP_ATOMIC, (void *) 1, 4)) {
-				if (sp->debug & L1_DEB_WARN)
-					debugl1(sp, "ISAC RME out of buffers!");
-				writereg(sp->isac, ISAC_CMDR, 0x80);
-				goto afterRPF;
-			} else
-				sp->rcvptr = 0;
 		isac_empty_fifo(sp, 32);
 	}
-      afterRPF:
 	if (val & 0x20) {	/* RSC */
 		/* never */
 		if (sp->debug & L1_DEB_WARN)
 			debugl1(sp, "ISAC RSC interrupt");
 	}
 	if (val & 0x10) {	/* XPR */
-		if (sp->xmtibh)
-			if (sp->xmtibh->datasize > sp->sendptr) {
+		if (sp->tx_skb)
+			if (sp->tx_skb->len) {
 				isac_fill_fifo(sp);
 				goto afterXPR;
 			} else {
-				if (sp->releasebuf)
-					BufPoolRelease(sp->xmtibh);
-				sp->xmtibh = NULL;
-				sp->sendptr = 0;
+				SET_SKB_FREE(sp->tx_skb);
+				dev_kfree_skb(sp->tx_skb, FREE_WRITE);
+				sp->tx_cnt = 0;
+				sp->tx_skb = NULL;
 			}
-		if (!BufQueueUnlink(&sp->xmtibh, &sp->sq)) {
-			sp->releasebuf = !0;
+		if ((sp->tx_skb = skb_dequeue(&sp->sq))) {
+			sp->tx_cnt = 0;
 			isac_fill_fifo(sp);
 		} else
 			isac_sched_event(sp, ISAC_XMTBUFREADY);
@@ -514,10 +474,10 @@ isac_interrupt(struct IsdnCardState *sp, byte val)
 }
 
 static inline void
-hscx_int_main(struct IsdnCardState *sp, byte val)
+hscx_int_main(struct IsdnCardState *sp, u_char val)
 {
 
-	byte exval;
+	u_char exval;
 	struct HscxState *hsp;
 	char tmp[32];
 
@@ -532,7 +492,11 @@ hscx_int_main(struct IsdnCardState *sp, byte val)
 				/* Here we lost an TX interrupt, so
 				   * restart transmitting the whole frame.
 				 */
-				hsp->sendptr = 0;
+				if (hsp->tx_skb) {
+					skb_push(hsp->tx_skb, hsp->count);
+					hsp->tx_cnt += hsp->count;
+					hsp->count = 0;
+				}
 				writehscxCMDR(sp->hscx[hsp->hscx], 0x01);
 				if (sp->debug & L1_DEB_WARN) {
 					sprintf(tmp, "HSCX B EXIR %x Lost TX", exval);
@@ -561,7 +525,11 @@ hscx_int_main(struct IsdnCardState *sp, byte val)
 				/* Here we lost an TX interrupt, so
 				   * restart transmitting the whole frame.
 				 */
-				hsp->sendptr = 0;
+				if (hsp->tx_skb) {
+					skb_push(hsp->tx_skb, hsp->count);
+					hsp->tx_cnt += hsp->count;
+					hsp->count = 0;
+				}
 				writehscxCMDR(sp->hscx[hsp->hscx], 0x01);
 				if (sp->debug & L1_DEB_WARN) {
 					sprintf(tmp, "HSCX A EXIR %x Lost TX", exval);
@@ -587,7 +555,7 @@ static void
 avm_a1_interrupt(int intno, void *dev_id, struct pt_regs *regs)
 {
 	struct IsdnCardState *sp;
-	byte val, sval, stat = 0;
+	u_char val, sval, stat = 0;
 	char tmp[32];
 
 	sp = (struct IsdnCardState *) irq2dev_map[intno];
@@ -675,48 +643,48 @@ modehscx(struct HscxState *hs, int mode, int ichan)
 	writereg(sp->hscx[hscx], HSCX_RLCR, 0x0);
 
 	switch (mode) {
-	case (0):
-		writereg(sp->hscx[hscx], HSCX_CCR2, 0x30);
-		writereg(sp->hscx[hscx], HSCX_TSAX, 0xff);
-		writereg(sp->hscx[hscx], HSCX_TSAR, 0xff);
-		writereg(sp->hscx[hscx], HSCX_XCCR, 7);
-		writereg(sp->hscx[hscx], HSCX_RCCR, 7);
-		writereg(sp->hscx[hscx], HSCX_MODE, 0x84);
-		break;
-	case (1):
-		if (ichan == 0) {
+		case (0):
 			writereg(sp->hscx[hscx], HSCX_CCR2, 0x30);
-			writereg(sp->hscx[hscx], HSCX_TSAX, 0x2f);
-			writereg(sp->hscx[hscx], HSCX_TSAR, 0x2f);
+			writereg(sp->hscx[hscx], HSCX_TSAX, 0xff);
+			writereg(sp->hscx[hscx], HSCX_TSAR, 0xff);
 			writereg(sp->hscx[hscx], HSCX_XCCR, 7);
 			writereg(sp->hscx[hscx], HSCX_RCCR, 7);
-		} else {
-			writereg(sp->hscx[hscx], HSCX_CCR2, 0x30);
-			writereg(sp->hscx[hscx], HSCX_TSAX, 0x3);
-			writereg(sp->hscx[hscx], HSCX_TSAR, 0x3);
-			writereg(sp->hscx[hscx], HSCX_XCCR, 7);
-			writereg(sp->hscx[hscx], HSCX_RCCR, 7);
-		}
-		writereg(sp->hscx[hscx], HSCX_MODE, 0xe4);
-		writereg(sp->hscx[hscx], HSCX_CMDR, 0x41);
-		break;
-	case (2):
-		if (ichan == 0) {
-			writereg(sp->hscx[hscx], HSCX_CCR2, 0x30);
-			writereg(sp->hscx[hscx], HSCX_TSAX, 0x2f);
-			writereg(sp->hscx[hscx], HSCX_TSAR, 0x2f);
-			writereg(sp->hscx[hscx], HSCX_XCCR, 7);
-			writereg(sp->hscx[hscx], HSCX_RCCR, 7);
-		} else {
-			writereg(sp->hscx[hscx], HSCX_CCR2, 0x30);
-			writereg(sp->hscx[hscx], HSCX_TSAX, 0x3);
-			writereg(sp->hscx[hscx], HSCX_TSAR, 0x3);
-			writereg(sp->hscx[hscx], HSCX_XCCR, 7);
-			writereg(sp->hscx[hscx], HSCX_RCCR, 7);
-		}
-		writereg(sp->hscx[hscx], HSCX_MODE, 0x8c);
-		writereg(sp->hscx[hscx], HSCX_CMDR, 0x41);
-		break;
+			writereg(sp->hscx[hscx], HSCX_MODE, 0x84);
+			break;
+		case (1):
+			if (ichan == 0) {
+				writereg(sp->hscx[hscx], HSCX_CCR2, 0x30);
+				writereg(sp->hscx[hscx], HSCX_TSAX, 0x2f);
+				writereg(sp->hscx[hscx], HSCX_TSAR, 0x2f);
+				writereg(sp->hscx[hscx], HSCX_XCCR, 7);
+				writereg(sp->hscx[hscx], HSCX_RCCR, 7);
+			} else {
+				writereg(sp->hscx[hscx], HSCX_CCR2, 0x30);
+				writereg(sp->hscx[hscx], HSCX_TSAX, 0x3);
+				writereg(sp->hscx[hscx], HSCX_TSAR, 0x3);
+				writereg(sp->hscx[hscx], HSCX_XCCR, 7);
+				writereg(sp->hscx[hscx], HSCX_RCCR, 7);
+			}
+			writereg(sp->hscx[hscx], HSCX_MODE, 0xe4);
+			writereg(sp->hscx[hscx], HSCX_CMDR, 0x41);
+			break;
+		case (2):
+			if (ichan == 0) {
+				writereg(sp->hscx[hscx], HSCX_CCR2, 0x30);
+				writereg(sp->hscx[hscx], HSCX_TSAX, 0x2f);
+				writereg(sp->hscx[hscx], HSCX_TSAR, 0x2f);
+				writereg(sp->hscx[hscx], HSCX_XCCR, 7);
+				writereg(sp->hscx[hscx], HSCX_RCCR, 7);
+			} else {
+				writereg(sp->hscx[hscx], HSCX_CCR2, 0x30);
+				writereg(sp->hscx[hscx], HSCX_TSAX, 0x3);
+				writereg(sp->hscx[hscx], HSCX_TSAR, 0x3);
+				writereg(sp->hscx[hscx], HSCX_XCCR, 7);
+				writereg(sp->hscx[hscx], HSCX_RCCR, 7);
+			}
+			writereg(sp->hscx[hscx], HSCX_MODE, 0x8c);
+			writereg(sp->hscx[hscx], HSCX_CMDR, 0x41);
+			break;
 	}
 	writereg(sp->hscx[hscx], HSCX_ISTA, 0x00);
 }
@@ -801,6 +769,7 @@ int
 initavm_a1(struct IsdnCardState *sp)
 {
 	int ret;
+	int loop = 0;
 	char tmp[40];
 
 	sp->counter = kstat.interrupts[sp->irq];
@@ -812,6 +781,16 @@ initavm_a1(struct IsdnCardState *sp)
 		initisac(sp);
 		sp->modehscx(sp->hs, 0, 0);
 		sp->modehscx(sp->hs + 1, 0, 0);
+		while (loop++ < 10) {
+			/* At least 1-3 irqs must happen
+			 * (one from HSCX A, one from HSCX B, 3rd from ISAC)
+			 */
+			if (kstat.interrupts[sp->irq] > sp->counter)
+				break;
+			current->state = TASK_INTERRUPTIBLE;
+			current->timeout = jiffies + 1;
+			schedule();
+		}
 		sprintf(tmp, "IRQ %d count %d", sp->irq,
 			kstat.interrupts[sp->irq]);
 		debugl1(sp, tmp);
@@ -830,7 +809,7 @@ initavm_a1(struct IsdnCardState *sp)
 int
 setup_avm_a1(struct IsdnCard *card)
 {
-	byte val, verA, verB;
+	u_char val, verA, verB;
 	struct IsdnCardState *sp = card->sp;
 	long flags;
 	char tmp[64];

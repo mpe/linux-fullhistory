@@ -158,6 +158,7 @@ const struct modem_rx_info *sm_modem_rx_table[] = {
 static const struct hardware_info *sm_hardware_table[] = {
 #ifdef CONFIG_SOUNDMODEM_SBC
 	&sm_hw_sbc,
+	&sm_hw_sbcfdx,
 #endif /* CONFIG_SOUNDMODEM_SBC */
 #ifdef CONFIG_SOUNDMODEM_WSS
 	&sm_hw_wss,

@@ -938,11 +938,7 @@ out:
 	return retval;
 }
 
-#ifdef CONFIG_BLK_DEV_INITRD
-static void do_mount_root(void)
-#else
 __initfunc(static void do_mount_root(void))
-#endif
 {
 	struct file_system_type * fs_type;
 	struct super_block * sb;
@@ -1060,7 +1056,9 @@ __initfunc(void mount_root(void))
 
 #ifdef CONFIG_BLK_DEV_INITRD
 
-int change_root(kdev_t new_root_dev,const char *put_old)
+extern int initmem_freed;
+
+__initfunc(static int do_change_root(kdev_t new_root_dev,const char *put_old))
 {
 	kdev_t old_root_dev;
 	struct vfsmount *vfsmnt;
@@ -1112,6 +1110,15 @@ int change_root(kdev_t new_root_dev,const char *put_old)
 	}
 	inode->i_mount = old_root;
 	return 0;
+}
+
+int change_root(kdev_t new_root_dev,const char *put_old)
+{
+	if (initmem_freed) {
+		printk (KERN_CRIT "Initmem has been already freed. Staying in initrd\n");
+		return -EBUSY;
+	}
+	return do_change_root(new_root_dev, put_old);
 }
 
 #endif

@@ -1,4 +1,4 @@
-/*  $Id: signal.c,v 1.2 1997/05/18 08:42:15 davem Exp $
+/*  $Id: signal.c,v 1.4 1997/05/27 06:28:05 davem Exp $
  *  arch/sparc64/kernel/signal.c
  *
  *  Copyright (C) 1991, 1992  Linus Torvalds
@@ -61,7 +61,7 @@ struct new_signal_frame {
  */
 asmlinkage void _sigpause_common(unsigned int set, struct pt_regs *regs)
 {
-	unsigned int mask;
+	unsigned long mask;
 
 #ifdef CONFIG_SPARC32_COMPAT
 	if (current->tss.flags & SPARC_FLAG_32BIT) {
@@ -134,7 +134,7 @@ void do_sigreturn(struct pt_regs *regs)
 	struct new_signal_frame *sf;
 	unsigned long tpc, tnpc, tstate;
 	__siginfo_fpu_t *fpu_save;
-	int mask;
+	unsigned long mask;
 
 #ifdef CONFIG_SPARC32_COMPAT
 	if (current->tss.flags & SPARC_FLAG_32BIT) {
@@ -270,8 +270,15 @@ new_setup_frame(struct sigaction *sa, struct pt_regs *regs,
 	regs->tnpc = (regs->tpc + 4);
 
 	/* Flush instruction space. */
-	__asm__ __volatile__ ("flush %0; flush %0 + 4" : : "r" (&(sf->insns[0])));
-		
+	__asm__ __volatile__("
+	membar		#StoreStore
+	stxa		%%g0, [%0] %2
+	stxa		%%g0, [%1] %2
+	flush		%%g4
+	" : /* no outputs */
+	  : "r" (((unsigned long)&(sf->insns[0])) & ~(PAGE_MASK)),
+	    "r" ((((unsigned long)&(sf->insns[0])) & ~(PAGE_MASK)) + PAGE_SIZE),
+	    "i" (ASI_IC_TAG));
 }
 
 static inline void handle_signal(unsigned long signr, struct sigaction *sa,
@@ -323,7 +330,7 @@ asmlinkage int do_signal(unsigned long oldmask, struct pt_regs * regs,
 #endif	
 	while ((signr = current->signal & mask) != 0) {
 		signr = ffz(~signr);
-		clear_bit(signr, &current->signal);
+		clear_bit(signr + 32, &current->signal);
 		sa = current->sig->action + signr;
 		signr++;
 		if ((current->flags & PF_PTRACED) && signr != SIGKILL) {

@@ -1,8 +1,5 @@
 /*
- *	Rose release 001
- *
- *	This is ALPHA test software. This code may break your machine, randomly fail to work with new
- *	releases, misbehave and/or generally screw up. It might even work.
+ *	ROSE release 002
  *
  *	This code REQUIRES 2.1.15 or higher/ NET3.038
  *
@@ -19,7 +16,7 @@
  *	easy to break;
  *
  *	History
- *	Rose 001	Jonathan(G4KLX)	Cloned from nr_in.c
+ *	ROSE 001	Jonathan(G4KLX)	Cloned from nr_in.c
  */
 
 #include <linux/config.h>
@@ -116,8 +113,7 @@ static int rose_state1_machine(struct sock *sk, struct sk_buff *skb, int framety
 			sk->dead                 = 1;
 			break;
 
-		default:		/* XXX */
-			printk(KERN_WARNING "rose: unknown %02X in state 1\n", frametype);
+		default:
 			break;
 	}
 
@@ -146,8 +142,7 @@ static int rose_state2_machine(struct sock *sk, struct sk_buff *skb, int framety
 			sk->dead                 = 1;
 			break;
 
-		default:		/* XXX */
-			printk(KERN_WARNING "rose: unknown %02X in state 2\n", frametype);
+		default:
 			break;
 	}
 
@@ -245,7 +240,7 @@ static int rose_state3_machine(struct sock *sk, struct sk_buff *skb, int framety
 			 * If the window is full, ack the frame, else start the
 			 * acknowledge hold back timer.
 			 */
-			if (((sk->protinfo.rose->vl + ROSE_MAX_WINDOW_SIZE) % ROSE_MODULUS) == sk->protinfo.rose->vr) {
+			if (((sk->protinfo.rose->vl + sysctl_rose_window_size) % ROSE_MODULUS) == sk->protinfo.rose->vr) {
 				sk->protinfo.rose->condition &= ~ROSE_COND_ACK_PENDING;
 				sk->protinfo.rose->timer      = 0;
 				rose_enquiry_response(sk);
@@ -256,7 +251,7 @@ static int rose_state3_machine(struct sock *sk, struct sk_buff *skb, int framety
 			break;
 
 		default:
-			printk(KERN_WARNING "rose: unknown %02X in state 3\n", frametype);
+			printk(KERN_WARNING "ROSE: unknown %02X in state 3\n", frametype);
 			break;
 	}
 
@@ -297,8 +292,7 @@ static int rose_state4_machine(struct sock *sk, struct sk_buff *skb, int framety
 			sk->dead                 = 1;
 			break;
 
-		default:		/* XXX */
-			printk(KERN_WARNING "rose: unknown %02X in state 4\n", frametype);
+		default:
 			break;
 	}
 

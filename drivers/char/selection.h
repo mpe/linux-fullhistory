@@ -3,6 +3,9 @@
  *
  * Interface between console.c, tty_io.c, vt.c, vc_screen.c and selection.c
  */
+
+#include <linux/config.h>
+
 extern int sel_cons;
 
 extern void clear_selection(void);
@@ -11,6 +14,16 @@ extern int paste_selection(struct tty_struct *tty);
 extern int sel_loadlut(const unsigned long arg);
 extern int mouse_reporting(void);
 extern void mouse_report(struct tty_struct * tty, int butt, int mrx, int mry);
+
+#ifdef CONFIG_FB_CONSOLE
+extern unsigned long get_video_num_columns(unsigned int console);
+extern unsigned long get_video_num_lines(unsigned int console);
+extern unsigned long get_video_size_row(unsigned int console);
+#else
+#define get_video_num_columns(dummy) video_num_columns
+#define get_video_num_lines(dummy) video_num_lines
+#define get_video_size_row(dummy) video_size_row
+#endif
 
 extern unsigned long video_num_columns;
 extern unsigned long video_num_lines;

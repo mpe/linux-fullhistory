@@ -4756,8 +4756,8 @@ CONFIG_ISDN_AUDIO
   (mgetty+sendfax by gert@greenie.muc.de with an extension, available
   with the ISDN utility package for example), you will be able to use
   your Linux box as an ISDN-answering machine. Of course, this must be
-  supported by the lowlevel driver also. Currently, the Teles and
-  HiSax drivers are the only voice-supporting drivers. See
+  supported by the lowlevel driver also. Currently, the HiSax driver is
+  the only voice-supporting driver. See
   Documentation/isdn/README.audio for more information.
 
 ICN 2B and 4B support
@@ -4772,18 +4772,6 @@ CONFIG_ISDN_DRV_ICN
   can be inserted in and removed from the running kernel whenever you
   want), say M here and read Documentation/modules.txt. The module
   will be called icn.o.
-
-Teles, NICCY1016PC, Creatix support
-CONFIG_ISDN_DRV_TELES
-  This enables support for the Teles ISDN-cards S0-16.0, S0-16.3, S0-8
-  and many compatibles.
-  There is a new, heavily improved driver called HiSax which can be
-  enabled in the next section. This driver will be removed soon. Please
-  use this driver only if you cannot get the HiSax driver to work.
-  By default, the driver is configured to support a 16.0-type using
-  EDSS1-protocol. See Documentation/isdn/README on how to configure
-  it using 16.3, a different D-channel protocol, or non-standard
-  irq/port/shmem settings.
 
 HiSax SiemensChipSet driver support
 CONFIG_ISDN_DRV_HISAX

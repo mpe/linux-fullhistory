@@ -1,9 +1,6 @@
 /*
  *	NET/ROM release 006
  *
- *	This is ALPHA test software. This code may break your machine, randomly fail to work with new 
- *	releases, misbehave and/or generally screw up. It might even work. 
- *
  *	This code REQUIRES 2.1.15 or higher/ NET3.038
  *
  *	This module:
@@ -30,6 +27,7 @@
  *	NET/ROM 005	Jonathan(G4KLX) Linux 2.1
  *			Alan(GW4PTS)	Started POSIXisms
  *	NET/ROM 006	Alan(GW4PTS)	Brought in line with the ANK changes
+ *			Jonathan(G4KLX)	Removed hdrincl.
  */
 
 #include <linux/config.h>
@@ -66,6 +64,8 @@
 #include <linux/if_arp.h>
 #include <linux/init.h>
 
+int nr_ndevs = 4;
+
 int sysctl_netrom_default_path_quality            = NR_DEFAULT_QUAL;
 int sysctl_netrom_obsolescence_count_initialiser  = NR_DEFAULT_OBS;
 int sysctl_netrom_network_ttl_initialiser         = NR_DEFAULT_TTL;
@@ -86,7 +86,7 @@ static struct proto_ops nr_proto_ops;
 
 static void nr_free_sock(struct sock *sk)
 {
-	kfree_s(sk->protinfo.nr, sizeof(*sk->protinfo.nr));
+	kfree(sk->protinfo.nr);
 
 	sk_free(sk);
 
@@ -101,7 +101,7 @@ static struct sock *nr_alloc_sock(void)
 	if ((sk = sk_alloc(GFP_ATOMIC)) == NULL)
 		return NULL;
 
-	if ((nr = (nr_cb *)kmalloc(sizeof(*nr), GFP_ATOMIC)) == NULL) {
+	if ((nr = kmalloc(sizeof(*nr), GFP_ATOMIC)) == NULL) {
 		sk_free(sk);
 		return NULL;
 	}
@@ -328,94 +328,6 @@ void nr_destroy_socket(struct sock *sk)	/* Not static as it's used by the timer 
  *	NET/ROM socket object.
  */
 
-/*
- * dl1bke 960311: set parameters for existing NET/ROM connections,
- *		  includes a KILL command to abort any connection.
- *		  VERY useful for debugging ;-)
- */
-static int nr_ctl_ioctl(const unsigned int cmd, void *arg)
-{
-	struct nr_ctl_struct nr_ctl;
-	struct sock *sk;
-	unsigned long flags;
-	int err;
-
-	if ((err = verify_area(VERIFY_READ, arg, sizeof(nr_ctl))) != 0)
-		return err;
-
-	copy_from_user(&nr_ctl, arg, sizeof(nr_ctl));
-
-	if ((sk = nr_find_socket(nr_ctl.index, nr_ctl.id)) == NULL)
-		return -ENOTCONN;
-
-	switch (nr_ctl.cmd) {
-		case NETROM_KILL:
-			nr_clear_queues(sk);
-			nr_write_internal(sk, NR_DISCREQ);
-			sk->protinfo.nr->state = NR_STATE_0;
-			sk->state              = TCP_CLOSE;
-			sk->err                = ENETRESET;
-			sk->shutdown          |= SEND_SHUTDOWN;
-			if (!sk->dead)
-				sk->state_change(sk);
-			sk->dead               = 1;
-			nr_set_timer(sk);
-	  		break;
-
-	  	case NETROM_T1:
-  			if (nr_ctl.arg < 1) 
-  				return -EINVAL;
-  			sk->protinfo.nr->t1  = nr_ctl.arg * NR_SLOWHZ;
-  			save_flags(flags); cli();
-  			if (sk->protinfo.nr->t1timer > sk->protinfo.nr->t1)
-  				sk->protinfo.nr->t1timer = sk->protinfo.nr->t1;
-  			restore_flags(flags);
-  			break;
-
-	  	case NETROM_T2:
-	  		if (nr_ctl.arg < 1) 
-	  			return -EINVAL;
-	  		save_flags(flags); cli();
-	  		sk->protinfo.nr->t2 = nr_ctl.arg * NR_SLOWHZ;
-	  		if (sk->protinfo.nr->t2timer > sk->protinfo.nr->t2)
-	  			sk->protinfo.nr->t2timer = sk->protinfo.nr->t2;
-	  		restore_flags(flags);
-	  		break;
-
-	  	case NETROM_N2:
-	  		if (nr_ctl.arg < 1 || nr_ctl.arg > 10) 
-	  			return -EINVAL;
-	  		sk->protinfo.nr->n2count = 0;
-	  		sk->protinfo.nr->n2      = nr_ctl.arg;
-	  		break;
-
-	  	case NETROM_T4:
-	  		if (nr_ctl.arg < 1) 
-	  			return -EINVAL;
-	  		save_flags(flags); cli();
-	  		sk->protinfo.nr->t4 = nr_ctl.arg * NR_SLOWHZ;
-	  		if (sk->protinfo.nr->t4timer > sk->protinfo.nr->t4)
-	  			sk->protinfo.nr->t4timer = sk->protinfo.nr->t4;
-	  		restore_flags(flags);
-	  		break;
-
-	  	case NETROM_IDLE:
-	  		if (nr_ctl.arg < 1) 
-	  			return -EINVAL;
-	  		save_flags(flags); cli();
-	  		sk->protinfo.nr->idle = nr_ctl.arg * 60 * NR_SLOWHZ;
-	  		if (sk->protinfo.nr->idletimer > sk->protinfo.nr->idle)
-	  			sk->protinfo.nr->idletimer = sk->protinfo.nr->idle;
-	  		restore_flags(flags);
-	  		break;
-
-	  	default:
-	  		return -EINVAL;
-	  }
-	  
-	  return 0;
-}
-
 static int nr_setsockopt(struct socket *sock, int level, int optname,
 	char *optval, int optlen)
 {
@@ -462,10 +374,6 @@ static int nr_setsockopt(struct socket *sock, int level, int optname,
 			sk->protinfo.nr->idle = opt * 60 * NR_SLOWHZ;
 			return 0;
 
-		case NETROM_HDRINCL:
-			sk->protinfo.nr->hdrincl = opt ? 1 : 0;
-			return 0;
-
 		default:
 			return -ENOPROTOOPT;
 	}
@@ -503,10 +411,6 @@ static int nr_getsockopt(struct socket *sock, int level, int optname,
 
 		case NETROM_IDLE:
 			val = sk->protinfo.nr->idle / (NR_SLOWHZ * 60);
-			break;
-
-		case NETROM_HDRINCL:
-			val = sk->protinfo.nr->hdrincl;
 			break;
 
 		default:
@@ -614,7 +518,6 @@ static struct sock *nr_make_new(struct sock *osk)
 
 	nr->device  = osk->protinfo.nr->device;
 	nr->bpqext  = osk->protinfo.nr->bpqext;
-	nr->hdrincl = osk->protinfo.nr->hdrincl;
 
 	return sk;
 }
@@ -1122,7 +1025,6 @@ static int nr_sendmsg(struct socket *sock, struct msghdr *msg, int len, struct s
 	return len;
 }
 
-
 static int nr_recvmsg(struct socket *sock, struct msghdr *msg, int size, 
 	int flags, struct scm_cookie *scm)
 {
@@ -1144,12 +1046,8 @@ static int nr_recvmsg(struct socket *sock, struct msghdr *msg, int size,
 	if ((skb = skb_recv_datagram(sk, flags & ~MSG_DONTWAIT, flags & MSG_DONTWAIT, &er)) == NULL)
 		return er;
 
-	if (!sk->protinfo.nr->hdrincl) {
-		skb_pull(skb, NR_NETWORK_LEN + NR_TRANSPORT_LEN);
-		skb->h.raw = skb->data;
-	}
-
-	copied = skb->len;
+	skb->h.raw = skb->data;
+	copied     = skb->len;
 
 	if (copied > size) {
 		copied = size;
@@ -1231,10 +1129,6 @@ static int nr_ioctl(struct socket *sock, unsigned int cmd, unsigned long arg)
 			if (!suser()) return -EPERM;
 			return nr_rt_ioctl(cmd, (void *)arg);
 
- 		case SIOCNRCTLCON:
- 			if (!suser()) return -EPERM;
- 			return nr_ctl_ioctl(cmd, (void *)arg);
- 
  		default:
 			return dev_ioctl(cmd, (void *)arg);
 	}
@@ -1355,28 +1249,32 @@ static struct proc_dir_entry proc_net_nr_nodes = {
 };
 #endif	
 
-static struct device dev_nr[] = {
-	{"nr0", 0, 0, 0, 0, 0, 0, 0, 0, 0, NULL, nr_init},
-	{"nr1", 0, 0, 0, 0, 0, 0, 0, 0, 0, NULL, nr_init},
-	{"nr2", 0, 0, 0, 0, 0, 0, 0, 0, 0, NULL, nr_init},
-	{"nr3", 0, 0, 0, 0, 0, 0, 0, 0, 0, NULL, nr_init}
-};
+static struct device *dev_nr;
 
 __initfunc(void nr_proto_init(struct net_proto *pro))
 {
 	int i;
 
+	if ((dev_nr = kmalloc(nr_ndevs * sizeof(struct device), GFP_KERNEL)) == NULL) {
+		printk(KERN_ERR "NET/ROM: nr_proto_init - unable to allocate device structure\n");
+		return;
+	}
+
+	memset(dev_nr, 0x00, nr_ndevs * sizeof(struct device));
+
+	for (i = 0; i < nr_ndevs; i++) {
+		dev_nr[i].name = kmalloc(20, GFP_KERNEL);
+		sprintf(dev_nr[i].name, "nr%d", i);
+		dev_nr[i].init = nr_init;
+		register_netdev(&dev_nr[i]);
+	}
+
 	sock_register(&nr_family_ops);
 	register_netdevice_notifier(&nr_dev_notifier);
 	printk(KERN_INFO "G4KLX NET/ROM for Linux. Version 0.6 for AX25.035 Linux 2.1\n");
 
-	if (!ax25_protocol_register(AX25_P_NETROM, nr_route_frame))
-		printk(KERN_ERR "NET/ROM unable to register protocol with AX.25\n");
-	if (!ax25_linkfail_register(nr_link_failed))
-		printk(KERN_ERR "NET/ROM unable to register linkfail handler with AX.25\n");
-
-	for (i = 0; i < 4; i++)
-		register_netdev(&dev_nr[i]);
+	ax25_protocol_register(AX25_P_NETROM, nr_route_frame);
+	ax25_linkfail_register(nr_link_failed);
 
 #ifdef CONFIG_SYSCTL
 	nr_register_sysctl();
@@ -1391,6 +1289,12 @@ __initfunc(void nr_proto_init(struct net_proto *pro))
 
 #ifdef MODULE
 EXPORT_NO_SYMBOLS;
+
+MODULE_PARM(nr_ndevs, "i");
+MODULE_PARM_DESC(nr_ndevs, "number of NET/ROM devices");
+
+MODULE_AUTHOR("Jonathan Naylor G4KLX <g4klx@g4klx.demon.co.uk>");
+MODULE_DESCRIPTION("The amateur radio NET/ROM network and transport layer protocol");
 
 int init_module(void)
 {
@@ -1420,13 +1324,16 @@ void cleanup_module(void)
 #endif
 	sock_unregister(AF_NETROM);
 
-	for (i = 0; i < 4; i++) {
+	for (i = 0; i < nr_ndevs; i++) {
 		if (dev_nr[i].priv != NULL) {
 			kfree(dev_nr[i].priv);
 			dev_nr[i].priv = NULL;
 			unregister_netdev(&dev_nr[i]);
 		}
+		kfree(dev_nr[i].name);
 	}
+
+	kfree(dev_nr);
 }
 
 #endif

@@ -228,6 +228,8 @@
 #define ASIZ_thread_wstate	0x00000008
 #define AOFF_thread_cwp	0x00000120
 #define ASIZ_thread_cwp	0x00000008
+#define AOFF_thread_ctx	0x00000128
+#define ASIZ_thread_ctx	0x00000008
 #define AOFF_thread_reg_window	0x00000130
 #define ASIZ_thread_reg_window	0x00000400
 #define AOFF_thread_rwbuf_stkptrs	0x00000530

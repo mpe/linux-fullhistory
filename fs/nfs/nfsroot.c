@@ -1,10 +1,10 @@
 /*
- *  linux/fs/nfs/nfsroot.c -- version 2.3
+ *  $Id: nfsroot.c,v 1.36 1997/05/27 15:57:47 mj Exp $
  *
  *  Copyright (C) 1995, 1996  Gero Kuhlmann <gero@gkminix.han.de>
  *
  *  For parts of this file:
- *  Copyright (C) 1996  Martin Mares <mj@k332.feld.cvut.cz>
+ *  Copyright (C) 1996, 1997  Martin Mares <mj@atrey.karlin.mff.cuni.cz>
  *
  *  Allow an NFS filesystem to be mounted as root. The way this works is:
  *     (1) Determine the local IP address via RARP or BOOTP or from the
@@ -54,6 +54,9 @@
  *	Jacek Zapala	:	Fixed a bug which prevented server-ip address
  *				from nfsroot parameter from being used.
  *	Olaf Kirch	:	Adapted to new NFS code.
+ *	Jakub Jelinek	:	Free used code segment.
+ *	Marko Kohtala	:	Fixed some bugs.
+ *	Martin Mares	:	Debug message cleanup
  *
  */
 
@@ -71,6 +74,7 @@
 #include <linux/fs.h>
 #include <linux/random.h>
 #include <linux/fcntl.h>
+#include <linux/init.h>
 
 #include <asm/param.h>
 #include <linux/utsname.h>
@@ -120,28 +124,28 @@ struct open_dev {
 	struct open_dev *next;
 };
 
-static struct open_dev *open_base = NULL;
+static struct open_dev *open_base __initdata = NULL;
 
 
 /* IP configuration */
-static struct device *root_dev = NULL;	/* Device selected for booting */
-static char user_dev_name[IFNAMSIZ];	/* Name of user-selected boot device */
-static __u32 myaddr;			/* My IP address */
-static __u32 servaddr;			/* Server IP address */
-static __u32 gateway;			/* Gateway IP address */
-static __u32 netmask;			/* Netmask for local subnet */
+static struct device *root_dev __initdata = NULL;	/* Device selected for booting */
+static char user_dev_name[IFNAMSIZ] __initdata = { 0, };/* Name of user-selected boot device */
+static __u32 myaddr __initdata = 0;			/* My IP address */
+static __u32 servaddr __initdata = 0;			/* Server IP address */
+static __u32 gateway __initdata = 0;			/* Gateway IP address */
+static __u32 netmask __initdata = 0;			/* Netmask for local subnet */
 
 
 /* BOOTP/RARP variables */
-static int bootp_flag;			/* User said: Use BOOTP! */
-static int rarp_flag;			/* User said: Use RARP! */
-static int bootp_dev_count = 0;		/* Number of devices allowing BOOTP */
-static int rarp_dev_count = 0;		/* Number of devices allowing RARP */
-static __u32 rarp_serv;			/* IP address of RARP server */
+static int bootp_flag __initdata = 0;		/* User said: Use BOOTP! */
+static int rarp_flag __initdata = 0;		/* User said: Use RARP! */
+static int bootp_dev_count __initdata = 0;	/* Number of devices allowing BOOTP */
+static int rarp_dev_count __initdata = 0;	/* Number of devices allowing RARP */
+static __u32 rarp_serv __initdata = 0;		/* IP address of RARP server */
 
 #if defined(CONFIG_RNFS_BOOTP) || defined(CONFIG_RNFS_RARP)
-#define CONFIG_RNFS_DYNAMIC		/* Enable dynamic IP config */
-static volatile int pkt_arrived;	/* BOOTP/RARP packet detected */
+#define CONFIG_RNFS_DYNAMIC			/* Enable dynamic IP config */
+static volatile int pkt_arrived __initdata = 0;	/* BOOTP/RARP packet detected */
 
 #define ARRIVED_BOOTP	1
 #define ARRIVED_RARP	2
@@ -149,10 +153,10 @@ static volatile int pkt_arrived;	/* BOOTP/RARP packet detected */
 
 
 /* NFS-related data */
-static struct nfs_mount_data nfs_data;		/* NFS mount info */
-static char	nfs_path[NFS_MAXPATHLEN];	/* Name of directory to mount */
-static int	nfs_port;			/* Port to connect to for NFS */
-static int	mount_port;			/* Mount daemon port number */
+static struct nfs_mount_data nfs_data __initdata = { 0, };/* NFS mount info */
+static char	nfs_path[NFS_MAXPATHLEN] __initdata = { 0, };/* Name of directory to mount */
+static int	nfs_port __initdata = 0;		/* Port to connect to for NFS */
+static int	mount_port __initdata = 0;		/* Mount daemon port number */
 
 
 /* Yes, we use sys_socket, but there's no include file for it */
@@ -170,7 +174,7 @@ extern asmlinkage int sys_socket(int family, int type, int protocol);
  * Setup and initialize all network devices. If there is a user-preferred
  * interface, ignore all other interfaces.
  */
-static int root_dev_open(void)
+__initfunc(static int root_dev_open(void))
 {
 	struct open_dev *openp, **last;
 	struct device *dev;
@@ -221,8 +225,8 @@ set_sockaddr(struct sockaddr_in *sin, __u32 addr, __u16 port)
 	sin->sin_port = port;
 }
 
-static int
-root_dev_chg_route(int op, struct device *dev, __u32 dest, __u32 mask, __u32 gw)
+__initfunc(static int
+root_dev_chg_route(int op, struct device *dev, __u32 dest, __u32 mask, __u32 gw))
 {
 	struct rtentry	route;
 	unsigned long	oldfs;
@@ -250,26 +254,28 @@ root_dev_chg_route(int op, struct device *dev, __u32 dest, __u32 mask, __u32 gw)
 	err = ip_rt_ioctl(op, &route);
 	set_fs(oldfs);
 
+#ifdef NFSROOT_DEBUG
 	/* in_ntoa in ipv4/utils.c uses a single static buffer, so
 	 * must make multiple printk calls, one for each in_ntoa
 	 * invocation...
 	 */
-	printk(KERN_NOTICE "%s route ", (op == SIOCADDRT ? "addr" : "del"));
+	printk(KERN_NOTICE "%s route ", (op == SIOCADDRT ? "add" : "del"));
 	printk("%s ", in_ntoa(dest));
 	printk("%s ", in_ntoa(mask));
 	printk("%s: res %d\n", in_ntoa(gw), err);
+#endif
 
 	return err;
 }
 
-static int
-root_dev_add_route(struct device *dev, __u32 dest, __u32 mask, __u32 gateway)
+__initfunc(static int
+root_dev_add_route(struct device *dev, __u32 dest, __u32 mask, __u32 gateway))
 {
 	return root_dev_chg_route(SIOCADDRT, dev, dest, mask, gateway);
 }
 
-static int
-root_dev_del_route(struct device *dev, __u32 dest, __u32 mask, __u32 gateway)
+__initfunc(static int
+root_dev_del_route(struct device *dev, __u32 dest, __u32 mask, __u32 gateway))
 {
 	return root_dev_chg_route(SIOCDELRT, dev, dest, mask, gateway);
 }
@@ -278,7 +284,7 @@ root_dev_del_route(struct device *dev, __u32 dest, __u32 mask, __u32 gateway)
  *  Restore the state of all devices. However, keep the root device open
  *  for the upcoming mount.
  */
-static void root_dev_close(void)
+__initfunc(static void root_dev_close(void))
 {
 	struct open_dev *openp;
 	struct open_dev *nextp;
@@ -318,7 +324,7 @@ static int root_rarp_recv(struct sk_buff *skb, struct device *dev,
 			  struct packet_type *pt);
 
 
-static struct packet_type rarp_packet_type = {
+static struct packet_type rarp_packet_type __initdata = {
 	0,			/* Should be: __constant_htons(ETH_P_RARP)
 				 * - but this _doesn't_ come out constant! */
 	NULL,			/* Listen to all devices */
@@ -331,7 +337,7 @@ static struct packet_type rarp_packet_type = {
 /*
  *  Register the packet type for RARP
  */
-static void root_rarp_open(void)
+__initfunc(static void root_rarp_open(void))
 {
 	rarp_packet_type.type = htons(ETH_P_RARP);
 	dev_add_pack(&rarp_packet_type);
@@ -341,7 +347,7 @@ static void root_rarp_open(void)
 /*
  *  Deregister the RARP packet type
  */
-static void root_rarp_close(void)
+__initfunc(static void root_rarp_close(void))
 {
 	rarp_packet_type.type = htons(ETH_P_RARP);
 	dev_remove_pack(&rarp_packet_type);
@@ -351,7 +357,8 @@ static void root_rarp_close(void)
 /*
  *  Receive RARP packets.
  */
-static int root_rarp_recv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
+__initfunc(static int
+root_rarp_recv(struct sk_buff *skb, struct device *dev, struct packet_type *pt))
 {
 	struct arphdr *rarp = (struct arphdr *)skb->h.raw;
 	unsigned char *rarp_ptr = (unsigned char *) (rarp + 1);
@@ -428,7 +435,7 @@ static int root_rarp_recv(struct sk_buff *skb, struct device *dev, struct packet
 /*
  *  Send RARP request packet over all devices which allow RARP.
  */
-static void root_rarp_send(void)
+__initfunc(static void root_rarp_send(void))
 {
 	struct open_dev *openp;
 	struct device *dev;
@@ -455,10 +462,10 @@ static void root_rarp_send(void)
 
 #ifdef CONFIG_RNFS_BOOTP
 
-static struct device *bootp_dev = NULL;	/* Device selected as best BOOTP target */
+static struct device *bootp_dev __initdata = NULL;	/* Device selected as best BOOTP target */
 
-static struct socket *bootp_xmit_sock;	/* BOOTP send socket */
-static struct socket *bootp_recv_sock;	/* BOOTP receive socket */
+static struct socket *bootp_xmit_sock __initdata = NULL;/* BOOTP send socket */
+static struct socket *bootp_recv_sock __initdata = NULL;/* BOOTP receive socket */
 
 struct bootp_pkt {		/* BOOTP packet format */
 	u8 op;			/* 1=request, 2=reply */
@@ -481,16 +488,16 @@ struct bootp_pkt {		/* BOOTP packet format */
 #define BOOTP_REQUEST 1
 #define BOOTP_REPLY 2
 
-static struct bootp_pkt *xmit_bootp;	/* Packet being transmitted */
-static struct bootp_pkt *recv_bootp;	/* Packet being received */
+static struct bootp_pkt *xmit_bootp __initdata = NULL;	/* Packet being transmitted */
+static struct bootp_pkt *recv_bootp __initdata = NULL;	/* Packet being received */
 
-static int bootp_have_route = 0;	/* BOOTP route installed */
+static int bootp_have_route __initdata = 0;	/* BOOTP route installed */
 
 
 /*
  *  Free BOOTP packet buffers
  */
-static void root_free_bootp(void)
+__initfunc(static void root_free_bootp(void))
 {
 	if (xmit_bootp) {
 		kfree_s(xmit_bootp, sizeof(struct bootp_pkt));
@@ -510,7 +517,7 @@ static inline int root_alloc_bootp(void)
 {
 	if (!(xmit_bootp = kmalloc(sizeof(struct bootp_pkt), GFP_KERNEL)) ||
 	    !(recv_bootp = kmalloc(sizeof(struct bootp_pkt), GFP_KERNEL))) {
-		printk("BOOTP: Out of memory!");
+		printk(KERN_ERR "BOOTP: Out of memory!\n");
 		return -1;
 	}
 	return 0;
@@ -520,7 +527,7 @@ static inline int root_alloc_bootp(void)
 /*
  *  Create default route for BOOTP sending
  */
-static int root_add_bootp_route(void)
+__initfunc(static int root_add_bootp_route(void))
 {
 	if (root_dev_add_route(bootp_dev, 0, 0, 0) < 0) {
 		printk(KERN_ERR "BOOTP: Failed to add route\n");
@@ -534,7 +541,7 @@ static int root_add_bootp_route(void)
 /*
  *  Delete default route for BOOTP sending
  */
-static int root_del_bootp_route(void)
+__initfunc(static int root_del_bootp_route(void))
 {
 	if (bootp_have_route && root_dev_del_route(bootp_dev, 0, 0, 0) < 0) {
 		printk(KERN_ERR "BOOTP: Deleting of route failed!\n");
@@ -548,7 +555,7 @@ static int root_del_bootp_route(void)
 /*
  *  Open UDP socket.
  */
-static int root_open_udp_sock(struct socket **sock)
+__initfunc(static int root_open_udp_sock(struct socket **sock))
 {
 	int	err;
 
@@ -561,12 +568,13 @@ static int root_open_udp_sock(struct socket **sock)
 /*
  *  Connect UDP socket.
  */
-static int root_connect_udp_sock(struct socket *sock, u32 addr, u16 port)
+__initfunc(static int
+root_connect_udp_sock(struct socket *sock, u32 addr, u16 port))
 {
 	struct sockaddr_in sa;
 	int result;
 
-	set_sockaddr(&sa, htonl(addr), htonl(port));
+	set_sockaddr(&sa, htonl(addr), htons(port));
 	result = sock->ops->connect(sock, (struct sockaddr *) &sa, sizeof(sa), 0);
 	if (result < 0) {
 		printk(KERN_ERR "BOOTP: connect() failed\n");
@@ -579,12 +587,13 @@ static int root_connect_udp_sock(struct socket *sock, u32 addr, u16 port)
 /*
  *  Bind UDP socket.
  */
-static int root_bind_udp_sock(struct socket *sock, u32 addr, u16 port)
+__initfunc(static int
+root_bind_udp_sock(struct socket *sock, u32 addr, u16 port))
 {
 	struct sockaddr_in sa;
 	int result;
 
-	set_sockaddr(&sa, htonl(addr), htonl(port));
+	set_sockaddr(&sa, htonl(addr), htons(port));
 	result = sock->ops->bind(sock, (struct sockaddr *) &sa, sizeof(sa));
 	if (result < 0) {
 		printk(KERN_ERR "BOOTP: bind() failed\n");
@@ -645,7 +654,7 @@ static inline int root_recv_udp(struct socket *sock, void *buf, int size)
 /*
  *  Initialize BOOTP extension fields in the request.
  */
-static void root_bootp_init_ext(u8 *e)
+__initfunc(static void root_bootp_init_ext(u8 *e))
 {
 	*e++ = 99;		/* RFC1048 Magic Cookie */
 	*e++ = 130;
@@ -673,7 +682,7 @@ static void root_bootp_init_ext(u8 *e)
 /*
  *  Deinitialize the BOOTP mechanism.
  */
-static void root_bootp_close(void)
+__initfunc(static void root_bootp_close(void))
 {
 	if (bootp_xmit_sock)
 		sock_release(bootp_xmit_sock);
@@ -687,7 +696,7 @@ static void root_bootp_close(void)
 /*
  *  Initialize the BOOTP mechanism.
  */
-static int root_bootp_open(void)
+__initfunc(static int root_bootp_open(void))
 {
 	struct open_dev *openp;
 	struct device *dev, *best_dev;
@@ -767,7 +776,7 @@ static int root_bootp_open(void)
 /*
  *  Send BOOTP request.
  */
-static int root_bootp_send(u32 jiffies)
+__initfunc(static int root_bootp_send(u32 jiffies))
 {
 	xmit_bootp->secs = htons(jiffies / HZ);
 	return root_send_udp(bootp_xmit_sock, xmit_bootp, sizeof(struct bootp_pkt));
@@ -777,7 +786,8 @@ static int root_bootp_send(u32 jiffies)
 /*
  *  Copy BOOTP-supplied string if not already set.
  */
-static int root_bootp_string(char *dest, char *src, int len, int max)
+__initfunc(static int
+root_bootp_string(char *dest, char *src, int len, int max))
 {
 	if (*dest || !len)
 		return 0;
@@ -792,12 +802,12 @@ static int root_bootp_string(char *dest, char *src, int len, int max)
 /*
  *  Process BOOTP extension.
  */
-static void root_do_bootp_ext(u8 *ext)
+__initfunc(static void root_do_bootp_ext(u8 *ext))
 {
 #ifdef NFSROOT_BOOTP_DEBUG
 	u8 *c;
 
-	printk("BOOTP: Got extension %02x",*ext);
+	printk(KERN_DEBUG "BOOTP: Got extension %02x",*ext);
 	for(c=ext+2; c<ext+2+ext[1]; c++)
 		printk(" %02x", *c);
 	printk("\n");
@@ -828,7 +838,7 @@ static void root_do_bootp_ext(u8 *ext)
 /*
  *  Receive BOOTP request.
  */
-static void root_bootp_recv(void)
+__initfunc(static void root_bootp_recv(void))
 {
 	int len;
 	u8 *ext, *end, *opt;
@@ -897,7 +907,7 @@ static void root_bootp_recv(void)
  *  Determine client and server IP numbers and appropriate device by using
  *  the RARP and BOOTP protocols.
  */
-static int root_auto_config(void)
+__initfunc(static int root_auto_config(void))
 {
 	int retries;
 	unsigned long timeout, jiff;
@@ -988,8 +998,10 @@ static int root_auto_config(void)
 #else
 			;
 #endif
-		if (pkt_arrived)
+		if (pkt_arrived) {
+			printk(" OK\n");
 			break;
+		}
 		if (! --retries) {
 			printk(" timed out!\n");
 			break;
@@ -1011,7 +1023,6 @@ static int root_auto_config(void)
 	if (!pkt_arrived)
 		return -1;
 
-	printk(" OK\n");
 	printk(KERN_NOTICE "Root-NFS: Got %s answer from %s, ",
 		(pkt_arrived == ARRIVED_BOOTP) ? "BOOTP" : "RARP",
 		in_ntoa(servaddr));
@@ -1022,7 +1033,7 @@ static int root_auto_config(void)
 #endif
 
 /* Get default netmask - used to be exported from net/ipv4 */
-static unsigned long
+static inline unsigned long
 ip_get_mask(unsigned long addr)
 {
 	if (!addr)
@@ -1050,7 +1061,7 @@ ip_get_mask(unsigned long addr)
 static struct nfs_int_opts {
 	char *name;
 	int  *val;
-} root_int_opts[] = {
+} root_int_opts[] __initdata = {
 	{ "port",	&nfs_port },
 	{ "rsize",	&nfs_data.rsize },
 	{ "wsize",	&nfs_data.wsize },
@@ -1071,7 +1082,7 @@ static struct nfs_bool_opts {
 	char *name;
 	int  and_mask;
 	int  or_mask;
-} root_bool_opts[] = {
+} root_bool_opts[] __initdata = {
 	{ "soft",	~NFS_MOUNT_SOFT,	NFS_MOUNT_SOFT },
 	{ "hard",	~NFS_MOUNT_SOFT,	0 },
 	{ "intr",	~NFS_MOUNT_INTR,	NFS_MOUNT_INTR },
@@ -1090,7 +1101,7 @@ static struct nfs_bool_opts {
  *  Prepare the NFS data structure and parse any options. This tries to
  *  set as many values in the nfs_data structure as known right now.
  */
-static int root_nfs_name(char *name)
+__initfunc(static int root_nfs_name(char *name))
 {
 	char buf[NFS_MAXPATHLEN];
 	char *cp, *cq, *options, *val;
@@ -1120,6 +1131,7 @@ static int root_nfs_name(char *name)
 	memset(&nfs_data, 0, sizeof(nfs_data));
 	strncpy(nfs_data.hostname, in_ntoa(servaddr),
 						sizeof(nfs_data.hostname)-1);
+	nfs_data.namlen = strlen(nfs_data.hostname);
 
 	/* Set the name of the directory to mount */
 	if (nfs_path[0] == '\0' || strncmp(name, "default", 7))
@@ -1141,7 +1153,7 @@ static int root_nfs_name(char *name)
 
 	/* Set some default values */
 	nfs_port          = -1;
-	nfs_data.version  = NFS_MNT_VERSION;
+	nfs_data.version  = NFS_MOUNT_VERSION;
 	nfs_data.flags    = NFS_MOUNT_NONLM;	/* No lockd in nfs root yet */
 	nfs_data.rsize    = NFS_DEF_FILE_IO_BUFFER_SIZE;
 	nfs_data.wsize    = NFS_DEF_FILE_IO_BUFFER_SIZE;
@@ -1183,8 +1195,8 @@ static int root_nfs_name(char *name)
 /*
  *  Tell the user what's going on.
  */
-#ifdef NFSROOT_BOOTP
-static void root_nfs_print(void)
+#ifdef NFSROOT_DEBUG
+__initfunc(static void root_nfs_print(void))
 {
 #define IN_NTOA(x) (((x) == INADDR_NONE) ? "none" : in_ntoa(x))
 
@@ -1231,7 +1243,7 @@ static void root_nfs_print(void)
  *			  one for BOOTP
  *	<bootp|rarp>	- use both protocols to determine my own address
  */
-static void root_nfs_addrs(char *addrs)
+__initfunc(static void root_nfs_addrs(char *addrs))
 {
 	char *cp, *ip, *dp;
 	int num = 0;
@@ -1314,7 +1326,7 @@ static void root_nfs_addrs(char *addrs)
 /*
  *  Set the interface address and configure a route to the server.
  */
-static int root_nfs_setup(void)
+__initfunc(static int root_nfs_setup(void))
 {
 	/* Set the default system name in case none was previously found */
 	if (!system_utsname.nodename[0]) {
@@ -1372,7 +1384,7 @@ static int root_nfs_setup(void)
  *  Get the necessary IP addresses and prepare for mounting the required
  *  NFS filesystem.
  */
-int nfs_root_init(char *nfsname, char *nfsaddrs)
+__initfunc(int nfs_root_init(char *nfsname, char *nfsaddrs))
 {
 #ifdef NFSROOT_DEBUG
 	nfs_debug |= NFSDBG_ROOT;
@@ -1461,14 +1473,14 @@ int nfs_root_init(char *nfsname, char *nfsaddrs)
 /*
  *  Query server portmapper for the port of a daemon program
  */
-static int root_nfs_getport(int program, int version)
+__initfunc(static int root_nfs_getport(int program, int version))
 {
 	struct sockaddr_in	sin;
 
-printk(KERN_NOTICE "Looking up port of RPC %d/%d on %s\n",
-	program, version, in_ntoa(servaddr));
-	set_sockaddr(&sin, servaddr, 0);
-	return rpc_getport_external(&sin, program, version, IPPROTO_UDP);
+	printk(KERN_NOTICE "Looking up port of RPC %d/%d on %s\n",
+		program, version, in_ntoa(servaddr));
+		set_sockaddr(&sin, servaddr, 0);
+		return rpc_getport_external(&sin, program, version, IPPROTO_UDP);
 }
 
 
@@ -1478,7 +1490,7 @@ printk(KERN_NOTICE "Looking up port of RPC %d/%d on %s\n",
  *  keep this code is that we may want to use fallback ports. But is there
  *  actually someone who does not run portmap?
  */
-static int root_nfs_ports(void)
+__initfunc(static int root_nfs_ports(void))
 {
 	int	port;
 
@@ -1488,7 +1500,7 @@ static int root_nfs_ports(void)
 					"number from server, using default\n");
 			port = NFS_PORT;
 		}
-		nfs_port = port;
+		nfs_port = htons(port);
 		dprintk("Root-NFS: Portmapper on server returned %d "
 			"as nfsd port\n", port);
 	}
@@ -1511,7 +1523,7 @@ static int root_nfs_ports(void)
  *  Get a file handle from the server for the directory which is to be
  *  mounted
  */
-static int root_nfs_get_handle(void)
+__initfunc(static int root_nfs_get_handle(void))
 {
 	struct sockaddr_in sin;
 	int		status;
@@ -1529,7 +1541,7 @@ static int root_nfs_get_handle(void)
 /*
  *  Now actually mount the given directory
  */
-static int root_nfs_do_mount(struct super_block *sb)
+__initfunc(static int root_nfs_do_mount(struct super_block *sb))
 {
 	/* Pass the server address to NFS */
 	set_sockaddr((struct sockaddr_in *) &nfs_data.addr, servaddr, nfs_port);
@@ -1545,7 +1557,7 @@ static int root_nfs_do_mount(struct super_block *sb)
  *  Get the NFS port numbers and file handle, and then read the super-
  *  block for mounting.
  */
-int nfs_root_mount(struct super_block *sb)
+__initfunc(int nfs_root_mount(struct super_block *sb))
 {
 	if (root_nfs_ports() < 0)
 		return -1;

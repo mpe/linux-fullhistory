@@ -1,4 +1,4 @@
-/* $Id: teles0.c,v 1.6 1997/01/27 15:52:18 keil Exp $
+/* $Id: teles0.c,v 1.8 1997/04/13 19:54:04 keil Exp $
 
  * teles0.c     low level stuff for Teles Memory IO isdn cards
  *              based on the teles driver from Jan den Ouden
@@ -10,6 +10,12 @@
  *              Beat Doebeli
  *
  * $Log: teles0.c,v $
+ * Revision 1.8  1997/04/13 19:54:04  keil
+ * Change in IRQ check delay for SMP
+ *
+ * Revision 1.7  1997/04/06 22:54:04  keil
+ * Using SKB's
+ *
  * Revision 1.6  1997/01/27 15:52:18  keil
  * SMP proof,cosmetics
  *
@@ -40,70 +46,70 @@
 
 extern const char *CardType[];
 
-const char *teles0_revision = "$Revision: 1.6 $";
+const char *teles0_revision = "$Revision: 1.8 $";
 
 #define byteout(addr,val) outb_p(val,addr)
 #define bytein(addr) inb_p(addr)
 
-static inline byte
-readisac(unsigned int adr, byte off)
+static inline u_char
+readisac(unsigned int adr, u_char off)
 {
 	return readb(adr + 0x120 + ((off & 1) ? 0x1ff : 0) + off);
 }
 
 static inline void
-writeisac(unsigned int adr, byte off, byte data)
+writeisac(unsigned int adr, u_char off, u_char data)
 {
 	writeb(data, adr + 0x120 + ((off & 1) ? 0x1ff : 0) + off);
 }
 
 
-static inline byte
-readhscx(unsigned int adr, int hscx, byte off)
+static inline u_char
+readhscx(unsigned int adr, int hscx, u_char off)
 {
 	return readb(adr + (hscx ? 0x1e0 : 0x1a0) +
 		     ((off & 1) ? 0x1ff : 0) + off);
 }
 
 static inline void
-writehscx(unsigned int adr, int hscx, byte off, byte data)
+writehscx(unsigned int adr, int hscx, u_char off, u_char data)
 {
 	writeb(data, adr + (hscx ? 0x1e0 : 0x1a0) +
 	       ((off & 1) ? 0x1ff : 0) + off);
 }
 
 static inline void
-read_fifo_isac(unsigned int adr, byte * data, int size)
+read_fifo_isac(unsigned int adr, u_char * data, int size)
 {
 	register int i;
-	register byte *ad = (byte *) (adr + 0x100);
+	register u_char *ad = (u_char *) (adr + 0x100);
 	for (i = 0; i < size; i++)
 		data[i] = readb(ad);
 }
 
 static void
-write_fifo_isac(unsigned int adr, byte * data, int size)
+write_fifo_isac(unsigned int adr, u_char * data, int size)
 {
 	register int i;
-	register byte *ad = (byte *) (adr + 0x100);
+	register u_char *ad = (u_char *) (adr + 0x100);
 	for (i = 0; i < size; i++)
 		writeb(data[i], ad);
 }
 
 static inline void
-read_fifo_hscx(unsigned int adr, int hscx, byte * data, int size)
+read_fifo_hscx(unsigned int adr, int hscx, u_char * data, int size)
 {
 	register int i;
-	register byte *ad = (byte *) (adr + (hscx ? 0x1c0 : 0x180));
+	register u_char *ad = (u_char *) (adr + (hscx ? 0x1c0 : 0x180));
 	for (i = 0; i < size; i++)
 		data[i] = readb(ad);
 }
 
 static inline void
-write_fifo_hscx(unsigned int adr, int hscx, byte * data, int size)
+write_fifo_hscx(unsigned int adr, int hscx, u_char * data, int size)
 {
 	int i;
-	register byte *ad = (byte *) (adr + (hscx ? 0x1c0 : 0x180));
+	register u_char *ad = (u_char *) (adr + (hscx ? 0x1c0 : 0x180));
 	for (i = 0; i < size; i++)
 		writeb(data[i], ad);
 }
@@ -135,7 +141,7 @@ waitforXFW(int adr, int hscx)
 }
 
 static inline void
-writehscxCMDR(int adr, int hscx, byte data)
+writehscxCMDR(int adr, int hscx, u_char data)
 {
 	long flags;
 
@@ -178,25 +184,22 @@ teles0_report(struct IsdnCardState *sp)
 static void
 hscx_empty_fifo(struct HscxState *hsp, int count)
 {
-	byte *ptr;
+	u_char *ptr;
 	struct IsdnCardState *sp = hsp->sp;
-	struct BufHeader *ibh = hsp->rcvibh;
 	long flags;
 
 	if ((sp->debug & L1_DEB_HSCX) && !(sp->debug & L1_DEB_HSCX_FIFO))
 		debugl1(sp, "hscx_empty_fifo");
 
-	if (hsp->rcvptr + count > BUFFER_SIZE(HSCX_RBUF_ORDER,
-					      HSCX_RBUF_BPPS)) {
+	if (hsp->rcvidx + count > HSCX_BUFMAX) {
 		if (sp->debug & L1_DEB_WARN)
 			debugl1(sp, "hscx_empty_fifo: incoming packet too large");
 		writehscxCMDR(sp->membase, hsp->hscx, 0x80);
+		hsp->rcvidx = 0;
 		return;
 	}
-	ptr = DATAPTR(ibh);
-	ptr += hsp->rcvptr;
-
-	hsp->rcvptr += count;
+	ptr = hsp->rcvbuf + hsp->rcvidx;
+	hsp->rcvidx += count;
 	save_flags(flags);
 	cli();
 	read_fifo_hscx(sp->membase, hsp->hscx, ptr, count);
@@ -217,34 +220,32 @@ static void
 hscx_fill_fifo(struct HscxState *hsp)
 {
 	struct IsdnCardState *sp = hsp->sp;
-	struct BufHeader *ibh;
 	int more, count;
-	byte *ptr;
+	u_char *ptr;
 	long flags;
 
 	if ((sp->debug & L1_DEB_HSCX) && !(sp->debug & L1_DEB_HSCX_FIFO))
 		debugl1(sp, "hscx_fill_fifo");
 
-	ibh = hsp->xmtibh;
-	if (!ibh)
+	if (!hsp->tx_skb)
 		return;
-
-	count = ibh->datasize - hsp->sendptr;
-	if (count <= 0)
+	if (hsp->tx_skb->len <= 0)
 		return;
 
 	more = (hsp->mode == 1) ? 1 : 0;
-	if (count > 32) {
+	if (hsp->tx_skb->len > 32) {
 		more = !0;
 		count = 32;
-	}
-	ptr = DATAPTR(ibh);
-	ptr += hsp->sendptr;
-	hsp->sendptr += count;
+	} else
+		count = hsp->tx_skb->len;
 
 	waitforXFW(sp->membase, hsp->hscx);
 	save_flags(flags);
 	cli();
+	ptr = hsp->tx_skb->data;
+	skb_pull(hsp->tx_skb, count);
+	hsp->tx_cnt -= count;
+	hsp->count += count;
 	write_fifo_hscx(sp->membase, hsp->hscx, ptr, count);
 	writehscxCMDR(sp->membase, hsp->hscx, more ? 0x8 : 0xa);
 	restore_flags(flags);
@@ -260,11 +261,12 @@ hscx_fill_fifo(struct HscxState *hsp)
 }
 
 static inline void
-hscx_interrupt(struct IsdnCardState *sp, byte val, byte hscx)
+hscx_interrupt(struct IsdnCardState *sp, u_char val, u_char hscx)
 {
-	byte r;
+	u_char r;
 	struct HscxState *hsp = sp->hs + hscx;
-	int count, err;
+	struct sk_buff *skb;
+	int count;
 	char tmp[32];
 
 	if (!hsp->init)
@@ -286,79 +288,57 @@ hscx_interrupt(struct IsdnCardState *sp, byte val, byte hscx)
 			if (!r & 0x20)
 				if (sp->debug & L1_DEB_WARN)
 					debugl1(sp, "HSCX CRC error");
-			if (hsp->rcvibh)
-				BufPoolRelease(hsp->rcvibh);
-			hsp->rcvibh = NULL;
 			writehscxCMDR(sp->membase, hsp->hscx, 0x80);
-			goto afterRME;
+		} else {
+			count = readhscx(sp->membase, hsp->hscx, HSCX_RBCL) & 0x1f;
+			if (count == 0)
+				count = 32;
+			hscx_empty_fifo(hsp, count);
+			if ((count = hsp->rcvidx - 1) > 0) {
+				if (!(skb = dev_alloc_skb(count)))
+					printk(KERN_WARNING "AVM: receive out of memory\n");
+				else {
+					memcpy(skb_put(skb, count), hsp->rcvbuf, count);
+					skb_queue_tail(&hsp->rqueue, skb);
+				}
+			}
 		}
-		if (!hsp->rcvibh)
-			if (BufPoolGet(&hsp->rcvibh, &hsp->rbufpool,
-				       GFP_ATOMIC, (void *) 1, 1)) {
-				if (sp->debug & L1_DEB_WARN)
-					debugl1(sp, "HSCX RME out of buffers");
-				writehscxCMDR(sp->membase, hsp->hscx, 0x80);
-				goto afterRME;
-			} else
-				hsp->rcvptr = 0;
-
-		count = readhscx(sp->membase, hsp->hscx, HSCX_RBCL) & 0x1f;
-		if (count == 0)
-			count = 32;
-		hscx_empty_fifo(hsp, count);
-		hsp->rcvibh->datasize = hsp->rcvptr - 1;
-		BufQueueLink(&hsp->rq, hsp->rcvibh);
-		hsp->rcvibh = NULL;
+		hsp->rcvidx = 0;
 		hscx_sched_event(hsp, HSCX_RCVBUFREADY);
 	}
-      afterRME:
 	if (val & 0x40) {	/* RPF */
-		if (!hsp->rcvibh) {
-			if (hsp->mode == 1)
-				err = BufPoolGet(&hsp->rcvibh, &hsp->smallpool,
-					      GFP_ATOMIC, (void *) 1, 2);
-			else
-				err = BufPoolGet(&hsp->rcvibh, &hsp->rbufpool,
-					      GFP_ATOMIC, (void *) 1, 2);
-
-			if (err) {
-				if (sp->debug & L1_DEB_WARN)
-					debugl1(sp, "HSCX RPF out of buffers");
-				writehscxCMDR(sp->membase, hsp->hscx, 0x80);
-				goto afterRPF;
-			} else
-				hsp->rcvptr = 0;
-		}
 		hscx_empty_fifo(hsp, 32);
 		if (hsp->mode == 1) {
 			/* receive audio data */
-			hsp->rcvibh->datasize = hsp->rcvptr;
-			BufQueueLink(&hsp->rq, hsp->rcvibh);
-			hsp->rcvibh = NULL;
+			if (!(skb = dev_alloc_skb(32)))
+				printk(KERN_WARNING "AVM: receive out of memory\n");
+			else {
+				memcpy(skb_put(skb, 32), hsp->rcvbuf, 32);
+				skb_queue_tail(&hsp->rqueue, skb);
+			}
+			hsp->rcvidx = 0;
 			hscx_sched_event(hsp, HSCX_RCVBUFREADY);
 		}
 	}
-      afterRPF:
 	if (val & 0x10) {	/* XPR */
-		if (hsp->xmtibh)
-			if (hsp->xmtibh->datasize > hsp->sendptr) {
+		if (hsp->tx_skb)
+			if (hsp->tx_skb->len) {
 				hscx_fill_fifo(hsp);
-				goto afterXPR;
+				return;
 			} else {
-				if (hsp->releasebuf)
-					BufPoolRelease(hsp->xmtibh);
-				hsp->sendptr = 0;
+				SET_SKB_FREE(hsp->tx_skb);
+				dev_kfree_skb(hsp->tx_skb, FREE_WRITE);
+				hsp->count = 0;
 				if (hsp->st->l4.l1writewakeup)
 					hsp->st->l4.l1writewakeup(hsp->st);
-				hsp->xmtibh = NULL;
+				hsp->tx_skb = NULL;
 			}
-		if (!BufQueueUnlink(&hsp->xmtibh, &hsp->sq)) {
-			hsp->releasebuf = !0;
+		if ((hsp->tx_skb = skb_dequeue(&hsp->squeue))) {
+			hsp->count = 0;
 			hscx_fill_fifo(hsp);
 		} else
 			hscx_sched_event(hsp, HSCX_XMTBUFREADY);
 	}
-      afterXPR:
 }
 
 /*
@@ -368,25 +348,25 @@ hscx_interrupt(struct IsdnCardState *sp, byte val, byte hscx)
 static void
 isac_empty_fifo(struct IsdnCardState *sp, int count)
 {
-	byte *ptr;
-	struct BufHeader *ibh = sp->rcvibh;
+	u_char *ptr;
 	long flags;
 
 	if ((sp->debug & L1_DEB_ISAC) && !(sp->debug & L1_DEB_ISAC_FIFO))
 		debugl1(sp, "isac_empty_fifo");
 
-	if (sp->rcvptr >= 3072) {
+	if ((sp->rcvidx + count) >= MAX_DFRAME_LEN) {
 		if (sp->debug & L1_DEB_WARN) {
 			char tmp[40];
-			sprintf(tmp, "isac_empty_fifo rcvptr %d", sp->rcvptr);
+			sprintf(tmp, "isac_empty_fifo overrun %d",
+				sp->rcvidx + count);
 			debugl1(sp, tmp);
 		}
+		writeisac(sp->membase, ISAC_CMDR, 0x80);
+		sp->rcvidx = 0;
 		return;
 	}
-	ptr = DATAPTR(ibh);
-	ptr += sp->rcvptr;
-	sp->rcvptr += count;
-
+	ptr = sp->rcvbuf + sp->rcvidx;
+	sp->rcvidx += count;
 	save_flags(flags);
 	cli();
 	read_fifo_isac(sp->membase, ptr, count);
@@ -405,22 +385,18 @@ isac_empty_fifo(struct IsdnCardState *sp, int count)
 static void
 isac_fill_fifo(struct IsdnCardState *sp)
 {
-	struct BufHeader *ibh;
 	int count, more;
-	byte *ptr;
+	u_char *ptr;
 	long flags;
 
 	if ((sp->debug & L1_DEB_ISAC) && !(sp->debug & L1_DEB_ISAC_FIFO))
 		debugl1(sp, "isac_fill_fifo");
 
-	ibh = sp->xmtibh;
-	if (!ibh)
+	if (!sp->tx_skb)
 		return;
 
-	count = ibh->datasize - sp->sendptr;
+	count = sp->tx_skb->len;
 	if (count <= 0)
-		return;
-	if (count >= 3072)
 		return;
 
 	more = 0;
@@ -428,12 +404,11 @@ isac_fill_fifo(struct IsdnCardState *sp)
 		more = !0;
 		count = 32;
 	}
-	ptr = DATAPTR(ibh);
-	ptr += sp->sendptr;
-	sp->sendptr += count;
-
 	save_flags(flags);
 	cli();
+	ptr = sp->tx_skb->data;
+	skb_pull(sp->tx_skb, count);
+	sp->tx_cnt += count;
 	write_fifo_isac(sp->membase, ptr, count);
 	writeisac(sp->membase, ISAC_CMDR, more ? 0x8 : 0xa);
 	restore_flags(flags);
@@ -459,9 +434,10 @@ ph_command(struct IsdnCardState *sp, unsigned int command)
 }
 
 static inline void
-isac_interrupt(struct IsdnCardState *sp, byte val)
+isac_interrupt(struct IsdnCardState *sp, u_char val)
 {
-	byte exval;
+	u_char exval;
+	struct sk_buff *skb;
 	unsigned int count;
 	char tmp[32];
 
@@ -478,62 +454,45 @@ isac_interrupt(struct IsdnCardState *sp, byte val)
 			if (!exval & 0x20)
 				if (sp->debug & L1_DEB_WARN)
 					debugl1(sp, "ISAC CRC error");
-			if (sp->rcvibh)
-				BufPoolRelease(sp->rcvibh);
-			sp->rcvibh = NULL;
 			writeisac(sp->membase, ISAC_CMDR, 0x80);
-			goto afterRME;
+		} else {
+			count = readisac(sp->membase, ISAC_RBCL) & 0x1f;
+			if (count == 0)
+				count = 32;
+			isac_empty_fifo(sp, count);
+			if ((count = sp->rcvidx) > 0) {
+				if (!(skb = alloc_skb(count, GFP_ATOMIC)))
+					printk(KERN_WARNING "AVM: D receive out of memory\n");
+				else {
+					memcpy(skb_put(skb, count), sp->rcvbuf, count);
+					skb_queue_tail(&sp->rq, skb);
+				}
+			}
 		}
-		if (!sp->rcvibh)
-			if (BufPoolGet(&(sp->rcvibh), &(sp->rbufpool),
-				       GFP_ATOMIC, (void *) 1, 3)) {
-				if (sp->debug & L1_DEB_WARN)
-					debugl1(sp, "ISAC RME out of buffers!");
-				writeisac(sp->membase, ISAC_CMDR, 0x80);
-				goto afterRME;
-			} else
-				sp->rcvptr = 0;
-		count = readisac(sp->membase, ISAC_RBCL) & 0x1f;
-		if (count == 0)
-			count = 32;
-		isac_empty_fifo(sp, count);
-		sp->rcvibh->datasize = sp->rcvptr;
-		BufQueueLink(&(sp->rq), sp->rcvibh);
-		sp->rcvibh = NULL;
+		sp->rcvidx = 0;
 		isac_sched_event(sp, ISAC_RCVBUFREADY);
 	}
-      afterRME:
 	if (val & 0x40) {	/* RPF */
-		if (!sp->rcvibh)
-			if (BufPoolGet(&(sp->rcvibh), &(sp->rbufpool),
-				       GFP_ATOMIC, (void *) 1, 4)) {
-				if (sp->debug & L1_DEB_WARN)
-					debugl1(sp, "ISAC RME out of buffers!");
-				writeisac(sp->membase, ISAC_CMDR, 0x80);
-				goto afterRPF;
-			} else
-				sp->rcvptr = 0;
 		isac_empty_fifo(sp, 32);
 	}
-      afterRPF:
 	if (val & 0x20) {	/* RSC */
 		/* never */
 		if (sp->debug & L1_DEB_WARN)
 			debugl1(sp, "ISAC RSC interrupt");
 	}
 	if (val & 0x10) {	/* XPR */
-		if (sp->xmtibh)
-			if (sp->xmtibh->datasize > sp->sendptr) {
+		if (sp->tx_skb)
+			if (sp->tx_skb->len) {
 				isac_fill_fifo(sp);
 				goto afterXPR;
 			} else {
-				if (sp->releasebuf)
-					BufPoolRelease(sp->xmtibh);
-				sp->xmtibh = NULL;
-				sp->sendptr = 0;
+				SET_SKB_FREE(sp->tx_skb);
+				dev_kfree_skb(sp->tx_skb, FREE_WRITE);
+				sp->tx_cnt = 0;
+				sp->tx_skb = NULL;
 			}
-		if (!BufQueueUnlink(&sp->xmtibh, &sp->sq)) {
-			sp->releasebuf = !0;
+		if ((sp->tx_skb = skb_dequeue(&sp->sq))) {
+			sp->tx_cnt = 0;
 			isac_fill_fifo(sp);
 		} else
 			isac_sched_event(sp, ISAC_XMTBUFREADY);
@@ -563,10 +522,10 @@ isac_interrupt(struct IsdnCardState *sp, byte val)
 }
 
 static inline void
-hscx_int_main(struct IsdnCardState *sp, byte val)
+hscx_int_main(struct IsdnCardState *sp, u_char val)
 {
 
-	byte exval;
+	u_char exval;
 	struct HscxState *hsp;
 	char tmp[32];
 
@@ -581,7 +540,11 @@ hscx_int_main(struct IsdnCardState *sp, byte val)
 				/* Here we lost an TX interrupt, so
 				   * restart transmitting the whole frame.
 				 */
-				hsp->sendptr = 0;
+				if (hsp->tx_skb) {
+					skb_push(hsp->tx_skb, hsp->count);
+					hsp->tx_cnt += hsp->count;
+					hsp->count = 0;
+				}
 				writehscxCMDR(sp->membase, hsp->hscx, 0x01);
 				if (sp->debug & L1_DEB_WARN) {
 					sprintf(tmp, "HSCX B EXIR %x Lost TX", exval);
@@ -610,7 +573,11 @@ hscx_int_main(struct IsdnCardState *sp, byte val)
 				/* Here we lost an TX interrupt, so
 				   * restart transmitting the whole frame.
 				 */
-				hsp->sendptr = 0;
+				if (hsp->tx_skb) {
+					skb_push(hsp->tx_skb, hsp->count);
+					hsp->tx_cnt += hsp->count;
+					hsp->count = 0;
+				}
 				writehscxCMDR(sp->membase, hsp->hscx, 0x01);
 				if (sp->debug & L1_DEB_WARN) {
 					sprintf(tmp, "HSCX A EXIR %x Lost TX", exval);
@@ -636,7 +603,7 @@ static void
 telesS0_interrupt(int intno, void *dev_id, struct pt_regs *regs)
 {
 	struct IsdnCardState *sp;
-	byte val, stat = 0;
+	u_char val, stat = 0;
 
 	sp = (struct IsdnCardState *) irq2dev_map[intno];
 
@@ -723,48 +690,48 @@ modehscx(struct HscxState *hs, int mode, int ichan)
 		ichan = 1 - ichan;
 
 	switch (mode) {
-	case (0):
-		writehscx(sp->membase, hscx, HSCX_CCR2, 0x30);
-		writehscx(sp->membase, hscx, HSCX_TSAX, 0xff);
-		writehscx(sp->membase, hscx, HSCX_TSAR, 0xff);
-		writehscx(sp->membase, hscx, HSCX_XCCR, 7);
-		writehscx(sp->membase, hscx, HSCX_RCCR, 7);
-		writehscx(sp->membase, hscx, HSCX_MODE, 0x84);
-		break;
-	case (1):
-		if (ichan == 0) {
+		case (0):
 			writehscx(sp->membase, hscx, HSCX_CCR2, 0x30);
-			writehscx(sp->membase, hscx, HSCX_TSAX, 0x7);
-			writehscx(sp->membase, hscx, HSCX_TSAR, 0x7);
+			writehscx(sp->membase, hscx, HSCX_TSAX, 0xff);
+			writehscx(sp->membase, hscx, HSCX_TSAR, 0xff);
 			writehscx(sp->membase, hscx, HSCX_XCCR, 7);
 			writehscx(sp->membase, hscx, HSCX_RCCR, 7);
-		} else {
-			writehscx(sp->membase, hscx, HSCX_CCR2, 0x30);
-			writehscx(sp->membase, hscx, HSCX_TSAX, 0x3);
-			writehscx(sp->membase, hscx, HSCX_TSAR, 0x3);
-			writehscx(sp->membase, hscx, HSCX_XCCR, 7);
-			writehscx(sp->membase, hscx, HSCX_RCCR, 7);
-		}
-		writehscx(sp->membase, hscx, HSCX_MODE, 0xe4);
-		writehscx(sp->membase, hscx, HSCX_CMDR, 0x41);
-		break;
-	case (2):
-		if (ichan == 0) {
-			writehscx(sp->membase, hscx, HSCX_CCR2, 0x30);
-			writehscx(sp->membase, hscx, HSCX_TSAX, 0x7);
-			writehscx(sp->membase, hscx, HSCX_TSAR, 0x7);
-			writehscx(sp->membase, hscx, HSCX_XCCR, 7);
-			writehscx(sp->membase, hscx, HSCX_RCCR, 7);
-		} else {
-			writehscx(sp->membase, hscx, HSCX_CCR2, 0x30);
-			writehscx(sp->membase, hscx, HSCX_TSAX, 0x3);
-			writehscx(sp->membase, hscx, HSCX_TSAR, 0x3);
-			writehscx(sp->membase, hscx, HSCX_XCCR, 7);
-			writehscx(sp->membase, hscx, HSCX_RCCR, 7);
-		}
-		writehscx(sp->membase, hscx, HSCX_MODE, 0x8c);
-		writehscx(sp->membase, hscx, HSCX_CMDR, 0x41);
-		break;
+			writehscx(sp->membase, hscx, HSCX_MODE, 0x84);
+			break;
+		case (1):
+			if (ichan == 0) {
+				writehscx(sp->membase, hscx, HSCX_CCR2, 0x30);
+				writehscx(sp->membase, hscx, HSCX_TSAX, 0x7);
+				writehscx(sp->membase, hscx, HSCX_TSAR, 0x7);
+				writehscx(sp->membase, hscx, HSCX_XCCR, 7);
+				writehscx(sp->membase, hscx, HSCX_RCCR, 7);
+			} else {
+				writehscx(sp->membase, hscx, HSCX_CCR2, 0x30);
+				writehscx(sp->membase, hscx, HSCX_TSAX, 0x3);
+				writehscx(sp->membase, hscx, HSCX_TSAR, 0x3);
+				writehscx(sp->membase, hscx, HSCX_XCCR, 7);
+				writehscx(sp->membase, hscx, HSCX_RCCR, 7);
+			}
+			writehscx(sp->membase, hscx, HSCX_MODE, 0xe4);
+			writehscx(sp->membase, hscx, HSCX_CMDR, 0x41);
+			break;
+		case (2):
+			if (ichan == 0) {
+				writehscx(sp->membase, hscx, HSCX_CCR2, 0x30);
+				writehscx(sp->membase, hscx, HSCX_TSAX, 0x7);
+				writehscx(sp->membase, hscx, HSCX_TSAR, 0x7);
+				writehscx(sp->membase, hscx, HSCX_XCCR, 7);
+				writehscx(sp->membase, hscx, HSCX_RCCR, 7);
+			} else {
+				writehscx(sp->membase, hscx, HSCX_CCR2, 0x30);
+				writehscx(sp->membase, hscx, HSCX_TSAX, 0x3);
+				writehscx(sp->membase, hscx, HSCX_TSAR, 0x3);
+				writehscx(sp->membase, hscx, HSCX_XCCR, 7);
+				writehscx(sp->membase, hscx, HSCX_RCCR, 7);
+			}
+			writehscx(sp->membase, hscx, HSCX_MODE, 0x8c);
+			writehscx(sp->membase, hscx, HSCX_CMDR, 0x41);
+			break;
 	}
 	writehscx(sp->membase, hscx, HSCX_ISTA, 0x00);
 }
@@ -832,6 +799,7 @@ int
 initteles0(struct IsdnCardState *sp)
 {
 	int ret;
+	int loop = 0;
 	char tmp[40];
 
 	sp->counter = kstat.interrupts[sp->irq];
@@ -843,6 +811,16 @@ initteles0(struct IsdnCardState *sp)
 		initisac(sp);
 		sp->modehscx(sp->hs, 0, 0);
 		sp->modehscx(sp->hs + 1, 0, 0);
+		while (loop++ < 10) {
+			/* At least 1-3 irqs must happen
+			 * (one from HSCX A, one from HSCX B, 3rd from ISAC)
+			 */
+			if (kstat.interrupts[sp->irq] > sp->counter)
+				break;
+			current->state = TASK_INTERRUPTIBLE;
+			current->timeout = jiffies + 1;
+			schedule();
+		}
 		sprintf(tmp, "IRQ %d count %d", sp->irq,
 			kstat.interrupts[sp->irq]);
 		debugl1(sp, tmp);
@@ -861,7 +839,7 @@ initteles0(struct IsdnCardState *sp)
 int
 setup_teles0(struct IsdnCard *card)
 {
-	byte cfval, val, verA, verB;
+	u_char cfval, val, verA, verB;
 	struct IsdnCardState *sp = card->sp;
 	long flags;
 	char tmp[64];
@@ -897,33 +875,33 @@ setup_teles0(struct IsdnCard *card)
 		}
 	}
 	switch (sp->irq) {
-	case 2:
-		cfval = 0x00;
-		break;
-	case 3:
-		cfval = 0x02;
-		break;
-	case 4:
-		cfval = 0x04;
-		break;
-	case 5:
-		cfval = 0x06;
-		break;
-	case 10:
-		cfval = 0x08;
-		break;
-	case 11:
-		cfval = 0x0A;
-		break;
-	case 12:
-		cfval = 0x0C;
-		break;
-	case 15:
-		cfval = 0x0E;
-		break;
-	default:
-		cfval = 0x00;
-		break;
+		case 2:
+			cfval = 0x00;
+			break;
+		case 3:
+			cfval = 0x02;
+			break;
+		case 4:
+			cfval = 0x04;
+			break;
+		case 5:
+			cfval = 0x06;
+			break;
+		case 10:
+			cfval = 0x08;
+			break;
+		case 11:
+			cfval = 0x0A;
+			break;
+		case 12:
+			cfval = 0x0C;
+			break;
+		case 15:
+			cfval = 0x0E;
+			break;
+		default:
+			cfval = 0x00;
+			break;
 	}
 	cfval |= ((card->para[1] >> 9) & 0xF0);
 	if (sp->cfg_reg) {

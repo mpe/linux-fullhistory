@@ -1,4 +1,4 @@
-/* $Id: icn.c,v 1.38 1997/02/11 18:29:31 fritz Exp $
+/* $Id: icn.c,v 1.44 1997/03/30 16:51:26 calle Exp $
 
  * ISDN low-level module for the ICN active ISDN-Card.
  *
@@ -19,6 +19,25 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  *
  * $Log: icn.c,v $
+ * Revision 1.44  1997/03/30 16:51:26  calle
+ * changed calls to copy_from_user/copy_to_user and removed verify_area
+ * were possible.
+ *
+ * Revision 1.43  1997/03/21 18:27:04  fritz
+ * Corrected parsing of incoming setup.
+ *
+ * Revision 1.42  1997/03/05 21:13:18  fritz
+ * Bugfix: sndcount was not reset on hangup.
+ *
+ * Revision 1.41  1997/02/24 23:34:29  fritz
+ * Bugfix in Layer1 error-recovery.
+ *
+ * Revision 1.40  1997/02/23 23:34:45  fritz
+ * Minor bugfixes in debugging code.
+ *
+ * Revision 1.39  1997/02/23 16:21:56  fritz
+ * Bugfix: Check for NULL pointer in icn_parse_status().
+ *
  * Revision 1.38  1997/02/11 18:29:31  fritz
  * Bugfix in D64S initialization.
  *
@@ -171,22 +190,25 @@
 #undef MAP_DEBUG
 
 static char
-*revision = "$Revision: 1.38 $";
+*revision = "$Revision: 1.44 $";
 
 static int icn_addcard(int, char *, char *);
 
 /*
- * Free queue completely.
+ * Free send-queue completely.
  * Parameter:
- *   queue = pointer to queue-head
+ *   card   = pointer to card struct
+ *   channel = channel number
  */
 static void
-icn_free_queue(struct sk_buff_head *queue)
+icn_free_queue(icn_card * card, int channel)
 {
+	struct sk_buff_head *queue = &card->spqueue[channel];
 	struct sk_buff *skb;
 
 	while ((skb = skb_dequeue(queue)))
 		dev_kfree_skb(skb, FREE_WRITE);
+	card->sndcount[channel] = 0;
 }
 
 /* Put a value into a shift-register, highest bit first.
@@ -235,7 +257,7 @@ static inline void
 icn_map_channel(icn_card * card, int channel)
 {
 #ifdef MAP_DEBUG
-	printk(KERN_DEBUG "icn_map_channel %d %d\n", dev->channel, channel);
+	printk(KERN_DEBUG "icn_map_channel %d %d\n", dev.channel, channel);
 #endif
 	if ((channel == dev.channel) && (card == dev.mcard))
 		return;
@@ -275,7 +297,7 @@ icn_lock_channel(icn_card * card, int channel)
 	} else {
 		retval = 0;
 #ifdef MAP_DEBUG
-		printk(KERN_DEBUG "icn_lock_channel %d FAILED, dc=%d\n", channel, device->channel);
+		printk(KERN_DEBUG "icn_lock_channel %d FAILED, dc=%d\n", channel, dev.channel);
 #endif
 	}
 	restore_flags(flags);
@@ -291,7 +313,7 @@ icn_release_channel(void)
 	ulong flags;
 
 #ifdef MAP_DEBUG
-	printk(KERN_DEBUG "icn_release_channel l=%d\n", device->chanlock);
+	printk(KERN_DEBUG "icn_release_channel l=%d\n", dev.chanlock);
 #endif
 	save_flags(flags);
 	cli();
@@ -501,7 +523,6 @@ typedef struct icn_stat {
 	int command;
 	int action;
 } icn_stat;
-
 /* *INDENT-OFF* */
 static icn_stat icn_stat_table[] =
 {
@@ -519,9 +540,12 @@ static icn_stat icn_stat_table[] =
 	{"NO D-CHAN",      ISDN_STAT_NODCH, 0},	/* No D-channel available     */
 	{"E_L1: ACT FAIL", ISDN_STAT_BHUP,  8},	/* Layer-1 activation failed  */
 	{"E_L2: DATA LIN", ISDN_STAT_BHUP,  8},	/* Layer-2 data link lost     */
+	{"E_L1: ACTIVATION FAILED",
+					   ISDN_STAT_BHUP,  8},	/* Layer-1 activation failed  */
 	{NULL, 0, -1}
 };
 /* *INDENT-ON* */
+
 
 /*
  * Check Statusqueue-Pointer from isdn-cards.
@@ -562,7 +586,7 @@ icn_parse_status(u_char * status, int channel, icn_card * card)
 		case 2:
 			card->flags &= ~((channel) ?
 				ICN_FLAGS_B2ACTIVE : ICN_FLAGS_B1ACTIVE);
-			icn_free_queue(&card->spqueue[channel]);
+			icn_free_queue(card, channel);
 			save_flags(flags);
 			cli();
 			card->rcvidx[channel] = 0;
@@ -571,20 +595,28 @@ icn_parse_status(u_char * status, int channel, icn_card * card)
 			break;
 		case 3:
 			{
-				char *s = strtok(status + 6, ",");
-				strncpy(cmd.parm.setup.phone, s, sizeof(cmd.parm.setup.phone));
-				s = strtok(NULL, ",");
-				if (!strlen(s))
+				char *t = status + 6;
+				char *s = strpbrk(t, ",");
+
+				*s++ = '\0';
+				strncpy(cmd.parm.setup.phone, t,
+					sizeof(cmd.parm.setup.phone));
+				s = strpbrk(t = s, ",");
+				*s++ = '\0';
+				if (!strlen(t))
 					cmd.parm.setup.si1 = 0;
 				else
-					cmd.parm.setup.si1 = simple_strtoul(s, NULL, 10);
-				s = strtok(NULL, ",");
-				if (!strlen(s))
+					cmd.parm.setup.si1 =
+					    simple_strtoul(t, NULL, 10);
+				s = strpbrk(t = s, ",");
+				*s++ = '\0';
+				if (!strlen(t))
 					cmd.parm.setup.si2 = 0;
 				else
-					cmd.parm.setup.si2 = simple_strtoul(s, NULL, 10);
-				s = strtok(NULL, ",");
-				strncpy(cmd.parm.setup.eazmsn, s, sizeof(cmd.parm.setup.eazmsn));
+					cmd.parm.setup.si2 =
+					    simple_strtoul(t, NULL, 10);
+				strncpy(cmd.parm.setup.eazmsn, s,
+					sizeof(cmd.parm.setup.eazmsn));
 			}
 			cmd.parm.setup.plan = 0;
 			cmd.parm.setup.screen = 0;
@@ -613,6 +645,13 @@ icn_parse_status(u_char * status, int channel, icn_card * card)
 				strncpy(cmd.parm.num, status + 1, sizeof(cmd.parm.num) - 1);
 			break;
 		case 8:
+			dflag = 3;
+			card->flags &= ~ICN_FLAGS_B1ACTIVE;
+			icn_free_queue(card, 0);
+			save_flags(flags);
+			cli();
+			card->rcvidx[0] = 0;
+			restore_flags(flags);
 			cmd.arg = 0;
 			cmd.driver = card->myid;
 			card->interface.statcallb(&cmd);
@@ -621,6 +660,12 @@ icn_parse_status(u_char * status, int channel, icn_card * card)
 			cmd.driver = card->myid;
 			card->interface.statcallb(&cmd);
 			cmd.command = ISDN_STAT_BHUP;
+			card->flags &= ~ICN_FLAGS_B2ACTIVE;
+			icn_free_queue(card, 1);
+			save_flags(flags);
+			cli();
+			card->rcvidx[1] = 0;
+			restore_flags(flags);
 			cmd.arg = 1;
 			cmd.driver = card->myid;
 			card->interface.statcallb(&cmd);
@@ -867,11 +912,13 @@ icn_loadboot(u_char * buffer, icn_card * card)
 #ifdef BOOT_DEBUG
 	printk(KERN_DEBUG "icn_loadboot called, buffaddr=%08lx\n", (ulong) buffer);
 #endif
-	if ((ret = verify_area(VERIFY_READ, (void *) buffer, ICN_CODE_STAGE1)))
-		return ret;
 	if (!(codebuf = kmalloc(ICN_CODE_STAGE1, GFP_KERNEL))) {
 		printk(KERN_WARNING "icn: Could not allocate code buffer\n");
 		return -ENOMEM;
+	}
+	if ((ret = copy_from_user(codebuf, buffer, ICN_CODE_STAGE1))) {
+		kfree(codebuf);
+		return ret;
 	}
 	save_flags(flags);
 	cli();
@@ -920,7 +967,6 @@ icn_loadboot(u_char * buffer, icn_card * card)
 	icn_lock_channel(card, 0);	/* Lock Bank 0      */
 	restore_flags(flags);
 	SLEEP(1);
-	copy_from_user(codebuf, buffer, ICN_CODE_STAGE1);
 	memcpy_toio(dev.shmem, codebuf, ICN_CODE_STAGE1);	/* Copy code        */
 #ifdef BOOT_DEBUG
 	printk(KERN_DEBUG "Bootloader transfered\n");
@@ -992,7 +1038,10 @@ icn_loadproto(u_char * buffer, icn_card * card)
 	while (left) {
 		if (sbfree) {   /* If there is a free buffer...  */
 			cnt = MIN(256, left);
-			copy_from_user(codebuf, p, cnt);
+			if (copy_from_user(codebuf, p, cnt)) {
+				icn_maprelease_channel(card, 0);
+				return -EFAULT;
+			}
 			memcpy_toio(&sbuf_l, codebuf, cnt);	/* copy data                     */
 			sbnext; /* switch to next buffer         */
 			p += cnt;
@@ -1290,17 +1339,15 @@ icn_command(isdn_ctrl * c, icn_card * card)
 				case ICN_IOCTL_GETDOUBLE:
 					return (int) card->doubleS0;
 				case ICN_IOCTL_DEBUGVAR:
-					if ((i = verify_area(VERIFY_WRITE,
-							     (void *) a,
-						     sizeof(ulong) * 2)))
+					if ((i = copy_to_user((char *) a,
+					  (char *) &card, sizeof(ulong))))
 						return i;
-					copy_to_user((char *) a,
-					  (char *) &card, sizeof(ulong));
 					a += sizeof(ulong);
 					{
 						ulong l = (ulong) & dev;
-						copy_to_user((char *) a,
-							     (char *) &l, sizeof(ulong));
+						if ((i = copy_to_user((char *) a,
+							     (char *) &l, sizeof(ulong))))
+							return i;
 					}
 					return 0;
 				case ICN_IOCTL_LOADBOOT:
@@ -1321,9 +1368,8 @@ icn_command(isdn_ctrl * c, icn_card * card)
 				case ICN_IOCTL_ADDCARD:
 					if (!dev.firstload)
 						return -EBUSY;
-					if ((i = verify_area(VERIFY_READ, (void *) a, sizeof(icn_cdef))))
+					if ((i = copy_from_user((char *) &cdef, (char *) a, sizeof(cdef))))
 						return i;
-					copy_from_user((char *) &cdef, (char *) a, sizeof(cdef));
 					return (icn_addcard(cdef.port, cdef.id1, cdef.id2));
 					break;
 				case ICN_IOCTL_LEASEDCFG:
@@ -1774,7 +1820,7 @@ cleanup_module(void)
 				card->rvalid = 0;
 			}
 			for (i = 0; i < ICN_BCH; i++)
-				icn_free_queue(&card->spqueue[i]);
+				icn_free_queue(card, i);
 		}
 		card = card->next;
 	}

@@ -1,9 +1,6 @@
 /*
  *	AX.25 release 036
  *
- *	This is ALPHA test software. This code may break your machine, randomly fail to work with new 
- *	releases, misbehave and/or generally screw up. It might even work. 
- *
  *	This code REQUIRES 2.1.15 or higher/ NET3.038
  *
  *	This module:
@@ -61,12 +58,6 @@ static int ax25_ds_state1_machine(ax25_cb *ax25, struct sk_buff *skb, int framet
 			ax25_send_control(ax25, AX25_UA, pf, AX25_RESPONSE);
 			break;
 
-		case AX25_SABME:
-			ax25->modulus = AX25_EMODULUS;
-			ax25->window  = ax25->ax25_dev->values[AX25_VALUES_EWINDOW];
-			ax25_send_control(ax25, AX25_UA, pf, AX25_RESPONSE);
-			break;
-
 		case AX25_DISC:
 			ax25_send_control(ax25, AX25_DM, pf, AX25_RESPONSE);
 			break;
@@ -100,20 +91,15 @@ static int ax25_ds_state1_machine(ax25_cb *ax25, struct sk_buff *skb, int framet
 
 		case AX25_DM:
 			if (pf) {
-				if (ax25->modulus == AX25_MODULUS) {
-					ax25_clear_queues(ax25);
-					ax25->state = AX25_STATE_0;
-					if (ax25->sk != NULL) {
-						ax25->sk->state     = TCP_CLOSE;
-						ax25->sk->err       = ECONNREFUSED;
-						ax25->sk->shutdown |= SEND_SHUTDOWN;
-						if (!ax25->sk->dead)
-							ax25->sk->state_change(ax25->sk);
-						ax25->sk->dead      = 1;
-					}
-				} else {
-					ax25->modulus = AX25_MODULUS;
-					ax25->window  = ax25->ax25_dev->values[AX25_VALUES_WINDOW];
+				ax25_clear_queues(ax25);
+				ax25->state = AX25_STATE_0;
+				if (ax25->sk != NULL) {
+					ax25->sk->state     = TCP_CLOSE;
+					ax25->sk->err       = ECONNREFUSED;
+					ax25->sk->shutdown |= SEND_SHUTDOWN;
+					if (!ax25->sk->dead)
+						ax25->sk->state_change(ax25->sk);
+					ax25->sk->dead      = 1;
 				}
 			}
 			break;
@@ -136,9 +122,7 @@ static int ax25_ds_state2_machine(ax25_cb *ax25, struct sk_buff *skb, int framet
 {
 	switch (frametype) {
 		case AX25_SABM:
-		case AX25_SABME:
 			ax25_send_control(ax25, AX25_DISC, AX25_POLLON, AX25_COMMAND);
-			ax25->dama_slave = 0;
 			ax25_dama_off(ax25);
 			break;
 
@@ -146,7 +130,6 @@ static int ax25_ds_state2_machine(ax25_cb *ax25, struct sk_buff *skb, int framet
 			ax25_send_control(ax25, AX25_UA, pf, AX25_RESPONSE);
 			ax25->state = AX25_STATE_0;
 			ax25_dama_off(ax25);
-
 			if (ax25->sk != NULL) {
 				ax25->sk->state     = TCP_CLOSE;
 				ax25->sk->err       = 0;
@@ -162,7 +145,6 @@ static int ax25_ds_state2_machine(ax25_cb *ax25, struct sk_buff *skb, int framet
 			if (pf) {
 				ax25->state = AX25_STATE_0;
 				ax25_dama_off(ax25);
-
 				if (ax25->sk != NULL) {
 					ax25->sk->state     = TCP_CLOSE;
 					ax25->sk->err       = 0;
@@ -180,7 +162,6 @@ static int ax25_ds_state2_machine(ax25_cb *ax25, struct sk_buff *skb, int framet
 		case AX25_RR:
 			if (pf) {
 				ax25_send_control(ax25, AX25_DISC, AX25_POLLON, AX25_COMMAND);
-				ax25->dama_slave = 0;
 				ax25_dama_off(ax25);
 			}
 			break;
@@ -203,14 +184,8 @@ static int ax25_ds_state3_machine(ax25_cb *ax25, struct sk_buff *skb, int framet
 
 	switch (frametype) {
 		case AX25_SABM:
-		case AX25_SABME:
-			if (frametype == AX25_SABM) {
-				ax25->modulus = AX25_MODULUS;
-				ax25->window  = ax25->ax25_dev->values[AX25_VALUES_WINDOW];
-			} else {
-				ax25->modulus = AX25_EMODULUS;
-				ax25->window  = ax25->ax25_dev->values[AX25_VALUES_EWINDOW];
-			}
+			ax25->modulus   = AX25_MODULUS;
+			ax25->window    = ax25->ax25_dev->values[AX25_VALUES_WINDOW];
 			ax25_send_control(ax25, AX25_UA, pf, AX25_RESPONSE);
 			ax25->condition = 0x00;
 			ax25->t1timer   = 0;
@@ -229,7 +204,6 @@ static int ax25_ds_state3_machine(ax25_cb *ax25, struct sk_buff *skb, int framet
 			ax25->t3timer = 0;
 			ax25->state   = AX25_STATE_0;
 			ax25_dama_off(ax25);
-
 			if (ax25->sk != NULL) {
 				ax25->sk->state     = TCP_CLOSE;
 				ax25->sk->err       = 0;
@@ -245,7 +219,6 @@ static int ax25_ds_state3_machine(ax25_cb *ax25, struct sk_buff *skb, int framet
 			ax25->t3timer = 0;
 			ax25->state   = AX25_STATE_0;
 			ax25_dama_off(ax25);
-
 			if (ax25->sk != NULL) {
 				ax25->sk->state     = TCP_CLOSE;
 				ax25->sk->err       = ECONNRESET;
@@ -306,193 +279,7 @@ static int ax25_ds_state3_machine(ax25_cb *ax25, struct sk_buff *skb, int framet
 				break;
 			}
 			if (ns == ax25->vr) {
-				ax25->vr = (ax25->vr + 1) % ax25->modulus;
-				queued = ax25_rx_iframe(ax25, skb);
-				if (ax25->condition & AX25_COND_OWN_RX_BUSY) {
-					ax25->vr = ns;	/* ax25->vr - 1 */
-					if (pf) ax25_ds_enquiry_response(ax25);
-					break;
-				}
-				ax25->condition &= ~AX25_COND_REJECT;
-				if (pf) {
-					ax25_ds_enquiry_response(ax25);
-				} else {
-					if (!(ax25->condition & AX25_COND_ACK_PENDING)) {
-						ax25->t2timer = ax25->t2;
-						ax25->condition |= AX25_COND_ACK_PENDING;
-					}
-				}
-			} else {
-				if (ax25->condition & AX25_COND_REJECT) {
-					if (pf) ax25_ds_enquiry_response(ax25);
-				} else {
-					ax25->condition |= AX25_COND_REJECT;
-					ax25_ds_enquiry_response(ax25);
-					ax25->condition &= ~AX25_COND_ACK_PENDING;
-				}
-			}
-			break;
-
-		case AX25_FRMR:
-		case AX25_ILLEGAL:
-			ax25_ds_establish_data_link(ax25);
-			ax25->state = AX25_STATE_1;
-			break;
-
-		default:
-			break;
-	}
-
-	return queued;
-}
-
-/*
- *	State machine for state 4, Timer Recovery State.
- *	The handling of the timer(s) is in file ax25_timer.c
- *	Handling of state 0 and connection release is in ax25.c.
- */
-static int ax25_ds_state4_machine(ax25_cb *ax25, struct sk_buff *skb, int frametype, int ns, int nr, int pf, int type)
-{
-	int queued = 0;
-
-	switch (frametype) {
-		case AX25_SABM:
-		case AX25_SABME:
-			if (frametype == AX25_SABM) {
-				ax25->modulus = AX25_MODULUS;
-				ax25->window  = ax25->ax25_dev->values[AX25_VALUES_WINDOW];
-			} else {
-				ax25->modulus = AX25_EMODULUS;
-				ax25->window  = ax25->ax25_dev->values[AX25_VALUES_EWINDOW];
-			}
-			ax25_send_control(ax25, AX25_UA, pf, AX25_RESPONSE);
-			ax25->condition = 0x00;
-			ax25->t1timer   = 0;
-			ax25->t3timer   = ax25->t3;
-			ax25->idletimer = ax25->idle;
-			ax25->vs        = 0;
-			ax25->va        = 0;
-			ax25->vr        = 0;
-			ax25->state     = AX25_STATE_3;
-			ax25->n2count   = 0;
-			ax25_requeue_frames(ax25);
-			ax25_dama_on(ax25);
-			break;
-
-		case AX25_DISC:
-			ax25_clear_queues(ax25);
-			ax25_send_control(ax25, AX25_UA, pf, AX25_RESPONSE);
-			ax25->t3timer = 0;
-			ax25->state   = AX25_STATE_0;
-			ax25_dama_off(ax25);
-
-			if (ax25->sk != NULL) {
-				ax25->sk->state     = TCP_CLOSE;
-				ax25->sk->err       = 0;
-				ax25->sk->shutdown |= SEND_SHUTDOWN;
-				if (!ax25->sk->dead)
-					ax25->sk->state_change(ax25->sk);
-				ax25->sk->dead      = 1;
-			}
-			break;
-
-		case AX25_DM:
-			ax25_clear_queues(ax25);
-			ax25->t3timer = 0;
-			ax25->state   = AX25_STATE_0;
-			ax25_dama_off(ax25);
-
-			if (ax25->sk != NULL) {
-				ax25->sk->state     = TCP_CLOSE;
-				ax25->sk->err       = ECONNRESET;
-				ax25->sk->shutdown |= SEND_SHUTDOWN;
-				if (!ax25->sk->dead)
-					ax25->sk->state_change(ax25->sk);
-				ax25->sk->dead      = 1;
-			}
-			break;
-
-		case AX25_RR:
-		case AX25_RNR:
-			if (frametype == AX25_RR)
-				ax25->condition &= ~AX25_COND_PEER_RX_BUSY;
-			else
-				ax25->condition |= AX25_COND_PEER_RX_BUSY;
-			if (type == AX25_RESPONSE && pf) {
-				ax25->t1timer = 0;
-				if (ax25_validate_nr(ax25, nr)) {
-					ax25_frames_acked(ax25, nr);
-					ax25->n2count = 0;
-					if (ax25->vs == ax25->va) {
-						ax25->t3timer = ax25->t3;
-						ax25->state   = AX25_STATE_3;
-					} else {
-						ax25_requeue_frames(ax25);
-					}
-				} else {
-					ax25_ds_nr_error_recovery(ax25);
-					ax25->state = AX25_STATE_1;
-				}
-				break;
-			}
-			if (ax25_validate_nr(ax25, nr)) {
-				ax25_frames_acked(ax25, nr);
-				ax25->n2count = 0;
-				if (type == AX25_COMMAND && pf)
-					ax25_ds_enquiry_response(ax25);
-			} else {
-				ax25_ds_nr_error_recovery(ax25);
-				ax25->state = AX25_STATE_1;
-			}
-			break;
-
-		case AX25_REJ:
-			ax25->condition &= ~AX25_COND_PEER_RX_BUSY;
-			if (pf) {
-				ax25->t1timer = 0;
-				if (ax25_validate_nr(ax25, nr)) {
-					ax25_frames_acked(ax25, nr);
-					ax25->n2count = 0;
-					if (ax25->vs == ax25->va) {
-						ax25->t3timer = ax25->t3;
-						ax25->state   = AX25_STATE_3;
-					} else {
-						ax25_requeue_frames(ax25);
-					}
-					if (type == AX25_COMMAND && pf)
-						ax25_ds_enquiry_response(ax25);
-				} else {
-					ax25_ds_nr_error_recovery(ax25);
-					ax25->state = AX25_STATE_1;
-				}
-				break;
-			}
-			if (ax25_validate_nr(ax25, nr)) {
-				ax25_frames_acked(ax25, nr);
-				ax25->n2count = 0;
-				ax25_requeue_frames(ax25);
-				if (type == AX25_COMMAND && pf)
-					ax25_ds_enquiry_response(ax25);
-			} else {
-				ax25_ds_nr_error_recovery(ax25);
-				ax25->state = AX25_STATE_1;
-			}
-			break;
-
-		case AX25_I:
-			if (!ax25_validate_nr(ax25, nr)) {
-				ax25_ds_nr_error_recovery(ax25);
-				ax25->state = AX25_STATE_1;
-				break;
-			}
-			ax25_frames_acked(ax25, nr);
-			ax25->n2count = 0;
-			if (ax25->condition & AX25_COND_OWN_RX_BUSY) {
-				if (pf) ax25_ds_enquiry_response(ax25);
-				break;
-			}
-			if (ns == ax25->vr) {
-				ax25->vr = (ax25->vr + 1) % ax25->modulus;
+				ax25->vr = (ax25->vr + 1) % AX25_MODULUS;
 				queued = ax25_rx_iframe(ax25, skb);
 				if (ax25->condition & AX25_COND_OWN_RX_BUSY) {
 					ax25->vr = ns;	/* ax25->vr - 1 */
@@ -550,9 +337,6 @@ int ax25_ds_frame_in(ax25_cb *ax25, struct sk_buff *skb, int type)
 			break;
 		case AX25_STATE_3:
 			queued = ax25_ds_state3_machine(ax25, skb, frametype, ns, nr, pf, type);
-			break;
-		case AX25_STATE_4:
-			queued = ax25_ds_state4_machine(ax25, skb, frametype, ns, nr, pf, type);
 			break;
 	}
 

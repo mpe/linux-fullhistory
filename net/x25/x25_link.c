@@ -110,7 +110,7 @@ void x25_link_control(struct sk_buff *skb, struct x25_neigh *neigh, unsigned sho
 			break;
 
 		case X25_DIAGNOSTIC:
-			printk(KERN_WARNING "x25: diagnostic #%d\n", skb->data[3]);
+			printk(KERN_WARNING "x25: diagnostic #%d - %02X %02X %02X\n", skb->data[3], skb->data[4], skb->data[5], skb->data[6]);
 			break;
 			
 		default:
@@ -240,8 +240,10 @@ void x25_transmit_clear_request(struct x25_neigh *neigh, unsigned int lci, unsig
 
 void x25_transmit_link(struct sk_buff *skb, struct x25_neigh *neigh)
 {
-	if (call_fw_firewall(PF_X25, skb->dev, skb->data, NULL,&skb) != FW_ACCEPT)
+	if (call_fw_firewall(PF_X25, skb->dev, skb->data, NULL, &skb) != FW_ACCEPT) {
+		kfree_skb(skb, FREE_WRITE);
 		return;
+	}
 
 	switch (neigh->state) {
 		case X25_LINK_STATE_0:
@@ -294,7 +296,7 @@ void x25_link_device_up(struct device *dev)
 	struct x25_neigh *x25_neigh;
 	unsigned long flags;
 
-	if ((x25_neigh = (struct x25_neigh *)kmalloc(sizeof(*x25_neigh), GFP_ATOMIC)) == NULL)
+	if ((x25_neigh = kmalloc(sizeof(*x25_neigh), GFP_ATOMIC)) == NULL)
 		return;
 
 	skb_queue_head_init(&x25_neigh->queue);
@@ -329,7 +331,7 @@ static void x25_remove_neigh(struct x25_neigh *x25_neigh)
 	if ((s = x25_neigh_list) == x25_neigh) {
 		x25_neigh_list = x25_neigh->next;
 		restore_flags(flags);
-		kfree_s(x25_neigh, sizeof(struct x25_neigh));
+		kfree(x25_neigh);
 		return;
 	}
 
@@ -337,7 +339,7 @@ static void x25_remove_neigh(struct x25_neigh *x25_neigh)
 		if (s->next == x25_neigh) {
 			s->next = x25_neigh->next;
 			restore_flags(flags);
-			kfree_s(x25_neigh, sizeof(struct x25_neigh));
+			kfree(x25_neigh);
 			return;
 		}
 
@@ -419,46 +421,6 @@ int x25_subscr_ioctl(unsigned int cmd, void *arg)
 
 	return 0;
 }
-
-int x25_link_get_info(char *buffer, char **start, off_t offset, int length, int dummy)
-{
-	struct x25_neigh *x25_neigh;
-	int len     = 0;
-	off_t pos   = 0;
-	off_t begin = 0;
-
-	cli();
-
-	len += sprintf(buffer, "device  st    t20    ext\n");
-
-	for (x25_neigh = x25_neigh_list; x25_neigh != NULL; x25_neigh = x25_neigh->next) {
-		len += sprintf(buffer + len, "%-6s  %2d  %3d/%03d  %d\n",
-			x25_neigh->dev->name,
-			x25_neigh->state,
-			x25_neigh->t20timer / X25_SLOWHZ,
-			x25_neigh->t20      / X25_SLOWHZ,
-			x25_neigh->extended);
-
-		pos = begin + len;
-
-		if (pos < offset) {
-			len   = 0;
-			begin = pos;
-		}
-
-		if (pos > offset + length)
-			break;
-	}
-
-	sti();
-
-	*start = buffer + (offset - begin);
-	len   -= (offset - begin);
-
-	if (len > length) len = length;
-
-	return len;
-} 
 
 #ifdef MODULE
 

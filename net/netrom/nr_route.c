@@ -1,9 +1,6 @@
 /*
  *	NET/ROM release 006
  *
- *	This is ALPHA test software. This code may break your machine, randomly fail to work with new 
- *	releases, misbehave and/or generally screw up. It might even work. 
- *
  *	This code REQUIRES 2.1.15 or higher/ NET3.038
  *
  *	This module:
@@ -91,7 +88,7 @@ static int nr_add_node(ax25_address *nr, const char *mnemonic, ax25_address *ax2
 		return 0;
 
 	if (nr_neigh == NULL) {
-		if ((nr_neigh = (struct nr_neigh *)kmalloc(sizeof(*nr_neigh), GFP_ATOMIC)) == NULL)
+		if ((nr_neigh = kmalloc(sizeof(*nr_neigh), GFP_ATOMIC)) == NULL)
 			return -ENOMEM;
 
 		nr_neigh->callsign = *ax25;
@@ -105,7 +102,7 @@ static int nr_add_node(ax25_address *nr, const char *mnemonic, ax25_address *ax2
 
 		if (ax25_digi != NULL && ax25_digi->ndigi > 0) {
 			if ((nr_neigh->digipeat = kmalloc(sizeof(*ax25_digi), GFP_KERNEL)) == NULL) {
-				kfree_s(nr_neigh, sizeof(*nr_neigh));
+				kfree(nr_neigh);
 				return -ENOMEM;
 			}
 			*nr_neigh->digipeat = *ax25_digi;
@@ -120,11 +117,11 @@ static int nr_add_node(ax25_address *nr, const char *mnemonic, ax25_address *ax2
 		restore_flags(flags);
 	}
 
-	if (quality != 0 && ax25cmp(nr, ax25) == 0)
+	if (quality != 0 && ax25cmp(nr, ax25) == 0 && !nr_neigh->locked)
 		nr_neigh->quality = quality;
 
 	if (nr_node == NULL) {
-		if ((nr_node = (struct nr_node *)kmalloc(sizeof(*nr_node), GFP_ATOMIC)) == NULL)
+		if ((nr_node = kmalloc(sizeof(*nr_node), GFP_ATOMIC)) == NULL)
 			return -ENOMEM;
 
 		nr_node->callsign = *nr;
@@ -252,7 +249,7 @@ static void nr_remove_node(struct nr_node *nr_node)
 	if ((s = nr_node_list) == nr_node) {
 		nr_node_list = nr_node->next;
 		restore_flags(flags);
-		kfree_s(nr_node, sizeof(struct nr_node));
+		kfree(nr_node);
 		return;
 	}
 
@@ -260,7 +257,7 @@ static void nr_remove_node(struct nr_node *nr_node)
 		if (s->next == nr_node) {
 			s->next = nr_node->next;
 			restore_flags(flags);
-			kfree_s(nr_node, sizeof(struct nr_node));
+			kfree(nr_node);
 			return;
 		}
 
@@ -282,8 +279,8 @@ static void nr_remove_neigh(struct nr_neigh *nr_neigh)
 		nr_neigh_list = nr_neigh->next;
 		restore_flags(flags);
 		if (nr_neigh->digipeat != NULL)
-			kfree_s(nr_neigh->digipeat, sizeof(ax25_digi));
-		kfree_s(nr_neigh, sizeof(struct nr_neigh));
+			kfree(nr_neigh->digipeat);
+		kfree(nr_neigh);
 		return;
 	}
 
@@ -292,8 +289,8 @@ static void nr_remove_neigh(struct nr_neigh *nr_neigh)
 			s->next = nr_neigh->next;
 			restore_flags(flags);
 			if (nr_neigh->digipeat != NULL)
-				kfree_s(nr_neigh->digipeat, sizeof(ax25_digi));
-			kfree_s(nr_neigh, sizeof(struct nr_neigh));
+				kfree(nr_neigh->digipeat);
+			kfree(nr_neigh);
 			return;
 		}
 
@@ -370,7 +367,7 @@ static int nr_add_neigh(ax25_address *callsign, ax25_digi *ax25_digi, struct dev
 		}
 	}
 
-	if ((nr_neigh = (struct nr_neigh *)kmalloc(sizeof(*nr_neigh), GFP_ATOMIC)) == NULL)
+	if ((nr_neigh = kmalloc(sizeof(*nr_neigh), GFP_ATOMIC)) == NULL)
 		return -ENOMEM;
 
 	nr_neigh->callsign = *callsign;
@@ -384,7 +381,7 @@ static int nr_add_neigh(ax25_address *callsign, ax25_digi *ax25_digi, struct dev
 
 	if (ax25_digi != NULL && ax25_digi->ndigi > 0) {
 		if ((nr_neigh->digipeat = kmalloc(sizeof(*ax25_digi), GFP_KERNEL)) == NULL) {
-			kfree_s(nr_neigh, sizeof(*nr_neigh));
+			kfree(nr_neigh);
 			return -ENOMEM;
 		}
 		*nr_neigh->digipeat = *ax25_digi;
@@ -688,6 +685,7 @@ int nr_route_frame(struct sk_buff *skb, ax25_cb *ax25)
 
 	if (ax25 != NULL && call_in_firewall(PF_NETROM, skb->dev, skb->data, NULL, &skb) != FW_ACCEPT)
 		return 0;
+
 	if (ax25 == NULL && call_out_firewall(PF_NETROM, skb->dev, skb->data, NULL, &skb) != FW_ACCEPT)
 		return 0;
 

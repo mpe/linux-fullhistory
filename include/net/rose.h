@@ -56,10 +56,11 @@ enum {
 #define	ROSE_DEFAULT_IDLE		(20 * 60 * ROSE_SLOWHZ)	/* Default No Activity value */
 #define	ROSE_DEFAULT_ROUTING		1			/* Default routing flag */
 #define	ROSE_DEFAULT_FAIL_TIMEOUT	(120 * ROSE_SLOWHZ)	/* Time until link considered usable */
+#define	ROSE_DEFAULT_MAXVC		50			/* Maximum number of VCs per neighbour */
+#define	ROSE_DEFAULT_WINDOW_SIZE	3			/* Default window size */
 
 #define ROSE_MODULUS 			8
-#define ROSE_MAX_WINDOW_SIZE		2			/* Maximum Window Allowable */
-#define	ROSE_MAX_PACKET_SIZE		128			/* Maximum Packet Length */
+#define	ROSE_MAX_PACKET_SIZE		256			/* Maximum packet size */
 
 #define	ROSE_COND_ACK_PENDING		0x01
 #define	ROSE_COND_PEER_RX_BUSY		0x02
@@ -77,31 +78,42 @@ enum {
 #define	FAC_CCITT_SRC_NSAP		0xCB
 
 struct rose_neigh {
-	struct rose_neigh *next;
-	ax25_address      callsign;
-	ax25_digi         *digipeat;
-	struct device     *dev;
-	unsigned short    count;
-	unsigned int      number;
-	int               restarted;
-	struct sk_buff_head queue;
-	unsigned short    t0timer, ftimer;
-	struct timer_list timer;
+	struct rose_neigh	*next;
+	ax25_address		callsign;
+	ax25_digi		*digipeat;
+	struct device		*dev;
+	unsigned short		count;
+	unsigned int		number;
+	char			restarted;
+	char			dce_mode;
+	struct sk_buff_head	queue;
+	unsigned short		t0timer, ftimer;
+	struct timer_list	timer;
 };
 
 struct rose_node {
-	struct rose_node  *next;
-	rose_address      address;
-	unsigned short    mask;
-	unsigned char     count;
-	struct rose_neigh *neighbour[3];
+	struct rose_node	*next;
+	rose_address		address;
+	unsigned short		mask;
+	unsigned char		count;
+	struct rose_neigh	*neighbour[3];
 };
 
 struct rose_route {
-	struct rose_route *next;
-	unsigned int	  lci1,    lci2;
-	struct rose_neigh *neigh1, *neigh2;
-	unsigned int      rand;
+	struct rose_route	*next;
+	unsigned int		lci1, lci2;
+	rose_address		src_addr, dest_addr;
+	ax25_address		src_call, dest_call;
+	struct rose_neigh 	*neigh1, *neigh2;
+	unsigned int		rand;
+};
+
+struct rose_facilities {
+	rose_address		source_addr,   dest_addr;
+	ax25_address		source_call,   dest_call;
+	unsigned char		source_ndigis, dest_ndigis;
+	ax25_address		source_digi,   dest_digi;
+	unsigned int		rand;
 };
 
 typedef struct {
@@ -112,7 +124,7 @@ typedef struct {
 	struct rose_neigh	*neighbour;
 	struct device		*device;
 	unsigned int		lci, rand;
-	unsigned char		state, condition, hdrincl;
+	unsigned char		state, condition, qbitincl;
 	unsigned short		vs, vr, va, vl;
 	unsigned short		timer;
 	unsigned short		t1, t2, t3, hb, idle;
@@ -131,11 +143,14 @@ extern int  sysctl_rose_no_activity_timeout;
 extern int  sysctl_rose_ack_hold_back_timeout;
 extern int  sysctl_rose_routing_control;
 extern int  sysctl_rose_link_fail_timeout;
+extern int  sysctl_rose_maximum_vcs;
+extern int  sysctl_rose_window_size;
 extern int  rosecmp(rose_address *, rose_address *);
 extern int  rosecmpm(rose_address *, rose_address *, unsigned short);
 extern char *rose2asc(rose_address *);
-extern struct sock *rose_find_socket(unsigned int, struct device *);
-extern unsigned int rose_new_lci(struct device *);
+extern struct sock *rose_find_socket(unsigned int, struct rose_neigh *);
+extern void rose_kill_by_neigh(struct rose_neigh *);
+extern unsigned int rose_new_lci(struct rose_neigh *);
 extern int  rose_rx_call_request(struct sk_buff *, struct device *, struct rose_neigh *, unsigned int);
 extern void rose_destroy_socket(struct sock *);
 
@@ -168,6 +183,7 @@ extern void rose_rt_device_down(struct device *);
 extern void rose_link_device_down(struct device *);
 extern struct device *rose_dev_first(void);
 extern struct device *rose_dev_get(rose_address *);
+extern struct rose_route *rose_route_free_lci(unsigned int, struct rose_neigh *);
 extern struct device *rose_ax25_dev_get(char *);
 extern struct rose_neigh *rose_get_neigh(rose_address *);
 extern int  rose_rt_ioctl(unsigned int, void *);
@@ -183,7 +199,7 @@ extern void rose_clear_queues(struct sock *);
 extern int  rose_validate_nr(struct sock *, unsigned short);
 extern void rose_write_internal(struct sock *, int);
 extern int  rose_decode(struct sk_buff *, int *, int *, int *, int *, int *);
-extern int  rose_parse_facilities(struct sk_buff *, rose_cb *);
+extern int  rose_parse_facilities(struct sk_buff *, struct rose_facilities *);
 extern int  rose_create_facilities(unsigned char *, rose_cb *);
 
 /* rose_timer.c */

@@ -1210,7 +1210,9 @@ static int msync_interval(struct vm_area_struct * vma,
 		return 0;
 	if (vma->vm_ops->sync) {
 		int error;
+		lock_kernel();		/* Horrible */
 		error = vma->vm_ops->sync(vma, start, end-start, flags);
+		unlock_kernel();	/* Horrible */
 		if (error)
 			return error;
 		if (flags & MS_SYNC)
@@ -1226,7 +1228,7 @@ asmlinkage int sys_msync(unsigned long start, size_t len, int flags)
 	struct vm_area_struct * vma;
 	int unmapped_error, error = -EINVAL;
 
-	lock_kernel();
+	down(&current->mm->mmap_sem);
 	if (start & ~PAGE_MASK)
 		goto out;
 	len = (len + ~PAGE_MASK) & PAGE_MASK;
@@ -1272,7 +1274,7 @@ asmlinkage int sys_msync(unsigned long start, size_t len, int flags)
 		vma = vma->vm_next;
 	}
 out:
-	unlock_kernel();
+	up(&current->mm->mmap_sem);
 	return error;
 }
 

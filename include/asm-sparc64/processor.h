@@ -1,4 +1,4 @@
-/* $Id: processor.h,v 1.26 1997/05/17 05:59:10 davem Exp $
+/* $Id: processor.h,v 1.27 1997/05/23 09:35:52 jj Exp $
  * include/asm-sparc64/processor.h
  *
  * Copyright (C) 1996 David S. Miller (davem@caip.rutgers.edu)
@@ -41,7 +41,7 @@ struct thread_struct {
 	unsigned long   fsr;
 	
 	/* Context switch saved kernel state. */
-	unsigned long ksp, kpc, wstate, cwp;
+	unsigned long ksp, kpc, wstate, cwp, ctx;
 
 	/* Storage for windows when user stack is bogus. */
 	struct reg_window reg_window[NSWINS] __attribute__ ((aligned (16)));
@@ -80,8 +80,8 @@ struct thread_struct {
                    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, },	\
 /* FPU status */ 							\
    0, 									\
-/* ksp, kpc, wstate, cwp */ 						\
-   0,   0,   0,	     0,							\
+/* ksp, kpc, wstate, cwp, secctx */ 					\
+   0,   0,   0,	     0,	  0,						\
 /* reg_window */							\
 { { { 0, }, { 0, } }, }, 						\
 /* rwbuf_stkptrs */							\

@@ -1,4 +1,4 @@
-/*  $Id: setup.c,v 1.6 1997/05/04 07:21:04 davem Exp $
+/*  $Id: setup.c,v 1.7 1997/05/20 07:58:56 jj Exp $
  *  linux/arch/sparc64/kernel/setup.c
  *
  *  Copyright (C) 1995,1996  David S. Miller (davem@caip.rutgers.edu)
@@ -25,6 +25,7 @@
 #include <linux/string.h>
 #include <linux/blk.h>
 #include <linux/init.h>
+#include <linux/inet.h>
 
 #include <asm/segment.h>
 #include <asm/system.h>
@@ -247,6 +248,10 @@ extern void register_console(void (*proc)(const char *));
 char saved_command_line[256];
 char reboot_command[256];
 
+#ifdef CONFIG_ROOT_NFS
+extern char nfs_root_addrs[];
+#endif
+
 unsigned long phys_base;
 
 static struct pt_regs fake_swapper_regs = { { 0, }, 0, 0, 0, 0 };
@@ -345,6 +350,31 @@ __initfunc(void setup_arch(char **cmdline_p,
 	init_task.mm->mmap->vm_end = *memory_end_p;
 	init_task.mm->context = (unsigned long) NO_CONTEXT;
 	init_task.tss.kregs = &fake_swapper_regs;
+
+#ifdef CONFIG_ROOT_NFS	
+	if (!*nfs_root_addrs) {
+		int chosen = prom_finddevice ("/chosen");
+		u32 cl, sv, gw;
+		char *p = nfs_root_addrs;
+		
+		cl = prom_getintdefault (chosen, "client-ip", 0);
+		sv = prom_getintdefault (chosen, "server-ip", 0);
+		gw = prom_getintdefault (chosen, "gateway-ip", 0);
+		if (cl && sv) {
+			strcpy (p, in_ntoa (cl));
+			p += strlen (p);
+			*p++ = ':';
+			strcpy (p, in_ntoa (sv));
+			p += strlen (p);
+			*p++ = ':';
+			if (gw) {
+				strcpy (p, in_ntoa (gw));
+				p += strlen (p);
+			}
+			strcpy (p, "::::none");
+		}
+	}
+#endif
 
 #ifdef CONFIG_SUN_SERIAL
 	*memory_start_p = sun_serial_setup(*memory_start_p); /* set this up ASAP */

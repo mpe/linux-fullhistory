@@ -617,10 +617,8 @@ int generic_NCR5380_proc_info(char* buffer, char** start, off_t offset, int leng
     unsigned char status;
     int i;
     struct Scsi_Host *scsi_ptr;
-	Scsi_Device *dev;
     Scsi_Cmnd *ptr;
     struct NCR5380_hostdata *hostdata;
-    extern const char *const scsi_device_types[MAX_SCSI_DEVICE_CODE];
     
     cli();
 

@@ -1,9 +1,6 @@
 /*
  *	AX.25 release 036
  *
- *	This is ALPHA test software. This code may break your machine, randomly fail to work with new
- *	releases, misbehave and/or generally screw up. It might even work.
- *
  *	This code REQUIRES 2.1.15 or higher/ NET3.038
  *
  *	This module:
@@ -94,6 +91,7 @@
  *			Jonathan(G4KLX)		Support for packet forwarding.
  *	AX.25 036	Jonathan(G4KLX)		Major restructuring.
  *			Joerg(DL1BKE)		Fixed DAMA Slave.
+ *			Jonathan(G4KLX)		Fix widlcard listen parameter setting.
  */
 
 #include <linux/config.h>
@@ -141,11 +139,11 @@ static struct proto_ops ax25_proto_ops;
 void ax25_free_cb(ax25_cb *ax25)
 {
 	if (ax25->digipeat != NULL) {
-		kfree_s(ax25->digipeat, sizeof(ax25_digi));
+		kfree(ax25->digipeat);
 		ax25->digipeat = NULL;
 	}
 
-	kfree_s(ax25, sizeof(ax25_cb));
+	kfree(ax25);
 
 	MOD_DEC_USE_COUNT;
 }
@@ -472,7 +470,6 @@ static int ax25_ctl_ioctl(const unsigned int cmd, void *arg)
 			if (ax25_dev->dama.slave && ax25->ax25_dev->values[AX25_VALUES_PROTOCOL] == AX25_PROTO_DAMA_SLAVE)
 				ax25_dama_off(ax25);
 #endif
-
 			if (ax25->sk != NULL) {
 				ax25->sk->state     = TCP_CLOSE;
 				ax25->sk->err       = ENETRESET;
@@ -481,9 +478,8 @@ static int ax25_ctl_ioctl(const unsigned int cmd, void *arg)
 					ax25->sk->state_change(ax25->sk);
 				ax25->sk->dead  = 1;
 			}
-
 			ax25_set_timer(ax25);
-	  		break;
+			break;
 
 	  	case AX25_WINDOW:
 	  		if (ax25->modulus == AX25_MODULUS) {
@@ -558,6 +554,51 @@ static int ax25_ctl_ioctl(const unsigned int cmd, void *arg)
 }
 
 /*
+ *	Fill in a created AX.25 created control block with the default
+ *	values for a particular device.
+ */
+void ax25_fillin_cb(ax25_cb *ax25, ax25_dev *ax25_dev)
+{
+	ax25->ax25_dev = ax25_dev;
+
+	if (ax25->ax25_dev != NULL) {
+		ax25->rtt     = ax25_dev->values[AX25_VALUES_T1] / 2;
+		ax25->t1      = ax25_dev->values[AX25_VALUES_T1];
+		ax25->t2      = ax25_dev->values[AX25_VALUES_T2];
+		ax25->t3      = ax25_dev->values[AX25_VALUES_T3];
+		ax25->n2      = ax25_dev->values[AX25_VALUES_N2];
+		ax25->paclen  = ax25_dev->values[AX25_VALUES_PACLEN];
+		ax25->idle    = ax25_dev->values[AX25_VALUES_IDLE];
+		ax25->backoff = ax25_dev->values[AX25_VALUES_BACKOFF];
+
+		if (ax25_dev->values[AX25_VALUES_AXDEFMODE]) {
+			ax25->modulus = AX25_EMODULUS;
+			ax25->window  = ax25_dev->values[AX25_VALUES_EWINDOW];
+		} else {
+			ax25->modulus = AX25_MODULUS;
+			ax25->window  = ax25_dev->values[AX25_VALUES_WINDOW];
+		}
+	} else {
+		ax25->rtt     = AX25_DEF_T1 / 2;
+		ax25->t1      = AX25_DEF_T1;
+		ax25->t2      = AX25_DEF_T2;
+		ax25->t3      = AX25_DEF_T3;
+		ax25->n2      = AX25_DEF_N2;
+		ax25->paclen  = AX25_DEF_PACLEN;
+		ax25->idle    = AX25_DEF_IDLE;
+		ax25->backoff = AX25_DEF_BACKOFF;
+
+		if (AX25_DEF_AXDEFMODE) {
+			ax25->modulus = AX25_EMODULUS;
+			ax25->window  = AX25_DEF_EWINDOW;
+		} else {
+			ax25->modulus = AX25_MODULUS;
+			ax25->window  = AX25_DEF_WINDOW;
+		}
+	}
+}
+
+/*
  * Create an empty AX.25 control block.
  */
 ax25_cb *ax25_create_cb(void)
@@ -578,53 +619,11 @@ ax25_cb *ax25_create_cb(void)
 
 	init_timer(&ax25->timer);
 
-	ax25->rtt     = AX25_DEF_T1 / 2;
-	ax25->t1      = AX25_DEF_T1;
-	ax25->t2      = AX25_DEF_T2;
-	ax25->t3      = AX25_DEF_T3;
-	ax25->n2      = AX25_DEF_N2;
-	ax25->paclen  = AX25_DEF_PACLEN;
-	ax25->idle    = AX25_DEF_IDLE;
+	ax25_fillin_cb(ax25, NULL);
 
-	if (AX25_DEF_AXDEFMODE) {
-		ax25->modulus = AX25_EMODULUS;
-		ax25->window  = AX25_DEF_EWINDOW;
-	} else {
-		ax25->modulus = AX25_MODULUS;
-		ax25->window  = AX25_DEF_WINDOW;
-	}
-
-	ax25->backoff = AX25_DEF_BACKOFF;
-	ax25->state   = AX25_STATE_0;
+	ax25->state = AX25_STATE_0;
 
 	return ax25;
-}
-
-/*
- *	Fill in a created AX.25 created control block with the default
- *	values for a particular device.
- */
-void ax25_fillin_cb(ax25_cb *ax25, ax25_dev *ax25_dev)
-{
-	ax25->ax25_dev = ax25_dev;
-
-	ax25->rtt      = ax25_dev->values[AX25_VALUES_T1];
-	ax25->t1       = ax25_dev->values[AX25_VALUES_T1];
-	ax25->t2       = ax25_dev->values[AX25_VALUES_T2];
-	ax25->t3       = ax25_dev->values[AX25_VALUES_T3];
-	ax25->n2       = ax25_dev->values[AX25_VALUES_N2];
-	ax25->paclen   = ax25_dev->values[AX25_VALUES_PACLEN];
-	ax25->idle     = ax25_dev->values[AX25_VALUES_IDLE];
-
-	if (ax25_dev->values[AX25_VALUES_AXDEFMODE]) {
-		ax25->modulus = AX25_EMODULUS;
-		ax25->window  = ax25_dev->values[AX25_VALUES_EWINDOW];
-	} else {
-		ax25->modulus = AX25_MODULUS;
-		ax25->window  = ax25_dev->values[AX25_VALUES_WINDOW];
-	}
-
-	ax25->backoff = ax25_dev->values[AX25_VALUES_BACKOFF];
 }
 
 /*
@@ -698,8 +697,8 @@ static int ax25_setsockopt(struct socket *sock, int level, int optname, char *op
 			sk->protinfo.ax25->modulus = opt ? AX25_EMODULUS : AX25_MODULUS;
 			return 0;
 
-		case AX25_HDRINCL:
-			sk->protinfo.ax25->hdrincl = opt ? 1 : 0;
+		case AX25_PIDINCL:
+			sk->protinfo.ax25->pidincl = opt ? 1 : 0;
 			return 0;
 
 		case AX25_IAMDIGI:
@@ -762,8 +761,8 @@ static int ax25_getsockopt(struct socket *sock, int level, int optname, char *op
 			val = (sk->protinfo.ax25->modulus == AX25_EMODULUS);
 			break;
 
-		case AX25_HDRINCL:
-			val = sk->protinfo.ax25->hdrincl;
+		case AX25_PIDINCL:
+			val = sk->protinfo.ax25->pidincl;
 			break;
 
 		case AX25_IAMDIGI:
@@ -870,7 +869,7 @@ int ax25_create(struct socket *sock, int protocol)
 	return 0;
 }
 
-struct sock *ax25_make_new(struct sock *osk, struct device *dev)
+struct sock *ax25_make_new(struct sock *osk, struct ax25_dev *ax25_dev)
 {
 	struct sock *sk;
 	ax25_cb *ax25;
@@ -910,7 +909,7 @@ struct sock *ax25_make_new(struct sock *osk, struct device *dev)
 
 	ax25->modulus = osk->protinfo.ax25->modulus;
 	ax25->backoff = osk->protinfo.ax25->backoff;
-	ax25->hdrincl = osk->protinfo.ax25->hdrincl;
+	ax25->pidincl = osk->protinfo.ax25->pidincl;
 	ax25->iamdigi = osk->protinfo.ax25->iamdigi;
 	ax25->rtt     = osk->protinfo.ax25->rtt;
 	ax25->t1      = osk->protinfo.ax25->t1;
@@ -921,7 +920,7 @@ struct sock *ax25_make_new(struct sock *osk, struct device *dev)
 	ax25->paclen  = osk->protinfo.ax25->paclen;
 	ax25->window  = osk->protinfo.ax25->window;
 
-	ax25->ax25_dev    = osk->protinfo.ax25->ax25_dev;
+	ax25->ax25_dev    = ax25_dev;
 	ax25->source_addr = osk->protinfo.ax25->source_addr;
 
 	if (osk->protinfo.ax25->digipeat != NULL) {
@@ -1183,6 +1182,8 @@ static int ax25_connect(struct socket *sock, struct sockaddr *uaddr, int addr_le
 
 #ifdef CONFIG_AX25_DAMA_SLAVE
 		case AX25_PROTO_DAMA_SLAVE:
+			ax25->modulus = AX25_MODULUS;
+			ax25->window  = ax25->ax25_dev->values[AX25_VALUES_WINDOW];
 			if (sk->protinfo.ax25->ax25_dev->dama.slave)
 				ax25_ds_establish_data_link(sk->protinfo.ax25);
 			else
@@ -1406,9 +1407,11 @@ static int ax25_sendmsg(struct socket *sock, struct msghdr *msg, int len, struct
 	/* User data follows immediately after the AX.25 data */
 	memcpy_fromiovec(skb_put(skb, len), msg->msg_iov, len);
 
-	/* Add the PID, usually AX25_TEXT */
-	asmptr  = skb_push(skb, 1);
-	*asmptr = sk->protocol;
+	/* Add the PID if one is not supplied by the user in the skb */
+	if (!sk->protinfo.ax25->pidincl) {
+		asmptr  = skb_push(skb, 1);
+		*asmptr = sk->protocol;
+	}
 
 	SOCK_DEBUG(sk, "AX.25: Transmitting buffer\n");
 
@@ -1455,10 +1458,9 @@ static int ax25_recvmsg(struct socket *sock, struct msghdr *msg, int size, int f
 {
 	struct sock *sk = sock->sk;
 	struct sockaddr_ax25 *sax = (struct sockaddr_ax25 *)msg->msg_name;
-	int copied, length;
+	int copied;
 	struct sk_buff *skb;
 	int er;
-	int dama;
 
 	/*
 	 * 	This works for seqpacket too. The receiver has ordered the
@@ -1471,16 +1473,11 @@ static int ax25_recvmsg(struct socket *sock, struct msghdr *msg, int size, int f
 	if ((skb = skb_recv_datagram(sk, flags & ~MSG_DONTWAIT, flags & MSG_DONTWAIT, &er)) == NULL)
 		return er;
 
-	if (sk->protinfo.ax25->hdrincl) {
-		length = skb->len + (skb->data - skb->h.raw);
-	} else {
-		if (sk->type == SOCK_SEQPACKET)
-			skb_pull(skb, 1);		/* Remove PID */
-		length     = skb->len;
-		skb->h.raw = skb->data;
-	}
+	if (!sk->protinfo.ax25->pidincl)
+		skb_pull(skb, 1);		/* Remove PID */
 
-	copied = length;
+	skb->h.raw = skb->data;
+	copied     = skb->len;
 
 	if (copied > size) {
 		copied = size;
@@ -1492,6 +1489,7 @@ static int ax25_recvmsg(struct socket *sock, struct msghdr *msg, int size, int f
 	if (sax != NULL) {
 		ax25_digi digi;
 		ax25_address dest;
+		int dama;
 
 		ax25_addr_parse(skb->data, skb->len, NULL, &dest, &digi, NULL, &dama);
 
@@ -1816,6 +1814,9 @@ __initfunc(void ax25_proto_init(struct net_proto *pro))
 }
 
 #ifdef MODULE
+MODULE_AUTHOR("Jonathan Naylor G4KLX <g4klx@g4klx.demon.co.uk>");
+MODULE_DESCRIPTION("The amateur radio AX.25 link layer protocol");
+
 int init_module(void)
 {
 	ax25_proto_init(NULL);

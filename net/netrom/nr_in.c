@@ -1,9 +1,6 @@
 /*
  *	NET/ROM release 006
  *
- *	This is ALPHA test software. This code may break your machine, randomly fail to work with new 
- *	releases, misbehave and/or generally screw up. It might even work. 
- *
  *	This code REQUIRES 2.1.15 or higher/ NET3.038
  *
  *	This module:
@@ -23,6 +20,7 @@
  *	NET/ROM 003	Jonathan(G4KLX)	Added NET/ROM fragment reception.
  *			Darryl(G7LED)	Added missing INFO with NAK case, optimized
  *					INFOACK handling, removed reconnect on error.
+ *	NET/ROM 006	Jonathan(G4KLX)	Hdrincl removal changes.
  */
 
 #include <linux/config.h>
@@ -54,6 +52,8 @@ static int nr_queue_rx_frame(struct sock *sk, struct sk_buff *skb, int more)
 {
 	struct sk_buff *skbo, *skbn = skb;
 
+	skb_pull(skb, NR_NETWORK_LEN + NR_TRANSPORT_LEN);
+
 	if (more) {
 		sk->protinfo.nr->fraglen += skb->len;
 		skb_queue_tail(&sk->protinfo.nr->frag_queue, skb);
@@ -69,12 +69,7 @@ static int nr_queue_rx_frame(struct sock *sk, struct sk_buff *skb, int more)
 
 		skbn->h.raw = skbn->data;
 
-		skbo = skb_dequeue(&sk->protinfo.nr->frag_queue);
-		memcpy(skb_put(skbn, skbo->len), skbo->data, skbo->len);
-		kfree_skb(skbo, FREE_READ);
-
 		while ((skbo = skb_dequeue(&sk->protinfo.nr->frag_queue)) != NULL) {
-			skb_pull(skbo, NR_NETWORK_LEN + NR_TRANSPORT_LEN);
 			memcpy(skb_put(skbn, skbo->len), skbo->data, skbo->len);
 			kfree_skb(skbo, FREE_READ);
 		}

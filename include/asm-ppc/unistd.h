@@ -329,7 +329,7 @@ static inline long kernel_thread(int (*fn)(void *), void * arg, unsigned long fl
 static inline _syscall0(int,idle) /* made inline "just in case" -- Cort */
 static inline _syscall0(int,fork) /* needs to be inline */
 static inline _syscall0(int,pause) /* needs to be inline */
-static inline _syscall0(int,setup) /* called in init before execve */
+static inline _syscall1(int,setup,int,magic) /* called in init before execve */
 static inline _syscall0(int,sync)
 static inline _syscall0(pid_t,setsid)
 static /*inline*/ _syscall3(int,write,int,fd,const char *,buf,off_t,count)

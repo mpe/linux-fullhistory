@@ -157,6 +157,11 @@ extern int  x25_llc_receive_frame(struct sk_buff *, struct device *, struct pack
 extern void x25_establish_link(struct x25_neigh *);
 extern void x25_terminate_link(struct x25_neigh *);
 
+/* x25_facilities.c */
+extern int  x25_parse_facilities(struct sk_buff *, struct x25_facilities *);
+extern int  x25_create_facilities(unsigned char *, struct x25_facilities *);
+extern int  x25_negotiate_facilities(struct sk_buff *, struct sock *, struct x25_facilities *);
+
 /* x25_in.c */
 extern int  x25_process_rx_frame(struct sock *, struct sk_buff *);
 
@@ -173,7 +178,6 @@ extern void x25_transmit_clear_request(struct x25_neigh *, unsigned int, unsigne
 extern void x25_transmit_link(struct sk_buff *, struct x25_neigh *);
 extern int  x25_subscr_ioctl(unsigned int, void *);
 extern struct x25_neigh *x25_get_neigh(struct device *);
-extern int  x25_link_get_info(char *, char **, off_t, int, int);
 extern void x25_link_free(void);
 
 /* x25_out.c */
@@ -195,8 +199,6 @@ extern void x25_clear_queues(struct sock *);
 extern int  x25_validate_nr(struct sock *, unsigned short);
 extern void x25_write_internal(struct sock *, int);
 extern int  x25_decode(struct sock *, struct sk_buff *, int *, int *, int *, int *, int *);
-extern int  x25_parse_facilities(struct sk_buff *, struct x25_facilities *);
-extern int  x25_create_facilities(unsigned char *, struct x25_facilities *);
 
 /* x25_timer.c */
 extern void x25_set_timer(struct sock *);

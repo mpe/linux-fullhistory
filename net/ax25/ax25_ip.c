@@ -1,9 +1,6 @@
 /*
  *	AX.25 release 036
  *
- *	This is ALPHA test software. This code may break your machine, randomly fail to work with new
- *	releases, misbehave and/or generally screw up. It might even work.
- *
  *	This code REQUIRES 2.1.15 or higher/ NET3.038
  *
  *	This module:
@@ -94,7 +91,7 @@ int ax25_encapsulate(struct sk_buff *skb, struct device *dev, unsigned short typ
   			*buff++ = AX25_P_ARP;
   			break;
   		default:
-  			printk(KERN_ERR "AX.25 wrong protocol type 0x%x2.2\n", type);
+  			printk(KERN_ERR "AX.25: ax25_encapsulate - wrong protocol type 0x%x2.2\n", type);
   			*buff++ = 0;
   			break;
  	}
@@ -138,7 +135,7 @@ int ax25_rebuild_header(struct sk_buff *skb)
 			 *	gets fixed.
 			 */
 			if ((ourskb = skb_copy(skb, GFP_ATOMIC)) == NULL) {
-				dev_kfree_skb(skb, FREE_WRITE);
+				kfree_skb(skb, FREE_WRITE);
 				return 1;
 			}
 
@@ -163,12 +160,15 @@ int ax25_rebuild_header(struct sk_buff *skb)
   	bp[14] |= AX25_EBIT;
   	bp[14] |= AX25_SSSID_SPARE;
 
-	ax25_dg_build_path(skb, (ax25_address *)(bp + 1), dev);
+	if ((ourskb = ax25_dg_build_path(skb, (ax25_address *)(bp + 1), dev)) == NULL) {
+		kfree_skb(skb, FREE_WRITE);
+		return 1;
+	}
 
-	skb->dev      = dev;
-	skb->priority = SOPRI_NORMAL;
+	ourskb->dev      = dev;
+	ourskb->priority = SOPRI_NORMAL;
 
-	ax25_queue_xmit(skb);
+	ax25_queue_xmit(ourskb);
 
   	return 1;
 }

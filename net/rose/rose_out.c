@@ -1,8 +1,5 @@
 /*
- *	Rose release 001
- *
- *	This is ALPHA test software. This code may break your machine, randomly fail to work with new 
- *	releases, misbehave and/or generally screw up. It might even work. 
+ *	ROSE release 002
  *
  *	This code REQUIRES 2.1.15 or higher/ NET3.038
  *
@@ -13,7 +10,7 @@
  *		2 of the License, or (at your option) any later version.
  *
  *	History
- *	Rose 001	Jonathan(G4KLX)	Cloned from nr_out.c
+ *	ROSE 001	Jonathan(G4KLX)	Cloned from nr_out.c
  */
 
 #include <linux/config.h>
@@ -41,7 +38,7 @@
 #include <net/rose.h>
 
 /*
- *	This is where all Rose frames pass;
+ *	This is where all ROSE frames pass;
  */
 void rose_output(struct sock *sk, struct sk_buff *skb)
 {
@@ -109,7 +106,7 @@ void rose_kick(struct sock *sk)
 
 	del_timer(&sk->timer);
 
-	end = (sk->protinfo.rose->va + ROSE_MAX_WINDOW_SIZE) % ROSE_MODULUS;
+	end = (sk->protinfo.rose->va + sysctl_rose_window_size) % ROSE_MODULUS;
 
 	if (!(sk->protinfo.rose->condition & ROSE_COND_PEER_RX_BUSY) &&
 	    sk->protinfo.rose->vs != end                             &&

@@ -1,4 +1,4 @@
-/* $Id: isdn_net.c,v 1.37 1997/02/11 18:32:51 fritz Exp $
+/* $Id: isdn_net.c,v 1.44 1997/05/27 15:17:26 fritz Exp $
 
  * Linux ISDN subsystem, network interfaces and related functions (linklevel).
  *
@@ -21,6 +21,32 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  *
  * $Log: isdn_net.c,v $
+ * Revision 1.44  1997/05/27 15:17:26  fritz
+ * Added changes for recent 2.1.x kernels:
+ *   changed return type of isdn_close
+ *   queue_task_* -> queue_task
+ *   clear/set_bit -> test_and_... where apropriate.
+ *   changed type of hard_header_cache parameter.
+ *
+ * Revision 1.43  1997/03/30 16:51:13  calle
+ * changed calls to copy_from_user/copy_to_user and removed verify_area
+ * were possible.
+ *
+ * Revision 1.42  1997/03/11 08:43:51  fritz
+ * Perform a hangup if number is deleted while dialing.
+ *
+ * Revision 1.41  1997/03/08 08:16:31  fritz
+ * Bugfix: Deleting a phone number during dial gave unpredictable results.
+ *
+ * Revision 1.40  1997/03/05 21:16:08  fritz
+ * Fix: did not compile with 2.1.27
+ *
+ * Revision 1.39  1997/03/04 21:36:52  fritz
+ * Added sending ICMP messages when no connetion is possible.
+ *
+ * Revision 1.38  1997/02/23 23:41:14  fritz
+ * Bugfix: Slave interfaces have to be hung up before master.
+ *
  * Revision 1.37  1997/02/11 18:32:51  fritz
  * Bugfix in isdn_ppp_free_mpqueue().
  *
@@ -170,6 +196,7 @@
 #include <linux/isdn.h>
 #include <linux/if_arp.h>
 #include <net/arp.h>
+#include <net/icmp.h>
 #include "isdn_common.h"
 #include "isdn_net.h"
 #ifdef CONFIG_ISDN_PPP
@@ -184,11 +211,23 @@ static int isdn_net_start_xmit(struct sk_buff *, struct device *);
 static int isdn_net_xmit(struct device *, isdn_net_local *, struct sk_buff *);
 static void dev_purge_queues(struct device *dev);	/* move this to net/core/dev.c */
 
-char *isdn_net_revision = "$Revision: 1.37 $";
+char *isdn_net_revision = "$Revision: 1.44 $";
 
  /*
   * Code for raw-networking over ISDN
   */
+
+static void
+isdn_net_unreachable(struct device *dev, struct sk_buff *skb, char *reason)
+{
+	printk(KERN_DEBUG "isdn_net: %s: %s, send ICMP\n",
+	       dev->name, reason);
+	icmp_send(skb, ICMP_DEST_UNREACH, ICMP_HOST_UNREACH, 0
+#if (LINUX_VERSION_CODE < 0x02010f)	/* 2.1.15 */
+		  ,dev
+#endif
+	    );
+}
 
 static void
 isdn_net_reset(struct device *dev)
@@ -513,6 +552,7 @@ isdn_net_dial(void)
 	isdn_net_dev *p = dev->netdev;
 	int anymore = 0;
 	int i;
+	int flags;
 	isdn_ctrl cmd;
 
 	while (p) {
@@ -528,7 +568,16 @@ isdn_net_dial(void)
 				/* Initiate dialout. Set phone-number-pointer to first number
 				 * of interface.
 				 */
+				save_flags(flags);
+				cli();
 				p->local.dial = p->local.phone[1];
+				restore_flags(flags);
+				if (!p->local.dial) {
+					printk(KERN_WARNING "%s: phone number deleted?\n",
+					       p->local.name);
+					isdn_net_hangup(&p->dev);
+					break;
+				}
 				anymore = 1;
 				p->local.dialstate++;
 				/* Fall through */
@@ -560,6 +609,48 @@ isdn_net_dial(void)
 				dev->drv[p->local.isdn_device]->interface->command(&cmd);
 				cmd.driver = p->local.isdn_device;
 				cmd.arg = p->local.isdn_channel;
+				save_flags(flags);
+				cli();
+				if (!p->local.dial) {
+					restore_flags(flags);
+					printk(KERN_WARNING "%s: phone number deleted?\n",
+					       p->local.name);
+					isdn_net_hangup(&p->dev);
+					break;
+				}
+				if (!strcmp(p->local.dial->num, "LEASED")) {
+					restore_flags(flags);
+					p->local.dialstate = 4;
+					printk(KERN_INFO "%s: Open leased line ...\n", p->local.name);
+				} else {
+					sprintf(cmd.parm.setup.phone, "%s", p->local.dial->num);
+					/*
+					 * Switch to next number or back to start if at end of list.
+					 */
+					if (!(p->local.dial = (isdn_net_phone *) p->local.dial->next)) {
+						p->local.dial = p->local.phone[1];
+						p->local.dialretry++;
+					}
+					restore_flags(flags);
+					cmd.command = ISDN_CMD_DIAL;
+					cmd.parm.setup.si1 = 7;
+					cmd.parm.setup.si2 = 0;
+					sprintf(cmd.parm.setup.eazmsn, "%s",
+						isdn_map_eaz2msn(p->local.msn, cmd.driver));
+					i = isdn_dc2minor(p->local.isdn_device, p->local.isdn_channel);
+					if (i >= 0) {
+						strcpy(dev->num[i], cmd.parm.setup.phone);
+						isdn_info_update();
+					}
+					printk(KERN_INFO "%s: dialing %d %s...\n", p->local.name,
+					       p->local.dialretry - 1, cmd.parm.setup.phone);
+					p->local.dtimer = 0;
+#ifdef ISDN_DEBUG_NET_DIAL
+					printk(KERN_DEBUG "dial: d=%d c=%d\n", p->local.isdn_device,
+					       p->local.isdn_channel);
+#endif
+					dev->drv[p->local.isdn_device]->interface->command(&cmd);
+				}
 				p->local.huptimer = 0;
 				p->local.outgoing = 1;
 				if (p->local.chargeint) {
@@ -568,37 +659,6 @@ isdn_net_dial(void)
 				} else {
 					p->local.hupflags |= ISDN_WAITCHARGE;
 					p->local.hupflags &= ~ISDN_HAVECHARGE;
-				}
-				if (!strcmp(p->local.dial->num, "LEASED")) {
-					p->local.dialstate = 4;
-					printk(KERN_INFO "%s: Open leased line ...\n", p->local.name);
-				} else {
-					cmd.command = ISDN_CMD_DIAL;
-					cmd.parm.setup.si1 = 7;
-					cmd.parm.setup.si2 = 0;
-					sprintf(cmd.parm.setup.phone, "%s", p->local.dial->num);
-					sprintf(cmd.parm.setup.eazmsn, "%s",
-						isdn_map_eaz2msn(p->local.msn, cmd.driver));
-					i = isdn_dc2minor(p->local.isdn_device, p->local.isdn_channel);
-					if (i >= 0) {
-						strcpy(dev->num[i], p->local.dial->num);
-						isdn_info_update();
-					}
-					printk(KERN_INFO "%s: dialing %d %s...\n", p->local.name,
-					       p->local.dialretry, p->local.dial->num);
-					/*
-					 * Switch to next number or back to start if at end of list.
-					 */
-					if (!(p->local.dial = (isdn_net_phone *) p->local.dial->next)) {
-						p->local.dial = p->local.phone[1];
-						p->local.dialretry++;
-					}
-					p->local.dtimer = 0;
-#ifdef ISDN_DEBUG_NET_DIAL
-					printk(KERN_DEBUG "dial: d=%d c=%d\n", p->local.isdn_device,
-					       p->local.isdn_channel);
-#endif
-					dev->drv[p->local.isdn_device]->interface->command(&cmd);
 				}
 				anymore = 1;
 				p->local.dialstate =
@@ -956,13 +1016,21 @@ isdn_net_start_xmit(struct sk_buff *skb, struct device *ndev)
 							   lp->l3_proto,
 							   lp->pre_device,
 						 lp->pre_channel)) < 0) {
+					restore_flags(flags);
+#if 0
 					printk(KERN_WARNING
 					       "isdn_net_start_xmit: No channel for %s\n",
 					       ndev->name);
-					restore_flags(flags);
 					/* we probably should drop the skb here and return 0 to omit
 					   'socket destroy delayed' messages */
 					return 1;
+#else
+					isdn_net_unreachable(ndev, skb,
+							   "No channel");
+					dev_kfree_skb(skb, FREE_WRITE);
+					ndev->tbusy = 0;
+					return 0;
+#endif
 				}
 				/* Log packet, which triggered dialing */
 				if (dev->net_verbose)
@@ -1000,20 +1068,8 @@ isdn_net_start_xmit(struct sk_buff *skb, struct device *ndev)
 				isdn_net_dial();
 				return 0;
 			} else {
-				/*
-				 * Having no phone-number is a permanent
-				 * failure or misconfiguration.
-				 * Instead of just dropping, we should also
-				 * have the upper layers to respond
-				 * with an ICMP No route to host in the
-				 * future, however at the moment, i don't
-				 * know a simple way to do that.
-				 * The same applies, when the telecom replies
-				 * "no destination" to our dialing-attempt.
-				 */
-				printk(KERN_WARNING
-				       "isdn_net: No phone number for %s, packet dropped\n",
-				       ndev->name);
+				isdn_net_unreachable(ndev, skb,
+						     "No phone number");
 				dev_kfree_skb(skb, FREE_WRITE);
 				ndev->tbusy = 0;
 				return 0;
@@ -1045,7 +1101,6 @@ isdn_net_close(struct device *dev)
 
 	dev->tbusy = 1;
 	dev->start = 0;
-	isdn_net_hangup(dev);
 	if ((p = (((isdn_net_local *) dev->priv)->slave))) {
 		/* If this interface has slaves, stop them also */
 		while (p) {
@@ -1055,6 +1110,7 @@ isdn_net_close(struct device *dev)
 			p = (((isdn_net_local *) p->priv)->slave);
 		}
 	}
+	isdn_net_hangup(dev);
 	isdn_MOD_DEC_USE_COUNT();
 	return 0;
 }
@@ -2314,11 +2370,10 @@ isdn_net_getphones(isdn_net_ioctl_phone * phone, char *phones)
 			put_user(' ', phones++);
 			count++;
 		}
-		if ((ret = verify_area(VERIFY_WRITE, (void *) phones, strlen(n->num) + 1))) {
+		if ((ret = copy_to_user(phones, n->num, strlen(n->num) + 1))) {
 			restore_flags(flags);
 			return ret;
 		}
-		copy_to_user(phones, n->num, strlen(n->num) + 1);
 		phones += strlen(n->num);
 		count += strlen(n->num);
 		more = 1;
@@ -2340,12 +2395,17 @@ isdn_net_delphone(isdn_net_ioctl_phone * phone)
 	int inout = phone->outgoing & 1;
 	isdn_net_phone *n;
 	isdn_net_phone *m;
+	int flags;
 
 	if (p) {
+		save_flags(flags);
+		cli();
 		n = p->local.phone[inout];
 		m = NULL;
 		while (n) {
 			if (!strcmp(n->num, phone->phone)) {
+				if (p->local.dial == n)
+					p->local.dial = n->next;
 				if (m)
 					m->next = n->next;
 				else
@@ -2356,6 +2416,7 @@ isdn_net_delphone(isdn_net_ioctl_phone * phone)
 			m = n;
 			n = (isdn_net_phone *) n->next;
 		}
+		restore_flags(flags);
 		return -EINVAL;
 	}
 	return -ENODEV;
@@ -2383,6 +2444,7 @@ isdn_net_rmallphone(isdn_net_dev * p)
 		}
 		p->local.phone[i] = NULL;
 	}
+	p->local.dial = NULL;
 	restore_flags(flags);
 	return 0;
 }
@@ -2399,13 +2461,13 @@ isdn_net_force_hangup(char *name)
 	if (p) {
 		if (p->local.isdn_device < 0)
 			return 1;
-		isdn_net_hangup(&p->dev);
 		q = p->local.slave;
 		/* If this interface has slaves, do a hangup for them also. */
 		while (q) {
 			isdn_net_hangup(q);
 			q = (((isdn_net_local *) q->priv)->slave);
 		}
+		isdn_net_hangup(&p->dev);
 		return 0;
 	}
 	return -ENODEV;

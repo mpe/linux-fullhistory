@@ -149,7 +149,7 @@ static void 	do_bp_request(void);
 static void 	do_bp_read(void);
 static int 	bp_ioctl(struct inode *inode,struct file *file,
                          unsigned int cmd, unsigned long arg);
-static void 	bp_release (struct inode *inode, struct file *file);
+static int 	bp_release (struct inode *inode, struct file *file);
 
 static int 	bp_detect(void);
 static int      bp_lock(void);
@@ -277,7 +277,7 @@ static int bp_ioctl(struct inode *inode,struct file *file,
 	}
 }
 
-static void bp_release (struct inode *inode, struct file *file)
+static int bp_release (struct inode *inode, struct file *file)
 
 {	kdev_t	devp;
 
@@ -290,6 +290,7 @@ static void bp_release (struct inode *inode, struct file *file)
 	    bp_unlock();
 	}
 	MOD_DEC_USE_COUNT;
+	return 0;
 }
 
 #ifdef MODULE

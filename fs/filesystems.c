@@ -30,22 +30,16 @@
 #ifdef CONFIG_KERNELD
 #include <linux/kerneld.h>
 #endif
+#include <linux/lockd/bind.h>
+#include <linux/lockd/xdr.h>
+#include <linux/init.h>
 
 extern void device_setup(void);
 extern void binfmt_setup(void);
 extern void free_initmem(void);
 
-/* This may be used only once, enforced by 'static int callable' */
-asmlinkage int sys_setup(void)
+__initfunc(static void do_sys_setup(void))
 {
-	static int callable = 1;
-	int err = -1;
-
-	lock_kernel();
-	if (!callable)
-		goto out;
-	callable = 0;
-	
 	device_setup();
 
 	binfmt_setup();
@@ -123,11 +117,28 @@ asmlinkage int sys_setup(void)
 #endif
 
 	mount_root();
-	
-	free_initmem();
-	
-	err = 0;
-out:
+}
+
+int initmem_freed = 0;
+
+/* This may be used only twice, enforced by 'static int callable' */
+asmlinkage int sys_setup(int magic)
+{
+	static int callable = 1;
+	int err = -1;
+
+	lock_kernel();
+	if (magic) {
+		if (!initmem_freed) {
+			initmem_freed = 1;
+			free_initmem ();
+			err = 0;
+		}
+	} else if (callable) {
+		callable = 0;
+		do_sys_setup();
+		err = 0;
+	}
 	unlock_kernel();
 	return err;
 }

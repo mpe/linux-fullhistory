@@ -1,4 +1,4 @@
-/* $Id: unistd.h,v 1.32 1997/04/11 00:42:23 davem Exp $ */
+/* $Id: unistd.h,v 1.33 1997/05/21 10:21:55 jj Exp $ */
 #ifndef _SPARC_UNISTD_H
 #define _SPARC_UNISTD_H
 
@@ -428,7 +428,7 @@ static __inline__ _syscall0(int,idle)
 static __inline__ _syscall0(int,fork)
 static __inline__ _syscall2(int,clone,unsigned long,flags,char *,ksp)
 static __inline__ _syscall0(int,pause)
-static __inline__ _syscall0(int,setup)
+static __inline__ _syscall1(int,setup,int,magic)
 static __inline__ _syscall0(int,sync)
 static __inline__ _syscall0(pid_t,setsid)
 static __inline__ _syscall3(int,write,int,fd,__const__ char *,buf,off_t,count)

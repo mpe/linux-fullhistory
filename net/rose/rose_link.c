@@ -1,8 +1,5 @@
 /*
- *	Rose release 001
- *
- *	This is ALPHA test software. This code may break your machine, randomly fail to work with new 
- *	releases, misbehave and/or generally screw up. It might even work. 
+ *	ROSE release 002
  *
  *	This code REQUIRES 2.1.15 or higher/ NET3.038
  *
@@ -13,7 +10,7 @@
  *		2 of the License, or (at your option) any later version.
  *
  *	History
- *	Rose 001	Jonathan(G4KLX)	Cloned from rose_timer.c
+ *	ROSE 001	Jonathan(G4KLX)	Cloned from rose_timer.c
  */
 
 #include <linux/config.h>
@@ -62,7 +59,7 @@ void rose_link_set_timer(struct rose_neigh *neigh)
 }
 
 /*
- *	Rose Link Timer
+ *	ROSE Link Timer
  *
  *	This routine is called every 100ms. Decrement timer by this
  *	amount - if expired then process the event.
@@ -79,7 +76,8 @@ static void rose_link_timer(unsigned long param)
 
 		if (neigh->t0timer == 0) {
 			rose_transmit_restart_request(neigh);
-			neigh->t0timer = sysctl_rose_restart_request_timeout;
+			neigh->dce_mode = 0;
+			neigh->t0timer  = sysctl_rose_restart_request_timeout;
 		}
 	}
 
@@ -134,6 +132,7 @@ void rose_link_rx_restart(struct sk_buff *skb, struct rose_neigh *neigh, unsigne
 		case ROSE_RESTART_REQUEST:
 			neigh->t0timer   = 0;
 			neigh->restarted = 1;
+			neigh->dce_mode  = (skb->data[3] == 0x00);
 			del_timer(&neigh->timer);
 			rose_transmit_restart_confirmation(neigh);
 			break;
@@ -145,11 +144,11 @@ void rose_link_rx_restart(struct sk_buff *skb, struct rose_neigh *neigh, unsigne
 			break;
 
 		case ROSE_DIAGNOSTIC:
-			printk(KERN_WARNING "rose: diagnostic #%d\n", skb->data[3]);
+			printk(KERN_WARNING "ROSE: received diagnostic #%d - %02X %02X %02X\n", skb->data[3], skb->data[4], skb->data[5], skb->data[6]);
 			break;
 
 		default:
-			printk(KERN_WARNING "rose: received unknown %02X with LCI 000\n", frametype);
+			printk(KERN_WARNING "ROSE: received unknown %02X with LCI 000\n", frametype);
 			break;
 	}
 
@@ -278,8 +277,10 @@ void rose_transmit_link(struct sk_buff *skb, struct rose_neigh *neigh)
 {
 	unsigned char *dptr;
 
-	if (call_fw_firewall(PF_ROSE, skb->dev, skb->data, NULL,&skb) != FW_ACCEPT)
+	if (call_fw_firewall(PF_ROSE, skb->dev, skb->data, NULL, &skb) != FW_ACCEPT) {
+		kfree_skb(skb, FREE_WRITE);
 		return;
+	}
 
 	if (!rose_link_up(neigh))
 		neigh->restarted = 0;
@@ -295,7 +296,8 @@ void rose_transmit_link(struct sk_buff *skb, struct rose_neigh *neigh)
 
 		if (neigh->t0timer == 0) {
 			rose_transmit_restart_request(neigh);
-			neigh->t0timer = sysctl_rose_restart_request_timeout;
+			neigh->dce_mode = 0;
+			neigh->t0timer  = sysctl_rose_restart_request_timeout;
 			rose_link_set_timer(neigh);
 		}
 	}

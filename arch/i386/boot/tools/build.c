@@ -1,5 +1,5 @@
 /*
- *  arch/i386/boot/tools/build.c
+ *  $Id: build.c,v 1.5 1997/05/19 12:29:58 mj Exp $
  *
  *  Copyright (C) 1991, 1992  Linus Torvalds
  *  Copyright (C) 1997 Martin Mares
@@ -170,7 +170,8 @@ int main(int argc, char ** argv)
 	fprintf (stderr, "System is %d kB\n", sz/1024);
 	sys_size = (sz + 15) / 16;
 	if (sys_size > (is_big_kernel ? 0xffff : DEF_SYSSIZE))
-		die("System is too big");
+		die("System is too big. Try using %smodules.",
+			is_big_kernel ? "" : "bzImage or ");
 	while (sz > 0) {
 		int l, n;
 

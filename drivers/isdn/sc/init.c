@@ -305,7 +305,7 @@ int init_sc(void)
 			/*
 			 * No interrupt could be used
 			 */
-			pr_debug("Failed to acquire an IRQ line\n");
+			pr_debug("Failed to aquire an IRQ line\n");
 			continue;
 		}
 

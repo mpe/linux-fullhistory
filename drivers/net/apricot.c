@@ -299,7 +299,7 @@ init_i596_mem(struct device *dev)
     i596_add_cmd(dev, &lp->tdr);
 
     boguscnt = 200;
-    while (lp->scb.status, lp->scb.command)
+    while (lp->scb.command)
 	if (--boguscnt == 0)
 	{
 	    printk("%s: receive unit start timed out with status %4.4x, cmd %4.4x.\n",
@@ -311,7 +311,7 @@ init_i596_mem(struct device *dev)
     outw(0, ioaddr+4);
 
     boguscnt = 200;
-    while (lp->scb.status, lp->scb.command)
+    while (lp->scb.command)
         if (--boguscnt == 0)
 	{
 	    printk("i82596 init timed out with status %4.4x, cmd %4.4x.\n",
@@ -427,7 +427,7 @@ i596_cleanup_cmd(struct i596_private *lp)
 	}
     }
 
-    while (lp->scb.status, lp->scb.command)
+    while (lp->scb.command)
 	if (--boguscnt == 0)
 	{
 	    printk("i596_cleanup_cmd timed out with status %4.4x, cmd %4.4x.\n",
@@ -445,7 +445,7 @@ i596_reset(struct device *dev, struct i596_private *lp, int ioaddr)
 
     if (i596_debug > 4) printk ("i596_reset\n");
 
-    while (lp->scb.status, lp->scb.command)
+    while (lp->scb.command)
         if (--boguscnt == 0)
 	{
 	    printk("i596_reset timed out with status %4.4x, cmd %4.4x.\n",
@@ -462,7 +462,7 @@ i596_reset(struct device *dev, struct i596_private *lp, int ioaddr)
     /* wait for shutdown */
     boguscnt = 400;
 
-    while ((lp->scb.status, lp->scb.command) || lp->scb.command)
+    while (lp->scb.command)
         if (--boguscnt == 0)
 	{
 	    printk("i596_reset 2 timed out with status %4.4x, cmd %4.4x.\n",
@@ -499,7 +499,7 @@ static void i596_add_cmd(struct device *dev, struct i596_cmd *cmd)
     else
     {
 	lp->cmd_head = cmd;
-	while (lp->scb.status, lp->scb.command)
+	while (lp->scb.command)
 	    if (--boguscnt == 0)
 	    {
 		printk("i596_add_cmd timed out with status %4.4x, cmd %4.4x.\n",
@@ -768,7 +768,7 @@ i596_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 
     lp = (struct i596_private *)dev->priv;
 
-    while (lp->scb.status, lp->scb.command)
+    while (lp->scb.command)
 	if (--boguscnt == 0)
 	    {
 		printk("%s: i596 interrupt, timeout status %4.4x command %4.4x.\n", dev->name, lp->scb.status, lp->scb.command);
@@ -827,8 +827,6 @@ i596_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 		}
 		case CmdMulticastList:
 		{
-		    unsigned short count = *((unsigned short *) (ptr + 1));
-
 		    ptr->next = (struct i596_cmd * ) I596_NULL;
 		    kfree(ptr);
 		    break;
@@ -890,7 +888,7 @@ i596_interrupt(int irq, void *dev_id, struct pt_regs *regs)
     if ((lp->scb.cmd != (struct i596_cmd *) I596_NULL) && (dev->start)) ack_cmd | = CUC_START;
 */
     boguscnt = 100;
-    while (lp->scb.status, lp->scb.command)
+    while (lp->scb.command)
 	if (--boguscnt == 0)
 	    {
 		printk("%s: i596 interrupt, timeout status %4.4x command %4.4x.\n", dev->name, lp->scb.status, lp->scb.command);
@@ -928,7 +926,7 @@ i596_close(struct device *dev)
 
     i596_cleanup_cmd(lp);
 
-    while (lp->scb.status, lp->scb.command)
+    while (lp->scb.command)
 	if (--boguscnt == 0)
 	{
 	    printk("%s: close timed timed out with status %4.4x, cmd %4.4x.\n",
@@ -1033,7 +1031,7 @@ void
 cleanup_module(void)
 {
     unregister_netdev(&dev_apricot);
-    kfree(dev_apricot.mem_start);
+    kfree((void*)dev_apricot.mem_start);
     dev_apricot.priv = NULL;
 
     /* If we don't do this, we can't re-insmod it later. */

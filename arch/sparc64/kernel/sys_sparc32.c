@@ -1,4 +1,4 @@
-/* $Id: sys_sparc32.c,v 1.13 1997/05/18 04:16:44 davem Exp $
+/* $Id: sys_sparc32.c,v 1.18 1997/05/27 06:28:08 davem Exp $
  * sys_sparc32.c: Conversion between 32bit and 64bit native syscalls.
  *
  * Copyright (C) 1997 Jakub Jelinek (jj@sunsite.mff.cuni.cz)
@@ -48,7 +48,6 @@ extern asmlinkage unsigned long sys_mmap(unsigned long addr, unsigned long len, 
 extern asmlinkage int sys_bdflush(int func, long data);
 extern asmlinkage int sys_uselib(const char * library);
 extern asmlinkage long sys_fcntl(unsigned int fd, unsigned int cmd, unsigned long arg);
-extern asmlinkage int sys_ioctl(unsigned int fd, unsigned int cmd, unsigned long arg);
 extern asmlinkage int sys_mknod(const char * filename, int mode, dev_t dev);
 extern asmlinkage int sys_mkdir(const char * pathname, int mode);
 extern asmlinkage int sys_rmdir(const char * pathname);
@@ -146,6 +145,69 @@ extern asmlinkage int sys_listen(int fd, int backlog);
 extern asmlinkage int sys_socket(int family, int type, int protocol);
 extern asmlinkage int sys_socketpair(int family, int type, int protocol, int usockvec[2]);
 extern asmlinkage int sys_shutdown(int fd, int how);
+
+/*
+ * In order to reduce some races, while at the same time doing additional
+ * checking and hopefully speeding things up, we copy filenames to the
+ * kernel data space before using them..
+ *
+ * POSIX.1 2.4: an empty pathname is invalid (ENOENT).
+ */
+static inline int do_getname32(u32 filename, char *page)
+{
+	int retval;
+
+	/* 32bit pointer will be always far below TASK_SIZE :)) */
+	retval = strncpy_from_user((char *)page, (char *)A(filename), PAGE_SIZE);
+	if (retval > 0) {
+		if (retval < PAGE_SIZE)
+			return 0;
+		return -ENAMETOOLONG;
+	} else if (!retval)
+		retval = -ENOENT;
+	return retval;
+}
+
+/*
+ * This is a single page for faster getname.
+ *   If the page is available when entering getname, use it.
+ *   If the page is not available, call __get_free_page instead.
+ * This works even though do_getname can block (think about it).
+ * -- Michael Chastain, based on idea of Linus Torvalds, 1 Dec 1996.
+ * We don't use the common getname/putname from namei.c, so that
+ * this still works well, as every routine which calls getname32
+ * will then call getname, then putname and then putname32.
+ */
+static unsigned long name_page_cache32 = 0;
+
+void putname32(char * name)
+{
+	if (name_page_cache32 == 0)
+		name_page_cache32 = (unsigned long) name;
+	else
+		free_page((unsigned long) name);
+}
+
+int getname32(u32 filename, char **result)
+{
+	unsigned long page;
+	int retval;
+
+	page = name_page_cache32;
+	name_page_cache32 = 0;
+	if (!page) {
+		page = __get_free_page(GFP_KERNEL);
+		if (!page)
+			return -ENOMEM;
+	}
+
+	retval = do_getname32(filename, (char *) page);
+	if (retval < 0)
+		putname32( (char *) page );
+	else
+		*result = (char *) page;
+	return retval;
+}
 
 asmlinkage int sys32_ioperm(u32 from, u32 num, int on)
 {
@@ -558,13 +620,6 @@ asmlinkage long sys32_fcntl(unsigned int fd, unsigned int cmd, u32 arg)
 	}
 }
 
-/* Conversion of args should be probably done in all the locations where it is handled,
-   using if (current->tss.flags & SPARC_FLAG_32BIT */
-asmlinkage int sys32_ioctl(unsigned int fd, unsigned int cmd, u32 arg)
-{
-	return sys_ioctl(fd, cmd, (unsigned long)arg);
-}
-
 asmlinkage int sys32_mknod(u32 filename, int mode, __kernel_dev_t32 dev)
 {
 	return sys_mknod((const char *)A(filename), mode, dev);
@@ -704,14 +759,21 @@ asmlinkage int sys32_utime(u32 filename, u32 times)
 	struct utimbuf t;
 	unsigned long old_fs;
 	int ret;
+	char *filenam;
 	
+	if (!times)
+		return sys_utime((char *)A(filename), NULL);
 	if (get_user (t.actime, &(((struct utimbuf32 *)A(times))->actime)) ||
 	    __get_user (t.modtime, &(((struct utimbuf32 *)A(times))->modtime)))
 		return -EFAULT;
-	old_fs = get_fs();
-	set_fs (KERNEL_DS); 
-	ret = sys_utime((char *)A(filename), &t);
-	set_fs (old_fs);
+	ret = getname32 (filename, &filenam);
+	if (!ret) {
+		old_fs = get_fs();
+		set_fs (KERNEL_DS); 
+		ret = sys_utime(filenam, &t);
+		set_fs (old_fs);
+		putname32 (filenam);
+	}
 	return ret;
 }
 
@@ -992,6 +1054,7 @@ out:
 
 asmlinkage int sys32_select(int n, u32 inp, u32 outp, u32 exp, u32 tvp)
 {
+	struct timeval kern_tv, *ktvp;
 	unsigned long old_fs;
 	char *p;
 	u32 *q;
@@ -1015,9 +1078,15 @@ asmlinkage int sys32_select(int n, u32 inp, u32 outp, u32 exp, u32 tvp)
 		    __get_user (q[PAGE_SIZE/2], Exp+1))
 			goto out;
 	}
+	ktvp = NULL;
+	if(tvp) {
+		if(copy_from_user(&kern_tv, (struct timeval *)A(tvp), sizeof(*ktvp)))
+			goto out;
+		ktvp = &kern_tv;
+	}
 	old_fs = get_fs ();
 	set_fs (KERNEL_DS);
-	ret = sys_select(n, (fd_set *)p, (fd_set *)(p + PAGE_SIZE/4), (fd_set *)(p + PAGE_SIZE/2), (struct timeval *)A(tvp));
+	ret = sys_select(n, (fd_set *)p, (fd_set *)(p + PAGE_SIZE/4), (fd_set *)(p + PAGE_SIZE/2), ktvp);
 	set_fs (old_fs);
 	q = (u32 *)p;
 	Inp = (u32 *)A(inp); Outp = (u32 *)A(outp); Exp = (u32 *)A(exp);
@@ -1065,12 +1134,17 @@ asmlinkage int sys32_newstat(u32 filename, u32 statbuf)
 {
 	int ret;
 	struct stat s;
+	char *filenam;
 	unsigned long old_fs = get_fs();
 	
-	set_fs (KERNEL_DS);
-	ret = sys_newstat((char *)A(filename), &s);
-	set_fs (old_fs);
-	if (putstat (statbuf, &s)) return -EFAULT;
+	ret = getname32 (filename, &filenam);
+	if (!ret) {
+		set_fs (KERNEL_DS);
+		ret = sys_newstat(filenam, &s);
+		set_fs (old_fs);
+		putname32 (filenam);
+		if (putstat (statbuf, &s)) return -EFAULT;
+	}
 	return ret;
 }
 
@@ -1078,12 +1152,17 @@ asmlinkage int sys32_newlstat(u32 filename, u32 statbuf)
 {
 	int ret;
 	struct stat s;
+	char *filenam;
 	unsigned long old_fs = get_fs();
 	
-	set_fs (KERNEL_DS);
-	ret = sys_newlstat((char *)A(filename), &s);
-	set_fs (old_fs);
-	if (putstat (statbuf, &s)) return -EFAULT;
+	ret = getname32 (filename, &filenam);
+	if (!ret) {
+		set_fs (KERNEL_DS);
+		ret = sys_newlstat(filenam, &s);
+		set_fs (old_fs);
+		putname32 (filenam);
+		if (putstat (statbuf, &s)) return -EFAULT;
+	}
 	return ret;
 }
 
@@ -1985,6 +2064,144 @@ asmlinkage int sys32_nfsservctl(int cmd, u32 argp, u32 resp)
 {
 	/* XXX handle argp and resp args */
 	return sys_nfsservctl(cmd, (void *)A(argp), (void *)A(resp));
+}
+
+/*
+ * count32() counts the number of arguments/envelopes
+ */
+static int count32(u32 * argv)
+{
+	int i = 0;
+
+	if (argv != NULL) {
+		for (;;) {
+			u32 p; int error;
+
+			error = get_user(p,argv);
+			if (error) return error;
+			if (!p) break;
+			argv++; i++;
+		}
+	}
+	return i;
+}
+
+/*
+ * 'copy_string32()' copies argument/envelope strings from user
+ * memory to free pages in kernel mem. These are in a format ready
+ * to be put directly into the top of new user memory.
+ */
+static unsigned long
+copy_strings32(int argc,u32 * argv,unsigned long *page,
+	       unsigned long p)
+{
+	u32 str;
+
+	if (!p) return 0;	/* bullet-proofing */
+	while (argc-- > 0) {
+		int len;
+		unsigned long pos;
+
+		get_user(str, argv+argc);
+		if (!str) panic("VFS: argc is wrong");
+		len = strlen_user((char *)A(str));	/* includes the '\0' */
+		if (p < len)	/* this shouldn't happen - 128kB */
+			return 0;
+		p -= len; pos = p;
+		while (len) {
+			char *pag;
+			int offset, bytes_to_copy;
+
+			offset = pos % PAGE_SIZE;
+			if (!(pag = (char *) page[pos/PAGE_SIZE]) &&
+			    !(pag = (char *) page[pos/PAGE_SIZE] =
+			      (unsigned long *) get_free_page(GFP_USER)))
+				return 0;
+			bytes_to_copy = PAGE_SIZE - offset;
+			if (bytes_to_copy > len)
+				bytes_to_copy = len;
+			copy_from_user(pag + offset, (char *)A(str), bytes_to_copy);
+			pos += bytes_to_copy;
+			str += bytes_to_copy;
+			len -= bytes_to_copy;
+		}
+	}
+	return p;
+}
+
+/*
+ * sys32_execve() executes a new program.
+ */
+static inline int 
+do_execve32(char * filename, u32 * argv, u32 * envp, struct pt_regs * regs)
+{
+	struct linux_binprm bprm;
+	int retval;
+	int i;
+
+	bprm.p = PAGE_SIZE*MAX_ARG_PAGES-sizeof(void *);
+	for (i=0 ; i<MAX_ARG_PAGES ; i++)	/* clear page-table */
+		bprm.page[i] = 0;
+	retval = open_namei(filename, 0, 0, &bprm.inode, NULL);
+	if (retval)
+		return retval;
+	bprm.filename = filename;
+	bprm.sh_bang = 0;
+	bprm.java = 0;
+	bprm.loader = 0;
+	bprm.exec = 0;
+	bprm.dont_iput = 0;
+	if ((bprm.argc = count32(argv)) < 0)
+		return bprm.argc;
+	if ((bprm.envc = count32(envp)) < 0)
+		return bprm.envc;
+
+	retval = prepare_binprm(&bprm);
+	
+	if(retval>=0) {
+		bprm.p = copy_strings(1, &bprm.filename, bprm.page, bprm.p, 2);
+		bprm.exec = bprm.p;
+		bprm.p = copy_strings32(bprm.envc,envp,bprm.page,bprm.p);
+		bprm.p = copy_strings32(bprm.argc,argv,bprm.page,bprm.p);
+		if (!bprm.p)
+			retval = -E2BIG;
+	}
+
+	if(retval>=0)
+		retval = search_binary_handler(&bprm,regs);
+	if(retval>=0)
+		/* execve success */
+		return retval;
+
+	/* Something went wrong, return the inode and free the argument pages*/
+	if(!bprm.dont_iput)
+		iput(bprm.inode);
+	for (i=0 ; i<MAX_ARG_PAGES ; i++)
+		free_page(bprm.page[i]);
+	return(retval);
+}
+
+/*
+ * sparc32_execve() executes a new program after the asm stub has set
+ * things up for us.  This should basically do what I want it to.
+ */
+asmlinkage int sparc32_execve(struct pt_regs *regs)
+{
+        int error, base = 0;
+        char *filename;
+
+        /* Check for indirect call. */
+        if((u32)regs->u_regs[UREG_G1] == 0)
+                base = 1;
+
+        error = getname((char *)(unsigned long)(u32)regs->u_regs[base + UREG_I0], &filename);
+        if(error)
+                return error;
+        error = do_execve32(filename,
+        	(u32 *)A((u32)regs->u_regs[base + UREG_I1]),
+        	(u32 *)A((u32)regs->u_regs[base + UREG_I2]), regs);
+        putname(filename);
+        return error;
 }
 
 struct ncp_mount_data32 {

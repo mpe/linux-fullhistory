@@ -1,9 +1,6 @@
 /*
  *	AX.25 release 036
  *
- *	This is ALPHA test software. This code may break your machine, randomly fail to work with new 
- *	releases, misbehave and/or generally screw up. It might even work. 
- *
  *	This code REQUIRES 2.1.15 or higher/ NET3.038
  *
  *	This module:
@@ -109,9 +106,7 @@ void ax25_ds_enquiry_response(ax25_cb *ax25)
 			continue;
 		}
 
-		if (!(ax25o->condition & AX25_COND_PEER_RX_BUSY) && 
-		    (ax25o->state == AX25_STATE_3 || 
-		    (ax25o->state == AX25_STATE_4 && ax25o->t1timer == 0))) {
+		if (!(ax25o->condition & AX25_COND_PEER_RX_BUSY) && ax25o->state == AX25_STATE_3) {
 			ax25_requeue_frames(ax25o);
 			ax25_kick(ax25o);
 		}
@@ -125,12 +120,11 @@ void ax25_ds_enquiry_response(ax25_cb *ax25)
 
 void ax25_ds_establish_data_link(ax25_cb *ax25)
 {
-	ax25->condition = 0x00;
-	ax25->n2count   = 0;
-
-	ax25->t3timer = ax25->t3;
-	ax25->t2timer = 0;
-	ax25->t1timer = ax25->t1 = ax25_calculate_t1(ax25);
+	ax25->condition &= AX25_COND_DAMA_MODE;
+	ax25->n2count    = 0;
+	ax25->t3timer    = ax25->t3;
+	ax25->t2timer    = 0;
+	ax25->t1timer    = ax25->t1 = ax25_calculate_t1(ax25);
 }
 
 /*
@@ -139,7 +133,6 @@ void ax25_ds_establish_data_link(ax25_cb *ax25)
  *	We need a driver level  request to switch duplex mode, that does 
  *	either SCC changing, PI config or KISS as required. Currently
  *	this request isn't reliable.
- *
  */
 static void ax25_kiss_cmd(ax25_dev *ax25_dev, unsigned char cmd, unsigned char param)
 {
@@ -173,13 +166,12 @@ static void ax25_kiss_cmd(ax25_dev *ax25_dev, unsigned char cmd, unsigned char p
  *	ax25->dama_slave=1 and look on every disconnect if still slave
  *	connections exist.
  */
-
 static int ax25_check_dama_slave(ax25_dev *ax25_dev)
 {
 	ax25_cb *ax25;
 
 	for (ax25 = ax25_list; ax25 != NULL ; ax25 = ax25->next)
-		if (ax25->ax25_dev == ax25_dev && ax25->dama_slave && ax25->state > AX25_STATE_1)
+		if (ax25->ax25_dev == ax25_dev && (ax25->condition & AX25_COND_DAMA_MODE) && ax25->state > AX25_STATE_1)
 			return 1;
 
 	return 0;
@@ -202,8 +194,7 @@ void ax25_dev_dama_off(ax25_dev *ax25_dev)
 	if (ax25_dev == NULL)
 		return;
 
-	if (ax25_dev->dama.slave && !ax25_check_dama_slave(ax25_dev))
-	{
+	if (ax25_dev->dama.slave && !ax25_check_dama_slave(ax25_dev)) {
 		ax25_kiss_cmd(ax25_dev, 5, 0);
 		ax25_dev->dama.slave = 0;
 		ax25_ds_del_timer(ax25_dev);
@@ -213,13 +204,13 @@ void ax25_dev_dama_off(ax25_dev *ax25_dev)
 void ax25_dama_on(ax25_cb *ax25)
 {
 	ax25_dev_dama_on(ax25->ax25_dev);
-	ax25->dama_slave = 1;
+	ax25->condition |= AX25_COND_DAMA_MODE;
 }
 
 void ax25_dama_off(ax25_cb *ax25)
 {
 	ax25_dev_dama_off(ax25->ax25_dev);
-	ax25->dama_slave = 0;
+	ax25->condition &= ~AX25_COND_DAMA_MODE;
 }
 
 #endif

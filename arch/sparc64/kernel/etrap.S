@@ -1,4 +1,4 @@
-/* $Id: etrap.S,v 1.17 1997/05/18 22:52:09 davem Exp $
+/* $Id: etrap.S,v 1.18 1997/05/19 05:58:51 davem Exp $
  * etrap.S: Preparing for entry into the kernel on Sparc V9.
  *
  * Copyright (C) 1996, 1997 David S. Miller (davem@caip.rutgers.edu)
@@ -29,59 +29,39 @@ etrap_irq:
 	rdpr		%tstate, %g1
 	sllx		%g2, 20, %g2
 	or		%g1, %g2, %g1
-
-	/* What happens more often? etrap when already in priv or from userland? */
 	andcc		%g1, TSTATE_PRIV, %g0
 	bne,a,pn	%xcc, 1f
 	 sub		%sp, REGWIN_SZ + TRACEREG_SZ - STACK_BIAS, %g2
+	rd		%pic, %g3
 
-	/* Just when going from userland to privileged mode,
-	 * we have to change this stuff.
-	 *
-	 * Setup to run in NUCLEUS context, stash user context in
-	 * secondary for later trap return.  Note we must not change
-	 * trap level until PRIMARY_CONTEXT is set to zero, else
-	 * we fall out of NUCLEUS too soon and crash hard.
-	 */
-	mov		PRIMARY_CONTEXT, %g1
-	ldxa		[%g1] ASI_DMMU, %g2
-	stxa		%g0, [%g1] ASI_DMMU
-
-	mov		SECONDARY_CONTEXT, %g1
-	stxa		%g2, [%g1] ASI_DMMU
-
-	rd		%pic, %g1
 	sethi		%hi((PAGE_SIZE<<1)-TRACEREG_SZ-REGWIN_SZ), %g2
 	or		%g2, %lo((PAGE_SIZE<<1)-TRACEREG_SZ-REGWIN_SZ), %g2
-	add		%g1, %g2, %g2
-	rdpr		%tstate, %g1
-1:
-	stx		%g1, [%g2 + REGWIN_SZ + PT_V9_TSTATE]
+	add		%g3, %g2, %g2
+1:	stx		%g1, [%g2 + REGWIN_SZ + PT_V9_TSTATE]
 	rdpr		%tpc, %g1
 	rdpr		%tnpc, %g3
 	stx		%g1, [%g2 + REGWIN_SZ + PT_V9_TPC]
 	rd		%y, %g1
+
 	stx		%g3, [%g2 + REGWIN_SZ + PT_V9_TNPC]
 	stx		%g1, [%g2 + REGWIN_SZ + PT_V9_Y]
-
-	wrpr		%g0, 0x0, %tl
 	rdpr		%pstate, %g1
 	save		%g2, -STACK_BIAS, %sp
-
-	/* Must guarentee that here andcc of TSTATE_PRIV at the top is
-	 * still valid in %ccr register.  Don't show this trick to your
-	 * mom. -DaveM
-	 */
 	bne,pn		%xcc, 1f
 	 rdpr		%canrestore, %g3
-	wrpr		%g0, 0, %canrestore
-	wrpr		%g3, 0, %otherwin
-
 	rdpr		%wstate, %g6
-	sll		%g6, 3, %g6
-	wrpr		%g6, %wstate
+	wrpr		%g0, 0, %canrestore
 
+	sll		%g6, 3, %g6
+	wrpr		%g3, 0, %otherwin
+	wrpr		%g6, %wstate
+	sethi		%uhi(KERNBASE), %g3
+	sllx		%g3, 32, %g3
+	mov		PRIMARY_CONTEXT, %g2
+	stxa		%g0, [%g2] ASI_DMMU
+	flush		%g3
 1:
+	wrpr		%g0, 0x0, %tl
 	mov		%g1, %l1
 	mov		%g4, %l4
 	mov		%g5, %l5
@@ -89,6 +69,7 @@ etrap_irq:
 	wrpr		%l1, PSTATE_AG, %pstate
 	stx		%g1, [%sp + STACK_BIAS + REGWIN_SZ + PT_V9_G1]
 	stx		%g2, [%sp + STACK_BIAS + REGWIN_SZ + PT_V9_G2]
+
 	stx		%g3, [%sp + STACK_BIAS + REGWIN_SZ + PT_V9_G3]
 	stx		%g4, [%sp + STACK_BIAS + REGWIN_SZ + PT_V9_G4]
 	stx		%g5, [%sp + STACK_BIAS + REGWIN_SZ + PT_V9_G5]
@@ -97,19 +78,24 @@ etrap_irq:
 	stx		%i0, [%sp + STACK_BIAS + REGWIN_SZ + PT_V9_I0]
 	stx		%i1, [%sp + STACK_BIAS + REGWIN_SZ + PT_V9_I1]
 	stx		%i2, [%sp + STACK_BIAS + REGWIN_SZ + PT_V9_I2]
+
 	stx		%i3, [%sp + STACK_BIAS + REGWIN_SZ + PT_V9_I3]
 	stx		%i4, [%sp + STACK_BIAS + REGWIN_SZ + PT_V9_I4]
 	stx		%i5, [%sp + STACK_BIAS + REGWIN_SZ + PT_V9_I5]
 	stx		%i6, [%sp + STACK_BIAS + REGWIN_SZ + PT_V9_I6]
 	stx		%i7, [%sp + STACK_BIAS + REGWIN_SZ + PT_V9_I7]
 	wrpr		%l1, (PSTATE_IE | PSTATE_AG), %pstate
-	srlx		%sp, 43, %g4
+	sethi		%uhi(KERNBASE), %g4
 	rd		%pic, %g6
+
 	jmpl		%l2 + 0x4, %g0
-	 sllx		%g4, 43, %g4
+	 sllx		%g4, 32, %g4
 
 	.globl	etraptl1
 etraptl1:
 	rdpr	%tstate, %g1
 	ba,pt	%xcc, 1b
 	 sub	%sp, REGWIN_SZ + TRACEREG_SZ - STACK_BIAS, %g2
+	nop
+	nop
+	nop

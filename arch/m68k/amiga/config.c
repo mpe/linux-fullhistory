@@ -12,7 +12,6 @@
  * Miscellaneous Amiga stuff
  */
 
-#include <stdarg.h>
 #include <linux/config.h>
 #include <linux/types.h>
 #include <linux/kernel.h>

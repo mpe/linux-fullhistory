@@ -1,12 +1,16 @@
 L_OBJS :=
 M_OBJS :=
-O_OBJS := isdnl1.o config.o buffers.o tei.o isdnl2.o isdnl3.o \
+O_OBJS := isdnl1.o config.o tei.o isdnl2.o isdnl3.o \
           q931.o callc.o fsm.o
 
 # EXTRA_CFLAGS += -S
 
 ifeq ($(CONFIG_HISAX_EURO),y)
 	 O_OBJS += l3dss1.o
+endif
+
+ifeq ($(CONFIG_HISAX_NI1),y)
+       O_OBJS += l3ni1.o
 endif
 
 ifeq ($(CONFIG_HISAX_1TR6),y)
@@ -26,6 +30,10 @@ ifeq ($(CONFIG_HISAX_AVM_A1),y)
 endif
 
 ifeq ($(CONFIG_HISAX_ELSA_PCC),y)
+	 O_OBJS += elsa.o
+endif
+
+ifeq ($(CONFIG_HISAX_ELSA_PCMCIA),y)
 	 O_OBJS += elsa.o
 endif
 

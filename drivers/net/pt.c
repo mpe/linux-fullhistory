@@ -26,7 +26,7 @@
  * 03/03/95 cs  Painfully found out (after 3 days) SERIAL_CFG is write only
  *              created image of it and DMA_CFG
  * 21/06/95 cs  Upgraded to suit PI driver 0.8 ALPHA
- * 22/08/95	cs	Changed it all around to make it like pi driver
+ * 22/08/95 cs	Changed it all around to make it like pi driver
  * 23/08/95 cs  It now works, got caught again by TMR2 and we must have
  *				auto-enables for daughter boards.
  * 07/10/95 cs  Fixed for 1.3.30 (hopefully)
@@ -317,12 +317,6 @@ static void setup_tx_dma(struct pt_local *lp, int length)
 
     restore_flags(flags);
 }
-
-static void free_p(struct sk_buff *skb)
-{
-    dev_kfree_skb(skb, FREE_WRITE);
-}
-
 
 /*
  * This sets up all the registers in the SCC for the given channel
@@ -979,7 +973,7 @@ static int pt_close(struct device *dev)
 
 	/* Free any buffers left in the hardware transmit queue */
 	while ((ptr = skb_dequeue(&lp->sndq)) != NULL)
-		free_p(ptr);
+		kfree_skb(ptr, FREE_WRITE);
 
 	restore_flags(flags);
 
@@ -1197,7 +1191,7 @@ static void pt_txisr(struct pt_local *lp)
 	        /* stuffing a char satisfies interrupt condition */
 	    } else {
 	        /* No more to send */
-	        free_p(lp->sndbuf);
+	        kfree_skb(lp->sndbuf, FREE_WRITE);
 	        lp->sndbuf = NULL;
 	        if ((rdscc(lp->cardbase, cmd, R0) & TxEOM))
 	        {
@@ -1552,7 +1546,7 @@ static void pt_exisr(struct pt_local *lp)
 #ifdef PT_DEBUG
 	printk(KERN_DEBUG "PT: exisr(): unexpected underrun detected.\n");
 #endif
-        free_p(lp->sndbuf);
+        kfree_skb(lp->sndbuf, FREE_WRITE);
         lp->sndbuf = NULL;
         if (!lp->dmachan)
         {
@@ -1765,6 +1759,9 @@ static void pt_exisr(struct pt_local *lp)
 
 #ifdef MODULE
 EXPORT_NO_SYMBOLS;
+
+MODULE_AUTHOR("Craig Small VK2XLZ <vk2xlz@vk2xlz.ampr.org>");
+MODULE_DESCRIPTION("AX.25 driver for the Gracillis PacketTwin HDLC card");
 
 int init_module(void)
 {

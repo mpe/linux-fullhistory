@@ -1,4 +1,4 @@
-/* $Id: systbls.S,v 1.8 1997/04/21 08:34:23 jj Exp $
+/* $Id: systbls.S,v 1.11 1997/05/27 19:30:20 jj Exp $
  * systbls.S: System call entry point tables for OS compatibility.
  *            The native Linux system call table lives here also.
  *
@@ -22,13 +22,13 @@ sys_call_table32:
 /*10*/  .xword sys32_unlink, sunos_execv, sys32_chdir, sys_nis_syscall, sys32_mknod
 /*15*/	.xword sys32_chmod, sys32_chown, sparc32_brk, sys_nis_syscall, sys32_lseek
 /*20*/	.xword sys_getpid, sys_nis_syscall, sys_nis_syscall, sys_setuid, sys_getuid
-/*25*/	.xword sys32_time, sys32_ptrace, sys_alarm, sys_nis_syscall, sys_pause
+/*25*/	.xword sys32_time, sys_ptrace, sys_alarm, sys_nis_syscall, sys_pause
 /*30*/	.xword sys32_utime, sys_stty, sys_gtty, sys32_access, sys_nice
 	.xword sys_ftime, sys_sync, sys_kill, sys32_newstat, sys_nis_syscall
 /*40*/	.xword sys32_newlstat, sys_dup, sys_pipe, sys32_times, sys_profil
 	.xword sys_nis_syscall, sys_setgid, sys_getgid, sys32_signal, sys_geteuid
 /*50*/	.xword sys_getegid, sys32_acct, sys_nis_syscall, sys_nis_syscall, sys32_ioctl
-	.xword sys32_reboot, sys_nis_syscall, sys32_symlink, sys32_readlink, sys_execve
+	.xword sys32_reboot, sys_nis_syscall, sys32_symlink, sys32_readlink, sys32_execve
 /*60*/	.xword sys_umask, sys32_chroot, sys32_newfstat, sys_nis_syscall, sys_getpagesize
 	.xword sys_nis_syscall, sys_vfork, sys_nis_syscall, sys_nis_syscall, sys_nis_syscall
 /*70*/	.xword sys_nis_syscall, sys32_mmap, sys_nis_syscall, sys32_munmap, sys32_mprotect
@@ -61,7 +61,7 @@ sys_call_table32:
 	.xword sys_nis_syscall, sys32_socketcall, sys32_syslog, sys32_olduname, sys_nis_syscall
 /*210*/	.xword sys_idle, sys_nis_syscall, sys32_waitpid, sys32_swapoff, sys32_sysinfo
 	.xword sys32_ipc, sys_sigreturn, sys_clone, sys_nis_syscall, sys32_adjtimex
-/*220*/	.xword sys_sigprocmask, sys_nis_syscall, sys_nis_syscall, sys_nis_syscall, sys_getpgid
+/*220*/	.xword sys32_sigprocmask, sys_nis_syscall, sys_nis_syscall, sys_nis_syscall, sys_getpgid
 	.xword sys32_bdflush, sys32_sysfs, sys_nis_syscall, sys_setfsuid, sys_setfsgid
 /*230*/	.xword sys32_llseek, sys32_time, sys_nis_syscall, sys_stime, sys_nis_syscall
 	.xword sys_nis_syscall, sys32_llseek, sys32_mlock, sys32_munlock, sys_mlockall
@@ -153,7 +153,7 @@ sunos_sys_table:
 /*50*/	.xword sunos_nosys, sys_acct, sunos_nosys
 	.xword sunos_mctl, sunos_ioctl, sys_reboot
 	.xword sunos_nosys, sys_symlink, sys_readlink
-	.xword sys_execve, sys_umask, sys_chroot
+	.xword sys32_execve, sys_umask, sys_chroot
 	.xword sys_newfstat, sunos_nosys, sys_getpagesize
 	.xword sys_msync, sys_vfork, sunos_nosys
 	.xword sunos_nosys, sunos_sbrk, sunos_sstk

@@ -1,4 +1,4 @@
-/*  $Id: setup.c,v 1.84 1997/05/08 17:45:16 davem Exp $
+/*  $Id: setup.c,v 1.85 1997/05/27 06:45:54 davem Exp $
  *  linux/arch/sparc/kernel/setup.c
  *
  *  Copyright (C) 1995  David S. Miller (davem@caip.rutgers.edu)
@@ -79,7 +79,6 @@ asmlinkage void sys_sync(void);	/* it's really int */
 void prom_sync_me(void)
 {
 	unsigned long prom_tbr, flags;
-	int cpu = smp_processor_id();
 
 #ifdef __SMP__
 	global_irq_holder = NO_PROC_ID;

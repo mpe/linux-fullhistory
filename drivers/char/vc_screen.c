@@ -61,7 +61,19 @@ vcs_size(struct inode *inode)
 	/* Multimon patch	*/
 	if (!vc_cons[currcons].d) return 0;
 #endif
-   	size= video_num_lines * video_num_columns;
+#ifdef CONFIG_FB_CONSOLE
+	int cons = MINOR(inode->i_rdev) & 127;
+
+	if (cons == 0)
+		cons = fg_console;
+	else
+		cons--;
+	if (!vc_cons_allocated(cons))
+		return -ENXIO;
+#endif
+
+	size = get_video_num_lines(cons) * get_video_num_columns(cons);
+
 	if (MINOR(inode->i_rdev) & 128)
 		size = 2*size + HEADER_SIZE;
 	return size;
@@ -128,8 +140,8 @@ vcs_read(struct inode *inode, struct file *file, char *buf, unsigned long count)
 	} else {
 		if (p < HEADER_SIZE) {
 			char header[HEADER_SIZE];
-			header[0] = (char) video_num_lines;
-			header[1] = (char) video_num_columns;
+			header[0] = (char) get_video_num_lines(currcons);
+			header[1] = (char) get_video_num_columns(currcons);
 			getconsxy(currcons, header+2);
 			while (p < HEADER_SIZE && count > 0)
 			    { count--; put_user(header[p++], buf++); }

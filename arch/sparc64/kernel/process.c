@@ -1,4 +1,4 @@
-/*  $Id: process.c,v 1.11 1997/05/18 22:52:19 davem Exp $
+/*  $Id: process.c,v 1.12 1997/05/23 09:35:43 jj Exp $
  *  arch/sparc64/kernel/process.c
  *
  *  Copyright (C) 1995, 1996 David S. Miller (davem@caip.rutgers.edu)
@@ -355,6 +355,7 @@ void flush_thread(void)
 		get_mmu_context(current);
 	}
 	current->tss.current_ds = USER_DS;
+	spitfire_set_secondary_context (current->mm->context);
 }
 
 static __inline__ void copy_regs(struct pt_regs *dst, struct pt_regs *src)

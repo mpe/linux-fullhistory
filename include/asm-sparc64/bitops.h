@@ -1,4 +1,4 @@
-/* $Id: bitops.h,v 1.12 1997/05/14 20:48:04 davem Exp $
+/* $Id: bitops.h,v 1.13 1997/05/27 06:47:16 davem Exp $
  * bitops.h: Bit string operations on the V9.
  *
  * Copyright 1996 David S. Miller (davem@caip.rutgers.edu)
@@ -109,12 +109,24 @@ extern __inline__ unsigned long test_bit(int nr, __const__ void *addr)
 /* The easy/cheese version for now. */
 extern __inline__ unsigned long ffz(unsigned long word)
 {
-	unsigned long result = 0;
+	unsigned long result;
 
+#ifdef ULTRA_HAS_POPULATION_COUNT	/* Thanks for nothing Sun... */
+	__asm__ __volatile__("
+	brz,pn	%0, 1f
+	 neg	%0, %%g1
+	xnor	%0, %%g1, %%g2
+	popc	%%g2, %0
+1:	" : "=&r" (result)
+	  : "0" (word)
+	  : "g1", "g2");
+#else
+	result = 0;
 	while(word & 1) {
 		result++;
 		word >>= 1;
 	}
+#endif
 	return result;
 }
 

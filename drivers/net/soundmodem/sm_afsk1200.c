@@ -1,7 +1,7 @@
 /*****************************************************************************/
 
 /*
- *	sm_afsk1200.h  -- soundcard radio modem driver, 1200 baud AFSK modem
+ *	sm_afsk1200.c  -- soundcard radio modem driver, 1200 baud AFSK modem
  *
  *	Copyright (C) 1996  Thomas Sailer (sailer@ife.ee.ethz.ch)
  *

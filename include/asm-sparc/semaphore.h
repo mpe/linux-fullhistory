@@ -9,12 +9,12 @@
 
 struct semaphore {
 	atomic_t count;
-	atomic_t waking;
+	int waking;
 	struct wait_queue * wait;
 };
 
-#define MUTEX ((struct semaphore) { ATOMIC_INIT(1), ATOMIC_INIT(0), NULL })
-#define MUTEX_LOCKED ((struct semaphore) { ATOMIC_INIT(0), ATOMIC_INIT(0), NULL })
+#define MUTEX ((struct semaphore) { ATOMIC_INIT(1), 0, NULL })
+#define MUTEX_LOCKED ((struct semaphore) { ATOMIC_INIT(0), 0, NULL })
 
 extern void __down(struct semaphore * sem);
 extern int __down_interruptible(struct semaphore * sem);
@@ -22,23 +22,24 @@ extern void __up(struct semaphore * sem);
 
 #define sema_init(sem, val)	atomic_set(&((sem)->count), val)
 
-#define wake_one_more(sem)	atomic_inc(&sem->waking);
+#define wake_one_more(sem)	\
+do {				\
+	unsigned long flags;	\
+	save_and_cli(flags);	\
+	sem->waking++;		\
+	restore_flags(flags);	\
+} while(0)
 
-/* XXX Put this in raw assembler for SMP case so that the atomic_t
- * XXX spinlock can allow this to be done without grabbing the IRQ
- * XXX global lock.
- */
-#define waking_non_zero(sem) \
-({	unsigned long flags; \
-	int ret = 0; \
-	save_flags(flags); \
-	cli(); \
-	if (atomic_read(&sem->waking) > 0) { \
-		atomic_dec(&sem->waking); \
-		ret = 1; \
-	} \
-	restore_flags(flags); \
-	ret; \
+#define waking_non_zero(sem)	\
+({	unsigned long flags;	\
+	int ret = 0;		\
+	save_and_cli(flags);	\
+	if (sem->waking > 0) {	\
+		sem->waking--;	\
+		ret = 1;	\
+	}			\
+	restore_flags(flags);	\
+	ret;			\
 })
 
 /* This isn't quite as clever as the x86 side, I'll be fixing this

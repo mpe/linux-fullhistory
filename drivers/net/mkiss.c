@@ -15,7 +15,7 @@
  *		This method clears the way to implement other kiss protocols
  *		like mkiss smack g8bpq ..... so far only mkiss is implemented.
  *
- * Hans Alblas Hansa@cuci.nl
+ * Hans Alblas <hans@esrac.ele.tue.nl>
  *
  *	History
  *	Jonathan (G4KLX)	Fixed to match Linux networking changes - 2.1.15.
@@ -31,6 +31,7 @@
 #include <linux/mm.h>
 #include <linux/interrupt.h>
 #include <linux/in.h>
+#include <linux/inet.h>
 #include <linux/tty.h>
 #include <linux/errno.h>
 #include <linux/netdevice.h>
@@ -75,8 +76,8 @@ typedef struct ax25_ctrl {
 } ax25_ctrl_t;
 
 static ax25_ctrl_t **ax25_ctrls = NULL;
+
 int ax25_maxdev = AX25_MAXDEV;		/* Can be overridden with insmod! */
-MODULE_PARM(ax25_maxdev, "i");
 
 static struct tty_ldisc	ax_ldisc;
 static struct tty_driver mkiss_driver;
@@ -118,7 +119,7 @@ static inline struct ax_disp *ax_alloc(void)
 		return NULL;
 
 	/* If no channels are available, allocate one */
-	if (axp == NULL && (ax25_ctrls[i] = (ax25_ctrl_t *)kmalloc(sizeof(ax25_ctrl_t), GFP_KERNEL)) != NULL) {
+	if (axp == NULL && (ax25_ctrls[i] = kmalloc(sizeof(ax25_ctrl_t), GFP_KERNEL)) != NULL) {
 		axp = ax25_ctrls[i];
 		memset(axp, 0, sizeof(ax25_ctrl_t));
 
@@ -148,7 +149,7 @@ static inline struct ax_disp *ax_alloc(void)
 			return &axp->ctrl;
 		} else {
 			clear_bit(AXF_INUSE,&axp->ctrl.flags);
-			printk(KERN_ERR "ax_alloc() - register_netdev() failure.\n");
+			printk(KERN_ERR "mkiss: ax_alloc() - register_netdev() failure.\n");
 		}
 	}
 
@@ -166,7 +167,7 @@ static inline void ax_free(struct ax_disp *ax)
 		kfree(ax->xbuff);
 	ax->xbuff = NULL;
 	if (!test_and_clear_bit(AXF_INUSE, &ax->flags))
-		printk(KERN_ERR "%s: ax_free for already free unit.\n", ax->dev->name);
+		printk(KERN_ERR "mkiss: %s: ax_free for already free unit.\n", ax->dev->name);
 }
 
 static void ax_changedmtu(struct ax_disp *ax)
@@ -186,11 +187,11 @@ static void ax_changedmtu(struct ax_disp *ax)
 	if (len < 576 * 2)
 		len = 576 * 2;
 
-	xbuff = (unsigned char *)kmalloc(len + 4, GFP_ATOMIC);
-	rbuff = (unsigned char *)kmalloc(len + 4, GFP_ATOMIC);
+	xbuff = kmalloc(len + 4, GFP_ATOMIC);
+	rbuff = kmalloc(len + 4, GFP_ATOMIC);
 
 	if (xbuff == NULL || rbuff == NULL)  {
-		printk(KERN_ERR "%s: unable to grow ax25 buffers, MTU change cancelled.\n",
+		printk(KERN_ERR "mkiss: %s: unable to grow ax25 buffers, MTU change cancelled.\n",
 		       ax->dev->name);
 		dev->mtu = ax->mtu;
 		if (xbuff != NULL)
@@ -245,7 +246,7 @@ static void ax_changedmtu(struct ax_disp *ax)
 static inline void ax_lock(struct ax_disp *ax)
 {
 	if (test_and_set_bit(0, (void *)&ax->dev->tbusy))
-		printk(KERN_ERR "%s: trying to lock already locked device!\n", ax->dev->name);
+		printk(KERN_ERR "mkiss: %s: trying to lock already locked device!\n", ax->dev->name);
 }
 
 
@@ -253,7 +254,7 @@ static inline void ax_lock(struct ax_disp *ax)
 static inline void ax_unlock(struct ax_disp *ax)
 {
 	if (!test_and_clear_bit(0, (void *)&ax->dev->tbusy))
-		printk(KERN_ERR "%s: trying to unlock already unlocked device!\n", ax->dev->name);
+		printk(KERN_ERR "mkiss: %s: trying to unlock already unlocked device!\n", ax->dev->name);
 }
 
 /* Send one completely decapsulated AX.25 packet to the AX.25 layer. */
@@ -277,7 +278,7 @@ static void ax_bump(struct ax_disp *ax)
 	count = ax->rcount;
 
 	if ((skb = dev_alloc_skb(count)) == NULL) {
-		printk(KERN_ERR "%s: memory squeeze, dropping packet.\n", ax->dev->name);
+		printk(KERN_ERR "mkiss: %s: memory squeeze, dropping packet.\n", ax->dev->name);
 		ax->rx_dropped++;
 		return;
 	}
@@ -302,7 +303,7 @@ static void ax_encaps(struct ax_disp *ax, unsigned char *icp, int len)
 
 	if (len > ax->mtu) {		/* Sigh, shouldn't occur BUT ... */
 		len = ax->mtu;
-		printk(KERN_ERR "%s: truncating oversized transmit packet!\n", ax->dev->name);
+		printk(KERN_ERR "mkiss: %s: truncating oversized transmit packet!\n", ax->dev->name);
 		ax->tx_dropped++;
 		ax_unlock(ax);
 		return;
@@ -380,7 +381,7 @@ static int ax_xmit(struct sk_buff *skb, struct device *dev)
 	}
 
 	if (!dev->start)  {
-		printk(KERN_ERR "%s: xmit call when iface is down\n", dev->name);
+		printk(KERN_ERR "mkiss: %s: xmit call when iface is down\n", dev->name);
 		return 1;
 	}
 
@@ -404,7 +405,7 @@ static int ax_xmit(struct sk_buff *skb, struct device *dev)
 			return 1;
 		}
 
-		printk(KERN_ERR "%s: transmit timed out, %s?\n", dev->name,
+		printk(KERN_ERR "mkiss: %s: transmit timed out, %s?\n", dev->name,
 		       (ax->tty->driver.chars_in_buffer(ax->tty) || ax->xleft) ?
 		       "bad line quality" : "driver error");
 
@@ -419,7 +420,7 @@ static int ax_xmit(struct sk_buff *skb, struct device *dev)
 		if (tmp_ax != NULL)
 			ax_lock(tmp_ax);
 		ax_encaps(ax, skb->data, skb->len);
-		dev_kfree_skb(skb, FREE_WRITE);
+		kfree_skb(skb, FREE_WRITE);
 	}
 
 	return 0;
@@ -476,10 +477,10 @@ static int ax_open(struct device *dev)
 	if (len < 576 * 2)
 		len = 576 * 2;
 
-	if ((ax->rbuff = (unsigned char *) kmalloc(len + 4, GFP_KERNEL)) == NULL)
+	if ((ax->rbuff = kmalloc(len + 4, GFP_KERNEL)) == NULL)
 		goto norbuff;
 
-	if ((ax->xbuff = (unsigned char *) kmalloc(len + 4, GFP_KERNEL)) == NULL)
+	if ((ax->xbuff = kmalloc(len + 4, GFP_KERNEL)) == NULL)
 		goto noxbuff;
 
 	ax->mtu	     = dev->mtu + 73;
@@ -823,7 +824,7 @@ __initfunc(int mkiss_init_ctrl_dev(void))
 
 	if (ax25_maxdev < 4) ax25_maxdev = 4; /* Sanity */
 
-	if ((ax25_ctrls = (ax25_ctrl_t **)kmalloc(sizeof(void*) * ax25_maxdev, GFP_KERNEL)) == NULL) {
+	if ((ax25_ctrls = kmalloc(sizeof(void*) * ax25_maxdev, GFP_KERNEL)) == NULL) {
 		printk(KERN_ERR "mkiss: Can't allocate ax25_ctrls[] array !  No mkiss available\n");
 		return -ENOMEM;
 	}
@@ -910,10 +911,13 @@ static int ax25_init(struct device *dev)
 	/* New-style flags. */
 	dev->flags      = 0;
 	dev->family     = AF_INET;
-	dev->pa_addr    = 0;
-	dev->pa_brdaddr = 0;
-	dev->pa_mask    = 0;
+
+#ifdef CONFIG_INET
+	dev->pa_addr    = in_aton("192.168.0.1");
+	dev->pa_brdaddr = in_aton("192.168.0.255");
+	dev->pa_mask    = in_aton("255.255.255.0");
 	dev->pa_alen    = 4;
+#endif
 
 	return 0;
 }
@@ -1080,7 +1084,7 @@ __initfunc(static int mkiss_init(void))
 	mkiss_driver.put_char     = mkiss_dummy2;
 
 	if (tty_register_driver(&mkiss_driver)) {
-		printk(KERN_ERR "Couldn't register Mkiss device\n");
+		printk(KERN_ERR "mkiss: couldn't register Mkiss device\n");
 		return -EIO;
 	}
 
@@ -1091,6 +1095,12 @@ __initfunc(static int mkiss_init(void))
 
 #ifdef MODULE
 EXPORT_NO_SYMBOLS;
+
+MODULE_PARM(ax25_maxdev, "i");
+MODULE_PARM_DESC(ax25_maxdev, "number of MKISS devices");
+
+MODULE_AUTHOR("Hans Albas PE1AYX <hans@esrac.ele.tue.nl>");
+MODULE_DESCRIPTION("KISS driver for AX.25 over TTYs");
 
 int init_module(void)
 {

@@ -296,20 +296,23 @@ struct tcp_opt
  *		sockmem [mem, proto, callbacks]
  *
  *		union or struct {
- *			netrom;
- *			ax_25;
+ *			ax25;
  *		} ll_pinfo;
  *	
  *		union {
  *			ipv4;
  *			ipv6;
  *			ipx;
+ *			netrom;
+ *			rose;
+ * 			x25;
  *		} net_pinfo;
  *
  *		union {
  *			tcp;
  *			udp;
  *			spx;
+ *			netrom;
  *		} tp_pinfo;
  *
  *	}

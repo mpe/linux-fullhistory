@@ -1,4 +1,4 @@
-/* $Id: fault.c,v 1.8 1997/05/18 04:16:52 davem Exp $
+/* $Id: fault.c,v 1.9 1997/05/19 05:58:54 davem Exp $
  * arch/sparc64/mm/fault.c: Page fault handlers for the 64-bit Sparc.
  *
  * Copyright (C) 1996 David S. Miller (davem@caip.rutgers.edu)
@@ -150,13 +150,13 @@ asmlinkage void do_sparc64_fault(struct pt_regs *regs, int text_fault, int write
 	static unsigned long last_addr = 0;
 	static int rcnt = 0;
 
-	printk("do_sparc64_fault(PC[%016lx],t[%d],w[%d],addr[%016lx]tag[%016lx]"
-	       "sfar[%016lx])\n", regs->tpc, text_fault, write, address, tag, sfsr);
+	printk("FAULT(PC[%016lx],t[%d],w[%d],addr[%016lx])\n",
+	       regs->tpc, text_fault, write, address);
 	if(address == last_addr && rcnt++ > 5) {
 		printk("Wheee lotsa bogus faults, something wrong, spinning\n");
 		while(1)
 			barrier();
-	}
+	} else rcnt = 0;
 	last_addr = address;
 #endif
 	lock_kernel ();

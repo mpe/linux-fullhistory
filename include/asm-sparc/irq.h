@@ -1,4 +1,4 @@
-/* $Id: irq.h,v 1.19 1997/05/08 20:57:39 davem Exp $
+/* $Id: irq.h,v 1.20 1997/05/28 05:25:07 davem Exp $
  * irq.h: IRQ registers on the Sparc.
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
@@ -24,7 +24,7 @@
 extern void irq_enter(int cpu, int irq, void *regs);
 extern void irq_exit(int cpu, int irq);
 #else
-extern __inline__ void irq_enter(int cpu, int irq)
+extern __inline__ void irq_enter(int cpu, int irq, void *regs)
 {
 	register int proc asm("g1");
 	proc = cpu;
@@ -51,8 +51,8 @@ extern __inline__ void irq_exit(int cpu, int irq)
 }
 #endif /* DEBUG_IRQLOCK */
 #else
-#define irq_enter(cpu, irq)	(local_irq_count[cpu]++)
-#define irq_exit(cpu, irq)	(local_irq_count[cpu]--)
+#define irq_enter(cpu, irq, regs)	(local_irq_count[cpu]++)
+#define irq_exit(cpu, irq)		(local_irq_count[cpu]--)
 #endif
 
 /* Dave Redman (djhr@tadpole.co.uk)

@@ -1,4 +1,4 @@
-/* $Id: entry.S,v 1.21 1997/05/18 10:04:44 davem Exp $
+/* $Id: entry.S,v 1.27 1997/05/27 19:30:11 jj Exp $
  * arch/sparc64/kernel/entry.S:  Sparc64 trap low-level entry points.
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
@@ -17,6 +17,8 @@
 #include <asm/page.h>
 #include <asm/signal.h>
 #include <asm/pgtable.h>
+
+/* define SYSCALL_TRACING */
 
 #define curptr      g6
 
@@ -52,6 +54,11 @@ sparc64_dtlb_prot_catch:
 	b,a,pt	%xcc, 1f
 
 sparc64_dtlb_refbit_catch:
+	srlx	%g5, 9, %g4
+	and	%g4, ((_PAGE_PRESENT | _PAGE_READ) >> 9), %g4
+	cmp	%g4, ((_PAGE_PRESENT | _PAGE_READ) >> 9)
+	be,a,pt	%xcc, 2f
+	 mov	1, %g4
 	wr	%g0, ASI_DMMU, %asi
 	rdpr	%pstate, %g1
 	wrpr	%g1, PSTATE_AG|PSTATE_MG, %pstate
@@ -75,6 +82,11 @@ sparc64_dtlb_refbit_catch:
 	ba,a,pt	%xcc, rtrap
 
 sparc64_itlb_refbit_catch:
+	srlx	%g5, 9, %g4
+	and	%g4, ((_PAGE_PRESENT | _PAGE_READ) >> 9), %g4
+	cmp	%g4, ((_PAGE_PRESENT | _PAGE_READ) >> 9)
+	be,a,pt	%xcc, 3f
+	 mov	1, %g4
 	rdpr	%pstate, %g1
 	wrpr	%g1, PSTATE_AG|PSTATE_MG, %pstate
 	ba,pt	%xcc, etrap
@@ -88,6 +100,22 @@ sparc64_itlb_refbit_catch:
 	call	do_sparc64_fault
 	 add	%sp, STACK_BIAS + REGWIN_SZ, %o0	! pt_regs ptr
 	ba,a,pt	%xcc, rtrap
+
+2:
+	sllx	%g4, 63, %g4				! _PAGE_VALID
+	or	%g5, _PAGE_ACCESSED, %g5
+	or	%g5, %g4, %g5
+	stxa	%g5, [%g3 + %g1] ASI_PHYS_USE_EC	! store new PTE
+	stxa	%g5, [%g0] ASI_DTLB_DATA_IN		! TLB load
+	retry
+
+3:
+	sllx	%g4, 63, %g4				! _PAGE_VALID
+	or	%g5, _PAGE_ACCESSED, %g5
+	or	%g5, %g4, %g5
+	stxa	%g5, [%g3 + %g1] ASI_PHYS_USE_EC	! store new PTE
+	stxa	%g5, [%g0] ASI_ITLB_DATA_IN		! TLB load
+	retry
 
 	/* Note check out head.h, this code isn't even used for UP,
 	 * for SMP things will be different.  In particular the data
@@ -161,6 +189,7 @@ breakpoint_trap:
 
 	.globl	sys_pipe, sys_execve, sys_sigpause, sys_nis_syscall
 	.globl	sys_sigsuspend, sys_sigreturn
+	.globl	sys32_execve, sys_ptrace
 
 sys_pipe:
 	sethi	%hi(sparc_pipe), %g1
@@ -178,6 +207,12 @@ sys_execve:
 	sethi	%hi(sparc_execve), %g1
 	add	%g1, %g4, %g1
 	jmpl	%g1 + %lo(sparc_execve), %g0
+	 add	%sp, STACK_BIAS + REGWIN_SZ, %o0
+
+sys32_execve:
+	sethi	%hi(sparc32_execve), %g1
+	add	%g1, %g4, %g1
+	jmpl	%g1 + %lo(sparc32_execve), %g0
 	 add	%sp, STACK_BIAS + REGWIN_SZ, %o0
 
 sys_sigpause:
@@ -199,7 +234,7 @@ sys_sigsuspend:
 	
 	ld	[%curptr + AOFF_task_flags], %l5
 	andcc	%l5, 0x20, %g0
-	be,pt	%icc, ret_sys_call
+	be,pt	%icc, rtrap
 	 nop
 	call	syscall_trace
 	 nop
@@ -211,13 +246,25 @@ sys_sigreturn:
 	
 	ld	[%curptr + AOFF_task_flags], %l5
 	andcc	%l5, 0x20, %g0
-	be,pt	%icc, ret_sys_call
+	be,pt	%icc, rtrap
 	 nop
 	call	syscall_trace
 	 nop
 	ba,a,pt	%xcc, rtrap
 
-	/* This is how fork() was meant to be done, 11 instruction entry. -DaveM */
+sys_ptrace:
+	call	do_ptrace
+	 add	%sp, STACK_BIAS + REGWIN_SZ, %o0
+	
+	ld	[%curptr + AOFF_task_flags], %l5
+	andcc	%l5, 0x20, %g0
+	be,pt	%icc, rtrap
+	 nop
+	call	syscall_trace
+	 nop
+	ba,a,pt	%xcc, rtrap
+	
+	/* This is how fork() was meant to be done, 10 instruction entry. -DaveM */
 	.globl	sys_fork, sys_vfork, sys_clone
 sys_fork:
 sys_vfork:
@@ -228,13 +275,12 @@ sys_clone:
 	flushw
 	rdpr	%cwp, %o4
 	add	%sp, STACK_BIAS + REGWIN_SZ, %o2
-	brz,a	%o1, 1f
-	 mov	%fp, %o1
-1:
+	movrz	%o1, %fp, %o1
+
 	/* Don't try this at home. */
 	stx	%o4, [%sp + STACK_BIAS + REGWIN_SZ + PT_V9_G0]
 	call	do_fork
-	 add	%l5, 8, %o7
+	 mov	%l5, %o7
 
 linux_sparc_ni_syscall:
 	sethi	%hi(sys_ni_syscall), %l7
@@ -281,6 +327,11 @@ linux_sparc_syscall:
 
 	.globl	syscall_is_too_hard
 syscall_is_too_hard:
+#ifdef SYSCALL_TRACING	/* Debugging... */
+	mov	%g1, %o0				! o0=scall, o1=ptregs
+	call	syscall_trace_entry
+	 add	%sp, STACK_BIAS + REGWIN_SZ, %o1
+#endif
 	mov	%i0, %o0
 	mov	%i1, %o1
 	mov	%i2, %o2
@@ -295,13 +346,12 @@ syscall_is_too_hard:
 	call	%l7
 	 mov	%i5, %o5
 
-	stx	%o0, [%sp + STACK_BIAS + REGWIN_SZ + PT_V9_I0]
-#if 0
-	/* Debugging... */
-	call	syscall_trace_exit
-	 add	%sp, STACK_BIAS + REGWIN_SZ, %o0
-	ldx	[%sp + STACK_BIAS + REGWIN_SZ + PT_V9_I0], %o0
+#ifdef SYSCALL_TRACING	/* Debugging... */
+	call	syscall_trace_exit			! o0=sysret, o1=ptregs
+	 add	%sp, STACK_BIAS + REGWIN_SZ, %o1
 #endif
+	stx	%o0, [%sp + STACK_BIAS + REGWIN_SZ + PT_V9_I0]
+
 	.globl	ret_sys_call
 ret_sys_call:
 	ldx	[%curptr + AOFF_task_flags], %l6

@@ -1,9 +1,6 @@
 /*
  *	AX.25 release 036
  *
- *	This is ALPHA test software. This code may break your machine, randomly fail to work with new 
- *	releases, misbehave and/or generally screw up. It might even work. 
- *
  *	This code REQUIRES 2.1.15 or higher/ NET3.038
  *
  *	This module:
@@ -157,7 +154,7 @@ void ax25_output(ax25_cb *ax25, int paclen, struct sk_buff *skb)
 
 			if ((skbn = alloc_skb(paclen + 2 + frontlen, GFP_ATOMIC)) == NULL) {
 				restore_flags(flags);
-				printk(KERN_DEBUG "ax25_output: alloc_skb returned NULL\n");
+				printk(KERN_CRIT "AX.25: ax25_output - out of memory\n");
 				return;
 			}
 
@@ -314,7 +311,9 @@ void ax25_kick(ax25_cb *ax25)
 
 void ax25_transmit_buffer(ax25_cb *ax25, struct sk_buff *skb, int type)
 {
+	struct sk_buff *skbn;
 	unsigned char *ptr;
+	int headroom;
 
 	if (ax25->ax25_dev == NULL) {
 		if (ax25->sk != NULL) {
@@ -328,13 +327,24 @@ void ax25_transmit_buffer(ax25_cb *ax25, struct sk_buff *skb, int type)
 		return;
 	}
 
-	if (skb_headroom(skb) < ax25_addr_size(ax25->digipeat)) {
-		printk(KERN_CRIT "ax25_transmit_buffer: not enough room for digi-peaters\n");
+	headroom = ax25_addr_size(ax25->digipeat);
+
+	if (skb_headroom(skb) < headroom) {
+		if ((skbn = skb_realloc_headroom(skb, headroom)) == NULL) {
+			printk(KERN_CRIT "AX.25: ax25_transmit_buffer - out of memory\n");
+			kfree_skb(skb, FREE_WRITE);
+			return;
+		}
+
+		if (skb->sk != NULL)
+			skb_set_owner_w(skbn, skb->sk);
+
 		kfree_skb(skb, FREE_WRITE);
-		return;
+		skb = skbn;
 	}
 
-	ptr = skb_push(skb, ax25_addr_size(ax25->digipeat));
+	ptr = skb_push(skb, headroom);
+
 	ax25_addr_build(ptr, &ax25->source_addr, &ax25->dest_addr, ax25->digipeat, type, ax25->modulus);
 
 	skb->dev      = ax25->ax25_dev->dev;
@@ -352,7 +362,7 @@ void ax25_queue_xmit(struct sk_buff *skb)
 	unsigned char *ptr;
 
 	if (call_out_firewall(PF_AX25, skb->dev, skb->data, NULL, &skb) != FW_ACCEPT) {
-		dev_kfree_skb(skb, FREE_WRITE);
+		kfree_skb(skb, FREE_WRITE);
 		return;
 	}
 

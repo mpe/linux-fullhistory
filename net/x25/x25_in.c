@@ -84,7 +84,6 @@ static int x25_queue_rx_frame(struct sock *sk, struct sk_buff *skb, int more)
 static int x25_state1_machine(struct sock *sk, struct sk_buff *skb, int frametype)
 {
 	x25_address source_addr, dest_addr;
-	struct x25_facilities facilities;
 
 	switch (frametype) {
 
@@ -102,9 +101,8 @@ static int x25_state1_machine(struct sock *sk, struct sk_buff *skb, int frametyp
 			 */
 			skb_pull(skb, X25_STD_MIN_LEN);
 			skb_pull(skb, x25_addr_ntoa(skb->data, &source_addr, &dest_addr));
-			skb_pull(skb, x25_parse_facilities(skb, &facilities));
+			skb_pull(skb, x25_parse_facilities(skb, &sk->protinfo.x25->facilities));
 			/*
-			 *	Facilities XXX
 			 *	Copy any Call User Data.
 			 */
 			if (skb->len >= 0) {
@@ -128,7 +126,6 @@ static int x25_state1_machine(struct sock *sk, struct sk_buff *skb, int frametyp
 			break;
 
 		default:
-			printk(KERN_WARNING "x25: unknown %02X in state 1\n", frametype);
 			break;
 	}
 
@@ -158,7 +155,6 @@ static int x25_state2_machine(struct sock *sk, struct sk_buff *skb, int frametyp
 			break;
 
 		default:
-			printk(KERN_WARNING "x25: unknown %02X in state 2\n", frametype);
 			break;
 	}
 
@@ -334,7 +330,6 @@ static int x25_state4_machine(struct sock *sk, struct sk_buff *skb, int frametyp
 			break;
 
 		default:
-			printk(KERN_WARNING "x25: unknown %02X in state 4\n", frametype);
 			break;
 	}
 

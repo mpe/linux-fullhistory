@@ -1,10 +1,22 @@
-/* $Id: config.c,v 1.11 1997/02/14 12:23:12 fritz Exp $
+/* $Id: config.c,v 1.15 1997/04/06 22:57:24 keil Exp $
 
  * Author       Karsten Keil (keil@temic-ech.spacenet.de)
  *              based on the teles driver from Jan den Ouden
  *
  *
  * $Log: config.c,v $
+ * Revision 1.15  1997/04/06 22:57:24  keil
+ * Hisax version 2.1
+ *
+ * Revision 1.14  1997/03/25 23:11:22  keil
+ * US NI-1 protocol
+ *
+ * Revision 1.13  1997/03/23 21:45:49  keil
+ * Add support for ELSA PCMCIA
+ *
+ * Revision 1.12  1997/03/11 21:01:43  keil
+ * nzproto is only used with modules
+ *
  * Revision 1.11  1997/02/14 12:23:12  fritz
  * Added support for new insmod parameter handling.
  *
@@ -63,11 +75,12 @@
  *    5 AVM A1 (Fritz)  p0=irq p1=iobase
  *    6 ELSA PC         [p0=iobase] or nothing (autodetect)
  *    7 ELSA Quickstep  p0=irq p1=iobase
+ *      ELSA PCMCIA     p0=irq p1=iobase
  *    8 Teles PCMCIA    p0=irq p1=iobase
  *    9 ITK ix1-micro   p0=irq p1=iobase
  *
  *
- * protocol can be either ISDN_PTYPE_EURO or ISDN_PTYPE_1TR6
+ * protocol can be either ISDN_PTYPE_EURO or ISDN_PTYPE_1TR6 or ISDN_PTYPE_NI1
  *
  *
  */
@@ -75,6 +88,10 @@
 #ifdef CONFIG_HISAX_ELSA_PCC
 #define DEFAULT_CARD ISDN_CTYPE_ELSA
 #define DEFAULT_CFG {0,0,0}
+#endif
+#ifdef CONFIG_HISAX_ELSA_PCMCIA
+#define DEFAULT_CARD ISDN_CTYPE_ELSA_QS1000
+#define DEFAULT_CFG {3,0x2f8,0}
 #endif
 #ifdef CONFIG_HISAX_AVM_A1
 #undef DEFAULT_CARD
@@ -111,6 +128,12 @@
 #define DEFAULT_PROTO ISDN_PTYPE_EURO
 #undef DEFAULT_PROTO_NAME
 #define DEFAULT_PROTO_NAME "EURO"
+#endif
+#ifdef CONFIG_HISAX_NI1
+#undef DEFAULT_PROTO
+#define DEFAULT_PROTO ISDN_PTYPE_NI1
+#undef DEFAULT_PROTO_NAME
+#define DEFAULT_PROTO_NAME "NI1"
 #endif
 #ifndef DEFAULT_PROTO
 #define DEFAULT_PROTO ISDN_PTYPE_UNKNOWN
@@ -280,8 +303,9 @@ HiSax_init(void)
 	int i;
 	char tmp[64], rev[64];
 	char *r = rev;
+#ifdef MODULE
 	int nzproto = 0;
-
+#endif
 	nrcards = 0;
 	strcpy(tmp, l1_revision);
 	r += sprintf(r, "%s/", HiSax_getrev(tmp));
@@ -295,7 +319,7 @@ HiSax_init(void)
 	r += sprintf(r, "%s", HiSax_getrev(tmp));
 
 	printk(KERN_NOTICE "HiSax: Driver for Siemens chip set ISDN cards\n");
-	printk(KERN_NOTICE "HiSax: Version 2.0\n");
+	printk(KERN_NOTICE "HiSax: Version 2.1\n");
 	printk(KERN_NOTICE "HiSax: Revisions %s\n", rev);
 
 #ifdef MODULE

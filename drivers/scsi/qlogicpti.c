@@ -976,6 +976,7 @@ static int qlogicpti_return_status(struct Status_Entry *sts)
 		host_status = DID_ERROR;
 		break;
 	      case CS_RESET_OCCURRED:
+	      case CS_BUS_RESET:
 		host_status = DID_RESET;
 		break;
 	      case CS_ABORTED:
@@ -1105,7 +1106,7 @@ int qlogicpti_abort(Scsi_Cmnd *Cmnd)
 	struct qlogicpti *qpti = (struct qlogicpti *) host->hostdata;
 	int return_status = SCSI_ABORT_SUCCESS;
 
-	printk(KERN_EMERG "qlogicpti : Aborting cmd for tgt[%d] lun[%d]\n",
+	printk(KERN_WARNING "qlogicpti : Aborting cmd for tgt[%d] lun[%d]\n",
 	       (int)Cmnd->target, (int)Cmnd->lun);
 	qlogicpti_disable_irqs(qpti->qregs);
 	param[0] = MBOX_ABORT;
@@ -1128,7 +1129,7 @@ int qlogicpti_reset(Scsi_Cmnd *Cmnd, unsigned int reset_flags)
 	struct qlogicpti *qpti = (struct qlogicpti *) host->hostdata;
 	int return_status = SCSI_RESET_SUCCESS;
 
-	printk(KERN_EMERG "qlogicpti : Resetting SCSI bus!\n");
+	printk(KERN_WARNING "qlogicpti : Resetting SCSI bus!\n");
 	qlogicpti_disable_irqs(qpti->qregs);
 	param[0] = MBOX_BUS_RESET;
 	param[1] = qpti->host_param.bus_reset_delay;

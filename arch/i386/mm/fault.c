@@ -83,6 +83,10 @@ bad_area:
  *	bit 0 == 0 means no page found, 1 means protection fault
  *	bit 1 == 0 means read, 1 means write
  *	bit 2 == 0 means kernel, 1 means user-mode
+ *
+ * NOTE! This all needs to be SMP-safe. Happily, we're only really touching
+ * per-thread data that we can know is valid (except for the "mm" structure
+ * that is shared - which is protected by the mm->mmap_sem semaphore).
  */
 asmlinkage void do_page_fault(struct pt_regs *regs, unsigned long error_code)
 {
@@ -93,8 +97,6 @@ asmlinkage void do_page_fault(struct pt_regs *regs, unsigned long error_code)
 	unsigned long page;
 	unsigned long fixup;
 	int write;
-
-	lock_kernel();
 
 	/* get the address */
 	__asm__("movl %%cr2,%0":"=r" (address));
@@ -152,7 +154,7 @@ good_area:
 		if (bit < 32)
 			tsk->tss.screen_bitmap |= 1 << bit;
 	}
-	goto out;
+	return;
 
 /*
  * Something tried to access memory that isn't in our memory map..
@@ -168,7 +170,7 @@ bad_area:
 			regs->eip,
 			fixup);
 		regs->eip = fixup;
-		goto out;
+		return;
 	}
 
 	if (error_code & 4) {
@@ -176,7 +178,7 @@ bad_area:
 		tsk->tss.error_code = error_code;
 		tsk->tss.trap_no = 14;
 		force_sig(SIGSEGV, tsk);
-		goto out;
+		return;
 	}
 /*
  * Oops. The kernel tried to access some bad page. We'll have to
@@ -188,7 +190,7 @@ bad_area:
 		wp_works_ok = 1;
 		pg0[0] = pte_val(mk_pte(0, PAGE_SHARED));
 		flush_tlb();
-		goto out;
+		return;
 	}
 	if (address < PAGE_SIZE) {
 		printk(KERN_ALERT "Unable to handle kernel NULL pointer dereference");
@@ -209,6 +211,4 @@ bad_area:
 	}
 	die_if_kernel("Oops", regs, error_code);
 	do_exit(SIGKILL);
-out:
-	unlock_kernel();
 }

@@ -4,6 +4,7 @@
 #define RNR    0x05
 #define REJ    0x09
 #define SABME  0x6f
+#define SABM   0x2f
 #define DM     0x0f
 #define UI     0x03
 #define DISC   0x43

@@ -685,15 +685,15 @@ static void refill_freelist(int size)
 		needed -= PAGE_SIZE;
 
 repeat:
+	if(needed <= 0)
+		return;
+
 	/* OK, we cannot grow the buffer cache, now try to get some
 	 * from the lru list.
 	 *
 	 * First set the candidate pointers to usable buffers.  This
 	 * should be quick nearly all of the time.
 	 */
-
-	if(needed <= 0)
-		return;
 
 	for(i=0; i<BUF_DIRTY; i++) {
 		buffers[i] = nr_buffers_type[i];
@@ -731,12 +731,8 @@ repeat:
 				candidate[i] = find_candidate(candidate[i],
 							      &buffers[i], size);
 		}
-		if (needed >= 0)
-			goto repeat;
+		goto repeat;
 	}
-	
-	if(needed <= 0)
-		return;
 	
 	/* Too bad, that was not enough. Try a little harder to grow some. */
 	if (nr_free_pages > min_free_pages + 5) {
@@ -747,9 +743,10 @@ repeat:
 	}
 	
 	/* And repeat until we find something good. */
-	if (!grow_buffers(GFP_ATOMIC, size))
+	if (grow_buffers(GFP_ATOMIC, size))
+		needed -= PAGE_SIZE;
+	else
 		wakeup_bdflush(1);
-	needed -= PAGE_SIZE;
 	goto repeat;
 }
 
@@ -995,6 +992,7 @@ static void put_unused_buffer_head(struct buffer_head * bh)
 		kmem_cache_free(bh_cachep, bh);
 		return;
 	}
+
 	memset(bh,0,sizeof(*bh));
 	nr_unused_buffer_heads++;
 	bh->b_next_free = unused_list;
@@ -1034,24 +1032,17 @@ static void get_more_buffer_heads(void)
  * fields after the final unlock.  So, the device driver puts them on
  * the reuse_list instead once IO completes, and we recover these to
  * the unused_list here.
- *
- * The reuse_list receives buffers from interrupt routines, so we need
- * to be IRQ-safe here (but note that interrupts only _add_ to the
- * reuse_list, never take away. So we don't need to worry about the
- * reuse_list magically emptying).
  */
 static inline void recover_reusable_buffer_heads(void)
 {
-	if (reuse_list) {
-		struct buffer_head *head;
+	struct buffer_head *head;
 
-		head = xchg(&reuse_list, NULL);
+	head = xchg(&reuse_list, NULL);
 	
-		do {
-			struct buffer_head *bh = head;
-			head = head->b_next_free;
-			put_unused_buffer_head(bh);
-		} while (head);
+	while (head) {
+		struct buffer_head *bh = head;
+		head = head->b_next_free;
+		put_unused_buffer_head(bh);
 	}
 }
 
@@ -1139,7 +1130,7 @@ static inline void free_async_buffers (struct buffer_head * bh)
 				"async IO mismatch on page.\n");
 			return;
 		}
-		tmp->b_next_free = reuse_list;
+		tmp->b_next_free = xchg(&reuse_list, NULL);
 		reuse_list = tmp;
 		clear_bit(BH_FreeOnIO, &tmp->b_state);
 		tmp = tmp->b_this_page;

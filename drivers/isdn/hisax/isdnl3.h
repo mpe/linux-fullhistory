@@ -1,6 +1,9 @@
-/* $Id: isdnl3.h,v 1.2 1997/01/21 22:31:28 keil Exp $
+/* $Id: isdnl3.h,v 1.3 1997/04/06 22:54:17 keil Exp $
  *
  * $Log: isdnl3.h,v $
+ * Revision 1.3  1997/04/06 22:54:17  keil
+ * Using SKB's
+ *
  * Revision 1.2  1997/01/21 22:31:28  keil
  * new statemachine; L3 timers
  *
@@ -21,9 +24,9 @@
 #define	L3_DEB_CHARGE	0x08
 
 struct stateentry {
-	int             state;
-	byte            primitive;
-	void            (*rout) (struct PStack *, byte, void *);
+	int	state;
+	u_char	primitive;
+	void	(*rout) (struct PStack *, u_char, void *);
 };
 
 extern void l3_debug(struct PStack *st, char *s);
@@ -32,3 +35,4 @@ extern void L3InitTimer(struct PStack *st, struct L3Timer *t);
 extern void L3DelTimer(struct L3Timer *t);
 extern int  L3AddTimer(struct L3Timer *t, int millisec, int event);
 extern void StopAllL3Timer(struct PStack *st);
+extern struct sk_buff *l3_alloc_skb(int len);

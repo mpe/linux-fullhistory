@@ -449,14 +449,8 @@ int pcbit_writecmd(const u_char* buf, int len, int user, int driver, int channel
 		for (i=0; i < len; i++)
 		{
 			for(j=0; j < LOAD_RETRY; j++)
-			{
-				__volatile__ unsigned char * ptr;
-
-				ptr = dev->sh_mem + dev->loadptr;
-				if (*ptr == 0)
+				if (!(readb(dev->sh_mem + dev->loadptr)))
 					break;
-
-			}
 
 			if (j == LOAD_RETRY)
 			{

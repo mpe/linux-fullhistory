@@ -1,8 +1,5 @@
 /*
- *	Rose release 001
- *
- *	This is ALPHA test software. This code may break your machine, randomly fail to work with new 
- *	releases, misbehave and/or generally screw up. It might even work. 
+ *	ROSE release 002
  *
  *	This code REQUIRES 2.1.15 or higher/ NET3.038
  *
@@ -13,7 +10,7 @@
  *		2 of the License, or (at your option) any later version.
  *
  *	History
- *	Rose 001	Jonathan(G4KLX)	Cloned from nr_subr.c
+ *	ROSE 001	Jonathan(G4KLX)	Cloned from nr_subr.c
  */
 
 #include <linux/config.h>
@@ -173,7 +170,7 @@ void rose_write_internal(struct sock *sk, int frametype)
 			break;
 
 		default:
-			printk(KERN_ERR "rose_write_internal: invalid frametype %02X\n", frametype);
+			printk(KERN_ERR "ROSE: rose_write_internal - invalid frametype %02X\n", frametype);
 			kfree_skb(skb, FREE_WRITE);
 			return;
 	}
@@ -227,7 +224,7 @@ int rose_decode(struct sk_buff *skb, int *ns, int *nr, int *q, int *d, int *m)
 	return ROSE_ILLEGAL;
 }
 
-static int rose_parse_national(unsigned char *p, rose_cb *rose, int len)
+static int rose_parse_national(unsigned char *p, struct rose_facilities *facilities, int len)
 {
 	unsigned char l, n = 0;
 
@@ -241,7 +238,7 @@ static int rose_parse_national(unsigned char *p, rose_cb *rose, int len)
 
 			case 0x40:
 				if (*p == FAC_NATIONAL_RAND)
-					rose->rand = ((p[1] << 8) & 0xFF00) + ((p[2] << 0) & 0x00FF);
+					facilities->rand = ((p[1] << 8) & 0xFF00) + ((p[2] << 0) & 0x00FF);
 				p   += 3;
 				n   += 3;
 				len -= 3;
@@ -256,12 +253,12 @@ static int rose_parse_national(unsigned char *p, rose_cb *rose, int len)
 			case 0xC0:
 				l = p[1];
 				if (*p == FAC_NATIONAL_DEST_DIGI) {
-					memcpy(&rose->source_digi, p + 2, AX25_ADDR_LEN);
-					rose->source_ndigis = 1;
+					memcpy(&facilities->source_digi, p + 2, AX25_ADDR_LEN);
+					facilities->source_ndigis = 1;
 				}
 				if (*p == FAC_NATIONAL_SRC_DIGI) {
-					memcpy(&rose->dest_digi,   p + 2, AX25_ADDR_LEN);
-					rose->dest_ndigis = 1;
+					memcpy(&facilities->dest_digi,   p + 2, AX25_ADDR_LEN);
+					facilities->dest_ndigis = 1;
 				}
 				p   += l + 2;
 				n   += l + 2;
@@ -273,7 +270,7 @@ static int rose_parse_national(unsigned char *p, rose_cb *rose, int len)
 	return n;
 }
 
-static int rose_parse_ccitt(unsigned char *p, rose_cb *rose, int len)
+static int rose_parse_ccitt(unsigned char *p, struct rose_facilities *facilities, int len)
 {
 	unsigned char l, n = 0;
 	char callsign[11];
@@ -301,16 +298,16 @@ static int rose_parse_ccitt(unsigned char *p, rose_cb *rose, int len)
 			case 0xC0:
 				l = p[1];
 				if (*p == FAC_CCITT_DEST_NSAP) {
-					memcpy(&rose->source_addr, p + 7, ROSE_ADDR_LEN);
+					memcpy(&facilities->source_addr, p + 7, ROSE_ADDR_LEN);
 					memcpy(callsign, p + 12,   l - 10);
 					callsign[l - 10] = '\0';
-					rose->source_call = *asc2ax(callsign);
+					facilities->source_call = *asc2ax(callsign);
 				}
 				if (*p == FAC_CCITT_SRC_NSAP) {
-					memcpy(&rose->dest_addr, p + 7, ROSE_ADDR_LEN);
+					memcpy(&facilities->dest_addr, p + 7, ROSE_ADDR_LEN);
 					memcpy(callsign, p + 12, l - 10);
 					callsign[l - 10] = '\0';
-					rose->dest_call = *asc2ax(callsign);
+					facilities->dest_call = *asc2ax(callsign);
 				}
 				p   += l + 2;
 				n   += l + 2;
@@ -322,12 +319,12 @@ static int rose_parse_ccitt(unsigned char *p, rose_cb *rose, int len)
 	return n;
 }
 
-int rose_parse_facilities(struct sk_buff *skb, rose_cb *rose)
+int rose_parse_facilities(struct sk_buff *skb, struct rose_facilities *facilities)
 {
 	int facilities_len, len;
 	unsigned char *p;
 
-	memset(rose, 0x00, sizeof(rose_cb));
+	memset(facilities, 0x00, sizeof(struct rose_facilities));
 
 	len  = (((skb->data[3] >> 4) & 0x0F) + 1) / 2;
 	len += (((skb->data[3] >> 0) & 0x0F) + 1) / 2;
@@ -346,19 +343,19 @@ int rose_parse_facilities(struct sk_buff *skb, rose_cb *rose)
 
 			switch (*p) {
 				case FAC_NATIONAL:		/* National */
-					len = rose_parse_national(p + 1, rose, facilities_len - 1);
+					len = rose_parse_national(p + 1, facilities, facilities_len - 1);
 					facilities_len -= len + 1;
 					p += len + 1;
 					break;
 
 				case FAC_CCITT:		/* CCITT */
-					len = rose_parse_ccitt(p + 1, rose, facilities_len - 1);
+					len = rose_parse_ccitt(p + 1, facilities, facilities_len - 1);
 					facilities_len -= len + 1;
 					p += len + 1;
 					break;
 
 				default:
-					printk(KERN_DEBUG "rose_parse_facilities: unknown facilities family %02X\n", *p);
+					printk(KERN_DEBUG "ROSE: rose_parse_facilities - unknown facilities family %02X\n", *p);
 					facilities_len--;
 					p++;
 					break;

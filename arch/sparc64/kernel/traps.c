@@ -1,4 +1,4 @@
-/* $Id: traps.c,v 1.10 1997/05/18 08:42:16 davem Exp $
+/* $Id: traps.c,v 1.13 1997/05/27 19:30:08 jj Exp $
  * arch/sparc/kernel/traps.c
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
@@ -24,74 +24,269 @@
 #include <asm/unistd.h>
 #include <asm/uaccess.h>
 
-/* #define TRAP_DEBUG */
+/* #define SYSCALL_TRACING */
+/* #define VERBOSE_SYSCALL_TRACING */
 
-struct trap_trace_entry {
-	unsigned long pc;
-	unsigned long type;
+#ifdef SYSCALL_TRACING
+#ifdef VERBOSE_SYSCALL_TRACING
+struct sdesc {
+	int	scall_num;
+	char	*name;
+	int	num_args;
+	char	arg_is_string[6];
+} sdesc_entries[] = {
+	{ 0, "setup", 0, },
+	{ 1, "exit", 1, { 0, } },
+	{ 2, "fork", 0, },
+	{ 3, "read", 3, { 0, 0, 0, } },
+	{ 4, "write", 3, { 0, 0, 0, } },
+	{ 5, "open", 3, { 1, 0, 0, } },
+	{ 6, "close", 1, { 0, } },
+	{ 7, "wait4", 4, { 0, 0, 0, 0, } },
+	{ 8, "creat", 2, { 1, 0, } },
+	{ 9, "link", 2, { 1, 1, } },
+	{ 10, "unlink", 1, { 1, } },
+	{ 11, "execv", 2, { 1, 0, } },
+	{ 12, "chdir", 1, { 1, } },
+	{ 15, "chmod", 2, { 1, 0, } },
+	{ 16, "chown", 3, { 1, 0, 0, } },
+	{ 17, "brk", 1, { 0, } },
+	{ 19, "lseek", 3, { 0, 0, 0, } },
+	{ 27, "alarm", 1, { 0, } },
+	{ 29, "pause", 0, },
+	{ 33, "access", 2, { 1, 0, } },
+	{ 36, "sync", 0, },
+	{ 37, "kill", 2, { 0, 0, } },
+	{ 38, "stat", 2, { 1, 0, } },
+	{ 40, "lstat", 2, { 1, 0, } },
+	{ 41, "dup", 1, { 0, } },
+	{ 42, "pipd", 0, },
+	{ 54, "ioctl", 3, { 0, 0, 0, } },
+	{ 57, "symlink", 2, { 1, 1, } },
+	{ 58, "readlink", 3, { 1, 0, 0, } },
+	{ 59, "execve", 3, { 1, 0, 0, } },
+	{ 60, "umask", 1, { 0, } },
+	{ 62, "fstat", 2, { 0, 0, } },
+	{ 64, "getpagesize", 0, },
+	{ 71, "mmap", 6, { 0, 0, 0, 0, 0, 0, } },
+	{ 73, "munmap", 2, { 0, 0, } },
+	{ 74, "mprotect", 3, { 0, 0, 0, } },
+	{ 83, "setitimer", 3, { 0, 0, 0, } },
+	{ 90, "dup2", 2, { 0, 0, } },
+	{ 92, "fcntl", 3, { 0, 0, 0, } },
+	{ 93, "select", 5, { 0, 0, 0, 0, 0, } },
+	{ 97, "socket", 3, { 0, 0, 0, } },
+	{ 98, "connect", 3, { 0, 0, 0, } },
+	{ 99, "accept", 3, { 0, 0, 0, } },
+	{ 101, "send", 4, { 0, 0, 0, 0, } },
+	{ 102, "recv", 4, { 0, 0, 0, 0, } },
+	{ 104, "bind", 3, { 0, 0, 0, } },
+	{ 105, "setsockopt", 5, { 0, 0, 0, 0, 0, } },
+	{ 106, "listen", 2, { 0, 0, } },
+	{ 120, "readv", 3, { 0, 0, 0, } },
+	{ 121, "writev", 3, { 0, 0, 0, } },
+	{ 123, "fchown", 3, { 0, 0, 0, } },
+	{ 124, "fchmod", 2, { 0, 0, } },
+	{ 128, "rename", 2, { 1, 1, } },
+	{ 129, "truncate", 2, { 1, 0, } },
+	{ 130, "ftruncate", 2, { 0, 0, } },
+	{ 131, "flock", 2, { 0, 0, } },
+	{ 136, "mkdir", 2, { 1, 0, } },
+	{ 137, "rmdir", 1, { 1, } },
+	{ 146, "killpg", 1, { 0, } },
+	{ 157, "statfs", 2, { 1, 0, } },
+	{ 158, "fstatfs", 2, { 0, 0, } },
+	{ 159, "umount", 1, { 1, } },
+	{ 167, "mount", 5, { 1, 1, 1, 0, 0, } },
+	{ 174, "getdents", 3, { 0, 0, 0, } },
+	{ 176, "fchdir", 2, { 0, 0, } },
+	{ 198, "sigaction", 3, { 0, 0, 0, } },
+	{ 201, "sigsuspend", 1, { 0, } },
+	{ 206, "socketcall", 2, { 0, 0, } },
+	{ 216, "sigreturn", 0, },
+	{ 230, "newselect", 5, { 0, 0, 0, 0, 0, } },
+	{ 236, "llseek", 5, { 0, 0, 0, 0, 0, } },
+	{ 251, "sysctl", 1, { 0, } },
 };
+#define NUM_SDESC_ENTRIES (sizeof(sdesc_entries) / sizeof(sdesc_entries[0]))
+#endif
 
-int trap_curbuf = 0;
-struct trap_trace_entry trapbuf[1024];
+#ifdef VERBOSE_SYSCALL_TRACING
+static char scall_strbuf[512];
+#endif
 
-void syscall_trace_entry(struct pt_regs *regs)
+void syscall_trace_entry(unsigned long g1, struct pt_regs *regs)
 {
-	printk("%s[%d]: ", current->comm, current->pid);
-	printk("scall<%ld> (could be %ld)\n", (long) regs->u_regs[UREG_G1],
-	       (long) regs->u_regs[UREG_I0]);
+#ifdef VERBOSE_SYSCALL_TRACING
+	struct sdesc *sdp;
+	int i;
+#endif
+
+	printk("SYS[%s:%d]: <%d> ", current->comm, current->pid, (int)g1);
+#ifdef VERBOSE_SYSCALL_TRACING
+	sdp = NULL;
+	for(i = 0; i < NUM_SDESC_ENTRIES; i++)
+		if(sdesc_entries[i].scall_num == g1) {
+			sdp = &sdesc_entries[i];
+			break;
+		}
+	if(sdp) {
+		printk("%s(", sdp->name);
+		for(i = 0; i < sdp->num_args; i++) {
+			if(i)
+				printk(",");
+			if(!sdp->arg_is_string[i])
+				printk("%08x", (unsigned int)regs->u_regs[UREG_I0 + i]);
+			else {
+				strncpy_from_user(scall_strbuf,
+						  (char *)regs->u_regs[UREG_I0 + i],
+						  512);
+				printk("%s", scall_strbuf);
+			}
+		}
+		printk(") ");
+	}
+#endif
 }
 
-void syscall_trace_exit(struct pt_regs *regs)
+unsigned long syscall_trace_exit(unsigned long retval, struct pt_regs *regs)
 {
-	printk("Syscall return check, reg dump.\n");
-	show_regs(regs);
+	printk("ret[%08x]\n", (unsigned int) retval);
+	return retval;
 }
+#endif /* SYSCALL_TRACING */
 
-void sparc64_dtlb_fault_handler (void)
+#if 0
+void user_rtrap_report(struct pt_regs *regs)
 {
-	printk ("sparc64_dtlb_fault_handler\n");
-	while (1);
-	/* Die for now... */
-}
+	static int hits = 0;
 
-void sparc64_dtlb_refbit_handler (struct pt_regs *regs)
-{
-	printk ("sparc64_dtlb_refbit_handler[%016lx]\n", regs->tpc);
-	while (1);
-	/* Die for now... */
-}
+	/* Bwahhhhrggg... */
+	if(regs->tpc == 0x1f294UL && ++hits == 2) {
+		register unsigned long ctx asm("o4");
+		register unsigned long paddr asm("o5");
+		unsigned long cwp, wstate;
 
-void sparc64_itlb_refbit_handler (void)
-{
-	printk ("sparc64_itlb_refbit_handler\n");
-	while (1);
-	/* Die for now... */
+		printk("RT[%016lx:%016lx] ", regs->tpc, regs->u_regs[UREG_I6]);
+		__asm__ __volatile__("rdpr %%cwp, %0" : "=r" (cwp));
+		__asm__ __volatile__("rdpr %%wstate, %0" : "=r" (wstate));
+		printk("CWP[%d] WSTATE[%016lx]\n"
+		       "TSS( ksp[%016lx] kpc[%016lx] wstate[%016lx] w_saved[%d] flgs[%x]"
+		       " cur_ds[%d] )\n", cwp, wstate,
+		       current->tss.ksp, current->tss.kpc, current->tss.wstate,
+		       (int) current->tss.w_saved, current->tss.flags,
+		       current->tss.current_ds);
+		__asm__ __volatile__("
+		rdpr	%%pstate, %%o3
+		wrpr	%%o3, %2, %%pstate
+		mov	%%g7, %%o5
+		mov	0x10, %%o4
+		ldxa	[%%o4] %3, %%o4
+		wrpr	%%o3, 0x0, %%pstate
+		" : "=r" (ctx), "=r" (paddr)
+		  : "i" (PSTATE_MG|PSTATE_IE), "i" (ASI_DMMU));
+
+		printk("MMU[ppgd(%016lx)sctx(%d)] ", paddr, ctx);
+		printk("mm->context(%016lx) mm->pgd(%p)\n",
+		       current->mm->context, current->mm->pgd);
+		printk("TASK: signal[%016lx] blocked[%016lx]\n",
+		       current->signal, current->blocked);
+		show_regs(regs);
+		while(1)
+			barrier();
+	}
 }
+#endif
 
 void bad_trap (struct pt_regs *regs, long lvl)
 {
-	printk ("Bad trap %d (tstate %016lx tpc %016lx tnpc %016lx)\n", lvl, regs->tstate, regs->tpc, regs->tnpc);
-	while (1);
-	/* Die for now... */
+	lock_kernel ();
+	if (lvl < 0x100) {
+		char buffer[24];
+		
+		sprintf (buffer, "Bad hw trap %lx at tl0\n", lvl);
+		die_if_kernel (buffer, regs);
+	}
+	if (regs->tstate & TSTATE_PRIV)
+		die_if_kernel ("Kernel bad trap", regs);
+        current->tss.sig_desc = SUBSIG_BADTRAP(lvl - 0x100);
+        current->tss.sig_address = regs->tpc;
+        send_sig(SIGILL, current, 1);
+	unlock_kernel ();
 }
 
 void bad_trap_tl1 (struct pt_regs *regs, long lvl)
 {
-	printk ("Bad trap %d at tl1+ (tstate %016lx tpc %016lx tnpc %016lx)\n", lvl, regs->tstate, regs->tpc, regs->tnpc);
-	while (1);
-	/* Die for now... */
+	char buffer[24];
+	
+	lock_kernel ();
+	sprintf (buffer, "Bad trap %lx at tl>0", lvl);
+	die_if_kernel (buffer, regs);
 }
 
 void data_access_exception (struct pt_regs *regs)
 {
-	printk ("Unhandled data access exception sfsr %016lx sfar %016lx\n", spitfire_get_dsfsr(), spitfire_get_sfar());
+	lock_kernel ();
+	printk ("Unhandled data access exception ");
+	printk("sfsr %016lx sfar %016lx\n", spitfire_get_dsfsr(), spitfire_get_sfar());
 	die_if_kernel("Data access exception", regs);
+}
+
+void do_dae(struct pt_regs *regs)
+{
+	printk("DAE: at %016lx\n", regs->tpc);
+	while(1)
+		barrier();
 }
 
 void instruction_access_exception (struct pt_regs *regs)
 {
-	printk ("Unhandled instruction access exception sfsr %016lx\n", spitfire_get_isfsr());
+	lock_kernel ();
+	printk ("Unhandled instruction access exception ");
+	printk("sfsr %016lx\n", spitfire_get_isfsr());
 	die_if_kernel("Instruction access exception", regs);
+}
+
+void do_iae(struct pt_regs *regs)
+{
+	printk("IAE at %016lx\n", regs->tpc);
+	while(1)
+		barrier();
+}
+
+void do_fpdis(struct pt_regs *regs)
+{
+	printk("FPDIS: at %016lx\n", regs->tpc);
+	while(1)
+		barrier();
+}
+
+void do_fpieee(struct pt_regs *regs)
+{
+	printk("FPIEEE: at %016lx\n", regs->tpc);
+	while(1)
+		barrier();
+}
+
+void do_fpother(struct pt_regs *regs)
+{
+	printk("FPOTHER: at %016lx\n", regs->tpc);
+	while(1)
+		barrier();
+}
+
+void do_tof(struct pt_regs *regs)
+{
+	printk("TOF: at %016lx\n", regs->tpc);
+	while(1)
+		barrier();
+}
+
+void do_div0(struct pt_regs *regs)
+{
+	printk("DIV0: at %016lx\n", regs->tpc);
+	while(1)
+		barrier();
 }
 
 void instruction_dump (unsigned int *pc)
@@ -116,11 +311,27 @@ void die_if_kernel(char *str, struct pt_regs *regs)
 "                 \\__U_/\n");
 
 	printk("%s(%d): %s\n", current->comm, current->pid, str);
+	__asm__ __volatile__("flushw");
 	show_regs(regs);
+	{
+		struct reg_window *rw = (struct reg_window *)
+			(regs->u_regs[UREG_FP] + STACK_BIAS);
+
+		if(rw) {
+			printk("Caller[%016lx]\n", rw->ins[7]);
+			rw = (struct reg_window *)
+				(rw->ins[6] + STACK_BIAS);
+			if(rw) {
+				printk("Caller[%016lx]\n", rw->ins[7]);
+				rw = (struct reg_window *)
+					(rw->ins[6] + STACK_BIAS);
+				if(rw)
+					printk("Caller[%016lx]\n", rw->ins[7]);
+			}
+		}
+	}
 	printk("Instruction DUMP:");
 	instruction_dump ((unsigned int *) regs->tpc);
-	while(1)
-		barrier();
 	if(regs->tstate & TSTATE_PRIV)
 		do_exit(SIGKILL);
 	do_exit(SIGSEGV);
@@ -156,6 +367,20 @@ void do_mna(struct pt_regs *regs)
 {
 	printk("AIEEE: do_mna at %016lx\n", regs->tpc);
 	show_regs(regs);
+	while(1)
+		barrier();
+}
+
+void do_privop(struct pt_regs *regs)
+{
+	printk("PRIVOP: at %016lx\n", regs->tpc);
+	while(1)
+		barrier();
+}
+
+void do_privact(struct pt_regs *regs)
+{
+	printk("PRIVACT: at %016lx\n", regs->tpc);
 	while(1)
 		barrier();
 }

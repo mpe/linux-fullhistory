@@ -28,6 +28,7 @@
 #include <net/route.h>
 #include <net/scm.h>
 #include <net/inet_common.h>
+#include <linux/inet.h>
 #include <linux/net_alias.h>
 #include <linux/mroute.h>
 
@@ -163,6 +164,8 @@ EXPORT_SYMBOL(ip_send_check);
 EXPORT_SYMBOL(ip_fragment);
 EXPORT_SYMBOL(ip_dev_find_tunnel);
 EXPORT_SYMBOL(inet_family_ops);
+EXPORT_SYMBOL(in_aton);
+EXPORT_SYMBOL(in_ntoa);
 
 #ifdef CONFIG_IPV6_MODULE
 /* inet functions common to v4 and v6 */

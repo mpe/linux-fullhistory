@@ -1,8 +1,5 @@
 /*
- *	Rose release 001
- *
- *	This is ALPHA test software. This code may break your machine, randomly fail to work with new
- *	releases, misbehave and/or generally screw up. It might even work.
+ *	ROSE release 002
  *
  *	This code REQUIRES 2.1.15 or higher/ NET3.038
  *
@@ -13,7 +10,7 @@
  *		2 of the License, or (at your option) any later version.
  *
  *	History
- *	Rose 001	Jonathan(G4KLX)	Cloned from nr_dev.c.
+ *	ROSE 001	Jonathan(G4KLX)	Cloned from nr_dev.c.
  *			Hans(PE1AYX)	Fixed interface to IP layer.
  */
 
@@ -52,7 +49,7 @@
 #include <net/rose.h>
 
 /*
- *	Only allow IP over Rose frames through if the netrom device is up.
+ *	Only allow IP over ROSE frames through if the netrom device is up.
  */
 
 int rose_rx_ip(struct sk_buff *skb, struct device *dev)
@@ -175,7 +172,7 @@ static int rose_xmit(struct sk_buff *skb, struct device *dev)
 		return 0;
 
 	if (!dev->start) {
-		printk(KERN_ERR "rose: xmit call when iface is down\n");
+		printk(KERN_ERR "ROSE: rose_xmit - called when iface is down\n");
 		return 1;
 	}
 
@@ -226,10 +223,12 @@ int rose_init(struct device *dev)
 	dev->flags		= 0;
 	dev->family		= AF_INET;
 
-	dev->pa_addr		= 0;
-	dev->pa_brdaddr		= 0;
-	dev->pa_mask		= 0;
-	dev->pa_alen		= sizeof(unsigned long);
+#ifdef CONFIG_INET
+	dev->pa_addr		= in_aton("192.168.0.1");
+	dev->pa_brdaddr		= in_aton("192.168.0.255");
+	dev->pa_mask		= in_aton("255.255.255.0");
+	dev->pa_alen		= 4;
+#endif
 
 	if ((dev->priv = kmalloc(sizeof(struct net_device_stats), GFP_KERNEL)) == NULL)
 		return -ENOMEM;
