@@ -179,7 +179,7 @@ xfs_dir2_leaf_to_node(
 	 * Copy freespace entries from the leaf block to the new block.
 	 * Count active entries.
 	 */
-	for (i = n = 0, from = XFS_DIR2_LEAF_BESTS_P_ARCH(ltp, ARCH_CONVERT), to = free->bests;
+	for (i = n = 0, from = XFS_DIR2_LEAF_BESTS_P(ltp), to = free->bests;
 	     i < INT_GET(ltp->bestcount, ARCH_CONVERT); i++, from++, to++) {
 		if ((off = INT_GET(*from, ARCH_CONVERT)) != NULLDATAOFF)
 			n++;

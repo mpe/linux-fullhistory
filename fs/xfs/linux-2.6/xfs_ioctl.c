@@ -1243,7 +1243,7 @@ xfs_ioc_xattr(
 
 		va.va_mask = XFS_AT_XFLAGS;
 		va.va_xflags = xfs_merge_ioc_xflags(flags,
-				xfs_dic2xflags(&ip->i_d, ARCH_NOCONVERT));
+				xfs_ip2xflags(ip));
 
 		VOP_SETATTR(vp, &va, attr_flags, NULL, error);
 		if (!error)

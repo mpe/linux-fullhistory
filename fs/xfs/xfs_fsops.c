@@ -393,7 +393,7 @@ xfs_growfs_data_private(
 			break;
 		}
 		sbp = XFS_BUF_TO_SBP(bp);
-		xfs_xlatesb(sbp, &mp->m_sb, -1, ARCH_CONVERT, XFS_SB_ALL_BITS);
+		xfs_xlatesb(sbp, &mp->m_sb, -1, XFS_SB_ALL_BITS);
 		/*
 		 * If we get an error writing out the alternate superblocks,
 		 * just issue a warning and continue.  The real work is

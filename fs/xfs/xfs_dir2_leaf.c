@@ -127,7 +127,7 @@ xfs_dir2_block_to_leaf(
 	block = dbp->data;
 	xfs_dir2_data_check(dp, dbp);
 	btp = XFS_DIR2_BLOCK_TAIL_P(mp, block);
-	blp = XFS_DIR2_BLOCK_LEAF_P_ARCH(btp, ARCH_CONVERT);
+	blp = XFS_DIR2_BLOCK_LEAF_P(btp);
 	/*
 	 * Set the counts in the leaf header.
 	 */
@@ -162,7 +162,7 @@ xfs_dir2_block_to_leaf(
 	 */
 	ltp = XFS_DIR2_LEAF_TAIL_P(mp, leaf);
 	INT_SET(ltp->bestcount, ARCH_CONVERT, 1);
-	bestsp = XFS_DIR2_LEAF_BESTS_P_ARCH(ltp, ARCH_CONVERT);
+	bestsp = XFS_DIR2_LEAF_BESTS_P(ltp);
 	INT_COPY(bestsp[0], block->hdr.bestfree[0].length, ARCH_CONVERT);
 	/*
 	 * Log the data header and leaf bests table.
@@ -233,7 +233,7 @@ xfs_dir2_leaf_addname(
 	index = xfs_dir2_leaf_search_hash(args, lbp);
 	leaf = lbp->data;
 	ltp = XFS_DIR2_LEAF_TAIL_P(mp, leaf);
-	bestsp = XFS_DIR2_LEAF_BESTS_P_ARCH(ltp, ARCH_CONVERT);
+	bestsp = XFS_DIR2_LEAF_BESTS_P(ltp);
 	length = XFS_DIR2_DATA_ENTSIZE(args->namelen);
 	/*
 	 * See if there are any entries with the same hash value
@@ -595,7 +595,7 @@ xfs_dir2_leaf_check(
 	 * Leaves and bests don't overlap.
 	 */
 	ASSERT((char *)&leaf->ents[INT_GET(leaf->hdr.count, ARCH_CONVERT)] <=
-	       (char *)XFS_DIR2_LEAF_BESTS_P_ARCH(ltp, ARCH_CONVERT));
+	       (char *)XFS_DIR2_LEAF_BESTS_P(ltp));
 	/*
 	 * Check hash value order, count stale entries.
 	 */
@@ -1229,8 +1229,8 @@ xfs_dir2_leaf_log_bests(
 	leaf = bp->data;
 	ASSERT(INT_GET(leaf->hdr.info.magic, ARCH_CONVERT) == XFS_DIR2_LEAF1_MAGIC);
 	ltp = XFS_DIR2_LEAF_TAIL_P(tp->t_mountp, leaf);
-	firstb = XFS_DIR2_LEAF_BESTS_P_ARCH(ltp, ARCH_CONVERT) + first;
-	lastb = XFS_DIR2_LEAF_BESTS_P_ARCH(ltp, ARCH_CONVERT) + last;
+	firstb = XFS_DIR2_LEAF_BESTS_P(ltp) + first;
+	lastb = XFS_DIR2_LEAF_BESTS_P(ltp) + last;
 	xfs_da_log_buf(tp, bp, (uint)((char *)firstb - (char *)leaf),
 		(uint)((char *)lastb - (char *)leaf + sizeof(*lastb) - 1));
 }
@@ -1497,7 +1497,7 @@ xfs_dir2_leaf_removename(
 	needscan = needlog = 0;
 	oldbest = INT_GET(data->hdr.bestfree[0].length, ARCH_CONVERT);
 	ltp = XFS_DIR2_LEAF_TAIL_P(mp, leaf);
-	bestsp = XFS_DIR2_LEAF_BESTS_P_ARCH(ltp, ARCH_CONVERT);
+	bestsp = XFS_DIR2_LEAF_BESTS_P(ltp);
 	ASSERT(INT_GET(bestsp[db], ARCH_CONVERT) == oldbest);
 	/*
 	 * Mark the former data entry unused.
@@ -1749,7 +1749,7 @@ xfs_dir2_leaf_trim_data(
 	/*
 	 * Eliminate the last bests entry from the table.
 	 */
-	bestsp = XFS_DIR2_LEAF_BESTS_P_ARCH(ltp, ARCH_CONVERT);
+	bestsp = XFS_DIR2_LEAF_BESTS_P(ltp);
 	INT_MOD(ltp->bestcount, ARCH_CONVERT, -1);
 	memmove(&bestsp[1], &bestsp[0], INT_GET(ltp->bestcount, ARCH_CONVERT) * sizeof(*bestsp));
 	xfs_dir2_leaf_log_tail(tp, lbp);
@@ -1865,7 +1865,7 @@ xfs_dir2_node_to_leaf(
 	/*
 	 * Set up the leaf bests table.
 	 */
-	memcpy(XFS_DIR2_LEAF_BESTS_P_ARCH(ltp, ARCH_CONVERT), free->bests,
+	memcpy(XFS_DIR2_LEAF_BESTS_P(ltp), free->bests,
 		INT_GET(ltp->bestcount, ARCH_CONVERT) * sizeof(leaf->bests[0]));
 	xfs_dir2_leaf_log_bests(tp, lbp, 0, INT_GET(ltp->bestcount, ARCH_CONVERT) - 1);
 	xfs_dir2_leaf_log_tail(tp, lbp);

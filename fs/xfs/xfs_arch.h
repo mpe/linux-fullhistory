@@ -90,15 +90,8 @@
  * get and set integers from potentially unaligned locations
  */
 
-#define INT_GET_UNALIGNED_16_LE(pointer) \
-   ((__u16)((((__u8*)(pointer))[0]	) | (((__u8*)(pointer))[1] << 8 )))
 #define INT_GET_UNALIGNED_16_BE(pointer) \
    ((__u16)((((__u8*)(pointer))[0] << 8) | (((__u8*)(pointer))[1])))
-#define INT_SET_UNALIGNED_16_LE(pointer,value) \
-    { \
-	((__u8*)(pointer))[0] = (((value)     ) & 0xff); \
-	((__u8*)(pointer))[1] = (((value) >> 8) & 0xff); \
-    }
 #define INT_SET_UNALIGNED_16_BE(pointer,value) \
     { \
 	((__u8*)(pointer))[0] = (((value) >> 8) & 0xff); \
@@ -124,13 +117,9 @@
  */
 
 #if __BYTE_ORDER == __LITTLE_ENDIAN
-#define INT_GET_UNALIGNED_16(pointer)	    INT_GET_UNALIGNED_16_LE(pointer)
-#define INT_SET_UNALIGNED_16(pointer,value) INT_SET_UNALIGNED_16_LE(pointer,value)
 #define INT_GET_UNALIGNED_32(pointer)	    INT_GET_UNALIGNED_32_LE(pointer)
 #define INT_GET_UNALIGNED_64(pointer)	    INT_GET_UNALIGNED_64_LE(pointer)
 #else
-#define INT_GET_UNALIGNED_16(pointer)	    INT_GET_UNALIGNED_16_BE(pointer)
-#define INT_SET_UNALIGNED_16(pointer,value) INT_SET_UNALIGNED_16_BE(pointer,value)
 #define INT_GET_UNALIGNED_32(pointer)	    INT_GET_UNALIGNED_32_BE(pointer)
 #define INT_GET_UNALIGNED_64(pointer)	    INT_GET_UNALIGNED_64_BE(pointer)
 #endif
@@ -218,20 +207,6 @@
 
 #define INT_ZERO(reference,arch) \
     ((reference) = 0)
-
-#define INT_GET_UNALIGNED_16_ARCH(pointer,arch) \
-    ( ((arch) == ARCH_NOCONVERT) \
-	? \
-	    (INT_GET_UNALIGNED_16(pointer)) \
-	: \
-	    (INT_GET_UNALIGNED_16_BE(pointer)) \
-    )
-#define INT_SET_UNALIGNED_16_ARCH(pointer,value,arch) \
-    if ((arch) == ARCH_NOCONVERT) { \
-	INT_SET_UNALIGNED_16(pointer,value); \
-    } else { \
-	INT_SET_UNALIGNED_16_BE(pointer,value); \
-    }
 
 #define DIRINO4_GET_ARCH(pointer,arch) \
     ( ((arch) == ARCH_NOCONVERT) \

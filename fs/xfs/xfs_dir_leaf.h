@@ -140,10 +140,8 @@ typedef union {
 #define	XFS_PUT_COOKIE(c,mp,bno,entry,hash)	\
 	((c).s.be = XFS_DA_MAKE_BNOENTRY(mp, bno, entry), (c).s.h = (hash))
 
-#define	XFS_GET_DIR_INO_ARCH(mp,di,arch) \
-    DIRINO_GET_ARCH(&(di),arch)
 #define	XFS_GET_DIR_INO(mp,di) \
-    XFS_GET_DIR_INO_ARCH(mp,di,ARCH_NOCONVERT)
+    DIRINO_GET_ARCH(&(di),ARCH_CONVERT)
 
 typedef struct xfs_dir_put_args
 {
