@@ -398,6 +398,28 @@ __initfunc(void config_amiga(void))
   /* ensure that the DMA master bit is set */
   custom.dmacon = DMAF_SETCLR | DMAF_MASTER;
 
+  /* don't use Z2 RAM as system memory on Z3 capable machines */
+  if (AMIGAHW_PRESENT(ZORRO3)) {
+    int i, j;
+    u32 disabled_z2mem = 0;
+    for (i = 0; i < m68k_num_memory; i++)
+      if (m68k_memory[i].addr < 16*1024*1024) {
+	if (i == 0) {
+	  /* don't cut off the branch we're sitting on */
+	  printk("Warning: kernel runs in Zorro II memory\n");
+	  continue;
+	}
+	disabled_z2mem += m68k_memory[i].size;
+	m68k_num_memory--;
+	for (j = i; j < m68k_num_memory; j++)
+	  m68k_memory[j] = m68k_memory[j+1];
+	i--;
+      }
+    if (disabled_z2mem)
+      printk("%dK of Zorro II memory will not be used as system memory\n",
+	     disabled_z2mem>>10);
+  }
+
   /* initialize chipram allocator */
   amiga_chip_init ();
 

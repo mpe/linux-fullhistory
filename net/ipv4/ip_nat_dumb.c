@@ -24,6 +24,7 @@
  * NOTE:	It is just working model of real NAT.
  */
 
+#include <linux/config.h>
 #include <linux/types.h>
 #include <linux/mm.h>
 #include <linux/sched.h>

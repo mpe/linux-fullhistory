@@ -2104,6 +2104,9 @@ __initfunc(int tty_init(void))
 #ifdef CONFIG_ROCKETPORT
 	rp_init();
 #endif
+#ifdef CONFIG_MVME16x
+	serial167_init();
+#endif
 #ifdef CONFIG_CYCLADES
 	cy_init();
 #endif

@@ -736,7 +736,6 @@ int __init start_secondary(void *unused)
 	/*  Must be done before calibration delay is computed  */
 	mtrr_init_secondary_cpu ();
 #endif
-	stts();
 	smp_callin();
 	while (!smp_commenced)
 		barrier();
@@ -753,6 +752,13 @@ void __init initialize_secondary(void)
 	struct thread_struct * p = &current->tss;
 
 	/*
+	 * Load up the LDT and the task register.
+	 */
+	asm volatile("lldt %%ax": :"a" (p->ldt));
+	asm volatile("ltr %%ax": :"a" (p->tr));
+	stts();
+
+	/*
 	 * We don't actually need to load the full TSS,
 	 * basically just the stack pointer and the eip.
 	 *
@@ -760,8 +766,7 @@ void __init initialize_secondary(void)
 	 * to release it as part of the "reschedule" return.
 	 */
 	spin_lock(&scheduler_lock);
-	asm volatile("lldt %%ax": :"a" (p->ldt));
-	asm volatile("ltr %%ax": :"a" (p->tr));
+
 	asm volatile(
 		"movl %0,%%esp\n\t"
 		"jmp *%1"

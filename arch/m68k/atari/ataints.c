@@ -419,6 +419,7 @@ int atari_request_irq(unsigned int irq, void (*handler)(int, void *, struct pt_r
                       unsigned long flags, const char *devname, void *dev_id)
 {
 	int vector;
+	unsigned long oflags = flags;
 
 	/*
 	 * The following is a hack to make some PCI card drivers work,
@@ -427,9 +428,14 @@ int atari_request_irq(unsigned int irq, void (*handler)(int, void *, struct pt_r
 
 	flags &= ~SA_SHIRQ;
 
+	if (flags == SA_INTERRUPT) {
+		printk ("%s: SA_INTERRUPT changed to IRQ_TYPE_SLOW for %s\n",
+			__FUNCTION__, devname);
+		flags = IRQ_TYPE_SLOW;
+	}
 	if (flags < IRQ_TYPE_SLOW || flags > IRQ_TYPE_PRIO) {
-		printk ("%s: Bad irq type %ld requested from %s\n",
-		        __FUNCTION__, flags, devname);
+		printk ("%s: Bad irq type 0x%lx <0x%lx> requested from %s\n",
+		        __FUNCTION__, flags, oflags, devname);
 		return -EINVAL;
 	}
 	if (!IS_VALID_INTNO(irq)) {

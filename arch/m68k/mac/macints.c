@@ -69,7 +69,6 @@
  * - 
  */
 
-#include <linux/config.h>
 #include <linux/types.h>
 #include <linux/kernel.h>
 #include <linux/sched.h>
@@ -216,7 +215,10 @@ void mac_debug_handler(int irq, void *dev_id, struct pt_regs *regs);
 
 static void via_do_nubus(int slot, void *via, struct pt_regs *regs);
 
-/*#define DEBUG_VIA*/
+/* #define DEBUG_MACINTS */
+/* #define DEBUG_NUBUS_INT */
+/* #define DEBUG_VIA */
+/* #define DEBUG_VIA_NUBUS */
 
 void mac_init_IRQ(void)
 {
@@ -273,13 +275,8 @@ void mac_init_IRQ(void)
 	 *		Currently, one interrupt per channel is used, solely
 	 *		to pass the correct async_info as parameter!
 	 */
-#if 0	/* want to install debug/SCC shutup routine until SCC init */
-	sys_request_irq(4, mac_SCC_handler, IRQ_FLG_STD, "INT4", mac_SCC_handler);
-#else
+
 	sys_request_irq(4, mac_debug_handler, IRQ_FLG_STD, "INT4", mac_debug_handler);
-#endif
-	/* Alan uses IRQ 5 for SCC ?? */
-	sys_request_irq(5, mac_debug_handler, IRQ_FLG_STD, "INT5", mac_debug_handler);
 
 	/* level 6 */
 	sys_request_irq(6, mac_bang, IRQ_FLG_LOCK, "offswitch", mac_bang);
@@ -289,25 +286,25 @@ void mac_init_IRQ(void)
 
 	/* initialize the handler tables for VIAs */
 	for (i = 0; i < 8; i++) {
-		 via1_handler[i].handler = mac_default_handler;
-		 via1_handler[i].dev_id  = NULL;
-		 via1_param[i].flags     = IRQ_FLG_STD;
-		 via1_param[i].devname   = NULL;
+		via1_handler[i].handler = mac_default_handler;
+		via1_handler[i].dev_id  = NULL;
+		via1_param[i].flags     = IRQ_FLG_STD;
+		via1_param[i].devname   = NULL;
 
-		 via2_handler[i].handler = mac_default_handler;
-		 via2_handler[i].dev_id  = NULL;
-		 via2_param[i].flags     = IRQ_FLG_STD;
-		 via2_param[i].devname   = NULL;
+		via2_handler[i].handler = mac_default_handler;
+		via2_handler[i].dev_id  = NULL;
+		via2_param[i].flags     = IRQ_FLG_STD;
+		via2_param[i].devname   = NULL;
 
-		  rbv_handler[i].handler = mac_default_handler;
-		  rbv_handler[i].dev_id  = NULL;
-		  rbv_param[i].flags     = IRQ_FLG_STD;
-		  rbv_param[i].devname   = NULL;
+		rbv_handler[i].handler = mac_default_handler;
+		rbv_handler[i].dev_id  = NULL;
+		rbv_param[i].flags     = IRQ_FLG_STD;
+		rbv_param[i].devname   = NULL;
 
-		  scc_handler[i].handler = mac_default_handler;
-		  scc_handler[i].dev_id  = NULL;
-		  scc_param[i].flags     = IRQ_FLG_STD;
-		  scc_param[i].devname   = NULL;
+		scc_handler[i].handler = mac_default_handler;
+		scc_handler[i].dev_id  = NULL;
+		scc_param[i].flags     = IRQ_FLG_STD;
+		scc_param[i].devname   = NULL;
 
 		/* NUBUS interrupts routed through VIA2 slot 2 - special */
 		nubus_handler[i].handler = nubus_wtf;
@@ -337,16 +334,16 @@ void mac_init_IRQ(void)
 	via_table[2]     =  NULL;
 	via_table[3]     =  NULL;
 	
-	handler_table[2] =   &rbv_handler[0];
+	handler_table[2] =  &rbv_handler[0];
 	handler_table[3] =  &scc_handler[0];
 	handler_table[4] =  NULL;
 	handler_table[5] =  NULL;
 	handler_table[6] =  NULL;
-	handler_table[7] = &nubus_handler[0];
+	handler_table[7] =  &nubus_handler[0];
 
-	param_table[2]   =   &rbv_param[0];
+	param_table[2]   =  &rbv_param[0];
 	param_table[3]   =  &scc_param[0];
-	param_table[7]   = &nubus_param[0];
+	param_table[7]   =  &nubus_param[0];
 
 	mac_irqs[2]	 =  &rbv_irqs[0];
 	mac_irqs[3]	 =  &scc_irqs[0];
@@ -356,7 +353,8 @@ void mac_init_IRQ(void)
 	 *	AV Macs: shutup the PSC ints
 	 */
 	if (macintosh_config->ident == MAC_MODEL_C660
-	 || macintosh_config->ident == MAC_MODEL_Q840) {
+	 || macintosh_config->ident == MAC_MODEL_Q840) 
+	{
 		psc_init();
 
 		handler_table[2] = &psc3_handler[0];
@@ -463,9 +461,15 @@ int mac_request_irq (unsigned int irq, void (*handler)(int, void *, struct pt_re
 		 * 980429 MS: RBV is ok, OSS seems to be differentt
 		 */
 		if (!via2_is_oss)
-			/* CB2 (IRQ) indep. interrupt input, positive edge */
-			/* CA2 (DRQ) indep. interrupt input, positive edge */
-			via_write(via, vPCR, 0x66);
+			if (macintosh_config->scsi_type == MAC_SCSI_OLD) {
+				/* CB2 (IRQ) indep. interrupt input, positive edge */
+				/* CA2 (DRQ) indep. interrupt input, positive edge */
+				via_write(via, vPCR, 0x66);
+			} else {
+				/* CB2 (IRQ) indep. interrupt input, negative edge */
+				/* CA2 (DRQ) indep. interrupt input, negative edge */
+				via_write(via, vPCR, 0x22);
+			}
 #if 0
 		else
 			/* CB2 (IRQ) indep. interrupt input, negative edge */
@@ -614,7 +618,7 @@ void mac_turnon_irq( unsigned int irq )
 	        via_write(via, rIER, via_read(via, rIER)|0x80|(1<<(irqidx)));
 	else if (srcidx == SRC_VIA2 && via2_is_oss)
 		via_write(oss_regp, oss_map[irqidx]+8, 2);
-	else if (srcidx >= SRC_VIA2)
+	else if (srcidx > SRC_VIA2)
 	        via_write(via, (0x104 + 0x10*srcidx), 
 	        	via_read(via, (0x104 + 0x10*srcidx))|0x80|(1<<(irqidx)));
 	else
@@ -636,7 +640,11 @@ void mac_turnoff_irq( unsigned int irq )
 		via_write(via, rIER, (via_read(via, rIER)&(1<<irqidx)));
 	else if (srcidx == SRC_VIA2 && via2_is_oss)
 		via_write(oss_regp, oss_map[irqidx]+8, 0);
-	else if (srcidx >= SRC_VIA2)
+	/*
+	 *	VIA2 is fixed. The stuff above VIA2 is for later
+	 *	macintoshes only.
+	 */
+	else if (srcidx > SRC_VIA2)
 	        via_write(via, (0x104 + 0x10*srcidx), 
 	        	via_read(via, (0x104 + 0x10*srcidx))|(1<<(irqidx)));
 	else
@@ -677,7 +685,7 @@ int  mac_irq_pending( unsigned int irq )
 		pending |= via_read(via, rIFR)&(1<<irqidx);
 	else if (srcidx == SRC_VIA2 && via2_is_oss)
 		pending |= via_read(via, oIFR)&0x03&(1<<oss_map[irqidx]);
-	else if (srcidx >= SRC_VIA2)
+	else if (srcidx > SRC_VIA2)
 	        pending |= via_read(via, (0x100 + 0x10*srcidx))&(1<<irqidx);
 	else
 		pending |= via_read(via, vIFR)&(1<<irqidx);
@@ -1159,7 +1167,7 @@ void oss_irq(int irq, void *dev_id, struct pt_regs *regs)
 	 * limited verbosity for RBV interrupts (add more if needed)
 	 */
 	if ( events != 1<<3 )		/* SCSI IRQ */
-		printk("oss_irq: irq %d events %x %x %x !\n", irq, srcidx+1, 
+		printk("oss_irq: irq %d srcidx+1 %d events %x %x %x !\n", irq, srcidx+1, 
 			events, adb_ev, nub_ev);
 #endif
 
@@ -1313,7 +1321,7 @@ void psc_irq(int irq, void *dev_id, struct pt_regs *regs)
 	 * limited verbosity for RBV interrupts (add more if needed)
 	 */
 	if ( srcidx == 1 && events != 1<<3 && events != 1<<1 )		/* SCSI IRQ */
-		printk("psc_irq: irq %d events %x !\n", irq, srcidx+1, events);
+		printk("psc_irq: irq %d srcidx+1 %d events %x !\n", irq, srcidx+1, events);
 #endif
 
 	/* to be changed, possibly: for each non'masked', enabled IRQ, read 

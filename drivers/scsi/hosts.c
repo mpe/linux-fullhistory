@@ -41,7 +41,15 @@
 
 #include "hosts.h"
 
-#if defined(CONFIG_A4000T_SCSI) || defined(CONFIG_WARPENGINE_SCSI) || defined(CONFIG_A4091_SCSI) || defined (CONFIG_GVP_TURBO_SCSI)
+#if defined(CONFIG_A4000T_SCSI) || \
+    defined(CONFIG_WARPENGINE_SCSI) || \
+    defined(CONFIG_A4091_SCSI) || \
+    defined (CONFIG_GVP_TURBO_SCSI) || \
+    defined (CONFIG_BLZ603E)
+#define AMIGA7XXCONFIG
+#endif
+
+#ifdef AMIGA7XXCONFIG
 #include "amiga7xx.h"
 #endif
 
@@ -317,7 +325,7 @@ Scsi_Host_Template * scsi_hosts = NULL;
 static Scsi_Host_Template builtin_scsi_hosts[] =
 {
 #ifdef CONFIG_AMIGA
-#if defined(CONFIG_WARPENGINE_SCSI) || defined(CONFIG_A4000T_SCSI) || defined(CONFIG_A4091_SCSI) || defined (CONFIG_GVP_TURBO_SCSI)
+#ifdef AMIGA7XXCONFIG
 	AMIGA7XX_SCSI,
 #endif
 #ifdef CONFIG_A3000_SCSI

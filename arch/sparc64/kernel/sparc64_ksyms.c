@@ -1,4 +1,4 @@
-/* $Id: sparc64_ksyms.c,v 1.41 1998/10/04 08:44:16 davem Exp $
+/* $Id: sparc64_ksyms.c,v 1.42 1998/10/05 03:18:50 davem Exp $
  * arch/sparc64/kernel/sparc64_ksyms.c: Sparc64 specific ksyms support.
  *
  * Copyright (C) 1996 David S. Miller (davem@caip.rutgers.edu)
@@ -62,6 +62,7 @@ extern void *__memscan_zero(void *, size_t);
 extern void *__memscan_generic(void *, int, size_t);
 extern int __memcmp(const void *, const void *, __kernel_size_t);
 extern int __strncmp(const char *, const char *, __kernel_size_t);
+extern __kernel_size_t __strlen(const char *);
 extern char saved_command_line[];
 extern char *getname32(u32 name);
 extern void linux_sparc_syscall(void);

@@ -205,26 +205,8 @@ out:
  */
 extern inline void eieio(void)
 {
-	__asm__ __volatile__ ("eieio" : : : "memory" );
+	__asm__ __volatile__ ("eieio" : : : "memory");
 }
-
-
-/*
- * the constraint handling of gcc-2.7 is broken, fall back to
- * the old optimizer unfriendly eieio()
- */
-
-#if defined(__GNUC__) && __GNUC__ == 2 && __GNUC_MINOR__ <= 7
-#define __memory_clobber_pre \
-	do { } while(0)
-#define __memory_clobber_post \
-	eieio()
-#else
-#define __memory_clobber_pre \
-	__asm__ __volatile__ (" \t#%0,%1" : "=m" (*addr) : "0" (*addr) )
-#define __memory_clobber_post \
-	__asm__ __volatile__ ("eieio \t#%0,%1" : "=m" (*addr) : "0" (*addr) )
-#endif
 
 /*
  * 8, 16 and 32 bit, big and little endian I/O operations, with barrier.
@@ -233,26 +215,21 @@ extern inline int in_8(volatile unsigned char *addr)
 {
 	int ret;
 
-	__memory_clobber_pre;
-	ret = *addr;
-	__memory_clobber_post;
+	__asm__ __volatile__("lbz%U1%X1 %0,%1; eieio" : "=r" (ret) : "m" (*addr));
 	return ret;
 }
 
 extern inline void out_8(volatile unsigned char *addr, int val)
 {
-	__memory_clobber_pre;
-	*addr = val;
-	__memory_clobber_post;
+	__asm__ __volatile__("stb%U0%X0 %1,%0; eieio" : "=m" (*addr) : "r" (val));
 }
 
 extern inline int in_le16(volatile unsigned short *addr)
 {
 	int ret;
 
-	__memory_clobber_pre;
-	ret = ld_le16(addr);
-	__memory_clobber_post;
+	__asm__ __volatile__("lhbrx %0,0,%1; eieio" : "=r" (ret) :
+			      "r" (addr), "m" (*addr));
 	return ret;
 }
 
@@ -260,58 +237,47 @@ extern inline int in_be16(volatile unsigned short *addr)
 {
 	int ret;
 
-	__memory_clobber_pre;
-	ret = *addr;
-	__memory_clobber_post;
+	__asm__ __volatile__("lhz%U1%X1 %0,%1; eieio" : "=r" (ret) : "m" (*addr));
 	return ret;
 }
 
 extern inline void out_le16(volatile unsigned short *addr, int val)
 {
-	__memory_clobber_pre;
-	st_le16(addr, val);
-	__memory_clobber_post;
+	__asm__ __volatile__("sthbrx %1,0,%2; eieio" : "=m" (*addr) :
+			      "r" (val), "r" (addr));
 }
 
 extern inline void out_be16(volatile unsigned short *addr, int val)
 {
-	__memory_clobber_pre;
-	*addr = val;
-	__memory_clobber_post;
+	__asm__ __volatile__("sth%U0%X0 %1,%0; eieio" : "=m" (*addr) : "r" (val));
 }
 
 extern inline unsigned in_le32(volatile unsigned *addr)
 {
 	unsigned ret;
 
-	__memory_clobber_pre;
-	ret = ld_le32(addr);
-	__memory_clobber_post;
+	__asm__ __volatile__("lwbrx %0,0,%1; eieio" : "=r" (ret) :
+			     "r" (addr), "m" (*addr));
 	return ret;
 }
 
-extern inline int in_be32(volatile unsigned *addr)
+extern inline unsigned in_be32(volatile unsigned *addr)
 {
-	int ret;
+	unsigned ret;
 
-	__memory_clobber_pre;
-	ret = *addr;
-	__memory_clobber_post;
+	__asm__ __volatile__("lwz%U1%X1 %0,%1; eieio" : "=r" (ret) : "m" (*addr));
 	return ret;
 }
 
 extern inline void out_le32(volatile unsigned *addr, int val)
 {
-	__memory_clobber_pre;
-	st_le32(addr, val);
-	__memory_clobber_post;
+	__asm__ __volatile__("stwbrx %1,0,%2; eieio" : "=m" (*addr) :
+			     "r" (val), "r" (addr));
 }
 
 extern inline void out_be32(volatile unsigned *addr, int val)
 {
-	__memory_clobber_pre;
-	*addr = val;
-	__memory_clobber_post;
+	__asm__ __volatile__("stw%U0%X0 %1,%0; eieio" : "=m" (*addr) : "r" (val));
 }
 
 #endif

@@ -27,12 +27,52 @@ void mac_mksound( unsigned int hz, unsigned int ticks )
 	unsigned long flags;
 	int samples=512;
 
+	if (macintosh_config->ident == MAC_MODEL_C660
+	 || macintosh_config->ident == MAC_MODEL_Q840)
+	{
+		/*
+		 * The Quadra 660AV and 840AV use the "Singer" custom ASIC for sound I/O.
+		 * It appears to be similar to the "AWACS" custom ASIC in the Power Mac 
+		 * [678]100.  Because Singer and AWACS may have a similar hardware 
+		 * interface, this would imply that the code in drivers/sound/dmasound.c 
+		 * for AWACS could be used as a basis for Singer support.  All we have to
+		 * do is figure out how to do DMA on the 660AV/840AV through the PSC and 
+		 * figure out where the Singer hardware sits in memory. (I'd look in the
+		 * vicinity of the AWACS location in a Power Mac [678]100 first, or the 
+		 * current location of the Apple Sound Chip--ASC--in other Macs.)  The 
+		 * Power Mac [678]100 info can be found in MkLinux Mach kernel sources.
+		 *
+		 * Quoted from Apple's Tech Info Library, article number 16405:
+		 *   "Among desktop Macintosh computers, only the 660AV, 840AV, and Power
+		 *   Macintosh models have 16-bit audio input and output capability 
+		 *   because of the AT&T DSP3210 hardware circuitry and the 16-bit Singer
+		 *   codec circuitry in the AVs.  The Audio Waveform Amplifier and
+		 *   Converter (AWAC) chip in the Power Macintosh performs the same 
+		 *   16-bit I/O functionality.  The PowerBook 500 series computers
+		 *   support 16-bit stereo output, but only mono input."
+		 *
+		 *   http://til.info.apple.com/techinfo.nsf/artnum/n16405
+		 *
+		 * --David Kilzer
+		 */
+
+		return;
+	}
+	
 	if(!inited)
 	{
 		int i=0;
 		int j=0;
 		int k=0;
 		int l=0;
+
+		/*
+		 *	The IIfx strikes again!
+		 */
+		 
+		if(macintosh_config->ident==MAC_MODEL_IIFX)
+			asc_base=(void *)0x50010000;
+
 		for(i=0;i<samples;i++)
 		{
 			asc_base[i]=sine_data[j];

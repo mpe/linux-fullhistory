@@ -7,6 +7,7 @@
 #include <linux/elfcore.h>
 #include <linux/in6.h>
 #include <linux/interrupt.h>
+#include <linux/config.h>
 
 #include <asm/setup.h>
 #include <asm/machdep.h>
@@ -30,9 +31,13 @@ EXPORT_SYMBOL(m68k_cputype);
 EXPORT_SYMBOL(m68k_is040or060);
 EXPORT_SYMBOL(cache_push);
 EXPORT_SYMBOL(cache_clear);
+#ifndef CONFIG_SINGLE_MEMORY_CHUNK
 EXPORT_SYMBOL(mm_vtop);
 EXPORT_SYMBOL(mm_ptov);
 EXPORT_SYMBOL(mm_end_of_chunk);
+#endif
+EXPORT_SYMBOL(mm_vtop_fallback);
+EXPORT_SYMBOL(m68k_memory);
 EXPORT_SYMBOL(kernel_map);
 EXPORT_SYMBOL(m68k_debug_device);
 EXPORT_SYMBOL(dump_fpu);
@@ -44,6 +49,7 @@ EXPORT_SYMBOL(local_irq_count);
 EXPORT_SYMBOL(local_bh_count);
 EXPORT_SYMBOL(enable_irq);
 EXPORT_SYMBOL(disable_irq);
+EXPORT_SYMBOL(checksignals);
 
 /* Networking helper routines. */
 EXPORT_SYMBOL(csum_partial_copy);

@@ -54,10 +54,6 @@
  */
 static struct semaphore mount_sem = MUTEX;
 
-#ifdef CONFIG_BSD_PROCESS_ACCT
-extern void acct_auto_close(kdev_t);
-#endif
-
 extern void wait_for_keypress(void);
 extern struct file_operations * get_blkfops(unsigned int major);
 

@@ -1479,13 +1479,6 @@ CONFIG_VGA_CONSOLE
   display that complies with the generic VGA standard. Virtually
   everyone wants that. Say Y.
 
-Use 64KB of VGA video RAM (aka: Maximum VGA Scrollback)
-CONFIG_VGA_GET_64KB
-  Use 64K rather than 32K of video RAM. This doesn't actually work
-  on all "VGA" controllers. If your vga card can do it, then you 
-  can say Y here to get more scrollback buffer (shift-pgup) on VGA
-  consoles.
-
 Video mode selection support
 CONFIG_VIDEO_SELECT
   This enables support for text mode selection on kernel startup. If
@@ -1507,20 +1500,26 @@ CONFIG_FB
   hardware. It represents the frame buffer of some video hardware and
   allows application software to access the graphics hardware through
   a well-defined interface, so the software doesn't need to know
-  anything about the low-level (hardware register) stuff. This works
-  across the different architectures supported by Linux and makes the
-  implementation of application programs easier and more portable; at
-  this point, an X server exists which uses the frame buffer device
-  exclusively.
+  anything about the low-level (hardware register) stuff. 
 
+  Frame buffer devices work identically across the different
+  architectures supported by Linux and make the implementation of
+  application programs easier and more portable; at this point, an X
+  server exists which uses the frame buffer device exclusively.
+  On several non-X86 architectures, the frame buffer device is the
+  only way to use the graphics hardware.
+ 
   The device is accessed through special device nodes, usually located
   in the /dev directory, i.e. /dev/fb*.
 
-  Please read the file Documentation/fb/framebuffer.txt for more
-  information.
+  You need an utility program called fbset to make full use of frame
+  buffer devices. Please read the file
+  Documentation/fb/framebuffer.txt for more information.
 
-  If you want to play with it, say Y here and to the driver for your
-  graphics board, below. If unsure, say N.
+  If you want to play with it, say Y here and also to the driver for
+  your graphics board, below. If unsure, say N, unless you are
+  compiling a kernel for a non-X86 architecture, in which case you
+  should say Y.
 
 Acorn VIDC support
 CONFIG_FB_ACORN
@@ -1559,33 +1558,34 @@ CONFIG_FB_AMIGA_AGA
 
 Amiga CyberVision support
 CONFIG_FB_CYBER
-  This enables support for the Cybervision 64 graphics card from Phase5.
-  Please note that its use is not all that intuitive (i.e. if you have
-  any questions, be sure to ask!).  Say N unless you have a Cybervision
-  64 or plan to get one before you next recompile the kernel.         
-  Please note that this driver DOES NOT support the Cybervision 64 3D
-  card, as they use incompatible video chips.           
+  This enables support for the Cybervision 64 graphics card from
+  Phase5. Please note that its use is not all that intuitive (i.e. if
+  you have any questions, be sure to ask!). Say N unless you have a
+  Cybervision 64 or plan to get one before you next recompile the
+  kernel. Please note that this driver DOES NOT support the
+  Cybervision 64 3D card, as they use incompatible video chips.
 
 Amiga CyberVision3D support (EXPERIMENTAL)
 CONFIG_FB_VIRGE
-  This enables support for the Cybervision 64/3D graphics card from Phase5.
-  Please note that its use is not all that intuitive (i.e. if you have
-  any questions, be sure to ask!).  Say N unless you have a Cybervision
-  64/3D or plan to get one before you next recompile the kernel.         
-  Please note that this driver DOES NOT support the older Cybervision 64
-  card, as they use incompatible video chips.           
+  This enables support for the Cybervision 64/3D graphics card from
+  Phase5. Please note that its use is not all that intuitive (i.e. if
+  you have any questions, be sure to ask!). Say N unless you have a
+  Cybervision 64/3D or plan to get one before you next recompile the
+  kernel. Please note that this driver DOES NOT support the older
+  Cybervision 64 card, as they use incompatible video chips.
 
 Amiga RetinaZ3 support (EXPERIMENTAL)
 CONFIG_FB_RETINAZ3
-  This enables support for the Retina Z3 graphics card. Say N unless you
-  have a Retina Z3 or plan to get one before you next recompile the kernel.
+  This enables support for the Retina Z3 graphics card. Say N unless
+  you have a Retina Z3 or plan to get one before you next recompile
+  the kernel.
 
 Amiga CLgen driver (EXPERIMENTAL)
 CONFIG_FB_CLGEN
-  This enables support for Cirrus Logic GD542x/543x based boards on Amiga:
-  SD64, Piccolo, Picasso II/II+, Picasso IV, or EGS Spectrum.  Say N
-  unless you have such a graphics board or plan to get one before you next
-  recompile the kernel.
+  This enables support for Cirrus Logic GD542x/543x based boards on
+  Amiga: SD64, Piccolo, Picasso II/II+, Picasso IV, or EGS Spectrum.
+  Say N unless you have such a graphics board or plan to get one
+  before you next recompile the kernel.
 
 Atari native chipset support
 CONFIG_FB_ATARI
@@ -1686,13 +1686,14 @@ CONFIG_FB_TCX
 
 Virtual Frame Buffer support (ONLY FOR TESTING!)
 CONFIG_FB_VIRTUAL
-  This is a `virtual' frame buffer device.  It operates on a chunk of
-  unswapable kernel memory instead of on the memory of a graphics board.
-  This means you cannot see any output sent to this frame buffer device,
-  while it does consume precious memory.  The main use of this frame
-  buffer device is testing and debugging the frame buffer subsystem. Do
-  NOT enable it for normal systems! To protect the innocent, it has to
-  be enabled explicitly on boot time using the kernel option `video=vfb:'.
+  This is a `virtual' frame buffer device. It operates on a chunk of
+  unswapable kernel memory instead of on the memory of a graphics
+  board. This means you cannot see any output sent to this frame
+  buffer device, while it does consume precious memory. The main use
+  of this frame buffer device is testing and debugging the frame
+  buffer subsystem. Do NOT enable it for normal systems! To protect
+  the innocent, it has to be enabled explicitly at boot time using the
+  kernel option `video=vfb:'.
 
   This driver is also available as a module ( = code which can be
   inserted and removed from the running kernel whenever you want).
@@ -1709,12 +1710,12 @@ CONFIG_FBCON_ADVANCED
   drivers. Note that they are used for text console output only; they are
   NOT needed for graphical applications.
 
-  If you do not enable this option, the needed low level drivers are
-  automatically enabled, depending on what frame buffer devices you
-  selected. This is recommended for most users.
+  If you say N here, the needed low level drivers are automatically
+  enabled, depending on what frame buffer devices you selected above.
+  This is recommended for most users.
 
-  If you enable this option, you have more fine-grained control over which
-  low level drivers are enabled. You can e.g. leave out low level drivers
+  If you say Y here, you have more fine-grained control over which low
+  level drivers are enabled. You can e.g. leave out low level drivers
   for color depths you do not intend to use for text consoles.
 
   Low level frame buffer console drivers can be modules ( = code which
@@ -1788,13 +1789,13 @@ CONFIG_FBCON_IPLAN2P8
 Mac variable bpp packed pixels support
 CONFIG_FBCON_MAC
   This is the low level frame buffer console driver for 1/2/4/8/16/32
-  bits per pixel packed pixels on Mac. It supports variable fontwidths
+  bits per pixel packed pixels on Mac. It supports variable font widths
   for low resolution screens.
   
 VGA characters/attributes support
 CONFIG_FBCON_VGA
-  This is the low level frame buffer console driver for VGA text mode, as
-  used by vgafb.
+  This is the low level frame buffer console driver for VGA text mode;
+  it is used if you said Y to "VGA chipset support (text only)" above.
 
 Parallel-port support
 CONFIG_PARPORT
@@ -8988,15 +8989,6 @@ CONFIG_AMIFB_AGA
   and CD32.  If you intend to run Linux on any of these systems, say Y;
   otherwise say N.
 
-Amiga Cybervision support
-CONFIG_FB_CYBER
-  This enables support for the Cybervision 64 graphics card from Phase5.
-  Please note that its use is not all that intuitive (i.e. if you have
-  any questions, be sure to ask!).  Say N unless you have a Cybervision
-  64 or plan to get one before you next recompile the kernel.
-  Please note that this driver DOES NOT support the Cybervision 64 3D
-  card at present, as they use incompatible video chips.
-
 Amiga GSP (TMS340x0) support
 CONFIG_AMIGA_GSP
   Include support for Amiga graphics cards that use the Texas
@@ -9124,6 +9116,11 @@ CONFIG_BLZ1230_SCSI
   1260 accelerator, and the optional SCSI module, say Y.  Otherwise,
   say N.
 
+Blizzard PowerUP 603e+ SCSI support
+CONFIG_BLZ603EPLUS_SCSI
+  If you have an Amiga 1200 with a Phase5 Blizzard PowerUP 603e+
+  accelerator, say Y.  Otherwise, say N.
+
 Fastlane SCSI support
 CONFIG_FASTLANE_SCSI
   If you have the Phase5 Fastlane Z3 SCSI controller, or plan to use
@@ -9165,6 +9162,16 @@ CONFIG_ARIADNE
   This driver is also available as a module ( = code which can be
   inserted in and removed from the running kernel whenever you
   want). The module is called ariadne.o. If you want to compile it as
+  a module, say M here and read Documentation/modules.txt.
+
+Ariadne II support
+CONFIG_ARIADNE2
+  If you have a VillageTronics Ariadne II Ethernet adapter, say Y.
+  Otherwise, say N.
+
+  This driver is also available as a module ( = code which can be
+  inserted in and removed from the running kernel whenever you
+  want). The module is called ariadne2.o. If you want to compile it as
   a module, say M here and read Documentation/modules.txt.
 
 A2065 support

@@ -73,7 +73,7 @@
 */
 
 /*
-**	16 July 1998, version 3.0g
+**	October 4 1998, version 3.0i
 **
 **	Supported SCSI-II features:
 **	    Synchronous negotiation
@@ -584,6 +584,7 @@ static spinlock_t driver_lock;
 #endif
 
 #ifdef __sparc__
+#include <asm/irq.h>
 #define remap_pci_mem(base, size)	((vm_offset_t) __va(base))
 #define unmap_pci_mem(vaddr, size)
 #define pcivtophys(p)			((p) & pci_dvma_mask)
@@ -2011,9 +2012,9 @@ struct script {
 	ncrcmd	start		[  5];
 	ncrcmd  startpos	[  1];
 	ncrcmd	select		[  6];
-	ncrcmd	select2		[  7];
+	ncrcmd	select2		[  9];
 	ncrcmd	loadpos		[  4];
-	ncrcmd	send_ident	[  7];
+	ncrcmd	send_ident	[  9];
 	ncrcmd	prepare		[  6];
 	ncrcmd	prepare2	[  7];
 #ifdef SCSI_NCR_PROFILE_SUPPORT
@@ -2340,6 +2341,15 @@ static	struct script script0 __initdata = {
 	*/
 
 	/*
+	**	The M_REJECT problem seems to be due to a selection 
+	**	timing problem.
+	**	Wait immediately for the selection to complete. 
+	**	(2.5x behaves so)
+	*/
+	SCR_JUMPR ^ IFFALSE (WHEN (SCR_MSG_OUT)),
+		0,
+
+	/*
 	**	Next time use the next slot.
 	*/
 	SCR_COPY (4),
@@ -2384,8 +2394,10 @@ static	struct script script0 __initdata = {
 		offsetof (struct dsb, smsg),
 	SCR_JUMP ^ IFTRUE (WHEN (SCR_MSG_OUT)),
 		PADDRH (resend_ident),
+	SCR_LOAD_REG (scratcha, 0x80),
+		0,
 	SCR_COPY (1),
-		RADDR (sfbr),
+		RADDR (scratcha),
 		NADDR (lastmsg),
 }/*-------------------------< PREPARE >----------------------*/,{
 	/*
@@ -2818,7 +2830,7 @@ static	struct script script0 __initdata = {
 	SCR_MOVE_ABS (1) ^ SCR_MSG_OUT,
 		NADDR (msgout),
 	SCR_COPY (1),
-		RADDR (sfbr),
+		NADDR (msgout),
 		NADDR (lastmsg),
 	/*
 	**	If it was no ABORT message ...
@@ -3343,7 +3355,7 @@ static	struct scripth scripth0 __initdata = {
 	SCR_MOVE_ABS (4) ^ SCR_MSG_OUT,
 		NADDR (msgout),
 	SCR_COPY (1),
-		RADDR (sfbr),
+		NADDR (msgout),
 		NADDR (lastmsg),
 	SCR_JUMP,
 		PADDR (msg_out_done),
@@ -3399,7 +3411,7 @@ static	struct scripth scripth0 __initdata = {
 	SCR_MOVE_ABS (5) ^ SCR_MSG_OUT,
 		NADDR (msgout),
 	SCR_COPY (1),
-		RADDR (sfbr),
+		NADDR (msgout),
 		NADDR (lastmsg),
 	SCR_JUMP,
 		PADDR (msg_out_done),
@@ -3504,7 +3516,7 @@ static	struct scripth scripth0 __initdata = {
 	SCR_MOVE_ABS (1) ^ SCR_MSG_OUT,
 		NADDR (msgout),
 	SCR_COPY (1),
-		RADDR (sfbr),
+		NADDR (msgout),
 		NADDR (lastmsg),
 	SCR_CLR (SCR_ACK|SCR_ATN),
 		0,
@@ -4492,9 +4504,9 @@ static int ncr_attach (Scsi_Host_Template *tpnt, int unit, ncr_device *device)
 	int i;
 
 #ifdef __sparc__
-printk(KERN_INFO "ncr53c%s-%d: rev=0x%02x, base=0x%lx, io_port=0x%lx, irq=0x%x\n",
+printk(KERN_INFO "ncr53c%s-%d: rev=0x%02x, base=0x%lx, io_port=0x%lx, irq=%s\n",
 	device->chip.name, unit, device->chip.revision_id, device->slot.base,
-	device->slot.io_port, device->slot.irq);
+	device->slot.io_port, __irq_itoa(device->slot.irq));
 #else
 printk(KERN_INFO "ncr53c%s-%d: rev=0x%02x, base=0x%lx, io_port=0x%lx, irq=%d\n",
 	device->chip.name, unit, device->chip.revision_id, device->slot.base,
@@ -4696,15 +4708,25 @@ printk(KERN_INFO "ncr53c%s-%d: rev=0x%02x, base=0x%lx, io_port=0x%lx, irq=%d\n",
 #ifdef	SCSI_NCR_SHARE_IRQ
 #define	NCR_SA_INTERRUPT_FLAGS (SA_INTERRUPT | SA_SHIRQ)
 	if (bootverbose > 1)
+#ifdef __sparc__
+		printk(KERN_INFO "%s: requesting shared irq %s (dev_id=0x%lx)\n",
+		        ncr_name(np), __irq_itoa(device->slot.irq), (u_long) np);
+#else
 		printk(KERN_INFO "%s: requesting shared irq %d (dev_id=0x%lx)\n",
 		        ncr_name(np), device->slot.irq, (u_long) np);
+#endif
 #else
 #define	NCR_SA_INTERRUPT_FLAGS SA_INTERRUPT
 #endif
 	if (request_irq(device->slot.irq, ncr53c8xx_intr,
 			NCR_SA_INTERRUPT_FLAGS, "ncr53c8xx", np)) {
+#ifdef __sparc__
+		printk(KERN_ERR "%s: request irq %s failure\n",
+			ncr_name(np), __irq_itoa(device->slot.irq));
+#else
 		printk(KERN_ERR "%s: request irq %d failure\n",
 			ncr_name(np), device->slot.irq);
+#endif
 		goto attach_error;
 	}
 	np->irq = device->slot.irq;
@@ -4794,7 +4816,8 @@ attach_error:
 	if (np->irq) {
 #ifdef DEBUG_NCR53C8XX
 #ifdef __sparc__
-	printk(KERN_INFO "%s: freeing irq 0x%x\n", ncr_name(np), np->irq);
+	printk(KERN_INFO "%s: freeing irq %s\n", ncr_name(np),
+	       __irq_itoa(np->irq));
 #else
 	printk(KERN_INFO "%s: freeing irq %d\n", ncr_name(np), np->irq);
 #endif
@@ -4951,7 +4974,7 @@ int ncr_queue_command (ncb_p np, Scsi_Cmnd *cmd)
 
 	nego = 0;
 
-	if ((!tp->widedone || !tp->period) && !tp->nego_cp && tp->inq_done) {
+	if ((!tp->widedone || !tp->period) && !tp->nego_cp && tp->inq_done && lp) {
 
 		/*
 		**	negotiate wide transfers ?
@@ -5610,7 +5633,11 @@ static int ncr_detach(ncb_p np)
 */
 
 #ifdef DEBUG_NCR53C8XX
+#ifdef __sparc__
+	printk("%s: freeing irq %s\n", ncr_name(np), __irq_itoa(np->irq));
+#else
 	printk("%s: freeing irq %d\n", ncr_name(np), np->irq);
+#endif
 #endif
 	free_irq(np->irq, np);
 
@@ -5866,7 +5893,8 @@ void ncr_complete (ncb_p np, ccb_p cp)
 		if (DEBUG_FLAGS & (DEBUG_RESULT|DEBUG_TINY)) {
 			u_char * p = (u_char*) & cmd->sense_buffer;
 			int i;
-			printk ("\n%s: sense data:", ncr_name (np));
+			PRINT_ADDR(cmd);
+			printk ("sense data:");
 			for (i=0; i<14; i++) printk (" %x", *p++);
 			printk (".\n");
 		}
@@ -9792,7 +9820,7 @@ static int ncr53c8xx_pci_init(Scsi_Host_Template *tpnt,
 	}
 
 	if ((chip->features & FE_CLSE) && !cache_line_size) {
-		cache_line_size = 16;
+		cache_line_size = CACHE_LINE_SIZE;
 		if (initverbose >= 2)
 			printk("ncr53c8xx: setting PCI_CACHE_LINE_SIZE to %d (fixup)\n", cache_line_size);
 		pcibios_write_config_byte(bus, device_fn,
@@ -10715,7 +10743,11 @@ static int ncr_host_info(ncb_p np, char *ptr, off_t offset, int len)
 	copy_info(&info, "revision id 0x%x\n",	np->revision_id);
 
 	copy_info(&info, "  IO port address 0x%lx, ", (u_long) np->port);
+#ifdef __sparc__
+	copy_info(&info, "IRQ number %s\n", __irq_itoa(np->irq));
+#else
 	copy_info(&info, "IRQ number %d\n", (int) np->irq);
+#endif
 
 #ifndef NCR_IOMAPPED
 	if (np->reg)

@@ -882,7 +882,7 @@ unsigned char linux_logo[] __initdata = {
 
 #else
 
-#define LINUX_LOGO_COLORS 221
+#define LINUX_LOGO_COLORS 214
 
 #endif
 

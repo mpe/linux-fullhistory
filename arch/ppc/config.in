@@ -1,4 +1,4 @@
-# $Id: config.in,v 1.71 1998/09/18 13:25:17 cort Exp $
+# $Id: config.in,v 1.72 1998/10/01 14:09:40 cort Exp $
 # For a description of the syntax of this configuration file,
 # see the Configure script.
 #
@@ -27,7 +27,7 @@ choice 'Machine Type' \
 	 CHRP		CONFIG_CHRP \
 	 PowerMac/PReP/CHRP	CONFIG_ALL_PPC \
   	 APUS           CONFIG_APUS \
-	 MBX		CONFIG_MBX" PReP
+	 MBX		CONFIG_MBX" PowerMac
 endmenu
 
 if [ "$CONFIG_MBX" = "y" ];then
@@ -184,10 +184,10 @@ comment 'Sound'
 tristate 'Sound card support' CONFIG_SOUND
 if [ "$CONFIG_SOUND" != "n" ]; then
   if [ "$CONFIG_APUS" = "y" -o "$CONFIG_PMAC" = "y" ]; then
-    tristate 'Amiga or PowerMac DMA sound support' CONFIG_DMASOUND
+     tristate 'Amiga or PowerMac DMA sound support' CONFIG_DMASOUND
   fi
   if [ "$CONFIG_PREP" = "y" -o "$CONFIG_CHRP" = "y" ]; then
-    source drivers/sound/Config.in
+     source drivers/sound/Config.in
   fi
 fi
 

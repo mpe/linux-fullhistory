@@ -192,8 +192,8 @@
 #define __NR_capset		185
 #define __NR_sigaltstack	186
 #define __NR_sendfile		187
-#define __NR_streams1		188	/* some people actually want it */
-#define __NR_streams2		189	/* some people actually want it */
+#define __NR_getpmsg		188	/* some people actually want streams */
+#define __NR_putpmsg		189	/* some people actually want streams */
 
 /* user-visible error numbers are in the range -1 - -122: see <asm-i386/errno.h> */
 

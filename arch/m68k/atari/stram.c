@@ -273,7 +273,7 @@ __initfunc(void atari_stram_init( void ))
 
 	/* determine whether kernel code resides in ST-RAM (then ST-RAM is the
 	 * first memory block at virtual 0x0) */
-	stram_start = phys_to_virt( 0 );
+	stram_start = (unsigned long)phys_to_virt(0);
 	kernel_in_stram = (stram_start == 0);
 
 	for( i = 0; i < m68k_num_memory; ++i ) {
@@ -1465,9 +1465,10 @@ int get_stram_list( char *buf )
 	for( p = alloc_list; p; p = p->next ) {
 		if (len + 50 >= PAGE_SIZE)
 			break;
-		PRINT_PROC( "0x%08lx-0x%08lx: %s (",
-					virt_to_phys(p->start),
-					virt_to_phys(p->start+p->size-1), p->owner );
+		PRINT_PROC("0x%08lx-0x%08lx: %s (",
+			   virt_to_phys((void *)p->start),
+			   virt_to_phys((void *)p->start+p->size-1),
+			   p->owner);
 		if (p->flags & BLOCK_STATIC)
 			PRINT_PROC( "static)\n" );
 		else if (p->flags & BLOCK_GFP)

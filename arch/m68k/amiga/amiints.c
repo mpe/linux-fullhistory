@@ -288,12 +288,14 @@ void amiga_enable_irq(unsigned int irq)
 	}
 
 	if (irq >= IRQ_AMIGA_CIAB) {
+		cia_set_irq(&ciab_base, (1 << (irq - IRQ_AMIGA_CIAB)));
 		cia_able_irq(&ciab_base, CIA_ICR_SETCLR |
 		             (1 << (irq - IRQ_AMIGA_CIAB)));
 		return;
 	}
 
 	if (irq >= IRQ_AMIGA_CIAA) {
+		cia_set_irq(&ciaa_base, (1 << (irq - IRQ_AMIGA_CIAA)));
 		cia_able_irq(&ciaa_base, CIA_ICR_SETCLR |
 		             (1 << (irq - IRQ_AMIGA_CIAA)));
 		return;

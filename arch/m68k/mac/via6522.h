@@ -6,6 +6,9 @@
  *	is a bit incomplete as the Mac documentation doesnt cover this well
  */
  
+#ifndef _ASM_VIA6522_H_
+#define _ASM_VIA6522_H_
+
 #define VIABASE		0x50F00000
 #define VIABASE2	0x50F02000
 
@@ -45,17 +48,32 @@
  *	Register B has the fun stuff in it
  */
 
+#define VIA2B_vMode32	0x08	/* 24/32bit switch - doubles as cache flush */
 #define VIA2B_vPower	0x04	/* Off switch */
-#define VIA2B_vBusLk	0x02
-#define VIA2B_vCDis	0x01
+#define VIA2B_vBusLk	0x02	/* Nubus in use ?? */
+#define VIA2B_vCDis	0x01	/* Cache disable */
 
+/*
+ *	The 6522 via is a 2MHz part, and needs a delay. MacOS seems to
+ *	execute MOV (Ax),(Ax) for this... Oh and we can't use udelay
+ *	here... see we need the via to calibrate the udelay loop ...
+ */
+
+extern volatile long *via_memory_bogon;
+ 
 extern __inline__ void via_write(volatile unsigned char *via,int reg, int v)
 {
+	*via_memory_bogon;
+	*via_memory_bogon;
+	*via_memory_bogon;
 	via[reg]=v;
 }
 
 extern __inline__ int via_read(volatile unsigned char *via,int reg)
 {
+	*via_memory_bogon;
+	*via_memory_bogon;
+	*via_memory_bogon;
 	return (int)via[reg];
 }
 
@@ -109,3 +127,5 @@ extern void via1_irq(int, void *, struct pt_regs *);
 extern void via2_irq(int, void *, struct pt_regs *);
 
 extern void via_setup_keyboard(void);
+
+#endif /* _ASM_VIA6522_H_ */

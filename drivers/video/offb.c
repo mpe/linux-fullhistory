@@ -35,6 +35,8 @@
 
 #include <video/fbcon.h>
 #include <video/fbcon-cfb8.h>
+#include <video/fbcon-cfb16.h>
+#include <video/fbcon-cfb32.h>
 #include <video/macmodes.h>
 
 
@@ -48,6 +50,14 @@ struct fb_info_offb {
     struct { u_char red, green, blue, pad; } palette[256];
     volatile unsigned char *cmap_adr;
     volatile unsigned char *cmap_data;
+    union {
+#ifdef FBCON_HAS_CFB16
+	u16 cfb16[16];
+#endif
+#ifdef FBCON_HAS_CFB32
+	u32 cfb32[16];
+#endif
+    } fbcon_cmap;
 };
 
 #ifdef __powerpc__
@@ -205,7 +215,7 @@ static int offb_set_var(struct fb_var_screeninfo *var, int con,
 	oldbpp = display->var.bits_per_pixel;
 	display->var = *var;
     }
-    if (oldbpp != var->bits_per_pixel) {
+    if ((oldbpp != var->bits_per_pixel) || (display->cmap.len == 0)) {
 	if ((err = fb_alloc_cmap(&display->cmap, 0, 0)))
 	    return err;
 	do_install_cmap(con, info);
@@ -476,7 +486,7 @@ __initfunc(static void offb_init_fb(const char *name, const char *full_name,
 
     printk(KERN_INFO "Using unsupported %dx%d %s at %lx, depth=%d, pitch=%d\n",
 	   width, height, name, address, depth, pitch);
-    if (depth != 8) {
+    if (depth != 8 && depth != 16 && depth != 32) {
 	printk("%s: can't use depth = %d\n", full_name, depth);
 	return;
     }
@@ -509,16 +519,51 @@ __initfunc(static void offb_init_fb(const char *name, const char *full_name,
 	info->cmap_data = info->cmap_adr + 1;
     }
 
-    fix->visual = info->cmap_adr ? FB_VISUAL_PSEUDOCOLOR :
-	FB_VISUAL_STATIC_PSEUDOCOLOR;
+    if (depth == 8)
+	fix->visual = info->cmap_adr ? FB_VISUAL_PSEUDOCOLOR
+				     : FB_VISUAL_STATIC_PSEUDOCOLOR;
+    else
+	fix->visual = FB_VISUAL_TRUECOLOR;
 
     var->xoffset = var->yoffset = 0;
-    var->bits_per_pixel = 8;
+    var->bits_per_pixel = depth;
+    switch (depth) {
+	case 8:
+	    var->bits_per_pixel = 8;
+	    var->red.offset = 0;
+	    var->red.length = 8;
+	    var->green.offset = 0;
+	    var->green.length = 8;
+	    var->blue.offset = 0;
+	    var->blue.length = 8;
+	    var->transp.offset = 0;
+	    var->transp.length = 0;
+	    break;
+	case 16:	/* RGB 555 */
+	    var->bits_per_pixel = 16;
+	    var->red.offset = 10;
+	    var->red.length = 5;
+	    var->green.offset = 5;
+	    var->green.length = 5;
+	    var->blue.offset = 0;
+	    var->blue.length = 5;
+	    var->transp.offset = 0;
+	    var->transp.length = 0;
+	    break;
+	case 32:	/* RGB 888 */
+	    var->bits_per_pixel = 32;
+	    var->red.offset = 16;
+	    var->red.length = 8;
+	    var->green.offset = 8;
+	    var->green.length = 8;
+	    var->blue.offset = 0;
+	    var->blue.length = 8;
+	    var->transp.offset = 24;
+	    var->transp.length = 8;
+	    break;
+    }
+    var->red.msb_right = var->green.msb_right = var->blue.msb_right = var->transp.msb_right = 0;
     var->grayscale = 0;
-    var->red.offset = var->green.offset = var->blue.offset = 0;
-    var->red.length = var->green.length = var->blue.length = 8;
-    var->red.msb_right = var->green.msb_right = var->blue.msb_right = 0;
-    var->transp.offset = var->transp.length = var->transp.msb_right = 0;
     var->nonstd = 0;
     var->activate = 0;
     var->height = var->width = -1;
@@ -545,11 +590,37 @@ __initfunc(static void offb_init_fb(const char *name, const char *full_name,
     disp->line_length = fix->line_length;
     disp->can_soft_blank = info->cmap_adr ? 1 : 0;
     disp->inverse = 0;
+    switch (depth) {
 #ifdef FBCON_HAS_CFB8
-    disp->dispsw = &fbcon_cfb8;
-#else
-    disp->dispsw = &fbcon_dummy;
+        case 8:
+            disp->dispsw = &fbcon_cfb8;
+            break;
 #endif
+#ifdef FBCON_HAS_CFB16
+        case 16:
+            disp->dispsw = &fbcon_cfb16;
+            disp->dispsw_data = info->fbcon_cmap.cfb16;
+            for (i = 0; i < 16; i++)
+		info->fbcon_cmap.cfb16[i] =
+		    (((default_blu[i] >> 3) & 0x1f) << 10) |
+		    (((default_grn[i] >> 3) & 0x1f) << 5) |
+		    ((default_red[i] >> 3) & 0x1f);
+            break;
+#endif
+#ifdef FBCON_HAS_CFB32
+        case 32:
+            disp->dispsw = &fbcon_cfb32;
+            disp->dispsw_data = info->fbcon_cmap.cfb32;
+            for (i = 0; i < 16; i++)
+		info->fbcon_cmap.cfb32[i] = (default_blu[i] << 16) |
+					    (default_grn[i] << 8) |
+					    default_red[i];
+            break;
+#endif
+        default:
+            disp->dispsw = &fbcon_dummy;
+    }
+
     disp->scrollmode = SCROLL_YREDRAW;
 
     strcpy(info->info.modename, "OFfb ");
@@ -584,7 +655,7 @@ __initfunc(static void offb_init_fb(const char *name, const char *full_name,
     if (!console_fb_info) {
 	display_info.height = var->yres;
 	display_info.width = var->xres;
-	display_info.depth = 8;
+	display_info.depth = depth;
 	display_info.pitch = fix->line_length;
 	display_info.mode = 0;
 	strncpy(display_info.name, name, sizeof(display_info.name));
@@ -696,9 +767,11 @@ static int offb_setcolreg(u_int regno, u_int red, u_int green, u_int blue,
 			 u_int transp, struct fb_info *info)
 {
     struct fb_info_offb *info2 = (struct fb_info_offb *)info;
-
+    int i;
+	
     if (!info2->cmap_adr || regno > 255)
 	return 1;
+
     red >>= 8;
     green >>= 8;
     blue >>= 8;
@@ -706,6 +779,7 @@ static int offb_setcolreg(u_int regno, u_int red, u_int green, u_int blue,
     info2->palette[regno].red = red;
     info2->palette[regno].green = green;
     info2->palette[regno].blue = blue;
+
     *info2->cmap_adr = regno;
     mach_eieio();
     *info2->cmap_data = red;
@@ -714,6 +788,23 @@ static int offb_setcolreg(u_int regno, u_int red, u_int green, u_int blue,
     mach_eieio();
     *info2->cmap_data = blue;
     mach_eieio();
+
+    if (regno < 16)
+	switch (info2->var.bits_per_pixel) {
+#ifdef FBCON_HAS_CFB16
+	    case 16:
+		info2->fbcon_cmap.cfb16[regno] = (regno << 10) | (regno << 5) |
+						 regno;
+		break;
+#endif
+#ifdef FBCON_HAS_CFB32
+	    case 32:
+		i = (regno << 8) | regno;
+		info2->fbcon_cmap.cfb32[regno] = (i << 16) | i;
+		break;
+#endif
+       }
+
     return 0;
 }
 
@@ -752,14 +843,14 @@ int console_setmode(struct vc_mode *mode, int doit)
     switch (mode->depth) {
 	case 8:
 	case 0:		/* default */
-	    cmode = 0;	/* CMODE_8 */
+	    cmode = CMODE_8;
 	    break;
 	case 16:
-	    cmode = 1;	/* CMODE_16 */
+	    cmode = CMODE_16;
 	    break;
 	case 24:
 	case 32:
-	    cmode = 2;	/* CMODE_32 */
+	    cmode = CMODE_32;
 	    break;
 	default:
 	    return -EINVAL;

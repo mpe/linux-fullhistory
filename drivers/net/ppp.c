@@ -4,7 +4,7 @@
  *  Al Longyear <longyear@netcom.com>
  *  Extensively rewritten by Paul Mackerras <paulus@cs.anu.edu.au>
  *
- *  ==FILEVERSION 980704==
+ *  ==FILEVERSION 981004==
  *
  *  NOTE TO MAINTAINERS:
  *     If you modify this file at all, please set the number above to the
@@ -115,6 +115,7 @@ static void ppp_receive_error(struct ppp *ppp);
 static void ppp_output_wakeup(struct ppp *ppp);
 static void ppp_send_ctrl(struct ppp *ppp, struct sk_buff *skb);
 static void ppp_send_frame(struct ppp *ppp, struct sk_buff *skb);
+static void ppp_send_frames(struct ppp *ppp);
 static struct sk_buff *ppp_vj_compress(struct ppp *ppp, struct sk_buff *skb);
 
 static struct ppp *ppp_find (int pid_value);
@@ -439,6 +440,8 @@ ppp_tty_close (struct tty_struct *tty)
 		return;
 	if (ppp->backup_tty) {
 		ppp->tty = ppp->backup_tty;
+		if (ppp_tty_push(ppp))
+			ppp_output_wakeup(ppp);
 	} else {
 		ppp->tty = 0;
 		ppp->sc_xfer = 0;
@@ -448,7 +451,6 @@ ppp_tty_close (struct tty_struct *tty)
 
 		ppp_async_release(ppp);
 		ppp_release(ppp);
-		ppp->inuse = 0;
 		MOD_DEC_USE_COUNT;
 	}
 }
@@ -2113,8 +2115,8 @@ extern inline __u8 * store_long (register __u8 *p, register int value) {
 
 /*
  * Compress and send an frame to the peer.
- * Should be called with dev->tbusy == 1, having been set by the caller.
- * That is, we use dev->tbusy as a lock to prevent reentry of this
+ * Should be called with xmit_busy == 1, having been set by the caller.
+ * That is, we use xmit_busy as a lock to prevent reentry of this
  * procedure.
  */
 static void
@@ -2186,7 +2188,7 @@ ppp_send_frame(struct ppp *ppp, struct sk_buff *skb)
 		if (new_skb == NULL) {
 			printk(KERN_ERR "ppp_send_frame: no memory\n");
 			kfree_skb(skb);
-			ppp->dev.tbusy = 0;
+			ppp->xmit_busy = 0;
 			return;
 		}
 
@@ -2215,9 +2217,9 @@ ppp_send_frame(struct ppp *ppp, struct sk_buff *skb)
 	ret = ppp_async_send(ppp, skb);
 	if (ret > 0) {
 		/* we can release the lock */
-		ppp->dev.tbusy = 0;
+		ppp->xmit_busy = 0;
 	} else if (ret < 0) {
-		/* this can't happen, since the caller got the tbusy lock */
+		/* can't happen, since the caller got the xmit_busy lock */
 		printk(KERN_ERR "ppp: ppp_async_send didn't accept pkt\n");
 	}
 }
@@ -2276,14 +2278,17 @@ ppp_send_frames(struct ppp *ppp)
 {
 	struct sk_buff *skb;
 
-	while (!test_and_set_bit(0, &ppp->dev.tbusy)) {
+	while (!test_and_set_bit(0, &ppp->xmit_busy)) {
 		skb = skb_dequeue(&ppp->xmt_q);
 		if (skb == NULL) {
-			ppp->dev.tbusy = 0;
-			mark_bh(NET_BH);
+			ppp->xmit_busy = 0;
 			break;
 		}
 		ppp_send_frame(ppp, skb);
+	}
+	if (!ppp->xmit_busy && ppp->dev.tbusy) {
+		ppp->dev.tbusy = 0;
+		mark_bh(NET_BH);
 	}
 }
 
@@ -2296,11 +2301,11 @@ ppp_output_wakeup(struct ppp *ppp)
 {
 	CHECK_PPP_VOID();
 
-	if (!ppp->dev.tbusy) {
-		printk(KERN_ERR "ppp_output_wakeup called but tbusy==0\n");
+	if (!ppp->xmit_busy) {
+		printk(KERN_ERR "ppp_output_wakeup called but xmit_busy==0\n");
 		return;
 	}
-	ppp->dev.tbusy = 0;
+	ppp->xmit_busy = 0;
 	ppp_send_frames(ppp);
 }
 
@@ -2425,9 +2430,15 @@ ppp_dev_xmit(struct sk_buff *skb, struct device *dev)
 	 * The dev->tbusy field acts as a lock to allow only
 	 * one packet to be processed at a time.  If we can't
 	 * get the lock, try again later.
+	 * We deliberately queue as little as possible inside
+	 * the ppp driver in order to minimize the latency
+	 * for high-priority packets.
 	 */
-	if (test_and_set_bit(0, &dev->tbusy))
+	if (test_and_set_bit(0, &ppp->xmit_busy)) {
+		dev->tbusy = 1;	/* can't take it now */
 		return 1;
+	}
+	dev->tbusy = 0;
 
 	/*
 	 * Put the 4-byte PPP header on the packet.
@@ -2441,7 +2452,8 @@ ppp_dev_xmit(struct sk_buff *skb, struct device *dev)
 			printk(KERN_ERR "%s: skb hdr alloc failed\n",
 			       ppp->name);
 			dev_kfree_skb(skb);
-			dev->tbusy = 0;
+			ppp->xmit_busy = 0;
+			ppp_send_frames(ppp);
 			return 0;
 		}
 		skb_reserve(new_skb, PPP_HDRLEN);
@@ -2457,6 +2469,8 @@ ppp_dev_xmit(struct sk_buff *skb, struct device *dev)
 	hdr[3] = proto;
 
 	ppp_send_frame(ppp, skb);
+	if (!ppp->xmit_busy)
+		ppp_send_frames(ppp);
 	return 0;
 }
 
@@ -2600,6 +2614,7 @@ ppp_generic_init(struct ppp *ppp)
 
 	ppp->last_xmit	= jiffies;
 	ppp->last_recv  = jiffies;
+	ppp->xmit_busy  = 0;
 
 	/* clear statistics */
 	memset(&ppp->stats, 0, sizeof (struct pppstat));
@@ -2640,6 +2655,12 @@ ppp_release(struct ppp *ppp)
 		kfree_skb(skb);
 	while ((skb = skb_dequeue(&ppp->xmt_q)) != NULL)
 		kfree_skb(skb);
+
+	ppp->inuse = 0;
+	if (ppp->dev.tbusy) {
+		ppp->dev.tbusy = 0;
+		mark_bh(NET_BH);
+	}
 }
 
 /*

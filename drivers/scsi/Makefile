@@ -147,6 +147,14 @@ else
   endif
 endif
 
+ifeq ($(CONFIG_BLZ603EPLUS_SCSI),y)
+L_OBJS += amiga7xx.o 53c7xx.o
+else
+  ifeq ($(CONFIG_BLZ603EPLUS_SCSI),m)
+  M_OBJS += amiga7xx.o 53c7xx.o
+  endif
+endif
+
 ifeq ($(CONFIG_WARPENGINE_SCSI),y)
 L_OBJS += amiga7xx.o 53c7xx.o
 else

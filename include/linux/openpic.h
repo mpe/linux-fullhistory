@@ -327,7 +327,7 @@ extern u_char *OpenPIC_InitSenses;
      */
 
 /* Global Operations */
-extern void openpic_init(void);
+extern void openpic_init(int);
 extern void openpic_reset(void);
 extern void openpic_enable_8259_pass_through(void);
 extern void openpic_disable_8259_pass_through(void);

@@ -245,13 +245,16 @@ void adb_bus_init(void)
 		 	via_write(via1, vIFR, SR_INT);
 
 			/* get those pesky clock ticks we missed while booting */
-			for ( i = 0; i < 30; i++) {
+			for ( i = 0; i < 60; i++) {
 				udelay(ADB_DELAY);
 				adb_hw_setup_IIsi();
 				udelay(ADB_DELAY);
 				if (via_read(via1, vBufB) & TREQ)
 					break;
 			}
+			if (i == 60)
+				printk("adb_IIsi: maybe bus jammed ??\n");
+
 		 	/*
 		 	 *	Ok we probably ;) have a ready to use adb bus. Its also
  			 */

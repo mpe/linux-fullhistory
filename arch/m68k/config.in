@@ -32,6 +32,7 @@ fi
 bool 'Macintosh support' CONFIG_MAC
 if [ "$CONFIG_MAC" = "y" ]; then
   define_bool CONFIG_NUBUS y
+  define_bool CONFIG_M68K_L2_CACHE y
 fi
 bool 'Apollo support' CONFIG_APOLLO
 bool 'VME (Motorola and BVM) support' CONFIG_VME
@@ -155,6 +156,7 @@ if [ "$CONFIG_ZORRO" = "y" ]; then
   if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
     bool 'A4091 SCSI support' CONFIG_A4091_SCSI
     bool 'WarpEngine SCSI support' CONFIG_WARPENGINE_SCSI
+    bool 'Blizzard PowerUP 603e+ SCSI' CONFIG_BLZ603EPLUS_SCSI
     bool 'Cyberstorm Mk III SCSI support' CONFIG_CYBERSTORMIII_SCSI
 #    bool 'GVP Turbo 040/060 SCSI support' CONFIG_GVP_TURBO_SCSI
   fi
@@ -171,6 +173,7 @@ if [ "$CONFIG_ATARI" = "y" ]; then
 fi
 if [ "$CONFIG_MAC" = "y" ]; then
   bool 'MAC NCR5380 SCSI' CONFIG_MAC_SCSI
+  bool 'MAC NCR53c9[46] SCSI' CONFIG_SCSI_MAC_ESP
 fi
 #dep_tristate 'SCSI debugging host adapter' CONFIG_SCSI_DEBUG $CONFIG_SCSI
 
@@ -211,6 +214,7 @@ fi
 tristate 'EQL (serial line load balancing) support' CONFIG_EQUALIZER
 if [ "$CONFIG_ZORRO" = "y" ]; then
   tristate 'Ariadne support' CONFIG_ARIADNE
+  tristate 'Ariadne II support' CONFIG_ARIADNE2
   tristate 'A2065 support' CONFIG_A2065
   tristate 'Hydra support' CONFIG_HYDRA
 fi
@@ -222,6 +226,8 @@ if [ "$CONFIG_APOLLO" = "y" ] ; then
 fi
 if [ "$CONFIG_MAC" = "y" ]; then
   bool 'Mac NS 8390 based ethernet cards' CONFIG_DAYNAPORT
+  bool 'AV Macintosh onboard MACE ethernet' CONFIG_MACMACE
+  bool 'Macintosh onboard SONIC ethernet' CONFIG_MACSONIC
 fi
 if [ "$CONFIG_VME" = "y" -a "$CONFIG_MVME16x" = "y" ]; then
   bool 'MVME16x Ethernet support' CONFIG_MVME16x_NET

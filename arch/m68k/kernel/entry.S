@@ -396,7 +396,7 @@ SYMBOL_NAME_LABEL(resume)
 .data
 ALIGN
 SYMBOL_NAME_LABEL(sys_call_table)
-	.long SYMBOL_NAME(sys_setup)		/* 0 */
+	.long SYMBOL_NAME(sys_ni_syscall)	/* 0  -  old "setup()" system call*/
 	.long SYMBOL_NAME(sys_exit)
 	.long SYMBOL_NAME(sys_fork)
 	.long SYMBOL_NAME(sys_read)

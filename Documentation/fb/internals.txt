@@ -2,7 +2,7 @@
 This is a first start for some documentation about frame buffer device
 internals.
 
-Geert Uytterhoeven <Geert.Uytterhoeven@cs.kuleuven.ac.be>, 10 June 1998
+Geert Uytterhoeven <Geert.Uytterhoeven@cs.kuleuven.ac.be>, 21 July 1998
 
 --------------------------------------------------------------------------------
 
@@ -68,14 +68,13 @@ value, and that color is displayed.
 
 True color (FB_VISUAL_TRUECOLOR)
 --------------------------------
-The pixel value is broken up into red, green, and blue fields, each of which 
-are looked up in separate red, green, and blue lookup tables.
+The pixel value is broken up into red, green, and blue fields.
 
 
 Direct color (FB_VISUAL_DIRECTCOLOR)
 ------------------------------------
-The pixel value is broken up into red, green, and blue fields. This is what
-most people mean when then say `true color'.
+The pixel value is broken up into red, green, and blue fields, each of which 
+are looked up in separate red, green, and blue lookup tables.
 
 
 Grayscale displays

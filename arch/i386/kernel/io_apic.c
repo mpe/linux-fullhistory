@@ -103,8 +103,10 @@ int mpc_default_type = 0;			/* non-0 if default (table-less)
 
 /*
  * This is performance-critical, we want to do it O(1)
+ *
+ * the indexing order of this array favors 1:1 mappings
+ * between pins and IRQs.
  */
-static int irq_2_pin[NR_IRQS];
 
 static inline unsigned int io_apic_read(unsigned int reg)
 {
@@ -119,6 +121,15 @@ static inline void io_apic_write(unsigned int reg, unsigned int value)
 }
 
 /*
+ * Re-write a value: to be used for read-modify-write
+ * cycles where the read already set up the index register.
+ */
+static inline void io_apic_modify(unsigned int value)
+{
+	*(IO_APIC_BASE+4) = value;
+}
+
+/*
  * Synchronize the IO-APIC and the CPU by doing
  * a dummy read from the IO-APIC
  */
@@ -128,58 +139,68 @@ static inline void io_apic_sync(void)
 }
 
 /*
+ * Rough estimation of how many shared IRQs there are, can
+ * be changed anytime.
+ */
+#define MAX_PLUS_SHARED_IRQS NR_IRQS
+#define PIN_MAP_SIZE (MAX_PLUS_SHARED_IRQS + NR_IRQS)
+
+static struct irq_pin_list {
+	int pin, next;
+} irq_2_pin[PIN_MAP_SIZE];
+
+/*
+ * The common case is 1:1 IRQ<->pin mappings. Sometimes there are
+ * shared ISA-space IRQs, so we have to support them. We are super
+ * fast in the common case, and fast for shared ISA-space IRQs.
+ */
+static void add_pin_to_irq(unsigned int irq, int pin)
+{
+	static int first_free_entry = NR_IRQS;
+	struct irq_pin_list *entry = irq_2_pin + irq;
+
+	while (entry->next)
+		entry = irq_2_pin + entry->next;
+
+	if (entry->pin != -1) {
+		entry->next = first_free_entry;
+		entry = irq_2_pin + entry->next;
+		if (++first_free_entry >= PIN_MAP_SIZE)
+			panic("io_apic.c: whoops");
+	}
+	entry->pin = pin;
+}
+
+#define DO_ACTION(name,R,ACTION, FINAL)					\
+									\
+static void name##_IO_APIC_irq(unsigned int irq)			\
+{									\
+	int pin;							\
+	struct irq_pin_list *entry = irq_2_pin + irq;			\
+									\
+	for (;;) {							\
+		unsigned int reg;					\
+		pin = entry->pin;					\
+		if (pin == -1)						\
+			break;						\
+		reg = io_apic_read(0x10 + R + pin*2);			\
+		reg ACTION;						\
+		io_apic_modify(reg);					\
+		if (!entry->next)					\
+			break;						\
+		entry = irq_2_pin + entry->next;			\
+	}								\
+	FINAL;								\
+}
+
+/*
  * We disable IO-APIC IRQs by setting their 'destination CPU mask' to
  * zero. Trick by Ramesh Nalluri.
  */
-static inline void disable_IO_APIC_irq(unsigned int irq)
-{
-	int pin = irq_2_pin[irq];
-	struct IO_APIC_route_entry entry;
-
-	if (pin != -1) {
-		*(((int *)&entry) + 1) = io_apic_read(0x11 + pin * 2);
-		entry.dest.logical.logical_dest = 0x0;
-		io_apic_write(0x11 + 2 * pin, *(((int *)&entry) + 1));
-		io_apic_sync();
-	}
-}
-
-static inline void enable_IO_APIC_irq(unsigned int irq)
-{
-	int pin = irq_2_pin[irq];
-	struct IO_APIC_route_entry entry;
-
-	if (pin != -1) {
-		*(((int *)&entry) + 1) = io_apic_read(0x11 + pin * 2);
-		entry.dest.logical.logical_dest = 0xff;
-		io_apic_write(0x11 + 2 * pin, *(((int *)&entry) + 1));
-	}
-}
-
-static inline void mask_IO_APIC_irq(unsigned int irq)
-{
-	int pin = irq_2_pin[irq];
-	struct IO_APIC_route_entry entry;
-
-	if (pin != -1) {
-		*(((int *)&entry) + 0) = io_apic_read(0x10 + pin * 2);
-		entry.mask = 1;
-		io_apic_write(0x10 + 2 * pin, *(((int *)&entry) + 0));
-		io_apic_sync();
-	}
-}
-
-static inline void unmask_IO_APIC_irq(unsigned int irq)
-{
-	int pin = irq_2_pin[irq];
-	struct IO_APIC_route_entry entry;
-
-	if (pin != -1) {
-		*(((int *)&entry) + 0) = io_apic_read(0x10 + pin * 2);
-		entry.mask = 0;
-		io_apic_write(0x10 + 2 * pin, *(((int *)&entry) + 0));
-	}
-}
+DO_ACTION( disable, 1, &= 0x00ffffff, io_apic_sync())		/* destination = 0x00 */
+DO_ACTION( enable,  1, |= 0xff000000, )				/* destination = 0xff */
+DO_ACTION( mask,    0, |= 0x00010000, io_apic_sync())		/* mask = 1 */
+DO_ACTION( unmask,  0, &= 0xfffeffff, )				/* mask = 0 */
 
 static void __init clear_IO_APIC_pin(unsigned int pin)
 {
@@ -577,7 +598,7 @@ void __init setup_IO_APIC_irqs(void)
 		}
 
 		irq = pin_2_irq(idx,pin);
-		irq_2_pin[irq] = pin;
+		add_pin_to_irq(irq, pin);
 
 		if (!IO_APIC_IRQ(irq))
 			continue;
@@ -703,8 +724,8 @@ void __init print_IO_APIC(void)
 	}
 
 	printk("IRQ to pin mappings:\n");
-	for (i = 0; i < NR_IRQS; i++)
-		printk("%d->%d ", i, irq_2_pin[i]);
+	for (i = 0; i < PIN_MAP_SIZE; i++)
+		printk("%d->%d(%d) ", i, irq_2_pin[i].pin, irq_2_pin[i].next);
 	printk("\n");
 
 	printk(".................................... done.\n");
@@ -716,8 +737,10 @@ static void __init init_sym_mode(void)
 {
 	int i, pin;
 
-	for (i = 0; i < NR_IRQS; i++)
-		irq_2_pin[i] = -1;
+	for (i = 0; i < PIN_MAP_SIZE; i++) {
+		irq_2_pin[i].pin = -1;
+		irq_2_pin[i].next = 0;
+	}
 	if (!pirqs_enabled)
 		for (i = 0; i < MAX_PIRQS; i++)
 			pirq_entries[i] =- 1;

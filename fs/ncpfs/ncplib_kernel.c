@@ -300,6 +300,7 @@ out:
 	return result;
 }
 
+#ifdef CONFIG_NCPFS_NFS_NS
 static int
 ncp_obtain_DOS_dir_base(struct ncp_server *server,
 		__u8 volnum, __u32 dirent,
@@ -323,6 +324,7 @@ ncp_obtain_DOS_dir_base(struct ncp_server *server,
 	ncp_unlock_server(server);
 	return result;
 }
+#endif /* CONFIG_NCPFS_NFS_NS */
 
 static inline int
 ncp_get_known_namespace(struct ncp_server *server, __u8 volume)

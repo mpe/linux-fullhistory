@@ -5,7 +5,6 @@
  * This file contains the system call numbers.
  */
 
-#define __NR_setup		  0	/* used only by init, to get system going */
 #define __NR_exit		  1
 #define __NR_fork		  2
 #define __NR_read		  3
@@ -192,8 +191,8 @@
 #define __NR_capset		185
 #define __NR_sigaltstack	186
 #define __NR_sendfile		187
-#define __NR_streams1		188	/* some people actually want it */
-#define __NR_streams2		189	/* some people actually want it */
+#define __NR_getpmsg		188	/* some people actually want streams */
+#define __NR_putpmsg		189	/* some people actually want streams */
 
 /* user-visible error numbers are in the range -1 - -122: see
    <asm-m68k/errno.h> */
@@ -311,7 +310,6 @@ __syscall_return(type,__res); \
 #define __NR__exit __NR_exit
 static inline _syscall0(int,idle)
 static inline _syscall0(int,pause)
-static inline _syscall1(int,setup,int,magic)
 static inline _syscall0(int,sync)
 static inline _syscall0(pid_t,setsid)
 static inline _syscall3(int,write,int,fd,const char *,buf,off_t,count)

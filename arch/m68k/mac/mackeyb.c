@@ -51,6 +51,7 @@ static void input_keycode(int, int);
 
 extern struct kbd_struct kbd_table[];
 
+extern void adb_bus_init(void);
 extern void handle_scancode(unsigned char);
 extern void put_queue(int);
 
@@ -59,9 +60,9 @@ static void mac_leds_done(struct adb_request *);
 static void keyboard_input(unsigned char *, int, struct pt_regs *);
 static void mouse_input(unsigned char *, int, struct pt_regs *);
 /* Hook for mouse driver */
-void (*adb_mouse_interrupt_hook) (unsigned char *, int);
+void (*adb_mouse_interrupt_hook) (char *, int);
 /* The mouse driver - for debugging */
-extern void mac_mouse_interrupt(char *);
+extern void adb_mouse_interrupt(char *, int);
 /* end keyb */
 
 /* this map indicates which keys shouldn't autorepeat. */
@@ -652,6 +653,8 @@ __initfunc(int mac_keyb_init(void))
 
 	printk("Configuring keyboard:\n");
 
+	udelay(3000);
+
 	/* 
 	 * turn on all leds - the keyboard driver will turn them back off 
 	 * via mac_kbd_leds if everything works ok!
@@ -676,6 +679,8 @@ __initfunc(int mac_keyb_init(void))
 #if 1
 	printk("configuring coding mode ...\n");
 
+	udelay(3000);
+
 	/* 
 	 * get the keyboard to send separate codes for
 	 * left and right shift, control, option keys. 
@@ -696,6 +701,8 @@ __initfunc(int mac_keyb_init(void))
 
 #if 0	/* seems to hurt, at least Geert's Mac */
 	printk("Configuring mouse (3-button mode) ...\n");
+
+	udelay(3000);
 
 	/* 
 	 * XXX: taken from the PPC driver again ... 
@@ -732,11 +739,6 @@ __initfunc(int mac_keyb_init(void))
 	printk("keyboard init done\n");
 
 	return 0;
-}
-
-/* for "kbd-reset" cmdline param */
-__initfunc(void mac_kbd_reset_setup(char *str, int *ints))
-{
 }
 
 /* for "kbd-reset" cmdline param */

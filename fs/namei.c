@@ -29,6 +29,8 @@
 #include <asm/semaphore.h>
 #include <asm/spinlock.h>
 #include <asm/namei.h>
+#include <asm/page.h>
+#include <asm/pgtable.h>
 
 /* This can be removed after the beta phase. */
 #define CACHE_SUPERVISE	/* debug the correctness of dcache entries */

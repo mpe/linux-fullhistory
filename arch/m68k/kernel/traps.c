@@ -452,7 +452,7 @@ static inline void bus_error030 (struct frame *fp)
 #endif
 
 	    errorcode = (mmusr & MMU_I) ? 0 : 1;
-	    if (!(ssw & RW) || ssw & RM)
+	    if (!(ssw & RW) || (ssw & RM))
 		    errorcode |= 2;
 
 	    if (mmusr & (MMU_I | MMU_WP)) {

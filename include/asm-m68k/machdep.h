@@ -37,6 +37,7 @@ extern long mach_max_dma_address;
 extern void (*mach_floppy_setup)(char *, int *);
 extern void (*mach_floppy_eject)(void);
 extern void (*mach_heartbeat) (int);
+extern void (*mach_l2_flush) (int);
 extern int mach_sysrq_key;
 extern int mach_sysrq_shift_state;
 extern int mach_sysrq_shift_mask;

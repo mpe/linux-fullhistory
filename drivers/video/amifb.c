@@ -61,6 +61,7 @@
 #include <asm/amigaints.h>
 #include <asm/setup.h>
 
+#include <video/fbcon.h>
 #include <video/fbcon-afb.h>
 #include <video/fbcon-ilbm.h>
 #include <video/fbcon-mfb.h>

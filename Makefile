@@ -1,6 +1,6 @@
 VERSION = 2
 PATCHLEVEL = 1
-SUBLEVEL = 124
+SUBLEVEL = 125
 
 ARCH := $(shell uname -m | sed -e s/i.86/i386/ -e s/sun4u/sparc64/ -e s/arm.*/arm/ -e s/sa110/arm/)
 
@@ -35,6 +35,7 @@ CPP	=$(CC) -E
 AR	=$(CROSS_COMPILE)ar
 NM	=$(CROSS_COMPILE)nm
 STRIP	=$(CROSS_COMPILE)strip
+OBJDUMP	=$(CROSS_COMPILE)objdump
 MAKE	=make
 GENKSYMS=/sbin/genksyms
 
@@ -153,6 +154,10 @@ endif
 
 ifdef CONFIG_ZORRO
 DRIVERS := $(DRIVERS) drivers/zorro/zorro.a
+endif
+
+ifeq ($(CONFIG_FC4),y)
+DRIVERS := $(DRIVERS) drivers/fc4/fc4.a
 endif
 
 ifdef CONFIG_PPC
@@ -316,11 +321,10 @@ modules_install:
 	if [ -f VIDEO_MODULES ]; then inst_mod VIDEO_MODULES video; fi; \
 	if [ -f FC4_MODULES   ]; then inst_mod FC4_MODULES   fc4;   fi; \
 	\
-	rm -f /tmp/.misc.$$$$ /tmp/.allmods.$$$$; \
-	ls *.o > /tmp/.allmods.$$$$; \
-	echo $$MODULES | tr ' ' '\n' | sort | comm -23 /tmp/.allmods.$$$$ - > /tmp/.misc.$$$$; \
-	if [ -s /tmp/.misc.$$$$ ]; then inst_mod /tmp/.misc.$$$$ misc; fi; \
-	rm -f /tmp/.misc.$$$$ /tmp/.allmods.$$$$; \
+	ls *.o > .allmods; \
+	echo $$MODULES | tr ' ' '\n' | sort | comm -23 .allmods - > .misc; \
+	if [ -s .misc ]; then inst_mod .misc misc; fi; \
+	rm -f .misc .allmods; \
 	)
 
 # modules disabled....

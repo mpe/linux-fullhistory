@@ -79,20 +79,17 @@ You can pass kernel command line options to vesafb with
 by comma.  Accepted options:
 
 invers	- no comment...
-
-redraw	- scroll by redrawing the affected part of the screen.
-	  This is the default.
+redraw	- scroll by redrawing the affected part of the screen
 ypan    - enable display panning using the VESA protected mode
 	  interface.  This enables the Shift-PgUp scrollback 
 	  thing and greatly speeds up fullscreen scrolling.
 	  It is slower than "redraw" when scrolling only a halve
-	  screen.  Seems not to work with some BIOSes.
+	  screen.  This is the default.
 ywrap	- If your gfx board supports wrap-around, use this one
 	  instead of ypan. 
-
-vgapal	- Use the standard vga registers for palette changes.
-	  This is the default.
-pmipal	- Use the protected mode interface for palette changes.
+nopal	- Don't use the protected mode interface for palette
+	  changes.  vesafb will try the standard vga registers
+	  instead.
 
 
 Have fun!

@@ -1250,7 +1250,7 @@ static ssize_t extract_entropy(struct random_bucket *r, char * buf,
 		}
 #if HASH_BUFFER_SIZE & 1	/* There's a middle word to deal with */
 		x = tmp[HASH_BUFFER_SIZE/2];
-		add_entropy_words(r, x, (__u32)buf);
+		add_entropy_words(r, x, (__u32)((unsigned long)buf));
 		x ^= (x >> 16);		/* Fold it in half */
 		((__u16 *)tmp)[HASH_BUFFER_SIZE-1] = (__u16)x;
 #endif

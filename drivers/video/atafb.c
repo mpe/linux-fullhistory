@@ -1636,9 +1636,9 @@ static int falcon_getcolreg( unsigned regno, unsigned *red,
 	 * Even with hicolor r/g/b=5/6/5 bit!
 	 */
 	col = f030_col[regno];
-	*red = (col >> 26) & 0x3f;
-	*green = (col >> 18) & 0x3f;
-	*blue = (col >> 2) & 0x3f;
+	*red = (col >> 16) & 0xff00;
+	*green = (col >> 8) & 0xff00;
+	*blue = (col << 8) & 0xff00;
 	*transp = 0;
 	return 0;
 }
@@ -1650,14 +1650,18 @@ static int falcon_setcolreg( unsigned regno, unsigned red,
 {
 	if (regno > 255)
 		return 1;
-	f030_col[regno] = (red << 26) | (green << 18) | (blue << 2);
+	f030_col[regno] = (((red & 0xfc00) << 16) |
+			   ((green & 0xfc00) << 8) |
+			   ((blue & 0xfc00) >> 8));
 	if (regno < 16) {
 		shifter_tt.color_reg[regno] =
-			(((red & 0xe) >> 1) | ((red & 1) << 3) << 8) |
-			(((green & 0xe) >> 1) | ((green & 1) << 3) << 4) |
-			((blue & 0xe) >> 1) | ((blue & 1) << 3);
+			(((red & 0xe000) >> 13) | ((red & 0x1000) >> 12) << 8) |
+			(((green & 0xe000) >> 13) | ((green & 0x1000) >> 12) << 4) |
+			((blue & 0xe000) >> 13) | ((blue & 0x1000) >> 12);
 #ifdef FBCON_HAS_CFB16
-		fbcon_cfb16_cmap[regno] = (red << 11) | (green << 5) | blue;
+		fbcon_cfb16_cmap[regno] = ((red & 0xf800) |
+					   ((green & 0xfc00) >> 5) |
+					   ((blue & 0xf800) >> 11));
 #endif
 	}
 	return 0;

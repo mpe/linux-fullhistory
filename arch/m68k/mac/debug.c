@@ -249,7 +249,6 @@ void mac_boom(int booms)
  * TODO: serial debug code
  */
 
-#define SCC_BAS (0x50F04000)
 struct SCC
  {
   u_char cha_b_ctrl;
@@ -260,13 +259,16 @@ struct SCC
   u_char char_dummy3;
   u_char cha_a_data;
  };
-# define scc ((*(volatile struct SCC*)SCC_BAS))
+
+# define scc (*((volatile struct SCC*)mac_bi_data.sccbase))
 
 /* Flag that serial port is already initialized and used */
 int mac_SCC_init_done = 0;
 /* Can be set somewhere, if a SCC master reset has already be done and should
  * not be repeated; used by kgdb */
 int mac_SCC_reset_done = 0;
+
+static int scc_port = -1;
 
 static struct console mac_console_driver = {
 	"debug",
@@ -282,20 +284,18 @@ static struct console mac_console_driver = {
 	NULL
 };
 
-static int scc_port;
-
 /* Mac: loops_per_sec min. 1900000 ^= .5 us; MFPDELAY was 0.6 us*/
 
-#define US 1
+#define uSEC 1
 
 static inline void mac_sccb_out (char c)
 {
     int i;
     do {
-	for( i = US; i > 0; --i )
+	for( i = uSEC; i > 0; --i )
 		barrier();
     } while (!(scc.cha_b_ctrl & 0x04)); /* wait for tx buf empty */
-    for( i = US; i > 0; --i )
+    for( i = uSEC; i > 0; --i )
 	barrier();
     scc.cha_b_data = c;
 }
@@ -304,10 +304,10 @@ static inline void mac_scca_out (char c)
 {
     int i;
     do {
-	for( i = US; i > 0; --i )
+	for( i = uSEC; i > 0; --i )
 		barrier();
     } while (!(scc.cha_a_ctrl & 0x04)); /* wait for tx buf empty */
-    for( i = US; i > 0; --i )
+    for( i = uSEC; i > 0; --i )
 	barrier();
     scc.cha_a_data = c;
 }
@@ -337,10 +337,10 @@ int mac_sccb_console_wait_key(struct console *co)
 {
     int i;
     do {
-	for( i = US; i > 0; --i )
+	for( i = uSEC; i > 0; --i )
 		barrier();
     } while( !(scc.cha_b_ctrl & 0x01) ); /* wait for rx buf filled */
-    for( i = US; i > 0; --i )
+    for( i = uSEC; i > 0; --i )
 	barrier();
     return( scc.cha_b_data );
 }
@@ -349,10 +349,10 @@ int mac_scca_console_wait_key(struct console *co)
 {
     int i;
     do {
-	for( i = US; i > 0; --i )
+	for( i = uSEC; i > 0; --i )
 		barrier();
     } while( !(scc.cha_a_ctrl & 0x01) ); /* wait for rx buf filled */
-    for( i = US; i > 0; --i )
+    for( i = uSEC; i > 0; --i )
 	barrier();
     return( scc.cha_a_data );
 }
@@ -365,10 +365,10 @@ int mac_scca_console_wait_key(struct console *co)
     do {						\
 	int i;						\
 	scc.cha_b_ctrl = (reg);				\
-	for( i = US; i > 0; --i )			\
+	for( i = uSEC; i > 0; --i )			\
 		barrier();				\
 	scc.cha_b_ctrl = (val);				\
-	for( i = US; i > 0; --i )			\
+	for( i = uSEC; i > 0; --i )			\
 		barrier();				\
     } while(0)
 
@@ -376,10 +376,10 @@ int mac_scca_console_wait_key(struct console *co)
     do {						\
 	int i;						\
 	scc.cha_a_ctrl = (reg);				\
-	for( i = US; i > 0; --i )			\
+	for( i = uSEC; i > 0; --i )			\
 		barrier();				\
 	scc.cha_a_ctrl = (val);				\
-	for( i = US; i > 0; --i )			\
+	for( i = uSEC; i > 0; --i )			\
 		barrier();				\
     } while(0)
 
@@ -389,7 +389,7 @@ int mac_scca_console_wait_key(struct console *co)
 #define LONG_DELAY()				\
     do {					\
 	int i;					\
-	for( i = 60*US; i > 0; --i )		\
+	for( i = 60*uSEC; i > 0; --i )		\
 	    barrier();				\
     } while(0)
     
@@ -399,19 +399,21 @@ __initfunc(static void mac_init_scc_port( int cflag, int port ))
 void mac_init_scc_port( int cflag, int port )
 #endif
 {
-    extern int mac_SCC_reset_done;
-    static int clksrc_table[9] =
-	/* reg 11: 0x50 = BRG, 0x00 = RTxC, 0x28 = TRxC */
-    	{ 0x50, 0x50, 0x50, 0x50, 0x50, 0x50, 0x50, 0x00, 0x00 };
-    static int brgsrc_table[9] =
-	/* reg 14: 0 = RTxC, 2 = PCLK */
-    	{ 2, 2, 2, 2, 2, 2, 0, 2, 2 };
-    static int clkmode_table[9] =
-	/* reg 4: 0x40 = x16, 0x80 = x32, 0xc0 = x64 */
-    	{ 0x40, 0x40, 0x40, 0x40, 0x40, 0x40, 0x40, 0xc0, 0x80 };
-    static int div_table[9] =
-	/* reg12 (BRG low) */
-    	{ 208, 138, 103, 50, 24, 11, 1, 0, 0 };
+	extern int mac_SCC_reset_done;
+
+	/*
+	 * baud rates: 1200, 1800, 2400, 4800, 9600, 19.2k, 38.4k, 57.6k, 115.2k
+	 */
+
+	static int clksrc_table[9] =
+		/* reg 11: 0x50 = BRG, 0x00 = RTxC, 0x28 = TRxC */
+    		{ 0x50, 0x50, 0x50, 0x50, 0x50, 0x50, 0x50, 0x00, 0x00 };
+	static int clkmode_table[9] =
+		/* reg 4: 0x40 = x16, 0x80 = x32, 0xc0 = x64 */
+    		{ 0x40, 0x40, 0x40, 0x40, 0x40, 0x40, 0x40, 0xc0, 0x80 };
+	static int div_table[9] =
+		/* reg12 (BRG low) */
+    		{ 94, 62, 46, 22, 10, 4, 1, 0, 0 };
 
     int baud = cflag & CBAUD;
     int clksrc, clkmode, div, reg3, reg5;
@@ -426,12 +428,10 @@ void mac_init_scc_port( int cflag, int port )
     clkmode = clkmode_table[baud];
     div     = div_table[baud];
 
-    reg3 = (cflag & CSIZE) == CS8 ? 0xc0 : 0x40;
-    reg5 = (cflag & CSIZE) == CS8 ? 0x60 : 0x20 | 0x82 /* assert DTR/RTS */;
+    reg3 = (((cflag & CSIZE) == CS8) ? 0xc0 : 0x40);
+    reg5 = (((cflag & CSIZE) == CS8) ? 0x60 : 0x20) | 0x82 /* assert DTR/RTS */;
 
-#if 0    
-    if (port) {
-#endif
+    if (port == 1) {
 	    (void)scc.cha_b_ctrl;	/* reset reg pointer */
 	    SCCB_WRITE( 9, 0xc0 );	/* reset */
 	    LONG_DELAY();		/* extra delay after WR9 access */
@@ -442,17 +442,14 @@ void mac_init_scc_port( int cflag, int port )
 	    SCCB_WRITE( 5, reg5 );
 	    SCCB_WRITE( 9, 0 );		/* no interrupts */
 	    LONG_DELAY();		/* extra delay after WR9 access */
-	    SCCB_WRITE( 10, 0 );		/* NRZ mode */
+	    SCCB_WRITE( 10, 0 );	/* NRZ mode */
 	    SCCB_WRITE( 11, clksrc );	/* main clock source */
 	    SCCB_WRITE( 12, div );	/* BRG value */
 	    SCCB_WRITE( 13, 0 );		/* BRG high byte */
-	    SCCB_WRITE( 14, brgsrc_table[baud] );
-	    SCCB_WRITE( 14, brgsrc_table[baud] | (div ? 1 : 0) );
+	    SCCB_WRITE( 14, 1 );
 	    SCCB_WRITE( 3, reg3 | 1 );
 	    SCCB_WRITE( 5, reg5 | 8 );
-#if 0
-    } else {
-#endif
+    } else if (port == 0) {
 	    (void)scc.cha_a_ctrl;	/* reset reg pointer */
 	    SCCA_WRITE( 9, 0xc0 );	/* reset */
 	    LONG_DELAY();		/* extra delay after WR9 access */
@@ -463,17 +460,15 @@ void mac_init_scc_port( int cflag, int port )
 	    SCCA_WRITE( 5, reg5 );
 	    SCCA_WRITE( 9, 0 );		/* no interrupts */
 	    LONG_DELAY();		/* extra delay after WR9 access */
-	    SCCA_WRITE( 10, 0 );		/* NRZ mode */
+	    SCCA_WRITE( 10, 0 );	/* NRZ mode */
 	    SCCA_WRITE( 11, clksrc );	/* main clock source */
 	    SCCA_WRITE( 12, div );	/* BRG value */
 	    SCCA_WRITE( 13, 0 );		/* BRG high byte */
-	    SCCA_WRITE( 14, brgsrc_table[baud] );
-	    SCCA_WRITE( 14, brgsrc_table[baud] | (div ? 1 : 0) );
+	    SCCA_WRITE( 14, 1 );
 	    SCCA_WRITE( 3, reg3 | 1 );
 	    SCCA_WRITE( 5, reg5 | 8 );
-#if 0
     }
-#endif
+
     mac_SCC_reset_done = 1;
     mac_SCC_init_done = 1;
 }
@@ -486,18 +481,20 @@ __initfunc(void mac_debug_init(void))
     return;
 #endif
 #ifdef DEBUG_SERIAL
-    if (!strcmp( m68k_debug_device, "ser" )) {
-	strcpy( m68k_debug_device, "ser1" );
-    }
-    if (!strcmp( m68k_debug_device, "ser1" )) {
-	/* ST-MFP Modem1 serial port */
+    if (   !strcmp( m68k_debug_device, "ser"  )
+        || !strcmp( m68k_debug_device, "ser1" )) {
+	/* Mac modem port */
 	mac_init_scc_port( B9600|CS8, 0 );
 	mac_console_driver.write = mac_scca_console_write;
+	mac_console_driver.wait_key = mac_scca_console_wait_key;
+	scc_port = 0;
     }
     else if (!strcmp( m68k_debug_device, "ser2" )) {
-	/* SCC Modem2 serial port */
+	/* Mac printer port */
 	mac_init_scc_port( B9600|CS8, 1 );
 	mac_console_driver.write = mac_sccb_console_write;
+	mac_console_driver.wait_key = mac_sccb_console_wait_key;
+	scc_port = 1;
     }
     if (mac_console_driver.write)
 	register_console(&mac_console_driver);

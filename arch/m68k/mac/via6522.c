@@ -5,18 +5,24 @@
  *	via them as are assorted bits and bobs - eg rtc, adb.
  */
 
+#include <linux/config.h>
 #include <linux/types.h>
 #include <linux/kernel.h>
 #include <linux/mm.h>
+#include <linux/delay.h>
 
+#include <asm/adb.h> 
+#include <asm/bootinfo.h> 
 #include <asm/macintosh.h> 
 #include <asm/macints.h> 
 #include "via6522.h"
-#include "psc.h"
+#include <asm/mac_psc.h>
 
 volatile unsigned char *via1=(unsigned char *)VIABASE;
 volatile unsigned char *via2=(unsigned char *)VIABASE2;
 volatile unsigned char *psc=(unsigned char *)PSCBASE;
+
+volatile long *via_memory_bogon=(long *)&via_memory_bogon;
 
 unsigned char via1_clock, via1_datab;
 
@@ -38,9 +44,8 @@ static void (*rom_reset)(void);
 #define MAC_CLOCK_HIGH		(MAC_CLOCK_TICK>>8)
 
 
-void via_init_clock(void (*func)(int, void *, struct pt_regs *))
+void via_configure_base(void)
 {
-	unsigned char c;
 
 	switch(macintosh_config->via_type)
 	{
@@ -66,6 +71,13 @@ void via_init_clock(void (*func)(int, void *, struct pt_regs *))
 			break;
 		default:
 	}
+}
+
+
+void via_init_clock(void (*func)(int, void *, struct pt_regs *))
+{	
+	unsigned char c;
+	
 	via1_clock=via_read(via1, vACR);
 	via1_datab=via_read(via1, vBufB);
 
@@ -179,29 +191,28 @@ void via_init_clock(void (*func)(int, void *, struct pt_regs *))
 }
 
 /*
- * get time offset between scheduling timer ticks
- * Code stolen from arch/m68k/atari/time.c; underflow check probably
- * wrong.
+ * TBI: get time offset between scheduling timer ticks
  */
 #define TICK_SIZE 10000
   
 /* This is always executed with interrupts disabled.  */
+
 unsigned long mac_gettimeoffset (void)
 {
-  unsigned long ticks, offset = 0;
+	unsigned long ticks, offset = 0;
 
-  /* read VIA1 timer 2 current value */
-  ticks = via_read(via1, vT1CL) + (via_read(via1, vT1CH)<<8);
-  /* The probability of underflow is less than 2% */
-  if (ticks > MAC_CLOCK_TICK - MAC_CLOCK_TICK / 50)
-    /* Check for pending timer interrupt in VIA1 IFR */
-    if (via_read(via1, vIFR) & 0x40)
-      offset = TICK_SIZE;
+	/* read VIA1 timer 2 current value */
+	ticks = via_read(via1, vT1CL) + (via_read(via1, vT1CH)<<8);
+	/* The probability of underflow is less than 2% */
+	if (ticks > MAC_CLOCK_TICK - MAC_CLOCK_TICK / 50)
+		/* Check for pending timer interrupt in VIA1 IFR */
+		if (via_read(via1, vIFR) & 0x40)
+			offset = TICK_SIZE;
 
-  ticks = MAC_CLOCK_TICK - ticks;
-  ticks = ticks * 10000L / MAC_CLOCK_TICK;
+	ticks = MAC_CLOCK_TICK - ticks;
+	ticks = ticks * 10000L / MAC_CLOCK_TICK;
 
-  return ticks + offset;
+	return ticks + offset;
 }
 
 /*
@@ -218,27 +229,64 @@ void psc_init(void)
 }
 
 /*
- *	The power switch - yes its software!
+ *	The power switch - yes it's software!
  */
- 
+
 void mac_poweroff(void)
 {
-#if 0
+
 	/*
-	 * Powerdown, for the Macs that support it
+	 * MAC_ADB_IISI may need to be moved up here if it doesn't actually
+	 * work using the ADB packet method.  --David Kilzer
 	 */
-	if(rbv)	{
-		via_write(via2, rBufB, via_read(via2, rBufB)&~0x04);
-	} else {
-		/* Direction of vDirB is output */
-		via_write(via2,vDirB,via_read(via2,vDirB)|0x04);
-		/* Send a value of 0 on that line */
-		via_write(via2,vBufB,via_read(via2,vBufB)&~0x04);
+
+	if (macintosh_config->adb_type == MAC_ADB_II)
+	{
+		if(rbv)	{
+			via_write(via2, rBufB, via_read(via2, rBufB)&~0x04);
+		} else {
+			/* Direction of vDirB is output */
+			via_write(via2,vDirB,via_read(via2,vDirB)|0x04);
+			/* Send a value of 0 on that line */
+			via_write(via2,vBufB,via_read(via2,vBufB)&~0x04);
+			/* Otherwise it prints "It is now.." then shuts off */
+			mdelay(1000);
+		}
+
+		/* We should never make it this far... */
+		printk ("It is now safe to switch off your machine.\n");
+
+		/* XXX - delay do we need to spin here ? */
+		while(1);	/* Just in case .. */
 	}
-#endif
-	/* We should never make it this far... */
-	/* XXX - delay do we need to spin here ? */
-	while(1);	/* Just in case .. */
+
+	/*
+	 * Initially discovered this technique in the Mach kernel of MkLinux in
+	 * osfmk/src/mach_kernel/ppc/POWERMAC/cuda_power.c.  Found equivalent LinuxPPC
+	 * code in arch/ppc/kernel/setup.c, which also has a PMU technique for PowerBooks!
+	 * --David Kilzer
+	 */
+
+	else if (macintosh_config->adb_type == MAC_ADB_IISI
+	      || macintosh_config->adb_type == MAC_ADB_CUDA)
+	{
+		struct adb_request req;
+
+		/*
+		 * Print our "safe" message before we send the request
+		 * just in case the request never returns.
+		 */
+
+		printk ("It is now safe to switch off your machine.\n");
+
+		adb_request (&req, NULL, 2, CUDA_PACKET, CUDA_POWERDOWN);
+
+		printk ("ADB powerdown request sent.\n");
+		for (;;)
+		{
+			adb_poll();
+		}
+	}
 }
 
 /* 
@@ -247,28 +295,65 @@ void mac_poweroff(void)
  */
 void mac_reset(void)
 {
-	unsigned long flags;
-	unsigned long *reset_hook;
+	/*
+	 * MAC_ADB_IISI may need to be moved up here if it doesn't actually
+	 * work using the ADB packet method.  --David Kilzer
+	 */
 
-	save_flags(flags);
-	cli();
+	if (macintosh_config->adb_type == MAC_ADB_II)
+	{
+		unsigned long flags;
+		unsigned long *reset_hook;
 
-#if 0	/* need ROMBASE in booter */
-#if 0	/* works on some */
-	rom_reset = (boot_info.bi_mac.rombase + 0xa);
-#else	/* testing, doesn't work on SE/30 either */
-	reset_hook = (unsigned long *) (boot_info.bi_mac.rombase + 0x4);
-	printk("ROM reset hook: %p\n", *reset_hook);
-	rom_reset = *reset_hook;
+		save_flags(flags);
+		cli();
+
+		/* need ROMBASE in booter */
+
+		/* works on some */
+		rom_reset = (void *) (mac_bi_data.rombase + 0xa);
+
+#if 0
+		/* testing, doesn't work on SE/30 either */
+		reset_hook = (unsigned long *) (mac_bi_data.rombase + 0x4);
+		printk("ROM reset hook: %p\n", *reset_hook);
+		rom_reset = *reset_hook;
 #endif
-	rom_reset();
-#endif
-	restore_flags(flags);
 
-	/* We never make it this far... */
-	printk(" reboot failed, reboot manually!\n");
-	/* XXX - delay do we need to spin here ? */
-	while(1);	/* Just in case .. */
+		rom_reset();
+
+		restore_flags(flags);
+
+		/* We never make it this far... */
+		printk ("Restart failed.  Please restart manually.\n");
+
+		/* XXX - delay do we need to spin here ? */
+		while(1);	/* Just in case .. */
+	}
+
+	/*
+	 * Initially discovered this technique in the Mach kernel of MkLinux in
+	 * osfmk/src/mach_kernel/ppc/POWERMAC/cuda_power.c.  Found equivalent LinuxPPC
+	 * code in arch/ppc/kernel/setup.c, which also has a PMU technique!
+	 * --David Kilzer
+	 * 
+	 * I suspect the MAC_ADB_CUDA code might work with other ADB types of machines
+	 * but have no way to test this myself.  --DDK
+	 */
+
+	else if (macintosh_config->adb_type == MAC_ADB_IISI
+	      || macintosh_config->adb_type == MAC_ADB_CUDA)
+	{
+		struct adb_request req;
+
+		adb_request (&req, NULL, 2, CUDA_PACKET, CUDA_RESET_SYSTEM);
+
+		printk ("Restart failed.  Please restart manually.\n");
+		for (;;)
+		{
+			adb_poll();
+		}
+	}
 }
 
 /*

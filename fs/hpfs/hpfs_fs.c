@@ -340,7 +340,7 @@ struct super_block *hpfs_read_super(struct super_block *s,
 	struct hpfs_boot_block *bootblock;
 	struct hpfs_super_block *superblock;
 	struct hpfs_spare_block *spareblock;
-	struct hpfs_dirent *de;
+	struct hpfs_dirent *de = NULL;
 	struct buffer_head *bh0, *bh1, *bh2;
 	struct quad_buffer_head qbh;
 	dnode_secno root_dno;

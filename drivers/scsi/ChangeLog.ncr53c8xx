@@ -1,4 +1,26 @@
-Sar Jul 18 13:00 1998 Gerard Roudier (groudier@club-internet.fr)
+Sun Oct  4 14:00 1998 Gerard Roudier (groudier@club-internet.fr)
+	* revision 3.0i
+	- Cosmetic changes for sparc (but not for the driver) that needs  
+	  __irq_itoa() to be used for printed IRQ value to be understandable.
+	- Some problems with the driver that didn't occur using driver 2.5f 
+	  were due to a SCSI selection problem triggered by a clearly 
+	  documented feature that in fact seems not to work: (53C8XX chips  
+	  are claimed by the manuals to be able to execute SCSI scripts just 
+	  after abitration while the SCSI core is performing SCSI selection).
+	  This optimization is broken and has been removed.
+	- Some broken scsi devices are confused when a negotiation is started 
+	  on a LUN that does not correspond to a real device. According to 
+	  SCSI specs, this is a device firmware bug. This has been worked 
+	  around by only starting negotiation if the LUN has previously be 
+	  used for at least 1 successful SCSI command.
+	- The 'last message sent' printed out on M_REJECT message reception 
+	  was read from the SFBR i/o register after the previous message had 
+	  been sent. 
+	  This was not correct and affects all previous driver versions and 
+	  the original FreeBSD one as well. The SCSI scripts has been fixed 
+	  so that it now provides the right information to the C code.
+
+Sat Jul 18 13:00 1998 Gerard Roudier (groudier@club-internet.fr)
 	* revision 3.0g
 	- Preliminary fixes for Big Endian (sent by Eddie C. Dost).
 	  Big Endian architectures should work again with the driver.

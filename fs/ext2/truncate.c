@@ -62,8 +62,6 @@ static int ext2_secrm_seed = 152;	/* Random generator base */
 #define TINDIRECT_BLOCK(inode,offset) \
 	(INDIRECT_BLOCK(inode,offset) / (addr_per_block*addr_per_block))
 
-static u32 le32_zero = cpu_to_le32(0);
-
 /*
  * Truncate has the most races in the whole filesystem: coding it is
  * a pain in the a**. Especially as I don't do any locking...
@@ -128,18 +126,16 @@ static int check_block_empty(struct inode *inode, struct buffer_head *bh,
 	} while (retry);
 
 	for (i = 0; i < addr_per_block; i++)
-		if (le32_to_cpu(*(ind++)))
+		if (*(ind++))
 			goto in_use;
 
 	if (bh->b_count == 1) {
 		int tmp;
-		if (ind_bh) {
+		if (ind_bh)
 			tmp = le32_to_cpu(*p);
-			*p = le32_zero;
-		} else {
+		else
 			tmp = *p;
-			*p = 0;
-		}
+		*p = 0;
 		inode->i_blocks -= (inode->i_sb->s_blocksize / 512);
 		mark_inode_dirty(inode);
 		/*
@@ -232,13 +228,11 @@ static int trunc_indirect (struct inode * inode, int offset, u32 * p,
 		ext2_error(inode->i_sb, "trunc_indirect",
 			"Read failure, inode=%ld, block=%d",
 			inode->i_ino, tmp);
-		if (dind_bh) {
-			*p = le32_zero;
+		*p = 0;
+		if (dind_bh)
 			mark_buffer_dirty(dind_bh, 1);
-		} else {
-			*p = 0;
+		else
 			mark_inode_dirty(inode);
-		}
 		return 0;
 	}
 
@@ -268,7 +262,7 @@ static int trunc_indirect (struct inode * inode, int offset, u32 * p,
 			}
 		}
 
-		*ind = le32_zero;
+		*ind = 0;
 		inode->i_blocks -= blocks;
 		mark_inode_dirty(inode);
 		bforget(bh);
@@ -316,13 +310,11 @@ static int trunc_dindirect (struct inode * inode, int offset, u32 * p,
 		ext2_error(inode->i_sb, "trunc_dindirect",
 			"Read failure, inode=%ld, block=%d",
 			inode->i_ino, tmp);
-		if (tind_bh) {
-			*p = le32_zero;
+		*p = 0;
+		if (tind_bh)
 			mark_buffer_dirty(tind_bh, 1);
-		} else {
-			*p = 0;
+		else
 			mark_inode_dirty(inode);
-		}
 		return 0;
 	}
 

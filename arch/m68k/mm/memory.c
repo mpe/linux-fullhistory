@@ -18,6 +18,7 @@
 #include <asm/system.h>
 #include <asm/traps.h>
 #include <asm/io.h>
+#include <asm/machdep.h>
 #ifdef CONFIG_AMIGA
 #include <asm/amigahw.h>
 #endif
@@ -554,6 +555,14 @@ unsigned long mm_ptov (unsigned long paddr)
  * this?). So we have to push first and then additionally to invalidate.
  */
 
+#ifdef CONFIG_M68K_L2_CACHE
+/*
+ *	Jes was worried about performance (urhh ???) so its optional
+ */
+ 
+extern void (*mach_l2_flush)(int) = NULL;
+#endif
+ 
 /*
  * cache_clear() semantics: Clear any cache entries for the area in question,
  * without writing back dirty entries first. This is useful if the data will
@@ -593,6 +602,10 @@ void cache_clear (unsigned long paddr, int len)
 		      "movec %/d0,%/cacr"
 		      : : "i" (FLUSH_I_AND_D)
 		      : "d0");
+#ifdef CONFIG_M68K_L2_CACHE
+    if(mach_l2_flush)
+    	mach_l2_flush(0);
+#endif
 }
 
 
@@ -641,6 +654,10 @@ void cache_push (unsigned long paddr, int len)
 		      "movec %/d0,%/cacr"
 		      : : "i" (FLUSH_I)
 		      : "d0");
+#ifdef CONFIG_M68K_L2_CACHE
+    if(mach_l2_flush)
+    	mach_l2_flush(1);
+#endif
 }
 
 

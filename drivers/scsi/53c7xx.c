@@ -325,6 +325,7 @@ static void abnormal_finished (struct NCR53c7x0_cmd *cmd, int result);
 static int disable (struct Scsi_Host *host);
 static int NCR53c7xx_run_tests (struct Scsi_Host *host);
 static void NCR53c7x0_intr(int irq, void *dev_id, struct pt_regs * regs);
+static void NCR53c7x0_intfly (struct Scsi_Host *host);
 static int ncr_halt (struct Scsi_Host *host);
 static void intr_phase_mismatch (struct Scsi_Host *host, struct NCR53c7x0_cmd 
     *cmd);
@@ -847,7 +848,6 @@ NCR53c7x0_init (struct Scsi_Host *host) {
     unsigned char revision;
     struct NCR53c7x0_hostdata *hostdata = (struct NCR53c7x0_hostdata *)
 	host->hostdata[0];
-    struct Scsi_Host *search;
     /* 
      * There are some things which we need to know about in order to provide
      * a semblance of support.  Print 'em if they aren't what we expect, 
@@ -1072,26 +1072,13 @@ NCR53c7x0_init (struct Scsi_Host *host) {
 
     NCR53c7x0_driver_init (host);
 
-    /*
-     * Set up an interrupt handler if we aren't already sharing an IRQ
-     * with another board.
-     */
-
-    for (search = first_host; search && !(search->hostt == the_template &&
-	search->irq == host->irq && search != host); search=search->next);
-
-    if (!search) {
-	if (request_irq(host->irq, NCR53c7x0_intr, 0, "53c7xx", NCR53c7x0_intr))
-	{
-	    printk("scsi%d : IRQ%d not free, detaching\n",
+    if (request_irq(host->irq, NCR53c7x0_intr, 0, "53c7xx", host))
+    {
+	printk("scsi%d : IRQ%d not free, detaching\n",
 		host->host_no, host->irq);
-	    scsi_unregister (host);
-	    return -1;
-	} 
-    } else {
-	printk("scsi%d : using interrupt handler previously installed for scsi%d\n",
-	    host->host_no, search->host_no);
-    }
+	scsi_unregister (host);
+	return -1;
+    } 
 
     if ((hostdata->run_tests && hostdata->run_tests(host) == -1) ||
         (hostdata->options & OPTION_DEBUG_TESTS_ONLY)) {
@@ -2509,18 +2496,7 @@ NCR53c7x0_dstat_sir_intr (struct Scsi_Host *host, struct
 	    abnormal_finished (cmd, DID_ERROR << 16);
 	return SPECIFIC_INT_NOTHING;
     case A_int_norm_emulateintfly:
-	/* I'm not sure this is the right ! thing to do, but it works
-	 * with the A4000T when copyback is disabled, and also the
-	 * WarpEngine with copyback enabled, so it looks as though
-	 * it does work to some extent.
-	 *
-	 * RGH:  I don't really like it - You get an interrupt which
-	 * calls NCR53c7x0_intr(), which calls this function (via
-	 * intr_dma()), which calls NCR53c7x0_intr().....
-	 * Anyway let's see how it goes for now.
-	 */
-	hostdata->emulated_intfly = 1;
-	NCR53c7x0_intr(host->irq, NULL, NULL);
+	NCR53c7x0_intfly(host);
 	return SPECIFIC_INT_NOTHING;
     case A_int_test_1:
     case A_int_test_2:
@@ -4141,6 +4117,108 @@ void dump_log(void)
 }
 #endif
 
+
+/*
+ * Function : static void NCR53c7x0_intfly (struct Scsi_Host *host)
+ *
+ * Purpose : Scan command queue for specified host, looking for completed
+ *           commands.
+ * 
+ * Inputs : Scsi_Host pointer.
+ *
+ * 	This is called from the interrupt handler, when a simulated INTFLY
+ * 	interrupt occurs.
+ */
+
+static void
+NCR53c7x0_intfly (struct Scsi_Host *host)
+{
+    NCR53c7x0_local_declare();
+    struct NCR53c7x0_hostdata *hostdata;	/* host->hostdata[0] */
+    struct NCR53c7x0_cmd *cmd,			/* command which halted */
+	**cmd_prev_ptr;
+    unsigned long flags;				
+    char search_found = 0;			/* Got at least one ? */
+
+    hostdata = (struct NCR53c7x0_hostdata *) host->hostdata[0];
+    NCR53c7x0_local_setup(host);
+
+    if (hostdata->options & OPTION_DEBUG_INTR)
+    printk ("scsi%d : INTFLY\n", host->host_no); 
+
+    /*
+    * Traverse our list of running commands, and look
+    * for those with valid (non-0xff ff) status and message
+    * bytes encoded in the result which signify command
+    * completion.
+    */
+
+    save_flags(flags);
+    cli();
+restart:
+    for (cmd_prev_ptr = (struct NCR53c7x0_cmd **)&(hostdata->running_list),
+	cmd = (struct NCR53c7x0_cmd *) hostdata->running_list; cmd ;
+	cmd_prev_ptr = (struct NCR53c7x0_cmd **) &(cmd->next), 
+    	cmd = (struct NCR53c7x0_cmd *) cmd->next)
+    {
+	Scsi_Cmnd *tmp;
+
+	if (!cmd) {
+	    printk("scsi%d : very weird.\n", host->host_no);
+	    break;
+	}
+
+	if (!(tmp = cmd->cmd)) {
+	    printk("scsi%d : weird.  NCR53c7x0_cmd has no Scsi_Cmnd\n",
+		    host->host_no);
+	    continue;
+	}
+	/* Copy the result over now; may not be complete,
+	 * but subsequent tests may as well be done on
+	 * cached memory.
+	 */
+	tmp->result = cmd->result;
+
+	if (((tmp->result & 0xff) == 0xff) ||
+			    ((tmp->result & 0xff00) == 0xff00))
+	    continue;
+
+	search_found = 1;
+
+	if (cmd->bounce.len)
+	    memcpy ((void *)cmd->bounce.addr,
+				(void *)cmd->bounce.buf, cmd->bounce.len);
+
+	/* Important - remove from list _before_ done is called */
+	if (cmd_prev_ptr)
+	    *cmd_prev_ptr = (struct NCR53c7x0_cmd *) cmd->next;
+
+	--hostdata->busy[tmp->target][tmp->lun];
+	cmd->next = hostdata->free;
+	hostdata->free = cmd;
+
+	tmp->host_scribble = NULL;
+
+	if (hostdata->options & OPTION_DEBUG_INTR) {
+	    printk ("scsi%d : command complete : pid %lu, id %d,lun %d result 0x%x ", 
+		  host->host_no, tmp->pid, tmp->target, tmp->lun, tmp->result);
+	    print_command (tmp->cmnd);
+	}
+
+	tmp->scsi_done(tmp);
+	goto restart;
+    }
+    restore_flags(flags);
+
+    if (!search_found)  {
+	printk ("scsi%d : WARNING : INTFLY with no completed commands.\n",
+			    host->host_no);
+    } else {
+	run_process_issue_queue();
+    }
+    return;
+}
+
 /*
  * Function : static void NCR53c7x0_intr (int irq, void *dev_id, struct pt_regs * regs)
  *
@@ -4161,268 +4239,108 @@ NCR53c7x0_intr (int irq, void *dev_id, struct pt_regs * regs) {
     struct Scsi_Host *host;			/* Host we are looking at */
     unsigned char istat; 			/* Values of interrupt regs */
     struct NCR53c7x0_hostdata *hostdata;	/* host->hostdata[0] */
-    struct NCR53c7x0_cmd *cmd,			/* command which halted */
-	**cmd_prev_ptr;
+    struct NCR53c7x0_cmd *cmd;			/* command which halted */
     u32 *dsa;					/* DSA */
-    int done = 1;				/* Indicates when handler 
-						   should terminate */
-    int interrupted = 0;			/* This HA generated 
-						   an interrupt */
-    int have_intfly;				/* Don't print warning 
-						   messages when we stack
-						   INTFLYs */
-    unsigned long flags;				
 
 #ifdef NCR_DEBUG
     char buf[80];				/* Debugging sprintf buffer */
     size_t buflen;				/* Length of same */
 #endif
 
-#if defined(CONFIG_AMIGA)
-    custom.intena = IF_PORTS;
-#endif
+    host     = (struct Scsi_Host *)dev_id;
+    hostdata = (struct NCR53c7x0_hostdata *) host->hostdata[0];
+    NCR53c7x0_local_setup(host);
 
-    do {
-	done = 1;
-	for (host = first_host; host; host = host->next) 
-	    if (host->hostt == the_template
-#if defined(MVME16x_INTFLY)
-			/* We have two different interrupts pointing
-			 * at this routine, so remove this check */
-#else
-				&& host->irq == irq
-#endif
-							) {
-    	    NCR53c7x0_local_setup(host);
+    /*
+     * Only read istat once per loop, since reading it again will unstack
+     * interrupts
+     */
 
-	    hostdata = (struct NCR53c7x0_hostdata *) host->hostdata[0];
-	    hostdata->dsp_changed = 0;
-	    interrupted = 0;
-	    have_intfly = 0;
+    while ((istat = NCR53c7x0_read8(hostdata->istat)) & (ISTAT_SIP|ISTAT_DIP)) {
+	hostdata->dsp_changed = 0;
+	hostdata->dstat_valid = 0;
+    	hostdata->state = STATE_HALTED;
 
-	    do {
-		hostdata->dstat_valid = 0;
-		interrupted = 0;
-		/*
-		 * Only read istat once, since reading it again will unstack
-		 * interrupts?
-		 */
-		istat = NCR53c7x0_read8(hostdata->istat);
+	if (NCR53c7x0_read8 (SSTAT2_REG) & SSTAT2_FF_MASK) 
+	    printk ("scsi%d : SCSI FIFO not empty\n", host->host_no);
 
-		if ((hostdata->options & OPTION_INTFLY) && 
-#ifdef MVME16x_INTFLY
-                    /* the bit is set which indicates an on-the-fly int */
-                        (*(volatile unsigned long *)0xfff40068 & 0x8000))
-#else
-		    (hostdata->emulated_intfly != 0))
-#endif
-		{
-		    char search_found = 0;	/* Got at least one ? */
-		    done = 0;
-		    interrupted = 1;
+	/*
+	 * NCR53c700 and NCR53c700-66 change the current SCSI
+	 * process, hostdata->ncrcurrent, in the Linux driver so
+	 * cmd = hostdata->ncrcurrent.
+	 *
+	 * With other chips, we must look through the commands
+	 * executing and find the command structure which 
+	 * corresponds to the DSA register.
+	 */
 
-#ifdef MVME16x_INTFLY
-                    /* clear the INTFLY bit */
-                    *(volatile unsigned long *)0xfff40074 = 0x8000;
-#endif
-
-		    if (hostdata->options & OPTION_DEBUG_INTR)
-			printk ("scsi%d : INTFLY\n", host->host_no); 
-
-		    /*
-		     * Traverse our list of running commands, and look
-		     * for those with valid (non-0xff ff) status and message
-		     * bytes encoded in the result which signify command
-		     * completion.
-		     */
-
-
-		    save_flags(flags);
-		    cli();
-restart:
-		    for (cmd_prev_ptr = (struct NCR53c7x0_cmd **) 
-			 &(hostdata->running_list), cmd = 
-			 (struct NCR53c7x0_cmd *) hostdata->running_list; cmd ;
-			 cmd_prev_ptr = (struct NCR53c7x0_cmd **) &(cmd->next), 
-    	    	    	 cmd = (struct NCR53c7x0_cmd *) cmd->next) {
-			Scsi_Cmnd *tmp;
-
-			if (!cmd) {
-			    printk("scsi%d : very weird.\n", host->host_no);
-			    break;
-			}
-
-			if (!(tmp = cmd->cmd)) {
-			    printk("scsi%d : weird.  NCR53c7x0_cmd has no Scsi_Cmnd\n",
-				host->host_no);
-				continue;
-			}
-                        /* Copy the result over now; may not be complete,
-			 * but subsequent tests may as well be done on
-                         * cached memory.
-                         */
-                        tmp->result = cmd->result;
-#if 0
-			printk ("scsi%d : looking at result of 0x%x\n",
-			    host->host_no, cmd->cmd->result);
-#endif
-		
-			if (((tmp->result & 0xff) == 0xff) ||
-			    ((tmp->result & 0xff00) == 0xff00))
-			    continue;
-
-			search_found = 1;
-
-			if (cmd->bounce.len)
-			    memcpy ((void *)cmd->bounce.addr,
-				(void *)cmd->bounce.buf, cmd->bounce.len);
-
-			/* Important - remove from list _before_ done is called */
-			if (cmd_prev_ptr)
-			    *cmd_prev_ptr = (struct NCR53c7x0_cmd *) cmd->next;
-
-			--hostdata->busy[tmp->target][tmp->lun];
-    	    	    	cmd->next = hostdata->free;
-    	    	    	hostdata->free = cmd;
-
-    	    	    	tmp->host_scribble = NULL;
-
-			if (hostdata->options & OPTION_DEBUG_INTR) {
-			    printk ("scsi%d : command complete : pid %lu, id %d,lun %d result 0x%x ", 
-				host->host_no, tmp->pid, tmp->target, tmp->lun, tmp->result);
-			    print_command (tmp->cmnd);
-			}
-
-#if 0
-			hostdata->options &= ~OPTION_DEBUG_INTR;
-#endif
-			tmp->scsi_done(tmp);
-			goto restart;
-
-		    }
-		    restore_flags(flags);
-		   
-		    if (!search_found && !have_intfly)  {
-			printk ("scsi%d : WARNING : INTFLY with no completed commands.\n",
-			    host->host_no);
-		    } else if (!have_intfly)  {
-			have_intfly = 1; 
-    		    	run_process_issue_queue();
-		    }
-		}
-
-		if (hostdata->emulated_intfly)
-		{
-			hostdata->emulated_intfly = 0;
-			return;
-		}
-
-		if (istat & (ISTAT_SIP|ISTAT_DIP)) {
-		    done = 0;
-		    interrupted = 1;
-    	    	    hostdata->state = STATE_HALTED;
-
-		    if (NCR53c7x0_read8 (SSTAT2_REG) & SSTAT2_FF_MASK) 
-			printk ("scsi%d : SCSI FIFO not empty\n", 
-			    host->host_no);
-
-		    /*
-		     * NCR53c700 and NCR53c700-66 change the current SCSI
-		     * process, hostdata->ncrcurrent, in the Linux driver so
-		     * cmd = hostdata->ncrcurrent.
-		     *
-		     * With other chips, we must look through the commands
-		     * executing and find the command structure which 
-		     * corresponds to the DSA register.
-		     */
-
-		    if (hostdata->options & OPTION_700) {
-			cmd = (struct NCR53c7x0_cmd *) hostdata->ncrcurrent;
-		    } else {
-			dsa = bus_to_virt(NCR53c7x0_read32(DSA_REG));
-			for (cmd = (struct NCR53c7x0_cmd *) 
-			    hostdata->running_list; cmd &&
-    	    	    	    (dsa + (hostdata->dsa_start / sizeof(u32))) != 
-    	    	    	    	cmd->dsa;
-			    cmd = (struct NCR53c7x0_cmd *)(cmd->next));
-		    }
-		    if (hostdata->options & OPTION_DEBUG_INTR) {
-			if (cmd) {
-			    printk("scsi%d : interrupt for pid %lu, id %d, lun %d ", 
-				host->host_no, cmd->cmd->pid, (int) cmd->cmd->target,
-				(int) cmd->cmd->lun);
-			    print_command (cmd->cmd->cmnd);
-			} else {
-			    printk("scsi%d : no active command\n", host->host_no);
-			}
-		    }
-
-		    if (istat & ISTAT_SIP) {
-			if (hostdata->options & OPTION_DEBUG_INTR) 
-			    printk ("scsi%d : ISTAT_SIP\n", host->host_no);
-			intr_scsi (host, cmd);
-		    }
-		
-		    if (istat & ISTAT_DIP) {
-			if (hostdata->options & OPTION_DEBUG_INTR) 
-			    printk ("scsi%d : ISTAT_DIP\n", host->host_no);
-			intr_dma (host, cmd);
-		    }
-
-		    if (!hostdata->dstat_valid) {
-			hostdata->dstat = NCR53c7x0_read8(DSTAT_REG);
-			hostdata->dstat_valid = 1;
-		    }
-
-		    if (!(hostdata->dstat & DSTAT_DFE)) {
-		      printk ("scsi%d : DMA FIFO not empty\n", host->host_no);
-		      /* Really need to check this out for 710 RGH */
-                      NCR53c7x0_write8 (CTEST8_REG, CTEST8_10_CLF);
-                      while (NCR53c7x0_read8 (CTEST8_REG) & CTEST8_10_CLF);
-		      hostdata->dstat |= DSTAT_DFE;
-		    }
-		}
-	    } while (interrupted);
-
-
-
-	    if (hostdata->intrs != -1)
-		hostdata->intrs++;
-#if 0
-	    if (hostdata->intrs > 40) {
-		printk("scsi%d : too many interrupts, halting", host->host_no);
-		disable(host);
-	    }
-#endif
-
-	    if (!hostdata->idle && hostdata->state == STATE_HALTED) {
-		if (!hostdata->dsp_changed) {
-		    hostdata->dsp = (u32 *) 
-			bus_to_virt(NCR53c7x0_read32(DSP_REG));
-		}
-			
-#if 0
-		printk("scsi%d : new dsp is 0x%lx (virt 0x%p)\n",
-		    host->host_no,  virt_to_bus(hostdata->dsp), hostdata->dsp);
-#endif
-		
-		hostdata->state = STATE_RUNNING;
-		NCR53c7x0_write32 (DSP_REG, virt_to_bus(hostdata->dsp));
-		if (hostdata->options & OPTION_DEBUG_TRACE) {
-#ifdef CYCLIC_TRACE
-		    log_insn (hostdata->dsp);
-#else
-	    	    print_insn (host, hostdata->dsp, "t ", 1);
-#endif
-		    NCR53c7x0_write8 (DCNTL_REG, hostdata->saved_dcntl |
-				DCNTL_SSM | DCNTL_STD);
-		}
+	if (hostdata->options & OPTION_700) {
+	    cmd = (struct NCR53c7x0_cmd *) hostdata->ncrcurrent;
+	} else {
+	    dsa = bus_to_virt(NCR53c7x0_read32(DSA_REG));
+	    for (cmd = (struct NCR53c7x0_cmd *) hostdata->running_list;
+		cmd && (dsa + (hostdata->dsa_start / sizeof(u32))) != cmd->dsa;
+		    cmd = (struct NCR53c7x0_cmd *)(cmd->next))
+		;
+	}
+	if (hostdata->options & OPTION_DEBUG_INTR) {
+	    if (cmd) {
+		printk("scsi%d : interrupt for pid %lu, id %d, lun %d ", 
+		    host->host_no, cmd->cmd->pid, (int) cmd->cmd->target,
+		    (int) cmd->cmd->lun);
+		print_command (cmd->cmd->cmnd);
+	    } else {
+		printk("scsi%d : no active command\n", host->host_no);
 	    }
 	}
-    } while (!done);
-#ifdef CONFIG_AMIGA
-	custom.intena = IF_SETCLR | IF_PORTS;
+	
+	if (istat & ISTAT_SIP) {
+	    if (hostdata->options & OPTION_DEBUG_INTR) 
+		printk ("scsi%d : ISTAT_SIP\n", host->host_no);
+	    intr_scsi (host, cmd);
+	}
+	
+	if (istat & ISTAT_DIP) {
+	    if (hostdata->options & OPTION_DEBUG_INTR) 
+		printk ("scsi%d : ISTAT_DIP\n", host->host_no);
+	    intr_dma (host, cmd);
+	}
+	
+	if (!hostdata->dstat_valid) {
+	    hostdata->dstat = NCR53c7x0_read8(DSTAT_REG);
+	    hostdata->dstat_valid = 1;
+	}
+	
+	if (!(hostdata->dstat & DSTAT_DFE)) {
+	    printk ("scsi%d : DMA FIFO not empty\n", host->host_no);
+	    /* Really need to check this out for 710 RGH */
+	    NCR53c7x0_write8 (CTEST8_REG, CTEST8_10_CLF);
+	    while (NCR53c7x0_read8 (CTEST8_REG) & CTEST8_10_CLF)
+		;
+	    hostdata->dstat |= DSTAT_DFE;
+	}
+
+	if (!hostdata->idle && hostdata->state == STATE_HALTED) {
+	    if (!hostdata->dsp_changed)
+		hostdata->dsp = (u32 *)bus_to_virt(NCR53c7x0_read32(DSP_REG));
+#if 0
+	    printk("scsi%d : new dsp is 0x%lx (virt 0x%p)\n",
+		host->host_no,  virt_to_bus(hostdata->dsp), hostdata->dsp);
 #endif
+		
+	    hostdata->state = STATE_RUNNING;
+	    NCR53c7x0_write32 (DSP_REG, virt_to_bus(hostdata->dsp));
+	    if (hostdata->options & OPTION_DEBUG_TRACE) {
+#ifdef CYCLIC_TRACE
+		log_insn (hostdata->dsp);
+#else
+	    	print_insn (host, hostdata->dsp, "t ", 1);
+#endif
+		NCR53c7x0_write8 (DCNTL_REG,
+			hostdata->saved_dcntl | DCNTL_SSM | DCNTL_STD);
+	    }
+	}
+    }
 }
 
 

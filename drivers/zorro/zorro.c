@@ -10,7 +10,7 @@
  *    for more details.
  */
 
-
+#include <linux/config.h>
 #include <linux/types.h>
 #include <linux/kernel.h>
 #include <linux/init.h>
@@ -185,8 +185,7 @@ __initfunc(static void mark_region(u32 addr, u_int size, int flag))
 
 __initfunc(void zorro_init(void))
 {
-    u_int i, j;
-    u32 disabled_z2mem = 0;
+    u_int i;
 
     if (!MACH_IS_AMIGA || !AMIGAHW_PRESENT(ZORRO)) {
 	printk("Zorro: No Zorro bus detected\n");
@@ -205,25 +204,10 @@ __initfunc(void zorro_init(void))
 
     /* Unmark all used Zorro II memory */
     for (i = 0; i < m68k_num_memory; i++)
-	if (m68k_memory[i].addr < 16*1024*1024) {
-	    if (AMIGAHW_PRESENT(ZORRO3)) {
-		/* don't use Zorro II RAM as system memory on Zorro III */
-		/* capable machines */
-		if (i == 0) {
-		    /* don't cut off the branch we're sitting on */
-		    printk("Warning: kernel runs in Zorro II memory\n");
-		} else {
-		    disabled_z2mem += m68k_memory[i].size;
-		    m68k_num_memory--;
-		    for (j = i; j < m68k_num_memory; j++)
-			m68k_memory[j] = m68k_memory[j+1];
-		    i--;
-		    continue;
-		}
-	    }
+	if (m68k_memory[i].addr < 16*1024*1024)
 	    mark_region(m68k_memory[i].addr, m68k_memory[i].size, 0);
-	}
-    if (disabled_z2mem)
-	printk("%dK of Zorro II memory will not be used as system memory\n",
-	       disabled_z2mem>>10);
+
+#ifdef CONFIG_PROC_FS
+    zorro_proc_init();
+#endif
 }

@@ -192,8 +192,8 @@
 #define __NR_capset		184
 #define __NR_sigaltstack	185
 #define __NR_sendfile		186
-#define __NR_streams1		187	/* some people actually want it */
-#define __NR_streams2		188	/* some people actually want it */
+#define __NR_getpmsg		187	/* some people actually want streams */
+#define __NR_putpmsg		188	/* some people actually want streams */
 
 
 #define __NR(n)	#n

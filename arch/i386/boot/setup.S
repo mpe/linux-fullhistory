@@ -145,7 +145,7 @@ start_of_setup:
 	jne	bad_sig
 	jmp	good_sig1
 
-! Routine to print ASCII string at DS:SI
+! Routine to print ASCIIz string at DS:SI
 
 prtstr:	lodsb
 	and	al,al
@@ -345,7 +345,7 @@ is_disk1:
 	mov ds,ax
 	mov ds,ax
 	xor ax,ax
-	mov [0x220], ax		! set table length to 0
+	mov [0xa0], ax		! set table length to 0
 	mov ah, #0xc0
 	stc
 	int 0x15		! puts feature table at es:bx
@@ -357,9 +357,13 @@ is_disk1:
 	sub ax, #DELTA_INITSEG	! aka #INITSEG
 	mov es,ax
 	mov si,bx
-	mov di,#0x220
+	mov di,#0xa0
 	mov cx,(si)
 	add cx,#2		! table length is a short
+	cmp cx,#0x10
+	jc sysdesc_ok
+	mov cx,#0x10		! we keep only first 16 bytes
+sysdesc_ok:
 	rep
 	movsb
 	pop ds
