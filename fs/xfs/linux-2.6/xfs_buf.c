@@ -966,7 +966,7 @@ pagebuf_cond_lock(			/* lock buffer, if not locked	*/
 	return(locked ? 0 : -EBUSY);
 }
 
-#ifdef DEBUG
+#if defined(DEBUG) || defined(XFS_BLI_TRACE)
 /*
  *	pagebuf_lock_value
  *
