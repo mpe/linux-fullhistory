@@ -10,8 +10,8 @@
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
  *		Corey Minyard <wf-rch!minyard@relay.EU.net>
- *		Donald J. Becker, <becker@super.org>
- *		Alan Cox, <A.Cox@swansea.ac.uk>
+ *		Donald J. Becker, <becker@cesdis.gsfc.nasa.gov>
+ *		Alan Cox, <Alan.Cox@linux.org>
  *		Bjorn Ekwall. <bj0rn@blox.se>
  *
  *		This program is free software; you can redistribute it and/or
@@ -28,10 +28,18 @@
 #include <linux/if.h>
 #include <linux/if_ether.h>
 
-/* for future expansion when we will have different priorities. */
-#define DEV_NUMBUFFS	3
-#define MAX_ADDR_LEN	7
+/*
+ *	For future expansion when we will have different priorities. 
+ */
+ 
+#define DEV_NUMBUFFS	3		/* Number of queues per device	   */
+#define MAX_ADDR_LEN	7		/* Largest hardware address length */
 
+/*
+ *	Compute the worst case header length according to the protocols
+ *	used.
+ */
+ 
 #if !defined(CONFIG_AX25) && !defined(CONFIG_AX25_MODULE) && !defined(CONFIG_TR)
 #define LL_MAX_HEADER	32
 #else
@@ -79,11 +87,11 @@ struct dev_mc_list
 
 struct hh_cache
 {
-	struct hh_cache *hh_next;
-	int		hh_refcnt;	/* number of users */
+	struct hh_cache *hh_next;	/* Next entry			     */
+	int		hh_refcnt;	/* number of users                   */
 	unsigned short  hh_type;	/* protocol identifier, f.e ETH_P_IP */
-	char		hh_uptodate;	/* hh_data is valid */
-	/* cached hardware header; allow for machine alignment needs.  */
+	char		hh_uptodate;	/* hh_data is valid                  */
+	/* cached hardware header; allow for machine alignment needs.        */
 	unsigned long	hh_data[16/sizeof(unsigned long)];
 };
 
@@ -140,6 +148,12 @@ struct device
 	unsigned char		if_port;	/* Selectable AUI, TP,..*/
 	unsigned char		dma;		/* DMA channel		*/
 
+	/*
+	 *	FIXME:
+	 *	The description 'enet_statistics' is misleading. We
+	 *	should change this.
+	 */
+	 
 	struct enet_statistics* (*get_stats)(struct device *dev);
 #ifdef CONFIG_NET_RADIO
 	struct iw_statistics*	(*get_wireless_stats)(struct device *dev);
@@ -179,8 +193,8 @@ struct device
 	int			mc_count;	/* Number of installed mcasts	*/
   
 	struct ip_mc_list	*ip_mc_list;	/* IP multicast filter chain    */
-	unsigned		ip_flags;
-	__u8			hash;	
+	unsigned		ip_flags;	/* IP layer control flags	*/
+	__u8			hash;		/* Hashing index 		*/	
 	__u32			tx_queue_len;	/* Max frames per queue allowed */
     
 	/* For load balancing driver pair support */
@@ -229,12 +243,13 @@ struct device
 };
 
 
-struct packet_type {
-	unsigned short		type;	/* This is really htons(ether_type). */
-	struct device		*dev;
+struct packet_type 
+{
+	unsigned short		type;	/* This is really htons(ether_type).	*/
+	struct device		*dev;	/* NULL is wildcarded here		*/
 	int			(*func) (struct sk_buff *, struct device *,
 					 struct packet_type *);
-	void			*data;
+	void			*data;	/* Private to the packet type		*/
 	struct packet_type	*next;
 };
 
@@ -242,16 +257,14 @@ struct packet_type {
 #include <linux/interrupt.h>
 #include <linux/notifier.h>
 
-/* Used by dev_rint */
-#define IN_SKBUFF	1
-
-extern struct device	loopback_dev;
-extern struct device	*dev_base;
-extern struct packet_type *ptype_base[16];
+extern struct device		loopback_dev;		/* The loopback */
+extern struct device		*dev_base;		/* All devices */
+extern struct packet_type 	*ptype_base[16];	/* Hashed types */
 
 /* NOTE: move to INET specific header;
    __ip_chk_addr is deprecated, do not use if it's possible.
  */
+
 extern int		__ip_chk_addr(unsigned long addr);
 extern struct device 	*ip_dev_find(unsigned long addr, char *name);
 /* This is the wrong place but it'll do for the moment */
@@ -311,7 +324,7 @@ extern __inline__ void dev_lock_wait(void)
 
 /* NOTE: about to be replaced with if_index */
 
-static __inline__ __u8 dev_hash_name(char *name)
+extern __inline__ __u8 dev_hash_name(char *name)
 {
 	__u8 hash = 0;
 	__u8 *p;
@@ -320,7 +333,7 @@ static __inline__ __u8 dev_hash_name(char *name)
 	return hash;
 }
 
-static __inline__ __u8 dev_hash_mc_name(char *name)
+extern __inline__ __u8 dev_hash_mc_name(char *name)
 {
 	int i;
 	__u8 hash = 0;
@@ -332,6 +345,21 @@ static __inline__ __u8 dev_hash_mc_name(char *name)
 		hash ^= h;
 	}
 	return hash;
+}
+
+/*
+ *	Buffer initialisation function. This used to appear in all the
+ *	drivers but is now an inline in case we ever want to change the
+ *	schemes used.
+ */
+ 
+extern __inline__ void dev_init_buffers(struct device *dev)
+{
+	int i;
+	for(i=0;i<DEV_NUMBUFFS;i++)
+	{
+		skb_queue_head_init(&dev->buffs[i]);
+	}
 }
 
 

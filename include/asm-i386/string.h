@@ -550,7 +550,9 @@ __asm__ __volatile__(
 	"cmpl $-1,%2\n\t"
 	"jne 1b\n"
 	"3:\tsubl %1,%0"
-	:"=a" (__res):"c" (s),"d" (count));
+	:"=a" (__res)
+	:"c" (s),"d" (count)
+	:"dx");
 return __res;
 }
 /* end of additional stuff */

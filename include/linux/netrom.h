@@ -33,6 +33,8 @@ struct nr_route_struct {
 	char mnemonic[7];
 	ax25_address neighbour;
 	unsigned int obs_count;
+	unsigned int ndigis;
+	ax25_address digipeaters[AX25_MAX_DIGIS];
 };
 
 struct nr_ctl_struct {

@@ -4,7 +4,7 @@ Written by Gerard Roudier <groudier@club-internet.fr>
 21 Rue Carnot
 95170 DEUIL LA BARRE - FRANCE
 
-05 November 1996
+29 December 1996
 ===============================================================================
 
 1.  Introduction
@@ -23,13 +23,18 @@ Written by Gerard Roudier <groudier@club-internet.fr>
       8.6  Clear profile counters
       8.7  Set flag (no_sync)
 9.  Configuration parameters
-10. Some constants and flags of the ncr53c8xx.h header files
-11. Provided files
-12. Installation procedure
+10. Boot setup commands
+      10.1 Syntax
+      10.2 Available arguments
+      10.3 Advised boot setup commands
+11. Some constants and flags of the ncr53c8xx.h header file
+12. Installation
+      12.1 Provided files
+      12.2 Installation procedure
 13. Control commands under linux-1.2.13
 14. Known problems
       14.1 Tagged commands with Iomega Jaz device
-15. SCSI problems solving
+15. SCSI problem troubleshooting
 
 ===============================================================================
 
@@ -81,13 +86,13 @@ Chip   SDMS BIOS   Wide   Ultra SCSI   the driver      the driver
 810A       N         N        N            Y             Y
 815        Y         N        N            Y             Y
 825        Y         Y        N            Y             Y
-825A       Y         Y        N            Y             Not yet
+825A       Y         Y        N            Y             Y
 860        N         N        Y(1)         Y             Y
 875        Y         Y        Y(1)         Y             Y
 
-(1) Ultra SCSI extensions will be supported in a future release of the 
-    driver.
-
+(1) Ultra (fast20 / fast40) SCSI data transfers are "in theory" supported 
+    by the driver, but not fully tested, since the maintainer does not have 
+    for the moment Ultra SCSI hard disks.
 
 3. Summary of other supported features.
 
@@ -98,6 +103,7 @@ Chip   SDMS BIOS   Wide   Ultra SCSI   the driver      the driver
         Debugging information: written to syslog (expert only)
 	Scatter / gather
 	Shared interrupt
+        Boot setup commands
 
 
 4. Memory mapped I/O versus normal I/O
@@ -259,21 +265,8 @@ Due to the 1/100 second tick of the system clock, "ms_post" time may
 be wrong.
 
 In the example above, we got 18038 interrupts "on the fly" and only
-1673 script breaks probably due to disconnections inside a segment of
-the scatter list.  This is an excellent result due to the fact that
-the driver tries to use small data segments (512) for the scatter
-list. The CPU load of this rescatter process is acceptable. Unlike
-other SCSI processors, NCR53C8XX controllers do not need large data
-chunks in order to get better performance, and it seems that it is
-just the opposite.  The scatter/gather algorithm of the middle SCSI
-driver is not optimal for NCR SCSI processors and should be tunable
-according to host type.
-
-You can tune the "wished" segment size for the scatterlist by changing
-the following "define" in the file ncr53c8xx.h.  Use only power of 2
-greater than 512 (1024, 2048 or 4096).
-
-SCSI_NCR_SEGMENT_SIZE		(default: 512)
+1673 script breaks generally due to disconnections inside a segment 
+of the scatter list.
 
 
 8. Control commands
@@ -407,19 +400,138 @@ CONFIG_SCSI_NCR53C8XX_NO_DISCONNECT   (default and only reasonnable answer: n)
     even while performing long SCSI operations.
 
 
-10. Some constants and flags of the ncr53c8xx.h header files
+10. Boot setup commands
+
+10.1 Syntax
+
+Setup commands can be passed to the driver at boot time.
+A boot setup command for the ncr53c8xx driver begins with the driver name 
+"ncr53c8xx=". The kernel syntax parser then expects an optionnal list of
+integers separated with comma followed by an optionnal list of  comma- 
+separated strings. Example of boot setup command under lilo prompt:
+
+lilo: linux root=/dev/hda2 ncr53c8xx=tags:4,sync:10,debug:0x200
+
+- enable tagged commands, up to 4 tagged commands queued.
+- set synchronous negotiation speed to 10 Mega-transfers / second.
+- set DEBUG_NEGO flag.
+
+For the moment, the integer list of arguments is disgarded by the driver. 
+It will be used in the future in order to allow a per controller setup.
+
+Each string argument must be specified as "keyword:value". Only lower-case 
+characters and digits are allowed.
+
+10.2 Available arguments
+
+Master parity checking
+      mpar:y     enabled
+      mpar:n     disabled
+
+Scsi parity checking
+      spar:y     enabled
+      spar:n     disabled
+
+Scsi disconnections
+      disc:y     enabled
+      disc:n     disabled
+ 
+Special features
+   Only apply to 810A, 825A, 860 and 875 controllers.
+   Have no effect with normal 810 and 825.
+      specf:y    enabled
+      specf:n    disabled
+
+Ultra SCSI support
+   Only apply to 860 and 875 controllers.
+   Have no effect with other ones.
+      ultra:y    enabled
+      ultra:n    disabled
+
+Number of tagged commands
+      tags:0     (or tags:1 ) tagged command queuing disabled
+      tags:#tags (#tags  > 1) tagged command queuing enabled
+  #tags will be truncated to the max queued commands configuration parameter.
+  If the driver is configured with a maximum of 4 queued commands, tags:4 is 
+  the right argument to specify.
+
+Default synchronous negotiation frequency
+      sync:0     disabled (asynchronous transfer mode)
+      sync:#MHz  enabled up to #MHz.
+  #MHz > 10     Ultra SCSI
+  #MHz >  5     Fast  SCSI
+  In all cases, the driver will use the minimum transfer period supported by 
+  controllers according to NCR53C8XX chip type.
+
+Negotiate synchronous with all devices
+  (force sync nego)
+      fsn:y      enabled
+      fsn:n      disabled
+
+Verbosity level
+      verb:0     minimal
+      verb:1     normal
+      verb:2     too much
+
+Debug mode
+      debug:0	clear debug flags
+      debug:#x   set debug flags
+  #x is an integer value combining the following power-of-2 values:
+  DEBUG_ALLOC       0x1
+  DEBUG_PHASE       0x2
+  DEBUG_POLL        0x4
+  DEBUG_QUEUE       0x8
+  DEBUG_RESULT     0x10
+  DEBUG_SCATTER    0x20
+  DEBUG_SCRIPT     0x40
+  DEBUG_TINY       0x80
+  DEBUG_TIMING    0x100
+  DEBUG_NEGO      0x200
+  DEBUG_TAGS      0x400
+  DEBUG_FREEZE    0x800
+  DEBUG_RESTART  0x1000
+
+You can play safely with DEBUG_NEGO. However, some of these flags may 
+generate bunches of syslog messages. 
+
+10.3 Advised boot setup commands
+
+If the driver has been configured with default options, the equivalent 
+boot setup is:
+    ncr53c8xx=mpar:y,spar:y,disc:y,fsn:n,specf:y,ultra:y,sync:5,tags:0,verb:1
+
+For an installation diskette or a safe but not fast system, boot setup is:
+    ncr53c8xx=mpar:y,spar:y,disc:n,fsn:n,specf:n,ultra:n,sync:0,tags:0
+
+My personnal system works flawlessly with the following setup:
+    ncr53c8xx=mpar:y,spar:y,disc:y,fsn:n,specf:y,ultra:y,sync:20,tags:8
+
+The driver prints its actual setup when verbosity level is 2. You can try 
+"ncr53c8xx=verb:2" to get the "static" setup of the driver, or add "verb:2" 
+to your boot setup command in order to check the actual setup the drive use.
+
+
+11. Some constants and flags of the ncr53c8xx.h header file
 
 Some of these are defined from the configuration parameters.  To
 change other "defines", you must edit the header file.  Do that only
 if you know what you are doing.
 
-SCSI_NCR_TRUST_BIOS_SETTING	(default: not defined)
-	If defined, the driver will preserve features bits from  
-	dmode/dcntl/ctest3/ctest4 io registers.
+SCSI_NCR_SETUP_ULTRA_SUPPORT	(default: defined)
+	Ultra SCSI support.
+	Can be changed by the following boot setup command:
+		ncr53c8xx=ultra:n
 
-SCSI_NCR_SPECIAL_FEATURES	(default: not defined)
+SCSI_NCR_SETUP_SPECIAL_FEATURES	(default: defined)
 	If defined, the driver will enable some special features according  
 	to chip and revision id.
+        For 810A, 860, 825A and 875 scsi chips, this option enables support 
+        of features that reduce load of PCI bus and memory accesses during  
+        scsi transfer processing: burst op-code fetch, read multiple, 
+        read line, prefetch, cache line line, write and invalidate, 
+        burst 128 (875 only), large dma fifo (875 only), offset 16 (875 only).
+	Can be changed by the following boot setup command:
+		ncr53c8xx=specf:n
 
 SCSI_NCR_IOMAPPED		(default: not defined)
 	If defined, normal I/O is forced.
@@ -431,12 +543,12 @@ SCSI_NCR_MAX_TAGS		(default: 4)
 	Maximum number of simultaneous tagged commands to a device.
 	Can be changed by "settags <target> <maxtags>"
 
-SCSI_NCR_DEFAULT_SYNC           (default: 5)
+SCSI_NCR_SETUP_DEFAULT_SYNC     (default: 5)
 	Frequency in KHz the driver will use at boot time for synchronous 
 	negotiation. 0 means asynchronous.
 	Can be changed by "setsync <target> <period>"
 
-SCSI_NCR_DEFAULT_TAGS		(default: 4)
+SCSI_NCR_SETUP_DEFAULT_TAGS     (default: 4)
 	Default number of simultaneous tagged commands to a device.
 	< 1 means tagged command queuing disabled at start-up.
 
@@ -444,29 +556,24 @@ SCSI_NCR_ALWAYS_SIMPLE_TAG	(default: defined)
 	Use SIMPLE TAG for read and write commands.
 	Can be changed by "setorder <ordered|simple|default>"
 
-SCSI_NCR_NO_DISCONNECT		(default: not defined)
-	If defined, targets are not allowed to disconnect.
+SCSI_NCR_SETUP_DISCONNECTION	(default: defined)
+	If defined, targets are allowed to disconnect.
 
-SCSI_NCR_FORCE_SYNC_NEGO	(default: not defined)
+SCSI_NCR_SETUP_FORCE_SYNC_NEGO	(default: not defined)
 	If defined, synchronous negotiation is tried for all SCSI-2 devices.
 	Can be changed by "setsync <target> <period>"
 
-SCSI_NCR_DISABLE_MPARITY_CHECK	(default: not defined)
-	If defined, master parity checking is disabled.
+SCSI_NCR_SETUP_MASTER_PARITY	(default: defined)
+	If defined, master parity checking is enabled.
 
-SCSI_NCR_DISABLE_PARITY_CHECK	(default: not defined)
-	If defined, SCSI parity checking is disabled.
+SCSI_NCR_SETUP_MASTER_PARITY	(default: defined)
+	If defined, SCSI parity checking is enabled.
 
 SCSI_NCR_PROFILE		(default: defined)
 	If defined, profiling information is gathered.
 
 SCSI_NCR_MAX_SCATTER		(default: 128)
 	Scatter list size of the driver ccb.
-
-SCSI_NCR_SEGMENT_SIZE		(default: 512)
-	If defined, the driver will try to use scatter segments of this size.
-	If not defined, the Linux scatter list is used as is.
-	Not defined by default.
 
 SCSI_NCR_MAX_TARGET		(default: 16)
 	Max number of targets per host.
@@ -494,8 +601,9 @@ SCSI_NCR_SG_TABLESIZE		(default: SCSI_NCR_MAX_SCATTER-1)
 SCSI_NCR_MAX_LUN	(default: 8)
 	Max number of LUNs per target.
 
+12. Installation
 
-11. Provided files
+12.1 Provided files
 
 Driver and common files:
 
@@ -509,20 +617,19 @@ Driver and common files:
 
 	Install.ncr53c8xx	: installation script
 
-	Patch-1.2.13.ncr53c8xx     : patch for linux-1.2.13
-	Patch-2.0.22-25.ncr53c8xx  : patch for linux-2.0.22 to linux-2.0.25
+	Patch-1.2.13.ncr53c8xx  : patch for linux-1.2.13
+	Patch-2.0.27.ncr53c8xx  : patch for linux-2.0.27
 
 Prior to installing the driver, you must untar the distribution, as follow:
 
 	mkdir ncrB2L
 	cd ncrB2L
-	tar zxvf ncrBsd2Linux-1.14c-src.tar.gz
+	tar zxvf ncrBsd2Linux-1.16b-src.tar.gz
 
 
-12. Installation procedure
+12.2 Installation procedure
 
-This install script has been tested with linux-1.2.13 and linux-2.0.22
-to 2.0.25. It will probably work with linux 2.0.X (X>25).
+This install script has been tested with linux-1.2.13 and 2.0.27.
 
 This procedure copies the new driver files to the kernel tree and
 applies a patch to some files of the kernel tree.

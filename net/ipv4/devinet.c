@@ -240,10 +240,6 @@ int devinet_ioctl(unsigned int cmd, void *arg)
 
 			addr = (*(struct sockaddr_in *)&ifr.ifr_broadaddr).sin_addr.s_addr;
 
-			if (addr == dev->pa_brdaddr) {
-				dev->ip_flags |= IFF_IP_BRD_OK;
-				return 0;
-			}
 			if (dev->flags & IFF_UP)
 				ip_rt_change_broadcast(dev, addr);
 			dev->pa_brdaddr = addr;

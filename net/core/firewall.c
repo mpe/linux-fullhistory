@@ -29,6 +29,10 @@ int register_firewall(int pf, struct firewall_ops *fw)
 	 *	Don't allow two people to adjust at once.
 	 */
 
+	/*
+	 *	FIXME: Swap for a kernel semaphore object
+	 */
+	 
 	while(firewall_lock)
 		schedule();
 	firewall_lock=1;

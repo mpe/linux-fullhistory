@@ -1924,7 +1924,7 @@ int tty_init(void)
 	
 	kbd_init();
 #ifdef CONFIG_ESPSERIAL  /* init ESP before rs, so rs doesn't see the port */
-	esp_init();
+	espserial_init();
 #endif
 #ifdef CONFIG_SERIAL
 	rs_init();

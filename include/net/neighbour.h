@@ -119,15 +119,13 @@ static __inline__ void neigh_insert(struct neigh_table *tbl,
 	if (tbl->tbl_lock == 1)
 	{
 		neigh_table_ins(tbl, neigh);
-		end_bh_atomic();
 	}
 	else
 	{
-		end_bh_atomic();
 		tbl->tbl_bh_mask |= NT_MASK_QUEUE;
 		neigh_queue_ins(tbl, neigh);
 	}
-	
+	end_bh_atomic();	
 }
 
 
@@ -164,7 +162,9 @@ static __inline__ void neigh_table_unlock(struct neigh_table *tbl)
 {
 	start_bh_atomic();
 	if (atomic_dec_and_test(&tbl->tbl_lock) && tbl->tbl_bh_mask)
+	{
 		neigh_tbl_run_bh(tbl);
+	}
 	end_bh_atomic();
 }
 

@@ -110,8 +110,6 @@ static int loopback_open(struct device *dev)
 /* Initialize the rest of the LOOPBACK device. */
 int loopback_init(struct device *dev)
 {
-	int i;
-
 	dev->mtu		= LOOPBACK_MTU;
 	dev->tbusy		= 0;
 	dev->hard_start_xmit	= loopback_xmit;
@@ -142,8 +140,7 @@ int loopback_init(struct device *dev)
 	 *	Fill in the generic fields of the device structure. 
 	 */
    
-	for (i = 0; i < DEV_NUMBUFFS; i++)
-		skb_queue_head_init(&dev->buffs[i]);
+	dev_init_buffers(dev);
   
 	return(0);
 };

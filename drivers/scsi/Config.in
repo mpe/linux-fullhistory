@@ -61,11 +61,6 @@ if [ "$CONFIG_PCI" = "y" -a "$CONFIG_SCSI_NCR53C7xx" != "y" ]; then
       bool '  not allow targets to disconnect' CONFIG_SCSI_NCR53C8XX_NO_DISCONNECT
     fi
   fi
-  if [ "$CONFIG_SCSI_NCR53C8XX" != "n" -a "$CONFIG_EXPERIMENTAL" = "y" ]; then
-    bool '  disable master parity checking' CONFIG_SCSI_NCR53C8XX_DISABLE_MPARITY_CHECK
-    bool '  disable scsi parity checking' CONFIG_SCSI_NCR53C8XX_DISABLE_PARITY_CHECK
-    bool '  force synchronous negotiation' CONFIG_SCSI_NCR53C8XX_FORCE_SYNC_NEGO
-  fi
 fi
 if [ "$CONFIG_MCA" = "y" ]; then
   bool 'IBMMCA SCSI support' CONFIG_SCSI_IBMMCA

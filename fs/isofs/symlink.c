@@ -83,7 +83,6 @@ static int isofs_readlink(struct inode * inode, char * buffer, int buflen)
 {
         char * pnt;
 	int i;
-	char c;
 
 	if (!S_ISLNK(inode->i_mode)) {
 		iput(inode);
@@ -97,12 +96,12 @@ static int isofs_readlink(struct inode * inode, char * buffer, int buflen)
 	iput(inode);
 	if (!pnt)
 		return 0;
-	i = 0;
 
-	while (i<buflen && (c = pnt[i])) {
-		i++;
-		put_user(c,buffer++);
-	}
+	i = strlen(pnt)+1;
+	if (i > buflen)
+		i = buflen; 
+	if (copy_to_user(buffer, pnt, i))
+		i = -EFAULT; 	
 	kfree(pnt);
 	return i;
 }

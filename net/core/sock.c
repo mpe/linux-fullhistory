@@ -367,6 +367,11 @@ int sock_getsockopt(struct socket *sock, int level, int optname,
   	return err;
 }
 
+/*
+ *	All socket objects are allocated here. This is for future
+ *	usage.
+ */
+ 
 struct sock *sk_alloc(int priority)
 {
 	struct sock *sk=(struct sock *)kmalloc(sizeof(*sk), priority);
@@ -381,6 +386,10 @@ void sk_free(struct sock *sk)
 	kfree_s(sk,sizeof(*sk));
 }
 
+/*
+ *	Simple resource managers for sockets.
+ */
+ 
 void sock_wfree(struct sk_buff *skb)
 {
 	struct sock *sk = skb->sk;
@@ -498,7 +507,11 @@ struct sk_buff *sock_alloc_send_skb(struct sock *sk, unsigned long size, unsigne
 		}
 		
 		if(sk->shutdown&SEND_SHUTDOWN)
-		{
+		{	
+			/*
+			 *	FIXME: Check 1003.1g should we deliver
+			 *	a signal here ???
+			 */
 			*errcode=-EPIPE;
 			return NULL;
 		}
@@ -590,3 +603,101 @@ void __release_sock(struct sock *sk)
 	end_bh_atomic();
 #endif  
 }
+
+
+/*
+ *	Generic socket manager library. Most simpler socket families
+ *	use this to manage their socket lists. At some point we should
+ *	hash these. By making this generic we get the lot hashed for free.
+ */
+ 
+void sklist_remove_socket(struct sock **list, struct sock *sk)
+{
+	unsigned long flags;
+	struct sock *s;
+
+	save_flags(flags);
+	cli();
+
+	s= *list;
+	if(s==sk)
+	{
+		*list = s->next;
+		restore_flags(flags);
+		return;
+	}
+	while(s && s->next)
+	{
+		if(s->next==sk)
+		{
+			s->next=sk->next;
+			restore_flags(flags);
+			return;
+		}
+		s=s->next;
+	}
+	restore_flags(flags);
+}
+
+void sklist_insert_socket(struct sock **list, struct sock *sk)
+{
+	unsigned long flags;
+	save_flags(flags);
+	cli();
+	sk->next= *list;
+	*list=sk;
+	restore_flags(flags);
+}
+
+/*
+ *	This is only called from user mode. Thus it protects itself against
+ *	interrupt users but doesn't worry about being called during work.
+ *	Once it is removed from the queue no interrupt or bottom half will
+ *	touch it and we are (fairly 8-) ) safe.
+ */
+
+void sklist_destroy_socket(struct sock **list, struct sock *sk);
+
+/*
+ *	Handler for deferred kills.
+ */
+
+static void sklist_destroy_timer(unsigned long data)
+{
+	struct sock *sk=(struct sock *)data;
+	sklist_destroy_socket(NULL,sk);
+}
+
+/*
+ *	Destroy a socket. We pass NULL for a list if we know the
+ *	socket is not on a list.
+ */
+ 
+void sklist_destroy_socket(struct sock **list,struct sock *sk)
+{
+	struct sk_buff *skb;
+	if(list)
+		sklist_remove_socket(list, sk);
+
+	while((skb=skb_dequeue(&sk->receive_queue))!=NULL)
+	{
+		kfree_skb(skb,FREE_READ);
+	}
+
+	if(sk->wmem_alloc == 0 && sk->rmem_alloc == 0 && sk->dead)
+	{
+		sk_free(sk);
+	}
+	else
+	{
+		/*
+		 *	Someone is using our buffers still.. defer
+		 */
+		init_timer(&sk->timer);
+		sk->timer.expires=jiffies+10*HZ;
+		sk->timer.function=sklist_destroy_timer;
+		sk->timer.data = (unsigned long)sk;
+		add_timer(&sk->timer);
+	}
+}
+

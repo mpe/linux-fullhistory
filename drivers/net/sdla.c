@@ -1636,7 +1636,6 @@ static struct enet_statistics *sdla_stats(struct device *dev)
 int sdla_init(struct device *dev)
 {
    struct frad_local *flp;
-   int               i;
 
    /* allocate the private data structure */
    flp = kmalloc(sizeof(struct frad_local), GFP_KERNEL);
@@ -1666,9 +1665,8 @@ int sdla_init(struct device *dev)
    dev->addr_len        = 0;
    dev->mtu             = SDLA_MAX_MTU;
 
-   for (i = 0; i < DEV_NUMBUFFS; i++) 
-      skb_queue_head_init(&dev->buffs[i]);
-
+   dev_init_buffers(dev);
+   
    flp->activate        = sdla_activate;
    flp->deactivate      = sdla_deactivate;
    flp->assoc           = sdla_assoc;

@@ -115,14 +115,14 @@ void x25_link_control(struct sk_buff *skb, struct x25_neigh *neigh, unsigned sho
 	switch (frametype) {
 		case X25_RESTART_REQUEST:
 			neigh->t20timer = 0;
-			neigh->state    = 1;
+			neigh->state    = X25_LINK_STATE_3;
 			del_timer(&neigh->timer);
 			x25_transmit_restart_confirmation(neigh);
 			break;
 
 		case X25_RESTART_CONFIRMATION:
 			neigh->t20timer = 0;
-			neigh->state    = 1;
+			neigh->state    = X25_LINK_STATE_3;
 			del_timer(&neigh->timer);
 			break;
 
@@ -135,9 +135,9 @@ void x25_link_control(struct sk_buff *skb, struct x25_neigh *neigh, unsigned sho
 			break;
 	}
 
-	if (neigh->state == 1) {
+	if (neigh->state == X25_LINK_STATE_3) {
 		while ((skbn = skb_dequeue(&neigh->queue)) != NULL)
-			x25_send_frame(skbn, neigh->dev);
+			x25_send_frame(skbn, neigh);
 	}
 }
 
@@ -167,7 +167,7 @@ void x25_transmit_restart_request(struct x25_neigh *neigh)
 
 	skb->sk = NULL;
 
-	x25_send_frame(skb, neigh->dev);
+	x25_send_frame(skb, neigh);
 }
 
 /*
@@ -194,7 +194,7 @@ void x25_transmit_restart_confirmation(struct x25_neigh *neigh)
 
 	skb->sk = NULL;
 
-	x25_send_frame(skb, neigh->dev);
+	x25_send_frame(skb, neigh);
 }
 
 /*
@@ -222,7 +222,7 @@ void x25_transmit_diagnostic(struct x25_neigh *neigh, unsigned char diag)
 
 	skb->sk = NULL;
 
-	x25_send_frame(skb, neigh->dev);
+	x25_send_frame(skb, neigh);
 }
 
 /*
@@ -252,7 +252,7 @@ void x25_transmit_clear_request(struct x25_neigh *neigh, unsigned int lci, unsig
 
 	skb->sk = NULL;
 
-	x25_send_frame(skb, neigh->dev);
+	x25_send_frame(skb, neigh);
 }
 
 void x25_transmit_link(struct sk_buff *skb, struct x25_neigh *neigh)
@@ -262,22 +262,40 @@ void x25_transmit_link(struct sk_buff *skb, struct x25_neigh *neigh)
 		return;
 #endif
 
-	if (!x25_link_up(neigh->dev))
-		neigh->state = 0;
+	switch (neigh->state) {
+		case X25_LINK_STATE_0:
+			skb_queue_tail(&neigh->queue, skb);
+			neigh->state = X25_LINK_STATE_1;
+			x25_establish_link(neigh);
+			break;
+		case X25_LINK_STATE_1:
+		case X25_LINK_STATE_2:
+			skb_queue_tail(&neigh->queue, skb);
+			break;
+		case X25_LINK_STATE_3:
+			x25_send_frame(skb, neigh);
+			break;
+	}
+}
 
-	skb->arp  = 1;
-
-	if (neigh->state == 1) {
-		x25_send_frame(skb, neigh->dev);
-	} else {
-		skb_queue_tail(&neigh->queue, skb);
-		
-		if (neigh->t20timer == 0) {
+void x25_link_established(struct x25_neigh *neigh)
+{
+	switch (neigh->state) {
+		case X25_LINK_STATE_0:
+			neigh->state = X25_LINK_STATE_2;
+			break;
+		case X25_LINK_STATE_1:
 			x25_transmit_restart_request(neigh);
+			neigh->state    = X25_LINK_STATE_2;
 			neigh->t20timer = neigh->t20;
 			x25_link_set_timer(neigh);
-		}
+			break;
 	}
+}
+
+void x25_link_terminated(struct x25_neigh *neigh)
+{
+	neigh->state = X25_LINK_STATE_0;
 }
 
 /*
@@ -295,7 +313,7 @@ void x25_link_device_up(struct device *dev)
 	init_timer(&x25_neigh->timer);
 
 	x25_neigh->dev      = dev;
-	x25_neigh->state    = 0;
+	x25_neigh->state    = X25_LINK_STATE_0;
 	x25_neigh->extended = 0;
 	x25_neigh->t20timer = 0;
 	x25_neigh->t20      = sysctl_x25_restart_request_timeout;
@@ -412,10 +430,10 @@ int x25_link_get_info(char *buffer, char **start, off_t offset, int length, int 
 
 	cli();
 
-	len += sprintf(buffer, "device           st    t20    ext\n");
+	len += sprintf(buffer, "device  st    t20    ext\n");
 
 	for (x25_neigh = x25_neigh_list; x25_neigh != NULL; x25_neigh = x25_neigh->next) {
-		len += sprintf(buffer + len, "%-15s  %2d %3d/%03d  %d\n",
+		len += sprintf(buffer + len, "%-6s  %2d  %3d/%03d  %d\n",
 			x25_neigh->dev->name,
 			x25_neigh->state,
 			x25_neigh->t20timer / X25_SLOWHZ,

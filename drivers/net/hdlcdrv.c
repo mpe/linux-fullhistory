@@ -790,8 +790,8 @@ static int hdlcdrv_probe(struct device *dev)
 	dev->get_stats = hdlcdrv_get_stats;
 
 	/* Fill in the fields of the device structure */
-	for (i=0; i < DEV_NUMBUFFS; i++)
-		skb_queue_head_init(&dev->buffs[i]);
+
+	dev_init_buffers(dev);
 
 	skb_queue_head_init(&s->send_queue);
 	

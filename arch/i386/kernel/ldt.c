@@ -16,7 +16,6 @@
 
 static int read_ldt(void * ptr, unsigned long bytecount)
 {
-	int error;
 	void * address = current->ldt;
 	unsigned long size;
 
@@ -29,11 +28,7 @@ static int read_ldt(void * ptr, unsigned long bytecount)
 	}
 	if (size > bytecount)
 		size = bytecount;
-	error = verify_area(VERIFY_WRITE, ptr, size);
-	if (error)
-		return error;
-	copy_to_user(ptr, address, size);
-	return size;
+	return copy_to_user(ptr, address, size) ? -EFAULT : size;
 }
 
 static inline int limits_ok(struct modify_ldt_ldt_s *ldt_info)
@@ -69,11 +64,9 @@ static int write_ldt(void * ptr, unsigned long bytecount, int oldmode)
 
 	if (bytecount != sizeof(ldt_info))
 		return -EINVAL;
-	error = verify_area(VERIFY_READ, ptr, sizeof(ldt_info));
+	error = copy_from_user(&ldt_info, ptr, sizeof(ldt_info));
 	if (error)
-		return error;
-
-	copy_from_user(&ldt_info, ptr, sizeof(ldt_info));
+		return -EFAULT; 	
 
 	if ((ldt_info.contents == 3 && (oldmode || ldt_info.seg_not_present == 0)) || ldt_info.entry_number >= LDT_ENTRIES)
 		return -EINVAL;

@@ -46,9 +46,10 @@
 #define ESI_NO_COMMAND		0xff
 
 #define ESP_STAT_RX_TIMEOUT	0x01
-#define ESP_STAT_NEED_DMA	0x02
-#define ESP_STAT_DMA_RX		0x04
-#define ESP_STAT_DMA_TX		0x08
+#define ESP_STAT_NEED_DMA_RX	0x02
+#define ESP_STAT_NEED_DMA_TX    0x04
+#define ESP_STAT_DMA_RX		0x08
+#define ESP_STAT_DMA_TX		0x10
 
 #define ESP_EVENT_WRITE_WAKEUP	0
 #define ESP_MAGIC		0x53ee

@@ -57,10 +57,13 @@ static int reasm_frag(struct frag_queue *fq, struct sk_buff **skb,
 		      __u8 *nhptr,
 		      struct frag_hdr *fhdr)
 {
-	__u32	expires;
+	__u32	expires = jiffies + IPV6_FRAG_TIMEOUT;
 	int nh;
 
-	expires = del_timer(&fq->timer);
+	if (del_timer(&fq->timer))
+	{
+		expires = fq->timer.expires;
+	}
 
 	/*
 	 *	We queue the packet even if it's the last.
@@ -83,7 +86,7 @@ static int reasm_frag(struct frag_queue *fq, struct sk_buff **skb,
 		if ((nh = reasm_frag_1(fq, skb)))
 			return nh;
 	}
-		
+
 	fq->timer.expires = expires;
 	add_timer(&fq->timer);
 	

@@ -4,7 +4,7 @@
  *	This is ALPHA test software. This code may break your machine, randomly fail to work with new 
  *	releases, misbehave and/or generally screw up. It might even work. 
  *
- *	This code REQUIRES 2.1.15 or higher/ NET3.039
+ *	This code REQUIRES 2.1.15 or higher/ NET3.038
  *
  *	This module:
  *		This module is free software; you can redistribute it and/or
@@ -34,6 +34,7 @@
   
 #include <linux/config.h>
 #if defined(CONFIG_NETROM) || defined(CONFIG_NETROM_MODULE)
+#include <linux/module.h>
 #include <linux/errno.h>
 #include <linux/types.h>
 #include <linux/socket.h>
@@ -82,6 +83,37 @@ static struct sock *volatile nr_list = NULL;
 
 static struct proto_ops nr_proto_ops;
 
+static void nr_free_sock(struct sock *sk)
+{
+	kfree_s(sk->protinfo.nr, sizeof(*sk->protinfo.nr));
+
+	sk_free(sk);
+	
+	MOD_DEC_USE_COUNT;
+}
+
+static struct sock *nr_alloc_sock(void)
+{
+	struct sock *sk;
+	nr_cb *nr;
+
+	if ((sk = sk_alloc(GFP_ATOMIC)) == NULL)
+		return NULL;
+
+	if ((nr = (nr_cb *)kmalloc(sizeof(*nr), GFP_ATOMIC)) == NULL) {
+		sk_free(sk);
+		return NULL;
+	}
+
+	MOD_INC_USE_COUNT;
+
+	memset(nr, 0x00, sizeof(*nr));
+
+	sk->protinfo.nr = nr;
+	nr->sk = sk;
+
+	return sk;
+}
 
 /*
  *	Socket removal during an interrupt is now safe.
@@ -283,8 +315,7 @@ void nr_destroy_socket(struct sock *sk)	/* Not static as it's used by the timer 
 		sk->timer.data     = (unsigned long)sk;
 		add_timer(&sk->timer);
 	} else {
-		kfree_s(sk->protinfo.nr, sizeof(*sk->protinfo.nr));
-		sk_free(sk);
+		nr_free_sock(sk);
 	}
 
 	restore_flags(flags);
@@ -543,7 +574,19 @@ static void def_callback1(struct sock *sk)
 static void def_callback2(struct sock *sk, int len)
 {
 	if (!sk->dead)
+	{
+		sock_wake_async(sk->socket,1);
 		wake_up_interruptible(sk->sleep);
+	}
+}
+
+static void def_callback3(struct sock *sk, int len)
+{
+	if (!sk->dead)
+	{
+		sock_wake_async(sk->socket,2);
+		wake_up_interruptible(sk->sleep);
+	}
 }
 
 static int nr_create(struct socket *sock, int protocol)
@@ -554,13 +597,10 @@ static int nr_create(struct socket *sock, int protocol)
 	if (sock->type != SOCK_SEQPACKET || protocol != 0)
 		return -ESOCKTNOSUPPORT;
 
-	if ((sk = sk_alloc(GFP_ATOMIC)) == NULL)
+	if ((sk = nr_alloc_sock()) == NULL)
 		return -ENOMEM;
 
-	if ((nr = (nr_cb *)kmalloc(sizeof(*nr), GFP_ATOMIC)) == NULL) {
-		sk_free(sk);
-		return -ENOMEM;
-	}
+	nr = sk->protinfo.nr;
 
 	skb_queue_head_init(&sk->receive_queue);
 	skb_queue_head_init(&sk->write_queue);
@@ -583,7 +623,7 @@ static int nr_create(struct socket *sock, int protocol)
 
 	sk->state_change = def_callback1;
 	sk->data_ready   = def_callback2;
-	sk->write_space  = def_callback1;
+	sk->write_space  = def_callback3;
 	sk->error_report = def_callback1;
 
 	if (sock != NULL) {
@@ -595,8 +635,6 @@ static int nr_create(struct socket *sock, int protocol)
 	skb_queue_head_init(&nr->reseq_queue);
 	skb_queue_head_init(&nr->frag_queue);
 
-	nr->my_index = 0;
-	nr->my_id    = 0;
 	nr->rtt      = sysctl_netrom_transport_timeout / 2;
 	nr->t1       = sysctl_netrom_transport_timeout;
 	nr->t2       = sysctl_netrom_transport_acknowledge_delay;
@@ -606,35 +644,8 @@ static int nr_create(struct socket *sock, int protocol)
 	nr->paclen   = sysctl_netrom_transport_packet_length;
 	nr->window   = sysctl_netrom_transport_requested_window_size;
 
-	nr->t1timer   = 0;
-	nr->t2timer   = 0;
-	nr->t4timer   = 0;
-	nr->idletimer = 0;
-	nr->n2count   = 0;
-
-	nr->va       = 0;
-	nr->vr       = 0;
-	nr->vs       = 0;
-	nr->vl       = 0;
-
-	nr->your_index = 0;
-	nr->your_id    = 0;
-
-	nr->my_index   = 0;
-	nr->my_id      = 0;
-
 	nr->bpqext     = 1;
-	nr->fraglen    = 0;
-	nr->hdrincl    = 0;
 	nr->state      = NR_STATE_0;
-	nr->device     = NULL;
-
-	memset(&nr->source_addr, '\0', AX25_ADDR_LEN);
-	memset(&nr->user_addr,   '\0', AX25_ADDR_LEN);
-	memset(&nr->dest_addr,   '\0', AX25_ADDR_LEN);
-
-	nr->sk          = sk;
-	sk->protinfo.nr = nr;
 
 	return 0;
 }
@@ -647,13 +658,10 @@ static struct sock *nr_make_new(struct sock *osk)
 	if (osk->type != SOCK_SEQPACKET)
 		return NULL;
 
-	if ((sk = sk_alloc(GFP_ATOMIC)) == NULL)
+	if ((sk = nr_alloc_sock()) == NULL)
 		return NULL;
 
-	if ((nr = (nr_cb *)kmalloc(sizeof(*nr), GFP_ATOMIC)) == NULL) {
-		sk_free(sk);
-		return NULL;
-	}
+	nr = sk->protinfo.nr;
 
 	skb_queue_head_init(&sk->receive_queue);
 	skb_queue_head_init(&sk->write_queue);
@@ -675,7 +683,7 @@ static struct sock *nr_make_new(struct sock *osk)
 
 	sk->state_change = def_callback1;
 	sk->data_ready   = def_callback2;
-	sk->write_space  = def_callback1;
+	sk->write_space  = def_callback3;
 	sk->error_report = def_callback1;
 
 	skb_queue_head_init(&nr->ack_queue);
@@ -694,21 +702,6 @@ static struct sock *nr_make_new(struct sock *osk)
 	nr->device   = osk->protinfo.nr->device;
 	nr->bpqext   = osk->protinfo.nr->bpqext;
 	nr->hdrincl  = osk->protinfo.nr->hdrincl;
-	nr->fraglen  = 0;
-
-	nr->t1timer   = 0;
-	nr->t2timer   = 0;
-	nr->t4timer   = 0;
-	nr->idletimer = 0;
-	nr->n2count   = 0;
-
-	nr->va       = 0;
-	nr->vr       = 0;
-	nr->vs       = 0;
-	nr->vl       = 0;
-	
-	sk->protinfo.nr = nr;
-	nr->sk          = sk;
 
 	return sk;
 }
@@ -1248,7 +1241,7 @@ static int nr_recvmsg(struct socket *sock, struct msghdr *msg, int size,
 		return -ENOTCONN;
 
 	/* Now we can treat all alike */
-	if ((skb = skb_recv_datagram(sk, flags, msg->msg_flags & MSG_DONTWAIT, &er)) == NULL)
+	if ((skb = skb_recv_datagram(sk, flags & ~MSG_DONTWAIT, flags & MSG_DONTWAIT, &er)) == NULL)
 		return er;
 
 	if (!sk->protinfo.nr->hdrincl) {
@@ -1413,7 +1406,7 @@ static int nr_get_info(char *buffer, char **start, off_t offset, int length, int
 	return(len);
 } 
 
-static struct net_proto_family netrom_family_ops = 
+static struct net_proto_family nr_family_ops = 
 {
 	AF_NETROM,
 	nr_create
@@ -1440,7 +1433,7 @@ static struct proto_ops nr_proto_ops = {
 	nr_recvmsg
 };
 
-struct notifier_block nr_dev_notifier = {
+static struct notifier_block nr_dev_notifier = {
 	nr_device_event,
 	0
 };
@@ -1466,9 +1459,18 @@ static struct proc_dir_entry proc_net_nr_nodes = {
 };
 #endif	
 
+static struct device dev_nr[] = {
+	{"nr0", 0, 0, 0, 0, 0, 0, 0, 0, 0, NULL, nr_init},
+	{"nr1", 0, 0, 0, 0, 0, 0, 0, 0, 0, NULL, nr_init},
+	{"nr2", 0, 0, 0, 0, 0, 0, 0, 0, 0, NULL, nr_init},
+	{"nr3", 0, 0, 0, 0, 0, 0, 0, 0, 0, NULL, nr_init}
+};
+
 void nr_proto_init(struct net_proto *pro)
 {
-	sock_register(&netrom_family_ops);
+	int i;
+
+	sock_register(&nr_family_ops);
 	register_netdevice_notifier(&nr_dev_notifier);
 	printk(KERN_INFO "G4KLX NET/ROM for Linux. Version 0.6 for AX25.034 Linux 2.1\n");
 
@@ -1476,6 +1478,9 @@ void nr_proto_init(struct net_proto *pro)
 		printk(KERN_ERR "NET/ROM unable to register protocol with AX.25\n");
 	if (!ax25_linkfail_register(nr_link_failed))
 		printk(KERN_ERR "NET/ROM unable to register linkfail handler with AX.25\n");
+
+	for (i = 0; i < 4; i++)
+		register_netdev(&dev_nr[i]);
 
 	nr_register_sysctl();
 
@@ -1485,5 +1490,46 @@ void nr_proto_init(struct net_proto *pro)
 	proc_net_register(&proc_net_nr_nodes);
 #endif	
 }
+
+#ifdef MODULE
+EXPORT_NO_SYMBOLS;
+
+int init_module(void)
+{
+	nr_proto_init(NULL);
+
+	return 0;
+}
+
+void cleanup_module(void)
+{
+	int i;
+
+#ifdef CONFIG_PROC_FS
+	proc_net_unregister(PROC_NET_NR);
+	proc_net_unregister(PROC_NET_NR_NEIGH);
+	proc_net_unregister(PROC_NET_NR_NODES);
+#endif
+	nr_rt_free();
+
+	ax25_protocol_release(AX25_P_NETROM);
+	ax25_linkfail_release(nr_link_failed);
+
+	unregister_netdevice_notifier(&nr_dev_notifier);
+
+	nr_unregister_sysctl();
+
+	sock_unregister(AF_NETROM);
+
+	for (i = 0; i < 4; i++) {
+		if (dev_nr[i].priv != NULL) {
+			kfree(dev_nr[i].priv);
+			dev_nr[i].priv = NULL;
+			unregister_netdev(&dev_nr[i]);
+		}
+	}
+}
+
+#endif
 
 #endif

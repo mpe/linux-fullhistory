@@ -23,7 +23,6 @@
 #include <asm/uaccess.h>
 #include <asm/system.h>
 #include <asm/bitops.h>
-#include <linux/config.h>
 #include <linux/types.h>
 #include <linux/kernel.h>
 #include <linux/sched.h>
@@ -43,19 +42,17 @@
 #include <linux/skbuff.h>
 #include <net/sock.h>
 #include <net/arp.h>
-#ifdef CONFIG_NET_ALIAS
 #include <linux/net_alias.h>
-#endif
 
 
 /*
- *	Device multicast list maintenance. This knows about such little matters as promiscuous mode and
- *	converting from the list to the array the drivers use. At least until I fix the drivers up.
+ *	Device multicast list maintenance. 
  *
- *	This is used both by IP and by the user level maintenance functions. Unlike BSD we maintain a usage count
- *	on a given multicast address so that a casual user application can add/delete multicasts used by protocols
- *	without doing damage to the protocols when it deletes the entries. It also helps IP as it tracks overlapping
- *	maps.
+ *	This is used both by IP and by the user level maintenance functions. 
+ *	Unlike BSD we maintain a usage count on a given multicast address so 
+ *	that a casual user application can add/delete multicasts used by 
+ *	protocols without doing damage to the protocols when it deletes the
+ *	entries. It also helps IP as it tracks overlapping maps.
  */
  
 
@@ -72,9 +69,13 @@ void dev_mc_upload(struct device *dev)
 	if(!(dev->flags&IFF_UP))
 		return;
 
-#ifdef CONFIG_NET_ALIAS
+	/*
+	 *	An aliased device should end up with the combined
+	 *	multicast list of all its aliases. 
+	 *	[Check this is still ok -AC]
+	 */
+	 
 	dev = net_alias_main_dev(dev);
-#endif
 		
 	/*
 	 *	Devices with no set multicast don't get set 
@@ -93,19 +94,29 @@ void dev_mc_upload(struct device *dev)
 void dev_mc_delete(struct device *dev, void *addr, int alen, int all)
 {
 	struct dev_mc_list **dmi;
-#ifdef CONFIG_NET_ALIAS
 	dev = net_alias_main_dev(dev);
-#endif
+
 	for(dmi=&dev->mc_list;*dmi!=NULL;dmi=&(*dmi)->next)
 	{
+		/*
+		 *	Find the entry we want to delete. The device could
+		 *	have variable length entries so check these too.
+		 */
 		if(memcmp((*dmi)->dmi_addr,addr,(*dmi)->dmi_addrlen)==0 && alen==(*dmi)->dmi_addrlen)
 		{
 			struct dev_mc_list *tmp= *dmi;
 			if(--(*dmi)->dmi_users && !all)
 				return;
+			/*
+			 *	Last user. So delete the entry.
+			 */
 			*dmi=(*dmi)->next;
 			dev->mc_count--;
 			kfree_s(tmp,sizeof(*tmp));
+			/*
+			 *	We have altered the list, so the card
+			 *	loaded filter is now wrong. Fix it
+			 */
 			dev_mc_upload(dev);
 			return;
 		}
@@ -119,9 +130,9 @@ void dev_mc_delete(struct device *dev, void *addr, int alen, int all)
 void dev_mc_add(struct device *dev, void *addr, int alen, int newonly)
 {
 	struct dev_mc_list *dmi;
-#ifdef CONFIG_NET_ALIAS
+
 	dev = net_alias_main_dev(dev);
-#endif
+
 	for(dmi=dev->mc_list;dmi!=NULL;dmi=dmi->next)
 	{
 		if(memcmp(dmi->dmi_addr,addr,dmi->dmi_addrlen)==0 && dmi->dmi_addrlen==alen)
@@ -149,10 +160,8 @@ void dev_mc_add(struct device *dev, void *addr, int alen, int newonly)
 
 void dev_mc_discard(struct device *dev)
 {
-#ifdef CONFIG_NET_ALIAS
 	if (net_alias_is(dev))
 		return;
-#endif
 	while(dev->mc_list!=NULL)
 	{
 		struct dev_mc_list *tmp=dev->mc_list;

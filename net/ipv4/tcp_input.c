@@ -567,10 +567,11 @@ static int tcp_clean_rtx_queue(struct sock *sk, __u32 ack, __u32 *seq,
 		kfree_skb(skb, FREE_WRITE);
 	}
 
-	if (acked && !sk->dead)
+	if (acked)
 	{
 		tp->retrans_head = NULL;
-		sk->write_space(sk);
+		if (!sk->dead)
+			sk->write_space(sk);
 	}
 	
 	return acked;
@@ -1744,8 +1745,6 @@ int tcp_rcv_state_process(struct sock *sk, struct sk_buff *skb,
 			if (tp->snd_una == sk->write_seq) 
 			{
 				tcp_time_wait(sk);
-				if (!sk->dead) 
-					sk->state_change(sk);
 			}
 			break;
 
@@ -1812,7 +1811,7 @@ int tcp_rcv_state_process(struct sock *sk, struct sk_buff *skb,
 		
 	case TCP_ESTABLISHED:
 		queued = tcp_data(skb, sk, len);
-		break;		
+		break;
 	}
 
 	/*

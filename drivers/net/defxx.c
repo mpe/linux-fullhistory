@@ -687,11 +687,11 @@ struct device *dfx_alloc_device(
 	tmp_dev->rebuild_header			= NULL;		/* set in fddi_setup() */
 	tmp_dev->set_multicast_list		= &dfx_ctl_set_multicast_list;
 	tmp_dev->set_mac_address		= &dfx_ctl_set_mac_address;
-	tmp_dev->do_ioctl				= NULL;		/* not supported for now &&& */
-	tmp_dev->set_config				= NULL;		/* not supported for now &&& */
-	tmp_dev->header_cache_bind		= NULL;		/* not supported */
-	tmp_dev->header_cache_update	= NULL;		/* not supported */
-	tmp_dev->change_mtu				= NULL;		/* set in fddi_setup() */
+	tmp_dev->do_ioctl			= NULL;		/* not supported for now &&& */
+	tmp_dev->set_config			= NULL;		/* not supported for now &&& */
+	tmp_dev->hard_header_cache		= NULL;		/* not supported */
+	tmp_dev->header_cache_update		= NULL;		/* not supported */
+	tmp_dev->change_mtu			= NULL;		/* set in fddi_setup() */
 
 	/* Initialize remaining device structure information */
 
@@ -3134,13 +3134,13 @@ int dfx_xmt_queue_pkt(
 	 */
 
 	if (!IN_RANGE(skb->len, FDDI_K_LLC_ZLEN, FDDI_K_LLC_LEN))
-		{
-		printk("%s: Invalid packet length - %lu bytes\n", dev->name, skb->len);
-		bp->xmt_length_errors++;	/* bump error counter */
+	{
+		printk("%s: Invalid packet length - %u bytes\n", 
+			dev->name, skb->len);
+		bp->xmt_length_errors++;		/* bump error counter */
 		dev_tint(dev);				/* dequeue packets from xmt queue and send them */
-		return(0);					/* return "success" */
-		}
-
+		return(0);				/* return "success" */
+	}
 	/*
 	 * See if adapter link is available, if not, free buffer
 	 *

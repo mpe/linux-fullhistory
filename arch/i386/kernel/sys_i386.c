@@ -28,15 +28,12 @@ asmlinkage int sys_pipe(unsigned long * fildes)
 	int fd[2];
 	int error;
 
-	error = verify_area(VERIFY_WRITE,fildes,8);
-	if (error)
-		return error;
 	error = do_pipe(fd);
-	if (error)
-		return error;
-	put_user(fd[0],0+fildes);
-	put_user(fd[1],1+fildes);
-	return 0;
+	if (!error) {
+		if (copy_to_user(fildes, fd, 2*sizeof(int)))
+			error = -EFAULT;
+	}
+	return error;
 }
 
 /*
@@ -60,10 +57,8 @@ asmlinkage int old_mmap(struct mmap_arg_struct *arg)
 	struct file * file = NULL;
 	struct mmap_arg_struct a;
 
-	error = verify_area(VERIFY_READ, arg, sizeof(*arg));
-	if (error)
-		return error;
-	copy_from_user(&a, arg, sizeof(a));
+	if (copy_from_user(&a, arg, sizeof(a)))
+			return -EFAULT; 
 	if (!(a.flags & MAP_ANONYMOUS)) {
 		if (a.fd >= NR_OPEN || !(file = current->files->fd[a.fd]))
 			return -EBADF;
@@ -110,12 +105,10 @@ asmlinkage int sys_ipc (uint call, int first, int second, int third, void *ptr, 
 			return sys_semget (first, second, third);
 		case SEMCTL: {
 			union semun fourth;
-			int err;
 			if (!ptr)
 				return -EINVAL;
-			if ((err = verify_area (VERIFY_READ, ptr, sizeof(long))))
-				return err;
-			get_user(fourth.__pad, (void **) ptr);
+			if (get_user(fourth.__pad, (void **) ptr))
+				return -EFAULT;	
 			return sys_semctl (first, second, third, fourth);
 			}
 		default:
@@ -130,12 +123,11 @@ asmlinkage int sys_ipc (uint call, int first, int second, int third, void *ptr, 
 			switch (version) {
 			case 0: {
 				struct ipc_kludge tmp;
-				int err;
 				if (!ptr)
 					return -EINVAL;
-				if ((err = verify_area (VERIFY_READ, ptr, sizeof(tmp))))
-					return err;
-				copy_from_user(&tmp,(struct ipc_kludge *) ptr, sizeof (tmp));
+				if (copy_from_user(&tmp,(struct ipc_kludge *) ptr, 
+								   sizeof (tmp)))
+					return -EFAULT; 	
 				return sys_msgrcv (first, tmp.msgp, second, tmp.msgtyp, third);
 				}
 			case 1: default:
@@ -155,14 +147,11 @@ asmlinkage int sys_ipc (uint call, int first, int second, int third, void *ptr, 
 			case 0: default: {
 				ulong raddr;
 				int err;
-				if ((err = verify_area(VERIFY_WRITE, (ulong*) third, sizeof(ulong))))
-					return err;
 				err = sys_shmat (first, (char *) ptr, second, &raddr);
 				if (err)
 					return err;
-				put_user (raddr, (ulong *) third);
-				return 0;
-				}
+				return put_user (raddr, (ulong *) third);
+			}
 			case 1:	/* iBCS2 emulator entry point */
 				if (get_fs() != get_ds())
 					return -EINVAL;

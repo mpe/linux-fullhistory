@@ -105,7 +105,6 @@ static int ext2_readlink (struct inode * inode, char * buffer, int buflen)
 	struct buffer_head * bh = NULL;
 	char * link;
 	int i, err;
-	char c;
 
 	if (!S_ISLNK(inode->i_mode)) {
 		iput (inode);
@@ -123,12 +122,14 @@ static int ext2_readlink (struct inode * inode, char * buffer, int buflen)
 	}
 	else
 		link = (char *) inode->u.ext2_i.i_data;
-	i = 0;
-	while (i < buflen && (c = link[i])) {
-		i++;
-		put_user (c, buffer++);
-	}
-	if (DO_UPDATE_ATIME(inode)) {
+	
+	/* XXX I hope link is always '\0'-terminated. */ 	
+	i = strlen(link)+1; 
+	if (i > buflen) 
+		i = buflen; 
+	if (copy_to_user(buffer, link, i))
+		i = -EFAULT; 	
+ 	if (DO_UPDATE_ATIME(inode)) {
 		inode->i_atime = CURRENT_TIME;
 		inode->i_dirt = 1;
 	}

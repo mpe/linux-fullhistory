@@ -4,35 +4,6 @@
 #include <linux/in6.h>
 #include <asm/byteorder.h>
 
-/*
- *	IPv6 fixed header
- */
-
-struct ipv6hdr {
-#if defined(__LITTLE_ENDIAN_BITFIELD)
-	__u8			priority:4,
-				version:4;
-#elif defined(__BIG_ENDIAN_BITFIELD)
-	__u8			version:4,
-				priority:4;
-#else
-#error	"Please fix <asm/byteorder.h>"
-#endif						
-	__u8			flow_lbl[3];
-
-	__u16			payload_len;
-	__u8			nexthdr;
-	__u8			hop_limit;
-
-	struct	in6_addr	saddr;
-	struct	in6_addr	daddr;
-};
-
-struct in6_ifreq {
-	struct in6_addr	addr;
-	__u32		prefix_len;
-	char		devname[8]; 
-};
 
 /*
  *	Advanced API
@@ -44,6 +15,13 @@ struct in6_ifreq {
 struct in6_pktinfo {
 	struct in6_addr	ipi6_addr;
 	int		ipi6_ifindex;
+};
+
+
+struct in6_ifreq {
+	struct in6_addr	ifr6_addr;
+	__u32		ifr6_prefixlen;
+	int		ifr6_ifindex; 
 };
 
 #define IPV6_SRCRT_STRICT	0x01	/* this hop must be a neighbor	*/
@@ -77,6 +55,30 @@ struct rt0_hdr {
 };
 
 #ifdef __KERNEL__
+
+/*
+ *	IPv6 fixed header
+ */
+
+struct ipv6hdr {
+#if defined(__LITTLE_ENDIAN_BITFIELD)
+	__u8			priority:4,
+				version:4;
+#elif defined(__BIG_ENDIAN_BITFIELD)
+	__u8			version:4,
+				priority:4;
+#else
+#error	"Please fix <asm/byteorder.h>"
+#endif						
+	__u8			flow_lbl[3];
+
+	__u16			payload_len;
+	__u8			nexthdr;
+	__u8			hop_limit;
+
+	struct	in6_addr	saddr;
+	struct	in6_addr	daddr;
+};
 
 /*
  *	The length of this struct cannot be greater than the length of

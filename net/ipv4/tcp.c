@@ -467,13 +467,31 @@ static struct open_request *tcp_find_established(struct tcp_opt *tp)
 
 static void tcp_close_pending (struct sock *sk)
 {
-	struct sk_buff *skb;
+	struct tcp_opt *tp = &(sk->tp_pinfo.af_tcp);
+	struct open_request *req;
 
-	while ((skb = skb_dequeue(&sk->receive_queue)) != NULL)
-	{
-		tcp_close(skb->sk, 0);
-		kfree_skb(skb, FREE_READ);
-	}
+	req = tp->syn_wait_queue;
+
+	if (!req)
+		return;
+	
+	do {
+		struct open_request *iter;
+		
+		if (req->sk)
+			tcp_close(req->sk, 0);
+
+		iter = req;
+		req = req->dl_next;
+		
+		(*iter->class->destructor)(iter);
+		tcp_dec_slow_timer(TCP_SLT_SYNACK);
+		sk->ack_backlog--;
+		kfree(iter);
+
+	} while (req != tp->syn_wait_queue);
+
+	tp->syn_wait_queue = NULL;
 	return;
 }
 
@@ -945,8 +963,9 @@ int tcp_do_sendmsg(struct sock *sk, int iovlen, struct iovec *iov,
 
 			actual_win = tp->snd_wnd - (tp->snd_nxt - tp->snd_una);
 
-			if (copy > actual_win && 
-			    (((long) actual_win) >= (sk->max_window >> 1)))
+			if (copy > actual_win &&
+			    (((long) actual_win) >= (sk->max_window >> 1))
+			    && actual_win)
 			{
 				copy = actual_win;
 			}
@@ -1172,12 +1191,15 @@ static void cleanup_rbuf(struct sock *sk)
 {
 	struct sk_buff *skb;
 	struct tcp_opt *tp = &(sk->tp_pinfo.af_tcp);
+	unsigned long pspace, rspace;
 
 	/*
 	 * NOTE! The socket must be locked, so that we don't get
 	 * a messed-up receive queue.
 	 */
 
+	pspace = sock_rspace(sk);
+	
 	while ((skb=skb_peek(&sk->receive_queue)) != NULL) {
 		if (!skb->used || skb->users>1)
 			break;
@@ -1192,14 +1214,16 @@ static void cleanup_rbuf(struct sock *sk)
 	 *  else let tcp_data deal with the acking policy.
 	 */
 
-	if (sock_rspace(sk) > tp->rcv_wnd - (tp->rcv_nxt - tp->rcv_wup) && 
+	rspace = sock_rspace(sk);
+
+	if ((rspace > pspace) &&
+	    (rspace > tp->rcv_wnd - (tp->rcv_nxt - tp->rcv_wup)) && 
 	    (tp->rcv_wnd - (tp->rcv_nxt - tp->rcv_wup) < sk->mss)) 
 	{
 		/* Send an ack right now. */
 		sk->delayed_acks++;
 		tcp_read_wakeup(sk);
-	} 
-	
+	}	
 } 
 
 
@@ -1747,7 +1771,7 @@ struct sock *tcp_accept(struct sock *sk, int flags)
 got_new_connect:
 		tcp_synq_unlink(tp, req);
 		newsk = req->sk;
-		kfree(req);		
+		kfree(req);
 		sk->ack_backlog--;
 		error = 0;
 out:
@@ -1852,10 +1876,3 @@ void tcp_set_keepalive(struct sock *sk, int val)
 		tcp_dec_slow_timer(TCP_SLT_KEEPALIVE);
 	}
 }
-
-/*
- * Local variables:
- *  compile-command: "gcc -D__KERNEL__ -I/usr/src/linux/include -Wall -Wstrict-prototypes -O2 -fomit-frame-pointer -fno-strength-reduce -pipe -m486 -DCPU=486 -c -o tcp.o tcp.c"
- * c-file-style: "Linux"
- * End:
- */

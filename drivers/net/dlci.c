@@ -619,9 +619,8 @@ int dlci_init(struct device *dev)
    dev->pa_brdaddr      = 0;
    dev->pa_mask         = 0;
 
-   for (i = 0; i < DEV_NUMBUFFS; i++) 
-      skb_queue_head_init(&dev->buffs[i]);
-
+   dev_init_buffers(dev);
+   
    return(0);
 }
 

@@ -33,6 +33,10 @@ extern void inet6_proto_init(struct net_proto *pro);
 #include <net/x25call.h>
 #endif
 
+#ifdef CONFIG_LAPB
+#include <net/lapbcall.h>
+#endif
+
 #ifdef CONFIG_AX25
 #include <net/ax25call.h>
 #ifdef CONFIG_NETROM
@@ -117,6 +121,10 @@ struct net_proto protocols[] = {
 
 #ifdef CONFIG_ATALK
   { "DDP",	atalk_proto_init },			/* Netatalk Appletalk driver	*/
+#endif
+
+#ifdef CONFIG_LAPB
+  { "LAPB",     lapb_proto_init },			/* LAPB protocols */
 #endif
 
 #ifdef CONFIG_X25

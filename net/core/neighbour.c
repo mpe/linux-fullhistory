@@ -137,17 +137,17 @@ struct neighbour * neigh_lookup(struct neigh_table *tbl, void *pkey,
 	if (neigh)
 	{
 		do {
-			if (memcmp(&neigh->primary_key, pkey, key_len) == 0)
+			if (memcmp(neigh->primary_key, pkey, key_len) == 0)
 			{
 				if (!dev || dev == neigh->dev)
-					break;
+					return neigh;
 			}
 			neigh = neigh->next;
 			
 		} while (neigh != head);
 	}
 
-	return neigh;
+	return NULL;
 }
 
 /*

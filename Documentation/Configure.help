@@ -1638,9 +1638,10 @@ CONFIG_SCSI_NCR53C8XX
   of PCI-SCSI controllers. This driver supports parity checking,
   tagged command queuing, fast scsi II transfer up to 10 MB/s with
   narrow scsi devices and 20 MB/s with wide scsi devices.
-  Linux/i386 and Linux/Alpha are supported by this driver.
-  Memory mapped io is currently untested under Linux/Alpha.
+  Support of Ultra SCSI data transfers with NCR53C860 and NCR53C875 
+  controllers has been recently added to the driver.
   Please read drivers/scsi/README.ncr53c8xx for more information.
+  Linux/i386 and Linux/Alpha are supported by this driver.
 
 synchronous data transfers frequency
 CONFIG_SCSI_NCR53C8XX_SYNC
@@ -1702,42 +1703,10 @@ CONFIG_SCSI_NCR53C8XX_MAX_TAGS
   possible.  The default value is 4. Minimum is 2, maximum is 12.  The
   normal answer therefore is the default one.
 
-force asynchronous transfer mode
-CONFIG_SCSI_NCR53C8XX_FORCE_ASYNCHRONOUS
-  This option allows you to force asynchronous transfer mode for all
-  SCSI devices at linux startup. You can enable synchronous
-  negotiation with the "setsync" control command after boot-up, for
-  example:
-     echo "setsync 2 25" >/proc/scsi/ncr53c8xx/0
-  asks the driver to set the period to 25 ns (10MB/sec) for target 2
-  of controller 0 (please read drivers/scsi/README.ncr53c8xx for more
-  information). The safe answer therefore is Y.  The normal answer
-  therefore is N.
-
-force synchronous negotiation
-CONFIG_SCSI_NCR53C8XX_FORCE_SYNC_NEGO
-  Some scsi-2 devices support synchronous negotiations but do not
-  report this feature in byte 7 of inquiry data.
-  Answer Y only if you suspect some device to be so humble.
-  The normal answer therefore is N.
- 
 IBMMCA SCSI support
 CONFIG_SCSI_IBMMCA
   If your computer sports an MCA bus system architecture (IBM PS/2)
   with an SCSI harddrive, say Y here.
-
-disable master parity checking
-CONFIG_SCSI_NCR53C8XX_DISABLE_MPARITY_CHECK
-  Some hardware may have problems with parity during master cycles on
-  PCI bus.  Only seen once. Answer Y if you suspect such problem.  The
-  normal answer therefore is N.
-
-disable scsi parity checking
-CONFIG_SCSI_NCR53C8XX_DISABLE_PARITY_CHECK
-  Parity on scsi bus is a system option. If one device checks parity,
-  then all devices on the scsi bus must generate parity.  However, the
-  parity can be ignored by the scsi devices.  Answer Y only if you
-  know what you are doing.  The normal answer therefore is N.
 
 Always IN2000 SCSI support
 CONFIG_SCSI_IN2000
@@ -3697,9 +3666,12 @@ CONFIG_QIC02_TAPE
 Do you want runtime configuration for QIC-02
 CONFIG_QIC02_DYNCONF
   You can either configure this driver once and for all by editing a
-  header file, in which case you should say N, or you can fetch a
-  program via anonymous ftp which is able to configure this driver
-  during runtime. If you want this, say Y.
+  header file (include/linux/tpqic02.h), in which case you should
+  say N, or you can fetch a program via anonymous ftp which is able
+  to configure this driver during runtime. The program to do this is
+  called 'qic02conf' and it is part of the 'tpqic02-support-X.Y.tar.gz'
+  support package.
+  If you want to use the qic02conf program, say Y.
 
 Ftape (QIC-80/Travan) support
 CONFIG_FTAPE

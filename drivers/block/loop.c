@@ -25,11 +25,11 @@
 #include <asm/uaccess.h>
 
 #ifdef CONFIG_BLK_DEV_LOOP_DES
-#include <linux/des.h>
+# /*nodep*/ include <linux/des.h>
 #endif
 
 #ifdef CONFIG_BLK_DEV_LOOP_IDEA
-#include <linux/idea.h>
+# /*nodep*/ include <linux/idea.h>
 #endif
 
 #include <linux/loop.h>		/* must follow des.h */

@@ -689,6 +689,10 @@ extern struct sk_buff 		*sock_alloc_send_skb(struct sock *skb,
 						     int noblock,
 						     int *errcode);
 
+extern void sklist_remove_socket(struct sock **list, struct sock *sk);
+extern void sklist_insert_socket(struct sock **list, struct sock *sk);
+extern void sklist_destroy_socket(struct sock **list, struct sock *sk);
+
 /*
  * 	Queue a received datagram if it will fit. Stream and sequenced
  *	protocols can't normally use this as they need to fit buffers in

@@ -97,6 +97,11 @@ int llc_data_request(llcptr lp, struct sk_buff *skb)
 				break;
 			default:
 		}
+		if(lp->llc_callbacks)
+		{
+			lp->llc_event(lp);
+			lp->llc_callbacks=0;
+		}
 		return 0;  
 	}              
 }
@@ -118,6 +123,14 @@ void disconnect_request(llcptr lp)
 	{
 		lp->state = D_CONN;
 		llc_interpret_pseudo_code(lp, SH1, NULL, NO_FRAME);
+		if(lp->llc_callbacks)
+		{
+			lp->llc_event(lp);
+			lp->llc_callbacks=0;
+		}
+		/*
+ 		 *	lp may be invalid after the callback
+		 */
 	}
 }
 
@@ -132,6 +145,14 @@ void connect_request(llcptr lp)
 	{
 		lp->state = SETUP;
 		llc_interpret_pseudo_code(lp, ADM1, NULL, NO_FRAME);
+		if(lp->llc_callbacks)
+		{
+			lp->llc_event(lp);
+			lp->llc_callbacks=0;
+		}
+		/*
+ 		 *	lp may be invalid after the callback
+		 */
 	}
 }
 
@@ -196,53 +217,41 @@ void llc_interpret_pseudo_code(llcptr lp, int pc_label, struct sk_buff *skb,
 			case 2:
 				lp->state = NORMAL;  /* needed to eliminate connect_response() */
 				lp->llc_mode = MODE_ABM;
-				if (lp->ops->connect_indication_ep != NULL)
-					lp->ops->connect_indication_ep(lp);
+				lp->llc_callbacks|=LLC_CONN_INDICATION;
 				break;
 			case 3:
 				lp->llc_mode = MODE_ABM;
-				if (lp->ops->connect_confirm_ep != NULL)
-					lp->ops->connect_confirm_ep(lp);
+				lp->llc_callbacks|=LLC_CONN_CONFIRM;
 				break;
 			case 4:
-				if (lp->ops->data_indication_ep != NULL)
-				{
-					skb_pull(skb, 4);
-					lp->ops->data_indication_ep(lp, skb);
-				}
+				skb_pull(skb, 4);
+				lp->inc_skb=skb;
+				lp->llc_callbacks|=LLC_DATA_INDIC;
 				break;
 			case 5:
 				lp->llc_mode = MODE_ADM;
-				if (lp->ops->disconnect_indication_ep != NULL)
-					lp->ops->disconnect_indication_ep(lp);
+				lp->llc_callbacks|=LLC_DISC_INDICATION;
 				break;
 			case 70:
-				if (lp->ops->reset_indication_ep != NULL)
-					lp->ops->reset_indication_ep(lp, LOCAL);
+				lp->llc_callbacks|=LLC_RESET_INDIC_LOC;
 				break;
 			case 71:
-				if (lp->ops->reset_indication_ep != NULL)
-					lp->ops->reset_indication_ep(lp, REMOTE);
+				lp->llc_callbacks|=LLC_RESET_INDIC_REM;
 				break;
 			case 7:
-				if (lp->ops->reset_confirm_ep != NULL)
-					lp->ops->reset_confirm_ep(lp, REMOTE);
+				lp->llc_callbacks|=LLC_RST_CONFIRM;
 				break;
 			case 66:
-				if (lp->ops->report_status_ep != NULL)
-					lp->ops->report_status_ep(lp, FRMR_RECEIVED);
+				lp->llc_callbacks|=LLC_FRMR_RECV;
 				break;
 			case 67:
-				if (lp->ops->report_status_ep != NULL)
-					lp->ops->report_status_ep(lp, FRMR_SENT);
+				lp->llc_callbacks|=LLC_FRMR_SENT;
 				break;
 			case 68:
-				if (lp->ops->report_status_ep != NULL)
-					lp->ops->report_status_ep(lp, REMOTE_BUSY);
+				lp->llc_callbacks|=LLC_REMOTE_BUSY;
 				break;
 			case 69:
-				if (lp->ops->report_status_ep != NULL)
-					lp->ops->report_status_ep(lp, REMOTE_NOT_BUSY);
+				lp->llc_callbacks|=LLC_REMOTE_NOTBUSY;
 				break;
 			case 11:
 				llc_sendpdu(lp, DISC_CMD, lp->f_flag, 0, NULL);
@@ -322,8 +331,7 @@ void llc_interpret_pseudo_code(llcptr lp, int pc_label, struct sk_buff *skb,
 				{
 					lp->remote_busy = 1;
 					llc_start_timer(lp, BUSY_TIMER);
-					if (lp->ops->report_status_ep != NULL)
-						lp->ops->report_status_ep(lp, REMOTE_BUSY);
+					lp->llc_callbacks|=LLC_REMOTE_BUSY;
 				}
 				else if (lp->timer_state[BUSY_TIMER] == TIMER_IDLE)
 				{
@@ -559,6 +567,15 @@ void llc_process_otype2_frame(llcptr lp, struct sk_buff *skb, char type)
 	if (pc_label != 0)
 	{ 
 		llc_interpret_pseudo_code(lp, pc_label, skb, type);
+		if(lp->llc_callbacks)
+		{
+			lp->llc_event(lp);
+			lp->llc_callbacks=0;
+		}
+		/*
+ 		 *	lp may no longer be valid after this point. Be
+		 *	careful what is added!
+		 */
 	}
 }
 
@@ -585,5 +602,13 @@ void llc_timer_expired(llcptr lp, int t)
 		lp->state = timertr_entry[idx +1];
 	}
 	lp->timer_state[t] = TIMER_IDLE;
+	if(lp->llc_callbacks)
+	{
+		lp->llc_event(lp);
+		lp->llc_callbacks=0;
+	}
+	/*
+ 	 *	And lp may have vanished in the event callback
+ 	 */
 }
 

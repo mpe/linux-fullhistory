@@ -2,7 +2,7 @@ This file contains brief information about the SCSI tape driver.
 The driver is currently maintained by Kai M{kisara (email
 Kai.Makisara@metla.fi)
 
-Last modified: Sun Jun 30 15:47:14 1996 by root@kai.makisara.fi
+Last modified: Wed Jan  1 15:44:49 1997 by makisara@kai.makisara.fi
 
 
 BASICS
@@ -76,6 +76,17 @@ optionally written. In both cases end of data is signified by
 returning zero bytes for two consecutive reads.
 
 The compile options are defined in the file linux/drivers/scsi/st_options.h.
+
+
+BSD AND SYS V SEMANTICS
+
+The user can choose between these two behaviours of the tape driver by
+defining the value of the symbol ST_SYSV. The semantics differ when a
+file being read is closed. The BSD semantics leaves the tape where it
+currently is whereas the SYS V semantics moves the tape past the next
+filemark unless the filemark has just been crossed.
+
+The default is BSD semantics.
 
 
 BUFFERING
@@ -186,7 +197,11 @@ MTSETBLK Set the drive block size. Setting to zero sets the drive into
 MTSETDENSITY Sets the drive density code to arg. See drive
         documentation for available codes.
 MTLOCK and MTUNLOCK Explicitly lock/unlock the tape drive door.
-MTLOAD and MTUNLOAD Explicitly load and unload the tape.
+MTLOAD and MTUNLOAD Explicitly load and unload the tape. If the
+	command argument x is between MT_ST_HPLOADER_OFFSET + 1 and
+	MT_ST_HPLOADER_OFFSET + 6, the number x is used sent to the
+	drive with the command and it selects the tape slot to use of
+	HP C1553A changer.
 MTCOMPRESSION Sets compressing or uncompressing drive mode using the
 	SCSI mode page 15. Note that some drives other methods for
 	control of compression. Some drives (like the Exabytes) use

@@ -215,8 +215,6 @@ static struct enet_statistics *tunnel_get_stats(struct device *dev)
  
 int tunnel_init(struct device *dev)
 {
-	int i;
-
 	/* Oh, just say we're here, in case anyone cares */
 	static int tun_msg=0;
 	if(!tun_msg)
@@ -236,8 +234,8 @@ int tunnel_init(struct device *dev)
 	memset(dev->priv, 0, sizeof(struct enet_statistics));
 
 	/* Initialize the tunnel device structure */
-	for (i = 0; i < DEV_NUMBUFFS; i++)
-		skb_queue_head_init(&dev->buffs[i]);
+	
+	dev_init_buffers(dev);
 
 	dev->hard_header	= NULL;
 	dev->rebuild_header 	= NULL;

@@ -55,9 +55,9 @@ int sysctl_x25_ack_holdback_timeout    = X25_DEFAULT_T2;
 
 static unsigned int lci = 1;
 
-struct proto_ops x25_proto_ops;
-
 static struct sock *volatile x25_list = NULL;
+
+static struct proto_ops x25_proto_ops;
 
 int x25_addr_ntoa(unsigned char *p, x25_address *called_addr, x25_address *calling_addr)
 {
@@ -136,31 +136,9 @@ int x25_addr_aton(unsigned char *p, x25_address *called_addr, x25_address *calli
 /*
  *	Socket removal during an interrupt is now safe.
  */
-static void x25_remove_socket(struct sock *sk)
+extern inline void x25_remove_socket(struct sock *sk)
 {
-	struct sock *s;
-	unsigned long flags;
-	
-	save_flags(flags);
-	cli();
-
-	if ((s = x25_list) == sk) {
-		x25_list = s->next;
-		restore_flags(flags);
-		return;
-	}
-
-	while (s != NULL && s->next != NULL) {
-		if (s->next == sk) {
-			s->next = sk->next;
-			restore_flags(flags);
-			return;
-		}
-
-		s = s->next;
-	}
-
-	restore_flags(flags);
+	sklist_remove_socket(&x25_list,sk);
 }
 
 /*
@@ -189,7 +167,11 @@ static int x25_device_event(struct notifier_block *this, unsigned long event, vo
 {
 	struct device *dev = (struct device *)ptr;
 
-	if (dev->type == ARPHRD_X25 || dev->type == ARPHRD_ETHER) {
+	if (dev->type == ARPHRD_X25
+#if defined(CONFIG_LLC) || defined(CONFIG_LLC_MODULE)
+	 || dev->type == ARPHRD_ETHER
+#endif
+	 ) {
 		switch (event) {
 			case NETDEV_UP:
 				x25_link_device_up(dev);
@@ -208,17 +190,10 @@ static int x25_device_event(struct notifier_block *this, unsigned long event, vo
 /*
  *	Add a socket to the bound sockets list.
  */
-static void x25_insert_socket(struct sock *sk)
+ 
+extern inline void x25_insert_socket(struct sock *sk)
 {
-	unsigned long flags;
-
-	save_flags(flags);
-	cli();
-
-	sk->next = x25_list;
-	x25_list  = sk;
-
-	restore_flags(flags);
+	sklist_insert_socket(&x25_list,sk);
 }
 
 /*
@@ -504,6 +479,8 @@ static struct sock *x25_alloc_socket(void)
 		return NULL;
 	}
 
+	memset(x25, 0x00, sizeof(*x25));
+
 	x25->sk          = sk;
 	sk->protinfo.x25 = x25;
 
@@ -523,14 +500,6 @@ static struct sock *x25_alloc_socket(void)
 	skb_queue_head_init(&x25->ack_queue);
 	skb_queue_head_init(&x25->fragment_queue);
 	skb_queue_head_init(&x25->interrupt_queue);
-
-	x25->condition = 0x00;
-	x25->timer     = 0;
-
-	x25->va    = 0;
-	x25->vr    = 0;
-	x25->vs    = 0;
-	x25->vl    = 0;
 
 	return sk;
 }
@@ -566,27 +535,17 @@ static int x25_create(struct socket *sock, int protocol)
 		sk->sleep = &sock->wait;
 	}
 
-	x25->lci      = 0;
-
 	x25->t21      = sysctl_x25_call_request_timeout;
 	x25->t22      = sysctl_x25_reset_request_timeout;
 	x25->t23      = sysctl_x25_clear_request_timeout;
 	x25->t2       = sysctl_x25_ack_holdback_timeout;
 
-	x25->fraglen     = 0;
-	x25->qbitincl    = 0;
-	x25->intflg      = 0;
 	x25->state       = X25_STATE_0;
 
 	x25->facilities.window_size = X25_DEFAULT_WINDOW_SIZE;
 	x25->facilities.packet_size = X25_DEFAULT_PACKET_SIZE;
 	x25->facilities.throughput  = X25_DEFAULT_THROUGHPUT;
 	x25->facilities.reverse     = X25_DEFAULT_REVERSE;
-
-	x25->neighbour   = NULL;
-
-	memset(&x25->source_addr, '\0', X25_ADDR_LEN);
-	memset(&x25->dest_addr,   '\0', X25_ADDR_LEN);
 
 	return 0;
 }
@@ -623,9 +582,7 @@ static struct sock *x25_make_new(struct sock *osk)
 
 	x25->facilities = osk->protinfo.x25->facilities;
 
-	x25->qbitincl    = osk->protinfo.x25->qbitincl;
-	x25->intflg      = 0;
-	x25->fraglen     = 0;
+	x25->qbitincl   = osk->protinfo.x25->qbitincl;
 
 	return sk;
 }
@@ -1103,7 +1060,7 @@ static int x25_recvmsg(struct socket *sock, struct msghdr *msg, int size, int fl
 		return -ENOTCONN;
 
 	/* Now we can treat all alike */
-	if ((skb = skb_recv_datagram(sk, flags, msg->msg_flags & MSG_DONTWAIT, &er)) == NULL)
+	if ((skb = skb_recv_datagram(sk, flags & ~MSG_DONTWAIT, flags & MSG_DONTWAIT, &er)) == NULL)
 		return er;
 
 	qbit = (skb->data[0] & X25_Q_BIT) == X25_Q_BIT;
@@ -1272,7 +1229,7 @@ struct net_proto_family x25_family_ops = {
 	x25_create
 };
 
-struct proto_ops x25_proto_ops = {
+static struct proto_ops x25_proto_ops = {
 	AF_X25,
 
 	x25_dup,
@@ -1345,11 +1302,10 @@ void x25_proto_init(struct net_proto *pro)
 }
 
 #ifdef MODULE
+EXPORT_NO_SYMBOLS;
 
 int init_module(void)
 {
-	register_symtab(NULL);
-
 	x25_proto_init(NULL);
 	
 	return 0;
@@ -1373,7 +1329,7 @@ void cleanup_module(void)
 
 	dev_remove_pack(&x25_packet_type);
 
-	sock_unregister(x25_proto_ops.family);
+	sock_unregister(AF_X25);
 }
 
 #endif

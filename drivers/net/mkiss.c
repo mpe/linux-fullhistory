@@ -862,11 +862,11 @@ int mkiss_init_ctrl_dev(void)
 }
 
 
-/* Initialize the driver.  Called by DDI. */
+/* Initialize the driver.  Called by network startup. */
+
 static int ax25_init(struct device *dev)
 {
 	struct ax_disp *ax = (struct ax_disp*)dev->priv;
-	int i;
 
 	static char ax25_bcast[AX25_ADDR_LEN] =
 		{'Q'<<1,'S'<<1,'T'<<1,' '<<1,' '<<1,' '<<1,'0'<<1};
@@ -903,8 +903,7 @@ static int ax25_init(struct device *dev)
 	dev->rebuild_header  = ax_rebuild_header;
 #endif
 
-	for (i = 0; i < DEV_NUMBUFFS; i++)
-		skb_queue_head_init(&dev->buffs[i]);
+	dev_init_buffers(dev);
 
 	/* New-style flags. */
 	dev->flags      = 0;

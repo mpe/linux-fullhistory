@@ -3,7 +3,6 @@
  *		ethernet 'ELAP'.
  *
  *		Alan Cox  <Alan.Cox@linux.org>
- *			  <iialan@www.linux.org.uk>
  *
  *		With more than a little assistance from
  *
@@ -30,8 +29,6 @@
  *		as published by the Free Software Foundation; either version
  *		2 of the License, or (at your option) any later version.
  *
- *	TODO
- *		ASYNC I/O
  */
 
 #include <linux/config.h>
@@ -88,7 +85,7 @@ static struct proto_ops atalk_dgram_ops;
 *															*
 \***********************************************************************************************************************/
 
-static struct sock *volatile atalk_socket_list=NULL;
+static struct sock *atalk_socket_list=NULL;
 
 /*
  *	Note: Sockets may not be removed _during_ an interrupt or inet_bh
@@ -96,42 +93,14 @@ static struct sock *volatile atalk_socket_list=NULL;
  *	use this facility.
  */
 
-static void atalk_remove_socket(struct sock *sk)
+extern inline void atalk_remove_socket(struct sock *sk)
 {
-	unsigned long flags;
-	struct sock *s;
-
-	save_flags(flags);
-	cli();
-
-	s=atalk_socket_list;
-	if(s==sk)
-	{
-		atalk_socket_list=s->next;
-		restore_flags(flags);
-		return;
-	}
-	while(s && s->next)
-	{
-		if(s->next==sk)
-		{
-			s->next=sk->next;
-			restore_flags(flags);
-			return;
-		}
-		s=s->next;
-	}
-	restore_flags(flags);
+	sklist_remove_socket(&atalk_socket_list,sk);
 }
 
-static void atalk_insert_socket(struct sock *sk)
+extern inline void atalk_insert_socket(struct sock *sk)
 {
-	unsigned long flags;
-	save_flags(flags);
-	cli();
-	sk->next=atalk_socket_list;
-	atalk_socket_list=sk;
-	restore_flags(flags);
+	sklist_insert_socket(&atalk_socket_list,sk);
 }
 
 static struct sock *atalk_search_socket(struct sockaddr_at *to, struct atalk_iface *atif)
@@ -191,52 +160,10 @@ static struct sock *atalk_find_socket(struct sockaddr_at *sat)
 	return( s );
 }
 
-/*
- *	This is only called from user mode. Thus it protects itself against
- *	interrupt users but doesn't worry about being called during work.
- *	Once it is removed from the queue no interrupt or bottom half will
- *	touch it and we are (fairly 8-) ) safe.
- */
-
-static void atalk_destroy_socket(struct sock *sk);
-
-/*
- *	Handler for deferred kills.
- */
-
-static void atalk_destroy_timer(unsigned long data)
+extern inline void atalk_destroy_socket(struct sock *sk)
 {
-	atalk_destroy_socket((struct sock *)data);
+	sklist_destroy_socket(&atalk_socket_list,sk);
 }
-
-static void atalk_destroy_socket(struct sock *sk)
-{
-	struct sk_buff *skb;
-	atalk_remove_socket(sk);
-
-	while((skb=skb_dequeue(&sk->receive_queue))!=NULL)
-	{
-		kfree_skb(skb,FREE_READ);
-	}
-
-	if(sk->wmem_alloc == 0 && sk->rmem_alloc == 0 && sk->dead)
-	{
-		sk_free(sk);
-		MOD_DEC_USE_COUNT;
-	}
-	else
-	{
-		/*
-		 *	Someone is using our buffers still.. defer
-		 */
-		init_timer(&sk->timer);
-		sk->timer.expires=jiffies+10*HZ;
-		sk->timer.function=atalk_destroy_timer;
-		sk->timer.data = (unsigned long)sk;
-		add_timer(&sk->timer);
-	}
-}
-
 
 /*
  *	Called from proc fs
@@ -364,9 +291,8 @@ static int atif_probe_device(struct atalk_iface *atif)
 
 /*
  *	THIS IS A HACK: Farallon cards want to do their own picking of
- *	addresses. This needs tidying up post 1.4, but we need it in
- *	now for the 1.4 release as is.
- *
+ *	addresses. This needs tidying up when someone does localtalk
+ *	drivers
  */
 	if((atif->dev->type == ARPHRD_LOCALTLK || atif->dev->type == ARPHRD_PPP)
 		&& atif->dev->do_ioctl)
@@ -1105,7 +1031,16 @@ static void def_callback2(struct sock *sk, int len)
 	if(!sk->dead)
 	{
 		wake_up_interruptible(sk->sleep);
-		sock_wake_async(sk->socket,0);
+		sock_wake_async(sk->socket,1);
+	}
+}
+
+static void def_callback3(struct sock *sk)
+{
+	if(!sk->dead)
+	{
+		wake_up_interruptible(sk->sleep);
+		sock_wake_async(sk->socket, 2);
 	}
 }
 
@@ -1159,7 +1094,7 @@ static int atalk_create(struct socket *sock, int protocol)
 
 	sk->state_change=def_callback1;
 	sk->data_ready=def_callback2;
-	sk->write_space=def_callback1;
+	sk->write_space=def_callback3;
 	sk->error_report=def_callback1;
 
 	sk->zapped=1;

@@ -342,6 +342,33 @@ __constant_copy_from_user(void *to, const void *from, unsigned long n)
 	return n;
 }
 
+static inline unsigned long
+__generic_copy_to_user_nocheck(void *to, const void *from, unsigned long n)
+{
+	__copy_user(to,from,n);
+	return n;
+}
+
+static inline unsigned long
+__constant_copy_to_user_nocheck(void *to, const void *from, unsigned long n)
+{
+	__constant_copy_user(to,from,n);
+	return n;
+}
+
+static inline unsigned long
+__generic_copy_from_user_nocheck(void *to, const void *from, unsigned long n)
+{
+	__copy_user(to,from,n);
+	return n;
+}
+
+static inline unsigned long
+__constant_copy_from_user_nocheck(void *to, const void *from, unsigned long n)
+{
+	__constant_copy_user(to,from,n);
+	return n;
+}
 
 #define copy_to_user(to,from,n)				\
 	(__builtin_constant_p(n) ?			\
@@ -354,11 +381,22 @@ __constant_copy_from_user(void *to, const void *from, unsigned long n)
 	 __generic_copy_from_user((to),(from),(n)))
 
 
+#define __copy_to_user(to,from,n)			\
+	(__builtin_constant_p(n) ?			\
+	 __constant_copy_to_user_nocheck((to),(from),(n)) :	\
+	 __generic_copy_to_user_nocheck((to),(from),(n)))
+
+#define __copy_from_user(to,from,n)			\
+	(__builtin_constant_p(n) ?			\
+	 __constant_copy_from_user_nockeck((to),(from),(n)) :	\
+	 __generic_copy_from_user_nocheck((to),(from),(n)))
+
+
 /*
  * Zero Userspace
  */
 
-#define __clear_user(addr,size)						\
+#define __do_clear_user(addr,size)						\
 	__asm__ __volatile__(						\
 		"0:	rep; stosl\n"					\
 		"	movl %1,%0\n"					\
@@ -380,7 +418,14 @@ static inline unsigned long
 clear_user(void *to, unsigned long n)
 {
 	if (access_ok(VERIFY_WRITE, to, n))
-		__clear_user(to, n);
+		__do_clear_user(to, n);
+	return n;
+}
+
+static inline unsigned long
+__clear_user(void *to, unsigned long n)
+{
+	__do_clear_user(to, n);
 	return n;
 }
 
@@ -389,7 +434,7 @@ clear_user(void *to, unsigned long n)
  * Copy a null terminated string from userspace.
  */
 
-#define __strncpy_from_user(dst,src,count,res)				   \
+#define __do_strncpy_from_user(dst,src,count,res)			   \
 	__asm__ __volatile__(						   \
 		"	testl %1,%1\n"					   \
 		"	jz 2f\n"					   \
@@ -413,11 +458,19 @@ clear_user(void *to, unsigned long n)
 		: "si", "di", "ax", "memory")
 
 static inline long
+__strncpy_from_user(char *dst, const char *src, long count)
+{
+	long res;
+	__do_strncpy_from_user(dst, src, count, res);
+	return res;
+}
+
+static inline long
 strncpy_from_user(char *dst, const char *src, long count)
 {
 	long res = -EFAULT;
 	if (access_ok(VERIFY_READ, src, 1))
-		__strncpy_from_user(dst, src, count, res);
+		__do_strncpy_from_user(dst, src, count, res);
 	return res;
 }
 

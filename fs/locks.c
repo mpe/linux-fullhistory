@@ -258,18 +258,15 @@ asmlinkage int sys_flock(unsigned int fd, unsigned int cmd)
  */
 int fcntl_getlk(unsigned int fd, struct flock *l)
 {
-	int error;
 	struct flock flock;
 	struct file *filp;
 	struct file_lock *fl,file_lock;
 
 	if ((fd >= NR_OPEN) || !(filp = current->files->fd[fd]))
 		return (-EBADF);
-	error = verify_area(VERIFY_WRITE, l, sizeof(*l));
-	if (error)
-		return (error);
+	if (copy_from_user(&flock, l, sizeof(flock)))
+		return -EFAULT; 	
 
-	copy_from_user(&flock, l, sizeof(flock));
 	if ((flock.l_type != F_RDLCK) && (flock.l_type != F_WRLCK))
 		return (-EINVAL);
 
@@ -286,14 +283,12 @@ int fcntl_getlk(unsigned int fd, struct flock *l)
 				fl->fl_end - fl->fl_start + 1;
 			flock.l_whence = 0;
 			flock.l_type = fl->fl_type;
-			copy_to_user(l, &flock, sizeof(flock));
-			return (0);
+			return copy_to_user(l, &flock, sizeof(flock)) ? -EFAULT : 0; 
 		}
 	}
 
 	flock.l_type = F_UNLCK;			/* no conflict found */
-	copy_to_user(l, &flock, sizeof(flock));
-	return (0);
+	return copy_to_user(l, &flock, sizeof(flock)) ? -EFAULT : 0; 
 }
 
 /* Apply the lock described by l to an open file descriptor.
@@ -301,7 +296,6 @@ int fcntl_getlk(unsigned int fd, struct flock *l)
  */
 int fcntl_setlk(unsigned int fd, unsigned int cmd, struct flock *l)
 {
-	int error;
 	struct file *filp;
 	struct file_lock file_lock;
 	struct flock flock;
@@ -312,10 +306,6 @@ int fcntl_setlk(unsigned int fd, unsigned int cmd, struct flock *l)
 
 	if ((fd >= NR_OPEN) || !(filp = current->files->fd[fd]))
 		return (-EBADF);
-	
-	error = verify_area(VERIFY_READ, l, sizeof(*l));
-	if (error)
-		return (error);
 	
 	if (!(inode = filp->f_inode))
 		return (-EINVAL);
@@ -334,7 +324,8 @@ int fcntl_setlk(unsigned int fd, unsigned int cmd, struct flock *l)
 		} while (vma != inode->i_mmap);
 	}
 
-	copy_from_user(&flock, l, sizeof(flock));
+	if (copy_from_user(&flock, l, sizeof(flock)))
+		return -EFAULT; 	
 	if (!posix_make_lock(filp, &file_lock, &flock))
 		return (-EINVAL);
 	

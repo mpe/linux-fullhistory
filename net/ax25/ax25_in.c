@@ -1,10 +1,10 @@
 /*
- *	AX.25 release 033
+ *	AX.25 release 035
  *
  *	This is ALPHA test software. This code may break your machine, randomly fail to work with new 
  *	releases, misbehave and/or generally screw up. It might even work. 
  *
- *	This code REQUIRES 1.2.1 or higher/ NET3.029
+ *	This code REQUIRES 2.1.15 or higher/ NET3.038
  *
  *	This module:
  *		This module is free software; you can redistribute it and/or
@@ -35,6 +35,7 @@
  *	AX.25 032	Darryl(G7LED)	AX.25 segmentation fixed.
  *	AX.25 033	Jonathan(G4KLX)	Remove auto-router.
  *					Modularisation changes.
+ *	AX.25 035	Hans(PE1AYX)	Fixed interface to IP layer.
  */
 
 #include <linux/config.h>
@@ -161,7 +162,10 @@ static int ax25_rx_iframe(ax25_cb *ax25, struct sk_buff *skb)
 #ifdef CONFIG_INET
 	if (pid == AX25_P_IP) {
 		skb_pull(skb, 1);	/* Remove PID */
-		skb->h.raw = skb->data;
+		skb->h.raw    = skb->data;
+		skb->nh.raw   = skb->data;
+		skb->dev      = ax25->device;
+		skb->pkt_type = PACKET_HOST;
 		ip_rcv(skb, ax25->device, NULL);	/* Wrong ptype */
 		return 1;
 	}

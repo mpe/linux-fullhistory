@@ -78,9 +78,7 @@
 #include <linux/proc_fs.h>
 #include <linux/stat.h>
 #include <net/br.h>
-#ifdef CONFIG_NET_ALIAS
 #include <linux/net_alias.h>
-#endif
 #ifdef CONFIG_KERNELD
 #include <linux/kerneld.h>
 #endif
@@ -91,14 +89,30 @@
 /*
  *	The list of devices, that are able to output.
  */
+
 static struct device *dev_up_base;
 
 /*
  *	The list of packet types we will receive (as opposed to discard)
  *	and the routines to invoke.
+ *
+ *	Why 16. Because with 16 the only overlap we get on a hash of the
+ *	low nibble of the protocol value is RARP/SNAP/X.25. 
+ *
+ *		0800	IP
+ *		0001	802.3
+ *		0002	AX.25
+ *		0004	802.2
+ *		8035	RARP
+ *		0005	SNAP
+ *		0805	X.25
+ *		0806	ARP
+ *		8137	IPX
+ *		0009	Localtalk
+ *		86DD	IPv6
  */
 
-struct packet_type *ptype_base[16];
+struct packet_type *ptype_base[16];		/* 16 way hashed list */
 struct packet_type *ptype_all = NULL;		/* Taps */
 
 /*
@@ -243,6 +257,7 @@ int dev_open(struct device *dev)
 	/*
 	 *	Call device private open method
 	 */
+	 
 	if (dev->open) 
   		ret = dev->open(dev);
 
@@ -259,11 +274,12 @@ int dev_open(struct device *dev)
 		 */
 		dev_mc_upload(dev);
 		notifier_call_chain(&netdev_chain, NETDEV_UP, dev);
-#ifdef CONFIG_NET_ALIAS
-		if (!net_alias_is(dev) || dev->tx_queue_len)
-#else
-		if (dev->tx_queue_len)
-#endif
+		/* 
+		 *	FIXME: This logic was wrong before. Now its
+		 *	obviously so. I think the change here (removing the
+		 *	! on the net_alias_is) is right. ANK ??
+		 */
+		if (net_alias_is(dev) || dev->tx_queue_len)
 		{
 			cli();
 			dev->next_up = dev_up_base;
@@ -301,6 +317,7 @@ int dev_close(struct device *dev)
 	/*
 	 *	Tell people we are going down
 	 */
+	 
 	notifier_call_chain(&netdev_chain, NETDEV_DOWN, dev);
 	/*
 	 *	Flush the multicast chain
@@ -318,6 +335,10 @@ int dev_close(struct device *dev)
 		ct++;
 	}
 
+	/*
+	 *	The device is no longer up. Drop it from the list.
+	 */
+	 
 	devp = &dev_up_base;
 	while (*devp)
 	{
@@ -347,6 +368,34 @@ int unregister_netdevice_notifier(struct notifier_block *nb)
 	return notifier_chain_unregister(&netdev_chain,nb);
 }
 
+/*
+ *	Support routine. Sends outgoing frames to any network
+ *	taps currently in use.
+ */
+
+static void queue_xmit_nit(struct sk_buff *skb, struct device *dev)
+{
+	struct packet_type *ptype;
+	get_fast_time(&skb->stamp);
+
+	for (ptype = ptype_all; ptype!=NULL; ptype = ptype->next) 
+	{
+		/* Never send packets back to the socket
+		 * they originated from - MvS (miquels@drinkel.ow.org)
+		 */
+		if ((ptype->dev == dev || !ptype->dev) &&
+			((struct sock *)ptype->data != skb->sk))
+		{
+			struct sk_buff *skb2;
+			if ((skb2 = skb_clone(skb, GFP_ATOMIC)) == NULL)
+				break;
+			skb2->mac.raw = skb2->data;
+			skb2->nh.raw = skb2->h.raw = skb2->data + dev->hard_header_len;
+			ptype->func(skb2, skb->dev, ptype);
+		}
+	}
+}
+ 
 /*
  *	Send (or queue for sending) a packet. 
  *
@@ -403,40 +452,29 @@ static void do_dev_queue_xmit(struct sk_buff *skb, struct device *dev, int pri)
 	list = dev->buffs + pri;
 
 	save_flags(flags);
-	/* if this isn't a retransmission, use the first packet instead... */
-	if (!retransmission) {
-		if (skb_queue_len(list)) {
-			/* avoid overrunning the device queue.. */
-			if (skb_queue_len(list) > dev->tx_queue_len) {
-				dev_kfree_skb(skb, FREE_WRITE);
-				return;
-			}
+
+	/*
+	 *	If this isn't a retransmission, use the first packet instead.
+	 *	Note: We don't do strict priority ordering here. We will in
+	 *	fact kick the queue that is our priority. The dev_tint reload
+	 *	does strict priority queueing. In effect what we are doing here
+	 *	is to add some random jitter to the queues and to do so by
+	 *	saving clocks. Doing a perfect priority queue isn't a good idea
+	 *	as you get some fascinating timing interactions.
+	 */
+
+	if (!retransmission) 
+	{
+		/* avoid overrunning the device queue.. */
+		if (skb_queue_len(list) > dev->tx_queue_len) 
+		{
+			dev_kfree_skb(skb, FREE_WRITE);
+			return;
 		}
 
 		/* copy outgoing packets to any sniffer packet handlers */
-		if (dev_nit) {
-			struct packet_type *ptype;
-
-			get_fast_time(&skb->stamp);
-
-			for (ptype = ptype_all; ptype!=NULL; ptype = ptype->next) 
-			{
-				/* Never send packets back to the socket
-				 * they originated from - MvS (miquels@drinkel.ow.org)
-				 */
-				if ((ptype->dev == dev || !ptype->dev) &&
-				   ((struct sock *)ptype->data != skb->sk))
-				{
-					struct sk_buff *skb2;
-					if ((skb2 = skb_clone(skb, GFP_ATOMIC)) == NULL)
-						break;
-					skb2->mac.raw = skb2->data;
-					skb2->nh.raw =
-					skb2->h.raw = skb2->data + dev->hard_header_len;
-					ptype->func(skb2, skb->dev, ptype);
-				}
-			}
-		}
+		if (dev_nit) 
+			queue_xmit_nit(skb,dev);
 
 		if (skb_queue_len(list)) {
 			cli();
@@ -461,12 +499,15 @@ static void do_dev_queue_xmit(struct sk_buff *skb, struct device *dev, int pri)
 	restore_flags(flags);
 }
 
+/*
+ *	Entry point for transmitting frames.
+ */
+ 
 int dev_queue_xmit(struct sk_buff *skb)
 {
 	struct device *dev = skb->dev;
 
 	start_bh_atomic();
-
 
 #if CONFIG_SKB_CHECK 
 	IS_SKB(skb);
@@ -477,13 +518,23 @@ int dev_queue_xmit(struct sk_buff *skb)
 	 *	This can cover all protocols and technically not just ARP either.
 	 */
 	 
-	if (!skb->arp) {
-		if (dev->rebuild_header) {
-			if (dev->rebuild_header(skb)) {
+	if (!skb->arp) 
+	{
+		/*
+		 *	FIXME: we should make the printk for no rebuild
+		 *	header a default rebuild_header routine and drop
+		 *	this call. Similarly we should make hard_header
+		 *	have a default NULL operation not check conditions.
+		 */
+		if (dev->rebuild_header) 
+		{
+			if (dev->rebuild_header(skb)) 
+			{
 				end_bh_atomic();
 				return 0;
 			}
-		} else
+		} 
+		else
 			printk("%s: !skb->arp & !rebuild_header!\n", dev->name);
 	}
 
@@ -495,16 +546,18 @@ int dev_queue_xmit(struct sk_buff *skb)
 	 *
 	 */
 
-#ifdef CONFIG_NET_ALIAS
 	if (net_alias_is(dev))
 	  	skb->dev = dev = net_alias_main_dev(dev);
-#endif
 
 	do_dev_queue_xmit(skb, dev, skb->priority);
 	end_bh_atomic();
 	return 0;
 }
 
+/*
+ *	Fast path for loopback frames.
+ */
+ 
 void dev_loopback_xmit(struct sk_buff *skb)
 {
 	struct sk_buff *newskb=skb_clone(skb, GFP_ATOMIC);
@@ -521,8 +574,7 @@ void dev_loopback_xmit(struct sk_buff *skb)
 
 /*
  *	Receive a packet from a device driver and queue it for the upper
- *	(protocol) levels.  It always succeeds. This is the recommended 
- *	interface to use.
+ *	(protocol) levels.  It always succeeds. 
  */
 
 void netif_rx(struct sk_buff *skb)
@@ -582,7 +634,8 @@ static void dev_transmit(void)
 
 	for (dev = dev_up_base; dev != NULL; dev = dev->next_up)
 	{
-		if (dev->flags != 0 && !dev->tbusy) {
+		if (dev->flags != 0 && !dev->tbusy) 
+		{
 			/*
 			 *	Kick the device
 			 */
@@ -636,7 +689,8 @@ void net_bh(void)
 	 *	disabling interrupts.
 	 */
 
-	while (!skb_queue_empty(&backlog)) {
+	while (!skb_queue_empty(&backlog)) 
+	{
 		struct sk_buff * skb = backlog.next;
 
 		/*
@@ -658,8 +712,6 @@ void net_bh(void)
 			continue;
 		}
 		
-		
-
 #ifdef CONFIG_BRIDGE
 
 		/*
@@ -783,9 +835,7 @@ void net_bh(void)
 	 *	One last output flush.
 	 */
 
-#ifdef XMIT_AFTER	 
 	dev_transmit();
-#endif
 }
 
 
@@ -804,12 +854,11 @@ void dev_tint(struct device *dev)
 	 * aliases do not transmit (for now :) )
 	 */
 
-#ifdef CONFIG_NET_ALIAS
 	if (net_alias_is(dev)) {
 		printk("net alias %s transmits\n", dev->name);
 		return;
 	}
-#endif
+
 	head = dev->buffs;
 	save_flags(flags);
 	cli();
@@ -848,7 +897,7 @@ void dev_tint(struct device *dev)
 
 /*
  *	Perform a SIOCGIFCONF call. This structure will change
- *	size shortly, and there is nothing I can do about it.
+ *	size eventually, and there is nothing I can do about it.
  *	Thus we will need a 'compatibility mode'.
  */
 
@@ -1426,6 +1475,7 @@ extern void dlci_setup(void);
 extern int pt_init(void);
 extern int sm_init(void);
 extern int baycom_init(void);
+extern int lapbeth_init(void);
 
 #ifdef CONFIG_PROC_FS
 static struct proc_dir_entry proc_net_dev = {
@@ -1496,6 +1546,9 @@ int net_dev_init(void)
 #endif
 #if defined(CONFIG_SOUNDMODEM)
 	sm_init();
+#endif
+#if defined(CONFIG_LAPBETHER)
+	lapbeth_init();
 #endif
 	/*
 	 *	SLHC if present needs attaching so other people see it

@@ -84,11 +84,8 @@ int llc_mac_data_indicate(llcptr lp, struct sk_buff *skb, struct device *dev, st
 					fr->u_hdr.u_info);
 				break;
 			case TEST_RSP:
-				if (lp->ops->test_indication_ep != NULL)
-				{
-					lp->ops->test_indication_ep(lp,
-						ll -3, fr->u_hdr.u_info);
-				}
+				lp->llc_callbacks|=LLC_TEST_INDICATION;
+				lp->inc_skb=skb;
 				break;
 			case XID_CMD:
 				/*
@@ -110,19 +107,14 @@ int llc_mac_data_indicate(llcptr lp, struct sk_buff *skb, struct device *dev, st
 				{
 					lp->k = fr->u_hdr.u_info[2];
 				}
-				if (lp->ops->xid_indication_ep != NULL)
-				{
-					lp->ops->xid_indication_ep(lp,
-						ll-3, fr->u_hdr.u_info);
-				}
+				lp->llc_callbacks|=LLC_XID_INDICATION;
+				lp->inc_skb=skb;
 				break;
 
 			case UI_CMD:
-				if(lp->ops->unit_data_indication_ep != NULL)
-				{
-					free=lp->ops->unit_data_indication_ep(lp,
-						ll-3, fr->u_hdr.u_info);
-				}
+				lp->llc_callbacks|=LLC_UI_DATA;
+				skb_pull(skb,3);
+				lp->inc_skb=skb;
 				break;
 
 			default:
@@ -140,6 +132,12 @@ int llc_mac_data_indicate(llcptr lp, struct sk_buff *skb, struct device *dev, st
 		skb->sk = NULL;
 		kfree_skb(skb, FREE_READ);
 	}
+
+	if(lp->llc_callbacks)
+	{
+		lp->llc_event(lp);
+		lp->llc_callbacks=0;
+	}
 	return 0;
 }
 
@@ -149,7 +147,7 @@ int llc_mac_data_indicate(llcptr lp, struct sk_buff *skb, struct device *dev, st
  *	LLC's on device down, the device list must be locked before this call.
  */
 
-int register_cl2llc_client(llcptr lp, const char *device, llc_ops *ops, u8 *rmac, u8 ssap, u8 dsap)
+int register_cl2llc_client(llcptr lp, const char *device, void (*event)(llcptr), u8 *rmac, u8 ssap, u8 dsap)
 {
 	char eye_init[] = "LLC\0";
 
@@ -167,7 +165,7 @@ int register_cl2llc_client(llcptr lp, const char *device, llc_ops *ops, u8 *rmac
 	lp->timer_interval[ACK_TIMER] = HZ/8;
 	lp->timer_interval[BUSY_TIMER] = HZ*2;
 	lp->local_sap = ssap;
-	lp->ops = ops;
+	lp->llc_event = event;
 	lp->remote_mac_len = lp->dev->addr_len;
 	memcpy(lp->remote_mac, rmac, lp->remote_mac_len);
 	lp->state = 0;

@@ -1,5 +1,5 @@
 /*
- *	AX.25 release 034
+ *	AX.25 release 035
  *
  *	This is ALPHA test software. This code may break your machine, randomly fail to work with new
  *	releases, misbehave and/or generally screw up. It might even work.
@@ -88,6 +88,8 @@
  *			Alan(GW4PTS)		Small POSIXisations
  *	AX.25 035	Alan(GW4PTS)		Started fixing to the new
  *						format.
+ *			Hans(PE1AYX)		Fixed interface to IP layer.
+ *			Alan(GW4PTS)		Added asynchronous support.
  *
  *	To do:
  *		Restructure the ax25_rcv code to be cleaner/faster and
@@ -729,14 +731,14 @@ static ax25_cb *ax25_create_cb(void)
 
 	MOD_INC_USE_COUNT;
 
+	memset(ax25, 0x00, sizeof(*ax25));
+
 	skb_queue_head_init(&ax25->write_queue);
 	skb_queue_head_init(&ax25->frag_queue);
 	skb_queue_head_init(&ax25->ack_queue);
 	skb_queue_head_init(&ax25->reseq_queue);
 
 	init_timer(&ax25->timer);
-
-	ax25->dama_slave = 0;
 
 	ax25->rtt     = AX25_DEF_T1 / 2;
 	ax25->t1      = AX25_DEF_T1;
@@ -755,29 +757,8 @@ static ax25_cb *ax25_create_cb(void)
 		ax25->window  = AX25_DEF_WINDOW;
 	}
 
-	ax25->fragno    = 0;
-	ax25->fraglen   = 0;
-	ax25->hdrincl   = 0;
-	ax25->backoff   = AX25_DEF_BACKOFF;
-	ax25->condition = 0x00;
-	ax25->t1timer   = 0;
-	ax25->t2timer   = 0;
-	ax25->t3timer   = 0;
-	ax25->n2count   = 0;
-	ax25->idletimer = 0;
-
-	ax25->va      = 0;
-	ax25->vr      = 0;
-	ax25->vs      = 0;
-
-	ax25->device   = NULL;
-	ax25->digipeat = NULL;
-	ax25->sk       = NULL;
-
-	ax25->state    = AX25_STATE_0;
-
-	memset(&ax25->dest_addr,   '\0', AX25_ADDR_LEN);
-	memset(&ax25->source_addr, '\0', AX25_ADDR_LEN);
+	ax25->backoff = AX25_DEF_BACKOFF;
+	ax25->state   = AX25_STATE_0;
 
 	return ax25;
 }
@@ -819,8 +800,6 @@ static void ax25_fillin_cb(ax25_cb *ax25, struct device *dev)
 	ax25->paclen   = ax25_dev_get_value(dev, AX25_VALUES_PACLEN);
 	ax25->maxqueue = ax25_dev_get_value(dev, AX25_VALUES_MAXQUEUE);
 	ax25->idle     = ax25_dev_get_value(dev, AX25_VALUES_IDLE);
-
-	ax25->dama_slave = 0;
 
 	if (ax25_dev_get_value(dev, AX25_VALUES_AXDEFMODE)) {
 		ax25->modulus = EMODULUS;
@@ -1116,7 +1095,19 @@ static void def_callback1(struct sock *sk)
 static void def_callback2(struct sock *sk, int len)
 {
 	if (!sk->dead)
+	{
 		wake_up_interruptible(sk->sleep);
+		sock_wake_async(sk->socket,1);
+	}
+}
+
+static void def_callback3(struct sock *sk, int len)
+{
+	if (!sk->dead)
+	{
+		wake_up_interruptible(sk->sleep);
+		sock_wake_async(sk->socket,2);
+	}
 }
 
 static int ax25_create(struct socket *sock, int protocol)
@@ -1185,7 +1176,7 @@ static int ax25_create(struct socket *sock, int protocol)
 
 	sk->state_change = def_callback1;
 	sk->data_ready   = def_callback2;
-	sk->write_space  = def_callback1;
+	sk->write_space  = def_callback3;
 	sk->error_report = def_callback1;
 
 	if (sock != NULL) {
@@ -1245,7 +1236,7 @@ static struct sock *ax25_make_new(struct sock *osk, struct device *dev)
 
 	sk->state_change = def_callback1;
 	sk->data_ready   = def_callback2;
-	sk->write_space  = def_callback1;
+	sk->write_space  = def_callback3;
 	sk->error_report = def_callback1;
 
 	ax25->modulus = osk->protinfo.ax25->modulus;
@@ -1367,6 +1358,8 @@ static int ax25_release(struct socket *sock, struct socket *peer)
  *	digipeated via a local address as source. This is a hack until we add
  *	BSD 4.4 ADDIFADDR type support. It is however small and trivially backward
  *	compatible 8)
+ *
+ *	FIXME: Check family
  */
 static int ax25_bind(struct socket *sock, struct sockaddr *uaddr, int addr_len)
 {
@@ -1430,6 +1423,11 @@ static int ax25_bind(struct socket *sock, struct sockaddr *uaddr, int addr_len)
 	return 0;
 }
 
+/*
+ *	FIXME: nonblock behaviour looks like it may have a bug. Also check
+ *	the family in the connect.
+ */
+ 
 static int ax25_connect(struct socket *sock, struct sockaddr *uaddr,
 	int addr_len, int flags)
 {
@@ -1687,8 +1685,7 @@ static int ax25_rcv(struct sk_buff *skb, struct device *dev, ax25_address *dev_a
 		if (ax25cmp(&dp.calls[dp.lastrepeat + 1], dev_addr) == 0) {
 			struct device *dev_out = dev;
 
-			skb=skb_unshare(skb, GFP_ATOMIC, FREE_READ);
-			if(skb==NULL)
+			if ((skb = skb_unshare(skb, GFP_ATOMIC, FREE_READ)) == NULL)
 				return 0;
 
 			/* We are the digipeater. Mark ourselves as repeated
@@ -1723,7 +1720,6 @@ static int ax25_rcv(struct sk_buff *skb, struct device *dev, ax25_address *dev_a
 				return 0;
 			}
 #endif
-
 			skb->arp = 1;
 			skb->dev = dev_out;
 			skb->priority = SOPRI_NORMAL;
@@ -1764,11 +1760,19 @@ static int ax25_rcv(struct sk_buff *skb, struct device *dev, ax25_address *dev_a
 #ifdef CONFIG_INET
 			case AX25_P_IP:
 				skb_pull(skb,2);		/* drop PID/CTRL */
+				skb->h.raw    = skb->data;
+				skb->nh.raw   = skb->data;
+				skb->dev      = dev;
+				skb->pkt_type = PACKET_HOST;
 				ip_rcv(skb, dev, ptype);	/* Note ptype here is the wrong one, fix me later */
 				break;
 
 			case AX25_P_ARP:
 				skb_pull(skb,2);
+				skb->h.raw    = skb->data;
+				skb->nh.raw   = skb->data;
+				skb->dev      = dev;
+				skb->pkt_type = PACKET_HOST;
 				arp_rcv(skb, dev, ptype);	/* Note ptype here is wrong... */
 				break;
 #endif
@@ -2115,7 +2119,7 @@ static int ax25_recvmsg(struct socket *sock, struct msghdr *msg, int size, int f
 		return -ENOTCONN;
 
 	/* Now we can treat all alike */
-	if ((skb = skb_recv_datagram(sk, flags, msg->msg_flags & MSG_DONTWAIT, &er)) == NULL)
+	if ((skb = skb_recv_datagram(sk, flags & ~MSG_DONTWAIT, flags & MSG_DONTWAIT, &er)) == NULL)
 		return er;
 
 	if (sk->protinfo.ax25->hdrincl) {
@@ -2395,6 +2399,7 @@ EXPORT_SYMBOL(ax25cmp);
 EXPORT_SYMBOL(ax2asc);
 EXPORT_SYMBOL(asc2ax);
 EXPORT_SYMBOL(null_ax25_address);
+#endif
 
 #ifdef CONFIG_PROC_FS
 static struct proc_dir_entry proc_ax25_route = {
@@ -2431,7 +2436,7 @@ void ax25_proto_init(struct net_proto *pro)
 	proc_net_register(&proc_ax25_calls);
 #endif
 
-	printk(KERN_INFO "G4KLX/GW4PTS AX.25 for Linux. Version 0.34 for Linux NET3.037 (Linux 2.1)\n");
+	printk(KERN_INFO "G4KLX/GW4PTS AX.25 for Linux. Version 0.35 for Linux NET3.038 (Linux 2.1)\n");
 }
 
 /*
@@ -2605,7 +2610,7 @@ void cleanup_module(void)
 	ax25_packet_type.type = htons(ETH_P_AX25);
 	dev_remove_pack(&ax25_packet_type);
 
-	sock_unregister(ax25_proto_ops.family);
+	sock_unregister(AF_AX25);
 }
 #endif
 

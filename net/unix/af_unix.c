@@ -1,7 +1,7 @@
 /*
  * NET3:	Implementation of BSD Unix domain sockets.
  *
- * Authors:	Alan Cox, <alan@cymru.net>
+ * Authors:	Alan Cox, <alan.cox@linux.org>
  *
  *		Currently this contains all but the file descriptor passing code.
  *		Before that goes in the odd bugs in the iovec handlers need 
@@ -50,8 +50,6 @@
  *	Bug fixes and improvements.
  *		- client shutdown killed server socket.
  *		- removed all useless cli/sti pairs.
- *		- (suspicious!) not allow connect/send to connected not to us
- *		  socket, return EPERM.
  *
  *	Semantic changes/extensions.
  *		- generic control message passing.
@@ -100,7 +98,7 @@ unix_socket *unix_socket_table[UNIX_HASH_SIZE+1];
 
 #define UNIX_ABSTRACT(sk)	((sk)->protinfo.af_unix.addr->hash!=UNIX_HASH_SIZE)
 
-static __inline__ unsigned unix_hash_fold(unsigned hash)
+extern __inline__ unsigned unix_hash_fold(unsigned hash)
 {
 	hash ^= hash>>16;
 	hash ^= hash>>8;
@@ -110,32 +108,32 @@ static __inline__ unsigned unix_hash_fold(unsigned hash)
 
 #define unix_peer(sk) ((sk)->pair)
 
-static __inline__ int unix_our_peer(unix_socket *sk, unix_socket *osk)
+extern __inline__ int unix_our_peer(unix_socket *sk, unix_socket *osk)
 {
 	return unix_peer(osk) == sk;
 }
 
-static __inline__ int unix_may_send(unix_socket *sk, unix_socket *osk)
+extern __inline__ int unix_may_send(unix_socket *sk, unix_socket *osk)
 {
-	return !unix_peer(osk) || unix_peer(osk) == sk;
+	return (sk->type==osk->type);
 }
 
-static __inline__ void unix_lock(unix_socket *sk)
+extern __inline__ void unix_lock(unix_socket *sk)
 {
 	sk->users++;
 }
 
-static __inline__ int unix_unlock(unix_socket *sk)
+extern __inline__ int unix_unlock(unix_socket *sk)
 {
 	return sk->users--;
 }
 
-static __inline__ int unix_locked(unix_socket *sk)
+extern __inline__ int unix_locked(unix_socket *sk)
 {
 	return sk->users;
 }
 
-static __inline__ void unix_release_addr(struct unix_address *addr)
+extern __inline__ void unix_release_addr(struct unix_address *addr)
 {
 	if (addr)
 	{
@@ -300,10 +298,6 @@ static void unix_destroy_socket(unix_socket *sk)
 	}
 }
 
-/*
- *	Fixme: We need async I/O on AF_UNIX doing next.
- */
- 
 static int unix_fcntl(struct socket *sock, unsigned int cmd, unsigned long arg)
 {
 	return -EINVAL;
@@ -657,7 +651,7 @@ static int unix_dgram_connect(struct socket *sock, struct sockaddr *addr,
 	if (!unix_may_send(sk, other))
 	{
 		unix_unlock(other);
-		return -EPERM;
+		return -EINVAL;
 	}
 
 	/*
@@ -1001,18 +995,9 @@ static int unix_dgram_sendmsg(struct socket *sock, struct msghdr *msg, int len,
 	other = unix_peer(sk);
 	if (other && other->dead)
 	{
-		/* Alan said:
+		/*
 		 *	Check with 1003.1g - what should
 		 *	datagram error
-		 * 
-		 * Pardon, if POSIX says, that we should return
-		 * error here, it is wrong.
-		 * It is the main idea of SOCK_DGRAM sockets,
-		 * they could die and be borned, and clients
-		 * should not care about it.
-		 * If you want SOCK_STREAM semantics,
-		 * use SOCK_STREAM.
-		 *				--ANK
 		 */
 		unix_unlock(other);
 		unix_peer(sk)=NULL;
@@ -1035,7 +1020,7 @@ static int unix_dgram_sendmsg(struct socket *sock, struct msghdr *msg, int len,
 		{
 			unix_unlock(other);
 			kfree_skb(skb, FREE_WRITE);
-			return -EPERM;
+			return -EINVAL;
 		}
 	}
 
@@ -1102,8 +1087,8 @@ static int unix_stream_sendmsg(struct socket *sock, struct msghdr *msg, int len,
 		 *	much.
 		 */
 
-		if (size > 4000)
-			limit = 4000;	/* Fall back to 4K if we can't grab a big buffer this instant */
+		if (size > 3500)
+			limit = 3500;	/* Fall back to a page if we can't grab a big buffer this instant */
 		else
 			limit = 0;	/* Otherwise just grab and wait */
 
@@ -1232,6 +1217,11 @@ retry:
 		     apparently wrong)
 		   - clone fds (I choosed it for now, it is the most universal
 		     solution)
+		
+	           POSIX 1003.1g does not actually define this clearly
+	           at all. POSIX 1003.1g doesn't define a lot of things
+	           clearly however!		     
+		   
 		*/
 		if (UNIXCB(skb).fp)
 			scm->fp = scm_fp_dup(UNIXCB(skb).fp);
@@ -1278,11 +1268,10 @@ static int unix_stream_recvmsg(struct socket *sock, struct msghdr *msg, int size
 		{
 			if (copied >= target)
 				break;
-#if 0
-			/* ANK: sk->err is never set for UNIX */
+
 			if (sk->err) 
 				return sock_error(sk);
-#endif
+
 			if (sk->shutdown & RCV_SHUTDOWN)
 				break;
 			up(&sk->protinfo.af_unix.readsem);
@@ -1348,8 +1337,8 @@ static int unix_stream_recvmsg(struct socket *sock, struct msghdr *msg, int size
 		}
 		else
 		{
-			/* It is questionable,
-			   see note in unix_dgram_recvmsg.
+			/* It is questionable, see note in unix_dgram_recvmsg.
+			   
 			 */
 			if (UNIXCB(skb).fp)
 				scm->fp = scm_fp_dup(UNIXCB(skb).fp);
@@ -1415,7 +1404,7 @@ static int unix_ioctl(struct socket *sock, unsigned int cmd, unsigned long arg)
 			if(sk->state==TCP_LISTEN)
 				return -EINVAL;
 			/*
-			 *	These two are safe on a single CPU system as
+			 *	These two are safe on current systems as
 			 *	only user tasks fiddle here
 			 */
 			if((skb=skb_peek(&sk->receive_queue))!=NULL)
@@ -1544,7 +1533,7 @@ static struct proc_dir_entry proc_net_unix = {
 void unix_proto_init(struct net_proto *pro)
 {
 	struct sk_buff *dummy_skb;
-	printk(KERN_INFO "NET3: Unix domain sockets 0.14 for Linux NET3.037.\n");
+	printk(KERN_INFO "NET3: Unix domain sockets 0.15 for Linux NET3.038.\n");
 	if (sizeof(struct unix_skb_parms) > sizeof(dummy_skb->cb))
 	{
 		printk(KERN_CRIT "unix_proto_init: panic\n");

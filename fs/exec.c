@@ -386,8 +386,10 @@ static void exec_mmap(void)
 		new_page_tables(current);
 		return;
 	}
+	flush_cache_mm(current->mm);
 	exit_mmap(current->mm);
 	clear_page_tables(current);
+	flush_tlb_mm(current->mm);
 }
 
 /*

@@ -1143,12 +1143,11 @@ int slip_init_ctrl_dev(struct device *dummy)
       }
 
 
-/* Initialize the SLIP driver.  Called by DDI. */
-int
-slip_init(struct device *dev)
+/* Initialise the SLIP driver.  Called by the device init code */
+
+int slip_init(struct device *dev)
 {
 	struct slip *sl = (struct slip*)(dev->priv);
-	int i;
 
 	if (sl == NULL)		/* Allocation failed ?? */
 	  return -ENODEV;
@@ -1159,7 +1158,10 @@ slip_init(struct device *dev)
 	sl->magic  = SLIP_MAGIC;
 	sl->dev	   = dev;
 
-	/* Finish setting up the DEVICE info. */
+	/*
+	 *	Finish setting up the DEVICE info. 
+	 */
+	 
 	dev->mtu		= SL_MTU;
 	dev->hard_start_xmit	= sl_xmit;
 	dev->open		= sl_open_dev;
@@ -1170,10 +1172,8 @@ slip_init(struct device *dev)
 	dev->type		= ARPHRD_SLIP + SL_MODE_DEFAULT;
 	dev->tx_queue_len	= 10;
 
-	for (i = 0; i < DEV_NUMBUFFS; i++)  {
-		skb_queue_head_init(&dev->buffs[i]);
-	}
-
+	dev_init_buffers(dev);
+	
 	/* New-style flags. */
 	dev->flags		= IFF_NOARP|IFF_MULTICAST;
 	dev->family		= AF_INET;

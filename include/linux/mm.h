@@ -256,7 +256,7 @@ extern void clear_page_tables(struct task_struct * tsk);
 extern int new_page_tables(struct task_struct * tsk);
 extern int copy_page_tables(struct task_struct * to);
 
-extern int zap_page_range(struct mm_struct *mm, unsigned long address, unsigned long size);
+extern void zap_page_range(struct mm_struct *mm, unsigned long address, unsigned long size);
 extern int copy_page_range(struct mm_struct *dst, struct mm_struct *src, struct vm_area_struct *vma);
 extern int remap_page_range(unsigned long from, unsigned long to, unsigned long size, pgprot_t prot);
 extern int zeromap_page_range(unsigned long from, unsigned long size, pgprot_t prot);

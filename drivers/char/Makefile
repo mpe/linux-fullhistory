@@ -206,11 +206,11 @@ M = y
 L_OBJS += rtc.o
 endif
 
-ifdef CONFIG_QIC02_TAPE
+ifeq ($(CONFIG_QIC02_TAPE),y)
+L_OBJS += tpqic02.o
+else
   ifeq ($(CONFIG_QIC02_TAPE),m)
-    M_OBJS += tpqic02.o
-  else
-    L_OBJS += tpqic02.o 
+  M_OBJS += tpqic02.o
   endif
 endif
 

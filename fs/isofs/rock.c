@@ -287,7 +287,7 @@ int parse_rock_ridge_inode(struct iso_directory_record * de,
 	CHECK_CE;
 	break;
       case SIG('E','R'):
-	printk("ISO9660 Extensions: ");
+	printk(KERN_DEBUG"ISO9660 Extensions: ");
 	{ int p;
 	  for(p=0;p<rr->u.ER.len_id;p++) printk("%c",rr->u.ER.data[p]);
 	};

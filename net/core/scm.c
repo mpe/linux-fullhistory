@@ -37,7 +37,8 @@
 
 
 /*
- *	Allow to send credentials, that user could set with setu(g)id.
+ *	Only allow a user to send credentials, that they could set with 
+ *	setu(g)id.
  */
 
 static __inline__ int scm_check_creds(struct ucred *creds)
@@ -54,8 +55,7 @@ static __inline__ int scm_check_creds(struct ucred *creds)
 }
 
 
-static int
-scm_fp_copy(struct cmsghdr *cmsg, struct scm_fp_list **fplp)
+static int scm_fp_copy(struct cmsghdr *cmsg, struct scm_fp_list **fplp)
 {
 	int num;
 	struct scm_fp_list *fpl = *fplp;
@@ -124,7 +124,7 @@ void __scm_destroy(struct scm_cookie *scm)
 
 
 
-static __inline__ int not_one_bit(unsigned val)
+extern __inline__ int not_one_bit(unsigned val)
 {
 	return (val-1) & val;
 }
@@ -138,16 +138,18 @@ int __scm_send(struct socket *sock, struct msghdr *msg, struct scm_cookie *p)
 	int acc_fd;
 	unsigned scm_flags=0;
 
-	for (cmsg = KCMSG_FIRSTHDR(msg); cmsg; cmsg = KCMSG_NXTHDR(msg, cmsg)) {
+	for (cmsg = KCMSG_FIRSTHDR(msg); cmsg; cmsg = KCMSG_NXTHDR(msg, cmsg)) 
+	{
 		if (kcm.cmsg_level != SOL_SOCKET)
 			continue;
 
 		err = -EINVAL;
 
 		/*
-		 * Temporary hack: no protocols except for AF_UNIX
-		 * undestand scm now.
+		 *	Temporary hack: no protocols except for AF_UNIX
+		 *	undestand scm now.
 		 */
+
 		if (sock->ops->family != AF_UNIX)
 			goto error;
 
@@ -285,7 +287,7 @@ void scm_detach_fds(struct msghdr *msg, struct scm_cookie *scm)
 	scm->fp = NULL;
 }
 
-struct scm_fp_list * scm_fp_dup(struct scm_fp_list *fpl)
+struct scm_fp_list *scm_fp_dup(struct scm_fp_list *fpl)
 {
 	int i;
 	struct scm_fp_list *new_fpl;

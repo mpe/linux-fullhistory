@@ -2414,8 +2414,6 @@ static int strip_close_low(struct device *dev)
 
 static int strip_dev_init(struct device *dev)
 {
-    int i;
-
     /*
      * Finish setting up the DEVICE info.
      */
@@ -2446,8 +2444,7 @@ static int strip_dev_init(struct device *dev)
      * Pointer to the interface buffers.
      */
 
-    for (i = 0; i < DEV_NUMBUFFS; i++)
-        skb_queue_head_init(&dev->buffs[i]);
+   dev_init_buffers(dev);
 
     /*
      * Pointers to interface service routines.

@@ -90,7 +90,7 @@
 #include <linux/ppp_defs.h>
 
 #ifdef NEW_SKBUFF
-#include <linux/netprotocol.h>
+# /*nodep*/ include <linux/netprotocol.h>
 #endif
 
 #include <linux/ip.h>

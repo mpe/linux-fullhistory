@@ -851,34 +851,47 @@ static int addrconf_ifdown(struct device *dev)
 int addrconf_set_dstaddr(void *arg)
 {
 	struct in6_ifreq ireq;
+	struct inet6_dev *idev;
 	struct device *dev;
-	int err;
+	int err = -EINVAL;
 
-	err = copy_from_user(&ireq, arg, sizeof(struct in6_ifreq));
-	
-	if (err)
-		return -EFAULT;
+	if (copy_from_user(&ireq, arg, sizeof(struct in6_ifreq)))
+	{
+		err = -EFAULT;
+		goto err_exit;
+	}
 
-	dev = dev_get(ireq.devname);
+	idev = ipv6_dev_by_index(ireq.ifr6_ifindex);
+
+	if (idev == NULL)
+	{
+		err = -ENODEV;
+		goto err_exit;
+	}
+
+	dev = idev->dev;
 
 	if (dev->type == ARPHRD_SIT)
 	{
 		struct device *dev;
 		
-		if (!(ipv6_addr_type(&ireq.addr) & IPV6_ADDR_COMPATv4))
+		if (!(ipv6_addr_type(&ireq.ifr6_addr) & IPV6_ADDR_COMPATv4))
 		{
 			return -EADDRNOTAVAIL;
 		}
 		
-		dev = sit_add_tunnel(ireq.addr.s6_addr32[3]);
+		dev = sit_add_tunnel(ireq.ifr6_addr.s6_addr32[3]);
 		
 		if (dev == NULL)
-			return -ENODEV;
-
-		return 0;
+		{
+			err = -ENODEV;
+		}
+		else
+			err = 0;
 	}
-	
-	return -EINVAL;
+
+err_exit:
+	return err;
 }
 
 /*
@@ -934,20 +947,17 @@ int addrconf_add_ifaddr(void *arg)
 	if (err)
 		return -EFAULT;
 
-	dev = dev_get(ireq.devname);
-
-	if (dev == NULL)
-		return -EINVAL;
-
-	in6_dev = ipv6_get_idev(dev);
+	in6_dev = ipv6_dev_by_index(ireq.ifr6_ifindex);
 
 	if (in6_dev == NULL)
 		return -EINVAL;
 
-	addr_type  = ipv6_addr_type(&ireq.addr);
+	dev = in6_dev->dev;
+	
+	addr_type  = ipv6_addr_type(&ireq.ifr6_addr);
 	addr_type &= IPV6_ADDR_SCOPE_MASK;
 	
-	ifp = ipv6_add_addr(in6_dev, &ireq.addr, addr_type);
+	ifp = ipv6_add_addr(in6_dev, &ireq.ifr6_addr, addr_type);
 
 	if (ifp == NULL)
 		return -ENOMEM;
@@ -959,12 +969,12 @@ int addrconf_add_ifaddr(void *arg)
 		struct in6_addr maddr;
 
 		/* join to solicited addr multicast group */
-		addrconf_addr_solict_mult(&ireq.addr, &maddr);
+		addrconf_addr_solict_mult(&ireq.ifr6_addr, &maddr);
 		ipv6_dev_mc_inc(dev, &maddr);
 	}
 
 
-	ifp->prefix_len = ireq.prefix_len;
+	ifp->prefix_len = ireq.ifr6_prefixlen;
 	ifp->flags |= ADDR_PERMANENT;
 
 	if (!(dev->flags & (IFF_NOARP|IFF_LOOPBACK)))
@@ -1150,7 +1160,7 @@ static void addrconf_dad_timer(unsigned long data)
 
 	ifp = (struct inet6_ifaddr *) data;
 
-	if (ifp->probes-- == 0)
+	if (--ifp->probes == 0)
 	{
 		/*
 		 * DAD was successful
@@ -1415,9 +1425,3 @@ void addrconf_cleanup(void)
 
 	proc_unregister(&proc_net, iface_proc_entry.low_ino);
 }
-
-/*
- * Local variables:
- * c-file-style: "Linux"
- * End:
- */

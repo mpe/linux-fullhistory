@@ -1,4 +1,4 @@
-/* $Id: tpqic02.h,v 0.25 1994/07/21 02:16:30 root Exp root $
+/* $Id: tpqic02.h,v 1.5 1996/12/14 23:01:38 root Exp root $
  *
  * Include file for QIC-02 driver for Linux.
  *
@@ -12,7 +12,7 @@
 
 #include <linux/config.h>
 
-#if defined(CONFIG_QIC02_TAPE) || defined (CONFIG_QIC02_TAPE_MODULE)
+#if CONFIG_QIC02_TAPE || CONFIG_QIC02_TAPE_MODULE
 
 /* need to have QIC02_TAPE_DRIVE and QIC02_TAPE_IFC expand to something */
 #include <linux/mtio.h>
@@ -28,6 +28,9 @@
  *
  * Support for Mountain controllers was added by Erik Jacobson
  * and severely hacked by me.   -- hhb
+ * 
+ * Support for Emerald controllers by Alan Bain <afrb2@chiark.chu.cam.ac.uk>
+ * with more hacks by me.   -- hhb
  */
 #define WANGTEK		1		   /* don't know about Wangtek QIC-36 */
 #define EVEREX		(WANGTEK+1)  /* I heard *some* of these are identical */
@@ -39,6 +42,11 @@
 #define ARCHIVE_SC499	ARCHIVE       /* SC402 and SC499R should be identical */
 
 #define MOUNTAIN	5		       /* Mountain Computer Interface */
+#define EMERALD		6		       /* Emerald Interface card */
+
+
+
+#define QIC02_TAPE_PORT_RANGE 	8	 /* number of IO locations to reserve */
 
 
 /*********** START OF USER CONFIGURABLE SECTION ************/
@@ -205,6 +213,7 @@
 #define WT_QIC02_DATA_PORT	(QIC02_TAPE_PORT+1)
 
 /* status register bits (Active LOW!) */
+#define WT_QIC02_STAT_POLARITY	0
 #define WT_QIC02_STAT_READY	0x01
 #define WT_QIC02_STAT_EXCEPTION	0x02
 #define WT_QIC02_STAT_MASK	(WT_QIC02_STAT_READY|WT_QIC02_STAT_EXCEPTION)
@@ -221,6 +230,31 @@
 #define WT_CTL_DMA3		0x10			  /* enable dma chan3 */
 #define WT_CTL_DMA1		0x08	         /* enable dma chan1 or chan2 */
 
+/* EMERALD interface card specifics
+ * Much like Wangtek, only different polarity and bit locations
+ */
+#define EMR_QIC02_STAT_PORT	(QIC02_TAPE_PORT)
+#define EMR_QIC02_CTL_PORT	(QIC02_TAPE_PORT)
+#define EMR_QIC02_CMD_PORT	(QIC02_TAPE_PORT+1)
+#define EMR_QIC02_DATA_PORT	(QIC02_TAPE_PORT+1)
+
+/* status register bits (Active High!) */
+#define EMR_QIC02_STAT_POLARITY		1
+#define EMR_QIC02_STAT_READY		0x01
+#define EMR_QIC02_STAT_EXCEPTION	0x02
+#define EMR_QIC02_STAT_MASK	(EMR_QIC02_STAT_READY|EMR_QIC02_STAT_EXCEPTION)
+
+#define EMR_QIC02_STAT_RESETMASK	0x07
+#define EMR_QIC02_STAT_RESETVAL	(EMR_QIC02_STAT_RESETMASK & ~EMR_QIC02_STAT_EXCEPTION)
+
+/* controller register (QIC02_CTL_PORT) bits */
+#define EMR_QIC02_CTL_RESET	0x02
+#define EMR_QIC02_CTL_REQUEST	0x04
+#define EMR_CTL_ONLINE		0x01
+#define EMR_CTL_CMDOFF		0xC0 
+
+#define EMR_CTL_DMA3		0x10			  /* enable dma chan3 */
+#define EMR_CTL_DMA1		0x08	         /* enable dma chan1 or chan2 */
 
 
 
@@ -234,6 +268,7 @@
 #define AR_RESET_DMA_PORT	(QIC02_TAPE_PORT+3)
 
 /* STAT port bits */
+#define AR_QIC02_STAT_POLARITY	0
 #define AR_STAT_IRQF		0x80	/* active high, interrupt request flag */
 #define AR_QIC02_STAT_READY	0x40	/* active low */
 #define AR_QIC02_STAT_EXCEPTION	0x20	/* active low */
@@ -266,6 +301,7 @@
 #define MTN_W_DMA_WRITE_PORT	(QIC02_TAPE_PORT+3)
 
 /* STAT port bits */
+#define MTN_QIC02_STAT_POLARITY	 0
 #define MTN_QIC02_STAT_READY	 0x02	/* active low */
 #define MTN_QIC02_STAT_EXCEPTION 0x04	/* active low */
 #define MTN_QIC02_STAT_MASK	 (MTN_QIC02_STAT_READY|MTN_QIC02_STAT_EXCEPTION)
@@ -274,7 +310,7 @@
 #define MTN_QIC02_STAT_RESETMASK 0x07	/* check RDY,EXC,DMADONE */
 #define MTN_QIC02_STAT_RESETVAL	 ((MTN_QIC02_STAT_RESETMASK & ~MTN_QIC02_STAT_EXCEPTION) | MTN_STAT_DMADONE)
 
-  /* CTL port bits */
+/* CTL port bits */
 #define MTN_QIC02_CTL_RESET_NOT	 0x80	/* drive reset, active low */
 #define MTN_QIC02_CTL_RESET	 0x80	/* Fodder #definition to keep gcc happy */
 
@@ -294,6 +330,7 @@
 # define QIC02_TAPE_DEBUG	(qic02_tape_debug)
 
 # if QIC02_TAPE_IFC == WANGTEK	
+#  define QIC02_STAT_POLARITY	WT_QIC02_STAT_POLARITY
 #  define QIC02_STAT_PORT	WT_QIC02_STAT_PORT
 #  define QIC02_CTL_PORT	WT_QIC02_CTL_PORT
 #  define QIC02_CMD_PORT	WT_QIC02_CMD_PORT
@@ -320,7 +357,36 @@
 #   error Unsupported or incorrect DMA configuration.
 #  endif
 
+# elif QIC02_TAPE_IFC == EMERALD
+#  define QIC02_STAT_POLARITY	EMR_QIC02_STAT_POLARITY
+#  define QIC02_STAT_PORT	EMR_QIC02_STAT_PORT
+#  define QIC02_CTL_PORT	EMR_QIC02_CTL_PORT
+#  define QIC02_CMD_PORT	EMR_QIC02_CMD_PORT
+#  define QIC02_DATA_PORT	EMR_QIC02_DATA_PORT
+
+#  define QIC02_STAT_READY	EMR_QIC02_STAT_READY
+#  define QIC02_STAT_EXCEPTION	EMR_QIC02_STAT_EXCEPTION
+#  define QIC02_STAT_MASK	EMR_QIC02_STAT_MASK
+#  define QIC02_STAT_RESETMASK	EMR_QIC02_STAT_RESETMASK
+#  define QIC02_STAT_RESETVAL	EMR_QIC02_STAT_RESETVAL
+
+#  define QIC02_CTL_RESET	EMR_QIC02_CTL_RESET
+#  define QIC02_CTL_REQUEST	EMR_QIC02_CTL_REQUEST
+
+#  if QIC02_TAPE_DMA == 3
+#   ifdef QIC02_TAPE_DMA3_FIX
+#    define EMR_CTL_DMA		EMR_CTL_DMA1
+#   else
+#    define EMR_CTL_DMA		EMR_CTL_DMA3
+#   endif
+#  elif QIC02_TAPE_DMA == 1
+#    define EMR_CTL_DMA		EMR_CTL_DMA1
+#  else
+#   error Unsupported or incorrect DMA configuration.
+#  endif
+
 # elif QIC02_TAPE_IFC == ARCHIVE
+#  define QIC02_STAT_POLARITY	AR_QIC02_STAT_POLARITY
 #  define QIC02_STAT_PORT	AR_QIC02_STAT_PORT
 #  define QIC02_CTL_PORT	AR_QIC02_CTL_PORT
 #  define QIC02_CMD_PORT	AR_QIC02_CMD_PORT
@@ -340,6 +406,7 @@
 #  endif
 
 # elif QIC02_TAPE_IFC == MOUNTAIN
+#  define QIC02_STAT_POLARITY	MTN_QIC02_STAT_POLARITY
 #  define QIC02_STAT_PORT	MTN_QIC02_STAT_PORT
 #  define QIC02_CTL_PORT	MTN_QIC02_CTL_PORT
 #  define QIC02_CMD_PORT	MTN_QIC02_CMD_PORT
@@ -393,6 +460,7 @@
 # define QIC02_CMD_PORT 	(qic02_tape_ccb.port_cmd)
 # define QIC02_DATA_PORT 	(qic02_tape_ccb.port_data)
 
+# define QIC02_STAT_POLARITY	(qic02_tape_ccb.stat_polarity)
 # define QIC02_STAT_READY	(qic02_tape_ccb.stat_ready)
 # define QIC02_STAT_EXCEPTION	(qic02_tape_ccb.stat_exception)
 # define QIC02_STAT_MASK	(qic02_tape_ccb.stat_mask)
@@ -617,10 +685,10 @@ typedef char flag;
 
 /* NR_BLK_BUF is a `tuneable parameter'. If you're really low on
  * kernel space, you could decrease it to 1, or if you got a very
- * slow machine, you could increase it up to 128 blocks. Less kernel
+ * slow machine, you could increase it up to 127 blocks. Less kernel
  * buffer blocks result in more context-switching.
  */
-#define NR_BLK_BUF	20				    /* max 128 blocks */
+#define NR_BLK_BUF	20				    /* max 127 blocks */
 #define TAPE_BLKSIZE	512		  /* streamer tape block size (fixed) */
 #define TPQBUF_SIZE	(TAPE_BLKSIZE*NR_BLK_BUF)	       /* buffer size */
 
@@ -642,6 +710,7 @@ struct qic02_ccb {
 	unsigned short	port_data;	/* Data port address */
 
 	/* status register bits */
+	unsigned short	stat_polarity;	/* invert status bits or not */
 	unsigned short	stat_ready;	/* drive ready */
 	unsigned short	stat_exception;	/* drive signals exception */
 	unsigned short	stat_mask;
@@ -656,8 +725,12 @@ struct qic02_ccb {
 	unsigned short	dma_enable_value;
 };
 
-
+#if MODULE
+static int qic02_tape_init(void);
+#else
 extern int qic02_tape_init(void);			  /* for mem.c */
+#endif
+
 
 
 #endif /* CONFIG_QIC02_TAPE */

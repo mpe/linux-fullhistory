@@ -140,6 +140,10 @@ if [ "$CONFIG_NET_RADIO" != "n" ]; then
   tristate 'WIC Radio IP bridge' CONFIG_WIC
 fi
 
+if [ "$CONFIG_X25" != "n" ]; then
+  tristate 'LAPB over Ethernet driver' CONFIG_LAPBETHER
+fi
+
 tristate 'SLIP (serial line) support' CONFIG_SLIP
 if [ "$CONFIG_SLIP" != "n" ]; then
   bool ' CSLIP compressed headers' CONFIG_SLIP_COMPRESSED

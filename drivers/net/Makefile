@@ -524,6 +524,14 @@ else
   endif
 endif
 
+ifeq ($(CONFIG_LAPBETHER),y)
+L_OBJS += lapbether.o
+else
+  ifeq ($(CONFIG_LAPBETHER),m)
+  M_OBJS += lapbether.o
+  endif
+endif
+
 # If anything built-in uses slhc, then build it into the kernel also.
 # If not, but a module uses it, build as a module.
 ifdef CONFIG_SLHC_BUILTIN

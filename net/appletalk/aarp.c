@@ -3,15 +3,15 @@
  *			ethernet 'ELAP'.
  *
  *		Alan Cox  <Alan.Cox@linux.org>
- *			  <alan@cymru.net>
  *
- *	This doesn't fit cleanly with the IP arp. This isn't a problem as
- *	the IP arp wants extracting from the device layer in 1.3.x anyway.
- *	[see the pre-1.3 test code for details 8)]
+ *	This doesn't fit cleanly with the IP arp. Potentially we can use
+ *	the generic neighbour discovery code to clean this up.
  *
  *	FIXME:
  *		We ought to handle the retransmits with a single list and a 
  *	separate fast timer for when it is needed.
+ *		Use neighbour discovery code.
+ *		Token Ring Support.
  *
  *		This program is free software; you can redistribute it and/or
  *		modify it under the terms of the GNU General Public License

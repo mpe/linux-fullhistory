@@ -25,12 +25,19 @@ by a different author.
 
 Just when you thought that it could not become more confusing, another
 option appeared, XOT. This allows X.25 Packet Layer frames to operate over
-the Internet using TCP/IP as a reliable link layer. An RFC exists that
-specifies the format and behaviour of the protocol. If time permits this
-option will also be actively considered.
+the Internet using TCP/IP as a reliable link layer. RFC1613 specifies the
+format and behaviour of the protocol. If time permits this option will also
+be actively considered.
 
-It is hoped that a linux-x25 mailing list will be opened soon to allow for
-the discussion of Linux X.25, but it hasn't appeared yet.
+A linux-x25 mailing list has been created at vger.rutgers.edu to support the
+development and use of Linux X.25. It is early days yet, but interested
+parties are welcome to subscribe to it. Just send a message to
+Majordomo@vger.rutgers.edu with the following in the message body:
+
+subscribe linux-x25
+end
+
+The contents of the Subject line are ignored.
 
 Jonathan
 

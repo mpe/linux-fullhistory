@@ -82,10 +82,12 @@ static inline int dup_mmap(struct mm_struct * mm)
 
 	mm->mmap = NULL;
 	p = &mm->mmap;
+	flush_cache_mm(current->mm);
 	for (mpnt = current->mm->mmap ; mpnt ; mpnt = mpnt->vm_next) {
 		tmp = (struct vm_area_struct *) kmalloc(sizeof(struct vm_area_struct), GFP_KERNEL);
 		if (!tmp) {
 			exit_mmap(mm);
+			flush_tlb_mm(current->mm);
 			return -ENOMEM;
 		}
 		*tmp = *mpnt;
@@ -101,6 +103,7 @@ static inline int dup_mmap(struct mm_struct * mm)
 		}
 		if (copy_page_range(mm, current->mm, tmp)) {
 			exit_mmap(mm);
+			flush_tlb_mm(current->mm);
 			return -ENOMEM;
 		}
 		if (tmp->vm_ops && tmp->vm_ops->open)
@@ -108,6 +111,7 @@ static inline int dup_mmap(struct mm_struct * mm)
 		*p = tmp;
 		p = &tmp->vm_next;
 	}
+	flush_tlb_mm(current->mm);
 	build_mmap_avl(mm);
 	return 0;
 }

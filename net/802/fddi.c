@@ -20,7 +20,11 @@
  *		modify it under the terms of the GNU General Public License
  *		as published by the Free Software Foundation; either version
  *		2 of the License, or (at your option) any later version.
+ *
+ *	Changes
+ *		Alan Cox	:	New arp/rebuild header
  */
+ 
 #include <asm/segment.h>
 #include <asm/system.h>
 #include <linux/types.h>
@@ -45,21 +49,14 @@
  * daddr=NULL	means leave destination address (eg unresolved arp)
  */
 
-int fddi_header(
-	struct sk_buff	*skb,
-	struct device	*dev,
-	unsigned short	type,
-	void			*daddr,
-	void			*saddr,
-	unsigned		len
-	)
-
-	{
+int fddi_header(struct sk_buff	*skb, struct device *dev, unsigned short type,
+		void *daddr, void *saddr, unsigned len)
+{
 	struct fddihdr *fddi = (struct fddihdr *)skb_push(skb, FDDI_K_SNAP_HLEN);
 
 	/* Fill in frame header - assume 802.2 SNAP frames for now */
 
-	fddi->fc					 = FDDI_FC_K_ASYNC_LLC_DEF;
+	fddi->fc			 = FDDI_FC_K_ASYNC_LLC_DEF;
 	fddi->hdr.llc_snap.dsap		 = FDDI_EXTENDED_SAP;
 	fddi->hdr.llc_snap.ssap		 = FDDI_EXTENDED_SAP;
 	fddi->hdr.llc_snap.ctrl		 = FDDI_UI_CMD;
@@ -76,12 +73,12 @@ int fddi_header(
 		memcpy(fddi->saddr, dev->dev_addr, dev->addr_len);
 
 	if (daddr != NULL)
-		{
+	{
 		memcpy(fddi->daddr, daddr, dev->addr_len);
 		return(FDDI_K_SNAP_HLEN);
-		}
-	return(-FDDI_K_SNAP_HLEN);
 	}
+	return(-FDDI_K_SNAP_HLEN);
+}
 
 
 /*
@@ -90,32 +87,22 @@ int fddi_header(
  * this sk_buff.  We now let ARP fill in the other fields.
  */
  
-int fddi_rebuild_header(
-	void			*buff,
-	struct device	*dev,
-	unsigned long	dest,
-	struct sk_buff	*skb
-	)
-
-	{
-	struct fddihdr *fddi = (struct fddihdr *)buff;
+int fddi_rebuild_header(struct sk_buff	*skb)
+{
+	struct fddihdr *fddi = (struct fddihdr *)skb->data;
 
 	/* Only ARP/IP is currently supported */
 	 
 	if (fddi->hdr.llc_snap.ethertype != htons(ETH_P_IP))
-		{
+	{
 		printk("fddi_rebuild_header: Don't know how to resolve type %04X addresses?\n", (unsigned int)htons(fddi->hdr.llc_snap.ethertype));
-		return(0);
-		}
-
-	/* Try to get ARP to resolve the header and fill destination address */
-
-	if (arp_find(fddi->daddr, dest, dev, dev->pa_addr, skb))
-		return(1);
-	else
 		return(0);
 	}
 
+	/* Try to get ARP to resolve the header and fill destination address */
+
+	return arp_find(fddi->daddr, skb) ? 1 : 0;
+}
 
 /*
  * Determine the packet's protocol ID and fill in skb fields.
@@ -124,12 +111,8 @@ int fddi_rebuild_header(
  * the proper pointer to the start of packet data (skb->data).
  */
  
-unsigned short fddi_type_trans(
-	struct sk_buff	*skb,
-	struct device	*dev
-	)
-
-	{
+unsigned short fddi_type_trans(struct sk_buff *skb, struct device *dev)
+{
 	struct fddihdr *fddi = (struct fddihdr *)skb->data;
 
 	/*
@@ -143,20 +126,20 @@ unsigned short fddi_type_trans(
 	/* Set packet type based on destination address and flag settings */
 			
 	if (*fddi->daddr & 0x01)
-		{
+	{
 		if (memcmp(fddi->daddr, dev->broadcast, FDDI_K_ALEN) == 0)
 			skb->pkt_type = PACKET_BROADCAST;
 		else
 			skb->pkt_type = PACKET_MULTICAST;
-		}
+	}
 	
 	else if (dev->flags & IFF_PROMISC)
-		{
+	{
 		if (memcmp(fddi->daddr, dev->dev_addr, FDDI_K_ALEN))
 			skb->pkt_type = PACKET_OTHERHOST;
-		}
+	}
 
 	/* Assume 802.2 SNAP frames, for now */
 
 	return(fddi->hdr.llc_snap.ethertype);
-	}
+}

@@ -1,3 +1,55 @@
+Thu Dec 26 22:00 1996 Gerard Roudier (groudier@club-internet.fr)
+	* ncr53c8xx.c ncr53c8xx.h README.ncr53c8xx - revision 1.16b
+	- Remove useless code.
+	- Try to improve error recovery in case of abort and reset.
+	- Remove DEBUG_NEGO by default.
+	- Add boot setup command support.
+	  Now, all experimental config options can be removed.
+	- Update README file.
+
+
+Mon Dec 23 23:00 1996 Gerard Roudier (groudier@club-internet.fr)
+	* ncr53c8xx.c ncr53c8xx.h - revision 1.16a
+	New display for speed ##.# MB/s (From Stefan)
+	- I add "WIDE" qualifier after ULTRA and FAST
+	- I get "FAST WIDE SCSI-2 20 MB/s" with my Atlas. That's nice.
+
+	Richard Waltham reports SYMBIOS set the 875 to 20 MB/s for 13 ns 
+	period factor. I decide to trust SYMBIOS. 20 MB/s output speed 
+	instead of 19.2 MB/s should not cause problem. The ncr is only able 
+	to use 16.67 MB/s when 20 MB/s is not possible.
+
+	Fix from Markus Kossman: "Ultra SCSI enabled" wrongly printed 
+	when not enabled.
+
+	Set DEBUG_NEGO by default in order to get reports about sync nego. 
+	Will remove it in the next patch.
+
+Thu Dec 19 21:00 1996 Gerard Roudier (groudier@club-internet.fr)
+	* ncr53c8xx.c ncr53c8xx.h README.ncr53c8xx - revision 1.16
+	Incorporate new definitions in ncr53c8xx.h (From Stefan).
+	Check changes against Stefan's current version of the driver.
+	All seems ok.
+
+Sat Nov 30 21:00 1996 Gerard Roudier (groudier@club-internet.fr)
+	* ncr53c8xx.c ncr53c8xx.h
+	Make changes in order to support: 
+	- Clock doubler and so 80 Mhz scsi clock for 875 chips.
+	- Sync transfers below 7.5 MB/sec.
+          Use Clock/2 between 5 and 10 Mega-transfers/s and Clock/4 below 5.
+	- Ultra SCSI data transfers.
+	- Offset 16.
+
+	Works with my configuration. However I cannot test Ultra transfers,
+	since my disks are only fast scsi-2.
+
+Tue Nov 28 21:00 1996 Gerard Roudier (groudier@club-internet.fr)
+	* ncr53c8xx.c
+	I received yesterday my Promise SCSI Ultra board.
+	NCR53C875 rev. 3 with clock doubler.
+	Add the code to support some bus features, the large 536 dma fifo and 
+	burst 128. Works.
+
 Mon Nov 4 21:00 1996 Gerard Roudier (groudier@club-internet.fr)
 	* ncr53c8xx.c ncr53c8xx.h - revision 1.14c
 	Severall control command improvements:

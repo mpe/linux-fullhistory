@@ -108,10 +108,12 @@ static int nfs_readlink(struct inode *inode, char *buffer, int buflen)
 	error = nfs_proc_readlink(NFS_SERVER(inode), NFS_FH(inode), &mem,
 		&res, &len, buflen);
 	iput(inode);
-	if (! error) {
-		copy_to_user(buffer, res, len);
-		put_user('\0', buffer + len);
-		error = len;
+	if (!error) {
+		error = copy_to_user(buffer, res, len);
+		if (!error)
+			error = put_user('\0', buffer + len);
+		if (!error)
+			error = len;
 	}
 	kfree(mem);
 	return error;

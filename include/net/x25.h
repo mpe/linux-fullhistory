@@ -59,6 +59,11 @@
 #define X25_STATE_3		3		/* Data Transfer */
 #define	X25_STATE_4		4		/* Awaiting Reset Confirmation */
 
+#define	X25_LINK_STATE_0	0
+#define	X25_LINK_STATE_1	1
+#define	X25_LINK_STATE_2	2
+#define	X25_LINK_STATE_3	3
+
 #define X25_DEFAULT_T20		(180 * X25_SLOWHZ)	/* Default T20 value */
 #define X25_DEFAULT_T21		(200 * X25_SLOWHZ)	/* Default T21 value */
 #define X25_DEFAULT_T22		(180 * X25_SLOWHZ)	/* Default T22 value */
@@ -148,10 +153,11 @@ extern int  x25_rx_call_request(struct sk_buff *, struct x25_neigh *, unsigned i
 #include <net/x25call.h>
 
 /* x25_dev.c */
-extern int  x25_link_up(struct device *);
-extern void x25_send_frame(struct sk_buff *, struct device *);
+extern void x25_send_frame(struct sk_buff *, struct x25_neigh *);
 extern int  x25_lapb_receive_frame(struct sk_buff *, struct device *, struct packet_type *);
 extern int  x25_llc_receive_frame(struct sk_buff *, struct device *, struct packet_type *);
+extern void x25_establish_link(struct x25_neigh *);
+extern void x25_terminate_link(struct x25_neigh *);
 
 /* x25_in.c */
 extern int  x25_process_rx_frame(struct sock *, struct sk_buff *);
@@ -160,6 +166,8 @@ extern int  x25_process_rx_frame(struct sock *, struct sk_buff *);
 extern void x25_link_control(struct sk_buff *, struct x25_neigh *, unsigned short);
 extern void x25_link_device_up(struct device *);
 extern void x25_link_device_down(struct device *);
+extern void x25_link_established(struct x25_neigh *);
+extern void x25_link_terminated(struct x25_neigh *);
 extern void x25_transmit_restart_request(struct x25_neigh *);
 extern void x25_transmit_restart_confirmation(struct x25_neigh *);
 extern void x25_transmit_diagnostic(struct x25_neigh *, unsigned char);

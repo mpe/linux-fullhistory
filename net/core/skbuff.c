@@ -87,7 +87,7 @@ void show_net_buffers(void)
 #if CONFIG_SKB_CHECK
 
 /*
- *	Debugging paranoia. Can go later when this crud stack works
+ *	Debugging paranoia. Used for debugging network stacks.
  */
 
 int skb_check(struct sk_buff *skb, int head, int line, char *file)
@@ -114,20 +114,6 @@ int skb_check(struct sk_buff *skb, int head, int line, char *file)
 				file,line);
 			return -1;
 		}
-#if 0
-		{
-		struct sk_buff *skb2 = skb->next;
-		int i = 0;
-		while (skb2 != skb && i < 5) {
-			if (skb_check(skb2, 0, line, file) < 0) {
-				printk("bad queue element in whole queue\n");
-				return -1;
-			}
-			i++;
-			skb2 = skb2->next;
-		}
-		}
-#endif
 		return 0;
 	}
 	if (skb->next != NULL && skb->next->magic_debug_cookie != SK_HEAD_SKB
@@ -573,9 +559,15 @@ void skb_trim(struct sk_buff *skb, unsigned int len)
 
 #endif
 
+/**************************************************************************
+
+      Stuff below this point isn't debugging duplicates of the inlines
+      used for buffer handling
+      
+***************************************************************************/
+
 /*
- *	Free an sk_buff. This still knows about things it should
- *	not need to like protocols and sockets.
+ *	Free an sk_buff. Release anything attached to the buffer.
  */
 
 void __kfree_skb(struct sk_buff *skb)
@@ -603,7 +595,12 @@ void __kfree_skb(struct sk_buff *skb)
 /*
  *	Allocate a new skbuff. We do this ourselves so we can fill in a few 'private'
  *	fields and also do memory statistics to find all the [BEEP] leaks.
+ *
+ *	Note: For now we put the header after the data to get better cache
+ *	usage. Once we have a good cache aware kmalloc this will cease
+ *	to be a good idea.
  */
+
 struct sk_buff *alloc_skb(unsigned int size,int priority)
 {
 	struct sk_buff *skb;
@@ -620,6 +617,11 @@ struct sk_buff *alloc_skb(unsigned int size,int priority)
 		}
 	}
 
+	/*
+	 *	FIXME: We could do with an architecture dependant
+	 *	'alignment mask'.
+	 */
+	 
 	size=(size+15)&~15;		/* Allow for alignments. Make a multiple of 16 bytes */
 	len = size;
 	
@@ -684,7 +686,7 @@ struct sk_buff *alloc_skb(unsigned int size,int priority)
  *	Free an skbuff by memory
  */
 
-static inline void __kfree_skbmem(struct sk_buff *skb)
+extern inline void __kfree_skbmem(struct sk_buff *skb)
 {
 	/* don't do anything if somebody still uses us */
 	if (atomic_dec_and_test(&skb->count)) {

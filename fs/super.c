@@ -213,7 +213,7 @@ static int fs_index(const char * __name)
 static int fs_name(unsigned int index, char * buf)
 {
 	struct file_system_type * tmp;
-	int err, len;
+	int len;
 
 	tmp = file_systems;
 	while (tmp && index > 0) {
@@ -223,11 +223,7 @@ static int fs_name(unsigned int index, char * buf)
 	if (!tmp)
 		return -EINVAL;
 	len = strlen(tmp->name) + 1;
-	err = verify_area(VERIFY_WRITE, buf, len);
-	if (err)
-		return err;
-	copy_to_user(buf, tmp->name, len);
-	return 0;
+	return copy_to_user(buf, tmp->name, len) ? -EFAULT : 0;
 }
 
 static int fs_maxindex(void)
@@ -477,7 +473,6 @@ asmlinkage int sys_ustat(dev_t dev, struct ustat * ubuf)
         struct ustat tmp;
         struct statfs sbuf;
         unsigned long old_fs;
-        int error;
 
         s = get_super(to_kdev_t(dev));
         if (s == NULL)
@@ -485,10 +480,6 @@ asmlinkage int sys_ustat(dev_t dev, struct ustat * ubuf)
 
         if (!(s->s_op->statfs))
                 return -ENOSYS;
-
-        error = verify_area(VERIFY_WRITE,ubuf,sizeof(struct ustat));
-        if (error)
-                return error;
 
         old_fs = get_fs();
         set_fs(get_ds());
@@ -499,8 +490,7 @@ asmlinkage int sys_ustat(dev_t dev, struct ustat * ubuf)
         tmp.f_tfree = sbuf.f_bfree;
         tmp.f_tinode = sbuf.f_ffree;
 
-        copy_to_user(ubuf,&tmp,sizeof(struct ustat));
-        return 0;
+        return copy_to_user(ubuf,&tmp,sizeof(struct ustat)) ? -EFAULT : 0;
 }
 
 static struct super_block * read_super(kdev_t dev,const char *name,int flags,
@@ -807,7 +797,10 @@ static int copy_mount_options (const void * data, unsigned long *where)
 	if (!(page = __get_free_page(GFP_KERNEL))) {
 		return -ENOMEM;
 	}
-	copy_from_user((void *) page,data,i);
+	if (copy_from_user((void *) page,data,i)) {
+		free_page(page); 
+		return -EFAULT;
+	}
 	*where = page;
 	return 0;
 }

@@ -1,4 +1,4 @@
-/* $Id: srmmu.c,v 1.122 1996/12/30 06:16:31 davem Exp $
+/* $Id: srmmu.c,v 1.123 1996/12/31 09:53:00 davem Exp $
  * srmmu.c:  SRMMU specific routines for memory management.
  *
  * Copyright (C) 1995 David S. Miller  (davem@caip.rutgers.edu)
@@ -52,6 +52,14 @@ extern void smp_release(void);
 #define smp_capture()
 #define smp_release()
 #endif /* !(__SMP__) */
+
+#ifdef __SMP__
+#define FLUSH_BEGIN(mm)
+#define FLUSH_END
+#else
+#define FLUSH_BEGIN(mm) if((mm)->context != NO_CONTEXT) {
+#define FLUSH_END	}
+#endif
 
 /* #define USE_CHUNK_ALLOC 1 */
 
@@ -149,16 +157,12 @@ static inline unsigned long srmmu_p2v(unsigned long paddr)
  */
 static inline unsigned long srmmu_swap(unsigned long *addr, unsigned long value)
 {
-	__asm__ __volatile__("swap [%2], %0\n\t" :
-			     "=&r" (value) :
-			     "0" (value), "r" (addr));
+	__asm__ __volatile__("swap [%2], %0" : "=&r" (value) : "0" (value), "r" (addr));
 	return value;
 }
 
 /* Functions really use this, not srmmu_swap directly. */
-#define srmmu_set_entry(ptr, newentry) \
-        srmmu_swap((unsigned long *) (ptr), (newentry))
-
+#define srmmu_set_entry(ptr, newentry) srmmu_swap((unsigned long *) (ptr), (newentry))
 
 /* The very generic SRMMU page table operations. */
 static unsigned int srmmu_pmd_align(unsigned int addr) { return SRMMU_PMD_ALIGN(addr); }
@@ -279,17 +283,15 @@ static pte_t *srmmu_pte_offset(pmd_t * dir, unsigned long address)
 static void srmmu_update_rootmmu_dir(struct task_struct *tsk, pgd_t *pgdp) 
 {
 	if(tsk->mm->context != NO_CONTEXT) {
-		flush_cache_mm(current->mm);
+		flush_cache_mm(tsk->mm);
 		ctxd_set(&srmmu_context_table[tsk->mm->context], pgdp);
-		flush_tlb_mm(current->mm);
+		flush_tlb_mm(tsk->mm);
 	}
 }
 
 static unsigned long srmmu_getpage(void)
 {
-	unsigned long page = get_free_page(GFP_KERNEL);
-
-	return page;
+	return get_free_page(GFP_KERNEL);
 }
 
 static inline void srmmu_putpage(unsigned long page)
@@ -688,15 +690,23 @@ static void srmmu_set_pte_cacheable(pte_t *ptep, pte_t pteval)
 
 static void srmmu_set_pte_nocache_hyper(pte_t *ptep, pte_t pteval)
 {
-	volatile unsigned long clear;
-	unsigned long flags;
+	unsigned long page = ((unsigned long)ptep) & PAGE_MASK;
 
-	save_and_cli(flags);
 	srmmu_set_entry(ptep, pte_val(pteval));
-	if(srmmu_hwprobe(((unsigned long)ptep)&PAGE_MASK))
-		hyper_flush_cache_page(((unsigned long)ptep) & PAGE_MASK);
-	clear = srmmu_get_fstatus();
-	restore_flags(flags);
+	__asm__ __volatile__("
+	lda	[%0] %2, %%g4
+	orcc	%%g4, 0x0, %%g0
+	be	2f
+	 sethi	%%hi(%7), %%g5
+1:	subcc	%%g5, %6, %%g5		! hyper_flush_cache_page
+	bne	1b
+	 sta	%%g0, [%1 + %%g5] %3
+	lda	[%4] %5, %%g0
+2:"	: /* no outputs */
+	: "r" (page | 0x400), "r" (page), "i" (ASI_M_FLUSH_PROBE),
+	  "i" (ASI_M_FLUSH_PAGE), "r" (SRMMU_FAULT_STATUS), "i" (ASI_M_MMUREGS),
+	  "r" (vac_line_size), "i" (PAGE_SIZE)
+	: "g4", "g5");
 }
 
 static void srmmu_set_pte_nocache_cypress(pte_t *ptep, pte_t pteval)
@@ -867,6 +877,9 @@ static void srmmu_unlockarea(char *vaddr, unsigned long len)
 {
 }
 
+/* This is used in many routines below. */
+#define UWINMASK_OFFSET (const unsigned long)(&(((struct task_struct *)0)->tss.uwinmask))
+
 /* On the SRMMU we do not have the problems with limited tlb entries
  * for mapping kernel pages, so we just take things from the free page
  * pool.  As a side effect we are putting a little too much pressure
@@ -916,42 +929,29 @@ static void tsunami_flush_cache_all(void)
 
 static void tsunami_flush_cache_mm(struct mm_struct *mm)
 {
-#ifndef __SMP__
-	if(mm->context != NO_CONTEXT) {
-#endif
-		flush_user_windows();
-		tsunami_flush_icache();
-		tsunami_flush_dcache();
-#ifndef __SMP__
-	}
-#endif
+	FLUSH_BEGIN(mm)
+	flush_user_windows();
+	tsunami_flush_icache();
+	tsunami_flush_dcache();
+	FLUSH_END
 }
 
 static void tsunami_flush_cache_range(struct mm_struct *mm, unsigned long start, unsigned long end)
 {
-#ifndef __SMP__
-	if(mm->context != NO_CONTEXT) {
-#endif
-		flush_user_windows();
-		tsunami_flush_icache();
-		tsunami_flush_dcache();
-#ifndef __SMP__
-	}
-#endif
+	FLUSH_BEGIN(mm)
+	flush_user_windows();
+	tsunami_flush_icache();
+	tsunami_flush_dcache();
+	FLUSH_END
 }
 
 static void tsunami_flush_cache_page(struct vm_area_struct *vma, unsigned long page)
 {
-#ifndef __SMP__
-	struct mm_struct *mm = vma->vm_mm;
-	if(mm->context != NO_CONTEXT) {
-#endif
-		flush_user_windows();
-		tsunami_flush_icache();
-		tsunami_flush_dcache();
-#ifndef __SMP__
-	}
-#endif
+	FLUSH_BEGIN(vma->vm_mm)
+	flush_user_windows();
+	tsunami_flush_icache();
+	tsunami_flush_dcache();
+	FLUSH_END
 }
 
 static void tsunami_flush_cache_page_to_uncache(unsigned long page)
@@ -982,55 +982,42 @@ static void tsunami_flush_sig_insns(struct mm_struct *mm, unsigned long insn_add
 
 static void tsunami_flush_tlb_all(void)
 {
-	module_stats.invall++;
 	srmmu_flush_whole_tlb();
+	module_stats.invall++;
 }
 
 static void tsunami_flush_tlb_mm(struct mm_struct *mm)
 {
+	FLUSH_BEGIN(mm)
+	srmmu_flush_whole_tlb();
 	module_stats.invmm++;
-#ifndef __SMP__
-	if(mm->context != NO_CONTEXT) {
-#endif
-		srmmu_flush_whole_tlb();
-#ifndef __SMP__
-        }
-#endif
+	FLUSH_END
 }
 
 static void tsunami_flush_tlb_range(struct mm_struct *mm, unsigned long start, unsigned long end)
 {
+	FLUSH_BEGIN(mm)
+	srmmu_flush_whole_tlb();
 	module_stats.invrnge++;
-#ifndef __SMP__
-	if(mm->context != NO_CONTEXT) {
-#endif
-		srmmu_flush_whole_tlb();
-#ifndef __SMP__
-	}
-#endif
+	FLUSH_END
 }
 
 static void tsunami_flush_tlb_page(struct vm_area_struct *vma, unsigned long page)
 {
-	int octx;
 	struct mm_struct *mm = vma->vm_mm;
 
-#ifndef __SMP__
-	if(mm->context != NO_CONTEXT) {
-#endif
-		unsigned long flags;
-
-		save_and_cli(flags);
-		octx = srmmu_get_context();
-
-		srmmu_set_context(mm->context);
-		srmmu_flush_tlb_page(page);
-		srmmu_set_context(octx);
-		restore_flags(flags);
-#ifndef __SMP__
-	}
-#endif
+	FLUSH_BEGIN(mm)
+	__asm__ __volatile__("
+	lda	[%0] %3, %%g5
+	sta	%1, [%0] %3
+	sta	%%g0, [%2] %4
+	sta	%%g5, [%0] %3"
+	: /* no outputs */
+	: "r" (SRMMU_CTX_REG), "r" (mm->context), "r" (page & PAGE_MASK),
+	  "i" (ASI_M_MMUREGS), "i" (ASI_M_FLUSH_PROBE)
+	: "g5");
 	module_stats.invpg++;
+	FLUSH_END
 }
 
 static void tsunami_flush_tlb_page_for_cbit(unsigned long page)
@@ -1051,41 +1038,28 @@ static void swift_flush_cache_all(void)
 
 static void swift_flush_cache_mm(struct mm_struct *mm)
 {
-#ifndef __SMP__
-	if(mm->context != NO_CONTEXT) {
-#endif
-		flush_user_windows();
-		swift_idflash_clear();
-#ifndef __SMP__
-	}
-#endif
+	FLUSH_BEGIN(mm)
+	flush_user_windows();
+	swift_idflash_clear();
+	FLUSH_END
 }
 
 static void swift_flush_cache_range(struct mm_struct *mm, unsigned long start, unsigned long end)
 {
-#ifndef __SMP__
-	if(mm->context != NO_CONTEXT) {
-#endif
-		flush_user_windows();
-		swift_idflash_clear();
-#ifndef __SMP__
-	}
-#endif
+	FLUSH_BEGIN(mm)
+	flush_user_windows();
+	swift_idflash_clear();
+	FLUSH_END
 }
 
 static void swift_flush_cache_page(struct vm_area_struct *vma, unsigned long page)
 {
-#ifndef __SMP__
-	struct mm_struct *mm = vma->vm_mm;
-	if(mm->context != NO_CONTEXT) {
-#endif
-		flush_user_windows();
-		if(vma->vm_flags & VM_EXEC)
-			swift_flush_icache();
-		swift_flush_dcache();
-#ifndef __SMP__
-	}
-#endif
+	FLUSH_BEGIN(vma->vm_mm)
+	flush_user_windows();
+	if(vma->vm_flags & VM_EXEC)
+		swift_flush_icache();
+	swift_flush_dcache();
+	FLUSH_END
 }
 
 /* Not copy-back on swift. */
@@ -1115,36 +1089,32 @@ static void swift_flush_cache_page_to_uncache(unsigned long page)
 
 static void swift_flush_tlb_all(void)
 {
-	module_stats.invall++;
 	srmmu_flush_whole_tlb();
+	module_stats.invall++;
 }
 
 static void swift_flush_tlb_mm(struct mm_struct *mm)
 {
+	FLUSH_BEGIN(mm)
+	srmmu_flush_whole_tlb();
 	module_stats.invmm++;
-#ifndef __SMP__
-	if(mm->context != NO_CONTEXT)
-#endif
-		srmmu_flush_whole_tlb();
+	FLUSH_END
 }
 
 static void swift_flush_tlb_range(struct mm_struct *mm, unsigned long start, unsigned long end)
 {
+	FLUSH_BEGIN(mm)
+	srmmu_flush_whole_tlb();
 	module_stats.invrnge++;
-#ifndef __SMP__
-	if(mm->context != NO_CONTEXT)
-#endif
-		srmmu_flush_whole_tlb();
+	FLUSH_END
 }
 
 static void swift_flush_tlb_page(struct vm_area_struct *vma, unsigned long page)
 {
-#ifndef __SMP__
-	struct mm_struct *mm = vma->vm_mm;
-	if(mm->context != NO_CONTEXT)
-#endif
-		srmmu_flush_whole_tlb();
+	FLUSH_BEGIN(vma->vm_mm)
+	srmmu_flush_whole_tlb();
 	module_stats.invpg++;
+	FLUSH_END
 }
 
 static void swift_flush_tlb_page_for_cbit(unsigned long page)
@@ -1296,82 +1266,114 @@ static unsigned long viking_no_mxcc_getpage(void)
 
 static void viking_flush_tlb_all(void)
 {
-	module_stats.invall++;
-	flush_user_windows();
+	register int ctr asm("g5");
+
+	ctr = 0;
+	__asm__ __volatile__("
+	1:	ld	[%%g6 + %2], %%g4	! flush user windows
+		orcc	%%g0, %%g4, %%g0
+		add	%0, 1, %0
+		bne	1b
+		 save	%%sp, -64, %%sp
+	2:	subcc	%0, 1, %0
+		bne	2b
+		 restore %%g0, %%g0, %%g0"
+	: "=&r" (ctr) : "0" (ctr), "i" (UWINMASK_OFFSET) : "g4");
 	srmmu_flush_whole_tlb();
+	module_stats.invall++;
 }
 
 static void viking_flush_tlb_mm(struct mm_struct *mm)
 {
-	int octx;
-	module_stats.invmm++;
+	register int ctr asm("g5");
 
-#ifndef __SMP__
-	if(mm->context != NO_CONTEXT) {
-#endif
-		flush_user_windows();
-		octx = srmmu_get_context();
-		srmmu_set_context(mm->context);
-		srmmu_flush_tlb_ctx();
-		srmmu_set_context(octx);
-#ifndef __SMP__
-	}
-#endif
+	FLUSH_BEGIN(mm)
+	ctr = 0;
+	__asm__ __volatile__("
+1:	ld	[%%g6 + %7], %%g4	! flush user windows
+	orcc	%%g0, %%g4, %%g0
+	add	%0, 1, %0
+	bne	1b
+	 save	%%sp, -64, %%sp
+2:	subcc	%0, 1, %0
+	bne	2b
+	 restore %%g0, %%g0, %%g0
+	lda	[%1] %4, %0
+	sta	%3, [%1] %4
+	sta	%%g0, [%2] %5
+	sta	%0, [%1] %4"
+	: "=&r" (ctr)
+	: "r" (SRMMU_CTX_REG), "r" (0x300), "r" (mm->context),
+	  "i" (ASI_M_MMUREGS), "i" (ASI_M_FLUSH_PROBE), "0" (ctr),
+	  "i" (UWINMASK_OFFSET)
+	: "g4");
+	module_stats.invmm++;
+	FLUSH_END
 }
 
 static void viking_flush_tlb_range(struct mm_struct *mm, unsigned long start, unsigned long end)
 {
-	int octx;
-	module_stats.invrnge++;
+	register int ctr asm("g5");
+	unsigned long size;
 
-#ifndef __SMP__
-	if(mm->context != NO_CONTEXT) {
-#endif
-		flush_user_windows();
-		octx = srmmu_get_context();
-		srmmu_set_context(mm->context);
-		if((end - start) < SRMMU_PMD_SIZE) {
-			start &= PAGE_MASK;
-			while(start < end) {
-				srmmu_flush_tlb_page(start);
-				start += PAGE_SIZE;
-			}
-		} else if((end - start) < SRMMU_PGDIR_SIZE) {
-			start &= SRMMU_PMD_MASK;
-			while(start < end) {
-				srmmu_flush_tlb_segment(start);
-				start += SRMMU_PMD_SIZE;
-			}
-		} else {
-			start &= SRMMU_PGDIR_MASK;
-			while(start < end) {
-				srmmu_flush_tlb_region(start);
-				start += SRMMU_PGDIR_SIZE;
-			}
-		}
-		srmmu_set_context(octx);
-#ifndef __SMP__
-	}
-#endif
+	FLUSH_BEGIN(mm)
+	ctr = 0;
+	__asm__ __volatile__("
+	1:	ld	[%%g6 + %2], %%g4	! flush user windows
+		orcc	%%g0, %%g4, %%g0
+		add	%0, 1, %0
+		bne	1b
+		 save	%%sp, -64, %%sp
+	2:	subcc	%0, 1, %0
+		bne	2b
+		 restore %%g0, %%g0, %%g0"
+	: "=&r" (ctr) : "0" (ctr), "i" (UWINMASK_OFFSET) : "g4");
+	start &= SRMMU_PGDIR_MASK;
+	size = SRMMU_PGDIR_ALIGN(end) - start;
+	__asm__ __volatile__("
+		lda	[%0] %5, %%g5
+		sta	%1, [%0] %5
+	1:	subcc	%3, %4, %3
+		bne	1b
+		 sta	%%g0, [%2 + %3] %6
+		sta	%%g5, [%0] %5"
+	: /* no outputs */
+	: "r" (SRMMU_CTX_REG), "r" (mm->context), "r" (start | 0x200),
+	  "r" (size), "r" (SRMMU_PGDIR_SIZE), "i" (ASI_M_MMUREGS),
+	  "i" (ASI_M_FLUSH_PROBE)
+	: "g5");
+	module_stats.invrnge++;
+	FLUSH_END
 }
 
 static void viking_flush_tlb_page(struct vm_area_struct *vma, unsigned long page)
 {
-	int octx;
 	struct mm_struct *mm = vma->vm_mm;
+	register int ctr asm("g5");
 
+	FLUSH_BEGIN(mm)
+	ctr = 0;
+	__asm__ __volatile__("
+	1:	ld	[%%g6 + %2], %%g4	! flush user windows
+		orcc	%%g0, %%g4, %%g0
+		add	%0, 1, %0
+		bne	1b
+		 save	%%sp, -64, %%sp
+	2:	subcc	%0, 1, %0
+		bne	2b
+		 restore %%g0, %%g0, %%g0"
+	: "=&r" (ctr) : "0" (ctr), "i" (UWINMASK_OFFSET) : "g4");
+	__asm__ __volatile__("
+	lda	[%0] %3, %%g5
+	sta	%1, [%0] %3
+	sta	%%g0, [%2] %4
+	sta	%%g5, [%0] %3"
+	: /* no outputs */
+	: "r" (SRMMU_CTX_REG), "r" (mm->context), "r" (page & PAGE_MASK),
+	  "i" (ASI_M_MMUREGS), "i" (ASI_M_FLUSH_PROBE)
+	: "g5");
 	module_stats.invpg++;
-#ifndef __SMP__
-	if(mm->context != NO_CONTEXT) {
-#endif
-		flush_user_windows();
-		octx = srmmu_get_context();
-		srmmu_set_context(mm->context);
-		srmmu_flush_tlb_page(page);
-		srmmu_set_context(octx);
-#ifndef __SMP__
-	}
-#endif
+	FLUSH_END
 }
 
 static void viking_flush_tlb_page_for_cbit(unsigned long page)
@@ -1400,21 +1402,57 @@ static void cypress_flush_cache_all(void)
 
 static void cypress_flush_cache_mm(struct mm_struct *mm)
 {
+	register unsigned long a, b, c, d, e, f, g;
 	unsigned long flags, faddr;
 	int octx;
 
-#ifndef __SMP__
-	if(mm->context != NO_CONTEXT) {
-#endif
-		register unsigned long a, b, c, d, e, f, g;
-		flush_user_windows();
-		save_and_cli(flags);
-		octx = srmmu_get_context();
-		srmmu_set_context(mm->context);
-		a = 0x20; b = 0x40; c = 0x60;
-		d = 0x80; e = 0xa0; f = 0xc0; g = 0xe0;
+	FLUSH_BEGIN(mm)
+	flush_user_windows();
+	save_and_cli(flags);
+	octx = srmmu_get_context();
+	srmmu_set_context(mm->context);
+	a = 0x20; b = 0x40; c = 0x60;
+	d = 0x80; e = 0xa0; f = 0xc0; g = 0xe0;
 
-		faddr = (0x10000 - 0x100);
+	faddr = (0x10000 - 0x100);
+	goto inside;
+	do {
+		faddr -= 0x100;
+	inside:
+		__asm__ __volatile__("sta %%g0, [%0] %1\n\t"
+				     "sta %%g0, [%0 + %2] %1\n\t"
+				     "sta %%g0, [%0 + %3] %1\n\t"
+				     "sta %%g0, [%0 + %4] %1\n\t"
+				     "sta %%g0, [%0 + %5] %1\n\t"
+				     "sta %%g0, [%0 + %6] %1\n\t"
+				     "sta %%g0, [%0 + %7] %1\n\t"
+				     "sta %%g0, [%0 + %8] %1\n\t" : :
+				     "r" (faddr), "i" (ASI_M_FLUSH_CTX),
+				     "r" (a), "r" (b), "r" (c), "r" (d),
+				     "r" (e), "r" (f), "r" (g));
+	} while(faddr);
+	srmmu_set_context(octx);
+	restore_flags(flags);
+	FLUSH_END
+}
+
+static void cypress_flush_cache_range(struct mm_struct *mm, unsigned long start, unsigned long end)
+{
+	register unsigned long a, b, c, d, e, f, g;
+	unsigned long flags, faddr;
+	int octx;
+
+	FLUSH_BEGIN(mm)
+	flush_user_windows();
+	save_and_cli(flags);
+	octx = srmmu_get_context();
+	srmmu_set_context(mm->context);
+	a = 0x20; b = 0x40; c = 0x60;
+	d = 0x80; e = 0xa0; f = 0xc0; g = 0xe0;
+
+	start &= SRMMU_PMD_MASK;
+	while(start < end) {
+		faddr = (start + (0x10000 - 0x100));
 		goto inside;
 		do {
 			faddr -= 0x100;
@@ -1427,103 +1465,55 @@ static void cypress_flush_cache_mm(struct mm_struct *mm)
 					     "sta %%g0, [%0 + %6] %1\n\t"
 					     "sta %%g0, [%0 + %7] %1\n\t"
 					     "sta %%g0, [%0 + %8] %1\n\t" : :
-					     "r" (faddr), "i" (ASI_M_FLUSH_CTX),
+					     "r" (faddr),
+					     "i" (ASI_M_FLUSH_SEG),
 					     "r" (a), "r" (b), "r" (c), "r" (d),
 					     "r" (e), "r" (f), "r" (g));
-		} while(faddr);
-		srmmu_set_context(octx);
-		restore_flags(flags);
-#ifndef __SMP__
+		} while (faddr != start);
+		start += SRMMU_PMD_SIZE;
 	}
-#endif
-}
-
-static void cypress_flush_cache_range(struct mm_struct *mm, unsigned long start, unsigned long end)
-{
-	unsigned long flags, faddr;
-	int octx;
-
-#ifndef __SMP__
-	if(mm->context != NO_CONTEXT) {
-#endif
-		register unsigned long a, b, c, d, e, f, g;
-		flush_user_windows();
-		save_and_cli(flags);
-		octx = srmmu_get_context();
-		srmmu_set_context(mm->context);
-		a = 0x20; b = 0x40; c = 0x60;
-		d = 0x80; e = 0xa0; f = 0xc0; g = 0xe0;
-
-		start &= SRMMU_PMD_MASK;
-		while(start < end) {
-			faddr = (start + (0x10000 - 0x100));
-			goto inside;
-			do {
-				faddr -= 0x100;
-			inside:
-				__asm__ __volatile__("sta %%g0, [%0] %1\n\t"
-						     "sta %%g0, [%0 + %2] %1\n\t"
-						     "sta %%g0, [%0 + %3] %1\n\t"
-						     "sta %%g0, [%0 + %4] %1\n\t"
-						     "sta %%g0, [%0 + %5] %1\n\t"
-						     "sta %%g0, [%0 + %6] %1\n\t"
-						     "sta %%g0, [%0 + %7] %1\n\t"
-						     "sta %%g0, [%0 + %8] %1\n\t" : :
-						     "r" (faddr),
-						     "i" (ASI_M_FLUSH_SEG),
-						     "r" (a), "r" (b), "r" (c), "r" (d),
-						     "r" (e), "r" (f), "r" (g));
-			} while (faddr != start);
-			start += SRMMU_PMD_SIZE;
-		}
-		srmmu_set_context(octx);
-		restore_flags(flags);
-#ifndef __SMP__
-	}
-#endif
+	srmmu_set_context(octx);
+	restore_flags(flags);
+	FLUSH_END
 }
 
 static void cypress_flush_cache_page(struct vm_area_struct *vma, unsigned long page)
 {
+	register unsigned long a, b, c, d, e, f, g;
 	struct mm_struct *mm = vma->vm_mm;
 	unsigned long flags, line;
 	int octx;
 
-#ifndef __SMP__
-	if(mm->context != NO_CONTEXT) {
-#endif
-		register unsigned long a, b, c, d, e, f, g;
-		flush_user_windows();
-		save_and_cli(flags);
-		octx = srmmu_get_context();
-		srmmu_set_context(mm->context);
-		a = 0x20; b = 0x40; c = 0x60;
-		d = 0x80; e = 0xa0; f = 0xc0; g = 0xe0;
+	FLUSH_BEGIN(mm)
+	flush_user_windows();
+	save_and_cli(flags);
+	octx = srmmu_get_context();
+	srmmu_set_context(mm->context);
+	a = 0x20; b = 0x40; c = 0x60;
+	d = 0x80; e = 0xa0; f = 0xc0; g = 0xe0;
 
-		page &= PAGE_MASK;
-		line = (page + PAGE_SIZE) - 0x100;
-		goto inside;
-		do {
-			line -= 0x100;
-		inside:
-				__asm__ __volatile__("sta %%g0, [%0] %1\n\t"
-						     "sta %%g0, [%0 + %2] %1\n\t"
-						     "sta %%g0, [%0 + %3] %1\n\t"
-						     "sta %%g0, [%0 + %4] %1\n\t"
-						     "sta %%g0, [%0 + %5] %1\n\t"
-						     "sta %%g0, [%0 + %6] %1\n\t"
-						     "sta %%g0, [%0 + %7] %1\n\t"
-						     "sta %%g0, [%0 + %8] %1\n\t" : :
-						     "r" (line),
-						     "i" (ASI_M_FLUSH_PAGE),
-						     "r" (a), "r" (b), "r" (c), "r" (d),
-						     "r" (e), "r" (f), "r" (g));
-		} while(line != page);
-		srmmu_set_context(octx);
-		restore_flags(flags);
-#ifndef __SMP__
-	}
-#endif
+	page &= PAGE_MASK;
+	line = (page + PAGE_SIZE) - 0x100;
+	goto inside;
+	do {
+		line -= 0x100;
+	inside:
+			__asm__ __volatile__("sta %%g0, [%0] %1\n\t"
+					     "sta %%g0, [%0 + %2] %1\n\t"
+					     "sta %%g0, [%0 + %3] %1\n\t"
+					     "sta %%g0, [%0 + %4] %1\n\t"
+					     "sta %%g0, [%0 + %5] %1\n\t"
+					     "sta %%g0, [%0 + %6] %1\n\t"
+					     "sta %%g0, [%0 + %7] %1\n\t"
+					     "sta %%g0, [%0 + %8] %1\n\t" : :
+					     "r" (line),
+					     "i" (ASI_M_FLUSH_PAGE),
+					     "r" (a), "r" (b), "r" (c), "r" (d),
+					     "r" (e), "r" (f), "r" (g));
+	} while(line != page);
+	srmmu_set_context(octx);
+	restore_flags(flags);
+	FLUSH_END
 }
 
 /* Cypress is copy-back, at least that is how we configure it. */
@@ -1625,80 +1615,65 @@ static unsigned long cypress_getpage(void)
 
 static void cypress_flush_tlb_all(void)
 {
-	module_stats.invall++;
 	srmmu_flush_whole_tlb();
+	module_stats.invall++;
 }
 
 static void cypress_flush_tlb_mm(struct mm_struct *mm)
 {
-	int octx;
-
+	FLUSH_BEGIN(mm)
+	__asm__ __volatile__("
+	lda	[%0] %3, %%g5
+	sta	%2, [%0] %3
+	sta	%%g0, [%1] %4
+	sta	%%g5, [%0] %3"
+	: /* no outputs */
+	: "r" (SRMMU_CTX_REG), "r" (0x300), "r" (mm->context),
+	  "i" (ASI_M_MMUREGS), "i" (ASI_M_FLUSH_PROBE)
+	: "g5");
 	module_stats.invmm++;
-#ifndef __SMP__
-	if(mm->context != NO_CONTEXT) {
-#endif
-		octx = srmmu_get_context();
-		srmmu_set_context(mm->context);
-		srmmu_flush_tlb_ctx();
-		srmmu_set_context(octx);
-#ifndef __SMP__
-	}
-#endif
+	FLUSH_END
 }
 
 static void cypress_flush_tlb_range(struct mm_struct *mm, unsigned long start, unsigned long end)
 {
-	int octx;
-	module_stats.invrnge++;
+	unsigned long size;
 
-#ifndef __SMP__
-	if(mm->context != NO_CONTEXT) {
-#endif
-		flush_user_windows();
-		octx = srmmu_get_context();
-		srmmu_set_context(mm->context);
-		if((end - start) < SRMMU_PMD_SIZE) {
-			start &= PAGE_MASK;
-			while(start < end) {
-				srmmu_flush_tlb_page(start);
-				start += PAGE_SIZE;
-			}
-		} else if((end - start) < SRMMU_PGDIR_SIZE) {
-			start &= SRMMU_PMD_MASK;
-			while(start < end) {
-				srmmu_flush_tlb_segment(start);
-				start += SRMMU_PMD_SIZE;
-			}
-		} else {
-			start &= SRMMU_PGDIR_MASK;
-			while(start < end) {
-				srmmu_flush_tlb_region(start);
-				start += SRMMU_PGDIR_SIZE;
-			}
-		}
-		srmmu_set_context(octx);
-#ifndef __SMP__
-	}
-#endif
+	FLUSH_BEGIN(mm)
+	start &= SRMMU_PGDIR_MASK;
+	size = SRMMU_PGDIR_ALIGN(end) - start;
+	__asm__ __volatile__("
+		lda	[%0] %5, %%g5
+		sta	%1, [%0] %5
+	1:	subcc	%3, %4, %3
+		bne	1b
+		 sta	%%g0, [%2 + %3] %6
+		sta	%%g5, [%0] %5"
+	: /* no outputs */
+	: "r" (SRMMU_CTX_REG), "r" (mm->context), "r" (start | 0x200),
+	  "r" (size), "r" (SRMMU_PGDIR_SIZE), "i" (ASI_M_MMUREGS),
+	  "i" (ASI_M_FLUSH_PROBE)
+	: "g5");
+	module_stats.invrnge++;
+	FLUSH_END
 }
 
 static void cypress_flush_tlb_page(struct vm_area_struct *vma, unsigned long page)
 {
-	int octx;
 	struct mm_struct *mm = vma->vm_mm;
 
+	FLUSH_BEGIN(mm)
+	__asm__ __volatile__("
+	lda	[%0] %3, %%g5
+	sta	%1, [%0] %3
+	sta	%%g0, [%2] %4
+	sta	%%g5, [%0] %3"
+	: /* no outputs */
+	: "r" (SRMMU_CTX_REG), "r" (mm->context), "r" (page & PAGE_MASK),
+	  "i" (ASI_M_MMUREGS), "i" (ASI_M_FLUSH_PROBE)
+	: "g5");
 	module_stats.invpg++;
-#ifndef __SMP__
-	if(mm->context != NO_CONTEXT) {
-#endif
-		flush_user_windows();
-		octx = srmmu_get_context();
-		srmmu_set_context(mm->context);
-		srmmu_flush_tlb_page(page);
-		srmmu_set_context(octx);
-#ifndef __SMP__
-	}
-#endif
+	FLUSH_END
 }
 
 static void cypress_flush_tlb_page_for_cbit(unsigned long page)
@@ -1709,48 +1684,111 @@ static void cypress_flush_tlb_page_for_cbit(unsigned long page)
 /* Hypersparc flushes.  Very nice chip... */
 static void hypersparc_flush_cache_all(void)
 {
-	flush_user_windows();
-	hyper_flush_unconditional_combined();
-	hyper_flush_whole_icache();
+	register int ctr asm("g5");
+	unsigned long tmp1;
+
+	ctr = 0;
+	__asm__ __volatile__("
+	1:	ld	[%%g6 + %6], %%g4	! flush user windows
+		orcc	%%g0, %%g4, %%g0
+		add	%1, 1, %1
+		bne	1b
+		 save	%%sp, -64, %%sp
+	2:	subcc	%1, 1, %1
+		bne	2b
+		 restore %%g0, %%g0, %%g0
+	1:	subcc	%0, %3, %0		! hyper_flush_unconditional_combined
+		bne	1b
+		 sta	%%g0, [%0] %4
+		sta	%%g0, [%%g0] %5		! hyper_flush_whole_icache"
+	: "=&r" (tmp1), "=&r" (ctr)
+	: "0" (vac_cache_size), "r" (vac_line_size),
+	  "i" (ASI_M_FLUSH_CTX), "i" (ASI_M_FLUSH_IWHOLE),
+	  "i" (UWINMASK_OFFSET), "1" (ctr)
+	: "g4");
 }
 
 static void hypersparc_flush_cache_mm(struct mm_struct *mm)
 {
-#ifndef __SMP__
-	if(mm->context != NO_CONTEXT) {
-#endif
-		flush_user_windows();
-		hyper_flush_cache_user();
-		hyper_flush_whole_icache();
-#ifndef __SMP__
-	}
-#endif
+	register int ctr asm("g5");
+	unsigned long tmp1;
+
+	FLUSH_BEGIN(mm)
+	ctr = 0;
+	__asm__ __volatile__("
+	1:	ld	[%%g6 + %2], %%g4	! flush user windows
+		orcc	%%g0, %%g4, %%g0
+		add	%0, 1, %0
+		bne	1b
+		 save	%%sp, -64, %%sp
+	2:	subcc	%0, 1, %0
+		bne	2b
+		 restore %%g0, %%g0, %%g0"
+	: "=&r" (ctr)
+	: "0" (ctr), "i" (UWINMASK_OFFSET)
+	: "g4");
+
+	__asm__ __volatile__("
+	1:	subcc	%0, %2, %0		! hyper_flush_cache_user
+		bne	1b
+		 sta	%%g0, [%0] %3
+		sta	%%g0, [%%g0] %4		! hyper_flush_whole_icache"
+	: "=&r" (tmp1)
+	: "0" (vac_cache_size), "r" (vac_line_size), "i" (ASI_M_FLUSH_USER),
+	  "i" (ASI_M_FLUSH_IWHOLE));
+	FLUSH_END
 }
 
-/* Boy was my older implementation inefficient... */
+/* The things we do for performance... */
 static void hypersparc_flush_cache_range(struct mm_struct *mm, unsigned long start, unsigned long end)
 {
-	volatile unsigned long clear;
-	int octx;
+	register int ctr asm("g5");
+	unsigned long tmp1;
 
-#ifndef __SMP__
-	if(mm->context != NO_CONTEXT) {
-#endif
-		flush_user_windows();
-		octx = srmmu_get_context();
-		start &= PAGE_MASK;
-		srmmu_set_context(mm->context);
-		while(start < end) {
-			if(srmmu_hwprobe(start))
-				hyper_flush_cache_page(start);
-			start += PAGE_SIZE;
-		}
-		clear = srmmu_get_fstatus();
-		srmmu_set_context(octx);
-		hyper_flush_whole_icache();
-#ifndef __SMP__
+	FLUSH_BEGIN(mm)
+	ctr = 0;
+	__asm__ __volatile__("
+	1:	ld	[%%g6 + %2], %%g4	! flush user windows
+		orcc	%%g0, %%g4, %%g0
+		add	%0, 1, %0
+		bne	1b
+		 save	%%sp, -64, %%sp
+	2:	subcc	%0, 1, %0
+		bne	2b
+		 restore %%g0, %%g0, %%g0"
+	: "=&r" (ctr) : "0" (ctr), "i" (UWINMASK_OFFSET) : "g4");
+	tmp1 = vac_cache_size; start &= PAGE_MASK; end = PAGE_ALIGN(end);
+	if((end - start) >= (tmp1 << 2)) {
+		__asm__ __volatile__("
+		1:	subcc	%0, %2, %0	! hyper_flush_cache_user
+			bne	1b
+			 sta	%%g0, [%0] %3
+			sta	%%g0, [%%g0] %4"
+		: "=&r" (tmp1) : "0" (tmp1), "r" (vac_line_size),
+		  "i" (ASI_M_FLUSH_USER), "i" (ASI_M_FLUSH_IWHOLE));
+	} else {
+		tmp1 = srmmu_get_context(); srmmu_set_context(mm->context);
+		__asm__ __volatile__("
+			sub	%0, %3, %0
+		1:	or	%0, 0x400, %%g4
+			lda	[%%g4] %4, %%g4
+			orcc	%%g4, 0x0, %%g0
+			be	3f
+			 sethi	%%hi(0x1000), %%g5
+		2:	subcc	%%g5, %7, %%g5	! hyper_flush_cache_page
+			bne	2b
+			 sta	%%g0, [%0 + %%g5] %5
+		3:	cmp	%0, %2
+			bne	1b
+			 sub	%0, %3, %0
+			sta	%%g0, [%%g0] %6	! hyper_flush_whole_icache"
+		: "=&r" (end)
+		: "0" (end), "r" (start), "r" (PAGE_SIZE), "i" (ASI_M_FLUSH_PROBE),
+		  "i" (ASI_M_FLUSH_PAGE), "i" (ASI_M_FLUSH_IWHOLE), "r" (vac_line_size)
+		: "g4", "g5");
+		(void) srmmu_get_fstatus(); srmmu_set_context(tmp1);
 	}
-#endif
+	FLUSH_END
 }
 
 /* HyperSparc requires a valid mapping where we are about to flush
@@ -1759,35 +1797,64 @@ static void hypersparc_flush_cache_range(struct mm_struct *mm, unsigned long sta
 static void hypersparc_flush_cache_page(struct vm_area_struct *vma, unsigned long page)
 {
 	struct mm_struct *mm = vma->vm_mm;
-	volatile unsigned long clear;
-	int octx;
+	register int ctr asm("g5");
+	unsigned long tmp1;
 
-#ifndef __SMP__
-	if(mm->context != NO_CONTEXT) {
-#endif
-		octx = srmmu_get_context();
-		flush_user_windows();
-		srmmu_set_context(mm->context);
-		hyper_flush_whole_icache();
-		if(!srmmu_hwprobe(page))
-			goto no_mapping;
-		hyper_flush_cache_page(page);
-	no_mapping:
-		clear = srmmu_get_fstatus();
-		srmmu_set_context(octx);
-#ifndef __SMP__
-	}
-#endif
+	FLUSH_BEGIN(mm)
+	ctr = 0;
+	__asm__ __volatile__("
+	1:	ld	[%%g6 + %2], %%g4	! flush user windows
+		orcc	%%g0, %%g4, %%g0
+		add	%0, 1, %0
+		bne	1b
+		 save	%%sp, -64, %%sp
+	2:	subcc	%0, 1, %0
+		bne	2b
+		 restore %%g0, %%g0, %%g0"
+	: "=&r" (ctr) : "0" (ctr), "i" (UWINMASK_OFFSET) : "g4");
+	__asm__ __volatile__("
+		mov	0x200, %%g4
+		lda	[%%g4] %6, %1
+		sta	%0, [%%g4] %6
+		or	%3, 0x400, %0
+		lda	[%0] %9, %0
+		orcc	%0, 0x0, %%g0
+		be	2f
+		 sethi	%%hi(0x1000), %0
+	1:	subcc	%0, %5, %0		! hyper_flush_cache_page
+		bne	1b
+		 sta	%%g0, [%3 + %0] %7
+	2:	andcc	%4, 0x4, %%g0
+		sta	%1, [%%g4] %6
+		bne,a	1f
+		 sta	%%g0, [%%g0] %8
+1:"	: "=&r" (tmp1), "=&r" (ctr)
+	: "0" (mm->context), "r" (page & PAGE_MASK), "r" (vma->vm_flags),
+	  "r" (vac_line_size), "i" (ASI_M_MMUREGS), "i" (ASI_M_FLUSH_PAGE),
+	  "i" (ASI_M_FLUSH_IWHOLE), "i" (ASI_M_FLUSH_PROBE)
+	: "g4");
+	(void) srmmu_get_fstatus();
+	FLUSH_END
 }
 
 /* HyperSparc is copy-back. */
 static void hypersparc_flush_page_to_ram(unsigned long page)
 {
-	volatile unsigned long clear;
-
-	if(srmmu_hwprobe(page))
-		hyper_flush_cache_page(page);
-	clear = srmmu_get_fstatus();
+	page &= PAGE_MASK;
+	__asm__ __volatile__("
+	lda	[%0] %2, %%g4
+	orcc	%%g4, 0x0, %%g0
+	be	2f
+	 sethi	%%hi(%7), %%g5
+1:	subcc	%%g5, %6, %%g5		! hyper_flush_cache_page
+	bne	1b
+	 sta	%%g0, [%1 + %%g5] %3
+2:	lda	[%4] %5, %%g0"
+	: /* no outputs */
+	: "r" (page | 0x400), "r" (page), "i" (ASI_M_FLUSH_PROBE),
+	  "i" (ASI_M_FLUSH_PAGE), "r" (SRMMU_FAULT_STATUS), "i" (ASI_M_MMUREGS),
+	  "r" (vac_line_size), "i" (PAGE_SIZE)
+	: "g4", "g5");
 }
 
 /* HyperSparc is IO cache coherent. */
@@ -1805,108 +1872,106 @@ static void hypersparc_flush_sig_insns(struct mm_struct *mm, unsigned long insn_
 
 static void hypersparc_flush_cache_page_to_uncache(unsigned long page)
 {
-	volatile unsigned long clear;
-
-	if(srmmu_hwprobe(page))
-		hyper_flush_cache_page(page);
-	clear = srmmu_get_fstatus();
+	page &= PAGE_MASK;
+	__asm__ __volatile__("
+	lda	[%0] %2, %%g4
+	orcc	%%g4, 0x0, %%g0
+	be	2f
+	 sethi	%%hi(%7), %%g5
+1:	subcc	%%g5, %6, %%g5		! hyper_flush_cache_page
+	bne	1b
+	 sta	%%g0, [%1 + %%g5] %3
+2:	lda	[%4] %5, %%g0"
+	: /* no outputs */
+	: "r" (page | 0x400), "r" (page), "i" (ASI_M_FLUSH_PROBE),
+	  "i" (ASI_M_FLUSH_PAGE), "r" (SRMMU_FAULT_STATUS), "i" (ASI_M_MMUREGS),
+	  "r" (vac_line_size), "i" (PAGE_SIZE)
+	: "g4", "g5");
 }
 
 static unsigned long hypersparc_getpage(void)
 {
-	volatile unsigned long clear;
 	unsigned long page = get_free_page(GFP_KERNEL);
-	unsigned long flags;
 
-	save_and_cli(flags);
-	if(srmmu_hwprobe(page))
-		hyper_flush_cache_page(page);
-	clear = srmmu_get_fstatus();
-	restore_flags(flags);
+	__asm__ __volatile__("
+	lda	[%0] %2, %%g4
+	orcc	%%g4, 0x0, %%g0
+	be	2f
+	 sethi	%%hi(%7), %%g5
+1:	subcc	%%g5, %6, %%g5		! hyper_flush_cache_page
+	bne	1b
+	 sta	%%g0, [%1 + %%g5] %3
+2:	lda	[%4] %5, %%g0"
+	: /* no outputs */
+	: "r" (page | 0x400), "r" (page), "i" (ASI_M_FLUSH_PROBE),
+	  "i" (ASI_M_FLUSH_PAGE), "r" (SRMMU_FAULT_STATUS), "i" (ASI_M_MMUREGS),
+	  "r" (vac_line_size), "i" (PAGE_SIZE)
+	: "g4", "g5");
 
 	return page;
 }
 
 static void hypersparc_flush_tlb_all(void)
 {
-	module_stats.invall++;
 	srmmu_flush_whole_tlb();
+	module_stats.invall++;
 }
 
 static void hypersparc_flush_tlb_mm(struct mm_struct *mm)
 {
-	int octx;
-
+	FLUSH_BEGIN(mm)
+	__asm__ __volatile__("
+	lda	[%0] %3, %%g5
+	sta	%2, [%0] %3
+	sta	%%g0, [%1] %4
+	sta	%%g5, [%0] %3"
+	: /* no outputs */
+	: "r" (SRMMU_CTX_REG), "r" (0x300), "r" (mm->context),
+	  "i" (ASI_M_MMUREGS), "i" (ASI_M_FLUSH_PROBE)
+	: "g5");
 	module_stats.invmm++;
-#ifndef __SMP__
-	if(mm->context != NO_CONTEXT) {
-#endif
-
-		octx = srmmu_get_context();
-		srmmu_set_context(mm->context);
-		srmmu_flush_tlb_ctx();
-		srmmu_set_context(octx);
-
-#ifndef __SMP__
-	}
-#endif
+	FLUSH_END
 }
 
 static void hypersparc_flush_tlb_range(struct mm_struct *mm, unsigned long start, unsigned long end)
 {
-	int octx;
+	unsigned long size;
 
+	FLUSH_BEGIN(mm)
+	start &= SRMMU_PGDIR_MASK;
+	size = SRMMU_PGDIR_ALIGN(end) - start;
+	__asm__ __volatile__("
+		lda	[%0] %5, %%g5
+		sta	%1, [%0] %5
+	1:	subcc	%3, %4, %3
+		bne	1b
+		 sta	%%g0, [%2 + %3] %6
+		sta	%%g5, [%0] %5"
+	: /* no outputs */
+	: "r" (SRMMU_CTX_REG), "r" (mm->context), "r" (start | 0x200),
+	  "r" (size), "r" (SRMMU_PGDIR_SIZE), "i" (ASI_M_MMUREGS),
+	  "i" (ASI_M_FLUSH_PROBE)
+	: "g5");
 	module_stats.invrnge++;
-#ifndef __SMP__
-	if(mm->context != NO_CONTEXT) {
-#endif
-
-		octx = srmmu_get_context();
-		srmmu_set_context(mm->context);
-		if((end - start) < SRMMU_PMD_SIZE) {
-			start &= PAGE_MASK;
-			while(start < end) {
-				srmmu_flush_tlb_page(start);
-				start += PAGE_SIZE;
-			}
-		} else if((end - start) < SRMMU_PGDIR_SIZE) {
-			start &= SRMMU_PMD_MASK;
-			while(start < end) {
-				srmmu_flush_tlb_segment(start);
-				start += SRMMU_PMD_SIZE;
-			}
-		} else {
-			start &= SRMMU_PGDIR_MASK;
-			while(start < end) {
-				srmmu_flush_tlb_region(start);
-				start += SRMMU_PGDIR_SIZE;
-			}
-		}
-		srmmu_set_context(octx);
-
-#ifndef __SMP__
-	}
-#endif
+	FLUSH_END
 }
 
 static void hypersparc_flush_tlb_page(struct vm_area_struct *vma, unsigned long page)
 {
 	struct mm_struct *mm = vma->vm_mm;
-	int octx;
 
+	FLUSH_BEGIN(mm)
+	__asm__ __volatile__("
+	lda	[%0] %3, %%g5
+	sta	%1, [%0] %3
+	sta	%%g0, [%2] %4
+	sta	%%g5, [%0] %3"
+	: /* no outputs */
+	: "r" (SRMMU_CTX_REG), "r" (mm->context), "r" (page & PAGE_MASK),
+	  "i" (ASI_M_MMUREGS), "i" (ASI_M_FLUSH_PROBE)
+	: "g5");
 	module_stats.invpg++;
-#ifndef __SMP__
-	if(mm->context != NO_CONTEXT) {
-#endif
-
-		octx = srmmu_get_context();
-		srmmu_set_context(mm->context);
-		srmmu_flush_tlb_page(page);
-		srmmu_set_context(octx);
-
-#ifndef __SMP__
-	}
-#endif
+	FLUSH_END
 }
 
 static void hypersparc_flush_tlb_page_for_cbit(unsigned long page)
@@ -1922,21 +1987,27 @@ static void hypersparc_ctxd_set(ctxd_t *ctxp, pgd_t *pgdp)
 
 static void hypersparc_update_rootmmu_dir(struct task_struct *tsk, pgd_t *pgdp) 
 {
-	volatile unsigned long clear;
 	unsigned long page = ((unsigned long) pgdp) & PAGE_MASK;
-	unsigned long flags;
 
-	/* Do PGD flush. */
-	save_and_cli(flags);
-	if(srmmu_hwprobe(page))
-		hyper_flush_cache_page(page);
-	clear = srmmu_get_fstatus();
-	restore_flags(flags);
+	__asm__ __volatile__("
+	lda	[%0] %2, %%g4
+	orcc	%%g4, 0x0, %%g0
+	be	2f
+	 sethi	%%hi(%7), %%g5
+1:	subcc	%%g5, %6, %%g5		! hyper_flush_cache_page
+	bne	1b
+	 sta	%%g0, [%1 + %%g5] %3
+2:	lda	[%4] %5, %%g0"
+	: /* no outputs */
+	: "r" (page | 0x400), "r" (page), "i" (ASI_M_FLUSH_PROBE),
+	  "i" (ASI_M_FLUSH_PAGE), "r" (SRMMU_FAULT_STATUS), "i" (ASI_M_MMUREGS),
+	  "r" (vac_line_size), "i" (PAGE_SIZE)
+	: "g4", "g5");
 
 	if(tsk->mm->context != NO_CONTEXT) {
-		flush_cache_mm(current->mm);
+		flush_cache_mm(tsk->mm);
 		ctxd_set(&srmmu_context_table[tsk->mm->context], pgdp);
-		flush_tlb_mm(current->mm);
+		flush_tlb_mm(tsk->mm);
 	}
 }
 
@@ -2851,17 +2922,14 @@ static void srmmu_destroy_context(struct mm_struct *mm)
 static void srmmu_vac_update_mmu_cache(struct vm_area_struct * vma,
 				       unsigned long address, pte_t pte)
 {
-	unsigned long offset, vaddr;
-	unsigned long start;
-	pgd_t *pgdp;
-	pmd_t *pmdp;
-	pte_t *ptep;
-
 	if((vma->vm_flags & (VM_WRITE|VM_SHARED)) == (VM_WRITE|VM_SHARED)) {
 		struct vm_area_struct *vmaring;
 		struct inode *inode;
-		unsigned long flags;
+		unsigned long flags, offset, vaddr, start;
 		int alias_found = 0;
+		pgd_t *pgdp;
+		pmd_t *pmdp;
+		pte_t *ptep;
 
 		save_and_cli(flags);
 
@@ -3522,6 +3590,7 @@ __initfunc(void ld_mmu_srmmu(void))
 	mmu_getpage = srmmu_getpage;
 	set_pte = srmmu_set_pte_cacheable;
 	init_new_context = srmmu_init_new_context;
+	switch_to_context = srmmu_switch_to_context;
 	pmd_align = srmmu_pmd_align;
 	pgdir_align = srmmu_pgdir_align;
 	vmalloc_start = srmmu_vmalloc_start;

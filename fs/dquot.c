@@ -19,6 +19,7 @@
  * 
  * Fixes:   Dmitry Gorodchanin <begemot@bgm.rosprint.net>, 11 Feb 96
  *	    removed race conditions in dqput(), dqget() and iput(). 
+ *          Andi Kleen removed all verify_area() calls, 31 Dec 96  
  *
  * (C) Copyright 1994, 1995 Marco van Wieringen 
  *
@@ -591,9 +592,8 @@ static int set_dqblk(kdev_t dev, int id, short type, int flags, struct dqblk *dq
 		return(-EFAULT);
 
 	if (flags & QUOTA_SYSCALL) {
-		if ((error = verify_area(VERIFY_READ, dqblk, sizeof(struct dqblk))) != 0)
-			return(error);
-		copy_from_user(&dq_dqblk, dqblk, sizeof(struct dqblk));
+		if (copy_from_user(&dq_dqblk, dqblk, sizeof(struct dqblk)))
+			return -EFAULT;	
 	} else {
 		memcpy(&dq_dqblk, dqblk, sizeof(struct dqblk));
 	}
@@ -649,13 +649,10 @@ static int get_quota(kdev_t dev, int id, short type, struct dqblk *dqblk)
 		if (dqblk == (struct dqblk *)NULL)
 			return(-EFAULT);
 
-		if ((error = verify_area(VERIFY_WRITE, dqblk, sizeof(struct dqblk))) != 0)
-			return(error);
-
 		if ((dquot = dqget(dev, id, type)) != NODQUOT) {
-			copy_to_user(dqblk, (char *)&dquot->dq_dqb, sizeof(struct dqblk));
+			error = copy_to_user(dqblk, (char *)&dquot->dq_dqb, sizeof(struct dqblk));
 			dqput(dquot);
-			return(0);
+			return error ? -EFAULT : 0;
 		}
 	}
 	return(-ESRCH);
@@ -665,13 +662,10 @@ static int get_stats(caddr_t addr)
 {
 	int error;
 
-	if ((error = verify_area(VERIFY_WRITE, addr, sizeof(struct dqstats))) != 0)
-		return(error);
-
 	dqstats.allocated_dquots = nr_dquots;
 	dqstats.free_dquots = nr_free_dquots;
-	copy_to_user(addr, (caddr_t)&dqstats, sizeof(struct dqstats));
-	return(0);
+	return copy_to_user(addr, (caddr_t)&dqstats, sizeof(struct dqstats)) 
+			? -EFAULT : 0; 
 }
 
 /*

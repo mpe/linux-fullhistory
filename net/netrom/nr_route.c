@@ -1,10 +1,10 @@
 /*
- *	NET/ROM release 004
+ *	NET/ROM release 006
  *
  *	This is ALPHA test software. This code may break your machine, randomly fail to work with new 
  *	releases, misbehave and/or generally screw up. It might even work. 
  *
- *	This code REQUIRES 1.2.1 or higher/ NET3.029
+ *	This code REQUIRES 2.1.15 or higher/ NET3.038
  *
  *	This module:
  *		This module is free software; you can redistribute it and/or
@@ -20,6 +20,7 @@
  *					Change default quality for new neighbour when same
  *					as node callsign.
  *			Alan Cox(GW4PTS) Added the firewall hooks.
+ *	NET/ROM 006	Jonathan(G4KLX)	Added the setting of digipeated neighbours.
  */
  
 #include <linux/config.h>
@@ -100,14 +101,14 @@ static int nr_add_node(ax25_address *nr, const char *mnemonic, ax25_address *ax2
 		nr_neigh->count    = 0;
 		nr_neigh->number   = nr_neigh_no++;
 
-		if (ax25_digi != NULL) {
+		if (ax25_digi != NULL && ax25_digi->ndigi > 0) {
 			if ((nr_neigh->digipeat = kmalloc(sizeof(*ax25_digi), GFP_KERNEL)) == NULL) {
 				kfree_s(nr_neigh, sizeof(*nr_neigh));
 				return -ENOMEM;
 			}
 			*nr_neigh->digipeat = *ax25_digi;
 		}
-			
+
 		save_flags(flags);
 		cli();
 
@@ -351,7 +352,7 @@ static int nr_del_node(ax25_address *callsign, ax25_address *neighbour, struct d
 /*
  *	Lock a neighbour with a quality.
  */
-static int nr_add_neigh(ax25_address *callsign, struct device *dev, unsigned int quality)
+static int nr_add_neigh(ax25_address *callsign, ax25_digi *ax25_digi, struct device *dev, unsigned int quality)
 {
 	struct nr_neigh *nr_neigh;
 	unsigned long flags;
@@ -374,6 +375,14 @@ static int nr_add_neigh(ax25_address *callsign, struct device *dev, unsigned int
 	nr_neigh->locked   = 1;
 	nr_neigh->count    = 0;
 	nr_neigh->number   = nr_neigh_no++;
+
+	if (ax25_digi != NULL && ax25_digi->ndigi > 0) {
+		if ((nr_neigh->digipeat = kmalloc(sizeof(*ax25_digi), GFP_KERNEL)) == NULL) {
+			kfree_s(nr_neigh, sizeof(*nr_neigh));
+			return -ENOMEM;
+		}
+		*nr_neigh->digipeat = *ax25_digi;
+	}
 
 	save_flags(flags);
 	cli();
@@ -556,6 +565,25 @@ struct device *nr_dev_get(ax25_address *addr)
 	return NULL;
 }
 
+static ax25_digi *nr_call_to_digi(int ndigis, ax25_address *digipeaters)
+{
+	static ax25_digi ax25_digi;
+	int i;
+
+	if (ndigis == 0)
+		return NULL;
+
+	for (i = 0; i < ndigis; i++) {
+		ax25_digi.calls[i]    = digipeaters[i];
+		ax25_digi.repeated[i] = 0;
+	}
+
+	ax25_digi.ndigi      = ndigis;
+	ax25_digi.lastrepeat = 0;
+
+	return &ax25_digi;
+}
+
 /*
  *	Handle the ioctls that control the routing functions.
  */
@@ -573,15 +601,19 @@ int nr_rt_ioctl(unsigned int cmd, void *arg)
 			copy_from_user(&nr_route, arg, sizeof(struct nr_route_struct));
 			if ((dev = nr_ax25_dev_get(nr_route.device)) == NULL)
 				return -EINVAL;
+			if (nr_route.ndigis < 0 || nr_route.ndigis > AX25_MAX_DIGIS)
+				return -EINVAL;
 			switch (nr_route.type) {
 				case NETROM_NODE:
 					return nr_add_node(&nr_route.callsign,
 						nr_route.mnemonic,
 						&nr_route.neighbour,
-						NULL, dev, nr_route.quality,
+						nr_call_to_digi(nr_route.ndigis, nr_route.digipeaters),
+						dev, nr_route.quality,
 						nr_route.obs_count);
 				case NETROM_NEIGH:
 					return nr_add_neigh(&nr_route.callsign,
+						nr_call_to_digi(nr_route.ndigis, nr_route.digipeaters),
 						dev, nr_route.quality);
 				default:
 					return -EINVAL;
@@ -750,19 +782,27 @@ int nr_neigh_get_info(char *buffer, char **start, off_t offset,
 	int len     = 0;
 	off_t pos   = 0;
 	off_t begin = 0;
+	int i;
 
 	cli();
 
-	len += sprintf(buffer, "addr  callsign  dev  qual lock count\n");
+	len += sprintf(buffer, "addr  callsign  dev  qual lock count digipeaters\n");
 
 	for (nr_neigh = nr_neigh_list; nr_neigh != NULL; nr_neigh = nr_neigh->next) {
-		len += sprintf(buffer + len, "%05d %-9s %-4s  %3d    %d   %3d\n",
+		len += sprintf(buffer + len, "%05d %-9s %-4s  %3d    %d   %3d",
 			nr_neigh->number,
 			ax2asc(&nr_neigh->callsign),
 			nr_neigh->dev ? nr_neigh->dev->name : "???",
 			nr_neigh->quality,
 			nr_neigh->locked,
 			nr_neigh->count);
+
+		if (nr_neigh->digipeat != NULL) {
+			for (i = 0; i < nr_neigh->digipeat->ndigi; i++)
+				len += sprintf(buffer + len, " %s", ax2asc(&nr_neigh->digipeat->calls[i]));
+		}
+
+		len += sprintf(buffer + len, "\n");
 
 		pos = begin + len;
 

@@ -176,13 +176,13 @@ asmlinkage int sys_utime(char * filename, struct utimbuf * times)
 	/* Don't worry, the checks are done in inode_change_ok() */
 	newattrs.ia_valid = ATTR_CTIME | ATTR_MTIME | ATTR_ATIME;
 	if (times) {
-		error = verify_area(VERIFY_READ, times, sizeof(*times));
+		error = get_user(newattrs.ia_atime, &times->actime);
+		if (!error) 
+			error = get_user(newattrs.ia_mtime, &times->modtime);
 		if (error) {
 			iput(inode);
 			return error;
 		}
-		get_user(newattrs.ia_atime, &times->actime);
-		get_user(newattrs.ia_mtime, &times->modtime);
 		newattrs.ia_valid |= ATTR_ATIME_SET | ATTR_MTIME_SET;
 	} else {
 		if (current->fsuid != inode->i_uid &&
@@ -219,12 +219,10 @@ asmlinkage int sys_utimes(char * filename, struct timeval * utimes)
 	newattrs.ia_valid = ATTR_CTIME | ATTR_MTIME | ATTR_ATIME;
 	if (utimes) {
 		struct timeval times[2];
-		error = verify_area(VERIFY_READ, utimes, sizeof(times));
-		if (error) {
+		if (copy_from_user(&times, utimes, sizeof(times))) {
 			iput(inode);
-			return error;
-		}
-		copy_from_user(&times, utimes, sizeof(times));
+			return -EFAULT;
+		}		
 		newattrs.ia_atime = times[0].tv_sec;
 		newattrs.ia_mtime = times[1].tv_sec;
 		newattrs.ia_valid |= ATTR_ATIME_SET | ATTR_MTIME_SET;

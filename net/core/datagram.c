@@ -188,8 +188,9 @@ int skb_copy_datagram_iovec(struct sk_buff *skb, int offset, struct iovec *to,
 }
 
 /*
- *	Datagram select: Again totally generic. Moved from udp.c
- *	Now does seqpacket.
+ *	Datagram select: Again totally generic. This also handles
+ *	sequenced packet sockets providing the socket receive queue
+ *	is only ever holding data ready to receive.
  */
 
 int datagram_select(struct socket *sock, int sel_type, select_table *wait)

@@ -77,8 +77,7 @@ void wic_bh(struct device *dev);
 void wic_interrupt(int irq, void *dev_ptr, struct pt_regs *regs);
 
 /* Functions for DEV methods */
-int wic_rebuild_header(void *buff, struct device *dev,
-			       unsigned long raddr, struct sk_buff *skb);
+int wic_rebuild_header(struct sk_buff *skb);
 int wic_tx_packet(struct sk_buff *skb, struct device *dev);
 int wic_open(struct device *dev);
 int wic_close(struct device *dev);
@@ -155,14 +154,13 @@ struct net_local {
 	enum wic_connection_state connection;
 	unsigned short timeout_count;
 	char is_deferred;
-	int (*orig_rebuild_header)(void *eth, struct device *dev,
-				   unsigned long raddr, struct sk_buff *skb);
+	int (*orig_rebuild_header)(struct sk_buff *skb);
 };
 
 /* Entry point of WIC driver.
    Probe the hardware, and register/initialize the driver. */
-int
-wic_init(struct device *dev)
+
+int wic_init(struct device *dev)
 {
 	struct net_local *nl;
 	struct wicconf wc;
@@ -266,8 +264,7 @@ wic_init(struct device *dev)
 /* Bottom half handler for the delayed request.
    This routine is kicked by do_timer().
    Request `wic_bh' to be invoked. */
-void
-wic_kick_bh(struct device *dev)
+void wic_kick_bh(struct device *dev)
 {
 	struct net_local *nl = (struct net_local *)dev->priv;
 
@@ -309,8 +306,7 @@ wic_func connection_state_table[] =
 	wic_error
 };
 
-void 
-wic_set_multicast_list(struct device *dev)
+void wic_set_multicast_list(struct device *dev)
 {
 	struct wicconf wc;
 	struct wic_net *wn;
@@ -358,8 +354,7 @@ wic_set_multicast_list(struct device *dev)
 }
 
 /* Bottom half handler of WIC. */
-void
-wic_bh(struct device *dev)
+void wic_bh(struct device *dev)
 {
 	struct net_local *nl = (struct net_local *)dev->priv;
 	struct wic_local *snd = &nl->snd_data;
@@ -376,8 +371,7 @@ wic_bh(struct device *dev)
 	}
 }
 
-int
-wic_bh_timeout_error(struct device *dev, struct net_local *nl,
+int wic_bh_timeout_error(struct device *dev, struct net_local *nl,
 		      struct wic_local *snd, struct wic_local *rcv,
 		      int error)
 {
@@ -423,13 +417,11 @@ wic_bh_timeout_error(struct device *dev, struct net_local *nl,
 	}
 	rcv->state = WIC_PK_DONE;
 	if (rcv->skb) {
-		rcv->skb->free = 1;
 		kfree_skb(rcv->skb, FREE_READ);
 		rcv->skb = NULL;
 	}
 	snd->state = WIC_PK_DONE;
 	if (snd->skb) {
-		snd->skb->free = 1;
 		dev_kfree_skb(snd->skb, FREE_WRITE);
 		snd->skb = NULL;
 	}
@@ -446,8 +438,7 @@ wic_bh_timeout_error(struct device *dev, struct net_local *nl,
 	return TIMEOUT;
 }
 
-int
-wic_none(struct device *dev, struct net_local *nl,
+int wic_none(struct device *dev, struct net_local *nl,
 	  struct wic_local *snd, struct wic_local *rcv)
 {
 	return OK;
@@ -455,11 +446,10 @@ wic_none(struct device *dev, struct net_local *nl,
 
 /* WIC_RECEIVE --- receive a byte(two nibbles)
    Returns OK on success, TIMEOUT on timeout */
-inline int
-wic_receive(unsigned short nibble_timeout, unsigned short status_addr,
-	     enum wic_nibble_state *ns_p, unsigned char *data_p)
+extern inline int wic_receive(unsigned short nibble_timeout, 
+	unsigned short status_addr, enum wic_nibble_state *ns_p, unsigned char *data_p)
 {
-unsigned int cx;
+	unsigned int cx;
 
 	cx = LOOPCNT;
 	while ((inb(status_addr) & 0x08) != ((tog<<3) & 0x08)) {
@@ -474,8 +464,8 @@ unsigned int cx;
 }
 
 /* WIC_RECEIVE_PACKET --- receive a packet */
-int
-wic_receive_packet(struct device *dev, struct net_local *nl,
+
+int wic_receive_packet(struct device *dev, struct net_local *nl,
 		    struct wic_local *snd, struct wic_local *rcv)
 {
 	unsigned short status_addr = PAR_STATUS(dev);
@@ -637,11 +627,11 @@ wic_receive_packet(struct device *dev, struct net_local *nl,
 
 /* WIC_SEND --- send a byte (two nibbles) 
    Returns OK on success, TIMEOUT when timeout    */
-inline int
-wic_send(unsigned short nibble_timeout, unsigned short data_addr,
-	  enum wic_nibble_state *ns_p, unsigned char data)
+extern inline int wic_send(unsigned short nibble_timeout, 
+	unsigned short data_addr, enum wic_nibble_state *ns_p, 
+	unsigned char data)
 {
-unsigned int cx;
+	unsigned int cx;
 
 	cx = LOOPCNT;
 	while ((inb(data_addr+1) & 0x80) == ((tog<<7) & 0x80)) {
@@ -656,8 +646,7 @@ unsigned int cx;
 }
 
 /* WIC_SEND_PACKET --- send a packet */
-int
-wic_send_packet(struct device *dev, struct net_local *nl,
+int wic_send_packet(struct device *dev, struct net_local *nl,
 		 struct wic_local *snd, struct wic_local *rcv)
 {
 	unsigned short data_addr = PAR_DATA(dev);
@@ -819,11 +808,10 @@ wic_send_packet(struct device *dev, struct net_local *nl,
 	return OK;
 }
 
-int
-wic_connection_close(struct device *dev, struct net_local *nl,
+int wic_connection_close(struct device *dev, struct net_local *nl,
 		      struct wic_local *snd, struct wic_local *rcv)
 {
-unsigned long flags;
+	unsigned long flags;
 
 	save_flags(flags);
 	cli();
@@ -837,8 +825,7 @@ unsigned long flags;
 }
 
 /* WIC_ERROR --- wait till other end settled */
-int
-wic_error(struct device *dev, struct net_local *nl,
+int wic_error(struct device *dev, struct net_local *nl,
 	   struct wic_local *snd, struct wic_local *rcv)
 {
 	unsigned char status;
@@ -863,8 +850,7 @@ wic_error(struct device *dev, struct net_local *nl,
 }
 
 /* Handle the parallel port interrupts. */
-void
-wic_interrupt(int irq, void *dev_ptr, struct pt_regs * regs)
+void wic_interrupt(int irq, void *dev_ptr, struct pt_regs * regs)
 {
 	struct device *dev = (struct device *) irq2dev_map[irq];
 	struct net_local *nl = (struct net_local *)dev->priv;
@@ -916,16 +902,15 @@ wic_interrupt(int irq, void *dev_ptr, struct pt_regs * regs)
 	}
 }
 
-int
-wic_rebuild_header(void *buff, struct device *dev, unsigned long dst,
-		    struct sk_buff *skb)
+int wic_rebuild_header(struct sk_buff *skb)
 {
+	struct device *dev = skb->dev;
 	struct net_local *nl = (struct net_local *)dev->priv;
-	struct ethhdr *eth = (struct ethhdr *)buff;
+	struct ethhdr *eth = (struct ethhdr *)skb->data;
 	int i;
 
 	if ((dev->flags & IFF_NOARP)==0)
-		return nl->orig_rebuild_header(buff, dev, dst, skb);
+		return nl->orig_rebuild_header(skb);
 
 	if (eth->h_proto != htons(ETH_P_IP)) {
 		printk("wic_rebuild_header: Don't know how to resolve type %d addresses?\n", (int)eth->h_proto);
@@ -939,8 +924,7 @@ wic_rebuild_header(void *buff, struct device *dev, unsigned long dst,
 	return 0;
 }
 
-int
-wic_tx_packet(struct sk_buff *skb, struct device *dev)
+int wic_tx_packet(struct sk_buff *skb, struct device *dev)
 {
 	struct net_local *nl = (struct net_local *)dev->priv;
 	struct wic_local *snd = &nl->snd_data;
@@ -994,8 +978,8 @@ wic_tx_packet(struct sk_buff *skb, struct device *dev)
    This routine gets exclusive access to the parallel port by allocating
    its IRQ line.
  */
-int
-wic_open(struct device *dev)
+ 
+int wic_open(struct device *dev)
 {
 	struct net_local *nl = (struct net_local *)dev->priv;
 	unsigned long flags;
@@ -1031,8 +1015,7 @@ wic_open(struct device *dev)
 }
 
 /* The inverse routine to wic_open (). */
-int
-wic_close(struct device *dev)
+int wic_close(struct device *dev)
 {
 	struct net_local *nl = (struct net_local *)dev->priv;
 	struct wic_local *snd = &nl->snd_data;
@@ -1050,13 +1033,11 @@ wic_close(struct device *dev)
 
 	snd->state = WIC_PK_DONE;
 	if (snd->skb) {
-		snd->skb->free = 1;
 		dev_kfree_skb(snd->skb, FREE_WRITE);
 		snd->skb = NULL;
 	}
 	rcv->state = WIC_PK_DONE;
 	if (rcv->skb) {
-		rcv->skb->free = 1;
 		kfree_skb(rcv->skb, FREE_READ);
 		rcv->skb = NULL;
 	}

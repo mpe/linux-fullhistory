@@ -543,8 +543,7 @@ static int bpq_new_device(struct device *dev)
                 return -EIO;
         }
 
-	for (k=0; k < DEV_NUMBUFFS; k++)
-		skb_queue_head_init(&dev->buffs[k]);
+	dev_init_buffers(dev);
 
 	dev->hard_start_xmit = bpq_xmit;
 	dev->open	     = bpq_open;

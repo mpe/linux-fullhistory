@@ -833,7 +833,7 @@ int do_munmap(unsigned long addr, size_t len)
 	 * it will put new vm_area_struct(s) into the address space.
 	 */
 	do {
-		unsigned long st, end;
+		unsigned long st, end, size;
 
 		mpnt = free;
 		free = free->vm_next;
@@ -843,11 +843,14 @@ int do_munmap(unsigned long addr, size_t len)
 		st = addr < mpnt->vm_start ? mpnt->vm_start : addr;
 		end = addr+len;
 		end = end > mpnt->vm_end ? mpnt->vm_end : end;
+		size = end - st;
 
 		if (mpnt->vm_ops && mpnt->vm_ops->unmap)
-			mpnt->vm_ops->unmap(mpnt, st, end-st);
-		zap_page_range(current->mm, st, end-st);
-		unmap_fixup(mpnt, st, end-st);
+			mpnt->vm_ops->unmap(mpnt, st, size);
+		flush_cache_range(current->mm, st, end);
+		zap_page_range(current->mm, st, size);
+		flush_tlb_range(current->mm, st, end);
+		unmap_fixup(mpnt, st, size);
 		kfree(mpnt);
 	} while (free);
 
@@ -879,14 +882,18 @@ void exit_mmap(struct mm_struct * mm)
 	mm->locked_vm = 0;
 	while (mpnt) {
 		struct vm_area_struct * next = mpnt->vm_next;
+		unsigned long start = mpnt->vm_start;
+		unsigned long end = mpnt->vm_end;
+		unsigned long size = end - start;
+
 		if (mpnt->vm_ops) {
 			if (mpnt->vm_ops->unmap)
-				mpnt->vm_ops->unmap(mpnt, mpnt->vm_start, mpnt->vm_end-mpnt->vm_start);
+				mpnt->vm_ops->unmap(mpnt, start, size);
 			if (mpnt->vm_ops->close)
 				mpnt->vm_ops->close(mpnt);
 		}
 		remove_shared_vm_struct(mpnt);
-		zap_page_range(mm, mpnt->vm_start, mpnt->vm_end-mpnt->vm_start);
+		zap_page_range(mm, start, size);
 		if (mpnt->vm_inode)
 			iput(mpnt->vm_inode);
 		kfree(mpnt);

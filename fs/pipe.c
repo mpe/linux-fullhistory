@@ -18,7 +18,11 @@
  * Define this if you want SunOS compatibility wrt braindead
  * select behaviour on FIFO's.
  */
+#ifdef __sparc__
+#define FIFO_SUNOS_BRAINDAMAGE
+#else
 #undef FIFO_SUNOS_BRAINDAMAGE
+#endif
 
 /* We don't use the head/tail construction any more. Now we use the start/len*/
 /* construction providing full use of PIPE_BUF (multiple of PAGE_SIZE) */
@@ -147,14 +151,9 @@ static long bad_pipe_w(struct inode * inode, struct file * filp,
 static int pipe_ioctl(struct inode *pino, struct file * filp,
 	unsigned int cmd, unsigned long arg)
 {
-	int error;
-
 	switch (cmd) {
 		case FIONREAD:
-			error = verify_area(VERIFY_WRITE, (void *) arg, sizeof(int));
-			if (!error)
-				put_user(PIPE_SIZE(*pino),(int *) arg);
-			return error;
+			return put_user(PIPE_SIZE(*pino),(int *) arg);
 		default:
 			return -EINVAL;
 	}

@@ -44,16 +44,15 @@
  *
  *
  *	This module is effectively the top level interface to the BSD socket
- *	paradigm. Because it is very simple it works well for Unix domain sockets,
- *	but requires a whole layer of substructure for the other protocols.
- *
- *	In addition it lacks an effective kernel -> kernel interface to go with
- *	the user one.
+ *	paradigm. 
  *
  * PROBLEMS:
  *	- CLONE_FILES. Big problem, cloned thread can close file,
  *	  while other thread sleeps in kernel. It can be solved
  *	  by increasing f_count and releasing it on exit from syscall.
+ *	  _HAS_ to be fixed before 2.2 is released. I assume whoever is
+ *	  working on the CLONE stuff will fix that pile of accidents. If
+ *	  you find this comment in a 2.2-preXXX kernel scream loudly.
  *
  */
 
@@ -130,11 +129,13 @@ static struct file_operations socket_file_ops = {
 /*
  *	The protocol list. Each protocol is registered in here.
  */
+
 static struct net_proto_family *net_families[NPROTO];
 
 /*
  *	Statistics counters of the socket lists
  */
+
 static int sockets_in_use  = 0;
 
 /*
@@ -215,7 +216,7 @@ static int get_fd(struct inode *inode)
 	return fd;
 }
 
-static __inline__ struct socket *socki_lookup(struct inode *inode)
+extern __inline__ struct socket *socki_lookup(struct inode *inode)
 {
 	return &inode->u.socket_i;
 }
@@ -462,12 +463,13 @@ static int sock_select(struct inode *inode, struct file *file, int sel_type, sel
 void sock_close(struct inode *inode, struct file *filp)
 {
 	/*
-	 * It's possible the inode is NULL if we're closing an unfinished socket. 
+	 *	It was possible the inode is NULL we were 
+	 *	closing an unfinished socket. 
 	 */
 
 	if (!inode)
 	{
-		printk(KERN_DEBUG "Nope. It is impossible!\n");
+		printk(KERN_DEBUG "sock_close: NULL inode\n");
 		return;
 	}
 	sock_fasync(inode, filp, 0);
@@ -617,8 +619,8 @@ asmlinkage int sys_socket(int family, int type, int protocol)
 	if (!(sock = sock_alloc())) 
 	{
 		printk(KERN_WARNING "socket: no more sockets\n");
-		return(-ENOSR);	/* Was: EAGAIN, but we are out of
-				   system resources! */
+		return(-ENFILE);	/* Not exactly a match, but its the
+					   closest posix thing */
 	}
 
 	sock->type = type;
@@ -752,7 +754,7 @@ asmlinkage int sys_listen(int fd, int backlog)
  *	space and move it to user at the very end. This is unclean because
  *	we open the socket then return an error.
  *
- *	1003.1g addcs the ability to recvmsg() to query connection pending
+ *	1003.1g adds the ability to recvmsg() to query connection pending
  *	status to recvmsg. We need to add that support in a way thats
  *	clean when we restucture accept also.
  */
@@ -1212,9 +1214,10 @@ asmlinkage int sys_recvmsg(int fd, struct msghdr *msg, unsigned int flags)
 		return -EINVAL;
 
 	/*
-	 * save the user-mode address (verify_iovec will change the
-	 * kernel msghdr to use the kernel address space)
+	 *	Save the user-mode address (verify_iovec will change the
+	 *	kernel msghdr to use the kernel address space)
 	 */
+	 
 	uaddr = msg_sys.msg_name;
 	uaddr_len = &msg->msg_namelen;
 	err=verify_iovec(&msg_sys, iov, addr, VERIFY_WRITE);

@@ -33,6 +33,7 @@ if [ "$CONFIG_AX25" != "n" ]; then
 fi
 if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
   tristate 'CCITT X.25 Packet Layer (EXPERIMENTAL)' CONFIG_X25
+  tristate 'LAPB Data Link Driver (EXPERIMENTAL)' CONFIG_LAPB
   bool 'Bridging (EXPERIMENTAL)' CONFIG_BRIDGE
   bool '802.2 LLC (VERY EXPERIMENTAL)' CONFIG_LLC
 fi

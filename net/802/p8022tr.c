@@ -1,3 +1,13 @@
+/*
+ * NET3:	Handling for token ring frames that are not IP. IP is hooked
+ *		early in the token ring support code.
+ *
+ *		This program is free software; you can redistribute it and/or
+ *		modify it under the terms of the GNU General Public License
+ *		as published by the Free Software Foundation; either version
+ *		2 of the License, or (at your option) any later version.
+ */
+
 #include <linux/module.h>
 #include <linux/netdevice.h>
 #include <linux/skbuff.h>
@@ -14,11 +24,14 @@ static struct datalink_proto *p8022tr_list = NULL;
  *	We don't handle the loopback SAP stuff, the extended
  *	802.2 command set, multicast SAP identifiers and non UI
  *	frames. We have the absolute minimum needed for IPX,
- *	IP and Appletalk phase 2.
+ *	IP and Appletalk phase 2. See the llc_* routines for support
+ *	to handle the fun stuff.
+ *
+ *	We assume the list will be very short (at the moment its normally
+ *	one or two entries).
  */
 
-static struct datalink_proto *
-find_8022tr_client(unsigned char type)
+static struct datalink_proto *find_8022tr_client(unsigned char type)
 {
 	struct datalink_proto	*proto;
 
@@ -30,8 +43,7 @@ find_8022tr_client(unsigned char type)
 	return proto;
 }
 
-int
-p8022tr_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
+int p8022tr_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
 {
 	struct datalink_proto	*proto;
 
@@ -47,8 +59,7 @@ p8022tr_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
 	return 0;
 }
 
-static void
-p8022tr_datalink_header(struct datalink_proto *dl,
+static void p8022tr_datalink_header(struct datalink_proto *dl,
 		struct sk_buff *skb, unsigned char *dest_node)
 {
 	struct device	*dev = skb->dev;
@@ -85,8 +96,8 @@ void p8022tr_proto_init(struct net_proto *pro)
 	dev_add_pack(&p8022tr_packet_type);
 }
 
-struct datalink_proto *
-register_8022tr_client(unsigned char type, int (*rcvfunc)(struct sk_buff *, struct device *, struct packet_type *))
+struct datalink_proto *register_8022tr_client(unsigned char type, 
+	int (*rcvfunc)(struct sk_buff *, struct device *, struct packet_type *))
 {
 	struct datalink_proto	*proto;
 

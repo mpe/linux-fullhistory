@@ -6,34 +6,6 @@ typedef struct llc_struct llc;
 typedef struct llc_struct *llcptr;
 
 /*
- *	LLC operations object.
- */
- 
-typedef struct
-{
-	void (* data_indication_ep) (llcptr llc, struct sk_buff *skb);
-	/* unit data returns 0 to keep the data 1 to free it */
-	int (* unit_data_indication_ep) (llcptr llc, int ll, char *xid_data);       
-	void (* connect_indication_ep) (llcptr llc);
-	void (* connect_confirm_ep) (llcptr llc);
-	void (* data_connect_indication_ep) (llcptr llc);
-	void (* data_connect_confirm_ep) (llcptr llc);
-	void (* disconnect_indication_ep) (llcptr llc);
-	void (* disconnect_confirm_ep) (llcptr llc);
-	void (* reset_confirm_ep) (llcptr llc, char lr);
-	void (* reset_indication_ep) (llcptr llc, char lr);
-#define LOCAL		0
-#define REMOTE		1
-	void (* xid_indication_ep) (llcptr llc, int ll, char *xid_data);
-	void (* test_indication_ep) (llcptr llc, int ll, char *test_data);
-	void (* report_status_ep) (llcptr llc, char status);
-#define FRMR_RECEIVED	0
-#define FRMR_SENT	1
-#define REMOTE_BUSY	2
-#define REMOTE_NOT_BUSY	3
-} llc_ops;
-
-/*
  *	LLC private data area structure.
  */
 
@@ -84,10 +56,10 @@ struct llc_struct
 	struct timer_list tl[4];
 
 	/* 
-	 *	Client entry points, called by the LLC 
+	 *	Client entry point, called by the LLC.
 	 */
 	 
-	llc_ops *ops;
+	void	(*llc_event)(struct llc_struct *);
 	
 	/*
 	 *	Mux and Demux variables
@@ -106,18 +78,20 @@ struct llc_struct
 #define MODE_ABM 2
 
 	int llc_callbacks;		/* Pending callbacks */
-#define LLC_CONNECT_INDICATION	1	
-#define LLC_CONNECT_CONFIRM	2
-#define LLC_DATA_INDICATION	4
+#define LLC_CONN_INDICATION	1	/* We have to ensure the names don't */
+#define LLC_CONN_CONFIRM	2	/* mix up with the 802 state table */
+#define LLC_DATA_INDIC		4
 #define LLC_DISC_INDICATION	8
 #define LLC_RESET_INDIC_LOC	16
 #define LLC_RESET_INDIC_REM	32
-#define LLC_RESET_CONFIRM	64
+#define LLC_RST_CONFIRM		64
 #define LLC_FRMR_RECV		128
 #define LLC_FRMR_SENT		256
 #define LLC_REMOTE_BUSY		512
 #define LLC_REMOTE_NOTBUSY	1024
-#define LLC_SET_REMOTE_BUSY	2048
+#define LLC_TEST_INDICATION	2048
+#define LLC_XID_INDICATION	4096
+#define LLC_UI_DATA		8192
 
 	struct sk_buff *inc_skb;	/* Saved data buffer for indications */
 	
@@ -156,5 +130,5 @@ void		llc_connect_request(llcptr lp);
 void		llc_xid_request(llcptr lp, char opt, int data_len, char *pdu_data);
 void		llc_test_request(llcptr lp, int data_len, char *pdu_data);
 
-int		register_cl2llc_client(llcptr llc, const char *device, llc_ops *ops, u8 *rmac, u8 ssap, u8 dsap);
+int		register_cl2llc_client(llcptr llc, const char *device, void (*ops)(llcptr), u8 *rmac, u8 ssap, u8 dsap);
 void		unregister_cl2llc_client(llcptr lp);

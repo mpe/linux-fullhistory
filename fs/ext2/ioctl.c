@@ -19,23 +19,16 @@
 int ext2_ioctl (struct inode * inode, struct file * filp, unsigned int cmd,
 		unsigned long arg)
 {
-	int err;
 	unsigned long flags;
 
 	ext2_debug ("cmd = %u, arg = %lu\n", cmd, arg);
 
 	switch (cmd) {
 	case EXT2_IOC_GETFLAGS:
-		err = verify_area(VERIFY_WRITE, (int *) arg, sizeof(int));
-		if (err)
-			return err;
-		put_user(inode->u.ext2_i.i_flags, (int *) arg);
-		return 0;
+		return put_user(inode->u.ext2_i.i_flags, (int *) arg);
 	case EXT2_IOC_SETFLAGS:
-		err = verify_area(VERIFY_READ, (int *) arg, sizeof(int));
-		if (err)
-			return err;
-		get_user(flags, (int *) arg);
+		if (get_user(flags, (int *) arg))
+			return -EFAULT;	
 		/*
 		 * The IMMUTABLE and APPEND_ONLY flags can only be changed by
 		 * the super user when the security level is zero.
@@ -64,20 +57,14 @@ int ext2_ioctl (struct inode * inode, struct file * filp, unsigned int cmd,
 		inode->i_dirt = 1;
 		return 0;
 	case EXT2_IOC_GETVERSION:
-		err = verify_area(VERIFY_WRITE, (int *) arg, sizeof(int));
-		if (err)
-			return err;
-		put_user(inode->u.ext2_i.i_version, (int *) arg);
-		return 0;
+		return put_user(inode->u.ext2_i.i_version, (int *) arg);
 	case EXT2_IOC_SETVERSION:
 		if ((current->fsuid != inode->i_uid) && !fsuser())
 			return -EPERM;
 		if (IS_RDONLY(inode))
 			return -EROFS;
-		err = verify_area(VERIFY_READ, (int *) arg, sizeof(int));
-		if (err)
-			return err;
-		get_user(inode->u.ext2_i.i_version, (int *) arg);
+		if (get_user(inode->u.ext2_i.i_version, (int *) arg))
+			return -EFAULT;	
 		inode->i_ctime = CURRENT_TIME;
 		inode->i_dirt = 1;
 		return 0;

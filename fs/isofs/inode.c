@@ -193,6 +193,11 @@ static unsigned int isofs_get_last_session(kdev_t dev)
   vol_desc_start=0;
   if (get_blkfops(MAJOR(dev))->ioctl!=NULL)
     {
+      /* Whoops.  We must save the old FS, since otherwise
+       * we would destroy the kernels idea about FS on root
+       * mount in read_super... [chexum]
+       */
+      unsigned long old_fs=get_fs();
       inode_fake.i_rdev=dev;
       ms_info.addr_format=CDROM_LBA;
       set_fs(KERNEL_DS);
@@ -200,7 +205,7 @@ static unsigned int isofs_get_last_session(kdev_t dev)
 				       NULL,
 				       CDROMMULTISESSION,
 				       (unsigned long) &ms_info);
-      set_fs(USER_DS);
+      set_fs(old_fs);
 #if 0
       printk("isofs.inode: CDROMMULTISESSION: rc=%d\n",i);
       if (i==0)

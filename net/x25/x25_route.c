@@ -62,7 +62,9 @@ static int x25_add_route(x25_address *address, unsigned int sigdigits, struct de
 	if ((x25_route = (struct x25_route *)kmalloc(sizeof(*x25_route), GFP_ATOMIC)) == NULL)
 		return -ENOMEM;
 
-	x25_route->address   = *address;
+	strcpy(x25_route->address.x25_addr, "000000000000000");
+	memcpy(x25_route->address.x25_addr, address->x25_addr, sigdigits);
+
 	x25_route->sigdigits = sigdigits;
 	x25_route->dev       = dev;
 
@@ -143,7 +145,11 @@ struct device *x25_dev_get(char *devname)
 	if ((dev = dev_get(devname)) == NULL)
 		return NULL;
 
-	if ((dev->flags & IFF_UP) && (dev->type == ARPHRD_X25 || dev->type == ARPHRD_ETHER))
+	if ((dev->flags & IFF_UP) && (dev->type == ARPHRD_X25
+#if defined(CONFIG_LLC) || defined(CONFIG_LLC_MODULE)
+	   || dev->type == ARPHRD_ETHER
+#endif
+	   ))
 		return dev;
 
 	return NULL;
@@ -217,10 +223,10 @@ int x25_routes_get_info(char *buffer, char **start, off_t offset, int length, in
 
 	cli();
 
-	len += sprintf(buffer, "address         digits  device\n");
+	len += sprintf(buffer, "address          digits  device\n");
 
 	for (x25_route = x25_route_list; x25_route != NULL; x25_route = x25_route->next) {
-		len += sprintf(buffer + len, "%-15s %2d %-4s\n",
+		len += sprintf(buffer + len, "%-15s  %-6d  %-5s\n",
 			x25_route->address.x25_addr, x25_route->sigdigits,
 			(x25_route->dev != NULL) ? x25_route->dev->name : "???");
 

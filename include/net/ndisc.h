@@ -23,7 +23,7 @@
 #define NDISC_QUEUE_LEN	3
 
 #define NCF_NOARP		0x0100	/* no ARP needed on this device */
-#define NCF_SUBNET		0x0200   /* NC entry for subnet		*/
+#define NCF_SUBNET		0x0200  /* NC entry for subnet		*/
 #define NCF_INVALID		0x0400
 #define NCF_DELAY_EXPIRED	0x0800	/* time to move to PROBE	*/
 #define NCF_ROUTER		0x1000	/* neighbour is a router	*/

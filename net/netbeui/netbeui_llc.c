@@ -1,124 +1,169 @@
 /*
- *	Maintain 802.2 LLC logical channels being used by NetBEUI
- */
-
-
-
-void netbeui_disc_indication(llcptr llc)
-{
-	struct nb_link *nb=LLC_TO_NB(llc);
-	if(nb->users>0)
-		llc_connect_request(&nb->llc);
-}
-
-void netbeui_disc_confirm(llcptr llc)
-{
-	struct nb_link *nb=LLC_TO_NB(llc);
-	if(nb->users>0)
-		llc_connect_request(&nb->llc);
-	else
-	{
-		netbeui_destroy_channel(nb);
-	}
-}
-
-void netbeui_connect_confirm(llcptr llc)
-{
-	struct nb_link *nb=LLC_TO_NB(llc);
-	nb->status=SS_CONNECTED;
-	wakeup(&nb->wait_queue);
-}
-
-void netbeui_connect_indication(llcptr llc)
-{
-	struct nb_link *nb=LLC_TO_NB(llc);
-	nb->status=SS_CONNECTED;
-	wakeup(&nb->wait_queue);
-}
-
-void netbeui_reset_confirm(llcptr llc)
-{
-	struct nb_link *nb=LLC_TO_NB(llc);
-	/* Good question .. */
-}
-
-void netbeui_reset_indication(llcptr llc, char lr)
-{
-	struct nb_link *nb=LLC_TO_NB(llc);
-	printk("netbeui: 802.2LLC reset.\n");
-	/* Good question too */
-}
-	 
-void netbeui_data_indication(llcptr llc, struct sk_buff *skb)
-{
-	netbeui_rcv_seq(LLC_TO_NB(llc),skb);
-}
-
-int netbeui_unit_data_indication(llcptr llc, struct sk_buff *skb)
-{
-	return netbeui_rcv_dgram(LLC_TO_NB(llc),skb);
-}
-
-int netbeui_xid_indication(llcptr llc, int ll, char *data)
-{
-	struct nb_link *nb=LLC_TO_NB(llc);
-	/* No action needed */
-}
-
-int netbeui_test_indication(llcptr llc, int ll, char *data)
-{
-	struct nb_link *nb=LLC_TO_NB(llc);
-	/* No action needed */
-}
-
-void netbeui_report_status(llcptr llc, char status)
-{
-	struct nb_link *nb=LLC_TO_NB(llc);
-	switch(status)
-	{
-		case FRMR_RECEIVED:
-		case FRMR_SENT:
-			printk("netbeui: FRMR event %d\n",status);
-			break;	/* FRMR's - shouldnt occur - debug log */
-		case REMOTE_BUSY:
-			nb->busy=1;
-			break;
-		case REMOTE_NOT_BUSY:
-			nb->busy=0;
-			wakeup(&nb->wakeup);
-			break;
-		default:
-			printk("LLC passed netbeui bogus state %d\n",status);
-			break;
-	}
-}
-
-struct llc_ops netbeui_ops=
-{
-	netbeui_data_indication,		/* Sequenced frame */
-	netbeui_unit_data_indication,		/* Datagrams */
-	netbeui_connect_indication,		/* They called us */
-	netbeui_connect_confirm,		/* We called them, they OK'd */
-	netbeui_data_connect_indication,	/* Erm ?????? */
-	netbeui_data_connect_confirm,		/* Erm ?????? */
-	netbeui_disc_indication,		/* They closed */
-	netbeui_disc_confirm,			/* We closed they OK'd */
-	netbeui_reset_confirm,			/* Our reset worked */
-	netbeui_reset_indication,		/* They reset on us */
-	netbeui_xid_indication,			/* An XID frame */
-	netbeui_test_indication,		/* A TEST frame */
-	netbeui_report_status			/* Link state change */
-};
-
-/*
- *	Create a new outgoing session
+ *	NET3:	802.2 LLC supervisor for the netbeui protocols. 
+ *
+ *	The basic aim is to provide a self managing link layer supervisor
+ *	for netbeui. It creates and destroys the 802.2 virtual connections
+ *	as needed, and copes with the various races when a link goes down
+ *	just as its requested etc.
+ *
+ *	The upper layers are presented with the notion of an nb_link which
+ *	is a potentially shared object that represents a logical path 
+ *	between two hosts. Each nb_link has usage counts and users can
+ *	treat it as if its their own.
  */
  
+#include <linux/types.h>
+#include <linux/kernel.h>
+#include <linux/sched.h>
+#include <linux/string.h>
+#include <linux/mm.h>
+#include <linux/socket.h>
+#include <linux/sockios.h>
+#include <linux/notifier.h>
+#include <linux/netdevice.h>
+#include <linux/skbuff.h>
+#include <net/datalink.h>
+#include <net/p8022.h>
+#include <net/psnap.h>
+#include <net/sock.h>
+#include <net/llc.h>
+#include <net/netbeui.h>
+
+
+/*
+ *	When this routine is called the netbeui layer has decided to
+ *	drop the link. There is a tiny risk that we might reuse the
+ *	link after we decide. Thus before we blast the link into little
+ *	tiny pieces we must check....
+ */
+ 
+static void netbeui_do_destroy(struct nb_link *nb)
+{
+	/*
+	 *	Are we wanted again. Bring it back. Sigh, wish people
+	 *	would make up their minds 8)
+	 */
+	if(nb->users>0)
+	{
+		nb->state=NETBEUI_CONNWAIT;
+		llc_connect_request(&nb->llc);
+		return;
+	}
+	/*
+	 *	Blam.... into oblivion it goes
+	 */
+	
+	llc_unregister(&nb->llc);
+	netbeui_free_link(nb);
+}
+
+/*
+ *	Handle netbeui events. Basically that means keep it up when it
+ *	should be up, down when it should be down and handle all the data.
+ */
+
+static void netbeui_event(llcptr llc)
+{
+	struct nb_link *nb=(struct nb_link *)llc;
+	
+	/*
+	 *	See what has occured
+	 */
+	 
+	if(llc->llc_callbacks&LLC_CONN_CONFIRM)
+	{
+		/*
+		 *	Link up if desired. Otherwise try frantically
+		 *	to close it.
+		 */
+		if(nb->state!=NETBEUI_DEADWAIT)
+		{
+			/*
+			 *	Wake pending writers
+			 */
+			nb->state=NETBEUI_OPEN;
+			netbeui_wakeup(nb);
+		}
+		else
+			llc_disconnect_request(llc);
+	}
+	
+	/*
+	 *	Data is passed to the upper netbeui layer
+	 */
+
+	if(llc->llc_callbacks&LLC_DATA_INDIC)
+		netbeu_rcv_stream(llc,llc->inc_skb);
+
+	/*
+	 *	We got disconnected
+	 */
+	 
+	if(llc->llc_callbacks&LLC_DISC_INDICATION)
+	{
+		if(nb->state==NETBEUI_DEADWAIT)
+		{
+			netbeui_do_destroy(nb);
+			return;
+		}
+		if(nb->state==NETBEUI_DISCWAIT)
+		{
+			llc_connect_request(llc);
+			nb->state=NETBEUI_CONNWAIT;
+		}
+	}
+	
+	if(llc->llc_callbacks&(LLC_RESET_INDIC_LOC|LLC_RESET_INDIC_REM|
+					LLC_RST_CONFIRM))
+	{
+		/*
+		 *	Reset. 
+		 *	Q: Is tearing the link down the right answer ?
+		 *
+		 *	For now we just carry on
+		 */
+	}
+
+	if(llc->llc_callbacks&LLC_REMOTE_BUSY)
+		nb->busy=1;	/* Send no more for a bit */
+	if(llc->llc_callbacks&LLC_REMOTE_NOTBUSY)
+	{
+		/* Coming unbusy may wake sending threads */
+		nb->busy=0;
+		netbeui_wakeup(nb);
+	}		
+	/*
+	 *	UI frames are passed to the upper netbeui layer.
+	 */
+	if(llc->llc_callbacks&LLC_UI_DATA)
+		netbeui_rcv_dgram(llc,llc->inc_skb);
+
+	/* We ignore TST, XID, FRMR stuff */
+	/* FIXME: We need to free frames here once I fix the callback! */
+}
+
+/*
+ *	Netbeui has created a new logical link. As a result we will
+ *	need to find or create a suitable 802.2 LLC session and join
+ *	it.
+ */
+
 struct nb_link *netbeui_create_channel(struct device *dev, u8 *remote_mac, int pri)
 {
 	struct nb_link *nb=netbeui_find_channel(dev,remote_mac);
 	if(nb)
 	{
+		if(nb->state==NETBEUI_DEADWAIT)
+		{
+			/*
+			 *	We had commenced a final shutdown. We
+			 *	cannot abort that (we sent the packet) but
+			 *	we can shift the mode to DISCWAIT. That will
+			 *	cause the disconnect event to bounce us
+			 *	back into connected state.
+			 */
+			nb->state==NETBEUI_DISCWAIT;
+		}
 		nb->users++;
 		return nb;
 	}
@@ -131,19 +176,17 @@ struct nb_link *netbeui_create_channel(struct device *dev, u8 *remote_mac, int p
 	 */
 	 
 	nb->dev=dev;
-	init_timer(&nb->timer);
-	nb->timer.function=netbeui_link_timer;
 	nb->users=1;
 	nb->busy=0;
 	nb->wakeup=NULL;
-	nb->status=SS_CONNECTING;
+	nb->state=NETBEUI_CONNWAIT;
 	memcpy(nb->remote_mac, remote_mac, ETH_ALEN);
 	
 	/*
 	 *	Now try and attach an LLC.
 	 */
 	
-	if(register_cl2llc_client(&nb->llc,dev->name,&nebeui_llcops,
+	if(register_cl2llc_client(&nb->llc,dev->name,netbeui_event,
 		remote_mac, NETBEUI_SAP, NETBEUI_SAP)<0)
 	{
 		netbeui_free_link(nb);
@@ -165,21 +208,33 @@ struct nb_link *netbeui_create_channel(struct device *dev, u8 *remote_mac, int p
 	 
 	return nb;
 }
+
+/*
+ *	A logical netbeui channel has died. If the channel has no
+ *	further users we commence shutdown.
+ */
 	
 int netbeui_delete_channel(struct nb_link *nb)
 {
 	nb->users--;
+	
+	/*
+	 *	FIXME: Must remove ourselves from the nb_link chain when
+	 *	we add that bit
+	 */
+	 
 	if(nb->users)
 		return 0;
 		
-	llc_disconnect_request(lp);
 	/*
 	 *	Ensure we drop soon. The disconnect confirm will let
-	 *	us fix the deletion
+	 *	us fix the deletion. If someone wants the link at
+	 *	the wrong moment nothing bad will occur. The create
+	 *	or the do_destroy will sort it.
 	 */
-	nb->state = SS_DISCONNECTING;
-	nb->timer.expires=jiffies+NB_DROP_TIMEOUT;
-	add_timer(&nb->timer);
+
+	nb->state = NETBEUI_DEADWAIT;
+	llc_disconnect_request(lp);
 	return 0;
 }
 

@@ -1,12 +1,9 @@
-/* $Id: tpqic02.c,v 0.4.1.5 1994/10/29 02:46:13 root Exp root $
+/* $Id: tpqic02.c,v 0.7.1.5 1996/12/14 22:58:52 root Exp root $
  *
- * Driver for tape drive support for Linux-i386 1.1.58
+ * Driver for tape drive support for Linux-i386
  *
- * Copyright (c) 1992, 1993, 1994 by H. H. Bergman. All rights reserved.
- * Current e-mail address: hennus@sky.ow.org [This is a UUCP link.]
- * [If you are unable to reach me directly, try the TAPE mailing list
- * channel on linux-activists@niksula.hut.fi using "X-Mn-Key: TAPE" as
- * the first line in your message.]
+ * Copyright (c) 1992--1996 by H. H. Bergman. All rights reserved.
+ * Current e-mail address: hennus@cybercomm.nl
  *
  * Distribution of this program in executable form is only allowed if
  * all of the corresponding source files are made available through the same
@@ -33,154 +30,28 @@
  *
  * You are not allowed to change this line nor the text above.
  *
- * $Log: tpqic02.c,v $
- * Revision 0.4.1.5  1994/10/29  02:46:13  root
- * Minor cleanups.
+ * 1996/10/10   Emerald changes
  *
- * Revision 0.4.1.4  1994/07/21  02:15:45  root
- * ifdef'd DDI. Exception masks.
+ * 1996/05/21	Misc changes+merges+cleanups + I/O reservations
  *
- * Revision 0.4.1.3  1994/05/03  01:49:09  root
- * Initial attempt at Mountain support for the Mountain 7150.
- * Based on patches provided by Erik Jacobson.
+ * 1996/05/20	Module support patches submitted by Brian McCauley.
  *
- * Revision 0.4.1.2  1994/03/18  21:16:50  root
- * Many driver messages can now be turned off (runtime selectable).
+ * 1994/05/03	Initial attempt at Mountain support for the Mountain 7150.
+ * Based on patches provided by Erik Jacobson. Still incomplete, I suppose.
  *
- * Revision 0.4.1.1  1994/02/16  19:47:22  root
- * First stab at runtime debug-variable.
+ * 1994/02/07	Archive changes & some cleanups by Eddy Olk.
  *
- * Revision 0.4  1994/02/15  01:53:16  root
- * DYNCONF mark II.
- * Minor cleanups.
+ * 1994/01/19	Speed measuring stuff moved from aperf.h to delay.h.
+ *		BogoMips (tm) introduced by Linus.
  *
- * Revision 0.3  1994/02/07  01:23:16  root
- * More improved DYNCONF.
- * Archive changes & some cleanups by Eddy Olk.
- * Removed status_open, more cleanups, misc other.
+ * 1993/01/25	Kernel udelay. Eof fixups.
+ * 
+ * 1992/09/19	Some changes based on patches by Eddy Olk to support
+ * 		Archive SC402/SC499R controller cards.
  *
- * Revision 0.2.1.25  1994/01/24  02:01:33  root
- * Changed tape_qic02 to QIC02_TAPE.
- * Changes to prepare for DYNCONF.
+ * 1992/05/27	First release.
  *
- * Revision 0.2.1.24  1994/01/23  07:27:18  root
- * Attempt to remove compilation warnings, G++ bug,
- * Linus changed TAPE_QIC02 to QIC02_TAPE.
- *
- * Revision 0.2.1.23  1994/01/20  23:49:28  root
- * Changed some exception decoding stuff.
- * TP_HAVE_SEEK, TP_HAVE_DENS. byte_swap_w() on arg, not global.
- * Attempt to fix cartridge-changed-problem for 2150L.
- * Release irq and dma reservations if initial reset fails.
- *
- * Revision 0.2.1.22  1994/01/19  20:56:55  root
- * Speed measuring stuff moved from aperf.h to delay.h.
- * BogoMips (tm) introduced by Linus.
- *
- * Revision 0.2.1.21  1993/06/18  19:04:33  root
- * minor fixes for 0.99.10.
- *
- * Revision 0.2.1.20  1993/06/11  21:38:51  root
- * Added exception code for status 0x8000 (Cypher weirdness).
- *
- * Revision 0.2.1.19  1993/04/19  23:13:59  root
- * Cleanups. Changed to 0.99.8.
- *
- * Revision 0.2.1.18  1993/03/22  17:39:47  root
- * Moved to 0.99.7. Added Archive MTSEEK and MTTELL support.
- *
- * Revision 0.2.1.17  1993/03/08  18:51:59  root
- * Tried to `fix' write-once bug in previous release.
- *
- * Revision 0.2.1.16  1993/03/01  00:06:16  root
- * Use register_chrdev() for 0.99.6.
- *
- * Revision 0.2.1.15  1993/02/25  00:14:25  root
- * minor cleanups.
- *
- * Revision 0.2.1.14  1993/01/25  00:06:14  root
- * Kernel udelay. Eof fixups.
- * Removed report_ read/write dummies; have strace(1) now.
- *
- * Revision 0.2.1.13  1993/01/10  02:24:43  root
- * Rewrote wait_for_ready() to use newer schedule() features.
- * This improves performance for rewinds etc.
- *
- * Revision 0.2.1.12  1993/01/05  18:44:09  root
- * Changes for 0.99.1. Fixed `restartable reads'.
- *
- * Revision 0.2.1.11  1992/11/28  01:19:10  root
- * Changes to exception handling (significant).
- * Changed returned error codes. Hopefully they're correct now.
- * Changed declarations to please gcc-2.3.1.
- * Patch to deal with bogus interrupts for Archive cards.
- *
- * Revision 0.2.1.10  1992/10/28  00:50:44  root
- * underrun/error counter needed byte swapping.
- *
- * Revision 0.2.1.9  1992/10/15  17:06:01  root
- * Removed online() stuff. Changed EOF handling.
- *
- * Revision 0.2.1.8  1992/10/02  22:25:48  root
- * Removed `no_sleep' parameters (got usleep() now),
- * cleaned up some comments.
- *
- * Revision 0.2.1.7  1992/09/27  01:41:55  root
- * Changed write() to do entire user buffer in one go, rather than just
- * a kernel-buffer sized portion each time.
- *
- * Revision 0.2.1.6  1992/09/21  02:15:30  root
- * Introduced udelay() function for microsecond-delays.
- * Trying to use get_dma_residue rather than TC flags.
- * Patch to fill entire user buffer on reads before
- * returning.
- *
- * Revision 0.2.1.5  1992/09/19  02:31:28  root
- * Some changes based on patches by Eddy Olk to
- * support Archive SC402/SC499R controller cards.
- *
- * Revision 0.2.1.4  1992/09/07  01:37:37  root
- * Minor changes
- *
- * Revision 0.2.1.3  1992/08/13  00:11:02  root
- * Added some support for Archive SC402 and SC499 cards.
- * (Untested.)
- *
- * Revision 0.2.1.2  1992/08/10  02:02:36  root
- * Changed from linux/system.h macros to asm/dma.h inline functions.
- *
- * Revision 0.2.1.1  1992/08/08  01:12:39  root
- * cleaned up a bit. added stuff for selftesting.
- * preparing for asm/dma.h instead of linux/system.h
- *
- * Revision 0.2  1992/08/03  20:11:30  root
- * Changed to use new IRQ allocation. Padding now done at runtime, pads to
- * 512 bytes. Because of this the page regs must be re-programmed every
- * block! Added hooks for selftest commands.
- * Moved to linux-0.97.
- *
- * Revision 0.1.0.5  1992/06/22  22:20:30  root
- * moved to Linux 0.96b
- *
- * Revision 0.1.0.4  1992/06/18  02:00:04  root
- * Use minor bit-7 to enable/disable printing of extra debugging info
- * when do tape access.
- * Added semop stuff for DMA/IRQ allocation checking. Don't think this
- * is the right way to do it though.
- *
- * Revision 0.1.0.3  1992/06/01  01:57:34  root
- * changed DRQ to DMA. added TDEBUG ifdefs to reduce output.
- *
- * Revision 0.1.0.2  1992/05/31  14:02:38  root
- * changed SET_DMA_PAGE handling slightly.
- *
- * Revision 0.1.0.1  1992/05/27  12:12:03  root
- * Can now use multiple files on tape (sort of).
- * First release.
- *
- * Revision 0.1  1992/05/26  01:16:31  root
- * Initial version. Copyright H. H. Bergman 1992
- *
+ * 1992/05/26	Initial version. Copyright H. H. Bergman 1992
  */
 
 /* After the legalese, now the important bits:
@@ -200,14 +71,10 @@
 
 #define REALLY_SLOW_IO		/* it sure is ... */
 
+#include <linux/module.h>
+
 #include <linux/config.h>
 
-#ifdef MODULE
-  #ifdef CONFIG_QIC02_DYNCONF
-    #error dynamic configuration as module not implemented!
-  #endif
-#endif
- 
 #include <linux/module.h>
 #include <linux/sched.h>
 #include <linux/timer.h>
@@ -218,6 +85,7 @@
 #include <linux/mtio.h>
 #include <linux/fcntl.h>
 #include <linux/delay.h>
+#include <linux/ioport.h>
 #include <linux/tpqic02.h>
 #include <linux/mm.h>
 #include <linux/malloc.h>
@@ -227,14 +95,9 @@
 #include <asm/io.h>
 #include <asm/uaccess.h>
 
-/* We really shouldn't be using this define.. */
-#define IOCCMD_MASK 0x0000ffff
-
 /* check existence of required configuration parameters */
-#if !defined(QIC02_CMD_PORT) || \
-    !defined(QIC02_TAPE_IRQ) || \
-    !defined(QIC02_TAPE_DMA)
-#error qic02_tape configuration error
+#if !defined(QIC02_CMD_PORT) || !defined(QIC02_TAPE_IRQ) || !defined(QIC02_TAPE_DMA)
+# error qic02_tape configuration error
 #endif
 
 
@@ -248,17 +111,19 @@
 /* This holds the dynamic configuration info for the interface
  * card+drive info if runtime configuration has been selected.
  */
-struct mtconfiginfo qic02_tape_dynconf = { 0, };	/* user settable */
-struct qic02_ccb qic02_tape_ccb = { 0, };		/* private stuff */
+
+static struct mtconfiginfo qic02_tape_dynconf = 	/* user settable */
+    { 0, 0, BOGUS_IRQ, 0, 0, TPQD_DEFAULT_FLAGS, };
+static struct qic02_ccb qic02_tape_ccb = { 0, };	/* private stuff */
 
 #else
 
-unsigned long qic02_tape_debug;
+unsigned long qic02_tape_debug = TPQD_DEFAULT_FLAGS;
 
 # if ((QIC02_TAPE_IFC!=WANGTEK) && (QIC02_TAPE_IFC!=ARCHIVE) && (QIC02_TAPE_IFC!=MOUNTAIN))
 #  error No valid interface card specified
 # endif
-#endif
+#endif /* CONFIG_QIC02_DYNCONF */
 
 static volatile int ctlbits = 0;     /* control reg bits for tape interface */
 
@@ -268,8 +133,8 @@ static volatile struct mtget ioctl_status;	/* current generic status */
 
 static volatile struct tpstatus tperror;	/* last drive status */
 
-static char rcs_revision[] = "$Revision: 0.4.1.5 $";
-static char rcs_date[] = "$Date: 1994/10/29 02:46:13 $";
+static char rcs_revision[] = "$Revision: 0.7.1.5 $";
+static char rcs_date[] = "$Date: 1996/12/14 22:58:52 $";
 
 /* Flag bits for status and outstanding requests.
  * (Could all be put in one bit-field-struct.)
@@ -330,27 +195,17 @@ static char seek_addr_buf[AR_SEEK_BUF_SIZE];
  */
 static int  mode_access;	/* access mode: READ or WRITE */
 
+static int qic02_get_resources(void);
+static void qic02_release_resources(void);
 
-/* This is the actual kernel buffer where the interrupt routines read
- * from/write to. It is needed because the DMA channels 1 and 3 cannot
+/* This is a pointer to the actual kernel buffer where the interrupt routines
+ * read from/write to. It is needed because the DMA channels 1 and 3 cannot
  * always access the user buffers. [The kernel buffer must reside in the
- * lower 16MBytes of system memory because of the DMA controller.]
- * The user must ensure that a large enough buffer is passed to the
- * kernel, in order to reduce tape repositioning.
- *
- * The buffer is 512 bytes larger than expected, because I want to align it
- * at 512 bytes, to prevent problems with 64k boundaries.
+ * lower 16MBytes of system memory because of the DMA controller.] The user
+ * must ensure that a large enough buffer is passed to the kernel, in order
+ * to reduce tape repositioning wear and tear.
  */
-
-#ifdef MODULE
-static char *qic02_tape_buf = NULL;
-#else
-static volatile char qic02_tape_buf[TPQBUF_SIZE+TAPE_BLKSIZE];
-/* A really good compiler would be able to align this at 512 bytes... :-( */
-#endif /* MODULE */
-
-static unsigned long buffaddr;	/* aligned physical address of buffer */
-
+static unsigned long buffaddr = 0;	/* physical address of buffer */
 
 /* This translates minor numbers to the corresponding recording format: */
 static const char *format_names[] = {
@@ -436,15 +291,21 @@ static struct exception_list_type {
 };
 #define NR_OF_EXC	(sizeof(exception_list)/sizeof(struct exception_list_type))
 
-
+/* Compare expected struct size and actual struct size. This
+ * is useful to catch programs compiled with old #includes.
+ */
+#define CHECK_IOC_SIZE(structure) \
+	if (_IOC_SIZE(iocmd) != sizeof(struct structure)) { \
+		tpqputs(TPQD_ALWAYS, "sizeof(struct " #structure \
+			") does not match!"); \
+		return -EFAULT; \
+	} \
 
 static void tpqputs(unsigned long flags, const char *s)
 {
 	if ((flags & TPQD_ALWAYS) || (flags & QIC02_TAPE_DEBUG))
 		printk(TPQIC02_NAME ": %s\n", s);
 } /* tpqputs */
-
-
 
 
 /* Perform byte order swapping for a 16-bit word.
@@ -468,27 +329,36 @@ static inline void byte_swap_w(volatile unsigned short * w)
  */
 static void ifc_init(void)
 {
-	if (QIC02_TAPE_IFC == WANGTEK) /* || (QIC02_TAPE_IFC == EVEREX) */ {
-		ctlbits = WT_CTL_ONLINE;	/* online */
-		outb_p(ctlbits, QIC02_CTL_PORT);
-
-	} else if (QIC02_TAPE_IFC == ARCHIVE) {
-		ctlbits = 0;			/* no interrupts yet */
-		outb_p(ctlbits, QIC02_CTL_PORT);
-		outb_p(0, AR_RESET_DMA_PORT);	/* dummy write to reset DMA */
-
-	} else /* MOUNTAIN */ {
-		ctlbits = MTN_CTL_ONLINE;       /* online, and logic enabled */
-		outb_p(ctlbits, QIC02_CTL_PORT);
-	}
+    if (QIC02_TAPE_IFC == WANGTEK) /* || (QIC02_TAPE_IFC == EVEREX) */
+    {
+	ctlbits = WT_CTL_ONLINE;	/* online */
+	outb_p(ctlbits, QIC02_CTL_PORT);
+    }
+    else if (QIC02_TAPE_IFC == ARCHIVE)
+    {
+	ctlbits = 0;			/* no interrupts yet */
+	outb_p(ctlbits, QIC02_CTL_PORT);
+	outb_p(0, AR_RESET_DMA_PORT);	/* dummy write to reset DMA */
+    }
+    else /* MOUNTAIN */
+    {
+	ctlbits = MTN_CTL_ONLINE;       /* online, and logic enabled */
+	outb_p(ctlbits, QIC02_CTL_PORT);
+    }
 } /* ifc_init */
 
 
 static void report_qic_exception(unsigned n)
 {
-	if (n >= NR_OF_EXC) { tpqputs(TPQD_ALWAYS, "Oops -- report_qic_exception"); n = 0; }
-	if (TPQDBG(SENSE_TEXT) || n==0)
-		printk(TPQIC02_NAME ": sense: %s\n", exception_list[n].msg);
+    if (n >= NR_OF_EXC)
+    {
+	tpqputs(TPQD_ALWAYS, "Oops -- report_qic_exception");
+	n = 0;
+    }
+    if (TPQDBG(SENSE_TEXT) || n==0)
+    {
+	printk(TPQIC02_NAME ": sense: %s\n", exception_list[n].msg);
+    }
 } /* report_qic_exception */
 
 
@@ -499,91 +369,19 @@ static void report_qic_exception(unsigned n)
  */
 static int decode_qic_exception_nr(unsigned s)
 {
-	int i;
+    int i;
 
-	for (i=1; i<NR_OF_EXC; i++) {
-		if ((s & exception_list[i].mask)==exception_list[i].code)
-			return i;
+    for (i=1; i<NR_OF_EXC; i++)
+    {
+	if ((s & exception_list[i].mask)==exception_list[i].code)
+	{
+	    return i;
 	}
-	printk(TPQIC02_NAME ": decode_qic_exception_nr: exception(%x) not recognized\n", s);
-	return 0;
+    }
+    printk(TPQIC02_NAME ": decode_qic_exception_nr: exception(%x) not recognized\n", s);
+    return 0;
 } /* decode_qic_exception_nr */
 
-
-#ifdef OBSOLETE
-/* There are exactly 14 possible exceptions, as defined in QIC-02 rev F.
- * Some are FATAL, some aren't. Currently all exceptions are treated as fatal.
- * Especially 6 and 14 should not abort the transfer. RSN...
- * Should probably let sense() figure out the exception number using the code
- * below, and just report the error based on the number here, returning a code
- * for FATAL/CONTINUABLE.
- */
-static void report_error(int s)
-{
-	short n = -1;
-
-	if (s & TP_ST1) {
-		if (s & TP_ILL)		/* 12: Illegal command. FATAL */
-			n = 12;
-		if (s & TP_POR)		/* 13: Reset occurred. FATAL */
-			n = 13;
-	} 
-	else if (s & TP_ST0) {
-		if (s & TP_EOR) {	/* extra: 15: End of Recorded Media. CONTINUABLE */
-			n = 15;
-			/********** should set flag here **********/
-		}
-		else if (s & TP_EOM)		/* 4: End Of Media. CONTINUABLE */
-			n = 4;
-		else if (s & TP_USL)		/* 2: Drive not online. FATAL */
-			n = 2;
-		else if (s & TP_CNI) {	/* 1: Cartridge not in place. FATAL */
-			n = 1;
-			need_rewind = YES;
-			status_eof_detected = NO;
-			status_eom_detected = NO;
-		}
-		else if (s & TP_UDA) {
-			if (s & TP_BNL) {
-				if (s & TP_NDT) {
-					if (s & TP_BOM)		/* 9: Read error. No data detected & EOM. CONTINUABLE */
-						n = 9;
-					else if (s & TP_EOM)	/* 10: Read error. No data detected & BOM. CONTINUABLE */
-						n = 10;
-					else			/* 8: Read error. No data detected. CONTINUABLE */
-						n = 8;
-				} else { /* 7: Read error. Cannot recover block, filler substituted. CONTINUABLE */
-					tpqputs(TPQD_ALWAYS, "[Bad block -- filler data transferred.]");
-					n = 7;
-				}
-			}
-			else {
-				if (s & TP_EOM)	/* 5: Read or Write error. Rewind tape. FATAL */
-					n = 5;
-				else {		/* 6: Read error. Bad block transferred. CONTINUABLE */
-					/* block is bad, but transfer may continue.
-					 * This is why some people prefer not to
-					 * use compression on backups...
-					 */
-					tpqputs(TPQD_ALWAYS, "[CRC failed!]");
-					n = 6;
-				}
-			}
-		}
-		else if (s & TP_FIL) {
-			if (s & TP_MBD) {	/* 14: Marginal block detected. CONTINUABLE */
-				tpqputs(TPQD_ALWAYS, "[Marginal block]");
-				n = 14;
-			} else			/* 11: File mark detected. CONTINUABLE */
-				n = 11;
-		}
-		else if (s & TP_WRP)		/* 3: Write protected cartridge. FATAL */
-			n = 3;
-	}
-	if (n >= 0)
- 		sensemsg(n);
-} /* report_error */
-#endif
 
 
 /* Perform appropriate action for certain exceptions.
@@ -591,34 +389,43 @@ static void report_error(int s)
  */
 static void handle_qic_exception(int exnr, int exbits)
 {
-	if (exnr==EXC_NCART) {
-		/* Cartridge was changed. Redo sense().
-		 * EXC_NCART should be handled in open().
-		 * It is not permitted to remove the tape while
-		 * the tape driver has open files. 
-		 */
-		need_rewind = YES;
-		status_eof_detected = NO;
-		status_eom_detected = NO;
-	}
-	else if (exnr==EXC_XFILLER)
-		tpqputs(TPQD_ALWAYS, "[Bad block -- filler data transferred.]");
-	else if (exnr==EXC_XBAD)
-		tpqputs(TPQD_ALWAYS, "[CRC failed!]");
-	else if (exnr==EXC_MARGINAL) {
-		/* A marginal block behaves much like a FM.
-		 * User may continue reading, if desired.
-		 */
-		tpqputs(TPQD_ALWAYS, "[Marginal block]");
-		doing_read = NO;
-	} else if (exnr==EXC_FM)
-		doing_read = NO;
+    if (exnr==EXC_NCART)
+    {
+	/* Cartridge was changed. Redo sense().
+	 * EXC_NCART should be handled in open().
+	 * It is not permitted to remove the tape while
+	 * the tape driver has open files. 
+	 */
+	need_rewind = YES;
+	status_eof_detected = NO;
+	status_eom_detected = NO;
+    }
+    else if (exnr==EXC_XFILLER)
+    {
+	tpqputs(TPQD_ALWAYS, "[Bad block -- filler data transferred.]");
+    }
+    else if (exnr==EXC_XBAD)
+    {
+	tpqputs(TPQD_ALWAYS, "[CRC failed!]");
+    }
+    else if (exnr==EXC_MARGINAL)
+    {
+	/* A marginal block behaves much like a FM.
+	 * User may continue reading, if desired.
+	 */
+	tpqputs(TPQD_ALWAYS, "[Marginal block]");
+	doing_read = NO;
+    }
+    else if (exnr==EXC_FM)
+    {
+	doing_read = NO;
+    }
 } /* handle_qic_exception */
 
 
 static inline int is_exception(void)
 {
-	return (inb(QIC02_STAT_PORT) & QIC02_STAT_EXCEPTION) == 0;
+    return (inb(QIC02_STAT_PORT) & QIC02_STAT_EXCEPTION) == 0;
 } /* is_exception */
 
 
@@ -628,41 +435,53 @@ static inline int is_exception(void)
  */
 static int tape_reset(int verbose)
 {
-	ifc_init();				/* reset interface card */
+    ifc_init();				/* reset interface card */
 
-	/* assert reset */
-	if (QIC02_TAPE_IFC == MOUNTAIN)
-		outb_p(ctlbits & ~MTN_QIC02_CTL_RESET_NOT, QIC02_CTL_PORT);
-	else /* WANGTEK, ARCHIVE */
- 		outb_p(ctlbits | QIC02_CTL_RESET, QIC02_CTL_PORT);
+    /* assert reset */
+    if (QIC02_TAPE_IFC == MOUNTAIN)
+    {
+	outb_p(ctlbits & ~MTN_QIC02_CTL_RESET_NOT, QIC02_CTL_PORT);
+    }
+    else /* WANGTEK, ARCHIVE */
+    {
+	outb_p(ctlbits | QIC02_CTL_RESET, QIC02_CTL_PORT);
+    }
+    
+    /* Next, we need to wait >=25 usec. */
+    udelay(30);
 
-	/* Next, we need to wait >=25 usec. */
-	udelay(30);
-
-	/* after reset, we will be at BOT (modulo an automatic rewind) */
-	status_eof_detected = NO;
-	status_eom_detected = NO;
-	status_cmd_pending = 0;
-	need_rewind = YES;
-	doing_read = doing_write = NO;
-	ioctl_status.mt_fileno = ioctl_status.mt_blkno = 0;
-
-	/* de-assert reset */
-	if (QIC02_TAPE_IFC == MOUNTAIN)
-		outb_p(ctlbits | MTN_QIC02_CTL_RESET_NOT, QIC02_CTL_PORT);
-	else
-		outb_p(ctlbits & ~QIC02_CTL_RESET, QIC02_CTL_PORT);
-
-	/* KLUDGE FOR G++ BUG */
-	{ int stat = inb_p(QIC02_STAT_PORT);
-	  status_dead = ((stat & QIC02_STAT_RESETMASK) != QIC02_STAT_RESETVAL); }
-	/* if successful, inb(STAT) returned RESETVAL */
-	if (status_dead == YES)
-		printk(TPQIC02_NAME ": reset failed!\n");
-	else if (verbose)
-		printk(TPQIC02_NAME ": reset successful\n");
-
-	return (status_dead == YES)? TE_DEAD : TE_OK;
+    /* after reset, we will be at BOT (modulo an automatic rewind) */
+    status_eof_detected = NO;
+    status_eom_detected = NO;
+    status_cmd_pending = 0;
+    need_rewind = YES;
+    doing_read = doing_write = NO;
+    ioctl_status.mt_fileno = ioctl_status.mt_blkno = 0;
+    
+    /* de-assert reset */
+    if (QIC02_TAPE_IFC == MOUNTAIN)
+    {
+	outb_p(ctlbits | MTN_QIC02_CTL_RESET_NOT, QIC02_CTL_PORT);
+    }
+    else
+    {
+	outb_p(ctlbits & ~QIC02_CTL_RESET, QIC02_CTL_PORT);
+    }
+    
+    /* KLUDGE FOR G++ BUG */
+    { int stat = inb_p(QIC02_STAT_PORT);
+	status_dead = ((stat & QIC02_STAT_RESETMASK) != QIC02_STAT_RESETVAL); }
+    /* if successful, inb(STAT) returned RESETVAL */
+    if (status_dead == YES)
+    {
+	printk(TPQIC02_NAME ": reset failed!\n");
+    }
+    else if (verbose)
+    {
+	printk(TPQIC02_NAME ": reset successful\n");
+    }
+    
+    return (status_dead == YES)? TE_DEAD : TE_OK;
 } /* tape_reset */
 
 
@@ -1852,9 +1671,10 @@ static void qic02_tape_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 		 * if dma channel hasn't finished last byte yet.
 		 */
 		r = 0;
-/* Skip next ready check for Archive controller because
- * it may be busy reading ahead. Weird. --hhb
- */
+
+	    /* Skip next ready check for Archive controller because
+	     * it may be busy reading ahead. Weird. --hhb
+	     */
 		if (QIC02_TAPE_IFC == WANGTEK)	/* I think this is a drive-dependency, not IFC -- hhb */
 			if (stat & QIC02_STAT_READY) {		/* not ready */
 				tpqputs(TPQD_ALWAYS, "isr: ? Tape controller not ready");
@@ -1892,7 +1712,7 @@ static void qic02_tape_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 
 
 static long long qic02_tape_lseek(struct inode * inode, struct file * file,
-	long long offset, int origin)
+				  long long offset, int origin)
 {
 	return -EINVAL;	/* not supported */
 } /* qic02_tape_lseek */
@@ -1931,145 +1751,187 @@ static long long qic02_tape_lseek(struct inode * inode, struct file * file,
  */
 
 static long qic02_tape_read(struct inode * inode, struct file * filp,
-	char * buf, unsigned long count)
+			    char * buf, unsigned long count)
 {
-	kdev_t dev = inode->i_rdev;
-	unsigned short flags = filp->f_flags;
-	unsigned long bytes_todo, bytes_done, total_bytes_done = 0;
-	int stat;
+    int err;
+    kdev_t dev = inode->i_rdev;
+    unsigned short flags = filp->f_flags;
+    unsigned long bytes_todo, bytes_done, total_bytes_done = 0;
+    int stat;
 
-	if (status_zombie==YES) {
-		tpqputs(TPQD_ALWAYS, "configs not set");		
-		return -ENXIO;
+    if (status_zombie==YES)
+    {
+	tpqputs(TPQD_ALWAYS, "configs not set");		
+	return -ENXIO;
+    }
+
+    if (TP_DIAGS(current_tape_dev))
+      /* can't print a ``long long'' (for filp->f_pos), so chop it */
+      printk(TPQIC02_NAME ": request READ, minor=%x, buf=%p, count=%lx, pos=%lx, flags=%x\n",
+	     MINOR(dev), buf, count, (unsigned long) filp->f_pos, flags);
+    
+    if (count % TAPE_BLKSIZE)	/* Only allow mod 512 bytes at a time. */
+    {
+	tpqputs(TPQD_BLKSZ, "Wrong block size");
+	return -EINVAL;
+    }
+
+    /* Just assume everything is ok. Controller will scream if not. */
+
+    if (status_bytes_wr)	/* Once written, no more reads, 'till after WFM. */
+    {
+	return -EACCES;
+    }
+    
+    /* This is rather ugly because it has to implement a finite state
+     * machine in order to handle the EOF situations properly.
+     */
+    while ((signed)count>=0)
+    {
+	bytes_done = 0;
+	/* see how much fits in the kernel buffer */
+	bytes_todo = TPQBUF_SIZE;
+	if (bytes_todo>count)
+	{
+	    bytes_todo = count;
 	}
-
-	if (TP_DIAGS(current_tape_dev))
-		/* can't print a ``long long'' (for filp->f_pos), so chop it */
-		printk(TPQIC02_NAME ": request READ, minor=%x, buf=%p, count=%lx, pos=%lx, flags=%x\n",
-			MINOR(dev), buf, count, (unsigned long) filp->f_pos, flags);
-
-	if (count % TAPE_BLKSIZE) {	/* Only allow mod 512 bytes at a time. */
-		tpqputs(TPQD_BLKSZ, "Wrong block size");
-		return -EINVAL;
-	}
-
-	/* Just assume everything is ok. Controller will scream if not. */
-
-	if (status_bytes_wr)	/* Once written, no more reads, 'till after WFM. */
-		return -EACCES;
-
-	/* This is rather ugly because it has to implement a finite state
-	 * machine in order to handle the EOF situations properly.
-	 */
-	while ((signed)count>=0) {
-		bytes_done = 0;
-		/* see how much fits in the kernel buffer */
-		bytes_todo = TPQBUF_SIZE;
-		if (bytes_todo>count)
-			bytes_todo = count;
-
-		/* Must ensure that user program sees exactly one EOF token (==0) */
-		if (return_read_eof==YES) {
-			if (TPQDBG(DEBUG))
-				printk("read: return_read_eof==%d, reported_read_eof==%d, total_bytes_done==%lu\n", return_read_eof, reported_read_eof, total_bytes_done);
-
-			if (reported_read_eof==NO) {
-				/* have not yet returned EOF to user program */
-				if (total_bytes_done>0) {
-					return total_bytes_done; /* next time return EOF */
-				} else {
-					reported_read_eof = YES; /* move on next time */
-					return 0;		 /* return EOF */
-				}				
-			} else {
-				/* Application program has already received EOF
-				 * (above), now continue with next file on tape,
-				 * if possible.
-				 * When the FM is reached, EXCEPTION is set,
-				 * causing a sense(). Subsequent read/writes will
-				 * continue after the FM.
-				 */
-/*********** ?????????? this should check for (EOD|NDT), not EOM, 'cause we can read past EW: ************/
-				if (status_eom_detected)
-					/* If EOM, nothing left to read, so keep returning EOFs.
-					 *** should probably set some flag to avoid clearing
-					 *** status_eom_detected through ioctls or something
-					 */
-					return 0;
-				else {
-					/* just eof, there may be more files ahead... */
-					return_read_eof = NO;
-					reported_read_eof = NO;
-					status_eof_detected = NO; /* reset this too */
-					/*fall through*/
-				}
-			}
+	
+	/* Must ensure that user program sees exactly one EOF token (==0) */
+	if (return_read_eof==YES)
+	{
+	    if (TPQDBG(DEBUG))
+	    {
+		printk("read: return_read_eof==%d, reported_read_eof==%d, total_bytes_done==%lu\n", return_read_eof, reported_read_eof, total_bytes_done);
+	    }
+	    
+	    if (reported_read_eof==NO)
+	    {
+		/* have not yet returned EOF to user program */
+		if (total_bytes_done>0)
+		{
+		    return total_bytes_done; /* next time return EOF */
 		}
-
-/*****************************/
-		if (bytes_todo==0)
-			return total_bytes_done;
-
-		if (bytes_todo>0) {
-			/* start reading data */
-			if (is_exception())	/****************************************/
-				tpqputs(TPQD_DMAX, "is_exception() before start_dma()!");
+		else
+		{
+		    reported_read_eof = YES; /* move on next time */
+		    return 0;		 /* return EOF */
+		}				
+	    }
+	    else
+	    {
+		/* Application program has already received EOF
+		 * (above), now continue with next file on tape,
+		 * if possible.
+		 * When the FM is reached, EXCEPTION is set,
+		 * causing a sense(). Subsequent read/writes will
+		 * continue after the FM.
+		 */
+		/*********** ?????????? this should check for (EOD|NDT), not EOM, 'cause we can read past EW: ************/
+		if (status_eom_detected)
+		{
+		    /* If EOM, nothing left to read, so keep returning EOFs.
+		     *** should probably set some flag to avoid clearing
+		     *** status_eom_detected through ioctls or something
+		     */
+		    return 0;
+		}
+		else
+		{
+		    /* just eof, there may be more files ahead... */
+		    return_read_eof = NO;
+		    reported_read_eof = NO;
+		    status_eof_detected = NO; /* reset this too */
+		    /*fall through*/
+		}
+	    }
+	}
+	
+	/*****************************/
+	if (bytes_todo==0)
+	{
+	    return total_bytes_done;
+	}
+	
+	if (bytes_todo>0)
+	{
+	    /* start reading data */
+	    if (is_exception())	/****************************************/
+	    {
+		tpqputs(TPQD_DMAX, "is_exception() before start_dma()!");
+	    }
+	    
 /******************************************************************
  ***** if start_dma() fails because the head is positioned 0 bytes
  ***** before the FM, (causing EXCEPTION to be set) return_read_eof should
  ***** be set to YES, and we should return total_bytes_done, rather than -ENXIO.
  ***** The app should recognize this as an EOF condition.
  ***************************************************************************/
-			stat = start_dma(READ, bytes_todo);
-			if (stat == TE_OK) {
-				/* Wait for transfer to complete, interrupt should wake us */
-				while (dma_mode != 0) {
-					sleep_on(&qic02_tape_transfer);
-				}
-				if (status_error)
-					return_read_eof = YES;
-			} else if (stat != TE_END) {
-				/* should do sense() on error here */
-#if 0
-				return -ENXIO;
-#else
-				printk("Trouble: stat==%02x\n", stat);
-				return_read_eof = YES;
-				/*************** check EOF/EOT handling!!!!!! **/
-#endif
-			}
-			end_dma(&bytes_done);
-			if (bytes_done>bytes_todo) {
-				tpqputs(TPQD_ALWAYS, "read: Oops, read more bytes than requested");
-				return -EIO;
-			}
-			/* copy buffer to user-space in one go */
-			if (bytes_done>0)
-				if (copy_to_user( (void *) buf, (void *) bus_to_virt(buffaddr), 
-						bytes_done))
-					return -EFAULT;
-
-#if 1
-			/* Checks Ton's patch below */
-			if ((return_read_eof == NO) && (status_eof_detected == YES)) {
-				printk(TPQIC02_NAME ": read(): return_read_eof=%d, status_eof_detected=YES. return_read_eof:=YES\n", return_read_eof);
-			}
-#endif
-			if ((bytes_todo != bytes_done) || (status_eof_detected == YES))
-				/* EOF or EOM detected. return EOF next time. */
-				return_read_eof = YES;
-		} /* else: ignore read request for 0 bytes */
-
-		if (bytes_done>0) {
-			status_bytes_rd = YES;
-			buf += bytes_done;
-			filp->f_pos += bytes_done;
-			total_bytes_done += bytes_done;
-			count -= bytes_done;
+	    stat = start_dma(READ, bytes_todo);
+	    if (stat == TE_OK)
+	    {
+		/* Wait for transfer to complete, interrupt should wake us */
+		while (dma_mode != 0)
+		{
+		    sleep_on(&qic02_tape_transfer);
 		}
+		if (status_error)
+		{
+		    return_read_eof = YES;
+		}
+		
+	    }
+	    else if (stat != TE_END)
+	    {
+		/* should do sense() on error here */
+#if 0
+		return -ENXIO;
+#else
+		printk("Trouble: stat==%02x\n", stat);
+		return_read_eof = YES;
+		/*************** check EOF/EOT handling!!!!!! **/
+#endif
+	    }
+	    end_dma(&bytes_done);
+	    if (bytes_done>bytes_todo)
+	    {
+		tpqputs(TPQD_ALWAYS, "read: Oops, read more bytes than requested");
+		return -EIO;
+	    }
+	    /* copy buffer to user-space in one go */
+	    if (bytes_done>0)
+	    {
+		err = copy_to_user( (void *) buf, (void *) bus_to_virt(buffaddr), bytes_done);
+		if (err)
+		{
+		    return -EFAULT;
+		}
+	    }
+#if 1
+	    /* Checks Ton's patch below */
+	    if ((return_read_eof == NO) && (status_eof_detected == YES))
+	    {
+		printk(TPQIC02_NAME ": read(): return_read_eof=%d, status_eof_detected=YES. return_read_eof:=YES\n", return_read_eof);
+	    }
+#endif
+	    if ((bytes_todo != bytes_done) || (status_eof_detected == YES))
+	    {
+		/* EOF or EOM detected. return EOF next time. */
+		return_read_eof = YES;
+	    }
+	    
+	} /* else: ignore read request for 0 bytes */
+
+	if (bytes_done>0)
+	{
+	    status_bytes_rd = YES;
+	    buf += bytes_done;
+	    filp->f_pos += bytes_done;
+	    total_bytes_done += bytes_done;
+	    count -= bytes_done;
 	}
-	tpqputs(TPQD_ALWAYS, "read request for <0 bytes");
-	return -EINVAL;
+    }
+    tpqputs(TPQD_ALWAYS, "read request for <0 bytes");
+    return -EINVAL;
 } /* qic02_tape_read */
 
 
@@ -2102,77 +1964,98 @@ static long qic02_tape_read(struct inode * inode, struct file * filp,
  * tape device again. The driver will detect an exception status in (No Cartridge)
  * and force a rewind. After that tar may continue writing.
  */
-static long qic02_tape_write(struct inode * inode, struct file * filp,
-	const char * buf, unsigned long count)
+static long qic02_tape_write(struct inode * inode, struct file * filp, 
+			     const char * buf, unsigned long count)
 {
-	kdev_t dev = inode->i_rdev;
-	unsigned short flags = filp->f_flags;
-	unsigned long bytes_todo, bytes_done, total_bytes_done = 0;
+    int err;
+    kdev_t dev = inode->i_rdev;
+    unsigned short flags = filp->f_flags;
+    unsigned long bytes_todo, bytes_done, total_bytes_done = 0;
+    
+    if (status_zombie==YES)
+    {
+	tpqputs(TPQD_ALWAYS, "configs not set");		
+	return -ENXIO;
+    }
 
-	if (status_zombie==YES) {
-		tpqputs(TPQD_ALWAYS, "configs not set");		
-		return -ENXIO;
+    if (TP_DIAGS(current_tape_dev))
+    {
+	/* can't print a ``long long'' (for filp->f_pos), so chop it */
+	printk(TPQIC02_NAME ": request WRITE, minor=%x, buf=%p, count=%lx, pos=%lx, flags=%x\n",
+	       MINOR(dev), buf, count, (unsigned long) filp->f_pos, flags);
+    }
+    
+    if (count % TAPE_BLKSIZE) 	/* only allow mod 512 bytes at a time */
+    {
+	tpqputs(TPQD_BLKSZ, "Wrong block size");
+	return -EINVAL;
+    }
+
+    if (mode_access==READ)
+    {
+	tpqputs(TPQD_ALWAYS, "Not in write mode");
+	return -EACCES;
+    }
+
+    /* open() does a sense() and we can assume the tape isn't changed
+     * between open() and release(), so the tperror.exs bits will still
+     * be valid.
+     */
+    if ((tperror.exs & TP_ST0) && (tperror.exs & TP_WRP))
+    {
+	tpqputs(TPQD_ALWAYS, "Cartridge is write-protected.");
+	return -EACCES;	/* don't even try when write protected */
+    }
+      
+    if (doing_read == YES)
+    {
+	terminate_read(0);
+    }
+    
+    while ((signed)count>=0)
+    {
+	/* see how much fits in the kernel buffer */
+	bytes_done = 0;
+	bytes_todo = TPQBUF_SIZE;
+	if (bytes_todo>count)
+	{
+	    bytes_todo = count;
 	}
-
-	if (TP_DIAGS(current_tape_dev))
-		/* can't print a ``long long'' (for filp->f_pos), so chop it */
-		printk(TPQIC02_NAME ": request WRITE, minor=%x, buf=%p, count=%lx, pos=%lx, flags=%x\n",
-			MINOR(dev), buf, count, (unsigned long) filp->f_pos, flags);
-
-	if (count % TAPE_BLKSIZE) {	/* only allow mod 512 bytes at a time */
-		tpqputs(TPQD_BLKSZ, "Wrong block size");
-		return -EINVAL;
-	}
-
-	if (mode_access==READ) {
-		tpqputs(TPQD_ALWAYS, "Not in write mode");
-		return -EACCES;
-	}
-
-	/* open() does a sense() and we can assume the tape isn't changed
-	 * between open() and release(), so the tperror.exs bits will still
-	 * be valid.
-	 */
-	if ((tperror.exs & TP_ST0) && (tperror.exs & TP_WRP)) {
-		tpqputs(TPQD_ALWAYS, "Cartridge is write-protected.");
-		return -EACCES;	/* don't even try when write protected */
-	}
-
-	if (doing_read == YES)
-		terminate_read(0);
-
-	while ((signed)count>=0) {
-		/* see how much fits in the kernel buffer */
-		bytes_done = 0;
-		bytes_todo = TPQBUF_SIZE;
-		if (bytes_todo>count)
-			bytes_todo = count;
 	
-		if (return_write_eof == YES) {
-			/* return_write_eof should be reset on reverse tape movements. */
-
-			if (reported_write_eof==NO) {
-				if (bytes_todo>0) {
-					tpqputs(TPQD_ALWAYS, "partial write");
-					/* partial write signals EOF to user program */
-				}
-				reported_write_eof = YES;
-				return total_bytes_done;
-			} else {
-				return -ENOSPC;		 /* return error */
-			}	
+	if (return_write_eof == YES)
+	{
+	    /* return_write_eof should be reset on reverse tape movements. */
+	    
+	    if (reported_write_eof==NO)
+	    {
+		if (bytes_todo>0)
+		{
+		    tpqputs(TPQD_ALWAYS, "partial write");
+		    /* partial write signals EOF to user program */
 		}
-
-		/* Quit when done. */
-		if (bytes_todo==0)
-			return total_bytes_done;
-
-
-		/* copy from user to DMA buffer and initiate transfer. */
-		if (bytes_todo>0) {
-			if (copy_from_user( (void *) bus_to_virt(buffaddr), 
-					(const void *) buf, bytes_todo))
-				return -EFAULT;
+		reported_write_eof = YES;
+		return total_bytes_done;
+	    }
+	    else
+	    {
+		return -ENOSPC;		 /* return error */
+	    }	
+	}
+	
+	/* Quit when done. */
+	if (bytes_todo==0)
+	{
+	    return total_bytes_done;
+	}
+	
+	/* copy from user to DMA buffer and initiate transfer. */
+	if (bytes_todo>0)
+	{
+	    err = copy_from_user( (void *) bus_to_virt(buffaddr), (const void *) buf, bytes_todo);
+	    if (err)
+	    {
+		return -EFAULT;
+	    }
 
 /****************** similar problem with read() at FM could happen here at EOT.
  ******************/
@@ -2180,62 +2063,75 @@ static long qic02_tape_write(struct inode * inode, struct file * filp,
 /***** if at EOT, 0 bytes can be written. start_dma() will
  ***** fail and write() will return ENXIO error
  *****/
-			if (start_dma(WRITE, bytes_todo) != TE_OK) {
-				tpqputs(TPQD_ALWAYS, "write: start_dma() failed");
-				/* should do sense() on error here */
-				return -ENXIO;	/*********** FIXTHIS **************/
-			}
+	    if (start_dma(WRITE, bytes_todo) != TE_OK)
+	    {
+		tpqputs(TPQD_ALWAYS, "write: start_dma() failed");
+		/* should do sense() on error here */
+		return -ENXIO;	/*********** FIXTHIS **************/
+	    }
 
-			/* Wait for write to complete, interrupt should wake us. */
-			while ((status_error == 0) && (dma_mode != 0)) {
-				sleep_on(&qic02_tape_transfer);
-			}
+	    /* Wait for write to complete, interrupt should wake us. */
+	    while ((status_error == 0) && (dma_mode != 0))
+	    {
+		sleep_on(&qic02_tape_transfer);
+	    }
 
-			end_dma(&bytes_done);
-			if (bytes_done>bytes_todo) {
-				tpqputs(TPQD_ALWAYS, "write: Oops, wrote more bytes than requested");
-				return -EIO;
-			}
-			/* If the dma-transfer was aborted because of an exception,
-			 * status_error will have been set in the interrupt handler.
-			 * Then end_dma() will do a sense().
-			 * If the exception was EXC_EOM, the EW-hole was encountered
-			 * and two more blocks could be written. For the time being we'll
-			 * just consider this to be the EOT.
-			 * Otherwise, something Bad happened, such as the maximum number
-			 * of block-rewrites was exceeded. [e.g. A very bad spot on tape was
-			 * encountered. Normally short dropouts are compensated for by
-			 * rewriting the block in error, up to 16 times. I'm not sure
-			 * QIC-24 drives can do this.]
-			 */
-			if (status_error) {
-				if (status_eom_detected == YES)	{
-					tpqputs(TPQD_ALWAYS, "write: EW detected");
-					return_write_eof = YES;
-				} else {
-					/* probably EXC_RWA */
-					tpqputs(TPQD_ALWAYS, "write: dma: error in writing");
-					return -EIO;
-				}
-			}
-			if (bytes_todo != bytes_done)
-				/* EOF or EOM detected. return EOT next time. */
-				return_write_eof = YES;
+	    end_dma(&bytes_done);
+	    if (bytes_done>bytes_todo)
+	    {
+		tpqputs(TPQD_ALWAYS, "write: Oops, wrote more bytes than requested");
+		return -EIO;
+	    }
+	    /* If the dma-transfer was aborted because of an exception,
+	     * status_error will have been set in the interrupt handler.
+	     * Then end_dma() will do a sense().
+	     * If the exception was EXC_EOM, the EW-hole was encountered
+	     * and two more blocks could be written. For the time being we'll
+	     * just consider this to be the EOT.
+	     * Otherwise, something Bad happened, such as the maximum number
+	     * of block-rewrites was exceeded. [e.g. A very bad spot on tape was
+	     * encountered. Normally short dropouts are compensated for by
+	     * rewriting the block in error, up to 16 times. I'm not sure
+	     * QIC-24 drives can do this.]
+	     */
+	    if (status_error)
+	    {
+		if (status_eom_detected == YES)
+		{
+		    tpqputs(TPQD_ALWAYS, "write: EW detected");
+		    return_write_eof = YES;
 		}
-		/* else: ignore write request for 0 bytes. */
-
-		if (bytes_done>0) {
-			status_bytes_wr = YES;
-			buf += bytes_done;
-			filp->f_pos += bytes_done;
-			total_bytes_done += bytes_done;
-			count -= bytes_done;
+		else
+		{
+		    /* probably EXC_RWA */
+		    tpqputs(TPQD_ALWAYS, "write: dma: error in writing");
+		    return -EIO;
 		}
+	    }
+	    if (bytes_todo != bytes_done)
+	    {
+		/* EOF or EOM detected. return EOT next time. */
+		return_write_eof = YES;
+	    }
 	}
-	tpqputs(TPQD_ALWAYS, "write request for <0 bytes");
-	if (TPQDBG(DEBUG))
-		printk(TPQIC02_NAME ": status_bytes_wr %x, buf %p, total_bytes_done %lx, count %lx\n", status_bytes_wr, buf, total_bytes_done, count);
-	return -EINVAL;
+	/* else: ignore write request for 0 bytes. */
+	
+	if (bytes_done>0)
+	{
+	    status_bytes_wr = YES;
+	    buf += bytes_done;
+	    filp->f_pos += bytes_done;
+	    total_bytes_done += bytes_done;
+	    count -= bytes_done;
+	}
+    }
+    
+    tpqputs(TPQD_ALWAYS, "write request for <0 bytes");
+    if (TPQDBG(DEBUG))
+    {
+	printk(TPQIC02_NAME ": status_bytes_wr %x, buf %p, total_bytes_done %lx, count %lx\n", status_bytes_wr, buf, total_bytes_done, count);
+    }
+    return -EINVAL;
 } /* qic02_tape_write */
 
 
@@ -2251,344 +2147,388 @@ static long qic02_tape_write(struct inode * inode, struct file * filp,
  * remembered values, rewind the tape and set the required density.
  * Don't rewind if the minor bits specify density 0.
  */
+
 static int qic02_tape_open(struct inode * inode, struct file * filp)
 {
-	kdev_t dev = inode->i_rdev;
-	unsigned short flags = filp->f_flags;
-	unsigned short dens = 0;
-	int s;
+    static int qic02_tape_open_no_use_count(struct inode *, struct file *);
+    int open_error;
+
+    open_error = qic02_tape_open_no_use_count(inode, filp);
+    if (!open_error)
+    {
+	MOD_INC_USE_COUNT;
+    }
+    return open_error;
+}
+
+static int qic02_tape_open_no_use_count(struct inode * inode, struct file * filp)
+{
+    kdev_t dev = inode->i_rdev;
+    unsigned short flags = filp->f_flags;
+    unsigned short dens = 0;
+    int s;
 
 
-	if (TP_DIAGS(dev)) {
-		printk("qic02_tape_open: dev=%s, flags=%x     ",
-		       kdevname(dev), flags);
+    if (TP_DIAGS(dev))
+    {
+	printk("qic02_tape_open: dev=%s, flags=%x     ",
+	       kdevname(dev), flags);
+    }
+
+    if (MINOR(dev)==255)	/* special case for resetting */
+    {
+	if (suser())
+	{
+	    return (tape_reset(1)==TE_OK) ? -EAGAIN : -ENXIO;
 	}
-
-#ifdef MODULE
-       MOD_INC_USE_COUNT;
-#endif
-
-	if (MINOR(dev)==255) {	/* special case for resetting */
-#ifdef MODULE
-                MOD_DEC_USE_COUNT;
-#endif
-		if (suser())
-			return (tape_reset(1)==TE_OK) ? -EAGAIN : -ENXIO;
-		else
-			return -EPERM;
+	else
+	{
+	    return -EPERM;
 	}
-
-	if (status_dead==YES)
-		/* Allow `mt reset' ioctl() even when already open()ed. */
-		return 0;
-
+    }
+    
+    if (status_dead==YES)
+    {
+	/* Allow `mt reset' ioctl() even when already open()ed. */
+	return 0;
+    }
+    
 	/* Only one at a time from here on... */
-	if (filp->f_count>1) {	/* filp->f_count==1 for the first open() */
-#ifdef MODULE
-                MOD_DEC_USE_COUNT;
-#endif
-		return -EBUSY;
-	}
+    if (filp->f_count>1) 	/* filp->f_count==1 for the first open() */
+    {
+	return -EBUSY;
+    }
 
-	if (status_zombie==YES)
-		/* no irq/dma/port stuff allocated yet, no reset done
-		 * yet, so return until MTSETCONFIG has been done.
-		 */
-		return 0;
-
-	status_bytes_rd = NO;
-	status_bytes_wr = NO;
-
-	return_read_eof = NO;	/********????????????????*****/
-	return_write_eof = (status_eot_detected)? YES : NO;
-
-	/* Clear this in case user app close()d before reading EOF token */
-	status_eof_detected = NO;
-
-	reported_read_eof = NO;
-	reported_write_eof = NO;
-
-
-	switch (flags & O_ACCMODE) {
-		case O_RDONLY:
-			mode_access = READ;
-			break;
-		case O_WRONLY:	/* Fallthru... Strictly speaking this is not correct... */
-		case O_RDWR:	/* Reads are allowed as long as nothing is written */
-			mode_access = WRITE;
-			break;
-	}
-
-	/* This is to avoid tape-changed problems (TP_CNI exception).
-	 *
-	 * Since removing the cartridge will not raise an exception,
-	 * we always do a tp_sense() to make sure we have the proper
-	 * CNI status, the 2150L may need an additional sense.... - Eddy
+    if (status_zombie==YES)
+    {
+	/* no irq/dma/port stuff allocated yet, no reset done
+	 * yet, so return until MTSETCONFIG has been done.
 	 */
-	s = tp_sense(TP_WRP|TP_EOM|TP_BOM|TP_CNI|TP_EOR);
+	return 0;
+    }
+    
+    status_bytes_rd = NO;
+    status_bytes_wr = NO;
+    
+    return_read_eof = NO;	/********????????????????*****/
+    return_write_eof = (status_eot_detected)? YES : NO;
 
-	if (s == TE_OK)
-		/* Try to clear cartridge-changed status for Archive-2150L */
-		if ((tperror.exs & TP_ST0) && (tperror.exs & TP_CNI))
-			s = tp_sense(TP_WRP|TP_EOM|TP_BOM|TP_CNI|TP_EOR);
+    /* Clear this in case user app close()d before reading EOF token */
+    status_eof_detected = NO;
 
-	if (s != TE_OK) {
-		tpqputs(TPQD_ALWAYS, "open: sense() failed");
-#ifdef MODULE
-                MOD_DEC_USE_COUNT;
-#endif
-		return -EIO;
+    reported_read_eof = NO;
+    reported_write_eof = NO;
+
+
+    switch (flags & O_ACCMODE)
+    {
+     case O_RDONLY:
+	mode_access = READ;
+	break;
+     case O_WRONLY:	/* Fallthru... Strictly speaking this is not correct... */
+     case O_RDWR:	/* Reads are allowed as long as nothing is written */
+	mode_access = WRITE;
+	break;
+    }
+    
+    /* This is to avoid tape-changed problems (TP_CNI exception).
+     *
+     * Since removing the cartridge will not raise an exception,
+     * we always do a tp_sense() to make sure we have the proper
+     * CNI status, the 2150L may need an additional sense.... - Eddy
+     */
+    s = tp_sense(TP_WRP|TP_EOM|TP_BOM|TP_CNI|TP_EOR);
+    
+    if (s == TE_OK)
+    {
+	/* Try to clear cartridge-changed status for Archive-2150L */
+	if ((tperror.exs & TP_ST0) && (tperror.exs & TP_CNI))
+	{
+	    s = tp_sense(TP_WRP|TP_EOM|TP_BOM|TP_CNI|TP_EOR);
 	}
+    }
+    
+    if (s != TE_OK)
+    {
+	tpqputs(TPQD_ALWAYS, "open: sense() failed");
+	return -EIO;
+    }
 
-	/* exception bits should be up-to-date now, so check for
-	 * tape presence and exit if absent.
-	 * Even `mt stat' will fail without a tape.
+    /* exception bits should be up-to-date now, so check for
+     * tape presence and exit if absent.
+     * Even `mt stat' will fail without a tape.
+     */
+    if ((tperror.exs & TP_ST0) && (tperror.exs & TP_CNI))
+    {
+	tpqputs(TPQD_ALWAYS, "No tape present.");
+	return -EIO;
+    }
+
+    /* At this point we can assume that a tape is present and
+     * that it will remain present until release() is called.
+     */
+
+    /* not allowed to do QCMD_DENS_* unless tape is rewound */
+    if ((TP_DENS(dev)!=0) && (TP_DENS(current_tape_dev) != TP_DENS(dev)))
+    {
+	/* force rewind if minor bits have changed,
+	 * i.e. user wants to use tape in different format.
+	 * [assuming single drive operation]
 	 */
-	if ((tperror.exs & TP_ST0) && (tperror.exs & TP_CNI)) {
-		tpqputs(TPQD_ALWAYS, "No tape present.");
-#ifdef MODULE
-                MOD_DEC_USE_COUNT;
-#endif
-		return -EIO;
+	if (TP_HAVE_DENS)
+	{
+	    tpqputs(TPQD_REWIND, "Density minor bits have changed. Forcing rewind.");
+	    need_rewind = YES;
 	}
-
-	/* At this point we can assume that a tape is present and
-	 * that it will remain present until release() is called.
+    }
+    else
+    {
+	/* density bits still the same, but TP_DIAGS bit 
+	 * may have changed.
 	 */
-
-	/* not allowed to do QCMD_DENS_* unless tape is rewound */
-	if ((TP_DENS(dev)!=0) && (TP_DENS(current_tape_dev) != TP_DENS(dev))) {
-		/* force rewind if minor bits have changed,
-		 * i.e. user wants to use tape in different format.
-		 * [assuming single drive operation]
-		 */
-		if (TP_HAVE_DENS) {
-			tpqputs(TPQD_REWIND, "Density minor bits have changed. Forcing rewind.");
-			need_rewind = YES;
-		}
-	} else {
-		/* density bits still the same, but TP_DIAGS bit 
-		 * may have changed.
-		 */
-		current_tape_dev = dev;
+	current_tape_dev = dev;
+    }
+    
+    if (need_rewind == YES)  /***************** CHECK THIS!!!!!!!! **********/
+    {
+	s = do_qic_cmd(QCMD_REWIND, TIM_R);
+	if (s != 0)
+	{
+	    tpqputs(TPQD_ALWAYS, "open: rewind failed");
+	    return -EIO;
 	}
-
-	if (need_rewind == YES) { /***************** CHECK THIS!!!!!!!! **********/
-		s = do_qic_cmd(QCMD_REWIND, TIM_R);
-		if (s != 0) {
-			tpqputs(TPQD_ALWAYS, "open: rewind failed");
-#ifdef MODULE
-			MOD_DEC_USE_COUNT;
-#endif
-			return -EIO;
-		}
-	}
+    }
 
 
 /* Note: After a reset command, the controller will rewind the tape
  *	 just before performing any tape movement operation! ************ SO SET need_rewind flag!!!!!
  */ 
-	if (status_dead==YES) {
-		tpqputs(TPQD_ALWAYS, "open: tape dead, attempting reset");
-		if (tape_reset(1)!=TE_OK) {
-#ifdef MODULE
-			MOD_DEC_USE_COUNT;
-#endif
-			return -ENXIO;
-		} else {
-			status_dead = NO;
-			if (tp_sense(~(TP_ST1|TP_ILL)) != TE_OK) {
-				tpqputs(TPQD_ALWAYS, "open: tp_sense() failed\n");
-				status_dead = YES;	/* try reset next time */
-#ifdef MODULE
-				MOD_DEC_USE_COUNT;
-#endif
-				return -EIO;
-			}
-		}
+    if (status_dead==YES)
+    {
+	tpqputs(TPQD_ALWAYS, "open: tape dead, attempting reset");
+	if (tape_reset(1)!=TE_OK)
+	{
+	    return -ENXIO;
 	}
-
-	/* things should be ok, once we get here */
-
-
-	/* set density: only allowed when TP_BOM status bit is set,
-	 * so we must have done a rewind by now. If not, just skip over.
-	 * Only give set density command when minor bits have changed.
-	 */
-	if (TP_DENS(current_tape_dev) == TP_DENS(dev) )
-		return 0;
-
-	current_tape_dev = dev;
-	need_rewind = NO;
-	if (TP_HAVE_DENS)
-		dens = TP_DENS(dev);
-
-	if (dens < sizeof(format_names)/sizeof(char *))
-		printk(TPQIC02_NAME ": format: %s%s\n", (dens!=0)? "QIC-" : "", format_names[dens]);
 	else
-		tpqputs(TPQD_REWIND, "Wait for retensioning...");
-
-	switch (TP_DENS(dev)) {
-		case 0: /* Minor 0 is for drives without set-density support */
-			s = 0;
-			break;
-		case 1:
-			s = do_qic_cmd(QCMD_DENS_11, TIM_S);
-			break;
-		case 2:
-			s = do_qic_cmd(QCMD_DENS_24, TIM_S);
-			break;
-		case 3:
-			s = do_qic_cmd(QCMD_DENS_120, TIM_S);
-			break;
-		case 4:
-			s = do_qic_cmd(QCMD_DENS_150, TIM_S);
-			break;
-		case 5:
-			s = do_qic_cmd(QCMD_DENS_300, TIM_S);
-			break;
-		case 6:
-			s = do_qic_cmd(QCMD_DENS_600, TIM_S);
-			break;
-		default:  /* otherwise do a retension before anything else */
-			s = do_qic_cmd(QCMD_RETEN, TIM_R);
-	}
-	if (s != 0) {
-		status_dead = YES;	/* force reset */
-		current_tape_dev = 0; /* earlier 0xff80 */
-#ifdef MODULE
-		MOD_DEC_USE_COUNT;
-#endif
+	{
+	    status_dead = NO;
+	    if (tp_sense(~(TP_ST1|TP_ILL)) != TE_OK)
+	    {
+		tpqputs(TPQD_ALWAYS, "open: tp_sense() failed\n");
+		status_dead = YES;	/* try reset next time */
 		return -EIO;
+	    }
 	}
+    }
+    
+    /* things should be ok, once we get here */
+    
 
+    /* set density: only allowed when TP_BOM status bit is set,
+     * so we must have done a rewind by now. If not, just skip over.
+     * Only give set density command when minor bits have changed.
+     */
+    if (TP_DENS(current_tape_dev) == TP_DENS(dev) )
+    {
 	return 0;
+    }
+    
+    current_tape_dev = dev;
+    need_rewind = NO;
+    if (TP_HAVE_DENS)
+    {
+	dens = TP_DENS(dev);
+    }
+    
+    if (dens < sizeof(format_names)/sizeof(char *))
+    {
+	printk(TPQIC02_NAME ": format: %s%s\n", (dens!=0)? "QIC-" : "", format_names[dens]);
+    }
+    else
+    {
+	tpqputs(TPQD_REWIND, "Wait for retensioning...");
+    }
+    
+    switch (TP_DENS(dev))
+    {
+     case 0: /* Minor 0 is for drives without set-density support */
+	s = 0;
+	break;
+     case 1:
+	s = do_qic_cmd(QCMD_DENS_11, TIM_S);
+	break;
+     case 2:
+	s = do_qic_cmd(QCMD_DENS_24, TIM_S);
+	break;
+     case 3:
+	s = do_qic_cmd(QCMD_DENS_120, TIM_S);
+	break;
+     case 4:
+	s = do_qic_cmd(QCMD_DENS_150, TIM_S);
+	break;
+     case 5:
+	s = do_qic_cmd(QCMD_DENS_300, TIM_S);
+	break;
+     case 6:
+	s = do_qic_cmd(QCMD_DENS_600, TIM_S);
+	break;
+     default:  /* otherwise do a retension before anything else */
+	s = do_qic_cmd(QCMD_RETEN, TIM_R);
+    }
+    if (s != 0)
+    {
+	status_dead = YES;	/* force reset */
+	current_tape_dev = 0; /* earlier 0xff80 */
+	return -EIO;
+    }
+    
+    return 0;
 } /* qic02_tape_open */
 
 
 static void qic02_tape_release(struct inode * inode, struct file * filp)
 {
-	kdev_t dev = inode->i_rdev;
+    kdev_t dev = inode->i_rdev;
 
-	if (TP_DIAGS(dev))
-		printk("qic02_tape_release: dev=%s\n",
-		       kdevname(dev));
-
-	if (status_zombie==YES)		/* don't rewind in zombie mode */
-#ifdef MODULE
-		MOD_DEC_USE_COUNT;
-#endif
-		return;
-
+    if (TP_DIAGS(dev))
+    {
+	printk("qic02_tape_release: dev=%s\n",  kdevname(dev));
+    }
+    
+    if (status_zombie==NO)		/* don't rewind in zombie mode */
+    {
 	/* Terminate any pending write cycle. Terminating the read-cycle
 	 * is delayed until it is required to do so for a new command.
 	 */
 	terminate_write(-1);
-
+	
 	if (status_dead==YES)
-		tpqputs(TPQD_ALWAYS, "release: device dead!?");
-
- 	/* Rewind only if minor number requires it AND 
+	{
+	    tpqputs(TPQD_ALWAYS, "release: device dead!?");
+	}
+	
+	/* Rewind only if minor number requires it AND 
 	 * read/writes have been done. ************* IS THIS CORRECT??????????
 	 */
-	if ((TP_REWCLOSE(dev)) && (status_bytes_rd | status_bytes_wr)) {
-		tpqputs(TPQD_REWIND, "release: Doing rewind...");
-		(void) do_qic_cmd(QCMD_REWIND, TIM_R);
+	if ((TP_REWCLOSE(dev)) && (status_bytes_rd | status_bytes_wr))
+	{
+	    tpqputs(TPQD_REWIND, "release: Doing rewind...");
+	    (void) do_qic_cmd(QCMD_REWIND, TIM_R);
 	}
+    }
 #ifdef MODULE
-	MOD_DEC_USE_COUNT;
+    MOD_DEC_USE_COUNT;
 #endif
-	return;
+    return;
 } /* qic02_tape_release */
 
 
 #ifdef CONFIG_QIC02_DYNCONF
 /* Set masks etc. based on the interface card type. */
-int update_ifc_masks(int ifc)
+static int update_ifc_masks(int ifc)
 {
-	QIC02_TAPE_IFC = ifc;
+    QIC02_TAPE_IFC = ifc;
 
-	if ((QIC02_TAPE_IFC == WANGTEK) || (QIC02_TAPE_IFC == EVEREX)) {
-		QIC02_STAT_PORT = QIC02_TAPE_PORT;
-		QIC02_CTL_PORT = QIC02_TAPE_PORT;
-		QIC02_CMD_PORT = QIC02_TAPE_PORT+1;
-		QIC02_DATA_PORT = QIC02_TAPE_PORT+1;
-		QIC02_STAT_READY = WT_QIC02_STAT_READY;
-		QIC02_STAT_EXCEPTION = WT_QIC02_STAT_EXCEPTION;
-		QIC02_STAT_MASK = WT_QIC02_STAT_MASK;
-
-		QIC02_STAT_RESETMASK = WT_QIC02_STAT_RESETMASK;
-		QIC02_STAT_RESETVAL = WT_QIC02_STAT_RESETVAL;
-
-		QIC02_CTL_RESET = WT_QIC02_CTL_RESET;
-		QIC02_CTL_REQUEST = WT_QIC02_CTL_REQUEST;
+    if ((QIC02_TAPE_IFC == WANGTEK) || (QIC02_TAPE_IFC == EVEREX))
+    {
+	QIC02_STAT_PORT = QIC02_TAPE_PORT;
+	QIC02_CTL_PORT = QIC02_TAPE_PORT;
+	QIC02_CMD_PORT = QIC02_TAPE_PORT+1;
+	QIC02_DATA_PORT = QIC02_TAPE_PORT+1;
+	QIC02_STAT_READY = WT_QIC02_STAT_READY;
+	QIC02_STAT_EXCEPTION = WT_QIC02_STAT_EXCEPTION;
+	QIC02_STAT_MASK = WT_QIC02_STAT_MASK;
+	
+	QIC02_STAT_RESETMASK = WT_QIC02_STAT_RESETMASK;
+	QIC02_STAT_RESETVAL = WT_QIC02_STAT_RESETVAL;
+	
+	QIC02_CTL_RESET = WT_QIC02_CTL_RESET;
+	QIC02_CTL_REQUEST = WT_QIC02_CTL_REQUEST;
  
-		if (QIC02_TAPE_DMA == 3)
-			WT_CTL_DMA = WT_CTL_DMA3;
-		else if (QIC02_TAPE_DMA == 1)
-			WT_CTL_DMA = WT_CTL_DMA1;
-		else {
-			tpqputs(TPQD_ALWAYS, "Unsupported or incorrect DMA channel");
-			return -EIO;
-		} 
-
-		if (QIC02_TAPE_IFC == EVEREX) {
-			/* Everex is a special case for Wangtek (actually
-			 * it's the other way 'round, but I saw Wangtek first)
-			 */
-			if (QIC02_TAPE_DMA==3)
-				WT_CTL_DMA = WT_CTL_DMA1;
-			/* Fixup the kernel copy of the IFC type to that
-			 * we don't have to distinguish between Wangtek and
-			 * and Everex at runtime.
-			 */
-			QIC02_TAPE_IFC = WANGTEK;
-		}
-	} else if (QIC02_TAPE_IFC == ARCHIVE) {
-		QIC02_STAT_PORT = QIC02_TAPE_PORT+1;
-		QIC02_CTL_PORT = QIC02_TAPE_PORT+1;
-		QIC02_CMD_PORT = QIC02_TAPE_PORT;
-		QIC02_DATA_PORT = QIC02_TAPE_PORT;
-		QIC02_STAT_READY = AR_QIC02_STAT_READY;
-		QIC02_STAT_EXCEPTION  = AR_QIC02_STAT_EXCEPTION;
-		QIC02_STAT_MASK = AR_QIC02_STAT_MASK;
-
-		QIC02_STAT_RESETMASK = AR_QIC02_STAT_RESETMASK;
-		QIC02_STAT_RESETVAL = AR_QIC02_STAT_RESETVAL;
-
-		QIC02_CTL_RESET = AR_QIC02_CTL_RESET;
-		QIC02_CTL_REQUEST = AR_QIC02_CTL_REQUEST;
- 
-		if (QIC02_TAPE_DMA > 3) {
-			tpqputs(TPQD_ALWAYS, "Unsupported or incorrect DMA channel");
-			return -EIO;
-		} 
-	} else if (QIC02_TAPE_IFC == MOUNTAIN) {
-		QIC02_STAT_PORT = QIC02_TAPE_PORT+1;
-		QIC02_CTL_PORT = QIC02_TAPE_PORT+1;
-		QIC02_CMD_PORT = QIC02_TAPE_PORT;
-		QIC02_DATA_PORT = QIC02_TAPE_PORT;
-
-		QIC02_STAT_READY = MTN_QIC02_STAT_READY;
-		QIC02_STAT_EXCEPTION  = MTN_QIC02_STAT_EXCEPTION;
-		QIC02_STAT_MASK = MTN_QIC02_STAT_MASK;
-
-		QIC02_STAT_RESETMASK = MTN_QIC02_STAT_RESETMASK;
-		QIC02_STAT_RESETVAL = MTN_QIC02_STAT_RESETVAL;
-
-		QIC02_CTL_RESET = MTN_QIC02_CTL_RESET;
-		QIC02_CTL_REQUEST = MTN_QIC02_CTL_REQUEST;
- 
-		if (QIC02_TAPE_DMA > 3) {
-			tpqputs(TPQD_ALWAYS, "Unsupported or incorrect DMA channel");
-			return -EIO;
-		} 
-	} else {
-		tpqputs(TPQD_ALWAYS, "Invalid interface type");
-		return -ENXIO;
+	if (QIC02_TAPE_DMA == 3)
+	{
+	    WT_CTL_DMA = WT_CTL_DMA3;
 	}
-	return 0;
-} /* update_ifc-masks */
+	else if (QIC02_TAPE_DMA == 1)
+	{
+	    WT_CTL_DMA = WT_CTL_DMA1;
+	}
+	else
+	{
+	    tpqputs(TPQD_ALWAYS, "Unsupported or incorrect DMA channel");
+	    return -EIO;
+	} 
+
+	if (QIC02_TAPE_IFC == EVEREX)
+	{
+	    /* Everex is a special case for Wangtek (actually
+	     * it's the other way 'round, but I saw Wangtek first)
+	     */
+	    if (QIC02_TAPE_DMA==3)
+	    {
+		WT_CTL_DMA = WT_CTL_DMA1;
+	    }
+	    
+	    /* Fixup the kernel copy of the IFC type to that
+	     * we don't have to distinguish between Wangtek and
+	     * and Everex at runtime.
+	     */
+	    QIC02_TAPE_IFC = WANGTEK;
+	}
+    }
+    else if (QIC02_TAPE_IFC == ARCHIVE)
+    {
+	QIC02_STAT_PORT = QIC02_TAPE_PORT+1;
+	QIC02_CTL_PORT = QIC02_TAPE_PORT+1;
+	QIC02_CMD_PORT = QIC02_TAPE_PORT;
+	QIC02_DATA_PORT = QIC02_TAPE_PORT;
+	QIC02_STAT_READY = AR_QIC02_STAT_READY;
+	QIC02_STAT_EXCEPTION  = AR_QIC02_STAT_EXCEPTION;
+	QIC02_STAT_MASK = AR_QIC02_STAT_MASK;
+	
+	QIC02_STAT_RESETMASK = AR_QIC02_STAT_RESETMASK;
+	QIC02_STAT_RESETVAL = AR_QIC02_STAT_RESETVAL;
+	
+	QIC02_CTL_RESET = AR_QIC02_CTL_RESET;
+	QIC02_CTL_REQUEST = AR_QIC02_CTL_REQUEST;
+	
+	if (QIC02_TAPE_DMA > 3)
+	{
+	    tpqputs(TPQD_ALWAYS, "Unsupported or incorrect DMA channel");
+	    return -EIO;
+	} 
+    }
+    else if (QIC02_TAPE_IFC == MOUNTAIN)
+    {
+	QIC02_STAT_PORT = QIC02_TAPE_PORT+1;
+	QIC02_CTL_PORT = QIC02_TAPE_PORT+1;
+	QIC02_CMD_PORT = QIC02_TAPE_PORT;
+	QIC02_DATA_PORT = QIC02_TAPE_PORT;
+	
+	QIC02_STAT_READY = MTN_QIC02_STAT_READY;
+	QIC02_STAT_EXCEPTION  = MTN_QIC02_STAT_EXCEPTION;
+	QIC02_STAT_MASK = MTN_QIC02_STAT_MASK;
+	
+	QIC02_STAT_RESETMASK = MTN_QIC02_STAT_RESETMASK;
+	QIC02_STAT_RESETVAL = MTN_QIC02_STAT_RESETVAL;
+	
+	QIC02_CTL_RESET = MTN_QIC02_CTL_RESET;
+	QIC02_CTL_REQUEST = MTN_QIC02_CTL_REQUEST;
+	
+	if (QIC02_TAPE_DMA > 3)
+	{
+	    tpqputs(TPQD_ALWAYS, "Unsupported or incorrect DMA channel");
+	    return -EIO;
+	} 
+    }
+    else
+    {
+	tpqputs(TPQD_ALWAYS, "Invalid interface type");
+	return -ENXIO;
+    }
+    return qic02_get_resources();
+} /* update_ifc_masks */
 #endif
 
 
@@ -2596,209 +2536,207 @@ int update_ifc_masks(int ifc)
 static int qic02_tape_ioctl(struct inode * inode, struct file * filp, 
 		     unsigned int iocmd, unsigned long ioarg)
 {
-	int error;
-	int dev_maj = MAJOR(inode->i_rdev);
-	int c;
-	struct mtop operation;
-	char *stp, *argp;
-	unsigned char blk_addr[6];
-	struct mtpos ioctl_tell;
+    int error;
+    int dev_maj = MAJOR(inode->i_rdev);
+    int c;
+    struct mtop operation;
+    unsigned char blk_addr[6];
+    struct mtpos ioctl_tell;
+    
 
+    if (TP_DIAGS(current_tape_dev))
+    {
+	printk(TPQIC02_NAME ": ioctl(%4x, %4x, %4lx)\n", dev_maj, iocmd, ioarg);
+    }
+    
+    if (!inode || !ioarg)
+    {
+	return -EINVAL;
+    }
+    
+    /* check iocmd first */
 
-	if (TP_DIAGS(current_tape_dev))
-		printk(TPQIC02_NAME ": ioctl(%4x, %4x, %4lx)\n", dev_maj, iocmd, ioarg);
+    if (dev_maj != QIC02_TAPE_MAJOR)
+    {
+	printk(TPQIC02_NAME ": Oops! Wrong device?\n");
+	/* A panic() would be appropriate here */
+	return -ENODEV;
+    }
 
-	if (!inode || !ioarg)
-		return -EINVAL;
-
-	/* check iocmd first */
-
-	if (dev_maj != QIC02_TAPE_MAJOR) {
-		printk(TPQIC02_NAME ": Oops! Wrong device?\n");
-		/* A panic() would be appropriate here */
-		return -ENODEV;
-	}
-
-	c = iocmd & IOCCMD_MASK;
-
-#ifdef DDIOCSDBG
-	/* Check for DDI Debug Control, contributed by FvK, edited by HHB. */
-	if (c == DDIOCSDBG) {
-		if (!suser())
-			return -EPERM;
-		error = get_user(c, (int *) ioarg);
-		if (error)
-			return error;
-		if (c==0) {
-			QIC02_TAPE_DEBUG = 0;
-			return 0;
-		}
-		if ((c>=1) && (c<=32)) {
-			QIC02_TAPE_DEBUG |= (1 << (c-1));
-			return 0;
-		}
-		if (c >= 128) {
-			QIC02_TAPE_DEBUG &= ~(1 << (c - 128));
-			return 0;
-		}
-		return -EINVAL;
-	}
-#endif
+    c = _IOC_NR(iocmd);
 
 #ifdef CONFIG_QIC02_DYNCONF
-	if (c == (MTIOCGETCONFIG & IOCCMD_MASK)) {
-		if (((iocmd & IOCSIZE_MASK) >> IOCSIZE_SHIFT) != sizeof(struct mtconfiginfo)) {
-			tpqputs(TPQD_ALWAYS, "sizeof(struct mtconfiginfo) does not match!");
-			return -EFAULT;
-		}
+    if (c == _IOC_NR(MTIOCGETCONFIG))
+    {
+	CHECK_IOC_SIZE(mtconfiginfo);
 
-		/* check for valid user address and copy current settings to user space */
-		stp = (char *) &qic02_tape_dynconf;
-		argp = (char *) ioarg;
-		if (copy_to_user(stp, argp, sizeof(qic02_tape_dynconf)))
-			return -EFAULT;
-		return 0;
-
-	} else if (c == (MTIOCSETCONFIG & IOCCMD_MASK)) {
-		static int qic02_get_resources(void), qic02_release_resources(void);
-
-		/* One should always do a MTIOCGETCONFIG first, then update
-		 * user-settings, then write back with MTIOCSETCONFIG.
-		 * Re-open() the device before actual use to make sure
-		 * everything is initialized.
-		 */
-		if (((iocmd & IOCSIZE_MASK) >> IOCSIZE_SHIFT) != sizeof(struct mtconfiginfo)) {
-			tpqputs(TPQD_ALWAYS, "sizeof(struct mtconfiginfo) does not match!");
-			return -EFAULT;
-		}
-		if (!suser())
-			return -EPERM;
-		if ((doing_read!=NO) || (doing_write!=NO))
-			return -EBUSY;
-
-		/* copy struct from user space to kernel space */
-		stp = (char *) &qic02_tape_dynconf;
-		argp = (char *) ioarg;
-		if (copy_from_user(stp, argp, sizeof(qic02_tape_dynconf)))
-			return -EFAULT;
-		if (status_zombie==NO)
-			qic02_release_resources();	/* and go zombie */
-		if (update_ifc_masks(qic02_tape_dynconf.ifc_type))
-			return -EIO;
-		if (qic02_get_resources())
-			return -ENXIO;
-		return 0;
-
+	if (copy_to_user((char *) ioarg, (char *) &qic02_tape_dynconf, sizeof(qic02_tape_dynconf)))
+	{
+	    return -EFAULT;
 	}
-	if (status_zombie==YES) {
-		tpqputs(TPQD_ALWAYS, "Configs not set");
-		return -ENXIO;
+	return 0;
+
+    }
+    else if (c == _IOC_NR(MTIOCSETCONFIG))
+    {
+	/* One should always do a MTIOCGETCONFIG first, then update
+	 * user-settings, then write back with MTIOCSETCONFIG.
+	 * The qic02conf program should re-open() the device before actual
+	 * use, to make sure everything is initialized.
+	 */
+	
+	CHECK_IOC_SIZE(mtconfiginfo);
+	
+	if (!suser())
+	{
+	    return -EPERM;
 	}
+	
+	if ((doing_read!=NO) || (doing_write!=NO))
+	{
+	    return -EBUSY;
+	}
+	
+	if (status_zombie==NO)
+	{
+	    qic02_release_resources();	/* and go zombie */
+	}
+	
+	/* copy struct from user space to kernel space */
+	if (copy_from_user((char *) &qic02_tape_dynconf, (char *) ioarg, sizeof(qic02_tape_dynconf)))
+	{
+	    return -EFAULT;
+	}
+	return update_ifc_masks(qic02_tape_dynconf.ifc_type);
+    }
+    if (status_zombie==YES)
+    {
+	tpqputs(TPQD_ALWAYS, "Configs not set");
+	return -ENXIO;
+    }
 #endif
-	if (c == (MTIOCTOP & IOCCMD_MASK)) {
+    if (c == _IOC_NR(MTIOCTOP))
+    {
+	CHECK_IOC_SIZE(mtop);
 
-		/* Compare expected struct size and actual struct size. This
-		 * is useful to catch programs compiled with old #includes.
-		 */
-		if (((iocmd & IOCSIZE_MASK) >> IOCSIZE_SHIFT) != sizeof(struct mtop)) {
-			tpqputs(TPQD_ALWAYS, "sizeof(struct mtop) does not match!");
-			return -EFAULT;
+	/* copy mtop struct from user space to kernel space */
+	if (copy_from_user((char *) &operation, (char *) ioarg, sizeof(operation)))
+	{
+	    return -EFAULT;
+	}
+
+	/* ---note: mt_count is signed, negative seeks must be
+	 * ---	    translated to seeks in opposite direction!
+	 * (only needed for Sun-programs, I think.)
+	 */
+	/* ---note: MTFSF with count 0 should position the
+	 * ---	    tape at the beginning of the current file.
+	 */
+
+	if (TP_DIAGS(current_tape_dev))
+	{
+	    printk("OP op=%4x, count=%4x\n", operation.mt_op, operation.mt_count);
+	}
+	
+	if (operation.mt_count < 0)
+	{
+	    tpqputs(TPQD_ALWAYS, "Warning: negative mt_count ignored");
+	}
+	
+	ioctl_status.mt_resid = operation.mt_count;
+	if (operation.mt_op == MTSEEK)
+	{
+	    if (!TP_HAVE_SEEK)
+	    {
+		return -ENOTTY;
+	    }
+	    
+	    seek_addr_buf[0] = (operation.mt_count>>16)&0xff;
+	    seek_addr_buf[1] = (operation.mt_count>>8)&0xff;
+	    seek_addr_buf[2] = (operation.mt_count)&0xff;
+	    if (operation.mt_count>>24)
+	    {
+		return -EINVAL;
+	    }
+	    if ((error = do_ioctl_cmd(operation.mt_op)) != 0)
+	    {
+		return error;
+	    }
+	    
+	    ioctl_status.mt_resid = 0;
+	}
+	else
+	{
+	    while (operation.mt_count > 0)
+	    {
+		operation.mt_count--;
+		if ((error = do_ioctl_cmd(operation.mt_op)) != 0)
+		{
+		    return error;
 		}
-
-		/* copy mtop struct from user space to kernel space */
-		stp = (char *) &operation;
-		argp = (char *) ioarg;
-		if (copy_from_user(stp, argp, sizeof(operation)))
-			return -EFAULT;
-
-		/* ---note: mt_count is signed, negative seeks must be
-		 * ---	    translated to seeks in opposite direction!
-		 * (only needed for Sun-programs, I think.)
-		 */
-		/* ---note: MTFSF with count 0 should position the
-		 * ---	    tape at the beginning of the current file.
-		 */
-
-		if (TP_DIAGS(current_tape_dev))
-			printk("OP op=%4x, count=%4x\n", operation.mt_op, operation.mt_count);
-
-		if (operation.mt_count < 0)
-			tpqputs(TPQD_ALWAYS, "Warning: negative mt_count ignored");
-
+		
 		ioctl_status.mt_resid = operation.mt_count;
-		if (operation.mt_op == MTSEEK) {
-			if (!TP_HAVE_SEEK)
-				return -ENOTTY;
-			seek_addr_buf[0] = (operation.mt_count>>16)&0xff;
-			seek_addr_buf[1] = (operation.mt_count>>8)&0xff;
-			seek_addr_buf[2] = (operation.mt_count)&0xff;
-			if (operation.mt_count>>24)
-				return -EINVAL;
-			if ((error = do_ioctl_cmd(operation.mt_op)) != 0)
-				return error;
-			ioctl_status.mt_resid = 0;
-		} else {
-			while (operation.mt_count > 0) {
-				operation.mt_count--;
-				if ((error = do_ioctl_cmd(operation.mt_op)) != 0)
-					return error;
-				ioctl_status.mt_resid = operation.mt_count;
-			}
-		}
-		return 0;
+	    }
+	}
+	return 0;
+	
+    }
+    else if (c == _IOC_NR(MTIOCGET))
+    {
+	if (TP_DIAGS(current_tape_dev))
+	{
+	    printk("GET ");
+	}
+	
+	CHECK_IOC_SIZE(mtget);
 
-	} else if (c == (MTIOCGET & IOCCMD_MASK)) {
-		if (TP_DIAGS(current_tape_dev))
-			printk("GET ");
+	/* It appears (gmt(1)) that it is normal behaviour to
+	 * first set the status with MTNOP, and then to read
+	 * it out with MTIOCGET
+	 */
 
-		/* compare expected struct size and actual struct size */
-		if (((iocmd & IOCSIZE_MASK) >> IOCSIZE_SHIFT) != sizeof(struct mtget)) {
-			tpqputs(TPQD_ALWAYS, "sizeof(struct mtget) does not match!");
-			return -EFAULT;
-		}
+	/* copy results to user space */
+	if (copy_to_user((char *) &ioctl_status, (char *) ioarg, sizeof(ioctl_status)))
+	{
+	    return -EFAULT;
+	}	
+	return 0;
+    }
+    else if (TP_HAVE_TELL && (c == _IOC_NR(MTIOCPOS)))
+    {
+	if (TP_DIAGS(current_tape_dev))
+	{
+	    printk("POS ");
+	}
+	
+	CHECK_IOC_SIZE(mtpos);
+	
+	tpqputs(TPQD_IOCTLS, "MTTELL reading block address");
+	if ((doing_read==YES) || (doing_write==YES))
+	{
+	    finish_rw(AR_QCMDV_TELL_BLK);
+	}
+	
+	c = rdstatus((char *) blk_addr, sizeof(blk_addr), AR_QCMDV_TELL_BLK);
+	if (c!=TE_OK)
+	{
+	    return -EIO;
+	}
+	
+	ioctl_tell.mt_blkno = (blk_addr[3] << 16) | (blk_addr[4] << 8) | blk_addr[5];
 
-		/* It appears (gmt(1)) that it is normal behaviour to
-		 * first set the status with MTNOP, and then to read
-		 * it out with MTIOCGET
-		 */
+	/* copy results to user space */
+	if (copy_to_user((char *) ioarg, (char *) &ioctl_tell, sizeof(ioctl_tell)))
+	{
+	    return -EFAULT;
+	}
+	return 0;
 
-		/* copy results to user space */
-		stp = (char *) &ioctl_status;
-		argp = (char *) ioarg;
-		if (copy_to_user(stp, argp, sizeof(ioctl_status)))
-			return -EFAULT;
-		return 0;
-
-
-	} else if (TP_HAVE_TELL && (c == (MTIOCPOS & IOCCMD_MASK))) {
-		if (TP_DIAGS(current_tape_dev))
-			printk("POS ");
-
-		/* compare expected struct size and actual struct size */
-		if (((iocmd & IOCSIZE_MASK) >> IOCSIZE_SHIFT) != sizeof(struct mtpos)) {
-			tpqputs(TPQD_ALWAYS, "sizeof(struct mtpos) does not match!");
-			return -EFAULT;
-		}
-
-		tpqputs(TPQD_IOCTLS, "MTTELL reading block address");
-		if ((doing_read==YES) || (doing_write==YES))
-			finish_rw(AR_QCMDV_TELL_BLK);
-
-		c = rdstatus((char *) blk_addr, sizeof(blk_addr), AR_QCMDV_TELL_BLK);
-		if (c!=TE_OK)
-			return -EIO;
-
-		ioctl_tell.mt_blkno = (blk_addr[3] << 16) | (blk_addr[4] << 8) | blk_addr[5];
-
-		/* copy results to user space */
-		stp = (char *) &ioctl_tell;
-		argp = (char *) ioarg;
-		if (copy_to_user(stp, argp, sizeof(ioctl_status)))
-			return -EFAULT;
-		return 0;
-
-	} else
-		return -ENOTTY;	/* Other cmds not supported. */
+    }
+    else
+    {
+	return -ENOTTY;	/* Other cmds not supported. */
+    }
 } /* qic02_tape_ioctl */
 
 
@@ -2820,215 +2758,229 @@ static struct file_operations qic02_tape_fops = {
 	NULL				/* revalidate */
 };
 
-/* align `a' at `size' bytes. `size' must be a power of 2 */
-static inline unsigned long const align_buffer(unsigned long a, unsigned size)
-{
-	if (a & (size-1))			/* if not aligned */
-		return (a | (size-1)) + 1;
-	else					/* else is aligned */
-		return a;
-}
 
+/* Why is this not is one place? */
+/* Pure 2^n version of get_order */
+static inline int __get_order(unsigned long size)
+{
+    int order;
+
+    size = (size-1) >> (PAGE_SHIFT-1);
+    order = -1;
+    do
+    {
+	size >>= 1;
+	order++;
+    } while (size);
+    return order;
+}
 
 
 static void qic02_release_resources(void)
 {
-	free_irq(QIC02_TAPE_IRQ, NULL);
-	free_dma(QIC02_TAPE_DMA);
-	status_zombie = YES;
+    free_irq(QIC02_TAPE_IRQ, NULL);
+    free_dma(QIC02_TAPE_DMA);
+    release_region(QIC02_TAPE_PORT, QIC02_TAPE_PORT_RANGE);
+    if (buffaddr)
+    {
+	free_pages(buffaddr, __get_order(TPQBUF_SIZE));
+    }
+    buffaddr = 0; /* Better to cause a panic than overwite someone else */
+    status_zombie = YES;
 } /* qic02_release_resources */
-
-
 
 
 static int qic02_get_resources(void)
 {
-	/* First perform some checks. If one of them fails,
-	 * the tape driver will not be registered to the system.
-	 */
-	if (QIC02_TAPE_IRQ>16) {
-		tpqputs(TPQD_ALWAYS, "Bogus interrupt number.");
-		return -1;
-	}
+    /* First perform some checks. If one of them fails,
+     * the tape driver will not be registered to the system.
+     */
+    if (QIC02_TAPE_IRQ>16)
+    {
+	tpqputs(TPQD_ALWAYS, "Bogus interrupt number.");
+	return -ENXIO;
+    }
 
-	/* for DYNCONF, allocating DMA & IRQ should not be done until 
-         * the config parameters have been set using MTSETCONFIG.
-	 */
+    /* for DYNCONF, allocating IO, DMA and IRQ should not be done until 
+     * the config parameters have been set using MTSETCONFIG.
+     */
 
-	/* get IRQ */
-	if (request_irq(QIC02_TAPE_IRQ, qic02_tape_interrupt, SA_INTERRUPT, "QIC-02", NULL)) {
-		printk(TPQIC02_NAME ": can't allocate IRQ%d for QIC-02 tape\n",
-			QIC02_TAPE_IRQ);
-		status_zombie = YES;
-		return -1;
-	}
+    if (check_region(QIC02_TAPE_PORT, QIC02_TAPE_PORT_RANGE))
+    {
+	printk(TPQIC02_NAME ": IO space at 0x%x [%d ports] already reserved\n",
+	       QIC02_TAPE_PORT, QIC02_TAPE_PORT_RANGE);
+	return -ENXIO;
+    }
 
-	/* After IRQ, allocate DMA channel */
-	if (request_dma(QIC02_TAPE_DMA,"QIC-02")) {
-		printk(TPQIC02_NAME ": can't allocate DMA%d for QIC-02 tape\n",
-			QIC02_TAPE_DMA);
-		free_irq(QIC02_TAPE_IRQ, NULL);
-		status_zombie = YES;
-		return -1;
-	}
+    /* get IRQ */
+    if (request_irq(QIC02_TAPE_IRQ, qic02_tape_interrupt, SA_INTERRUPT, "QIC-02", NULL))
+    {
+	printk(TPQIC02_NAME ": can't allocate IRQ%d for QIC-02 tape\n",
+	       QIC02_TAPE_IRQ);
+	return -EBUSY;
+    }
 
-	printk(TPQIC02_NAME ": Settings: IRQ %d, DMA %d, IO 0x%x, IFC %s\n",
-		QIC02_TAPE_IRQ, QIC02_TAPE_DMA,
-		((QIC02_TAPE_IFC==ARCHIVE) || (QIC02_TAPE_IFC==MOUNTAIN))?
-			QIC02_CMD_PORT : QIC02_STAT_PORT,
-		(QIC02_TAPE_IFC==MOUNTAIN)? "Mountain" :
-			((QIC02_TAPE_IFC==ARCHIVE)? "Archive" : "Wangtek"));
+    /* After IRQ, allocate DMA channel */
+    if (request_dma(QIC02_TAPE_DMA,"QIC-02"))
+    {
+	printk(TPQIC02_NAME ": can't allocate DMA%d for QIC-02 tape\n",
+	       QIC02_TAPE_DMA);
+	free_irq(QIC02_TAPE_IRQ, NULL);
+	return -EBUSY;
+    }
 
-	if (tape_reset(0)!=TE_OK || tp_sense(TP_WRP|TP_POR|TP_CNI)!=TE_OK) {
-		/* No drive detected, so vanish */
-		tpqputs(TPQD_ALWAYS, "No drive detected -- releasing irq and dma.");
-		status_dead = YES;
-		qic02_release_resources();
-		return -1;
-	}
+    /* Grab the IO region. We already made sure it's available. */
+    request_region(QIC02_TAPE_PORT, QIC02_TAPE_PORT_RANGE, TPQIC02_NAME);
+    
+    /* Setup the page-address for the dma transfer. */
 
-	/* All should be ok now */
-	status_zombie = NO;
-	return 0;
+    /*** TODO: does _get_dma_pages() really return the physical address?? ****/
+    buffaddr = __get_dma_pages(GFP_KERNEL,__get_order(TPQBUF_SIZE));
+    
+    if (!buffaddr)
+    {
+	qic02_release_resources();
+	return -EBUSY; /* Not ideal, EAGAIN perhaps? */
+    }
+    
+    memset( (void*) buffaddr, 0, TPQBUF_SIZE );
+    
+    printk(TPQIC02_NAME ": Settings: IRQ %d, DMA %d, IO 0x%x, IFC %s\n",
+	   QIC02_TAPE_IRQ, QIC02_TAPE_DMA,
+	   ((QIC02_TAPE_IFC==ARCHIVE) || (QIC02_TAPE_IFC==MOUNTAIN))?
+	   QIC02_CMD_PORT : QIC02_STAT_PORT,
+	   (QIC02_TAPE_IFC==MOUNTAIN)? "Mountain" :
+	   ((QIC02_TAPE_IFC==ARCHIVE)? "Archive" : "Wangtek"));
+    
+    if (tape_reset(0)!=TE_OK || tp_sense(TP_WRP|TP_POR|TP_CNI)!=TE_OK)
+    {
+	/* No drive detected, so vanish */
+	tpqputs(TPQD_ALWAYS, "No drive detected -- releasing IO/IRQ/DMA.");
+	status_dead = YES;
+	qic02_release_resources();
+	return -EIO;
+    }
+
+    /* All should be ok now */
+    status_zombie = NO;
+    return 0;
 } /* qic02_get_resources */
 
-
+#ifdef MODULE
+static
+#endif
 int qic02_tape_init(void)
-	/* Shouldn't this be a caddr_t ? */
 {
+    if (TPSTATSIZE != 6)
+    {
+	printk(TPQIC02_NAME ": internal error: tpstatus struct incorrect!\n");
+	return -ENODEV;
+    }
+    if ((TPQBUF_SIZE<512) || (TPQBUF_SIZE>=0x10000))
+    {
+	printk(TPQIC02_NAME ": internal error: DMA buffer size out of range\n");
+	return -ENODEV;
+    }
 
-	if (TPSTATSIZE != 6) {
-		printk(TPQIC02_NAME ": internal error: tpstatus struct incorrect!\n");
-		return -ENODEV;
-	}
-	if ((TPQBUF_SIZE<512) || (TPQBUF_SIZE>=0x10000)) {
-		printk(TPQIC02_NAME ": internal error: DMA buffer size out of range\n");
-		return -ENODEV;
-	}
-
-	QIC02_TAPE_DEBUG = TPQD_DEFAULT_FLAGS;
-
-	current_tape_dev = MKDEV(QIC02_TAPE_MAJOR, 0);
+    current_tape_dev = MKDEV(QIC02_TAPE_MAJOR, 0);
 
 #ifndef CONFIG_QIC02_DYNCONF
-	printk(TPQIC02_NAME ": IRQ %d, DMA %d, IO 0x%x, IFC %s, %s, %s\n",
-		 QIC02_TAPE_IRQ, QIC02_TAPE_DMA,
+    printk(TPQIC02_NAME ": IRQ %d, DMA %d, IO 0x%x, IFC %s, %s, %s\n",
+	   QIC02_TAPE_IRQ, QIC02_TAPE_DMA,
 # if QIC02_TAPE_IFC == WANGTEK
-		 QIC02_STAT_PORT, "Wangtek",
+	   QIC02_STAT_PORT, "Wangtek",
 # elif QIC02_TAPE_IFC == ARCHIVE
-		 QIC02_CMD_PORT, "Archive",
+	   QIC02_CMD_PORT, "Archive",
 # elif QIC02_TAPE_IFC == MOUNTAIN
-		 QIC02_CMD_PORT, "Mountain",
+	   QIC02_CMD_PORT, "Mountain",
 # else
 #  error
 # endif
-		 rcs_revision, rcs_date);
-	if (qic02_get_resources())
-		return -ENODEV;
+	   rcs_revision, rcs_date);
+    if (qic02_get_resources())
+    {
+	return -ENODEV;
+    }
 #else
-	printk(TPQIC02_NAME ": Runtime config, %s, %s\n", 
-		 rcs_revision, rcs_date);
-	
-	QIC02_TAPE_IRQ = BOGUS_IRQ;	/* invalid value */
+    printk(TPQIC02_NAME ": Runtime config, %s, %s\n", 
+	   rcs_revision, rcs_date);
 #endif
-
-	printk(TPQIC02_NAME ": DMA buffers: %u blocks", NR_BLK_BUF);
-
-	/* 
-	 * Setup the page-address for the dma transfer.
-	 */
-#ifdef MODULE
-        qic02_tape_buf = kmalloc(TPQBUF_SIZE+TAPE_BLKSIZE, GFP_DMA);
-        if (qic02_tape_buf == NULL) {
+    printk(TPQIC02_NAME ": DMA buffers: %u blocks\n", NR_BLK_BUF);
+    /* If we got this far, install driver functions */
+    if (register_chrdev(QIC02_TAPE_MAJOR, TPQIC02_NAME, &qic02_tape_fops))
+    {
+	printk(TPQIC02_NAME ": Unable to get chrdev major %d\n", QIC02_TAPE_MAJOR);
 #ifndef CONFIG_QIC02_DYNCONF
-        /*
-         * irq and dma were requested by qic_get_resources, so
-         * relase them only when _not_ using DYNCONF
-         */
-		qic02_release_resources();
+	qic02_release_resources();
 #endif
-		return -ENODEV;
-       }
-       buffaddr = align_buffer(virt_to_bus((unsigned long *)qic02_tape_buf),
-                               TAPE_BLKSIZE);
-       printk(", at address 0x%lx (0x%lx)\n", buffaddr,
-              virt_to_bus((unsigned long *)qic02_tape_buf));
-#else /* no MODULE */
-	buffaddr = align_buffer(virt_to_bus(qic02_tape_buf), TAPE_BLKSIZE);
-	printk(", at address 0x%lx (0x%lx)\n", buffaddr, (unsigned long) &qic02_tape_buf);
-#endif /* MODULE */
+	return -ENODEV;
+    }
 
-
-#ifndef CONFIG_MAX_16M
-	if (buffaddr+TPQBUF_SIZE>=0x1000000) {
-		printk(TPQIC02_NAME ": DMA buffer *must* be in lower 16MB\n");
-#ifdef MODULE
-		qic02_release_resources();
-                kfree(qic02_tape_buf);
-#endif
-
-		return -ENODEV;
-	}
-#endif
-
-	/* If we got this far, install driver functions */
-	if (register_chrdev(QIC02_TAPE_MAJOR, TPQIC02_NAME, &qic02_tape_fops)) {
-		printk(TPQIC02_NAME ": Unable to get chrdev major %d\n", QIC02_TAPE_MAJOR);
+    /* prepare timer */
+    TIMEROFF;
+    timer_table[QIC02_TAPE_TIMER].expires = 0;
+    timer_table[QIC02_TAPE_TIMER].fn = qic02_tape_times_out;
+    
 #ifndef CONFIG_QIC02_DYNCONF
-		qic02_release_resources();
-#endif
-		return -ENODEV;
+    if (tape_reset(0)!=TE_OK || tp_sense(TP_WRP|TP_POR|TP_CNI)!=TE_OK)
+    {
+	/* No drive detected, so vanish */
+	tpqputs(TPQD_ALWAYS, "No drive detected -- driver going on vacation...");
+	qic02_release_resources();
+	status_dead = YES;
+	return -ENODEV;
+    }
+    else
+    {
+	if (is_exception())
+	{
+	    tpqputs(TPQD_ALWAYS, "exception detected\n");
+	    (void) tp_sense(TP_WRP|TP_POR|TP_CNI);
 	}
-
-	/* prepare timer */
-	TIMEROFF;
-	timer_table[QIC02_TAPE_TIMER].expires = 0;
-	timer_table[QIC02_TAPE_TIMER].fn = qic02_tape_times_out;
-
-#ifndef CONFIG_QIC02_DYNCONF
-	if (tape_reset(0)!=TE_OK || tp_sense(TP_WRP|TP_POR|TP_CNI)!=TE_OK) {
-		/* No drive detected, so vanish */
-		tpqputs(TPQD_ALWAYS, "No drive detected -- driver going on vacation...");
-		unregister_chrdev(QIC02_TAPE_MAJOR, TPQIC02_NAME);
-		qic02_release_resources();
-		return -ENODEV;
-	} else {
-		if (is_exception()) {
-			tpqputs(TPQD_ALWAYS, "exception detected\n");
-			(void) tp_sense(TP_WRP|TP_POR|TP_CNI);
-		}
-	}
+    }
 #endif
 
-	/* initialize generic status for ioctl requests */
+    /* initialize generic status for ioctl requests */
+    
+    ioctl_status.mt_type	= QIC02_TAPE_DRIVE;	/* MT_IS* id nr */
+    
+    ioctl_status.mt_resid	= 0;	/* ---residual count */
+    ioctl_status.mt_gstat	= 0;	/* ---generic status */
+    ioctl_status.mt_erreg	= 0;	/* not used */
+    ioctl_status.mt_fileno	= 0;	/* number of current file on tape */
+    ioctl_status.mt_blkno	= 0;	/* number of current (logical) block */
 
-	ioctl_status.mt_type	= QIC02_TAPE_DRIVE;	/* MT_IS* id nr */
-
-	ioctl_status.mt_resid	= 0;	/* ---residual count */
-	ioctl_status.mt_gstat	= 0;	/* ---generic status */
-	ioctl_status.mt_erreg	= 0;	/* not used */
-	ioctl_status.mt_fileno	= 0;	/* number of current file on tape */
-	ioctl_status.mt_blkno	= 0;	/* number of current (logical) block */
-
-	return 0;
+    return 0;
 } /* qic02_tape_init */
 
 #ifdef MODULE
 
-int init_module(void) {
-	return qic02_tape_init();
-}
-
-void cleanup_module(void) {
-	unsigned long flags;
-       
-	save_flags(flags); 
-	cli(); 
-	unregister_chrdev(QIC02_TAPE_MAJOR, TPQIC02_NAME); 
+void cleanup_module(void)
+{
+    if (status_zombie == NO)
+    {
 	qic02_release_resources();
-	if (qic02_tape_buf) kfree(qic02_tape_buf); 
-	sti(); 
-	restore_flags(flags); 
+    }
+    unregister_chrdev(QIC02_TAPE_MAJOR, TPQIC02_NAME);
 }
 
-#endif /* MODULE */
+int init_module(void)
+{
+    int retval;
+    retval=qic02_tape_init();
+# ifdef CONFIG_QIC02_DYNCONF
+    /* This allows the dynamic config program to setup the card
+     * by presetting qic02_tape_dynconf via insmod
+     */
+    if (!retval && qic02_tape_dynconf.ifc_type)
+    {
+	retval=update_ifc_masks(qic02_tape_dynconf.ifc_type);
+	if (retval)
+	{
+	  cleanup_module();
+	}
+    }
+# endif
+    return retval;
+}
+#endif

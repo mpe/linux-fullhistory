@@ -402,9 +402,8 @@ ppp_init_dev (struct device *dev)
 	dev->tx_queue_len     = 10;
 	dev->type	      = ARPHRD_PPP;
 
-	for (indx = 0; indx < DEV_NUMBUFFS; indx++)
-		skb_queue_head_init (&dev->buffs[indx]);
-
+	dev_init_buffers(dev);
+	
 	/* New-style flags */
 	dev->flags	= IFF_POINTOPOINT;
 	dev->family	= AF_INET;

@@ -46,20 +46,14 @@
     to the differences in the EISA and PCI CSR address offsets from the base
     address.
 
-    The ability to load  this driver as a  loadable module has been included
-    and used  extensively during the  driver development (to save those long
-    reboot sequences).  Loadable module support  under PCI and EISA has been
+    The ability to load this driver  as a loadable  module has been included
+    and used extensively during the  driver development (to save those  long
+    reboot sequences).  Loadable module support under  PCI and EISA has been
     achieved by letting the driver autoprobe as if it were compiled into the
     kernel, except that there is no autoprobing of the IRQ lines. This is of
-    no great  consequence except do make sure  you're not sharing interrupts
-    with  anything that cannot  accommodate  interrupt sharing! The existing
-    register_netdevice() code will only allow one device to be registered at
-    a time.
-
-    ************************************************************************
-    For now, please only use the 'io=??' assignment (see  2. below, ?? != 0)
-    when loading a module.
-    ************************************************************************
+    no great consequence except do  make sure you're not sharing  interrupts
+    with anything that cannot   accommodate interrupt sharing!  By  default,
+    the driver will autoprobe for the next available card.
 
     Essentially, the I/O address and IRQ information  are ignored and filled
     in later by  the PCI BIOS   during the PCI  probe.  Note  that the board
@@ -71,13 +65,20 @@
     0) have a copy of the loadable modules code installed on your system.
     1) copy de4x5.c from the  /linux/drivers/net directory to your favourite
     temporary directory.
-    2) edit the source code near line 3779 to reflect the I/O address you're
+    2) edit the source code near line 4146 to reflect the I/O address you're
     using (only  if you want to manually  load the module),  or assign these
     when loading by:
 
                    insmod de4x5.o io=0xghh         where g = bus number
 		                                        hh = device number
 
+       NB: autoprobing for modules is now supported by default. You may just
+           use:
+
+                   insmod de4x5.o
+
+           to load the next available board. For a specific board, still use
+	   the 'io=?' above.
     3) compile  de4x5.c, but include -DMODULE in  the command line to ensure
     that the correct bits are compiled (see end of source code).
     4) if you are wanting to add a new  card, goto 5. Otherwise, recompile a
@@ -215,11 +216,13 @@
                            by <bhat@mundook.cs.mu.OZ.AU>
       0.45    8-Dec-96    Include endian functions for PPC use, from work
                            by <cort@cs.nmt.edu>.
+      0.451  28-Dec-96    Added fix to allow autoprobe for modules after
+                           suggestion from <mjacob@feral.com>
 
     =========================================================================
 */
 
-static const char *version = "de4x5.c:v0.45 96/12/8 davies@maniac.ultranet.com\n";
+static const char *version = "de4x5.c:v0.451 96/12/28 davies@maniac.ultranet.com\n";
 
 #include <linux/module.h>
 
@@ -1666,7 +1669,9 @@ eisa_probe(struct device *dev, u_long ioaddr)
 	maxSlots = i + 1;
     }
 
-    for (status = -ENODEV; (i<maxSlots) && (dev!=NULL); i++, iobase+=EISA_SLOT_INC) {
+    for (status = -ENODEV;
+	 (i<maxSlots) && (dev!=NULL) && (!loading_module || (num_de4x5s == 0));
+	 i++, iobase+=EISA_SLOT_INC) {
 	if (EISA_signature(name, EISA_ID)) {
 	    cfid = inl(PCI_CFID);
 	    cfrv = inl(PCI_CFRV);
@@ -1740,7 +1745,8 @@ pci_probe(struct device *dev, u_long ioaddr)
     }
 
     for (index=0;
-	 (pcibios_find_class(class, index, &pb, &dev_fn)!= PCIBIOS_DEVICE_NOT_FOUND);
+	 (pcibios_find_class(class, index, &pb, &dev_fn)!= PCIBIOS_DEVICE_NOT_FOUND) &&
+	 (!loading_module || (num_de4x5s == 0));
 	 index++) {
 	dev_num = PCI_SLOT(dev_fn);
 
@@ -4130,10 +4136,8 @@ de4x5_ioctl(struct device *dev, struct ifreq *rq, int cmd)
 ** IRQ lines will not be auto-detected; instead I'll rely on the BIOSes
 ** to "do the right thing".
 **
-** NB: Current register_netdevice() code does not permit assigning io=0 as
-** this driver will autoprobe all instances of acceptable DECchips. The
-** cleanup_module() code needs work still....(just to unload modules owned
-** by this driver).
+** The module autoprobe will only load one instance of the driver and
+** hardware.
 */
 static char devicename[9] = { 0, };
 static struct device thisDE4X5 = {
@@ -4142,7 +4146,7 @@ static struct device thisDE4X5 = {
     0, 0,         /* I/O address, IRQ                                       */
     0, 0, 0, NULL, de4x5_probe };
 
-static int io=0x0b; /* EDIT THESE LINES FOR YOUR CONFIGURATION              */
+static int io=0x0; /* EDIT THESE LINES FOR YOUR CONFIGURATION              */
 MODULE_PARM(io, "i");
 
 int

@@ -47,9 +47,8 @@
 #include <linux/firewall.h>
 #include <net/x25.h>
 
-static int x25_receive_data(struct sk_buff *skb, struct device *dev)
+static int x25_receive_data(struct sk_buff *skb, struct x25_neigh *neigh)
 {
-	struct x25_neigh *neigh;
 	struct sock *sk;
 	unsigned short frametype;
 	unsigned int lci;
@@ -60,14 +59,6 @@ static int x25_receive_data(struct sk_buff *skb, struct device *dev)
 		return 0;
 	}
 #endif
-
-	/*
-	 *	Packet received from unrecognised device, throw it away.
-	 */
-	if ((neigh = x25_get_neigh(dev)) == NULL) {
-		kfree_skb(skb, FREE_READ);
-		return 0;
-	}
 
 	frametype = skb->data[2];
         lci = ((skb->data[0] << 8) & 0xF00) + ((skb->data[1] << 0) & 0x0FF);
@@ -107,12 +98,40 @@ static int x25_receive_data(struct sk_buff *skb, struct device *dev)
 
 int x25_lapb_receive_frame(struct sk_buff *skb, struct device *dev, struct packet_type *ptype)
 {
+	struct x25_neigh *neigh;
+
 	skb->sk = NULL;
 	
-	switch (*skb->data) {
+	/*
+	 *	Packet received from unrecognised device, throw it away.
+	 */
+	if ((neigh = x25_get_neigh(dev)) == NULL) {
+		kfree_skb(skb, FREE_READ);
+		return 0;
+	}
+
+	switch (skb->data[0]) {
 		case 0x00:
 			skb_pull(skb, 1);
-			return x25_receive_data(skb, dev);
+			return x25_receive_data(skb, neigh);
+
+		case 0x01:
+			x25_link_established(neigh);
+			kfree_skb(skb, FREE_READ);
+			return 0;
+
+		case 0x02:
+			x25_link_terminated(neigh);
+			kfree_skb(skb, FREE_READ);
+			return 0;
+
+		case 0x03:
+			kfree_skb(skb, FREE_READ);
+			return 0;
+
+		case 0x04:
+			kfree_skb(skb, FREE_READ);
+			return 0;
 
 		default:
 			kfree_skb(skb, FREE_READ);
@@ -122,59 +141,107 @@ int x25_lapb_receive_frame(struct sk_buff *skb, struct device *dev, struct packe
 
 int x25_llc_receive_frame(struct sk_buff *skb, struct device *dev, struct packet_type *ptype)
 {
-	unsigned int len;
+	struct x25_neigh *neigh;
 
 	skb->sk = NULL;
-
-	memcpy(&len, skb->data, sizeof(int));
-
-	skb_pull(skb, sizeof(int));
-
-	skb_trim(skb, len);
 	
-	return x25_receive_data(skb, dev);
-}
-
-int x25_link_up(struct device *dev)
-{
-	switch (dev->type) {
-		case ARPHRD_ETHER:
-			return 1;
-		case ARPHRD_X25:
-			return 0;
-		default:
-			return 0;
+	/*
+	 *	Packet received from unrecognised device, throw it away.
+	 */
+	if ((neigh = x25_get_neigh(dev)) == NULL) {
+		kfree_skb(skb, FREE_READ);
+		return 0;
 	}
+
+	return x25_receive_data(skb, neigh);
 }
 
-void x25_send_frame(struct sk_buff *skb, struct device *dev)
+void x25_establish_link(struct x25_neigh *neigh)
 {
-	unsigned char *dptr;
-	unsigned int  len;
-	static char bcast_addr[6] = {0xFF,0xFF,0xFF,0xFF,0xFF,0xFF};
+	struct sk_buff *skb;
+	unsigned char *ptr;
+
+	switch (neigh->dev->type) {
+		case ARPHRD_X25:
+			if ((skb = alloc_skb(1, GFP_ATOMIC)) == NULL) {
+				printk(KERN_ERR "x25_dev: out of memory\n");
+				return;
+			}
+			ptr  = skb_put(skb, 1);
+			*ptr = 0x01;
+			break;
+
+#if defined(CONFIG_LLC) || defined(CONFIG_LLC_MODULE)
+		case ARPHRD_ETHER:
+			return;
+#endif
+		default:
+			return;
+	}
 
 	skb->protocol = htons(ETH_P_X25);
 	skb->priority = SOPRI_NORMAL;
-	skb->dev      = dev;
+	skb->dev      = neigh->dev;
 	skb->arp      = 1;
 
-	switch (dev->type) {
-		case ARPHRD_ETHER:
-			len  = skb->len;
-			dptr = skb_push(skb, sizeof(int));
-			memcpy(dptr, &len, sizeof(int));
-			dev->hard_header(skb, dev, ETH_P_X25, bcast_addr, NULL, 0);
+	dev_queue_xmit(skb);
+}
+
+void x25_terminate_link(struct x25_neigh *neigh)
+{
+	struct sk_buff *skb;
+	unsigned char *ptr;
+
+	switch (neigh->dev->type) {
+		case ARPHRD_X25:
+			if ((skb = alloc_skb(1, GFP_ATOMIC)) == NULL) {
+				printk(KERN_ERR "x25_dev: out of memory\n");
+				return;
+			}
+			ptr  = skb_put(skb, 1);
+			*ptr = 0x02;
 			break;
 
+#if defined(CONFIG_LLC) || defined(CONFIG_LLC_MODULE)
+		case ARPHRD_ETHER:
+			return;
+#endif
+		default:
+			return;
+	}
+
+	skb->protocol = htons(ETH_P_X25);
+	skb->priority = SOPRI_NORMAL;
+	skb->dev      = neigh->dev;
+	skb->arp      = 1;
+
+	dev_queue_xmit(skb);
+}
+
+void x25_send_frame(struct sk_buff *skb, struct x25_neigh *neigh)
+{
+	unsigned char *dptr;
+
+	switch (neigh->dev->type) {
 		case ARPHRD_X25:
 			dptr  = skb_push(skb, 1);
 			*dptr = 0x00;
 			break;
 
+#if defined(CONFIG_LLC) || defined(CONFIG_LLC_MODULE)
+		case ARPHRD_ETHER:
+			kfree_skb(skb, FREE_WRITE);
+			return;
+#endif
 		default:
 			kfree_skb(skb, FREE_WRITE);
 			return;
 	}
+
+	skb->protocol = htons(ETH_P_X25);
+	skb->priority = SOPRI_NORMAL;
+	skb->dev      = neigh->dev;
+	skb->arp      = 1;
 
 	dev_queue_xmit(skb);
 }

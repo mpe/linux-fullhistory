@@ -174,9 +174,9 @@ void ether_setup(struct device *dev)
 	int i;
 	/* Fill in the fields of the device structure with ethernet-generic values.
 	   This should be in a common file instead of per-driver.  */
-	for (i = 0; i < DEV_NUMBUFFS; i++)
-		skb_queue_head_init(&dev->buffs[i]);
 
+	dev_init_buffers(dev);
+	
 	/* register boot-defined "eth" devices */
 	if (dev->name && (strncmp(dev->name, "eth", 3) == 0)) {
 		i = simple_strtoul(dev->name + 3, NULL, 0);
@@ -217,16 +217,14 @@ void ether_setup(struct device *dev)
 #ifdef CONFIG_FDDI
 
 void fddi_setup(struct device *dev)
-	{
-	int i;
-
+{
 	/*
 	 * Fill in the fields of the device structure with FDDI-generic values.
 	 * This should be in a common file instead of per-driver.
 	 */
-	for (i=0; i < DEV_NUMBUFFS; i++)
-		skb_queue_head_init(&dev->buffs[i]);
-
+	
+	dev_init_buffers(dev);
+	
 	dev->change_mtu			= fddi_change_mtu;
 	dev->hard_header		= fddi_header;
 	dev->rebuild_header		= fddi_rebuild_header;
@@ -247,7 +245,7 @@ void fddi_setup(struct device *dev)
 	dev->pa_mask	= 0;
 	dev->pa_alen	= 4;
 	return;
-	}
+}
 
 #endif
 
@@ -398,8 +396,7 @@ void unregister_netdev(struct device *dev)
 #define MAX_TR_CARDS 16 /* same as the number of irq's in irq2dev[] */
 static struct device *trdev_index[MAX_TR_CARDS];
 
-struct device *
-init_trdev(struct device *dev, int sizeof_priv)
+struct device *init_trdev(struct device *dev, int sizeof_priv)
 {
 	int new_device = 0;
 	int i;
@@ -436,7 +433,7 @@ init_trdev(struct device *dev, int sizeof_priv)
 		new_device = 1;
 	}
 
-	trfound:						/* From the double loop above. */
+trfound:						/* From the double loop above. */
 
 	for (i = 0; i < MAX_TR_CARDS; ++i)
 		if (trdev_index[i] == NULL) {
@@ -511,11 +508,9 @@ void tr_freedev(struct device *dev)
 int register_trdev(struct device *dev)
 {
 	unsigned long flags;
-	int i;
 	
-	for (i = 0; i < DEV_NUMBUFFS; i++)
-		skb_queue_head_init(&dev->buffs[i]);
-
+	dev_init_buffers(dev);
+	
 	save_flags(flags);
 
 	if (dev && dev->init) {

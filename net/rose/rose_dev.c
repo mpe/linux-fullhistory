@@ -4,7 +4,7 @@
  *	This is ALPHA test software. This code may break your machine, randomly fail to work with new
  *	releases, misbehave and/or generally screw up. It might even work.
  *
- *	This code REQUIRES 2.1.0 or higher/ NET3.029
+ *	This code REQUIRES 2.1.15 or higher/ NET3.038
  *
  *	This module:
  *		This module is free software; you can redistribute it and/or
@@ -14,11 +14,11 @@
  *
  *	History
  *	Rose 001	Jonathan(G4KLX)	Cloned from nr_dev.c.
+ *			Hans(PE1AYX)	Fixed interface to IP layer.
  */
 
 #include <linux/config.h>
 #if defined(CONFIG_ROSE) || defined(CONFIG_ROSE_MODULE)
-#include <linux/module.h>
 #include <linux/proc_fs.h>
 #include <linux/kernel.h>
 #include <linux/sched.h>
@@ -66,9 +66,11 @@ int rose_rx_ip(struct sk_buff *skb, struct device *dev)
 	skb->protocol = htons(ETH_P_IP);
 
 	/* Spoof incoming device */
-	skb->dev = dev;
+	skb->dev      = dev;
+	skb->h.raw    = skb->data;
+	skb->nh.raw   = skb->data;
+	skb->pkt_type = PACKET_HOST;
 
-	skb->h.raw = skb->data;
 	ip_rcv(skb, skb->dev, NULL);
 
 	return 1;
@@ -141,8 +143,6 @@ static int rose_open(struct device *dev)
 	dev->tbusy = 0;
 	dev->start = 1;
 
-	MOD_INC_USE_COUNT;
-
 	ax25_listen_register((ax25_address *)dev->dev_addr, NULL);
 
 	return 0;
@@ -154,8 +154,6 @@ static int rose_close(struct device *dev)
 	dev->start = 0;
 
 	ax25_listen_release((ax25_address *)dev->dev_addr, NULL);
-
-	MOD_DEC_USE_COUNT;
 
 	return 0;
 }
@@ -239,58 +237,5 @@ int rose_init(struct device *dev)
 
 	return 0;
 };
-
-#ifdef MODULE
-extern struct proto_ops rose_proto_ops;
-extern struct notifier_block rose_dev_notifier;
-
-static struct device dev_rose[] = {
-	{"rose0", 0, 0, 0, 0, 0, 0, 0, 0, 0, NULL, rose_init},
-	{"rose1", 0, 0, 0, 0, 0, 0, 0, 0, 0, NULL, rose_init}
-};
-
-EXPORT_NO_SYMBOLS;
-
-int init_module(void)
-{
-	register_netdev(&dev_rose[0]);
-	register_netdev(&dev_rose[1]);
-
-	rose_proto_init(NULL);
-
-	return 0;
-}
-
-void cleanup_module(void)
-{
-	int i;
-
-#ifdef CONFIG_PROC_FS
-	proc_net_unregister(PROC_NET_RS);
-	proc_net_unregister(PROC_NET_RS_NEIGH);
-	proc_net_unregister(PROC_NET_RS_NODES);
-	proc_net_unregister(PROC_NET_RS_ROUTES);
-#endif
-	rose_rt_free();
-
-	ax25_protocol_release(AX25_P_ROSE);
-	ax25_linkfail_release(rose_link_failed);
-
-	rose_unregister_sysctl();
-
-	unregister_netdevice_notifier(&rose_dev_notifier);
-
-	sock_unregister(rose_proto_ops.family);
-
-	for (i = 0; i < 2; i++) {
-		if (dev_rose[i].priv != NULL) {
-			kfree(dev_rose[i].priv);
-			dev_rose[i].priv = NULL;
-			unregister_netdev(&dev_rose[i]);
-		}
-	}
-}
-
-#endif
 
 #endif

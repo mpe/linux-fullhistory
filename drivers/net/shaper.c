@@ -547,8 +547,6 @@ static struct shaper *shaper_alloc(struct device *dev)
  
 int shaper_probe(struct device *dev)
 {
-	int i;
-	
 	/*
 	 *	Set up the shaper.
 	 */
@@ -567,8 +565,7 @@ int shaper_probe(struct device *dev)
 	 *	Intialise the packet queues
 	 */
 	 
-	for(i=0;i<DEV_NUMBUFFS;i++)
-		skb_queue_head_init(&dev->buffs[i]);
+	dev_init_buffers(dev);
 	
 	/*
 	 *	Handlers for when we attach to a device.

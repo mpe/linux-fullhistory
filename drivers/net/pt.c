@@ -733,7 +733,6 @@ static int pt_probe(struct device *dev)
 {
     short ioaddr;
     struct pt_local *lp;
-    int i;
     unsigned long flags;
     unsigned long mem_ptr;
 
@@ -851,8 +850,7 @@ static int pt_probe(struct device *dev)
     dev->get_stats = pt_get_stats;
 
     /* Fill in the fields of the device structure */
-    for (i=0; i < DEV_NUMBUFFS; i++)
-        skb_queue_head_init(&dev->buffs[i]);
+    dev_init_buffers(dev);
 
 #if defined(CONFIG_AX25) || defined(CONFIG_AX25_MODULE)
     dev->hard_header    = ax25_encapsulate;

@@ -163,13 +163,19 @@ static void ndisc_periodic_timer(unsigned long arg)
 	if (nd_tbl.tbl_lock == 1)
 	{
 		ntbl_walk_table(&nd_tbl, ndisc_gc_func, 0, 0, NULL);
+		ndisc_gc_timer.expires = now + nd_gc_interval;
+	}
+	else
+	{
+#if ND_DEBUG >= 2
+		printk(KERN_DEBUG "ndisc_gc delayed: table locked\n");
+#endif
+		ndisc_gc_timer.expires = now + HZ;
 	}
 	end_bh_atomic();
 	
 	neigh_table_unlock(&nd_tbl);
 	
-	ndisc_gc_timer.expires = now + HZ;
-	ndisc_gc_timer.expires = now + nd_gc_interval;
 	add_timer(&ndisc_gc_timer);
 }
 
@@ -178,19 +184,18 @@ static int ndisc_gc_func(struct neighbour *neigh, void *arg)
 	struct nd_neigh *ndn = (struct nd_neigh *) neigh;
         unsigned long now = jiffies;
 
-	if (ndn->ndn_refcnt == 0 &&
-	    ((ndn->ndn_nud_state == NUD_FAILED) ||
-	     ((ndn->ndn_nud_state == NUD_REACHABLE) &&
-	      (ndn->ndn_tstamp <= (now - nd_gc_staletime))
-	      )
-	     )
-	    )
+	if (ndn->ndn_refcnt == 0)
 	{
-		/*
-		 *	Release unused entries
-		 */
+		switch (ndn->ndn_nud_state) {
 		
-		return 1;
+		case NUD_REACHABLE:
+		case NUD_STALE:
+			if (now - ndn->ndn_tstamp < nd_gc_staletime)
+				break;
+		case NUD_FAILED:
+			return 1;
+		default:
+		}
 	}
 	return 0;
 }
@@ -198,17 +203,16 @@ static int ndisc_gc_func(struct neighbour *neigh, void *arg)
 static __inline__ void ndisc_add_timer(struct nd_neigh *ndn, int timer)
 {
 	unsigned long now = jiffies;
-	unsigned long tval;
+	unsigned long tval = ~0UL;
 
 	ndn->ndn_expires = now + timer;
-	tval = del_timer(&ndisc_timer);
-
-	if (tval)
+	
+	if (del_timer(&ndisc_timer))
 	{
-		tval = min(tval, ndn->ndn_expires);
+		tval = ndisc_timer.expires;
 	}
-	else
-		tval = ndn->ndn_expires;
+
+	tval = min(tval, ndn->ndn_expires);
 
 	ndisc_timer.expires = tval;
 	add_timer(&ndisc_timer);
@@ -216,12 +220,15 @@ static __inline__ void ndisc_add_timer(struct nd_neigh *ndn, int timer)
         
 static void ndisc_del_timer(struct nd_neigh *ndn)
 {
-	unsigned long tval;
+	unsigned long tval = ~0UL;
 
 	if (!(ndn->ndn_nud_state & NUD_IN_TIMER))
 		return;
 
-	tval = del_timer(&ndisc_timer);
+	if (del_timer(&ndisc_timer))
+	{
+		tval = ndisc_timer.expires;
+	}
 	
 	if (tval == ndn->ndn_expires)
 	{
@@ -362,6 +369,9 @@ struct neighbour * ndisc_get_neigh(struct device *dev, struct in6_addr *addr)
 	if (neigh == NULL)
 	{
 		neigh = ndisc_new_neigh(dev, addr);
+
+		if (neigh == NULL)
+			return NULL;
 	}
 
 	neigh_table_unlock(&nd_tbl);
@@ -475,6 +485,7 @@ void ndisc_send_na(struct device *dev, struct nd_neigh *ndn,
 	if (skb == NULL)
 	{
 		printk(KERN_DEBUG "send_na: alloc skb failed\n");
+		return;
 	}
 
 	if (ipv6_bld_hdr_2(sk, skb, dev, (struct neighbour *) ndn, 
@@ -631,6 +642,7 @@ void ndisc_send_rs(struct device *dev, struct in6_addr *saddr,
 	if (skb == NULL)
 	{
 		printk(KERN_DEBUG "send_ns: alloc skb failed\n");
+		return;
 	}
 
         if (ipv6_bld_hdr_2(sk, skb, dev, NULL, saddr, daddr, IPPROTO_ICMPV6,
@@ -723,14 +735,14 @@ static void ndisc_timer_handler(unsigned long arg)
 		{
                         if (ndn->ndn_nud_state & NUD_IN_TIMER)
 			{
-				long time;
+				unsigned long time;
 
-				if ((ndn->ndn_expires - now) <= 0)
+				time = ndn->ndn_expires - now;
+
+				if ((long) time <= 0)
 				{
 					time = ndisc_event_timer(ndn);
 				}
-				else
-					time = ndn->ndn_expires - now;
 				
 				if (time)
 				{
@@ -744,7 +756,7 @@ static void ndisc_timer_handler(unsigned long arg)
 
 	if (ntimer != (~0UL))
 	{
-		ndisc_timer.expires = jiffies + ntimer;
+		ndisc_timer.expires = now + ntimer;
 		add_timer(&ndisc_timer);
 	}
 	
@@ -1854,10 +1866,3 @@ void ndisc_cleanup(void)
 	del_timer(&ndisc_timer);
 }
 #endif
-
-/*
- * Local variables:
- *  compile-command: "gcc -D__KERNEL__ -I/usr/src/linux/include -Wall -Wstrict-prototypes -O2 -fomit-frame-pointer -fno-strength-reduce -pipe -m486 -DCPU=486 -DMODULE -DMODVERSIONS -include /usr/src/linux/include/linux/modversions.h  -c -o ndisc.o ndisc.c"
- * c-file-style: "Linux"
- * End:
- */

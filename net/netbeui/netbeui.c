@@ -49,7 +49,7 @@
 *															*
 \***********************************************************************************************************************/
 
-static netbeui_socket *volatile netbeui_socket_list=NULL;
+static netbeui_socket *netbeui_socket_list=NULL;
 
 /*
  *	Note: Sockets may not be removed _during_ an interrupt or inet_bh
@@ -57,90 +57,41 @@ static netbeui_socket *volatile netbeui_socket_list=NULL;
  *	use this facility.
  */
 
-static void netbeui_remove_socket(netbeui_socket *sk)
+extern inline void netbeui_remove_socket(netbeui_socket *sk)
 {
-	unsigned long flags;
-	netbeui_socket *s;
-
-	save_flags(flags);
-	cli();
-
-	s=netbeui_socket_list;
-	if(s==sk)
-	{
-		netbeui_socket_list=s->next;
-		restore_flags(flags);
-		return;
-	}
-	while(s && s->next)
-	{
-		if(s->next==sk)
-		{
-			s->next=sk->next;
-			restore_flags(flags);
-			return;
-		}
-		s=s->next;
-	}
-	restore_flags(flags);
+	sklist_remove_socket(&netbeui_socket_list,sk);
 }
 
-static void netbeui_insert_socket(netbeui_socket *sk)
+extenr inline void netbeui_insert_socket(netbeui_socket *sk)
 {
-	unsigned long flags;
-	save_flags(flags);
-	cli();
-	sk->next=netbeui_socket_list;
+	sklist_insert_socket(&netbeui_socket_list,sk);
 	netbeui_socket_list=sk;
 	restore_flags(flags);
 }
 
-/*
- *	This is only called from user mode. Thus it protects itself against
- *	interrupt users but doesn't worry about being called during work.
- *	Once it is removed from the queue no interrupt or bottom half will
- *	touch it and we are (fairly 8-) ) safe.
- */
-
-static void netbeui_destroy_socket(netbeui_socket *sk);
-
-/*
- *	Handler for deferred kills.
- */
-
-static void netbeui_destroy_timer(unsigned long data)
-{
-	netbeui_destroy_socket((netbeui_socket *)data);
-}
-
 static void netbeui_destroy_socket(netbeui_socket *sk)
 {
-	struct sk_buff *skb;
-	netbeui_remove_socket(sk);
-
-	while((skb=skb_dequeue(&sk->receive_queue))!=NULL)
+	/*
+	 *	Release netbios logical channels first
+	 */
+	if(sk->af_nb.nb_link)
 	{
-		kfree_skb(skb,FREE_READ);
+		netbeui_delete_channel(sk->af_nb.nb_link);
+		sk->af_nb.nb_link=NULL;
 	}
-
-	if(sk->wmem_alloc == 0 && sk->rmem_alloc == 0 && sk->dead)
+	if(sk->af_nb.src_name)
 	{
-		sk_free(sk);
-		MOD_DEC_USE_COUNT;
+		netbeui_release_name(sk->af_nb.src_name);
+		sk->af_nb.src_name=NULL;
 	}
-	else
+	if(sk->af_nb.dst_name)
 	{
-		/*
-		 *	Someone is using our buffers still.. defer
-		 */
-		init_timer(&sk->timer);
-		sk->timer.expires=jiffies+10*HZ;
-		sk->timer.function=netbeui_destroy_timer;
-		sk->timer.data = (unsigned long)sk;
-		add_timer(&sk->timer);
+		netbeui_release_name(sk->af_nb.dst_name);
+		sk->af_nb.dst_name=NULL;
 	}
+	netbeui_remove_listener(sk);
+	sklist_destroy_socket(&netbeui_socket,sk);
 }
-
 
 /*
  *	Called from proc fs
@@ -161,14 +112,10 @@ int netbeui_get_info(char *buffer, char **start, off_t offset, int length, int d
 	for (s = netbeui_socket_list; s != NULL; s = s->next)
 	{
 		len += sprintf (buffer+len,"%02X   ", s->type);
-		len += sprintf (buffer+len,"%04X:%02X:%02X  ",
-			ntohs(s->protinfo.af_at.src_net),
-			s->protinfo.af_at.src_node,
-			s->protinfo.af_at.src_port);
-		len += sprintf (buffer+len,"%04X:%02X:%02X  ",
-			ntohs(s->protinfo.af_at.dest_net),
-			s->protinfo.af_at.dest_node,
-			s->protinfo.af_at.dest_port);
+		len += sprintf (buffer+len,"%s  ",
+			s->af_nb.src_name->text);
+		len += sprintf (buffer+len,"%s  ",
+			s->af_nb.dst_name->text);
 		len += sprintf (buffer+len,"%08X:%08X ", s->wmem_alloc, s->rmem_alloc);
 		len += sprintf (buffer+len,"%02X %d\n", s->state, SOCK_INODE(s->socket)->i_uid);
 
@@ -258,9 +205,6 @@ static int netbeui_setsockopt(struct socket *sock, int level, int optname, char 
 			}
 			break;
 
-		case SOL_SOCKET:
-			return sock_setsockopt(sk,level,optname,optval,optlen);
-
 		default:
 			return -EOPNOTSUPP;
 	}
@@ -291,9 +235,6 @@ static int netbeui_getsockopt(struct socket *sock, int level, int optname,
 			}
 			break;
 
-		case SOL_SOCKET:
-			return sock_getsockopt(sk,level,optname,optval,optlen);
-
 		default:
 			return -EOPNOTSUPP;
 	}
@@ -320,7 +261,7 @@ static int netbeui_listen(struct socket *sock, int backlog)
 		sk->backlog=128;
 	sk->state=TCP_LISTEN;
 	sk->state_change(sk);
-	netbeui_llc_listen(sk);
+	netbeui_add_listener(sk);
 	return 0;
 }
 
@@ -339,7 +280,16 @@ static void def_callback2(struct sock *sk, int len)
 	if(!sk->dead)
 	{
 		wake_up_interruptible(sk->sleep);
-		sock_wake_async(sk->socket,0);
+		sock_wake_async(sk->socket,1);
+	}
+}
+
+static void def_callback3(struct sock *sk, int len)
+{
+	if(!sk->dead)
+	{
+		wake_up_interruptible(sk->sleep);
+		sock_wake_async(sk->socket,2);
 	}
 }
 
@@ -365,13 +315,6 @@ static int netbeui_create(struct socket *sock, int protocol)
 			return(-ESOCKTNOSUPPORT);
 	}
 
-	sk->llc802=llc_alloc(GFP_KERNEL);
-	if(sk->llc802==NULL)
-	{
-		sk_free((void *)sk);
-		return -ENOBUFS:
-	}
-
 	MOD_INC_USE_COUNT;
 
 	sk->allocation=GFP_KERNEL;
@@ -395,7 +338,7 @@ static int netbeui_create(struct socket *sock, int protocol)
 
 	sk->state_change=def_callback1;
 	sk->data_ready=def_callback2;
-	sk->write_space=def_callback1;
+	sk->write_space=def_callback3;
 	sk->error_report=def_callback1;
 	sk->zapped=1;
 	return(0);
@@ -435,21 +378,40 @@ static int netbeui_bind(struct socket *sock, struct sockaddr *uaddr,size_t addr_
 {
 	netbeui_socket *sk;
 	struct sockaddr_netbeui *addr=(struct sockaddr_netbeui *)uaddr;
+	int err;
 
 	sk=(netbeui_socket *)sock->data;
 
 	if(sk->zapped==0)
 		return(-EINVAL);
 
-	if(addr_len!=sizeof(struct sockaddr_at))
+	if(addr_len!=sizeof(struct sockaddr_netbeui))
 		return -EINVAL;
 
-	if(addr->sat_family!=AF_NETBEUI)
+	if(addr->snb_family!=AF_NETBEUI)
 		return -EAFNOSUPPORT;
 
-	if(netbeui_find_socket(addr)!=NULL)
-		return -EADDRINUSE;
-
+	/*
+	 *	This will sleep. To meet POSIX it is non interruptible.
+	 *	Someone should give the 1003.1g authors an injection of
+	 *	imagination...
+	 */
+	 
+	if(sk->af_nb.src_name!=NULL)
+		return -EINVAL;
+	
+	/*
+	 *	Try and get the name. It may return various 'invalid' name
+	 *	problem reports or EADDRINUSE if we or another node holds
+	 *	the desired name.
+	 */
+	 	
+	sk->af_nb.src_name=netbeui_alloc_name(addr, &err);
+	if(sk->af_nb.src_name==NULL)
+		return err;
+	/*
+	 *	Add us to the active socket list 
+	 */
 	netbeui_insert_socket(sk);
 	sk->zapped=0;
 	return(0);
@@ -463,28 +425,44 @@ static int netbeui_connect(struct socket *sock, struct sockaddr *uaddr,
 	size_t addr_len, int flags)
 {
 	netbeui_socket *sk=(netbeui_socket *)sock->data;
-	struct sockaddr_netbeui *addr;
+	struct sockaddr_netbeui *addr=(struct sockaddr_netbeui *)uaddr;
 
-	sk->state = TCP_CLOSE;
-	sock->state = SS_UNCONNECTED;
-
-	if(addr_len!=sizeof(*addr))
-		return(-EINVAL);
-	addr=(struct sockaddr_netbeui *)uaddr;
-
-	if(addr->sat_family!=AF_NETBEUI)
-		return -EAFNOSUPPORT;
-
-/* FIXME - Netbios broadcast semantics ?? */
-	if(addr->sat_addr.s_node==ATADDR_BCAST && !sk->broadcast)
-		return -EACCES;
-
-	if(sk->zapped)
-		return -EINVAL;
-
-	if(atrtr_get_dev(&addr->sat_addr)==NULL)
-		return -ENETUNREACH;
-
+	/*
+	 *	Check pending operations
+	 */	
+	
+	if(sk->state==TCP_ESTABLISHED && sock->state == SS_CONNECTING) 
+	{
+		sock->state==SS_CONNECTED;
+		return 0;
+	}
+	
+	if(sk->state == TCP_CLOSE & sock->state == SS_CONNECTING)
+	{
+		sock->state==SS_UNCONNECTED;
+		return -ECONNREFUSED;
+	}
+	
+	if(sock->state == SS_CONNECTING && (flags & O_NONBLOCK))
+		return -EINPROGRESS;
+	
+	if(sk->state==TCP_ESTABLISHED)
+		return -EISCONN;	 
+	
+	/*
+	 *	If this is new it must really be new...
+	 */
+	 
+	if(sk->af_nb.dst_name==NULL)
+	{
+		if(addr_len != sizeof(struct sockaddr_nb))
+			return -EINVAL;
+		if(addr->snb_family!=AF_NETBEUI)
+			return -EAFNOSUPPORT;
+		/*
+		 *	Try and find the name
+		 */
+	}
 }
 
 /*

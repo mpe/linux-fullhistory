@@ -20,7 +20,7 @@
  * For backward compatibility?  Maybe this should be moved
  * into arch/i386 instead?
  */
-static void cp_old_stat(struct inode * inode, struct __old_kernel_stat * statbuf)
+static int cp_old_stat(struct inode * inode, struct __old_kernel_stat * statbuf)
 {
 	struct __old_kernel_stat tmp;
 
@@ -39,12 +39,12 @@ static void cp_old_stat(struct inode * inode, struct __old_kernel_stat * statbuf
 	tmp.st_atime = inode->i_atime;
 	tmp.st_mtime = inode->i_mtime;
 	tmp.st_ctime = inode->i_ctime;
-	copy_to_user(statbuf,&tmp,sizeof(tmp));
+	return copy_to_user(statbuf,&tmp,sizeof(tmp)) ? -EFAULT : 0;
 }
 
 #endif
 
-static void cp_new_stat(struct inode * inode, struct stat * statbuf)
+static int cp_new_stat(struct inode * inode, struct stat * statbuf)
 {
 	struct stat tmp;
 	unsigned int blocks, indirect;
@@ -99,7 +99,7 @@ static void cp_new_stat(struct inode * inode, struct stat * statbuf)
 		tmp.st_blocks = inode->i_blocks;
 		tmp.st_blksize = inode->i_blksize;
 	}
-	copy_to_user(statbuf,&tmp,sizeof(tmp));
+	return copy_to_user(statbuf,&tmp,sizeof(tmp)) ? -EFAULT : 0;
 }
 
 #if !defined(__alpha__) && !defined(__sparc__)
@@ -112,15 +112,12 @@ asmlinkage int sys_stat(char * filename, struct __old_kernel_stat * statbuf)
 	struct inode * inode;
 	int error;
 
-	error = verify_area(VERIFY_WRITE,statbuf,sizeof (*statbuf));
-	if (error)
-		return error;
 	error = namei(filename,&inode);
 	if (error)
 		return error;
-	cp_old_stat(inode,statbuf);
+	error = cp_old_stat(inode,statbuf);
 	iput(inode);
-	return 0;
+	return error;
 }
 #endif
 
@@ -129,15 +126,12 @@ asmlinkage int sys_newstat(char * filename, struct stat * statbuf)
 	struct inode * inode;
 	int error;
 
-	error = verify_area(VERIFY_WRITE,statbuf,sizeof (*statbuf));
-	if (error)
-		return error;
 	error = namei(filename,&inode);
 	if (error)
 		return error;
-	cp_new_stat(inode,statbuf);
+	error = cp_new_stat(inode,statbuf);
 	iput(inode);
-	return 0;
+	return error;
 }
 
 #if !defined(__alpha__) && !defined(__sparc__)
@@ -151,15 +145,12 @@ asmlinkage int sys_lstat(char * filename, struct __old_kernel_stat * statbuf)
 	struct inode * inode;
 	int error;
 
-	error = verify_area(VERIFY_WRITE,statbuf,sizeof (*statbuf));
-	if (error)
-		return error;
 	error = lnamei(filename,&inode);
 	if (error)
 		return error;
-	cp_old_stat(inode,statbuf);
+	error = cp_old_stat(inode,statbuf);
 	iput(inode);
-	return 0;
+	return error;
 }
 
 #endif
@@ -169,15 +160,12 @@ asmlinkage int sys_newlstat(char * filename, struct stat * statbuf)
 	struct inode * inode;
 	int error;
 
-	error = verify_area(VERIFY_WRITE,statbuf,sizeof (*statbuf));
-	if (error)
-		return error;
 	error = lnamei(filename,&inode);
 	if (error)
 		return error;
-	cp_new_stat(inode,statbuf);
+	error = cp_new_stat(inode,statbuf);
 	iput(inode);
-	return 0;
+	return error;
 }
 
 #if !defined(__alpha__) && !defined(__sparc__)
@@ -190,15 +178,10 @@ asmlinkage int sys_fstat(unsigned int fd, struct __old_kernel_stat * statbuf)
 {
 	struct file * f;
 	struct inode * inode;
-	int error;
 
-	error = verify_area(VERIFY_WRITE,statbuf,sizeof (*statbuf));
-	if (error)
-		return error;
 	if (fd >= NR_OPEN || !(f=current->files->fd[fd]) || !(inode=f->f_inode))
 		return -EBADF;
-	cp_old_stat(inode,statbuf);
-	return 0;
+	return cp_old_stat(inode,statbuf);
 }
 
 #endif
@@ -207,15 +190,10 @@ asmlinkage int sys_newfstat(unsigned int fd, struct stat * statbuf)
 {
 	struct file * f;
 	struct inode * inode;
-	int error;
 
-	error = verify_area(VERIFY_WRITE,statbuf,sizeof (*statbuf));
-	if (error)
-		return error;
 	if (fd >= NR_OPEN || !(f=current->files->fd[fd]) || !(inode=f->f_inode))
 		return -EBADF;
-	cp_new_stat(inode,statbuf);
-	return 0;
+	return cp_new_stat(inode,statbuf);
 }
 
 asmlinkage int sys_readlink(const char * path, char * buf, int bufsiz)

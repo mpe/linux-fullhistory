@@ -1308,11 +1308,10 @@ int arcnet_reset(struct device *dev,int reset_delay)
  *
  * Intelligent defaults?!  Nah.
  */
+
 void arcnet_setup(struct device *dev)
 {
-	int i;
-	for (i=0; i<DEV_NUMBUFFS; i++)
-		skb_queue_head_init(&dev->buffs[i]);
+	dev_init_buffers(dev);
 
 	dev->broadcast[0]	= 0x00;	/* for us, broadcasts are address 0 */
 	dev->addr_len		= 1;

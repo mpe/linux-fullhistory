@@ -1400,9 +1400,9 @@ static int pi_probe(struct device *dev, int card_type)
     dev->get_stats = pi_get_stats;
 
     /* Fill in the fields of the device structure */
-    for (i = 0; i < DEV_NUMBUFFS; i++)
-	skb_queue_head_init(&dev->buffs[i]);
 
+    dev_init_buffers(dev):
+    
 #if defined(CONFIG_AX25) || defined(CONFIG_AX25_MODULE)
     dev->hard_header    = ax25_encapsulate;
     dev->rebuild_header = ax25_rebuild_header;

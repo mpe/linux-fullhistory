@@ -1546,7 +1546,7 @@ asmlinkage int sync_old_buffers(void)
 
 asmlinkage int sys_bdflush(int func, long data)
 {
-	int i, error;
+	int i;
 
 	if (!suser())
 		return -EPERM;
@@ -1560,11 +1560,7 @@ asmlinkage int sys_bdflush(int func, long data)
 		if (i < 0 || i >= N_PARAM)
 			return -EINVAL;
 		if((func & 1) == 0) {
-			error = verify_area(VERIFY_WRITE, (void *) data, sizeof(int));
-			if (error)
-				return error;
-			put_user(bdf_prm.data[i], (int*)data);
-			return 0;
+			return put_user(bdf_prm.data[i], (int*)data);
 		};
 		if (data < bdflush_min[i] || data > bdflush_max[i])
 			return -EINVAL;

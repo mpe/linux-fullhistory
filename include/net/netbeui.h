@@ -23,11 +23,17 @@ struct nb_ses
  
 struct nb_link
 {
+	struct  llc llc;	/* Must be first */
 	u8	mac[6];		/* Mac address of remote */
 	struct device *dev;	/* Device we heard him on */
-	struct llc *llc;	/* 802.2 link layer */
 	struct nb_ses *sessions;/* Netbeui sessions on this LLC link */
 	struct wait_queue *wait;/* Wait queue for this netbios LLC */
+	int	busy;		/* Track the LLC busy state */
+	int	state;		/* Link state */
+#define NETBEUI_OPEN		1	/* Up and going */
+#define NETBEUI_CONNWAIT	2	/* Waiting to come up */
+#define NETBEUI_DISCWAIT	3	/* Waiting to drop and recover */
+#define NETBEUI_DEADWAIT	4	/* Trying to die */
 };
 
 

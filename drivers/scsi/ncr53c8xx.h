@@ -45,10 +45,10 @@
 /*
 **	Name and revision of the driver
 */
-#define SCSI_NCR_DRIVER_NAME		"ncr53c8xx - revision 1.14c"
+#define SCSI_NCR_DRIVER_NAME		"ncr53c8xx - revision 1.16b"
  
 /*
-**	If SCSI_NCR_SPECIAL_FEATURES is defined,
+**	If SCSI_NCR_SETUP_SPECIAL_FEATURES is defined,
 **	the driver enables or not the following features according to chip id 
 **	revision id:
 **	DMODE   0xce
@@ -63,6 +63,9 @@
 **		0x01	set write and invalidate
 **	CTEST4  0x80
 **		0x80	burst disabled
+**	CTEST5  0x24	(825a and 875 only)
+**		0x04	burst 128
+**		0x80	dma fifo 536
 **
 **	If SCSI_NCR_TRUST_BIOS_SETTING is defined, the driver will use the 
 **	initial value of corresponding bit fields, assuming they have been 
@@ -70,14 +73,6 @@
 **	When Linux is booted from another O/S, these assertion is false and 
 **	the driver will not be able to guess it. 
 */
-
-#if 0
-#define SCSI_NCR_TRUST_BIOS_SETTING
-#endif
-
-#if 0
-#define SCSI_NCR_SPECIAL_FEATURES
-#endif
 
 /*********** LINUX SPECIFIC SECTION ******************/
 
@@ -144,10 +139,29 @@
 #	define SCSI_NCR_SHARE_IRQ
 #endif
 
-/*
-**	Avoid to change these constants, unless you know what you are doing.
+/* ---------------------------------------------------------------------
+** Take into account kernel configured parameters.
+** Most of these options can be overridden at startup by a command line.
+** ---------------------------------------------------------------------
 */
 
+/*
+ * For Ultra SCSI support option, use special features and allow 20Mhz 
+ * synchronous data transfers.
+ */
+#if	1 /* CONFIG_SCSI_NCR53C8XX_ULTRA_SUPPORT */
+#define	SCSI_NCR_SETUP_SPECIAL_FEATURES		(1)
+#define SCSI_NCR_SETUP_ULTRA_SCSI		(1)
+#define SCSI_NCR_MAX_SYNC (20000)
+#else
+#define	SCSI_NCR_SETUP_SPECIAL_FEATURES		(0)
+#define SCSI_NCR_SETUP_ULTRA_SCSI		(0)
+#define SCSI_NCR_MAX_SYNC (10000)
+#endif
+
+/*
+ * Allow tags from 2 to 12, default 4
+ */
 #ifdef	CONFIG_SCSI_NCR53C8XX_MAX_TAGS
 #if	CONFIG_SCSI_NCR53C8XX_MAX_TAGS < 2
 #define SCSI_NCR_MAX_TAGS	(2)
@@ -160,57 +174,91 @@
 #define SCSI_NCR_MAX_TAGS	(4)
 #endif
 
-#define SCSI_NCR_ALWAYS_SIMPLE_TAG
-
-#ifdef CONFIG_SCSI_NCR53C8XX_TAGGED_QUEUE
-#define SCSI_NCR_DEFAULT_TAGS	SCSI_NCR_MAX_TAGS
+/*
+ * Allow tagged command queuing support if configured with default number 
+ * of tags set to max (see above).
+ */
+#ifdef	CONFIG_SCSI_NCR53C8XX_TAGGED_QUEUE
+#define	SCSI_NCR_SETUP_DEFAULT_TAGS	SCSI_NCR_MAX_TAGS
 #else
-#define SCSI_NCR_DEFAULT_TAGS	(0)
+#define	SCSI_NCR_SETUP_DEFAULT_TAGS	(0)
 #endif
 
-#ifdef CONFIG_SCSI_NCR53C8XX_IOMAPPED
+/*
+ * Use normal IO if configured. Forced for alpha.
+ */
+#if defined(CONFIG_SCSI_NCR53C8XX_IOMAPPED) || defined(__alpha__)
 #define	SCSI_NCR_IOMAPPED
 #endif
 
+/*
+ * Sync transfer frequency at startup.
+ * Allow from 5Mhz to 20Mhz default 10 Mhz.
+ */
 #ifdef	CONFIG_SCSI_NCR53C8XX_SYNC
 #if	CONFIG_SCSI_NCR53C8XX_SYNC == 0
-#define	SCSI_NCR_DEFAULT_SYNC	(0)
-#elif	CONFIG_SCSI_NCR53C8XX_SYNC < 5
-#define	SCSI_NCR_DEFAULT_SYNC	(5000)
-#elif	CONFIG_SCSI_NCR53C8XX_SYNC > 10
-#define	SCSI_NCR_DEFAULT_SYNC	(10000)
+#define	SCSI_NCR_SETUP_DEFAULT_SYNC	(0)
+#elif	CONFIG_SCSI_NCR53C8XX_SYNC*1000 < 5000
+#define	SCSI_NCR_SETUP_DEFAULT_SYNC	(5000)
+#elif	CONFIG_SCSI_NCR53C8XX_SYNC*1000 > SCSI_NCR_MAX_SYNC
+#define	SCSI_NCR_SETUP_DEFAULT_SYNC	SCSI_NCR_MAX_SYNC
 #else
-#define	SCSI_NCR_DEFAULT_SYNC	(CONFIG_SCSI_NCR53C8XX_SYNC * 1000)
+#define	SCSI_NCR_SETUP_DEFAULT_SYNC	(CONFIG_SCSI_NCR53C8XX_SYNC * 1000)
 #endif
 #else
-#define	SCSI_NCR_DEFAULT_SYNC	(10000)
+#define	SCSI_NCR_SETUP_DEFAULT_SYNC	(10000)
 #endif
 
+/*
+ * Default sync to 0 will force asynchronous at startup
+ */
 #ifdef	CONFIG_SCSI_FORCE_ASYNCHRONOUS
-#undef	SCSI_NCR_DEFAULT_SYNC
-#define SCSI_NCR_DEFAULT_SYNC	(0)
+#undef	SCSI_NCR_SETUP_DEFAULT_SYNC
+#define SCSI_NCR_SETUP_DEFAULT_SYNC	(0)
 #endif
 
+/*
+ * Disallow disconnections at boot-up
+ */
 #ifdef CONFIG_SCSI_NCR53C8XX_NO_DISCONNECT
-#define SCSI_NCR_NO_DISCONNECT
+#define SCSI_NCR_SETUP_DISCONNECTION	(0)
+#else
+#define SCSI_NCR_SETUP_DISCONNECTION	(1)
 #endif
 
+/*
+ * Force synchronous negotiation for all targets
+ */
 #ifdef CONFIG_SCSI_NCR53C8XX_FORCE_SYNC_NEGO
-#define SCSI_NCR_FORCE_SYNC_NEGO
+#define SCSI_NCR_SETUP_FORCE_SYNC_NEGO	(1)
+#else
+#define SCSI_NCR_SETUP_FORCE_SYNC_NEGO	(0)
 #endif
 
+/*
+ * Disable master parity checking (flawed hardwares need that)
+ */
 #ifdef CONFIG_SCSI_NCR53C8XX_DISABLE_MPARITY_CHECK
-#define SCSI_NCR_DISABLE_MPARITY_CHECK
+#define SCSI_NCR_SETUP_MASTER_PARITY	(0)
+#else
+#define SCSI_NCR_SETUP_MASTER_PARITY	(1)
 #endif
 
+/*
+ * Disable scsi parity checking (flawed devices may need that)
+ */
 #ifdef CONFIG_SCSI_NCR53C8XX_DISABLE_PARITY_CHECK
-#define SCSI_NCR_DISABLE_PARITY_CHECK
+#define SCSI_NCR_SETUP_SCSI_PARITY	(0)
+#else
+#define SCSI_NCR_SETUP_SCSI_PARITY	(1)
 #endif
 
-#if 0
-#define SCSI_NCR_SEGMENT_SIZE	(512)
-#endif
+/*
+**	Other parameters not configurable with "make config"
+**	Avoid to change these constants, unless you know what you are doing.
+*/
 
+#define SCSI_NCR_ALWAYS_SIMPLE_TAG
 #define SCSI_NCR_MAX_SCATTER	(128)
 #define SCSI_NCR_MAX_TARGET	(16)
 #define SCSI_NCR_MAX_HOST	(2)
@@ -221,13 +269,32 @@
 #define SCSI_NCR_CMD_PER_LUN	(SCSI_NCR_MAX_TAGS)
 #define SCSI_NCR_SG_TABLESIZE	(SCSI_NCR_MAX_SCATTER-1)
 
+#define SCSI_NCR_TIMER_INTERVAL	((HZ+5-1)/5)
+
 #if 1 /* defined CONFIG_SCSI_MULTI_LUN */
 #define SCSI_NCR_MAX_LUN	(8)
 #else
 #define SCSI_NCR_MAX_LUN	(1)
 #endif
 
-#define SCSI_NCR_TIMER_INTERVAL	((HZ+5-1)/5)
+/*
+**	Initial setup.
+**	Can be overriden at startup by a command line.
+*/
+#define SCSI_NCR_DRIVER_SETUP			\
+{						\
+	SCSI_NCR_SETUP_MASTER_PARITY,		\
+	SCSI_NCR_SETUP_SCSI_PARITY,		\
+	SCSI_NCR_SETUP_DISCONNECTION,		\
+	SCSI_NCR_SETUP_SPECIAL_FEATURES,	\
+	SCSI_NCR_SETUP_ULTRA_SCSI,		\
+	SCSI_NCR_SETUP_FORCE_SYNC_NEGO,		\
+	1,					\
+	SCSI_NCR_SETUP_DEFAULT_TAGS,		\
+	SCSI_NCR_SETUP_DEFAULT_SYNC,		\
+	0x00					\
+}
+
 
 /*
 **	Define Scsi_Host_Template parameters
@@ -237,7 +304,11 @@
 
 #if defined(HOSTS_C) || defined(MODULE)
 
+#if	LINUX_VERSION_CODE >= LinuxVersionCode(1,3,98)
 #include <scsi/scsicam.h>
+#else
+#include <linux/scsicam.h>
+#endif
 
 int ncr53c8xx_abort(Scsi_Cmnd *);
 int ncr53c8xx_detect(Scsi_Host_Template *tpnt);
@@ -516,12 +587,18 @@ struct ncr_reg {
 	#define   CSIGP   0x40
 
 /*1b*/  u_char    nc_ctest3;
-	#define   CLF	  0x04	/* clear scsi fifo		    */
+	#define   FLF     0x08  /* cmd: flush dma fifo              */
+	#define   CLF	  0x04	/* cmd: clear dma fifo		    */
+	#define   FM      0x02  /* mod: fetch pin mode              */
+	#define   WRIE    0x01  /* mod: write and invalidate enable */
 
 /*1c*/  u_int32    nc_temp;	/* ### Temporary stack              */
 
 /*20*/	u_char	  nc_dfifo;
 /*21*/  u_char    nc_ctest4;
+	#define   BDIS    0x80  /* mod: burst disable               */
+	#define   MPEE    0x08  /* mod: master parity error enable  */
+
 /*22*/  u_char    nc_ctest5;
 /*23*/  u_char    nc_ctest6;
 
@@ -532,13 +609,25 @@ struct ncr_reg {
 /*34*/  u_int32    nc_scratcha;  /* ??? Temporary register a         */
 
 /*38*/  u_char    nc_dmode;
+	#define   BL_2    0x80  /* mod: burst length shift value +2 */
+	#define   BL_1    0x40  /* mod: burst length shift value +1 */
+	#define   ERL     0x08  /* mod: enable read line            */
+	#define   ERMP    0x04  /* mod: enable read multiple        */
+	#define   BOF     0x02  /* mod: burst op code fetch         */
+
 /*39*/  u_char    nc_dien;
 /*3a*/  u_char    nc_dwt;
 
 /*3b*/  u_char    nc_dcntl;	/* --> Script execution control     */
-        #define   SSM     0x10  /* mod: single step mode            */
-        #define   STD     0x04  /* cmd: start dma mode              */
-	#define	  NOCOM   0x01	/* cmd: protect sfbr while reselect */
+
+	#define   CLSE    0x80  /* mod: cache line size enable      */
+	#define   PFF     0x40  /* cmd: pre-fetch flush             */
+	#define   PFEN    0x20  /* mod: pre-fetch enable            */
+	#define   SSM     0x10  /* mod: single step mode            */
+	#define   IRQM    0x08  /* mod: irq mode (1 = totem pole !) */
+	#define   STD     0x04  /* cmd: start dma mode              */
+	#define   IRQD    0x02  /* mod: irq disable                 */
+ 	#define	  NOCOM   0x01	/* cmd: protect sfbr while reselect */
 
 /*3c*/  u_int32    nc_adder;
 

@@ -249,13 +249,11 @@ int eql_init(struct device *dev)
   
   	/*
   	 *	Fill in the fields of the device structure with 
-	 *	eql-generic values. This should be in a common 
-	 *	file instead of per-driver.  
+	 *	eql-generic values. 
 	 */
 
-	for (i = 0; i < DEV_NUMBUFFS; i++)
-		skb_queue_head_init(&dev->buffs[i]);
-
+	dev_init_buffers(dev);
+	
 	/*
 	 *	Now we undo some of the things that eth_setup does
 	 * 	that we don't like 

@@ -22,6 +22,7 @@
  *		Alan Cox	:	Added the watchdog ioctl() stuff
  *		Alan Cox	:	Fixed the reboot problem (as noted by
  *					Matt Crocker).
+ *		Alan Cox	:	Added wdt= boot option
  */
 
 #include <linux/config.h>
@@ -46,6 +47,7 @@ static int wdt_is_open=0;
 
 /*
  *	You must set these - there is no sane way to probe for this board.
+ *	You can use wdt=x,y to set these now.
  */
  
 int io=0x240;
@@ -53,6 +55,20 @@ int irq=14;
 
 #define WD_TIMO (100*60)		/* 1 minute */
 
+/*
+ *	Setup options
+ */
+ 
+void wdt_setup(char *str, int *ints)
+{
+	if(ints[0]>0)
+	{
+		io=ints[1];
+		if(ints[0]>1)
+			irq=ints[2];
+	}
+}
+ 
 /*
  *	Programming support
  */

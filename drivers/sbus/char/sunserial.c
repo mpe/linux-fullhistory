@@ -1,8 +1,9 @@
-/* $Id: sunserial.c,v 1.24 1996/11/21 16:57:56 jj Exp $
+/* $Id: sunserial.c,v 1.25 1996/12/30 07:50:26 davem Exp $
  * serial.c: Serial port driver for the Sparc.
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
  * Copyright (C) 1996 Eddie C. Dost   (ecd@skynet.be)
+ * Fixes by Pete A. Zaitcev <zaitcev@ipmce.su>.
  */
 
 #include <linux/errno.h>
@@ -489,6 +490,8 @@ clear_and_exit:
 
 static _INLINE_ void transmit_chars(struct sun_serial *info)
 {
+	struct tty_struct *tty = info->tty;
+
 	if (info->x_char) {
 		/* Send next char */
 		zs_put_char(info->zs_channel, info->x_char);
@@ -496,7 +499,7 @@ static _INLINE_ void transmit_chars(struct sun_serial *info)
 		goto clear_and_return;
 	}
 
-	if((info->xmit_cnt <= 0) || info->tty->stopped) {
+	if((info->xmit_cnt <= 0) || (tty != 0 && tty->stopped)) {
 		/* That's peculiar... */
 		info->zs_channel->control = RES_Tx_P;
 		udelay(5);
@@ -666,6 +669,10 @@ static void do_serial_hangup(void *private_)
 	tty = info->tty;
 	if (!tty)
 		return;
+#ifdef SERIAL_DEBUG_OPEN
+	printk("do_serial_hangup<%p: tty-%d\n",
+		__builtin_return_address(0), info->line);
+#endif
 
 	tty_hangup(tty);
 }
@@ -700,7 +707,7 @@ static int startup(struct sun_serial * info)
 	save_flags(flags); cli();
 
 #ifdef SERIAL_DEBUG_OPEN
-	printk("starting up ttys%d (irq %d)...", info->line, info->irq);
+	printk("Starting up tty-%d (irq %d)...\n", info->line, info->irq);
 #endif
 
 	/*
@@ -820,10 +827,7 @@ static void change_speed(struct sun_serial *info)
 		 */
 		i = B9600;
 	}
-	if (i == 0) {
-		/* XXX B0, hangup the line. */
-		do_serial_hangup(info);
-	} else if (baud_table[i]) {
+	if (baud_table[i]) {
 		info->zs_baud = baud_table[i];
 		info->clk_divisor = 16;
 
@@ -833,6 +837,8 @@ static void change_speed(struct sun_serial *info)
 		info->curregs[12] = (brg & 255);
 		info->curregs[13] = ((brg >> 8) & 255);
 		info->curregs[14] = BRSRC | BRENAB;
+	/* } else { */
+	/* XXX */
 	}
 
 	/* byte size and parity */
@@ -1405,7 +1411,7 @@ static void rs_close(struct tty_struct *tty, struct file * filp)
 	}
 	
 #ifdef SERIAL_DEBUG_OPEN
-	printk("rs_close ttys%d, count = %d\n", info->line, info->count);
+	printk("rs_close tty-%d, count = %d\n", info->line, info->count);
 #endif
 	if ((tty->count == 1) && (info->count != 1)) {
 		/*
@@ -1484,6 +1490,9 @@ static void rs_close(struct tty_struct *tty, struct file * filp)
 	info->flags &= ~(ZILOG_NORMAL_ACTIVE|ZILOG_CALLOUT_ACTIVE|
 			 ZILOG_CLOSING);
 	wake_up_interruptible(&info->close_wait);
+#ifdef SERIAL_DEBUG_OPEN
+	printk("rs_close tty-%d exiting, count = %d\n", info->line, info->count);
+#endif
 	restore_flags(flags);
 }
 
@@ -1497,6 +1506,11 @@ void rs_hangup(struct tty_struct *tty)
 	if (serial_paranoia_check(info, tty->device, "rs_hangup"))
 		return;
 	
+#ifdef SERIAL_DEBUG_OPEN
+	printk("rs_hangup<%p: tty-%d, count = %d bye\n",
+		__builtin_return_address(0), info->line, info->count);
+#endif
+
 	rs_flush_buffer(tty);
 	shutdown(info);
 	info->event = 0;
@@ -1517,6 +1531,7 @@ static int block_til_ready(struct tty_struct *tty, struct file * filp,
 	struct wait_queue wait = { current, NULL };
 	int		retval;
 	int		do_clocal = 0;
+	unsigned char	r0;
 
 	/*
 	 * If the device is in the middle of being closed, then block
@@ -1599,6 +1614,10 @@ static int block_til_ready(struct tty_struct *tty, struct file * filp,
 		current->state = TASK_INTERRUPTIBLE;
 		if (tty_hung_up_p(filp) ||
 		    !(info->flags & ZILOG_INITIALIZED)) {
+#ifdef SERIAL_DEBUG_OPEN
+			printk("block_til_ready hup-ed: ttys%d, count = %d\n",
+				info->line, info->count);
+#endif
 #ifdef SERIAL_DO_RESTART
 			if (info->flags & ZILOG_HUP_NOTIFY)
 				retval = -EAGAIN;
@@ -1610,9 +1629,12 @@ static int block_til_ready(struct tty_struct *tty, struct file * filp,
 			break;
 		}
 
+		cli();
+		r0 = read_zsreg(info->zs_channel, R0);
+		sti();
 		if (!(info->flags & ZILOG_CALLOUT_ACTIVE) &&
 		    !(info->flags & ZILOG_CLOSING) &&
-		    (do_clocal || (DCD & read_zsreg(info->zs_channel, R0))))
+		    (do_clocal || (DCD & r0)))
 			break;
 		if (current->signal & ~current->blocked) {
 			retval = -ERESTARTSYS;
@@ -1668,6 +1690,11 @@ int rs_open(struct tty_struct *tty, struct file * filp)
 	printk("rs_open %s%d, count = %d\n", tty->driver.name, info->line,
 	       info->count);
 #endif
+	if (info->tty != 0 && info->tty != tty) {
+		/* Never happen? */
+		printk("rs_open %s%d, tty overwrite.\n", tty->driver.name, info->line);
+		return -EBUSY;
+	}
 	info->count++;
 	tty->driver_data = info;
 	info->tty = tty;
@@ -1709,7 +1736,7 @@ int rs_open(struct tty_struct *tty, struct file * filp)
 
 static void show_serial_version(void)
 {
-	char *revision = "$Revision: 1.24 $";
+	char *revision = "$Revision: 1.25 $";
 	char *version, *p;
 
 	version = strchr(revision, ' ');

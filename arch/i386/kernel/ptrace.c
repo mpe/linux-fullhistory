@@ -421,24 +421,17 @@ asmlinkage int sys_ptrace(long request, long pid, long addr, long data)
 			res = read_long(child, addr, &tmp);
 			if (res < 0)
 				return res;
-			res = verify_area(VERIFY_WRITE, (void *) data, sizeof(long));
-			if (!res)
-				put_user(tmp,(unsigned long *) data);
-			return res;
+			return put_user(tmp,(unsigned long *) data);
 		}
 
 	/* read the word at location addr in the USER area. */
 		case PTRACE_PEEKUSR: {
 			unsigned long tmp;
-			int res;
 
 			if ((addr & 3) || addr < 0 || 
 			    addr > sizeof(struct user) - 3)
 				return -EIO;
 
-			res = verify_area(VERIFY_WRITE, (void *) data, sizeof(long));
-			if (res)
-				return res;
 			tmp = 0;  /* Default return condition */
 			if(addr < 17*sizeof(long))
 				tmp = getreg(child, addr);
@@ -448,8 +441,7 @@ asmlinkage int sys_ptrace(long request, long pid, long addr, long data)
 				addr = addr >> 2;
 				tmp = child->debugreg[addr];
 			};
-			put_user(tmp,(unsigned long *) data);
-			return 0;
+			return put_user(tmp,(unsigned long *) data);
 		}
 
       /* when I and D space are separate, this will have to be fixed. */
