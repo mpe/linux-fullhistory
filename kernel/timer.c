@@ -1,5 +1,5 @@
 /*
- *  linux/kernel/ktimer.c
+ *  linux/kernel/timer.c
  *
  *  Kernel internal timers, kernel timekeeping, basic process system calls
  *

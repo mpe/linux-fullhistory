@@ -380,28 +380,21 @@ extern __inline__ pgd_t *get_pgd_fast(void)
 			pgd_quicklist = (unsigned long *)ret->next_hash;
                 ret = (struct page *)(page_address(ret) + off);
                 pgd_cache_size--;
+        } else {
+		ret = (struct page *) __get_free_page(GFP_KERNEL);
+		if(ret) {
+			struct page *page = mem_map + MAP_NR(ret);
+			
+			memset(ret, 0, PAGE_SIZE);
+			(unsigned long)page->pprev_hash = 2;
+			(unsigned long *)page->next_hash = pgd_quicklist;
+			pgd_quicklist = (unsigned long *)page;
+			pgd_cache_size++;
+		}
         }
         return (pgd_t *)ret;
 }
 
-extern __inline__ pgd_t *get_pgd_slow(void)
-{
-	pgd_t *ret = (pgd_t *) __get_free_page(GFP_KERNEL);
-
-	if(ret)
-		memset(ret, 0, PAGE_SIZE);
-	return (pgd_t *)ret;
-}
-
-extern __inline__ pgd_t *get_pgd_uptodate(pgd_t *pgd)
-{
-	struct page *page = mem_map + MAP_NR(pgd);
-
-	(unsigned long)page->pprev_hash = 2;
-	(unsigned long *)page->next_hash = pgd_quicklist;
-	pgd_quicklist = (unsigned long *)page;
-	pgd_cache_size++;
-}
 #else /* __SMP__ */
 
 extern __inline__ void free_pgd_fast(pgd_t *pgd)
@@ -419,21 +412,12 @@ extern __inline__ pgd_t *get_pgd_fast(void)
 		pgd_quicklist = (unsigned long *)(*ret);
 		ret[0] = 0;
 		pgtable_cache_size--;
+	} else {
+		ret = (unsigned long *) __get_free_page(GFP_KERNEL);
+		if(ret)
+			memset(ret, 0, PAGE_SIZE);
 	}
 	return (pgd_t *)ret;
-}
-
-extern __inline__ pgd_t *get_pgd_slow(void)
-{
-	pgd_t *ret = (pgd_t *)__get_free_page(GFP_KERNEL);
-
-	if(ret)
-		memset(ret, 0, PAGE_SIZE);
-	return(ret);
-}
-
-extern __inline__ pgd_t *get_pgd_uptodate(pgd_t *pgd)
-{
 }
 
 extern __inline__ void free_pgd_slow(pgd_t *pgd)
@@ -500,6 +484,7 @@ extern __inline__ void free_pte_slow(pte_t *pte)
 #define pmd_free_kernel(pmd)	free_pmd_fast(pmd)
 #define pmd_free(pmd)		free_pmd_fast(pmd)
 #define pgd_free(pgd)		free_pgd_fast(pgd)
+#define pgd_alloc()		get_pgd_fast()
 
 extern inline pte_t * pte_alloc(pmd_t *pmd, unsigned long address)
 {

@@ -249,7 +249,7 @@ void __init mem_init(void)
 	initpages = &__init_end - &__init_begin;
 
 	max_mapnr   = max_low_pfn;
-	high_memory = (void *)__va(max_low_pfn * PAGE_SIZE);
+	high_memory = (void *)__va(PHYS_OFFSET + max_low_pfn * PAGE_SIZE);
 
 	/*
 	 * We may have non-contiguous memory.  Setup the PageSkip stuff,
@@ -273,12 +273,12 @@ void __init mem_init(void)
 		printk(" %ldMB", meminfo.bank[i].size >> 20);
 	}
 
-	printk(" = %luMB total\n", num_physpages >> (20 - PAGE_SHIFT)); 
+	printk(" = %luMB total\n", num_physpages >> (20 - PAGE_SHIFT));
 	printk("Memory: %luKB available (%dK code, %dK data, %dK init)\n",
 		(unsigned long) nr_free_pages() << (PAGE_SHIFT-10),
 		codepages >> 10, datapages >> 10, initpages >> 10);
 
-	if (PAGE_SIZE >= 16384 && max_mapnr <= 128) {
+	if (PAGE_SIZE >= 16384 && num_physpages <= 128) {
 		extern int sysctl_overcommit_memory;
 		/*
 		 * On a machine this small we won't get

@@ -205,6 +205,7 @@ static struct irqaction dc21285_error_action = {
 
 void __init dc21285_init(void)
 {
+	static struct resource csrmem, csrio;
 	unsigned int mem_size;
 	unsigned long cntl;
 
@@ -217,6 +218,15 @@ void __init dc21285_init(void)
 	*CSR_PCIADDR_EXTN     = 0;
 
 #ifdef CONFIG_HOST_FOOTBRIDGE
+
+	csrio.flags = IORESOURCE_IO;
+	csrmem.flags = IORESOURCE_MEM;
+
+	allocate_resource(&ioport_resource, &csrio, 128,
+			  0xff00, 0xffff, 128, NULL, NULL);
+	allocate_resource(&iomem_resource, &csrmem, 128,
+			  0xf4000000, 0xf8000000, 128, NULL, NULL);
+
 	/*
 	 * Map our SDRAM at a known address in PCI space, just in case
 	 * the firmware had other ideas.  Using a nonzero base is
@@ -224,8 +234,8 @@ void __init dc21285_init(void)
 	 * in the range 0x000a0000 to 0x000c0000. (eg, S3 cards).
 	 */
 	*CSR_PCICACHELINESIZE = 0x00002008;
-	*CSR_PCICSRBASE       = 0;
-	*CSR_PCICSRIOBASE     = 0;
+	*CSR_PCICSRBASE       = csrmem.start;
+	*CSR_PCICSRIOBASE     = csrio.start;
 	*CSR_PCISDRAMBASE     = virt_to_bus((void *)PAGE_OFFSET);
 	*CSR_PCIROMBASE       = 0;
 	*CSR_PCICMD           = PCI_COMMAND_IO | PCI_COMMAND_MEMORY |

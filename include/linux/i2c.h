@@ -42,6 +42,7 @@ struct i2c_device;
 #define I2C_BUSID_PARPORT	2	/* Bit banging on a parallel port */
 #define I2C_BUSID_BUZ		3
 #define I2C_BUSID_ZORAN		4
+#define I2C_BUSID_CYBER2000	5	/* I2C bus on a Cyber2000 */
 
 /*
  * struct for a driver for a i2c chip (tuner, soundprocessor,

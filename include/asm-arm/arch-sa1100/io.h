@@ -1,5 +1,5 @@
 /*
- * linux/include/asm-arm/arch-ebsa285/io.h
+ * linux/include/asm-arm/arch-sa1100/io.h
  *
  * Copyright (C) 1997-1999 Russell King
  *
@@ -10,37 +10,43 @@
 #ifndef __ASM_ARM_ARCH_IO_H
 #define __ASM_ARM_ARCH_IO_H
 
+#define IO_SPACE_LIMIT 0xffffffff
+
+#define __io_pci(a)		(PCIO_BASE + (a))
+
+#define __ioaddr(p)		__io_pci(p)
+
 /*
- * This architecture does not require any delayed IO
+ * Generic virtual read/write
  */
-#undef	ARCH_IO_DELAY
+#define __arch_getb(a)		(*(volatile unsigned char *)(a))
+#define __arch_getl(a)		(*(volatile unsigned long *)(a))
 
-#define __pci_io_addr(x)	(PCIO_BASE + (unsigned int)(x))
-
-#define __inb(p)		(*(volatile unsigned char *)__pci_io_addr(p))
-#define __inl(p)		(*(volatile unsigned long *)__pci_io_addr(p))
-
-extern __inline__ unsigned int __inw(unsigned int port)
+extern __inline__ unsigned int __arch_getw(unsigned long a)
 {
 	unsigned int value;
-	__asm__ __volatile__(
-	"ldr%?h	%0, [%1, %2]	@ inw"
-	: "=&r" (value)
-	: "r" (PCIO_BASE), "r" (port));
+	__asm__ __volatile__("ldr%?h	%0, [%1, #0]	@ getw"
+		: "=&r" (value)
+		: "r" (a));
 	return value;
 }
 
 
-#define __outb(v,p)		(*(volatile unsigned char *)__pci_io_addr(p) = (v))
-#define __outl(v,p)		(*(volatile unsigned long *)__pci_io_addr(p) = (v))
+#define __arch_putb(v,a)	(*(volatile unsigned char *)(a) = (v))
+#define __arch_putl(v,a)	(*(volatile unsigned long *)(a) = (v))
 
-extern __inline__ void __outw(unsigned int value, unsigned int port)
+extern __inline__ void __arch_putw(unsigned int value, unsigned long a)
 {
-	__asm__ __volatile__(
-	"str%?h	%0, [%1, %2]	@ outw"
-	: : "r" (value), "r" (PCIO_BASE), "r" (port));
+	__asm__ __volatile__("str%?h	%0, [%1, #0]	@ putw"
+		: : "r" (value), "r" (a));
 }
 
-#define __ioaddr(p)	__pci_io_addr(p)
+#define inb(p)			__arch_getb(__io_pci(p))
+#define inw(p)			__arch_getw(__io_pci(p))
+#define inl(p)			__arch_getl(__io_pci(p))
+
+#define outb(v,p)		__arch_putb(v,__io_pci(p))
+#define outw(v,p)		__arch_putw(v,__io_pci(p))
+#define outl(v,p)		__arch_putl(v,__io_pci(p))
 
 #endif

@@ -404,20 +404,15 @@ extern void (*pgd_init)(unsigned long page);
 
 extern __inline__ pgd_t *get_pgd_slow(void)
 {
-	pgd_t *ret = (pgd_t *)__get_free_page(GFP_KERNEL);
+	pgd_t *ret = (pgd_t *)__get_free_page(GFP_KERNEL), *init;
 
-	if (ret)
+	if (ret) {
+		init = pgd_offset(&init_mm, 0);
 		pgd_init((unsigned long)ret);
-	return ret;
-}
-
-extern __inline__ void get_pgd_uptodate(pgd_t *pgd)
-{
-	pgd_t *init;
-
-	init = pgd_offset(&init_mm, 0);
-	memcpy (pgd + USER_PTRS_PER_PGD, init + USER_PTRS_PER_PGD,
+		memcpy (ret + USER_PTRS_PER_PGD, init + USER_PTRS_PER_PGD,
 			(PTRS_PER_PGD - USER_PTRS_PER_PGD) * sizeof(pgd_t));
+	}
+	return ret;
 }
 
 extern __inline__ pgd_t *get_pgd_fast(void)
@@ -428,7 +423,8 @@ extern __inline__ pgd_t *get_pgd_fast(void)
 		pgd_quicklist = (unsigned long *)(*ret);
 		ret[0] = ret[1];
 		pgtable_cache_size--;
-	}
+	} else
+		ret = (unsigned long *)get_pgd_slow();
 	return (pgd_t *)ret;
 }
 
@@ -491,6 +487,7 @@ extern void __bad_pte_kernel(pmd_t *pmd);
 #define pte_free_kernel(pte)    free_pte_fast(pte)
 #define pte_free(pte)           free_pte_fast(pte)
 #define pgd_free(pgd)           free_pgd_fast(pgd)
+#define pgd_alloc()             get_pgd_fast()
 
 extern inline pte_t * pte_alloc_kernel(pmd_t * pmd, unsigned long address)
 {
@@ -550,13 +547,19 @@ extern int do_check_pgt_cache(int, int);
 
 extern inline void set_pgdir(unsigned long address, pgd_t entry)
 {
+	struct task_struct * p;
 	pgd_t *pgd;
 #ifdef __SMP__
 	int i;
 #endif	
- 
-	mmlist_access_lock();
-	mmlist_set_pgdir(address, entry);       
+        
+	read_lock(&tasklist_lock);
+	for_each_task(p) {
+		if (!p->mm)
+			continue;
+		*pgd_offset(p->mm,address) = entry;
+	}
+	read_unlock(&tasklist_lock);
 #ifndef __SMP__
 	for (pgd = (pgd_t *)pgd_quicklist; pgd; pgd = (pgd_t *)*(unsigned long *)pgd)
 		pgd[address >> PGDIR_SHIFT] = entry;
@@ -567,7 +570,6 @@ extern inline void set_pgdir(unsigned long address, pgd_t entry)
 		for (pgd = (pgd_t *)cpu_data[i].pgd_quick; pgd; pgd = (pgd_t *)*(unsigned long *)pgd)
 			pgd[address >> PGDIR_SHIFT] = entry;
 #endif
-	mmlist_access_unlock();
 }
 
 extern pgd_t swapper_pg_dir[1024];

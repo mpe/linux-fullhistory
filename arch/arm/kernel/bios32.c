@@ -47,6 +47,7 @@ void pcibios_report_device_errors(void)
  * - (0x48) enable all memory requests from ISA to be channeled to PCI
  * - (0x42) disable ping-pong (as per errata)
  * - (0x40) enable PCI packet retry
+ * - (0x44) Route INTA to IRQ11
  * - (0x83) don't use CPU park enable, park on last master, disable GAT bit
  * - (0x80) default rotating priorities
  * - (0x81) rotate bank 4
@@ -62,6 +63,7 @@ static void __init pci_fixup_83c553(struct pci_dev *dev)
 	pci_write_config_byte(dev, 0x48, 0xff);
 	pci_write_config_byte(dev, 0x42, 0x00);
 	pci_write_config_byte(dev, 0x40, 0x22);
+	pci_write_config_word(dev, 0x44, 0xb000);
 	pci_write_config_byte(dev, 0x83, 0x02);
 	pci_write_config_byte(dev, 0x80, 0xe0);
 	pci_write_config_byte(dev, 0x81, 0x01);

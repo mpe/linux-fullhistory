@@ -264,7 +264,7 @@ nfsd_proc_create(struct svc_rqst *rqstp, struct nfsd_createargs *argp,
 		goto out_unlock;
 
 	attr->ia_valid |= ATTR_MODE;
-	attr->ia_mode = type | mode;
+	attr->ia_mode = mode;
 
 	/* Special treatment for non-regular files according to the
 	 * gospel of sun micro
@@ -278,7 +278,6 @@ nfsd_proc_create(struct svc_rqst *rqstp, struct nfsd_createargs *argp,
 			rdev = 0;
 		} else if (type == S_IFCHR && !(attr->ia_valid & ATTR_SIZE)) {
 			/* If you think you've seen the worst, grok this. */
-			attr->ia_mode = S_IFIFO | mode;
 			type = S_IFIFO;
 		} else if (size != rdev) {
 			/* dev got truncated because of 16bit Linux dev_t */

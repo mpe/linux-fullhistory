@@ -10,92 +10,91 @@
 #ifndef __ASM_ARM_ARCH_IO_H
 #define __ASM_ARM_ARCH_IO_H
 
-#include <asm/dec21285.h>
+#define IO_SPACE_LIMIT 0xffff
 
 /*
- * This architecture does not require any delayed IO, and
- * has the constant-optimised IO
+ * Translation of various region addresses to virtual addresses
  */
-#undef	ARCH_IO_DELAY
-#define ARCH_READWRITE
+#define __io_pci(a)		(PCIO_BASE + (a))
+#if 0
+#define __mem_pci(a)		((unsigned long)(a))
+#define __mem_isa(a)		(PCIMEM_BASE + (unsigned long)(a))
+#else
 
-#define __pci_io_addr(x)	(PCIO_BASE + (unsigned int)(x))
+extern __inline__ unsigned long ___mem_pci(unsigned long a)
+{
+	if (a <= 0xc0000000 || a >= 0xe0000000)
+		BUG();
+	return a;
+}
 
-#define __inb(p)		(*(volatile unsigned char *)__pci_io_addr(p))
-#define __inl(p)		(*(volatile unsigned long *)__pci_io_addr(p))
+extern __inline__ unsigned long ___mem_isa(unsigned long a)
+{
+	if (a >= 16*1048576)
+		BUG();
+	return PCIMEM_BASE + a;
+}
+#define __mem_pci(a)		___mem_pci((unsigned long)(a))
+#define __mem_isa(a)		___mem_isa((unsigned long)(a))
+#endif
 
-extern __inline__ unsigned int __inw(unsigned int port)
+/* the following macro is depreciated */
+#define __ioaddr(p)		__io_pci(p)
+
+/*
+ * Generic virtual read/write
+ */
+#define __arch_getb(a)		(*(volatile unsigned char *)(a))
+#define __arch_getl(a)		(*(volatile unsigned long *)(a))
+
+extern __inline__ unsigned int __arch_getw(unsigned long a)
 {
 	unsigned int value;
-	__asm__ __volatile__(
-	"ldr%?h	%0, [%1, %2]	@ inw"
-	: "=&r" (value)
-	: "r" (PCIO_BASE), "r" (port));
+	__asm__ __volatile__("ldr%?h	%0, [%1, #0]	@ getw"
+		: "=&r" (value)
+		: "r" (a));
 	return value;
 }
 
 
-#define __outb(v,p)		(*(volatile unsigned char *)__pci_io_addr(p) = (v))
-#define __outl(v,p)		(*(volatile unsigned long *)__pci_io_addr(p) = (v))
+#define __arch_putb(v,a)	(*(volatile unsigned char *)(a) = (v))
+#define __arch_putl(v,a)	(*(volatile unsigned long *)(a) = (v))
 
-extern __inline__ void __outw(unsigned int value, unsigned int port)
+extern __inline__ void __arch_putw(unsigned int value, unsigned long a)
 {
-	__asm__ __volatile__(
-	"str%?h	%0, [%1, %2]	@ outw"
-	: : "r" (value), "r" (PCIO_BASE), "r" (port));
+	__asm__ __volatile__("str%?h	%0, [%1, #0]	@ putw"
+		: : "r" (value), "r" (a));
 }
 
-#define __ioaddr(p)	__pci_io_addr(p)
+#define inb(p)			__arch_getb(__io_pci(p))
+#define inw(p)			__arch_getw(__io_pci(p))
+#define inl(p)			__arch_getl(__io_pci(p))
+
+#define outb(v,p)		__arch_putb(v,__io_pci(p))
+#define outw(v,p)		__arch_putw(v,__io_pci(p))
+#define outl(v,p)		__arch_putl(v,__io_pci(p))
+
+#include <asm/dec21285.h>
 
 /*
  * ioremap support - validate a PCI memory address,
  * and convert a PCI memory address to a physical
  * address for the page tables.
  */
-#define valid_ioaddr(iomem,size) ((iomem) < 0x80000000 && (iomem) + (size) <= 0x80000000)
-#define io_to_phys(iomem)	 ((iomem) + DC21285_PCI_MEM)
-
-/*
- * Fudge up IO addresses by this much.  Once we're confident that nobody
- * is using read*() and so on with addresses they didn't get from ioremap
- * this can go away.
- */
-#define IO_FUDGE_FACTOR		PCIMEM_BASE
-
-#define __pci_mem_addr(x)	((void *)(IO_FUDGE_FACTOR + (unsigned long)(x)))
+#define valid_ioaddr(off,sz)	((off) < 0x80000000 && (off) + (sz) <= 0x80000000)
+#define io_to_phys(off)		((off) + DC21285_PCI_MEM)
 
 /*
  * ioremap takes a PCI memory address, as specified in
  * linux/Documentation/IO-mapping.txt
  */
-#define ioremap(iomem_addr,size)					\
-({									\
-	unsigned long _addr = (iomem_addr), _size = (size);		\
-	void *_ret = NULL;						\
-	if (valid_ioaddr(_addr, _size)) {				\
-		_addr = io_to_phys(_addr);				\
-		_ret = __ioremap(_addr, _size, 0);			\
-		if (_ret)						\
-			_ret = (void *)((int) _ret - IO_FUDGE_FACTOR);	\
-	}								\
-	_ret; })
-
-#define ioremap_nocache(iomem_addr,size) ioremap((iomem_addr),(size))
-
-#define iounmap(_addr)	do { __iounmap(__pci_mem_addr((_addr))); } while (0)
-
-#define readb(addr)	(*(volatile unsigned char *)__pci_mem_addr(addr))
-#define readw(addr)	(*(volatile unsigned short *)__pci_mem_addr(addr))
-#define readl(addr)	(*(volatile unsigned long *)__pci_mem_addr(addr))
-
-#define writeb(b,addr)	(*(volatile unsigned char *)__pci_mem_addr(addr) = (b))
-#define writew(b,addr)	(*(volatile unsigned short *)__pci_mem_addr(addr) = (b))
-#define writel(b,addr)	(*(volatile unsigned long *)__pci_mem_addr(addr) = (b))
-
-#define memset_io(a,b,c)	memset(__pci_mem_addr(a),(b),(c))
-#define memcpy_fromio(a,b,c)	memcpy((a),__pci_mem_addr(b),(c))
-#define memcpy_toio(a,b,c)	memcpy(__pci_mem_addr(a),(b),(c))
-
-#define eth_io_copy_and_sum(a,b,c,d) eth_copy_and_sum((a),__pci_mem_addr(b),(c),(d))
+#define __arch_ioremap(off,size,nocache)			\
+({								\
+	unsigned long _off = (off), _size = (size);		\
+	void *_ret = NULL;					\
+	if (valid_ioaddr(_off, _size))				\
+		_ret = __ioremap(io_to_phys(_off), _size, 0);	\
+	_ret;							\
+})
 
 #endif

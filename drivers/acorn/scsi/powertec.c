@@ -256,6 +256,9 @@ powertecscsi_detect(Scsi_Host_Template *tpnt)
 		host->dma_channel = ecs[count]->dma;
 		info = (PowerTecScsi_Info *)host->hostdata;
 
+		if (host->dma_channel != NO_DMA)
+			set_dma_speed(host->dma_channel, 180);
+
 		info->control.term_port = host->io_port + POWERTEC_TERM_CONTROL;
 		info->control.terms = term[count] ? POWERTEC_TERM_ENABLE : 0;
 		powertecscsi_terminator_ctl(host, info->control.terms);
@@ -268,7 +271,7 @@ powertecscsi_detect(Scsi_Host_Template *tpnt)
 		info->info.ifcfg.select_timeout	= 255;
 		info->info.ifcfg.asyncperiod	= POWERTEC_ASYNC_PERIOD;
 		info->info.ifcfg.sync_max_depth	= POWERTEC_SYNC_DEPTH;
-		info->info.ifcfg.cntl3		= /*CNTL3_BS8 |*/ CNTL3_FASTSCSI | CNTL3_FASTCLK;
+		info->info.ifcfg.cntl3		= CNTL3_BS8 | CNTL3_FASTSCSI | CNTL3_FASTCLK;
 		info->info.ifcfg.disconnect_ok	= 1;
 		info->info.ifcfg.wide_max_size	= 0;
 		info->info.dma.setup		= powertecscsi_dma_setup;

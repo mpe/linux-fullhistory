@@ -199,7 +199,7 @@ waveartist_reset(wavnc_info *devc)
 			if (res == 0x55aa)
 				break;
 		}
-	} while (timeout--);
+	} while (--timeout);
 
 	if (timeout == 0) {
 		printk(KERN_WARNING "WaveArtist: reset timeout ");
@@ -1200,7 +1200,8 @@ waveartist_init(wavnc_info *devc)
 	char rev[3], dev_name[64];
 	int my_dev;
 
-	waveartist_reset(devc);
+	if (waveartist_reset(devc))
+		return -ENODEV;
 
 	sprintf(dev_name, "%s (%s", devc->hw.name, devc->chip_name);
 
@@ -1765,14 +1766,14 @@ MODULE_PARM(irq, "i");		/* IRQ */
 MODULE_PARM(dma, "i");		/* DMA */
 MODULE_PARM(dma2, "i");		/* DMA2 */
 
-int io   = CONFIG_WAVEARTIST_BASE;
-int irq  = CONFIG_WAVEARTIST_IRQ;
-int dma  = CONFIG_WAVEARTIST_DMA;
-int dma2 = CONFIG_WAVEARTIST_DMA2;
+static int io   = CONFIG_WAVEARTIST_BASE;
+static int irq  = CONFIG_WAVEARTIST_IRQ;
+static int dma  = CONFIG_WAVEARTIST_DMA;
+static int dma2 = CONFIG_WAVEARTIST_DMA2;
 
 static int attached;
 
-struct address_info hw_config;
+static struct address_info hw_config;
 
 int init_module(void)
 {

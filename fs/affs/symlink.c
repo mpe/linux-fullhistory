@@ -60,6 +60,7 @@ static int affs_symlink_readpage(struct dentry *dentry, struct page *page)
 	}
 	link[i] = '\0';
 	affs_brelse(bh);
+	SetPageUptodate(page);
 	kunmap(page);
 	UnlockPage(page);
 	return 0;

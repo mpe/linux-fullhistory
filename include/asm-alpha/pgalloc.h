@@ -176,23 +176,18 @@ extern struct pgtable_cache_struct {
 
 extern __inline__ pgd_t *get_pgd_slow(void)
 {
-	pgd_t *ret = (pgd_t *)__get_free_page(GFP_KERNEL);
+	pgd_t *ret = (pgd_t *)__get_free_page(GFP_KERNEL), *init;
 	
 	if (ret) {
+		init = pgd_offset(&init_mm, 0UL);
 		memset (ret, 0, USER_PTRS_PER_PGD * sizeof(pgd_t));
-		pgd_val(ret[PTRS_PER_PGD]) =
-			pte_val(mk_pte(mem_map + MAP_NR(ret), PAGE_KERNEL));
+		memcpy (ret + USER_PTRS_PER_PGD, init + USER_PTRS_PER_PGD,
+			(PTRS_PER_PGD - USER_PTRS_PER_PGD) * sizeof(pgd_t));
+
+		pgd_val(ret[PTRS_PER_PGD])
+		  = pte_val(mk_pte(mem_map + MAP_NR(ret), PAGE_KERNEL));
 	}
 	return ret;
-}
-
-extern __inline__ void get_pgd_uptodate(pgd_t *pgd)
-{
-	pgd_t *init;
-
-	init = pgd_offset(&init_mm, 0UL);
-	memcpy (pgd + USER_PTRS_PER_PGD, init + USER_PTRS_PER_PGD,
-		(PTRS_PER_PGD - USER_PTRS_PER_PGD) * sizeof(pgd_t));
 }
 
 extern __inline__ pgd_t *get_pgd_fast(void)
@@ -203,7 +198,8 @@ extern __inline__ pgd_t *get_pgd_fast(void)
 		pgd_quicklist = (unsigned long *)(*ret);
 		ret[0] = ret[1];
 		pgtable_cache_size--;
-	}
+	} else
+		ret = (unsigned long *)get_pgd_slow();
 	return (pgd_t *)ret;
 }
 
@@ -279,6 +275,7 @@ extern void __bad_pmd(pgd_t *pgd);
 #define pmd_free_kernel(pmd)	free_pmd_fast(pmd)
 #define pmd_free(pmd)		free_pmd_fast(pmd)
 #define pgd_free(pgd)		free_pgd_fast(pgd)
+#define pgd_alloc()		get_pgd_fast()
 
 extern inline pte_t * pte_alloc(pmd_t *pmd, unsigned long address)
 {
@@ -323,13 +320,18 @@ extern int do_check_pgt_cache(int, int);
 
 extern inline void set_pgdir(unsigned long address, pgd_t entry)
 {
+	struct task_struct * p;
 	pgd_t *pgd;
         
-	mmlist_access_lock();
-	mmlist_set_pgdir(address, entry);
+	read_lock(&tasklist_lock);
+	for_each_task(p) {
+		if (!p->mm)
+			continue;
+		*pgd_offset(p->mm,address) = entry;
+	}
+	read_unlock(&tasklist_lock);
 	for (pgd = (pgd_t *)pgd_quicklist; pgd; pgd = (pgd_t *)*(unsigned long *)pgd)
 		pgd[(address >> PGDIR_SHIFT) & (PTRS_PER_PAGE - 1)] = entry;
-	mmlist_access_unlock();
 }
 
 #endif /* _ALPHA_PGALLOC_H */

@@ -81,6 +81,7 @@ static int ncp_symlink_readpage(struct dentry *dentry, struct page *page)
 	kfree(link);
 	if (error)
 		goto fail;
+	SetPageUptodate(page);
 	kunmap(page);
 	UnlockPage(page);
 	return 0;

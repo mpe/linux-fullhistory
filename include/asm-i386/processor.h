@@ -45,6 +45,7 @@ struct cpuinfo_x86 {
 	int	f00f_bug;
 	int	coma_bug;
 	unsigned long loops_per_sec;
+	unsigned long *pgd_quick;
 	unsigned long *pmd_quick;
 	unsigned long *pte_quick;
 	unsigned long pgtable_cache_sz;

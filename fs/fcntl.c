@@ -215,17 +215,6 @@ asmlinkage long sys_fcntl(unsigned int fd, unsigned int cmd, unsigned long arg)
 		case F_SETLKW:
 			err = fcntl_setlk(fd, cmd, (struct flock *) arg);
 			break;
-#if BIT_PER_LONG == 32	/* LFS only on 32 bit platforms */
-		case F_GETLK64:
-			err = fcntl_getlk64(fd, (struct flock64 *) arg);
-			break;
-		case F_SETLK64:
-			err = fcntl_setlk64(fd, cmd, (struct flock64 *) arg);
-			break;
-		case F_SETLKW64:
-			err = fcntl_setlk64(fd, cmd, (struct flock64 *) arg);
-			break;
-#endif
 		case F_GETOWN:
 			/*
 			 * XXX If f_owner is a process group, the

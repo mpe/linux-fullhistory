@@ -344,6 +344,7 @@ struct par_info {
 	unsigned char	crtc[19];
 	unsigned int	width;
 	unsigned int	pitch;
+	unsigned int	fetch;
 
 	/*
 	 * Other
@@ -359,7 +360,7 @@ static const char crtc_idx[] = {
 
 static void cyber2000fb_set_timing(struct par_info *hw)
 {
-	unsigned int fetchrow, i;
+	unsigned int i;
 
 	/*
 	 * Blank palette
@@ -412,6 +413,7 @@ static void cyber2000fb_set_timing(struct par_info *hw)
 	/* PLL registers */
 	cyber2000_grphw(0xb0, hw->clock_mult);
 	cyber2000_grphw(0xb1, hw->clock_div);
+
 	cyber2000_grphw(0xb2, 0xdb);
 	cyber2000_grphw(0xb3, 0x54);		/* MCLK: 75MHz */
 	cyber2000_grphw(0x90, 0x01);
@@ -427,12 +429,10 @@ static void cyber2000fb_set_timing(struct par_info *hw)
 	cyber2000_outb(0x20, 0x3c0);
 	cyber2000_outb(0xff, 0x3c6);
 
-	fetchrow = hw->pitch + 1;
-	cyber2000_grphw(0x14, fetchrow);
-	/* FIXME: is this the right way round? */
-	cyber2000_grphw(0x15, ((fetchrow >> 4) & 0xf0) | ((hw->pitch >> 8) & 0x0f));
+	cyber2000_grphw(0x14, hw->fetch);
+	cyber2000_grphw(0x15, ((hw->fetch >> 8) & 0x03) | ((hw->pitch >> 4) & 0x30));
 	cyber2000_grphw(0x77, hw->visualid);
-	cyber2000_grphw(0x33, 0x1c);
+	cyber2000_grphw(0x33, 0x0c);
 
 	/*
 	 * Set up accelerator registers
@@ -616,8 +616,8 @@ static int cyber2000fb_decode_crtc(struct par_info *hw, struct fb_var_screeninfo
  *   mult = reg0xb0.7:0
  *   div1 = (reg0xb1.5:0 + 1)
  *   div2 =  2^(reg0xb1.7:6)
- *   fpll should be between 150 and 220 MHz
- *  (6667ps and 4545ps)
+ *   fpll should be between 115 and 257 MHz
+ *  (8696ps and 3891ps)
  */
 static int
 cyber2000fb_decode_clock(struct par_info *hw, struct fb_var_screeninfo *var)
@@ -670,25 +670,95 @@ cyber2000fb_decode_clock(struct par_info *hw, struct fb_var_screeninfo *var)
 			break;
 	}
 #else
+	/*
+	 *				1600x1200 1280x1024 1152x864 1024x768 800x600 640x480
+	 * 5051		5051	yes	   76*
+	 * 5814		5814	no	   66
+	 * 6411		6411	no	   60
+	 * 7408		7408	yes	             75*
+	 *				             74*
+	 * 7937		7937	yes	             70*
+	 * 9091		4545	yes	                       80*
+	 *				                       75*     100*
+	 * 9260		4630	yes	             60*
+	 * 10000	5000	no	                       70       90
+	 * 12500	6250	yes	             47-lace*  60*
+	 *				             43-lace*
+	 * 12699	6349	yes	                                75*
+	 * 13334	6667	no	                                72
+	 *				                                70
+	 * 14815	7407	yes	                                       100*
+	 * 15385	7692	yes	                       47-lace* 60*
+	 *				                       43-lace*
+	 * 17656	4414	no	                                        90
+	 * 20000	5000	no	                                        72
+	 * 20203	5050	yes	                                        75*
+	 * 22272	5568	yes	                               43-lace* 70*    100*
+	 * 25000	6250	yes	                                        60*
+	 * 25057	6264	no	                                                90
+	 * 27778	6944	yes	                                        56*
+	 *									48-lace*
+	 * 31747	7936	yes	                                                75*
+	 * 32052	8013	no	                                                72
+	 * 39722 /6	6620	no
+	 * 39722 /8	4965	yes	                                                60*
+	 */
 					/*  /1     /2     /4     /6     /8    */
 					/*                      (2010) (2000) */
-	if (pll_ps == 4630) {		/* 216.0, 108.0, 54.00, 36.000 27.000 */
-		mult = 181;		/* 4630   9260   18520  27780  37040  */
-		div1 = 12;
-	} else if (pll_ps == 4965) {	/* 201.0, 100.5, 50.25, 33.500 25.125 */
-		mult = 211;		/* 4965   9930   19860  29790  39720  */
-		div1 = 15;
-	} else if (pll_ps == 5050) {	/* 198.0,  99.0, 49.50, 33.000 24.750 */
-		mult = 83;		/* 5050   10100  20200  30300  40400  */
-		div1 = 6;
-	} else if (pll_ps == 6349) {	/* 158.0,  79.0, 39.50, 26.333 19.750 */
-		mult = 209;		/* 6349   12698  25396  38094  50792  */
-		div1 = 19;
-	} else if (pll_ps == 6422) {	/* 156.0,  78.0, 39.00, 26.000 19.500 */
-		mult = 190;		/* 6422   12844  25688  38532  51376  */
-		div1 = 17;
+	if (pll_ps >= 4543 && pll_ps <= 4549) {
+		mult = 169;		/*u220.0  110.0  54.99  36.663 27.497 */
+		div1 = 11;		/* 4546    9092  18184  27276  36367  */
+	} else if (pll_ps >= 4596 && pll_ps <= 4602) {
+		mult = 243;		/* 217.5  108.7  54.36  36.243 27.181 */
+		div1 = 16;		/* 4599    9197  18395  27592  36789  */
+	} else if (pll_ps >= 4627 && pll_ps <= 4633) {
+		mult = 181;		/*u216.0, 108.0, 54.00, 36.000 27.000 */
+		div1 = 12;		/* 4630    9260  18520  27780  37040  */
+	} else if (pll_ps >= 4962 && pll_ps <= 4968) {
+		mult = 211;		/*u201.0, 100.5, 50.25, 33.500 25.125 */
+		div1 = 15;		/* 4965    9930  19860  29790  39720  */
+	} else if (pll_ps >= 5005 && pll_ps <= 5011) {
+		mult = 251;		/* 200.0   99.8  49.92  33.280 24.960 */
+		div1 = 18;		/* 5008   10016  20032  30048  40064  */
+	} else if (pll_ps >= 5047 && pll_ps <= 5053) {
+		mult = 83;		/*u198.0,  99.0, 49.50, 33.000 24.750 */
+		div1 = 6;		/* 5050   10100  20200  30300  40400  */
+	} else if (pll_ps >= 5490 && pll_ps <= 5496) {
+		mult = 89;		/* 182.0   91.0  45.51  30.342 22.756 */
+		div1 = 7;		/* 5493   10986  21972  32958  43944  */
+	} else if (pll_ps >= 5567 && pll_ps <= 5573) {
+		mult = 163;		/*u179.5   89.8  44.88  29.921 22.441 */
+		div1 = 13;		/* 5570   11140  22281  33421  44562  */
+	} else if (pll_ps >= 6246 && pll_ps <= 6252) {
+		mult = 190;		/*u160.0,  80.0, 40.00, 26.671 20.003 */
+		div1 = 17;		/* 6249   12498  24996  37494  49992  */
+	} else if (pll_ps >= 6346 && pll_ps <= 6352) {
+		mult = 209;		/*u158.0,  79.0, 39.50, 26.333 19.750 */
+		div1 = 19;		/* 6349   12698  25396  38094  50792  */
+	} else if (pll_ps >= 6648 && pll_ps <= 6655) {
+		mult = 210;		/*u150.3   75.2  37.58  25.057 18.792 */
+		div1 = 20;		/* 6652   13303  26606  39909  53213  */
+	} else if (pll_ps >= 6943 && pll_ps <= 6949) {
+		mult = 181;		/*u144.0   72.0  36.00  23.996 17.997 */
+		div1 = 18;		/* 6946   13891  27782  41674  55565  */
+	} else if (pll_ps >= 7404 && pll_ps <= 7410) {
+		mult = 198;		/*u134.0   67.5  33.75  22.500 16.875 */
+		div1 = 21;		/* 7407   14815  29630  44445  59260  */
+	} else if (pll_ps >= 7689 && pll_ps <= 7695) {
+		mult = 227;		/*u130.0   65.0  32.50  21.667 16.251 */
+		div1 = 25;		/* 7692   15384  30768  46152  61536  */
+	} else if (pll_ps >= 7808 && pll_ps <= 7814) {
+		mult = 152;		/* 128.0   64.0  32.00  21.337 16.003 */
+		div1 = 17;		/* 7811   15623  31245  46868  62490  */
+	} else if (pll_ps >= 7934 && pll_ps <= 7940) {
+		mult = 44;		/*u126.0   63.0  31.498 20.999 15.749 */
+		div1 = 5;		/* 7937   15874  31748  47622  63494  */
 	} else
 		return -EINVAL;
+	/* 187 13 -> 4855 */
+	/* 181 18 -> 6946 */
+	/* 163 13 -> 5570 */
+	/* 169 11 -> 4545 */
 #endif
 	/*
 	 * Step 3:
@@ -768,7 +838,11 @@ cyber2000fb_decode_var(struct fb_var_screeninfo *var, int con, struct par_info *
 			debug_printf("%02X ", hw->crtc[i]);
 		debug_printf("%02X\n", hw->crtc_ofl);
 	}
-	hw->width     -= 1;
+	hw->width -= 1;
+	hw->fetch = hw->pitch;
+	if (current_par.bus_64bit == 0)
+		hw->fetch <<= 1;
+	hw->fetch += 1;
 
 	return 0;
 }
@@ -1243,12 +1317,12 @@ cyber2000fb_setup(char *options)
 
 static char igs_regs[] __initdata = {
 	0x10, 0x10,			0x12, 0x00,	0x13, 0x00,
-/*	0x30, 0x21,*/	0x31, 0x00,	0x32, 0x00,	0x33, 0x01,
+			0x31, 0x00,	0x32, 0x00,	0x33, 0x01,
 	0x50, 0x00,	0x51, 0x00,	0x52, 0x00,	0x53, 0x00,
 	0x54, 0x00,	0x55, 0x00,	0x56, 0x00,	0x57, 0x01,
 	0x58, 0x00,	0x59, 0x00,	0x5a, 0x00,
-	0x70, 0x0b,/*	0x71, 0x10,	0x72, 0x45,*/	0x73, 0x30,
-	0x74, 0x1b,	0x75, 0x1e,	0x76, 0x00,	0x7a, 0xc8
+	0x70, 0x0b,					0x73, 0x30,
+	0x74, 0x0b,	0x75, 0x17,	0x76, 0x00,	0x7a, 0xc8
 };
 
 static void __init cyber2000fb_hw_init(void)
@@ -1259,6 +1333,12 @@ static void __init cyber2000fb_hw_init(void)
 		cyber2000_grphw(igs_regs[i], igs_regs[i+1]);
 }
 
+static unsigned short device_ids[] __initdata = {
+	PCI_DEVICE_ID_INTERG_2000,
+	PCI_DEVICE_ID_INTERG_2010,
+	PCI_DEVICE_ID_INTERG_5000
+};
+
 /*
  *    Initialization
  */
@@ -1267,14 +1347,14 @@ int __init cyber2000fb_init(void)
 	struct pci_dev *dev;
 	u_int h_sync, v_sync;
 	u_long mmio_base, smem_base, smem_size;
-	int err = 0;
+	int err = 0, i;
 
-	dev = pci_find_device(PCI_VENDOR_ID_INTERG,
-			      PCI_DEVICE_ID_INTERG_2000, NULL);
-
-	if (!dev)
+	for (i = 0; i < sizeof(device_ids) / sizeof(device_ids[0]); i++) {
 		dev = pci_find_device(PCI_VENDOR_ID_INTERG,
-				      PCI_DEVICE_ID_INTERG_2010, NULL);
+				      device_ids[i], NULL);
+		if (dev)
+			break;
+	}
 
 	if (!dev)
 		return -ENXIO;
@@ -1307,12 +1387,15 @@ int __init cyber2000fb_init(void)
 	cyber2000_outb(0x08, 0x46e8);
 
 	/*
-	 * get the video RAM size from the VGA register.
+	 * get the video RAM size and width from the VGA register.
 	 * This should have been already initialised by the BIOS,
 	 * but if it's garbage, claim default 1MB VRAM (woody)
 	 */
 	cyber2000_outb(0x72, 0x3ce);
-	switch (cyber2000_inb(0x3cf) & 3) {
+	i = cyber2000_inb(0x3cf);
+	current_par.bus_64bit = i & 4;
+
+	switch (i & 3) {
 	case 2:	 smem_size = 0x00400000; break;
 	case 1:	 smem_size = 0x00200000; break;
 	default: smem_size = 0x00100000; break;
@@ -1335,7 +1418,7 @@ int __init cyber2000fb_init(void)
 		err = -ENOMEM;
 		goto release_smem_resource;
 	}
-current_par.screen_base += IO_FUDGE_FACTOR;
+
 	current_par.screen_size   = smem_size;
 	current_par.screen_base_p = smem_base + 0x80000000;
 	current_par.regs_base_p   = mmio_base + 0x80000000;
@@ -1410,7 +1493,6 @@ void cleanup_module(void)
 	/* Not reached because the usecount will never be
 	   decremented to zero */
 	unregister_framebuffer(&fb_info);
-	/* TODO: clean up ... */
 
 	iounmap(current_par.screen_base);
 	iounmap(CyberRegs);

@@ -520,25 +520,6 @@ extern struct vm_area_struct *find_extend_vma(struct task_struct *tsk, unsigned 
 #define vmlist_modify_lock(mm)		vmlist_access_lock(mm)
 #define vmlist_modify_unlock(mm)	vmlist_access_unlock(mm)
 
-extern spinlock_t mm_lock;
-#define mmlist_access_lock()		spin_lock(&mm_lock)
-#define mmlist_access_unlock()		spin_unlock(&mm_lock)
-#define mmlist_modify_lock()		mmlist_access_lock()
-#define mmlist_modify_unlock()		mmlist_access_unlock()
-
-#define for_each_mm(mm) \
-	for (mm = list_entry(init_mm.mmlist.next, struct mm_struct, mmlist); \
-		(mm != &init_mm);  \
-		(mm = list_entry(mm->mmlist.next, struct mm_struct, mmlist)))
-
-static inline void mmlist_set_pgdir(unsigned long address, pgd_t entry)
-{
-	struct mm_struct *mm;
-
-	for_each_mm(mm)
-		*pgd_offset(mm,address) = entry;
-}
-
 #endif /* __KERNEL__ */
 
 #endif

@@ -479,8 +479,8 @@ struct file_lock {
 	struct file *fl_file;
 	unsigned char fl_flags;
 	unsigned char fl_type;
-	loff_t fl_start;
-	loff_t fl_end;
+	off_t fl_start;
+	off_t fl_end;
 
 	void (*fl_notify)(struct file_lock *);	/* unblock callback */
 
@@ -495,9 +495,6 @@ extern struct file_lock			*file_lock_table;
 
 extern int fcntl_getlk(unsigned int, struct flock *);
 extern int fcntl_setlk(unsigned int, unsigned int, struct flock *);
-
-extern int fcntl_getlk64(unsigned int fd, struct flock64 *l);
-extern int fcntl_setlk64(unsigned int fd, unsigned int cmd, struct flock64 *l);
 
 /* fs/locks.c */
 extern void locks_remove_posix(struct file *, fl_owner_t);

@@ -20,6 +20,7 @@
  *		Alan Cox	:	Datagram iovec handling
  *		Darryl Miles	:	Fixed non-blocking SOCK_STREAM.
  *		Alan Cox	:	POSIXisms
+ *		Pete Wyckoff    :       Unconnected accept() fix.
  *
  */
 
@@ -82,7 +83,7 @@ static int wait_for_packet(struct sock * sk, int *err)
 
 	/* Sequenced packets can come disconnected. If so we report the problem */
 	error = -ENOTCONN;
-	if(connection_based(sk) && sk->state!=TCP_ESTABLISHED)
+	if(connection_based(sk) && !(sk->state==TCP_ESTABLISHED || sk->state==TCP_LISTEN))
 		goto out;
 
 	/* handle signals */

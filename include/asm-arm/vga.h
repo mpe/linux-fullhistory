@@ -6,7 +6,7 @@
 
 #define VGA_MAP_MEM(x)	(PCIMEM_BASE + (x))
 
-#define vga_readb(x)	(*(x))
-#define vga_writeb(x,y)	(*(y) = (x))
+#define vga_readb(x)	(*((volatile unsigned char *)x))
+#define vga_writeb(x,y)	(*((volatile unsigned char *)y) = (x))
 
 #endif

@@ -170,6 +170,7 @@ CONFIG_BLK_DEV_SD=y
 #
 # Some SCSI devices (e.g. CD jukebox) support multiple LUNs
 #
+CONFIG_SCSI_DEBUG_QUEUES=y
 CONFIG_SCSI_MULTI_LUN=y
 CONFIG_SCSI_CONSTANTS=y
 # CONFIG_SCSI_LOGGING is not set

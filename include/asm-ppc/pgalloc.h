@@ -52,13 +52,19 @@ extern void __bad_pte(pmd_t *pmd);
 
 extern inline void set_pgdir(unsigned long address, pgd_t entry)
 {
+	struct task_struct * p;
 	pgd_t *pgd;
 #ifdef __SMP__
 	int i;
 #endif	
- 
-	mmlist_access_lock();
-	mmlist_set_pgdir(address, entry);       
+        
+	read_lock(&tasklist_lock);
+	for_each_task(p) {
+		if (!p->mm)
+			continue;
+		*pgd_offset(p->mm,address) = entry;
+	}
+	read_unlock(&tasklist_lock);
 #ifndef __SMP__
 	for (pgd = (pgd_t *)pgd_quicklist; pgd; pgd = (pgd_t *)*(unsigned long *)pgd)
 		pgd[address >> PGDIR_SHIFT] = entry;
@@ -69,7 +75,6 @@ extern inline void set_pgdir(unsigned long address, pgd_t entry)
 		for (pgd = (pgd_t *)cpu_data[i].pgd_cache; pgd; pgd = (pgd_t *)*(unsigned long *)pgd)
 			pgd[address >> PGDIR_SHIFT] = entry;
 #endif
-	mmlist_access_unlock();
 }
 
 /* We don't use pmd cache, so this is a dummy routine */
@@ -105,20 +110,16 @@ extern inline pmd_t * pmd_alloc(pgd_t * pgd, unsigned long address)
 
 extern __inline__ pgd_t *get_pgd_slow(void)
 {
-	pgd_t *ret = (pgd_t *)__get_free_page(GFP_KERNEL);
-
-	if (ret)
+	pgd_t *ret, *init;
+	/*if ( (ret = (pgd_t *)get_zero_page_fast()) == NULL )*/
+	if ( (ret = (pgd_t *)__get_free_page(GFP_KERNEL)) != NULL )
 		memset (ret, 0, USER_PTRS_PER_PGD * sizeof(pgd_t));
-	return ret;
-}
-
-extern __inline__ void get_pgd_uptodate(pgd_t *pgd)
-{
-	pgd_t *init;
-
-	init = pgd_offset(&init_mm, 0);
-	memcpy (pgd + USER_PTRS_PER_PGD, init + USER_PTRS_PER_PGD,
+	if (ret) {
+		init = pgd_offset(&init_mm, 0);
+		memcpy (ret + USER_PTRS_PER_PGD, init + USER_PTRS_PER_PGD,
 			(PTRS_PER_PGD - USER_PTRS_PER_PGD) * sizeof(pgd_t));
+	}
+	return ret;
 }
 
 extern __inline__ pgd_t *get_pgd_fast(void)
@@ -129,7 +130,8 @@ extern __inline__ pgd_t *get_pgd_fast(void)
                 pgd_quicklist = (unsigned long *)(*ret);
                 ret[0] = 0;
                 pgtable_cache_size--;
-        }
+        } else
+                ret = (unsigned long *)get_pgd_slow();
         return (pgd_t *)ret;
 }
 
@@ -174,6 +176,7 @@ extern __inline__ void free_pte_slow(pte_t *pte)
 #define pte_free_kernel(pte)    free_pte_fast(pte)
 #define pte_free(pte)           free_pte_fast(pte)
 #define pgd_free(pgd)           free_pgd_fast(pgd)
+#define pgd_alloc()             get_pgd_fast()
 
 extern inline pte_t * pte_alloc(pmd_t * pmd, unsigned long address)
 {

@@ -210,24 +210,11 @@ static iftype_t icside_identifyif (struct expansion_card *ec)
 /*
  * SG-DMA support.
  *
- * Similar to the BM-DMA, but we use the RiscPCs IOMD
- * DMA controllers.  There is only one DMA controller
- * per card, which means that only one drive can be
- * accessed at one time.  NOTE! We do not inforce that
- * here, but we rely on the main IDE driver spotting
- * that both interfaces use the same IRQ, which should
- * guarantee this.
- *
- * We are limited by the drives IOR/IOW pulse time.
- * The closest that we can get to the requirements is
- * a type C cycle for both mode 1 and mode 2.  However,
- * this does give a burst of 8MB/s.
- *
- * This has been tested with a couple of Conner
- * Peripherals 1080MB CFS1081A drives, one on each
- * interface, which deliver about 2MB/s each.  I
- * believe that this is limited by the lack of
- * on-board drive cache.
+ * Similar to the BM-DMA, but we use the RiscPCs IOMD DMA controllers.
+ * There is only one DMA controller per card, which means that only
+ * one drive can be accessed at one time.  NOTE! We do not enforce that
+ * here, but we rely on the main IDE driver spotting that both
+ * interfaces use the same IRQ, which should guarantee this.
  */
 #define TABLE_SIZE 2048
 
@@ -286,27 +273,43 @@ icside_build_dmatable(ide_drive_t *drive, int reading)
 }
 
 static int
-icside_config_drive(ide_drive_t *drive, int mode)
+icside_config_if(ide_drive_t *drive, int xfer_mode)
 {
-	int speed, err;
+	int func = ide_dma_off;
 
-	if (mode == 2) {
-		speed = XFER_MW_DMA_2;
+	switch (xfer_mode) {
+	case XFER_MW_DMA_2:
+		/*
+		 * The cycle time is limited to 250ns by the r/w
+		 * pulse width (90ns), however we should still
+		 * have a maximum burst transfer rate of 8MB/s.
+		 */
 		drive->drive_data = 250;
-	} else {
-		speed = XFER_MW_DMA_1;
+		break;
+
+	case XFER_MW_DMA_1:
 		drive->drive_data = 250;
+		break;
+
+	case XFER_MW_DMA_0:
+		drive->drive_data = 480;
+		break;
+
+	default:
+		drive->drive_data = 0;
+		break;
 	}
 
-	err = ide_config_drive_speed(drive, (byte) speed);
+	if (drive->drive_data &&
+	    ide_config_drive_speed(drive, (byte) xfer_mode) == 0)
+		func = ide_dma_on;
+	else
+		drive->drive_data = 480;
 
-	if (err == 0) {
-		drive->id->dma_mword &= 0x00ff;
-		drive->id->dma_mword |= 256 << mode;
-	} else
-		drive->drive_data = 0;
+	printk("%s: %s selected (peak %dMB/s)\n", drive->name,
+		ide_xfer_verbose(xfer_mode), 2000 / drive->drive_data);
 
-	return err;
+	return func;
 }
 
 static int
@@ -315,34 +318,51 @@ icside_dma_check(ide_drive_t *drive)
 	struct hd_driveid *id = drive->id;
 	ide_hwif_t *hwif = HWIF(drive);
 	int autodma = hwif->autodma;
+	int xfer_mode = XFER_PIO_2;
+	int func = ide_dma_off_quietly;
 
-	if (id && (id->capability & 1) && autodma) {
-		int dma_mode = 0;
+	if (!id || !(id->capability & 1) || !autodma)
+		goto out;
 
-		/* Consult the list of known "bad" drives */
-		if (ide_dmaproc(ide_dma_bad_drive, drive))
-			return hwif->dmaproc(ide_dma_off, drive);
-
-		/* Enable DMA on any drive that has
-		 * UltraDMA (mode 0/1/2) enabled
-		 */
-		if (id->field_valid & 4 && id->dma_ultra & 7)
-			dma_mode = 2;
-		
-		/* Enable DMA on any drive that has mode1
-		 * or mode2 multiword DMA enabled
-		 */
-		if (id->field_valid & 2 && id->dma_mword & 6)
-			dma_mode = id->dma_mword & 4 ? 2 : 1;
-
-		/* Consult the list of known "good" drives */
-		if (ide_dmaproc(ide_dma_good_drive, drive))
-			dma_mode = 1;
-
-		if (dma_mode &&	icside_config_drive(drive, dma_mode) == 0)
-			return hwif->dmaproc(ide_dma_on, drive);
+	/*
+	 * Consult the list of known "bad" drives
+	 */
+	if (ide_dmaproc(ide_dma_bad_drive, drive)) {
+		func = ide_dma_off;
+		goto out;
 	}
-	return hwif->dmaproc(ide_dma_off_quietly, drive);
+
+	/*
+	 * Enable DMA on any drive that has multiword DMA
+	 */
+	if (id->field_valid & 2) {
+		if (id->dma_mword & 4) {
+			xfer_mode = XFER_MW_DMA_2;
+			func = ide_dma_on;
+		} else if (id->dma_mword & 2) {
+			xfer_mode = XFER_MW_DMA_1;
+			func = ide_dma_on;
+		} else if (id->dma_mword & 1) {
+			xfer_mode = XFER_MW_DMA_0;
+			func = ide_dma_on;
+		}
+		goto out;
+	}
+
+	/*
+	 * Consult the list of known "good" drives
+	 */
+	if (ide_dmaproc(ide_dma_good_drive, drive)) {
+		if (id->eide_dma_time > 150)
+			goto out;
+		xfer_mode = XFER_MW_DMA_1;
+		func = ide_dma_on;
+	}
+
+out:
+	func = icside_config_if(drive, xfer_mode);
+
+	return hwif->dmaproc(func, drive);
 }
 
 static int

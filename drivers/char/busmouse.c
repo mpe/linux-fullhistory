@@ -49,7 +49,6 @@
 /*#define BROKEN_MOUSE*/
 
 extern int sun_mouse_init(void);
-extern void mouse_rpc_init (void);
 
 struct busmouse_data {
 	struct miscdevice	miscdev;
@@ -431,9 +430,6 @@ bus_mouse_init(void)
 {
 #ifdef CONFIG_SUN_MOUSE
 	sun_mouse_init();
-#endif
-#ifdef CONFIG_RPCMOUSE
-	mouse_rpc_init();
 #endif
 	return 0;
 }

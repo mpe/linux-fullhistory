@@ -388,7 +388,7 @@ inline void nmi_watchdog_tick(struct pt_regs * regs)
 		alert_counter[cpu]++;
 		if (alert_counter[cpu] == 5*HZ) {
 			spin_lock(&nmi_print_lock);
-			spin_unlock(&console_lock); // we are in trouble anyway
+			console_lock.lock = 0;	// we are in trouble anyway
 			printk("NMI Watchdog detected LOCKUP on CPU%d, registers:\n", cpu);
 			show_registers(regs);
 			printk("console shuts up ...\n");

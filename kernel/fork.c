@@ -33,7 +33,6 @@ int last_pid=0;
 
 /* SLAB cache for mm_struct's. */
 kmem_cache_t *mm_cachep;
-spinlock_t mm_lock = SPIN_LOCK_UNLOCKED;
 
 /* SLAB cache for files structs */
 kmem_cache_t *files_cachep; 
@@ -306,20 +305,9 @@ struct mm_struct * mm_alloc(void)
 		atomic_set(&mm->mm_count, 1);
 		init_MUTEX(&mm->mmap_sem);
 		mm->page_table_lock = SPIN_LOCK_UNLOCKED;
-		mmlist_modify_lock();
-		if ((mm->pgd = get_pgd_fast())) {
-			list_add_tail(&mm->mmlist, &init_mm.mmlist);
-			mmlist_modify_unlock();
+		mm->pgd = pgd_alloc();
+		if (mm->pgd)
 			return mm;
-		}
-		mmlist_modify_unlock();
-		if ((mm->pgd = get_pgd_slow())) {
-			mmlist_modify_lock();
-			get_pgd_uptodate(mm->pgd);
-			list_add_tail(&mm->mmlist, &init_mm.mmlist);
-			mmlist_modify_unlock();
-			return mm;
-		}
 		kmem_cache_free(mm_cachep, mm);
 	}
 	return NULL;
@@ -333,11 +321,8 @@ struct mm_struct * mm_alloc(void)
 inline void __mmdrop(struct mm_struct *mm)
 {
 	if (mm == &init_mm) BUG();
-	mmlist_modify_lock();
 	pgd_free(mm->pgd);
 	destroy_context(mm);
-	list_del(&mm->mmlist);
-	mmlist_modify_unlock();
 	kmem_cache_free(mm_cachep, mm);
 }
 

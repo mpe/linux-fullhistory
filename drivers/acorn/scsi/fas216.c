@@ -1247,7 +1247,6 @@ unrecognised:
 		printk("%s%02X", i & 31 ? " " : "\n  ", message[i]);
 	printk("\n");
 
-reject_message:
 	/*
 	 * Something strange seems to be happening here -
 	 * I can't use SETATN since the chip gives me an
@@ -1822,6 +1821,7 @@ static void fas216_done(FAS216_Info *info, unsigned int result)
 			case READ_CAPACITY:
 			case TEST_UNIT_READY:
 			case MODE_SENSE:
+			case REQUEST_SENSE:
 				break;
 
 			default:

@@ -70,8 +70,6 @@ struct flock32 {
 	__kernel_pid_t32 l_pid;
 	short __unused;
 };
-
-#define flock64 flock
 #endif
 
 #endif /* !(_SPARC64_FCNTL_H) */

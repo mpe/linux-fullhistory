@@ -8399,22 +8399,23 @@ CONFIG_ROOT_NFS
   
   Most people say N here. 
 
-NFS server support (EXPERIMENTAL)
+NFS server support
 CONFIG_NFSD
-  If you want your Linux box to act as a NFS *server*, so that other
+  If you want your Linux box to act as an NFS *server*, so that other
   computers on your local network which support NFS can access certain
   directories on your box transparently, you have two options: you can
   use the self-contained user space program nfsd, in which case you
-  should say N here, or you can say Y and use this new experimental
-  kernel based NFS server. The advantage of the kernel based solution
-  is that it is faster; it might not be completely stable yet, though.
+  should say N here, or you can say Y and use the kernel based NFS
+  server. The advantage of the kernel based solution is that it is
+  faster.
 
   In either case, you will need support software; the respective
   locations are given in the file Documentation/Changes in the NFS
   section.
 
   Please read the NFS-HOWTO, available from
-  http://metalab.unc.edu/mdw/linux.html#howto .
+  http://www.linuxdoc.org/HOWTO/NFS-HOWTO.html .
+
 
   The NFS server is also available as a module ( = code which can be
   inserted in and removed from the running kernel whenever you want).

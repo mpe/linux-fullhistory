@@ -35,6 +35,7 @@ static int __init nocache_setup(char *__unused)
 	cr_alignment &= ~4;
 	cr_no_alignment &= ~4;
 	set_cr(cr_alignment);
+	return 1;
 }
 
 static int __init nowrite_setup(char *__unused)
@@ -42,6 +43,7 @@ static int __init nowrite_setup(char *__unused)
 	cr_alignment &= ~(8|4);
 	cr_no_alignment &= ~(8|4);
 	set_cr(cr_alignment);
+	return 1;
 }
 
 __setup("nocache", nocache_setup);
@@ -307,7 +309,7 @@ void __init zonesize_init(unsigned int *zone_size)
 		if (meminfo.bank[i].size) {
 			unsigned int end;
 
-			end = (meminfo.bank[i].start +
+			end = (meminfo.bank[i].start - PHYS_OFFSET +
 				meminfo.bank[i].size) >> PAGE_SHIFT;
 			if (end > zone_size[0])
 				zone_size[0] = end;
@@ -323,7 +325,7 @@ void __init pagetable_init(void)
 	/*
 	 * Setup the above mappings
 	 */
-	init_map[0].physical = PHYS_OFFSET;
+	init_map[0].physical = virt_to_phys(alloc_bootmem_low_pages(PAGE_SIZE));
 	init_map[5].physical = FLUSH_BASE_PHYS;
 	init_map[5].virtual  = FLUSH_BASE;
 #ifdef FLUSH_BASE_MINICACHE
@@ -333,8 +335,9 @@ void __init pagetable_init(void)
 #endif
 
 	for (i = 0; i < meminfo.nr_banks; i++) {
-		init_map[i+1].physical = PHYS_OFFSET + meminfo.bank[i].start;
-		init_map[i+1].virtual  = PAGE_OFFSET + meminfo.bank[i].start;
+		init_map[i+1].physical = meminfo.bank[i].start;
+		init_map[i+1].virtual  = meminfo.bank[i].start +
+					 PAGE_OFFSET - PHYS_OFFSET;
 		init_map[i+1].length   = meminfo.bank[i].size;
 	}
 
@@ -378,11 +381,13 @@ void __init create_memmap_holes(void)
 	struct page *pg = NULL;
 	unsigned int i;
 
+#define PFN(x)	(((x) - PHYS_OFFSET) >> PAGE_SHIFT)
+
 	for (i = 0; i < meminfo.nr_banks; i++) {
 		if (meminfo.bank[i].size == 0)
 			continue;
 
-		start_pfn = meminfo.bank[i].start >> PAGE_SHIFT;
+		start_pfn = PFN(meminfo.bank[i].start);
 
 		/*
 		 * subtle here - if we have a full bank, then
@@ -393,8 +398,8 @@ void __init create_memmap_holes(void)
 			set_bit(PG_skip, &pg->flags);
 			pg->next_hash = mem_map + start_pfn;
 
-			start_pfn = PAGE_ALIGN(__pa(pg + 1));
-			end_pfn   = __pa(pg->next_hash) & PAGE_MASK;
+			start_pfn = PFN(PAGE_ALIGN(__pa(pg + 1)));
+			end_pfn   = PFN(__pa(pg->next_hash) & PAGE_MASK);
 
 			if (end_pfn != start_pfn)
 				free_bootmem(start_pfn, end_pfn - start_pfn);
@@ -402,8 +407,7 @@ void __init create_memmap_holes(void)
 			pg = NULL;
 		}
 
-		end_pfn = (meminfo.bank[i].start +
-			   meminfo.bank[i].size) >> PAGE_SHIFT;
+		end_pfn = PFN(meminfo.bank[i].start + meminfo.bank[i].size);
 
 		if (end_pfn != meminfo.end >> PAGE_SHIFT)
 			pg = mem_map + end_pfn;

@@ -12,6 +12,7 @@
 #include <linux/sched.h>
 #include <linux/ptrace.h>
 #include <linux/interrupt.h>
+#include <linux/init.h>
 
 #include <asm/hardware.h>
 #include <asm/irq.h>
@@ -48,8 +49,7 @@ static struct busmouse rpcmouse = {
 	6, "arcmouse", NULL, NULL, 7
 };
 
-int
-mouse_rpc_init(void)
+static int __init mouse_rpc_init(void)
 {
 	mousedev = register_busmouse(&rpcmouse);
 
@@ -69,19 +69,13 @@ mouse_rpc_init(void)
 	return mousedev >= 0 ? 0 : -ENODEV;
 }
 
-#ifdef MODULE
-int
-init_module(void)
-{
-	return mouse_rpc_init();
-}
-
-int
-cleanup_module(void)
+static void __exit mouse_rpc_exit(void)
 {
 	if (mousedev >= 0) {
 		unregister_busmouse(mousedev);
 		free_irq(IRQ_VSYNCPULSE, &mousedev);
 	}
 }
-#endif
+
+module_init(mouse_rpc_init);
+module_exit(mouse_rpc_exit);

@@ -249,67 +249,132 @@ static void __init setup_initrd(unsigned int start, unsigned int size)
 #endif
 }
 
+#define O_PFN_DOWN(x)	((x) >> PAGE_SHIFT)
+#define P_PFN_DOWN(x)	O_PFN_DOWN((x) - PHYS_OFFSET)
+#define V_PFN_DOWN(x)	O_PFN_DOWN(__pa(x))
+
+#define O_PFN_UP(x)	(PAGE_ALIGN(x) >> PAGE_SHIFT)
+#define P_PFN_UP(x)	O_PFN_UP((x) - PHYS_OFFSET)
+#define V_PFN_UP(x)	O_PFN_UP(__pa(x))
+
+#define PFN_SIZE(x)	((x) >> PAGE_SHIFT)
+#define PFN_RANGE(s,e)	PFN_SIZE(PAGE_ALIGN((unsigned long)(e)) - \
+				(((unsigned long)(s)) & PAGE_MASK))
+
+#define free_bootmem(s,sz)	free_bootmem((s)<<PAGE_SHIFT, (sz)<<PAGE_SHIFT)
+#define reserve_bootmem(s,sz)	reserve_bootmem((s)<<PAGE_SHIFT, (sz)<<PAGE_SHIFT)
+
+static unsigned int __init find_bootmap_pfn(unsigned int bootmap_pages)
+{
+	unsigned int start_pfn, bank, bootmap_pfn;
+
+	start_pfn   = V_PFN_UP(&_end);
+	bootmap_pfn = 0;
+
+	/*
+	 * FIXME: We really want to avoid allocating the bootmap
+	 * over the top of the initrd.
+	 */
+#ifdef CONFIG_BLK_DEV_INITRD
+	if (initrd_start) {
+		if (__pa(initrd_end) > (meminfo.end + PHYS_OFFSET)) {
+			printk ("initrd extends beyond end of memory "
+				"(0x%08lx > 0x%08lx) - disabling initrd\n",
+				__pa(initrd_end), meminfo.end + PHYS_OFFSET);
+			initrd_start = 0;
+			initrd_end   = 0;
+		}
+	}
+#endif
+
+	for (bank = 0; bank < meminfo.nr_banks; bank ++) {
+		unsigned int start, end;
+
+		if (meminfo.bank[bank].size == 0)
+			continue;
+
+		start = O_PFN_UP(meminfo.bank[bank].start);
+		end   = O_PFN_DOWN(meminfo.bank[bank].size +
+				   meminfo.bank[bank].start);
+
+		if (end < start_pfn)
+			continue;
+
+		if (start < start_pfn)
+			start = start_pfn;
+
+		if (end <= start)
+			continue;
+
+		if (end - start >= bootmap_pages) {
+			bootmap_pfn = start;
+			break;
+		}
+	}
+
+	if (bootmap_pfn == 0)
+		BUG();
+
+	return bootmap_pfn;
+}
+
 /*
- * Work out our memory regions.  Note that "pfn" is the physical page number
- * relative to the first physical page, not the physical address itself.
+ * Initialise the bootmem allocator.
  */
 static void __init setup_bootmem(void)
 {
-	unsigned int end_pfn, bootmem_end;
-	int bank;
+	unsigned int end_pfn, start_pfn, bootmap_pages, bootmap_pfn;
+	unsigned int i;
 
 	/*
-	 * Calculate the end of memory.
+	 * Calculate the  physical address of the top of memory.
 	 */
-	for (bank = 0; bank < meminfo.nr_banks; bank++) {
-		if (meminfo.bank[bank].size) {
-			unsigned long end;
+	meminfo.end = 0;
+	for (i = 0; i < meminfo.nr_banks; i++) {
+		unsigned long end;
 
-			end = meminfo.bank[bank].start +
-			      meminfo.bank[bank].size;
+		if (meminfo.bank[i].size != 0) {
+			end = meminfo.bank[i].start + meminfo.bank[i].size;
 			if (meminfo.end < end)
 				meminfo.end = end;
 		}
 	}
 
-	bootmem_end = __pa(PAGE_ALIGN((unsigned long)&_end));
-	end_pfn     = meminfo.end >> PAGE_SHIFT;
+	start_pfn     = O_PFN_UP(PHYS_OFFSET);
+	end_pfn	      = O_PFN_DOWN(meminfo.end);
+	bootmap_pages = bootmem_bootmap_pages(end_pfn - start_pfn);
+	bootmap_pfn   = find_bootmap_pfn(bootmap_pages);
 
 	/*
 	 * Initialise the boot-time allocator
 	 */
-	bootmem_end += init_bootmem(bootmem_end >> PAGE_SHIFT, end_pfn, PHYS_OFFSET);
+	init_bootmem_start(bootmap_pfn, start_pfn, end_pfn);
 
 	/*
 	 * Register all available RAM with the bootmem allocator.
-	 * The address is relative to the start of physical memory.
 	 */
-	for (bank = 0; bank < meminfo.nr_banks; bank ++)
-		free_bootmem(meminfo.bank[bank].start, meminfo.bank[bank].size);
+	for (i = 0; i < meminfo.nr_banks; i++)
+		if (meminfo.bank[i].size)
+			free_bootmem(O_PFN_UP(meminfo.bank[i].start),
+				     PFN_SIZE(meminfo.bank[i].size));
 
 	/*
-	 * reserve the following regions:
-	 *  physical page 0 - it contains the exception vectors
-	 *  kernel and the bootmem structure
-	 *  swapper page directory (if any)
-	 *  initrd (if any)
+	 * Register the reserved regions with bootmem
 	 */
-	reserve_bootmem(0, PAGE_SIZE);
-#ifdef CONFIG_CPU_32
-	reserve_bootmem(__pa(swapper_pg_dir), PTRS_PER_PGD * sizeof(void *));
-#endif
-	reserve_bootmem(__pa(&_stext), bootmem_end - __pa(&_stext));
-#ifdef CONFIG_BLK_DEV_INITRD
-	if (__pa(initrd_end) > (end_pfn << PAGE_SHIFT)) {
-		printk ("initrd extends beyond end of memory "
-			"(0x%08lx > 0x%08x) - disabling initrd\n",
-			__pa(initrd_end), end_pfn << PAGE_SHIFT);
-		initrd_start = 0;
-	}
+	reserve_bootmem(bootmap_pfn, bootmap_pages);
+	reserve_bootmem(V_PFN_DOWN(&_stext), PFN_RANGE(&_stext, &_end));
 
+#ifdef CONFIG_CPU_32
+	/*
+	 * Reserve the page tables.  These are already in use.
+	 */
+	reserve_bootmem(V_PFN_DOWN(swapper_pg_dir),
+			PFN_SIZE(PTRS_PER_PGD * sizeof(void *)));
+#endif
+#ifdef CONFIG_BLK_DEV_INITRD
 	if (initrd_start)
-		reserve_bootmem(__pa(initrd_start),
-				initrd_end - initrd_start);
+		reserve_bootmem(O_PFN_DOWN(initrd_start),
+				PFN_RANGE(initrd_start, initrd_end));
 #endif
 }
 
@@ -332,7 +397,7 @@ static void __init request_standard_resources(struct machine_desc *mdesc)
 		virt_start = __phys_to_virt(meminfo.bank[i].start);
 		virt_end   = virt_start + meminfo.bank[i].size - 1;
 
-		res = alloc_bootmem(sizeof(*res));
+		res = alloc_bootmem_low(sizeof(*res));
 		res->name  = "System RAM";
 		res->start = __virt_to_bus(virt_start);
 		res->end   = __virt_to_bus(virt_end);
@@ -400,7 +465,7 @@ fixup_acorn(struct machine_desc *desc, struct param_struct *params,
 		}
 
 		for (i = 0; i < 4; i++) {
-			meminfo.bank[i].start = i << 26;
+			meminfo.bank[i].start = PHYS_OFFSET + (i << 26);
 			meminfo.bank[i].size  =
 				params->u1.s.pages_in_bank[i] *
 				params->u1.s.page_size;
@@ -627,7 +692,7 @@ void __init setup_arch(char **cmdline_p)
 
 	if (meminfo.nr_banks == 0) {
 		meminfo.nr_banks      = 1;
-		meminfo.bank[0].start = 0;
+		meminfo.bank[0].start = PHYS_OFFSET;
 		if (params)
 			meminfo.bank[0].size = params->u1.s.nr_pages << PAGE_SHIFT;
 		else

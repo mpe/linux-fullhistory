@@ -111,12 +111,12 @@
 
 #include <asm/uaccess.h>
 
-#define OFFSET_MAX	(~(loff_t)0ULL >> 1)	/* FIXME: move elsewhere? */
+#define OFFSET_MAX	((off_t)LONG_MAX)	/* FIXME: move elsewhere? */
 
 static int flock_make_lock(struct file *filp, struct file_lock *fl,
 			       unsigned int cmd);
 static int posix_make_lock(struct file *filp, struct file_lock *fl,
-			       struct flock64 *l);
+			       struct flock *l);
 static int flock_locks_conflict(struct file_lock *caller_fl,
 				struct file_lock *sys_fl);
 static int posix_locks_conflict(struct file_lock *caller_fl,
@@ -195,7 +195,7 @@ static void locks_insert_block(struct file_lock *blocker,
 
 	if (waiter->fl_prevblock) {
 		printk(KERN_ERR "locks_insert_block: remove duplicated lock "
-			"(pid=%d %Ld-%Ld type=%d)\n",
+			"(pid=%d %ld-%ld type=%d)\n",
 			waiter->fl_pid, waiter->fl_start,
 			waiter->fl_end, waiter->fl_type);
 		locks_delete_block(waiter->fl_prevblock, waiter);
@@ -319,14 +319,18 @@ out:
 /* Report the first existing lock that would conflict with l.
  * This implements the F_GETLK command of fcntl().
  */
-static int do_fcntl_getlk(unsigned int fd, struct flock64 *flock)
+int fcntl_getlk(unsigned int fd, struct flock *l)
 {
 	struct file *filp;
 	struct file_lock *fl,file_lock;
+	struct flock flock;
 	int error;
 
+	error = -EFAULT;
+	if (copy_from_user(&flock, l, sizeof(flock)))
+		goto out;
 	error = -EINVAL;
-	if ((flock->l_type != F_RDLCK) && (flock->l_type != F_WRLCK))
+	if ((flock.l_type != F_RDLCK) && (flock.l_type != F_WRLCK))
 		goto out;
 
 	error = -EBADF;
@@ -338,7 +342,7 @@ static int do_fcntl_getlk(unsigned int fd, struct flock64 *flock)
 	if (!filp->f_dentry || !filp->f_dentry->d_inode)
 		goto out_putf;
 
-	if (!posix_make_lock(filp, &file_lock, flock))
+	if (!posix_make_lock(filp, &file_lock, &flock))
 		goto out_putf;
 
 	if (filp->f_op->lock) {
@@ -354,15 +358,18 @@ static int do_fcntl_getlk(unsigned int fd, struct flock64 *flock)
 		fl = posix_test_lock(filp, &file_lock);
 	}
  
-	flock->l_type = F_UNLCK;
+	flock.l_type = F_UNLCK;
 	if (fl != NULL) {
-		flock->l_pid = fl->fl_pid;
-		flock->l_start = fl->fl_start;
-		flock->l_len = fl->fl_end == OFFSET_MAX ? 0 :
+		flock.l_pid = fl->fl_pid;
+		flock.l_start = fl->fl_start;
+		flock.l_len = fl->fl_end == OFFSET_MAX ? 0 :
 			fl->fl_end - fl->fl_start + 1;
-		flock->l_whence = 0;
-		flock->l_type = fl->fl_type;
+		flock.l_whence = 0;
+		flock.l_type = fl->fl_type;
 	}
+	error = -EFAULT;
+	if (!copy_to_user(l, &flock, sizeof(flock)))
+		error = 0;
   
 out_putf:
 	fput(filp);
@@ -373,13 +380,21 @@ out:
 /* Apply the lock described by l to an open file descriptor.
  * This implements both the F_SETLK and F_SETLKW commands of fcntl().
  */
-static int do_fcntl_setlk(unsigned int fd, unsigned int cmd, struct flock64 *flock)
+int fcntl_setlk(unsigned int fd, unsigned int cmd, struct flock *l)
 {
 	struct file *filp;
 	struct file_lock file_lock;
+	struct flock flock;
 	struct dentry * dentry;
 	struct inode *inode;
 	int error;
+
+	/*
+	 * This might block, so we do it before checking the inode.
+	 */
+	error = -EFAULT;
+	if (copy_from_user(&flock, l, sizeof(flock)))
+		goto out;
 
 	/* Get arguments and validate them ...
 	 */
@@ -413,11 +428,11 @@ static int do_fcntl_setlk(unsigned int fd, unsigned int cmd, struct flock64 *flo
 	}
 
 	error = -EINVAL;
-	if (!posix_make_lock(filp, &file_lock, flock))
+	if (!posix_make_lock(filp, &file_lock, &flock))
 		goto out_putf;
 	
 	error = -EBADF;
-	switch (flock->l_type) {
+	switch (flock.l_type) {
 	case F_RDLCK:
 		if (!(filp->f_mode & FMODE_READ))
 			goto out_putf;
@@ -462,95 +477,6 @@ out_putf:
 out:
 	return error;
 }
-
-int fcntl_getlk(unsigned int fd, struct flock *l)
-{
-	struct flock flock;
-	struct flock64 fl64;
-	int error;
-
-	error = -EFAULT;
-	if (copy_from_user(&flock, l, sizeof(flock)))
-		goto out;
-
-	/* Convert to 64-bit offsets for internal use */
-	fl64.l_type	= flock.l_type;
-	fl64.l_whence	= flock.l_whence;
-	fl64.l_start	= (unsigned long)flock.l_start;
-	fl64.l_len	= (unsigned long)flock.l_len;
-	fl64.l_pid	= flock.l_pid;
-
-	error = do_fcntl_getlk(fd, &fl64);
-	if (error)
-		goto out;
-
-	/* and back again... */
-	flock.l_type	= fl64.l_type;
-	flock.l_whence	= fl64.l_whence;
-	flock.l_start	= (unsigned long)fl64.l_start;
-	flock.l_len	= (unsigned long)fl64.l_len;
-	flock.l_pid	= fl64.l_pid;
-
-	if (copy_to_user(l, &flock, sizeof(flock)))
-		error = -EFAULT;
-out:
-	return error;
-}
-
-int fcntl_setlk(unsigned int fd, unsigned int cmd, struct flock *l)
-{
-	struct flock flock;
-	struct flock64 fl64;
-	int error;
-
-	error = -EFAULT;
-	if (copy_from_user(&flock, l, sizeof(flock)))
-		goto out;
-
-	/* Convert to 64-bit offsets for internal use */
-	fl64.l_type	= flock.l_type;
-	fl64.l_whence	= flock.l_whence;
-	fl64.l_start	= (unsigned long)flock.l_start;
-	fl64.l_len	= (unsigned long)flock.l_len;
-	fl64.l_pid	= flock.l_pid;
-
-	error = do_fcntl_setlk(fd, cmd, &fl64);
-out:
-	return error;
-}
-
-#if BITS_PER_LONG == 32	/* LFS versions for 32 bit platforms */
-int fcntl_getlk64(unsigned int fd, struct flock64 *l)
-{
-	struct flock64 fl64;
-	int error;
-
-	error = -EFAULT;
-	if (copy_from_user(&fl64, l, sizeof(fl64)))
-		goto out;
-
-	error = do_fcntl_getlk(fd, &fl64);
-
-	if (!error && copy_to_user(l, &fl64, sizeof(fl64)))
-		error = -EFAULT;
-out:
-	return error;
-}
-
-int fcntl_setlk64(unsigned int fd, unsigned int cmd, struct flock64 *l)
-{
-	struct flock64 fl64;
-	int error;
-
-	error = -EFAULT;
-	if (copy_from_user(&fl64, l, sizeof(fl64)))
-		goto out;
-
-	error = do_fcntl_setlk(fd, cmd, &fl64);
-out:
-	return error;
-}
-#endif
 
 /*
  * This function is called when the file is being removed
@@ -721,7 +647,7 @@ repeat:
  * style lock.
  */
 static int posix_make_lock(struct file *filp, struct file_lock *fl,
-			   struct flock64 *l)
+			   struct flock *l)
 {
 	off_t start;
 
@@ -1274,7 +1200,7 @@ static char *lock_get_status(struct file_lock *fl, int id, char *pfx)
 		p += sprintf(p, "FLOCK  ADVISORY  ");
 	}
 	p += sprintf(p, "%s ", (fl->fl_type == F_RDLCK) ? "READ " : "WRITE");
-	p += sprintf(p, "%d %s:%ld %Ld %Ld ",
+	p += sprintf(p, "%d %s:%ld %ld %ld ",
 		     fl->fl_pid,
 		     kdevname(inode->i_dev), inode->i_ino, fl->fl_start,
 		     fl->fl_end);

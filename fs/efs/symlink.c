@@ -37,6 +37,7 @@ static int efs_symlink_readpage(struct dentry *dentry, struct page *page)
 		brelse(bh);
 	}
 	link[size] = '\0';
+	SetPageUptodate(page);
 	kunmap(page);
 	UnlockPage(page);
 	return 0;

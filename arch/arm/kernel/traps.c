@@ -133,7 +133,7 @@ static void dump_instr(unsigned long pc, int user)
 		printk ("pc not in code space\n");
 }
 
-spinlock_t die_lock;
+spinlock_t die_lock = SPIN_LOCK_UNLOCKED;
 
 /*
  * This function is protected against re-entrancy.

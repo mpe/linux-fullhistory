@@ -107,6 +107,13 @@ int parport_register_driver (struct parport_driver *drv)
 	for (port = portlist; port; port = port->next)
 		drv->attach (port);
 
+	/* For compatibility with 2.2, check the (obsolete) parport_lowlevel
+	 * alias in case some people haven't changed to post-install rules
+	 * yet.  parport_enumerate (itself deprecated) will printk a
+	 * friendly reminder. */
+	if (!portlist)
+		parport_enumerate ();
+
 	return 0;
 }
 

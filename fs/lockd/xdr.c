@@ -142,7 +142,7 @@ nlm_decode_lock(u32 *p, struct nlm_lock *lock)
 	fl->fl_pid   = ntohl(*p++);
 	fl->fl_flags = FL_POSIX;
 	fl->fl_type  = F_RDLCK;		/* as good as anything else */
-	fl->fl_start = (u_long)ntohl(*p++); // Up to 4G-1
+	fl->fl_start = ntohl(*p++);
 	len = ntohl(*p++);
 	if (len == 0 || (fl->fl_end = fl->fl_start + len - 1) < 0)
 		fl->fl_end = NLM_OFFSET_MAX;
@@ -163,11 +163,11 @@ nlm_encode_lock(u32 *p, struct nlm_lock *lock)
 		return NULL;
 
 	*p++ = htonl(fl->fl_pid);
-	*p++ = htonl((u_long)lock->fl.fl_start);
+	*p++ = htonl(lock->fl.fl_start);
 	if (lock->fl.fl_end == NLM_OFFSET_MAX)
 		*p++ = xdr_zero;
 	else
-		*p++ = htonl((u_long)(lock->fl.fl_end - lock->fl.fl_start + 1));
+		*p++ = htonl(lock->fl.fl_end - lock->fl.fl_start + 1);
 
 	return p;
 }
@@ -192,11 +192,11 @@ nlm_encode_testres(u32 *p, struct nlm_res *resp)
 		if (!(p = xdr_encode_netobj(p, &resp->lock.oh)))
 			return 0;
 
-		*p++ = htonl((u_long)fl->fl_start);
+		*p++ = htonl(fl->fl_start);
 		if (fl->fl_end == NLM_OFFSET_MAX)
 			*p++ = xdr_zero;
 		else
-			*p++ = htonl((u_long)(fl->fl_end - fl->fl_start + 1));
+			*p++ = htonl(fl->fl_end - fl->fl_start + 1);
 	}
 
 	return p;
@@ -425,7 +425,7 @@ nlmclt_decode_testres(struct rpc_rqst *req, u32 *p, struct nlm_res *resp)
 
 		fl->fl_flags = FL_POSIX;
 		fl->fl_type  = excl? F_WRLCK : F_RDLCK;
-		fl->fl_start = (u_long)ntohl(*p++);
+		fl->fl_start = ntohl(*p++);
 		len = ntohl(*p++);
 		if (len == 0 || (fl->fl_end = fl->fl_start + len - 1) < 0)
 			fl->fl_end = NLM_OFFSET_MAX;

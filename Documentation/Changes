@@ -57,7 +57,8 @@ running, the suggested command should tell you.
 - Loadlin                1.6a
 - Sh-utils               1.16                    ; basename --v
 - Autofs                 3.1.1                   ; automount --version
-- NFS                    2.2beta40               ; showmount --version
+- NFS (client)           2.2beta40               ; showmount --version
+- nfs-utils (server)     0.1.4
 - Bash                   1.14.7                  ; bash -version
 - Ncpfs                  2.2.0                   ; ncpmount -v
 - Pcmcia-cs              3.1.2                   ; cardmgr -V
@@ -646,9 +647,8 @@ The user-land 2.2beta40 release:
 ftp://ftp.mathematik.th-darmstadt.de/pub/linux/okir/dontuse/nfs-server-2.2beta40.tar.gz
 ftp://linux.nrao.edu/mirrors/fb0429.mathematik.th-darmstadt.de/pub/linux/okir/dontuse/nfs-server-2.2beta40.tar.gz
 
-The kernel-level 12/04/98 release:
-ftp://ftp.yggdrasil.com/private/hjl/knfsd-981204.tar.gz
-ftp://ftp.kernel.org/pub/linux/devel/gcc/knfsd-981204.tar.gz
+The kernel-level nfs-utils-0.1.4 release:
+ftp://nfs.sourceforge.net/pub/nfs/nfs-utils-0.1.4.tar.gz
 
 Net-tools
 =========
