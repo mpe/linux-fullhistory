@@ -143,7 +143,7 @@ static int	stl_nrbrds = sizeof(stl_brdconf) / sizeof(stlconf_t);
  */
 static char	*stl_drvtitle = "Stallion Multiport Serial Driver";
 static char	*stl_drvname = "stallion";
-static char	*stl_drvversion = "5.4.3";
+static char	*stl_drvversion = "5.4.5";
 static char	*stl_serialname = "ttyE";
 static char	*stl_calloutname = "cue";
 
@@ -278,6 +278,7 @@ static char	*stl_brdnames[] = {
 #define	EIO_INTRPEND	0x08
 #define	EIO_INTEDGE	0x00
 #define	EIO_INTLEVEL	0x08
+#define	EIO_0WS		0x10
 
 #define	ECH_ID		0xa0
 #define	ECH_IDBITMASK	0xe0
@@ -2153,6 +2154,10 @@ static inline int stl_initeio(stlbrd_t *brdp)
 	brdp->ioctrl = brdp->ioaddr1 + 1;
 	brdp->iostatus = brdp->ioaddr1 + 2;
 
+	status = inb(brdp->iostatus);
+	if ((status & EIO_IDBITMASK) == EIO_MK3)
+		brdp->ioctrl++;
+
 /*
  *	Handle board specific stuff now. The real difference is PCI
  *	or not PCI.
@@ -2171,7 +2176,7 @@ static inline int stl_initeio(stlbrd_t *brdp)
 				brdp->irq, brdp->brdnr);
 			return(-EINVAL);
 		}
-		outb((stl_vecmap[brdp->irq] |
+		outb((stl_vecmap[brdp->irq] | EIO_0WS |
 			((brdp->irqtype) ? EIO_INTLEVEL : EIO_INTEDGE)),
 			brdp->ioctrl);
 	}
@@ -2194,7 +2199,6 @@ static inline int stl_initeio(stlbrd_t *brdp)
 	brdp->clk = CD1400_CLK;
 	brdp->isr = stl_eiointr;
 
-	status = inb(brdp->iostatus);
 	switch (status & EIO_IDBITMASK) {
 	case EIO_8PORTM:
 		brdp->clk = CD1400_CLK8M;
@@ -2220,7 +2224,6 @@ static inline int stl_initeio(stlbrd_t *brdp)
 		default:
 			return(-ENODEV);
 		}
-		brdp->ioctrl++;
 		break;
 	default:
 		return(-ENODEV);

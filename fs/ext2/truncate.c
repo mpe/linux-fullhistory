@@ -181,7 +181,7 @@ repeat:
 	for (i = 0; i < addr_per_block; i++)
 		if (le32_to_cpu(*(ind++)))
 			break;
-	if (i >= addr_per_block)
+	if (i >= addr_per_block) {
 		if (ind_bh->b_count != 1)
 			retry = 1;
 		else {
@@ -193,6 +193,7 @@ repeat:
 			bforget(ind_bh);
 			ind_bh = NULL;
 		}
+	}
 	if (IS_SYNC(inode) && ind_bh && buffer_dirty(ind_bh)) {
 		ll_rw_block (WRITE, 1, &ind_bh);
 		wait_on_buffer (ind_bh);
@@ -243,7 +244,7 @@ repeat:
 	for (i = 0; i < addr_per_block; i++)
 		if (le32_to_cpu(*(dind++)))
 			break;
-	if (i >= addr_per_block)
+	if (i >= addr_per_block) {
 		if (dind_bh->b_count != 1)
 			retry = 1;
 		else {
@@ -255,6 +256,7 @@ repeat:
 			bforget(dind_bh);
 			dind_bh = 0;
 		}
+	}
 	if (IS_SYNC(inode) && dind_bh && buffer_dirty(dind_bh)) {
 		ll_rw_block (WRITE, 1, &dind_bh);
 		wait_on_buffer (dind_bh);
@@ -304,7 +306,7 @@ repeat:
 	for (i = 0; i < addr_per_block; i++)
 		if (le32_to_cpu(*(tind++)))
 			break;
-	if (i >= addr_per_block)
+	if (i >= addr_per_block) {
 		if (tind_bh->b_count != 1)
 			retry = 1;
 		else {
@@ -316,6 +318,7 @@ repeat:
 			bforget(tind_bh);
 			tind_bh = 0;
 		}
+	}
 	if (IS_SYNC(inode) && tind_bh && buffer_dirty(tind_bh)) {
 		ll_rw_block (WRITE, 1, &tind_bh);
 		wait_on_buffer (tind_bh);

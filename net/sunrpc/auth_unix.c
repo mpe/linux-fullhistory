@@ -14,11 +14,12 @@
 #include <linux/sunrpc/clnt.h>
 #include <linux/sunrpc/auth.h>
 
+#define NFS_NGROUPS	16
 struct unx_cred {
 	struct rpc_cred		uc_base;
 	uid_t			uc_fsuid;
 	gid_t			uc_gid, uc_fsgid;
-	gid_t			uc_gids[16];
+	gid_t			uc_gids[NFS_NGROUPS];
 };
 #define uc_uid			uc_base.cr_uid
 #define uc_count		uc_base.cr_count
@@ -84,12 +85,18 @@ unx_create_cred(struct rpc_task *task)
 		cred->uc_gid = cred->uc_fsgid = 0;
 		cred->uc_gids[0] = NOGROUP;
 	} else {
+		int groups = current->ngroups;
+		if (groups > NFS_NGROUPS)
+			groups = NFS_NGROUPS;
+
 		cred->uc_uid = current->uid;
 		cred->uc_gid = current->gid;
 		cred->uc_fsuid = current->fsuid;
 		cred->uc_fsgid = current->fsgid;
-		for (i = 0; i < 16 && i < NGROUPS; i++)
+		for (i = 0; i < groups; i++)
 			cred->uc_gids[i] = (gid_t) current->groups[i];
+		if (i < NFS_NGROUPS)
+		  cred->uc_gids[i] = NOGROUP;
 	}
 
 	return (struct rpc_cred *) cred;
@@ -135,13 +142,18 @@ unx_match(struct rpc_task * task, struct rpc_cred *rcred)
 	int		i;
 
 	if (!RPC_DO_ROOTOVERRIDE(task)) {
+		int groups;
+
 		if (cred->uc_uid != current->uid
 		 || cred->uc_gid != current->gid
 		 || cred->uc_fsuid != current->fsuid
 		 || cred->uc_fsgid != current->fsgid)
 			return 0;
 
-		for (i = 0; i < 16 && i < NGROUPS; i++)
+		groups = current->ngroups;
+		if (groups > NFS_NGROUPS)
+			groups = NFS_NGROUPS;
+		for (i = 0; i < groups ; i++)
 			if (cred->uc_gids[i] != (gid_t) current->groups[i])
 				return 0;
 		return 1;

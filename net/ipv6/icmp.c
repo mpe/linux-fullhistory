@@ -5,7 +5,7 @@
  *	Authors:
  *	Pedro Roque		<roque@di.fc.ul.pt>
  *
- *	$Id: icmp.c,v 1.13 1998/02/12 07:43:41 davem Exp $
+ *	$Id: icmp.c,v 1.15 1998/03/21 07:28:03 davem Exp $
  *
  *	Based on net/ipv4/icmp.c
  *
@@ -153,7 +153,7 @@ void icmpv6_send(struct sk_buff *skb, int type, int code, __u32 info,
 	struct ipv6hdr *hdr = skb->nh.ipv6h;
 	struct sock *sk = icmpv6_socket->sk;
 	struct in6_addr *saddr = NULL;
-	struct device *src_dev = NULL;
+	int iif = 0;
 	struct icmpv6_msg msg;
 	struct flowi fl;
 	int addr_type = 0;
@@ -203,7 +203,7 @@ void icmpv6_send(struct sk_buff *skb, int type, int code, __u32 info,
 	 */
 
 	if (addr_type & IPV6_ADDR_LINKLOCAL)
-		src_dev = skb->dev;
+		iif = skb->dev->ifindex;
 
 	/*
 	 *	Must not send if we know that source is Anycast also.
@@ -251,12 +251,17 @@ void icmpv6_send(struct sk_buff *skb, int type, int code, __u32 info,
 	fl.proto = IPPROTO_ICMPV6;
 	fl.nl_u.ip6_u.daddr = &hdr->saddr;
 	fl.nl_u.ip6_u.saddr = saddr;
-	fl.dev = src_dev;
+	fl.oif = iif;
 	fl.uli_u.icmpt.type = type;
 	fl.uli_u.icmpt.code = code;
 
 	ip6_build_xmit(sk, icmpv6_getfrag, &msg, &fl, len, NULL, -1,
 		       MSG_DONTWAIT);
+
+	/* Oops! We must purge cached dst, otherwise
+	   all the following ICMP messages will go there :) --ANK
+	 */
+	dst_release(xchg(&sk->dst_cache, NULL));
 }
 
 static void icmpv6_echo_reply(struct sk_buff *skb)
@@ -294,12 +299,17 @@ static void icmpv6_echo_reply(struct sk_buff *skb)
 	fl.proto = IPPROTO_ICMPV6;
 	fl.nl_u.ip6_u.daddr = &hdr->saddr;
 	fl.nl_u.ip6_u.saddr = saddr;
-	fl.dev = skb->dev;
+	fl.oif = skb->dev->ifindex;
 	fl.uli_u.icmpt.type = ICMPV6_ECHO_REPLY;
 	fl.uli_u.icmpt.code = 0;
 
 	ip6_build_xmit(sk, icmpv6_getfrag, &msg, &fl, len, NULL, -1,
 		       MSG_DONTWAIT);
+
+	/* Oops! We must purge cached dst, otherwise
+	   all the following ICMP messages will go there :) --ANK
+	 */
+	dst_release(xchg(&sk->dst_cache, NULL));
 }
 
 static __inline__ int ipv6_ext_hdr(u8 nexthdr)
@@ -317,7 +327,8 @@ static __inline__ int ipv6_ext_hdr(u8 nexthdr)
 		 
 }
 
-static void icmpv6_notify(int type, int code, unsigned char *buff, int len,
+static void icmpv6_notify(struct sk_buff *skb,
+			  int type, int code, unsigned char *buff, int len,
 			  struct in6_addr *saddr, struct in6_addr *daddr, 
 			  struct inet6_protocol *protocol)
 {
@@ -367,7 +378,7 @@ static void icmpv6_notify(int type, int code, unsigned char *buff, int len,
 			continue;
 
 		if (ipprot->err_handler) 
-			ipprot->err_handler(type, code, pbuff, info,
+			ipprot->err_handler(skb, type, code, pbuff, info,
 					    saddr, daddr, ipprot);
 		return;
 	}
@@ -457,7 +468,7 @@ int icmpv6_rcv(struct sk_buff *skb, struct device *dev,
 	case ICMPV6_TIME_EXCEED:
 	case ICMPV6_PARAMPROB:
 
-		icmpv6_notify(hdr->icmp6_type, hdr->icmp6_code,
+		icmpv6_notify(skb, hdr->icmp6_type, hdr->icmp6_code,
 			      (char *) (hdr + 1), ulen,
 			      saddr, daddr, protocol);
 		break;
@@ -493,7 +504,7 @@ int icmpv6_rcv(struct sk_buff *skb, struct device *dev,
 		 * must pass to upper level 
 		 */
 
-		icmpv6_notify(hdr->icmp6_type, hdr->icmp6_code,
+		icmpv6_notify(skb, hdr->icmp6_type, hdr->icmp6_code,
 			      (char *) (hdr + 1), ulen,
 			      saddr, daddr, protocol);	
 	};

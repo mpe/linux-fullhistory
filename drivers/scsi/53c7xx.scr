@@ -315,7 +315,7 @@ dsa_code_check_reselect:
 	MOVE MEMORY 1, reselected_identify, addr_scratch
 	DMODE_MEMORY_TO_MEMORY
 #ifdef BIG_ENDIAN
-	; BIG ENDIAN ON MVME166
+	; BIG ENDIAN ON MVME16x
 	MOVE SCRATCH3 TO SFBR
 #else
 	MOVE SCRATCH0 TO SFBR
@@ -1134,8 +1134,8 @@ command_complete_msgin:
     JUMP command_failed, IF 0x02
 #endif
 #if (CHIP == 710)
-#if defined(MVME166_INTFLY)
-; For MVME166 (ie CHIP=710) we will force an INTFLY by triggering a software
+#if defined(MVME16x_INTFLY)
+; For MVME16x (ie CHIP=710) we will force an INTFLY by triggering a software
 ; interupt (SW7).  We can use SCRATCH, as we are about to jump to
 ; schedule, which corrupts it anyway.  Will probably remove this later,
 ; but want to check performance effects first.

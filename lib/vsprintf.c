@@ -112,13 +112,14 @@ static char * number(char * str, long num, int base, int size, int precision
 			*str++ = ' ';
 	if (sign)
 		*str++ = sign;
-	if (type & SPECIAL)
+	if (type & SPECIAL) {
 		if (base==8)
 			*str++ = '0';
 		else if (base==16) {
 			*str++ = '0';
 			*str++ = digits[33];
 		}
+	}
 	if (!(type & LEFT))
 		while (size-- > 0)
 			*str++ = c;
@@ -281,12 +282,12 @@ int vsprintf(char *buf, const char *fmt, va_list args)
 		}
 		if (qualifier == 'l')
 			num = va_arg(args, unsigned long);
-		else if (qualifier == 'h')
+		else if (qualifier == 'h') {
 			if (flags & SIGN)
 				num = va_arg(args, short);
 			else
 				num = va_arg(args, unsigned short);
-		else if (flags & SIGN)
+		} else if (flags & SIGN)
 			num = va_arg(args, int);
 		else
 			num = va_arg(args, unsigned int);

@@ -19,7 +19,9 @@
 #include <linux/module.h>
 
 #include <linux/config.h>
+#include <linux/sched.h>
 #include <linux/fs.h>
+#include <linux/file.h>
 #include <linux/stat.h>
 #include <linux/errno.h>
 #include <linux/major.h>
@@ -277,7 +279,7 @@ repeat:
 	end_request(1);
 	goto repeat;
 error_out:
-    current_request->next=CURRENT;
+	current_request->next=CURRENT;
 	CURRENT=current_request;
 	end_request(0);
 	goto repeat;
@@ -287,27 +289,36 @@ static int loop_set_fd(struct loop_device *lo, kdev_t dev, unsigned int arg)
 {
 	struct file	*file;
 	struct inode	*inode;
+	int error;
 
-	if (arg >= NR_OPEN || !(file = current->files->fd[arg]))
-		return -EBADF;
+	MOD_INC_USE_COUNT;
+	error = -EBADF;
+	file = fget(arg);
+	if (!file)
+		goto out;
+
+	error = -EBUSY;
 	if (lo->lo_inode)
-		return -EBUSY;
+		goto out_putf;
+
+	error = -EINVAL;
 	inode = file->f_dentry->d_inode;
 	if (!inode) {
 		printk("loop_set_fd: NULL inode?!?\n");
-		return -EINVAL;
+		goto out_putf;
 	}
+
 	if (S_ISBLK(inode->i_mode)) {
-		int error = blkdev_open(inode, file);
-		if (error)
-			return error;
+		error = blkdev_open(inode, file);
 		lo->lo_device = inode->i_rdev;
 		lo->lo_flags = 0;
 	} else if (S_ISREG(inode->i_mode)) {
 		lo->lo_device = inode->i_dev;
 		lo->lo_flags = LO_FLAGS_DO_BMAP;
-	} else
-		return -EINVAL;
+		error = 0;
+	}
+	if (error)
+		goto out_putf;
 
 	if (IS_RDONLY (inode) || is_read_only(lo->lo_device)) {
 		lo->lo_flags |= LO_FLAGS_READ_ONLY;
@@ -317,25 +328,34 @@ static int loop_set_fd(struct loop_device *lo, kdev_t dev, unsigned int arg)
 		set_device_ro(dev, 0);
 	}
 
+	/* N.B. Should keep the file or dentry ... */
+	inode->i_count++;
 	lo->lo_inode = inode;
-	lo->lo_inode->i_count++;
 	lo->transfer = NULL;
 	figure_loop_size(lo);
-	MOD_INC_USE_COUNT;
-	return 0;
+
+out_putf:
+	fput(file);
+out:
+	if (error)
+		MOD_DEC_USE_COUNT;
+	return error;
 }
 
 static int loop_clr_fd(struct loop_device *lo, kdev_t dev)
 {
-	if (!lo->lo_inode)
+	struct inode *inode = lo->lo_inode;
+
+	if (!inode)
 		return -ENXIO;
 	if (lo->lo_refcnt > 1)	/* we needed one fd for the ioctl */
 		return -EBUSY;
-	if (S_ISBLK(lo->lo_inode->i_mode))
-		blkdev_release (lo->lo_inode);
-	iput(lo->lo_inode);
-	lo->lo_device = 0;
+
+	if (S_ISBLK(inode->i_mode))
+		blkdev_release (inode);
 	lo->lo_inode = NULL;
+	iput(inode);
+	lo->lo_device = 0;
 	lo->lo_encrypt_type = 0;
 	lo->lo_offset = 0;
 	lo->lo_encrypt_key_size = 0;

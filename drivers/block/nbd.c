@@ -313,7 +313,7 @@ static int nbd_ioctl(struct inode *inode, struct file *file,
 		     unsigned int cmd, unsigned long arg)
 {
 	struct nbd_device *lo;
-	int dev;
+	int dev, error;
 
 	if (!suser())
 		return -EPERM;
@@ -322,6 +322,7 @@ static int nbd_ioctl(struct inode *inode, struct file *file,
 	dev = MINOR(inode->i_rdev);
 	if (dev >= MAX_NBD)
 		return -ENODEV;
+
 	lo = &nbd_dev[dev];
 	switch (cmd) {
 	case NBD_CLEAR_SOCK:
@@ -329,19 +330,26 @@ static int nbd_ioctl(struct inode *inode, struct file *file,
 			printk(KERN_ERR "nbd: Some requests are in progress -> can not turn off.\n");
 			return -EBUSY;
 		}
-		if (!lo->file)
+		file = lo->file;
+		if (!file)
 			return -EINVAL;
-		lo->file->f_count--;
 		lo->file = NULL;
 		lo->sock = NULL;
+		fput(file);
 		return 0;
 	case NBD_SET_SOCK:
-		file = current->files->fd[arg];
-		inode = file->f_dentry->d_inode;
-		file->f_count++;
-		lo->sock = &inode->u.socket_i;
-		lo->file = file;
-		return 0;
+		if (lo->file)
+			return -EBUSY;
+		error = -EINVAL;
+		file = fget(arg);
+		if (file) {
+			inode = file->f_dentry->d_inode;
+			/* N.B. Should verify that it's a socket */
+			lo->file = file;
+			lo->sock = &inode->u.socket_i;
+			error = 0;
+		}
+		return error;
 	case NBD_SET_BLKSIZE:
 		if ((arg & 511) || (arg > PAGE_SIZE))
 			return -EINVAL;
@@ -383,6 +391,7 @@ static int nbd_release(struct inode *inode, struct file *file)
 	if (lo->refcnt <= 0)
 		printk(KERN_ALERT "nbd_release: refcount(%d) <= 0\n", lo->refcnt);
 	lo->refcnt--;
+	/* N.B. Doesn't lo->file need an fput?? */
 	MOD_DEC_USE_COUNT;
 	return 0;
 }

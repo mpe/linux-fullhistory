@@ -38,6 +38,9 @@ int pcwatchdog_init(void);
 #ifdef CONFIG_VIDEO_DEV
 extern int videodev_init(void);
 #endif
+#if defined(CONFIG_FB)
+extern void fbmem_init( void );
+#endif
 
 static ssize_t do_write_mem(struct file * file, void *p, unsigned long realp,
 			    const char * buf, size_t count, loff_t *ppos)
@@ -522,6 +525,9 @@ __initfunc(int chr_dev_init(void))
 	if (register_chrdev(MEM_MAJOR,"mem",&memory_fops))
 		printk("unable to get major %d for memory devs\n", MEM_MAJOR);
 	rand_initialize();
+#if defined (CONFIG_FB)
+	fbmem_init();
+#endif
 	tty_init();
 #ifdef CONFIG_PRINTER
 	lp_init();

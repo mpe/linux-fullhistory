@@ -14,41 +14,13 @@
 #include <linux/tty.h>
 #include <linux/console.h>
 #include <linux/string.h>
+#include <linux/config.h>
 #include <linux/fb.h>
 
+#include <asm/byteorder.h>
+
 #include "fbcon.h"
-
-
-#ifndef __mc68000__
-#error No support for non-m68k yet
-#endif
-
-
-    /*
-     *  Prototypes
-     */
-
-static int open_iplan2p2(struct display *p);
-static void release_iplan2p2(void);
-static void bmove_iplan2p2(struct display *p, int sy, int sx, int dy, int dx,
-			   int height, int width);
-static void clear_iplan2p2(struct vc_data *conp, struct display *p, int sy,
-			   int sx, int height, int width);
-static void putc_iplan2p2(struct vc_data *conp, struct display *p, int c,
-			  int yy, int xx);
-static void putcs_iplan2p2(struct vc_data *conp, struct display *p,
-			   const char *s, int count, int yy, int xx);
-static void rev_char_iplan2p2(struct display *display, int xx, int yy);
-
-
-    /*
-     *  `switch' for the low level operations
-     */
-
-static struct display_switch dispsw_iplan2p2 = {
-    open_iplan2p2, release_iplan2p2, bmove_iplan2p2, clear_iplan2p2,
-    putc_iplan2p2, putcs_iplan2p2, rev_char_iplan2p2
-};
+#include "fbcon-iplan2p2.h"
 
 
     /*
@@ -65,8 +37,19 @@ static struct display_switch dispsw_iplan2p2 = {
      *  The intensity bit (b3) is shifted into b1.
      */
 
-#define	COLOR_2P(c)	(((c & 7) >= 3 && (c & 7) != 4) | (c & 8) >> 2)
+static const u8 color_2p[] = { 0, 0, 0, 1, 0, 1, 1, 1, 2, 2, 2, 3, 2, 3, 3, 3 };
+#define	COLOR_2P(c)	color_2p[c]
 
+/* Perform the m68k movepw operation.  */
+static inline void movepw(u8 *d, u16 val)
+{
+#if defined __mc68000__ && !defined CONFIG_OPTIMIZE_060
+    asm volatile ("movepw %1,%0@(0)" : : "a" (d), "d" (val));
+#else
+    d[0] = (val >> 16) & 0xff;
+    d[2] = val & 0xff;
+#endif
+}
 
 /* Sets the bytes in the visible column at d, height h, to the value
  * val for a 2 plane screen. The the bis of the color in 'color' are
@@ -77,16 +60,13 @@ static struct display_switch dispsw_iplan2p2 = {
  *   *(d+2) = (color & 2) ? 0xff : 0;
  */
 
-static __inline__ void memclear_2p_col(void *d, size_t h, u_short val, int bpr)
+static __inline__ void memclear_2p_col(void *d, size_t h, u16 val, int bpr)
 {
-#ifdef __mc68000__
-    __asm__ __volatile__ ("1: movepw %4,%0@(0)\n\t"
-			  "addal  %5,%0\n\t"
-			  "dbra	  %1,1b"
-			  : "=a" (d), "=d" (h)
-			  : "0" (d), "1" (h - 1), "d" (val), "r" (bpr));
-#else /* !m68k */
-#endif /* !m68k */
+    u8 *dd = d;
+    do {
+	movepw(dd, val);
+	dd += bpr;
+    } while (--h);
 }
 
 /* Sets a 2 plane region from 'd', length 'count' bytes, to the color
@@ -98,9 +78,9 @@ static __inline__ void memclear_2p_col(void *d, size_t h, u_short val, int bpr)
  *   *(d+2) = *(d+3) = (color & 2) ? 0xff : 0;
  */
 
-static __inline__ void memset_even_2p(void *d, size_t count, u_long val)
+static __inline__ void memset_even_2p(void *d, size_t count, u32 val)
 {
-    u_long *dd = d;
+    u32 *dd = d;
 
     count /= 4;
     while (count--)
@@ -111,7 +91,7 @@ static __inline__ void memset_even_2p(void *d, size_t count, u_long val)
 
 static __inline__ void memmove_2p_col (void *d, void *s, int h, int bpr)
 {
-    u_char *dd = d, *ss = s;
+    u8 *dd = d, *ss = s;
 
     while (h--) {
 	dd[0] = ss[0];
@@ -124,81 +104,54 @@ static __inline__ void memmove_2p_col (void *d, void *s, int h, int bpr)
 
 /* This expands a 2 bit color into a short for movepw (2 plane) operations. */
 
-static __inline__ u_short expand2w(u_char c)
-{
-    u_short	rv;
+static const u16 two2byte[] = {
+    0x0000, 0xff00, 0x00ff, 0xffff
+};
 
-#ifdef __mc68000__
-    __asm__ __volatile__ ("lsrb	 #1,%2\n\t"
-			  "scs	 %0\n\t"
-			  "lsll	 #8,%0\n\t"
-			  "lsrb	 #1,%2\n\t"
-			  "scs	 %0\n\t"
-			  : "=&d" (rv), "=d" (c)
-			  : "1" (c));
-#endif /* !m68k */
-    return(rv);
+static __inline__ u16 expand2w(u8 c)
+{
+    return two2byte[c];
 }
+
 
 /* This expands a 2 bit color into one long for a movel operation
  * (2 planes).
  */
 
-static __inline__ u_long expand2l(u_char c)
-{
-    u_long	rv;
+static const u32 two2word[] = {
+#ifndef __LITTLE_ENDIAN
+    0x00000000, 0xffff0000, 0x0000ffff, 0xffffffff
+#else
+    0x00000000, 0x0000ffff, 0xffff0000, 0xffffffff
+#endif
+};
 
-#ifdef __mc68000__
-    __asm__ __volatile__ ("lsrb	 #1,%2\n\t"
-			  "scs	 %0\n\t"
-			  "extw	 %0\n\t"
-			  "swap	 %0\n\t"
-			  "lsrb	 #1,%2\n\t"
-			  "scs	 %0\n\t"
-			  "extw	 %0\n\t"
-			  : "=&d" (rv), "=d" (c)
-			  : "1" (c));
-#endif /* !m68k */
-    return rv;
+static __inline__ u32 expand2l(u8 c)
+{
+    return two2word[c];
 }
 
 
 /* This duplicates a byte 2 times into a short. */
 
-static __inline__ u_short dup2w(u_char c)
+static __inline__ u16 dup2w(u8 c)
 {
-    ushort  rv;
+    u16 rv;
 
-#ifdef __mc68000__
-    __asm__ __volatile__ ("moveb  %1,%0\n\t"
-			  "lslw   #8,%0\n\t"
-			  "moveb  %1,%0\n\t"
-			  : "=&d" (rv)
-			  : "d" (c));
-#endif /* !m68k */
-    return( rv );
+    rv = c;
+    rv |= c << 8;
+    return rv;
 }
 
 
-static int open_iplan2p2(struct display *p)
+void fbcon_iplan2p2_setup(struct display *p)
 {
-    if (p->type != FB_TYPE_INTERLEAVED_PLANES || p->type_aux != 2 ||
-	p->var.bits_per_pixel != 2)
-	return -EINVAL;
-
     p->next_line = p->var.xres_virtual>>2;
     p->next_plane = 2;
-    MOD_INC_USE_COUNT;
-    return 0;
 }
 
-static void release_iplan2p2(void)
-{
-    MOD_DEC_USE_COUNT;
-}
-
-static void bmove_iplan2p2(struct display *p, int sy, int sx, int dy, int dx,
-			   int height, int width)
+void fbcon_iplan2p2_bmove(struct display *p, int sy, int sx, int dy, int dx,
+			  int height, int width)
 {
     /*  bmove() has to distinguish two major cases: If both, source and
      *  destination, start at even addresses or both are at odd
@@ -212,7 +165,7 @@ static void bmove_iplan2p2(struct display *p, int sy, int sx, int dy, int dx,
      *  all movements by memmove_col().
      */
 
-    if (sx == 0 && dx == 0 && width == p->next_line/2) {
+    if (sx == 0 && dx == 0 && width * 2 == p->next_line) {
 	/*  Special (but often used) case: Moving whole lines can be
 	 *  done with memmove()
 	 */
@@ -221,8 +174,8 @@ static void bmove_iplan2p2(struct display *p, int sy, int sx, int dy, int dx,
 		  p->next_line * height * p->fontheight);
     } else {
 	int rows, cols;
-	u_char *src;
-	u_char *dst;
+	u8 *src;
+	u8 *dst;
 	int bytes = p->next_line;
 	int linesize = bytes * p->fontheight;
 	u_int colsize  = height * p->fontheight;
@@ -298,21 +251,21 @@ static void bmove_iplan2p2(struct display *p, int sy, int sx, int dy, int dx,
     }
 }
 
-static void clear_iplan2p2(struct vc_data *conp, struct display *p, int sy,
-			   int sx, int height, int width)
+void fbcon_iplan2p2_clear(struct vc_data *conp, struct display *p, int sy,
+			  int sx, int height, int width)
 {
-    ulong offset;
-    u_char *start;
+    u32 offset;
+    u8 *start;
     int rows;
     int bytes = p->next_line;
     int lines = height * p->fontheight;
-    ulong size;
-    u_long cval;
-    u_short pcval;
+    u32 size;
+    u32 cval;
+    u16 pcval;
 
     cval = expand2l (COLOR_2P (attr_bgcol_ec(p,conp)));
 
-    if (sx == 0 && width == bytes/2) {
+    if (sx == 0 && width * 2 == bytes) {
 	offset = sy * bytes * p->fontheight;
 	size = lines * bytes;
 	memset_even_2p(p->screen_base+offset, size, cval);
@@ -344,14 +297,14 @@ static void clear_iplan2p2(struct vc_data *conp, struct display *p, int sy,
     }
 }
 
-static void putc_iplan2p2(struct vc_data *conp, struct display *p, int c,
-			  int yy, int xx)
+void fbcon_iplan2p2_putc(struct vc_data *conp, struct display *p, int c,
+			 int yy, int xx)
 {
-    u_char *dest;
-    u_char *cdat;
+    u8 *dest;
+    u8 *cdat;
     int rows;
     int bytes = p->next_line;
-    ulong eorx, fgx, bgx, fdx;
+    u16 eorx, fgx, bgx, fdx;
 
     c &= 0xff;
 
@@ -364,22 +317,18 @@ static void putc_iplan2p2(struct vc_data *conp, struct display *p, int c,
 
     for (rows = p->fontheight ; rows-- ; dest += bytes) {
 	fdx = dup2w(*cdat++);
-#ifdef __mc68000__
-	__asm__ __volatile__ ("movepw %1,%0@(0)"
-			      : /* no outputs */
-			      : "a" (dest), "d" ((fdx & eorx) ^ bgx));
-#endif /* !m68k */
+	movepw(dest, (fdx & eorx) ^ bgx);
     }
 }
 
-static void putcs_iplan2p2(struct vc_data *conp, struct display *p,
-			   const char *s, int count, int yy, int xx)
+void fbcon_iplan2p2_putcs(struct vc_data *conp, struct display *p,
+			  const char *s, int count, int yy, int xx)
 {
-    u_char *dest, *dest0;
-    u_char *cdat, c;
+    u8 *dest, *dest0;
+    u8 *cdat, c;
     int rows;
     int bytes;
-    ulong eorx, fgx, bgx, fdx;
+    u16 eorx, fgx, bgx, fdx;
 
     bytes = p->next_line;
     dest0 = p->screen_base + yy * p->fontheight * bytes + (xx>>1)*4 + (xx & 1);
@@ -393,19 +342,15 @@ static void putcs_iplan2p2(struct vc_data *conp, struct display *p,
 
 	for (rows = p->fontheight, dest = dest0; rows-- ; dest += bytes) {
 	    fdx = dup2w(*cdat++);
-#ifdef __mc68000__
-	    __asm__ __volatile__ ("movepw %1,%0@(0)"
-				  : /* no outputs */
-				  : "a" (dest), "d" ((fdx & eorx) ^ bgx));
-#endif /* !m68k */
+	    movepw(dest, (fdx & eorx) ^ bgx);
 	}
 	INC_2P(dest0);
     }
 }
 
-static void rev_char_iplan2p2(struct display *p, int xx, int yy)
+void fbcon_iplan2p2_revc(struct display *p, int xx, int yy)
 {
-    u_char *dest;
+    u8 *dest;
     int j;
     int bytes;
 
@@ -425,18 +370,24 @@ static void rev_char_iplan2p2(struct display *p, int xx, int yy)
 }
 
 
-#ifdef MODULE
-int init_module(void)
-#else
-int fbcon_init_iplan2p2(void)
-#endif
-{
-    return(fbcon_register_driver(&dispsw_iplan2p2, 0));
-}
+    /*
+     *  `switch' for the low level operations
+     */
 
-#ifdef MODULE
-void cleanup_module(void)
-{
-    fbcon_unregister_driver(&dispsw_iplan2p2);
-}
-#endif /* MODULE */
+struct display_switch fbcon_iplan2p2 = {
+    fbcon_iplan2p2_setup, fbcon_iplan2p2_bmove, fbcon_iplan2p2_clear,
+    fbcon_iplan2p2_putc, fbcon_iplan2p2_putcs, fbcon_iplan2p2_revc
+};
+
+
+    /*
+     *  Visible symbols for modules
+     */
+
+EXPORT_SYMBOL(fbcon_iplan2p2);
+EXPORT_SYMBOL(fbcon_iplan2p2_setup);
+EXPORT_SYMBOL(fbcon_iplan2p2_bmove);
+EXPORT_SYMBOL(fbcon_iplan2p2_clear);
+EXPORT_SYMBOL(fbcon_iplan2p2_putc);
+EXPORT_SYMBOL(fbcon_iplan2p2_putcs);
+EXPORT_SYMBOL(fbcon_iplan2p2_revc);

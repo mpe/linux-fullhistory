@@ -9,7 +9,7 @@
  */
 
 
-#include <linux/config.h> /* for CONFIG_AMIGA */
+#include <linux/config.h>
 #include <linux/types.h>
 #include <linux/string.h>
 #ifdef __mc68000__
@@ -25,17 +25,22 @@
 /* VGA8x8 */
 extern char fontname_8x8[];
 extern int fontwidth_8x8, fontheight_8x8;
-extern u_char fontdata_8x8[];
+extern u8 fontdata_8x8[];
 
 /* VGA8x16 */
 extern char fontname_8x16[];
 extern int fontwidth_8x16, fontheight_8x16;
-extern u_char fontdata_8x16[];
+extern u8 fontdata_8x16[];
 
 /* PEARL8x8 */
 extern char fontname_pearl8x8[];
 extern int fontwidth_pearl8x8, fontheight_pearl8x8;
-extern u_char fontdata_pearl8x8[];
+extern u8 fontdata_pearl8x8[];
+
+/* VGA6x11 */
+extern char fontname_6x11[];
+extern int fontwidth_6x11, fontheight_6x11;
+extern u8 fontdata_6x11[];
 
 
    /*
@@ -46,18 +51,20 @@ struct softfontdesc {
    char *name;
    int *width;
    int *height;
-   u_char *data;
+   u8 *data;
 };
 
 #define VGA8x8_IDX	0
 #define VGA8x16_IDX	1
 #define PEARL8x8_IDX	2
+#define VGA6x11_IDX	3
 
 static struct softfontdesc softfonts[] = {
    { fontname_8x8, &fontwidth_8x8, &fontheight_8x8, fontdata_8x8 },
    { fontname_8x16, &fontwidth_8x16, &fontheight_8x16, fontdata_8x16 },
    { fontname_pearl8x8, &fontwidth_pearl8x8, &fontheight_pearl8x8,
      fontdata_pearl8x8 },
+   { fontname_6x11, &fontwidth_6x11, &fontheight_6x11, fontdata_6x11 },
 };
 
 static unsigned int numsoftfonts = sizeof(softfonts)/sizeof(*softfonts);
@@ -67,7 +74,7 @@ static unsigned int numsoftfonts = sizeof(softfonts)/sizeof(*softfonts);
     *    Find a font with a specific name
     */
 
-int findsoftfont(char *name, int *width, int *height, u_char *data[])
+int findsoftfont(char *name, int *width, int *height, u8 *data[])
 {
    unsigned int i;
 
@@ -90,7 +97,7 @@ int findsoftfont(char *name, int *width, int *height, u_char *data[])
     */
 
 void getdefaultfont(int xres, int yres, char *name[], int *width, int *height,
-                    u_char *data[])
+                    u8 *data[])
 {
     int i;
     
@@ -102,6 +109,16 @@ void getdefaultfont(int xres, int yres, char *name[], int *width, int *height,
 #endif
     } else
 	i = VGA8x16_IDX;
+
+#if defined(CONFIG_MAC)
+    if (MACH_IS_MAC) {
+#if 0  /* MSch: removed until 6x11 is debugged */
+        i = VGA6x11_IDX;   /* I added this for fun ... I like 6x11 */
+#endif
+       if (xres < 640)
+           i = VGA6x11_IDX;
+    }
+#endif
 
     if (name)
 	*name = softfonts[i].name;

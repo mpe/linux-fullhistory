@@ -5,6 +5,7 @@
 #include <linux/tty.h>
 #include <linux/malloc.h>
 #include <linux/delay.h>
+#include <linux/config.h>
 #include <linux/interrupt.h>
 #include <asm/setup.h>
 #include <asm/segment.h>
@@ -13,6 +14,9 @@
 #include <asm/apollohw.h>
 #include <linux/fb.h>
 #include <linux/module.h>
+
+#include "fbcon-mfb.h"
+
 
 /* apollo video HW definitions */
 
@@ -108,46 +112,44 @@
 #endif
 
 
-void dn_video_setup(char *options, int *ints);
-
 /* frame buffer operations */
 
-static int dn_fb_open(int fbidx);
-static int dn_fb_release(int fbidx);
-static int dn_fb_get_fix(struct fb_fix_screeninfo *fix, int con);
-static int dn_fb_get_var(struct fb_var_screeninfo *var, int con);
-static int dn_fb_set_var(struct fb_var_screeninfo *var, int isactive);
-static int dn_fb_get_cmap(struct fb_cmap *cmap,int kspc,int con);
-static int dn_fb_set_cmap(struct fb_cmap *cmap,int kspc,int con);
-static int dn_fb_pan_display(struct fb_var_screeninfo *var, int con);
-static int dn_fb_ioctl(struct inode *inode, struct file *file, unsigned int cmd,
-		       unsigned long arg, int con);
+static int dnfb_open(struct fb_info *info);
+static int dnfb_release(struct fb_info *info);
+static int dnfb_get_fix(struct fb_fix_screeninfo *fix, int con,
+			struct fb_info *info);
+static int dnfb_get_var(struct fb_var_screeninfo *var, int con,
+			struct fb_info *info);
+static int dnfb_set_var(struct fb_var_screeninfo *var, int con,
+			struct fb_info *info);
+static int dnfb_get_cmap(struct fb_cmap *cmap,int kspc,int con,
+			 struct fb_info *info);
+static int dnfb_set_cmap(struct fb_cmap *cmap,int kspc,int con,
+			 struct fb_info *info);
+static int dnfb_pan_display(struct fb_var_screeninfo *var, int con,
+			    struct fb_info *info);
+static int dnfb_ioctl(struct inode *inode, struct file *file,
+		      unsigned int cmd, unsigned long arg, int con,
+		      struct fb_info *info);
 
-static int dnfbcon_switch(int con);
-static int dnfbcon_updatevar(int con);
-static void dnfbcon_blank(int blank);
+static int dnfbcon_switch(int con, struct fb_info *info);
+static int dnfbcon_updatevar(int con, struct fb_info *info);
+static void dnfbcon_blank(int blank, struct fb_info *info);
 
-static void dn_fb_set_disp(int con);
+static void dnfb_set_disp(int con, struct fb_info *info);
 
 static struct display disp[MAX_NR_CONSOLES];
 static struct fb_info fb_info;
-static struct fb_ops dn_fb_ops = { 
-	dn_fb_open,dn_fb_release, dn_fb_get_fix, dn_fb_get_var, dn_fb_set_var,
-	dn_fb_get_cmap, dn_fb_set_cmap, dn_fb_pan_display, dn_fb_ioctl
+static struct fb_ops dnfb_ops = { 
+	dnfb_open,dnfb_release, dnfb_get_fix, dnfb_get_var, dnfb_set_var,
+	dnfb_get_cmap, dnfb_set_cmap, dnfb_pan_display, NULL, dnfb_ioctl
 };
 
 static int currcon=0;
 
-#define NUM_TOTAL_MODES 1
-struct fb_var_screeninfo dn_fb_predefined[] = {
+static char dnfb_name[]="Apollo";
 
-	{ 0, },
-
-};
-
-static char dn_fb_name[]="Apollo ";
-
-static int dn_fb_open(int fbidx)
+static int dnfb_open(struct fb_info *info)
 {
         /*
          * Nothing, only a usage count for the moment
@@ -157,14 +159,15 @@ static int dn_fb_open(int fbidx)
         return(0);
 }
 
-static int dn_fb_release(int fbidx)
+static int dnfb_release(struct fb_info *info)
 {
         MOD_DEC_USE_COUNT;
         return(0);
 }
 
-static int dn_fb_get_fix(struct fb_fix_screeninfo *fix, int con) {
-
+static int dnfb_get_fix(struct fb_fix_screeninfo *fix, int con,
+			struct fb_info *info)
+{
 	memset(fix, 0, sizeof(struct fb_fix_screeninfo));
 	strcpy(fix->id,"Apollo Mono");
 	fix->smem_start=(char*)(FRAME_BUFFER_START+IO_BASE);
@@ -181,8 +184,9 @@ static int dn_fb_get_fix(struct fb_fix_screeninfo *fix, int con) {
 
 }
         
-static int dn_fb_get_var(struct fb_var_screeninfo *var, int con) {
-		
+static int dnfb_get_var(struct fb_var_screeninfo *var, int con,
+			struct fb_info *info)
+{
 	var->xres=1280;
 	var->yres=1024;
 	var->xres_virtual=2048;
@@ -208,9 +212,9 @@ static int dn_fb_get_var(struct fb_var_screeninfo *var, int con) {
 
 }
 
-static int dn_fb_set_var(struct fb_var_screeninfo *var, int isactive) {
-
-        printk("fb_set_var\n");
+static int dnfb_set_var(struct fb_var_screeninfo *var, int con,
+			struct fb_info *info)
+{
 	if(var->xres!=1280) 
 		return -EINVAL;
 	if(var->yres!=1024)
@@ -252,48 +256,48 @@ static int dn_fb_set_var(struct fb_var_screeninfo *var, int isactive) {
 
 }
 
-static int dn_fb_get_cmap(struct fb_cmap *cmap,int kspc,int con) {
-
+static int dnfb_get_cmap(struct fb_cmap *cmap, int kspc, int con,
+			 struct fb_info *info)
+{
 	printk("get cmap not supported\n");
 
 	return -EINVAL;
 }
 
-static int dn_fb_set_cmap(struct fb_cmap *cmap,int kspc,int con) {
-
+static int dnfb_set_cmap(struct fb_cmap *cmap, int kspc, int con,
+			 struct fb_info *info)
+{
 	printk("set cmap not supported\n");
 
 	return -EINVAL;
 
 }
 
-static int dn_fb_pan_display(struct fb_var_screeninfo *var, int con) {
-
+static int dnfb_pan_display(struct fb_var_screeninfo *var, int con,
+			    struct fb_info *info)
+{
 	printk("panning not supported\n");
 
 	return -EINVAL;
 
 }
 
-static int dn_fb_ioctl(struct inode *inode, struct file *file, unsigned int cmd,
-		    unsigned long arg, int con) {
-
-	printk("no IOCTLs as of yet.\n");
-
+static int dnfb_ioctl(struct inode *inode, struct file *file,
+		      unsigned int cmd, unsigned long arg, int con,
+		      struct fb_info *info)
+{
 	return -EINVAL;
-
 }
 
-static void dn_fb_set_disp(int con) {
-
+static void dnfb_set_disp(int con, struct fb_info *info)
+{
   struct fb_fix_screeninfo fix;
 
-  dn_fb_get_fix(&fix,con);
+  dnfb_get_fix(&fix, con, info);
   if(con==-1) 
     con=0;
 
    disp[con].screen_base = (u_char *)fix.smem_start;
-printk("screenbase: %p\n",fix.smem_start);
    disp[con].visual = fix.visual;
    disp[con].type = fix.type;
    disp[con].type_aux = fix.type_aux;
@@ -302,27 +306,27 @@ printk("screenbase: %p\n",fix.smem_start);
    disp[con].can_soft_blank = 1;
    disp[con].inverse = 0;
    disp[con].line_length = fix.line_length;
+#ifdef CONFIG_FBCON_MFB
+   disp[con].dispsw = &fbcon_mfb;
+#else
+   disp[con].dispsw = NULL;
+#endif
 }
   
-unsigned long dn_fb_init(unsigned long mem_start) {
-
+unsigned long dnfb_init(unsigned long mem_start)
+{
 	int err;
        
-printk("dn_fb_init\n");
-
 	fb_info.changevar=NULL;
-	strcpy(&fb_info.modename[0],dn_fb_name);
+	strcpy(&fb_info.modename[0],dnfb_name);
 	fb_info.fontname[0]=0;
 	fb_info.disp=disp;
 	fb_info.switch_con=&dnfbcon_switch;
 	fb_info.updatevar=&dnfbcon_updatevar;
 	fb_info.blank=&dnfbcon_blank;	
 	fb_info.node = -1;
-	fb_info.fbops = &dn_fb_ops;
-	fb_info.fbvar = dn_fb_predefined;
-	fb_info.fbvar_num = NUM_TOTAL_MODES;
+	fb_info.fbops = &dnfb_ops;
 	
-printk("dn_fb_init: register\n");
 	err=register_framebuffer(&fb_info);
 	if(err < 0) {
 		panic("unable to register apollo frame buffer\n");
@@ -337,35 +341,34 @@ printk("dn_fb_init: register\n");
         outb(S_DATA_PLN, AP_CONTROL_2);
         outw(SWAP(0x3),AP_ROP_1);
 
-        printk("apollo frame buffer alive and kicking !\n");
+        printk("fb%d: apollo frame buffer alive and kicking !\n",
+	       GET_FB_IDX(fb_info.node));
 
 	
-        dn_fb_get_var(&disp[0].var,0);
+        dnfb_get_var(&disp[0].var, 0, &fb_info);
 
-	dn_fb_set_disp(-1);
+	dnfb_set_disp(-1, &fb_info);
 
 	return mem_start;
 
 }	
 
 	
-static int dnfbcon_switch(int con) { 
-
+static int dnfbcon_switch(int con, struct fb_info *info)
+{ 
 	currcon=con;
 	
 	return 0;
 
 }
 
-static int dnfbcon_updatevar(int con) {
-
+static int dnfbcon_updatevar(int con, struct fb_info *info)
+{
 	return 0;
-
 }
 
-static void dnfbcon_blank(int blank) {
-
-	printk("dnfbcon_blank: %d\n",blank);
+static void dnfbcon_blank(int blank, struct fb_info *info)
+{
 	if(blank)  {
         	outb(0, AP_CONTROL_3A);
 		outb((AD_BLT | DST_EQ_SRC | NORM_CREG1) & ~ENAB_DISP,
@@ -375,14 +378,4 @@ static void dnfbcon_blank(int blank) {
 	        outb(1, AP_CONTROL_3A);
         	outb((AD_BLT | DST_EQ_SRC | NORM_CREG1), AP_CONTROL_1);
 	}
-
-	return ;
-
 }
-
-void dn_video_setup(char *options, int *ints) {
-	
-	return;
-
-}
-

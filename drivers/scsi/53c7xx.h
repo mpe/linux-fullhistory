@@ -893,7 +893,7 @@ extern inline void * phys_to_virt(unsigned long address)
 					 * NCR53c710, this bit moved to CTEST8
 					 */
 #define DCNTL_10_COM		0x01	/* 700 software compatibility mode */
-#define DCNTL_10_EA		0x20	/* Enable Ack - needed for MVME166 */
+#define DCNTL_10_EA		0x20	/* Enable Ack - needed for MVME16x */
 
 #define DCNTL_700_SAVE ( DCNTL_CF_MASK | DCNTL_S16)
 

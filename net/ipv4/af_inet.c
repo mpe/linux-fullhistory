@@ -5,7 +5,7 @@
  *
  *		AF_INET protocol family socket handler.
  *
- * Version:	$Id: af_inet.c,v 1.63 1998/03/08 05:56:12 davem Exp $
+ * Version:	$Id: af_inet.c,v 1.66 1998/03/21 07:27:58 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -274,7 +274,7 @@ static int inet_autobind(struct sock *sk)
 		sk->num = sk->prot->good_socknum();
 		if (sk->num == 0) 
 			return(-EAGAIN);
-		sk->dummy_th.source = htons(sk->num);
+		sk->sport = htons(sk->num);
 		sk->prot->hash(sk);
 		add_to_prot_sklist(sk);
 	}
@@ -304,6 +304,7 @@ int inet_listen(struct socket *sock, int backlog)
 	if (sk->state != TCP_LISTEN) {
 		sk->ack_backlog = 0;
 		sk->state = TCP_LISTEN;
+		dst_release(xchg(&sk->dst_cache, NULL));
 		sk->prot->rehash(sk);
 		add_to_prot_sklist(sk);
 	}
@@ -348,7 +349,6 @@ static int inet_create(struct socket *sock, int protocol)
 
 	switch (sock->type) {
 	case SOCK_STREAM:
-		/* Note for tcp that also wiped the dummy_th block for us. */
 		if (protocol && protocol != IPPROTO_TCP)
 			goto free_and_noproto;
 		protocol = IPPROTO_TCP;
@@ -412,17 +412,13 @@ static int inet_create(struct socket *sock, int protocol)
 	sk->ip_mc_index=0;
 	sk->ip_mc_list=NULL;
 	
-	/*	Speed up by setting some standard state for the dummy_th
-	 *	if TCP uses it (maybe move to tcp_init later)
-	 */
-  	
 	if (sk->num) {
 		/* It assumes that any protocol which allows
 		 * the user to assign a number at socket
 		 * creation time automatically
 		 * shares.
 		 */
-		sk->dummy_th.source = htons(sk->num);
+		sk->sport = htons(sk->num);
 
 		/* Add to protocol hash chains. */
 		sk->prot->hash(sk);
@@ -552,9 +548,9 @@ static int inet_bind(struct socket *sock, struct sockaddr *uaddr, int addr_len)
 		return -EADDRINUSE;
 
 	sk->num = snum;
-	sk->dummy_th.source = htons(snum);
+	sk->sport = htons(snum);
 	sk->daddr = 0;
-	sk->dummy_th.dest = 0;
+	sk->dport = 0;
 	sk->prot->rehash(sk);
 	add_to_prot_sklist(sk);
 	dst_release(sk->dst_cache);
@@ -753,13 +749,13 @@ static int inet_getname(struct socket *sock, struct sockaddr *uaddr,
 	if (peer) {
 		if (!tcp_connected(sk->state)) 
 			return(-ENOTCONN);
-		sin->sin_port = sk->dummy_th.dest;
+		sin->sin_port = sk->dport;
 		sin->sin_addr.s_addr = sk->daddr;
 	} else {
 		__u32 addr = sk->rcv_saddr;
 		if (!addr)
 			addr = sk->saddr;
-		sin->sin_port = sk->dummy_th.source;
+		sin->sin_port = sk->sport;
 		sin->sin_addr.s_addr = addr;
 	}
 	*uaddr_len = sizeof(*sin);
@@ -798,7 +794,8 @@ int inet_sendmsg(struct socket *sock, struct msghdr *msg, int size,
 	struct sock *sk = sock->sk;
 
 	if (sk->shutdown & SEND_SHUTDOWN) {
-		send_sig(SIGPIPE, current, 1);
+		if (!(msg->msg_flags&MSG_NOSIGNAL))
+			send_sig(SIGPIPE, current, 1);
 		return(-EPIPE);
 	}
 	if (sk->prot->sendmsg == NULL) 

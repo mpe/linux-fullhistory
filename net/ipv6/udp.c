@@ -7,7 +7,7 @@
  *
  *	Based on linux/ipv4/udp.c
  *
- *	$Id: udp.c,v 1.24 1998/03/12 03:20:21 davem Exp $
+ *	$Id: udp.c,v 1.27 1998/03/21 07:28:06 davem Exp $
  *
  *	This program is free software; you can redistribute it and/or
  *      modify it under the terms of the GNU General Public License
@@ -151,8 +151,8 @@ static struct sock *udp_v6_lookup(struct in6_addr *saddr, u16 sport,
 		   !(sk->dead && (sk->state == TCP_CLOSE))) {
 			struct ipv6_pinfo *np = &sk->net_pinfo.af_inet6;
 			int score = 0;
-			if(sk->dummy_th.dest) {
-				if(sk->dummy_th.dest != sport)
+			if(sk->dport) {
+				if(sk->dport != sport)
 					continue;
 				score++;
 			}
@@ -241,7 +241,7 @@ int udpv6_connect(struct sock *sk, struct sockaddr *uaddr, int addr_len)
 
 	ipv6_addr_copy(&np->daddr, daddr);
 
-	sk->dummy_th.dest = usin->sin6_port;
+	sk->dport = usin->sin6_port;
 
 	/*
 	 *	Check for a route to destination an obtain the
@@ -251,9 +251,9 @@ int udpv6_connect(struct sock *sk, struct sockaddr *uaddr, int addr_len)
 	fl.proto = IPPROTO_UDP;
 	fl.nl_u.ip6_u.daddr = daddr;
 	fl.nl_u.ip6_u.saddr = NULL;
-	fl.dev = NULL;
-	fl.uli_u.ports.dport = sk->dummy_th.dest;
-	fl.uli_u.ports.sport = sk->dummy_th.source;
+	fl.oif = sk->bound_dev_if;
+	fl.uli_u.ports.dport = sk->dport;
+	fl.uli_u.ports.sport = sk->sport;
 
 	dst = ip6_route_output(sk, &fl);
        
@@ -363,7 +363,7 @@ out:
 	return err;
 }
 
-void udpv6_err(int type, int code, unsigned char *buff, __u32 info,
+void udpv6_err(struct sk_buff *skb, int type, int code, unsigned char *buff, __u32 info,
 	       struct in6_addr *saddr, struct in6_addr *daddr,
 	       struct inet6_protocol *protocol)
 {
@@ -428,8 +428,8 @@ static struct sock *udp_v6_mcast_next(struct sock *sk,
 		if((s->num == num)		&&
 		   !(s->dead && (s->state == TCP_CLOSE))) {
 			struct ipv6_pinfo *np = &s->net_pinfo.af_inet6;
-			if(s->dummy_th.dest) {
-				if(s->dummy_th.dest != rmt_port)
+			if(s->dport) {
+				if(s->dport != rmt_port)
 					continue;
 			}
 			if(!ipv6_addr_any(&np->daddr) &&
@@ -644,7 +644,6 @@ static int udpv6_sendmsg(struct sock *sk, struct msghdr *msg, int ulen)
 	struct ipv6_pinfo *np = &sk->net_pinfo.af_inet6;
 	struct sockaddr_in6 *sin6 = (struct sockaddr_in6 *) msg->msg_name;
 	struct ipv6_options *opt = NULL;
-	struct device *dev = NULL;
 	struct flowi fl;
 	int addr_len = msg->msg_namelen;
 	struct in6_addr *daddr;
@@ -692,7 +691,7 @@ static int udpv6_sendmsg(struct sock *sk, struct msghdr *msg, int ulen)
 		if (sk->state != TCP_ESTABLISHED)
 			return(-EINVAL);
 		
-		udh.uh.dest = sk->dummy_th.dest;
+		udh.uh.dest = sk->dport;
 		daddr = &sk->net_pinfo.af_inet6.daddr;
 	}
 
@@ -708,22 +707,21 @@ static int udpv6_sendmsg(struct sock *sk, struct msghdr *msg, int ulen)
 	}
 
 	udh.daddr = NULL;
+	fl.oif = sk->bound_dev_if;
 	
 	if (msg->msg_controllen) {
 		opt = &opt_space;
 		memset(opt, 0, sizeof(struct ipv6_options));
 
-		err = datagram_send_ctl(msg, &dev, &saddr, opt, &hlimit);
-		if (err < 0) {
-			printk(KERN_DEBUG "invalid msg_control\n");
+		err = datagram_send_ctl(msg, &fl.oif, &saddr, opt, &hlimit);
+		if (err < 0)
 			return err;
-		}
 		
 		if (opt->srcrt)
 			udh.daddr = daddr;
 	}
 	
-	udh.uh.source = sk->dummy_th.source;
+	udh.uh.source = sk->sport;
 	udh.uh.len = htons(len);
 	udh.uh.check = 0;
 	udh.iov = msg->msg_iov;
@@ -733,7 +731,6 @@ static int udpv6_sendmsg(struct sock *sk, struct msghdr *msg, int ulen)
 	fl.proto = IPPROTO_UDP;
 	fl.nl_u.ip6_u.daddr = daddr;
 	fl.nl_u.ip6_u.saddr = saddr;
-	fl.dev = dev;
 	fl.uli_u.ports.dport = udh.uh.dest;
 	fl.uli_u.ports.sport = udh.uh.source;
 

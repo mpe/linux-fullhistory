@@ -14,41 +14,13 @@
 #include <linux/tty.h>
 #include <linux/console.h>
 #include <linux/string.h>
+#include <linux/config.h>
 #include <linux/fb.h>
 
+#include <asm/byteorder.h>
+
 #include "fbcon.h"
-
-
-#ifndef __mc68000__
-#error No support for non-m68k yet
-#endif
-
-
-    /*
-     *  Prototypes
-     */
-
-static int open_iplan2p8(struct display *p);
-static void release_iplan2p8(void);
-static void bmove_iplan2p8(struct display *p, int sy, int sx, int dy, int dx,
-			   int height, int width);
-static void clear_iplan2p8(struct vc_data *conp, struct display *p, int sy,
-			   int sx, int height, int width);
-static void putc_iplan2p8(struct vc_data *conp, struct display *p, int c,
-			  int yy, int xx);
-static void putcs_iplan2p8(struct vc_data *conp, struct display *p,
-			   const char *s, int count, int yy, int xx);
-static void rev_char_iplan2p8(struct display *display, int xx, int yy);
-
-
-    /*
-     *  `switch' for the low level operations
-     */
-
-static struct display_switch dispsw_iplan2p8 = {
-    open_iplan2p8, release_iplan2p8, bmove_iplan2p8, clear_iplan2p8,
-    putc_iplan2p8, putcs_iplan2p8, rev_char_iplan2p8
-};
+#include "fbcon-iplan2p8.h"
 
 
     /*
@@ -65,9 +37,26 @@ static struct display_switch dispsw_iplan2p8 = {
 #define	INC_8P(p)	do { if (!((long)(++(p)) & 1)) (p) += 14; } while(0)
 #define	DEC_8P(p)	do { if ((long)(--(p)) & 1) (p) -= 14; } while(0)
 
+/* Perform the m68k movepl operation extended to 64 bits.  */
+static inline void movepl2(u8 *d, u32 val1, u32 val2)
+{
+#if defined __mc68000__ && !defined CONFIG_OPTIMIZE_060
+    asm volatile ("movepl %1,%0@(0); movepl %2,%0@(8)"
+		  : : "a" (d), "d" (val1), "d" (val2));
+#else
+    d[0] = (val1 >> 24) & 0xff;
+    d[2] = (val1 >> 16) & 0xff;
+    d[4] = (val1 >> 8) & 0xff;
+    d[6] = val1 & 0xff;
+    d[8] = (val2 >> 24) & 0xff;
+    d[10] = (val2 >> 16) & 0xff;
+    d[12] = (val2 >> 8) & 0xff;
+    d[14] = val2 & 0xff;
+#endif
+}
 
 /* Sets the bytes in the visible column at d, height h, to the value
- * val1,val2 for a 8 plane screen. The the bis of the color in 'color' are
+ * val1,val2 for a 8 plane screen. The bits of the color in 'color' are
  * moved (8 times) to the respective bytes. This means:
  *
  * for(h times; d += bpr)
@@ -81,18 +70,14 @@ static struct display_switch dispsw_iplan2p8 = {
  *   *(d+14) = (color & 128) ? 0xff : 0;
  */
 
-static __inline__ void memclear_8p_col(void *d, size_t h, u_long val1,
-                                       u_long val2, int bpr)
+static __inline__ void memclear_8p_col(void *d, size_t h, u32 val1,
+                                       u32 val2, int bpr)
 {
-#ifdef __mc68000__
-    __asm__ __volatile__ ("1: movepl %4,%0@(0)\n\t"
-			  "movepl %5,%0@(8)\n\t"
-			  "addal  %6,%0\n\t"
-			  "dbra	  %1,1b"
-			  : "=a" (d), "=d" (h)
-			  : "0" (d), "1" (h - 1), "d" (val1), "d" (val2),
-			    "r" (bpr));
-#endif /* !m68k */
+    u8 *dd = d;
+    do {
+	movepl2(dd, val1, val2);
+	dd += bpr;
+    } while (--h);
 }
 
 /* Sets a 8 plane region from 'd', length 'count' bytes, to the color
@@ -110,10 +95,10 @@ static __inline__ void memclear_8p_col(void *d, size_t h, u_long val1,
  *   *(d+14) = *(d+15) = (color & 128) ? 0xff : 0;
  */
 
-static __inline__ void memset_even_8p(void *d, size_t count, u_long val1,
-                                      u_long val2, u_long val3, u_long val4)
+static __inline__ void memset_even_8p(void *d, size_t count, u32 val1,
+                                      u32 val2, u32 val3, u32 val4)
 {
-    u_long *dd = d;
+    u32 *dd = d;
 
     count /= 16;
     while (count--) {
@@ -128,7 +113,7 @@ static __inline__ void memset_even_8p(void *d, size_t count, u_long val1,
 
 static __inline__ void memmove_8p_col (void *d, void *s, int h, int bpr)
 {
-    u_char *dd = d, *ss = s;
+    u8 *dd = d, *ss = s;
 
     while (h--) {
 	dd[0] = ss[0];
@@ -149,124 +134,64 @@ static __inline__ void memmove_8p_col (void *d, void *s, int h, int bpr)
  * operations.
  */
 
-static __inline__ void expand8dl(u_char c, u_long *ret1, u_long *ret2)
+static const u32 four2long[] =
 {
-    u_long	rv1, rv2;
+    0x00000000, 0xff000000, 0x00ff0000, 0xffff0000,
+    0x0000ff00, 0xff00ff00, 0x00ffff00, 0xffffff00,
+    0x000000ff, 0xff0000ff, 0x00ff00ff, 0xffff00ff,
+    0x0000ffff, 0xff00ffff, 0x00ffffff, 0xffffffff,
+};
 
-#ifdef __mc68000__
-    __asm__ __volatile__ ("lsrb	 #1,%3\n\t"
-			  "scs	 %0\n\t"
-			  "lsll	 #8,%0\n\t"
-			  "lsrb	 #1,%3\n\t"
-			  "scs	 %0\n\t"
-			  "lsll	 #8,%0\n\t"
-			  "lsrb	 #1,%3\n\t"
-			  "scs	 %0\n\t"
-			  "lsll	 #8,%0\n\t"
-			  "lsrb	 #1,%3\n\t"
-			  "scs	 %0\n\t"
-			  "lsrb	 #1,%3\n\t"
-			  "scs	 %1\n\t"
-			  "lsll	 #8,%1\n\t"
-			  "lsrb	 #1,%3\n\t"
-			  "scs	 %1\n\t"
-			  "lsll	 #8,%1\n\t"
-			  "lsrb	 #1,%3\n\t"
-			  "scs	 %1\n\t"
-			  "lsll	 #8,%1\n\t"
-			  "lsrb	 #1,%3\n\t"
-			  "scs	 %1"
-			  : "=&d" (rv1), "=&d" (rv2),"=d" (c)
-			  : "2" (c));
-#endif /* !m68k */
-    *ret1 = rv1;
-    *ret2 = rv2;
+static __inline__ void expand8dl(u8 c, u32 *ret1, u32 *ret2)
+{
+    *ret1 = four2long[c & 15];
+    *ret2 = four2long[c >> 4];
 }
+
 
 /* This expands a 8 bit color into four longs for four movel operations
  * (8 planes).
  */
 
-#ifdef __mc68000__
-/* ++andreas: use macro to avoid taking address of return values */
-#define expand8ql(c, rv1, rv2, rv3, rv4) \
-    do {								\
-	u_char tmp = c;							\
-	__asm__ __volatile__ ("lsrb  #1,%5\n\t"				\
-			      "scs   %0\n\t"				\
-			      "extw  %0\n\t"				\
-			      "swap  %0\n\t"				\
-			      "lsrb  #1,%5\n\t"				\
-			      "scs   %0\n\t"				\
-			      "extw  %0\n\t"				\
-			      "lsrb  #1,%5\n\t"				\
-			      "scs   %1\n\t"				\
-			      "extw  %1\n\t"				\
-			      "swap  %1\n\t"				\
-			      "lsrb  #1,%5\n\t"				\
-			      "scs   %1\n\t"				\
-			      "extw  %1\n\t"				\
-			      "lsrb  #1,%5\n\t"				\
-			      "scs   %2\n\t"				\
-			      "extw  %2\n\t"				\
-			      "swap  %2\n\t"				\
-			      "lsrb  #1,%5\n\t"				\
-			      "scs   %2\n\t"				\
-			      "extw  %2\n\t"				\
-			      "lsrb  #1,%5\n\t"				\
-			      "scs   %3\n\t"				\
-			      "extw  %3\n\t"				\
-			      "swap  %3\n\t"				\
-			      "lsrb  #1,%5\n\t"				\
-			      "scs   %3\n\t"				\
-			      "extw  %3"				\
-			      : "=&d" (rv1), "=&d" (rv2), "=&d" (rv3),	\
-				"=&d" (rv4), "=d" (tmp)			\
-			      : "4" (tmp));				\
-    } while (0)
-#endif /* !m68k */
+static const u32 two2word[] =
+{
+#ifndef __LITTLE_ENDIAN
+    0x00000000, 0xffff0000, 0x0000ffff, 0xffffffff
+#else
+    0x00000000, 0x0000ffff, 0xffff0000, 0xffffffff
+#endif
+};
+
+static inline void expand8ql(u8 c, u32 *rv1, u32 *rv2, u32 *rv3, u32 *rv4)
+{
+    *rv1 = two2word[c & 4];
+    *rv2 = two2word[(c >> 2) & 4];
+    *rv3 = two2word[(c >> 4) & 4];
+    *rv4 = two2word[c >> 6];
+}
 
 
 /* This duplicates a byte 4 times into a long. */
 
-static __inline__ u_long dup4l(u_char c)
+static __inline__ u32 dup4l(u8 c)
 {
-    ushort	tmp;
-    ulong	rv;
+    u32 rv;
 
-#ifdef __mc68000__
-    __asm__ __volatile__ ("moveb  %2,%0\n\t"
-			  "lslw   #8,%0\n\t"
-			  "moveb  %2,%0\n\t"
-			  "movew  %0,%1\n\t"
-			  "swap   %0\n\t"
-			  "movew  %1,%0"
-			  : "=&d" (rv), "=d" (tmp)
-			  : "d" (c));
-#endif /* !m68k */
-    return(rv);
+    rv = c;
+    rv |= rv << 8;
+    rv |= rv << 16;
+    return rv;
 }
 
 
-static int open_iplan2p8(struct display *p)
+void fbcon_iplan2p8_setup(struct display *p)
 {
-    if (p->type != FB_TYPE_INTERLEAVED_PLANES || p->type_aux != 2 ||
-	p->var.bits_per_pixel != 8)
-	return -EINVAL;
-
     p->next_line = p->var.xres_virtual;
     p->next_plane = 2;
-    MOD_INC_USE_COUNT;
-    return 0;
 }
 
-static void release_iplan2p8(void)
-{
-    MOD_DEC_USE_COUNT;
-}
-
-static void bmove_iplan2p8(struct display *p, int sy, int sx, int dy, int dx,
-			   int height, int width)
+void fbcon_iplan2p8_bmove(struct display *p, int sy, int sx, int dy, int dx,
+			  int height, int width)
 {
     /*  bmove() has to distinguish two major cases: If both, source and
      *  destination, start at even addresses or both are at odd
@@ -280,7 +205,7 @@ static void bmove_iplan2p8(struct display *p, int sy, int sx, int dy, int dx,
      *  all movements by memmove_col().
      */
 
-     if (sx == 0 && dx == 0 && width == p->next_line/8) {
+     if (sx == 0 && dx == 0 && width * 8 == p->next_line) {
 	/*  Special (but often used) case: Moving whole lines can be
 	 *  done with memmove()
 	 */
@@ -289,8 +214,8 @@ static void bmove_iplan2p8(struct display *p, int sy, int sx, int dy, int dx,
 		     p->next_line * height * p->fontheight);
      } else {
 	int rows, cols;
-	u_char *src;
-	u_char *dst;
+	u8 *src;
+	u8 *dst;
 	int bytes = p->next_line;
 	int linesize = bytes * p->fontheight;
 	u_int colsize = height * p->fontheight;
@@ -369,20 +294,20 @@ static void bmove_iplan2p8(struct display *p, int sy, int sx, int dy, int dx,
     }
 }
 
-static void clear_iplan2p8(struct vc_data *conp, struct display *p, int sy,
-			   int sx, int height, int width)
+void fbcon_iplan2p8_clear(struct vc_data *conp, struct display *p, int sy,
+			  int sx, int height, int width)
 {
-    ulong offset;
-    u_char *start;
+    u32 offset;
+    u8 *start;
     int rows;
     int bytes = p->next_line;
     int lines = height * p->fontheight;
-    ulong size;
-    u_long cval1, cval2, cval3, cval4, pcval1, pcval2;
+    u32 size;
+    u32 cval1, cval2, cval3, cval4, pcval1, pcval2;
 
-    expand8ql(attr_bgcol_ec(p,conp), cval1, cval2, cval3, cval4);
+    expand8ql(attr_bgcol_ec(p,conp), &cval1, &cval2, &cval3, &cval4);
 
-    if (sx == 0 && width == bytes/8) {
+    if (sx == 0 && width * 8 == bytes) {
 	offset = sy * bytes * p->fontheight;
 	size    = lines * bytes;
 	memset_even_8p(p->screen_base+offset, size, cval1, cval2, cval3, cval4);
@@ -414,14 +339,14 @@ static void clear_iplan2p8(struct vc_data *conp, struct display *p, int sy,
 	}
 }
 
-static void putc_iplan2p8(struct vc_data *conp, struct display *p, int c,
-			  int yy, int xx)
+void fbcon_iplan2p8_putc(struct vc_data *conp, struct display *p, int c,
+			 int yy, int xx)
 {
-    u_char *dest;
-    u_char *cdat;
+    u8 *dest;
+    u8 *cdat;
     int rows;
     int bytes = p->next_line;
-    ulong eorx1, eorx2, fgx1, fgx2, bgx1, bgx2, fdx;
+    u32 eorx1, eorx2, fgx1, fgx2, bgx1, bgx2, fdx;
 
     c &= 0xff;
 
@@ -434,24 +359,18 @@ static void putc_iplan2p8(struct vc_data *conp, struct display *p, int c,
 
     for(rows = p->fontheight ; rows-- ; dest += bytes) {
 	fdx = dup4l(*cdat++);
-#ifdef __mc68000__
-	__asm__ __volatile__ ("movepl %1,%0@(0)\n\t"
-			      "movepl %2,%0@(8)"
-			      : /* no outputs */
-			      : "a" (dest), "d" ((fdx & eorx1) ^ bgx1),
-				"d" ((fdx & eorx2) ^ bgx2) );
-#endif /* !m68k */
+	movepl2(dest, (fdx & eorx1) ^ bgx1, (fdx & eorx2) ^ bgx2);
     }
 }
 
-static void putcs_iplan2p8(struct vc_data *conp, struct display *p,
-			   const char *s, int count, int yy, int xx)
+void fbcon_iplan2p8_putcs(struct vc_data *conp, struct display *p,
+			  const char *s, int count, int yy, int xx)
 {
-    u_char *dest, *dest0;
-    u_char *cdat, c;
+    u8 *dest, *dest0;
+    u8 *cdat, c;
     int rows;
     int bytes;
-    ulong eorx1, eorx2, fgx1, fgx2, bgx1, bgx2, fdx;
+    u32 eorx1, eorx2, fgx1, fgx2, bgx1, bgx2, fdx;
 
     bytes = p->next_line;
     dest0 = p->screen_base + yy * p->fontheight * bytes + (xx>>1)*16 +
@@ -475,21 +394,15 @@ static void putcs_iplan2p8(struct vc_data *conp, struct display *p,
 
 	for(rows = p->fontheight, dest = dest0; rows-- ; dest += bytes) {
 	    fdx = dup4l(*cdat++);
-#ifdef __mc68000__
-	    __asm__ __volatile__ ("movepl %1,%0@(0)\n\t"
-				  "movepl %2,%0@(8)"
-				  : /* no outputs */
-				  : "a" (dest), "d" ((fdx & eorx1) ^ bgx1),
-				    "d" ((fdx & eorx2) ^ bgx2));
-#endif /* !m68k */
+	    movepl2(dest, (fdx & eorx1) ^ bgx1, (fdx & eorx2) ^ bgx2);
 	}
 	INC_8P(dest0);
     }
 }
 
-static void rev_char_iplan2p8(struct display *p, int xx, int yy)
+void fbcon_iplan2p8_revc(struct display *p, int xx, int yy)
 {
-    u_char *dest;
+    u8 *dest;
     int j;
     int bytes;
 
@@ -502,7 +415,7 @@ static void rev_char_iplan2p8(struct display *p, int xx, int yy)
 	/*  This should really obey the individual character's
 	 *  background and foreground colors instead of simply
 	 *  inverting. For 8 plane mode, only the lower 4 bits of the
-	 *  color are inverted, because only that color registers have
+	 *  color are inverted, because only these color registers have
 	 *  been set up.
 	 */
 	dest[0] = ~dest[0];
@@ -514,18 +427,24 @@ static void rev_char_iplan2p8(struct display *p, int xx, int yy)
 }
 
 
-#ifdef MODULE
-int init_module(void)
-#else
-int fbcon_init_iplan2p8(void)
-#endif
-{
-    return(fbcon_register_driver(&dispsw_iplan2p8, 0));
-}
+    /*
+     *  `switch' for the low level operations
+     */
 
-#ifdef MODULE
-void cleanup_module(void)
-{
-    fbcon_unregister_driver(&dispsw_iplan2p8);
-}
-#endif /* MODULE */
+struct display_switch fbcon_iplan2p8 = {
+    fbcon_iplan2p8_setup, fbcon_iplan2p8_bmove, fbcon_iplan2p8_clear,
+    fbcon_iplan2p8_putc, fbcon_iplan2p8_putcs, fbcon_iplan2p8_revc
+};
+
+
+    /*
+     *  Visible symbols for modules
+     */
+
+EXPORT_SYMBOL(fbcon_iplan2p8);
+EXPORT_SYMBOL(fbcon_iplan2p8_setup);
+EXPORT_SYMBOL(fbcon_iplan2p8_bmove);
+EXPORT_SYMBOL(fbcon_iplan2p8_clear);
+EXPORT_SYMBOL(fbcon_iplan2p8_putc);
+EXPORT_SYMBOL(fbcon_iplan2p8_putcs);
+EXPORT_SYMBOL(fbcon_iplan2p8_revc);

@@ -170,7 +170,7 @@ static int	stli_nrbrds = sizeof(stli_brdconf) / sizeof(stlconf_t);
  */
 static char	*stli_drvtitle = "Stallion Intelligent Multiport Serial Driver";
 static char	*stli_drvname = "istallion";
-static char	*stli_drvversion = "5.4.3";
+static char	*stli_drvversion = "5.4.5";
 static char	*stli_serialname = "ttyE";
 static char	*stli_calloutname = "cue";
 

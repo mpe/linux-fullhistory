@@ -7,7 +7,7 @@
  *
  *	Adapted from linux/net/ipv4/raw.c
  *
- *	$Id: raw.c,v 1.18 1998/03/08 05:56:54 davem Exp $
+ *	$Id: raw.c,v 1.19 1998/03/20 09:12:20 davem Exp $
  *
  *	This program is free software; you can redistribute it and/or
  *      modify it under the terms of the GNU General Public License
@@ -349,7 +349,6 @@ static int rawv6_sendmsg(struct sock *sk, struct msghdr *msg, int len)
 	struct sockaddr_in6 * sin6 = (struct sockaddr_in6 *) msg->msg_name;
 	struct ipv6_pinfo *np = &sk->net_pinfo.af_inet6;
 	struct ipv6_options *opt = NULL;
-	struct device *dev = NULL;
 	struct in6_addr *saddr = NULL;
 	struct flowi fl;
 	int addr_len = msg->msg_namelen;
@@ -419,15 +418,15 @@ static int rawv6_sendmsg(struct sock *sk, struct msghdr *msg, int len)
 		return(-EINVAL);
 	}
 
+	fl.oif = sk->bound_dev_if;
+
 	if (msg->msg_controllen) {
 		opt = &opt_space;
 		memset(opt, 0, sizeof(struct ipv6_options));
 
-		err = datagram_send_ctl(msg, &dev, &saddr, opt, &hlimit);
-		if (err < 0) {
-			printk(KERN_DEBUG "invalid msg_control\n");
+		err = datagram_send_ctl(msg, &fl.oif, &saddr, opt, &hlimit);
+		if (err < 0)
 			return err;
-		}		
 	}
 
 	raw_opt = &sk->tp_pinfo.tp_raw;
@@ -435,7 +434,6 @@ static int rawv6_sendmsg(struct sock *sk, struct msghdr *msg, int len)
 	fl.proto = proto;
 	fl.nl_u.ip6_u.daddr = daddr;
 	fl.nl_u.ip6_u.saddr = saddr;
-	fl.dev = dev;
 	fl.uli_u.icmpt.type = 0;
 	fl.uli_u.icmpt.code = 0;
 	

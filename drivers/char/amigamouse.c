@@ -267,7 +267,7 @@ static ssize_t read_mouse(struct file * file, char * buffer,
 	mouse.ready = 0;
 	AMI_MSE_INT_ON();
 
-	if ((put_user(buttons | 0x80, buffer++)) ||
+	if (put_user(buttons | 0x80, buffer++) ||
 	    put_user((char)dx, buffer++) ||
 	    put_user((char)dy, buffer++))
 		return -EINVAL;

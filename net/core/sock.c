@@ -663,31 +663,13 @@ struct sk_buff *sock_alloc_send_skb(struct sock *sk, unsigned long size, unsigne
 			goto failure;
 
 		/*
-		 *	FIXME: Check 1003.1g should we deliver
-		 *	a signal here ???
+		 *	We should send SIGPIPE in these cases according to
+		 *	1003.1g draft 6.4. If we (the user) did a shutdown()
+		 *	call however we should not. 
 		 *
-		 *	Alan, could we solve this question once and forever?
-		 *
-		 *	I believe, datagram sockets should never
-		 *	generate SIGPIPE. Moreover, I DO think that
-		 *	TCP is allowed to generate it only on write()
-		 *	call, but never on send/sendto/sendmsg.
-		 *	(btw, Solaris generates it even on read() :-))
-		 *
-		 *	The reason is that SIGPIPE is global flag,
-		 *	so that library function using sockets (f.e. syslog()),
-		 *	must save/disable it on entry and restore on exit.
-		 *	As result, signal arriving for another thread will
-		 *	be lost. Generation it on write() is still necessary
-		 *	because a lot of stupid programs never check write()
-		 *	return value.
-		 *
-		 *	Seems, SIGPIPE is very bad idea, sort of gets().
-		 *	At least, we could have an option disabling
-		 *	this behaviour on per-socket and/or per-message base.
-		 *	BTW it is very easy - MSG_SIGPIPE flag, which
-		 *	always set by read/write and checked here.
-		 *						--ANK
+		 *	Note: This routine isnt just used for datagrams and
+		 *	anyway some datagram protocols have a notion of
+		 *	close down.
 		 */
 
 		err = -EPIPE;
@@ -699,7 +681,7 @@ struct sk_buff *sock_alloc_send_skb(struct sock *sk, unsigned long size, unsigne
 		else {
 			/* The buffer get won't block, or use the atomic queue. It does
 			   produce annoying no free page messages still.... */
-			skb = sock_wmalloc(sk, size, 0 , GFP_BUFFER);
+			skb = sock_wmalloc(sk, size, 0, GFP_BUFFER);
 			if (!skb)
 				skb=sock_wmalloc(sk, fallback, 0, sk->allocation);
 		}

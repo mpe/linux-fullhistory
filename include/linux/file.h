@@ -9,13 +9,26 @@ extern int __fput(struct file *);
 extern void insert_file_free(struct file *file);
 
 /*
+ * Check whether the specified task has the fd open. Since the task
+ * may not have a files_struct, we must test for p->files != NULL.
+ */
+extern inline struct file * fcheck_task(struct task_struct *p, unsigned int fd)
+{
+	struct file * file = NULL;
+
+	if (p->files && fd < p->files->max_fds)
+		file = p->files->fd[fd];
+	return file;
+}
+
+/*
  * Check whether the specified fd has an open file.
  */
 extern inline struct file * fcheck(unsigned int fd)
 {
 	struct file * file = NULL;
 
-	if (fd < NR_OPEN)
+	if (fd < current->files->max_fds)
 		file = current->files->fd[fd];
 	return file;
 }

@@ -7,43 +7,70 @@ if [ "$CONFIG_FB" = "y" ]; then
   mainmenu_option next_comment
   comment 'Frame buffer devices'
 
- if [ "$CONFIG_AMIGA" = "y" ]; then
+  if [ "$CONFIG_APOLLO" = "y" ]; then
+    define_bool CONFIG_FB_APOLLO y
+  fi
+  if [ "$CONFIG_AMIGA" = "y" ]; then
     bool 'Amiga native chipset support' CONFIG_FB_AMIGA
     if [ "$CONFIG_FB_AMIGA" != "n" ]; then
       bool 'Amiga OCS chipset support' CONFIG_FB_AMIGA_OCS
       bool 'Amiga ECS chipset support' CONFIG_FB_AMIGA_ECS
       bool 'Amiga AGA chipset support' CONFIG_FB_AMIGA_AGA
     fi
-    tristate 'Amiga Cybervision support' CONFIG_FB_CYBER
+    tristate 'Amiga CyberVision support' CONFIG_FB_CYBER
     if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
+      bool 'Amiga CyberVision3D support (experimental)' CONFIG_FB_VIRGE
       tristate 'Amiga RetinaZ3 support' CONFIG_FB_RETINAZ3
     fi
   fi
   if [ "$CONFIG_ATARI" = "y" ]; then
     bool 'Atari native chipset support' CONFIG_FB_ATARI
-#    tristate 'Mach64 Frame Buffer support' CONFIG_FB_MACH64
+    bool 'ATI Mach64 display support' CONFIG_FB_ATY
   fi
-  if [ "$CONFIG_CHRP" = "y" -o "$CONFIG_PMAC" = "y" ]; then
-    bool 'Open Firmware frame buffer device support' CONFIG_FB_OPEN_FIRMWARE
-  fi 
-  tristate 'Virtual Frame Buffer support' CONFIG_FB_VIRTUAL
+  if [ "$CONFIG_PPC" = "y" ]; then
+    bool 'Open Firmware frame buffer device support' CONFIG_FB_OF
+    bool 'S3 Trio frame buffer device support' CONFIG_FB_S3TRIO
+    if [ "$CONFIG_FB_OF" = "y" ]; then
+#     bool 'Apple "control" display support' CONFIG_FB_CONTROL
+#     bool 'Apple "platinum" display support' CONFIG_FB_PLATINUM
+#     bool 'Apple "valkyrie" display support' CONFIG_FB_VALKYRIE
+      bool 'ATI Mach64 display support' CONFIG_FB_ATY
+#     bool 'IMS Twin Turbo display support' CONFIG_FB_IMSTT
+#     bool 'Chips 65550 display support' CONFIG_FB_CT65550
+#     bool 'S3 Trio display support' CONFIG_FB_S3TRIO
+    fi
+  fi
+  if [ "$CONFIG_MAC" = "y" ]; then
+    define_bool CONFIG_FB_MAC y
+  fi
+  if [ "$CONFIG_TGA_CONSOLE" = "y" ]; then
+    define_bool CONFIG_FB_TGA y
+  fi
+  tristate 'Virtual Frame Buffer support (ONLY FOR TESTING!)' CONFIG_FB_VIRTUAL
 
   bool 'Advanced low level driver options' CONFIG_FBCON_ADVANCED
   if [ "$CONFIG_FBCON_ADVANCED" = "y" ]; then
-    tristate 'Monochrome support' CONFIG_FBCON_MFB
-    tristate 'Interleaved bitplanes support' CONFIG_FBCON_ILBM
-    tristate 'Normal bitplanes support' CONFIG_FBCON_AFB
-    tristate 'Atari interleaved bitplanes (2 planes) support' CONFIG_FBCON_IPLAN2P2
-    tristate 'Atari interleaved bitplanes (4 planes) support' CONFIG_FBCON_IPLAN2P4
-    tristate 'Atari interleaved bitplanes (8 planes) support' CONFIG_FBCON_IPLAN2P8
-    tristate '8 bpp packed pixel support' CONFIG_FBCON_CFB8
-    tristate '16 bpp packed pixel support' CONFIG_FBCON_CFB16
-    tristate 'Cybervision support (accelerated)' CONFIG_FBCON_CYBER
-    tristate 'RetinaZ3 support (accelerated)' CONFIG_FBCON_RETINAZ3
+    bool 'Monochrome support' CONFIG_FBCON_MFB
+    bool '2 bpp packed pixels support' CONFIG_FBCON_CFB2
+    bool '4 bpp packed pixels support' CONFIG_FBCON_CFB4
+    bool '8 bpp packed pixels support' CONFIG_FBCON_CFB8
+    bool '16 bpp packed pixels support' CONFIG_FBCON_CFB16
+    bool '24 bpp packed pixels support' CONFIG_FBCON_CFB24
+    bool '32 bpp packed pixels support' CONFIG_FBCON_CFB32
+    bool 'Amiga bitplanes support' CONFIG_FBCON_AFB
+    bool 'Amiga interleaved bitplanes support' CONFIG_FBCON_ILBM
+    bool 'Atari interleaved bitplanes (2 planes) support' CONFIG_FBCON_IPLAN2P2
+    bool 'Atari interleaved bitplanes (4 planes) support' CONFIG_FBCON_IPLAN2P4
+    bool 'Atari interleaved bitplanes (8 planes) support' CONFIG_FBCON_IPLAN2P8
+    bool 'Mac variable bpp packed pixels support' CONFIG_FBCON_MAC
   else
-    if [ "$CONFIG_FB_AMIGA" != "n" -o "$CONFIG_FB_ATARI" != "n" -o \
-	 "$CONFIG_FB_CYBER" != "n" -o "$CONFIG_FB_RETINAZ3" != "n" -o \
-	 "$CONFIG_FB_VIRTUAL" != "n" ]; then
+    if [ "$CONFIG_FB_AMIGA" = "y" -o "$CONFIG_FB_AMIGA" = "m" -o \
+	 "$CONFIG_FB_ATARI" = "y" -o "$CONFIG_FB_ATARI" = "m" -o \
+	 "$CONFIG_FB_CYBER" = "y" -o "$CONFIG_FB_CYBER" = "m" -o \
+	 "$CONFIG_FB_RETINAZ3" = "y" -o "$CONFIG_FB_RETINAZ3" = "m" -o \
+	 "$CONFIG_FB_VIRGE" = "y" -o "$CONFIG_FB_VIRGE" = "m" -o \
+	 "$CONFIG_FB_MAC" = "y" -o "$CONFIG_FB_MAC" = "m" -o \
+	 "$CONFIG_FB_VIRTUAL" = "y" -o "$CONFIG_FB_VIRTUAL" = "m" ]; then
       define_bool CONFIG_FBCON_MFB y
     fi
     if [ "$CONFIG_FB_AMIGA" = "y" -o "$CONFIG_FB_AMIGA" = "m" ]; then
@@ -55,20 +82,32 @@ if [ "$CONFIG_FB" = "y" ]; then
       define_bool CONFIG_FBCON_IPLAN2P4 y
       define_bool CONFIG_FBCON_IPLAN2P8 y
     fi
+    if [ "$CONFIG_FB_MAC" = "y" -o "$CONFIG_FB_MAC" = "m" -o \
+	 "$CONFIG_FB_VIRTUAL" = "y" -o "$CONFIG_FB_VIRTUAL" = "m" ]; then
+      define_bool CONFIG_FBCON_MAC  y
+      define_bool CONFIG_FBCON_CFB2 y
+      define_bool CONFIG_FBCON_CFB4 y
+    fi
     if [ "$CONFIG_FB_ATARI" = "y" -o "$CONFIG_FB_ATARI" = "m" -o \
-	 "$CONFIG_FB_OPEN_FIRMWARE" = "y" -o \
+	 "$CONFIG_FB_OF" = "y" -o "$CONFIG_FB_OF" = "m" -o \
+	 "$CONFIG_FB_MAC" = "y" -o "$CONFIG_FB_MAC" = "m" -o  \
+	 "$CONFIG_FB_TGA" = "y" -o "$CONFIG_FB_TGA" = "m" -o \
 	 "$CONFIG_FB_VIRTUAL" = "y" -o "$CONFIG_FB_VIRTUAL" = "m" ]; then
       define_bool CONFIG_FBCON_CFB8 y
     fi
     if [ "$CONFIG_FB_ATARI" = "y" -o "$CONFIG_FB_ATARI" = "m" -o \
+	 "$CONFIG_FB_ATY" = "y" -o "$CONFIG_FB_ATY" = "m" -o \
+	 "$CONFIG_FB_MAC" = "y" -o "$CONFIG_FB_MAC" = "m" -o \
 	 "$CONFIG_FB_VIRTUAL" = "y" -o "$CONFIG_FB_VIRTUAL" = "m" ]; then
       define_bool CONFIG_FBCON_CFB16 y
     fi
-    if [ "$CONFIG_FB_CYBER" = "y" -o "$CONFIG_FB_CYBER" = "m" ]; then
-      define_bool CONFIG_FBCON_CYBER y
+    if [ "$CONFIG_FB_VIRTUAL" = "y" -o "$CONFIG_FB_VIRTUAL" = "m" ]; then
+      define_bool CONFIG_FBCON_CFB24 y
     fi
-    if [ "$CONFIG_FB_RETINAZ3" = "y" -o "$CONFIG_FB_RETINAZ3" = "m" ]; then
-      define_bool CONFIG_FBCON_RETINAZ3 y
+    if [ "$CONFIG_FB_ATARI" = "y" -o "$CONFIG_FB_ATARI" = "m" -o \
+	 "$CONFIG_FB_ATY" = "y" -o "$CONFIG_FB_ATY" = "m" -o \
+	 "$CONFIG_FB_VIRTUAL" = "y" -o "$CONFIG_FB_VIRTUAL" = "m" ]; then
+      define_bool CONFIG_FBCON_CFB32 y
     fi
   fi
 

@@ -5,7 +5,7 @@
  *	Authors:
  *	Pedro Roque		<roque@di.fc.ul.pt>	
  *
- *	$Id: addrconf.c,v 1.37 1998/03/08 20:52:46 davem Exp $
+ *	$Id: addrconf.c,v 1.38 1998/03/20 09:12:14 davem Exp $
  *
  *	This program is free software; you can redistribute it and/or
  *      modify it under the terms of the GNU General Public License
@@ -298,10 +298,9 @@ static void ipv6_del_addr(struct inet6_ifaddr *ifp)
 	struct inet6_ifaddr *iter, **back;
 	int hash;
 
-	ipv6_ifa_notify(RTM_DELADDR, ifp);
-
 	if (atomic_read(&addr_list_lock)) {
 		ifp->flags |= ADDR_INVALID;
+		ipv6_ifa_notify(RTM_DELADDR, ifp);
 		return;
 	}
 
@@ -330,6 +329,8 @@ static void ipv6_del_addr(struct inet6_ifaddr *ifp)
 		}
 		back = &(iter->if_next);
 	}
+
+	ipv6_ifa_notify(RTM_DELADDR, ifp);
 	
 	kfree(ifp);
 }
@@ -543,7 +544,7 @@ static int ipv6_generate_eui64(u8 *eui, struct device *dev)
 
 static void
 addrconf_prefix_route(struct in6_addr *pfx, int plen, struct device *dev,
-		      unsigned long info)
+		      unsigned long expires, unsigned flags)
 {
 	struct in6_rtmsg rtmsg;
 	int err;
@@ -553,8 +554,8 @@ addrconf_prefix_route(struct in6_addr *pfx, int plen, struct device *dev,
 	rtmsg.rtmsg_dst_len = plen;
 	rtmsg.rtmsg_metric = IP6_RT_PRIO_ADDRCONF;
 	rtmsg.rtmsg_ifindex = dev->ifindex;
-	rtmsg.rtmsg_info = info;
-	rtmsg.rtmsg_flags = RTF_UP|RTF_ADDRCONF;
+	rtmsg.rtmsg_info = expires;
+	rtmsg.rtmsg_flags = RTF_UP|flags;
 	rtmsg.rtmsg_type = RTMSG_NEWROUTE;
 
 	/* Prevent useless cloning on PtP SIT.
@@ -608,7 +609,7 @@ static void addrconf_add_lroute(struct device *dev)
 	struct in6_addr addr;
 
 	ipv6_addr_set(&addr,  __constant_htonl(0xFE800000), 0, 0, 0);
-	addrconf_prefix_route(&addr, 10, dev, 0);
+	addrconf_prefix_route(&addr, 10, dev, 0, RTF_ADDRCONF);
 }
 
 static struct inet6_dev *addrconf_add_dev(struct device *dev)
@@ -688,18 +689,20 @@ void addrconf_prefix_rcv(struct device *dev, u8 *opt, int len)
 	else
 		rt_expires = jiffies + valid_lft * HZ;
 
-	rt = rt6_lookup(&pinfo->prefix, NULL, dev, RTF_LINKRT);
+	rt = rt6_lookup(&pinfo->prefix, NULL, dev->ifindex, RTF_LINKRT);
 
 	if (rt && ((rt->rt6i_flags & (RTF_GATEWAY | RTF_DEFAULT)) == 0)) {
-		if (pinfo->onlink == 0 || valid_lft == 0) {
-			ip6_del_rt(rt);
-			rt = NULL;
-		} else {
-			rt->rt6i_expires = rt_expires;
+		if (rt->rt6i_flags&RTF_EXPIRES) {
+			if (pinfo->onlink == 0 || valid_lft == 0) {
+				ip6_del_rt(rt);
+				rt = NULL;
+			} else {
+				rt->rt6i_expires = rt_expires;
+			}
 		}
 	} else if (pinfo->onlink && valid_lft) {
 		addrconf_prefix_route(&pinfo->prefix, pinfo->prefix_len,
-				      dev, rt_expires);
+				      dev, rt_expires, RTF_ADDRCONF|RTF_EXPIRES);
 	}
 
 	/* Try to figure out our local address for this prefix */
@@ -1265,8 +1268,8 @@ static void addrconf_dad_start(struct inet6_ifaddr *ifp)
 
 	addrconf_join_solict(dev, &ifp->addr);
 
-	if (ifp->prefix_len != 128)
-		addrconf_prefix_route(&ifp->addr, ifp->prefix_len, dev, 0);
+	if (ifp->prefix_len != 128 && (ifp->flags&ADDR_PERMANENT))
+		addrconf_prefix_route(&ifp->addr, ifp->prefix_len, dev, 0, RTF_ADDRCONF);
 
 	if (dev->flags&(IFF_NOARP|IFF_LOOPBACK)) {
 		start_bh_atomic();

@@ -17,13 +17,12 @@
  *
  *	- How to set a single color register?
  *
- *	- We don't have support for CFB32 yet (fbcon-cfb32.c)
- *
  *	- Hardware cursor (useful for other graphics boards too)
  *
  * KNOWN PROBLEMS/TO DO ==================================================== */
 
 
+#include <linux/config.h>
 #include <linux/module.h>
 #include <linux/sched.h>
 #include <linux/kernel.h>
@@ -37,10 +36,12 @@
 #include <linux/interrupt.h>
 #include <linux/fb.h>
 #include <linux/init.h>
-#include <linux/bios32.h>
 #include <linux/pci.h>
 #include <linux/selection.h>
 #include <asm/io.h>
+
+#include "fbcon-cfb8.h"
+#include "fbcon-cfb32.h"
 
 
 /* TGA hardware description (minimal) */
@@ -188,10 +189,17 @@ static unsigned int base_addr_presets[4] __initdata = {
 unsigned char PLLbits[7] __initdata = { 0x80, 0x04, 0x00, 0x24, 0x44, 0x80, 0xb8 };
 
 const unsigned long bt485_cursor_source[64] __initdata = {
+#if 1
+  0x0000000000000000,0x0000000000000000,0x0000000000000000,0x0000000000000000,
+  0x0000000000000000,0x0000000000000000,0x0000000000000000,0x0000000000000000,
+  0x0000000000000000,0x0000000000000000,0x0000000000000000,0x0000000000000000,
+  0x0000000000000000,0x0000000000000000,0x0000000000000000,0x0000000000000000,
+#else
   0x00000000000000ff,0x00000000000000ff,0x00000000000000ff,0x00000000000000ff,
   0x00000000000000ff,0x00000000000000ff,0x00000000000000ff,0x00000000000000ff,
   0x00000000000000ff,0x00000000000000ff,0x00000000000000ff,0x00000000000000ff,
   0x00000000000000ff,0x00000000000000ff,0x00000000000000ff,0x00000000000000ff,
+#endif
   0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
   0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
   0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
@@ -235,9 +243,8 @@ static int currcon = 0;
 static struct display disp;
 static struct fb_info fb_info;
 static struct { u_char red, green, blue, pad; } palette[256];
-static char tgafb_name[16] = "DEC TGA ";
 
-static struct fb_fix_screeninfo fb_fix;
+static struct fb_fix_screeninfo fb_fix = { { "DEC TGA ", } };
 static struct fb_var_screeninfo fb_var = { 0, };
 
 
@@ -245,18 +252,22 @@ static struct fb_var_screeninfo fb_var = { 0, };
      *  Interface used by the world
      */
 
-void tgafb_video_setup(char *options, int *ints);
-
-static int tgafb_open(int fbidx);
-static int tgafb_release(int fbidx);
-static int tgafb_get_fix(struct fb_fix_screeninfo *fix, int con);
-static int tgafb_get_var(struct fb_var_screeninfo *var, int con);
-static int tgafb_set_var(struct fb_var_screeninfo *var, int con);
-static int tgafb_pan_display(struct fb_var_screeninfo *var, int con);
-static int tgafb_get_cmap(struct fb_cmap *cmap, int kspc, int con);
-static int tgafb_set_cmap(struct fb_cmap *cmap, int kspc, int con);
+static int tgafb_open(struct fb_info *info);
+static int tgafb_release(struct fb_info *info);
+static int tgafb_get_fix(struct fb_fix_screeninfo *fix, int con,
+			 struct fb_info *info);
+static int tgafb_get_var(struct fb_var_screeninfo *var, int con,
+			 struct fb_info *info);
+static int tgafb_set_var(struct fb_var_screeninfo *var, int con,
+			 struct fb_info *info);
+static int tgafb_pan_display(struct fb_var_screeninfo *var, int con,
+			     struct fb_info *info);
+static int tgafb_get_cmap(struct fb_cmap *cmap, int kspc, int con,
+			  struct fb_info *info);
+static int tgafb_set_cmap(struct fb_cmap *cmap, int kspc, int con,
+			  struct fb_info *info);
 static int tgafb_ioctl(struct inode *inode, struct file *file, u_int cmd,
-		       u_long arg, int con);
+		       u_long arg, int con, struct fb_info *info);
 
 
     /*
@@ -264,10 +275,9 @@ static int tgafb_ioctl(struct inode *inode, struct file *file, u_int cmd,
      */
 
 unsigned long tgafb_init(unsigned long mem_start);
-static int tgafbcon_switch(int con);
-static int tgafbcon_updatevar(int con);
-static void tgafbcon_blank(int blank);
-static int tgafbcon_setcmap(struct fb_cmap *cmap, int con);
+static int tgafbcon_switch(int con, struct fb_info *info);
+static int tgafbcon_updatevar(int con, struct fb_info *info);
+static void tgafbcon_blank(int blank, struct fb_info *info);
 
 
     /*
@@ -275,18 +285,18 @@ static int tgafbcon_setcmap(struct fb_cmap *cmap, int con);
      */
 
 static int tgafb_getcolreg(u_int regno, u_int *red, u_int *green, u_int *blue,
-			   u_int *transp);
+			   u_int *transp, struct fb_info *info);
 static int tgafb_setcolreg(u_int regno, u_int red, u_int green, u_int blue,
-			   u_int transp);
+			   u_int transp, struct fb_info *info);
 #if 1
 static void tga_update_palette(void);
 #endif
-static void do_install_cmap(int con);
+static void do_install_cmap(int con, struct fb_info *info);
 
 
 static struct fb_ops tgafb_ops = {
     tgafb_open, tgafb_release, tgafb_get_fix, tgafb_get_var, tgafb_set_var,
-    tgafb_get_cmap, tgafb_set_cmap, tgafb_pan_display, tgafb_ioctl
+    tgafb_get_cmap, tgafb_set_cmap, tgafb_pan_display, NULL, tgafb_ioctl
 };
 
 
@@ -294,7 +304,7 @@ static struct fb_ops tgafb_ops = {
      *  Open/Release the frame buffer device
      */
 
-static int tgafb_open(int fbidx)                                       
+static int tgafb_open(struct fb_info *info)                                       
 {
     /*                                                                     
      *  Nothing, only a usage count for the moment                          
@@ -304,7 +314,7 @@ static int tgafb_open(int fbidx)
     return(0);                              
 }
         
-static int tgafb_release(int fbidx)
+static int tgafb_release(struct fb_info *info)
 {
     MOD_DEC_USE_COUNT;
     return(0);                                                    
@@ -315,7 +325,8 @@ static int tgafb_release(int fbidx)
      *  Get the Fixed Part of the Display
      */
 
-static int tgafb_get_fix(struct fb_fix_screeninfo *fix, int con)
+static int tgafb_get_fix(struct fb_fix_screeninfo *fix, int con,
+			 struct fb_info *info)
 {
     memcpy(fix, &fb_fix, sizeof(fb_fix));
     return 0;
@@ -326,7 +337,8 @@ static int tgafb_get_fix(struct fb_fix_screeninfo *fix, int con)
      *  Get the User Defined Part of the Display
      */
 
-static int tgafb_get_var(struct fb_var_screeninfo *var, int con)
+static int tgafb_get_var(struct fb_var_screeninfo *var, int con,
+			 struct fb_info *info)
 {
     memcpy(var, &fb_var, sizeof(fb_var));
     return 0;
@@ -337,7 +349,8 @@ static int tgafb_get_var(struct fb_var_screeninfo *var, int con)
      *  Set the User Defined Part of the Display
      */
 
-static int tgafb_set_var(struct fb_var_screeninfo *var, int con)
+static int tgafb_set_var(struct fb_var_screeninfo *var, int con,
+			 struct fb_info *info)
 {
     struct display *display;
     int oldbpp = -1, err;
@@ -363,7 +376,7 @@ static int tgafb_set_var(struct fb_var_screeninfo *var, int con)
     if (oldbpp != var->bits_per_pixel) {
 	if ((err = fb_alloc_cmap(&display->cmap, 0, 0)))
 	    return err;
-	do_install_cmap(con);
+	do_install_cmap(con, info);
     }
     return 0;
 }
@@ -375,7 +388,8 @@ static int tgafb_set_var(struct fb_var_screeninfo *var, int con)
      *  This call looks only at xoffset, yoffset and the FB_VMODE_YWRAP flag
      */
 
-static int tgafb_pan_display(struct fb_var_screeninfo *var, int con)
+static int tgafb_pan_display(struct fb_var_screeninfo *var, int con,
+			     struct fb_info *info)
 {
     if (var->xoffset || var->yoffset)
 	return -EINVAL;
@@ -387,14 +401,16 @@ static int tgafb_pan_display(struct fb_var_screeninfo *var, int con)
      *  Get the Colormap
      */
 
-static int tgafb_get_cmap(struct fb_cmap *cmap, int kspc, int con)
+static int tgafb_get_cmap(struct fb_cmap *cmap, int kspc, int con,
+			  struct fb_info *info)
 {
     if (con == currcon) /* current console? */
-	return fb_get_cmap(cmap, &fb_display[con].var, kspc, tgafb_getcolreg);
+	return fb_get_cmap(cmap, &fb_display[con].var, kspc, tgafb_getcolreg,
+			   info);
     else if (fb_display[con].cmap.len) /* non default colormap? */
 	fb_copy_cmap(&fb_display[con].cmap, cmap, kspc ? 0 : 2);
     else
-	fb_copy_cmap(fb_default_cmap(fb_display[con].var.bits_per_pixel),
+	fb_copy_cmap(fb_default_cmap(1<<fb_display[con].var.bits_per_pixel),
 		     cmap, kspc ? 0 : 2);
     return 0;
 }
@@ -403,7 +419,8 @@ static int tgafb_get_cmap(struct fb_cmap *cmap, int kspc, int con)
      *  Set the Colormap
      */
 
-static int tgafb_set_cmap(struct fb_cmap *cmap, int kspc, int con)
+static int tgafb_set_cmap(struct fb_cmap *cmap, int kspc, int con,
+			  struct fb_info *info)
 {
     int err;
 
@@ -413,7 +430,8 @@ static int tgafb_set_cmap(struct fb_cmap *cmap, int kspc, int con)
 	    return err;
     }
     if (con == currcon) {		/* current console? */
-	err = fb_set_cmap(cmap, &fb_display[con].var, kspc, tgafb_setcolreg);
+	err = fb_set_cmap(cmap, &fb_display[con].var, kspc, tgafb_setcolreg,
+			  info);
 #if 1
 	tga_update_palette();
 #endif
@@ -425,7 +443,7 @@ static int tgafb_set_cmap(struct fb_cmap *cmap, int kspc, int con)
 
 
 static int tgafb_ioctl(struct inode *inode, struct file *file, u_int cmd,
-		       u_long arg, int con)
+		       u_long arg, int con, struct fb_info *info)
 {
     return -EINVAL;
 }
@@ -437,22 +455,14 @@ static int tgafb_ioctl(struct inode *inode, struct file *file, u_int cmd,
 
 __initfunc(unsigned long tgafb_init(unsigned long mem_start))
 {
-    unsigned char pci_bus, pci_devfn;
-    int status;
     int i, j, temp, err;
     unsigned char *cbp;
+    struct pci_dev *pdev;
 
-    status = pcibios_find_device (PCI_VENDOR_ID_DEC, PCI_DEVICE_ID_DEC_TGA,
-				  0, &pci_bus, &pci_devfn);
-    if (status == PCIBIOS_DEVICE_NOT_FOUND)
+    pdev = pci_find_device(PCI_VENDOR_ID_DEC, PCI_DEVICE_ID_DEC_TGA, NULL);
+    if (!pdev)
 	return mem_start;
-
-    /*
-     * read BASE_REG_0 for memory address
-     */
-    pcibios_read_config_dword(pci_bus, pci_devfn, PCI_BASE_ADDRESS_0,
-			      &tga_mem_base);
-    tga_mem_base &= ~15;
+    tga_mem_base = pdev->base_address[0] & PCI_BASE_ADDRESS_MEM_MASK;
 #ifdef DEBUG
     printk("tgafb_init: mem_base 0x%x\n", tga_mem_base);
 #endif /* DEBUG */
@@ -460,19 +470,18 @@ __initfunc(unsigned long tgafb_init(unsigned long mem_start))
     tga_type = (readl((unsigned long)tga_mem_base) >> 12) & 0x0f;
     switch (tga_type) {
 	case 0:
-	    strcat(tgafb_name, "8plane");
+	    strcat(fb_fix.id, "8plane");
 	    break;
 	case 1:
-	    strcat(tgafb_name, "24plane");
+	    strcat(fb_fix.id, "24plane");
 	    break;
 	case 3:
-	    strcat(tgafb_name, "24plusZ");
+	    strcat(fb_fix.id, "24plusZ");
 	    break;
 	default:
 	    printk("TGA type (0x%x) unrecognized!\n", tga_type);
 	    return mem_start;
     }
-    strcpy(fb_fix.id, tgafb_name);
 
     tga_regs_base = ((unsigned long)tga_mem_base + TGA_REGS_OFFSET);
     tga_fb_base = ((unsigned long)tga_mem_base + fb_offset_presets[tga_type]);
@@ -537,6 +546,9 @@ __initfunc(unsigned long tgafb_init(unsigned long mem_start))
 	    TGA_WRITE_REG(default_red[j]|(BT485_DATA_PAL<<8), TGA_RAMDAC_REG);
 	    TGA_WRITE_REG(default_grn[j]|(BT485_DATA_PAL<<8), TGA_RAMDAC_REG);
 	    TGA_WRITE_REG(default_blu[j]|(BT485_DATA_PAL<<8), TGA_RAMDAC_REG);
+	    palette[i].red=default_red[j];
+	    palette[i].green=default_grn[j];
+	    palette[i].blue=default_blu[j];
 	}
 	for (i = 0; i < 240*3; i += 4) {
 	    TGA_WRITE_REG(0x55|(BT485_DATA_PAL<<8), TGA_RAMDAC_REG);
@@ -548,9 +560,9 @@ __initfunc(unsigned long tgafb_init(unsigned long mem_start))
 	/* initialize RAMDAC cursor colors */
 	BT485_WRITE(0, BT485_ADDR_CUR_WRITE);
 
-	BT485_WRITE(0xaa, BT485_DATA_CUR); /* overscan WHITE */
-	BT485_WRITE(0xaa, BT485_DATA_CUR); /* overscan WHITE */
-	BT485_WRITE(0xaa, BT485_DATA_CUR); /* overscan WHITE */
+	BT485_WRITE(0x00, BT485_DATA_CUR); /* overscan WHITE */
+	BT485_WRITE(0x00, BT485_DATA_CUR); /* overscan WHITE */
+	BT485_WRITE(0x00, BT485_DATA_CUR); /* overscan WHITE */
 
 	BT485_WRITE(0x00, BT485_DATA_CUR); /* color 1 BLACK */
 	BT485_WRITE(0x00, BT485_DATA_CUR); /* color 1 BLACK */
@@ -677,7 +689,7 @@ __initfunc(unsigned long tgafb_init(unsigned long mem_start))
     fb_var.xres = fb_var.xres_virtual = 640;
     fb_var.yres = fb_var.yres_virtual = 480;
     fb_fix.line_length = 80*fb_var.bits_per_pixel;
-    fb_fix.smem_start = (char *)tga_fb_base;
+    fb_fix.smem_start = (char *)(tga_fb_base + LCA_DENSE_MEM);
     fb_fix.smem_len = fb_fix.line_length*fb_var.yres;
     fb_fix.type = FB_TYPE_PACKED_PIXELS;
     fb_fix.type_aux = 0;
@@ -686,7 +698,16 @@ __initfunc(unsigned long tgafb_init(unsigned long mem_start))
 
     fb_var.xoffset = fb_var.yoffset = 0;
     fb_var.grayscale = 0;
-    fb_var.red.offset = fb_var.green.offset = fb_var.blue.offset = 0;
+    if (tga_type == 0) { /* 8-plane */
+	fb_var.red.offset = 0;
+	fb_var.green.offset = 0;
+	fb_var.blue.offset = 0;
+    } else { /* 24-plane or 24plusZ */
+	/* XXX: is this correct?? */
+	fb_var.red.offset = 16;
+	fb_var.green.offset = 8;
+	fb_var.blue.offset = 0;
+    }
     fb_var.red.length = fb_var.green.length = fb_var.blue.length = 8;
     fb_var.red.msb_right = fb_var.green.msb_right = fb_var.blue.msb_right = 0;
     fb_var.transp.offset = fb_var.transp.length = fb_var.transp.msb_right = 0;
@@ -717,41 +738,54 @@ __initfunc(unsigned long tgafb_init(unsigned long mem_start))
     disp.line_length = fb_fix.line_length;
     disp.can_soft_blank = 1;
     disp.inverse = 0;
+    switch (tga_type) {
+#ifdef CONFIG_FBCON_CFB8
+	case 0: /* 8-plane */
+	    disp.dispsw = &fbcon_cfb8;
+	    break;
+#endif
+#ifdef CONFIG_FBCON_CFB32
+	case 1: /* 24-plane */
+	case 3: /* 24plusZ */
+	    disp.dispsw = &fbcon_cfb32;
+	    break;
+#endif
+	default:
+	    disp.dispsw = NULL;
+    }
 
-    strcpy(fb_info.modename, tgafb_name);
+    strcpy(fb_info.modename, fb_fix.id);
     fb_info.node = -1;
     fb_info.fbops = &tgafb_ops;
-    fb_info.fbvar_num = 1;
-    fb_info.fbvar = &fb_var;
     fb_info.disp = &disp;
     fb_info.fontname[0] = '\0';
     fb_info.changevar = NULL;
     fb_info.switch_con = &tgafbcon_switch;
     fb_info.updatevar = &tgafbcon_updatevar;
     fb_info.blank = &tgafbcon_blank;
-    fb_info.setcmap = &tgafbcon_setcmap;
 
     err = register_framebuffer(&fb_info);
     if (err < 0)
 	return mem_start;
 
-    tgafb_set_var(&fb_var, -1);
+    tgafb_set_var(&fb_var, -1, &fb_info);
 
-    printk("%s frame buffer device\n", tgafb_name);
+    printk("fb%d: %s frame buffer device\n", GET_FB_IDX(fb_info.node),
+	   fb_fix.id);
     return mem_start;
 }
 
 
-static int tgafbcon_switch(int con)
+static int tgafbcon_switch(int con, struct fb_info *info)
 {
     /* Do we have to save the colormap? */
     if (fb_display[currcon].cmap.len)
 	fb_get_cmap(&fb_display[currcon].cmap, &fb_display[currcon].var, 1,
-		    tgafb_getcolreg);
+		    tgafb_getcolreg, info);
 
     currcon = con;
     /* Install new colormap */
-    do_install_cmap(con);
+    do_install_cmap(con, info);
     return 0;
 }
 
@@ -759,7 +793,7 @@ static int tgafbcon_switch(int con)
      *  Update the `var' structure (called by fbcon.c)
      */
 
-static int tgafbcon_updatevar(int con)
+static int tgafbcon_updatevar(int con, struct fb_info *info)
 {
     /* Nothing */
     return 0;
@@ -769,20 +803,10 @@ static int tgafbcon_updatevar(int con)
      *  Blank the display.
      */
 
-static void tgafbcon_blank(int blank)
+static void tgafbcon_blank(int blank, struct fb_info *info)
 {
     /* Nothing */
 }
-
-    /*
-     *  Set the colormap
-     */
-
-static int tgafbcon_setcmap(struct fb_cmap *cmap, int con)
-{
-    return(tgafb_set_cmap(cmap, 1, con));
-}
-
 
     /*
      *  Read a single color register and split it into
@@ -790,7 +814,7 @@ static int tgafbcon_setcmap(struct fb_cmap *cmap, int con)
      */
 
 static int tgafb_getcolreg(u_int regno, u_int *red, u_int *green, u_int *blue,
-                         u_int *transp)
+                         u_int *transp, struct fb_info *info)
 {
     if (regno > 255)
 	return 1;
@@ -808,13 +832,18 @@ static int tgafb_getcolreg(u_int regno, u_int *red, u_int *green, u_int *blue,
      */
 
 static int tgafb_setcolreg(u_int regno, u_int red, u_int green, u_int blue,
-                         u_int transp)
+                         u_int transp, struct fb_info *info)
 {
     if (regno > 255)
 	return 1;
     palette[regno].red = red;
     palette[regno].green = green;
     palette[regno].blue = blue;
+
+#ifdef CONFIG_FBCON_CFB32
+    if (regno < 16 && tga_type != 0)
+	fbcon_cfb32_cmap[regno] = (red << 16) | (green << 8) | blue;
+#endif /* CONFIG_FBCON_CFB32 */
 
     /* How to set a single color register?? */
 
@@ -853,21 +882,21 @@ static void tga_update_palette(void)
 }
 #endif
 
-static void do_install_cmap(int con)
+static void do_install_cmap(int con, struct fb_info *info)
 {
     if (con != currcon)
 	return;
     if (fb_display[con].cmap.len)
 	fb_set_cmap(&fb_display[con].cmap, &fb_display[con].var, 1,
-		    tgafb_setcolreg);
+		    tgafb_setcolreg, info);
     else
-	fb_set_cmap(fb_default_cmap(fb_display[con].var.bits_per_pixel),
-				    &fb_display[con].var, 1, tgafb_setcolreg);
+	fb_set_cmap(fb_default_cmap(1<<fb_display[con].var.bits_per_pixel),
+				    &fb_display[con].var, 1, tgafb_setcolreg,
+				    info);
 #if 1
     tga_update_palette();
 #endif
 }
-
 
 #if 0	/* No cursor stuff yet */
 

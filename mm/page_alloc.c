@@ -118,28 +118,33 @@ static spinlock_t page_alloc_lock;
  *
  * [previously, there had to be two entries of the highest memory
  *  order, but this lead to problems on large-memory machines.]
+ *
+ * This will return zero if no list was found, non-zero
+ * if there was memory (the bigger, the better).
  */
-int free_memory_available(void)
+int free_memory_available(int nr)
 {
-	int i, retval = 0;
 	unsigned long flags;
 	struct free_area_struct * list = NULL;
 
+	list = free_area + NR_MEM_LISTS;
 	spin_lock_irqsave(&page_alloc_lock, flags);
 	/* We fall through the loop if the list contains one
 	 * item. -- thanks to Colin Plumb <colin@nyx.net>
 	 */
-	for (i = 1; i < 4; ++i) {
-		list = free_area + NR_MEM_LISTS - i;
+	do {
+		list--;
+		/* Empty list? Bad - we need more memory */
 		if (list->next == memory_head(list))
 			break;
+		/* One item on the list? Look further */
 		if (list->next->next == memory_head(list))
 			continue;
-		retval = 1;
+		/* More than one item? We're ok */
 		break;
-	}
+	} while (--nr >= 0);
 	spin_unlock_irqrestore(&page_alloc_lock, flags);
-	return retval;
+	return nr + 1;
 }
 
 static inline void free_pages_ok(unsigned long map_nr, unsigned long order)

@@ -52,11 +52,13 @@
 #ifndef _IP_FW_H
 #define _IP_FW_H
 
+#ifdef __KERNEL__
 #include <linux/icmp.h>
 #include <linux/in.h>
 #include <linux/ip.h>
 #include <linux/tcp.h>
 #include <linux/udp.h>
+#endif
 
 struct ip_fw 
 {

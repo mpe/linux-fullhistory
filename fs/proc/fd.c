@@ -6,12 +6,13 @@
  *  proc fd directory handling functions
  */
 
-#include <asm/uaccess.h>
-
 #include <linux/errno.h>
 #include <linux/sched.h>
+#include <linux/file.h>
 #include <linux/proc_fs.h>
 #include <linux/stat.h>
+
+#include <asm/uaccess.h>
 
 static int proc_readfd(struct file *, void *, filldir_t);
 static int proc_lookupfd(struct inode *, struct dentry *);
@@ -65,19 +66,20 @@ static int proc_lookupfd(struct inode * dir, struct dentry * dentry)
 {
 	unsigned int ino, pid, fd, c;
 	struct task_struct * p;
-	struct super_block * sb;
+	struct file * file;
 	struct inode *inode;
 	const char *name;
-	int len;
+	int len, err;
 
+	err = -ENOENT;
+	if (!dir)
+		goto out;
 	ino = dir->i_ino;
 	pid = ino >> 16;
 	ino &= 0x0000ffff;
-	if (!dir)
-		return -ENOENT;
-	sb = dir->i_sb;
+
 	if (!pid || ino != PROC_PID_FD || !S_ISDIR(dir->i_mode))
-		return -ENOENT;
+		goto out;
 
 	fd = 0;
 	len = dentry->d_name.len;
@@ -85,22 +87,20 @@ static int proc_lookupfd(struct inode * dir, struct dentry * dentry)
 	while (len-- > 0) {
 		c = *name - '0';
 		name++;
-		if (c > 9) {
-			fd = 0xfffff;
-			break;
-		}
+		if (c > 9)
+			goto out;
 		fd *= 10;
 		fd += c;
-		if (fd & 0xffff0000) {
-			fd = 0xfffff;
-			break;
-		}
+		if (fd & 0xffff0000)
+			goto out;
 	}
+
 	read_lock(&tasklist_lock);
+	file = NULL;
 	p = find_task_by_pid(pid);
-	read_unlock(&tasklist_lock);	/* FIXME!! This should be done only after not using 'p' any more */
-	if (!pid || !p)
-		return -ENOENT;
+	if (p)
+		file = fcheck_task(p, fd);
+	read_unlock(&tasklist_lock);
 
 	/*
 	 *	File handle is invalid if it is out of range, if the process
@@ -108,60 +108,61 @@ static int proc_lookupfd(struct inode * dir, struct dentry * dentry)
 	 *	is NULL
 	 */
 
- 	if (fd >= NR_OPEN	||
-	    !p->files		||
-	    !p->files->fd[fd]	||
-	    !p->files->fd[fd]->f_dentry)
-		return -ENOENT;
+	if (!file || !file->f_dentry)
+		goto out;
 
+	/* N.B. What happens if fd > 255?? */
 	ino = (pid << 16) + (PROC_PID_FD_DIR << 8) + fd;
-
-	inode = proc_get_inode(sb, ino, NULL);
-	if (!inode)
-		return -ENOENT;
-
-	d_add(dentry, inode);
-	return 0;
+	inode = proc_get_inode(dir->i_sb, ino, NULL);
+	if (inode) {
+		d_add(dentry, inode);
+		err = 0;
+	}
+out:
+	return err;
 }
 
 #define NUMBUF 10
 
-static int proc_readfd(struct file * filp,
-	void * dirent, filldir_t filldir)
+static int proc_readfd(struct file * filp, void * dirent, filldir_t filldir)
 {
-	char buf[NUMBUF];
+	struct inode *inode = filp->f_dentry->d_inode;
 	struct task_struct * p, **tarrayp;
 	unsigned int fd, pid, ino;
-	unsigned long i,j;
-	struct inode *inode = filp->f_dentry->d_inode;
+	int retval;
+	char buf[NUMBUF];
 
+	retval = -EBADF;
 	if (!inode || !S_ISDIR(inode->i_mode))
-		return -EBADF;
+		goto out;
+
+	retval = 0;
 	ino = inode->i_ino;
 	pid = ino >> 16;
 	ino &= 0x0000ffff;
 	if (ino != PROC_PID_FD)
-		return 0;
+		goto out;
 
 	for (fd = filp->f_pos; fd < 2; fd++, filp->f_pos++) {
 		unsigned long ino = inode->i_ino;
 		if (fd)
 			ino = (ino & 0xffff0000) | PROC_PID_INO;
 		if (filldir(dirent, "..", fd+1, fd, ino) < 0)
-			return 0;
+			goto out;
 	}
 
 	read_lock(&tasklist_lock);
 	p = find_task_by_pid(pid);
-	read_unlock(&tasklist_lock);	/* FIXME!! This should be done only after not using 'p' any more */
-	if(!p)
-		return 0;
+	if (!p)
+		goto out_unlock;
 	tarrayp = p->tarray_ptr;
 
-	for (fd -= 2 ; fd < NR_OPEN; fd++, filp->f_pos++) {
-		if (!p->files)
-			break;
-		if (!p->files->fd[fd] || !p->files->fd[fd]->f_dentry)
+	for (fd -= 2 ; p->files && fd < p->files->max_fds; fd++, filp->f_pos++)
+	{
+		struct file * file = fcheck_task(p, fd);
+		unsigned int i,j;
+
+		if (!file || !file->f_dentry)
 			continue;
 
 		j = NUMBUF;
@@ -172,13 +173,21 @@ static int proc_readfd(struct file * filp,
 			i /= 10;
 		} while (i);
 
+		/* Drop the task lock, as the filldir function may block */
+		read_unlock(&tasklist_lock);
+
 		ino = (pid << 16) + (PROC_PID_FD_DIR << 8) + fd;
 		if (filldir(dirent, buf+j, NUMBUF-j, fd+2, ino) < 0)
-			break;
+			goto out;
 
+		read_lock(&tasklist_lock);
 		/* filldir() might have slept, so we must re-validate "p" */
 		if (p != *tarrayp || p->pid != pid)
 			break;
 	}
-	return 0;
+out_unlock:
+	read_unlock(&tasklist_lock);
+
+out:
+	return retval;
 }

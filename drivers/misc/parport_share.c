@@ -46,7 +46,9 @@ struct parport *parport_enumerate(void)
 {
 #ifdef CONFIG_KMOD
 	if (portlist == NULL) {
+#if defined(CONFIG_PARPORT_PC_MODULE) || defined(CONFIG_PARPORT_AX_MODULE) || defined(CONFIG_PARPORT_ARC_MODULE)
 		request_module("parport_lowlevel");
+#endif /* CONFIG_PARPORT_LOWLEVEL_MODULE */
 #ifdef CONFIG_PNP_PARPORT_MODULE
 		request_module("parport_probe");
 #endif /* CONFIG_PNP_PARPORT_MODULE */

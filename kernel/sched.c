@@ -333,20 +333,27 @@ void add_timer(struct timer_list *timer)
 
 static inline int detach_timer(struct timer_list *timer)
 {
-	int ret = 0;
-	struct timer_list *next, *prev;
-	next = timer->next;
-	prev = timer->prev;
-	if (next) {
-		next->prev = prev;
-	}
+	struct timer_list *prev = timer->prev;
 	if (prev) {
-		ret = 1;
+		struct timer_list *next = timer->next;
 		prev->next = next;
+		if (next)
+			next->prev = prev;
+		return 1;
 	}
-	return ret;
+	return 0;
 }
 
+void mod_timer(struct timer_list *timer, unsigned long expires)
+{
+	unsigned long flags;
+
+	spin_lock_irqsave(&timerlist_lock, flags);
+	timer->expires = expires;
+	detach_timer(timer);
+	internal_add_timer(timer);
+	spin_unlock_irqrestore(&timerlist_lock, flags);
+}
 
 int del_timer(struct timer_list * timer)
 {

@@ -8,6 +8,7 @@
  *  more details.
  */
 
+#include <linux/config.h>
 #include <linux/module.h>
 #include <linux/kernel.h>
 #include <linux/errno.h>
@@ -21,6 +22,14 @@
 #include <asm/uaccess.h>
 #include <linux/fb.h>
 #include <linux/init.h>
+
+#include "fbcon-mfb.h"
+#include "fbcon-cfb2.h"
+#include "fbcon-cfb4.h"
+#include "fbcon-cfb8.h"
+#include "fbcon-cfb16.h"
+#include "fbcon-cfb24.h"
+#include "fbcon-cfb32.h"
 
 
 #define arraysize(x)	(sizeof(x)/sizeof(*(x)))
@@ -41,61 +50,51 @@ static int currcon = 0;
 static struct display disp;
 static struct fb_info fb_info;
 static struct { u_char red, green, blue, pad; } palette[256];
-static char virtual_fb_name[16] = "Virtual FB";
+static char vfb_name[16] = "Virtual FB";
 
-static struct fb_var_screeninfo virtual_fb_predefined[] = {
-
-    /*
-     *  Autodetect (Default) Video Mode
-     */
-
-    {
-	/* 640x480, 8 bpp */
-	640, 480, 640, 480, 0, 0, 8, 0,
-	{0, 8, 0}, {0, 8, 0}, {0, 8, 0}, {0, 0, 0},
-	0, 0, -1, -1, FB_ACCEL_NONE, 20000, 64, 64, 32, 32, 64, 2,
-	0, FB_VMODE_NONINTERLACED
-    },
-
-    /*
-     *  User Defined Video Modes (8)
-     */
-
-    { 0, }, { 0, }, { 0, }, { 0, }, { 0, }, { 0, }, { 0, }, { 0, }
+static struct fb_var_screeninfo vfb_default = {
+    /* 640x480, 8 bpp */
+    640, 480, 640, 480, 0, 0, 8, 0,
+    {0, 8, 0}, {0, 8, 0}, {0, 8, 0}, {0, 0, 0},
+    0, 0, -1, -1, FB_ACCEL_NONE, 20000, 64, 64, 32, 32, 64, 2,
+    0, FB_VMODE_NONINTERLACED
 };
 
-#define NUM_USER_MODES		(8)
-#define NUM_TOTAL_MODES		arraysize(virtual_fb_predefined)
-#define NUM_PREDEF_MODES	(1)
+static int vfb_enable = 0;	/* disabled by default */
 
 
     /*
      *  Interface used by the world
      */
 
-void vfb_video_setup(char *options, int *ints);
+void vfb_setup(char *options, int *ints);
 
-static int virtual_fb_open(int fbidx);
-static int virtual_fb_release(int fbidx);
-static int virtual_fb_get_fix(struct fb_fix_screeninfo *fix, int con);
-static int virtual_fb_get_var(struct fb_var_screeninfo *var, int con);
-static int virtual_fb_set_var(struct fb_var_screeninfo *var, int con);
-static int virtual_fb_pan_display(struct fb_var_screeninfo *var, int con);
-static int virtual_fb_get_cmap(struct fb_cmap *cmap, int kspc, int con);
-static int virtual_fb_set_cmap(struct fb_cmap *cmap, int kspc, int con);
-static int virtual_fb_ioctl(struct inode *inode, struct file *file, u_int cmd,
-			    u_long arg, int con);
+static int vfb_open(struct fb_info *info);
+static int vfb_release(struct fb_info *info);
+static int vfb_get_fix(struct fb_fix_screeninfo *fix, int con,
+		       struct fb_info *info);
+static int vfb_get_var(struct fb_var_screeninfo *var, int con,
+		       struct fb_info *info);
+static int vfb_set_var(struct fb_var_screeninfo *var, int con,
+		       struct fb_info *info);
+static int vfb_pan_display(struct fb_var_screeninfo *var, int con,
+			   struct fb_info *info);
+static int vfb_get_cmap(struct fb_cmap *cmap, int kspc, int con,
+			struct fb_info *info);
+static int vfb_set_cmap(struct fb_cmap *cmap, int kspc, int con,
+			struct fb_info *info);
+static int vfb_ioctl(struct inode *inode, struct file *file, u_int cmd,
+		     u_long arg, int con, struct fb_info *info);
 
 
     /*
      *  Interface to the low level console driver
      */
 
-unsigned long virtual_fb_init(unsigned long mem_start);
-static int vfbcon_switch(int con);
-static int vfbcon_updatevar(int con);
-static void vfbcon_blank(int blank);
-static int vfbcon_setcmap(struct fb_cmap *cmap, int con);
+unsigned long vfb_init(unsigned long mem_start);
+static int vfbcon_switch(int con, struct fb_info *info);
+static int vfbcon_updatevar(int con, struct fb_info *info);
+static void vfbcon_blank(int blank, struct fb_info *info);
 
 
     /*
@@ -107,16 +106,15 @@ static void vfb_encode_fix(struct fb_fix_screeninfo *fix,
 			   struct fb_var_screeninfo *var);
 static void set_color_bitfields(struct fb_var_screeninfo *var);
 static int vfb_getcolreg(u_int regno, u_int *red, u_int *green, u_int *blue,
-                         u_int *transp);
+                         u_int *transp, struct fb_info *info);
 static int vfb_setcolreg(u_int regno, u_int red, u_int green, u_int blue,
-                         u_int transp);
-static void do_install_cmap(int con);
+                         u_int transp, struct fb_info *info);
+static void do_install_cmap(int con, struct fb_info *info);
 
 
-static struct fb_ops virtual_fb_ops = {
-    virtual_fb_open, virtual_fb_release, virtual_fb_get_fix,
-    virtual_fb_get_var, virtual_fb_set_var, virtual_fb_get_cmap,
-    virtual_fb_set_cmap, virtual_fb_pan_display, virtual_fb_ioctl
+static struct fb_ops vfb_ops = {
+    vfb_open, vfb_release, vfb_get_fix, vfb_get_var, vfb_set_var, vfb_get_cmap,
+    vfb_set_cmap, vfb_pan_display, NULL, vfb_ioctl
 };
 
 
@@ -124,7 +122,7 @@ static struct fb_ops virtual_fb_ops = {
      *  Open/Release the frame buffer device
      */
 
-static int virtual_fb_open(int fbidx)                                       
+static int vfb_open(struct fb_info *info)                                       
 {
     /*                                                                     
      *  Nothing, only a usage count for the moment                          
@@ -134,7 +132,7 @@ static int virtual_fb_open(int fbidx)
     return(0);                              
 }
         
-static int virtual_fb_release(int fbidx)
+static int vfb_release(struct fb_info *info)
 {
     MOD_DEC_USE_COUNT;
     return(0);                                                    
@@ -145,12 +143,13 @@ static int virtual_fb_release(int fbidx)
      *  Get the Fixed Part of the Display
      */
 
-static int virtual_fb_get_fix(struct fb_fix_screeninfo *fix, int con)
+static int vfb_get_fix(struct fb_fix_screeninfo *fix, int con,
+		       struct fb_info *info)
 {
     struct fb_var_screeninfo *var;
 
     if (con == -1)
-	var = &virtual_fb_predefined[0];
+	var = &vfb_default;
     else
 	var = &fb_display[con].var;
     vfb_encode_fix(fix, var);
@@ -162,10 +161,11 @@ static int virtual_fb_get_fix(struct fb_fix_screeninfo *fix, int con)
      *  Get the User Defined Part of the Display
      */
 
-static int virtual_fb_get_var(struct fb_var_screeninfo *var, int con)
+static int vfb_get_var(struct fb_var_screeninfo *var, int con,
+		       struct fb_info *info)
 {
     if (con == -1)
-	*var = virtual_fb_predefined[0];
+	*var = vfb_default;
     else
 	*var = fb_display[con].var;
     set_color_bitfields(var);
@@ -177,7 +177,8 @@ static int virtual_fb_get_var(struct fb_var_screeninfo *var, int con)
      *  Set the User Defined Part of the Display
      */
 
-static int virtual_fb_set_var(struct fb_var_screeninfo *var, int con)
+static int vfb_set_var(struct fb_var_screeninfo *var, int con,
+		       struct fb_info *info)
 {
     int err, activate = var->activate;
     int oldxres, oldyres, oldvxres, oldvyres, oldbpp;
@@ -258,13 +259,53 @@ static int virtual_fb_set_var(struct fb_var_screeninfo *var, int con)
 	    display->line_length = fix.line_length;
 	    display->can_soft_blank = 1;
 	    display->inverse = 0;
+	    switch (var->bits_per_pixel) {
+#ifdef CONFIG_FBCON_MFB
+		case 1:
+		    display->dispsw = &fbcon_mfb;
+		    break;
+#endif
+#ifdef CONFIG_FBCON_CFB2
+		case 2:
+		    display->dispsw = &fbcon_cfb2;
+		    break;
+#endif
+#ifdef CONFIG_FBCON_CFB4
+		case 4:
+		    display->dispsw = &fbcon_cfb4;
+		    break;
+#endif
+#ifdef CONFIG_FBCON_CFB8
+		case 8:
+		    display->dispsw = &fbcon_cfb8;
+		    break;
+#endif
+#ifdef CONFIG_FBCON_CFB16
+		case 16:
+		    display->dispsw = &fbcon_cfb16;
+		    break;
+#endif
+#ifdef CONFIG_FBCON_CFB24
+		case 24:
+		    display->dispsw = &fbcon_cfb24;
+		    break;
+#endif
+#ifdef CONFIG_FBCON_CFB32
+		case 32:
+		    display->dispsw = &fbcon_cfb32;
+		    break;
+#endif
+		default:
+		    display->dispsw = NULL;
+		    break;
+	    }
 	    if (fb_info.changevar)
 		(*fb_info.changevar)(con);
 	}
 	if (oldbpp != var->bits_per_pixel) {
 	    if ((err = fb_alloc_cmap(&display->cmap, 0, 0)))
 		return err;
-	    do_install_cmap(con);
+	    do_install_cmap(con, info);
 	}
     }
     return 0;
@@ -277,7 +318,8 @@ static int virtual_fb_set_var(struct fb_var_screeninfo *var, int con)
      *  This call looks only at xoffset, yoffset and the FB_VMODE_YWRAP flag
      */
 
-static int virtual_fb_pan_display(struct fb_var_screeninfo *var, int con)
+static int vfb_pan_display(struct fb_var_screeninfo *var, int con,
+			   struct fb_info *info)
 {
     if (var->vmode & FB_VMODE_YWRAP) {
 	if (var->yoffset < 0 ||
@@ -304,14 +346,16 @@ static int virtual_fb_pan_display(struct fb_var_screeninfo *var, int con)
      *  Get the Colormap
      */
 
-static int virtual_fb_get_cmap(struct fb_cmap *cmap, int kspc, int con)
+static int vfb_get_cmap(struct fb_cmap *cmap, int kspc, int con,
+			struct fb_info *info)
 {
     if (con == currcon) /* current console? */
-	return fb_get_cmap(cmap, &fb_display[con].var, kspc, vfb_getcolreg);
+	return fb_get_cmap(cmap, &fb_display[con].var, kspc, vfb_getcolreg,
+			   info);
     else if (fb_display[con].cmap.len) /* non default colormap? */
 	fb_copy_cmap(&fb_display[con].cmap, cmap, kspc ? 0 : 2);
     else
-	fb_copy_cmap(fb_default_cmap(fb_display[con].var.bits_per_pixel),
+	fb_copy_cmap(fb_default_cmap(1<<fb_display[con].var.bits_per_pixel),
 		     cmap, kspc ? 0 : 2);
     return 0;
 }
@@ -320,7 +364,8 @@ static int virtual_fb_get_cmap(struct fb_cmap *cmap, int kspc, int con)
      *  Set the Colormap
      */
 
-static int virtual_fb_set_cmap(struct fb_cmap *cmap, int kspc, int con)
+static int vfb_set_cmap(struct fb_cmap *cmap, int kspc, int con,
+			struct fb_info *info)
 {
     int err;
 
@@ -330,7 +375,8 @@ static int virtual_fb_set_cmap(struct fb_cmap *cmap, int kspc, int con)
 	    return err;
     }
     if (con == currcon)			/* current console? */
-	return fb_set_cmap(cmap, &fb_display[con].var, kspc, vfb_setcolreg);
+	return fb_set_cmap(cmap, &fb_display[con].var, kspc, vfb_setcolreg,
+			   info);
     else
 	fb_copy_cmap(cmap, &fb_display[con].cmap, kspc ? 0 : 1);
     return 0;
@@ -341,18 +387,20 @@ static int virtual_fb_set_cmap(struct fb_cmap *cmap, int kspc, int con)
      *  Virtual Frame Buffer Specific ioctls
      */
 
-static int virtual_fb_ioctl(struct inode *inode, struct file *file, u_int cmd,
-			    u_long arg, int con)
+static int vfb_ioctl(struct inode *inode, struct file *file, u_int cmd,
+		     u_long arg, int con, struct fb_info *info)
 {
     return -EINVAL;
 }
 
 
-__initfunc(void vfb_video_setup(char *options, int *ints))
+__initfunc(void vfb_setup(char *options, int *ints))
 {
     char *this_opt;
 
     fb_info.fontname[0] = '\0';
+
+    vfb_enable = 1;
 
     if (!options || !*options)
 	return;
@@ -369,9 +417,12 @@ __initfunc(void vfb_video_setup(char *options, int *ints))
      *  Initialisation
      */
 
-__initfunc(unsigned long virtual_fb_init(unsigned long mem_start))
+__initfunc(unsigned long vfb_init(unsigned long mem_start))
 {
     int err;
+
+    if (!vfb_enable)
+	return mem_start;
 
     if (mem_start) {
 	videomemory = mem_start;
@@ -382,40 +433,37 @@ __initfunc(unsigned long virtual_fb_init(unsigned long mem_start))
     if (!videomemory)
 	return mem_start;
 
-    strcpy(fb_info.modename, virtual_fb_name);
+    strcpy(fb_info.modename, vfb_name);
     fb_info.changevar = NULL;
     fb_info.node = -1;
-    fb_info.fbops = &virtual_fb_ops;
-    fb_info.fbvar_num = NUM_TOTAL_MODES;
-    fb_info.fbvar = virtual_fb_predefined;
+    fb_info.fbops = &vfb_ops;
     fb_info.disp = &disp;
     fb_info.switch_con = &vfbcon_switch;
     fb_info.updatevar = &vfbcon_updatevar;
     fb_info.blank = &vfbcon_blank;
-    fb_info.setcmap = &vfbcon_setcmap;
 
     err = register_framebuffer(&fb_info);
     if (err < 0)
 	return mem_start;
 
-    virtual_fb_set_var(&virtual_fb_predefined[0], -1);
+    vfb_set_var(&vfb_default, -1, &fb_info);
 
-    printk("Virtual frame buffer device, using %ldK of video memory\n",
-	   videomemorysize>>10);
+    printk("fb%d: Virtual frame buffer device, using %ldK of video memory\n",
+	   GET_FB_IDX(fb_info.node), videomemorysize>>10);
     return mem_start;
 }
 
 
-static int vfbcon_switch(int con)
+static int vfbcon_switch(int con, struct fb_info *info)
 {
     /* Do we have to save the colormap? */
     if (fb_display[currcon].cmap.len)
 	fb_get_cmap(&fb_display[currcon].cmap, &fb_display[currcon].var, 1,
-		    vfb_getcolreg);
+		    vfb_getcolreg, info);
 
     currcon = con;
     /* Install new colormap */
-    do_install_cmap(con);
+    do_install_cmap(con, info);
     return 0;
 }
 
@@ -423,7 +471,7 @@ static int vfbcon_switch(int con)
      *  Update the `var' structure (called by fbcon.c)
      */
 
-static int vfbcon_updatevar(int con)
+static int vfbcon_updatevar(int con, struct fb_info *info)
 {
     /* Nothing */
     return 0;
@@ -433,20 +481,10 @@ static int vfbcon_updatevar(int con)
      *  Blank the display.
      */
 
-static void vfbcon_blank(int blank)
+static void vfbcon_blank(int blank, struct fb_info *info)
 {
     /* Nothing */
 }
-
-    /*
-     *  Set the colormap
-     */
-
-static int vfbcon_setcmap(struct fb_cmap *cmap, int con)
-{
-    return(virtual_fb_set_cmap(cmap, 1, con));
-}
-
 
 static u_long get_line_length(int xres_virtual, int bpp)
 {
@@ -462,7 +500,7 @@ static void vfb_encode_fix(struct fb_fix_screeninfo *fix,
 			   struct fb_var_screeninfo *var)
 {
     memset(fix, 0, sizeof(struct fb_fix_screeninfo));
-    strcpy(fix->id, virtual_fb_name);
+    strcpy(fix->id, vfb_name);
     fix->smem_start = (caddr_t)videomemory;
     fix->smem_len = videomemorysize;
     fix->type = FB_TYPE_PACKED_PIXELS;
@@ -471,6 +509,8 @@ static void vfb_encode_fix(struct fb_fix_screeninfo *fix,
 	case 1:
 	    fix->visual = FB_VISUAL_MONO01;
 	    break;
+	case 2:
+	case 4:
 	case 8:
 	    fix->visual = FB_VISUAL_PSEUDOCOLOR;
 	    break;
@@ -544,7 +584,7 @@ static void set_color_bitfields(struct fb_var_screeninfo *var)
      */
 
 static int vfb_getcolreg(u_int regno, u_int *red, u_int *green, u_int *blue,
-                         u_int *transp)
+                         u_int *transp, struct fb_info *info)
 {
     if (regno > 255)
 	return 1;
@@ -562,7 +602,7 @@ static int vfb_getcolreg(u_int regno, u_int *red, u_int *green, u_int *blue,
      */
 
 static int vfb_setcolreg(u_int regno, u_int red, u_int green, u_int blue,
-                         u_int transp)
+                         u_int transp, struct fb_info *info)
 {
     if (regno > 255)
 	return 1;
@@ -573,23 +613,23 @@ static int vfb_setcolreg(u_int regno, u_int red, u_int green, u_int blue,
 }
 
 
-static void do_install_cmap(int con)
+static void do_install_cmap(int con, struct fb_info *info)
 {
     if (con != currcon)
 	return;
     if (fb_display[con].cmap.len)
 	fb_set_cmap(&fb_display[con].cmap, &fb_display[con].var, 1,
-		    vfb_setcolreg);
+		    vfb_setcolreg, info);
     else
-	fb_set_cmap(fb_default_cmap(fb_display[con].var.bits_per_pixel),
-				    &fb_display[con].var, 1, vfb_setcolreg);
+	fb_set_cmap(fb_default_cmap(1<<fb_display[con].var.bits_per_pixel),
+		    &fb_display[con].var, 1, vfb_setcolreg, info);
 }
 
 
 #ifdef MODULE
 int init_module(void)
 {
-    return(virtual_fb_init(NULL));
+    return(vfb_init(NULL));
 }
 
 void cleanup_module(void)

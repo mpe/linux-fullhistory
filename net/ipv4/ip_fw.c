@@ -6,7 +6,7 @@
  *	license in recognition of the original copyright. 
  *				-- Alan Cox.
  *
- *	$Id: ip_fw.c,v 1.33 1998/03/15 03:31:43 davem Exp $
+ *	$Id: ip_fw.c,v 1.34 1998/03/20 09:12:06 davem Exp $
  *
  *	Ported from BSD to Linux,
  *		Alan Cox 22/Nov/1994.
@@ -683,11 +683,6 @@ static int insert_in_chain(struct ip_fw *volatile* chainptr, struct ip_fw *frwl,
 	if ((ftmp->fw_vianame)[0]) {
 		if (!(ftmp->fw_viadev = dev_get(ftmp->fw_vianame)))
 			ftmp->fw_viadev = (struct device *) -1;
-	} else if (ftmp->fw_via.s_addr) {
-		if (!(ftmp->fw_viadev = ip_dev_find(ftmp->fw_via.s_addr)))
-			ftmp->fw_viadev = (struct device *) -1;
-		else
-			memcpy(ftmp->fw_vianame, ftmp->fw_viadev->name, IFNAMSIZ);
 	} else
 		ftmp->fw_viadev = NULL;
 
@@ -732,11 +727,6 @@ static int append_to_chain(struct ip_fw *volatile* chainptr, struct ip_fw *frwl,
 	if ((ftmp->fw_vianame)[0]) {
 		if (!(ftmp->fw_viadev = dev_get(ftmp->fw_vianame)))
 			ftmp->fw_viadev = (struct device *) -1;
-	} else if (ftmp->fw_via.s_addr) {
-		if (!(ftmp->fw_viadev = ip_dev_find(ftmp->fw_via.s_addr)))
-			ftmp->fw_viadev = (struct device *) -1;
-		else
-			memcpy(ftmp->fw_vianame, ftmp->fw_viadev->name, IFNAMSIZ);
 	} else
 		ftmp->fw_viadev = NULL;
 

@@ -60,6 +60,11 @@
 #include <asm/amigaints.h>
 #include <asm/setup.h>
 
+#include "fbcon-afb.h"
+#include "fbcon-ilbm.h"
+#include "fbcon-mfb.h"
+
+
 #define DEBUG
 
 #if !defined(CONFIG_FB_AMIGA_OCS) && !defined(CONFIG_FB_AMIGA_ECS) && !defined(CONFIG_FB_AMIGA_AGA)
@@ -535,15 +540,6 @@ static u_short maxfmode, chipset;
 
 
 	/*
-	 * Monitor Specifications
-	 *
-	 * These are typical for a `generic' Amiga monitor (e.g. A1960)
-	 */
-
-static long vfmin = 50, vfmax = 90, hfmin = 15000, hfmax = 38000;
-
-
-	/*
 	 * Various macros
 	 */
 
@@ -672,7 +668,7 @@ static u_short *lofsprite, *shfsprite, *dummysprite;
 	 * Current Video Mode
 	 */
 
-static struct amiga_fb_par {
+static struct amifb_par {
 
 	/* General Values */
 
@@ -740,6 +736,7 @@ static struct amiga_fb_par {
 static int currcon = 0;
 
 static struct display disp;
+
 static struct fb_info fb_info;
 
 
@@ -789,229 +786,199 @@ static u_short is_lace = 0;		/* Screen is laced */
 	 * The rest of the name is filled in during initialization
 	 */
 
-static char amiga_fb_name[16] = "Amiga ";
+static char amifb_name[16] = "Amiga ";
+
 
 	/*
-	 * Predefined Video Mode Names
+	 * Predefined Video Modes
 	 *
-	 * The a2024-?? modes don't work yet because there's no A2024 driver.
 	 */
 
-static char *amiga_fb_modenames[] = {
+static struct fb_videomode amifb_predefined[] __initdata = {
 
-	/*
-	 * Autodetect (Default) Video Mode
-	 */
+    /*
+     *  AmigaOS Video Modes
+     */
 
-	"default",
+    {
+	"ntsc", {		/* 640x200, 15 kHz, 60 Hz (NTSC) */
+	    640, 200, 640, 200, 0, 0, 4, 0,
+	    {0, 8, 0}, {0, 8, 0}, {0, 8, 0}, {0, 0, 0},
+	    0, 0, -1, -1, 0, TAG_HIRES, 106, 86, 44, 16, 76, 2,
+	    FB_SYNC_BROADCAST, FB_VMODE_NONINTERLACED | FB_VMODE_YWRAP
+	}
+    }, {
+	"ntsc-lace", {		/* 640x400, 15 kHz, 60 Hz interlaced (NTSC) */
+	    640, 400, 640, 400, 0, 0, 4, 0,
+	    {0, 8, 0}, {0, 8, 0}, {0, 8, 0}, {0, 0, 0},
+	    0, 0, -1, -1, 0, TAG_HIRES, 106, 86, 88, 33, 76, 4,
+	    FB_SYNC_BROADCAST, FB_VMODE_INTERLACED | FB_VMODE_YWRAP
+	}
+    }, {
+	"pal", {		/* 640x256, 15 kHz, 50 Hz (PAL) */
+	    640, 256, 640, 256, 0, 0, 4, 0,
+	    {0, 8, 0}, {0, 8, 0}, {0, 8, 0}, {0, 0, 0},
+	    0, 0, -1, -1, 0, TAG_HIRES, 106, 86, 40, 14, 76, 2,
+	    FB_SYNC_BROADCAST, FB_VMODE_NONINTERLACED | FB_VMODE_YWRAP
+	}
+    }, {
+	"pal-lace", {		/* 640x512, 15 kHz, 50 Hz interlaced (PAL) */
+	    640, 512, 640, 512, 0, 0, 4, 0,
+	    {0, 8, 0}, {0, 8, 0}, {0, 8, 0}, {0, 0, 0},
+	    0, 0, -1, -1, 0, TAG_HIRES, 106, 86, 80, 29, 76, 4,
+	    FB_SYNC_BROADCAST, FB_VMODE_INTERLACED | FB_VMODE_YWRAP
+	}
+    }, {
+	"multiscan", {		/* 640x480, 29 kHz, 57 Hz */
+	    640, 480, 640, 480, 0, 0, 4, 0,
+	    {0, 8, 0}, {0, 8, 0}, {0, 8, 0}, {0, 0, 0},
+	    0, 0, -1, -1, 0, TAG_SHRES, 96, 112, 29, 8, 72, 8,
+	    0, FB_VMODE_NONINTERLACED | FB_VMODE_YWRAP
+	}
+    }, {
+	"multiscan-lace", {	/* 640x960, 29 kHz, 57 Hz interlaced */
+	    640, 960, 640, 960, 0, 0, 4, 0,
+	    {0, 8, 0}, {0, 8, 0}, {0, 8, 0}, {0, 0, 0},
+	    0, 0, -1, -1, 0, TAG_SHRES, 96, 112, 58, 16, 72, 16,
+	    0, FB_VMODE_INTERLACED | FB_VMODE_YWRAP
+	}
+    }, {
+	"euro36", {		/* 640x200, 15 kHz, 72 Hz */
+	    640, 200, 640, 200, 0, 0, 4, 0,
+	    {0, 8, 0}, {0, 8, 0}, {0, 8, 0}, {0, 0, 0},
+	    0, 0, -1, -1, 0, TAG_HIRES, 92, 124, 6, 6, 52, 5,
+	    0, FB_VMODE_NONINTERLACED | FB_VMODE_YWRAP
+	}
+    }, {
+	"euro36-lace", {	/* 640x400, 15 kHz, 72 Hz interlaced */
+	    640, 400, 640, 400, 0, 0, 4, 0,
+	    {0, 8, 0}, {0, 8, 0}, {0, 8, 0}, {0, 0, 0},
+	    0, 0, -1, -1, 0, TAG_HIRES, 92, 124, 12, 12, 52, 10,
+	    0, FB_VMODE_INTERLACED | FB_VMODE_YWRAP
+	}
+    }, {
+	"euro72", {		/* 640x400, 29 kHz, 68 Hz */
+	    640, 400, 640, 400, 0, 0, 4, 0,
+	    {0, 8, 0}, {0, 8, 0}, {0, 8, 0}, {0, 0, 0},
+	    0, 0, -1, -1, 0, TAG_SHRES, 164, 92, 9, 9, 80, 8,
+	    0, FB_VMODE_NONINTERLACED | FB_VMODE_YWRAP
+	}
+    }, {
+	"euro72-lace", {	/* 640x800, 29 kHz, 68 Hz interlaced */
+	    640, 800, 640, 800, 0, 0, 4, 0,
+	    {0, 8, 0}, {0, 8, 0}, {0, 8, 0}, {0, 0, 0},
+	    0, 0, -1, -1, 0, TAG_SHRES, 164, 92, 18, 18, 80, 16,
+	    0, FB_VMODE_INTERLACED | FB_VMODE_YWRAP
+	}
+    }, {
+	"super72", {		/* 800x300, 23 kHz, 70 Hz */
+	    800, 300, 800, 300, 0, 0, 4, 0,
+	    {0, 8, 0}, {0, 8, 0}, {0, 8, 0}, {0, 0, 0},
+	    0, 0, -1, -1, 0, TAG_SHRES, 212, 140, 10, 11, 80, 7,
+	    0, FB_VMODE_NONINTERLACED | FB_VMODE_YWRAP
+	}
+    }, {
+	"super72-lace", {	/* 800x600, 23 kHz, 70 Hz interlaced */
+	    800, 600, 800, 600, 0, 0, 4, 0,
+	    {0, 8, 0}, {0, 8, 0}, {0, 8, 0}, {0, 0, 0},
+	    0, 0, -1, -1, 0, TAG_SHRES, 212, 140, 20, 22, 80, 14,
+	    0, FB_VMODE_INTERLACED | FB_VMODE_YWRAP
+	}
+    }, {
+	"dblntsc", {		/* 640x200, 27 kHz, 57 Hz doublescan */
+	    640, 200, 640, 200, 0, 0, 4, 0,
+	    {0, 8, 0}, {0, 8, 0}, {0, 8, 0}, {0, 0, 0},
+	    0, 0, -1, -1, 0, TAG_SHRES, 196, 124, 18, 17, 80, 4,
+	    0, FB_VMODE_DOUBLE | FB_VMODE_YWRAP
+	}
+    }, {
+	"dblntsc-ff", {		/* 640x400, 27 kHz, 57 Hz */
+	    640, 400, 640, 400, 0, 0, 4, 0,
+	    {0, 8, 0}, {0, 8, 0}, {0, 8, 0}, {0, 0, 0},
+	    0, 0, -1, -1, 0, TAG_SHRES, 196, 124, 36, 35, 80, 7,
+	    0, FB_VMODE_NONINTERLACED | FB_VMODE_YWRAP
+	}
+    }, {
+	"dblntsc-lace", {	/* 640x800, 27 kHz, 57 Hz interlaced */
+	    640, 800, 640, 800, 0, 0, 4, 0,
+	    {0, 8, 0}, {0, 8, 0}, {0, 8, 0}, {0, 0, 0},
+	    0, 0, -1, -1, 0, TAG_SHRES, 196, 124, 72, 70, 80, 14,
+	    0, FB_VMODE_INTERLACED | FB_VMODE_YWRAP
+	}
+    }, {
+	"dblpal", {		/* 640x256, 27 kHz, 47 Hz doublescan */
+	    640, 256, 640, 256, 0, 0, 4, 0,
+	    {0, 8, 0}, {0, 8, 0}, {0, 8, 0}, {0, 0, 0},
+	    0, 0, -1, -1, 0, TAG_SHRES, 196, 124, 14, 13, 80, 4,
+	    0, FB_VMODE_DOUBLE | FB_VMODE_YWRAP
+	}
+    }, {
+	"dblpal-ff", {		/* 640x512, 27 kHz, 47 Hz */
+	    640, 512, 640, 512, 0, 0, 4, 0,
+	    {0, 8, 0}, {0, 8, 0}, {0, 8, 0}, {0, 0, 0},
+	    0, 0, -1, -1, 0, TAG_SHRES, 196, 124, 28, 27, 80, 7,
+	    0, FB_VMODE_NONINTERLACED | FB_VMODE_YWRAP
+	}
+    }, {
+	"dblpal-lace", {	/* 640x1024, 27 kHz, 47 Hz interlaced */
+	    640, 1024, 640, 1024, 0, 0, 4, 0,
+	    {0, 8, 0}, {0, 8, 0}, {0, 8, 0}, {0, 0, 0},
+	    0, 0, -1, -1, 0, TAG_SHRES, 196, 124, 56, 54, 80, 14,
+	    0, FB_VMODE_INTERLACED | FB_VMODE_YWRAP
+	}
+    },
 
-	/*
-	 * AmigaOS Video Modes
-	 */
+    /*
+     *  VGA Video Modes
+     */
 
-	"ntsc",			/* 640x200, 15 kHz, 60 Hz (NTSC) */
-	"ntsc-lace",		/* 640x400, 15 kHz, 60 Hz interlaced (NTSC) */
-	"pal",			/* 640x256, 15 kHz, 50 Hz (PAL) */
-	"pal-lace",		/* 640x512, 15 kHz, 50 Hz interlaced (PAL) */
-	"multiscan",		/* 640x480, 29 kHz, 57 Hz */
-	"multiscan-lace",	/* 640x960, 29 kHz, 57 Hz interlaced */
-	"a2024-10",		/* 1024x800, 10 Hz (Not yet supported) */
-	"a2024-15",		/* 1024x800, 15 Hz (Not yet supported) */
-	"euro36",		/* 640x200, 15 kHz, 72 Hz */
-	"euro36-lace",		/* 640x400, 15 kHz, 72 Hz interlaced */
-	"euro72",		/* 640x400, 29 kHz, 68 Hz */
-	"euro72-lace",		/* 640x800, 29 kHz, 68 Hz interlaced */
-	"super72",		/* 800x300, 23 kHz, 70 Hz */
-	"super72-lace",		/* 800x600, 23 kHz, 70 Hz interlaced */
-	"dblntsc",		/* 640x200, 27 kHz, 57 Hz doublescan */
-	"dblntsc-ff",		/* 640x400, 27 kHz, 57 Hz */
-	"dblntsc-lace",		/* 640x800, 27 kHz, 57 Hz interlaced */
-	"dblpal",		/* 640x256, 27 kHz, 47 Hz doublescan */
-	"dblpal-ff",		/* 640x512, 27 kHz, 47 Hz */
-	"dblpal-lace",		/* 640x1024, 27 kHz, 47 Hz interlaced */
+    {
+	"vga", {		/* 640x480, 31 kHz, 60 Hz (VGA) */
+	    640, 480, 640, 480, 0, 0, 4, 0,
+	    {0, 8, 0}, {0, 8, 0}, {0, 8, 0}, {0, 0, 0},
+	    0, 0, -1, -1, 0, TAG_SHRES, 64, 96, 30, 9, 112, 2,
+	    0, FB_VMODE_NONINTERLACED | FB_VMODE_YWRAP
+	}
+    }, {
+	"vga70", {		/* 640x400, 31 kHz, 70 Hz (VGA) */
+	    640, 400, 640, 400, 0, 0, 4, 0,
+	    {0, 8, 0}, {0, 8, 0}, {0, 8, 0}, {0, 0, 0},
+	    0, 0, -1, -1, 0, TAG_SHRES, 64, 96, 35, 12, 112, 2,
+	    FB_SYNC_VERT_HIGH_ACT | FB_SYNC_COMP_HIGH_ACT, FB_VMODE_NONINTERLACED | FB_VMODE_YWRAP
+	}
+    },
 
-	/*
-	 * VGA Video Modes
-	 */
+#if 0
 
-	"vga",			/* 640x480, 31 kHz, 60 Hz (VGA) */
-	"vga70",		/* 640x400, 31 kHz, 70 Hz (VGA) */
+    /*
+     *  A2024 video modes
+     *  These modes don't work yet because there's no A2024 driver.
+     */
 
-	/*
-	 * User Defined Video Modes: to be set after boot up using e.g. fbset
-	 */
-
-	"user0", "user1", "user2", "user3", "user4", "user5", "user6", "user7"
+    {
+	"a2024-10", {		/* 1024x800, 10 Hz */
+	    1024, 800, 1024, 800, 0, 0, 2, 0,
+	    {0, 2, 0}, {0, 2, 0}, {0, 2, 0}, {0, 0, 0},
+	    0, 0, -1, -1, 0, TAG_HIRES, 0, 0, 0, 0, 0, 0,
+	    0, FB_VMODE_NONINTERLACED | FB_VMODE_YWRAP
+	}
+    }, {
+	"a2024-15", {		/* 1024x800, 15 Hz */
+	    1024, 800, 1024, 800, 0, 0, 2, 0,
+	    {0, 2, 0}, {0, 2, 0}, {0, 2, 0}, {0, 0, 0},
+	    0, 0, -1, -1, 0, TAG_HIRES, 0, 0, 0, 0, 0, 0,
+	    0, FB_VMODE_NONINTERLACED | FB_VMODE_YWRAP
+	}
+    }
+#endif
 };
 
-static struct fb_var_screeninfo amiga_fb_predefined[] = {
-
-	/*
-	 * Autodetect (Default) Video Mode
-	 */
-
-	{ 0, },
-
-	/*
-	 * AmigaOS Video Modes
-	 */
-
-	{
-		/* ntsc */
-		640, 200, 640, 200, 0, 0, 4, 0,
-		{0, 8, 0}, {0, 8, 0}, {0, 8, 0}, {0, 0, 0},
-		0, 0, -1, -1, FB_ACCEL_NONE, TAG_HIRES, 106, 86, 44, 16, 76, 2,
-		FB_SYNC_BROADCAST, FB_VMODE_NONINTERLACED | FB_VMODE_YWRAP
-	}, {
-		/* ntsc-lace */
-		640, 400, 640, 400, 0, 0, 4, 0,
-		{0, 8, 0}, {0, 8, 0}, {0, 8, 0}, {0, 0, 0},
-		0, 0, -1, -1, FB_ACCEL_NONE, TAG_HIRES, 106, 86, 88, 33, 76, 4,
-		FB_SYNC_BROADCAST, FB_VMODE_INTERLACED | FB_VMODE_YWRAP
-	}, {
-		/* pal */
-		640, 256, 640, 256, 0, 0, 4, 0,
-		{0, 8, 0}, {0, 8, 0}, {0, 8, 0}, {0, 0, 0},
-		0, 0, -1, -1, FB_ACCEL_NONE, TAG_HIRES, 106, 86, 40, 14, 76, 2,
-		FB_SYNC_BROADCAST, FB_VMODE_NONINTERLACED | FB_VMODE_YWRAP
-	}, {
-		/* pal-lace */
-		640, 512, 640, 512, 0, 0, 4, 0,
-		{0, 8, 0}, {0, 8, 0}, {0, 8, 0}, {0, 0, 0},
-		0, 0, -1, -1, FB_ACCEL_NONE, TAG_HIRES, 106, 86, 80, 29, 76, 4,
-		FB_SYNC_BROADCAST, FB_VMODE_INTERLACED | FB_VMODE_YWRAP
-	}, {
-		/* multiscan */
-		640, 480, 640, 480, 0, 0, 4, 0,
-		{0, 8, 0}, {0, 8, 0}, {0, 8, 0}, {0, 0, 0},
-		0, 0, -1, -1, FB_ACCEL_NONE, TAG_SHRES, 96, 112, 29, 8, 72, 8,
-		0, FB_VMODE_NONINTERLACED | FB_VMODE_YWRAP
-
-	}, {
-		/* multiscan-lace */
-		640, 960, 640, 960, 0, 0, 4, 0,
-		{0, 8, 0}, {0, 8, 0}, {0, 8, 0}, {0, 0, 0},
-		0, 0, -1, -1, FB_ACCEL_NONE, TAG_SHRES, 96, 112, 58, 16, 72, 16,
-		0, FB_VMODE_INTERLACED | FB_VMODE_YWRAP
-	}, {
-		/* a2024-10 (Not yet supported) */
-		1024, 800, 1024, 800, 0, 0, 2, 0,
-		{0, 2, 0}, {0, 2, 0}, {0, 2, 0}, {0, 0, 0},
-		0, 0, -1, -1, FB_ACCEL_NONE, TAG_HIRES, 0, 0, 0, 0, 0, 0,
-		0, FB_VMODE_NONINTERLACED | FB_VMODE_YWRAP
-	}, {
-		/* a2024-15 (Not yet supported) */
-		1024, 800, 1024, 800, 0, 0, 2, 0,
-		{0, 2, 0}, {0, 2, 0}, {0, 2, 0}, {0, 0, 0},
-		0, 0, -1, -1, FB_ACCEL_NONE, TAG_HIRES, 0, 0, 0, 0, 0, 0,
-		0, FB_VMODE_NONINTERLACED | FB_VMODE_YWRAP
-	}, {
-		/* euro36 */
-		640, 200, 640, 200, 0, 0, 4, 0,
-		{0, 8, 0}, {0, 8, 0}, {0, 8, 0}, {0, 0, 0},
-		0, 0, -1, -1, FB_ACCEL_NONE, TAG_HIRES, 92, 124, 6, 6, 52, 5,
-		0, FB_VMODE_NONINTERLACED | FB_VMODE_YWRAP
-	}, {
-		/* euro36-lace */
-		640, 400, 640, 400, 0, 0, 4, 0,
-		{0, 8, 0}, {0, 8, 0}, {0, 8, 0}, {0, 0, 0},
-		0, 0, -1, -1, FB_ACCEL_NONE, TAG_HIRES, 92, 124, 12, 12, 52, 10,
-		0, FB_VMODE_INTERLACED | FB_VMODE_YWRAP
-	}, {
-		/* euro72 */
-		640, 400, 640, 400, 0, 0, 4, 0,
-		{0, 8, 0}, {0, 8, 0}, {0, 8, 0}, {0, 0, 0},
-		0, 0, -1, -1, FB_ACCEL_NONE, TAG_SHRES, 164, 92, 9, 9, 80, 8,
-		0, FB_VMODE_NONINTERLACED | FB_VMODE_YWRAP
-	}, {
-		/* euro72-lace */
-		640, 800, 640, 800, 0, 0, 4, 0,
-		{0, 8, 0}, {0, 8, 0}, {0, 8, 0}, {0, 0, 0},
-		0, 0, -1, -1, FB_ACCEL_NONE, TAG_SHRES, 164, 92, 18, 18, 80, 16,
-		0, FB_VMODE_INTERLACED | FB_VMODE_YWRAP
-	}, {
-		/* super72 */
-		800, 300, 800, 300, 0, 0, 4, 0,
-		{0, 8, 0}, {0, 8, 0}, {0, 8, 0}, {0, 0, 0},
-		0, 0, -1, -1, FB_ACCEL_NONE, TAG_SHRES, 212, 140, 10, 11, 80, 7,
-		0, FB_VMODE_NONINTERLACED | FB_VMODE_YWRAP
-	}, {
-		/* super72-lace */
-		800, 600, 800, 600, 0, 0, 4, 0,
-		{0, 8, 0}, {0, 8, 0}, {0, 8, 0}, {0, 0, 0},
-		0, 0, -1, -1, FB_ACCEL_NONE, TAG_SHRES, 212, 140, 20, 22, 80, 14,
-		0, FB_VMODE_INTERLACED | FB_VMODE_YWRAP
-	}, {
-		/* dblntsc */
-		640, 200, 640, 200, 0, 0, 4, 0,
-		{0, 8, 0}, {0, 8, 0}, {0, 8, 0}, {0, 0, 0},
-		0, 0, -1, -1, FB_ACCEL_NONE, TAG_SHRES, 196, 124, 18, 17, 80, 4,
-		0, FB_VMODE_DOUBLE | FB_VMODE_YWRAP
-	}, {
-		/* dblntsc-ff */
-		640, 400, 640, 400, 0, 0, 4, 0,
-		{0, 8, 0}, {0, 8, 0}, {0, 8, 0}, {0, 0, 0},
-		0, 0, -1, -1, FB_ACCEL_NONE, TAG_SHRES, 196, 124, 36, 35, 80, 7,
-		0, FB_VMODE_NONINTERLACED | FB_VMODE_YWRAP
-	}, {
-		/* dblntsc-lace */
-		640, 800, 640, 800, 0, 0, 4, 0,
-		{0, 8, 0}, {0, 8, 0}, {0, 8, 0}, {0, 0, 0},
-		0, 0, -1, -1, FB_ACCEL_NONE, TAG_SHRES, 196, 124, 72, 70, 80, 14,
-		0, FB_VMODE_INTERLACED | FB_VMODE_YWRAP
-	}, {
-		/* dblpal */
-		640, 256, 640, 256, 0, 0, 4, 0,
-		{0, 8, 0}, {0, 8, 0}, {0, 8, 0}, {0, 0, 0},
-		0, 0, -1, -1, FB_ACCEL_NONE, TAG_SHRES, 196, 124, 14, 13, 80, 4,
-		0, FB_VMODE_DOUBLE | FB_VMODE_YWRAP
-	}, {
-		/* dblpal-ff */
-		640, 512, 640, 512, 0, 0, 4, 0,
-		{0, 8, 0}, {0, 8, 0}, {0, 8, 0}, {0, 0, 0},
-		0, 0, -1, -1, FB_ACCEL_NONE, TAG_SHRES, 196, 124, 28, 27, 80, 7,
-		0, FB_VMODE_NONINTERLACED | FB_VMODE_YWRAP
-	}, {
-		/* dblpal-lace */
-		640, 1024, 640, 1024, 0, 0, 4, 0,
-		{0, 8, 0}, {0, 8, 0}, {0, 8, 0}, {0, 0, 0},
-		0, 0, -1, -1, FB_ACCEL_NONE, TAG_SHRES, 196, 124, 56, 54, 80, 14,
-		0, FB_VMODE_INTERLACED | FB_VMODE_YWRAP
-	},
-
-	/*
-	 * VGA Video Modes
-	 */
-
-	{
-		/* vga */
-		640, 480, 640, 480, 0, 0, 4, 0,
-		{0, 8, 0}, {0, 8, 0}, {0, 8, 0}, {0, 0, 0},
-		0, 0, -1, -1, FB_ACCEL_NONE, TAG_SHRES, 64, 96, 30, 9, 112, 2,
-		0, FB_VMODE_NONINTERLACED | FB_VMODE_YWRAP
-	}, {
-		/* vga70 */
-		640, 400, 640, 400, 0, 0, 4, 0,
-		{0, 8, 0}, {0, 8, 0}, {0, 8, 0}, {0, 0, 0},
-		0, 0, -1, -1, FB_ACCEL_NONE, TAG_SHRES, 64, 96, 35, 12, 112, 2,
-		FB_SYNC_VERT_HIGH_ACT | FB_SYNC_COMP_HIGH_ACT, FB_VMODE_NONINTERLACED | FB_VMODE_YWRAP
-	},
-
-	/*
-	 * User Defined Video Modes
-	 */
-
-	{ 0, }, { 0, }, { 0, }, { 0, }, { 0, }, { 0, }, { 0, }, { 0, }
-};
-
-#define NUM_USER_MODES   (8)
-#define NUM_TOTAL_MODES  arraysize(amiga_fb_predefined)
-#define NUM_PREDEF_MODES (NUM_TOTAL_MODES-NUM_USER_MODES)
+#define NUM_TOTAL_MODES  arraysize(amifb_predefined)
 
 static int amifb_ilbm = 0;	/* interleaved or normal bitplanes */
-
 static int amifb_inverse = 0;
-static int amifb_usermode = 0;
+static int amifb_usermode __initdata = 0;
+static int amifb_userdepth __initdata = -1;
 
 	/*
 	 * Some default modes
@@ -1022,6 +989,9 @@ static int amifb_usermode = 0;
 #define DEFMODE_AMBER_PAL  "pal-lace"	/* for flicker fixed PAL (A3000) */
 #define DEFMODE_AMBER_NTSC "ntsc-lace"	/* for flicker fixed NTSC (A3000) */
 #define DEFMODE_AGA        "vga70"	/* for AGA */
+
+static struct fb_var_screeninfo amifb_default;
+
 
 	/*
 	 * Macros for the conversion from real world values to hardware register
@@ -1181,40 +1151,47 @@ static u_short sprfetchmode[3] = {
 	 * Interface used by the world
 	 */
 
-void amiga_video_setup(char *options, int *ints);
+void amifb_setup(char *options, int *ints);
 
-static int amiga_fb_open(int fbidx);
-static int amiga_fb_release(int fbidx);
-static int amiga_fb_get_fix(struct fb_fix_screeninfo *fix, int con);
-static int amiga_fb_get_var(struct fb_var_screeninfo *var, int con);
-static int amiga_fb_set_var(struct fb_var_screeninfo *var, int con);
-static int amiga_fb_pan_display(struct fb_var_screeninfo *var, int con);
-static int amiga_fb_get_cmap(struct fb_cmap *cmap, int kspc, int con);
-static int amiga_fb_set_cmap(struct fb_cmap *cmap, int kspc, int con);
-static int amiga_fb_ioctl(struct inode *inode, struct file *file, u_int cmd,
-                          u_long arg, int con);
+static int amifb_open(struct fb_info *info);
+static int amifb_release(struct fb_info *info);
+static int amifb_get_fix(struct fb_fix_screeninfo *fix, int con,
+			 struct fb_info *info);
+static int amifb_get_var(struct fb_var_screeninfo *var, int con,
+			 struct fb_info *info);
+static int amifb_set_var(struct fb_var_screeninfo *var, int con,
+			 struct fb_info *info);
+static int amifb_pan_display(struct fb_var_screeninfo *var, int con,
+			     struct fb_info *info);
+static int amifb_get_cmap(struct fb_cmap *cmap, int kspc, int con,
+			  struct fb_info *info);
+static int amifb_set_cmap(struct fb_cmap *cmap, int kspc, int con,
+			  struct fb_info *info);
+static int amifb_ioctl(struct inode *inode, struct file *file, u_int cmd,
+		       u_long arg, int con, struct fb_info *info);
 
-static int amiga_fb_get_fix_cursorinfo(struct fb_fix_cursorinfo *fix, int con);
-static int amiga_fb_get_var_cursorinfo(struct fb_var_cursorinfo *var, u_char *data, int con);
-static int amiga_fb_set_var_cursorinfo(struct fb_var_cursorinfo *var, u_char *data, int con);
-static int amiga_fb_get_cursorstate(struct fb_cursorstate *state, int con);
-static int amiga_fb_set_cursorstate(struct fb_cursorstate *state, int con);
+static int amifb_get_fix_cursorinfo(struct fb_fix_cursorinfo *fix, int con);
+static int amifb_get_var_cursorinfo(struct fb_var_cursorinfo *var,
+				       u_char *data, int con);
+static int amifb_set_var_cursorinfo(struct fb_var_cursorinfo *var,
+				       u_char *data, int con);
+static int amifb_get_cursorstate(struct fb_cursorstate *state, int con);
+static int amifb_set_cursorstate(struct fb_cursorstate *state, int con);
 
 	/*
 	 * Interface to the low level console driver
 	 */
 
-unsigned long amiga_fb_init(unsigned long mem_start);
-static int amifbcon_switch(int con);
-static int amifbcon_updatevar(int con);
-static void amifbcon_blank(int blank);
-static int amifbcon_setcmap(struct fb_cmap *cmap, int con);
+unsigned long amifb_init(unsigned long mem_start);
+static int amifbcon_switch(int con, struct fb_info *info);
+static int amifbcon_updatevar(int con, struct fb_info *info);
+static void amifbcon_blank(int blank, struct fb_info *info);
 
 	/*
 	 * Internal routines
 	 */
 
-static void do_install_cmap(int con);
+static void do_install_cmap(int con, struct fb_info *info);
 static int flash_cursor(void);
 static void amifb_interrupt(int irq, void *dev_id, struct pt_regs *fp);
 static void get_video_mode(const char *name);
@@ -1227,22 +1204,22 @@ static char *strtoke(char *s,const char *ct);
 	 */
 
 static int ami_encode_fix(struct fb_fix_screeninfo *fix,
-                          struct amiga_fb_par *par);
+                          struct amifb_par *par);
 static int ami_decode_var(struct fb_var_screeninfo *var,
-                          struct amiga_fb_par *par);
+                          struct amifb_par *par);
 static int ami_encode_var(struct fb_var_screeninfo *var,
-                          struct amiga_fb_par *par);
-static void ami_get_par(struct amiga_fb_par *par);
+                          struct amifb_par *par);
+static void ami_get_par(struct amifb_par *par);
 static void ami_set_var(struct fb_var_screeninfo *var);
 #ifdef DEBUG
-static void ami_set_par(struct amiga_fb_par *par);
+static void ami_set_par(struct amifb_par *par);
 #endif
 static void ami_pan_var(struct fb_var_screeninfo *var);
 static int ami_update_par(void);
 static int ami_getcolreg(u_int regno, u_int *red, u_int *green, u_int *blue,
-                         u_int *transp);
+                         u_int *transp, struct fb_info *info);
 static int ami_setcolreg(u_int regno, u_int red, u_int green, u_int blue,
-                         u_int transp);
+                         u_int transp, struct fb_info *info);
 static void ami_update_display(void);
 static void ami_init_display(void);
 static void ami_do_blank(void);
@@ -1265,29 +1242,14 @@ static void ami_rebuild_copper(void);
 extern unsigned short ami_intena_vals[];
 
 
-static struct fb_ops amiga_fb_ops = {
-	amiga_fb_open, amiga_fb_release, amiga_fb_get_fix, amiga_fb_get_var,
-	amiga_fb_set_var, amiga_fb_get_cmap, amiga_fb_set_cmap,
-	amiga_fb_pan_display, amiga_fb_ioctl
+static struct fb_ops amifb_ops = {
+	amifb_open, amifb_release, amifb_get_fix, amifb_get_var,
+	amifb_set_var, amifb_get_cmap, amifb_set_cmap,
+	amifb_pan_display, NULL, amifb_ioctl
 };
 
-struct useropts {
-	long xres;
-	long yres;
-	long xres_virtual;
-	long yres_virtual;
-	long bits_per_pixel;
-	long left_margin;
-	long right_margin;
-	long upper_margin;
-	long lower_margin;
-	long hsync_len;
-	long vsync_len;
-} useropts __initdata = {
-    -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1
-};
 
-__initfunc(void amiga_video_setup(char *options, int *ints))
+__initfunc(void amifb_setup(char *options, int *ints))
 {
 	char *this_opt;
 	char mcap_spec[80];
@@ -1313,51 +1275,51 @@ __initfunc(void amiga_video_setup(char *options, int *ints))
 		else if (!strncmp(this_opt, "fstart:", 7))
 			min_fstrt = simple_strtoul(this_opt+7, NULL, 0);
 		else if (!strncmp(this_opt, "depth:", 6))
-			useropts.bits_per_pixel = simple_strtoul(this_opt+6, NULL, 0);
+			amifb_userdepth = simple_strtoul(this_opt+6, NULL, 0);
 		else if (!strncmp(this_opt, "size:", 5)) {
 			p = this_opt + 5;
 			if (*p != ';')
-				useropts.xres = simple_strtoul(p, NULL, 0);
+				amifb_default.xres = simple_strtoul(p, NULL, 0);
 			if (!(p = strchr(p, ';')))
 				continue;
 			if (*++p != ';')
-				useropts.yres = simple_strtoul(p, NULL, 0);
+				amifb_default.yres = simple_strtoul(p, NULL, 0);
 			if (!(p = strchr(p, ';')))
 				continue;
 			if (*++p != ';')
-				useropts.xres_virtual = simple_strtoul(p, NULL, 0);
+				amifb_default.xres_virtual = simple_strtoul(p, NULL, 0);
 			if (!(p = strchr(p, ';')))
 				continue;
 			if (*++p != ';')
-				useropts.yres_virtual = simple_strtoul(p, NULL, 0);
+				amifb_default.yres_virtual = simple_strtoul(p, NULL, 0);
 			if (!(p = strchr(p, ';')))
 				continue;
 			if (*++p)
-				useropts.bits_per_pixel = simple_strtoul(p, NULL, 0);
+				amifb_default.bits_per_pixel = simple_strtoul(p, NULL, 0);
 		} else if (!strncmp(this_opt, "timing:", 7)) {
 			p = this_opt + 7;
 			if (*p != ';')
-				useropts.left_margin = simple_strtoul(p, NULL, 0);
+				amifb_default.left_margin = simple_strtoul(p, NULL, 0);
 			if (!(p = strchr(p, ';')))
 				continue;
 			if (*++p != ';')
-				useropts.right_margin = simple_strtoul(p, NULL, 0);
+				amifb_default.right_margin = simple_strtoul(p, NULL, 0);
 			if (!(p = strchr(p, ';')))
 				continue;
 			if (*++p != ';')
-				useropts.upper_margin = simple_strtoul(p, NULL, 0);
+				amifb_default.upper_margin = simple_strtoul(p, NULL, 0);
 			if (!(p = strchr(p, ';')))
 				continue;
 			if (*++p)
-				useropts.lower_margin = simple_strtoul(p, NULL, 0);
+				amifb_default.lower_margin = simple_strtoul(p, NULL, 0);
 		} else if (!strncmp(this_opt, "sync:", 5)) {
 			p = this_opt + 5;
 			if (*p != ';')
-				useropts.hsync_len = simple_strtoul(p, NULL, 0);
+				amifb_default.hsync_len = simple_strtoul(p, NULL, 0);
 			if (!(p = strchr(p, ';')))
 				continue;
 			if (*++p)
-				useropts.vsync_len = simple_strtoul(p, NULL, 0);
+				amifb_default.vsync_len = simple_strtoul(p, NULL, 0);
 		} else
 			get_video_mode(this_opt);
 	}
@@ -1395,10 +1357,10 @@ __initfunc(void amiga_video_setup(char *options, int *ints))
 		if (hmax <= 0 || hmax <= hmin)
 			goto cap_invalid;
 
-		vfmin = vmin;
-		vfmax = vmax;
-		hfmin = hmin;
-		hfmax = hmax;
+		fb_info.monspecs.vfmin = vmin;
+		fb_info.monspecs.vfmax = vmax;
+		fb_info.monspecs.hfmin = hmin;
+		fb_info.monspecs.hfmax = hmax;
 cap_invalid:
 		;
 	}
@@ -1408,7 +1370,7 @@ cap_invalid:
 	 * Open/Release the frame buffer device
 	 */
 
-static int amiga_fb_open(int fbidx)
+static int amifb_open(struct fb_info *info)
 {
 	/*
 	 * Nothing, only a usage count for the moment
@@ -1418,7 +1380,7 @@ static int amiga_fb_open(int fbidx)
 	return(0);
 }
 
-static int amiga_fb_release(int fbidx)
+static int amifb_release(struct fb_info *info)
 {
 	MOD_DEC_USE_COUNT;
 	return(0);
@@ -1429,9 +1391,10 @@ static int amiga_fb_release(int fbidx)
 	 * Get the Fixed Part of the Display
 	 */
 
-static int amiga_fb_get_fix(struct fb_fix_screeninfo *fix, int con)
+static int amifb_get_fix(struct fb_fix_screeninfo *fix, int con,
+			 struct fb_info *info)
 {
-	struct amiga_fb_par par;
+	struct amifb_par par;
 
 	if (con == -1)
 		ami_get_par(&par);
@@ -1448,12 +1411,13 @@ static int amiga_fb_get_fix(struct fb_fix_screeninfo *fix, int con)
 	 * Get the User Defined Part of the Display
 	 */
 
-static int amiga_fb_get_var(struct fb_var_screeninfo *var, int con)
+static int amifb_get_var(struct fb_var_screeninfo *var, int con,
+			 struct fb_info *info)
 {
 	int err = 0;
 
 	if (con == -1) {
-		struct amiga_fb_par par;
+		struct amifb_par par;
 
 		ami_get_par(&par);
 		err = ami_encode_var(var, &par);
@@ -1466,11 +1430,12 @@ static int amiga_fb_get_var(struct fb_var_screeninfo *var, int con)
 	 * Set the User Defined Part of the Display
 	 */
 
-static int amiga_fb_set_var(struct fb_var_screeninfo *var, int con)
+static int amifb_set_var(struct fb_var_screeninfo *var, int con,
+			 struct fb_info *info)
 {
 	int err, activate = var->activate;
 	int oldxres, oldyres, oldvxres, oldvyres, oldbpp;
-	struct amiga_fb_par par;
+	struct amifb_par par;
 
 	struct display *display;
 	if (con >= 0)
@@ -1513,13 +1478,32 @@ static int amiga_fb_set_var(struct fb_var_screeninfo *var, int con)
 			display->line_length = fix.line_length;
 			display->can_soft_blank = 1;
 			display->inverse = amifb_inverse;
+			switch (fix.type) {
+#ifdef CONFIG_FBCON_ILBM
+			    case FB_TYPE_INTERLEAVED_PLANES:
+				display->dispsw = &fbcon_ilbm;
+				break;
+#endif
+#ifdef CONFIG_FBCON_AFB
+			    case FB_TYPE_PLANES:
+				display->dispsw = &fbcon_afb;
+				break;
+#endif
+#ifdef CONFIG_FBCON_MFB
+			    case FB_TYPE_PACKED_PIXELS:	/* depth == 1 */
+				display->dispsw = &fbcon_mfb;
+				break;
+#endif
+			    default:
+				display->dispsw = NULL;
+			}
 			if (fb_info.changevar)
 				(*fb_info.changevar)(con);
 		}
 		if (oldbpp != var->bits_per_pixel) {
 			if ((err = fb_alloc_cmap(&display->cmap, 0, 0)))
 				return err;
-			do_install_cmap(con);
+			do_install_cmap(con, info);
 		}
 		if (con == currcon)
 			ami_set_var(&display->var);
@@ -1533,7 +1517,8 @@ static int amiga_fb_set_var(struct fb_var_screeninfo *var, int con)
 	 * This call looks only at xoffset, yoffset and the FB_VMODE_YWRAP flag
 	 */
 
-static int amiga_fb_pan_display(struct fb_var_screeninfo *var, int con)
+static int amifb_pan_display(struct fb_var_screeninfo *var, int con,
+				struct fb_info *info)
 {
 	if (var->vmode & FB_VMODE_YWRAP) {
 		if (var->yoffset<0 || var->yoffset >= fb_display[con].var.yres_virtual || var->xoffset)
@@ -1562,15 +1547,16 @@ static int amiga_fb_pan_display(struct fb_var_screeninfo *var, int con)
 	 * Get the Colormap
 	 */
 
-static int amiga_fb_get_cmap(struct fb_cmap *cmap, int kspc, int con)
+static int amifb_get_cmap(struct fb_cmap *cmap, int kspc, int con,
+			  struct fb_info *info)
 {
 	if (con == currcon) /* current console? */
 		return fb_get_cmap(cmap, &fb_display[con].var, kspc,
-				   ami_getcolreg);
+				   ami_getcolreg, info);
 	else if (fb_display[con].cmap.len) /* non default colormap? */
 		fb_copy_cmap(&fb_display[con].cmap, cmap, kspc ? 0 : 2);
 	else
-		fb_copy_cmap(fb_default_cmap(fb_display[con].var.bits_per_pixel),
+		fb_copy_cmap(fb_default_cmap(1<<fb_display[con].var.bits_per_pixel),
 			     cmap, kspc ? 0 : 2);
 	return 0;
 }
@@ -1579,7 +1565,8 @@ static int amiga_fb_get_cmap(struct fb_cmap *cmap, int kspc, int con)
 	 * Set the Colormap
 	 */
 
-static int amiga_fb_set_cmap(struct fb_cmap *cmap, int kspc, int con)
+static int amifb_set_cmap(struct fb_cmap *cmap, int kspc, int con,
+			  struct fb_info *info)
 {
 	int err;
 
@@ -1591,7 +1578,7 @@ static int amiga_fb_set_cmap(struct fb_cmap *cmap, int kspc, int con)
 	}
 	if (con == currcon)			/* current console? */
 		return fb_set_cmap(cmap, &fb_display[con].var, kspc,
-				   ami_setcolreg);
+				   ami_setcolreg, info);
 	else
 		fb_copy_cmap(cmap, &fb_display[con].cmap, kspc ? 0 : 1);
 	return 0;
@@ -1601,8 +1588,8 @@ static int amiga_fb_set_cmap(struct fb_cmap *cmap, int kspc, int con)
 	 * Amiga Frame Buffer Specific ioctls
 	 */
 
-static int amiga_fb_ioctl(struct inode *inode, struct file *file,
-                          u_int cmd, u_long arg, int con)
+static int amifb_ioctl(struct inode *inode, struct file *file,
+                       u_int cmd, u_long arg, int con, struct fb_info *info)
 {
 	int i;
 
@@ -1612,7 +1599,7 @@ static int amiga_fb_ioctl(struct inode *inode, struct file *file,
 			
 			i = verify_area(VERIFY_WRITE, (void *)arg, sizeof(crsrfix));
 			if (!i) {
-				i = amiga_fb_get_fix_cursorinfo(&crsrfix, con);
+				i = amifb_get_fix_cursorinfo(&crsrfix, con);
 				copy_to_user((void *)arg, &crsrfix, sizeof(crsrfix));
 			}
 			return i;
@@ -1622,7 +1609,7 @@ static int amiga_fb_ioctl(struct inode *inode, struct file *file,
 
 			i = verify_area(VERIFY_WRITE, (void *)arg, sizeof(crsrvar));
 			if (!i) {
-				i = amiga_fb_get_var_cursorinfo(&crsrvar,
+				i = amifb_get_var_cursorinfo(&crsrvar,
 					((struct fb_var_cursorinfo *)arg)->data, con);
 				copy_to_user((void *)arg, &crsrvar, sizeof(crsrvar));
 			}
@@ -1634,7 +1621,7 @@ static int amiga_fb_ioctl(struct inode *inode, struct file *file,
 			i = verify_area(VERIFY_READ, (void *)arg, sizeof(crsrvar));
 			if (!i) {
 				copy_from_user(&crsrvar, (void *)arg, sizeof(crsrvar));
-				i = amiga_fb_set_var_cursorinfo(&crsrvar,
+				i = amifb_set_var_cursorinfo(&crsrvar,
 					((struct fb_var_cursorinfo *)arg)->data, con);
 			}
 			return i;
@@ -1644,7 +1631,7 @@ static int amiga_fb_ioctl(struct inode *inode, struct file *file,
 
 			i = verify_area(VERIFY_WRITE, (void *)arg, sizeof(crsrstate));
 			if (!i) {
-				i = amiga_fb_get_cursorstate(&crsrstate, con);
+				i = amifb_get_cursorstate(&crsrstate, con);
 				copy_to_user((void *)arg, &crsrstate, sizeof(crsrstate));
 			}
 			return i;
@@ -1655,27 +1642,27 @@ static int amiga_fb_ioctl(struct inode *inode, struct file *file,
 			i = verify_area(VERIFY_READ, (void *)arg, sizeof(crsrstate));
 			if (!i) {
 				copy_from_user(&crsrstate, (void *)arg, sizeof(crsrstate));
-				i = amiga_fb_set_cursorstate(&crsrstate, con);
+				i = amifb_set_cursorstate(&crsrstate, con);
 			}
 			return i;
 		}
 #ifdef DEBUG
 		case FBCMD_GET_CURRENTPAR : {
-			struct amiga_fb_par par;
+			struct amifb_par par;
 
-			i = verify_area(VERIFY_WRITE, (void *)arg, sizeof(struct amiga_fb_par));
+			i = verify_area(VERIFY_WRITE, (void *)arg, sizeof(struct amifb_par));
 			if (!i) {
 				ami_get_par(&par);
-				copy_to_user((void *)arg, &par, sizeof(struct amiga_fb_par));
+				copy_to_user((void *)arg, &par, sizeof(struct amifb_par));
 			}
 			return i;
 		}
 		case FBCMD_SET_CURRENTPAR : {
-			struct amiga_fb_par par;
+			struct amifb_par par;
 
-			i = verify_area(VERIFY_READ, (void *)arg, sizeof(struct amiga_fb_par));
+			i = verify_area(VERIFY_READ, (void *)arg, sizeof(struct amifb_par));
 			if (!i) {
-				copy_from_user(&par, (void *)arg, sizeof(struct amiga_fb_par));
+				copy_from_user(&par, (void *)arg, sizeof(struct amifb_par));
 				ami_set_par(&par);
 			}
 			return i;
@@ -1689,27 +1676,27 @@ static int amiga_fb_ioctl(struct inode *inode, struct file *file,
 	 * Hardware Cursor
 	 */
 
-static int amiga_fb_get_fix_cursorinfo(struct fb_fix_cursorinfo *fix, int con)
+static int amifb_get_fix_cursorinfo(struct fb_fix_cursorinfo *fix, int con)
 {
 	return ami_get_fix_cursorinfo(fix, con);
 }
 
-static int amiga_fb_get_var_cursorinfo(struct fb_var_cursorinfo *var, u_char *data, int con)
+static int amifb_get_var_cursorinfo(struct fb_var_cursorinfo *var, u_char *data, int con)
 {
 	return ami_get_var_cursorinfo(var, data, con);
 }
 
-static int amiga_fb_set_var_cursorinfo(struct fb_var_cursorinfo *var, u_char *data, int con)
+static int amifb_set_var_cursorinfo(struct fb_var_cursorinfo *var, u_char *data, int con)
 {
 	return ami_set_var_cursorinfo(var, data, con);
 }
 
-static int amiga_fb_get_cursorstate(struct fb_cursorstate *state, int con)
+static int amifb_get_cursorstate(struct fb_cursorstate *state, int con)
 {
 	return ami_get_cursorstate(state, con);
 }
 
-static int amiga_fb_set_cursorstate(struct fb_cursorstate *state, int con)
+static int amifb_set_cursorstate(struct fb_cursorstate *state, int con)
 {
 	return ami_set_cursorstate(state, con);
 }
@@ -1719,7 +1706,7 @@ static int amiga_fb_set_cursorstate(struct fb_cursorstate *state, int con)
 	 * Initialisation
 	 */
 
-__initfunc(unsigned long amiga_fb_init(unsigned long mem_start))
+__initfunc(unsigned long amifb_init(unsigned long mem_start))
 {
 	int err, tag, i;
 	u_long chipptr;
@@ -1745,7 +1732,7 @@ __initfunc(unsigned long amiga_fb_init(unsigned long mem_start))
 	switch (amiga_chipset) {
 #ifdef CONFIG_FB_AMIGA_OCS
 		case CS_OCS:
-			strcat(amiga_fb_name, "OCS");
+			strcat(amifb_name, "OCS");
 default_chipset:
 			chipset = TAG_OCS;
 			maxdepth[TAG_SHRES] = 0;	/* OCS means no SHRES */
@@ -1761,7 +1748,7 @@ default_chipset:
 
 #ifdef CONFIG_FB_AMIGA_ECS
 		case CS_ECS:
-			strcat(amiga_fb_name, "ECS");
+			strcat(amifb_name, "ECS");
 			chipset = TAG_ECS;
 			maxdepth[TAG_SHRES] = 2;
 			maxdepth[TAG_HIRES] = 4;
@@ -1785,7 +1772,7 @@ default_chipset:
 
 #ifdef CONFIG_FB_AMIGA_AGA
 		case CS_AGA:
-			strcat(amiga_fb_name, "AGA");
+			strcat(amifb_name, "AGA");
 			chipset = TAG_AGA;
 			maxdepth[TAG_SHRES] = 8;
 			maxdepth[TAG_HIRES] = 8;
@@ -1804,7 +1791,7 @@ default_chipset:
 		default:
 #ifdef CONFIG_FB_AMIGA_OCS
 			printk("Unknown graphics chipset, defaulting to OCS\n");
-			strcat(amiga_fb_name, "Unknown");
+			strcat(amifb_name, "Unknown");
 			goto default_chipset;
 #else /* CONFIG_FB_AMIGA_OCS */
 			return mem_start;
@@ -1824,26 +1811,42 @@ default_chipset:
 	 * Replace the Tag Values with the Real Pixel Clock Values
 	 */
 
-	for (i = 0; i < NUM_PREDEF_MODES; i++) {
-		tag = amiga_fb_predefined[i].pixclock;
+	if (amifb_userdepth != -1)
+		amifb_default.bits_per_pixel = amifb_userdepth;
+	for (i = 0; i < NUM_TOTAL_MODES; i++) {
+		struct fb_var_screeninfo *var = &amifb_predefined[i].var;
+		tag = var->pixclock;
 		if (tag == TAG_SHRES || tag == TAG_HIRES || tag == TAG_LORES) {
-			amiga_fb_predefined[i].pixclock = pixclock[tag];
-			if (amiga_fb_predefined[i].bits_per_pixel > maxdepth[tag])
-				amiga_fb_predefined[i].bits_per_pixel = maxdepth[tag];
+			var->pixclock = pixclock[tag];
+			if (var->bits_per_pixel > maxdepth[tag])
+				var->bits_per_pixel = maxdepth[tag];
 		}
 	}
+	tag = amifb_default.pixclock;
+	if (tag == TAG_SHRES || tag == TAG_HIRES || tag == TAG_LORES) {
+		amifb_default.pixclock = pixclock[tag];
+		if (amifb_default.bits_per_pixel > maxdepth[tag])
+			amifb_default.bits_per_pixel = maxdepth[tag];
+	}
 
-	strcpy(fb_info.modename, amiga_fb_name);
+	/*
+	 *  These monitor specs are for a typical Amiga monitor (e.g. A1960)
+	 */
+	if (fb_info.monspecs.hfmin == 0) {
+	    fb_info.monspecs.hfmin = 15000;
+	    fb_info.monspecs.hfmax = 38000;
+	    fb_info.monspecs.vfmin = 49;
+	    fb_info.monspecs.vfmax = 90;
+	}
+
+	strcpy(fb_info.modename, amifb_name);
 	fb_info.changevar = NULL;
 	fb_info.node = -1;
-	fb_info.fbops = &amiga_fb_ops;
-	fb_info.fbvar_num = NUM_TOTAL_MODES;
-	fb_info.fbvar = amiga_fb_predefined;
+	fb_info.fbops = &amifb_ops;
 	fb_info.disp = &disp;
 	fb_info.switch_con = &amifbcon_switch;
 	fb_info.updatevar = &amifbcon_updatevar;
 	fb_info.blank = &amifbcon_blank;
-	fb_info.setcmap = &amifbcon_setcmap;
 
 	err = register_framebuffer(&fb_info);
 	if (err < 0)
@@ -1889,10 +1892,11 @@ default_chipset:
 	custom.intena = IF_VERTB;
 	custom.intena = IF_SETCLR | IF_COPER;
 
-	amiga_fb_set_var(&amiga_fb_predefined[0], -1);
+	amifb_set_var(&amifb_default, -1, &fb_info);
 
-	printk("%s frame buffer device, using %ldK of video memory\n",
-	       fb_info.modename, videomemorysize>>10);
+	printk("fb%d: %s frame buffer device, using %ldK of video memory\n",
+	       GET_FB_IDX(fb_info.node), fb_info.modename,
+	       videomemorysize>>10);
 
 	/* TODO: This driver cannot be unloaded yet */
 	MOD_INC_USE_COUNT;
@@ -1900,17 +1904,17 @@ default_chipset:
 	return mem_start;
 }
 
-static int amifbcon_switch(int con)
+static int amifbcon_switch(int con, struct fb_info *info)
 {
 	/* Do we have to save the colormap? */
 	if (fb_display[currcon].cmap.len)
 		fb_get_cmap(&fb_display[currcon].cmap,
-			    &fb_display[currcon].var, 1, ami_getcolreg);
+			    &fb_display[currcon].var, 1, ami_getcolreg, info);
 
 	currcon = con;
 	ami_set_var(&fb_display[con].var);
 	/* Install new colormap */
-	do_install_cmap(con);
+	do_install_cmap(con, info);
 	return 0;
 }
 
@@ -1918,7 +1922,7 @@ static int amifbcon_switch(int con)
 	 * Update the `var' structure (called by fbcon.c)
 	 */
 
-static int amifbcon_updatevar(int con)
+static int amifbcon_updatevar(int con, struct fb_info *info)
 {
 	ami_pan_var(&fb_display[con].var);
 	return 0;
@@ -1928,7 +1932,7 @@ static int amifbcon_updatevar(int con)
 	 * Blank the display.
 	 */
 
-static void amifbcon_blank(int blank)
+static void amifbcon_blank(int blank, struct fb_info *info)
 {
 	do_blank = blank ? blank : -1;
 }
@@ -1937,23 +1941,17 @@ static void amifbcon_blank(int blank)
 	 * Set the colormap
 	 */
 
-static int amifbcon_setcmap(struct fb_cmap *cmap, int con)
-{
-	return(amiga_fb_set_cmap(cmap, 1, con));
-}
-
-
-static void do_install_cmap(int con)
+static void do_install_cmap(int con, struct fb_info *info)
 {
 	if (con != currcon)
 		return;
 	if (fb_display[con].cmap.len)
 		fb_set_cmap(&fb_display[con].cmap, &fb_display[con].var, 1,
-			    ami_setcolreg);
+			    ami_setcolreg, info);
 	else
-		fb_set_cmap(fb_default_cmap(fb_display[con].var.bits_per_pixel),
+		fb_set_cmap(fb_default_cmap(1<<fb_display[con].var.bits_per_pixel),
 					    &fb_display[con].var, 1,
-					    ami_setcolreg);
+					    ami_setcolreg, info);
 }
 
 static int flash_cursor(void)
@@ -2039,33 +2037,9 @@ __initfunc(static void get_video_mode(const char *name))
 {
 	int i;
 
-	for (i = 1; i < NUM_PREDEF_MODES; i++) {
-		if (!strcmp(name, amiga_fb_modenames[i])) {
-			amiga_fb_predefined[0] = amiga_fb_predefined[i];
-
-			if (useropts.xres != -1)
-				amiga_fb_predefined[0].xres = useropts.xres;
-			if (useropts.yres != -1)
-				amiga_fb_predefined[0].yres = useropts.yres;
-			if (useropts.xres_virtual != -1)
-				amiga_fb_predefined[0].xres_virtual = useropts.xres_virtual;
-			if (useropts.yres_virtual != -1)
-				amiga_fb_predefined[0].yres_virtual = useropts.yres_virtual;
-			if (useropts.bits_per_pixel != -1)
-				amiga_fb_predefined[0].bits_per_pixel = useropts.bits_per_pixel;
-			if (useropts.left_margin != -1)
-				amiga_fb_predefined[0].left_margin = useropts.left_margin;
-			if (useropts.right_margin != -1)
-				amiga_fb_predefined[0].right_margin = useropts.right_margin;
-			if (useropts.upper_margin != -1)
-				amiga_fb_predefined[0].upper_margin = useropts.upper_margin;
-			if (useropts.lower_margin != -1)
-				amiga_fb_predefined[0].lower_margin = useropts.lower_margin;
-			if (useropts.hsync_len != -1)
-				amiga_fb_predefined[0].hsync_len = useropts.hsync_len;
-			if (useropts.vsync_len != -1)
-				amiga_fb_predefined[0].vsync_len = useropts.vsync_len;
-
+	for (i = 0; i < NUM_TOTAL_MODES; i++) {
+		if (!strcmp(name, amifb_predefined[i].name)) {
+			amifb_default = amifb_predefined[i].var;
 			amifb_usermode = i;
 			return;
 		}
@@ -2073,23 +2047,22 @@ __initfunc(static void get_video_mode(const char *name))
 }
 
 	/*
-	 * Probe the  Video Modes
+	 *  Probe the Video Modes
 	 */
 
 __initfunc(static void check_default_mode(void))
 {
-	struct amiga_fb_par par;
+	struct amifb_par par;
 	int mode;
 
-	for (mode = 0; mode < NUM_PREDEF_MODES; mode++) {
-		if (!ami_decode_var(&amiga_fb_predefined[mode], &par)) {
-			if (mode)
-				amiga_fb_predefined[0] = amiga_fb_predefined[mode];
+	if (!ami_decode_var(&amifb_default, &par))
+		return;
+	printk("Can't use default video mode. Probing video modes...\n");
+	for (mode = 0; mode < NUM_TOTAL_MODES; mode++)
+		if (!ami_decode_var(&amifb_predefined[mode].var, &par)) {
+			amifb_default = amifb_predefined[mode].var;
 			return;
 		}
-		if (!mode)
-			printk("Can't use default video mode. Probing video modes...\n");
-	}
 	panic("Can't find any usable video mode");
 }
 
@@ -2141,13 +2114,19 @@ __initfunc(static char *strtoke(char *s,const char *ct))
 	 */
 
 static int ami_encode_fix(struct fb_fix_screeninfo *fix,
-                          struct amiga_fb_par *par)
+                          struct amifb_par *par)
 {
 	memset(fix, 0, sizeof(struct fb_fix_screeninfo));
-	strcpy(fix->id, amiga_fb_name);
+	strcpy(fix->id, amifb_name);
 	fix->smem_start = (char *)videomemory;
 	fix->smem_len = videomemorysize;
 
+#ifdef CONFIG_FBCON_MFB
+	if (par->bpp == 1) {
+		fix->type = FB_TYPE_PACKED_PIXELS;
+		fix->type_aux = 0;
+	} else
+#endif
 	if (amifb_ilbm) {
 		fix->type = FB_TYPE_INTERLEAVED_PLANES;
 		fix->type_aux = par->next_line;
@@ -2169,6 +2148,7 @@ static int ami_encode_fix(struct fb_fix_screeninfo *fix,
 			fix->xpanstep = 16<<maxfmode;
 		fix->ypanstep = 1;
 	}
+	fix->accel = FB_ACCEL_AMIGABLITT;
 	return 0;
 }
 
@@ -2178,11 +2158,11 @@ static int ami_encode_fix(struct fb_fix_screeninfo *fix,
 	 */
 
 static int ami_decode_var(struct fb_var_screeninfo *var,
-                          struct amiga_fb_par *par)
+                          struct amifb_par *par)
 {
 	u_short clk_shift, line_shift;
 	u_long maxfetchstop, fstrt, fsize, fconst, xres_n, yres_n;
-	u_long hrate = 0, vrate = 0;
+	u_int htotal, vtotal;
 
 	/*
 	 * Find a matching Pixel Clock
@@ -2319,8 +2299,8 @@ static int ami_decode_var(struct fb_var_screeninfo *var,
 				DPRINTK("diwstrt_v too low for pal\n");
 				return -EINVAL;
 			}
-			hrate = 15625;
-			vrate = 50;
+			htotal = PAL_HTOTAL>>clk_shift;
+			vtotal = PAL_VTOTAL>>1;
 			if (!IS_OCS) {
 				par->beamcon0 = BMC0_PAL;
 				par->bplcon3 |= BPC3_BRDRBLNK;
@@ -2349,8 +2329,8 @@ static int ami_decode_var(struct fb_var_screeninfo *var,
 				DPRINTK("diwstrt_v too low for ntsc\n");
 				return -EINVAL;
 			}
-			hrate = 15750;
-			vrate = 60;
+			htotal = NTSC_HTOTAL>>clk_shift;
+			vtotal = NTSC_VTOTAL>>1;
 			if (!IS_OCS) {
 				par->beamcon0 = 0;
 				par->bplcon3 |= BPC3_BRDRBLNK;
@@ -2409,9 +2389,8 @@ static int ami_decode_var(struct fb_var_screeninfo *var,
 			par->beamcon0 |= BMC0_VSYTRUE;
 		if (var->sync & FB_SYNC_COMP_HIGH_ACT)
 			par->beamcon0 |= BMC0_CSYTRUE;
-		hrate = (amiga_masterclock+par->htotal/2)/par->htotal;
-		vrate = div2(par->vtotal) * par->htotal;
-		vrate = (amiga_masterclock+vrate/2)/vrate;
+		htotal = par->htotal>>clk_shift;
+		vtotal = par->vtotal>>1;
 	} else {
 		DPRINTK("only broadcast modes possible for ocs\n");
 		return -EINVAL;
@@ -2546,7 +2525,8 @@ static int ami_decode_var(struct fb_var_screeninfo *var,
 	par->crsr.spot_x = par->crsr.spot_y = 0;
 	par->crsr.height = par->crsr.width = 0;
 
-	if (hrate < hfmin || hrate > hfmax || vrate < vfmin || vrate > vfmax) {
+	if (!fbmon_valid_timings(pixclock[clk_shift], htotal, vtotal,
+				 &fb_info)) {
 		DPRINTK("mode doesn't fit for monitor\n");
 		return -EINVAL;
 	}
@@ -2560,7 +2540,7 @@ static int ami_decode_var(struct fb_var_screeninfo *var,
 	 */
 
 static int ami_encode_var(struct fb_var_screeninfo *var,
-                          struct amiga_fb_par *par)
+                          struct amifb_par *par)
 {
 	u_short clk_shift, line_shift;
 	int i;
@@ -2606,7 +2586,6 @@ static int ami_encode_var(struct fb_var_screeninfo *var,
 
 	var->height = -1;
 	var->width = -1;
-	var->accel = 0;
 
 	var->pixclock = pixclock[clk_shift];
 
@@ -2657,7 +2636,7 @@ static int ami_encode_var(struct fb_var_screeninfo *var,
 	 * Get current hardware setting
 	 */
 
-static void ami_get_par(struct amiga_fb_par *par)
+static void ami_get_par(struct amifb_par *par)
 {
 	*par = currentpar;
 }
@@ -2676,7 +2655,7 @@ static void ami_set_var(struct fb_var_screeninfo *var)
 }
 
 #ifdef DEBUG
-static void ami_set_par(struct amiga_fb_par *par)
+static void ami_set_par(struct amifb_par *par)
 {
 	do_vmode_pan = 0;
 	do_vmode_full = 0;
@@ -2695,7 +2674,7 @@ static void ami_set_par(struct amiga_fb_par *par)
 
 static void ami_pan_var(struct fb_var_screeninfo *var)
 {
-	struct amiga_fb_par *par = &currentpar;
+	struct amifb_par *par = &currentpar;
 
 	par->xoffset = var->xoffset;
 	par->yoffset = var->yoffset;
@@ -2715,7 +2694,7 @@ static void ami_pan_var(struct fb_var_screeninfo *var)
 
 static int ami_update_par(void)
 {
-	struct amiga_fb_par *par = &currentpar;
+	struct amifb_par *par = &currentpar;
 	short clk_shift, vshift, fstrt, fsize, fstop, fconst,  shift, move, mod;
 
 	clk_shift = par->clk_shift;
@@ -2780,7 +2759,7 @@ static int ami_update_par(void)
 	 */
 
 static int ami_getcolreg(u_int regno, u_int *red, u_int *green, u_int *blue,
-                         u_int *transp)
+                         u_int *transp, struct fb_info *info)
 {
 	if (IS_AGA) {
 		if (regno > 255)
@@ -2804,7 +2783,7 @@ static int ami_getcolreg(u_int regno, u_int *red, u_int *green, u_int *blue,
 	 */
 
 static int ami_setcolreg(u_int regno, u_int red, u_int green, u_int blue,
-                         u_int transp)
+                         u_int transp, struct fb_info *info)
 {
 #if defined(CONFIG_FB_AMIGA_AGA)
 	u_short bplcon3 = currentpar.bplcon3;
@@ -2867,7 +2846,7 @@ static int ami_setcolreg(u_int regno, u_int red, u_int green, u_int blue,
 
 static void ami_update_display(void)
 {
-	struct amiga_fb_par *par = &currentpar;
+	struct amifb_par *par = &currentpar;
 
 	custom.bplcon1 = par->bplcon1;
 	custom.bpl1mod = par->bpl1mod;
@@ -2882,7 +2861,7 @@ static void ami_update_display(void)
 
 static void ami_init_display(void)
 {
-	struct amiga_fb_par *par = &currentpar;
+	struct amifb_par *par = &currentpar;
 
 	custom.bplcon0 = par->bplcon0 & ~BPC0_LACE;
 	custom.bplcon2 = (IS_OCS ? 0 : BPC2_KILLEHB) | BPC2_PF2P2 | BPC2_PF1P2;
@@ -2938,7 +2917,7 @@ static void ami_init_display(void)
 
 static void ami_do_blank(void)
 {
-	struct amiga_fb_par *par = &currentpar;
+	struct amifb_par *par = &currentpar;
 #if defined(CONFIG_FB_AMIGA_AGA)
 	u_short bplcon3 = par->bplcon3;
 #endif
@@ -3023,7 +3002,7 @@ static void ami_do_blank(void)
 
 static int ami_get_fix_cursorinfo(struct fb_fix_cursorinfo *fix, int con)
 {
-	struct amiga_fb_par *par = &currentpar;
+	struct amifb_par *par = &currentpar;
 
 	fix->crsr_width = fix->crsr_xsize = par->crsr.width;
 	fix->crsr_height = fix->crsr_ysize = par->crsr.height;
@@ -3034,7 +3013,7 @@ static int ami_get_fix_cursorinfo(struct fb_fix_cursorinfo *fix, int con)
 
 static int ami_get_var_cursorinfo(struct fb_var_cursorinfo *var, u_char *data, int con)
 {
-	struct amiga_fb_par *par = &currentpar;
+	struct amifb_par *par = &currentpar;
 	register u_short *lspr, *sspr;
 #ifdef __mc68000__
 	register u_long datawords asm ("d2");
@@ -3109,7 +3088,7 @@ static int ami_get_var_cursorinfo(struct fb_var_cursorinfo *var, u_char *data, i
 
 static int ami_set_var_cursorinfo(struct fb_var_cursorinfo *var, u_char *data, int con)
 {
-	struct amiga_fb_par *par = &currentpar;
+	struct amifb_par *par = &currentpar;
 	register u_short *lspr, *sspr;
 #ifdef __mc68000__
 	register u_long datawords asm ("d2");
@@ -3228,7 +3207,7 @@ static int ami_set_var_cursorinfo(struct fb_var_cursorinfo *var, u_char *data, i
 
 static int ami_get_cursorstate(struct fb_cursorstate *state, int con)
 {
-	struct amiga_fb_par *par = &currentpar;
+	struct amifb_par *par = &currentpar;
 
 	state->xoffset = par->crsr.crsr_x;
 	state->yoffset = par->crsr.crsr_y;
@@ -3238,7 +3217,7 @@ static int ami_get_cursorstate(struct fb_cursorstate *state, int con)
 
 static int ami_set_cursorstate(struct fb_cursorstate *state, int con)
 {
-	struct amiga_fb_par *par = &currentpar;
+	struct amifb_par *par = &currentpar;
 
 	par->crsr.crsr_x = state->xoffset;
 	par->crsr.crsr_y = state->yoffset;
@@ -3250,7 +3229,7 @@ static int ami_set_cursorstate(struct fb_cursorstate *state, int con)
 
 static void ami_set_sprite(void)
 {
-	struct amiga_fb_par *par = &currentpar;
+	struct amifb_par *par = &currentpar;
 	copins *copl, *cops;
 	u_short hs, vs, ve;
 	u_long pl, ps, pt;
@@ -3333,7 +3312,7 @@ __initfunc(static void ami_init_copper(void))
 
 static void ami_reinit_copper(void)
 {
-	struct amiga_fb_par *par = &currentpar;
+	struct amifb_par *par = &currentpar;
 
 	copdisplay.init[cip_bplcon0].w[1] = ~(BPC0_BPU3 | BPC0_BPU2 | BPC0_BPU1 | BPC0_BPU0) & par->bplcon0;
 	copdisplay.wait->l = CWAIT(32, par->diwstrt_v-4);
@@ -3345,7 +3324,7 @@ static void ami_reinit_copper(void)
 
 static void ami_build_copper(void)
 {
-	struct amiga_fb_par *par = &currentpar;
+	struct amifb_par *par = &currentpar;
 	copins *copl, *cops;
 	u_long p;
 
@@ -3422,7 +3401,7 @@ static void ami_build_copper(void)
 
 static void ami_rebuild_copper(void)
 {
-	struct amiga_fb_par *par = &currentpar;
+	struct amifb_par *par = &currentpar;
 	copins *copl, *cops;
 	u_short line, h_end1, h_end2;
 	short i;
@@ -3507,7 +3486,7 @@ static void ami_rebuild_copper(void)
 #ifdef MODULE
 int init_module(void)
 {
-	return(amiga_fb_init(NULL));
+	return(amifb_init(NULL));
 }
 
 void cleanup_module(void)

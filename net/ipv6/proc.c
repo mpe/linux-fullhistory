@@ -7,7 +7,7 @@
  *		PROC file system.  This is very similar to the IPv4 version,
  *		except it reports the sockets in the INET6 address family.
  *
- * Version:	$Id: proc.c,v 1.6 1998/03/13 08:02:19 davem Exp $
+ * Version:	$Id: proc.c,v 1.7 1998/03/18 07:52:13 davem Exp $
  *
  * Authors:	David S. Miller (davem@caip.rutgers.edu)
  *
@@ -68,8 +68,8 @@ static int get__netinfo6(struct proto *pro, char *buffer, int format, char **sta
 			dest  = &sp->net_pinfo.af_inet6.daddr;
 			src   = &sp->net_pinfo.af_inet6.rcv_saddr;
 		}
-		destp = ntohs(sp->dummy_th.dest);
-		srcp  = ntohs(sp->dummy_th.source);
+		destp = ntohs(sp->dport);
+		srcp  = ntohs(sp->sport);
 		if((format == 0) && (sp->state == TCP_TIME_WAIT)) {
 			timer_active1	= timer_active2 = 0;
 			timer_active	= 3;

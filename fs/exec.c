@@ -138,10 +138,9 @@ int unregister_binfmt(struct linux_binfmt * fmt)
 /* N.B. Error returns must be < 0 */
 int open_dentry(struct dentry * dentry, int mode)
 {
-	int fd;
 	struct inode * inode = dentry->d_inode;
 	struct file * f;
-	int error;
+	int fd, error;
 
 	error = -EINVAL;
 	if (!inode->i_op || !inode->i_op->default_file_ops)
@@ -163,7 +162,7 @@ int open_dentry(struct dentry * dentry, int mode)
 			if (error)
 				goto out_filp;
 		}
-		current->files->fd[fd] = f;
+		fd_install(fd, f);
 		dget(dentry);
 	}
 	return fd;
@@ -195,18 +194,20 @@ asmlinkage int sys_uselib(const char * library)
 	retval = fd;
 	if (fd < 0)
 		goto out;
-	file = current->files->fd[fd];
+	file = fget(fd);
 	retval = -ENOEXEC;
 	if (file && file->f_dentry && file->f_op && file->f_op->read) {
 		for (fmt = formats ; fmt ; fmt = fmt->next) {
 			int (*fn)(int) = fmt->load_shlib;
 			if (!fn)
 				continue;
+			/* N.B. Should use file instead of fd */
 			retval = fn(fd);
 			if (retval != -ENOEXEC)
 				break;
 		}
 	}
+	fput(file);
 	sys_close(fd);
 out:
 	unlock_kernel();
@@ -491,7 +492,7 @@ static inline void flush_old_files(struct files_struct * files)
 		unsigned long set, i;
 
 		i = j * __NFDBITS;
-		if (i >= NR_OPEN)
+		if (i >= files->max_fds)
 			break;
 		set = files->close_on_exec.fds_bits[j];
 		files->close_on_exec.fds_bits[j] = 0;

@@ -739,7 +739,21 @@ L_OBJS += mace.o
 endif
 
 ifeq ($(CONFIG_VENDOR_SANGOMA),y)
-  M_OBJS += sdladrv.o
+  L_OBJS += sdladrv.o
+  L_OBJS += sdlamain.o
+  ifeq ($(CONFIG_WANPIPE_X25),y)
+    L_OBJS += sdla_x25.o
+  endif
+  ifeq ($(CONFIG_WANPIPE_FR),y)
+    L_OBJS += sdla_fr.o
+  endif
+  ifeq ($(CONFIG_WANPIPE_PPP),y)
+    L_OBJS += sdla_ppp.o
+  endif
+endif
+
+ifeq ($(CONFIG_VENDOR_SANGOMA),m)
+  MX_OBJS += sdladrv.o
   M_OBJS += wanpipe.o
   WANPIPE_OBJS = sdlamain.o
   ifeq ($(CONFIG_WANPIPE_X25),y)

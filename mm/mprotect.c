@@ -185,12 +185,12 @@ static int mprotect_fixup(struct vm_area_struct * vma,
 	if (newflags == vma->vm_flags)
 		return 0;
 	newprot = protection_map[newflags & 0xf];
-	if (start == vma->vm_start)
+	if (start == vma->vm_start) {
 		if (end == vma->vm_end)
 			error = mprotect_fixup_all(vma, newflags, newprot);
 		else
 			error = mprotect_fixup_start(vma, end, newflags, newprot);
-	else if (end == vma->vm_end)
+	} else if (end == vma->vm_end)
 		error = mprotect_fixup_end(vma, start, newflags, newprot);
 	else
 		error = mprotect_fixup_middle(vma, start, end, newflags, newprot);

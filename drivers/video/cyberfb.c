@@ -36,18 +36,34 @@
 #include <asm/system.h>
 #include <asm/irq.h>
 #include <asm/pgtable.h>
-#include "s3blit.h"
+#include <asm/amigahw.h>
 
+#include "s3blit.h"
+#include "fbcon.h"
+#include "fbcon-cfb8.h"
+#include "fbcon-cfb16.h"
+
+
+#ifdef CYBERFBDEBUG
+#define DPRINTK(fmt, args...) printk(KERN_DEBUG "%s: " fmt, __FUNCTION__ , ## args)
+#else
+#define DPRINTK(fmt, args...)
+#endif
 
 #define arraysize(x)    (sizeof(x)/sizeof(*(x)))
 
-struct Cyber_fb_par {
+
+#define wb_64(reg,dat) (*((unsigned char volatile *)CyberRegs + reg) = dat)
+
+
+
+struct cyberfb_par {
    int xres;
    int yres;
    int bpp;
 };
 
-static struct Cyber_fb_par current_par;
+static struct cyberfb_par current_par;
 
 static int current_par_valid = 0;
 static int currcon = 0;
@@ -68,13 +84,13 @@ static struct fb_hwswitch {
 
    /* Display Control */
 
-   int (*encode_fix)(struct fb_fix_screeninfo *fix, struct Cyber_fb_par *par);
-   int (*decode_var)(struct fb_var_screeninfo *var, struct Cyber_fb_par *par);
-   int (*encode_var)(struct fb_var_screeninfo *var, struct Cyber_fb_par *par);
+   int (*encode_fix)(struct fb_fix_screeninfo *fix, struct cyberfb_par *par);
+   int (*decode_var)(struct fb_var_screeninfo *var, struct cyberfb_par *par);
+   int (*encode_var)(struct fb_var_screeninfo *var, struct cyberfb_par *par);
    int (*getcolreg)(u_int regno, u_int *red, u_int *green, u_int *blue,
-                    u_int *transp);
+                    u_int *transp, struct fb_info *info);
    int (*setcolreg)(u_int regno, u_int red, u_int green, u_int blue,
-                    u_int transp);
+                    u_int transp, struct fb_info *info);
    void (*blank)(int blank);
 } *fbhw;
 
@@ -83,7 +99,7 @@ static struct fb_hwswitch {
  *    Frame Buffer Name
  */
 
-static char Cyber_fb_name[16] = "Cybervision";
+static char cyberfb_name[16] = "Cybervision";
 
 
 /*
@@ -106,105 +122,67 @@ static unsigned char Cyber_colour_table [256][4];
 static unsigned long CyberMem;
 static unsigned long CyberSize;
 static volatile char *CyberRegs;
-
+ 
 
 /*
- *    Predefined Video Mode Names
+ *    Predefined Video Modes
  */
 
-static char *Cyber_fb_modenames[] = {
-
-   /*
-    *    Autodetect (Default) Video Mode
-    */
-
-   "default",
-
-   /*
-    *    Predefined Video Modes
-    */
-    
-   "cyber8",            /* Cybervision 8 bpp */
-   "cyber16",           /* Cybervision 16 bpp */
-   "800x600x8",
-   "640x480x8",
-
-   /*
-    *    Dummy Video Modes
-    */
-
-   "dummy", "dummy", "dummy", "dummy", "dummy", "dummy", "dummy", "dummy",
-   "dummy", "dummy", "dummy", "dummy", "dummy", "dummy", "dummy", "dummy",
-   "dummy", "dummy",
-
-   /*
-    *    User Defined Video Modes
-    *
-    *    This doesn't work yet!!
-    */
-
-   "user0", "user1", "user2", "user3", "user4", "user5", "user6", "user7"
+static struct fb_videomode cyberfb_predefined[] __initdata = {
+    {
+	"640x480-8", {		/* Cybervision 8 bpp */
+	    640, 480, 640, 480, 0, 0, 8, 0,
+	    {0, 8, 0}, {0, 8, 0}, {0, 8, 0}, {0, 0, 0},
+	    0, 0, -1, -1, FB_ACCEL_NONE, CYBER8_PIXCLOCK, 64, 96, 35, 12, 112, 2,
+	    FB_SYNC_COMP_HIGH_ACT|FB_SYNC_VERT_HIGH_ACT, FB_VMODE_NONINTERLACED
+	}
+    }, {
+	"800x600-8", {		/* Cybervision 8 bpp */
+	    800, 600, 800, 600, 0, 0, 8, 0,
+	    {0, 8, 0}, {0, 8, 0}, {0, 8, 0}, {0, 0, 0},
+	    0, 0, -1, -1, FB_ACCEL_NONE, CYBER8_PIXCLOCK, 64, 96, 35, 12, 112, 2,
+	    FB_SYNC_COMP_HIGH_ACT|FB_SYNC_VERT_HIGH_ACT, FB_VMODE_NONINTERLACED
+	}
+    }, {
+	"1024x768-8", {		/* Cybervision 8 bpp */
+	    1024, 768, 1024, 768, 0, 0, 8, 0,
+	    {0, 8, 0}, {0, 8, 0}, {0, 8, 0}, {0, 0, 0},
+	    0, 0, -1, -1, FB_ACCEL_NONE, CYBER8_PIXCLOCK, 64, 96, 35, 12, 112, 2,
+	    FB_SYNC_COMP_HIGH_ACT|FB_SYNC_VERT_HIGH_ACT, FB_VMODE_NONINTERLACED
+	}
+    }, {
+	"1152x886-8", {		/* Cybervision 8 bpp */
+	    1152, 886, 1152, 886, 0, 0, 8, 0,
+	    {0, 8, 0}, {0, 8, 0}, {0, 8, 0}, {0, 0, 0},
+	    0, 0, -1, -1, FB_ACCEL_NONE, CYBER8_PIXCLOCK, 64, 96, 35, 12, 112, 2,
+	    FB_SYNC_COMP_HIGH_ACT|FB_SYNC_VERT_HIGH_ACT, FB_VMODE_NONINTERLACED
+	}
+    }, {
+	"1280x1024-8", {	/* Cybervision 8 bpp */
+	    1280, 1024, 1280, 1024, 0, 0, 8, 0,
+	    {0, 8, 0}, {0, 8, 0}, {0, 8, 0}, {0, 0, 0},
+	    0, 0, -1, -1, FB_ACCEL_NONE, CYBER8_PIXCLOCK, 64, 96, 35, 12, 112, 2,
+	    FB_SYNC_COMP_HIGH_ACT|FB_SYNC_VERT_HIGH_ACT, FB_VMODE_NONINTERLACED
+	}
+    }, {
+	"1600x1200-8", {	/* Cybervision 8 bpp */
+	    1600, 1200, 1600, 1200, 0, 0, 8, 0,
+	    {0, 8, 0}, {0, 8, 0}, {0, 8, 0}, {0, 0, 0},
+	    0, 0, -1, -1, FB_ACCEL_NONE, CYBER8_PIXCLOCK, 64, 96, 35, 12, 112, 2,
+	    FB_SYNC_COMP_HIGH_ACT|FB_SYNC_VERT_HIGH_ACT, FB_VMODE_NONINTERLACED
+	}
+    }, {
+	"800x600-16", {		/* Cybervision 16 bpp */
+	    800, 600, 800, 600, 0, 0, 16, 0,
+	    {11, 5, 0}, {5, 6, 0}, {0, 5, 0}, {0, 0, 0},
+	    0, 0, -1, -1, FB_ACCEL_NONE, CYBER16_PIXCLOCK, 64, 96, 35, 12, 112, 2,
+	    FB_SYNC_COMP_HIGH_ACT|FB_SYNC_VERT_HIGH_ACT, FB_VMODE_NONINTERLACED
+	}
+    }
 };
 
 
-/*
- *    Predefined Video Mode Definitions
- */
-
-static struct fb_var_screeninfo cyber_fb_predefined[] = {
-
-   /*
-    *    Autodetect (Default) Video Mode
-    */
-
-   { 0, },
-
-   /*
-    *    Predefined Video Modes
-    */
-    
-   {
-      /* Cybervision 8 bpp */
-      CYBER8_WIDTH, CYBER8_HEIGHT, CYBER8_WIDTH, CYBER8_HEIGHT, 0, 0, 8, 0,
-      {0, 8, 0}, {0, 8, 0}, {0, 8, 0}, {0, 0, 0},
-      0, 0, -1, -1, FB_ACCEL_NONE, CYBER8_PIXCLOCK, 64, 96, 35, 12, 112, 2,
-      FB_SYNC_COMP_HIGH_ACT|FB_SYNC_VERT_HIGH_ACT, FB_VMODE_NONINTERLACED
-   }, {
-      /* Cybervision 16 bpp */
-      800, 600, 800, 600, 0, 0, 16, 0,
-      {11, 5, 0}, {5, 6, 0}, {0, 5, 0}, {0, 0, 0},
-      0, 0, -1, -1, FB_ACCEL_NONE, CYBER16_PIXCLOCK, 64, 96, 35, 12, 112, 2,
-      FB_SYNC_COMP_HIGH_ACT|FB_SYNC_VERT_HIGH_ACT, FB_VMODE_NONINTERLACED
-   }, {
-      /* Cybervision 8 bpp */
-      800, 600, 800, 600, 0, 0, 8, 0,
-      {0, 8, 0}, {0, 8, 0}, {0, 8, 0}, {0, 0, 0},
-      0, 0, -1, -1, FB_ACCEL_NONE, CYBER8_PIXCLOCK, 64, 96, 35, 12, 112, 2,
-      FB_SYNC_COMP_HIGH_ACT|FB_SYNC_VERT_HIGH_ACT, FB_VMODE_NONINTERLACED
-   }, {
-      /* Cybervision 8 bpp */
-      640, 480, 640, 480, 0, 0, 8, 0,
-      {0, 8, 0}, {0, 8, 0}, {0, 8, 0}, {0, 0, 0},
-      0, 0, -1, -1, FB_ACCEL_NONE, CYBER8_PIXCLOCK, 64, 96, 35, 12, 112, 2,
-      FB_SYNC_COMP_HIGH_ACT|FB_SYNC_VERT_HIGH_ACT, FB_VMODE_NONINTERLACED
-   },
-   /*
-    *    Dummy Video Modes
-    */
-
-   { 0, }, { 0, }, { 0, }, { 0, }, { 0, }, { 0, }, { 0, }, { 0, }, { 0, }, 
-   { 0, }, { 0, }, { 0, }, { 0, }, { 0, }, { 0, }, { 0, }, { 0, }, { 0, },
-
-   /*
-    *    User Defined Video Modes
-    */
-
-   { 0, }, { 0, }, { 0, }, { 0, }, { 0, }, { 0, }, { 0, }, { 0, }
-};
-
-
-#define NUM_TOTAL_MODES    arraysize(cyber_fb_predefined)
-#define NUM_PREDEF_MODES   (5)
+#define NUM_TOTAL_MODES    arraysize(cyberfb_predefined)
 
 
 static int Cyberfb_inverse = 0;
@@ -212,57 +190,72 @@ static int Cyberfb_inverse = 0;
 static int Cyberfb_Cyber8 = 0;        /* Use Cybervision board */
 static int Cyberfb_Cyber16 = 0;       /* Use Cybervision board */
 #endif
-static int Cyberfb_mode = 0;
-
 
 /*
  *    Some default modes
  */
 
-#define CYBER8_DEFMODE     (1)
-#define CYBER16_DEFMODE    (2)
+#define CYBER8_DEFMODE     (0)
+#define CYBER16_DEFMODE    (6)
+
+static struct fb_var_screeninfo cyberfb_default;
 
 
 /*
  *    Interface used by the world
  */
 
-void Cyber_video_setup(char *options, int *ints);
+void cyberfb_setup(char *options, int *ints);
 
-static int Cyber_fb_open(int fbidx);
-static int Cyber_fb_release(int fbidx);
-static int Cyber_fb_get_fix(struct fb_fix_screeninfo *fix, int con);
-static int Cyber_fb_get_var(struct fb_var_screeninfo *var, int con);
-static int Cyber_fb_set_var(struct fb_var_screeninfo *var, int con);
-static int Cyber_fb_get_cmap(struct fb_cmap *cmap, int kspc, int con);
-static int Cyber_fb_set_cmap(struct fb_cmap *cmap, int kspc, int con);
-static int Cyber_fb_pan_display(struct fb_var_screeninfo *var, int con);
-static int Cyber_fb_ioctl(struct inode *inode, struct file *file, u_int cmd,
-                          u_long arg, int con);
+static int cyberfb_open(struct fb_info *info);
+static int cyberfb_release(struct fb_info *info);
+static int cyberfb_get_fix(struct fb_fix_screeninfo *fix, int con, struct
+fb_info *info);
+static int cyberfb_get_var(struct fb_var_screeninfo *var, int con, struct
+fb_info *info);
+static int cyberfb_set_var(struct fb_var_screeninfo *var, int con, struct
+fb_info *info);
+static int cyberfb_get_cmap(struct fb_cmap *cmap, int kspc, int con,
+			    struct fb_info *info);
+static int cyberfb_set_cmap(struct fb_cmap *cmap, int kspc, int con,
+			    struct fb_info *info);
+static int cyberfb_pan_display(struct fb_var_screeninfo *var, int con,
+			       struct fb_info *info);
+static int cyberfb_ioctl(struct inode *inode, struct file *file, u_int cmd,
+                         u_long arg, int con, struct fb_info *info);
 
 
 /*
  *    Interface to the low level console driver
  */
 
-unsigned long Cyber_fb_init(unsigned long mem_start);
-static int Cyberfb_switch(int con);
-static int Cyberfb_updatevar(int con);
-static void Cyberfb_blank(int blank);
-static int Cyberfb_setcmap(struct fb_cmap *cmap, int con);
+unsigned long cyberfb_init(unsigned long mem_start);
+static int Cyberfb_switch(int con, struct fb_info *info);
+static int Cyberfb_updatevar(int con, struct fb_info *info);
+static void Cyberfb_blank(int blank, struct fb_info *info);
+
+
+/*
+ *    Text console acceleration
+ */
+
+#ifdef CONFIG_FBCON_CFB8
+static struct display_switch fbcon_cyber8;
+#endif
 
 
 /*
  *    Accelerated Functions used by the low level console driver
  */
 
-void Cyber_WaitQueue(u_short fifo);
-void Cyber_WaitBlit(void);
-void Cyber_BitBLT(u_short curx, u_short cury, u_short destx, u_short desty,
-                  u_short width, u_short height, u_short mode);
-void Cyber_RectFill(u_short x, u_short y, u_short width, u_short height,
-                    u_short mode, u_short color);
-void Cyber_MoveCursor(u_short x, u_short y);
+static void Cyber_WaitQueue(u_short fifo);
+static void Cyber_WaitBlit(void);
+static void Cyber_BitBLT(u_short curx, u_short cury, u_short destx,
+			 u_short desty, u_short width, u_short height,
+			 u_short mode);
+static void Cyber_RectFill(u_short x, u_short y, u_short width, u_short height,
+			   u_short mode, u_short color);
+static void Cyber_MoveCursor(u_short x, u_short y);
 
 
 /*
@@ -271,15 +264,15 @@ void Cyber_MoveCursor(u_short x, u_short y);
 
 static int Cyber_init(void);
 static int Cyber_encode_fix(struct fb_fix_screeninfo *fix,
-                          struct Cyber_fb_par *par);
+                          struct cyberfb_par *par);
 static int Cyber_decode_var(struct fb_var_screeninfo *var,
-                          struct Cyber_fb_par *par);
+                          struct cyberfb_par *par);
 static int Cyber_encode_var(struct fb_var_screeninfo *var,
-                          struct Cyber_fb_par *par);
+                          struct cyberfb_par *par);
 static int Cyber_getcolreg(u_int regno, u_int *red, u_int *green, u_int *blue,
-                         u_int *transp);
+                         u_int *transp, struct fb_info *info);
 static int Cyber_setcolreg(u_int regno, u_int red, u_int green, u_int blue,
-                         u_int transp);
+                         u_int transp, struct fb_info *info);
 static void Cyber_blank(int blank);
 
 
@@ -287,11 +280,11 @@ static void Cyber_blank(int blank);
  *    Internal routines
  */
 
-static void Cyber_fb_get_par(struct Cyber_fb_par *par);
-static void Cyber_fb_set_par(struct Cyber_fb_par *par);
+static void cyberfb_get_par(struct cyberfb_par *par);
+static void cyberfb_set_par(struct cyberfb_par *par);
 static int do_fb_set_var(struct fb_var_screeninfo *var, int isactive);
-static void do_install_cmap(int con);
-static void Cyber_fb_set_disp(int con);
+static void do_install_cmap(int con, struct fb_info *info);
+static void cyberfb_set_disp(int con, struct fb_info *info);
 static int get_video_mode(const char *name);
 
 
@@ -311,41 +304,32 @@ static int Cyber_init(void)
 	char size;
 	volatile u_long *CursorBase;
 
-#if 0
-	if (Cyberfb_mode == -1)
-	{
-		if (Cyberfb_Cyber8)
-			Cyberfb_mode = CYBER8_DEFMODE;
-		else
-			Cyberfb_mode = CYBER16_DEFMODE;
-	}
-#endif
-
 	for (i = 0; i < 256; i++)
-
-		for (i = 0; i < 256; i++)
-		{
-			Cyber_colour_table [i][0] = i;
-			Cyber_colour_table [i][1] = i;
-			Cyber_colour_table [i][2] = i;
-			Cyber_colour_table [i][3] = 0;
-		}
+	{
+		Cyber_colour_table [i][0] = i;
+		Cyber_colour_table [i][1] = i;
+		Cyber_colour_table [i][2] = i;
+		Cyber_colour_table [i][3] = 0;
+	}
 
 	/*
 	 * Just clear the thing for the biggest mode.
+	 *
+	 * ++Andre, TODO: determine size first, then clear all memory
+	 *                (the 3D penguin might need texture memory :-) )
 	 */
 
-	memset ((char*)CyberMem, 0, CYBER8_WIDTH * CYBER8_HEIGHT);
+	memset ((char*)CyberMem, 0, 1600 * 1200);
 
 	/* Disable hardware cursor */
-	*(CyberRegs + S3_CRTC_ADR)  = S3_REG_LOCK2;
-	*(CyberRegs + S3_CRTC_DATA) = 0xa0;
-	*(CyberRegs + S3_CRTC_ADR)  = S3_HGC_MODE;
-	*(CyberRegs + S3_CRTC_DATA) = 0x00;
-	*(CyberRegs + S3_CRTC_ADR)  = S3_HWGC_DX;
-	*(CyberRegs + S3_CRTC_DATA) = 0x00;
-	*(CyberRegs + S3_CRTC_ADR)  = S3_HWGC_DY;
-	*(CyberRegs + S3_CRTC_DATA) = 0x00;
+	wb_64(S3_CRTC_ADR, S3_REG_LOCK2);
+	wb_64(S3_CRTC_DATA, 0xa0);
+	wb_64(S3_CRTC_ADR, S3_HGC_MODE);
+	wb_64(S3_CRTC_DATA, 0x00);
+	wb_64(S3_CRTC_ADR, S3_HWGC_DX);
+	wb_64(S3_CRTC_DATA, 0x00);
+	wb_64(S3_CRTC_ADR, S3_HWGC_DY);
+	wb_64(S3_CRTC_DATA, 0x00);
 
 	/* Get memory size (if not 2MB it is 4MB) */
 	*(CyberRegs + S3_CRTC_ADR) = S3_LAW_CTL;
@@ -372,8 +356,8 @@ static int Cyber_init(void)
 		*(CursorBase+3+(i*4)) = 0xffff0000;
 	}
 
-	Cyber_setcolreg (255, 56, 100, 160, 0);
-	Cyber_setcolreg (254, 0, 0, 0, 0);
+	Cyber_setcolreg (255, 56, 100, 160, 0, NULL /* unused */);
+	Cyber_setcolreg (254, 0, 0, 0, 0, NULL /* unused */);
 
 	return 0;
 }
@@ -385,11 +369,11 @@ static int Cyber_init(void)
  */
 
 static int Cyber_encode_fix(struct fb_fix_screeninfo *fix,
-			    struct Cyber_fb_par *par)
+			    struct cyberfb_par *par)
 {
 	int i;
 
-	strcpy(fix->id, Cyber_fb_name);
+	strcpy(fix->id, cyberfb_name);
 	fix->smem_start = (caddr_t)CyberMem;
 	fix->smem_len = CyberSize;
 	fix->mmio_start = (unsigned char *)CyberRegs;
@@ -420,7 +404,7 @@ static int Cyber_encode_fix(struct fb_fix_screeninfo *fix,
  */
 
 static int Cyber_decode_var(struct fb_var_screeninfo *var,
-			    struct Cyber_fb_par *par)
+			    struct cyberfb_par *par)
 {
 #if 1
 	par->xres = var->xres;
@@ -447,7 +431,7 @@ static int Cyber_decode_var(struct fb_var_screeninfo *var,
  */
 
 static int Cyber_encode_var(struct fb_var_screeninfo *var,
-			    struct Cyber_fb_par *par)
+			    struct cyberfb_par *par)
 {
 	int i;
 
@@ -486,7 +470,10 @@ static int Cyber_encode_var(struct fb_var_screeninfo *var,
 
 	var->height = -1;
 	var->width = -1;
+
 	var->accel = FB_ACCEL_CYBERVISION;
+	DPRINTK("accel CV64\n");
+
 	var->vmode = FB_VMODE_NONINTERLACED;
 
 	/* Dummy values */
@@ -517,20 +504,22 @@ static int Cyber_encode_var(struct fb_var_screeninfo *var,
  */
 
 static int Cyber_setcolreg(u_int regno, u_int red, u_int green, u_int blue,
-			   u_int transp)
+			   u_int transp, struct fb_info *info)
 {
 	if (regno > 255)
+	{
 		return (1);
+	}
 
-	*(CyberRegs + 0x3c8) = (char)regno;
+	wb_64(0x3c8, (unsigned char) regno);
 	Cyber_colour_table [regno][0] = red & 0xff;
 	Cyber_colour_table [regno][1] = green & 0xff;
 	Cyber_colour_table [regno][2] = blue & 0xff;
 	Cyber_colour_table [regno][3] = transp;
 
-	*(CyberRegs + 0x3c9) = (red & 0xff) >> 2;
-	*(CyberRegs + 0x3c9) = (green & 0xff) >> 2;
-	*(CyberRegs + 0x3c9) = (blue & 0xff) >> 2;
+	wb_64(0x3c9, (red & 0xff) >> 2);
+	wb_64(0x3c9, (green & 0xff) >> 2);
+	wb_64(0x3c9, (blue & 0xff) >> 2);
 
 	return (0);
 }
@@ -542,13 +531,13 @@ static int Cyber_setcolreg(u_int regno, u_int red, u_int green, u_int blue,
  */
 
 static int Cyber_getcolreg(u_int regno, u_int *red, u_int *green, u_int *blue,
-			   u_int *transp)
+			   u_int *transp, struct fb_info *info)
 {
 	if (regno >= 256)
 		return (1);
-	*red    = Cyber_colour_table [regno][0];
-	*green  = Cyber_colour_table [regno][1];
-	*blue   = Cyber_colour_table [regno][2];
+	*red	= Cyber_colour_table [regno][0];
+	*green	= Cyber_colour_table [regno][1];
+	*blue	= Cyber_colour_table [regno][2];
 	*transp = Cyber_colour_table [regno][3];
 	return (0);
 }
@@ -563,28 +552,32 @@ void Cyber_blank(int blank)
 	int i;
 
 	if (blank)
+	{
 		for (i = 0; i < 256; i++)
 		{
-			*(CyberRegs + 0x3c8) = i;
-			*(CyberRegs + 0x3c9) = 0;
-			*(CyberRegs + 0x3c9) = 0;
-			*(CyberRegs + 0x3c9) = 0;
+			wb_64(0x3c8, (unsigned char) i);
+			wb_64(0x3c9, 0);
+			wb_64(0x3c9, 0);
+			wb_64(0x3c9, 0);
 		}
+	}
 	else
+	{
 		for (i = 0; i < 256; i++)
 		{
-			*(CyberRegs + 0x3c8) = i;
-			*(CyberRegs + 0x3c9) = Cyber_colour_table [i][0] >> 2;
-			*(CyberRegs + 0x3c9) = Cyber_colour_table [i][1] >> 2;
-			*(CyberRegs + 0x3c9) = Cyber_colour_table [i][2] >> 2;
+			wb_64(0x3c8, (unsigned char) i);
+			wb_64(0x3c9, Cyber_colour_table[i][0] >> 2);
+			wb_64(0x3c9, Cyber_colour_table[i][1] >> 2);
+			wb_64(0x3c9, Cyber_colour_table[i][2] >> 2);
 		}
+	}
 }
 
 
 /**************************************************************
  * We are waiting for "fifo" FIFO-slots empty
  */
-void Cyber_WaitQueue (u_short fifo)
+static void Cyber_WaitQueue (u_short fifo)
 {
 	u_short status;
 
@@ -598,7 +591,7 @@ void Cyber_WaitQueue (u_short fifo)
 /**************************************************************
  * We are waiting for Hardware (Graphics Engine) not busy
  */
-void Cyber_WaitBlit (void)
+static void Cyber_WaitBlit (void)
 {
 	u_short status;
 
@@ -612,8 +605,9 @@ void Cyber_WaitBlit (void)
 /**************************************************************
  * BitBLT - Through the Plane
  */
-void Cyber_BitBLT (u_short curx, u_short cury, u_short destx, u_short desty,
-                   u_short width, u_short height, u_short mode)
+static void Cyber_BitBLT (u_short curx, u_short cury, u_short destx,
+			  u_short desty, u_short width, u_short height,
+			  u_short mode)
 {
 	u_short blitcmd = S3_BITBLT;
 
@@ -655,8 +649,8 @@ void Cyber_BitBLT (u_short curx, u_short cury, u_short destx, u_short desty,
 /**************************************************************
  * Rectangle Fill Solid
  */
-void Cyber_RectFill (u_short x, u_short y, u_short width, u_short height,
-                     u_short mode, u_short color)
+static void Cyber_RectFill (u_short x, u_short y, u_short width,
+			    u_short height, u_short mode, u_short color)
 {
 	u_short blitcmd = S3_FILLEDRECT;
 
@@ -677,11 +671,10 @@ void Cyber_RectFill (u_short x, u_short y, u_short width, u_short height,
 	*((u_short volatile *)(CyberRegs + S3_CMD)) = blitcmd;
 }
 
-
 /**************************************************************
  * Move cursor to x, y
  */
-void Cyber_MoveCursor (u_short x, u_short y)
+static void Cyber_MoveCursor (u_short x, u_short y)
 {
 	*(CyberRegs + S3_CRTC_ADR)  = 0x39;
 	*(CyberRegs + S3_CRTC_DATA) = 0xa0;
@@ -714,16 +707,20 @@ static struct fb_hwswitch Cyber_switch = {
  *    Fill the hardware's `par' structure.
  */
 
-static void Cyber_fb_get_par(struct Cyber_fb_par *par)
+static void cyberfb_get_par(struct cyberfb_par *par)
 {
 	if (current_par_valid)
+	{
 		*par = current_par;
+	}
 	else
-		fbhw->decode_var(&cyber_fb_predefined[Cyberfb_mode], par);
+	{
+		fbhw->decode_var(&cyberfb_default, par);
+	}
 }
 
 
-static void Cyber_fb_set_par(struct Cyber_fb_par *par)
+static void cyberfb_set_par(struct cyberfb_par *par)
 {
 	current_par = *par;
 	current_par_valid = 1;
@@ -733,6 +730,7 @@ static void Cyber_fb_set_par(struct Cyber_fb_par *par)
 static void cyber_set_video(struct fb_var_screeninfo *var)
 {
 	/* Set clipping rectangle to current screen size */
+ 
 	*((u_short volatile *)(CyberRegs + 0xbee8)) = 0x1000;
 	*((u_short volatile *)(CyberRegs + 0xbee8)) = 0x2000;
 
@@ -744,13 +742,13 @@ static void cyber_set_video(struct fb_var_screeninfo *var)
 static int do_fb_set_var(struct fb_var_screeninfo *var, int isactive)
 {
 	int err, activate;
-	struct Cyber_fb_par par;
+	struct cyberfb_par par;
 
 	if ((err = fbhw->decode_var(var, &par)))
 		return(err);
 	activate = var->activate;
 	if ((var->activate & FB_ACTIVATE_MASK) == FB_ACTIVATE_NOW && isactive)
-		Cyber_fb_set_par(&par);
+		cyberfb_set_par(&par);
 	fbhw->encode_var(var, &par);
 	var->activate = activate;
 
@@ -759,16 +757,16 @@ static int do_fb_set_var(struct fb_var_screeninfo *var, int isactive)
 }
 
 
-static void do_install_cmap(int con)
+static void do_install_cmap(int con, struct fb_info *info)
 {
 	if (con != currcon)
 		return;
 	if (fb_display[con].cmap.len)
 		fb_set_cmap(&fb_display[con].cmap, &fb_display[con].var, 1,
-			    fbhw->setcolreg);
+			    fbhw->setcolreg, info);
 	else
-		fb_set_cmap(fb_default_cmap(fb_display[con].var.bits_per_pixel),
-			    &fb_display[con].var, 1, fbhw->setcolreg);
+		fb_set_cmap(fb_default_cmap(1<<fb_display[con].var.bits_per_pixel),
+			    &fb_display[con].var, 1, fbhw->setcolreg, info);
 }
 
 
@@ -776,7 +774,7 @@ static void do_install_cmap(int con)
  *  Open/Release the frame buffer device
  */
 
-static int Cyber_fb_open(int fbidx)
+static int cyberfb_open(struct fb_info *info)
 {
 	/*
 	 * Nothing, only a usage count for the moment
@@ -786,7 +784,7 @@ static int Cyber_fb_open(int fbidx)
 	return(0);
 }
 
-static int Cyber_fb_release(int fbidx)
+static int cyberfb_release(struct fb_info *info)
 {
 	MOD_DEC_USE_COUNT;
 	return(0);
@@ -797,13 +795,14 @@ static int Cyber_fb_release(int fbidx)
  *    Get the Fixed Part of the Display
  */
 
-static int Cyber_fb_get_fix(struct fb_fix_screeninfo *fix, int con)
+static int cyberfb_get_fix(struct fb_fix_screeninfo *fix, int con,
+			   struct fb_info *info)
 {
-	struct Cyber_fb_par par;
+	struct cyberfb_par par;
 	int error = 0;
 
 	if (con == -1)
-		Cyber_fb_get_par(&par);
+		cyberfb_get_par(&par);
 	else
 		error = fbhw->decode_var(&fb_display[con].var, &par);
 	return(error ? error : fbhw->encode_fix(fix, &par));
@@ -814,21 +813,28 @@ static int Cyber_fb_get_fix(struct fb_fix_screeninfo *fix, int con)
  *    Get the User Defined Part of the Display
  */
 
-static int Cyber_fb_get_var(struct fb_var_screeninfo *var, int con)
+static int cyberfb_get_var(struct fb_var_screeninfo *var, int con,
+			   struct fb_info *info)
 {
-	struct Cyber_fb_par par;
+	struct cyberfb_par par;
 	int error = 0;
 
-	if (con == -1) {
-		Cyber_fb_get_par(&par);
+	if (con == -1)
+	{
+		cyberfb_get_par(&par);
 		error = fbhw->encode_var(var, &par);
-	} else
+		disp.var = *var;   /* ++Andre: don't know if this is the right place */
+	}
+	else
+	{
 		*var = fb_display[con].var;
+	}
+
 	return(error);
 }
 
 
-static void Cyber_fb_set_disp(int con)
+static void cyberfb_set_disp(int con, struct fb_info *info)
 {
 	struct fb_fix_screeninfo fix;
 	struct display *display;
@@ -838,7 +844,7 @@ static void Cyber_fb_set_disp(int con)
 	else
 		display = &disp;	/* used during initialization */
 
-	Cyber_fb_get_fix(&fix, con);
+	cyberfb_get_fix(&fix, con, info);
 	if (con == -1)
 		con = 0;
 	display->screen_base = (u_char *)fix.smem_start;
@@ -849,6 +855,21 @@ static void Cyber_fb_set_disp(int con)
 	display->ywrapstep = fix.ywrapstep;
 	display->can_soft_blank = 1;
 	display->inverse = Cyberfb_inverse;
+	switch (display->var.bits_per_pixel) {
+#ifdef CONFIG_FBCON_CFB8
+	    case 8:
+		display->dispsw = &fbcon_cyber8;
+		break;
+#endif
+#ifdef CONFIG_FBCON_CFB16
+	    case 16:
+		display->dispsw = &fbcon_cfb16;
+		break;
+#endif
+	    default:
+		display->dispsw = NULL;
+		break;
+	}
 }
 
 
@@ -856,7 +877,8 @@ static void Cyber_fb_set_disp(int con)
  *    Set the User Defined Part of the Display
  */
 
-static int Cyber_fb_set_var(struct fb_var_screeninfo *var, int con)
+static int cyberfb_set_var(struct fb_var_screeninfo *var, int con,
+			   struct fb_info *info)
 {
 	int err, oldxres, oldyres, oldvxres, oldvyres, oldbpp;
 
@@ -873,10 +895,10 @@ static int Cyber_fb_set_var(struct fb_var_screeninfo *var, int con)
 		    oldvxres != var->xres_virtual ||
 		    oldvyres != var->yres_virtual ||
 		    oldbpp != var->bits_per_pixel) {
-			Cyber_fb_set_disp(con);
+			cyberfb_set_disp(con, info);
 			(*fb_info.changevar)(con);
 			fb_alloc_cmap(&fb_display[con].cmap, 0, 0);
-			do_install_cmap(con);
+			do_install_cmap(con, info);
 		}
 	}
 	var->activate = 0;
@@ -888,15 +910,16 @@ static int Cyber_fb_set_var(struct fb_var_screeninfo *var, int con)
  *    Get the Colormap
  */
 
-static int Cyber_fb_get_cmap(struct fb_cmap *cmap, int kspc, int con)
+static int cyberfb_get_cmap(struct fb_cmap *cmap, int kspc, int con,
+			    struct fb_info *info)
 {
 	if (con == currcon) /* current console? */
 		return(fb_get_cmap(cmap, &fb_display[con].var,
-				   kspc, fbhw->getcolreg));
+				   kspc, fbhw->getcolreg, info));
 	else if (fb_display[con].cmap.len) /* non default colormap? */
 		fb_copy_cmap(&fb_display[con].cmap, cmap, kspc ? 0 : 2);
 	else
-		fb_copy_cmap(fb_default_cmap(fb_display[con].var.bits_per_pixel),
+		fb_copy_cmap(fb_default_cmap(1<<fb_display[con].var.bits_per_pixel),
 			     cmap, kspc ? 0 : 2);
 	return(0);
 }
@@ -906,7 +929,8 @@ static int Cyber_fb_get_cmap(struct fb_cmap *cmap, int kspc, int con)
  *    Set the Colormap
  */
 
-static int Cyber_fb_set_cmap(struct fb_cmap *cmap, int kspc, int con)
+static int cyberfb_set_cmap(struct fb_cmap *cmap, int kspc, int con,
+			    struct fb_info *info)
 {
 	int err;
 
@@ -915,9 +939,9 @@ static int Cyber_fb_set_cmap(struct fb_cmap *cmap, int kspc, int con)
 				 1<<fb_display[con].var.bits_per_pixel, 0)))
 			return(err);
 	}
-	if (con == currcon)              /* current console? */
+	if (con == currcon)		 /* current console? */
 		return(fb_set_cmap(cmap, &fb_display[con].var,
-				   kspc, fbhw->setcolreg));
+				   kspc, fbhw->setcolreg, info));
 	else
 		fb_copy_cmap(cmap, &fb_display[con].cmap, kspc ? 0 : 1);
 	return(0);
@@ -930,31 +954,32 @@ static int Cyber_fb_set_cmap(struct fb_cmap *cmap, int kspc, int con)
  *    This call looks only at xoffset, yoffset and the FB_VMODE_YWRAP flag
  */
 
-static int Cyber_fb_pan_display(struct fb_var_screeninfo *var, int con)
+static int cyberfb_pan_display(struct fb_var_screeninfo *var, int con,
+			       struct fb_info *info)
 {
 	return(-EINVAL);
 }
 
 
 /*
-    *    Cybervision Frame Buffer Specific ioctls
+    *	 Cybervision Frame Buffer Specific ioctls
     */
 
-static int Cyber_fb_ioctl(struct inode *inode, struct file *file,
-                          u_int cmd, u_long arg, int con)
+static int cyberfb_ioctl(struct inode *inode, struct file *file,
+			 u_int cmd, u_long arg, int con, struct fb_info *info)
 {
 	return(-EINVAL);
 }
 
 
-static struct fb_ops Cyber_fb_ops = {
-	Cyber_fb_open, Cyber_fb_release, Cyber_fb_get_fix, Cyber_fb_get_var,
-	Cyber_fb_set_var, Cyber_fb_get_cmap, Cyber_fb_set_cmap,
-	Cyber_fb_pan_display, Cyber_fb_ioctl
+static struct fb_ops cyberfb_ops = {
+	cyberfb_open, cyberfb_release, cyberfb_get_fix, cyberfb_get_var,
+	cyberfb_set_var, cyberfb_get_cmap, cyberfb_set_cmap,
+	cyberfb_pan_display, NULL, cyberfb_ioctl
 };
 
 
-__initfunc(void Cyber_video_setup(char *options, int *ints))
+__initfunc(void cyberfb_setup(char *options, int *ints))
 {
 	char *this_opt;
 
@@ -969,14 +994,18 @@ __initfunc(void Cyber_video_setup(char *options, int *ints))
 			fb_invert_cmaps();
 		} else if (!strncmp(this_opt, "font:", 5))
 			strcpy(fb_info.fontname, this_opt+5);
-#if 0
-		else if (!strcmp (this_opt, "cyber8"))
-			Cyberfb_Cyber8 = 1;
-		else if (!strcmp (this_opt, "cyber16"))
-			Cyberfb_Cyber16 = 1;
-#endif
+		else if (!strcmp (this_opt, "cyber8")){
+			cyberfb_default = cyberfb_predefined[CYBER8_DEFMODE].var;
+		}
+		else if (!strcmp (this_opt, "cyber16")){
+			cyberfb_default = cyberfb_predefined[CYBER16_DEFMODE].var;
+		}
 		else
-			Cyberfb_mode = get_video_mode(this_opt);
+			get_video_mode(this_opt);
+
+	DPRINTK("default mode: xres=%d, yres=%d, bpp=%d\n",cyberfb_default.xres,
+                                                           cyberfb_default.yres,
+		                                           cyberfb_default.bits_per_pixel);
 }
 
 
@@ -984,10 +1013,10 @@ __initfunc(void Cyber_video_setup(char *options, int *ints))
  *    Initialization
  */
 
-__initfunc(unsigned long Cyber_fb_init(unsigned long mem_start))
+__initfunc(unsigned long cyberfb_init(unsigned long mem_start))
 {
 	int err;
-	struct Cyber_fb_par par;
+	struct cyberfb_par par;
 	unsigned long board_addr;
 	const struct ConfigDev *cd;
 
@@ -1005,33 +1034,30 @@ __initfunc(unsigned long Cyber_fb_init(unsigned long mem_start))
 
 	fbhw = &Cyber_switch;
 
-	strcpy(fb_info.modename, Cyber_fb_name);
+	strcpy(fb_info.modename, cyberfb_name);
 	fb_info.changevar = NULL;
 	fb_info.node = -1;
-	fb_info.fbops = &Cyber_fb_ops;
-	fb_info.fbvar_num = NUM_TOTAL_MODES;
-	fb_info.fbvar = cyber_fb_predefined;
+	fb_info.fbops = &cyberfb_ops;
 	fb_info.disp = &disp;
 	fb_info.switch_con = &Cyberfb_switch;
 	fb_info.updatevar = &Cyberfb_updatevar;
 	fb_info.blank = &Cyberfb_blank;
-	fb_info.setcmap = &Cyberfb_setcmap;
 
 	err = register_framebuffer(&fb_info);
 	if (err < 0)
 		return mem_start;
 
 	fbhw->init();
-	fbhw->decode_var(&cyber_fb_predefined[Cyberfb_mode], &par);
-	fbhw->encode_var(&cyber_fb_predefined[0], &par);
+	fbhw->decode_var(&cyberfb_default, &par);
+	fbhw->encode_var(&cyberfb_default, &par);
 
-	do_fb_set_var(&cyber_fb_predefined[0], 1);
-	Cyber_fb_get_var(&fb_display[0].var, -1);
-	Cyber_fb_set_disp(-1);
-	do_install_cmap(0);
+	do_fb_set_var(&cyberfb_default, 1);
+	cyberfb_get_var(&fb_display[0].var, -1, &fb_info);
+	cyberfb_set_disp(-1, &fb_info);
+	do_install_cmap(0, &fb_info);
 
-	printk("%s frame buffer device, using %ldK of video memory\n",
-	       fb_info.modename, CyberSize>>10);
+	printk("fb%d: %s frame buffer device, using %ldK of video memory\n",
+	       GET_FB_IDX(fb_info.node), fb_info.modename, CyberSize>>10);
 
 	/* TODO: This driver cannot be unloaded yet */
 	MOD_INC_USE_COUNT;
@@ -1040,17 +1066,17 @@ __initfunc(unsigned long Cyber_fb_init(unsigned long mem_start))
 }
 
 
-static int Cyberfb_switch(int con)
+static int Cyberfb_switch(int con, struct fb_info *info)
 {
 	/* Do we have to save the colormap? */
 	if (fb_display[currcon].cmap.len)
 		fb_get_cmap(&fb_display[currcon].cmap, &fb_display[currcon].var, 1,
-			    fbhw->getcolreg);
+			    fbhw->getcolreg, info);
 
 	do_fb_set_var(&fb_display[con].var, 1);
 	currcon = con;
 	/* Install new colormap */
-	do_install_cmap(con);
+	do_install_cmap(con, info);
 	return(0);
 }
 
@@ -1062,7 +1088,7 @@ static int Cyberfb_switch(int con)
  *    Since it's called by a kernel driver, no range checking is done.
  */
 
-static int Cyberfb_updatevar(int con)
+static int Cyberfb_updatevar(int con, struct fb_info *info)
 {
 	return(0);
 }
@@ -1072,19 +1098,9 @@ static int Cyberfb_updatevar(int con)
     *    Blank the display.
     */
 
-static void Cyberfb_blank(int blank)
+static void Cyberfb_blank(int blank, struct fb_info *info)
 {
 	fbhw->blank(blank);
-}
-
-
-/*
- *    Set the colormap
- */
-
-static int Cyberfb_setcmap(struct fb_cmap *cmap, int con)
-{
-	return(Cyber_fb_set_cmap(cmap, 1, con));
 }
 
 
@@ -1092,22 +1108,82 @@ static int Cyberfb_setcmap(struct fb_cmap *cmap, int con)
  *    Get a Video Mode
  */
 
-static int get_video_mode(const char *name)
+__initfunc(static int get_video_mode(const char *name))
 {
 	int i;
 
-	for (i = 1; i < NUM_PREDEF_MODES; i++)
-		if (!strcmp(name, Cyber_fb_modenames[i]))
-			cyber_fb_predefined[0] = cyber_fb_predefined[i];
+	for (i = 0; i < NUM_TOTAL_MODES; i++) {
+		if (!strcmp(name, cyberfb_predefined[i].name)) {
+			cyberfb_default = cyberfb_predefined[i].var;
 			return(i);
+		}
+	}
+	/* ++Andre: set cyberfb default mode */
+	cyberfb_default = cyberfb_predefined[CYBER8_DEFMODE].var;
 	return(0);
 }
+
+
+/*
+ *    Text console acceleration
+ */
+
+#ifdef CONFIG_FBCON_CFB8
+static void fbcon_cyber8_bmove(struct display *p, int sy, int sx, int dy,
+			       int dx, int height, int width)
+{
+    sx *= 8; dx *= 8; width *= 8;
+    Cyber_BitBLT((u_short)sx, (u_short)(sy*p->fontheight), (u_short)dx,
+		 (u_short)(dy*p->fontheight), (u_short)width,
+		 (u_short)(height*p->fontheight), (u_short)S3_NEW);
+}
+
+static void fbcon_cyber8_clear(struct vc_data *conp, struct display *p, int sy,
+			       int sx, int height, int width)
+{
+    unsigned char bg;
+
+    sx *= 8; width *= 8;
+    bg = attr_bgcol_ec(p,conp);
+    Cyber_RectFill((u_short)sx,
+		   (u_short)(sy*p->fontheight),
+		   (u_short)width,
+		   (u_short)(height*p->fontheight),
+		   (u_short)S3_NEW,
+		   (u_short)bg);
+}
+
+static void fbcon_cyber8_putc(struct vc_data *conp, struct display *p, int c,
+			      int yy, int xx)
+{
+    Cyber_WaitBlit();
+    fbcon_cfb8_putc(conp, p, c, yy, xx);
+}
+
+static void fbcon_cyber8_putcs(struct vc_data *conp, struct display *p,
+			       const char *s, int count, int yy, int xx)
+{
+    Cyber_WaitBlit();
+    fbcon_cfb8_putcs(conp, p, s, count, yy, xx);
+}
+
+static void fbcon_cyber8_revc(struct display *p, int xx, int yy)
+{
+    Cyber_WaitBlit();
+    fbcon_cfb8_revc(p, xx, yy);
+}
+
+static struct display_switch fbcon_cyber8 = {
+   fbcon_cfb8_setup, fbcon_cyber8_bmove, fbcon_cyber8_clear, fbcon_cyber8_putc,
+   fbcon_cyber8_putcs, fbcon_cyber8_revc
+};
+#endif
 
 
 #ifdef MODULE
 int init_module(void)
 {
-	return(Cyber_fb_init(NULL));
+	return(cyberfb_init(NULL));
 }
 
 void cleanup_module(void)
@@ -1118,12 +1194,3 @@ void cleanup_module(void)
 	/* TODO: clean up ... */
 }
 #endif /* MODULE */
-
-
-/*
- *  Visible symbols for modules
- */
-
-EXPORT_SYMBOL(Cyber_BitBLT);
-EXPORT_SYMBOL(Cyber_RectFill);
-EXPORT_SYMBOL(Cyber_WaitBlit);

@@ -251,7 +251,23 @@ extern inline unsigned long get_free_page(int gfp_mask)
 }
 
 /* memory.c & swap.c*/
-extern int free_memory_available(void);
+
+/*
+ * This traverses "nr" memory size lists,
+ * and returns true if there is enough memory.
+ *
+ * For example, we want to keep on waking up
+ * kswapd every once in a while until the highest
+ * memory order has an entry (ie nr == 0), but
+ * we want to do it in the background.
+ *
+ * We want to do it in the foreground only if
+ * none of the three highest lists have enough
+ * memory. Random number.
+ */
+extern int free_memory_available(int nr);
+#define kswapd_continue()	(!free_memory_available(3))
+#define kswapd_wakeup()		(!free_memory_available(0))
 
 #define free_page(addr) free_pages((addr),0)
 extern void FASTCALL(free_pages(unsigned long addr, unsigned long order));

@@ -5,7 +5,7 @@
  *
  *		Implementation of the Transmission Control Protocol(TCP).
  *
- * Version:	$Id: tcp.c,v 1.96 1998/03/16 02:25:55 davem Exp $
+ * Version:	$Id: tcp.c,v 1.104 1998/03/22 22:10:30 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -668,7 +668,7 @@ static int wait_for_tcp_connect(struct sock * sk, int flags)
 			return sock_error(sk);
 		if((1 << sk->state) &
 		   ~(TCPF_SYN_SENT | TCPF_SYN_RECV)) {
-			if(sk->keepopen)
+			if(sk->keepopen && !(flags&MSG_NOSIGNAL))
 				send_sig(SIGPIPE, tsk, 0);
 			return -EPIPE;
 		}
@@ -733,14 +733,24 @@ static void wait_for_tcp_memory(struct sock * sk)
 
 int tcp_do_sendmsg(struct sock *sk, int iovlen, struct iovec *iov, int flags)
 {
+	struct tcp_opt *tp = &(sk->tp_pinfo.af_tcp);
+	int mss_now = sk->mss;
 	int err = 0;
 	int copied  = 0;
-	struct tcp_opt *tp=&(sk->tp_pinfo.af_tcp);
 
 	/* Wait for a connection to finish. */
 	if ((1 << sk->state) & ~(TCPF_ESTABLISHED | TCPF_CLOSE_WAIT))
 		if((err = wait_for_tcp_connect(sk, flags)) != 0)
 			return err;
+
+	/* The socket is locked, nothing can change the state of pending
+	 * SACKs or IP options.
+	 */
+	if(tp->sack_ok && tp->num_sacks)
+		mss_now -= (TCPOLEN_SACK_BASE_ALIGNED +
+			    (tp->num_sacks * TCPOLEN_SACK_PERBLOCK));
+	if(sk->opt && sk->opt->optlen)
+		mss_now -= (sk->opt->optlen);
 
 	/* Ok commence sending. */
 	while(--iovlen >= 0) {
@@ -769,22 +779,19 @@ int tcp_do_sendmsg(struct sock *sk, int iovlen, struct iovec *iov, int flags)
 			 */
 			if (tp->send_head && !(flags & MSG_OOB)) {
 				skb = sk->write_queue.prev;
-				copy = skb->tail -
-					((unsigned char *)(skb->h.th) +
-					 tp->tcp_header_len);
-				/* This window_seq test is somewhat dangerous
-				 * If the remote does SWS avoidance we should
+				copy = skb->len;
+				/* If the remote does SWS avoidance we should
 				 * queue the best we can if not we should in 
 				 * fact send multiple packets...
-				 * a method for detecting this would be most
-				 * welcome
+				 * A method for detecting this would be most
+				 * welcome.
 				 */
 				if (skb_tailroom(skb) > 0 &&
-				    (sk->mss - copy) > 0 &&
+				    (mss_now - copy) > 0 &&
 				    tp->snd_nxt < skb->end_seq) {
-					int last_byte_was_odd = (copy & 1);
+					int last_byte_was_odd = (copy % 4);
 
-					copy = sk->mss - copy;
+					copy = mss_now - copy;
 					if(copy > skb_tailroom(skb))
 						copy = skb_tailroom(skb);
 					if(copy > seglen)
@@ -793,12 +800,8 @@ int tcp_do_sendmsg(struct sock *sk, int iovlen, struct iovec *iov, int flags)
 						if(copy_from_user(skb_put(skb, copy),
 								  from, copy))
 							err = -EFAULT;
-						skb->csum = csum_partial(
-							(((unsigned char *)skb->h.th) +
-							 tp->tcp_header_len),
-							(skb->tail -
-							 (((unsigned char *)skb->h.th) +
-							  tp->tcp_header_len)), 0);
+						skb->csum = csum_partial(skb->data,
+									 skb->len, 0);
 					} else {
 						skb->csum =
 							csum_and_copy_from_user(
@@ -810,6 +813,8 @@ int tcp_do_sendmsg(struct sock *sk, int iovlen, struct iovec *iov, int flags)
 					from += copy;
 					copied += copy;
 					seglen -= copy;
+					if(!seglen && !iovlen)
+						TCP_SKB_CB(skb)->flags |= TCPCB_FLAG_PSH;
 					continue;
 				}
 			}
@@ -828,18 +833,17 @@ int tcp_do_sendmsg(struct sock *sk, int iovlen, struct iovec *iov, int flags)
 			 */
 			copy = tp->snd_wnd - (tp->snd_nxt - tp->snd_una);
 			if(copy >= (tp->max_window >> 1))
-				copy = min(copy, sk->mss);
+				copy = min(copy, mss_now);
 			else
-				copy = sk->mss;
+				copy = mss_now;
 			if(copy > seglen)
 				copy = seglen;
 
-			tmp = MAX_HEADER + sk->prot->max_header +
-				sizeof(struct sk_buff) + 15;
+			tmp = MAX_HEADER + sk->prot->max_header + 15;
 			queue_it = 0;
-			if (copy < min(sk->mss, tp->max_window >> 1) &&
+			if (copy < min(mss_now, tp->max_window >> 1) &&
 			    !(flags & MSG_OOB)) {
-				tmp += min(sk->mss, tp->max_window);
+				tmp += min(mss_now, tp->max_window);
 
 				/* What is happening here is that we want to
 				 * tack on later members of the users iovec
@@ -869,35 +873,34 @@ int tcp_do_sendmsg(struct sock *sk, int iovlen, struct iovec *iov, int flags)
 				continue;
 			}
 
-			/* FIXME: we need to optimize this.
-			 * Perhaps some hints here would be good.
-			 */
-			tmp = tp->af_specific->build_net_header(sk, skb);
-			if (tmp < 0) {
-				kfree_skb(skb);
-				err = tmp;
-				goto do_interrupted;
-			}
-
-			skb->h.th =(struct tcphdr *)
-			  skb_put(skb,tp->tcp_header_len);
-
 			seglen -= copy;
-			tcp_build_header_data(skb->h.th, sk, seglen || iovlen);
 
+			/* Prepare control bits for TCP header creation engine. */
+			TCP_SKB_CB(skb)->flags = (TCPCB_FLAG_ACK |
+						  ((!seglen && !iovlen) ?
+						   TCPCB_FLAG_PSH : 0));
+			TCP_SKB_CB(skb)->sacked = 0;
 			if (flags & MSG_OOB) {
-				skb->h.th->urg = 1;
-				skb->h.th->urg_ptr = ntohs(copy);
-			}
+				TCP_SKB_CB(skb)->flags |= TCPCB_FLAG_URG;
+				TCP_SKB_CB(skb)->urg_ptr = copy;
+			} else
+				TCP_SKB_CB(skb)->urg_ptr = 0;
 
+			/* TCP data bytes are SKB_PUT() on top, later
+			 * TCP+IP+DEV headers are SKB_PUSH()'d beneath.
+			 * Reserve header space and checksum the data.
+			 */
+			skb_reserve(skb, MAX_HEADER + sk->prot->max_header);
 			skb->csum = csum_and_copy_from_user(from,
 					skb_put(skb, copy), copy, 0, &err);
 
 			from += copy;
 			copied += copy;
 
-			tp->write_seq += copy;
+			skb->seq = tp->write_seq;
+			skb->end_seq = skb->seq + copy;
 
+			/* This advances tp->write_seq for us. */
 			tcp_send_skb(sk, skb, queue_it);
 		}
 	}
@@ -913,7 +916,8 @@ do_sock_err:
 do_shutdown:
 	if(copied)
 		return copied;
-	send_sig(SIGPIPE, current, 0);
+	if (!(flags&MSG_NOSIGNAL))
+		send_sig(SIGPIPE, current, 0);
 	return -EPIPE;
 do_interrupted:
 	if(copied)
@@ -1044,9 +1048,20 @@ static void cleanup_rbuf(struct sock *sk, int copied)
   	/* We send an ACK if we can now advertise a non-zero window
 	 * which has been raised "significantly".
   	 */
-	if((copied > 0) &&
-	   (copied >= tcp_receive_window(&sk->tp_pinfo.af_tcp)))
-		tcp_read_wakeup(sk);
+	if(copied > 0) {
+		struct tcp_opt *tp = &(sk->tp_pinfo.af_tcp);
+		__u32 rcv_window_now = tcp_receive_window(tp);
+
+		/* We won't be raising the window any further than
+		 * the window-clamp allows.  Our window selection
+		 * also keeps things a nice multiple of MSS.  These
+		 * checks are necessary to prevent spurious ACKs
+		 * which don't advertize a larger window.
+		 */
+		if((copied >= rcv_window_now) &&
+		   ((rcv_window_now + sk->mss) <= tp->window_clamp))
+			tcp_read_wakeup(sk);
+	}
 }
 
 
@@ -1319,12 +1334,8 @@ static int tcp_close_state(struct sock *sk, int dead)
 	 *	that we won't make the old 4*rto = almost no time - whoops
 	 *	reset mistake.
 	 */
-	if(dead && ns==TCP_FIN_WAIT2) {
-		if(sk->timer.prev && del_timer(&sk->timer))
-			add_timer(&sk->timer);
-		else
-			tcp_reset_msl_timer(sk, TIME_CLOSE, sysctl_tcp_fin_timeout);
-	}
+	if(dead && ns == TCP_FIN_WAIT2 && !sk->timer.prev)
+		tcp_reset_msl_timer(sk, TIME_CLOSE, sysctl_tcp_fin_timeout);
 
 	return send_fin;
 }
@@ -1448,12 +1459,8 @@ void tcp_close(struct sock *sk, unsigned long timeout)
 	/* Now that the socket is dead, if we are in the FIN_WAIT2 state
 	 * we may need to set up a timer.
          */
-	if (sk->state==TCP_FIN_WAIT2) {
-		if(sk->timer.prev && del_timer(&sk->timer))
-			add_timer(&sk->timer);
-		else
-			tcp_reset_msl_timer(sk, TIME_CLOSE, sysctl_tcp_fin_timeout);
-	}
+	if (sk->state == TCP_FIN_WAIT2 && !sk->timer.prev)
+		tcp_reset_msl_timer(sk, TIME_CLOSE, sysctl_tcp_fin_timeout);
 
 	sk->dead = 1;
 	release_sock(sk);

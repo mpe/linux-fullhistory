@@ -5,21 +5,23 @@
 
 #include <linux/fd.h>
 
-#define FD_MAX_UNITS    4
+#define FD_MAX_UNITS    4	/* Max. Number of drives */
+#define FLOPPY_MAX_SECTORS	22	/* Max. Number of sectors per track */
+
+#ifndef ASSEMBLER
 
 struct fd_data_type {
     char *name;			/* description of data type */
     int sects;			/* sectors per track */
 #ifdef __STDC__
-    int (*read_fkt)(int, unsigned char *, unsigned long, int);
-    void (*write_fkt)(int, unsigned long, unsigned char *, int);
+    int (*read_fkt)(int);
+    void (*write_fkt)(int);
 #else
     int (*read_fkt)();		/* read whole track */
     void (*write_fkt)();		/* write whole track */
 #endif
 };
 
-#ifndef ASSEMBLER
 /*
 ** Floppy type descriptions
 */
@@ -43,13 +45,15 @@ struct amiga_floppy_struct {
     struct fd_drive_type *type;	/* type of floppy for this unit */
     struct fd_data_type *dtype;	/* type of floppy for this unit */
     int track;			/* current track (-1 == unknown) */
+    unsigned char *trackbuf;    /* current track (kmaloc()'d */
 
     int blocks;			/* total # blocks on disk */
-    int sects;			/* number of sectors per track */
 
+    int changed;		/* true when not known */
     int disk;			/* disk in drive (-1 == unknown) */
     int motor;			/* true when motor is at speed */
     int busy;			/* true when drive is active */
+    int dirty;			/* true when trackbuf is not on disk */
     int status;			/* current error code for unit */
 };
 #endif

@@ -131,7 +131,7 @@ extern u_long m68k_machtype;
      *
      *      CPU_68020 == MMU_68851
      *      CPU_68030 == MMU_68030
-     *      CPU_68040 == FPU_68040 == MMU_68040 (not strictly, think of 68LC040!)
+     *      CPU_68040 == FPU_68040 == MMU_68040
      *      CPU_68060 == FPU_68060 == MMU_68060
      */
 

@@ -46,11 +46,12 @@ static ssize_t pipe_read(struct file * filp, char * buf,
 	if (filp->f_flags & O_NONBLOCK) {
 		if (PIPE_LOCK(*inode))
 			return -EAGAIN;
-		if (PIPE_EMPTY(*inode))
+		if (PIPE_EMPTY(*inode)) {
 			if (PIPE_WRITERS(*inode))
 				return -EAGAIN;
 			else
 				return 0;
+		}
 	} else while (PIPE_EMPTY(*inode) || PIPE_LOCK(*inode)) {
 		if (PIPE_EMPTY(*inode)) {
 			if (!PIPE_WRITERS(*inode))
@@ -485,8 +486,9 @@ int do_pipe(int *fd)
 	f2->f_flags = O_WRONLY;
 	f2->f_op = &write_pipe_fops;
 	f2->f_mode = 2;
-	current->files->fd[i] = f1;
-	current->files->fd[j] = f2;
+
+	fd_install(i, f1);
+	fd_install(j, f2);
 	fd[0] = i;
 	fd[1] = j;
 	return 0;

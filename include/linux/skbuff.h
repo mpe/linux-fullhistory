@@ -22,6 +22,7 @@
 
 #define HAVE_ALLOC_SKB		/* For the drivers to know */
 #define HAVE_ALIGNABLE_SKB	/* Ditto 8)		   */
+#define SLAB_SKB 		/* Slabified skbuffs 	   */
 
 #define CHECKSUM_NONE 0
 #define CHECKSUM_HW 1
@@ -88,27 +89,27 @@ struct sk_buff
   
 	unsigned int 	len;			/* Length of actual data			*/
 	unsigned int	csum;			/* Checksum 					*/
-	volatile char 	used;
-	unsigned char	tries,			/* Times tried					*/
-  			inclone,		/* Inline clone					*/
+	volatile char 	used;			/* Data moved to user and not MSG_PEEK		*/
+	unsigned char	is_clone,		/* We are a clone				*/
+			cloned, 		/* head may be cloned (check refcnt to be sure). */
   			pkt_type,		/* Packet class					*/
   			pkt_bridged,		/* Tracker for bridging 			*/
   			ip_summed;		/* Driver fed us an IP checksum			*/
-	__u32		priority;
+	__u32		priority;		/* Packet queueing priority			*/
 	atomic_t	users;			/* User count - see datagram.c,tcp.c 		*/
 	unsigned short	protocol;		/* Packet protocol from driver. 		*/
 	unsigned short	security;		/* Security level of packet			*/
 	unsigned int	truesize;		/* Buffer size 					*/
 
+#ifndef SLAB_SKB
 	atomic_t	count;			/* reference count				*/
 	struct sk_buff	*data_skb;		/* Link to the actual data skb			*/
+#endif
 	unsigned char	*head;			/* Head of buffer 				*/
 	unsigned char	*data;			/* Data head pointer				*/
 	unsigned char	*tail;			/* Tail pointer					*/
 	unsigned char 	*end;			/* End pointer					*/
 	void 		(*destructor)(struct sk_buff *);	/* Destruct function		*/
-#define SKB_CLONE_ORIG		1
-#define SKB_CLONE_INLINE	2
 	
 #if defined(CONFIG_SHAPER) || defined(CONFIG_SHAPER_MODULE)
 	__u32		shapelatency;		/* Latency on frame */
@@ -163,6 +164,12 @@ extern int			skb_tailroom(struct sk_buff *skb);
 extern void			skb_reserve(struct sk_buff *skb, unsigned int len);
 extern void 			skb_trim(struct sk_buff *skb, unsigned int len);
 
+/* Internal */
+extern __inline__ atomic_t *skb_datarefp(struct sk_buff *skb)
+{
+	return (atomic_t *)(skb->end);
+}
+
 extern __inline__ int skb_queue_empty(struct sk_buff_head *list)
 {
 	return (list->next == (struct sk_buff *) list);
@@ -174,9 +181,16 @@ extern __inline__ void kfree_skb(struct sk_buff *skb)
 		__kfree_skb(skb);
 }
 
+/* Use this if you didn't touch the skb state [for fast switching] */
+extern __inline__ void kfree_skb_fast(struct sk_buff *skb)
+{
+	if (atomic_dec_and_test(&skb->users))
+		kfree_skbmem(skb);	
+}
+
 extern __inline__ int skb_cloned(struct sk_buff *skb)
 {
-	return (atomic_read(&skb->data_skb->count) != 1);
+	return skb->cloned && atomic_read(skb_datarefp(skb)) != 1;
 }
 
 extern __inline__ int skb_shared(struct sk_buff *skb)
@@ -451,7 +465,12 @@ extern __inline__ unsigned char *skb_put(struct sk_buff *skb, unsigned int len)
 	if(skb->tail>skb->end)
 	{
 		__label__ here;
+#if 1
+		printk(KERN_DEBUG "skbput: over: %p:tail=%p:end=%p:len=%u\n",
+						&&here, skb->tail, skb->end, len);
+#else
 		panic(skb_put_errstr,&&here,len);
+#endif
 here:          ;
 	}
 	return tmp;
@@ -542,6 +561,9 @@ extern unsigned int		datagram_poll(struct file *file, struct socket *sock, struc
 extern int			skb_copy_datagram(struct sk_buff *from, int offset, char *to,int size);
 extern int			skb_copy_datagram_iovec(struct sk_buff *from, int offset, struct iovec *to,int size);
 extern void			skb_free_datagram(struct sock * sk, struct sk_buff *skb);
+
+extern void skb_init(void);
+extern void skb_add_mtu(int mtu);
 
 #endif	/* __KERNEL__ */
 #endif	/* _LINUX_SKBUFF_H */

@@ -35,45 +35,45 @@ static void memcpy_fs(int fsfromto, void *to, void *from, int len)
 #define CNVT_FROMHW(val,width)	(((width) ? ((((val)<<16)-(val)) / \
 					((1<<(width))-1)) : 0))
 
-static u_short red2[] = {
+static u16 red2[] = {
     0x0000, 0xaaaa
 };
-static u_short green2[] = {
+static u16 green2[] = {
     0x0000, 0xaaaa
 };
-static u_short blue2[] = {
+static u16 blue2[] = {
     0x0000, 0xaaaa
-};                                                  
- 
-static u_short red4[] = {
+};
+
+static u16 red4[] = {
     0x0000, 0xaaaa, 0x5555, 0xffff
 };
-static u_short green4[] = {
+static u16 green4[] = {
     0x0000, 0xaaaa, 0x5555, 0xffff
 };
-static u_short blue4[] = {
+static u16 blue4[] = {
     0x0000, 0xaaaa, 0x5555, 0xffff
 };
- 
-static u_short red8[] = {
+
+static u16 red8[] = {
     0x0000, 0x0000, 0x0000, 0x0000, 0xaaaa, 0xaaaa, 0xaaaa, 0xaaaa
 };
-static u_short green8[] = {
+static u16 green8[] = {
     0x0000, 0x0000, 0xaaaa, 0xaaaa, 0x0000, 0x0000, 0xaaaa, 0xaaaa
 };
-static u_short blue8[] = {
+static u16 blue8[] = {
     0x0000, 0xaaaa, 0x0000, 0xaaaa, 0x0000, 0xaaaa, 0x0000, 0xaaaa
 };
- 
-static u_short red16[] = {
+
+static u16 red16[] = {
     0x0000, 0x0000, 0x0000, 0x0000, 0xaaaa, 0xaaaa, 0xaaaa, 0xaaaa,
     0x5555, 0x5555, 0x5555, 0x5555, 0xffff, 0xffff, 0xffff, 0xffff
 };
-static u_short green16[] = {
+static u16 green16[] = {
     0x0000, 0x0000, 0xaaaa, 0xaaaa, 0x0000, 0x0000, 0xaaaa, 0xaaaa,
     0x5555, 0x5555, 0xffff, 0xffff, 0x5555, 0x5555, 0xffff, 0xffff
 };
-static u_short blue16[] = {
+static u16 blue16[] = {
     0x0000, 0xaaaa, 0x0000, 0xaaaa, 0x0000, 0xaaaa, 0x0000, 0xaaaa,
     0x5555, 0xffff, 0x5555, 0xffff, 0x5555, 0xffff, 0x5555, 0xffff
 };
@@ -83,10 +83,10 @@ static struct fb_cmap default_2_colors = {
 };
 static struct fb_cmap default_8_colors = {
     0, 8, red8, green8, blue8, NULL
-};                                  
+};
 static struct fb_cmap default_4_colors = {
     0, 4, red4, green4, blue4, NULL
-};             
+};
 static struct fb_cmap default_16_colors = {
     0, 16, red16, green16, blue16, NULL
 };
@@ -98,32 +98,32 @@ static struct fb_cmap default_16_colors = {
 
 int fb_alloc_cmap(struct fb_cmap *cmap, int len, int transp)
 {
-    int size = len*sizeof(u_short);
-		    
+    int size = len*sizeof(u16);
+
     if (cmap->len != len) {
-	if (cmap->red)                                         
+	if (cmap->red)
 	    kfree(cmap->red);
 	if (cmap->green)
 	    kfree(cmap->green);
 	if (cmap->blue)
 	    kfree(cmap->blue);
 	if (cmap->transp)
-	    kfree(cmap->transp);            
-	cmap->red = cmap->green = cmap->blue = cmap->transp = NULL;    
-	cmap->len = 0;                          
-	if (!len) 
-	    return 0;                                      
+	    kfree(cmap->transp);
+	cmap->red = cmap->green = cmap->blue = cmap->transp = NULL;
+	cmap->len = 0;
+	if (!len)
+	    return 0;
 	if (!(cmap->red = kmalloc(size, GFP_ATOMIC)))
 	    return -1;
-	if (!(cmap->green = kmalloc(size, GFP_ATOMIC)))                 
+	if (!(cmap->green = kmalloc(size, GFP_ATOMIC)))
 	    return -1;
 	if (!(cmap->blue = kmalloc(size, GFP_ATOMIC)))
-	    return -1;                  
-	if (transp) {                            
+	    return -1;
+	if (transp) {
 	    if (!(cmap->transp = kmalloc(size, GFP_ATOMIC)))
-		return -1;                                      
-	} else                  
-	    cmap->transp = NULL;                                    
+		return -1;
+	} else
+	    cmap->transp = NULL;
     }
     cmap->start = 0;
     cmap->len = len;
@@ -150,12 +150,12 @@ void fb_copy_cmap(struct fb_cmap *from, struct fb_cmap *to, int fsfromto)
 	size = from->len-fromoff;
     if (size < 0)
 	return;
-    size *= sizeof(u_short);                         
+    size *= sizeof(u16);
     memcpy_fs(fsfromto, to->red+tooff, from->red+fromoff, size);
     memcpy_fs(fsfromto, to->green+tooff, from->green+fromoff, size);
     memcpy_fs(fsfromto, to->blue+tooff, from->blue+fromoff, size);
     if (from->transp && to->transp)
-	memcpy_fs(fsfromto, to->transp+tooff, from->transp+fromoff, size);                              
+	memcpy_fs(fsfromto, to->transp+tooff, from->transp+fromoff, size);
 }
 
 
@@ -164,10 +164,11 @@ void fb_copy_cmap(struct fb_cmap *from, struct fb_cmap *to, int fsfromto)
      */
 
 int fb_get_cmap(struct fb_cmap *cmap, struct fb_var_screeninfo *var, int kspc,
-    	    	int (*getcolreg)(u_int, u_int *, u_int *, u_int *, u_int *))
+    	    	int (*getcolreg)(u_int, u_int *, u_int *, u_int *, u_int *,
+				 struct fb_info *), struct fb_info *info)
 {
     int i, start;
-    u_short *red, *green, *blue, *transp;
+    u16 *red, *green, *blue, *transp;
     u_int hred, hgreen, hblue, htransp;
 
     red = cmap->red;
@@ -178,7 +179,7 @@ int fb_get_cmap(struct fb_cmap *cmap, struct fb_var_screeninfo *var, int kspc,
     if (start < 0)
 	return -EINVAL;
     for (i = 0; i < cmap->len; i++) {
-	if (getcolreg(start++, &hred, &hgreen, &hblue, &htransp))
+	if (getcolreg(start++, &hred, &hgreen, &hblue, &htransp, info))
 	    return 0;
 	hred = CNVT_FROMHW(hred, var->red.length);
 	hgreen = CNVT_FROMHW(hgreen, var->green.length);
@@ -212,10 +213,11 @@ int fb_get_cmap(struct fb_cmap *cmap, struct fb_var_screeninfo *var, int kspc,
      */
 
 int fb_set_cmap(struct fb_cmap *cmap, struct fb_var_screeninfo *var, int kspc,
-    	    	int (*setcolreg)(u_int, u_int, u_int, u_int, u_int))
+    	    	int (*setcolreg)(u_int, u_int, u_int, u_int, u_int,
+				 struct fb_info *), struct fb_info *info)
 {
     int i, start;
-    u_short *red, *green, *blue, *transp;
+    u16 *red, *green, *blue, *transp;
     u_int hred, hgreen, hblue, htransp;
 
     red = cmap->red;
@@ -250,7 +252,7 @@ int fb_set_cmap(struct fb_cmap *cmap, struct fb_var_screeninfo *var, int kspc,
 	blue++;
 	if (transp)
 	    transp++;
-	if (setcolreg(start++, hred, hgreen, hblue, htransp))
+	if (setcolreg(start++, hred, hgreen, hblue, htransp, info))
 	    return 0;
     }
     return 0;
@@ -261,22 +263,15 @@ int fb_set_cmap(struct fb_cmap *cmap, struct fb_var_screeninfo *var, int kspc,
      *  Get the default colormap for a specific screen depth
      */
 
-struct fb_cmap *fb_default_cmap(int bpp)
+struct fb_cmap *fb_default_cmap(int len)
 {
-    switch (bpp) {                                                          
-	case 1:                                                       
-	    return &default_2_colors;
-	    break;
-	case 2:                                            
-	    return &default_4_colors;                             
-	    break;                                   
-	case 3:
-	    return &default_8_colors;                              
-	    break;
-	default:
-	    return &default_16_colors;
-	    break;                                                  
-    }
+    if (len <= 2)
+	return &default_2_colors;
+    if (len <= 4)
+	return &default_4_colors;
+    if (len <= 8)
+	return &default_8_colors;
+    return &default_16_colors;
 }
 
 

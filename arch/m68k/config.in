@@ -37,6 +37,10 @@ if [ "$CONFIG_VME" = "y" ]; then
 # bool 'BVME4000 and BVME6000 support' CONFIG_BVME6000
 fi
 
+if [ "$CONFIG_PCI" = "y" ]; then
+  bool 'Backward-compatible /proc/pci' CONFIG_PCI_OLD_PROC
+fi
+
 comment 'Processor type'
 bool '68020 support' CONFIG_M68020
 bool '68030 support' CONFIG_M68030
@@ -61,6 +65,7 @@ comment 'General setup'
 
 bool 'Networking support' CONFIG_NET
 bool 'System V IPC' CONFIG_SYSVIPC
+bool 'BSD Process Accounting' CONFIG_BSD_PROCESS_ACCT
 bool 'Sysctl support' CONFIG_SYSCTL
 tristate 'Kernel support for a.out binaries' CONFIG_BINFMT_AOUT
 tristate 'Kernel support for ELF binaries' CONFIG_BINFMT_ELF
@@ -138,6 +143,9 @@ if [ "$CONFIG_BLK_DEV_MD" = "y" ]; then
   tristate '   Linear (append) mode' CONFIG_MD_LINEAR
   tristate '   RAID-0 (striping) mode' CONFIG_MD_STRIPED
 fi
+if [ "$CONFIG_MD_LINEAR" = "y" -o "$CONFIG_MD_STRIPED" = "y" ]; then
+  bool '      Boot support (linear, striped)' CONFIG_MD_BOOT
+fi
 tristate 'RAM disk support' CONFIG_BLK_DEV_RAM
 if [ "$CONFIG_BLK_DEV_RAM" = "y" ]; then
   bool '   Initial RAM disk (initrd) support' CONFIG_BLK_DEV_INITRD
@@ -188,7 +196,7 @@ if [ "$CONFIG_AMIGA" = "y" ]; then
     bool 'A4000T SCSI support' CONFIG_A4000T_SCSI
     bool 'A4091 SCSI support' CONFIG_A4091_SCSI
     bool 'WarpEngine SCSI support' CONFIG_WARPENGINE_SCSI
-    bool 'Cyberstorm Mk III SCSI support' CONFIG_CYBERSTORMIII_SCSI
+#    bool 'Cyberstorm Mk III SCSI support' CONFIG_CYBERSTORMIII_SCSI
 #    bool 'GVP Turbo 040/060 SCSI support' CONFIG_GVP_TURBO_SCSI
   fi
 fi

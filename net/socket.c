@@ -646,15 +646,17 @@ asmlinkage int sys_socket(int family, int type, int protocol)
 		goto out;
 
 	retval = get_fd(sock->inode);
-	if (retval < 0) {
-		sock_release(sock);
-		goto out;
-	}
+	if (retval < 0)
+		goto out_release;
+	sock->file = fcheck(retval);
 
-	sock->file = current->files->fd[retval];
 out:
 	unlock_kernel();
 	return retval;
+
+out_release:
+	sock_release(sock);
+	goto out;
 }
 
 /*
@@ -787,9 +789,8 @@ asmlinkage int sys_accept(int fd, struct sockaddr *upeer_sockaddr, int *upeer_ad
 {
 	struct inode *inode;
 	struct socket *sock, *newsock;
-	int err;
+	int err, len;
 	char address[MAX_SOCK_ADDR];
-	int len;
 
 	lock_kernel();
 	sock = sockfd_lookup(fd, &err);
@@ -815,7 +816,7 @@ restart:
 
 	if ((err = get_fd(inode)) < 0) 
 		goto out_release;
-	newsock->file = current->files->fd[err];
+	newsock->file = fcheck(err);
 
 	if (upeer_sockaddr)
 	{

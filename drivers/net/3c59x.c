@@ -83,7 +83,7 @@ static int max_interrupt_work = 20;
 #if LINUX_VERSION_CODE < 0x10300
 #define RUN_AT(x) (x)			/* What to put in timer->expires.  */
 #define DEV_ALLOC_SKB(len) alloc_skb(len, GFP_ATOMIC)
-#if defined(__alpha)
+#if defined(__alpha__)
 #error "The Alpha architecture is only support with kernel version 2.0."
 #endif
 #define virt_to_bus(addr)  ((unsigned long)addr)

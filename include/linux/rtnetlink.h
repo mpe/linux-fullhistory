@@ -5,7 +5,7 @@
 #include <linux/netlink.h>
 
 #define RTNL_DEBUG 1
-#define CONFIG_RTNL_OLD_IFINFO 1
+/* #define CONFIG_RTNL_OLD_IFINFO 1 */
 
 
 /****

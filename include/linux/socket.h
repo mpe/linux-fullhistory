@@ -197,6 +197,8 @@ struct ucred {
 #define MSG_SYN		0x400
 #define MSG_URG		0x800
 #define MSG_RST		0x1000
+#define MSG_ERRQUEUE	0x2000
+#define MSG_NOSIGNAL	0x4000
 
 #define MSG_CTLIGNORE   0x80000000
 

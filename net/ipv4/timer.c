@@ -5,7 +5,7 @@
  *
  *		TIMER - implementation of software timers for IP.
  *
- * Version:	$Id: timer.c,v 1.10 1998/03/13 08:02:18 davem Exp $
+ * Version:	$Id: timer.c,v 1.11 1998/03/19 08:34:06 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -59,10 +59,8 @@ void net_delete_timer (struct sock *t)
 
 void net_reset_timer (struct sock *t, int timeout, unsigned long len)
 {
-	net_delete_timer (t);
 	t->timeout = timeout;
-	t->timer.expires = jiffies+len;
-	add_timer (&t->timer);
+	mod_timer(&t->timer, jiffies+len);
 }
 
 /* Now we will only be called whenever we need to do

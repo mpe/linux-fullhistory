@@ -5,7 +5,7 @@
  *
  *		ROUTE - implementation of the IP router.
  *
- * Version:	$Id: route.c,v 1.41 1998/03/08 20:52:38 davem Exp $
+ * Version:	$Id: route.c,v 1.42 1998/03/20 09:12:09 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -104,6 +104,7 @@ int ip_rt_redirect_load = HZ/50;
 int ip_rt_redirect_silence = ((HZ/50) << (9+1));
 int ip_rt_error_cost = HZ;
 int ip_rt_error_burst = 5*HZ;
+int ip_rt_gc_elasticity = 8;
 
 static unsigned long rt_deadline = 0;
 
@@ -398,10 +399,10 @@ static int rt_garbage_collect(void)
 
 	last_gc = now;
 	if (atomic_read(&ipv4_dst_ops.entries) < ipv4_dst_ops.gc_thresh)
-		expire = ip_rt_gc_timeout;
+		expire = ip_rt_gc_timeout>>1;
 
 out:
-	expire >>= 1;
+	expire -= expire>>ip_rt_gc_elasticity;
 	end_bh_atomic();
 	return (atomic_read(&ipv4_dst_ops.entries) > ip_rt_max_size);
 }
@@ -1739,6 +1740,9 @@ ctl_table ipv4_route_table[] = {
          &proc_dointvec},
 	{NET_IPV4_ROUTE_ERROR_BURST, "error_burst",
          &ip_rt_error_burst, sizeof(int), 0644, NULL,
+         &proc_dointvec},
+	{NET_IPV4_ROUTE_GC_ELASTICITY, "gc_elasticity",
+         &ip_rt_gc_elasticity, sizeof(int), 0644, NULL,
          &proc_dointvec},
 	 {0}
 };

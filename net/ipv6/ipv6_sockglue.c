@@ -7,7 +7,7 @@
  *
  *	Based on linux/net/ipv4/ip_sockglue.c
  *
- *	$Id: ipv6_sockglue.c,v 1.17 1998/03/08 05:56:51 davem Exp $
+ *	$Id: ipv6_sockglue.c,v 1.18 1998/03/20 09:12:18 davem Exp $
  *
  *	This program is free software; you can redistribute it and/or
  *      modify it under the terms of the GNU General Public License
@@ -157,15 +157,13 @@ int ipv6_setsockopt(struct sock *sk, int level, int optname, char *optval,
 
 	case IPV6_MULTICAST_IF:
 	{
+		int oif = 0;
 		struct in6_addr addr;
 
-		err = copy_from_user(&addr, optval, sizeof(struct in6_addr));
-		if(err)
+		if (copy_from_user(&addr, optval, sizeof(struct in6_addr)))
 			return -EFAULT;
 				
-		if (ipv6_addr_any(&addr)) {
-			np->oif = NULL;
-		} else {
+		if (!ipv6_addr_any(&addr)) {
 			struct inet6_ifaddr *ifp;
 
 			ifp = ipv6_chk_addr(&addr, NULL, 0);
@@ -175,8 +173,13 @@ int ipv6_setsockopt(struct sock *sk, int level, int optname, char *optval,
 				break;
 			}
 
-			np->oif = ifp->idev->dev;
+			oif = ifp->idev->dev->ifindex;
 		}
+		if (sk->bound_dev_if && sk->bound_dev_if != oif) {
+			retv = -EINVAL;
+			break;
+		}
+		np->mcast_oif = oif;
 		retv = 0;
 		break;
 	}

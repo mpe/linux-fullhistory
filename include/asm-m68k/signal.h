@@ -128,6 +128,13 @@ struct old_sigaction {
 	void (*sa_restorer)(void);
 };
 
+struct sigaction {
+	__sighandler_t sa_handler;
+	unsigned long sa_flags;
+	void (*sa_restorer)(void);
+	sigset_t sa_mask;		/* mask last for extensibility */
+};
+
 struct k_sigaction {
 	struct sigaction sa;
 };
@@ -173,9 +180,9 @@ extern __inline__ int __const_sigismember(sigset_t *set, int _sig)
 
 extern __inline__ int __gen_sigismember(sigset_t *set, int _sig)
 {
-	char ret;
-	__asm__("bftst %1{%2,#1}\n\t sne %0"
-		: "=rm"(ret) : "m"(*set), "id"((_sig-1) ^ 31) : "cc");
+	int ret;
+	__asm__("bfextu %1{%2,#1},%0"
+		: "=d"(ret) : "m"(*set), "id"((_sig-1) ^ 31));
 	return ret;
 }
 

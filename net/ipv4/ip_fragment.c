@@ -5,7 +5,7 @@
  *
  *		The IP fragmentation functionality.
  *		
- * Version:	$Id: ip_fragment.c,v 1.32 1998/03/08 05:56:21 davem Exp $
+ * Version:	$Id: ip_fragment.c,v 1.33 1998/03/19 08:34:08 davem Exp $
  *
  * Authors:	Fred N. van Kempen <waltje@uWalt.NL.Mugnet.ORG>
  *		Alan Cox <Alan.Cox@linux.org>
@@ -430,11 +430,8 @@ struct sk_buff *ip_defrag(struct sk_buff *skb)
 			qp->ihlen = ihl;
 			memcpy(qp->iph, iph, ihl+8);
 		}
-		del_timer(&qp->timer);
-		qp->timer.expires = jiffies + sysctl_ipfrag_time;	/* about 30 seconds */
-		qp->timer.data = (unsigned long) qp;	/* pointer to queue */
-		qp->timer.function = ip_expire;		/* expire function */
-		add_timer(&qp->timer);
+		/* about 30 seconds */
+		mod_timer(&qp->timer, jiffies + sysctl_ipfrag_time);
 	} else {
 		/* If we failed to create it, then discard the frame. */
 		if ((qp = ip_create(skb, iph)) == NULL) {

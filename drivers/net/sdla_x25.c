@@ -10,6 +10,7 @@
 *		as published by the Free Software Foundation; either version
 *		2 of the License, or (at your option) any later version.
 * ============================================================================
+* Mar 15, 1998  Alan Cox	 o 2.1.x porting
 * Nov 27, 1997	Jaspreet Singh	 o Added protection against enabling of irqs
 *				   when they are disabled.
 * Nov 17, 1997  Farhan Thawar    o Added IPX support
@@ -41,6 +42,7 @@
 #error	This code MUST be compiled as a kernel module!
 #endif
 
+#include <linux/config.h>	/* OS configuration options */
 #include <linux/kernel.h>	/* printk(), and other useful stuff */
 #include <linux/stddef.h>	/* offsetof(), etc. */
 #include <linux/errno.h>	/* return codes */
@@ -48,9 +50,8 @@
 #include <linux/malloc.h>	/* kmalloc(), kfree() */
 #include <linux/wanrouter.h>	/* WAN router definitions */
 #include <linux/wanpipe.h>	/* WANPIPE common user API definitions */
-#include <linux/init.h>		/* __initfunc et al. */
 #include <asm/byteorder.h>	/* htons(), etc. */
-#include <asm/uaccess.h>	/* copy_from_user, etc */
+#include <asm/uaccess.h>
 
 #define	_GNUC_
 #include <linux/sdla_x25.h>	/* X.25 firmware API definitions */
@@ -132,7 +133,7 @@ static int if_header (struct sk_buff* skb, struct device* dev,
 	unsigned short type, void* daddr, void* saddr, unsigned len);
 static int if_rebuild_hdr (struct sk_buff* skb);
 static int if_send (struct sk_buff* skb, struct device* dev);
-static struct enet_statistics* if_stats (struct device* dev);
+static struct net_device_stats * if_stats (struct device* dev);
 
 /* Interrupt handlers */
 static void wpx_isr	(sdla_t* card);
@@ -211,7 +212,7 @@ extern void enable_irq(unsigned int);
  * Return:	0	o.k.
  *		< 0	failure.
  */
-__initfunc(int wpx_init (sdla_t* card, wandev_conf_t* conf))
+int wpx_init (sdla_t* card, wandev_conf_t* conf)
 {
 	union
 	{
@@ -372,14 +373,11 @@ static int update (wan_device_t* wandev)
 
 	/* sanity checks */
 	if ((wandev == NULL) || (wandev->private == NULL))
-		return -EFAULT
-	;
+		return -EFAULT;
 	if (wandev->state == WAN_UNCONFIGURED)
-		return -ENODEV
-	;
+		return -ENODEV;
 	if (test_and_set_bit(0, (void*)&wandev->critical))
-		return -EAGAIN
-	;
+		return -EAGAIN;
 	card = wandev->private;
 
 	x25_get_err_stats(card);
@@ -476,7 +474,6 @@ static int new_if (wan_device_t* wandev, struct device* dev, wanif_conf_t* conf)
 /*============================================================================
  * Delete logical channel.
  */
-
 static int del_if (wan_device_t* wandev, struct device* dev)
 {
 	if (dev->priv)
@@ -502,18 +499,21 @@ static int wpx_exec (struct sdla* card, void* u_cmd, void* u_data)
 
 	if(copy_from_user((void*)&cmd, u_cmd, sizeof(cmd)))
 		return -EFAULT;
-
+		
 	/* execute command */
+
 	do
 	{
 		memcpy(&mbox->cmd, &cmd, sizeof(cmd));
 		if (cmd.length)
+		{
 			if(copy_from_user((void*)&mbox->data, u_data, cmd.length))
-				return -EFAULT;
+				return-EFAULT;
+		}
 		if (sdla_exec(mbox))
-			err = mbox->cmd.result;
-		else
-			return -EIO;
+			err = mbox->cmd.result
+		;
+		else return -EIO;
 	}
 	while (err && retry-- && x25_error(card, err, cmd.command, cmd.lcn));
 
@@ -521,9 +521,8 @@ static int wpx_exec (struct sdla* card, void* u_cmd, void* u_data)
 	if(copy_to_user(u_cmd, (void*)&mbox->cmd, sizeof(TX25Cmd)))
 		return -EFAULT;
 	len = mbox->cmd.length;
-	if (len && u_data)
-		if(copy_to_user(u_data, (void*)&mbox->data, len))
-			return -EFAULT;
+	if (len && u_data && copy_to_user(u_data, (void*)&mbox->data, len))
+		return -EFAULT;
 	return 0;
 }
 
@@ -541,7 +540,6 @@ static int if_init (struct device* dev)
 	x25_channel_t* chan = dev->priv;
 	sdla_t* card = chan->card;
 	wan_device_t* wandev = &card->wandev;
-	int i;
 
 	/* Initialize device driver entry points */
 	dev->open		= &if_open;
@@ -552,14 +550,12 @@ static int if_init (struct device* dev)
 	dev->get_stats		= &if_stats;
 
 	/* Initialize media-specific parameters */
-	dev->family		= AF_INET;	/* address family */
 	dev->type		= 30;		/* ARP h/w type */
 	dev->mtu		= X25_CHAN_MTU;
 	dev->hard_header_len	= X25_HRDHDR_SZ; /* media header length */
 	dev->addr_len		= 2;		/* hardware address length */
 	if (!chan->svc)
-		*(unsigned short*)dev->dev_addr = htons(chan->lcn)
-	;
+		*(unsigned short*)dev->dev_addr = htons(chan->lcn);
 
 	/* Initialize hardware parameters (just for reference) */
 	dev->irq	= wandev->irq;
@@ -572,8 +568,8 @@ static int if_init (struct device* dev)
         dev->tx_queue_len = 10;
 
 	/* Initialize socket buffers */
-	dev_init_buffers(dev);
 	
+	dev_init_buffers(dev);
 	set_chan_state(dev, WAN_DISCONNECTED);
 	return 0;
 }
@@ -591,11 +587,10 @@ static int if_open (struct device* dev)
 	sdla_t* card = chan->card;
 
 	if (dev->start)
-		return -EBUSY		/* only one open is allowed */
-	;
+		return -EBUSY;		/* only one open is allowed */
+	
 	if (test_and_set_bit(0, (void*)&card->wandev.critical))
 		return -EAGAIN;
-	;
 
 	dev->interrupt = 0;
 	dev->tbusy = 0;
@@ -604,8 +599,7 @@ static int if_open (struct device* dev)
 
 	/* If this is the first open, initiate physical connection */
 	if (card->open_cnt == 1)
-		connect(card)
-	;
+		connect(card);
 	card->wandev.critical = 0;
 	return 0;
 }
@@ -622,17 +616,17 @@ static int if_close (struct device* dev)
 
 	if (test_and_set_bit(0, (void*)&card->wandev.critical))
 		return -EAGAIN;
-	;
+
 	dev->start = 0;
 	if ((chan->state == WAN_CONNECTED) || (chan->state == WAN_CONNECTING))
-		chan_disc(dev)
-	;
+		chan_disc(dev);
+		
 	wanpipe_close(card);
 
 	/* If this is the last close, disconnect physical link */
 	if (!card->open_cnt)
-		disconnect(card)
-	;
+		disconnect(card);
+		
 	card->wandev.critical = 0;
 	return 0;
 }
@@ -672,14 +666,15 @@ static int if_header (struct sk_buff* skb, struct device* dev,
  * Return:	1	physical address resolved.
  *		0	physical address not resolved
  */
+ 
 static int if_rebuild_hdr (struct sk_buff* skb)
 {
-	x25_channel_t* chan = skb->dev->priv;
+	struct device *dev=skb->dev;
+	x25_channel_t* chan = dev->priv;
 	sdla_t* card = chan->card;
 
 	printk(KERN_INFO "%s: rebuild_header() called for interface %s!\n",
-		card->devname, skb->dev->name)
-	;
+		card->devname, dev->name);
 	return 1;
 }
 
@@ -700,6 +695,7 @@ static int if_rebuild_hdr (struct sk_buff* skb)
  * 2. Setting tbusy flag will inhibit further transmit requests from the
  *    protocol stack and can be used for flow control with protocol layer.
  */
+
 static int if_send (struct sk_buff* skb, struct device* dev)
 {
 	x25_channel_t* chan = dev->priv;
@@ -707,20 +703,6 @@ static int if_send (struct sk_buff* skb, struct device* dev)
 	struct device *dev2;
 	TX25Status* status = card->flags;
 	unsigned long host_cpu_flags;
-
-	if (skb == NULL)
-	{
-		/* If we get here, some higher layer thinks we've missed a
-		 * tx-done interrupt.
-		 */
-#ifdef _DEBUG_
-		printk(KERN_INFO "%s: interface %s got kicked!\n",
-			card->devname, dev->name)
-		;
-#endif
-		dev_tint(dev);
-		return 0;
-	}
 
 	if (dev->tbusy)
 	{
@@ -742,7 +724,7 @@ static int if_send (struct sk_buff* skb, struct device* dev)
 	disable_irq(card->hw.irq);
 	++card->irq_dis_if_send_count;
 
-	if (set_bit(0, (void*)&card->wandev.critical)) 
+	if (test_and_set_bit(0, (void*)&card->wandev.critical)) 
 	{
 		printk(KERN_INFO "Hit critical in if_send()!\n");
 		if (card->wandev.critical == CRITICAL_IN_ISR) 
@@ -773,85 +755,81 @@ static int if_send (struct sk_buff* skb, struct device* dev)
 
 	/* Below is only until we have per-channel IPX going.... */
 	if(!(chan->svc))
-	{
 		chan->protocol = skb->protocol;
-	}
 
 	if (card->wandev.state != WAN_CONNECTED)
-	{
-		++chan->ifstats.tx_dropped
-	;
-	}
+		++chan->ifstats.tx_dropped;
+
 	/* Below is only until we have per-channel IPX going.... */
 	else if ( (chan->svc) && (chan->protocol && (chan->protocol != skb->protocol)))
 	{
 		printk(KERN_INFO
 			"%s: unsupported Ethertype 0x%04X on interface %s!\n",
-			card->devname, skb->protocol, dev->name)
-		;
+			card->devname, skb->protocol, dev->name);
 		++chan->ifstats.tx_errors;
 	}
 	else switch (chan->state)
 	{
-	case WAN_DISCONNECTED:
-		/* Try to establish connection. If succeded, then start
-		 * transmission, else drop a packet.
-		 */
-		if (chan_connect(dev) != 0)
-		{
-			++chan->ifstats.tx_dropped;
-			++card->wandev.stats.tx_dropped;
-			break;
-		}
-		/* fall through */
-
-	case WAN_CONNECTED:
-		if( skb->protocol == ETH_P_IPX ) {
-			if(card->wandev.enable_IPX) {
-				switch_net_numbers( skb->data, 
-					card->wandev.network_number, 0);
-			} else {
-				++card->wandev.stats.tx_dropped;
+		case WAN_DISCONNECTED:
+			/* Try to establish connection. If succeded, then start
+			 * transmission, else drop a packet.
+			 */
+			if (chan_connect(dev) != 0)
+			{
 				++chan->ifstats.tx_dropped;
-				goto tx_done;
+				++card->wandev.stats.tx_dropped;
+				break;
 			}
-		}
-		dev->trans_start = jiffies;
-		if(chan_send(dev, skb))
-		{
-			dev->tbusy = 1;
-			status->imask |= 0x2;
-		}
-		break;
+			/* fall through */
 
-	default:
-		++chan->ifstats.tx_dropped;	
-		++card->wandev.stats.tx_dropped;
+		case WAN_CONNECTED:
+			if( skb->protocol == ETH_P_IPX ) 
+			{
+				if(card->wandev.enable_IPX) 
+				{
+					switch_net_numbers( skb->data, 
+						card->wandev.network_number, 0);
+				}
+				else 
+				{
+					++card->wandev.stats.tx_dropped;
+					++chan->ifstats.tx_dropped;
+					goto tx_done;
+				}
+			}
+			dev->trans_start = jiffies;
+			if(chan_send(dev, skb))
+			{
+				dev->tbusy = 1;
+				status->imask |= 0x2;
+			}
+			break;
+
+		default:
+			++chan->ifstats.tx_dropped;	
+			++card->wandev.stats.tx_dropped;
 	}
-
 tx_done:
 	if (!dev->tbusy)
-	{
 		dev_kfree_skb(skb);
-	}
+
 	card->wandev.critical = 0;
 	save_flags(host_cpu_flags);
         cli();
         if ((!(--card->irq_dis_if_send_count)) && (!card->irq_dis_poll_count))
                 enable_irq(card->hw.irq);
         restore_flags(host_cpu_flags);
-
 	return dev->tbusy;
 }
 
 /*============================================================================
  * Get ethernet-style interface statistics.
- * Return a pointer to struct enet_statistics.
+ * Return a pointer to struct net_device_stats
  */
-static struct enet_statistics* if_stats (struct device* dev)
+ 
+static struct net_device_stats* if_stats (struct device* dev)
 {
 	x25_channel_t* chan = dev->priv;
-
 	return &chan->ifstats;
 }
 
@@ -860,6 +838,7 @@ static struct enet_statistics* if_stats (struct device* dev)
 /*============================================================================
  * X.25 Interrupt Service Routine.
  */
+ 
 static void wpx_isr (sdla_t* card)
 {
 	TX25Status* status = card->flags;
@@ -869,7 +848,8 @@ static void wpx_isr (sdla_t* card)
 	card->in_isr = 1;
 	card->buff_int_mode_unbusy = 0;
 
-	if (test_and_set_bit(0, (void*)&card->wandev.critical)) {
+	if (test_and_set_bit(0, (void*)&card->wandev.critical)) 
+	{
 
  		printk(KERN_INFO "wpx_isr: %s, wandev.critical set to 0x%02X, int type = 0x%02X\n", card->devname, card->wandev.critical, status->iflags);
 		card->in_isr = 0;
@@ -884,28 +864,27 @@ static void wpx_isr (sdla_t* card)
 
 	switch (status->iflags)
 	{
-	case 0x01:		/* receive interrupt */
-		rx_intr(card);
-		break;
+		case 0x01:		/* receive interrupt */
+			rx_intr(card);
+			break;
 
-	case 0x02:		/* transmit interrupt */
-		tx_intr(card);
-		card->buff_int_mode_unbusy = 1;
-		status->imask &= ~0x2;
-		break;
+		case 0x02:		/* transmit interrupt */
+			tx_intr(card);
+			card->buff_int_mode_unbusy = 1;
+			status->imask &= ~0x2;
+			break;
 
-	case 0x04:		/* modem status interrupt */
-		status_intr(card);
-		break;
+		case 0x04:		/* modem status interrupt */
+			status_intr(card);
+			break;
 
-	case 0x10:		/* network event interrupt */
-		event_intr(card);
-		break;
+		case 0x10:		/* network event interrupt */
+			event_intr(card);
+			break;
 
-	default:		/* unwanted interrupt */
-		spur_intr(card);
+		default:		/* unwanted interrupt */
+			spur_intr(card);
 	}
-
 	card->wandev.critical = CRITICAL_INTR_HANDLED;
 	if( card->wandev.enable_tx_int)
 	{
@@ -925,7 +904,8 @@ static void wpx_isr (sdla_t* card)
 		{
 			if(((x25_channel_t*)dev->priv)->devtint)
 			{
-				dev_tint(dev);
+				mark_bh(NET_BH);
+				return;
 			}	
 		}
 	}
@@ -947,6 +927,7 @@ static void wpx_isr (sdla_t* card)
  * 2. If something goes wrong and X.25 packet has to be dropped (e.g. no
  *    socket buffers available) the whole packet sequence must be discarded.
  */
+
 static void rx_intr (sdla_t* card)
 {
 	TX25Mbox* rxmb = card->rxmb;
@@ -963,8 +944,7 @@ static void rx_intr (sdla_t* card)
 	{
 		/* Invalid channel, discard packet */
 		printk(KERN_INFO "%s: receiving on orphaned LCN %d!\n",
-			card->devname, lcn)
-		;
+			card->devname, lcn);
 		return;
 	}
 
@@ -986,8 +966,7 @@ static void rx_intr (sdla_t* card)
 		if (skb == NULL)
 		{
 			printk(KERN_INFO "%s: no socket buffers available!\n",
-				card->devname)
-			;
+				card->devname);
 			chan->drop_sequence = 1;	/* set flag */
 			++chan->ifstats.rx_dropped;
 			return;
@@ -1005,8 +984,7 @@ static void rx_intr (sdla_t* card)
 		if (qdm & 0x01) chan->drop_sequence = 1;
 
 		printk(KERN_INFO "%s: unexpectedly long packet sequence "
-			"on interface %s!\n", card->devname, dev->name)
-		;
+			"on interface %s!\n", card->devname, dev->name);
 		++chan->ifstats.rx_length_errors;
 		return;
 	}
@@ -1014,7 +992,9 @@ static void rx_intr (sdla_t* card)
 	/* Append packet to the socket buffer */
 	bufptr = skb_put(skb, len);
 	memcpy(bufptr, rxmb->data, len);
-	if (qdm & 0x01) return;		/* more data is comming */
+
+	if (qdm & 0x01)
+		return;		/* more data is comming */
 
 	dev->last_rx = jiffies;		/* timestamp */
 	chan->rx_skb = NULL;		/* dequeue packet */
@@ -1043,7 +1023,7 @@ static void rx_intr (sdla_t* card)
 			}
 			else
 			{
-				/* increment IPX packet dropped statistic */
+				/* FIXME: increment IPX packet dropped statistic */
 			}
 		}
 		else
@@ -1059,11 +1039,11 @@ static void rx_intr (sdla_t* card)
  *	o Release socket buffer
  *	o Clear 'tbusy' flag
  */
+
 static void tx_intr (sdla_t* card)
 {
 	struct device *dev;
 
-	
 	/* unbusy all devices and then dev_tint(); */
 	for(dev = card->wandev.dev; dev; dev = dev->slave)
 	{
@@ -1102,13 +1082,14 @@ static void spur_intr (sdla_t* card)
 
 /*============================================================================
  * Main polling routine.
- * This routine is repeatedly called by the WANPIPE 'thead' to allow for
+ * This routine is repeatedly called by the WANPIPE 'thread' to allow for
  * time-dependent housekeeping work.
  *
  * Notes:
  * 1. This routine may be called on interrupt context with all interrupts
  *    enabled. Beware!
  */
+
 static void wpx_poll (sdla_t* card)
 {
 	unsigned long host_cpu_flags;
@@ -1116,42 +1097,37 @@ static void wpx_poll (sdla_t* card)
 	disable_irq(card->hw.irq);
 	++card->irq_dis_poll_count;
 
-	if (set_bit(0, (void*)&card->wandev.critical)) {
-
- 		printk(KERN_INFO "%s: critical in polling!\n",card->devname);
-	 	
+	if (test_and_set_bit(0, (void*)&card->wandev.critical)) 
+	{
+ 		printk(KERN_INFO "%s: critical in polling!\n",card->devname);	
 		save_flags(host_cpu_flags);
                 cli();
 		if ((!card->irq_dis_if_send_count) &&
                                 (!(--card->irq_dis_poll_count)))
                         enable_irq(card->hw.irq);
                 restore_flags(host_cpu_flags);
-		
 		return;
 	}
 
 	switch(card->wandev.state)
 	{
-	case WAN_CONNECTED:
-		poll_active(card);
-		break;
+		case WAN_CONNECTED:
+			poll_active(card);
+			break;
 
-	case WAN_CONNECTING:
-		poll_connecting(card);
-		break;
+		case WAN_CONNECTING:
+			poll_connecting(card);
+			break;
 
-	case WAN_DISCONNECTED:
-		poll_disconnected(card);
+		case WAN_DISCONNECTED:
+			poll_disconnected(card);
 	}
-
 	card->wandev.critical = 0;
-
 	save_flags(host_cpu_flags);
         cli();
         if ((!card->irq_dis_if_send_count) && (!(--card->irq_dis_poll_count)))
                 enable_irq(card->hw.irq);
         restore_flags(host_cpu_flags);
-
 }
 
 /*============================================================================
@@ -1169,8 +1145,7 @@ static void poll_connecting (sdla_t* card)
 		status->imask &= ~0x2;		/* mask Tx interupts */
 	}
 	else if ((jiffies - card->state_tick) > CONNECT_TIMEOUT)
-	    disconnect(card)
-	;
+	    disconnect(card);
 }
 
 /*============================================================================
@@ -1181,8 +1156,7 @@ static void poll_connecting (sdla_t* card)
 static void poll_disconnected (sdla_t* card)
 {
 	if (card->open_cnt && ((jiffies - card->state_tick) > HOLD_DOWN_TIME))
-		connect(card)
-	;
+		connect(card);
 }
 
 /*============================================================================
@@ -1220,7 +1194,7 @@ static void poll_active (sdla_t* card)
 		{
 			if( (jiffies - chan->i_timeout_sofar) / HZ > chan->idle_timeout )
 			{
-				//Close svc
+				/* Close svc */
 				printk(KERN_INFO "%s: Closing down Idle link %s on LCN %d\n",card->devname,chan->name,chan->lcn); 
 				chan->i_timeout_sofar = jiffies;
 				chan_disc(dev);
@@ -1255,13 +1229,11 @@ static int x25_get_version (sdla_t* card, char* str)
 		mbox->cmd.command = X25_READ_CODE_VERSION;
 		err = sdla_exec(mbox) ? mbox->cmd.result : CMD_TIMEOUT;
 	} while (err && retry-- &&
-		 x25_error(card, err, X25_READ_CODE_VERSION, 0))
-	;
+		 x25_error(card, err, X25_READ_CODE_VERSION, 0));
 
 	if (!err && str)
 	{
 		int len = mbox->cmd.length;
-
 		memcpy(str, mbox->data, len);
 		str[len] = '\0';
 	}
@@ -1271,6 +1243,7 @@ static int x25_get_version (sdla_t* card, char* str)
 /*============================================================================
  * Configure adapter.
  */
+
 static int x25_configure (sdla_t* card, TX25Config* conf)
 {
 	TX25Mbox* mbox = card->mbox;
@@ -1284,9 +1257,7 @@ static int x25_configure (sdla_t* card, TX25Config* conf)
 		mbox->cmd.length  = sizeof(TX25Config);
 		mbox->cmd.command = X25_SET_CONFIGURATION;
 		err = sdla_exec(mbox) ? mbox->cmd.result : CMD_TIMEOUT;
-	} while (err && retry-- &&
-		 x25_error(card, err, X25_SET_CONFIGURATION, 0))
-	;
+	} while (err && retry-- && x25_error(card, err, X25_SET_CONFIGURATION, 0));
 	return err;
 }
 
@@ -1304,9 +1275,8 @@ static int x25_get_err_stats (sdla_t* card)
 		memset(&mbox->cmd, 0, sizeof(TX25Cmd));
 		mbox->cmd.command = X25_HDLC_READ_COMM_ERR;
 		err = sdla_exec(mbox) ? mbox->cmd.result : CMD_TIMEOUT;
-	} while (err && retry-- &&
-		 x25_error(card, err, X25_HDLC_READ_COMM_ERR, 0))
-	;
+	} while (err && retry-- && x25_error(card, err, X25_HDLC_READ_COMM_ERR, 0));
+
 	if (!err)
 	{
 		THdlcCommErr* stats = (void*)mbox->data;
@@ -1333,9 +1303,8 @@ static int x25_get_stats (sdla_t* card)
 		memset(&mbox->cmd, 0, sizeof(TX25Cmd));
 		mbox->cmd.command = X25_READ_STATISTICS;
 		err = sdla_exec(mbox) ? mbox->cmd.result : CMD_TIMEOUT;
-	} while (err && retry-- &&
-		 x25_error(card, err, X25_READ_STATISTICS, 0))
-	;
+	} while (err && retry-- && x25_error(card, err, X25_READ_STATISTICS, 0));
+	
 	if (!err)
 	{
 		TX25Stats* stats = (void*)mbox->data;
@@ -1360,9 +1329,8 @@ static int x25_close_hdlc (sdla_t* card)
 		memset(&mbox->cmd, 0, sizeof(TX25Cmd));
 		mbox->cmd.command = X25_HDLC_LINK_CLOSE;
 		err = sdla_exec(mbox) ? mbox->cmd.result : CMD_TIMEOUT;
-	} while (err && retry-- &&
-		 x25_error(card, err, X25_HDLC_LINK_CLOSE, 0))
-	;
+	} while (err && retry-- && x25_error(card, err, X25_HDLC_LINK_CLOSE, 0));
+
 	return err;
 }
 
@@ -1380,9 +1348,8 @@ static int x25_open_hdlc (sdla_t* card)
 		memset(&mbox->cmd, 0, sizeof(TX25Cmd));
 		mbox->cmd.command = X25_HDLC_LINK_OPEN;
 		err = sdla_exec(mbox) ? mbox->cmd.result : CMD_TIMEOUT;
-	} while (err && retry-- &&
-		 x25_error(card, err, X25_HDLC_LINK_OPEN, 0))
-	;
+	} while (err && retry-- && x25_error(card, err, X25_HDLC_LINK_OPEN, 0));
+	
 	return err;
 }
 
@@ -1400,9 +1367,8 @@ static int x25_setup_hdlc (sdla_t* card)
 		memset(&mbox->cmd, 0, sizeof(TX25Cmd));
 		mbox->cmd.command = X25_HDLC_LINK_SETUP;
 		err = sdla_exec(mbox) ? mbox->cmd.result : CMD_TIMEOUT;
-	} while (err && retry-- &&
-		 x25_error(card, err, X25_HDLC_LINK_SETUP, 0))
-	;
+	} while (err && retry-- && x25_error(card, err, X25_HDLC_LINK_SETUP, 0));
+	
 	return err;
 }
 
@@ -1424,9 +1390,8 @@ static int x25_set_dtr (sdla_t* card, int dtr)
 		mbox->cmd.length  = 3;
 		mbox->cmd.command = X25_SET_GLOBAL_VARS;
 		err = sdla_exec(mbox) ? mbox->cmd.result : CMD_TIMEOUT;
-	} while (err && retry-- &&
-		 x25_error(card, err, X25_SET_GLOBAL_VARS, 0))
-	;
+	} while (err && retry-- && x25_error(card, err, X25_SET_GLOBAL_VARS, 0));
+
 	return err;
 }
 
@@ -1451,9 +1416,7 @@ static int x25_set_intr_mode (sdla_t* card, int mode)
 		else mbox->cmd.length  = 1;
 		mbox->cmd.command = X25_SET_INTERRUPT_MODE;
 		err = sdla_exec(mbox) ? mbox->cmd.result : CMD_TIMEOUT;
-	} while (err && retry-- &&
-		 x25_error(card, err, X25_SET_INTERRUPT_MODE, 0))
-	;
+	} while (err && retry-- && x25_error(card, err, X25_SET_INTERRUPT_MODE, 0)) ;
 	return err;
 }
 
@@ -1473,9 +1436,7 @@ static int x25_get_chan_conf (sdla_t* card, x25_channel_t* chan)
 		mbox->cmd.lcn     = lcn;
 		mbox->cmd.command = X25_READ_CHANNEL_CONFIG;
 		err = sdla_exec(mbox) ? mbox->cmd.result : CMD_TIMEOUT;
-	} while (err && retry-- &&
-		 x25_error(card, err, X25_READ_CHANNEL_CONFIG, lcn))
-	;
+	} while (err && retry-- && x25_error(card, err, X25_READ_CHANNEL_CONFIG, lcn));
 
 	if (!err)
 	{
@@ -1483,19 +1444,23 @@ static int x25_get_chan_conf (sdla_t* card, x25_channel_t* chan)
 
 		/* calculate an offset into the array of status bytes */
 		if (card->u.x.hi_svc <= 255) 
-			chan->ch_idx = lcn - 1
-		;
+			chan->ch_idx = lcn - 1;
 		else
 		{
 			int offset;
 
 			switch (mbox->data[0] && 0x1F)
 			{
-			case 0x01: offset = status->pvc_map; break;
-			case 0x03: offset = status->icc_map; break;
-			case 0x07: offset = status->twc_map; break;
-			case 0x0B: offset = status->ogc_map; break;
-			default: offset = 0;
+				case 0x01:
+					offset = status->pvc_map; break;
+				case 0x03:
+					offset = status->icc_map; break;
+				case 0x07:
+					offset = status->twc_map; break;
+				case 0x0B: 
+					offset = status->ogc_map; break;
+				default: 
+					offset = 0;
 			}
 			chan->ch_idx = lcn - 1 - offset;
 		}
@@ -1503,17 +1468,30 @@ static int x25_get_chan_conf (sdla_t* card, x25_channel_t* chan)
 		/* get actual transmit packet size on this channel */
 		switch(mbox->data[1] & 0x38)
 		{
-		case 0x00: chan->tx_pkt_size = 16; break;
-		case 0x08: chan->tx_pkt_size = 32; break;
-		case 0x10: chan->tx_pkt_size = 64; break;
-		case 0x18: chan->tx_pkt_size = 128; break;
-		case 0x20: chan->tx_pkt_size = 256; break;
-		case 0x28: chan->tx_pkt_size = 512; break;
-		case 0x30: chan->tx_pkt_size = 1024; break;
+			case 0x00:
+				chan->tx_pkt_size = 16;
+				break;
+			case 0x08:
+				chan->tx_pkt_size = 32;
+				break;
+			case 0x10:
+				chan->tx_pkt_size = 64;
+				break;
+			case 0x18:
+				chan->tx_pkt_size = 128;
+				break;
+			case 0x20:
+				chan->tx_pkt_size = 256;
+				break;
+			case 0x28:
+				chan->tx_pkt_size = 512;
+				break;
+			case 0x30:
+				chan->tx_pkt_size = 1024;
+				break;
 		}
 		printk(KERN_INFO "%s: X.25 packet size on LCN %d is %d.\n",
-			card->devname, lcn, chan->tx_pkt_size)
-		;
+			card->devname, lcn, chan->tx_pkt_size);
 	}
 	return err;
 }
@@ -1521,6 +1499,7 @@ static int x25_get_chan_conf (sdla_t* card, x25_channel_t* chan)
 /*============================================================================
  * Place X.25 call.
  */
+
 static int x25_place_call (sdla_t* card, x25_channel_t* chan)
 {
 	TX25Mbox* mbox = card->mbox;
@@ -1536,9 +1515,8 @@ static int x25_place_call (sdla_t* card, x25_channel_t* chan)
 		mbox->cmd.length  = strlen(str);
 		mbox->cmd.command = X25_PLACE_CALL;
 		err = sdla_exec(mbox) ? mbox->cmd.result : CMD_TIMEOUT;
-	} while (err && retry-- &&
-		 x25_error(card, err, X25_PLACE_CALL, 0))
-	;
+	} while (err && retry-- && x25_error(card, err, X25_PLACE_CALL, 0));
+
 	if (!err)
 	{
 		chan->lcn = mbox->cmd.lcn;
@@ -1550,6 +1528,7 @@ static int x25_place_call (sdla_t* card, x25_channel_t* chan)
 /*============================================================================
  * Accept X.25 call.
  */
+
 static int x25_accept_call (sdla_t* card, int lcn, int qdm)
 {
 	TX25Mbox* mbox = card->mbox;
@@ -1563,9 +1542,8 @@ static int x25_accept_call (sdla_t* card, int lcn, int qdm)
 		mbox->cmd.qdm     = qdm;
 		mbox->cmd.command = X25_ACCEPT_CALL;
 		err = sdla_exec(mbox) ? mbox->cmd.result : CMD_TIMEOUT;
-	} while (err && retry-- &&
-		 x25_error(card, err, X25_ACCEPT_CALL, lcn))
-	;
+	} while (err && retry-- && x25_error(card, err, X25_ACCEPT_CALL, lcn));
+
 	return err;
 }
 
@@ -1586,9 +1564,8 @@ static int x25_clear_call (sdla_t* card, int lcn, int cause, int diagn)
 		mbox->cmd.diagn   = diagn;
 		mbox->cmd.command = X25_CLEAR_CALL;
 		err = sdla_exec(mbox) ? mbox->cmd.result : CMD_TIMEOUT;
-	} while (err && retry-- &&
-		 x25_error(card, err, X25_CLEAR_CALL, lcn))
-	;
+	} while (err && retry-- && x25_error(card, err, X25_CLEAR_CALL, lcn));
+
 	return err;
 }
 
@@ -1600,7 +1577,7 @@ static int x25_send (sdla_t* card, int lcn, int qdm, int len, void* buf)
 	TX25Mbox* mbox = card->mbox;
   	int retry = MAX_CMD_RETRY;
 	int err;
-
+	
 	do
 	{
 		memset(&mbox->cmd, 0, sizeof(TX25Cmd));
@@ -1628,7 +1605,8 @@ static int x25_fetch_events (sdla_t* card)
 		memset(&mbox->cmd, 0, sizeof(TX25Cmd));
 		mbox->cmd.command = X25_IS_DATA_AVAILABLE;
 		err = sdla_exec(mbox) ? mbox->cmd.result : CMD_TIMEOUT;
- 		if (err) x25_error(card, err, X25_IS_DATA_AVAILABLE, 0);
+ 		if (err)
+ 			x25_error(card, err, X25_IS_DATA_AVAILABLE, 0);
 	}
 	return err;
 }
@@ -1656,99 +1634,90 @@ static int x25_error (sdla_t* card, int err, int cmd, int lcn)
 	if (mb == NULL)
 	{
 		printk(KERN_ERR "%s: x25_error() out of memory!\n",
-			card->devname)
-		;
+			card->devname);
 		return 0;
 	}
 	memcpy(mb, card->mbox, sizeof(TX25Mbox) + dlen);
 	switch (err)
 	{
-	case 0x40:	/* X.25 asynchronous packet was received */
-		mb->data[dlen] = '\0';
-		switch (mb->cmd.pktType & 0x7F)
-		{
-		case 0x30:		/* incomming call */
-			retry = incomming_call(card, cmd, lcn, mb);
+		case 0x40:	/* X.25 asynchronous packet was received */
+			mb->data[dlen] = '\0';
+			switch (mb->cmd.pktType & 0x7F)
+			{
+				case 0x30:		/* incomming call */
+					retry = incomming_call(card, cmd, lcn, mb);
+					break;
+
+				case 0x31:		/* connected */
+					retry = call_accepted(card, cmd, lcn, mb);
+					break;
+
+				case 0x02:		/* call clear request */
+					retry = call_cleared(card, cmd, lcn, mb);
+					break;
+
+				case 0x04:		/* reset request */
+					printk(KERN_INFO "%s: X.25 reset request on LCN %d! "
+						"Cause:0x%02X Diagn:0x%02X\n",
+						card->devname, mb->cmd.lcn, mb->cmd.cause,
+						mb->cmd.diagn);
+					break;
+
+				case 0x08:		/* restart request */
+					retry = restart_event(card, cmd, lcn, mb);
+					break;
+
+				default:
+					printk(KERN_INFO "%s: X.25 event 0x%02X on LCN %d! "
+						"Cause:0x%02X Diagn:0x%02X\n",
+						card->devname, mb->cmd.pktType,
+						mb->cmd.lcn, mb->cmd.cause, mb->cmd.diagn);
+			}
 			break;
 
-		case 0x31:		/* connected */
-			retry = call_accepted(card, cmd, lcn, mb);
+		case 0x41:	/* X.25 protocol violation indication */
+			printk(KERN_INFO
+				"%s: X.25 protocol violation on LCN %d! "
+				"Packet:0x%02X Cause:0x%02X Diagn:0x%02X\n",
+				card->devname, mb->cmd.lcn,
+				mb->cmd.pktType & 0x7F, mb->cmd.cause, mb->cmd.diagn);
 			break;
 
-		case 0x02:		/* call clear request */
-			retry = call_cleared(card, cmd, lcn, mb);
+		case 0x42:	/* X.25 timeout */
+			retry = timeout_event(card, cmd, lcn, mb);
 			break;
 
-		case 0x04:		/* reset request */
-			printk(KERN_INFO "%s: X.25 reset request on LCN %d! "
-				"Cause:0x%02X Diagn:0x%02X\n",
-				card->devname, mb->cmd.lcn, mb->cmd.cause,
-				mb->cmd.diagn)
-			;
+		case 0x43:	/* X.25 retry limit exceeded */
+			printk(KERN_INFO
+				"%s: exceeded X.25 retry limit on LCN %d! "
+				"Packet:0x%02X Diagn:0x%02X\n", card->devname,
+				mb->cmd.lcn, mb->cmd.pktType, mb->cmd.diagn);
 			break;
 
-		case 0x08:		/* restart request */
-			retry = restart_event(card, cmd, lcn, mb);
+		case 0x08:	/* modem failure */
+			printk(KERN_INFO "%s: modem failure!\n", card->devname);
+			break;
+
+		case 0x09:	/* N2 retry limit */
+			printk(KERN_INFO "%s: exceeded HDLC retry limit!\n",
+				card->devname);
+			break;
+
+		case 0x06:	/* unnumbered frame was received while in ABM */
+			printk(KERN_INFO "%s: received Unnumbered frame 0x%02X!\n",
+				card->devname, mb->data[0]);
+			break;
+
+		case CMD_TIMEOUT:
+			printk(KERN_ERR "%s: command 0x%02X timed out!\n",
+				card->devname, cmd);
+			retry = 0;	/* abort command */
 			break;
 
 		default:
-			printk(KERN_INFO "%s: X.25 event 0x%02X on LCN %d! "
-				"Cause:0x%02X Diagn:0x%02X\n",
-				card->devname, mb->cmd.pktType,
-				mb->cmd.lcn, mb->cmd.cause, mb->cmd.diagn)
-			;
-		}
-		break;
-
-	case 0x41:	/* X.25 protocol violation indication */
-		printk(KERN_INFO
-			"%s: X.25 protocol violation on LCN %d! "
-			"Packet:0x%02X Cause:0x%02X Diagn:0x%02X\n",
-			card->devname, mb->cmd.lcn,
-			mb->cmd.pktType & 0x7F, mb->cmd.cause, mb->cmd.diagn)
-		;
-		break;
-
-	case 0x42:	/* X.25 timeout */
-		retry = timeout_event(card, cmd, lcn, mb);
-		break;
-
-	case 0x43:	/* X.25 retry limit exceeded */
-		printk(KERN_INFO
-			"%s: exceeded X.25 retry limit on LCN %d! "
-			"Packet:0x%02X Diagn:0x%02X\n", card->devname,
-			mb->cmd.lcn, mb->cmd.pktType, mb->cmd.diagn)
-		;
-		break;
-
-	case 0x08:	/* modem failure */
-		printk(KERN_INFO "%s: modem failure!\n", card->devname);
-		break;
-
-	case 0x09:	/* N2 retry limit */
-		printk(KERN_INFO "%s: exceeded HDLC retry limit!\n",
-			card->devname)
-		;
-		break;
-
-	case 0x06:	/* unnumbered frame was received while in ABM */
-		printk(KERN_INFO "%s: received Unnumbered frame 0x%02X!\n",
-			card->devname, mb->data[0])
-		;
-		break;
-
-	case CMD_TIMEOUT:
-		printk(KERN_ERR "%s: command 0x%02X timed out!\n",
-			card->devname, cmd)
-		;
-		retry = 0;	/* abort command */
-		break;
-
-	default:
-		printk(KERN_INFO "%s: command 0x%02X returned 0x%02X!\n",
-			card->devname, cmd, err)
-		;
-		retry = 0;	/* abort command */
+			printk(KERN_INFO "%s: command 0x%02X returned 0x%02X!\n",
+				card->devname, cmd, err);
+			retry = 0;	/* abort command */
 	}
 	kfree(mb);
 	return retry;
@@ -1772,6 +1741,7 @@ static int x25_error (sdla_t* card, int err, int cmd, int lcn)
  *	   (i.e. call collision has occured), the incomming call shall be
  *	   rejected and call request shall be retried.
  */
+
 static int incomming_call (sdla_t* card, int cmd, int lcn, TX25Mbox* mb)
 {
 	wan_device_t* wandev = &card->wandev;
@@ -1786,8 +1756,7 @@ static int incomming_call (sdla_t* card, int cmd, int lcn, TX25Mbox* mb)
 	{
 		printk(KERN_INFO
 			"%s: X.25 incomming call collision on LCN %d!\n",
-			card->devname, new_lcn)
-		;
+			card->devname, new_lcn);
 		x25_clear_call(card, new_lcn, 0, 0);
 		return 1;
 	}
@@ -1797,8 +1766,7 @@ static int incomming_call (sdla_t* card, int cmd, int lcn, TX25Mbox* mb)
 	{
 		printk(KERN_INFO
 			"%s: X.25 incomming call on LCN %d with D-bit set!\n",
-			card->devname, new_lcn)
-		;
+			card->devname, new_lcn);
 		x25_clear_call(card, new_lcn, 0, 0);
 		return 1;
 	}
@@ -1815,8 +1783,7 @@ static int incomming_call (sdla_t* card, int cmd, int lcn, TX25Mbox* mb)
 	}
 	parse_call_info(mb->data, info);
 	printk(KERN_INFO "%s: X.25 incomming call on LCN %d! Call data: %s\n",
-		card->devname, new_lcn, mb->data)
-	;
+		card->devname, new_lcn, mb->data);
 
 	/* Find available channel */
 	for (dev = wandev->dev; dev; dev = dev->slave)
@@ -1824,22 +1791,18 @@ static int incomming_call (sdla_t* card, int cmd, int lcn, TX25Mbox* mb)
 		chan = dev->priv;
 
 		if (!chan->svc || (chan->state != WAN_DISCONNECTED))
-			continue
-		;
+			continue;
 		if (strcmp(info->src, chan->addr) == 0)
-			break
-		;
-	        // If just an '@' is specified, accept all incomming calls
+			break;
+	        /* If just an '@' is specified, accept all incomming calls */
 	        if (strcmp(chan->addr, "") == 0)
-	                break
-	        ;
+	                break;
 	}
 
 	if (dev == NULL)
 	{
 		printk(KERN_INFO "%s: no channels available!\n",
-			card->devname)
-		;
+			card->devname);
 		x25_clear_call(card, new_lcn, 0, 0);
 	}
 
@@ -1848,41 +1811,39 @@ static int incomming_call (sdla_t* card, int cmd, int lcn, TX25Mbox* mb)
 	{
 		printk(KERN_INFO
 			"%s: no user data in incomming call on LCN %d!\n",
-			card->devname, new_lcn)
-		;
+			card->devname, new_lcn);
 		x25_clear_call(card, new_lcn, 0, 0);
 	}
 	else switch (info->user[0])
 	{
-	case 0:		/* multiplexed */
-		chan->protocol = 0;
-		accept = 1;
-		break;
+		case 0:		/* multiplexed */
+			chan->protocol = 0;
+			accept = 1;
+			break;
 
-	case NLPID_IP:	/* IP datagrams */
-		chan->protocol = ETH_P_IP;
-		accept = 1;
-		break;
+		case NLPID_IP:	/* IP datagrams */
+			chan->protocol = ETH_P_IP;
+			accept = 1;
+			break;
 
-	case NLPID_SNAP: /* IPX datagrams */
-		chan->protocol = ETH_P_IPX;
-		accept = 1;
-		break;
-	default:
-		printk(KERN_INFO
-			"%s: unsupported NLPID 0x%02X in incomming call "
-			"on LCN %d!\n", card->devname, info->user[0], new_lcn)
-		;
-		x25_clear_call(card, new_lcn, 0, 249);
+		case NLPID_SNAP: /* IPX datagrams */
+			chan->protocol = ETH_P_IPX;
+			accept = 1;
+			break;
+		default:
+			printk(KERN_INFO
+				"%s: unsupported NLPID 0x%02X in incomming call "
+				"on LCN %d!\n", card->devname, info->user[0], new_lcn);
+			x25_clear_call(card, new_lcn, 0, 249);
 	}
 
 	if (accept && (x25_accept_call(card, new_lcn, 0) == CMD_OK))
 	{
 		chan->lcn = new_lcn;
 		if (x25_get_chan_conf(card, chan) == CMD_OK)
-			set_chan_state(dev, WAN_CONNECTED)
-		;
-		else x25_clear_call(card, new_lcn, 0, 0);
+			set_chan_state(dev, WAN_CONNECTED);
+		else
+			x25_clear_call(card, new_lcn, 0, 0);
 	}
 	kfree(info);
 	return 1;
@@ -1891,6 +1852,7 @@ static int incomming_call (sdla_t* card, int cmd, int lcn, TX25Mbox* mb)
 /*============================================================================
  * Handle accepted call.
  */
+
 static int call_accepted (sdla_t* card, int cmd, int lcn, TX25Mbox* mb)
 {
 	unsigned new_lcn = mb->cmd.lcn;
@@ -1898,14 +1860,12 @@ static int call_accepted (sdla_t* card, int cmd, int lcn, TX25Mbox* mb)
 	x25_channel_t* chan;
 
 	printk(KERN_INFO "%s: X.25 call accepted on LCN %d!\n",
-		card->devname, new_lcn)
-	;
+		card->devname, new_lcn);
 	if (dev == NULL)
 	{
 		printk(KERN_INFO
 			"%s: clearing orphaned connection on LCN %d!\n",
-			card->devname, new_lcn)
-		;
+			card->devname, new_lcn);
 		x25_clear_call(card, new_lcn, 0, 0);
 		return 1;
 	}
@@ -1924,6 +1884,7 @@ static int call_accepted (sdla_t* card, int cmd, int lcn, TX25Mbox* mb)
 /*============================================================================
  * Handle cleared call.
  */
+
 static int call_cleared (sdla_t* card, int cmd, int lcn, TX25Mbox* mb)
 {
 	unsigned new_lcn = mb->cmd.lcn;
@@ -1931,17 +1892,17 @@ static int call_cleared (sdla_t* card, int cmd, int lcn, TX25Mbox* mb)
 
 	printk(KERN_INFO "%s: X.25 clear request on LCN %d! Cause:0x%02X "
 		"Diagn:0x%02X\n",
-		card->devname, new_lcn, mb->cmd.cause, mb->cmd.diagn)
-	;
-	if (dev == NULL) return 1;
+		card->devname, new_lcn, mb->cmd.cause, mb->cmd.diagn);
+	if (dev == NULL)
+		return 1;
 	set_chan_state(dev, WAN_DISCONNECTED);
-
 	return ((cmd == X25_WRITE) && (lcn == new_lcn)) ? 0 : 1;
 }
 
 /*============================================================================
  * Handle X.25 restart event.
  */
+ 
 static int restart_event (sdla_t* card, int cmd, int lcn, TX25Mbox* mb)
 {
 	wan_device_t* wandev = &card->wandev;
@@ -1949,13 +1910,11 @@ static int restart_event (sdla_t* card, int cmd, int lcn, TX25Mbox* mb)
 
 	printk(KERN_INFO
 		"%s: X.25 restart request! Cause:0x%02X Diagn:0x%02X\n",
-		card->devname, mb->cmd.cause, mb->cmd.diagn)
-	;
+		card->devname, mb->cmd.cause, mb->cmd.diagn);
 
 	/* down all logical channels */
 	for (dev = wandev->dev; dev; dev = dev->slave)
-		set_chan_state(dev, WAN_DISCONNECTED)
-	;
+		set_chan_state(dev, WAN_DISCONNECTED);
 	return (cmd == X25_WRITE) ? 0 : 1;
 }
 
@@ -1971,13 +1930,12 @@ static int timeout_event (sdla_t* card, int cmd, int lcn, TX25Mbox* mb)
 		struct device* dev = get_dev_by_lcn(&card->wandev, new_lcn);
 
 		printk(KERN_INFO "%s: X.25 call timed timeout on LCN %d!\n",
-			card->devname, new_lcn)
-		;
-		if (dev) set_chan_state(dev, WAN_DISCONNECTED);
+			card->devname, new_lcn);
+		if (dev)
+			set_chan_state(dev, WAN_DISCONNECTED);
 	}
 	else printk(KERN_INFO "%s: X.25 packet 0x%02X timeout on LCN %d!\n",
-		card->devname, mb->cmd.pktType, new_lcn)
-	;
+		card->devname, mb->cmd.pktType, new_lcn);
 	return 1;
 }
 
@@ -1994,8 +1952,7 @@ static int timeout_event (sdla_t* card, int cmd, int lcn, TX25Mbox* mb)
 static int connect (sdla_t* card)
 {
 	if (x25_open_hdlc(card) || x25_setup_hdlc(card))
-		return -EIO
-	;
+		return -EIO;
 	wanpipe_set_state(card, WAN_CONNECTING);
 	return 1;
 }
@@ -2025,8 +1982,8 @@ static struct device* get_dev_by_lcn (wan_device_t* wandev, unsigned lcn)
 	struct device* dev;
 
 	for (dev = wandev->dev; dev; dev = dev->slave)
-		if (((x25_channel_t*)dev->priv)->lcn == lcn) break
-	;
+		if (((x25_channel_t*)dev->priv)->lcn == lcn)
+			break;
 	return dev;
 }
 
@@ -2047,22 +2004,18 @@ static int chan_connect (struct device* dev)
 	if (chan->svc)
 	{
 		if (!chan->addr[0])
-			return -EINVAL	/* no destination address */
-		;
+			return -EINVAL;	/* no destination address */
 		printk(KERN_INFO "%s: placing X.25 call to %s ...\n",
-			card->devname, chan->addr)
-		;
+			card->devname, chan->addr);
 		if (x25_place_call(card, chan) != CMD_OK)
-			return -EIO
-		;
+			return -EIO;
 		set_chan_state(dev, WAN_CONNECTING);
 		return 1;
 	}
 	else
 	{
 		if (x25_get_chan_conf(card, chan) != CMD_OK)
-			return -EIO
-		;
+			return -EIO;
 		set_chan_state(dev, WAN_CONNECTED);
 	}
 	return 0;
@@ -2076,7 +2029,8 @@ static int chan_disc (struct device* dev)
 {
 	x25_channel_t* chan = dev->priv;
 
-	if (chan->svc) x25_clear_call(chan->card, chan->lcn, 0, 0);
+	if (chan->svc)
+		x25_clear_call(chan->card, chan->lcn, 0, 0);
 	set_chan_state(dev, WAN_DISCONNECTED);
 	return 0;
 }
@@ -2096,29 +2050,27 @@ static void set_chan_state (struct device* dev, int state)
 	{
 		switch (state)
 		{
-		case WAN_CONNECTED:
-			printk (KERN_INFO "%s: interface %s connected!\n",
-			card->devname, dev->name)
-			;
-			*(unsigned short*)dev->dev_addr = htons(chan->lcn);
-			chan->i_timeout_sofar = jiffies;
-			break;
+			case WAN_CONNECTED:
+				printk (KERN_INFO "%s: interface %s connected!\n",
+					card->devname, dev->name);
+				*(unsigned short*)dev->dev_addr = htons(chan->lcn);
+				chan->i_timeout_sofar = jiffies;
+				break;
 
-		case WAN_CONNECTING:
-			printk (KERN_INFO "%s: interface %s connecting...\n",
-				card->devname, dev->name)
-			;
-			break;
+			case WAN_CONNECTING:
+				printk (KERN_INFO "%s: interface %s connecting...\n",
+					card->devname, dev->name);
+				break;
 
-		case WAN_DISCONNECTED:
-			printk (KERN_INFO "%s: interface %s disconnected!\n",
-				card->devname, dev->name)
-			;
-			if (chan->svc) {
-				*(unsigned short*)dev->dev_addr = 0;
-		                chan->lcn = 0;
-			}
-			break;
+			case WAN_DISCONNECTED:
+				printk (KERN_INFO "%s: interface %s disconnected!\n",
+					card->devname, dev->name);
+				if (chan->svc) 
+				{
+					*(unsigned short*)dev->dev_addr = 0;
+		                	chan->lcn = 0;
+				}
+				break;
 		}
 		chan->state = state;
 	}
@@ -2150,8 +2102,8 @@ static int chan_send (struct device* dev, struct sk_buff* skb)
 
 	/* Check to see if channel is ready */
 	if (!(status->cflags[chan->ch_idx] & 0x40))
-		return 1
-	;
+		return 1;
+
 	if (skb->len > chan->tx_pkt_size)
 	{
 		len = chan->tx_pkt_size;
@@ -2164,22 +2116,22 @@ static int chan_send (struct device* dev, struct sk_buff* skb)
 	}
 	switch(x25_send(card, chan->lcn, qdm, len, skb->data))
 	{
-	case 0x00:	/* success */
-		chan->i_timeout_sofar = jiffies;
-		if (qdm)
-		{
-			skb_pull(skb, len);
+		case 0x00:	/* success */
+			chan->i_timeout_sofar = jiffies;
+			if (qdm)
+			{
+				skb_pull(skb, len);
+				return 1;
+			}
+			++chan->ifstats.tx_packets;
+			break;
+
+		case 0x33:	/* Tx busy */
 			return 1;
-		}
-		++chan->ifstats.tx_packets;
-		break;
 
-	case 0x33:	/* Tx busy */
-		return 1;
-
-	default:	/* failure */
-		++chan->ifstats.tx_errors;
-/*		return 1; */
+		default:	/* failure */
+			++chan->ifstats.tx_errors;
+/*			return 1; */
 	}
 	return 0;
 }
@@ -2187,6 +2139,7 @@ static int chan_send (struct device* dev, struct sk_buff* skb)
 /*============================================================================
  * Parse X.25 call request data and fill x25_call_info_t structure.
  */
+
 static void parse_call_info (unsigned char* str, x25_call_info_t* info)
 {
 	memset(info, 0, sizeof(x25_call_info_t));
@@ -2197,50 +2150,53 @@ static void parse_call_info (unsigned char* str, x25_call_info_t* info)
 
 		if (*str == '-') switch (str[1])
 		{
-		case 'd':	/* destination address */
-			for (i = 0; i < 16; ++i)
-			{
-				ch = str[2+i];
-				if (!is_digit(ch)) break;
-				info->dest[i] = ch;
-			}
-			break;
+			case 'd':	/* destination address */
+				for (i = 0; i < 16; ++i)
+				{
+					ch = str[2+i];
+					if (!is_digit(ch)) 
+						break;
+					info->dest[i] = ch;
+				}
+				break;
+	
+			case 's':	/* source address */
+				for (i = 0; i < 16; ++i)
+				{
+					ch = str[2+i];
+					if (!is_digit(ch))
+						break;
+					info->src[i] = ch;
+				}
+				break;
 
-		case 's':	/* source address */
-			for (i = 0; i < 16; ++i)
-			{
-				ch = str[2+i];
-				if (!is_digit(ch)) break;
-				info->src[i] = ch;
-			}
-			break;
+			case 'u':	/* user data */
+				for (i = 0; i < 127; ++i)
+				{
+					ch = str[2+2*i];
+					if (!is_hex_digit(ch)) 
+						break;
+					info->user[i] = hex_to_uint(&str[2+2*i], 2);
+				}
+				info->nuser = i;
+				break;
 
-		case 'u':	/* user data */
-			for (i = 0; i < 127; ++i)
-			{
-				ch = str[2+2*i];
-				if (!is_hex_digit(ch)) break;
-				info->user[i] = hex_to_uint(&str[2+2*i], 2);
-			}
-			info->nuser = i;
-			break;
-
-		case 'f':	/* facilities */
-			for (i = 0; i < 64; ++i)
-			{
-				ch = str[2+4*i];
-				if (!is_hex_digit(ch)) break;
-				info->facil[i].code =
-					hex_to_uint(&str[2+4*i], 2)
-				;
-				ch = str[4+4*i];
-				if (!is_hex_digit(ch)) break;
-				info->facil[i].parm =
-					hex_to_uint(&str[4+4*i], 2)
-				;
-			}
-			info->nfacil = i;
-			break;
+			case 'f':	/* facilities */
+				for (i = 0; i < 64; ++i)
+				{
+					ch = str[2+4*i];
+					if (!is_hex_digit(ch))
+						break;
+					info->facil[i].code =
+						hex_to_uint(&str[2+4*i], 2);
+					ch = str[4+4*i];
+					if (!is_hex_digit(ch))
+						break;
+					info->facil[i].parm =
+						hex_to_uint(&str[4+4*i], 2);
+				}
+				info->nfacil = i;
+				break;
 		}
 	}
 }
@@ -2279,8 +2235,7 @@ static unsigned int dec_to_uint (unsigned char* str, int len)
 
 	if (!len) len = strlen(str);
 	for (val = 0; len && is_digit(*str); ++str, --len)
-		val = (val * 10) + (*str - (unsigned)'0')
-	;
+		val = (val * 10) + (*str - (unsigned)'0');
 	return val;
 }
 
@@ -2297,12 +2252,11 @@ static unsigned int hex_to_uint (unsigned char* str, int len)
 	{
 		ch = *str;
 		if (is_digit(ch))
-			val = (val << 4) + (ch - (unsigned)'0')
-		;
+			val = (val << 4) + (ch - (unsigned)'0');
 		else if (is_hex_digit(ch))
-			val = (val << 4) + ((ch & 0xDF) - (unsigned)'A' + 10)
-		;
-		else break;
+			val = (val << 4) + ((ch & 0xDF) - (unsigned)'A' + 10);
+		else
+			break;
 	}
 	return val;
 }
@@ -2334,22 +2288,18 @@ static int handle_IPXWAN(unsigned char *sendpacket, char *devname, unsigned char
 			/* It's a timer request packet */
 			printk(KERN_INFO "%s: Received IPXWAN Timer Request packet\n",devname);
 
-			/* Go through the routing options and answer no to every */
-			/* option except Unnumbered RIP/SAP */
+			/* Go through the routing options and answer no to every
+			 * option except Unnumbered RIP/SAP */
 			for(i = 41; sendpacket[i] == 0x00; i += 5)
 			{
 				/* 0x02 is the option for Unnumbered RIP/SAP */
 				if( sendpacket[i + 4] != 0x02)
-				{
 					sendpacket[i + 1] = 0;
-				}
 			}
 
 			/* Skip over the extended Node ID option */
 			if( sendpacket[i] == 0x04 )
-			{
 				i += 8;
-			}
 
 			/* We also want to turn off all header compression opt. */
 			for(; sendpacket[i] == 0x80 ;)
@@ -2388,15 +2338,13 @@ static int handle_IPXWAN(unsigned char *sendpacket, char *devname, unsigned char
 			sendpacket[64] = CVHexToAscii((network_number & 0x000000F0)>> 4);
 			sendpacket[65] = CVHexToAscii(network_number & 0x0000000F);
 			for(i = 66; i < 99; i+= 1)
-			{
 				sendpacket[i] = 0;
-			}
 
-			/* printk(KERN_INFO "%s: Sending IPXWAN Information Response packet\n",devname); */
+			printk(KERN_INFO "%s: Sending IPXWAN Information Response packet\n",devname);
 		}
 		else
 		{
-			printk(KERN_WARNING "%s: Unknown IPXWAN packet!\n",devname);
+			printk(KERN_INFO "%s: Unknown IPXWAN packet!\n",devname);
 			return 0;
 		}
 
@@ -2408,9 +2356,8 @@ static int handle_IPXWAN(unsigned char *sendpacket, char *devname, unsigned char
 
 		return 1;
 	} else {
-		/* If we get here its an IPX-data packet, so it'll get passed up the stack. */
-
-		/* switch the network numbers */
+		/* If we get here its an IPX-data packet, so it'll get passed up the stack.
+		   switch the network numbers */
 		switch_net_numbers(sendpacket, network_number, 1);	
 		return 0;
 	}
@@ -2421,6 +2368,7 @@ static int handle_IPXWAN(unsigned char *sendpacket, char *devname, unsigned char
    if incoming is 1 - if the net number is 0 make it ours 
 
 */
+
 static void switch_net_numbers(unsigned char *sendpacket, unsigned long network_number, unsigned char incoming)
 {
 	unsigned long pnetwork_number;
@@ -2429,15 +2377,20 @@ static void switch_net_numbers(unsigned char *sendpacket, unsigned long network_
 			  (sendpacket[7] << 16) + (sendpacket[8] << 8) + 
 			  sendpacket[9]);
 
-	if (!incoming) {
+	if (!incoming) 
+	{
 		/* If the destination network number is ours, make it 0 */
-		if( pnetwork_number == network_number) {
+		if( pnetwork_number == network_number) 
+		{
 			sendpacket[6] = sendpacket[7] = sendpacket[8] = 
 					 sendpacket[9] = 0x00;
 		}
-	} else {
+	} 
+	else 
+	{
 		/* If the incoming network is 0, make it ours */
-		if( pnetwork_number == 0) {
+		if( pnetwork_number == 0) 
+		{
 			sendpacket[6] = (unsigned char)(network_number >> 24);
 			sendpacket[7] = (unsigned char)((network_number & 
 					 0x00FF0000) >> 16);
@@ -2453,15 +2406,20 @@ static void switch_net_numbers(unsigned char *sendpacket, unsigned long network_
 			  (sendpacket[19] << 16) + (sendpacket[20] << 8) + 
 			  sendpacket[21]);
 
-	if( !incoming ) {
+	if( !incoming ) 
+	{
 		/* If the source network is ours, make it 0 */
-		if( pnetwork_number == network_number) {
+		if( pnetwork_number == network_number) 
+		{
 			sendpacket[18] = sendpacket[19] = sendpacket[20] = 
 					 sendpacket[21] = 0x00;
 		}
-	} else {
+	}
+	else
+	{
 		/* If the source network is 0, make it ours */
-		if( pnetwork_number == 0 ) {
+		if( pnetwork_number == 0 ) 
+		{
 			sendpacket[18] = (unsigned char)(network_number >> 24);
 			sendpacket[19] = (unsigned char)((network_number & 
 					 0x00FF0000) >> 16);

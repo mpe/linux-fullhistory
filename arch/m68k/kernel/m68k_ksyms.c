@@ -1,3 +1,4 @@
+#include <linux/config.h>
 #include <linux/module.h>
 #include <linux/linkage.h>
 #include <linux/sched.h>
@@ -60,6 +61,6 @@ EXPORT_SYMBOL_NOVERS(__down_failed);
 EXPORT_SYMBOL_NOVERS(__down_failed_interruptible);
 EXPORT_SYMBOL_NOVERS(__up_wakeup);
 
-#if CONFIG_PCI
+#ifdef CONFIG_PCI
 EXPORT_SYMBOL(pci_devices);
 #endif

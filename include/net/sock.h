@@ -150,6 +150,7 @@ struct ipv6_pinfo
 	__u32			flow_lbl;
 	int			hop_limit;
 	int			mcast_hops;
+	int			mcast_oif;
 	__u8			priority;
 
 
@@ -162,10 +163,6 @@ struct ipv6_pinfo
 				dstopts:1,
 				mc_loop:1,
                                 unused:2;
-
-	/* device for outgoing packets */
-
-	struct device		*oif;
 
 	struct ipv6_mc_socklist	*ipv6_mc_list;
 	__u32			dst_cookie;
@@ -188,6 +185,11 @@ struct raw_opt {
 };
 #endif
 
+/* This defines a selective acknowledgement block. */
+struct tcp_sack_block {
+	__u32	start_seq;
+	__u32	end_seq;
+};
 
 struct tcp_opt
 {
@@ -259,7 +261,8 @@ struct tcp_opt
  *      Options received (usually on last packet, some only on SYN packets).
  */
 	char	tstamp_ok,	/* TIMESTAMP seen on SYN packet		*/
-		wscale_ok;	/* Wscale seen on SYN packet		*/
+		wscale_ok,	/* Wscale seen on SYN packet		*/
+		sack_ok;	/* SACK seen on SYN packet		*/
 	char	saw_tstamp;	/* Saw TIMESTAMP on last packet		*/
         __u16	in_mss;		/* MSS option received from sender	*/
         __u8	snd_wscale;	/* Window scaling received from sender	*/
@@ -268,6 +271,8 @@ struct tcp_opt
         __u32	rcv_tsecr;	/* Time stamp echo reply        	*/
         __u32	ts_recent;	/* Time stamp to echo next		*/
         __u32	ts_recent_stamp;/* Time we stored ts_recent (for aging) */
+	int	num_sacks;	/* Number of SACK blocks		*/
+	struct tcp_sack_block selective_acks[4]; /* The SACKS themselves*/
 
  	struct timer_list	probe_timer;		/* Probes	*/
 	__u32	basertt;	/* Vegas baseRTT			*/
@@ -355,7 +360,12 @@ struct sock
 	unsigned short		num;		/* Local port				*/
 	volatile unsigned char	state,		/* Connection state			*/
 				zapped;		/* In ax25 & ipx means not linked	*/
-	struct tcphdr		dummy_th;	/* TCP header template			*/
+	__u16			sport;		/* Source port				*/
+	__u16			dport;		/* Destination port			*/
+
+	unsigned short		family;
+	unsigned char		reuse,
+				nonagle;
 
 	int			sock_readers;	/* user count				*/
 	int			rcvbuf;
@@ -379,13 +389,11 @@ struct sock
 	volatile char		dead,
 				done,
 				urginline,
-				reuse,
 				keepopen,
 				linger,
 				destroy,
 				no_check,
 				broadcast,
-				nonagle,
 				bsdism;
 	unsigned char		debug;
 	int			proc;
@@ -398,7 +406,6 @@ struct sock
 	struct sk_buff_head	back_log,
 	                        error_queue;
 
-	unsigned short		family;
 	struct proto		*prot;
 
 /*

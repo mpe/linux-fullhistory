@@ -97,7 +97,7 @@ extern struct sock *tcp_regs[TCP_NUM_REGS];
 #define TCP_RHASH_FN(__fport) \
 	((((__fport) >> 7) ^ (__fport)) & (TCP_NUM_REGS - 1))
 #define TCP_RHASH(__fport)	tcp_regs[TCP_RHASH_FN((__fport))]
-#define TCP_SK_RHASH_FN(__sock)	TCP_RHASH_FN((__sock)->dummy_th.dest)
+#define TCP_SK_RHASH_FN(__sock)	TCP_RHASH_FN((__sock)->dport)
 #define TCP_SK_RHASH(__sock)	tcp_regs[TCP_SK_RHASH_FN((__sock))]
 
 static __inline__ void tcp_reg_zap(struct sock *sk)
@@ -161,9 +161,12 @@ struct tcp_tw_bucket {
 	int			bound_dev_if;
 	unsigned short		num;
 	unsigned char		state,
-				family;		/* sk->zapped */
-	__u16			source;		/* sk->dummy_th.source */
-	__u16			dest;		/* sk->dummy_th.dest */
+				zapped;
+	__u16			sport;
+	__u16			dport;
+	unsigned short		family;
+	unsigned char		reuse,
+				nonagle;
 
 	/* And these are ours. */
 	__u32			rcv_nxt;
@@ -187,6 +190,7 @@ extern kmem_cache_t *tcp_timewait_cachep;
  */
 extern int sysctl_tcp_timestamps;
 extern int sysctl_tcp_window_scaling;
+extern int sysctl_tcp_sack;
 
 /* These can have wildcards, don't try too hard. */
 static __inline__ int tcp_lhashfn(unsigned short num)
@@ -294,15 +298,12 @@ static __inline__ int tcp_sk_listen_hashfn(struct sock *sk)
 #define TCPOLEN_TIMESTAMP      10
 
 /* But this is what stacks really send out. */
-#define TCPOLEN_TSTAMP_ALIGNED	12
-#define TCPOLEN_WSCALE_ALIGNED	4
-
-/*
- *      TCP option flags for parsed options.
- */
-
-#define TCPOPTF_SACK_PERM       1
-#define TCPOPTF_TIMESTAMP       2
+#define TCPOLEN_TSTAMP_ALIGNED		12
+#define TCPOLEN_WSCALE_ALIGNED		4
+#define TCPOLEN_SACKPERM_ALIGNED	4
+#define TCPOLEN_SACK_BASE		2
+#define TCPOLEN_SACK_BASE_ALIGNED	4
+#define TCPOLEN_SACK_PERBLOCK		8
 
 /*
  *	TCP Vegas constants
@@ -331,7 +332,7 @@ struct tcp_v6_open_req {
 	struct in6_addr		loc_addr;
 	struct in6_addr		rmt_addr;
 	struct ipv6_options	*opt;
-	struct device		*dev;
+	int			iif;
 };
 #endif
 
@@ -347,6 +348,7 @@ struct open_request {
 	unsigned snd_wscale : 4, 
 		rcv_wscale : 4, 
 		tstamp_ok : 1,
+		sack_ok : 1,
 		wscale_ok : 1;
 	/* The following two fields can be easily recomputed I think -AK */
 	__u32			window_clamp;	/* window clamp at creation time */
@@ -378,9 +380,6 @@ extern kmem_cache_t *tcp_openreq_cachep;
  */
 
 struct tcp_func {
-	int			(*build_net_header)	(struct sock *sk, 
-							 struct sk_buff *skb);
-
 	void			(*queue_xmit)		(struct sk_buff *skb);
 
 	void			(*send_check)		(struct sock *sk,
@@ -388,8 +387,7 @@ struct tcp_func {
 							 int len,
 							 struct sk_buff *skb);
 
-	int			(*rebuild_header)	(struct sock *sk,
-							 struct sk_buff *skb);
+	int			(*rebuild_header)	(struct sock *sk);
 
 	int			(*conn_request)		(struct sock *sk,
 							 struct sk_buff *skb,
@@ -497,15 +495,14 @@ extern int			tcp_recvmsg(struct sock *sk,
 					    int len, int nonblock, 
 					    int flags, int *addr_len);
 
-extern void			tcp_parse_options(struct tcphdr *th, struct tcp_opt *tp, 
-									  int no_fancy);
+extern void			tcp_parse_options(struct sock *sk, struct tcphdr *th,
+						  struct tcp_opt *tp, int no_fancy);
 
 /*
  *	TCP v4 functions exported for the inet6 API
  */
 
-extern int		       	tcp_v4_rebuild_header(struct sock *sk, 
-						      struct sk_buff *skb);
+extern int		       	tcp_v4_rebuild_header(struct sock *sk);
 
 extern int		       	tcp_v4_build_header(struct sock *sk, 
 						    struct sk_buff *skb);
@@ -520,7 +517,8 @@ extern int			tcp_v4_conn_request(struct sock *sk,
 
 extern struct sock *		tcp_create_openreq_child(struct sock *sk,
 							 struct open_request *req,
-							 struct sk_buff *skb);
+							 struct sk_buff *skb,
+							 int mss);
 
 extern struct sock *		tcp_v4_syn_recv_sock(struct sock *sk,
 						     struct sk_buff *skb,
@@ -534,6 +532,16 @@ extern int			tcp_v4_connect(struct sock *sk,
 					       struct sockaddr *uaddr,
 					       int addr_len);
 
+extern void			tcp_connect(struct sock *sk,
+					    struct sk_buff *skb,
+					    int est_mss);
+
+extern struct sk_buff *		tcp_make_synack(struct sock *sk,
+						struct dst_entry *dst,
+						struct open_request *req,
+						int mss);
+
+
 /* From syncookies.c */
 extern struct sock *cookie_v4_check(struct sock *sk, struct sk_buff *skb, 
 				    struct ip_options *opt);
@@ -543,7 +551,8 @@ extern __u32 cookie_v4_init_sequence(struct sock *sk, struct sk_buff *skb,
 extern void tcp_read_wakeup(struct sock *);
 extern void tcp_write_xmit(struct sock *);
 extern void tcp_time_wait(struct sock *);
-extern void tcp_do_retransmit(struct sock *, int);
+extern int tcp_retransmit_skb(struct sock *, struct sk_buff *);
+extern void tcp_xmit_retransmit_queue(struct sock *);
 extern void tcp_simple_retransmit(struct sock *);
 
 /* tcp_output.c */
@@ -554,6 +563,7 @@ extern void tcp_write_wakeup(struct sock *);
 extern void tcp_send_fin(struct sock *sk);
 extern void tcp_send_active_reset(struct sock *sk);
 extern int  tcp_send_synack(struct sock *);
+extern void tcp_transmit_skb(struct sock *, struct sk_buff *);
 extern void tcp_send_skb(struct sock *, struct sk_buff *, int force_queue);
 extern void tcp_send_ack(struct sock *sk);
 extern void tcp_send_delayed_ack(struct tcp_opt *tp, int max_timeout);
@@ -639,6 +649,32 @@ extern __inline__ int tcp_raise_window(struct sock *sk)
 	return (new_win && (new_win > (cur_win << 1)));
 }
 
+/* This is what the send packet queueing engine uses to pass
+ * TCP per-packet control information to the transmission
+ * code.
+ */
+struct tcp_skb_cb {
+	__u8	flags;			/* TCP header flags.		*/
+
+	/* NOTE: These must match up to the flags byte in a
+	 *       real TCP header.
+	 */
+#define TCPCB_FLAG_FIN		0x01
+#define TCPCB_FLAG_SYN		0x02
+#define TCPCB_FLAG_RST		0x04
+#define TCPCB_FLAG_PSH		0x08
+#define TCPCB_FLAG_ACK		0x10
+#define TCPCB_FLAG_URG		0x20
+
+	__u8	sacked;			/* State flags for SACK/FACK.	*/
+#define TCPCB_SACKED_ACKED	0x01	/* SKB ACK'd by a SACK block	*/
+#define TCPCB_SACKED_RETRANS	0x02	/* SKB retransmitted		*/
+
+	__u16	urg_ptr;		/* Valid w/URG flags is set.	*/
+};
+
+#define TCP_SKB_CB(__skb)	((struct tcp_skb_cb *)&((__skb)->cb[0]))
+
 /* This checks if the data bearing packet SKB (usually tp->send_head)
  * should be put on the wire right now.
  */
@@ -663,7 +699,7 @@ static __inline__ int tcp_snd_test(struct sock *sk, struct sk_buff *skb)
 	 */
 	len = skb->end_seq - skb->seq;
 	if (!sk->nonagle && len < (sk->mss >> 1) && tp->packets_out && 
-	    !skb->h.th->urg)
+	    !(TCP_SKB_CB(skb)->flags & TCPCB_FLAG_URG))
 		nagle_check = 0;
 
 	return (nagle_check && tp->packets_out < tp->snd_cwnd &&
@@ -739,72 +775,39 @@ static __inline__ void tcp_set_state(struct sock *sk, int state)
 	}
 }
 
-static __inline__ void tcp_build_options(__u32 *ptr, struct tcp_opt *tp)
-{
-	if (tp->tstamp_ok) {
-		*ptr = __constant_htonl((TCPOPT_NOP << 24) |
-					(TCPOPT_NOP << 16) |
-					(TCPOPT_TIMESTAMP << 8) |
-					TCPOLEN_TIMESTAMP);
-		/* rest filled in by tcp_update_options */
-	}
-}
-
-static __inline__ void tcp_update_options(__u32 *ptr, struct tcp_opt *tp)
-{
-	if (tp->tstamp_ok) {
-		*++ptr = htonl(jiffies);
-		*++ptr = htonl(tp->ts_recent);
-	}
-}
-
-static __inline__ void tcp_build_and_update_options(__u32 *ptr, struct tcp_opt *tp)
+static __inline__ void tcp_build_and_update_options(__u32 *ptr, struct tcp_opt *tp, __u32 tstamp)
 {
 	if (tp->tstamp_ok) {
 		*ptr++ = __constant_htonl((TCPOPT_NOP << 24) |
 					  (TCPOPT_NOP << 16) |
 					  (TCPOPT_TIMESTAMP << 8) |
 					  TCPOLEN_TIMESTAMP);
-		*ptr++ = htonl(jiffies);
-		*ptr   = htonl(tp->ts_recent);
+		*ptr++ = htonl(tstamp);
+		*ptr++ = htonl(tp->ts_recent);
+	}
+	if(tp->sack_ok && tp->num_sacks) {
+		int this_sack;
+
+		*ptr++ = __constant_htonl((TCPOPT_NOP << 24) |
+					  (TCPOPT_NOP << 16) |
+					  (TCPOPT_SACK << 8) |
+					  (TCPOLEN_SACK_BASE +
+					   (tp->num_sacks * TCPOLEN_SACK_PERBLOCK)));
+		for(this_sack = 0; this_sack < tp->num_sacks; this_sack++) {
+			*ptr++ = htonl(tp->selective_acks[this_sack].start_seq);
+			*ptr++ = htonl(tp->selective_acks[this_sack].end_seq);
+		}
 	}
 }
 
-/* 
- *	This routines builds a generic TCP header. 
- *	They also build the RFC1323 Timestamp, but don't fill the
- *	actual timestamp in (you need to call tcp_update_options for this).
- *	XXX: pass tp instead of sk here.
- */
- 
-static inline void tcp_build_header_data(struct tcphdr *th, struct sock *sk, int push)
-{
-	struct tcp_opt *tp = &(sk->tp_pinfo.af_tcp);
-
-	memcpy(th,(void *) &(sk->dummy_th), sizeof(*th));
-	th->seq = htonl(tp->write_seq);
-	if (!push)
-		th->psh = 1;
-	tcp_build_options((__u32*)(th+1), tp);
-}
-
-/*
- * Construct a tcp options header for a SYN or SYN_ACK packet.
+/* Construct a tcp options header for a SYN or SYN_ACK packet.
  * If this is every changed make sure to change the definition of
  * MAX_SYN_SIZE to match the new maximum number of options that you
  * can generate.
- * FIXME: This is completely disgusting.
- * This is probably a good candidate for a bit of assembly magic.
- * It would be especially magical to compute the checksum for this
- * stuff on the fly here.
  */
-extern __inline__ int tcp_syn_build_options(struct sk_buff *skb, int mss, int ts, int offer_wscale, int wscale)
+extern __inline__ void tcp_syn_build_options(__u32 *ptr, int mss, int ts, int sack,
+					     int offer_wscale, int wscale, __u32 tstamp)
 {
-	int count = 4 + (offer_wscale ? TCPOLEN_WSCALE_ALIGNED : 0) +
-		((ts) ? TCPOLEN_TSTAMP_ALIGNED : 0);
-	unsigned char *optr = skb_put(skb,count);
-	__u32 *ptr = (__u32 *)optr;
-
 	/* We always get an MSS option.
 	 * The option bytes which will be seen in normal data
 	 * packets should timestamps be used, must be in the MSS
@@ -815,20 +818,26 @@ extern __inline__ int tcp_syn_build_options(struct sk_buff *skb, int mss, int ts
 	 * recognize data packets as being full sized when we
 	 * should, and thus we won't abide by the delayed ACK
 	 * rules correctly.
+	 * SACKs don't matter, we never delay an ACK when we
+	 * have any of those going out.
 	 */
 	if(ts)
 		mss += TCPOLEN_TSTAMP_ALIGNED;
 	*ptr++ = htonl((TCPOPT_MSS << 24) | (TCPOLEN_MSS << 16) | mss);
 	if (ts) {
-		*ptr++ = __constant_htonl((TCPOPT_NOP << 24) | (TCPOPT_NOP << 16) |
-					  (TCPOPT_TIMESTAMP << 8) | TCPOLEN_TIMESTAMP);
-		*ptr++ = htonl(jiffies);	/* TSVAL */
+		if(sack)
+			*ptr++ = __constant_htonl((TCPOPT_SACK_PERM << 24) | (TCPOLEN_SACK_PERM << 16) |
+						  (TCPOPT_TIMESTAMP << 8) | TCPOLEN_TIMESTAMP);
+		else
+			*ptr++ = __constant_htonl((TCPOPT_NOP << 24) | (TCPOPT_NOP << 16) |
+						  (TCPOPT_TIMESTAMP << 8) | TCPOLEN_TIMESTAMP);
+		*ptr++ = htonl(tstamp);		/* TSVAL */
 		*ptr++ = __constant_htonl(0);	/* TSECR */
-	}
+	} else if(sack)
+		*ptr++ = __constant_htonl((TCPOPT_NOP << 24) | (TCPOPT_NOP << 16) |
+					  (TCPOPT_SACK_PERM << 8) | TCPOLEN_SACK_PERM);
 	if (offer_wscale)
-		*ptr++ = htonl((TCPOPT_WINDOW << 24) | (TCPOLEN_WINDOW << 16) | (wscale << 8));
-	skb->csum = csum_partial(optr, count, 0);
-	return count;
+		*ptr++ = htonl((TCPOPT_NOP << 24) | (TCPOPT_WINDOW << 16) | (TCPOLEN_WINDOW << 8) | (wscale));
 }
 
 /* Determine a window scaling and initial window to offer.

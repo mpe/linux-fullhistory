@@ -1,503 +1,651 @@
 /*
- * linux/zorro.h -- Amiga AutoConfig (Zorro) Expansion Device Definitions
+ *  linux/zorro.h -- Amiga AutoConfig (Zorro) Expansion Device Definitions
  *
- * Copyright (C) 1995 Geert Uytterhoeven
+ *  Copyright (C) 1995 Geert Uytterhoeven
  *
- * This file is subject to the terms and conditions of the GNU General Public
- * License.  See the file COPYING in the main directory of this archive
- * for more details.
+ *  Please update arch/m68k/amiga/zorro.c if you make changes here!
+ *
+ *  Many IDs were obtained from ExpName/Identify ((C) Richard Körber)
+ *  and by looking at the NetBSD-Amiga kernel sources
+ *
+ *  This file is subject to the terms and conditions of the GNU General Public
+ *  License.  See the file COPYING in the main directory of this archive
+ *  for more details.
  */
 
-#ifndef __ZORRO_H
-#define __ZORRO_H
+#ifndef _LINUX_ZORRO_H
+#define _LINUX_ZORRO_H
 
 #ifndef __ASSEMBLY__
 
-/*
- * Defined Board Manufacturers
- *
- * Please update arch/m68k/amiga/zorro.c if you make changes here
- * Many IDs were obtained from ExpName/Identify ((C) Richard Körber)
- * and by looking at the NetBSD-Amiga kernel sources
- */
-
-#define MANUF_PACIFIC          (0x00D3)	/* Pacific Peripherals */
-#define PROD_SE_2000_A500      (0x00)	/* SE 2000 A500 */
-#define PROD_PACIFIC_HD        (0x0A)	/* HD Controller */
-
-#define MANUF_KUPKE            (0x00DD)	/* Kupke */
-#define PROD_GOLEM_BOX_2       (0x00)	/* Golem RAM Box 2MB */
-
-#define MANUF_MEMPHIS          (0x0100)	/* Memphis */
-#define PROD_STORMBRINGER      (0x00)	/* Stormbringer */
-
-#define MANUF_3_STATE          (0x0200)	/* 3-State */
-#define PROD_MEGAMIX_2000      (0x02)	/* Megamix 2000 RAM */
-
-#define MANUF_COMMODORE2       (0x0201)	/* Commodore Braunschweig */
-#define PROD_A2088             (0x01)	/* CBM A2088 XT Bridgeboard */
-#define PROD_A2286             (0x02)	/* CBM A2286 AT Bridgeboard */
-#define PROD_A4091_2           (0x54)	/* CBM A4091 SCSI Controller */
-#define PROD_A2386SX           (0x67)	/* CBM A2386-SX Bridgeboard */
-
-#define MANUF_COMMODORE        (0x0202)	/* Commodore West Chester */
-#define PROD_A2090A            (0x01)	/* CBM A2090/A2090A HD Controller */
-#define PROD_A590              (0x02)	/* CBM A590 SCSI Controller */
-#define PROD_A2091             (0x03)	/* CBM A2091 SCSI Controller */
-#define PROD_A2090B            (0x04)	/* CBM A2090B 2090 Autoboot Card */
-#define PROD_ARCNET            (0x09)	/* CBM A2060 Arcnet Card */
-#define PROD_CBMRAM            (0x0A)	/* CBM A2052/58.RAM | 590/2091.RAM */
-#define PROD_A560RAM           (0x20)	/* CBM A560 Memory Module */
-#define PROD_A2232PROTO        (0x45)	/* CBM A2232 Serial Prototype */
-#define PROD_A2232             (0x46)	/* CBM A2232 Serial Production */
-#define PROD_A2620             (0x50)	/* CBM A2620 68020/RAM Card */
-#define PROD_A2630             (0x51)	/* CBM A2630 68030/RAM Card */
-#define PROD_A4091             (0x54)	/* CBM A4091 SCSI Controller */
-#define PROD_A2065_2           (0x5A)	/* A2065 Ethernet Card */
-#define PROD_ROMULATOR         (0x60)	/* CBM Romulator Card */
-#define PROD_A3000TESTFIX      (0x61)	/* CBM A3000 Test Fixture */
-#define PROD_A2386SX_2         (0x67)	/* A2386-SX Bridgeboard */
-#define PROD_A2065             (0x70)	/* CBM A2065 Ethernet Card */
-
-#define MANUF_COMMODORE3       (0x0203)	/* Commodore West Chester */
-#define PROD_A2090A_CM         (0x03)	/* A2090A Combitec/MacroSystem */
-
-#define MANUF_KCS              (0x02FF)	/* Kolff Computer Supplies */
-#define PROD_POWER_BOARD       (0x00)	/* KCS Power PC Board */
-
-#define MANUF_CARDCO           (0x03EC)	/* Cardco */
-#define PROD_KRONOS_2000_SCSI  (0x04)	/* Kronos 2000 SCSI Controller */
-#define PROD_A1000_SCSI        (0x0C)	/* A1000 SCSI Controller */
-#define PROD_ESCORT_SCSI       (0x0E)	/* Escort SCSI Controller */
-#define PROD_CC_A2410          (0xF5)	/* Cardco A2410 Hires Graphics Card */
-
-#define MANUF_A_SQUARED        (0x03ED)	/* A-Squared */
-#define PROD_LIVE_2000         (0x01)	/* Live! 2000 */
-
-#define MANUF_COMSPEC          (0x03EE)	/* ComSpec Communications */
-#define PROD_AX2000            (0x01)	/* AX2000 */
-
-#define MANUF_ANAKIN           (0x03F1)	/* Anakin */
-#define PROD_EASYL             (0x01)	/* Easyl Tablet */
-
-#define MANUF_MICROBOTICS      (0x03F2)	/* MicroBotics */
-#define PROD_STARBOARD_II      (0x00)	/* StarBoard II */
-#define PROD_STARDRIVE         (0x02)	/* StarDrive */
-#define PROD_8_UP_A            (0x03)	/* 8-Up (Rev A) */
-#define PROD_8_UP_Z            (0x04)	/* 8-Up (Rev Z) */
-#define PROD_DELTA_RAM         (0x20)	/* Delta Card RAM */
-#define PROD_8_STAR_RAM        (0x40)	/* 8-Star RAM */
-#define PROD_8_STAR            (0x41)	/* 8-Star */
-#define PROD_VXL_RAM           (0x44)	/* VXL RAM */
-#define PROD_VXL_30            (0x45)	/* VXL-30 Turbo Board */
-#define PROD_DELTA             (0x60)	/* Delta Card */
-#define PROD_MBX_1200          (0x81)	/* MBX 1200 */
-#define PROD_HARDFRAME_2000    (0x9E)	/* Hardframe 2000 */
-#define PROD_MBX_1200_2        (0xC1)	/* MBX 1200 */
-
-#define MANUF_ACCESS           (0x03F4)	/* Access Associates */
-
-#define MANUF_EXPANSION_TECH   (0x03F6)	/* Expansion Technologies */
-
-#define MANUF_ASDG             (0x03FF)	/* ASDG */
-#define PROD_ASDG_MEMORY       (0x01)	/* Memory Expansion */
-#define PROD_ASDG_MEMORY_2     (0x02)	/* Memory Expansion */
-#define PROD_LAN_ROVER         (0xFE)	/* Lan Rover Ethernet */
-#define PROD_TWIN_X            (0xFF)	/* Twin-X Serial Card */
-
-#define MANUF_IMTRONICS        (0x0404)	/* Imtronics */
-#define PROD_HURRICANE_2800    (0x39)	/* Hurricane 2800 68030 */
-#define PROD_HURRICANE_2800_2  (0x57)	/* Hurricane 2800 68030 */
-
-#define MANUF_UNIV_OF_LOWELL   (0x0406)	/* University of Lowell */
-#define PROD_A2410             (0x00)	/* CBM A2410 Hires Graphics Card */
-
-#define MANUF_AMERISTAR        (0x041D)	/* Ameristar */
-#define PROD_AMERISTAR2065     (0x01)	/* A2065 Ethernet Card */
-#define PROD_A560              (0x09)	/* Arcnet Card */
-#define PROD_A4066             (0x0A)	/* A4066 Ethernet Card */
-
-#define MANUF_SUPRA            (0x0420)	/* Supra */
-#define PROD_SUPRADRIVE_4x4    (0x01)	/* SupraDrive 4x4 SCSI Controller */
-#define PROD_SUPRA_2000        (0x03)	/* 2000 DMA HD */
-#define PROD_SUPRA_500         (0x05)	/* 500 HD/RAM */
-#define PROD_SUPRA_500XP       (0x09)	/* 500XP/2000 RAM */
-#define PROD_SUPRA_500RX       (0x0A)	/* 500RX/2000 RAM */
-#define PROD_SUPRA_2400ZI      (0x0B)	/* 2400zi Modem */
-#define PROD_WORDSYNC          (0x0C)	/* Supra Wordsync SCSI Controller */
-#define PROD_WORDSYNC_II       (0x0D)	/* Supra Wordsync II SCSI Controller */
-#define PROD_SUPRA_2400ZIPLUS  (0x10)	/* 2400zi+ Modem */
-
-#define MANUF_CSA              (0x0422)	/* Computer Systems Ass. */
-#define PROD_MAGNUM            (0x11)	/* Magnum 40 SCSI Controller */
-#define PROD_12GAUGE           (0x15)	/* 12 Gauge SCSI Controller */
-
-#define MANUF_MTEC2            (0x0502)	/* M-Tech */
-#define PROD_AT500_2           (0x03)	/* AT500 RAM */
-
-#define MANUF_GVP3             (0x06E1)	/* Great Valley Products */
-#define PROD_IMPACT            (0x08)	/* Impact SCSI/Memory */
-
-#define MANUF_BYTEBOX          (0x07DA)	/* ByteBox */
-#define PROD_BYTEBOX_A500      (0x00)	/* A500 */
-
-#define MANUF_HACKER           (0x07DB)	/* Test only: no product definitions */
-
-#define MANUF_POWER_COMPUTING  (0x07DC)	/* Power Computing (DKB) */
-#define PROD_DKB_3128          (0x0E)	/* DKB 3128 RAM */
-#define PROD_RAPID_FIRE        (0x0F)	/* Rapid Fire SCSI Controller */
-#define PROD_DKB_1202          (0x10)	/* DKB 1202 RAM */
-#define PROD_VIPER_II_COBRA    (0x12)	/* Viper II Turbo Board (DKB Cobra) */
-#define PROD_WILDFIRE_060      (0x17)	/* WildFire 060 Turbo Board */
-#define PROD_WILDFIRE_060_2    (0xFF)	/* WildFire 060 Turbo Board */
-
-#define MANUF_GVP              (0x07E1)	/* Great Valley Products */
-#define PROD_IMPACT_I_4K       (0x01)	/* Impact Series-I SCSI 4K */
-#define PROD_IMPACT_I_16K_2    (0x02)	/* Impact Series-I SCSI 16K/2 */
-#define PROD_IMPACT_I_16K_3    (0x03)	/* Impact Series-I SCSI 16K/3 */
-#define PROD_IMPACT_3001_IDE   (0x08)	/* Impact 3001 IDE */
-#define PROD_IMPACT_3001_RAM   (0x09)	/* Impact 3001 RAM */
-#define PROD_GVPIISCSI         (0x0B)	/* GVP Series II SCSI Controller */
-#define PROD_GVPIISCSI_2       (0x09)	/* evidence that the driver works
-					   for this product code also */
-#define PROD_GVPIIRAM          (0x0A)	/* GVP Series II RAM */
-#define PROD_GVP               (0x0B)	/* This code is used by a wide range of
-					   GVP products - use the epc to
-					   identify it correctly */
-#define PROD_GVP_A2000_030     (0x0D)	/* GVP A2000 68030 Turbo Board */
-#define PROD_IMPACT_3001_IDE_2 (0x0D)	/* Impact 3001 IDE */
-#define PROD_GFORCE_040_SCSI   (0x16)	/* GForce 040 with SCSI (new) */
-#define PROD_GVPIV_24          (0x20)	/* GVP IV-24 Graphics Board */
-#define PROD_GFORCE_040        (0xFF)	/* GForce 040 Turbo Board */
-/* #define PROD_GVPIO_EXT      (0xFF)*/	/* GVP I/O Extender */
-
-#define MANUF_SYNERGY          (0x07E5)	/* Synergy */
-
-#define MANUF_XETEC            (0x07E6)	/* Xetec */
-#define PROD_FASTCARD_SCSI     (0x01)	/* FastCard SCSI Controller */
-#define PROD_FASTCARD_RAM      (0x02)	/* FastCard RAM */
-
-#define MANUF_PPI              (0x07EA)	/* Progressive Peripherals Inc. */
-#define PROD_MERCURY           (0x00)	/* Mercury Turbo Board */
-#define PROD_PPS_A3000_040     (0x01)	/* PP&S A3000 68040 Turbo Board */
-#define PROD_PPS_A2000_040     (0x69)	/* PP&S A2000 68040 Turbo Board */
-#define PROD_ZEUS              (0x96)	/* Zeus SCSI Controller */
-#define PROD_PPS_A500_040      (0xBB)	/* PP&S A500 68040 Turbo Board */
-
-#define MANUF_XEBEC            (0x07EC)	/* Xebec */
-
-#define MANUF_SPIRIT           (0x07F2)	/* Spirit */
-#define PROD_HDA_506           (0x04)	/* HDA 506 Harddisk */
-#define PROD_OCTABYTE_RAM      (0x06)	/* OctaByte RAM */
-
-#define MANUF_BSC              (0x07FE)	/* BSC */
-#define PROD_ALF_3_SCSI        (0x03)	/* BSC ALF 3 SCSI Controller */
-
-#define MANUF_BSC3             (0x0801)	/* BSC */
-#define PROD_ALF_2_SCSI        (0x01)	/* ALF 2 SCSI Controller */
-#define PROD_ALF_2_SCSI_2      (0x02)	/* ALF 2 SCSI Controller */
-#define PROD_ALF_3_SCSI_2      (0x03)	/* ALF 3 SCSI Controller */
-
-#define MANUF_C_LTD            (0x0802)	/* C Ltd. */
-#define PROD_KRONOS_SCSI       (0x04)	/* Kronos SCSI Controller */
-#define PROD_A1000_SCSI_2      (0x0C)	/* A1000 SCSI Controller */
-
-#define MANUF_JOCHHEIM         (0x0804)	/* Jochheim */
-#define PROD_JOCHHEIM_RAM      (0x01)	/* Jochheim RAM */
-
-#define MANUF_CHECKPOINT       (0x0807)	/* Checkpoint Technologies */
-#define PROD_SERIAL_SOLUTION   (0x00)	/* Serial Solution */
-
-#define MANUF_ICD              (0x0817)	/* ICD */
-#define PROD_ADVANTAGE_2000    (0x01)	/* Advantage 2000 SCSI Controller */
-
-#define MANUF_KUPKE2           (0x0819)	/* Kupke */
-#define PROD_KUPKE_SCSI_II     (0x02)	/* Golem SCSI-II Controller */
-#define PROD_GOLEM_BOX         (0x03)	/* Golem Box */
-#define PROD_KUPKE_TURBO       (0x04)	/* 030/882 Turbo Board */
-#define PROD_KUPKE_SCSI_AT     (0x05)	/* SCSI/AT Controller */
-
-#define MANUF_GVP4             (0x081D)	/* Great Valley Products */
-#define PROD_A2000_RAM8        (0x09)	/* A2000-RAM8/2 */
-
-#define MANUF_INTERWORKS_NET   (0x081E)	/* Interworks Network */
-
-#define MANUF_HARDITAL         (0x0820)	/* Hardital Synthesis */
-#define PROD_TQM               (0x14)	/* TQM 68030+68882 Turbo Board */
-
-#define MANUF_BSC2             (0x082C)	/* BSC */
-#define PROD_OKTAGON_SCSI      (0x05)	/* BSC Oktagon 2008 SCSI Controller */
-#define PROD_TANDEM            (0x06)	/* BSC Tandem AT-2008/508 IDE */
-#define PROD_ALPHA_RAM_1200    (0x07)	/* Alpha RAM 1200 */
-#define PROD_OKTAGON_RAM       (0x08)	/* BSC Oktagon 2008 RAM */
-#define PROD_MULTIFACE_I       (0x10)	/* Alfa Data MultiFace I */
-#define PROD_MULTIFACE_II      (0x11)	/* Alfa Data MultiFace II */
-#define PROD_MULTIFACE_III     (0x12)	/* Alfa Data MultiFace III */
-#define PROD_BSC_FRAEMBUFFER   (0x20)	/* Framebuffer */
-#define PROD_GRAFFITI_RAM      (0x21)	/* Graffiti Graphics Board */
-#define PROD_GRAFFITI_REG      (0x22)
-#define PROD_ISDN_MASTERCARD   (0x40)	/* BSC ISDN MasterCard */
-#define PROD_ISDN_MASTERCARD_2 (0x41)	/* BSC ISDN MasterCard II */
-
-#define MANUF_ADV_SYS_SOFT     (0x0836)	/* Advanced Systems & Software */
-#define PROD_NEXUS_SCSI        (0x01)	/* Nexus SCSI Controller */
-#define PROD_NEXUS_RAM         (0x08)	/* Nexus RAM */
-
-#define MANUF_IMPULSE          (0x0838)	/* Impulse */
-#define PROD_FIRECRACKER_24    (0x00)	/* FireCracker 24 */
-
-#define MANUF_IVS              (0x0840)	/* IVS */
-#define PROD_GRANDSLAM_PIC_2   (0x02)	/* GrandSlam PIC 2 RAM */
-#define PROD_GRANDSLAM_PIC_1   (0x04)	/* GrandSlam PIC 1 RAM */
-#define PROD_IVS_OVERDRIVE     (0x10)	/* OverDrive HD */
-#define PROD_TRUMPCARD_CLASSIC (0x30)	/* Trumpcard Classic SCSI Controller */
-#define PROD_TRUMPCARD_PRO     (0x34)	/* Trumpcard Pro SCSI Controller */
-#define PROD_META_4            (0x40)	/* Meta-4 RAM */
-#define PROD_WAVETOOLS         (0xBF)	/* Wavetools Sound Board */
-#define PROD_VECTOR            (0xF3)	/* Vector SCSI Controller */
-#define PROD_VECTOR_2          (0xF4)	/* Vector SCSI Controller */
-
-#define MANUF_VECTOR           (0x0841)	/* Vector */
-#define PROD_CONNECTION        (0xE3)	/* Connection Serial IO */
-
-#define MANUF_XPERT_PRODEV     (0x0845)	/* XPert/ProDev */
-#define PROD_VISIONA_RAM       (0x01)	/* Visiona Graphics Board */
-#define PROD_VISIONA_REG       (0x02)
-#define PROD_MERLIN_RAM        (0x03)	/* Merlin Graphics Board */
-#define PROD_MERLIN_REG        (0x04)
-#define PROD_MERLIN_REG_2      (0xC9)
-
-#define MANUF_HYDRA_SYSTEMS    (0x0849)	/* Hydra Systems */
-#define PROD_AMIGANET          (0x01)	/* Amiganet Board */
-
-#define MANUF_SUNRIZE          (0x084F)	/* Sunrize Industries */
-#define PROD_AD1012            (0x01)	/* AD1012 Sound Board */
-#define PROD_AD516             (0x02)	/* AD516 Sound Board */
-#define PROD_DD512             (0x03)	/* DD512 Sound Board */
-
-#define MANUF_TRICERATOPS      (0x0850)	/* Triceratops */
-#define PROD_TRICERATOPS       (0x01)	/* Triceratops Multi I/O Board */
-
-#define MANUF_APPLIED_MAGIC    (0x0851)	/* Applied Magic Inc */
-#define PROD_DMI_RESOLVER      (0x01)	/* DMI Resolver Graphics Board */
-#define PROD_DIGITAL_BCASTER   (0x06)	/* Digital Broadcaster */
-
-#define MANUF_GFX_BASE         (0x085E)	/* GFX-Base */
-#define PROD_GDA_1_RAM         (0x00)	/* GDA-1 Graphics Board */
-#define PROD_GDA_1_REG         (0x01)
-
-#define MANUF_ROCTEC           (0x0860)	/* RocTec */
-#define PROD_RH_800C           (0x01)	/* RH 800C Hard Disk Controller */
-#define PROD_RH_800C_RAM       (0x01)	/* RH 800C RAM */
-
-#define MANUF_HELFRICH1        (0x0861)	/* Helfrich */
-#define PROD_RAINBOW3          (0x21)	/* Rainbow3 Graphics Board */
-
-#define MANUF_SW_RESULT_ENTS   (0x0866)	/* Software Result Enterprises */
-#define PROD_GG2PLUS           (0x01)	/* GG2+ Bus Converter */
-
-#define MANUF_MASOBOSHI        (0x086D)	/* Masoboshi */
-#define PROD_MASTER_CARD_RAM   (0x03)	/* Master Card RAM */
-#define PROD_MASTER_CARD_SCSI  (0x04)	/* Master Card SCSI Controller */
-#define PROD_MVD_819           (0x07)	/* MVD 819 */
-
-#define MANUF_VILLAGE_TRONIC   (0x0877)	/* Village Tronic */
-#define PROD_DOMINO_RAM        (0x01)	/* Domino Graphics Board */
-#define PROD_DOMINO_REG        (0x02)
-#define PROD_PICASSO_II_RAM    (0x0B)	/* Picasso II/II+ Graphics Board */
-#define PROD_PICASSO_II_REG    (0x0C)
-#define PROD_PICASSO_II_SEGM   (0x0D)	/* Picasso II/II+ (Segmented Mode) */
-#define PROD_PICASSO_IV        (0x15)	/* Picassio IV Graphics Board */
-#define PROD_PICASSO_IV_2      (0x16)
-#define PROD_PICASSO_IV_3      (0x17)
-#define PROD_PICASSO_IV_4      (0x18)
-#define PROD_ARIADNE           (0xC9)	/* Ariadne Ethernet */
-
-#define MANUF_UTILITIES_ULTD   (0x087B)	/* Utilities Unlimited */
-#define PROD_EMPLANT_DELUXE    (0x15)	/* Emplant Deluxe SCSI Controller */
-#define PROD_EMPLANT_DELUXE2   (0x20)	/* Emplant Deluxe SCSI Controller */
-
-#define MANUF_AMITRIX          (0x0880)	/* Amitrix */
-#define PROD_AMITRIX_MULTI_IO  (0x01)	/* Multi-IO */
-#define PROD_AMITRIX_CD_RAM    (0x02)	/* CD-RAM Memory */
-
-#define MANUF_ARMAX            (0x0885)	/* ArMax */
-#define PROD_OMNIBUS           (0x00)	/* OmniBus Graphics Board */
-
-#define MANUF_NEWTEK           (0x088F)	/* NewTek */
-#define PROD_VIDEOTOASTER      (0x00)	/* VideoToaster */
-
-#define MANUF_MTEC             (0x0890)	/* M-Tech Germany */
-#define PROD_AT500             (0x01)	/* AT500 IDE Controller */
-#define PROD_MTEC_68030        (0x03)	/* 68030 Turbo Board */
-#define PROD_MTEC_68020I       (0x06)	/* 68020i Turbo Board */
-#define PROD_MTEC_T1230        (0x20)	/* A1200 T68030/42 RTC Turbo Board */
-#define PROD_MTEC_RAM          (0x22)	/* MTEC 8MB RAM */
-
-#define MANUF_GVP2             (0x0891)	/* Great Valley Products */
-#define PROD_SPECTRUM_RAM      (0x01)	/* EGS 28/24 Spectrum Graphics Board */
-#define PROD_SPECTRUM_REG      (0x02)
-
-#define MANUF_HELFRICH2        (0x0893)	/* Helfrich */
-#define PROD_PICCOLO_RAM       (0x05)	/* Piccolo Graphics Board */
-#define PROD_PICCOLO_REG       (0x06)
-#define PROD_PEGGY_PLUS        (0x07)	/* PeggyPlus MPEG Decoder Board */
-#define PROD_VIDEOCRUNCHER     (0x08)	/* VideoCruncher */
-#define PROD_SD64_RAM          (0x0A)	/* SD64 Graphics Board */
-#define PROD_SD64_REG          (0x0B)
-
-#define MANUF_MACROSYSTEMS     (0x089B)	/* MacroSystems USA */
-#define PROD_WARP_ENGINE       (0x13)	/* Warp Engine 40xx SCSI Controller */
-
-#define MANUF_ELBOX            (0x089E)	/* ElBox Computer */
-#define PROD_ELBOX_1200        (0x06)	/* Elbox 1200/4 RAM */
-
-#define MANUF_HARMS_PROF       (0x0A00)	/* Harms Professional */
-#define PROD_HARMS_030_PLUS    (0x10)	/* 030 plus */
-#define PROD_3500_TURBO        (0xD0)	/* 3500 Turbo board */
-
-#define MANUF_MICRONIK         (0x0A50)	/* Micronik */
-#define PROD_RCA_120           (0x0A)	/* RCA 120 RAM */
-
-#define MANUF_MEGA_MICRO       (0x1000)	/* MegaMicro */
-#define PROD_SCRAM_500_SCSI    (0x03)	/* SCRAM 500 SCSI Controller */
-#define PROD_SCRAM_500_RAM     (0x04)	/* SCRAM 500 RAM */
-
-#define MANUF_IMTRONICS2       (0x1028)	/* Imtronics */
-#define PROD_HURRICANE_2800_3  (0x39)	/* Hurricane 2800 68030 */
-#define PROD_HURRICANE_2800_4  (0x57)	/* Hurricane 2800 68030 */
-
-#define MANUF_KUPKE3           (0x1248)	/* Kupke */
-#define PROD_GOLEM_3000        (0x01)	/* Golem HD 3000 */
-
-#define MANUF_ITH              (0x1388)	/* ITH */
-#define PROD_ISDN_MASTER_II    (0x01)	/* ISDN-Master II */
-
-#define MANUF_VMC              (0x1389)	/* VMC */
-#define PROD_ISDN_BLASTER_Z2   (0x01)	/* ISDN Blaster Z2 */
-#define PROD_HYPERCOM_4        (0x02)	/* HyperCom 4 */
-
-#define MANUF_INFORMATION      (0x157C)	/* Information */
-#define PROD_ISDN_ENGINE_I     (0x64)	/* ISDN Engine I */
-
-#define MANUF_VORTEX           (0x2017)	/* Vortex */
-#define PROD_GOLDEN_GATE_386SX (0x07)	/* Golden Gate 80386SX Board */
-#define PROD_GOLDEN_GATE_RAM   (0x08)	/* Golden Gate RAM */
-#define PROD_GOLDEN_GATE_486   (0x09)	/* Golden Gate 80486 Board */
-
-#define MANUF_DATAFLYER        (0x2062)	/* DataFlyer */
-#define PROD_DATAFLYER_4000SXS (0x01)	/* DataFlyer 4000SX SCSI Controller */
-#define PROD_DATAFLYER_4000SXR (0x02)	/* DataFlyer 4000SX RAM */
-
-#define MANUF_READYSOFT        (0x2100)	/* ReadySoft */
-#define PROD_AMAX              (0x01)	/* AMax II/IV */
-
-#define MANUF_PHASE5           (0x2140)	/* Phase5 */
-#define PROD_BLIZZARD_RAM      (0x01)	/* Blizzard RAM */
-#define PROD_BLIZZARD          (0x02)	/* Blizzard */
-#define PROD_BLIZZARD_1220_IV  (0x06)	/* Blizzard 1220-IV Turbo Board */
-#define PROD_FASTLANE_RAM      (0x0A)	/* FastLane RAM */
-#define PROD_FASTLANE_SCSI     (0x0B)	/* FastLane/Blizzard 1230-II SCSI/CyberSCSI */
-#define PROD_CYBERSTORM_SCSI   (0x0C)	/* Blizzard 1220/CyberStorm */
-#define PROD_BLIZZARD_1230_III (0x0D)	/* Blizzard 1230-III Turbo Board */
-#define PROD_BLIZZARD_1230_IV  (0x11)	/* Blizzard 1230-IV/1260 Turbo Board */
-#define PROD_BLIZZARD_2060SCSI (0x18)	/* Blizzard 2060 SCSI Controller */
-#define PROD_CYBERSTORM_II     (0x19)	/* CyberStorm Mk II */
-#define PROD_CYBERVISION       (0x22)	/* CyberVision64 Graphics Board */
-#define PROD_CYBERVISION3D_PRT (0x32)	/* CyberVision64-3D Prototype */
-#define PROD_CYBERVISION3D     (0x43)	/* CyberVision64-3D Graphics Board */
-
-#define MANUF_DPS              (0x2169)	/* DPS */
-#define PROD_DPS_PAR           (0x01)	/* Personal Animation Recorder */
-
-#define MANUF_APOLLO2          (0x2200)	/* Apollo */
-#define PROD_A620              (0x00)	/* A620 68020 Accelerator */
-#define PROD_A620_2            (0x01)	/* A620 68020 Accelerator */
-
-#define MANUF_APOLLO           (0x2222)	/* Apollo */
-#define PROD_AT_APOLLO         (0x22)	/* AT-Apollo */
-#define PROD_APOLLO_TURBO      (0x23)	/* Apollo Turbo Board */
-
-#define MANUF_PETSOFF          (0x38A5)	/* Petsoff LP */
-#define PROD_DELFINA           (0x00)	/* Delfina DSP */
-
-#define MANUF_UWE_GERLACH      (0x3FF7)	/* Uwe Gerlach */
-#define PROD_UG_RAM_ROM        (0xd4)	/* RAM/ROM */
-
-#define MANUF_MACROSYSTEMS2    (0x4754)	/* MacroSystems Germany */
-#define PROD_MAESTRO           (0x03)	/* Maestro */
-#define PROD_VLAB              (0x04)	/* VLab */
-#define PROD_MAESTRO_PRO       (0x05)	/* Maestro Pro */
-#define PROD_RETINA_Z2         (0x06)	/* Retina Z2 Graphics Board */
-#define PROD_MULTI_EVOLUTION   (0x08)	/* MultiEvolution */
-#define PROD_TOCCATA           (0x0C)	/* Toccata Sound Board */
-#define PROD_RETINA_Z3         (0x10)	/* Retina Z3 Graphics Board */
-#define PROD_VLAB_MOTION       (0x12)	/* VLab Motion */
-#define PROD_ALTAIS            (0x13)	/* Altais Graphics Board */
-#define PROD_FALCON_040        (0xFD)	/* Falcon '040 Turbo Board */
-
-#define MANUF_COMBITEC         (0x6766)	/* Combitec */
-
-#define MANUF_SKI              (0x8000)	/* SKI Peripherals */
-#define PROD_MAST_FIREBALL     (0x08)	/* M.A.S.T. Fireball SCSI Controller */
-#define PROD_SKI_SCSI_SERIAL   (0x80)	/* SCSI / Dual Serial */
-
-#define MANUF_CAMERON          (0xAA01)	/* Cameron */
-#define PROD_PERSONAL_A4       (0x10)	/* Personal A4 */
-
-#define MANUF_REIS_WARE        (0xAA11)	/* Reis-Ware */
-#define PROD_RW_HANDYSCANNER   (0x11)	/* Handyscanner */
-
-
-/* Illegal Manufacturer IDs. These do NOT appear in arch/m68k/amiga/zorro.c! */
-
-#define MANUF_HACKER_INC       (0x07DB)	/* Hacker Inc. */
-#define PROD_HACKER_SCSI       (0x01)	/* Hacker Inc. SCSI Controller */
-
-#define MANUF_RES_MNGT_FORCE   (0x07DB)	/* Resource Management Force */
-#define PROD_QUICKNET          (0x02)	/* QuickNet Ethernet */
-
-#define MANUF_VECTOR2          (0x07DB)	/* Vector */
-#define PROD_CONNECTION_2      (0xE0)	/* Vector Connection */
-#define PROD_CONNECTION_3      (0xE1)	/* Vector Connection */
-#define PROD_CONNECTION_4      (0xE2)	/* Vector Connection */
-#define PROD_CONNECTION_5      (0xE3)	/* Vector Connection */
-
-
-/*
- * GVP's identifies most of their product through the 'extended
- * product code' (epc). The epc has to be and'ed with the GVP_PRODMASK
- * before the identification.
- */
-
-#define GVP_PRODMASK    (0xf8)
-#define GVP_SCSICLKMASK (0x01)
-
-enum GVP_ident {
-  GVP_GFORCE_040      = 0x20,
-  GVP_GFORCE_040_SCSI = 0x30,
-  GVP_A1291_SCSI      = 0x40,
-  GVP_COMBO_R4        = 0x60,
-  GVP_COMBO_R4_SCSI   = 0x70,
-  GVP_PHONEPAK        = 0x78,
-  GVP_IOEXT           = 0x98,
-  GVP_GFORCE_030      = 0xa0,
-  GVP_GFORCE_030_SCSI = 0xb0,
-  GVP_A530            = 0xc0,
-  GVP_A530_SCSI       = 0xd0,
-  GVP_COMBO_R3        = 0xe0,
-  GVP_COMBO_R3_SCSI   = 0xf0,
-  GVP_SERIESII        = 0xf8,
+    /*
+     *  Zorro Product Classes
+     *
+     *  Make sure to keep these in sync with arch/m68k/amiga/zorro.c!
+     */
+
+enum Zorro_Classes {
+    ZORRO_CLASS_UNKNOWN = 0x00,
+    ZORRO_CLASS_ARCNET,
+    ZORRO_CLASS_AUDIO,
+    ZORRO_CLASS_BRIDGE,
+    ZORRO_CLASS_DSP,
+    ZORRO_CLASS_ETHERNET,
+    ZORRO_CLASS_ETHERNET_PARALLEL,
+    ZORRO_CLASS_FLASHROM,
+    ZORRO_CLASS_FPU_RAM,
+    ZORRO_CLASS_GFX,
+    ZORRO_CLASS_GFXRAM,
+    ZORRO_CLASS_HD,
+    ZORRO_CLASS_HD_RAM,
+    ZORRO_CLASS_IDE,
+    ZORRO_CLASS_IDE_RAM,
+    ZORRO_CLASS_IDE_FLOPPY,
+    ZORRO_CLASS_ISDN,
+    ZORRO_CLASS_MACEMU,
+    ZORRO_CLASS_MISC,
+    ZORRO_CLASS_MODEM,
+    ZORRO_CLASS_MULTIIO,
+    ZORRO_CLASS_RAM,
+    ZORRO_CLASS_SCANNER,
+    ZORRO_CLASS_SCSI,
+    ZORRO_CLASS_SCSI_IDE,
+    ZORRO_CLASS_SCSI_RAM,
+    ZORRO_CLASS_SCSI_SERIAL,
+    ZORRO_CLASS_SERIAL,
+    ZORRO_CLASS_TABLET,
+    ZORRO_CLASS_TURBO,
+    ZORRO_CLASS_TURBO_RAM,
+    ZORRO_CLASS_TURBO_HD,
+    ZORRO_CLASS_TURBO_IDE,
+    ZORRO_CLASS_TURBO_SCSI,
+    ZORRO_CLASS_TURBO_SCSI_RAM,
+    ZORRO_CLASS_VIDEO,
 };
 
+
+    /*
+     *  Known Zorro Boards
+     *
+     *  Each Zorro board has a 32-bit ID of the form
+     *
+     *      mmmmmmmmmmmmmmmmppppppppeeeeeeee
+     *
+     *  with
+     *
+     *      mmmmmmmmmmmmmmmm	16-bit Manufacturer ID (assigned by CBM (sigh))
+     *      pppppppp		8-bit Product ID (assigned by manufacturer)
+     *      eeeeeeee		8-bit Extended Product ID (currently only used
+     *				for some GVP boards)
+     */
+
+
+#define ZORRO_MANUF(id)		((id) >> 16)
+#define ZORRO_PROD(id)		(((id) >> 8) & 0xff)
+#define ZORRO_EPC(id)		((id) & 0xff)
+
+#define ZORRO_ID(manuf, prod, epc) \
+    ((ZORRO_MANUF_##manuf << 16) | ((prod) << 8) | (epc))
+
+typedef u32 zorro_id;
+
+
+#define ZORRO_MANUF_PACIFIC_PERIPHERALS				0x00D3
+#define  ZORRO_PROD_PACIFIC_PERIPHERALS_SE_2000_A500		ZORRO_ID(PACIFIC_PERIPHERALS, 0x00, 0)
+#define  ZORRO_PROD_PACIFIC_PERIPHERALS_SCSI			ZORRO_ID(PACIFIC_PERIPHERALS, 0x0A, 0)
+
+#define ZORRO_MANUF_MACROSYSTEMS_USA_2				0x0100
+#define  ZORRO_PROD_MACROSYSTEMS_WARP_ENGINE			ZORRO_ID(MACROSYSTEMS_USA_2, 0x13, 0)
+
+#define ZORRO_MANUF_KUPKE_1					0x00DD
+#define  ZORRO_PROD_KUPKE_GOLEM_RAM_BOX_2MB			ZORRO_ID(KUPKE_1, 0x00, 0)
+
+#define ZORRO_MANUF_MEMPHIS					0x0100
+#define  ZORRO_PROD_MEMPHIS_STORMBRINGER			ZORRO_ID(MEMPHIS, 0x00, 0)
+
+#define ZORRO_MANUF_3_STATE					0x0200
+#define  ZORRO_PROD_3_STATE_MEGAMIX_2000			ZORRO_ID(3_STATE, 0x02, 0)
+
+#define ZORRO_MANUF_COMMODORE_BRAUNSCHWEIG			0x0201
+#define  ZORRO_PROD_CBM_A2088_A2286				ZORRO_ID(COMMODORE_BRAUNSCHWEIG, 0x01, 0)
+#define  ZORRO_PROD_CBM_A2286					ZORRO_ID(COMMODORE_BRAUNSCHWEIG, 0x02, 0)
+#define  ZORRO_PROD_CBM_A4091_1					ZORRO_ID(COMMODORE_BRAUNSCHWEIG, 0x54, 0)
+#define  ZORRO_PROD_CBM_A2386SX_1				ZORRO_ID(COMMODORE_BRAUNSCHWEIG, 0x67, 0)
+
+#define ZORRO_MANUF_COMMODORE_WEST_CHESTER_1			0x0202
+#define  ZORRO_PROD_CBM_A2090A					ZORRO_ID(COMMODORE_WEST_CHESTER_1, 0x01, 0)
+#define  ZORRO_PROD_CBM_A590_A2091_1				ZORRO_ID(COMMODORE_WEST_CHESTER_1, 0x02, 0)
+#define  ZORRO_PROD_CBM_A590_A2091_2				ZORRO_ID(COMMODORE_WEST_CHESTER_1, 0x03, 0)
+#define  ZORRO_PROD_CBM_A2090B					ZORRO_ID(COMMODORE_WEST_CHESTER_1, 0x04, 0)
+#define  ZORRO_PROD_CBM_A2060					ZORRO_ID(COMMODORE_WEST_CHESTER_1, 0x09, 0)
+#define  ZORRO_PROD_CBM_A590_A2052_A2058_A2091			ZORRO_ID(COMMODORE_WEST_CHESTER_1, 0x0A, 0)
+#define  ZORRO_PROD_CBM_A560_RAM				ZORRO_ID(COMMODORE_WEST_CHESTER_1, 0x20, 0)
+#define  ZORRO_PROD_CBM_A2232_PROTOTYPE				ZORRO_ID(COMMODORE_WEST_CHESTER_1, 0x45, 0)
+#define  ZORRO_PROD_CBM_A2232					ZORRO_ID(COMMODORE_WEST_CHESTER_1, 0x46, 0)
+#define  ZORRO_PROD_CBM_A2620					ZORRO_ID(COMMODORE_WEST_CHESTER_1, 0x50, 0)
+#define  ZORRO_PROD_CBM_A2630					ZORRO_ID(COMMODORE_WEST_CHESTER_1, 0x51, 0)
+#define  ZORRO_PROD_CBM_A4091_2					ZORRO_ID(COMMODORE_WEST_CHESTER_1, 0x54, 0)
+#define  ZORRO_PROD_CBM_A2065_1					ZORRO_ID(COMMODORE_WEST_CHESTER_1, 0x5A, 0)
+#define  ZORRO_PROD_CBM_ROMULATOR				ZORRO_ID(COMMODORE_WEST_CHESTER_1, 0x60, 0)
+#define  ZORRO_PROD_CBM_A3000_TEST_FIXTURE			ZORRO_ID(COMMODORE_WEST_CHESTER_1, 0x61, 0)
+#define  ZORRO_PROD_CBM_A2386SX_2				ZORRO_ID(COMMODORE_WEST_CHESTER_1, 0x67, 0)
+#define  ZORRO_PROD_CBM_A2065_2					ZORRO_ID(COMMODORE_WEST_CHESTER_1, 0x70, 0)
+
+#define ZORRO_MANUF_COMMODORE_WEST_CHESTER_2			0x0203
+#define  ZORRO_PROD_CBM_A2090A_CM				ZORRO_ID(COMMODORE_WEST_CHESTER_2, 0x03, 0)
+
+#define ZORRO_MANUF_PROGRESSIVE_PERIPHERALS_AND_SYSTEMS_2	0x02F4
+#define  ZORRO_PROD_PPS_EXP8000					ZORRO_ID(PROGRESSIVE_PERIPHERALS_AND_SYSTEMS_2, 0x02, 0)
+
+#define ZORRO_MANUF_KOLFF_COMPUTER_SUPPLIES			0x02FF
+#define  ZORRO_PROD_KCS_POWER_PC_BOARD				ZORRO_ID(KOLFF_COMPUTER_SUPPLIES, 0x00, 0)
+
+#define ZORRO_MANUF_CARDCO_1					0x03EC
+#define  ZORRO_PROD_CARDCO_KRONOS_2000_1			ZORRO_ID(CARDCO_1, 0x04, 0)
+#define  ZORRO_PROD_CARDCO_A1000_1				ZORRO_ID(CARDCO_1, 0x0C, 0)
+#define  ZORRO_PROD_CARDCO_ESCORT				ZORRO_ID(CARDCO_1, 0x0E, 0)
+#define  ZORRO_PROD_CARDCO_A2410				ZORRO_ID(CARDCO_1, 0xF5, 0)
+
+#define ZORRO_MANUF_A_SQUARED					0x03ED
+#define  ZORRO_PROD_A_SQUARED_LIVE_2000				ZORRO_ID(A_SQUARED, 0x01, 0)
+
+#define ZORRO_MANUF_COMSPEC_COMMUNICATIONS			0x03EE
+#define  ZORRO_PROD_COMSPEC_COMMUNICATIONS_AX2000		ZORRO_ID(COMSPEC_COMMUNICATIONS, 0x01, 0)
+
+#define ZORRO_MANUF_ANAKIN_RESEARCH				0x03F1
+#define  ZORRO_PROD_ANAKIN_RESEARCH_EASYL			ZORRO_ID(ANAKIN_RESEARCH, 0x01, 0)
+
+#define ZORRO_MANUF_MICROBOTICS					0x03F2
+#define  ZORRO_PROD_MICROBOTICS_STARBOARD_II			ZORRO_ID(MICROBOTICS, 0x00, 0)
+#define  ZORRO_PROD_MICROBOTICS_STARDRIVE			ZORRO_ID(MICROBOTICS, 0x02, 0)
+#define  ZORRO_PROD_MICROBOTICS_8_UP_A				ZORRO_ID(MICROBOTICS, 0x03, 0)
+#define  ZORRO_PROD_MICROBOTICS_8_UP_Z				ZORRO_ID(MICROBOTICS, 0x04, 0)
+#define  ZORRO_PROD_MICROBOTICS_DELTA_RAM			ZORRO_ID(MICROBOTICS, 0x20, 0)
+#define  ZORRO_PROD_MICROBOTICS_8_STAR_RAM			ZORRO_ID(MICROBOTICS, 0x40, 0)
+#define  ZORRO_PROD_MICROBOTICS_8_STAR				ZORRO_ID(MICROBOTICS, 0x41, 0)
+#define  ZORRO_PROD_MICROBOTICS_VXL_RAM_32			ZORRO_ID(MICROBOTICS, 0x44, 0)
+#define  ZORRO_PROD_MICROBOTICS_VXL_68030			ZORRO_ID(MICROBOTICS, 0x45, 0)
+#define  ZORRO_PROD_MICROBOTICS_DELTA				ZORRO_ID(MICROBOTICS, 0x60, 0)
+#define  ZORRO_PROD_MICROBOTICS_MBX_1200_1200Z_RAM		ZORRO_ID(MICROBOTICS, 0x81, 0)
+#define  ZORRO_PROD_MICROBOTICS_HARDFRAME_2000_1		ZORRO_ID(MICROBOTICS, 0x96, 0)
+#define  ZORRO_PROD_MICROBOTICS_HARDFRAME_2000_2		ZORRO_ID(MICROBOTICS, 0x9E, 0)
+#define  ZORRO_PROD_MICROBOTICS_MBX_1200_1200Z			ZORRO_ID(MICROBOTICS, 0xC1, 0)
+
+#define ZORRO_MANUF_ACCESS_ASSOCIATES_ALEGRA			0x03F4
+
+#define ZORRO_MANUF_EXPANSION_TECHNOLOGIES			0x03F6
+
+#define ZORRO_MANUF_ASDG					0x03FF
+#define  ZORRO_PROD_ASDG_MEMORY_1				ZORRO_ID(ASDG, 0x01, 0)
+#define  ZORRO_PROD_ASDG_MEMORY_2				ZORRO_ID(ASDG, 0x02, 0)
+#define  ZORRO_PROD_ASDG_EB920_LAN_ROVER			ZORRO_ID(ASDG, 0xFE, 0)
+#define  ZORRO_PROD_ASDG_GPIB_DUALIEEE488_TWIN_X		ZORRO_ID(ASDG, 0xFF, 0)
+
+#define ZORRO_MANUF_IMTRONICS_1					0x0404
+#define  ZORRO_PROD_IMTRONICS_HURRICANE_2800_1			ZORRO_ID(IMTRONICS_1, 0x39, 0)
+#define  ZORRO_PROD_IMTRONICS_HURRICANE_2800_2			ZORRO_ID(IMTRONICS_1, 0x57, 0)
+
+#define ZORRO_MANUF_CBM_UNIVERSITY_OF_LOWELL			0x0406
+#define  ZORRO_PROD_CBM_A2410					ZORRO_ID(CBM_UNIVERSITY_OF_LOWELL, 0x00, 0)
+
+#define ZORRO_MANUF_AMERISTAR					0x041D
+#define  ZORRO_PROD_AMERISTAR_A2065				ZORRO_ID(AMERISTAR, 0x01, 0)
+#define  ZORRO_PROD_AMERISTAR_A560				ZORRO_ID(AMERISTAR, 0x09, 0)
+#define  ZORRO_PROD_AMERISTAR_A4066				ZORRO_ID(AMERISTAR, 0x0A, 0)
+
+#define ZORRO_MANUF_SUPRA					0x0420
+#define  ZORRO_PROD_SUPRA_SUPRADRIVE_4x4			ZORRO_ID(SUPRA, 0x01, 0)
+#define  ZORRO_PROD_SUPRA_1000_RAM				ZORRO_ID(SUPRA, 0x02, 0)
+#define  ZORRO_PROD_SUPRA_2000_DMA				ZORRO_ID(SUPRA, 0x03, 0)
+#define  ZORRO_PROD_SUPRA_500					ZORRO_ID(SUPRA, 0x05, 0)
+#define  ZORRO_PROD_SUPRA_500_SCSI				ZORRO_ID(SUPRA, 0x08, 0)
+#define  ZORRO_PROD_SUPRA_500XP_2000_RAM			ZORRO_ID(SUPRA, 0x09, 0)
+#define  ZORRO_PROD_SUPRA_500RX_2000_RAM			ZORRO_ID(SUPRA, 0x0A, 0)
+#define  ZORRO_PROD_SUPRA_2400ZI				ZORRO_ID(SUPRA, 0x0B, 0)
+#define  ZORRO_PROD_SUPRA_500XP_SUPRADRIVE_WORDSYNC		ZORRO_ID(SUPRA, 0x0C, 0)
+#define  ZORRO_PROD_SUPRA_SUPRADRIVE_WORDSYNC_II		ZORRO_ID(SUPRA, 0x0D, 0)
+#define  ZORRO_PROD_SUPRA_2400ZIPLUS				ZORRO_ID(SUPRA, 0x10, 0)
+
+#define ZORRO_MANUF_COMPUTER_SYSTEMS_ASSOCIATES			0x0422
+#define  ZORRO_PROD_CSA_MAGNUM					ZORRO_ID(COMPUTER_SYSTEMS_ASSOCIATES, 0x11, 0)
+#define  ZORRO_PROD_CSA_12_GAUGE				ZORRO_ID(COMPUTER_SYSTEMS_ASSOCIATES, 0x15, 0)
+
+#define ZORRO_MANUF_MARC_MICHAEL_GROTH				0x0439
+
+#define ZORRO_MANUF_M_TECH					0x0502
+#define  ZORRO_PROD_MTEC_AT500_1				ZORRO_ID(M_TECH, 0x03, 0)
+
+#define ZORRO_MANUF_GREAT_VALLEY_PRODUCTS_1			0x06E1
+#define  ZORRO_PROD_GVP_IMPACT_SERIES_I				ZORRO_ID(GREAT_VALLEY_PRODUCTS_1, 0x08, 0)
+
+#define ZORRO_MANUF_BYTEBOX					0x07DA
+#define  ZORRO_PROD_BYTEBOX_A500				ZORRO_ID(BYTEBOX, 0x00, 0)
+
+#define ZORRO_MANUF_DKB_POWER_COMPUTING				0x07DC
+#define  ZORRO_PROD_DKB_POWER_COMPUTING_SECUREKEY		ZORRO_ID(DKB_POWER_COMPUTING, 0x09, 0)
+#define  ZORRO_PROD_DKB_POWER_COMPUTING_DKM_3128		ZORRO_ID(DKB_POWER_COMPUTING, 0x0E, 0)
+#define  ZORRO_PROD_DKB_POWER_COMPUTING_RAPID_FIRE		ZORRO_ID(DKB_POWER_COMPUTING, 0x0F, 0)
+#define  ZORRO_PROD_DKB_POWER_COMPUTING_DKM_1202		ZORRO_ID(DKB_POWER_COMPUTING, 0x10, 0)
+#define  ZORRO_PROD_DKB_POWER_COMPUTING_COBRA_VIPER_II_68EC030	ZORRO_ID(DKB_POWER_COMPUTING, 0x12, 0)
+#define  ZORRO_PROD_DKB_POWER_COMPUTING_WILDFIRE_060_1		ZORRO_ID(DKB_POWER_COMPUTING, 0x17, 0)
+#define  ZORRO_PROD_DKB_POWER_COMPUTING_WILDFIRE_060_2		ZORRO_ID(DKB_POWER_COMPUTING, 0xFF, 0)
+
+#define ZORRO_MANUF_GREAT_VALLEY_PRODUCTS_2			0x07E1
+#define  ZORRO_PROD_GVP_IMPACT_SERIES_I_4K			ZORRO_ID(GREAT_VALLEY_PRODUCTS_2, 0x01, 0)
+#define  ZORRO_PROD_GVP_IMPACT_SERIES_I_16K_2			ZORRO_ID(GREAT_VALLEY_PRODUCTS_2, 0x02, 0)
+#define  ZORRO_PROD_GVP_IMPACT_SERIES_I_16K_3			ZORRO_ID(GREAT_VALLEY_PRODUCTS_2, 0x03, 0)
+#define  ZORRO_PROD_GVP_IMPACT_3001_IDE_1			ZORRO_ID(GREAT_VALLEY_PRODUCTS_2, 0x08, 0)
+#define  ZORRO_PROD_GVP_IMPACT_3001_RAM				ZORRO_ID(GREAT_VALLEY_PRODUCTS_2, 0x09, 0)
+#define  ZORRO_PROD_GVP_IMPACT_SERIES_II_RAM_1			ZORRO_ID(GREAT_VALLEY_PRODUCTS_2, 0x0A, 0)
+#define  ZORRO_PROD_GVP_EPC_BASE				ZORRO_ID(GREAT_VALLEY_PRODUCTS_2, 0x0B, 0)
+#define  ZORRO_PROD_GVP_GFORCE_040_1				ZORRO_ID(GREAT_VALLEY_PRODUCTS_2, 0x0B, 0x20)
+#define  ZORRO_PROD_GVP_GFORCE_040_SCSI_1			ZORRO_ID(GREAT_VALLEY_PRODUCTS_2, 0x0B, 0x30)
+#define  ZORRO_PROD_GVP_A1291					ZORRO_ID(GREAT_VALLEY_PRODUCTS_2, 0x0B, 0x40)
+#define  ZORRO_PROD_GVP_COMBO_030_R4				ZORRO_ID(GREAT_VALLEY_PRODUCTS_2, 0x0B, 0x60)
+#define  ZORRO_PROD_GVP_COMBO_030_R4_SCSI			ZORRO_ID(GREAT_VALLEY_PRODUCTS_2, 0x0B, 0x70)
+#define  ZORRO_PROD_GVP_PHONEPAK				ZORRO_ID(GREAT_VALLEY_PRODUCTS_2, 0x0B, 0x78)
+#define  ZORRO_PROD_GVP_IO_EXTENDER				ZORRO_ID(GREAT_VALLEY_PRODUCTS_2, 0x0B, 0x98)
+#define  ZORRO_PROD_GVP_GFORCE_030				ZORRO_ID(GREAT_VALLEY_PRODUCTS_2, 0x0B, 0xa0)
+#define  ZORRO_PROD_GVP_GFORCE_030_SCSI				ZORRO_ID(GREAT_VALLEY_PRODUCTS_2, 0x0B, 0xb0)
+#define  ZORRO_PROD_GVP_A530					ZORRO_ID(GREAT_VALLEY_PRODUCTS_2, 0x0B, 0xc0)
+#define  ZORRO_PROD_GVP_A530_SCSI				ZORRO_ID(GREAT_VALLEY_PRODUCTS_2, 0x0B, 0xd0)
+#define  ZORRO_PROD_GVP_COMBO_030_R3				ZORRO_ID(GREAT_VALLEY_PRODUCTS_2, 0x0B, 0xe0)
+#define  ZORRO_PROD_GVP_COMBO_030_R3_SCSI			ZORRO_ID(GREAT_VALLEY_PRODUCTS_2, 0x0B, 0xf0)
+#define  ZORRO_PROD_GVP_SERIES_II				ZORRO_ID(GREAT_VALLEY_PRODUCTS_2, 0x0B, 0xf8)
+#define  ZORRO_PROD_GVP_IMPACT_3001_IDE_2			ZORRO_ID(GREAT_VALLEY_PRODUCTS_2, 0x0D, 0)
+/*#define  ZORRO_PROD_GVP_A2000_030				ZORRO_ID(GREAT_VALLEY_PRODUCTS_2, 0x0D, 0)*/
+/*#define  ZORRO_PROD_GVP_GFORCE_040_SCSI_2			ZORRO_ID(GREAT_VALLEY_PRODUCTS_2, 0x0D, 0)*/
+#define  ZORRO_PROD_GVP_GFORCE_040_060				ZORRO_ID(GREAT_VALLEY_PRODUCTS_2, 0x16, 0)
+#define  ZORRO_PROD_GVP_IMPACT_VISION_24			ZORRO_ID(GREAT_VALLEY_PRODUCTS_2, 0x20, 0)
+#define  ZORRO_PROD_GVP_GFORCE_040_2				ZORRO_ID(GREAT_VALLEY_PRODUCTS_2, 0xFF, 0)
+
+#define ZORRO_MANUF_CALIFORNIA_ACCESS_SYNERGY			0x07E5
+#define  ZORRO_PROD_CALIFORNIA_ACCESS_SYNERGY_MALIBU		ZORRO_ID(CALIFORNIA_ACCESS_SYNERGY, 0x01, 0)
+
+#define ZORRO_MANUF_XETEC					0x07E6
+#define  ZORRO_PROD_XETEC_FASTCARD				ZORRO_ID(XETEC, 0x01, 0)
+#define  ZORRO_PROD_XETEC_FASTCARD_RAM				ZORRO_ID(XETEC, 0x02, 0)
+#define  ZORRO_PROD_XETEC_FASTCARD_PLUS				ZORRO_ID(XETEC, 0x03, 0)
+
+#define ZORRO_MANUF_PROGRESSIVE_PERIPHERALS_AND_SYSTEMS		0x07EA
+#define  ZORRO_PROD_PPS_MERCURY					ZORRO_ID(PROGRESSIVE_PERIPHERALS_AND_SYSTEMS, 0x00, 0)
+#define  ZORRO_PROD_PPS_A3000_68040				ZORRO_ID(PROGRESSIVE_PERIPHERALS_AND_SYSTEMS, 0x01, 0)
+#define  ZORRO_PROD_PPS_A2000_68040				ZORRO_ID(PROGRESSIVE_PERIPHERALS_AND_SYSTEMS, 0x69, 0)
+#define  ZORRO_PROD_PPS_ZEUS					ZORRO_ID(PROGRESSIVE_PERIPHERALS_AND_SYSTEMS, 0x96, 0)
+#define  ZORRO_PROD_PPS_A500_68040				ZORRO_ID(PROGRESSIVE_PERIPHERALS_AND_SYSTEMS, 0xBB, 0)
+
+#define ZORRO_MANUF_XEBEC					0x07EC
+
+#define ZORRO_MANUF_SPIRIT_TECHNOLOGY				0x07F2
+#define  ZORRO_PROD_SPIRIT_TECHNOLOGY_INSIDER_IN1000		ZORRO_ID(SPIRIT_TECHNOLOGY, 0x01, 0)
+#define  ZORRO_PROD_SPIRIT_TECHNOLOGY_INSIDER_IN500		ZORRO_ID(SPIRIT_TECHNOLOGY, 0x02, 0)
+#define  ZORRO_PROD_SPIRIT_TECHNOLOGY_SIN500			ZORRO_ID(SPIRIT_TECHNOLOGY, 0x03, 0)
+#define  ZORRO_PROD_SPIRIT_TECHNOLOGY_HDA_506			ZORRO_ID(SPIRIT_TECHNOLOGY, 0x04, 0)
+#define  ZORRO_PROD_SPIRIT_TECHNOLOGY_AX_S			ZORRO_ID(SPIRIT_TECHNOLOGY, 0x05, 0)
+#define  ZORRO_PROD_SPIRIT_TECHNOLOGY_OCTABYTE			ZORRO_ID(SPIRIT_TECHNOLOGY, 0x06, 0)
+#define  ZORRO_PROD_SPIRIT_TECHNOLOGY_INMATE			ZORRO_ID(SPIRIT_TECHNOLOGY, 0x08, 0)
+
+#define ZORRO_MANUF_SPIRIT_TECHNOLOGY_2				0x07F3
+
+#define ZORRO_MANUF_BSC_ALFADATA_1				0x07FE
+#define  ZORRO_PROD_BSC_ALF_3_1					ZORRO_ID(BSC_ALFADATA_1, 0x03, 0)
+
+#define ZORRO_MANUF_BSC_ALFADATA_2				0x0801
+#define  ZORRO_PROD_BSC_ALF_2_1					ZORRO_ID(BSC_ALFADATA_2, 0x01, 0)
+#define  ZORRO_PROD_BSC_ALF_2_2					ZORRO_ID(BSC_ALFADATA_2, 0x02, 0)
+#define  ZORRO_PROD_BSC_ALF_3_2					ZORRO_ID(BSC_ALFADATA_2, 0x03, 0)
+
+#define ZORRO_MANUF_CARDCO_2					0x0802
+#define  ZORRO_PROD_CARDCO_KRONOS_2000_2			ZORRO_ID(CARDCO_2, 0x04, 0)
+#define  ZORRO_PROD_CARDCO_A1000_2				ZORRO_ID(CARDCO_2, 0x0C, 0)
+
+#define ZORRO_MANUF_JOCHHEIM					0x0804
+#define  ZORRO_PROD_JOCHHEIM_RAM				ZORRO_ID(JOCHHEIM, 0x01, 0)
+
+#define ZORRO_MANUF_CHECKPOINT_TECHNOLOGIES			0x0807
+#define  ZORRO_PROD_CHECKPOINT_TECHNOLOGIES_SERIAL_SOLUTION	ZORRO_ID(CHECKPOINT_TECHNOLOGIES, 0x00, 0)
+
+#define ZORRO_MANUF_EDOTRONIK					0x0810
+#define  ZORRO_PROD_EDOTRONIK_IEEE_488				ZORRO_ID(EDOTRONIK, 0x01, 0)
+#define  ZORRO_PROD_EDOTRONIK_8032				ZORRO_ID(EDOTRONIK, 0x02, 0)
+#define  ZORRO_PROD_EDOTRONIK_MULTISERIAL			ZORRO_ID(EDOTRONIK, 0x03, 0)
+#define  ZORRO_PROD_EDOTRONIK_VIDEODIGITIZER			ZORRO_ID(EDOTRONIK, 0x04, 0)
+#define  ZORRO_PROD_EDOTRONIK_PARALLEL_IO			ZORRO_ID(EDOTRONIK, 0x05, 0)
+#define  ZORRO_PROD_EDOTRONIK_PIC_PROTOYPING			ZORRO_ID(EDOTRONIK, 0x06, 0)
+#define  ZORRO_PROD_EDOTRONIK_ADC				ZORRO_ID(EDOTRONIK, 0x07, 0)
+#define  ZORRO_PROD_EDOTRONIK_VME				ZORRO_ID(EDOTRONIK, 0x08, 0)
+#define  ZORRO_PROD_EDOTRONIK_DSP96000				ZORRO_ID(EDOTRONIK, 0x09, 0)
+
+#define ZORRO_MANUF_NES_INC					0x0813
+#define  ZORRO_PROD_NES_INC_RAM					ZORRO_ID(NES_INC, 0x00, 0)
+
+#define ZORRO_MANUF_ICD						0x0817
+#define  ZORRO_PROD_ICD_ADVANTAGE_2000_SCSI			ZORRO_ID(ICD, 0x01, 0)
+#define  ZORRO_PROD_ICD_ADVANTAGE_IDE				ZORRO_ID(ICD, 0x03, 0)
+#define  ZORRO_PROD_ICD_ADVANTAGE_2080_RAM			ZORRO_ID(ICD, 0x04, 0)
+
+#define ZORRO_MANUF_KUPKE_2					0x0819
+#define  ZORRO_PROD_KUPKE_OMTI					ZORRO_ID(KUPKE_2, 0x01, 0)
+#define  ZORRO_PROD_KUPKE_SCSI_II				ZORRO_ID(KUPKE_2, 0x02, 0)
+#define  ZORRO_PROD_KUPKE_GOLEM_BOX				ZORRO_ID(KUPKE_2, 0x03, 0)
+#define  ZORRO_PROD_KUPKE_030_882				ZORRO_ID(KUPKE_2, 0x04, 0)
+#define  ZORRO_PROD_KUPKE_SCSI_AT				ZORRO_ID(KUPKE_2, 0x05, 0)
+
+#define ZORRO_MANUF_GREAT_VALLEY_PRODUCTS_3			0x081D
+#define  ZORRO_PROD_GVP_A2000_RAM8				ZORRO_ID(GREAT_VALLEY_PRODUCTS_3, 0x09, 0)
+#define  ZORRO_PROD_GVP_IMPACT_SERIES_II_RAM_2			ZORRO_ID(GREAT_VALLEY_PRODUCTS_3, 0x0A, 0)
+
+#define ZORRO_MANUF_INTERWORKS_NETWORK				0x081E
+
+#define ZORRO_MANUF_HARDITAL_SYNTHESIS				0x0820
+#define  ZORRO_PROD_HARDITAL_SYNTHESIS_TQM_68030_68882		ZORRO_ID(HARDITAL_SYNTHESIS, 0x14, 0)
+
+#define ZORRO_MANUF_APPLIED_ENGINEERING				0x0828
+#define  ZORRO_PROD_APPLIED_ENGINEERING_DL2000			ZORRO_ID(APPLIED_ENGINEERING, 0x10, 0)
+#define  ZORRO_PROD_APPLIED_ENGINEERING_RAM_WORKS		ZORRO_ID(APPLIED_ENGINEERING, 0xE0, 0)
+
+#define ZORRO_MANUF_BSC_ALFADATA_3				0x082C
+#define  ZORRO_PROD_BSC_OKTAGON_2008				ZORRO_ID(BSC_ALFADATA_3, 0x05, 0)
+#define  ZORRO_PROD_BSC_TANDEM_AT_2008_508			ZORRO_ID(BSC_ALFADATA_3, 0x06, 0)
+#define  ZORRO_PROD_BSC_ALFA_RAM_1200				ZORRO_ID(BSC_ALFADATA_3, 0x07, 0)
+#define  ZORRO_PROD_BSC_OKTAGON_2008_RAM			ZORRO_ID(BSC_ALFADATA_3, 0x08, 0)
+#define  ZORRO_PROD_BSC_MULTIFACE_I				ZORRO_ID(BSC_ALFADATA_3, 0x10, 0)
+#define  ZORRO_PROD_BSC_MULTIFACE_II				ZORRO_ID(BSC_ALFADATA_3, 0x11, 0)
+#define  ZORRO_PROD_BSC_MULTIFACE_III				ZORRO_ID(BSC_ALFADATA_3, 0x12, 0)
+#define  ZORRO_PROD_BSC_FRAMEBUFFER				ZORRO_ID(BSC_ALFADATA_3, 0x20, 0)
+#define  ZORRO_PROD_BSC_GRAFFITI_RAM				ZORRO_ID(BSC_ALFADATA_3, 0x21, 0)
+#define  ZORRO_PROD_BSC_GRAFFITI_REG				ZORRO_ID(BSC_ALFADATA_3, 0x22, 0)
+#define  ZORRO_PROD_BSC_ISDN_MASTERCARD				ZORRO_ID(BSC_ALFADATA_3, 0x40, 0)
+#define  ZORRO_PROD_BSC_ISDN_MASTERCARD_II			ZORRO_ID(BSC_ALFADATA_3, 0x41, 0)
+
+#define ZORRO_MANUF_PHOENIX					0x0835
+#define  ZORRO_PROD_PHOENIX_ST506				ZORRO_ID(PHOENIX, 0x21, 0)
+#define  ZORRO_PROD_PHOENIX_SCSI				ZORRO_ID(PHOENIX, 0x22, 0)
+#define  ZORRO_PROD_PHOENIX_RAM					ZORRO_ID(PHOENIX, 0xBE, 0)
+
+#define ZORRO_MANUF_ADVANCED_STORAGE_SYSTEMS			0x0836
+#define  ZORRO_PROD_ADVANCED_STORAGE_SYSTEMS_NEXUS		ZORRO_ID(ADVANCED_STORAGE_SYSTEMS, 0x01, 0)
+#define  ZORRO_PROD_ADVANCED_STORAGE_SYSTEMS_NEXUS_RAM		ZORRO_ID(ADVANCED_STORAGE_SYSTEMS, 0x08, 0)
+
+#define ZORRO_MANUF_IMPULSE					0x0838
+#define  ZORRO_PROD_IMPULSE_FIRECRACKER_24			ZORRO_ID(IMPULSE, 0x00, 0)
+
+#define ZORRO_MANUF_IVS						0x0840
+#define  ZORRO_PROD_IVS_GRANDSLAM_PIC_2				ZORRO_ID(IVS, 0x02, 0)
+#define  ZORRO_PROD_IVS_GRANDSLAM_PIC_1				ZORRO_ID(IVS, 0x04, 0)
+#define  ZORRO_PROD_IVS_OVERDRIVE				ZORRO_ID(IVS, 0x10, 0)
+#define  ZORRO_PROD_IVS_TRUMPCARD_CLASSIC			ZORRO_ID(IVS, 0x30, 0)
+#define  ZORRO_PROD_IVS_TRUMPCARD_PRO_GRANDSLAM			ZORRO_ID(IVS, 0x34, 0)
+#define  ZORRO_PROD_IVS_META_4					ZORRO_ID(IVS, 0x40, 0)
+#define  ZORRO_PROD_IVS_WAVETOOLS				ZORRO_ID(IVS, 0xBF, 0)
+#define  ZORRO_PROD_IVS_VECTOR_1				ZORRO_ID(IVS, 0xF3, 0)
+#define  ZORRO_PROD_IVS_VECTOR_2				ZORRO_ID(IVS, 0xF4, 0)
+
+#define ZORRO_MANUF_VECTOR_1					0x0841
+#define  ZORRO_PROD_VECTOR_CONNECTION_1				ZORRO_ID(VECTOR_1, 0xE3, 0)
+
+#define ZORRO_MANUF_XPERT_PRODEV				0x0845
+#define  ZORRO_PROD_XPERT_PRODEV_VISIONA_RAM			ZORRO_ID(XPERT_PRODEV, 0x01, 0)
+#define  ZORRO_PROD_XPERT_PRODEV_VISIONA_REG			ZORRO_ID(XPERT_PRODEV, 0x02, 0)
+#define  ZORRO_PROD_XPERT_PRODEV_MERLIN_RAM			ZORRO_ID(XPERT_PRODEV, 0x03, 0)
+#define  ZORRO_PROD_XPERT_PRODEV_MERLIN_REG_1			ZORRO_ID(XPERT_PRODEV, 0x04, 0)
+#define  ZORRO_PROD_XPERT_PRODEV_MERLIN_REG_2			ZORRO_ID(XPERT_PRODEV, 0xC9, 0)
+
+#define ZORRO_MANUF_HYDRA_SYSTEMS				0x0849
+#define  ZORRO_PROD_HYDRA_SYSTEMS_AMIGANET			ZORRO_ID(HYDRA_SYSTEMS, 0x01, 0)
+
+#define ZORRO_MANUF_SUNRIZE_INDUSTRIES				0x084F
+#define  ZORRO_PROD_SUNRIZE_INDUSTRIES_AD1012			ZORRO_ID(SUNRIZE_INDUSTRIES, 0x01, 0)
+#define  ZORRO_PROD_SUNRIZE_INDUSTRIES_AD516			ZORRO_ID(SUNRIZE_INDUSTRIES, 0x02, 0)
+#define  ZORRO_PROD_SUNRIZE_INDUSTRIES_DD512			ZORRO_ID(SUNRIZE_INDUSTRIES, 0x03, 0)
+
+#define ZORRO_MANUF_TRICERATOPS					0x0850
+#define  ZORRO_PROD_TRICERATOPS_MULTI_IO			ZORRO_ID(TRICERATOPS, 0x01, 0)
+
+#define ZORRO_MANUF_APPLIED_MAGIC				0x0851
+#define  ZORRO_PROD_APPLIED_MAGIC_DMI_RESOLVER			ZORRO_ID(APPLIED_MAGIC, 0x01, 0)
+#define  ZORRO_PROD_APPLIED_MAGIC_DIGITAL_BROADCASTER		ZORRO_ID(APPLIED_MAGIC, 0x06, 0)
+
+#define ZORRO_MANUF_GFX_BASE					0x085E
+#define  ZORRO_PROD_GFX_BASE_GDA_1_VRAM				ZORRO_ID(GFX_BASE, 0x00, 0)
+#define  ZORRO_PROD_GFX_BASE_GDA_1				ZORRO_ID(GFX_BASE, 0x01, 0)
+
+#define ZORRO_MANUF_ROCTEC					0x0860
+#define  ZORRO_PROD_ROCTEC_RH_800C				ZORRO_ID(ROCTEC, 0x01, 0)
+#define  ZORRO_PROD_ROCTEC_RH_800C_RAM				ZORRO_ID(ROCTEC, 0x01, 0)
+
+#define ZORRO_MANUF_KATO					0x0861
+#define  ZORRO_PROD_KATO_MELODY					ZORRO_ID(KATO, 0x80, 0)
+/* ID clash!! */
+#define ZORRO_MANUF_HELFRICH_1					0x0861
+#define  ZORRO_PROD_HELFRICH_RAINBOW_II				ZORRO_ID(HELFRICH_1, 0x20, 0)
+#define  ZORRO_PROD_HELFRICH_RAINBOW_III			ZORRO_ID(HELFRICH_1, 0x21, 0)
+
+#define ZORRO_MANUF_ATLANTIS					0x0862
+
+#define ZORRO_MANUF_PROTAR					0x0864
+
+#define ZORRO_MANUF_ACS						0x0865
+
+#define ZORRO_MANUF_SOFTWARE_RESULTS_ENTERPRISES		0x0866
+#define  ZORRO_PROD_SOFTWARE_RESULTS_ENTERPRISES_GOLDEN_GATE_2_BUS_PLUS	ZORRO_ID(SOFTWARE_RESULTS_ENTERPRISES, 0x01, 0)
+
+#define ZORRO_MANUF_MASOBOSHI					0x086D
+#define  ZORRO_PROD_MASOBOSHI_MASTER_CARD_SC201			ZORRO_ID(MASOBOSHI, 0x03, 0)
+#define  ZORRO_PROD_MASOBOSHI_MASTER_CARD_MC702			ZORRO_ID(MASOBOSHI, 0x04, 0)
+#define  ZORRO_PROD_MASOBOSHI_MVD_819				ZORRO_ID(MASOBOSHI, 0x07, 0)
+
+#define ZORRO_MANUF_MAINHATTAN_DATA				0x086F
+#define  ZORRO_PROD_MAINHATTAN_DATA_IDE				ZORRO_ID(MAINHATTAN_DATA, 0x01, 0)
+
+#define ZORRO_MANUF_VILLAGE_TRONIC				0x0877
+#define  ZORRO_PROD_VILLAGE_TRONIC_DOMINO_RAM			ZORRO_ID(VILLAGE_TRONIC, 0x01, 0)
+#define  ZORRO_PROD_VILLAGE_TRONIC_DOMINO_REG			ZORRO_ID(VILLAGE_TRONIC, 0x02, 0)
+#define  ZORRO_PROD_VILLAGE_TRONIC_DOMINO_16M_PROTOTYPE		ZORRO_ID(VILLAGE_TRONIC, 0x03, 0)
+#define  ZORRO_PROD_VILLAGE_TRONIC_PICASSO_II_II_PLUS_RAM	ZORRO_ID(VILLAGE_TRONIC, 0x0B, 0)
+#define  ZORRO_PROD_VILLAGE_TRONIC_PICASSO_II_II_PLUS_REG	ZORRO_ID(VILLAGE_TRONIC, 0x0C, 0)
+#define  ZORRO_PROD_VILLAGE_TRONIC_PICASSO_II_II_PLUS_SEGMENTED_MODE	ZORRO_ID(VILLAGE_TRONIC, 0x0D, 0)
+#define  ZORRO_PROD_VILLAGE_TRONIC_PICASSO_IV_Z2_MEM1		ZORRO_ID(VILLAGE_TRONIC, 0x15, 0)
+#define  ZORRO_PROD_VILLAGE_TRONIC_PICASSO_IV_Z2_MEM2		ZORRO_ID(VILLAGE_TRONIC, 0x16, 0)
+#define  ZORRO_PROD_VILLAGE_TRONIC_PICASSO_IV_Z2_REG		ZORRO_ID(VILLAGE_TRONIC, 0x17, 0)
+#define  ZORRO_PROD_VILLAGE_TRONIC_PICASSO_IV_Z3		ZORRO_ID(VILLAGE_TRONIC, 0x18, 0)
+#define  ZORRO_PROD_VILLAGE_TRONIC_ARIADNE			ZORRO_ID(VILLAGE_TRONIC, 0xC9, 0)
+
+#define ZORRO_MANUF_UTILITIES_UNLIMITED				0x087B
+#define  ZORRO_PROD_UTILITIES_UNLIMITED_EMPLANT_DELUXE		ZORRO_ID(UTILITIES_UNLIMITED, 0x15, 0)
+#define  ZORRO_PROD_UTILITIES_UNLIMITED_EMPLANT_DELUXE2		ZORRO_ID(UTILITIES_UNLIMITED, 0x20, 0)
+
+#define ZORRO_MANUF_AMITRIX					0x0880
+#define  ZORRO_PROD_AMITRIX_MULTI_IO				ZORRO_ID(AMITRIX, 0x01, 0)
+#define  ZORRO_PROD_AMITRIX_CD_RAM				ZORRO_ID(AMITRIX, 0x02, 0)
+
+#define ZORRO_MANUF_ARMAX					0x0885
+#define  ZORRO_PROD_ARMAX_OMNIBUS				ZORRO_ID(ARMAX, 0x00, 0)
+
+#define ZORRO_MANUF_NEWTEK					0x088F
+#define  ZORRO_PROD_NEWTEK_VIDEOTOASTER				ZORRO_ID(NEWTEK, 0x00, 0)
+
+#define ZORRO_MANUF_M_TECH_GERMANY				0x0890
+#define  ZORRO_PROD_MTEC_AT500_2				ZORRO_ID(M_TECH_GERMANY, 0x01, 0)
+#define  ZORRO_PROD_MTEC_68030					ZORRO_ID(M_TECH_GERMANY, 0x03, 0)
+#define  ZORRO_PROD_MTEC_68020I					ZORRO_ID(M_TECH_GERMANY, 0x06, 0)
+#define  ZORRO_PROD_MTEC_A1200_T68030_RTC			ZORRO_ID(M_TECH_GERMANY, 0x20, 0)
+#define  ZORRO_PROD_MTEC_VIPER_MK_V_E_MATRIX_530		ZORRO_ID(M_TECH_GERMANY, 0x21, 0)
+#define  ZORRO_PROD_MTEC_8_MB_RAM				ZORRO_ID(M_TECH_GERMANY, 0x22, 0)
+#define  ZORRO_PROD_MTEC_VIPER_MK_V_E_MATRIX_530_SCSI_IDE	ZORRO_ID(M_TECH_GERMANY, 0x24, 0)
+
+#define ZORRO_MANUF_GREAT_VALLEY_PRODUCTS_4			0x0891
+#define  ZORRO_PROD_GVP_EGS_28_24_SPECTRUM_REG			ZORRO_ID(GREAT_VALLEY_PRODUCTS_4, 0x01, 0)
+#define  ZORRO_PROD_GVP_EGS_28_24_SPECTRUM_RAM			ZORRO_ID(GREAT_VALLEY_PRODUCTS_4, 0x02, 0)
+
+#define ZORRO_MANUF_APOLLO_1					0x0892
+#define  ZORRO_PROD_APOLLO_A1200				ZORRO_ID(APOLLO_1, 0x01, 0)
+
+#define ZORRO_MANUF_HELFRICH_2					0x0893
+#define  ZORRO_PROD_HELFRICH_PICCOLO_RAM			ZORRO_ID(HELFRICH_2, 0x05, 0)
+#define  ZORRO_PROD_HELFRICH_PICCOLO_REG			ZORRO_ID(HELFRICH_2, 0x06, 0)
+#define  ZORRO_PROD_HELFRICH_PEGGY_PLUS_MPEG			ZORRO_ID(HELFRICH_2, 0x07, 0)
+#define  ZORRO_PROD_HELFRICH_VIDEOCRUNCHER			ZORRO_ID(HELFRICH_2, 0x08, 0)
+#define  ZORRO_PROD_HELFRICH_SD64_RAM				ZORRO_ID(HELFRICH_2, 0x0A, 0)
+#define  ZORRO_PROD_HELFRICH_SD64_REG				ZORRO_ID(HELFRICH_2, 0x0B, 0)
+
+#define ZORRO_MANUF_MACROSYSTEMS_USA				0x089B
+#define  ZORRO_PROD_MACROSYSTEMS_WARP_ENGINE_40xx		ZORRO_ID(MACROSYSTEMS_USA, 0x13, 0)
+
+#define ZORRO_MANUF_ELBOX_COMPUTER				0x089E
+#define  ZORRO_PROD_ELBOX_COMPUTER_1200_4			ZORRO_ID(ELBOX_COMPUTER, 0x06, 0)
+
+#define ZORRO_MANUF_HARMS_PROFESSIONAL				0x0A00
+#define  ZORRO_PROD_HARMS_PROFESSIONAL_030_PLUS			ZORRO_ID(HARMS_PROFESSIONAL, 0x10, 0)
+#define  ZORRO_PROD_HARMS_PROFESSIONAL_3500			ZORRO_ID(HARMS_PROFESSIONAL, 0xD0, 0)
+
+#define ZORRO_MANUF_MICRONIK					0x0A50
+#define  ZORRO_PROD_MICRONIK_RCA_120				ZORRO_ID(MICRONIK, 0x0A, 0)
+
+#define ZORRO_MANUF_MICRONIK2					0x0F0F
+#define  ZORRO_PROD_MICRONIK2_Z3I				ZORRO_ID(MICRONIK2, 0x01, 0)
+
+#define ZORRO_MANUF_MEGAMICRO					0x1000
+#define  ZORRO_PROD_MEGAMICRO_SCRAM_500				ZORRO_ID(MEGAMICRO, 0x03, 0)
+#define  ZORRO_PROD_MEGAMICRO_SCRAM_500_RAM			ZORRO_ID(MEGAMICRO, 0x04, 0)
+
+#define ZORRO_MANUF_IMTRONICS_2					0x1028
+#define  ZORRO_PROD_IMTRONICS_HURRICANE_2800_3			ZORRO_ID(IMTRONICS_2, 0x39, 0)
+#define  ZORRO_PROD_IMTRONICS_HURRICANE_2800_4			ZORRO_ID(IMTRONICS_2, 0x57, 0)
+
+/* unofficial ID */
+#define ZORRO_MANUF_INDIVIDUAL_COMPUTERS			0x1212
+#define  ZORRO_PROD_INDIVIDUAL_COMPUTERS_BUDDHA			ZORRO_ID(INDIVIDUAL_COMPUTERS, 0x00, 0)
+#define  ZORRO_PROD_INDIVIDUAL_COMPUTERS_CATWEASEL		ZORRO_ID(INDIVIDUAL_COMPUTERS, 0x2A, 0)
+
+#define ZORRO_MANUF_KUPKE_3					0x1248
+#define  ZORRO_PROD_KUPKE_GOLEM_HD_3000				ZORRO_ID(KUPKE_3, 0x01, 0)
+
+#define ZORRO_MANUF_ITH						0x1388
+#define  ZORRO_PROD_ITH_ISDN_MASTER_II				ZORRO_ID(ITH, 0x01, 0)
+
+#define ZORRO_MANUF_VMC						0x1389
+#define  ZORRO_PROD_VMC_ISDN_BLASTER_Z2				ZORRO_ID(VMC, 0x01, 0)
+#define  ZORRO_PROD_VMC_HYPERCOM_4				ZORRO_ID(VMC, 0x02, 0)
+
+#define ZORRO_MANUF_INFORMATION					0x157C
+#define  ZORRO_PROD_INFORMATION_ISDN_ENGINE_I			ZORRO_ID(INFORMATION, 0x64, 0)
+
+#define ZORRO_MANUF_VORTEX					0x2017
+#define  ZORRO_PROD_VORTEX_GOLDEN_GATE_80386SX			ZORRO_ID(VORTEX, 0x07, 0)
+#define  ZORRO_PROD_VORTEX_GOLDEN_GATE_RAM			ZORRO_ID(VORTEX, 0x08, 0)
+#define  ZORRO_PROD_VORTEX_GOLDEN_GATE_80486			ZORRO_ID(VORTEX, 0x09, 0)
+
+#define ZORRO_MANUF_EXPANSION_SYSTEMS				0x2062
+#define  ZORRO_PROD_EXPANSION_SYSTEMS_DATAFLYER_4000SX		ZORRO_ID(EXPANSION_SYSTEMS, 0x01, 0)
+#define  ZORRO_PROD_EXPANSION_SYSTEMS_DATAFLYER_4000SX_RAM	ZORRO_ID(EXPANSION_SYSTEMS, 0x02, 0)
+
+#define ZORRO_MANUF_READYSOFT					0x2100
+#define  ZORRO_PROD_READYSOFT_AMAX_II_IV			ZORRO_ID(READYSOFT, 0x01, 0)
+
+#define ZORRO_MANUF_PHASE5					0x2140
+#define  ZORRO_PROD_PHASE5_BLIZZARD_RAM				ZORRO_ID(PHASE5, 0x01, 0)
+#define  ZORRO_PROD_PHASE5_BLIZZARD				ZORRO_ID(PHASE5, 0x02, 0)
+#define  ZORRO_PROD_PHASE5_BLIZZARD_1220_IV			ZORRO_ID(PHASE5, 0x06, 0)
+#define  ZORRO_PROD_PHASE5_FASTLANE_Z3_RAM			ZORRO_ID(PHASE5, 0x0A, 0)
+#define  ZORRO_PROD_PHASE5_BLIZZARD_1230_II_FASTLANE_Z3_CYBERSCSI_CYBERSTORM060	ZORRO_ID(PHASE5, 0x0B, 0)
+#define  ZORRO_PROD_PHASE5_BLIZZARD_1220_CYBERSTORM		ZORRO_ID(PHASE5, 0x0C, 0)
+#define  ZORRO_PROD_PHASE5_BLIZZARD_1230			ZORRO_ID(PHASE5, 0x0D, 0)
+#define  ZORRO_PROD_PHASE5_BLIZZARD_1230_IV_1260		ZORRO_ID(PHASE5, 0x11, 0)
+#define  ZORRO_PROD_PHASE5_BLIZZARD_2060			ZORRO_ID(PHASE5, 0x18, 0)
+#define  ZORRO_PROD_PHASE5_CYBERSTORM_MK_II			ZORRO_ID(PHASE5, 0x19, 0)
+#define  ZORRO_PROD_PHASE5_CYBERVISION64			ZORRO_ID(PHASE5, 0x22, 0)
+#define  ZORRO_PROD_PHASE5_CYBERVISION64_3D_PROTOTYPE		ZORRO_ID(PHASE5, 0x32, 0)
+#define  ZORRO_PROD_PHASE5_CYBERVISION64_3D			ZORRO_ID(PHASE5, 0x43, 0)
+#define  ZORRO_PROD_PHASE5_CYBERSTORM_MK_III			ZORRO_ID(PHASE5, 0x64, 0)
+
+#define ZORRO_MANUF_DPS						0x2169
+#define  ZORRO_PROD_DPS_PERSONAL_ANIMATION_RECORDER		ZORRO_ID(DPS, 0x01, 0)
+
+#define ZORRO_MANUF_APOLLO_2					0x2200
+#define  ZORRO_PROD_APOLLO_A620_68020_1				ZORRO_ID(APOLLO_2, 0x00, 0)
+#define  ZORRO_PROD_APOLLO_A620_68020_2				ZORRO_ID(APOLLO_2, 0x01, 0)
+
+#define ZORRO_MANUF_APOLLO_3					0x2222
+#define  ZORRO_PROD_APOLLO_AT_APOLLO				ZORRO_ID(APOLLO_3, 0x22, 0)
+#define  ZORRO_PROD_APOLLO_1230_1240_1260_2030_4040_4060	ZORRO_ID(APOLLO_3, 0x23, 0)
+
+#define ZORRO_MANUF_PETSOFF_LP					0x38A5
+#define  ZORRO_PROD_PETSOFF_LP_DELFINA				ZORRO_ID(PETSOFF_LP, 0x00, 0)
+#define  ZORRO_PROD_PETSOFF_LP_DELFINA_LITE			ZORRO_ID(PETSOFF_LP, 0x01, 0)
+
+#define ZORRO_MANUF_UWE_GERLACH					0x3FF7
+#define  ZORRO_PROD_UWE_GERLACH_RAM_ROM				ZORRO_ID(UWE_GERLACH, 0xd4, 0)
+
+#define ZORRO_MANUF_MACROSYSTEMS_GERMANY			0x4754
+#define  ZORRO_PROD_MACROSYSTEMS_MAESTRO			ZORRO_ID(MACROSYSTEMS_GERMANY, 0x03, 0)
+#define  ZORRO_PROD_MACROSYSTEMS_VLAB				ZORRO_ID(MACROSYSTEMS_GERMANY, 0x04, 0)
+#define  ZORRO_PROD_MACROSYSTEMS_MAESTRO_PRO			ZORRO_ID(MACROSYSTEMS_GERMANY, 0x05, 0)
+#define  ZORRO_PROD_MACROSYSTEMS_RETINA				ZORRO_ID(MACROSYSTEMS_GERMANY, 0x06, 0)
+#define  ZORRO_PROD_MACROSYSTEMS_MULTI_EVOLUTION		ZORRO_ID(MACROSYSTEMS_GERMANY, 0x08, 0)
+#define  ZORRO_PROD_MACROSYSTEMS_TOCCATA			ZORRO_ID(MACROSYSTEMS_GERMANY, 0x0C, 0)
+#define  ZORRO_PROD_MACROSYSTEMS_RETINA_Z3			ZORRO_ID(MACROSYSTEMS_GERMANY, 0x10, 0)
+#define  ZORRO_PROD_MACROSYSTEMS_VLAB_MOTION			ZORRO_ID(MACROSYSTEMS_GERMANY, 0x12, 0)
+#define  ZORRO_PROD_MACROSYSTEMS_ALTAIS				ZORRO_ID(MACROSYSTEMS_GERMANY, 0x13, 0)
+#define  ZORRO_PROD_MACROSYSTEMS_FALCON_040			ZORRO_ID(MACROSYSTEMS_GERMANY, 0xFD, 0)
+
+#define ZORRO_MANUF_COMBITEC					0x6766
+
+#define ZORRO_MANUF_SKI_PERIPHERALS				0x8000
+#define  ZORRO_PROD_SKI_PERIPHERALS_MAST_FIREBALL		ZORRO_ID(SKI_PERIPHERALS, 0x08, 0)
+#define  ZORRO_PROD_SKI_PERIPHERALS_SCSI_DUAL_SERIAL		ZORRO_ID(SKI_PERIPHERALS, 0x80, 0)
+
+#define ZORRO_MANUF_REIS_WARE_2					0xA9AD
+#define  ZORRO_PROD_REIS_WARE_SCAN_KING				ZORRO_ID(REIS_WARE_2, 0x11, 0)
+
+#define ZORRO_MANUF_CAMERON					0xAA01
+#define  ZORRO_PROD_CAMERON_PERSONAL_A4				ZORRO_ID(CAMERON, 0x10, 0)
+
+#define ZORRO_MANUF_REIS_WARE					0xAA11
+#define  ZORRO_PROD_REIS_WARE_HANDYSCANNER			ZORRO_ID(REIS_WARE, 0x11, 0)
+
+#define ZORRO_MANUF_PHOENIX_2					0xB5A8
+#define  ZORRO_PROD_PHOENIX_ST506_2				ZORRO_ID(PHOENIX_2, 0x21, 0)
+#define  ZORRO_PROD_PHOENIX_SCSI_2				ZORRO_ID(PHOENIX_2, 0x22, 0)
+#define  ZORRO_PROD_PHOENIX_RAM_2				ZORRO_ID(PHOENIX_2, 0xBE, 0)
+
+#define ZORRO_MANUF_COMBITEC_2					0xC008
+#define  ZORRO_PROD_COMBITEC_HD					ZORRO_ID(COMBITEC_2, 0x2A, 0)
+#define  ZORRO_PROD_COMBITEC_SRAM				ZORRO_ID(COMBITEC_2, 0x2B, 0)
+
+
+    /*
+     *  Test and illegal Manufacturer IDs.
+     *  These do NOT appear in arch/m68k/amiga/zorro.c!
+     */
+
+#define ZORRO_MANUF_HACKER					0x07DB
+#define  ZORRO_PROD_GENERAL_PROTOTYPE				ZORRO_ID(HACKER, 0x00, 0)
+#define  ZORRO_PROD_HACKER_SCSI					ZORRO_ID(HACKER, 0x01, 0)
+#define  ZORRO_PROD_RESOURCE_MANAGEMENT_FORCE_QUICKNET_QN2000	ZORRO_ID(HACKER, 0x02, 0)
+#define  ZORRO_PROD_VECTOR_CONNECTION_2				ZORRO_ID(HACKER, 0xE0, 0)
+#define  ZORRO_PROD_VECTOR_CONNECTION_3				ZORRO_ID(HACKER, 0xE1, 0)
+#define  ZORRO_PROD_VECTOR_CONNECTION_4				ZORRO_ID(HACKER, 0xE2, 0)
+#define  ZORRO_PROD_VECTOR_CONNECTION_5				ZORRO_ID(HACKER, 0xE3, 0)
+
+
+    /*
+     *  GVP identifies most of its products through the 'extended product code'
+     *  (epc). The epc has to be and'ed with the GVP_PRODMASK before the
+     *  identification.
+     */
+
+#define GVP_PRODMASK			(0xf8)
+#define GVP_SCSICLKMASK			(0x01)
+
 enum GVP_flags {
-  GVP_IO       = 0x01,
-  GVP_ACCEL    = 0x02,
-  GVP_SCSI     = 0x04,
-  GVP_24BITDMA = 0x08,
-  GVP_25BITDMA = 0x10,
-  GVP_NOBANK   = 0x20,
-  GVP_14MHZ    = 0x40,
+    GVP_IO		= 0x01,
+    GVP_ACCEL		= 0x02,
+    GVP_SCSI		= 0x04,
+    GVP_24BITDMA	= 0x08,
+    GVP_25BITDMA	= 0x10,
+    GVP_NOBANK		= 0x20,
+    GVP_14MHZ		= 0x40,
 };
 
 
@@ -515,8 +663,8 @@ struct ExpansionRom {
     u_char	er_Product;	/* Product number, assigned by manufacturer */
     u_char	er_Flags;	/* Flags */
     u_char	er_Reserved03;	/* Must be zero ($ff inverted) */
-    u_short	er_Manufacturer; /* Unique ID,ASSIGNED BY COMMODORE-AMIGA! */
-    u_long	er_SerialNumber; /* Available for use by manufacturer */
+    u_short	er_Manufacturer;/* Unique ID,ASSIGNED BY COMMODORE-AMIGA! */
+    u_long	er_SerialNumber;/* Available for use by manufacturer */
     u_short	er_InitDiagVec;	/* Offset to optional "DiagArea" structure */
     u_char	er_Reserved0c;
     u_char	er_Reserved0d;
@@ -547,7 +695,7 @@ struct ConfigDev {
     u_long		cd_Unused[4];	/* for whatever the driver wants */
 };
 
-#else	/* __ASSEMBLY__ */
+#else /* __ASSEMBLY__ */
 
 LN_Succ		= 0
 LN_Pred		= LN_Succ+4
@@ -582,7 +730,7 @@ CD_NextCD	= CD_Driver+4
 CD_Unused	= CD_NextCD+4
 CD_sizeof	= CD_Unused+(4*4)
 
-#endif	/* __ASSEMBLY__ */
+#endif /* __ASSEMBLY__ */
 
 #ifndef __ASSEMBLY__
 
@@ -590,30 +738,30 @@ CD_sizeof	= CD_Unused+(4*4)
 
 #ifdef __KERNEL__
 
-extern int zorro_num_autocon;		/* # of autoconfig devices found */
+extern unsigned int zorro_num_autocon;		/* # of autoconfig devices found */
 extern struct ConfigDev zorro_autocon[ZORRO_NUM_AUTO];
 
 
-/*
- * Zorro Functions
- */
+    /*
+     *  Zorro Functions
+     */
 
-extern int zorro_find(int manuf, int prod, int part, int index);
-extern struct ConfigDev *zorro_get_board(int key);
-extern void zorro_config_board(int key, int part);
-extern void zorro_unconfig_board(int key, int part);
+extern unsigned int zorro_find(zorro_id id, unsigned int part, unsigned int index);
+extern const struct ConfigDev *zorro_get_board(unsigned int key);
+extern void zorro_config_board(unsigned int key, unsigned int part);
+extern void zorro_unconfig_board(unsigned int key, unsigned int part);
 
 
-/*
- * Bitmask indicating portions of available Zorro II RAM that are unused
- * by the system. Every bit represents a 64K chunk, for a maximum of 8MB
- * (128 chunks, physical 0x00200000-0x009fffff).
- *
- * If you want to use (= allocate) portions of this RAM, you should clear
- * the corresponding bits.
- */
+    /*
+     *  Bitmask indicating portions of available Zorro II RAM that are unused
+     *  by the system. Every bit represents a 64K chunk, for a maximum of 8MB
+     *  (128 chunks, physical 0x00200000-0x009fffff).
+     *
+     *  If you want to use (= allocate) portions of this RAM, you should clear
+     *  the corresponding bits.
+     */
 
-extern u_long zorro_unused_z2ram[4];
+extern u32 zorro_unused_z2ram[4];
 
 #define Z2RAM_START		(0x00200000)
 #define Z2RAM_END		(0x00a00000)
@@ -623,14 +771,14 @@ extern u_long zorro_unused_z2ram[4];
 #define Z2RAM_CHUNKSHIFT	(16)
 
 
-/*
- * Verbose Board Identification
- */
+    /*
+     *  Verbose Board Identification
+     */
 
 extern void zorro_identify(void);
 extern int zorro_get_list(char *buffer);
 
-#endif	/* !__ASSEMBLY__ */
-#endif	/* __KERNEL__ */
+#endif /* !__ASSEMBLY__ */
+#endif /* __KERNEL__ */
 
-#endif /* __ZORRO_H */
+#endif /* _LINUX_ZORRO_H */

@@ -10,6 +10,7 @@
 #include <linux/mm.h>
 #include <linux/string.h>
 #include <linux/stat.h>
+#include <linux/file.h>
 #include <linux/locks.h>
 #include <linux/limits.h>
 #include <linux/config.h>
@@ -250,24 +251,24 @@ void proc_read_inode(struct inode * inode)
 	inode->i_blocks = 0;
 	inode->i_blksize = 1024;
 	ino = inode->i_ino;
-	if (ino >= PROC_OPENPROM_FIRST && ino < PROC_OPENPROM_FIRST + PROC_NOPENPROM)
-		return;
+	if (ino >= PROC_OPENPROM_FIRST && 
+	    ino <  PROC_OPENPROM_FIRST + PROC_NOPENPROM)
+		goto out;
 	inode->i_op = NULL;
 	inode->i_mode = 0;
 	inode->i_uid = 0;
 	inode->i_gid = 0;
 	inode->i_nlink = 1;
 	inode->i_size = 0;
-	pid = ino >> 16;
 
+	pid = ino >> 16;
 	if (!pid)
-		return;
+		goto out;
+
 	read_lock(&tasklist_lock);
 	p = find_task_by_pid(pid);
-	read_unlock(&tasklist_lock);	/* FIXME!! This should be done only after we have stopped using 'p' */
-
 	if (!p)
-		return;
+		goto out_unlock;
 
 	ino &= 0x0000ffff;
 	if (ino == PROC_PID_INO || p->dumpable) {
@@ -275,19 +276,27 @@ void proc_read_inode(struct inode * inode)
 		inode->i_gid = p->egid;
 	}
 	switch (ino >> 8) {
-		case PROC_PID_FD_DIR:
-			ino &= 0xff;
-			if (ino >= NR_OPEN || !p->files->fd[ino])
-				return;
-			inode->i_op = &proc_link_inode_operations;
-			inode->i_size = 64;
-			inode->i_mode = S_IFLNK;
-			if (p->files->fd[ino]->f_mode & 1)
-				inode->i_mode |= S_IRUSR | S_IXUSR;
-			if (p->files->fd[ino]->f_mode & 2)
-				inode->i_mode |= S_IWUSR | S_IXUSR;
-			return;
+		struct file * file;
+	case PROC_PID_FD_DIR:
+		ino &= 0xff;
+		file = fcheck_task(p, ino);
+		if (!file)
+			goto out_unlock;
+
+		inode->i_op = &proc_link_inode_operations;
+		inode->i_size = 64;
+		inode->i_mode = S_IFLNK;
+		if (file->f_mode & 1)
+			inode->i_mode |= S_IRUSR | S_IXUSR;
+		if (file->f_mode & 2)
+			inode->i_mode |= S_IWUSR | S_IXUSR;
 	}
+out_unlock:
+	/* Defer unlocking until we're done with the task */
+	read_unlock(&tasklist_lock);
+
+out:
+	return;
 }
 
 void proc_write_inode(struct inode * inode)

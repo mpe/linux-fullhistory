@@ -631,7 +631,7 @@ static void gentbl_banner(FILE *f)
 
 /* -------------------------------------------------------------------- */
 
-void main(int argc, char *argv[])
+int main(int argc, char *argv[])
 {
 	FILE *f;
 	
@@ -681,7 +681,7 @@ void main(int argc, char *argv[])
 	gentbl_costab(f, 6);
 	gentbl_afsk2400(f, 7372800);
 	fclose(f);
-	exit(0);
+	return(0);
 }
 
 

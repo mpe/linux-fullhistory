@@ -5,7 +5,7 @@
  *
  *		Implementation of the Transmission Control Protocol(TCP).
  *
- * Version:	$Id: tcp_timer.c,v 1.39 1998/03/13 08:02:17 davem Exp $
+ * Version:	$Id: tcp_timer.c,v 1.43 1998/03/22 22:10:28 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -77,11 +77,6 @@ void tcp_reset_xmit_timer(struct sock *sk, int what, unsigned long when)
 {
 	struct tcp_opt *tp = &sk->tp_pinfo.af_tcp;
 
-	if((long)when <= 0) {
-		printk(KERN_DEBUG "xmit_timer <= 0 - timer:%d when:%lx\n", what, when);
-		when=HZ/50;
-	}
-
 	switch (what) {
 	case TIME_RETRANS:
 		/* When seting the transmit timer the probe timer 
@@ -91,24 +86,15 @@ void tcp_reset_xmit_timer(struct sock *sk, int what, unsigned long when)
 		 */
 		if(tp->probe_timer.prev)
 			del_timer(&tp->probe_timer);
-		if(tp->retransmit_timer.prev)
-			del_timer(&tp->retransmit_timer);
-		tp->retransmit_timer.expires=jiffies+when;
-		add_timer(&tp->retransmit_timer);
+		mod_timer(&tp->retransmit_timer, jiffies+when);
 		break;
 
 	case TIME_DACK:
-		if(tp->delack_timer.prev)
-			del_timer(&tp->delack_timer);
-		tp->delack_timer.expires=jiffies+when;
-		add_timer(&tp->delack_timer);
+		mod_timer(&tp->delack_timer, jiffies+when);
 		break;
 
 	case TIME_PROBE0:
-		if(tp->probe_timer.prev)
-			del_timer(&tp->probe_timer);
-		tp->probe_timer.expires=jiffies+when;
-		add_timer(&tp->probe_timer);
+		mod_timer(&tp->probe_timer, jiffies+when);
 		break;	
 
 	case TIME_WRITE:
@@ -150,17 +136,12 @@ static int tcp_write_err(struct sock *sk, int force)
 	return 1;
 }
 
-/*
- *	A write timeout has occurred. Process the after effects. BROKEN (badly)
- */
-
+/* A write timeout has occurred. Process the after effects. */
 static int tcp_write_timeout(struct sock *sk)
 {
 	struct tcp_opt *tp = &(sk->tp_pinfo.af_tcp);
 
-	/*
-	 *	Look for a 'soft' timeout.
-	 */
+	/* Look for a 'soft' timeout. */
 	if ((sk->state == TCP_ESTABLISHED &&
 	     tp->retransmits && (tp->retransmits % TCP_QUICK_TRIES) == 0) ||
 	    (sk->state != TCP_ESTABLISHED && tp->retransmits > sysctl_tcp_retries1)) {
@@ -206,11 +187,10 @@ void tcp_probe_timer(unsigned long data)
 		return;
 	}
 
-	/*
-	 *	*WARNING* RFC 1122 forbids this 
-	 * 	It doesn't AFAIK, because we kill the retransmit timer -AK
-	 *	FIXME: We ought not to do it, Solaris 2.5 actually has fixing
-	 *	this behaviour in Solaris down as a bug fix. [AC]
+	/* *WARNING* RFC 1122 forbids this 
+	 * It doesn't AFAIK, because we kill the retransmit timer -AK
+	 * FIXME: We ought not to do it, Solaris 2.5 actually has fixing
+	 * this behaviour in Solaris down as a bug fix. [AC]
 	 */
 	if (tp->probes_out > sysctl_tcp_retries2) {
 		if(sk->err_soft)
@@ -226,9 +206,10 @@ void tcp_probe_timer(unsigned long data)
 			/* Clean up time. */
 			tcp_set_state(sk, TCP_CLOSE);
 		}
+	} else {
+		/* Only send another probe if we didn't close things up. */
+		tcp_send_probe0(sk);
 	}
-	
-	tcp_send_probe0(sk);
 }
 
 static __inline__ int tcp_keepopen_proc(struct sock *sk)
@@ -375,6 +356,21 @@ void tcp_retransmit_timer(unsigned long data)
 	/* Clear delay ack timer. */
 	tcp_clear_xmit_timer(sk, TIME_DACK);
 
+	/* RFC 2018, clear all 'sacked' flags in retransmission queue,
+	 * the sender may have dropped out of order frames and we must
+	 * send them out should this timer fire on us.
+	 */
+	if(tp->sack_ok) {
+		struct sk_buff *skb = skb_peek(&sk->write_queue);
+
+		while((skb != NULL) &&
+		      (skb != tp->send_head) &&
+		      (skb != (struct sk_buff *)&sk->write_queue)) {
+			TCP_SKB_CB(skb)->sacked = 0;
+			skb = skb->next;
+		}
+	}
+
 	/* Retransmission. */
 	tp->retrans_head = NULL;
 	if (tp->retransmits == 0) {
@@ -390,7 +386,7 @@ void tcp_retransmit_timer(unsigned long data)
 
 	tp->dup_acks = 0;
 	tp->high_seq = tp->snd_nxt;
-	tcp_do_retransmit(sk, 0);
+	tcp_retransmit_skb(sk, skb_peek(&sk->write_queue));
 
 	/* Increase the timeout each time we retransmit.  Note that
 	 * we do not increase the rtt estimate.  rto is initialized
@@ -407,7 +403,7 @@ void tcp_retransmit_timer(unsigned long data)
 	 * implemented ftp to mars will work nicely. We will have to fix
 	 * the 120 second clamps though!
 	 */
-	tp->backoff++;	/* FIXME: always same as retransmits? -- erics */
+	tp->backoff++;
 	tp->rto = min(tp->rto << 1, 120*HZ);
 	tcp_reset_xmit_timer(sk, TIME_RETRANS, tp->rto);
 
@@ -523,18 +519,18 @@ void tcp_sltimer_handler(unsigned long data)
 void __tcp_inc_slow_timer(struct tcp_sl_timer *slt)
 {
 	unsigned long now = jiffies;
-	unsigned long next = 0;
 	unsigned long when;
 
 	slt->last = now;
-		
-	when = now + slt->period;
-	if (del_timer(&tcp_slow_timer))
-		next = tcp_slow_timer.expires;
 
-	if (next && ((long)(next - when) < 0))
-		when = next;
-		
-	tcp_slow_timer.expires = when;
-	add_timer(&tcp_slow_timer);
+	when = now + slt->period;
+
+	if (tcp_slow_timer.prev) {
+		if ((long)(tcp_slow_timer.expires - when) >= 0) {
+			mod_timer(&tcp_slow_timer, when);
+		}
+	} else {
+		tcp_slow_timer.expires = when;
+		add_timer(&tcp_slow_timer);
+	}
 }

@@ -22,7 +22,7 @@ struct flowi {
 		} ip6_u;
 	} nl_u;
 
-	struct device	*dev;
+	int	oif;
 
 	union {
 		struct {

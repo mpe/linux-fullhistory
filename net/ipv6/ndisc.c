@@ -774,7 +774,7 @@ void ndisc_send_redirect(struct sk_buff *skb, struct neighbour *neigh,
 	int hlen;
 
 	dev = skb->dev;
-	rt = rt6_lookup(&skb->nh.ipv6h->saddr, NULL, dev, 0);
+	rt = rt6_lookup(&skb->nh.ipv6h->saddr, NULL, dev->ifindex, 0);
 
 	if (rt == NULL || rt->u.dst.error) {
 		ND_PRINTK1("ndisc_send_redirect: hostunreach\n");

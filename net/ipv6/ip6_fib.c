@@ -5,7 +5,7 @@
  *	Authors:
  *	Pedro Roque		<roque@di.fc.ul.pt>	
  *
- *	$Id: ip6_fib.c,v 1.11 1998/03/08 05:56:50 davem Exp $
+ *	$Id: ip6_fib.c,v 1.12 1998/03/20 09:12:16 davem Exp $
  *
  *	This program is free software; you can redistribute it and/or
  *      modify it under the terms of the GNU General Public License
@@ -418,9 +418,13 @@ static int fib6_add_rt2node(struct fib6_node *fn, struct rt6_info *rt)
 			    (iter->rt6i_flowr == rt->rt6i_flowr) &&
 			    (ipv6_addr_cmp(&iter->rt6i_gateway,
 					   &rt->rt6i_gateway) == 0)) {
-				if (rt->rt6i_expires == 0 ||
-				    (long)(rt->rt6i_expires - iter->rt6i_expires) > 0)
-					rt->rt6i_expires = iter->rt6i_expires;
+				if (!(iter->rt6i_flags&RTF_EXPIRES))
+					return -EEXIST;
+				iter->rt6i_expires = rt->rt6i_expires;
+				if (!(rt->rt6i_flags&RTF_EXPIRES)) {
+					iter->rt6i_flags &= ~RTF_EXPIRES;
+					iter->rt6i_expires = rt->rt6i_expires;
+				}
 				return -EEXIST;
 			}
 		}
@@ -931,7 +935,8 @@ static int fib6_gc_node(struct fib6_node *fn, int timeout)
 		 *	Seems, radix tree walking is absolutely broken,
 		 *	but we will try in any case --ANK
 		 */
-		if (rt->rt6i_expires && (long)(now - rt->rt6i_expires) < 0) {
+		if ((rt->rt6i_flags&RTF_EXPIRES) && rt->rt6i_expires
+		    && (long)(now - rt->rt6i_expires) > 0) {
 			struct rt6_info *old;
 
 			old = rt;

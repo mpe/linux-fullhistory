@@ -26,7 +26,7 @@ extern int			datagram_recv_ctl(struct sock *sk,
 						  struct sk_buff *skb);
 
 extern int			datagram_send_ctl(struct msghdr *msg,
-						  struct device **src_dev,
+						  int *oif,
 						  struct in6_addr **src_addr,
 						  struct ipv6_options *opt,
 						  int *hlimit);

@@ -5,7 +5,7 @@
  *
  *		The Internet Protocol (IP) output module.
  *
- * Version:	$Id: ip_output.c,v 1.48 1998/03/08 05:56:25 davem Exp $
+ * Version:	$Id: ip_output.c,v 1.50 1998/03/20 09:12:08 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -81,46 +81,24 @@ int sysctl_ip_dynaddr = 0;
 
 int ip_id_count = 0;
 
-int ip_build_pkt(struct sk_buff *skb, struct sock *sk, u32 saddr, u32 daddr,
-		 struct ip_options *opt)
+/* Generate a checksum for an outgoing IP datagram. */
+__inline__ void ip_send_check(struct iphdr *iph)
 {
-	struct rtable *rt;
-	u32 final_daddr = daddr;
+	iph->check = 0;
+	iph->check = ip_fast_csum((unsigned char *)iph, iph->ihl);
+}
+
+void ip_build_and_send_pkt(struct sk_buff *skb, struct sock *sk,
+			   u32 saddr, u32 daddr, struct ip_options *opt)
+{
+	struct rtable *rt = (struct rtable *)skb->dst;
 	struct iphdr *iph;
-	int err;
 	
-	if (opt && opt->srr)
-		daddr = opt->faddr;
-
-	err = ip_route_output(&rt, daddr, saddr, RT_TOS(sk->ip_tos) |
-			      RTO_CONN | sk->localroute, sk->bound_dev_if);
-	if (err)
-	{
-		ip_statistics.IpOutNoRoutes++;
-		return err;
-	}
-
-	if (opt && opt->is_strictroute && rt->rt_dst != rt->rt_gateway) {
-		ip_rt_put(rt);
-		ip_statistics.IpOutNoRoutes++;
-		return -ENETUNREACH;
-	}
-
-	skb->dst = dst_clone(&rt->u.dst);
-	skb_reserve(skb, (rt->u.dst.dev->hard_header_len+15)&~15);
-
-	/*
-	 *	Now build the IP header.
-	 */
-
-	/*
-	 *	Build the IP addresses
-	 */
-	 
+	/* Build the IP header. */
 	if (opt)
-		iph=(struct iphdr *)skb_put(skb,sizeof(struct iphdr) + opt->optlen);
+		iph=(struct iphdr *)skb_push(skb,sizeof(struct iphdr) + opt->optlen);
 	else
-		iph=(struct iphdr *)skb_put(skb,sizeof(struct iphdr));
+		iph=(struct iphdr *)skb_push(skb,sizeof(struct iphdr));
 
 	iph->version  = 4;
 	iph->ihl      = 5;
@@ -133,92 +111,19 @@ int ip_build_pkt(struct sk_buff *skb, struct sock *sk, u32 saddr, u32 daddr,
 	iph->daddr    = rt->rt_dst;
 	iph->saddr    = rt->rt_src;
 	iph->protocol = sk->protocol;
+	iph->tot_len  = htons(skb->len);
+	iph->id       = htons(ip_id_count++);
 	skb->nh.iph   = iph;
-	skb->h.raw    = (unsigned char*)(iph+1);
 
-	if (opt && opt->optlen)
-	{
+	if (opt && opt->optlen) {
 		iph->ihl += opt->optlen>>2;
-		skb->h.raw += opt->optlen;
-		ip_options_build(skb, opt, final_daddr, rt, 0);
-	}
-	
-	ip_rt_put(rt);
-	return 0;
-}
-
-/*
- * This routine builds the appropriate hardware/IP headers for
- * the routine.
- */
-int ip_build_header(struct sk_buff *skb, struct sock *sk)
-{
-	struct rtable *rt;
-	struct ip_options *opt = sk->opt;
-	u32 daddr = sk->daddr;
-	u32 final_daddr = daddr;
-	struct iphdr *iph;
-	int err;
-
-	if (opt && opt->srr)
-		daddr = opt->faddr;
-
-	rt = (struct rtable*)sk->dst_cache;
-
-	if (!rt || rt->u.dst.obsolete) {
-		sk->dst_cache = NULL;
-		ip_rt_put(rt);
-		err = ip_route_output(&rt, daddr, sk->saddr, RT_TOS(sk->ip_tos) |
-				      RTO_CONN | sk->localroute, sk->bound_dev_if);
-		if (err)
-			return err;
-		sk->dst_cache = &rt->u.dst;
+		ip_options_build(skb, opt, daddr, rt, 0);
 	}
 
-	if (opt && opt->is_strictroute && rt->rt_dst != rt->rt_gateway) {
-		sk->dst_cache = NULL;
-		ip_rt_put(rt);
-		ip_statistics.IpOutNoRoutes++;
-		return -ENETUNREACH;
-	}
+	ip_send_check(iph);
 
-	skb->dst = dst_clone(sk->dst_cache);
-	skb_reserve(skb, MAX_HEADER);
-	
-	/*
-	 *	Now build the IP header.
-	 */
-
-	/*
-	 *	Build the IP addresses
-	 */
-	 
-	if (opt)
-		iph=(struct iphdr *)skb_put(skb,sizeof(struct iphdr) + opt->optlen);
-	else
-		iph=(struct iphdr *)skb_put(skb,sizeof(struct iphdr));
-
-	iph->version  = 4;
-	iph->ihl      = 5;
-	iph->tos      = sk->ip_tos;
-	iph->frag_off = 0;
-	if (sk->ip_pmtudisc == IP_PMTUDISC_WANT &&
-		!(rt->u.dst.mxlock&(1<<RTAX_MTU)))
-		iph->frag_off |= htons(IP_DF);
-	iph->ttl      = sk->ip_ttl;
-	iph->daddr    = rt->rt_dst;
-	iph->saddr    = rt->rt_src;
-	iph->protocol = sk->protocol;
-	skb->nh.iph   = iph;
-	skb->h.raw    = (unsigned char*)(iph+1);
-
-	if (!opt || !opt->optlen)
-		return 0;
-	iph->ihl += opt->optlen>>2;
-	skb->h.raw += opt->optlen;
-	ip_options_build(skb, opt, final_daddr, rt, 0);
-
-	return 0;
+	/* Send it out. */
+	skb->dst->output(skb);
 }
 
 int __ip_finish_output(struct sk_buff *skb)
@@ -322,78 +227,101 @@ int ip_acct_output(struct sk_buff *skb)
 }
 #endif
 
-/*
- *	Generate a checksum for an outgoing IP datagram.
- */
-
-void ip_send_check(struct iphdr *iph)
-{
-	iph->check = 0;
-	iph->check = ip_fast_csum((unsigned char *)iph, iph->ihl);
-}
-
-
-
-/*
- * Queues a packet to be sent, and starts the transmitter if necessary.  
+/* Queues a packet to be sent, and starts the transmitter if necessary.  
  * This routine also needs to put in the total length and compute the 
- * checksum
+ * checksum.  We use to do this in two stages, ip_build_header() then
+ * this, but that scheme created a mess when routes disappeared etc.
+ * So we do it all here, and the TCP send engine has been changed to
+ * match. (No more unroutable FIN disasters, etc. wheee...)  This will
+ * most likely make other reliable transport layers above IP easier
+ * to implement under Linux.
  */
-
 void ip_queue_xmit(struct sk_buff *skb)
 {
 	struct sock *sk = skb->sk;
-	struct rtable *rt = (struct rtable*)skb->dst;
+	struct ip_options *opt = sk->opt;
+	struct rtable *rt;
 	struct device *dev;
+	struct iphdr *iph;
 	unsigned int tot_len;
-	struct iphdr *iph = skb->nh.iph;
+
+	/* Make sure we can route this packet. */
+	rt = (struct rtable *) sk->dst_cache;
+	if(rt == NULL || rt->u.dst.obsolete) {
+		u32 daddr;
+
+		sk->dst_cache = NULL;
+		ip_rt_put(rt);
+
+		/* Use correct destination address if we have options. */
+		daddr = sk->daddr;
+		if(opt && opt->srr)
+			daddr = opt->faddr;
+
+		/* If this fails, retransmit mechanism of transport layer will
+		 * keep trying until route appears or the connection times itself
+		 * out.
+		 */
+		if(ip_route_output(&rt, daddr, sk->saddr,
+				   RT_TOS(sk->ip_tos) | RTO_CONN | sk->localroute,
+				   sk->bound_dev_if))
+			goto drop;
+		sk->dst_cache = &rt->u.dst;
+	}
+	if(opt && opt->is_strictroute && rt->rt_dst != rt->rt_gateway)
+		goto no_route;
+
+	/* We have a route, so grab a reference. */
+	skb->dst = dst_clone(sk->dst_cache);
+
+	/* OK, we know where to send it, allocate and build IP header. */
+	iph = (struct iphdr *) skb_push(skb, sizeof(struct iphdr) + (opt ? opt->optlen : 0));
+	iph->version  = 4;
+	iph->ihl      = 5;
+	iph->tos      = sk->ip_tos;
+	iph->frag_off = 0;
+	if(sk->ip_pmtudisc == IP_PMTUDISC_WANT && !(rt->u.dst.mxlock & (1 << RTAX_MTU)))
+		iph->frag_off |= __constant_htons(IP_DF);
+	iph->ttl      = sk->ip_ttl;
+	iph->daddr    = rt->rt_dst;
+	iph->saddr    = rt->rt_src;
+	iph->protocol = sk->protocol;
+	skb->nh.iph   = iph;
+	/* Transport layer set skb->h.foo itself. */
+
+	if(opt && opt->optlen) {
+		iph->ihl += opt->optlen >> 2;
+		ip_options_build(skb, opt, sk->daddr, rt, 0);
+	}
 
 	tot_len = skb->len;
 	iph->tot_len = htons(tot_len);
 	iph->id = htons(ip_id_count++);
 
-	if (rt->u.dst.obsolete) {
-		/* Ugly... ugly... but what can I do?
-		   Essentially it is "ip_reroute_output" function. --ANK
-		*/
-		struct rtable *nrt;
-		if (ip_route_output(&nrt, rt->key.dst, rt->key.src,
-				    rt->key.tos | RTO_CONN, 
-				    sk?sk->bound_dev_if:0)) 
-			goto drop;
-		skb->dst = &nrt->u.dst;
-		ip_rt_put(rt);
-		rt = nrt;
-	}
-
 	dev = rt->u.dst.dev;
 
-	if (call_out_firewall(PF_INET, dev, iph, NULL,&skb) < FW_ACCEPT) 
+	if (call_out_firewall(PF_INET, dev, iph, NULL, &skb) < FW_ACCEPT) 
 		goto drop;
 
 #ifdef CONFIG_NET_SECURITY	
-	/*
-	 *	Add an IP checksum (must do this before SECurity because
-	 *	of possible tunneling)
+	/* Add an IP checksum (must do this before SECurity because
+	 * of possible tunneling).
 	 */
-
 	ip_send_check(iph);
-
-	if (call_out_firewall(PF_SECURITY, NULL, NULL, (void *) 4, &skb)<FW_ACCEPT)
+	if (call_out_firewall(PF_SECURITY, NULL, NULL, (void *) 4, &skb) < FW_ACCEPT)
 		goto drop;
-
 	iph = skb->nh.iph;
-	/* don't update tot_len, as the dev->mtu is already decreased */	
+	/* Don't update tot_len, as the dev->mtu is already decreased. */
 #endif
-
+	/* This can happen when the transport layer has segments queued
+	 * with a cached route, and by the time we get here things are
+	 * re-routed to a device with a different MTU than the original
+	 * device.  Sick, but we must cover it.
+	 */
 	if (skb_headroom(skb) < dev->hard_header_len && dev->hard_header) {
 		struct sk_buff *skb2;
-		/* ANK: It is almost impossible, but
-		 * if you loaded module device with hh_len > MAX_HEADER,
-		 * and if a route changed to this device,
-		 * and if (uh...) TCP had segments queued on this route...
-		 */
-		skb2 = skb_realloc_headroom(skb, (dev->hard_header_len+15)&~15);
+
+		skb2 = skb_realloc_headroom(skb, (dev->hard_header_len + 15) & ~15);
 		kfree_skb(skb);
 		if (skb2 == NULL)
 			return;
@@ -401,40 +329,35 @@ void ip_queue_xmit(struct sk_buff *skb)
 		iph = skb->nh.iph;
 	}
 
-	/*
-	 *	Do we need to fragment. Again this is inefficient.
-	 *	We need to somehow lock the original buffer and use
-	 *	bits of it.
+	/* Do we need to fragment.  Again this is inefficient.  We
+	 * need to somehow lock the original buffer and use bits of it.
 	 */
-
 	if (tot_len > rt->u.dst.pmtu)
 		goto fragment;
 
 #ifndef CONFIG_NET_SECURITY
-	/*
-	 *	Add an IP checksum
-	 */
-
+	/* Add an IP checksum. */
 	ip_send_check(iph);
 #endif
-
-	if (sk)
-		skb->priority = sk->priority;
+	skb->priority = sk->priority;
 	skb->dst->output(skb);
 	return;
 
 fragment:
-	if ((iph->frag_off & htons(IP_DF)))
-	{
+	if ((iph->frag_off & htons(IP_DF)) != 0) {
 		printk(KERN_DEBUG "sending pkt_too_big to self\n");
 		icmp_send(skb, ICMP_DEST_UNREACH, ICMP_FRAG_NEEDED,
 			  htonl(rt->u.dst.pmtu));
 		goto drop;
 	}
-	
 	ip_fragment(skb, skb->dst->output);
 	return;
 
+no_route:
+	sk->dst_cache = NULL;
+	ip_rt_put(rt);
+	ip_statistics.IpOutNoRoutes++;
+	/* Fall through... */
 drop:
 	kfree_skb(skb);
 }
@@ -948,14 +871,7 @@ struct sk_buff * ip_reply(struct sk_buff *skb, int payload)
 	reply->dst = &rt->u.dst;
 	skb_reserve(reply, (rt->u.dst.dev->hard_header_len+15)&~15);
 
-	/*
-	 *	Now build the IP header.
-	 */
-
-	/*
-	 *	Build the IP addresses
-	 */
-	 
+	/* Now build the IP header. */
 	reply->nh.iph = iph = (struct iphdr *)skb_put(reply, iphlen);
 
 	iph->version  = 4;
@@ -966,6 +882,7 @@ struct sk_buff * ip_reply(struct sk_buff *skb, int payload)
 	iph->daddr    = rt->rt_dst;
 	iph->saddr    = rt->rt_src;
 	iph->protocol = skb->nh.iph->protocol;
+	iph->id       = htons(ip_id_count++);
 	
 	ip_options_build(reply, &replyopts.opt, daddr, rt, 0);
 

@@ -2,7 +2,7 @@
  * 53c710 driver.  Modified from Drew Eckhardts driver
  * for 53c810 by Richard Hirst [richard@sleepie.demon.co.uk]
  * Check out PERM_OPTIONS and EXPECTED_CLOCK, which may be defined in the
- * relevant machine specific file (eg. mvme166.[ch], amiga7xx.[ch]).
+ * relevant machine specific file (eg. mvme16x.[ch], amiga7xx.[ch]).
  * There are also currently some defines at the top of 53c7xx.scr.
  * The chip type is #defined in script_asm.pl, as well as the Makefile.
  * Host scsi ID expected to be 7 - see NCR53c7x0_init().
@@ -10,9 +10,9 @@
  * I have removed the PCI code and some of the 53c8xx specific code - 
  * simply to make this file smaller and easier to manage.
  *
- * MVME166 issues:
+ * MVME16x issues:
  *   Problems trying to read any chip registers in NCR53c7x0_init(), as they
- *   may never have been set by 166Bug (eg. If kernel has come in over tftp).
+ *   may never have been set by 16xBug (eg. If kernel has come in over tftp).
  */
 
 /*
@@ -45,6 +45,9 @@
  * validids:0x??	-	Bitmask field that disallows certain ID's.
  *			-	e.g.	0x03	allows ID 0,1
  *			-		0x1F	allows ID 0,1,2,3,4
+ * opthi:n		-	replace top word of options with 'n'
+ * optlo:n		-	replace bottom word of options with 'n'
+ *			-	ALWAYS SPECIFY opthi THEN optlo <<<<<<<<<<
  */
 
 /*
@@ -60,7 +63,7 @@
  *	out brain damaged main boards.
  *
  * Other PERM_OPTIONS settings are listed below.  Note the actual options
- * required are set in the relevant file (mvme166.c, amiga7xx.c, etc):
+ * required are set in the relevant file (mvme16x.c, amiga7xx.c, etc):
  *
  *   OPTION_NO_ASYNC
  *	Don't negotiate for asynchronous transfers on the first command 
@@ -231,6 +234,9 @@
 #endif
 
 #include <linux/config.h>
+
+#include <linux/types.h>
+#include <asm/setup.h>
 #include <asm/dma.h>
 #include <asm/io.h>
 #include <asm/system.h>
@@ -259,11 +265,13 @@
 #define NO_IO_SPACE
 #endif
 
-#ifdef CONFIG_MVME166
-#include <asm/mvme166hw.h>
+#ifdef CONFIG_MVME16x
+#include <asm/pgtable.h>
+#include <asm/mvme16xhw.h>
 
 #define BIG_ENDIAN
 #define NO_IO_SPACE
+#define VALID_IDS
 #endif
 
 #include "scsi.h"
@@ -636,6 +644,7 @@ static const unsigned char wdtr_message[] = {
     EXTENDED_MESSAGE, 2 /* length */, EXTENDED_WDTR, 1 /* 2^1 bytes */
 };
 
+#if 0
 /*
  * Function : struct Scsi_Host *find_host (int host)
  * 
@@ -734,6 +743,7 @@ request_disconnect (int host, int on_or_off) {
 	hostdata->options &= ~OPTION_DISCONNECT;
     return 0;
 }
+#endif
 
 /*
  * Function : static void NCR53c7x0_driver_init (struct Scsi_Host *host)
@@ -750,10 +760,6 @@ NCR53c7x0_driver_init (struct Scsi_Host *host) {
 	host->hostdata;
     int i, j;
     u32 *ncrcurrent;
-
-flush_cache_all();
-cache_push(virt_to_bus(hostdata->script), flushsize);
-cache_clear(virt_to_bus(hostdata->script), flushsize);
 
     for (i = 0; i < 16; ++i) {
 	hostdata->request_sense[i] = 0;
@@ -783,9 +789,9 @@ cache_clear(virt_to_bus(hostdata->script), flushsize);
     	hostdata->initiate_sdtr = 0;
     hostdata->talked_to = 0;
     hostdata->idle = 1;
-flush_cache_all();
-cache_push(virt_to_bus(hostdata->script), flushsize);
-cache_clear(virt_to_bus(hostdata->script), flushsize);
+
+    if (!MACH_IS_MVME16x)
+	cache_push(virt_to_bus(hostdata->script), flushsize);
 }
 
 /* 
@@ -877,18 +883,22 @@ NCR53c7x0_init (struct Scsi_Host *host) {
 		setup_used[--i] = 1;
     }
 
+    if (check_setup_strings("opthi",&flags,&val,buf))
+	hostdata->options = (long long)val << 32;
+    if (check_setup_strings("optlo",&flags,&val,buf))
+	hostdata->options |= val;
 
     NCR53c7x0_local_setup(host);
-
     switch (hostdata->chip) {
     case 710:
+    case 770:
     	hostdata->dstat_sir_intr = NCR53c7x0_dstat_sir_intr;
     	hostdata->init_save_regs = NULL;
     	hostdata->dsa_fixup = NCR53c7xx_dsa_fixup;
     	hostdata->init_fixup = NCR53c7x0_init_fixup;
     	hostdata->soft_reset = NCR53c7x0_soft_reset;
 	hostdata->run_tests = NCR53c7xx_run_tests;
-	expected_clock = hostdata->scsi_clock = 50000000;
+	expected_clock = hostdata->scsi_clock;
 	expected_id = 7;
     	break;
     default:
@@ -904,7 +914,6 @@ NCR53c7x0_init (struct Scsi_Host *host) {
     hostdata->NCR53c7xx_msg_abort = ABORT;
     hostdata->NCR53c7xx_msg_nop = NOP;
     hostdata->NOP_insn = (DCMD_TYPE_TCI|DCMD_TCI_OP_JUMP) << 24;
-
     if (expected_mapping == -1 || 
 	(hostdata->options & (OPTION_MEMORY_MAPPED)) != 
 	(expected_mapping & OPTION_MEMORY_MAPPED))
@@ -916,6 +925,12 @@ NCR53c7x0_init (struct Scsi_Host *host) {
 	DMODE_REG_00 : DMODE_REG_10;
     hostdata->istat = ((hostdata->chip / 100) == 8) ? 
     	ISTAT_REG_800 : ISTAT_REG_700;
+
+/* We have to assume that this may be the first access to the chip, so
+ * we must set EA in DCNTL. */
+
+    NCR53c7x0_write8 (DCNTL_REG, DCNTL_10_EA|DCNTL_10_COM);
+
 
 /* Only the ISTAT register is readable when the NCR is running, so make 
    sure it's halted. */
@@ -990,7 +1005,7 @@ NCR53c7x0_init (struct Scsi_Host *host) {
      * On NCR53c700 series chips, DCNTL controls the SCSI clock divisor,
      * on 800 series chips, it allows for a totem-pole IRQ driver.
      * NOTE saved_dcntl currently overwritten in init function.
-     * The value read here may be garbage anyway, MVME166 board at least
+     * The value read here may be garbage anyway, MVME16x board at least
      * does not initialise chip if kernel arrived via tftp.
      */
 
@@ -999,7 +1014,7 @@ NCR53c7x0_init (struct Scsi_Host *host) {
     /*
      * DMODE controls DMA burst length, and on 700 series chips,
      * 286 mode and bus width  
-     * NOTE:  On MVME166, chip may have been reset, so this could be a
+     * NOTE:  On MVME16x, chip may have been reset, so this could be a
      * power-on/reset default value.
      */
     hostdata->saved_dmode = NCR53c7x0_read8(hostdata->dmode);
@@ -1053,11 +1068,11 @@ NCR53c7x0_init (struct Scsi_Host *host) {
      * with another board.
      */
 
-#ifdef CONFIG_MVME166
-    if (request_irq(IRQ_MVME166_SCSI, NCR53c7x0_intr, 0, "SCSI-script", NULL))
+#ifdef CONFIG_MVME16x
+    if (request_irq(IRQ_MVME16x_SCSI, NCR53c7x0_intr, 0, "SCSI-script", NULL))
 	panic ("Couldn't get SCSI IRQ");
-#ifdef MVME166_INTFLY
-    else if (request_irq(IRQ_MVME166_FLY, NCR53c7x0_intr, 0, "SCSI-intfly", NULL))
+#ifdef MVME16x_INTFLY
+    else if (request_irq(IRQ_MVME16x_FLY, NCR53c7x0_intr, 0, "SCSI-intfly", NULL))
 	panic ("Couldn't get INT_FLY IRQ");
 #endif
 #else
@@ -1105,10 +1120,9 @@ NCR53c7x0_init (struct Scsi_Host *host) {
 }
 
 /* 
- * Function : static int normal_init(Scsi_Host_Template *tpnt, int board, 
- *	int chip, u32 base, int io_port, int irq, int dma, int pcivalid,
- *	unsigned char pci_bus, unsigned char pci_device_fn,
- *	long long options);
+ * Function : static int ncr53c7xx_init(Scsi_Host_Template *tpnt, int board, 
+ *	int chip, u32 base, int io_port, int irq, int dma,
+ *	long long options, int clock);
  *
  * Purpose : initializes a NCR53c7,8x0 based on base addresses,
  *	IRQ, and DMA channel.	
@@ -1137,6 +1151,7 @@ ncr53c7xx_init (Scsi_Host_Template *tpnt, int board, int chip,
 
     switch (chip) {
     case 710:
+    case 770:
 	schedule_size = (tpnt->can_queue + 1) * 8 /* JUMP instruction size */;
 	script_len = NCR53c7xx_script_len;
     	dsa_len = NCR53c7xx_dsa_len;
@@ -1214,7 +1229,7 @@ ncr53c7xx_init (Scsi_Host_Template *tpnt, int board, int chip,
     /* FIXME : if we ever support an ISA NCR53c7xx based board, we
        need to check if the chip is running in a 16 bit mode, and if so 
        unregister it if it is past the 16M (0x1000000) mark */
-   	
+
     hostdata = (struct NCR53c7x0_hostdata *) 
     	instance->hostdata;
     hostdata->size = size;
@@ -1269,6 +1284,7 @@ ncr53c7xx_init (Scsi_Host_Template *tpnt, int board, int chip,
     hostdata->dsa_len = dsa_len;
     hostdata->max_cmd_size = max_cmd_size;
     hostdata->num_cmds = 1;
+    hostdata->scsi_clock = clock;
     /* Initialize single command */
     tmp = (hostdata->script + hostdata->script_count);
 #ifdef FORCE_DSA_ALIGNMENT
@@ -1393,8 +1409,8 @@ NCR53c7x0_init_fixup (struct Scsi_Host *host) {
      * register.  Make sure SCRIPTS start automagically.
      */
 
-#if defined(CONFIG_MVME166)
-    /* We know better what we want than 166Bug does! */
+#if defined(CONFIG_MVME16x)
+    /* We know better what we want than 16xBug does! */
     tmp = DMODE_10_BL_8 | DMODE_10_FC2;
 #else
     tmp = NCR53c7x0_read8(DMODE_REG_10);
@@ -1543,9 +1559,9 @@ NCR53c7x0_init_fixup (struct Scsi_Host *host) {
 
     printk("scsi%d : NCR code relocated to 0x%lx (virt 0x%p)\n", host->host_no,
 	virt_to_bus(hostdata->script), hostdata->script);
-flush_cache_all();
-cache_push(virt_to_bus(hostdata->script), flushsize);
-cache_clear(virt_to_bus(hostdata->script), flushsize);
+
+    if (!MACH_IS_MVME16x)
+	cache_push(virt_to_bus(hostdata->script), flushsize);
 }
 
 /*
@@ -1599,9 +1615,8 @@ NCR53c7xx_run_tests (struct Scsi_Host *host) {
 	start = virt_to_bus (hostdata->script) + hostdata->E_test_1;
     	hostdata->state = STATE_RUNNING;
 	printk ("scsi%d : test 1", host->host_no);
-	flush_cache_all();
-	cache_push(virt_to_bus(hostdata->script), flushsize);
-	cache_clear(virt_to_bus(hostdata->script), flushsize);
+	if (!MACH_IS_MVME16x)
+	    cache_push(virt_to_bus(hostdata->script), flushsize);
 	NCR53c7x0_write32 (DSP_REG, start);
 	if (hostdata->options & OPTION_DEBUG_TRACE)
 	    NCR53c7x0_write8 (DCNTL_REG, hostdata->saved_dcntl | DCNTL_SSM |
@@ -1695,8 +1710,8 @@ NCR53c7xx_run_tests (struct Scsi_Host *host) {
 	    hostdata->test_completed = -1;
 	    start = virt_to_bus(hostdata->script) + hostdata->E_test_2;
 	    hostdata->state = STATE_RUNNING;
-	    flush_cache_all();
-	    cache_clear(virt_to_bus(hostdata->script), flushsize);
+	    if(!MACH_IS_MVME16x)
+		cache_clear(virt_to_bus(hostdata->script), flushsize);
 	    NCR53c7x0_write32 (DSA_REG, virt_to_bus(dsa));
 	    NCR53c7x0_write32 (DSP_REG, start);
 	    if (hostdata->options & OPTION_DEBUG_TRACE)
@@ -1803,9 +1818,10 @@ NCR53c7xx_dsa_fixup (struct NCR53c7x0_cmd *cmd) {
     patch_abs_32 (cmd->dsa, Ent_dsa_code_template / sizeof(u32),
 	dsa_temp_addr_dsa_value, virt_to_bus(&cmd->dsa_addr));
 
-flush_cache_all();
-cache_push(virt_to_bus(hostdata->script), flushsize);
-cache_clear(virt_to_bus(hostdata->script), flushsize);
+    if (!MACH_IS_MVME16x) {
+	cache_push(virt_to_bus(hostdata->script), flushsize);
+    	cache_push(virt_to_bus(cmd->dsa), flushsize);
+    }
 }
 
 /* 
@@ -1988,8 +2004,6 @@ intr_break (struct Scsi_Host *host, struct
      */
     save_flags(flags);
     cli();
-    flush_cache_all();
-    cache_push(virt_to_bus(hostdata->script), flushsize);
     dsp = (u32 *) bus_to_virt(NCR53c7x0_read32(DSP_REG));
     for (bp = hostdata->breakpoints; bp && bp->address != dsp; 
     	bp = bp->next);
@@ -2258,13 +2272,19 @@ NCR53c7x0_dstat_sir_intr (struct Scsi_Host *host, struct
 	host->hostdata;		
     u32 dsps,*dsp;	/* Argument of the INT instruction */
 
-flush_cache_all();
-cache_push(virt_to_bus(hostdata->script), flushsize);
-cache_clear(virt_to_bus(hostdata->script), flushsize);
-
     NCR53c7x0_local_setup(host);
     dsps = NCR53c7x0_read32(DSPS_REG);
     dsp = (u32 *) bus_to_virt(NCR53c7x0_read32(DSP_REG));
+
+    /* RGH 150597:  Frig.  Commands which fail with Check Condition are
+     * Flagged as successful - hack dsps to indicate check condition */
+#if 0
+    /* RGH 200597:  Need to disable for BVME6000, as it gets Check Conditions
+     * and then dies.  Seems to handle Check Condition at startup, but
+     * not mid kernel build. */
+    if (dsps == A_int_norm_emulateintfly && c && c->result == 2)
+        dsps = A_int_err_check_condition;
+#endif
 
     if (hostdata->options & OPTION_DEBUG_INTR) 
 	printk ("scsi%d : DSPS = 0x%x\n", host->host_no, dsps);
@@ -2870,9 +2890,9 @@ cache_clear(virt_to_bus(hostdata->script), flushsize);
 	    host->host_no, (unsigned) dsps);
 	return SPECIFIC_INT_PANIC;
     }
-flush_cache_all();
-cache_push(virt_to_bus(hostdata->script), flushsize);
-cache_clear(virt_to_bus(hostdata->script), flushsize);
+
+    if (!MACH_IS_MVME16x)
+	flush_cache_all();
 }
 
 /* 
@@ -2910,7 +2930,7 @@ static void
 NCR53c7x0_soft_reset (struct Scsi_Host *host) {
     NCR53c7x0_local_declare();
     unsigned long flags;
-#ifdef CONFIG_MVME166
+#ifdef CONFIG_MVME16x
     volatile unsigned long v;
 #endif
     struct NCR53c7x0_hostdata *hostdata = (struct NCR53c7x0_hostdata *)
@@ -2922,7 +2942,7 @@ NCR53c7x0_soft_reset (struct Scsi_Host *host) {
 
     /* Disable scsi chip and s/w level 7 ints */
 
-#ifdef CONFIG_MVME166
+#ifdef CONFIG_MVME16x
     v = *(volatile unsigned long *)0xfff4006c;
     v &= ~0x8000;
     *(volatile unsigned long *)0xfff4006c = v;
@@ -2997,7 +3017,7 @@ NCR53c7x0_soft_reset (struct Scsi_Host *host) {
 	    SIEN_PAR : 0) | SIEN_700_STO | SIEN_RST | SIEN_UDC |
 		SIEN_SGE | SIEN_MA);
 
-#ifdef CONFIG_MVME166
+#ifdef CONFIG_MVME16x
     /* Enable scsi chip and s/w level 7 ints */
 
     v = *(volatile unsigned long *)0xfff40080;
@@ -3285,10 +3305,6 @@ create_cmd (Scsi_Cmnd *cmd) {
     patch_dsa_32(tmp->dsa, dsa_next, 0, 0);
     patch_dsa_32(tmp->dsa, dsa_cmnd, 0, virt_to_bus(cmd));
 
-flush_cache_all();
-cache_push(virt_to_bus(hostdata->script), flushsize);
-cache_clear(virt_to_bus(hostdata->script), flushsize);
-
     if (hostdata->options & OPTION_DEBUG_SYNCHRONOUS) {
 
 	exp_select_indirect = ((1 << cmd->target) << 16) |
@@ -3305,11 +3321,6 @@ cache_clear(virt_to_bus(hostdata->script), flushsize);
 
     patch_dsa_32(tmp->dsa, dsa_select, 0,
 		hostdata->sync[cmd->target].select_indirect);
-
-
-flush_cache_all();
-cache_push(virt_to_bus(hostdata->script), flushsize);
-cache_clear(virt_to_bus(hostdata->script), flushsize);
 
     /*
      * Right now, we'll do the WIDE and SYNCHRONOUS negotiations on
@@ -3339,10 +3350,6 @@ cache_clear(virt_to_bus(hostdata->script), flushsize);
     else if (!(hostdata->talked_to & (1 << cmd->target)) && 
 		!(hostdata->options & OPTION_NO_ASYNC)) {
 
-flush_cache_all();
-cache_push(virt_to_bus(hostdata->script), flushsize);
-cache_clear(virt_to_bus(hostdata->script), flushsize);
-
 	memcpy ((void *) (tmp->select + 1), (void *) async_message, 
 	    sizeof(async_message));
     	patch_dsa_32(tmp->dsa, dsa_msgout, 0, 1 + sizeof(async_message));
@@ -3351,10 +3358,6 @@ cache_clear(virt_to_bus(hostdata->script), flushsize);
 #endif
     else 
     	patch_dsa_32(tmp->dsa, dsa_msgout, 0, 1);
-
-flush_cache_all();
-cache_push(virt_to_bus(hostdata->script), flushsize);
-cache_clear(virt_to_bus(hostdata->script), flushsize);
 
     hostdata->talked_to |= (1 << cmd->target);
     tmp->select[0] = (hostdata->options & OPTION_DISCONNECT) ? 
@@ -3429,11 +3432,6 @@ cache_clear(virt_to_bus(hostdata->script), flushsize);
  * Not bad, not good. We'll see.
  */
 
-flush_cache_all();
-cache_push(virt_to_bus(hostdata->script), flushsize);
-cache_clear(virt_to_bus(hostdata->script), flushsize);
-
-
     for (i = 0; cmd->use_sg ? (i < cmd->use_sg) : !i; cmd_datain += 4, 
 	cmd_dataout += 4, ++i) {
 	u32 buf = cmd->use_sg ? 
@@ -3476,11 +3474,6 @@ cache_clear(virt_to_bus(hostdata->script), flushsize);
 	}
     }
 
-flush_cache_all();
-cache_push(virt_to_bus(hostdata->script), flushsize);
-cache_clear(virt_to_bus(hostdata->script), flushsize);
-
-
     /*
      * Install JUMP instructions after the data transfer routines to return
      * control to the do_other_transfer routines.
@@ -3514,10 +3507,6 @@ cache_clear(virt_to_bus(hostdata->script), flushsize);
 #endif
 	cmd_dataout += 2;
     }
-
-flush_cache_all();
-cache_push(virt_to_bus(hostdata->script), flushsize);
-cache_clear(virt_to_bus(hostdata->script), flushsize);
 
     return tmp;
 }
@@ -3693,11 +3682,6 @@ to_schedule_list (struct Scsi_Host *host, struct NCR53c7x0_hostdata *hostdata,
 	i > 0  && ncrcurrent[0] != hostdata->NOP_insn;
 	--i, ncrcurrent += 2 /* JUMP instructions are two words */);
 
-
-flush_cache_all();
-cache_push(virt_to_bus(hostdata->script), flushsize);
-cache_clear(virt_to_bus(hostdata->script), flushsize);
-
     if (i > 0) {
 	++hostdata->busy[tmp->target][tmp->lun];
 	cmd->next = hostdata->running_list;
@@ -3724,14 +3708,14 @@ cache_clear(virt_to_bus(hostdata->script), flushsize);
 	return;
     }
 
-    cache_push(virt_to_bus(cmd->dsa), hostdata->dsa_len);
-    cache_push(virt_to_bus(ncrcurrent), sizeof(ncrcurrent));
-
     /* 
      * If the NCR chip is in an idle state, start it running the scheduler
      * immediately.  Otherwise, signal the chip to jump to schedule as 
      * soon as it is idle.
      */
+
+    if (!MACH_IS_MVME16x)
+	flush_cache_all();
 
     if (hostdata->idle) {
 	hostdata->idle = 0;
@@ -4133,7 +4117,7 @@ NCR53c7x0_intr (int irq, void *dev_id, struct pt_regs * regs) {
 	done = 1;
 	for (host = first_host; host; host = host->next) 
 	    if (host->hostt == the_template
-#if defined(MVME166_INTFLY)
+#if defined(MVME16x_INTFLY)
 			/* We have two different interrupts pointing
 			 * at this routine, so remove this check */
 #else
@@ -4157,7 +4141,7 @@ NCR53c7x0_intr (int irq, void *dev_id, struct pt_regs * regs) {
 		istat = NCR53c7x0_read8(hostdata->istat);
 
 		if ((hostdata->options & OPTION_INTFLY) && 
-#ifdef MVME166_INTFLY
+#ifdef MVME16x_INTFLY
                     /* the bit is set which indicates an on-the-fly int */
                         (*(volatile unsigned long *)0xfff40068 & 0x8000))
 #else
@@ -4168,7 +4152,7 @@ NCR53c7x0_intr (int irq, void *dev_id, struct pt_regs * regs) {
 		    done = 0;
 		    interrupted = 1;
 
-#ifdef MVME166_INTFLY
+#ifdef MVME16x_INTFLY
                     /* clear the INTFLY bit */
                     *(volatile unsigned long *)0xfff40074 = 0x8000;
 #endif
@@ -4345,6 +4329,8 @@ restart:
 #endif
 		
 		hostdata->state = STATE_RUNNING;
+		if (!MACH_IS_MVME16x)
+		    flush_cache_all();
 		NCR53c7x0_write32 (DSP_REG, virt_to_bus(hostdata->dsp));
 		if (hostdata->options & OPTION_DEBUG_TRACE) {
 #ifdef CYCLIC_TRACE
@@ -4669,7 +4655,9 @@ intr_phase_mismatch (struct Scsi_Host *host, struct NCR53c7x0_cmd *cmd) {
 	    where = "non-BMI dynamic DSA code";
 	    action = ACTION_ABORT_PRINT;
 	}
-    } else if (dsp == (hostdata->script + hostdata->E_select_msgout / 4)) {
+    } else if (dsp == (hostdata->script + hostdata->E_select_msgout / 4 + 2)) {
+	/* RGH 290697:  Added +2 above, to compensate for the script
+	 * instruction which disables the selection timer. */
 	/* Release ATN */
 	NCR53c7x0_write8 (SOCL_REG, 0);
 	switch (sbcl) {
@@ -4751,8 +4739,9 @@ intr_phase_mismatch (struct Scsi_Host *host, struct NCR53c7x0_cmd *cmd) {
 	print_insn (host, hostdata->dsp, "", 1);
     }
 #endif
-    
-    cache_push(virt_to_bus(hostdata->script), flushsize);
+
+    if (!MACH_IS_MVME16x)
+	cache_push(virt_to_bus(hostdata->script), flushsize);
 }
 
 /*
@@ -4826,7 +4815,7 @@ intr_bf (struct Scsi_Host *host, struct NCR53c7x0_cmd *cmd) {
      */
 
     if (retry == NEVER) {
-    	printk(KERN_ALERT "          mail drew@PoohSticks.ORG\n");
+    	printk(KERN_ALERT "          mail ricahrd@sleepie.demon.co.uk\n");
     	FATAL (host);
     }
 }
@@ -5097,7 +5086,7 @@ print_insn (struct Scsi_Host *host, const u32 *insn,
  * FIXME : (void *) cast in virt_to_bus should be unnecessary, because
  * 	it should take const void * as argument.
  */
-#ifndef CONFIG_MVME166
+#ifndef CONFIG_MVME16x
 	sprintf(buf, "%s0x%lx (virt 0x%p) : 0x%08x 0x%08x (virt 0x%p)", 
 	    (prefix ? prefix : ""), virt_to_bus((void *) insn), insn,  
 	    insn[0], insn[1], bus_to_virt (insn[1]));
@@ -5110,7 +5099,7 @@ print_insn (struct Scsi_Host *host, const u32 *insn,
 #endif
 	tmp = buf + strlen(buf);
 	if ((dcmd & DCMD_TYPE_MASK) == DCMD_TYPE_MMI)  {
-#ifndef CONFIG_MVME166
+#ifndef CONFIG_MVME16x
 	    sprintf (tmp, " 0x%08x (virt 0x%p)\n", insn[2], 
 		bus_to_virt(insn[2]));
 #else

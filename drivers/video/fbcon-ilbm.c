@@ -16,33 +16,7 @@
 #include <linux/fb.h>
 
 #include "fbcon.h"
-
-
-    /*
-     *  Prototypes
-     */
-
-static int open_ilbm(struct display *p);
-static void release_ilbm(void);
-static void bmove_ilbm(struct display *p, int sy, int sx, int dy, int dx,
-		       int height, int width);
-static void clear_ilbm(struct vc_data *conp, struct display *p, int sy, int sx,
-		       int height, int width);
-static void putc_ilbm(struct vc_data *conp, struct display *p, int c, int yy,
-		      int xx);
-static void putcs_ilbm(struct vc_data *conp, struct display *p, const char *s,
-		       int count, int yy, int xx);
-static void rev_char_ilbm(struct display *p, int xx, int yy);
-
-
-    /*
-     *  `switch' for the low level operations
-     */
-
-static struct display_switch dispsw_ilbm = {
-    open_ilbm, release_ilbm, bmove_ilbm, clear_ilbm, putc_ilbm, putcs_ilbm,
-    rev_char_ilbm
-};
+#include "fbcon-ilbm.h"
 
 
     /*
@@ -56,11 +30,8 @@ static struct display_switch dispsw_ilbm = {
      *  much performance loss?
      */
 
-static int open_ilbm(struct display *p)
+void fbcon_ilbm_setup(struct display *p)
 {
-    if (p->type != FB_TYPE_INTERLEAVED_PLANES || p->type_aux == 2)
-	return -EINVAL;
-
     if (p->line_length) {
 	p->next_line = p->line_length*p->var.bits_per_pixel;
 	p->next_plane = p->line_length;
@@ -68,24 +39,17 @@ static int open_ilbm(struct display *p)
 	p->next_line = p->type_aux;
 	p->next_plane = p->type_aux/p->var.bits_per_pixel;
     }
-    MOD_INC_USE_COUNT;
-    return 0;
 }
 
-static void release_ilbm(void)
-{
-    MOD_DEC_USE_COUNT;
-}
-
-static void bmove_ilbm(struct display *p, int sy, int sx, int dy, int dx,
-		       int height, int width)
+void fbcon_ilbm_bmove(struct display *p, int sy, int sx, int dy, int dx,
+		      int height, int width)
 {
     if (sx == 0 && dx == 0 && width == p->next_plane)
 	mymemmove(p->screen_base+dy*p->fontheight*p->next_line,
 		  p->screen_base+sy*p->fontheight*p->next_line,
 		  height*p->fontheight*p->next_line);
     else {
-	u_char *src, *dest;
+	u8 *src, *dest;
 	u_int i;
 
 	if (dy <= sy) {
@@ -108,10 +72,10 @@ static void bmove_ilbm(struct display *p, int sy, int sx, int dy, int dx,
     }
 }
 
-static void clear_ilbm(struct vc_data *conp, struct display *p, int sy, int sx,
-		       int height, int width)
+void fbcon_ilbm_clear(struct vc_data *conp, struct display *p, int sy, int sx,
+		      int height, int width)
 {
-    u_char *dest;
+    u8 *dest;
     u_int i, rows;
     int bg, bg0;
 
@@ -130,12 +94,12 @@ static void clear_ilbm(struct vc_data *conp, struct display *p, int sy, int sx,
     }
 }
 
-static void putc_ilbm(struct vc_data *conp, struct display *p, int c, int yy,
-			     int xx)
+void fbcon_ilbm_putc(struct vc_data *conp, struct display *p, int c, int yy,
+		     int xx)
 {
-    u_char *dest, *cdat;
+    u8 *dest, *cdat;
     u_int rows, i;
-    u_char d;
+    u8 d;
     int fg0, bg0, fg, bg;
 
     c &= 0xff;
@@ -150,16 +114,17 @@ static void putc_ilbm(struct vc_data *conp, struct display *p, int c, int yy,
 	fg = fg0;
 	bg = bg0;
 	for (i = p->var.bits_per_pixel; i--; dest += p->next_plane) {
-	    if (bg & 1)
+	    if (bg & 1){
 		if (fg & 1)
 		    *dest = 0xff;
 		else
 		    *dest = ~d;
-	    else
+	    }else{
 		if (fg & 1)
 		    *dest = d;
 		else
 		    *dest = 0x00;
+	    }
 	    bg >>= 1;
 	    fg >>= 1;
 	}
@@ -181,13 +146,13 @@ static void putc_ilbm(struct vc_data *conp, struct display *p, int c, int yy,
      *  -- Geert
      */
 
-static void putcs_ilbm(struct vc_data *conp, struct display *p, const char *s,
-		       int count, int yy, int xx)
+void fbcon_ilbm_putcs(struct vc_data *conp, struct display *p, const char *s,
+		      int count, int yy, int xx)
 {
-    u_char *dest0, *dest, *cdat1, *cdat2, *cdat3, *cdat4;
+    u8 *dest0, *dest, *cdat1, *cdat2, *cdat3, *cdat4;
     u_int rows, i;
-    u_char c1, c2, c3, c4;
-    u_long d;
+    u8 c1, c2, c3, c4;
+    u32 d;
     int fg0, bg0, fg, bg;
 
     dest0 = p->screen_base+yy*p->fontheight*p->next_line+xx;
@@ -206,16 +171,17 @@ static void putcs_ilbm(struct vc_data *conp, struct display *p, const char *s,
 		fg = fg0;
 		bg = bg0;
 		for (i = p->var.bits_per_pixel; i--; dest += p->next_plane) {
-		    if (bg & 1)
+		    if (bg & 1){
 			if (fg & 1)
 			    *dest = 0xff;
 			else
 			    *dest = ~d;
-		    else
+		    }else{
 			if (fg & 1)
 			    *dest = d;
 			else
 			    *dest = 0x00;
+		    }
 		    bg >>= 1;
 		    fg >>= 1;
 		}
@@ -232,20 +198,27 @@ static void putcs_ilbm(struct vc_data *conp, struct display *p, const char *s,
 	    cdat3 = p->fontdata+c3*p->fontheight;
 	    cdat4 = p->fontdata+c4*p->fontheight;
 	    for (rows = p->fontheight; rows--;) {
+#if defined(__BIG_ENDIAN)
 		d = *cdat1++<<24 | *cdat2++<<16 | *cdat3++<<8 | *cdat4++;
+#elif defined(__LITTLE_ENDIAN)
+		d = *cdat1++ | *cdat2++<<8 | *cdat3++<<16 | *cdat4++<<32);
+#else
+#error FIXME: No endianness??
+#endif
 		fg = fg0;
 		bg = bg0;
 		for (i = p->var.bits_per_pixel; i--; dest += p->next_plane) {
-		    if (bg & 1)
+		    if (bg & 1){
 			if (fg & 1)
-			    *(u_long *)dest = 0xffffffff;
+			    *(u32 *)dest = 0xffffffff;
 			else
-			    *(u_long *)dest = ~d;
-		    else
+			    *(u32 *)dest = ~d;
+		    }else{
 			if (fg & 1)
-			    *(u_long *)dest = d;
+			    *(u32 *)dest = d;
 			else
-			    *(u_long *)dest = 0x00000000;
+			    *(u32 *)dest = 0x00000000;
+		    }
 		    bg >>= 1;
 		    fg >>= 1;
 		}
@@ -257,9 +230,9 @@ static void putcs_ilbm(struct vc_data *conp, struct display *p, const char *s,
 	}
 }
 
-static void rev_char_ilbm(struct display *p, int xx, int yy)
+void fbcon_ilbm_revc(struct display *p, int xx, int yy)
 {
-    u_char *dest, *dest0;
+    u8 *dest, *dest0;
     u_int rows, i;
     int mask;
 
@@ -283,18 +256,24 @@ static void rev_char_ilbm(struct display *p, int xx, int yy)
 }
 
 
-#ifdef MODULE
-int init_module(void)
-#else
-int fbcon_init_ilbm(void)
-#endif
-{
-    return(fbcon_register_driver(&dispsw_ilbm, 0));
-}
+    /*
+     *  `switch' for the low level operations
+     */
 
-#ifdef MODULE
-void cleanup_module(void)
-{
-    fbcon_unregister_driver(&dispsw_ilbm);
-}
-#endif /* MODULE */
+struct display_switch fbcon_ilbm = {
+    fbcon_ilbm_setup, fbcon_ilbm_bmove, fbcon_ilbm_clear, fbcon_ilbm_putc,
+    fbcon_ilbm_putcs, fbcon_ilbm_revc
+};
+
+
+    /*
+     *  Visible symbols for modules
+     */
+
+EXPORT_SYMBOL(fbcon_ilbm);
+EXPORT_SYMBOL(fbcon_ilbm_setup);
+EXPORT_SYMBOL(fbcon_ilbm_bmove);
+EXPORT_SYMBOL(fbcon_ilbm_clear);
+EXPORT_SYMBOL(fbcon_ilbm_putc);
+EXPORT_SYMBOL(fbcon_ilbm_putcs);
+EXPORT_SYMBOL(fbcon_ilbm_revc);

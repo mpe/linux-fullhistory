@@ -7,7 +7,7 @@
  *		PROC file system.  It is mainly used for debugging and
  *		statistics.
  *
- * Version:	$Id: proc.c,v 1.26 1998/03/13 08:02:12 davem Exp $
+ * Version:	$Id: proc.c,v 1.27 1998/03/18 07:51:59 davem Exp $
  *
  * Authors:	Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
  *		Gerald J. Heim, <heim@peanuts.informatik.uni-tuebingen.de>
@@ -59,7 +59,7 @@ static inline void get__openreq(struct sock *sk, struct open_request *req,
 		" %02X %08X:%08X %02X:%08lX %08X %5d %8d %lu",
 		i,
 		(long unsigned int)req->af.v4_req.loc_addr,
-		ntohs(sk->dummy_th.source),
+		ntohs(sk->sport),
 		(long unsigned int)req->af.v4_req.rmt_addr,
 		req->rmt_port,
 		TCP_SYN_RECV,
@@ -83,8 +83,8 @@ static inline void get__sock(struct sock *sp, char *tmpbuf, int i, int format)
 
 	dest  = sp->daddr;
 	src   = sp->rcv_saddr;
-	destp = sp->dummy_th.dest;
-	srcp  = sp->dummy_th.source;
+	destp = sp->dport;
+	srcp  = sp->sport;
 	
 	/* FIXME: The fact that retransmit_timer occurs as a field
 	 * in two different parts of the socket structure is,

@@ -275,7 +275,7 @@ struct ip_masq_mod * ip_masq_mod_getbyname(const char *mmod_name)
 
 	IP_MASQ_DEBUG(1, "searching mmod_name \"%s\"\n", mmod_name);
 	
-	for (mmod=ip_masq_mod_reg_base; mmod ; mmod=mmod->next) {
+	for (mmod=ip_masq_mod_reg_base; mmod ; mmod=mmod->next_reg) {
 		if (mmod->mmod_ctl && *(mmod_name)
 				&& (strcmp(mmod_name, mmod->mmod_name)==0)) {
 			/* HIT */

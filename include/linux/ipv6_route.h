@@ -28,6 +28,7 @@ enum
 
 #define RTF_LINKRT	0x00100000	/* link specific - device match	*/
 #define RTF_NONEXTHOP	0x00200000	/* route with no nexthop	*/
+#define RTF_EXPIRES	0x00400000
 
 #define RTF_CACHE	0x01000000	/* cache entry			*/
 #define RTF_FLOW	0x02000000	/* flow significant route	*/

@@ -5,7 +5,7 @@
  *	Authors:
  *	Pedro Roque		<roque@di.fc.ul.pt>	
  *
- *	$Id: ip6_output.c,v 1.9 1998/03/08 05:56:50 davem Exp $
+ *	$Id: ip6_output.c,v 1.10 1998/03/20 09:12:17 davem Exp $
  *
  *	Based on linux/net/ipv4/ip_output.c
  *
@@ -82,76 +82,49 @@ int ip6_output(struct sk_buff *skb)
 
 /*
  *	xmit an sk_buff (used by TCP)
- *	sk can be NULL (for sending RESETs)
  */
 
 int ip6_xmit(struct sock *sk, struct sk_buff *skb, struct flowi *fl,
 	     struct ipv6_options *opt)
 {
-	struct ipv6_pinfo *np = NULL;
-	struct dst_entry *dst = NULL;
+	struct ipv6_pinfo * np = sk ? &sk->net_pinfo.af_inet6 : NULL;
+	struct dst_entry *dst = skb->dst;
 	struct ipv6hdr *hdr;
 	int seg_len;
+	int hlimit;
 
-	hdr = skb->nh.ipv6h;
+	/* Do something with IPv6 options headers here. */
 
-	if (sk) {
-		np = &sk->net_pinfo.af_inet6;
+	seg_len = skb->len;
 
-		if (sk->dst_cache) {
-			/*
-			 *	dst_check returns NULL if route is no longer valid
-			 */
-			dst = dst_check(&sk->dst_cache, np->dst_cookie);
-		}
-	}
-
-	if (dst == NULL) {
-		dst = ip6_route_output(sk, fl);
-
-		if (dst->error) {
-			/*
-			 *	NETUNREACH usually
-			 */
-			dst_release(dst);
-			return dst->error;
-		}
-	}
-
-	skb->dst = dst_clone(dst);
-	seg_len = skb->tail - ((unsigned char *) hdr);
-	hdr = skb->nh.ipv6h;
+	hdr = skb->nh.ipv6h = (struct ipv6hdr*)skb_push(skb, sizeof(struct ipv6hdr));
 
 	/*
 	 *	Fill in the IPv6 header
 	 */
 
 	hdr->version = 6;
-	hdr->priority = np ? np->priority : 0;
-
-	if (np)
+	if (np) {
+		hdr->priority = np->priority;
 		memcpy(hdr->flow_lbl, (void *) &np->flow_lbl, 3);
-	else
+		hlimit = np->hop_limit;
+	} else {
+		hdr->priority = 0;
 		memset(hdr->flow_lbl, 0, 3);
+		hlimit = -1;
+	}
+	if (hlimit < 0)
+		hlimit = ((struct rt6_info*)dst)->rt6i_hoplimit;
 
-	hdr->payload_len = htons(seg_len - sizeof(struct ipv6hdr));
+	hdr->payload_len = htons(seg_len);
 	hdr->nexthdr = fl->proto;
-	if (np == NULL || np->hop_limit < 0)
-		hdr->hop_limit = ((struct rt6_info*)dst)->rt6i_hoplimit;
-	else
-		hdr->hop_limit = np->hop_limit;
+	hdr->hop_limit = hlimit;
 
 	ipv6_addr_copy(&hdr->saddr, fl->nl_u.ip6_u.saddr);
 	ipv6_addr_copy(&hdr->daddr, fl->nl_u.ip6_u.daddr);
 
 	ipv6_statistics.Ip6OutRequests++;
 	dst->output(skb);
-
-	if (sk) {
-		if (sk->dst_cache == NULL)
-			ip6_dst_store(sk, dst);
-	} else
-		dst_release(dst);
 
 	return 0;
 }
@@ -412,6 +385,9 @@ int ip6_build_xmit(struct sock *sk, inet_getfrag_t getfrag, const void *data,
 	}
 
 	dst = NULL;
+
+	if (!fl->oif && ipv6_addr_is_multicast(fl->nl_u.ip6_u.daddr))
+		fl->oif = np->mcast_oif;
 	
 	if (sk->dst_cache)
 		dst = dst_check(&sk->dst_cache, np->dst_cookie);

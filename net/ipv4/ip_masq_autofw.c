@@ -119,10 +119,8 @@ static __inline__ void ip_autofw_update_out (__u32 who, __u32 where, __u16 port,
 		{
 			if (af->flags & IP_AUTOFW_USETIME)
 			{
-				if (af->timer.expires)
-					del_timer(&af->timer);
-				af->timer.expires=jiffies+IP_AUTOFW_EXPIRE;
-				add_timer(&af->timer);
+				mod_timer(&af->timer,
+					  jiffies+IP_AUTOFW_EXPIRE);
 			}
 			af->flags|=IP_AUTOFW_ACTIVE;
 			af->lastcontact=where;
@@ -139,9 +137,7 @@ static __inline__ void ip_autofw_update_in (__u32 where, __u16 port, __u16 proto
 	af=ip_autofw_check_range(where, port,protocol);
 	if (af)
 	{
-		del_timer(&af->timer);
-		af->timer.expires=jiffies+IP_AUTOFW_EXPIRE;
-		add_timer(&af->timer);
+		mod_timer(&af->timer, jiffies+IP_AUTOFW_EXPIRE);
 	}
 }
 #endif

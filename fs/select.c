@@ -41,7 +41,7 @@
  * sleep/wakeup mechanism works.
  *
  * Two very simple procedures, poll_wait() and free_wait() make all the
- * work.  poll_wait() is an inline-function defined in <linux/sched.h>,
+ * work.  poll_wait() is an inline-function defined in <linux/poll.h>,
  * as all select/poll functions have to call it to add an entry to the
  * poll table.
  */
@@ -152,9 +152,8 @@ int do_select(int n, fd_set_buffer *fds, unsigned long timeout)
 	n = retval;
 	retval = 0;
 	for (;;) {
-		struct file ** fd = current->files->fd;
 		current->state = TASK_INTERRUPTIBLE;
-		for (i = 0 ; i < n ; i++, fd++) {
+		for (i = 0 ; i < n; i++) {
 			unsigned long bit = BIT(i);
 			unsigned long *in = MEM(i,fds->in);
 			unsigned long mask;
@@ -162,8 +161,12 @@ int do_select(int n, fd_set_buffer *fds, unsigned long timeout)
 
 			if (!(bit & BITS(in)))
 				continue;
-
-			file = *fd;
+			/*
+			 * The poll_wait routine will increment f_count if
+			 * the file is added to the wait table, so we don't
+			 * need to increment it now.
+			 */
+			file = fcheck(i);
 			mask = POLLNVAL;
 			if (file) {
 				mask = DEFAULT_POLLMASK;
@@ -286,23 +289,21 @@ out_nofds:
 
 static int do_poll(unsigned int nfds, struct pollfd *fds, poll_table *wait)
 {
-	int count;
-	struct file ** fd = current->files->fd;
+	int count = 0;
 
-	count = 0;
 	for (;;) {
 		unsigned int j;
 		struct pollfd * fdpnt;
 
 		current->state = TASK_INTERRUPTIBLE;
 		for (fdpnt = fds, j = 0; j < nfds; j++, fdpnt++) {
-			unsigned int i;
 			unsigned int mask;
 			struct file * file;
 
 			mask = POLLNVAL;
-			i = fdpnt->fd;
-			if (i < NR_OPEN && (file = fd[i]) != NULL) {
+			/* poll_wait increments f_count if needed */
+			file = fcheck(fdpnt->fd);
+			if (file != NULL) {
 				mask = DEFAULT_POLLMASK;
 				if (file->f_op && file->f_op->poll)
 					mask = file->f_op->poll(file, wait);
@@ -326,18 +327,22 @@ static int do_poll(unsigned int nfds, struct pollfd *fds, poll_table *wait)
 
 asmlinkage int sys_poll(struct pollfd * ufds, unsigned int nfds, int timeout)
 {
-	int i, count, fdcount, err;
+	int i, fdcount, err, size;
 	struct pollfd * fds, *fds1;
-	poll_table wait_table, *wait;
+	poll_table wait_table, *wait = NULL;
 
 	lock_kernel();
+	/* Do a sanity check on nfds ... */
+	err = -EINVAL;
+	if (nfds > NR_OPEN)
+		goto out;
+
 	if (timeout < 0)
 		timeout = 0x7fffffff;
 	else if (timeout)
 		timeout = ((unsigned long)timeout*HZ+999)/1000+jiffies+1;
-	err = -ENOMEM;
 
-	wait = NULL;
+	err = -ENOMEM;
 	if (timeout) {
 		struct poll_table_entry *entry;
 		entry = (struct poll_table_entry *) __get_free_page(GFP_KERNEL);
@@ -347,34 +352,32 @@ asmlinkage int sys_poll(struct pollfd * ufds, unsigned int nfds, int timeout)
 		wait_table.entry = entry;
 		wait = &wait_table;
 	}
-	fds = (struct pollfd *) kmalloc(nfds*sizeof(struct pollfd), GFP_KERNEL);
-	if (!fds) {
+
+	size = nfds * sizeof(struct pollfd);
+	fds = (struct pollfd *) kmalloc(size, GFP_KERNEL);
+	if (!fds)
 		goto out;
-	}
 
 	err = -EFAULT;
-	if (copy_from_user(fds, ufds, nfds*sizeof(struct pollfd))) {
-		kfree(fds);
-		goto out;
-	}
+	if (copy_from_user(fds, ufds, size))
+		goto out_fds;
 
 	current->timeout = timeout;
-
-	count = 0;
-
 	fdcount = do_poll(nfds, fds, wait);
 	current->timeout = 0;
 
 	/* OK, now copy the revents fields back to user space. */
 	fds1 = fds;
-	for(i=0; i < (int)nfds; i++, ufds++, fds++) {
-		__put_user(fds->revents, &ufds->revents);
+	for(i=0; i < (int)nfds; i++, ufds++, fds1++) {
+		__put_user(fds1->revents, &ufds->revents);
 	}
-	kfree(fds1);
+
+	err = fdcount;
 	if (!fdcount && signal_pending(current))
 		err = -EINTR;
-	else
-		err = fdcount;
+
+out_fds:
+	kfree(fds);
 out:
 	if (wait) {
 		free_wait(&wait_table);

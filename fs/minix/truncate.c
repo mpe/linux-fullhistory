@@ -117,7 +117,7 @@ repeat:
 	for (i = 0; i < 512; i++)
 		if (*(ind++))
 			break;
-	if (i >= 512)
+	if (i >= 512) {
 		if (ind_bh->b_count != 1)
 			retry = 1;
 		else {
@@ -125,6 +125,7 @@ repeat:
 			*p = 0;
 			minix_free_block(inode->i_sb,tmp);
 		}
+	}
 	brelse(ind_bh);
 	return retry;
 }
@@ -161,7 +162,7 @@ repeat:
 	for (i = 0; i < 512; i++)
 		if (*(dind++))
 			break;
-	if (i >= 512)
+	if (i >= 512) {
 		if (dind_bh->b_count != 1)
 			retry = 1;
 		else {
@@ -170,6 +171,7 @@ repeat:
 			mark_inode_dirty(inode);
 			minix_free_block(inode->i_sb,tmp);
 		}
+	}
 	brelse(dind_bh);
 	return retry;
 }
@@ -279,7 +281,7 @@ repeat:
 	for (i = 0; i < 256; i++)
 		if (*(ind++))
 			break;
-	if (i >= 256)
+	if (i >= 256) {
 		if (ind_bh->b_count != 1)
 			retry = 1;
 		else {
@@ -287,6 +289,7 @@ repeat:
 			*p = 0;
 			minix_free_block(inode->i_sb,tmp);
 		}
+	}
 	brelse(ind_bh);
 	return retry;
 }
@@ -323,7 +326,7 @@ repeat:
 	for (i = 0; i < 256; i++)
 		if (*(dind++))
 			break;
-	if (i >= 256)
+	if (i >= 256) {
 		if (dind_bh->b_count != 1)
 			retry = 1;
 		else {
@@ -332,6 +335,7 @@ repeat:
 			mark_inode_dirty(inode);
 			minix_free_block(inode->i_sb,tmp);
 		}
+	}
 	brelse(dind_bh);
 	return retry;
 }
@@ -368,7 +372,7 @@ repeat:
         for (i = 0; i < 256; i++)
                 if (*(tind++))
                         break;
-        if (i >= 256)
+        if (i >= 256) {
                 if (tind_bh->b_count != 1)
                         retry = 1;
                 else {
@@ -377,6 +381,7 @@ repeat:
                         mark_inode_dirty(inode);
                         minix_free_block(inode->i_sb,tmp);
 		}
+	}
         brelse(tind_bh);
         return retry;
 }

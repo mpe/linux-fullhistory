@@ -72,7 +72,7 @@ extern void			rt6_sndmsg(int type, struct in6_addr *dst,
 
 extern struct rt6_info		*rt6_lookup(struct in6_addr *daddr,
 					    struct in6_addr *saddr,
-					    struct device *dev, int flags);
+					    int oif, int flags);
 
 /*
  *	support functions for ND

@@ -918,7 +918,7 @@ static int unix_dgram_sendmsg(struct socket *sock, struct msghdr *msg, int len,
 	if (msg->msg_flags&MSG_OOB)
 		return -EOPNOTSUPP;
 
-	if (msg->msg_flags&~MSG_DONTWAIT)
+	if (msg->msg_flags&~(MSG_DONTWAIT|MSG_NOSIGNAL))
 		return -EINVAL;
 
 	if (msg->msg_namelen) {
@@ -935,7 +935,7 @@ static int unix_dgram_sendmsg(struct socket *sock, struct msghdr *msg, int len,
 		unix_autobind(sock);
 
 	skb = sock_alloc_send_skb(sk, len, 0, msg->msg_flags&MSG_DONTWAIT, &err);
-		
+
 	if (skb==NULL)
 		return err;
 
@@ -1005,7 +1005,7 @@ static int unix_stream_sendmsg(struct socket *sock, struct msghdr *msg, int len,
 	if (msg->msg_flags&MSG_OOB)
 		return -EOPNOTSUPP;
 
-	if (msg->msg_flags&~MSG_DONTWAIT)
+	if (msg->msg_flags&~(MSG_DONTWAIT|MSG_NOSIGNAL))
 		return -EINVAL;
 
 	if (msg->msg_namelen) {
@@ -1020,7 +1020,8 @@ static int unix_stream_sendmsg(struct socket *sock, struct msghdr *msg, int len,
 	}
 
 	if (sk->shutdown&SEND_SHUTDOWN) {
-		send_sig(SIGPIPE,current,0);
+		if (!(msg->msg_flags&MSG_NOSIGNAL))
+			send_sig(SIGPIPE,current,0);
 		return -EPIPE;
 	}
 
@@ -1085,7 +1086,8 @@ static int unix_stream_sendmsg(struct socket *sock, struct msghdr *msg, int len,
 			kfree_skb(skb);
 			if(sent)
 				goto out;
-			send_sig(SIGPIPE,current,0);
+			if (!(msg->msg_flags&MSG_NOSIGNAL))
+				send_sig(SIGPIPE,current,0);
 			return -EPIPE;
 		}
 

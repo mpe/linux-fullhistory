@@ -87,16 +87,16 @@
 static unsigned long vgacon_startup(unsigned long kmem_start,
 				   const char **display_desc);
 static void vgacon_init(struct vc_data *conp);
-static int vgacon_deinit(struct vc_data *conp);
-static int vgacon_clear(struct vc_data *conp, int sy, int sx, int height,
-		       int width);
-static int vgacon_putc(struct vc_data *conp, int c, int ypos, int xpos);
-static int vgacon_putcs(struct vc_data *conp, const char *s, int count,
-		       int ypos, int xpos);
-static int vgacon_cursor(struct vc_data *conp, int mode);
-static int vgacon_scroll(struct vc_data *conp, int t, int b,
-			int dir, int count);
-static int vgacon_bmove(struct vc_data *conp, int sy, int sx, int dy, int dx,
+static void vgacon_deinit(struct vc_data *conp);
+static void vgacon_clear(struct vc_data *conp, int sy, int sx, int height,
+			 int width);
+static void vgacon_putc(struct vc_data *conp, int c, int ypos, int xpos);
+static void vgacon_putcs(struct vc_data *conp, const char *s, int count,
+			 int ypos, int xpos);
+static void vgacon_cursor(struct vc_data *conp, int mode);
+static void vgacon_scroll(struct vc_data *conp, int t, int b, int dir,
+			  int count);
+static void vgacon_bmove(struct vc_data *conp, int sy, int sx, int dy, int dx,
 		       int height, int width);
 static int vgacon_switch(struct vc_data *conp);
 static int vgacon_blank(int blank);
@@ -104,6 +104,7 @@ static int vgacon_get_font(struct vc_data *conp, int *w, int *h, char *data);
 static int vgacon_set_font(struct vc_data *conp, int w, int h, char *data);
 static int vgacon_set_palette(struct vc_data *conp, unsigned char *table);
 static int vgacon_scrolldelta(int lines);
+static int vgacon_set_mode(struct vc_data *conp, int mode);
 
 
 /*
@@ -215,25 +216,6 @@ __initfunc(static unsigned long vgacon_startup(unsigned long kmem_start,
 	unsigned short saved;
 	unsigned short *p;
 
-	/*
-	 *	Find out if there is a graphics card present.
-	 *	Are there smarter methods around?
-	 */
-	p = (unsigned short *)(((ORIG_VIDEO_MODE == 7) ? 0xb0000 : 0xb8000) +
-			       + VGA_OFFSET);
-	saved = vga_readw(p);
-	vga_writew(0xAA55, p);
-	if (vga_readw(p) != 0xAA55) {
-		vga_writew(saved, p);
-		return kmem_start;
-	}
-	vga_writew(0x55AA, p);
-	if (vga_readw(p) != 0x55AA) {
-		vga_writew(saved, p);
-		return kmem_start;
-	}
-	vga_writew(saved, p);
-
 	vga_video_num_lines = ORIG_VIDEO_LINES;
 	vga_video_num_columns = ORIG_VIDEO_COLS;
 	vga_video_size_row = 2 * ORIG_VIDEO_COLS;
@@ -327,6 +309,24 @@ __initfunc(static unsigned long vgacon_startup(unsigned long kmem_start,
 		}
 	}
 
+	/*
+	 *	Find out if there is a graphics card present.
+	 *	Are there smarter methods around?
+	 */
+	p = (unsigned short *)vga_video_mem_base;
+	saved = vga_readw(p);
+	vga_writew(0xAA55, p);
+	if (vga_readw(p) != 0xAA55) {
+		vga_writew(saved, p);
+		return kmem_start;
+	}
+	vga_writew(0x55AA, p);
+	if (vga_readw(p) != 0x55AA) {
+		vga_writew(saved, p);
+		return kmem_start;
+	}
+	vga_writew(saved, p);
+
 	vga_hardscroll_enabled = (vga_hardscroll_disabled_by_init ? 0 :
 	  (vga_video_type == VIDEO_TYPE_EGAC
 	    || vga_video_type == VIDEO_TYPE_VGAC
@@ -358,22 +358,21 @@ static void vgacon_init(struct vc_data *conp)
     conp->vc_can_do_color = vga_can_do_color;
 }
 
-static int vgacon_deinit(struct vc_data *conp)
+static void vgacon_deinit(struct vc_data *conp)
 {
-    return 0;
 }
 
 
 /* ====================================================================== */
 
-static int vgacon_clear(struct vc_data *conp, int sy, int sx, int height,
-			      int width)
+static void vgacon_clear(struct vc_data *conp, int sy, int sx, int height,
+			 int width)
 {
     int rows;
     unsigned long dest;
 
     if (console_blanked)
-	return 0;
+	return;
 
     dest = vga_video_mem_base + sy*vga_video_size_row + sx*2;
     if (sx == 0 && width == vga_video_num_columns)      
@@ -381,41 +380,38 @@ static int vgacon_clear(struct vc_data *conp, int sy, int sx, int height,
     else
         for (rows = height; rows-- ; dest += vga_video_size_row)
 	    vga_memsetw((void *)dest, conp->vc_video_erase_char, width);
-    return 0;
 }
 
 
-static int vgacon_putc(struct vc_data *conp, int c, int ypos, int xpos)
+static void vgacon_putc(struct vc_data *conp, int c, int ypos, int xpos)
 {
-    u_short *p;
+    u16 *p;
 
     if (console_blanked)
-	    return 0;
+	return;
 
-    p = (u_short *)(vga_video_mem_base+ypos*vga_video_size_row+xpos*2);
+    p = (u16 *)(vga_video_mem_base+ypos*vga_video_size_row+xpos*2);
     vga_writew(conp->vc_attr << 8 | c, p);
-    return 0;
 }
 
 
-static int vgacon_putcs(struct vc_data *conp, const char *s, int count,
-		       int ypos, int xpos)
+static void vgacon_putcs(struct vc_data *conp, const char *s, int count,
+			 int ypos, int xpos)
 {
-    u_short *p;
-    u_short sattr;
+    u16 *p;
+    u16 sattr;
 
     if (console_blanked)
-	    return 0;
+	return;
 
-    p = (u_short *)(vga_video_mem_base+ypos*vga_video_size_row+xpos*2);
+    p = (u16 *)(vga_video_mem_base+ypos*vga_video_size_row+xpos*2);
     sattr = conp->vc_attr << 8;
     while (count--)
 	vga_writew(sattr | *s++, p++);
-    return 0;
 }
 
 
-static int vgacon_cursor(struct vc_data *conp, int mode)
+static void vgacon_cursor(struct vc_data *conp, int mode)
 {
     switch (mode) {
 	case CM_ERASE:
@@ -427,14 +423,14 @@ static int vgacon_cursor(struct vc_data *conp, int mode)
 	    write_vga(14, conp->vc_y*vga_video_num_columns+conp->vc_x);
 	    break;
     }
-    return 0;
 }
 
 
-static int vgacon_scroll(struct vc_data *conp, int t, int b, int dir, int count)
+static void vgacon_scroll(struct vc_data *conp, int t, int b, int dir,
+			  int count)
 {
     if (console_blanked)
-	return 0;
+	return;
 
     vgacon_cursor(conp, CM_ERASE);
 
@@ -469,19 +465,17 @@ static int vgacon_scroll(struct vc_data *conp, int t, int b, int dir, int count)
 	    vgacon_clear(conp, 0, t, conp->vc_rows, count);
 	    break;
     }
-
-    return 0;
 }
 
 
-static int vgacon_bmove(struct vc_data *conp, int sy, int sx, int dy, int dx,
-		       int height, int width)
+static void vgacon_bmove(struct vc_data *conp, int sy, int sx, int dy, int dx,
+			 int height, int width)
 {
     unsigned long src, dst;
     int rows;
 
     if (console_blanked)
-	return 0;
+	return;
 
     if (sx == 0 && dx == 0 && width == vga_video_num_columns) {
 	src = vga_video_mem_base + sy * vga_video_size_row;
@@ -505,7 +499,6 @@ static int vgacon_bmove(struct vc_data *conp, int sy, int sx, int dy, int dx,
 	    dst -= vga_video_size_row;
 	}
     }
-    return 0;
 }
 
 
@@ -522,7 +515,7 @@ static int vgacon_blank(int blank)
 	return 0;
     } else {
 	/* Tell console.c that it has to restore the screen itself */
-	return(1);
+	return 1;
     }
     return 0;
 }
@@ -564,6 +557,11 @@ static int vgacon_scrolldelta(int lines)
     return -ENOSYS;
 }
 
+static int vgacon_set_mode(struct vc_data *conp, int mode)
+{
+    return -ENOSYS;
+}
+
 
 __initfunc(static int vgacon_show_logo( void ))
 {
@@ -587,5 +585,5 @@ struct consw vga_con = {
     vgacon_startup, vgacon_init, vgacon_deinit, vgacon_clear, vgacon_putc,
     vgacon_putcs, vgacon_cursor, vgacon_scroll, vgacon_bmove, vgacon_switch,
     vgacon_blank, vgacon_get_font, vgacon_set_font, vgacon_set_palette,
-    vgacon_scrolldelta
+    vgacon_scrolldelta, vgacon_set_mode
 };

@@ -66,6 +66,7 @@
 #include <linux/interrupt.h>
 #include <linux/tty.h>
 #include <linux/tty_flip.h>
+#include <linux/file.h>
 #include <linux/console.h>
 #include <linux/timer.h>
 #include <linux/ctype.h>
@@ -1734,8 +1735,8 @@ void do_SAK( struct tty_struct *tty)
 		    ((session > 0) && (p->session == session)))
 			send_sig(SIGKILL, p, 1);
 		else if (p->files) {
-			for (i=0; i < NR_OPEN; i++) {
-				filp = p->files->fd[i];
+			for (i=0; i < p->files->max_fds; i++) {
+				filp = fcheck_task(p, i);
 				if (filp && (filp->f_op == &tty_fops) &&
 				    (filp->private_data == tty)) {
 					send_sig(SIGKILL, p, 1);

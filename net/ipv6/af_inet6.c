@@ -7,7 +7,7 @@
  *
  *	Adapted from linux/net/ipv4/af_inet.c
  *
- *	$Id: af_inet6.c,v 1.28 1998/03/08 05:56:49 davem Exp $
+ *	$Id: af_inet6.c,v 1.29 1998/03/18 07:52:11 davem Exp $
  *
  *	This program is free software; you can redistribute it and/or
  *      modify it under the terms of the GNU General Public License
@@ -75,7 +75,6 @@ static int inet6_create(struct socket *sock, int protocol)
 	if (sk == NULL) 
 		goto do_oom;
 
-	/* Note for tcp that also wiped the dummy_th block for us. */
 	if(sock->type == SOCK_STREAM || sock->type == SOCK_SEQPACKET) {
 		if (protocol && protocol != IPPROTO_TCP) 
 			goto free_and_noproto;
@@ -138,7 +137,7 @@ static int inet6_create(struct socket *sock, int protocol)
 		 * the user to assign a number at socket
 		 * creation time automatically shares.
 		 */
-		sk->dummy_th.source = ntohs(sk->num);
+		sk->sport = ntohs(sk->num);
 		sk->prot->hash(sk);
 		add_to_prot_sklist(sk);
 	}
@@ -229,8 +228,8 @@ static int inet6_bind(struct socket *sock, struct sockaddr *uaddr, int addr_len)
 		return -EADDRINUSE;
 
 	sk->num = snum;
-	sk->dummy_th.source = ntohs(sk->num);
-	sk->dummy_th.dest = 0;
+	sk->sport = ntohs(sk->num);
+	sk->dport = 0;
 	sk->daddr = 0;
 	sk->prot->rehash(sk);
 	add_to_prot_sklist(sk);
@@ -259,7 +258,7 @@ static int inet6_getname(struct socket *sock, struct sockaddr *uaddr,
 	if (peer) {
 		if (!tcp_connected(sk->state))
 			return(-ENOTCONN);
-		sin->sin6_port = sk->dummy_th.dest;
+		sin->sin6_port = sk->dport;
 		memcpy(&sin->sin6_addr, &sk->net_pinfo.af_inet6.daddr,
 		       sizeof(struct in6_addr));
 	} else {
@@ -272,7 +271,7 @@ static int inet6_getname(struct socket *sock, struct sockaddr *uaddr,
 			       &sk->net_pinfo.af_inet6.rcv_saddr,
 			       sizeof(struct in6_addr));
 
-		sin->sin6_port = sk->dummy_th.source;
+		sin->sin6_port = sk->sport;
 	}
 	*uaddr_len = sizeof(*sin);	
 	return(0);

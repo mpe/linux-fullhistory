@@ -324,6 +324,9 @@ void cleanup_module (void)
  * Return:	0	ok.
  *		< 0	error
  */
+ 
+EXPORT_SYMBOL(sdla_setup);
+
 int sdla_setup (sdlahw_t* hw, void* sfm, unsigned len)
 {
 	unsigned* irq_opt	= NULL;	/* IRQ options */
@@ -449,6 +452,9 @@ int sdla_setup (sdlahw_t* hw, void* sfm, unsigned len)
 /*============================================================================
  * Shut down SDLA: disable shared memory access and interrupts, stop CPU, etc.
  */
+
+EXPORT_SYMBOL(sdla_down);
+
 int sdla_down (sdlahw_t* hw)
 {
 	unsigned port = hw->port;
@@ -491,6 +497,9 @@ int sdla_down (sdlahw_t* hw)
 /*============================================================================
  * Map shared memory window into SDLA adress space.
  */
+
+EXPORT_SYMBOL(sdla_mapmem);
+
 int sdla_mapmem (sdlahw_t* hw, unsigned long addr)
 {
 	unsigned port = hw->port;
@@ -552,6 +561,9 @@ int sdla_mapmem (sdlahw_t* hw, unsigned long addr)
 /*============================================================================
  * Enable interrupt generation.
  */
+ 
+EXPORT_SYMBOL(sdla_inten);
+
 int sdla_inten (sdlahw_t* hw)
 {
 	unsigned port = hw->port;
@@ -606,6 +618,9 @@ int sdla_inten (sdlahw_t* hw)
 /*============================================================================
  * Disable interrupt generation.
  */
+
+EXPORT_SYMBOL(sdla_intde);
+
 int sdla_intde (sdlahw_t* hw)
 {
 	unsigned port = hw->port;
@@ -662,6 +677,9 @@ int sdla_intde (sdlahw_t* hw)
 /*============================================================================
  * Acknowledge SDLA hardware interrupt.
  */
+
+EXPORT_SYMBOL(sdla_intack);
+
 int sdla_intack (sdlahw_t* hw)
 {
 	unsigned port = hw->port;
@@ -711,6 +729,9 @@ int sdla_intack (sdlahw_t* hw)
 /*============================================================================
  * Generate an interrupt to adapter's CPU.
  */
+
+EXPORT_SYMBOL(sdla_intr);
+
 int sdla_intr (sdlahw_t* hw)
 {
 	unsigned port = hw->port;
@@ -756,6 +777,9 @@ int sdla_intr (sdlahw_t* hw)
  * o Busy-wait until flag is reset.
  * o Return number of loops made, or 0 if command timed out.
  */
+
+EXPORT_SYMBOL(sdla_exec);
+
 int sdla_exec (void* opflag)
 {
 	volatile unsigned char* flag = opflag;
@@ -784,6 +808,9 @@ int sdla_exec (void* opflag)
  * This function is not atomic, so caller must disable interrupt if
  * interrupt routines are accessing adapter shared memory.
  */
+ 
+EXPORT_SYMBOL(sdla_peek);
+
 int sdla_peek (sdlahw_t* hw, unsigned long addr, void* buf, unsigned len)
 {
 	unsigned long oldvec = hw->vector;
@@ -823,6 +850,9 @@ int sdla_peek (sdlahw_t* hw, unsigned long addr, void* buf, unsigned len)
  * This function is not atomic, so caller must disable interrupt if
  * interrupt routines are accessing adapter shared memory.
  */
+ 
+EXPORT_SYMBOL(sdla_poke);
+ 
 int sdla_poke (sdlahw_t* hw, unsigned long addr, void* buf, unsigned len)
 {
 	unsigned long oldvec = hw->vector;
@@ -1826,5 +1856,6 @@ static unsigned short checksum (unsigned char* buf, unsigned len)
 	}
 	return crc;
 }
+
 
 /****** End *****************************************************************/

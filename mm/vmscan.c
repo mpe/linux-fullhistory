@@ -44,11 +44,6 @@ int swapout_interval = HZ / 4;
  */
 static struct wait_queue * kswapd_wait = NULL;
 
-/* 
- * We avoid doing a reschedule if the pageout daemon is already awake;
- */
-static int kswapd_awake = 0;
-
 static void init_swap_timer(void);
 
 /*
@@ -545,13 +540,12 @@ int kswapd(void *unused)
 	add_wait_queue(&kswapd_wait, &wait);
 	while (1) {
 		int tries;
+		int tried = 0;
 
 		current->state = TASK_INTERRUPTIBLE;
-		kswapd_awake = 0;
 		flush_signals(current);
 		run_task_queue(&tq_disk);
 		schedule();
-		kswapd_awake = 1;
 		swapstats.wakeups++;
 		/* Do the background pageout: 
 		 * When we've got loads of memory, we try
@@ -563,12 +557,12 @@ int kswapd(void *unused)
 		if (tries < freepages.min) {
 			tries = freepages.min;
 		}
-		if (nr_free_pages < freepages.high + freepages.low)
+		if (nr_free_pages < freepages.low)
 			tries <<= 1;
 		while (tries--) {
 			int gfp_mask;
 
-			if (free_memory_available())
+			if (++tried > SWAP_CLUSTER_MAX && free_memory_available(0))
 				break;
 			gfp_mask = __GFP_IO;
 			try_to_free_page(gfp_mask);
@@ -592,24 +586,35 @@ int kswapd(void *unused)
 
 void swap_tick(void)
 {
-	int want_wakeup = 0, memory_low = 0;
-	int pages = nr_free_pages + atomic_read(&nr_async_pages);
+	unsigned long now, want;
+	int want_wakeup = 0;
 
-	if (pages < freepages.low)
-		memory_low = want_wakeup = 1;
-	else if ((pages < freepages.high || BUFFER_MEM > (num_physpages * buffer_mem.max_percent / 100))
-			&& jiffies >= next_swap_jiffies)
+	want = next_swap_jiffies;
+	now = jiffies;
+
+	/*
+	 * Examine the memory queues. Mark memory low
+	 * if there is nothing available in the three
+	 * highest queues.
+	 *
+	 * Schedule for wakeup if there isn't lots
+	 * of free memory.
+	 */
+	switch (free_memory_available(3)) {
+	case 0:
+		want = now;
+		/* Fall through */
+	case 1 ... 2:
 		want_wakeup = 1;
-
-	if (want_wakeup) { 
-		if (!kswapd_awake) {
+	default:
+	}
+ 
+	if ((long) (now - want) >= 0) {
+		if (want_wakeup || (num_physpages * buffer_mem.max_percent / 100) < BUFFER_MEM) {
+			/* Set the next wake-up time */
+			next_swap_jiffies = now + swapout_interval;
 			wake_up(&kswapd_wait);
-			need_resched = 1;
 		}
-		/* Set the next wake-up time */
-		next_swap_jiffies = jiffies;
-		if (!memory_low) 
-			next_swap_jiffies += swapout_interval;
 	}
 	timer_active |= (1<<SWAP_TIMER);
 }

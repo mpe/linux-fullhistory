@@ -55,7 +55,7 @@ struct inet6_protocol
 			unsigned short len,
 			int redo, struct inet6_protocol *protocol);
 
-	void	(*err_handler)(int type, int code, unsigned char *buff,
+	void	(*err_handler)(struct sk_buff *skb, int type, int code, unsigned char *buff,
 			__u32 info, struct in6_addr *saddr,
 			struct in6_addr *daddr,
 			struct inet6_protocol *protocol);

@@ -13,65 +13,30 @@
 #include <linux/tty.h>
 #include <linux/console.h>
 #include <linux/string.h>
+#include <linux/config.h>
 #include <linux/fb.h>
 
 #include "fbcon.h"
-
-
-    /*
-     *  Prototypes
-     */
-
-static int open_mfb(struct display *p);
-static void release_mfb(void);
-static void bmove_mfb(struct display *p, int sy, int sx, int dy, int dx,
-		      int height, int width);
-static void clear_mfb(struct vc_data *conp, struct display *p, int sy, int sx,
-		      int height, int width);
-static void putc_mfb(struct vc_data *conp, struct display *p, int c, int yy,
-		      int xx);
-static void putcs_mfb(struct vc_data *conp, struct display *p, const char *s,
-		      int count, int yy, int xx);
-static void rev_char_mfb(struct display *p, int xx, int yy);
-
-
-    /*
-     *  `switch' for the low level operations
-     */
-
-static struct display_switch dispsw_mfb = {
-    open_mfb, release_mfb, bmove_mfb, clear_mfb, putc_mfb, putcs_mfb,
-    rev_char_mfb
-};
+#include "fbcon-mfb.h"
 
 
     /*
      *  Monochrome
      */
 
-static int open_mfb(struct display *p)
+void fbcon_mfb_setup(struct display *p)
 {
-    if (p->var.bits_per_pixel != 1)
-	return -EINVAL;
-
     if (p->line_length)
 	p->next_line = p->line_length;
     else
 	p->next_line = p->var.xres_virtual>>3;
     p->next_plane = 0;
-    MOD_INC_USE_COUNT;
-    return 0;
 }
 
-static void release_mfb(void)
+void fbcon_mfb_bmove(struct display *p, int sy, int sx, int dy, int dx,
+		     int height, int width)
 {
-    MOD_DEC_USE_COUNT;
-}
-
-static void bmove_mfb(struct display *p, int sy, int sx, int dy, int dx,
-		      int height, int width)
-{
-    u_char *src, *dest;
+    u8 *src, *dest;
     u_int rows;
 
     if (sx == 0 && dx == 0 && width == p->next_line) {
@@ -97,10 +62,10 @@ static void bmove_mfb(struct display *p, int sy, int sx, int dy, int dx,
     }
 }
 
-static void clear_mfb(struct vc_data *conp, struct display *p, int sy, int sx,
-		      int height, int width)
+void fbcon_mfb_clear(struct vc_data *conp, struct display *p, int sy, int sx,
+		     int height, int width)
 {
-    u_char *dest;
+    u8 *dest;
     u_int rows;
 
     dest = p->screen_base+sy*p->fontheight*p->next_line+sx;
@@ -118,12 +83,12 @@ static void clear_mfb(struct vc_data *conp, struct display *p, int sy, int sx,
 		mymemclear_small(dest, width);
 }
 
-static void putc_mfb(struct vc_data *conp, struct display *p, int c, int yy,
-		     int xx)
+void fbcon_mfb_putc(struct vc_data *conp, struct display *p, int c, int yy,
+		    int xx)
 {
-    u_char *dest, *cdat;
+    u8 *dest, *cdat;
     u_int rows, bold, revs, underl;
-    u_char d;
+    u8 d;
 
     c &= 0xff;
 
@@ -145,12 +110,12 @@ static void putc_mfb(struct vc_data *conp, struct display *p, int c, int yy,
     }
 }
 
-static void putcs_mfb(struct vc_data *conp, struct display *p, const char *s,
-		      int count, int yy, int xx)
+void fbcon_mfb_putcs(struct vc_data *conp, struct display *p, const char *s,
+		     int count, int yy, int xx)
 {
-    u_char *dest, *dest0, *cdat;
+    u8 *dest, *dest0, *cdat;
     u_int rows, bold, revs, underl;
-    u_char c, d;
+    u8 c, d;
 
     dest0 = p->screen_base+yy*p->fontheight*p->next_line+xx;
     bold = attr_bold(p,conp);
@@ -174,9 +139,9 @@ static void putcs_mfb(struct vc_data *conp, struct display *p, const char *s,
     }
 }
 
-static void rev_char_mfb(struct display *p, int xx, int yy)
+void fbcon_mfb_revc(struct display *p, int xx, int yy)
 {
-    u_char *dest;
+    u8 *dest;
     u_int rows;
 
     dest = p->screen_base+yy*p->fontheight*p->next_line+xx;
@@ -185,18 +150,24 @@ static void rev_char_mfb(struct display *p, int xx, int yy)
 }
 
 
-#ifdef MODULE
-int init_module(void)
-#else
-int fbcon_init_mfb(void)
-#endif
-{
-    return(fbcon_register_driver(&dispsw_mfb, 0));
-}
+    /*
+     *  `switch' for the low level operations
+     */
 
-#ifdef MODULE
-void cleanup_module(void)
-{
-    fbcon_unregister_driver(&dispsw_mfb);
-}
-#endif /* MODULE */
+struct display_switch fbcon_mfb = {
+    fbcon_mfb_setup, fbcon_mfb_bmove, fbcon_mfb_clear, fbcon_mfb_putc,
+    fbcon_mfb_putcs, fbcon_mfb_revc
+};
+
+
+    /*
+     *  Visible symbols for modules
+     */
+
+EXPORT_SYMBOL(fbcon_mfb);
+EXPORT_SYMBOL(fbcon_mfb_setup);
+EXPORT_SYMBOL(fbcon_mfb_bmove);
+EXPORT_SYMBOL(fbcon_mfb_clear);
+EXPORT_SYMBOL(fbcon_mfb_putc);
+EXPORT_SYMBOL(fbcon_mfb_putcs);
+EXPORT_SYMBOL(fbcon_mfb_revc);

@@ -10,8 +10,9 @@
 
 #include <linux/errno.h>
 #include <linux/sched.h>
-#include <linux/fs.h>
 #include <linux/mm.h>
+#include <linux/fs.h>
+#include <linux/file.h>
 #include <linux/proc_fs.h>
 #include <linux/stat.h>
 
@@ -81,53 +82,58 @@ static struct dentry * proc_follow_link(struct dentry *dentry,
 	pid = ino >> 16;
 	ino &= 0x0000ffff;
 
-	p = find_task_by_pid(pid);
 	result = ERR_PTR(-ENOENT);
+	read_lock(&tasklist_lock);
+	p = find_task_by_pid(pid);
 	if (!p)
-		goto out;
+		goto out_unlock;
 
 	switch (ino) {
 		case PROC_PID_CWD:
 			if (!p->fs || !p->fs->pwd)
-				break;
-			result = dget(p->fs->pwd);
-			break;
+				goto out_unlock;
+			result = p->fs->pwd;
+			goto out_dget;
 
 		case PROC_PID_ROOT:
 			if (!p->fs || !p->fs->root)
-				break;
-			result = dget(p->fs->root);
-			break;
+				goto out_unlock;
+			result = p->fs->root;
+			goto out_dget;
 
 		case PROC_PID_EXE: {
 			struct vm_area_struct * vma;
 			if (!p->mm)
-				break;
+				goto out_unlock;
 			vma = p->mm->mmap;
 			while (vma) {
-				if ((vma->vm_flags & VM_EXECUTABLE) && vma->vm_file)
-					return dget(vma->vm_file->f_dentry);
-
+				if ((vma->vm_flags & VM_EXECUTABLE) && 
+				    vma->vm_file) {
+					result = vma->vm_file->f_dentry;
+					goto out_dget;
+				}
 				vma = vma->vm_next;
 			}
-			break;
+			goto out_unlock;
 		}
 		default:
 			switch (ino >> 8) {
+				struct file * file;
 			case PROC_PID_FD_DIR:
-				if (!p->files)
-					break;
 				ino &= 0xff;
-				if (ino >= NR_OPEN)
-					break;
-				if (!p->files->fd[ino])
-					break;
-				if (!p->files->fd[ino]->f_dentry)
-					break;
-				result = dget(p->files->fd[ino]->f_dentry);
-				break;
+				file = fcheck_task(p, ino);
+				if (!file || !file->f_dentry)
+					goto out_unlock;
+				result = file->f_dentry;
+				goto out_dget;
 			}
 	}
+out_dget:
+	result = dget(result);
+
+out_unlock:
+	read_unlock(&tasklist_lock);
+
 out:
 	return result;
 }

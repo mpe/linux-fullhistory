@@ -762,16 +762,16 @@ __initfunc(int SK_probe(struct device *dev, short ioaddr))
 	    dev->dev_addr[4],
 	    dev->dev_addr[5]);
 
-    /* Grab the I/O Port region */
-    request_region(ioaddr, ETHERCARD_TOTAL_SIZE,"sk_g16");
-
-    /* Initialize device structure */
-
     /* Allocate memory for private structure */
     p = dev->priv = (void *) kmalloc(sizeof(struct priv), GFP_KERNEL);
-    if (p == NULL)
+    if (p == NULL) {
+	   printk("%s: ERROR - no memory for driver data!\n", dev->name);
 	   return -ENOMEM;
+    }
     memset((char *) dev->priv, 0, sizeof(struct priv)); /* clear memory */
+
+    /* Grab the I/O Port region */
+    request_region(ioaddr, ETHERCARD_TOTAL_SIZE,"sk_g16");
 
     /* Assign our Device Driver functions */
 

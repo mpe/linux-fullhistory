@@ -134,12 +134,12 @@ void parport_pc_change_mode(struct parport *p, int m)
 
 void parport_pc_write_fifo(struct parport *p, unsigned char v)
 {
-	/* FIXME */
+	outb (v, p->base+CONFIGA);
 }
 
 unsigned char parport_pc_read_fifo(struct parport *p)
 {
-	return 0; /* FIXME */
+	return inb (p->base+CONFIGA);
 }
 
 void parport_pc_disable_irq(struct parport *p)
@@ -186,22 +186,34 @@ void parport_pc_restore_state(struct parport *p, struct parport_state *s)
 
 size_t parport_pc_epp_read_block(struct parport *p, void *buf, size_t length)
 {
-	return 0; /* FIXME */
+	size_t got = 0;
+	for (; got < length; got++) {
+		*((char*)buf)++ = inb (p->base+EPPREG);
+		if (inb (p->base+STATUS) & 0x01)
+			break;
+	}
+	return got;
 }
 
 size_t parport_pc_epp_write_block(struct parport *p, void *buf, size_t length)
 {
-	return 0; /* FIXME */
+	size_t written = 0;
+	for (; written < length; written++) {
+		outb (*((char*)buf)++, p->base+EPPREG);
+		if (inb (p->base+STATUS) & 0x01)
+			break;
+	}
+	return written;
 }
 
 int parport_pc_ecp_read_block(struct parport *p, void *buf, size_t length, void (*fn)(struct parport *, void *, size_t), void *handle)
 {
-	return 0; /* FIXME */
+	return -ENOSYS; /* FIXME */
 }
 
 int parport_pc_ecp_write_block(struct parport *p, void *buf, size_t length, void (*fn)(struct parport *, void *, size_t), void *handle)
 {
-	return 0; /* FIXME */
+	return -ENOSYS; /* FIXME */
 }
 
 int parport_pc_examine_irq(struct parport *p)

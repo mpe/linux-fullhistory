@@ -196,8 +196,8 @@ __initfunc(int a2091_detect(Scsi_Host_Template *tpnt))
     static unsigned char called = 0;
     struct Scsi_Host *instance;
     caddr_t address;
-    int key;
-    struct ConfigDev *cd;
+    unsigned int key;
+    const struct ConfigDev *cd;
 
     if (!MACH_IS_AMIGA || called)
 	return 0;
@@ -206,8 +206,8 @@ __initfunc(int a2091_detect(Scsi_Host_Template *tpnt))
     tpnt->proc_dir = &proc_scsi_a2091;
     tpnt->proc_info = &wd33c93_proc_info;
 
-    while ((key = zorro_find(MANUF_COMMODORE, PROD_A2091, 0, 0)) ||
-	   (key = zorro_find(MANUF_COMMODORE, PROD_A590, 0, 0))) {
+    while ((key = zorro_find(ZORRO_PROD_CBM_A590_A2091_1, 0, 0)) ||
+	   (key = zorro_find(ZORRO_PROD_CBM_A590_A2091_2, 0, 0))) {
 	cd = zorro_get_board(key);
 	address = cd->cd_BoardAddr;
 	instance = scsi_register (tpnt, sizeof (struct WD33C93_hostdata));

@@ -439,7 +439,7 @@ asmlinkage int sys_ptrace(long request, long pid, long addr, long data)
 			long tmp;
 
 			ret = -EIO;
-			if ((unsigned long) data >= _NSIG)
+			if ((unsigned long) data > _NSIG)
 				goto out;
 			if (request == PTRACE_SYSCALL)
 				child->flags |= PF_TRACESYS;
@@ -477,7 +477,7 @@ asmlinkage int sys_ptrace(long request, long pid, long addr, long data)
 			long tmp;
 
 			ret = -EIO;
-			if ((unsigned long) data >= _NSIG)
+			if ((unsigned long) data > _NSIG)
 				goto out;
 			child->flags &= ~PF_TRACESYS;
 			tmp = get_reg(child, PT_SR) | (TRACE_BITS << 16);
@@ -494,7 +494,7 @@ asmlinkage int sys_ptrace(long request, long pid, long addr, long data)
 			long tmp;
 
 			ret = -EIO;
-			if ((unsigned long) data >= _NSIG)
+			if ((unsigned long) data > _NSIG)
 				goto out;
 			child->flags &= ~(PF_PTRACED|PF_TRACESYS);
 			wake_up_process(child);

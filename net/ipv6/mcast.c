@@ -5,7 +5,7 @@
  *	Authors:
  *	Pedro Roque		<roque@di.fc.ul.pt>	
  *
- *	$Id: mcast.c,v 1.13 1998/01/04 15:28:31 mj Exp $
+ *	$Id: mcast.c,v 1.14 1998/03/20 09:12:18 davem Exp $
  *
  *	Based on linux/ipv4/igmp.c and linux/ipv4/ip_sockglue.c 
  *
@@ -91,7 +91,7 @@ int ipv6_sock_mc_join(struct sock *sk, int ifindex, struct in6_addr *addr)
 
 	if (ifindex == 0) {
 		struct rt6_info *rt;
-		rt = rt6_lookup(addr, NULL, NULL, 0);
+		rt = rt6_lookup(addr, NULL, 0, 0);
 		if (rt)
 			dev = rt->rt6i_dev;
 	} else

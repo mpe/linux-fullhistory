@@ -1819,12 +1819,8 @@ int ip_masq_ctl(int optname, void *arg, int arglen)
 	struct ip_fw_masqctl *mctl = arg;
 	int ret = EINVAL;
 
-	ip_masq_lockz(&__ip_masq_lock, &masq_wait, 0);
-
 	if (1) /*  (mctl->mctl_action == IP_MASQ_MOD_CTL)  */
 		ret = ip_masq_mod_ctl(optname, mctl, arglen);
-
-	ip_masq_unlockz(&__ip_masq_lock, &masq_wait, 0);
 
 	return ret;
 }

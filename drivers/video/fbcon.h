@@ -8,6 +8,9 @@
  *  for more details.
  */
 
+#ifndef __VIDEO_FBCON_H
+#define __VIDEO_FBCON_H
+
 #include <linux/console_struct.h>
 
 
@@ -16,8 +19,7 @@
      */
  
 struct display_switch {                                                
-    int (*open)(struct display *p);
-    void (*release)(void);
+    void (*setup)(struct display *p);
     void (*bmove)(struct display *p, int sy, int sx, int dy, int dx,
 		  int height, int width);
     void (*clear)(struct vc_data *conp, struct display *p, int sy, int sx,
@@ -26,17 +28,8 @@ struct display_switch {
     		 int xx);
     void (*putcs)(struct vc_data *conp, struct display *p, const char *s,
 		  int count, int yy, int xx);     
-    void (*rev_char)(struct display *p, int xx, int yy);
-    struct display_switch *next;
+    void (*revc)(struct display *p, int xx, int yy);
 }; 
-
-
-    /*
-     *  Driver registration
-     */
-
-extern int fbcon_register_driver(struct display_switch *dispsw, int is_accel);
-int fbcon_unregister_driver(struct display_switch *dispsw);
 
 
     /*
@@ -335,3 +328,5 @@ static __inline__ void fast_memmove(char *dst, const char *src, size_t size)
 }
 
 #endif /* !m68k */
+
+#endif /* __VIDEO_FBCON_H */

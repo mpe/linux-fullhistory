@@ -5,7 +5,7 @@
  *	Authors:
  *	Pedro Roque		<roque@di.fc.ul.pt>	
  *
- *	$Id: datagram.c,v 1.13 1997/12/13 21:53:09 kuznet Exp $
+ *	$Id: datagram.c,v 1.14 1998/03/20 09:12:15 davem Exp $
  *
  *	This program is free software; you can redistribute it and/or
  *      modify it under the terms of the GNU General Public License
@@ -55,7 +55,7 @@ int datagram_recv_ctl(struct sock *sk, struct msghdr *msg, struct sk_buff *skb)
 	return 0;
 }
 
-int datagram_send_ctl(struct msghdr *msg, struct device **src_dev,
+int datagram_send_ctl(struct msghdr *msg, int *oif,
 		      struct in6_addr **src_addr, struct ipv6_options *opt, 
 		      int *hlimit)
 {
@@ -81,15 +81,15 @@ int datagram_send_ctl(struct msghdr *msg, struct device **src_dev,
 			src_info = (struct in6_pktinfo *)CMSG_DATA(cmsg);
 			
 			if (src_info->ipi6_ifindex) {
-				int index = src_info->ipi6_ifindex;
-
-				*src_dev = dev_get_by_index(index);
+				if (*oif && src_info->ipi6_ifindex != *oif)
+					return -EINVAL;
+				*oif = src_info->ipi6_ifindex;
 			}
-			
+
 			if (!ipv6_addr_any(&src_info->ipi6_addr)) {
 				struct inet6_ifaddr *ifp;
 
-				ifp = ipv6_chk_addr(&src_info->ipi6_addr, *src_dev, 0);
+				ifp = ipv6_chk_addr(&src_info->ipi6_addr, NULL, 0);
 
 				if (ifp == NULL) {
 					err = -EINVAL;

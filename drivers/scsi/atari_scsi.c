@@ -107,6 +107,7 @@
 #include "NCR5380.h"
 #include "constants.h"
 #include <asm/atari_stdma.h>
+#include <asm/atari_stram.h>
 #include <asm/io.h>
 
 #include <linux/stat.h>
@@ -254,6 +255,10 @@ MODULE_PARM(setup_use_tagged_queuing, "i");
 static int setup_hostid = -1;
 MODULE_PARM(setup_hostid, "i");
 
+
+#if defined(CONFIG_TT_DMA_EMUL)
+#include "atari_dma_emul.c"
+#endif
 
 #if defined(REAL_DMA)
 
@@ -652,8 +657,12 @@ int atari_scsi_detect (Scsi_Host_Template *host)
 	 */
 	if (MACH_IS_ATARI && ATARIHW_PRESENT(ST_SCSI) &&
 	    !ATARIHW_PRESENT(EXTD_DMA) && m68k_num_memory > 1) {
-		atari_dma_buffer = scsi_init_malloc(STRAM_BUFFER_SIZE,
-						    GFP_ATOMIC | GFP_DMA);
+		atari_dma_buffer = atari_stram_alloc( STRAM_BUFFER_SIZE, NULL, "SCSI" );
+		if (!atari_dma_buffer) {
+			printk( KERN_ERR "atari_scsi_detect: can't allocate ST-RAM "
+					"double buffer\n" );
+			return( 0 );
+		}
 		atari_dma_phys_buffer = VTOP( atari_dma_buffer );
 		atari_dma_orig_addr = 0;
 	}
@@ -682,7 +691,14 @@ int atari_scsi_detect (Scsi_Host_Template *host)
 		atari_dma_residual = 0;
 #endif /* REAL_DMA */
 #ifdef REAL_DMA
-		if (is_medusa || is_hades) {
+#ifdef CONFIG_TT_DMA_EMUL
+		if (MACH_IS_HADES) {
+			request_irq(IRQ_AUTO_2, hades_dma_emulator,
+				    IRQ_TYPE_PRIO, "Hades DMA emulator",
+				    hades_dma_emulator);
+		}
+#endif
+		if (MACH_IS_MEDUSA || MACH_IS_HADES) {
 			/* While the read overruns (described by Drew Eckhardt in
 			 * NCR5380.c) never happened on TTs, they do in fact on the Medusa
 			 * (This was the cause why SCSI didn't work right for so long
@@ -739,7 +755,7 @@ int atari_scsi_release (struct Scsi_Host *sh)
 	if (IS_A_TT())
 		free_irq(IRQ_TT_MFP_SCSI, scsi_tt_intr);
 	if (atari_dma_buffer)
-		scsi_init_free (atari_dma_buffer, STRAM_BUFFER_SIZE);
+		atari_stram_free (atari_dma_buffer);
 	return 1;
 }
 #endif
@@ -1003,11 +1019,11 @@ static unsigned long atari_dma_xfer_len( unsigned long wanted_len,
 					int write_flag )
 {
 	unsigned long	possible_len, limit;
-
-	if (is_hades)
+#ifndef CONFIG_TT_DMA_EMUL
+	if (MACH_IS_HADES)
 		/* Hades has no SCSI DMA at all :-( Always force use of PIO */
 		return( 0 );
-	
+#endif	
 	if (IS_A_TT())
 		/* TT SCSI DMA can transfer arbitrary #bytes */
 		return( wanted_len );

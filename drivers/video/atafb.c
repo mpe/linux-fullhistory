@@ -66,9 +66,30 @@
 
 #include <asm/atarihw.h>
 #include <asm/atariints.h>
+#include <asm/atari_stram.h>
 
 #include <linux/fb.h>
 #include <asm/atarikb.h>
+
+#ifdef CONFIG_FBCON_CFB8
+#include "fbcon-cfb8.h"
+#endif
+#ifdef CONFIG_FBCON_CFB16
+#include "fbcon-cfb16.h"
+#endif
+#ifdef CONFIG_FBCON_IPLAN2P2
+#include "fbcon-iplan2p2.h"
+#endif
+#ifdef CONFIG_FBCON_IPLAN2P4
+#include "fbcon-iplan2p4.h"
+#endif
+#ifdef CONFIG_FBCON_IPLAN2P8
+#include "fbcon-iplan2p8.h"
+#endif
+#ifdef CONFIG_FBCON_MFB
+#include "fbcon-mfb.h"
+#endif
+
 
 #define SWITCH_ACIA 0x01		/* modes for switch on OverScan */
 #define SWITCH_SND6 0x40
@@ -92,16 +113,18 @@ static int use_hwscroll = 1;
 static int sttt_xres=640,st_yres=400,tt_yres=480;
 static int sttt_xres_virtual=640,sttt_yres_virtual=400;
 static int ovsc_offset=0, ovsc_addlen=0;
-int        ovsc_switchmode=0;
 
-static struct atari_fb_par {
+static struct atafb_par {
 	unsigned long screen_base;
 	int yres_virtual;
+#if defined ATAFB_TT || defined ATAFB_STE
 	union {
 		struct {
 			int mode;
 			int sync;
 		} tt, st;
+#endif
+#ifdef ATAFB_FALCON
 		struct falcon_hw {
 			/* Here are fields for storing a video mode, as direct
 			 * parameters for the hardware.
@@ -121,6 +144,7 @@ static struct atari_fb_par {
 			short ste_mode;
 			short bpp;
 		} falcon;
+#endif
 		/* Nothing needed for external mode */
 	} hw;
 } current_par;
@@ -130,6 +154,7 @@ static struct atari_fb_par {
  * hardware extensions (e.g. ScreenBlaster)  */
 static int DontCalcRes = 0; 
 
+#ifdef ATAFB_FALCON
 #define HHT hw.falcon.hht
 #define HBB hw.falcon.hbb
 #define HBE hw.falcon.hbe
@@ -150,6 +175,7 @@ static int DontCalcRes = 0;
 #define VMO_DOUBLE		0x01
 #define VMO_INTER		0x02
 #define VMO_PREMASK		0x0c
+#endif
 
 static struct fb_info fb_info;
 
@@ -239,26 +265,22 @@ extern int fontheight_8x16;
 extern int fontwidth_8x16;
 extern unsigned char fontdata_8x16[];
 
-/* import first 16 colors from fbcon.c */
-extern unsigned short packed16_cmap[16];
-
-
 /* ++roman: This structure abstracts from the underlying hardware (ST(e),
  * TT, or Falcon.
  *
  * int (*detect)( void )
  *   This function should detect the current video mode settings and
- *   store them in atari_fb_predefined[0] for later reference by the
+ *   store them in atafb_predefined[0] for later reference by the
  *   user. Return the index+1 of an equivalent predefined mode or 0
  *   if there is no such.
  * 
  * int (*encode_fix)( struct fb_fix_screeninfo *fix,
- *                    struct atari_fb_par *par )
+ *                    struct atafb_par *par )
  *   This function should fill in the 'fix' structure based on the
  *   values in the 'par' structure.
  *   
  * int (*decode_var)( struct fb_var_screeninfo *var,
- *                    struct atari_fb_par *par )
+ *                    struct atafb_par *par )
  *   Get the video params out of 'var'. If a value doesn't fit, round
  *   it up, if it's too big, return EINVAL.
  *   Round up in the following order: bits_per_pixel, xres, yres, 
@@ -266,26 +288,26 @@ extern unsigned short packed16_cmap[16];
  *   horizontal timing, vertical timing.
  *
  * int (*encode_var)( struct fb_var_screeninfo *var,
- *                    struct atari_fb_par *par );
+ *                    struct atafb_par *par );
  *   Fill the 'var' structure based on the values in 'par' and maybe
  *   other values read out of the hardware.
  *   
- * void (*get_par)( struct atari_fb_par *par )
+ * void (*get_par)( struct atafb_par *par )
  *   Fill the hardware's 'par' structure.
  *   
- * void (*set_par)( struct atari_fb_par *par )
+ * void (*set_par)( struct atafb_par *par )
  *   Set the hardware according to 'par'.
  *   
  * int (*setcolreg)( unsigned regno, unsigned red,
  *                   unsigned green, unsigned blue,
- *                   unsigned transp )
+ *                   unsigned transp, struct fb_info *info )
  *   Set a single color register. The values supplied are already
  *   rounded down to the hardware's capabilities (according to the
  *   entries in the var structure). Return != 0 for invalid regno.
  *
  * int (*getcolreg)( unsigned regno, unsigned *red,
  *                   unsigned *green, unsigned *blue,
- *                   unsigned *transp )
+ *                   unsigned *transp, struct fb_info *info )
  *   Read a single color register and split it into
  *   colors/transparent. Return != 0 for invalid regno.
  *
@@ -305,23 +327,23 @@ extern unsigned short packed16_cmap[16];
 static struct fb_hwswitch {
 	int  (*detect)( void );
 	int  (*encode_fix)( struct fb_fix_screeninfo *fix,
-						struct atari_fb_par *par );
+						struct atafb_par *par );
 	int  (*decode_var)( struct fb_var_screeninfo *var,
-						struct atari_fb_par *par );
+						struct atafb_par *par );
 	int  (*encode_var)( struct fb_var_screeninfo *var,
-						struct atari_fb_par *par );
-	void (*get_par)( struct atari_fb_par *par );
-	void (*set_par)( struct atari_fb_par *par );
+						struct atafb_par *par );
+	void (*get_par)( struct atafb_par *par );
+	void (*set_par)( struct atafb_par *par );
 	int  (*getcolreg)( unsigned regno, unsigned *red,
 					   unsigned *green, unsigned *blue,
-					   unsigned *transp );
+					   unsigned *transp, struct fb_info *info );
 	int  (*setcolreg)( unsigned regno, unsigned red,
 					   unsigned green, unsigned blue,
-					   unsigned transp );
+					   unsigned transp, struct fb_info *info );
 	void (*set_screen_base)( unsigned long s_base );
 	int  (*blank)( int blank_mode );
 	int  (*pan_display)( struct fb_var_screeninfo *var,
-						 struct atari_fb_par *par);
+						 struct atafb_par *par);
 } *fbhw;
 
 static char *autodetect_names[] = {"autodetect", NULL};
@@ -337,15 +359,6 @@ static char *vga16_names[] = {"vga16", "default3", NULL};
 static char *vga256_names[] = {"vga256", NULL};
 static char *falh2_names[] = {"falh2", NULL};
 static char *falh16_names[] = {"falh16", NULL};
-static char *user0_names[] = {"user0", NULL};
-static char *user1_names[] = {"user1", NULL};
-static char *user2_names[] = {"user2", NULL};
-static char *user3_names[] = {"user3", NULL};
-static char *user4_names[] = {"user4", NULL};
-static char *user5_names[] = {"user5", NULL};
-static char *user6_names[] = {"user6", NULL};
-static char *user7_names[] = {"user7", NULL};
-static char *dummy_names[] = {"dummy", NULL};
 
 static char **fb_var_names[] = {
 	/* Writing the name arrays directly in this array (via "(char *[]){...}")
@@ -365,22 +378,11 @@ static char **fb_var_names[] = {
 	vga256_names,
 	falh2_names,
 	falh16_names,
-	dummy_names, dummy_names, dummy_names, dummy_names,
-	dummy_names, dummy_names, dummy_names, dummy_names,
-	dummy_names, dummy_names,
-	user0_names,
-	user1_names,
-	user2_names,
-	user3_names,
-	user4_names,
-	user5_names,
-	user6_names,
-	user7_names,
 	NULL
 	/* ,NULL */ /* this causes a sigsegv on my gcc-2.5.8 */
 };
 
-static struct fb_var_screeninfo atari_fb_predefined[] = {
+static struct fb_var_screeninfo atafb_predefined[] = {
  	/*
  	 * yres_virtual==0 means use hw-scrolling if possible, else yres
  	 */
@@ -436,53 +438,9 @@ static struct fb_var_screeninfo atari_fb_predefined[] = {
 	  896, 608, 896, 0, 0, 0, 4, 0,
 	  {0, 6, 0}, {0, 6, 0}, {0, 6, 0}, {0, 0, 0},
 	  0, 0, -1, -1, 0, 0, 0, 0, 0, 0, 0, 0 },
-	/* Minor 14..23 free for more standard video modes */
-	{ 0, },
-	{ 0, },
-	{ 0, },
-	{ 0, },
-	{ 0, },
-	{ 0, },
-	{ 0, },
-	{ 0, },
-	{ 0, },
-	{ 0, },
-	/* Minor 24..31 reserved for user defined video modes */
-	{ /* user0, initialized to Rx;y;d from commandline, if supplied */
-	  0, 0, 0, 0, 0, 0, 0, 0,
-	  {0, 6, 0}, {0, 6, 0}, {0, 6, 0}, {0, 0, 0},
-	  0, 0, -1, -1, 0, 0, 0, 0, 0, 0, 0, 0 },
-	{ /* user1 */
-	  0, 0, 0, 0, 0, 0, 0, 0,
-	  {0, 6, 0}, {0, 6, 0}, {0, 6, 0}, {0, 0, 0},
-	  0, 0, -1, -1, 0, 0, 0, 0, 0, 0, 0, 0 },
-	{ /* user2 */
-	  0, 0, 0, 0, 0, 0, 0, 0,
-	  {0, 6, 0}, {0, 6, 0}, {0, 6, 0}, {0, 0, 0},
-	  0, 0, -1, -1, 0, 0, 0, 0, 0, 0, 0, 0 },
-	{ /* user3 */
-	  0, 0, 0, 0, 0, 0, 0, 0,
-	  {0, 6, 0}, {0, 6, 0}, {0, 6, 0}, {0, 0, 0},
-	  0, 0, -1, -1, 0, 0, 0, 0, 0, 0, 0, 0 },
-	{ /* user4 */
-	  0, 0, 0, 0, 0, 0, 0, 0,
-	  {0, 6, 0}, {0, 6, 0}, {0, 6, 0}, {0, 0, 0},
-	  0, 0, -1, -1, 0, 0, 0, 0, 0, 0, 0, 0 },
-	{ /* user5 */
-	  0, 0, 0, 0, 0, 0, 0, 0,
-	  {0, 6, 0}, {0, 6, 0}, {0, 6, 0}, {0, 0, 0},
-	  0, 0, -1, -1, 0, 0, 0, 0, 0, 0, 0, 0 },
-	{ /* user6 */
-	  0, 0, 0, 0, 0, 0, 0, 0,
-	  {0, 6, 0}, {0, 6, 0}, {0, 6, 0}, {0, 0, 0},
-	  0, 0, -1, -1, 0, 0, 0, 0, 0, 0, 0, 0 },
-	{ /* user7 */
-	  0, 0, 0, 0, 0, 0, 0, 0,
-	  {0, 6, 0}, {0, 6, 0}, {0, 6, 0}, {0, 0, 0},
-	  0, 0, -1, -1, 0, 0, 0, 0, 0, 0, 0, 0 }
 };
 
-static int num_atari_fb_predefined=arraysize(atari_fb_predefined);
+static int num_atafb_predefined=arraysize(atafb_predefined);
 
 
 static int
@@ -492,7 +450,7 @@ get_video_mode(char *vname)
     char **name;
     int i;
     name_list=fb_var_names;
-    for (i = 0 ; i < num_atari_fb_predefined ; i++) {
+    for (i = 0 ; i < num_atafb_predefined ; i++) {
 	name=*(name_list++);
 	if (! name || ! *name)
 	    break;
@@ -512,7 +470,7 @@ get_video_mode(char *vname)
 #ifdef ATAFB_TT
 
 static int tt_encode_fix( struct fb_fix_screeninfo *fix,
-						  struct atari_fb_par *par )
+						  struct atafb_par *par )
 
 {
 	int mode;
@@ -539,7 +497,7 @@ static int tt_encode_fix( struct fb_fix_screeninfo *fix,
 
 
 static int tt_decode_var( struct fb_var_screeninfo *var,
-						  struct atari_fb_par *par )
+						  struct atafb_par *par )
 {
 	int xres=var->xres;
 	int yres=var->yres;
@@ -620,7 +578,7 @@ static int tt_decode_var( struct fb_var_screeninfo *var,
 }
 
 static int tt_encode_var( struct fb_var_screeninfo *var,
-						  struct atari_fb_par *par )
+						  struct atafb_par *par )
 {
 	int linelen, i;
 	var->red.offset=0;
@@ -716,7 +674,7 @@ static int tt_encode_var( struct fb_var_screeninfo *var,
 }
 
 
-static void tt_get_par( struct atari_fb_par *par )
+static void tt_get_par( struct atafb_par *par )
 {
 	unsigned long addr;
 	par->hw.tt.mode=shifter_tt.tt_shiftmode;
@@ -727,7 +685,7 @@ static void tt_get_par( struct atari_fb_par *par )
 	par->screen_base = PTOV(addr);
 }
 
-static void tt_set_par( struct atari_fb_par *par )
+static void tt_set_par( struct atafb_par *par )
 {
 	shifter_tt.tt_shiftmode=par->hw.tt.mode;
 	shifter.syncmode=par->hw.tt.sync;
@@ -739,7 +697,7 @@ static void tt_set_par( struct atari_fb_par *par )
 
 static int tt_getcolreg( unsigned regno, unsigned *red,
 						 unsigned *green, unsigned *blue,
-						 unsigned *transp )
+						 unsigned *transp, struct fb_info *info )
 {
 	if ((shifter_tt.tt_shiftmode & TT_SHIFTER_MODEMASK) == TT_SHIFTER_STHIGH)
 		regno += 254;
@@ -756,7 +714,7 @@ static int tt_getcolreg( unsigned regno, unsigned *red,
 
 static int tt_setcolreg( unsigned regno, unsigned red,
 						 unsigned green, unsigned blue,
-						 unsigned transp )
+						 unsigned transp, struct fb_info *info )
 {
 	if ((shifter_tt.tt_shiftmode & TT_SHIFTER_MODEMASK) == TT_SHIFTER_STHIGH)
 		regno += 254;
@@ -772,7 +730,7 @@ static int tt_setcolreg( unsigned regno, unsigned red,
 						  
 static int tt_detect( void )
 
-{	struct atari_fb_par par;
+{	struct atafb_par par;
 
 	/* Determine the connected monitor: The DMA sound must be
 	 * disabled before reading the MFP GPIP, because the Sound
@@ -789,7 +747,7 @@ static int tt_detect( void )
 	mono_moni = (mfp.par_dt_reg & 0x80) == 0;
 
 	tt_get_par(&par);
-	tt_encode_var(&atari_fb_predefined[0], &par);
+	tt_encode_var(&atafb_predefined[0], &par);
 
 	return 1;
 }
@@ -806,10 +764,6 @@ static int f030_bus_width;	/* Falcon ram bus width (for vid_control) */
 #define F_MON_SC	1
 #define F_MON_VGA	2
 #define F_MON_TV	3
-
-/* Multisync monitor capabilities */
-/* Atari-TOS defaults if no boot option present */
-static long vfmin=58, vfmax=62, hfmin=31000, hfmax=32000;
 
 static struct pixel_clock {
 	unsigned long f;	/* f/[Hz] */
@@ -837,7 +791,7 @@ static inline int hxx_prescale(struct falcon_hw *hw)
 }
 
 static int falcon_encode_fix( struct fb_fix_screeninfo *fix,
-							  struct atari_fb_par *par )
+							  struct atafb_par *par )
 {
 	strcpy(fix->id, "Atari Builtin");
 	fix->smem_start = (char *)real_screen_base;
@@ -867,7 +821,7 @@ static int falcon_encode_fix( struct fb_fix_screeninfo *fix,
 
 
 static int falcon_decode_var( struct fb_var_screeninfo *var,
-							  struct atari_fb_par *par )
+							  struct atafb_par *par )
 {
 	int bpp = var->bits_per_pixel;
 	int xres = var->xres;
@@ -943,7 +897,7 @@ static int falcon_decode_var( struct fb_var_screeninfo *var,
 
 	if (mon_type == F_MON_SM || DontCalcRes) {
 		/* Skip all calculations. VGA/TV/SC1224 only supported. */
-		struct fb_var_screeninfo *myvar = &atari_fb_predefined[0];
+		struct fb_var_screeninfo *myvar = &atafb_predefined[0];
 		
 		if (bpp > myvar->bits_per_pixel ||
 			var->xres > myvar->xres ||
@@ -1069,11 +1023,14 @@ static int falcon_decode_var( struct fb_var_screeninfo *var,
 
 			/* Choose master pixelclock depending on hor. timing */
 			plen = 1 * xstretch;
-			if ((plen * xres + f25.right+f25.hsync+f25.left) * hfmin < f25.f)
+			if ((plen * xres + f25.right+f25.hsync+f25.left) *
+			    fb_info.monspecs.hfmin < f25.f)
 				pclock = &f25;
-			else if ((plen * xres + f32.right+f32.hsync+f32.left) * hfmin < f32.f)
+			else if ((plen * xres + f32.right+f32.hsync+f32.left) * 
+			    fb_info.monspecs.hfmin < f32.f)
 				pclock = &f32;
-			else if ((plen * xres + fext.right+fext.hsync+fext.left) * hfmin < fext.f
+			else if ((plen * xres + fext.right+fext.hsync+fext.left) * 
+			    fb_info.monspecs.hfmin < fext.f
 			         && fext.f)
 				pclock = &fext;
 			else
@@ -1246,14 +1203,14 @@ static int falcon_decode_var( struct fb_var_screeninfo *var,
 
 	/*  check hor. frequency */
 	hfreq = pclock->f / ((par->HHT+2)*prescale*2);
-	if (hfreq > hfmax && mon_type!=F_MON_VGA) {
+	if (hfreq > fb_info.monspecs.hfmax && mon_type!=F_MON_VGA) {
 		/* ++guenther:   ^^^^^^^^^^^^^^^^^^^ can't remember why I did this */
 		/* Too high -> enlarge margin */
 		left_margin += 1;
 		right_margin += 1;
 		goto again;
 	}
-	if (hfreq > hfmax || hfreq < hfmin)
+	if (hfreq > fb_info.monspecs.hfmax || hfreq < fb_info.monspecs.hfmin)
 		return -EINVAL;
 
 	/* Vxx-registers */
@@ -1282,45 +1239,52 @@ static int falcon_decode_var( struct fb_var_screeninfo *var,
 	/* V-frequency check, hope I didn't create any loop here. */
 	/* Interlace and doubleline are mutually exclusive. */
 	vfreq = (hfreq * 2) / (par->VFT + 1);
-	if      (vfreq > vfmax && !doubleline && !interlace) {
+	if      (vfreq > fb_info.monspecs.vfmax && !doubleline && !interlace) {
 		/* Too high -> try again with doubleline */
 		doubleline = 1;
 		goto again;
 	}
-	else if (vfreq < vfmin && !interlace && !doubleline) {
+	else if (vfreq < fb_info.monspecs.vfmin && !interlace && !doubleline) {
 		/* Too low -> try again with interlace */
 		interlace = 1;
 		goto again;
 	}
-	else if (vfreq < vfmin && doubleline) {
+	else if (vfreq < fb_info.monspecs.vfmin && doubleline) {
 		/* Doubleline too low -> clear doubleline and enlarge margins */
 		int lines;
 		doubleline = 0;
-		for (lines=0; (hfreq*2)/(par->VFT+1+4*lines-2*yres)>vfmax; lines++)
+		for (lines=0;
+		     (hfreq*2)/(par->VFT+1+4*lines-2*yres)>fb_info.monspecs.vfmax;
+		     lines++)
 			;
 		upper_margin += lines;
 		lower_margin += lines;
 		goto again;
 	}
-	else if (vfreq > vfmax && doubleline) {
+	else if (vfreq > fb_info.monspecs.vfmax && doubleline) {
 		/* Doubleline too high -> enlarge margins */
 		int lines;
-		for (lines=0; (hfreq*2)/(par->VFT+1+4*lines)>vfmax; lines+=2)
+		for (lines=0;
+		     (hfreq*2)/(par->VFT+1+4*lines)>fb_info.monspecs.vfmax;
+		     lines+=2)
 			;
 		upper_margin += lines;
 		lower_margin += lines;
 		goto again;
 	}
-	else if (vfreq > vfmax && interlace) {
+	else if (vfreq > fb_info.monspecs.vfmax && interlace) {
 		/* Interlace, too high -> enlarge margins */
 		int lines;
-		for (lines=0; (hfreq*2)/(par->VFT+1+4*lines)>vfmax; lines++)
+		for (lines=0;
+		     (hfreq*2)/(par->VFT+1+4*lines)>fb_info.monspecs.vfmax;
+		     lines++)
 			;
 		upper_margin += lines;
 		lower_margin += lines;
 		goto again;
 	}
-	else if (vfreq < vfmin || vfreq > vfmax)
+	else if (vfreq < fb_info.monspecs.vfmin ||
+		 vfreq > fb_info.monspecs.vfmax)
 		return -EINVAL;
 
   set_screen_base:
@@ -1339,7 +1303,7 @@ static int falcon_decode_var( struct fb_var_screeninfo *var,
 }
 
 static int falcon_encode_var( struct fb_var_screeninfo *var,
-							  struct atari_fb_par *par )
+							  struct atafb_par *par )
 {
 /* !!! only for VGA !!! */
 	int linelen, i;
@@ -1425,12 +1389,13 @@ static int falcon_encode_var( struct fb_var_screeninfo *var,
 	var->transp.msb_right=0;
 
 	linelen = var->xres_virtual * var->bits_per_pixel / 8;
-	if (screen_len)
+	if (screen_len) {
 		if (par->yres_virtual)
 			var->yres_virtual = par->yres_virtual;
 		else
 			/* yres_virtual==0 means use maximum */
 			var->yres_virtual = screen_len / linelen;
+	}
 	else {
 		if (hwscroll < 0)
 			var->yres_virtual = 2 * var->yres;
@@ -1506,7 +1471,7 @@ static int f_change_mode = 0;
 static struct falcon_hw f_new_mode;
 static int f_pan_display = 0;
 
-static void falcon_get_par( struct atari_fb_par *par )
+static void falcon_get_par( struct atafb_par *par )
 {
 	unsigned long addr;
 	struct falcon_hw *hw = &par->hw.falcon;
@@ -1543,7 +1508,7 @@ static void falcon_get_par( struct atari_fb_par *par )
 	           ((hw->f_shift & 0x510)==0 && hw->st_shift==0x200);
 }
 
-static void falcon_set_par( struct atari_fb_par *par )
+static void falcon_set_par( struct atafb_par *par )
 {
 	f_change_mode = 0;
 
@@ -1627,7 +1592,7 @@ static void falcon_vbl_switcher( int irq, void *dummy, struct pt_regs *fp )
 
 
 static int falcon_pan_display( struct fb_var_screeninfo *var,
-							   struct atari_fb_par *par )
+							   struct atafb_par *par )
 {
 	int xoffset;
 	int bpp = fb_display[currcon].var.bits_per_pixel;
@@ -1659,7 +1624,7 @@ static int falcon_pan_display( struct fb_var_screeninfo *var,
 
 static int falcon_getcolreg( unsigned regno, unsigned *red,
 				 unsigned *green, unsigned *blue,
-				 unsigned *transp )
+				 unsigned *transp, struct fb_info *info )
 {	unsigned long col;
 	
 	if (regno > 255)
@@ -1679,7 +1644,7 @@ static int falcon_getcolreg( unsigned regno, unsigned *red,
 
 static int falcon_setcolreg( unsigned regno, unsigned red,
 							 unsigned green, unsigned blue,
-							 unsigned transp )
+							 unsigned transp, struct fb_info *info )
 {
 	if (regno > 255)
 		return 1;
@@ -1690,7 +1655,7 @@ static int falcon_setcolreg( unsigned regno, unsigned red,
 			(((green & 0xe) >> 1) | ((green & 1) << 3) << 4) |
 			((blue & 0xe) >> 1) | ((blue & 1) << 3);
 #ifdef CONFIG_FBCON_CFB16
-		packed16_cmap[regno] = (red << 11) | (green << 5) | blue;
+		fbcon_cfb16_cmap[regno] = (red << 11) | (green << 5) | blue;
 #endif
 	}
 	return 0;
@@ -1738,7 +1703,7 @@ static int falcon_blank( int blank_mode )
  
 static int falcon_detect( void )
 {
-	struct atari_fb_par par;
+	struct atafb_par par;
 	unsigned char fhw;
 
 	/* Determine connected monitor and set monitor parameters */
@@ -1748,18 +1713,18 @@ static int falcon_detect( void )
 	f030_bus_width = fhw << 6 & 0x80;
 	switch (mon_type) {
 	case F_MON_SM:
-		vfmin = 70;
-		vfmax = 72;
-		hfmin = 35713;
-		hfmax = 35715;
+		fb_info.monspecs.vfmin = 70;
+		fb_info.monspecs.vfmax = 72;
+		fb_info.monspecs.hfmin = 35713;
+		fb_info.monspecs.hfmax = 35715;
 		break;
 	case F_MON_SC:
 	case F_MON_TV:
 		/* PAL...NTSC */
-		vfmin = 49; /* not 50, since TOS defaults to 49.9x Hz */
-		vfmax = 60;
-		hfmin = 15620;
-		hfmax = 15755;
+		fb_info.monspecs.vfmin = 49; /* not 50, since TOS defaults to 49.9x Hz */
+		fb_info.monspecs.vfmax = 60;
+		fb_info.monspecs.hfmin = 15620;
+		fb_info.monspecs.hfmax = 15755;
 		break;
 	}
 	/* initialize hsync-len */
@@ -1769,7 +1734,7 @@ static int falcon_detect( void )
 		fext.hsync = h_syncs[mon_type] / fext.t;
 
 	falcon_get_par(&par);
-	falcon_encode_var(&atari_fb_predefined[0], &par);
+	falcon_encode_var(&atafb_predefined[0], &par);
 
 	/* Detected mode is always the "autodetect" slot */
 	return 1;
@@ -1782,7 +1747,7 @@ static int falcon_detect( void )
 #ifdef ATAFB_STE
 
 static int stste_encode_fix( struct fb_fix_screeninfo *fix,
-							 struct atari_fb_par *par )
+							 struct atafb_par *par )
 
 {
 	int mode;
@@ -1813,7 +1778,7 @@ static int stste_encode_fix( struct fb_fix_screeninfo *fix,
 
 
 static int stste_decode_var( struct fb_var_screeninfo *var,
-						  struct atari_fb_par *par )
+						  struct atafb_par *par )
 {
 	int xres=var->xres;
 	int yres=var->yres;
@@ -1871,7 +1836,7 @@ static int stste_decode_var( struct fb_var_screeninfo *var,
 }
 
 static int stste_encode_var( struct fb_var_screeninfo *var,
-						  struct atari_fb_par *par )
+						  struct atafb_par *par )
 {
 	int linelen, i;
 	var->red.offset=0;
@@ -1922,12 +1887,13 @@ static int stste_encode_var( struct fb_var_screeninfo *var,
 	
 	if (! use_hwscroll)
 		var->yres_virtual=var->yres;
-	else if (screen_len)
+	else if (screen_len) {
 		if (par->yres_virtual)
 			var->yres_virtual = par->yres_virtual;
 		else
 			/* yres_virtual==0 means use maximum */
 			var->yres_virtual = screen_len / linelen;
+	}
 	else {
 		if (hwscroll < 0)
 			var->yres_virtual = 2 * var->yres;
@@ -1948,7 +1914,7 @@ static int stste_encode_var( struct fb_var_screeninfo *var,
 }
 
 
-static void stste_get_par( struct atari_fb_par *par )
+static void stste_get_par( struct atafb_par *par )
 {
 	unsigned long addr;
 	par->hw.st.mode=shifter_tt.st_shiftmode;
@@ -1960,7 +1926,7 @@ static void stste_get_par( struct atari_fb_par *par )
 	par->screen_base = PTOV(addr);
 }
 
-static void stste_set_par( struct atari_fb_par *par )
+static void stste_set_par( struct atafb_par *par )
 {
 	shifter_tt.st_shiftmode=par->hw.st.mode;
 	shifter.syncmode=par->hw.st.sync;
@@ -1972,7 +1938,7 @@ static void stste_set_par( struct atari_fb_par *par )
 
 static int stste_getcolreg( unsigned regno, unsigned *red,
 							unsigned *green, unsigned *blue,
-							unsigned *transp )
+							unsigned *transp, struct fb_info *info )
 {	unsigned col;
 	
 	if (regno > 15)
@@ -1995,7 +1961,7 @@ static int stste_getcolreg( unsigned regno, unsigned *red,
 
 static int stste_setcolreg( unsigned regno, unsigned red,
 						 unsigned green, unsigned blue,
-						 unsigned transp )
+						 unsigned transp, struct fb_info *info )
 {
 	if (regno > 15)
 		return 1;
@@ -2015,7 +1981,7 @@ static int stste_setcolreg( unsigned regno, unsigned red,
 						  
 static int stste_detect( void )
 
-{	struct atari_fb_par par;
+{	struct atafb_par par;
 
 	/* Determine the connected monitor: The DMA sound must be
 	 * disabled before reading the MFP GPIP, because the Sound
@@ -2028,7 +1994,7 @@ static int stste_detect( void )
 	mono_moni = (mfp.par_dt_reg & 0x80) == 0;
 
 	stste_get_par(&par);
-	stste_encode_var(&atari_fb_predefined[0], &par);
+	stste_encode_var(&atafb_predefined[0], &par);
 
 	if (!ATARIHW_PRESENT(EXTD_SHIFTER))
 		use_hwscroll = 0;
@@ -2067,12 +2033,12 @@ static void stste_set_screen_base(unsigned long s_base)
 #define SYNC_DELAY  (mono_moni ? 1500 : 2000)
 
 /* SWITCH_ACIA may be used for Falcon (ScreenBlaster III internal!) */
-static void st_ovsc_switch(int switchmode)
+static void st_ovsc_switch(void)
 {
     unsigned long flags;
     register unsigned char old, new;
 
-    if ((switchmode & (SWITCH_ACIA | SWITCH_SND6 | SWITCH_SND7)) == 0)
+    if (!(atari_switches & ATARI_SWITCH_OVSC_MASK))
 	return;
     save_flags(flags);
     cli();
@@ -2093,11 +2059,15 @@ static void st_ovsc_switch(int switchmode)
     mfp.tim_ct_b = 0x10;
     udelay(SYNC_DELAY);
 
-    if (switchmode == SWITCH_ACIA)
-	acia.key_ctrl = (ACIA_DIV64|ACIA_D8N1S|ACIA_RHTID|ACIA_RIE);
-    else {
+    if (atari_switches & ATARI_SWITCH_OVSC_IKBD)
+	acia.key_ctrl = ACIA_DIV64 | ACIA_D8N1S | ACIA_RHTID | ACIA_RIE;
+    if (atari_switches & ATARI_SWITCH_OVSC_MIDI)
+	acia.mid_ctrl = ACIA_DIV16 | ACIA_D8N1S | ACIA_RHTID;
+    if (atari_switches & (ATARI_SWITCH_OVSC_SND6|ATARI_SWITCH_OVSC_SND7)) {
 	sound_ym.rd_data_reg_sel = 14;
-	sound_ym.wd_data = sound_ym.rd_data_reg_sel | switchmode;
+	sound_ym.wd_data = sound_ym.rd_data_reg_sel |
+			   ((atari_switches&ATARI_SWITCH_OVSC_SND6) ? 0x40:0) |
+			   ((atari_switches&ATARI_SWITCH_OVSC_SND7) ? 0x80:0);
     }
     restore_flags(flags);
 }
@@ -2107,7 +2077,7 @@ static void st_ovsc_switch(int switchmode)
 #ifdef ATAFB_EXT
 
 static int ext_encode_fix( struct fb_fix_screeninfo *fix,
-						   struct atari_fb_par *par )
+						   struct atafb_par *par )
 
 {
 	strcpy(fix->id,"Unknown Extern");
@@ -2157,9 +2127,9 @@ static int ext_encode_fix( struct fb_fix_screeninfo *fix,
 
 
 static int ext_decode_var( struct fb_var_screeninfo *var,
-						   struct atari_fb_par *par )
+						   struct atafb_par *par )
 {
-	struct fb_var_screeninfo *myvar = &atari_fb_predefined[0];
+	struct fb_var_screeninfo *myvar = &atafb_predefined[0];
 	
 	if (var->bits_per_pixel > myvar->bits_per_pixel ||
 		var->xres > myvar->xres ||
@@ -2173,7 +2143,7 @@ static int ext_decode_var( struct fb_var_screeninfo *var,
 
 
 static int ext_encode_var( struct fb_var_screeninfo *var,
-						   struct atari_fb_par *par )
+						   struct atafb_par *par )
 {
 	int i;
 
@@ -2217,12 +2187,12 @@ static int ext_encode_var( struct fb_var_screeninfo *var,
 }
 
 
-static void ext_get_par( struct atari_fb_par *par )
+static void ext_get_par( struct atafb_par *par )
 {
 	par->screen_base = external_addr;
 }
 
-static void ext_set_par( struct atari_fb_par *par )
+static void ext_set_par( struct atafb_par *par )
 {
 }
 
@@ -2238,10 +2208,8 @@ static void ext_set_par( struct atari_fb_par *par )
 
 static int ext_getcolreg( unsigned regno, unsigned *red,
 						  unsigned *green, unsigned *blue,
-						  unsigned *transp )
-
-{	unsigned char colmask = (1 << external_bitspercol) - 1;
-		
+						  unsigned *transp, struct fb_info *info )
+{
 	if (! external_vgaiobase)
 		return 1;
 
@@ -2254,7 +2222,7 @@ static int ext_getcolreg( unsigned regno, unsigned *red,
 	
 static int ext_setcolreg( unsigned regno, unsigned red,
 						  unsigned green, unsigned blue,
-						  unsigned transp )
+						  unsigned transp, struct fb_info *info )
 
 {	unsigned char colmask = (1 << external_bitspercol) - 1;
 
@@ -2292,8 +2260,8 @@ static int ext_setcolreg( unsigned regno, unsigned red,
 static int ext_detect( void )
 
 {
-	struct fb_var_screeninfo *myvar = &atari_fb_predefined[0];
-	struct atari_fb_par dummy_par;
+	struct fb_var_screeninfo *myvar = &atafb_predefined[0];
+	struct atafb_par dummy_par;
 
 	myvar->xres = external_xres;
 	myvar->xres_virtual = external_xres_virtual;
@@ -2319,7 +2287,7 @@ static void set_screen_base(unsigned long s_base)
 
 
 static int pan_display( struct fb_var_screeninfo *var,
-                        struct atari_fb_par *par )
+                        struct atafb_par *par )
 {
 	if (!fbhw->set_screen_base ||
 		(!ATARIHW_PRESENT(EXTD_SHIFTER) && var->xoffset))
@@ -2369,7 +2337,7 @@ static struct fb_hwswitch ext_switch = {
 
 
 
-static void atari_fb_get_par( struct atari_fb_par *par )
+static void atafb_get_par( struct atafb_par *par )
 {
 	if (current_par_valid) {
 		*par=current_par;
@@ -2379,7 +2347,7 @@ static void atari_fb_get_par( struct atari_fb_par *par )
 }
 
 
-static void atari_fb_set_par( struct atari_fb_par *par )
+static void atafb_set_par( struct atafb_par *par )
 {
 	fbhw->set_par(par);
 	current_par=*par;
@@ -2396,7 +2364,7 @@ static void atari_fb_set_par( struct atari_fb_par *par )
 /* used for hardware scrolling */
 
 static int
-fb_update_var(int con)
+fb_update_var(int con, struct fb_info *info)
 {
 	int off=fb_display[con].var.yoffset*fb_display[con].var.xres_virtual*
 			fb_display[con].var.bits_per_pixel>>3;
@@ -2412,12 +2380,12 @@ static int
 do_fb_set_var(struct fb_var_screeninfo *var, int isactive)
 {
 	int err,activate;
-	struct atari_fb_par par;
+	struct atafb_par par;
 	if ((err=fbhw->decode_var(var, &par)))
 		return err;
 	activate=var->activate;
 	if (((var->activate & FB_ACTIVATE_MASK) == FB_ACTIVATE_NOW) && isactive)
-		atari_fb_set_par(&par);
+		atafb_set_par(&par);
 	fbhw->encode_var(var, &par);
 	var->activate=activate;
 	return 0;
@@ -2426,17 +2394,17 @@ do_fb_set_var(struct fb_var_screeninfo *var, int isactive)
 /* Functions for handling colormap */
 
 static void
-do_install_cmap(int con)
+do_install_cmap(int con, struct fb_info *info)
 {
 	if (con != currcon)
 		return;
 	if (fb_display[con].cmap.len)
 		fb_set_cmap(&fb_display[con].cmap, &(fb_display[con].var), 1,
-			    fbhw->setcolreg);
+			    fbhw->setcolreg, info);
 	else
-		fb_set_cmap(fb_default_cmap(fb_display[con].var.bits_per_pixel),
+		fb_set_cmap(fb_default_cmap(1<<fb_display[con].var.bits_per_pixel),
 					    &(fb_display[con].var), 1,
-					    fbhw->setcolreg);		
+					    fbhw->setcolreg, info);		
 }
 
 
@@ -2444,7 +2412,7 @@ do_install_cmap(int con)
 	 * Open/Release the frame buffer device
 	 */
 
-static int atari_fb_open(int fbidx)
+static int atafb_open(struct fb_info *info)
 {
 	/*
 	 * Nothing, only a usage count for the moment
@@ -2454,7 +2422,7 @@ static int atari_fb_open(int fbidx)
 	return(0);
 }
 
-static int atari_fb_release(int fbidx)
+static int atafb_release(struct fb_info *info)
 {
 	MOD_DEC_USE_COUNT;
 	return(0);
@@ -2462,11 +2430,11 @@ static int atari_fb_release(int fbidx)
 
 
 static int
-atari_fb_get_fix(struct fb_fix_screeninfo *fix, int con)
+atafb_get_fix(struct fb_fix_screeninfo *fix, int con, struct fb_info *info)
 {
-	struct atari_fb_par par;
+	struct atafb_par par;
 	if (con == -1)
-		atari_fb_get_par(&par);
+		atafb_get_par(&par);
 	else
 		fbhw->decode_var(&fb_display[con].var,&par);
 	memset(fix, 0, sizeof(struct fb_fix_screeninfo));
@@ -2474,11 +2442,11 @@ atari_fb_get_fix(struct fb_fix_screeninfo *fix, int con)
 }
 	
 static int
-atari_fb_get_var(struct fb_var_screeninfo *var, int con)
+atafb_get_var(struct fb_var_screeninfo *var, int con, struct fb_info *info)
 {
-	struct atari_fb_par par;
+	struct atafb_par par;
 	if (con == -1) {
-		atari_fb_get_par(&par);
+		atafb_get_par(&par);
 		fbhw->encode_var(var, &par);
 	}
 	else
@@ -2487,9 +2455,10 @@ atari_fb_get_var(struct fb_var_screeninfo *var, int con)
 }
 
 static void
-atari_fb_set_disp(int con)
+atafb_set_disp(int con, struct fb_info *info)
 {
 	struct fb_fix_screeninfo fix;
+	struct fb_var_screeninfo var;
 	struct display *display;
 
 	if (con >= 0)
@@ -2497,7 +2466,8 @@ atari_fb_set_disp(int con)
 	else
 		display = &disp;	/* used during initialization */
 
-	atari_fb_get_fix(&fix, con);
+	atafb_get_fix(&fix, con, info);
+	atafb_get_var(&var, con, info);
 	if (con == -1)
 		con=0;
 	display->screen_base = (u_char *)fix.smem_start;
@@ -2514,10 +2484,50 @@ atari_fb_set_disp(int con)
 		display->can_soft_blank = 1;
 	display->inverse =
 	    (fix.visual == FB_VISUAL_MONO01 ? !inverse : inverse);
+	switch (fix.type) {
+	    case FB_TYPE_INTERLEAVED_PLANES:
+		switch (var.bits_per_pixel) {
+#ifdef CONFIG_FBCON_IPLAN2P2
+		    case 2:
+			display->dispsw = &fbcon_iplan2p2;
+			break;
+#endif
+#ifdef CONFIG_FBCON_IPLAN2P4
+		    case 4:
+			display->dispsw = &fbcon_iplan2p4;
+			break;
+#endif
+#ifdef CONFIG_FBCON_IPLAN2P8
+		    case 8:
+			display->dispsw = &fbcon_iplan2p8;
+			break;
+#endif
+		}
+		break;
+	    case FB_TYPE_PACKED_PIXELS:
+		switch (var.bits_per_pixel) {
+#ifdef CONFIG_FBCON_MFB
+		    case 1:
+			display->dispsw = &fbcon_mfb;
+			break;
+#endif
+#ifdef CONFIG_FBCON_CFB8
+		    case 8:
+			display->dispsw = &fbcon_cfb8;
+			break;
+#endif
+#ifdef CONFIG_FBCON_CFB16
+		    case 16:
+			display->dispsw = &fbcon_cfb16;
+			break;
+#endif
+		}
+		break;
+	}
 }
 
 static int
-atari_fb_set_var(struct fb_var_screeninfo *var, int con)
+atafb_set_var(struct fb_var_screeninfo *var, int con, struct fb_info *info)
 {
 	int err,oldxres,oldyres,oldbpp,oldxres_virtual,
 	    oldyres_virtual,oldyoffset;
@@ -2536,10 +2546,10 @@ atari_fb_set_var(struct fb_var_screeninfo *var, int con)
 		    || oldyres_virtual != var->yres_virtual
 		    || oldbpp != var->bits_per_pixel
 		    || oldyoffset != var->yoffset) {
-			atari_fb_set_disp(con);
+			atafb_set_disp(con, info);
 			(*fb_info.changevar)(con);
 			fb_alloc_cmap(&fb_display[con].cmap, 0, 0);
-			do_install_cmap(con);
+			do_install_cmap(con, info);
 		}
 	}
 	var->activate=0;
@@ -2549,22 +2559,22 @@ atari_fb_set_var(struct fb_var_screeninfo *var, int con)
 
 
 static int
-atari_fb_get_cmap(struct fb_cmap *cmap, int kspc, int con)
+atafb_get_cmap(struct fb_cmap *cmap, int kspc, int con, struct fb_info *info)
 {
 	if (con == currcon) /* current console ? */
 		return fb_get_cmap(cmap, &(fb_display[con].var), kspc,
-				   fbhw->getcolreg);
+				   fbhw->getcolreg, info);
 	else
 		if (fb_display[con].cmap.len) /* non default colormap ? */
 			fb_copy_cmap(&fb_display[con].cmap, cmap, kspc ? 0 : 2);
 		else
-			fb_copy_cmap(fb_default_cmap(fb_display[con].var.bits_per_pixel),
+			fb_copy_cmap(fb_default_cmap(1<<fb_display[con].var.bits_per_pixel),
 				     cmap, kspc ? 0 : 2);
 	return 0;
 }
 
 static int
-atari_fb_set_cmap(struct fb_cmap *cmap, int kspc, int con)
+atafb_set_cmap(struct fb_cmap *cmap, int kspc, int con, struct fb_info *info)
 {
 	int err;
 	if (! fb_display[con].cmap.len) { /* no colormap allocated ? */
@@ -2575,14 +2585,14 @@ atari_fb_set_cmap(struct fb_cmap *cmap, int kspc, int con)
 	}
 	if (con == currcon) /* current console ? */
 		return fb_set_cmap(cmap, &(fb_display[con].var), kspc,
-				   fbhw->setcolreg);
+				   fbhw->setcolreg, info);
 	else
 		fb_copy_cmap(cmap, &fb_display[con].cmap, kspc ? 0 : 1);
 	return 0;
 }
 
 static int
-atari_fb_pan_display(struct fb_var_screeninfo *var, int con)
+atafb_pan_display(struct fb_var_screeninfo *var, int con, struct fb_info *info)
 {
 	int xoffset = var->xoffset;
 	int yoffset = var->yoffset;
@@ -2606,33 +2616,33 @@ atari_fb_pan_display(struct fb_var_screeninfo *var, int con)
 }
 
 static int
-atari_fb_ioctl(struct inode *inode, struct file *file, unsigned int cmd,
-	       unsigned long arg, int con)
+atafb_ioctl(struct inode *inode, struct file *file, unsigned int cmd,
+	       unsigned long arg, int con, struct fb_info *info)
 {
 	switch (cmd) {
 #ifdef FBCMD_GET_CURRENTPAR
 	case FBCMD_GET_CURRENTPAR:
 		if (copy_to_user((void *)arg, (void *)&current_par,
-				 sizeof(struct atari_fb_par)))
+				 sizeof(struct atafb_par)))
 			return -EFAULT;
 		return 0;
 #endif
 #ifdef FBCMD_SET_CURRENTPAR
 	case FBCMD_SET_CURRENTPAR:
 		if (copy_from_user((void *)&current_par, (void *)arg,
-				   sizeof(struct atari_fb_par)))
+				   sizeof(struct atafb_par)))
 			return -EFAULT;
-		atari_fb_set_par(&current_par);
+		atafb_set_par(&current_par);
 		return 0;
 #endif
 	}
 	return -EINVAL;
 }
 
-static struct fb_ops atari_fb_ops = {
-	atari_fb_open, atari_fb_release, atari_fb_get_fix, atari_fb_get_var,
-	atari_fb_set_var, atari_fb_get_cmap, atari_fb_set_cmap,
-	atari_fb_pan_display, atari_fb_ioctl	
+static struct fb_ops atafb_ops = {
+	atafb_open, atafb_release, atafb_get_fix, atafb_get_var,
+	atafb_set_var, atafb_get_cmap, atafb_set_cmap,
+	atafb_pan_display, NULL, atafb_ioctl	
 };
 
 static void
@@ -2645,14 +2655,14 @@ check_default_par( int detected_mode )
 
 	/* First try the user supplied mode */
 	if (default_par) {
-		var=atari_fb_predefined[default_par-1];
+		var=atafb_predefined[default_par-1];
 		var.activate = FB_ACTIVATE_TEST;
 		if (do_fb_set_var(&var,1))
 			default_par=0;		/* failed */
 	}
 	/* Next is the autodetected one */
 	if (! default_par) {
-		var=atari_fb_predefined[detected_mode-1]; /* autodetect */
+		var=atafb_predefined[detected_mode-1]; /* autodetect */
 		var.activate = FB_ACTIVATE_TEST;
 		if (!do_fb_set_var(&var,1))
 			default_par=detected_mode;
@@ -2665,7 +2675,7 @@ check_default_par( int detected_mode )
 			default_par=get_video_mode(default_name);
 			if (! default_par)
 				panic("can't set default video mode\n");
-			var=atari_fb_predefined[default_par-1];
+			var=atafb_predefined[default_par-1];
 			var.activate = FB_ACTIVATE_TEST;
 			if (! do_fb_set_var(&var,1))
 				break;	/* ok */
@@ -2677,16 +2687,17 @@ check_default_par( int detected_mode )
 }
 
 static int
-atafb_switch(int con)
+atafb_switch(int con, struct fb_info *info)
 {
 	/* Do we have to save the colormap ? */
 	if (fb_display[currcon].cmap.len)
 		fb_get_cmap(&fb_display[currcon].cmap,
-			    &(fb_display[currcon].var), 1, fbhw->getcolreg);
+			    &(fb_display[currcon].var), 1, fbhw->getcolreg,
+			    info);
 	do_fb_set_var(&fb_display[con].var,1);
 	currcon=con;
 	/* Install new colormap */
-	do_install_cmap(con);
+	do_install_cmap(con, info);
 	return 0;
 }
 
@@ -2698,7 +2709,7 @@ atafb_switch(int con)
  * 4 = off
  */
 static void
-atafb_blank(int blank)
+atafb_blank(int blank, struct fb_info *info)
 {
 	unsigned short black[16];
 	struct fb_cmap cmap;
@@ -2713,19 +2724,13 @@ atafb_blank(int blank)
 		cmap.start=0;
 		cmap.len=16;
 		fb_set_cmap(&cmap, &(fb_display[currcon].var), 1,
-			    fbhw->setcolreg);
+			    fbhw->setcolreg, info);
 	}
 	else
-		do_install_cmap(currcon);
+		do_install_cmap(currcon, info);
 }
 
-static int
-atafb_setcmap(struct fb_cmap *cmap, int con)
-{
-	return(atari_fb_set_cmap(cmap, 1, con));
-}
-
-__initfunc(unsigned long atari_fb_init(unsigned long mem_start))
+__initfunc(unsigned long atafb_init(unsigned long mem_start))
 {
 	int err;
 	int pad;
@@ -2770,6 +2775,16 @@ __initfunc(unsigned long atari_fb_init(unsigned long mem_start))
 		panic("Cannot initialize video hardware\n");
 #endif
 	} while (0);
+
+	/* Multisync monitor capabilities */
+	/* Atari-TOS defaults if no boot option present */
+	if (fb_info.monspecs.hfmin == 0) {
+	    fb_info.monspecs.hfmin = 31000;
+	    fb_info.monspecs.hfmax = 32000;
+	    fb_info.monspecs.vfmin = 58;
+	    fb_info.monspecs.vfmax = 62;
+	}
+
 	detected_mode = fbhw->detect();
 	check_default_par(detected_mode);
 #ifdef ATAFB_EXT
@@ -2778,13 +2793,14 @@ __initfunc(unsigned long atari_fb_init(unsigned long mem_start))
 		mem_req = default_mem_req + ovsc_offset +
 			ovsc_addlen;
 		mem_req = ((mem_req + PAGE_SIZE - 1) & PAGE_MASK) + PAGE_SIZE;
-		screen_base = (unsigned long) atari_stram_alloc(mem_req, &mem_start);
+		screen_base = (unsigned long)atari_stram_alloc(mem_req, &mem_start,
+													   "atafb");
 		memset((char *) screen_base, 0, mem_req);
 		pad = ((screen_base + PAGE_SIZE-1) & PAGE_MASK) - screen_base;
 		screen_base+=pad;
 		real_screen_base=screen_base+ovsc_offset;
 		screen_len = (mem_req - pad - ovsc_offset) & PAGE_MASK;
-		st_ovsc_switch(ovsc_switchmode);
+		st_ovsc_switch();
 		if (CPU_IS_040_OR_060) {
 			/* On a '040+, the cache mode of video RAM must be set to
 			 * write-through also for internal video hardware! */
@@ -2815,32 +2831,29 @@ __initfunc(unsigned long atari_fb_init(unsigned long mem_start))
 	strcpy(fb_info.modename, "Atari Builtin ");
 	fb_info.changevar = NULL;
 	fb_info.node = -1;
-	fb_info.fbops = &atari_fb_ops;
-	fb_info.fbvar_num = num_atari_fb_predefined;
-	fb_info.fbvar = atari_fb_predefined;
+	fb_info.fbops = &atafb_ops;
 	fb_info.disp = &disp;
 	fb_info.switch_con = &atafb_switch;
 	fb_info.updatevar = &fb_update_var;
 	fb_info.blank = &atafb_blank;
-	fb_info.setcmap = &atafb_setcmap;
-	do_fb_set_var(&atari_fb_predefined[default_par-1], 1);
+	do_fb_set_var(&atafb_predefined[default_par-1], 1);
 	strcat(fb_info.modename, fb_var_names[default_par-1][0]);
 
 	err=register_framebuffer(&fb_info);
 	if (err < 0)
 		return(err);
 
-	atari_fb_get_var(&disp.var, -1);
-	atari_fb_set_disp(-1);
+	atafb_get_var(&disp.var, -1, &fb_info);
+	atafb_set_disp(-1, &fb_info);
 	printk("Determined %dx%d, depth %d\n",
 	       disp.var.xres, disp.var.yres, disp.var.bits_per_pixel);
 	if ((disp.var.xres != disp.var.xres_virtual) ||
 	    (disp.var.yres != disp.var.yres_virtual))
 	   printk("   virtual %dx%d\n",
 			  disp.var.xres_virtual, disp.var.yres_virtual);
-	do_install_cmap(0);
-	printk("%s frame buffer device, using %dK of video memory\n",
-	       fb_info.modename, screen_len>>10);
+	do_install_cmap(0, &fb_info);
+	printk("fb%d: %s frame buffer device, using %dK of video memory\n",
+	       GET_FB_IDX(fb_info.node), fb_info.modename, screen_len>>10);
 
 	/* TODO: This driver cannot be unloaded yet */
 	MOD_INC_USE_COUNT;
@@ -2870,7 +2883,7 @@ static char * strtoke(char * s,const char * ct)
   return sbegin;
 }
 
-__initfunc(void atari_video_setup( char *options, int *ints ))
+__initfunc(void atafb_setup( char *options, int *ints ))
 {
     char *this_opt;
     int temp;
@@ -2902,15 +2915,6 @@ __initfunc(void atari_video_setup( char *options, int *ints ))
 		if (hwscroll > 200)
 			hwscroll = 200;
 	}
-	else if (! strncmp(this_opt, "sw_",3)) {
-		if (! strcmp(this_opt+3, "acia"))
-			ovsc_switchmode = SWITCH_ACIA;
-		else if (! strcmp(this_opt+3, "snd6"))
-			ovsc_switchmode = SWITCH_SND6;
-		else if (! strcmp(this_opt+3, "snd7"))
-			ovsc_switchmode = SWITCH_SND7;
-		else ovsc_switchmode = SWITCH_NONE;
-	}
 #ifdef ATAFB_EXT
 	else if (!strcmp(this_opt,"mv300")) {
 		external_bitspercol = 8;
@@ -2939,12 +2943,8 @@ __initfunc(void atari_video_setup( char *options, int *ints ))
 
     if (*int_str) {
 	/* Format to config extended internal video hardware like OverScan:
-	"<switch-type>,internal:<xres>;<yres>;<xres_max>;<yres_max>;<offset>"
+	"internal:<xres>;<yres>;<xres_max>;<yres_max>;<offset>"
 	Explanation:
-	<switch-type> type to switch on higher resolution
-			sw_acia : via keyboard ACIA
-			sw_snd6 : via bit 6 of the soundchip port
-			sw_snd7 : via bit 7 of the soundchip port
 	<xres>: x-resolution 
 	<yres>: y-resolution
 	The following are only needed if you have an overscan which
@@ -2974,9 +2974,9 @@ __initfunc(void atari_video_setup( char *options, int *ints ))
 
 	if (ovsc_offset || (sttt_yres_virtual != st_yres))
 		use_hwscroll=0;
+      int_invalid:
+	;
     }
-    else 
-      int_invalid:	ovsc_switchmode = SWITCH_NONE;
 
 #ifdef ATAFB_EXT
     if (*ext_str) {
@@ -3103,10 +3103,10 @@ __initfunc(void atari_video_setup( char *options, int *ints ))
 	hmax = 1000 * simple_strtoul(p, NULL, 10);
 	if (hmax <= 0 || hmax <= hmin) goto cap_invalid;
 
-	vfmin = vmin;
-	vfmax = vmax;
-	hfmin = hmin;
-	hfmax = hmax;
+	fb_info.monspecs.vfmin = vmin;
+	fb_info.monspecs.vfmax = vmax;
+	fb_info.monspecs.hfmin = hmin;
+	fb_info.monspecs.hfmax = hmax;
       cap_invalid:
 	;
     }
@@ -3126,9 +3126,9 @@ __initfunc(void atari_video_setup( char *options, int *ints ))
 		depth = simple_strtoul(p, NULL, 10);
 		if ((temp=get_video_mode("user0"))) {
 			default_par=temp;
-			atari_fb_predefined[default_par-1].xres = xres;
-			atari_fb_predefined[default_par-1].yres = yres;
-			atari_fb_predefined[default_par-1].bits_per_pixel = depth;
+			atafb_predefined[default_par-1].xres = xres;
+			atafb_predefined[default_par-1].yres = yres;
+			atafb_predefined[default_par-1].bits_per_pixel = depth;
 		}
 
 	  user_invalid:
@@ -3139,7 +3139,7 @@ __initfunc(void atari_video_setup( char *options, int *ints ))
 #ifdef MODULE
 int init_module(void)
 {
-	return(atari_fb_init(NULL));
+	return(atafb_init(NULL));
 }
 
 void cleanup_module(void)
@@ -3147,6 +3147,7 @@ void cleanup_module(void)
 	/* Not reached because the usecount will never
 	   be decremented to zero */
 	unregister_framebuffer(&fb_info);
-	/* TODO: clean up ... */
+	/* atari_stram_free( screen_base ); */
+	/* TODO: further clean up ... */
 }
 #endif /* MODULE */

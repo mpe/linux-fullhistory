@@ -205,7 +205,7 @@ BUILD_IRQ(12) BUILD_IRQ(13) BUILD_IRQ(14) BUILD_IRQ(15)
 #ifdef __SMP__
 
 /*
- * The IO-APIC (persent only in SMP boards) has 8 more hardware
+ * The IO-APIC (present only in SMP boards) has 8 more hardware
  * interrupt pins, for all of them we define an IRQ vector:
  *
  * raw PCI interrupts 0-3, basically these are the ones used
@@ -1003,7 +1003,7 @@ unsigned long probe_irq_on (void)
 	for (i=0; i<NR_IRQS; i++)
 		for (j=0; j<NR_CPUS; j++)
 			if (kstat.irqs[j][i] != probe_irqs[j][i])
-				irqs &= ~(i<<1);
+				irqs &= ~(1UL << i);
 
 	return irqs;
 }
@@ -1018,7 +1018,7 @@ int probe_irq_off (unsigned long irqs)
 			sum += kstat.irqs[j][i];
 			sum -= probe_irqs[j][i];
 		}
-		if (sum && (irqs & (i<<1))) {
+		if (sum && (irqs & (1UL << i))) {
 			if (irq_found != -1) {
 				irq_found = -irq_found;
 				goto out;

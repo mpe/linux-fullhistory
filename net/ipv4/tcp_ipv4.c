@@ -5,7 +5,7 @@
  *
  *		Implementation of the Transmission Control Protocol(TCP).
  *
- * Version:	$Id: tcp_ipv4.c,v 1.109 1998/03/15 07:24:15 davem Exp $
+ * Version:	$Id: tcp_ipv4.c,v 1.119 1998/03/22 19:14:47 davem Exp $
  *
  *		IPv4 specific functions
  *
@@ -62,16 +62,12 @@
 
 extern int sysctl_tcp_timestamps;
 extern int sysctl_tcp_window_scaling;
+extern int sysctl_tcp_sack;
 extern int sysctl_tcp_syncookies;
 extern int sysctl_ip_dynaddr;
 
 /* Check TCP sequence numbers in ICMP packets. */
-#define ICMP_PARANOIA 1 
-#ifndef ICMP_PARANOIA
-#define ICMP_MIN_LENGTH 4
-#else
 #define ICMP_MIN_LENGTH 8
-#endif
 
 static void tcp_v4_send_reset(struct sk_buff *skb);
 
@@ -120,7 +116,7 @@ static __inline__ int tcp_sk_hashfn(struct sock *sk)
 	__u32 laddr = sk->rcv_saddr;
 	__u16 lport = sk->num;
 	__u32 faddr = sk->daddr;
-	__u16 fport = sk->dummy_th.dest;
+	__u16 fport = sk->dport;
 
 	return tcp_hashfn(laddr, lport, faddr, fport);
 }
@@ -365,7 +361,7 @@ static inline struct sock *__tcp_v4_lookup(struct tcphdr *th,
 	sk = TCP_RHASH(sport);
 	if(sk						&&
 	   sk->daddr		== saddr		&& /* remote address */
-	   sk->dummy_th.dest	== sport		&& /* remote port    */
+	   sk->dport		== sport		&& /* remote port    */
 	   sk->num		== hnum			&& /* local port     */
 	   sk->rcv_saddr	== daddr		&& /* local address  */
 	   (!sk->bound_dev_if || sk->bound_dev_if == dif))
@@ -377,7 +373,7 @@ static inline struct sock *__tcp_v4_lookup(struct tcphdr *th,
 	hash = tcp_hashfn(daddr, hnum, saddr, sport);
 	for(sk = tcp_established_hash[hash]; sk; sk = sk->next) {
 		if(sk->daddr		== saddr		&& /* remote address */
-		   sk->dummy_th.dest	== sport		&& /* remote port    */
+		   sk->dport		== sport		&& /* remote port    */
 		   sk->num		== hnum			&& /* local port     */
 		   sk->rcv_saddr	== daddr		&& /* local address  */
 		   (!sk->bound_dev_if || sk->bound_dev_if == dif)) {
@@ -389,7 +385,7 @@ static inline struct sock *__tcp_v4_lookup(struct tcphdr *th,
 	/* Must check for a TIME_WAIT'er before going to listener hash. */
 	for(sk = tcp_established_hash[hash+(TCP_HTABLE_SIZE/2)]; sk; sk = sk->next) {
 		if(sk->daddr		== saddr		&& /* remote address */
-		   sk->dummy_th.dest	== sport		&& /* remote port    */
+		   sk->dport		== sport		&& /* remote port    */
 		   sk->num		== hnum			&& /* local port     */
 		   sk->rcv_saddr	== daddr		&& /* local address  */
 		   (!sk->bound_dev_if || sk->bound_dev_if == dif))
@@ -456,8 +452,8 @@ pass2:
 				continue;
 			score++;
 		}
-		if(s->dummy_th.dest) {
-			if(s->dummy_th.dest != rnum)
+		if(s->dport) {
+			if(s->dport != rnum)
 				continue;
 			score++;
 		}
@@ -496,12 +492,7 @@ static inline __u32 tcp_v4_init_sequence(struct sock *sk, struct sk_buff *skb)
 					  skb->h.th->source);
 }
 
-/*
- *	From tcp.c
- */
-
-/*
- * Check that a TCP address is unique, don't allow multiple
+/* Check that a TCP address is unique, don't allow multiple
  * connects to/from the same address.  Actually we can optimize
  * quite a bit, since the socket about to connect is still
  * in TCP_CLOSE, a tcp_bind_bucket for the local port he will
@@ -509,8 +500,7 @@ static inline __u32 tcp_v4_init_sequence(struct sock *sk, struct sk_buff *skb)
  * The good_socknum and verify_bind scheme we use makes this
  * work.
  */
-
-static int tcp_unique_address(struct sock *sk)
+static int tcp_v4_unique_address(struct sock *sk)
 {
 	struct tcp_bind_bucket *tb;
 	unsigned short snum = sk->num;
@@ -524,7 +514,7 @@ static int tcp_unique_address(struct sock *sk)
 			/* Almost certainly the re-use port case, search the real hashes
 			 * so it actually scales.
 			 */
-			sk = __tcp_v4_lookup(NULL, sk->daddr, sk->dummy_th.dest,
+			sk = __tcp_v4_lookup(NULL, sk->daddr, sk->dport,
 					     sk->rcv_saddr, snum, sk->bound_dev_if);
 			if((sk != NULL) && (sk->state != TCP_LISTEN))
 				retval = 0;
@@ -535,19 +525,15 @@ static int tcp_unique_address(struct sock *sk)
 	return retval;
 }
 
-
-/*
- *	This will initiate an outgoing connection. 
- */
- 
+/* This will initiate an outgoing connection. */
 int tcp_v4_connect(struct sock *sk, struct sockaddr *uaddr, int addr_len)
 {
-	struct sk_buff *buff;
-	int tmp;
-	struct tcphdr *th;
-	struct rtable *rt;
 	struct tcp_opt *tp = &(sk->tp_pinfo.af_tcp);
 	struct sockaddr_in *usin = (struct sockaddr_in *) uaddr;
+	struct sk_buff *buff;
+	struct rtable *rt;
+	int tmp;
+	int mss;
 
 	if (sk->state != TCP_CLOSE) 
 		return(-EISCONN);
@@ -567,8 +553,6 @@ int tcp_v4_connect(struct sock *sk, struct sockaddr *uaddr, int addr_len)
 			printk(KERN_DEBUG "%s forgot to set AF_INET in " __FUNCTION__ "\n", current->comm);
 	}
 
-	dst_release(xchg(&sk->dst_cache, NULL));
-
 	tmp = ip_route_connect(&rt, usin->sin_addr.s_addr, sk->saddr,
 			       RT_TOS(sk->ip_tos)|sk->localroute, sk->bound_dev_if);
 	if (tmp < 0)
@@ -579,143 +563,52 @@ int tcp_v4_connect(struct sock *sk, struct sockaddr *uaddr, int addr_len)
 		return -ENETUNREACH;
 	}
 
-	if (!tcp_unique_address(sk)) {
-		ip_rt_put(rt);
-		return -EADDRNOTAVAIL;
-	}
+	dst_release(xchg(&sk->dst_cache, rt));
 
-	lock_sock(sk);
-
-	/* Do this early, so there is less state to unwind on failure. */
-	buff = sock_wmalloc(sk, (MAX_SYN_SIZE + sizeof(struct sk_buff)),
+	buff = sock_wmalloc(sk, (MAX_HEADER + sk->prot->max_header),
 			    0, GFP_KERNEL);
-	if (buff == NULL) {
-		release_sock(sk);
-		ip_rt_put(rt);
-		return(-ENOBUFS);
-	}
 
-	sk->dst_cache = &rt->u.dst;
+	if (buff == NULL)
+		return -ENOBUFS;
+
+	/* Socket has no identity, so lock_sock() is useless.  Also
+	 * since state==TCP_CLOSE (checked above) the socket cannot
+	 * possibly be in the hashes.  TCP hash locking is only
+	 * needed while checking quickly for a unique address.
+	 * However, the socket does need to be (and is) locked
+	 * in tcp_connect().
+	 * Perhaps this addresses all of ANK's concerns. 8-)  -DaveM
+	 */
+	sk->dport = usin->sin_port;
 	sk->daddr = rt->rt_dst;
 	if (!sk->saddr)
 		sk->saddr = rt->rt_src;
 	sk->rcv_saddr = sk->saddr;
 
-	if (sk->priority == 0)
-		sk->priority = rt->u.dst.priority;
-
-	sk->dummy_th.dest = usin->sin_port;
-
-	tp->write_seq = secure_tcp_sequence_number(sk->saddr, sk->daddr,
-						   sk->dummy_th.source,
-						   usin->sin_port);
-	tp->snd_wnd = 0;
-	tp->snd_wl1 = 0;
-	tp->snd_wl2 = tp->write_seq;
-	tp->snd_una = tp->write_seq;
-	tp->rcv_nxt = 0;
-
-	sk->err = 0;
-	
-	/* Put in the IP header and routing stuff. */
-	tmp = ip_build_header(buff, sk);
-	if (tmp < 0) {
-		/* Caller has done ip_rt_put(rt) and set sk->dst_cache
-		 * to NULL.  We must unwind the half built TCP socket
-		 * state so that this failure does not create a "stillborn"
-		 * sock (ie. future re-tries of connect() would fail).
-		 */
-		sk->daddr = 0;
-		sk->saddr = sk->rcv_saddr = 0;
+	if (!tcp_v4_unique_address(sk)) {
 		kfree_skb(buff);
-		release_sock(sk);
-		return(-ENETUNREACH);
+		return -EADDRNOTAVAIL;
 	}
-
-	/* No failure conditions can result past this point. */
-
-	/* We'll fix this up when we get a response from the other end.
-	 * See tcp_input.c:tcp_rcv_state_process case TCP_SYN_SENT.
-	 */
-	tp->tcp_header_len = sizeof(struct tcphdr) +
-		(sysctl_tcp_timestamps ? TCPOLEN_TSTAMP_ALIGNED : 0);
-
-	th = (struct tcphdr *) skb_put(buff,sizeof(struct tcphdr));
-	buff->h.th = th;
-
-	memcpy(th,(void *)&(sk->dummy_th), sizeof(*th));
-	/* th->doff gets fixed up below if we tack on options. */
-
-	buff->seq = tp->write_seq++;
-	th->seq = htonl(buff->seq);
-	tp->snd_nxt = tp->write_seq;
-	buff->end_seq = tp->write_seq;
-	th->ack = 0;
-	th->syn = 1;
 
 	sk->mtu = rt->u.dst.pmtu;
 	if ((sk->ip_pmtudisc == IP_PMTUDISC_DONT ||
 	     (sk->ip_pmtudisc == IP_PMTUDISC_WANT &&
 	      (rt->u.dst.mxlock&(1<<RTAX_MTU)))) &&
-	    rt->u.dst.pmtu > 576)
+	    rt->u.dst.pmtu > 576 && rt->rt_dst != rt->rt_gateway)
 		sk->mtu = 576;
 
-	if(sk->mtu < 64)
+	if (sk->mtu < 64)
 		sk->mtu = 64;	/* Sanity limit */
 
-	sk->mss = (sk->mtu - sizeof(struct iphdr) - tp->tcp_header_len);
-	if(sk->user_mss)
-		sk->mss = min(sk->mss, sk->user_mss);
+	mss = sk->mtu - sizeof(struct iphdr);
+	if (sk->opt)
+		mss -= sk->opt->optlen;
 
-	if (sk->mss < 1) {
-		printk(KERN_DEBUG "intial sk->mss below 1\n");
-		sk->mss = 1;	/* Sanity limit */
-	}
+	tp->write_seq = secure_tcp_sequence_number(sk->saddr, sk->daddr,
+						   sk->sport, usin->sin_port);
 
-	tp->window_clamp = rt->u.dst.window;
-	tcp_select_initial_window(sock_rspace(sk)/2,sk->mss,
-		&tp->rcv_wnd,
-		&tp->window_clamp,
-		sysctl_tcp_window_scaling,
-		&tp->rcv_wscale);
-	th->window = htons(tp->rcv_wnd);
-
-	tmp = tcp_syn_build_options(buff, sk->mss, sysctl_tcp_timestamps,
-		sysctl_tcp_window_scaling, tp->rcv_wscale);
-	buff->csum = 0;
-	th->doff = (sizeof(*th)+ tmp)>>2;
-
-	tcp_v4_send_check(sk, th, sizeof(struct tcphdr) + tmp, buff);
-
-	tcp_set_state(sk,TCP_SYN_SENT);
-
-	/* Socket identity change complete, no longer
-	 * in TCP_CLOSE, so enter ourselves into the
-	 * hash tables.
-	 */
-	tcp_v4_hash(sk);
-
-	tp->rto = rt->u.dst.rtt;
-
-	tcp_init_xmit_timers(sk);
-
-	/* Now works the right way instead of a hacked initial setting. */
-	tp->retransmits = 0;
-
-	skb_queue_tail(&sk->write_queue, buff);
-
-	tp->packets_out++;
-	buff->when = jiffies;
-
-	ip_queue_xmit(skb_clone(buff, GFP_KERNEL));
-
-	/* Timer for repeating the SYN until an answer. */
-	tcp_reset_xmit_timer(sk, TIME_RETRANS, tp->rto);
-	tcp_statistics.TcpActiveOpens++;
-	tcp_statistics.TcpOutSegs++;
-  
-	release_sock(sk);
-	return(0);
+	tcp_connect(sk, buff, mss);
+	return 0;
 }
 
 static int tcp_v4_sendmsg(struct sock *sk, struct msghdr *msg, int len)
@@ -724,7 +617,7 @@ static int tcp_v4_sendmsg(struct sock *sk, struct msghdr *msg, int len)
 	int retval = -EINVAL;
 
 	/* Do sanity checking for sendmsg/sendto/send. */
-	if (msg->msg_flags & ~(MSG_OOB|MSG_DONTROUTE|MSG_DONTWAIT))
+	if (msg->msg_flags & ~(MSG_OOB|MSG_DONTROUTE|MSG_DONTWAIT|MSG_NOSIGNAL))
 		goto out;
 	if (msg->msg_name) {
 		struct sockaddr_in *addr=(struct sockaddr_in *)msg->msg_name;
@@ -737,7 +630,7 @@ static int tcp_v4_sendmsg(struct sock *sk, struct msghdr *msg, int len)
 		if(sk->state == TCP_CLOSE)
 			goto out;
 		retval = -EISCONN;
-		if (addr->sin_port != sk->dummy_th.dest)
+		if (addr->sin_port != sk->dport)
 			goto out;
 		if (addr->sin_addr.s_addr != sk->daddr)
 			goto out;
@@ -851,9 +744,7 @@ void tcp_v4_err(struct sk_buff *skb, unsigned char *dp, int len)
 	int code = skb->h.icmph->code;
 	struct sock *sk;
 	int opening;
-#ifdef ICMP_PARANOIA
 	__u32 seq;
-#endif
 
 	if (len < (iph->ihl << 2) + ICMP_MIN_LENGTH) { 
 		icmp_statistics.IcmpInErrors++; 
@@ -869,7 +760,6 @@ void tcp_v4_err(struct sk_buff *skb, unsigned char *dp, int len)
 	}
 
 	tp = &sk->tp_pinfo.af_tcp;
-#ifdef ICMP_PARANOIA
 	seq = ntohl(th->seq);
 	if (sk->state != TCP_LISTEN && 
    	    !between(seq, tp->snd_una, max(tp->snd_una+32768,tp->snd_nxt))) {
@@ -879,7 +769,6 @@ void tcp_v4_err(struct sk_buff *skb, unsigned char *dp, int len)
 			       (int)sk->state, seq, tp->snd_una, tp->snd_nxt); 
 		return; 
 	}
-#endif
 
 	switch (type) {
 	case ICMP_SOURCE_QUENCH:
@@ -927,7 +816,6 @@ void tcp_v4_err(struct sk_buff *skb, unsigned char *dp, int len)
 		req = tcp_v4_search_req(tp, iph, th, &prev); 
 		if (!req)
 			return;
-#ifdef ICMP_PARANOIA
 		if (seq != req->snt_isn) {
 			if (net_ratelimit())
 				printk(KERN_DEBUG "icmp packet for openreq "
@@ -935,7 +823,6 @@ void tcp_v4_err(struct sk_buff *skb, unsigned char *dp, int len)
 				       seq, req->snt_isn);
 			return;
 		}
-#endif
 		if (req->sk) {	/* not yet accept()ed */
 			sk = req->sk; /* report error in accept */
 		} else {
@@ -987,44 +874,50 @@ void tcp_v4_send_check(struct sock *sk, struct tcphdr *th, int len,
 
 static void tcp_v4_send_reset(struct sk_buff *skb)
 {
-	struct tcphdr  *th = skb->h.th;
-	struct sk_buff *skb1;
-	struct tcphdr  *th1;
+	struct tcphdr *th = skb->h.th;
 
-	if (th->rst)
-		return;
+	/* Never send a reset in response to a reset. */
+	if (th->rst == 0) {
+		struct tcphdr  *th = skb->h.th;
+		struct sk_buff *skb1 = ip_reply(skb, sizeof(struct tcphdr));
+		struct tcphdr  *th1;
 
-	skb1 = ip_reply(skb, sizeof(struct tcphdr));
-	if (skb1 == NULL)
-		return;
+		if (skb1 == NULL)
+			return;
  
-	skb1->h.th = th1 = (struct tcphdr *)skb_put(skb1, sizeof(struct tcphdr));
-	memset(th1, 0, sizeof(*th1));
+		skb1->h.th = th1 = (struct tcphdr *)
+			skb_put(skb1, sizeof(struct tcphdr));
 
-	/* Swap the send and the receive. */
-	th1->dest = th->source;
-	th1->source = th->dest;
-	th1->doff = sizeof(*th1)/4;
-	th1->rst = 1;
+		/* Swap the send and the receive. */
+		memset(th1, 0, sizeof(*th1));
+		th1->dest = th->source;
+		th1->source = th->dest;
+		th1->doff = sizeof(*th1)/4;
+		th1->rst = 1;
 
-	if (th->ack)
-	  	th1->seq = th->ack_seq;
-	else {
-		th1->ack = 1;
-	  	if (!th->syn)
-			th1->ack_seq = th->seq;
-		else
-			th1->ack_seq = htonl(ntohl(th->seq)+1);
+		if (th->ack) {
+			th1->seq = th->ack_seq;
+		} else {
+			th1->ack = 1;
+			if (!th->syn)
+				th1->ack_seq = th->seq;
+			else
+				th1->ack_seq = htonl(ntohl(th->seq)+1);
+		}
+		skb1->csum = csum_partial((u8 *) th1, sizeof(*th1), 0);
+		th1->check = tcp_v4_check(th1, sizeof(*th1), skb1->nh.iph->saddr,
+					  skb1->nh.iph->daddr, skb1->csum);
+
+		/* Finish up some IP bits. */
+		skb1->nh.iph->tot_len = htons(skb1->len);
+		ip_send_check(skb1->nh.iph);
+
+		/* All the other work was done by ip_reply(). */
+		skb1->dst->output(skb1);
+
+		tcp_statistics.TcpOutSegs++;
+		tcp_statistics.TcpOutRsts++;
 	}
-
-	skb1->csum = csum_partial((u8 *) th1, sizeof(*th1), 0);
-	th1->check = tcp_v4_check(th1, sizeof(*th1), skb1->nh.iph->saddr,
-				  skb1->nh.iph->daddr, skb1->csum);
-
-	/* Do not place TCP options in a reset. */
-	ip_queue_xmit(skb1);
-	tcp_statistics.TcpOutSegs++;
-	tcp_statistics.TcpOutRsts++;
 }
 
 #ifdef CONFIG_IP_TRANSPARENT_PROXY
@@ -1055,82 +948,48 @@ int tcp_chkaddr(struct sk_buff *skb)
 
 static void tcp_v4_send_synack(struct sock *sk, struct open_request *req)
 {
+	struct rtable *rt;
+	struct ip_options *opt;
 	struct sk_buff * skb;
-	struct tcphdr *th;
-	int tmp;
 	int mss;
 
-	skb = sock_wmalloc(sk, MAX_SYN_SIZE, 1, GFP_ATOMIC);
-	if (skb == NULL)
-		return;
-
-	if(ip_build_pkt(skb, sk, req->af.v4_req.loc_addr,
-			req->af.v4_req.rmt_addr, req->af.v4_req.opt) < 0) {
-		kfree_skb(skb);
+	/* First, grab a route. */
+	opt = req->af.v4_req.opt;
+	if(ip_route_output(&rt, ((opt && opt->srr) ?
+				 opt->faddr :
+				 req->af.v4_req.rmt_addr),
+			   req->af.v4_req.loc_addr,
+			   RT_TOS(sk->ip_tos) | RTO_CONN | sk->localroute,
+			   sk->bound_dev_if)) {
+		ip_statistics.IpOutNoRoutes++;
 		return;
 	}
-	
-	mss = (skb->dst->pmtu - sizeof(struct iphdr) - sizeof(struct tcphdr));
-	if (sk->user_mss)
-		mss = min(mss, sk->user_mss);
-	if(req->tstamp_ok)
-		mss -= TCPOLEN_TSTAMP_ALIGNED;
-	else
-		req->mss += TCPOLEN_TSTAMP_ALIGNED;
-
-	/* tcp_syn_build_options will do an skb_put() to obtain the TCP
-	 * options bytes below.
-	 */
-	skb->h.th = th = (struct tcphdr *) skb_put(skb, sizeof(struct tcphdr));
-
-	/* Don't offer more than they did.
-	 * This way we don't have to memorize who said what.
-	 * FIXME: maybe this should be changed for better performance
-	 * with syncookies.
-	 */
-	req->mss = min(mss, req->mss);
-
-	if (req->mss < 1) {
-		printk(KERN_DEBUG "initial req->mss below 1\n");
-		req->mss = 1;
+	if(opt && opt->is_strictroute && rt->rt_dst != rt->rt_gateway) {
+		ip_rt_put(rt);
+		ip_statistics.IpOutNoRoutes++;
+		return;
 	}
 
-	/* Yuck, make this header setup more efficient... -DaveM */
-	memset(th, 0, sizeof(struct tcphdr));
-	th->syn = 1;
-	th->ack = 1;
+	mss = (rt->u.dst.pmtu - sizeof(struct iphdr) - sizeof(struct tcphdr));
+	if (opt)
+		mss -= opt->optlen;
+
+	skb = tcp_make_synack(sk, &rt->u.dst, req, mss);
+	if (skb) {
+		struct tcphdr *th = skb->h.th;
+
 #ifdef CONFIG_IP_TRANSPARENT_PROXY
-	th->source = req->lcl_port; /* LVE */
-#else
-	th->source = sk->dummy_th.source;
+		th->source = req->lcl_port; /* LVE */
 #endif
-	th->dest = req->rmt_port;
-	skb->seq = req->snt_isn;
-	skb->end_seq = skb->seq + 1;
-	th->seq = htonl(skb->seq);
-	th->ack_seq = htonl(req->rcv_isn + 1);
-	if (req->rcv_wnd == 0) { /* ignored for retransmitted syns */
-		__u8 rcv_wscale; 
-		/* Set this up on the first call only */
-		req->window_clamp = skb->dst->window;
-		tcp_select_initial_window(sock_rspace(sk)/2,req->mss,
-			&req->rcv_wnd,
-			&req->window_clamp,
-			req->wscale_ok,
-			&rcv_wscale);
-		req->rcv_wscale = rcv_wscale; 
-	}
-	th->window = htons(req->rcv_wnd);
-	tmp = tcp_syn_build_options(skb, req->mss, req->tstamp_ok,
-		req->wscale_ok,req->rcv_wscale);
-	skb->csum = 0;
-	th->doff = (sizeof(*th) + tmp)>>2;
-	th->check = tcp_v4_check(th, sizeof(*th) + tmp,
-				 req->af.v4_req.loc_addr, req->af.v4_req.rmt_addr,
-				 csum_partial((char *)th, sizeof(*th)+tmp, skb->csum));
 
-	ip_queue_xmit(skb);
-	tcp_statistics.TcpOutSegs++;
+		th->check = tcp_v4_check(th, skb->len,
+					 req->af.v4_req.loc_addr, req->af.v4_req.rmt_addr,
+					 csum_partial((char *)th, skb->len, skb->csum));
+
+		ip_build_and_send_pkt(skb, sk, req->af.v4_req.loc_addr,
+				      req->af.v4_req.rmt_addr, req->af.v4_req.opt);
+	}
+	ip_rt_put(rt);
 }
 
 static void tcp_v4_or_free(struct open_request *req)
@@ -1240,15 +1099,16 @@ int tcp_v4_conn_request(struct sock *sk, struct sk_buff *skb, void *ptr,
 	req->rcv_wnd = 0;		/* So that tcp_send_synack() knows! */
 
 	req->rcv_isn = skb->seq;
- 	tp.tstamp_ok = tp.wscale_ok = tp.snd_wscale = 0;
+ 	tp.tstamp_ok = tp.sack_ok = tp.wscale_ok = tp.snd_wscale = 0;
 	tp.in_mss = 536;
-	tcp_parse_options(th,&tp,want_cookie);
+	tcp_parse_options(NULL, th, &tp, want_cookie);
 	req->mss = tp.in_mss;
 	if (tp.saw_tstamp) {
 		req->mss -= TCPOLEN_TSTAMP_ALIGNED;
 		req->ts_recent = tp.rcv_tsval;
 	}
 	req->tstamp_ok = tp.tstamp_ok;
+	req->sack_ok = tp.sack_ok;
 	req->snd_wscale = tp.snd_wscale;
 	req->wscale_ok = tp.wscale_ok;
 	req->rmt_port = th->source;
@@ -1300,8 +1160,11 @@ error:
 
 /* This is not only more efficient than what we used to do, it eliminates
  * a lot of code duplication between IPv4/IPv6 SYN recv processing. -DaveM
+ *
+ * This function wants to be moved to a common for IPv[46] file. --ANK
  */
-struct sock *tcp_create_openreq_child(struct sock *sk, struct open_request *req, struct sk_buff *skb)
+struct sock *tcp_create_openreq_child(struct sock *sk, struct open_request *req, struct sk_buff *skb,
+				      int snd_mss)
 {
 	struct sock *newsk = sk_alloc(AF_INET, GFP_ATOMIC, 0);
 
@@ -1310,27 +1173,16 @@ struct sock *tcp_create_openreq_child(struct sock *sk, struct open_request *req,
 
 		memcpy(newsk, sk, sizeof(*newsk));
 		newsk->sklist_next = NULL;
-		newsk->daddr = req->af.v4_req.rmt_addr;
-		newsk->rcv_saddr = req->af.v4_req.loc_addr;
-#ifdef CONFIG_IP_TRANSPARENT_PROXY
-		newsk->num = ntohs(skb->h.th->dest);
-#endif
 		newsk->state = TCP_SYN_RECV;
 
 		/* Clone the TCP header template */
-#ifdef CONFIG_IP_TRANSPARENT_PROXY
-		newsk->dummy_th.source = req->lcl_port;
-#endif
-		newsk->dummy_th.dest = req->rmt_port;
-		newsk->dummy_th.ack = 1;
-		newsk->dummy_th.doff = sizeof(struct tcphdr)>>2;
+		newsk->dport = req->rmt_port;
 
 		newsk->sock_readers = 0;
 		atomic_set(&newsk->rmem_alloc, 0);
 		skb_queue_head_init(&newsk->receive_queue);
 		atomic_set(&newsk->wmem_alloc, 0);
 		skb_queue_head_init(&newsk->write_queue);
-		newsk->saddr = req->af.v4_req.loc_addr;
 
 		newsk->done = 0;
 		newsk->proc = 0;
@@ -1395,12 +1247,40 @@ struct sock *tcp_create_openreq_child(struct sock *sk, struct open_request *req,
 		newsk->priority = 1;
 
 		/* IP layer stuff */
-		newsk->opt = req->af.v4_req.opt;
 		newsk->timeout = 0;
 		init_timer(&newsk->timer);
 		newsk->timer.function = &net_timer;
 		newsk->timer.data = (unsigned long) newsk;
 		newsk->socket = NULL;
+
+		newtp->tstamp_ok = req->tstamp_ok;
+		if((newtp->sack_ok = req->sack_ok) != 0)
+			newtp->num_sacks = 0;
+		newtp->window_clamp = req->window_clamp;
+		newtp->rcv_wnd = req->rcv_wnd;
+		newtp->wscale_ok = req->wscale_ok;
+		if (newtp->wscale_ok) {
+			newtp->snd_wscale = req->snd_wscale;
+			newtp->rcv_wscale = req->rcv_wscale;
+		} else {
+			newtp->snd_wscale = newtp->rcv_wscale = 0;
+			newtp->window_clamp = min(newtp->window_clamp,65535);
+		}
+		if (newtp->tstamp_ok) {
+			newtp->ts_recent = req->ts_recent;
+			newtp->ts_recent_stamp = jiffies;
+			newtp->tcp_header_len = sizeof(struct tcphdr) + TCPOLEN_TSTAMP_ALIGNED;
+		} else {
+			newtp->tcp_header_len = sizeof(struct tcphdr);
+		}
+
+		snd_mss -= newtp->tcp_header_len;
+
+		if (sk->user_mss)
+			snd_mss = min(snd_mss, sk->user_mss);
+
+		newsk->mss = min(req->mss, snd_mss);
+
 	}
 	return newsk;
 }
@@ -1409,77 +1289,58 @@ struct sock * tcp_v4_syn_recv_sock(struct sock *sk, struct sk_buff *skb,
 				   struct open_request *req,
 				   struct dst_entry *dst)
 {
+	struct ip_options *opt = req->af.v4_req.opt;
 	struct tcp_opt *newtp;
 	struct sock *newsk;
 	int snd_mss;
+	int mtu;
 
 #ifdef NEW_LISTEN
 	if (sk->ack_backlog > sk->max_ack_backlog)
 		goto exit; /* head drop */
 #endif
-	newsk = tcp_create_openreq_child(sk, req, skb);
-	if (!newsk) 
-		goto exit;
-#ifdef NEW_LISTEN
-	sk->ack_backlog++;
-#endif
-
-	newtp = &(newsk->tp_pinfo.af_tcp);
-
-	/* options / mss / route_cache */
 	if (dst == NULL) { 
 		struct rtable *rt;
 		
 		if (ip_route_output(&rt,
-				    newsk->opt && newsk->opt->srr ? 
-				    newsk->opt->faddr : newsk->daddr,
-				    newsk->saddr, newsk->ip_tos|RTO_CONN, 0)) {
-			sk_free(newsk);
+				    opt && opt->srr ? opt->faddr : req->af.v4_req.rmt_addr,
+				    req->af.v4_req.loc_addr, sk->ip_tos|RTO_CONN, 0))
 			return NULL;
-		}
 	        dst = &rt->u.dst;
-	} 
+	}
+
+#ifdef NEW_LISTEN
+	sk->ack_backlog++;
+#endif
+
+	mtu = dst->pmtu;
+	if (mtu < 68)
+		mtu = 68;
+	snd_mss = mtu - sizeof(struct iphdr);
+	if (opt)
+		snd_mss -= opt->optlen;
+
+	newsk = tcp_create_openreq_child(sk, req, skb, snd_mss);
+	if (!newsk) 
+		goto exit;
+
 	newsk->dst_cache = dst;
-	
-	snd_mss = dst->pmtu;
 
-	/* FIXME: is mtu really the same as snd_mss? */
-	newsk->mtu = snd_mss;
-	/* FIXME: where does mtu get used after this? */
-	/* sanity check */
-	if (newsk->mtu < 64)
-		newsk->mtu = 64;
-
-	newtp->tstamp_ok = req->tstamp_ok;
-	newtp->window_clamp = req->window_clamp;
-	newtp->rcv_wnd = req->rcv_wnd;
-	newtp->wscale_ok = req->wscale_ok;
-	if (newtp->wscale_ok) {
-		newtp->snd_wscale = req->snd_wscale;
-		newtp->rcv_wscale = req->rcv_wscale;
-	} else {
-		newtp->snd_wscale = newtp->rcv_wscale = 0;
-		newtp->window_clamp = min(newtp->window_clamp,65535);
-	}
-	if (newtp->tstamp_ok) {
-		newtp->ts_recent = req->ts_recent;
-		newtp->ts_recent_stamp = jiffies;
-		newtp->tcp_header_len = sizeof(struct tcphdr) + TCPOLEN_TSTAMP_ALIGNED;
-		newsk->dummy_th.doff += (TCPOLEN_TSTAMP_ALIGNED >> 2);
-	} else {
-		newtp->tcp_header_len = sizeof(struct tcphdr);
-	}
-
-	snd_mss -= sizeof(struct iphdr) + sizeof(struct tcphdr);
-	if (sk->user_mss)
-		snd_mss = min(snd_mss, sk->user_mss);
-
-	/* Make sure our mtu is adjusted for headers. */
-	newsk->mss = min(req->mss, snd_mss) + sizeof(struct tcphdr) - newtp->tcp_header_len;
+	newtp = &(newsk->tp_pinfo.af_tcp);
+	newsk->daddr = req->af.v4_req.rmt_addr;
+	newsk->saddr = req->af.v4_req.loc_addr;
+	newsk->rcv_saddr = req->af.v4_req.loc_addr;
+#ifdef CONFIG_IP_TRANSPARENT_PROXY
+	newsk->num = ntohs(skb->h.th->dest);
+	newsk->sport = req->lcl_port;
+#endif
+	newsk->opt = req->af.v4_req.opt;
+	newsk->mtu = mtu;
 
 	/* Must use the af_specific ops here for the case of IPv6 mapped. */
 	newsk->prot->hash(newsk);
 	add_to_prot_sklist(newsk);
+
 	return newsk;
 
 exit:
@@ -1677,106 +1538,82 @@ do_time_wait:
 	goto discard_it;
 }
 
-int tcp_v4_build_header(struct sock *sk, struct sk_buff *skb)
+int tcp_v4_rebuild_header(struct sock *sk)
 {
-	return ip_build_header(skb, sk);
-}
-
-int tcp_v4_rebuild_header(struct sock *sk, struct sk_buff *skb)
-{
-	struct rtable *rt;
-	struct iphdr *iph;
-	struct tcphdr *th;
-	int size;
+	struct rtable *rt = (struct rtable *)sk->dst_cache;
+	__u32 new_saddr;
         int want_rewrite = sysctl_ip_dynaddr && sk->state == TCP_SYN_SENT;
 
-	/* Check route */
+	if(rt == NULL)
+		return 0;
 
-	rt = (struct rtable*)skb->dst;
-
-	/* Force route checking if want_rewrite */
-	/* The idea is good, the implementation is disguisting.
-	   Well, if I made bind on this socket, you cannot randomly ovewrite
-	   its source address. --ANK
+	/* Force route checking if want_rewrite.
+	 * The idea is good, the implementation is disguisting.
+	 * Well, if I made bind on this socket, you cannot randomly ovewrite
+	 * its source address. --ANK
 	 */
 	if (want_rewrite) {
 		int tmp;
+		struct rtable *new_rt;
 		__u32 old_saddr = rt->rt_src;
 
-		/* Query new route */
-		tmp = ip_route_connect(&rt, rt->rt_dst, 0, 
+		/* Query new route using another rt buffer */
+		tmp = ip_route_connect(&new_rt, rt->rt_dst, 0,
 					RT_TOS(sk->ip_tos)|sk->localroute,
 					sk->bound_dev_if);
 
 		/* Only useful if different source addrs */
-		if (tmp == 0 || rt->rt_src != old_saddr ) {
-			dst_release(skb->dst);
-			skb->dst = &rt->u.dst;
-		} else {
-			want_rewrite = 0;
-			dst_release(&rt->u.dst);
+		if (tmp == 0) {
+			/*
+			 *	Only useful if different source addrs
+			 */
+			if (new_rt->rt_src != old_saddr ) {
+				dst_release(sk->dst_cache);
+				sk->dst_cache = &new_rt->u.dst;
+				rt = new_rt;
+				goto do_rewrite;
+			} 
+			dst_release(&new_rt->u.dst);
 		}
-	} else 
+	}
 	if (rt->u.dst.obsolete) {
 		int err;
 		err = ip_route_output(&rt, rt->rt_dst, rt->rt_src, rt->key.tos|RTO_CONN, rt->key.oif);
 		if (err) {
 			sk->err_soft=-err;
-			sk->error_report(skb->sk);
+			sk->error_report(sk);
 			return -1;
 		}
-		dst_release(skb->dst);
-		skb->dst = &rt->u.dst;
+		dst_release(xchg(&sk->dst_cache, &rt->u.dst));
 	}
 
-	iph = skb->nh.iph;
-	th = skb->h.th;
-	size = skb->tail - skb->h.raw;
+	return 0;
 
-        if (want_rewrite) {
-        	__u32 new_saddr = rt->rt_src;
+do_rewrite:
+	new_saddr = rt->rt_src;
                 
-                /*
-                 *	Ouch!, this should not happen.
-                 */
-                if (!sk->saddr || !sk->rcv_saddr) {
-                	printk(KERN_WARNING "tcp_v4_rebuild_header(): not valid sock addrs: saddr=%08lX rcv_saddr=%08lX\n",
-			       ntohl(sk->saddr), 
-			       ntohl(sk->rcv_saddr));
-                        return 0;
-                }
+	/* Ouch!, this should not happen. */
+	if (!sk->saddr || !sk->rcv_saddr) {
+		printk(KERN_WARNING "tcp_v4_rebuild_header(): not valid sock addrs: "
+		       "saddr=%08lX rcv_saddr=%08lX\n",
+		       ntohl(sk->saddr), 
+		       ntohl(sk->rcv_saddr));
+		return 0;
+	}
 
-		/*
-		 *	Maybe whe are in a skb chain loop and socket address has
-		 *	yet been 'damaged'.
-		 */
+	if (new_saddr != sk->saddr) {
+		if (sysctl_ip_dynaddr > 1) {
+			printk(KERN_INFO "tcp_v4_rebuild_header(): shifting sk->saddr "
+			       "from %d.%d.%d.%d to %d.%d.%d.%d\n",
+			       NIPQUAD(sk->saddr), 
+			       NIPQUAD(new_saddr));
+		}
 
-		if (new_saddr != sk->saddr) {
-			if (sysctl_ip_dynaddr > 1) {
-				printk(KERN_INFO "tcp_v4_rebuild_header(): shifting sk->saddr from %d.%d.%d.%d to %d.%d.%d.%d\n",
-					NIPQUAD(sk->saddr), 
-					NIPQUAD(new_saddr));
-			}
-
-			sk->saddr = new_saddr;
-			sk->rcv_saddr = new_saddr;
-			/* sk->prot->rehash(sk); */
-			tcp_v4_rehash(sk);
-		} 
-
-		if (new_saddr != iph->saddr) {
-			if (sysctl_ip_dynaddr > 1) {
-				printk(KERN_INFO "tcp_v4_rebuild_header(): shifting iph->saddr from %d.%d.%d.%d to %d.%d.%d.%d\n",
-					NIPQUAD(iph->saddr), 
-					NIPQUAD(new_saddr));
-			}
-
-			iph->saddr = new_saddr;
-			ip_send_check(iph);
-		} 
+		sk->saddr = new_saddr;
+		sk->rcv_saddr = new_saddr;
+		tcp_v4_rehash(sk);
+	} 
         
-        }
-
 	return 0;
 }
 
@@ -1792,11 +1629,10 @@ static void v4_addr2sockaddr(struct sock *sk, struct sockaddr * uaddr)
 
 	sin->sin_family		= AF_INET;
 	sin->sin_addr.s_addr	= sk->daddr;
-	sin->sin_port		= sk->dummy_th.dest;
+	sin->sin_port		= sk->dport;
 }
 
 struct tcp_func ipv4_specific = {
-	tcp_v4_build_header,
 	ip_queue_xmit,
 	tcp_v4_send_check,
 	tcp_v4_rebuild_header,
@@ -1834,10 +1670,6 @@ static int tcp_v4_init_sock(struct sock *sk)
 	sk->max_ack_backlog = SOMAXCONN;
 	sk->mtu = 576;
 	sk->mss = 536;
-
-	/* Speed up by setting some standard state for the dummy_th. */
-  	sk->dummy_th.ack=1;
-  	sk->dummy_th.doff=sizeof(struct tcphdr)>>2;
 
 	/* Init SYN queue. */
 	tcp_synq_init(tp);

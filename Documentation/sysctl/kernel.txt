@@ -25,10 +25,14 @@ Currently, these files are in /proc/sys/kernel:
 - inode-max
 - inode-nr
 - inode-state
+- kmod_unload_delay           ==> Documentation/kmod.txt
+- modprobe                    ==> Documentation/kmod.txt
 - osrelease
 - ostype
 - panic
 - printk
+- real-root-dev               ==> Documentation/initrd.txt
+- reboot-cmd                  ==> SPARC specific
 - securelevel
 - version
 

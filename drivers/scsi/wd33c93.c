@@ -1579,7 +1579,7 @@ Scsi_Cmnd *tmp, *prev;
 
 
 #define MAX_WD33C93_HOSTS 4
-#define MAX_SETUP_ARGS (sizeof(setup_args) / sizeof(char *))
+#define MAX_SETUP_ARGS ((int)(sizeof(setup_args) / sizeof(char *)))
 #define SETUP_BUFFER_SIZE 200
 static char setup_buffer[SETUP_BUFFER_SIZE];
 static char setup_used[MAX_SETUP_ARGS];

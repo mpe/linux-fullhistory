@@ -406,7 +406,7 @@ static __inline__ void ide_get_lock (int *ide_lock, void (*handler)(int, void *,
 #endif /* CONFIG_ATARI */
 }
 
-#define ide_ack_intr(hwif) (hwif)->ack_intr((hwif))
+#define ide_ack_intr(hwif)	((hwif)->ack_intr ? (hwif)->ack_intr(hwif) : 1)
 
 /*
  * On the Atari, we sometimes can't enable interrupts:

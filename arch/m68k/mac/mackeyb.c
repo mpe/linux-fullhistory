@@ -16,6 +16,7 @@
 #include <linux/tty.h>
 #include <linux/console.h>
 #include <linux/interrupt.h>
+#include <linux/init.h>
 /* keyb */
 #include <linux/keyboard.h>
 #include <linux/random.h>
@@ -39,7 +40,6 @@
 #define MOUSE_DATAREG	0	/* reg# for movement/button codes from mouse */
 /* end keyboard_input stuff */
 
-#include <asm/keyboard.h>
 #include <linux/kbd_kern.h>
 #include <linux/kbd_ll.h>
 
@@ -81,7 +81,7 @@ static unsigned char dont_repeat[128] = {
 /*
  * Mac private key maps
  */
-u_short mac_plain_map[NR_KEYS] = {
+u_short mac_plain_map[NR_KEYS] __initdata = {
 	0xfb61,	0xfb73,	0xfb64,	0xfb66,	0xfb68,	0xfb67,	0xfb7a,	0xfb78,
 	0xfb63,	0xfb76,	0xf200,	0xfb62,	0xfb71,	0xfb77,	0xfb65,	0xfb72,
 	0xfb79,	0xfb74,	0xf031,	0xf032,	0xf033,	0xf034,	0xf036,	0xf035,
@@ -100,7 +100,7 @@ u_short mac_plain_map[NR_KEYS] = {
 	0xf101,	0xf119,	0xf100,	0xf200,	0xf200,	0xf200,	0xf200,	0xf200,
 };
 
-u_short mac_shift_map[NR_KEYS] = {
+u_short mac_shift_map[NR_KEYS] __initdata = {
 	0xfb41,	0xfb53,	0xfb44,	0xfb46,	0xfb48,	0xfb47,	0xfb5a,	0xfb58,
 	0xfb43,	0xfb56,	0xf200,	0xfb42,	0xfb51,	0xfb57,	0xfb45,	0xfb52,
 	0xfb59,	0xfb54,	0xf021,	0xf040,	0xf023,	0xf024,	0xf05e,	0xf025,
@@ -119,7 +119,7 @@ u_short mac_shift_map[NR_KEYS] = {
 	0xf10b,	0xf20a,	0xf10a,	0xf200,	0xf200,	0xf200,	0xf200,	0xf200,
 };
 
-u_short mac_altgr_map[NR_KEYS] = {
+u_short mac_altgr_map[NR_KEYS] __initdata = {
 	0xf914,	0xfb73,	0xf917,	0xf919,	0xfb68,	0xfb67,	0xfb7a,	0xfb78,
 	0xf916,	0xfb76,	0xf200,	0xf915,	0xfb71,	0xfb77,	0xf918,	0xfb72,
 	0xfb79,	0xfb74,	0xf200,	0xf040,	0xf200,	0xf024,	0xf200,	0xf200,
@@ -138,7 +138,7 @@ u_short mac_altgr_map[NR_KEYS] = {
 	0xf50d,	0xf119,	0xf50c,	0xf200,	0xf200,	0xf200,	0xf200,	0xf200,
 };
 
-u_short mac_ctrl_map[NR_KEYS] = {
+u_short mac_ctrl_map[NR_KEYS] __initdata = {
 	0xf001,	0xf013,	0xf004,	0xf006,	0xf008,	0xf007,	0xf01a,	0xf018,
 	0xf003,	0xf016,	0xf200,	0xf002,	0xf011,	0xf017,	0xf005,	0xf012,
 	0xf019,	0xf014,	0xf200,	0xf000,	0xf01b,	0xf01c,	0xf01e,	0xf01d,
@@ -157,7 +157,7 @@ u_short mac_ctrl_map[NR_KEYS] = {
 	0xf101,	0xf119,	0xf100,	0xf200,	0xf200,	0xf200,	0xf200,	0xf200,
 };
 
-u_short mac_shift_ctrl_map[NR_KEYS] = {
+u_short mac_shift_ctrl_map[NR_KEYS] __initdata = {
 	0xf001,	0xf013,	0xf004,	0xf006,	0xf008,	0xf007,	0xf01a,	0xf018,
 	0xf003,	0xf016,	0xf200,	0xf002,	0xf011,	0xf017,	0xf005,	0xf012,
 	0xf019,	0xf014,	0xf200,	0xf000,	0xf200,	0xf200,	0xf200,	0xf200,
@@ -176,7 +176,7 @@ u_short mac_shift_ctrl_map[NR_KEYS] = {
 	0xf200,	0xf119,	0xf200,	0xf200,	0xf200,	0xf200,	0xf200,	0xf20c,
 };
 
-u_short mac_alt_map[NR_KEYS] = {
+u_short mac_alt_map[NR_KEYS] __initdata = {
 	0xf861,	0xf873,	0xf864,	0xf866,	0xf868,	0xf867,	0xf87a,	0xf878,
 	0xf863,	0xf876,	0xf200,	0xf862,	0xf871,	0xf877,	0xf865,	0xf872,
 	0xf879,	0xf874,	0xf831,	0xf832,	0xf833,	0xf834,	0xf836,	0xf835,
@@ -195,7 +195,7 @@ u_short mac_alt_map[NR_KEYS] = {
 	0xf501,	0xf119,	0xf500,	0xf200,	0xf200,	0xf200,	0xf200,	0xf200,
 };
 
-u_short mac_ctrl_alt_map[NR_KEYS] = {
+u_short mac_ctrl_alt_map[NR_KEYS] __initdata = {
 	0xf801,	0xf813,	0xf804,	0xf806,	0xf808,	0xf807,	0xf81a,	0xf818,
 	0xf803,	0xf816,	0xf200,	0xf802,	0xf811,	0xf817,	0xf805,	0xf812,
 	0xf819,	0xf814,	0xf200,	0xf200,	0xf200,	0xf200,	0xf200,	0xf200,
@@ -215,15 +215,6 @@ u_short mac_ctrl_alt_map[NR_KEYS] = {
 };
 
 extern unsigned int keymap_count;
-
-#if 0
-ushort *mac_key_maps[MAX_NR_KEYMAPS] = {
-	mac_plain_map, mac_shift_map, mac_altgr_map, 0,
-	mac_ctrl_map, mac_shift_ctrl_map, 0, 0,
-	mac_alt_map, 0, 0, 0,
-	mac_ctrl_alt_map,	0
-};
-#endif
 
 /*
  * Misc. defines for testing 
@@ -603,23 +594,19 @@ int mac_kbdrate(struct kbd_repeat *k)
 	return 0;
 }
 
-int mac_keyb_init(void)
+__initfunc(int mac_keyb_init(void))
 {
 	static struct adb_request autopoll_req, confcod_req, mouse_req, readkey_req;
 	volatile int ct;
 
 	/* setup key map */
-	key_maps[0]  = mac_plain_map;
-	key_maps[1]  = mac_shift_map;
-	key_maps[2]  = mac_altgr_map;
-	key_maps[4]  = mac_ctrl_map;
-	key_maps[5]  = mac_shift_ctrl_map;
-	key_maps[8]  = mac_alt_map;
-	/* key_maps[9]  = atashift_alt_map; */
-	key_maps[12] = mac_ctrl_alt_map;
-	/* key_maps[13] = atashift_ctrl_alt_map; */
 	memcpy (plain_map, mac_plain_map, sizeof(plain_map));
-	keymap_count = 7;
+	memcpy(shift_map, mac_shift_map, sizeof(shift_map));
+	memcpy(altgr_map, mac_altgr_map, sizeof(altgr_map));
+	memcpy(ctrl_map, mac_ctrl_map, sizeof(ctrl_map));
+	memcpy(shift_ctrl_map, mac_shift_ctrl_map, sizeof(shift_ctrl_map));
+	memcpy(alt_map, mac_alt_map, sizeof(alt_map));
+	memcpy(ctrl_alt_map, mac_ctrl_alt_map, sizeof(ctrl_alt_map));
 
 	/* initialize mouse interrupt hook */
 	mac_mouse_interrupt_hook = NULL;

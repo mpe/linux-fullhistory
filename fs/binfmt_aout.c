@@ -6,7 +6,6 @@
 
 #include <linux/module.h>
 
-#include <linux/fs.h>
 #include <linux/sched.h>
 #include <linux/kernel.h>
 #include <linux/mm.h>
@@ -15,6 +14,8 @@
 #include <linux/errno.h>
 #include <linux/signal.h>
 #include <linux/string.h>
+#include <linux/fs.h>
+#include <linux/file.h>
 #include <linux/stat.h>
 #include <linux/fcntl.h>
 #include <linux/ptrace.h>
@@ -401,10 +402,10 @@ static inline int do_load_aout_binary(struct linux_binprm * bprm, struct pt_regs
 			printk(KERN_NOTICE "executable not page aligned\n");
 
 		fd = open_dentry(bprm->dentry, O_RDONLY);
-
 		if (fd < 0)
 			return fd;
-		file = current->files->fd[fd];
+		file = fcheck(fd);
+
 		if (!file->f_op || !file->f_op->mmap) {
 			sys_close(fd);
 			do_mmap(NULL, 0, ex.a_text+ex.a_data,
@@ -479,48 +480,44 @@ static inline int
 do_load_aout_library(int fd)
 {
         struct file * file;
-	struct exec ex;
-	struct dentry * dentry;
 	struct inode * inode;
-	unsigned int len;
-	unsigned int bss;
-	unsigned int start_addr;
+	unsigned long bss, start_addr, len;
 	unsigned long error;
+	int retval;
+	loff_t offset = 0;
+	struct exec ex;
 
-	file = current->files->fd[fd];
+	retval = -EACCES;
+	file = fget(fd);
+	if (!file)
+		goto out;
+	if (!file->f_op)
+		goto out_putf;
+	inode = file->f_dentry->d_inode;
 
-	if (!file || !file->f_op)
-		return -EACCES;
-
-	dentry = file->f_dentry;
-	inode = dentry->d_inode;
-
-	/* Seek into the file */
-	if (file->f_op->llseek) {
-		if ((error = file->f_op->llseek(file, 0, 0)) != 0)
-			return -ENOEXEC;
-	} else
-		file->f_pos = 0;
-
+	retval = -ENOEXEC;
+	/* N.B. Save current fs? */
 	set_fs(KERNEL_DS);
-	error = file->f_op->read(file, (char *) &ex, sizeof(ex), &file->f_pos);
+	error = file->f_op->read(file, (char *) &ex, sizeof(ex), &offset);
 	set_fs(USER_DS);
 	if (error != sizeof(ex))
-		return -ENOEXEC;
+		goto out_putf;
 
 	/* We come in here for the regular a.out style of shared libraries */
 	if ((N_MAGIC(ex) != ZMAGIC && N_MAGIC(ex) != QMAGIC) || N_TRSIZE(ex) ||
 	    N_DRSIZE(ex) || ((ex.a_entry & 0xfff) && N_MAGIC(ex) == ZMAGIC) ||
 	    inode->i_size < ex.a_text+ex.a_data+N_SYMSIZE(ex)+N_TXTOFF(ex)) {
-		return -ENOEXEC;
+		goto out_putf;
 	}
+
 	if (N_MAGIC(ex) == ZMAGIC && N_TXTOFF(ex) &&
 	    (N_TXTOFF(ex) < inode->i_sb->s_blocksize)) {
 		printk("N_TXTOFF < BLOCK_SIZE. Please convert library\n");
-		return -ENOEXEC;
+		goto out_putf;
 	}
 
-	if (N_FLAGS(ex)) return -ENOEXEC;
+	if (N_FLAGS(ex))
+		goto out_putf;
 
 	/* For  QMAGIC, the starting address is 0x20 into the page.  We mask
 	   this off to get the starting address for the page */
@@ -532,18 +529,26 @@ do_load_aout_library(int fd)
 			PROT_READ | PROT_WRITE | PROT_EXEC,
 			MAP_FIXED | MAP_PRIVATE | MAP_DENYWRITE,
 			N_TXTOFF(ex));
+	retval = error;
 	if (error != start_addr)
-		return error;
+		goto out_putf;
+
 	len = PAGE_ALIGN(ex.a_text + ex.a_data);
 	bss = ex.a_text + ex.a_data + ex.a_bss;
 	if (bss > len) {
-		error = do_mmap(NULL, start_addr + len, bss-len,
-				PROT_READ|PROT_WRITE|PROT_EXEC,
-				MAP_PRIVATE|MAP_FIXED, 0);
+		error = do_mmap(NULL, start_addr + len, bss - len,
+				PROT_READ | PROT_WRITE | PROT_EXEC,
+				MAP_PRIVATE | MAP_FIXED, 0);
+		retval = error;
 		if (error != start_addr + len)
-			return error;
+			goto out_putf;
 	}
-	return 0;
+	retval = 0;
+
+out_putf:
+	fput(file);
+out:
+	return retval;
 }
 
 static int

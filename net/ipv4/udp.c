@@ -5,7 +5,7 @@
  *
  *		The User Datagram Protocol (UDP).
  *
- * Version:	$Id: udp.c,v 1.53 1998/03/12 03:20:00 davem Exp $
+ * Version:	$Id: udp.c,v 1.55 1998/03/21 07:28:01 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -315,8 +315,8 @@ struct sock *udp_v4_lookup_longway(u32 saddr, u16 sport, u32 daddr, u16 dport, i
 					continue;
 				score++;
 			}
-			if(sk->dummy_th.dest) {
-				if(sk->dummy_th.dest != sport)
+			if(sk->dport) {
+				if(sk->dport != sport)
 					continue;
 				score++;
 			}
@@ -412,8 +412,8 @@ static struct sock *udp_v4_proxy_lookup(unsigned short num, unsigned long raddr,
 					continue;
 				score++;
 			}
-			if(s->dummy_th.dest) {
-				if(s->dummy_th.dest != rnum)
+			if(s->dport) {
+				if(s->dport != rnum)
 					continue;
 				score++;
 			}
@@ -453,7 +453,7 @@ static inline struct sock *udp_v4_mcast_next(struct sock *sk,
 		if ((s->num != hnum)					||
 		    (s->dead && (s->state == TCP_CLOSE))		||
 		    (s->daddr && s->daddr!=raddr)			||
-		    (s->dummy_th.dest != rnum && s->dummy_th.dest != 0) ||
+		    (s->dport != rnum && s->dport != 0) ||
 		    (s->rcv_saddr  && s->rcv_saddr != laddr))
 			continue;
 		break;
@@ -644,12 +644,12 @@ int udp_sendmsg(struct sock *sk, struct msghdr *msg, int len)
 		return -EOPNOTSUPP;
 
 #ifdef CONFIG_IP_TRANSPARENT_PROXY
-	if (msg->msg_flags&~(MSG_DONTROUTE|MSG_DONTWAIT|MSG_PROXY))
+	if (msg->msg_flags&~(MSG_DONTROUTE|MSG_DONTWAIT|MSG_PROXY|MSG_NOSIGNAL))
 	  	return -EINVAL;
 	if ((msg->msg_flags&MSG_PROXY) && !suser() )
 	  	return -EPERM;
 #else
-	if (msg->msg_flags&~(MSG_DONTROUTE|MSG_DONTWAIT))
+	if (msg->msg_flags&~(MSG_DONTROUTE|MSG_DONTWAIT|MSG_NOSIGNAL))
 	  	return -EINVAL;
 #endif
 
@@ -686,7 +686,7 @@ int udp_sendmsg(struct sock *sk, struct msghdr *msg, int len)
 		if (sk->state != TCP_ESTABLISHED)
 			return -EINVAL;
 		ufh.daddr = sk->daddr;
-		ufh.uh.dest = sk->dummy_th.dest;
+		ufh.uh.dest = sk->dport;
 
 		/*
 		   BUGGG Khm... And who will validate it? Fixing it fastly...
@@ -712,7 +712,7 @@ int udp_sendmsg(struct sock *sk, struct msghdr *msg, int len)
 #endif
 	{
 		ipc.addr = sk->saddr;
-		ufh.uh.source = sk->dummy_th.source;
+		ufh.uh.source = sk->sport;
 	}
 
 	ipc.opt = NULL;
@@ -971,7 +971,7 @@ int udp_connect(struct sock *sk, struct sockaddr *uaddr, int addr_len)
 	if(!sk->rcv_saddr)
 		sk->rcv_saddr = rt->rt_src;
 	sk->daddr = rt->rt_dst;
-	sk->dummy_th.dest = usin->sin_port;
+	sk->dport = usin->sin_port;
 	sk->state = TCP_ESTABLISHED;
 
 	if(uh_cache_sk == sk)

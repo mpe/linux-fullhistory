@@ -273,7 +273,6 @@ EXPORT_SYMBOL(tcp_statistics);
 EXPORT_SYMBOL(tcp_rcv_state_process);
 EXPORT_SYMBOL(tcp_timewait_state_process);
 EXPORT_SYMBOL(tcp_do_sendmsg);
-EXPORT_SYMBOL(tcp_v4_build_header);
 EXPORT_SYMBOL(tcp_v4_rebuild_header);
 EXPORT_SYMBOL(tcp_v4_send_check);
 EXPORT_SYMBOL(tcp_v4_conn_request);
@@ -291,6 +290,9 @@ EXPORT_SYMBOL(tcp_prot);
 EXPORT_SYMBOL(tcp_openreq_cachep);
 EXPORT_SYMBOL(ipv4_specific);
 EXPORT_SYMBOL(tcp_simple_retransmit);
+EXPORT_SYMBOL(tcp_transmit_skb);
+EXPORT_SYMBOL(tcp_connect);
+EXPORT_SYMBOL(tcp_make_synack);
 
 EXPORT_SYMBOL(xrlim_allow);
 
@@ -374,6 +376,7 @@ EXPORT_SYMBOL(unregister_netdevice_notifier);
 
 /* support for loadable net drivers */
 #ifdef CONFIG_NET
+EXPORT_SYMBOL(loopback_dev);
 EXPORT_SYMBOL(register_netdevice);
 EXPORT_SYMBOL(unregister_netdevice);
 EXPORT_SYMBOL(register_netdev);

@@ -28,26 +28,17 @@
  *  The low level operations for the various display memory organizations are
  *  now in separate source files.
  *
- *  Currently only the following organizations are supported:
+ *  Currently the following organizations are supported:
  *
- *    - non-accelerated:
- *
- *	  o mfb		 Monochrome
- *	  o ilbm	 Interleaved bitplanes à la Amiga
- *	  o afb		 Bitplanes à la Amiga
- *	  o iplan2p[248] Interleaved bitplanes à la Atari (2, 4 and 8 planes)
- *	  o cfb{8,16}    Packed pixels (8 and 16 bpp)
- *
- *    - accelerated:
- *
- *	  o cyber	 CyberVision64 packed pixels (accelerated)
- *	  o retz3	 Retina Z3 packed pixels (accelerated)
- *	  o mach64	 ATI Mach 64 packed pixels (accelerated)
+ *    o afb			Amiga bitplanes
+ *    o cfb{2,4,8,16,24,32}	Packed pixels
+ *    o ilbm			Amiga interleaved bitplanes
+ *    o iplan2p[248]		Atari interleaved bitplanes
+ *    o mfb			Monochrome
  *
  *  To do:
  *
  *    - Implement 16 plane mode (iplan2p16)
- *    - Add support for 24/32 bit packed pixels (cfb{24,32})
  *    - Hardware cursor
  *
  *
@@ -55,6 +46,8 @@
  *  License.  See the file COPYING in the main directory of this archive for
  *  more details.
  */
+
+#undef FBCONDEBUG
 
 #define SUPPORT_SCROLLBACK	0
 #define FLASHING_CURSOR		1
@@ -65,6 +58,7 @@
 #include <linux/sched.h>
 #include <linux/fs.h>
 #include <linux/kernel.h>
+#include <linux/delay.h>	/* MSch: for IRQ probe */
 #include <linux/tty.h>
 #include <linux/console.h>
 #include <linux/string.h>
@@ -74,9 +68,6 @@
 #include <linux/vt_kern.h>
 #include <linux/selection.h>
 #include <linux/init.h>
-#ifdef CONFIG_KMOD
-#include <linux/kmod.h>
-#endif
 
 #include <asm/irq.h>
 #include <asm/system.h>
@@ -88,6 +79,9 @@
 #ifdef CONFIG_ATARI
 #include <asm/atariints.h>
 #endif
+#ifdef CONFIG_MAC
+#include <asm/macints.h>
+#endif
 #ifdef __mc68000__
 #include <asm/machdep.h>
 #include <asm/setup.h>
@@ -95,8 +89,14 @@
 #include <asm/linux_logo.h>
 
 #include "fbcon.h"
+#include "fbcon-mac.h"	/* for 6x11 font on mac */
 #include "font.h"
 
+#ifdef FBCONDEBUG
+#  define DPRINTK(fmt, args...) printk(KERN_DEBUG "%s: " fmt, __FUNCTION__ , ## args)
+#else
+#  define DPRINTK(fmt, args...)
+#endif
 
 struct display fb_display[MAX_NR_CONSOLES];
 
@@ -112,6 +112,7 @@ static int cursor_drawn = 0;
 /* # VBL ints between cursor state changes */
 #define AMIGA_CURSOR_BLINK_RATE		(20)
 #define ATARI_CURSOR_BLINK_RATE		(42)
+#define MAC_CURSOR_BLINK_RATE		(32)
 #define DEFAULT_CURSOR_BLINK_RATE	(20)
 
 static int vbl_cursor_cnt = 0;
@@ -146,26 +147,25 @@ static __inline__ int CURSOR_UNDRAWN(void)
 static unsigned long fbcon_startup(unsigned long kmem_start,
 				   const char **display_desc);
 static void fbcon_init(struct vc_data *conp);
-static int fbcon_deinit(struct vc_data *conp);
+static void fbcon_deinit(struct vc_data *conp);
 static int fbcon_changevar(int con);
-static int fbcon_clear(struct vc_data *conp, int sy, int sx, int height,
+static void fbcon_clear(struct vc_data *conp, int sy, int sx, int height,
 		       int width);
-static int fbcon_putc(struct vc_data *conp, int c, int ypos, int xpos);
-static int fbcon_putcs(struct vc_data *conp, const char *s, int count,
-		       int ypos, int xpos);
-static int fbcon_cursor(struct vc_data *conp, int mode);
-static int fbcon_scroll(struct vc_data *conp, int t, int b,
-			int dir, int count);
-static int fbcon_bmove(struct vc_data *conp, int sy, int sx, int dy, int dx,
-		       int height, int width);
+static void fbcon_putc(struct vc_data *conp, int c, int ypos, int xpos);
+static void fbcon_putcs(struct vc_data *conp, const char *s, int count,
+			int ypos, int xpos);
+static void fbcon_cursor(struct vc_data *conp, int mode);
+static void fbcon_scroll(struct vc_data *conp, int t, int b, int dir,
+			 int count);
+static void fbcon_bmove(struct vc_data *conp, int sy, int sx, int dy, int dx,
+			int height, int width);
 static int fbcon_switch(struct vc_data *conp);
 static int fbcon_blank(int blank);
 static int fbcon_get_font(struct vc_data *conp, int *w, int *h, char *data);
 static int fbcon_set_font(struct vc_data *conp, int w, int h, char *data);
 static int fbcon_set_palette(struct vc_data *conp, unsigned char *table);
 static int fbcon_scrolldelta(int lines);
-int fbcon_register_driver(struct display_switch *dispsw, int is_accel);
-int fbcon_unregister_driver(struct display_switch *dispsw);
+static int fbcon_set_mode(struct vc_data *conp, int mode);
 
 
 /*
@@ -193,16 +193,23 @@ static __inline__ void ypan_down(int unit, struct vc_data *conp,
 				 struct display *p, int count);
 static void fbcon_bmove_rec(struct display *p, int sy, int sx, int dy, int dx,
 			    int height, int width, u_int y_break);
-static struct display_switch *probe_list(struct display_switch *dispsw,
-					 struct display *disp);
 
-#ifdef CONFIG_KMOD
-static void request_driver(struct display *disp, int is_accel);
-#endif
-static struct display_switch *fbcon_get_driver(struct display *disp);
 static int fbcon_show_logo(void);
 
 #if FLASHING_CURSOR
+
+#ifdef CONFIG_MAC
+/*
+ * On the Macintoy, there may or may not be a working VBL int. We need to prob
+ */
+static int vbl_detected = 0;
+
+static void fbcon_vbl_detect(int irq, void *dummy, struct pt_regs *fp)
+{
+      vbl_detected++;
+}
+#endif
+
 static void cursor_timer_handler(unsigned long dev_addr);
 
 static struct timer_list cursor_timer = {
@@ -212,7 +219,7 @@ static struct timer_list cursor_timer = {
 static void cursor_timer_handler(unsigned long dev_addr)
 {
       fbcon_vbl_handler(0, NULL, NULL);
-      cursor_timer.expires = jiffies+2;
+      cursor_timer.expires = jiffies+HZ/50;
       cursor_timer.data = 0;
       cursor_timer.next = cursor_timer.next = NULL;
       add_timer(&cursor_timer);
@@ -223,49 +230,8 @@ static void cursor_timer_handler(unsigned long dev_addr)
  *  Low Level Operations
  */
 
-static struct display_switch dispsw_dummy;
+static struct display_switch fbcon_dummy;
 
-#ifdef CONFIG_FBCON_MFB
-extern int fbcon_init_mfb(void);
-#endif
-#ifdef CONFIG_FBCON_ILBM
-extern int fbcon_init_ilbm(void);
-#endif
-#ifdef CONFIG_FBCON_AFB
-extern int fbcon_init_afb(void);
-#endif
-#ifdef CONFIG_FBCON_IPLAN2P2
-extern int fbcon_init_iplan2p2(void);
-#endif
-#ifdef CONFIG_FBCON_IPLAN2P4
-extern int fbcon_init_iplan2p4(void);
-#endif
-#ifdef CONFIG_FBCON_IPLAN2P8
-extern int fbcon_init_iplan2p8(void);
-#endif
-#ifdef CONFIG_FBCON_CFB8
-extern int fbcon_init_cfb8(void);
-#endif
-#ifdef CONFIG_FBCON_CFB16
-extern int fbcon_init_cfb16(void);
-#endif
-#ifdef CONFIG_FBCON_CFB24
-extern int fbcon_init_cfb24(void);
-#endif
-#ifdef CONFIG_FBCON_CFB32
-extern int fbcon_init_cfb32(void);
-#endif
-#ifdef CONFIG_FBCON_CYBER
-extern int fbcon_init_cyber(void);
-#endif
-#ifdef CONFIG_FBCON_RETINAZ3
-extern int fbcon_init_retz3(void);
-#endif
-#ifdef CONFIG_FBCON_MACH64
-extern int fbcon_init_mach64(void);
-#endif
-
-extern int num_registered_fb;
 
 __initfunc(static unsigned long fbcon_startup(unsigned long kmem_start,
 					      const char **display_desc))
@@ -275,49 +241,10 @@ __initfunc(static unsigned long fbcon_startup(unsigned long kmem_start,
     /* Probe all frame buffer devices */
     kmem_start = probe_framebuffers(kmem_start);
 
-    if (!num_registered_fb)
+    if (!num_registered_fb) {
+            DPRINTK("no framebuffer registered\n");
 	    return kmem_start;
-
-    /* Initialize all built-in low level drivers */
-#ifdef CONFIG_FBCON_RETINAZ3
-    fbcon_init_retz3();
-#endif
-#ifdef CONFIG_FBCON_MFB
-    fbcon_init_mfb();
-#endif
-#ifdef CONFIG_FBCON_IPLAN2P2
-    fbcon_init_iplan2p2();
-#endif
-#ifdef CONFIG_FBCON_IPLAN2P4
-    fbcon_init_iplan2p4();
-#endif
-#ifdef CONFIG_FBCON_IPLAN2P8
-    fbcon_init_iplan2p8();
-#endif
-#ifdef CONFIG_FBCON_ILBM
-    fbcon_init_ilbm();
-#endif
-#ifdef CONFIG_FBCON_AFB
-    fbcon_init_afb();
-#endif
-#ifdef CONFIG_FBCON_CFB8
-    fbcon_init_cfb8();
-#endif
-#ifdef CONFIG_FBCON_CFB16
-    fbcon_init_cfb16();
-#endif
-#ifdef CONFIG_FBCON_CFB24
-    fbcon_init_cfb24();
-#endif
-#ifdef CONFIG_FBCON_CFB32
-    fbcon_init_cfb32();
-#endif
-#ifdef CONFIG_FBCON_CYBER
-    fbcon_init_cyber();
-#endif
-#ifdef CONFIG_FBCON_MACH64
-    fbcon_init_mach64();
-#endif
+    }
 
     *display_desc = "frame buffer device";
 
@@ -335,9 +262,49 @@ __initfunc(static unsigned long fbcon_startup(unsigned long kmem_start,
 			     "console/cursor", fbcon_vbl_handler);
     }
 #endif /* CONFIG_ATARI */
+
+#ifdef CONFIG_MAC
+    /*
+     * On a Macintoy, the VBL interrupt may or may not be active. 
+     * As interrupt based cursor is more reliable and race free, we 
+     * probe for VBL interrupts.
+     */
+    if (MACH_IS_MAC) {
+       int ct = 0;
+       /*
+        * Probe for VBL: set temp. handler ...
+        */
+       irqres = request_irq(IRQ_MAC_VBL, fbcon_vbl_detect, 0,
+                            "console/cursor", fbcon_vbl_detect);
+       /*
+        * ... and spin for 20 ms ...
+        */
+       while (!vbl_detected && ++ct<1000)
+          udelay(20);
+ 
+       if(ct==1000)
+          printk("fbcon_startup: No VBL detected, using timer based cursor.\n");
+ 
+       if (vbl_detected) {
+         /*
+          * interrupt based cursor ok
+          */
+          cursor_blink_rate = MAC_CURSOR_BLINK_RATE;
+          irqres = request_irq(IRQ_MAC_VBL, fbcon_vbl_handler, 0,
+                               "console/cursor", fbcon_vbl_handler);
+       } else {
+          /*
+           * VBL not detected: fall through, use timer based cursor
+           */
+           irqres = 1;
+	   /* free interrupt here ?? */
+       }
+    }
+#endif /* CONFIG_MAC */
+
     if (irqres) {
 	cursor_blink_rate = DEFAULT_CURSOR_BLINK_RATE;
-	cursor_timer.expires = jiffies+2;
+	cursor_timer.expires = jiffies+HZ/50;
 	cursor_timer.data = 0;
 	cursor_timer.next = cursor_timer.prev = NULL;
 	add_timer(&cursor_timer);
@@ -360,22 +327,24 @@ static void fbcon_init(struct vc_data *conp)
 
     info->changevar = &fbcon_changevar;
     fb_display[unit] = *(info->disp);	/* copy from default */
+    DPRINTK("mode:   %s\n",info->modename);
+    DPRINTK("visual: %d\n",fb_display[unit].visual);
+    DPRINTK("res:    %dx%d-%d\n",fb_display[unit].var.xres,
+	                     fb_display[unit].var.yres,
+	                     fb_display[unit].var.bits_per_pixel);
     fb_display[unit].conp = conp;
     fb_display[unit].fb_info = info;
     fbcon_setup(unit, 1, 1);
 }
 
 
-static int fbcon_deinit(struct vc_data *conp)
+static void fbcon_deinit(struct vc_data *conp)
 {
     int unit = conp->vc_num;
     struct display *p = &fb_display[unit];
 
-    if (p->dispsw)
-	    p->dispsw->release();
-    p->dispsw = 0;
+    p->dispsw = NULL;
     p->conp = 0;
-    return(0);
 }
 
 
@@ -405,7 +374,6 @@ static void fbcon_setup(int con, int setcol, int init)
     struct display *p = &fb_display[con];
     struct vc_data *conp = p->conp;
     int nr_rows, nr_cols;
-    struct display_switch *old_dispsw, *new_dispsw;
 
     p->var.xoffset = p->var.yoffset = p->yscroll = 0;  /* reset wrap/pan */
 
@@ -415,9 +383,17 @@ static void fbcon_setup(int con, int setcol, int init)
 	getdefaultfont(p->var.xres, p->var.yres, NULL, &p->fontwidth,
 		       &p->fontheight, &p->fontdata);
     if (p->fontwidth != 8) {
-	/* ++Geert: changed from panic() to `correct and continue' */
-	printk(KERN_ERR "fbcon_setup: No support for fontwidth != 8");
-	p->fontwidth = 8;
+#ifdef CONFIG_MAC
+	if (MACH_IS_MAC)
+	    /* ++Geert: hack to make 6x11 fonts work on mac */
+	    p->dispsw = &fbcon_mac;
+	else
+#endif
+	{
+	    /* ++Geert: changed from panic() to `correct and continue' */
+	    printk(KERN_ERR "fbcon_setup: No support for fontwidth != 8");
+	    p->dispsw = &fbcon_dummy;
+	}
     }
     updatescrollmode(p);
 
@@ -435,18 +411,12 @@ static void fbcon_setup(int con, int setcol, int init)
     p->vrows = p->var.yres_virtual/p->fontheight;
     conp->vc_can_do_color = p->var.bits_per_pixel != 1;
 
-    new_dispsw = fbcon_get_driver(p);
-    if (!new_dispsw) {
+    if (!p->dispsw) {
 	printk(KERN_WARNING "fbcon_setup: type %d (aux %d, depth %d) not "
 	       "supported\n", p->type, p->type_aux, p->var.bits_per_pixel);
-	dispsw_dummy.open(p);
-	new_dispsw = &dispsw_dummy;
+	p->dispsw = &fbcon_dummy;
     }
-    /* Be careful when changing dispsw, it might be the current console.  */
-    old_dispsw = p->dispsw;
-    p->dispsw = new_dispsw;
-    if (old_dispsw)
-	old_dispsw->release();
+    p->dispsw->setup(p);
 
     if (setcol) {
 	p->fgcol = p->var.bits_per_pixel > 2 ? 7 : (1<<p->var.bits_per_pixel)-1;
@@ -492,15 +462,18 @@ static __inline__ int real_y(struct display *p, int ypos)
 }
 
 
-static int fbcon_clear(struct vc_data *conp, int sy, int sx, int height,
-			      int width)
+static void fbcon_clear(struct vc_data *conp, int sy, int sx, int height,
+			int width)
 {
     int unit = conp->vc_num;
     struct display *p = &fb_display[unit];
     u_int y_break;
 
     if (!p->can_soft_blank && console_blanked)
-	return(0);
+	return;
+
+    if (!height || !width)
+	return;
 
     if ((sy <= p->cursor_y) && (p->cursor_y < sy+height) &&
 	(sx <= p->cursor_x) && (p->cursor_x < sx+width))
@@ -515,47 +488,41 @@ static int fbcon_clear(struct vc_data *conp, int sy, int sx, int height,
 	p->dispsw->clear(conp, p, real_y(p, sy+b), sx, height-b, width);
     } else
 	p->dispsw->clear(conp, p, real_y(p, sy), sx, height, width);
-
-    return(0);
 }
 
 
-static int fbcon_putc(struct vc_data *conp, int c, int ypos, int xpos)
+static void fbcon_putc(struct vc_data *conp, int c, int ypos, int xpos)
 {
     int unit = conp->vc_num;
     struct display *p = &fb_display[unit];
 
     if (!p->can_soft_blank && console_blanked)
-	    return 0;
+	    return;
 
     if ((p->cursor_x == xpos) && (p->cursor_y == ypos))
 	    CURSOR_UNDRAWN();
 
     p->dispsw->putc(conp, p, c, real_y(p, ypos), xpos);
-
-    return 0;
 }
 
 
-static int fbcon_putcs(struct vc_data *conp, const char *s, int count,
+static void fbcon_putcs(struct vc_data *conp, const char *s, int count,
 		       int ypos, int xpos)
 {
     int unit = conp->vc_num;
     struct display *p = &fb_display[unit];
 
     if (!p->can_soft_blank && console_blanked)
-	    return 0;
+	    return;
 
     if ((p->cursor_y == ypos) && (xpos <= p->cursor_x) &&
 	(p->cursor_x < (xpos + count)))
 	    CURSOR_UNDRAWN();
     p->dispsw->putcs(conp, p, s, count, real_y(p, ypos), xpos);
-
-    return(0);
 }
 
 
-static int fbcon_cursor(struct vc_data *conp, int mode)
+static void fbcon_cursor(struct vc_data *conp, int mode)
 {
     int unit = conp->vc_num;
     struct display *p = &fb_display[unit];
@@ -563,9 +530,9 @@ static int fbcon_cursor(struct vc_data *conp, int mode)
     /* Avoid flickering if there's no real change. */
     if (p->cursor_x == conp->vc_x && p->cursor_y == conp->vc_y &&
 	(mode == CM_ERASE) == !cursor_on)
-	return 0;
+	return;
     if (CURSOR_UNDRAWN ())
-	p->dispsw->rev_char(p, p->cursor_x, real_y(p, p->cursor_y));
+	p->dispsw->revc(p, p->cursor_x, real_y(p, p->cursor_y));
     p->cursor_x = conp->vc_x;
     p->cursor_y = conp->vc_y;
 
@@ -580,8 +547,6 @@ static int fbcon_cursor(struct vc_data *conp, int mode)
 	    cursor_on = 1;
 	    break;
     }
-
-    return(0);
 }
 
 
@@ -598,7 +563,7 @@ static void fbcon_vbl_handler(int irq, void *dummy, struct pt_regs *fp)
 	 * switching code should set vbl_cursor_cnt to an appropriate value.
 	 */
 	p = &fb_display[fg_console];
-	p->dispsw->rev_char(p, p->cursor_x, real_y(p, p->cursor_y));
+	p->dispsw->revc(p, p->cursor_x, real_y(p, p->cursor_y));
 	cursor_drawn ^= 1;
 	vbl_cursor_cnt = cursor_blink_rate;
     }
@@ -623,7 +588,7 @@ static __inline__ void ywrap_up(int unit, struct display *p, int count)
     p->var.xoffset = 0;
     p->var.yoffset = p->yscroll*p->fontheight;
     p->var.vmode |= FB_VMODE_YWRAP;
-    p->fb_info->updatevar(unit);
+    p->fb_info->updatevar(unit, p->fb_info);
 #if SUPPORT_SCROLLBACK
     scrollback_max += count;
     if (scrollback_max > p->vrows-conp->vc_rows)
@@ -646,7 +611,7 @@ static __inline__ void ywrap_down(int unit, struct display *p, int count)
     p->var.xoffset = 0;
     p->var.yoffset = p->yscroll*p->fontheight;
     p->var.vmode |= FB_VMODE_YWRAP;
-    p->fb_info->updatevar(unit);
+    p->fb_info->updatevar(unit, p->fb_info);
 #if SUPPORT_SCROLLBACK
     scrollback_max -= count;
     if (scrollback_max < 0)
@@ -668,7 +633,7 @@ static __inline__ void ypan_up(int unit, struct vc_data *conp,
     p->var.xoffset = 0;
     p->var.yoffset = p->yscroll*p->fontheight;
     p->var.vmode &= ~FB_VMODE_YWRAP;
-    p->fb_info->updatevar(unit);
+    p->fb_info->updatevar(unit, p->fb_info);
 }
 
 
@@ -684,17 +649,21 @@ static __inline__ void ypan_down(int unit, struct vc_data *conp,
     p->var.xoffset = 0;
     p->var.yoffset = p->yscroll*p->fontheight;
     p->var.vmode &= ~FB_VMODE_YWRAP;
-    p->fb_info->updatevar(unit);
+    p->fb_info->updatevar(unit, p->fb_info);
 }
 
 
-static int fbcon_scroll(struct vc_data *conp, int t, int b, int dir, int count)
+static void fbcon_scroll(struct vc_data *conp, int t, int b, int dir,
+			 int count)
 {
     int unit = conp->vc_num;
     struct display *p = &fb_display[unit];
 
     if (!p->can_soft_blank && console_blanked)
-	return(0);
+	return;
+
+    if (!count)
+	return;
 
     fbcon_cursor(conp, CM_ERASE);
 
@@ -822,19 +791,20 @@ static int fbcon_scroll(struct vc_data *conp, int t, int b, int dir, int count)
 	    fbcon_clear(conp, 0, t, conp->vc_rows, count);
 	    break;
     }
-
-    return(0);
 }
 
 
-static int fbcon_bmove(struct vc_data *conp, int sy, int sx, int dy, int dx,
-		       int height, int width)
+static void fbcon_bmove(struct vc_data *conp, int sy, int sx, int dy, int dx,
+			int height, int width)
 {
     int unit = conp->vc_num;
     struct display *p = &fb_display[unit];
 
     if (!p->can_soft_blank && console_blanked)
-	return(0);
+	return;
+
+    if (!width || !height)
+	return;
 
     if (((sy <= p->cursor_y) && (p->cursor_y < sy+height) &&
 	 (sx <= p->cursor_x) && (p->cursor_x < sx+width)) ||
@@ -850,8 +820,6 @@ static int fbcon_bmove(struct vc_data *conp, int sy, int sx, int dy, int dx,
      *  over again, so we use fbcon_bmove_rec()
      */
     fbcon_bmove_rec(p, sy, sx, dy, dx, height, width, p->vrows-p->yscroll);
-
-    return(0);
 }
 
 
@@ -894,7 +862,7 @@ static int fbcon_switch(struct vc_data *conp)
     struct fb_info *info = p->fb_info;
 
     if (info && info->switch_con)
-	(*info->switch_con)(conp->vc_num);
+	(*info->switch_con)(conp->vc_num, info);
 #if SUPPORT_SCROLLBACK
     scrollback_max = 0;
     scrollback_current = 0;
@@ -906,11 +874,19 @@ static int fbcon_switch(struct vc_data *conp)
 static int fbcon_blank(int blank)
 {
     struct display *p = &fb_display[fg_console];
+    struct fb_info *info = p->fb_info;
 
     fbcon_cursor(p->conp, blank ? CM_ERASE : CM_DRAW);
 
     if (!p->can_soft_blank) {
 	if (blank) {
+#ifdef CONFIG_MAC
+	    if (MACH_IS_MAC)
+		mymemset(p->screen_base,
+			 p->var.xres_virtual*p->var.yres_virtual*
+			 p->var.bits_per_pixel>>3);
+	    else
+#endif
 	    if (p->visual == FB_VISUAL_MONO01)
 		mymemset(p->screen_base,
 			 p->var.xres_virtual*p->var.yres_virtual*
@@ -925,7 +901,7 @@ static int fbcon_blank(int blank)
 	    return(1);
 	}
     }
-    (*p->fb_info->blank)(blank);
+    (*info->blank)(blank, info);
     return(0);
 }
 
@@ -975,7 +951,7 @@ static int fbcon_set_font(struct vc_data *conp, int w, int h, char *data)
 	copy_from_user( name, data, MAX_FONT_NAME );
 	name[sizeof(name)-1] = 0;
 
-	if (!findsoftfont( name, &w, &h, (u_char **)&data ))
+	if (!findsoftfont( name, &w, &h, (u8 **)&data ))
 	    return( -ENOENT );
 	userspace = 0;
     } else if (w == 1) {
@@ -1049,9 +1025,9 @@ activate:
     return( 0 );
 }
 
-static unsigned short palette_red[16];
-static unsigned short palette_green[16];
-static unsigned short palette_blue[16];
+static u16 palette_red[16];
+static u16 palette_green[16];
+static u16 palette_blue[16];
 
 static struct fb_cmap palette_cmap  = {
     0, 16, palette_red, palette_green, palette_blue, NULL
@@ -1062,7 +1038,7 @@ static int fbcon_set_palette(struct vc_data *conp, unsigned char *table)
     int unit = conp->vc_num;
     struct display *p = &fb_display[unit];
     int i, j, k;
-    u_char val;
+    u8 val;
 
     if (!conp->vc_can_do_color || (!p->can_soft_blank && console_blanked))
 	return(-EINVAL);
@@ -1078,7 +1054,7 @@ static int fbcon_set_palette(struct vc_data *conp, unsigned char *table)
     palette_cmap.len = 1<<p->var.bits_per_pixel;
     if (palette_cmap.len > 16)
 	palette_cmap.len = 16;
-    return(p->fb_info->setcmap(&palette_cmap, unit));
+    return p->fb_info->fbops->fb_set_cmap(&palette_cmap, 1, unit, p->fb_info);
 }
 
 static int fbcon_scrolldelta(int lines)
@@ -1109,10 +1085,24 @@ static int fbcon_scrolldelta(int lines)
     p->var.vmode |= FB_VMODE_YWRAP;
     p->var.xoffset = 0;
     p->var.yoffset = offset*p->fontheight;
-    p->fb_info->updatevar(unit);
+    p->fb_info->updatevar(unit, p->fb_info);
 #else
     return -ENOSYS;
 #endif
+}
+
+
+    /*
+     *  Switch between `text' (emulated and accelerated) and `graphics'
+     *  (unaccelerated text) mode
+     */
+
+static int fbcon_set_mode(struct vc_data *conp, int mode)
+{
+    struct display *p = &fb_display[conp->vc_num];
+    struct fb_ops *ops = p->fb_info->fbops;
+
+    return ops->fb_set_mode ? ops->fb_set_mode(mode, p->fb_info) : 0;
 }
 
 
@@ -1166,7 +1156,8 @@ __initfunc(static int fbcon_show_logo( void ))
 		palette_cmap.green[j] = (green[i+j] << 8) | green[i+j];
 		palette_cmap.blue[j]  = (blue[i+j] << 8) | blue[i+j];
 	    }
-	    p->fb_info->setcmap( &palette_cmap, fg_console );
+	    p->fb_info->fbops->fb_set_cmap(&palette_cmap, 1, fg_console,
+					   p->fb_info);
 	}
 	fb_display[fg_console].cmap.len = old_cmap_len;
     }
@@ -1184,12 +1175,65 @@ __initfunc(static int fbcon_show_logo( void ))
 	logo_depth = 1;
     }
 
-#if defined(CONFIG_FBCON_CFB16) || defined(CONFIG_FBCON_CYBER) || \
-    defined(CONFIG_FBCON_RETINAZ3)
-    if ((depth % 8 == 0) && (p->visual == FB_VISUAL_TRUECOLOR ||
-			     p->visual == FB_VISUAL_DIRECTCOLOR)) {
+#if defined(CONFIG_FBCON_CFB16) || defined(CONFIG_FBCON_CFB24) || \
+    defined(CONFIG_FBCON_CFB32)
+    if (p->visual == FB_VISUAL_TRUECOLOR) {
+	unsigned int val;		/* max. depth 32! */
+	int bdepth;
+	int redshift, greenshift, blueshift;
+		
+	/* Bug: Doesn't obey msb_right ... (who needs that?) */
+	redshift   = p->var.red.offset;
+	greenshift = p->var.green.offset;
+	blueshift  = p->var.blue.offset;
+
+	if (depth >= 24 && (depth % 8) == 0) {
+	    /* have at least 8 bits per color */
+	    src = logo;
+	    bdepth = depth/8;
+	    for( y1 = 0; y1 < LOGO_H; y1++ ) {
+		dst = fb + y1*line;
+		for( x1 = 0; x1 < LOGO_W; x1++, src++ ) {
+		val = ((linux_logo_red[*src]   & redmask)   << redshift) |
+		      ((linux_logo_green[*src] & greenmask) << greenshift) |
+		      ((linux_logo_blue[*src]  & bluemask)  << blueshift);
+		    for( i = bdepth-1; i >= 0; --i )
+			*dst++ = val >> (i*8);
+		}
+	    }
+	}
+	else if (depth >= 15 && depth <= 23) {
+	    /* have 5..7 bits per color, using 16 color image */
+	    unsigned int pix;
+	    src = linux_logo16;
+	    bdepth = (depth+7)/8;
+	    for( y1 = 0; y1 < LOGO_H; y1++ ) {
+		dst = fb + y1*line;
+		for( x1 = 0; x1 < LOGO_W/2; x1++, src++ ) {
+		    pix = (*src >> 4) | 0x10; /* upper nibble */
+		    val = (pix << redshift) |
+			  (pix << greenshift) |
+			  (pix << blueshift);
+		    for( i = 0; i < bdepth; ++i )
+			*dst++ = val >> (i*8);
+		    pix = (*src & 0x0f) | 0x10; /* lower nibble */
+		    val = (pix << redshift) |
+			  (pix << greenshift) |
+			  (pix << blueshift);
+		    for( i = bdepth-1; i >= 0; --i )
+			*dst++ = val >> (i*8);
+		}
+	    }
+	}
+	
+	done = 1;
+    }
+#endif
+#if defined(CONFIG_FBCON_CFB16) || defined(CONFIG_FBCON_CFB24) || \
+    defined(CONFIG_FBCON_CFB32)
+    if ((depth % 8 == 0) && (p->visual == FB_VISUAL_DIRECTCOLOR)) {
 	/* Modes without color mapping, needs special data transformation... */
-	unsigned long val;		/* max. depth 32! */
+	unsigned int val;		/* max. depth 32! */
 	int bdepth = depth/8;
 	unsigned char mask[9] = { 0,0x80,0xc0,0xe0,0xf0,0xf8,0xfc,0xfe,0xff };
 	unsigned char redmask, greenmask, bluemask;
@@ -1218,8 +1262,7 @@ __initfunc(static int fbcon_show_logo( void ))
 	done = 1;
     }
 #endif
-#if defined(CONFIG_FBCON_CFB8) || defined(CONFIG_FBCON_CYBER) || \
-    defined(CONFIG_FBCON_RETINAZ3)
+#if defined(CONFIG_FBCON_CFB8)
     if (depth == 8 && p->type == FB_TYPE_PACKED_PIXELS) {
 	/* depth 8 or more, packed, with color registers */
 		
@@ -1316,153 +1359,23 @@ struct consw fb_con = {
     fbcon_startup, fbcon_init, fbcon_deinit, fbcon_clear, fbcon_putc,
     fbcon_putcs, fbcon_cursor, fbcon_scroll, fbcon_bmove, fbcon_switch,
     fbcon_blank, fbcon_get_font, fbcon_set_font, fbcon_set_palette,
-    fbcon_scrolldelta
+    fbcon_scrolldelta, fbcon_set_mode
 };
-
-
-/*
- *  Driver registration
- */
-
-static struct display_switch *drivers = NULL, *accel_drivers = NULL;
-
-int fbcon_register_driver(struct display_switch *dispsw, int is_accel)
-{
-    struct display_switch **list;
-
-    list = is_accel ? &accel_drivers : &drivers;
-    dispsw->next = *list;
-    *list = dispsw;
-    return 0;
-}
-
-int fbcon_unregister_driver(struct display_switch *dispsw)
-{
-    struct display_switch **list;
-
-    for (list = &accel_drivers; *list; list = &(*list)->next)
-	if (*list == dispsw) {
-	    *list = dispsw->next;
-	    dispsw->next = NULL;
-	    return 0;
-	}
-    for (list = &drivers; *list; list = &(*list)->next)
-	if (*list == dispsw) {
-	    *list = dispsw->next;
-	    dispsw->next = NULL;
-	    return 0;
-	}
-    return -EINVAL;
-}
-
-
-static struct display_switch *probe_list(struct display_switch *dispsw,
-					 struct display *disp)
-{
-    while (dispsw) {
-	if (!dispsw->open(disp))
-	    return(dispsw);
-	dispsw = dispsw->next;
-    }
-    return(NULL);
-}
-
-
-#ifdef CONFIG_KMOD
-static void request_driver(struct display *disp, int is_accel)
-{
-    char modname[30];
-    int len;
-    const char *type;
-
-    if (disp->var.bits_per_pixel == 1)
-	type = "mfb";
-    else
-	switch (disp->type) {
-	    case FB_TYPE_INTERLEAVED_PLANES:
-		if (disp->type_aux == 2)
-		    type = "iplan2p%d";
-		else
-		    type = "ilbm";
-		break;
-	    case FB_TYPE_PLANES:
-		type = "afb";
-		break;
-	    case FB_TYPE_PACKED_PIXELS:
-		type = "cfb%d";
-		break;
-	    default:
-		return;
-	}
-    len = sprintf(modname, "fbcon-");
-    len += sprintf(modname+len, type, disp->var.bits_per_pixel);
-    if (is_accel)
-	len += sprintf(modname+len, "-%d", disp->var.accel);
-    request_module(modname);
-}
-#endif /* CONFIG_KMOD */
-
-
-static struct display_switch *fbcon_get_driver(struct display *disp)
-{
-    struct display_switch *dispsw;
-
-    if (disp->var.accel != FB_ACCEL_NONE) {
-	/* First try an accelerated driver */
-	dispsw = probe_list(accel_drivers, disp);
-#ifdef CONFIG_KMOD
-	if (!dispsw) {
-	    request_driver(disp, 1);
-	    dispsw = probe_list(accel_drivers, disp);
-	}
-#endif
-	if (dispsw)
-	    return(dispsw);
-    }
-
-    /* Then try an unaccelerated driver */
-    dispsw = probe_list(drivers, disp);
-#ifdef CONFIG_KMOD
-    if (!dispsw) {
-	request_driver(disp, 0);
-	dispsw = probe_list(drivers, disp);
-    }
-#endif
-    return(dispsw);
-}
 
 
 /*
  *  Dummy Low Level Operations
  */
 
-static int open_dummy(struct display *p)
-{
-    if (p->line_length)
-	p->next_line = p->line_length;
-    else
-	p->next_line = p->var.xres_virtual>>3;
-    p->next_plane = 0;
-    p->var.bits_per_pixel = 1;
-    return 0;
-}
+static void fbcon_dummy_op(void) {}
 
-static void misc_dummy(void) {}
-
-static struct display_switch dispsw_dummy = {
-    open_dummy,
-    /* release_dummy */
-    misc_dummy,
-    /* bmove_dummy */
-    (void (*)(struct display *, int, int, int, int, int, int))misc_dummy,
-    /* clear_dummy */
-    (void (*)(struct vc_data *, struct display *, int, int, int, int))misc_dummy,
-    /* putc_dummy */
-    (void (*)(struct vc_data *, struct display *, int, int, int))misc_dummy,
-    /* putcs_dummy */
-    (void (*)(struct vc_data *, struct display *, const char *, int, int, int))misc_dummy,
-    /* rev_char_dummy */
-    (void (*)(struct display *, int, int))misc_dummy,
+static struct display_switch fbcon_dummy = {
+    (void *)fbcon_dummy_op,	/* fbcon_dummy_setup */
+    (void *)fbcon_dummy_op,	/* fbcon_dummy_bmove */
+    (void *)fbcon_dummy_op,	/* fbcon_dummy_clear */
+    (void *)fbcon_dummy_op,	/* fbcon_dummy_putc */
+    (void *)fbcon_dummy_op,	/* fbcon_dummy_putcs */
+    (void *)fbcon_dummy_op,	/* fbcon_dummy_revc */
 };
 
 
@@ -1471,5 +1384,3 @@ static struct display_switch dispsw_dummy = {
  */
 
 EXPORT_SYMBOL(fb_display);
-EXPORT_SYMBOL(fbcon_register_driver);
-EXPORT_SYMBOL(fbcon_unregister_driver);

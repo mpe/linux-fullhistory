@@ -383,8 +383,8 @@ alloc586( struct device *dev ) {
 }
 
 /*****************************************************************/
-__initfunc(static int
-elmc_getinfo( char* buf, int slot, void* d )) {
+static int
+elmc_getinfo( char* buf, int slot, void* d ) {
 	int len = 0;
 	struct device* dev = (struct device*) d;
 	int i;

@@ -312,7 +312,14 @@ extern const char *const scsi_device_types[MAX_SCSI_DEVICE_CODE];
 #define ASKED_FOR_SENSE 0x20
 
 
+#ifdef __mc68000__
+#include <asm/pgtable.h>
+#define CONTIGUOUS_BUFFERS(X,Y) \
+	(virt_to_phys((X)->b_data+(X)->b_size-1)+1==virt_to_phys((Y)->b_data))
+#else
 #define CONTIGUOUS_BUFFERS(X,Y) ((X->b_data+X->b_size) == Y->b_data)
+#endif
+
 
 /*
  * This is the crap from the old error handling code.  We have it in a special
@@ -454,14 +461,6 @@ struct scsi_device {
                                      * because we did a bus reset. */
     unsigned device_blocked:1;      /* Device returned QUEUE_FULL. */
 };
-
-#ifdef __mc68000__
-#include <asm/pgtable.h>
-#define CONTIGUOUS_BUFFERS(X,Y) \
-	(virt_to_phys((X)->b_data+(X)->b_size-1)+1==virt_to_phys((Y)->b_data))
-#else
-#define CONTIGUOUS_BUFFERS(X,Y) ((X->b_data+X->b_size) == Y->b_data)
-#endif
 
 
 /*

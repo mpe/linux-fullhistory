@@ -21,6 +21,7 @@
  */
 
 
+#include <linux/config.h>
 #include <linux/module.h>
 #include <linux/kernel.h>
 #include <linux/errno.h>
@@ -39,6 +40,10 @@
 #include <asm/pgtable.h>
 
 #include "retz3fb.h"
+#include "fbcon.h"
+#include "fbcon-cfb8.h"
+#include "fbcon-cfb16.h"
+
 
 /* #define DEBUG if(1) */
 #define DEBUG if(0)
@@ -54,7 +59,7 @@
 
 #define arraysize(x)    (sizeof(x)/sizeof(*(x)))
 
-struct retz3_fb_par {
+struct retz3fb_par {
 	int xres;
 	int yres;
 	int xres_vir;
@@ -93,7 +98,7 @@ struct display_data {
 	long v_dispend;		/* Horizontal Display End */
 };
 
-static struct retz3_fb_par current_par;
+static struct retz3fb_par current_par;
 
 static int current_par_valid = 0;
 static int currcon = 0;
@@ -114,13 +119,15 @@ static struct fb_hwswitch {
 
    /* Display Control */
 
-   int (*encode_fix)(struct fb_fix_screeninfo *fix, struct retz3_fb_par *par);
-   int (*decode_var)(struct fb_var_screeninfo *var, struct retz3_fb_par *par);
-   int (*encode_var)(struct fb_var_screeninfo *var, struct retz3_fb_par *par);
+   int (*encode_fix)(struct fb_fix_screeninfo *fix, struct retz3fb_par *par);
+   int (*decode_var)(struct fb_var_screeninfo *var, struct retz3fb_par *par);
+   int (*encode_var)(struct fb_var_screeninfo *var, struct retz3fb_par *par);
    int (*getcolreg)(unsigned int regno, unsigned int *red, unsigned
-		    int *green, unsigned int *blue, unsigned int *transp);
+		    int *green, unsigned int *blue, unsigned int *transp,
+			struct fb_info *info);
    int (*setcolreg)(unsigned int regno, unsigned int red, unsigned int
-		    green, unsigned int blue, unsigned int transp);
+		    green, unsigned int blue, unsigned int transp,
+			struct fb_info *info);
    void (*blank)(int blank);
 } *fbhw;
 
@@ -129,7 +136,7 @@ static struct fb_hwswitch {
  *    Frame Buffer Name
  */
 
-static char retz3_fb_name[16] = "RetinaZ3";
+static char retz3fb_name[16] = "RetinaZ3";
 
 
 static unsigned char retz3_color_table [256][4];
@@ -138,46 +145,6 @@ static unsigned long z3_fbmem;
 static unsigned long z3_size;
 static volatile unsigned char *z3_regs;
 
-
-/*
- *    Predefined Video Mode Names
- */
-
-static char *retz3_fb_modenames[] = {
-
-	/*
-	 *    Autodetect (Default) Video Mode
-	 */
-
-	"default",
-
-	/*
-	 *    Predefined Video Modes
-	 */
-
-	"640x480",		/* RetinaZ3 8 bpp */
-	"800x600",		/* RetinaZ3 8 bpp */
-	"1024x768i",
-	"640x480-16",		/* RetinaZ3 16 bpp */
-	"640x480-24",		/* RetinaZ3 24 bpp */
-	
-	/*
-	 *    Dummy Video Modes
-	 */
-
-	"dummy", "dummy", "dummy", "dummy", "dummy", "dummy", "dummy",
-	"dummy", "dummy", "dummy", "dummy", "dummy", "dummy", "dummy",
-	"dummy", "dummy", "dummy", "dummy", "dummy", "dummy",
-
-	/*
-	 *    User Defined Video Modes
-	 *
-	 *    This doesn't work yet!!
-	 */
-
-	"user0", "user1", "user2", "user3",
-	"user4", "user5", "user6", "user7"
-};
 
 /*
  * A small info on how to convert XFree86 timing values into fb
@@ -217,131 +184,124 @@ under "programs/Xserver/hw/xfree86/doc/modeDB.txt".
 */
 
 /*
- *    Predefined Video Mode Definitions
+ *    Predefined Video Modes
  */
 
-static struct fb_var_screeninfo retz3_fb_predefined[] = {
+static struct fb_videomode retz3fb_predefined[] __initdata = {
+    /*
+     * NB: it is very important to adjust the pixel-clock to the color-depth.
+     */
 
-   /*
-    *    Autodetect (Default) Video Mode
-    */
-
-   { 0, },
-
-   /*
-    *    Predefined Video Modes
-    */
-
-   /*
-    * NB: it is very important to adjust the pixel-clock to the color-depth.
-    */
-
-   {
-	   640, 480, 640, 480, 0, 0, 8, 0,
-	   {0, 8, 0}, {0, 8, 0}, {0, 8, 0}, {0, 0, 0},
-	   0, 0, -1, -1, FB_ACCEL_RETINAZ3, 38461, 28, 32, 12, 10, 96, 2,
-	   FB_SYNC_HOR_HIGH_ACT | FB_SYNC_VERT_HIGH_ACT, FB_VMODE_NONINTERLACED
-   },
-   /*
-    ModeLine "800x600" 36 800 824 896 1024 600 601 603 625
-             < name > DCF HR  SH1 SH2  HFL VR  SV1 SV2 VFL
-    */
-   {
-	   /* 800 x 600, 8 bpp */
-	   800, 600, 800, 600, 0, 0, 8, 0,
-	   {0, 8, 0}, {0, 8, 0}, {0, 8, 0}, {0, 0, 0},
-	   0, 0, -1, -1, FB_ACCEL_RETINAZ3, 27778, 64, 24, 22, 1, 120, 2,
-	   FB_SYNC_COMP_HIGH_ACT|FB_SYNC_VERT_HIGH_ACT, FB_VMODE_NONINTERLACED
-   },
-   /*
-    ModeLine "1024x768i" 45 1024 1064 1224 1264 768 777 785 817 interlace
-              < name >   DCF HR  SH1  SH2  HFL  VR  SV1 SV2 VFL
-    */
-   {
-	   /* 1024 x 768, 8 bpp, interlaced */
-	   1024, 768, 1024, 768, 0, 0, 8, 0,
-	   {0, 8, 0}, {0, 8, 0}, {0, 8, 0}, {0, 0, 0},
-	   0, 0, -1, -1, FB_ACCEL_RETINAZ3, 22222, 40, 40, 32, 9, 160, 8,
-	   FB_SYNC_COMP_HIGH_ACT|FB_SYNC_VERT_HIGH_ACT, FB_VMODE_INTERLACED
-   },
-   {
-	   640, 480, 640, 480, 0, 0, 16, 0,
-	   {11, 5, 0}, {5, 6, 0}, {0, 5, 0}, {0, 0, 0},
-	   0, 0, -1, -1, FB_ACCEL_RETINAZ3, 38461/2, 28, 32, 12, 10, 96, 2,
-	   FB_SYNC_HOR_HIGH_ACT | FB_SYNC_VERT_HIGH_ACT, FB_VMODE_NONINTERLACED
-   },
-   {
-	   640, 480, 640, 480, 0, 0, 24, 0,
-	   {8, 8, 8}, {8, 8, 8}, {8, 8, 8}, {0, 0, 0}, 
-	   0, 0, -1, -1, FB_ACCEL_RETINAZ3, 38461/3, 28, 32, 12, 10, 96, 2,
-	   FB_SYNC_HOR_HIGH_ACT | FB_SYNC_VERT_HIGH_ACT, FB_VMODE_NONINTERLACED
-   },
-
-   /*
-    *    Dummy Video Modes
-    */
-
-   { 0, }, { 0, }, { 0, }, { 0, }, { 0, }, { 0, }, { 0, }, { 0, }, { 0, },
-   { 0, }, { 0, }, { 0, }, { 0, }, { 0, }, { 0, }, { 0, }, { 0, }, { 0, },
-   { 0, }, { 0, },
-
-   /*
-    *    User Defined Video Modes
-    */
-
-   { 0, }, { 0, }, { 0, }, { 0, }, { 0, }, { 0, }, { 0, }, { 0, }
+    {
+	"640x480", {		/* 640x480, 8 bpp */
+	    640, 480, 640, 480, 0, 0, 8, 0,
+	    {0, 8, 0}, {0, 8, 0}, {0, 8, 0}, {0, 0, 0},
+	    0, 0, -1, -1, FB_ACCEL_NCR77C32BLT, 38461, 28, 32, 12, 10, 96, 2,
+	    FB_SYNC_HOR_HIGH_ACT | FB_SYNC_VERT_HIGH_ACT, FB_VMODE_NONINTERLACED
+	}
+    },
+    /*
+     ModeLine "800x600" 36 800 824 896 1024 600 601 603 625
+	      < name > DCF HR  SH1 SH2  HFL VR  SV1 SV2 VFL
+     */
+    {
+	"800x600", {		/* 800x600, 8 bpp */
+	    800, 600, 800, 600, 0, 0, 8, 0,
+	    {0, 8, 0}, {0, 8, 0}, {0, 8, 0}, {0, 0, 0},
+	    0, 0, -1, -1, FB_ACCEL_NCR77C32BLT, 27778, 64, 24, 22, 1, 120, 2,
+	    FB_SYNC_COMP_HIGH_ACT|FB_SYNC_VERT_HIGH_ACT, FB_VMODE_NONINTERLACED
+	}
+    },
+    /*
+     ModeLine "1024x768i" 45 1024 1064 1224 1264 768 777 785 817 interlace
+	       < name >   DCF HR  SH1  SH2  HFL  VR  SV1 SV2 VFL
+     */
+    {
+	"1024x768i", {		/* 1024x768, 8 bpp, interlaced */
+	    1024, 768, 1024, 768, 0, 0, 8, 0,
+	    {0, 8, 0}, {0, 8, 0}, {0, 8, 0}, {0, 0, 0},
+	    0, 0, -1, -1, FB_ACCEL_NCR77C32BLT, 22222, 40, 40, 32, 9, 160, 8,
+	    FB_SYNC_COMP_HIGH_ACT|FB_SYNC_VERT_HIGH_ACT, FB_VMODE_INTERLACED
+	}
+    }, {
+	"640x480-16", {		/* 640x480, 16 bpp */
+	    640, 480, 640, 480, 0, 0, 16, 0,
+	    {11, 5, 0}, {5, 6, 0}, {0, 5, 0}, {0, 0, 0},
+	    0, 0, -1, -1, FB_ACCEL_NCR77C32BLT, 38461/2, 28, 32, 12, 10, 96, 2,
+	    FB_SYNC_HOR_HIGH_ACT | FB_SYNC_VERT_HIGH_ACT, FB_VMODE_NONINTERLACED
+	}
+    }, {
+	"640x480-24", {		/* 640x480, 24 bpp */
+	    640, 480, 640, 480, 0, 0, 24, 0,
+	    {8, 8, 8}, {8, 8, 8}, {8, 8, 8}, {0, 0, 0},
+	    0, 0, -1, -1, FB_ACCEL_NCR77C32BLT, 38461/3, 28, 32, 12, 10, 96, 2,
+	    FB_SYNC_HOR_HIGH_ACT | FB_SYNC_VERT_HIGH_ACT, FB_VMODE_NONINTERLACED
+	}
+    },
 };
 
 
-#define NUM_TOTAL_MODES    arraysize(retz3_fb_predefined)
-#define NUM_PREDEF_MODES   5
+#define NUM_TOTAL_MODES    arraysize(retz3fb_predefined)
 
+static struct fb_var_screeninfo retz3fb_default;
 
 static int z3fb_inverse = 0;
-static int z3fb_mode = 0;
+static int z3fb_mode __initdata = 0;
 
 
 /*
  *    Interface used by the world
  */
 
-void retz3_video_setup(char *options, int *ints);
+void retz3fb_setup(char *options, int *ints);
 
-static int retz3_fb_open(int fbidx);
-static int retz3_fb_release(int fbidx);
-static int retz3_fb_get_fix(struct fb_fix_screeninfo *fix, int con);
-static int retz3_fb_get_var(struct fb_var_screeninfo *var, int con);
-static int retz3_fb_set_var(struct fb_var_screeninfo *var, int con);
-static int retz3_fb_get_cmap(struct fb_cmap *cmap, int kspc, int con);
-static int retz3_fb_set_cmap(struct fb_cmap *cmap, int kspc, int con);
-static int retz3_fb_pan_display(struct fb_var_screeninfo *var, int con);
-static int retz3_fb_ioctl(struct inode *inode, struct file *file,
-			  unsigned int cmd, unsigned long arg, int con);
+static int retz3fb_open(struct fb_info *info);
+static int retz3fb_release(struct fb_info *info);
+static int retz3fb_get_fix(struct fb_fix_screeninfo *fix, int con,
+			   struct fb_info *info);
+static int retz3fb_get_var(struct fb_var_screeninfo *var, int con,
+			   struct fb_info *info);
+static int retz3fb_set_var(struct fb_var_screeninfo *var, int con,
+			   struct fb_info *info);
+static int retz3fb_get_cmap(struct fb_cmap *cmap, int kspc, int con,
+			    struct fb_info *info);
+static int retz3fb_set_cmap(struct fb_cmap *cmap, int kspc, int con,
+			    struct fb_info *info);
+static int retz3fb_pan_display(struct fb_var_screeninfo *var, int con,
+			       struct fb_info *info);
+static int retz3fb_ioctl(struct inode *inode, struct file *file,
+			 unsigned int cmd, unsigned long arg, int con,
+			 struct fb_info *info);
 
 
 /*
  *    Interface to the low level console driver
  */
 
-unsigned long retz3_fb_init(unsigned long mem_start);
-static int z3fb_switch(int con);
-static int z3fb_updatevar(int con);
-static void z3fb_blank(int blank);
-static int z3fb_setcmap(struct fb_cmap *cmap, int con);
+unsigned long retz3fb_init(unsigned long mem_start);
+static int z3fb_switch(int con, struct fb_info *info);
+static int z3fb_updatevar(int con, struct fb_info *info);
+static void z3fb_blank(int blank, struct fb_info *info);
+
+
+/*
+ *    Text console acceleration
+ */
+
+#ifdef CONFIG_FBCON_CFB8
+static struct display_switch fbcon_retz3_8;
+#endif
 
 
 /*
  *    Accelerated Functions used by the low level console driver
  */
 
-void retz3_bitblt(struct fb_var_screeninfo *scr,
-		  unsigned short curx, unsigned short cury, unsigned
-		  short destx, unsigned short desty, unsigned short
-		  width, unsigned short height, unsigned short cmd,
-		  unsigned short mask);
-void retz3_fill(unsigned short x, unsigned short y, unsigned short
-		width, unsigned short height, unsigned short mode,
-		unsigned short color);
+static void retz3_bitblt(struct fb_var_screeninfo *scr,
+			 unsigned short curx, unsigned short cury, unsigned
+			 short destx, unsigned short desty, unsigned short
+			 width, unsigned short height, unsigned short cmd,
+			 unsigned short mask);
 
 /*
  *   Hardware Specific Routines
@@ -349,17 +309,17 @@ void retz3_fill(unsigned short x, unsigned short y, unsigned short
 
 static int retz3_init(void);
 static int retz3_encode_fix(struct fb_fix_screeninfo *fix,
-                          struct retz3_fb_par *par);
+                          struct retz3fb_par *par);
 static int retz3_decode_var(struct fb_var_screeninfo *var,
-                          struct retz3_fb_par *par);
+                          struct retz3fb_par *par);
 static int retz3_encode_var(struct fb_var_screeninfo *var,
-                          struct retz3_fb_par *par);
+                          struct retz3fb_par *par);
 static int retz3_getcolreg(unsigned int regno, unsigned int *red,
 			   unsigned int *green, unsigned int *blue,
-			   unsigned int *transp);
+			   unsigned int *transp, struct fb_info *info);
 static int retz3_setcolreg(unsigned int regno, unsigned int red,
 			   unsigned int green, unsigned int blue,
-			   unsigned int transp);
+			   unsigned int transp, struct fb_info *info);
 static void retz3_blank(int blank);
 
 
@@ -367,13 +327,11 @@ static void retz3_blank(int blank);
  *    Internal routines
  */
 
-static void retz3_fb_get_par(struct retz3_fb_par *par);
-static void retz3_fb_set_par(struct retz3_fb_par *par);
+static void retz3fb_get_par(struct retz3fb_par *par);
+static void retz3fb_set_par(struct retz3fb_par *par);
 static int do_fb_set_var(struct fb_var_screeninfo *var, int isactive);
-static void do_install_cmap(int con);
-/*
-static void retz3_fb_set_disp(int con);
-*/
+static void do_install_cmap(int con, struct fb_info *info);
+static void retz3fb_set_disp(int con, struct fb_info *info);
 static int get_video_mode(const char *name);
 
 
@@ -397,7 +355,7 @@ static unsigned short find_fq(unsigned int freq)
 	else if (freq <= 250000000)
 		n2 = 0;
 	else
-		return(0);
+		return 0;
 
 
 	do {
@@ -424,10 +382,12 @@ static unsigned short find_fq(unsigned int freq)
 
 
 static int retz3_set_video(struct fb_var_screeninfo *var,
-			   struct retz3_fb_par *par)
+			   struct retz3fb_par *par)
 {
+#if 0
 	float freq_f;
-	long freq;
+#endif
+	unsigned int freq;
 
 	int xres, hfront, hsync, hback;
 	int yres, vfront, vsync, vback;
@@ -478,7 +438,7 @@ static int retz3_set_video(struct fb_var_screeninfo *var,
 		vback  = var->upper_margin;
 	}
 
-	data.h_total	= (hback / 8) + (xres / 8) 
+	data.h_total	= (hback / 8) + (xres / 8)
 			+ (hfront / 8) + (hsync / 8) - 1 /* + 1 */;
 	data.h_dispend	= ((xres + bpp - 1)/ 8) - 1;
 	data.h_bstart	= xres / 8 /* + 1 */;
@@ -736,8 +696,13 @@ static int retz3_set_video(struct fb_var_screeninfo *var,
 	/*
 	 * Convert from ps to Hz.
 	 */
+#if 0
 	freq_f = (1.0/(float)var->pixclock) * 1000000000;
-	freq = ((long)freq_f) * 1000;
+	freq = ((unsigned int)freq_f) * 1000;
+#else
+	freq = 2000000000 / var->pixclock;
+	freq = freq * 500;
+#endif
 
 	best_freq = find_fq(freq);
 	pll_w(0x02, best_freq);
@@ -791,7 +756,7 @@ static int retz3_set_video(struct fb_var_screeninfo *var,
 	 */
 	switch (bpp){
 	case 8:
-		reg_w(0x83c6, 0x00); 
+		reg_w(0x83c6, 0x00);
 		break;
 	case 16:
 		reg_w(0x83c6, 0x60);
@@ -805,7 +770,7 @@ static int retz3_set_video(struct fb_var_screeninfo *var,
 
 	reg_w(VDAC_ADDRESS, 0x00);
 
-	seq_w(SEQ_MAP_MASK, 0x0f );  
+	seq_w(SEQ_MAP_MASK, 0x0f );
 
 	return 0;
 }
@@ -854,8 +819,8 @@ static int retz3_init(void)
 	}
 #endif
 
-	retz3_setcolreg (255, 56, 100, 160, 0);
-	retz3_setcolreg (254, 0, 0, 0, 0);
+	retz3_setcolreg (255, 56, 100, 160, 0, NULL /* unused */);
+	retz3_setcolreg (254, 0, 0, 0, 0, NULL /* unused */);
 
 	return 0;
 }
@@ -867,11 +832,11 @@ static int retz3_init(void)
  */
 
 static int retz3_encode_fix(struct fb_fix_screeninfo *fix,
-			    struct retz3_fb_par *par)
+			    struct retz3fb_par *par)
 {
 	short i;
 
-	strcpy(fix->id, retz3_fb_name);
+	strcpy(fix->id, retz3fb_name);
 	fix->smem_start = (char *)z3_fbmem;
 	fix->smem_len = z3_size;
 	fix->mmio_start = (unsigned char *)z3_regs;
@@ -889,6 +854,8 @@ static int retz3_encode_fix(struct fb_fix_screeninfo *fix,
 	fix->ywrapstep = 0;
 	fix->line_length = 0;
 
+	fix->accel = FB_ACCEL_NCR77C32BLT;
+
 	for (i = 0; i < arraysize(fix->reserved); i++)
 		fix->reserved[i] = 0;
 
@@ -902,7 +869,7 @@ static int retz3_encode_fix(struct fb_fix_screeninfo *fix,
  */
 
 static int retz3_decode_var(struct fb_var_screeninfo *var,
-			    struct retz3_fb_par *par)
+			    struct retz3fb_par *par)
 {
 	par->xres = var->xres;
 	par->yres = var->yres;
@@ -934,7 +901,7 @@ static int retz3_decode_var(struct fb_var_screeninfo *var,
  */
 
 static int retz3_encode_var(struct fb_var_screeninfo *var,
-			    struct retz3_fb_par *par)
+			    struct retz3fb_par *par)
 {
 	short i;
 
@@ -959,7 +926,7 @@ static int retz3_encode_var(struct fb_var_screeninfo *var,
 	var->height = -1;
 	var->width = -1;
 
-	var->accel = FB_ACCEL_RETINAZ3;
+	var->accel = FB_ACCEL_NCR77C32BLT;
 
 	var->pixclock = par->pixclock;
 
@@ -987,7 +954,7 @@ static int retz3_encode_var(struct fb_var_screeninfo *var,
 
 static int retz3_setcolreg(unsigned int regno, unsigned int red,
 			   unsigned int green, unsigned int blue,
-			   unsigned int transp)
+			   unsigned int transp, struct fb_info *info)
 {
 	/* We'll get to this */
 
@@ -1015,7 +982,7 @@ static int retz3_setcolreg(unsigned int regno, unsigned int red,
 
 static int retz3_getcolreg(unsigned int regno, unsigned int *red,
 			   unsigned int *green, unsigned int *blue,
-			   unsigned int *transp)
+			   unsigned int *transp, struct fb_info *info)
 {
 	if (regno > 255)
 		return 1;
@@ -1052,11 +1019,11 @@ void retz3_blank(int blank)
 }
 
 
-void retz3_bitblt (struct fb_var_screeninfo *var,
-		   unsigned short srcx, unsigned short srcy, unsigned
-		   short destx, unsigned short desty, unsigned short
-		   width, unsigned short height, unsigned short cmd,
-		   unsigned short mask)
+static void retz3_bitblt (struct fb_var_screeninfo *var,
+			  unsigned short srcx, unsigned short srcy,
+			  unsigned short destx, unsigned short desty,
+			  unsigned short width, unsigned short height,
+			  unsigned short cmd, unsigned short mask)
 {
 
 	volatile unsigned long *acm = (unsigned long *) (z3_mem + ACM_OFFSET);
@@ -1129,7 +1096,7 @@ void retz3_bitblt (struct fb_var_screeninfo *var,
 	*(acm + ACM_CONTROL/4) = tmp;
 
 	tmp  = width | (height << 16);
-	
+
 	*(acm + ACM_BITMAP_DIMENSION/4) = cpu_to_le32(tmp);
 
 	*(((volatile unsigned char *)acm) + ACM_START_STATUS) = 0x00;
@@ -1154,20 +1121,10 @@ void retz3_bitblt (struct fb_var_screeninfo *var,
 }
 
 #if 0
-void retz3_fill (unsigned short x, unsigned short y, unsigned
-		 short width, unsigned short height,
-		 unsigned short mode, unsigned short color)
-{
-
-}
-#endif
-
-
-#if 0
 /*
  * Move cursor to x, y
  */
-void retz3_MoveCursor (unsigned short x, unsigned short y)
+static void retz3_MoveCursor (unsigned short x, unsigned short y)
 {
 	/* Guess we gotta deal with the cursor at some point */
 }
@@ -1189,16 +1146,16 @@ static struct fb_hwswitch retz3_switch = {
  *    Fill the hardware's `par' structure.
  */
 
-static void retz3_fb_get_par(struct retz3_fb_par *par)
+static void retz3fb_get_par(struct retz3fb_par *par)
 {
 	if (current_par_valid)
 		*par = current_par;
 	else
-		fbhw->decode_var(&retz3_fb_predefined[z3fb_mode], par);
+		fbhw->decode_var(&retz3fb_default, par);
 }
 
 
-static void retz3_fb_set_par(struct retz3_fb_par *par)
+static void retz3fb_set_par(struct retz3fb_par *par)
 {
 	current_par = *par;
 	current_par_valid = 1;
@@ -1208,7 +1165,7 @@ static void retz3_fb_set_par(struct retz3_fb_par *par)
 static int do_fb_set_var(struct fb_var_screeninfo *var, int isactive)
 {
 	int err, activate;
-	struct retz3_fb_par par;
+	struct retz3fb_par par;
 
 	if ((err = fbhw->decode_var(var, &par)))
 		return err;
@@ -1217,7 +1174,7 @@ static int do_fb_set_var(struct fb_var_screeninfo *var, int isactive)
 	/* XXX ... what to do about isactive ? */
 
 	if ((var->activate & FB_ACTIVATE_MASK) == FB_ACTIVATE_NOW && isactive)
-		retz3_fb_set_par(&par);
+		retz3fb_set_par(&par);
 	fbhw->encode_var(var, &par);
 	var->activate = activate;
 
@@ -1227,17 +1184,17 @@ static int do_fb_set_var(struct fb_var_screeninfo *var, int isactive)
 }
 
 
-static void do_install_cmap(int con)
+static void do_install_cmap(int con, struct fb_info *info)
 {
 	if (con != currcon)
 		return;
 	if (fb_display[con].cmap.len)
 		fb_set_cmap(&fb_display[con].cmap, &fb_display[con].var, 1,
-			    fbhw->setcolreg);
+			    fbhw->setcolreg, info);
 	else
-		fb_set_cmap(fb_default_cmap(fb_display[con].var.bits_per_pixel),
+		fb_set_cmap(fb_default_cmap(1<<fb_display[con].var.bits_per_pixel),
 					    &fb_display[con].var, 1,
-					    fbhw->setcolreg);
+					    fbhw->setcolreg, info);
 }
 
 
@@ -1245,7 +1202,7 @@ static void do_install_cmap(int con)
  *    Open/Release the frame buffer device
  */
 
-static int retz3_fb_open(int fbidx)
+static int retz3fb_open(struct fb_info *info)
 {
 	/*
 	 * Nothing, only a usage count for the moment
@@ -1255,7 +1212,7 @@ static int retz3_fb_open(int fbidx)
 	return 0;
 }
 
-static int retz3_fb_release(int fbidx)
+static int retz3fb_release(struct fb_info *info)
 {
 	MOD_DEC_USE_COUNT;
 	return 0;
@@ -1266,13 +1223,14 @@ static int retz3_fb_release(int fbidx)
  *    Get the Fixed Part of the Display
  */
 
-static int retz3_fb_get_fix(struct fb_fix_screeninfo *fix, int con)
+static int retz3fb_get_fix(struct fb_fix_screeninfo *fix, int con,
+			   struct fb_info *info)
 {
-	struct retz3_fb_par par;
+	struct retz3fb_par par;
 	int error = 0;
 
 	if (con == -1)
-		retz3_fb_get_par(&par);
+		retz3fb_get_par(&par);
 	else
 		error = fbhw->decode_var(&fb_display[con].var, &par);
 	return(error ? error : fbhw->encode_fix(fix, &par));
@@ -1283,13 +1241,14 @@ static int retz3_fb_get_fix(struct fb_fix_screeninfo *fix, int con)
  *    Get the User Defined Part of the Display
  */
 
-static int retz3_fb_get_var(struct fb_var_screeninfo *var, int con)
+static int retz3fb_get_var(struct fb_var_screeninfo *var, int con,
+			   struct fb_info *info)
 {
-	struct retz3_fb_par par;
+	struct retz3fb_par par;
 	int error = 0;
 
 	if (con == -1) {
-		retz3_fb_get_par(&par);
+		retz3fb_get_par(&par);
 		error = fbhw->encode_var(var, &par);
 	} else
 		*var = fb_display[con].var;
@@ -1298,7 +1257,7 @@ static int retz3_fb_get_var(struct fb_var_screeninfo *var, int con)
 
 
 #if 1
-static void retz3_fb_set_disp(int con)
+static void retz3fb_set_disp(int con, struct fb_info *info)
 {
 	struct fb_fix_screeninfo fix;
 	struct display *display;
@@ -1308,7 +1267,7 @@ static void retz3_fb_set_disp(int con)
 	else
 		display = &disp;	/* used during initialization */
 
-	retz3_fb_get_fix(&fix, con);
+	retz3fb_get_fix(&fix, con, info);
 
 	if (con == -1)
 		con = 0;
@@ -1321,6 +1280,21 @@ static void retz3_fb_set_disp(int con)
 	display->ywrapstep = fix.ywrapstep;
 	display->can_soft_blank = 1;
 	display->inverse = z3fb_inverse;
+	switch (display->var.bits_per_pixel) {
+#ifdef CONFIG_FBCON_CFB8
+	case 8:
+		display->dispsw = &fbcon_retz3_8;
+		break;
+#endif
+#ifdef CONFIG_FBCON_CFB16
+	case 16:
+		display->dispsw = &fbcon_cfb16;
+		break;
+#endif
+	default:
+		display->dispsw = NULL;
+		break;
+	}
 }
 #endif
 
@@ -1328,7 +1302,8 @@ static void retz3_fb_set_disp(int con)
  *    Set the User Defined Part of the Display
  */
 
-static int retz3_fb_set_var(struct fb_var_screeninfo *var, int con)
+static int retz3fb_set_var(struct fb_var_screeninfo *var, int con,
+			   struct fb_info *info)
 {
 	int err, oldxres, oldyres, oldvxres, oldvyres, oldbpp;
 	struct display *display;
@@ -1359,7 +1334,7 @@ static int retz3_fb_set_var(struct fb_var_screeninfo *var, int con)
 		    oldbpp != var->bits_per_pixel) {
 
 			struct fb_fix_screeninfo fix;
-			retz3_fb_get_fix(&fix, con);
+			retz3fb_get_fix(&fix, con, info);
 
 			display->screen_base = fix.smem_start;
 			display->visual = fix.visual;
@@ -1370,8 +1345,23 @@ static int retz3_fb_set_var(struct fb_var_screeninfo *var, int con)
 			display->line_length = fix.line_length;
 			display->can_soft_blank = 1;
 			display->inverse = z3fb_inverse;
+			switch (display->var.bits_per_pixel) {
+#ifdef CONFIG_FBCON_CFB8
+			case 8:
+				display->dispsw = &fbcon_retz3_8;
+				break;
+#endif
+#ifdef CONFIG_FBCON_CFB16
+			case 16:
+				display->dispsw = &fbcon_cfb16;
+				break;
+#endif
+			default:
+				display->dispsw = NULL;
+				break;
+			}
 /*
-	retz3_fb_set_disp(con);
+	retz3fb_set_disp(con, info);
 */
 			if (fb_info.changevar)
 				(*fb_info.changevar)(con);
@@ -1380,7 +1370,7 @@ static int retz3_fb_set_var(struct fb_var_screeninfo *var, int con)
 		if (oldbpp != var->bits_per_pixel) {
 			if ((err = fb_alloc_cmap(&display->cmap, 0, 0)))
 				return err;
-			do_install_cmap(con);
+			do_install_cmap(con, info);
 		}
 	}
 	return 0;
@@ -1391,15 +1381,16 @@ static int retz3_fb_set_var(struct fb_var_screeninfo *var, int con)
  *    Get the Colormap
  */
 
-static int retz3_fb_get_cmap(struct fb_cmap *cmap, int kspc, int con)
+static int retz3fb_get_cmap(struct fb_cmap *cmap, int kspc, int con,
+			    struct fb_info *info)
 {
 	if (con == currcon) /* current console? */
 		return(fb_get_cmap(cmap, &fb_display[con].var, kspc,
-				   fbhw->getcolreg));
+				   fbhw->getcolreg, info));
 	else if (fb_display[con].cmap.len) /* non default colormap? */
 		fb_copy_cmap(&fb_display[con].cmap, cmap, kspc ? 0 : 2);
 	else
-		fb_copy_cmap(fb_default_cmap(fb_display[con].var.bits_per_pixel),
+		fb_copy_cmap(fb_default_cmap(1<<fb_display[con].var.bits_per_pixel),
 			     cmap, kspc ? 0 : 2);
 	return 0;
 }
@@ -1409,7 +1400,8 @@ static int retz3_fb_get_cmap(struct fb_cmap *cmap, int kspc, int con)
  *    Set the Colormap
  */
 
-static int retz3_fb_set_cmap(struct fb_cmap *cmap, int kspc, int con)
+static int retz3fb_set_cmap(struct fb_cmap *cmap, int kspc, int con,
+			    struct fb_info *info)
 {
 	int err;
 
@@ -1421,7 +1413,7 @@ static int retz3_fb_set_cmap(struct fb_cmap *cmap, int kspc, int con)
 	}
 	if (con == currcon)              /* current console? */
 		return(fb_set_cmap(cmap, &fb_display[con].var, kspc,
-				   fbhw->setcolreg));
+				   fbhw->setcolreg, info));
 	else
 		fb_copy_cmap(cmap, &fb_display[con].cmap, kspc ? 0 : 1);
 	return 0;
@@ -1434,7 +1426,8 @@ static int retz3_fb_set_cmap(struct fb_cmap *cmap, int kspc, int con)
  *    This call looks only at xoffset, yoffset and the FB_VMODE_YWRAP flag
  */
 
-static int retz3_fb_pan_display(struct fb_var_screeninfo *var, int con)
+static int retz3fb_pan_display(struct fb_var_screeninfo *var, int con,
+				struct fb_info *info)
 {
 	return -EINVAL;
 }
@@ -1444,21 +1437,22 @@ static int retz3_fb_pan_display(struct fb_var_screeninfo *var, int con)
  *    RetinaZ3 Frame Buffer Specific ioctls
  */
 
-static int retz3_fb_ioctl(struct inode *inode, struct file *file,
-                          unsigned int cmd, unsigned long arg, int con)
+static int retz3fb_ioctl(struct inode *inode, struct file *file,
+                         unsigned int cmd, unsigned long arg, int con,
+                         struct fb_info *info)
 {
 	return -EINVAL;
 }
 
 
-static struct fb_ops retz3_fb_ops = {
-	retz3_fb_open, retz3_fb_release, retz3_fb_get_fix, retz3_fb_get_var,
-	retz3_fb_set_var, retz3_fb_get_cmap, retz3_fb_set_cmap,
-	retz3_fb_pan_display, retz3_fb_ioctl
+static struct fb_ops retz3fb_ops = {
+	retz3fb_open, retz3fb_release, retz3fb_get_fix, retz3fb_get_var,
+	retz3fb_set_var, retz3fb_get_cmap, retz3fb_set_cmap,
+	retz3fb_pan_display, NULL, retz3fb_ioctl
 };
 
 
-__initfunc(void retz3_video_setup(char *options, int *ints))
+__initfunc(void retz3fb_setup(char *options, int *ints))
 {
 	char *this_opt;
 
@@ -1467,7 +1461,7 @@ __initfunc(void retz3_video_setup(char *options, int *ints))
 	if (!options || !*options)
 		return;
 
-	for (this_opt = strtok(options, ","); this_opt; 
+	for (this_opt = strtok(options, ","); this_opt;
 	     this_opt = strtok(NULL, ",")){
 		if (!strcmp(this_opt, "inverse")) {
 			z3fb_inverse = 1;
@@ -1484,14 +1478,14 @@ __initfunc(void retz3_video_setup(char *options, int *ints))
  *    Initialization
  */
 
-__initfunc(unsigned long retz3_fb_init(unsigned long mem_start))
+__initfunc(unsigned long retz3fb_init(unsigned long mem_start))
 {
 	int err;
 	unsigned long board_addr, board_size;
 	unsigned int key;
 	const struct ConfigDev *cd;
 
-	struct retz3_fb_par par;
+	struct retz3fb_par par;
 
 	if (!(key = zorro_find(ZORRO_PROD_MACROSYSTEMS_RETINA_Z3, 0, 0)))
 		return mem_start;
@@ -1511,43 +1505,38 @@ __initfunc(unsigned long retz3_fb_init(unsigned long mem_start))
 
 	z3_size = 0x00400000; /* 4 MB */
 
-	memset ((char*)z3_fbmem, 0, z3_size);
-
 	fbhw = &retz3_switch;
 
 	fbhw->init();
 
-	strcpy(fb_info.modename, retz3_fb_name);
+	strcpy(fb_info.modename, retz3fb_name);
 	fb_info.changevar = NULL;
 	fb_info.node = -1;
-	fb_info.fbops = &retz3_fb_ops;
-	fb_info.fbvar_num = NUM_TOTAL_MODES;
-	fb_info.fbvar = retz3_fb_predefined;
+	fb_info.fbops = &retz3fb_ops;
 	fb_info.disp = &disp;
 	fb_info.switch_con = &z3fb_switch;
 	fb_info.updatevar = &z3fb_updatevar;
 	fb_info.blank = &z3fb_blank;
-	fb_info.setcmap = &z3fb_setcmap;
 
 	err = register_framebuffer(&fb_info);
 	if (err < 0)
 		return mem_start;
 
 	if (z3fb_mode == -1)
-		z3fb_mode = 1;
+		retz3fb_default = retz3fb_predefined[0].var;
 
-	fbhw->decode_var(&retz3_fb_predefined[z3fb_mode], &par);
-	fbhw->encode_var(&retz3_fb_predefined[0], &par);
+	fbhw->decode_var(&retz3fb_default, &par);
+	fbhw->encode_var(&retz3fb_default, &par);
 
-	do_fb_set_var(&retz3_fb_predefined[0], 0);
-	retz3_fb_get_var(&disp.var, -1);
+	do_fb_set_var(&retz3fb_default, 0);
+	retz3fb_get_var(&disp.var, -1, &fb_info);
 
-	retz3_fb_set_disp(-1);
+	retz3fb_set_disp(-1, &fb_info);
 
-	do_install_cmap(0);
+	do_install_cmap(0, &fb_info);
 
-	printk("%s frame buffer device, using %ldK of video memory\n",
-	       fb_info.modename, z3_size>>10);
+	printk("fb%d: %s frame buffer device, using %ldK of video memory\n",
+	       GET_FB_IDX(fb_info.node), fb_info.modename, z3_size>>10);
 
 	/* TODO: This driver cannot be unloaded yet */
 	MOD_INC_USE_COUNT;
@@ -1556,17 +1545,18 @@ __initfunc(unsigned long retz3_fb_init(unsigned long mem_start))
 }
 
 
-static int z3fb_switch(int con)
+static int z3fb_switch(int con, struct fb_info *info)
 {
 	/* Do we have to save the colormap? */
 	if (fb_display[currcon].cmap.len)
 		fb_get_cmap(&fb_display[currcon].cmap,
-			    &fb_display[currcon].var, 1, fbhw->getcolreg);
+			    &fb_display[currcon].var, 1, fbhw->getcolreg,
+			    info);
 
 	do_fb_set_var(&fb_display[con].var, 1);
 	currcon = con;
 	/* Install new colormap */
-	do_install_cmap(con);
+	do_install_cmap(con, info);
 	return 0;
 }
 
@@ -1578,7 +1568,7 @@ static int z3fb_switch(int con)
  *    Since it's called by a kernel driver, no range checking is done.
  */
 
-static int z3fb_updatevar(int con)
+static int z3fb_updatevar(int con, struct fb_info *info)
 {
 	return 0;
 }
@@ -1588,19 +1578,9 @@ static int z3fb_updatevar(int con)
  *    Blank the display.
  */
 
-static void z3fb_blank(int blank)
+static void z3fb_blank(int blank, struct fb_info *info)
 {
 	fbhw->blank(blank);
-}
-
-
-/*
- *    Set the colormap
- */
-
-static int z3fb_setcmap(struct fb_cmap *cmap, int con)
-{
-	return(retz3_fb_set_cmap(cmap, 1, con));
 }
 
 
@@ -1608,13 +1588,13 @@ static int z3fb_setcmap(struct fb_cmap *cmap, int con)
  *    Get a Video Mode
  */
 
-static int get_video_mode(const char *name)
+__initfunc(static int get_video_mode(const char *name))
 {
 	short i;
 
-	for (i = 1; i <= NUM_PREDEF_MODES; i++)
-		if (!strcmp(name, retz3_fb_modenames[i])){
-			retz3_fb_predefined[0] = retz3_fb_predefined[i];
+	for (i = 0; i <= NUM_TOTAL_MODES; i++)
+		if (!strcmp(name, retz3fb_predefined[i].name)){
+			retz3fb_default = retz3fb_predefined[i].var;
 			return i;
 		}
 	return -1;
@@ -1624,7 +1604,7 @@ static int get_video_mode(const char *name)
 #ifdef MODULE
 int init_module(void)
 {
-	return(retz3_fb_init(NULL));
+	return(retz3fb_init(NULL));
 }
 
 void cleanup_module(void)
@@ -1636,11 +1616,60 @@ void cleanup_module(void)
 	unregister_framebuffer(&fb_info);
 	/* TODO: clean up ... */
 }
-#endif /* MODULE */
+#endif
 
 
 /*
- *  Visible symbols for modules
+ *  Text console acceleration
  */
 
-EXPORT_SYMBOL(retz3_bitblt);
+#ifdef CONFIG_FBCON_CFB8
+static void fbcon_retz3_8_bmove(struct display *p, int sy, int sx, int dy, int dx,
+	                int height, int width)
+{
+	int fontwidth = p->fontwidth;
+
+	sx *= fontwidth;
+	dx *= fontwidth;
+	width *= fontwidth;
+
+	retz3_bitblt(&p->var,
+		     (unsigned short)sx,
+		     (unsigned short)(sy*p->fontheight),
+		     (unsigned short)dx,
+		     (unsigned short)(dy*p->fontheight),
+		     (unsigned short)width,
+		     (unsigned short)(height*p->fontheight),
+		     Z3BLTcopy,
+		     0xffff);
+}
+
+static void fbcon_retz3_8_clear(struct vc_data *conp, struct display *p, int
+			sy, int sx, int height, int width)
+{
+	unsigned short col;
+	int fontwidth = p->fontwidth;
+
+	sx *= fontwidth;
+	width *= fontwidth;
+
+	col = attr_bgcol_ec(p, conp);
+	col &= 0xff;
+	col |= (col << 8);
+
+	retz3_bitblt(&p->var,
+		     (unsigned short)sx,
+		     (unsigned short)(sy*p->fontheight),
+		     (unsigned short)sx,
+		     (unsigned short)(sy*p->fontheight),
+		     (unsigned short)width,
+		     (unsigned short)(height*p->fontheight),
+		     Z3BLTset,
+		     col);
+}
+
+static struct display_switch fbcon_retz3_8 = {
+    fbcon_cfb8_setup, fbcon_retz3_8_bmove, fbcon_retz3_8_clear,
+    fbcon_cfb8_putc, fbcon_cfb8_putcs, fbcon_cfb8_revc
+};
+#endif

@@ -46,7 +46,7 @@ extern struct timer_struct timer_table[32];
  * to distinguish between the different invocations.
  */
 struct timer_list {
-	struct timer_list *next;
+	struct timer_list *next; /* MUST be first element */
 	struct timer_list *prev;
 	unsigned long expires;
 	unsigned long data;
@@ -55,6 +55,13 @@ struct timer_list {
 
 extern void add_timer(struct timer_list * timer);
 extern int  del_timer(struct timer_list * timer);
+
+/*
+ * mod_timer is a more efficient way to update the expire field of an
+ * active timer (if the timer is inactive it will be activated)
+ * mod_timer(a,b) is equivalent to del_timer(a); a->expires = b; add_timer(a)
+ */
+void mod_timer(struct timer_list *timer, unsigned long expires);
 
 extern void it_real_fn(unsigned long);
 

@@ -101,6 +101,14 @@ void * dst_alloc(int size, struct dst_ops * ops)
 void __dst_free(struct dst_entry * dst)
 {
 	start_bh_atomic();
+	/* The first case (dev==NULL) is required, when
+	   protocol module is unloaded.
+	 */
+	if (dst->dev == NULL || !(dst->dev->flags&IFF_UP)) {
+		dst->input = dst_discard;
+		dst->output = dst_blackhole;
+		dst->dev = &loopback_dev;
+	}
 	dst->obsolete = 2;
 	dst->next = dst_garbage_list;
 	dst_garbage_list = dst;
