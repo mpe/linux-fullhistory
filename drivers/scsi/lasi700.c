@@ -127,16 +127,23 @@ lasi700_probe(struct parisc_device *dev)
 
 	NCR_700_set_mem_mapped(hostdata);
 
-	host = NCR_700_detect(&lasi700_template, hostdata, &dev->dev,
-			      dev->irq, 7);
+	host = NCR_700_detect(&lasi700_template, hostdata, &dev->dev);
 	if (!host)
 		goto out_kfree;
+	host->this_id = 7;
+	host->irq = dev->irq;
+	if(request_irq(dev->irq, NCR_700_intr, SA_SHIRQ, "lasi700", host)) {
+		printk(KERN_ERR "lasi700: request_irq failed!\n");
+		goto out_put_host;
+	}
 
 	dev_set_drvdata(&dev->dev, host);
 	scsi_scan_host(host);
 
 	return 0;
 
+ out_put_host:
+	scsi_host_put(host);
  out_kfree:
 	iounmap(hostdata->base);
 	kfree(hostdata);

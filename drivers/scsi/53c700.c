@@ -296,8 +296,7 @@ NCR_700_get_SXFER(struct scsi_device *SDp)
 
 struct Scsi_Host *
 NCR_700_detect(struct scsi_host_template *tpnt,
-	       struct NCR_700_Host_Parameters *hostdata, struct device *dev,
-	       unsigned long irq, u8 scsi_id)
+	       struct NCR_700_Host_Parameters *hostdata, struct device *dev)
 {
 	dma_addr_t pScript, pSlots;
 	__u8 *memory;
@@ -393,8 +392,6 @@ NCR_700_detect(struct scsi_host_template *tpnt,
 	host->unique_id = hostdata->base;
 	host->base = hostdata->base;
 	hostdata->eh_complete = NULL;
-	host->irq = irq;
-	host->this_id = scsi_id;
 	host->hostdata[0] = (unsigned long)hostdata;
 	/* kick the chip */
 	NCR_700_writeb(0xff, host, CTEST9_REG);
@@ -415,28 +412,16 @@ NCR_700_detect(struct scsi_host_template *tpnt,
 	/* reset the chip */
 	NCR_700_chip_reset(host);
 
-	if (request_irq(irq, NCR_700_intr, SA_SHIRQ, dev->bus_id, host)) {
-		dev_printk(KERN_ERR, dev, "53c700: irq %lu request failed\n ",
-			   irq);
-		goto out_put_host;
-	}
-
 	if (scsi_add_host(host, dev)) {
 		dev_printk(KERN_ERR, dev, "53c700: scsi_add_host failed\n");
-		goto out_release_irq;
+		scsi_host_put(host);
+		return NULL;
 	}
 
 	spi_signalling(host) = hostdata->differential ? SPI_SIGNAL_HVD :
 		SPI_SIGNAL_SE;
 
 	return host;
-
- out_release_irq:
-	free_irq(irq, host);
- out_put_host:
-	scsi_host_put(host);
-
-	return NULL;
 }
 
 int

@@ -97,6 +97,7 @@
 #include <linux/kernel.h>
 #include <linux/module.h>
 #include <linux/mca.h>
+#include <linux/interrupt.h>
 #include <asm/io.h>
 #include <scsi/scsi_host.h>
 #include <scsi/scsi_device.h>
@@ -168,11 +169,13 @@ static struct scsi_host_template NCR_D700_driver_template = {
 struct NCR_D700_private {
 	struct device		*dev;
 	struct Scsi_Host	*hosts[2];
+	char			name[30];
+	char			pad;
 };
 
 static int 
-NCR_D700_probe_one(struct NCR_D700_private *p, int siop,
-		int irq, int slot, u32 region, int differential)
+NCR_D700_probe_one(struct NCR_D700_private *p, int siop, int irq,
+		   int slot, u32 region, int differential)
 {
 	struct NCR_700_Host_Parameters *hostdata;
 	struct Scsi_Host *host;
@@ -201,18 +204,18 @@ NCR_D700_probe_one(struct NCR_D700_private *p, int siop,
 	NCR_700_set_io_mapped(hostdata);
 
 	/* and register the siop */
-	host = NCR_700_detect(&NCR_D700_driver_template, hostdata,
-			      p->dev, irq,
-			      /* FIXME: read this from SUS */
-			      id_array[slot * 2 + siop]);
+	host = NCR_700_detect(&NCR_D700_driver_template, hostdata, p->dev);
 	if (!host) {
 		ret = -ENOMEM;
 		goto detect_failed;
 	}
 
+	p->hosts[siop] = host;
+	/* FIXME: read this from SUS */
+	host->this_id = id_array[slot * 2 + siop];
+	host->irq = irq;
 	scsi_scan_host(host);
 
-	p->hosts[siop] = host;
 	return 0;
 
  detect_failed:
@@ -221,6 +224,20 @@ NCR_D700_probe_one(struct NCR_D700_private *p, int siop,
 	kfree(hostdata);
 
 	return ret;
+}
+
+static int
+NCR_D700_intr(int irq, void *data, struct pt_regs *regs)
+{
+	struct NCR_D700_private *p = (struct NCR_D700_private *)data;
+	int i, found = 0;
+
+	for (i = 0; i < 2; i++)
+		if (p->hosts[i] &&
+		    NCR_700_intr(irq, p->hosts[i], regs) == IRQ_HANDLED)
+			found++;
+
+	return found ? IRQ_HANDLED : IRQ_NONE;
 }
 
 /* Detect a D700 card.  Note, because of the setup --- the chips are
@@ -301,13 +318,19 @@ NCR_D700_probe(struct device *dev)
 	p = kmalloc(sizeof(*p), GFP_KERNEL);
 	if (!p)
 		return -ENOMEM;
+	memset(p, '\0', sizeof(*p));
 	p->dev = dev;
-
+	snprintf(p->name, sizeof(p->name), "D700(%s)", dev->bus_id);
+	if (request_irq(irq, NCR_D700_intr, SA_SHIRQ, p->name, p)) {
+		printk(KERN_ERR "D700: request_irq failed\n");
+		kfree(p);
+		return -EBUSY;
+	}
 	/* plumb in both 700 chips */
 	for (i = 0; i < 2; i++) {
 		int err;
 
-		if ((err = NCR_D700_probe_one(p, i, irq, slot,
+		if ((err = NCR_D700_probe_one(p, i, slot, irq,
 					      offset_addr + (0x80 * i),
 					      differential)) != 0)
 			printk("D700: SIOP%d: probe failed, error = %d\n",
