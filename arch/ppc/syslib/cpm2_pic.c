@@ -48,6 +48,8 @@ static void cpm2_mask_irq(unsigned int irq_nr)
 	int	bit, word;
 	volatile uint	*simr;
 
+	irq_nr -= CPM_IRQ_OFFSET;
+
 	bit = irq_to_siubit[irq_nr];
 	word = irq_to_siureg[irq_nr];
 
@@ -61,6 +63,8 @@ static void cpm2_unmask_irq(unsigned int irq_nr)
 	int	bit, word;
 	volatile uint	*simr;
 
+	irq_nr -= CPM_IRQ_OFFSET;
+
 	bit = irq_to_siubit[irq_nr];
 	word = irq_to_siureg[irq_nr];
 
@@ -73,6 +77,8 @@ static void cpm2_mask_and_ack(unsigned int irq_nr)
 {
 	int	bit, word;
 	volatile uint	*simr, *sipnr;
+
+	irq_nr -= CPM_IRQ_OFFSET;
 
 	bit = irq_to_siubit[irq_nr];
 	word = irq_to_siureg[irq_nr];
@@ -92,6 +98,7 @@ static void cpm2_end_irq(unsigned int irq_nr)
 	if (!(irq_desc[irq_nr].status & (IRQ_DISABLED|IRQ_INPROGRESS))
 			&& irq_desc[irq_nr].action) {
 
+		irq_nr -= CPM_IRQ_OFFSET;
 		bit = irq_to_siubit[irq_nr];
 		word = irq_to_siureg[irq_nr];
 
@@ -101,20 +108,15 @@ static void cpm2_end_irq(unsigned int irq_nr)
 	}
 }
 
-struct hw_interrupt_type cpm2_pic = {
-	" CPM2 SIU  ",
-	NULL,
-	NULL,
-	cpm2_unmask_irq,
-	cpm2_mask_irq,
-	cpm2_mask_and_ack,
-	cpm2_end_irq,
-	0
+static struct hw_interrupt_type cpm2_pic = {
+	.typename = " CPM2 SIU ",
+	.enable = cpm2_unmask_irq,
+	.disable = cpm2_mask_irq,
+	.ack = cpm2_mask_and_ack,
+	.end = cpm2_end_irq,
 };
 
-
-int
-cpm2_get_irq(struct pt_regs *regs)
+int cpm2_get_irq(struct pt_regs *regs)
 {
 	int irq;
         unsigned long bits;
@@ -126,5 +128,43 @@ cpm2_get_irq(struct pt_regs *regs)
 
 	if (irq == 0)
 		return(-1);
-	return irq;
+	return irq+CPM_IRQ_OFFSET;
+}
+
+void cpm2_init_IRQ(void)
+{
+	int i;
+
+	/* Clear the CPM IRQ controller, in case it has any bits set
+	 * from the bootloader
+	 */
+
+	/* Mask out everything */
+	cpm2_immr->im_intctl.ic_simrh = 0x00000000;
+	cpm2_immr->im_intctl.ic_simrl = 0x00000000;
+	wmb();
+
+	/* Ack everything */
+	cpm2_immr->im_intctl.ic_sipnrh = 0xffffffff;
+	cpm2_immr->im_intctl.ic_sipnrl = 0xffffffff;
+	wmb();
+
+	/* Dummy read of the vector */
+	i = cpm2_immr->im_intctl.ic_sivec;
+	rmb();
+
+	/* Initialize the default interrupt mapping priorities,
+	 * in case the boot rom changed something on us.
+	 */
+	cpm2_immr->im_intctl.ic_sicr = 0;
+	cpm2_immr->im_intctl.ic_scprrh = 0x05309770;
+	cpm2_immr->im_intctl.ic_scprrl = 0x05309770;
+
+
+	/* Enable chaining to OpenPIC, and make everything level
+	 */
+	for (i = 0; i < NR_CPM_INTS; i++) {
+		irq_desc[i+CPM_IRQ_OFFSET].handler = &cpm2_pic;
+		irq_desc[i+CPM_IRQ_OFFSET].status |= IRQ_LEVEL;
+	}
 }
