@@ -173,6 +173,10 @@ unsigned long do_mmap(struct file * file, unsigned long addr, unsigned long len,
 	if (off + len < off)
 		return -EINVAL;
 
+	/* Too many mappings? */
+	if (mm->map_count > MAX_MAP_COUNT)
+		return -ENOMEM;
+
 	/* mlock MCL_FUTURE? */
 	if (mm->def_flags & VM_LOCKED) {
 		unsigned long locked = mm->locked_vm << PAGE_SHIFT;
@@ -452,6 +456,7 @@ asmlinkage int sys_munmap(unsigned long addr, size_t len)
  */
 int do_munmap(unsigned long addr, size_t len)
 {
+	struct mm_struct * mm;
 	struct vm_area_struct *mpnt, *next, *free, *extra;
 	int freed;
 
@@ -466,7 +471,8 @@ int do_munmap(unsigned long addr, size_t len)
 	 * every area affected in some way (by any overlap) is put
 	 * on the list.  If nothing is put on, nothing is affected.
 	 */
-	mpnt = current->mm->mmap;
+	mm = current->mm;
+	mpnt = mm->mmap;
 	while(mpnt && mpnt->vm_end <= addr)
 		mpnt = mpnt->vm_next;
 	if (!mpnt)
@@ -508,6 +514,7 @@ int do_munmap(unsigned long addr, size_t len)
 		free = free->vm_next;
 		freed = 1;
 
+		mm->map_count--;
 		remove_shared_vm_struct(mpnt);
 
 		st = addr < mpnt->vm_start ? mpnt->vm_start : addr;
@@ -518,9 +525,9 @@ int do_munmap(unsigned long addr, size_t len)
 		if (mpnt->vm_ops && mpnt->vm_ops->unmap)
 			mpnt->vm_ops->unmap(mpnt, st, size);
 
-		flush_cache_range(current->mm, st, end);
-		zap_page_range(current->mm, st, size);
-		flush_tlb_range(current->mm, st, end);
+		flush_cache_range(mm, st, end);
+		zap_page_range(mm, st, size);
+		flush_tlb_range(mm, st, end);
 
 		/*
 		 * Fix the mapping, and free the old area if it wasn't reused.
@@ -534,7 +541,7 @@ int do_munmap(unsigned long addr, size_t len)
 		kmem_cache_free(vm_area_cachep, extra);
 
 	if (freed)
-		current->mm->mmap_cache = NULL;	/* Kill the cache. */
+		mm->mmap_cache = NULL;	/* Kill the cache. */
 	return 0;
 }
 
@@ -560,6 +567,7 @@ void exit_mmap(struct mm_struct * mm)
 			if (mpnt->vm_ops->close)
 				mpnt->vm_ops->close(mpnt);
 		}
+		mm->map_count--;
 		remove_shared_vm_struct(mpnt);
 		zap_page_range(mm, start, size);
 		if (mpnt->vm_dentry)
@@ -567,6 +575,10 @@ void exit_mmap(struct mm_struct * mm)
 		kmem_cache_free(vm_area_cachep, mpnt);
 		mpnt = next;
 	}
+
+	/* This is just debugging */
+	if (mm->map_count)
+		printk("exit_mmap: map count is %d\n", mm->map_count);
 }
 
 /* Insert vm structure into process list sorted by address
@@ -576,6 +588,8 @@ void insert_vm_struct(struct mm_struct *mm, struct vm_area_struct *vmp)
 {
 	struct vm_area_struct **pprev = &mm->mmap;
 	struct dentry * dentry;
+
+	mm->map_count++;
 
 	/* Find where to link it in. */
 	while(*pprev && (*pprev)->vm_start <= vmp->vm_start)
@@ -668,6 +682,7 @@ void merge_segments (struct mm_struct * mm, unsigned long start_addr, unsigned l
 			mpnt->vm_start = mpnt->vm_end;
 			mpnt->vm_ops->close(mpnt);
 		}
+		mm->map_count--;
 		remove_shared_vm_struct(mpnt);
 		if (mpnt->vm_dentry)
 			dput(mpnt->vm_dentry);

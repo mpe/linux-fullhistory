@@ -220,6 +220,7 @@ static inline int dup_mmap(struct mm_struct * mm)
 		*tmp = *mpnt;
 		tmp->vm_flags &= ~VM_LOCKED;
 		tmp->vm_mm = mm;
+		mm->map_count++;
 		tmp->vm_next = NULL;
 		dentry = tmp->vm_dentry;
 		if (dentry) {
@@ -272,6 +273,7 @@ struct mm_struct * mm_alloc(void)
 		*mm = *current->mm;
 		init_new_context(mm);
 		mm->count = 1;
+		mm->map_count = 0;
 		mm->def_flags = 0;
 		mm->mmap_sem = MUTEX;
 		/*

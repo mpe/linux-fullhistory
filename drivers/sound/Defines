@@ -97,10 +97,18 @@ CONFIG_SBDSP=y
 endif
 endif
 
-ifdef CONFIG_SB
-ifneq ($(CONFIG_UART401),Y)
-CONFIG_UART401=y
-endif
+
+
+ifdef CONFIG_SB 
+  ifeq ($(CONFIG_SB),m)
+    ifneq ($(CONFIG_UART401),Y)
+      CONFIG_UART401=m
+    endif
+  else
+    ifneq ($(CONFIG_UART401),Y)
+      CONFIG_UART401=y
+    endif
+  endif
 endif
 
 ifdef CONFIG_TRIX

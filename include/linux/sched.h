@@ -140,10 +140,13 @@ struct fs_struct {
 	NULL, NULL \
 }
 
+/* Maximum number of active map areas.. This is a random (large) number */
+#define MAX_MAP_COUNT	(65536)
+
 struct mm_struct {
 	struct vm_area_struct *mmap, *mmap_cache;
 	pgd_t * pgd;
-	int count;
+	int count, map_count;
 	struct semaphore mmap_sem;
 	unsigned long context;
 	unsigned long start_code, end_code, start_data, end_data;
@@ -155,7 +158,7 @@ struct mm_struct {
 };
 
 #define INIT_MM {					\
-		&init_mmap, NULL, swapper_pg_dir, 1,	\
+		&init_mmap, NULL, swapper_pg_dir, 1, 1,	\
 		MUTEX,					\
 		0,					\
 		0, 0, 0, 0,				\

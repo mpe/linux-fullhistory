@@ -90,11 +90,12 @@ ifeq ($(CONFIG_BLK_DEV_IDE),y)
   L_OBJS += ide-probe.o
 else
   ifeq ($(CONFIG_BLK_DEV_IDE),m)
-  MX_OBJS += ide.o
+  MIX_OBJS += ide.o
   ifeq ($(CONFIG_PROC_FS),y)
     M_OBJS += ide-proc.o
   endif
-  M_OBJS += ide-probe.o
+  M_OBJS += ide-mod.o
+  MX_OBJS += ide-probe.o
   endif
 endif
 
@@ -117,7 +118,6 @@ endif
 ifeq ($(CONFIG_BLK_DEV_PS2),y)
 L_OBJS += ps2esdi.o
 endif
-
 
 ifeq ($(CONFIG_BLK_DEV_DTC2278),y)
 L_OBJS += dtc2278.o
@@ -250,3 +250,6 @@ else
 endif
 
 include $(TOPDIR)/Rules.make
+
+ide-mod.o: ide.o ide-proc.o
+	$(LD) $(LD_RFLAG) -r -o $@ ide.o ide-proc.o

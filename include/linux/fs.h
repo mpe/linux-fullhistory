@@ -321,8 +321,8 @@ struct inode {
 	struct list_head	i_dentry;
 
 	unsigned long		i_ino;
+	unsigned long		i_count;
 	kdev_t			i_dev;
-	unsigned short		i_count;
 	umode_t			i_mode;
 	nlink_t			i_nlink;
 	uid_t			i_uid;

@@ -799,9 +799,6 @@ __initfunc(static void ic_do_bootp_ext(u8 *ext))
 				ic_bootp_string(root_server_path, ext+1, *ext, sizeof(root_server_path));
 			break;
 	}
-
-	if (ic_gateway == INADDR_NONE && b->relay_ip)
-		ic_gateway = b->relay_ip;
 }
 
 

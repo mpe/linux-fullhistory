@@ -87,16 +87,6 @@ static int ide_getxdigit(char c)
 	return digit;
 }
 
-static int ide_getdigit(char c)
-{
-	int digit;
-	if (isdigit(c))
-		digit = c - '0';
-	else
-		digit = -1;
-	return digit;
-}
-
 static int xx_xx_parse_error (const char *data, unsigned long len, const char *msg)
 {
 	char errbuf[16];
@@ -254,24 +244,6 @@ parse_error:
 	return xx_xx_parse_error(start, startn, msg);
 }
 
-static int proc_ide_read_drivers
-	(char *page, char **start, off_t off, int count, int *eof, void *data)
-{
-	char		*out = page;
-	int		len;
-	ide_module_t	*p = ide_modules;
-	ide_driver_t	*driver;
-
-	while (p) {
-		driver = (ide_driver_t *) p->info;
-		if (p->type == IDE_DRIVER_MODULE && driver)
-			out += sprintf(out, "%s version %s\n", driver->name, driver->version);
-		p = p->next;
-	}
-	len = out - page;
-	PROC_IDE_READ_RETURN(page,start,off,count,eof,len);
-}
-
 static int proc_ide_read_config
 	(char *page, char **start, off_t off, int count, int *eof, void *data)
 {
@@ -310,6 +282,34 @@ static int proc_ide_read_imodel
 	PROC_IDE_READ_RETURN(page,start,off,count,eof,len);
 }
 #endif	/* CONFIG_PCI */
+
+static int ide_getdigit(char c)
+{
+	int digit;
+	if (isdigit(c))
+		digit = c - '0';
+	else
+		digit = -1;
+	return digit;
+}
+
+static int proc_ide_read_drivers
+	(char *page, char **start, off_t off, int count, int *eof, void *data)
+{
+	char		*out = page;
+	int		len;
+	ide_module_t	*p = ide_modules;
+	ide_driver_t	*driver;
+
+	while (p) {
+		driver = (ide_driver_t *) p->info;
+		if (p->type == IDE_DRIVER_MODULE && driver)
+			out += sprintf(out, "%s version %s\n", driver->name, driver->version);
+		p = p->next;
+	}
+	len = out - page;
+	PROC_IDE_READ_RETURN(page,start,off,count,eof,len);
+}
 
 static int proc_ide_read_type
 	(char *page, char **start, off_t off, int count, int *eof, void *data)
