@@ -10,14 +10,21 @@ SYSTEM = $(TOPDIR)/vmlinux
 OBJECTS = $(HEAD) misc.o
 
 CFLAGS = -O2 -DSTDC_HEADERS
+ZLDFLAGS = -e startup_32
+
+#
+# ZIMAGE_OFFSET is the load offset of the compression loader
+# BZIMAGE_OFFSET is the load offset of the high loaded compression loader
+#
+ZIMAGE_OFFSET = 0x1000
+BZIMAGE_OFFSET = 0x100000
+
+ZLINKFLAGS = -Ttext $(ZIMAGE_OFFSET) $(ZLDFLAGS)
+BZLINKFLAGS = -Ttext $(BZIMAGE_OFFSET) $(ZLDFLAGS)
 
 ifdef SMP
 CFLAGS := $(CFLAGS) -D__SMP__
 endif
-
-TARGET=--target elf32-i386
-INPUT_DATA=input_data
-INPUT_LEN=input_len
 
 all: vmlinux
 
@@ -40,24 +47,14 @@ head.o: head.S $(TOPDIR)/include/linux/tasks.h
 endif
 
 
-# You cannot compress a file and have the kernel uncompress it, it must
-# be stdin
 piggy.o:	$(SYSTEM)
 	tmppiggy=/tmp/$$$$piggy; \
 	rm -f $$tmppiggy $$tmppiggy.gz $$tmppiggy.lnk; \
-	if hash $(ENCAPS) 2> /dev/null; then \
-	  $(OBJDUMP) $(OBJDUMP_FLAGS) -o $(IMAGE_OFFSET) $(SYSTEM) > $$tmppiggy; \
-	else \
-	  $(OBJCOPY) $(SYSTEM) $$tmppiggy; \
-	fi; \
+	$(OBJCOPY) $(SYSTEM) $$tmppiggy; \
 	gzip -f -9 < $$tmppiggy > $$tmppiggy.gz; \
-	if hash $(ENCAPS) 2> /dev/null; then \
-	  $(ENCAPS) $(TARGET) piggy.o $$tmppiggy.gz $(INPUT_DATA) $(INPUT_LEN); \
-	else \
-	  echo "SECTIONS { .data : { input_len = .; LONG(input_data_end - input_data) input_data = .; *(.data) input_data_end = .; }}" > $$tmppiggy.lnk; \
-	  $(LD) -m elf_i386 -r -o piggy.o -b binary $$tmppiggy.gz -b elf32-i386 -T $$tmppiggy.lnk; \
-	fi; \
+	echo "SECTIONS { .data : { input_len = .; LONG(input_data_end - input_data) input_data = .; *(.data) input_data_end = .; }}" > $$tmppiggy.lnk; \
+	$(LD) -m elf_i386 -r -o piggy.o -b binary $$tmppiggy.gz -b elf32-i386 -T $$tmppiggy.lnk; \
 	rm -f $$tmppiggy $$tmppiggy.gz $$tmppiggy.lnk
 
 clean:
-	rm -f xtract piggyback vmlinux bvmlinux
+	rm -f vmlinux bvmlinux

@@ -10,6 +10,8 @@
  * 1995-03-26    Markus Kuhn
  *      fixed 500 ms bug at call to set_rtc_mmss, fixed DS12887
  *      precision CMOS clock update
+ * 1997-01-09    Adrian Sun
+ *      use interval timer if CONFIG_RTC=y
  */
 #include <linux/errno.h>
 #include <linux/sched.h>
@@ -25,7 +27,11 @@
 #include <linux/mc146818rtc.h>
 #include <linux/timex.h>
 
-#define TIMER_IRQ 0
+#ifdef CONFIG_RTC 
+#define TIMER_IRQ 0  /* using pit for timer */
+#else 
+#define TIMER_IRQ 8  /* using rtc for timer */
+#endif
 
 extern struct hwrpb_struct *hwrpb;
 
@@ -61,7 +67,7 @@ static inline __u32 rpcc(void)
  * timer_interrupt() needs to keep up the real-time clock,
  * as well as call the "do_timer()" routine every clocktick
  */
-void timer_interrupt(struct pt_regs * regs)
+void timer_interrupt(int irq, void *dev, struct pt_regs * regs)
 {
 	__u32 delta, now;
 
@@ -125,6 +131,10 @@ static inline unsigned long mktime(unsigned int year, unsigned int mon,
 
 void time_init(void)
 {
+#ifdef CONFIG_RTC
+	unsigned char save_control;
+#endif
+        void (*irq_handler)(int, void *, struct pt_regs *);
 	unsigned int year, mon, day, hour, min, sec;
 	int i;
 
@@ -178,6 +188,21 @@ void time_init(void)
 	state.scaled_ticks_per_cycle = ((unsigned long) HZ << FIX_SHIFT) / hwrpb->cycle_freq;
 	state.max_cycles_per_tick = (2 * hwrpb->cycle_freq) / HZ;
 	state.last_rtc_update = 0;
+
+#ifdef CONFIG_RTC 
+	/* turn off RTC interrupts before /dev/rtc is initialized */
+	save_control = CMOS_READ(RTC_CONTROL);
+        save_control &= ~RTC_PIE;
+        save_control &= ~RTC_AIE;
+        save_control &= ~RTC_UIE;
+        CMOS_WRITE(save_control, RTC_CONTROL);
+        CMOS_READ(RTC_INTR_FLAGS);
+#endif
+
+	/* setup timer */ 
+        irq_handler = timer_interrupt;
+        if (request_irq(TIMER_IRQ, irq_handler, 0, "timer", NULL))
+	  panic("Could not allocate timer IRQ!");
 }
 
 /*

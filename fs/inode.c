@@ -491,7 +491,7 @@ repeat:
 	inode = first_inode;
 	best = NULL;
 	badness = 1000;
-	for (i = nr_inodes/2; i > 0; i--,inode = inode->i_prev) {
+	for (i = nr_inodes/2; i > 0; i--,inode = inode->i_next) {
 		if (!inode->i_count) {
 			unsigned long i = 999;
 			if (!(inode->i_lock | inode->i_dirt))

@@ -17,6 +17,7 @@
 #include <linux/mm.h>
 #include <linux/swap.h>
 #include <linux/smp.h>
+#include <linux/init.h>
 #ifdef CONFIG_BLK_DEV_INITRD
 #include <linux/blk.h>
 #endif
@@ -96,6 +97,11 @@ void show_mem(void)
 
 extern unsigned long free_area_init(unsigned long, unsigned long);
 
+/* References to section boundaries */
+
+extern char _text, _etext, _edata, __bss_start, _end;
+extern char __init_begin, __init_end;
+
 /*
  * paging_init() sets up the page tables - note that the first 4MB are
  * already mapped by head.S.
@@ -103,7 +109,7 @@ extern unsigned long free_area_init(unsigned long, unsigned long);
  * This routines also unmaps the page at virtual kernel address 0, so
  * that we can trap those pesky NULL-reference errors in the kernel.
  */
-unsigned long paging_init(unsigned long start_mem, unsigned long end_mem)
+__initfunc(unsigned long paging_init(unsigned long start_mem, unsigned long end_mem))
 {
 	pgd_t * pg_dir;
 	pte_t * pg_table;
@@ -202,14 +208,14 @@ unsigned long paging_init(unsigned long start_mem, unsigned long end_mem)
 	return free_area_init(start_mem, end_mem);
 }
 
-void mem_init(unsigned long start_mem, unsigned long end_mem)
+__initfunc(void mem_init(unsigned long start_mem, unsigned long end_mem))
 {
 	unsigned long start_low_mem = PAGE_SIZE;
 	int codepages = 0;
 	int reservedpages = 0;
 	int datapages = 0;
+	int initpages = 0;
 	unsigned long tmp;
-	extern int _etext;
 
 	end_mem &= PAGE_MASK;
 	high_memory = (void *) end_mem;
@@ -251,12 +257,19 @@ void mem_init(unsigned long start_mem, unsigned long end_mem)
 		if (tmp >= MAX_DMA_ADDRESS)
 			clear_bit(PG_DMA, &mem_map[MAP_NR(tmp)].flags);
 		if (PageReserved(mem_map+MAP_NR(tmp))) {
-			if (tmp >= 0xA0000+PAGE_OFFSET && tmp < 0x100000+PAGE_OFFSET)
-				reservedpages++;
-			else if (tmp < (unsigned long) &_etext)
-				codepages++;
-			else
+			if (tmp >= (unsigned long) &_text && tmp < (unsigned long) &_edata) {
+				if (tmp < (unsigned long) &_etext)
+					codepages++;
+				else
+					datapages++;
+			} else if (tmp >= (unsigned long) &__init_begin
+				   && tmp < (unsigned long) &__init_end)
+				initpages++;
+			else if (tmp >= (unsigned long) &__bss_start
+				 && tmp < (unsigned long) start_mem)
 				datapages++;
+			else
+				reservedpages++;
 			continue;
 		}
 		atomic_set(&mem_map[MAP_NR(tmp)].count, 1);
@@ -266,12 +279,13 @@ void mem_init(unsigned long start_mem, unsigned long end_mem)
 #endif
 			free_page(tmp);
 	}
-	printk("Memory: %luk/%luk available (%dk kernel code, %dk reserved, %dk data)\n",
+	printk("Memory: %luk/%luk available (%dk kernel code, %dk reserved, %dk data, %dk init)\n",
 		(unsigned long) nr_free_pages << (PAGE_SHIFT-10),
 		max_mapnr << (PAGE_SHIFT-10),
 		codepages << (PAGE_SHIFT-10),
 		reservedpages << (PAGE_SHIFT-10),
-		datapages << (PAGE_SHIFT-10));
+		datapages << (PAGE_SHIFT-10),
+		initpages << (PAGE_SHIFT-10));
 /* test if the WP bit is honoured in supervisor mode */
 	if (wp_works_ok < 0) {
 		unsigned char tmp_reg;
@@ -300,7 +314,14 @@ void mem_init(unsigned long start_mem, unsigned long end_mem)
 
 void free_initmem(void)
 {
-	/* To be written */
+	unsigned long addr;
+	
+	addr = (unsigned long)(&__init_begin);
+	for (; addr < (unsigned long)(&__init_end); addr += PAGE_SIZE) {
+		mem_map[MAP_NR(addr)].flags &= ~(1 << PG_reserved);
+		atomic_set(&mem_map[MAP_NR(addr)].count, 1);
+		free_page(addr);
+	}
 }
 
 void si_meminfo(struct sysinfo *val)

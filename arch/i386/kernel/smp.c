@@ -39,11 +39,14 @@
 #include <linux/smp.h>
 #include <linux/smp_lock.h>
 #include <linux/interrupt.h>
+#include <linux/init.h>
 #include <asm/pgtable.h>
 #include <asm/bitops.h>
 #include <asm/pgtable.h>
 #include <asm/smp.h>
 #include <asm/io.h>
+
+#include "irq.h"
 
 extern unsigned long start_kernel, _etext;
 void setup_APIC_clock (void);
@@ -170,7 +173,7 @@ volatile int smp_process_available=0;
  *	SMP mode to <NUM>.
  */
 
-void smp_setup(char *str, int *ints)
+__initfunc(void smp_setup(char *str, int *ints))
 {
 	if (ints && ints[0] > 0)
 		max_cpus = ints[1];
@@ -232,7 +235,7 @@ static char *mpc_family(int family,int model)
  *	Read the MPC
  */
 
-static int smp_read_mpc(struct mp_config_table *mpc)
+__initfunc(static int smp_read_mpc(struct mp_config_table *mpc))
 {
 	char str[16];
 	int count=sizeof(*mpc);
@@ -377,7 +380,7 @@ static int smp_read_mpc(struct mp_config_table *mpc)
  *	Scan the memory blocks for an SMP configuration block.
  */
  
-int smp_scan_config(unsigned long base, unsigned long length)
+__initfunc(int smp_scan_config(unsigned long base, unsigned long length))
 {
 	unsigned long *bp=phys_to_virt(base);
 	struct intel_mp_floating *mpf;
@@ -535,7 +538,7 @@ extern unsigned char trampoline_end  [];
  *	has made sure it's suitably aligned.
  */
  
-static void install_trampoline(unsigned char *mp)
+__initfunc(static void install_trampoline(unsigned char *mp))
 {
 	memcpy(mp, trampoline_data, trampoline_end - trampoline_data);
 }
@@ -547,7 +550,7 @@ static void install_trampoline(unsigned char *mp)
  *	other things).
  */
  
-unsigned long smp_alloc_memory(unsigned long mem_base)
+__initfunc(unsigned long smp_alloc_memory(unsigned long mem_base))
 {
 	int size=(num_processors-1)*PAGE_SIZE;		/* Number of stacks needed */
 
@@ -568,7 +571,7 @@ unsigned long smp_alloc_memory(unsigned long mem_base)
  *	Hand out stacks one at a time.
  */
  
-static void *get_kernel_stack(void)
+__initfunc(static void *get_kernel_stack(void))
 {
 	void *stack=kstack_base;
 	if(kstack_base>=kstack_end)
@@ -583,7 +586,7 @@ static void *get_kernel_stack(void)
  *	a given CPU
  */
  
-void smp_store_cpu_info(int id)
+__initfunc(void smp_store_cpu_info(int id))
 {
 	struct cpuinfo_x86 *c=&cpu_data[id];
 	c->hard_math=hard_math;			/* Always assumed same currently */
@@ -614,7 +617,7 @@ void smp_store_cpu_info(int id)
  *	we use to track CPU's as they power up.
  */
 
-void smp_commence(void)
+__initfunc(void smp_commence(void))
 {
 	/*
 	 *	Lets the callin's below out of their loop.
@@ -623,7 +626,7 @@ void smp_commence(void)
 	smp_commenced=1;
 }
 
-void smp_callin(void)
+__initfunc(void smp_callin(void))
 {
 	extern void calibrate_delay(void);
 	int cpuid=GET_APIC_ID(apic_read(APIC_ID));
@@ -687,7 +690,7 @@ void smp_callin(void)
  *	Cycle through the processors sending APIC IPI's to boot each.
  */
  
-void smp_boot_cpus(void)
+__initfunc(void smp_boot_cpus(void))
 {
 	int i;
 	int cpucount=0;
@@ -1093,6 +1096,7 @@ void smp_boot_cpus(void)
  
 void smp_message_pass(int target, int msg, unsigned long data, int wait)
 {
+	unsigned long flags;
 	unsigned long cfg;
 	unsigned long target_map;
 	int p=smp_processor_id();
@@ -1121,11 +1125,12 @@ void smp_message_pass(int target, int msg, unsigned long data, int wait)
 			break;
 
 		case MSG_INVALIDATE_TLB:
+			/* make this a NMI some day */
 			irq = 0x31;
 			break;
 
 		case MSG_STOP_CPU:
-			irq = 0x32;
+			irq = 0x40;
 			break;
 
 		default:
@@ -1168,15 +1173,15 @@ void smp_message_pass(int target, int msg, unsigned long data, int wait)
 	 *	Just pray... there is nothing more we can do
 	 */
 	 
-	if(ct==1000) {
-		printk("CPU #%d: previous IPI still not cleared after 10mS", p);
-		ack_APIC_irq ();
-	}
+	if(ct==1000)
+		printk("CPU #%d: previous IPI still not cleared after 10mS\n", p);
 		
 	/*
 	 *	Program the APIC to deliver the IPI
 	 */
-	 
+
+	__save_flags(flags);
+	__cli();
 	cfg=apic_read(APIC_ICR2);
 	cfg&=0x00FFFFFF;
 	apic_write(APIC_ICR2, cfg|SET_APIC_DEST_FIELD(target));			/* Target chip     		*/
@@ -1210,7 +1215,8 @@ void smp_message_pass(int target, int msg, unsigned long data, int wait)
 	 *	Send the IPI. The write to APIC_ICR fires this off.
 	 */
 	 
-	apic_write(APIC_ICR, cfg);	
+	apic_write(APIC_ICR, cfg);
+	__restore_flags(flags);
 	
 	/*
 	 *	Spin waiting for completion
@@ -1300,36 +1306,6 @@ void smp_flush_tlb(void)
 /*	printk("SMID\n");*/
 }
 
-/*	
- *	Reschedule call back
- */
-asmlinkage void smp_reschedule_interrupt(void)
-{
-	need_resched=1;
-	ack_APIC_irq();
-}
-
-/*
- * Invalidate call-back
- */
-asmlinkage void smp_invalidate_interrupt(void)
-{
-	if (clear_bit(smp_processor_id(), &smp_invalidate_needed))
-		local_flush_tlb();
-
-	ack_APIC_irq ();
-}	
-
-/*
- *	CPU halt call-back
- */
-asmlinkage void smp_stop_cpu_interrupt(void)
-{
-	if (cpu_data[smp_processor_id()].hlt_works_ok)
-		for(;;) __asm__("hlt");
-	for  (;;) ;
-}
-
 /*
  * Platform specific profiling function.
  * it builds a 'prof_shift' resolution EIP distribution histogram
@@ -1337,7 +1313,7 @@ asmlinkage void smp_stop_cpu_interrupt(void)
  * it's SMP safe.
  */
 
-inline void x86_do_profile (unsigned long eip)
+static inline void x86_do_profile (unsigned long eip)
 {
 	if (prof_buffer && current->pid) {
 		extern int _stext;
@@ -1394,9 +1370,6 @@ static inline void smp_local_timer_interrupt(struct pt_regs * regs)
 		 *
 		 * kernel statistics counters are updated via atomic
 		 * operations.
-		 *
-		 * update_one_process() might send signals, thus
-		 * we have to get the irq lock for that one.
 		 */
 
 		if (user_mode(regs))
@@ -1405,12 +1378,7 @@ static inline void smp_local_timer_interrupt(struct pt_regs * regs)
 			system=1;
 
 		if (p->pid) {
-			unsigned long flags;
-	
-			save_flags(flags);
-			cli();
-			update_one_process(current, 1, user, system);
-			restore_flags(flags);
+			update_one_process(p, 1, user, system);
 
 			p->counter -= 1;
 			if (p->counter < 0) {
@@ -1464,9 +1432,63 @@ static inline void smp_local_timer_interrupt(struct pt_regs * regs)
  */
 void smp_apic_timer_interrupt(struct pt_regs * regs)
 {
+	int cpu = smp_processor_id();
+
+	/*
+	 * NOTE! We'd better ACK the irq immediately,
+	 * because timer handling can be slow, and we
+	 * want to be able to accept NMI tlb invalidates
+	 * during this time.
+	 */
+	ack_APIC_irq ();
+
+	/*
+	 * After doing the above, we need to make like
+	 * a normal interrupt - otherwise timer interrupts
+	 * ignore the global interrupt lock, which is the
+	 * WrongThing (tm) to do.
+	 */
+	irq_enter(cpu, 0);
 	smp_local_timer_interrupt(regs);
+	irq_exit(cpu, 0);
+}
+
+/*	
+ *	Reschedule call back
+ */
+asmlinkage void smp_reschedule_interrupt(void)
+{
+	int cpu = smp_processor_id();
+
+	ack_APIC_irq();
+	/*
+	 * This looks silly, but we actually do need to wait
+	 * for the global interrupt lock.
+	 */
+	irq_enter(cpu, 0);
+	need_resched=1;
+	irq_exit(cpu, 0);
+}
+
+/*
+ * Invalidate call-back
+ */
+asmlinkage void smp_invalidate_interrupt(void)
+{
+	if (clear_bit(smp_processor_id(), &smp_invalidate_needed))
+		local_flush_tlb();
 
 	ack_APIC_irq ();
+}	
+
+/*
+ *	CPU halt call-back
+ */
+asmlinkage void smp_stop_cpu_interrupt(void)
+{
+	if (cpu_data[smp_processor_id()].hlt_works_ok)
+		for(;;) __asm__("hlt");
+	for  (;;) ;
 }
 
 /*
@@ -1487,7 +1509,7 @@ void smp_apic_timer_interrupt(struct pt_regs * regs)
  * but we do not accept timer interrupts yet. We only allow the BP
  * to calibrate.
  */
-unsigned int get_8254_timer_count (void)
+static unsigned int get_8254_timer_count (void)
 {
 	unsigned int count;
 
@@ -1524,11 +1546,11 @@ void setup_APIC_timer (unsigned int clocks)
 	 * mode. With the IO APIC we can re-route the external timer
 	 * interrupt and broadcast it as an NMI to all CPUs, so no pain.
 	 *
-	 * NOTE: this irq vector 19 and the gate in BUILD_SMP_TIMER_INTERRUPT
+	 * NOTE: this trap vector (0x41) and the gate in BUILD_SMP_TIMER_INTERRUPT
 	 * should be the same ;)
 	 */
 	tmp_value = apic_read(APIC_LVTT);
-	lvtt1_value = APIC_LVT_TIMER_PERIODIC | (0x20+19);
+	lvtt1_value = APIC_LVT_TIMER_PERIODIC | 0x41;
 	apic_write(APIC_LVTT , lvtt1_value);
 
 	/*

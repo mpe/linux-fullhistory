@@ -27,6 +27,7 @@
 #include <linux/random.h>
 #include <linux/smp.h>
 #include <linux/smp_lock.h>
+#include <linux/init.h>
 
 #include <asm/system.h>
 #include <asm/io.h>
@@ -34,6 +35,8 @@
 #include <asm/bitops.h>
 #include <asm/smp.h>
 #include <asm/pgtable.h>
+
+#include "irq.h"
 
 #ifdef __SMP_PROF__
 extern volatile unsigned long smp_local_timer_ticks[1+NR_CPUS];
@@ -146,9 +149,7 @@ BUILD_IRQ(SECOND,15,0x80)
 BUILD_SMP_INTERRUPT(reschedule_interrupt)
 BUILD_SMP_INTERRUPT(invalidate_interrupt)
 BUILD_SMP_INTERRUPT(stop_cpu_interrupt)
-#ifdef __SMP_PROF__
 BUILD_SMP_TIMER_INTERRUPT(apic_timer_interrupt)
-#endif
 #endif
 
 /*
@@ -524,40 +525,6 @@ void __global_restore_flags(unsigned long flags)
 	}
 }
 
-#undef INIT_STUCK
-#define INIT_STUCK 200000000
-
-#undef STUCK
-#define STUCK \
-if (!--stuck) {printk("irq_enter stuck (irq=%d, cpu=%d, global=%d)\n",irq,cpu,global_irq_holder); stuck = INIT_STUCK;}
-
-inline void irq_enter(int cpu, int irq)
-{
-	int stuck = INIT_STUCK;
-
-	hardirq_enter(cpu);
-	while (test_bit(0,&global_irq_lock)) {
-		if ((unsigned char) cpu == global_irq_holder) {
-			printk("BAD! Local interrupts enabled, global disabled\n");
-			break;
-		}
-		STUCK;
-		/* nothing */;
-	}
-}
-
-inline void irq_exit(int cpu, int irq)
-{
-	__cli();
-	hardirq_exit(cpu);
-	release_irqlock(cpu);
-}
-
-#else
-
-#define irq_enter(cpu, irq)	(++local_irq_count[cpu])
-#define irq_exit(cpu, irq)	(--local_irq_count[cpu])
-
 #endif
 
 /*
@@ -754,7 +721,7 @@ int probe_irq_off (unsigned long irqs)
 	return i;
 }
 
-void init_IRQ(void)
+__initfunc(void init_IRQ(void))
 {
 	int i;
 	static unsigned char smptrap=0;
@@ -777,19 +744,25 @@ void init_IRQ(void)
 	 */
 
 #ifdef __SMP__	
-	/* IRQ '16' - IPI for rescheduling */
+	/*
+	 * NOTE! The local APIC isn't very good at handling
+	 * multiple interrupts at the same interrupt level.
+	 * As the interrupt level is determined by taking the
+	 * vector number and shifting that right by 4, we
+	 * want to spread these out a bit so that they don't
+	 * all fall in the same interrupt level
+	 */
+	/* IRQ '16' (trap 0x30) - IPI for rescheduling */
 	set_intr_gate(0x20+i, reschedule_interrupt);
 
-	/* IRQ '17' - IPI for invalidation */
+	/* IRQ '17' (trap 0x31) - IPI for invalidation */
 	set_intr_gate(0x21+i, invalidate_interrupt);
 
-	/* IRQ '18' - IPI for CPU halt */
-	set_intr_gate(0x22+i, stop_cpu_interrupt);
+	/* IRQ '18' (trap 0x40) - IPI for CPU halt */
+	set_intr_gate(0x30+i, stop_cpu_interrupt);
 
-#ifdef __SMP_PROF__
-	/* IRQ '19' - self generated IPI for local APIC timer */
-	set_intr_gate(0x23+i, apic_timer_interrupt);
-#endif
+	/* IRQ '19' (trap 0x41) - self generated IPI for local APIC timer */
+	set_intr_gate(0x31+i, apic_timer_interrupt);
 #endif	
 	request_region(0x20,0x20,"pic1");
 	request_region(0xa0,0x20,"pic2");

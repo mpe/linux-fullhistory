@@ -905,8 +905,9 @@ S: Australia
 
 N: Martin Mares
 E: mj@k332.feld.cvut.cz
+W: http://atrey.karlin.mff.cuni.cz/~mj/
 D: BIOS video mode handling code
-D: Miscellaneous kernel fixes
+D: Miscellaneous kernel fixes and hacks
 D: MOXA C-218 serial board driver
 D: BOOTP support
 S: Kankovskeho 1241

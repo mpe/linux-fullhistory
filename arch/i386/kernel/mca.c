@@ -23,6 +23,7 @@
 #include <linux/pagemap.h>
 #include <linux/ioport.h>
 #include <asm/uaccess.h>
+#include <linux/init.h>
 
 /* This structure holds MCA information. Each (plug-in) adapter has 
  * eight POS registers. Then the machine may have integrated video and
@@ -78,7 +79,7 @@ static struct inode_operations proc_mca_inode_operations = {
 
 /*--------------------------------------------------------------------*/
 
-long mca_init(long memory_start, long memory_end)
+__initfunc(long mca_init(long memory_start, long memory_end))
 {
 	unsigned int  i, j;
 	int foundscsi = 0;
@@ -417,7 +418,7 @@ int  get_mca_info(char *buf)
 
 
 /*--------------------------------------------------------------------*/
-long mca_do_proc_init( long memory_start, long memory_end )
+__initfunc(long mca_do_proc_init( long memory_start, long memory_end ))
 {
 	int i = 0;
 	struct proc_dir_entry* node = 0;

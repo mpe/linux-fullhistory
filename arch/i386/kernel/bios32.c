@@ -59,6 +59,7 @@
 #include <linux/kernel.h>
 #include <linux/bios32.h>
 #include <linux/pci.h>
+#include <linux/init.h>
 
 #include <asm/page.h>
 #include <asm/segment.h>
@@ -188,7 +189,7 @@ static struct {
 } pci_indirect = { 0, KERNEL_CS };
 
 
-extern unsigned long check_pcibios(unsigned long memory_start, unsigned long memory_end)
+__initfunc(static unsigned long check_pcibios(unsigned long memory_start, unsigned long memory_end))
 {
 	unsigned long signature;
 	unsigned char present_status;
@@ -710,7 +711,7 @@ static struct pci_access pci_direct_conf2 = {
 };
 
 
-static struct pci_access *check_direct_pci(void)
+__initfunc(static struct pci_access *check_direct_pci(void))
 {
     unsigned int tmp;
     unsigned long flags;
@@ -863,14 +864,14 @@ const char *pcibios_strerror (int error)
 }
 
 
-unsigned long pcibios_fixup(unsigned long mem_start, unsigned long mem_end)
+__initfunc(unsigned long pcibios_fixup(unsigned long mem_start, unsigned long mem_end))
 {
     return mem_start;
 }
 
 #endif
 
-unsigned long pcibios_init(unsigned long memory_start, unsigned long memory_end)
+__initfunc(unsigned long pcibios_init(unsigned long memory_start, unsigned long memory_end))
 {
 #ifdef CONFIG_PCI
 	union bios32 *check;

@@ -22,6 +22,11 @@
 #include <linux/delay.h>
 #include <linux/config.h>	/* CONFIG_ALPHA_LCA etc */
 
+#ifdef CONFIG_RTC
+#include <linux/ioport.h>
+#include <linux/timex.h>
+#endif
+
 #include <asm/uaccess.h>
 #include <asm/pgtable.h>
 #include <asm/system.h>
@@ -83,9 +88,17 @@ static void init_pit (void)
     outb(0x18, 0x41);
 #endif
 
+#ifdef CONFIG_RTC /* setup interval timer if /dev/rtc is being used */
+    outb(0x34, 0x43);  /* binary, mode 2, LSB/MSB, ch 0 */
+    outb(LATCH & 0xff, 0x40); /* LSB */
+    outb(LATCH >> 8, 0x40); /* MSB */
+    request_region(0x40, 0x20, "timer"); /* reserve pit */
+#else
     outb(0x36, 0x43);	/* counter 0: system timer */
     outb(0x00, 0x40);
     outb(0x00, 0x40);
+    request_region(0x70, 0x10, "timer"); /* reserve rtc */
+#endif
 
     outb(0xb6, 0x43);	/* counter 2: speaker */
     outb(0x31, 0x42);

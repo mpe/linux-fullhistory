@@ -32,6 +32,7 @@
 #include <linux/slab.h>
 #include <linux/major.h>
 #include <linux/blk.h>
+#include <linux/init.h>
 #ifdef CONFIG_ROOT_NFS
 #include <linux/nfs_fs.h>
 #endif
@@ -256,7 +257,7 @@ extern void dquot_init(void);
 static char * argv_init[MAX_INIT_ARGS+2] = { "init", NULL, };
 static char * envp_init[MAX_INIT_ENVS+2] = { "HOME=/", "TERM=linux", NULL, };
 
-char *get_options(char *str, int *ints)
+__initfunc(char *get_options(char *str, int *ints))
 {
 	char *cur = str;
 	int i=1;
@@ -270,7 +271,7 @@ char *get_options(char *str, int *ints)
 	return(cur);
 }
 
-static void profile_setup(char *str, int *ints)
+__initfunc(static void profile_setup(char *str, int *ints))
 {
 	if (ints[0] > 0)
 		prof_shift = (unsigned long) ints[1];
@@ -285,7 +286,7 @@ static void profile_setup(char *str, int *ints)
 struct {
 	const char *str;
 	void (*setup_func)(char *, int *);
-} bootsetups[] = {
+} bootsetups[] __initdata = {
 	{ "reserve=", reserve_setup },
 	{ "profile=", profile_setup },
 #ifdef __SMP__
@@ -502,25 +503,25 @@ struct {
 };
 
 #ifdef CONFIG_BLK_DEV_RAM
-static void ramdisk_start_setup(char *str, int *ints)
+__initfunc(static void ramdisk_start_setup(char *str, int *ints))
 {
    if (ints[0] > 0 && ints[1] >= 0)
       rd_image_start = ints[1];
 }
 
-static void load_ramdisk(char *str, int *ints)
+__initfunc(static void load_ramdisk(char *str, int *ints))
 {
    if (ints[0] > 0 && ints[1] >= 0)
       rd_doload = ints[1] & 1;
 }
 
-static void prompt_ramdisk(char *str, int *ints)
+__initfunc(static void prompt_ramdisk(char *str, int *ints))
 {
    if (ints[0] > 0 && ints[1] >= 0)
       rd_prompt = ints[1] & 1;
 }
 
-static void ramdisk_size(char *str, int *ints)
+__initfunc(static void ramdisk_size(char *str, int *ints))
 {
 	if (ints[0] > 0 && ints[1] >= 0)
 		rd_size = ints[1];
@@ -528,7 +529,7 @@ static void ramdisk_size(char *str, int *ints)
 
 #endif
 
-static int checksetup(char *line)
+__initfunc(static int checksetup(char *line))
 {
 	int i = 0;
 	int ints[11];
@@ -560,7 +561,7 @@ unsigned long loops_per_sec = (1<<12);
    better than 1% */
 #define LPS_PREC 8
 
-void calibrate_delay(void)
+__initfunc(void calibrate_delay(void))
 {
 	unsigned long ticks, loopbit;
 	int lps_precision = LPS_PREC;
@@ -603,7 +604,7 @@ void calibrate_delay(void)
 		((loops_per_sec+2500)/5000) % 100);
 }
 
-static void parse_root_dev(char * line)
+__initfunc(static void parse_root_dev(char * line))
 {
 	int base = 0;
 	static struct dev_name_struct {
@@ -674,7 +675,7 @@ static void parse_root_dev(char * line)
  * This routine also checks for options meant for the kernel.
  * These options are not given to init - they are for internal kernel use only.
  */
-static void parse_options(char *line)
+__initfunc(static void parse_options(char *line))
 {
 	char *next;
 	int args, envs;
@@ -782,7 +783,7 @@ extern int cpu_idle(void * unused);
  *	Activate a secondary processor.
  */
  
-asmlinkage void start_secondary(void)
+__initfunc(asmlinkage void start_secondary(void))
 {
 	trap_init();
 	init_IRQ();
@@ -793,7 +794,7 @@ asmlinkage void start_secondary(void)
 
 
 /* Called by boot processor to activate the rest. */
-static void smp_init(void)
+__initfunc(static void smp_init(void))
 {
 	int i, j;
 
@@ -823,7 +824,7 @@ static void smp_init(void)
  *	they are finished.
  */
  
-static void smp_begin(void)
+__initfunc(static void smp_begin(void))
 {
 	smp_threads_ready=1;
 	smp_commence();
@@ -835,7 +836,7 @@ static void smp_begin(void)
  *	Activate the first processor.
  */
  
-asmlinkage void start_kernel(void)
+__initfunc(asmlinkage void start_kernel(void))
 {
 	char * command_line;
 
@@ -947,7 +948,7 @@ asmlinkage void start_kernel(void)
 }
 
 #ifdef CONFIG_BLK_DEV_INITRD
-static int do_linuxrc(void * shell)
+__initfunc(static int do_linuxrc(void * shell))
 {
 	static char *argv[] = { "linuxrc", NULL, };
 
@@ -959,7 +960,7 @@ static int do_linuxrc(void * shell)
 	return execve(shell, argv, envp_init);
 }
 
-static void no_initrd(char *s,int *ints)
+__initfunc(static void no_initrd(char *s,int *ints))
 {
 	mount_initrd = 0;
 }

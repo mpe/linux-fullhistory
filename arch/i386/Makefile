@@ -17,33 +17,11 @@ AS86    =$(CROSS_COMPILE)as86 -0 -a
 AS386   =$(CROSS_COMPILE)as86 -3
 LD86    =$(CROSS_COMPILE)ld86 -0
 
-#
-# ZIMAGE_OFFSET is the load offset of the compression loader
-# BZIMAGE_OFFSET is the load offset of the high loaded compression loader
-#
-ZIMAGE_OFFSET=0x1000
-BZIMAGE_OFFSET=0x100000
-
-#
-# IMAGE_OFFSET is the load offset of the _real_ kernel, soon
-# to be offset by another 0xC0000000...
-#
-IMAGE_OFFSET=0xC0100000
-
-# This is used for ELF - it needs to migrate or be moved.
-LD_RFLAG = -m elf_i386
-
 LD=$(CROSS_COMPILE)ld -m elf_i386
-CPP=$(CC) -E -D__ELF__
-OBJDUMP=$(CROSS_COMPILE)objdump
-OBJDUMP_FLAGS=-k -q 
-ENCAPS=$(CROSS_COMPILE)encaps
-OBJCOPY=$(CROSS_COMPILE)objcopy -O binary -R .note -R .comment -R .stab -R .stabstr
-ZLDFLAGS=-e startup_32 
+CPP=$(CC) -E
+OBJCOPY=$(CROSS_COMPILE)objcopy -O binary -R .note -R .comment -S
 LDFLAGS=-e stext
-ZLINKFLAGS =-Ttext $(ZIMAGE_OFFSET) $(ZLDFLAGS)
-BZLINKFLAGS =-Ttext $(BZIMAGE_OFFSET) $(ZLDFLAGS)
-LINKFLAGS =-Ttext $(IMAGE_OFFSET) $(LDFLAGS)
+LINKFLAGS =-T arch/i386/vmlinux.lds $(LDFLAGS)
 
 CFLAGS := $(CFLAGS) -pipe -fno-strength-reduce
 

@@ -224,6 +224,7 @@ CONFIG_PSMOUSE=y
 # CONFIG_APM is not set
 # CONFIG_WATCHDOG is not set
 # CONFIG_RTC is not set
+CONFIG_RTC_ARC=y
 
 #
 # Sound

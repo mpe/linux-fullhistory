@@ -136,4 +136,7 @@
 #define	ERESTART	127	/* Interrupted system call should be restarted */
 #define	ESTRPIPE	128	/* Streams pipe error */
 
+#define ENOMEDIUM	129	/* No medium found */
+#define EMEDIUMTYPE	130	/* Wrong medium type */
+
 #endif

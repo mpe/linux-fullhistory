@@ -104,6 +104,17 @@ struct sched_param {
 
 #ifdef __KERNEL__
 
+#include <asm/spinlock.h>
+
+/*
+ * This serializes "schedule()" and also protects
+ * the run-queue from deletions/modifications (but
+ * _adding_ to the beginning of the run-queue has
+ * a separate lock).
+ */
+extern spinlock_t scheduler_lock;
+extern spinlock_t tasklist_lock;
+
 extern void sched_init(void);
 extern void show_state(void);
 extern void trap_init(void);
@@ -460,11 +471,11 @@ extern inline void poll_wait(struct wait_queue ** wait_address, poll_table * p)
 	p->nr++;
 }
 
-#define REMOVE_LINKS(p) do { unsigned long flags; \
-	save_flags(flags) ; cli(); \
+#define REMOVE_LINKS(p) do { \
+	spin_lock(&tasklist_lock); \
 	(p)->next_task->prev_task = (p)->prev_task; \
 	(p)->prev_task->next_task = (p)->next_task; \
-	restore_flags(flags); \
+	spin_unlock(&tasklist_lock); \
 	if ((p)->p_osptr) \
 		(p)->p_osptr->p_ysptr = (p)->p_ysptr; \
 	if ((p)->p_ysptr) \
@@ -473,13 +484,13 @@ extern inline void poll_wait(struct wait_queue ** wait_address, poll_table * p)
 		(p)->p_pptr->p_cptr = (p)->p_osptr; \
 	} while (0)
 
-#define SET_LINKS(p) do { unsigned long flags; \
-	save_flags(flags); cli(); \
+#define SET_LINKS(p) do { \
+	spin_lock(&tasklist_lock); \
 	(p)->next_task = &init_task; \
 	(p)->prev_task = init_task.prev_task; \
 	init_task.prev_task->next_task = (p); \
 	init_task.prev_task = (p); \
-	restore_flags(flags); \
+	spin_unlock(&tasklist_lock); \
 	(p)->p_ysptr = NULL; \
 	if (((p)->p_osptr = (p)->p_pptr->p_cptr) != NULL) \
 		(p)->p_osptr->p_ysptr = p; \

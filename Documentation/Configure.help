@@ -4439,6 +4439,12 @@ CONFIG_RTC
   have a use for such a device (such as periodic data sampling), then
   say Y here, and go read the file Documentation/rtc.txt for details.
 
+ARC console time
+CONFIG_RTC_ARC
+  If you boot your Alpha using the ARC firmware, say Y here. This option
+  adjusts the RTC clock to take into account the different starting epoch
+  used by ARC.
+
 Sound card support
 CONFIG_SOUND
   If you have a Sound Card in your Computer, i.e. if it can say more

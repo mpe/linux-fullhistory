@@ -56,6 +56,13 @@
 #include <asm/system.h>
 #include <asm/poll.h>
 
+/* Adjust starting epoch if ARC console time is being used */
+#ifdef CONFIG_RTC_ARC
+#define ARCFUDGE 20 
+#else
+#define ARCFUDGE 0
+#endif
+
 /*
  *	We sponge a minor off of the misc major. No need slurping
  *	up another valuable major dev number for this. If you add
@@ -336,7 +343,7 @@ static int rtc_ioctl(struct inode *inode, struct file *file, unsigned int cmd,
 
 			copy_from_user(&rtc_tm, (struct rtc_time*)arg, sizeof(struct rtc_time));
 
-			yrs = rtc_tm.tm_year + 1900;
+			yrs = rtc_tm.tm_year + 1900 + ARCFUDGE;
 			mon = rtc_tm.tm_mon + 1;   /* tm_mon starts at zero */
 			day = rtc_tm.tm_mday;
 			hrs = rtc_tm.tm_hour;
@@ -724,6 +731,9 @@ void get_rtc_time(struct rtc_time *rtc_tm)
 	 */
 	if (rtc_tm->tm_year <= 69)
 		rtc_tm->tm_year += 100;
+
+	/* if ARCFUDGE == 0, the optimizer should do away with this */
+	rtc_tm->tm_year -= ARCFUDGE;
 
 	rtc_tm->tm_mon--;
 }

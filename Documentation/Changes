@@ -26,7 +26,10 @@ HTML-ized shopping list.
 http://www.datanet.hu/generations/linux/Changes2.html is an
 English-language HTML version.
 
-Last updated: April 1, 1997.
+   Also, don't forget http://www.linuxhq.com/ for all your Linux kernel
+needs.
+
+Last updated: April 15, 1997.
 Current Author: Chris Ricker (gt1355b@prism.gatech.edu).
 
 Current Minimal Requirements
@@ -35,19 +38,19 @@ Current Minimal Requirements
    Upgrade to at *least* these software revisions before thinking you've
 encountered a bug!
 
-- Kernel modules	 modutils-2.1.29-970320
+- Kernel modules	 modutils-2.1.34
 - Gnu C 		 2.7.2.1
 - Binutils		 2.7.0.9
 - Linux C Library	 5.4.23
 - Dynamic Linker (ld.so) 1.8.5
 - Linux C++ Library	 2.7.2.1
 - Procps		 1.01
-- Mount                  2.5p
+- Mount                  2.6e
 - Net-tools              1.32-alpha
-- Kbd                    0.91
 - Loadlin                1.6a
 - Sh-utils               1.16
-- Ncpfs                  2.1.1
+- Autofs                 970409
+- NFS                    0.4.21
 
 Upgrade notes
 *************
@@ -78,20 +81,22 @@ release.
 
    If you upgrade to libc-5.4.x, you also have to upgrade your dynamic
 linker (ld.so) to at least 1.8.5, or all sorts of weirdness will
-happen.  Actually, ld.so-1.8.2 and later will work, but only 1.8.5 is
-widely available, so if you need to upgrade, use it.
+happen.  Actually, ld.so-1.8.2 and later will work, but 1.8.5 is widely
+available, so if you need to upgrade, use it.  If you get a release
+later than 1.8.5, avoid 1.8.10 as it introduces a few bugs that are
+fixed in later releases.
 
 Modules
 =======
 
-   You need to upgrade to modutils-2.1.29-970320 for kernels 2.1.29 and
-later.
+   You need to upgrade to modutils-2.1.34 for kernels 2.1.34 and later.
 
 Binutils
 ========
 
    If you upgrade binutils, please read its accompanying release notes
-to find out the proper way to upgrade it.
+to find out the proper way to upgrade it.  No, the instruction to "rm
+`which encaps`" is not a joke.
 
 Gnu C
 =====
@@ -126,6 +131,15 @@ presence.
    To run bootpd, you'll need to issue the following command:   echo 1
 >/proc/sys/net/ipv4/ip_boot_agent
 
+Mount and network file systems
+==============================
+
+   The NFS code in the kernel is currently being revised, resulting in
+much-improved performance.  As a result, you'll need to upgrade mount
+to a 2.6 release.  Also, amd is being phased out in favor of the much
+better autofs.  You'll also have to get the appropriate utils to use
+autofs as well as the new NFS utils.
+
 RPM
 ===
 
@@ -150,6 +164,16 @@ Sh-utils
    As of Linux-2.1.26, the Configure script ("make config") has been
 updated to be POSIX-compliant.  As a result, your expr needs to be
 updated.  Use sh-utils 1.16 or later.
+
+Parallel Ports
+==============
+
+   As of 2.1.33, parallel port support can now by handled by the parport
+driver.  Be aware that with Plug-and-Play support turned on, your
+parallel port may no longer be where you expect it; for example, LPT1
+(under DOS) was sometimes /dev/lp1 in Linux, but will probably be
+/dev/lp0 with the new Plug-and-Play driver.  If printing breaks with
+the new driver, try checking your lpd configuration.
 
 How to know the version of the installed programs
 *************************************************
@@ -223,8 +247,9 @@ ftp://sunsite.unc.edu/pub/Linux/GCC/ld.so-1.8.5.tar.gz
 Modules utilities
 =================
 
-The 2.1.29-970320 release:
-ftp://ftp.redhat.com/pub/alphabits/modutils-2.1.29-970320.tar.gz
+The 2.1.34 release:
+ftp://ftp.redhat.com/pub/alphabits/modutils-2.1.34.tar.gz
+ftp://ftp.kernel.org/pub/linux/kernel/modutils-2.1.34.tar.gz
 
 Procps utilities
 ================
@@ -263,9 +288,28 @@ ftp://elserv.ffm.fgan.de/pub/linux/loadlin-1.6/update-1.6a/loadlin.exe.gz
 Sh-utils
 ========
 
-The 1.16 release
+The 1.16 release:
 ftp://sunsite.unc.edu/pub/gnu/sh-utils-1.16.tar.gz
 ftp://prep.ai.mit.edu/pub/gnu/sh-utils-1.16.tar.gz
+
+Mount
+=====
+
+The 2.6e release:
+ftp://ftp.win.tue.nl/pub/linux/util/mount-2.6e.tar.gz
+
+Autofs
+======
+
+The 970409 release:
+ftp://ftp.kernel.org/pub/linux/daemons/autofs/autofs-970409.tar.gz
+
+NFS
+===
+
+The 0.4.21 release:
+ftp://ftp.mathematik.th-darmstadt.de/pub/linux/okir/linux-nfs-0.4.21.tar.gz
+ftp://linux.nrao.edu/pub/people/okir/linux-nfs-0.4.21.tar.gz
 
 Other Info
 ==========

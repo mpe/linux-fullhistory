@@ -452,10 +452,10 @@ by doing the following after installing slackware (or whatever):
 
 	0. Boot from the "boot floppy" created during the installation
         1. Mount your DOS partition as /dos (and stick it in /etc/fstab)
-        2. Move your kernel (/vmlinuz) to /dos/vmlinuz with:  mv /vmlinuz /dos
-        3. Edit /etc/lilo.conf to change /vmlinuz to /dos/vmlinuz
-        4. Move /boot to /dos/boot with:  cp -a /boot /dos ; rm -r /boot
-        5. Create a symlink for LILO to use with:  ln -s /dos/boot /boot
+        2. Move /boot to /dos/boot with:  cp -a /boot /dos ; rm -r /boot
+        3. Create a symlink for LILO to use with:  ln -s /dos/boot /boot
+        4. Move your kernel (/vmlinuz) to /boot/vmlinuz:  mv /vmlinuz /boot
+        5. Edit /etc/lilo.conf to change /vmlinuz to /boot/vmlinuz
         6. Re-run LILO with:  lilo
 
 	A danger with this approach is that whenever an MS-DOS "defragmentation"

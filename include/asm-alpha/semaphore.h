@@ -24,18 +24,35 @@ extern void __up(struct semaphore * sem);
 
 #define sema_init(sem, val)	atomic_set(&((sem)->count), val)
 
+/*
+ * These two _must_ execute atomically wrt each other.
+ *
+ * This is trivially done with load_locked/store_cond,
+ * which we have.  Let the rest of the losers suck eggs.
+ */
+
+static inline void wake_one_more(struct semaphore * sem)
+{
+	atomic_inc(&sem->waking);
+}
+
 static inline int waking_non_zero(struct semaphore *sem)
 {
-	unsigned long flags;
-	int ret = 0;
+	int ret, tmp;
 
-	save_flags(flags);
-	cli();
-	if (atomic_read(&sem->waking) > 0) {
-		atomic_dec(&sem->waking);
-		ret = 1;
-	}
-	restore_flags(flags);
+	__asm__ __volatile__(
+	"1:	ldl_l	%1,%2\n"
+	"	ble	%1,2f\n"
+	"	subl	%1,1,%0\n"
+	"	stl_c	%0,%2\n"
+	"	beq	%0,3f\n"
+	"2:\n"
+	".text 2\n"
+	"3:	br	1b\n"
+	".text"
+	: "=r"(ret), "=r"(tmp), "=m"(__atomic_fool_gcc(&sem->waking))
+	: "0"(0));
+
 	return ret;
 }
 

@@ -89,7 +89,7 @@ startup_32:
  * Clear BSS first so that there are no surprises...
  */
 	xorl %eax,%eax
-	movl $ SYMBOL_NAME(_edata),%edi
+	movl $ SYMBOL_NAME(__bss_start),%edi
 	movl $ SYMBOL_NAME(_end),%ecx
 	subl %edi,%ecx
 	cld

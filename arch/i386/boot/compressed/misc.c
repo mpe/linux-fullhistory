@@ -75,11 +75,7 @@ static void gzip_release(void **);
  * This is set up by the setup-routine at boot-time
  */
 #define EXT_MEM_K (*(unsigned short *)0x90002)
-#define DRIVE_INFO (*(struct drive_info *)0x90080)
 #define SCREEN_INFO (*(struct screen_info *)0x90000)
-#define RAMDISK_SIZE (*(unsigned short *)0x901F8)
-#define ORIG_ROOT_DEV (*(unsigned short *)0x901FC)
-#define AUX_DEVICE_INFO (*(unsigned char *)0x901FF)
 
 extern char input_data[];
 extern int input_len;

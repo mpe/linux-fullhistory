@@ -22,6 +22,7 @@
 #include <linux/mm.h>
 #include <linux/smp.h>
 #include <linux/smp_lock.h>
+#include <linux/init.h>
 
 #include <asm/system.h>
 #include <asm/uaccess.h>
@@ -375,7 +376,7 @@ asmlinkage void math_emulate(long arg)
 
 #endif /* CONFIG_MATH_EMULATION */
 
-void trap_init(void)
+__initfunc(void trap_init(void))
 {
 	int i;
 	struct desc_struct * p;

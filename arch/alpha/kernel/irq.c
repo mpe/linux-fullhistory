@@ -26,7 +26,12 @@
 #include <asm/bitops.h>
 #include <asm/dma.h>
 
-extern void timer_interrupt(struct pt_regs * regs);
+#define RTC_IRQ    8
+#ifdef CONFIG_RTC
+#define TIMER_IRQ  0        /* timer is the pit */
+#else
+#define TIMER_IRQ  RTC_IRQ  /* the timer is, in fact, the rtc */
+#endif
 
 #if NR_IRQS > 64
 #  error Unable to handle more than 64 irq levels.
@@ -132,6 +137,7 @@ void enable_irq(unsigned int irq_nr)
 /*
  * Initial irq handlers.
  */
+static struct irqaction timer_irq = { NULL, 0, 0, NULL, NULL, NULL};
 static struct irqaction *irq_action[NR_IRQS];
 
 int get_irq_list(char *buf)
@@ -143,7 +149,7 @@ int get_irq_list(char *buf)
 		action = irq_action[i];
 		if (!action) 
 			continue;
-		len += sprintf(buf+len, "%2d: %8d %c %s",
+		len += sprintf(buf+len, "%2d: %10u %c %s",
 			i, kstat.interrupts[i],
 			(action->flags & SA_INTERRUPT) ? '+' : ' ',
 			action->name);
@@ -211,7 +217,10 @@ int request_irq(unsigned int irq,
 		shared = 1;
 	}
 
-	action = (struct irqaction *)kmalloc(sizeof(struct irqaction),
+        if (irq == TIMER_IRQ)
+ 		action = &timer_irq;
+        else
+		action = (struct irqaction *)kmalloc(sizeof(struct irqaction),
 					     GFP_KERNEL);
 	if (!action)
 		return -ENOMEM;
@@ -329,6 +338,7 @@ static inline void handle_irq(int irq, struct pt_regs * regs)
 static inline void device_interrupt(int irq, int ack, struct pt_regs * regs)
 {
 	struct irqaction * action;
+	int cpu = smp_processor_id();
 
 	if ((unsigned) irq > NR_IRQS) {
 		printk("device_interrupt: unexpected interrupt %d\n", irq);
@@ -660,7 +670,9 @@ int probe_irq_off(unsigned long irqs)
 {
 	int i;
 	
-	irqs &= irq_mask & ~1;	/* always mask out irq 0---it's the unused timer */
+        /* as irq 0 & 8 handling don't use this function, i didn't
+	 * bother changing the following: */
+        irqs &= irq_mask & ~1;  /* always mask out irq 0---it's the unused timer */
 #ifdef CONFIG_ALPHA_P2K
 	irqs &= ~(1 << 8);	/* mask out irq 8 since that's the unused RTC input to PIC */
 #endif
@@ -700,7 +712,7 @@ asmlinkage void do_entInt(unsigned long type, unsigned long vector, unsigned lon
 			printk("Interprocessor interrupt? You must be kidding\n");
 			break;
 		case 1:
-			timer_interrupt(&regs);
+		        handle_irq(RTC_IRQ, &regs);
 			return;
 		case 2:
 			machine_check(vector, la_ptr, &regs);

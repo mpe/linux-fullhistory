@@ -29,6 +29,10 @@
 #include <linux/elfcore.h>
 #include <linux/reboot.h>
 
+#ifdef CONFIG_RTC
+#include <linux/mc146818rtc.h>
+#endif
+
 #include <asm/reg.h>
 #include <asm/uaccess.h>
 #include <asm/system.h>
@@ -66,6 +70,24 @@ out:
 
 void machine_restart(char * __unused)
 {
+#ifdef CONFIG_RTC  /* reset rtc to defaults */
+	unsigned char control;
+	unsigned long flags;
+
+	/* i'm not sure if i really need to disable interrupts here */
+	save_flags(flags);
+	cli();
+ 	/* reset periodic interrupt frequency */
+        CMOS_WRITE(0x26, RTC_FREQ_SELECT);
+
+	/* turn on periodic interrupts */
+	control = CMOS_READ(RTC_CONTROL);
+	control |= RTC_PIE;
+	CMOS_WRITE(control, RTC_CONTROL);	
+        CMOS_READ(RTC_INTR_FLAGS);
+	restore_flags(flags);
+#endif
+
 #if defined(CONFIG_ALPHA_SRM) && defined(CONFIG_ALPHA_ALCOR)
 	/* who said DEC engineer's have no sense of humor? ;-)) */
 	*(int *) GRU_RESET = 0x0000dead;

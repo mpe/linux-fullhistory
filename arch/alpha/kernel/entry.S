@@ -126,19 +126,8 @@
 .ent	entInt
 entInt:
 	SAVE_ALL
-/* start atomic operation with respect to software interrupts */
-	lda	$0,intr_count
-	ldl	$1,0($0)
-	addq	$1,1,$1
-	stl	$1,0($0)
-/* set up the arguments to the C interrupt handler */
 	ldq	$8,current_set
 	jsr	$26,do_entInt
-/* ok, return */
-	lda	$0,intr_count
-	ldl	$1,0($0)
-	subq	$1,1,$1
-	stl	$1,0($0)
 	br	$31,ret_from_sys_call
 .end entInt
 

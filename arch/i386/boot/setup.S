@@ -27,12 +27,12 @@
 ! Video handling moved to video.S by Martin Mares, March 1996
 ! <mj@k332.feld.cvut.cz>
 
-! NOTE! These had better be the same as in bootsect.s!
 #define __ASSEMBLY__
 #include <linux/config.h>
 #include <asm/segment.h>
 #include <linux/version.h>
 #include <linux/compile.h>
+#include <asm/boot.h>
 
 ! Signature words to ensure LILO loaded us right
 #define SIG1	0xAA55
@@ -79,23 +79,32 @@ type_of_loader:	.byte	0		! = 0, old one (LILO, Loadlin,
 					!	T=3 for SYSLX
 					!	T=4 for ETHERBOOT
 					!       V = version
-loadflags:	.byte	0	! unused bits =0 (reserved for future development)
+loadflags:			! flags, unused bits must be zero (RFU)
 LOADED_HIGH	= 1		! bit within loadflags,
 				! if set, then the kernel is loaded high
 CAN_USE_HEAP	= 0x80		! if set, the loader also has set heap_end_ptr
 				! to tell how much space behind setup.S
 				| can be used for heap purposes.
 				! Only the loader knows what is free!
+#ifndef __BIG_KERNEL__
+		.byte	0x00
+#else
+		.byte	LOADED_HIGH
+#endif
+
 setup_move_size: .word  0x8000	! size to move, when we (setup) are not
 				! loaded at 0x90000. We will move ourselves
 				! to 0x90000 then just before jumping into
 				! the kernel. However, only the loader
 				! know how much of data behind us also needs
 				! to be loaded.
-code32_start:	.long	0x1000		! here loaders can put a different
+code32_start:				! here loaders can put a different
 					! start address for 32-bit code.
-					!   0x1000 = default for zImage
-					! 0x100000 = default for big kernel
+#ifndef __BIG_KERNEL__
+		.long	0x1000		!   0x1000 = default for zImage
+#else
+		.long	0x100000	! 0x100000 = default for big kernel
+#endif
 ramdisk_image:	.long	0	! address of loaded ramdisk image
 				! Here the loader (or kernel generator) puts
 				! the 32-bit address were it loaded the image.

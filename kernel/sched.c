@@ -16,7 +16,6 @@
  * current-task
  */
 
-#include <linux/config.h>
 #include <linux/signal.h>
 #include <linux/sched.h>
 #include <linux/timer.h>
@@ -188,6 +187,10 @@ static inline void move_last_runqueue(struct task_struct * p)
 }
 
 /*
+ * The tasklist_lock protects the linked list of processes
+ * and doesn't need to be interrupt-safe as interrupts never
+ * use the task-list.
+ *
  * The scheduler lock is protecting against multiple entry
  * into the scheduling code, and doesn't need to worry
  * about interrupts (because interrupts cannot call the
@@ -196,6 +199,7 @@ static inline void move_last_runqueue(struct task_struct * p)
  * The run-queue lock locks the parts that actually access
  * and change the run-queues, and have to be interrupt-safe.
  */
+spinlock_t tasklist_lock = SPIN_LOCK_UNLOCKED;
 spinlock_t scheduler_lock = SPIN_LOCK_UNLOCKED;
 static spinlock_t runqueue_lock = SPIN_LOCK_UNLOCKED;
 
@@ -300,7 +304,6 @@ static inline int goodness(struct task_struct * p, struct task_struct * prev, in
  */
 asmlinkage void schedule(void)
 {
-	static int need_recalculate = 0;
 	int lock_depth;
 	struct task_struct * prev, * next;
 	unsigned long timeout;
@@ -384,7 +387,15 @@ asmlinkage void schedule(void)
 				}
 				p = p->next_run;
 			}
-			need_recalculate = !c;
+
+			/* Do we need to re-calculate counters? */
+			if (!c) {
+				struct task_struct *p;
+				spin_lock(&tasklist_lock);
+				for_each_task(p)
+					p->counter = (p->counter >> 1) + p->priority;
+				spin_unlock(&tasklist_lock);
+			}
 		}
 	}
 
@@ -410,16 +421,7 @@ asmlinkage void schedule(void)
 	}
 	spin_unlock(&scheduler_lock);
 
-	if (lock_depth) {
-		reaquire_kernel_lock(prev, smp_processor_id(), lock_depth);
-
-		/* Do we need to re-calculate counters? */
-		if (need_recalculate) {
-			struct task_struct *p;
-			for_each_task(p)
-				p->counter = (p->counter >> 1) + p->priority;
-		}
-	}
+	reaquire_kernel_lock(prev, smp_processor_id(), lock_depth);
 }
 
 #ifndef __alpha__

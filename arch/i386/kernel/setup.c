@@ -22,6 +22,7 @@
 #include <linux/ioport.h>
 #include <linux/delay.h>
 #include <linux/config.h>
+#include <linux/init.h>
 #ifdef CONFIG_APM
 #include <linux/apm_bios.h>
 #endif
@@ -115,8 +116,8 @@ extern char empty_zero_page[PAGE_SIZE];
 static char command_line[COMMAND_LINE_SIZE] = { 0, };
        char saved_command_line[COMMAND_LINE_SIZE];
 
-void setup_arch(char **cmdline_p,
-	unsigned long * memory_start_p, unsigned long * memory_end_p)
+__initfunc(void setup_arch(char **cmdline_p,
+	unsigned long * memory_start_p, unsigned long * memory_end_p))
 {
 	unsigned long memory_start, memory_end;
 	char c = ' ', *to = command_line, *from = COMMAND_LINE;

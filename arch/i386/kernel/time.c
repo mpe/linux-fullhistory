@@ -22,6 +22,7 @@
 #include <linux/interrupt.h>
 #include <linux/time.h>
 #include <linux/delay.h>
+#include <linux/init.h>
 
 #include <asm/uaccess.h>
 #include <asm/io.h>
@@ -369,7 +370,7 @@ static long last_rtc_update = 0;
  * Move this to a header file - right now it shows
  * up both here and in smp.c
  */
-inline void x86_do_profile (unsigned long eip)
+static inline void x86_do_profile (unsigned long eip)
 {
 	if (prof_buffer && current->pid) {
 		extern int _stext;
@@ -415,11 +416,13 @@ static inline void timer_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 	    last_rtc_update = xtime.tv_sec;
 	  else
 	    last_rtc_update = xtime.tv_sec - 600; /* do it again in 60 s */
+#if 0
 	/* As we return to user mode fire off the other CPU schedulers.. this is 
 	   basically because we don't yet share IRQ's around. This message is
 	   rigged to be safe on the 386 - basically it's a hack, so don't look
 	   closely for now.. */
 	smp_message_pass(MSG_ALL_BUT_SELF, MSG_RESCHEDULE, 0L, 0);
+#endif
 	    
 #ifdef CONFIG_MCA
 	if( MCA_bus ) {
@@ -528,7 +531,7 @@ unsigned long get_cmos_time(void)
 static struct irqaction irq0  = { timer_interrupt, 0, 0, "timer", NULL, NULL};
 
 
-void time_init(void)
+__initfunc(void time_init(void))
 {
 	xtime.tv_sec = get_cmos_time();
 	xtime.tv_usec = 0;

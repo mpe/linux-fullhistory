@@ -34,10 +34,12 @@ typedef struct {
 typedef struct { unsigned long a[100]; } __dummy_lock_t;
 #define __dummy_lock(lock) (*(__dummy_lock_t *)(lock))
 
-#define spin_unlock(lock)				\
-	__asm__ __volatile__(				\
-	"mb; stq $31,%0"				\
-	:"=m" (__dummy_lock(lock)))
+static inline void spin_unlock(spinlock_t * lock)
+{
+	__asm__ __volatile__(
+	"mb; stq $31,%0"
+	:"=m" (__dummy_lock(lock)));
+}
 
 static inline void spin_lock(spinlock_t * lock)
 {
