@@ -1117,7 +1117,8 @@ static void snd_timer_user_append_to_tqueue(snd_timer_user_t *tu, snd_timer_trea
 	if (tu->qused >= tu->queue_size) {
 		tu->overrun++;
 	} else {
-		memcpy(&tu->queue[tu->qtail++], tread, sizeof(*tread));
+		memcpy(&tu->tqueue[tu->qtail++], tread, sizeof(*tread));
+		tu->qtail %= tu->queue_size;
 		tu->qused++;
 	}
 }
