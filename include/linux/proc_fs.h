@@ -145,12 +145,6 @@ struct proc_dir_entry {
 	int deleted;		/* delete flag */
 };
 
-#if 0 /* FIXME! /proc/scsi is broken right now */
-extern int (* dispatch_scsi_info_ptr) (int ino, char *buffer, char **start,
-				off_t offset, int length, int inout);
-extern struct inode_operations proc_scsi_inode_operations;
-#endif
-
 #define PROC_INODE_PROPER(inode) ((inode)->i_ino & ~0xffff)
 #define PROC_INODE_OPENPROM(inode) \
 	((inode->i_ino >= PROC_OPENPROM_FIRST) \
@@ -161,7 +155,6 @@ extern struct inode_operations proc_scsi_inode_operations;
 extern struct proc_dir_entry proc_root;
 extern struct proc_dir_entry *proc_root_fs;
 extern struct proc_dir_entry *proc_net;
-extern struct proc_dir_entry *proc_scsi;
 extern struct proc_dir_entry proc_sys;
 extern struct proc_dir_entry proc_openprom;
 extern struct proc_dir_entry *proc_mca;
@@ -182,41 +175,6 @@ extern int proc_unregister(struct proc_dir_entry *, int);
 extern struct proc_dir_entry *create_proc_entry(const char *name, mode_t mode,
 						struct proc_dir_entry *parent);
 extern void remove_proc_entry(const char *name, struct proc_dir_entry *parent);
-
-
-extern inline int proc_scsi_register(struct proc_dir_entry *driver, 
-				     struct proc_dir_entry *x)
-{
-#if 0 /* FIXME! */
-    x->ops = &proc_scsi_inode_operations;
-#endif
-    if(x->low_ino < PROC_SCSI_FILE){
-	return(proc_register(proc_scsi, x));
-    }else{
-	return(proc_register(driver, x));
-    }
-}
-
-extern inline int proc_scsi_unregister(struct proc_dir_entry *driver, int x)
-{
-    extern void scsi_init_free(char *ptr, unsigned int size);
-
-    if(x < PROC_SCSI_FILE)
-	return(proc_unregister(proc_scsi, x));
-    else {
-	struct proc_dir_entry **p = &driver->subdir, *dp;
-	int ret;
-
-	while ((dp = *p) != NULL) {
-		if (dp->low_ino == x) 
-		    break;
-		p = &dp->next;
-	}
-	ret = proc_unregister(driver, x);
-	scsi_init_free((char *) dp, sizeof(struct proc_dir_entry) + 4);
-	return(ret);
-    }
-}
 
 
 /*
@@ -362,8 +320,6 @@ extern inline int proc_unregister(struct proc_dir_entry *a, int b) { return 0; }
 extern inline struct proc_dir_entry *proc_net_create(const char *name, mode_t mode, 
 	get_info_t *get_info) {return NULL;}
 extern inline void proc_net_remove(const char *name) {}
-extern inline int proc_scsi_register(struct proc_dir_entry *b, struct proc_dir_entry *c) { return 0; }
-extern inline int proc_scsi_unregister(struct proc_dir_entry *a, int x) { return 0; }
 
 extern inline struct proc_dir_entry *create_proc_entry(const char *name,
 	mode_t mode, struct proc_dir_entry *parent) { return NULL; }

@@ -8,6 +8,7 @@
 #define _LINUX_MODULE_H
 
 #include <linux/config.h>
+#include <linux/spinlock.h>
 
 #ifdef __GENKSYMS__
 #  define _set_ver(sym) sym
@@ -286,5 +287,6 @@ __attribute__((section("__ksymtab"))) =			\
 #define EXPORT_NO_SYMBOLS
 #endif /* MODULE */
 
+extern rwlock_t modlist_lock;
 extern unsigned long get_kcore_size(void);
 #endif /* _LINUX_MODULE_H */

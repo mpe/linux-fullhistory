@@ -71,8 +71,12 @@
 #undef USE_STATIC_SCSI_MEMORY
 
 struct proc_dir_entry *proc_scsi = NULL;
+
+#ifdef CONFIG_PROC_FS
 static int scsi_proc_info(char *buffer, char **start, off_t offset,
 			  int length, int inout);
+static void scsi_dump_status(int level);
+#endif
 
 /*
    static const char RCSid[] = "$Header: /vger/u4/cvs/linux/drivers/scsi/scsi.c,v 1.38 1997/01/19 23:07:18 davem Exp $";
@@ -189,7 +193,6 @@ extern void scsi_old_times_out(Scsi_Cmnd * SCpnt);
                   || ((HOST)->host_blocked)                                       \
                   || ((DEVICE) != NULL && (DEVICE)->device_blocked) )
 
-static void scsi_dump_status(int level);
 
 
 struct dev_info {
@@ -1983,7 +1986,7 @@ int __init scsi_dev_init(void)
 	/*
 	 * This makes /proc/scsi and /proc/scsi/scsi visible.
 	 */
-#if CONFIG_PROC_FS
+#ifdef CONFIG_PROC_FS
 	proc_scsi = create_proc_entry ("scsi", S_IFDIR, 0);
 	if (!proc_scsi) {
 		printk (KERN_ERR "cannot init /proc/scsi\n");
@@ -2178,7 +2181,7 @@ static int scsi_proc_info(char *buffer, char **start, off_t offset,
 	 * where token is one of [error,scan,mlqueue,mlcomplete,llqueue,
 	 * llcomplete,hlqueue,hlcomplete]
 	 */
-#if CONFIG_SCSI_LOGGING		/* { */
+#ifdef CONFIG_SCSI_LOGGING		/* { */
 
 	if (!strncmp("log", buffer + 5, 3)) {
 		char *token;
@@ -2614,7 +2617,7 @@ static int scsi_register_host(Scsi_Host_Template * tpnt)
 		scsi_hosts = tpnt;
 
 		/* Add the new driver to /proc/scsi */
-#if CONFIG_PROC_FS
+#ifdef CONFIG_PROC_FS
 		build_proc_dir_entries(tpnt);
 #endif
 
@@ -2884,7 +2887,7 @@ static void scsi_unregister_host(Scsi_Host_Template * tpnt)
 			if (shpnt->loaded_as_module) {
 				pcount = next_scsi_host;
 				/* Remove the /proc/scsi directory entry */
-#if CONFIG_PROC_FS
+#ifdef CONFIG_PROC_FS
 				proc_scsi_unregister(tpnt->proc_dir,
 					shpnt->host_no + PROC_SCSI_FILE);
 #endif
@@ -2946,7 +2949,7 @@ static void scsi_unregister_host(Scsi_Host_Template * tpnt)
 			break;
 		}
 	/* Rebuild the /proc/scsi directory entries */
-#if CONFIG_PROC_FS
+#ifdef CONFIG_PROC_FS
 	proc_scsi_unregister(tpnt->proc_dir, tpnt->proc_dir->low_ino);
 #endif
 	MOD_DEC_USE_COUNT;
@@ -3133,6 +3136,7 @@ void scsi_unregister_module(int module_type, void *ptr)
 
 #endif				/* CONFIG_MODULES */
 
+#ifdef CONFIG_PROC_FS
 /*
  * Function:    scsi_dump_status
  *
@@ -3153,8 +3157,7 @@ void scsi_unregister_module(int module_type, void *ptr)
  */
 static void scsi_dump_status(int level)
 {
-#if CONFIG_PROC_FS
-#if CONFIG_SCSI_LOGGING		/* { */
+#ifdef CONFIG_SCSI_LOGGING		/* { */
 	int i;
 	struct Scsi_Host *shpnt;
 	Scsi_Cmnd *SCpnt;
@@ -3233,8 +3236,8 @@ static void scsi_dump_status(int level)
 	}
 	/* printk("wait_for_request = %p\n", &wait_for_request); */
 #endif	/* CONFIG_SCSI_LOGGING */ /* } */
-#endif				/* CONFIG_PROC_FS */
 }
+#endif				/* CONFIG_PROC_FS */
 
 #ifdef MODULE
 
@@ -3246,7 +3249,7 @@ int init_module(void)
 	/*
 	 * This makes /proc/scsi and /proc/scsi/scsi visible.
 	 */
-#if CONFIG_PROC_FS
+#ifdef CONFIG_PROC_FS
 	proc_scsi = create_proc_entry ("scsi", S_IFDIR, 0);
 	if (!proc_scsi) {
 		printk (KERN_ERR "cannot init /proc/scsi\n");
@@ -3303,7 +3306,7 @@ void cleanup_module(void)
 {
 	remove_bh(SCSI_BH);
 
-#if CONFIG_PROC_FS
+#ifdef CONFIG_PROC_FS
 	/* No, we're not here anymore. Don't show the /proc/scsi files. */
 	remove_proc_entry ("scsi/scsi", 0);
 	remove_proc_entry ("scsi", 0);

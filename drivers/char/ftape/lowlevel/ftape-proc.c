@@ -22,244 +22,24 @@
  *
  *      This file contains the procfs interface for the
  *      QIC-40/80/3010/3020 floppy-tape driver "ftape" for Linux.
+
+ *	Old code removed, switched to dynamic proc entry.
  */
 
 #include <linux/config.h>
 
 #if defined(CONFIG_PROC_FS) && defined(CONFIG_FT_PROC_FS)
 
-/*  adding proc entries from inside a module is REALLY complicated 
- *  for pre-2.1.28 kernels. I don't want to care about it.
- */
-
 #include <linux/proc_fs.h>
 
 #include <linux/ftape.h>
-#if LINUX_VERSION_CODE <= KERNEL_VER(1,2,13) /* bail out */
-#error \
-Please disable CONFIG_FT_PROC_FS in "MCONFIG" or upgrade to a newer kernel!
-#endif
-#if LINUX_VERSION_CODE >= KERNEL_VER(2,1,16)
 #include <linux/init.h>
-#else
-#define __initdata
-#define __initfunc(__arg) __arg
-#endif
 #include <linux/qic117.h>
-
 
 #include "../lowlevel/ftape-io.h"
 #include "../lowlevel/ftape-ctl.h"
 #include "../lowlevel/ftape-proc.h"
 #include "../lowlevel/ftape-tracing.h"
-
-static int ftape_read_proc(char *page, char **start, off_t off,
-			   int count, int *eof, void *data);
-
-#if LINUX_VERSION_CODE < KERNEL_VER(2,1,28)
-
-#include <asm/segment.h> /* for memcpy_tofs() */
-
-#if LINUX_VERSION_CODE >= KERNEL_VER(2,1,0)
-static long ftape_proc_read(struct inode* inode, struct file* file,
-			    char* buf, unsigned long count);
-#else
-static int ftape_proc_read(struct inode* inode, struct file* file,
-			   char* buf, int count);
-#endif
-
-#define FT_PROC_REGISTER(parent, child) proc_register_dynamic(parent, child)
-
-/*
- *	Structures for interfacing with the /proc filesystem.
- *	Router creates its own directory /proc/net/router with the folowing
- *	entries:
- *	config		device configuration
- *	status		global device statistics
- *	<device>	entry for each WAN device
- */
-
-/*
- *	Generic /proc/net/ftape/<file> file and inode operations
- */
-
-
-static struct file_operations ftape_proc_fops =
-{
-	NULL,			/* lseek   */
-	ftape_proc_read,	/* read	   */
-	NULL,			/* write   */
-	NULL,			/* readdir */
-	NULL,			/* select  */
-	NULL,			/* ioctl   */
-	NULL,			/* mmap	   */
-	NULL,			/* no special open code	   */
-	NULL,			/* flush */
-	NULL,			/* no special release code */
-	NULL,			/* can't fsync */
-};
-
-static struct inode_operations ftape_proc_inode_operations =
-{
-	&ftape_proc_fops,
-	NULL,			/* create */
-	NULL,			/* lookup */
-	NULL,			/* link */
-	NULL,			/* unlink */
-	NULL,			/* symlink */
-	NULL,			/* mkdir */
-	NULL,			/* rmdir */
-	NULL,			/* mknod */
-	NULL,			/* rename */
-	NULL,			/* readlink */
-	NULL,			/* follow_link */
-	NULL,			/* get_block */
-	NULL,			/* readpage */
-	NULL,			/* writepage */
-	NULL,			/* flushpage */
-	NULL,			/* truncate */
-	NULL,			/* permission */
-	NULL,			/* smap */
-	NULL,			/* revalidate */
-};
-
-/*
- * Proc filesystem directory entries.
- */
-
-static int ftape_get_info(char *page, char **start, off_t off,
-			  int count, int dummy)
-{
-	int dummy_eof;
-
-	return ftape_read_proc(page, start, off, count, &dummy_eof, NULL);
-}
-
-static struct proc_dir_entry proc_ftape = {
-	0,                            /* low_ino    */
-	sizeof("ftape")-1,            /* namelen    */
-	"ftape",                      /* name       */
-	S_IFREG | S_IRUGO,            /* mode       */
-	1,                            /* nlink      */
-	0,                            /* uid        */
-	0,                            /* gid        */
-	0,                            /* size       */
-	&ftape_proc_inode_operations, /* ops        */
-	ftape_get_info,               /* get_info   */
-	NULL,                         /* fill_inode */
-	NULL,                         /* next       */
-	NULL,                         /* parent     */
-	NULL,                         /* subdir     */
-	NULL                          /* data       */
-};
-
-/*  Read ftape proc directory entry.
- */
-
-#define PROC_BLOCK_SIZE	PAGE_SIZE
-
-#if LINUX_VERSION_CODE >= KERNEL_VER(2,1,0)
-static long ftape_proc_read(struct inode * inode, struct file * file,
-			    char * buf, unsigned long nbytes)
-#else
-static int ftape_proc_read(struct inode * inode, struct file * file,
-			   char * buf, int nbytes)
-#endif
-{
-	char 	*page;
-	int	retval=0;
-	int	eof=0;
-	int	n, count;
-	char	*start;
-	struct proc_dir_entry * dp;
-
-	if (nbytes < 0)
-		return -EINVAL;
-	dp = (struct proc_dir_entry *) inode->u.generic_ip;
-	if (!(page = (char*) __get_free_page(GFP_KERNEL)))
-		return -ENOMEM;
-
-	while ((nbytes > 0) && !eof)
-	{
-		count = PROC_BLOCK_SIZE <= nbytes ? PROC_BLOCK_SIZE : nbytes;
-
-		start = NULL;
-		if (dp->get_info) {
-			/*
-			 * Handle backwards compatibility with the old net
-			 * routines.
-			 * 
-			 * XXX What gives with the file->f_flags & O_ACCMODE
-			 * test?  Seems stupid to me....
-			 */
-			n = dp->get_info(page, &start, file->f_pos, count,
-				 (file->f_flags & O_ACCMODE) == O_RDWR);
-			if (n < count)
-				eof = 1;
-		} else
-			break;
-			
-		if (!start) {
-			/*
-			 * For proc files that are less than 4k
-			 */
-			start = page + file->f_pos;
-			n -= file->f_pos;
-			if (n <= 0)
-				break;
-			if (n > count)
-				n = count;
-		}
-		if (n == 0)
-			break;	/* End of file */
-		if (n < 0) {
-			if (retval == 0)
-				retval = n;
-			break;
-		}
-#if LINUX_VERSION_CODE > KERNEL_VER(2,1,3)
-		copy_to_user(buf, start, n);
-#else
-		memcpy_tofs(buf, start, n);
-#endif
-		file->f_pos += n;	/* Move down the file */
-		nbytes -= n;
-		buf += n;
-		retval += n;
-	}
-	free_page((unsigned long) page);
-	return retval;
-}
-
-#else /* LINUX_VERSION_CODE < KERNEL_VER(2,1,28) */
-
-#define FT_PROC_REGISTER(parent, child) proc_register(parent, child)
-
-/*
- * Proc filesystem directory entries.
- */
-
-static struct proc_dir_entry proc_ftape = {
-	0,                   /* low_ino    */
-	sizeof("ftape")-1,   /* namelen    */
-	"ftape",             /* name       */
-	S_IFREG | S_IRUGO,   /* mode       */
-	1,                   /* nlink      */
-	0,                   /* uid        */
-	0,                   /* gid        */
-	0,                   /* size       */
-	NULL,                /* ops        */
-	NULL,                /* get_info   */
-	NULL,                /* fill_inode */
-	NULL,                /* next       */
-	NULL,                /* parent     */
-	NULL,                /* subdir     */
-	NULL,                /* data       */
-	ftape_read_proc,     /* read_proc  */
-	NULL                 /* write_proc */
-};
-
-#endif
 
 static size_t get_driver_info(char *buf)
 {
@@ -423,13 +203,14 @@ int ftape_read_proc(char *page, char **start, off_t off,
 
 int __init ftape_proc_init(void)
 {
-	return FT_PROC_REGISTER(&proc_root, &proc_ftape);
+	return create_proc_read_entry("ftape", 0, &proc_root,
+		ftape_read_proc, NULL) != NULL;
 }
 
 #ifdef MODULE
 void ftape_proc_destroy(void)
 {
-	proc_unregister(&proc_root, proc_ftape.low_ino);
+	remove_proc_entry("ftape", &proc_root);
 }
 #endif
 

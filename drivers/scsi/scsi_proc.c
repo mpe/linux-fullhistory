@@ -27,6 +27,9 @@
 #include <linux/errno.h>
 #include <linux/stat.h>
 #include <linux/blk.h>
+
+#include <asm/uaccess.h>
+
 #include "scsi.h"
 #include "hosts.h"
 
@@ -77,7 +80,7 @@ int generic_proc_info(char *buffer, char **start, off_t offset,
 /* dispatch_scsi_info is the central dispatcher 
  * It is the interface between the proc-fs and the SCSI subsystem code
  */
-int dispatch_scsi_info(int ino, char *buffer, char **start,
+static int dispatch_scsi_info(int ino, char *buffer, char **start,
 			      off_t offset, int length, int func)
 {
 	struct Scsi_Host *hpnt = scsi_hostlist;
@@ -290,12 +293,6 @@ void proc_print_scsidevice(Scsi_Device * scd, char *buffer, int *size, int len)
 	return;
 }
 
-#else
-
-void proc_print_scsidevice(Scsi_Device * scd, char *buffer, int *size, int len)
-{
-}
-
 /* forward references */
 static ssize_t proc_readscsi(struct file * file, char * buf,
                              size_t count, loff_t *ppos);
@@ -304,10 +301,6 @@ static ssize_t proc_writescsi(struct file * file, const char * buf,
 static long long proc_scsilseek(struct file *, long long, int);
 
 extern void build_proc_dir_hba_entries(uint);
-
-/* the *_get_info() functions are in the respective scsi driver code */
-int (* dispatch_scsi_info_ptr) (int ino, char *buffer, char **start,
-				off_t offset, int length, int inout) = 0;
 
 static struct file_operations proc_scsi_operations = {
     proc_scsilseek,	/* lseek   */
@@ -349,26 +342,6 @@ struct inode_operations proc_scsi_inode_operations = {
 	NULL			/* revalidate */
 };
 
-static int get_not_present_info(char *buffer, char **start, off_t offset, int length)
-{
-    int len, pos, begin;
-    
-    begin = 0;
-    pos = len = sprintf(buffer, 
-			"No low-level scsi modules are currently present\n");
-    if(pos < offset) {
-	len = 0;
-	begin = pos;
-    }
-    
-    *start = buffer + (offset - begin);	  /* Start of wanted data */
-    len -= (offset - begin);
-    if(len > length)
-	len = length;
-    
-    return(len);
-}
-
 #define PROC_BLOCK_SIZE (3*1024)     /* 4K page size, but our output routines 
 				      * use some slack for overruns 
 				      */
@@ -392,11 +365,8 @@ static ssize_t proc_readscsi(struct file * file, char * buf,
 	if(bytes > PROC_BLOCK_SIZE)
 	    thistime = PROC_BLOCK_SIZE;
 	
-	if(dispatch_scsi_info_ptr)
-	    length = dispatch_scsi_info_ptr(inode->i_ino, page, &start, 
-					    *ppos, thistime, 0);
-	else
-	    length = get_not_present_info(page, &start, *ppos, thistime);
+    	length = dispatch_scsi_info (inode->i_ino, page, &start, 
+				     *ppos, thistime, 0);
 	if(length < 0) {
 	    free_page((ulong) page);
 	    return(length);
@@ -438,13 +408,10 @@ static ssize_t proc_writescsi(struct file * file, const char * buf,
 	return(-EOVERFLOW);
     }
 
-    if(dispatch_scsi_info_ptr != NULL) {
-        if (!(page = (char *) __get_free_page(GFP_KERNEL)))
-            return(-ENOMEM);
-	copy_from_user(page, buf, count);
-	ret = dispatch_scsi_info_ptr(inode->i_ino, page, 0, 0, count, 1);
-    } else 
-	return(-ENOPKG);	  /* Nothing here */
+    if (!(page = (char *) __get_free_page(GFP_KERNEL)))
+	return(-ENOMEM);
+    copy_from_user(page, buf, count);
+    ret = dispatch_scsi_info (inode->i_ino, page, 0, 0, count, 1);
     
     free_page((ulong) page);
     return(ret);
@@ -466,6 +433,14 @@ static long long proc_scsilseek(struct file * file, long long offset, int orig)
 	return(-EINVAL);
     }
 }
+
+#else				/* if !CONFIG_PROC_FS */
+
+void proc_print_scsidevice(Scsi_Device * scd, char *buffer, int *size, int len)
+{
+}
+
+struct inode_operations proc_scsi_inode_operations = { 0, };
 
 #endif				/* CONFIG_PROC_FS */
 

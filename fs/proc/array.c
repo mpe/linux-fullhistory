@@ -403,9 +403,9 @@ static inline void statm_pte_range(pmd_t * pmd, unsigned long address, unsigned 
 		++*pages;
 		if (pte_dirty(page))
 			++*dirty;
-		if (MAP_NR(pte_page(page)) >= max_mapnr)
+		if (pte_pagenr(page) >= max_mapnr)
 			continue;
-		if (page_count(mem_map + MAP_NR(pte_page(page))) > 1)
+		if (page_count(pte_page(page)) > 1)
 			++*shared;
 	} while (address < end);
 }

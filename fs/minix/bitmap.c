@@ -251,13 +251,15 @@ struct inode * minix_new_inode(const struct inode * dir, int * error)
 	struct buffer_head * bh;
 	int i,j;
 
-	if (!dir || !(inode = get_empty_inode()))
+	inode = get_empty_inode();
+	if (!inode)
 		return NULL;
 	sb = dir->i_sb;
 	inode->i_sb = sb;
 	inode->i_flags = 0;
 	j = 8192;
 	bh = NULL;
+	lock_super(sb);
 	for (i = 0; i < sb->u.minix_sb.s_imap_blocks; i++) {
 		bh = inode->i_sb->u.minix_sb.s_imap[i];
 		if ((j = minix_find_first_zero_bit(bh->b_data, 8192)) < 8192)
@@ -265,17 +267,20 @@ struct inode * minix_new_inode(const struct inode * dir, int * error)
 	}
 	if (!bh || j >= 8192) {
 		iput(inode);
+		unlock_super(sb);
 		return NULL;
 	}
 	if (minix_set_bit(j,bh->b_data)) {	/* shouldn't happen */
 		printk("new_inode: bit already set");
 		iput(inode);
+		unlock_super(sb);
 		return NULL;
 	}
 	mark_buffer_dirty(bh, 1);
 	j += i*8192;
 	if (!j || j > inode->i_sb->u.minix_sb.s_ninodes) {
 		iput(inode);
+		unlock_super(sb);
 		return NULL;
 	}
 	inode->i_nlink = 1;

@@ -16,6 +16,7 @@
 #define _SCSI_H
 
 #include <linux/config.h>	/* for CONFIG_SCSI_LOGGING */
+#include <linux/proc_fs.h>
 
 /*
  * Some of the public constants are being moved to this file.
@@ -404,6 +405,50 @@ extern void scsi_release_command(Scsi_Cmnd *);
 extern int max_scsi_hosts;
 
 extern void proc_print_scsidevice(Scsi_Device *, char *, int *, int);
+extern struct inode_operations proc_scsi_inode_operations;
+extern struct proc_dir_entry *proc_scsi;
+
+#ifdef CONFIG_PROC_FS
+
+extern inline int proc_scsi_register(struct proc_dir_entry *driver, 
+				     struct proc_dir_entry *x)
+{
+    x->ops = &proc_scsi_inode_operations;
+    if(x->low_ino < PROC_SCSI_FILE){
+	return(proc_register(proc_scsi, x));
+    }else{
+	return(proc_register(driver, x));
+    }
+}
+
+extern inline int proc_scsi_unregister(struct proc_dir_entry *driver, int x)
+{
+    extern void scsi_init_free(char *ptr, unsigned int size);
+
+    if(x < PROC_SCSI_FILE)
+	return(proc_unregister(proc_scsi, x));
+    else {
+	struct proc_dir_entry **p = &driver->subdir, *dp;
+	int ret;
+
+	while ((dp = *p) != NULL) {
+		if (dp->low_ino == x) 
+		    break;
+		p = &dp->next;
+	}
+	ret = proc_unregister(driver, x);
+	scsi_init_free((char *) dp, sizeof(struct proc_dir_entry) + 4);
+	return(ret);
+    }
+}
+
+#else
+
+extern inline int proc_scsi_register(struct proc_dir_entry *b, struct proc_dir_entry *c) { return 0; }
+extern inline int proc_scsi_unregister(struct proc_dir_entry *a, int x) { return 0; }
+
+#endif /* CONFIG_PROC_FS */
+
 
 extern void print_command(unsigned char *);
 extern void print_sense(const char *, Scsi_Cmnd *);

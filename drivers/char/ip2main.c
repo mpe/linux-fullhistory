@@ -74,16 +74,6 @@
 int ip2_read_procmem(char *, char **, off_t, int, int );
 int ip2_read_proc(char *, char **, off_t, int, int *, void * );
 
-struct proc_dir_entry ip2_proc_entry = {
-   0,
-   6,"ip2mem",
-   S_IFREG | S_IRUGO,
-   1, 0, 0,
-   0,
-   NULL,
-   ip2_read_procmem
-};
-
 /********************/
 /* Type Definitions */
 /********************/
@@ -429,9 +419,7 @@ cleanup_module(void)
 	if ( ( err = unregister_chrdev ( IP2_IPL_MAJOR, pcIpl ) ) ) {
 		printk(KERN_ERR "IP2: failed to unregister IPL driver (%d)\n", err);
 	}
-	if ( ( err = proc_unregister( &proc_root, ip2_proc_entry.low_ino ) ) ) {
-		printk(KERN_ERR "IP2: failed to unregister read_procmem (%d)\n", err);
-	}
+	remove_proc_entry("ip2mem", &proc_root);
 
 	// free memory
 	for (i = 0; i < IP2_MAX_BOARDS; i++) {
@@ -673,8 +661,8 @@ old_ip2_init(void)
 		printk(KERN_ERR "IP2: failed to register IPL device (%d)\n", err );
 	} else
 	/* Register the read_procmem thing */
-	if ( ( err = proc_register( &proc_root,  &ip2_proc_entry ) ) ) {
-		printk(KERN_ERR "IP2: failed to register read_procmem (%d)\n", err );
+	if (!create_proc_info_entry("ip2mem",0,&proc_root,ip2_read_procmem)) {
+		printk(KERN_ERR "IP2: failed to register read_procmem\n");
 	} else {
 
 #ifdef IP2DEBUG_TRACE

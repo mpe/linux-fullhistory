@@ -247,7 +247,7 @@ static int __init isapnp_proc_init(void)
 static int isapnp_proc_done(void)
 {
 	if (isapnp_proc_entry)
-		proc_unregister(&proc_root, isapnp_proc_entry->low_ino);
+		remove_proc_entry("isapnp",&proc_root);
 	return 0;
 }
 #endif /* MODULE */

@@ -49,13 +49,18 @@ search_exception_table(unsigned long addr)
 #else
 	/* The kernel is the last "module" -- no need to treat it special. */
 	struct module *mp;
+	read_lock(&modlist_lock);
 	for (mp = module_list; mp ; mp = mp->next) {
 		if (!mp->ex_table_start)
 			continue;
 		ret = search_one_table(mp->ex_table_start,
 				       mp->ex_table_end - 1, addr - mp->gp);
-		if (ret) return ret;
+		if (ret) {
+			read_unlock(&modlist_lock);
+			return ret;
+		}
 	}
+	read_unlock(&modlist_lock);
 #endif
 
 	return 0;

@@ -147,7 +147,6 @@ static void join_net(u_long local);
 static void start_net(u_long local);
 /* void start_net(ray_dev_t *local); */
 
-static int ray_cs_proc_read(char *buf, char **start, off_t off, int len, int spare);
 /* Create symbol table for registering with kernel in init_module */
 EXPORT_SYMBOL(ray_dev_ioctl);
 EXPORT_SYMBOL(ray_rx);
@@ -308,18 +307,6 @@ static char hop_pattern_length[] = { 1,
 
 static char rcsid[] = "Raylink/WebGear wireless LAN - Corey <Thomas corey@world.std.com>";
 
-#ifdef CONFIG_PROC_FS
-struct proc_dir_entry ray_cs_proc_entry = {
-    0,                         /* Dynamic inode # */
-    6,"ray_cs",                /* name length and name */
-    S_IFREG | S_IRUGO,         /* mode */
-    1, 0, 0,                   /* nlinks, owner, group */
-    0,                         /* size (unused) */
-    NULL,                      /* operations (default) */
-    &ray_cs_proc_read,         /* function to read data */
-    /* The end ?? */
-};
-#endif
 /*===========================================================================*/
 static void cs_error(client_handle_t handle, int func, int ret)
 {
@@ -2695,7 +2682,8 @@ static int __init init_ray_cs(void)
     rc = register_pcmcia_driver(&dev_info, &ray_attach, &ray_detach);
     DEBUG(1, "raylink init_module register_pcmcia_driver returns 0x%x\n",rc);
 #ifdef CONFIG_PROC_FS    
-    proc_register(&proc_root, &ray_cs_proc_entry);
+    /* [proc-namespace][fixme] It shouldn't be under root, damnit! */
+    create_proc_info_entry("ray_cs", 0, proc_root, ray_cs_proc_read);
 #endif    
     if (translate != 0) translate = 1;
     return 0;
@@ -2726,7 +2714,7 @@ static void __exit exit_ray_cs(void)
         ray_detach(dev_list);
     }
 #ifdef CONFIG_PROC_FS    
-    proc_unregister(&proc_root, ray_cs_proc_entry.low_ino);
+    remove_proc_entry("ray_cs", proc_root);
 #endif   
 } /* exit_ray_cs */
 
