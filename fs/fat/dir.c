@@ -510,7 +510,8 @@ static int vfat_ioctl_fill(
 	const char * name,
 	int name_len,
 	off_t offset,
-	ino_t ino)
+	ino_t ino,
+	unsigned int d_type)
 {
 	struct dirent *d1 = (struct dirent *)buf;
 	struct dirent *d2 = d1 + 1;

@@ -32,28 +32,20 @@
 #ifndef _HWACCESS_H
 #define _HWACCESS_H
 
-#include <linux/version.h>
-#include <linux/kernel.h>
 #include <linux/fs.h>
-#include <linux/ioport.h>
 #include <linux/sound.h>
-#include <linux/malloc.h>
 #include <linux/soundcard.h>
 #include <linux/pci.h>
-#include <linux/interrupt.h>
 
-#include <asm/io.h>
-#include <asm/dma.h>
+#include "emu_wrapper.h"
 
-#include <emu_wrapper.h>
-
-enum GlobalErrorCode
-{
-	CTSTATUS_SUCCESS = 0x0000,
-	CTSTATUS_ERROR,
-	CTSTATUS_NOMEMORY,
-	CTSTATUS_INUSE,
-};
+#define EMUPAGESIZE     4096            /* don't change */
+#define NUM_G           64              /* use all channels */
+#define NUM_FXSENDS     4               /* don't change */
+/* setting this to other than a power of two may break some applications */
+#define MAXBUFSIZE	65536
+#define MAXPAGES	8192 
+#define BUFMAXPAGES     (MAXBUFSIZE / PAGE_SIZE)
 
 #define FLAGS_AVAILABLE     0x0001
 #define FLAGS_READY         0x0002
@@ -62,50 +54,57 @@ enum GlobalErrorCode
 
 struct memhandle
 {
-	unsigned long busaddx;
-	void *virtaddx;
-	u32 order;
+	dma_addr_t dma_handle;
+	void *addr;
+	u32 size;
 };
-
-struct memhandle *emu10k1_alloc_memphysical(u32);
-void emu10k1_free_memphysical(struct memhandle *);
 
 #define DEBUG_LEVEL 2
 
 #ifdef EMU10K1_DEBUG
 # define DPD(level,x,y...) do {if(level <= DEBUG_LEVEL) printk( KERN_NOTICE "emu10k1: %s: %d: " x , __FILE__ , __LINE__ , y );} while(0)
 # define DPF(level,x)   do {if(level <= DEBUG_LEVEL) printk( KERN_NOTICE "emu10k1: %s: %d: " x , __FILE__ , __LINE__ );} while(0)
-#define ERROR() DPF(1,"error\n");
 #else
-# define DPD(level,x,y...) /* not debugging: nothing */
-# define DPF(level,x)
-#define ERROR()
+# define DPD(level,x,y...) do { } while (0) /* not debugging: nothing */
+# define DPF(level,x) do { } while (0)
 #endif /* EMU10K1_DEBUG */
 
-#include "8010.h"
-#include "voicemgr.h"
-
-int emu10k1_addxmgr_alloc(u32, struct emu10k1_card *);
-void emu10k1_addxmgr_free(struct emu10k1_card *, int);
-
-#include "timer.h"
-#include "irqmgr.h"
+#define ERROR() DPF(1,"error\n")
 
 /* DATA STRUCTURES */
+
+struct emu10k1_waveout
+{
+	u16 send_routing[3];
+
+	u8 send_a[3];
+	u8 send_b[3];
+	u8 send_c[3];
+	u8 send_d[3];
+};
+
+struct emu10k1_wavein
+{
+        struct wiinst *ac97;
+        struct wiinst *mic;
+        struct wiinst *fx;
+
+        u8 recsrc;
+        u32 fxwc;
+};
+
 
 struct emu10k1_card 
 {
 	struct list_head list;
 
-	struct memhandle	*virtualpagetable;
-
-	struct memhandle	*tankmem;
-	u32 tmemsize;
-	struct memhandle	*silentpage;
+	struct memhandle	virtualpagetable;
+	struct memhandle	tankmem;
+	struct memhandle	silentpage;
 
 	spinlock_t		lock;
 
-	struct voice_manager	voicemgr;
+	u8			voicetable[NUM_G];
 	u16			emupagetable[MAXPAGES];
 
 	struct list_head	timers;
@@ -114,22 +113,23 @@ struct emu10k1_card
 
 	struct pci_dev		*pci_dev;
 	unsigned long           iobase;
-        unsigned long           mixeraddx;
-	u32  irq; 
+	unsigned long		length;
+	unsigned short		model;
+	unsigned int irq; 
 
-	unsigned long	audio1_num;
-	unsigned long	audio2_num;
-	unsigned long	mixer_num;
-	unsigned long	midi_num;
+	int	audio_num;
+	int	audio1_num;
+	int	mixer_num;
+	int	midi_num;
 
-	struct emu10k1_waveout	*waveout;
-	struct emu10k1_wavein	*wavein;
+	struct emu10k1_waveout	waveout;
+	struct emu10k1_wavein	wavein;
 	struct emu10k1_mpuout	*mpuout;
 	struct emu10k1_mpuin	*mpuin;
 
 	u16			arrwVol[SOUND_MIXER_NRDEVICES + 1];
 	/* array is used from the member 1 to save (-1) operation */
-	u32			digmix[96];
+	u32			digmix[9 * 6 * 2];
 	unsigned int		modcnt;
 	struct semaphore	open_sem;
 	mode_t			open_mode;
@@ -139,7 +139,12 @@ struct emu10k1_card
 	u32	    has_toslink;	       // TOSLink detection
 
 	u8 chiprev;                    /* Chip revision                */
+
+	int isaps;
 };
+
+int emu10k1_addxmgr_alloc(u32, struct emu10k1_card *);
+void emu10k1_addxmgr_free(struct emu10k1_card *, int);
 
 #ifdef PRIVATE_PCM_VOLUME
 
@@ -154,15 +159,8 @@ struct sblive_pcm_volume_rec {
 	int opened;		// counter - locks element
 };
 extern struct sblive_pcm_volume_rec sblive_pcm_volume[];
-
+extern u16 pcm_last_mixer;
 #endif
-
-
-#define ENABLE 			0xffffffff
-#define DISABLE 		0x00000000
-
-#define ENV_ON			0x80
-#define ENV_OFF			0x00
 
 #define TIMEOUT 		    16384
 
@@ -173,19 +171,17 @@ extern struct list_head emu10k1_devs;
 
 /* Hardware Abstraction Layer access functions */
 
-#define WRITE_FN0(a,b,c) sblive_wrtmskfn0((a),(u8)(b), ((1 << (((b) >> 24) & 0x3f)) - 1) << (((b) >> 16) & 0x1f), (c) << (((b) >> 16) & 0x1f))
-
-#define READ_FN0(a,b) sblive_rdmskfn0((a),(u8)(b),((1 << (((b) >> 24) & 0x3f)) - 1) << (((b) >> 16) & 0x1f)) >> (((b) >> 16) & 0x1f)
-
-void sblive_writefn0(struct emu10k1_card *, u8 , u32 );
-void sblive_wrtmskfn0(struct emu10k1_card *, u8 , u32 , u32 );
-
-u32 sblive_readfn0(struct emu10k1_card *, u8 );
-u32 sblive_rdmskfn0(struct emu10k1_card *, u8, u32 );
+void emu10k1_writefn0(struct emu10k1_card *, u32 , u32 );
+u32 emu10k1_readfn0(struct emu10k1_card *, u32 );
 
 void sblive_writeptr(struct emu10k1_card *, u32 , u32 , u32 );
+void sblive_writeptr_tag(struct emu10k1_card *card, u32 channel, ...);
+#define TAGLIST_END 0
+
 u32 sblive_readptr(struct emu10k1_card *, u32 , u32 );
 
+void emu10k1_irq_enable(struct emu10k1_card *, u32);
+void emu10k1_irq_disable(struct emu10k1_card *, u32);
 void emu10k1_set_stop_on_loop(struct emu10k1_card *, u32);
 void emu10k1_clear_stop_on_loop(struct emu10k1_card *, u32);
 

@@ -10,6 +10,9 @@
 #define flush_icache_page(vma,page)		do { } while (0)
 #define flush_icache_range(start,end)		do { } while (0)
 
+/* DAG: ARM3 will flush cache on MEMC updates anyway? so don't bother */
+#define clean_cache_area(_start,_size) do { } while (0)
+
 /*
  * TLB flushing:
  *

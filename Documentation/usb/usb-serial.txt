@@ -135,16 +135,16 @@ ZyXEL omni.net lcd plus ISDN TA
 
 Digi AccelePort Driver
 
-  This driver supports the Digi AccelePort USB 4 device, a 4 port
-  USB serial converter.  The driver does NOT yet support the Digi
-  AccelePort USB 2 or 8.
+  This driver supports the Digi AccelePort USB 2 and 4 devices, 2 port
+  (plus a parallel port) and 4 port USB serial converters.  The driver
+  does NOT yet support the Digi AccelePort USB 8.
 
-  The driver supports open, close, read, write, termios settings (baud
-  rate, word size, parity, stop bits, hardware/software flow control,
-  CREAD), DTR/RTS, and TIOCMGET/SET/BIS/BIC ioctls.  It has not been
-  thoroughly tested, but it seems to be working reasonable well.  There
-  is more work to do, including flow control, ioctls, and support for
-  the Digi AccelePort USB 2 and 8.
+  The driver is generally working, though we still have a few more ioctls
+  to implement and final testing and debugging to do.  The paralled port
+  on the USB 2 is supported as a serial to parallel converter; in other
+  words, it appears as another USB serial port on Linux, even though
+  physically it is really a parallel port.  The Digi Acceleport USB 8
+  is not yet supported.
 
   Please contact Peter Berger (pberger@brimson.com) or Al Borchers
   (alborchers@steinerpoint.com) for questions or problems with this

@@ -83,8 +83,11 @@ int fiq_def_op(void *ref, int relinquish)
 	return 0;
 }
 
-static struct fiq_handler default_owner =
-	{ NULL, "default", fiq_def_op, NULL };
+static struct fiq_handler default_owner = {
+	name:	"default",
+	fiq_op:	fiq_def_op,
+};
+
 static struct fiq_handler *current_fiq = &default_owner;
 
 int get_fiq_list(char *buf)

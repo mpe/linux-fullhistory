@@ -1781,15 +1781,12 @@ static void end_buffer_io_kiobuf(struct buffer_head *bh, int uptodate)
  * for them to complete.  Clean up the buffer_heads afterwards.  
  */
 
-static int do_kio(int rw, int nr, struct buffer_head *bh[], int size)
+static int wait_kio(int rw, int nr, struct buffer_head *bh[], int size)
 {
 	int iosize;
 	int i;
 	struct buffer_head *tmp;
 
-	if (rw == WRITE)
-		rw = WRITERAW;
-	ll_rw_block(rw, nr, bh);
 
 	iosize = 0;
 	spin_lock(&unused_list_lock);
@@ -1905,12 +1902,13 @@ int brw_kiovec(int rw, int nr, struct kiobuf *iovec[],
 				offset += size;
 
 				atomic_inc(&iobuf->io_count);
-	
+
+				generic_make_request(rw, tmp);
 				/* 
-				 * Start the IO if we have got too much 
+				 * Wait for IO if we have got too much 
 				 */
 				if (bhind >= KIO_MAX_SECTORS) {
-					err = do_kio(rw, bhind, bh, size);
+					err = wait_kio(rw, bhind, bh, size);
 					if (err >= 0)
 						transferred += err;
 					else
@@ -1928,7 +1926,7 @@ int brw_kiovec(int rw, int nr, struct kiobuf *iovec[],
 
 	/* Is there any IO still left to submit? */
 	if (bhind) {
-		err = do_kio(rw, bhind, bh, size);
+		err = wait_kio(rw, bhind, bh, size);
 		if (err >= 0)
 			transferred += err;
 		else

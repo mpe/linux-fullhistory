@@ -1,9 +1,9 @@
 /*
  * arch/arm/mm/mm-lusl7200.c
  *
- * Extra MM routines for LUSL7200 architecture
+ * Extra MM routines for L7200 architecture
  *
- * Copyright (C) 2000 Steven J. Hill
+ * Copyright (C) 2000 Steve Hill (sjhill@cotw.com)
  */
 
 #include <linux/init.h>

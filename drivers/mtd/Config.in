@@ -20,7 +20,7 @@ if [ "$CONFIG_MTD" != "n" ]; then
       fi
    fi
    dep_tristate '  Use extra onboard system memory as MTD device' CONFIG_MTD_SLRAM $CONFIG_MTD
-   dep_tristate '  Ramix PMC551 PCI Mezzanine ram card support' CONFIG_MTD_PMC551 $CONFIG_MTD
+   dep_tristate '  Ramix PMC551 PCI Mezzanine ram card support' CONFIG_MTD_PMC551 $CONFIG_MTD $CONFIG_PCI
    if [ "$CONFIG_MTD_PMC551" != "n" ]; then
       bool '    PMC551 256M DRAM Bugfix' CONFIG_MTD_PMC551_BUGFIX
    fi

@@ -10,7 +10,7 @@
 #
 # Special variables which should not be exported
 #
-unexport EXTRA_ASFLAGS
+unexport EXTRA_AFLAGS
 unexport EXTRA_CFLAGS
 unexport EXTRA_LDFLAGS
 unexport EXTRA_ARFLAGS
@@ -57,7 +57,21 @@ first_rule: sub_dirs
 	) > $(dir $@)/.$(notdir $@).flags
 
 %.o: %.s
-	$(AS) $(ASFLAGS) $(EXTRA_CFLAGS) -o $@ $<
+	$(AS) $(AFLAGS) $(EXTRA_CFLAGS) -o $@ $<
+
+# Old makefiles define their own rules for compiling .S files,
+# but these standard rules are available for any Makefile that
+# wants to use them.  Our plan is to incrementally convert all
+# the Makefiles to these standard rules.  -- rmk, mec
+ifdef USE_STANDARD_AS_RULE
+
+%.s: %.S
+	$(CPP) $(AFLAGS) $(EXTRA_AFLAGS) $(AFLAGS_$@) $< > $@
+
+%.o: %.S
+	$(CC) $(AFLAGS) $(EXTRA_AFLAGS) $(AFLAGS_$@) -c -o $@ $<
+
+endif
 
 #
 #

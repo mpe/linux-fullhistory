@@ -23,7 +23,6 @@ if [ "$CONFIG_NET" != "n" ]; then
    fi
 
    if [ "$CONFIG_IRDA" != "n" ]; then
-      source net/irda/compressors/Config.in
       source drivers/net/irda/Config.in
    fi
    endmenu

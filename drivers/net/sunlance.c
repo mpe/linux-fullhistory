@@ -1,4 +1,4 @@
-/* $Id: sunlance.c,v 1.102 2000/06/30 10:18:35 davem Exp $
+/* $Id: sunlance.c,v 1.103 2000/08/12 19:23:38 anton Exp $
  * lance.c: Linux/Sparc/Lance driver
  *
  *	Written 1995, 1996 by Miguel de Icaza
@@ -108,8 +108,6 @@ static char *lancestr = "LANCE";
 #include <linux/netdevice.h>
 #include <linux/etherdevice.h>
 #include <linux/skbuff.h>
-
-#include <asm/machines.h>
 
 /* Define: 2^4 Tx buffers and 2^4 Rx buffers */
 #ifndef LANCE_LOG_TX_BUFFERS

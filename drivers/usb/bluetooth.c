@@ -1,11 +1,18 @@
 /*
- * bluetooth.c   Version 0.3
+ * bluetooth.c   Version 0.4
  *
  * Copyright (c) 2000 Greg Kroah-Hartman	<greg@kroah.com>
  * Copyright (c) 2000 Mark Douglas Corner	<mcorner@umich.edu>
  *
  * USB Bluetooth driver, based on the Bluetooth Spec version 1.0B
  *
+ *
+ * (07/11/2000) Version 0.4 gkh
+ *	Fixed bug in disconnect for when we call tty_hangup
+ *	Fixed bug in bluetooth_ctrl_msg where the bluetooth struct was not
+ *	getting attached to the control urb properly.
+ *	Fixed bug in bluetooth_write where we pay attention to the result
+ *	of bluetooth_ctrl_msg.
  *
  * (08/03/2000) Version 0.3 gkh mdc
  *	Merged in Mark's changes to make the driver play nice with the Axis
@@ -251,7 +258,7 @@ static int bluetooth_ctrl_msg (struct usb_bluetooth *bluetooth, int request, int
 	dr->length = cpu_to_le16p(&len);
 	
 	FILL_CONTROL_URB (urb, bluetooth->dev, usb_sndctrlpipe(bluetooth->dev, 0),
-			  (unsigned char*)dr, buf, len, bluetooth_ctrl_callback, 0);
+			  (unsigned char*)dr, buf, len, bluetooth_ctrl_callback, bluetooth);
 
 	/* send it down the pipe */
 	status = usb_submit_urb(urb);
@@ -400,7 +407,10 @@ static int bluetooth_write (struct tty_struct * tty, int from_user, const unsign
 			else
 				memcpy (new_buffer, buf+1, count-1);
 
-			bluetooth_ctrl_msg (bluetooth, 0x00, 0x00, new_buffer, count-1);
+			if (bluetooth_ctrl_msg (bluetooth, 0x00, 0x00, new_buffer, count-1) != 0) {
+				kfree (new_buffer);
+				return 0;
+			}
 
 			/* need to free new_buffer somehow... FIXME */
 			return count;
@@ -1099,6 +1109,9 @@ static void usb_bluetooth_disconnect(struct usb_device *dev, void *ptr)
 	int i;
 
 	if (bluetooth) {
+		if ((bluetooth->active) && (bluetooth->tty))
+			tty_hangup(bluetooth->tty);
+
 		bluetooth->active = 0;
 
 		if (bluetooth->read_urb) {
@@ -1116,9 +1129,6 @@ static void usb_bluetooth_disconnect(struct usb_device *dev, void *ptr)
 			kfree (bluetooth->interrupt_in_buffer);
 
 		tty_unregister_devfs (&bluetooth_tty_driver, bluetooth->minor);
-
-		if (bluetooth->tty)
-			tty_hangup(bluetooth->tty);
 
 		for (i = 0; i < NUM_BULK_URBS; ++i) {
 			if (bluetooth->write_urb_pool[i]) {

@@ -9,6 +9,8 @@
 # parent makefile.
 #
 
+USE_STANDARD_AS_RULE := true
+
 L_TARGET	:= acorn-block.a
 
 obj-y		:=

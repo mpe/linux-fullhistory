@@ -78,7 +78,6 @@
 						 p->u1.s.pages_in_bank[2] + \
 						 p->u1.s.pages_in_bank[3]))
 
-#define PARAMS_BASE		(PAGE_OFFSET + PARAMS_OFFSET)
 #define Z_PARAMS_BASE		(RAM_START + PARAMS_OFFSET)
 #define FLUSH_BASE_PHYS		0x00000000	/* ROM */
 

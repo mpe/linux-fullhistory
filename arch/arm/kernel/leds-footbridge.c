@@ -25,6 +25,7 @@
 
 #include <asm/hardware.h>
 #include <asm/leds.h>
+#include <asm/mach-types.h>
 #include <asm/system.h>
 
 #define LED_STATE_ENABLED	1
@@ -35,7 +36,7 @@ static char hw_led_state;
 static spinlock_t leds_lock = SPIN_LOCK_UNLOCKED;
 extern spinlock_t gpio_lock;
 
-#ifdef CONFIG_FOOTBRIDGE
+#if defined(CONFIG_ARCH_EBSA285) || defined(CONFIG_ARCH_CO285)
 
 static void ebsa285_leds_event(led_event_t evt)
 {
@@ -76,14 +77,19 @@ static void ebsa285_leds_event(led_event_t evt)
 #ifdef CONFIG_LEDS_CPU
 	case led_idle_start:
 		if (!(led_state & LED_STATE_CLAIMED))
-			hw_led_state |= XBUS_LED_RED;
+			hw_led_state |= XBUS_LED_AMBER;
 		break;
 
 	case led_idle_end:
 		if (!(led_state & LED_STATE_CLAIMED))
-			hw_led_state &= ~XBUS_LED_RED;
+			hw_led_state &= ~XBUS_LED_AMBER;
 		break;
 #endif
+
+	case led_halted:
+		if (!(led_state & LED_STATE_CLAIMED))
+			hw_led_state &= ~XBUS_LED_RED;
+		break;
 
 	case led_green_on:
 		if (led_state & LED_STATE_CLAIMED)
@@ -174,6 +180,11 @@ static void netwinder_leds_event(led_event_t evt)
 		break;
 #endif
 
+	case led_halted:
+		if (!(led_state & LED_STATE_CLAIMED))
+			hw_led_state |= GPIO_RED_LED;
+		break;
+
 	case led_green_on:
 		if (led_state & LED_STATE_CLAIMED)
 			hw_led_state |= GPIO_GREEN_LED;
@@ -229,7 +240,7 @@ EXPORT_SYMBOL(leds_event);
 
 static int __init leds_init(void)
 {
-#ifdef CONFIG_FOOTBRIDGE
+#if defined(CONFIG_ARCH_EBSA285) || defined(CONFIG_ARCH_CO285)
 	if (machine_is_ebsa285() || machine_is_co285())
 		leds_event = ebsa285_leds_event;
 #endif

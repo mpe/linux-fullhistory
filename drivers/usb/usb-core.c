@@ -13,6 +13,7 @@
 #include <linux/version.h>
 #include <linux/kernel.h>
 #include <linux/config.h>
+#include <linux/init.h>
 #include <linux/usb.h>
 
 /*
@@ -42,13 +43,11 @@ int dsbr100_init(void);
 int uhci_init(void);
 int ohci_hcd_init(void);
 
-#ifdef MODULE
-
 /*
  * Cleanup
  */
 
-void cleanup_module(void)
+static void __exit usb_exit(void)
 {
 	usb_major_cleanup();
 	usbdevfs_cleanup();
@@ -59,10 +58,7 @@ void cleanup_module(void)
  * Init
  */
 
-int init_module(void)
-#else
-int usb_init(void)
-#endif
+static int __init usb_init(void)
 {
 	usb_major_init();
 	usbdevfs_init();
@@ -99,3 +95,6 @@ int usb_init(void)
 #endif
 	return 0;
 }
+
+module_init(usb_init);
+module_exit(usb_exit);

@@ -12,7 +12,7 @@
  * (C) Copyright 1999 Johannes Erdfelt
  * (C) Copyright 1999 Randy Dunlap
  *
- * $Id: usb-uhci.c,v 1.236 2000/08/02 20:28:28 acher Exp $
+ * $Id: usb-uhci.c,v 1.237 2000/08/08 14:58:17 acher Exp $
  */
 
 #include <linux/config.h>
@@ -48,7 +48,7 @@
 /* This enables an extra UHCI slab for memory debugging */
 #define DEBUG_SLAB
 
-#define VERSTR "$Revision: 1.236 $ time " __TIME__ " " __DATE__
+#define VERSTR "$Revision: 1.237 $ time " __TIME__ " " __DATE__
 
 #include <linux/usb.h>
 #include "usb-uhci.h"
@@ -888,7 +888,7 @@ _static int uhci_submit_bulk_urb (urb_t *urb, urb_t *bulk_urb)
 		data += pktsze;
 		len -= pktsze;
 
-		last = (len == 0 && (usb_pipein(pipe) || pktsze < maxsze || (urb->transfer_flags & USB_DISABLE_SPD)));
+		last = (len == 0 && (usb_pipein(pipe) || pktsze < maxsze || !(urb->transfer_flags & USB_DISABLE_SPD)));
 
 		if (last)
 			td->hw.td.status |= TD_CTRL_IOC;	// last one generates INT

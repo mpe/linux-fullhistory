@@ -564,28 +564,6 @@ static int raid1_make_request (mddev_t *mddev, int rw,
 	if (rw == READA)
 		rw = READ;
 
-	if (rw == WRITE) {
-		rw = WRITERAW;
-		/*
-		 * we first clean the bh, then we start the IO, then
-		 * when the IO has finished, we end_io the bh and
-		 * mark it uptodate. This way we do not miss the
-		 * case when the bh got dirty again during the IO.
-		 *
-		 * We do an important optimization here - if the
-		 * buffer was not dirty and we are during resync or
-		 * reconstruction, then we can skip writing it back
-		 * to the master disk! (we still have to write it
-		 * back to the other disks, because we are not sync
-		 * yet.)
-		 */
-		if (atomic_set_buffer_clean(bh))
-			__mark_buffer_clean(bh);
-		else {
-			bh->b_end_io(bh, test_bit(BH_Uptodate, &bh->b_state));
-			return 0;
-		}
-	}
 	r1_bh = raid1_alloc_r1bh (conf);
 
 	spin_lock_irq(&conf->segment_lock);

@@ -44,14 +44,15 @@ int emu10k1_addxmgr_alloc(u32 size, struct emu10k1_card *card)
 	/* Convert bytes to pages */
 	numpages = (size / EMUPAGESIZE) + ((size % EMUPAGESIZE) ? 1 : 0);
 
-	while (index < (MAXPAGES - RESERVED - 1)) {
+	spin_lock_irqsave(&card->lock, flags);
+
+	while (index < (MAXPAGES - 1)) {
 		if (pagetable[index] & 0x8000) {
 			/* This block of pages is in use, jump to the start of the next block. */
 			index += (pagetable[index] & 0x7fff);
 		} else {
 			/* Found free block */
 			if (pagetable[index] >= numpages) {
-				spin_lock_irqsave(&card->lock, flags);
 
 				/* Block is large enough */
 
@@ -71,6 +72,8 @@ int emu10k1_addxmgr_alloc(u32 size, struct emu10k1_card *card)
 			}
 		}
 	}
+
+	spin_unlock_irqrestore(&card->lock, flags);
 
 	return -1;
 }

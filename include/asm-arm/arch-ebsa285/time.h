@@ -21,7 +21,7 @@
 
 #include <asm/dec21285.h>
 #include <asm/leds.h>
-#include <asm/system.h>
+#include <asm/mach-types.h>
 
 static int rtc_base;
 

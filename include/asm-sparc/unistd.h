@@ -1,4 +1,4 @@
-/* $Id: unistd.h,v 1.67 2000/08/12 13:25:51 davem Exp $ */
+/* $Id: unistd.h,v 1.68 2000/08/12 20:49:49 jj Exp $ */
 #ifndef _SPARC_UNISTD_H
 #define _SPARC_UNISTD_H
 
@@ -170,7 +170,7 @@
 /* #define __NR_putmsg          152    SunOS Specific                              */
 #define __NR_poll               153 /* Common                                      */
 #define __NR_getdents64		154 /* Linux specific				   */
-/* #define __NR_nfssvc          155    SunOS Specific                              */
+#define __NR_fstat64		155 /* Linux sparc32 Specific                      */
 /* #define __NR_getdirentries   156    SunOS Specific                              */
 #define __NR_statfs             157 /* Common                                      */
 #define __NR_fstatfs            158 /* Common                                      */

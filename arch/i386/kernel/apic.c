@@ -682,46 +682,28 @@ asmlinkage void smp_spurious_interrupt(void)
  * This interrupt should never happen with our APIC/SMP architecture
  */
 
-static spinlock_t err_lock = SPIN_LOCK_UNLOCKED;
-
 asmlinkage void smp_error_interrupt(void)
 {
-	unsigned long v;
+	unsigned long v, v1;
 
-	spin_lock(&err_lock);
-
+	/* First tickle the hardware, only then report what went on. -- REW */
 	v = apic_read(APIC_ESR);
-	printk(KERN_INFO "APIC error interrupt on CPU#%d, should never happen.\n",
-			smp_processor_id());
-	printk(KERN_INFO "... APIC ESR0: %08lx\n", v);
-
 	apic_write(APIC_ESR, 0);
-	v |= apic_read(APIC_ESR);
-	printk(KERN_INFO "... APIC ESR1: %08lx\n", v);
-	/*
-	 * Be a bit more verbose. (multiple bits can be set)
-	 */
-	if (v & 0x01)
-		printk(KERN_INFO "... bit 0: APIC Send CS Error (hw problem).\n");
-	if (v & 0x02)
-		printk(KERN_INFO "... bit 1: APIC Receive CS Error (hw problem).\n");
-	if (v & 0x04)
-		printk(KERN_INFO "... bit 2: APIC Send Accept Error.\n");
-	if (v & 0x08)
-		printk(KERN_INFO "... bit 3: APIC Receive Accept Error.\n");
-	if (v & 0x10)
-		printk(KERN_INFO "... bit 4: Reserved!.\n");
-	if (v & 0x20)
-		printk(KERN_INFO "... bit 5: Send Illegal Vector (kernel bug).\n");
-	if (v & 0x40)
-		printk(KERN_INFO "... bit 6: Received Illegal Vector.\n");
-	if (v & 0x80)
-		printk(KERN_INFO "... bit 7: Illegal Register Address.\n");
-
+	v1 = apic_read(APIC_ESR);
 	ack_APIC_irq();
-
 	irq_err_count++;
 
-	spin_unlock(&err_lock);
+	/* Here is what the APIC error bits mean:
+	   0: Send CS error
+	   1: Receive CS error
+	   2: Send accept error
+	   3: Receive accept error
+	   4: Reserved
+	   5: Send illegal vector
+	   6: Received illegal vector
+	   7: Illegal register address
+	*/
+	printk (KERN_ERR "APIC error on CPU%d: %02x(%02x)\n",
+	        smp_processor_id(), v , v1);
 }
 

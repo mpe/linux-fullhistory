@@ -15,7 +15,7 @@
 #include <asm/dec21285.h>
 #include <asm/elf.h>
 #include <asm/setup.h>
-#include <asm/system.h>
+#include <asm/mach-types.h>
 
 #include "arch.h"
 
@@ -219,6 +219,17 @@ static void victor_power_off(void)
 	while (1);
 }
 
+
+static void xp860_power_off(void)
+{
+	GPDR |= GPIO_GPIO20;
+	GPSR = GPIO_GPIO20;
+	mdelay(1000);
+	GPCR = GPIO_GPIO20;
+	while(1);
+}
+
+
 extern void select_sa1100_io_desc(void);
 #define SET_BANK(__nr,__start,__size) \
 	mi->bank[__nr].start = (__start), \
@@ -273,6 +284,18 @@ fixup_sa1100(struct machine_desc *desc, struct param_struct *params,
 		setup_initrd( __phys_to_virt(0xd8000000), 3*1024*1024 );
 	}
 
+        else if (machine_is_cerf()) {
+                // 16Meg Ram.
+                SET_BANK( 0, 0xc0000000, 8*1024*1024 );
+                SET_BANK( 1, 0xc8000000, 8*1024*1024 );			// comment this out for 8MB Cerfs
+                mi->nr_banks = 2;
+
+                ROOT_DEV = MKDEV(RAMDISK_MAJOR,0);
+                setup_ramdisk(1,  0, 0, 8192);
+                // Save 2Meg for RAMDisk
+                setup_initrd(0xc0500000, 3*1024*1024);
+        }
+
 	else if (machine_is_empeg()) {
 		SET_BANK( 0, 0xc0000000, 4*1024*1024 );
 		SET_BANK( 1, 0xc8000000, 4*1024*1024 );
@@ -309,6 +332,18 @@ fixup_sa1100(struct machine_desc *desc, struct param_struct *params,
 		setup_initrd( __phys_to_virt(0xc0800000), 4*1024*1024 );
 	}
 
+	else if (machine_is_nanoengine()) {
+		SET_BANK( 0, 0xc0000000, 32*1024*1024 );
+		mi->nr_banks = 1;
+
+		ROOT_DEV = MKDEV(RAMDISK_MAJOR,0);
+		setup_ramdisk( 1, 0, 0, 8192 );
+		setup_initrd( __phys_to_virt(0xc0800000), 4*1024*1024 );
+
+		/* Get command line parameters passed from the loader (if any) */
+		if( *((char*)0xc0000100) )
+			*cmdline = ((char *)0xc0000100);
+	}
 	else if (machine_is_tifon()) {
 		SET_BANK( 0, 0xc0000000, 16*1024*1024 );
 		SET_BANK( 1, 0xc8000000, 16*1024*1024 );
@@ -335,6 +370,12 @@ fixup_sa1100(struct machine_desc *desc, struct param_struct *params,
 		pm_power_off = victor_power_off;
 	}
 
+	else if (machine_is_xp860()) {
+		SET_BANK( 0, 0xc0000000, 32*1024*1024 );
+		mi->nr_banks = 1;
+
+		pm_power_off = xp860_power_off;
+	}
 }
 
 #ifdef CONFIG_SA1100_ASSABET
@@ -352,6 +393,13 @@ MACHINE_END
 #endif
 #ifdef CONFIG_SA1100_BRUTUS
 MACHINE_START(BRUTUS, "Intel Brutus (SA1100 eval board)")
+	BOOT_MEM(0xc0000000, 0x80000000, 0xf8000000)
+	FIXUP(fixup_sa1100)
+MACHINE_END
+#endif
+#ifdef CONFIG_SA1100_CERF
+MACHINE_START(CERF, "Intrinsyc CerfBoard")
+	MAINTAINER("Pieter Truter")
 	BOOT_MEM(0xc0000000, 0x80000000, 0xf8000000)
 	FIXUP(fixup_sa1100)
 MACHINE_END
@@ -377,6 +425,12 @@ MACHINE_END
 #endif
 #ifdef CONFIG_SA1100_LART
 MACHINE_START(LART, "LART")
+	BOOT_MEM(0xc0000000, 0x80000000, 0xf8000000)
+	FIXUP(fixup_sa1100)
+MACHINE_END
+#endif
+#ifdef CONFIG_SA1100_NANOENGINE
+MACHINE_START(NANOENGINE, "BSE nanoEngine")
 	BOOT_MEM(0xc0000000, 0x80000000, 0xf8000000)
 	FIXUP(fixup_sa1100)
 MACHINE_END

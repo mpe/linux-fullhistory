@@ -59,6 +59,11 @@ char *hpfs_load_code_page(struct super_block *s, secno cps)
 	cpds = cp->array[0].code_page_data;
 	cpi = cp->array[0].index;
 	brelse(bh);
+
+	if (cpi >= 3) {
+		printk("HPFS: Code page index out of array\n");
+		return NULL;
+	}
 	
 	if (!(cpd = hpfs_map_sector(s, cpds, &bh, 0))) return NULL;
 	if ((unsigned)cpd->offs[cpi] > 0x178) {

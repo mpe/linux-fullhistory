@@ -142,6 +142,7 @@
 #include <asm/io.h>
 #include <asm/ioc.h>
 #include <asm/irq.h>
+#include <asm/mach-types.h>
 #include <asm/pgtable.h>
 #include <asm/segment.h>
 #include <asm/uaccess.h>

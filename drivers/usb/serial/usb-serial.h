@@ -11,6 +11,9 @@
  *
  * See Documentation/usb/usb-serial.txt for more information on using this driver
  *
+ * (08/08/2000) gkh
+ *	Added open_count to port structure.
+ *
  * (07/23/2000) gkh
  *	Added bulk_out_endpointAddress to port structure.
  *
@@ -59,6 +62,7 @@ struct usb_serial_port {
 	wait_queue_head_t	write_wait;
 
 	struct tq_struct	tqueue;		/* task queue for line discipline waking up */
+	int			open_count;	/* number of times this port has been opened */
 	
 	void *			private;	/* data private to the specific port */
 };

@@ -309,7 +309,9 @@ drm_agp_head_t *drm_agp_init(void)
 
 #if LINUX_VERSION_CODE >= 0x020400
 		case VIA_MVP4:		head->chipset = "VIA MVP4";      break;
-		case VIA_APOLLO_SUPER:	head->chipset = "VIA Apollo Super"; 
+		case VIA_APOLLO_KX133:	head->chipset = "VIA Apollo KX133"; 
+			break;
+		case VIA_APOLLO_KT133:	head->chipset = "VIA Apollo KT133"; 
 			break;
 #endif
 

@@ -41,7 +41,7 @@ extern __inline__ void set_fs (mm_segment_t fs)
 	"2:\n"							\
 	"	.section .fixup,\"ax\"\n"			\
 	"	.align	2\n"					\
-	"3:	mvn	%0, %3\n"				\
+	"3:	mov	%0, %3\n"				\
 	"	b	2b\n"					\
 	"	.previous\n"					\
 	"	.section __ex_table,\"a\"\n"			\
@@ -49,7 +49,7 @@ extern __inline__ void set_fs (mm_segment_t fs)
 	"	.long	1b, 3b\n"				\
 	"	.previous"					\
 	: "=r" (err)						\
-	: "r" (x), "r" (addr), "i" (EFAULT), "0" (err))
+	: "r" (x), "r" (addr), "i" (-EFAULT), "0" (err))
 
 #define __put_user_asm_half(x,addr,err)				\
 ({								\
@@ -60,7 +60,7 @@ extern __inline__ void set_fs (mm_segment_t fs)
 	"3:\n"							\
 	"	.section .fixup,\"ax\"\n"			\
 	"	.align	2\n"					\
-	"4:	mvn	%0, %5\n"				\
+	"4:	mov	%0, %5\n"				\
 	"	b	3b\n"					\
 	"	.previous\n"					\
 	"	.section __ex_table,\"a\"\n"			\
@@ -71,7 +71,7 @@ extern __inline__ void set_fs (mm_segment_t fs)
 	: "=r" (err)						\
 	: "r" (__temp), "r" (__temp >> 8),			\
 	  "r" (addr), "r" ((int)(addr) + 1),			\
-	   "i" (EFAULT), "0" (err));				\
+	   "i" (-EFAULT), "0" (err));				\
 })
 
 #define __put_user_asm_word(x,addr,err)				\
@@ -80,7 +80,7 @@ extern __inline__ void set_fs (mm_segment_t fs)
 	"2:\n"							\
 	"	.section .fixup,\"ax\"\n"			\
 	"	.align	2\n"					\
-	"3:	mvn	%0, %3\n"				\
+	"3:	mov	%0, %3\n"				\
 	"	b	2b\n"					\
 	"	.previous\n"					\
 	"	.section __ex_table,\"a\"\n"			\
@@ -88,7 +88,7 @@ extern __inline__ void set_fs (mm_segment_t fs)
 	"	.long	1b, 3b\n"				\
 	"	.previous"					\
 	: "=r" (err)						\
-	: "r" (x), "r" (addr), "i" (EFAULT), "0" (err))
+	: "r" (x), "r" (addr), "i" (-EFAULT), "0" (err))
 
 #define __get_user_asm_byte(x,addr,err)				\
 	__asm__ __volatile__(					\
@@ -96,7 +96,7 @@ extern __inline__ void set_fs (mm_segment_t fs)
 	"2:\n"							\
 	"	.section .fixup,\"ax\"\n"			\
 	"	.align	2\n"					\
-	"3:	mvn	%0, %3\n"				\
+	"3:	mov	%0, %3\n"				\
 	"	mov	%1, #0\n"				\
 	"	b	2b\n"					\
 	"	.previous\n"					\
@@ -105,7 +105,7 @@ extern __inline__ void set_fs (mm_segment_t fs)
 	"	.long	1b, 3b\n"				\
 	"	.previous"					\
 	: "=r" (err), "=r" (x)					\
-	: "r" (addr), "i" (EFAULT), "0" (err))
+	: "r" (addr), "i" (-EFAULT), "0" (err))
 
 #define __get_user_asm_half(x,addr,err)				\
 ({								\
@@ -117,7 +117,7 @@ extern __inline__ void set_fs (mm_segment_t fs)
 	"3:\n"							\
 	"	.section .fixup,\"ax\"\n"			\
 	"	.align	2\n"					\
-	"4:	mvn	%0, %5\n"				\
+	"4:	mov	%0, %5\n"				\
 	"	mov	%1, #0\n"				\
 	"	b	3b\n"					\
 	"	.previous\n"					\
@@ -128,7 +128,7 @@ extern __inline__ void set_fs (mm_segment_t fs)
 	"	.previous"					\
 	: "=r" (err), "=r" (x), "=&r" (__temp)			\
 	: "r" (addr), "r" ((int)(addr) + 1),			\
-	   "i" (EFAULT), "0" (err));				\
+	   "i" (-EFAULT), "0" (err));				\
 })
 
 
@@ -138,7 +138,7 @@ extern __inline__ void set_fs (mm_segment_t fs)
 	"2:\n"							\
 	"	.section .fixup,\"ax\"\n"			\
 	"	.align	2\n"					\
-	"3:	mvn	%0, %3\n"				\
+	"3:	mov	%0, %3\n"				\
 	"	mov	%1, #0\n"				\
 	"	b	2b\n"					\
 	"	.previous\n"					\
@@ -147,7 +147,7 @@ extern __inline__ void set_fs (mm_segment_t fs)
 	"	.long	1b, 3b\n"				\
 	"	.previous"					\
 	: "=r" (err), "=r" (x)					\
-	: "r" (addr), "i" (EFAULT), "0" (err))
+	: "r" (addr), "i" (-EFAULT), "0" (err))
 
 extern unsigned long __arch_copy_from_user(void *to, const void *from, unsigned long n);
 #define __do_copy_from_user(to,from,n)				\

@@ -9,7 +9,7 @@ SUB_DIRS     :=
 MOD_SUB_DIRS := $(SUB_DIRS)
 ALL_SUB_DIRS := $(SUB_DIRS) lmc
 
-O_TARGET := wan.a
+O_TARGET := wan.o
 
 export-objs =	z85230.o syncppp.o comx.o sdladrv.o cycx_drv.o
 list-multi =	wanpipe.o cyclomx.o
@@ -28,7 +28,7 @@ obj-$(CONFIG_HOSTESS_SV11)	+= z85230.o	syncppp.o	hostess_sv11.o
 obj-$(CONFIG_SEALEVEL_4021)	+= z85230.o	syncppp.o	sealevel.o
 obj-$(CONFIG_COMX)		+= 				comx.o
 obj-$(CONFIG_COMX_HW_COMX)	+= 				comx-hw-comx.o
-obj-$(CONFIG_COMX_HW_LOCOMX)	+= cz85230.o	syncppp.o	comx-hw-locomx.o
+obj-$(CONFIG_COMX_HW_LOCOMX)	+= z85230.o	syncppp.o	comx-hw-locomx.o
 obj-$(CONFIG_COMX_HW_MIXCOM)	+=				comx-hw-mixcom.o
 obj-$(CONFIG_COMX_PROTO_PPP)	+=		syncppp.o	comx-proto-ppp.o
 obj-$(CONFIG_COMX_PROTO_LAPB)	+=				comx-proto-lapb.o

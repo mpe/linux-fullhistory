@@ -242,7 +242,7 @@ README for the ISDN-subsystem
                                       0 = transparent
                                       1 = transparent with audio features (e.g. DSP)
                                       2 = Fax G3 Class 2 commands (S14 has to be set to 11)
-                                      2 = Fax G3 Class 1 commands (S14 has to be set to 11)
+                                      3 = Fax G3 Class 1 commands (S14 has to be set to 11)
              16   250       Send-Packet-size/16
              17   8         Window-size (not yet implemented)
              18   4         Bit coded register, Service-Octet-1 to accept,

@@ -9,6 +9,7 @@
 
 #include <linux/config.h>
 #include <linux/linkage.h>
+#include <asm/mach-types.h>
 
 #ifndef CONFIG_ARCH_SA1100
 #error What am I doing here...
@@ -18,27 +19,10 @@
 
 __SA1100_start:
 
-		@ Preserve r0/r1 i.e. kernel entry values
-		mov	r8, r0
-		mov	r9, r1
-
-#if	defined( CONFIG_SA1100_ASSABET ) || \
-	defined( CONFIG_SA1100_BRUTUS ) || \
-	defined( CONFIG_SA1100_THINCLIENT )
-@ Booting from Angel -- need to enter SVC mode
-#define angel_SWIreason_EnterSVC 0x17   /* from arm.h, in angel source */
-#define angel_SWI_ARM (0x123456)
-		mov	r0, #angel_SWIreason_EnterSVC
-		swi	#angel_SWI_ARM
-
-		@ turn off interrupts to prevent the angel from running
-		mrs	r0, cpsr
-		orr	r0, r0, #0xc0
-		msr	cpsr_c, r0
-#endif
+		@ Preserve r8/r7 i.e. kernel entry values
 
 #ifdef CONFIG_SA1100_VICTOR
-		teq	r9, #26			@ MACH_TYPE_VICTOR
+		teq	r7, #MACH_TYPE_VICTOR
 		bne	10f
 
 		@ Copy cmdline to 0xc0000000
@@ -74,10 +58,6 @@ __SA1100_start:
  * Pause for a short time so that we give enough time
  * for the host to start a terminal up.
  */
-		mov	r0, #0x02000000
+		mov	r0, #0x00200000
 1:		subs	r0, r0, #1
 		bne	1b
-
-		@ Restore initial r0/r1
-		mov	r0, r8
-		mov	r1, r9

@@ -32,44 +32,41 @@
 #define _CARDWI_H
 
 #include "icardwav.h"
+#include "audio.h"
+#include "timer.h"
 
-struct wave_in 
-{
-	struct list_head list;
-
-	u32 state;
-	struct record *rec_ptr;
-	struct memhandle *memhandle;
-	struct emu_timer *timer;
-	u32 callbacksize;
-	struct wave_format wave_fmt;
+struct wavein_buffer {
+	u16 ossfragshift;
+        u32 fragment_size;
+        u32 numfrags;
+	u32 hw_pos;		/* hardware cursor position */
+	u32 pos;		/* software cursor position */
+	u32 bytestocopy;	/* bytes of recorded data available */
+	u32 size;
+	u32 sizereg;
+	u32 sizeregval;
+        u32 addrreg;
+        u32 idxreg;
+        u32 adcctl;
+	void *addr;
+	u8 cov;
+	dma_addr_t dma_handle;	
 };
 
 struct wiinst
 {
-	struct wave_in *wave_in;
-	struct wave_format wave_fmt;
-	u16 ossfragshift;
-	u32 fragment_size;
-	u32 numfrags;
+	u8 state;
+	struct emu_timer timer;
+	struct wave_format format;
+	struct wavein_buffer buffer;
 	wait_queue_head_t wait_queue;
-	int mapped;
-	u32 total_recorded;
+	u8 mmapped;
+	u32 total_recorded;	/* total bytes read() from device */
 	u32 blocks;
-	u32 curpos;
 	spinlock_t lock;
 	u8 recsrc;
+	u16 fxwc;
 };
-
-struct emu10k1_wavein 
-{
-	struct wave_in *ac97;
-	struct wave_in *mic;
-	struct wave_in *fx;
-
-	u8 recsrc;
-};
-
 
 #define WAVEIN_MAXBUFSIZE         65536
 #define WAVEIN_MINBUFSIZE	  368
@@ -83,10 +80,10 @@ int emu10k1_wavein_open(struct emu10k1_wavedevice *);
 void emu10k1_wavein_close(struct emu10k1_wavedevice *);
 void emu10k1_wavein_start(struct emu10k1_wavedevice *);
 void emu10k1_wavein_stop(struct emu10k1_wavedevice *);
-void emu10k1_wavein_getxfersize(struct wave_in *, u32 *, u32 *);
+void emu10k1_wavein_getxfersize(struct wiinst *, u32 *);
 void emu10k1_wavein_xferdata(struct wiinst *, u8 *, u32 *);
-int emu10k1_wavein_setformat(struct emu10k1_wavedevice *);
-int emu10k1_wavein_getcontrol(struct wave_in *, u32, u32 *);
+int emu10k1_wavein_setformat(struct emu10k1_wavedevice *, struct wave_format *);
+void emu10k1_wavein_update(struct emu10k1_card *, struct wiinst *);
 
 
 #endif /* _CARDWI_H */

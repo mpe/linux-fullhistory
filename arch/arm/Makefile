@@ -48,7 +48,7 @@ NEW_GCC		:= $(shell if $(CC) --version 2>&1 | grep '^2\.7' > /dev/null; then ech
 #
 ifeq ($(NEW_GCC),y)
 CFLAGS			+= -mshort-load-bytes
-CFLAGS_PROC_CPU_26	:= -mcpu=arm3 -Os
+CFLAGS_PROC_CPU_26	:= -mcpu=arm3 -mapcs-26 -Os
 CFLAGS_PROC_CPU_32v3	:= -march=armv3
 CFLAGS_PROC_CPU_32v4	:= -march=armv4
 CFLAGS_ARM6		:= -mtune=arm6
@@ -166,10 +166,9 @@ endif
 HEAD		:= arch/arm/kernel/head-$(PROCESSOR).o \
 		   arch/arm/kernel/init_task.o
 SUBDIRS		+= arch/arm/kernel arch/arm/mm arch/arm/lib \
-		   arch/arm/special arch/arm/nwfpe
+		   arch/arm/nwfpe
 CORE_FILES	:= arch/arm/kernel/kernel.o arch/arm/mm/mm.o $(CORE_FILES)
 LIBS		:= arch/arm/lib/lib.o arch/arm/lib/lib.a $(LIBS) $(LIBGCC)
-DRIVERS		+= arch/arm/special/special.a
 
 ifeq ($(CONFIG_NWFPE),y)
 LIBS		:= arch/arm/nwfpe/math-emu.o $(LIBS)
@@ -193,7 +192,14 @@ MAKEBOOT	 = $(MAKE) -C arch/$(ARCH)/boot
 # The following is a hack to get 'constants.h' up
 # to date before starting compilation
 
-$(patsubst %, _dir_%, $(SUBDIRS)) : constants
+$(patsubst %, _dir_%, $(SUBDIRS)) init/main.o init/version.o : \
+	constants \
+	include/asm-arm/mach-types.h
+
+include/asm-arm/mach-types.h: \
+	arch/arm/tools/mach-types \
+	arch/arm/tools/gen-mach-types
+	@awk -f arch/arm/tools/gen-mach-types arch/arm/tools/mach-types > $@
 
 constants: $(TOPDIR)/include/asm-arm/proc-fns.h dummy
 	@$(MAKE) -C arch/arm/lib constants.h
@@ -218,16 +224,16 @@ arch/arm/mm: dummy
 arch/arm/lib: dummy
 	$(MAKE) linuxsubdirs SUBDIRS=arch/arm/lib
 
-zImage zinstall Image install: vmlinux
+bzImage zImage zinstall Image bootpImage install: vmlinux
 	@$(MAKEBOOT) $@
 
 archmrproper:
-	@$(MAKE) -C arch/$(ARCH)/special mrproper
 	$(RM) include/asm-arm/arch include/asm-arm/proc
 
 archclean:
 	@$(MAKEBOOT) clean
 	$(RM) arch/arm/lib/constants.h arch/arm/vmlinux.lds
+	$(RM) include/asm-arm/mach-types.h
 
 archdep: symlinks
 	@$(MAKEBOOT) dep
@@ -241,46 +247,25 @@ zi:;	@$(MAKEBOOT) zinstall
 #
 # Configuration targets.  Use these to select a
 # configuration for your architecture
-#
-a5k_config:
-	$(RM) arch/arm/defconfig
-	cp arch/arm/def-configs/a5k arch/arm/defconfig
+CFGS=	a5k_config		ebsa110_config		\
+	footbridge_config	rpc_config		\
+	brutus_config		victor_config		\
+	empeg_config		thinclient_config	\
+	assabet_config		lart_config		\
+	cerf_config 
 
-ebsa110_config:
-	$(RM) arch/arm/defconfig
-	cp arch/arm/def-configs/ebsa110 arch/arm/defconfig
-
-footbridge_config:
-	$(RM) arch/arm/defconfig
-	cp arch/arm/def-configs/footbridge arch/arm/defconfig
-
-rpc_config:
-	$(RM) arch/arm/defconfig
-	cp arch/arm/def-configs/rpc arch/arm/defconfig
-
-brutus_config:
-	$(RM) arch/arm/defconfig
-	cp arch/arm/def-configs/brutus arch/arm/defconfig
-
-victor_config:
-	$(RM) arch/arm/defconfig
-	cp arch/arm/def-configs/victor arch/arm/defconfig
-
-empeg_config:
-	$(RM) arch/arm/defconfig
-	cp arch/arm/def-configs/empeg arch/arm/defconfig
-
-thinclient_config:
-	$(RM) arch/arm/defconfig
-	cp arch/arm/def-configs/thinclient arch/arm/defconfig
-
-assabet_config:
-	$(RM) arch/arm/defconfig
-	cp arch/arm/def-configs/assabet arch/arm/defconfig
-
-lart_config:
-	$(RM) arch/arm/defconfig
-	cp arch/arm/def-configs/lart arch/arm/defconfig
+$(CFGS):
+	@( \
+	CFG=$(@:_config=); \
+	if [ -f arch/arm/def-configs/$$CFG ]; then \
+	  $(RM) arch/arm/defconfig; \
+	  cp arch/arm/def-configs/$$CFG arch/arm/defconfig; \
+	  echo "*** Default configuration for $$CFG installed"; \
+	  echo "*** Next, you may run 'make oldconfig'"; \
+	else \
+	  echo "$$CFG does not exist"; \
+	fi; \
+	)
 
 l7200_config:
 	$(RM) arch/arm/defconfig

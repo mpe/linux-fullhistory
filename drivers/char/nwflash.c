@@ -18,6 +18,7 @@
 #include <asm/dec21285.h>
 #include <asm/io.h>
 #include <asm/leds.h>
+#include <asm/mach-types.h>
 #include <asm/system.h>
 #include <asm/uaccess.h>
 

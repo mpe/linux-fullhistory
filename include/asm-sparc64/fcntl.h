@@ -1,4 +1,4 @@
-/* $Id: fcntl.h,v 1.9 2000/08/12 13:25:53 davem Exp $ */
+/* $Id: fcntl.h,v 1.10 2000/08/12 20:49:49 jj Exp $ */
 #ifndef _SPARC64_FCNTL_H
 #define _SPARC64_FCNTL_H
 
@@ -33,6 +33,12 @@
 #define F_SETLKW	9
 #define F_SETSIG	10	/*  for sockets. */
 #define F_GETSIG	11	/*  for sockets. */
+
+#ifdef __KERNEL__
+#define F_GETLK64	12
+#define F_SETLK64	13
+#define F_SETLKW64	14
+#endif
 
 /* for F_[GET|SET]FL */
 #define FD_CLOEXEC	1	/* actually anything with low bit set goes */

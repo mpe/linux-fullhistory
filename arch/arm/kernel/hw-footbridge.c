@@ -15,7 +15,7 @@
 
 #include <asm/io.h>
 #include <asm/leds.h>
-#include <asm/system.h>
+#include <asm/mach-types.h>
 
 #define IRDA_IO_BASE		0x180
 #define GP1_IO_BASE		0x338

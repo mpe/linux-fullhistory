@@ -22,7 +22,6 @@
 #include <linux/malloc.h>
 #include <linux/init.h>
 #include <linux/fb.h>
-#include <linux/wrapper.h>
 
 #include <asm/hardware.h>
 #include <asm/io.h>
@@ -1528,13 +1527,16 @@ free_unused_pages(unsigned int virtual_start, unsigned int virtual_end)
 	virtual_end = PAGE_ALIGN(virtual_end);
 
 	while (virtual_start < virtual_end) {
+		struct page *page;
+
 		/*
 		 * Clear page reserved bit,
 		 * set count to 1, and free
 		 * the page.
 		 */
-		mem_map_unreserve(virt_to_page(virtual_start));
-		atomic_set(&virt_to_page(virtual_start)->count, 1);
+		page = virt_to_page(virtual_start);
+		ClearPageReserved(page);
+		atomic_set(&page->count, 1);
 		free_page(virtual_start);
 
 		virtual_start += PAGE_SIZE;
@@ -1629,7 +1631,7 @@ acornfb_init(void)
 		for (page = current_par.screen_base; 
 		     page < PAGE_ALIGN(current_par.screen_base + size);
 		     page += PAGE_SIZE)
-			mem_map_reserve(virt_to_page(page));
+			SetPageReserved(virt_to_page(page));
 		/* Hand back any excess pages that we allocated. */
 		for (page = current_par.screen_base + size; page < top; page += PAGE_SIZE)
 			free_page(page);

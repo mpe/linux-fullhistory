@@ -67,6 +67,8 @@
 #define IOEB_BASE		((volatile unsigned char *)0xe0350050)
 #define PCIO_FLOPPYDMABASE	((volatile unsigned char *)0xe002a000)
 #define PCIO_BASE		0xe0010000
+/* in/out bias for the ISA slot region */
+#define ISASLOT_IO		0x80400000
 
 /*
  * RAM definitions
@@ -76,8 +78,6 @@
 						 p->u1.s.pages_in_bank[1] + \
 						 p->u1.s.pages_in_bank[2] + \
 						 p->u1.s.pages_in_bank[3]))
-
-#define PARAMS_BASE		0
 
 #define FLUSH_BASE_PHYS		0x00000000	/* ROM */
 

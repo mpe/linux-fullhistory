@@ -77,6 +77,24 @@ extern __inline__ unsigned long __xchg(unsigned long x, volatile void *ptr, int 
 	  : "memory");				\
 	} while(0)
 
+#define __clf()	do {				\
+	unsigned long temp;			\
+	__asm__ __volatile__(			\
+"	mov	%0, pc		@ clf\n"	\
+"	orr	%0, %0, #0x04000000\n"		\
+"	teqp	%0, #0\n"			\
+	: "=r" (temp));				\
+    } while(0)
+
+#define __stf()	do {				\
+	unsigned long temp;			\
+	__asm__ __volatile__(			\
+"	mov	%0, pc		@ stf\n"	\
+"	bic	%0, %0, #0x04000000\n"		\
+"	teqp	%0, #0\n"			\
+	: "=r" (temp));				\
+    } while(0)
+
 /*
  * save current IRQ & FIQ state
  */

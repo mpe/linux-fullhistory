@@ -274,7 +274,7 @@ void __init dc21285_init(void)
 
 	cfn_mode = __footbridge_cfn_mode();
 
-	printk(KERN_INFO "PCI: DC21285 footbridge, revision %02lX in "
+	printk(KERN_INFO "PCI: DC21285 footbridge, revision %02lX, in "
 		"%s mode\n", *CSR_CLASSREV & 0xff, cfn_mode ?
 		"central function" : "addin");
 

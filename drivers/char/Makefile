@@ -65,11 +65,12 @@ ifeq ($(ARCH),m68k)
 endif
 
 ifeq ($(ARCH),arm)
-# we actually need to be able to select various different keymaps
-# and keyboards dependent on which actual machine we're going to
-# run on.
-  KEYMAP   =
-  KEYBD    =
+  ifneq ($(CONFIG_PC_KEYMAP),y)
+    KEYMAP   =
+  endif
+  ifneq ($(CONFIG_PC_KEYB),y)
+    KEYBD    =
+  endif
 endif
 
 ifeq ($(ARCH),sh)

@@ -1,4 +1,4 @@
-$Id: README.eicon,v 1.7 2000/03/06 16:38:43 armin Exp $
+$Id: README.eicon,v 1.9 2000/06/08 08:50:25 armin Exp $
 
 (c) 1999,2000 Armin Schindler (mac@melware.de)
 (c) 1999,2000 Cytronics & Melware (info@melware.de)
@@ -40,6 +40,7 @@ DIVA Server family
 ------------------
 - DIVA Server BRI/PCI 2M
 - DIVA Server PRI/PCI 2M (9M 23M 30M)
+- DIVA Server 4BRI/PCI
 	supported functions of onboard DSPs:
 	- analog modem
 	- fax group 2/3 (Fax Class 2 commands)
@@ -80,7 +81,7 @@ Example for loading and starting a BRI card with E-DSS1 Protocol.
 
 Example for a BRI card with E-DSS1 Protocol with PtP configuration.
 
-	eiconctrl [-d DriverId] load etsi -n -t0 -s1
+	eiconctrl [-d DriverId] load etsi -n -t1 -s1
 
 
 Example for loading and starting a PRI card with E-DSS1 Protocol.
@@ -99,6 +100,18 @@ Just use "eiconctrl isdnlog on" and the driver will generate
 the necessary D-Channel traces for isdnlog.
 
 
+FILECHECK:
+A part of the eicon driver source code files are provided
+by Eicon Technology. In order to get the best support from Eicon,
+these files are tested with a checksum, just to know if the files
+were modified. This does *not* mean, you are not allowed to modify the
+driver. If you want to improve the driver or you fix a bug, please do
+so and let me (or Eicon) know, about the necessary changes. So
+every user knows, if the driver he uses is modified or checked with
+Eicon files. When the driver has been loaded, in the syslog you will
+find something like "verified" or "modified" right after the version.
+
+
 Thanks to 
 	Deutsche Mailbox Saar-Lor-Lux GmbH
 	for sponsoring and testing fax
@@ -113,3 +126,4 @@ Have fun !
 Armin Schindler
 mac@melware.de
 http://www.melware.de
+

@@ -11,6 +11,8 @@
 #ifndef __ASM_ARCH_SERIAL_H
 #define __ASM_ARCH_SERIAL_H
 
+#include <asm/arch/hardware.h>
+
 /*
  * This assumes you have a 1.8432 MHz clock for your UART.
  *
@@ -27,9 +29,10 @@
      /* UART CLK        PORT  IRQ     FLAGS        */
 #define STD_SERIAL_PORT_DEFNS \
 	{ 0, BASE_BAUD, 0x3F8, 10, STD_COM_FLAGS },	/* ttyS0 */	\
-	{ 0, BASE_BAUD, 0x2F8, 10, STD_COM_FLAGS },	/* ttyS1 */	\
-	{ 0, BASE_BAUD, 0x804002e8,  41, STD_COM_FLAGS },	/* ttyS2 */	\
-	{ 0, BASE_BAUD, 0x804003e8,  40, STD_COM_FLAGS },	/* ttyS3 */	\
+	{ 0, BASE_BAUD, 0x2F8,  0, STD_COM_FLAGS },	/* ttyS1 */     \
+        /* ISA Slot Serial ports */ \
+	{ 0, BASE_BAUD, ISASLOT_IO + 0x2e8,  41, STD_COM_FLAGS },	/* ttyS2 */	\
+	{ 0, BASE_BAUD, ISASLOT_IO + 0x3e8,  40, STD_COM_FLAGS },	/* ttyS3 */	\
 	{ 0, BASE_BAUD, 0    ,  0, STD_COM_FLAGS }, 	/* ttyS4 */	\
 	{ 0, BASE_BAUD, 0    ,  0, STD_COM_FLAGS },	/* ttyS5 */	\
 	{ 0, BASE_BAUD, 0    ,  0, STD_COM_FLAGS },	/* ttyS6 */	\

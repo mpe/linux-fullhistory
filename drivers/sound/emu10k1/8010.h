@@ -37,18 +37,23 @@
 #ifndef _8010_H
 #define _8010_H
 
+#include <linux/types.h>
+
 /* ------------------- DEFINES -------------------- */
 
-#define EMUPAGESIZE	4096		/* don't change */
-#define RESERVED	0
-#define NUM_G		64		/* use all channels */
-#define NUM_FXSENDS	4		/* don't change */
-#define MAXPAGES        (32768 * NUM_G / EMUPAGESIZE)      /* WAVEOUT_MAXBUFSIZE * NUM_G / EMUPAGESIZE */
+#define CMD_WRITEFN0		0x0
+#define CMD_READFN0		0x1
+#define CMD_WRITEPTR		0x2
+#define CMD_READPTR		0x3
+#define CMD_SETRECSRC		0x4
+#define CMD_GETRECSRC		0x5
+#define CMD_GETVOICEPARAM	0x6
+#define CMD_SETVOICEPARAM	0x7
 
-#define TMEMSIZE	256*1024
-#define TMEMSIZEREG	4
-
-#define IP_TO_CP(ip) ((ip == 0) ? 0 : (((0x00001000uL | (ip & 0x00000FFFL)) << (((ip >> 12) & 0x000FL) + 4)) & 0xFFFF0000uL))
+struct mixer_private_ioctl {
+	u32 cmd;
+	u32 val[10];
+};
 
 /************************************************************************************************/
 /* PCI function 0 registers, address = <val> + PCIBASE0						*/
@@ -174,14 +179,16 @@
 #define HCFG_AC3ENABLE_MASK	0x0x0000e0	/* AC3 async input control - Not implemented	*/
 #define HCFG_AC3ENABLE_ZVIDEO	0x00000080	/* Channels 0 and 1 replace ZVIDEO		*/
 #define HCFG_AC3ENABLE_CDSPDIF	0x00000040	/* Channels 0 and 1 replace CDSPDIF		*/
+#define HCFG_AC3ENABLE_GPSPDIF  0x00000020      /* Channels 0 and 1 replace GPSPDIF             */
 #define HCFG_AUTOMUTE		0x00000010	/* When set, the async sample rate convertors	*/
 						/* will automatically mute their output when	*/
 						/* they are not rate-locked to the external	*/
 						/* async audio source  				*/
 #define HCFG_LOCKSOUNDCACHE	0x00000008	/* 1 = Cancel bustmaster accesses to soundcache */
 						/* NOTE: This should generally never be used.  	*/
-#define HCFG_LOCKTANKCACHE	0x00000004	/* 1 = Cancel bustmaster accesses to tankcache	*/
+#define HCFG_LOCKTANKCACHE_MASK	0x00000004	/* 1 = Cancel bustmaster accesses to tankcache	*/
 						/* NOTE: This should generally never be used.  	*/
+#define HCFG_LOCKTANKCACHE	0x01020014
 #define HCFG_MUTEBUTTONENABLE	0x00000002	/* 1 = Master mute button sets AUDIOENABLE = 0.	*/
 						/* NOTE: This is a 'cheap' way to implement a	*/
 						/* master mute function on the mute button, and	*/
@@ -256,7 +263,7 @@
 #define AC97_RECORDSELECT	0x1a
 #define AC97_RECORDGAIN		0x1c
 #define AC97_RECORDGAINMIC	0x1e
-#define AC97_GENERALPUPOSE	0x20
+#define AC97_GENERALPURPOSE	0x20
 #define AC97_3DCONTROL		0x22
 #define AC97_MODEMRATE		0x24
 #define AC97_POWERDOWN		0x26
@@ -335,10 +342,12 @@
 #define CCCA_CURRADDR		0x18000008
 
 #define CCR			0x09		/* Cache control register				*/
-#define CCR_CACHEINVALIDSIZE	0xfe000000	/* Number of invalid samples cache for this channel    	*/
+#define CCR_CACHEINVALIDSIZE	0x07190009
+#define CCR_CACHEINVALIDSIZE_MASK	0xfe000000	/* Number of invalid samples cache for this channel    	*/
 #define CCR_CACHELOOPFLAG	0x01000000	/* 1 = Cache has a loop service pending			*/
 #define CCR_INTERLEAVEDSAMPLES	0x00800000	/* 1 = A cache service will fetch interleaved samples	*/
 #define CCR_WORDSIZEDSAMPLES	0x00400000	/* 1 = A cache service will fetch word sized samples	*/
+#define CCR_READADDRESS		0x06100009
 #define CCR_READADDRESS_MASK	0x003f0000	/* Location of cache just beyond current cache service	*/
 #define CCR_LOOPINVALSIZE	0x0000fe00	/* Number of invalid samples in cache prior to loop	*/
 						/* NOTE: This is valid only if CACHELOOPFLAG is set	*/

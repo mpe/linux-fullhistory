@@ -53,8 +53,8 @@ void __down(struct semaphore * sem)
 {
 	struct task_struct *tsk = current;
 	DECLARE_WAITQUEUE(wait, tsk);
-	tsk->state = TASK_UNINTERRUPTIBLE;
-	add_wait_queue(&sem->wait, &wait);
+	tsk->state = TASK_UNINTERRUPTIBLE|TASK_EXCLUSIVE;
+	add_wait_queue_exclusive(&sem->wait, &wait);
 
 	spin_lock_irq(&semaphore_lock);
 	sem->sleepers++;
@@ -67,28 +67,28 @@ void __down(struct semaphore * sem)
 		 */
 		if (!atomic_add_negative(sleepers - 1, &sem->count)) {
 			sem->sleepers = 0;
-			wake_up(&sem->wait);
 			break;
 		}
 		sem->sleepers = 1;	/* us - see -1 above */
 		spin_unlock_irq(&semaphore_lock);
 
 		schedule();
-		tsk->state = TASK_UNINTERRUPTIBLE;
+		tsk->state = TASK_UNINTERRUPTIBLE|TASK_EXCLUSIVE;
 		spin_lock_irq(&semaphore_lock);
 	}
 	spin_unlock_irq(&semaphore_lock);
 	remove_wait_queue(&sem->wait, &wait);
 	tsk->state = TASK_RUNNING;
+	wake_up(&sem->wait);
 }
 
 int __down_interruptible(struct semaphore * sem)
 {
-	int retval;
+	int retval = 0;
 	struct task_struct *tsk = current;
 	DECLARE_WAITQUEUE(wait, tsk);
-	tsk->state = TASK_INTERRUPTIBLE;
-	add_wait_queue(&sem->wait, &wait);
+	tsk->state = TASK_INTERRUPTIBLE|TASK_EXCLUSIVE;
+	add_wait_queue_exclusive(&sem->wait, &wait);
 
 	spin_lock_irq(&semaphore_lock);
 	sem->sleepers ++;
@@ -102,12 +102,10 @@ int __down_interruptible(struct semaphore * sem)
 		 * it has contention. Just correct the count
 		 * and exit.
 		 */
-		retval = -EINTR;
 		if (signal_pending(current)) {
+			retval = -EINTR;
 			sem->sleepers = 0;
-			if (atomic_add_negative(sleepers, &sem->count))
-				break;
-			wake_up(&sem->wait);
+			atomic_add(sleepers, &sem->count);
 			break;
 		}
 
@@ -118,8 +116,6 @@ int __down_interruptible(struct semaphore * sem)
 		 * the lock.
 		 */
 		if (!atomic_add_negative(sleepers - 1, &sem->count)) {
-			wake_up(&sem->wait);
-			retval = 0;
 			sem->sleepers = 0;
 			break;
 		}
@@ -127,12 +123,13 @@ int __down_interruptible(struct semaphore * sem)
 		spin_unlock_irq(&semaphore_lock);
 
 		schedule();
-		tsk->state = TASK_INTERRUPTIBLE;
+		tsk->state = TASK_INTERRUPTIBLE|TASK_EXCLUSIVE;
 		spin_lock_irq(&semaphore_lock);
 	}
 	spin_unlock_irq(&semaphore_lock);
 	tsk->state = TASK_RUNNING;
 	remove_wait_queue(&sem->wait, &wait);
+	wake_up(&sem->wait);
 	return retval;
 }
 
@@ -147,8 +144,9 @@ int __down_interruptible(struct semaphore * sem)
 int __down_trylock(struct semaphore * sem)
 {
 	int sleepers;
+	unsigned long flags;
 
-	spin_lock_irq(&semaphore_lock);
+	spin_lock_irqsave(&semaphore_lock, flags);
 	sleepers = sem->sleepers + 1;
 	sem->sleepers = 0;
 
@@ -159,7 +157,7 @@ int __down_trylock(struct semaphore * sem)
 	if (!atomic_add_negative(sleepers, &sem->count))
 		wake_up(&sem->wait);
 
-	spin_unlock_irq(&semaphore_lock);
+	spin_unlock_irqrestore(&semaphore_lock, flags);
 	return 1;
 }
 
@@ -254,7 +252,8 @@ struct rw_semaphore *down_write_failed(struct rw_semaphore *sem)
 	while (atomic_read(&sem->count) < 0) {
 		set_task_state(tsk, TASK_UNINTERRUPTIBLE | TASK_EXCLUSIVE);
 		if (atomic_read(&sem->count) >= 0)
-			break;	/* we must attempt to aquire or bias the lock */		schedule();
+			break;	/* we must attempt to aquire or bias the lock */
+		schedule();
 	}
 
 	remove_wait_queue(&sem->wait, &wait);
@@ -293,6 +292,102 @@ struct rw_semaphore *rwsem_wake_writer(struct rw_semaphore *sem)
  * registers (r0 to r3 and lr), but not ip, as we use it as a return
  * value in some cases..
  */
+#ifdef CONFIG_CPU_26
+asm("	.section	.text.lock, \"ax\"
+	.align	5
+	.globl	__down_failed
+__down_failed:
+	stmfd	sp!, {r0 - r3, lr}
+	mov	r0, ip
+	bl	__down
+	ldmfd	sp!, {r0 - r3, pc}^
+
+	.align	5
+	.globl	__down_interruptible_failed
+__down_interruptible_failed:
+	stmfd	sp!, {r0 - r3, lr}
+	mov	r0, ip
+	bl	__down_interruptible
+	mov	ip, r0
+	ldmfd	sp!, {r0 - r3, pc}^
+
+	.align	5
+	.globl	__down_trylock_failed
+__down_trylock_failed:
+	stmfd	sp!, {r0 - r3, lr}
+	mov	r0, ip
+	bl	__down_trylock
+	mov	ip, r0
+	ldmfd	sp!, {r0 - r3, pc}^
+
+	.align	5
+	.globl	__up_wakeup
+__up_wakeup:
+	stmfd	sp!, {r0 - r3, lr}
+	mov	r0, ip
+	bl	__up
+	ldmfd	sp!, {r0 - r3, pc}^
+
+	.align	5
+	.globl	__down_read_failed
+__down_read_failed:
+	stmfd	sp!, {r0 - r3, lr}
+	mov	r0, ip
+	bcc	1f
+1:	bl	down_read_failed_biased
+	ldmfd	sp!, {r0 - r3, pc}^
+2:	bl	down_read_failed
+	mov	r1, pc
+	orr	r2, r1, #
+	teqp r2, #0
+
+	ldr	r3, [r0]
+	subs	r3, r3, #1
+	str	r3, [r0]
+	ldmplfd	sp!, {r0 - r3, pc}^
+  orrcs r1, r1, #0x20000000   @ Set carry
+  teqp r1, #0
+	bcc	2b
+	b	1b
+
+	.align	5
+	.globl	__down_write_failed
+__down_write_failed:
+	stmfd	sp!, {r0 - r3, lr}
+	mov	r0, ip
+	bcc	1f
+1:	bl	down_write_failed_biased
+	ldmfd	sp!, {r0 - r3, pc}^
+2:	bl	down_write_failed
+	mov r1, pc
+	orr	r2, r1, #128
+	teqp r2, #0
+
+	ldr	r3, [r0]
+	subs	r3, r3, #"RW_LOCK_BIAS_STR"
+	str	r3, [r0]
+	ldmeqfd	sp!, {r0 - r3, pc}^
+  orrcs r1, r1, #0x20000000   @ Set carry
+	teqp r1, #0
+	bcc	2b
+	b	1b
+
+	.align	5
+	.globl	__rwsem_wake
+__rwsem_wake:
+	stmfd	sp!, {r0 - r3, lr}
+	mov	r0, ip
+	beq	1f
+	bl	rwsem_wake_readers
+	ldmfd	sp!, {r0 - r3, pc}^
+1:	bl	rwsem_wake_writer
+	ldmfd	sp!, {r0 - r3, pc}^
+
+	.previous
+	");
+
+#else
+/* 32 bit version */
 asm("	.section	.text.lock, \"ax\"
 	.align	5
 	.globl	__down_failed
@@ -382,3 +477,4 @@ __rwsem_wake:
 	.previous
 	");
 
+#endif

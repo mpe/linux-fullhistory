@@ -11,4 +11,10 @@
 
 #include <asm/arch/hardware.h>
 
+#ifdef PARAMS_OFFSET
+#define PARAMS_BASE		((PAGE_OFFSET) + (PARAMS_OFFSET))
+#else
+#define PARAMS_BASE		0
+#endif
+
 #endif

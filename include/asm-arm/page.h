@@ -91,8 +91,8 @@ extern __inline__ int get_order(unsigned long size)
 #define __va(x)			((void *)__phys_to_virt((unsigned long)(x)))
 
 #ifndef CONFIG_DISCONTIGMEM
-#define MAP_NR(addr)		((__pa(addr) - PHYS_OFFSET) >> PAGE_SHIFT)
-#define virt_to_page(kaddr)	(mem_map + ((__pa(kaddr) - PHYS_OFFSET) >> PAGE_SHIFT))
+#define virt_to_page(kaddr)	(mem_map + (__pa(kaddr) >> PAGE_SHIFT) - \
+				 (PHYS_OFFSET >> PAGE_SHIFT))
 #define VALID_PAGE(page)	((page - mem_map) < max_mapnr)
 #endif
 

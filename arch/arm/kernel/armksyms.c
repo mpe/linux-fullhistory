@@ -23,6 +23,7 @@
 #include <asm/system.h>
 #include <asm/uaccess.h>
 #include <asm/checksum.h>
+#include <asm/mach-types.h>
 
 extern void dump_thread(struct pt_regs *, struct user *);
 extern int dump_fpu(struct pt_regs *, struct user_fp_struct *);
@@ -187,16 +188,17 @@ EXPORT_SYMBOL(__arch_copy_from_user);
 EXPORT_SYMBOL(__arch_copy_to_user);
 EXPORT_SYMBOL(__arch_clear_user);
 EXPORT_SYMBOL(__arch_strnlen_user);
-#elif defined(CONFIG_CPU_26)
-EXPORT_SYMBOL(uaccess_kernel);
-EXPORT_SYMBOL(uaccess_user);
-#endif
 
 	/* consistent area handling */
 EXPORT_SYMBOL(pci_alloc_consistent);
 EXPORT_SYMBOL(consistent_alloc);
 EXPORT_SYMBOL(consistent_free);
 EXPORT_SYMBOL(consistent_sync);
+
+#elif defined(CONFIG_CPU_26)
+EXPORT_SYMBOL(uaccess_kernel);
+EXPORT_SYMBOL(uaccess_user);
+#endif
 
 	/* gcc lib functions */
 EXPORT_SYMBOL_NOVERS(__gcc_bcmp);

@@ -1,4 +1,4 @@
-/* $Id: sys_sparc32.c,v 1.160 2000/08/12 13:25:41 davem Exp $
+/* $Id: sys_sparc32.c,v 1.161 2000/08/12 20:49:49 jj Exp $
  * sys_sparc32.c: Conversion between 32bit and 64bit native syscalls.
  *
  * Copyright (C) 1997,1998 Jakub Jelinek (jj@sunsite.mff.cuni.cz)
@@ -866,13 +866,25 @@ asmlinkage long sys32_fcntl(unsigned int fd, unsigned int cmd, unsigned long arg
 			old_fs = get_fs(); set_fs (KERNEL_DS);
 			ret = sys_fcntl(fd, cmd, (unsigned long)&f);
 			set_fs (old_fs);
+			if (ret) return ret;
+			if (f.l_start >= 0x7fffffffUL ||
+			    f.l_len >= 0x7fffffffUL ||
+			    f.l_start + f.l_len >= 0x7fffffffUL)
+				return -EOVERFLOW;
 			if(put_flock(&f, (struct flock32 *)arg))
 				return -EFAULT;
-			return ret;
+			return 0;
 		}
 	default:
 		return sys_fcntl(fd, cmd, (unsigned long)arg);
 	}
+}
+
+asmlinkage long sys32_fcntl64(unsigned int fd, unsigned int cmd, unsigned long arg)
+{
+	if (cmd >= F_GETLK64 && cmd <= F_SETLKW64)
+		return sys_fcntl(fd, cmd + F_GETLK - F_GETLK64, arg);
+	return sys32_fcntl(fd, cmd, arg);
 }
 
 struct dqblk32 {

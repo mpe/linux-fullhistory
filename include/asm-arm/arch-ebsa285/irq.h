@@ -13,12 +13,13 @@
 #include <asm/hardware.h>
 #include <asm/dec21285.h>
 #include <asm/irq.h>
+#include <asm/mach-types.h>
 
 /*
  * Footbridge IRQ translation table
  *  Converts from our IRQ numbers into FootBridge masks
  */
-static int dc21285_irq_mask[] = {
+static const int dc21285_irq_mask[] = {
 	IRQ_MASK_UART_RX,	/*  0 */
 	IRQ_MASK_UART_TX,	/*  1 */
 	IRQ_MASK_TIMER1,	/*  2 */
@@ -45,8 +46,10 @@ static int isa_irq = -1;
 
 static inline int fixup_irq(unsigned int irq)
 {
+#ifdef PCIIACK_BASE
 	if (irq == isa_irq)
 		irq = *(unsigned char *)PCIIACK_BASE;
+#endif
 
 	return irq;
 }

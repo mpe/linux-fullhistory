@@ -38,17 +38,6 @@
 
 		.text
 
-@ Offsets into task structure
-@ ---------------------------
-@
-#define STATE		0
-#define COUNTER		4
-#define PRIORITY	8
-#define FLAGS		12
-#define SIGPENDING	16
-
-#define PF_TRACESYS	0x20
-
 @ Bad Abort numbers
 @ -----------------
 @
@@ -57,12 +46,6 @@
 #define BAD_ADDREXCPTN	2
 #define BAD_IRQ		3
 #define BAD_UNDEFINSTR	4
-
-@ OS version number used in SWIs
-@  RISC OS is 0
-@  RISC iX is 8
-@
-#define OS_NUMBER	9
 
 @
 @ Stack format (ensured by USER_* and SVC_*)
@@ -456,6 +439,7 @@ vector_IRQ:	ldr	r13, .LCirq			@ I will leave this one in just in case...
 		orr	lr, lr, #0x08000003		@ Force SVC
 		bne	do_IRQ
 		mov	r4, #0
+		get_current_task r5
 		b	ret_with_reschedule
 
 		irq_prio_table

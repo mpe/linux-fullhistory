@@ -11,8 +11,6 @@
 #include <asm/io.h>
 #include <asm/system.h>
 
-extern int have_isa_bridge;
-
 extern int pckbd_setkeycode(unsigned int scancode, unsigned int keycode);
 extern int pckbd_getkeycode(unsigned int scancode);
 extern int pckbd_translate(unsigned char scancode, unsigned char *keycode,

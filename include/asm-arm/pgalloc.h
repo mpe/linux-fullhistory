@@ -5,7 +5,6 @@
 #define _ASMARM_PGALLOC_H
 
 #include <linux/config.h>
-#include <linux/threads.h>
 
 #include <asm/processor.h>
 

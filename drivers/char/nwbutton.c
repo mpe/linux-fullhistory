@@ -19,6 +19,8 @@
 
 #include <asm/uaccess.h>
 #include <asm/irq.h>
+#include <asm/mach-types.h>
+
 #define __NWBUTTON_C		/* Tell the header file who we are */
 #include "nwbutton.h"
 

@@ -265,8 +265,7 @@ static int exec_mmap(void)
  * Set up the expansion card
  * daemon's environment.
  */
-static void
-ecard_init_task(void)
+static void ecard_init_task(int force)
 {
 	/* We want to set up the page tables for the following mapping:
 	 *  Virtual	Physical
@@ -282,7 +281,8 @@ ecard_init_task(void)
 	pgd_t *src_pgd, *dst_pgd;
 	unsigned int dst_addr = IO_START;
 
-	exec_mmap();
+	if (!force)
+		exec_mmap();
 
 	src_pgd = pgd_offset(current->mm, IO_BASE);
 	dst_pgd = pgd_offset(current->mm, dst_addr);
@@ -309,21 +309,24 @@ ecard_init_task(void)
 static int
 ecard_task(void * unused)
 {
-	current->session = 1;
-	current->pgrp = 1;
+	struct task_struct *tsk = current;
+
+	tsk->session = 1;
+	tsk->pgrp = 1;
 
 	/*
 	 * We don't want /any/ signals, not even SIGKILL
 	 */
-	sigfillset(&current->blocked);
-	sigemptyset(&current->signal);
+	sigfillset(&tsk->blocked);
+	sigemptyset(&tsk->signal);
+	recalc_sigpending(tsk);
 
-	strcpy(current->comm, "kecardd");
+	strcpy(tsk->comm, "kecardd");
 
 	/*
 	 * Set up the environment
 	 */
-	ecard_init_task();
+	ecard_init_task(0);
 
 	while (1) {
 		struct ecard_request *req;
@@ -332,7 +335,7 @@ ecard_task(void * unused)
 			req = xchg(&ecard_req, NULL);
 
 			if (req == NULL) {
-				sigemptyset(&current->signal);
+				sigemptyset(&tsk->signal);
 				interruptible_sleep_on(&ecard_wait);
 			}
 		} while (req == NULL);
@@ -368,7 +371,7 @@ ecard_call(struct ecard_request *req)
 	 */
 	if ((current == &init_task || in_interrupt()) &&
 	    req->req == req_reset && req->ec == NULL) {
-		ecard_init_task();
+		ecard_init_task(1);
 		ecard_task_reset(req);
 	} else {
 		if (ecard_pid <= 0)

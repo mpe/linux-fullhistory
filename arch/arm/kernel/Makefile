@@ -5,8 +5,13 @@
 # removes any old dependencies. DON'T put your own dependencies here
 # unless it's something special (ie not a .c file).
 
+USE_STANDARD_AS_RULE := true
+
 HEAD_OBJ  = head-$(PROCESSOR).o
 ENTRY_OBJ = entry-$(PROCESSOR).o
+
+AFLAGS_head-armv.o := -DTEXTADDR=$(TEXTADDR) -traditional
+AFLAGS_head-armo.o := -DTEXTADDR=$(TEXTADDR) -traditional
 
 O_OBJS_arc        = dma-arc.o oldlatches.o
 O_OBJS_rpc        = dma-rpc.o
@@ -54,13 +59,7 @@ MX_OBJS 	:= $(sort $(filter     $(export-objs), $(obj-m)))
 
 all: kernel.o $(HEAD_OBJ) init_task.o
 
-$(HEAD_OBJ): $(HEAD_OBJ:.o=.S)
-	$(CC) $(AFLAGS) -DTEXTADDR=$(TEXTADDR) -traditional -c $(HEAD_OBJ:.o=.S) -o $@
-
 include $(TOPDIR)/Rules.make
-
-.S.o:
-	$(CC) $(AFLAGS) $(AFLAGS_$@) -c -o $*.o $<
 
 # Spell out some dependencies that `make dep' doesn't spot
 entry-armv.o: calls.S ../lib/constants.h

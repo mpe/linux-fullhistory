@@ -4,6 +4,8 @@
 # Copyright (C) 1998, 1999 Philip Blundell
 #
 
+USE_STANDARD_AS_RULE := true
+
 NWFPE_OBJS := fpa11.o fpa11_cpdo.o fpa11_cpdt.o fpa11_cprt.o \
 	      fpmodule.o fpopcode.o softfloat.o \
 	      single_cpdo.o double_cpdo.o extended_cpdo.o

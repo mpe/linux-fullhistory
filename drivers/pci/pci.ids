@@ -1468,6 +1468,7 @@
 		10b7 3590  TokenLink Velocity XL Adapter
 	4500  3c450 Cyclone/unknown
 	5055  3c555 Laptop Hurricane
+	6055  3c556 Laptop Hurricane
 	5057  3c575 [Megahertz] 10/100 LAN CardBus
 		10b7 5a57  3C575 Megahertz 10/100 LAN Cardbus PC Card
 	5157  3c575 [Megahertz] 10/100 LAN CardBus
@@ -1964,8 +1965,8 @@
 	6100  VT85C100A [Rhine II]
 	8231  VT8231 [PCI-to-ISA Bridge]
 	8235  VT8235 Power Management
-	8305  VT8365 [KM133 AGP]
-	8391  VT8363/8371 [KT133/KX133 AGP] 
+	8305  VT8363/8365 [KT133/KM133 AGP]
+	8391  VT8371 [KX133 AGP] 
 	8501  VT8501 [Apollo MVP4 AGP]
 	8596  VT82C596 [Apollo PRO AGP]
 	8597  VT82C597 [Apollo VP3 AGP]

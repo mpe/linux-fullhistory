@@ -303,18 +303,16 @@ static struct serial_uart_config uart_config[] = {
 	{ 0, 0}
 };
 
-#ifdef CONFIG_SERIAL_RSA
+#if defined(CONFIG_SERIAL_RSA) && defined(MODULE)
 
 #define PORT_RSA_MAX 4
 static int probe_rsa[PORT_RSA_MAX];
 static int force_rsa[PORT_RSA_MAX];
 
-#ifdef MODULE
 MODULE_PARM(probe_rsa, "1-" __MODULE_STRING(PORT_RSA_MAX) "i");
 MODULE_PARM_DESC(probe_rsa, "Probe I/O ports for RSA");
 MODULE_PARM(force_rsa, "1-" __MODULE_STRING(PORT_RSA_MAX) "i");
 MODULE_PARM_DESC(force_rsa, "Force I/O ports for RSA");
-#endif
 #endif /* CONFIG_SERIAL_RSA  */
 
 static struct serial_state rs_table[RS_TABLE_SIZE] = {

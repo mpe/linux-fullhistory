@@ -440,10 +440,10 @@ struct socket *sock_alloc(void)
 	struct socket * sock;
 
 	inode = get_empty_inode();
-	inode->i_sb = sock_mnt->mnt_sb;
 	if (!inode)
 		return NULL;
 
+	inode->i_sb = sock_mnt->mnt_sb;
 	sock = socki_lookup(inode);
 
 	inode->i_mode = S_IFSOCK|S_IRWXUGO;
@@ -1712,6 +1712,9 @@ void __init sock_init(void)
 
 	proto_init();
 
+	register_filesystem(&sock_fs_type);
+	sock_mnt = kern_mount(&sock_fs_type);
+
 	/*
 	 *	The netlink device handler may be needed early.
 	 */
@@ -1725,8 +1728,6 @@ void __init sock_init(void)
 #ifdef CONFIG_NETFILTER
 	netfilter_init();
 #endif
-	register_filesystem(&sock_fs_type);
-	sock_mnt = kern_mount(&sock_fs_type);
 }
 
 int socket_get_info(char *buffer, char **start, off_t offset, int length)

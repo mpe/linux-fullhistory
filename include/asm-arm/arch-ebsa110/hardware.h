@@ -42,7 +42,7 @@
 
 #define UNCACHEABLE_ADDR	0xf3000000
 
-#define PARAMS_BASE		(PAGE_OFFSET + 0x400)
+#define PARAMS_OFFSET		0x400
 
 #endif
 

@@ -187,7 +187,9 @@ struct code_page_directory
 					   in data block */
     secno code_page_data;		/* sector number of a code_page_data
 					   containing c.p. array */
-    unsigned index;			/* index in c.p. array in that sector*/
+    unsigned short index;		/* index in c.p. array in that sector*/
+    unsigned short unknown;		/* some unknown value; usually 0;
+    					   2 in Japanese version */
   } array[31];				/* unknown length */
 };
 
@@ -207,7 +209,7 @@ struct code_page_data
   struct {
     unsigned short ix;			/* index */
     unsigned short code_page_number;	/* code page number */
-    unsigned short zero1;
+    unsigned short unknown;		/* the same as in cp directory */
     unsigned char map[128];		/* upcase table for chars 80..ff */
     unsigned short zero2;
   } code_page[3];

@@ -23,7 +23,7 @@ Feel free to translate this document.  If you do so, please send me a
 URL to your translation for inclusion in future revisions of this
 document.
 
-Last updated: June 11, 2000
+Last updated: August 12, 2000
 
 Chris Ricker (kaboom@gatech.edu or chris.ricker@genetics.utah.edu).
 
@@ -41,8 +41,9 @@ Card) hardware, for example, you probably needn't concern yourself
 with pcmcia-cs.
 
 o  Gnu C                  2.7.2.3                 # gcc --version
+o  Gnu make               3.77                    # make --version
 o  binutils               2.9.1.0.22              # ld -v
-o  util-linux             2.10g                   # chsh -v
+o  util-linux             2.10o                   # kbdrate -v
 o  modutils               2.3.13                  # insmod -V
 o  e2fsprogs              1.18                    # /sbin/tune2fs --version
 o  pcmcia-cs              3.1.13                  # cardmgr -V
@@ -59,7 +60,7 @@ You will need at least gcc 2.7.2 to compile the kernel.  You currently
 have several options for gcc-derived compilers:  gcc 2.7.2.3, various
 versions of egcs, the new gcc 2.95 and upcoming gcc 3.0, and experimental
 compilers like pgcc.  For absolute stability, it is still recommended
-that gcc 2.7.2.3 be used to compile your kernel.  egcs 1.12 should also
+that gcc 2.7.2.3 be used to compile your kernel.  egcs 1.1.2 should also
 work.  gcc 2.95 is known to have problems, and using pgcc for your kernel
 is just asking for trouble.
 
@@ -67,6 +68,11 @@ In addition, please pay attention to compiler optimization.  Anything
 greater than -O2 may not be wise.  Similarly, if you choose to use gcc-2.95
 or derivatives, be sure not to use -fstrict-aliasing (which, depending on
 your version of gcc 2.95, may necessitate using -fno-strict-aliasing).
+
+Make
+----
+
+You will need Gnu make 3.77 or later to build the kernel.
 
 Binutils
 --------
@@ -95,7 +101,7 @@ System V shared memory is now implemented via a virtual filesystem.
 You do not have to mount it to use it as long as you can live with the
 default maxima for shared memory and segments.  If you wish to change
 these variables, you have to mount it with the options nr_blocks
-and/or nr_inodes.  POSIX shared memory is also now implemented via a
+and / or nr_inodes.  POSIX shared memory is also now implemented via a
 virtual filesystem.  If you want to use it, you'll need to mount the
 filesystem.  The recommended mount location is /dev/shm, and adding the
 following line to /etc/fstab should take care of things:
@@ -124,7 +130,8 @@ Util-linux
 
 New versions of util-linux provide *fdisk support for larger disks,
 support new options to mount, recognize more supported partition
-types, and similar goodies.  You'll probably want to upgrade.
+types, have a fdformat which works with 2.4 kernels, and similar goodies.
+You'll probably want to upgrade.
 
 Ksymoops
 --------
@@ -138,7 +145,15 @@ Modutils
 
 Upgrade to recent modutils to fix various outstanding bugs which are
 seen more frequently under 2.3.x, and to enable auto-loading of USB
-modules.
+modules.  In addition, the layout of modules under
+/lib/modules/`uname -r`/ has been made more sane.  This change also
+requires that you upgrade to a recent modutils.
+
+Mkinitrd
+--------
+
+These changes to the /lib/modules file tree layout also require that
+mkinitrd be upgraded.
 
 E2fsprogs
 ---------
@@ -224,110 +239,86 @@ Compilers
 
 gcc 2.7.2.3
 -----------
-o  ftp://ftp.gnu.org/gnu/gcc/gcc-2.7.2.3.tar.gz
-     <ftp://ftp.gnu.org/gnu/gcc/gcc-2.7.2.3.tar.gz>
-o  ftp://metalab.unc.edu/pub/gnu/gcc-2.7.2.3.tar.gz
-     <ftp://metalab.unc.edu/pub/gnu/gcc-2.7.2.3.tar.gz>
+o  <ftp://ftp.gnu.org/gnu/gcc/gcc-2.7.2.3.tar.gz>
+o  <ftp://metalab.unc.edu/pub/gnu/gcc-2.7.2.3.tar.gz>
 
-egcs 1.12
+egcs 1.1.2
 ---------
-o  ftp://ftp.valinux.com/pub/support/hjl/gcc/egcs-1.1.2/egcs-1.1.2-glibc.x86.tar.bz2
-     <ftp://ftp.valinux.com/pub/support/hjl/gcc/egcs-1.1.2/egcs-1.1.2-glibc.x86.tar.bz2>
-o  ftp://ftp.valinux.com/pub/support/hjl/gcc/egcs-1.1.2/egcs-1.1.2-libc5.x86.tar.bz2
-     <ftp://ftp.valinux.com/pub/support/hjl/gcc/egcs-1.1.2/egcs-1.1.2-libc5.x86.tar.bz2>
-o  ftp://ftp.valinux.com/pub/support/hjl/gcc/egcs-1.1.2/egcs-1.1.2-alpha.tar.bz2
-     <ftp://ftp.valinux.com/pub/support/hjl/gcc/egcs-1.1.2/egcs-1.1.2-alpha.tar.bz2>
+o  <ftp://ftp.valinux.com/pub/support/hjl/gcc/egcs-1.1.2/egcs-1.1.2-glibc.x86.tar.bz2>
+o  <ftp://ftp.valinux.com/pub/support/hjl/gcc/egcs-1.1.2/egcs-1.1.2-libc5.x86.tar.bz2>
+o  <ftp://ftp.valinux.com/pub/support/hjl/gcc/egcs-1.1.2/egcs-1.1.2-alpha.tar.bz2>
 
 Binutils
 ********
 
 2.9.1 series
 ------------
-o  ftp://ftp.valinux.com/pub/support/hjl/binutils/2.9.1/binutils-2.9.1.0.25.tar.gz
-     <ftp://ftp.valinux.com/pub/support/hjl/binutils/2.9.1/binutils-2.9.1.0.25.tar.gz>
+o  <ftp://ftp.valinux.com/pub/support/hjl/binutils/2.9.1/binutils-2.9.1.0.25.tar.gz>
 
 2.9.5 series
 ------------
-o  ftp://ftp.valinux.com/pub/support/hjl/binutils/binutils-2.9.5.0.46.tar.gz
-     <ftp://ftp.valinux.com/pub/support/hjl/binutils/binutils-2.9.5.0.46.tar.bz2>
+o  <ftp://ftp.valinux.com/pub/support/hjl/binutils/binutils-2.9.5.0.46.tar.bz2>
 
 System utilities
 ****************
 
 Util-linux
 ----------
-o  ftp://ftp.cwi.nl/pub/aeb/util-linux/util-linux-2.10g.tar.gz
-     <ftp://ftp.cwi.nl/pub/aeb/util-linux/util-linux-2.10g.tar.gz>
+o  <ftp://ftp.win.tue.nl/pub/linux-local/util-linux/util-linux-2.10o.tar.gz>
 
 Ksymoops
 --------
-o  ftp://ftp.kernel.org/pub/linux/utils/kernel/ksymoops/v2.3
-     <ftp://ftp.kernel.org/pub/linux/utils/kernel/ksymoops/v2.3>
+o  <ftp://ftp.kernel.org/pub/linux/utils/kernel/ksymoops/v2.3>
 
 Modutils
 --------
-o  ftp://ftp.kernel.org/pub/linux/utils/kernel/modutils/v2.3/modutils-2.3.13.tar.gz
-     <ftp://ftp.kernel.org/pub/linux/utils/kernel/modutils/v2.3/modutils-2.3.13.tar.gz>
+o  <ftp://ftp.kernel.org/pub/linux/utils/kernel/modutils/v2.3/modutils-2.3.13.tar.gz>
 
 E2fsprogs
 ---------
-o  http://web.mit.edu/tytso/www/linux/dist/e2fsprogs-1.18.tar.gz
-     <http://web.mit.edu/tytso/www/linux/dist/e2fsprogs-1.18.tar.gz>
-o  http://web.mit.edu/tytso/www/linux/dist/e2fsprogs-1.18.src.rpm
-     <http://web.mit.edu/tytso/www/linux/dist/e2fsprogs-1.18.src.rpm>
+o  <http://web.mit.edu/tytso/www/linux/dist/e2fsprogs-1.18.tar.gz>
+o  <http://web.mit.edu/tytso/www/linux/dist/e2fsprogs-1.18.src.rpm>
 
 LVM toolset
 -----------
-o  http://linux.msede.com/lvm/ <http://linux.msede.com/lvm/>
+o  <http://linux.msede.com/lvm/>
 
 Pcmcia-cs
 ---------
-o  ftp://sourceforge.org/pcmcia/pcmcia-cs-3.1.13.tar.gz
-     <ftp://sourceforge.org/pcmcia/pcmcia-cs-3.1.13.tar.gz>
+o  <ftp://sourceforge.org/pcmcia/pcmcia-cs-3.1.13.tar.gz>
 
 Jade
 ----
-o  ftp://ftp.jclark.com/pub/jade/jade-1.2.1.tar.gz
-     <ftp://ftp.jclark.com/pub/jade/jade-1.2.1.tar.gz>
+o  <ftp://ftp.jclark.com/pub/jade/jade-1.2.1.tar.gz>
 
 DocBook Stylesheets
 -------------------
-o  http://nwalsh.com/docbook/dsssl/
-     <http://nwalsh.com/docbook/dsssl/>
+o  <http://nwalsh.com/docbook/dsssl/>
 
 Intel P6 microcode
 ------------------
-o  http://www.urbanmyth.org/microcode/
-     <http://www.urbanmyth.org/microcode/>
+o  <http://www.urbanmyth.org/microcode/>
 
 Network
 *******
 
 PPP
 ---
-o  ftp://linuxcare.com.au/pub/ppp/ppp-2.4.0b1.tar.gz
-     <ftp://linuxcare.com.au/pub/ppp/ppp-2.4.0b1.tar.gz>
+o  <ftp://linuxcare.com.au/pub/ppp/ppp-2.4.0b1.tar.gz>
 
 Isdn4k-utils
 ------------
-o  ftp://ftp.isdn4linux.de/pub/isdn4linux/utils/testing/isdn4k-
-     utils.v3.1beta7.tar.gz
-     <ftp://ftp.isdn4linux.de/pub/isdn4linux/utils/testing/isdn4k-
-     utils.v3.1beta7.tar.gz>
+o  <ftp://ftp.isdn4linux.de/pub/isdn4linux/utils/testing/isdn4k-utils.v3.1beta7.tar.gz>
 
 Netfilter
 ---------
-o  http://netfilter.filewatcher.org/iptables-1.1.1.tar.bz2
-     <http://netfilter.filewatcher.org/iptables-1.1.1.tar.bz2>
-o  http://www.samba.org/netfilter/iptables-1.1.1.tar.bz2
-     <http://www.samba.org/netfilter/iptables-1.1.1.tar.bz2>
-o  http://netfilter.kernelnotes.org/iptables-1.1.1.tar.bz2
-     <http://netfilter.kernelnotes.org/iptables-1.1.1.tar.bz2>
+o  <http://netfilter.filewatcher.org/iptables-1.1.1.tar.bz2>
+o  <http://www.samba.org/netfilter/iptables-1.1.1.tar.bz2>
+o  <http://netfilter.kernelnotes.org/iptables-1.1.1.tar.bz2>
 
 Ip-route2
 ---------
-o  ftp://ftp.inr.ac.ru/ip-routing/iproute2-2.2.4-now-ss991023.tar.gz
-     <ftp://ftp.inr.ac.ru/ip-routing/iproute2-2.2.4-now-ss991023.tar.gz>
+o  <ftp://ftp.inr.ac.ru/ip-routing/iproute2-2.2.4-now-ss991023.tar.gz>
 
 Suggestions and corrections
 ===========================

@@ -313,8 +313,8 @@ ENTRY(cpu_sa1100_data_abort)
 		ldr	r1, [r0]			@ read instruction causing problem
 		mrc	p15, 0, r0, c6, c0, 0		@ get FAR
 		mov	r1, r1, lsr #19			@ b1 = L
-		and	r1, r1, #2
 		mrc	p15, 0, r3, c5, c0, 0		@ get FSR
+		and	r1, r1, #2
 		and	r3, r3, #255
 		mov	pc, lr
 

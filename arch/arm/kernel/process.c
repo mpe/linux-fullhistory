@@ -22,6 +22,7 @@
 
 #include <asm/system.h>
 #include <asm/io.h>
+#include <asm/leds.h>
 #include <asm/uaccess.h>
 
 /*
@@ -32,7 +33,7 @@
 #define IDLE_CLOCK_SLOW	2
 #define IDLE_CLOCK_FAST	3
 
-extern char *processor_modes[];
+extern const char *processor_modes[];
 extern void setup_mm_for_reboot(char mode);
 
 asmlinkage void ret_from_sys_call(void) __asm__("ret_from_sys_call");
@@ -109,10 +110,12 @@ __setup("reboot=", reboot_setup);
 
 void machine_halt(void)
 {
+	leds_event(led_halted);
 }
 
 void machine_power_off(void)
 {
+	leds_event(led_halted);
 	if (pm_power_off)
 		pm_power_off();
 }

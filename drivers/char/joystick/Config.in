@@ -40,9 +40,9 @@ if [ "$CONFIG_JOYSTICK" != "n" ]; then
 
    if [ "$CONFIG_PARPORT" != "n" ]; then
    comment 'Parallel port joysticks'
-      dep_tristate '  Multisystem, Sega Genesis, Saturn joysticks and gamepads' CONFIG_INPUT_DB9 $CONFIG_JOYSTICK
-      dep_tristate '  Multisystem, NES, SNES, N64, PSX joysticks and gamepads' CONFIG_INPUT_GAMECON $CONFIG_JOYSTICK
-      dep_tristate '  Multisystem joysticks via TurboGraFX device' CONFIG_INPUT_TURBOGRAFX $CONFIG_JOYSTICK
+      dep_tristate '  Multisystem, Sega Genesis, Saturn joysticks and gamepads' CONFIG_INPUT_DB9 $CONFIG_JOYSTICK $CONFIG_PARPORT
+      dep_tristate '  Multisystem, NES, SNES, N64, PSX joysticks and gamepads' CONFIG_INPUT_GAMECON $CONFIG_JOYSTICK $CONFIG_PARPORT
+      dep_tristate '  Multisystem joysticks via TurboGraFX device' CONFIG_INPUT_TURBOGRAFX $CONFIG_JOYSTICK $CONFIG_PARPORT
    fi
 
    if [ "$CONFIG_AMIGA" = "y" ]; then

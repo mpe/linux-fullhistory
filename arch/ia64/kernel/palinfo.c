@@ -16,6 +16,7 @@
  *	  are empty for now.
  *	- remove hack to avoid problem with <= 256M RAM for itr.
  */
+#include <linux/config.h>
 #include <linux/types.h>
 #include <linux/errno.h>
 #include <linux/init.h>

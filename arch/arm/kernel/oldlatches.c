@@ -1,14 +1,17 @@
 /* Support for the latches on the old Archimedes which control the floppy,
  * hard disc and printer
  *
- * (c) David Alan Gilbert 1995/1996
+ * (c) David Alan Gilbert 1995/1996,2000
  */
 #include <linux/module.h>
 #include <linux/kernel.h>
 #include <linux/init.h>
+#include <linux/sched.h>
 
 #include <asm/io.h>
 #include <asm/hardware.h>
+#include <asm/mach-types.h>
+#include <asm/arch/oldlatches.h>
 
 static unsigned char latch_a_copy;
 static unsigned char latch_b_copy;

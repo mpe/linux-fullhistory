@@ -7,7 +7,6 @@
 #include <linux/config.h>
 #include <asm/arch/memory.h>
 #include <asm/proc-fns.h>
-#include <asm/system.h>
 
 /*
  * PMD_SHIFT determines the size of the area a second-level page table can map
@@ -80,7 +79,8 @@ extern void __handle_bad_pmd_kernel(pmd_t *pmd);
 #define pte_clear(ptep)		set_pte((ptep), __pte(0))
 
 #ifndef CONFIG_DISCONTIGMEM
-#define pte_page(x)		(mem_map + (unsigned long)(((pte_val(pte) - PHYS_OFFSET) >> PAGE_SHIFT)))
+#define pte_page(x)		(mem_map + (pte_val((x)) >> PAGE_SHIFT) - \
+				 (PHYS_OFFSET >> PAGE_SHIFT))
 #else
 /*
  * I'm not happy with this - we needlessly convert a physical address
@@ -88,7 +88,7 @@ extern void __handle_bad_pmd_kernel(pmd_t *pmd);
  * which, if __va and __pa are expensive causes twice the expense for
  * zero gain. --rmk
  */
-#define pte_page(x)		(mem_map + MAP_NR(__va(pte_val(pte))))
+#define pte_page(x)		(mem_map + MAP_NR(__va(pte_val((x)))))
 #endif
 
 #define pmd_none(pmd)		(!pmd_val(pmd))
@@ -172,9 +172,6 @@ extern pgd_t swapper_pg_dir[PTRS_PER_PGD];
 
 #define module_map		vmalloc
 #define module_unmap		vfree
-
-/* Needs to be defined here and not in linux/mm.h, as it is arch dependent */
-#define PageSkip(page)		(machine_is_riscpc() && test_bit(PG_skip, &(page)->flags))
 
 #define io_remap_page_range	remap_page_range
 

@@ -8,6 +8,7 @@
  *  20-Jan-1998	RMK	Started merge of EBSA286, CATS and NetWinder
  *  01-Feb-1999	PJB	ISA IRQs start at 0 not 16
  */
+#include <asm/mach-types.h>
 
 #define NR_IRQS			36
 #define NR_DC21285_IRQS		16

@@ -7,10 +7,9 @@
 
 #include <linux/config.h>
 
-#ifdef CONFIG_BLK_DEV_IDE
-
 #include <asm/irq.h>
-#include <asm/arch/hardware.h>
+#include <asm/hardware.h>
+#include <asm/mach-types.h>
 
 /*
  * Set up a hw structure for a specified data port, control port and IRQ.
@@ -118,7 +117,24 @@ ide_init_default_hwifs(void)
 	ide_register_hw(&hw, NULL);
 #endif
     }
+    else if (machine_is_lart()) {
+#ifdef CONFIG_SA1100_LART
+        hw_regs_t hw;
+
+        /* Enable GPIO as interrupt line */
+        GPDR &= ~GPIO_GPIO1;
+        set_GPIO_IRQ_edge(GPIO_GPIO1, GPIO_RISING_EDGE);
+        
+        /* set PCMCIA interface timing */
+        MECR = 0x00060006;
+
+        /* init the interface */
+/*         ide_init_hwif_ports(&hw, 0xe00000000, 0xe00001000, NULL); */
+        ide_init_hwif_ports(&hw, 0xe00001000, 0xe00000000, NULL);
+        hw.irq = IRQ_GPIO1;
+        ide_register_hw(&hw, NULL);
+#endif
+    }
 }
 
-#endif
 

@@ -43,17 +43,6 @@
 #define IRQTYPE_SPDIF               (IPR_GPSPDIFSTATUSCHANGE | IPR_CDROMSTATUSCHANGE)
 #define IRQTYPE_DSP                 IPR_FXDSP
 
-struct emu10k1_wavedevice
-{
-        struct emu10k1_card *card;
-        struct wiinst *wiinst;
-        struct woinst *woinst;
-        u16 enablebits;
-};
-
 void emu10k1_timer_irqhandler(struct emu10k1_card *);
-
-int emu10k1_irq_enable(struct emu10k1_card *, u32);
-int emu10k1_irq_disable(struct emu10k1_card *, u32);
 
 #endif /* _IRQ_H */

@@ -1,4 +1,4 @@
-/* $Id: eicon.h,v 1.19 2000/01/23 21:21:23 armin Exp $
+/* $Id: eicon.h,v 1.23 2000/06/21 11:28:42 armin Exp $
  *
  * ISDN low-level module for Eicon active ISDN-Cards.
  *
@@ -19,86 +19,6 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA. 
- *
- * $Log: eicon.h,v $
- * Revision 1.19  2000/01/23 21:21:23  armin
- * Added new trace capability and some updates.
- * DIVA Server BRI now supports data for ISDNLOG.
- *
- * Revision 1.18  1999/11/25 11:43:27  armin
- * Fixed statectrl and connect message.
- * X.75 fix and HDLC/transparent with autoconnect.
- * Minor cleanup.
- *
- * Revision 1.17  1999/10/26 21:15:33  armin
- * using define for checking phone number len to avoid buffer overflow.
- *
- * Revision 1.16  1999/10/08 22:09:33  armin
- * Some fixes of cards interface handling.
- * Bugfix of NULL pointer occurence.
- * Changed a few log outputs.
- *
- * Revision 1.15  1999/09/26 14:17:53  armin
- * Improved debug and log via readstat()
- *
- * Revision 1.14  1999/09/08 20:17:31  armin
- * Added microchannel patch from Erik Weber.
- *
- * Revision 1.13  1999/09/06 07:29:35  fritz
- * Changed my mail-address.
- *
- * Revision 1.12  1999/09/04 06:20:05  keil
- * Changes from kernel set_current_state()
- *
- * Revision 1.11  1999/08/29 17:23:44  armin
- * New setup compat.
- * Bugfix if compile as not module.
- *
- * Revision 1.10  1999/08/22 20:26:41  calle
- * backported changes from kernel 2.3.14:
- * - several #include "config.h" gone, others come.
- * - "struct device" changed to "struct net_device" in 2.3.14, added a
- *   define in isdn_compat.h for older kernel versions.
- *
- * Revision 1.9  1999/08/18 20:16:57  armin
- * Added XLOG function for all cards.
- * Bugfix of alloc_skb NULL pointer.
- *
- * Revision 1.8  1999/07/25 15:12:01  armin
- * fix of some debug logs.
- * enabled ISA-cards option.
- *
- * Revision 1.7  1999/07/11 17:16:23  armin
- * Bugfixes in queue handling.
- * Added DSP-DTMF decoder functions.
- * Reorganized ack_handler.
- *
- * Revision 1.6  1999/06/09 19:31:24  armin
- * Wrong PLX size for request_region() corrected.
- * Added first MCA code from Erik Weber.
- *
- * Revision 1.5  1999/03/29 11:19:41  armin
- * I/O stuff now in seperate file (eicon_io.c)
- * Old ISA type cards (S,SX,SCOM,Quadro,S2M) implemented.
- *
- * Revision 1.4  1999/03/02 12:37:42  armin
- * Added some important checks.
- * Analog Modem with DSP.
- * Channels will be added to Link-Level after loading firmware.
- *
- * Revision 1.3  1999/01/24 20:14:07  armin
- * Changed and added debug stuff.
- * Better data sending. (still problems with tty's flip buffer)
- *
- * Revision 1.2  1999/01/10 18:46:04  armin
- * Bug with wrong values in HLC fixed.
- * Bytes to send are counted and limited now.
- *
- * Revision 1.1  1999/01/01 18:09:41  armin
- * First checkin of new eicon driver.
- * DIVA-Server BRI/PCI and PRI/PCI are supported.
- * Old diehl code is obsolete.
- *
  *
  */
 
@@ -123,6 +43,8 @@
 #define EICON_IOCTL_FREEIT   97
 #define EICON_IOCTL_TEST     98
 #define EICON_IOCTL_DEBUGVAR 99
+
+#define EICON_IOCTL_DIA_OFFSET	100
 
 /* Bus types */
 #define EICON_BUS_ISA          1
@@ -185,39 +107,10 @@ typedef struct {
 	unsigned char code[1]; /* Rest (bootstrap- and firmware code) will be allocated */
 } eicon_isa_codebuf;
 
-/* Struct for downloading protocol via ioctl for PCI cards */
-typedef struct {
-        /* start-up parameters */
-        unsigned char tei;
-        unsigned char nt2;
-        unsigned char WatchDog;
-        unsigned char Permanent;
-        unsigned char XInterface;
-        unsigned char StableL2;
-        unsigned char NoOrderCheck;
-        unsigned char HandsetType;
-        unsigned char LowChannel;
-        unsigned char ProtVersion;
-        unsigned char Crc4;
-        unsigned char NoHscx30Mode;  /* switch PRI into No HSCX30 test mode */
-        unsigned char Loopback;      /* switch card into Loopback mode */
-        struct q931_link_s
-        {
-          unsigned char oad[32];
-          unsigned char osa[32];
-          unsigned char spid[32];
-        } l[2];
-        unsigned long protocol_len;
-	unsigned int  dsp_code_num;
-        unsigned long dsp_code_len[9];
-        unsigned char code[1]; /* Rest (protocol- and dsp code) will be allocated */
-} eicon_pci_codebuf;
-
 /* Data for downloading protocol via ioctl */
 typedef union {
 	eicon_isa_codebuf isa;
 	eicon_isa_codebuf mca;
-	eicon_pci_codebuf pci;
 } eicon_codebuf;
 
 /* Data for Management interface */
@@ -228,6 +121,7 @@ typedef struct {
 	unsigned char data[700]; 
 } eicon_manifbuf;
 
+#define TRACE_OK                 (1)
 
 #ifdef __KERNEL__
 
@@ -265,205 +159,33 @@ typedef struct {
 
 #include "eicon_isa.h"
 
+#include "idi.h"
+
+typedef struct {
+  __u16 NextReq  __attribute__ ((packed));  /* pointer to next Req Buffer */
+  __u16 NextRc   __attribute__ ((packed));  /* pointer to next Rc Buffer  */
+  __u16 NextInd  __attribute__ ((packed));  /* pointer to next Ind Buffer */
+  __u8 ReqInput  __attribute__ ((packed));  /* number of Req Buffers sent */
+  __u8 ReqOutput  __attribute__ ((packed)); /* number of Req Buffers returned */
+  __u8 ReqReserved  __attribute__ ((packed));/*number of Req Buffers reserved */
+  __u8 Int  __attribute__ ((packed));       /* ISDN-P interrupt           */
+  __u8 XLock  __attribute__ ((packed));     /* Lock field for arbitration */
+  __u8 RcOutput  __attribute__ ((packed));  /* number of Rc buffers received */
+  __u8 IndOutput  __attribute__ ((packed)); /* number of Ind buffers received */
+  __u8 IMask  __attribute__ ((packed));     /* Interrupt Mask Flag        */
+  __u8 Reserved1[2]  __attribute__ ((packed)); /* reserved field, do not use */
+  __u8 ReadyInt  __attribute__ ((packed));  /* request field for ready int */
+  __u8 Reserved2[12]  __attribute__ ((packed)); /* reserved field, do not use */
+  __u8 InterfaceType  __attribute__ ((packed)); /* interface type 1=16K    */
+  __u16 Signature  __attribute__ ((packed));    /* ISDN-P initialized ind  */
+  __u8 B[1];                            /* buffer space for Req,Ind and Rc */
+} eicon_pr_ram;
+
 /* Macro for delay via schedule() */
 #define SLEEP(j) {                     \
   set_current_state(TASK_UNINTERRUPTIBLE); \
   schedule_timeout(j);                 \
 }
-
-#endif /* KERNEL */
-
-#define DIVAS_SHARED_OFFSET	(0x1000)
-
-#define MIPS_BUFFER_SZ  128
-#define MIPS_MAINT_OFFS 0xff00
-
-#define XLOG_ERR_CARD_NUM       (13)
-#define XLOG_ERR_DONE           (14)
-#define XLOG_ERR_CMD            (15)
-#define XLOG_ERR_TIMEOUT        (16)
-#define XLOG_ERR_CARD_STATE     (17)
-#define XLOG_ERR_UNKNOWN        (18)
-#define XLOG_OK                  (0)
-
-#define TRACE_OK                 (1)
-
-typedef struct {
-  __u8 Id	__attribute__ ((packed));
-  __u8 uX	__attribute__ ((packed));
-  __u8 listen	__attribute__ ((packed));
-  __u8 active	__attribute__ ((packed));
-  __u8 sin[3]	__attribute__ ((packed));
-  __u8 bc[6]	__attribute__ ((packed));
-  __u8 llc[6]	__attribute__ ((packed));
-  __u8 hlc[6]	__attribute__ ((packed));
-  __u8 oad[20]	__attribute__ ((packed));
-}DSigStruc;
-
-typedef struct {
-  __u32 cx_b1	__attribute__ ((packed));
-  __u32 cx_b2	__attribute__ ((packed));
-  __u32 cr_b1	__attribute__ ((packed));
-  __u32 cr_b2	__attribute__ ((packed));
-  __u32 px_b1	__attribute__ ((packed));
-  __u32 px_b2	__attribute__ ((packed));
-  __u32 pr_b1	__attribute__ ((packed));
-  __u32 pr_b2	__attribute__ ((packed));
-  __u16 er_b1	__attribute__ ((packed));
-  __u16 er_b2	__attribute__ ((packed));
-}BL1Struc;
-
-typedef struct {
-  __u32 XTotal	__attribute__ ((packed));
-  __u32 RTotal	__attribute__ ((packed));
-  __u16 XError	__attribute__ ((packed));
-  __u16 RError	__attribute__ ((packed));
-}L2Struc;
-
-typedef struct {
-  __u16 free_n;
-}OSStruc;
-
-typedef union
-{
-  DSigStruc DSigStats;
-  BL1Struc BL1Stats;
-  L2Struc L2Stats;
-  OSStruc OSStats;
-  __u8   b[MIPS_BUFFER_SZ];
-  __u16   w[MIPS_BUFFER_SZ>>1];
-  __u16   l[MIPS_BUFFER_SZ>>2]; /* word is wrong, do not use! Use 'd' instead. */
-  __u32  d[MIPS_BUFFER_SZ>>2];
-} MIPS_BUFFER;
-
-typedef struct
-{
-  __u8 req	__attribute__ ((packed));
-  __u8 rc	__attribute__ ((packed));
-  __u8 reserved[2]	__attribute__ ((packed));     /* R3000 alignment ... */
-  __u8 *mem	__attribute__ ((packed));
-  __u16 length	__attribute__ ((packed));		/* used to be short */
-  __u16 port	__attribute__ ((packed));
-  __u8 fill[4]	__attribute__ ((packed));         /* data at offset 16   */
-  MIPS_BUFFER data	__attribute__ ((packed));
-} mi_pc_maint_t;
-
-typedef struct
-{
-        __u16 command;
-        mi_pc_maint_t pcm;
-}xlogreq_t;
-
-typedef struct{
-        __u16 code	__attribute__ ((packed));	/* used to be short */
-        __u16 timeh	__attribute__ ((packed));
-        __u16 timel	__attribute__ ((packed));
-        char buffer[MIPS_BUFFER_SZ - 6];
-}xlog_entry_t;
-
-
-#define DSP_COMBIFILE_FORMAT_IDENTIFICATION_SIZE 48
-#define DSP_COMBIFILE_FORMAT_VERSION_BCD    0x0100
-
-#define DSP_FILE_FORMAT_IDENTIFICATION_SIZE 48
-#define DSP_FILE_FORMAT_VERSION_BCD         0x0100
-
-typedef struct tag_dsp_combifile_header
-{
-  char                  format_identification[DSP_COMBIFILE_FORMAT_IDENTIFICATION_SIZE] __attribute__ ((packed));
-  __u16                  format_version_bcd             __attribute__ ((packed));
-  __u16                  header_size                    __attribute__ ((packed));
-  __u16                  combifile_description_size     __attribute__ ((packed));
-  __u16                  directory_entries              __attribute__ ((packed));
-  __u16                  directory_size                 __attribute__ ((packed));
-  __u16                  download_count                 __attribute__ ((packed));
-  __u16                  usage_mask_size                __attribute__ ((packed));
-} t_dsp_combifile_header;
-
-typedef struct tag_dsp_combifile_directory_entry
-{
-  __u16                  card_type_number               __attribute__ ((packed));
-  __u16                  file_set_number                __attribute__ ((packed));
-} t_dsp_combifile_directory_entry;
-
-typedef struct tag_dsp_file_header
-{
-  char                  format_identification[DSP_FILE_FORMAT_IDENTIFICATION_SIZE] __attribute__ ((packed));
-  __u16                 format_version_bcd              __attribute__ ((packed));
-  __u16                 download_id                     __attribute__ ((packed));
-  __u16                 download_flags                  __attribute__ ((packed));
-  __u16                 required_processing_power       __attribute__ ((packed));
-  __u16                 interface_channel_count         __attribute__ ((packed));
-  __u16                 header_size                     __attribute__ ((packed));
-  __u16                 download_description_size       __attribute__ ((packed));
-  __u16                 memory_block_table_size         __attribute__ ((packed));
-  __u16                 memory_block_count              __attribute__ ((packed));
-  __u16                 segment_table_size              __attribute__ ((packed));
-  __u16                 segment_count                   __attribute__ ((packed));
-  __u16                 symbol_table_size               __attribute__ ((packed));
-  __u16                 symbol_count                    __attribute__ ((packed));
-  __u16                 total_data_size_dm              __attribute__ ((packed));
-  __u16                 data_block_count_dm             __attribute__ ((packed));
-  __u16                 total_data_size_pm              __attribute__ ((packed));
-  __u16                 data_block_count_pm             __attribute__ ((packed));
-} t_dsp_file_header;
-
-typedef struct tag_dsp_memory_block_desc
-{
-  __u16                 alias_memory_block;
-  __u16                 memory_type;
-  __u16                 address;
-  __u16                 size;             /* DSP words */
-} t_dsp_memory_block_desc;
-
-typedef struct tag_dsp_segment_desc
-{
-  __u16                 memory_block;
-  __u16                 attributes;
-  __u16                 base;
-  __u16                 size;
-  __u16                 alignment;        /* ==0 -> no other legal start address than base */
-} t_dsp_segment_desc;
-
-typedef struct tag_dsp_symbol_desc
-{
-  __u16                 symbol_id;
-  __u16                 segment;
-  __u16                 offset;
-  __u16                 size;             /* DSP words */
-} t_dsp_symbol_desc;
-
-typedef struct tag_dsp_data_block_header
-{
-  __u16                 attributes;
-  __u16                 segment;
-  __u16                 offset;
-  __u16                 size;             /* DSP words */
-} t_dsp_data_block_header;
-
-typedef struct tag_dsp_download_desc      /* be sure to keep native alignment for MAESTRA's */
-{
-  __u16                 download_id;
-  __u16                 download_flags;
-  __u16                 required_processing_power;
-  __u16                 interface_channel_count;
-  __u16                 excess_header_size;
-  __u16                 memory_block_count;
-  __u16                 segment_count;
-  __u16                 symbol_count;
-  __u16                 data_block_count_dm;
-  __u16                 data_block_count_pm;
-  __u8  *            p_excess_header_data               __attribute__ ((packed));
-  char  *            p_download_description             __attribute__ ((packed));
-  t_dsp_memory_block_desc  *p_memory_block_table        __attribute__ ((packed));
-  t_dsp_segment_desc  *p_segment_table                  __attribute__ ((packed));
-  t_dsp_symbol_desc  *p_symbol_table                    __attribute__ ((packed));
-  __u16 *            p_data_blocks_dm                   __attribute__ ((packed));
-  __u16 *            p_data_blocks_pm                   __attribute__ ((packed));
-} t_dsp_download_desc;
-
-
-#ifdef __KERNEL__
 
 typedef struct {
   __u8                  Req;            /* pending request          */
@@ -508,6 +230,7 @@ typedef struct {
 	unsigned short statectrl;	 /* State controling bits	*/
 	unsigned short eazmask;          /* EAZ-Mask for this Channel   */
 	int		queued;          /* User-Data Bytes in TX queue */
+	int		pqueued;         /* User-Data Packets in TX queue */
 	int		waitq;           /* User-Data Bytes in wait queue */
 	int		waitpq;          /* User-Data Bytes in packet queue */
 	struct sk_buff *tskb1;           /* temp skb 1			*/
@@ -518,7 +241,9 @@ typedef struct {
 	T30_s		*fax;		 /* pointer to fax data in LL	*/
 	eicon_ch_fax_buf fax2;		 /* fax related struct		*/
 #endif
-	entity		e;		 /* Entity  			*/
+	entity		e;		 /* Native Entity		*/
+	ENTITY		de;		 /* Divas D Entity 		*/
+	ENTITY		be;		 /* Divas B Entity 		*/
 	char		cpn[32];	 /* remember cpn		*/
 	char		oad[32];	 /* remember oad		*/
 	char		dsa[32];	 /* remember dsa		*/
@@ -542,8 +267,6 @@ typedef struct {
 #define EICON_FLAGS_MVALID   8 /* Cards membase is valid */
 #define EICON_FLAGS_LOADED   8 /* Firmware loaded        */
 
-#define EICON_BCH            2 /* # of channels per card */
-
 /* D-Channel states */
 #define EICON_STATE_NULL     0
 #define EICON_STATE_ICALL    1
@@ -564,9 +287,6 @@ typedef struct {
 #define EICON_STATE_WMCONN  16
 
 #define EICON_MAX_QUEUE  2138
-
-#define EICON_LOCK_TX 0
-#define EICON_LOCK_RX 1
 
 typedef union {
 	eicon_isa_card isa;
@@ -593,17 +313,12 @@ typedef struct {
 	__u8 more;
 } eicon_indhdr;
 
-typedef struct msn_entry {
-	char eaz;
-        char msn[16];
-        struct msn_entry * next;
-} msn_entry;
-
 /*
  * Per card driver data
  */
 typedef struct eicon_card {
 	eicon_hwif hwif;                 /* Hardware dependant interface     */
+	DESCRIPTOR *d;			 /* IDI Descriptor		     */
         u_char ptype;                    /* Protocol type (1TR6 or Euro)     */
         u_char bus;                      /* Bustype (ISA, MCA, PCI)          */
         u_char type;                     /* Cardtype (EICON_CTYPE_...)       */
@@ -621,48 +336,22 @@ typedef struct eicon_card {
 	struct tq_struct snd_tq;         /* Task struct for xmit bh          */
 	struct tq_struct rcv_tq;         /* Task struct for rcv bh           */
 	struct tq_struct ack_tq;         /* Task struct for ack bh           */
-	msn_entry *msn_list;
 	eicon_chan*	IdTable[256];	 /* Table to find entity   */
 	__u16  ref_in;
 	__u16  ref_out;
 	int    nchannels;                /* Number of B-Channels             */
 	int    ReadyInt;		 /* Ready Interrupt		     */
 	eicon_chan *bch;                 /* B-Channel status/control         */
-	char   status_buf[256];          /* Buffer for status messages       */
-	char   *status_buf_read;
-	char   *status_buf_write;
-	char   *status_buf_end;
+	DBUFFER *dbuf;			 /* Dbuffer for Diva Server	     */
+	BUFFERS *sbuf;			 /* Buffer for Diva Server	     */
+	char *sbufp;			 /* Data Buffer for Diva Server	     */
         isdn_if interface;               /* Interface to upper layer         */
-        char regname[35];                /* Name used for request_region     */
+        char regname[35];                /* Drivers card name 		     */
 #ifdef CONFIG_MCA
         int	mca_slot;	 	 /* # of cards MCA slot              */
 	int	mca_io;			 /* MCA cards IO port		     */
 #endif /* CONFIG_MCA */
 } eicon_card;
-
-/* -----------------------------------------------------------**
-** The PROTOCOL_FEATURE_STRING                                **
-** defines capabilities and                                   **
-** features of the actual protocol code. It's used as a bit   **
-** mask.                                                      **
-** The following Bits are defined:                            **
-** -----------------------------------------------------------*/
-#define PROTCAP_TELINDUS  0x0001  /* Telindus Variant of protocol code   */
-#define PROTCAP_MANIF     0x0002  /* Management interface implemented    */
-#define PROTCAP_V_42      0x0004  /* V42 implemented                     */
-#define PROTCAP_V90D      0x0008  /* V.90D (implies up to 384k DSP code) */
-#define PROTCAP_EXTD_FAX  0x0010  /* Extended FAX (ECM, 2D, T6, Polling) */
-#define PROTCAP_FREE4     0x0020  /* not used                            */
-#define PROTCAP_FREE5     0x0040  /* not used                            */
-#define PROTCAP_FREE6     0x0080  /* not used                            */
-#define PROTCAP_FREE7     0x0100  /* not used                            */
-#define PROTCAP_FREE8     0x0200  /* not used                            */
-#define PROTCAP_FREE9     0x0400  /* not used                            */
-#define PROTCAP_FREE10    0x0800  /* not used                            */
-#define PROTCAP_FREE11    0x1000  /* not used                            */
-#define PROTCAP_FREE12    0x2000  /* not used                            */
-#define PROTCAP_FREE13    0x4000  /* not used                            */
-#define PROTCAP_EXTENSION 0x8000  /* used for future extentions          */
 
 #include "eicon_idi.h"
 
@@ -688,13 +377,11 @@ extern __inline__ void eicon_schedule_ack(eicon_card *card)
         mark_bh(IMMEDIATE_BH);
 }
 
-extern char *eicon_find_eaz(eicon_card *, char);
-extern int eicon_addcard(int, int, int, char *);
+extern int eicon_addcard(int, int, int, char *, int);
 extern void eicon_io_transmit(eicon_card *card);
 extern void eicon_irq(int irq, void *dev_id, struct pt_regs *regs);
 extern void eicon_io_rcv_dispatch(eicon_card *ccard);
 extern void eicon_io_ack_dispatch(eicon_card *ccard);
-extern int eicon_get_xlog(eicon_card *card, xlogreq_t *xlogreq);
 #ifdef CONFIG_MCA
 extern int eicon_mca_find_card(int, int, int, char *);
 extern int eicon_mca_probe(int, int, int, int, char *);
@@ -704,6 +391,8 @@ extern int eicon_info(char *, int , void *);
 extern ulong DebugVar;
 extern void eicon_log(eicon_card * card, int level, const char *fmt, ...);
 extern void eicon_putstatus(eicon_card * card, char * buf);
+
+extern spinlock_t eicon_lock;
 
 #endif  /* __KERNEL__ */
 

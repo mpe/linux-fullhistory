@@ -24,6 +24,9 @@ Supported ISDN-Cards
 Eicon DIVA Server BRI/PCI
 	- full support with both B-channels.
 
+Eicon DIVA Server 4BRI/PCI
+	- full support with all B-channels.
+
 Eicon DIVA Server PRI/PCI
 	- full support on amount of B-channels
 		depending on DSPs on board.

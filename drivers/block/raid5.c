@@ -863,8 +863,7 @@ static void compute_parity(struct stripe_head *sh, int method)
 		if (!sh->bh_copy[i])
 			sh->bh_copy[i] = raid5_alloc_buffer(sh, sh->size);
 		raid5_build_block(sh, sh->bh_copy[i], i);
-		if (atomic_set_buffer_clean(sh->bh_new[i]))
-			atomic_set_buffer_dirty(sh->bh_copy[i]);
+		atomic_set_buffer_dirty(sh->bh_copy[i]);
 		memcpy(sh->bh_copy[i]->b_data, sh->bh_new[i]->b_data, sh->size);
 	}
 	if (sh->bh_copy[pd_idx] == NULL) {
@@ -995,28 +994,12 @@ static void complete_stripe(struct stripe_head *sh)
 }
 
 
-static int is_stripe_allclean(struct stripe_head *sh, int disks)
-{
-	int i;
-
-	return 0;
-	for (i = 0; i < disks; i++) {
-		if (sh->bh_new[i])
-			if (test_bit(BH_Dirty, &sh->bh_new[i]))
-				return 0;
-		if (sh->bh_old[i])
-			if (test_bit(BH_Dirty, &sh->bh_old[i]))
-				return 0;
-	}
-	return 1;
-}
-
 static void handle_stripe_write (mddev_t *mddev , raid5_conf_t *conf,
 	struct stripe_head *sh, int nr_write, int * operational, int disks,
 	int parity, int parity_failed, int nr_cache, int nr_cache_other,
 	int nr_failed_other, int nr_cache_overwrite, int nr_failed_overwrite)
 {
-	int i, allclean;
+	int i;
 	unsigned int block;
 	struct buffer_head *bh;
 	int method1 = INT_MAX, method2 = INT_MAX;
@@ -1068,7 +1051,6 @@ static void handle_stripe_write (mddev_t *mddev , raid5_conf_t *conf,
 	PRINTK("handle_stripe(), sector %lu, nr_write %d, method1 %d, method2 %d\n", sh->sector, nr_write, method1, method2);
 
 	if (!method1 || !method2) {
-		allclean = is_stripe_allclean(sh, disks);
 		sh->phase = PHASE_WRITE;
 		compute_parity(sh, method1 <= method2 ? RECONSTRUCT_WRITE : READ_MODIFY_WRITE);
 
@@ -1087,24 +1069,11 @@ static void handle_stripe_write (mddev_t *mddev , raid5_conf_t *conf,
 					PRINTK("writing spare %d\n", i);
 					atomic_inc(&sh->nr_pending);
 					bh->b_dev = bh->b_rdev = conf->spare->dev;
-					generic_make_request(WRITERAW, bh);
+					generic_make_request(WRITE, bh);
 				} else {
-#if 0
 					atomic_inc(&sh->nr_pending);
 					bh->b_dev = bh->b_rdev = conf->disks[i].dev;
-					generic_make_request(WRITERAW, bh);
-#else
-					if (!allclean || (i==sh->pd_idx)) {
-						PRINTK("writing dirty %d\n", i);
-						atomic_inc(&sh->nr_pending);
-						bh->b_dev = bh->b_rdev = conf->disks[i].dev;
-						generic_make_request(WRITERAW, bh);
-					} else {
-						PRINTK("not writing clean %d\n", i);
-						raid5_end_request(bh, 1);
-						sh->new[i] = 0;
-					}
-#endif
+					generic_make_request(WRITE, bh);
 				}
 				atomic_dec(&bh->b_count);
 			}
@@ -1282,7 +1251,7 @@ static void handle_stripe_sync (mddev_t *mddev , raid5_conf_t *conf,
 				atomic_inc(&sh->nr_pending);
 				lock_get_bh(bh);
 				bh->b_dev = bh->b_rdev = conf->spare->dev;
-				generic_make_request(WRITERAW, bh);
+				generic_make_request(WRITE, bh);
 				md_sync_acct(bh->b_rdev, bh->b_size/512);
 				atomic_dec(&bh->b_count);
 		PRINTK("handle_stripe_sync() %lu, phase WRITE, pending %d buffers\n", sh->sector, md_atomic_read(&sh->nr_pending));
@@ -1308,7 +1277,7 @@ static void handle_stripe_sync (mddev_t *mddev , raid5_conf_t *conf,
 		lock_get_bh(bh);
 		atomic_inc(&sh->nr_pending);
 		bh->b_dev = bh->b_rdev = conf->disks[pd_idx].dev;
-		generic_make_request(WRITERAW, bh);
+		generic_make_request(WRITE, bh);
 		md_sync_acct(bh->b_rdev, bh->b_size/512);
 		atomic_dec(&bh->b_count);
 		PRINTK("handle_stripe_sync() %lu phase WRITE, pending %d buffers\n",

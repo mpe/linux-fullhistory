@@ -34,6 +34,7 @@
 #define _CARDMO_H
 
 #include "icardmid.h"
+#include <linux/interrupt.h>
 
 #define CARDMIDIOUT_STATE_DEFAULT    0x00000000
 #define CARDMIDIOUT_STATE_SUSPEND    0x00000001

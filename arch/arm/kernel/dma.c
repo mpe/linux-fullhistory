@@ -248,24 +248,23 @@ int request_dma(dmach_t channel, const char *device_id)
 	return -EINVAL;
 }
 
-static int no_dma(void)
+int get_dma_residue(dmach_t channel)
 {
 	return 0;
 }
 
 #define GLOBAL_ALIAS(_a,_b) asm (".set " #_a "," #_b "; .globl " #_a)
-GLOBAL_ALIAS(disable_dma, no_dma);
-GLOBAL_ALIAS(enable_dma, no_dma);
-GLOBAL_ALIAS(free_dma, no_dma);
-GLOBAL_ALIAS(get_dma_residue, no_dma);
-GLOBAL_ALIAS(get_dma_list, no_dma);
-GLOBAL_ALIAS(set_dma_mode, no_dma);
-GLOBAL_ALIAS(set_dma_page, no_dma);
-GLOBAL_ALIAS(set_dma_count, no_dma);
-GLOBAL_ALIAS(set_dma_addr, no_dma);
-GLOBAL_ALIAS(set_dma_sg, no_dma);
-GLOBAL_ALIAS(set_dma_speed, no_dma);
-GLOBAL_ALIAS(init_dma, no_dma);
+GLOBAL_ALIAS(disable_dma, get_dma_residue);
+GLOBAL_ALIAS(enable_dma, get_dma_residue);
+GLOBAL_ALIAS(free_dma, get_dma_residue);
+GLOBAL_ALIAS(get_dma_list, get_dma_residue);
+GLOBAL_ALIAS(set_dma_mode, get_dma_residue);
+GLOBAL_ALIAS(set_dma_page, get_dma_residue);
+GLOBAL_ALIAS(set_dma_count, get_dma_residue);
+GLOBAL_ALIAS(set_dma_addr, get_dma_residue);
+GLOBAL_ALIAS(set_dma_sg, get_dma_residue);
+GLOBAL_ALIAS(set_dma_speed, get_dma_residue);
+GLOBAL_ALIAS(init_dma, get_dma_residue);
 
 #endif
 

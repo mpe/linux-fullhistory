@@ -154,8 +154,11 @@ struct agp_bridge_data {
 #ifndef PCI_DEVICE_ID_VIA_82C691_0
 #define PCI_DEVICE_ID_VIA_82C691_0      0x0691
 #endif
-#ifndef PCI_DEVICE_ID_VIA_82C691_1
-#define PCI_DEVICE_ID_VIA_82C691_1      0x8691
+#ifndef PCI_DEVICE_ID_VIA_8371_0
+#define PCI_DEVICE_ID_VIA_8371_0      0x0391
+#endif
+#ifndef PCI_DEVICE_ID_VIA_8363_0
+#define PCI_DEVICE_ID_VIA_8363_0      0x0305
 #endif
 #ifndef PCI_DEVICE_ID_INTEL_810_0
 #define PCI_DEVICE_ID_INTEL_810_0       0x7120

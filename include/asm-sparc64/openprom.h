@@ -1,4 +1,4 @@
-/* $Id: openprom.h,v 1.7 1998/03/15 10:14:47 ecd Exp $ */
+/* $Id: openprom.h,v 1.8 2000/08/12 19:55:25 anton Exp $ */
 #ifndef __SPARC64_OPENPROM_H
 #define __SPARC64_OPENPROM_H
 
@@ -7,12 +7,6 @@
  *
  * Copyright (C) 1996 David S. Miller (davem@caip.rutgers.edu)
  */
-
-/* Empirical constants... */
-#define KADB_DEBUGGER_BEGVM     0xffc00000    /* Where kern debugger is in virt-mem */
-#define	LINUX_OPPROM_BEGVM	0xffd00000
-#define	LINUX_OPPROM_ENDVM	0xfff00000
-#define	LINUX_OPPROM_MAGIC      0x10010407
 
 #ifndef __ASSEMBLY__
 /* V0 prom device operations. */

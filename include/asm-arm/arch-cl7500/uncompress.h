@@ -5,11 +5,12 @@
  */
 
 #define BASE 0x03010000
+#define SERBASE (BASE + (0x3f8 << 2))
 
 static __inline__ void putc(char c)
 {
-	while (!(*((volatile unsigned int *)(BASE + 0xbf4)) & 0x20));
-	*((volatile unsigned int *)(BASE + 0xbe0)) = c;
+	while (!(*((volatile unsigned int *)(SERBASE + 0x14)) & 0x20));
+	*((volatile unsigned int *)(SERBASE)) = c;
 }
 
 /*
@@ -27,13 +28,13 @@ static void puts(const char *s)
 
 static __inline__ void arch_decomp_setup(void)
 {
-	int baud = 3686400 / (9600 * 16);
+	int baud = 3686400 / (9600 * 32);
 
-	*((volatile unsigned int *)(BASE + 0xBEC)) = 0x80;
-	*((volatile unsigned int *)(BASE + 0xBE0)) = baud & 0xff;
-	*((volatile unsigned int *)(BASE + 0xBE4)) = (baud & 0xff00) >> 8;
-	*((volatile unsigned int *)(BASE + 0xBEC)) = 3; /* 8 bits */
-	*((volatile unsigned int *)(BASE + 0xBF0)) = 3; /* DTR, RTS */
+	*((volatile unsigned int *)(SERBASE + 0xC)) = 0x80;
+	*((volatile unsigned int *)(SERBASE + 0x0)) = baud & 0xff;
+	*((volatile unsigned int *)(SERBASE + 0x4)) = (baud & 0xff00) >> 8;
+	*((volatile unsigned int *)(SERBASE + 0xC)) = 3; /* 8 bits */
+	*((volatile unsigned int *)(SERBASE + 0x10)) = 3; /* DTR, RTS */
 }
 
 /*

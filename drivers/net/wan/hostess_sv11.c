@@ -305,6 +305,7 @@ static struct sv11_device *sv11_init(int iobase, int irq)
 	if(z8530_init(dev)!=0)
 	{
 		printk(KERN_ERR "Z8530 series device not found.\n");
+		restore_flags(flags);
 		goto dmafail2;
 	}
 	z8530_channel_load(&dev->chanB, z8530_dead_port);

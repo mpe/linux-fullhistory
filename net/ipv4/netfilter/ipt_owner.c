@@ -51,7 +51,7 @@ match_sid(const struct sk_buff *skb, pid_t sid)
 
 	read_lock(&tasklist_lock);
 	for_each_task(p) {
-		struct file *files;
+		struct files_struct *files;
 		if (p->session != sid)
 			continue;
 

@@ -31,7 +31,7 @@
 #include <asm/irq.h>
 #include <asm/uaccess.h>
 #include <asm/hardware.h>
-#include <asm/system.h>
+#include <asm/mach-types.h>
 #include <asm/dec21285.h>
 
 /*

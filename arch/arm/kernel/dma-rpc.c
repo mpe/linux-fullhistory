@@ -315,7 +315,7 @@ static struct dma_ops floppy_dma_ops = {
 /*
  * This is virtual DMA - we don't need anything here.
  */
-static int sound_enable_disable_dma(dmach_t channel, dma_t *dma)
+static void sound_enable_disable_dma(dmach_t channel, dma_t *dma)
 {
 }
 

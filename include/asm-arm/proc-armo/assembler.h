@@ -6,10 +6,6 @@
  * This file contains arm architecture specific defines
  * for the different processors
  */
-#ifndef __ASSEMBLY__
-#error "Only include this from assembly code"
-#endif
-
 #define MODE_USR	USR26_MODE
 #define MODE_FIQ	FIQ26_MODE
 #define MODE_IRQ	IRQ26_MODE
@@ -60,3 +56,25 @@
 #define SVCMODE(tmpreg)\
 	teqp	pc, $0x00000003;\
 	mov	r0, r0
+
+
+/*
+ * Save the current IRQ state and disable IRQs
+ * Note that this macro assumes FIQs are enabled, and
+ * that the processor is in SVC mode.
+ */
+	.macro	save_and_disable_irqs, oldcpsr, temp
+  mov \oldcpsr, pc
+  orr \temp, \oldcpsr, #0x08000000
+  teqp \temp, #0
+  .endm
+
+/*
+ * Restore interrupt state previously stored in
+ * a register
+ * ** Actually do nothing on Arc - hope that the caller uses a MOVS PC soon
+ * after!
+ */
+	.macro	restore_irqs, oldcpsr
+  @ This be restore_irqs
+  .endm

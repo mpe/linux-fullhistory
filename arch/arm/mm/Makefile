@@ -7,8 +7,10 @@
 #
 # Note 2! The CFLAGS definition is now in the main makefile...
 
+USE_STANDARD_AS_RULE := true
+
 O_TARGET	:= mm.o
-O_OBJS		:= consistent.o extable.o fault-$(PROCESSOR).o init.o \
+O_OBJS		:= extable.o fault-$(PROCESSOR).o init.o \
 		   mm-$(PROCESSOR).o small_page.o
 
 ifeq ($(CONFIG_CPU_26),y)
@@ -31,13 +33,10 @@ ifeq ($(CONFIG_CPU_32),y)
   ifeq ($(CONFIG_CPU_SA1100),y)
     P_OBJS	+= proc-sa110.o
   endif
-  O_OBJS	+= mm-$(MACHINE).o ioremap.o $(sort $(P_OBJS))
+  O_OBJS	+= mm-$(MACHINE).o consistent.o ioremap.o $(sort $(P_OBJS))
 endif
 
 include $(TOPDIR)/Rules.make
-
-.S.o:
-	$(CC) $(AFLAGS) $(AFLAGS_$@) -traditional -c -o $*.o $<
 
 # Special dependencies
 fault-armv.o: fault-common.c

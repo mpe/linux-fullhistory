@@ -4,6 +4,7 @@
 #ifndef _ASM_MC146818RTC_H
 #define _ASM_MC146818RTC_H
 
+#include <asm/arch/irqs.h>
 #include <asm/io.h>
 
 #ifndef RTC_PORT
@@ -23,7 +24,5 @@ inb_p(RTC_PORT(1)); \
 outb_p((addr),RTC_PORT(0)); \
 outb_p((val),RTC_PORT(1)); \
 })
-
-#define RTC_IRQ 8
 
 #endif /* _ASM_MC146818RTC_H */

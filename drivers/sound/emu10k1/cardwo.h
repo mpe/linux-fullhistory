@@ -33,86 +33,59 @@
 #define _CARDWO_H
 
 #include "icardwav.h"
+#include "audio.h"
+#include "voicemgr.h"
+#include "timer.h"
 
-struct wave_xferbuf 
-{
-	u32     xferpos;
-	u32     silence_xferpos;
-	u32     xferbufsize;     /* transfer buffer size */
-	u32     numpages;        /* number of pages in transfer buffer */
-	void    **xferbuffer;    /* pointer to the transfer buffer */
-	int     is_stereo;
-	int     is_16bit;
-	int	bytespersample;
-	u32     stopposition;
+/* setting this to other than a power of two may break some applications */
+#define WAVEOUT_MAXBUFSIZE	MAXBUFSIZE
+#define WAVEOUT_MINBUFSIZE	64
+
+#define WAVEOUT_DEFAULTFRAGLEN	20 /* Time to play a fragment in ms (latency) */
+#define WAVEOUT_DEFAULTBUFLEN	500 /* Time to play the entire buffer in ms */
+
+#define WAVEOUT_MINFRAGSHIFT	6
+
+struct waveout_buffer {
+	u16 ossfragshift;
+        u32 numfrags;
+	u32 fragment_size;	/* in bytes units */
+	u32 size;		/* in bytes units */
+	u32 pages;		/* buffer size in page units*/
+	int emupageindex;
+	void *addr[BUFMAXPAGES];
+	dma_addr_t dma_handle[BUFMAXPAGES];
+        u32 silence_pos;	/* software cursor position (including silence) */
+	u32 hw_pos;		/* hardware cursor position */
+	u32 bytestocopy;	/* free space on buffer (including silence) */
+	u8 fill_silence;
+	u32 silence_bytes;      /* silence bytes in buffer */
 };
-
-struct wave_out
-{
-    u32             state;
-    struct emu_voice *voice;
-    int             emupageindex;
-    struct emu_timer *timer;
-    struct wave_xferbuf *wavexferbuf;
-    void 	    **pagetable;
-    u32             callbacksize;
-    u32             localvol;
-    u32             localreverb;
-    u32             localchorus;
-    u32             globalvolFactor;
-    u32             globalreverbFactor;
-    u32             globalchorusFactor;
-    int             setpos;
-    u32             position;
-    struct wave_format      wave_fmt;
-    int             fill_silence;
-};
-
-/* setting this to other than a power of two
-   may break some applications */
-#define WAVEOUT_MAXBUFSIZE          32768 
-#define WAVEOUT_MINBUFSIZE	    64
-
-#define WAVEOUT_DEFAULTFRAGLEN      100 /* Time to play a fragment in ms (latency) */
-#define WAVEOUT_DEFAULTBUFLEN       1000 /* Time to play the entire buffer in ms */
-
-#define WAVEOUT_MINFRAGSHIFT	4
 
 struct woinst 
 {
-        struct wave_out *wave_out;
-        struct wave_format wave_fmt;
-        u16 ossfragshift;
-        u32 fragment_size;
-        u32 numfrags;
+	u8 state;
+	struct emu_voice voice;
+	struct emu_timer timer;
+        struct wave_format format;
+	struct waveout_buffer buffer;
         wait_queue_head_t wait_queue;
-        int mapped;
-        u32 total_copied;
-        u32 total_played;
+        u8 mmapped;
+        u32 total_copied;	/* total number of bytes written() to the buffer (excluding silence) */
+        u32 total_played;	/* total number of bytes played including silence */
         u32 blocks;
-	u32 curpos;
-	u32 device;
+	u8 device;
 	spinlock_t lock;
-};
-
-struct emu10k1_waveout
-{
-	u32 globalvol;
-	u32 mute;
-	u32 left;
-	u32 right;
-	u32 globalreverb;
-	u32 globalchorus;
 };
 
 int emu10k1_waveout_open(struct emu10k1_wavedevice *);
 void emu10k1_waveout_close(struct emu10k1_wavedevice *);
-int emu10k1_waveout_start(struct emu10k1_wavedevice *);
+void emu10k1_waveout_start(struct emu10k1_wavedevice *);
 void emu10k1_waveout_stop(struct emu10k1_wavedevice *);
-void emu10k1_waveout_getxfersize(struct wave_out *, u32 *, u32 *, u32 *);
+void emu10k1_waveout_getxfersize(struct woinst*, u32 *);
 void emu10k1_waveout_xferdata(struct woinst*, u8*, u32 *);
 void emu10k1_waveout_fillsilence(struct woinst*);
-int emu10k1_waveout_setformat(struct emu10k1_wavedevice*);
-int emu10k1_waveout_getcontrol(struct wave_out*, u32, u32 *);
+int emu10k1_waveout_setformat(struct emu10k1_wavedevice*, struct wave_format*);
+void emu10k1_waveout_update(struct woinst*);
 
 #endif /* _CARDWO_H */

@@ -31,8 +31,12 @@
  ********************************************************************** 
  */
 
+#include <linux/malloc.h>
+
 #include "hwaccess.h"
+#include "8010.h"
 #include "cardmo.h"
+#include "irqmgr.h"
 
 /* Installs the IRQ handler for the MPU out port               *
  * and initialize parameters                                    */
@@ -44,7 +48,7 @@ int emu10k1_mpuout_open(struct emu10k1_card *card, struct midi_openinfo *openinf
 	DPF(2, "emu10k1_mpuout_open()\n");
 
 	if (!(card_mpuout->status & FLAGS_AVAILABLE))
-		return CTSTATUS_INUSE;
+		return -1;
 
 	/* Copy open info and mark channel as in use */
 	card_mpuout->intr = 0;
@@ -57,7 +61,7 @@ int emu10k1_mpuout_open(struct emu10k1_card *card, struct midi_openinfo *openinf
 	emu10k1_mpu_reset(card);
 	emu10k1_mpu_acquire(card);
 
-	return CTSTATUS_SUCCESS;
+	return 0;
 }
 
 int emu10k1_mpuout_close(struct emu10k1_card *card)
@@ -92,7 +96,7 @@ int emu10k1_mpuout_close(struct emu10k1_card *card)
 
 	spin_unlock_irqrestore(&card_mpuout->lock, flags);
 
-	return CTSTATUS_SUCCESS;
+	return 0;
 }
 
 /* If there isn't enough buffer space, reject Midi Buffer.     *
@@ -109,14 +113,14 @@ int emu10k1_mpuout_add_buffer(struct emu10k1_card *card, struct midi_hdr *midihd
 	DPF(2, "emu10k1_mpuout_add_buffer()\n");
 
 	if (card_mpuout->state == CARDMIDIOUT_STATE_SUSPEND)
-		return CTSTATUS_SUCCESS;
+		return 0;
 
 	midihdr->flags |= MIDIBUF_INQUEUE;
 	midihdr->flags &= ~MIDIBUF_DONE;
 
 	if ((midiq = (struct midi_queue *) kmalloc(sizeof(struct midi_queue), GFP_KERNEL)) == NULL) {
 		/* Message lost */
-		return CTSTATUS_NOMEMORY;
+		return -1;
 	}
 
 	midiq->next = NULL;
@@ -143,7 +147,7 @@ int emu10k1_mpuout_add_buffer(struct emu10k1_card *card, struct midi_hdr *midihd
 
 	spin_unlock_irqrestore(&card_mpuout->lock, flags);
 
-	return CTSTATUS_SUCCESS;
+	return 0;
 }
 
 void emu10k1_mpuout_bh(unsigned long refdata)
@@ -151,7 +155,6 @@ void emu10k1_mpuout_bh(unsigned long refdata)
 	struct emu10k1_card *card = (struct emu10k1_card *) refdata;
 	struct emu10k1_mpuout *card_mpuout = card->mpuout;
 	int cByteSent = 0;
-	int status;
 	struct midi_queue *midiq;
 	struct midi_queue *doneq = NULL;
 	unsigned long flags;
@@ -162,14 +165,12 @@ void emu10k1_mpuout_bh(unsigned long refdata)
 		midiq = card_mpuout->firstmidiq;
 
 		while (cByteSent < 4 && midiq->sizeLeft) {
-			status = emu10k1_mpu_write_data(card, *midiq->midibyte);
-
-			if (status == CTSTATUS_SUCCESS) {
+			if (emu10k1_mpu_write_data(card, *midiq->midibyte) < 0) {
+				DPF(2, "emu10k1_mpuoutDpcCallback error!!\n");
+			} else {
 				++cByteSent;
 				--midiq->sizeLeft;
 				++midiq->midibyte;
-			} else {
-				DPF(2, "emu10k1_mpuoutDpcCallback error!!\n");
 			}
 		}
 
@@ -225,5 +226,5 @@ int emu10k1_mpuout_irqhandler(struct emu10k1_card *card)
 
 	tasklet_hi_schedule(&card_mpuout->tasklet);
 
-	return CTSTATUS_SUCCESS;
+	return 0;
 }

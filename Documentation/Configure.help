@@ -10180,9 +10180,10 @@ CONFIG_USB_SERIAL_OMNINET
 
 USB Digi International AccelePort USB Serial Driver
 CONFIG_USB_SERIAL_DIGI_ACCELEPORT
-  Say Y here if you want to use a Digi AccelePort USB 4 device,
-  a 4 port USB serial converter.  The Digi Acceleport USB 2 and
-  8 are not yet supported by this driver.
+  Say Y here if you want to use Digi AccelePort USB 2 or 4 devices,
+  2 port (plus parallel port) and 4 port USB serial converters.  The
+  parallel port on the USB 2 appears as a third serial port on Linux.
+  The Digi Acceleport USB 8 is not yet supported by this driver.
 
   This code is also available as a module ( = code which can be
   inserted in and removed from the running kernel whenever you want).
@@ -14092,7 +14093,7 @@ CONFIG_AEDSP16_MPU401
 Creative EMU10K1 based PCI sound cards
 CONFIG_SOUND_EMU10K1
   Say Y or M if you have a PCI sound card using the EMU10K1
-  chipset, such as the Creative SBLive! or SB PCI512.
+  chipset, such as the Creative SBLive!,  SB PCI512 or Emu-APS.
 
 Ensoniq ES1370 based PCI sound cards
 CONFIG_SOUND_ES1370
@@ -14597,13 +14598,18 @@ CONFIG_ISDN_DRV_SC
   called sc.o. See Documentation/isdn/README.sc and
   http://www.spellcast.com for more information.
 
-Eicon.Diehl active card support
+Eicon active card support
 CONFIG_ISDN_DRV_EICON
   Say Y here if you have an Eicon active ISDN card. In order to use
   this card, additional firmware is necessary, which has to be loaded
   into the card using the eiconctrl utility which is part of the
   latest isdn4k-utils package. Please read the file
   Documentation/isdn/README.eicon for more information.
+  
+Eicon Diva Server card support
+CONFIG_ISDN_DRV_EICON_PCI
+  Say Y here if you have an Eicon Diva Server (BRI/PRI/4BRI) ISDN card.
+  Please read Documentation/isdn/README.eicon for more information.
   
 Eicon old-type card support
 CONFIG_ISDN_DRV_EICON_ISA
@@ -14612,6 +14618,14 @@ CONFIG_ISDN_DRV_EICON_ISA
   loaded into the card using the eiconctrl utility which is part of
   the latest isdn4k-utils package. Please read the file
   Documentation/isdn/README.eicon for more information.
+
+Eicon driver type standalone
+CONFIG_ISDN_DRV_EICON_STANDALONE
+  Enable this option if you want the eicon driver as standalone
+  version with no interface to the ISDN4Linux isdn module. If you
+  say Y here, the eicon module only supports the Diva Server PCI
+  cards and will provide its own IDI interface. You should say N
+  here.
 
 Support AT-Fax Class 2 commands
 CONFIG_ISDN_TTY_FAX

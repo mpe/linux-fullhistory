@@ -733,8 +733,7 @@ static int proc_clearhalt(struct dev_state *ps, void *arg)
         else
                 pipe = usb_sndbulkpipe(ps->dev, ep & 0x7f);
 
-	usb_clear_halt(ps->dev, pipe);
-	return 0;
+	return usb_clear_halt(ps->dev, pipe);
 }
 		
 

@@ -19,6 +19,7 @@
 #endif
 
 #define SWAPPER_PGDIR_OFFSET	0x4000
+#define K(a,b,c)	((a) << 24 | (b) << 12 | (c))
 
 		.globl	SYMBOL_NAME(swapper_pg_dir)
 		.equ	SYMBOL_NAME(swapper_pg_dir),	TEXTADDR - 0x8000 + SWAPPER_PGDIR_OFFSET
@@ -27,7 +28,28 @@
 		.type	stext, #function
 ENTRY(stext)
 ENTRY(_stext)
-
+/*
+ * Entry point.  The general rules are:
+ *  should be called with r0 == 0
+ *  r1 contains the unique architecture number
+ *  with MMU is off, I-cache may be on or off, D-cache should be off.
+ * See linux/arch/arm/kernel/arch.c and linux/include/asm-arm/system.h
+ * for the complete list of numbers for r1.  If you require a new number,
+ * please follow the instructions given towards the end of
+ * linux/Documentation/arm/README.
+ */
+		mov	r12, r0
+/*
+ * NOTE!  Any code which is placed here should be done for one of
+ * the following reasons:
+ *
+ *  1. Compatability with old production boot firmware (ie, users
+ *     actually have and are booting the kernel with the old firmware)
+ *     and therefore will be eventually removed.
+ *  2. Cover the case when there is no boot firmware.  This is not
+ *     ideal, but in this case, it should ONLY set r0 and r1 to the
+ *     appropriate value.
+ */
 #ifdef CONFIG_ARCH_NETWINDER
 /*
  * Compatability cruft for old NetWinder NeTTroms.  This
@@ -63,28 +85,18 @@ ENTRY(_stext)
 		mov	r5, #0
 		movne	pc, r0
 
-		mov	r0, #0			@ catch old NeTTroms
 		mov	r1, #5			@ (will go in 2.5)
+		mov	r12, #2 << 24		@ scheduled for removal in 2.5.xx
+		orr	r12, r12, #5 << 12
 #endif
 #ifdef CONFIG_ARCH_L7200
 /*
  * FIXME - No bootloader, so manually set 'r1' with our architecture number.
  */
-		mov	r0, #0
 		mov	r1, #19
 #endif
 
-/*
- * Entry point.  Entry *must* be called with r0 == 0, with the MMU off.
- *  r1 contains the unique architecture number.  See
- * linux/arch/arm/kernel/arch.c and linux/include/asm-arm/system.h for
- * the complete list.  If you require a new number, please follow the
- * instructions given towards the end of Documentation/arm/README.
- */
-__entry:	teq	r0, #0				@ wrong register vals?
-		movne	r0, #'i'			@ yes, error 'i'
-		bne	__error
-		bl	__lookup_processor_type
+__entry:	bl	__lookup_processor_type
 		teq	r10, #0				@ invalid processor?
 		moveq	r0, #'p'			@ yes, error 'p'
 		beq	__error
@@ -98,6 +110,7 @@ __entry:	teq	r0, #0				@ wrong register vals?
 							@ (return control reg)
 
 __switch_data:	.long	__mmap_switched
+		.long	SYMBOL_NAME(compat)
 		.long	SYMBOL_NAME(__bss_start)
 		.long	SYMBOL_NAME(_end)
 		.long	SYMBOL_NAME(processor_id)
@@ -123,8 +136,9 @@ __ret:		ldr	lr, __switch_data
 		.align	5
 __mmap_switched:
 		adr	r3, __switch_data + 4
-		ldmia	r3, {r4, r5, r6, r7, r8, sp}	@ r4 = __bss_start
+		ldmia	r3, {r2, r4, r5, r6, r7, r8, sp}@ r2 = compat
 							@ sp = stack pointer
+		str	r12, [r2]
 
 		mov	fp, #0				@ Clear BSS
 1:		cmp	r4, r5

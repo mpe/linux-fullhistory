@@ -32,8 +32,6 @@
 
 		.text
 
-#define PT_TRACESYS	0x00000002
-
 @ Bad Abort numbers
 @ -----------------
 @
@@ -42,12 +40,6 @@
 #define BAD_ADDREXCPTN	2
 #define BAD_IRQ		3
 #define BAD_UNDEFINSTR	4
-
-@ OS version number used in SWIs
-@  RISC OS is 0
-@  RISC iX is 8
-@
-#define OS_NUMBER	9
 
 @
 @ Stack format (ensured by USER_* and SVC_*)
@@ -426,12 +418,15 @@ ENTRY(soft_irq_mask)
 		.endm
 
 #elif defined(CONFIG_ARCH_L7200)
-/* Don't use fast interrupts */
+	
+		.equ	irq_base_addr,	IO_BASE_2
+
 		.macro  disable_fiq
 		.endm
  
 		.macro  get_irqnr_and_base, irqnr, irqstat, base
-		ldr     r4, =0xe0001000			@ Virt addr status reg
+		mov     r4, #irq_base_addr		@ Virt addr IRQ regs
+		add	r4, r4, #0x00001000		@ Status reg
 		ldr     \irqstat, [r4]			@ get interrupts
 		mov     \irqnr, #0
 1001:		tst     \irqstat, #1
@@ -727,6 +722,7 @@ __irq_usr:	sub	sp, sp, #S_FRAME_SIZE
 		@
 		bne	do_IRQ
 		mov	r4, #0
+		get_current_task r5
 		b	ret_with_reschedule
 
 		.align	5

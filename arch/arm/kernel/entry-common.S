@@ -1,4 +1,13 @@
 #include <linux/config.h>
+
+#define PT_TRACESYS	0x00000002
+
+@ OS version number used in SWIs
+@  RISC OS is 0
+@  RISC iX is 8
+@
+#define OS_NUMBER	9
+
 /*============================================================================
  * All exits to user mode from the kernel go through this code.
  */
@@ -22,25 +31,23 @@ slow_syscall_return:
 		add	sp, sp, #S_OFF
 ret_from_sys_call:				@ external entry
 		get_softirq r0
+		get_current_task r5
 		ldmia	r0, {r0, r1}		@ softirq_active, softirq_mask
 		mov	r4, #1			@ flag this as being syscall return
 		tst	r0, r1
 		blne	SYMBOL_NAME(do_softirq)
-ret_with_reschedule:				@ external entry (__irq_usr)
-		get_current_task r5
+ret_with_reschedule:				@ external entry (r5 must be set) (__irq_usr)
 		ldr	r0, [r5, #TSK_NEED_RESCHED]
 		ldr	r1, [r5, #TSK_SIGPENDING]
 		teq	r0, #0
 		bne	ret_reschedule
 		teq	r1, #0			@ check for signals
-		bne	ret_signal
-
+		blne	ret_signal
 ret_from_all:	restore_user_regs		@ internal
 
 ret_signal:	mov	r1, sp			@ internal
-		adrsvc	al, lr, ret_from_all
 		mov	r2, r4
-		b	SYMBOL_NAME(do_signal)
+		b	SYMBOL_NAME(do_signal)	@ note the bl above sets lr
 
 ret_reschedule:	adrsvc	al, lr, ret_with_reschedule	@ internal
 		b	SYMBOL_NAME(schedule)
@@ -48,12 +55,13 @@ ret_reschedule:	adrsvc	al, lr, ret_with_reschedule	@ internal
 		.globl	ret_from_exception
 ret_from_exception:				@ external entry
 		get_softirq r0
+		get_current_task r5
 		ldmia	r0, {r0, r1}		@ softirq_active, softirq_mask
 		mov	r4, #0
 		tst	r0, r1
+		ldr	r6, [sp, #S_PSR]
 		blne	SYMBOL_NAME(do_softirq)
-		ldr	r0, [sp, #S_PSR]
-		tst	r0, #3			@ returning to user mode?
+		tst	r6, #3			@ returning to user mode?
 		beq	ret_with_reschedule
 		b	ret_from_all
 

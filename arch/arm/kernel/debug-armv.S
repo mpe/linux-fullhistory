@@ -162,12 +162,14 @@
 
 #elif defined(CONFIG_ARCH_L7200)
 
-		.macro	addruart,rx
+		.equ	io_virt, IO_BASE
+		.equ	io_phys, IO_START
 
+		.macro	addruart,rx
 		mrc	p15, 0, \rx, c1, c0
 		tst	\rx, #1			@ MMU enabled?
-		moveq	\rx, #0x80000000	@ physical base address
-		movne	\rx, #0xd0000000        @ virtual address
+		moveq	\rx, #io_phys		@ physical base address
+		movne	\rx, #io_virt		@ virtual address
 		add	\rx, \rx, #0x00044000	@ Ser1
 @		add	\rx, \rx, #0x00045000	@ Ser2
 		.endm

@@ -18,12 +18,10 @@
 #include <linux/smp.h>
 #include <linux/init.h>
 #include <linux/bootmem.h>
-#ifdef CONFIG_BLK_DEV_INITRD
 #include <linux/blk.h>
-#endif
 
-#include <asm/system.h>
 #include <asm/segment.h>
+#include <asm/mach-types.h>
 #include <asm/pgalloc.h>
 #include <asm/dma.h>
 #include <asm/hardware.h>
@@ -151,11 +149,18 @@ void show_mem(void)
 		end  = page + NODE_DATA(node)->node_size;
 
 		do {
-			if (PageSkip(page)) {
-				page = page->next_hash;
-				if (page == NULL)
-					break;
-			}
+/* This is currently broken
+ * PG_skip is used on sparc/sparc64 architectures to "skip" certain
+ * parts of the address space.
+ *
+ * #define PG_skip	10
+ * #define PageSkip(page) (machine_is_riscpc() && test_bit(PG_skip, &(page)->flags))
+ *			if (PageSkip(page)) {
+ *				page = page->next_hash;
+ *				if (page == NULL)
+ *					break;
+ *			}
+ */
 			total++;
 			if (PageReserved(page))
 				reserved++;
@@ -554,7 +559,7 @@ void __init mem_init(void)
 	initpages = &__init_end - &__init_begin;
 
 	high_memory = (void *)__va(meminfo.end);
-	max_mapnr   = MAP_NR(high_memory);
+	max_mapnr   = virt_to_page(high_memory) - mem_map;
 
 	/*
 	 * We may have non-contiguous memory.
@@ -598,9 +603,9 @@ void __init mem_init(void)
 static inline void free_area(unsigned long addr, unsigned long end, char *s)
 {
 	unsigned int size = (end - addr) >> 10;
-	struct page *page = virt_to_page(addr);
 
-	for (; addr < end; addr += PAGE_SIZE, page ++) {
+	for (; addr < end; addr += PAGE_SIZE) {
+		struct page *page = virt_to_page(addr);
 		ClearPageReserved(page);
 		set_page_count(page, 1);
 		free_page(addr);
@@ -608,18 +613,14 @@ static inline void free_area(unsigned long addr, unsigned long end, char *s)
 	}
 
 	if (size)
-		printk(" %dk %s", size, s);
+		printk("Freeing %s memory: %dK\n", s, size);
 }
 
 void free_initmem(void)
 {
-	printk("Freeing unused kernel memory:");
-
 	free_area((unsigned long)(&__init_begin),
 		  (unsigned long)(&__init_end),
 		  "init");
-
-	printk("\n");
 }
 
 #ifdef CONFIG_BLK_DEV_INITRD
@@ -628,17 +629,8 @@ static int keep_initrd;
 
 void free_initrd_mem(unsigned long start, unsigned long end)
 {
-	unsigned long addr;
-
-	if (!keep_initrd) {
-		for (addr = start; addr < end; addr += PAGE_SIZE) {
-			ClearPageReserved(virt_to_page(addr));
-			set_page_count(virt_to_page(addr), 1);
-			free_page(addr);
-			totalram_pages++;
-		}
-		printk ("Freeing initrd memory: %ldk freed\n", (end - start) >> 10);
-	}
+	if (!keep_initrd)
+		free_area(start, end, "initrd");
 }
 
 static int __init keepinitrd_setup(char *__unused)

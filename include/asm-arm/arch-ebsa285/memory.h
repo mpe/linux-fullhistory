@@ -17,58 +17,53 @@
 
 #include <linux/config.h>
 
-#if defined(CONFIG_FOOTBRIDGE_HOST)
-
+#if defined(CONFIG_FOOTBRIDGE_ADDIN)
 /*
- * Task size: 3GB
+ * If we may be using add-in footbridge mode, then we must
+ * use the out-of-line translation that makes use of the
+ * PCI BAR
  */
-#define TASK_SIZE		(0xc0000000UL)
-#define TASK_SIZE_26		(0x04000000UL)
+#ifndef __ASSEMBLY__
+extern unsigned long __virt_to_bus(unsigned long);
+extern unsigned long __bus_to_virt(unsigned long);
+#endif
 
-/*
- * Page offset: 3GB
- */
-#define PAGE_OFFSET		(0xc0000000UL)
-#define PHYS_OFFSET		(0x00000000UL)
+#elif defined(CONFIG_FOOTBRIDGE_HOST)
 
 #define __virt_to_bus__is_a_macro
 #define __virt_to_bus(x)	((x) - 0xe0000000)
 #define __bus_to_virt__is_a_macro
 #define __bus_to_virt(x)	((x) + 0xe0000000)
 
-#elif defined(CONFIG_FOOTBRIDGE_ADDIN)
+#else
 
-#if defined(CONFIG_ARCH_CO285)
+#error "Undefined footbridge mode"
 
-/*
- * Task size: 1.5GB
- */
+#endif
+
+#if defined(CONFIG_ARCH_FOOTBRIDGE)
+
+/* Task size and page offset at 3GB */
+#define TASK_SIZE		(0xc0000000UL)
+#define PAGE_OFFSET		(0xc0000000UL)
+
+#elif defined(CONFIG_ARCH_CO285)
+
+/* Task size and page offset at 1.5GB */
 #define TASK_SIZE		(0x60000000UL)
-#define TASK_SIZE_26		(0x04000000UL)
-
-/*
- * Page offset: 1.5GB
- */
 #define PAGE_OFFSET		(0x60000000UL)
-#define PHYS_OFFSET		(0x00000000UL)
 
 #else
 
-#error Add in your architecture here
+#error "Undefined footbridge architecture"
 
 #endif
 
-#ifndef __ASSEMBLY__
-extern unsigned long __virt_to_bus(unsigned long);
-extern unsigned long __bus_to_virt(unsigned long);
-#endif
-
-#endif
+#define TASK_SIZE_26		(0x04000000UL)
+#define PHYS_OFFSET		(0x00000000UL)
 
 /*
- * On Footbridge machines, the dram is contiguous.
- * On Host Footbridge, these conversions are constant.
- * On an add-in footbridge, these depend on register settings.
+ * The DRAM is always contiguous.
  */
 #define __virt_to_phys__is_a_macro
 #define __virt_to_phys(vpage) ((unsigned long)(vpage) - PAGE_OFFSET)

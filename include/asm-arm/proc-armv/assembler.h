@@ -6,10 +6,6 @@
  * This file contains ARM processor specifics for
  * the ARM6 and better processors.
  */
-#ifndef __ASSEMBLY__
-#error "Only include this from assembly code"
-#endif
-
 #define MODE_USR	USR_MODE
 #define MODE_FIQ	FIQ_MODE
 #define MODE_IRQ	IRQ_MODE
@@ -35,9 +31,8 @@
 	instr	regs
 
 /*
- * Save the current IRQ state and disable IRQs
- * Note that this macro assumes FIQs are enabled, and
- * that the processor is in SVC mode.
+ * Save the current IRQ state and disable IRQs.  Note that this macro
+ * assumes FIQs are enabled, and that the processor is in SVC mode.
  */
 	.macro	save_and_disable_irqs, oldcpsr, temp
 	mrs	\oldcpsr, cpsr
@@ -46,8 +41,8 @@
 	.endm
 
 /*
- * Restore interrupt state previously stored in
- * a register
+ * Restore interrupt state previously stored in a register.  We don't
+ * guarantee that this will preserve the flags.
  */
 	.macro	restore_irqs, oldcpsr
 	msr	cpsr_c, \oldcpsr

@@ -414,10 +414,9 @@ int agp_unbind_memory(agp_memory * curr)
 
 /* 
  * Driver routines - start
- * Currently this module supports the 
- * i810, 440lx, 440bx, 440gx, via vp3, via mvp3,
- * amd irongate, ALi M1541 and generic support for the
- * SiS chipsets.
+ * Currently this module supports the following chipsets:
+ * i810, 440lx, 440bx, 440gx, via vp3, via mvp3, via kx133, via kt133,
+ * amd irongate, ALi M1541, and generic support for the SiS chipsets.
  */
 
 /* Generic Agp routines - Start */
@@ -2129,12 +2128,6 @@ static struct {
 #endif /* CONFIG_AGP_SIS */
 
 #ifdef CONFIG_AGP_VIA
-	{ PCI_DEVICE_ID_VIA_8371_0,
-		PCI_VENDOR_ID_VIA,
-		VIA_APOLLO_SUPER,
-		"Via",
-		"Apollo Super",
-		via_generic_setup },
 	{ PCI_DEVICE_ID_VIA_8501_0,
 		PCI_VENDOR_ID_VIA,
 		VIA_MVP4,
@@ -2158,6 +2151,18 @@ static struct {
 		VIA_APOLLO_PRO,
 		"Via",
 		"Apollo Pro",
+		via_generic_setup },
+	{ PCI_DEVICE_ID_VIA_8371_0,
+		PCI_VENDOR_ID_VIA,
+		VIA_APOLLO_KX133,
+		"Via",
+		"Apollo Pro KX133",
+		via_generic_setup },
+	{ PCI_DEVICE_ID_VIA_8363_0,
+		PCI_VENDOR_ID_VIA,
+		VIA_APOLLO_KT133,
+		"Via",
+		"Apollo Pro KT133",
 		via_generic_setup },
 	{ 0,
 		PCI_VENDOR_ID_VIA,

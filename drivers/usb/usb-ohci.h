@@ -366,6 +366,7 @@ typedef struct ohci {
 
 	int irq;
 	int disabled;			/* e.g. got a UE, we're hung */
+	atomic_t resume_count;		/* defending against multiple resumes */
 
 	struct ohci_regs * regs;	/* OHCI controller's memory */
 	struct list_head ohci_hcd_list;	/* list of all ohci_hcd */
@@ -384,7 +385,10 @@ typedef struct ohci {
 	struct usb_bus * bus;    
 	struct usb_device * dev[128];
 	struct virt_root_hub rh;
-	struct pci_dev *ohci_dev;
+
+	/* PCI device handle and settings */
+	struct pci_dev	*ohci_dev;
+	u8		pci_latency;
 } ohci_t;
 
 

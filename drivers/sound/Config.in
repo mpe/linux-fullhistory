@@ -85,7 +85,7 @@ if [ "$CONFIG_SOUND_OSS" = "y" -o "$CONFIG_SOUND_OSS" = "m" ]; then
    bool '      Persistent DMA buffers' CONFIG_SOUND_DMAP
 
    if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
-      dep_tristate '    AD1816(A) based cards (EXPERIMENTAL)' CONFIG_SOUND_AD1816 $CONFIG_SOUND
+      dep_tristate '    AD1816(A) based cards (EXPERIMENTAL)' CONFIG_SOUND_AD1816 $CONFIG_SOUND_OSS
    fi
    dep_tristate '    Aztech Sound Galaxy (non-PnP) cards' CONFIG_SOUND_SGALAXY $CONFIG_SOUND_OSS
    dep_tristate '    Adlib Cards' CONFIG_SOUND_ADLIB $CONFIG_SOUND_OSS

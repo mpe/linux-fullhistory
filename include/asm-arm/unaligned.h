@@ -1,7 +1,7 @@
 #ifndef __ASM_ARM_UNALIGNED_H
 #define __ASM_ARM_UNALIGNED_H
 
-#include <linux/types.h>
+#include <asm/types.h>
 
 extern int __bug_unaligned_x(void *ptr);
 

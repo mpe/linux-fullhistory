@@ -10,11 +10,13 @@
  * Changelog:
  *  05-09-2000  SJH	Created by moving 720 specific functions
  *			out of 'proc-arm6,7.S' per RSK discussion
+ *  07-25-2000  SJH	Added idle function.
  */
 #include <linux/linkage.h>
 #include <asm/assembler.h>
 #include <asm/procinfo.h>
 #include <asm/errno.h>
+#include <asm/hardware.h>
 #include "../lib/constants.h"
 
 /*
@@ -127,8 +129,8 @@ ENTRY(cpu_arm720_data_abort)
 		add	pc, pc, r2, lsr #22		@ Now branch to the relevent processing routine
 		movs	pc, lr
 
-		b	Ldata_unknown
-		b	Ldata_unknown
+		b	Ldata_lateldrhpost		@ ldrh	rd, [rn], #m/rm
+		b	Ldata_lateldrhpre		@ ldrh	rd, [rn, #m/rm]
 		b	Ldata_unknown
 		b	Ldata_unknown
 		b	Ldata_lateldrpostconst		@ ldr	rd, [rn], #m
@@ -142,12 +144,40 @@ ENTRY(cpu_arm720_data_abort)
 		b	Ldata_simple			@ ldc	rd, [rn], #m	@ Same as ldr	rd, [rn], #m
 		b	Ldata_simple			@ ldc	rd, [rn, #m]
 		b	Ldata_unknown
+
 Ldata_unknown:	@ Part of jumptable
 		mov	r0, r2
 		mov	r1, r4
 		mov	r2, r3
 		bl	baddataabort
 		b	ret_from_sys_call
+
+Ldata_lateldrhpre:
+		tst	r4, #1 << 21			@ check writeback bit
+		beq	Ldata_simple
+Ldata_lateldrhpost:
+		tst	r4, #1 << 22			@ check if register or immediate offset
+		beq	Ldata_lateldrhpostreg
+Ldata_lateldrhpostconst:
+		and	r2, r4, #0xf			@ load and clear low nibble of const offset
+		and	r5, r4, #0xf00			@ load and clear high nibble of const offset
+		orrs	r2, r2, r5, lsr #4		@ create offset
+		beq	Ldata_simple			@ don't have to do anything if zero
+		and	r5, r4, #0xf << 16		@ get Rn
+		ldr	r0, [sp, r5, lsr #14]
+		tst	r4, #1 << 23			@ U bit
+		subne	r7, r0, r2, lsr #20
+		addeq	r7, r0, r2, lsr #20
+		b	Ldata_saver7
+Ldata_lateldrhpostreg:
+		and	r5, r4, #0xf
+		ldr	r2, [sp, r5, lsl #2]		@ get Rm
+		and	r5, r4, #0xf << 16
+		ldr	r0, [sp, r5, lsr #14]		@ get Rn
+		tst	r4, #1 << 23
+		subne	r7, r0, r2
+		addeq	r7, r0, r2
+		b	Ldata_saver7
 
 Ldata_lateldrpreconst:
 		tst	r4, #1 << 21			@ check writeback bit
@@ -219,7 +249,6 @@ Ldata_lateldrpostreg:
  * Function: arm720_check_bugs (void)
  *	   : arm720_proc_init (void)
  *	   : arm720_proc_fin (void)
- *	   : arm720_proc_do_idle (void)
  *
  * Notes   : This processor does not require these
  */
@@ -240,8 +269,22 @@ ENTRY(cpu_arm720_proc_fin)
 		mcr	p15, 0, r0, c1, c0, 0		@ disable caches
 		mov	pc, lr
 
+/*
+ * Function: arm720_proc_do_idle (void)
+ *
+ * Params  : r0 = call type:
+ *           0 = slow idle
+ *           1 = fast idle
+ *           2 = switch to slow processor clock
+ *           3 = switch to fast processor clock
+ *
+ * Purpose : put the processer in proper idle mode
+ */
 ENTRY(cpu_arm720_do_idle)
-		mov	r0, #-EINVAL
+		ldr	r2, =IO_BASE			@ Virt addr of IO
+		add	r2, r2, #0x00050000		@ Start of PMU regs
+		mov	r1, #0x01			@ Idle mode
+		str	r1, [r2, #4]			
 		mov	pc, lr
 
 /*

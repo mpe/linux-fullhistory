@@ -31,18 +31,12 @@
 #include <asm/io.h>
 #include <asm/system.h>
 
-#ifndef cliIF
-#define cliIF()
-#endif
-
 /*
- * Maximum IRQ count.  Currently, this is arbitary.
- * However, it should not be set too low to prevent
- * false triggering.  Conversely, if it is set too
- * high, then you could miss a stuck IRQ.
+ * Maximum IRQ count.  Currently, this is arbitary.  However, it should
+ * not be set too low to prevent false triggering.  Conversely, if it
+ * is set too high, then you could miss a stuck IRQ.
  *
- * Maybe we ought to set a timer and re-enable the
- * IRQ at a later time?
+ * Maybe we ought to set a timer and re-enable the IRQ at a later time?
  */
 #define MAX_IRQ_CNT	100000
 
@@ -94,7 +88,6 @@ void disable_irq(unsigned int irq)
 	unsigned long flags;
 
 	spin_lock_irqsave(&irq_controller_lock, flags);
-	cliIF();
 	irq_desc[irq].enabled = 0;
 	irq_desc[irq].mask(irq);
 	spin_unlock_irqrestore(&irq_controller_lock, flags);
@@ -105,7 +98,6 @@ void enable_irq(unsigned int irq)
 	unsigned long flags;
 
 	spin_lock_irqsave(&irq_controller_lock, flags);
-	cliIF();
 	irq_desc[irq].probing = 0;
 	irq_desc[irq].triggered = 0;
 	irq_desc[irq].enabled = 1;

@@ -29,6 +29,7 @@ comment 'System Type'
 
 choice 'ARM system type'	\
 	"Archimedes/A5000	CONFIG_ARCH_ARCA5K \
+	 Cirrus-CL-PS7500FE     CONFIG_ARCH_CLPS7500 \
 	 Co-EBSA285		CONFIG_ARCH_CO285 \
 	 EBSA-110		CONFIG_ARCH_EBSA110 \
 	 FootBridge		CONFIG_ARCH_FOOTBRIDGE \
@@ -62,6 +63,7 @@ if [ "$CONFIG_ARCH_SA1100" = "y" ]; then
       bool '  Include support for Neponset' CONFIG_ASSABET_NEPONSET
    fi
    bool '  Include support for Brutus' CONFIG_SA1100_BRUTUS
+   bool '  Include support for CerfBoard' CONFIG_SA1100_CERF
    bool '  Include support for Compaq iPAQ H3600 (Bitsy)' CONFIG_SA1100_BITSY
 #   bool '  Include support for Empeg' CONFIG_SA1100_EMPEG
 #   bool '  Include support for Itsy' CONFIG_SA1100_ITSY
@@ -69,9 +71,52 @@ if [ "$CONFIG_ARCH_SA1100" = "y" ]; then
 #   bool '  Include support for PLEB' CONFIG_SA1100_PLEB
    bool '  Include support for ThinClient' CONFIG_SA1100_THINCLIENT
    bool '  Include support for GraphicsClient' CONFIG_SA1100_GRAPHICSCLIENT
+   bool '  Include support for nanoEngine' CONFIG_SA1100_NANOENGINE
    bool '  Include support for Victor' CONFIG_SA1100_VICTOR
 #   bool '  Include support for Tifon' CONFIG_SA1100_TIFON
-#   bool '  Include support for XP860' CONFIG_SA1100_XP860
+   bool '  Include support for XP860' CONFIG_SA1100_XP860
+
+   bool '  Load kernel using Angel Debug Monitor' CONFIG_ANGELBOOT
+
+   # Determine if SA1111 support is required
+   if [ "$CONFIG_ASSABET_NEPONSET" = "y" -o \
+	"$CONFIG_SA1100_XP860" = "y" ]; then
+      define_bool CONFIG_SA1111 y
+   fi
+fi
+
+# Definitions to make life easier
+if [ "$CONFIG_ARCH_ARCA5K" = "y" -o \
+     "$CONFIG_ARCH_RPC" = "y" ]; then
+   define_bool CONFIG_ARCH_ACORN y
+else
+   define_bool CONFIG_ARCH_ACORN n
+fi
+
+# see Documentation/arm/ConfigVars for a description of these
+if [ "$CONFIG_ARCH_CO285" = "y" -o \
+     "$CONFIG_ARCH_FOOTBRIDGE" = "y" ]; then
+   define_bool CONFIG_FOOTBRIDGE y
+else
+   define_bool CONFIG_FOOTBRIDGE n
+fi
+if [ "$CONFIG_ARCH_CATS" = "y" -o \
+     "$CONFIG_ARCH_EBSA285_HOST" = "y" -o \
+     "$CONFIG_ARCH_NETWINDER" = "y" -o \
+     "$CONFIG_ARCH_PERSONAL_SERVER" = "y" ]; then
+   define_bool CONFIG_FOOTBRIDGE_HOST y
+else
+   define_bool CONFIG_FOOTBRIDGE_HOST n
+fi
+if [ "$CONFIG_ARCH_CO285" = "y" -o \
+     "$CONFIG_ARCH_EBSA285_ADDIN" = "y" ]; then
+   define_bool CONFIG_FOOTBRIDGE_ADDIN y
+else
+   define_bool CONFIG_FOOTBRIDGE_ADDIN n
+fi
+if [ "$CONFIG_ARCH_EBSA285_HOST" = "y" -o \
+     "$CONFIG_ARCH_EBSA285_ADDIN" = "y" ]; then
+   define_bool CONFIG_ARCH_EBSA285 y
 fi
 
 # Figure out whether this system uses 26-bit or 32-bit CPUs.
@@ -113,38 +158,6 @@ if [ "$CONFIG_ARCH_SA1100" = "y" ]; then
 fi
 
 # Select various configuration options depending on the machine type
-if [ "$CONFIG_ARCH_ARCA5K" = "y" -o \
-     "$CONFIG_ARCH_RPC" = "y" ]; then
-   define_bool CONFIG_ARCH_ACORN y
-else
-   define_bool CONFIG_ARCH_ACORN n
-fi
-
-if [ "$CONFIG_ARCH_CO285" = "y" -o \
-     "$CONFIG_ARCH_FOOTBRIDGE" = "y" ]; then
-   define_bool CONFIG_FOOTBRIDGE y
-else
-   define_bool CONFIG_FOOTBRIDGE n
-fi
-if [ "$CONFIG_ARCH_CATS" = "y" -o \
-     "$CONFIG_ARCH_EBSA285_HOST" = "y" -o \
-     "$CONFIG_ARCH_NETWINDER" = "y" -o \
-     "$CONFIG_ARCH_PERSONAL_SERVER" = "y" ]; then
-   define_bool CONFIG_FOOTBRIDGE_HOST y
-else
-   define_bool CONFIG_FOOTBRIDGE_HOST n
-fi
-if [ "$CONFIG_ARCH_CO285" = "y" -o \
-     "$CONFIG_ARCH_EBSA285_ADDIN" = "y" ]; then
-   define_bool CONFIG_FOOTBRIDGE_ADDIN y
-else
-   define_bool CONFIG_FOOTBRIDGE_ADDIN n
-fi
-if [ "$CONFIG_ARCH_EBSA285_HOST" = "y" -o \
-     "$CONFIG_ARCH_EBSA285_ADDIN" = "y" ]; then
-   define_bool CONFIG_ARCH_EBSA285 y
-fi
-
 if [ "$CONFIG_ARCH_SA1100" = "y" ]; then
    define_bool CONFIG_DISCONTIGMEM y
 else
@@ -166,6 +179,15 @@ if [ "$CONFIG_FOOTBRIDGE_HOST" = "y" -o \
 else
    define_bool CONFIG_ISA n
    define_bool CONFIG_ISA_DMA n
+fi
+
+# Do we have a PC-type keyboard in this architecture?
+if [ "$CONFIG_FOOTBRIDGE_HOST" = "y" ]; then
+   define_bool CONFIG_PC_KEYB y
+   define_bool CONFIG_PC_KEYMAP y
+fi
+if [ "$CONFIG_SA1100_ASSABET" = "y" ]; then
+   define_bool CONFIG_PC_KEYMAP y
 fi
 endmenu
 
@@ -199,6 +221,7 @@ if [ "$CONFIG_CPU_32" = "y" ]; then
 fi
 if [ "$CONFIG_ARCH_EBSA110" = "y" -o \
      "$CONFIG_ARCH_SA1100" = "y" -o \
+     "$CONFIG_ARCH_CLPS7500" = "y" -o \
      "$CONFIG_ARCH_PERSONAL_SERVER" = "y" -o \
      "$CONFIG_ARCH_CATS" = "y" ]; then
    string 'Default kernel command string' CONFIG_CMDLINE ""

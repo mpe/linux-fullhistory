@@ -27,21 +27,27 @@
 #ifndef _TIMER_H
 #define _TIMER_H
 
+#include <linux/interrupt.h>
+#include "hwaccess.h"
+
 struct emu_timer 
 {
 	struct list_head list;
 	struct tasklet_struct tasklet;
-	int active;
+	u8 state; 
 	u32 count;				/* current number of interrupts */
 	u32 count_max;				/* number of interrupts needed to schedule the bh */
 	u32 delay;                              /* timer delay */
 };
 
-struct emu_timer *emu10k1_timer_install(struct emu10k1_card *, void (*)(unsigned long), unsigned long, u32);
+void emu10k1_timer_install(struct emu10k1_card *, struct emu_timer *, u32);
 void emu10k1_timer_uninstall(struct emu10k1_card *, struct emu_timer *);
 void emu10k1_timer_enable(struct emu10k1_card *, struct emu_timer *);
 void emu10k1_timer_disable(struct emu10k1_card *, struct emu_timer *);
 
-#define TIMER_STOPPED 0xffffffff 
+#define TIMER_STOPPED 			0xffffffff 
+#define TIMER_STATE_INSTALLED 		0x01
+#define TIMER_STATE_ACTIVE		0x02
+#define TIMER_STATE_UNINSTALLED 	0x04
 
 #endif /* _TIMER_H */

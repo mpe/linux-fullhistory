@@ -111,7 +111,6 @@
 
 #include <asm/bitops.h>
 #include <asm/mmu_context.h>
-#include <asm/processor.h>
 #include <asm/system.h>
 
 /*

@@ -12,6 +12,7 @@
  *  29-07-1998	RMK	Major re-work of IDE architecture specific code
  */
 #include <asm/irq.h>
+#include <asm/mach-types.h>
 
 /*
  * Set up a hw structure for a specified data port, control port and IRQ.

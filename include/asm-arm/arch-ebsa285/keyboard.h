@@ -6,10 +6,9 @@
  * (C) 1998 Russell King
  * (C) 1998 Phil Blundell
  */
+#include <linux/ioport.h>
 #include <asm/irq.h>
 #include <asm/system.h>
-
-extern int have_isa_bridge;
 
 extern int pckbd_setkeycode(unsigned int scancode, unsigned int keycode);
 extern int pckbd_getkeycode(unsigned int scancode);
@@ -71,7 +70,7 @@ extern unsigned char pckbd_sysrq_xlate[128];
 #define SYSRQ_KEY	0x54
 
 /* resource allocation */
-#define kbd_request_region()
+#define kbd_request_region()	request_region(0x60, 16, "keyboard")
 #define kbd_request_irq(handler) request_irq(KEYBOARD_IRQ, handler, 0, \
 					     "keyboard", NULL)
 

@@ -4,6 +4,8 @@
 # Copyright (C) 1995-1999 Russell King
 #
 
+USE_STANDARD_AS_RULE := true
+
 L_TARGET := lib.a
 L_OBJS   := changebit.o csumipv6.o csumpartial.o csumpartialcopy.o \
 	    csumpartialcopyuser.o clearbit.o copy_page.o findbit.o \
@@ -35,9 +37,6 @@ endif
 L_OBJS	+= $(L_OBJS_$(MACHINE))
 
 include $(TOPDIR)/Rules.make
-
-.S.o:
-	$(CC) $(AFLAGS) -traditional -c -o $*.o $<
 
 constants.h: getconsdata.o extractconstants.pl
 	$(PERL) extractconstants.pl $(OBJDUMP) > $@

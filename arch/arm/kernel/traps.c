@@ -30,7 +30,7 @@
 
 extern void c_backtrace (unsigned long fp, int pmode);
 
-char *processor_modes[]=
+const char *processor_modes[]=
 { "USER_26", "FIQ_26" , "IRQ_26" , "SVC_26" , "UK4_26" , "UK5_26" , "UK6_26" , "UK7_26" ,
   "UK8_26" , "UK9_26" , "UK10_26", "UK11_26", "UK12_26", "UK13_26", "UK14_26", "UK15_26",
   "USER_32", "FIQ_32" , "IRQ_32" , "SVC_32" , "UK4_32" , "UK5_32" , "UK6_32" , "ABT_32" ,
@@ -414,7 +414,7 @@ void __bug(const char *file, int line, void *data)
 	if (data)
 		printk(KERN_CRIT" - extra data = %p", data);
 	printk("\n");
-	BUG();
+	*(int *)0 = 0;
 }
 
 void __readwrite_bug(const char *fn)

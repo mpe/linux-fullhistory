@@ -4,7 +4,7 @@
  * Copyright (c) 2000 Steve Hill (sjhill@cotw.com)
  *
  * Changelog:
- *  29-03-2000	SJH	Created file placeholder
+ *  03-29-2000	SJH	Created file placeholder
  */
 #include <asm/irq.h>
 

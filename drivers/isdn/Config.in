@@ -83,7 +83,15 @@ if [ "$CONFIG_EXPERIMENTAL" != "n" ]; then
 fi
 dep_tristate 'Eicon active card support' CONFIG_ISDN_DRV_EICON $CONFIG_ISDN
 if [ "$CONFIG_ISDN_DRV_EICON" != "n" ]; then
-   bool '  Eicon S,SX,SCOM,Quadro,S2M support' CONFIG_ISDN_DRV_EICON_ISA
+   if [ "$CONFIG_ISDN_DRV_EICON_STANDALONE" != "y" ]; then
+      if [ "$CONFIG_PCI" = "y" ]; then
+         bool '    Eicon PCI DIVA Server BRI/PRI/4BRI support' CONFIG_ISDN_DRV_EICON_PCI
+      fi
+      bool '    Eicon S,SX,SCOM,Quadro,S2M support' CONFIG_ISDN_DRV_EICON_ISA
+   fi
+   if [ "$CONFIG_PCI" = "y" ]; then
+      bool '    build eicon driver type standalone' CONFIG_ISDN_DRV_EICON_STANDALONE
+   fi
 fi
 dep_tristate 'CAPI2.0 support' CONFIG_ISDN_CAPI $CONFIG_ISDN
 if [ "$CONFIG_EXPERIMENTAL" != "n" ]; then

@@ -17,7 +17,7 @@
 
 #include <asm/delay.h>
 #include <asm/hardware.h>
-
+#include <asm/mach-types.h>
 
 /*
  * SA1100 GPIO edge detection for IRQs:
@@ -130,12 +130,40 @@ void __init sa1111_init(void){
    * any other SA-1111 functional blocks must be enabled separately
    * using the SKPCR.
    */
+
+  {
+  /*
+   * SA1111 DMA bus master setup 
+   */
+	int cas;
+
+	/* SA1111 side */
+	switch ( (MDCNFG>>12) & 0x03 ) {
+	case 0x02:
+		cas = 0; break;
+	case 0x03:
+		cas = 1; break;
+	default:
+		cas = 1; break;
+	}
+	SMCR = 1		/* 1: memory is SDRAM */
+		| ( 1 << 1 )	/* 1:MBGNT is enable */
+		| ( ((MDCNFG >> 4) & 0x07) << 2 )	/* row address lines */
+		| ( cas << 5 );	/* CAS latency */
+
+	/* SA1110 side */
+	GPDR |= 1<<21;
+	GPDR &= ~(1<<22);
+	GAFR |= ( (1<<21) | (1<<22) );
+
+	TUCR |= (1<<10);
+  }
 }
 
 #endif
 
 
-static void __init hw_sa1100_init(void)
+static int __init hw_sa1100_init(void)
 {
 	if( machine_is_assabet() ){
 		if(machine_has_neponset()){
@@ -147,7 +175,10 @@ static void __init hw_sa1100_init(void)
 				"hasn't been configured in the kernel\n" );
 #endif
 		}
+	} else if (machine_is_xp860()) {
+		sa1111_init();
 	}
+	return 0;
 }
 
 module_init(hw_sa1100_init);

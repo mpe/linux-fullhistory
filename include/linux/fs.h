@@ -71,8 +71,6 @@ extern int max_super_blocks, nr_super_blocks;
 #define READA 2		/* read-ahead  - don't block if no resources */
 #define SPECIAL 4	/* For non-blockdevice requests in request queue */
 
-#define WRITERAW 5	/* raw write - don't play with buffer lists */
-
 #define SEL_IN		1
 #define SEL_OUT		2
 #define SEL_EX		4

@@ -54,8 +54,6 @@ static void timer_interrupt(int irq, void *dev_id, struct pt_regs *regs)
  */
 extern __inline__ void setup_timer(void)
 {
-	xtime.tv_sec = RTC_RTCDR;
-
 	RTC_RTCC = 0;				/* Clear interrupt */
 
 	timer_irq.handler = timer_interrupt;

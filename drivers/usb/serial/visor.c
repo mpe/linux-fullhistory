@@ -11,6 +11,11 @@
  *
  * See Documentation/usb/usb-serial.txt for more information on using this driver
  * 
+ * (08/08/2000) gkh
+ *	Fixed endian problem in visor_startup.
+ *	Fixed MOD_INC and MOD_DEC logic and the ability to open a port more 
+ *	than once.
+ * 
  * (07/23/2000) gkh
  *	Added pool of write urbs to speed up transfers to the visor.
  * 
@@ -71,6 +76,7 @@ static int  visor_write		(struct usb_serial_port *port, int from_user, const uns
 static void visor_throttle	(struct usb_serial_port *port);
 static void visor_unthrottle	(struct usb_serial_port *port);
 static int  visor_startup	(struct usb_serial *serial);
+static void visor_shutdown	(struct usb_serial *serial);
 static int  visor_ioctl		(struct usb_serial_port *port, struct file * file, unsigned int cmd, unsigned long arg);
 static void visor_set_termios	(struct usb_serial_port *port, struct termios *old_termios);
 static void visor_write_bulk_callback (struct urb *urb);
@@ -94,6 +100,7 @@ struct usb_serial_device_type handspring_device = {
 	throttle:		visor_throttle,
 	unthrottle:		visor_unthrottle,
 	startup:		visor_startup,
+	shutdown:		visor_shutdown,
 	ioctl:			visor_ioctl,
 	set_termios:		visor_set_termios,
 	write:			visor_write,
@@ -117,13 +124,18 @@ static int visor_open (struct usb_serial_port *port, struct file *filp)
 		return -EINVAL;
 	}
 
-	port->active = 1;
+	++port->open_count;
+	MOD_INC_USE_COUNT;
+	
+	if (!port->active) {
+		port->active = 1;
 
-	/*Start reading from the device*/
-	if (usb_submit_urb(port->read_urb))
-		dbg(__FUNCTION__  " - usb_submit_urb(read bulk) failed");
-
-	return (0);
+		/*Start reading from the device*/
+		if (usb_submit_urb(port->read_urb))
+			dbg(__FUNCTION__  " - usb_submit_urb(read bulk) failed");
+	}
+	
+	return 0;
 }
 
 
@@ -134,19 +146,24 @@ static void visor_close (struct usb_serial_port *port, struct file * filp)
 	
 	dbg(__FUNCTION__ " - port %d", port->number);
 			 
-	if (!transfer_buffer) {
-		err(__FUNCTION__ " - kmalloc(%d) failed.", 0x12);
-	} else {
-		/* send a shutdown message to the device */
-		usb_control_msg (serial->dev, usb_rcvctrlpipe(serial->dev, 0), VISOR_CLOSE_NOTIFICATION,
-				0xc2, 0x0000, 0x0000, transfer_buffer, 0x12, 300);
-		kfree (transfer_buffer);
-	}
+	--port->open_count;
+	MOD_DEC_USE_COUNT;
 
-	/* shutdown our bulk reads and writes */
-	usb_unlink_urb (port->write_urb);
-	usb_unlink_urb (port->read_urb);
-	port->active = 0;
+	if (port->open_count <= 0) {
+		if (!transfer_buffer) {
+			err(__FUNCTION__ " - kmalloc(%d) failed.", 0x12);
+		} else {
+			/* send a shutdown message to the device */
+			usb_control_msg (serial->dev, usb_rcvctrlpipe(serial->dev, 0), VISOR_CLOSE_NOTIFICATION,
+					0xc2, 0x0000, 0x0000, transfer_buffer, 0x12, 300);
+			kfree (transfer_buffer);
+		}
+
+		/* shutdown our bulk read */
+		usb_unlink_urb (port->read_urb);
+		port->active = 0;
+		port->open_count = 0;
+	}
 }
 
 
@@ -282,6 +299,8 @@ static int  visor_startup (struct usb_serial *serial)
 	} else {
 		struct visor_connection_info *connection_info = (struct visor_connection_info *)transfer_buffer;
 		char *string;
+
+		le16_to_cpus(&connection_info->num_ports);
 		info("%s: Number of ports: %d", serial->type->name, connection_info->num_ports);
 		for (i = 0; i < connection_info->num_ports; ++i) {
 			switch (connection_info->connections[i].port_function_id) {
@@ -319,6 +338,21 @@ static int  visor_startup (struct usb_serial *serial)
 
 	/* continue on with initialization */
 	return (0);
+}
+
+
+static void visor_shutdown (struct usb_serial *serial)
+{
+	int i;
+
+	dbg (__FUNCTION__);
+
+	/* stop reads and writes on all ports */
+	for (i=0; i < serial->num_ports; ++i) {
+		while (serial->port[i].open_count > 0) {
+			visor_close (&serial->port[i], NULL);
+		}
+	}
 }
 
 

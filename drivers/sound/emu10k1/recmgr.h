@@ -32,31 +32,17 @@
 #ifndef _RECORDMGR_H
 #define _RECORDMGR_H
 
-struct record 
-{
-	struct emu10k1_card *card;
-	u8 *recbuffer;
-	u32 recpos;
-	int is_stereo;
-	int is_16bit;
-	u32 recbufsize;
-	u32 bufsize;
-	u32 bufsizereg;
-	u32 bufaddrreg;
-	u32 bufidxreg;
-	u32 adcctl;
-	unsigned long busaddx;
-	u32 samplingrate;
-};
+#include "hwaccess.h"
+#include "cardwi.h"
 
 /* Recording resources */
 #define WAVERECORD_AC97		0x01
 #define WAVERECORD_MIC		0x02
 #define WAVERECORD_FX		0x03
 
-void emu10k1_start_record(struct record *);
-void emu10k1_stop_record(struct record *);
-void emu10k1_set_record_src(struct record *, u8);
+void emu10k1_start_record(struct emu10k1_card *, struct wavein_buffer *);
+void emu10k1_stop_record(struct emu10k1_card *, struct wavein_buffer *);
+void emu10k1_set_record_src(struct emu10k1_card *, struct wiinst *wiinst);
 
 
 #endif /* _RECORDMGR_H */

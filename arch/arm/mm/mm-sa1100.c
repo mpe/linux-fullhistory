@@ -23,6 +23,7 @@
 #include <asm/hardware.h>
 #include <asm/pgtable.h>
 #include <asm/page.h>
+#include <asm/mach-types.h>
 
 #include "map.h"
  
@@ -53,10 +54,27 @@ static struct map_desc assabet_io_desc[] __initdata = {
 #endif
 };
 
+static struct map_desc nanoengine_io_desc[] __initdata = {
+#ifdef CONFIG_SA1100_NANOENGINE
+  { 0xd0000000, 0x00000000, 0x02000000, DOMAIN_IO, 1, 1, 0, 0 }, /* Flash bank 0 */
+  { 0xd4000000, 0x10000000, 0x00100000, DOMAIN_IO, 1, 1, 0, 0 }, /* System Registers */
+  { 0xdc000000, 0x18A00000, 0x00100000, DOMAIN_IO, 1, 1, 0, 0 }, /* Internal PCI Config Space */
+  SA1100_STD_IO_MAPPING
+#endif
+};
+
 static struct map_desc bitsy_io_desc[] __initdata = {
 #ifdef CONFIG_SA1100_BITSY
   { 0xd0000000, 0x00000000, 0x02000000, DOMAIN_IO, 1, 1, 0, 0 }, /* Flash bank 0 */
   { 0xdc000000, 0x49000000, 0x02000000, DOMAIN_IO, 1, 1, 0, 0 }, /* EGPIO 0 */
+  SA1100_STD_IO_MAPPING
+#endif
+};
+
+static struct map_desc cerf_io_desc[] __initdata = {
+#ifdef CONFIG_SA1100_CERF
+  { 0xd8000000, 0x08000000, 0x00100000, DOMAIN_IO, 1, 1, 0, 0 }, /* Crystal Chip */
+  { 0xd0000000, 0x00000000, 0x01000000, DOMAIN_IO, 1, 1, 0, 0 }, /* Flash bank 0 */
   SA1100_STD_IO_MAPPING
 #endif
 };
@@ -73,6 +91,14 @@ static struct map_desc graphicsclient_io_desc[] __initdata = {
   { 0xd0000000, 0x08000000, 0x00800000, DOMAIN_IO, 1, 1, 0, 0 }, /* Flash bank 1 */
   { 0xd0800000, 0x18000000, 0x00800000, DOMAIN_IO, 1, 1, 0, 0 }, /* Flash bank 3 */
   { 0xdc000000, 0x10000000, 0x00400000, DOMAIN_IO, 0, 1, 0, 0 }, /* CPLD */
+  SA1100_STD_IO_MAPPING
+#endif
+};
+
+static struct map_desc lart_io_desc[] __initdata = {
+#ifdef CONFIG_SA1100_LART
+  { 0xd0000000, 0x00000000, 0x00400000, DOMAIN_IO, 1, 1, 0, 0 }, /* main flash memory */
+  { 0xd8000000, 0x08000000, 0x00400000, DOMAIN_IO, 1, 1, 0, 0 }, /* main flash, alternative location */
   SA1100_STD_IO_MAPPING
 #endif
 };
@@ -104,6 +130,14 @@ static struct map_desc victor_io_desc[] __initdata = {
 #endif
 };
 
+static struct map_desc xp860_io_desc[] __initdata = {
+#ifdef CONFIG_SA1100_XP860
+  { 0xd8000000, 0x40000000, 0x00800000, DOMAIN_IO, 1, 1, 0, 0 }, /* SA-1111 */
+  { 0xda000000, 0x10000000, 0x00100000, DOMAIN_IO, 1, 1, 0, 0 }, /* SCSI */
+  { 0xdc000000, 0x18000000, 0x00100000, DOMAIN_IO, 1, 1, 0, 0 }, /* LAN */
+  SA1100_STD_IO_MAPPING
+#endif
+};
 
 static struct map_desc default_io_desc[] __initdata = {
   SA1100_STD_IO_MAPPING
@@ -122,15 +156,24 @@ void __init select_sa1100_io_desc(void)
 	if( machine_is_assabet() ) {
 		memcpy( io_desc, assabet_io_desc, sizeof(assabet_io_desc) );
 		io_desc_size = SIZE(assabet_io_desc);
+	} else if( machine_is_nanoengine() ) {
+		memcpy( io_desc, nanoengine_io_desc, sizeof(nanoengine_io_desc) );
+		io_desc_size = SIZE(nanoengine_io_desc);
 	} else if( machine_is_bitsy() ) {
 		memcpy( io_desc, bitsy_io_desc, sizeof(bitsy_io_desc) );
 		io_desc_size = SIZE(bitsy_io_desc);
+	} else if( machine_is_cerf() ) {
+		memcpy( io_desc, cerf_io_desc, sizeof(cerf_io_desc) );
+		io_desc_size = SIZE(cerf_io_desc);
 	} else if( machine_is_empeg() ) {
 		memcpy( io_desc, empeg_io_desc, sizeof(empeg_io_desc) );
 		io_desc_size = SIZE(empeg_io_desc);
 	} else if( machine_is_graphicsclient() ) {
 		memcpy( io_desc, graphicsclient_io_desc, sizeof(graphicsclient_io_desc) );
 		io_desc_size = SIZE(graphicsclient_io_desc);
+	} else if( machine_is_lart() ) {
+	        memcpy( io_desc, lart_io_desc, sizeof(lart_io_desc) );
+		io_desc_size = SIZE(lart_io_desc);
 	} else if( machine_is_thinclient() ) {
 		memcpy( io_desc, thinclient_io_desc, sizeof(thinclient_io_desc) );
 		io_desc_size = SIZE(thinclient_io_desc);
@@ -140,6 +183,9 @@ void __init select_sa1100_io_desc(void)
 	} else if( machine_is_victor() ) {
 		memcpy( io_desc, victor_io_desc, sizeof(victor_io_desc) );
 		io_desc_size = SIZE(victor_io_desc);
+	} else if( machine_is_xp860() ) {
+		memcpy( io_desc, xp860_io_desc, sizeof(xp860_io_desc) );
+		io_desc_size = SIZE(xp860_io_desc);
 	} else {
 		memcpy( io_desc, default_io_desc, sizeof(default_io_desc) );
 		io_desc_size = SIZE(default_io_desc);

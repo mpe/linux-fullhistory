@@ -9,8 +9,9 @@
  *  Runtime test for Neponset added.
  */
 
-#define __ASSEMBLY__
 #include <linux/linkage.h>
+#include <linux/config.h>
+#include <asm/mach-types.h>
 
 		.text
 
@@ -44,6 +45,12 @@ SCR_loc:	.long	SYMBOL_NAME(SCR_value)
 #define GPIO_2_9	0x3fc
 
 
+/*
+ * void sa1100_setup( int arch_id );
+ *
+ * This is called from decompress_kernel() with the arch_decomp_setup() macro.
+ */
+
 ENTRY(sa1100_setup)
 		mov	r3, r0			@ keep machine type in r3
 
@@ -51,7 +58,7 @@ ENTRY(sa1100_setup)
 @ (taken from "Intel StrongARM SA-1110 Microprocessor Development Board
 @ User's Guide," p.4-9)
 
-		teq	r3, #25			@ MACH_TYPE_ASSABET
+		teq	r3, #MACH_TYPE_ASSABET
 		bne	skip_SCR
 
 		ldr	r0, GPIO_BASE
@@ -80,8 +87,8 @@ ENTRY(sa1100_setup)
 skip_SCR:
 
 		@ Initialize UART (if bootloader has not done it yet)...
-		teq	r3, #16			@ MACH_TYPE_BRUTUS
-		teqne	r3, #25			@ MACH_TYPE_ASSABET
+		teq	r3, #MACH_TYPE_BRUTUS
+		teqne	r3, #MACH_TYPE_ASSABET
 		bne	skip_uart
 
 		@ UART3 if Assabet is used with Neponset
@@ -92,7 +99,7 @@ skip_SCR:
 
 		@ At least for Brutus, the UART1 is used through
 		@ the alternate GPIO function...
-		teq	r3, #16			@ MACH_TYPE_BRUTUS
+		teq	r3, #MACH_TYPE_BRUTUS
 		bne	uart1
 
 alt_GPIO_uart:	ldr	r0, GPIO_BASE
@@ -126,5 +133,14 @@ uart_init:	ldr	r1, [r0, #UTSR1]
 		mov	r1, #0xff		@ flush status reg
 		str	r1, [r0, #UTSR0]
 skip_uart:
+
+		@ Extra specific setup calls
+		@ The machine type is passed in r0
+		mov	r0, r3
+#ifdef CONFIG_SA1100_NANOENGINE
+		teq	r0, #32			@ MACH_TYPE_NANOENGINE
+		beq	SYMBOL_NAME(bse_setup)
+#endif
+
 out:		mov	pc, lr
 

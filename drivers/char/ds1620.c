@@ -13,6 +13,7 @@
 #include <linux/init.h>
 
 #include <asm/hardware.h>
+#include <asm/mach-types.h>
 #include <asm/uaccess.h>
 #include <asm/therm.h>
 

@@ -101,7 +101,7 @@ static cycx_t *card_array = NULL;	/* adapter data space */
  *		< 0	error.
  * Context:	process
  */
-static int __init cyclomx_init (void)
+int __init cyclomx_init (void)
 {
 	int cnt, err = 0;
 

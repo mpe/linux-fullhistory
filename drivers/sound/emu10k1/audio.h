@@ -33,12 +33,15 @@
 #ifndef _AUDIO_H
 #define _AUDIO_H
 
-#define __NO_VERSION__
-#include <linux/module.h>
-#include <linux/poll.h>
-#include <asm/uaccess.h>
-
 #define MINFRAGS	2	/* _don't_ got bellow 2 */
+
+struct emu10k1_wavedevice
+{
+        struct emu10k1_card *card;
+        struct wiinst *wiinst;
+        struct woinst *woinst;
+        u16 enablebits;
+};
 
 void emu10k1_waveout_bh(unsigned long);
 void emu10k1_wavein_bh(unsigned long);

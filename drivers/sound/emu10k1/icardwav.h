@@ -32,21 +32,19 @@
 #ifndef _ICARDWAV_H
 #define _ICARDWAV_H
 
-/* Enumeration for SetControl */
-enum
-{
-        WAVECURPOS = 0x10,
-};
-
 struct wave_format 
 {
-	u32 samplingrate;
-	u32 bitsperchannel;
-	u32 channels;		/* 1 = Mono, 2 = Stereo */
+	int samplingrate;
+	u8 bitsperchannel;
+	u8 channels;		/* 1 = Mono, 2 = Stereo */
+	u8 bytesperchannel;
+	u8 bytespersample;
+	int bytespersec;
 };
 
 /* emu10k1_wave states */
-#define CARDWAVE_STATE_STOPPED     0x0001
-#define CARDWAVE_STATE_STARTED     0x0002
+#define WAVE_STATE_OPEN		0x01	
+#define WAVE_STATE_STARTED	0x02
+#define WAVE_STATE_CLOSED	0x04
 
 #endif /* _ICARDWAV_H */

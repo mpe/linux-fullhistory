@@ -77,6 +77,10 @@ extern void set_GPIO_IRQ_edge( int gpio_mask, int edge_mask );
 #define machine_has_neponset()	(0)
 #endif
 
+#ifdef CONFIG_SA1100_CERF
+#include "cerf.h"
+#endif
+
 #ifdef CONFIG_SA1100_EMPEG
 #include "empeg.h"
 #endif

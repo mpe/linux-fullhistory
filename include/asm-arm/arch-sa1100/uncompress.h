@@ -9,6 +9,8 @@
 #include "hardware.h"
 #include "serial_reg.h"
 
+#include <asm/mach-types.h>
+
 /* Assabet's Status Control "Register" */
 unsigned long SCR_value;
 
@@ -29,7 +31,7 @@ static void puts( const char *s )
 			serial_port = (unsigned long *)_Ser3UTCR0;
 		else
 			serial_port = (unsigned long *)_Ser1UTCR0;
-	} else if (machine_is_brutus())
+	} else if (machine_is_brutus()||machine_is_nanoengine())
 		serial_port = (unsigned long *)_Ser1UTCR0;
 	else if (machine_is_empeg() || machine_is_bitsy() ||
 		 machine_is_victor() || machine_is_lart())

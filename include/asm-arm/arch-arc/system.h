@@ -5,21 +5,6 @@
  */
 #include <linux/config.h>
 
-#ifdef CONFIG_ARCH_ARC
-
-#define cliIF()				\
-	do {				\
-	  unsigned long temp;		\
-	  __asm__ __volatile__(		\
-"	mov	%0, pc\n"		\
-"	orr %0, %0, #0x0c000000\n"	\
-"	teqp	%0, #0\n"		\
-	  : "=r" (temp)	\
-    : );	\
-  } while(0)
-
-#endif
-
 static void arch_idle(void)
 {
 	while (!current->need_resched && !hlt_counter);

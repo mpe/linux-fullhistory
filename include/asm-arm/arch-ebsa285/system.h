@@ -7,6 +7,7 @@
 #include <asm/io.h>
 #include <asm/hardware.h>
 #include <asm/leds.h>
+#include <asm/mach-types.h>
 
 static void arch_idle(void)
 {

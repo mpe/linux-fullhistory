@@ -31,6 +31,7 @@
  */
 
 #include "hwaccess.h"
+#include "8010.h"
 #include "cardmi.h"
 #include "cardmo.h"
 #include "irqmgr.h"
@@ -40,15 +41,12 @@
 void emu10k1_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 {
 	struct emu10k1_card *card = (struct emu10k1_card *) dev_id;
-	u32 irqstatus, ptr, tmp;
+	u32 irqstatus, tmp;
 
-	if (!(irqstatus = sblive_readfn0(card, IPR)))
+	if (!(irqstatus = emu10k1_readfn0(card, IPR)))
 		return;
 
 	DPD(4, "emu10k1_interrupt called, irq =  %u\n", irq);
-
-	/* Preserve PTR register */
-	ptr = sblive_readfn0(card, PTR);
 
 	/*
 	 ** NOTE :
@@ -85,43 +83,10 @@ void emu10k1_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 		if (irqstatus)
 			emu10k1_irq_disable(card, irqstatus);
 
-		sblive_writefn0(card, IPR, tmp);
+		emu10k1_writefn0(card, IPR, tmp);
 
-	} while ((irqstatus = sblive_readfn0(card, IPR)));
-
-	sblive_writefn0(card, PTR, ptr);
+	} while ((irqstatus = emu10k1_readfn0(card, IPR)));
 
 	return;
 }
 
-/* Enables the specified irq service */
-
-int emu10k1_irq_enable(struct emu10k1_card *card, u32 irqtype)
-{
-	/*
-	 * TODO :
-	 * put protection here so that we don't accidentally
-	 * screw-up another cardxxx objects irqs
-	 */
-
-	DPD(4, "emu10k1_irq_enable %x\n", irqtype);
-	sblive_wrtmskfn0(card, INTE, irqtype, ENABLE);
-
-	return CTSTATUS_SUCCESS;
-}
-
-/* Disables the specified irq service */
-
-int emu10k1_irq_disable(struct emu10k1_card *card, u32 irqtype)
-{
-	/*
-	 * TODO :
-	 * put protection here so that we don't accidentally
-	 * screw-up another cardxxx objects irqs
-	 */
-
-	DPD(4, "emu10k1_irq_disable %x\n", irqtype);
-	sblive_wrtmskfn0(card, INTE, irqtype, DISABLE);
-
-	return CTSTATUS_SUCCESS;
-}

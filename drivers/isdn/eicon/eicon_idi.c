@@ -1,4 +1,4 @@
-/* $Id: eicon_idi.c,v 1.33 2000/03/06 15:45:17 armin Exp $
+/* $Id: eicon_idi.c,v 1.41 2000/08/12 18:00:47 armin Exp $
  *
  * ISDN lowlevel-module for Eicon active cards.
  *        IDI interface 
@@ -25,135 +25,6 @@
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA. 
  *
- * $Log: eicon_idi.c,v $
- * Revision 1.33  2000/03/06 15:45:17  armin
- * Fixed incomplete number handling with BRI PtP connection.
- *
- * Revision 1.32  2000/03/04 17:04:21  armin
- * Fix of statemachine, B-connect before D-connect,
- * thanks to Helmut Adams <adams@ipcon.de>
- * Minor change in send-data packet handling.
- *
- * Revision 1.31  2000/02/22 16:26:40  armin
- * Fixed membase error message.
- * Fixed missing log buffer struct.
- *
- * Revision 1.30  2000/02/16 16:08:46  armin
- * Fixed virtual channel handling of IDI.
- *
- * Revision 1.29  2000/01/23 21:21:23  armin
- * Added new trace capability and some updates.
- * DIVA Server BRI now supports data for ISDNLOG.
- *
- * Revision 1.28  2000/01/20 19:55:34  keil
- * Add FAX Class 1 support
- *
- * Revision 1.27  1999/11/29 13:12:03  armin
- * Autoconnect on L2_TRANS doesn't work with link_level correctly,
- * changed back to former mode.
- *
- * Revision 1.26  1999/11/25 11:43:27  armin
- * Fixed statectrl and connect message.
- * X.75 fix and HDLC/transparent with autoconnect.
- * Minor cleanup.
- *
- * Revision 1.25  1999/11/18 20:30:55  armin
- * removed old workaround for ISA cards.
- *
- * Revision 1.24  1999/10/26 21:15:33  armin
- * using define for checking phone number len to avoid buffer overflow.
- *
- * Revision 1.23  1999/10/11 18:13:25  armin
- * Added fax capabilities for Eicon Diva Server cards.
- *
- * Revision 1.22  1999/10/08 22:09:33  armin
- * Some fixes of cards interface handling.
- * Bugfix of NULL pointer occurence.
- * Changed a few log outputs.
- *
- * Revision 1.21  1999/09/26 14:17:53  armin
- * Improved debug and log via readstat()
- *
- * Revision 1.20  1999/09/21 20:35:43  armin
- * added more error checking.
- *
- * Revision 1.19  1999/09/21 20:06:40  armin
- * Added pointer checks.
- *
- * Revision 1.18  1999/09/07 12:48:05  armin
- * Prepared for sub-address usage.
- *
- * Revision 1.17  1999/09/07 12:35:39  armin
- * Better checking and channel Id handling.
- *
- * Revision 1.16  1999/09/04 13:44:19  armin
- * Fix of V.42 analog Modem negotiation handling.
- *
- * Revision 1.15  1999/08/28 21:32:50  armin
- * Prepared for fax related functions.
- * Now compilable without errors/warnings.
- *
- * Revision 1.14  1999/08/28 20:24:40  armin
- * Corrected octet 3/3a in CPN/OAD information element.
- * Thanks to John Simpson <xfl23@dial.pipex.com>
- *
- * Revision 1.13  1999/08/22 20:26:44  calle
- * backported changes from kernel 2.3.14:
- * - several #include "config.h" gone, others come.
- * - "struct device" changed to "struct net_device" in 2.3.14, added a
- *   define in isdn_compat.h for older kernel versions.
- *
- * Revision 1.12  1999/08/18 20:16:59  armin
- * Added XLOG function for all cards.
- * Bugfix of alloc_skb NULL pointer.
- *
- * Revision 1.11  1999/07/25 15:12:03  armin
- * fix of some debug logs.
- * enabled ISA-cards option.
- *
- * Revision 1.10  1999/07/11 17:16:24  armin
- * Bugfixes in queue handling.
- * Added DSP-DTMF decoder functions.
- * Reorganized ack_handler.
- *
- * Revision 1.9  1999/03/29 11:19:42  armin
- * I/O stuff now in seperate file (eicon_io.c)
- * Old ISA type cards (S,SX,SCOM,Quadro,S2M) implemented.
- *
- * Revision 1.8  1999/03/02 12:37:43  armin
- * Added some important checks.
- * Analog Modem with DSP.
- * Channels will be added to Link-Level after loading firmware.
- *
- * Revision 1.7  1999/02/03 18:34:35  armin
- * Channel selection for outgoing calls w/o CHI.
- * Added channel # in debug messages.
- * L2 Transparent should work with 800 byte/packet now.
- *
- * Revision 1.6  1999/01/26 07:18:59  armin
- * Bug with wrong added CPN fixed.
- *
- * Revision 1.5  1999/01/24 20:14:11  armin
- * Changed and added debug stuff.
- * Better data sending. (still problems with tty's flip buffer)
- *
- * Revision 1.4  1999/01/10 18:46:05  armin
- * Bug with wrong values in HLC fixed.
- * Bytes to send are counted and limited now.
- *
- * Revision 1.3  1999/01/05 14:49:34  armin
- * Added experimental usage of full BC and HLC for
- * speech, 3.1kHz audio, fax gr.2/3
- *
- * Revision 1.2  1999/01/04 13:19:29  armin
- * Channel status with listen-request wrong - fixed.
- *
- * Revision 1.1  1999/01/01 18:09:41  armin
- * First checkin of new eicon driver.
- * DIVA-Server BRI/PCI and PRI/PCI are supported.
- * Old diehl code is obsolete.
- *
- *
  */
 
 #include <linux/config.h>
@@ -161,24 +32,13 @@
 #include "eicon.h"
 #include "eicon_idi.h"
 #include "eicon_dsp.h"
+#include "uxio.h"
 
 #undef EICON_FULL_SERVICE_OKTETT
 
-char *eicon_idi_revision = "$Revision: 1.33 $";
+char *eicon_idi_revision = "$Revision: 1.41 $";
 
 eicon_manifbuf *manbuf;
-
-static char BC_Speech[3] = 	{ 0x80, 0x90, 0xa3 };
-static char BC_31khz[3] =  	{ 0x90, 0x90, 0xa3 };
-static char BC_64k[2] =    	{ 0x88, 0x90 };
-static char BC_video[3] =  	{ 0x91, 0x90, 0xa5 };
-
-#ifdef EICON_FULL_SERVICE_OKTETT
-/* 
-static char HLC_telephony[2] =	{ 0x91, 0x81 }; 
-*/
-static char HLC_faxg3[2] =  	{ 0x91, 0x84 };
-#endif
 
 int eicon_idi_manage_assign(eicon_card *card);
 int eicon_idi_manage_remove(eicon_card *card);
@@ -209,7 +69,7 @@ idi_assign_req(eicon_REQ *reqbuf, int signet, eicon_chan *chan)
 	reqbuf->XBuffer.P[l++] = 0; /* end */
 	reqbuf->Req = ASSIGN;
 	reqbuf->ReqCh = 0;
-	reqbuf->ReqId = 0;
+	reqbuf->ReqId = DSIG_ID;
 	reqbuf->XBuffer.length = l;
 	reqbuf->Reference = 0; /* Sig Entity */
   }
@@ -221,6 +81,9 @@ idi_assign_req(eicon_REQ *reqbuf, int signet, eicon_chan *chan)
 	reqbuf->XBuffer.P[l++] = LLC;
 	reqbuf->XBuffer.P[l++] = 2;
 	switch(chan->l2prot) {
+		case ISDN_PROTO_L2_V11096:
+		case ISDN_PROTO_L2_V11019:
+		case ISDN_PROTO_L2_V11038:
 		case ISDN_PROTO_L2_TRANS:
 			reqbuf->XBuffer.P[l++] = 2; /* transparent */
 			break;
@@ -262,7 +125,7 @@ idi_assign_req(eicon_REQ *reqbuf, int signet, eicon_chan *chan)
 	reqbuf->XBuffer.P[l++] = 0; /* end */
 	reqbuf->Req = ASSIGN;
 	reqbuf->ReqCh = 0;
-	reqbuf->ReqId = 0x20;
+	reqbuf->ReqId = NL_ID;
 	reqbuf->XBuffer.length = l;
 	reqbuf->Reference = 1; /* Net Entity */
   }
@@ -282,6 +145,21 @@ idi_put_req(eicon_REQ *reqbuf, int rq, int signet, int Ch)
 }
 
 int
+idi_put_suspend_req(eicon_REQ *reqbuf, eicon_chan *chan)
+{
+	reqbuf->Req = SUSPEND;
+	reqbuf->ReqCh = 0;
+	reqbuf->ReqId = 1;
+	reqbuf->XBuffer.P[0] = CAI;
+	reqbuf->XBuffer.P[1] = 1;
+	reqbuf->XBuffer.P[2] = chan->No;
+	reqbuf->XBuffer.P[3] = 0;
+	reqbuf->XBuffer.length = 4;
+	reqbuf->Reference = 0; /* Sig Entity */
+   return(0);
+}
+
+int
 idi_call_res_req(eicon_REQ *reqbuf, eicon_chan *chan)
 {
 	int l = 9;
@@ -295,7 +173,7 @@ idi_call_res_req(eicon_REQ *reqbuf, eicon_chan *chan)
 	reqbuf->XBuffer.P[4] = 0;
 	reqbuf->XBuffer.P[5] = 0;
 	reqbuf->XBuffer.P[6] = 32;
-	reqbuf->XBuffer.P[7] = 3;
+	reqbuf->XBuffer.P[7] = 0;
 	switch(chan->l2prot) {
 		case ISDN_PROTO_L2_X75I:
 		case ISDN_PROTO_L2_X75UI:
@@ -391,6 +269,12 @@ idi_do_req(eicon_card *card, eicon_chan *chan, int cmd, int layer)
 		case HANGUP:
 			idi_put_req(reqbuf, HANGUP, 0, 0);
 			break;
+		case SUSPEND:
+			idi_put_suspend_req(reqbuf, chan);
+			break;
+		case RESUME:
+			idi_put_req(reqbuf, RESUME, 0 ,0);
+			break;
 		case REJECT:
 			idi_put_req(reqbuf, REJECT, 0 ,0);
 			break;
@@ -400,17 +284,20 @@ idi_do_req(eicon_card *card, eicon_chan *chan, int cmd, int layer)
 		case CALL_RES:
 			idi_call_res_req(reqbuf, chan);
 			break;
-		case IDI_N_CONNECT|0x700:
-			idi_put_req(reqbuf, IDI_N_CONNECT, 1, 0);
+		case CALL_HOLD:
+			idi_put_req(reqbuf, CALL_HOLD, 0, 0);
 			break;
-		case IDI_N_CONNECT_ACK|0x700:
-			idi_put_req(reqbuf, IDI_N_CONNECT_ACK, 1, 0);
+		case N_CONNECT|0x700:
+			idi_put_req(reqbuf, N_CONNECT, 1, 0);
 			break;
-		case IDI_N_DISC|0x700:
-			idi_put_req(reqbuf, IDI_N_DISC, 1, chan->e.IndCh);
+		case N_CONNECT_ACK|0x700:
+			idi_put_req(reqbuf, N_CONNECT_ACK, 1, 0);
 			break;
-		case IDI_N_DISC_ACK|0x700:
-			idi_put_req(reqbuf, IDI_N_DISC_ACK, 1, chan->e.IndCh);
+		case N_DISC|0x700:
+			idi_put_req(reqbuf, N_DISC, 1, chan->e.IndCh);
+			break;
+		case N_DISC_ACK|0x700:
+			idi_put_req(reqbuf, N_DISC_ACK, 1, chan->e.IndCh);
 			break;
 		default:
 			eicon_log(card, 1, "idi_req: Ch%d: Unknown request\n", chan->No);
@@ -492,7 +379,7 @@ idi_hangup(eicon_card *card, eicon_chan *chan)
 
 	if ((chan->fsm_state == EICON_STATE_ACTIVE) ||
 	    (chan->fsm_state == EICON_STATE_WMCONN)) {
-  		if (chan->e.B2Id) idi_do_req(card, chan, IDI_N_DISC, 1);
+  		if (chan->e.B2Id) idi_do_req(card, chan, N_DISC, 1);
 	}
 	if (chan->e.B2Id) idi_do_req(card, chan, REMOVE, 1);
 	if (chan->fsm_state != EICON_STATE_NULL) {
@@ -505,6 +392,32 @@ idi_hangup(eicon_card *card, eicon_chan *chan)
 	chan->fax = 0;
 #endif
   return(0);
+}
+
+int
+capipmsg(eicon_card *card, eicon_chan *chan, capi_msg *cm)
+{
+	if ((cm->para[0] != 3) || (cm->para[1] != 0))
+		return -1;
+	if (cm->para[2] < 3)
+		return -1;
+	if (cm->para[4] != 0)
+		return -1;
+	switch(cm->para[3]) {
+		case 4: /* Suspend */
+			eicon_log(card, 8, "idi_req: Ch%d: Call Suspend\n", chan->No);
+			if (cm->para[5]) {
+				idi_do_req(card, chan, SUSPEND, 0);
+			} else {
+				idi_do_req(card, chan, CALL_HOLD, 0);
+			}
+			break;
+		case 5: /* Resume */
+			eicon_log(card, 8, "idi_req: Ch%d: Call Resume\n", chan->No);
+			idi_do_req(card, chan, RESUME, 0);
+			break;
+        }
+	return 0;
 }
 
 int
@@ -612,7 +525,14 @@ idi_connect_req(eicon_card *card, eicon_chan *chan, char *phone,
 			reqbuf->XBuffer.P[l++] = *sub++ & 0x7f;
 	}
 
-	if ((tmp = idi_si2bc(si1, si2, bc, hlc)) > 0) {
+	if (si2 > 2) {
+		reqbuf->XBuffer.P[l++] = SHIFT|6;
+		reqbuf->XBuffer.P[l++] = SIN;
+		reqbuf->XBuffer.P[l++] = 2;
+		reqbuf->XBuffer.P[l++] = si1;
+		reqbuf->XBuffer.P[l++] = si2;
+	}
+	else if ((tmp = idi_si2bc(si1, si2, bc, hlc)) > 0) {
 		reqbuf->XBuffer.P[l++] = BC;
 		reqbuf->XBuffer.P[l++] = tmp;
 		for(i=0; i<tmp;i++) 
@@ -632,7 +552,7 @@ idi_connect_req(eicon_card *card, eicon_chan *chan, char *phone,
 	reqbuf->XBuffer.P[l++] = 0;
 	reqbuf->XBuffer.P[l++] = 0;
 	reqbuf->XBuffer.P[l++] = 32;
-	reqbuf->XBuffer.P[l++] = 3;
+	reqbuf->XBuffer.P[l++] = 0;
         switch(chan->l2prot) {
 		case ISDN_PROTO_L2_X75I:
 		case ISDN_PROTO_L2_X75UI:
@@ -859,7 +779,7 @@ idi_IndParse(eicon_card *ccard, eicon_chan *chan, idi_ind_message *message, unsi
 				}
 				for(i=0; i < wlen; i++) 
 					message->llc[i] = buffer[pos++];
-				eicon_log(ccard, 4, "idi_inf: Ch%d: LLC=%d %d %d %d\n", chan->No, message->llc[0],
+				eicon_log(ccard, 4, "idi_inf: Ch%d: LLC=%d %d %d %d ...\n", chan->No, message->llc[0],
 					message->llc[1],message->llc[2],message->llc[3]);
 				break;
 			case HLC:
@@ -869,7 +789,7 @@ idi_IndParse(eicon_card *ccard, eicon_chan *chan, idi_ind_message *message, unsi
 				}
 				for(i=0; i < wlen; i++) 
 					message->hlc[i] = buffer[pos++];
-				eicon_log(ccard, 4, "idi_inf: Ch%d: HLC=%x %x %x %x %x\n", chan->No,
+				eicon_log(ccard, 4, "idi_inf: Ch%d: HLC=%x %x %x %x %x ...\n", chan->No,
 					message->hlc[0], message->hlc[1],
 					message->hlc[2], message->hlc[3], message->hlc[4]);
 				break;
@@ -1061,31 +981,55 @@ idi_IndParse(eicon_card *ccard, eicon_chan *chan, idi_ind_message *message, unsi
 }
 
 void
-idi_bc2si(unsigned char *bc, unsigned char *hlc, unsigned char *si1, unsigned char *si2)
+idi_bc2si(unsigned char *bc, unsigned char *hlc, unsigned char *sin, unsigned char *si1, unsigned char *si2)
 {
-  si1[0] = 0;
-  si2[0] = 0;
-  if (memcmp(bc, BC_Speech, 3) == 0) {		/* Speech */
-	si1[0] = 1;
+	si1[0] = 0;
+	si2[0] = 0;
+
+	switch (bc[0] & 0x7f) {
+		case 0x00: /* Speech */
+			si1[0] = 1;
 #ifdef EICON_FULL_SERVICE_OKTETT
-	si2[0] = 1;
+			si1[0] = sin[0];
+			si2[0] = sin[1];
 #endif
-  }
-  if (memcmp(bc, BC_31khz, 3) == 0) {		/* 3.1kHz audio */
-	si1[0] = 1;
+			break;
+		case 0x10: /* 3.1 Khz audio */
+			si1[0] = 1;
 #ifdef EICON_FULL_SERVICE_OKTETT
-	si2[0] = 2;
-  	if (memcmp(hlc, HLC_faxg3, 2) == 0) {	/* Fax Gr.2/3 */
-		si1[0] = 2;
+			si1[0] = sin[0];
+			si2[0] = sin[1];
+#endif
+			break;
+		case 0x08: /* Unrestricted digital information */
+			si1[0] = 7;
+			si2[0] = sin[1];
+			break;
+		case 0x09: /* Restricted digital information */
+			si1[0] = 2;
+			break;
+		case 0x11:
+			/* Unrestr. digital information  with
+			 * tones/announcements ( or 7 kHz audio
+			 */
+			si1[0] = 3;
+			break;
+		case 0x18: /* Video */
+			si1[0] = 4;
+			break;
 	}
-#endif
-  }
-  if (memcmp(bc, BC_64k, 2) == 0) {		/* unrestricted 64 kbits */
-	si1[0] = 7;
-  }
-  if (memcmp(bc, BC_video, 3) == 0) {		/* video */
-	si1[0] = 4;
-  }
+	switch (bc[1] & 0x7f) {
+		case 0x40: /* packed mode */
+			si1[0] = 8;
+			break;
+		case 0x10: /* 64 kbit */
+		case 0x11: /* 2*64 kbit */
+		case 0x13: /* 384 kbit */
+		case 0x15: /* 1536 kbit */
+		case 0x17: /* 1920 kbit */
+			/* moderate = bc[1] & 0x7f; */
+			break;
+	}
 }
 
 /********************* FAX stuff ***************************/
@@ -1225,7 +1169,7 @@ idi_send_edata(eicon_card *card, eicon_chan *chan)
 
 	reqbuf = (eicon_REQ *)skb_put(skb, sizeof(eicon_t30_s) + sizeof(eicon_REQ));
 
-	reqbuf->Req = IDI_N_EDATA;
+	reqbuf->Req = N_EDATA;
 	reqbuf->ReqCh = chan->e.IndCh;
 	reqbuf->ReqId = 1;
 
@@ -1359,7 +1303,7 @@ idi_fax_send_header(eicon_card *card, eicon_chan *chan, int header)
 			eicon_log(card, 128, "sSFF-Head: pagelength = %d\n", page->pagelength);
 			break;
 	}
-	idi_send_data(card, chan, 0, skb, 0);
+	idi_send_data(card, chan, 0, skb, 0, 0);
 }
 
 void
@@ -1913,7 +1857,7 @@ idi_fax_send_outbuf(eicon_card *ccard, eicon_chan *chan, eicon_OBJBUFFER *OutBuf
 	OutBuf->Len = 0;
 	OutBuf->Next = OutBuf->Data;
 
-	return(idi_send_data(ccard, chan, 0, skb, 1));
+	return(idi_send_data(ccard, chan, 0, skb, 1, 0));
 }
 
 int
@@ -1958,6 +1902,8 @@ idi_faxdata_send(eicon_card *ccard, eicon_chan *chan, struct sk_buff *skb)
 
         if (chan->queued + skb->len > 1200)
                 return 0;
+	if (chan->pqueued > 1)
+		return 0;
 
 	InBuf.Data = skb->data;
 	InBuf.Size = skb->len;
@@ -2183,6 +2129,7 @@ idi_fax_hangup(eicon_card *ccard, eicon_chan *chan)
 	}
 	if ((chan->fax->code > 1) && (chan->fax->code < 120))
 		chan->fax->code += 120;
+	eicon_log(ccard, 8, "idi_fax: Ch%d: Hangup (code=%d)\n", chan->No, chan->fax->code);
 	chan->fax->r_code = ISDN_TTY_FAX_HNG;
 	cmd.driver = ccard->myid;
 	cmd.command = ISDN_STAT_FAXIND;
@@ -2224,7 +2171,7 @@ idi_send_udata(eicon_card *card, eicon_chan *chan, int UReq, u_char *buffer, int
 
 	reqbuf = (eicon_REQ *)skb_put(skb, 1 + len + sizeof(eicon_REQ));
 
-	reqbuf->Req = IDI_N_UDATA;
+	reqbuf->Req = N_UDATA;
 	reqbuf->ReqCh = chan->e.IndCh;
 	reqbuf->ReqId = 1;
 
@@ -2418,12 +2365,12 @@ idi_handle_ind(eicon_card *ccard, struct sk_buff *skb)
 		                while((skb2 = skb_dequeue(&chan->e.X))) {
 					dev_kfree_skb(skb2);
 				}
-				save_flags(flags);
-				cli();
+				spin_lock_irqsave(&eicon_lock, flags);
 				chan->queued = 0;
+				chan->pqueued = 0;
 				chan->waitq = 0;
 				chan->waitpq = 0;
-				restore_flags(flags);
+				spin_unlock_irqrestore(&eicon_lock, flags);
 				if (message.e_cau[0] & 0x7f) {
 					cmd.driver = ccard->myid;
 					cmd.arg = chan->No;
@@ -2433,10 +2380,6 @@ idi_handle_ind(eicon_card *ccard, struct sk_buff *skb)
 					ccard->interface.statcallb(&cmd);
 				}
 				chan->cause[0] = 0; 
-#ifdef CONFIG_ISDN_TTY_FAX
-				if (!chan->e.B2Id)
-					chan->fax = 0;
-#endif
 				if (((chan->fsm_state == EICON_STATE_ACTIVE) ||
 				    (chan->fsm_state == EICON_STATE_WMCONN)) ||
 				    ((chan->l2prot == ISDN_PROTO_L2_FAX) &&
@@ -2446,6 +2389,7 @@ idi_handle_ind(eicon_card *ccard, struct sk_buff *skb)
 					if (chan->e.B2Id)
 						idi_do_req(ccard, chan, REMOVE, 1);
 					chan->statectrl &= ~WAITING_FOR_HANGUP;
+					chan->statectrl &= ~IN_HOLD;
 					if (chan->statectrl & HAVE_CONN_REQ) {
 						eicon_log(ccard, 32, "idi_req: Ch%d: queueing delayed conn_req\n", chan->No);
 						chan->statectrl &= ~HAVE_CONN_REQ;
@@ -2463,6 +2407,9 @@ idi_handle_ind(eicon_card *ccard, struct sk_buff *skb)
 						cmd.command = ISDN_STAT_DHUP;
 						ccard->interface.statcallb(&cmd);
 						eicon_idi_listen_req(ccard, chan);
+#ifdef CONFIG_ISDN_TTY_FAX
+						chan->fax = 0;
+#endif
 					}
 				}
 				break;
@@ -2475,7 +2422,7 @@ idi_handle_ind(eicon_card *ccard, struct sk_buff *skb)
 					break;
 				}
 				chan->fsm_state = EICON_STATE_ICALL;
-				idi_bc2si(message.bc, message.hlc, &chan->si1, &chan->si2);
+				idi_bc2si(message.bc, message.hlc, message.sin, &chan->si1, &chan->si2);
 				strcpy(chan->cpn, message.cpn + 1);
 				strcpy(chan->oad, message.oad);
 				strcpy(chan->dsa, message.dsa);
@@ -2553,12 +2500,15 @@ idi_handle_ind(eicon_card *ccard, struct sk_buff *skb)
 						case ISDN_PROTO_L2_MODEM:
 							/* do nothing, wait for connect */
 							break;
+						case ISDN_PROTO_L2_V11096:
+						case ISDN_PROTO_L2_V11019:
+						case ISDN_PROTO_L2_V11038:
 						case ISDN_PROTO_L2_TRANS:
-							idi_do_req(ccard, chan, IDI_N_CONNECT, 1);
+							idi_do_req(ccard, chan, N_CONNECT, 1);
 							break;
 						default:
 							/* On most incoming calls we use automatic connect */
-							/* idi_do_req(ccard, chan, IDI_N_CONNECT, 1); */
+							/* idi_do_req(ccard, chan, N_CONNECT, 1); */
 					}
 				} else {
 					if (chan->fsm_state != EICON_STATE_ACTIVE)
@@ -2568,32 +2518,49 @@ idi_handle_ind(eicon_card *ccard, struct sk_buff *skb)
 			case CALL_CON:
 				eicon_log(ccard, 8, "idi_ind: Ch%d: Call_Con\n", chan->No);
 				if (chan->fsm_state == EICON_STATE_OCALL) {
-					chan->fsm_state = EICON_STATE_OBWAIT;
-					cmd.driver = ccard->myid;
-					cmd.command = ISDN_STAT_DCONN;
-					cmd.arg = chan->No;
-					ccard->interface.statcallb(&cmd);
-
 					/* check if old NetID has been removed */
 					if (chan->e.B2Id) {
 						eicon_log(ccard, 1, "eicon: Ch%d: old net_id %x still exist, removing.\n",
 							chan->No, chan->e.B2Id);
 						idi_do_req(ccard, chan, REMOVE, 1);
 					}
-
-					idi_do_req(ccard, chan, ASSIGN, 1); 
-					idi_do_req(ccard, chan, IDI_N_CONNECT, 1);
 #ifdef CONFIG_ISDN_TTY_FAX
 					if (chan->l2prot == ISDN_PROTO_L2_FAX) {
-						if (chan->fax)
+						if (chan->fax) {
 							chan->fax->phase = ISDN_FAX_PHASE_A;
+						} else {
+							eicon_log(ccard, 1, "idi_ind: Call_Con with NULL fax struct, ERROR\n");
+							idi_hangup(ccard, chan);
+							break;
+						}
 					}
 #endif
+					chan->fsm_state = EICON_STATE_OBWAIT;
+					cmd.driver = ccard->myid;
+					cmd.command = ISDN_STAT_DCONN;
+					cmd.arg = chan->No;
+					ccard->interface.statcallb(&cmd);
+
+					idi_do_req(ccard, chan, ASSIGN, 1); 
+					idi_do_req(ccard, chan, N_CONNECT, 1);
 				} else
-				idi_hangup(ccard, chan);
+					idi_hangup(ccard, chan);
 				break;
 			case AOC_IND:
 				eicon_log(ccard, 8, "idi_ind: Ch%d: Advice of Charge\n", chan->No);
+				break;
+			case CALL_HOLD_ACK:
+				chan->statectrl |= IN_HOLD;
+				eicon_log(ccard, 8, "idi_ind: Ch%d: Call Hold Ack\n", chan->No);
+				break;
+			case SUSPEND_REJ:
+				eicon_log(ccard, 8, "idi_ind: Ch%d: Suspend Rejected\n", chan->No);
+				break;
+			case SUSPEND:
+				eicon_log(ccard, 8, "idi_ind: Ch%d: Suspend Ack\n", chan->No);
+				break;
+			case RESUME:
+				eicon_log(ccard, 8, "idi_ind: Ch%d: Resume Ack\n", chan->No);
 				break;
 			default:
 				eicon_log(ccard, 8, "idi_ind: Ch%d: UNHANDLED SigIndication 0x%02x\n", chan->No, ind->Ind);
@@ -2613,7 +2580,7 @@ idi_handle_ind(eicon_card *ccard, struct sk_buff *skb)
 		} 
 		else
 		switch(ind->Ind) {
-			case IDI_N_CONNECT_ACK:
+			case N_CONNECT_ACK:
 				eicon_log(ccard, 16, "idi_ind: Ch%d: N_Connect_Ack\n", chan->No);
 				if (chan->l2prot == ISDN_PROTO_L2_MODEM) {
 					chan->fsm_state = EICON_STATE_WMCONN;
@@ -2634,7 +2601,7 @@ idi_handle_ind(eicon_card *ccard, struct sk_buff *skb)
 						}
 					}
 					else {
-						eicon_log(ccard, 1, "idi_ind: N_CONNECT_ACK with NULL fax struct, ERROR\n");
+						eicon_log(ccard, 1, "idi_ind: N_Connect_Ack with NULL fax struct, ERROR\n");
 					}
 #endif
 					break;
@@ -2646,10 +2613,10 @@ idi_handle_ind(eicon_card *ccard, struct sk_buff *skb)
 				strcpy(cmd.parm.num, "64000");
 				ccard->interface.statcallb(&cmd);
 				break; 
-			case IDI_N_CONNECT:
+			case N_CONNECT:
 				eicon_log(ccard, 16,"idi_ind: Ch%d: N_Connect\n", chan->No);
 				chan->e.IndCh = ind->IndCh;
-				if (chan->e.B2Id) idi_do_req(ccard, chan, IDI_N_CONNECT_ACK, 1);
+				if (chan->e.B2Id) idi_do_req(ccard, chan, N_CONNECT_ACK, 1);
 				if (chan->l2prot == ISDN_PROTO_L2_FAX) {
 					break;
 				}
@@ -2664,43 +2631,47 @@ idi_handle_ind(eicon_card *ccard, struct sk_buff *skb)
 				strcpy(cmd.parm.num, "64000");
 				ccard->interface.statcallb(&cmd);
 				break; 
-			case IDI_N_DISC:
-				eicon_log(ccard, 16, "idi_ind: Ch%d: N_DISC\n", chan->No);
+			case N_DISC:
+				eicon_log(ccard, 16, "idi_ind: Ch%d: N_Disc\n", chan->No);
 				if (chan->e.B2Id) {
 		                	while((skb2 = skb_dequeue(&chan->e.X))) {
 						dev_kfree_skb(skb2);
 					}
-					idi_do_req(ccard, chan, IDI_N_DISC_ACK, 1);
+					idi_do_req(ccard, chan, N_DISC_ACK, 1);
 					idi_do_req(ccard, chan, REMOVE, 1);
 				}
 #ifdef CONFIG_ISDN_TTY_FAX
-				if (chan->l2prot == ISDN_PROTO_L2_FAX) {
+				if ((chan->l2prot == ISDN_PROTO_L2_FAX) && (chan->fax)){
 					idi_parse_edata(ccard, chan, ind->RBuffer.P, ind->RBuffer.length);
 					idi_fax_hangup(ccard, chan);
 				}
 #endif
 				chan->e.IndCh = 0;
-				save_flags(flags);
-				cli();
+				spin_lock_irqsave(&eicon_lock, flags);
 				chan->queued = 0;
+				chan->pqueued = 0;
 				chan->waitq = 0;
 				chan->waitpq = 0;
-				restore_flags(flags);
-				idi_do_req(ccard, chan, HANGUP, 0);
+				spin_unlock_irqrestore(&eicon_lock, flags);
+				if (!(chan->statectrl & IN_HOLD)) {
+					idi_do_req(ccard, chan, HANGUP, 0);
+				}
 				if (chan->fsm_state == EICON_STATE_ACTIVE) {
 					cmd.driver = ccard->myid;
 					cmd.command = ISDN_STAT_BHUP;
 					cmd.arg = chan->No;
 					ccard->interface.statcallb(&cmd);
 					chan->fsm_state = EICON_STATE_NULL;
-					chan->statectrl |= WAITING_FOR_HANGUP;
+					if (!(chan->statectrl & IN_HOLD)) {
+						chan->statectrl |= WAITING_FOR_HANGUP;
+					}
 				}
 #ifdef CONFIG_ISDN_TTY_FAX
 				chan->fax = 0;
 #endif
 				break; 
-			case IDI_N_DISC_ACK:
-				eicon_log(ccard, 16, "idi_ind: Ch%d: N_DISC_ACK\n", chan->No);
+			case N_DISC_ACK:
+				eicon_log(ccard, 16, "idi_ind: Ch%d: N_Disc_Ack\n", chan->No);
 #ifdef CONFIG_ISDN_TTY_FAX
 				if (chan->l2prot == ISDN_PROTO_L2_FAX) {
 					idi_parse_edata(ccard, chan, ind->RBuffer.P, ind->RBuffer.length);
@@ -2708,10 +2679,10 @@ idi_handle_ind(eicon_card *ccard, struct sk_buff *skb)
 				}
 #endif
 				break; 
-			case IDI_N_DATA_ACK:
-				eicon_log(ccard, 128, "idi_ind: Ch%d: N_DATA_ACK\n", chan->No);
+			case N_DATA_ACK:
+				eicon_log(ccard, 128, "idi_ind: Ch%d: N_Data_Ack\n", chan->No);
 				break;
-			case IDI_N_DATA:
+			case N_DATA:
 				skb_pull(skb, sizeof(eicon_IND) - 1);
 				eicon_log(ccard, 128, "idi_rcv: Ch%d: %d bytes\n", chan->No, skb->len);
 				if (chan->l2prot == ISDN_PROTO_L2_FAX) {
@@ -2723,11 +2694,11 @@ idi_handle_ind(eicon_card *ccard, struct sk_buff *skb)
 					free_buff = 0; 
 				}
 				break; 
-			case IDI_N_UDATA:
+			case N_UDATA:
 				idi_parse_udata(ccard, chan, ind->RBuffer.P, ind->RBuffer.length);
 				break; 
 #ifdef CONFIG_ISDN_TTY_FAX
-			case IDI_N_EDATA:
+			case N_EDATA:
 				idi_edata_action(ccard, chan, ind->RBuffer.P, ind->RBuffer.length);
 				break; 
 #endif
@@ -2747,6 +2718,8 @@ idi_handle_ack_ok(eicon_card *ccard, eicon_chan *chan, eicon_RC *ack)
 {
 	ulong flags;
 	isdn_ctrl cmd;
+	int tqueued = 0;
+	int twaitpq = 0;
 
 	if (ack->RcId != ((chan->e.ReqCh) ? chan->e.B2Id : chan->e.D3Id)) {
 		/* I dont know why this happens, should not ! */
@@ -2770,16 +2743,15 @@ idi_handle_ack_ok(eicon_card *ccard, eicon_chan *chan, eicon_RC *ack)
 			eicon_log(ccard, 16, "idi_ack: Ch%d: Rc-Ref %d not equal to stored %d\n", chan->No,
 				ack->Reference, chan->e.ref);
 		}
-		save_flags(flags);
-		cli();
+		spin_lock_irqsave(&eicon_lock, flags);
 		ccard->IdTable[ack->RcId] = NULL;
-		eicon_log(ccard, 16, "idi_ack: Ch%d: Removed : Id=%x Ch=%d (%s)\n", chan->No,
-			ack->RcId, ack->RcCh, (chan->e.ReqCh)? "Net":"Sig");
 		if (!chan->e.ReqCh) 
 			chan->e.D3Id = 0;
 		else
 			chan->e.B2Id = 0;
-		restore_flags(flags);
+		spin_unlock_irqrestore(&eicon_lock, flags);
+		eicon_log(ccard, 16, "idi_ack: Ch%d: Removed : Id=%x Ch=%d (%s)\n", chan->No,
+			ack->RcId, ack->RcCh, (chan->e.ReqCh)? "Net":"Sig");
 		return 1;
 	}
 
@@ -2790,25 +2762,21 @@ idi_handle_ack_ok(eicon_card *ccard, eicon_chan *chan, eicon_RC *ack)
 	} else {
 	/* Network layer */
 		switch(chan->e.Req & 0x0f) {
-			case IDI_N_CONNECT:
+			case N_CONNECT:
 				chan->e.IndCh = ack->RcCh;
 				eicon_log(ccard, 16, "idi_ack: Ch%d: RC OK Id=%x Ch=%d (ref:%d)\n", chan->No,
 					ack->RcId, ack->RcCh, ack->Reference);
 				break;
-			case IDI_N_MDATA:
-			case IDI_N_DATA:
-				if ((chan->e.Req & 0x0f) == IDI_N_DATA) {
-					if (chan->queued) {
-						cmd.driver = ccard->myid;
-						cmd.command = ISDN_STAT_BSENT;
-						cmd.arg = chan->No;
-						cmd.parm.length = chan->waitpq;
-						ccard->interface.statcallb(&cmd);
-					}
-					save_flags(flags);
-					cli();
+			case N_MDATA:
+			case N_DATA:
+				tqueued = chan->queued;
+				twaitpq = chan->waitpq;
+				if ((chan->e.Req & 0x0f) == N_DATA) {
+					spin_lock_irqsave(&eicon_lock, flags);
 					chan->waitpq = 0;
-					restore_flags(flags);
+					if(chan->pqueued)
+						chan->pqueued--;
+					spin_unlock_irqrestore(&eicon_lock, flags);
 #ifdef CONFIG_ISDN_TTY_FAX
 					if (chan->l2prot == ISDN_PROTO_L2_FAX) {
 						if (((chan->queued - chan->waitq) < 1) &&
@@ -2828,11 +2796,17 @@ idi_handle_ack_ok(eicon_card *ccard, eicon_chan *chan, eicon_RC *ack)
 					}
 #endif
 				}
-				save_flags(flags);
-				cli();
+				spin_lock_irqsave(&eicon_lock, flags);
 				chan->queued -= chan->waitq;
 				if (chan->queued < 0) chan->queued = 0;
-				restore_flags(flags);
+				spin_unlock_irqrestore(&eicon_lock, flags);
+				if (((chan->e.Req & 0x0f) == N_DATA) && (tqueued)) {
+					cmd.driver = ccard->myid;
+					cmd.command = ISDN_STAT_BSENT;
+					cmd.arg = chan->No;
+					cmd.parm.length = twaitpq;
+					ccard->interface.statcallb(&cmd);
+				}
 				break;
 			default:
 				eicon_log(ccard, 16, "idi_ack: Ch%d: RC OK Id=%x Ch=%d (ref:%d)\n", chan->No,
@@ -2858,11 +2832,10 @@ idi_handle_ack(eicon_card *ccard, struct sk_buff *skb)
 		return;
 	}
 
-	save_flags(flags);
-	cli();
+	spin_lock_irqsave(&eicon_lock, flags);
 	if ((chan = ccard->IdTable[ack->RcId]) != NULL)
 		dCh = chan->No;
-	restore_flags(flags);
+	spin_unlock_irqrestore(&eicon_lock, flags);
 
 	switch (ack->Rc) {
 		case OK_FC:
@@ -2890,8 +2863,7 @@ idi_handle_ack(eicon_card *ccard, struct sk_buff *skb)
 				eicon_log(ccard, 1, "idi_ack: Ch%d: ASSIGN-OK on chan already assigned (%x,%x)\n",
 					chan->No, chan->e.D3Id, chan->e.B2Id);
 			}
-			save_flags(flags);
-			cli();
+			spin_lock_irqsave(&eicon_lock, flags);
 			for(j = 0; j < ccard->nchannels + 1; j++) {
 				if ((ccard->bch[j].e.ref == ack->Reference) &&
 					(ccard->bch[j].e.Req == ASSIGN)) {
@@ -2901,12 +2873,12 @@ idi_handle_ack(eicon_card *ccard, struct sk_buff *skb)
 						ccard->bch[j].e.B2Id  = ack->RcId;
 					ccard->IdTable[ack->RcId] = &ccard->bch[j];
 					chan = &ccard->bch[j];
-					eicon_log(ccard, 16, "idi_ack: Ch%d: Id %x assigned (%s)\n", j, 
-						ack->RcId, (ccard->bch[j].e.ReqCh)? "Net":"Sig");
 					break;
 				}
-			}		
-			restore_flags(flags);
+			}
+			spin_unlock_irqrestore(&eicon_lock, flags);
+			eicon_log(ccard, 16, "idi_ack: Ch%d: Id %x assigned (%s)\n", j, 
+				ack->RcId, (ccard->bch[j].e.ReqCh)? "Net":"Sig");
 			if (j > ccard->nchannels) {
 				eicon_log(ccard, 24, "idi_ack: Ch??: ref %d not found for Id %d\n", 
 					ack->Reference, ack->RcId);
@@ -2917,6 +2889,7 @@ idi_handle_ack(eicon_card *ccard, struct sk_buff *skb)
 		case UNKNOWN_COMMAND:
 		case WRONG_COMMAND:
 		case WRONG_ID:
+		case ADAPTER_DEAD:
 		case WRONG_CH:
 		case UNKNOWN_IE:
 		case WRONG_IE:
@@ -2949,19 +2922,18 @@ idi_handle_ack(eicon_card *ccard, struct sk_buff *skb)
 				ccard->interface.statcallb(&cmd);
 			}
 	}
-	save_flags(flags);
-	cli();
+	spin_lock_irqsave(&eicon_lock, flags);
 	if (chan) {
 		chan->e.ref = 0;
 		chan->e.busy = 0;
 	}
-	restore_flags(flags);
+	spin_unlock_irqrestore(&eicon_lock, flags);
 	dev_kfree_skb(skb);
 	eicon_schedule_tx(ccard);
 }
 
 int
-idi_send_data(eicon_card *card, eicon_chan *chan, int ack, struct sk_buff *skb, int que)
+idi_send_data(eicon_card *card, eicon_chan *chan, int ack, struct sk_buff *skb, int que, int chk)
 {
         struct sk_buff *xmit_skb;
         struct sk_buff *skb2;
@@ -2985,13 +2957,14 @@ idi_send_data(eicon_card *card, eicon_chan *chan, int ack, struct sk_buff *skb, 
 		return -1;
         if (!len)
                 return 0;
-	if (chan->queued + len > EICON_MAX_QUEUE)
+
+	if ((chk) && (chan->pqueued > 1))
 		return 0;
 
-	eicon_log(card, 128, "idi_snd: Ch%d: %d bytes\n", chan->No, len);
+	eicon_log(card, 128, "idi_snd: Ch%d: %d bytes (Pqueue=%d)\n",
+		chan->No, len, chan->pqueued);
 
-	save_flags(flags);
-	cli();
+	spin_lock_irqsave(&eicon_lock, flags);
 	while(offset < len) {
 
 		plen = ((len - offset) > 270) ? 270 : len - offset;
@@ -3000,7 +2973,7 @@ idi_send_data(eicon_card *card, eicon_chan *chan, int ack, struct sk_buff *skb, 
         	skb2 = alloc_skb(sizeof(eicon_chan_ptr), GFP_ATOMIC);
 
 	        if ((!xmit_skb) || (!skb2)) {
-			restore_flags(flags);
+			spin_unlock_irqrestore(&eicon_lock, flags);
         	        eicon_log(card, 1, "idi_err: Ch%d: alloc_skb failed in send_data()\n", chan->No);
 			if (xmit_skb) 
 				dev_kfree_skb(skb);
@@ -3013,13 +2986,10 @@ idi_send_data(eicon_card *card, eicon_chan *chan, int ack, struct sk_buff *skb, 
         	chan2->ptr = chan;
 
 	        reqbuf = (eicon_REQ *)skb_put(xmit_skb, plen + sizeof(eicon_REQ));
-		if (((len - offset) > 270) &&
-			(chan->l2prot != ISDN_PROTO_L2_MODEM) &&
-			(chan->l2prot != ISDN_PROTO_L2_FAX) &&
-			(chan->l2prot != ISDN_PROTO_L2_TRANS)) {
-		        reqbuf->Req = IDI_N_MDATA;
+		if ((len - offset) > 270) { 
+		        reqbuf->Req = N_MDATA;
 		} else {
-		        reqbuf->Req = IDI_N_DATA;
+		        reqbuf->Req = N_DATA;
 			/* if (ack) reqbuf->Req |= N_D_BIT; */
 		}	
         	reqbuf->ReqCh = chan->e.IndCh;
@@ -3033,9 +3003,11 @@ idi_send_data(eicon_card *card, eicon_chan *chan, int ack, struct sk_buff *skb, 
 
 		offset += plen;
 	}
-	if (que)
+	if (que) {
 		chan->queued += len;
-	restore_flags(flags);
+		chan->pqueued++;
+	}
+	spin_unlock_irqrestore(&eicon_lock, flags);
 	eicon_schedule_tx(card);
         dev_kfree_skb(skb);
         return len;
@@ -3073,7 +3045,7 @@ eicon_idi_manage_assign(eicon_card *card)
         reqbuf->XBuffer.P[0] = 0;
         reqbuf->Req = ASSIGN;
         reqbuf->ReqCh = 0;
-        reqbuf->ReqId = 0xe0;
+        reqbuf->ReqId = MAN_ID;
         reqbuf->XBuffer.length = 1;
         reqbuf->Reference = 2; /* Man Entity */
 
@@ -3199,7 +3171,7 @@ eicon_idi_manage(eicon_card *card, eicon_manifbuf *mb)
         reqbuf->XBuffer.P[1] = manbuf->length[0] + 1;
 
         reqbuf->XBuffer.P[l++] = 0;
-        reqbuf->Req = (manbuf->count) ? manbuf->count : 0x02; /* Request */
+        reqbuf->Req = (manbuf->count) ? manbuf->count : MAN_READ;
         reqbuf->ReqCh = 0;
         reqbuf->ReqId = 1;
         reqbuf->XBuffer.length = l;

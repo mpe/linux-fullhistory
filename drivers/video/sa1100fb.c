@@ -12,17 +12,40 @@
 
 /*
  *   Code Status:
- *	4/1/99 - Driver appears to be working for Brutus 320x200x8bpp mode.  Other
- *               resolutions are working, but only the 8bpp mode is supported.
- *               Changes need to be made to the palette encode and decode routines
- *               to support 4 and 16 bpp modes.  
- *               Driver is not designed to be a module.  The FrameBuffer is statically
- *               allocated since dynamic allocation of a 300k buffer cannot be guaranteed. 
+ * 1999/04/01:
+ * 	Driver appears to be working for Brutus 320x200x8bpp mode.  Other
+ * 	resolutions are working, but only the 8bpp mode is supported.
+ * 	Changes need to be made to the palette encode and decode routines
+ * 	to support 4 and 16 bpp modes.  
+ * 	Driver is not designed to be a module.  The FrameBuffer is statically
+ * 	allocated since dynamic allocation of a 300k buffer cannot be 
+ * 	guaranteed. 
+ * 
+ * 1999/06/17:
+ * 	FrameBuffer memory is now allocated at run-time when the
+ * 	driver is initialized.    
  *
- *     6/17/99 - FrameBuffer memory is now allocated at run-time when the
- *               driver is initialized.    
- *
+ * 2000/04/10:
+ * 	Big cleanup for dynamic selection of machine type at run time.
+ * 		Nicolas Pitre <nico@cam.org>
+ * 
+ * 2000/07/19:
+ * 	Support for Bitsy aka Compaq iPAQ H3600 added.
+ * 		Jamey Hicks <jamey@crl.dec.com>
+ * 
+ * 2000/08/07:
+ * 	Resolved an issue caused by a change made to the Assabet's PLD 
+ * 	earlier this year which broke the framebuffer driver for newer 
+ * 	Phase 4 Assabets.  Some other parameters were changed to optimize for
+ * 	the Sharp display.
+ * 		Tak-Shing Chan <tchan.rd@idthk.com>
+ * 		Jeff Sutherland <jsutherland@accelent.com>
+ * 
+ * 2000/08/09:
+ * 	XP860 support added
+ * 		Kunihiko IMAI <???>
  */
+
 #include <linux/config.h>
 #include <linux/module.h>
 #include <linux/kernel.h>
@@ -41,6 +64,7 @@
 #include <asm/hardware.h>
 #include <asm/io.h>
 #include <asm/irq.h>
+#include <asm/mach-types.h>
 #include <asm/uaccess.h>
 #include <asm/proc/pgtable.h>
 
@@ -324,7 +348,7 @@ static int
 sa1100fb_encode_var(struct fb_var_screeninfo *var,
                     struct sa1100fb_par *par)
 {
-        // Don't know if really want to var on entry.
+        // Don't know if really want to zero var on entry.
         // Look at set_var to see.  If so, may need to add extra params to par     
 //	memset(var, 0, sizeof(struct fb_var_screeninfo));
  
@@ -347,15 +371,26 @@ sa1100fb_encode_var(struct fb_var_screeninfo *var,
 		break;
 	case 12:          // This case should differ for Active/Passive mode  
 	case 16:
-		var->red.length    = 5;
-		var->green.length  = 6;
-		var->blue.length   = 5;
-		var->transp.length = 0;
-		var->red.offset    = 11;
-		var->green.offset  = 5;
-		var->blue.offset   = 0;
-		var->transp.offset = 0;
-		break;
+                if (machine_is_bitsy()) {
+                        var->red.length    = 4;
+                        var->blue.length   = 4;
+                        var->green.length  = 4;
+                        var->transp.length = 0;
+                        var->red.offset    = 12;
+                        var->green.offset  = 7;
+                        var->blue.offset   = 1;
+                        var->transp.offset = 0;
+                } else {
+                        var->red.length    = 5;
+                        var->blue.length   = 5;
+                        var->green.length  = 6;
+                        var->transp.length = 0;
+                        var->red.offset    = 11;
+                        var->green.offset  = 5;
+                        var->blue.offset   = 0;
+                        var->transp.offset = 0;
+                }
+                break;
 	}
 	return 0;
 }
@@ -425,10 +460,13 @@ sa1100fb_decode_var(struct fb_var_screeninfo *var,
 
 	DPRINTK("p_palette_base = 0x%08lx\n",(u_long)par->p_palette_base);
 	DPRINTK("v_palette_base = 0x%08lx\n",(u_long)par->v_palette_base);
+	DPRINTK("palette_size = 0x%08lx\n",(u_long)par->palette_size);
+	DPRINTK("palette_mem_size = 0x%08lx\n",(u_long)palette_mem_size);
 	DPRINTK("p_screen_base  = 0x%08lx\n",(u_long)par->p_screen_base);
 	DPRINTK("v_screen_base  = 0x%08lx\n",(u_long)par->v_screen_base);
 	DPRINTK("VideoMemRegion = 0x%08lx\n",(u_long)VideoMemRegion);
 	DPRINTK("VideoMemRegion_phys = 0x%08lx\n",(u_long)VideoMemRegion_phys);
+
 	return 0;
 }
 
@@ -463,8 +501,6 @@ sa1100fb_set_var(struct fb_var_screeninfo *var, int con, struct fb_info *info)
 	else
 		display = &global_disp;     /* Default display settings */
 
-
-	DPRINTK("xres = %d, yres = %d\n",var->xres, var->yres);
 	/* Decode var contents into a par structure, adjusting any */
 	/* out of range values. */
 	if ((err = sa1100fb_decode_var(var, &par)))
@@ -490,7 +526,6 @@ sa1100fb_set_var(struct fb_var_screeninfo *var, int con, struct fb_info *info)
 		    (memcmp(&display->var.blue, &var->blue, sizeof(var->blue)))) 
 			chgvar = 1;
 	}
-	DPRINTK("chgvar=%d\n", chgvar);
 
 	display->var = *var;
 	display->screen_base	= par.v_screen_base;
@@ -505,8 +540,6 @@ sa1100fb_set_var(struct fb_var_screeninfo *var, int con, struct fb_info *info)
 	display->can_soft_blank	= 1;
 	display->inverse	= 0;
 
-        DPRINTK("display->var.bits_per_pixel=%d xres=%d yres=%d display->dispsw=%p\n", 
-                display->var.bits_per_pixel, var->xres, var->yres, display->dispsw);
 	switch (display->var.bits_per_pixel) {
 #ifdef FBCON_HAS_CFB4
         case 4:
@@ -545,7 +578,6 @@ sa1100fb_set_var(struct fb_var_screeninfo *var, int con, struct fb_info *info)
 			cmap = &display->cmap;
 		else
 			cmap = fb_default_cmap(current_par.palette_size);
-                DPRINTK("visual=%d palette_size=%d cmap=%p\n", current_par.visual, current_par.palette_size, cmap);
 
 		fb_set_cmap(cmap, 1, sa1100fb_setcolreg, info);
 	}
@@ -634,14 +666,18 @@ __init sa1100fb_init_fbinfo(void)
 		init_var.blue.length	= 5;
 		init_var.grayscale	= 0;
 		init_var.sync		= 0;
+		init_var.pixclock	= 171521;
 	} else if (machine_is_bitsy()) {
 		current_par.max_xres	= 320;
 		current_par.max_yres	= 240;
 		current_par.max_bpp	= 16;
-		init_var.red.length	   = 5;
-		init_var.green.length	   = 6;
-		init_var.blue.length	   = 5;
-		init_var.grayscale	   = 0;
+		init_var.red.length	= 4;
+		init_var.green.length	= 4;
+		init_var.blue.length	= 4;
+		init_var.red.offset	= 12;
+		init_var.green.offset	= 7;
+		init_var.blue.offset	= 1;
+		init_var.grayscale	= 0;
 	} else if (machine_is_brutus()) {
 		current_par.max_xres	= 320;
 		current_par.max_yres	= 240;
@@ -694,6 +730,23 @@ __init sa1100fb_init_fbinfo(void)
 	        init_var.vsync_len	= 1;
 		init_var.sync		= FB_SYNC_HOR_HIGH_ACT | FB_SYNC_VERT_HIGH_ACT;
 		init_var.vmode		= 0;
+	} else if (machine_is_xp860()) {
+		current_par.max_xres	= 1024;
+		current_par.max_yres	= 768;
+
+		current_par.max_bpp	= 8;
+		init_var.red.length	= 4;
+		init_var.green		= init_var.red;
+		init_var.blue		= init_var.red;
+
+		init_var.hsync_len	= 4;
+		init_var.left_margin	= 3;
+		init_var.right_margin	= 2;
+
+		init_var.vsync_len	= 3;
+		init_var.upper_margin	= 2;
+		init_var.lower_margin	= 1;
+		
 	}
 
 	current_par.p_palette_base	= NULL;
@@ -769,7 +822,6 @@ __init sa1100fb_map_video_memory(void)
 					     L_PTE_YOUNG    |
 					     L_PTE_DIRTY    |
 					     L_PTE_WRITE);
-	memset(VideoMemRegion, 0xAA, ALLOCATED_FB_MEM_SIZE);
 	return (VideoMemRegion == NULL ? -EINVAL : 0);
 }
 
@@ -803,6 +855,12 @@ static inline int get_pcd(unsigned int pixclock)
 		pcd = pcd / 10000000 * 12;
 		/* the last multiplication by 1.2 is to handle */
 		/* sync problems */
+	}
+	if (machine_is_assabet()) {
+		pcd = frequency[PPCR & 0xf] / 1000;
+		pcd *= pixclock / 1000;
+		pcd = pcd / 1000000;
+		pcd++; /* make up for integer math truncations */
 	}
 	return pcd;
 }
@@ -844,12 +902,12 @@ sa1100fb_activate_var(struct fb_var_screeninfo *var)
 			LCCR1_DisWdth(var->xres) + LCCR1_HorSnchWdth(6) + 
 			LCCR1_BegLnDel(61) + LCCR1_EndLnDel(9);
 		lcd_shadow.lccr2 = 
-			LCCR2_DisHght(var->yres) + LCCR2_VrtSnchWdth(2) + 
+			LCCR2_DisHght(var->yres) + LCCR2_VrtSnchWdth(1) + 
 			LCCR2_BegFrmDel(3) + LCCR2_EndFrmDel(0);
 		lcd_shadow.lccr3 = 
 			LCCR3_OutEnH + LCCR3_PixFlEdg + LCCR3_VrtSnchH + 
 			LCCR3_HorSnchH + LCCR3_ACBsCntOff + 
-			LCCR3_ACBsDiv(2) + LCCR3_PixClkDiv(38);
+			LCCR3_ACBsDiv(2) + LCCR3_PixClkDiv(pcd);
 
 		/* Set board control register to handle new color depth */
 		sa1100fb_assabet_set_truecolor(var->bits_per_pixel >= 16);
@@ -860,29 +918,33 @@ sa1100fb_activate_var(struct fb_var_screeninfo *var)
 				   LCCR0_DMADel(0);
 		lcd_shadow.lccr1 = LCCR1_DisWdth( var->xres ) +
 				   LCCR1_HorSnchWdth( 4 ) +
-				   LCCR1_BegLnDel( 0x1f ) +
-				   LCCR1_EndLnDel( 0x1f );
-		lcd_shadow.lccr2 = LCCR2_DisHght( var->yres ) +
-				   LCCR2_VrtSnchWdth( 1 )+
-				   LCCR2_BegFrmDel( 0 ) +
-				   LCCR2_EndFrmDel( 0 );
-		lcd_shadow.lccr3 = 15;
+				   LCCR1_BegLnDel( 0xC ) +
+				   LCCR1_EndLnDel( 0x11 );
+		lcd_shadow.lccr2 = LCCR2_DisHght( var->yres + 1 ) +
+				   LCCR2_VrtSnchWdth( 3 )+
+				   LCCR2_BegFrmDel( 10 ) +
+				   LCCR2_EndFrmDel( 1 );
+		lcd_shadow.lccr3 = (/* PCD */ 0x10
+                                    | /* ACB */ 0
+                                    | /* API */ 0
+                                    | LCCR3_VrtSnchL
+                                    | LCCR3_HorSnchL);
 	} else if (machine_is_brutus()) {
-		DPRINTK("Configuring  Brutus LCD\n");
-		lcd_shadow.lccr0 = 
-			LCCR0_LEN + LCCR0_Color + LCCR0_Sngl + LCCR0_Pas + 
-			LCCR0_LtlEnd + LCCR0_LDM + LCCR0_BAM + LCCR0_ERM + 
-			LCCR0_DMADel(0);
-		lcd_shadow.lccr1 = 
-			LCCR1_DisWdth(var->xres) + LCCR1_HorSnchWdth(4) + 
-			LCCR1_BegLnDel(41) + LCCR1_EndLnDel(101);
-		lcd_shadow.lccr2 = 
-			LCCR2_DisHght(var->yres) + LCCR2_VrtSnchWdth(1) + 
-			LCCR2_BegFrmDel(0) + LCCR2_EndFrmDel(0);
-		lcd_shadow.lccr3 = 
-			LCCR3_OutEnH + LCCR3_PixFlEdg + LCCR3_VrtSnchH + 
-			LCCR3_HorSnchH + LCCR3_ACBsCntOff + 
-			LCCR3_ACBsDiv(2) + LCCR3_PixClkDiv(44);
+ 		DPRINTK("Configuring  Brutus LCD\n");
+ 		lcd_shadow.lccr0 = 
+ 			LCCR0_LEN + LCCR0_Color + LCCR0_Sngl + LCCR0_Pas + 
+ 			LCCR0_LtlEnd + LCCR0_LDM + LCCR0_BAM + LCCR0_ERM + 
+ 			LCCR0_DMADel(0);
+ 		lcd_shadow.lccr1 = 
+ 			LCCR1_DisWdth(var->xres) + LCCR1_HorSnchWdth(4) + 
+ 			LCCR1_BegLnDel(41) + LCCR1_EndLnDel(101);
+ 		lcd_shadow.lccr2 = 
+ 			LCCR2_DisHght(var->yres) + LCCR2_VrtSnchWdth(1) + 
+ 			LCCR2_BegFrmDel(0) + LCCR2_EndFrmDel(0);
+ 		lcd_shadow.lccr3 = 
+ 			LCCR3_OutEnH + LCCR3_PixFlEdg + LCCR3_VrtSnchH + 
+ 			LCCR3_HorSnchH + LCCR3_ACBsCntOff + 
+ 			LCCR3_ACBsDiv(2) + LCCR3_PixClkDiv(44);
 	} else if (machine_is_lart()) {
 		DPRINTK("Configuring LART LCD\n");
 		lcd_shadow.lccr0 = 
@@ -950,6 +1012,25 @@ sa1100fb_activate_var(struct fb_var_screeninfo *var)
 			((current_var.sync & FB_SYNC_HOR_HIGH_ACT) ? LCCR3_HorSnchH : LCCR3_HorSnchL) +
 			((current_var.sync & FB_SYNC_VERT_HIGH_ACT) ? LCCR3_VrtSnchH : LCCR3_VrtSnchL);
 		*/
+	} else if (machine_is_xp860()) {
+		DPRINTK("Configuring XP860 LCD\n");
+		lcd_shadow.lccr0 = 
+			LCCR0_LEN + LCCR0_Color + LCCR0_Sngl + LCCR0_Act +
+			LCCR0_LtlEnd + LCCR0_LDM + LCCR0_ERM +
+			LCCR0_DMADel(0);
+		lcd_shadow.lccr1 = 
+			LCCR1_DisWdth(var->xres) + 
+			LCCR1_HorSnchWdth(var->hsync_len) +
+			LCCR1_BegLnDel(var->left_margin) +
+			LCCR1_EndLnDel(var->right_margin);
+		lcd_shadow.lccr2 = 
+			LCCR2_DisHght(var->yres) + 
+			LCCR2_VrtSnchWdth(var->vsync_len) +
+			LCCR2_BegFrmDel(var->upper_margin) +
+			LCCR2_EndFrmDel(var->lower_margin);
+		lcd_shadow.lccr3 = 
+			LCCR3_PixClkDiv(6) +
+			LCCR3_HorSnchL + LCCR3_VrtSnchL;
 	}
 
 	/* Restore interrupt status */
@@ -976,10 +1057,12 @@ sa1100fb_activate_var(struct fb_var_screeninfo *var)
 static void sa1100fb_inter_handler(int irq, void *dev_id, struct pt_regs *regs)
 {
         if (LCSR & LCSR_LDD) {
+                int controller_state = current_par.controller_state;
 	        /* Disable Done Flag is set */
 		LCCR0 |= LCCR0_LDM;	      /* Mask LCD Disable Done Interrupt */
 		current_par.controller_state = LCD_MODE_DISABLED;
-		if (current_par.controller_state == LCD_MODE_DISABLE_BEFORE_ENABLE) {
+		if (controller_state == LCD_MODE_DISABLE_BEFORE_ENABLE) {
+		        DPRINTK("sa1100fb_inter_handler: re-enabling LCD controller\n");
 			sa1100fb_enable_lcd_controller();
 		}
 	}
@@ -1010,7 +1093,8 @@ static void sa1100fb_disable_lcd_controller(void)
 #endif
 	} else if (machine_is_bitsy()) {
 #ifdef CONFIG_SA1100_BITSY
-	        clr_bitsy_egpio(EGPIO_BITSY_LCD_ON | EGPIO_BITSY_LCD_PCI | EGPIO_BITSY_LCD_5V_ON | EGPIO_BITSY_LVDD_ON);
+                if (current_par.controller_state != LCD_MODE_DISABLE_BEFORE_ENABLE)
+                        clr_bitsy_egpio(EGPIO_BITSY_LCD_ON | EGPIO_BITSY_LCD_PCI | EGPIO_BITSY_LCD_5V_ON | EGPIO_BITSY_LVDD_ON);
 #endif
 	} else if (machine_is_penny()) {
 #ifdef CONFIG_SA1100_PENNY
@@ -1066,7 +1150,7 @@ static void sa1100fb_enable_lcd_controller(void)
 #endif
 		} else if (machine_is_bitsy()) {
 #ifdef CONFIG_SA1100_BITSY
-                        set_bitsy_egpio(EGPIO_BITSY_LCD_ON | EGPIO_BITSY_LCD_PCI | EGPIO_BITSY_LCD_5V_ON | EGPIO_BITSY_LVDD_ON)
+                  set_bitsy_egpio(EGPIO_BITSY_LCD_ON | EGPIO_BITSY_LCD_PCI | EGPIO_BITSY_LCD_5V_ON | EGPIO_BITSY_LVDD_ON);
 			DPRINTK("DBAR1=%p\n", DBAR1);
 			DPRINTK("LCCR0=%x\n", LCCR0);
 			DPRINTK("LCCR1=%x\n", LCCR1);
@@ -1115,6 +1199,7 @@ sa1100fb_blank(int blank, struct fb_info *info)
 		                  current_par.currcon, info); 
 		sa1100fb_enable_lcd_controller();
 	}
+	/* TODO: Bitsy support for blanking display */
 }
 
 
@@ -1164,7 +1249,7 @@ int __init sa1100fb_init(void)
 		current_par.montype = 1;
 
 	if (request_irq(IRQ_LCD, sa1100fb_inter_handler, SA_INTERRUPT, "SA1100 LCD", NULL) != 0) {
-		printk("sa1100fb: failed in request_irq\n");
+		printk(KERN_ERR "sa1100fb: failed in request_irq\n");
 		return -EBUSY;
 	}
 	DPRINTK("sa1100fb: request_irq succeeded\n");
@@ -1185,6 +1270,9 @@ int __init sa1100fb_init(void)
 #endif
 	} else if (machine_is_tifon()) {
 		GPDR |= GPIO_GPIO(24);	/* set GPIO24 to output */
+	} else if (machine_is_xp860()) {
+		GPDR |= 0x3fc;
+		GAFR |= 0x3fc;
 	}
 
 	if (sa1100fb_set_var(&init_var, -1, &fb_info))

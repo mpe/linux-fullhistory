@@ -3,8 +3,8 @@
  *
  * Copyright (C) 1996-1999 Russell King
  */
+#include <linux/config.h>
 #include <linux/linkage.h>
-
 
 /*
  * Debugging stuff
@@ -84,18 +84,31 @@ start:
 		b	1f
 		.word	0x016f2818		@ Magic numbers to help the loader
 		.word	start	
-1:
+1:		mov	r7, r1			@ save architecture ID
+		mov	r8, r0			@ save r0
+#ifdef CONFIG_ANGELBOOT
+		/*
+		 * Booting from Angel - need to enter SVC mode and disable
+		 * FIQs/IRQs (numeric definitions from angel arm.h source)
+		 */
+		mov	r0, #0x17		@ angel_SWIreason_EnterSVC
+		swi	0x123456		@ angel_SWI_ARM
+		mrs	r0, cpsr		@ turn off interrupts to
+		orr	r0, r0, #0xc0		@ prevent angel from running
+		msr	cpsr_c, r0
+
+		/*
+		 * Note that some cache flushing and other stuff may
+		 * be needed here - is there an Angel SWI call for this?
+		 */
+#endif
 		/*
 		 * some architecture specific code can be inserted
-		 * by the linker here, but it should preserve r0, r1
-		 * and r8.
+		 * by the linker here, but it should preserve r7 and r8.
 		 */
 
 		.text
-1:		teq	r0, #0
-		bne	1b
-		mov	r7, r1			@ save architecture ID
-		mrc	p15, 0, r6, c0, c0	@ get processor ID
+1:		mrc	p15, 0, r6, c0, c0	@ get processor ID
 		adr	r2, LC0
 		ldmia	r2, {r2, r3, r4, r5, sp}
 

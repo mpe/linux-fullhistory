@@ -52,7 +52,6 @@ This driver supports the following hardware:
    3CCFE656 Cyclone CardBus
    3CCFEM656 Cyclone CardBus
    3c450 Cyclone/unknown
-   3Com Boomerang (unknown version)
 
 
 Module parameters
@@ -67,7 +66,7 @@ options 3c59x debug=3 rx_copybreak=300
 If you are using the PCMCIA tools (cardmgr) then the options may be
 placed in /etc/pcmcia/config.opts:
 
-module "3c59x" opts "debug=3 extra_reset=1"
+module "3c59x" opts "debug=3 rx_copybreak=300"
 
 
 The supported parameters are:
@@ -104,8 +103,8 @@ options=N1,N2,N3,...
   When generating a value for the 'options' setting, the above media
   selection values may be OR'ed (or added to) the following:
 
-  512 (0x200)	Force full-duplex
-  16  (0x10)	Bus-master enable bit (Old Vortex cards only)
+  512  (0x200)	Force full duplex mode.
+  16   (0x10)	Bus-master enable bit (Old Vortex cards only)
 
   For example:
 
@@ -118,6 +117,22 @@ full_duplex=N1,N2,N3...
 
   Similar to bit 9 of 'options'.  Forces the corresponding card into
   full-duplex mode.
+
+flow_ctrl=N1,N2,N3...
+
+  Use 802.3x MAC-layer flow control.  The 3com cards only support the
+  PAUSE command, which means that they will stop sending packets for a
+  short period if they receive a PAUSE frame from the link partner. 
+
+  The driver only allows flow control on a link which is operating in
+  full duplex mode.
+
+  This feature does not appear to work on the 3c905 - only 3c905B and
+  3c905C have been tested.
+
+  The 3com cards appear to only respond to PAUSE frames which are
+  sent to the reserved destination address of 01:80:c2:00:00:01.  They
+  do not honour PAUSE frames which are sent to the station MAC address.
 
 rx_copybreak=M
 
@@ -140,15 +155,6 @@ max_interrupt_work=N
   service routine will loop.  The default value is 32 loops.  If this
   is exceeded the interrupt service routine gives up and generates a
   warning message "eth0: Too much work in interrupt".
-
-extra_reset=N
-
-  Where N is 0 or 1 (default 0).
-
-  Some network cards (notably 3CCFE575CT Cardbus) do not initialise
-  correctly and need an extra transmitter reset.  If you find that the
-  card comes up receiving but not transmitting, try giving the module
-  the 'extra_reset=1' option.
 
 compaq_ioaddr=N
 compaq_irq=N
@@ -220,29 +226,102 @@ Autonegotiation notes
 Reporting and diagnosing problems
 ---------------------------------
 
-If the driver plays up, there are a number of things you can do analyse
-the problem and to help others do this:
+Maintainers find that accurate and complete problem reports are
+invaluable in resolving driver problems.  We are frequently not able to
+reproduce problems and must rely on your patience and efforts to get to
+the bottom of the problem.
 
-- Turn on debugging in the driver
-	Add 'debug=7' to /etc/modules.conf (/etc/conf.modules)
-	Change 'vortex_debug' to 7 in the source code.
+If you believe you have a driver problem here are some of the
+steps you should take:
 
-- Send all kernel logs, starting with the first probe of the card.
+- Is it really a driver problem?
 
-- Run 'mii-diag -v' to show the state of the Media Independent
-  Interface.  If the card sometimes works and sometimes doesn't, run
-  'mii-diag -v' in both states.
+   Eliminate some variables: try different cards, different
+   computers, different cables, different ports on the switch/hub,
+   different versions of the kernel or ofthe driver, etc.
 
-- Please run 'vortex-diag -aaee' in both good and bad states.  This
-  show the NIC's registers and EEPROM contents.
+- OK, it's a driver problem.
 
-- Describe your setup: 10baseT, 100baseT, full/half duplex, etc.
+   You need to generate a report.  Typically this is an email to the
+   maintainer and/or linux-net@vger.rutgers.edu.  The maintainer's
+   email address will be inthe driver source or in the MAINTAINERS file.
 
-- Note any additional module insertion commands you're using.
+- The contents of your report will vary a lot depending upon the
+  problem.  If it's a kernel crash then you should refer to the
+  REPORTING-BUGS file.
 
-- Try different media type settings (see above).
+  But for most problems it is useful to provide the following:
 
-- Try inserting the module with 'extra_reset=1' (or compile this into
-  the driver).
+   o Kernel version, driver version
 
+   o A copy of the banner message which the driver generates when
+     it is initialised.  For example:
+
+     eth0: 3Com PCI 3c905C Tornado at 0xa400,  00:50:da:6a:88:f0, IRQ 19
+     8K byte-wide RAM 5:3 Rx:Tx split, autoselect/Autonegotiate interface.
+     MII transceiver found at address 24, status 782d.
+     Enabling bus-master transmits and whole-frame receives.
+
+   o If it is a PCI device, the relevant output from 'lspci -vx', eg:
+
+     00:09.0 Ethernet controller: 3Com Corporation 3c905C-TX [Fast Etherlink] (rev 74)
+             Subsystem: 3Com Corporation: Unknown device 9200
+             Flags: bus master, medium devsel, latency 32, IRQ 19
+             I/O ports at a400 [size=128]
+             Memory at db000000 (32-bit, non-prefetchable) [size=128]
+             Expansion ROM at <unassigned> [disabled] [size=128K]
+             Capabilities: [dc] Power Management version 2
+     00: b7 10 00 92 07 00 10 02 74 00 00 02 08 20 00 00
+     10: 01 a4 00 00 00 00 00 db 00 00 00 00 00 00 00 00
+     20: 00 00 00 00 00 00 00 00 00 00 00 00 b7 10 00 10
+     30: 00 00 00 00 dc 00 00 00 00 00 00 00 05 01 0a 0a
+
+   o A description of the environment: 10baseT? 100baseT?
+     full/half duplex? switched or hubbed?
+
+   o Any additional module parameters which you may be providing to the driver.
+
+   o Any kernel logs which are produced.  The more the merrier. 
+     If this is a large file and you are sending your report to a
+     mailing list, mention that you have the logfile, but don't send
+     it.  If you're reporting direct to the maintainer then just send
+     it.
+
+     To ensure that all kernel logs are available, add the
+     following line to /etc/syslog.conf:
+
+         kern.* /var/log/messages
+
+     Then restart syslogd with:
+
+         /etc/rc.d/init.d/syslog restart
+
+     (The above may vary, depending upon which Linux distribution you use).
+
+    o If your problem is reproducible then that's great.  Try the
+      following:
+
+      1) Increase the debug level.  Usually this is done via:
+
+         a) modprobe driver.o debug=7
+         b) In /etc/conf.modules (or modules.conf):
+            options driver_name debug=7
+
+      2) Recreate the problem with the higher debug level,
+         send all logs to the maintainer.
+
+      3) Download you card's diagnostic tool from Donald
+         Backer's website http://www.scyld.com/diag.  Download
+         mii-diag.c as well.  Build these.
+
+         a) Run 'vortex-diag -aaee' and 'mii-diag -v' when the card is
+            working correctly.  Save the output.
+
+         b) Run the above commands when the card is malfunctioning.  Send
+            both sets of output.
+
+Finally, please be patient and be prepared to do some work.  You may end up working on
+this problem for a week or more as the maintainer asks more questions, asks for more
+tests, asks for patches to be applied, etc.  At the end of it all, the problem may even
+remain unresolved.
 

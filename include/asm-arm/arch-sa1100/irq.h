@@ -16,6 +16,7 @@
  */
 #include <linux/config.h>
 #include <asm/irq.h>
+#include <asm/mach-types.h>
 
 #define fixup_irq(x)	(x)
 

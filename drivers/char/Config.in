@@ -60,6 +60,15 @@ if [ "$CONFIG_SERIAL_NONSTANDARD" = "y" ]; then
      tristate '    Stallion EC8/64, ONboard, Brumby support' CONFIG_ISTALLION
    fi
 fi
+if [ "$CONFIG_FOOTBRIDGE" = "y" ]; then
+   bool 'DC21285 serial port support' CONFIG_SERIAL_21285
+   if [ "$CONFIG_SERIAL_21285" = "y" ]; then
+      if [ "$CONFIG_OBSOLETE" = "y" ]; then
+         bool '  Use /dev/ttyS0 device (OBSOLETE)' CONFIG_SERIAL_21285_OLD
+      fi
+      bool '  Console on DC21285 serial port' CONFIG_SERIAL_21285_CONSOLE
+   fi
+fi
 bool 'Unix98 PTY support' CONFIG_UNIX98_PTYS
 if [ "$CONFIG_UNIX98_PTYS" = "y" ]; then
    int 'Maximum number of Unix98 PTYs in use (0-2048)' CONFIG_UNIX98_PTY_COUNT 256
@@ -238,7 +247,7 @@ if [ "$CONFIG_VIDEO_DEV" != "n" ]; then
       fi
       dep_tristate '  Stradis 4:2:2 MPEG-2 video driver  (EXPERIMENTAL)' CONFIG_VIDEO_STRADIS $CONFIG_VIDEO_DEV $CONFIG_PCI
    fi
-   dep_tristate '  Zoran ZR36057/36060 Video For Linux' CONFIG_VIDEO_ZORAN $CONFIG_VIDEO_DEV $CONFIG_PCI
+   dep_tristate '  Zoran ZR36057/36060 Video For Linux' CONFIG_VIDEO_ZORAN $CONFIG_VIDEO_DEV $CONFIG_PCI $CONFIG_I2C
    dep_tristate '    Include support for Iomega Buz' CONFIG_VIDEO_BUZ $CONFIG_VIDEO_ZORAN
    dep_tristate '  Zoran ZR36120/36125 Video For Linux' CONFIG_VIDEO_ZR36120 $CONFIG_VIDEO_DEV $CONFIG_PCI $CONFIG_I2C
 fi

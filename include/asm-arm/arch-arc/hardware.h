@@ -82,7 +82,7 @@
  * RAM definitions
  */
 #define GET_MEMORY_END(p)	(PAGE_OFFSET + (p->u1.s.page_size) * (p->u1.s.nr_pages))
-#define PARAMS_BASE		(PAGE_OFFSET + 0x7c000)
+#define PARAMS_OFFSET		0x7c000
 
 #else
 

@@ -11,7 +11,7 @@
 #include <linux/config.h>
 #include <asm/arch/memory.h>
 
-#ifdef CONFIG_FOOTBRIDGE_HOST
+#ifdef CONFIG_ARCH_FOOTBRIDGE
 /*   Virtual      Physical	Size
  * 0xff800000	0x40000000	1MB	X-Bus
  * 0xff000000	0x7c000000	1MB	PCI I/O space
@@ -61,7 +61,9 @@
 #define PCIMEM_BASE		0xf0000000
 
 #elif defined(CONFIG_ARCH_CO285)
-
+/*
+ * This is the COEBSA285 cut-down mapping
+ */
 #define PCIMEM_SIZE		0x80000000
 #define PCIMEM_BASE		0x80000000
 
@@ -85,7 +87,7 @@
 
 #else
 
-#error Add your add-in architecture here
+#error "Undefined footbridge architecture"
 
 #endif
 
@@ -102,7 +104,6 @@
 #define XBUS_SWITCH_J17_9	((*XBUS_SWITCH) & (1 << 6))
 
 #define PARAMS_OFFSET		0x0100
-#define PARAMS_BASE		(PAGE_OFFSET + PARAMS_OFFSET)
 
 #define FLUSH_BASE_PHYS		0x50000000
 #define UNCACHEABLE_ADDR	(ARMCSR_BASE + 0x108)

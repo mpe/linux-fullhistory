@@ -19,7 +19,7 @@
 #include <asm/io.h>
 #include <asm/procinfo.h>
 #include <asm/setup.h>
-#include <asm/system.h>
+#include <asm/mach-types.h>
 
 #include "arch.h"
 
@@ -40,6 +40,7 @@ extern int root_mountflags;
 extern int _stext, _text, _etext, _edata, _end;
 
 unsigned int processor_id;
+unsigned int compat;
 unsigned int __machine_arch_type;
 unsigned int system_rev;
 unsigned int system_serial_low;
@@ -161,6 +162,11 @@ static struct machine_desc * __init setup_architecture(unsigned int nr)
 	}
 
 	printk("Architecture: %s\n", list->name);
+	if (compat)
+		printk(KERN_WARNING "Using compatability code "
+			"scheduled for removal in v%d.%d.%d\n",
+			compat >> 24, (compat >> 12) & 0x3ff,
+			compat & 0x3ff);
 
 	return list;
 }
@@ -304,12 +310,6 @@ void __init setup_arch(char **cmdline_p)
 	char *from = default_command_line;
 
 	memset(&meminfo, 0, sizeof(meminfo));
-
-#if defined(CONFIG_ARCH_ARC)
-	__machine_arch_type = MACH_TYPE_ARCHIMEDES;
-#elif defined(CONFIG_ARCH_A5K)
-	__machine_arch_type = MACH_TYPE_A5K;
-#endif
 
 	setup_processor();
 

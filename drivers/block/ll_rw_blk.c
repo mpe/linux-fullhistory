@@ -696,19 +696,7 @@ static int __make_request(request_queue_t * q, int rw,
 			rw_ahead = 1;
 			rw = READ;	/* drop into READ */
 		case READ:
-			if (buffer_uptodate(bh)) /* Hmmph! Already have it */
-				goto end_io;
-			kstat.pgpgin++;
-			break;
-		case WRITERAW:
-			rw = WRITE;
-			goto do_write;	/* Skip the buffer refile */
 		case WRITE:
-			if (!test_and_clear_bit(BH_Dirty, &bh->b_state))
-				goto end_io;	/* Hmmph! Nothing to write */
-			refile_buffer(bh);
-		do_write:
-			kstat.pgpgout++;
 			break;
 		default:
 			BUG();
@@ -940,6 +928,30 @@ void ll_rw_block(int rw, int nr, struct buffer_head * bhs[])
 			continue;
 
 		set_bit(BH_Req, &bh->b_state);
+
+		switch(rw) {
+		case WRITE:
+			if (!atomic_set_buffer_clean(bh))
+				/* Hmmph! Nothing to write */
+				goto end_io;
+			__mark_buffer_clean(bh);
+			kstat.pgpgout++;
+			break;
+
+		case READA:
+		case READ:
+			if (buffer_uptodate(bh))
+				/* Hmmph! Already have it */
+				goto end_io;
+			kstat.pgpgin++;
+			break;
+		default:
+			BUG();
+	end_io:
+			bh->b_end_io(bh, test_bit(BH_Uptodate, &bh->b_state));
+			continue;
+			
+		}
 
 		/*
 		 * First step, 'identity mapping' - RAID or LVM might
