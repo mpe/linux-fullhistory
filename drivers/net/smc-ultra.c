@@ -75,13 +75,13 @@ static void ultra_get_8390_hdr(struct device *dev, struct e8390_pkt_hdr *hdr,
 static void ultra_block_input(struct device *dev, int count,
 						  struct sk_buff *skb, int ring_offset);
 static void ultra_block_output(struct device *dev, int count,
-							const unsigned char *buf, const start_page);
+							const unsigned char *buf, int start_page);
 static void ultra_pio_get_hdr(struct device *dev, struct e8390_pkt_hdr *hdr,
 						int ring_page);
 static void ultra_pio_input(struct device *dev, int count,
 						  struct sk_buff *skb, int ring_offset);
 static void ultra_pio_output(struct device *dev, int count,
-							const unsigned char *buf, const start_page);
+							const unsigned char *buf, int start_page);
 static int ultra_close_card(struct device *dev);
 
 
@@ -385,7 +385,7 @@ static void ultra_pio_input(struct device *dev, int count,
 }
 
 static void ultra_pio_output(struct device *dev, int count,
-							const unsigned char *buf, const start_page)
+							const unsigned char *buf, int start_page)
 {
 	int ioaddr = dev->base_addr - ULTRA_NIC_OFFSET; /* ASIC addr */
 	outb(0x00, ioaddr + IOPA);	/* Set the address, LSB first. */

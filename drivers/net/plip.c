@@ -12,11 +12,11 @@
  *		Modularization and ifreq/ifmap support by Alan Cox.
  *		Rewritten by Niibe Yutaka.
  *              parport-sharing awareness code by Philip Blundell.
+ *		SMP locking by Niibe Yutaka.
  *
  * Fixes:
  *		Niibe Yutaka
- *		  - Module initialization.  You can specify I/O addr and IRQ:
- *			# insmod plip.o io=0x3bc irq=7
+ *		  - Module initialization.
  *		  - MTU fix.
  *		  - Make sure other end is OK, before sending a packet.
  *		  - Fix immediate timer problem.
@@ -45,7 +45,7 @@
  *     To use with DOS box, please do (Turn on ARP switch):
  *	# ifconfig plip[0-2] arp
  */
-static const char *version = "NET3 PLIP version 2.2-parport gniibe@mri.co.jp\n";
+static const char *version = "NET3 PLIP version 2.3-parport gniibe@mri.co.jp\n";
 
 /*
   Sources:
@@ -108,6 +108,7 @@ static const char *version = "NET3 PLIP version 2.2-parport gniibe@mri.co.jp\n";
 #include <asm/bitops.h>
 #include <asm/irq.h>
 #include <asm/byteorder.h>
+#include <asm/spinlock.h>
 
 #include <linux/parport.h>
 
@@ -214,6 +215,7 @@ struct net_local {
 	int port_owner;
 	int should_relinquish;
 	int (*orig_rebuild_header)(struct sk_buff *skb);
+	spinlock_t lock;
 };
 
 /* Entry point of PLIP driver.
@@ -238,7 +240,7 @@ plip_init_dev(struct device *dev, struct parport *pb))
 		printk(KERN_INFO "plip: %s has no IRQ.\n", pb->name);
 		return -ENODEV;
 	}
-	
+
 	pardev = parport_register_device(pb, dev->name, plip_preempt,
 					 plip_wakeup, plip_interrupt, 
 					 PARPORT_DEV_LURK, dev);
@@ -291,6 +293,7 @@ plip_init_dev(struct device *dev, struct parport *pb))
 	nl->deferred.sync = 0;
 	nl->deferred.routine = (void *)(void *)plip_kick_bh;
 	nl->deferred.data = dev;
+	spin_lock_init(&nl->lock);
 
 	return 0;
 }
@@ -367,7 +370,7 @@ plip_bh_timeout_error(struct device *dev, struct net_local *nl,
 {
 	unsigned char c0;
 
-	cli();
+	spin_lock_irq(&nl->lock);
 	if (nl->connection == PLIP_CN_SEND) {
 
 		if (error != ERROR) { /* Timeout */
@@ -375,7 +378,7 @@ plip_bh_timeout_error(struct device *dev, struct net_local *nl,
 			if ((snd->state == PLIP_PK_TRIGGER
 			     && nl->timeout_count <= 10)
 			    || nl->timeout_count <= 3) {
-				sti();
+				spin_unlock_irq(&nl->lock);
 				/* Try again later */
 				return TIMEOUT;
 			}
@@ -388,12 +391,12 @@ plip_bh_timeout_error(struct device *dev, struct net_local *nl,
 	} else if (nl->connection == PLIP_CN_RECEIVE) {
 		if (rcv->state == PLIP_PK_TRIGGER) {
 			/* Transmission was interrupted. */
-			sti();
+			spin_unlock_irq(&nl->lock);
 			return OK;
 		}
 		if (error != ERROR) { /* Timeout */
 			if (++nl->timeout_count <= 3) {
-				sti();
+				spin_unlock_irq(&nl->lock);
 				/* Try again later */
 				return TIMEOUT;
 			}
@@ -413,12 +416,13 @@ plip_bh_timeout_error(struct device *dev, struct net_local *nl,
 		dev_kfree_skb(snd->skb, FREE_WRITE);
 		snd->skb = NULL;
 	}
+	spin_unlock_irq(&nl->lock);
 	disable_irq(dev->irq);
+	synchronize_irq();
 	outb(PAR_INTR_OFF, PAR_CONTROL(dev));
 	dev->tbusy = 1;
 	nl->connection = PLIP_CN_ERROR;
 	outb(0x00, PAR_DATA(dev));
-	sti();
 
 	return TIMEOUT;
 }
@@ -493,6 +497,7 @@ plip_receive_packet(struct device *dev, struct net_local *nl,
 	switch (rcv->state) {
 	case PLIP_PK_TRIGGER:
 		disable_irq(dev->irq);
+		/* Don't need to synchronize irq, as we can safely ignore it */
 		outb(PAR_INTR_OFF, PAR_CONTROL(dev));
 		dev->interrupt = 0;
 		outb(0x01, PAR_DATA(dev)); /* send ACK */
@@ -577,10 +582,10 @@ plip_receive_packet(struct device *dev, struct net_local *nl,
 
 		/* Close the connection. */
 		outb (0x00, PAR_DATA(dev));
-		cli();
+		spin_lock_irq(&nl->lock);
 		if (snd->state != PLIP_PK_DONE) {
 			nl->connection = PLIP_CN_SEND;
-			sti();
+			spin_unlock_irq(&nl->lock);
 			queue_task(&nl->immediate, &tq_immediate);
 			mark_bh(IMMEDIATE_BH);
 			outb(PAR_INTR_ON, PAR_CONTROL(dev));
@@ -588,7 +593,7 @@ plip_receive_packet(struct device *dev, struct net_local *nl,
 			return OK;
 		} else {
 			nl->connection = PLIP_CN_NONE;
-			sti();
+			spin_unlock_irq(&nl->lock);
 			outb(PAR_INTR_ON, PAR_CONTROL(dev));
 			enable_irq(dev->irq);
 			return OK;
@@ -673,28 +678,34 @@ plip_send_packet(struct device *dev, struct net_local *nl,
 		cx = nl->trigger;
 		while (1) {
 			udelay(PLIP_DELAY_UNIT);
-			cli();
+			spin_lock_irq(&nl->lock);
 			if (nl->connection == PLIP_CN_RECEIVE) {
-				sti();
-				/* interrupted */
+				spin_unlock_irq(&nl->lock);
+				/* Interrupted. */
 				nl->enet_stats.collisions++;
-				if (net_debug > 1)
-					printk("%s: collision.\n", dev->name);
 				return OK;
 			}
 			c0 = inb(PAR_STATUS(dev));
 			if (c0 & 0x08) {
+				spin_unlock_irq(&nl->lock);
 				disable_irq(dev->irq);
+				synchronize_irq();
+				if (nl->connection == PLIP_CN_RECEIVE) {
+					/* Interrupted.
+					   We don't need to enable irq,
+					   as it is soon disabled.    */
+					nl->enet_stats.collisions++;
+					return OK;
+				}
 				outb(PAR_INTR_OFF, PAR_CONTROL(dev));
 				if (net_debug > 2)
 					printk("%s: send start\n", dev->name);
 				snd->state = PLIP_PK_LENGTH_LSB;
 				snd->nibble = PLIP_NB_BEGIN;
 				nl->timeout_count = 0;
-				sti();
 				break;
 			}
-			sti();
+			spin_unlock_irq(&nl->lock);
 			if (--cx == 0) {
 				outb(0x00, data_addr);
 				return TIMEOUT;
@@ -755,13 +766,13 @@ static int
 plip_connection_close(struct device *dev, struct net_local *nl,
 		      struct plip_local *snd, struct plip_local *rcv)
 {
-	cli();
+	spin_lock_irq(&nl->lock);
 	if (nl->connection == PLIP_CN_CLOSING) {
 		nl->connection = PLIP_CN_NONE;
 		dev->tbusy = 0;
 		mark_bh(NET_BH);
 	}
-	sti();
+	spin_unlock_irq(&nl->lock);
 	if (nl->should_relinquish) {
 		nl->should_relinquish = nl->port_owner = 0;
 		parport_release(nl->pardev);
@@ -805,7 +816,7 @@ plip_interrupt(int irq, void *dev_id, struct pt_regs * regs)
 	unsigned char c0;
 
 	if (dev == NULL) {
-		printk ("plip_interrupt: irq %d for unknown device.\n", irq);
+		printk("plip_interrupt: irq %d for unknown device.\n", irq);
 		return;
 	}
 
@@ -825,7 +836,7 @@ plip_interrupt(int irq, void *dev_id, struct pt_regs * regs)
 	if (net_debug > 3)
 		printk("%s: interrupt.\n", dev->name);
 
-	cli();
+	spin_lock_irq(&nl->lock);
 	switch (nl->connection) {
 	case PLIP_CN_CLOSING:
 		dev->tbusy = 0;
@@ -837,16 +848,18 @@ plip_interrupt(int irq, void *dev_id, struct pt_regs * regs)
 		nl->timeout_count = 0;
 		queue_task(&nl->immediate, &tq_immediate);
 		mark_bh(IMMEDIATE_BH);
-		sti();
+		spin_unlock_irq(&nl->lock);
 		break;
 
 	case PLIP_CN_RECEIVE:
-		sti();
-		printk("%s: receive interrupt when receiving packet\n", dev->name);
+		/* May occur because there is race condition
+		   around test and set of dev->interrupt.
+		   Ignore this interrupt. */
+		spin_unlock_irq(&nl->lock);
 		break;
 
 	case PLIP_CN_ERROR:
-		sti();
+		spin_unlock_irq(&nl->lock);
 		printk("%s: receive interrupt in error state\n", dev->name);
 		break;
 	}
@@ -898,7 +911,7 @@ plip_tx_packet(struct sk_buff *skb, struct device *dev)
 	if (net_debug > 2)
 		printk("%s: send request\n", dev->name);
 
-	cli();
+	spin_lock_irq(&nl->lock);
 	dev->trans_start = jiffies;
 	snd->skb = skb;
 	snd->length.h = skb->len;
@@ -909,7 +922,7 @@ plip_tx_packet(struct sk_buff *skb, struct device *dev)
 	}
 	queue_task(&nl->immediate, &tq_immediate);
 	mark_bh(IMMEDIATE_BH);
-	sti();
+	spin_unlock_irq(&nl->lock);
 
 	return 0;
 }
@@ -946,24 +959,25 @@ plip_open(struct device *dev)
 	nl->connection = PLIP_CN_NONE;
 	nl->is_deferred = 0;
 
-	/* Fill in the MAC-level header. */
+	/* Fill in the MAC-level header.
+	   (ab)Use "dev->broadcast" to store point-to-point MAC address.
 
+	   PLIP doesn't have a real mac address, but we need to create one
+	   to be DOS compatible.  */
 	memset(dev->dev_addr,  0xfc, ETH_ALEN);
+	memset(dev->broadcast, 0xfc, ETH_ALEN);
 
-	/* Now PLIP doesnt have a real mac addr which is a pain..
-	   we need to create one, and to be DOS compatible its a good
-	   idea to use the same rules. Layering purists please look away */
-	
-	if((in_dev=dev->ip_ptr)!=NULL)
-	{
+	if ((in_dev=dev->ip_ptr) != NULL) {
 		/*
-		 *	Any address wil do - we take the first
+		 *	Any address will do - we take the first
 		 */
 		struct in_ifaddr *ifa=in_dev->ifa_list;
-		if(ifa!=NULL)
-			memcpy(dev->dev_addr+2,&ifa->ifa_local,4);
+		if (ifa != NULL) {
+			memcpy(dev->dev_addr+2, &ifa->ifa_local, 4);
+			memcpy(dev->broadcast+2, &ifa->ifa_address, 4);
+		}
 	}
-	
+
 	dev->interrupt = 0;
 	dev->start = 1;
 	dev->tbusy = 0;
@@ -982,8 +996,9 @@ plip_close(struct device *dev)
 
 	dev->tbusy = 1;
 	dev->start = 0;
-	cli();
-	sti();
+	disable_irq(dev->irq);
+	synchronize_irq();
+
 #ifdef NOTDEF
 	outb(0x00, PAR_DATA(dev));
 #endif
@@ -1070,15 +1085,21 @@ plip_get_stats(struct device *dev)
 static int
 plip_config(struct device *dev, struct ifmap *map)
 {
+	struct net_local *nl = (struct net_local *) dev->priv;
+	struct pardevice *pardev = nl->pardev;
+
 	if (dev->flags & IFF_UP)
 		return -EBUSY;
 
-	if (map->base_addr != (unsigned long)-1
-	    && map->base_addr != dev->base_addr)
-		printk("%s: You cannot change base_addr of this interface (ignored).\n", dev->name);
+	printk(KERN_WARNING "plip: Warning, changing irq with ifconfig will be obsoleted.\n");
+	printk("plip: Next time, please set with /proc/parport/*/irq instead.\n");
 
-	if (map->irq != (unsigned char)-1)
-		dev->irq = map->irq;
+	if (map->irq != (unsigned char)-1) {
+		pardev->port->irq = dev->irq = map->irq;
+		/* Dummy request */
+		request_irq(dev->irq, plip_interrupt, SA_INTERRUPT,
+			    pardev->name, NULL);
+	}
 	return 0;
 }
 
@@ -1233,6 +1254,6 @@ plip_init(void))
 
 /*
  * Local variables:
- * compile-command: "gcc -DMODULE -DMODVERSIONS -D__KERNEL__ -Wall -Wstrict-prototypes -O2 -g -fomit-frame-pointer -pipe -m486 -c plip.c"
+ * compile-command: "gcc -DMODULE -DMODVERSIONS -D__KERNEL__ -Wall -Wstrict-prototypes -O2 -g -fomit-frame-pointer -pipe -c plip.c"
  * End:
  */

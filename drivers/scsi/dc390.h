@@ -65,7 +65,7 @@ extern int tmscsim_proc_info(char *buffer, char **start, off_t offset, int lengt
 
 #define DC390_T    {			          \
    proc_dir:       &proc_scsi_tmscsim,            \
-   proc_info:      tmscsim_proc_info
+   proc_info:      tmscsim_proc_info,		  \
    name:           "Tekram DC390(T) V1.10 Dec-05-1996",\
    detect:         DC390_detect,   		  \
    release:        DC390_release,		  \

@@ -617,8 +617,8 @@ struct scsi_cmnd {
 #define SCSI_MLQUEUE_HOST_BUSY   0x1055
 #define SCSI_MLQUEUE_DEVICE_BUSY 0x1056
 
-extern scsi_mlqueue_insert(Scsi_Cmnd * cmd, int reason);
-extern scsi_mlqueue_finish(struct Scsi_Host * host, Scsi_Device * device);
+extern int scsi_mlqueue_insert(Scsi_Cmnd * cmd, int reason);
+extern int scsi_mlqueue_finish(struct Scsi_Host * host, Scsi_Device * device);
 
 
 #if defined(MAJOR_NR) && (MAJOR_NR != SCSI_TAPE_MAJOR)

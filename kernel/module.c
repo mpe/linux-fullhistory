@@ -772,8 +772,10 @@ free_module(struct module *mod)
 	/* Let the module clean up.  */
 
 	mod->flags |= MOD_DELETED;
-	if (mod->flags & MOD_RUNNING) {
-		mod->cleanup();
+	if (mod->flags & MOD_RUNNING) 
+	{
+		if(mod->cleanup)
+			mod->cleanup();
 		mod->flags &= ~MOD_RUNNING;
 	}
 

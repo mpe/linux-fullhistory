@@ -28,7 +28,7 @@ extern void uninit_aedsp16(void);
 void
 sound_preinit_lowlevel_drivers(void)
 {
-#ifdef CONFIG_AEDSP16
+#if defined(CONFIG_AEDSP16) && !defined(MODULE)
    init_aedsp16();
 #endif
 }

@@ -216,7 +216,7 @@ pas_mixer_reset(void)
 
 static int pas_mixer_ioctl(int dev, unsigned int cmd, caddr_t arg)
 {
-	int level, v;
+	int level,v ;
 
 	DEB(printk("pas2_mixer.c: int pas_mixer_ioctl(unsigned int cmd = %X, unsigned int arg = %X)\n", cmd, arg));
 	if (cmd == SOUND_MIXER_PRIVATE1) { /* Set loudness bit */
@@ -260,7 +260,7 @@ static int pas_mixer_ioctl(int dev, unsigned int cmd, caddr_t arg)
 		if (__get_user(level, (int *)arg))
 			return -EFAULT;
 		if (level == -1)	/* Return current settings */
-			level = = !(pas_read(0x0B8A) & 0x20);
+			level = !(pas_read(0x0B8A) & 0x20);
 		else {
 			if (level)
 				pas_write(pas_read(0x0B8A) & (~0x20), 0x0B8A);

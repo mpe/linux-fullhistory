@@ -21,6 +21,14 @@ MOD_LIST_NAME := HAM_MODULES
 CONFIG_HDLCDRV_BUILTIN :=
 CONFIG_HDLCDRV_MODULE  :=
 
+ifeq ($(CONFIG_DMASCC),y)
+L_OBJS += dmascc.o
+else
+  ifeq ($(CONFIG_DMASCC),m)
+  M_OBJS += dmascc.o
+  endif
+endif
+
 ifeq ($(CONFIG_SCC),y)
 L_OBJS += scc.o
 else

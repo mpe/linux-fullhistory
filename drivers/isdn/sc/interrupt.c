@@ -32,7 +32,7 @@
 #include "message.h"
 #include "card.h"
 
-extern indicate_status(int, int, ulong, char *);
+extern int indicate_status(int, int, ulong, char *);
 extern void check_phystat(unsigned long);
 extern void dump_messages(int);
 extern int receivemessage(int, RspMessage *);

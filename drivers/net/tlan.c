@@ -2184,7 +2184,6 @@ static int TLan_PhyDp83840aCheck( struct device *dev )
 {
 	TLanPrivateInfo	*priv = (TLanPrivateInfo *) dev->priv;
 	u16			gen_ctl;
-	int			i;
 	u32			io;
 	u16			phy;
 	u16			value;

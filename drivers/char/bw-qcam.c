@@ -1,8 +1,6 @@
 /*
  *    QuickCam Driver For Video4Linux.
  *
- *	This version only works as a module.
- *
  *	Video4Linux conversion work by Alan Cox.
  */
 
@@ -297,7 +295,7 @@ static int qc_detect(struct qcam_device *q)
 
 	/* Be liberal in what you accept...  */
 
-	if (count > 30 && count < 200)
+	if (count > 20 && count < 250)
 		return 1;	/* found */
 	else
 		return 0;	/* not found */
@@ -744,6 +742,7 @@ static int qcam_ioctl(struct video_device *dev, unsigned int cmd, void *arg)
 			qcam->bpp = p.depth;
 			
 			qc_setscanmode(qcam);
+			qc_set(qcam);
 			return 0;
 		}
 		case VIDIOCSWIN:
@@ -842,6 +841,8 @@ static struct video_device qcam_template=
 };
 
 
+#ifdef MODULE
+
 int io=0x378;
 
 MODULE_PARM(io,"i");
@@ -859,6 +860,7 @@ int init_module(void)
 	if(qc_detect(qcam)==0)
 	{
 		kfree(qcam);
+		printk(KERN_ERR "bw_qcam: No quickcam detected at 0x%03X\n", io);
 		return -ENODEV;
 	}
 	qc_calibrate(qcam);
@@ -875,3 +877,35 @@ void cleanup_module(void)
 	video_unregister_device(&qcam->vdev);
 	kfree(qcam);
 }
+
+#else
+
+void init_bw_qcams(void)
+{
+	int io_ports[3]={0x278,0x378, 0x3BC};
+	struct qcam_device *qcam;
+	int i;
+	
+	for(i=0;i<3;i++)
+	{
+		qcam=qcam_init(io_ports[i]);
+		if(qcam==NULL)
+			continue;
+		
+		qc_reset(qcam);
+	
+		if(qc_detect(qcam)==0)
+		{
+			kfree(qcam);
+			continue;
+		}
+		qc_calibrate(qcam);
+	
+		printk(KERN_INFO "Connectix Quickcam at 0x%03X\n", qcam->port);
+	
+		if(video_register_device(&qcam->vdev)==-1)
+			return -ENODEV;
+	}
+}
+
+#endif

@@ -118,9 +118,10 @@ static int set_volumes(int dev, int vol)
 
 static int ics2101_mixer_ioctl(int dev, unsigned int cmd, caddr_t arg)
 {
+	int val;
+	
 	if (((cmd >> 8) & 0xff) == 'M') {
 		if (_SIOC_DIR(cmd) & _SIOC_WRITE) {
-			int val;
 			
 			if (__get_user(val, (int *)arg))
 				return -EFAULT;
@@ -220,7 +221,6 @@ ics2101_mixer_init(void)
 
 	if ((n = sound_alloc_mixerdev()) != -1)
 	{
-		n = num_mixers;
 		mixer_devs[n] = &ics2101_mixer_operations;
 
 		/*

@@ -26,7 +26,7 @@ if [ "$CONFIG_HAMRADIO" != "n" ] ; then
 #     tristate 'Serial port 6PACK driver' CONFIG_6PACK
       tristate 'BPQ Ethernet driver' CONFIG_BPQETHER
     
-      tristate 'High-speed (DMA) SCC driver for AX.25' CONFIG_DMASCC $CONFIG_AX25
+      dep_tristate 'High-speed (DMA) SCC driver for AX.25' CONFIG_DMASCC $CONFIG_AX25
       tristate 'Z8530 SCC driver' CONFIG_SCC
       if [ "$CONFIG_SCC" != "n" ]; then
         bool '   additional delay for PA0HZP OptoSCC compatible boards' CONFIG_SCC_DELAY

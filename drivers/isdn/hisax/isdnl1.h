@@ -44,7 +44,7 @@ extern char *ISACVersion(u_char v);
 extern void hscx_sched_event(struct HscxState *hsp, int event);
 extern void isac_sched_event(struct IsdnCardState *sp, int event);
 extern void isac_new_ph(struct IsdnCardState *sp);
-extern get_irq(int cardnr, void *routine);
+extern int get_irq(int cardnr, void *routine);
 
 #ifdef L2FRAME_DEBUG
 extern void Logl2Frame(struct IsdnCardState *sp, struct sk_buff *skb, char *buf, int dir);

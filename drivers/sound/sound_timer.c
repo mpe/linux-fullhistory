@@ -46,8 +46,7 @@ tmr2ticks(int tmr_value)
 	return (tmp + (scale / 2)) / scale;
 }
 
-static void
-reprogram_timer(void)
+void reprogram_timer(void)
 {
 	unsigned long   usecs_per_tick;
 

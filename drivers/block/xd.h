@@ -46,6 +46,7 @@
 #define CMD_DTCGETGEOM	0xFF	/* get geometry data (DTC 5150X only?) */
 #define CMD_ST11GETGEOM 0xF8	/* get geometry data (Seagate ST11R/M only?) */
 #define CMD_WDSETPARAM	0x0C	/* set drive parameters (WD 1004A27X only?) */
+#define CMD_XBSETPARAM	0x0C	/* set drive parameters (XEBEC only?) */
 
 /* Bits for command status byte */
 #define CSB_ERROR	0x02	/* error */
@@ -136,6 +137,8 @@ static void xd_seagate_init_controller (unsigned int address);
 static void xd_seagate_init_drive (u_char drive);
 static void xd_omti_init_controller (unsigned int address);
 static void xd_omti_init_drive (u_char drive);
+static void xd_xebec_init_controller (unsigned int address);
+static void xd_xebec_init_drive (u_char drive);
 static void xd_setparam (u_char command,u_char drive,u_char heads,u_short cylinders,u_short rwrite,u_short wprecomp,u_char ecc);
 static void xd_override_init_drive (u_char drive);
 

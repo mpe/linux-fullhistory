@@ -406,7 +406,7 @@ do_plx_dma(
 		 */
 		udelay(1);
 
-		csr = (volatile) priv->vplxdma[PLX_DMA_CSR/4];
+		csr = (volatile unsigned long) priv->vplxdma[PLX_DMA_CSR/4];
 
                 if (csr & PLX_DMA_CSR_0_DONE)
                         break;
@@ -871,7 +871,7 @@ static int dgrs_ioctl(struct device *devN, struct ifreq *ifr, int cmd)
 			/* Wait for old command to finish */
 			for (i = 0; i < 1000; ++i)
 			{
-				if ( (volatile) privN->bcomm->bc_filter_cmd <= 0 )
+				if ( (volatile long) privN->bcomm->bc_filter_cmd <= 0 )
 					break;
 				udelay(1);
 			}

@@ -122,7 +122,7 @@ static void mark_screen_rdonly(struct task_struct * tsk)
 
 
 
-static do_vm86_irq_handling(int subfunction, int irqnumber);
+static int do_vm86_irq_handling(int subfunction, int irqnumber);
 static void do_sys_vm86(struct kernel_vm86_struct *info, struct task_struct *tsk);
 
 asmlinkage int sys_vm86old(struct vm86_struct * v86)

@@ -25,6 +25,7 @@
 #include <linux/romfs_fs.h>
 #include <linux/auto_fs.h>
 #include <linux/ntfs_fs.h>
+#include <linux/hfs_fs.h>
 #include <linux/major.h>
 #include <linux/smp.h>
 #include <linux/smp_lock.h>
@@ -112,6 +113,10 @@ __initfunc(static void do_sys_setup(void))
 
 #ifdef CONFIG_NTFS_FS
 	init_ntfs_fs();
+#endif
+
+#ifdef CONFIG_HFS_FS
+	init_hfs_fs();
 #endif
 
 #ifdef CONFIG_AFFS_FS

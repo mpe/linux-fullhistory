@@ -6953,7 +6953,7 @@ aic7xxx_reset(Scsi_Cmnd *cmd, unsigned int flags)
   channel = cmd->channel ? 'B': 'A';
   tindex = TARGET_INDEX(cmd);
 
-#ifdef 0   /* AIC7XXX_DEBUG_ABORT */
+#if 0   /* AIC7XXX_DEBUG_ABORT */
   if (scb != NULL)
   {
     printk("(scsi%d:%d:%d) Reset called, scb %d, flags 0x%x\n",

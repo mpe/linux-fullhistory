@@ -215,7 +215,7 @@ void write_inode_now(struct inode *inode)
 /*
  * This is called by the filesystem to tell us
  * that the inode is no longer useful. We just
- * terminate it with extreme predjudice.
+ * terminate it with extreme prejudice.
  */
 void clear_inode(struct inode *inode)
 {

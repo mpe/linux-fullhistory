@@ -2566,7 +2566,6 @@ cleanup_module(void)
 	SOUND_LOCK_END;
 	if(loaded)
 		unload_ms_sound(&hw_config);
-/*      unregister_symtab(&ad1848_syms); */
 }
 
 #else
@@ -2574,7 +2573,6 @@ cleanup_module(void)
 void
 export_ad1848_syms(void)
 {
-	register_symtab(&ad1848_syms);
 }
 
 #endif

@@ -1712,6 +1712,12 @@ static int init_bt848(struct bttv *btv)
 
 	memcpy(&btv->video_dev,&bttv_template,sizeof(bttv_template));
 	idcard(btv);
+	
+	btv->picture.brightness=0x90<<8;
+	btv->picture.contrast = 0x70 << 8;
+	btv->picture.colour = 0x70<<8;
+	btv->picture.hue = 0x8000;
+	
 	if(video_register_device(&btv->video_dev)<0)
 		return -1;
 	return 0;

@@ -2932,10 +2932,8 @@ int gus_default_mixer_ioctl(int dev, unsigned int cmd, caddr_t arg)
 					return __put_user(val, (int *)arg);
 
 				case SOUND_MIXER_PCM:
-					val = ;
-					return __put_user(, (int *)arg);
-				    return (*(int *) arg = gus_pcm_volume | (gus_pcm_volume << 8));
-				    break;
+					val = gus_pcm_volume | (gus_pcm_volume << 8);
+					return __put_user(val, (int *)arg);
 
 				case SOUND_MIXER_SYNTH:
 					return __put_user(gus_wave_volume | (gus_wave_volume << 8), (int *)arg);

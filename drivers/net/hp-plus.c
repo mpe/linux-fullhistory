@@ -103,13 +103,13 @@ static int hpp_close(struct device *dev);
 static void hpp_mem_block_input(struct device *dev, int count,
 						  struct sk_buff *skb, int ring_offset);
 static void hpp_mem_block_output(struct device *dev, int count,
-							const unsigned char *buf, const start_page);
+							const unsigned char *buf, int start_page);
 static void hpp_mem_get_8390_hdr(struct device *dev, struct e8390_pkt_hdr *hdr,
 						  int ring_page);
 static void hpp_io_block_input(struct device *dev, int count,
 						  struct sk_buff *skb, int ring_offset);
 static void hpp_io_block_output(struct device *dev, int count,
-							const unsigned char *buf, const start_page);
+							const unsigned char *buf, int start_page);
 static void hpp_io_get_8390_hdr(struct device *dev, struct e8390_pkt_hdr *hdr,
 						  int ring_page);
 
@@ -385,7 +385,7 @@ hpp_mem_block_input(struct device *dev, int count, struct sk_buff *skb, int ring
    It's always safe to round up, so we do. */
 static void
 hpp_io_block_output(struct device *dev, int count,
-					const unsigned char *buf, const start_page)
+					const unsigned char *buf, int start_page)
 {
 	int ioaddr = dev->base_addr - NIC_OFFSET;
 	outw(start_page << 8, ioaddr + HPP_OUT_ADDR);
@@ -395,7 +395,7 @@ hpp_io_block_output(struct device *dev, int count,
 
 static void
 hpp_mem_block_output(struct device *dev, int count,
-				const unsigned char *buf, const start_page)
+				const unsigned char *buf, int start_page)
 {
 	int ioaddr = dev->base_addr - NIC_OFFSET;
 	int option_reg = inw(ioaddr + HPP_OPTION);

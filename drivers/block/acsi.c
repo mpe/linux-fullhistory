@@ -1820,12 +1820,19 @@ int init_module(void)
 
 void cleanup_module(void)
 {
+	struct gendisk ** gdp;
+
 	del_timer( &acsi_timer );
 	blk_dev[MAJOR_NR].request_fn = 0;
 	free_pages( (unsigned long)acsi_buffer, ACSI_BUFFER_ORDER );
 
 	if (unregister_blkdev( MAJOR_NR, "ad" ) != 0)
 		printk( KERN_ERR "acsi: cleanup_module failed\n");
+	for (gdp = &gendisk_head; *gdp; gdp = &((*gdp)->next))
+		if (*gdp == &acsi_gendisk)
+			break;
+	if (*gdp)
+		*gdp = (*gdp)->next;
 }
 #endif
 

@@ -149,7 +149,8 @@ bool 'Additional low level drivers' CONFIG_LOWLEVEL_SOUND
 if [ "$CONFIG_LOWLEVEL_SOUND" = "y" ]; then
    dep_tristate 'ACI mixer (miroPCM12)' CONFIG_ACI_MIXER $CONFIG_SOUND
    dep_tristate 'AWE32 synth' CONFIG_AWE32_SYNTH $CONFIG_SOUND
-   bool 'Gallant Audio Cards (SC-6000 and SC-6600 based)' CONFIG_AEDSP16
+   dep_tristate 'Gallant Audio Cards (SC-6000 and SC-6600 based)' CONFIG_AEDSP16
+
    if [ "$CONFIG_AEDSP16" = "y" -o "$CONFIG_AEDSP16" = "m" ]; then
       hex '  I/O base for Audio Excel DSP 16 220 or 240' AEDSP16_BASE 220
    fi
@@ -193,6 +194,11 @@ if [ "$CONFIG_LOWLEVEL_SOUND" = "y" ]; then
 	    						AEDSP16_MPU_IRQ $MPU_IRQ
          fi
       fi
+   fi
+
+   if [ "$CONFIG_AEDSP16" = "y" -o "$CONFIG_AEDSP16" = "m" ]; then
+      comment 'SC-6600 Audio Cards have no jumper switches at all'
+      bool 'SC-6600 based audio cards (new Audio Excel DSP 16)' CONFIG_SC6600
 
       if [ "$CONFIG_SC6600" = "y" ]; then
          comment 'SC-6600 specific configuration'
@@ -201,7 +207,6 @@ if [ "$CONFIG_LOWLEVEL_SOUND" = "y" ]; then
 	 					CONFIG_SC6600_CDROM 4
          hex 'SC-6600 CDROM Interface I/O Address' CONFIG_SC6600_CDROMBASE 0
       fi
-
    fi
 fi
 

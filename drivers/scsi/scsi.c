@@ -607,7 +607,7 @@ static void scan_scsis (struct Scsi_Host *shpnt,
             {
                 SCSI_LOG_SCAN_BUS(4,printk("%p ", scmd));
             }
-                SCSI_LOG_SCAN_BUS(4,printk("\n", scmd));
+            SCSI_LOG_SCAN_BUS(4,printk("\n"));
         }
     }
 }

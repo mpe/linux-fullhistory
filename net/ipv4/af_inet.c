@@ -326,7 +326,15 @@ static int inet_create(struct socket *sock, int protocol)
 	if (sock->type == SOCK_PACKET) {
 		static int warned; 
 		if (net_families[AF_PACKET]==NULL)
+		{
+#if defined(CONFIG_KERNELD) && defined(CONFIG_PACKET_MODULE)
+			char module_name[30];
+			sprintf(module_name,"net-pf-%d", AF_PACKET);
+			request_module(module_name);
+			if (net_families[AF_PACKET] == NULL)
+#endif
 			return -ESOCKTNOSUPPORT;
+		}
 		if (!warned++)
 			printk(KERN_INFO "%s uses obsolete (AF_INET,SOCK_PACKET)\n", current->comm);
 		return net_families[AF_PACKET]->create(sock, protocol);

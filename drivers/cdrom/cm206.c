@@ -887,7 +887,7 @@ int get_toc_lba(uch track)
   uch * q = cd->q;
   uch ct;			/* current track */
   int binary=0;
-  const skip = 3*60*75;		/* 3 minutes */
+  const int skip = 3*60*75;		/* 3 minutes */
 
   for (i=track; i>0; i--) if (cd->toc[i].track) {
     min = fsm2lba(cd->toc[i].fsm);

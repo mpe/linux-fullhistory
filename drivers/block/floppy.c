@@ -4246,7 +4246,7 @@ int init_module(void)
 
 void cleanup_module(void)
 {
-	int fdc, dummy;
+	int dummy;
 		
 	unregister_blkdev(MAJOR_NR, "fd");
 

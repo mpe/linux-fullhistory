@@ -33,6 +33,7 @@
 #include "hardware.h"
 #include "message.h"
 #include "card.h"
+#include <asm/io.h>
 
 extern board *adapter[];
 extern unsigned int cinst;
@@ -202,7 +203,7 @@ int sendmessage(int card,
 	 * wait for an empty slot in the queue
 	 */
 	while (!(inb(adapter[card]->ioport[FIFO_STATUS]) & WF_NOT_FULL))
-		SLOW_DOWN_IO;
+		__SLOW_DOWN_IO;
 
 	/*
 	 * Disable interrupts and map in shared memory

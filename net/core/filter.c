@@ -322,7 +322,7 @@ int sk_chk_filter(struct sock_filter *filter, int flen)
 	 *	end they _will_ hit this.
 	 */
 	 
-        return (BPF_CLASS(filter[flen - 1].code) == BPF_RET);
+        return (BPF_CLASS(filter[flen - 1].code) == BPF_RET)?0:-EINVAL;
 }
 
 /*
@@ -340,7 +340,7 @@ int sk_attach_filter(struct sock_fprog *fprog, struct sock *sk)
         if(fprog->filter == NULL || fprog->len == 0 || fsize > BPF_MAXINSNS)
                 return (-EINVAL);
 
-	if((err = sk_chk_filter(fprog->filter, fprog->len)))
+	if((err = sk_chk_filter(fprog->filter, fprog->len))==0)
 	{
 		/* If existing filter, remove it first */
 		if(sk->filter)

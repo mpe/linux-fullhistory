@@ -612,7 +612,7 @@ static int pms_capture(struct pms_device *dev, char *buf, int rgb555, int count)
 	int dw = 2*dev->width;
 	char *src = (char *)bus_to_virt((void *)mem_base);
 
-	char tmp[dw+16]; /* using a temp buffer is faster than direct  */
+	char tmp[dw+32]; /* using a temp buffer is faster than direct  */
 	int cnt = 0;
 	int len=0;
 	unsigned char r8 = 0x5;  /* value for reg8  */
@@ -626,7 +626,7 @@ static int pms_capture(struct pms_device *dev, char *buf, int rgb555, int count)
 	for (y = 0; y < dev->height; y++ ) 
 	{
 		*src = 0;  /* synchronisiert neue Zeile */
-		memcpy(tmp, src, dw+16); /* discard 8 word   */
+		memcpy(tmp, src, dw+32); /* discard 16 word   */
 		cnt -= dev->height;
 		while (cnt <= 0) 
 		{ 
@@ -637,7 +637,7 @@ static int pms_capture(struct pms_device *dev, char *buf, int rgb555, int count)
 			if(dt+len>count)
 				dt=count-len;
 			cnt += dev->height;
-			copy_to_user(buf, tmp+16, dt);
+			copy_to_user(buf, tmp+32, dt);
 			buf += dt;    
 			len += dt;
 		}
@@ -814,10 +814,10 @@ static int pms_ioctl(struct video_device *dev, unsigned int cmd, void *arg)
 			 *	Now load the card.
 			 */
 
-			pms_brightness(p.brightness);
-			pms_hue(p.hue);
-			pms_colour(p.colour);
-			pms_contrast(p.contrast);	
+			pms_brightness(p.brightness>>8);
+			pms_hue(p.hue>>8);
+			pms_colour(p.colour>>8);
+			pms_contrast(p.contrast>>8);	
 			return 0;
 		}
 		case VIDIOCSWIN:

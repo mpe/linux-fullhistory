@@ -133,8 +133,8 @@ static int aha1542_restart(struct Scsi_Host * shost);
 #define aha1542_intr_reset(base)  outb(IRST, CONTROL(base))
 
 #define WAIT(port, mask, allof, noneof)					\
- { register WAITbits;							\
-   register WAITtimeout = WAITnexttimeout;				\
+ { register int WAITbits;						\
+   register int WAITtimeout = WAITnexttimeout;				\
    while (1) {								\
      WAITbits = inb(port) & (mask);					\
      if ((WAITbits & (allof)) == (allof) && ((WAITbits & (noneof)) == 0)) \
@@ -146,8 +146,8 @@ static int aha1542_restart(struct Scsi_Host * shost);
 /* Similar to WAIT, except we use the udelay call to regulate the
    amount of time we wait.  */
 #define WAITd(port, mask, allof, noneof, timeout)			\
- { register WAITbits;							\
-   register WAITtimeout = timeout;					\
+ { register int WAITbits;						\
+   register int WAITtimeout = timeout;					\
    while (1) {								\
      WAITbits = inb(port) & (mask);					\
      if ((WAITbits & (allof)) == (allof) && ((WAITbits & (noneof)) == 0)) \

@@ -430,6 +430,18 @@ N: Doug Evans
 E: dje@cygnus.com
 D: Wrote Xenix FS (part of standard kernel since 0.99.15)
 
+N: Riccardo Facchetti
+E: fizban@tin.it
+P: 1024/6E657BB5 AF 22 90 33 78 76 04 8B  AF F9 97 1E B5 E2 65 30
+D: Audio Excel DSP 16 init driver author
+D: libmodem author
+D: Yet Another Micro Monitor port and current mantainer
+D: First ELF-HOWTO author
+D: random kernel hacker
+S: Via Paolo VI n.29
+S: 23900 - LECCO (Lc)
+S: Italy
+
 N: Rik Faith
 E: faith@cs.unc.edu
 E: r.faith@ieee.org

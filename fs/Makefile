@@ -17,7 +17,7 @@ O_OBJS    = open.o read_write.o devices.o file_table.o buffer.o \
 
 MOD_LIST_NAME := FS_MODULES
 ALL_SUB_DIRS = coda minix ext2 fat msdos vfat proc isofs nfs umsdos ntfs \
-		hpfs sysv smbfs ncpfs ufs affs romfs autofs lockd nfsd nls
+		hpfs sysv smbfs ncpfs ufs affs romfs autofs hfs lockd nfsd nls
 
 ifeq ($(CONFIG_QUOTA),y)
 O_OBJS += dquot.o
@@ -90,6 +90,14 @@ SUB_DIRS += isofs
 else
   ifeq ($(CONFIG_ISO9660_FS),m)
   MOD_SUB_DIRS += isofs
+  endif
+endif
+
+ifeq ($(CONFIG_HFS_FS),y)
+SUB_DIRS += hfs
+else
+  ifeq ($(CONFIG_HFS_FS),m)
+  MOD_SUB_DIRS += hfs
   endif
 endif
 

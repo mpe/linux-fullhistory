@@ -105,7 +105,10 @@ extern void com90xx_setup(char *str, int *ints);
 #ifdef CONFIG_DECNET
 extern void decnet_setup(char *str, int *ints);
 #endif
+#ifdef CONFIG_BLK_DEV_XD
 extern void xd_setup(char *str, int *ints);
+extern void xd_manual_geo_init(char *str, int *ints);
+#endif
 #ifdef CONFIG_BLK_DEV_IDE
 extern void ide_setup(char *);
 #endif
@@ -583,6 +586,7 @@ static struct kernel_param cooked_params[] __initdata = {
 #endif
 #ifdef CONFIG_BLK_DEV_XD
 	{ "xd=", xd_setup },
+	{ "xd_geo=", xd_manual_geo_init },
 #endif
 #if defined(CONFIG_BLK_DEV_FD) || defined(CONFIG_AMIGA_FLOPPY) || defined(CONFIG_ATARI_FLOPPY)
 	{ "floppy=", floppy_setup },

@@ -191,6 +191,9 @@ EXPORT_SYMBOL(in_aton);
 EXPORT_SYMBOL(in_ntoa);
 EXPORT_SYMBOL(net_ratelimit);
 
+/* needed for ip_gre -cw */
+EXPORT_SYMBOL(ip_statistics);
+
 #ifdef CONFIG_IPV6_MODULE
 /* inet functions common to v4 and v6 */
 EXPORT_SYMBOL(inet_stream_ops);

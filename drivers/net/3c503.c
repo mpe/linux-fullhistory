@@ -76,7 +76,7 @@ static int el2_close(struct device *dev);
 static void el2_reset_8390(struct device *dev);
 static void el2_init_card(struct device *dev);
 static void el2_block_output(struct device *dev, int count,
-			     const unsigned char *buf, const start_page);
+			     const unsigned char *buf, int start_page);
 static void el2_block_input(struct device *dev, int count, struct sk_buff *skb,
 			   int ring_offset);
 static void el2_get_8390_hdr(struct device *dev, struct e8390_pkt_hdr *hdr,
@@ -432,7 +432,7 @@ el2_init_card(struct device *dev)
  */
 static void
 el2_block_output(struct device *dev, int count,
-		 const unsigned char *buf, const start_page)
+		 const unsigned char *buf, int start_page)
 {
     unsigned short int *wrd;
     int boguscount;		/* timeout counter */

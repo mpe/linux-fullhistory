@@ -985,9 +985,10 @@ static void ddv_geninit(struct gendisk *ignored)
 int init_module(void)
 {
 	int error = ddv_init();
-	ddv_geninit(&(struct gendisk) { 0,0,0,0,0,0,0,0,0,0,0 });
-	if (!error)
+	if (!error) {
+		ddv_geninit(&(struct gendisk) { 0,0,0,0,0,0,0,0,0,0,0 });
 		printk(KERN_INFO "DDV: Loaded as module.\n");
+	}
 	return error;
 }
 
@@ -995,6 +996,7 @@ int init_module(void)
 void cleanup_module(void)
 {
 	int i;
+	struct gendisk ** gdp;
 
 	for (i = 0 ; i < NUM_DDVDEVS; i++)
 		invalidate_buffers(MKDEV(MAJOR_NR, i));
@@ -1004,6 +1006,11 @@ void cleanup_module(void)
 	OPT_IO(PRST) = PRST_IRST; 
 
 	unregister_blkdev( MAJOR_NR, DEVICE_NAME );
+	for (gdp = &gendisk_head; *gdp; gdp = &((*gdp)->next))
+		if (*gdp == &ddv_gendisk)
+			break;
+	if (*gdp)
+		*gdp = (*gdp)->next;
 	free_irq(APOPT0_IRQ, NULL);
 	blk_dev[MAJOR_NR].request_fn = 0;
 }

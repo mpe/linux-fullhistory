@@ -1,13 +1,13 @@
 #ifndef _SOUNDMODULE_H
 #define _SOUNDMODULE_H
 
-#ifdef MODULE
-
 #include <linux/notifier.h>
 
 extern struct notifier_block *sound_locker;
 extern void sound_notifier_chain_register(struct notifier_block *);
 extern int lock_depth;
+
+#ifdef MODULE
 
 #ifdef SOUND_CORE
 

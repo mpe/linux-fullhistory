@@ -57,6 +57,7 @@ fi
 
 tristate 'System V and Coherent filesystem support' CONFIG_SYSV_FS
 tristate 'Amiga FFS filesystem support' CONFIG_AFFS_FS
+tristate 'Apple Macintosh filesystem support (experimental)' CONFIG_HFS_FS
 tristate 'ROM filesystem support' CONFIG_ROMFS_FS
 tristate 'Kernel automounter support (experimental)' CONFIG_AUTOFS_FS
 if [ "$CONFIG_AFFS_FS" != "n" ]; then
@@ -66,6 +67,7 @@ tristate 'UFS filesystem support (read only)' CONFIG_UFS_FS
 if [ "$CONFIG_UFS_FS" != "n" ]; then
   bool 'BSD disklabel (FreeBSD partition tables) support' CONFIG_BSD_DISKLABEL
   bool 'SMD disklabel (Sun partition tables) support' CONFIG_SMD_DISKLABEL
+  bool 'Solaris (x86) partition table support' CONFIG_SOLARIS_X86_PARTITION
 fi
 bool 'Macintosh partition map support' CONFIG_MAC_PARTITION
 endmenu

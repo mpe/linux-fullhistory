@@ -516,7 +516,7 @@ static inline int NCR5380_pread (struct Scsi_Host *instance, unsigned char *dst,
     register unsigned char  *d = dst;
     register unsigned short reg = (unsigned short) (instance->io_port + 
 	P_DATA_REG_OFFSET);
-    register i = len;
+    register int i = len;
     int ii = 0;
 
     while ( !(inb(instance->io_port + P_STATUS_REG_OFFSET) & P_ST_RDY) )
@@ -552,7 +552,7 @@ static inline int NCR5380_pwrite (struct Scsi_Host *instance, unsigned char *src
     int len) {
     register unsigned char *s = src;
     register unsigned short reg = (instance->io_port + P_DATA_REG_OFFSET);
-    register i = len;
+    register int i = len;
     int ii = 0;
 
     while ( !((inb(instance->io_port + P_STATUS_REG_OFFSET)) & P_ST_RDY) )

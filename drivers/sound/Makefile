@@ -45,7 +45,7 @@ ifeq ($(CONFIG_SOUND),y)
 else
   ifeq ($(CONFIG_SOUND),m)
      M_OBJS += sound.o
-     MX_OBJS += sound_syms.o
+     MIX_OBJS += sound_syms.o
   endif
 endif
 
@@ -242,7 +242,6 @@ sound.o: soundcard.o dev_table.o audio.o dmabuf.o sequencer.o sys_timer.o sound_
 	ld -r -o sound.o soundcard.o dev_table.o audio.o dmabuf.o \
 	       sequencer.o sys_timer.o sound_timer.o lowlevel/lowlevel.o \
 	       midi_synth.o midibuf.o sound_firmware.o
-	rm sound_syms.o
 
 gus.o: gus_card.o gus_midi.o gus_vol.o gus_wave.o ics2101.o
 	ld -r -o gus.o gus_card.o gus_midi.o gus_vol.o gus_wave.o ics2101.o

@@ -104,6 +104,9 @@ int sd_ioctl(struct inode * inode, struct file * file, unsigned int cmd, unsigne
 	
     case BLKRRPART: /* Re-read partition tables */
 	return revalidate_scsidisk(dev, 1);
+
+    RO_IOCTLS(dev, arg);
+
     default:
 	return scsi_ioctl(rscsi_disks[MINOR(dev) >> 4].device , cmd, (void *) arg);
     }

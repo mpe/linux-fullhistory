@@ -328,7 +328,7 @@ static inline int NCR5380_pread (struct Scsi_Host *instance, unsigned char *dst,
     int len) {
     register unsigned char *reg = (unsigned char *) (instance->base + 
 	T_DATA_REG_OFFSET), *d = dst;
-    register i = len;
+    register int i = len;
 
 
 #if 0
@@ -372,7 +372,7 @@ static inline int NCR5380_pwrite (struct Scsi_Host *instance, unsigned char *src
     int len) {
     register unsigned char *reg = (unsigned char *) (instance->base + 
 	T_DATA_REG_OFFSET), *s = src;
-    register i = len;
+    register int i = len;
 
 #if 0
     for (; i; --i) {

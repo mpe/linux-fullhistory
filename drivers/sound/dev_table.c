@@ -73,9 +73,7 @@ start_cards(void)
 	{
 		extern void     sound_preinit_lowlevel_drivers(void);
 
-#ifdef FIXME
 		sound_preinit_lowlevel_drivers();
-#endif
 	}
 #endif
 

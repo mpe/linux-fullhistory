@@ -1,5 +1,5 @@
 /*
- * $Id: dmascc.c,v 1.2 1997/12/02 16:49:49 oe1kib Exp $
+ * $Id: dmascc.c,v 1.2.1.3 1997/12/19 13:40:15 oe1kib Exp $
  *
  * Driver for high-speed SCC boards (those with DMA support)
  * Copyright (C) 1997 Klaus Kudielka
@@ -21,11 +21,11 @@
 
 
 #include <linux/module.h>
+#include <linux/delay.h>
 #include <linux/dmascc.h>
 #include <linux/errno.h>
 #include <linux/if_arp.h>
 #include <linux/in.h>
-#include <linux/init.h>
 #include <linux/interrupt.h>
 #include <linux/ioport.h>
 #include <linux/kernel.h>
@@ -40,10 +40,54 @@
 #include <asm/io.h>
 #include <asm/irq.h>
 #include <asm/segment.h>
-#include <asm/uaccess.h>
 #include <net/ax25.h>
 #include <stdio.h>
 #include "z8530.h"
+
+
+/* Linux 2.0 compatibility */
+
+#if LINUX_VERSION_CODE < 0x20100
+
+
+#define __init
+#define __initdata
+#define __initfunc(x) x
+
+#define MODULE_AUTHOR(x)
+#define MODULE_DESCRIPTION(x)
+#define MODULE_PARM(x,y)
+
+#define copy_to_user(x,y,z) memcpy_tofs(x,y,z)
+#define copy_from_user(x,y,z) memcpy_fromfs(x,y,z)
+#define test_and_set_bit(x,y) set_bit(x,y)
+#define register_netdevice(x) register_netdev(x)
+#define unregister_netdevice(x) unregister_netdev(x)
+
+static int dmascc_dev_init(struct device *dev)
+{
+  return 0;
+}
+
+static void dev_init_buffers(struct device *dev)
+{
+  int i;
+
+  for (i = 0; i < DEV_NUMBUFFS; i++)
+    skb_queue_head_init(&dev->buffs[i]);
+}
+
+
+#else
+
+
+#include <linux/init.h>
+#include <asm/uaccess.h>
+
+#define dmascc_dev_init NULL
+
+
+#endif
 
 
 /* Number of buffers per channel */
@@ -89,7 +133,7 @@
 #define SCCA_CMD        0x02
 #define SCCA_DATA       0x03
 
-/* 8254 registers relative to card base */
+/* 8253/8254 registers relative to card base */
 #define TMR_CNT0        0x00
 #define TMR_CNT1        0x01
 #define TMR_CNT2        0x02
@@ -265,7 +309,7 @@ void cleanup_module(void)
     /* Unregister devices */
     for (i = 0; i < 2; i++) {
       if (info->dev[i].name)
-	unregister_netdev(&info->dev[i]);
+	unregister_netdevice(&info->dev[i]);
     }
 
     /* Reset board */
@@ -301,14 +345,19 @@ __initfunc(void dmascc_setup(char *str, int *ints))
 
 __initfunc(int dmascc_init(void))
 {
-  int h, i, j, n, base[MAX_NUM_DEVS], tcmd, t0, t1, status;
-  unsigned long time, start[MAX_NUM_DEVS], stop[MAX_NUM_DEVS];
+  int h, i, j, n;
+  int base[MAX_NUM_DEVS], tcmd[MAX_NUM_DEVS], t0[MAX_NUM_DEVS],
+    t1[MAX_NUM_DEVS];
+  unsigned t_val;
+  unsigned long time, start[MAX_NUM_DEVS], delay[MAX_NUM_DEVS],
+    counting[MAX_NUM_DEVS];
 
   /* Initialize random number generator */
   rand = jiffies;
-
   /* Cards found = 0 */
   n = 0;
+  /* Warning message */
+  if (!io[0]) printk("dmascc: autoprobing (dangerous)\n");
 
   /* Run autodetection for each card type */
   for (h = 0; h < NUM_TYPES; h++) {
@@ -320,63 +369,66 @@ __initfunc(int dmascc_init(void))
 	j = (io[i] - hw[h].io_region) / hw[h].io_delta;
 	if (j >= 0 &&
 	    j < hw[h].num_devs && 
-	    hw[h].io_region + j * hw[h].io_delta == io[i])
+	    hw[h].io_region + j * hw[h].io_delta == io[i]) {
 	  base[j] = io[i];
+	}
       }
     } else {
       /* Default I/O address regions */
-      for (i = 0; i < hw[h].num_devs; i++)
+      for (i = 0; i < hw[h].num_devs; i++) {
 	base[i] = hw[h].io_region + i * hw[h].io_delta;
+      }
     }
 
     /* Check valid I/O address regions */
     for (i = 0; i < hw[h].num_devs; i++)
-      if (base[i] && check_region(base[i], hw[h].io_size))
-	base[i] = 0;
+      if (base[i])
+	if (check_region(base[i], hw[h].io_size))
+	  base[i] = 0;
+	else {
+	  tcmd[i] = base[i] + hw[h].tmr_offset + TMR_CTRL;
+	  t0[i]   = base[i] + hw[h].tmr_offset + TMR_CNT0;
+	  t1[i]   = base[i] + hw[h].tmr_offset + TMR_CNT1;
+	}
 
     /* Start timers */
     for (i = 0; i < hw[h].num_devs; i++)
       if (base[i]) {
-	tcmd = base[i] + hw[h].tmr_offset + TMR_CTRL;
-	t0   = base[i] + hw[h].tmr_offset + TMR_CNT0;
-	t1   = base[i] + hw[h].tmr_offset + TMR_CNT1;
 	/* Timer 0: LSB+MSB, Mode 3, TMR_0_HZ */
-	outb_p(0x36, tcmd);
-	outb_p((hw[h].tmr_hz/TMR_0_HZ) & 0xFF, t0);
-	outb_p((hw[h].tmr_hz/TMR_0_HZ) >> 8, t0);
+	outb_p(0x36, tcmd[i]);
+	outb_p((hw[h].tmr_hz/TMR_0_HZ) & 0xFF, t0[i]);
+	outb_p((hw[h].tmr_hz/TMR_0_HZ) >> 8, t0[i]);
 	/* Timer 1: LSB+MSB, Mode 0, HZ/10 */
-	outb_p(0x70, tcmd);
-	outb_p((TMR_0_HZ/HZ*10) & 0xFF, t1);
-	outb_p((TMR_0_HZ/HZ*10) >> 8, t1);
+	outb_p(0x70, tcmd[i]);
+	outb_p((TMR_0_HZ/HZ*10) & 0xFF, t1[i]);
+	outb_p((TMR_0_HZ/HZ*10) >> 8, t1[i]);
+	start[i] = jiffies;
+	delay[i] = 0;
+	counting[i] = 1;
 	/* Timer 2: LSB+MSB, Mode 0 */
-	outb_p(0xb0, tcmd);
+	outb_p(0xb0, tcmd[i]);
       }
-
-    /* Initialize start values in case we miss the null count bit */
     time = jiffies;
-    for (i = 0; i < hw[h].num_devs; i++) start[i] = time;
+    /* Wait until counter registers are loaded */
+    udelay(2000000/TMR_0_HZ);
 
     /* Timing loop */
-    while (jiffies - time < 12) {
+    while (jiffies - time < 13) {
       for (i = 0; i < hw[h].num_devs; i++)
-	if (base[i]) {
-	  /* Read back Timer 1: Status */
-	  outb_p(0xE4, base[i] + hw[h].tmr_offset + TMR_CTRL);
-	  status = inb_p(base[i] + hw[h].tmr_offset + TMR_CNT1);
-	  if ((status & 0x3F) != 0x30) base[i] = 0;
-	  if (status & 0x40) start[i] = jiffies;
-	  if (~status & 0x80) stop[i] = jiffies;
+	if (base[i] && counting[i]) {
+	  /* Read back Timer 1: latch; read LSB; read MSB */
+	  outb_p(0x40, tcmd[i]);
+	  t_val = inb_p(t1[i]) + (inb_p(t1[i]) << 8);
+	  /* Also check whether counter did wrap */
+	  if (t_val == 0 || t_val > TMR_0_HZ/HZ*10) counting[i] = 0;
+	  delay[i] = jiffies - start[i];
 	}
     }
 
     /* Evaluate measurements */
     for (i = 0; i < hw[h].num_devs; i++)
       if (base[i]) {
-	time = stop[i] - start[i];
-	if (time < 9 || time > 11)
-	  /* The time expired doesn't match */
-	  base[i] = 0;
-	else {
+	if (delay[i] >= 9 && delay[i] <= 11) {
 	  /* Ok, we have found an adapter */
 	  if (setup_adapter(base[i], h, n) == 0)
 	    n++;
@@ -523,6 +575,7 @@ __initfunc(int setup_adapter(int io, int h, int n))
     dev->hard_header = ax25_encapsulate;
     dev->rebuild_header = ax25_rebuild_header;
     dev->set_mac_address = scc_set_mac_address;
+    dev->init = dmascc_dev_init;
     dev->type = ARPHRD_AX25;
     dev->hard_header_len = 73;
     dev->mtu = 1500;
@@ -530,9 +583,8 @@ __initfunc(int setup_adapter(int io, int h, int n))
     dev->tx_queue_len = 64;
     memcpy(dev->broadcast, ax25_broadcast, 7);
     memcpy(dev->dev_addr, ax25_test, 7);
-    dev->flags = 0;
     dev_init_buffers(dev);
-    if (register_netdev(dev)) {
+    if (register_netdevice(dev)) {
       printk("dmascc: could not register %s\n", dev->name);
       dev->name = NULL;
     }
