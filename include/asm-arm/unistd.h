@@ -349,6 +349,8 @@
 #define __NR_semtimedop			(__NR_SYSCALL_BASE+312)
 #endif
 
+#define __NR_vserver			(__NR_SYSCALL_BASE+313)
+
 /*
  * The following SWIs are ARM private.
  */
