@@ -38,7 +38,7 @@
 
 #define DRIVER_NAME		"radeon"
 #define DRIVER_DESC		"ATI Radeon"
-#define DRIVER_DATE		"20050125"
+#define DRIVER_DATE		"20050311"
 
 /* Interface history:
  *
@@ -80,9 +80,11 @@
  *     - Add R100/R200 surface allocation/free support
  * 1.15- Add support for texture micro tiling
  *     - Add support for r100 cube maps
+ * 1.16- Add R200_EMIT_PP_TRI_PERF_CNTL packet to support brilinear
+ *       texture filtering on r200
  */
 #define DRIVER_MAJOR		1
-#define DRIVER_MINOR		15
+#define DRIVER_MINOR		16
 #define DRIVER_PATCHLEVEL	0
 
 #define GET_RING_HEAD(dev_priv)		DRM_READ32(  (dev_priv)->ring_rptr, 0 )
@@ -819,6 +821,8 @@ extern int radeon_postcleanup( struct drm_device *dev );
 #define R200_RB3D_BLENDCOLOR              0x3218
 
 #define R200_SE_TCL_POINT_SPRITE_CNTL     0x22c4
+
+#define R200_PP_TRI_PERF 0x2cf8
 
 /* Constants */
 #define RADEON_MAX_USEC_TIMEOUT		100000	/* 100 ms */
