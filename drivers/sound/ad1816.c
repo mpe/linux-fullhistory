@@ -1,6 +1,6 @@
 /*
 
-AD1816 lowlevel sound driver for Linux 2.1.128 (and above)
+AD1816 lowlevel sound driver for Linux 2.2.0 and above
 
 Copyright (C) 1998 by Thorsten Knabe <tek@rbg.informatik.tu-darmstadt.de>
 Based on the CS4232/AD1848 driver Copyright (C) by Hannu Savolainen 1993-1996
@@ -32,16 +32,18 @@ Please report any bugs to: tek@rbg.informatik.tu-darmstadt.de
 
 -------------------------------------------------------------------------------
 
-version: 1.1
-cvs: $Header: /home/tek/tmp/CVSROOT/sound21/ad1816.c,v 1.24.2.8 1998/12/04 16:39:46 tek Exp $
+version: 1.2
+cvs: $Header: /home/tek/tmp/CVSROOT/sound21/ad1816.c,v 1.28 1999/01/16 19:01:36 tek Exp $
 status: experimental
-date: 1998/12/04
+date: 1999/01/16
 
 Changes:
 	Oleg Drokin: Some cleanup of load/unload functions.    1998/11/24
 	
 	Thorsten Knabe: attach and unload rewritten, 
 	some argument checks added                             1998/11/30
+
+	Thorsten Knabe: Buggy isa bridge workaround added      1999/01/16
 */
 
 #include <linux/config.h>
@@ -164,7 +166,9 @@ static void ad1816_halt_input (int dev)
 	save_flags (flags); 
 	cli ();
 	
-	disable_dma(audio_devs[dev]->dmap_in->dma);
+	if(!isa_dma_bridge_buggy) {
+	        disable_dma(audio_devs[dev]->dmap_in->dma);
+	}
 	
 	buffer=inb(devc->base+9);
 	if (buffer & 0x01) {
@@ -172,8 +176,10 @@ static void ad1816_halt_input (int dev)
 		outb(buffer & ~0x01,devc->base+9); 
 	}
 
-	enable_dma(audio_devs[dev]->dmap_in->dma);
-	
+	if(!isa_dma_bridge_buggy) {
+	        enable_dma(audio_devs[dev]->dmap_in->dma);
+	}
+
 	/* Clear interrupt status */
 	outb (~0x40, devc->base+1);	
 	
@@ -195,15 +201,20 @@ static void ad1816_halt_output (int dev)
 	/* Mute pcm output */
 	ad_write(devc, 4, ad_read(devc,4)|0x8080);
 
-	disable_dma(audio_devs[dev]->dmap_out->dma);
-	
+	if(!isa_dma_bridge_buggy) {
+	        disable_dma(audio_devs[dev]->dmap_out->dma);
+	}
+
 	buffer=inb(devc->base+8);
 	if (buffer & 0x01) {
 		/* disable capture */
 		outb(buffer & ~0x01,devc->base+8); 
 	}
-	enable_dma(audio_devs[dev]->dmap_out->dma);
-	
+
+	if(!isa_dma_bridge_buggy) {
+	        enable_dma(audio_devs[dev]->dmap_out->dma);
+	}
+
 	/* Clear interrupt status */
 	outb ((unsigned char)~0x80, devc->base+1);	
 
@@ -707,11 +718,11 @@ MIX_ENT(SOUND_MIXER_LINE3,      39, 0, 9, 4,    39, 1, 0, 5)
 
 static unsigned short default_mixer_levels[SOUND_MIXER_NRDEVICES] =
 {
-	0x6464,			/* Master Volume */
+	0x4343,			/* Master Volume */
 	0x3232,			/* Bass */
 	0x3232,			/* Treble */
 	0x0000,			/* FM */
-	0x6464,			/* PCM */
+	0x4343,			/* PCM */
 	0x0000,			/* PC Speaker */
 	0x0000,			/* Ext Line */
 	0x0000,			/* Mic */
@@ -1080,7 +1091,13 @@ int probe_ad1816 ( struct address_info *hw_config )
 	int tmp;
 	
 	printk("ad1816: AD1816 sounddriver Copyright (C) 1998 by Thorsten Knabe\n");
-	printk("ad1816: $Header: /home/tek/tmp/CVSROOT/sound21/ad1816.c,v 1.24.2.8 1998/12/04 16:39:46 tek Exp $\n");
+	printk("ad1816: $Header: /home/tek/tmp/CVSROOT/sound21/ad1816.c,v 1.28 1999/01/16 19:01:36 tek Exp $\n");
+	printk("ad1816: io=0x%x, irq=%d, dma=%d, dma2=%d, isadmabug=%d\n",
+	       hw_config->io_base,
+	       hw_config->irq,
+	       hw_config->dma,
+	       hw_config->dma2,
+	       isa_dma_bridge_buggy);
 
 	if (check_region (io_base, 16)) {
 		printk ("ad1816: I/O port 0x%03x not free\n", io_base);

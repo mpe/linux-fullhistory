@@ -341,6 +341,13 @@ __initfunc(void setup_arch(char **cmdline_p,
 	*memory_start_p = memory_start;
 	*memory_end_p = memory_end;
 
+#ifdef __SMP__
+	/*
+	 *	Save possible boot-time SMP configuration:
+	 */
+	init_smp_config();
+#endif
+
 #ifdef CONFIG_BLK_DEV_INITRD
 	if (LOADER_TYPE) {
 		initrd_start = INITRD_START ? INITRD_START + PAGE_OFFSET : 0;

@@ -79,7 +79,7 @@ struct ip_masq_mfw {
 };
 
 
-static struct semaphore mfw_sema;
+static struct semaphore mfw_sema = MUTEX;
 #ifdef __SMP__
 static rwlock_t mfw_lock = RW_LOCK_UNLOCKED;
 #endif
@@ -748,7 +748,6 @@ static struct ip_masq_mod mfw_mod = {
 
 __initfunc(int ip_mfw_init(void))
 {
-	sema_init(&mfw_sema, 1);
 	return register_ip_masq_mod ((mmod_self=&mfw_mod));
 }
 

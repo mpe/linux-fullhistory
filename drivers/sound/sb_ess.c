@@ -2,8 +2,6 @@
  * Created: 9-Jan-1999
  *
  * TODO: 	consistency speed calculations!!
- *			what's the sample rate when duplex? Docs contradict.
- *			I broke IRQ detection for non-SMP machines
  * ????:	Did I break MIDI support?
  *
  * This files contains ESS chip specifics. It's based on the existing ESS
@@ -18,6 +16,10 @@
  * Full duplex is enabled by specifying dma16. While the normal dma must
  * be one of 0, 1 or 3, dma16 can be one of 0, 1, 3 or 5. DMA 5 is a 16 bit
  * DMA channel, while the others are 8 bit..
+ *
+ * ESS detection isn't full proof (yet). If it fails an additional module
+ * parameter esstype can be specified to be one of the following:
+ * 688, 1688, 1868, 1869, 1788, 1887, 1888
  *
  * History:
  *
@@ -77,6 +79,9 @@
  * Oh, and this is another trap: in ES1887 docs mixer register 0x70 is decribed
  * as if it's exactly the same as register 0xa1. This is *NOT* true. The
  * description of 0x70 in ES1869 docs is accurate however.
+ * Well, the assumption about ES1869 was wrong: register 0x70 is very much
+ * like register 0xa1, except that bit 7 is allways 1, whatever you want
+ * it to be.
  *
  * When using audio 2 mixer register 0x72 seems te be meaningless. Only 0xa2
  * has effect.
@@ -85,6 +90,16 @@
  * the fact that register 0x78 isn't reset is great when you wanna change back
  * to single dma operation (simplex): audio 2 is still operation, and uses the
  * same dma as audio 1: your ess changes into a funny echo machine.
+ *
+ * Received the new that ES1688 is detected as a ES1788. Did some thinking:
+ * the ES1887 detection scheme suggests in step 2 to try if bit 3 of register
+ * 0x64 can be changed. This is inaccurate, first I inverted the * check: "If
+ * can be modified, it's a 1688", which lead to a correct detection
+ * of my ES1887. It resulted however in bad detection of 1688 (reported by mail)
+ * and 1868 (if no PnP detection first): they result in a 1788 being detected.
+ * I don't have docs on 1688, but I do have docs on 1868: The documentation is
+ * probably inaccurate in the fact that I should check bit 2, not bit 3. This
+ * is what I do now.
  */
 
 /*
@@ -141,13 +156,13 @@
  * ES1946	yes		This is a PCI chip; not handled by this driver
  */
 
-#include <linux/delay.h>
-
 #include "sound_config.h"
 #include "sb_mixer.h"
 #include "sb.h"
 
 #include "sb_ess.h"
+
+extern int esstype; /* module parameter in sb_card.c */
 
 #ifdef FKS_LOGGING
 static void ess_show_mixerregs (sb_devc *devc);
@@ -255,10 +270,10 @@ static int ess_calc_div (int clock, int revert, int *speedp, int *diffp)
 	int retval;
 
 	speed   = *speedp;
-	divider = (clock + speed / 2) / *speedp;
+	divider = (clock + speed / 2) / speed;
 	retval  = revert - divider;
-	if (retval > 127) {
-		retval  = 127;
+	if (retval > revert - 1) {
+		retval  = revert - 1;
 		divider = revert - retval;
 	}
 	/* This line is suggested. Must be wrong I think
@@ -299,60 +314,59 @@ static int ess_calc_best_speed
 
 /*
  * Depending on the audiochannel ESS devices can
- * have different clock settings.
+ * have different clock settings. These are made consistent for duplex
+ * however.
  * callers of ess_speed only do an audionum suggestion, which means
  * input suggests 1, output suggests 2. This suggestion is only true
  * however when doing duplex.
  */
+static void ess_common_speed (sb_devc *devc, int *speedp, int *divp)
+{
+	int diff = 0, div, choice;
+
+	if (devc->duplex) {
+		/*
+		 * The 0x80 is important for the first audio channel
+		 */
+		div = 0x80 | ess_calc_div (795500, 128, speedp, &diff);
+	} else {
+		choice = ess_calc_best_speed (397700, 128, 795500, 256, &div, speedp);
+		if (choice == 2) div |= 0x80;
+	}
+	*divp = div;
+}
+
 static void ess_speed (sb_devc *devc, int audionum)
 {
-	int choice;
-	int speed = devc->speed;
-	int clock1, clock2;
-	int rev1, rev2;
-	int div;
+	int speed;
+	int div, div2;
 
-	if (!devc->duplex) audionum = 1;
-
-	if (audionum == 1) {
-		rev1	= 128;
-		clock1	= 397700;
-		rev2	= 256;
-		clock2	= 795500;
-	} else {
-		rev1	= 128;
-		clock1	= 793800;
-		rev2	= 128;
-		clock2	= 768000;
-	}
-	choice = ess_calc_best_speed
-			(clock1, rev1, clock2, rev2, &div, &speed);
+	ess_common_speed (devc, &(devc->speed), &div);
 
 #ifdef FKS_REG_LOGGING
-printk (KERN_INFO "FKS: ess_speed (%d) b speed = %d, div=%x\n", audionum, speed, div);
+printk (KERN_INFO "FKS: ess_speed (%d) b speed = %d, div=%x\n", audionum, devc->speed, div);
 #endif
 
-	if (choice == 2) div |= 0x80;
+	/* Set filter roll-off to 90% of speed/2 */
+	speed = (devc->speed * 9) / 20;
+
+	div2 = 256 - 7160000 / (speed * 82);
+
+	if (!devc->duplex) audionum = 1;
 
 	if (audionum == 1) {
 		/* Change behaviour of register A1 *
 		sb_chg_mixer(devc, 0x71, 0x20, 0x20)
 		* For ES1869 only??? */
 		ess_write (devc, 0xa1, div);
+		ess_write (devc, 0xa2, div2);
 	} else {
 		ess_setmixer (devc, 0x70, div);
-	}
-
-	/* Set filter roll-off to 90% of speed/2 */
-	speed = (speed * 9) / 20;
-
-	div = 256 - 7160000 / (speed * 82);
-
-	if (audionum == 1) {
-		ess_write (devc, 0xa2, div);
-	} else {
-		ess_write (devc, 0xa2, div);
-		ess_setmixer (devc, 0x72, div);
+		/*
+		 * FKS: fascinating: 0x72 doesn't seem to work.
+		 */
+		ess_write (devc, 0xa2, div2);
+		ess_setmixer (devc, 0x72, div2);
 	}
 }
 
@@ -442,7 +456,9 @@ static int ess_audio_prepare_for_output_audio2 (int dev, int bsize, int bcount)
 	sb_devc *devc = audio_devs[dev]->devc;
 	unsigned char bits;
 
+/* FKS: qqq
 	sb_dsp_reset(devc);
+*/
 
 	/*
 	 * Auto-Initialize:
@@ -626,31 +642,19 @@ static void ess_audio_trigger(int dev, int bits)
 	devc->trigger_bits = bits | bits_16;
 }
 
-/*
- * FKS: Change this!! it's the old routine!
- */
 static int ess_audio_set_speed(int dev, int speed)
 {
 	sb_devc *devc = audio_devs[dev]->devc;
-	int divider;
+	int minspeed, maxspeed, dummydiv;
 
-	if (speed > 0)
-	{
-		if (speed < 5000)
-			speed = 5000;
-		if (speed > 48000)
-			speed = 48000;
+	if (speed > 0) {
+		minspeed = (devc->duplex ? 6215  : 5000 );
+		maxspeed = (devc->duplex ? 44100 : 48000);
+		if (speed < minspeed) speed = minspeed;
+		if (speed > maxspeed) speed = maxspeed;
 
-		if (speed > 22000)
-		{
-			divider = (795500 + speed / 2) / speed;
-			speed = (795500 + divider / 2) / divider;
-		}
-		else
-		{
-			divider = (397700 + speed / 2) / speed;
-			speed = (397700 + divider / 2) / divider;
-		}
+		ess_common_speed (devc, &speed, &dummydiv);
+
 		devc->speed = speed;
 	}
 	return devc->speed;
@@ -972,7 +976,7 @@ int ess_init(sb_devc * devc, struct address_info *hw_config)
 	unsigned char cfg;
 	int ess_major = 0, ess_minor = 0;
 	int i;
-	static char name[100];
+	static char name[100], modelname[10];
 
 	/*
 	 * Try to detect ESS chips.
@@ -1022,13 +1026,42 @@ int ess_init(sb_devc * devc, struct address_info *hw_config)
 	if (ess_major == 0x68 && (ess_minor & 0xf0) == 0x80) {
 		char *chip = NULL;
 
-		if ((ess_minor & 0x0f) < 8) {
+		if (esstype) {
+			int submodel = -1;
+
+			switch (esstype) {
+			case 688:
+				submodel = 0x00;
+				break;
+			case 1688:
+				submodel = 0x08;
+				break;
+			case 1868:
+				submodel = SUBMDL_ES1868;
+				break;
+			case 1869:
+				submodel = SUBMDL_ES1869;
+				break;
+			case 1788:
+				submodel = SUBMDL_ES1788;
+				break;
+			case 1887:
+				submodel = SUBMDL_ES1887;
+				break;
+			case 1888:
+				submodel = SUBMDL_ES1888;
+				break;
+			};
+			if (submodel != -1) {
+				devc->submodel = submodel;
+				sprintf (modelname, "ES%d", esstype);
+				chip = modelname;
+			};
+		};
+		if (chip == NULL && (ess_minor & 0x0f) < 8) {
 			chip = "ES688";
 		};
-#ifdef FKS_LOGGING
-printk(KERN_INFO "FKS: mixer_reset\n");
-		ess_setmixer (devc, 0x00, 0x00);
-#endif
+
 		if (chip == NULL) {
 			int type;
 
@@ -1049,7 +1082,24 @@ printk(KERN_INFO "FKS: mixer_reset\n");
 				break;
 			};
 		};
-		if (chip == NULL && !ess_probe(devc, 0x64, (1 << 3))) {
+#if 0
+		/*
+		 * this one failed:
+		 * the probing of bit 4 is another thought: from ES1788 and up, all
+		 * chips seem to have hardware volume control. Bit 4 is readonly to
+		 * check if a hardware volume interrupt has fired.
+		 * Cause ES688/ES1688 don't have this feature, bit 4 might be writeable
+		 * for these chips.
+		 */
+		if (chip == NULL && !ess_probe(devc, 0x64, (1 << 4))) {
+#endif
+		/*
+		 * the probing of bit 2 is my idea. The ES1887 docs want me to probe
+		 * bit 3. This results in ES1688 being detected as ES1788.
+		 * Bit 2 is for "Enable HWV IRQE", but as ES(1)688 chips don't have
+		 * HardWare Volume, I think they don't have this IRQE.
+		 */
+		if (chip == NULL && ess_probe(devc, 0x64, (1 << 2))) {
 			if (ess_probe (devc, 0x70, 0x7f)) {
 				if (ess_probe (devc, 0x64, (1 << 5))) {
 					chip = "ES1887";

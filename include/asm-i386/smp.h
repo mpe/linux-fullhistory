@@ -163,7 +163,7 @@ struct mpc_config_intlocal
  */
  
 extern int smp_found_config;
-extern int smp_scan_config(unsigned long, unsigned long);
+extern void init_smp_config(void);
 extern unsigned long smp_alloc_memory(unsigned long mem_base);
 extern unsigned char boot_cpu_id;
 extern unsigned long cpu_present_map;

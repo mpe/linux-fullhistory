@@ -307,6 +307,7 @@
 #define __NR_getcwd			367
 #define __NR_capget			368
 #define __NR_capset			369
+#define __NR_sendfile			370
 
 #if defined(__LIBRARY__) && defined(__GNUC__)
 

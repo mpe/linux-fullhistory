@@ -79,11 +79,11 @@ static int aux_count = 0;
 #define AUX_INTS_ON  (KBD_MODE_KCC | KBD_MODE_SYS | KBD_MODE_MOUSE_INT | KBD_MODE_KBD_INT)
 
 #define MAX_RETRIES	60		/* some aux operations take long time*/
-#if defined(__alpha__) && !defined(CONFIG_PCI)
-# define AUX_IRQ	9		/* Jensen is odd indeed */
-#else
+
+#ifndef AUX_IRQ
 # define AUX_IRQ	12
 #endif
+
 #endif /* CONFIG_PSMOUSE */
 
 /*
@@ -811,7 +811,7 @@ static int release_aux(struct inode * inode, struct file * file)
 	if (--aux_count)
 		return 0;
 	kbd_write_cmd(AUX_INTS_OFF);			    /* Disable controller ints */
-	kbd_write(KBD_CCMD_MOUSE_DISABLE, KBD_CNTL_REG);
+	kbd_write(KBD_CNTL_REG, KBD_CCMD_MOUSE_DISABLE);
 	free_irq(AUX_IRQ, AUX_DEV);
 	return 0;
 }
@@ -831,7 +831,7 @@ static int open_aux(struct inode * inode, struct file * file)
 		aux_count--;
 		return -EBUSY;
 	}
-	kbd_write(KBD_CCMD_MOUSE_ENABLE, KBD_CNTL_REG);	/* Enable the
+	kbd_write(KBD_CNTL_REG, KBD_CCMD_MOUSE_ENABLE);	/* Enable the
 							   auxiliary port on
 							   controller. */
 	aux_write_dev(AUX_ENABLE_DEV); /* Enable aux device */
@@ -950,14 +950,14 @@ static int __init psaux_init(void)
 	queue->proc_list = NULL;
 
 #ifdef INITIALIZE_MOUSE
-	kbd_write(KBD_CCMD_MOUSE_ENABLE, KBD_CNTL_REG);	/* Enable Aux. */
+	kbd_write(KBD_CNTL_REG, KBD_CCMD_MOUSE_ENABLE);	/* Enable Aux. */
 	aux_write_dev(AUX_SET_SAMPLE);
 	aux_write_dev(100);			/* 100 samples/sec */
 	aux_write_dev(AUX_SET_RES);
 	aux_write_dev(3);			/* 8 counts per mm */
 	aux_write_dev(AUX_SET_SCALE21);		/* 2:1 scaling */
 #endif /* INITIALIZE_MOUSE */
-	kbd_write(KBD_CCMD_MOUSE_DISABLE, KBD_CNTL_REG); /* Disable aux device. */
+	kbd_write(KBD_CNTL_REG, KBD_CCMD_MOUSE_DISABLE); /* Disable aux device. */
 	kbd_write_cmd(AUX_INTS_OFF); /* Disable controller ints. */
 
 	return 0;

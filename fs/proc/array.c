@@ -14,7 +14,7 @@
  *                      EVERY character on the current page.
  *                      <middelin@polyware.iaf.nl>
  *
- * Danny ter Haar    :	added cpuinfo 
+ * Danny ter Haar    :	added cpuinfo
  *			<dth@cistron.nl>
  *
  * Alessandro Rubini :  profile extension.
@@ -33,13 +33,13 @@
  *                      and /proc/<pid>/cpu extension
  *                      <forissier@isia.cma.fr>
  *			- Incorporation and non-SMP safe operation
- *			of forissier patch in 2.1.78 by 
+ *			of forissier patch in 2.1.78 by
  *			Hans Marcus <crowbar@concepts.nl>
  *
  * aeb@cwi.nl        :  /proc/partitions
  *
  *
- * Alan Cox	     :  security fixes. 
+ * Alan Cox	     :  security fixes.
  *			<Alan.Cox@linux.org>
  *
  * Andi Kleen	     :  Race Fixes. 	
@@ -142,7 +142,7 @@ static struct file_operations proc_kcore_operations = {
 };
 
 struct inode_operations proc_kcore_inode_operations = {
-	&proc_kcore_operations, 
+	&proc_kcore_operations,
 };
 
 /*
@@ -198,7 +198,7 @@ static ssize_t write_profile(struct file * file, const char * buf,
 			return -EINVAL;
 	}
 #endif
-  
+
 	memset(prof_buffer, 0, prof_len * sizeof(*prof_buffer));
 	return count;
 }
@@ -210,7 +210,7 @@ static struct file_operations proc_profile_operations = {
 };
 
 struct inode_operations proc_profile_inode_operations = {
-	&proc_profile_operations, 
+	&proc_profile_operations,
 };
 
 
@@ -388,29 +388,29 @@ static int get_cmdline(char * buffer)
 	return sprintf(buffer, "%s\n", saved_command_line);
 }
 
-/* 
+/*
  * Caller must release_mm the mm_struct later.
- * You don't get any access to init_mm. 
- */ 
-static struct mm_struct *get_mm_and_lock(int pid) 
-{ 
-	struct mm_struct *mm = NULL;  
-	struct task_struct *tsk; 
+ * You don't get any access to init_mm.
+ */
+static struct mm_struct *get_mm_and_lock(int pid)
+{
+	struct mm_struct *mm = NULL;
+	struct task_struct *tsk;
 
-	read_lock(&tasklist_lock); 
-	tsk = find_task_by_pid(pid); 
+	read_lock(&tasklist_lock);
+	tsk = find_task_by_pid(pid);
 	if (tsk && tsk->mm && tsk->mm != &init_mm)
-		mmget(mm = tsk->mm);  
+		mmget(mm = tsk->mm);
 	read_unlock(&tasklist_lock);
-	if (mm != NULL) 
-		down(&mm->mmap_sem); 
-	return mm; 
+	if (mm != NULL)
+		down(&mm->mmap_sem);
+	return mm;
 }
 
 static void release_mm(struct mm_struct *mm)
 {
-	up(&mm->mmap_sem); 
-	mmput(mm); 
+	up(&mm->mmap_sem);
+	mmput(mm);
 }
 
 static unsigned long get_phys_addr(struct mm_struct *mm, unsigned long ptr)
@@ -423,7 +423,7 @@ static unsigned long get_phys_addr(struct mm_struct *mm, unsigned long ptr)
 		return 0;
 	/* Check for NULL pgd .. shouldn't happen! */
 	if (!mm->pgd) {
-		printk(KERN_DEBUG "missing pgd for mm %p\n", mm); 
+		printk(KERN_DEBUG "missing pgd for mm %p\n", mm);
 		return 0;
 	}
 
@@ -480,12 +480,12 @@ static int get_array(struct mm_struct *mm, unsigned long start, unsigned long en
 
 static int get_env(int pid, char * buffer)
 {
-	struct mm_struct *mm; 
-	int res = 0; 
+	struct mm_struct *mm;
+	int res = 0;
 
-	mm = get_mm_and_lock(pid); 
-	if (mm) {  
-		res = get_array(mm, mm->env_start, mm->env_end, buffer); 
+	mm = get_mm_and_lock(pid);
+	if (mm) {
+		res = get_array(mm, mm->env_start, mm->env_end, buffer);
 		release_mm(mm);
 	}
 	return res;
@@ -493,14 +493,14 @@ static int get_env(int pid, char * buffer)
 
 static int get_arg(int pid, char * buffer)
 {
-	struct mm_struct *mm; 
-	int res = 0; 
+	struct mm_struct *mm;
+	int res = 0;
 
-	mm = get_mm_and_lock(pid); 
+	mm = get_mm_and_lock(pid);
 	if (mm) {
-		res = get_array(mm, mm->arg_start, mm->arg_end, buffer); 
-		release_mm(mm); 
-	} 
+		res = get_array(mm, mm->arg_start, mm->arg_end, buffer);
+		release_mm(mm);
+	}
 	return res;
 }
 
@@ -754,14 +754,14 @@ static inline char * task_mem(struct task_struct *p, char *buffer)
 {
 	struct mm_struct * mm = p->mm;
 
-	if (!mm) 
+	if (!mm)
 		return buffer;
 	if (mm != &init_mm) {
 		struct vm_area_struct * vma;
 		unsigned long data = 0, stack = 0;
 		unsigned long exec = 0, lib = 0;
 
-		down(&mm->mmap_sem); 
+		down(&mm->mmap_sem);
 		for (vma = mm->mmap; vma; vma = vma->vm_next) {
 			unsigned long len = (vma->vm_end - vma->vm_start) >> 10;
 			if (!vma->vm_file) {
@@ -779,7 +779,7 @@ static inline char * task_mem(struct task_struct *p, char *buffer)
 				lib += len;
 			}
 		}	
-		up(&mm->mmap_sem); 
+		up(&mm->mmap_sem);
 		buffer += sprintf(buffer,
 			"VmSize:\t%8lu kB\n"
 			"VmLck:\t%8lu kB\n"
@@ -849,35 +849,31 @@ extern inline char *task_cap(struct task_struct *p, char *buffer)
 			    cap_t(p->cap_effective));
 }
 
-static struct task_struct *grab_task(int pid, struct task_struct *dst) 
+static struct task_struct *grab_task(int pid)
 {
-	struct task_struct *tsk = current; 
-	if (pid != tsk->pid) { 
+	struct task_struct *tsk = current;
+	if (pid != tsk->pid) {
 		read_lock(&tasklist_lock);
 		tsk = find_task_by_pid(pid);
-		if (tsk) { 
-			memcpy(dst, tsk, sizeof(struct task_struct));
-			tsk = dst;
-			if (tsk->mm && tsk->mm != &init_mm) 
-				mmget(tsk->mm);
-		}
+		if (tsk && tsk->mm && tsk->mm != &init_mm)
+			mmget(tsk->mm);
 		read_unlock(&tasklist_lock);
 	}	
-	return tsk; 
+	return tsk;
 }
 
 static void release_task(struct task_struct *tsk)
 {
 	if (tsk != current && tsk->mm && tsk->mm != &init_mm)
-		mmput(tsk->mm); 
+		mmput(tsk->mm);
 }
 
 static int get_status(int pid, char * buffer)
 {
 	char * orig = buffer;
-	struct task_struct *tsk, mytask;
+	struct task_struct *tsk;
 	
-	tsk = grab_task(pid, &mytask); 
+	tsk = grab_task(pid);
 	if (!tsk)
 		return 0;
 	buffer = task_name(tsk, buffer);
@@ -885,13 +881,13 @@ static int get_status(int pid, char * buffer)
 	buffer = task_mem(tsk, buffer);
 	buffer = task_sig(tsk, buffer);
 	buffer = task_cap(tsk, buffer);
-	release_task(tsk); 
+	release_task(tsk);
 	return buffer - orig;
 }
 
 static int get_stat(int pid, char * buffer)
 {
-	struct task_struct *tsk, mytask;
+	struct task_struct *tsk;
 	unsigned long vsize, eip, esp, wchan;
 	long priority, nice;
 	int tty_pgrp;
@@ -899,8 +895,8 @@ static int get_stat(int pid, char * buffer)
 	char state;
 	int res;
 
-	tsk = grab_task(pid, &mytask);  
-	if (!tsk) 
+	tsk = grab_task(pid);
+	if (!tsk)
 		return 0;
 	state = *get_task_state(tsk);
 	vsize = eip = esp = 0;
@@ -908,10 +904,10 @@ static int get_stat(int pid, char * buffer)
 		struct vm_area_struct *vma;
 
 		down(&tsk->mm->mmap_sem);
-		for (vma = tsk->mm->mmap; vma; vma = vma->vm_next) {  
+		for (vma = tsk->mm->mmap; vma; vma = vma->vm_next) {
 			vsize += vma->vm_end - vma->vm_start;
 		}
-		up(&tsk->mm->mmap_sem); 
+		up(&tsk->mm->mmap_sem);
 		
 		eip = KSTK_EIP(tsk);
 		esp = KSTK_ESP(tsk);
@@ -1061,8 +1057,8 @@ static int get_statm(int pid, char * buffer)
 	int size=0, resident=0, share=0, trs=0, lrs=0, drs=0, dt=0;
 	struct mm_struct *mm;
 
-	mm = get_mm_and_lock(pid); 
-	if (mm) { 
+	mm = get_mm_and_lock(pid);
+	if (mm) {
 		struct vm_area_struct * vma = mm->mmap;
 
 		while (vma) {
@@ -1084,7 +1080,7 @@ static int get_statm(int pid, char * buffer)
 				drs += pages;
 			vma = vma->vm_next;
 		}
-		release_mm(mm); 
+		release_mm(mm);
 	}
 	return sprintf(buffer,"%d %d %d %d %d %d %d\n",
 		       size, resident, share, trs, lrs, drs, dt);
@@ -1122,7 +1118,7 @@ static int get_statm(int pid, char * buffer)
 
 #define MAPS_LINE_MAX	MAPS_LINE_MAX8
 
-/* FIXME: this does not do proper mm locking */  
+/* FIXME: this does not do proper mm locking */
 static ssize_t read_maps (int pid, struct file * file, char * buf,
 			  size_t count, loff_t *ppos)
 {
@@ -1170,7 +1166,7 @@ static ssize_t read_maps (int pid, struct file * file, char * buf,
 		int flags;
 		kdev_t dev;
 		unsigned long ino;
-		int maxlen = (sizeof(void*) == 4) ? 
+		int maxlen = (sizeof(void*) == 4) ?
 			MAPS_LINE_MAX4 :  MAPS_LINE_MAX8;
 		int len;
 
@@ -1254,10 +1250,10 @@ out:
 #ifdef __SMP__
 static int get_pidcpu(int pid, char * buffer)
 {
-	struct task_struct * tsk, mytask;
+	struct task_struct * tsk;
 	int i, len;
 
-	tsk = grab_task(pid, &mytask);
+	tsk = grab_task(pid);
 	if (!tsk)
 		return 0;
 
@@ -1272,7 +1268,7 @@ static int get_pidcpu(int pid, char * buffer)
 			tsk->per_cpu_utime[cpu_logical_map(i)],
 			tsk->per_cpu_stime[cpu_logical_map(i)]);
 
-	release_task(tsk); 
+	release_task(tsk);
 	return len;
 }
 #endif
@@ -1399,10 +1395,9 @@ static int process_unauthorized(int type, int pid)
 	read_lock(&tasklist_lock);
 	
 	/*
-	 *	Grab the lock, find the task, save the uid and 
+	 *	Grab the lock, find the task, save the uid and
 	 *	check it has an mm still (ie its not dead)
 	 */
-	 
 	p = find_task_by_pid(pid);
 	if(p)
 	{

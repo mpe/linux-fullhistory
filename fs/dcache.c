@@ -480,17 +480,6 @@ struct dentry * d_alloc(struct dentry * parent, const struct qstr *name)
 	char * str;
 	struct dentry *dentry;
 
-	/*
-	 * Prune the dcache if there are too many unused dentries.
-	 */
-	if (dentry_stat.nr_unused > 3*(nr_inodes >> 1)) {
-#ifdef DCACHE_DEBUG
-printk("d_alloc: %d unused, pruning dcache\n", dentry_stat.nr_unused);
-#endif
-		prune_dcache(8);
-		free_inode_memory(8);
-	}
-
 	dentry = kmem_cache_alloc(dentry_cache, GFP_KERNEL); 
 	if (!dentry)
 		return NULL;

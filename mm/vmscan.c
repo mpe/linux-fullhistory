@@ -368,88 +368,6 @@ out:
 }
 
 /*
- * Before we start the kernel thread, print out the 
- * kswapd initialization message (otherwise the init message 
- * may be printed in the middle of another driver's init 
- * message).  It looks very bad when that happens.
- */
-void __init kswapd_setup(void)
-{
-       int i;
-       char *revision="$Revision: 1.5 $", *s, *e;
-
-       swap_setup();
-       
-       if ((s = strchr(revision, ':')) &&
-           (e = strchr(s, '$')))
-               s++, i = e - s;
-       else
-               s = revision, i = -1;
-       printk ("Starting kswapd v%.*s\n", i, s);
-}
-
-/*
- * The background pageout daemon, started as a kernel thread
- * from the init process. 
- *
- * This basically executes once a second, trickling out pages
- * so that we have _some_ free memory available even if there
- * is no other activity that frees anything up. This is needed
- * for things like routing etc, where we otherwise might have
- * all activity going on in asynchronous contexts that cannot
- * page things out.
- *
- * If there are applications that are active memory-allocators
- * (most normal use), this basically shouldn't matter.
- */
-int kswapd(void *unused)
-{
-	current->session = 1;
-	current->pgrp = 1;
-	strcpy(current->comm, "kswapd");
-	sigfillset(&current->blocked);
-	
-	/*
-	 * Tell the memory management that we're a "memory allocator",
-	 * and that if we need more memory we should get access to it
-	 * regardless (see "__get_free_pages()"). "kswapd" should
-	 * never get caught in the normal page freeing logic.
-	 *
-	 * (Kswapd normally doesn't need memory anyway, but sometimes
-	 * you need a small amount of memory in order to be able to
-	 * page out something else, and this flag essentially protects
-	 * us from recursively trying to free more memory as we're
-	 * trying to free the first piece of memory in the first place).
-	 */
-	current->flags |= PF_MEMALLOC;
-
-	while (1) {
-		int tmo;
-
-		/*
-		 * Wake up once a second to see if we need to make
-		 * more memory available. When we get into a low
-		 * memory situation, we start waking up more often.
-		 *
-		 * We consider "freepages.low" to be low on memory,
-		 * but we also try to be aggressive if other processes
-		 * are low on memory and would otherwise block when
-		 * calling __get_free_page().
-		 */
-		tmo = HZ;
-		if (nr_free_pages < freepages.high) {
-			if (nr_free_pages < freepages.low || low_on_memory) {
-				if (try_to_free_pages(GFP_KSWAPD))
-					tmo = (HZ+9)/10;
-			}
-		}
-		run_task_queue(&tq_disk);
-		current->state = TASK_INTERRUPTIBLE;
-		schedule_timeout(tmo);
-	}
-}
-
-/*
  * We need to make the locks finer granularity, but right
  * now we need this so that we can do page allocations
  * without holding the kernel lock etc.
@@ -458,7 +376,7 @@ int kswapd(void *unused)
  * cluster them so that we get good swap-out behaviour. See
  * the "free_memory()" macro for details.
  */
-int try_to_free_pages(unsigned int gfp_mask)
+static int do_try_to_free_pages(unsigned int gfp_mask)
 {
 	int priority;
 	int count = SWAP_CLUSTER_MAX;
@@ -496,3 +414,112 @@ done:
 
 	return priority >= 0;
 }
+
+/*
+ * Before we start the kernel thread, print out the 
+ * kswapd initialization message (otherwise the init message 
+ * may be printed in the middle of another driver's init 
+ * message).  It looks very bad when that happens.
+ */
+void __init kswapd_setup(void)
+{
+       int i;
+       char *revision="$Revision: 1.5 $", *s, *e;
+
+       swap_setup();
+       
+       if ((s = strchr(revision, ':')) &&
+           (e = strchr(s, '$')))
+               s++, i = e - s;
+       else
+               s = revision, i = -1;
+       printk ("Starting kswapd v%.*s\n", i, s);
+}
+
+static struct task_struct *kswapd_process;
+
+/*
+ * The background pageout daemon, started as a kernel thread
+ * from the init process. 
+ *
+ * This basically executes once a second, trickling out pages
+ * so that we have _some_ free memory available even if there
+ * is no other activity that frees anything up. This is needed
+ * for things like routing etc, where we otherwise might have
+ * all activity going on in asynchronous contexts that cannot
+ * page things out.
+ *
+ * If there are applications that are active memory-allocators
+ * (most normal use), this basically shouldn't matter.
+ */
+int kswapd(void *unused)
+{
+	struct task_struct *tsk = current;
+
+	kswapd_process = tsk;
+	tsk->session = 1;
+	tsk->pgrp = 1;
+	strcpy(tsk->comm, "kswapd");
+	sigfillset(&tsk->blocked);
+	
+	/*
+	 * Tell the memory management that we're a "memory allocator",
+	 * and that if we need more memory we should get access to it
+	 * regardless (see "__get_free_pages()"). "kswapd" should
+	 * never get caught in the normal page freeing logic.
+	 *
+	 * (Kswapd normally doesn't need memory anyway, but sometimes
+	 * you need a small amount of memory in order to be able to
+	 * page out something else, and this flag essentially protects
+	 * us from recursively trying to free more memory as we're
+	 * trying to free the first piece of memory in the first place).
+	 */
+	tsk->flags |= PF_MEMALLOC;
+
+	while (1) {
+		/*
+		 * Wake up once a second to see if we need to make
+		 * more memory available.
+		 *
+		 * If we actually get into a low-memory situation,
+		 * the processes needing more memory will wake us
+		 * up on a more timely basis.
+		 */
+		do {
+			if (nr_free_pages >= freepages.high)
+				break;
+
+			if (!do_try_to_free_pages(GFP_KSWAPD))
+				break;
+		} while (!tsk->need_resched);
+		run_task_queue(&tq_disk);
+		tsk->state = TASK_INTERRUPTIBLE;
+		schedule_timeout(HZ);
+	}
+}
+
+/*
+ * Called by non-kswapd processes when they want more
+ * memory.
+ *
+ * In a perfect world, this should just wake up kswapd
+ * and return. We don't actually want to swap stuff out
+ * from user processes, because the locking issues are
+ * nasty to the extreme (file write locks, and MM locking)
+ *
+ * One option might be to let kswapd do all the page-out
+ * and VM page table scanning that needs locking, and this
+ * process thread could do just the mmap shrink stage that
+ * can be done by just dropping cached pages without having
+ * any deadlock issues.
+ */
+int try_to_free_pages(unsigned int gfp_mask)
+{
+	int retval = 1;
+
+	wake_up_process(kswapd_process);
+	if (gfp_mask & __GFP_WAIT)
+		retval = do_try_to_free_pages(gfp_mask);
+	return retval;
+}
+	

@@ -21,7 +21,7 @@
 #ifndef _BTTV_H_
 #define _BTTV_H_
 
-#define BTTV_VERSION_CODE 0x000520
+#define BTTV_VERSION_CODE 0x000523
 
 #include <linux/types.h>
 #include <linux/wait.h>
@@ -37,8 +37,7 @@
 
 #define MAX_GBUFFERS	2
 #define RISCMEM_LEN	(32744*2)
-#define VBI_MAXLINES    19
-#define VBIBUF_SIZE     (2048*VBI_MAXLINES*2)
+#define VBIBUF_SIZE     65536
 
 /* maximum needed buffer size for extended VBI frame mode capturing */
 #define BTTV_MAX_FBUF	0x190000
@@ -207,6 +206,7 @@ struct bttv
 #define BTTV_MIROPRO       0x0b
 #define BTTV_ADSTECH_TV    0x0c
 #define BTTV_AVERMEDIA98   0x0d
+#define BTTV_VHX   	   0x0e
 
 #define AUDIO_TUNER        0x00
 #define AUDIO_RADIO        0x01
@@ -227,6 +227,7 @@ struct bttv
 #define I2C_TDA8425        0x82
 #define I2C_HAUPEE         0xa0
 #define I2C_STBEE          0xae
+#define I2C_VHX 	   0xc0
 
 #define TDA9840_SW	   0x00
 #define TDA9840_LVADJ	   0x02

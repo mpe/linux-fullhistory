@@ -27,6 +27,8 @@
 #define		POLARIS_DENSE_IO_BASE		(IDENT_ADDR + 0xf9fc000000)
 #define		POLARIS_DENSE_CONFIG_BASE	(IDENT_ADDR + 0xf9fe000000)
 
+#define		POLARIS_IACK_SC			POLARIS_IACK_BASE
+
 /* The Polaris command/status registers live in PCI Config space for
  * bus 0/device 0.  As such, they may be bytes, words, or doublewords.
  */

@@ -678,9 +678,12 @@ struct dentry * open_namei(const char * pathname, int flag, int mode)
 	if (flag & O_CREAT) {
 		struct dentry *dir;
 
-		error = -EEXIST;
-		if (dentry->d_inode && (flag & O_EXCL))
+		if (dentry->d_inode) {
+			if (!(flag & O_EXCL))
+				goto nocreate;
+			error = -EEXIST;
 			goto exit;
+		}
 
 		dir = lock_parent(dentry);
 		if (!check_parent(dir, dentry)) {
@@ -723,6 +726,7 @@ struct dentry * open_namei(const char * pathname, int flag, int mode)
 			goto exit;
 	}
 
+nocreate:
 	error = -ENOENT;
 	inode = dentry->d_inode;
 	if (!inode)

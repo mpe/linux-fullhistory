@@ -1,6 +1,8 @@
 #ifndef __MEGARAID_H__
 #define __MEGARAID_H__
 
+#include <linux/version.h>
+
 #define IN_ISR                  0x80000000L
 #define NO_INTR                 0x40000000L
 #define IN_TIMEOUT              0x20000000L

@@ -1657,9 +1657,9 @@ int vfat_rename(struct inode *old_dir,struct dentry *old_dentry,
 			drop_aliases(new_dentry);
 		}
 		res = vfat_remove_entry(new_dir,&sinfo,new_inode);
+		if (res)
+			goto rename_done;
 	}
-	if (res)
-		goto rename_done;
 
 	/* Serious lossage here. FAT uses braindead inode numbers scheme,
 	 * so we can't simply cannibalize the entry. It means that we have

@@ -10,7 +10,7 @@
 #define rti	.long PAL_rti
 #define SIGCHLD 20
 
-#define NR_SYSCALLS 370
+#define NR_SYSCALLS 371
 
 /*
  * These offsets must match with alpha_mv in <asm/machvec.h>.
@@ -1138,4 +1138,4 @@ sys_call_table:
 	.quad sys_getcwd
 	.quad sys_capget
 	.quad sys_capset
-	.quad sys_ni_syscall			/* 370 */
+	.quad sys_sendfile			/* 370 */

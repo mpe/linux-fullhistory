@@ -1,3 +1,4 @@
+#include <linux/config.h>
 #ifndef __I386_COBALT_H
 #define __I386_COBALT_H
 

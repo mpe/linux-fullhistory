@@ -645,10 +645,6 @@ int sb_dsp_init(struct address_info *hw_config)
 				}
 			}
 		}
-#if defined(__SMP__)
-		/* Skip IRQ detection if SMP (doesn't work) */
-		devc->irq_ok = 1;
-#else
 		if (devc->major == 4 && devc->minor <= 11 )	/* Won't work */
 			devc->irq_ok = 1;
 		else
@@ -671,7 +667,6 @@ int sb_dsp_init(struct address_info *hw_config)
 				DDB(printk("IRQ test OK (IRQ%d)\n", devc->irq));
 			}
 		}
-#endif				/* __SMP__ */
 	}			/* IRQ setup */
 	request_region(hw_config->io_base, 16, "soundblaster");
 

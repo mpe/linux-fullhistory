@@ -1,6 +1,8 @@
 #ifndef __I386_LITHIUM_H
 #define __I386_LITHIUM_H
 
+#include <linux/config.h>
+
 /*
  * Lithium is the I/O ASIC on the SGI 320 and 540 Visual Workstations
  */
@@ -16,6 +18,7 @@
 #define	LI_PCI_BUSNUM	0x44			/* lo8: primary, hi8: sub */
 #define LI_PCI_INTEN    0x46
 
+#ifdef CONFIG_X86_VISWS_APIC
 /* More special purpose macros... */
 extern __inline void li_pcia_write16(unsigned long reg, unsigned short v)
 {
@@ -36,5 +39,7 @@ extern __inline unsigned short li_pcib_read16(unsigned long reg)
 {
 	return *((volatile unsigned short *)(LI_PCIB_VADDR+reg));
 }
+#endif
 
 #endif
+

@@ -535,6 +535,8 @@ static struct tvcard tvcards[] =
 	{ 3, 4, 0, 2, 15, { 2, 3, 1, 1}, { 13, 14, 11, 7, 0, 0}, 0},
         /* AVerMedia TVCapture 98 */
 	{ 3, 4, 0, 2, 15, { 2, 3, 1, 1}, { 13, 14, 11, 7, 0, 0}, 0},
+        /* Aimslab VHX */
+        { 3, 1, 0, 2, 7, { 2, 3, 1, 1}, { 0, 1, 2, 3, 4}},
 };
 #define TVCARDS (sizeof(tvcards)/sizeof(tvcard))
 
@@ -764,7 +766,7 @@ static struct tvnorm tvnorms[] = {
 	/* NTSC */
 	{ 28636363,
           768, 480,  910, 0x68, 0x5d, (BT848_IFORM_NTSC|BT848_IFORM_XT0),
-          910, 128, 754, 0x1a, 144},
+          910, 128, 910, 0x1a, 144},
 /*
 	{ 28636363,
           640, 480,  910, 0x68, 0x5d, (BT848_IFORM_NTSC|BT848_IFORM_XT0),
@@ -814,10 +816,6 @@ static void make_vbitab(struct bttv *btv)
 	DEBUG(printk(KERN_DEBUG "vbievn: 0x%08x\n",(int)btv->vbi_even));
 	DEBUG(printk(KERN_DEBUG "po: 0x%08x\n",(int)po));
 	DEBUG(printk(KERN_DEBUG "pe: 0x%08x\n",(int)pe));
-        
-	/* setup proper VBI capture length for given video mode */
-	btwrite(tvnorms[btv->win.norm].vbipack, BT848_VBI_PACK_SIZE);
-	btwrite(1, BT848_VBI_PACK_DEL);
         
 	*(po++)=BT848_RISC_SYNC|BT848_FIFO_STATUS_FM1; *(po++)=0;
 	for (i=0; i<16; i++) 
@@ -1281,6 +1279,8 @@ static void bt848_set_geo(struct bttv *btv, u16 width, u16 height, u16 fmt)
 	btwrite(tvn->adelay, BT848_ADELAY);
 	btwrite(tvn->bdelay, BT848_BDELAY);
 	btaor(tvn->iform,~(BT848_IFORM_NORM|BT848_IFORM_XTBOTH), BT848_IFORM);
+	btwrite(tvn->vbipack, BT848_VBI_PACK_SIZE);
+	btwrite(1, BT848_VBI_PACK_DEL);
 
         btv->pll.pll_ofreq = tvn->Fsc;
         set_pll(btv);
@@ -2880,7 +2880,9 @@ static void idcard(int i)
 
 		} else if (I2CRead(&(btv->i2c), I2C_STBEE)>=0) {
 			btv->type=BTTV_STB;
-
+		} else 
+		        if (I2CRead(&(btv->i2c), I2C_VHX)>=0) {
+			        btv->type=BTTV_VHX;
 		} else {
 			if (I2CRead(&(btv->i2c), 0x80)>=0) /* check for msp34xx */
 				btv->type = BTTV_MIROPRO;
@@ -2938,6 +2940,9 @@ static void idcard(int i)
                 case TDA9850:
                         init_tda9850(&(btv->i2c));
                         break; 
+                case TDA9840:
+                        init_tda9840(&(btv->i2c));
+                        break; 
                 case TDA8425:
                         init_tda8425(&(btv->i2c));
                         break;
@@ -2977,6 +2982,9 @@ static void idcard(int i)
 		case BTTV_AVERMEDIA98: 
 			strcat(btv->video_dev.name,"(AVerMedia TVCapture 98)");
 			break;
+		case BTTV_VHX:
+			strcpy(btv->video_dev.name,"BT848(Aimslab-VHX)");
+ 			break;
 	}
 	printk("%s\n",btv->video_dev.name);
 	audio(btv, AUDIO_MUTE);

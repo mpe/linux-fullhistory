@@ -801,10 +801,10 @@ void tok_interrupt (int irq, void *dev_id, struct pt_regs *regs)
 	struct tok_info *ti;
 	struct device *dev;
 
+	dev = dev_id;
 #if TR_VERBOSE
 	DPRINTK("Int from tok_driver, dev : %p\n",dev);
 #endif
-	dev = dev_id;
 	ti  = (struct tok_info *) dev->priv;
 
       	/* Disable interrupts till processing is finished */

@@ -83,7 +83,7 @@ struct msp3400c {
 
 	/* thread */
 	struct task_struct  *thread;
-	struct semaphore    *wait;
+	struct wait_queue   *wq;
 	struct semaphore    *notify;
 	int                  active,restart,rmmod;
 
@@ -500,14 +500,12 @@ static void msp3400c_stereo_wake(unsigned long data)
 {
 	struct msp3400c *msp = (struct msp3400c*)data;   /* XXX alpha ??? */
 
-	if (!msp->active)
-		up(msp->wait);    
+	wake_up_interruptible(&msp->wq);
 }
 
 static int msp3400c_thread(void *data)
 {
 	struct msp3400c *msp = data;
-	struct semaphore sem = MUTEX_LOCKED;
     
 	struct CARRIER_DETECT *cd;
 	int                   count, max1,max2,val1,val2, val,this;
@@ -525,7 +523,7 @@ static int msp3400c_thread(void *data)
 	current->fs->umask = 0;
 	strcpy(current->comm,"msp3400");
 
-	msp->wait   = &sem;
+	msp->wq     = NULL;
 	msp->thread = current;
 
 #ifdef __SMP__
@@ -541,7 +539,7 @@ static int msp3400c_thread(void *data)
 			goto done;
 		if (debug > 1)
 			printk("msp3400: thread: sleep\n");
-		down_interruptible(&sem);
+		interruptible_sleep_on(&msp->wq);
 		if (debug > 1)
 			printk("msp3400: thread: wakeup\n");
 		if (msp->rmmod || signal_pending(current))
@@ -735,7 +733,6 @@ static int msp3400c_thread(void *data)
 
 done:
 	dprintk("msp3400: thread: exit\n");
-	msp->wait   = NULL;
 	msp->active = 0;
 	msp->thread = NULL;
 
@@ -777,6 +774,7 @@ static int msp3410d_thread(void *data)
 			goto done;
 		dprintk("msp3410: thread: sleep\n");
 		down_interruptible(&sem);
+		sem.owner = 0;
 		dprintk("msp3410: thread: wakeup\n");
 		if (msp->rmmod)
 			goto done;
@@ -1072,12 +1070,12 @@ static int msp3400c_attach(struct i2c_device *device)
 
 	/* startup control thread */
 	MOD_INC_USE_COUNT;
+	msp->wq     = NULL;
 	msp->notify = &sem;
 	kernel_thread(msp3400c_thread, (void *)msp, 0);
 	down(&sem);
 	msp->notify = NULL;
-	if (!msp->active)
-		up(msp->wait);
+	wake_up_interruptible(&msp->wq);
 
 	printk(KERN_INFO "msp3400: init: chip=%s",device->name);
 	if (msp->nicam)
@@ -1109,8 +1107,7 @@ static int msp3400c_detach(struct i2c_device *device)
 	{
 		msp->notify = &sem;
 		msp->rmmod = 1;
-		if (!msp->active)
-			up(msp->wait);
+		wake_up_interruptible(&msp->wq);
 		down(&sem);
 		msp->notify = NULL;
 	}
@@ -1158,10 +1155,9 @@ static int msp3400c_command(struct i2c_device *device,
 		/* channels switching step two -- trigger sound carrier scan */
 		msp->watch_stereo=0;
 		del_timer(&msp->wake_stereo);
-		if (!msp->active)
-			up(msp->wait);
-		else
+		if (msp->active)
 			msp->restart = 1;
+		wake_up_interruptible(&msp->wq);
 		break;
 
 	case MSP_GET_VOLUME:

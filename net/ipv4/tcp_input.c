@@ -1691,7 +1691,7 @@ static int prune_queue(struct sock *sk)
 		do {	net_statistics.OfoPruned += skb->len; 
 			kfree_skb(skb);
 			skb = __skb_dequeue_tail(&tp->out_of_order_queue);
-		} while((skb = __skb_dequeue_tail(&tp->out_of_order_queue)) != NULL);
+		} while(skb != NULL);
 
 		/* Reset SACK state.  A conforming SACK implementation will
 		 * do the same at a timeout based retransmit.  When a connection

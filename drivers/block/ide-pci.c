@@ -150,22 +150,15 @@ static ide_pci_device_t ide_pci_chipsets[] __initdata = {
  */
 __initfunc(static unsigned int ide_special_settings (struct pci_dev *dev, const char *name))
 {
-	unsigned int addressbios = 0;
-
-	pci_read_config_dword(dev, PCI_ROM_ADDRESS, &addressbios);
-
 	switch(dev->device) {
 		case PCI_DEVICE_ID_ARTOP_ATP850UF:
 		case PCI_DEVICE_ID_PROMISE_20246:
-			pci_write_config_byte(dev, PCI_ROM_ADDRESS, PCI_ROM_ADDRESS_ENABLE);
-			printk("%s: ROM enabled ", name);
-
-			if (!addressbios) {
-				printk("but no address\n");
-			} else {
-				printk("at 0x%08x\n", addressbios);
+			if (dev->rom_address) {
+				pci_write_config_byte(dev, PCI_ROM_ADDRESS,
+					dev->rom_address | PCI_ROM_ADDRESS_ENABLE);
+				printk(KERN_INFO "%s: ROM enabled at 0x%08lx\n", name, dev->rom_address);
 			}
-
+			
 			if ((dev->class >> 8) == PCI_CLASS_STORAGE_RAID) {
 				unsigned char irq1 = 0, irq2 = 0;
 

@@ -37,19 +37,8 @@
 #include <linux/delay.h>
 #include <linux/mc146818rtc.h>
 #include <linux/smp_lock.h>
-#include <linux/interrupt.h>
 #include <linux/init.h>
-#include <asm/pgtable.h>
-#include <asm/bitops.h>
-#include <asm/pgtable.h>
-#include <asm/io.h>
-
-#ifdef CONFIG_MTRR
-#  include <asm/mtrr.h>
-#endif
-
-#define __KERNEL_SYSCALLS__
-#include <linux/unistd.h>
+#include <asm/mtrr.h>
 
 #include "irq.h"
 
@@ -98,21 +87,6 @@ extern void update_one_process( struct task_struct *p,
 
 /* Kernel spinlock */
 spinlock_t kernel_flag = SPIN_LOCK_UNLOCKED;
-
-/*
- *	Why isn't this somewhere standard ??
- *
- * Maybe because this procedure is horribly buggy, and does
- * not deserve to live.  Think about signedness issues for five
- * seconds to see why.		- Linus
- */
-
-extern __inline int max(int a,int b)
-{
-	if (a>b)
-		return a;
-	return b;
-}
 
 /*
  * function prototypes:
@@ -168,6 +142,11 @@ int skip_ioapic_setup = 0;				/* 1 if "noapic" boot option passed */
 #endif
 
 /*
+ * IA s/w dev Vol 3, Section 7.4
+ */
+#define APIC_DEFAULT_PHYS_BASE 0xfee00000
+
+/*
  *	Setup routine for controlling SMP activation
  *
  *	Command-line option of "nosmp" or "maxcpus=0" will disable SMP
@@ -197,19 +176,11 @@ void ack_APIC_irq(void)
 	apic_write(APIC_EOI, 0);
 }
 
-#ifdef CONFIG_X86_VISWS_APIC
 /*
- * hacky!
+ * Intel MP BIOS table parsing routines:
  */
-int __init smp_scan_config(unsigned long base, unsigned long length)
-{
-	cpu_present_map |= 2; /* or in id 1 */
-	apic_version[1] |= 0x10; /* integrated APIC */
-	num_processors = 2;
 
-	return 1;
-} 
-#else
+#ifndef CONFIG_X86_VISWS_APIC
 /*
  *	Checksum an MP configuration block.
  */
@@ -429,7 +400,7 @@ static int __init smp_read_mpc(struct mp_config_table *mpc)
  *	Scan the memory blocks for an SMP configuration block.
  */
 
-int __init smp_scan_config(unsigned long base, unsigned long length)
+static int __init smp_scan_config(unsigned long base, unsigned long length)
 {
 	unsigned long *bp=phys_to_virt(base);
 	struct intel_mp_floating *mpf;
@@ -463,7 +434,7 @@ int __init smp_scan_config(unsigned long base, unsigned long length)
 					unsigned long cfg;
 
 					/* local APIC has default address */
-					mp_lapic_addr = 0xFEE00000;
+					mp_lapic_addr = APIC_DEFAULT_PHYS_BASE;
 					/*
 					 *	We need to know what the local
 					 *	APIC id of the boot CPU is!
@@ -579,7 +550,76 @@ int __init smp_scan_config(unsigned long base, unsigned long length)
 
 	return 0;
 }
+
+void __init init_intel_smp (void)
+{
+	/*
+	 * FIXME: Linux assumes you have 640K of base ram..
+	 * this continues the error...
+	 *
+	 * 1) Scan the bottom 1K for a signature
+	 * 2) Scan the top 1K of base RAM
+	 * 3) Scan the 64K of bios
+	 */
+	if (!smp_scan_config(0x0,0x400) &&
+	    !smp_scan_config(639*0x400,0x400) &&
+	    !smp_scan_config(0xF0000,0x10000)) {
+		/*
+		 * If it is an SMP machine we should know now, unless the
+		 * configuration is in an EISA/MCA bus machine with an
+		 * extended bios data area. 
+		 *
+		 * there is a real-mode segmented pointer pointing to the
+		 * 4K EBDA area at 0x40E, calculate and scan it here.
+		 *
+		 * NOTE! There are Linux loaders that will corrupt the EBDA
+		 * area, and as such this kind of SMP config may be less
+		 * trustworthy, simply because the SMP table may have been
+		 * stomped on during early boot. These loaders are buggy and
+		 * should be fixed.
+		 */
+		unsigned int address;
+
+		address = *(unsigned short *)phys_to_virt(0x40E);
+		address<<=4;
+		smp_scan_config(address, 0x1000);
+		if (smp_found_config)
+			printk(KERN_WARNING "WARNING: MP table in the EBDA can be UNSAFE, contact linux-smp@vger.rutgers.edu if you experience SMP problems!\n");
+	}
+}
+
+#else
+
+/*
+ * The Visual Workstation is Intel MP compliant in the hardware
+ * sense, but it doesnt have a BIOS(-configuration table).
+ * No problem for Linux.
+ */
+void __init init_visws_smp(void)
+{
+	smp_found_config = 1;
+
+	cpu_present_map |= 2; /* or in id 1 */
+	apic_version[1] |= 0x10; /* integrated APIC */
+	apic_version[0] |= 0x10;
+
+	mp_lapic_addr = APIC_DEFAULT_PHYS_BASE;
+} 
+
 #endif
+
+/*
+ * - Intel MP Configuration Table
+ * - or SGI Visual Workstation configuration
+ */
+void __init init_smp_config (void)
+{
+#ifndef CONFIG_VISWS
+	init_intel_smp();
+#else
+	init_visws_smp();
+#endif
+}
 
 /*
  *	Trampoline 80x86 program as an array.
@@ -674,6 +714,26 @@ void __init enable_local_APIC(void)
  	value &= ~APIC_TPRI_MASK;	/* Set Task Priority to 'accept all' */
  	apic_write(APIC_TASKPRI,value);
 
+	/*
+	 * Set arbitrarion priority to 0
+	 */
+ 	value = apic_read(APIC_ARBPRI);
+ 	value &= ~APIC_ARBPRI_MASK;
+ 	apic_write(APIC_ARBPRI, value);
+
+	/*
+	 * Set the logical destination ID to 'all', just to be safe.
+	 * also, put the APIC into flat delivery mode.
+	 */
+ 	value = apic_read(APIC_LDR);
+	value &= ~APIC_LDR_MASK;
+	value |= SET_APIC_LOGICAL_ID(0xff);
+ 	apic_write(APIC_LDR,value);
+
+ 	value = apic_read(APIC_DFR);
+	value |= SET_APIC_DFR(0xf);
+ 	apic_write(APIC_DFR, value);
+
 	udelay(100);			/* B safe */
 	ack_APIC_irq();
 	udelay(100);
@@ -681,14 +741,11 @@ void __init enable_local_APIC(void)
 
 unsigned long __init init_smp_mappings(unsigned long memory_start)
 {
-	unsigned long apic_phys, ioapic_phys;
+	unsigned long apic_phys;
 
 	memory_start = PAGE_ALIGN(memory_start);
 	if (smp_found_config) {
 		apic_phys = mp_lapic_addr;
-#ifdef CONFIG_X86_IO_APIC
-		ioapic_phys = mp_ioapic_addr;
-#endif
 	} else {
 		/*
 		 * set up a fake all zeroes page to simulate the
@@ -697,17 +754,27 @@ unsigned long __init init_smp_mappings(unsigned long memory_start)
 		 * this way if some buggy code writes to this page ...
 		 */
 		apic_phys = __pa(memory_start);
-		ioapic_phys = __pa(memory_start+PAGE_SIZE);
-		memset((void *)memory_start, 0, 2*PAGE_SIZE);
-		memory_start += 2*PAGE_SIZE;
+		memset((void *)memory_start, 0, PAGE_SIZE);
+		memory_start += PAGE_SIZE;
 	}
+	set_fixmap(FIX_APIC_BASE,apic_phys);
+	printk("mapped APIC to %08lx (%08lx)\n", APIC_BASE, apic_phys);
 
 #ifdef CONFIG_X86_IO_APIC
-	set_fixmap(FIX_APIC_BASE,apic_phys);
-	set_fixmap(FIX_IO_APIC_BASE,ioapic_phys);
+	{
+		unsigned long ioapic_phys;
 
-	printk("mapped APIC to %08lx (%08lx)\n", APIC_BASE, apic_phys);
-	printk("mapped IOAPIC to %08lx (%08lx)\n", fix_to_virt(FIX_IO_APIC_BASE), ioapic_phys);
+		if (smp_found_config) {
+			ioapic_phys = mp_ioapic_addr;
+		} else {
+			ioapic_phys = __pa(memory_start);
+			memset((void *)memory_start, 0, PAGE_SIZE);
+			memory_start += PAGE_SIZE;
+		}
+		set_fixmap(FIX_IO_APIC_BASE,ioapic_phys);
+		printk("mapped IOAPIC to %08lx (%08lx)\n",
+				fix_to_virt(FIX_IO_APIC_BASE), ioapic_phys);
+	}
 #endif
 
 	return memory_start;
@@ -925,8 +992,7 @@ static void __init do_boot_cpu(int i)
 	apic_write(APIC_ICR2, cfg|SET_APIC_DEST_FIELD(i)); 			/* Target chip     	*/
 	cfg=apic_read(APIC_ICR);
 	cfg&=~0xCDFFF;								/* Clear bits 		*/
-	cfg |= (APIC_DEST_FIELD | APIC_DEST_LEVELTRIG
-		| APIC_DEST_ASSERT | APIC_DEST_DM_INIT);
+	cfg |= (APIC_DEST_LEVELTRIG | APIC_DEST_ASSERT | APIC_DEST_DM_INIT);
 	apic_write(APIC_ICR, cfg);						/* Send IPI */
 
 	udelay(200);
@@ -937,8 +1003,7 @@ static void __init do_boot_cpu(int i)
 	apic_write(APIC_ICR2, cfg|SET_APIC_DEST_FIELD(i));			/* Target chip     	*/
 	cfg=apic_read(APIC_ICR);
 	cfg&=~0xCDFFF;								/* Clear bits 		*/
-	cfg |= (APIC_DEST_FIELD | APIC_DEST_LEVELTRIG
-				| APIC_DEST_DM_INIT);
+	cfg |= (APIC_DEST_LEVELTRIG | APIC_DEST_DM_INIT);
 	apic_write(APIC_ICR, cfg);						/* Send IPI */
 
 	/*
@@ -974,9 +1039,7 @@ static void __init do_boot_cpu(int i)
 		apic_write(APIC_ICR2, cfg|SET_APIC_DEST_FIELD(i));			/* Target chip     	*/
 		cfg=apic_read(APIC_ICR);
 		cfg&=~0xCDFFF;								/* Clear bits 		*/
-		cfg |= (APIC_DEST_FIELD
-			| APIC_DEST_DM_STARTUP
-			| (start_eip >> 12));						/* Boot on the stack 	*/
+		cfg |= (APIC_DEST_DM_STARTUP | (start_eip >> 12));						/* Boot on the stack 	*/
 		SMP_PRINTK(("Before start apic_write.\n"));
 		apic_write(APIC_ICR, cfg);						/* Kick the second 	*/
 
@@ -1099,7 +1162,6 @@ unsigned int prof_counter[NR_CPUS];
 void __init smp_boot_cpus(void)
 {
 	int i;
-	unsigned long cfg;
 
 #ifdef CONFIG_MTRR
 	/*  Must be done before other processors booted  */
@@ -1134,20 +1196,20 @@ void __init smp_boot_cpus(void)
 
 	cpu_number_map[boot_cpu_id] = 0;
 
-#ifdef CONFIG_X86_IO_APIC
 	/*
-	 *	If we don't conform to the Intel MPS standard, get out
-	 *	of here now!
+	 * If we couldnt find an SMP configuration at boot time,
+	 * get out of here now!
 	 */
 
 	if (!smp_found_config)
 	{
 		printk(KERN_NOTICE "SMP motherboard not detected. Using dummy APIC emulation.\n");
+#ifndef CONFIG_VISWS
 		io_apic_irqs = 0;
+#endif
 		cpu_online_map = cpu_present_map;
 		goto smp_done;
 	}
-#endif
 
 	/*
 	 *	If SMP should be disabled, then really disable it!
@@ -1246,29 +1308,34 @@ void __init smp_boot_cpus(void)
 	 *	Cleanup possible dangling ends...
 	 */
 
-	/*
-	 *	Install writable page 0 entry.
-	 */
+#ifndef CONFIG_VISWS
+	{
+		unsigned long cfg;
 
-	cfg = pg0[0];
-	pg0[0] = 3;	/* writeable, present, addr 0 */
-	local_flush_tlb();
+		/*
+		 *	Install writable page 0 entry.
+		 */
+		cfg = pg0[0];
+		pg0[0] = 3;	/* writeable, present, addr 0 */
+		local_flush_tlb();
+	
+		/*
+		 *	Paranoid:  Set warm reset code and vector here back
+		 *	to default values.
+		 */
 
-	/*
-	 *	Paranoid:  Set warm reset code and vector here back
-	 *	to default values.
-	 */
+		CMOS_WRITE(0, 0xf);
 
-	CMOS_WRITE(0, 0xf);
+		*((volatile long *) phys_to_virt(0x467)) = 0;
 
-	*((volatile long *) phys_to_virt(0x467)) = 0;
+		/*
+		 *	Restore old page 0 entry.
+		 */
 
-	/*
-	 *	Restore old page 0 entry.
-	 */
-
-	pg0[0] = cfg;
-	local_flush_tlb();
+		pg0[0] = cfg;
+		local_flush_tlb();
+	}
+#endif
 
 	/*
 	 *	Allow the user to impress friends.
@@ -1301,15 +1368,16 @@ void __init smp_boot_cpus(void)
 	SMP_PRINTK(("Boot done.\n"));
 
 	cache_APIC_registers();
-#ifdef CONFIG_X86_IO_APIC
+#ifndef CONFIG_VISWS
 	/*
 	 * Here we can be sure that there is an IO-APIC in the system. Let's
 	 * go and set it up:
 	 */
 	if (!skip_ioapic_setup) 
 		setup_IO_APIC();
-smp_done:
 #endif
+
+smp_done:
 }
 
 
@@ -1393,7 +1461,7 @@ static inline int __prepare_ICR (unsigned int shortcut, int vector)
 	unsigned int cfg;
 
 	cfg = __get_ICR();
-	cfg |= APIC_DEST_FIELD|APIC_DEST_DM_FIXED|shortcut|vector;
+	cfg |= APIC_DEST_DM_FIXED|shortcut|vector;
 
 	return cfg;
 }
@@ -1903,7 +1971,7 @@ int __init calibrate_APIC_clock(void)
 		((long)(t2-t1)/LOOPS)/(1000000/HZ),
 		((long)(t2-t1)/LOOPS)%(1000000/HZ)  );
 
-	printk("..... APIC bus clock speed is %ld.%04ld MHz.\n",
+	printk("..... system bus clock speed is %ld.%04ld MHz.\n",
 		calibration_result/(1000000/HZ),
 		calibration_result%(1000000/HZ)  );
 #undef LOOPS

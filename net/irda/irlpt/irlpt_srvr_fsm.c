@@ -17,8 +17,6 @@
  *
  ********************************************************************/
 
-#include <linux/config.h>
-
 #include <net/irda/iriap.h>
 #include <net/irda/irlmp.h>
 #include <net/irda/irttp.h>

@@ -155,12 +155,12 @@ void free_pages(unsigned long addr, unsigned long order)
 	change_bit((index) >> (1+(order)), (area)->map)
 #define CAN_DMA(x) (PageDMA(x))
 #define ADDRESS(x) (PAGE_OFFSET + ((x) << PAGE_SHIFT))
-#define RMQUEUE(order, dma) \
+#define RMQUEUE(order, gfp_mask) \
 do { struct free_area_struct * area = free_area+order; \
      unsigned long new_order = order; \
 	do { struct page *prev = memory_head(area), *ret = prev->next; \
 		while (memory_head(area) != ret) { \
-			if (!dma || CAN_DMA(ret)) { \
+			if (!(gfp_mask & __GFP_DMA) || CAN_DMA(ret)) { \
 				unsigned long map_nr; \
 				(prev->next = ret->next)->prev = prev; \
 				map_nr = ret - mem_map; \
@@ -198,45 +198,45 @@ unsigned long __get_free_pages(int gfp_mask, unsigned long order)
 	if (order >= NR_MEM_LISTS)
 		goto nopage;
 
-	if (gfp_mask & __GFP_WAIT) {
-		if (in_interrupt()) {
-			static int count = 0;
-			if (++count < 5) {
-				printk("gfp called nonatomically from interrupt %p\n",
-					__builtin_return_address(0));
+#ifdef ATOMIC_MEMORY_DEBUGGING
+	if ((gfp_mask & __GFP_WAIT) && in_interrupt()) {
+		static int count = 0;
+		if (++count < 5) {
+			printk("gfp called nonatomically from interrupt %p\n",
+				__builtin_return_address(0));
+		}
+		goto nopage;
+	}
+#endif
+
+	/*
+	 * If this is a recursive call, we'd better
+	 * do our best to just allocate things without
+	 * further thought.
+	 */
+	if (!(current->flags & PF_MEMALLOC)) {
+		int freed;
+
+		if (nr_free_pages > freepages.min) {
+			if (!low_on_memory)
+				goto ok_to_allocate;
+			if (nr_free_pages >= freepages.high) {
+				low_on_memory = 0;
+				goto ok_to_allocate;
 			}
+		}
+
+		low_on_memory = 1;
+		current->flags |= PF_MEMALLOC;
+		freed = try_to_free_pages(gfp_mask);
+		current->flags &= ~PF_MEMALLOC;
+
+		if (!freed && !(gfp_mask & (__GFP_MED | __GFP_HIGH)))
 			goto nopage;
-		}
-
-		/*
-		 * If this is a recursive call, we'd better
-		 * do our best to just allocate things without
-		 * further thought.
-		 */
-		if (!(current->flags & PF_MEMALLOC)) {
-			int freed;
-
-			if (nr_free_pages > freepages.min) {
-				if (!low_on_memory)
-					goto ok_to_allocate;
-				if (nr_free_pages >= freepages.high) {
-					low_on_memory = 0;
-					goto ok_to_allocate;
-				}
-			}
-
-			low_on_memory = 1;
-			current->flags |= PF_MEMALLOC;
-			freed = try_to_free_pages(gfp_mask);
-			current->flags &= ~PF_MEMALLOC;
-
-			if (!freed && !(gfp_mask & (__GFP_MED | __GFP_HIGH)))
-				goto nopage;
-		}
 	}
 ok_to_allocate:
 	spin_lock_irqsave(&page_alloc_lock, flags);
-	RMQUEUE(order, (gfp_mask & GFP_DMA));
+	RMQUEUE(order, gfp_mask);
 	spin_unlock_irqrestore(&page_alloc_lock, flags);
 
 	/*

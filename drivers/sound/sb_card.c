@@ -136,6 +136,7 @@ int trix = 0;	/* Set trix=1 to load this as support for trix */
 int pas2 = 0;	/* Set pas2=1 to load this as support for pas2 */
 int sm_games = 0;	/* Mixer - see sb_mixer.c */
 int acer = 0;	/* Do acer notebook init */
+int esstype = 0;	/* ESS chip type */
 
 MODULE_PARM(io, "i");
 MODULE_PARM(irq, "i");
@@ -147,6 +148,7 @@ MODULE_PARM(mad16, "i");
 MODULE_PARM(trix, "i");
 MODULE_PARM(pas2, "i");
 MODULE_PARM(sm_games, "i");
+MODULE_PARM(esstype, "i");
 
 void *smw_free = NULL;
 

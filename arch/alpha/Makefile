@@ -49,7 +49,11 @@ ifeq ($(have_mcpu),y)
     ifeq ($(have_mcpu_ev6),y)
       CFLAGS := $(CFLAGS) -mcpu=ev6
     else
-      CFLAGS := $(CFLAGS) -mcpu=pca56
+      ifeq ($(have_mcpu_pca56),y)
+        CFLAGS := $(CFLAGS) -mcpu=pca56
+      else
+        CFLAGS := $(CFLAGS) -mcpu=ev56
+      endif
     endif
   endif
 endif
@@ -71,6 +75,9 @@ else
  endif
  ifeq ($(CONFIG_ALPHA_POLARIS),y)
    CFLAGS := $(CFLAGS) -Wa,-m21164pc
+ endif
+ ifeq ($(CONFIG_ALPHA_TSUNAMI),y)
+   CFLAGS := $(CFLAGS) -Wa,-mev6
  endif
 endif
 

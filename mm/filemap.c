@@ -125,7 +125,7 @@ int shrink_mmap(int priority, int gfp_mask)
 	struct page * page;
 	int count;
 
-	count = (limit << 1) >> priority;
+	count = limit >> priority;
 
 	page = mem_map + clock;
 	do {
@@ -147,7 +147,6 @@ int shrink_mmap(int priority, int gfp_mask)
 			clock = page - mem_map;
 		}
 		
-		count--;
 		referenced = test_and_clear_bit(PG_referenced, &page->flags);
 
 		if (PageLocked(page))
@@ -159,6 +158,8 @@ int shrink_mmap(int priority, int gfp_mask)
 		/* We can't free pages unless there's just one user */
 		if (atomic_read(&page->count) != 1)
 			continue;
+
+		count--;
 
 		/*
 		 * Is it a page swap page? If so, we want to

@@ -354,36 +354,28 @@ static int free_inodes(int goal)
 	return found;
 }
 
+static void shrink_dentry_inodes(int goal)
+{
+	int found;
+
+	spin_unlock(&inode_lock);
+	found = select_dcache(goal, 0);
+	if (found < goal)
+		found = goal;
+	prune_dcache(found);
+	spin_lock(&inode_lock);
+}
+
 /*
  * Searches the inodes list for freeable inodes,
- * possibly shrinking the dcache before or after.
+ * shrinking the dcache before (and possible after,
+ * if we're low)
  */
 static void try_to_free_inodes(int goal)
 {
-	int retry = 1, found;
-
-	/*
-	 * Check whether to preshrink the dcache ...
-	 */
-	if (inodes_stat.preshrink)
-		goto preshrink;
-
-	retry = 0;
-	do {
-		if (free_inodes(goal))
-			break;
-		/*
-		 * If we didn't free any inodes, do a limited
-		 * pruning of the dcache to help the next time.
-		 */
-	preshrink:
-		spin_unlock(&inode_lock);
-		found = select_dcache(goal, 0);
-		if (found < goal)
-			found = goal;
-		prune_dcache(found);
-		spin_lock(&inode_lock);
-	} while (retry--);
+	shrink_dentry_inodes(goal);
+	if (!free_inodes(goal))
+		shrink_dentry_inodes(goal);
 }
 
 /*
@@ -408,6 +400,21 @@ static struct inode * grow_inodes(void)
 {
 	struct inode * inode;
 
+	/*
+	 * Check whether to restock the unused list.
+	 */
+	if (inodes_stat.preshrink) {
+		struct list_head *tmp;
+		try_to_free_inodes(8);
+		tmp = inode_unused.next;
+		if (tmp != &inode_unused) {
+			inodes_stat.nr_free_inodes--;
+			list_del(tmp);
+			inode = list_entry(tmp, struct inode, i_list);
+			return inode;
+		}
+	}
+		
 	spin_unlock(&inode_lock);
 	inode = (struct inode *)__get_free_page(GFP_KERNEL);
 	if (inode) {
@@ -512,6 +519,12 @@ static inline void read_inode(struct inode *inode, struct super_block *sb)
 	sb->s_op->read_inode(inode);
 }
 
+/*
+ * This is called by things like the networking layer
+ * etc that want to get an inode without any inode
+ * number, or filesystems that allocate new inodes with
+ * no pre-existing information.
+ */
 struct inode * get_empty_inode(void)
 {
 	static unsigned long last_ino = 0;
@@ -519,11 +532,6 @@ struct inode * get_empty_inode(void)
 	struct list_head * tmp;
 
 	spin_lock(&inode_lock);
-	/*
-	 * Check whether to restock the unused list.
-	 */
-	if (inodes_stat.nr_free_inodes < 16)
-		try_to_free_inodes(8);
 	tmp = inode_unused.next;
 	if (tmp != &inode_unused) {
 		list_del(tmp);
@@ -629,25 +637,18 @@ struct inode *iget(struct super_block *sb, unsigned long ino)
 	struct inode * inode;
 
 	spin_lock(&inode_lock);
-	if (!inodes_stat.nr_free_inodes)
-		goto restock;
-search:
 	inode = find_inode(sb, ino, head);
-	if (!inode) {
-		return get_new_inode(sb, ino, head);
+	if (inode) {
+		spin_unlock(&inode_lock);
+		wait_on_inode(inode);
+		return inode;
 	}
-	spin_unlock(&inode_lock);
-	wait_on_inode(inode);
-	return inode;
-
 	/*
-	 * We restock the freelist before calling find,
-	 * in order to avoid repeating the search.
-	 * (The unused list usually won't be empty.)
+	 * get_new_inode() will do the right thing, releasing
+	 * the inode lock and re-trying the search in case it
+	 * had to block at any point.
 	 */
-restock:
-	try_to_free_inodes(8);
-	goto search;
+	return get_new_inode(sb, ino, head);
 }
 
 void insert_inode_hash(struct inode *inode)

@@ -279,39 +279,6 @@ __initfunc(unsigned long paging_init(unsigned long start_mem, unsigned long end_
  * kernel.
  * It may also hold the MP configuration table when we are booting SMP.
  */
-#ifdef __SMP__
-	/*
-	 * FIXME: Linux assumes you have 640K of base ram..
-	 * this continues the error...
-	 *
-	 * 1) Scan the bottom 1K for a signature
-	 * 2) Scan the top 1K of base RAM
-	 * 3) Scan the 64K of bios
-	 */
-	if (!smp_scan_config(0x0,0x400) &&
-	    !smp_scan_config(639*0x400,0x400) &&
-	    !smp_scan_config(0xF0000,0x10000)) {
-		/*
-		 * If it is an SMP machine we should know now, unless the
-		 * configuration is in an EISA/MCA bus machine with an
-		 * extended bios data area. 
-		 *
-		 * there is a real-mode segmented pointer pointing to the
-		 * 4K EBDA area at 0x40E, calculate and scan it here.
-		 *
-		 * NOTE! There are Linux loaders that will corrupt the EBDA
-		 * area, and as such this kind of SMP config may be less
-		 * trustworthy, simply because the SMP table may have been
-		 * stomped on during early boot. These loaders are buggy and
-		 * should be fixed.
-		 */
-		address = *(unsigned short *)phys_to_virt(0x40E);
-		address<<=4;
-		smp_scan_config(address, 0x1000);
-		if (smp_found_config)
-			printk(KERN_WARNING "WARNING: MP table in the EBDA can be UNSAFE, contact linux-smp@vger.rutgers.edu if you experience SMP problems!\n");
-	}
-#endif
 	start_mem = PAGE_ALIGN(start_mem);
 	address = PAGE_OFFSET;
 	pg_dir = swapper_pg_dir;

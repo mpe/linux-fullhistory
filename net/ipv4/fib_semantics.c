@@ -984,7 +984,7 @@ void fib_node_get_info(int type, int dead, struct fib_info *fi, u32 prefix, u32 
 			      flags, 0, 0, 0,
 			      mask, 0, 0, 0);
 	}
-	memset(buffer+len, 0, 127-len);
+	memset(buffer+len, ' ', 127-len);
 	buffer[127] = '\n';
 }
 

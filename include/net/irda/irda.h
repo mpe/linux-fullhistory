@@ -25,6 +25,7 @@
 #ifndef IRDA_H
 #define IRDA_H
 
+#include <linux/config.h>
 #include <linux/skbuff.h>
 
 #ifndef TRUE

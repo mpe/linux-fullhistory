@@ -77,7 +77,6 @@ __down_failed:
 	.ent	__down_failed_interruptible
 __down_failed_interruptible:
 	ldgp	$29,0($27)
-	ldgp	$29,0($27)
 	lda	$30, -20*8($30)
 	stq	$28, 0*8($30)
 	stq	$0, 1*8($30)

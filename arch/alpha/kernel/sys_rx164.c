@@ -211,8 +211,6 @@ rx164_pci_fixup(void)
  * The System Vector
  */
 
-#define POLARIS_IACK_SC	POLARIS_IACK_BASE /* hack, move to header */
-
 struct alpha_machine_vector rx164_mv __initmv = {
 	vector_name:		"RX164",
 	DO_EV5_MMU,

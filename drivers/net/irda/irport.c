@@ -53,7 +53,6 @@
 #include <asm/bitops.h>
 #include <asm/io.h>
 #include <linux/errno.h>
-#include <linux/config.h>
 #include <linux/init.h>
 
 #include <linux/skbuff.h>

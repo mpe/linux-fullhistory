@@ -425,7 +425,6 @@ static int set_recmask(sb_devc * devc, int mask)
 			if (devc->model == MDL_ESS && ess_set_recmask (devc, &devmask)) {
 				break;
 			};
-printk (KERN_INFO "FKS: set_recmask not handled by ess_set_recmask\n");
 			if (devmask != SOUND_MASK_MIC &&
 				devmask != SOUND_MASK_LINE &&
 				devmask != SOUND_MASK_CD)
