@@ -356,16 +356,49 @@ nfs_statfs(struct super_block *sb, struct statfs *buf, int bufsiz)
 }
 
 /*
+ * Free all unused dentries in an inode's alias list.
+ *
+ * Subtle note: we have to be very careful not to cause
+ * any IO operations with the stale dentries, as this
+ * could cause file corruption. But since the dentry
+ * count is 0 and all pending IO for a dentry has been
+ * flushed when the count went to 0, we're safe here.
+ */
+void nfs_free_dentries(struct inode *inode)
+{
+	struct list_head *tmp, *head = &inode->i_dentry;
+
+restart:
+	tmp = head;
+	while ((tmp = tmp->next) != head) {
+		struct dentry *dentry = list_entry(tmp, struct dentry, d_alias);
+		if (!dentry->d_count) {
+printk("nfs_free_dentries: freeing %s/%s, i_count=%d\n",
+dentry->d_parent->d_name.name, dentry->d_name.name, inode->i_count);
+			dget(dentry);
+			d_drop(dentry);
+			dput(dentry);
+			goto restart;
+		}
+	}
+}
+
+/*
  * This is our own version of iget that looks up inodes by file handle
  * instead of inode number.  We use this technique instead of using
  * the vfs read_inode function because there is no way to pass the
  * file handle or current attributes into the read_inode function.
+ *
+ * Note carefully the special handling of busy inodes (i_count > 1).
+ * With the Linux 2.1.xx dcache all inodes except hard links must
+ * have i_count == 1 after iget(). Otherwise, it indicates that the
+ * server has reused a fileid (i_ino) and we have a stale inode.
  */
 struct inode *
 nfs_fhget(struct super_block *sb, struct nfs_fh *fhandle,
 				  struct nfs_fattr *fattr)
 {
-	int error;
+	int error, max_count;
 	struct inode *inode = NULL;
 	struct nfs_fattr newfattr;
 
@@ -377,6 +410,8 @@ nfs_fhget(struct super_block *sb, struct nfs_fh *fhandle,
 		if (error)
 			goto out_bad_attr;
 	}
+
+retry:
 	inode = iget(sb, fattr->fileid);
 	if (!inode)
 		goto out_no_inode;
@@ -387,6 +422,40 @@ printk("nfs_fhget: impossible\n");
 
 	if (inode->i_ino != fattr->fileid)
 		goto out_bad_id;
+
+	/*
+	 * Check for busy inodes, and attempt to get rid of any
+	 * unused local references. If successful, we release the
+	 * inode and try again.
+	 *
+	 * Note that the busy test uses the values in the fattr,
+	 * as the inode may have become a different object.
+	 * (We can probably handle modes changes here, too.)
+	 */
+	max_count = S_ISDIR(fattr->mode) ? 1 : fattr->nlink;
+	if (inode->i_count > max_count) {
+printk("nfs_fhget: inode %ld busy, i_count=%d, i_nlink=%d\n",
+inode->i_ino, inode->i_count, inode->i_nlink);
+		nfs_free_dentries(inode);
+		if (inode->i_count > max_count) {
+printk("nfs_fhget: inode %ld still busy, i_count=%d\n",
+inode->i_ino, inode->i_count);
+			if (!list_empty(&inode->i_dentry)) {
+				struct dentry *dentry;
+				dentry = list_entry(inode->i_dentry.next,
+						 struct dentry, d_alias);
+printk("nfs_fhget: killing %s/%s filehandle\n",
+dentry->d_parent->d_name.name, dentry->d_name.name);
+				memset(dentry->d_fsdata, 0, sizeof(*fhandle));
+			} else
+				printk("NFS: inode %ld busy, no aliases?\n",
+					inode->i_ino);
+			make_bad_inode(inode);
+			remove_inode_hash(inode);
+		}
+		iput(inode);
+		goto retry;
+	}
 
 	/*
 	 * Check whether the mode has been set, as we only want to

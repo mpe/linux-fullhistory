@@ -47,7 +47,7 @@ else
 endif
 
 ifeq ($(CONFIG_ISDN_DRV_ICN),y)
-  L_OBJS += icn/icn.o
+  L_OBJS += icn/icn_obj.o
   SUB_DIRS += icn
   MOD_SUB_DIRS += icn
 else

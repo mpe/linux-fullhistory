@@ -648,7 +648,17 @@ restock:
 void insert_inode_hash(struct inode *inode)
 {
 	struct list_head *head = inode_hashtable + hash(inode->i_sb, inode->i_ino);
+	spin_lock(&inode_lock);
 	list_add(&inode->i_hash, head);
+	spin_unlock(&inode_lock);
+}
+
+void remove_inode_hash(struct inode *inode)
+{
+	spin_lock(&inode_lock);
+	list_del(&inode->i_hash);
+	INIT_LIST_HEAD(&inode->i_hash);
+	spin_unlock(&inode_lock);
 }
 
 void iput(struct inode *inode)
@@ -689,6 +699,9 @@ void iput(struct inode *inode)
 				list_add(&inode->i_list, inode_in_use.prev);
 			}
 #ifdef INODE_PARANOIA
+if (!list_empty(&inode->i_dentry))
+printk("iput: device %s inode %ld still has aliases!\n",
+kdevname(inode->i_dev), inode->i_ino);
 if (inode->i_count)
 printk("iput: device %s inode %ld count changed, count=%d\n",
 kdevname(inode->i_dev), inode->i_ino, inode->i_count);

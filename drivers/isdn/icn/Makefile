@@ -1,11 +1,8 @@
-L_OBJS :=
-M_OBJS :=
-
 ifeq ($(CONFIG_ISDN_DRV_ICN),y)
-  L_OBJS += icn.o
+  O_TARGET := icn_obj.o
+  O_OBJS   := icn.o
 else
-  M_OBJS += icn.o
+  M_OBJS   := icn.o
 endif
 
 include $(TOPDIR)/Rules.make
-
