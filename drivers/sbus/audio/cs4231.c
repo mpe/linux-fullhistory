@@ -73,6 +73,7 @@ static void cs4231_playintr(struct sparcaudio_driver *drv);
 static int cs4231_recintr(struct sparcaudio_driver *drv);
 static int cs4231_output_muted(struct sparcaudio_driver *drv, int value);
 static void cs4231_pollinput(struct sparcaudio_driver *drv);
+static void eb4231_pollinput(struct sparcaudio_driver *drv);
 static int cs4231_length_to_samplecount(struct audio_prinfo *thisdir, 
                                         unsigned int length);
 static void cs4231_getsamplecount(struct sparcaudio_driver *drv, 
@@ -92,8 +93,8 @@ static __inline__ void cs4231_enable_interrupts(struct sparcaudio_driver *drv)
   tprintk(("enabling interrupts\n"));
   save_flags(flags);
   cli();
-  cs4231_chip->regs->iar = 0xa;
-  cs4231_chip->regs->idr = INTR_ON;
+  CS4231_WRITE8(cs4231_chip, &(cs4231_chip->regs->iar), 0xa);
+  CS4231_WRITE8(cs4231_chip, &(cs4231_chip->regs->idr), INTR_ON);
   restore_flags(flags);
 
   cs4231_chip->status |= CS_STATUS_INTS_ON;
@@ -111,8 +112,8 @@ static __inline__ void cs4231_disable_interrupts(struct sparcaudio_driver *drv)
   tprintk(("disabling interrupts\n"));
   save_flags(flags);
   cli();
-  cs4231_chip->regs->iar = 0xa;
-  cs4231_chip->regs->idr = INTR_OFF;
+  CS4231_WRITE8(cs4231_chip, &(cs4231_chip->regs->iar), 0xa);
+  CS4231_WRITE8(cs4231_chip, &(cs4231_chip->regs->idr), INTR_OFF);
   restore_flags(flags);
 
   cs4231_chip->status &= ~CS_STATUS_INTS_ON;
@@ -127,8 +128,9 @@ static __inline__ void cs4231_enable_play(struct sparcaudio_driver *drv)
   save_flags(flags);
   cli();
   
-  cs4231_chip->regs->iar = 0x9;
-  cs4231_chip->regs->idr |= PEN_ENABLE;
+  CS4231_WRITE8(cs4231_chip, &(cs4231_chip->regs->iar), 0x9);
+  CS4231_WRITE8(cs4231_chip, &(cs4231_chip->regs->idr),
+                (CS4231_READ8(cs4231_chip, &(cs4231_chip->regs->idr)) | PEN_ENABLE));
   restore_flags(flags);
 }
 
@@ -140,8 +142,9 @@ static __inline__ void cs4231_disable_play(struct sparcaudio_driver *drv)
   tprintk(("disabling play\n"));
   save_flags(flags);
   cli();
-  cs4231_chip->regs->iar = 0x9;
-  cs4231_chip->regs->idr &= PEN_DISABLE;
+  CS4231_WRITE8(cs4231_chip, &(cs4231_chip->regs->iar), 0x9);
+  CS4231_WRITE8(cs4231_chip, &(cs4231_chip->regs->idr),
+                (CS4231_READ8(cs4231_chip, &(cs4231_chip->regs->idr)) & PEN_DISABLE));
   restore_flags(flags);
 }
 
@@ -153,8 +156,9 @@ static __inline__ void cs4231_enable_rec(struct sparcaudio_driver *drv)
   tprintk(("enabling rec\n"));
   save_flags(flags);
   cli();
-  cs4231_chip->regs->iar = 0x9;
-  cs4231_chip->regs->idr |= CEN_ENABLE;
+  CS4231_WRITE8(cs4231_chip, &(cs4231_chip->regs->iar), 0x9);
+  CS4231_WRITE8(cs4231_chip, &(cs4231_chip->regs->idr),
+                (CS4231_READ8(cs4231_chip, &(cs4231_chip->regs->idr)) | CEN_ENABLE));
   restore_flags(flags);
 }
 
@@ -166,64 +170,68 @@ static __inline__ void cs4231_disable_rec(struct sparcaudio_driver *drv)
   tprintk(("disabling rec\n"));
   save_flags(flags);
   cli();
-  cs4231_chip->regs->iar = 0x9;
-  cs4231_chip->regs->idr &= CEN_DISABLE;
+  CS4231_WRITE8(cs4231_chip, &(cs4231_chip->regs->iar), 0x9);
+  CS4231_WRITE8(cs4231_chip, &(cs4231_chip->regs->idr),
+                (CS4231_READ8(cs4231_chip, &(cs4231_chip->regs->idr)) & CEN_DISABLE));
   restore_flags(flags);
 }
 
-static int 
-cs4231_rate_to_bits(struct sparcaudio_driver *drv, int value)
-{
-  int set_bits;
+static struct cs4231_rates {
+  int speed, bits;
+} cs4231_rate_table[] = {
+  { 5512, CS4231_DFR_5512 },
+  { 6615, CS4231_DFR_6615 },
+  { 8000, CS4231_DFR_8000 },
+  { 9600, CS4231_DFR_9600 },
+  { 11025, CS4231_DFR_11025 },
+  { 16000, CS4231_DFR_16000 },
+  { 18900, CS4231_DFR_18900 },
+  { 22050, CS4231_DFR_22050 },
+  { 27429, CS4231_DFR_27429 },
+  { 32000, CS4231_DFR_32000 },
+  { 33075, CS4231_DFR_33075 },
+  { 37800, CS4231_DFR_37800 },
+  { 44100, CS4231_DFR_44100 },
+  { 48000, CS4231_DFR_48000 }
+};
 
-  switch (value) {
-  case 5512:
-    set_bits = CS4231_DFR_5512;
-    break;
-  case 6615:
-    set_bits = CS4231_DFR_6615;
-    break;
-  case 8000:
-    set_bits = CS4231_DFR_8000;
-    break;
-  case 9600:
-    set_bits = CS4231_DFR_9600;
-    break;
-  case 11025:
-    set_bits = CS4231_DFR_11025;
-    break;
-  case 16000:
-    set_bits = CS4231_DFR_16000;
-    break;
-  case 18900:
-    set_bits = CS4231_DFR_18900;
-    break;
-  case 22050:
-    set_bits = CS4231_DFR_22050;
-    break;
-  case 27429:
-    set_bits = CS4231_DFR_27429;
-    break;
-  case 32000:
-    set_bits = CS4231_DFR_32000;
-    break;
-  case 33075:
-    set_bits = CS4231_DFR_33075;
-    break;
-  case 37800:
-    set_bits = CS4231_DFR_37800;
-    break;
-  case 44100:
-    set_bits = CS4231_DFR_44100;
-    break;
-  case 48000:
-    set_bits = CS4231_DFR_48000;
-    break;
-  default:
-    set_bits = -(EINVAL);
-    break;
+#define NUM_RATES	(sizeof(cs4231_rate_table) / sizeof(struct cs4231_rates))
+
+static int 
+cs4231_rate_to_bits(struct sparcaudio_driver *drv, int *value)
+{
+  struct cs4231_rates *p = &cs4231_rate_table[0];
+  int i, wanted = *value;
+
+  /* We try to be nice and approximate what the user asks for. */
+  if(wanted < 5512)
+    wanted = 5512;
+  if(wanted > 48000)
+    wanted = 48000;
+
+  for(i = 0; i < NUM_RATES; i++, p++) {
+    /* Exact match? */
+    if(wanted == p->speed)
+      break;
+
+    /* If we're inbetween two entries, and neither is exact,
+     * pick the closest one.
+     */
+    if(wanted == p[1].speed)
+      continue;
+    if(wanted > p->speed &&
+       wanted < p[1].speed) {
+      int diff1, diff2;
+
+      diff1 = wanted - p->speed;
+      diff2 = p[1].speed - wanted;
+      if(diff2 < diff1)
+        p++;
+      break;
+    }
   }
-  return set_bits;
+  *value = p->speed;
+  return p->bits;
 }
 
 static int 
@@ -268,9 +276,14 @@ cs4231_set_output_encoding(struct sparcaudio_driver *drv, int value)
   if (value != 0) {
     set_bits = cs4231_encoding_to_bits(drv, value);
     if (set_bits >= 0) {
-        cs4231_chip->regs->iar = IAR_AUTOCAL_BEGIN | 0x8;
-        tmp_bits = cs4231_chip->regs->idr;
-        cs4231_chip->regs->idr = CHANGE_ENCODING(tmp_bits, set_bits);
+        CS4231_READ8(cs4231_chip, &(cs4231_chip->regs->idr));
+        CS4231_READ8(cs4231_chip, &(cs4231_chip->regs->idr));
+        CS4231_WRITE8(cs4231_chip, &(cs4231_chip->regs->iar), IAR_AUTOCAL_BEGIN | 0x8);
+        tmp_bits = CS4231_READ8(cs4231_chip, &(cs4231_chip->regs->idr));
+        CS4231_WRITE8(cs4231_chip, &(cs4231_chip->regs->idr),
+                      CHANGE_ENCODING(tmp_bits, set_bits));
+        CS4231_READ8(cs4231_chip, &(cs4231_chip->regs->idr));
+        CS4231_READ8(cs4231_chip, &(cs4231_chip->regs->idr));
     
         CHIP_READY
 
@@ -298,9 +311,14 @@ cs4231_set_input_encoding(struct sparcaudio_driver *drv, int value)
   if (value != 0) {
     set_bits = cs4231_encoding_to_bits(drv, value);
     if (set_bits >= 0) {
-        cs4231_chip->regs->iar = IAR_AUTOCAL_BEGIN | 0x1c;
-        tmp_bits = cs4231_chip->regs->idr;
-        cs4231_chip->regs->idr = CHANGE_ENCODING(tmp_bits, set_bits);
+        CS4231_READ8(cs4231_chip, &(cs4231_chip->regs->idr));
+        CS4231_READ8(cs4231_chip, &(cs4231_chip->regs->idr));
+        CS4231_WRITE8(cs4231_chip, &(cs4231_chip->regs->iar), IAR_AUTOCAL_BEGIN | 0x1c);
+        tmp_bits = CS4231_READ8(cs4231_chip, &(cs4231_chip->regs->idr));
+        CS4231_WRITE8(cs4231_chip, &(cs4231_chip->regs->idr),
+                      CHANGE_ENCODING(tmp_bits, set_bits));
+        CS4231_READ8(cs4231_chip, &(cs4231_chip->regs->idr));
+        CS4231_READ8(cs4231_chip, &(cs4231_chip->regs->idr));
 
         CHIP_READY
 
@@ -326,15 +344,22 @@ cs4231_set_output_rate(struct sparcaudio_driver *drv, int value)
 
   tprintk(("output rate %d\n", value));
   if (value != 0) {
-    set_bits = cs4231_rate_to_bits(drv, value);
+    set_bits = cs4231_rate_to_bits(drv, &value);
     if (set_bits >= 0) {
-        cs4231_chip->regs->iar = IAR_AUTOCAL_BEGIN | 0x8;
-        tmp_bits = cs4231_chip->regs->idr;
-        cs4231_chip->regs->idr = CHANGE_DFR(tmp_bits, set_bits);
+        CS4231_READ8(cs4231_chip, &(cs4231_chip->regs->idr));
+        CS4231_READ8(cs4231_chip, &(cs4231_chip->regs->idr));
+        CS4231_WRITE8(cs4231_chip, &(cs4231_chip->regs->iar), IAR_AUTOCAL_BEGIN | 0x8);
+        tmp_bits = CS4231_READ8(cs4231_chip, &(cs4231_chip->regs->idr));
+        CS4231_WRITE8(cs4231_chip, &(cs4231_chip->regs->idr),
+                      CHANGE_DFR(tmp_bits, set_bits));
+        CS4231_READ8(cs4231_chip, &(cs4231_chip->regs->idr));
+        CS4231_READ8(cs4231_chip, &(cs4231_chip->regs->idr));
 
         CHIP_READY
 
         cs4231_chip->perchip_info.play.sample_rate = value;
+        tprintk(("tmp_bits[%02x] set_bits[%02x] CHANGE_DFR[%02x]\n",
+                 tmp_bits, set_bits, CHANGE_DFR(tmp_bits, set_bits)));
         return 0;
     }
   }
@@ -356,11 +381,16 @@ cs4231_set_input_rate(struct sparcaudio_driver *drv, int value)
 
   tprintk(("input rate %d\n", value));
   if (value != 0) {
-    set_bits = cs4231_rate_to_bits(drv, value);
+    set_bits = cs4231_rate_to_bits(drv, &value);
     if (set_bits >= 0) {
-        cs4231_chip->regs->iar = IAR_AUTOCAL_BEGIN | 0x1c;
-        tmp_bits = cs4231_chip->regs->idr;
-        cs4231_chip->regs->idr = CHANGE_DFR(tmp_bits, set_bits);
+        CS4231_READ8(cs4231_chip, &(cs4231_chip->regs->idr));
+        CS4231_READ8(cs4231_chip, &(cs4231_chip->regs->idr));
+        CS4231_WRITE8(cs4231_chip, &(cs4231_chip->regs->iar), IAR_AUTOCAL_BEGIN | 0x1c);
+        tmp_bits = CS4231_READ8(cs4231_chip, &(cs4231_chip->regs->idr));
+        CS4231_WRITE8(cs4231_chip, &(cs4231_chip->regs->idr),
+                      CHANGE_DFR(tmp_bits, set_bits));
+        CS4231_READ8(cs4231_chip, &(cs4231_chip->regs->idr));
+        CS4231_READ8(cs4231_chip, &(cs4231_chip->regs->idr));
       
         CHIP_READY
 
@@ -390,10 +420,10 @@ cs4231_set_input_channels(struct sparcaudio_driver *drv, int value)
   tmp_bits = cs4231_chip->regs->idr;
   switch (value) {
   case 1:
-      cs4231_chip->regs->idr = CS4231_MONO_ON(tmp_bits);
+      CS4231_WRITE8(cs4231_chip, &(cs4231_chip->regs->idr), CS4231_MONO_ON(tmp_bits));
       break;
   case 2:
-      cs4231_chip->regs->idr = CS4231_STEREO_ON(tmp_bits);
+      CS4231_WRITE8(cs4231_chip, &(cs4231_chip->regs->idr), CS4231_STEREO_ON(tmp_bits));
       break;
   default:
       dprintk(("input chan failed\n"));
@@ -420,14 +450,14 @@ cs4231_set_output_channels(struct sparcaudio_driver *drv, int value)
   int tmp_bits;
 
   tprintk(("output channels %d\n", value));
-  cs4231_chip->regs->iar = IAR_AUTOCAL_BEGIN | 0x8;
-  tmp_bits = cs4231_chip->regs->idr;
+  CS4231_WRITE8(cs4231_chip, &(cs4231_chip->regs->iar), IAR_AUTOCAL_BEGIN | 0x8);
+  tmp_bits = CS4231_READ8(cs4231_chip, &(cs4231_chip->regs->idr));
   switch (value) {
   case 1:
-      cs4231_chip->regs->idr = CS4231_MONO_ON(tmp_bits);
+      CS4231_WRITE8(cs4231_chip, &(cs4231_chip->regs->idr), CS4231_MONO_ON(tmp_bits));
       break;
   case 2:
-      cs4231_chip->regs->idr = CS4231_STEREO_ON(tmp_bits);
+      CS4231_WRITE8(cs4231_chip, &(cs4231_chip->regs->idr), CS4231_STEREO_ON(tmp_bits));
       break;
   default:
       dprintk(("output chan failed\n"));
@@ -483,14 +513,16 @@ cs4231_ready(struct sparcaudio_driver *drv)
   struct cs4231_chip *cs4231_chip = (struct cs4231_chip *)drv->private;
   unsigned int x = 0;
 
-  cs4231_chip->regs->iar = IAR_AUTOCAL_END;
-  while (cs4231_chip->regs->idr == IAR_NOT_READY && x <= CS_TIMEOUT) {
+  CS4231_WRITE8(cs4231_chip, &(cs4231_chip->regs->iar), IAR_AUTOCAL_END);
+  while (CS4231_READ8(cs4231_chip, &(cs4231_chip->regs->idr)) == IAR_NOT_READY &&
+         x <= CS_TIMEOUT) {
     x++;
   }
 
   x = 0;
-  cs4231_chip->regs->iar = 0x0b;
-  while (cs4231_chip->regs->idr == AUTOCAL_IN_PROGRESS && x <= CS_TIMEOUT) {
+  CS4231_WRITE8(cs4231_chip, &(cs4231_chip->regs->iar), 0x0b);
+  while (CS4231_READ8(cs4231_chip, &(cs4231_chip->regs->idr)) == AUTOCAL_IN_PROGRESS &&
+         x <= CS_TIMEOUT) {
     x++;
   }
 }
@@ -501,16 +533,20 @@ static int cs4231_output_muted(struct sparcaudio_driver *drv, int value)
   struct cs4231_chip *cs4231_chip = (struct cs4231_chip *)drv->private;
   tprintk(("in cs4231_output_muted: %d\n", value));
   if (!value) {
-      cs4231_chip->regs->iar = 0x7;
-      cs4231_chip->regs->idr &= OUTCR_UNMUTE;
-      cs4231_chip->regs->iar = 0x6;
-      cs4231_chip->regs->idr &= OUTCR_UNMUTE;
+      CS4231_WRITE8(cs4231_chip, &(cs4231_chip->regs->iar), 0x7);
+      CS4231_WRITE8(cs4231_chip, &(cs4231_chip->regs->idr),
+                    (CS4231_READ8(cs4231_chip, &(cs4231_chip->regs->idr)) & OUTCR_UNMUTE));
+      CS4231_WRITE8(cs4231_chip, &(cs4231_chip->regs->iar), 0x6);
+      CS4231_WRITE8(cs4231_chip, &(cs4231_chip->regs->idr),
+                    (CS4231_READ8(cs4231_chip, &(cs4231_chip->regs->idr)) & OUTCR_UNMUTE));
       cs4231_chip->perchip_info.output_muted = 0;
   } else {
-      cs4231_chip->regs->iar = 0x7;
-      cs4231_chip->regs->idr |= OUTCR_MUTE;
-      cs4231_chip->regs->iar = 0x6;
-      cs4231_chip->regs->idr |= OUTCR_MUTE;
+      CS4231_WRITE8(cs4231_chip, &(cs4231_chip->regs->iar), 0x7);
+      CS4231_WRITE8(cs4231_chip, &(cs4231_chip->regs->idr),
+                    (CS4231_READ8(cs4231_chip, &(cs4231_chip->regs->idr)) | OUTCR_MUTE));
+      CS4231_WRITE8(cs4231_chip, &(cs4231_chip->regs->iar), 0x6);
+      CS4231_WRITE8(cs4231_chip, &(cs4231_chip->regs->idr),
+                    (CS4231_READ8(cs4231_chip, &(cs4231_chip->regs->idr)) | OUTCR_MUTE));
       cs4231_chip->perchip_info.output_muted = 1;
   }
   return 0;
@@ -555,27 +591,33 @@ static int cs4231_set_output_port(struct sparcaudio_driver *drv, int value)
   /* Aaaaaah! It's all coming so fast! Turn it all off, then selectively
    * enable things.
    */
-  cs4231_chip->regs->iar = 0x1a;
-  cs4231_chip->regs->idr |= MONO_IOCR_MUTE;
-  cs4231_chip->regs->iar = 0x0a;
-  cs4231_chip->regs->idr |= PINCR_LINE_MUTE;
-  cs4231_chip->regs->idr |= PINCR_HDPH_MUTE;
+  CS4231_WRITE8(cs4231_chip, &(cs4231_chip->regs->iar), 0x1a);
+  CS4231_WRITE8(cs4231_chip, &(cs4231_chip->regs->idr),
+                (CS4231_READ8(cs4231_chip, &(cs4231_chip->regs->idr)) | MONO_IOCR_MUTE));
+  CS4231_WRITE8(cs4231_chip, &(cs4231_chip->regs->iar), 0x0a);
+  CS4231_WRITE8(cs4231_chip, &(cs4231_chip->regs->idr),
+                (CS4231_READ8(cs4231_chip, &(cs4231_chip->regs->idr)) | PINCR_LINE_MUTE));
+  CS4231_WRITE8(cs4231_chip, &(cs4231_chip->regs->idr),
+                (CS4231_READ8(cs4231_chip, &(cs4231_chip->regs->idr)) | PINCR_HDPH_MUTE));
 
   if (value & AUDIO_SPEAKER) {
-      cs4231_chip->regs->iar = 0x1a;
-      cs4231_chip->regs->idr &= ~MONO_IOCR_MUTE;
+      CS4231_WRITE8(cs4231_chip, &(cs4231_chip->regs->iar), 0x1a);
+      CS4231_WRITE8(cs4231_chip, &(cs4231_chip->regs->idr),
+                    (CS4231_READ8(cs4231_chip, &(cs4231_chip->regs->idr)) & ~MONO_IOCR_MUTE));
       retval |= AUDIO_SPEAKER;
   }
 
   if (value & AUDIO_HEADPHONE) {
-      cs4231_chip->regs->iar = 0x0a;
-      cs4231_chip->regs->idr &= ~PINCR_HDPH_MUTE;
+      CS4231_WRITE8(cs4231_chip, &(cs4231_chip->regs->iar), 0x0a);
+      CS4231_WRITE8(cs4231_chip, &(cs4231_chip->regs->idr),
+                    (CS4231_READ8(cs4231_chip, &(cs4231_chip->regs->idr)) & ~PINCR_HDPH_MUTE));
       retval |= AUDIO_HEADPHONE;
   }
 
   if (value & AUDIO_LINE_OUT) {
-      cs4231_chip->regs->iar = 0x0a;
-      cs4231_chip->regs->idr &= ~PINCR_LINE_MUTE;
+      CS4231_WRITE8(cs4231_chip, &(cs4231_chip->regs->iar), 0x0a);
+      CS4231_WRITE8(cs4231_chip, &(cs4231_chip->regs->idr),
+                    (CS4231_READ8(cs4231_chip, &(cs4231_chip->regs->idr)) & ~PINCR_LINE_MUTE));
       retval |= AUDIO_LINE_OUT;
   }
   
@@ -605,32 +647,40 @@ static int cs4231_set_input_port(struct sparcaudio_driver *drv, int value)
 
   /* Ultra systems do not support AUDIO_INTERNAL_CD_IN */
   /* This apparently applies only to APC ultras, not ebus ultras */
-  if (!cs4231_chip->status & CS_STATUS_IS_ULTRA) {
+  if (!(cs4231_chip->status & CS_STATUS_IS_ULTRA)) {
     if (value & AUDIO_INTERNAL_CD_IN) {
-        cs4231_chip->regs->iar = 0x1;
-        cs4231_chip->regs->idr = CDROM_ENABLE(cs4231_chip->regs->idr);
-        cs4231_chip->regs->iar = 0x0;
-        cs4231_chip->regs->idr = CDROM_ENABLE(cs4231_chip->regs->idr);
+        CS4231_WRITE8(cs4231_chip, &(cs4231_chip->regs->iar), 0x1);
+        CS4231_WRITE8(cs4231_chip, &(cs4231_chip->regs->idr),
+                      CDROM_ENABLE(CS4231_READ8(cs4231_chip, &(cs4231_chip->regs->idr))));
+        CS4231_WRITE8(cs4231_chip, &(cs4231_chip->regs->iar), 0x0);
+        CS4231_WRITE8(cs4231_chip, &(cs4231_chip->regs->idr),
+                      CDROM_ENABLE(CS4231_READ8(cs4231_chip, &(cs4231_chip->regs->idr))));
         retval = AUDIO_INTERNAL_CD_IN;
     }
   }
   if ((value & AUDIO_LINE_IN)) {
-      cs4231_chip->regs->iar = 0x1;
-      cs4231_chip->regs->idr = LINE_ENABLE(cs4231_chip->regs->idr);
-      cs4231_chip->regs->iar = 0x0;
-      cs4231_chip->regs->idr = LINE_ENABLE(cs4231_chip->regs->idr);
+      CS4231_WRITE8(cs4231_chip, &(cs4231_chip->regs->iar), 0x1);
+      CS4231_WRITE8(cs4231_chip, &(cs4231_chip->regs->idr),
+                    LINE_ENABLE(CS4231_READ8(cs4231_chip, &(cs4231_chip->regs->idr))));
+      CS4231_WRITE8(cs4231_chip, &(cs4231_chip->regs->iar), 0x0);
+      CS4231_WRITE8(cs4231_chip, &(cs4231_chip->regs->idr),
+                    LINE_ENABLE(CS4231_READ8(cs4231_chip, &(cs4231_chip->regs->idr))));
       retval = AUDIO_LINE_IN;
   } else if (value & AUDIO_MICROPHONE) {
-      cs4231_chip->regs->iar = 0x1;
-      cs4231_chip->regs->idr = MIC_ENABLE(cs4231_chip->regs->idr);
-      cs4231_chip->regs->iar = 0x0;
-      cs4231_chip->regs->idr = MIC_ENABLE(cs4231_chip->regs->idr);
+      CS4231_WRITE8(cs4231_chip, &(cs4231_chip->regs->iar), 0x1);
+      CS4231_WRITE8(cs4231_chip, &(cs4231_chip->regs->idr),
+                    MIC_ENABLE(CS4231_READ8(cs4231_chip, &(cs4231_chip->regs->idr))));
+      CS4231_WRITE8(cs4231_chip, &(cs4231_chip->regs->iar), 0x0);
+      CS4231_WRITE8(cs4231_chip, &(cs4231_chip->regs->idr),
+                    MIC_ENABLE(CS4231_READ8(cs4231_chip, &(cs4231_chip->regs->idr))));
       retval = AUDIO_MICROPHONE;
   } else if (value & AUDIO_ANALOG_LOOPBACK) {
-      cs4231_chip->regs->iar = 0x1;
-      cs4231_chip->regs->idr = OUTPUTLOOP_ENABLE(cs4231_chip->regs->idr);
-      cs4231_chip->regs->iar = 0x0;
-      cs4231_chip->regs->idr = OUTPUTLOOP_ENABLE(cs4231_chip->regs->idr);
+      CS4231_WRITE8(cs4231_chip, &(cs4231_chip->regs->iar), 0x1);
+      CS4231_WRITE8(cs4231_chip, &(cs4231_chip->regs->idr),
+                    OUTPUTLOOP_ENABLE(CS4231_READ8(cs4231_chip, &(cs4231_chip->regs->idr))));
+      CS4231_WRITE8(cs4231_chip, &(cs4231_chip->regs->iar), 0x0);
+      CS4231_WRITE8(cs4231_chip, &(cs4231_chip->regs->idr),
+                    OUTPUTLOOP_ENABLE(CS4231_READ8(cs4231_chip, &(cs4231_chip->regs->idr))));
       retval = AUDIO_ANALOG_LOOPBACK;
   }
 
@@ -659,18 +709,19 @@ static int cs4231_set_monitor_volume(struct sparcaudio_driver *drv, int value)
   a = CS4231_MON_MAX_ATEN - (value * (CS4231_MON_MAX_ATEN + 1) / 
                              (AUDIO_MAX_GAIN + 1));
 
-  cs4231_chip->regs->iar = 0x0d;
+  CS4231_WRITE8(cs4231_chip, &(cs4231_chip->regs->iar), 0x0d);
   if (a >= CS4231_MON_MAX_ATEN) 
-      cs4231_chip->regs->idr = LOOPB_OFF;
+      CS4231_WRITE8(cs4231_chip, &(cs4231_chip->regs->idr), LOOPB_OFF);
   else 
-      cs4231_chip->regs->idr = ((a << 2) | LOOPB_ON);
+      CS4231_WRITE8(cs4231_chip, &(cs4231_chip->regs->idr), ((a << 2) | LOOPB_ON));
 
   if (value == AUDIO_MAX_GAIN) 
-    cs4231_chip->perchip_info.monitor_gain = AUDIO_MAX_GAIN;
+    CS4231_WRITE8(cs4231_chip, &(cs4231_chip->perchip_info.monitor_gain), AUDIO_MAX_GAIN);
   else 
-    cs4231_chip->perchip_info.monitor_gain = ((CS4231_MAX_DEV_ATEN - a) * 
-                                              (AUDIO_MAX_GAIN + 1) / 
-                                              (CS4231_MAX_DEV_ATEN + 1));
+    CS4231_WRITE8(cs4231_chip, &(cs4231_chip->perchip_info.monitor_gain),
+                  ((CS4231_MAX_DEV_ATEN - a) * 
+                   (AUDIO_MAX_GAIN + 1) / 
+                   (CS4231_MAX_DEV_ATEN + 1)));
 
   return 0;
 }
@@ -852,12 +903,12 @@ static int cs4231_record_gain(struct sparcaudio_driver *drv, int value, unsigned
   l_adj = l * (CS4231_MAX_GAIN + 1) / (AUDIO_MAX_GAIN + 1);
   r_adj = r * (CS4231_MAX_GAIN + 1) / (AUDIO_MAX_GAIN + 1);
   
-  cs4231_chip->regs->iar = 0x0;
-  old_gain = cs4231_chip->regs->idr;
-  cs4231_chip->regs->idr = RECGAIN_SET(old_gain, l_adj);
-  cs4231_chip->regs->iar = 0x1;
-  old_gain = cs4231_chip->regs->idr;
-  cs4231_chip->regs->idr = RECGAIN_SET(old_gain, r_adj);
+  CS4231_WRITE8(cs4231_chip, &(cs4231_chip->regs->iar), 0x0);
+  old_gain = CS4231_READ8(cs4231_chip, &(cs4231_chip->regs->idr));
+  CS4231_WRITE8(cs4231_chip, &(cs4231_chip->regs->idr), RECGAIN_SET(old_gain, l_adj));
+  CS4231_WRITE8(cs4231_chip, &(cs4231_chip->regs->iar), 0x1);
+  old_gain = CS4231_READ8(cs4231_chip, &(cs4231_chip->regs->idr));
+  CS4231_WRITE8(cs4231_chip, &(cs4231_chip->regs->idr), RECGAIN_SET(old_gain, r_adj));
   
   if (l == value) {
     (l == 0) ? (tmp = 0) : (tmp = ((l_adj + 1) * AUDIO_MAX_GAIN) / 
@@ -894,12 +945,12 @@ static int cs4231_play_gain(struct sparcaudio_driver *drv, int value, unsigned c
                                               (r * (CS4231_MAX_ATEN + 1) /
                                                (AUDIO_MAX_GAIN + 1)));
   
-  cs4231_chip->regs->iar = 0x6;
-  old_gain = cs4231_chip->regs->idr;
-  cs4231_chip->regs->idr = GAIN_SET(old_gain, l_adj);
-  cs4231_chip->regs->iar = 0x7;
-  old_gain = cs4231_chip->regs->idr;
-  cs4231_chip->regs->idr = GAIN_SET(old_gain, r_adj);
+  CS4231_WRITE8(cs4231_chip, &(cs4231_chip->regs->iar), 0x6);
+  old_gain = CS4231_READ8(cs4231_chip, &(cs4231_chip->regs->idr));
+  CS4231_WRITE8(cs4231_chip, &(cs4231_chip->regs->idr), GAIN_SET(old_gain, l_adj));
+  CS4231_WRITE8(cs4231_chip, &(cs4231_chip->regs->iar), 0x7);
+  old_gain = CS4231_READ8(cs4231_chip, &(cs4231_chip->regs->idr));
+  CS4231_WRITE8(cs4231_chip, &(cs4231_chip->regs->idr), GAIN_SET(old_gain, r_adj));
   
   if ((value == 0) || (value == AUDIO_MAX_GAIN)) {
     tmp = value;
@@ -920,13 +971,16 @@ static int cs4231_play_gain(struct sparcaudio_driver *drv, int value, unsigned c
 static void cs4231_chip_reset(struct sparcaudio_driver *drv)
 {
   struct cs4231_chip *cs4231_chip = (struct cs4231_chip *)drv->private;
+  unsigned char vers;
 
   tprintk(("in cs4231_chip_reset\n"));
 
   if (cs4231_chip->status & CS_STATUS_IS_EBUS) {
 #ifdef EB4231_SUPPORT
-    writel(EBUS_DCSR_RESET, &cs4231_chip->eb2p->dcsr);
-    writel(EBUS_DCSR_RESET, &cs4231_chip->eb2c->dcsr);
+    writel(EBUS_DCSR_RESET, &(cs4231_chip->eb2p->dcsr));
+    writel(EBUS_DCSR_RESET, &(cs4231_chip->eb2c->dcsr));
+    writel(EBUS_DCSR_BURST_SZ_16, &(cs4231_chip->eb2p->dcsr));
+    writel(EBUS_DCSR_BURST_SZ_16, &(cs4231_chip->eb2c->dcsr));
 #endif
   } else {
     cs4231_chip->regs->dmacsr = APC_CHIP_RESET;
@@ -938,12 +992,13 @@ static void cs4231_chip_reset(struct sparcaudio_driver *drv)
     cs4231_chip->regs->dmacsr &= ~(APC_CDC_RESET);
   }
 
-  cs4231_chip->regs->iar |= IAR_AUTOCAL_BEGIN;
+  CS4231_WRITE8(cs4231_chip, &(cs4231_chip->regs->iar),
+                (CS4231_READ8(cs4231_chip, &(cs4231_chip->regs->iar)) | IAR_AUTOCAL_BEGIN));
   
   CHIP_READY
     
-  cs4231_chip->regs->iar = IAR_AUTOCAL_BEGIN | 0x0c;
-  cs4231_chip->regs->idr = MISC_IR_MODE2;
+  CS4231_WRITE8(cs4231_chip, &(cs4231_chip->regs->iar), IAR_AUTOCAL_BEGIN | 0x0c);
+  CS4231_WRITE8(cs4231_chip, &(cs4231_chip->regs->idr), MISC_IR_MODE2);
 
   /* This is the equivalent of DEFAULT_DATA_FMAT */
   cs4231_set_input_encoding(drv, AUDIO_ENCODING_ULAW);
@@ -956,25 +1011,27 @@ static void cs4231_chip_reset(struct sparcaudio_driver *drv)
   cs4231_set_output_channels(drv, CS4231_CHANNELS);
   cs4231_set_output_precision(drv, CS4231_PRECISION);
 
-  cs4231_chip->regs->iar = 0x19;
+  CS4231_WRITE8(cs4231_chip, &(cs4231_chip->regs->iar), 0x19);
+
   /* see what we can turn on */
-  if (cs4231_chip->regs->idr & CS4231A) {
+  vers = CS4231_READ8(cs4231_chip, &(cs4231_chip->regs->idr));
+  if (vers & CS4231A) {
     tprintk(("This is a CS4231A\n"));
     cs4231_chip->status |= CS_STATUS_REV_A;
   } else
     cs4231_chip->status &= ~CS_STATUS_REV_A;
   
-  cs4231_chip->regs->iar = IAR_AUTOCAL_BEGIN | 0x10;
-  cs4231_chip->regs->idr = OLB_ENABLE;
+  CS4231_WRITE8(cs4231_chip, &(cs4231_chip->regs->iar), IAR_AUTOCAL_BEGIN | 0x10);
+  CS4231_WRITE8(cs4231_chip, &(cs4231_chip->regs->idr), OLB_ENABLE);
   
-  cs4231_chip->regs->iar = IAR_AUTOCAL_BEGIN | 0x11;
+  CS4231_WRITE8(cs4231_chip, &(cs4231_chip->regs->iar), IAR_AUTOCAL_BEGIN | 0x11);
   if (cs4231_chip->status & CS_STATUS_REV_A)
-      cs4231_chip->regs->idr = (HPF_ON | XTALE_ON);
+      CS4231_WRITE8(cs4231_chip, &(cs4231_chip->regs->idr), (HPF_ON | XTALE_ON));
   else
-      cs4231_chip->regs->idr = HPF_ON;
+      CS4231_WRITE8(cs4231_chip, &(cs4231_chip->regs->idr), HPF_ON);
   
-  cs4231_chip->regs->iar = IAR_AUTOCAL_BEGIN | 0x1a;
-  cs4231_chip->regs->idr = 0x00;
+  CS4231_WRITE8(cs4231_chip, &(cs4231_chip->regs->iar), IAR_AUTOCAL_BEGIN | 0x1a);
+  CS4231_WRITE8(cs4231_chip, &(cs4231_chip->regs->idr), 0x00);
   
   /* Now set things up for defaults */
   cs4231_set_input_balance(drv, AUDIO_MID_BALANCE);
@@ -988,13 +1045,14 @@ static void cs4231_chip_reset(struct sparcaudio_driver *drv)
 
   cs4231_set_monitor_volume(drv, LOOPB_OFF);
   
-  cs4231_chip->regs->iar = IAR_AUTOCAL_END;
+  CS4231_WRITE8(cs4231_chip, &(cs4231_chip->regs->iar), IAR_AUTOCAL_END);
   
   cs4231_ready(drv);
   
-  cs4231_chip->regs->iar = IAR_AUTOCAL_BEGIN | 0x09;
-  cs4231_chip->regs->idr &= ACAL_DISABLE;
-  cs4231_chip->regs->iar = IAR_AUTOCAL_END;
+  CS4231_WRITE8(cs4231_chip, &(cs4231_chip->regs->iar), IAR_AUTOCAL_BEGIN | 0x09);
+  CS4231_WRITE8(cs4231_chip, &(cs4231_chip->regs->idr),
+                (CS4231_READ8(cs4231_chip, &(cs4231_chip->regs->idr)) & ACAL_DISABLE));
+  CS4231_WRITE8(cs4231_chip, &(cs4231_chip->regs->iar), IAR_AUTOCAL_END);
   
   cs4231_ready(drv);
 
@@ -1036,24 +1094,18 @@ static void eb4231_getsamplecount(struct sparcaudio_driver *drv, unsigned int le
 {
   struct cs4231_chip *cs4231_chip = (struct cs4231_chip *)drv->private;
   struct audio_prinfo *thisdir;
-  unsigned int count, nextcount, curcount;
+  unsigned int count, curcount, nextcount, dbcr;
 
-  if (direction == 1) /* record */ 
-    {
-      thisdir = &cs4231_chip->perchip_info.record;
-      curcount = 
-	cs4231_length_to_samplecount(thisdir, readl(&cs4231_chip->eb2c->dbcr));
-      nextcount = 
-	cs4231_length_to_samplecount(thisdir, 0/*cs4231_chip->regs->dmacnc*/);
-    }
-  else /* play */
-    {
-      thisdir = &cs4231_chip->perchip_info.play;
-      curcount = 
-	cs4231_length_to_samplecount(thisdir, readl(&cs4231_chip->eb2p->dbcr));
-      nextcount = 
-	cs4231_length_to_samplecount(thisdir, 0/*cs4231_chip->regs->dmapnc*/);
-    }
+  if(direction == 1) {
+    thisdir = &cs4231_chip->perchip_info.record;
+    dbcr = readl(&(cs4231_chip->eb2c->dbcr));
+    nextcount = cs4231_chip->input_next_dma_size;
+  } else {
+    thisdir = &cs4231_chip->perchip_info.play;
+    dbcr = readl(&(cs4231_chip->eb2p->dbcr));
+    nextcount = cs4231_chip->output_next_dma_size;
+  }
+  curcount = cs4231_length_to_samplecount(thisdir, dbcr);
   count = thisdir->samples;
   length = cs4231_length_to_samplecount(thisdir, length);
   /* normalize for where we are. */
@@ -1131,18 +1183,16 @@ static void cs4231_release(struct inode * inode, struct file * file, struct spar
     /* stop capture here or midlevel? */
     cs4231_chip->perchip_info.record.open = 0;
     if (cs4231_chip->input_dma_handle) {
-#if 0
-      mmu_release_scsi_one(cs4231_chip->input_dma_handle,
-                           cs4231_chip->input_dma_size, drv->dev->my_bus);
-#endif
+      if(!(cs4231_chip->status & CS_STATUS_IS_EBUS))
+              mmu_release_scsi_one(cs4231_chip->input_dma_handle,
+                                   cs4231_chip->input_dma_size, drv->dev->my_bus);
       cs4231_chip->input_dma_handle = 0;
       cs4231_chip->input_dma_size = 0;
     }
     if (cs4231_chip->input_next_dma_handle) {
-#if 0
-      mmu_release_scsi_one(cs4231_chip->input_next_dma_handle,
-                           cs4231_chip->input_next_dma_size, drv->dev->my_bus);
-#endif
+      if(!(cs4231_chip->status & CS_STATUS_IS_EBUS))
+              mmu_release_scsi_one(cs4231_chip->input_next_dma_handle,
+                                   cs4231_chip->input_next_dma_size, drv->dev->my_bus);
       cs4231_chip->input_next_dma_handle = 0;
       cs4231_chip->input_next_dma_size = 0;
     }
@@ -1152,19 +1202,17 @@ static void cs4231_release(struct inode * inode, struct file * file, struct spar
     cs4231_chip->perchip_info.play.active =
       cs4231_chip->perchip_info.play.open = 0;
     if (cs4231_chip->output_dma_handle) {
-#if 0
-      mmu_release_scsi_one(cs4231_chip->output_dma_handle,
-                           cs4231_chip->output_dma_size, drv->dev->my_bus);
-#endif
+      if(!(cs4231_chip->status & CS_STATUS_IS_EBUS))
+              mmu_release_scsi_one(cs4231_chip->output_dma_handle,
+                                   cs4231_chip->output_dma_size, drv->dev->my_bus);
       cs4231_chip->output_dma_handle = 0;
       cs4231_chip->output_dma_size = 0;
     }
     if (cs4231_chip->output_next_dma_handle) {
-#if 0
-      mmu_release_scsi_one(cs4231_chip->output_next_dma_handle,
-                           cs4231_chip->output_next_dma_size, 
-                           drv->dev->my_bus);
-#endif
+      if(!(cs4231_chip->status & CS_STATUS_IS_EBUS))
+              mmu_release_scsi_one(cs4231_chip->output_next_dma_handle,
+                                   cs4231_chip->output_next_dma_size, 
+                                   drv->dev->my_bus);
       cs4231_chip->output_next_dma_handle = 0;
       cs4231_chip->output_next_dma_size = 0;
     }
@@ -1230,11 +1278,7 @@ static void eb4231_playintr(struct sparcaudio_driver *drv)
 {
   struct cs4231_chip *cs4231_chip = (struct cs4231_chip *)drv->private;
   int status = 0;
-  unsigned int dcsr;
 
-  dcsr = readl(&cs4231_chip->eb2p->dcsr);
-
-  printk("pintr\ncsr 0x%x acr 0x%x bcr %d\n", readl(&cs4231_chip->eb2p->dcsr), readl(&cs4231_chip->eb2p->dacr), readl(&cs4231_chip->eb2p->dbcr));
   if (cs4231_chip->playlen == 0 && cs4231_chip->output_size > 0) 
     cs4231_chip->playlen = cs4231_chip->output_size;
 
@@ -1244,35 +1288,24 @@ static void eb4231_playintr(struct sparcaudio_driver *drv)
     cs4231_chip->playing_count--;
     status++;
   }
-
-#if 0
-  if (cs4231_chip->output_next_dma_handle) {
+  if(cs4231_chip->output_next_dma_handle) {
     cs4231_chip->output_dma_handle = cs4231_chip->output_next_dma_handle;
     cs4231_chip->output_dma_size = cs4231_chip->output_next_dma_size;
-    cs4231_chip->output_next_dma_size = 0;
     cs4231_chip->output_next_dma_handle = 0;
+    cs4231_chip->output_next_dma_size = 0;
   }
-#endif
 
   if ((cs4231_chip->output_ptr && cs4231_chip->output_size > 0) && 
       !(cs4231_chip->perchip_info.play.pause)) {
-#if 0
-    if (dcsr & EBUS_DCSR_A_LOADED) {
-      cs4231_chip->output_next_dma_handle = virt_to_bus(cs4231_chip->output_ptr);
-      cs4231_chip->output_next_dma_size = cs4231_chip->output_size;
-    } else {
-#endif
-      cs4231_chip->output_dma_handle = virt_to_bus(cs4231_chip->output_ptr);
-      cs4231_chip->output_dma_size = cs4231_chip->output_size;
-#if 0
-    }
-#endif
-    writel(virt_to_bus(cs4231_chip->output_ptr), &cs4231_chip->eb2p->dacr);
-    writel(cs4231_chip->output_size, &cs4231_chip->eb2p->dbcr);
+    cs4231_chip->output_next_dma_handle = virt_to_bus(cs4231_chip->output_ptr);
+    cs4231_chip->output_next_dma_size = cs4231_chip->output_size;
+
+    writel(cs4231_chip->output_next_dma_size, &(cs4231_chip->eb2p->dbcr));
+    writel(cs4231_chip->output_next_dma_handle, &(cs4231_chip->eb2p->dacr));
     cs4231_chip->output_size = 0;
     cs4231_chip->output_ptr = NULL;
     cs4231_chip->playing_count++;
-    status+=2;
+    status += 2;
   }
 
   sparcaudio_output_done(drv, status);
@@ -1354,14 +1387,11 @@ static int eb4231_recintr(struct sparcaudio_driver *drv)
 
   if (cs4231_chip->perchip_info.record.active == 0) {
     dprintk(("going inactive\n"));
+    eb4231_pollinput(drv);
     cs4231_disable_rec(drv);    
   } 
 
   if (cs4231_chip->input_dma_handle) {
-#if 0
-    mmu_release_scsi_one(cs4231_chip->input_dma_handle, 
-                         cs4231_chip->input_dma_size, drv->dev->my_bus);
-#endif
     cs4231_chip->input_dma_handle = 0;
     cs4231_chip->input_dma_size = 0;
     cs4231_chip->recording_count--;
@@ -1378,29 +1408,17 @@ static int eb4231_recintr(struct sparcaudio_driver *drv)
       !(cs4231_chip->perchip_info.record.pause)) {
     cs4231_recclear(cs4231_chip->perchip_info.record.encoding, 
                     (char *)cs4231_chip->input_ptr, cs4231_chip->input_size);
-#if 0
-    cs4231_chip->input_next_dma_handle =
-      mmu_get_scsi_one((char *) cs4231_chip->input_ptr, 
-                       cs4231_chip->input_size, drv->dev->my_bus);
-    cs4231_chip->regs->dmacnva = cs4231_chip->input_next_dma_handle;
-    cs4231_chip->input_next_dma_size = cs4231_chip->regs->dmacnc = 
-      cs4231_chip->input_size;
-#else
-    cs4231_chip->input_next_dma_handle = cs4231_chip->eb2c->dacr = virt_to_bus(cs4231_chip->input_ptr);
-    cs4231_chip->input_next_dma_size = cs4231_chip->eb2c->dbcr = cs4231_chip->input_size;
-#endif
+
+    cs4231_chip->input_next_dma_handle = virt_to_bus(cs4231_chip->input_ptr);
+    cs4231_chip->input_next_dma_size = cs4231_chip->input_size;
+
+    writel(cs4231_chip->input_next_dma_size, &(cs4231_chip->eb2c->dbcr));
+    writel(cs4231_chip->input_next_dma_handle, &(cs4231_chip->eb2c->dacr));
+
     cs4231_chip->input_size = 0;
     cs4231_chip->input_ptr = NULL;
     cs4231_chip->recording_count++;
     status += 2;
-  } else {
-#if 0
-    cs4231_chip->regs->dmacnva = 0;
-    cs4231_chip->regs->dmacnc = 0;
-#else
-    cs4231_chip->eb2c->dacr = 0;
-    cs4231_chip->eb2c->dbcr = 0;
-#endif
   }
 
   sparcaudio_input_done(drv, 1);
@@ -1416,7 +1434,6 @@ static void eb4231_start_output(struct sparcaudio_driver *drv, __u8 * buffer,
   struct cs4231_chip *cs4231_chip = (struct cs4231_chip *)drv->private;
   unsigned int dcsr;
 
-  dprintk(("in eb4231 start output act %d pau %d\n", cs4231_chip->perchip_info.play.active, cs4231_chip->perchip_info.play.pause));
   cs4231_chip->output_ptr = buffer;
   cs4231_chip->output_size = count;
 
@@ -1431,17 +1448,19 @@ static void eb4231_start_output(struct sparcaudio_driver *drv, __u8 * buffer,
 
   dcsr = readl(&cs4231_chip->eb2p->dcsr);
   if (!(dcsr & EBUS_DCSR_EN_DMA)) {
-    dprintk(("about to go setup\n"));
+    writel(EBUS_DCSR_RESET, &(cs4231_chip->eb2p->dcsr));
+    writel(EBUS_DCSR_BURST_SZ_16, &(cs4231_chip->eb2p->dcsr));
 
-    dcsr = EB2_PLAY_SETUP;
-    writel(dcsr, (unsigned long)&cs4231_chip->eb2p->dcsr);
     eb4231_playintr(drv);
-    dprintk(("enabling\n"));
+
+    writel(EBUS_DCSR_BURST_SZ_16 |
+           (EBUS_DCSR_EN_DMA | EBUS_DCSR_INT_EN | EBUS_DCSR_EN_CNT | EBUS_DCSR_EN_NEXT),
+           &(cs4231_chip->eb2p->dcsr));
+
     cs4231_enable_play(drv);
 
     cs4231_ready(drv);
   } else {
-    dprintk(("playing next block\n"));
     eb4231_playintr(drv);
   }
 }
@@ -1484,21 +1503,28 @@ static void cs4231_start_output(struct sparcaudio_driver *drv, __u8 * buffer,
 static void eb4231_stop_output(struct sparcaudio_driver *drv)
 {
   struct cs4231_chip *cs4231_chip = (struct cs4231_chip *)drv->private;
+  int dcsr;
 
-  dprintk(("in cs4231_stop_output\n"));
-  dprintk(("csr 0x%x acr 0x%x bcr %d\n", readl(&cs4231_chip->eb2p->dcsr), readl(&cs4231_chip->eb2p->dacr), readl(&cs4231_chip->eb2p->dbcr)));
+  dprintk(("eb4231_stop_output: dcsr 0x%x dacr 0x%x dbcr %d\n",
+           readl(&cs4231_chip->eb2p->dcsr),
+           readl(&cs4231_chip->eb2p->dacr),
+           readl(&cs4231_chip->eb2p->dbcr)));
   cs4231_chip->output_ptr = NULL;
   cs4231_chip->output_size = 0;
   if (cs4231_chip->output_dma_handle) {
     cs4231_chip->output_dma_handle = 0;
     cs4231_chip->output_dma_size = 0;
   }
-#if 0
   if (cs4231_chip->output_next_dma_handle) {
     cs4231_chip->output_next_dma_handle = 0;
     cs4231_chip->output_next_dma_size = 0;
   }
-#endif
+  dcsr = readl(&(cs4231_chip->eb2p->dcsr));
+  if(dcsr & EBUS_DCSR_EN_DMA)
+    writel(dcsr & ~EBUS_DCSR_EN_DMA, &(cs4231_chip->eb2p->dcsr));
+
+  /* Else subsequent speed setting changes are ignored by the chip. */
+  cs4231_disable_play(drv);
 }
 #endif
 
@@ -1521,7 +1547,26 @@ static void cs4231_stop_output(struct sparcaudio_driver *drv)
     cs4231_chip->output_next_dma_handle = 0;
     cs4231_chip->output_next_dma_size = 0;
   }
+#if 0 /* Not safe without shutting off the DMA controller as well. -DaveM */
+  /* Else subsequent speed setting changes are ignored by the chip. */
+  cs4231_disable_play(drv);
+#endif
 }
+
+#ifdef EB4231_SUPPORT
+static void eb4231_pollinput(struct sparcaudio_driver *drv)
+{
+  struct cs4231_chip *cs4231_chip = (struct cs4231_chip *)drv->private;
+  int x = 0, dcsr;
+
+  while (!((dcsr = readl(&(cs4231_chip->eb2c->dcsr))) & EBUS_DCSR_TC) &&
+         x <= CS_TIMEOUT) {
+    x++;
+  }
+
+  writel(dcsr | EBUS_DCSR_TC, &(cs4231_chip->eb2c->dcsr));
+}
+#endif
 
 static void cs4231_pollinput(struct sparcaudio_driver *drv)
 {
@@ -1687,8 +1732,8 @@ static void cs4231_loopback(struct sparcaudio_driver *drv, unsigned int value)
 {
   struct cs4231_chip *cs4231_chip = (struct cs4231_chip *)drv->private;
 
-  cs4231_chip->regs->iar = 0x0d;
-  cs4231_chip->regs->idr = (value ? LOOPB_ON : 0);
+  CS4231_WRITE8(cs4231_chip, &(cs4231_chip->regs->iar), 0x0d);
+  CS4231_WRITE8(cs4231_chip, &(cs4231_chip->regs->idr), (value ? LOOPB_ON : 0));
 }
 
 static int cs4231_ioctl(struct inode * inode, struct file * file,
@@ -1716,61 +1761,15 @@ void eb4231_cinterrupt(int irq, void *dev_id, struct pt_regs *regs)
 {
   struct sparcaudio_driver *drv = (struct sparcaudio_driver *)dev_id;
   struct cs4231_chip *cs4231_chip = (struct cs4231_chip *)drv->private;
-  int dummy1, dummy2;
+  int dummy;
   
-  printk("in eb4231_interrupt\n");
+  /* Read status. */
+  dummy = readl(&cs4231_chip->eb2c->dcsr);
 
-  /* Clear the interrupt. */
-  dummy1 = readl(&cs4231_chip->eb2p->dcsr);
-  dummy2 = readl(&cs4231_chip->eb2c->dcsr);
-
-  printk("play csr 0x%x capt csr 0x%x\n", dummy1, dummy2);
-
-  cs4231_chip->eb2p->dcsr = dummy1;
-  cs4231_chip->eb2c->dcsr = dummy2;
-#if 0
-  if (dummy & APC_PLAY_INT) {
-    if (dummy & APC_XINT_PNVA) {
-      cs4231_chip->perchip_info.play.samples += 
-	cs4231_length_to_samplecount(&(cs4231_chip->perchip_info.play), 
-				     cs4231_chip->playlen); 
-      eb4231_playintr(drv);
-    } 
-    /* Any other conditions we need worry about? */
-  }
-
-  if (dummy & APC_CAPT_INT) {
-    if (dummy & APC_XINT_CNVA) {
-      cs4231_chip->perchip_info.record.samples += 
-	cs4231_length_to_samplecount(&(cs4231_chip->perchip_info.record), 
-				     cs4231_chip->reclen);
-      eb4231_recintr(drv);
-    }
-    /* Any other conditions we need worry about? */
-  }
-
-  
-  if (dummy & APC_XINT_CEMP) {
-    if (cs4231_chip->perchip_info.record.active == 0) {
-      /* Fix me */
-      cs4231_chip->perchip_info.record.active = 0;
-      cs4231_chip->perchip_info.record.error = 1;
-      eb4231_recintr(drv);
-    }
-  }
-
-  if (dummy & APC_XINT_EMPT) {
-    if (!cs4231_chip->output_next_dma_handle) {
-      cs4231_chip->regs->dmacsr |= (APC_PPAUSE);
-      cs4231_disable_play(drv);
-      cs4231_chip->perchip_info.play.error = 1;
-    }
-    cs4231_chip->perchip_info.play.active = 0;
-    eb4231_playintr(drv);
-
-    eb4231_getsamplecount(drv, cs4231_chip->playlen, 0);
-  }
-#endif
+  cs4231_chip->perchip_info.record.samples += 
+          cs4231_length_to_samplecount(&(cs4231_chip->perchip_info.record), 
+                                       cs4231_chip->reclen);
+  eb4231_recintr(drv);
 }
 
 /* ebus audio play interrupt handler. */
@@ -1780,42 +1779,29 @@ void eb4231_pinterrupt(int irq, void *dev_id, struct pt_regs *regs)
   struct cs4231_chip *cs4231_chip = (struct cs4231_chip *)drv->private;
   unsigned int dummy;
   
-  dprintk(("in eb4231_interrupt2\n"));
+  /* Clear the interrupt.  Bleh, when not using the next-address
+   * feature, TC can only be cleared by a reset.
+   */
+  dummy = readl(&(cs4231_chip->eb2p->dcsr));
+  writel(dummy, &(cs4231_chip->eb2p->dcsr));
 
-  /* Clear the interrupt. */
-  dummy = readl(&cs4231_chip->eb2p->dcsr);
-  dprintk(("play csr 0x%x\n", dummy));
-
-  if (dummy & EBUS_DCSR_INT_PEND) {
-#if 0
-    if (!(dummy & EBUS_DCSR_NA_LOADED)) {
-#endif
-      cs4231_chip->perchip_info.play.samples += 
-        cs4231_length_to_samplecount(&(cs4231_chip->perchip_info.play), 
-                                     cs4231_chip->playlen); 
-      eb4231_playintr(drv);
-#if 0
-    } 
-#endif
+  /* If we get a terminal count and address loaded condition,
+   * this means the DNAR was copied into DACR.
+   */
+  if((dummy & EBUS_DCSR_TC) != 0
+     /*&& (dummy & EBUS_DCSR_A_LOADED) != 0*/) {
+    cs4231_chip->perchip_info.play.samples += 
+      cs4231_length_to_samplecount(&(cs4231_chip->perchip_info.play), 
+                                   cs4231_chip->playlen); 
+    eb4231_playintr(drv);
   }
 
-  if (!(dummy & EBUS_DCSR_A_LOADED)) {
-#if 0
-    if (!cs4231_chip->output_next_dma_handle) {
-#endif
-      writel((dummy & ~EBUS_DCSR_EN_DMA), &cs4231_chip->eb2p->dcsr);
-      cs4231_disable_play(drv);
-      cs4231_chip->perchip_info.play.error = 1;
-#if 0
-    }
-#endif
+  if((dummy & EBUS_DCSR_A_LOADED) == 0) {
     cs4231_chip->perchip_info.play.active = 0;
-#if 0
     eb4231_playintr(drv);
-#endif
+
     eb4231_getsamplecount(drv, cs4231_chip->playlen, 0);
   }
-
 }
 #endif
 
@@ -2151,26 +2137,6 @@ static int eb4231_attach(struct sparcaudio_driver *drv,
 
   nregs = len / sizeof(regs[0]);
 
-  /* Make sure we can map the registers first */
-  if (check_region(edev->base_address[0],
-                   sizeof(struct cs4231_regs))) {
-    printk("eb4231_attach: can't get region at %016lx\n",
-           edev->base_address[0]);
-    goto cleanup;
-  }
-  if (check_region(edev->base_address[1],
-                   sizeof(struct linux_ebus_dma))) {
-    printk("eb4231_attach: can't get region at %016lx\n",
-           edev->base_address[1]);
-    goto cleanup;
-  }
-  if (check_region(edev->base_address[2],
-                   sizeof(struct linux_ebus_dma))) {
-    printk("eb4231_attach: can't get region at %016lx\n",
-           edev->base_address[2]);
-    goto cleanup;
-  }
-
   cs4231_chip->regs = (struct cs4231_regs *)edev->base_address[0];
   cs4231_chip->eb2p = (struct linux_ebus_dma *)edev->base_address[1];
   cs4231_chip->eb2c = (struct linux_ebus_dma *)edev->base_address[2];
@@ -2188,13 +2154,9 @@ static int eb4231_attach(struct sparcaudio_driver *drv,
   cs4231_chip->irq = edev->irqs[0];
   cs4231_chip->irq2 = edev->irqs[1];
 
-  request_irq(cs4231_chip->irq, eb4231_cinterrupt, SA_SHIRQ, "cs4231", drv);
-#if 0
-  enable_irq(cs4231_chip->irq);
-#endif
-
-  request_irq(cs4231_chip->irq2, eb4231_pinterrupt, SA_SHIRQ, "cs4231", drv);
-  enable_irq(cs4231_chip->irq2);
+  if(request_irq(cs4231_chip->irq, eb4231_cinterrupt, SA_SHIRQ, "cs4231", drv) ||
+     request_irq(cs4231_chip->irq2, eb4231_pinterrupt, SA_SHIRQ, "cs4231", drv))
+          goto bail;
 
   cs4231_chip->nirqs = 2;
 
@@ -2207,14 +2169,14 @@ static int eb4231_attach(struct sparcaudio_driver *drv,
   err = register_sparcaudio_driver(drv, 1);
 
   if (err < 0) {
+  bail:
     printk(KERN_ERR "cs4231: unable to register\n");
     cs4231_disable_interrupts(drv);
     disable_irq(cs4231_chip->irq);
     free_irq(cs4231_chip->irq, drv);
-    if (cs4231_chip->nirqs == 2) {
-      disable_irq(cs4231_chip->irq2);
-      free_irq(cs4231_chip->irq2, drv);
-    }
+    disable_irq(cs4231_chip->irq2);
+    free_irq(cs4231_chip->irq2, drv);
+
     release_region((unsigned long)cs4231_chip->regs, 
                    sizeof(struct cs4231_regs));
     release_region((unsigned long)cs4231_chip->eb2c, 
@@ -2312,9 +2274,11 @@ static void cs4231_detach(struct sparcaudio_driver *drv)
           sparc_free_io(cs4231_chip->regs, cs4231_chip->regs_size);
         } else {
 #ifdef EB4231_SUPPORT
-          release_region(cs4231_chip->regs, sizeof(struct cs4231_regs));
-          release_region(cs4231_chip->eb2c, sizeof(struct linux_ebus_dma));
-          release_region(cs4231_chip->eb2p, sizeof(struct linux_ebus_dma));
+          disable_irq(cs4231_chip->irq2);
+          free_irq(cs4231_chip->irq2, drv);
+          release_region((unsigned long)cs4231_chip->regs, sizeof(struct cs4231_regs));
+          release_region((unsigned long)cs4231_chip->eb2c, sizeof(struct linux_ebus_dma));
+          release_region((unsigned long)cs4231_chip->eb2p, sizeof(struct linux_ebus_dma));
 #endif
         }
         kfree(drv->private);

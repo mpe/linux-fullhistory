@@ -1,4 +1,4 @@
-/* $Id: psycho.c,v 1.79 1999/03/19 05:38:46 davem Exp $
+/* $Id: psycho.c,v 1.85 1999/04/02 14:54:28 davem Exp $
  * psycho.c: Ultra/AX U2P PCI controller support.
  *
  * Copyright (C) 1997 David S. Miller (davem@caipfs.rutgers.edu)
@@ -680,20 +680,23 @@ pbm_reconfigure_bridges(struct linux_pbm_info *pbm, unsigned char bus)
 {
 	unsigned int devfn, l, class;
 	unsigned char hdr_type = 0;
+	int is_multi = 0;
 
 	for (devfn = 0; devfn < 0xff; ++devfn) {
-		if (PCI_FUNC(devfn) == 0) {
-			pbm_read_config_byte(pbm, bus, devfn,
-					     PCI_HEADER_TYPE, &hdr_type);
-		} else if (!(hdr_type & 0x80)) {
+		if (PCI_FUNC(devfn) != 0 && is_multi == 0) {
 			/* not a multi-function device */
 			continue;
 		}
+		pbm_read_config_byte(pbm, bus, devfn,
+				     PCI_HEADER_TYPE, &hdr_type);
+		if (PCI_FUNC(devfn) == 0)
+			is_multi = hdr_type & 0x80;
 
 		/* Check if there is anything here. */
 		pbm_read_config_dword(pbm, bus, devfn, PCI_VENDOR_ID, &l);
-		if (l == 0xffffffff || l == 0x00000000) {
-			hdr_type = 0;
+		if (l == 0xffffffff || l == 0x00000000 ||
+		    l == 0x0000ffff || l == 0xffff0000) {
+			is_multi = 0;
 			continue;
 		}
 
@@ -1234,12 +1237,13 @@ static void __init fixup_regs(struct pci_dev *pdev,
 		}
 		if (bsreg == PCI_ROM_ADDRESS) {
 			pdev->rom_address = (unsigned long)__va(pci_addr);
-			pdev->rom_address |= 1;
+			pdev->rom_address &= ~1UL;
+
 			/*
-			 * Enable access to the ROM.
+			 * Disable access to the ROM.
 			 */
 			pci_read_config_dword(pdev, PCI_ROM_ADDRESS, &rtmp);
-			pci_write_config_dword(pdev, PCI_ROM_ADDRESS, rtmp | 1);
+			pci_write_config_dword(pdev, PCI_ROM_ADDRESS, rtmp & ~1);
 		} else
 			pdev->base_address[brindex] = (unsigned long)__va(pci_addr);
 
@@ -1408,7 +1412,7 @@ static void __init fixup_regs(struct pci_dev *pdev,
 
 			rtmp = new_base;
 			pci_read_config_dword(pdev, breg, &base);
-			rtmp |= (base & ~PCI_ROM_ADDRESS_MASK);
+			rtmp &= ~(base & ~PCI_ROM_ADDRESS_MASK);
 			pci_write_config_dword(pdev, breg, rtmp);
 
 			/* Apply PBM ranges and update pci_dev. */
@@ -1431,8 +1435,7 @@ static void __init fixup_regs(struct pci_dev *pdev,
 					    "PBM ranges\n");
 			}
 			pdev->rom_address = (unsigned long)__va(pci_addr);
-
-			pdev->rom_address |= (base & ~PCI_ROM_ADDRESS_MASK);
+			pdev->rom_address &= ~(base & ~PCI_ROM_ADDRESS_MASK);
 			MEM_seen = 1;
 		}
 	rom_address_done:
@@ -1588,6 +1591,36 @@ unsigned int __init psycho_irq_build(struct linux_pbm_info *pbm,
 			imap_off = imap_offset(imap_ser);
 			break;
 
+		case 0x2c:
+			/* Onboard Timer 0 */
+			imap_off = imap_offset(imap_tim0);
+			break;
+
+		case 0x2d:
+			/* Onboard Timer 1 */
+			imap_off = imap_offset(imap_tim1);
+			break;
+
+		case 0x2e:
+			/* Psycho UE Interrupt */
+			imap_off = imap_offset(imap_ue);
+			break;
+
+		case 0x2f:
+			/* Psycho CE Interrupt */
+			imap_off = imap_offset(imap_ce);
+			break;
+
+		case 0x30:
+			/* Psycho PCI A Error Interrupt */
+			imap_off = imap_offset(imap_a_err);
+			break;
+
+		case 0x31:
+			/* Psycho PCI B Error Interrupt */
+			imap_off = imap_offset(imap_b_err);
+			break;
+
 		case 0x32:
 			/* Power Management */
 			imap_off = imap_offset(imap_pmgmt);
@@ -1720,7 +1753,6 @@ static void __init fixup_irq(struct pci_dev *pdev,
 			     int node)
 {
 	unsigned int prom_irq, portid = pbm->parent->upa_portid;
-	unsigned char pci_irq_line = pdev->irq;
 	int err;
 
 #ifdef FIXUP_IRQ_DEBUG
@@ -1764,7 +1796,25 @@ static void __init fixup_irq(struct pci_dev *pdev,
 		unsigned int bus, slot, line;
 
 		bus = (pbm == &pbm->parent->pbm_B) ? (1 << 4) : 0;
-		line = (pci_irq_line) & 3;
+
+		/* Use the given interrupt property value as the line if it
+		 * is non-zero and legal.  Legal encodings are INTA=1, INTB=2,
+		 * INTC=3, INTD=4 as per PCI OBP binding spec version 2.1 -DaveM
+		 */
+		if(prom_irq > 0 && prom_irq < 5) {
+			line = ((prom_irq - 1) & 3);
+		} else {
+			unsigned char pci_irq_line;
+
+			/* The generic PCI probing layer will read the
+			 * interrupt line into pdev->irq if the interrupt
+			 * pin is non-zero, so we have to explicitly fetch
+			 * the pin here to be certain (the interrupt line is
+			 * typically left at zero by OBP).
+			 */
+			pci_read_config_byte(pdev, PCI_INTERRUPT_PIN, &pci_irq_line);
+			line = ((pci_irq_line - 1) & 3);
+		}
 
 		/* Slot determination is only slightly complex.  Handle
 		 * the easy case first.

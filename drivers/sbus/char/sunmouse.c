@@ -94,7 +94,7 @@ extern void mouse_put_char(char ch);
 
 #undef SMOUSE_DEBUG
 
-static void
+static int
 push_event (Firm_event *ev)
 {
 	int next = (sunmouse.head + 1) % EV_SIZE;
@@ -102,7 +102,9 @@ push_event (Firm_event *ev)
 	if (next != sunmouse.tail){
 		sunmouse.queue.ev [sunmouse.head] = *ev;
 		sunmouse.head = next;
+		return 1;
 	}
+	return 0;
 }
 
 static int
@@ -150,7 +152,11 @@ void sun_mouse_change_baud(void)
 	extern void rs_change_mouse_baud(int newbaud);
 
 	if(mouse_baud == 1200)
+		mouse_baud = 2400;
+	else if(mouse_baud == 2400)
 		mouse_baud = 4800;
+	else if(mouse_baud == 4800)
+		mouse_baud = 9600;
 	else
 		mouse_baud = 1200;
 
@@ -196,7 +202,7 @@ void
 sun_mouse_inbyte(unsigned char byte)
 {
 	signed char mvalue;
-	int d;
+	int d, pushed = 0;
 	Firm_event ev;
 
 	add_mouse_randomness (byte);
@@ -290,29 +296,31 @@ sun_mouse_inbyte(unsigned char byte)
 		}
 		ev.time = xtime;
 		ev.value = ev.value ? VKEY_DOWN : VKEY_UP;
-		push_event (&ev);
+		pushed += push_event (&ev);
 	}
 	if (sunmouse.delta_x){
 		ev.id = LOC_X_DELTA;
 		ev.time = xtime;
 		ev.value = sunmouse.delta_x;
-		push_event (&ev);
+		pushed += push_event (&ev);
 		sunmouse.delta_x = 0;
 	}
 	if (sunmouse.delta_y){
 		ev.id = LOC_Y_DELTA;
 		ev.time = xtime;
 		ev.value = sunmouse.delta_y;
-		push_event (&ev);
+		pushed += push_event (&ev);
 	}
 	
-        /* We just completed a transaction, wake up whoever is awaiting
-	 * this event.
-	 */
-	sunmouse.ready = 1;
-	if (sunmouse.fasync)
-		kill_fasync (sunmouse.fasync, SIGIO);
-	wake_up_interruptible(&sunmouse.proc_list);
+	if(pushed != 0) {
+		/* We just completed a transaction, wake up whoever is awaiting
+		 * this event.
+		 */
+		sunmouse.ready = 1;
+		if (sunmouse.fasync)
+			kill_fasync (sunmouse.fasync, SIGIO);
+		wake_up_interruptible(&sunmouse.proc_list);
+	}
 	return;
 }
 

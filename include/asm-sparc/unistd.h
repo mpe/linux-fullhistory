@@ -1,4 +1,4 @@
-/* $Id: unistd.h,v 1.54 1999/03/25 00:40:12 davem Exp $ */
+/* $Id: unistd.h,v 1.55 1999/04/07 17:14:15 davem Exp $ */
 #ifndef _SPARC_UNISTD_H
 #define _SPARC_UNISTD_H
 
@@ -60,7 +60,7 @@
 #define __NR_pipe                42 /* Common                                      */
 #define __NR_times               43 /* Implemented via getrusage() in SunOS        */
 /* #define __NR_profil           44    Common                                      */
-/* #define __NR_ni_syscall       45    ENOSYS under SunOS                          */
+#define __NR_umount2             45 /* Linux Specific                              */
 #define __NR_setgid              46 /* Implemented via setregid() in SunOS         */
 #define __NR_getgid              47 /* Common                                      */
 #define __NR_signal              48 /* Implemented via sigvec() in SunOS           */

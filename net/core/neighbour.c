@@ -1170,7 +1170,7 @@ static int neigh_dump_table(struct neigh_table *tbl, struct sk_buff *skb, struct
 	for (h=0; h <= NEIGH_HASHMASK; h++) {
 		if (h < s_h) continue;
 		if (h > s_h)
-			memset(&cb->args[2], 0, sizeof(cb->args) - 2*sizeof(cb->args[0]));
+			s_idx = 0;
 		start_bh_atomic();
 		for (n = tbl->hash_buckets[h], idx = 0; n;
 		     n = n->next, idx++) {
@@ -1179,12 +1179,14 @@ static int neigh_dump_table(struct neigh_table *tbl, struct sk_buff *skb, struct
 			if (neigh_fill_info(skb, n, NETLINK_CB(cb->skb).pid,
 					    cb->nlh->nlmsg_seq, RTM_NEWNEIGH) <= 0) {
 				end_bh_atomic();
-				goto done;
+				cb->args[1] = h;
+				cb->args[2] = idx;
+				return -1;
 			}
 		}
 		end_bh_atomic();
 	}
-done:
+
 	cb->args[1] = h;
 	cb->args[2] = idx;
 	return skb->len;
@@ -1355,10 +1357,10 @@ int neigh_sysctl_register(struct device *dev, struct neigh_parms *p,
 		t->neigh_dev[0].ctl_name = dev->ifindex;
 		memset(&t->neigh_vars[12], 0, sizeof(ctl_table));
 	} else {
-		t->neigh_vars[12].data = (&p->locktime) + 1;
-		t->neigh_vars[13].data = (&p->locktime) + 2;
-		t->neigh_vars[14].data = (&p->locktime) + 3;
-		t->neigh_vars[15].data = (&p->locktime) + 4;
+		t->neigh_vars[12].data = (int*)(p+1);
+		t->neigh_vars[13].data = (int*)(p+1) + 1;
+		t->neigh_vars[14].data = (int*)(p+1) + 2;
+		t->neigh_vars[15].data = (int*)(p+1) + 3;
 	}
 	t->neigh_neigh_dir[0].ctl_name = pdev_id;
 

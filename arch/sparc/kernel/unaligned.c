@@ -1,4 +1,4 @@
-/* $Id: unaligned.c,v 1.17 1997/04/11 00:42:08 davem Exp $
+/* $Id: unaligned.c,v 1.18 1999/04/03 11:36:17 anton Exp $
  * unaligned.c: Unaligned load/store trap handling with special
  *              cases for the kernel to do them more quickly.
  *
@@ -332,7 +332,6 @@ asmlinkage void kernel_unaligned_trap(struct pt_regs *regs, unsigned int insn)
 	enum direction dir = decode_direction(insn);
 	int size = decode_access_size(insn);
 
-	lock_kernel();
 	if(!ok_for_kernel(insn) || dir == both) {
 		printk("Unsupported unaligned load/store trap for kernel at <%08lx>.\n",
 		       regs->pc);
@@ -380,7 +379,6 @@ asmlinkage void kernel_unaligned_trap(struct pt_regs *regs, unsigned int insn)
 		}
 		advance(regs);
 	}
-	unlock_kernel();
 }
 
 static inline int ok_for_user(struct pt_regs *regs, unsigned int insn,

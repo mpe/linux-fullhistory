@@ -279,8 +279,8 @@ struct socket *sock_alloc(void)
 
 	inode->i_mode = S_IFSOCK|S_IRWXUGO;
 	inode->i_sock = 1;
-	inode->i_uid = current->uid;
-	inode->i_gid = current->gid;
+	inode->i_uid = current->fsuid;
+	inode->i_gid = current->fsgid;
 
 	sock->inode = inode;
 	init_waitqueue(&sock->wait);
@@ -1135,7 +1135,7 @@ asmlinkage int sys_sendmsg(int fd, struct msghdr *msg, unsigned flags)
 	/* Check whether to allocate the iovec area*/
 	err = -ENOMEM;
 	iov_size = msg_sys.msg_iovlen * sizeof(struct iovec);
-	if (msg_sys.msg_iovlen > 1 /* UIO_FASTIOV */) {
+	if (msg_sys.msg_iovlen > UIO_FASTIOV) {
 		iov = sock_kmalloc(sock->sk, iov_size, GFP_KERNEL);
 		if (!iov)
 			goto out_put;
@@ -1147,6 +1147,11 @@ asmlinkage int sys_sendmsg(int fd, struct msghdr *msg, unsigned flags)
 		goto out_freeiov;
 	total_len = err;
 
+	err = -ENOBUFS;
+
+	/* msg_controllen must fit to int */
+	if (msg_sys.msg_controllen > INT_MAX)
+		goto out_freeiov;
 	ctl_len = msg_sys.msg_controllen; 
 	if (ctl_len) 
 	{

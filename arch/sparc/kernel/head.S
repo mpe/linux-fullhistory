@@ -1,4 +1,4 @@
-/* $Id: head.S,v 1.93 1999/01/10 06:03:14 jj Exp $
+/* $Id: head.S,v 1.95 1999/04/13 07:40:34 anton Exp $
  * head.S: The initial boot code for the Sparc port of Linux.
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
@@ -408,13 +408,11 @@ C_LABEL(trapbase_cpu3):
 /* This was the only reasonable way I could think of to properly align
  * these page-table data structures.
  */
-	.globl C_LABEL(bootup_user_stack)
 	.globl C_LABEL(pg0), C_LABEL(pg1), C_LABEL(pg2), C_LABEL(pg3)
 	.globl C_LABEL(empty_bad_page)
 	.globl C_LABEL(empty_bad_page_table)
 	.globl C_LABEL(empty_zero_page)
 	.globl C_LABEL(swapper_pg_dir)
-C_LABEL(bootup_user_stack):		.skip 0x2000
 C_LABEL(swapper_pg_dir):		.skip PAGE_SIZE
 C_LABEL(pg0):				.skip PAGE_SIZE
 C_LABEL(pg1):				.skip PAGE_SIZE
@@ -427,8 +425,8 @@ C_LABEL(empty_zero_page):		.skip PAGE_SIZE
 	.global C_LABEL(root_flags)
 	.global C_LABEL(ram_flags)
 	.global C_LABEL(root_dev)
-	.global C_LABEL(ramdisk_image)
-	.global C_LABEL(ramdisk_size)
+	.global C_LABEL(sparc_ramdisk_image)
+	.global C_LABEL(sparc_ramdisk_size)
 
 /* This stuff has to be in sync with SILO and other potential boot loaders
  * Fields should be kept upward compatible and whenever any change is made,
@@ -443,9 +441,9 @@ C_LABEL(root_dev):
 	.half	0
 C_LABEL(ram_flags):
 	.half	0
-C_LABEL(ramdisk_image):
+C_LABEL(sparc_ramdisk_image):
 	.word	0
-C_LABEL(ramdisk_size):
+C_LABEL(sparc_ramdisk_size):
 	.word	0
 	.word	C_LABEL(reboot_command)
 
@@ -1005,8 +1003,8 @@ sun4c_continue_boot:
 		WRITE_PAUSE
 
 		/* I want a kernel stack NOW! */
-		set	C_LABEL(bootup_user_stack), %g1
-		set	(0x2000 - REGWIN_SZ), %g2
+		set	C_LABEL(init_task_union), %g1
+		set	(TASK_UNION_SIZE - REGWIN_SZ), %g2
 		add	%g1, %g2, %sp
 		mov	0, %fp			/* And for good luck */
 

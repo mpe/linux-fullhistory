@@ -1,4 +1,4 @@
-/* $Id: irq.h,v 1.25 1998/06/04 09:55:04 jj Exp $
+/* $Id: irq.h,v 1.26 1999/04/20 13:22:44 anton Exp $
  * irq.h: IRQ registers on the Sparc.
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
@@ -8,8 +8,9 @@
 #define _SPARC_IRQ_H
 
 #include <linux/linkage.h>
+#include <linux/tasks.h>     /* For NR_CPUS */
 
-#include <asm/system.h>     /* For NCPUS */
+#include <asm/system.h>     /* For SUN4M_NCPUS */
 #include <asm/btfixup.h>
 
 #define __irq_ino(irq) irq
@@ -19,46 +20,18 @@ BTFIXUPDEF_CALL(char *, __irq_itoa, unsigned int)
 
 #define NR_IRQS    15
 
-/* Get rid of this when lockups have gone away. -DaveM */
-#ifndef DEBUG_IRQLOCK
-#define DEBUG_IRQLOCK
-#endif
-
 /* IRQ handler dispatch entry and exit. */
 #ifdef __SMP__
-#ifdef DEBUG_IRQLOCK
-extern void irq_enter(int cpu, int irq, void *regs);
-extern void irq_exit(int cpu, int irq);
+extern unsigned int local_irq_count[NR_CPUS];
+#define irq_enter(cpu, irq)                     \
+do {    hardirq_enter(cpu);                     \
+        spin_unlock_wait(&global_irq_lock);     \
+	} while(0)
+#define irq_exit(cpu, irq)      hardirq_exit(cpu)
 #else
-extern __inline__ void irq_enter(int cpu, int irq, void *regs)
-{
-	register int proc asm("g1");
-	proc = cpu;
-	__asm__ __volatile__("
-	mov	%%o7, %%g4
-	call	___irq_enter
-	 add	%%o7, 8, %%o7
-"	: "=&r" (proc)
-	: "0" (proc)
-	: "g2", "g3", "g4", "g5", "memory", "cc");
-}
-
-extern __inline__ void irq_exit(int cpu, int irq)
-{
-	register int proc asm("g7");
-	proc = cpu;
-	__asm__ __volatile__("
-	mov	%%o7, %%g4
-	call	___irq_exit
-	 add	%%o7, 8, %%o7
-"	: "=&r" (proc)
-	: "0" (proc)
-	: "g1", "g2", "g3", "g4", "g5", "memory", "cc");
-}
-#endif /* DEBUG_IRQLOCK */
-#else
-#define irq_enter(cpu, irq, regs)	(local_irq_count[cpu]++)
-#define irq_exit(cpu, irq)		(local_irq_count[cpu]--)
+extern unsigned int local_irq_count;
+#define irq_enter(cpu, irq)     (local_irq_count++)
+#define irq_exit(cpu, irq)      (local_irq_count--)
 #endif
 
 /* Dave Redman (djhr@tadpole.co.uk)
@@ -133,7 +106,7 @@ struct sun4m_intreg_percpu {
  *             sun4m machines, for MP the layout makes more sense.
  */
 struct sun4m_intregs {
-	struct sun4m_intreg_percpu cpu_intregs[NCPUS];
+	struct sun4m_intreg_percpu cpu_intregs[SUN4M_NCPUS];
 	unsigned int tbt;                /* IRQ's that are still pending. */
 	unsigned int irqs;               /* Master IRQ bits. */
 

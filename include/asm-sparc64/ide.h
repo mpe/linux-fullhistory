@@ -1,4 +1,4 @@
-/* $Id: ide.h,v 1.11 1998/08/12 22:19:37 ecd Exp $
+/* $Id: ide.h,v 1.12 1999/04/17 14:25:29 davem Exp $
  * ide.h: Ultra/PCI specific IDE glue.
  *
  * Copyright (C) 1997  David S. Miller (davem@caip.rutgers.edu)
@@ -123,7 +123,7 @@ static __inline__ void ide_insw(unsigned long port,
 				unsigned long count)
 {
 	volatile unsigned short *data_port;
-	unsigned long end = (unsigned long)dst + count;
+	unsigned long end = (unsigned long)dst + (count << 1);
 	u16 *ps = dst;
 	u32 *pi;
 
@@ -154,7 +154,7 @@ static __inline__ void ide_outsw(unsigned long port,
 				 unsigned long count)
 {
 	volatile unsigned short *data_port;
-	unsigned long end = (unsigned long)src + count;
+	unsigned long end = (unsigned long)src + (count << 1);
 	const u16 *ps = src;
 	const u32 *pi;
 

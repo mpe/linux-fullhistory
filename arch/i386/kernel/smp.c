@@ -29,6 +29,7 @@
  *					from Jose Renau
  *		Alan Cox	:	Added EBDA scanning
  *		Ingo Molnar	:	various cleanups and rewrites
+ *		Tigran Aivazian	:	fixed "0.00 in /proc/uptime on SMP" bug.
  */
 
 #include <linux/config.h>
@@ -1707,9 +1708,8 @@ void smp_local_timer_interrupt(struct pt_regs * regs)
 			system=1;
 
  		irq_enter(cpu, 0);
+		update_one_process(p, 1, user, system, cpu);
 		if (p->pid) {
-			update_one_process(p, 1, user, system, cpu);
-
 			p->counter -= 1;
 			if (p->counter < 0) {
 				p->counter = 0;
@@ -1722,7 +1722,6 @@ void smp_local_timer_interrupt(struct pt_regs * regs)
 				kstat.cpu_user += user;
 				kstat.per_cpu_user[cpu] += user;
 			}
-
 			kstat.cpu_system += system;
 			kstat.per_cpu_system[cpu] += system;
 

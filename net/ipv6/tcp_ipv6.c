@@ -5,7 +5,7 @@
  *	Authors:
  *	Pedro Roque		<roque@di.fc.ul.pt>	
  *
- *	$Id: tcp_ipv6.c,v 1.101 1999/03/28 10:18:30 davem Exp $
+ *	$Id: tcp_ipv6.c,v 1.103 1999/04/22 10:07:46 davem Exp $
  *
  *	Based on: 
  *	linux/net/ipv4/tcp.c
@@ -401,6 +401,19 @@ static int tcp_v6_connect(struct sock *sk, struct sockaddr *uaddr,
 	if (usin->sin6_family && usin->sin6_family != AF_INET6) 
 		return(-EAFNOSUPPORT);
 
+	fl.fl6_flowlabel = 0;
+	if (np->sndflow) {
+		fl.fl6_flowlabel = usin->sin6_flowinfo&IPV6_FLOWINFO_MASK;
+		if (fl.fl6_flowlabel&IPV6_FLOWLABEL_MASK) {
+			struct ip6_flowlabel *flowlabel;
+			flowlabel = fl6_sock_lookup(sk, fl.fl6_flowlabel);
+			if (flowlabel == NULL)
+				return -EINVAL;
+			ipv6_addr_copy(&usin->sin6_addr, &flowlabel->dst);
+			fl6_sock_release(flowlabel);
+		}
+	}
+
 	/*
   	 *	connect() to INADDR_ANY means loopback (BSD'ism).
   	 */
@@ -422,6 +435,7 @@ static int tcp_v6_connect(struct sock *sk, struct sockaddr *uaddr,
 		return (-EINVAL);
 
 	memcpy(&np->daddr, &usin->sin6_addr, sizeof(struct in6_addr));
+	np->flow_label = fl.fl6_flowlabel;
 
 	/*
 	 *	TCP over IPv4
@@ -446,6 +460,7 @@ static int tcp_v6_connect(struct sock *sk, struct sockaddr *uaddr,
 			tp->ext_header_len = exthdrlen;
 			sk->tp_pinfo.af_tcp.af_specific = &ipv6_specific;
 			sk->backlog_rcv = tcp_v6_do_rcv;
+			goto failure;
 		} else {
 			ipv6_addr_set(&np->saddr, 0, 0, __constant_htonl(0x0000FFFF),
 				      sk->saddr);
@@ -460,8 +475,8 @@ static int tcp_v6_connect(struct sock *sk, struct sockaddr *uaddr,
 		saddr = &np->rcv_saddr;
 
 	fl.proto = IPPROTO_TCP;
-	fl.nl_u.ip6_u.daddr = &np->daddr;
-	fl.nl_u.ip6_u.saddr = saddr;
+	fl.fl6_dst = &np->daddr;
+	fl.fl6_src = saddr;
 	fl.oif = sk->bound_dev_if;
 	fl.uli_u.ports.dport = usin->sin6_port;
 	fl.uli_u.ports.sport = sk->sport;
@@ -475,7 +490,7 @@ static int tcp_v6_connect(struct sock *sk, struct sockaddr *uaddr,
 
 	if ((err = dst->error) != 0) {
 		dst_release(dst);
-		return err;
+		goto failure;
 	}
 
 	if (fl.oif == 0 && addr_type&IPV6_ADDR_LINKLOCAL) {
@@ -492,7 +507,7 @@ static int tcp_v6_connect(struct sock *sk, struct sockaddr *uaddr,
 	if (saddr == NULL) {
 		err = ipv6_get_saddr(dst, &np->daddr, &saddr_buf);
 		if (err)
-			return err;
+			goto failure;
 
 		saddr = &saddr_buf;
 	}
@@ -507,17 +522,19 @@ static int tcp_v6_connect(struct sock *sk, struct sockaddr *uaddr,
 	/* Reset mss clamp */
 	tp->mss_clamp = ~0;
 
+	err = -ENOBUFS;
 	buff = sock_wmalloc(sk, (MAX_HEADER + sk->prot->max_header),
 			    0, GFP_KERNEL);
 
 	if (buff == NULL)
-		return -ENOBUFS;
+		goto failure;
 
 	sk->dport = usin->sin6_port;
 
 	if (!tcp_v6_unique_address(sk)) {
 		kfree_skb(buff);
-		return -EADDRNOTAVAIL;
+		err = -EADDRNOTAVAIL;
+		goto failure;
 	}
 
 	/*
@@ -531,6 +548,12 @@ static int tcp_v6_connect(struct sock *sk, struct sockaddr *uaddr,
 	tcp_connect(sk, buff, dst->pmtu);
 
 	return 0;
+
+failure:
+	dst_release(xchg(&sk->dst_cache, NULL));
+	memcpy(&np->daddr, 0, sizeof(struct in6_addr));
+	sk->daddr = 0;
+	return err;
 }
 
 static int tcp_v6_sendmsg(struct sock *sk, struct msghdr *msg, int len)
@@ -560,6 +583,8 @@ static int tcp_v6_sendmsg(struct sock *sk, struct msghdr *msg, int len)
 		if (addr->sin6_port != sk->dport)
 			goto out;
 		if (ipv6_addr_cmp(&addr->sin6_addr, &np->daddr))
+			goto out;
+		if (np->sndflow && np->flow_label != (addr->sin6_flowinfo&IPV6_FLOWINFO_MASK))
 			goto out;
 	}
 
@@ -712,6 +737,7 @@ static void tcp_v6_send_synack(struct sock *sk, struct open_request *req)
 	fl.proto = IPPROTO_TCP;
 	fl.nl_u.ip6_u.daddr = &req->af.v6_req.rmt_addr;
 	fl.nl_u.ip6_u.saddr = &req->af.v6_req.loc_addr;
+	fl.fl6_flowlabel = 0;
 	fl.oif = req->af.v6_req.iif;
 	fl.uli_u.ports.dport = req->rmt_port;
 	fl.uli_u.ports.sport = sk->sport;
@@ -775,6 +801,8 @@ static int ipv6_opt_accepted(struct sock *sk, struct sk_buff *skb)
 
 	if (sk->net_pinfo.af_inet6.rxopt.all) {
 		if ((opt->hop && sk->net_pinfo.af_inet6.rxopt.bits.hopopts) ||
+		    ((IPV6_FLOWINFO_MASK&*(u32*)skb->nh.raw) &&
+		     sk->net_pinfo.af_inet6.rxopt.bits.rxflow) ||
 		    (opt->srcrt && sk->net_pinfo.af_inet6.rxopt.bits.srcrt) ||
 		    ((opt->dst1 || opt->dst0) && sk->net_pinfo.af_inet6.rxopt.bits.dstopts))
 			return 1;
@@ -953,6 +981,7 @@ static struct sock * tcp_v6_syn_recv_sock(struct sock *sk, struct sk_buff *skb,
 			fl.nl_u.ip6_u.daddr = rt0->addr;
 		}
 		fl.nl_u.ip6_u.saddr = &req->af.v6_req.loc_addr;
+		fl.fl6_flowlabel = 0;
 		fl.oif = sk->bound_dev_if;
 		fl.uli_u.ports.dport = req->rmt_port;
 		fl.uli_u.ports.sport = sk->sport;
@@ -1078,6 +1107,7 @@ static void tcp_v6_send_reset(struct sk_buff *skb)
 
 	fl.nl_u.ip6_u.daddr = &skb->nh.ipv6h->saddr;
 	fl.nl_u.ip6_u.saddr = &skb->nh.ipv6h->daddr;
+	fl.fl6_flowlabel = 0;
 
 	t1->check = csum_ipv6_magic(fl.nl_u.ip6_u.saddr,
 				    fl.nl_u.ip6_u.daddr, 
@@ -1257,6 +1287,7 @@ static int tcp_v6_do_rcv(struct sock *sk, struct sk_buff *skb)
 		 * the new socket..
 		 */
 		if (atomic_read(&nsk->sock_readers)) {
+			skb_orphan(skb);
 			__skb_queue_tail(&nsk->back_log, skb);
 			return 0;
 		}
@@ -1404,6 +1435,7 @@ static int tcp_v6_rebuild_header(struct sock *sk)
 		fl.proto = IPPROTO_TCP;
 		fl.nl_u.ip6_u.daddr = &np->daddr;
 		fl.nl_u.ip6_u.saddr = &np->saddr;
+		fl.fl6_flowlabel = np->flow_label;
 		fl.oif = sk->bound_dev_if;
 		fl.uli_u.ports.dport = sk->dport;
 		fl.uli_u.ports.sport = sk->sport;
@@ -1448,8 +1480,9 @@ static void tcp_v6_xmit(struct sk_buff *skb)
 	struct dst_entry *dst = sk->dst_cache;
 
 	fl.proto = IPPROTO_TCP;
-	fl.nl_u.ip6_u.daddr = &np->daddr;
-	fl.nl_u.ip6_u.saddr = &np->saddr;
+	fl.fl6_dst = &np->daddr;
+	fl.fl6_src = &np->saddr;
+	fl.fl6_flowlabel = np->flow_label;
 	fl.oif = sk->bound_dev_if;
 	fl.uli_u.ports.sport = sk->sport;
 	fl.uli_u.ports.dport = sk->dport;
@@ -1490,6 +1523,8 @@ static void v6_addr2sockaddr(struct sock *sk, struct sockaddr * uaddr)
 	sin6->sin6_family = AF_INET6;
 	memcpy(&sin6->sin6_addr, &np->daddr, sizeof(struct in6_addr));
 	sin6->sin6_port	= sk->dport;
+	/* We do not store received flowlabel for TCP */
+	sin6->sin6_flowinfo = 0;
 }
 
 static struct tcp_func ipv6_specific = {

@@ -161,11 +161,11 @@ struct vm_struct * get_vm_area(unsigned long size)
 	for (p = &vmlist; (tmp = *p) ; p = &tmp->next) {
 		if (size + addr < (unsigned long) tmp->addr)
 			break;
+		addr = tmp->size + (unsigned long) tmp->addr;
 		if (addr > VMALLOC_END-size) {
 			kfree(area);
 			return NULL;
 		}
-		addr = tmp->size + (unsigned long) tmp->addr;
 	}
 	area->addr = (void *)addr;
 	area->size = size + PAGE_SIZE;

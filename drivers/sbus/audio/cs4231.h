@@ -64,6 +64,27 @@ struct cs4231_chip {
   volatile unsigned long recording_count;
 };
 
+#ifdef EB4231_SUPPORT
+#define CS4231_READ32(__C, __REG) \
+	(((__C)->status & CS_STATUS_IS_EBUS) ? readl((unsigned long)(__REG)) : (*(__REG)))
+#define CS4231_READ8(__C, __REG) \
+	(((__C)->status & CS_STATUS_IS_EBUS) ? readb((unsigned long)(__REG)) : (*(__REG)))
+#define CS4231_WRITE32(__C, __REG, __VAL) \
+	(((__C)->status & CS_STATUS_IS_EBUS) ? \
+         writel((__VAL), (unsigned long)(__REG)) : \
+         (*(__REG) = (__VAL)))
+#define CS4231_WRITE8(__C, __REG, __VAL) \
+	(((__C)->status & CS_STATUS_IS_EBUS) ? \
+         writeb((__VAL), (unsigned long)(__REG)) : \
+         (*(__REG) = (__VAL)))
+#else
+/* We can assume all is SBUS in this case. */
+#define CS4231_READ32(__C, __REG) (*(__REG))
+#define CS4231_READ8(__C, __REG) (*(__REG))
+#define CS4231_WRITE32(__C, __REG, __VAL) (*(__REG) = (__VAL))
+#define CS4231_WRITE8(__C, __REG, __VAL) (*(__REG) = (__VAL))
+#endif
+
 /* Local status bits */
 #define CS_STATUS_NEED_INIT 0x01
 #define CS_STATUS_INIT_ON_CLOSE 0x02

@@ -13,6 +13,8 @@ extern struct proto rawv6_prot;
 extern struct proto udpv6_prot;
 extern struct proto tcpv6_prot;
 
+struct flowi;
+
 extern void				rawv6_init(void);
 extern void				udpv6_init(void);
 extern void				tcpv6_init(void);
@@ -26,8 +28,7 @@ extern int			datagram_recv_ctl(struct sock *sk,
 						  struct sk_buff *skb);
 
 extern int			datagram_send_ctl(struct msghdr *msg,
-						  int *oif,
-						  struct in6_addr **src_addr,
+						  struct flowi *fl,
 						  struct ipv6_txoptions *opt,
 						  int *hlimit);
 

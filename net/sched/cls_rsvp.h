@@ -193,23 +193,23 @@ restart:
 				    && src[2] == f->src[2]
 #endif
 				    ) {
+					*res = f->res;
 
 					RSVP_POLICE();
 
 matched:
-					if (f->tunnelhdr == 0) {
-						*res = f->res;
+					if (f->tunnelhdr == 0)
 						return 0;
-					} else {
-						tunnelid = f->res.classid;
-						nhptr = (void*)(xprt + f->tunnelhdr - sizeof(*nhptr));
-						goto restart;
-					}
+
+					tunnelid = f->res.classid;
+					nhptr = (void*)(xprt + f->tunnelhdr - sizeof(*nhptr));
+					goto restart;
 				}
 			}
 
 			/* And wildcard bucket... */
 			for (f = s->ht[16]; f; f = f->next) {
+				*res = f->res;
 				RSVP_POLICE();
 				goto matched;
 			}

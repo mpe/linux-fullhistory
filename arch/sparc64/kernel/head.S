@@ -1,4 +1,4 @@
-/* $Id: head.S,v 1.59 1999/01/06 01:37:35 davem Exp $
+/* $Id: head.S,v 1.60 1999/04/12 08:08:21 davem Exp $
  * head.S: Initial boot code for the Sparc64 port of Linux.
  *
  * Copyright (C) 1996,1997 David S. Miller (davem@caip.rutgers.edu)
@@ -47,7 +47,7 @@ bootup_user_stack:
  * HdrS version should be incremented.
  */
         .global root_flags, ram_flags, root_dev
-        .global ramdisk_image, ramdisk_size
+        .global sparc_ramdisk_image, sparc_ramdisk_size
 	.globl	silo_args
 
         .ascii  "HdrS"
@@ -59,9 +59,9 @@ root_dev:
         .half   0
 ram_flags:
         .half   0
-ramdisk_image:
+sparc_ramdisk_image:
         .word   0
-ramdisk_size:
+sparc_ramdisk_size:
         .word   0
         .xword  reboot_command
 	.xword	bootstr_len

@@ -1,4 +1,4 @@
-/* $Id: vaddrs.h,v 1.21 1996/10/07 03:03:02 davem Exp $ */
+/* $Id: vaddrs.h,v 1.22 1999/04/20 13:22:55 anton Exp $ */
 #ifndef _SPARC_VADDRS_H
 #define _SPARC_VADDRS_H
 
@@ -51,7 +51,7 @@
 /* On sun4m machines we need per-cpu virtual areas */
 #define  PERCPU_VADDR   0xffc00000  /* Base for per-cpu virtual mappings */
 #define  PERCPU_ENTSIZE 0x00100000
-#define  PERCPU_LEN     ((PERCPU_ENTSIZE*NCPUS))
+#define  PERCPU_LEN     ((PERCPU_ENTSIZE*SUN4M_NCPUS))
 
 /* per-cpu offsets */
 #define  PERCPU_TBR_OFFSET      0x00000      /* %tbr, mainly used for identification. */

@@ -5,7 +5,7 @@
  *
  *		ROUTE - implementation of the IP router.
  *
- * Version:	$Id: route.c,v 1.65 1999/03/25 10:04:35 davem Exp $
+ * Version:	$Id: route.c,v 1.66 1999/04/22 10:07:35 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -281,6 +281,9 @@ static __inline__ int rt_may_expire(struct rtable *rth, int tmo1, int tmo2)
 	if (atomic_read(&rth->u.dst.use))
 		return 0;
 
+	if (rth->u.dst.expires && (long)(rth->u.dst.expires - jiffies) <= 0)
+		return 1;
+
 	age = jiffies - rth->u.dst.lastuse;
 	if (age <= tmo1 && !rt_fast_clean(rth))
 		return 0;
@@ -305,7 +308,7 @@ static void rt_check_expire(unsigned long dummy)
 		while ((rth = *rthp) != NULL) {
 			if (rth->u.dst.expires) {
 				/* Entrie is expired even if it is in use */
-				if ((long)(now - rth->u.dst.expires) < tmo) {
+				if ((long)(now - rth->u.dst.expires) <= 0) {
 					tmo >>= 1;
 					rthp = &rth->u.rt_next;
 					continue;
@@ -564,8 +567,11 @@ restart:
 			 */
 			if (attempts-- > 0) {
 				int saved_elasticity = ip_rt_gc_elasticity;
+				int saved_int = ip_rt_gc_min_interval;
 				ip_rt_gc_elasticity = 1;
+				ip_rt_gc_min_interval = 0;
 				rt_garbage_collect();
+				ip_rt_gc_min_interval = saved_int;
 				ip_rt_gc_elasticity = saved_elasticity;
 				goto restart;
 			}
@@ -885,7 +891,16 @@ unsigned short ip_rt_frag_needed(struct iphdr *iph, unsigned short new_mtu)
 			}
 		}
 	}
-	return est_mtu;
+	return est_mtu ? : new_mtu;
+}
+
+void ip_rt_update_pmtu(struct dst_entry *dst, unsigned mtu)
+{
+	if (dst->pmtu > mtu && mtu >= 68 &&
+	    !(dst->mxlock&(1<<RTAX_MTU))) {
+		dst->pmtu = mtu;
+		dst_set_expires(dst, ip_rt_mtu_expires);
+	}
 }
 
 static struct dst_entry * ipv4_dst_check(struct dst_entry * dst, u32 cookie)
@@ -1850,7 +1865,7 @@ int ip_rt_dump(struct sk_buff *skb,  struct netlink_callback *cb)
 	for (h=0; h < RT_HASH_DIVISOR; h++) {
 		if (h < s_h) continue;
 		if (h > s_h)
-			memset(&cb->args[1], 0, sizeof(cb->args) - sizeof(cb->args[0]));
+			s_idx = 0;
 		start_bh_atomic();
 		for (rt = rt_hash_table[h], idx = 0; rt; rt = rt->u.rt_next, idx++) {
 			if (idx < s_idx)

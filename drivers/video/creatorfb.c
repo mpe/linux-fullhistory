@@ -1,4 +1,4 @@
-/* $Id: creatorfb.c,v 1.26 1999/03/11 00:29:54 davem Exp $
+/* $Id: creatorfb.c,v 1.27 1999/03/28 12:37:12 jj Exp $
  * creatorfb.c: Creator/Creator3D frame buffer driver
  *
  * Copyright (C) 1997,1998,1999 Jakub Jelinek (jj@ultra.linux.cz)
@@ -718,6 +718,11 @@ __initfunc(char *creatorfb_init(struct fb_info_sbusfb *fb))
 	i = prom_getintdefault (fb->prom_node, "board_type", 8);
 	                                                        
 	sprintf(idstring, "%s at %016lx type %d DAC %d", fix->id, regs[0].phys_addr, i, fb->s.ffb.dac_rev);
+	
+	/* Elite3D has different DAC revision numbering, and no DAC revisions
+	   have the reversed meaning of cursor enable */
+	if (afb)
+		fb->s.ffb.dac_rev = 10;
 	
 	return idstring;
 }

@@ -15,6 +15,14 @@
 #include <asm/auxio.h>
 #include <asm/irq.h>
 
+/* We don't need no stinkin' I/O port allocation crap. */
+#undef release_region
+#undef check_region
+#undef request_region
+#define release_region(X, Y)	do { } while(0)
+#define check_region(X, Y)	(0)
+#define request_region(X, Y, Z)	do { } while(0)
+
 /* References:
  * 1) Netbsd Sun floppy driver.
  * 2) NCR 82077 controller manual
@@ -320,8 +328,7 @@ static int sun_floppy_init(void)
 								"floppy",
 								fd_regs[0].which_io,
 								0x0);
-	release_region((long)sun_fdc & PAGE_MASK, 
-		       (((long)sun_fdc & ~PAGE_MASK) + fd_regs[0].reg_size + PAGE_SIZE - 1) & PAGE_MASK);
+
 	/* Last minute sanity check... */
 	if(sun_fdc->status_82072 == 0xff) {
 		sun_fdc = NULL;

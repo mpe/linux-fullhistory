@@ -5,7 +5,7 @@
  *
  *		The IP to API glue.
  *		
- * Version:	$Id: ip_sockglue.c,v 1.41 1999/03/25 10:04:29 davem Exp $
+ * Version:	$Id: ip_sockglue.c,v 1.42 1999/04/22 10:07:34 davem Exp $
  *
  * Authors:	see ip.c
  *
@@ -150,7 +150,8 @@ int ip_cmsg_send(struct msghdr *msg, struct ipcm_cookie *ipc)
 	struct cmsghdr *cmsg;
 
 	for (cmsg = CMSG_FIRSTHDR(msg); cmsg; cmsg = CMSG_NXTHDR(msg, cmsg)) {
-		if ((unsigned long)(((char*)cmsg - (char*)msg->msg_control)
+		if (cmsg->cmsg_len < sizeof(struct cmsghdr) ||
+		    (unsigned long)(((char*)cmsg - (char*)msg->msg_control)
 				    + cmsg->cmsg_len) > msg->msg_controllen) {
 			return -EINVAL;
 		}

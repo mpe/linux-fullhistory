@@ -19,10 +19,12 @@ struct flowi {
 		struct {
 			struct in6_addr *	daddr;
 			struct in6_addr *	saddr;
+			__u32			flowlabel;
 		} ip6_u;
 	} nl_u;
 #define fl6_dst		nl_u.ip6_u.daddr
 #define fl6_src		nl_u.ip6_u.saddr
+#define fl6_flowlabel	nl_u.ip6_u.flowlabel
 #define fl4_dst		nl_u.ip4_u.daddr
 #define fl4_src		nl_u.ip4_u.saddr
 

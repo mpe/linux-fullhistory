@@ -813,7 +813,7 @@ void ndisc_send_redirect(struct sk_buff *skb, struct neighbour *neigh,
 		}
 	}
 
-	rd_len = min(IPV6_MIN_MTU-sizeof(struct ipv6hdr)-len, ntohs(skb->nh.ipv6h->payload_len) + 8);
+	rd_len = min(IPV6_MIN_MTU-sizeof(struct ipv6hdr)-len, skb->len + 8);
 	rd_len &= ~0x7;
 	len += rd_len;
 
@@ -873,7 +873,7 @@ void ndisc_send_redirect(struct sk_buff *skb, struct neighbour *neigh,
 	*(opt++) = (rd_len >> 3);
 	opt += 6;
 
-	memcpy(opt, &skb->nh.ipv6h, rd_len - 8);
+	memcpy(opt, skb->nh.ipv6h, rd_len - 8);
 
 	icmph->icmp6_cksum = csum_ipv6_magic(&ifp->addr, &skb->nh.ipv6h->saddr,
 					     len, IPPROTO_ICMPV6,

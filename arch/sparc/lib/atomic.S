@@ -44,6 +44,7 @@ ___xchg32_sun4md:
 	.globl	___atomic_add
 ___atomic_add:
 	rd	%psr, %g3		! Keep the code small, old way was stupid
+	nop; nop; nop;			! Let the bits set
 	or	%g3, PSR_PIL, %g7	! Disable interrupts
 	wr	%g7, 0x0, %psr		! Set %psr
 	nop; nop; nop;			! Let the bits set
@@ -69,6 +70,7 @@ ___atomic_add:
 	.globl	___atomic_sub
 ___atomic_sub:
 	rd	%psr, %g3		! Keep the code small, old way was stupid
+	nop; nop; nop;			! Let the bits set
 	or	%g3, PSR_PIL, %g7	! Disable interrupts
 	wr	%g7, 0x0, %psr		! Set %psr
 	nop; nop; nop;			! Let the bits set

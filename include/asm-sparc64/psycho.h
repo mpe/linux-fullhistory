@@ -1,4 +1,4 @@
-/* $Id: psycho.h,v 1.4 1998/12/23 10:08:16 davem Exp $
+/* $Id: psycho.h,v 1.5 1999/04/01 12:27:28 davem Exp $
  * psycho.h: UltraSparc AX specific PCI definitions.
  *
  * Copyright (C) 1997 Eddie C. Dost (ecd@skynet.be)
@@ -257,7 +257,7 @@ struct psycho_regs {
 #define PSYCHO_CEAFSR_SDWR	0x0400000000000000 /* Secondary DVMA write is cause*/
 #define PSYCHO_CEAFSR_RESV1	0x0300000000000000 /* Reserved                     */
 #define PSYCHO_CEAFSR_ESYND	0x00ff000000000000 /* Syndrome Bits                */
-#define PSYCHO_UEAFSR_SIZE	0x0000ffff00000000 /* Bytemask of failed transfer  */
+#define PSYCHO_CEAFSR_SIZE	0x0000ffff00000000 /* Bytemask of failed transfer  */
 #define PSYCHO_CEAFSR_DOFF	0x00000000e0000000 /* Double Offset                */
 #define PSYCHO_CEAFSR_MID	0x000000001f000000 /* UPA MID causing the fault    */
 #define PSYCHO_CEAFSR_BLK	0x0000000000800000 /* Trans was block operation    */

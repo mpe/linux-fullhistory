@@ -32,6 +32,8 @@
  * 3-Jan-1999:  Fixed serious procfs security hole -- users should never
  *              be allowed to view the chains!
  *              Marc Santoro <ultima@snicker.emoti.com>
+ * 29-Jan-1999: Locally generated bogus IPs dealt with, rather than crash
+ *              during dump_packet. --RR.
  */
 
 /*
@@ -1660,6 +1662,10 @@ int ipfw_input_check(struct firewall_ops *this, int pf, struct device *dev,
 int ipfw_output_check(struct firewall_ops *this, int pf, struct device *dev, 
 		      void *phdr, void *arg, struct sk_buff **pskb)
 {
+	/* Locally generated bogus packets by root. <SIGH>. */
+	if (((struct iphdr *)phdr)->ihl * 4 < sizeof(struct iphdr)
+	    || (*pskb)->len < sizeof(struct iphdr))
+		return FW_ACCEPT;
 	return ip_fw_check(phdr, dev->name,
 			   arg, IP_FW_OUTPUT_CHAIN, *pskb, SLOT_NUMBER(), 0);
 }

@@ -1,4 +1,4 @@
-/* $Id: timer.h,v 1.20 1998/09/21 05:07:37 jj Exp $
+/* $Id: timer.h,v 1.21 1999/04/20 13:22:51 anton Exp $
  * timer.h:  Definitions for the timer chips on the Sparc.
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
@@ -9,7 +9,7 @@
 #ifndef _SPARC_TIMER_H
 #define _SPARC_TIMER_H
 
-#include <asm/system.h>  /* For NCPUS */
+#include <asm/system.h>  /* For SUN4M_NCPUS */
 #include <asm/sun4paddr.h>
 #include <asm/btfixup.h>
 
@@ -70,7 +70,7 @@ struct sun4m_timer_percpu_info {
 };
 
 struct sun4m_timer_regs {
-	struct sun4m_timer_percpu_info cpu_timers[NCPUS];
+	struct sun4m_timer_percpu_info cpu_timers[SUN4M_NCPUS];
 	volatile unsigned int l10_timer_limit;
 	volatile unsigned int l10_cur_count;
 

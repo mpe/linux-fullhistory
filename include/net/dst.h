@@ -16,11 +16,7 @@
  * 1 - rare events and bugs (default)
  * 2 - trace mode.
  */
-#ifdef  NO_ANK_FIX
 #define RT_CACHE_DEBUG		0
-#else
-#define RT_CACHE_DEBUG		1
-#endif
 
 #define DST_GC_MIN	(1*HZ)
 #define DST_GC_INC	(5*HZ)

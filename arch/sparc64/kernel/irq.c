@@ -1,4 +1,4 @@
-/* $Id: irq.c,v 1.75 1999/01/28 12:37:56 jj Exp $
+/* $Id: irq.c,v 1.76 1999/04/02 14:54:30 davem Exp $
  * irq.c: UltraSparc IRQ handling/init/registry.
  *
  * Copyright (C) 1997  David S. Miller  (davem@caip.rutgers.edu)
@@ -309,7 +309,7 @@ static struct ino_bucket pil0_dummy_bucket = {
 unsigned int build_irq(int pil, int inofixup, unsigned int *iclr, unsigned int *imap)
 {
 	struct ino_bucket *bucket;
-	unsigned short ino;
+	int ino;
 
 	if(pil == 0) {
 		if(iclr != NULL || imap != NULL) {

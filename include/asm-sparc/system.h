@@ -1,4 +1,4 @@
-/* $Id: system.h,v 1.72 1999/01/02 16:50:21 davem Exp $ */
+/* $Id: system.h,v 1.73 1999/04/20 13:22:49 anton Exp $ */
 #include <linux/config.h>
 
 #ifndef __SPARC_SYSTEM_H
@@ -47,6 +47,8 @@ extern enum sparc_cpu sparc_cpu_model;
 #define ARCH_SUN4C_SUN4 1
 #define ARCH_SUN4 1
 #endif
+
+#define SUN4M_NCPUS            4              /* Architectural limit of sun4m. */
 
 extern unsigned long empty_bad_page;
 extern unsigned long empty_bad_page_table;

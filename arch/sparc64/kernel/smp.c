@@ -380,37 +380,51 @@ void smp_flush_tlb_all(void)
  * to the stack before we get here because all callers of us
  * are flush_tlb_*() routines, and these run after flush_cache_*()
  * which performs the flushw.
+ *
+ * The SMP TLB coherency scheme we use works as follows:
+ *
+ * 1) mm->cpu_vm_mask is a bit mask of which cpus an address
+ *    space has (potentially) executed on, this is the heuristic
+ *    we use to avoid doing cross calls.
+ *
+ * 2) TLB context numbers are shared globally across all processors
+ *    in the system, this allows us to play several games to avoid
+ *    cross calls.
+ *
+ *    One invariant is that when a cpu switches to a process, and
+ *    that processes tsk->mm->cpu_vm_mask does not have the current
+ *    cpu's bit set, that tlb context is flushed locally.
+ *
+ *    If the address space is non-shared (ie. mm->count == 1) we avoid
+ *    cross calls when we want to flush the currently running process's
+ *    tlb state.  This is done by clearing all cpu bits except the current
+ *    processor's in current->mm->cpu_vm_mask and performing the flush
+ *    locally only.  This will force any subsequent cpus which run this
+ *    task to flush the context from the local tlb if the process migrates
+ *    to another cpu (again).
+ *
+ * 3) For shared address spaces (threads) and swapping we bite the
+ *    bullet for most cases and perform the cross call.
+ *
+ *    The performance gain from "optimizing" away the cross call for threads is
+ *    questionable (in theory the big win for threads is the massive sharing of
+ *    address space state across processors).
+ *
+ *    For the swapping case the locking is difficult to get right, we'd have to
+ *    enforce strict ordered access to mm->cpu_vm_mask via a spinlock for example.
+ *    Then again one could argue that when you are swapping, the cost of a cross
+ *    call won't even show up on the performance radar.  But in any case we do get
+ *    rid of the cross-call when the task has a dead context or the task has only
+ *    ever run on the local cpu.
  */
-static void smp_cross_call_avoidance(struct mm_struct *mm)
-{
-	u32 ctx;
-
-	spin_lock(&scheduler_lock);
-	get_new_mmu_context(mm);
-	mm->cpu_vm_mask = (1UL << smp_processor_id());
-	current->tss.ctx = ctx = mm->context & 0x3ff;
-	spitfire_set_secondary_context(ctx);
-	__asm__ __volatile__("flush %g6");
-	spitfire_flush_dtlb_secondary_context();
-	spitfire_flush_itlb_secondary_context();
-	__asm__ __volatile__("flush %g6");
-	if(!segment_eq(current->tss.current_ds,USER_DS)) {
-		/* Rarely happens. */
-		current->tss.ctx = 0;
-		spitfire_set_secondary_context(0);
-		__asm__ __volatile__("flush %g6");
-	}
-	spin_unlock(&scheduler_lock);
-}
-
 void smp_flush_tlb_mm(struct mm_struct *mm)
 {
 	u32 ctx = mm->context & 0x3ff;
 
 	if(mm == current->mm && atomic_read(&mm->count) == 1) {
-		if(mm->cpu_vm_mask == (1UL << smp_processor_id()))
-			goto local_flush_and_out;
-		return smp_cross_call_avoidance(mm);
+		if(mm->cpu_vm_mask != (1UL << smp_processor_id()))
+			mm->cpu_vm_mask = (1UL << smp_processor_id());
+		goto local_flush_and_out;
 	}
 	smp_cross_call(&xcall_flush_tlb_mm, ctx, 0, 0);
 
@@ -426,9 +440,9 @@ void smp_flush_tlb_range(struct mm_struct *mm, unsigned long start,
 	start &= PAGE_MASK;
 	end   &= PAGE_MASK;
 	if(mm == current->mm && atomic_read(&mm->count) == 1) {
-		if(mm->cpu_vm_mask == (1UL << smp_processor_id()))
-			goto local_flush_and_out;
-		return smp_cross_call_avoidance(mm);
+		if(mm->cpu_vm_mask != (1UL << smp_processor_id()))
+			mm->cpu_vm_mask = (1UL << smp_processor_id());
+		goto local_flush_and_out;
 	}
 	smp_cross_call(&xcall_flush_tlb_range, ctx, start, end);
 
@@ -442,22 +456,32 @@ void smp_flush_tlb_page(struct mm_struct *mm, unsigned long page)
 
 	page &= PAGE_MASK;
 	if(mm == current->mm && atomic_read(&mm->count) == 1) {
-		if(mm->cpu_vm_mask == (1UL << smp_processor_id()))
-			goto local_flush_and_out;
-		return smp_cross_call_avoidance(mm);
-	}
-#if 0 /* XXX Disabled until further notice... */
-	else if(atomic_read(&mm->count) == 1) {
+		if(mm->cpu_vm_mask != (1UL << smp_processor_id()))
+			mm->cpu_vm_mask = (1UL << smp_processor_id());
+		goto local_flush_and_out;
+	} else {
+		spin_lock(&scheduler_lock);
+
 		/* Try to handle two special cases to avoid cross calls
 		 * in common scenerios where we are swapping process
 		 * pages out.
 		 */
-		if((mm->context ^ tlb_context_cache) & CTX_VERSION_MASK)
+		if(((mm->context ^ tlb_context_cache) & CTX_VERSION_MASK) ||
+		   (mm->cpu_vm_mask == 0)) {
+			/* A dead context cannot ever become "alive" until
+			 * a task switch is done to it.
+			 */
+			spin_unlock(&scheduler_lock);
 			return; /* It's dead, nothing to do. */
-		if(mm->cpu_vm_mask == (1UL << smp_processor_id()))
-			goto local_flush_and_out;
+		}
+		if(mm->cpu_vm_mask == (1UL << smp_processor_id())) {
+			spin_unlock(&scheduler_lock);
+			__flush_tlb_page(ctx, page, SECONDARY_CONTEXT);
+			return; /* Only local flush is necessary. */
+		}
+
+		spin_unlock(&scheduler_lock);
 	}
-#endif
 	smp_cross_call(&xcall_flush_tlb_page, ctx, page, 0);
 
 local_flush_and_out:

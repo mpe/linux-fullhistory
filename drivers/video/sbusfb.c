@@ -520,7 +520,7 @@ static void sbusfb_cursor(struct display *p, int mode, int x, int y)
 static int sbusfb_get_cmap(struct fb_cmap *cmap, int kspc, int con,
 			 struct fb_info *info)
 {
-	if (con == currcon) /* current console? */
+	if (!info->display_fg || con == info->display_fg->vc_num) /* current console? */
 		return fb_get_cmap(cmap, kspc, sbusfb_getcolreg, info);
 	else if (fb_display[con].cmap.len) /* non default colormap? */
 		fb_copy_cmap(&fb_display[con].cmap, cmap, kspc ? 0 : 2);
@@ -537,9 +537,14 @@ static int sbusfb_set_cmap(struct fb_cmap *cmap, int kspc, int con,
 			 struct fb_info *info)
 {
 	int err;
+	struct display *disp;
 
-	if (!fb_display[con].cmap.len) {	/* no colormap allocated? */
-		if ((err = fb_alloc_cmap(&fb_display[con].cmap, 1<<fb_display[con].var.bits_per_pixel, 0)))
+	if (con >= 0)
+		disp = &fb_display[con];
+	else
+		disp = info->disp;
+	if (!disp->cmap.len) {	/* no colormap allocated? */
+		if ((err = fb_alloc_cmap(&disp->cmap, 1<<disp->var.bits_per_pixel, 0)))
 			return err;
 	}
 	if (con == currcon) {			/* current console? */
@@ -552,7 +557,7 @@ static int sbusfb_set_cmap(struct fb_cmap *cmap, int kspc, int con,
 		}
 		return err;
 	} else
-		fb_copy_cmap(cmap, &fb_display[con].cmap, kspc ? 0 : 1);
+		fb_copy_cmap(cmap, &disp->cmap, kspc ? 0 : 1);
 	return 0;
 }
 

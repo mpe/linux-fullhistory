@@ -1,4 +1,4 @@
-/*  $Id: sun4d_irq.c,v 1.17 1998/10/18 03:31:03 davem Exp $
+/*  $Id: sun4d_irq.c,v 1.18 1999/04/20 13:22:30 anton Exp $
  *  arch/sparc/kernel/sun4d_irq.c:
  *			SS1000/SC2000 interrupt handling.
  *
@@ -193,7 +193,7 @@ void sun4d_handler_irq(int irq, struct pt_regs * regs)
 	
 	cc_set_iclr(1 << irq);
 	
-	irq_enter(cpu, irq, regs);
+	irq_enter(cpu, irq);
 	kstat.irqs[cpu][irq]++;
 	if (!sbusl) {
 		action = *(irq + irq_action);

@@ -236,6 +236,8 @@ struct fb_ops {
 		    unsigned long arg, int con, struct fb_info *info);
     /* perform fb specific mmap */
     int (*fb_mmap)(struct fb_info *info, struct file *file, struct vm_area_struct *vma);
+    /* switch to/from raster image mode */
+    int (*fb_rasterimg)(struct fb_info *info, int start);
 };
 
 

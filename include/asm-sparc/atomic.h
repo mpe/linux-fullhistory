@@ -41,13 +41,14 @@ typedef struct { int counter; } atomic_t;
 
 static __inline__ int atomic_read(atomic_t *v)
 {
-	int val;
+	int ret = v->counter;
 
-	__asm__ __volatile__("sra	%1, 0x8, %0"
-			     : "=r" (val)
-			     : "r" (v->counter));
-	return val;
+	while(ret & 0xff)
+		ret = v->counter;
+
+	return ret >> 8;
 }
+
 #define atomic_set(v, i)	(((v)->counter) = ((i) << 8))
 #endif
 

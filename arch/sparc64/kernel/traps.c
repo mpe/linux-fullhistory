@@ -1,4 +1,4 @@
-/* $Id: traps.c,v 1.57 1999/03/02 15:42:18 jj Exp $
+/* $Id: traps.c,v 1.58 1999/03/29 12:38:10 jj Exp $
  * arch/sparc64/kernel/traps.c
  *
  * Copyright (C) 1995,1997 David S. Miller (davem@caip.rutgers.edu)
@@ -406,8 +406,6 @@ void do_fpe_common(struct pt_regs *regs)
 void do_fpieee(struct pt_regs *regs)
 {
 #ifdef DEBUG_FPU
-	save_and_clear_fpu();
-	
 	printk("fpieee %016lx\n", current->tss.xfsr[0]);
 #endif
 	do_fpe_common(regs);
@@ -420,7 +418,6 @@ void do_fpother(struct pt_regs *regs)
 	struct fpustate *f = FPUSTATE;
 	int ret = 0;
 
-	save_and_clear_fpu();
 	switch ((current->tss.xfsr[0] & 0x1c000)) {
 	case (2 << 14): /* unfinished_FPop */
 	case (3 << 14): /* unimplemented_FPop */
@@ -428,7 +425,7 @@ void do_fpother(struct pt_regs *regs)
 		break;
 	}
 	if (ret) return;
-#ifdef DEBUG_FPU	
+#ifdef DEBUG_FPU
 	printk("fpother %016lx\n", current->tss.xfsr[0]);
 #endif
 	do_fpe_common(regs);

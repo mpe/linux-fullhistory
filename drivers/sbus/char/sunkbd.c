@@ -1479,7 +1479,7 @@ kbd_close (struct inode *i, struct file *f)
 		return 0;
 
 	if (kbd_redirected)
-		kbd_table [kbd_opened-1].kbdmode = VC_XLATE;
+		kbd_table [kbd_redirected-1].kbdmode = VC_XLATE;
 
 	kbd_redirected = 0;
 	kbd_opened = 0;

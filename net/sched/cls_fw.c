@@ -7,6 +7,10 @@
  *		2 of the License, or (at your option) any later version.
  *
  * Authors:	Alexey Kuznetsov, <kuznet@ms2.inr.ac.ru>
+ *
+ * Changes:
+ * Karlis Peisenieks <karlis@mt.lv> : 990415 : fw_walk off by one
+ * Karlis Peisenieks <karlis@mt.lv> : 990415 : fw_delete killed all the filter (and kernel).
  */
 
 #include <linux/config.h>
@@ -146,7 +150,7 @@ static void fw_destroy(struct tcf_proto *tp)
 
 static int fw_delete(struct tcf_proto *tp, unsigned long arg)
 {
-	struct fw_head *head = (struct fw_head*)xchg(&tp->root, NULL);
+	struct fw_head *head = (struct fw_head*)tp->root;
 	struct fw_filter *f = (struct fw_filter*)arg;
 	struct fw_filter **fp;
 
@@ -273,7 +277,7 @@ static void fw_walk(struct tcf_proto *tp, struct tcf_walker *arg)
 	if (arg->stop)
 		return;
 
-	for (h = 0; h <= 256; h++) {
+	for (h = 0; h < 256; h++) {
 		struct fw_filter *f;
 
 		for (f = head->ht[h]; f; f = f->next) {

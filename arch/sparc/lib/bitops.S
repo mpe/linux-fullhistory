@@ -20,12 +20,10 @@
 	.globl	___set_bit
 ___set_bit:
 	rd	%psr, %g3
-	andcc	%g3, PSR_PIL, %g0
-	bne	1f
-	 nop
-	wr	%g3, PSR_PIL, %psr
+	nop; nop; nop;
+	or	%g3, PSR_PIL, %g5
+	wr	%g5, 0x0, %psr
 	nop; nop; nop
-1:
 #ifdef __SMP__
 	set	C_LABEL(bitops_spinlock), %g5
 2:	ldstub	[%g5], %g7		! Spin on the byte lock for SMP.
@@ -38,17 +36,12 @@ ___set_bit:
 #ifdef __SMP__
 	st	%g5, [%g1]
 	set	C_LABEL(bitops_spinlock), %g5
-	andcc	%g3, PSR_PIL, %g0
-	bne	1f
-	 stb	%g0, [%g5]
+	stb	%g0, [%g5]
 #else
-	andcc	%g3, PSR_PIL, %g0
-	bne	1f
-	 st	%g5, [%g1]
+	st	%g5, [%g1]
 #endif
 	wr	%g3, 0x0, %psr
 	nop; nop; nop
-1:
 	jmpl	%o7, %g0
 	 mov	%g4, %o7
 
@@ -56,12 +49,10 @@ ___set_bit:
 	.globl	___clear_bit
 ___clear_bit:
 	rd	%psr, %g3
-	andcc	%g3, PSR_PIL, %g0
-	bne	1f
-	 nop
-	wr	%g3, PSR_PIL, %psr
 	nop; nop; nop
-1:
+	or	%g3, PSR_PIL, %g5
+	wr	%g5, 0x0, %psr
+	nop; nop; nop
 #ifdef __SMP__
 	set	C_LABEL(bitops_spinlock), %g5
 2:	ldstub	[%g5], %g7		! Spin on the byte lock for SMP.
@@ -74,17 +65,12 @@ ___clear_bit:
 #ifdef __SMP__
 	st	%g5, [%g1]
 	set	C_LABEL(bitops_spinlock), %g5
-	andcc	%g3, PSR_PIL, %g0
-	bne	1f
-	 stb	%g0, [%g5]
+	stb	%g0, [%g5]
 #else
-	andcc	%g3, PSR_PIL, %g0
-	bne	1f
-	 st	%g5, [%g1]
+	st	%g5, [%g1]
 #endif
 	wr	%g3, 0x0, %psr
 	nop; nop; nop
-1:
 	jmpl	%o7, %g0
 	 mov	%g4, %o7
 
@@ -92,12 +78,10 @@ ___clear_bit:
 	.globl	___change_bit
 ___change_bit:
 	rd	%psr, %g3
-	andcc	%g3, PSR_PIL, %g0
-	bne	1f
-	 nop
-	wr	%g3, PSR_PIL, %psr
 	nop; nop; nop
-1:
+	or	%g3, PSR_PIL, %g5
+	wr	%g5, 0x0, %psr
+	nop; nop; nop
 #ifdef __SMP__
 	set	C_LABEL(bitops_spinlock), %g5
 2:	ldstub	[%g5], %g7		! Spin on the byte lock for SMP.
@@ -110,17 +94,12 @@ ___change_bit:
 #ifdef __SMP__
 	st	%g5, [%g1]
 	set	C_LABEL(bitops_spinlock), %g5
-	andcc	%g3, PSR_PIL, %g0
-	bne	1f
-	 stb	%g0, [%g5]
+	stb	%g0, [%g5]
 #else
-	andcc	%g3, PSR_PIL, %g0
-	bne	1f
-	 st	%g5, [%g1]
+	st	%g5, [%g1]
 #endif
 	wr	%g3, 0x0, %psr
 	nop; nop; nop
-1:
 	jmpl	%o7, %g0
 	 mov	%g4, %o7
 
@@ -128,12 +107,10 @@ ___change_bit:
 	.globl	___set_le_bit
 ___set_le_bit:
 	rd	%psr, %g3
-	andcc	%g3, PSR_PIL, %g0
-	bne	1f
-	 nop
-	wr	%g3, PSR_PIL, %psr
 	nop; nop; nop
-1:
+	or	%g3, PSR_PIL, %g5
+	wr	%g5, 0x0, %psr
+	nop; nop; nop
 #ifdef __SMP__
 	set	C_LABEL(bitops_spinlock), %g5
 2:	ldstub	[%g5], %g7		! Spin on the byte lock for SMP.
@@ -146,29 +123,22 @@ ___set_le_bit:
 #ifdef __SMP__
 	stb	%g5, [%g1]
 	set	C_LABEL(bitops_spinlock), %g5
-	andcc	%g3, PSR_PIL, %g0
-	bne	1f
-	 stb	%g0, [%g5]
+	stb	%g0, [%g5]
 #else
-	andcc	%g3, PSR_PIL, %g0
-	bne	1f
-	 stb	%g5, [%g1]
+	stb	%g5, [%g1]
 #endif
 	wr	%g3, 0x0, %psr
 	nop; nop; nop
-1:
 	jmpl	%o7, %g0
 	 mov	%g4, %o7
 
 	.globl	___clear_le_bit
 ___clear_le_bit:
 	rd	%psr, %g3
-	andcc	%g3, PSR_PIL, %g0
-	bne	1f
-	 nop
-	wr	%g3, PSR_PIL, %psr
 	nop; nop; nop
-1:
+	or	%g3, PSR_PIL, %g5
+	wr	%g5, 0x0, %psr
+	nop; nop; nop
 #ifdef __SMP__
 	set	C_LABEL(bitops_spinlock), %g5
 2:	ldstub	[%g5], %g7		! Spin on the byte lock for SMP.
@@ -181,16 +151,11 @@ ___clear_le_bit:
 #ifdef __SMP__
 	stb	%g5, [%g1]
 	set	C_LABEL(bitops_spinlock), %g5
-	andcc	%g3, PSR_PIL, %g0
-	bne	1f
-	 stb	%g0, [%g5]
+	stb	%g0, [%g5]
 #else
-	andcc	%g3, PSR_PIL, %g0
-	bne	1f
-	 stb	%g5, [%g1]
+	stb	%g5, [%g1]
 #endif
 	wr	%g3, 0x0, %psr
 	nop; nop; nop
-1:
 	jmpl	%o7, %g0
 	 mov	%g4, %o7

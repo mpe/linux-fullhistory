@@ -1,7 +1,7 @@
 /* hardirq.h: 32-bit Sparc hard IRQ support.
  *
  * Copyright (C) 1997 David S. Miller (davem@caip.rutgers.edu)
- * Copyright (C) 1998 Anton Blanchard (anton@progsoc.uts.edu.au)
+ * Copyright (C) 1998-99 Anton Blanchard (anton@progsoc.uts.edu.au)
  */
 
 #ifndef __SPARC_HARDIRQ_H
@@ -9,22 +9,20 @@
 
 #include <linux/tasks.h>
 
-extern unsigned int local_irq_count[NR_CPUS];
+#ifndef __SMP__
+extern unsigned int local_irq_count;
 
 /*
  * Are we in an interrupt context? Either doing bottom half
  * or hardware interrupt processing?
  */
-#define in_interrupt() ({ int __cpu = smp_processor_id(); \
-	(local_irq_count[__cpu] + local_bh_count[__cpu] != 0); })
+#define in_interrupt()  ((local_irq_count + local_bh_count) != 0)
 
-#ifndef __SMP__
-
-#define hardirq_trylock(cpu)	(local_irq_count[cpu] == 0)
+#define hardirq_trylock(cpu)	(local_irq_count == 0)
 #define hardirq_endlock(cpu)	do { } while (0)
 
-#define hardirq_enter(cpu)	(local_irq_count[cpu]++)
-#define hardirq_exit(cpu)	(local_irq_count[cpu]--)
+#define hardirq_enter(cpu)	(local_irq_count++)
+#define hardirq_exit(cpu)	(local_irq_count--)
 
 #define synchronize_irq()	barrier()
 
@@ -35,9 +33,17 @@ extern unsigned int local_irq_count[NR_CPUS];
 #include <asm/system.h>
 #include <asm/smp.h>
 
+extern unsigned int local_irq_count[NR_CPUS];
 extern unsigned char global_irq_holder;
 extern spinlock_t global_irq_lock;
 extern atomic_t global_irq_count;
+
+/*
+ * Are we in an interrupt context? Either doing bottom half
+ * or hardware interrupt processing?
+ */
+#define in_interrupt() ({ int __cpu = smp_processor_id(); \
+	(local_irq_count[__cpu] + local_bh_count[__cpu] != 0); })
 
 static inline void release_irqlock(int cpu)
 {
@@ -62,7 +68,8 @@ static inline void hardirq_exit(int cpu)
 
 static inline int hardirq_trylock(int cpu)
 {
-	return !atomic_read(&global_irq_count) && !*(((volatile unsigned char *)(&global_irq_lock)));
+	return (! atomic_read(&global_irq_count) &&
+		! spin_is_locked (&global_irq_lock));
 }
 
 #define hardirq_endlock(cpu)	do { } while (0)

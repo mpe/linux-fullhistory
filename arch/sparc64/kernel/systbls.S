@@ -1,4 +1,4 @@
-/* $Id: systbls.S,v 1.52 1999/03/20 22:02:05 davem Exp $
+/* $Id: systbls.S,v 1.53 1999/04/07 17:14:11 davem Exp $
  * systbls.S: System call entry point tables for OS compatibility.
  *            The native Linux system call table lives here also.
  *
@@ -26,7 +26,7 @@ sys_call_table32:
 /*30*/	.word sys32_utime, sys_nis_syscall, sys_nis_syscall, sys_access, sys_nice
 	.word sys_nis_syscall, sys_sync, sys_kill, sys32_newstat, sys32_sendfile
 /*40*/	.word sys32_newlstat, sys_dup, sys_pipe, sys32_times, sys_nis_syscall
-	.word sys_nis_syscall, sys_setgid, sys_getgid, sys_signal, sys_geteuid
+	.word sys_umount, sys_setgid, sys_getgid, sys_signal, sys_geteuid
 /*50*/	.word sys_getegid, sys_acct, sys_nis_syscall, sys_nis_syscall, sys32_ioctl
 	.word sys_reboot, sys_nis_syscall, sys_symlink, sys_readlink, sys32_execve
 /*60*/	.word sys_umask, sys_chroot, sys32_newfstat, sys_nis_syscall, sys_getpagesize
@@ -48,7 +48,7 @@ sys_call_table32:
 /*140*/	.word sys_nis_syscall, sys_nis_syscall, sys_nis_syscall, sys_nis_syscall, sys32_getrlimit
 	.word sys32_setrlimit, sys_nis_syscall, sys32_prctl, sys32_pciconfig_read, sys32_pciconfig_write
 /*150*/	.word sys_nis_syscall, sys_nis_syscall, sys_nis_syscall, sys_poll, sys_nis_syscall
-	.word sys_nis_syscall, sys_nis_syscall, sys32_statfs, sys32_fstatfs, sys_umount
+	.word sys_nis_syscall, sys_nis_syscall, sys32_statfs, sys32_fstatfs, sys_oldumount
 /*160*/	.word sys_nis_syscall, sys_nis_syscall, sys_getdomainname, sys_setdomainname, sys_nis_syscall
 	.word sys32_quotactl, sys_nis_syscall, sys32_mount, sys_ustat, sys_nis_syscall
 /*170*/	.word sys_nis_syscall, sys_nis_syscall, sys_nis_syscall, sys_nis_syscall, sys32_getdents
@@ -85,7 +85,7 @@ sys_call_table:
 /*30*/	.word sys_utime, sys_nis_syscall, sys_nis_syscall, sys_access, sys_nice
 	.word sys_nis_syscall, sys_sync, sys_kill, sys_newstat, sys_sendfile
 /*40*/	.word sys_newlstat, sys_dup, sys_pipe, sys_times, sys_nis_syscall
-	.word sys_nis_syscall, sys_setgid, sys_getgid, sys_signal, sys_geteuid
+	.word sys_umount, sys_setgid, sys_getgid, sys_signal, sys_geteuid
 /*50*/	.word sys_getegid, sys_acct, sys_memory_ordering, sys_nis_syscall, sys_ioctl
 	.word sys_reboot, sys_nis_syscall, sys_symlink, sys_readlink, sys_execve
 /*60*/	.word sys_umask, sys_chroot, sys_newfstat, sys_nis_syscall, sys_getpagesize
@@ -107,7 +107,7 @@ sys_call_table:
 /*140*/	.word sys_nis_syscall, sys_getpeername, sys_nis_syscall, sys_nis_syscall, sys_getrlimit
 	.word sys_setrlimit, sys_nis_syscall, sys_prctl, sys_pciconfig_read, sys_pciconfig_write
 /*150*/	.word sys_getsockname, sys_nis_syscall, sys_nis_syscall, sys_poll, sys_nis_syscall
-	.word sys_nis_syscall, sys_nis_syscall, sys_statfs, sys_fstatfs, sys_umount
+	.word sys_nis_syscall, sys_nis_syscall, sys_statfs, sys_fstatfs, sys_oldumount
 /*160*/	.word sys_nis_syscall, sys_nis_syscall, sys_getdomainname, sys_setdomainname, sys_utrap_install
 	.word sys_quotactl, sys_nis_syscall, sys_mount, sys_ustat, sys_nis_syscall
 /*170*/	.word sys_nis_syscall, sys_nis_syscall, sys_nis_syscall, sys_nis_syscall, sys_getdents
@@ -188,7 +188,7 @@ sunos_sys_table:
 /*150*/	.word sys_getsockname, sunos_nosys, sunos_nosys
 	.word sys_poll, sunos_nosys, sunos_nosys
 	.word sunos_getdirentries, sys32_statfs, sys32_fstatfs
-	.word sys_umount, sunos_nosys, sunos_nosys
+	.word sys_oldumount, sunos_nosys, sunos_nosys
 	.word sys_getdomainname, sys_setdomainname
 	.word sunos_nosys, sys32_quotactl, sunos_nosys
 	.word sunos_mount, sys_ustat, sunos_semsys

@@ -1,4 +1,4 @@
-/* $Id: head.h,v 1.35 1998/03/18 09:15:40 jj Exp $ */
+/* $Id: head.h,v 1.36 1999/04/20 13:22:42 anton Exp $ */
 #ifndef __SPARC_HEAD_H
 #define __SPARC_HEAD_H
 
@@ -7,8 +7,6 @@
 #define SUN4C_SEGSZ     (1 << 18)
 #define SRMMU_L1_KBASE_OFFSET ((KERNBASE>>24)<<2)  /* Used in boot remapping. */
 #define INTS_ENAB        0x01           /* entry.S uses this. */
-
-#define NCPUS            4              /* Architectural limit of sun4m. */
 
 #define SUN4_PROM_VECTOR 0xFFE81000     /* SUN4 PROM needs to be hardwired */
 

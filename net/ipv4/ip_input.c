@@ -5,7 +5,7 @@
  *
  *		The Internet Protocol (IP) module.
  *
- * Version:	$Id: ip_input.c,v 1.36 1999/03/21 05:22:38 davem Exp $
+ * Version:	$Id: ip_input.c,v 1.37 1999/04/22 10:38:36 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -253,7 +253,19 @@ int ip_local_deliver(struct sk_buff *skb)
 	 * Do we need to de-masquerade this packet?
 	 */
         {
-		int ret = ip_fw_demasquerade(&skb);
+		int ret;
+		/*
+		 *	Some masq modules can re-inject packets if
+		 *	bad configured.
+		 */
+
+		if((IPCB(skb)->flags&IPSKB_MASQUERADED)) {
+			printk(KERN_DEBUG "ip_input(): demasq recursion detected. Check masq modules configuration\n");
+			kfree_skb(skb);
+			return 0;
+		}
+
+		ret = ip_fw_demasquerade(&skb);
 		if (ret < 0) {
 			kfree_skb(skb);
 			return 0;

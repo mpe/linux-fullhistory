@@ -1,4 +1,4 @@
-/* $Id: uaccess.h,v 1.17 1998/09/16 12:25:29 jj Exp $
+/* $Id: uaccess.h,v 1.18 1999/03/30 06:38:38 jj Exp $
  * uaccess.h: User space memore access functions.
  *
  * Copyright (C) 1996 David S. Miller (davem@caip.rutgers.edu)
@@ -349,9 +349,8 @@ extern __inline__ __kernel_size_t __clear_user(void *addr, __kernel_size_t size)
 	.align 4
 	.word 1f,3
 	.previous
-1:
 	mov %2, %%o1
-	call __bzero
+1:	call __bzero
 	 mov %1, %%o0
 	mov %%o0, %0 
 	" : "=r" (ret) : "r" (addr), "r" (size) :

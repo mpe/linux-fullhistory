@@ -1,10 +1,10 @@
-/* $Id: entry.S,v 1.101 1999/01/19 07:54:38 davem Exp $
+/* $Id: entry.S,v 1.102 1999/03/29 12:38:09 jj Exp $
  * arch/sparc64/kernel/entry.S:  Sparc64 trap low-level entry points.
  *
  * Copyright (C) 1995,1997 David S. Miller (davem@caip.rutgers.edu)
  * Copyright (C) 1996 Eddie C. Dost        (ecd@skynet.be)
  * Copyright (C) 1996 Miguel de Icaza      (miguel@nuclecu.unam.mx)
- * Copyright (C) 1996,1998 Jakub Jelinek   (jj@sunsite.mff.cuni.cz)
+ * Copyright (C) 1996,98,99 Jakub Jelinek  (jj@sunsite.mff.cuni.cz)
  */
 
 #include <linux/config.h>
@@ -163,6 +163,39 @@ fpdis_exit2:
 	wrpr		%g3, %tstate
 	wr		%g0, FPRS_FEF, %fprs	! clean DU/DL bits
 	retry
+
+	.globl		do_fptrap
+	.align		32
+do_fptrap:
+	ldub		[%g6 + AOFF_task_tss + AOFF_thread_fpsaved], %g3
+	stx		%fsr, [%g6 + AOFF_task_tss + AOFF_thread_xfsr]
+	rd		%fprs, %g1
+	or		%g3, %g1, %g3
+	stb		%g3, [%g6 + AOFF_task_tss + AOFF_thread_fpsaved]
+	rd		%gsr, %g3
+	stb		%g3, [%g6 + AOFF_task_tss + AOFF_thread_gsr]
+	mov		SECONDARY_CONTEXT, %g3
+	add		%g6, AOFF_task_fpregs, %g2
+	ldxa		[%g3] ASI_DMMU, %g5
+	stxa		%g0, [%g3] ASI_DMMU
+	flush		%g6
+	membar		#StoreStore | #LoadStore
+	andcc		%g1, FPRS_DL, %g0
+	be,pn		%icc, 4f
+	 mov		0x40, %g3
+	stda		%f0, [%g2] ASI_BLK_S
+	stda		%f16, [%g2 + %g3] ASI_BLK_S
+	andcc		%g1, FPRS_DU, %g0
+	be,pn		%icc, 5f
+4:       add		%g2, 128, %g2
+	stda		%f32, [%g2] ASI_BLK_S
+	stda		%f48, [%g2 + %g3] ASI_BLK_S
+5:	mov		SECONDARY_CONTEXT, %g1
+	membar		#Sync
+	stxa		%g5, [%g1] ASI_DMMU
+	flush		%g6
+	ba,pt		%xcc, etrap
+	 wr		%g0, 0, %fprs
 
 	/* The registers for cross calls will be:
 	 *

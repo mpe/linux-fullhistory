@@ -462,7 +462,7 @@ __asm__  __volatile__("cld\n\t" \
 #define __HAVE_ARCH_MEMSET
 #define memset(s, c, count) \
 (__builtin_constant_p(c) ? \
- __constant_c_x_memset((s),(0x01010101UL*(unsigned char)c),(count)) : \
+ __constant_c_x_memset((s),(0x01010101UL*(unsigned char)(c)),(count)) : \
  __memset((s),(c),(count)))
 
 /*

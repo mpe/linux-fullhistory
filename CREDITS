@@ -810,12 +810,13 @@ D: bug toaster (A1 sauce makes all the difference)
 D: Transmeta BOFH in my copius free time
 
 N: Dirk Hohndel
-E: hohndel@aib.com
+E: hohndel@suse.de
 D: The XFree86[tm] Project
-S: AIB Software Corporation
-S: 46030 Manekin Plaza, Suite 160
-S: Dulles, Virginia 20166
-S: USA
+D: USB mouse maintainer
+S: SuSE Rhein/Main AG
+S: Mergenthalerallee 45-47
+S: 65760 Eschborn
+S: Germany
 
 N: Kenji Tsutomu Hollis
 E: khollis@bitgate.com
@@ -1874,7 +1875,7 @@ S: Spain
 
 N: Linus Torvalds
 E: torvalds@transmeta.com
-W: http://www.cs.helsinki.fi/~torvalds/
+W: http://www.cs.helsinki.fi/Linus.Torvalds
 P: 1024/A86B35C5 96 54 50 29 EC 11 44 7A  BE 67 3C 24 03 13 62 C8
 D: Original kernel hacker
 S: 1050 Woodduck Avenue

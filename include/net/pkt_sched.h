@@ -215,6 +215,8 @@ extern int psched_clock_scale;
    (stamp) = __cur>>psched_clock_scale; \
 })
 
+#define PSCHED_EXPORTLIST_1
+
 #elif defined (__alpha__)
 
 #define PSCHED_WATCHER u32

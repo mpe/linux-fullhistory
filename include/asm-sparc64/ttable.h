@@ -1,4 +1,4 @@
-/* $Id: ttable.h,v 1.10 1998/09/25 01:09:45 davem Exp $ */
+/* $Id: ttable.h,v 1.11 1999/03/29 12:38:12 jj Exp $ */
 #ifndef _SPARC64_TTABLE_H
 #define _SPARC64_TTABLE_H
 
@@ -29,11 +29,21 @@
 	 clr	%l6;					\
 	nop;
 
+#define TRAP_SAVEFPU(routine)				\
+	sethi	%hi(109f), %g7;				\
+	ba,pt	%xcc, do_fptrap;			\
+109:	 or	%g7, %lo(109b), %g7;			\
+	call	routine;				\
+	 add	%sp, STACK_BIAS + REGWIN_SZ, %o0;	\
+	ba,pt	%xcc, rtrap;				\
+	 clr	%l6;					\
+	nop;
+
 #define TRAP_NOSAVE(routine)				\
 	ba,pt	%xcc, routine;				\
 	 nop;						\
 	nop; nop; nop; nop; nop; nop;
-
+	
 #define TRAPTL1(routine)				\
 	sethi	%hi(109f), %g7;				\
 	ba,pt	%xcc, etraptl1;				\

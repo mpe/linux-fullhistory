@@ -5,7 +5,7 @@
  *	Authors:
  *	Pedro Roque		<roque@di.fc.ul.pt>	
  *
- *	$Id: datagram.c,v 1.16 1998/10/03 09:38:25 davem Exp $
+ *	$Id: datagram.c,v 1.17 1999/04/22 10:07:40 davem Exp $
  *
  *	This program is free software; you can redistribute it and/or
  *      modify it under the terms of the GNU General Public License
@@ -132,10 +132,13 @@ int ipv6_recv_error(struct sock *sk, struct msghdr *msg, int len)
 	sin = (struct sockaddr_in6 *)msg->msg_name;
 	if (sin) {
 		sin->sin6_family = AF_INET6;
+		sin->sin6_flowinfo = 0;
 		sin->sin6_port = serr->port; 
-		if (serr->ee.ee_origin == SO_EE_ORIGIN_ICMP6)
+		if (serr->ee.ee_origin == SO_EE_ORIGIN_ICMP6) {
 			memcpy(&sin->sin6_addr, skb->nh.raw + serr->addr_offset, 16);
-		else
+			if (sk->net_pinfo.af_inet6.sndflow)
+				sin->sin6_flowinfo = *(u32*)(skb->nh.raw + serr->addr_offset - 24) & IPV6_FLOWINFO_MASK;
+		} else
 			ipv6_addr_set(&sin->sin6_addr, 0, 0,
 				      __constant_htonl(0xffff),
 				      *(u32*)(skb->nh.raw + serr->addr_offset));
@@ -146,6 +149,7 @@ int ipv6_recv_error(struct sock *sk, struct msghdr *msg, int len)
 	sin->sin6_family = AF_UNSPEC;
 	if (serr->ee.ee_origin != SO_EE_ORIGIN_LOCAL) {
 		sin->sin6_family = AF_INET6;
+		sin->sin6_flowinfo = 0;
 		if (serr->ee.ee_origin == SO_EE_ORIGIN_ICMP6) {
 			memcpy(&sin->sin6_addr, &skb->nh.ipv6h->saddr, 16);
 			if (sk->net_pinfo.af_inet6.rxopt.all)
@@ -199,6 +203,10 @@ int datagram_recv_ctl(struct sock *sk, struct msghdr *msg, struct sk_buff *skb)
 		put_cmsg(msg, SOL_IPV6, IPV6_HOPLIMIT, sizeof(hlim), &hlim);
 	}
 
+	if (np->rxopt.bits.rxflow && (*(u32*)skb->nh.raw & IPV6_FLOWINFO_MASK)) {
+		u32 flowinfo = *(u32*)skb->nh.raw & IPV6_FLOWINFO_MASK;
+		put_cmsg(msg, SOL_IPV6, IPV6_FLOWINFO, sizeof(flowinfo), &flowinfo);
+	}
 	if (np->rxopt.bits.hopopts && opt->hop) {
 		u8 *ptr = skb->nh.raw + opt->hop;
 		put_cmsg(msg, SOL_IPV6, IPV6_HOPOPTS, (ptr[1]+1)<<3, ptr);
@@ -222,8 +230,8 @@ int datagram_recv_ctl(struct sock *sk, struct msghdr *msg, struct sk_buff *skb)
 	return 0;
 }
 
-int datagram_send_ctl(struct msghdr *msg, int *oif,
-		      struct in6_addr **src_addr, struct ipv6_txoptions *opt,
+int datagram_send_ctl(struct msghdr *msg, struct flowi *fl,
+		      struct ipv6_txoptions *opt,
 		      int *hlimit)
 {
 	struct in6_pktinfo *src_info;
@@ -235,17 +243,15 @@ int datagram_send_ctl(struct msghdr *msg, int *oif,
 
 	for (cmsg = CMSG_FIRSTHDR(msg); cmsg; cmsg = CMSG_NXTHDR(msg, cmsg)) {
 
-		if ((unsigned long)(((char*)cmsg - (char*)msg->msg_control)
+		if (cmsg->cmsg_len < sizeof(struct cmsghdr) ||
+		    (unsigned long)(((char*)cmsg - (char*)msg->msg_control)
 				    + cmsg->cmsg_len) > msg->msg_controllen) {
 			err = -EINVAL;
 			goto exit_f;
 		}
 
-		if (cmsg->cmsg_level != SOL_IPV6) {
-			if (net_ratelimit())
-				printk(KERN_DEBUG "invalid cmsg_level %d\n", cmsg->cmsg_level);
+		if (cmsg->cmsg_level != SOL_IPV6)
 			continue;
-		}
 
 		switch (cmsg->cmsg_type) {
  		case IPV6_PKTINFO:
@@ -257,9 +263,9 @@ int datagram_send_ctl(struct msghdr *msg, int *oif,
 			src_info = (struct in6_pktinfo *)CMSG_DATA(cmsg);
 			
 			if (src_info->ipi6_ifindex) {
-				if (*oif && src_info->ipi6_ifindex != *oif)
+				if (fl->oif && src_info->ipi6_ifindex != fl->oif)
 					return -EINVAL;
-				*oif = src_info->ipi6_ifindex;
+				fl->oif = src_info->ipi6_ifindex;
 			}
 
 			if (!ipv6_addr_any(&src_info->ipi6_addr)) {
@@ -272,9 +278,24 @@ int datagram_send_ctl(struct msghdr *msg, int *oif,
 					goto exit_f;
 				}
 
-				*src_addr = &src_info->ipi6_addr;
+				fl->fl6_src = &src_info->ipi6_addr;
 			}
 
+			break;
+
+		case IPV6_FLOWINFO:
+                        if (cmsg->cmsg_len < CMSG_LEN(4)) {
+				err = -EINVAL;
+				goto exit_f;
+			}
+
+			if (fl->fl6_flowlabel&IPV6_FLOWINFO_MASK) {
+				if ((fl->fl6_flowlabel^*(u32 *)CMSG_DATA(cmsg))&~IPV6_FLOWINFO_MASK) {
+					err = -EINVAL;
+					goto exit_f;
+				}
+			}
+			fl->fl6_flowlabel = IPV6_FLOWINFO_MASK & *(u32 *)CMSG_DATA(cmsg);
 			break;
 
 		case IPV6_HOPOPTS:

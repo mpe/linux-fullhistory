@@ -691,10 +691,10 @@ int shm_swap (int prio, int gfp_mask)
 		next_id:
 		swap_idx = 0;
 		if (++swap_id > max_shmid) {
+			swap_id = 0;
 			if (loop)
 				goto failed;
 			loop = 1;
-			swap_id = 0;
 		}
 		goto check_id;
 	}

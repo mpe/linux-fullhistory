@@ -7,6 +7,7 @@
  * 
  * Mixer code adapted from code contributed by and
  * Copyright (C) 1998 Michael Mraka (michael@fi.muni.cz)
+ * and with fixes from Michael Shuey (shuey@ecn.purdue.edu)
  * The mixer code cheats; Sparc hardware doesn't generally allow independent
  * line control, and this fakes it badly.
  *
@@ -628,13 +629,12 @@ static ssize_t sparcaudio_write(struct file * file, const char *buf,
 #define MONO_DEVICES (SOUND_MASK_SPEAKER | SOUND_MASK_MIC)
 
 static int sparcaudio_mixer_ioctl(struct inode * inode, struct file * file,
-			    unsigned int cmd, unsigned long arg)
+			    unsigned int cmd, unsigned int *arg)
 {
   struct sparcaudio_driver *drv = drivers[(MINOR(inode->i_rdev) >>
 					   SPARCAUDIO_DEVICE_SHIFT)];
-  unsigned long i = 0, j = 0, k = 0;
-
-  k = arg;
+  unsigned long i = 0, j = 0;
+  unsigned int k;
 
   if(cmd == SOUND_MIXER_INFO) {
           audio_device_t tmp;
@@ -663,6 +663,9 @@ static int sparcaudio_mixer_ioctl(struct inode * inode, struct file * file,
   case SOUND_MIXER_WRITE_MIC:
   case SOUND_MIXER_WRITE_CD:
   case SOUND_MIXER_WRITE_LINE:
+  case SOUND_MIXER_WRITE_IMIX:
+    if(get_user(k, arg))
+      return -EFAULT;
     tprintk(("setting input volume (0x%x)", k));
     if (drv->ops->get_input_channels)
       j = drv->ops->get_input_channels(drv);
@@ -692,6 +695,8 @@ static int sparcaudio_mixer_ioctl(struct inode * inode, struct file * file,
   case SOUND_MIXER_WRITE_PCM:
   case SOUND_MIXER_WRITE_VOLUME:
   case SOUND_MIXER_WRITE_SPEAKER:
+    if(get_user(k, arg))
+	return -EFAULT;
     tprintk(("setting output volume (0x%x)", k));
     if (drv->ops->get_output_channels)
       j = drv->ops->get_output_channels(drv);
@@ -731,10 +736,13 @@ static int sparcaudio_mixer_ioctl(struct inode * inode, struct file * file,
   case SOUND_MIXER_WRITE_RECSRC: 
     if (!drv->ops->set_input_port)
       return -EINVAL;
-    if (arg & SOUND_MASK_IMIX) j |= AUDIO_ANALOG_LOOPBACK;
-    if (arg & SOUND_MASK_CD) j |= AUDIO_CD;
-    if (arg & SOUND_MASK_LINE) j |= AUDIO_LINE_IN;
-    if (arg & SOUND_MASK_MIC) j |= AUDIO_MICROPHONE;
+    if(get_user(k, arg))
+      return -EFAULT;
+    /* only one should ever be selected */
+    if (k & SOUND_MASK_IMIX) j = AUDIO_ANALOG_LOOPBACK;
+    if (k & SOUND_MASK_CD) j = AUDIO_CD;
+    if (k & SOUND_MASK_LINE) j = AUDIO_LINE_IN;
+    if (k & SOUND_MASK_MIC) j = AUDIO_MICROPHONE;
     tprintk(("setting inport to %d\n", j));
     i = drv->ops->set_input_port(drv, j);
     
@@ -790,11 +798,12 @@ static int sparcaudio_mixer_ioctl(struct inode * inode, struct file * file,
 	j = drv->ops->get_output_balance(drv);
       i = b_to_s(i,j);
     }
-    return COPY_OUT((int *)arg, i);
+    return COPY_OUT(arg, i);
   case SOUND_MIXER_READ_RECLEV:
   case SOUND_MIXER_READ_MIC:
   case SOUND_MIXER_READ_CD:
   case SOUND_MIXER_READ_LINE:
+  case SOUND_MIXER_READ_IMIX:
     if (drv->ops->get_input_channels)
       j = drv->ops->get_input_channels(drv);
     if (j == 1) {
@@ -808,7 +817,7 @@ static int sparcaudio_mixer_ioctl(struct inode * inode, struct file * file,
 	j = drv->ops->get_input_balance(drv);
       i = b_to_s(i,j);
     }
-    return COPY_OUT((int *)arg, i);
+    return COPY_OUT(arg, i);
   default:
     return -EINVAL;
   }
@@ -862,7 +871,7 @@ static int sparcaudio_ioctl(struct inode * inode, struct file * file,
 
 	switch (minor & 0xf) {
 	case SPARCAUDIO_MIXER_MINOR:
-	  return sparcaudio_mixer_ioctl(inode, file, cmd, arg);
+	  return sparcaudio_mixer_ioctl(inode, file, cmd, (unsigned int *)arg);
 	case SPARCAUDIO_DSP16_MINOR:
         case SPARCAUDIO_DSP_MINOR:
 	case SPARCAUDIO_AUDIO_MINOR:

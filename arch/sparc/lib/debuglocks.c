@@ -1,12 +1,13 @@
-/* $Id: debuglocks.c,v 1.6 1999/02/23 13:23:55 jj Exp $
+/* $Id: debuglocks.c,v 1.7 1999/04/21 02:26:58 anton Exp $
  * debuglocks.c: Debugging versions of SMP locking primitives.
  *
  * Copyright (C) 1997 David S. Miller (davem@caip.rutgers.edu)
- * Copyright (C) 1998 Anton Blanchard (anton@progsoc.uts.edu.au)
+ * Copyright (C) 1998-99 Anton Blanchard (anton@progsoc.uts.edu.au)
  */
 
 #include <linux/kernel.h>
 #include <linux/sched.h>
+#include <linux/tasks.h>	/* For NR_CPUS */
 #include <asm/psr.h>
 #include <asm/system.h>
 #include <asm/spinlock.h>
@@ -39,20 +40,22 @@ static inline void show_read(char *str, rwlock_t *lock, unsigned long caller)
 {
 	int cpu = smp_processor_id();
 
-	printk("%s(%p) CPU#%d stuck at %08lx, owner PC(%08lx):CPU(%lx)\n",str,
+	printk("%s(%p) CPU#%d stuck at %08lx, owner PC(%08lx):CPU(%lx)\n", str,
 		lock, cpu, caller, lock->owner_pc & ~3, lock->owner_pc & 3);
 }
 
 static inline void show_write(char *str, rwlock_t *lock, unsigned long caller)
 {
 	int cpu = smp_processor_id();
+	int i;
 
-	printk("%s(%p) CPU#%d stuck at %08lx, owner PC(%08lx):CPU(%lx) reader[0]=%08lx reader[1]=%08lx reader[2]=%08lx reader[3]=%08lx\n",
-		str, lock, cpu, caller, lock->owner_pc & ~3, lock->owner_pc & 3,
-		lock->reader_pc[0],
-		lock->reader_pc[1],
-		lock->reader_pc[2],
-		lock->reader_pc[3]);
+	printk("%s(%p) CPU#%d stuck at %08lx, owner PC(%08lx):CPU(%lx)", str,
+		lock, cpu, caller, lock->owner_pc & ~3, lock->owner_pc & 3);
+
+	for(i = 0; i < NR_CPUS; i++)
+		printk(" reader[i]=%08lx", lock->reader_pc[i]);
+
+	printk("\n");
 }
 
 #undef INIT_STUCK
@@ -105,9 +108,6 @@ void _do_spin_unlock(spinlock_t *lock)
 	lock->lock = 0;
 }
 
-#undef INIT_STUCK
-#define INIT_STUCK 100000000
-
 void _do_read_lock(rwlock_t *rw, char *str)
 {
 	unsigned long caller;
@@ -135,9 +135,6 @@ wlock_again:
 	rw->lock++;
 }
 
-#undef INIT_STUCK
-#define INIT_STUCK 100000000
-
 void _do_read_unlock(rwlock_t *rw, char *str)
 {
 	unsigned long caller;
@@ -164,9 +161,6 @@ wlock_again:
 	barrier();
 	rw->lock -= 0x1ff;
 }
-
-#undef INIT_STUCK
-#define INIT_STUCK 100000000
 
 void _do_write_lock(rwlock_t *rw, char *str)
 {

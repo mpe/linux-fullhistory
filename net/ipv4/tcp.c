@@ -5,7 +5,7 @@
  *
  *		Implementation of the Transmission Control Protocol(TCP).
  *
- * Version:	$Id: tcp.c,v 1.139 1999/03/17 19:30:34 davem Exp $
+ * Version:	$Id: tcp.c,v 1.140 1999/04/22 10:34:31 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -772,7 +772,7 @@ int tcp_do_sendmsg(struct sock *sk, struct msghdr *msg)
 		iov++;
 
 		while(seglen > 0) {
-			int copy, tmp, queue_it;
+			int copy, tmp, queue_it, psh;
 
 			if (err)
 				goto do_fault2;
@@ -854,11 +854,14 @@ int tcp_do_sendmsg(struct sock *sk, struct msghdr *msg)
 			 * being outside the window, it will be queued
 			 * for later rather than sent.
 			 */
+			psh = 0;
 			copy = tp->snd_wnd - (tp->snd_nxt - tp->snd_una);
-			if(copy > (tp->max_window >> 1))
+			if(copy > (tp->max_window >> 1)) {
 				copy = min(copy, mss_now);
-			else
+				psh = 1;
+			} else {
 				copy = mss_now;
+			}
 			if(copy > seglen)
 				copy = seglen;
 
@@ -906,7 +909,7 @@ int tcp_do_sendmsg(struct sock *sk, struct msghdr *msg)
 
 			/* Prepare control bits for TCP header creation engine. */
 			TCP_SKB_CB(skb)->flags = (TCPCB_FLAG_ACK |
-						  (PSH_NEEDED ?
+						  ((PSH_NEEDED || psh) ?
 						   TCPCB_FLAG_PSH : 0));
 			TCP_SKB_CB(skb)->sacked = 0;
 			if (flags & MSG_OOB) {

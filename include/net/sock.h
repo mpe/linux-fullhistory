@@ -146,12 +146,11 @@ struct ipv6_pinfo {
 	struct in6_addr		daddr;
 	struct in6_addr		*daddr_cache;
 
-	__u32			flow_lbl;
+	__u32			flow_label;
 	__u32			frag_size;
 	int			hop_limit;
 	int			mcast_hops;
 	int			mcast_oif;
-	__u8			priority;
 
 	/* pktoption flags */
 	union {
@@ -162,7 +161,7 @@ struct ipv6_pinfo {
 				hopopts:1,
 				dstopts:1,
                                 authhdr:1,
-                                unused:1;
+                                rxflow:1;
 		} bits;
 		__u8		all;
 	} rxopt;
@@ -170,9 +169,11 @@ struct ipv6_pinfo {
 	/* sockopt flags */
 	__u8			mc_loop:1,
 	                        recverr:1,
+	                        sndflow:1,
 	                        pmtudisc:2;
 
 	struct ipv6_mc_socklist	*ipv6_mc_list;
+	struct ipv6_fl_socklist *ipv6_fl_list;
 	__u32			dst_cookie;
 
 	struct ipv6_txoptions	*opt;

@@ -5,7 +5,7 @@
  *	Authors:
  *	Pedro Roque		<roque@di.fc.ul.pt>	
  *
- *	$Id: ip6_output.c,v 1.16 1999/03/21 05:22:54 davem Exp $
+ *	$Id: ip6_output.c,v 1.17 1999/04/22 10:07:42 davem Exp $
  *
  *	Based on linux/net/ipv4/ip_output.c
  *
@@ -140,16 +140,10 @@ int ip6_xmit(struct sock *sk, struct sk_buff *skb, struct flowi *fl,
 	 *	Fill in the IPv6 header
 	 */
 
-	hdr->version = 6;
-	if (np) {
-		hdr->priority = np->priority;
-		memcpy(hdr->flow_lbl, (void *) &np->flow_lbl, 3);
+	*(u32*)hdr = __constant_htonl(0x60000000) | fl->fl6_flowlabel;
+	hlimit = -1;
+	if (np)
 		hlimit = np->hop_limit;
-	} else {
-		hdr->priority = 0;
-		memset(hdr->flow_lbl, 0, 3);
-		hlimit = -1;
-	}
 	if (hlimit < 0)
 		hlimit = ((struct rt6_info*)dst)->rt6i_hoplimit;
 
@@ -197,9 +191,7 @@ int ip6_nd_hdr(struct sock *sk, struct sk_buff *skb, struct device *dev,
 	hdr = (struct ipv6hdr *) skb_put(skb, sizeof(struct ipv6hdr));
 	skb->nh.ipv6h = hdr;
 
-	hdr->version  = 6;
-	hdr->priority = np->priority & 0x0f;
-	memset(hdr->flow_lbl, 0, 3);
+	*(u32*)hdr = htonl(0x60000000);
 
 	hdr->payload_len = htons(len);
 	hdr->nexthdr = proto;
@@ -214,16 +206,13 @@ int ip6_nd_hdr(struct sock *sk, struct sk_buff *skb, struct device *dev,
 static struct ipv6hdr * ip6_bld_1(struct sock *sk, struct sk_buff *skb, struct flowi *fl,
 				  int hlimit, unsigned pktlength)
 {
-	struct ipv6_pinfo *np = &sk->net_pinfo.af_inet6;
 	struct ipv6hdr *hdr;
 	
 	skb->nh.raw = skb_put(skb, sizeof(struct ipv6hdr));
 	hdr = skb->nh.ipv6h;
 	
-	hdr->version = 6;
-	hdr->priority = np->priority;
-	memcpy(hdr->flow_lbl, &np->flow_lbl, 3);
-	
+	*(u32*)hdr = fl->fl6_flowlabel | htonl(0x60000000);
+
 	hdr->payload_len = htons(pktlength - sizeof(struct ipv6hdr));
 	hdr->hop_limit = hlimit;
 	hdr->nexthdr = fl->proto;
@@ -436,8 +425,8 @@ int ip6_build_xmit(struct sock *sk, inet_getfrag_t getfrag, const void *data,
 
 	if (opt && opt->srcrt) {
 		struct rt0_hdr *rt0 = (struct rt0_hdr *) opt->srcrt;
-		final_dst = fl->nl_u.ip6_u.daddr;
-		fl->nl_u.ip6_u.daddr = rt0->addr;
+		final_dst = fl->fl6_dst;
+		fl->fl6_dst = rt0->addr;
 	}
 
 	if (!fl->oif && ipv6_addr_is_multicast(fl->nl_u.ip6_u.daddr))
@@ -486,8 +475,8 @@ int ip6_build_xmit(struct sock *sk, inet_getfrag_t getfrag, const void *data,
 		return -ENETUNREACH;
 	}
 
-	if (fl->nl_u.ip6_u.saddr == NULL) {
-		err = ipv6_get_saddr(dst, fl->nl_u.ip6_u.daddr, &saddr);
+	if (fl->fl6_src == NULL) {
+		err = ipv6_get_saddr(dst, fl->fl6_dst, &saddr);
 
 		if (err) {
 #if IP6_DEBUG >= 2
@@ -496,12 +485,12 @@ int ip6_build_xmit(struct sock *sk, inet_getfrag_t getfrag, const void *data,
 #endif
 			goto out;
 		}
-		fl->nl_u.ip6_u.saddr = &saddr;
+		fl->fl6_src = &saddr;
 	}
 	pktlength = length;
 
 	if (hlimit < 0) {
-		if (ipv6_addr_is_multicast(fl->nl_u.ip6_u.daddr))
+		if (ipv6_addr_is_multicast(fl->fl6_dst))
 			hlimit = np->mcast_hops;
 		else
 			hlimit = np->hop_limit;

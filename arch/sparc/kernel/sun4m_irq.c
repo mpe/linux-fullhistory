@@ -253,7 +253,7 @@ __initfunc(static void sun4m_init_timers(void (*counter_fn)(int, void *, struct 
     
 	/* Map the per-cpu Counter registers. */
 	sun4m_timers = sparc_alloc_io(cnt_regs[0].phys_addr, 0,
-				      PAGE_SIZE*NCPUS, "counters_percpu",
+				      PAGE_SIZE*SUN4M_NCPUS, "counters_percpu",
 				      cnt_regs[0].which_io, 0x0);
     
 	/* Map the system Counter register. */
@@ -334,7 +334,7 @@ __initfunc(void sun4m_init_IRQ(void))
 
 	/* Map the interrupt registers for all possible cpus. */
 	sun4m_interrupts = sparc_alloc_io(int_regs[0].phys_addr, 0,
-					  PAGE_SIZE*NCPUS, "interrupts_percpu",
+					  PAGE_SIZE*SUN4M_NCPUS, "interrupts_percpu",
 					  int_regs[0].which_io, 0x0);
     
 	/* Map the system interrupt control registers. */

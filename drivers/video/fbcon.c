@@ -1700,6 +1700,7 @@ static inline int fbcon_set_font(int unit, struct console_font_op *op)
     	    fb_display[i].fontdata &&
     	    FNTSUM(fb_display[i].fontdata) == k &&
     	    FNTSIZE(fb_display[i].fontdata) == size &&
+    	    fontwidth(&fb_display[i]) == w &&
 	    !memcmp(fb_display[i].fontdata, new_data, size)) {
 	    kfree(new_data - FONT_EXTRA_WORDS*sizeof(int));
 	    new_data = fb_display[i].fontdata;
@@ -1961,7 +1962,7 @@ __initfunc(static int fbcon_show_logo( void ))
     /* Return if the frame buffer is not mapped */
     if (!fb)
 	return 0;
-
+	
     /* Set colors if visual is PSEUDOCOLOR and we have enough colors, or for
      * DIRECTCOLOR */
     if ((p->visual == FB_VISUAL_PSEUDOCOLOR && depth >= 4) ||
@@ -2013,6 +2014,9 @@ __initfunc(static int fbcon_show_logo( void ))
 	logo = linux_logo_bw;
 	logo_depth = 1;
     }
+    
+    if (p->fb_info->fbops->fb_rasterimg)
+    	p->fb_info->fbops->fb_rasterimg(p->fb_info, 1);
 
     for (x = 0; x < smp_num_cpus * (LOGO_W + 8) &&
     	 x < p->var.xres - (LOGO_W + 8); x += (LOGO_W + 8)) {
@@ -2039,12 +2043,18 @@ __initfunc(static int fbcon_show_logo( void ))
 			val = (*src << redshift) |
 			      (*src << greenshift) |
 			      (*src << blueshift);
+			if (bdepth == 4 && !((long)dst & 3)) {
+			    /* Some cards require 32bit access */
+			    *(u32 *)dst = val;
+			    dst += 4;
+			} else {
 #ifdef __LITTLE_ENDIAN
-			for( i = 0; i < bdepth; ++i )
+			    for( i = 0; i < bdepth; ++i )
 #else
-			for( i = bdepth-1; i >= 0; --i )
+			    for( i = bdepth-1; i >= 0; --i )
 #endif
-			    *dst++ = val >> (i*8);
+			        *dst++ = val >> (i*8);
+			}
 		    }
 		}
 	    }
@@ -2107,12 +2117,18 @@ __initfunc(static int fbcon_show_logo( void ))
 		    val = safe_shift((linux_logo_red[*src-32]   & redmask), redshift) |
 		          safe_shift((linux_logo_green[*src-32] & greenmask), greenshift) |
 		          safe_shift((linux_logo_blue[*src-32]  & bluemask), blueshift);
+		    if (bdepth == 4 && !((long)dst & 3)) {
+			/* Some cards require 32bit access */
+			*(u32 *)dst = val;
+			dst += 4;
+		    } else {
 #ifdef __LITTLE_ENDIAN
-		    for( i = 0; i < bdepth; ++i )
+			for( i = 0; i < bdepth; ++i )
 #else
-		    for( i = bdepth-1; i >= 0; --i )
+			for( i = bdepth-1; i >= 0; --i )
 #endif
-			*dst++ = val >> (i*8);
+			    *dst++ = val >> (i*8);
+		    }
 		}
 	    }
 	    done = 1;
@@ -2223,6 +2239,9 @@ __initfunc(static int fbcon_show_logo( void ))
 #endif
     }
     
+    if (p->fb_info->fbops->fb_rasterimg)
+    	p->fb_info->fbops->fb_rasterimg(p->fb_info, 0);
+
     /* Modes not yet supported: packed pixels with depth != 8 (does such a
      * thing exist in reality?) */
 

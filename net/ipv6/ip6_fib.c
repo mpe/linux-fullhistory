@@ -5,7 +5,7 @@
  *	Authors:
  *	Pedro Roque		<roque@di.fc.ul.pt>	
  *
- *	$Id: ip6_fib.c,v 1.16 1999/03/21 05:22:52 davem Exp $
+ *	$Id: ip6_fib.c,v 1.17 1999/04/22 10:07:41 davem Exp $
  *
  *	This program is free software; you can redistribute it and/or
  *      modify it under the terms of the GNU General Public License
@@ -890,9 +890,6 @@ static void fib6_del_route(struct fib6_node *fn, struct rt6_info **rtp)
 
 	RT6_TRACE("fib6_del_route\n");
 
-	if (!(rt->rt6i_flags&RTF_CACHE))
-		fib6_prune_clones(fn, rt);
-
 	/* Unlink it */
 	*rtp = rt->u.next;
 	rt->rt6i_node = NULL;
@@ -938,6 +935,9 @@ int fib6_del(struct rt6_info *rt)
 		return -ENOENT;
 
 	BUG_TRAP(fn->fn_flags&RTN_RTINFO);
+
+	if (!(rt->rt6i_flags&RTF_CACHE))
+		fib6_prune_clones(fn, rt);
 
 	/*
 	 *	Walk the leaf entries looking for ourself

@@ -448,6 +448,7 @@ void smp4m_percpu_timer_interrupt(struct pt_regs *regs)
 	if(!--prof_counter[cpu]) {
 		int user = user_mode(regs);
 
+		irq_enter(cpu, 0);
 		if(current->pid) {
 			update_one_process(current, 1, user, !user, cpu);
 
@@ -456,7 +457,6 @@ void smp4m_percpu_timer_interrupt(struct pt_regs *regs)
 				current->need_resched = 1;
 			}
 
-			spin_lock(&ticker_lock);
 			if(user) {
 				if(current->priority < DEF_PRIORITY) {
 					kstat.cpu_nice++;
@@ -469,9 +469,9 @@ void smp4m_percpu_timer_interrupt(struct pt_regs *regs)
 				kstat.cpu_system++;
 				kstat.per_cpu_system[cpu]++;
 			}
-			spin_unlock(&ticker_lock);
 		}
 		prof_counter[cpu] = prof_multiplier[cpu];
+		irq_exit(cpu, 0);
 	}
 }
 

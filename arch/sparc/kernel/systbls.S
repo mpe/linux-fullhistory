@@ -1,4 +1,4 @@
-/* $Id: systbls.S,v 1.82 1999/03/20 22:01:59 davem Exp $
+/* $Id: systbls.S,v 1.83 1999/04/07 17:14:06 davem Exp $
  * systbls.S: System call entry point tables for OS compatibility.
  *            The native Linux system call table lives here also.
  *
@@ -25,7 +25,7 @@ sys_call_table:
 /*30*/	.long sys_utime, sys_nis_syscall, sys_nis_syscall, sys_access, sys_nice
 /*35*/	.long sys_nis_syscall, sys_sync, sys_kill, sys_newstat, sys_sendfile
 /*40*/	.long sys_newlstat, sys_dup, sys_pipe, sys_times, sys_nis_syscall
-/*45*/	.long sys_nis_syscall, sys_setgid, sys_getgid, sys_signal, sys_geteuid
+/*45*/	.long sys_umount, sys_setgid, sys_getgid, sys_signal, sys_geteuid
 /*50*/	.long sys_getegid, sys_acct, sys_nis_syscall, sys_nis_syscall, sys_ioctl
 /*55*/	.long sys_reboot, sys_nis_syscall, sys_symlink, sys_readlink, sys_execve
 /*60*/	.long sys_umask, sys_chroot, sys_newfstat, sys_nis_syscall, sys_getpagesize
@@ -47,7 +47,7 @@ sys_call_table:
 /*140*/	.long sys_nis_syscall, sys_nis_syscall, sys_nis_syscall, sys_nis_syscall, sys_getrlimit
 /*145*/	.long sys_setrlimit, sys_nis_syscall, sys_prctl, sys_pciconfig_read, sys_pciconfig_write
 /*150*/	.long sys_nis_syscall, sys_nis_syscall, sys_nis_syscall, sys_poll, sys_nis_syscall
-/*155*/	.long sys_nis_syscall, sys_nis_syscall, sys_statfs, sys_fstatfs, sys_umount
+/*155*/	.long sys_nis_syscall, sys_nis_syscall, sys_statfs, sys_fstatfs, sys_oldumount
 /*160*/	.long sys_nis_syscall, sys_nis_syscall, sys_getdomainname, sys_setdomainname, sys_nis_syscall
 /*165*/	.long sys_quotactl, sys_nis_syscall, sys_mount, sys_ustat, sys_nis_syscall
 /*170*/	.long sys_nis_syscall, sys_nis_syscall, sys_nis_syscall, sys_nis_syscall, sys_getdents
@@ -129,7 +129,7 @@ sunos_sys_table:
 /*150*/	.long sys_getsockname, sunos_nosys, sunos_nosys
 	.long sys_poll, sunos_nosys, sunos_nosys
 	.long sunos_getdirentries, sys_statfs, sys_fstatfs
-	.long sys_umount, sunos_nosys, sunos_nosys
+	.long sys_oldumount, sunos_nosys, sunos_nosys
 	.long sys_getdomainname, sys_setdomainname
 	.long sunos_nosys, sys_quotactl, sunos_nosys
 	.long sunos_mount, sys_ustat, sunos_semsys

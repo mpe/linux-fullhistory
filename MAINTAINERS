@@ -698,7 +698,7 @@ M:	ecd@skynet.be
 P:	Jakub Jelinek
 M:	jj@sunsite.ms.mff.cuni.cz
 P:	Anton Blanchard
-M:	anton@jubilex.progsoc.uts.edu.au
+M:	anton@progsoc.uts.edu.au
 L:	sparclinux@vger.rutgers.edu
 L:	ultralinux@vger.rutgers.edu
 W:	http://ultra.linux.cz
@@ -770,6 +770,20 @@ P:	Jens Axboe
 M:	axboe@image.dk
 L:	linux-kernel@vger.rutgers.edu
 S:	Maintained
+
+USB HUB DRIVER
+P:	Johannes Erdfelt
+M:	jerdfelt@sventech.com
+L:	linux-usb@peloncho.fis.ucm.es
+S:	Maintained
+
+USB OHCI DRIVER
+P:	Gregory P. Smith
+M:	greg@electricrain.com
+M:	greg@suitenine.com
+L:	linux-usb@peloncho.fis.ucm.es
+S:	Maintained (not yet usable)
+W:	http://suitenine.com/usb/
 
 VFAT FILESYSTEM:
 P:	Gordon Chaffee

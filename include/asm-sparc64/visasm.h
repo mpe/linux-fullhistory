@@ -1,4 +1,4 @@
-/* $Id: visasm.h,v 1.3 1998/09/04 01:59:48 ecd Exp $ */
+/* $Id: visasm.h,v 1.4 1999/04/19 01:25:55 davem Exp $ */
 #ifndef _SPARC64_VISASM_H
 #define _SPARC64_VISASM_H
 
@@ -10,7 +10,7 @@
 #include <asm/pstate.h>
 #include <asm/ptrace.h>
 
-#define AOFF_task_fpregs	(((ASIZ_task) + 255) & ~255)
+#define AOFF_task_fpregs	(((ASIZ_task) + (64 - 1)) & ~(64 - 1))
  
 /* Clobbers %o5, %g1, %g2, %g3, %g7, %icc, %xcc */
 

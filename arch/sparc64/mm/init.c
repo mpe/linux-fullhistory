@@ -1,4 +1,4 @@
-/*  $Id: init.c,v 1.125 1999/03/28 08:39:33 davem Exp $
+/*  $Id: init.c,v 1.126 1999/04/09 16:16:41 jj Exp $
  *  arch/sparc64/mm/init.c
  *
  *  Copyright (C) 1996-1999 David S. Miller (davem@caip.rutgers.edu)
@@ -1127,6 +1127,7 @@ void sparc_ultra_dump_dtlb(void)
 /* paging_init() sets up the page tables */
 
 extern unsigned long free_area_init(unsigned long, unsigned long);
+extern unsigned long sun_serial_setup(unsigned long);
 
 __initfunc(unsigned long 
 paging_init(unsigned long start_mem, unsigned long end_mem))
@@ -1195,6 +1196,13 @@ paging_init(unsigned long start_mem, unsigned long end_mem))
 	 * such that __pa() macros etc. work.
 	 */
 	mempool = PAGE_ALIGN(start_mem) + shift;
+	
+#ifdef CONFIG_SUN_SERIAL
+	/* This does not logically belong here, but is the first place
+	   we can initialize it at, so that we work in the PAGE_OFFSET+
+	   address space. */
+	mempool = sun_serial_setup(mempool);
+#endif
 
 	/* Allocate 64M for dynamic DVMA mapping area. */
 	allocate_ptable_skeleton(DVMA_VADDR, DVMA_VADDR + 0x4000000);

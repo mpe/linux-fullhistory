@@ -7,7 +7,7 @@
  *
  *	Adapted from linux/net/ipv4/raw.c
  *
- *	$Id: raw.c,v 1.23 1998/11/08 11:17:09 davem Exp $
+ *	$Id: raw.c,v 1.24 1999/04/22 10:07:45 davem Exp $
  *
  *	This program is free software; you can redistribute it and/or
  *      modify it under the terms of the GNU General Public License
@@ -283,6 +283,7 @@ int rawv6_recvmsg(struct sock *sk, struct msghdr *msg, int len,
 		sin6->sin6_family = AF_INET6;
 		memcpy(&sin6->sin6_addr, &skb->nh.ipv6h->saddr, 
 		       sizeof(struct in6_addr));
+		sin6->sin6_flowinfo = 0;
 	}
 
 	if (sk->net_pinfo.af_inet6.rxopt.all)
@@ -363,7 +364,7 @@ static int rawv6_sendmsg(struct sock *sk, struct msghdr *msg, int len)
 	struct sockaddr_in6 * sin6 = (struct sockaddr_in6 *) msg->msg_name;
 	struct ipv6_pinfo *np = &sk->net_pinfo.af_inet6;
 	struct ipv6_txoptions *opt = NULL;
-	struct in6_addr *saddr = NULL;
+	struct ip6_flowlabel *flowlabel = NULL;
 	struct flowi fl;
 	int addr_len = msg->msg_namelen;
 	struct in6_addr *daddr;
@@ -388,6 +389,8 @@ static int rawv6_sendmsg(struct sock *sk, struct msghdr *msg, int len)
 	 *	Get and verify the address. 
 	 */
 
+	fl.fl6_flowlabel = 0;
+
 	if (sin6) {
 		if (addr_len < sizeof(struct sockaddr_in6)) 
 			return(-EINVAL);
@@ -405,12 +408,28 @@ static int rawv6_sendmsg(struct sock *sk, struct msghdr *msg, int len)
 			return(-EINVAL);
 
 		daddr = &sin6->sin6_addr;
+		if (np->sndflow) {
+			fl.fl6_flowlabel = sin6->sin6_flowinfo&IPV6_FLOWINFO_MASK;
+			if (fl.fl6_flowlabel&IPV6_FLOWLABEL_MASK) {
+				flowlabel = fl6_sock_lookup(sk, fl.fl6_flowlabel);
+				if (flowlabel == NULL)
+					return -EINVAL;
+				daddr = &flowlabel->dst;
+			}
+		}
+
+
+		/* Otherwise it will be difficult to maintain sk->dst_cache. */
+		if (sk->state == TCP_ESTABLISHED &&
+		    !ipv6_addr_cmp(daddr, &sk->net_pinfo.af_inet6.daddr))
+			daddr = &sk->net_pinfo.af_inet6.daddr;
 	} else {
 		if (sk->state != TCP_ESTABLISHED) 
 			return(-EINVAL);
 		
 		proto = sk->num;
 		daddr = &(sk->net_pinfo.af_inet6.daddr);
+		fl.fl6_flowlabel = np->flow_label;
 	}
 
 	if (ipv6_addr_any(daddr)) {
@@ -422,23 +441,34 @@ static int rawv6_sendmsg(struct sock *sk, struct msghdr *msg, int len)
 	}
 
 	fl.oif = sk->bound_dev_if;
+	fl.fl6_src = NULL;
 
 	if (msg->msg_controllen) {
 		opt = &opt_space;
 		memset(opt, 0, sizeof(struct ipv6_txoptions));
 
-		err = datagram_send_ctl(msg, &fl.oif, &saddr, opt, &hlimit);
-		if (err < 0)
+		err = datagram_send_ctl(msg, &fl, opt, &hlimit);
+		if (err < 0) {
+			fl6_sock_release(flowlabel);
 			return err;
+		}
+		if ((fl.fl6_flowlabel&IPV6_FLOWLABEL_MASK) && !flowlabel) {
+			flowlabel = fl6_sock_lookup(sk, fl.fl6_flowlabel);
+			if (flowlabel == NULL)
+				return -EINVAL;
+		}
+		if (!(opt->opt_nflen|opt->opt_flen))
+			opt = NULL;
 	}
-	if (opt == NULL || !(opt->opt_nflen|opt->opt_flen))
+	if (opt == NULL)
 		opt = np->opt;
+	if (flowlabel)
+		opt = fl6_merge_options(&opt_space, flowlabel, opt);
 
 	raw_opt = &sk->tp_pinfo.tp_raw;
 
 	fl.proto = proto;
-	fl.nl_u.ip6_u.daddr = daddr;
-	fl.nl_u.ip6_u.saddr = saddr;
+	fl.fl6_dst = daddr;
 	fl.uli_u.icmpt.type = 0;
 	fl.uli_u.icmpt.code = 0;
 	
@@ -462,6 +492,8 @@ static int rawv6_sendmsg(struct sock *sk, struct msghdr *msg, int len)
 		err = ip6_build_xmit(sk, rawv6_getfrag, msg->msg_iov, &fl, len,
 				     opt, hlimit, msg->msg_flags);
 	}
+
+	fl6_sock_release(flowlabel);
 
 	return err<0?err:len;
 }

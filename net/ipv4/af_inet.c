@@ -5,7 +5,7 @@
  *
  *		PF_INET protocol family socket handler.
  *
- * Version:	$Id: af_inet.c,v 1.86 1999/03/25 00:38:15 davem Exp $
+ * Version:	$Id: af_inet.c,v 1.87 1999/04/22 10:07:33 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -513,17 +513,6 @@ static int inet_bind(struct socket *sock, struct sockaddr *uaddr, int addr_len)
 	    (sk->num != 0))
 		return -EINVAL;
 		
-	snum = ntohs(addr->sin_port);
-#ifdef CONFIG_IP_MASQUERADE
-	/* The kernel masquerader needs some ports. */
-	if((snum >= PORT_MASQ_BEGIN) && (snum <= PORT_MASQ_END))
-		return -EADDRINUSE;
-#endif		 
-	if (snum == 0) 
-		snum = sk->prot->good_socknum();
-	if (snum < PROT_SOCK && !capable(CAP_NET_BIND_SERVICE))
-		return(-EACCES);
-	
 	chk_addr_ret = inet_addr_type(addr->sin_addr.s_addr);
 	if (addr->sin_addr.s_addr != 0 && chk_addr_ret != RTN_LOCAL &&
 	    chk_addr_ret != RTN_MULTICAST && chk_addr_ret != RTN_BROADCAST) {
@@ -545,6 +534,17 @@ static int inet_bind(struct socket *sock, struct sockaddr *uaddr, int addr_len)
 	if(chk_addr_ret == RTN_MULTICAST || chk_addr_ret == RTN_BROADCAST)
 		sk->saddr = 0;  /* Use device */
 
+	snum = ntohs(addr->sin_port);
+#ifdef CONFIG_IP_MASQUERADE
+	/* The kernel masquerader needs some ports. */
+	if((snum >= PORT_MASQ_BEGIN) && (snum <= PORT_MASQ_END))
+		return -EADDRINUSE;
+#endif		 
+	if (snum == 0) 
+		snum = sk->prot->good_socknum();
+	if (snum < PROT_SOCK && !capable(CAP_NET_BIND_SERVICE))
+		return(-EACCES);
+	
 	/* Make sure we are allowed to bind here. */
 	if(sk->prot->verify_bind(sk, snum))
 		return -EADDRINUSE;

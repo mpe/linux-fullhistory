@@ -1,4 +1,4 @@
-/* $Id: srmmu.c,v 1.185 1999/03/24 11:42:35 davem Exp $
+/* $Id: srmmu.c,v 1.186 1999/04/13 14:17:19 jj Exp $
  * srmmu.c:  SRMMU specific routines for memory management.
  *
  * Copyright (C) 1995 David S. Miller  (davem@caip.rutgers.edu)
@@ -14,6 +14,7 @@
 #include <linux/vmalloc.h>
 #include <linux/pagemap.h>
 #include <linux/init.h>
+#include <linux/blk.h>
 
 #include <asm/page.h>
 #include <asm/pgtable.h>
@@ -2000,6 +2001,18 @@ __initfunc(unsigned long srmmu_paging_init(unsigned long start_mem, unsigned lon
 
 	start_mem = sparc_context_init(start_mem, num_contexts);
 	start_mem = free_area_init(start_mem, end_mem);
+	
+#ifdef CONFIG_BLK_DEV_INITRD
+	/* If initial ramdisk was specified with physical address,
+	   translate it here, as the p2v translation in srmmu
+	   is not straightforward. */
+	if (initrd_start && initrd_start < KERNBASE) {
+		initrd_start = srmmu_p2v(initrd_start);
+		initrd_end = srmmu_p2v(initrd_end);
+		if (initrd_end <= initrd_start)
+			initrd_start = 0;
+	}
+#endif
 
 	return PAGE_ALIGN(start_mem);
 }

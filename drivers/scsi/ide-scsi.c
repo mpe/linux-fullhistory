@@ -67,7 +67,7 @@ typedef struct idescsi_pc_s {
 	int b_count;				/* Bytes transferred from current entry */
 	Scsi_Cmnd *scsi_cmd;			/* SCSI command */
 	void (*done)(Scsi_Cmnd *);		/* Scsi completion routine */
-	unsigned int flags;			/* Status/Action flags */
+	unsigned long flags;			/* Status/Action flags */
 	unsigned long timeout;			/* Command timeout */
 } idescsi_pc_t;
 
@@ -92,9 +92,9 @@ typedef struct idescsi_pc_s {
 typedef struct {
 	ide_drive_t *drive;
 	idescsi_pc_t *pc;			/* Current packet command */
-	unsigned int flags;			/* Status/Action flags */
-	int transform;				/* SCSI cmd translation layer */
-	int log;				/* log flags */
+	unsigned long flags;			/* Status/Action flags */
+	unsigned long transform;		/* SCSI cmd translation layer */
+	unsigned long log;			/* log flags */
 } idescsi_scsi_t;
 
 /*
