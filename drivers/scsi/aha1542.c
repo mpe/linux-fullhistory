@@ -675,7 +675,7 @@ static int aha1542_mbenable(int base)
   WAIT(INTRFLAGS(base),INTRMASK,HACC,0);
   aha1542_intr_reset(base);
   
-  if (mbenable_result[0] & 0x08) {
+  if ((mbenable_result[0] & 0x08) || mbenable_result[1]) {
      mbenable_cmd[0]=CMD_MBENABLE;
      mbenable_cmd[1]=0;
      mbenable_cmd[2]=mbenable_result[1];

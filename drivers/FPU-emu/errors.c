@@ -261,6 +261,7 @@ static struct {
 	      0x233  in reg_round.S
 	      0x234  in reg_round.S
 	      0x235  in reg_round.S
+	      0x236  in reg_round.S
  */
 
 void exception(int n)

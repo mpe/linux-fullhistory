@@ -1205,6 +1205,10 @@ char *fldenv(fpu_addr_modes addr_modes)
       s += 0x1c;
     }
 
+#ifdef PECULIAR_486
+  control_word &= ~0xe080;
+#endif PECULIAR_486
+
   top = (partial_status >> SW_Top_Shift) & 7;
 
   if ( partial_status & ~control_word & CW_Exceptions )
@@ -1318,7 +1322,11 @@ char *fstenv(fpu_addr_modes addr_modes)
     {
       RE_ENTRANT_CHECK_OFF;
       FPU_verify_area(VERIFY_WRITE,d,14);
+#ifdef PECULIAR_486
+      put_fs_long(control_word & ~0xe080, (unsigned short *) d);
+#else
       put_fs_word(control_word, (unsigned short *) d);
+#endif PECULIAR_486
       put_fs_word(status_word(), (unsigned short *) (d+2));
       put_fs_word(tag_word(), (unsigned short *) (d+4));
       put_fs_word(ip_offset, (unsigned short *) (d+6));

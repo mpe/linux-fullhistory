@@ -1816,7 +1816,7 @@ static int tape_qic02_read(struct inode * inode, struct file * filp, char * buf,
 	int stat;
 
 	if (TP_DIAGS(current_tape_dev))
-		printk(TPQIC_NAME ": request READ, minor=%x, buf=%lx, count=%x, pos=%x, flags=%x\n",
+		printk(TPQIC_NAME ": request READ, minor=%x, buf=%p, count=%x, pos=%x, flags=%x\n",
 			MINOR(dev), buf, count, filp->f_pos, flags);
 
 	if (count % TAPE_BLKSIZE) {	/* Only allow mod 512 bytes at a time. */
@@ -1833,7 +1833,7 @@ static int tape_qic02_read(struct inode * inode, struct file * filp, char * buf,
 	/* Make sure buffer is safe to write into. */
 	error = verify_area(VERIFY_WRITE, buf, count);
 	if (error) {
-		printk(TPQIC_NAME ": read: verify_area(WRITE, %lx, %x) failed\n", buf, count);
+		printk(TPQIC_NAME ": read: verify_area(WRITE, %p, %x) failed\n", buf, count);
 		return error;
 	}
 
@@ -1985,7 +1985,7 @@ static int tape_qic02_write(struct inode * inode, struct file * filp, char * buf
 	unsigned long bytes_todo, bytes_done, total_bytes_done = 0;
 
 	if (TP_DIAGS(current_tape_dev))
-		printk(TPQIC_NAME ": request WRITE, minor=%x, buf=%lx, count=%x, pos=%x, flags=%x\n",
+		printk(TPQIC_NAME ": request WRITE, minor=%x, buf=%p, count=%x, pos=%x, flags=%x\n",
 			MINOR(dev), buf, count, filp->f_pos, flags);
 
 	if (count % TAPE_BLKSIZE) {	/* only allow mod 512 bytes at a time */
@@ -2010,7 +2010,7 @@ static int tape_qic02_write(struct inode * inode, struct file * filp, char * buf
 	/* Make sure buffer is safe to read from. */
 	error = verify_area(VERIFY_READ, buf, count);
 	if (error) {
-		printk(TPQIC_NAME ": write: verify_area(READ, %lx, %x) failed\n", buf, count);
+		printk(TPQIC_NAME ": write: verify_area(READ, %p, %x) failed\n", buf, count);
 		return error;
 	}
 
@@ -2107,7 +2107,7 @@ static int tape_qic02_write(struct inode * inode, struct file * filp, char * buf
 		}
 	}
 	tpqputs("write request for <0 bytes");
-	printk(TPQIC_NAME ": status_bytes_wr %x, buf %x, total_bytes_done %x, count %x\n", status_bytes_wr, buf, total_bytes_done, count);
+	printk(TPQIC_NAME ": status_bytes_wr %x, buf %p, total_bytes_done %x, count %x\n", status_bytes_wr, buf, total_bytes_done, count);
 	return -EINVAL;
 } /* tape_qic02_write */
 

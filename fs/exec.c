@@ -134,7 +134,11 @@ int core_dump(long signr, struct pt_regs * regs)
 	fs = get_fs();
 	set_fs(KERNEL_DS);
 	memcpy(corefile,"core.",5);
+#if 0
 	memcpy(corefile+5,current->comm,sizeof(current->comm));
+#else
+	corefile[4] = '\0';
+#endif
 	if (open_namei(corefile,O_CREAT | 2 | O_TRUNC,0600,&inode,NULL)) {
 		inode = NULL;
 		goto end_coredump;

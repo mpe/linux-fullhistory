@@ -258,7 +258,13 @@ static void rs_stop(struct tty_struct *tty)
 	struct async_struct *info;
 	
 	info = rs_table + DEV_TO_SL(tty->line);
-	
+
+	if (info->flags & ASYNC_CLOSING) {
+		tty->stopped = 0;
+		tty->hw_stopped = 0;
+		return;
+	}
+
 	info->IER = UART_IER_MSI | UART_IER_RLSI | UART_IER_RDI;
 #ifdef ISR_HACK
 	serial_out(info, UART_IER, info->IER);
@@ -431,7 +437,7 @@ static inline int check_modem_status(struct async_struct *info)
 			rs_sched_event(info, RS_EVENT_HANGUP);
 		}
 	}
-	if (C_CRTSCTS(info->tty)) {
+	if (C_CRTSCTS(info->tty) && !(info->flags & ASYNC_CLOSING)) {
 		if (info->tty->hw_stopped) {
 			if (status & UART_MSR_CTS) {
 #ifdef SERIAL_DEBUG_INTR
@@ -1029,9 +1035,11 @@ void rs_write(struct tty_struct * tty)
 	if (!tty || tty->stopped || tty->hw_stopped)
 		return;
 	info = rs_table + DEV_TO_SL(tty->line);
-	if (!info || !info->tty || !(info->flags & ASYNC_INITIALIZED))
-		return;
 	cli();
+	if (!info || !info->tty || !(info->flags & ASYNC_INITIALIZED)) {
+		sti();
+		return;
+	}
 	restart_port(info);
 	info->IER = (UART_IER_MSI | UART_IER_RLSI |
 		     UART_IER_THRI | UART_IER_RDI);

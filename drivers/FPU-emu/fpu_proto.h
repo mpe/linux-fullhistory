@@ -52,7 +52,7 @@ extern void fstp_i(void);
 
 /* fpu_entry.c */
 asmlinkage void math_emulate(long arg);
-extern void __math_abort(struct info *info, unsigned int signal);
+extern void math_abort(struct info *info, unsigned int signal);
 
 /* fpu_etc.c */
 extern void fp_etc(void);

@@ -9,6 +9,8 @@
 
 _register_chrdev
 _unregister_chrdev
+_register_blkdev
+_unregister_blkdev
 _wake_up_interruptible
 
 _wp_works_ok

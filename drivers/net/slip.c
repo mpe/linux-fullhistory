@@ -19,6 +19,7 @@
  *		Alan Cox	:	Honours the old SL_COMPRESSED flag
  *		Alan Cox	:	KISS AX.25 and AXUI IP support
  *		Michael Riepe	:	Automatic CSLIP recognition added
+ *		Charles Hedrick :	CSLIP header length problem fix.
  */
  
 #include <asm/segment.h>
@@ -522,6 +523,8 @@ sl_xmit(struct sk_buff *skb, struct device *dev)
 {
   struct tty_struct *tty;
   struct slip *sl;
+  
+  int size;
 
   /* Find the correct SLIP channel to use. */
   sl = &sl_ctrl[dev->base_addr];
@@ -555,8 +558,19 @@ sl_xmit(struct sk_buff *skb, struct device *dev)
   	}
 #endif  	
 	sl_lock(sl);
-/*	sl_hex_dump(skb->data,skb->len);*/
-	sl_encaps(sl, skb->data, skb->len);
+	
+	size=skb->len;
+	if(size<sizeof(struct iphdr))
+	{
+		printk("Runt IP frame fed to slip!\n");
+	}
+	else
+	{
+		size=((struct iphdr *)(skb->data))->tot_len;
+		size=ntohs(size);
+	/*	sl_hex_dump(skb->data,skb->len);*/
+		sl_encaps(sl, skb->data, size);
+	}
 	if (skb->free) kfree_skb(skb, FREE_WRITE);
   }
   return(0);

@@ -39,6 +39,18 @@ static int reg_offset[] = {
 
 #define REG_(x) (*(long *)(reg_offset[(x)]+(char *) FPU_info))
 
+static int reg_offset_vm86[] = {
+	offsetof(struct info,___cs),
+	offsetof(struct info,___vm86_ds),
+	offsetof(struct info,___vm86_es),
+	offsetof(struct info,___vm86_fs),
+	offsetof(struct info,___vm86_gs),
+	offsetof(struct info,___ss)
+      };
+
+#define VM86_REG_(x) (*(unsigned short *) \
+		      (reg_offset_vm86[((unsigned)x)]+(char *) FPU_info))
+
 
 /* Decode the SIB byte. This function assumes mod != 0 */
 static void *sib(int mod, unsigned long *fpu_eip)
@@ -94,32 +106,18 @@ static void *sib(int mod, unsigned long *fpu_eip)
   return (void *) offset;
 }
 
-static unsigned long vm86_segment(char segment)
+
+static unsigned long vm86_segment(unsigned char segment)
 { 
-  switch ( segment )
+  segment--;
+#ifdef PARANOID
+  if ( segment > PREFIX_SS_ )
     {
-    case PREFIX_CS:
-      return FPU_CS << 4;
-      break;
-    case PREFIX_SS:
-      return FPU_SS << 4;
-      break;
-    case PREFIX_ES:
-      return FPU_VM86_ES << 4;
-      break;
-    case PREFIX_DS:
-      return FPU_VM86_DS << 4;
-      break;
-    case PREFIX_FS:
-      return FPU_VM86_FS << 4;
-      break;
-    case PREFIX_GS:
-      return FPU_VM86_GS << 4;
-      break;
-    default:
       EXCEPTION(EX_INTERNAL|0x130);
-      return 0; /* Keep gcc quiet. */
+      math_abort(FPU_info,SIGSEGV);
     }
+#endif PARANOID
+  return (unsigned long)VM86_REG_(segment) << 4;
 }
 
 
@@ -156,7 +154,7 @@ void get_address(unsigned char FPU_modrm, unsigned long *fpu_eip,
      in 32 bit protected mode. */
 #define FPU_WRITE_BIT 0x10
   if ( !addr_modes.vm86 && (FPU_modrm & FPU_WRITE_BIT)
-      && (addr_modes.override.segment == PREFIX_CS) )
+      && (addr_modes.override.segment == PREFIX_CS_) )
     {
       math_abort(FPU_info,SIGSEGV);
     }
@@ -235,7 +233,7 @@ void get_address_16(unsigned char FPU_modrm, unsigned long *fpu_eip,
      in 32 bit protected mode. */
 #define FPU_WRITE_BIT 0x10
   if ( !addr_modes.vm86 && (FPU_modrm & FPU_WRITE_BIT)
-      && (addr_modes.override.segment == PREFIX_CS) )
+      && (addr_modes.override.segment == PREFIX_CS_) )
     {
       math_abort(FPU_info,SIGSEGV);
     }

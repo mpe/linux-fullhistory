@@ -9,6 +9,11 @@ struct fpu_reg {
 	unsigned sigh;
 };
 
+
+/* This structure matches the layout of the data saved to the stack
+   following a device-not-present interrupt, part of it saved
+   automatically by the 80386/80486.
+   */
 struct info {
 	long ___orig_eip;
 	long ___ret_from_system_call;
@@ -29,30 +34,10 @@ struct info {
 	long ___eflags;
 	long ___esp;
 	long ___ss;
+	long ___vm86_es; /* This and the following only in vm86 mode */
+	long ___vm86_ds;
+	long ___vm86_fs;
+	long ___vm86_gs;
 };
-
-#if 0
-#define EAX (info->___eax)
-#define EBX (info->___ebx)
-#define ECX (info->___ecx)
-#define EDX (info->___edx)
-#define ESI (info->___esi)
-#define EDI (info->___edi)
-#define EBP (info->___ebp)
-#define ESP (info->___esp)
-#define EIP (info->___eip)
-#define ORIG_EIP (info->___orig_eip)
-#define EFLAGS (info->___eflags)
-#define DS (*(unsigned short *) &(info->___ds))
-#define ES (*(unsigned short *) &(info->___es))
-#define FS (*(unsigned short *) &(info->___fs))
-#define CS (*(unsigned short *) &(info->___cs))
-#define SS (*(unsigned short *) &(info->___ss))
-#endif
-
-void __math_abort(struct info *, unsigned int);
-
-#define math_abort(x,y) \
-(((volatile void (*)(struct info *,unsigned int)) __math_abort)((x),(y)))
 
 #endif

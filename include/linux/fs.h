@@ -320,12 +320,13 @@ extern int getname(const char * filename, char **result);
 extern void putname(char * name);
 
 extern int register_blkdev(unsigned int, const char *, struct file_operations *);
+extern int unregister_blkdev(unsigned int major, const char * name);
 extern int blkdev_open(struct inode * inode, struct file * filp);
 extern struct file_operations def_blk_fops;
 extern struct inode_operations blkdev_inode_operations;
 
 extern int register_chrdev(unsigned int, const char *, struct file_operations *);
-extern int unregister_chrdev( unsigned int major, const char * name);
+extern int unregister_chrdev(unsigned int major, const char * name);
 extern int chrdev_open(struct inode * inode, struct file * filp);
 extern struct file_operations def_chr_fops;
 extern struct inode_operations chrdev_inode_operations;

@@ -11,7 +11,7 @@
 
 int __verify_write(unsigned long addr, unsigned long count);
 
-extern inline int verify_area(int type, void * addr, unsigned long size)
+extern inline int verify_area(int type, const void * addr, unsigned long size)
 {
 	if (TASK_SIZE <= (unsigned long) addr)
 		return -EFAULT;

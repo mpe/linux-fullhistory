@@ -560,7 +560,7 @@ static int valid_prefix(unsigned char *Byte, unsigned char **fpu_eip,
   unsigned char byte;
   unsigned char *ip = *fpu_eip;
 
-  *override = (overrides) { 0, 0, PREFIX_DS };       /* defaults */
+  *override = (overrides) { 0, 0, PREFIX_DS_ };       /* defaults */
 
   RE_ENTRANT_CHECK_OFF;
   FPU_code_verify_area(1);
@@ -580,23 +580,23 @@ static int valid_prefix(unsigned char *Byte, unsigned char **fpu_eip,
 	  goto do_next_byte;
 
 	case PREFIX_CS:
-	  override->segment = PREFIX_CS;
+	  override->segment = PREFIX_CS_;
 	  goto do_next_byte;
 	case PREFIX_ES:
-	  override->segment = PREFIX_ES;
+	  override->segment = PREFIX_ES_;
 	  goto do_next_byte;
 	case PREFIX_SS:
-	  override->segment = PREFIX_SS;
+	  override->segment = PREFIX_SS_;
 	  goto do_next_byte;
 	case PREFIX_FS:
-	  override->segment = PREFIX_FS;
+	  override->segment = PREFIX_FS_;
 	  goto do_next_byte;
 	case PREFIX_GS:
-	  override->segment = PREFIX_GS;
+	  override->segment = PREFIX_GS_;
 	  goto do_next_byte;
 
 	case PREFIX_DS:   /* Redundant unless preceded by another override. */
-	  override->segment = PREFIX_DS;
+	  override->segment = PREFIX_DS_;
 
 /* lock is not a valid prefix for FPU instructions,
    let the cpu handle it to generate a SIGILL. */
@@ -635,7 +635,7 @@ static int valid_prefix(unsigned char *Byte, unsigned char **fpu_eip,
 }
 
 
-void __math_abort(struct info * info, unsigned int signal)
+void math_abort(struct info * info, unsigned int signal)
 {
 	FPU_EIP = FPU_ORIG_EIP;
 	current->tss.trap_no = 16;

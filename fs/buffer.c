@@ -484,17 +484,15 @@ repeat:
 #endif
 	}
 
-	if (!bh && nr_free_pages > 5) {
-		if (grow_buffers(GFP_BUFFER, size))
-			goto repeat;
-	}
-	
-/* and repeat until we find something good */
 	if (!bh) {
+		if (nr_free_pages > 5)
+			if (grow_buffers(GFP_BUFFER, size))
+				goto repeat;
 		if (!grow_buffers(GFP_ATOMIC, size))
 			sleep_on(&buffer_wait);
 		goto repeat;
 	}
+
 	wait_on_buffer(bh);
 	if (bh->b_count || bh->b_size != size)
 		goto repeat;
@@ -920,7 +918,7 @@ static int try_to_free(struct buffer_head * bh, struct buffer_head ** bhp)
 	do {
 		if (!tmp)
 			return 0;
-		if (tmp->b_count || tmp->b_dirt || tmp->b_lock)
+		if (tmp->b_count || tmp->b_dirt || tmp->b_lock || tmp->b_wait)
 			return 0;
 		tmp = tmp->b_this_page;
 	} while (tmp != bh);

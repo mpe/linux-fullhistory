@@ -59,6 +59,7 @@
  *		Alan Cox	:	Added a couple of small NET2E timer fixes
  *		Charles Hedrick :	TCP fixes
  *		Toomas Tamm	:	TCP window fixes
+ *		Alan Cox	:	Small URG fix to rlogin ^C ack fight
  *
  *
  * To Fix:
@@ -1314,6 +1315,8 @@ tcp_read_urg(struct sock * sk, int nonblock,
 	do {
 		int amt;
 
+		if (before(sk->copied_seq+1, skb->h.th->seq))
+			break;
 		if (skb->h.th->urg && !skb->urg_used) {
 			if (skb->h.th->urg_ptr == 0) {
 				skb->h.th->urg_ptr = ntohs(skb->len);
@@ -1329,6 +1332,7 @@ tcp_read_urg(struct sock * sk, int nonblock,
 				skb->urg_used = 1;
 				sk->urg--;
 			}
+			cleanup_rbuf(sk);
 			release_sock(sk);
 			copied += amt;
 			return(copied);
@@ -1337,6 +1341,7 @@ tcp_read_urg(struct sock * sk, int nonblock,
 	} while(skb != sk->rqueue);
   }
 /*sk->urg = 0;*/
+  cleanup_rbuf(sk);
   release_sock(sk);
   return(0);
 }
