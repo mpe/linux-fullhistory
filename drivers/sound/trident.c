@@ -101,6 +101,7 @@
 #include <linux/ac97_codec.h>
 #include <asm/uaccess.h>
 #include <asm/hardirq.h>
+#include <linux/bitops.h>
 
 #include "trident.h"
 

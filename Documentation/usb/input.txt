@@ -185,24 +185,28 @@ programs could use a more reasonable interface, for example evdev.c
 	crw-r--r--   1 root     root      13,  33 Mar 29 00:41 mouse1
 	crw-r--r--   1 root     root      13,  34 Mar 29 00:41 mouse2
 	crw-r--r--   1 root     root      13,  35 Apr  1 10:50 mouse3
+	...
+	...
+	crw-r--r--   1 root     root      13,  62 Apr  1 10:50 mouse30
+	crw-r--r--   1 root     root      13,  63 Apr  1 10:50 mice
 
-and so on, up to mouse31. Each is assigned to a single mouse or digitizer,
-unless CONFIG_INPUT_MOUSEDEV_MIX is set. In that case all mice and
-digitizers share a single character device, mouse0, and even when none are
-connected, mouse0 is present. This is useful for hotplugging USB mice, so
-that programs can open the device even when no mice are present.
+Each 'mouse' device is assigned to a single mouse or digitizer, except the last
+one - 'mice'. This single character device is shared by all mice and
+digitizers, and even if none are connected, the device is present.  This is
+useful for hotplugging USB mice, so that programs can open the device even when
+no mice are present.
 
   CONFIG_INPUT_MOUSEDEV_SCREEN_[XY] in the kernel configuration are the size
 of your screen (in pixels) in XFree86. This is needed if you want to use
 your digitizer in X, because it's movement is sent to X via a virtual PS/2
-mouse.
+mouse. These values won't be used if you use a mouse only.
 
   Mousedev.c will generate either PS/2, ImPS/2 (microsoft intellimouse) or
 GenPS/2 (genius netmouse/netscroll) protocols, depending on what the program
-wishes. You can set GPM and X to any of these. You'll need ImPS/2 if you
-want to make use of a wheel on a USB mouse and GenPS/2 if you want to use
-extra (up to 5) buttons. I'm not sure how much is GenPS/2 supported in X,
-though.
+reading the data wishes. You can set GPM and X to any of these. You'll need
+ImPS/2 if you want to make use of a wheel on a USB mouse and GenPS/2 if you
+want to use extra (up to 5) buttons. I'm not sure how much is GenPS/2 supported
+in X, though.
 
 3.2.3 joydev.c
 ~~~~~~~~~~~~~~
@@ -216,6 +220,7 @@ though. As soon as any USB joystick is connected, it can be accessed in
 	crw-r--r--   1 root     root      13,   1 Apr  1 10:50 js1
 	crw-r--r--   1 root     root      13,   2 Apr  1 10:50 js2
 	crw-r--r--   1 root     root      13,   3 Apr  1 10:50 js3
+	...
 
 And so on up to js31.
 
@@ -236,6 +241,7 @@ independent.
 	crw-r--r--   1 root     root      13,  65 Apr  1 10:50 event1
 	crw-r--r--   1 root     root      13,  66 Apr  1 10:50 event2
 	crw-r--r--   1 root     root      13,  67 Apr  1 10:50 event3
+	...
 
 3. Contacts
 ~~~~~~~~~~~

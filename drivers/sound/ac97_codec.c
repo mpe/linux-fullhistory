@@ -34,6 +34,7 @@
 #include <linux/kernel.h>
 #include <linux/string.h>
 #include <linux/errno.h>
+#include <linux/bitops.h>
 #include <linux/ac97_codec.h>
 #include <asm/uaccess.h>
 

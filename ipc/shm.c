@@ -740,8 +740,9 @@ static int newseg (key_t key, const char *name, int namelen,
 	if (shm_tot + numpages >= shm_ctlall)
 		return -ENOSPC;
 
-	if (!(shp = seg_alloc(numpages, namelen ? namelen : SHM_FMT_LEN + 1)))
-		return -ENOMEM;
+	shp = seg_alloc(numpages, namelen ? namelen : SHM_FMT_LEN + 1);
+	if (IS_ERR(shp))
+		return PTR_ERR(shp);
 	id = shm_addid(shp);
 	if(id == -1) {
 		seg_free(shp, 1);
@@ -1428,6 +1429,7 @@ static int shm_swap_core(struct shmid_kernel *shp, unsigned long idx, swp_entry_
 	if (page_count(page_map) != 1)
 		return RETRY;
 
+	lock_page(page_map);
 	if (!(page_map = prepare_highmem_swapout(page_map)))
 		return FAILED;
 	SHM_ENTRY (shp, idx) = swp_entry_to_pte(swap_entry);
@@ -1437,7 +1439,6 @@ static int shm_swap_core(struct shmid_kernel *shp, unsigned long idx, swp_entry_
 	   reading a not yet uptodate block from disk.
 	   NOTE: we just accounted the swap space reference for this
 	   swap cache page at __get_swap_page() time. */
-	lock_page(page_map);
 	add_to_swap_cache(*outpage = page_map, swap_entry);
 	return OKAY;
 }

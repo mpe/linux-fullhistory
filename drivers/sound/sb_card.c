@@ -40,6 +40,8 @@
  *  Thanks to Gaël Quéri and Alessandro Zummo for testing and fixes.
  *  Paul E. Laufer <pelaufer@csupomona.edu>
  *
+ * 06-05-2000 added another card. Daniel M. Newman <dmnewman@pobox.com>
+ *
  */
 
 #include <linux/config.h>
@@ -262,6 +264,11 @@ static struct {
 		ISAPNP_VENDOR('C','T','L'), ISAPNP_FUNCTION(0x0031),
 		0,0,0,0,
 		0,1,1,-1},
+       {"Sound Blaster 16",
+		ISAPNP_VENDOR('C','T','L'), ISAPNP_DEVICE(0x002a),
+		ISAPNP_VENDOR('C','T','L'), ISAPNP_FUNCTION(0x0031),
+		0,0,0,0,
+		0,1,1,-1},
 	{"Sound Blaster 16", 
 		ISAPNP_VENDOR('C','T','L'), ISAPNP_DEVICE(0x002b), 
 		ISAPNP_VENDOR('C','T','L'), ISAPNP_FUNCTION(0x0031),
@@ -435,6 +442,11 @@ static struct {
 		ISAPNP_VENDOR('@','X','@'), ISAPNP_FUNCTION(0x2001),
 		ISAPNP_VENDOR('@','H','@'), ISAPNP_FUNCTION(0x0001),
 		1,0,0,0},
+	{"Creative SB16 PnP", 
+		ISAPNP_VENDOR('C','T','L'), ISAPNP_DEVICE(0x002a), 
+		ISAPNP_VENDOR('C','T','L'), ISAPNP_FUNCTION(0x0031),
+		0,0,0,0,
+		0,1,1,-1},
 	{0}
 };
 

@@ -563,14 +563,10 @@ static volatile int main_running = 0;
 
 static __inline__ void run_main(void)
 {
-	unsigned long flags;
-	save_flags(flags);
-	cli();
 	if (!main_running) {
 		main_running = 1;
 		NCR5380_main();
 	}
-	restore_flags(flags);
 }
 
 #ifdef USLEEP
@@ -1224,7 +1220,6 @@ int NCR5380_queue_command(Scsi_Cmnd * cmd, void (*done) (Scsi_Cmnd *)) {
 	 * sense data is only guaranteed to be valid while the condition exists.
 	 */
 
-	cli();
 	if (!(hostdata->issue_queue) || (cmd->cmnd[0] == REQUEST_SENSE)) {
 		LIST(cmd, hostdata->issue_queue);
 		cmd->host_scribble = (unsigned char *) hostdata->issue_queue;

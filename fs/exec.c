@@ -379,8 +379,10 @@ static int exec_mmap(void)
 		struct mm_struct *active_mm = current->active_mm;
 
 		init_new_context(current, mm);
+		task_lock(current);
 		current->mm = mm;
 		current->active_mm = mm;
+		task_unlock(current);
 		activate_mm(active_mm, mm);
 		mm_release();
 		if (old_mm) {
@@ -413,7 +415,9 @@ static inline int make_private_signals(void)
 	spin_lock_init(&newsig->siglock);
 	atomic_set(&newsig->count, 1);
 	memcpy(newsig->action, current->sig->action, sizeof(newsig->action));
+	spin_lock_irq(&current->sigmask_lock);
 	current->sig = newsig;
+	spin_unlock_irq(&current->sigmask_lock);
 	return 0;
 }
 	
@@ -466,7 +470,6 @@ int flush_old_exec(struct linux_binprm * bprm)
 	/*
 	 * Make sure we have a private signal table
 	 */
-	task_lock(current);
 	oldsig = current->sig;
 	retval = make_private_signals();
 	if (retval) goto flush_failed;
@@ -505,16 +508,16 @@ int flush_old_exec(struct linux_binprm * bprm)
 			
 	flush_signal_handlers(current);
 	flush_old_files(current->files);
-	task_unlock(current);
 
 	return 0;
 
 mmap_failed:
+flush_failed:
+	spin_lock_irq(&current->sigmask_lock);
 	if (current->sig != oldsig)
 		kfree(current->sig);
-flush_failed:
 	current->sig = oldsig;
-	task_unlock(current);
+	spin_unlock_irq(&current->sigmask_lock);
 	return retval;
 }
 

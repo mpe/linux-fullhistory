@@ -397,7 +397,7 @@ static struct buffer_head * inode_getblk(struct inode * inode, long block,
 	int c = 1;
 	int lbcount = 0, b_off = 0, offset = 0;
 	Uint32 newblocknum, newblock;
-	char etype;
+	int etype;
 	int goal = 0, pgoal = UDF_I_LOCATION(inode).logicalBlockNum;
 	char lastblock = 0;
 
@@ -1885,7 +1885,7 @@ int udf_delete_aext(struct inode *inode, lb_addr nbloc, int nextoffset,
 	struct buffer_head *obh;
 	lb_addr obloc;
 	int oextoffset, adsize;
-	char type;
+	int type;
 	struct AllocExtDesc *aed;
 
 	if (!(nbh))

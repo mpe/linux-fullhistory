@@ -18,12 +18,12 @@
 
 /* Default values for tunable parameters first */
 
-#define I2O_LAN_MAX_BUCKETS_OUT 256
+#define I2O_LAN_MAX_BUCKETS_OUT 96
 #define I2O_LAN_BUCKET_THRESH	18	/* 9 buckets in one message */
 #define I2O_LAN_RX_COPYBREAK	200
 #define I2O_LAN_TX_TIMEOUT 	(1*HZ)
-#define I2O_LAN_TX_BATCH_MODE	1	/* 1=on, 0=off */
-#define I2O_LAN_EVENT_MASK	0	/* 0=None, 0xFFC00002=All */
+#define I2O_LAN_TX_BATCH_MODE	2	/* 2=automatic, 1=on, 0=off */
+#define I2O_LAN_EVENT_MASK	0;	/* 0=None, 0xFFC00002=All */
 
 /* LAN types */
 #define I2O_LAN_ETHERNET	0x0030
@@ -126,6 +126,7 @@ struct i2o_bucket_descriptor {
 struct i2o_lan_local {
 	u8 unit;
 	struct i2o_device *i2o_dev;
+
 	struct fddi_statistics stats;   /* see also struct net_device_stats */
 	unsigned short (*type_trans)(struct sk_buff *, struct net_device *);
 	atomic_t buckets_out;  		/* nbr of unused buckets on DDM */
@@ -133,7 +134,7 @@ struct i2o_lan_local {
 	u8 tx_count;  			/* packets in one TX message frame */
 	u16 tx_max_out;	   		/* DDM's Tx queue len */
 	u8 sgl_max;			/* max SGLs in one message frame */
-	u32 m;				/* IOP address of msg frame */
+	u32 m;				/* IOP address of the batch msg frame */
 
 	struct tq_struct i2o_batch_send_task;
 	int send_active;

@@ -345,7 +345,7 @@ struct task_struct {
 /* Thread group tracking */
    	u32 parent_exec_id;
    	u32 self_exec_id;
-/* Protection of (de-)allocation: mm, files, fs */
+/* Protection of (de-)allocation: mm, files, fs, tty */
 	spinlock_t alloc_lock;
 };
 

@@ -306,6 +306,7 @@ int proc_pid_stat(struct task_struct *task, char * buffer)
 	char state;
 	int res;
 	pid_t ppid;
+	int tty_nr;
 	struct mm_struct *mm;
 
 	state = *get_task_state(task);
@@ -332,10 +333,13 @@ int proc_pid_stat(struct task_struct *task, char * buffer)
 
 	collect_sigign_sigcatch(task, &sigign, &sigcatch);
 
+	task_lock(task);
 	if (task->tty)
 		tty_pgrp = task->tty->pgrp;
 	else
 		tty_pgrp = -1;
+	tty_nr = task->tty ? kdev_t_to_nr(task->tty->device) : 0;
+	task_unlock(task);
 
 	/* scale priority and nice values from timeslices to -20..20 */
 	/* to make it look like a "normal" Unix priority/nice value  */
@@ -356,7 +360,7 @@ int proc_pid_stat(struct task_struct *task, char * buffer)
 		ppid,
 		task->pgrp,
 		task->session,
-	        task->tty ? kdev_t_to_nr(task->tty->device) : 0,
+	        tty_nr,
 		tty_pgrp,
 		task->flags,
 		task->min_flt,

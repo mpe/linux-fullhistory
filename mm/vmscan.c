@@ -48,7 +48,6 @@ static int try_to_swap_out(struct mm_struct * mm, struct vm_area_struct* vma, un
 	if ((page-mem_map >= max_mapnr) || PageReserved(page))
 		goto out_failed;
 
-	mm->swap_cnt--;
 	/* Don't look at this pte if it's been accessed recently. */
 	if (pte_young(pte)) {
 		/*
@@ -77,6 +76,7 @@ static int try_to_swap_out(struct mm_struct * mm, struct vm_area_struct* vma, un
 		set_pte(page_table, swp_entry_to_pte(entry));
 drop_pte:
 		UnlockPage(page);
+		mm->swap_cnt--;
 		vma->vm_mm->rss--;
 		flush_tlb_page(vma, address);
 		__free_page(page);
@@ -142,6 +142,7 @@ drop_pte:
 		struct file *file = vma->vm_file;
 		if (file) get_file(file);
 		pte_clear(page_table);
+		mm->swap_cnt--;
 		vma->vm_mm->rss--;
 		flush_tlb_page(vma, address);
 		vmlist_access_unlock(vma->vm_mm);
@@ -173,6 +174,7 @@ drop_pte:
 	add_to_swap_cache(page, entry);
 
 	/* Put the swap entry into the pte after the page is in swapcache */
+	mm->swap_cnt--;
 	vma->vm_mm->rss--;
 	set_pte(page_table, swp_entry_to_pte(entry));
 	flush_tlb_page(vma, address);
@@ -362,7 +364,7 @@ static int swap_out(unsigned int priority, int gfp_mask)
 	 * Think of swap_cnt as a "shadow rss" - it tells us which process
 	 * we want to page out (always try largest first).
 	 */
-	counter = (nr_threads << 1) >> (priority >> 1);
+	counter = nr_threads / (priority+1);
 	if (counter < 1)
 		counter = 1;
 
@@ -423,14 +425,18 @@ out:
  * now we need this so that we can do page allocations
  * without holding the kernel lock etc.
  *
- * We want to try to free "count" pages, and we need to 
- * cluster them so that we get good swap-out behaviour. See
- * the "free_memory()" macro for details.
+ * We want to try to free "count" pages, and we want to 
+ * cluster them so that we get good swap-out behaviour.
+ *
+ * Don't try _too_ hard, though. We don't want to have bad
+ * latency.
  */
+#define FREE_COUNT	8
+#define SWAP_COUNT	8
 static int do_try_to_free_pages(unsigned int gfp_mask)
 {
 	int priority;
-	int count = SWAP_CLUSTER_MAX;
+	int count = FREE_COUNT;
 
 	/* Always trim SLAB caches when memory gets low. */
 	kmem_cache_reap(gfp_mask);
@@ -460,12 +466,27 @@ static int do_try_to_free_pages(unsigned int gfp_mask)
 			}
 		}
 
-		/* Then, try to page stuff out.. */
-		while (swap_out(priority, gfp_mask)) {
-			if (!--count)
-				goto done;
+		/*
+		 * Then, try to page stuff out..
+		 *
+		 * This will not actually free any pages (they get
+		 * put in the swap cache), so we must not count this
+		 * as a "count" success.
+		 */
+		{
+			int swap_count = SWAP_COUNT;
+			while (swap_out(priority, gfp_mask))
+				if (--swap_count < 0)
+					break;
 		}
 	} while (--priority >= 0);
+
+	/* Always end on a shrink_mmap.. */
+	while (shrink_mmap(0, gfp_mask)) {
+		if (!--count)
+			goto done;
+	}
+
 	return 0;
 
 done:

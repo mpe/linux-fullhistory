@@ -515,7 +515,7 @@ int ioctl_html(unsigned long arg)
 		msg[0] = NINE_WORD_MSG_SIZE|SGL_OFFSET_5;
 		msg[5] = 0x50000000|65536;
 		msg[7] = 0xD4000000|(kcmd.qlen);
-		msg[8] = virt_to_phys(query);
+		msg[8] = virt_to_bus(query);
 	}
 
 	token = i2o_post_wait(c, msg, 9*4, 10);
@@ -592,7 +592,7 @@ int ioctl_swdl(unsigned long arg)
 	msg[5]= swlen;
 	msg[6]= kxfer.sw_id;
 	msg[7]= (0xD0000000 | fragsize);
-	msg[8]= virt_to_phys(buffer);
+	msg[8]= virt_to_bus(buffer);
 
 //	printk("i2o_config: swdl frag %d/%d (size %d)\n", curfrag, maxfrag, fragsize);
 	status = i2o_post_wait(c, msg, sizeof(msg), 60);

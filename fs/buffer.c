@@ -2112,6 +2112,31 @@ out:
 }
 
 /*
+ * Sync all the buffers on one page..
+ *
+ * If we have old buffers that are locked, we'll
+ * wait on them, but we won't wait on the new ones
+ * we're writing out now.
+ *
+ * This all is required so that we can free up memory
+ * later.
+ */
+static void sync_page_buffers(struct buffer_head *bh)
+{
+	struct buffer_head * tmp;
+
+	tmp = bh;
+	do {
+		struct buffer_head *p = tmp;
+		tmp = tmp->b_this_page;
+		if (buffer_locked(p))
+			__wait_on_buffer(p);
+		else if (buffer_dirty(p))
+			ll_rw_block(WRITE, 1, &p);
+	} while (tmp != bh);
+}
+
+/*
  * Can the buffer be thrown out?
  */
 #define BUFFER_BUSY_BITS	((1<<BH_Dirty) | (1<<BH_Lock) | (1<<BH_Protected))
@@ -2130,16 +2155,15 @@ out:
  */
 int try_to_free_buffers(struct page * page)
 {
-	struct buffer_head * tmp, * p, * bh = page->buffers;
+	struct buffer_head * tmp, * bh = page->buffers;
 	int index = BUFSIZE_INDEX(bh->b_size);
-	int ret;
 
 	spin_lock(&lru_list_lock);
 	write_lock(&hash_table_lock);
 	spin_lock(&free_list[index].lock);
 	tmp = bh;
 	do {
-		p = tmp;
+		struct buffer_head *p = tmp;
 
 		tmp = tmp->b_this_page;
 		if (buffer_busy(p))
@@ -2169,19 +2193,18 @@ int try_to_free_buffers(struct page * page)
 	/* And free the page */
 	page->buffers = NULL;
 	__free_page(page);
-	ret = 1;
-out:
 	spin_unlock(&free_list[index].lock);
 	write_unlock(&hash_table_lock);
 	spin_unlock(&lru_list_lock);
-	return ret;
+	return 1;
 
 busy_buffer_page:
 	/* Uhhuh, start writeback so that we don't end up with all dirty pages */
-	if (buffer_dirty(p))
-		wakeup_bdflush(0);
-	ret = 0;
-	goto out;
+	spin_unlock(&free_list[index].lock);
+	write_unlock(&hash_table_lock);
+	spin_unlock(&lru_list_lock);	
+	sync_page_buffers(bh);
+	return 0;
 }
 
 /* ================== Debugging =================== */

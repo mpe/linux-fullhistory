@@ -121,6 +121,7 @@ static int proc_root_link(struct inode *inode, struct dentry **dentry, struct vf
 		*mnt = mntget(fs->rootmnt);
 		*dentry = dget(fs->root);
 		result = 0;
+		put_fs_struct(fs);
 	}
 	return result;
 }
@@ -258,18 +259,6 @@ static ssize_t proc_info_read(struct file * file, char * buf,
 	if (!(page = __get_free_page(GFP_KERNEL)))
 		return -ENOMEM;
 
-	/* FIXME: check that all proc_read function
-	 *	handle a dying task gracefully.
-	 *	The memory for the task structure
-	 *	won't be freed, we've called get_task_struct().
-	 */
-#if 0
-	if (!task->p_pptr) {
-		free_page(page);
-		return -EIO;
-	}
-#endif
-	
 	length = inode->u.proc_i.op.proc_read(task, (char*)page);
 
 	if (length < 0) {
@@ -446,18 +435,19 @@ static int proc_pid_readlink(struct dentry * dentry, char * buffer, int buflen)
 {
 	int error;
 	struct inode *inode = dentry->d_inode;
-	struct vfsmount *mnt;
+	struct dentry *de;
+	struct vfsmount *mnt = NULL;
 
 	error = proc_permission(inode, MAY_EXEC);
 	if (error)
 		goto out;
 
-	error = inode->u.proc_i.op.proc_get_link(inode, &dentry, &mnt);
+	error = inode->u.proc_i.op.proc_get_link(inode, &de, &mnt);
 	if (error)
 		goto out;
 
-	error = do_proc_readlink(dentry, mnt, buffer, buflen);
-	dput(dentry);
+	error = do_proc_readlink(de, mnt, buffer, buflen);
+	dput(de);
 	mntput(mnt);
 out:
 	return error;
@@ -521,6 +511,7 @@ static int proc_readfd(struct file * filp, void * dirent, filldir_t filldir)
 	unsigned int fd, pid, ino;
 	int retval;
 	char buf[NUMBUF];
+	struct files_struct * files;
 
 	retval = 0;
 	pid = p->pid;
@@ -537,12 +528,19 @@ static int proc_readfd(struct file * filp, void * dirent, filldir_t filldir)
 				goto out;
 			filp->f_pos++;
 		default:
+			task_lock(p);
+			files = p->files;
+			if (files)
+				atomic_inc(&files->count);
+			task_unlock(p);
+			if (!files)
+				goto out;
 			for (fd = filp->f_pos-2;
-			     p->p_pptr && p->files && fd < p->files->max_fds;
+			     fd < files->max_fds;
 			     fd++, filp->f_pos++) {
 				unsigned int i,j;
 
-				if (!fcheck_task(p, fd))
+				if (!fcheck_files(files, fd))
 					continue;
 
 				j = NUMBUF;
@@ -556,8 +554,8 @@ static int proc_readfd(struct file * filp, void * dirent, filldir_t filldir)
 				ino = fake_ino(pid, PROC_PID_FD_DIR + fd);
 				if (filldir(dirent, buf+j, NUMBUF-j, fd+2, ino) < 0)
 					break;
-
 			}
+			put_files_struct(files);
 	}
 out:
 	return retval;
@@ -713,16 +711,20 @@ static struct dentry *proc_lookupfd(struct inode * dir, struct dentry * dentry)
 	inode = proc_pid_make_inode(dir->i_sb, task, PROC_PID_FD_DIR+fd);
 	if (!inode)
 		goto out;
-	/* FIXME */
+	task_lock(task);
 	files = task->files;
-	if (!files)	/* can we ever get here if that's the case? */
+	if (files)
+		atomic_inc(&files->count);
+	task_unlock(task);
+	if (!files)
 		goto out_unlock;
 	read_lock(&files->file_lock);
-	file = inode->u.proc_i.file = fcheck_task(task, fd);
+	file = inode->u.proc_i.file = fcheck_files(files, fd);
 	if (!file)
 		goto out_unlock2;
 	get_file(file);
 	read_unlock(&files->file_lock);
+	put_files_struct(files);
 	inode->i_op = &proc_pid_link_inode_operations;
 	inode->i_size = 64;
 	inode->i_mode = S_IFLNK;
@@ -736,6 +738,7 @@ static struct dentry *proc_lookupfd(struct inode * dir, struct dentry * dentry)
 	return NULL;
 
 out_unlock2:
+	put_files_struct(files);
 	read_unlock(&files->file_lock);
 out_unlock:
 	iput(inode);

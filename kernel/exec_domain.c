@@ -110,9 +110,16 @@ void __set_personality(unsigned long personality)
 	if (it) {
 		if (atomic_read(&current->fs->count) != 1) {
 			struct fs_struct *new = copy_fs_struct(current->fs);
-			if (!new)
+			struct fs_struct *old;
+			if (!new) {
+				put_exec_domain(it);
 				return;
-			put_fs_struct(xchg(&current->fs,new));
+			}
+			task_lock(current);
+			old = current->fs;
+			current->fs = new;
+			task_unlock(current);
+			put_fs_struct(old);
 		}
 		/*
 		 * At that point we are guaranteed to be the sole owner of

@@ -272,7 +272,7 @@ struct page * __alloc_pages(zonelist_t *zonelist, unsigned long order)
 		int gfp_mask = zonelist->gfp_mask;
 		if (!try_to_free_pages(gfp_mask)) {
 			if (!(gfp_mask & __GFP_HIGH))
-				return NULL;
+				goto fail;
 		}
 	}
 
@@ -291,6 +291,7 @@ struct page * __alloc_pages(zonelist_t *zonelist, unsigned long order)
 			return page;
 	}
 
+fail:
 	/* No luck.. */
 	return NULL;
 }

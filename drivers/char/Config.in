@@ -204,6 +204,9 @@ if [ "$CONFIG_VIDEO_DEV" != "n" ]; then
       dep_tristate '  BT848 Video For Linux' CONFIG_VIDEO_BT848 $CONFIG_VIDEO_DEV $CONFIG_PCI $CONFIG_I2C_ALGOBIT
    fi
    dep_tristate '  Mediavision Pro Movie Studio Video For Linux' CONFIG_VIDEO_PMS $CONFIG_VIDEO_DEV
+   if [ "$CONFIG_ALL_PPC" = "y" ]; then
+      dep_tristate '  PlanB Video-In on PowerMac' CONFIG_VIDEO_PLANB $CONFIG_VIDEO_DEV
+   fi
    if [ "$CONFIG_PARPORT" != "n" ]; then
       dep_tristate '  Quickcam BW Video For Linux' CONFIG_VIDEO_BWQCAM $CONFIG_VIDEO_DEV $CONFIG_PARPORT
       if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then

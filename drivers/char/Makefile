@@ -23,7 +23,7 @@ obj-		:=
 
 SUB_DIRS     := 
 MOD_SUB_DIRS := $(SUB_DIRS)
-ALL_SUB_DIRS := $(SUB_DIRS) ftape joystick pcmcia
+ALL_SUB_DIRS := $(SUB_DIRS) ftape joystick pcmcia rio
 
 #
 # This file contains the font map for the default (hardware) font
@@ -44,6 +44,13 @@ KEYMAP   =defkeymap.o
 KEYBD    =pc_keyb.o
 CONSOLE  =console.o
 SERIAL   =serial.o
+
+ifeq ($(ARCH),s390)
+  KEYMAP   =
+  KEYBD    =
+  CONSOLE  =
+  SERIAL   =
+endif
 
 ifeq ($(ARCH),m68k)
    ifdef CONFIG_AMIGA
@@ -127,11 +134,41 @@ obj-$(CONFIG_SYNCLINK) += synclink.o
 obj-$(CONFIG_N_HDLC) += n_hdlc.o
 obj-$(CONFIG_SPECIALIX) += specialix.o
 obj-$(CONFIG_AMIGA_BUILTIN_SERIAL) += amiserial.o
+obj-$(CONFIG_SX) += sx.o
 
+
+# If either is in the kernel, generic_serial goes in the kernel, and
+# the module is no longer required. The "in kernel" case is last to be
+# able to override the module case....  This is an example of the new
+# "makefile automatically figures out the dependencies"....  -- REW
+
+GS = n
+ifeq ($(CONFIG_SX),m)
+  GS = m
+endif
+ifeq ($(CONFIG_RIO),m)
+  GS = m 
+endif
 ifeq ($(CONFIG_SX),y)
-obj-y += sx.o generic_serial.o
+  GS = y 
+endif
+ifeq ($(CONFIG_RIO),y)
+  GS = y 
+endif
+obj-$(GS) += generic_serial.o
+
+
+
+
+ifeq ($(CONFIG_RIO),y)
+obj-y += rio/rio.o  generic_serial.o
+SUB_DIRS += rio
+MOD_SUB_DIRS += rio
 else
-  obj-$(CONFIG_SX) += sx.o
+  ifeq ($(CONFIG_RIO),m)
+  obj-m += generic_serial.o
+  MOD_SUB_DIRS += rio
+  endif
 endif
 
 obj-$(CONFIG_ATIXL_BUSMOUSE) += atixlmouse.o

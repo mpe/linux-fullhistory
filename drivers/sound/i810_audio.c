@@ -924,7 +924,10 @@ static void i810_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 
 	status = inl(card->iobase + GLOB_STA);
 	if(!(status & INT_MASK)) 
+	{
+		spin_unlock(&card->lock);
 		return;  /* not for us */
+	}
 
 //	printk("Interrupt %X: ", status);
 	if(status & (INT_PO|INT_PI|INT_MC))

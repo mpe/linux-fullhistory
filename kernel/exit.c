@@ -182,24 +182,32 @@ static inline void close_files(struct files_struct * files)
 
 extern kmem_cache_t *files_cachep;  
 
+void put_files_struct(struct files_struct *files)
+{
+	if (atomic_dec_and_test(&files->count)) {
+		close_files(files);
+		/*
+		 * Free the fd and fdset arrays if we expanded them.
+		 */
+		if (files->fd != &files->fd_array[0])
+			free_fd_array(files->fd, files->max_fds);
+		if (files->max_fdset > __FD_SETSIZE) {
+			free_fdset(files->open_fds, files->max_fdset);
+			free_fdset(files->close_on_exec, files->max_fdset);
+		}
+		kmem_cache_free(files_cachep, files);
+	}
+}
+
 static inline void __exit_files(struct task_struct *tsk)
 {
-	struct files_struct * files = xchg(&tsk->files, NULL);
+	struct files_struct * files = tsk->files;
 
 	if (files) {
-		if (atomic_dec_and_test(&files->count)) {
-			close_files(files);
-			/*
-			 * Free the fd and fdset arrays if we expanded them.
-			 */
-			if (files->fd != &files->fd_array[0])
-				free_fd_array(files->fd, files->max_fds);
-			if (files->max_fdset > __FD_SETSIZE) {
-				free_fdset(files->open_fds, files->max_fdset);
-				free_fdset(files->close_on_exec, files->max_fdset);
-			}
-			kmem_cache_free(files_cachep, files);
-		}
+		task_lock(tsk);
+		tsk->files = NULL;
+		task_unlock(tsk);
+		put_files_struct(files);
 	}
 }
 
@@ -232,7 +240,9 @@ static inline void __exit_fs(struct task_struct *tsk)
 	struct fs_struct * fs = tsk->fs;
 
 	if (fs) {
+		task_lock(tsk);
 		tsk->fs = NULL;
+		task_unlock(tsk);
 		__put_fs_struct(fs);
 	}
 }
@@ -247,11 +257,9 @@ static inline void __exit_sighand(struct task_struct *tsk)
 	struct signal_struct * sig = tsk->sig;
 
 	if (sig) {
-		unsigned long flags;
-
-		spin_lock_irqsave(&tsk->sigmask_lock, flags);
+		spin_lock_irq(&tsk->sigmask_lock);
 		tsk->sig = NULL;
-		spin_unlock_irqrestore(&tsk->sigmask_lock, flags);
+		spin_unlock_irq(&tsk->sigmask_lock);
 		if (atomic_dec_and_test(&sig->count))
 			kfree(sig);
 	}
@@ -302,7 +310,10 @@ static inline void __exit_mm(struct task_struct * tsk)
 		atomic_inc(&mm->mm_count);
 		mm_release();
 		if (mm != tsk->active_mm) BUG();
+		/* more a memory barrier than a real lock */
+		task_lock(tsk);
 		tsk->mm = NULL;
+		task_unlock(tsk);
 		enter_lazy_tlb(mm, current, smp_processor_id());
 		mmput(mm);
 	}
@@ -429,7 +440,6 @@ fake_volatile:
 #ifdef CONFIG_BSD_PROCESS_ACCT
 	acct_process(code);
 #endif
-	task_lock(tsk);
 	sem_exit();
 	__exit_mm(tsk);
 	__exit_files(tsk);
@@ -439,7 +449,6 @@ fake_volatile:
 	tsk->state = TASK_ZOMBIE;
 	tsk->exit_code = code;
 	exit_notify();
-	task_unlock(tsk);
 	put_exec_domain(tsk->exec_domain);
 	if (tsk->binfmt && tsk->binfmt->module)
 		__MOD_DEC_USE_COUNT(tsk->binfmt->module);

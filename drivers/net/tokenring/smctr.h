@@ -1382,7 +1382,8 @@ routine */
  * Definitions for the field:
  * bic_type (Bus interface chip type)
  */
-#define BIC_NO_CHIP             0x0000  /* Bus interface chip not implemented */#define BIC_583_CHIP            0x0001  /* 83C583 bus interface chip */
+#define BIC_NO_CHIP             0x0000  /* Bus interface chip not implemented */
+#define BIC_583_CHIP            0x0001  /* 83C583 bus interface chip */
 #define BIC_584_CHIP            0x0002  /* 83C584 bus interface chip */
 #define BIC_585_CHIP            0x0003  /* 83C585 bus interface chip */
 #define BIC_593_CHIP            0x0004  /* 83C593 bus interface chip */
@@ -1486,7 +1487,8 @@ routine */
 
 #define MAX_8023_SIZE           1500    /* Max 802.3 size of frame. */
 #define DEFAULT_ERX_VALUE       4       /* Number of 16-byte blocks for 790B early Rx. */
-#define DEFAULT_ETX_VALUE       32      /* Number of bytes for 790B early Tx. */#define DEFAULT_TX_RETRIES      3       /* Number of transmit retries */
+#define DEFAULT_ETX_VALUE       32      /* Number of bytes for 790B early Tx. */
+#define DEFAULT_TX_RETRIES      3       /* Number of transmit retries */
 #define LPBK_FRAME_SIZE         1024    /* Default loopback frame for Rx calibration test. */
 #define MAX_LOOKAHEAD_SIZE      252     /* Max lookahead size for ethernet. */
 

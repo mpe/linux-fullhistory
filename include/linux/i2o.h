@@ -142,7 +142,6 @@ struct i2o_controller
 	void (*bus_disable)(struct i2o_controller *c);
 
 	void *page_frame;		/* Message buffers */
-	int inbound_size;		/* Inbound queue size */
 };
 
 /*
@@ -304,8 +303,6 @@ extern int i2o_query_table(int, struct i2o_controller *, int, int, int, void *,
 extern int i2o_clear_table(struct i2o_controller *, int, int); 
 extern int i2o_row_add_table(struct i2o_controller *, int, int, int, void *,
 			     int);
-extern int i2o_row_delete_table(struct i2o_controller *, int, int, int, void *,
-				int);
 extern int i2o_issue_params(int, struct i2o_controller *, int, void *,
 			    int, void *, int); 
 
@@ -401,13 +398,12 @@ extern int i2o_delete_controller(struct i2o_controller *);
 
 #define I2O_PRIVATE_MSG			0xFF
 
-/*
- *	Init Outbound Q status 
- */
-#define I2O_CMD_OUTBOUND_INIT_IN_PROGRESS	0x01
-#define I2O_CMD_OUTBOUND_INIT_REJECTED		0x02
-#define I2O_CMD_OUTBOUND_INIT_FAILED		0x03
-#define I2O_CMD_OUTBOUND_INIT_COMPLETE		0x04
+/* Command status values  */
+
+#define I2O_CMD_IN_PROGRESS	0x01
+#define I2O_CMD_REJECTED	0x02
+#define I2O_CMD_FAILED		0x03
+#define I2O_CMD_COMPLETED	0x04
 
 /* I2O API function return values */
 
@@ -490,6 +486,25 @@ extern int i2o_delete_controller(struct i2o_controller *);
 #define I2O_DSC_DEVICE_BUSY                    0x001B
 #define I2O_DSC_DEVICE_NOT_AVAILABLE           0x001C
 
+/* FailureStatusCodes, Table 3-3 Message Failure Codes */
+
+#define I2O_FSC_TRANSPORT_SERVICE_SUSPENDED             0x81
+#define I2O_FSC_TRANSPORT_SERVICE_TERMINATED            0x82
+#define I2O_FSC_TRANSPORT_CONGESTION                    0x83
+#define I2O_FSC_TRANSPORT_FAILURE                       0x84
+#define I2O_FSC_TRANSPORT_STATE_ERROR                   0x85
+#define I2O_FSC_TRANSPORT_TIME_OUT                      0x86
+#define I2O_FSC_TRANSPORT_ROUTING_FAILURE               0x87
+#define I2O_FSC_TRANSPORT_INVALID_VERSION               0x88
+#define I2O_FSC_TRANSPORT_INVALID_OFFSET                0x89
+#define I2O_FSC_TRANSPORT_INVALID_MSG_FLAGS             0x8A
+#define I2O_FSC_TRANSPORT_FRAME_TOO_SMALL               0x8B
+#define I2O_FSC_TRANSPORT_FRAME_TOO_LARGE               0x8C
+#define I2O_FSC_TRANSPORT_INVALID_TARGET_ID             0x8D
+#define I2O_FSC_TRANSPORT_INVALID_INITIATOR_ID          0x8E
+#define I2O_FSC_TRANSPORT_INVALID_INITIATOR_CONTEXT     0x8F
+#define I2O_FSC_TRANSPORT_UNKNOWN_FAILURE               0xFF
+
 /* Device Claim Types */
 #define	I2O_CLAIM_PRIMARY					0x01000000
 #define	I2O_CLAIM_MANAGEMENT					0x02000000
@@ -526,7 +541,7 @@ extern int i2o_delete_controller(struct i2o_controller *);
 #define MSG_64BIT_CNTXT	0x0200
 #define MSG_MULTI_TRANS	0x1000
 #define MSG_FAIL	0x2000
-#define MSG_LAST	0x4000
+#define MSG_FINAL	0x4000
 #define MSG_REPLY	0x8000
 
  /* minimum size msg */

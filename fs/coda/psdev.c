@@ -35,6 +35,7 @@
 #include <linux/poll.h>
 #include <linux/init.h>
 #include <linux/list.h>
+#include <linux/smp_lock.h>
 #include <asm/io.h>
 #include <asm/segment.h>
 #include <asm/system.h>
@@ -144,7 +145,9 @@ static ssize_t coda_psdev_write(struct file *file, const char *buf,
 		        return -EFAULT;
 
 		/* what downcall errors does Venus handle ? */
+		lock_kernel();
 		error = coda_downcall(hdr.opcode, dcbuf, sb);
+		unlock_kernel();
 
 		if ( error) {
 		        printk("psdev_write: coda_downcall error: %d\n", 

@@ -7,16 +7,12 @@
 
 extern void _fput(struct file *);
 
-/*
- * Check whether the specified task has the fd open. Since the task
- * may not have a files_struct, we must test for p->files != NULL.
- */
-static inline struct file * fcheck_task(struct task_struct *p, unsigned int fd)
+static inline struct file * fcheck_files(struct files_struct *files, unsigned int fd)
 {
 	struct file * file = NULL;
 
-	if (fd < p->files->max_fds)
-		file = p->files->fd[fd];
+	if (fd < files->max_fds)
+		file = files->fd[fd];
 	return file;
 }
 
@@ -99,5 +95,7 @@ static inline void fd_install(unsigned int fd, struct file * file)
 	if (result)
 		fput(result);
 }
+
+void put_files_struct(struct files_struct *fs);
 
 #endif /* __LINUX_FILE_H */

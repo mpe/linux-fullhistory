@@ -276,7 +276,7 @@ static int __init probe_trix_sb(struct address_info *hw_config)
 
 	int tmp;
 	unsigned char conf;
-	static char irq_translate[] = {
+	static signed char irq_translate[] = {
 		-1, -1, -1, 0, 1, 2, -1, 3
 	};
 
@@ -346,7 +346,7 @@ static void __init attach_trix_mpu(struct address_info *hw_config)
 static int __init probe_trix_mpu(struct address_info *hw_config)
 {
 	unsigned char conf;
-	static char irq_bits[] = {
+	static int irq_bits[] = {
 		-1, -1, -1, 1, 2, 3, -1, 4, -1, 5
 	};
 

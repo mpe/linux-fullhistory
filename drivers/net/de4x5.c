@@ -4356,12 +4356,11 @@ srom_command(u_int command, u_long addr)
 static void
 srom_address(u_int command, u_long addr, u_char offset)
 {
-    int i;
-    char a;
+    int i, a;
     
-    a = (char)(offset << 2);
+    a = offset << 2;
     for (i=0; i<6; i++, a <<= 1) {
-	srom_latch(command | ((a < 0) ? DT_IN : 0), addr);
+	srom_latch(command | ((a & 0x80) ? DT_IN : 0), addr);
     }
     de4x5_us_delay(1);
     

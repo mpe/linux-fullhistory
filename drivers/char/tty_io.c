@@ -1384,7 +1384,9 @@ init_dev_done:
 	    current->leader &&
 	    !current->tty &&
 	    tty->session == 0) {
+	    	task_lock(current);
 		current->tty = tty;
+		task_unlock(current);
 		current->tty_old_pgrp = 0;
 		tty->session = current->session;
 		tty->pgrp = current->pgrp;
@@ -1594,7 +1596,9 @@ static int tiocsctty(struct tty_struct *tty, int arg)
 		} else
 			return -EPERM;
 	}
+	task_lock(current);
 	current->tty = tty;
+	task_unlock(current);
 	current->tty_old_pgrp = 0;
 	tty->session = current->session;
 	tty->pgrp = current->pgrp;
@@ -1761,7 +1765,9 @@ int tty_ioctl(struct inode * inode, struct file * file,
 				return -ENOTTY;
 			if (current->leader)
 				disassociate_ctty(0);
+			task_lock(current);
 			current->tty = NULL;
+			task_unlock(current);
 			return 0;
 		case TIOCSCTTY:
 			return tiocsctty(tty, arg);
@@ -1858,8 +1864,9 @@ void do_SAK( struct tty_struct *tty)
 			send_sig(SIGKILL, p, 1);
 		else if (p->files) {
 			read_lock(&p->files->file_lock);
+			/* FIXME: p->files could change */
 			for (i=0; i < p->files->max_fds; i++) {
-				filp = fcheck_task(p, i);
+				filp = fcheck_files(p->files, i);
 				if (filp && (filp->f_op == &tty_fops) &&
 				    (filp->private_data == tty)) {
 					send_sig(SIGKILL, p, 1);

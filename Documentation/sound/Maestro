@@ -30,7 +30,8 @@ Driver OSS Behavior
 --------------------
 
 This OSS driver exports /dev/mixer and /dev/dsp to applications, which
-mostly adhere to the OSS spec.
+mostly adhere to the OSS spec.   This driver doesn't register itself
+with /dev/sndstat, so don't expect information to appear there.
 
 The /dev/dsp device exported behaves almost as expected.  Playback is
 supported in all the various lovely formats.  8/16bit stereo/mono from

@@ -643,10 +643,10 @@ static int __init probe_mad16(struct address_info *hw_config)
 static void __init attach_mad16(struct address_info *hw_config)
 {
 
-	static char     interrupt_bits[12] = {
+	static signed char     interrupt_bits[12] = {
 		-1, -1, -1, -1, -1, -1, -1, 0x08, -1, 0x10, 0x18, 0x20
 	};
-	char bits;
+	signed char bits;
 
 	static char     dma_bits[4] = {
 		1, 2, 0, 3

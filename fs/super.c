@@ -949,7 +949,7 @@ static int do_umount(struct vfsmount *mnt, int umount_root, int flags)
 	}
 
 	if (mnt->mnt_instances.next != mnt->mnt_instances.prev) {
-		if (sb->s_type->fs_flags && FS_SINGLE)
+		if (sb->s_type->fs_flags & FS_SINGLE)
 			put_filesystem(sb->s_type);
 		mntput(mnt);
 		remove_vfsmnt(mnt);

@@ -1344,7 +1344,7 @@ void __init identify_cpu(struct cpuinfo_x86 *c)
 			/* Names for the Pentium II/Celeron processors 
 			   detectable only by also checking the cache size.
 			   Dixon is NOT a Celeron. */
-			if (cpu_models[i].x86 == 6) {
+			if (c->x86 == 6) {
 				switch (c->x86_model) {
 					case 5:
 						if (c->x86_cache_size == 0)

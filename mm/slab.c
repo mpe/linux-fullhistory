@@ -682,6 +682,9 @@ kmem_cache_create(const char *name, size_t size, size_t offset,
 	size_t		left_over;
 	size_t		align;
 
+#if SLAB_DEBUG_SUPPORT
+	flags |= SLAB_POISON;
+#endif
 	/* Sanity checks... */
 #if	SLAB_MGMT_CHECKS
 	if (!name) {

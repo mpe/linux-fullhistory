@@ -25,11 +25,17 @@
  *		Independent queues per IOP
  *		Support for dynamic device creation/deletion
  *		Code cleanup	
- *    Support for larger I/Os through merge* functions 
- *       (taken from DAC960 driver)
+ *    		Support for larger I/Os through merge* functions 
+ *       	(taken from DAC960 driver)
+ *	Boji T Kannanthanam:
+ *		Reduced the timeout during RAID 5 creation. 
+ *		This is to prevent race condition when a RAID volume
+ *		is created and immediately deleted.
  *
  *	To do:
  *		Serial number scanning to find duplicates for FC multipathing
+ *		Remove the random timeout in the code needed for RAID 5
+ *			volume creation.
  */
 
 #include <linux/major.h>
@@ -1376,7 +1382,7 @@ void i2ob_new_device(struct i2o_controller *c, struct i2o_device *d)
 	 * so we just sleep for a little while and let it do it's thing
 	 */
 	current->state = TASK_INTERRUPTIBLE;
-	schedule_timeout(10*HZ);
+	schedule_timeout(3*HZ);
 
 	if(i2o_claim_device(d, &i2o_block_handler))
 	{

@@ -98,7 +98,7 @@ static DECLARE_MUTEX(tmp_buf_sem);
 
 /*   baud index mappings from linux defns to isi */
 
-static char linuxb_to_isib[] = {
+static signed char linuxb_to_isib[] = {
 	-1, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 11, 13, 15, 16, 17,     
 	18, 19
 };

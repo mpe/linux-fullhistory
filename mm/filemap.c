@@ -236,9 +236,7 @@ repeat:
 int shrink_mmap(int priority, int gfp_mask)
 {
 	int ret = 0, count;
-	LIST_HEAD(young);
 	LIST_HEAD(old);
-	LIST_HEAD(forget);
 	struct list_head * page_lru, * dispose;
 	struct page * page = NULL;
 	
@@ -334,7 +332,6 @@ int shrink_mmap(int priority, int gfp_mask)
 			goto cache_unlock_continue;
 		}
 
-		dispose = &forget;
 		printk(KERN_ERR "shrink_mmap: unknown LRU page!\n");
 
 cache_unlock_continue:
@@ -359,7 +356,6 @@ made_buffer_progress:
 	nr_lru_pages--;
 
 out:
-	list_splice(&young, &lru_cache);
 	list_splice(&old, lru_cache.prev);
 
 	spin_unlock(&pagemap_lru_lock);

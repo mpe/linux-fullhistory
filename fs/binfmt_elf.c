@@ -261,12 +261,14 @@ static unsigned long load_elf_interp(struct elfhdr * interp_elf_ex,
 	    if (interp_elf_ex->e_type == ET_EXEC || load_addr_set)
 	    	elf_type |= MAP_FIXED;
 
+	    down(&current->mm->mmap_sem);
 	    map_addr = do_mmap(interpreter,
 			    load_addr + ELF_PAGESTART(vaddr),
 			    eppnt->p_filesz + ELF_PAGEOFFSET(eppnt->p_vaddr),
 			    elf_prot,
 			    elf_type,
 			    eppnt->p_offset - ELF_PAGEOFFSET(eppnt->p_vaddr));
+	    up(&current->mm->mmap_sem);
 	    if (map_addr > -1024UL) /* Real error */
 		goto out_close;
 
@@ -612,11 +614,13 @@ static int load_elf_binary(struct linux_binprm * bprm, struct pt_regs * regs)
 			elf_flags |= MAP_FIXED;
 		}
 
+		down(&current->mm->mmap_sem);
 		error = do_mmap(bprm->file, ELF_PAGESTART(load_bias + vaddr),
 		                (elf_ppnt->p_filesz +
 		                ELF_PAGEOFFSET(elf_ppnt->p_vaddr)),
 		                elf_prot, elf_flags, (elf_ppnt->p_offset -
 		                ELF_PAGEOFFSET(elf_ppnt->p_vaddr)));
+		up(&current->mm->mmap_sem);
 
 		if (!load_addr_set) {
 			load_addr_set = 1;
@@ -726,8 +730,10 @@ static int load_elf_binary(struct linux_binprm * bprm, struct pt_regs * regs)
 		   Since we do not have the power to recompile these, we
 		   emulate the SVr4 behavior.  Sigh.  */
 		/* N.B. Shouldn't the size here be PAGE_SIZE?? */
+		down(&current->mm->mmap_sem);
 		error = do_mmap(NULL, 0, 4096, PROT_READ | PROT_EXEC,
 				MAP_FIXED | MAP_PRIVATE, 0);
+		up(&current->mm->mmap_sem);
 	}
 
 #ifdef ELF_PLAT_INIT
