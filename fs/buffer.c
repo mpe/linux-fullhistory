@@ -1113,14 +1113,14 @@ __asm__ __volatile__("rep ; movsl": \
  * etc. This also allows us to optimize memory usage by sharing code pages
  * and filesystem buffers..
  */
-unsigned long bread_page(unsigned long address, dev_t dev, int b[], int size, int share)
+unsigned long bread_page(unsigned long address, dev_t dev, int b[], int size, int no_share)
 {
 	struct buffer_head * bh[8];
 	unsigned long where;
 	int i, j;
 
-	if (share) {
-		where = try_to_share_buffers(address,dev,b,size);
+	if (!no_share) {
+		where = try_to_share_buffers(address, dev, b, size);
 		if (where)
 			return where;
 	}
@@ -1132,14 +1132,14 @@ unsigned long bread_page(unsigned long address, dev_t dev, int b[], int size, in
 	}
 	read_buffers(bh,i);
 	where = address;
- 	for (i=0, j=0; j<PAGE_SIZE ; i++, j += size,address += size) {
+ 	for (i=0, j=0; j<PAGE_SIZE ; i++, j += size, where += size) {
 		if (bh[i]) {
 			if (bh[i]->b_uptodate)
-				COPYBLK(size, (unsigned long) bh[i]->b_data,address);
+				COPYBLK(size, (unsigned long) bh[i]->b_data, where);
 			brelse(bh[i]);
 		}
 	}
-	return where;
+	return address;
 }
 
 /*

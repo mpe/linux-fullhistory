@@ -941,8 +941,8 @@ static int plip_config(struct device *dev, struct ifmap *map)
 
 static int plip_ioctl(struct device *dev, struct ifreq *rq)
 {
-	struct net_local *nl=(struct net_local *)dev->priv;
-	struct plipconf *pc=(struct plipconf *)rq->ifr_data;
+	struct net_local *nl = (struct net_local *) dev->priv;
+	struct plipconf *pc = (struct plipconf *) &rq->ifr_data;
 	
 	switch(pc->pcmd)
 	{

@@ -263,11 +263,17 @@ int copy_page_tables(struct task_struct * tsk)
 				*new_page_table = swap_duplicate(pg);
 				continue;
 			}
-			if ((pg & (PAGE_RW | PAGE_COW)) == (PAGE_RW | PAGE_COW))
-				pg &= ~PAGE_RW;
-			*new_page_table = pg;
-			if (mem_map[MAP_NR(pg)] & MAP_PAGE_RESERVED)
+			if (pg > high_memory || (mem_map[MAP_NR(pg)] & MAP_PAGE_RESERVED)) {
+				*new_page_table = pg;
 				continue;
+			}
+			if (pg & PAGE_COW)
+				pg &= ~PAGE_RW;
+			if (in_swap_cache(pg)) {
+				swap_cache_invalidate(pg);
+				pg |= PAGE_DIRTY;
+			}
+			*new_page_table = pg;
 			*old_page_table = pg;
 			mem_map[MAP_NR(pg)]++;
 		}
@@ -730,9 +736,6 @@ static int try_to_share(unsigned long to_address, struct vm_area_struct * to_are
 /* if it is private, it must be clean to be shared */
 	if ((from_area->vm_page_prot & PAGE_COW) && (from & PAGE_DIRTY))
 		return 0;
-/* the swap caching doesn't really handle shared pages.. */
-	if (in_swap_cache(from))
-		return 0;
 /* is the page reasonable at all? */
 	if (from >= high_memory)
 		return 0;
@@ -748,14 +751,26 @@ static int try_to_share(unsigned long to_address, struct vm_area_struct * to_are
 		return 0;
 /* do we copy? */
 	if (newpage) {
+		if (in_swap_cache(from)) { /* implies PAGE_DIRTY */
+			if (from_area->vm_page_prot & PAGE_COW)
+				return 0;
+		}
 		copy_page((from & PAGE_MASK), newpage);
 		*(unsigned long *) to_page = newpage | to_area->vm_page_prot;
 		return 1;
 	}
-/* just share them.. */
+/* do a final swap-cache test before sharing them.. */
+	if (in_swap_cache(from)) {
+		if (from_area->vm_page_prot & PAGE_COW)
+			return 0;
+		from |= PAGE_DIRTY;
+		*(unsigned long *) from_page = from;
+		swap_cache_invalidate(from);
+		invalidate();
+	}
 	mem_map[MAP_NR(from)]++;
 /* fill in the 'to' field, checking for COW-stuff */
-	to = (from & PAGE_MASK) | to_area->vm_page_prot;
+	to = (from & (PAGE_MASK | PAGE_DIRTY)) | to_area->vm_page_prot;
 	if (to & PAGE_COW)
 		to &= ~PAGE_RW;
 	*(unsigned long *) to_page = to;
@@ -764,7 +779,7 @@ static int try_to_share(unsigned long to_address, struct vm_area_struct * to_are
 		return 1;
 	if (!(from_area->vm_page_prot & PAGE_COW))
 		return 1;
-/* ok, need to mark it read-only, so invalidate aany possible old TB entry */
+/* ok, need to mark it read-only, so invalidate any possible old TB entry */
 	from &= ~PAGE_RW;
 	*(unsigned long *) from_page = from;
 	invalidate();
@@ -923,13 +938,24 @@ void do_no_page(struct vm_area_struct * vma, unsigned long address,
 	}
 	++vma->vm_task->mm->maj_flt;
 	++vma->vm_task->mm->rss;
-	page = vma->vm_ops->nopage(vma, address, page, error_code);
+	prot = vma->vm_page_prot;
+	/*
+	 * The fourth argument is "no_share", which tells the low-level code
+	 * to copy, not share the page even if sharing is possible.  It's
+	 * essentially an early COW detection ("moo at 5 AM").
+	 */
+	page = vma->vm_ops->nopage(vma, address, page, (error_code & PAGE_RW) && (prot & PAGE_COW));
 	if (share_page(vma, address, error_code, 0)) {
 		free_page(page);
 		return;
 	}
-	prot = vma->vm_page_prot;
-	if ((prot & PAGE_COW) && mem_map[MAP_NR(page)] > 1)
+	/*
+	 * This silly early PAGE_DIRTY setting removes a race
+	 * due to the bad i386 page protection.
+	 */
+	if (error_code & PAGE_RW) {
+		prot |= PAGE_DIRTY;	/* can't be COW-shared: see "no_share" above */
+	} else if ((prot & PAGE_COW) && mem_map[MAP_NR(page)] > 1)
 		prot &= ~PAGE_RW;
 	if (put_page(vma->vm_task, page, address, prot))
 		return;
@@ -1251,25 +1277,29 @@ void si_meminfo(struct sysinfo *val)
 }
 
 
-/* This handles a generic mmap of a disk file */
+/*
+ * This handles a generic mmap of a disk file.
+ */
 static unsigned long file_mmap_nopage(struct vm_area_struct * area, unsigned long address,
-	unsigned long page, int error_code)
+	unsigned long page, int no_share)
 {
 	struct inode * inode = area->vm_inode;
 	unsigned int block;
 	int nr[8];
-	int i, j;
-	int prot = area->vm_page_prot;
+	int i, *p;
 
 	address &= PAGE_MASK;
 	block = address - area->vm_start + area->vm_offset;
 	block >>= inode->i_sb->s_blocksize_bits;
-
-	for (i=0, j=0; i< PAGE_SIZE ; j++, block++, i += inode->i_sb->s_blocksize)
-		nr[j] = bmap(inode,block);
-	if (error_code & PAGE_RW)
-		prot |= PAGE_RW | PAGE_DIRTY;
-	return bread_page(page, inode->i_dev, nr, inode->i_sb->s_blocksize, !(error_code & PAGE_RW));
+	i = PAGE_SIZE >> inode->i_sb->s_blocksize_bits;
+	p = nr;
+	do {
+		*p = bmap(inode,block);
+		i--;
+		block++;
+		p++;
+	} while (i > 0);
+	return bread_page(page, inode->i_dev, nr, inode->i_sb->s_blocksize, no_share);
 }
 
 struct vm_operations_struct file_mmap = {

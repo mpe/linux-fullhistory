@@ -5,7 +5,7 @@
  *            and for "no-sound" interfaces like Lasermate and the
  *            Panasonic CI-101P.
  *
- *  NOTE:     This is release 2.3.
+ *  NOTE:     This is release 2.4.
  *            It works with my SbPro & drive CR-521 V2.11 from 2/92
  *            and with the new CR-562-B V0.75 on a "naked" Panasonic
  *            CI-101P interface. And vice versa. 
@@ -117,6 +117,9 @@
  *  2.3  Let "door lock" and "eject" live together.
  *       Implemented "close tray" (done automatically during open).
  *
+ *  2.4  Use different names for device registering.
+ *       
+ *
  *  TODO
  *
  *     disk change detection
@@ -192,7 +195,7 @@
 
 #include "blk.h"
 
-#define VERSION "2.3 Eberhard Moenkeberg <emoenke@gwdg.de>"
+#define VERSION "2.4 Eberhard Moenkeberg <emoenke@gwdg.de>"
 
 #define SBPCD_DEBUG
 
@@ -397,6 +400,18 @@ static char *str_sb = "SoundBlaster";
 static char *str_lm = "LaserMate";
 static char *str_sp = "SPEA";
 char *type;
+#if !(SBPCD_ISSUE-1)
+static char *major_name="sbpcd";
+#endif
+#if !(SBPCD_ISSUE-2)
+static char *major_name="sbpcd2";
+#endif
+#if !(SBPCD_ISSUE-3)
+static char *major_name="sbpcd3";
+#endif
+#if !(SBPCD_ISSUE-4)
+static char *major_name="sbpcd4";
+#endif
 
 /*==========================================================================*/
 
@@ -2840,7 +2855,6 @@ static int sbpcd_ioctl(struct inode *inode, struct file *file, u_int cmd,
 /*==========================================================================*/
 /*
  *  Take care of the different block sizes between cdrom and Linux.
- *  When Linux gets variable block sizes this will probably go away.
  */
 static void sbp_transfer(void)
 {
@@ -3551,7 +3565,7 @@ unsigned long SBPCD_INIT(u_long mem_start, u_long mem_end)
       OUT(MIXER_data,0xCC); /* one nibble per channel */
     }
   
-  if (register_blkdev(MAJOR_NR, "sbpcd", &sbpcd_fops) != 0)
+  if (register_blkdev(MAJOR_NR, major_name, &sbpcd_fops) != 0)
     {
       printk("SBPCD: Can't get MAJOR %d for Matsushita CDROM\n", MAJOR_NR);
 #if PRINTK_BUG

@@ -27,7 +27,7 @@
  * Fill in the supplied page for mmap
  */
 static unsigned long nfs_file_mmap_nopage(struct vm_area_struct * area,
-	unsigned long address, unsigned long page, int error_code)
+	unsigned long address, unsigned long page, int no_share)
 {
 	struct inode * inode = area->vm_inode;
 	unsigned int clear;

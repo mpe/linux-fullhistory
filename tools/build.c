@@ -32,7 +32,9 @@
 #include <linux/a.out.h>
 
 #define MINIX_HEADER 32
-#define GCC_HEADER 1024
+
+#define N_MAGIC_OFFSET 1024
+static int GCC_HEADER = sizeof(struct exec);
 
 #define SYS_SIZE DEF_SYSSIZE
 
@@ -188,7 +190,10 @@ int main(int argc, char ** argv)
 		die("Unable to open 'system'");
 	if (read(id,buf,GCC_HEADER) != GCC_HEADER)
 		die("Unable to read header of 'system'");
-	if (N_MAGIC(*ex) != ZMAGIC)
+	if (N_MAGIC(*ex) == ZMAGIC) {
+		GCC_HEADER = N_MAGIC_OFFSET;
+		lseek(id, GCC_HEADER, SEEK_SET);
+	} else if (N_MAGIC(*ex) != QMAGIC)
 		die("Non-GCC header of 'system'");
 	fprintf(stderr,"System is %d kB (%d kB code, %d kB data and %d kB bss)\n",
 		(ex->a_text+ex->a_data+ex->a_bss)/1024,

@@ -21,7 +21,7 @@ Space.o: Space.c ../../include/linux/autoconf.h
 net_init.o: ../../include/linux/autoconf.h
 
 ifdef CONFIG_SK_G16
-NETDRV_OBJS := $(NETDRV_OBJS) net.a(sk_g16.o)
+NETDRV_OBJS := $(NETDRV_OBJS) sk_g16.o
 endif
 
 ifdef CONFIG_WD80x3
@@ -53,7 +53,7 @@ hp.o:	hp.c CONFIG
 endif
 
 ifdef CONFIG_HPLAN_PLUS
-NETDRV_OBJS := $(NETDRV_OBJS) net.a(hp-plus.o)
+NETDRV_OBJS := $(NETDRV_OBJS) hp-plus.o
 CONFIG_8390 = CONFIG_8390
 endif
 
@@ -104,7 +104,7 @@ de600.o: de600.c CONFIG
 	$(CC) $(CPPFLAGS) $(CFLAGS) $(DE600_OPTS) -c $<
 	
 ifdef CONFIG_DE620
-NETDRV_OBJS := $(NETDRV_OBJS) net.a(de620.o)
+NETDRV_OBJS := $(NETDRV_OBJS) de620.o
 endif
 de620.o: de620.c CONFIG
 	$(CC) $(CPPFLAGS) $(CFLAGS) $(DE620_OPTS) -c $<
@@ -155,7 +155,7 @@ NETDRV_OBJS := $(NETDRV_OBJS) ac3200.o
 CONFIG_8390 = CONFIG_8390
 endif
 ifdef CONFIG_APRICOT
-NETDRV_OBJS := $(NETDRV_OBJS) net.a(apricot.o)
+NETDRV_OBJS := $(NETDRV_OBJS) apricot.o
 endif
 
 ifdef CONFIG_8390

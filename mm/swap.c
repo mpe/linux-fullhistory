@@ -344,21 +344,13 @@ static inline int try_to_swap_out(unsigned long * table_ptr)
 	}
 
         if ((entry = find_in_swap_cache(page)))  {
-		*table_ptr |= PAGE_DIRTY;
 		if (mem_map[MAP_NR(page)] != 1) {
+			*table_ptr |= PAGE_DIRTY;
+			printk("Aiee.. duplicated cached swap-cache entry\n");
 			return 0;
 		}
-		if (!entry)  {
-			if (!(entry = get_swap_page()))  {
-				return 0;
-			}
-			*table_ptr = entry;
-			invalidate();
-			write_swap_page(entry, (char *) (page & PAGE_MASK));
-		} else  {
-			*table_ptr = entry;
-			invalidate();
-		}
+		*table_ptr = entry;
+		invalidate();
 		free_page(page & PAGE_MASK);
 		return 1;
 	} 
@@ -901,12 +893,14 @@ asmlinkage int sys_swapon(const char * specialfile)
 	error = namei(specialfile,&swap_inode);
 	if (error)
 		goto bad_swap;
+	p->swap_file = swap_inode;
 	error = -EBUSY;
 	if (swap_inode->i_count != 1)
 		goto bad_swap;
 	error = -EINVAL;
 	if (S_ISBLK(swap_inode->i_mode)) {
 		p->swap_device = swap_inode->i_rdev;
+		p->swap_file = NULL;
 		iput(swap_inode);
 		error = -ENODEV;
 		if (!p->swap_device)
@@ -918,9 +912,7 @@ asmlinkage int sys_swapon(const char * specialfile)
 			if (p->swap_device == swap_info[i].swap_device)
 				goto bad_swap;
 		}
-	} else if (S_ISREG(swap_inode->i_mode))
-		p->swap_file = swap_inode;
-	else
+	} else if (!S_ISREG(swap_inode->i_mode))
 		goto bad_swap;
 	p->swap_lockmap = (unsigned char *) get_free_page(GFP_USER);
 	if (!p->swap_lockmap) {

@@ -18,7 +18,9 @@
 #include <a.out.h>
 #include <linux/config.h>
 
-#define GCC_HEADER 1024
+#define N_MAGIC_OFFSET 1024
+
+static int GCC_HEADER = sizeof(struct exec);
 
 #define STRINGIFY(x) #x
 
@@ -49,7 +51,10 @@ int main(int argc, char ** argv)
 		die("Unable to open 'system'");
 	if (read(id,buf,GCC_HEADER) != GCC_HEADER)
 		die("Unable to read header of 'system'");
-	if (N_MAGIC(*ex) != ZMAGIC)
+	if (N_MAGIC(*ex) == ZMAGIC) {
+		GCC_HEADER = N_MAGIC_OFFSET;
+		lseek(id, GCC_HEADER, SEEK_SET);
+	} else if (N_MAGIC(*ex) != QMAGIC)
 		die("Non-GCC header of 'system'");
 
 	sz = N_SYMOFF(*ex) - GCC_HEADER + 4;	/* +4 to get the same result than tools/build */

@@ -444,7 +444,7 @@ extern void ll_rw_swap_file(int rw, int dev, unsigned int *b, int nb, char *buff
 extern void brelse(struct buffer_head * buf);
 extern void set_blocksize(dev_t dev, int size);
 extern struct buffer_head * bread(dev_t dev, int block, int size);
-extern unsigned long bread_page(unsigned long addr,dev_t dev,int b[],int size,int share);
+extern unsigned long bread_page(unsigned long addr,dev_t dev,int b[],int size,int no_share);
 extern struct buffer_head * breada(dev_t dev,int block, int size, 
 				   unsigned int pos, unsigned int filesize);
 extern void put_super(dev_t dev);

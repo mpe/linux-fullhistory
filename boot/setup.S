@@ -14,8 +14,8 @@
 ! Move PS/2 aux init code to psaux.c
 ! (troyer@saifr00.cfsat.Honeywell.COM) 03Oct92
 !
-! some changes and additional features by Christoph Niemann, March 1993
-! (niemann@rubdv15.ETDV.Ruhr-Uni-Bochum.De)
+! some changes and additional features by Christoph Niemann,
+! March 1993/June 1994 (Christoph.Niemann@linux.org)
 !
 
 ! NOTE! These had better be the same as in bootsect.s!
@@ -97,9 +97,11 @@ novga:	mov	[14],ax
 	mov	ds,ax
 	lds	si,[4*0x41]
 	mov	ax,#INITSEG
+	push	ax
 	mov	es,ax
 	mov	di,#0x0080
 	mov	cx,#0x10
+	push	cx
 	cld
 	rep
 	movsb
@@ -109,11 +111,9 @@ novga:	mov	[14],ax
 	xor	ax,ax		! clear ax
 	mov	ds,ax
 	lds	si,[4*0x46]
-	mov	ax,#INITSEG
-	mov	es,ax
+	pop	cx
+	pop	es
 	mov	di,#0x0090
-	mov	cx,#0x10
-	cld
 	rep
 	movsb
 
@@ -159,7 +159,7 @@ no_psmouse:
 	cld			! 'direction'=0, movs moves forward
 do_move:
 	mov	es,ax		! destination segment
-	add	ax,#0x100
+	inc	ah		! instead of add ax,#0x100
 	cmp	ax,#0x9000
 	jz	end_move
 	mov	ds,bx		! source segment
@@ -246,7 +246,8 @@ end_move:
 ! Note that the short jump isn't strictly needed, althought there are
 ! reasons why it might be a good idea. It won't hurt in any case.
 !
-	mov	ax,#0x0001	! protected mode (PE) bit
+	xor	ax,ax
+	inc	ax		! protected mode (PE) bit
 	lmsw	ax		! This is it!
 	jmp	flush_instr
 flush_instr:
@@ -394,33 +395,89 @@ vga28:
 	mov	ax,#0x501c	! return 80x28
 	ret
 /* svga modes */
+!
+!	test for presence of an S3 VGA chip. The algorithm was taken
+!	from the SuperProbe package of XFree86 1.2.1
+!	report bugs to Christoph.Niemann@linux.org
+!
 svga:   cld
-        lea     si,id9GXE	! Check for the #9GXE (jyanowit@orixa.mtholyoke.edu,thanks dlm40629@uxa.cso.uiuc.edu)
-        mov     di,#0x49	! id string is at c000:049
-        mov     cx,#0x11	! length of "Graphics Power By"
-        repe
-        cmpsb
-        jne     of1280
-is9GXE:	lea 	si,dsc9GXE	! table of descriptions of video modes for BIOS
-	lea	di,mo9GXE	! table of sizes of video modes for my BIOS
+	mov	cx,#0x0f35	! we store some constants in cl/ch
+	mov	dx,#0x03d4
+	movb	al,#0x38
+	call	inidx
+	mov	bh,al		! store current value of CRT-register 0x38
+	mov	ax,#0x0038
+	call	outidx		! disable writing to special regs
+	movb	al,cl		! check wether we can write special reg 0x35
+	call	inidx
+	movb	bl,al		! save the current value of CRT reg 0x35
+	andb	al,#0xf0	! clear bits 0-3
+	movb	ah,al
+	movb	al,cl		! and write it to CRT reg 0x35
+	call	outidx
+	call	inidx		! now read it back
+	andb	al,ch		! clear the upper 4 bits
+	jz	s3_2		! the first test failed. But we have a
+	movb	ah,bl		! second chance
+	mov	al,cl
+	call	outidx
+	jmp	s3_1		! do the other tests
+s3_2:	mov	ax,cx		! load ah with 0xf and al with 0x35
+	orb	ah,bl		! set the upper 4 bits of ah with the orig value
+	call	outidx		! write ...
+	call	inidx		! ... and reread 
+	andb	al,cl		! turn off the upper 4 bits
+	push	ax
+	movb	ah,bl		! restore old value in register 0x35
+	movb	al,cl
+	call	outidx
+	pop	ax
+	cmp	al,ch		! setting lower 4 bits was successful => bad
+	je	no_s3		! writing is allowed => this is not an S3
+s3_1:	mov	ax,#0x4838	! allow writing to special regs by putting
+	call	outidx		! magic number into CRT-register 0x38
+	movb	al,cl		! check wether we can write special reg 0x35
+	call	inidx
+	movb	bl,al
+	andb	al,#0xf0
+	movb	ah,al
+	movb	al,cl
+	call	outidx
+	call	inidx
+	andb	al,ch
+	jnz	no_s3		! no, we can't write => no S3
+	mov	ax,cx
+	orb	ah,bl
+	call	outidx
+	call	inidx
+	andb	al,ch
+	push	ax
+	movb	ah,bl		! restore old value in register 0x35
+	movb	al,cl
+	call	outidx
+	pop	ax
+	cmp	al,ch
+	jne	no_s31		! writing not possible => no S3
+	movb	al,#0x30
+	call	inidx		! now get the S3 id ...
+	lea	di,idS3
+	mov	cx,#0x10
+	repne
+	scasb
+	je	no_s31
+	lea 	si,dsc_S3	! table of descriptions of video modes for BIOS
+	lea	di,mo_S3	! table of sizes of video modes for my BIOS
+	movb	ah,bh
+	movb	al,#0x38
+	call	outidx		! restore old value of CRT register 0x38
 	br	selmod		! go ask for video mode
-of1280:	cld	
-	lea	si,idf1280	! Check for Orchid F1280 (dingbat@diku.dk)
-	mov	di,#0x10a	! id string is at c000:010a
-	mov	cx,#0x21	! length
-	repe
-	cmpsb
-	jne	nf1280	
-isVRAM:	lea	si,dscf1280
-	lea	di,mof1280
-	br	selmod
-nf1280:	lea	si,idVRAM
-	mov	di,#0x10a
-	mov	cx,#0x0c
-	repe
-	cmpsb
-	je	isVRAM
-	cld
+no_s3:	movb	al,#0x35	! restore CRT register 0x35
+	movb	ah,bl
+	call	outidx
+no_s31:	movb	ah,bh
+	movb	al,#0x38
+	call	outidx		! restore old value of CRT register 0x38
+
 	lea 	si,idati		! Check ATI 'clues'
 	mov	di,#0x31
 	mov 	cx,#0x09
@@ -710,6 +767,29 @@ gotmode:	xor	ah,ah
 	pop	ds
 	ret
 
+! Routine to write al into a VGA-register that is
+! accessed via an index register
+!
+! dx contains the address of the index register
+! al contains the index
+! ah contains the value to write to the data register (dx + 1)
+!
+! no registers are changed
+
+outidx:	out	dx,al
+	push	ax
+	mov	al,ah
+	inc	dx
+	out	dx,al
+	dec	dx
+	pop	ax
+	ret
+inidx:	out	dx,al
+	inc	dx
+	in	al,dx
+	dec	dx
+	ret
+
 ! Routine to print asciiz-string at DS:SI
 
 prtstr:	lodsb
@@ -817,9 +897,8 @@ idcandt:	.byte	0xa5
 idgenoa:	.byte	0x77, 0x00, 0x99, 0x66
 idparadise:	.ascii	"VGA="
 idoakvga:	.ascii  "OAK VGA "
-idf1280:	.ascii	"Orchid Technology Fahrenheit 1280"
-id9GXE:		.ascii  "Graphics Power By"
-idVRAM:		.ascii	"Stealth VRAM"
+idS3:		.byte	0x81, 0x82, 0x90, 0x91, 0x92, 0x93, 0x94, 0x95
+		.byte	0xa0, 0xa1, 0xa2, 0xa3, 0xa4, 0xa5, 0xa8, 0xb0
 
 ! Manufacturer:	  Numofmodes+2:	Mode:
 ! Number of modes is the number of chip-specific svga modes plus the extended
@@ -836,8 +915,7 @@ motrident:	.byte	0x09,	0x50, 0x51, 0x52, 0x57, 0x58, 0x59, 0x5a
 motseng:	.byte	0x07,	0x26, 0x2a, 0x23, 0x24, 0x22
 movideo7:	.byte	0x08,	0x40, 0x43, 0x44, 0x41, 0x42, 0x45
 mooakvga:	.byte   0x08,   0x00, 0x07, 0x4e, 0x4f, 0x50, 0x51
-mo9GXE:		.byte	0x04,	0x54, 0x55
-mof1280:	.byte	0x04,	0x54, 0x55
+mo_S3:		.byte	0x04,	0x54, 0x55
 mounknown:	.byte	0x02
 
 !			msb = Cols lsb = Rows:
@@ -855,8 +933,7 @@ dsctrident:	.word 	0x5032, 0x501c, 0x501e, 0x502b, 0x503c, 0x8419, 0x841e, 0x842
 dsctseng:	.word	0x5032, 0x501c, 0x503c, 0x6428, 0x8419, 0x841c, 0x842c
 dscvideo7:	.word	0x5032, 0x501c, 0x502b, 0x503c, 0x643c, 0x8419, 0x842c, 0x841c
 dscoakvga:	.word   0x5032, 0x501c, 0x2819, 0x5019, 0x503c, 0x843c, 0x8419, 0x842b
-dscf1280:	.word	0x5032, 0x501c, 0x842b, 0x8419
-dsc9GXE:	.word	0x5032, 0x501c, 0x842b, 0x8419
+dsc_S3:		.word	0x5032, 0x501c, 0x842b, 0x8419
 dsunknown:	.word	0x5032, 0x501c
 modesave:	.word	SVGA_MODE
 

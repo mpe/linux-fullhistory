@@ -1,6 +1,6 @@
 VERSION = 1
 PATCHLEVEL = 1
-SUBLEVEL = 33
+SUBLEVEL = 34
 
 all:	Version zImage
 
@@ -79,9 +79,21 @@ endif
 AS86	=as86 -0 -a
 LD86	=ld86 -0
 
+# 
+# Set these to indicate how to link it..
+#
+# -zmagic:
+#
+#LOWLDFLAGS	= -Ttext 0x1000
+#HIGHLDFLAGS	= -Ttext 0x100000
+#
+# -qmagic (we need to remove the 32 byte header for bootup purposes)
+#
+LOWLDFLAGS	=-qmagic -Ttext 0xfe0
+HIGHLDFLAGS	=-qmagic -Ttext 0xfffe0
+
 AS	=as
 LD	=ld
-LDFLAGS	=#-qmagic
 HOSTCC	=gcc
 CC	=gcc -D__KERNEL__ -I$(TOPDIR)/include
 MAKE	=make
@@ -156,7 +168,7 @@ init/main.o: $(CONFIGURE) init/main.c
 	$(CC) $(CFLAGS) $(PROFILING) -c -o $*.o $<
 
 tools/system:	boot/head.o init/main.o tools/version.o linuxsubdirs
-	$(LD) $(LDFLAGS) -Ttext 1000 boot/head.o init/main.o tools/version.o \
+	$(LD) $(LOWLDFLAGS) boot/head.o init/main.o tools/version.o \
 		$(ARCHIVES) \
 		$(FILESYSTEMS) \
 		$(DRIVERS) \
@@ -201,7 +213,7 @@ zlilo: $(CONFIGURE) zImage
 	if [ -x /sbin/lilo ]; then /sbin/lilo; else /etc/lilo/install; fi
 
 tools/zSystem:	boot/head.o init/main.o tools/version.o linuxsubdirs
-	$(LD) $(LDFLAGS) -Ttext 100000 boot/head.o init/main.o tools/version.o \
+	$(LD) $(HIGHLDFLAGS) boot/head.o init/main.o tools/version.o \
 		$(ARCHIVES) \
 		$(FILESYSTEMS) \
 		$(DRIVERS) \

@@ -228,9 +228,14 @@ extern void shm_no_page (ulong *);
 /* swap cache stuff (in swap.c) */
 extern unsigned long * swap_cache;
 
-extern inline unsigned long in_swap_cache (unsigned long addr)
+extern inline unsigned long in_swap_cache(unsigned long addr)
 {
 	return swap_cache[addr >> PAGE_SHIFT]; 
+}
+
+extern inline void swap_cache_invalidate(unsigned long addr)
+{
+	swap_cache[addr >> PAGE_SHIFT] = 0;
 }
 
 #endif

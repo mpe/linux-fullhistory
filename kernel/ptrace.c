@@ -157,7 +157,7 @@ static struct vm_area_struct * find_vma(struct task_struct * tsk, unsigned long 
 	struct vm_area_struct * vma;
 
 	addr &= PAGE_MASK;
-	for (vma = current->mm->mmap ; ; vma = vma->vm_next) {
+	for (vma = tsk->mm->mmap ; ; vma = vma->vm_next) {
 		if (!vma)
 			return NULL;
 		if (vma->vm_end > addr)
