@@ -27,7 +27,7 @@ struct rand_pool_info {
 
 void rand_initialize(void);
 void rand_initialize_irq(int irq);
-void rand_initialize_blkdev(int irq);
+void rand_initialize_blkdev(int irq, int mode);
 
 void add_keyboard_randomness(unsigned char scancode);
 void add_mouse_randomness(__u32 mouse_data);

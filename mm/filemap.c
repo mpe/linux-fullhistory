@@ -84,9 +84,9 @@ int shrink_mmap(int priority, unsigned long limit)
 	while (priority-- > 0) {
 		if (page->inode) {
 			unsigned age = page->age;
-			/* if the page is shared, we juvenate it slightly */
+			/* if the page is shared, we juvenate it */
 			if (page->count != 1)
-				age |= PAGE_AGE_VALUE;
+				age |= PAGE_AGE_VALUE << 1;
 			page->age = age >> 1;
 			if (age <= PAGE_AGE_VALUE/2) {
 				remove_page_from_hash_queue(page);
@@ -127,25 +127,171 @@ unsigned long page_unuse(unsigned long page)
 }
 
 /*
- * This should be a low-level fs-specific function (ie
- * inode->i_op->readpage).
+ * Update a page cache copy, when we're doing a "write()" system call
+ * See also "update_vm_cache()".
  */
-static int readpage(struct inode * inode, unsigned long offset, char * page)
+void update_vm_cache(struct inode * inode, unsigned long pos, const char * buf, int count)
 {
-	int *p, nr[PAGE_SIZE/512];
-	int i;
+	struct page * page;
 
-	i = PAGE_SIZE >> inode->i_sb->s_blocksize_bits;
-	offset >>= inode->i_sb->s_blocksize_bits;
-	p = nr;
-	do {
-		*p = inode->i_op->bmap(inode, offset);
-		i--;
-		offset++;
-		p++;
-	} while (i > 0);
-	bread_page((unsigned long) page, inode->i_dev, nr, inode->i_sb->s_blocksize);
+	page = find_page(inode, pos & PAGE_MASK);
+	if (page) {
+		unsigned long addr;
+
+		page->count++;
+		if (!page->uptodate)
+			sleep_on(&page->wait);
+		addr = page_address(page);
+		memcpy((void *) ((pos & ~PAGE_MASK) + addr), buf, count);
+		free_page(addr);
+	}
+}
+
+/*
+ * Find a cached page and wait for it to become up-to-date, return
+ * the page address.
+ *
+ * If no cached page can be found, create one using the supplied
+ * new page instead (and return zero to indicate that we used the
+ * supplied page in doing so).
+ */
+static unsigned long fill_page(struct inode * inode, unsigned long offset, unsigned long newpage)
+{
+	struct page * page;
+
+	page = find_page(inode, offset);
+	if (page) {
+		if (!page->uptodate)
+			sleep_on(&page->wait);
+		return page_address(page);
+	}
+	page = mem_map + MAP_NR(newpage);
+	page->count++;
+	page->uptodate = 0;
+	page->error = 0;
+	page->offset = offset;
+	add_page_to_inode_queue(inode, page);
+	add_page_to_hash_queue(inode, page);
+	inode->i_op->readpage(inode, page);
+	page->uptodate = 1;
+	wake_up(&page->wait);
 	return 0;
+}
+
+/*
+ * Try to read ahead in the file. "page_cache" is a potentially free page
+ * that we could use for the cache (if it is 0 we can try to create one,
+ * this is all overlapped with the IO on the previous page finishing anyway)
+ */
+static unsigned long try_to_read_ahead(struct inode * inode, unsigned long offset, unsigned long page_cache)
+{
+	if (!page_cache)
+		page_cache = __get_free_page(GFP_KERNEL);
+	offset = (offset + PAGE_SIZE) & PAGE_MASK;
+	/*
+	 * read-ahead is not implemented yet, but this is
+	 * where we should start..
+	 */
+	return page_cache;
+}
+
+/*
+ * This is a generic file read routine, and uses the
+ * inode->i_op->readpage() function for the actual low-level
+ * stuff.
+ */
+int generic_file_read(struct inode * inode, struct file * filp, char * buf, int count)
+{
+	int read = 0;
+	unsigned long pos;
+	unsigned long page_cache = 0;
+
+	if (count <= 0)
+		return 0;
+
+	pos = filp->f_pos;
+	do {
+		struct page *page;
+		unsigned long offset, addr, nr;
+
+		if (pos >= inode->i_size)
+			break;
+		offset = pos & ~PAGE_MASK;
+		nr = PAGE_SIZE - offset;
+		/*
+		 * Try to find the data in the page cache..
+		 */
+		page = find_page(inode, pos & PAGE_MASK);
+		if (page)
+			goto found_page;
+
+		/*
+		 * Ok, it wasn't cached, so we need to create a new
+		 * page..
+		 */
+		if (!page_cache) {
+			page_cache = __get_free_page(GFP_KERNEL);
+			if (!page_cache) {
+				if (!read)
+					read = -ENOMEM;
+				break;
+			}
+		}
+
+		/*
+		 * That could have slept, so we need to check again..
+		 */
+		if (pos >= inode->i_size)
+			break;
+		page = find_page(inode, pos & PAGE_MASK);
+		if (page)
+			goto found_page;
+
+		/*
+		 * Ok, add the new page to the hash-queues...
+		 */
+		page = mem_map + MAP_NR(page_cache);
+		page_cache = 0;
+		page->count++;
+		page->uptodate = 0;
+		page->error = 0;
+		page->offset = pos & PAGE_MASK;
+		add_page_to_inode_queue(inode, page);
+		add_page_to_hash_queue(inode, page);
+
+		/* 
+		 * And start IO on it..
+		 * (this should be asynchronous, but currently isn't)
+		 */
+		inode->i_op->readpage(inode, page);
+
+found_page:
+		addr = page_address(page);
+		if (nr > count)
+			nr = count;
+		if (!page->uptodate) {
+			page_cache = try_to_read_ahead(inode, offset, page_cache);
+			if (!page->uptodate)
+				sleep_on(&page->wait);
+		}
+		if (nr > inode->i_size - pos)
+			nr = inode->i_size - pos;
+		memcpy_tofs(buf, (void *) (addr + offset), nr);
+		free_page(addr);
+		buf += nr;
+		pos += nr;
+		read += nr;
+		count -= nr;
+	} while (count);
+
+	filp->f_pos = pos;
+	if (page_cache)
+		free_page(page_cache);
+	if (!IS_RDONLY(inode)) {
+		inode->i_atime = CURRENT_TIME;
+		inode->i_dirt = 1;
+	}
+	return read;
 }
 
 /*
@@ -156,51 +302,36 @@ static int readpage(struct inode * inode, unsigned long offset, char * page)
 static unsigned long filemap_nopage(struct vm_area_struct * area, unsigned long address,
 	unsigned long page, int no_share)
 {
+	unsigned long offset;
 	struct inode * inode = area->vm_inode;
-	unsigned long new_page, old_page;
-	struct page *p;
+	unsigned long new_page;
 
-	address = (address & PAGE_MASK) - area->vm_start + area->vm_offset;
-	if (address >= inode->i_size && (area->vm_flags & VM_SHARED) && area->vm_mm == current->mm)
+	offset = (address & PAGE_MASK) - area->vm_start + area->vm_offset;
+	if (offset >= inode->i_size && (area->vm_flags & VM_SHARED) && area->vm_mm == current->mm)
 		send_sig(SIGBUS, current, 1);
-	p = find_page(inode, address);
-	if (p)
-		goto old_page_exists;
-	new_page = 0;
+
+	new_page = fill_page(inode, offset, page);
+	if (new_page) {
+		if (no_share) {
+			memcpy((void *) page, (void *) new_page, PAGE_SIZE);
+			free_page(new_page);
+			return page;
+		}
+		free_page(page);
+		return new_page;
+	}
+
 	if (no_share) {
 		new_page = __get_free_page(GFP_USER);
 		if (!new_page) {
 			oom(current);
-			return page;
+			new_page = pte_page(BAD_PAGE);
 		}
-	}
-	/* inode->i_op-> */ readpage(inode, address, (char *) page);
-	p = find_page(inode, address);
-	if (p)
-		goto old_and_new_page_exists;
-	p = mem_map + MAP_NR(page);
-	p->offset = address;
-	add_page_to_inode_queue(inode, p);
-	add_page_to_hash_queue(inode, p);
-	if (new_page) {
 		memcpy((void *) new_page, (void *) page, PAGE_SIZE);
-		return new_page;
+		free_page(page);
+		page = new_page;
 	}
-	p->count++;
 	return page;
-
-old_and_new_page_exists:
-	if (new_page)
-		free_page(new_page);
-old_page_exists:
-	old_page = page_address(p);
-	if (no_share) {
-		memcpy((void *) page, (void *) old_page, PAGE_SIZE);
-		return page;
-	}
-	p->count++;
-	free_page(page);
-	return old_page;
 }
 
 /*
@@ -479,7 +610,7 @@ int generic_mmap(struct inode * inode, struct file * file, struct vm_area_struct
 	}
 	if (!inode->i_sb || !S_ISREG(inode->i_mode))
 		return -EACCES;
-	if (!inode->i_op || !inode->i_op->bmap)
+	if (!inode->i_op || !inode->i_op->readpage)
 		return -ENOEXEC;
 	if (!IS_RDONLY(inode)) {
 		inode->i_atime = CURRENT_TIME;

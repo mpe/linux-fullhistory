@@ -1323,17 +1323,11 @@ unsigned long free_area_init(unsigned long start_mem, unsigned long end_mem)
 	mem_map = (mem_map_t *) start_mem;
 	p = mem_map + MAP_NR(end_mem);
 	start_mem = LONG_ALIGN((unsigned long) p);
-	while (p > mem_map) {
+	memset(mem_map, 0, start_mem - (unsigned long) mem_map);
+	do {
 		--p;
-		p->count = 0;
-		p->dirty = 0;
 		p->reserved = 1;
-		p->inode = NULL;
-		p->offset = 0;
-		p->write_list = NULL;
-		p->next = p->prev = NULL;
-		p->next_hash = p->next_hash = NULL;
-	}
+	} while (p > mem_map);
 
 	for (i = 0 ; i < NR_MEM_LISTS ; i++) {
 		unsigned long bitmap_size;

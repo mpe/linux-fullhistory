@@ -177,9 +177,34 @@ typing - a infinite number of monkeys typing into GNU emacs would never
 make a good program). 
 
 So, you can either get rid of GNU emacs, or change it to use saner
-values.  I did the first, so don't ask me how to do the latter.  But
-even if you fail in getting emacs to do sane formatting, not everything
-is lost: use "indent". 
+values.  To do the latter, you can stick the following in your .emacs file:
+
+(defun linux-c-mode ()
+  "C mode with adjusted defaults for use with the Linux kernel."
+  (interactive)
+  (c-mode)
+  (setq c-indent-level 8)
+  (setq c-brace-imaginary-offset 0)
+  (setq c-brace-offset -8)
+  (setq c-argdecl-indent 8)
+  (setq c-label-offset -8)
+  (setq c-continued-statement-offset 8)
+  (setq indent-tabs-mode nil)
+  (setq tab-width 8))
+
+This will define the M-x linux-c-mode command.  When hacking on a
+module, if you put the string -*- linux-c -*- somewhere on the first
+two lines, this mode will be automatically invoked. Also, you may want
+to add
+
+(setq auto-mode-alist (cons '("/usr/src/linux.*/.*\\.[ch]$" . linux-c-mode)
+                       auto-mode-alist))
+
+to your .emacs file if you want to have linux-c-mode switched on
+automagically when you edit source files under /usr/src/linux.
+
+But even if you fail in getting emacs to do sane formatting, not
+everything is lost: use "indent".
 
 Now, again, GNU indent has the same brain dead settings that GNU emacs
 has, which is why you need to give it a few command line options. 

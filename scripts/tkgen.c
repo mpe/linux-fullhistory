@@ -3,6 +3,9 @@
  * Version 1.0
  * Eric Youngdale
  * 10/95
+ *
+ * 1995 01 04 - Aesthetic improvements by Avery Pennarun
+ *              <apenwarr@foxnet.net>
  */
 #include <stdio.h>
 #include "tkparse.h"
@@ -399,8 +402,8 @@ static end_proc(int menu_num, int first, int last)
   printf("\tbutton $w.f.back -text \"Main Menu\" -activebackground green \\\n");
   printf("\t\t-width 15 -command \"destroy $w; focus $oldFocus; update_mainmenu $w\"\n");
 
-  printf("\tpack $w.f.back $w.f.next $w.f.prev -side left -pady 10 -padx 45\n");
-  printf("\tpack $w.f -pady 10 -side top -padx 10 -anchor w\n");
+  printf("\tpack $w.f.back $w.f.next $w.f.prev -side left -expand on\n");
+  printf("\tpack $w.f -pady 10 -side top -anchor w -fill x -expand on\n");
   printf("\tfocus $w\n");
   printf("\tupdate_menu%d $w\n", menu_num);
   printf("\tglobal winx; global winy\n");
@@ -638,7 +641,7 @@ dump_tk_script(struct kconfig *scfg)
 	  break;
 
 	case tok_choice:
-	  printf("\t$w.line%d.menu add radiobutton -label \"%s\" -variable %s -value %d -command \"update_menu%d .menu%d\"\n",
+	  printf("\t$w.x%d.x.menu add radiobutton -label \"%s\" -variable %s -value %d -command \"update_menu%d .menu%d\"\n",
 		 cfg1->menu_line,
 		 cfg->label,
 		 cfg1->optionname,
@@ -652,11 +655,20 @@ dump_tk_script(struct kconfig *scfg)
 	      start_proc(menulabel, cfg->menu_number, FALSE);
 	      menu_num = cfg->menu_number;
 	    }
+#if 0
 	  printf("\tmenubutton $w.line%d -text \"%s\" -menu $w.line%d.menu \\\n",
 		 cfg->menu_line, cfg->label, cfg->menu_line);
 	  printf("\t	-relief raised -width 35\n");
 	  printf("\tpack $w.line%d -anchor w\n", cfg->menu_line);
 	  printf("\tmenu $w.line%d.menu\n", cfg->menu_line);
+#else
+	  printf("\tminimenu $w %d %d \"%s\" %s\n",
+	  	cfg->menu_number,
+	  	cfg->menu_line,
+	  	cfg->label,
+	  	cfg->optionname);
+	  printf("\tmenu $w.x%d.x.menu\n", cfg->menu_line);
+#endif
 	  cfg1 = cfg;
 	  break;
 	case tok_tristate:
@@ -733,7 +745,7 @@ dump_tk_script(struct kconfig *scfg)
 #endif
   printf("\tlabel $w.m0 -bitmap error\n");
   printf("\tmessage $w.m1 -width 400 -aspect 300 -text \"The sound drivers cannot as of yet be configured via the X-based interface\" -relief raised\n");
-  printf("\tpack $w.m0 $w.m1 -side top -pady 10\n");
+  printf("\tpack $w.m0 $w.m1 -side top -pady 10 -expand on\n");
   /*
    * Close out the last menu.
    */

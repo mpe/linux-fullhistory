@@ -8,7 +8,7 @@
 
 #ifdef __SMP__
 #include <asm/smp.h>
-
+#include <asm/smp_lock.h>
  
 extern void smp_message_pass(int target, int msg, unsigned long data, int wait);
 extern void smp_boot_cpus(void);		/* Boot processor call to load the other CPU's */
@@ -39,5 +39,6 @@ extern volatile int smp_msg_id;
 #define smp_processor_id()		0
 #define smp_message_pass(t,m,d,w)	
 #define smp_threads_ready		1
+#define kernel_lock()
 #endif
 #endif

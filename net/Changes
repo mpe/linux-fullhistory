@@ -314,6 +314,14 @@ o	Only allow SMBFS selection with IP configured	[IN]
 o	Packetwin driver [Craig]			[IN]
 o	Net alias changes [Juan]			[IN]
 
+-------->>>>> 1.3.53 <<<<<<--------
+
+o	Missing htons() in ip_build_xmit [Mike Kilburn]	[IN]
+o	Missing protocol type set in appletalk		[IN]
+o	Net alias changes/documentation [Juan Ciarlante][IN]
+o	Set protocol type on IPX sends [Various]	[IN]
+o	Lance driver packet length sanity check		[IN]
+
 ---------- Things I thought Linus had for a while and not merged ----------------
 
 
@@ -324,6 +332,7 @@ o	Decnet pre pre pre pre pre Alpha 0.0.
 o	Chase Donald for new drivers, get people to sort out what net
 	drivers should cease to be 'Alpha'.
 o	IPX PPP support
+o	IP multicast bug fixes
 
 ---------- Things pending for me to merge --------------
 
@@ -337,7 +346,7 @@ o	SPARC patches [Dave] [partly in]
 o	Forwarding queue control (+ fairness algorithms ??)
 o	IP forward flow control.
 o	IPX memory leak ?????				[Done with luck]
-o	Clean up RAW AX.25 sockets.
+o	Clean up RAW AX.25 sockets.			[Sorted by skb_clone change]
 o	Finish IPIP bug fixes				[Done hopefully]
 o	Multicast routing				[STARTED BITS]
 o	PPP/IPX

@@ -45,9 +45,6 @@ extern unsigned long pg0[1024];		/* page table for 0-4MB for everybody */
 #ifdef CONFIG_DESKSTATION_TYNE
 extern void deskstation_tyne_dma_init(void);
 #endif
-#ifdef CONFIG_SCSI
-extern void scsi_mem_init(unsigned long);
-#endif
 #ifdef CONFIG_SOUND
 extern void sound_mem_init(void);
 #endif
@@ -224,9 +221,6 @@ printk("Mem init - Start: %x, End: %x\n", start_mem, high_memory);
 	}
 #ifdef CONFIG_DESKSTATION_TYNE
 	deskstation_tyne_dma_init();
-#endif
-#ifdef CONFIG_SCSI
-	scsi_mem_init(high_memory);
 #endif
 #ifdef CONFIG_SOUND
 	sound_mem_init();

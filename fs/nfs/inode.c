@@ -268,13 +268,13 @@ int nfs_notify_change(struct inode *inode, struct iattr *attr)
 	else
 		sattr.size = (unsigned) -1;
 
-	if (attr->ia_valid & ATTR_MTIME) {
+	if (attr->ia_valid & ATTR_MTIME_SET) {
 		sattr.mtime.seconds = attr->ia_mtime;
 		sattr.mtime.useconds = 0;
 	} else 
 		sattr.mtime.seconds = sattr.mtime.useconds = (unsigned) -1;
 
-	if (attr->ia_valid & ATTR_ATIME) {
+	if (attr->ia_valid & ATTR_ATIME_SET) {
 		sattr.atime.seconds = attr->ia_atime;
 		sattr.atime.useconds = 0;
 	} else

@@ -1,12 +1,4 @@
 #
-# Used to determine size of canvas inserted for booleans. It holds the
-# place where the 'm' button goes in a tristate, and keeps the look and feel
-# consistent.
-#
-set modbutton_width 0
-set modbutton_height 0
-
-#
 # Set to be the x and y position of subwindows.
 #
 set winx 100
@@ -23,7 +15,7 @@ proc mainmenu_name { text } {
 
 proc menu_option { w menu_num text } {
 	button .f0.x$menu_num -text "$text" -width 50 -command "$w .$w \"$text\""
-	pack .f0.x$menu_num -anchor w -pady 1
+	pack .f0.x$menu_num -pady 1 -expand on
 }
 
 #
@@ -173,7 +165,7 @@ proc read_config { filename } {
 	set file1 [open $filename r]
 	clear_choices
 	while { [gets $file1 line] >= 0} {
-		if [regexp {([0-9A-Z_]+)=([ynm])} $line foo var value] {
+		if [regexp {([0-9A-Za-z_]+)=([ynm])} $line foo var value] {
 			if { $value == "y" } then { set cmd "global $var; set $var 1" }
 			if { $value == "n" } then { set cmd "global $var; set $var 0" }
 			if { $value == "m" } then { set cmd "global $var; set $var 2" }
@@ -213,45 +205,59 @@ proc write_variable { file1 file2 varname variable dep } {
 	}
 }
 
-proc bool {w mnum line text variable} {
-	frame $w.x$line
-	global modbutton_width
-	global modbutton_height
-	radiobutton $w.x$line.y -text "y" -variable $variable -value 1 \
-		-width 2 -command "update_menu$mnum .menu$mnum"
-	radiobutton $w.x$line.n -text "n"  -variable $variable -value 0 \
-		-width 2 -command "update_menu$mnum .menu$mnum"
-	canvas $w.x$line.m -width $modbutton_width -relief raised \
-		-height $modbutton_height
+proc option_name {w mnum line text variable} {
 	button $w.x$line.help -text "Help" -relief raised \
 		-command "dohelp .dohelp $variable"
-	pack $w.x$line.y $w.x$line.m  -anchor w -side left
-	button $w.x$line.l -text "$text" -relief raised 
-	pack $w.x$line.n $w.x$line.help $w.x$line.l -anchor w -side left
-	pack $w.x$line -anchor w
-#
-# If we don't know the size yet, update the screen and calculate the size
-# of the 'm' button by measuring the size of the 'y' button.  The buttons
-# have fixed size anyways, so it should always be correct.
-#
-	if { $modbutton_width == 0 } then {
-		update
-		set modbutton_width [winfo width $w.x$line.y]
-		set modbutton_height [winfo height $w.x$line.y]
-		$w.x$line.m configure -height $modbutton_height \
-			-width $modbutton_width
-	}
+	button $w.x$line.l -text "$text" -relief groove -anchor w
+	pack $w.x$line.help -side right -fill y
+	pack $w.x$line.l -side right -fill both -expand on
+}
+
+proc toggle_switch {w mnum line text variable} {
+	frame $w.x$line -relief sunken
+	radiobutton $w.x$line.y -text "y" -variable $variable -value 1 \
+		-relief groove -width 2 -command "update_menu$mnum .menu$mnum"
+	radiobutton $w.x$line.n -text "n"  -variable $variable -value 0 \
+		-relief groove -width 2 -command "update_menu$mnum .menu$mnum"
+	radiobutton $w.x$line.m -text "m"  -variable $variable -value 2 \
+		-relief groove -width 2 -command "update_menu$mnum .menu$mnum"
+		
+	option_name $w $mnum $line $text $variable
+		
+	pack $w.x$line.n $w.x$line.m $w.x$line.y -side right -fill y
+}
+
+proc bool {w mnum line text variable} {
+	toggle_switch $w $mnum $line $text $variable
+	$w.x$line.m configure -state disabled
+	pack $w.x$line -anchor w -padx 15 -fill both -expand on
+}
+
+proc tristate {w mnum line text variable } {
+	toggle_switch $w $mnum $line $text $variable
+	pack $w.x$line -anchor w -padx 15 -fill both -expand on
+}
+
+proc dep_tristate {w mnum line text variable } {
+	tristate $w $mnum $line $text $variable
 }
 
 proc int { w mnum line text variable } {
 	frame $w.x$line
-	button $w.x$line.help -text "Help" -relief raised \
-		-command "dohelp .dohelp $variable "
-	button $w.x$line.l -text "$text" -relief raised 
+	option_name $w $mnum $line $text $variable
 	entry $w.x$line.x -width 15 -relief sunken -borderwidth 2 \
 		-textvariable $variable
-	pack $w.x$line.x $w.x$line.help $w.x$line.l -anchor w -side left
-	pack $w.x$line -anchor w
+	pack $w.x$line.x -anchor w -side right -fill y
+	pack $w.x$line -anchor w -padx 15 -fill both -expand on
+}
+
+proc minimenu { w mnum line text variable } {
+	frame $w.x$line
+	option_name $w $mnum $line $text $variable
+	menubutton $w.x$line.x -text "Choose..." -menu $w.x$line.x.menu \
+		-relief raised -width 15
+	pack $w.x$line.x -anchor w -side right -fill y
+	pack $w.x$line -anchor w -padx 15 -fill both -expand on
 }
 
 proc comment {w line text } {
@@ -349,37 +355,6 @@ proc wrapup {w }  {
 proc check_sound_config { num } {
 #nothing for now.
 }
-
-proc tristate {w mnum line text variable } {
-	frame $w.x$line
-	radiobutton $w.x$line.y -text "y" -variable $variable -value 1 \
-		-width 2 -command "update_menu$mnum .menu$mnum"
-	radiobutton $w.x$line.n -text "n"  -variable $variable -value 0 \
-		-width 2 -command "update_menu$mnum .menu$mnum"
-	radiobutton $w.x$line.m -text "m"  -variable $variable -value 2 \
-		-width 2 -command "update_menu$mnum .menu$mnum"
-	button $w.x$line.help -text "Help" -relief raised \
-		-command "dohelp .dohelp $variable"
-	button $w.x$line.l -text "$text" -relief raised 
-	pack $w.x$line.y $w.x$line.m $w.x$line.n $w.x$line.help $w.x$line.l -anchor w -side left
-	pack $w.x$line -anchor w
-}
-
-proc dep_tristate {w mnum line text variable } {
-	frame $w.x$line
-	radiobutton $w.x$line.y -text "y" -variable $variable -value 1 \
-		-width 2 -command "update_menu$mnum .menu$mnum"
-	radiobutton $w.x$line.n -text "n"  -variable $variable -value 0 \
-		-width 2 -command "update_menu$mnum .menu$mnum"
-	radiobutton $w.x$line.m -text "m"  -variable $variable -value 2 \
-		-width 2 -command "update_menu$mnum .menu$mnum"
-	button $w.x$line.help -text "Help" -relief raised \
-		-command "dohelp .dohelp $variable"
-	button $w.x$line.l -text "$text" -relief raised 
-	pack $w.x$line.y $w.x$line.m $w.x$line.n $w.x$line.help $w.x$line.l -anchor w -side left
-	pack $w.x$line -anchor w
-}
-
 
 proc do_sound {w mnum line} {
 	message $w.x$line -width 400 -aspect 300 -text "Note: The sound drivers cannot as of yet be configured via the X-based interface" -relief raised

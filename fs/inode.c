@@ -306,13 +306,21 @@ void inode_setattr(struct inode *inode, struct iattr *attr)
  * notify_change is called for inode-changing operations such as
  * chown, chmod, utime, and truncate.  It is guaranteed (unlike
  * write_inode) to be called from the context of the user requesting
- * the change.  It is not called for ordinary access-time updates.
- * NFS uses this to get the authentication correct.  -- jrs
+ * the change.
  */
 
 int notify_change(struct inode * inode, struct iattr *attr)
 {
 	int retval;
+
+	if (attr->ia_valid & (ATTR_ATIME | ATTR_MTIME | ATTR_CTIME)) {
+		unsigned long now = CURRENT_TIME;
+		if (!(attr->ia_valid & ATTR_ATIME_SET))
+			attr->ia_atime = now;
+		if (!(attr->ia_valid & ATTR_MTIME_SET))
+			attr->ia_mtime = now;
+		attr->ia_ctime = now;
+	}
 
 	if (inode->i_sb && inode->i_sb->s_op  &&
 	    inode->i_sb->s_op->notify_change) 

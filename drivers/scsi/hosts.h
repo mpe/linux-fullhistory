@@ -282,14 +282,6 @@ struct Scsi_Host
      * initialized to 0 in scsi_register.
      */
     unsigned int unique_id;
-
-    /*
-     * Set these if there are conflicts between memory
-     * in the < 1mb region and regions at 16mb multiples.
-     * The address must be on a page boundary.
-     */
-    unsigned long forbidden_addr;
-    unsigned long forbidden_size;
     
     /*
      * The rest can be copied from the template, or specifically
@@ -313,7 +305,7 @@ struct Scsi_Host
      */
     unsigned suggest_bus_reset:1;
  
-    int hostdata[0];  /* Used for storage of host specific stuff */
+    unsigned long hostdata[0];  /* Used for storage of host specific stuff */
 };
 
 extern struct Scsi_Host * scsi_hostlist;

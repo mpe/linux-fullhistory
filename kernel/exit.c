@@ -516,9 +516,9 @@ fake_volatile:
 	__exit_fs(current);
 	__exit_sighand(current);
 	exit_thread();
-	exit_notify();
 	current->state = TASK_ZOMBIE;
 	current->exit_code = code;
+	exit_notify();
 #ifdef DEBUG_PROC_TREE
 	audit_ptree();
 #endif

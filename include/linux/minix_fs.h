@@ -8,8 +8,7 @@
 /*
  * Thanks to Kees J Bot for sending me the definitions of the new
  * minix filesystem (aka V2) with bigger inodes and 32-bit block
- * pointers. It's not actually implemented yet, but I'll look into
- * it.
+ * pointers.
  */
 
 #define MINIX_ROOT_INO 1
@@ -18,14 +17,21 @@
 #define MINIX_LINK_MAX	250
 
 #define MINIX_I_MAP_SLOTS	8
-#define MINIX_Z_MAP_SLOTS	8
+#define MINIX_Z_MAP_SLOTS	64
 #define MINIX_SUPER_MAGIC	0x137F		/* original minix fs */
 #define MINIX_SUPER_MAGIC2	0x138F		/* minix fs, 30 char names */
-#define NEW_MINIX_SUPER_MAGIC	0x2468		/* minix V2 - not implemented */
+#define MINIX2_SUPER_MAGIC	0x2468		/* minix V2 fs */
+#define MINIX2_SUPER_MAGIC2	0x2478		/* minix V2 fs, 30 char names */
 #define MINIX_VALID_FS		0x0001		/* Clean fs. */
 #define MINIX_ERROR_FS		0x0002		/* fs has errors. */
 
 #define MINIX_INODES_PER_BLOCK ((BLOCK_SIZE)/(sizeof (struct minix_inode)))
+#define MINIX2_INODES_PER_BLOCK ((BLOCK_SIZE)/(sizeof (struct minix2_inode)))
+
+#define MINIX_V1		0x0001		/* original minix fs */
+#define MINIX_V2		0x0002		/* minix V2 fs */
+
+#define INODE_VERSION(inode)	inode->i_sb->u.minix_sb.s_version
 
 /*
  * This is the original minix inode layout on disk.
@@ -47,7 +53,7 @@ struct minix_inode {
  * instead of 7+1+1). Also, some previously 8-bit values are
  * now 16-bit. The inode is now 64 bytes instead of 32.
  */
-struct new_minix_inode {
+struct minix2_inode {
 	__u16 i_mode;
 	__u16 i_nlinks;
 	__u16 i_uid;
@@ -72,6 +78,7 @@ struct minix_super_block {
 	__u32 s_max_size;
 	__u16 s_magic;
 	__u16 s_state;
+	__u32 s_zones;
 };
 
 struct minix_dir_entry {

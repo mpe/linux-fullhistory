@@ -14,6 +14,7 @@
  *		Felix Koop	:	NR_CPUS used properly
  *		Jose Renau	:	Handle single CPU case.
  *		Alan Cox	:	By repeated request 8) - Total BogoMIP report.
+ *		Greg Wright	:	Fix for kernel stacks panic.
  *
  */
 
@@ -42,7 +43,7 @@ int smp_threads_ready=0;				/* Set when the idlers are all forked 			*/
 volatile unsigned long cpu_callin_map[NR_CPUS] = {0,};	/* We always use 0 the rest is ready for parallel delivery */
 volatile unsigned long smp_invalidate_needed;		/* Used for the invalidate map thats also checked in the spinlock */
 struct cpuinfo_x86 cpu_data[NR_CPUS];			/* Per cpu bogomips and other parameters 		*/
-static unsigned int num_processors = 0;			/* Internal processor count				*/
+static unsigned int num_processors = 1;			/* Internal processor count				*/
 static unsigned long io_apic_addr = 0;			/* Address of the I/O apic (not yet used) 		*/
 unsigned char boot_cpu_id = 0;				/* Processor that is doing the boot up 			*/
 static unsigned char *kstack_base,*kstack_end;		/* Kernel stack list pointers 				*/
@@ -249,7 +250,6 @@ void smp_scan_config(unsigned long base, unsigned long length)
 {
 	unsigned long *bp=(unsigned long *)base;
 	struct intel_mp_floating *mpf;
-	num_processors = 1;		/* The boot processor */
 	
 /*	printk("Scan SMP from %p for %ld bytes.\n",
 		bp,length);*/

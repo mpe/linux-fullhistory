@@ -441,6 +441,7 @@ int aarp_send_ddp(struct device *dev,struct sk_buff *skb, struct at_addr *sa, vo
 	}
 
 	skb->dev = dev;
+	skb->protocol = htons(ETH_P_ATALK);
 			
 	hash=sa->s_node%(AARP_HASH_SIZE-1);
 	save_flags(flags);

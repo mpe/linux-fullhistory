@@ -391,6 +391,9 @@ by doing the following after installing slackware (or whatever):
 	program is run (like Norton "speeddisk"), it may move the Linux boot
 	files around, confusing LILO and making the (Linux) system unbootable.
 	Be sure to keep a kernel "boot floppy" at hand for such circumstances.
+	A possible workaround is to mark the Linux files as S+H+R (System,
+	Hidden, Readonly), to prevent most defragmentation programs from
+	moving the files around.
 
 If you "don't do DOS", then partition as you please, but remember to create
 a small partition to hold the /boot directory (and vmlinuz) as described above

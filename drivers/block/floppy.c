@@ -272,7 +272,7 @@ static inline int DRIVE(kdev_t x) {
 /*
  * globals used by 'result()'
  */
-#define MAX_REPLIES 10
+#define MAX_REPLIES 17
 static unsigned char reply_buffer[MAX_REPLIES];
 static int inr; /* size of reply buffer, when called from interrupt */
 #define ST0 (reply_buffer[0])
@@ -3656,8 +3656,38 @@ static char get_fdc_version(void)
 		printk("FDC init: UNLOCK: unexpected return of %d bytes.\n", r);
 		return FDC_UNKNOWN;
 	}
-	printk("FDC %d is a post-1991 82077\n",fdc);
-	return FDC_82077;	/* Revised 82077AA passes all the tests */
+	output_byte(FD_PARTID);
+	r = result();
+	if (r != 1) {
+		printk("FDC init: PARTID: unexpected return of %d bytes.\n",r);
+		return FDC_UNKNOWN;
+	}
+	if (reply_buffer[0] == 0x80) {
+		printk("FDC %d is a post-1991 82077\n",fdc);
+		return FDC_82077;	/* Revised 82077AA passes all the tests */
+	}
+	switch (reply_buffer[0] >> 5) {
+	case 0x0:
+		output_byte(FD_SAVE);
+		r = result();
+		if (r != 17) {
+			printk("FDC init: SAVE: unexpected return of %d bytes.\n",r);
+			return FDC_UNKNOWN;
+		}
+		if (!(reply_buffer[0] & 0x40)) {
+			printk("FDC %d is a 3Volt 82078SL.\n",fdc);
+			return FDC_82078;
+		}
+		/* Either a 82078-1 or a 82078SL running at 5Volt */
+		printk("FDC %d is a 82078-1.\n",fdc);
+		return FDC_82078_1;
+	case 0x1:
+		printk("FDC %d is a 44pin 82078\n",fdc);
+		return FDC_82078;
+	default:
+		printk("FDC %d init: PARTID returned an unknown ID: %d.\n", fdc, reply_buffer[0] >> 5);
+		return FDC_UNKNOWN;
+	}
 } /* get_fdc_version */
 
 /* lilo configuration */

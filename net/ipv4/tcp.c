@@ -180,7 +180,9 @@
  *		Alan Cox	:	Small hooks for enSKIP.
  *		Alexey Kuznetsov:	Path MTU discovery.
  *		Alan Cox	:	Support soft errors.
- *
+ *		Alan Cox	:	Fix MTU discovery pathalogical case
+ *					when the remote claims no mtu!
+ *		Marc Tamsky	:	TCP_CLOSE fix.
  *
  * To Fix:
  *		Fast path the code. Two things here - fix the window calculation
@@ -766,6 +768,7 @@ void tcp_do_retransmit(struct sock *sk, int all)
 		 */
 		 
 		ct++;
+		sk->retransmits++;
 		sk->prot->retransmits ++;
 		tcp_statistics.TcpRetransSegs++;
 		
@@ -950,8 +953,15 @@ static void retransmit_timer(unsigned long data)
 	struct sock *sk = (struct sock*)data;
 	int why = sk->ip_xmit_timeout;
 
+	/*
+	 *	We are reset. We will send no more retransmits.
+	 */
+	 
+	if(sk->zapped)
+		return;
+		
 	/* 
-	 * only process if socket is not in use
+	 *	Only process if socket is not in use
 	 */
 
 	cli();
@@ -969,7 +979,7 @@ static void retransmit_timer(unsigned long data)
 
 	/* Always see if we need to send an ack. */
 
-	if (sk->ack_backlog && !sk->zapped) 
+	if (sk->ack_backlog) 
 	{
 		sk->prot->read_wakeup (sk);
 		if (! sk->dead)
@@ -1105,7 +1115,8 @@ void tcp_err(int type, int code, unsigned char *header, __u32 daddr,
 			if (rt->rt_mtu > new_mtu)
 				rt->rt_mtu = new_mtu;
 
-		if (sk->mtu > new_mtu - sizeof(struct iphdr) - sizeof(struct tcphdr))
+		if (sk->mtu > new_mtu - sizeof(struct iphdr) - sizeof(struct tcphdr)
+			&& new_mtu > sizeof(struct iphdr)+sizeof(struct tcphdr))
 			sk->mtu = new_mtu - sizeof(struct iphdr) - sizeof(struct tcphdr);
 
 		return;
@@ -3877,8 +3888,9 @@ extern __inline__ int tcp_ack(struct sock *sk, struct tcphdr *th, unsigned long 
 		if (sk->rcv_ack_seq == sk->write_seq /*&& sk->acked_seq == sk->fin_seq*/) 
 		{
 			flag |= 1;
-			tcp_set_state(sk,TCP_CLOSE);
 			sk->shutdown = SHUTDOWN_MASK;
+			tcp_set_state(sk,TCP_CLOSE);
+			return 1;
 		}
 	}
 
@@ -4163,9 +4175,10 @@ extern __inline__ int tcp_data(struct sk_buff *skb, struct sock *sk,
 					tcp_reset(sk->saddr, sk->daddr, skb->h.th,
 						sk->prot, NULL, skb->dev, sk->ip_tos, sk->ip_ttl);
 					tcp_statistics.TcpEstabResets++;
-					tcp_set_state(sk,TCP_CLOSE);
 					sk->err = EPIPE;
+					sk->error_report(sk);
 					sk->shutdown = SHUTDOWN_MASK;
+					tcp_set_state(sk,TCP_CLOSE);
 					kfree_skb(skb, FREE_READ);
 					return 0;
 				}
@@ -5425,9 +5438,9 @@ void tcp_send_probe0(struct sock *sk)
 
 	sk->backoff++;
 	sk->rto = min(sk->rto << 1, 120*HZ);
-	reset_xmit_timer (sk, TIME_PROBE0, sk->rto);
 	sk->retransmits++;
 	sk->prot->retransmits ++;
+	reset_xmit_timer (sk, TIME_PROBE0, sk->rto);
 }
 
 /*

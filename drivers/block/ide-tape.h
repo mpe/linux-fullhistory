@@ -1,7 +1,7 @@
 /*
- * linux/drivers/block/ide-tape.h	Version 1.1 - ALPHA	Dec  14, 1995
+ * linux/drivers/block/ide-tape.h	Version 1.2 - ALPHA	Jan   1, 1996
  *
- * Copyright (C) 1995 Gadi Oxman <tgud@tochnapc2.technion.ac.il>
+ * Copyright (C) 1995, 1996 Gadi Oxman <tgud@tochnapc2.technion.ac.il>
  */
 
 /*
@@ -23,8 +23,7 @@
  *
  *	Pipelined operation mode has the potential to maximize the
  *	performance of the driver and thus to saturate the throughput
- *	to the maximum value supported by the tape. Currently, pipelined
- *	mode is supported only on writes.
+ *	to the maximum value supported by the tape.
  *
  *	In pipelined mode we are servicing requests without blocking the
  *	user backup program. For example, on a write request, we will add it
@@ -32,9 +31,8 @@
  *	user program will then have enough time to prepare the next blocks
  *	while the tape is still busy working on the previous requests.
  *
- *	Pipelined (write) operation mode is enabled by default, but since
- *	it has a few downfalls as well (Use of additional memory and deferred
- *      error code to the application), you may wish to disable it.
+ *	Pipelined operation mode is enabled by default, but since it has a
+ *	few downfalls as well, you may wish to disable it.
  *	Further explanation of pipelined mode is available in ide-tape.c .
  */
 
@@ -58,6 +56,29 @@
 #define	IDETAPE_INCREASE_STAGES_RATE		0.2
 
 /*
+ *	Assuming the tape shares an interface with another device, the default
+ *	behavior is to service our pending pipeline requests as soon as
+ *	possible, but to gracefully postpone them in favor of the other device
+ *	when the tape is busy. This has the potential to maximize our
+ *	throughput and in the same time, to make efficient use of the IDE bus.
+ *
+ *	Note that when we transfer data to / from the tape, we co-operate with
+ *	the relatively fast tape buffers and the tape will perform the
+ *	actual media access in the background, without blocking the IDE
+ *	bus. This means that as long as the maximum IDE bus throughput is much
+ *	higher than the sum of our maximum throughput and the maximum
+ *	throughput of the other device, we should probably leave the default
+ *	behavior.
+ *
+ *	However, if it is still desired to give the other device a share even
+ *	in our own (small) bus bandwidth, you can set IDETAPE_LOW_TAPE_PRIORITY
+ *	to 1. This will let the other device finish *all* its pending requests
+ *	before we even check if we can service our next pending request.
+ */
+		 
+#define IDETAPE_LOW_TAPE_PRIORITY		0
+
+/*
  *	It seems that dynamically allocating buffers of about 32KB
  *	each is doomed to fail, unless we are in or very near the
  *	initialization stage. Take care when changing this value, as it
@@ -76,21 +97,25 @@
 #endif
 
 /*
- *	Setting IDETAPE_DEBUG to 1 will:
+ *	The following are used to debug the driver:
  *
- *		1.	Generally log all driver actions.
- *		2.	Enable self-sanity checks in some places.
+ *	Setting IDETAPE_DEBUG_LOG to 1 will log driver flow control.
+ *	Setting IDETAPE_DEBUG_BUGS to 1 will enable self-sanity checks in
+ *	some places.
  *
- *	Use IDETAPE_DEBUG when encountering a problem with the driver.
- *
- *	Setting IDETAPE_DEBUG to 0 will restore normal operation mode:
+ *	Setting them to 0 will restore normal operation mode:
  *
  *		1.	Disable logging normal successful operations.
  *		2.	Disable self-sanity checks.
  *		3.	Errors will still be logged, of course.
+ *
+ *	All the #if DEBUG code will be removed some day, when the driver
+ *	is verified to be stable enough. This will make it much more
+ *	esthetic.
  */
  
-#define	IDETAPE_DEBUG		0
+#define	IDETAPE_DEBUG_LOG		0
+#define	IDETAPE_DEBUG_BUGS		1
 
 /*
  *	After each failed packet command we issue a request sense command
@@ -147,9 +172,12 @@
  *		request queue, so that ide.c will service requests from
  *		the other device on the same interface meanwhile.
  *
- *		The polling frequency is 1/IDETAPE_DSC_READ_WRITE_FREQUENCY,
- *		and it should be relatively fast. The default is a period
- *		of 50 msec.
+ *		We can now automatically select the "best" polling frequency.
+ *		Have a look at IDETAPE_ANTICIPATE_READ_WRITE_DSC below.
+ *
+ *		In case you don't want to use the automatic selection,
+ *		choose it to be relatively fast. The default fallback
+ *		frequency is 1/50 msec.
  *
  *	2.	After the successful initialization of a "media access
  *		packet command", which is a command which can take a long
@@ -173,7 +201,30 @@
  *
  */
 
-#define	IDETAPE_DSC_READ_WRITE_FREQUENCY	5*HZ/100	/* 50 msec */
+/*
+ *	Setting IDETAPE_ANTICIPATE_READ_WRITE_DSC to 1 will allow ide-tape
+ *	to cleverly select the lowest possible frequency which will
+ *	not affect performance, based on the tape parameters and our operation
+ *	mode. This has potential to dramatically decrease our polling load
+ *	on Linux.
+ *
+ *	However, for the cases in which our calculation fails, setting
+ *	the following option to 0 will force the use of the "fallback"
+ *	polling period defined below (defaults to 50 msec).
+ *
+ *	In any case, the frequency will be between the "lowest" value
+ *	to the "fallback" value, to ensure that our selected "best" frequency
+ *	is reasonable.
+ */
+
+#define IDETAPE_ANTICIPATE_READ_WRITE_DSC	1
+
+/*
+ *	DSC timings.
+ */
+ 
+#define	IDETAPE_DSC_READ_WRITE_FALLBACK_FREQUENCY   5*HZ/100	/* 50 msec */
+#define IDETAPE_DSC_READ_WRITE_LOWEST_FREQUENCY	30*HZ/100	/* 300 msec */
 #define	IDETAPE_DSC_FAST_MEDIA_ACCESS_FREQUENCY	1*HZ		/* 1 second */
 #define	IDETAPE_FAST_SLOW_THRESHOLD		5*60*HZ		/* 5 minutes */
 #define IDETAPE_DSC_SLOW_MEDIA_ACCESS_FREQUENCY	60*HZ		/* 1 minute */
@@ -184,14 +235,13 @@
 /*
  *	Definitions which are already needed in ide.h
  */
- 
+
 /*
- *	The following is currently not used.
+ *	Current character device data transfer direction.
  */
+  
+typedef enum {idetape_direction_none,idetape_direction_read,idetape_direction_write} chrdev_direction_t;
 
-typedef enum {no_excess_data,excess_data_read,excess_data_write} excess_data_status_t;
-
- 
 struct ide_drive_s;				/* Forward declaration - Will be defined later in ide.h */
 typedef void (idetape_pc_completed_t)(struct ide_drive_s *);
 
@@ -203,10 +253,9 @@ typedef struct idetape_packet_command_s {
 	byte c [12];				/* Actual packet bytes */
 	
 	byte retries;				/* On each retry, we increment retries */
-	byte error;				/* Set when an error occured */
-	byte active;				/* Set when a packet command is in progress */
-	byte wait_for_dsc;			/* 1 When polling for DSC */
-	byte dsc_count;		
+	byte error;				/* Error code */
+	byte abort;				/* Set when an error is considered normal - We won't retry */
+	byte wait_for_dsc;			/* 1 When polling for DSC on a media access command */
 	unsigned long request_transfer;		/* Bytes to transfer */
 	unsigned long actually_transferred; 	/* Bytes actually transferred */
 	unsigned long buffer_size;		/* Size of our data buffer */
@@ -353,12 +402,20 @@ typedef struct {
 	byte dsc_count;				/* We received DSC dsc_count times in a row */
 	unsigned long dsc_polling_start;	/* The time in which we started polling for DSC */
 	struct timer_list dsc_timer;		/* Timer used to poll for dsc */
+
+	/*
+	 *	We can now be much more clever in our selection of the
+	 *	read/write polling frequency. This is used along with
+	 *	the compile time option IDETAPE_ANTICIPATE_DSC.
+	 */
+ 
+	unsigned long best_dsc_rw_frequency;	/* Read/Write dsc polling frequency */
+
 	unsigned long dsc_polling_frequency;	/* The current polling frequency */
 	unsigned long dsc_timeout;		/* Maximum waiting time */
 	byte dsc_received;			/* Set when we receive DSC */
 
 	byte request_status;
-	byte request_dsc_callback;
 	byte last_status;			/* Contents of the tape status register */
 						/* before the current request (saved for us */
 						/* by ide.c) */
@@ -374,7 +431,7 @@ typedef struct {
 
 	/* Character device operation */
 
-	unsigned char last_dt_was_write;	/* Last character device data transfer was a write */
+	chrdev_direction_t chrdev_direction;	/* Current character device data transfer direction */
 	byte busy;				/* Device already opened */
 
 	/* Device information */
@@ -410,24 +467,25 @@ typedef struct {
 		
 	int current_number_of_stages;		/* Number of currently used stages */
 	int max_number_of_stages;		/* We will not allocate more than this number of stages */
-	idetape_pipeline_stage_t *first_stage;	/* Will be serviced after the currently active request */
-	idetape_pipeline_stage_t *last_stage;	/* New write requests will be added to the pipeline here */
-	int pipeline_was_full_once;		/* Set at the first time we fill the pipeline since the tape was opened */
+	idetape_pipeline_stage_t *first_stage;	/* The first stage which will be removed from the pipeline */
+	idetape_pipeline_stage_t *active_stage;	/* The currently active stage */
+	idetape_pipeline_stage_t *next_stage;	/* Will be serviced after the currently active request */
+	idetape_pipeline_stage_t *last_stage;	/* New requests will be added to the pipeline here */
 	int error_in_pipeline_stage;		/* Set when an error was detected in one of the pipeline stages */	
-	int pipeline_locked;			/* Against race conditions ... */
 	
 } idetape_tape_t;
 
+/*
+ *	The following is used to have a quick look at the tape's status
+ *	register between requests of the other device.
+ */
+ 
 #define POLL_HWIF_TAPE_DRIVE							\
 	if (hwif->tape_drive != NULL) {						\
 		if (hwif->tape_drive->tape.request_status) {			\
 			OUT_BYTE(hwif->tape_drive->select.all,IDE_SELECT_REG);	\
 			hwif->tape_drive->tape.last_status=GET_STAT();		\
 			hwif->tape_drive->tape.request_status=0;		\
-		}								\
-		if (hwif->tape_drive->tape.request_dsc_callback) {		\
-			hwif->tape_drive->tape.request_dsc_callback=0;		\
-			idetape_put_back_postponed_request(hwif->tape_drive);	\
 		}								\
 	}
 

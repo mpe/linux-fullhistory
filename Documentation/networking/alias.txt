@@ -1,0 +1,92 @@
+NET_ALIAS device aliasing v0.4x
+===============================
+  The main step taken in versions 0.40+ is the implementation of a
+  device aliasing mechanism that creates *actual* devices.
+  This development includes NET_ALIAS (generic aliasing) plus IP_ALIAS
+  (specific IP) support.
+
+Features
+--------
+o  ACTUAL alias devices created & inserted in dev chain
+o  AF_ independent: net_alias_type objects. Generic aliasing engine.
+o  AF_INET optimized
+o  hashed alias address lookup
+o  net_alias_type objs registration/unreg., module-ables.
+o  /proc/net/aliases & /proc/net/alias_types entries
+
+o IP alias implementation: static or runtime module.
+
+Usage (IP aliasing)
+-------------------
+  A very first step to test if you are running a net_alias-ed kernel
+  is to check /proc/net/aliases & /proc/net/alias_types entries:
+     # cat /proc/net/alias*
+
+  For IP aliasing you must have IP_ALIAS support included by
+  static linking ('y' to 2nd question above), or runtime module
+  insertion ('m' to 2nd q. above):
+     # insmod /usr/src/linux/modules/ip_alias.o (1.3.xx)
+     # insmod /usr/src/ip_alias/ip_alias.o      (1.2.xx) see above.
+
+o Alias creation.
+  Alias creation is done by 'magic' iface naming: eg. to create a
+  200.1.1.1 alias for eth0 ...
+  
+    # ifconfig eth0:0 200.1.1.1  etc,etc....
+                   ~~ -> request alias #0 creation (if it not exists) for eth0
+    and routing stuff also ...
+    # route add -host 200.1.1.1 dev eth0:0  (if same IP network as
+					    main device)
+   
+    # route add -net 200.1.1.0 dev eth0:0   (if completely new network wanted
+					    for eth0:0)
+
+o Alias deletion.
+  Also done by magic naming, eg:
+
+    # ifconfig eth0:0-  0  (maybe any address)
+                   ~~~ -> will delete alias (note '-' after dev name)
+  alias device is closed before deletion, so all network stuff that
+  points to it (routes, arp entries, ...) will be released.
+  		   		   
+Alias (re-)configuring
+  Aliases *are* devices, so you configure and refer to them as usual (ifconfig,
+  route, etc).
+  
+o Procfs entries
+  2 entries are added to help fetching alias runtime configuration:
+  a) /proc/net/alias_types
+     Will show you alias_types registered (ie. address families that
+     can be aliased).
+     eg. for IP aliasing with 1 alias configured:
+
+     # cat /proc/net/alias_types
+     type    name            n_attach
+     2       ip              1      
+     
+  b) /proc/net/aliases
+     Will show aliased devices info, eg (same as above):
+
+     # cat /proc/net/aliases
+     device           family address                                
+     eth0:0           2      200.1.1.1
+
+Relationship with main device
+-----------------------------
+  - On main device closing, all aliases will be closed and freed.
+  - Each new alias created is inserted in dev_chain just before next
+    main device (aliases get 'stacked' after main_dev), eg:
+      lo->eth0->eth0:0->eth0:2->eth1->0
+    If eth0 is unregistered, all it aliases will also be:
+      lo->eth1->0     
+
+Contact
+-------
+Please finger or e-mail me:
+   Juan Jose Ciarlante <jjciarla@raiz.uncu.edu.ar>
+   
+		   		
+; local variables:
+; mode: indented-text
+; mode: auto-fill
+; end:

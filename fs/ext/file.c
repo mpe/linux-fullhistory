@@ -64,7 +64,7 @@ struct inode_operations ext_file_inode_operations = {
 	NULL,			/* rename */
 	NULL,			/* readlink */
 	NULL,			/* follow_link */
-	NULL,			/* readpage */
+	generic_readpage,	/* readpage */
 	NULL,			/* writepage */
 	ext_bmap,		/* bmap */
 	ext_truncate,		/* truncate */

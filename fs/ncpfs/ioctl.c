@@ -20,14 +20,16 @@ ncp_ioctl (struct inode * inode, struct file * filp,
 {
 	int result;
 	struct ncp_ioctl_request request;
-	struct ncp_server *server;
+	struct ncp_fs_info info;
+	struct ncp_server *server = NCP_SERVER(inode);
 
 	switch(cmd) {
 	case NCP_IOC_NCPREQUEST:
 
-		if (!suser())
+		if (   (permission(inode, MAY_WRITE) != 0)
+		    && (current->uid != server->m.mounted_uid))
 		{
-			return -EPERM;
+			return -EACCES;
 		}
 		
 		if ((result = verify_area(VERIFY_READ, (char *)arg,
@@ -52,37 +54,70 @@ ncp_ioctl (struct inode * inode, struct file * filp,
 			return result;
 		}
 
-		server = NCP_SERVER(inode);
 		ncp_lock_server(server);
 
 		/* FIXME: We hack around in the server's structures
                    here to be able to use ncp_request */
 
 		server->has_subfunction = 0;
-		server->current_size =
-			request.size + sizeof(struct ncp_request_header);
-		memcpy_fromfs(server->packet, request.data,
-			      request.size+sizeof(struct ncp_request_header));
+		server->current_size = request.size;
+		memcpy_fromfs(server->packet, request.data, request.size);
 
-		
 		ncp_request(server, request.function);
 
 		DPRINTK("ncp_ioctl: copy %d bytes\n",
 			server->reply_size);
-		memcpy_tofs(request.data, server->packet,
-			    server->reply_size);
+		memcpy_tofs(request.data, server->packet, server->reply_size);
 
 		ncp_unlock_server(server);
 
 		return server->reply_size;
 
+	case NCP_IOC_GET_FS_INFO:
+
+		if (   (permission(inode, MAY_WRITE) != 0)
+		    && (current->uid != server->m.mounted_uid))
+		{
+			return -EACCES;
+		}
+		
+		if ((result = verify_area(VERIFY_WRITE, (char *)arg,
+					  sizeof(info))) != 0)
+		{
+			return result;
+		}
+
+		memcpy_fromfs(&info, (struct ncp_fs_info *)arg,
+			      sizeof(info));
+
+		if (info.version != NCP_GET_FS_INFO_VERSION)
+		{
+			DPRINTK("info.version invalid: %d\n", info.version);
+			return -EINVAL;
+		}
+
+		info.addr        = server->m.serv_addr;
+		info.mounted_uid = server->m.mounted_uid;
+		info.connection  = server->connection;
+		info.buffer_size = server->buffer_size;
+
+		memcpy_tofs((struct ncp_fs_info *)arg, &info, sizeof(info));
+		return 0;		
+
         case NCP_IOC_GETMOUNTUID:
+
+		if (   (permission(inode, MAY_READ) != 0)
+		    && (current->uid != server->m.mounted_uid))
+		{
+			return -EACCES;
+		}
+		
                 if ((result = verify_area(VERIFY_WRITE, (uid_t*) arg,
                                           sizeof(uid_t))) != 0)
 		{
                         return result;
                 }
-                put_fs_word(NCP_SERVER(inode)->m.mounted_uid, (uid_t*) arg);
+                put_fs_word(server->m.mounted_uid, (uid_t*) arg);
                 return 0;
 
 	default:

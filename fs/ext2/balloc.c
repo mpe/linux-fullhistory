@@ -227,7 +227,7 @@ void ext2_free_blocks (const struct inode * inode, unsigned long block,
 				      block);
 		else {
 			if (sb->dq_op)
-				sb->dq_op->free_block(inode, fs_to_dq_blocks(1, inode->i_blksize));
+				sb->dq_op->free_block(inode, fs_to_dq_blocks(1, sb->s_blocksize));
 			gdp->bg_free_blocks_count++;
 			es->s_free_blocks_count++;
 		}
@@ -404,7 +404,7 @@ got_block:
 	 * Check quota for allocation of this block.
 	 */
 	if (sb->dq_op)
-		if (sb->dq_op->alloc_block (inode, fs_to_dq_blocks(1, inode->i_blksize))) {
+		if (sb->dq_op->alloc_block (inode, fs_to_dq_blocks(1, sb->s_blocksize))) {
 			unlock_super (sb);
 			*err = -EDQUOT;
 			return 0;
@@ -424,7 +424,7 @@ got_block:
 		ext2_warning (sb, "ext2_new_block",
 			      "bit already set for block %d", j);
 		if (sb->dq_op)
-			sb->dq_op->free_block(inode, fs_to_dq_blocks(1, inode->i_blksize));
+			sb->dq_op->free_block(inode, fs_to_dq_blocks(1, sb->s_blocksize));
 		goto repeat;
 	}
 
@@ -440,11 +440,11 @@ got_block:
 		for (k = 1;
 		     k < 8 && (j + k) < EXT2_BLOCKS_PER_GROUP(sb); k++) {
 			if (sb->dq_op)
-				if (sb->dq_op->alloc_block(inode, fs_to_dq_blocks(1, inode->i_blksize)))
+				if (sb->dq_op->alloc_block(inode, fs_to_dq_blocks(1, sb->s_blocksize)))
 					break;
 			if (set_bit (j + k, bh->b_data)) {
 				if (sb->dq_op)
-					sb->dq_op->free_block(inode, fs_to_dq_blocks(1, inode->i_blksize));
+					sb->dq_op->free_block(inode, fs_to_dq_blocks(1, sb->s_blocksize));
 				break;
 			}
 			(*prealloc_count)++;

@@ -26,8 +26,25 @@ struct ncp_ioctl_request {
 	char          *data;
 };
 
+struct ncp_fs_info {
+	int    version;
+	struct sockaddr_ipx addr;
+	uid_t  mounted_uid;
+	int    connection;	/* Connection number the server assigned us */
+	int    buffer_size;	/* The negotiated buffer size, to be
+				   used for read/write requests! */
+
+	/* Not used yet, but here some day the namespace numbers will be
+	   stored. */
+	int    volume_number;
+	__u32  directory_id;
+};	
+
 #define	NCP_IOC_NCPREQUEST		_IOR('n', 1, unsigned char *)
 #define	NCP_IOC_GETMOUNTUID		_IOR('u', 1, uid_t)
+
+#define NCP_GET_FS_INFO_VERSION (1)
+#define NCP_IOC_GET_FS_INFO             _IOWR('i', 1, unsigned char *)
 
 /*
  * The packet size to allocate. One page should be enough.

@@ -290,8 +290,6 @@ struct Scsi_Host * scsi_register(Scsi_Host_Template * tpnt, int j){
 
     retval->unique_id = 0;
     retval->io_port = 0;
-    retval->forbidden_addr = 0;
-    retval->forbidden_size = 0;
     retval->hostt = tpnt;
     retval->next = NULL;
 #ifdef DEBUG
@@ -402,28 +400,6 @@ unsigned int scsi_init()
     max_scsi_hosts = next_scsi_host;
 #endif
     return 0;
-}
-
-
-void scsi_mem_init(unsigned long memory_end)
-{
-    struct Scsi_Host *Host;
-    long High8, Low24;
-    for (Host = scsi_hostlist; Host != NULL; Host = Host->next) {
-	if (Host->forbidden_addr > 0 && Host->forbidden_size > 0) {
-	    for (High8 = 1<<24; High8 < memory_end; High8 += 1<<24) {
-		for (Low24 = Host->forbidden_addr;
-		     Low24 < Host->forbidden_addr + Host->forbidden_size;
-		     Low24 += PAGE_SIZE) {
-		    unsigned long ForbiddenAddress = High8 + Low24;
-		    if (ForbiddenAddress >= memory_end) goto next_host;
-		    mem_map[MAP_NR(ForbiddenAddress)].reserved = 1;
-		}
-	    }
-	}
-    next_host:
-	continue;
-    }
 }
 
 /*

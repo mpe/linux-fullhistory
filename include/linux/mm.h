@@ -110,10 +110,13 @@ typedef struct page {
 	unsigned int count;
 	unsigned dirty:16,
 		 age:8,
-		 unused:7,
+		 uptodate:1,
+		 error:1,
+		 unused:5,
 		 reserved:1;
 	unsigned long offset;
 	struct inode *inode;
+	struct wait_queue *wait;
 	struct page *write_list;
 	struct page *next, *prev;
 	struct page *next_hash, *prev_hash;

@@ -61,7 +61,7 @@ struct inode_operations xiafs_file_inode_operations = {
     NULL,			/* rename */
     NULL,			/* readlink */
     NULL,			/* follow_link */
-    NULL,			/* readpage */
+    generic_readpage,		/* readpage */
     NULL,			/* writepage */
     xiafs_bmap,			/* bmap */
     xiafs_truncate,		/* truncate */

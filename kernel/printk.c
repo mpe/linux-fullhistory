@@ -23,7 +23,7 @@
 #include <linux/tty.h>
 #include <linux/tty_driver.h>
 
-#define LOG_BUF_LEN	4096
+#define LOG_BUF_LEN	8192
 
 static char buf[1024];
 

@@ -1,12 +1,13 @@
 
-pack .header -side top -padx 10 -pady 10
-pack .f0 -side top -padx 15 -pady 10
+pack .header -side top -padx 10 -pady 10 -expand on
+pack .f0 -side top -padx 15 -pady 10 -fill y -expand on
 
 #
 # Misc buttons to save/restore state and so forth.
 # 
-frame .f0r_bot
-frame .f0l_bot
+frame .f0_bot
+frame .f0_bot.r
+frame .f0_bot.l
 
 #
 # Read the users settings from .config.  These wil override whatever is
@@ -31,45 +32,47 @@ if { [file readable .config] == 1} then {
 
 update_mainmenu .f0
 
-button .f0r_bot.save -text "Write Configuration" -width 25 -command {
+button .f0_bot.r.save -text "Save and Exit" -width 25 -command {
 	writeconfig .config include/linux/autoconf.h; wrapup .wrap }
 
-button .f0r_bot.quit -text "Quit" -command { maybe_exit .maybe } -width 25 \
+button .f0_bot.r.quit -text "Quit Without Saving" -command { maybe_exit .maybe } -width 25 \
 	-activebackground red -activeforeground white
 
-button .f0l_bot.store -text "Store Configuration to file" -width 25 -command {
+button .f0_bot.l.store -text "Store Configuration to File" -width 25 -command {
 	load_configfile .load "Save Configuration in file" write_config_file
 }
 
-button .f0l_bot.load -text "Load Configuration" -width 25 -command {
+button .f0_bot.l.load -text "Load Configuration from File" -width 25 -command {
 	load_configfile .load "Load Configuration from file" read_config_file
 }
 
-pack  .f0r_bot.save .f0r_bot.quit -padx 25 -ipadx 10 -ipady 2 -anchor w
+pack  .f0_bot.r.save .f0_bot.r.quit -padx 25 -ipadx 10 -ipady 2 -expand on
+pack  .f0_bot.l.load .f0_bot.l.store -padx 25 -ipadx 10 -ipady 2 -expand on
 
-pack  .f0l_bot.load .f0l_bot.store -padx 25 -ipadx 10 -ipady 2 -anchor w
+pack .f0_bot.r -side left -padx 15 -pady 10 -expand on -fill y
+pack .f0_bot.l -side right -padx 15 -pady 10 -expand on -fill y
 
-pack .f0r_bot .f0l_bot -side left -padx 15 -pady 10 -anchor w
+pack .f0_bot -fill both -expand on
 
 #
 # If we cannot write our config files, disable the write button.
 #
 if { [file exists .config] == 1 } then {
 		if { [file writable .config] == 0 } then {
-			.f0r_bot.save configure -state disabled
+			.f0_bot.r.save configure -state disabled
 		}
 	} else {
 		if { [file writable .] == 0 } then {
-			.f0r_bot.save configure -state disabled
+			.f0_bot.r.save configure -state disabled
 		}
 	}
 
 if { [file exists include/linux/autoconf.h] == 1 } then {
 		if { [file writable include/linux/autoconf.h] == 0 } then {
-			.f0r_bot.save configure -state disabled
+			.f0_bot.r.save configure -state disabled
 		}
 	} else {
 		if { [file writable include/linux/] == 0 } then {
-			.f0r_bot.save configure -state disabled
+			.f0_bot.r.save configure -state disabled
 		}
 	}

@@ -66,22 +66,18 @@ int do_truncate(struct inode *inode, unsigned long length)
 	int error;
 	struct iattr newattrs;
 
+	down(&inode->i_sem);
 	newattrs.ia_size = length;
-	newattrs.ia_ctime = newattrs.ia_mtime = CURRENT_TIME;
 	newattrs.ia_valid = ATTR_SIZE | ATTR_CTIME | ATTR_MTIME;
 	error = notify_change(inode, &newattrs);
-	if (error)
-		return error;
-
-	/* truncate virtual mappings of this file */
-	down(&inode->i_sem);
-	vmtruncate(inode, length);
-	inode->i_size = length;
-	inode->i_dirt = 1;
-	if (inode->i_op && inode->i_op->truncate)
-		inode->i_op->truncate(inode);
+	if (!error) {
+		/* truncate virtual mappings of this file */
+		vmtruncate(inode, length);
+		if (inode->i_op && inode->i_op->truncate)
+			inode->i_op->truncate(inode);
+	}
 	up(&inode->i_sem);
-	return 0;
+	return error;
 }
 
 asmlinkage int sys_truncate(const char * path, unsigned long length)
@@ -141,10 +137,8 @@ asmlinkage int sys_ftruncate(unsigned int fd, unsigned long length)
  */
 asmlinkage int sys_utime(char * filename, struct utimbuf * times)
 {
-	struct inode * inode;
-	long actime,modtime;
 	int error;
-	unsigned int flags = 0;
+	struct inode * inode;
 	struct iattr newattrs;
 
 	error = namei(filename,&inode);
@@ -155,27 +149,22 @@ asmlinkage int sys_utime(char * filename, struct utimbuf * times)
 		return -EROFS;
 	}
 	/* Don't worry, the checks are done in inode_change_ok() */
+	newattrs.ia_valid = ATTR_CTIME | ATTR_MTIME | ATTR_ATIME;
 	if (times) {
 		error = verify_area(VERIFY_READ, times, sizeof(*times));
 		if (error) {
 			iput(inode);
 			return error;
 		}
-		actime = get_user(&times->actime);
-		modtime = get_user(&times->modtime);
-		newattrs.ia_ctime = CURRENT_TIME;
-		flags = ATTR_ATIME_SET | ATTR_MTIME_SET;
+		newattrs.ia_atime = get_user(&times->actime);
+		newattrs.ia_mtime = get_user(&times->modtime);
+		newattrs.ia_valid |= ATTR_ATIME_SET | ATTR_MTIME_SET;
 	} else {
 		if ((error = permission(inode,MAY_WRITE)) != 0) {
 			iput(inode);
 			return error;
 		}
-		actime = modtime = newattrs.ia_ctime = CURRENT_TIME;
 	}
-	newattrs.ia_atime = actime;
-	newattrs.ia_mtime = modtime;
-	newattrs.ia_valid = ATTR_CTIME | ATTR_MTIME | ATTR_ATIME | flags;
-	inode->i_dirt = 1;
 	error = notify_change(inode, &newattrs);
 	iput(inode);
 	return error;
@@ -187,10 +176,8 @@ asmlinkage int sys_utime(char * filename, struct utimbuf * times)
  */
 asmlinkage int sys_utimes(char * filename, struct timeval * utimes)
 {
-	struct inode * inode;
-	long actime,modtime;
 	int error;
-	unsigned int flags = 0;
+	struct inode * inode;
 	struct iattr newattrs;
 
 	error = namei(filename,&inode);
@@ -201,6 +188,7 @@ asmlinkage int sys_utimes(char * filename, struct timeval * utimes)
 		return -EROFS;
 	}
 	/* Don't worry, the checks are done in inode_change_ok() */
+	newattrs.ia_valid = ATTR_CTIME | ATTR_MTIME | ATTR_ATIME;
 	if (utimes) {
 		struct timeval times[2];
 		error = verify_area(VERIFY_READ, utimes, sizeof(times));
@@ -209,21 +197,15 @@ asmlinkage int sys_utimes(char * filename, struct timeval * utimes)
 			return error;
 		}
 		memcpy_fromfs(&times, utimes, sizeof(times));
-		actime = times[0].tv_sec;
-		modtime = times[1].tv_sec;
-		newattrs.ia_ctime = CURRENT_TIME;
-		flags = ATTR_ATIME_SET | ATTR_MTIME_SET;
+		newattrs.ia_atime = times[0].tv_sec;
+		newattrs.ia_mtime = times[1].tv_sec;
+		newattrs.ia_valid |= ATTR_ATIME_SET | ATTR_MTIME_SET;
 	} else {
 		if ((error = permission(inode,MAY_WRITE)) != 0) {
 			iput(inode);
 			return error;
 		}
-		actime = modtime = newattrs.ia_ctime = CURRENT_TIME;
 	}
-	newattrs.ia_atime = actime;
-	newattrs.ia_mtime = modtime;
-	newattrs.ia_valid = ATTR_CTIME | ATTR_MTIME | ATTR_ATIME | flags;
-	inode->i_dirt = 1;
 	error = notify_change(inode, &newattrs);
 	iput(inode);
 	return error;
@@ -334,7 +316,6 @@ asmlinkage int sys_fchmod(unsigned int fd, mode_t mode)
 	if (mode == (mode_t) -1)
 		mode = inode->i_mode;
 	newattrs.ia_mode = (mode & S_IALLUGO) | (inode->i_mode & ~S_IALLUGO);
-	newattrs.ia_ctime = CURRENT_TIME;
 	newattrs.ia_valid = ATTR_MODE | ATTR_CTIME;
 	inode->i_dirt = 1;
 	return notify_change(inode, &newattrs);
@@ -360,7 +341,6 @@ asmlinkage int sys_chmod(const char * filename, mode_t mode)
 	if (mode == (mode_t) -1)
 		mode = inode->i_mode;
 	newattrs.ia_mode = (mode & S_IALLUGO) | (inode->i_mode & ~S_IALLUGO);
-	newattrs.ia_ctime = CURRENT_TIME;
 	newattrs.ia_valid = ATTR_MODE | ATTR_CTIME;
 	inode->i_dirt = 1;
 	error = notify_change(inode, &newattrs);
@@ -390,7 +370,6 @@ asmlinkage int sys_fchown(unsigned int fd, uid_t user, gid_t group)
 	newattrs.ia_mode = inode->i_mode;
 	newattrs.ia_uid = user;
 	newattrs.ia_gid = group;
-	newattrs.ia_ctime = CURRENT_TIME;
 	newattrs.ia_valid =  ATTR_UID | ATTR_GID | ATTR_CTIME;
 	/*
 	 * If the owner has been changed, remove the setuid bit
@@ -443,7 +422,6 @@ asmlinkage int sys_chown(const char * filename, uid_t user, gid_t group)
 	newattrs.ia_mode = inode->i_mode;
 	newattrs.ia_uid = user;
 	newattrs.ia_gid = group;
-	newattrs.ia_ctime = CURRENT_TIME;
 	newattrs.ia_valid =  ATTR_UID | ATTR_GID | ATTR_CTIME;
 	/*
 	 * If the owner has been changed, remove the setuid bit

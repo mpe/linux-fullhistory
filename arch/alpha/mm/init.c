@@ -21,7 +21,6 @@
 #include <asm/pgtable.h>
 #include <asm/hwrpb.h>
 
-extern void scsi_mem_init(unsigned long);
 extern void die_if_kernel(char *,struct pt_regs *,long);
 extern void show_net_buffers(void);
 
@@ -154,11 +153,6 @@ void mem_init(unsigned long start_mem, unsigned long end_mem)
 		mem_map[MAP_NR(tmp)].reserved = 1;
 		tmp += PAGE_SIZE;
 	}
-
-
-#ifdef CONFIG_SCSI
-	scsi_mem_init(high_memory);
-#endif
 
 	for (tmp = PAGE_OFFSET ; tmp < high_memory ; tmp += PAGE_SIZE) {
 		if (mem_map[MAP_NR(tmp)].reserved)

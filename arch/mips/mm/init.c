@@ -24,7 +24,6 @@
 #include <asm/pgtable.h>
 
 extern void deskstation_tyne_dma_init(void);
-extern void scsi_mem_init(unsigned long);
 extern void sound_mem_init(void);
 extern void die_if_kernel(char *,struct pt_regs *,long);
 extern void show_net_buffers(void);
@@ -257,9 +256,6 @@ void mem_init(unsigned long start_mem, unsigned long end_mem)
 
 #ifdef CONFIG_DESKSTATION_TYNE
 	deskstation_tyne_dma_init();
-#endif
-#ifdef CONFIG_SCSI
-	scsi_mem_init(high_memory);
 #endif
 #ifdef CONFIG_SOUND
 	sound_mem_init();

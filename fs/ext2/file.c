@@ -36,8 +36,6 @@
 #include <linux/fs.h>
 #include <linux/ext2_fs.h>
 
-static int ext2_readpage(struct inode *, unsigned long, char *);
-static int ext2_file_read (struct inode *, struct file *, char *, int);
 static int ext2_file_write (struct inode *, struct file *, const char *, int);
 static void ext2_release_file (struct inode *, struct file *);
 
@@ -47,7 +45,7 @@ static void ext2_release_file (struct inode *, struct file *);
  */
 static struct file_operations ext2_file_operations = {
 	NULL,			/* lseek - default */
-	ext2_file_read,		/* read */
+	generic_file_read,	/* read */
 	ext2_file_write,	/* write */
 	NULL,			/* readdir - bad */
 	NULL,			/* select - default */
@@ -74,127 +72,13 @@ struct inode_operations ext2_file_inode_operations = {
 	NULL,			/* rename */
 	NULL,			/* readlink */
 	NULL,			/* follow_link */
-	ext2_readpage,		/* readpage */
+	generic_readpage,	/* readpage */
 	NULL,			/* writepage */
 	ext2_bmap,		/* bmap */
 	ext2_truncate,		/* truncate */
 	ext2_permission,	/* permission */
 	NULL			/* smap */
 };
-
-static int ext2_readpage(struct inode * inode, unsigned long offset, char * page)
-{
-	int *p, nr[PAGE_SIZE/512];
-	int i;
-
-	i = PAGE_SIZE >> inode->i_sb->s_blocksize_bits;
-	offset >>= inode->i_sb->s_blocksize_bits;
-	p = nr;
-	do {
-		*p = ext2_bmap(inode, offset);
-		i--;
-		offset++;
-		p++;
-	} while (i > 0);
-	return bread_page((unsigned long) page, inode->i_dev, nr, inode->i_sb->s_blocksize);
-}
-
-/*
- * This is a generic file read routine, and uses the
- * inode->i_op->readpage() function for the actual low-level
- * stuff. We can put this into the other filesystems too
- * once we've debugged it a bit more.
- */
-static int ext2_file_read (struct inode * inode, struct file * filp,   
-		char * buf, int count)
-{
-	int read = 0;
-	unsigned long pos;
-	unsigned long addr;
-	unsigned long cached_page = 0;
-	struct page *page;
-
-	if (count <= 0)
-		return 0;
-
-	pos = filp->f_pos;
-	
-	for (;;) {
-		unsigned long offset, nr;
-
-		if (pos >= inode->i_size)
-			break;
-
-		offset = pos & ~PAGE_MASK;
-		nr = PAGE_SIZE - offset;
-		if (nr > count)
-			nr = count;
-
-		/* is it already cached? */
-		page = find_page(inode, pos & PAGE_MASK);
-		if (page)
-			goto found_page;
-
-		/* not cached, have to read it in.. */
-		if (!(addr = cached_page)) {
-			addr = cached_page = __get_free_page(GFP_KERNEL);
-			if (!addr) {
-				if (!read)
-					read = -ENOMEM;
-				break;
-			}
-		}
-		inode->i_op->readpage(inode, pos & PAGE_MASK, (char *) addr);
-
-		/* while we did that, things may have changed.. */
-		if (pos >= inode->i_size)
-			break;
-		page = find_page(inode, pos & PAGE_MASK);
-		if (page)
-			goto found_page;
-
-		/* nope, this is the only copy.. */
-		cached_page = 0;
-		page = mem_map + MAP_NR(addr);
-		page->offset = pos & PAGE_MASK;
-		add_page_to_inode_queue(inode, page);
-		add_page_to_hash_queue(inode, page);
-
-found_page:
-		if (nr > inode->i_size - pos)
-			nr = inode->i_size - pos;
-		page->count++;
-		addr = page_address(page);
-		memcpy_tofs(buf, (void *) (addr + offset), nr);
-		free_page(addr);
-		buf += nr;
-		pos += nr;
-		read += nr;
-		count -= nr;
-		if (!count)
-			break;
-	}
-	filp->f_pos = pos;
-	if (cached_page)
-		free_page(cached_page);
-	if (!IS_RDONLY(inode)) {
-		inode->i_atime = CURRENT_TIME;
-		inode->i_dirt = 1;
-	}
-	return read;
-}
-
-static inline void update_vm_cache(struct inode * inode, unsigned long pos,
-	char * buf, int count)
-{
-	struct page * page;
-
-	page = find_page(inode, pos & PAGE_MASK);
-	if (page) {
-		pos = (pos & ~PAGE_MASK) + page_address(page);
-		memcpy((void *) pos, buf, count);
-	}
-}
 
 static int ext2_file_write (struct inode * inode, struct file * filp,
 			    const char * buf, int count)

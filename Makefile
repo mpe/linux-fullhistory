@@ -1,6 +1,6 @@
 VERSION = 1
 PATCHLEVEL = 3
-SUBLEVEL = 53
+SUBLEVEL = 54
 
 ARCH = i386
 
@@ -249,7 +249,7 @@ MODFLAGS += -DMODVERSIONS -include $(HPATH)/linux/modversions.h
 endif
 
 modules: include/linux/version.h
-	@set -e; for i in $(SUBDIRS); do $(MAKE) -C $$i CFLAGS="-dc $(CFLAGS) $(MODFLAGS)" modules; done
+	@set -e; for i in $(SUBDIRS); do $(MAKE) -C $$i CFLAGS="$(CFLAGS) $(MODFLAGS)" modules; done
 
 modules_install:
 	@( \

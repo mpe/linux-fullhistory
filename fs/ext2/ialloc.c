@@ -464,7 +464,7 @@ repeat:
 		inode->i_gid = current->fsgid;
 	inode->i_dirt = 1;
 	inode->i_ino = j;
-	inode->i_blksize = sb->s_blocksize;
+	inode->i_blksize = PAGE_SIZE;	/* This is the optimal IO size (for stat), not the fs block size */
 	inode->i_blocks = 0;
 	inode->i_mtime = inode->i_atime = inode->i_ctime = CURRENT_TIME;
 	inode->u.ext2_i.i_flags = dir->u.ext2_i.i_flags;

@@ -598,13 +598,6 @@ void idetape_blkdev_release (struct inode *inode, struct file *filp, ide_drive_t
  
 void idetape_register_chrdev (void);
 
-/*
- *	The following function is called to re-insert a postponed tape
- *	request into the request queue.
- */
- 
-void idetape_put_back_postponed_request (ide_drive_t *drive);
-
 #endif /* CONFIG_BLK_DEV_IDETAPE */
 
 #ifdef CONFIG_BLK_DEV_TRITON

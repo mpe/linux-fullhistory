@@ -1,6 +1,6 @@
 /*
 
-  Linux Driver for BusLogic SCSI Host Adapters
+  Linux Driver for BusLogic MultiMaster SCSI Host Adapters
 
   Copyright 1995 by Leonard N. Zubkoff <lnz@dandelion.com>
 
@@ -95,13 +95,11 @@ int BusLogic_BIOSDiskParameters(SCSI_Disk_T *, KernelDevice_T, int *);
 
 /*
   Define the number of Incoming and Outgoing Mailboxes used by this driver.
-  Since BusLogic Host Adapters have room to buffer 32 commands internally,
-  there is significant virtue in setting BusLogic_MailboxCount to 32 or above.
   The maximum possible value is 255, since the MailboxCount parameter to the
   Initialize Extended Mailbox command is limited to a single byte.
 */
 
-#define BusLogic_MailboxCount			32
+#define BusLogic_MailboxCount			64
 
 
 /*
@@ -124,11 +122,12 @@ int BusLogic_BIOSDiskParameters(SCSI_Disk_T *, KernelDevice_T, int *);
 
 /*
   Define the default number of Concurrent Commands per Logical Unit to allow
-  for Target Devices on non-ISA and ISA Host Adapters.
+  for Target Devices depending on whether or not ISA bounce buffers are
+  required.
 */
 
 #define BusLogic_Concurrency			7
-#define BusLogic_Concurrency_ISA		1
+#define BusLogic_Concurrency_BB			1
 
 
 /*
@@ -142,7 +141,14 @@ int BusLogic_BIOSDiskParameters(SCSI_Disk_T *, KernelDevice_T, int *);
 
 
 /*
-  Define the possible Tracing Options.
+  Define the possible Local Options.
+*/
+
+#define BusLogic_InhibitTargetInquiry		1
+
+
+/*
+  Define the possible Global Options.
 */
 
 #define BusLogic_TraceProbe			1
@@ -267,7 +273,7 @@ typedef enum
   BusLogic_InitializeExtendedMailbox =		0x81,	/* documented */
   BusLogic_InquireFirmwareVersion3rdDigit =	0x84,	/* undocumented */
   BusLogic_InquireFirmwareVersionLetter =	0x85,	/* undocumented */
-  BusLogic_InquireBoardModelAndRevision =	0x8B,	/* undocumented */
+  BusLogic_InquireBoardModelNumber	 =	0x8B,	/* undocumented */
   BusLogic_InquireSynchronousPeriod =		0x8C,	/* undocumented */
   BusLogic_InquireExtendedSetupInformation =	0x8D,	/* documented */
   BusLogic_EnableStrictRoundRobinMode =		0x8F,	/* documented */
@@ -395,15 +401,10 @@ typedef unsigned char BusLogic_FirmwareVersionLetter_T;
 
 
 /*
-  Define the Inquire Board Model and Revision reply structure.
+  Define the Inquire Board Model Number reply type.
 */
 
-typedef struct BusLogic_ModelAndRevision
-{
-  unsigned char Model[5];
-  unsigned char Revision;
-}
-BusLogic_ModelAndRevision_T;
+typedef unsigned char BusLogic_BoardModelNumber_T[5];
 
 
 /*
@@ -427,7 +428,7 @@ typedef struct BusLogic_ExtendedSetupInformation
   unsigned char MailboxCount;				/* Byte 4 */
   void *BaseMailboxAddress __attribute__ ((packed));	/* Bytes 5-8 */
   struct { unsigned char :6;				/* Byte 9 */
-	   boolean LevelTriggeredInterrupts:1;
+	   boolean LevelSensitiveInterrupts:1;
 	   unsigned char :1; } Misc;
   unsigned char FirmwareRevision[3];			/* Bytes 10-12 */
   boolean HostWideSCSI:1;				/* Byte 13 Bit 0 */
@@ -479,8 +480,8 @@ typedef unsigned char BusLogic_WideModeCCBRequest_T;
 
 /*
   Define the Requested Reply Length type used by the Inquire Setup Information,
-  Inquire Board Model and Revision, Inquire Synchronous Period, and Inquire
-  Extended Setup Information commands.
+  Inquire Board Model Number, Inquire Synchronous Period, and Inquire Extended
+  Setup Information commands.
 */
 
 typedef unsigned char BusLogic_RequestedReplyLength_T;
@@ -676,7 +677,7 @@ typedef struct BusLogic_CCB
   BusLogic_HostAdapterStatus_T HostAdapterStatus:8;	/* Byte 14 */
   BusLogic_TargetDeviceStatus_T TargetDeviceStatus:8;	/* Byte 15 */
   unsigned char TargetID;				/* Byte 16 */
-  unsigned char LogicalUnit:5;				/* Byte 17 Bits 0-2 */
+  unsigned char LogicalUnit:5;				/* Byte 17 Bits 0-4 */
   boolean TagEnable:1;					/* Byte 17 Bit 5 */
   BusLogic_QueueTag_T QueueTag:2;			/* Byte 17 Bits 6-7 */
   SCSI_CDB_T CDB;					/* Bytes 18-29 */
@@ -691,7 +692,8 @@ typedef struct BusLogic_CCB
   SCSI_Command_T *Command;
   enum { BusLogic_CCB_Free =	    0,
 	 BusLogic_CCB_Active =	    1,
-	 BusLogic_CCB_Completed =   2 } Status;
+	 BusLogic_CCB_Completed =   2,
+	 BusLogic_CCB_Reset =	    3 } Status;
   BusLogic_CompletionCode_T MailboxCompletionCode;
   unsigned int SerialNumber;
   struct BusLogic_CCB *Next;
@@ -759,6 +761,7 @@ typedef struct BusLogic_CommandLineEntry
   unsigned short IO_Address;
   unsigned short Concurrency;
   unsigned short BusSettleTime;
+  unsigned short LocalOptions;
   unsigned short TaggedQueuingPermitted;
   unsigned short TaggedQueuingPermittedMask;
   unsigned char ErrorRecoveryOption[BusLogic_MaxTargetIDs];
@@ -774,10 +777,10 @@ typedef struct BusLogic_HostAdapter
 {
   SCSI_Host_T *SCSI_Host;
   unsigned char HostNumber;
-  unsigned char ModelName[6];
+  unsigned char ModelName[9];
   unsigned char FirmwareVersion[6];
-  unsigned char BoardName[15];
-  unsigned char InterruptLabel[63];
+  unsigned char BoardName[18];
+  unsigned char InterruptLabel[62];
   unsigned short IO_Address;
   unsigned char IRQ_Channel;
   unsigned char DMA_Channel;
@@ -788,10 +791,11 @@ typedef struct BusLogic_HostAdapter
   boolean SynchronousInitiation:1;
   boolean ParityChecking:1;
   boolean ExtendedTranslation:1;
-  boolean LevelTriggeredInterrupts:1;
+  boolean LevelSensitiveInterrupts:1;
   boolean HostWideSCSI:1;
   boolean HostDifferentialSCSI:1;
   boolean HostAdapterResetPending:1;
+  boolean BounceBuffersRequired:1;
   volatile boolean HostAdapterCommandCompleted:1;
   unsigned short HostAdapterScatterGatherLimit;
   unsigned short DriverScatterGatherLimit;
@@ -799,6 +803,7 @@ typedef struct BusLogic_HostAdapter
   unsigned short MaxLogicalUnits;
   unsigned short Concurrency;
   unsigned short BusSettleTime;
+  unsigned short LocalOptions;
   unsigned short DisconnectPermitted;
   unsigned short TaggedQueuingPermitted;
   unsigned long BIOS_Address;
@@ -813,6 +818,8 @@ typedef struct BusLogic_HostAdapter
   unsigned char ErrorRecoveryOption[BusLogic_MaxTargetIDs];
   unsigned char CommandSuccessfulFlag[BusLogic_MaxTargetIDs];
   unsigned long ReadWriteOperationCount[BusLogic_MaxTargetIDs];
+  unsigned char QueuedOperationCount[BusLogic_MaxTargetIDs];
+  unsigned long LastSequencePoint[BusLogic_MaxTargetIDs];
   BusLogic_OutgoingMailbox_T *FirstOutgoingMailbox;
   BusLogic_OutgoingMailbox_T *LastOutgoingMailbox;
   BusLogic_OutgoingMailbox_T *NextOutgoingMailbox;
@@ -943,14 +950,17 @@ void BusLogic_StartMailboxScan(BusLogic_HostAdapter_T *HostAdapter)
 
 
 /*
-  BusLogic_Delay waits for Seconds to elapse.  It must be called with
-  interrupts enabled so that jiffies is updated.
+  BusLogic_Delay waits for Seconds to elapse.
 */
 
 static inline void BusLogic_Delay(int Seconds)
 {
   unsigned long TimeoutJiffies = jiffies + Seconds * HZ;
+  unsigned long ProcessorFlags;
+  save_flags(ProcessorFlags);
+  sti();
   while (jiffies < TimeoutJiffies) ;
+  restore_flags(ProcessorFlags);
 }
 
 

@@ -537,6 +537,10 @@ static void smp_init(void)
 
 	for(i=1;i<smp_num_cpus;i++)
 	{
+		/*
+		 *	We use kernel_thread for the idlers which are
+		 *	unlocked tasks running in kernel space.
+		 */
 		kernel_thread(cpu_idle, NULL, CLONE_PID);
 		/*
 		 *	Assume linear processor numbering
@@ -636,7 +640,11 @@ asmlinkage void start_kernel(void)
 #ifdef __SMP__
 	smp_init();
 #endif
-	/* we count on the initial thread going ok */
+	/* 
+	 *	We count on the initial thread going ok 
+	 *	Like idlers init is an unlocked kernel thread, which will
+	 *	make syscalls (and thus be locked).
+	 */
 	kernel_thread(init, NULL, 0);
 /*
  * task[0] is meant to be used as an "idle" task: it may not sleep, but

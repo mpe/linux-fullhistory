@@ -573,6 +573,7 @@ static int ipxitf_send(ipx_interface *intrfc, struct sk_buff *skb, char *node)
 
 	/* set up data link and physical headers */
 	skb->dev = dev;
+	skb->protocol = htons(ETH_P_IPX);
 	dl->datalink_header(dl, skb, dest_node);
 #if 0
 	/* 
@@ -1094,10 +1095,11 @@ static int ipxrtr_route_packet(ipx_socket *sk, struct sockaddr_ipx *usipx, struc
 	skb=sock_alloc_send_skb(sk, size, 0, 0, &err);
 	if(skb==NULL)
 		return err;
-		
+
 	skb_reserve(skb,ipx_offset);
 	skb->free=1;
 	skb->arp=1;
+	skb->sk=sk;
 
 	/* Fill in IPX header */
 	ipx=(ipx_packet *)skb_put(skb,sizeof(ipx_packet));

@@ -91,6 +91,8 @@
 #define FD_LOCK			0x94	/* Fifo config lock */
 #define FD_RSEEK_OUT		0x8f	/* seek out (i.e. to lower tracks) */
 #define FD_RSEEK_IN		0xcf	/* seek in (i.e. to higher tracks) */
+#define FD_PARTID		0x18	/* part id ("extended" version cmd) */
+#define FD_SAVE			0x2e	/* save fdc regs for later restore */
 
 /* DMA commands */
 #define DMA_READ	0x46
@@ -104,6 +106,8 @@
 #define FDC_82072	0x40	/* Intel 82072; 8272a + FIFO + DUMPREGS */
 #define FDC_82077_ORIG	0x50	/* Original version of 82077AA, sans LOCK */
 #define FDC_82077	0x52	/* 82077AA-1 */
+#define FDC_82078	0x60	/* 44pin 82078 or 64pin 82078SL */
+#define FDC_82078_1	0x61	/* 82078-1 (2Mbps fdc) */
 
 #define FD_RESET_DELAY 20
 #endif

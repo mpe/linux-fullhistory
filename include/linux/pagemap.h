@@ -36,6 +36,7 @@ static inline struct page * find_page(struct inode * inode, unsigned long offset
 		if (page->offset != offset)
 			continue;
 		page->age = PAGE_AGE_VALUE | (page->age >> 1);
+		page->count++;
 		break;
 	}
 	return page;
@@ -94,5 +95,7 @@ static inline void add_page_to_inode_queue(struct inode * inode, struct page * p
 		page->next->prev = page;
 	*p = page;
 }
+
+extern void update_vm_cache(struct inode *, unsigned long, const char *, int);
 
 #endif

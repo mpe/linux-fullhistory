@@ -187,6 +187,10 @@ S: 14509 NE 39th Street #1096
 S: Bellevue, Washington 98007
 S: USA
 
+N: Juan Jose Ciarlante
+E: jjciarla@raiz.uncu.edu.ar
+D: Network driver alias support
+
 N: Hamish Coleman
 E: hamish@zot.apana.org.au
 D: SEEQ8005 network driver
@@ -195,11 +199,13 @@ S: East Malvern, Victoria, 3145
 S: Australia
 
 N: Alan Cox
-E: iialan@iifeak.swan.ac.uk
-E: alan@cymru.net (use for commercial traffic)
-E: gw4pts@gw4pts.ampr.org
+E: alan@lxorguk.ukuu.org.uk (linux related - except big patches)
+E: iialan@www.linux.org.uk (linux.org.uk/big patches)
+E: alan@cymru.net (commercial CymruNET stuff)
+E: gw4pts@gw4pts.ampr.org (amateur radio stuff)
 E: GW4PTS@GB7SWN (packet radio)
-S: c/o I^2IT Limited
+E: Please don't use iialan@iifeak.swan.ac.uk for Linux stuff
+S: c/o 3Com/I^2IT Limited
 S: The Innovation Centre
 S: University Of Wales
 S: Swansea, SA2 8PP
@@ -209,6 +215,8 @@ D: Network layer debugging
 D: Initial AX.25 & IPX releases
 D: Original Linux netatalk patches.
 D: Current 3c501 hacker. >>More 3c501 info/tricks wanted<<.
+D: Watchdog timer drivers
+D: Linux/SMP
 
 N: Laurence Culhane
 E: loz@holmes.demon.co.uk
@@ -557,6 +565,7 @@ S: The Netherlands
 N: Volker Lendecke
 E: lendecke@namu01.gwdg.de
 D: Kernel smbfs (to mount WfW, NT and OS/2 network drives.)
+D: NCP filesystem support (to mount NetWare volumes)
 S: Innersteweg 11
 S: 37081 Goettingen
 S: Germany
@@ -798,6 +807,13 @@ S: Australia
 N: Greg Page
 E: greg@caldera.com
 D: IPX development and support
+
+N: Avery Pennarun
+E: apenwarr@foxnet.net
+D: ARCnet driver, various small changes
+S: RR #5, 497 Pole Line Road
+S: Thunder Bay, Ontario
+S: CANADA P7C 5M9
 
 N: Kai Petzke
 E: wpp@marie.physik.tu-berlin.de

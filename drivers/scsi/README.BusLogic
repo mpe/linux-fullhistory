@@ -1,5 +1,5 @@
-		     BusLogic SCSI Driver for Linux 1.3.41
-		       Version 1.3.0 ~ 13 November 1995
+	       BusLogic MultiMaster SCSI Driver for Linux 1.3.51
+		       Version 1.3.1 ~ 31 December 1995
 
 			       Leonard N. Zubkoff
 			       Dandelion Digital
@@ -15,7 +15,7 @@ adapters which share a common programming interface across a diverse collection
 of bus architectures by virtue of their MultiMaster ASIC technology.  This
 driver supports all present BusLogic MultiMaster Host Adapters, and should
 support any future MultiMaster designs with little or no modification.  Host
-adapters based on the new FlashPoint technology are not supported by this
+adapters based on the new FlashPoint architecture are not supported by this
 driver.
 
 My primary goals in writing this completely new BusLogic driver for Linux are
@@ -86,9 +86,10 @@ o Performance Features
   number of concurrent commands per logical unit is available from the kernel
   command line.  In addition, tagged queuing is automatically disabled whenever
   the host adapter firmware version is known not to implement it correctly, or
-  whenever a concurrency value of 1 is selected.  In performance testing,
-  sustained disk writes of 7.3MB per second have been observed to a /dev/sd
-  device.
+  whenever a concurrency value of 1 is selected.  Tagged queuing is also
+  disabled for individual target devices if disconnect/reconnect is disabled
+  for that device.  In performance testing, sustained disk writes of 7.3MB per
+  second have been observed to a /dev/sd device.
 
 o Robustness Features
 
@@ -106,7 +107,9 @@ o Robustness Features
   correct operation, the next command that is reset will force a full host
   adapter hard reset and SCSI bus reset.  SCSI bus resets caused by other
   devices and detected by the host adapter are also handled by issuing a hard
-  reset to the host adapter and full reinitialization.  These error recovery
+  reset to the host adapter and full reinitialization.  Finally, if a command
+  using tagged queuing causes a bus device reset or SCSI bus reset, then tagged
+  queuing will be disabled for that target device.  These error recovery
   options should improve overall system robustness by preventing individual
   errant devices from causing the system as a whole to lock up or crash, and
   thereby allowing a clean shutdown and restart after the offending component
@@ -126,7 +129,9 @@ o PCI Configuration Support
   On PCI systems running kernels compiled with PCI BIOS support enabled, this
   driver will interrogate the PCI configuration space and use the I/O port
   addresses assigned by the system BIOS, rather than the ISA compatible I/O
-  port addresses.
+  port addresses.  The ISA compatible I/O port address is then disabled by the
+  driver.  On PCI systems it is also recommended that the AutoSCSI utility be
+  used to disable the ISA compatible I/O port entirely as it is not necessary.
 
 o Shared Interrupts Support
 
@@ -156,34 +161,34 @@ that it is or will be supported.
 
 "C" Series Host Adapters:
 
-946C	PCI	Fast Single-ended SCSI-2
-956C	PCI	Fast/Wide Single-ended SCSI-2
-956CD	PCI	Fast/Wide Differential SCSI-2
-445C	VLB	Fast Single-ended SCSI-2
-747C	EISA	Fast Single-ended SCSI-2
-757C	EISA	Fast/Wide Single-ended SCSI-2
-757CD	EISA	Fast/Wide Differential SCSI-2
-545C	ISA	Fast Single-ended SCSI-2
-540CF	ISA	Fast Single-ended SCSI-2
+BT-946C	    PCI	    Fast Single-ended SCSI-2
+BT-956C	    PCI	    Fast/Wide Single-ended SCSI-2
+BT-956CD    PCI	    Fast/Wide Differential SCSI-2
+BT-445C	    VLB	    Fast Single-ended SCSI-2
+BT-747C	    EISA    Fast Single-ended SCSI-2
+BT-757C	    EISA    Fast/Wide Single-ended SCSI-2
+BT-757CD    EISA    Fast/Wide Differential SCSI-2
+BT-545C	    ISA	    Fast Single-ended SCSI-2
+BT-540CF    ISA	    Fast Single-ended SCSI-2
 
 "S" Series Host Adapters:
 
-445S	VLB	Fast Single-ended SCSI-2
-747S	EISA	Fast Single-ended SCSI-2
-747D	EISA	Fast Differential SCSI-2
-757S	EISA	Fast/Wide Single-ended SCSI-2
-757D	EISA	Fast/Wide Differential SCSI-2
-545S	ISA	Fast Single-ended SCSI-2
-542D	ISA	Fast Differential SCSI-2
-742A 	EISA	Single-ended SCSI-2 (742A revision H)
-542B	ISA	Single-ended SCSI-2 (542B revision H)
+BT-445S	    VLB	    Fast Single-ended SCSI-2
+BT-747S	    EISA    Fast Single-ended SCSI-2
+BT-747D	    EISA    Fast Differential SCSI-2
+BT-757S	    EISA    Fast/Wide Single-ended SCSI-2
+BT-757D	    EISA    Fast/Wide Differential SCSI-2
+BT-545S	    ISA	    Fast Single-ended SCSI-2
+BT-542D	    ISA	    Fast Differential SCSI-2
+BT-742A	    EISA    Single-ended SCSI-2 (742A revision H)
+BT-542B	    ISA	    Single-ended SCSI-2 (542B revision H)
 
 "A" Series Host Adapters:
 
-742A 	EISA	Single-ended SCSI-2 (742A revisions A - G)
-542B	ISA	Single-ended SCSI-2 (542B revisions A - G)
+BT-742A	    EISA    Single-ended SCSI-2 (742A revisions A - G)
+BT-542B	    ISA	    Single-ended SCSI-2 (542B revisions A - G)
 
-The FlashPoint LT, also known as the 930 Ultra, implements a different host
+The FlashPoint LT, also known as the BT-930 Ultra, implements a different host
 interface and is not supported by this driver.
 
 AMI FastDisk Host Adapters are true BusLogic clones and are supported by this
@@ -235,18 +240,16 @@ substantially impact performance.
 
 				 INSTALLATION
 
-This distribution was prepared for Linux kernel version 1.3.41.  Installation
+This distribution was prepared for Linux kernel version 1.3.51.  Installation
 in later versions will probably be successful as well, though BusLogic.patch
-may not be required once this driver becomes part of the standard development
-kernel; installation in earlier versions should not be attempted as 1.3.41
-contains changes I made to the common code that are essential for correct error
-recovery.
+may not be required.  Installation in Linux 1.3.41 - 1.3.50 will probably be
+successful, but may require minor modifications.
 
 To install the BusLogic SCSI driver, you may use the following commands,
 replacing "/usr/src" with wherever you keep your Linux kernel source tree:
 
   cd /usr/src
-  tar -xvzf BusLogic-1.3.0.tar.gz
+  tar -xvzf BusLogic-1.3.1.tar.gz
   mv README.BusLogic BusLogic.[ch] linux/drivers/scsi
   patch -p < BusLogic.patch
   cd linux

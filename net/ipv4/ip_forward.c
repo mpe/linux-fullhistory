@@ -9,6 +9,7 @@
  *
  * Fixes:
  *		Many		:	Split from ip.c , see ip_input.c for history.
+ *		Dave Gregorich	:	NULL ip_rt_put fix for multicast routing.
  */
 
 #include <linux/config.h>
@@ -242,11 +243,13 @@ int ip_forward(struct sk_buff *skb, struct device *dev, int is_frag,
 #endif
 		IS_SKB(skb);
 
-		if (skb->len+encap > dev2->mtu && (ntohs(iph->frag_off) & IP_DF)) {
-		  ip_statistics.IpFragFails++;
-		  icmp_send(skb, ICMP_DEST_UNREACH, ICMP_FRAG_NEEDED, htonl(dev2->mtu), dev);
-		  ip_rt_put(rt);
-		  return -1;
+		if (skb->len+encap > dev2->mtu && (ntohs(iph->frag_off) & IP_DF)) 
+		{
+			ip_statistics.IpFragFails++;
+			icmp_send(skb, ICMP_DEST_UNREACH, ICMP_FRAG_NEEDED, htonl(dev2->mtu), dev);
+			if(rt)
+				ip_rt_put(rt);
+			return -1;
 		}
 
 #ifdef CONFIG_IP_MROUTE
@@ -266,7 +269,8 @@ int ip_forward(struct sk_buff *skb, struct device *dev, int is_frag,
 			if (skb2 == NULL)
 			{
 				NETDEBUG(printk("\nIP: No memory available for IP forward\n"));
-				ip_rt_put(rt);
+				if(rt)
+					ip_rt_put(rt);
 				return -1;
 			}
 		
@@ -427,10 +431,12 @@ int ip_forward(struct sk_buff *skb, struct device *dev, int is_frag,
 	}
 	else
 	{
-	        ip_rt_put(rt);
+	        if(rt)
+	        	ip_rt_put(rt);
 		return -1;
 	}
-	ip_rt_put(rt);
+	if(rt)
+		ip_rt_put(rt);
 	
 	/*
 	 *	Tell the caller if their buffer is free.

@@ -976,36 +976,47 @@ lance_rx(struct device *dev)
 			if (status & 0x08) lp->stats.rx_crc_errors++;
 			if (status & 0x04) lp->stats.rx_fifo_errors++;
 			lp->rx_ring[entry].base &= 0x03ffffff;
-		} else {
+		}
+		else 
+		{
 			/* Malloc up new buffer, compatible with net-2e. */
 			short pkt_len = (lp->rx_ring[entry].msg_length & 0xfff)-4;
 			struct sk_buff *skb;
-
-			skb = dev_alloc_skb(pkt_len+2);
-			if (skb == NULL) {
-				printk("%s: Memory squeeze, deferring packet.\n", dev->name);
-				for (i=0; i < RX_RING_SIZE; i++)
-				  if (lp->rx_ring[(entry+i) & RX_RING_MOD_MASK].base < 0)
-					break;
-
-				if (i > RX_RING_SIZE -2) {
-				  lp->stats.rx_dropped++;
-				  lp->rx_ring[entry].base |= 0x80000000;
-				  lp->cur_rx++;
-				}
-				break;
+			
+			if(pkt_len<60)
+			{
+				printk("%s: Runt packet!\n",dev->name);
+				lp->stats.rx_errors++;
 			}
-			skb->dev = dev;
-			skb_reserve(skb,2);	/* 16 byte align */
-			skb_put(skb,pkt_len);	/* Make room */
-			eth_copy_and_sum(skb,
-				   (unsigned char *)(lp->rx_ring[entry].base & 0x00ffffff),
-				   pkt_len,0);
-			skb->protocol=eth_type_trans(skb,dev);
-			netif_rx(skb);
-			lp->stats.rx_packets++;
-		}
+			else
+			{
+				skb = dev_alloc_skb(pkt_len+2);
+				if (skb == NULL) 
+				{
+					printk("%s: Memory squeeze, deferring packet.\n", dev->name);
+					for (i=0; i < RX_RING_SIZE; i++)
+						if (lp->rx_ring[(entry+i) & RX_RING_MOD_MASK].base < 0)
+							break;
 
+					if (i > RX_RING_SIZE -2) 
+					{
+						lp->stats.rx_dropped++;
+						lp->rx_ring[entry].base |= 0x80000000;
+						lp->cur_rx++;
+					}
+					break;
+				}
+				skb->dev = dev;
+				skb_reserve(skb,2);	/* 16 byte align */
+				skb_put(skb,pkt_len);	/* Make room */
+				eth_copy_and_sum(skb,
+					(unsigned char *)(lp->rx_ring[entry].base & 0x00ffffff),
+					pkt_len,0);
+				skb->protocol=eth_type_trans(skb,dev);
+				netif_rx(skb);
+				lp->stats.rx_packets++;
+			}
+		}
 		/* The docs say that the buffer length isn't touched, but Andrew Boyd
 		   of QNX reports that some revs of the 79C965 clear it. */
 		lp->rx_ring[entry].buf_length = -PKT_BUF_SZ;

@@ -1,6 +1,6 @@
 /*
 
-  Linux Driver for BusLogic SCSI Host Adapters
+  Linux Driver for BusLogic MultiMaster SCSI Host Adapters
 
   Copyright 1995 by Leonard N. Zubkoff <lnz@dandelion.com>
 
@@ -18,15 +18,17 @@
   sent directly to him for evaluation and testing.
 
   Special thanks to Alex T. Win of BusLogic, whose advice has been invaluable,
-  and to David B. Gentzel, for writing the original Linux BusLogic driver.
+  to David B. Gentzel, for writing the original Linux BusLogic driver, and to
+  Paul Gortmaker, for being such a dedicated test site.
 
 */
 
 
-#define BusLogic_DriverVersion		"1.3.0"
-#define BusLogic_DriverDate		"13 November 1995"
+#define BusLogic_DriverVersion		"1.3.1"
+#define BusLogic_DriverDate		"31 December 1995"
 
 
+#include <linux/module.h>
 #include <linux/config.h>
 #include <linux/types.h>
 #include <linux/blkdev.h>
@@ -67,12 +69,12 @@ static BusLogic_CommandLineEntry_T
 
 
 /*
-  BusLogic_TracingOptions is a bit mask of Tracing Options to be applied
+  BusLogic_GlobalOptions is a bit mask of Global Options to be applied
   across all Host Adapters.
 */
 
 static int
-  BusLogic_TracingOptions =		0;
+  BusLogic_GlobalOptions =		0;
 
 
 /*
@@ -146,8 +148,7 @@ static void BusLogic_AnnounceDriver(void)
   if (DriverAnnouncementPrinted) return;
   printk("scsi: ***** BusLogic SCSI Driver Version "
 	 BusLogic_DriverVersion " of " BusLogic_DriverDate " *****\n");
-  printk("scsi: Copyright 1995 by Leonard N. Zubkoff "
-	 "<lnz@dandelion.com>\n");
+  printk("scsi: Copyright 1995 by Leonard N. Zubkoff <lnz@dandelion.com>\n");
   DriverAnnouncementPrinted = true;
 }
 
@@ -315,8 +316,9 @@ static BusLogic_CCB_T *BusLogic_AllocateCCB(BusLogic_HostAdapter_T *HostAdapter)
   CCB = HostAdapter->Free_CCBs;
   if (CCB != NULL)
     {
-      CCB->SerialNumber = SerialNumber++;
+      CCB->SerialNumber = ++SerialNumber;
       HostAdapter->Free_CCBs = CCB->Next;
+      CCB->Next = NULL;
       BusLogic_UnlockHostAdapter(HostAdapter);
       return CCB;
     }
@@ -334,7 +336,7 @@ static BusLogic_CCB_T *BusLogic_AllocateCCB(BusLogic_HostAdapter_T *HostAdapter)
   CCB->HostAdapter = HostAdapter;
   CCB->Status = BusLogic_CCB_Free;
   BusLogic_LockHostAdapter(HostAdapter);
-  CCB->SerialNumber = SerialNumber++;
+  CCB->SerialNumber = ++SerialNumber;
   CCB->NextAll = HostAdapter->All_CCBs;
   HostAdapter->All_CCBs = CCB;
   BusLogic_UnlockHostAdapter(HostAdapter);
@@ -353,7 +355,6 @@ static void BusLogic_DeallocateCCB(BusLogic_CCB_T *CCB)
   BusLogic_LockHostAdapter(HostAdapter);
   CCB->Command = NULL;
   CCB->Status = BusLogic_CCB_Free;
-  CCB->SerialNumber = 0;
   CCB->Next = HostAdapter->Free_CCBs;
   HostAdapter->Free_CCBs = CCB;
   BusLogic_UnlockHostAdapter(HostAdapter);
@@ -396,7 +397,67 @@ static int BusLogic_Command(BusLogic_HostAdapter_T *HostAdapter,
   if (ReplyLength > 0)
     memset(ReplyData, 0, ReplyLength);
   /*
-    Select an appropriate timeout value.
+    Wait for the Host Adapter Ready bit to be set and the Command/Parameter
+    Register Busy bit to be reset in the Status Register.
+  */
+  TimeoutCounter = loops_per_sec >> 3;
+  while (--TimeoutCounter >= 0)
+    {
+      StatusRegister = BusLogic_ReadStatusRegister(HostAdapter);
+      if ((StatusRegister & BusLogic_HostAdapterReady) &&
+	  !(StatusRegister & BusLogic_CommandParameterRegisterBusy))
+	break;
+    }
+  BusLogic_CommandFailureReason = "Timeout waiting for Host Adapter Ready";
+  if (TimeoutCounter < 0) return -2;
+  /*
+    Write the OperationCode to the Command/Parameter Register.
+  */
+  HostAdapter->HostAdapterCommandCompleted = false;
+  BusLogic_WriteCommandParameterRegister(HostAdapter, OperationCode);
+  /*
+    Write any additional Parameter Bytes.
+  */
+  TimeoutCounter = 10000;
+  while (ParameterLength > 0 && --TimeoutCounter >= 0)
+    {
+      /*
+	Wait 100 microseconds to give the Host Adapter enough time to determine
+	whether the last value written to the Command/Parameter Register was
+	valid or not.  If the Command Complete bit is set in the Interrupt
+	Register, then the Command Invalid bit in the Status Register will be
+	reset if the Operation Code or Parameter was valid and the command
+	has completed, or set if the Operation Code or Parameter was invalid.
+	If the Data In Register Ready bit is set in the Status Register, then
+	the Operation Code was valid, and data is waiting to be read back
+	from the Host Adapter.  Otherwise, wait for the Command/Parameter
+	Register Busy bit in the Status Register to be reset.
+      */
+      udelay(100);
+      InterruptRegister = BusLogic_ReadInterruptRegister(HostAdapter);
+      StatusRegister = BusLogic_ReadStatusRegister(HostAdapter);
+      if (InterruptRegister & BusLogic_CommandComplete) break;
+      if (HostAdapter->HostAdapterCommandCompleted) break;
+      if (StatusRegister & BusLogic_DataInRegisterReady) break;
+      if (StatusRegister & BusLogic_CommandParameterRegisterBusy) continue;
+      BusLogic_WriteCommandParameterRegister(HostAdapter, *ParameterPointer++);
+      ParameterLength--;
+    }
+  BusLogic_CommandFailureReason = "Timeout waiting for Parameter Acceptance";
+  if (TimeoutCounter < 0) return -2;
+  /*
+    The Modify I/O Address command does not cause a Command Complete Interrupt.
+  */
+  if (OperationCode == BusLogic_ModifyIOAddress)
+    {
+      StatusRegister = BusLogic_ReadStatusRegister(HostAdapter);
+      BusLogic_CommandFailureReason = "Modify I/O Address Invalid";
+      if (StatusRegister & BusLogic_CommandInvalid) return -1;
+      BusLogic_CommandFailureReason = NULL;
+      return 0;
+    }
+  /*
+    Select an appropriate timeout value for awaiting command completion.
   */
   switch (OperationCode)
     {
@@ -411,58 +472,10 @@ static int BusLogic_Command(BusLogic_HostAdapter_T *HostAdapter,
       break;
     }
   /*
-    Wait for the Host Adapter Ready bit to be set and the Command/Parameter
-    Register Busy bit to be reset in the Status Register.
-  */
-  while (--TimeoutCounter >= 0)
-    {
-      StatusRegister = BusLogic_ReadStatusRegister(HostAdapter);
-      if ((StatusRegister & BusLogic_HostAdapterReady) &&
-	  !(StatusRegister & BusLogic_CommandParameterRegisterBusy))
-	break;
-    }
-  BusLogic_CommandFailureReason = "Timeout waiting for Host Adapter Ready";
-  if (TimeoutCounter < 0) return -2;
-  /*
-    Write the OperationCode to the Command/Parameter Register.
-  */
-  BusLogic_WriteCommandParameterRegister(HostAdapter, OperationCode);
-  /*
-    Write any additional Parameter Bytes.
-  */
-  HostAdapter->HostAdapterCommandCompleted = false;
-  while (--ParameterLength >= 0)
-    {
-      InterruptRegister = BusLogic_ReadInterruptRegister(HostAdapter);
-      if (InterruptRegister & BusLogic_CommandComplete) break;
-      if (HostAdapter->HostAdapterCommandCompleted) break;
-      while (--TimeoutCounter >= 0)
-	{
-	  StatusRegister = BusLogic_ReadStatusRegister(HostAdapter);
-	  if (!(StatusRegister & BusLogic_CommandParameterRegisterBusy)) break;
-	}
-      BusLogic_CommandFailureReason =
-	"Timeout waiting for Parameter Acceptance";
-      if (TimeoutCounter < 0) return -2;
-      BusLogic_WriteCommandParameterRegister(HostAdapter, *ParameterPointer++);
-    }
-  BusLogic_CommandFailureReason = "Excess Parameters Supplied";
-  if (ParameterLength >= 0) return -1;
-  /*
-    The Modify I/O Address command does not cause a Command Complete Interrupt.
-  */
-  if (OperationCode == BusLogic_ModifyIOAddress)
-    {
-      StatusRegister = BusLogic_ReadStatusRegister(HostAdapter);
-      BusLogic_CommandFailureReason = "Modify I/O Address Invalid";
-      return ((StatusRegister & BusLogic_CommandInvalid) ? -1 : 0);
-    }
-  /*
     Receive any Reply Bytes, waiting for either the Command Complete bit to
     be set in the Interrupt Register, or for the Interrupt Handler to set the
-    HostAdapterCommandCompleted bit in the Host Adapter structure.
+    Host Adapter Command Completed bit in the Host Adapter structure.
   */
-  HostAdapter->HostAdapterCommandCompleted = false;
   while (--TimeoutCounter >= 0)
     {
       InterruptRegister = BusLogic_ReadInterruptRegister(HostAdapter);
@@ -473,36 +486,72 @@ static int BusLogic_Command(BusLogic_HostAdapter_T *HostAdapter,
 	if (++ReplyBytes <= ReplyLength)
 	  *ReplyPointer++ = BusLogic_ReadDataInRegister(HostAdapter);
 	else BusLogic_ReadDataInRegister(HostAdapter);
-  }
+    }
   BusLogic_CommandFailureReason = "Timeout waiting for Command Complete";
   if (TimeoutCounter < 0) return -2;
   /*
-    Clear any pending Command Complete Interrupt, unless this is a
-    Test Command Complete Interrupt command.
+    If testing Command Complete Interrupts, wait a short while in case the
+    loop immediately above terminated due to the Command Complete bit being
+    set in the Interrupt Register, but the interrupt hasn't actually been
+    processed yet.  Otherwise, acknowledging the interrupt here could prevent
+    the interrupt test from succeeding.
   */
-  if (OperationCode != BusLogic_TestCommandCompleteInterrupt)
-    BusLogic_WriteControlRegister(HostAdapter, BusLogic_InterruptReset);
-  if (BusLogic_TracingOptions & BusLogic_TraceConfiguration)
+  if (OperationCode == BusLogic_TestCommandCompleteInterrupt)
+    udelay(10000);
+  /*
+    Clear any pending Command Complete Interrupt.
+  */
+  BusLogic_WriteControlRegister(HostAdapter, BusLogic_InterruptReset);
+  if (BusLogic_GlobalOptions & BusLogic_TraceConfiguration)
     if (OperationCode != BusLogic_TestCommandCompleteInterrupt)
       {
 	int i;
 	printk("BusLogic_Command(%02X) Status = %02X: %2d ==> %2d:",
 	       OperationCode, StatusRegister, ReplyLength, ReplyBytes);
-	for (i = 0; i < ReplyBytes; i++)
+	if (ReplyLength > ReplyBytes) ReplyLength = ReplyBytes;
+	for (i = 0; i < ReplyLength; i++)
 	  printk(" %02X", ((unsigned char *) ReplyData)[i]);
 	printk("\n");
       }
   /*
-    Return count of Reply Bytes, or -1 if the command was invalid.
+    Process Command Invalid conditions.
   */
-  BusLogic_CommandFailureReason = "Command Invalid";
-  return ((StatusRegister & BusLogic_CommandInvalid) ? -1 : ReplyBytes);
+  if (StatusRegister & BusLogic_CommandInvalid)
+    {
+      /*
+	Some early BusLogic Host Adapters may not recover properly from
+	a Command Invalid condition, so if this appears to be the case,
+	a Soft Reset is issued to the Host Adapter.  Potentially invalid
+	commands are never attempted after Mailbox Initialization is
+	performed, so there should be no Host Adapter state lost by a
+	Soft Reset in response to a Command Invalid condition.
+      */
+      udelay(1000);
+      StatusRegister = BusLogic_ReadStatusRegister(HostAdapter);
+      if (StatusRegister != (BusLogic_HostAdapterReady |
+			     BusLogic_InitializationRequired))
+	{
+	  BusLogic_WriteControlRegister(HostAdapter, BusLogic_SoftReset);
+	  udelay(1000);
+	}
+      BusLogic_CommandFailureReason = "Command Invalid";
+      return -1;
+    }
+  /*
+    Handle Excess Parameters Supplied conditions.
+  */
+  BusLogic_CommandFailureReason = "Excess Parameters Supplied";
+  if (ParameterLength > 0) return -1;
+  /*
+    Indicate the command completed successfully.
+  */
+  BusLogic_CommandFailureReason = NULL;
+  return ReplyBytes;
 }
 
 
 /*
-  BusLogic_Failure prints a standardized error message for tests that are
-  executed before the SCSI Host is registered, and then returns false.
+  BusLogic_Failure prints a standardized error message, and then returns false.
 */
 
 static boolean BusLogic_Failure(BusLogic_HostAdapter_T *HostAdapter,
@@ -524,7 +573,7 @@ static boolean BusLogic_Failure(BusLogic_HostAdapter_T *HostAdapter,
 
 static boolean BusLogic_ProbeHostAdapter(BusLogic_HostAdapter_T *HostAdapter)
 {
-  boolean TraceProbe = (BusLogic_TracingOptions & BusLogic_TraceProbe);
+  boolean TraceProbe = (BusLogic_GlobalOptions & BusLogic_TraceProbe);
   unsigned char StatusRegister, GeometryRegister;
   /*
     Read the Status Register to test if there is an I/O port that responds.  A
@@ -570,7 +619,7 @@ static boolean BusLogic_ProbeHostAdapter(BusLogic_HostAdapter_T *HostAdapter)
 static boolean BusLogic_HardResetHostAdapter(BusLogic_HostAdapter_T
 					     *HostAdapter)
 {
-  boolean TraceHardReset = (BusLogic_TracingOptions & BusLogic_TraceHardReset);
+  boolean TraceHardReset = (BusLogic_GlobalOptions & BusLogic_TraceHardReset);
   long TimeoutCounter = loops_per_sec >> 2;
   unsigned char StatusRegister = 0;
   /*
@@ -590,6 +639,12 @@ static boolean BusLogic_HardResetHostAdapter(BusLogic_HostAdapter_T
     printk("BusLogic_HardReset(0x%X): Diagnostic Active, Status 0x%02X\n",
 	   HostAdapter->IO_Address, StatusRegister);
   if (TimeoutCounter < 0) return false;
+  /*
+    Wait 100 microseconds to allow completion of any initial diagnostic
+    activity which might leave the contents of the Status Register
+    unpredictable.
+  */
+  udelay(100);
   /*
     Wait until Diagnostic Active is reset in the Status Register.
   */
@@ -655,13 +710,13 @@ static boolean BusLogic_CheckHostAdapter(BusLogic_HostAdapter_T *HostAdapter)
   unsigned long ProcessorFlags;
   int Result;
   /*
-    Issue the Inquire Setup Information command.  Only genuine BusLogic Host
-    Adapters and true clones support this command.  Adaptec 1542C series Host
-    Adapters that respond to the Geometry Register I/O port will fail this
-    command.  Interrupts must be disabled around the call to BusLogic_Command
-    since a Command Complete interrupt could occur if the IRQ Channel was
-    previously enabled for another BusLogic Host Adapter sharing the same IRQ
-    Channel.
+    Issue the Inquire Extended Setup Information command.  Only genuine
+    BusLogic Host Adapters and true clones support this command.  Adaptec 1542C
+    series Host Adapters that respond to the Geometry Register I/O port will
+    fail this command.  Interrupts must be disabled around the call to
+    BusLogic_Command since a Command Complete interrupt could occur if the IRQ
+    Channel was previously enabled for another BusLogic Host Adapter sharing
+    the same IRQ Channel.
   */
   save_flags(ProcessorFlags);
   cli();
@@ -672,7 +727,7 @@ static boolean BusLogic_CheckHostAdapter(BusLogic_HostAdapter_T *HostAdapter)
 			    &ExtendedSetupInformation,
 			    sizeof(ExtendedSetupInformation));
   restore_flags(ProcessorFlags);
-  if (BusLogic_TracingOptions & BusLogic_TraceProbe)
+  if (BusLogic_GlobalOptions & BusLogic_TraceProbe)
     printk("BusLogic_Check(0x%X): Result %d\n",
 	   HostAdapter->IO_Address, Result);
   return (Result == sizeof(ExtendedSetupInformation));
@@ -691,7 +746,7 @@ static boolean BusLogic_ReadHostAdapterConfiguration(BusLogic_HostAdapter_T
   BusLogic_Configuration_T Configuration;
   BusLogic_SetupInformation_T SetupInformation;
   BusLogic_ExtendedSetupInformation_T ExtendedSetupInformation;
-  BusLogic_ModelAndRevision_T ModelAndRevision;
+  BusLogic_BoardModelNumber_T BoardModelNumber;
   BusLogic_FirmwareVersion3rdDigit_T FirmwareVersion3rdDigit;
   BusLogic_FirmwareVersionLetter_T FirmwareVersionLetter;
   BusLogic_RequestedReplyLength_T RequestedReplyLength;
@@ -733,14 +788,19 @@ static boolean BusLogic_ReadHostAdapterConfiguration(BusLogic_HostAdapter_T
       != sizeof(ExtendedSetupInformation))
     return BusLogic_Failure(HostAdapter, "INQUIRE EXTENDED SETUP INFORMATION");
   /*
-    Issue the Inquire Board Model and Revision command.
+    Issue the Inquire Board Model Number command.
   */
-  RequestedReplyLength = sizeof(ModelAndRevision);
-  if (BusLogic_Command(HostAdapter, BusLogic_InquireBoardModelAndRevision,
-		       &RequestedReplyLength, sizeof(RequestedReplyLength),
-		       &ModelAndRevision, sizeof(ModelAndRevision))
-      != sizeof(ModelAndRevision))
-    return BusLogic_Failure(HostAdapter, "INQUIRE BOARD MODEL AND REVISION");
+  if (!(BoardID.FirmwareVersion1stDigit == '2' &&
+	ExtendedSetupInformation.BusType == 'A'))
+    {
+      RequestedReplyLength = sizeof(BoardModelNumber);
+      if (BusLogic_Command(HostAdapter, BusLogic_InquireBoardModelNumber,
+			   &RequestedReplyLength, sizeof(RequestedReplyLength),
+			   &BoardModelNumber, sizeof(BoardModelNumber))
+	  != sizeof(BoardModelNumber))
+	return BusLogic_Failure(HostAdapter, "INQUIRE BOARD MODEL NUMBER");
+    }
+  else strcpy(BoardModelNumber, "542B");
   /*
     Issue the Inquire Firmware Version 3rd Digit command.
   */
@@ -753,7 +813,9 @@ static boolean BusLogic_ReadHostAdapterConfiguration(BusLogic_HostAdapter_T
     Issue the Inquire Firmware Version Letter command.
   */
   FirmwareVersionLetter = '\0';
-  if (BoardID.FirmwareVersion1stDigit >= '3')
+  if (BoardID.FirmwareVersion1stDigit > '3' ||
+      (BoardID.FirmwareVersion1stDigit == '3' &&
+       BoardID.FirmwareVersion2ndDigit >= '3'))
     if (BusLogic_Command(HostAdapter, BusLogic_InquireFirmwareVersionLetter,
 			 NULL, 0, &FirmwareVersionLetter,
 			 sizeof(FirmwareVersionLetter))
@@ -764,21 +826,24 @@ static boolean BusLogic_ReadHostAdapterConfiguration(BusLogic_HostAdapter_T
     the major version number of their firmware as follows:
 
     4.xx	BusLogic "C" Series Host Adapters:
-		  946C/956C/956CD/747C/757C/757CD/445C/545C/540CF
+		  BT-946C/956C/956CD/747C/757C/757CD/445C/545C/540CF
     3.xx	BusLogic "S" Series Host Adapters:
-		  747S/747D/757S/757D/445S/545S/542D
-		  542B/742A (revision H)
+		  BT-747S/747D/757S/757D/445S/545S/542D
+		  BT-542B/742A (revision H)
     2.xx	BusLogic "A" Series Host Adapters:
-		  542B/742A (revision G and below)
-    0.xx	AMI FastDisk VLB BusLogic Clone Host Adapter
+		  BT-542B/742A (revision G and below)
+    0.xx	AMI FastDisk VLB/EISA BusLogic Clone Host Adapter
   */
   /*
     Save the Model Name and Board Name in the Host Adapter structure.
   */
   TargetPointer = HostAdapter->ModelName;
-  for (i = 0; i < sizeof(ModelAndRevision.Model); i++)
+  *TargetPointer++ = 'B';
+  *TargetPointer++ = 'T';
+  *TargetPointer++ = '-';
+  for (i = 0; i < sizeof(BoardModelNumber); i++)
     {
-      Character = ModelAndRevision.Model[i];
+      Character = BoardModelNumber[i];
       if (Character == ' ' || Character == '\0') break;
       *TargetPointer++ = Character;
     }
@@ -840,7 +905,7 @@ static boolean BusLogic_ReadHostAdapterConfiguration(BusLogic_HostAdapter_T
   if (ExtendedSetupInformation.BusType == 'A')
     HostAdapter->BusType = BusLogic_ISA_Bus;
   else
-    switch (HostAdapter->ModelName[0])
+    switch (HostAdapter->ModelName[3])
       {
       case '4':
 	HostAdapter->BusType = BusLogic_VESA_Bus;
@@ -881,7 +946,7 @@ static boolean BusLogic_ReadHostAdapterConfiguration(BusLogic_HostAdapter_T
       | SetupInformation.DisconnectPermittedID0to7;
   else HostAdapter->DisconnectPermitted = 0xFF;
   /*
-    Save the Scatter Gather Limits, Level Triggered Interrupts flag,
+    Save the Scatter Gather Limits, Level Sensitive Interrupts flag,
     Wide SCSI flag, and Differential SCSI flag in the Host Adapter structure.
   */
   HostAdapter->HostAdapterScatterGatherLimit =
@@ -890,8 +955,8 @@ static boolean BusLogic_ReadHostAdapterConfiguration(BusLogic_HostAdapter_T
     HostAdapter->HostAdapterScatterGatherLimit;
   if (HostAdapter->HostAdapterScatterGatherLimit > BusLogic_ScatterGatherLimit)
     HostAdapter->DriverScatterGatherLimit = BusLogic_ScatterGatherLimit;
-  if (ExtendedSetupInformation.Misc.LevelTriggeredInterrupts)
-    HostAdapter->LevelTriggeredInterrupts = true;
+  if (ExtendedSetupInformation.Misc.LevelSensitiveInterrupts)
+    HostAdapter->LevelSensitiveInterrupts = true;
   if (ExtendedSetupInformation.HostWideSCSI)
     {
       HostAdapter->HostWideSCSI = true;
@@ -913,15 +978,28 @@ static boolean BusLogic_ReadHostAdapterConfiguration(BusLogic_HostAdapter_T
   */
   HostAdapter->BIOS_Address = ExtendedSetupInformation.BIOS_Address << 12;
   /*
+    BusLogic BT-445S Host Adapters prior to board revision D have a hardware
+    bug whereby when the BIOS is enabled, transfers to/from the same address
+    range the BIOS occupies modulo 16MB are handled incorrectly.  Only properly
+    functioning BT-445S boards have firmware version 3.37, so we require that
+    ISA bounce buffers be used for the buggy BT-445S models as well as for all
+    ISA models.
+  */
+  if (HostAdapter->BusType == BusLogic_ISA_Bus ||
+      (HostAdapter->BIOS_Address > 0 &&
+       strcmp(HostAdapter->ModelName, "BT-445S") == 0 &&
+       strcmp(HostAdapter->FirmwareVersion, "3.37") < 0))
+    HostAdapter->BounceBuffersRequired = true;
+  /*
     Select an appropriate value for Concurrency (Commands per Logical Unit)
-    either from a Command Line Entry, or based on whether this is an ISA
-    or non-ISA Host Adapter.
+    either from a Command Line Entry, or based on whether this Host Adapter
+    requires that ISA bounce buffers be used.
   */
   if (HostAdapter->CommandLineEntry != NULL &&
       HostAdapter->CommandLineEntry->Concurrency > 0)
     HostAdapter->Concurrency = HostAdapter->CommandLineEntry->Concurrency;
-  else if (HostAdapter->BusType == BusLogic_ISA_Bus)
-    HostAdapter->Concurrency = BusLogic_Concurrency_ISA;
+  else if (HostAdapter->BounceBuffersRequired)
+    HostAdapter->Concurrency = BusLogic_Concurrency_BB;
   else HostAdapter->Concurrency = BusLogic_Concurrency;
   /*
     Select an appropriate value for Bus Settle Time either from a Command
@@ -931,6 +1009,11 @@ static boolean BusLogic_ReadHostAdapterConfiguration(BusLogic_HostAdapter_T
       HostAdapter->CommandLineEntry->BusSettleTime > 0)
     HostAdapter->BusSettleTime = HostAdapter->CommandLineEntry->BusSettleTime;
   else HostAdapter->BusSettleTime = BusLogic_DefaultBusSettleTime;
+  /*
+    Select an appropriate value for Local Options from a Command Line Entry.
+  */
+  if (HostAdapter->CommandLineEntry != NULL)
+    HostAdapter->LocalOptions = HostAdapter->CommandLineEntry->LocalOptions;
   /*
     Select appropriate values for the Error Recovery Option array either from
     a Command Line Entry, or using BusLogic_ErrorRecoveryDefault.
@@ -953,23 +1036,27 @@ static boolean BusLogic_ReadHostAdapterConfiguration(BusLogic_HostAdapter_T
   if (HostAdapter->Concurrency > 1)
     switch (HostAdapter->FirmwareVersion[0])
       {
+      case '5':
+	TaggedQueuingPermittedDefault = 0xFFFF;
+	break;
       case '4':
-	if (HostAdapter->FirmwareVersion[2] > '2' ||
-	    (HostAdapter->FirmwareVersion[2] == '2' &&
-	     HostAdapter->FirmwareVersion[3] >= '2'))
+	if (strcmp(HostAdapter->FirmwareVersion, "4.22") >= 0)
 	  TaggedQueuingPermittedDefault = 0xFFFF;
 	break;
       case '3':
-	if (HostAdapter->FirmwareVersion[2] > '3' ||
-	    (HostAdapter->FirmwareVersion[2] == '3' &&
-	     HostAdapter->FirmwareVersion[3] >= '5'))
+	if (strcmp(HostAdapter->FirmwareVersion, "3.35") >= 0)
 	  TaggedQueuingPermittedDefault = 0xFFFF;
 	break;
       }
   /*
-    Combine the default Tagged Queuing permission based on the Host Adapter
-    firmware version and Concurrency with any Command Line Entry Tagged
-    Queuing specification.
+    Tagged Queuing is only useful if Disconnect/Reconnect is permitted.
+    Therefore, mask the Tagged Queuing Permitted Default bits with the
+    Disconnect/Reconnect Permitted bits.
+  */
+  TaggedQueuingPermittedDefault &= HostAdapter->DisconnectPermitted;
+  /*
+    Combine the default Tagged Queuing Permitted Default bits with any
+    Command Line Entry Tagged Queuing specification.
   */
   if (HostAdapter->CommandLineEntry != NULL)
     HostAdapter->TaggedQueuingPermitted =
@@ -990,7 +1077,7 @@ static boolean BusLogic_ReadHostAdapterConfiguration(BusLogic_HostAdapter_T
 	 "IRQ Channel: %d/%s\n",
 	 HostAdapter->HostNumber, HostAdapter->FirmwareVersion,
 	 HostAdapter->IO_Address, HostAdapter->IRQ_Channel,
-	 (HostAdapter->LevelTriggeredInterrupts ? "Level" : "Edge"));
+	 (HostAdapter->LevelSensitiveInterrupts ? "Level" : "Edge"));
   printk("scsi%d:   DMA Channel: ", HostAdapter->HostNumber);
   if (HostAdapter->DMA_Channel > 0)
     printk("%d, ", HostAdapter->DMA_Channel);
@@ -1091,7 +1178,7 @@ static boolean BusLogic_AcquireResources(BusLogic_HostAdapter_T *HostAdapter,
 	{
 	  if (FirstHostAdapter->IRQ_Channel == HostAdapter->IRQ_Channel)
 	    {
-	      if (strlen(FirstHostAdapter->InterruptLabel) + 8
+	      if (strlen(FirstHostAdapter->InterruptLabel) + 11
 		  < sizeof(FirstHostAdapter->InterruptLabel))
 		{
 		  strcat(FirstHostAdapter->InterruptLabel, " + ");
@@ -1129,21 +1216,7 @@ static boolean BusLogic_AcquireResources(BusLogic_HostAdapter_T *HostAdapter,
   Host->can_queue = BusLogic_MailboxCount;
   Host->cmd_per_lun = HostAdapter->Concurrency;
   Host->sg_tablesize = HostAdapter->DriverScatterGatherLimit;
-  Host->unchecked_isa_dma = (HostAdapter->BusType == BusLogic_ISA_Bus);
-  /*
-    BusLogic 445S Host Adapters prior to board revision D have a hardware bug
-    whereby when the BIOS is enabled, transfers to/from the same address range
-    the BIOS occupies modulo 16MB are handled incorrectly.  Since 16KB out of
-    each 16MB after the first is such a small amount of memory, this memory
-    can be marked as reserved without a significant loss of performance; this
-    is a much cheaper solution than requiring that ISA bounce buffers be used.
-  */
-  if (HostAdapter->BIOS_Address > 0 &&
-      strcmp(HostAdapter->ModelName, "445S") == 0)
-    {
-      Host->forbidden_addr = HostAdapter->BIOS_Address;
-      Host->forbidden_size = 16*1024;
-    }
+  Host->unchecked_isa_dma = HostAdapter->BounceBuffersRequired;
   /*
     Indicate the System Resource Acquisition completed successfully,
   */
@@ -1200,26 +1273,17 @@ static boolean BusLogic_TestInterrupts(BusLogic_HostAdapter_T *HostAdapter)
   FinalInterruptCount = kstat.interrupts[HostAdapter->IRQ_Channel];
   if (FinalInterruptCount < InitialInterruptCount + TestCount)
     {
-      printk("scsi%d: HOST ADAPTER INTERRUPT TEST FAILED - DETACHING\n",
-	     HostAdapter->HostNumber);
-      printk("scsi%d:  Interrupts are not getting through "
-	     "from the Host Adapter to the\n", HostAdapter->HostNumber);
-      printk("scsi%d:  BusLogic Driver Interrupt Handler.  "
-	     "The most likely cause is that\n", HostAdapter->HostNumber);
-      printk("scsi%d:  either the Host Adapter or Motherboard "
-	     "is configured incorrectly.\n", HostAdapter->HostNumber);
-      printk("scsi%d:  Please check the Host Adapter configuration "
-	     "with AutoSCSI or by\n", HostAdapter->HostNumber);
-      printk("scsi%d:  examining any dip switch and jumper settings "
-	     "on the Host Adapter, and\n", HostAdapter->HostNumber);
-      printk("scsi%d:  verify that no other device is attempting to "
-	     "use the same IRQ Channel.\n", HostAdapter->HostNumber);
-      printk("scsi%d:  For PCI Host Adapters, it may also be necessary "
-	     "to investigate and\n", HostAdapter->HostNumber);
-      printk("scsi%d:  manually set the PCI interrupt assignments "
-	     "and edge/level interrupt\n", HostAdapter->HostNumber);
-      printk("scsi%d:  type selection in the BIOS Setup Program or "
-	     "with Motherboard jumpers.\n", HostAdapter->HostNumber);
+      BusLogic_Failure(HostAdapter, "HOST ADAPTER INTERRUPT TEST");
+      printk("\n\
+Interrupts are not getting through from the Host Adapter to the BusLogic\n\
+Driver Interrupt Handler. The most likely cause is that either the Host\n\
+Adapter or Motherboard is configured incorrectly.  Please check the Host\n\
+Adapter configuration with AutoSCSI or by examining any dip switch and\n\
+jumper settings on the Host Adapter, and verify that no other device is\n\
+attempting to use the same IRQ Channel.  For PCI Host Adapters, it may also\n\
+be necessary to investigate and manually set the PCI interrupt assignments\n\
+and edge/level interrupt type selection in the BIOS Setup Program or with\n\
+Motherboard jumpers.\n\n");
       return false;
     }
   /*
@@ -1243,13 +1307,15 @@ static boolean BusLogic_InitializeHostAdapter(BusLogic_HostAdapter_T
   BusLogic_WideModeCCBRequest_T WideModeCCBRequest;
   BusLogic_ModifyIOAddressRequest_T ModifyIOAddressRequest;
   /*
-    Initialize Read/Write Operation Count and Command Successful Flag
-    for each Target.
+    Initialize the Command Successful Flag, Read/Write Operation Count,
+    and Queued Operation Count for each Target.
   */
-  memset(HostAdapter->ReadWriteOperationCount, 0,
-	 sizeof(HostAdapter->ReadWriteOperationCount));
   memset(HostAdapter->CommandSuccessfulFlag, false,
 	 sizeof(HostAdapter->CommandSuccessfulFlag));
+  memset(HostAdapter->ReadWriteOperationCount, 0,
+	 sizeof(HostAdapter->ReadWriteOperationCount));
+  memset(HostAdapter->QueuedOperationCount, 0,
+	 sizeof(HostAdapter->QueuedOperationCount));
   /*
     Initialize the Outgoing and Incoming Mailbox structures.
   */
@@ -1276,11 +1342,7 @@ static boolean BusLogic_InitializeHostAdapter(BusLogic_HostAdapter_T
   if (BusLogic_Command(HostAdapter, BusLogic_InitializeExtendedMailbox,
 		       &ExtendedMailboxRequest,
 		       sizeof(ExtendedMailboxRequest), NULL, 0) < 0)
-    {
-      printk("scsi%d: MAILBOX INITIALIZATION FAILED - DETACHING\n",
-	     HostAdapter->HostNumber);
-      return false;
-    }
+    return BusLogic_Failure(HostAdapter, "MAILBOX INITIALIZATION");
   /*
     Enable Strict Round Robin Mode if supported by the Host Adapter.  In Strict
     Round Robin Mode, the Host Adapter only looks at the next Outgoing Mailbox
@@ -1288,10 +1350,14 @@ static boolean BusLogic_InitializeHostAdapter(BusLogic_HostAdapter_T
     Mailboxes to find any that have new commands in them.  BusLogic indicates
     that Strict Round Robin Mode is significantly more efficient.
   */
-  RoundRobinModeRequest = BusLogic_StrictRoundRobinMode;
-  BusLogic_Command(HostAdapter, BusLogic_EnableStrictRoundRobinMode,
-		   &RoundRobinModeRequest,
-		   sizeof(RoundRobinModeRequest), NULL, 0);
+  if (strcmp(HostAdapter->FirmwareVersion, "3.31") >= 0)
+    {
+      RoundRobinModeRequest = BusLogic_StrictRoundRobinMode;
+      if (BusLogic_Command(HostAdapter, BusLogic_EnableStrictRoundRobinMode,
+			   &RoundRobinModeRequest,
+			   sizeof(RoundRobinModeRequest), NULL, 0) < 0)
+	return BusLogic_Failure(HostAdapter, "ENABLE STRICT ROUND ROBIN MODE");
+    }
   /*
     For Wide SCSI Host Adapters, issue the Enable Wide Mode CCB command to
     allow more than 8 Logical Units per Target to be supported.
@@ -1302,11 +1368,7 @@ static boolean BusLogic_InitializeHostAdapter(BusLogic_HostAdapter_T
       if (BusLogic_Command(HostAdapter, BusLogic_EnableWideModeCCB,
 			   &WideModeCCBRequest,
 			   sizeof(WideModeCCBRequest), NULL, 0) < 0)
-	{
-	  printk("scsi%d: ENABLE WIDE MODE CCB FAILED - DETACHING\n",
-		 HostAdapter->HostNumber);
-	  return false;
-	}
+	return BusLogic_Failure(HostAdapter, "ENABLE WIDE MODE CCB");
     }
   /*
     For PCI Host Adapters being accessed through the PCI compliant I/O
@@ -1325,11 +1387,7 @@ static boolean BusLogic_InitializeHostAdapter(BusLogic_HostAdapter_T
 	  if (BusLogic_Command(HostAdapter, BusLogic_ModifyIOAddress,
 			       &ModifyIOAddressRequest,
 			       sizeof(ModifyIOAddressRequest), NULL, 0) < 0)
-	    {
-	      printk("scsi%d: MODIFY I/O ADDRESS FAILED - DETACHING\n",
-		     HostAdapter->HostNumber);
-	      return false;
-	    }
+	    return BusLogic_Failure(HostAdapter, "MODIFY I/O ADDRESS");
 	}
     }
   /*
@@ -1365,6 +1423,15 @@ static boolean BusLogic_InquireTargetDevices(BusLogic_HostAdapter_T
   */
   BusLogic_Delay(HostAdapter->BusSettleTime);
   /*
+    Inhibit the Target Devices Inquiry if requested.
+  */
+  if (HostAdapter->LocalOptions & BusLogic_InhibitTargetInquiry)
+    {
+      printk("scsi%d:   Target Device Inquiry Inhibited\n",
+	     HostAdapter->HostNumber);
+      return true;
+    }
+  /*
     Issue the Inquire Installed Devices ID 0 to 7 command, and for Wide SCSI
     Host Adapters the Inquire Installed Devices ID 8 to 15 command.  This is
     necessary to force Synchronous Transfer Negotiation so that the Inquire
@@ -1395,12 +1462,22 @@ static boolean BusLogic_InquireTargetDevices(BusLogic_HostAdapter_T
   /*
     Issue the Inquire Synchronous Period command.
   */
-  RequestedReplyLength = sizeof(SynchronousPeriod);
-  if (BusLogic_Command(HostAdapter, BusLogic_InquireSynchronousPeriod,
-		       &RequestedReplyLength, 1,
-		       &SynchronousPeriod, sizeof(SynchronousPeriod))
-      != sizeof(SynchronousPeriod))
-    return BusLogic_Failure(HostAdapter, "INQUIRE SYNCHRONOUS PERIOD");
+  if (HostAdapter->FirmwareVersion[0] >= '3')
+    {
+      RequestedReplyLength = sizeof(SynchronousPeriod);
+      if (BusLogic_Command(HostAdapter, BusLogic_InquireSynchronousPeriod,
+			   &RequestedReplyLength, sizeof(RequestedReplyLength),
+			   &SynchronousPeriod, sizeof(SynchronousPeriod))
+	  != sizeof(SynchronousPeriod))
+	return BusLogic_Failure(HostAdapter, "INQUIRE SYNCHRONOUS PERIOD");
+    }
+  else
+    for (TargetID = 0; TargetID < HostAdapter->MaxTargetIDs; TargetID++)
+      if (SetupInformation.SynchronousValuesID0to7[TargetID].Offset > 0)
+	SynchronousPeriod[TargetID] =
+	  20 + 5 * SetupInformation.SynchronousValuesID0to7[TargetID]
+				   .TransferPeriod;
+      else SynchronousPeriod[TargetID] = 0;
   /*
     Save the Installed Devices, Synchronous Values, and Synchronous Period
     information in the Host Adapter structure.
@@ -1430,7 +1507,7 @@ static boolean BusLogic_InquireTargetDevices(BusLogic_HostAdapter_T
 	    int RoundedSynchronousTransferRate =
 	      (SynchronousTransferRate + 5000) / 10000;
 	    printk("scsi%d:   Target %d: Synchronous at "
-		   "%d.%02d mega-transfers/sec, offset %d\n",
+		   "%d.%02d mega-transfers/second, offset %d\n",
 		   HostAdapter->HostNumber, TargetID,
 		   RoundedSynchronousTransferRate / 100,
 		   RoundedSynchronousTransferRate % 100,
@@ -1442,7 +1519,7 @@ static boolean BusLogic_InquireTargetDevices(BusLogic_HostAdapter_T
 	    int RoundedSynchronousTransferRate =
 	      (SynchronousTransferRate + 50000) / 100000;
 	    printk("scsi%d:   Target %d: Synchronous at "
-		   "%d.%01d mega-transfers/sec, offset %d\n",
+		   "%d.%01d mega-transfers/second, offset %d\n",
 		   HostAdapter->HostNumber, TargetID,
 		   RoundedSynchronousTransferRate / 10,
 		   RoundedSynchronousTransferRate % 10,
@@ -1555,8 +1632,8 @@ int BusLogic_DetectHostAdapter(SCSI_Host_Template_T *HostTemplate)
       /*
 	Read the Host Adapter Configuration, Acquire the System Resources
 	necessary to use Host Adapter and initialize the fields in the SCSI
-	Host structure, then Test Interrupts, Create the CCBs, and finally
-	Initialize the Host Adapter.
+	Host structure, then Test Interrupts, Create the CCBs, Initialize
+	the Host Adapter, and finally Inquire about the Target Devices.
       */
       if (BusLogic_ReadHostAdapterConfiguration(HostAdapter) &&
 	  BusLogic_AcquireResources(HostAdapter, Host) &&
@@ -1579,10 +1656,11 @@ int BusLogic_DetectHostAdapter(SCSI_Host_Template_T *HostTemplate)
 	{
 	  /*
 	    An error occurred during Host Adapter Configuration Querying,
-	    Resource Acquisition, Interrupt Testing, CCB Creation, or Host
-	    Adapter Initialization, so remove Host Adapter from the list of
-	    registered BusLogic Host Adapters, destroy the CCBs, Release
-	    the System Resources, and Unregister the SCSI Host.
+	    Resource Acquisition, Interrupt Testing, CCB Creation, Host
+	    Adapter Initialization, or Target Device Inquiry, so remove
+	    Host Adapter from the list of registered BusLogic Host Adapters,
+	    destroy the CCBs, Release the System Resources, and Unregister
+	    the SCSI Host.
 	  */
 	  BusLogic_DestroyCCBs(HostAdapter);
 	  BusLogic_ReleaseResources(HostAdapter);
@@ -1735,46 +1813,60 @@ static void BusLogic_InterruptHandler(int IRQ_Channel,
 		Scan through the Incoming Mailboxes in Strict Round Robin
 		fashion, saving any completed CCBs for further processing.
 		It is essential that for each CCB and SCSI Command issued,
-		completion processing is performed exactly once.  Therefore,
-		only Incoming Mailbox entries with completion code Command
-		Completed Without Error, Command Completed With Error, or
-		Command Aborted At Host Request are saved for completion
-		processing.  When an Incoming Mailbox entry has a completion
-		code of Aborted Command Not Found, the CCB had already
-		completed or been aborted before the current Abort request
-		was processed, and so completion processing has already
-		occurred and no further action should be taken.
+		command completion processing is performed exactly once.
+		Therefore, only Incoming Mailboxes with completion code
+		Command Completed Without Error, Command Completed With
+		Error, or Command Aborted At Host Request are saved for
+		completion processing.  When an Incoming Mailbox has a
+		completion code of Aborted Command Not Found, the CCB had
+		already completed or been aborted before the current Abort
+		request was processed, and so completion processing has
+		already occurred and no further action should be taken.
 	      */
 	      BusLogic_IncomingMailbox_T *NextIncomingMailbox =
 		HostAdapter->NextIncomingMailbox;
-	      while (NextIncomingMailbox->CompletionCode !=
+	      BusLogic_CompletionCode_T MailboxCompletionCode;
+	      while ((MailboxCompletionCode =
+		      NextIncomingMailbox->CompletionCode) !=
 		     BusLogic_IncomingMailboxFree)
 		{
 		  BusLogic_CCB_T *CCB = NextIncomingMailbox->CCB;
-		  BusLogic_CompletionCode_T MailboxCompletionCode =
-		    NextIncomingMailbox->CompletionCode;
 		  if (MailboxCompletionCode != BusLogic_AbortedCommandNotFound)
-		    {
-		      /*
-			Mark this CCB as completed and add it to the end
-			of the list of completed CCBs.
-		      */
-		      CCB->Status = BusLogic_CCB_Completed;
-		      CCB->MailboxCompletionCode = MailboxCompletionCode;
-		      CCB->Next = NULL;
-		      if (FirstCompletedCCB == NULL)
-			{
-			  FirstCompletedCCB = CCB;
-			  LastCompletedCCB = CCB;
-			}
-		      else
-			{
-			  LastCompletedCCB->Next = CCB;
-			  LastCompletedCCB = CCB;
-			}
-		    }
-		  else printk("scsi%d: Aborted CCB #%d Not Found\n",
-			      HostAdapter->HostNumber, CCB->SerialNumber);
+		    if (CCB->Status == BusLogic_CCB_Active)
+		      {
+			/*
+			  Mark this CCB as completed and add it to the end
+			  of the list of completed CCBs.
+			*/
+			CCB->Status = BusLogic_CCB_Completed;
+			CCB->MailboxCompletionCode = MailboxCompletionCode;
+			CCB->Next = NULL;
+			if (FirstCompletedCCB == NULL)
+			  {
+			    FirstCompletedCCB = CCB;
+			    LastCompletedCCB = CCB;
+			  }
+			else
+			  {
+			    LastCompletedCCB->Next = CCB;
+			    LastCompletedCCB = CCB;
+			  }
+			HostAdapter->QueuedOperationCount[CCB->TargetID]--;
+		      }
+		    else
+		      {
+			/*
+			  If a CCB ever appears in an Incoming Mailbox and
+			  is not marked as status Active, then there is
+			  most likely a bug in the Host Adapter firmware.
+			*/
+			printk("scsi%d: Illegal CCB #%d status %d in "
+			       "Incoming Mailbox\n", HostAdapter->HostNumber,
+			       CCB->SerialNumber, CCB->Status);
+		      }
+		  else printk("scsi%d: Aborted CCB #%d to Target %d "
+			      "Not Found\n", HostAdapter->HostNumber,
+			      CCB->SerialNumber, CCB->TargetID);
 		  NextIncomingMailbox->CompletionCode =
 		    BusLogic_IncomingMailboxFree;
 		  if (++NextIncomingMailbox > HostAdapter->LastIncomingMailbox)
@@ -1838,23 +1930,23 @@ static void BusLogic_InterruptHandler(int IRQ_Channel,
 	  {
 	  case BusLogic_IncomingMailboxFree:
 	  case BusLogic_AbortedCommandNotFound:
-	    printk("scsi%d: CCB #%d Impossible State\n",
-		   HostAdapter->HostNumber, CCB->SerialNumber);
+	    printk("scsi%d: CCB #%d to Target %d Impossible State\n",
+		   HostAdapter->HostNumber, CCB->SerialNumber, CCB->TargetID);
 	    break;
 	  case BusLogic_CommandCompletedWithoutError:
 	    HostAdapter->CommandSuccessfulFlag[CCB->TargetID] = true;
 	    Command->result = DID_OK << 16;
 	    break;
 	  case BusLogic_CommandAbortedAtHostRequest:
-	    printk("scsi%d: CCB #%d Aborted\n",
-		   HostAdapter->HostNumber, CCB->SerialNumber);
+	    printk("scsi%d: CCB #%d to Target %d Aborted\n",
+		   HostAdapter->HostNumber, CCB->SerialNumber, CCB->TargetID);
 	    Command->result = DID_ABORT << 16;
 	    break;
 	  case BusLogic_CommandCompletedWithError:
 	    Command->result =
 	      BusLogic_ComputeResultCode(CCB->HostAdapterStatus,
 					 CCB->TargetDeviceStatus);
-	    if (BusLogic_TracingOptions & BusLogic_TraceErrors)
+	    if (BusLogic_GlobalOptions & BusLogic_TraceErrors)
 	      if (CCB->HostAdapterStatus != BusLogic_SCSISelectionTimeout)
 		{
 		  int i;
@@ -1887,15 +1979,14 @@ static void BusLogic_InterruptHandler(int IRQ_Channel,
 
 
 /*
-  BusLogic_WriteOutgoingMailboxEntry writes an Outgoing Mailbox entry
-  for Host Adapter with Action Code and CCB.
+  BusLogic_WriteOutgoingMailbox places CCB and Action Code into an Outgoing
+  Mailbox for execution by Host Adapter.
 */
 
-static boolean BusLogic_WriteOutgoingMailboxEntry(BusLogic_HostAdapter_T
-						    *HostAdapter,
-						  BusLogic_ActionCode_T
-						    ActionCode,
-						  BusLogic_CCB_T *CCB)
+static boolean BusLogic_WriteOutgoingMailbox(BusLogic_HostAdapter_T
+					       *HostAdapter,
+					     BusLogic_ActionCode_T ActionCode,
+					     BusLogic_CCB_T *CCB)
 {
   BusLogic_OutgoingMailbox_T *NextOutgoingMailbox;
   boolean Result = false;
@@ -1903,13 +1994,20 @@ static boolean BusLogic_WriteOutgoingMailboxEntry(BusLogic_HostAdapter_T
   NextOutgoingMailbox = HostAdapter->NextOutgoingMailbox;
   if (NextOutgoingMailbox->ActionCode == BusLogic_OutgoingMailboxFree)
     {
-      NextOutgoingMailbox->ActionCode = ActionCode;
-      NextOutgoingMailbox->CCB = CCB;
       CCB->Status = BusLogic_CCB_Active;
+      /*
+	The CCB field must be written before the Action Code field since
+	the Host Adapter is operating asynchronously and the locking code
+	does not protect against simultaneous access by the Host Adapter.
+      */
+      NextOutgoingMailbox->CCB = CCB;
+      NextOutgoingMailbox->ActionCode = ActionCode;
       BusLogic_StartMailboxScan(HostAdapter);
       if (++NextOutgoingMailbox > HostAdapter->LastOutgoingMailbox)
 	NextOutgoingMailbox = HostAdapter->FirstOutgoingMailbox;
       HostAdapter->NextOutgoingMailbox = NextOutgoingMailbox;
+      if (ActionCode == BusLogic_MailboxStartCommand)
+	HostAdapter->QueuedOperationCount[CCB->TargetID]++;
       Result = true;
     }
   BusLogic_UnlockHostAdapter(HostAdapter);
@@ -1948,13 +2046,14 @@ int BusLogic_QueueCommand(SCSI_Command_T *Command,
       return 0;
     }
   /*
-    Allocate a CCB from the Host Adapter's free list, aborting the command
-    with an error if there are none available and memory allocation fails.
+    Allocate a CCB from the Host Adapter's free list.  If there are none
+    available and memory allocation fails, return a result code of Bus Busy
+    so that this Command will be retried.
   */
   CCB = BusLogic_AllocateCCB(HostAdapter);
   if (CCB == NULL)
     {
-      Command->result = DID_ERROR << 16;
+      Command->result = DID_BUS_BUSY << 16;
       CompletionRoutine(Command);
       return 0;
     }
@@ -2000,6 +2099,8 @@ int BusLogic_QueueCommand(SCSI_Command_T *Command,
     }
   CCB->CDB_Length = CDB_Length;
   CCB->SenseDataLength = sizeof(Command->sense_buffer);
+  CCB->HostAdapterStatus = 0;
+  CCB->TargetDeviceStatus = 0;
   CCB->TargetID = TargetID;
   CCB->LogicalUnit = LogicalUnit;
   /*
@@ -2017,24 +2118,48 @@ int BusLogic_QueueCommand(SCSI_Command_T *Command,
     BusLogic recommends that after a Reset the first couple of commands that
     are sent to a Target be sent in a non Tagged Queue fashion so that the Host
     Adapter and Target can establish Synchronous Transfer before Queue Tag
-    messages can interfere with the Synchronous Negotiation message.
+    messages can interfere with the Synchronous Negotiation message.  By
+    waiting to enable tagged Queuing until after the first 16 read/write
+    commands have been sent, it is assured that the Tagged Queuing message
+    will not occur while the partition table is printed.
   */
   if ((HostAdapter->TaggedQueuingPermitted & (1 << TargetID)) &&
       Command->device->tagged_supported &&
-      (EnableTQ = HostAdapter->ReadWriteOperationCount[TargetID] - 5) >= 0)
+      (EnableTQ = HostAdapter->ReadWriteOperationCount[TargetID] - 16) >= 0)
     {
+      BusLogic_QueueTag_T QueueTag = BusLogic_SimpleQueueTag;
+      unsigned long CurrentTime = jiffies;
       if (EnableTQ == 0)
 	printk("scsi%d: Tagged Queuing now active for Target %d\n",
 	       HostAdapter->HostNumber, TargetID);
+      /*
+	When using Tagged Queuing with Simple Queue Tags, it appears that disk
+	drive controllers do not guarantee that a queued command will not
+	remain in a disconnected state indefinitely if commands that read or
+	write nearer the head position continue to arrive without interruption.
+	Therefore, for each Target Device this driver keeps track of the last
+	time either the queue was empty or an Ordered Queue Tag was issued.  If
+	more than 2 seconds have elapsed since this last sequence point, this
+	command will be issued with an Ordered Queue Tag rather than a Simple
+	Queue Tag, which forces the Target Device to complete all previously
+	queued commands before this command may be executed.
+      */
+      if (HostAdapter->QueuedOperationCount[TargetID] == 0)
+	HostAdapter->LastSequencePoint[TargetID] = CurrentTime;
+      else if (CurrentTime - HostAdapter->LastSequencePoint[TargetID] > 2*HZ)
+	{
+	  HostAdapter->LastSequencePoint[TargetID] = CurrentTime;
+	  QueueTag = BusLogic_OrderedQueueTag;
+	}
       if (HostAdapter->HostWideSCSI)
 	{
 	  CCB->WideModeTagEnable = true;
-	  CCB->WideModeQueueTag = BusLogic_SimpleQueueTag;
+	  CCB->WideModeQueueTag = QueueTag;
 	}
       else
 	{
 	  CCB->TagEnable = true;
-	  CCB->QueueTag = BusLogic_SimpleQueueTag;
+	  CCB->QueueTag = QueueTag;
 	}
     }
   memcpy(CCB->CDB, CDB, CDB_Length);
@@ -2042,16 +2167,17 @@ int BusLogic_QueueCommand(SCSI_Command_T *Command,
   CCB->Command = Command;
   Command->scsi_done = CompletionRoutine;
   /*
-    Place the CCB in an Outgoing Mailbox, aborting the command with an
-    error if there are none available.
+    Place the CCB in an Outgoing Mailbox.  If there are no Outgoing
+    Mailboxes available, return a result code of Bus Busy so that this
+    Command will be retried.
   */
-  if (!(BusLogic_WriteOutgoingMailboxEntry(
-	  HostAdapter, BusLogic_MailboxStartCommand, CCB)))
+  if (!(BusLogic_WriteOutgoingMailbox(HostAdapter,
+				      BusLogic_MailboxStartCommand, CCB)))
     {
-      printk("scsi%d: cannot write Outgoing Mailbox Entry\n",
+      printk("scsi%d: cannot write Outgoing Mailbox\n",
 	     HostAdapter->HostNumber);
       BusLogic_DeallocateCCB(CCB);
-      Command->result = DID_ERROR << 16;
+      Command->result = DID_BUS_BUSY << 16;
       CompletionRoutine(Command);
     }
   return 0;
@@ -2066,6 +2192,7 @@ int BusLogic_AbortCommand(SCSI_Command_T *Command)
 {
   BusLogic_HostAdapter_T *HostAdapter =
     (BusLogic_HostAdapter_T *) Command->host->hostdata;
+  unsigned long CommandPID = Command->pid;
   unsigned char InterruptRegister;
   BusLogic_CCB_T *CCB;
   int Result;
@@ -2079,7 +2206,7 @@ int BusLogic_AbortCommand(SCSI_Command_T *Command)
   if (InterruptRegister & BusLogic_InterruptValid)
     {
       unsigned long ProcessorFlags;
-      printk("scsi%d: Recovering Lost Interrupt for IRQ Channel %d\n",
+      printk("scsi%d: Recovering Lost/Delayed Interrupt for IRQ Channel %d\n",
 	     HostAdapter->HostNumber, HostAdapter->IRQ_Channel);
       save_flags(ProcessorFlags);
       cli();
@@ -2088,41 +2215,54 @@ int BusLogic_AbortCommand(SCSI_Command_T *Command)
       return SCSI_ABORT_SNOOZE;
     }
   /*
-    Find the CCB to be aborted and determine how to proceed.
+    Find the CCB to be aborted if possible.
+  */
+  BusLogic_LockHostAdapter(HostAdapter);
+  for (CCB = HostAdapter->All_CCBs; CCB != NULL; CCB = CCB->NextAll)
+    if (CCB->Command == Command) break;
+  BusLogic_UnlockHostAdapter(HostAdapter);
+  if (CCB == NULL)
+    {
+      printk("scsi%d: Unable to Abort Command to Target %d - No CCB Found\n",
+	     HostAdapter->HostNumber, Command->target);
+      return SCSI_ABORT_NOT_RUNNING;
+    }
+  /*
+    Briefly pause to see if this command will complete.
+  */
+  printk("scsi%d: Pausing briefly to see if CCB #%d "
+	 "to Target %d will complete\n",
+	 HostAdapter->HostNumber, CCB->SerialNumber, CCB->TargetID);
+  BusLogic_Delay(2);
+  /*
+    If this CCB is still Active and still refers to the same Command, then
+    actually aborting this Command is necessary.
   */
   BusLogic_LockHostAdapter(HostAdapter);
   Result = SCSI_ABORT_NOT_RUNNING;
-  for (CCB = HostAdapter->All_CCBs; CCB != NULL; CCB = CCB->NextAll)
-    if (CCB->Command == Command)
-      {
-	if (CCB->Status == BusLogic_CCB_Active)
-	  if ((HostAdapter->HostWideSCSI && CCB->WideModeTagEnable &&
-	       CCB->WideModeQueueTag != BusLogic_SimpleQueueTag) ||
-	      (!HostAdapter->HostWideSCSI && CCB->TagEnable &&
-	       CCB->QueueTag != BusLogic_SimpleQueueTag))
-	    {
-	      /*
-		CCBs using Tagged Queuing with other than Simple Queue Tag
-		should not be aborted.
-	      */
-	      Result = SCSI_ABORT_BUSY;
-	    }
-	  else
-	    {
-	      /*
-		Attempt to abort the CCB.
-	      */
-	      if (BusLogic_WriteOutgoingMailboxEntry(
-		    HostAdapter, BusLogic_MailboxAbortCommand, CCB))
-		{
-		  printk("scsi%d: Aborting CCB #%d\n",
-			 HostAdapter->HostNumber, CCB->SerialNumber);
-		  Result = SCSI_ABORT_PENDING;
-		}
-	      else Result = SCSI_ABORT_BUSY;
-	    }
-	break;
-      }
+  if (CCB->Status == BusLogic_CCB_Active &&
+      CCB->Command == Command && Command->pid == CommandPID)
+    {
+      /*
+	Attempt to abort this CCB.
+      */
+      if (BusLogic_WriteOutgoingMailbox(HostAdapter,
+					BusLogic_MailboxAbortCommand, CCB))
+	{
+	  printk("scsi%d: Aborting CCB #%d to Target %d\n",
+		 HostAdapter->HostNumber, CCB->SerialNumber, CCB->TargetID);
+	  Result = SCSI_ABORT_PENDING;
+	}
+      else
+	{
+	  printk("scsi%d: Unable to Abort CCB #%d to Target %d - "
+		 "No Outgoing Mailboxes\n", HostAdapter->HostNumber,
+		 CCB->SerialNumber, CCB->TargetID);
+	  Result = SCSI_ABORT_BUSY;
+	}
+    }
+  else printk("scsi%d: CCB #%d to Target %d completed\n",
+	      HostAdapter->HostNumber, CCB->SerialNumber, CCB->TargetID);
   BusLogic_UnlockHostAdapter(HostAdapter);
   return Result;
 }
@@ -2165,23 +2305,50 @@ static int BusLogic_ResetHostAdapter(BusLogic_HostAdapter_T *HostAdapter,
   /*
     Mark all currently executing CCBs as having been reset.
   */
+  BusLogic_LockHostAdapter(HostAdapter);
   for (CCB = HostAdapter->All_CCBs; CCB != NULL; CCB = CCB->NextAll)
     if (CCB->Status == BusLogic_CCB_Active)
       {
-	SCSI_Command_T *ActiveCommand = CCB->Command;
-	if (ActiveCommand == Command) Command = NULL;
-	BusLogic_DeallocateCCB(CCB);
-	if (ActiveCommand != NULL)
+	CCB->Status = BusLogic_CCB_Reset;
+	if (CCB->Command == Command)
 	  {
-	    ActiveCommand->result = DID_RESET << 16;
-	    ActiveCommand->scsi_done(ActiveCommand);
+	    CCB->Command = NULL;
+	    /*
+	      Disable Tagged Queuing if it was active for this Target Device.
+	    */
+	    if (((HostAdapter->HostWideSCSI && CCB->WideModeTagEnable) ||
+		 (!HostAdapter->HostWideSCSI && CCB->TagEnable)) &&
+		(HostAdapter->TaggedQueuingPermitted & (1 << CCB->TargetID)))
+	      {
+		HostAdapter->TaggedQueuingPermitted &= ~(1 << CCB->TargetID);
+		printk("scsi%d: Tagged Queuing now disabled for Target %d\n",
+		       HostAdapter->HostNumber, CCB->TargetID);
+	      }
 	  }
       }
+  BusLogic_UnlockHostAdapter(HostAdapter);
+  /*
+    Perform completion processing for the Command being Reset.
+  */
   if (Command != NULL)
     {
       Command->result = DID_RESET << 16;
       Command->scsi_done(Command);
     }
+  /*
+    Perform completion processing for any other active CCBs.
+  */
+  for (CCB = HostAdapter->All_CCBs; CCB != NULL; CCB = CCB->NextAll)
+    if (CCB->Status == BusLogic_CCB_Reset)
+      {
+	Command = CCB->Command;
+	BusLogic_DeallocateCCB(CCB);
+	if (Command != NULL)
+	  {
+	    Command->result = DID_RESET << 16;
+	    Command->scsi_done(Command);
+	  }
+      }
   return SCSI_RESET_SUCCESS | SCSI_RESET_BUS_RESET;
 }
 
@@ -2210,16 +2377,27 @@ static int BusLogic_BusDeviceReset(BusLogic_HostAdapter_T *HostAdapter,
   /*
     If there is a currently executing CCB in the Host Adapter for this Command,
     then an Incoming Mailbox entry will be made with a completion code of
-    BusLogic_HostAdapterAssertedBusDeviceReset.  Otherwise, the CCB Command
+    BusLogic_HostAdapterAssertedBusDeviceReset.  Otherwise, the CCB's Command
     field will be left pointing to the Command so that the interrupt for the
     completion of the Bus Device Reset can call the Completion Routine for the
     Command.
   */
   BusLogic_LockHostAdapter(HostAdapter);
   for (XCCB = HostAdapter->All_CCBs; XCCB != NULL; XCCB = XCCB->NextAll)
-    if (XCCB->Status == BusLogic_CCB_Active && XCCB->Command == Command)
+    if (XCCB->Command == Command && XCCB->Status == BusLogic_CCB_Active)
       {
 	CCB->Command = NULL;
+	/*
+	  Disable Tagged Queuing if it was active for this Target Device.
+	*/
+	if (((HostAdapter->HostWideSCSI && XCCB->WideModeTagEnable) ||
+	    (!HostAdapter->HostWideSCSI && XCCB->TagEnable)) &&
+	    (HostAdapter->TaggedQueuingPermitted & (1 << TargetID)))
+	  {
+	    HostAdapter->TaggedQueuingPermitted &= ~(1 << TargetID);
+	    printk("scsi%d: Tagged Queuing now disabled for Target %d\n",
+		   HostAdapter->HostNumber, TargetID);
+	  }
 	break;
       }
   BusLogic_UnlockHostAdapter(HostAdapter);
@@ -2228,15 +2406,16 @@ static int BusLogic_BusDeviceReset(BusLogic_HostAdapter_T *HostAdapter,
     If sending a Bus Device Reset is impossible, attempt a full Host
     Adapter Hard Reset and SCSI Bus Reset.
   */
-  if (!(BusLogic_WriteOutgoingMailboxEntry(
-	  HostAdapter, BusLogic_MailboxStartCommand, CCB)))
+  if (!(BusLogic_WriteOutgoingMailbox(HostAdapter,
+				      BusLogic_MailboxStartCommand, CCB)))
     {
-      printk("scsi%d: cannot write Outgoing Mailbox Entry for "
-	     "Bus Device Reset\n", HostAdapter->HostNumber);
+      printk("scsi%d: cannot write Outgoing Mailbox for Bus Device Reset\n",
+	     HostAdapter->HostNumber);
       BusLogic_DeallocateCCB(CCB);
       return BusLogic_ResetHostAdapter(HostAdapter, Command);
     }
   HostAdapter->ReadWriteOperationCount[TargetID] = 0;
+  HostAdapter->QueuedOperationCount[TargetID] = 0;
   return SCSI_RESET_PENDING;
 }
 
@@ -2268,7 +2447,8 @@ int BusLogic_ResetCommand(SCSI_Command_T *Command)
 	}
       else return BusLogic_ResetHostAdapter(HostAdapter, Command);
     }
-  printk("scsi%d: Error Recovery Suppressed\n", HostAdapter->HostNumber);
+  printk("scsi%d: Error Recovery for Target %d Suppressed\n",
+	 HostAdapter->HostNumber, TargetID);
   return SCSI_RESET_PUNT;
 }
 
@@ -2345,9 +2525,13 @@ int BusLogic_BIOSDiskParameters(SCSI_Disk_T *Disk, KernelDevice_T Device,
   a SCSI Bus Reset and issuing any SCSI commands.  If unspecified, it defaults
   to 0 which means to use the value of BusLogic_DefaultBusSettleTime.
 
-  The fourth integer specified is the Tracing Options.  If unspecified, it
-  defaults to 0 which means that no special tracing information is to be
-  printed.  Note that Tracing Options are applied across all Host Adapters.
+  The fourth integer specified is the Local Options.  If unspecified, it
+  defaults to 0.  Note that Local Options are only applied to a specific Host
+  Adapter.
+
+  The fifth integer specified is the Global Options.  If unspecified, it
+  defaults to 0.  Note that Global Options are applied across all Host
+  Adapters.
 
   The string options are used to provide control over Tagged Queuing and Error
   Recovery. If both Tagged Queuing and Error Recovery strings are provided, the
@@ -2428,12 +2612,13 @@ void BusLogic_Setup(char *Strings, int *Integers)
   CommandLineEntry->IO_Address = 0;
   CommandLineEntry->Concurrency = 0;
   CommandLineEntry->BusSettleTime = 0;
+  CommandLineEntry->LocalOptions = 0;
   CommandLineEntry->TaggedQueuingPermitted = 0;
   CommandLineEntry->TaggedQueuingPermittedMask = 0;
   memset(CommandLineEntry->ErrorRecoveryOption,
 	 BusLogic_ErrorRecoveryDefault,
 	 sizeof(CommandLineEntry->ErrorRecoveryOption));
-  if (IntegerCount > 4)
+  if (IntegerCount > 5)
     printk("BusLogic: Unexpected Command Line Integers ignored\n");
   if (IntegerCount >= 1)
     {
@@ -2454,7 +2639,8 @@ void BusLogic_Setup(char *Strings, int *Integers)
 		       "(duplicate I/O Address 0x%X)\n", IO_Address);
 		return;
 	      }
-	    else if (IO_Address == BusLogic_IO_StandardAddresses[i]) break;
+	    else if (IO_Address >= 0x1000 ||
+		     IO_Address == BusLogic_IO_StandardAddresses[i]) break;
 	  BusLogic_IO_AddressProbeList[ProbeListIndex++] = IO_Address;
 	  BusLogic_IO_AddressProbeList[ProbeListIndex] = 0;
 	}
@@ -2474,7 +2660,9 @@ void BusLogic_Setup(char *Strings, int *Integers)
   if (IntegerCount >= 3)
     CommandLineEntry->BusSettleTime = Integers[3];
   if (IntegerCount >= 4)
-    BusLogic_TracingOptions |= Integers[4];
+    CommandLineEntry->LocalOptions = Integers[4];
+  if (IntegerCount >= 5)
+    BusLogic_GlobalOptions |= Integers[5];
   if (!(BusLogic_CommandLineEntryCount == 0 || ProbeListIndex == 0 ||
 	BusLogic_CommandLineEntryCount == ProbeListIndex))
     {
@@ -2575,3 +2763,17 @@ void BusLogic_Setup(char *Strings, int *Integers)
   if (*Strings != '\0')
     printk("BusLogic: Unexpected Command Line String '%s' ignored\n", Strings);
 }
+
+
+/*
+  Include Module support if requested.
+*/
+
+
+#ifdef MODULE
+
+SCSI_Host_Template_T driver_template = BUSLOGIC;
+
+#include "scsi_module.c"
+
+#endif

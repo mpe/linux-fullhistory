@@ -1,0 +1,47 @@
+#! /bin/sh
+# Script to apply kernel patches.
+#   usage: patch-kernel [ sourcedir [ patchdir ] ]
+#     The source directory defaults to /usr/src/linux, and the patch
+#     directory defaults to the current directory.
+#
+# It determines the current kernel version from the top-level Makefile.
+# It then looks for patches for the next sublevel in the patch directory.
+# This is applied using "patch -p1 -s" from within the kernel directory.
+# A check is then made for "*.rej" files to see if the patch was
+# successful.  If it is, then all of the "*.orig" files are removed.
+#
+#       Nick Holloway <Nick.Holloway@alfie.demon.co.uk>, 2nd January 1995.
+
+# Set directories from arguments, or use defaults.
+sourcedir=${1-/usr/src/linux}
+patchdir=${2-.}
+
+# set current VERSION, PATCHLEVEL, SUBLEVEL
+eval `sed -n 's/^\([A-Z]*\) = \([0-9]*\)$/\1=\2/p' $sourcedir/Makefile`
+if [ -z "$VERSION" -o -z "$PATCHLEVEL" -o -z "$SUBLEVEL" ]
+then
+    echo "unable to determine current kernel version" >&2
+    exit 1
+fi
+
+echo "Current kernel version is $VERSION.$PATCHLEVEL.$SUBLEVEL"
+
+while :
+do
+    SUBLEVEL=`expr $SUBLEVEL + 1`
+    patch=patch-$VERSION.$PATCHLEVEL.$SUBLEVEL.gz 
+    if [ ! -r $patchdir/$patch ]
+    then
+        break
+    fi
+
+    echo "Applying $patch..."
+    gunzip -dc $patchdir/$patch | patch -p1 -s -E -f -d $sourcedir
+    if [ "`find $sourcedir -name \*.rej -print`" ]
+    then
+        echo "Aborting.  Reject files found."
+        break
+    fi
+    # Remove backup files
+    find $sourcedir -name \*.orig -print | xargs rm -f
+done

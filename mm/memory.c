@@ -189,7 +189,7 @@ int new_page_tables(struct task_struct * tsk)
 	return 0;
 }
 
-static inline void copy_one_pte(pte_t * old_pte, pte_t * new_pte)
+static inline void copy_one_pte(pte_t * old_pte, pte_t * new_pte, int cow)
 {
 	pte_t pte = *old_pte;
 
@@ -204,7 +204,7 @@ static inline void copy_one_pte(pte_t * old_pte, pte_t * new_pte)
 		set_pte(new_pte, pte);
 		return;
 	}
-	if (pte_cow(pte))
+	if (cow)
 		pte = pte_wrprotect(pte);
 	if (delete_from_swap_cache(pte_page(pte)))
 		pte = pte_mkdirty(pte);
@@ -213,7 +213,7 @@ static inline void copy_one_pte(pte_t * old_pte, pte_t * new_pte)
 	mem_map[MAP_NR(pte_page(pte))].count++;
 }
 
-static inline int copy_pte_range(pmd_t *dst_pmd, pmd_t *src_pmd, unsigned long address, unsigned long size)
+static inline int copy_pte_range(pmd_t *dst_pmd, pmd_t *src_pmd, unsigned long address, unsigned long size, int cow)
 {
 	pte_t * src_pte, * dst_pte;
 	unsigned long end;
@@ -239,13 +239,13 @@ static inline int copy_pte_range(pmd_t *dst_pmd, pmd_t *src_pmd, unsigned long a
 		/* I would like to switch arguments here, to make it
 		 * consistent with copy_xxx_range and memcpy syntax.
 		 */
-		copy_one_pte(src_pte++, dst_pte++);
+		copy_one_pte(src_pte++, dst_pte++, cow);
 		address += PAGE_SIZE;
 	} while (address < end);
 	return 0;
 }
 
-static inline int copy_pmd_range(pgd_t *dst_pgd, pgd_t *src_pgd, unsigned long address, unsigned long size)
+static inline int copy_pmd_range(pgd_t *dst_pgd, pgd_t *src_pgd, unsigned long address, unsigned long size, int cow)
 {
 	pmd_t * src_pmd, * dst_pmd;
 	unsigned long end;
@@ -269,7 +269,7 @@ static inline int copy_pmd_range(pgd_t *dst_pgd, pgd_t *src_pgd, unsigned long a
 	if (end > PGDIR_SIZE)
 		end = PGDIR_SIZE;
 	do {
-		error = copy_pte_range(dst_pmd++, src_pmd++, address, end - address);
+		error = copy_pte_range(dst_pmd++, src_pmd++, address, end - address, cow);
 		if (error)
 			break;
 		address = (address + PMD_SIZE) & PMD_MASK; 
@@ -288,12 +288,13 @@ int copy_page_range(struct mm_struct *dst, struct mm_struct *src,
 	pgd_t * src_pgd, * dst_pgd;
 	unsigned long address = vma->vm_start;
 	unsigned long end = vma->vm_end;
-	int error = 0;
+	int error = 0, cow;
 
+	cow = (vma->vm_flags & (VM_SHARED | VM_WRITE)) == VM_WRITE;
 	src_pgd = pgd_offset(src, address);
 	dst_pgd = pgd_offset(dst, address);
 	while (address < end) {
-		error = copy_pmd_range(dst_pgd++, src_pgd++, address, end - address);
+		error = copy_pmd_range(dst_pgd++, src_pgd++, address, end - address, cow);
 		if (error)
 			break;
 		address = (address + PGDIR_SIZE) & PGDIR_MASK;
@@ -752,170 +753,6 @@ static inline void get_empty_page(struct task_struct * tsk, struct vm_area_struc
 }
 
 /*
- * try_to_share() checks the page at address "address" in the task "p",
- * to see if it exists, and if it is clean. If so, share it with the current
- * task.
- *
- * NOTE! This assumes we have checked that p != current, and that they
- * share the same inode and can generally otherwise be shared.
- */
-static int try_to_share(unsigned long to_address, struct vm_area_struct * to_area,
-	unsigned long from_address, struct vm_area_struct * from_area,
-	unsigned long newpage)
-{
-	pgd_t * from_dir, * to_dir;
-	pmd_t * from_middle, * to_middle;
-	pte_t * from_table, * to_table;
-	pte_t from, to;
-
-	from_dir = pgd_offset(from_area->vm_mm,from_address);
-/* is there a page-directory at from? */
-	if (pgd_none(*from_dir))
-		return 0;
-	if (pgd_bad(*from_dir)) {
-		printk("try_to_share: bad page directory %08lx\n", pgd_val(*from_dir));
-		pgd_clear(from_dir);
-		return 0;
-	}
-	from_middle = pmd_offset(from_dir, from_address);
-/* is there a mid-directory at from? */
-	if (pmd_none(*from_middle))
-		return 0;
-	if (pmd_bad(*from_middle)) {
-		printk("try_to_share: bad mid directory %08lx\n", pmd_val(*from_middle));
-		pmd_clear(from_middle);
-		return 0;
-	}
-	from_table = pte_offset(from_middle, from_address);
-	from = *from_table;
-/* is the page present? */
-	if (!pte_present(from))
-		return 0;
-/* if it is dirty it must be from a shared mapping to be shared */
-	if (pte_dirty(from)) {
-		if (!(from_area->vm_flags & VM_SHARED))
-			return 0;
-	}
-/* is the page reasonable at all? */
-	if (pte_page(from) >= high_memory)
-		return 0;
-	if (mem_map[MAP_NR(pte_page(from))].reserved)
-		return 0;
-/* is the destination ok? */
-	to_dir = pgd_offset(to_area->vm_mm,to_address);
-/* is there a page-directory at to? */
-	if (pgd_none(*to_dir))
-		return 0;
-	if (pgd_bad(*to_dir)) {
-		printk("try_to_share: bad page directory %08lx\n", pgd_val(*to_dir));
-		return 0;
-	}
-	to_middle = pmd_offset(to_dir, to_address);
-/* is there a mid-directory at to? */
-	if (pmd_none(*to_middle))
-		return 0;
-	if (pmd_bad(*to_middle)) {
-		printk("try_to_share: bad mid directory %08lx\n", pmd_val(*to_middle));
-		return 0;
-	}
-	to_table = pte_offset(to_middle, to_address);
-	to = *to_table;
-	if (!pte_none(to))
-		return 0;
-/* do we copy? */
-	if (newpage) {
-		/* if it's in the swap cache, it's dirty by implication */
-		/* so we can't use it if it's not from a shared mapping */
-		if (in_swap_cache(pte_page(from))) {
-			if (!(from_area->vm_flags & VM_SHARED))
-				return 0;
-		}
-		copy_page(pte_page(from), newpage);
-		set_pte(to_table, mk_pte(newpage, to_area->vm_page_prot));
-		return 1;
-	}
-/*
- * do a final swap-cache test before sharing them: if it's in the swap
- * cache, we have to remove it now, as we get two pointers to the same
- * physical page and the cache can't handle it. Mark the original dirty.
- *
- * NOTE! Even if "from" is dirty, "to" will be clean: if we get here
- * with a dirty "from", the from-mapping is a shared map, so we can trust
- * the page contents to be up-to-date
- */
-	if (in_swap_cache(pte_page(from))) {
-		if (!(from_area->vm_flags & VM_SHARED))
-			return 0;
-		set_pte(from_table, pte_mkdirty(from));
-		delete_from_swap_cache(pte_page(from));
-	}
-	mem_map[MAP_NR(pte_page(from))].count++;
-	set_pte(to_table, mk_pte(pte_page(from), to_area->vm_page_prot));
-/* Check if we need to do anything at all to the 'from' field */
-	if (!pte_write(from))
-		return 1;
-	if (from_area->vm_flags & VM_SHARED)
-		return 1;
-/* ok, need to mark it read-only, so invalidate any possible old TB entry */
-	set_pte(from_table, pte_wrprotect(from));
-	invalidate_page(from_area, from_address);
-	return 1;
-}
-
-/*
- * share_page() tries to find a process that could share a page with
- * the current one.
- *
- * We first check if it is at all feasible by checking inode->i_count.
- * It should be >1 if there are other tasks sharing this inode.
- */
-static int share_page(struct vm_area_struct * area, unsigned long address,
-	int write_access, unsigned long newpage)
-{
-	struct inode * inode;
-	unsigned long offset;
-	unsigned long from_address;
-	unsigned long give_page;
-	struct vm_area_struct * mpnt;
-
-	if (!area || !(inode = area->vm_inode) || inode->i_count < 2)
-		return 0;
-	/* do we need to copy or can we just share? */
-	give_page = 0;
-	if (write_access && !(area->vm_flags & VM_SHARED)) {
-		if (!newpage)
-			return 0;
-		give_page = newpage;
-	}
-	offset = address - area->vm_start + area->vm_offset;
-	/* See if there is something in the VM we can share pages with. */
-	/* Traverse the entire circular i_mmap list, except `area' itself. */
-	for (mpnt = area->vm_next_share; mpnt != area; mpnt = mpnt->vm_next_share) {
-		/* must be same inode */
-		if (mpnt->vm_inode != inode) {
-			printk("Aiee! Corrupt vm_area_struct i_mmap ring\n");
-			break;	
-		}
-		/* offsets must be mutually page-aligned */
-		if ((mpnt->vm_offset ^ area->vm_offset) & ~PAGE_MASK)
-			continue;
-		/* the other area must actually cover the wanted page.. */
-		from_address = offset + mpnt->vm_start - mpnt->vm_offset;
-		if (from_address < mpnt->vm_start || from_address >= mpnt->vm_end)
-			continue;
-		/* .. NOW we can actually try to use the same physical page */
-		if (!try_to_share(address, area, from_address, mpnt, give_page))
-			continue;
-		/* free newpage if we never used it.. */
-		if (give_page || !newpage)
-			return 1;
-		free_page(newpage);
-		return 1;
-	}
-	return 0;
-}
-
-/*
  * This function zeroes out partial mmap'ed pages at truncation time..
  */
 static void partial_clear(struct vm_area_struct *vma, unsigned long address)
@@ -1069,11 +906,6 @@ void do_no_page(struct task_struct * tsk, struct vm_area_struct * vma,
 		return;
 	}
 	page = __get_free_page(GFP_KERNEL);
-	if (share_page(vma, address, write_access, page)) {
-		++vma->vm_mm->rss;
-		++tsk->min_flt;
-		return;
-	}
 	if (!page) {
 		oom(tsk);
 		put_page(page_table, BAD_PAGE);
@@ -1088,10 +920,6 @@ void do_no_page(struct task_struct * tsk, struct vm_area_struct * vma,
 	 */
 	page = vma->vm_ops->nopage(vma, address, page,
 		write_access && !(vma->vm_flags & VM_SHARED));
-	if (share_page(vma, address, write_access, 0)) {
-		free_page(page);
-		return;
-	}
 	/*
 	 * This silly early PAGE_DIRTY setting removes a race
 	 * due to the bad i386 page protection. But it's valid

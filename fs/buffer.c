@@ -25,7 +25,9 @@
 #include <linux/locks.h>
 #include <linux/errno.h>
 #include <linux/malloc.h>
+#include <linux/pagemap.h>
 #include <linux/swapctl.h>
+#include <linux/smp.h>
 
 #include <asm/system.h>
 #include <asm/segment.h>
@@ -278,6 +280,7 @@ void invalidate_buffers(kdev_t dev)
 			if (bh->b_count)
 				continue;
 			bh->b_flushtime = 0;
+			clear_bit(BH_Protected, &bh->b_state);
 			clear_bit(BH_Uptodate, &bh->b_state);
 			clear_bit(BH_Dirty, &bh->b_state);
 			clear_bit(BH_Req, &bh->b_state);
@@ -837,6 +840,7 @@ void __bforget(struct buffer_head * buf)
 {
 	wait_on_buffer(buf);
 	mark_buffer_clean(buf);
+	clear_bit(BH_Protected, &buf->b_state);
 	buf->b_count--;
 	remove_from_hash_queue(buf);
 	buf->b_dev = NODEV;
@@ -1023,7 +1027,7 @@ static void read_buffers(struct buffer_head * bh[], int nrbuf)
 	} while (nrbuf > 0);
 }
 
-int bread_page(unsigned long address, kdev_t dev, int b[], int size)
+static int bread_page(unsigned long address, kdev_t dev, int b[], int size)
 {
 	struct buffer_head *bh, *next, *arr[MAX_BUF_PER_PAGE];
 	int block, nr;
@@ -1069,6 +1073,34 @@ int bread_page(unsigned long address, kdev_t dev, int b[], int size)
 		bh = bh->b_this_page;
 		put_unused_buffer_head(next);
 	}
+	return 0;
+}
+
+/*
+ * Generic "readpage" function for block devices that have the
+ * normal bmap functionality. This is most of the block device
+ * filesystems.
+ */
+int generic_readpage(struct inode * inode, struct page * page)
+{
+	unsigned long block;
+	int *p, nr[PAGE_SIZE/512];
+	int i;
+
+	i = PAGE_SIZE >> inode->i_sb->s_blocksize_bits;
+	block = page->offset >> inode->i_sb->s_blocksize_bits;
+	p = nr;
+	do {
+		*p = inode->i_op->bmap(inode, block);
+		i--;
+		block++;
+		p++;
+	} while (i > 0);
+
+	/* We should make this asynchronous, but this is good enough for now.. */
+	bread_page(page_address(page), inode->i_dev, nr, inode->i_sb->s_blocksize);
+	page->uptodate = 1;
+	wake_up(&page->wait);
 	return 0;
 }
 
@@ -1781,22 +1813,35 @@ asmlinkage int sys_bdflush(int func, long data)
  * the syscall above, but now we launch it ourselves internally with
  * kernel_thread(...)  directly after the first thread in init/main.c */
 
-int bdflush(void * unused) {
-	
+int bdflush(void * unused) 
+{
 	int i;
 	int ndirty;
 	int nlist;
 	int ncount;
 	struct buffer_head * bh, *next;
 
-	/* We have a bare-bones task_struct, and really should fill
-	in a few more things so "top" and /proc/2/{exe,root,cwd}
-	display semi-sane things. Not real crucial though...  */
+	/*
+	 *	We have a bare-bones task_struct, and really should fill
+	 *	in a few more things so "top" and /proc/2/{exe,root,cwd}
+	 *	display semi-sane things. Not real crucial though...  
+	 */
 
 	current->session = 1;
 	current->pgrp = 1;
 	sprintf(current->comm, "kernel bdflush");
 
+	/*
+	 *	As a kernel thread we want to tamper with system buffers
+	 *	and other internals and thus be subject to the SMP locking
+	 *	rules. (On a uniprocessor box this does nothing).
+	 */
+	 
+#ifdef __SMP__
+	lock_kernel();
+	syscall_count++;
+#endif
+		 
 	for (;;) {
 #ifdef DEBUG
 		printk("bdflush() activated...");

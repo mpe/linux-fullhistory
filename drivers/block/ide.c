@@ -1,7 +1,7 @@
 /*
- *  linux/drivers/block/ide.c	Version 5.23  Dec 15, 1995
+ *  linux/drivers/block/ide.c	Version 5.24  Jan 4, 1996
  *
- *  Copyright (C) 1994, 1995  Linus Torvalds & authors (see below)
+ *  Copyright (C) 1994-1996  Linus Torvalds & authors (see below)
  */
 
 /*
@@ -179,6 +179,7 @@
  *  Version 5.21	fix nasty cdrom/tape bug (ide_preempt was messed up)
  *  Version 5.22	fix ide_xlate_1024() to work with/without drive->id
  *  Version 5.23	miscellaneous touch-ups
+ *  Version 5.24	fix #if's for SUPPORT_CMD640
  *
  *  Driver compile-time options are in ide.h
  *
@@ -221,7 +222,7 @@
 
 #include "ide.h"
 
-#ifdef SUPPORT_CMD640
+#if SUPPORT_CMD640
 void cmd640_tune_drive(ide_drive_t *);
 static int cmd640_vlb = 0;
 #endif
@@ -2209,7 +2210,7 @@ static inline void do_identify (ide_drive_t *drive, byte cmd)
 			printk(", DMA");
 	}
 	printk("\n");
-#ifdef SUPPORT_CMD640
+#if SUPPORT_CMD640
 	cmd640_tune_drive(drive);	/* but can we tune a fish? */
 #endif
 }
@@ -2526,7 +2527,7 @@ static void init_qd6580 (void)
 #include "umc8672.c"	/* until we tidy up the interface some more */
 #endif
 
-#ifdef SUPPORT_CMD640
+#if SUPPORT_CMD640
 #include "cmd640.c"	/* until we tidy up the interface some more */
 #endif
 
@@ -3037,7 +3038,7 @@ int ide_init (void)
 	if (pcibios_present())
 		ide_init_pci ();
 #endif /* CONFIG_PCI */
-#ifdef SUPPORT_CMD640
+#if SUPPORT_CMD640
 	ide_probe_for_cmd640x();
 #endif
 

@@ -25,6 +25,11 @@
  * been completely removed.
  *
  * Loadable module support added by Tom Dyas.
+ *
+ * Further cleanups by Chad Page (page0588@sundance.sjsu.edu):
+ *	Cosmetic changes in #ifdef MODULE, code movement, etc...
+ * 	When the ramdisk is rmmod'ed, free the protected buffers
+ * 	Default ramdisk size changed to 2.88MB
  */
 
 #include <linux/sched.h>
@@ -52,10 +57,15 @@ extern void wait_for_keypress(void);
 #define MAJOR_NR RAMDISK_MAJOR
 #include <linux/blk.h>
 
-#define BUILD_CRAMDISK
+/* These *should* be defined as parameters */
 #define NUM_RAMDISKS 8
+#define RD_DEFAULTSIZE	2880	/* 2.88 MB */
 
 #ifndef MODULE
+/* We don't have to load ramdisks or gunzip them in a module... */
+#define RD_LOADER
+#define BUILD_CRAMDISK
+
 void rd_load(void);
 static int crd_load(struct file *fp, struct file *outfp);
 #endif
@@ -106,10 +116,17 @@ repeat:
 		goto repeat;
 	}
 
-	if (CURRENT->cmd == READ) {	
+	/*
+	 * If we're reading, fill the buffer with 0's.  This is okay since
+         * we're using protected buffers which should never get freed...
+	 *
+	 * If we're writing, we protect the buffer.
+  	 */
+
+	if (CURRENT->cmd == READ) 
 		memset(CURRENT->buffer, 0, len); 
-	}
-	set_bit(BH_Protected, &CURRENT->bh->b_state);
+	else	
+		set_bit(BH_Protected, &CURRENT->bh->b_state);
 
 	end_request(1);
 	goto repeat;
@@ -146,7 +163,6 @@ static int rd_ioctl(struct inode *inode, struct file *file, unsigned int cmd, un
 
 static int rd_open(struct inode * inode, struct file * filp)
 {
-
 	if (DEVICE_NR(inode->i_rdev) >= NUM_RAMDISKS)
 		return -ENODEV;
 
@@ -192,7 +208,7 @@ int rd_init(void)
 	blk_dev[MAJOR_NR].request_fn = &rd_request;
 
 	for (i = 0; i < NUM_RAMDISKS; i++) {
-		rd_length[i] = (16384 * 1024);
+		rd_length[i] = (RD_DEFAULTSIZE * 1024);
 		rd_blocksizes[i] = 1024;
 	}
 
@@ -201,7 +217,35 @@ int rd_init(void)
 	return 0;
 }
 
-#ifndef MODULE
+/* loadable module support */
+
+#ifdef MODULE
+
+int init_module(void)
+{
+	int error = rd_init();
+	if (!error)
+		printk(KERN_INFO "RAMDISK: Loaded as module.\n");
+	return error;
+}
+
+/* Before freeing the module, invalidate all of the protected buffers! */
+void cleanup_module(void)
+{
+	int i;
+
+	for (i = 0 ; i < NUM_RAMDISKS; i++)
+		invalidate_buffers(MKDEV(MAJOR_NR, i));
+
+	unregister_blkdev( MAJOR_NR, "ramdisk" );
+	blk_dev[MAJOR_NR].request_fn = 0;
+}
+
+#endif  /* MODULE */
+
+/* End of non-loading portions of the ramdisk driver */
+
+#ifdef RD_LOADER 
 /*
  * This routine tries to a ramdisk image to load, and returns the
  * number of blocks to read for a non-compressed image, 0 if the image
@@ -403,6 +447,7 @@ done:
 		infile.f_op->release(&inode, &infile);
 	set_fs(fs);
 }
+#endif /* RD_LOADER */
 
 #ifdef BUILD_CRAMDISK
 
@@ -546,25 +591,3 @@ crd_load(struct file * fp, struct file *outfp)
 
 #endif  /* BUILD_CRAMDISK */
 
-#endif  /* MODULE */
-
-
-/* loadable module support */
-
-#ifdef MODULE
-
-int init_module(void)
-{
-	int error = rd_init();
-	if (!error)
-		printk(KERN_INFO "RAMDISK: Loaded as module.\n");
-	return error;
-}
-
-void cleanup_module(void)
-{
-	unregister_blkdev( MAJOR_NR, "ramdisk" );
-	blk_dev[MAJOR_NR].request_fn = 0;
-}
-
-#endif  /* MODULE */

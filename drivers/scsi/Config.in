@@ -18,7 +18,7 @@ dep_tristate 'Adaptec AHA152X support' CONFIG_SCSI_AHA152X $CONFIG_SCSI
 dep_tristate 'Adaptec AHA1542 support' CONFIG_SCSI_AHA1542 $CONFIG_SCSI
 dep_tristate 'Adaptec AHA1740 support' CONFIG_SCSI_AHA1740 $CONFIG_SCSI
 dep_tristate 'Adaptec AHA274X/284X/294X support' CONFIG_SCSI_AIC7XXX $CONFIG_SCSI
-bool 'BusLogic SCSI support' CONFIG_SCSI_BUSLOGIC
+dep_tristate 'BusLogic SCSI support' CONFIG_SCSI_BUSLOGIC
 dep_tristate 'EATA-DMA (DPT, NEC, ATT, Olivetti) support' CONFIG_SCSI_EATA_DMA $CONFIG_SCSI
 dep_tristate 'EATA-PIO (old DPT PM2001, PM2012A) support' CONFIG_SCSI_EATA_PIO $CONFIG_SCSI
 dep_tristate 'UltraStor 14F/34F support' CONFIG_SCSI_U14_34F $CONFIG_SCSI

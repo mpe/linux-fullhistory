@@ -404,7 +404,7 @@ struct inode_operations {
 	int (*rename) (struct inode *,const char *,int,struct inode *,const char *,int);
 	int (*readlink) (struct inode *,char *,int);
 	int (*follow_link) (struct inode *,struct inode *,int,int,struct inode **);
-	int (*readpage) (struct inode *, unsigned long, char *);
+	int (*readpage) (struct inode *, struct page *);
 	int (*writepage) (struct inode *, struct page *);
 	int (*bmap) (struct inode *,int);
 	void (*truncate) (struct inode *);
@@ -574,10 +574,14 @@ extern inline void bforget(struct buffer_head *buf)
 }
 extern void set_blocksize(kdev_t dev, int size);
 extern struct buffer_head * bread(kdev_t dev, int block, int size);
-extern int bread_page(unsigned long addr,kdev_t dev,int b[],int size);
-extern void bwrite_page(unsigned long addr,kdev_t dev,int b[],int size);
 extern struct buffer_head * breada(kdev_t dev,int block, int size, 
 				   unsigned int pos, unsigned int filesize);
+
+extern int generic_readpage(struct inode *, struct page *);
+extern int generic_file_read(struct inode *, struct file *, char *, int);
+extern int generic_mmap(struct inode *, struct file *, struct vm_area_struct *);
+
+extern void bwrite_page(unsigned long addr,kdev_t dev,int b[],int size);
 extern void put_super(kdev_t dev);
 unsigned long generate_cluster(kdev_t dev, int b[], int size);
 extern kdev_t ROOT_DEV;
@@ -591,8 +595,6 @@ extern int read_ahead[];
 
 extern int char_write(struct inode *, struct file *, const char *, int);
 extern int block_write(struct inode *, struct file *, const char *, int);
-
-extern int generic_mmap(struct inode *, struct file *, struct vm_area_struct *);
 
 extern int block_fsync(struct inode *, struct file *);
 extern int file_fsync(struct inode *, struct file *);

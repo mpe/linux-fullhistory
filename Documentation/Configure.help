@@ -177,6 +177,17 @@ CONFIG_NET
   consider updating your networking tools too; read net/README for
   details. 
 
+Network aliasing
+CONFIG_NET_ALIAS
+  This is for setting several network addresses on the same low-level network
+  device driver. Typically used for services that act different based
+  on the address they listen (eg. Apache httpd) or for connecting to
+  different logical networks through the same physical interface.
+  This is the generic part, later when configuring network protocol
+  options you will be asked for protocol-specific aliasing support.
+  See net/core/README.alias for more info.
+  If you need this features (for any protocol, like IP) say Y.  
+
 Sun floppy controller support
 CONFIG_BLK_DEV_SUNFD
   This is support for floppy drives on Sun Sparc workstations. Say Y
@@ -492,6 +503,12 @@ CONFIG_IP_MASQUERADE
   has nothing to do with the computer architecture of the same
   name. If you want this, say Y.
 
+IP: aliasing support
+CONFIG_IP_ALIAS
+  You need this to enable IP layer network aliasing. This will also
+  enable ARP resolution for alias devices. If you don't need several
+  IP addresses per interface, answer N.
+
 IP: multicast routing(in progress)
 CONFIG_IP_MROUTE
   This is used if you want your machine to act as a router for IP
@@ -787,9 +804,10 @@ CONFIG_SCSI_BUSLOGIC
   the documentation in drivers/scsi/README.BusLogic for more information.
   BusLogic FlashPoint SCSI Host Adapters are not supported by this driver.
   If this driver does not work correctly without modification, please
-  consult the author. This driver is not currently available as a module.
-  You might want to read the SCSI-HOWTO, available via ftp (user: 
-  anonymous) at sunsite.unc.edu:/pub/Linux/docs/HOWTO.
+  consult the author.  This driver may also be built as a module, but
+  only a single instance may be loaded.  You might also want to read
+  the SCSI-HOWTO, available via anonymous ftp from
+  sunsite.unc.edu:/pub/Linux/docs/HOWTO.
  
 EATA-DMA (DPT,NEC&ATT for ISA,EISA,PCI) support
 CONFIG_SCSI_EATA_DMA

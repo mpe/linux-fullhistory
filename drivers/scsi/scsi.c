@@ -802,8 +802,8 @@ static void scsi_times_out (Scsi_Cmnd * SCpnt, int pid)
 	if (!scsi_abort (SCpnt, DID_TIME_OUT, pid))
 	    return;
     case IN_ABORT:
-	printk("SCSI host %d abort() timed out - resetting\n",
-	       SCpnt->host->host_no);
+	printk("SCSI host %d abort (pid %ld) timed out - resetting\n",
+	       SCpnt->host->host_no, SCpnt->pid);
 	if (!scsi_reset (SCpnt, FALSE))
 	    return;
     case IN_RESET:

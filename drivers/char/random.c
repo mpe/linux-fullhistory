@@ -1,7 +1,7 @@
 /*
  * random.c -- A strong random number generator
  *
- * Version 0.95, last modified 4-Nov-95
+ * Version 0.96, last modified 29-Dec-95
  * 
  * Copyright Theodore Ts'o, 1994, 1995.  All rights reserved.
  *
@@ -276,7 +276,7 @@ void rand_initialize_irq(int irq)
 	}
 }
 
-void rand_initialize_blkdev(int major)
+void rand_initialize_blkdev(int major, int mode)
 {
 	struct timer_rand_state *state;
 	
@@ -287,7 +287,7 @@ void rand_initialize_blkdev(int major)
 	 * If kamlloc returns null, we just won't use that entropy
 	 * source.
 	 */
-	state = kmalloc(sizeof(struct timer_rand_state), GFP_KERNEL);
+	state = kmalloc(sizeof(struct timer_rand_state), mode);
 	if (state) {
 		blkdev_timer_state[major] = state;
 		memset(state, 0, sizeof(struct timer_rand_state));
@@ -437,9 +437,15 @@ void add_interrupt_randomness(int irq)
 
 void add_blkdev_randomness(int major)
 {
-	if (major >= MAX_BLKDEV || blkdev_timer_state[major] == 0)
+	if (major >= MAX_BLKDEV)
 		return;
 
+	if (blkdev_timer_state[major] == 0) {
+		rand_initialize_blkdev(major, GFP_ATOMIC);
+		if (blkdev_timer_state[major] == 0)
+			return;
+	}
+		
 	add_timer_randomness(&random_state, blkdev_timer_state[major],
 			     0x200+major);
 }

@@ -71,6 +71,18 @@ INSTALLING the kernel:
    failed patches (xxx# or xxx.rej). If there are, either you or me has
    made a mistake.
 
+   Alternatively, the script patch-kernel can be used to automate this
+   process.  It determines the current kernel version and applies any
+   patches found.
+
+		cd /usr/src
+		linux/scripts/patch-kernel
+
+   The default directory for the kernel source is /usr/src/linux, but
+   can be specified as the first argument.  Patches are applied from
+   the current directory, but an alternative directory can be specified
+   as the second argument.
+
  - make sure your /usr/include/linux and /usr/include/asm directories
    are just symlinks to the kernel sources:
 

@@ -20,6 +20,7 @@
  *
  *	Fixes:
  *		Alan Cox	:	Missing nonblock feature in ip_build_xmit.
+ *		Mike Kilburn	:	htons() missing in ip_build_xmit.
  */
 
 #include <asm/segment.h>
@@ -153,7 +154,7 @@ static int ip_send_room(struct rtable * rt, struct sk_buff *skb, __u32 daddr, in
 
 	skb->dev = dev;
 	skb->arp = 1;
-	skb->protocol = ETH_P_IP;
+	skb->protocol = htons(ETH_P_IP);
 	if (dev->hard_header)
 	{
 		skb_reserve(skb,MAX_HEADER);
@@ -652,6 +653,7 @@ int ip_build_xmit(struct sock *sk,
 			return error;
 		}
 		skb->dev=dev;
+		skb->protocol = htons(ETH_P_IP);
 		skb->free=1;
 		skb->when=jiffies;
 		skb->sk=sk;
@@ -817,8 +819,8 @@ int ip_build_xmit(struct sock *sk,
 		 *	Fill in the control structures
 		 */
 		 
-		skb->next = skb->prev = NULL;
 		skb->dev = dev;
+		skb->protocol = htons(ETH_P_IP);
 		skb->when = jiffies;
 		skb->free = 1; /* dubious, this one */
 		skb->sk = sk;

@@ -28,7 +28,6 @@
 #undef USE_PENTIUM_MM
 #endif
 
-extern void scsi_mem_init(unsigned long);
 extern void die_if_kernel(char *,struct pt_regs *,long);
 extern void show_net_buffers(void);
 
@@ -232,9 +231,6 @@ void mem_init(unsigned long start_mem, unsigned long end_mem)
 		mem_map[MAP_NR(start_mem)].reserved = 0;
 		start_mem += PAGE_SIZE;
 	}
-#ifdef CONFIG_SCSI
-	scsi_mem_init(high_memory);
-#endif
 	for (tmp = 0 ; tmp < high_memory ; tmp += PAGE_SIZE) {
 		if (mem_map[MAP_NR(tmp)].reserved) {
 			if (tmp >= 0xA0000 && tmp < 0x100000)

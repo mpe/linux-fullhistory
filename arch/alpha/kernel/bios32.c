@@ -643,10 +643,13 @@ static inline void avanti_and_noname_fixup(void)
 					  PCI_INTERRUPT_LINE, dev->irq);
 #endif
 	}
-	/* now, set any level-triggered IRQs */
-	if (level_bits)
-		outw(level_bits, 0x4d0);
-
+	/*
+	 * Now, make all PCI interrupts level sensitive.  Notice:
+	 * these registers must be accessed byte-wise.  outw() doesn't
+	 * work, for some reason.
+	 */
+	outb((level_bits >> 0) & 0xff, 0x4d0);
+	outb((level_bits >> 8) & 0xff, 0x4d1);
 
 #if PCI_MODIFY
 	{

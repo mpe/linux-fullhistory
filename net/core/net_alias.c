@@ -1218,7 +1218,7 @@ net_alias_dev_rcv_sel32(struct device *main_dev, int family, __u32 src, __u32 ds
     
   dev = nat->dev_select(nat, main_dev, (struct sockaddr *)&sin_src);
 
-  if (dev == NULL) return main_dev;
+  if (dev == NULL || dev->family != family) return main_dev;
   
   /*
    * dev ok only if it is alias of main_dev

@@ -14,6 +14,11 @@
 #define __LITTLE_ENDIAN_BITFIELD
 #endif
 
+/* For avoiding bswap on i386 */
+#ifdef __KERNEL__
+#include <linux/config.h>
+#endif
+
 extern unsigned long int	ntohl(unsigned long int);
 extern unsigned short int	ntohs(unsigned short int);
 extern unsigned long int	htonl(unsigned long int);

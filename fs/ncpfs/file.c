@@ -1,7 +1,7 @@
 /*
  *  file.c
  *
- *  Copyright (C) 1995 by Paal-Kr. Engstad and Volker Lendecke
+ *  Copyright (C) 1995 by Volker Lendecke
  *
  */
 
@@ -82,7 +82,7 @@ ncp_make_open(struct inode *i, int right)
 static int 
 ncp_file_read(struct inode *inode, struct file *file, char *buf, int count)
 {
-	int bufsize, to_read, already_read;
+	int bufsize, already_read;
 	off_t pos;
         int errno;
 
@@ -126,17 +126,8 @@ ncp_file_read(struct inode *inode, struct file *file, char *buf, int count)
         while (already_read < count)
 	{
 		int read_this_time;
-
-		if ((pos % bufsize) != 0)
-		{
-			to_read = bufsize - (pos % bufsize);
-		}
-		else
-		{
-			to_read = bufsize;
-		}
-
-		to_read = min(to_read, count - already_read);
+		int to_read = min(bufsize - (pos % bufsize),
+				  count - already_read);
 
 		if (ncp_read(NCP_SERVER(inode), NCP_FINFO(inode)->file_handle,
 			     pos, to_read, buf, &read_this_time) != 0)
@@ -156,7 +147,11 @@ ncp_file_read(struct inode *inode, struct file *file, char *buf, int count)
 
         file->f_pos = pos;
 
-	if (!IS_RDONLY(inode)) inode->i_atime = CURRENT_TIME;
+	if (!IS_RDONLY(inode))
+	{
+		inode->i_atime = CURRENT_TIME;
+	}
+
 	inode->i_dirt = 1;
 
         DPRINTK("ncp_file_read: exit %s\n", NCP_ISTRUCT(inode)->entryName);
@@ -168,7 +163,7 @@ static int
 ncp_file_write(struct inode *inode, struct file *file, const char *buf,
 	       int count)
 {
-	int bufsize, to_write, already_written;
+	int bufsize, already_written;
         off_t pos;
         int errno;
 			  
@@ -211,17 +206,9 @@ ncp_file_write(struct inode *inode, struct file *file, const char *buf,
         while (already_written < count)
 	{
 		int written_this_time;
+		int to_write = min(bufsize - (pos % bufsize),
+				   count - already_written);
 
-		if ((pos % bufsize) != 0)
-		{
-			to_write = bufsize - (pos % bufsize);
-		}
-		else
-		{
-			to_write = bufsize;
-		}
-
-		to_write = min(to_write, count - already_written);
 		if (ncp_write(NCP_SERVER(inode), NCP_FINFO(inode)->file_handle,
 			      pos, to_write, buf, &written_this_time) != 0)
 		{
