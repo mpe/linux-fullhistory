@@ -61,7 +61,10 @@
 #define LSB_of(s) ((s)&0xFF)
 #define MSB_of(s) ((s)>>8)
 
-int transferred = 0;
+static int transferred = 0;
+
+static int usbat_flash_transport(struct scsi_cmnd * srb, struct us_data *us);
+static int usbat_hp8200e_transport(struct scsi_cmnd *srb, struct us_data *us);
 
 /*
  * Convenience function to produce an ATAPI read/write sectors command
@@ -872,8 +875,8 @@ static int usbat_identify_device(struct us_data *us,
 /*
  * Set the transport function based on the device type
  */
-int usbat_set_transport(struct us_data *us,
-			struct usbat_info *info)
+static int usbat_set_transport(struct us_data *us,
+			       struct usbat_info *info)
 {
 	int rc;
 
@@ -1417,7 +1420,7 @@ int init_usbat(struct us_data *us)
 /*
  * Transport for the HP 8200e
  */
-int usbat_hp8200e_transport(struct scsi_cmnd *srb, struct us_data *us)
+static int usbat_hp8200e_transport(struct scsi_cmnd *srb, struct us_data *us)
 {
 	int result;
 	unsigned char *status = us->iobuf;
@@ -1560,7 +1563,7 @@ int usbat_hp8200e_transport(struct scsi_cmnd *srb, struct us_data *us)
 /*
  * Transport for USBAT02-based CompactFlash and similar storage devices
  */
-int usbat_flash_transport(struct scsi_cmnd * srb, struct us_data *us)
+static int usbat_flash_transport(struct scsi_cmnd * srb, struct us_data *us)
 {
 	int rc;
 	struct usbat_info *info = (struct usbat_info *) (us->extra);

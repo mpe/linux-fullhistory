@@ -165,9 +165,6 @@ struct us_data {
 	extra_data_destructor	extra_destructor;/* extra data destructor   */
 };
 
-/* The structure which defines our driver */
-extern struct usb_driver usb_storage_driver;
-
 /* Function to fill an inquiry response. See usb.c for details */
 extern void fill_inquiry_response(struct us_data *us,
 	unsigned char *data, unsigned int data_len);

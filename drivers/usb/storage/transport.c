@@ -383,7 +383,8 @@ int usb_stor_ctrl_transfer(struct us_data *us, unsigned int pipe,
  * This routine always uses us->recv_intr_pipe as the pipe and
  * us->ep_bInterval as the interrupt interval.
  */
-int usb_stor_intr_transfer(struct us_data *us, void *buf, unsigned int length)
+static int usb_stor_intr_transfer(struct us_data *us, void *buf,
+				  unsigned int length)
 {
 	int result;
 	unsigned int pipe = us->recv_intr_pipe;
@@ -436,7 +437,7 @@ int usb_stor_bulk_transfer_buf(struct us_data *us, unsigned int pipe,
  * This function does basically the same thing as usb_stor_bulk_transfer_buf()
  * above, but it uses the usbcore scatter-gather library.
  */
-int usb_stor_bulk_transfer_sglist(struct us_data *us, unsigned int pipe,
+static int usb_stor_bulk_transfer_sglist(struct us_data *us, unsigned int pipe,
 		struct scatterlist *sg, int num_sg, unsigned int length,
 		unsigned int *act_len)
 {

@@ -225,7 +225,7 @@ static struct us_unusual_dev us_unusual_dev_list[] = {
 	{ NULL }
 };
 
-struct usb_driver usb_storage_driver = {
+static struct usb_driver usb_storage_driver = {
 	.owner =	THIS_MODULE,
 	.name =		"usb-storage",
 	.probe =	storage_probe,
@@ -787,7 +787,7 @@ static int usb_stor_acquire_resources(struct us_data *us)
 }
 
 /* Release all our dynamic resources */
-void usb_stor_release_resources(struct us_data *us)
+static void usb_stor_release_resources(struct us_data *us)
 {
 	US_DEBUGP("-- %s\n", __FUNCTION__);
 

@@ -494,15 +494,6 @@ struct scsi_host_template usb_stor_host_template = {
 	.module =			THIS_MODULE
 };
 
-/* For a device that is "Not Ready" */
-unsigned char usb_stor_sense_notready[18] = {
-	[0]	= 0x70,			    /* current error */
-	[2]	= 0x02,			    /* not ready */
-	[7]	= 0x0a,			    /* additional length */
-	[12]	= 0x04,			    /* not ready */
-	[13]	= 0x03			    /* manual intervention */
-};
-
 /* To Report "Illegal Request: Invalid Field in CDB */
 unsigned char usb_stor_sense_invalidCDB[18] = {
 	[0]	= 0x70,			    /* current error */
