@@ -135,8 +135,6 @@ asmlinkage int osf_getdirentries(unsigned int fd, struct osf_dirent *dirent,
 {
 	int error;
 	struct file *file;
-	struct dentry *dentry;
-	struct inode *inode;
 	struct osf_dirent_callback buf;
 
 	error = -EBADF;
@@ -145,14 +143,6 @@ asmlinkage int osf_getdirentries(unsigned int fd, struct osf_dirent *dirent,
 
 	file = current->files->fd[fd];
 	if (!file)
-		goto out;
-
-	dentry = file->f_dentry;
-	if (!dentry)
-		goto out;
-
-	inode = dentry->d_inode;
-	if (!inode)
 		goto out;
 
 	buf.dirent = dirent;
@@ -164,7 +154,7 @@ asmlinkage int osf_getdirentries(unsigned int fd, struct osf_dirent *dirent,
 	if (!file->f_op || !file->f_op->readdir)
 		goto out;
 
-	error = file->f_op->readdir(inode, file, &buf, osf_filldir);
+	error = file->f_op->readdir(file, &buf, osf_filldir);
 	if (error < 0)
 		goto out;
 

@@ -733,6 +733,25 @@ int ip6_del_rt(struct rt6_info *rt)
 
 int ip6_route_del(struct in6_rtmsg *rtmsg)
 {
+	struct rt6_info *rt;
+	struct device *dev=NULL;
+
+	/*
+	 *	Find device
+	 */
+	if(rtmsg->rtmsg_ifindex)
+		dev=dev_get_by_index(rtmsg->rtmsg_ifindex);
+	/*
+	 *	Find route
+	 */
+	rt=rt6_lookup(&rtmsg->rtmsg_dst, &rtmsg->rtmsg_src, dev, rtmsg->rtmsg_flags);
+	
+	/*
+	 *	Blow it away
+	 */
+	if(rt)
+		ip6_del_rt(rt);
+
 	return 0;
 }
 

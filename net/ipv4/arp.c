@@ -1265,7 +1265,7 @@ void arp_send(int type, int ptype, u32 dest_ip,
 	arp = (struct arphdr *) skb_put(skb,sizeof(struct arphdr) + 2*(dev->addr_len+4));
 	skb->arp = 1;
 	skb->dev = dev;
-	skb->protocol = htons (ETH_P_IP);
+	skb->protocol = htons (ETH_P_ARP);
 
 	/*
 	 *	Fill the device header for the ARP frame

@@ -1182,32 +1182,6 @@ unsigned long pcibios_fixup(unsigned long mem_start, unsigned long mem_end)
 }
 
 
-const char *pcibios_strerror (int error)
-{
-	static char buf[80];
-
-	switch (error) {
-		case PCIBIOS_SUCCESSFUL:
-			return "SUCCESSFUL";
-
-		case PCIBIOS_FUNC_NOT_SUPPORTED:
-			return "FUNC_NOT_SUPPORTED";
-
-		case PCIBIOS_BAD_VENDOR_ID:
-			return "SUCCESSFUL";
-
-		case PCIBIOS_DEVICE_NOT_FOUND:
-			return "DEVICE_NOT_FOUND";
-
-		case PCIBIOS_BAD_REGISTER_NUMBER:
-			return "BAD_REGISTER_NUMBER";
-
-		default:
-			sprintf (buf, "UNKNOWN RETURN 0x%x", error);
-			return buf;
-	}
-}
-
 asmlinkage int sys_pciconfig_read(
 	unsigned long bus,
 	unsigned long dfn,

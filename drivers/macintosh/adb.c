@@ -86,8 +86,7 @@ static int adb_release(struct inode *inode, struct file *file)
 	return 0;
 }
 
-static long long adb_lseek(struct inode *inode, struct file *file,
-			   long long offset, int origin)
+static long long adb_lseek(struct file *file, long long offset, int origin)
 {
 	return -ESPIPE;
 }

@@ -326,6 +326,17 @@ static struct device atp_dev = {
 #   define NEXT_DEV     (&dev_cops)
 #endif  /* COPS */
 
+#if defined(CONFIG_IPDDP)
+    extern int ipddp_init(struct device *dev);
+    static struct device dev_ipddp = {
+        "ipddp0\0   ",
+                0, 0, 0, 0,
+                0x0, 0,
+                0, 0, 0, NEXT_DEV, ipddp_init };
+#   undef NEXT_DEV
+#   define NEXT_DEV     (&dev_ipddp)
+#endif /* CONFIG_IPDDP */
+
 /* The first device defaults to I/O base '0', which means autoprobe. */
 #ifndef ETH0_ADDR
 # define ETH0_ADDR 0

@@ -33,7 +33,7 @@ static long proc_readscsi(struct inode * inode, struct file * file,
 			 char * buf, unsigned long count);
 static long proc_writescsi(struct inode * inode, struct file * file,
 			 const char * buf, unsigned long count);
-static long long proc_scsilseek(struct inode *, struct file *, long long, int);
+static long long proc_scsilseek(struct file *, long long, int);
 
 extern void build_proc_dir_hba_entries(uint);
 
@@ -177,8 +177,7 @@ static long proc_writescsi(struct inode * inode, struct file * file,
 }
 
 
-static long long proc_scsilseek(struct inode * inode, struct file * file, 
-				long long offset, int orig)
+static long long proc_scsilseek(struct file * file, long long offset, int orig)
 {
     switch (orig) {
     case 0:

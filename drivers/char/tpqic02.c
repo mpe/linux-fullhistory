@@ -1712,8 +1712,7 @@ static void qic02_tape_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 } /* qic02_tape_interrupt */
 
 
-static long long qic02_tape_lseek(struct inode * inode, struct file * file,
-				  long long offset, int origin)
+static long long qic02_tape_lseek(struct file * file, long long offset, int origin)
 {
 	return -EINVAL;	/* not supported */
 } /* qic02_tape_lseek */

@@ -16,6 +16,7 @@
 #define ATADDR_ANYPORT  (__u8)0
 #define ATADDR_BCAST	(__u8)255
 #define DDP_MAXSZ	587
+#define DDP_MAXHOPS     15      /* 4 bits of hop counter */
 
 #define SIOCATALKDIFADDR       (SIOCPROTOPRIVATE + 0)
 
@@ -69,8 +70,6 @@ struct atalk_sock
 	unsigned char dest_port;
 	unsigned char src_port;
 };
-
-#define DDP_MAXHOPS	15	/* 4 bits of hop counter */
 
 #ifdef __KERNEL__
 
@@ -154,11 +153,14 @@ extern __inline__ struct atalk_iface *atalk_find_dev(struct device *dev)
 }
 
 extern struct at_addr *atalk_find_dev_addr(struct device *dev);
+extern struct device *atrtr_get_dev(struct at_addr *sa);
 extern int aarp_send_ddp(struct device *dev,struct sk_buff *skb, struct at_addr *sa, void *hwaddr);
 extern void aarp_send_probe(struct device *dev, struct at_addr *addr);
-#ifdef MODULE
-extern void aarp_cleanup_module(void);
-#endif
 
-#endif
-#endif
+#ifdef MODULE
+extern void aarp_device_down(struct device *dev);
+extern void aarp_cleanup_module(void);
+#endif /* MODULE */
+
+#endif /* __KERNEL__ */
+#endif /* __LINUX_ATALK_H__ */

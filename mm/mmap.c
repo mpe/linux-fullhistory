@@ -296,7 +296,7 @@ unsigned long do_mmap(struct file * file, unsigned long addr, unsigned long len,
 			}
 		}
 		if (!error)
-			error = file->f_op->mmap(file->f_dentry->d_inode, file, vma);
+			error = file->f_op->mmap(file, vma);
 	
 		if (error) {
 			if (correct_wcount)

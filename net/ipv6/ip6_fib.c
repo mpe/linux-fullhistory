@@ -235,7 +235,15 @@ static struct fib6_node * fib6_add_1(struct fib6_node *root, void *addr,
 
 		key = (struct rt6key *)((u8 *)fn->leaf + offset);
 
+		/*
+		 *	Prefix match
+		 */
 		if (addr_match(&key->addr, addr, fn->fn_bit)) {
+		
+			/*
+			 *	Exact match ?
+			 */
+			 
 			if (plen == fn->fn_bit) {
 				/* clean up an intermediate node */
 				if ((fn->fn_flags & RTN_RTINFO) == 0) {
@@ -248,6 +256,10 @@ static struct fib6_node * fib6_add_1(struct fib6_node *root, void *addr,
 				return fn;
 			}
 
+			/*
+			 *	We have more bits to go
+			 */
+			 
 			if (plen > fn->fn_bit) {
 				/* Walk down on tree. */
 				fn->fn_sernum = sernum;
@@ -255,6 +267,11 @@ static struct fib6_node * fib6_add_1(struct fib6_node *root, void *addr,
 				pn = fn;
 				fn = dir ? fn->right: fn->left;
 
+				/*
+				 *	Round we go. Note if fn has become
+				 *	NULL then dir is set and fn is handled
+				 *	top of loop.
+				 */
 				continue;
 			}
 		}
@@ -611,7 +628,8 @@ static struct rt6_info * fib6_find_prefix(struct fib6_node *fn)
 }
 
 /*
- *	called to trim the tree of intermediate nodes when possible
+ *	Called to trim the tree of intermediate nodes when possible. "fn"
+ *	is the node we want to try and remove.
  */
 
 static void fib6_del_2(struct fib6_node *fn)
@@ -621,6 +639,10 @@ static void fib6_del_2(struct fib6_node *fn)
 	fn->fn_flags &= ~RTN_RTINFO;
 	rt6_stats.fib_route_nodes--;
 
+	/*
+	 *	Can't delete a root node
+	 */
+	 
 	if (fn->fn_flags & RTN_TL_ROOT)
 		return;
 
@@ -630,43 +652,89 @@ static void fib6_del_2(struct fib6_node *fn)
 
 		child = NULL;
 
+		/*
+		 *	We have a child to left
+		 */
+		 
 		if (fn->left) {
 			children++;
 			child = fn->left;
 		}
 
+		/*
+		 *	To right
+		 */
+		 
 		if (fn->right) {
 			children++;
 			child = fn->right;
 		}
 
+		/*
+		 *	We can't tidy a case of two children.
+		 */
+		 
 		if (children > 1 || (fn->fn_flags & RTN_RTINFO))
 			break;
 
+		/*
+		 *	The node we plan to tidy has an stree. Talk about
+		 *	making life hard.
+		 */
+		 
 		if (fn->subtree)
 			goto stree_node;
 
+		/*
+		 *	Up we go
+		 */
+		 
 		pn = fn->parent;
 
+		/*
+		 *	Not a ROOT - we can tidy
+		 */
+		 
 		if ((fn->fn_flags & RTN_ROOT) == 0) {
+			/*
+			 *	Make our child our parents child
+			 */
 			if (pn->left == fn)
 				pn->left = child;
 			else
 				pn->right = child;
 
+			/*
+			 *	Reparent the child
+			 */
 			if (child)
 				child->parent = pn;
 
+			/*
+			 *	Discard leaf entries
+			 */
 			if (fn->leaf)
 				rt6_release(fn->leaf);
 		} else {
 			if (children)
 				break;
+			/*
+			 *	No children so no subtree
+			 */
 
 			pn->subtree = NULL;
 		}
 
+		/*
+		 *	We are discarding 
+		 */
 		node_free(fn);
+		
+		/*
+		 *	Our merge of entries might propogate further
+		 *	up the tree, so move up a level and retry.
+		 */
+		 
 		fn = pn;
 
 	} while (!(fn->fn_flags & RTN_TL_ROOT));
@@ -685,18 +753,29 @@ stree_node:
 	fn->leaf = rt;
 }
 
+/*
+ *	Remove our entry in the tree. This throws away the route entry
+ *	from the list of entries attached to this fib node. It doesn't
+ *	expunge from the tree.
+ */
+
 static struct fib6_node * fib6_del_1(struct rt6_info *rt)
 {
 	struct fib6_node *fn;
 	
 	fn = rt->rt6i_node;
 
+	/* We need a fib node! */
 	if (fn) {
 		struct rt6_info **back;
 		struct rt6_info *lf;
 
 		back = &fn->leaf;
 		
+		/*
+		 *	Walk the leaf entries looking for ourself
+		 */
+		 
 		for(lf = fn->leaf; lf; lf=lf->u.next) {
 			if (rt == lf) {
 				/*

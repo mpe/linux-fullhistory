@@ -1173,9 +1173,11 @@ static struct vm_operations_struct file_private_mmap = {
 };
 
 /* This is used for a general mmap of a disk file */
-int generic_file_mmap(struct inode * inode, struct file * file, struct vm_area_struct * vma)
+
+int generic_file_mmap(struct file * file, struct vm_area_struct * vma)
 {
 	struct vm_operations_struct * ops;
+	struct inode *inode = file->f_dentry->d_inode;
 
 	if ((vma->vm_flags & VM_SHARED) && (vma->vm_flags & VM_MAYWRITE)) {
 		ops = &file_shared_mmap;
@@ -1214,7 +1216,7 @@ static int msync_interval(struct vm_area_struct * vma,
 		if (error)
 			return error;
 		if (flags & MS_SYNC)
-			return file_fsync(vma->vm_dentry->d_inode, NULL);
+			return file_fsync(NULL,vma->vm_dentry);
 		return 0;
 	}
 	return 0;

@@ -211,8 +211,7 @@ void nvram_set_checksum( void )
  * The are the file operation function for user access to /dev/nvram
  */
 
-static long long nvram_llseek( struct inode *inode, struct file *file,
-							   loff_t offset, int origin )
+static long long nvram_llseek(struct file *file,loff_t offset, int origin )
 {
 	switch( origin ) {
 	  case 0:

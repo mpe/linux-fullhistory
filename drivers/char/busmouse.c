@@ -106,11 +106,12 @@ static void mouse_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 	MSE_INT_ON();
 }
 
-static int fasync_mouse(struct inode *inode, struct file *filp, int on)
+static int fasync_mouse(struct file *filp, int on)
 {
 	int retval;
+	struct inode *inode = filp->f_dentry->d_inode;
 
-	retval = fasync_helper(inode, filp, on, &mouse.fasyncptr);
+	retval = fasync_helper(filp, on, &mouse.fasyncptr);
 	if (retval < 0)
 		return retval;
 	return 0;
@@ -122,7 +123,7 @@ static int fasync_mouse(struct inode *inode, struct file *filp, int on)
 
 static int close_mouse(struct inode * inode, struct file * file)
 {
-	fasync_mouse(inode, file, 0);
+	fasync_mouse(file, 0);
 	if (--mouse.active)
 		return 0;
 	MSE_INT_OFF();

@@ -96,8 +96,7 @@
 #include <net/scm.h>
 
 
-static long long sock_lseek(struct inode *inode, struct file *file,
-			    long long offset, int whence);
+static long long sock_lseek(struct file *file, long long offset, int whence);
 static long sock_read(struct inode *inode, struct file *file,
 		      char *buf, unsigned long size);
 static long sock_write(struct inode *inode, struct file *file,
@@ -107,7 +106,7 @@ static int sock_close(struct inode *inode, struct file *file);
 static unsigned int sock_poll(struct file *file, poll_table *wait);
 static int sock_ioctl(struct inode *inode, struct file *file,
 		      unsigned int cmd, unsigned long arg);
-static int sock_fasync(struct inode *inode, struct file *filp, int on);
+static int sock_fasync(struct file *filp, int on);
 
 
 /*
@@ -353,8 +352,7 @@ int sock_recvmsg(struct socket *sock, struct msghdr *msg, int size, int flags)
  *	Sockets are not seekable.
  */
 
-static long long sock_lseek(struct inode *inode, struct file *file,
-			    long long offset, int whence)
+static long long sock_lseek(struct file *file,long long offset, int whence)
 {
 	return -ESPIPE;
 }
@@ -482,7 +480,7 @@ int sock_close(struct inode *inode, struct file *filp)
 		printk(KERN_DEBUG "sock_close: NULL inode\n");
 		return 0;
 	}
-	sock_fasync(inode, filp, 0);
+	sock_fasync(filp, 0);
 	sock_release(socki_lookup(inode));
 	return 0;
 }
@@ -491,7 +489,7 @@ int sock_close(struct inode *inode, struct file *filp)
  *	Update the socket async list
  */
  
-static int sock_fasync(struct inode *inode, struct file *filp, int on)
+static int sock_fasync(struct file *filp, int on)
 {
 	struct fasync_struct *fa, *fna=NULL, **prev;
 	struct socket *sock;
@@ -504,7 +502,7 @@ static int sock_fasync(struct inode *inode, struct file *filp, int on)
 			return -ENOMEM;
 	}
 
-	sock = socki_lookup(inode);
+	sock = socki_lookup(filp->f_dentry->d_inode);
 	
 	prev=&(sock->fasync_list);
 	

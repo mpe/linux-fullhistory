@@ -115,7 +115,7 @@ static int tty_open(struct inode *, struct file *);
 static int tty_release(struct inode *, struct file *);
 static int tty_ioctl(struct inode * inode, struct file * file,
 		     unsigned int cmd, unsigned long arg);
-static int tty_fasync(struct inode * inode, struct file * filp, int on);
+static int tty_fasync(struct file * filp, int on);
 
 #ifndef MIN
 #define MIN(a,b)	((a) < (b) ? (a) : (b))
@@ -327,8 +327,7 @@ static int hung_up_tty_ioctl(struct inode * inode, struct file * file,
 	return cmd == TIOCSPGRP ? -ENOTTY : -EIO;
 }
 
-static long long tty_lseek(struct inode * inode, struct file * file,
-	long long offset, int orig)
+static long long tty_lseek(struct file * file,	long long offset, int orig)
 {
 	return -ESPIPE;
 }
@@ -381,7 +380,7 @@ void do_tty_hangup(struct tty_struct * tty, struct file_operations *fops)
 			continue;
 		if (filp->f_op != &tty_fops)
 			continue;
-		tty_fasync(filp->f_dentry->d_inode, filp, 0);
+		tty_fasync(filp, 0);
 		filp->f_op = fops;
 	}
 	
@@ -926,7 +925,7 @@ static void release_dev(struct file * filp)
 
 	check_tty_count(tty, "release_dev");
 
-	tty_fasync(filp->f_dentry->d_inode, filp, 0);
+	tty_fasync(filp, 0);
 
 	idx = MINOR(tty->device) - tty->driver.minor_start;
 	pty_master = (tty->driver.type == TTY_DRIVER_TYPE_PTY &&
@@ -1263,7 +1262,7 @@ static unsigned int tty_poll(struct file * filp, poll_table * wait)
  * to set up the fasync queue. It returns negative on error, 0 if it did
  * no changes and positive if it added/deleted the entry.
  */
-int fasync_helper(struct inode * inode, struct file * filp, int on, struct fasync_struct **fapp)
+int fasync_helper(struct file * filp, int on, struct fasync_struct **fapp)
 {
 	struct fasync_struct *fa, **fp;
 	unsigned long flags;
@@ -1298,16 +1297,16 @@ int fasync_helper(struct inode * inode, struct file * filp, int on, struct fasyn
 	return 1;
 }
 
-static int tty_fasync(struct inode * inode, struct file * filp, int on)
+static int tty_fasync(struct file * filp, int on)
 {
 	struct tty_struct * tty;
 	int retval;
 
 	tty = (struct tty_struct *)filp->private_data;
-	if (tty_paranoia_check(tty, inode->i_rdev, "tty_fasync"))
+	if (tty_paranoia_check(tty, filp->f_dentry->d_inode->i_rdev, "tty_fasync"))
 		return 0;
 	
-	retval = fasync_helper(inode, filp, on, &tty->fasync);
+	retval = fasync_helper(filp, on, &tty->fasync);
 	if (retval <= 0)
 		return retval;
 

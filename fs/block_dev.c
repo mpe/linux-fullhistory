@@ -287,7 +287,12 @@ long block_read(struct inode * inode, struct file * filp,
 	return read;
 }
 
-int block_fsync(struct inode *inode, struct file *filp)
+/*
+ *	Filp may be NULL when we are called by an msync of a vma
+ *	since the vma has no handle.
+ */
+ 
+int block_fsync(struct file *filp, struct dentry *dentry)
 {
-	return fsync_dev (inode->i_rdev);
+	return fsync_dev(dentry->d_inode->i_rdev);
 }

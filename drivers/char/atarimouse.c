@@ -54,11 +54,10 @@ static void atari_mouse_interrupt(char *buf)
 /*    ikbd_mouse_rel_pos(); */
 }
 
-static int fasync_mouse(struct inode *inode, struct file *filp, int on)
+static int fasync_mouse(struct file *filp, int on)
 {
 	int retval;
-
-	retval = fasync_helper(inode, filp, on, &mouse.fasyncptr);
+	retval = fasync_helper(filp, on, &mouse.fasyncptr);
 	if (retval < 0)
 		return retval;
 	return 0;
@@ -66,7 +65,7 @@ static int fasync_mouse(struct inode *inode, struct file *filp, int on)
 
 static int release_mouse(struct inode *inode, struct file *file)
 {
-    fasync_mouse(inode, file, 0);
+    fasync_mouse(file, 0);
     if (--mouse.active)
       return 0;
     ikbd_mouse_disable();

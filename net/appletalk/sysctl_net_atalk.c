@@ -59,9 +59,3 @@ void atalk_unregister_sysctl(void)
 {
 }
 #endif
-
-
-
-
-
-

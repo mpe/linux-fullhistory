@@ -155,8 +155,7 @@ void wdt_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 }
 
 
-static long long wdt_llseek(struct inode *inode, struct file *file, long long offset, 
-	int origin)
+static long long wdt_llseek(struct file *file, long long offset, int origin)
 {
 	return -ESPIPE;
 }

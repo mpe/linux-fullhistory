@@ -102,11 +102,11 @@ static inline int queue_empty(void)
 	return queue->head == queue->tail;
 }
 
-static int fasync_aux(struct inode *inode, struct file *filp, int on)
+static int fasync_aux(struct file *filp, int on)
 {
 	int retval;
 
-	retval = fasync_helper(inode, filp, on, &queue->fasync);
+	retval = fasync_helper(filp, on, &queue->fasync);
 	if (retval < 0)
 		return retval;
 	return 0;
@@ -239,7 +239,7 @@ static void aux_interrupt(int cpl, void *dev_id, struct pt_regs * regs)
 
 static int release_aux(struct inode * inode, struct file * file)
 {
-	fasync_aux(inode, file, 0);
+	fasync_aux(file, 0);
 	if (--aux_count)
 		return 0;
 	aux_start_atomic();
@@ -387,7 +387,7 @@ static int release_qp(struct inode * inode, struct file * file)
 {
 	unsigned char status;
 
-	fasync_aux(inode, file, 0);
+	fasync_aux(file, 0);
 	if (!--qp_count) {
 		if (!poll_qp_status())
 			printk("Warning: Mouse device busy in release_qp()\n");

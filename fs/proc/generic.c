@@ -20,8 +20,7 @@ static long proc_file_read(struct inode * inode, struct file * file,
 			   char * buf, unsigned long nbytes);
 static long proc_file_write(struct inode * inode, struct file * file,
 			    const char * buffer, unsigned long count);
-static long long proc_file_lseek(struct inode * inode, struct file * file, 
-				 long long offset, int orig);
+static long long proc_file_lseek(struct file * file, long long offset, int orig);
 
 int proc_match(int len, const char *name,struct proc_dir_entry * de)
 {
@@ -190,8 +189,7 @@ proc_file_write(struct inode * inode, struct file * file,
 }
 
 
-static long long proc_file_lseek(struct inode * inode, struct file * file, 
-				 long long offset, int orig)
+static long long proc_file_lseek(struct file * file, long long offset, int orig)
 {
     switch (orig) {
     case 0:

@@ -374,6 +374,9 @@ int ip6_mc_input(struct sk_buff *skb)
 	if (ipv6_chk_mcast_addr(skb->dev, &hdr->daddr))
 		deliver = 1;
 
+	/*
+	 *	IPv6 multicast router mode isnt currently supported.
+	 */
 #if 0
 	if (ipv6_config.multicast_route) {
 		int addr_type;

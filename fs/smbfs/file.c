@@ -25,8 +25,7 @@ min(int a, int b)
 	return a < b ? a : b;
 }
 
-static int
-smb_fsync(struct inode *inode, struct file *file)
+static int smb_fsync(struct file *file, struct dentry *dir)
 {
 	return 0;
 }
@@ -182,16 +181,16 @@ smb_file_read(struct inode * inode, struct file * file,
 }
 
 static int
-smb_file_mmap(struct inode * inode, struct file * file,
-				struct vm_area_struct * vma)
+smb_file_mmap(struct file * file, struct vm_area_struct * vma)
 {
 	int	status;
+	struct inode * inode = file->f_dentry->d_inode;
 
 	status = smb_revalidate_inode(inode);
 	if (status < 0)
 		return status;
 
-	return generic_file_mmap(inode, file, vma);
+	return generic_file_mmap(file, vma);
 }
 
 /* 

@@ -322,7 +322,7 @@ int fcntl_getlk(unsigned int fd, struct flock *l)
 		return -EINVAL;
 
 	if (filp->f_op->lock) {
-		error = filp->f_op->lock(inode, filp, F_GETLK, &file_lock);
+		error = filp->f_op->lock(filp, F_GETLK, &file_lock);
 		if (error < 0)
 			return error;
 		fl = &file_lock;
@@ -420,7 +420,7 @@ int fcntl_setlk(unsigned int fd, unsigned int cmd, struct flock *l)
 	}
 
 	if (filp->f_op->lock != NULL) {
-		error = filp->f_op->lock(inode, filp, cmd, &file_lock);
+		error = filp->f_op->lock(filp, cmd, &file_lock);
 		if (error < 0)
 			return (error);
 	}
@@ -451,7 +451,7 @@ void locks_remove_locks(struct task_struct *task, struct file *filp)
 			locks_delete_lock(before, 0);
 			if (filp->f_op->lock) {
 				file_lock.fl_type = F_UNLCK;
-				filp->f_op->lock(inode, filp, F_SETLK, &file_lock);
+				filp->f_op->lock(filp, F_SETLK, &file_lock);
 				/* List may have changed: */
 				before = &inode->i_flock;
 			}

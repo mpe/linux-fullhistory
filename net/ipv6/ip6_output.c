@@ -47,7 +47,9 @@ static void ipv6_build_mac_hdr(struct sk_buff *skb, struct dst_entry *dst,
 	
 	if (dev->hard_header) {
 		int mac;
-		
+
+		/* Maybe when Alexey has done his new magic I'll hack this
+		   it seems to be worth 1-2% on IPv4 */
 #if 0
 		if (dst->hh)
 			hh_copy_header(dst->hh, skb);
@@ -143,7 +145,7 @@ int ip6_xmit(struct sock *sk, struct sk_buff *skb, struct flowi *fl,
 
 /*
  *	To avoid extra problems ND packets are send through this
- *	routine. It's code duplication but i really want to avoid
+ *	routine. It's code duplication but I really want to avoid
  *	extra checks since ipv6_build_header is used by TCP (which
  *	is for us performace critical)
  */

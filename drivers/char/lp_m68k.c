@@ -353,8 +353,7 @@ static long lp_write(struct inode *inode, struct file *file,
 }
 #endif
 
-static long long lp_lseek(struct inode * inode, struct file * file,
-			  long long offset, int origin)
+static long long lp_lseek(struct file * file, long long offset, int origin)
 {
 	return -ESPIPE;
 }

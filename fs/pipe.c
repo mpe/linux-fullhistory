@@ -133,8 +133,7 @@ static long pipe_write(struct inode * inode, struct file * filp,
 	return written;
 }
 
-static long long pipe_lseek(struct inode * inode, struct file * file,
-	long long offset, int orig)
+static long long pipe_lseek(struct file * file, long long offset, int orig)
 {
 	return -ESPIPE;
 }

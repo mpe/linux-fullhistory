@@ -199,10 +199,9 @@ fb_ioctl(struct inode *inode, struct file *file, unsigned int cmd,
 	}
 }
 
-static int 
-fb_mmap(struct inode *inode, struct file *file, struct vm_area_struct * vma)
+static int fb_mmap(struct file *file, struct vm_area_struct * vma)
 {
-	struct fb_ops *fb = registered_fb[GET_FB_IDX(inode->i_rdev)];
+	struct fb_ops *fb = registered_fb[GET_FB_IDX(file->f_dentry->d_inode->i_rdev)];
 	struct fb_fix_screeninfo fix;
 
 	if (! fb)

@@ -24,7 +24,7 @@ static inline int min(int a, int b)
 	return a < b ? a : b;
 }
 
-static int ncp_fsync(struct inode *inode, struct file *file)
+static int ncp_fsync(struct file *file, struct dentry *dentry)
 {
 	return 0;
 }

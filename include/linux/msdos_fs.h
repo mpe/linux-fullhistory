@@ -232,7 +232,7 @@ extern long fat_file_write(struct inode *, struct file *, const char *, unsigned
 extern void fat_truncate(struct inode *inode);
 
 /* mmap.c */
-extern int fat_mmap(struct inode *, struct file *, struct vm_area_struct *);
+extern int fat_mmap(struct file *, struct vm_area_struct *);
 
 
 /* vfat.c */

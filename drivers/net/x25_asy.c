@@ -4,6 +4,11 @@
  *	o	tbusy handling
  *	o	allow users to set the parameters
  *	o	sync/async switching ?
+ *
+ *	Note: This does _not_ implement CCITT X.25 asynchronous framing
+ *	recommendations. Its primarily for testing purposes. If you wanted
+ *	to do CCITT then in theory all you need is to nick the HDLC async
+ *	checksum routines from ppp.c
  */
 
 #include <linux/config.h>

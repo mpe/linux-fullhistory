@@ -284,9 +284,15 @@ static int sync_tindirect (struct inode * inode, u32 * tiblock, int wait)
 	return err;
 }
 
-int ext2_sync_file (struct inode * inode, struct file * file)
+/*
+ *	File may be NULL when we are called. Perhaps we shouldn't
+ *	even pass file to fsync ?
+ */
+
+int ext2_sync_file(struct file * file, struct dentry *dentry)
 {
 	int wait, err = 0;
+	struct inode *inode = dentry->d_inode;
 
 	if (!(S_ISREG(inode->i_mode) || S_ISDIR(inode->i_mode) ||
 	     S_ISLNK(inode->i_mode)))

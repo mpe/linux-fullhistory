@@ -42,6 +42,7 @@ CONFIG_SYSVIPC=y
 CONFIG_SYSCTL=y
 CONFIG_BINFMT_AOUT=y
 CONFIG_BINFMT_ELF=y
+# CONFIG_BINFMT_MISC is not set
 CONFIG_BINFMT_EM86=y
 # CONFIG_PARPORT is not set
 
@@ -141,7 +142,6 @@ CONFIG_SCSI_CONSTANTS=y
 # CONFIG_SCSI_NCR53C406A is not set
 # CONFIG_SCSI_NCR53C7xx is not set
 # CONFIG_SCSI_NCR53C8XX is not set
-# CONFIG_SCSI_PPA is not set
 # CONFIG_SCSI_PAS16 is not set
 # CONFIG_SCSI_QLOGIC_FAS is not set
 CONFIG_SCSI_QLOGIC_ISP=y
@@ -150,8 +150,6 @@ CONFIG_SCSI_QLOGIC_ISP=y
 # CONFIG_SCSI_T128 is not set
 # CONFIG_SCSI_U14_34F is not set
 # CONFIG_SCSI_ULTRASTOR is not set
-# CONFIG_SCSI_MESH is not set
-# CONFIG_SCSI_MAC53C94 is not set
 
 #
 # Network device support
@@ -164,6 +162,7 @@ CONFIG_NET_ETHERNET=y
 # CONFIG_NET_VENDOR_3COM is not set
 # CONFIG_LANCE is not set
 # CONFIG_NET_VENDOR_SMC is not set
+# CONFIG_NET_VENDOR_RACAL is not set
 # CONFIG_NET_ISA is not set
 CONFIG_NET_EISA=y
 # CONFIG_PCNET32 is not set
@@ -176,7 +175,6 @@ CONFIG_DE4X5=y
 # CONFIG_NET_POCKET is not set
 # CONFIG_FDDI is not set
 # CONFIG_DLCI is not set
-# CONFIG_PLIP is not set
 # CONFIG_PPP is not set
 # CONFIG_NET_RADIO is not set
 # CONFIG_SLIP is not set

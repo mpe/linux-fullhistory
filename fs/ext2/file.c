@@ -36,7 +36,7 @@
 #include <linux/fs.h>
 #include <linux/ext2_fs.h>
 
-static long long ext2_file_lseek(struct inode *, struct file *, long long, int);
+static long long ext2_file_lseek(struct file *, long long, int);
 static long ext2_file_write (struct inode *, struct file *, const char *, unsigned long);
 static int ext2_release_file (struct inode *, struct file *);
 
@@ -84,12 +84,13 @@ struct inode_operations ext2_file_inode_operations = {
 /*
  * Make sure the offset never goes beyond the 32-bit mark..
  */
-static long long ext2_file_lseek(struct inode *inode,
+static long long ext2_file_lseek(
 	struct file *file,
 	long long offset,
 	int origin)
 {
 	long long retval;
+	struct inode *inode = file->f_dentry->d_inode;
 
 	switch (origin) {
 		case 2:

@@ -1006,7 +1006,7 @@ static int dev_ifname(struct ifreq *arg)
 
 	strcpy(ifr.ifr_name, dev->name);
 
-	err = copy_to_user(&ifr, arg, sizeof(struct ifreq));
+	err = copy_to_user(arg, &ifr, sizeof(struct ifreq));
 	return (err)?-EFAULT:0;
 }
 

@@ -32,13 +32,12 @@
 
 #define NFSDBG_FACILITY		NFSDBG_FILE
 
-static int  nfs_file_mmap(struct inode *, struct file *,
-					struct vm_area_struct *);
+static int  nfs_file_mmap(struct file *, struct vm_area_struct *);
 static long nfs_file_read(struct inode *, struct file *, char *, unsigned long);
 static long nfs_file_write(struct inode *, struct file *,
 					const char *, unsigned long);
 static int  nfs_file_close(struct inode *, struct file *);
-static int  nfs_fsync(struct inode *, struct file *);
+static int  nfs_fsync(struct file *, struct dentry *dentry);
 
 static struct file_operations nfs_file_operations = {
 	NULL,			/* lseek - default */
@@ -114,20 +113,21 @@ nfs_file_read(struct inode * inode, struct file * file,
 }
 
 static int
-nfs_file_mmap(struct inode * inode, struct file * file,
-				struct vm_area_struct * vma)
+nfs_file_mmap(struct file * file, struct vm_area_struct * vma)
 {
 	int	status;
+	struct inode *inode = file->f_dentry->d_inode;
 
 	dfprintk(VFS, "nfs: mmap(%x/%ld)\n", inode->i_dev, inode->i_ino);
 
 	if ((status = nfs_revalidate_inode(NFS_SERVER(inode), inode)) < 0)
 		return status;
-	return generic_file_mmap(inode, file, vma);
+	return generic_file_mmap(file, vma);
 }
 
-static int nfs_fsync(struct inode *inode, struct file *file)
+static int nfs_fsync(struct file *file, struct dentry *dentry)
 {
+	struct inode *inode = dentry->d_inode;
 	dfprintk(VFS, "nfs: fsync(%x/%ld)\n", inode->i_dev, inode->i_ino);
 
 	return nfs_flush_dirty_pages(inode, 0, 0);
@@ -175,9 +175,10 @@ nfs_file_write(struct inode *inode, struct file *file,
  * Lock a (portion of) a file
  */
 int
-nfs_lock(struct inode *inode, struct file *filp, int cmd, struct file_lock *fl)
+nfs_lock(struct file *filp, int cmd, struct file_lock *fl)
 {
 	int	status;
+	struct inode * inode;
 
 	dprintk("NFS: nfs_lock(f=%4x/%ld, t=%x, fl=%x, r=%ld:%ld)\n",
 			filp->f_dentry->d_inode->i_dev, filp->f_dentry->d_inode->i_ino,

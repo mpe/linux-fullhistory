@@ -169,8 +169,7 @@ extern int nfs_mmap(struct inode *inode, struct file *file,
 /*
  * linux/fs/nfs/locks.c
  */
-extern int nfs_lock(struct inode *inode, struct file *file,
-			int cmd, struct file_lock *fl);
+extern int nfs_lock(struct file *file, int cmd, struct file_lock *fl);
 
 /*
  * linux/fs/nfs/write.c

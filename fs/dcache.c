@@ -119,7 +119,7 @@ int d_invalidate(struct dentry * dentry)
  * something (at which point we need to unuse
  * all dentries).
  */
-void shrink_dcache(void)
+void prune_dcache(int count)
 {
 	for (;;) {
 		struct dentry *dentry;
@@ -143,6 +143,8 @@ void shrink_dcache(void)
 			parent = dentry->d_parent;
 			d_free(dentry);
 			dput(parent);
+			if (!--count)
+				break;
 		}
 	}
 }
@@ -211,8 +213,10 @@ struct dentry * d_alloc_root(struct inode * root_inode, struct dentry *old_root)
 
 	if (root_inode) {
 		res = d_alloc(NULL, &(const struct qstr) { "/", 1, 0 });
-		res->d_parent = res;
-		d_instantiate(res, root_inode);
+		if (res) {
+			res->d_parent = res;
+			d_instantiate(res, root_inode);
+		}
 	}
 	return res;
 }
@@ -344,7 +348,7 @@ void d_add(struct dentry * entry, struct inode * inode)
 	x = y; y = __tmp; } while (0)
 
 /*
- * We cannibalize "newdentry" when moving dentry on top of it,
+ * We cannibalize "target" when moving dentry on top of it,
  * because it's going to be thrown away anyway. We could be more
  * polite about it, though.
  *

@@ -727,6 +727,14 @@ else
   endif
 endif
 
+ifeq ($(CONFIG_IPDDP),y)
+L_OBJS += ipddp.o
+else
+  ifeq ($(CONFIG_IPDDP),m)
+  M_OBJS += ipddp.o
+  endif
+endif
+
 ifeq ($(CONFIG_BAYCOM),y)
 L_OBJS += baycom.o
 CONFIG_HDLCDRV_BUILTIN = y

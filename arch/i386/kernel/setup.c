@@ -257,7 +257,8 @@ static const char * k5model(unsigned int nr)
 {
 	static const char *model[] = {
 		"SSA5 (PR-75, PR-90, PR-100)", "5k86 (PR-120, PR-133)",
-		"5k86 (PR-166)", "5k86 (PR-200)", "", "", "K6"
+		"5k86 (PR-166)", "5k86 (PR-200)", "", "", 
+		"K6(PR-133..PR-166)","K6(PR-133..PR-200)"
 	};
 	if (nr < sizeof(model)/sizeof(char *))
 		return model[nr];

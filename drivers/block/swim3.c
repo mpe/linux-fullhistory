@@ -842,7 +842,7 @@ static int floppy_release(struct inode *inode, struct file *filp)
 		return -ENXIO;
 	fs = &floppy_states[0];
 	if (filp == 0 || (filp->f_mode & (2 | OPEN_WRITE_BIT)))
-		block_fsync(inode, filp);
+		block_fsync(filp, filp->f_dentry);
 	sw = fs->swim3;
 	if (fs->ref_count > 0 && --fs->ref_count == 0) {
 		swim3_action(fs, MOTOR_OFF);

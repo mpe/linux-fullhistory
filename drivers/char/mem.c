@@ -117,7 +117,7 @@ static long write_mem(struct inode * inode, struct file * file,
 	return do_write_mem(file,__va(p),p,buf,count);
 }
 
-static int mmap_mem(struct inode * inode, struct file * file, struct vm_area_struct * vma)
+static int mmap_mem(struct file * file, struct vm_area_struct * vma)
 {
 	unsigned long offset = vma->vm_offset;
 
@@ -330,7 +330,7 @@ out:
 	return written ? written : -EFAULT;
 }
 
-static int mmap_zero(struct inode * inode, struct file * file, struct vm_area_struct * vma)
+static int mmap_zero(struct file * file, struct vm_area_struct * vma)
 {
 	if (vma->vm_flags & VM_SHARED)
 		return -EINVAL;
@@ -350,8 +350,7 @@ static long write_full(struct inode * inode, struct file * file,
  * both devices with "a" now.  This was previously impossible.  SRB.
  */
 
-static long long null_lseek(struct inode * inode, struct file * file,
-	long long offset, int orig)
+static long long null_lseek(struct file * file, long long offset, int orig)
 {
 	return file->f_pos=0;
 }
@@ -363,8 +362,7 @@ static long long null_lseek(struct inode * inode, struct file * file,
  * also note that seeking relative to the "end of file" isn't supported:
  * it has no meaning, so it returns -EINVAL.
  */
-static long long memory_lseek(struct inode * inode, struct file * file,
-	long long offset, int orig)
+static long long memory_lseek(struct file * file, long long offset, int orig)
 {
 	switch (orig) {
 		case 0:

@@ -365,7 +365,7 @@ int read_exec(struct dentry *dentry, unsigned long offset,
 	if (!file.f_op->read)
 		goto close_readexec;
 	if (file.f_op->llseek) {
-		if (file.f_op->llseek(inode,&file,offset,0) != offset)
+		if (file.f_op->llseek(&file,offset,0) != offset)
  			goto close_readexec;
 	} else
 		file.f_pos = offset;

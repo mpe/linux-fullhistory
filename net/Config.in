@@ -31,9 +31,6 @@ if [ "$CONFIG_IPX" != "n" ]; then
   fi
 fi
 tristate 'Appletalk DDP' CONFIG_ATALK
-if [ "$CONFIG_ATALK" != "n" ]; then
-  bool 'IP-over-DDP support (EXPERIMENTAL)' CONFIG_IPDDP
-fi
 tristate 'Amateur Radio AX.25 Level 2' CONFIG_AX25
 if [ "$CONFIG_AX25" != "n" ]; then
   bool 'AX.25 DAMA Slave support' CONFIG_AX25_DAMA_SLAVE
@@ -53,6 +50,6 @@ if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
 #  if [ "$CONFIG_LLC" = "y" ]; then
 #   bool 'Netbeui (EXPERIMENTAL)' CONFIG_NETBEUI
 #  fi
-  bool 'WAN router' CONFIG_WAN_ROUTER
+  tristate 'WAN router' CONFIG_WAN_ROUTER
 fi
 endmenu

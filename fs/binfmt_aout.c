@@ -62,7 +62,7 @@ while (file.f_op->write(inode,&file,(char *)(addr),(nr)) != (nr)) goto close_cor
 
 #define DUMP_SEEK(offset) \
 if (file.f_op->llseek) { \
-	if (file.f_op->llseek(inode,&file,(offset),0) != (offset)) \
+	if (file.f_op->llseek(&file,(offset),0) != (offset)) \
  		goto close_coredump; \
 } else file.f_pos = (offset)
 
@@ -492,7 +492,7 @@ do_load_aout_library(int fd)
 
 	/* Seek into the file */
 	if (file->f_op->llseek) {
-		if ((error = file->f_op->llseek(inode, file, 0, 0)) != 0)
+		if ((error = file->f_op->llseek(file, 0, 0)) != 0)
 			return -ENOEXEC;
 	} else
 		file->f_pos = 0;

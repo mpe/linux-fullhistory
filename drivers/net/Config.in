@@ -126,7 +126,7 @@ if [ "$CONFIG_DLCI" = "y" -o "$CONFIG_DLCI" = "m" ]; then
 fi
 
 #
-# LocalTalk
+# AppleTalk
 #
 if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
   if [ "$CONFIG_ATALK" != "n" ]; then
@@ -136,6 +136,7 @@ if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
 	bool 'Dayna firmware support' CONFIG_COPS_DAYNA
 	bool 'Tangent firmware support' CONFIG_COPS_TANGENT
     fi
+    dep_tristate 'IP-over-DDP driver support' CONFIG_IPDDP $CONFIG_ATALK
   fi
 fi
 
@@ -202,10 +203,10 @@ fi
 #
 # WAN drivers support
 #
-if [ "$CONFIG_WAN_ROUTER" = "y" ]; then
+if [ "$CONFIG_WAN_ROUTER" != "n" ]; then
   bool 'WAN drivers' CONFIG_WAN_DRIVERS
   if [ "$CONFIG_WAN_DRIVERS" = "y" ]; then
-    bool 'Sangoma WANPIPE(tm) multiprotocol cards' CONFIG_VENDOR_SANGOMA
+    dep_tristate 'Sangoma WANPIPE(tm) multiprotocol cards' CONFIG_VENDOR_SANGOMA $CONFIG_WAN_DRIVERS
     if [ "$CONFIG_VENDOR_SANGOMA" = "y" ]; then
       int  '  Maximum number of cards' CONFIG_WANPIPE_CARDS 1
       bool '  WANPIPE X.25 support' CONFIG_WANPIPE_X25

@@ -282,9 +282,13 @@ asmlinkage int sys_sync(void)
 	return 0;
 }
 
-int file_fsync (struct inode *inode, struct file *filp)
+/*
+ *	filp may be NULL if called via the msync of a vma.
+ */
+ 
+int file_fsync(struct file *filp, struct dentry *dentry)
 {
-	return fsync_dev(inode->i_dev);
+	return fsync_dev(dentry->d_inode->i_dev);
 }
 
 asmlinkage int sys_fsync(unsigned int fd)
@@ -316,7 +320,7 @@ asmlinkage int sys_fsync(unsigned int fd)
 	if (!file->f_op || !file->f_op->fsync)
 		goto out;
 
-	err = file->f_op->fsync(inode,file);
+	err = file->f_op->fsync(file, file->f_dentry);
 
 out:
 	unlock_kernel();
@@ -353,7 +357,7 @@ asmlinkage int sys_fdatasync(unsigned int fd)
 		goto out;
 
 	/* this needs further work, at the moment it is identical to fsync() */
-	err = file->f_op->fsync(inode,file);
+	err = file->f_op->fsync(file, file->f_dentry);
 
 out:
 	unlock_kernel();

@@ -815,7 +815,7 @@ do_load_elf_library(int fd){
 
 	/* seek to the beginning of the file */
 	if (file->f_op->llseek) {
-		if ((error = file->f_op->llseek(inode, file, 0, 0)) != 0)
+		if ((error = file->f_op->llseek(file, 0, 0)) != 0)
 			return -ENOEXEC;
 	} else
 		file->f_pos = 0;
@@ -924,7 +924,7 @@ static int dump_write(struct file *file, const void *addr, int nr)
 static int dump_seek(struct file *file, off_t off)
 {
 	if (file->f_op->llseek) {
-		if (file->f_op->llseek(file->f_dentry->d_inode, file, off, 0) != off)
+		if (file->f_op->llseek(file, off, 0) != off)
 			return 0;
 	} else
 		file->f_pos = off;

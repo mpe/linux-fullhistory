@@ -360,7 +360,7 @@ identify_ramdisk_image(kdev_t device, struct file *fp, int start_block))
 	 * Read block 0 to test for gzipped kernel
 	 */
 	if (fp->f_op->llseek)
-		fp->f_op->llseek(fp->f_dentry->d_inode, fp, start_block * BLOCK_SIZE, 0);
+		fp->f_op->llseek(fp, start_block * BLOCK_SIZE, 0);
 	fp->f_pos = start_block * BLOCK_SIZE;
 	
 	fp->f_op->read(fp->f_dentry->d_inode, fp, buf, size);
@@ -390,8 +390,7 @@ identify_ramdisk_image(kdev_t device, struct file *fp, int start_block))
 	 * Read block 1 to test for minix and ext2 superblock
 	 */
 	if (fp->f_op->llseek)
-		fp->f_op->llseek(fp->f_dentry->d_inode, fp,
-				(start_block+1) * BLOCK_SIZE, 0);
+		fp->f_op->llseek(fp, (start_block+1) * BLOCK_SIZE, 0);
 	fp->f_pos = (start_block+1) * BLOCK_SIZE;
 
 	fp->f_op->read(fp->f_dentry->d_inode, fp, buf, size);
@@ -421,7 +420,7 @@ identify_ramdisk_image(kdev_t device, struct file *fp, int start_block))
 	
 done:
 	if (fp->f_op->llseek)
-		fp->f_op->llseek(fp->f_dentry->d_inode, fp, start_block * BLOCK_SIZE, 0);
+		fp->f_op->llseek(fp, start_block * BLOCK_SIZE, 0);
 	fp->f_pos = start_block * BLOCK_SIZE;	
 
 	if ((nblocks > 0) && blk_size[MAJOR(device)]) {

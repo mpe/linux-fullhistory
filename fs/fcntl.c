@@ -83,7 +83,7 @@ static int setfl(struct file * filp, unsigned long arg)
 	/* Did FASYNC state change? */
 	if ((arg ^ filp->f_flags) & FASYNC) {
 		if (filp->f_op->fasync)
-			filp->f_op->fasync(inode, filp, (arg & FASYNC) != 0);
+			filp->f_op->fasync(filp, (arg & FASYNC) != 0);
 	}
 
 	/* required for strict SunOS emulation */

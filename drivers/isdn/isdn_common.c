@@ -922,8 +922,7 @@ isdn_read(struct inode *inode, struct file *file, char *buf, RWARG count)
 	return -ENODEV;
 }
 
-static LSTYPE
-isdn_lseek(struct inode *inode, struct file *file, LSARG offset, int orig)
+static LSTYPE isdn_lseek(struct file *file, LSARG offset, int orig)
 {
 	return -ESPIPE;
 }

@@ -187,8 +187,7 @@ static long mem_write(struct inode * inode, struct file * file,
 
 #endif
 
-static long long mem_lseek(struct inode * inode, struct file * file,
-	long long offset, int orig)
+static long long mem_lseek(struct file * file, long long offset, int orig)
 {
 	switch (orig) {
 		case 0:
@@ -205,8 +204,7 @@ static long long mem_lseek(struct inode * inode, struct file * file,
 /*
  * This isn't really reliable by any means..
  */
-int mem_mmap(struct inode * inode, struct file * file,
-	     struct vm_area_struct * vma)
+int mem_mmap(struct file * file, struct vm_area_struct * vma)
 {
 	struct task_struct *tsk;
 	pgd_t *src_dir, *dest_dir;
@@ -214,7 +212,8 @@ int mem_mmap(struct inode * inode, struct file * file,
 	pte_t *src_table, *dest_table;
 	unsigned long stmp, dtmp;
 	struct vm_area_struct *src_vma = NULL;
-
+	struct inode *inode = file->f_dentry->d_inode;
+	
 	/* Get the source's task information */
 
 	tsk = get_task(inode->i_ino >> 16);

@@ -76,8 +76,7 @@ static struct wait_queue *rtc_wait;
 
 static struct timer_list rtc_irq_timer;
 
-static long long rtc_llseek(struct inode *inode, struct file *file,
-			    loff_t offset, int origin);
+static long long rtc_llseek(struct file *file, loff_t offset, int origin);
 
 static long rtc_read(struct inode *inode, struct file *file,
 			char *buf, unsigned long count);
@@ -142,8 +141,7 @@ static void rtc_interrupt(int irq, void *dev_id, struct pt_regs *regs)
  *	Now all the various file operations that we export.
  */
 
-static long long rtc_llseek(struct inode *inode, struct file *file,
-			    loff_t offset, int origin)
+static long long rtc_llseek(struct file *file, loff_t offset, int origin)
 {
 	return -ESPIPE;
 }

@@ -5,6 +5,7 @@
  *  Copyright (C) 1997 by Volker Lendecke
  *
  *  28/06/96 - Fixed long file name support (smb_proc_readdir_long) by Yuri Per
+ *  04/09/97 - Fixed smb_d_path to be non-recursive by Riccardo Facchetti
  */
 
 #include <linux/config.h>
@@ -16,6 +17,7 @@
 #include <linux/malloc.h>
 #include <linux/stat.h>
 #include <linux/fcntl.h>
+#include <linux/dcache.h>
 
 #include <asm/uaccess.h>
 #include <asm/string.h>
@@ -79,22 +81,36 @@ smb_encode_smb_length(__u8 * p, __u32 len)
 	return p + 4;
 }
 
-static int smb_d_path(struct dentry * entry, char * buf)
+static int smb_d_path(struct dentry * entry, char * buffer)
 {
-	if (IS_ROOT(entry)) {
-		*buf = '\\';
-		return 1;
-	} else {
-		int len = smb_d_path(entry->d_parent, buf);
+	char *page, *path, *buf = buffer;
+	int len = 0;
 
-		buf += len;
-		if (len > 1) {
-			*buf++ = '\\';
-			len++;
-		}
-		memcpy(buf, entry->d_name.name, entry->d_name.len);
-		return len + entry->d_name.len;
+	page = (char *) __get_free_page(GFP_KERNEL);
+
+	/*
+	 * Get the path
+	 */
+	path = d_path(entry, page, PAGE_SIZE);
+
+	/*
+	 * path is a string with a trailing '\0'
+	 */
+	len = strlen(path);
+
+	/*
+	 * Now encode it the DOSish way and copy it to the
+	 * output buffer. No need to terminate output buffer
+	 * with a trailing '\0'.
+	 */
+	while (*path) {
+		*buf++ = ((*path != '/') ? *path : '\\');
+		path++;
 	}
+
+	free_page((unsigned long) page);
+
+	return len;
 }
 
 static char *smb_encode_path(struct smb_sb_info *server, char *buf,
@@ -112,6 +128,15 @@ static char *smb_encode_path(struct smb_sb_info *server, char *buf,
 		*buf++ = 0;
 	}
 
+	/*
+	 * XXX smb_d_path don't put the trailing '\0' in the buf.
+	 * The problem may arise when (dir != NULL && name == NULL &&
+	 * server->opt.protocol <= SMB_PROTOCOL_COREPLUS))
+	 * because str_upper() rely on trailing '\0' for converting the
+	 * start to upper chars. I don't know samba, so I suspect a bug but I
+	 * don't want to do something stupid here.
+	 * -Riccardo
+	 */
 	if (server->opt.protocol <= SMB_PROTOCOL_COREPLUS)
 		str_upper(start);
 

@@ -92,7 +92,6 @@ struct icmpv6_msg {
 
 /*
  *	getfrag callback
- *	not static because it's needed in ndisc.c
  */
 
 static int icmpv6_getfrag(const void *data, struct in6_addr *saddr, 
@@ -131,11 +130,12 @@ static int icmpv6_getfrag(const void *data, struct in6_addr *saddr,
 }
 
 /*
- *	an inline helper for the "simple" if statement bellow
+ *	an inline helper for the "simple" if statement below
  *	checks if parameter problem report is caused by an
  *	unrecognized IPv6 option that has the Option Type 
  *	highest-order two bits set to 10
  */
+
 static __inline__ int opt_unrec(struct sk_buff *skb, __u32 offset)
 {
 	char *buff = skb->nh.raw;

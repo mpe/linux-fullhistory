@@ -12,8 +12,7 @@
 
 #define NVRAM_SIZE	8192
 
-static long long nvram_llseek(struct inode *inode, struct file *file,
-			      loff_t offset, int origin)
+static long long nvram_llseek(struct file *file, loff_t offset, int origin)
 {
 	switch (origin) {
 	case 1:

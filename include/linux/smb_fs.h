@@ -149,7 +149,7 @@ int smb_trans2_request(struct smb_sb_info *server, __u16 trans2_command,
 		       int *lrparam, unsigned char **rparam);
 
 /* linux/fs/smbfs/mmap.c */
-int smb_mmap(struct inode * inode, struct file * file, struct vm_area_struct * vma);
+int smb_mmap(struct file * file, struct vm_area_struct * vma);
 
 #endif /* __KERNEL__ */
 

@@ -116,8 +116,10 @@ struct vm_operations_struct ncp_file_mmap =
 
 
 /* This is used for a general mmap of a ncp file */
-int ncp_mmap(struct inode *inode, struct file *file, struct vm_area_struct *vma)
+int ncp_mmap(struct file *file, struct vm_area_struct *vma)
 {
+	struct inode *inode = file->f_dentry->d_inode;
+	
 	DPRINTK("ncp_mmap: called\n");
 
 	if (!ncp_conn_valid(NCP_SERVER(inode))) {

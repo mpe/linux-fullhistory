@@ -150,7 +150,7 @@ void ncp_lock_server(struct ncp_server *server);
 void ncp_unlock_server(struct ncp_server *server);
 
 /* linux/fs/ncpfs/mmap.c */
-int ncp_mmap(struct inode *inode, struct file *file, struct vm_area_struct *vma);
+int ncp_mmap(struct file *file, struct vm_area_struct *vma);
 
 #endif				/* __KERNEL__ */
 

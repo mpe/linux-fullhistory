@@ -126,8 +126,7 @@ static long netlink_read(struct inode * inode, struct file * file, char * buf,
 	return err ? -EFAULT : count;
 }
 
-static loff_t netlink_lseek(struct inode * inode, struct file * file,
-			    loff_t offset, int origin)
+static long long netlink_lseek(struct file * file, long long offset, int origin)
 {
 	return -ESPIPE;
 }

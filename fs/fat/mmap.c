@@ -91,8 +91,10 @@ struct vm_operations_struct fat_file_mmap = {
  * This is used for a general mmap of an msdos file
  * Returns 0 if ok, or a negative error code if not.
  */
-int fat_mmap(struct inode * inode, struct file * file, struct vm_area_struct * vma)
+int fat_mmap(struct file * file, struct vm_area_struct * vma)
 {
+	struct inode *inode = file->f_dentry->d_inode;
+	
 	if (vma->vm_flags & VM_SHARED)	/* only PAGE_COW or read-only supported now */
 		return -EINVAL;
 	if (vma->vm_offset & (inode->i_sb->s_blocksize - 1))

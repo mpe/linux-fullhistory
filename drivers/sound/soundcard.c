@@ -80,8 +80,7 @@ sound_write (struct inode *inode, struct file *file, const char *buf, unsigned l
   return sound_write_sw (dev, &files[dev], buf, count);
 }
 
-static long long
-sound_lseek (struct inode *inode, struct file *file, long long offset, int orig)
+static long long sound_lseek (struct file *file, long long offset, int orig)
 {
   return -EPERM;
 }
@@ -256,13 +255,13 @@ sound_poll (struct file *file, poll_table * wait)
 }
 
 static int
-sound_mmap (struct inode *inode, struct file *file, struct vm_area_struct *vma)
+sound_mmap (struct file *file, struct vm_area_struct *vma)
 {
   int             dev, dev_class;
   unsigned long   size;
   struct dma_buffparms *dmap = NULL;
 
-  dev = MINOR (inode->i_rdev);
+  dev = MINOR (file->f_dentry->d_inode->i_rdev);
 
   files[dev].flags = file->f_flags;
 

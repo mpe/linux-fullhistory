@@ -22,7 +22,9 @@
  *	References:
  *		Inside Appletalk (2nd Ed).
  */
- 
+
+#include <linux/config.h>
+#if defined(CONFIG_ATALK) || defined(CONFIG_ATALK_MODULE) 
 #include <asm/uaccess.h>
 #include <asm/system.h>
 #include <asm/bitops.h>
@@ -89,7 +91,6 @@ static struct timer_list aarp_timer;
 /*
  *	Delete an aarp queue
  */
-
 static void aarp_expire(struct aarp_entry *a)
 {
 	struct sk_buff *skb;
@@ -403,10 +404,9 @@ static struct aarp_entry *aarp_alloc(void)
 }
 
 /*
- *	Find an entry. We might return an expired but not yet purged entry. We
- *	don't care as it will do no harm.
+ * Find an entry. We might return an expired but not yet purged entry. We
+ * don't care as it will do no harm.
  */
- 
 static struct aarp_entry *aarp_find_entry(struct aarp_entry *list, struct device *dev, struct at_addr *sat)
 {
 	unsigned long flags;
@@ -426,7 +426,6 @@ static struct aarp_entry *aarp_find_entry(struct aarp_entry *list, struct device
 /*
  *	Send a DDP frame
  */
- 
 int aarp_send_ddp(struct device *dev,struct sk_buff *skb, struct at_addr *sa, void *hwaddr)
 {
 	static char ddp_eth_multicast[ETH_ALEN]={ 0x09, 0x00, 0x07, 0xFF, 0xFF, 0xFF };
@@ -620,7 +619,6 @@ int aarp_send_ddp(struct device *dev,struct sk_buff *skb, struct at_addr *sa, vo
  *	An entry in the aarp unresolved queue has become resolved. Send
  *	all the frames queued under it.
  */
- 
 static void aarp_resolved(struct aarp_entry **list, struct aarp_entry *a, int hash)
 {
 	struct sk_buff *skb;
@@ -662,7 +660,6 @@ static void aarp_resolved(struct aarp_entry **list, struct aarp_entry *a, int ha
  *	This is called by the SNAP driver whenever we see an AARP SNAP
  *	frame. We currently only support ethernet.
  */
- 
 static int aarp_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
 {
 	struct elapaarp *ea=(struct elapaarp *)skb->h.raw;
@@ -833,39 +830,32 @@ __initfunc(void aarp_proto_init(void))
 
 #ifdef MODULE
 
-/* Free all the entries in an aarp list. Caller should turn off interrupts. */
-static void free_entry_list(struct aarp_entry *list)
+/*
+ * Remove the AARP entries associated with a device.
+ * Called from cleanup_module() in ddp.c.
+ */
+void aarp_device_down(struct device *dev)
 {
-	struct aarp_entry *tmp;
+	int ct = 0;
 
-	while (list != NULL)
+	for(ct = 0; ct < AARP_HASH_SIZE; ct++)
 	{
-		tmp = list->next;
-		aarp_expire(list);
-		list = tmp;
+		aarp_expire_device(&resolved[ct], dev);
+		aarp_expire_device(&unresolved[ct], dev);
 	}
+
+	return;
 }
 
-/* General module cleanup. Called from cleanup_module() in ddp.c. */
+/*
+ * General module cleanup. Called from cleanup_module() in ddp.c.
+ */
 void aarp_cleanup_module(void)
 {
-	unsigned long flags;
-	int i;
-
-	save_flags(flags);
-	cli();
-
 	del_timer(&aarp_timer);
 	unregister_netdevice_notifier(&aarp_notifier);
 	unregister_snap_client(aarp_snap_id);
-
-	for (i = 0; i < AARP_HASH_SIZE; i++)
-	{
-		free_entry_list(resolved[i]);
-		free_entry_list(unresolved[i]);
-	}
-
-	restore_flags(flags);
 }
 
 #endif  /* MODULE */
+#endif  /* CONFIG_ATALK || CONFIG_ATALK_MODULE */

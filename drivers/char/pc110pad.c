@@ -474,11 +474,11 @@ static void sample_ps2(int d[3])
 
 
 
-static int fasync_pad(struct inode *inode, struct file *filp, int on)
+static int fasync_pad(struct file *filp, int on)
 {
 	int retval;
 
-	retval = fasync_helper(inode, filp, on, &asyncptr);
+	retval = fasync_helper(filp, on, &asyncptr);
 	if (retval < 0)
 		return retval;
 	return 0;
@@ -490,7 +490,7 @@ static int fasync_pad(struct inode *inode, struct file *filp, int on)
  */
 static int close_pad(struct inode * inode, struct file * file)
 {
-	fasync_pad(inode, file, 0);
+	fasync_pad(file, 0);
 	if (--active)
 		return 0;
 	outb(0x30, current_params.io+2);	/* switch off digitiser */

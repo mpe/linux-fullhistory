@@ -717,7 +717,7 @@ int __fput(struct file *filp)
 	struct inode * inode = dentry->d_inode;
 
 	if (filp->f_op && filp->f_op->release)
-		error = filp->f_op->release(inode,filp);
+		error = filp->f_op->release(inode, filp);
 	filp->f_dentry = NULL;
 	if (filp->f_mode & FMODE_WRITE)
 		put_write_access(inode);

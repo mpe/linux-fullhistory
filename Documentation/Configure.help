@@ -1381,13 +1381,9 @@ CONFIG_ATALK
   machine on the Internet that has a program like lynx or
   netscape). EtherTalk is the name used for appletalk over ethernet
   and the cheaper and slower LocalTalk is appletalk over a proprietary
-  apple network using serial links. Ethertalk is fully supported by
-  Linux, however the localtalk drivers are not yet ready to ship. The
-  kernel however supports localtalk and when such drivers become
-  available all you will need to do is download and install the
-  localtalk driver in order to join a Localtalk network. The
-  NET-2-HOWTO, available via ftp (user: anonymous) in
-  sunsite.unc.edu:/pub/Linux/docs/HOWTO contains valuable information
+  apple network using serial links. Ethertalk and Localtalk is fully 
+  supported by Linux. The NET-2-HOWTO, available via ftp (user: anonymous)
+  in sunsite.unc.edu:/pub/Linux/docs/HOWTO contains valuable information
   as well. This driver is also available as a module ( = code which
   can be inserted in and removed from the running kernel whenever you
   want). The module will be called appletalk.o. If you want to compile
@@ -1408,8 +1404,6 @@ CONFIG_LTPC
   If you are in doubt, this card is the one with the 65C02 chip on it.
   You also need version 1.3.3 or later of the netatalk package.
   This driver is experimental, which means that it may not work.
-  In particular the module support is not yet working for the 2.1.xx
-  kernels, so choose Y or N, but not M for now.
   See README.ltpc in the drivers/net directory, and the web site
   http://www.math.unm.edu/~bradford/ltpc.html
 
@@ -1418,10 +1412,8 @@ CONFIG_COPS
   This allows you to use COPS AppleTalk cards to connect to LocalTalk
   networks. You also need version 1.3.3 or later of the netatalk
   package.  This driver is experimental, which means that it may not
-  work.  In particular the module support is not yet working for the
-  2.1.xx kernels, so choose Y or N, but not M for now.  This driver
-  will only work if you choose "Appletalk DDP" networking support,
-  above.
+  work.  This driver will only work if you choose "Appletalk DDP"
+  networking support, above.
   Please read the file Documentation/networking/README.cops.  See the
   web site http://www.math.unm.edu/~bradford/ltpc.html for localtalk
   IP tools.
@@ -1430,7 +1422,7 @@ Dayna firmware support
 CONFIG_COPS_DAYNA
   Support COPS compatible cards with Dayna style firmware (Dayna
   DL2000/ Daynatalk/PC (half length), COPS LT-95, Farallon PhoneNET PC
-  III).
+  III, Farallon PhoneNET PC II).
 
 Tangent firmware support
 CONFIG_COPS_TANGENT

@@ -294,7 +294,7 @@ nfsd_close(struct file *filp)
 void
 nfsd_sync(struct inode *inode, struct file *filp)
 {
-	filp->f_op->fsync(inode, filp);
+	filp->f_op->fsync(filp, filp->f_dentry);
 }
 
 /*
@@ -928,7 +928,8 @@ nfsd_readdir(struct svc_rqst *rqstp, struct svc_fh *fhp, loff_t offset,
 			file.f_inode->i_dev, file.f_inode->i_ino,
 			(int) file.f_pos, (int) oldlen, (int) cd.buflen);
 		 */
-		err = file.f_op->readdir(&file, &cd, (filldir_t) func);
+		err = file.f_op->readdir(&file,
+					 &cd, (filldir_t) func);
 
 		if (err < 0) {
 			nfsd_close(&file);

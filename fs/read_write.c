@@ -19,16 +19,13 @@
 
 #include <asm/uaccess.h>
 
-static long long default_llseek(struct inode *inode,
-	struct file *file,
-	long long offset,
-	int origin)
+static long long default_llseek(struct file *file, long long offset, int origin)
 {
 	long long retval;
 
 	switch (origin) {
 		case 2:
-			offset += inode->i_size;
+			offset += file->f_dentry->d_inode->i_size;
 			break;
 		case 1:
 			offset += file->f_pos;
@@ -45,15 +42,14 @@ static long long default_llseek(struct inode *inode,
 	return retval;
 }
 
-static inline long long llseek(struct inode * inode, struct file *file,
-	long long offset, unsigned int origin)
+static inline long long llseek(struct file *file, long long offset, unsigned int origin)
 {
-	long long (*fn)(struct inode *, struct file *, long long, int);
+	long long (*fn)(struct file *, long long, int);
 
 	fn = default_llseek;
 	if (file->f_op && file->f_op->llseek)
 		fn = file->f_op->llseek;
-	return fn(inode, file, offset, origin);
+	return fn(file, offset, origin);
 }
 
 asmlinkage long sys_lseek(unsigned int fd, off_t offset, unsigned int origin)
@@ -73,7 +69,7 @@ asmlinkage long sys_lseek(unsigned int fd, off_t offset, unsigned int origin)
 	retval = -EINVAL;
 	if (origin > 2)
 		goto bad;
-	retval = llseek(inode, file, offset, origin);
+	retval = llseek(file, offset, origin);
 bad:
 	unlock_kernel();
 	return retval;
@@ -100,8 +96,7 @@ asmlinkage int sys_llseek(unsigned int fd, unsigned long offset_high,
 	if (origin > 2)
 		goto bad;
 
-	offset = llseek(inode, file,
-		(((unsigned long long) offset_high << 32) | offset_low),
+	offset = llseek(file, (((unsigned long long) offset_high << 32) | offset_low),
 		origin);
 
 	retval = offset;
