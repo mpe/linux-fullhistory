@@ -227,22 +227,21 @@ page_addr, offset, buffer);
 	goto out;
 }
 
-static long
-smb_file_read(struct inode * inode, struct file * file,
-	      char * buf, unsigned long count)
+static ssize_t
+smb_file_read(struct file * file, char * buf, size_t count, loff_t *ppos)
 {
-	int	status;
+	ssize_t	status;
 
 #ifdef SMBFS_DEBUG_VERBOSE
 printk("smb_file_read: file %s/%s, count=%lu@%lu\n",
 file->f_dentry->d_parent->d_name.name, file->f_dentry->d_name.name,
-count, (unsigned long) file->f_pos);
+count, (unsigned long) *ppos);
 #endif
 
-	status = smb_revalidate_inode(inode);
+	status = smb_revalidate_inode(file->f_dentry->d_inode);
 	if (status >= 0)
 	{
-		status = generic_file_read(inode, file, buf, count);
+		status = generic_file_read(file, buf, count, ppos);
 	}
 	return status;
 }
@@ -270,30 +269,29 @@ vma->vm_start, vma->vm_end);
 /* 
  * Write to a file (through the page cache).
  */
-static long
-smb_file_write(struct inode *inode, struct file *file,
-	       const char *buf, unsigned long count)
+static ssize_t
+smb_file_write(struct file *file, const char *buf, size_t count, loff_t *ppos)
 {
-	int	result;
+	ssize_t	result;
 
 #ifdef SMBFS_DEBUG_VERBOSE
 printk("smb_file_write: file %s/%s, count=%lu@%lu\n",
 file->f_dentry->d_parent->d_name.name, file->f_dentry->d_name.name,
-count, (unsigned long) file->f_pos);
+count, (unsigned long) *ppos);
 #endif
 
 #ifdef SMBFS_PARANOIA
 	/* Should be impossible now that inodes can't change mode */
 	result = -EINVAL;
-	if (!S_ISREG(inode->i_mode))
+	if (!S_ISREG(file->f_dentry->d_inode->i_mode))
 	{
 		printk("smb_file_write: write to non-file, mode %07o\n",
-			inode->i_mode);
+		       file->f_dentry->d_inode->i_mode);
 		goto out;
 	}
 #endif
 
-	result = smb_revalidate_inode(inode);
+	result = smb_revalidate_inode(file->f_dentry->d_inode);
 	if (result)
 		goto out;
 
@@ -303,9 +301,9 @@ count, (unsigned long) file->f_pos);
 
 	if (count > 0)
 	{
-		result = generic_file_write(inode, file, buf, count);
+		result = generic_file_write(file, buf, count, ppos);
 		if (result > 0)
-			smb_refresh_inode(inode);
+			smb_refresh_inode(file->f_dentry->d_inode);
 	}
 out:
 	return result;

@@ -9,6 +9,11 @@
 
 O_TARGET := isofs.o
 O_OBJS   := namei.o inode.o file.o dir.o util.o rock.o symlink.o
+
+ifdef CONFIG_JOLIET
+O_OBJS += joliet.o
+endif
+
 M_OBJS   := $(O_TARGET)
 
 include $(TOPDIR)/Rules.make

@@ -4,6 +4,8 @@ affs.txt
 	- info and mount options for the Amiga Fast File System.
 hpfs.txt
 	- info and mount options for the OS/2 HPFS.
+isofs.txt
+	- info and mount options for the ISO9660 (CDROM) filesystem.
 ncpfs.txt
 	- info on Novell Netware(tm) filesystem using NCP protocol.
 romfs.txt

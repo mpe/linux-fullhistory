@@ -687,7 +687,6 @@ depca_open(struct device *dev)
   s16 nicsr;
   int status = 0;
 
-  irq2dev_map[dev->irq] = dev;
   STOP_DEPCA;
   nicsr = inb(DEPCA_NICSR);
 
@@ -703,7 +702,7 @@ depca_open(struct device *dev)
 
   depca_dbg_open(dev);
 
-  if (request_irq(dev->irq, &depca_interrupt, 0, lp->adapter_name, NULL)) {
+  if (request_irq(dev->irq, &depca_interrupt, 0, lp->adapter_name, dev)) {
     printk("depca_open(): Requested IRQ%d is busy\n",dev->irq);
     status = -EAGAIN;
   } else {
@@ -837,7 +836,7 @@ depca_start_xmit(struct sk_buff *skb, struct device *dev)
 static void
 depca_interrupt(int irq, void *dev_id, struct pt_regs * regs)
 {
-  struct device *dev = (struct device *)(irq2dev_map[irq]);
+  struct device *dev =dev_id;
   struct depca_private *lp;
   s16 csr0, nicsr;
   u_long ioaddr;
@@ -1059,7 +1058,6 @@ depca_close(struct device *dev)
   ** Free the associated irq
   */
   free_irq(dev->irq, NULL);
-  irq2dev_map[dev->irq] = NULL;
 
   MOD_DEC_USE_COUNT;
 
@@ -1133,25 +1131,23 @@ set_multicast_list(struct device *dev)
   struct depca_private *lp = (struct depca_private *)dev->priv;
   u_long ioaddr = dev->base_addr;
 
-  if (irq2dev_map[dev->irq] != NULL) {
-    while(dev->tbusy);                /* Stop ring access */
-    set_bit(0, (void*)&dev->tbusy);
-    while(lp->tx_old != lp->tx_new);  /* Wait for the ring to empty */
+  while(dev->tbusy);                /* Stop ring access */
+  set_bit(0, (void*)&dev->tbusy);
+  while(lp->tx_old != lp->tx_new);  /* Wait for the ring to empty */
 
-    STOP_DEPCA;                       /* Temporarily stop the depca.  */
-    depca_init_ring(dev);             /* Initialize the descriptor rings */
+  STOP_DEPCA;                       /* Temporarily stop the depca.  */
+  depca_init_ring(dev);             /* Initialize the descriptor rings */
 
-    if (dev->flags & IFF_PROMISC) {   /* Set promiscuous mode */
-      lp->init_block.mode |= PROM;
-    } else {
-      SetMulticastFilter(dev);
-      lp->init_block.mode &= ~PROM;   /* Unset promiscuous mode */
-    }
-
-    LoadCSRs(dev);                    /* Reload CSR3 */
-    InitRestartDepca(dev);            /* Resume normal operation. */
-    dev->tbusy = 0;                   /* Unlock the TX ring */
+  if (dev->flags & IFF_PROMISC) {   /* Set promiscuous mode */
+    lp->init_block.mode |= PROM;
+  } else {
+    SetMulticastFilter(dev);
+    lp->init_block.mode &= ~PROM;   /* Unset promiscuous mode */
   }
+
+  LoadCSRs(dev);                    /* Reload CSR3 */
+  InitRestartDepca(dev);            /* Resume normal operation. */
+  dev->tbusy = 0;                   /* Unlock the TX ring */
 }
 
 /*

@@ -90,6 +90,9 @@ __attribute__((section("__ksymtab"))) = {
 };
 #endif
 
+#ifdef CONFIG_MODULES
+EXPORT_SYMBOL(get_module_symbol);
+#endif
 #ifdef CONFIG_KERNELD
 EXPORT_SYMBOL(kerneld_send);
 #endif

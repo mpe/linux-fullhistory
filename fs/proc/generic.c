@@ -18,10 +18,10 @@
 
 extern struct inode_operations proc_dyna_dir_inode_operations;
 
-static long proc_file_read(struct inode * inode, struct file * file,
-			   char * buf, unsigned long nbytes);
-static long proc_file_write(struct inode * inode, struct file * file,
-			    const char * buffer, unsigned long count);
+static ssize_t proc_file_read(struct file * file, char * buf,
+			      size_t nbytes, loff_t *ppos);
+static ssize_t proc_file_write(struct file * file, const char * buffer,
+			       size_t count, loff_t *ppos);
 static long long proc_file_lseek(struct file *, long long, int);
 
 int proc_match(int len, const char *name,struct proc_dir_entry * de)
@@ -97,18 +97,17 @@ struct inode_operations proc_net_inode_operations = {
 /* 4K page size but our output routines use some slack for overruns */
 #define PROC_BLOCK_SIZE	(3*1024)
 
-static long proc_file_read(struct inode * inode, struct file * file,
-			   char * buf, unsigned long nbytes)
+static ssize_t
+proc_file_read(struct file * file, char * buf, size_t nbytes, loff_t *ppos)
 {
+	struct inode * inode = file->f_dentry->d_inode;
 	char 	*page;
-	int	retval=0;
+	ssize_t	retval=0;
 	int	eof=0;
-	int	n, count;
+	ssize_t	n, count;
 	char	*start;
 	struct proc_dir_entry * dp;
 
-	if (nbytes < 0)
-		return -EINVAL;
 	dp = (struct proc_dir_entry *) inode->u.generic_ip;
 	if (!(page = (char*) __get_free_page(GFP_KERNEL)))
 		return -ENOMEM;
@@ -126,12 +125,12 @@ static long proc_file_read(struct inode * inode, struct file * file,
 			 * XXX What gives with the file->f_flags & O_ACCMODE
 			 * test?  Seems stupid to me....
 			 */
-			n = dp->get_info(page, &start, file->f_pos, count,
+			n = dp->get_info(page, &start, *ppos, count,
 				 (file->f_flags & O_ACCMODE) == O_RDWR);
 			if (n < count)
 				eof = 1;
 		} else if (dp->read_proc) {
-			n = dp->read_proc(page, &start, file->f_pos,
+			n = dp->read_proc(page, &start, *ppos,
 					  count, &eof, dp->data);
 		} else
 			break;
@@ -140,8 +139,8 @@ static long proc_file_read(struct inode * inode, struct file * file,
 			/*
 			 * For proc files that are less than 4k
 			 */
-			start = page + file->f_pos;
-			n -= file->f_pos;
+			start = page + *ppos;
+			n -= *ppos;
 			if (n <= 0)
 				break;
 			if (n > count)
@@ -162,7 +161,7 @@ static long proc_file_read(struct inode * inode, struct file * file,
 			break;
 		}
 		
-		file->f_pos += n;	/* Move down the file */
+		*ppos += n;	/* Move down the file */
 		nbytes -= n;
 		buf += n;
 		retval += n;
@@ -171,24 +170,25 @@ static long proc_file_read(struct inode * inode, struct file * file,
 	return retval;
 }
 
-static long
-proc_file_write(struct inode * inode, struct file * file,
-		const char * buffer, unsigned long count)
+static ssize_t
+proc_file_write(struct file * file, const char * buffer,
+		size_t count, loff_t *ppos)
 {
+	struct inode *inode = file->f_dentry->d_inode;
 	struct proc_dir_entry * dp;
 	
-	if (count < 0)
-		return -EINVAL;
 	dp = (struct proc_dir_entry *) inode->u.generic_ip;
 
 	if (!dp->write_proc)
 		return -EIO;
 
+	/* FIXME: does this routine need ppos?  probably... */
 	return dp->write_proc(file, buffer, count, dp->data);
 }
 
 
-static long long proc_file_lseek(struct file * file, long long offset, int orig)
+static long long
+proc_file_lseek(struct file * file, long long offset, int orig)
 {
     switch (orig) {
     case 0:

@@ -78,8 +78,8 @@ static struct timer_list rtc_irq_timer;
 
 static long long rtc_llseek(struct file *file, loff_t offset, int origin);
 
-static long rtc_read(struct inode *inode, struct file *file,
-			char *buf, unsigned long count);
+static ssize_t rtc_read(struct file *file, char *buf,
+			size_t count, loff_t *ppos);
 
 static int rtc_ioctl(struct inode *inode, struct file *file,
 			unsigned int cmd, unsigned long arg);
@@ -146,11 +146,12 @@ static long long rtc_llseek(struct file *file, loff_t offset, int origin)
 	return -ESPIPE;
 }
 
-static long rtc_read(struct inode *inode, struct file *file, char *buf,
-		     unsigned long count)
+static ssize_t rtc_read(struct file *file, char *buf,
+			size_t count, loff_t *ppos)
 {
 	struct wait_queue wait = { current, NULL };
-	int retval = 0;
+	unsigned long data;
+	ssize_t retval;
 	
 	if (count < sizeof(unsigned long))
 		return -EINVAL;
@@ -159,30 +160,22 @@ static long rtc_read(struct inode *inode, struct file *file, char *buf,
 
 	current->state = TASK_INTERRUPTIBLE;
 		
-	while (rtc_irq_data == 0) {
+	while ((data = xchg(&rtc_irq_data, 0)) == 0) {
 		if (file->f_flags & O_NONBLOCK) {
 			retval = -EAGAIN;
-			break;
+			goto out;
 		}
 		if (signal_pending(current)) {
 			retval = -ERESTARTSYS;
-			break;
+			goto out;
 		}
 		schedule();
 	}
 
-	if (retval == 0) {
-		unsigned long data, flags;
-		save_flags(flags);
-		cli();
-		data = rtc_irq_data;
-		rtc_irq_data = 0;
-		restore_flags(flags);
-		retval = put_user(data, (unsigned long *)buf); 
-		if (!retval)
-			retval = sizeof(unsigned long); 
-	}
-
+	retval = put_user(data, (unsigned long *)buf); 
+	if (!retval)
+		retval = sizeof(unsigned long); 
+out:
 	current->state = TASK_RUNNING;
 	remove_wait_queue(&rtc_wait, &wait);
 

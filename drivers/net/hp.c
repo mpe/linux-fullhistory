@@ -157,7 +157,7 @@ __initfunc(int hp_probe1(struct device *dev, int ioaddr))
 				outb_p(irqmap[irq] | HP_RUN, ioaddr + HP_CONFIGURE);
 				outb_p( 0x00 | HP_RUN, ioaddr + HP_CONFIGURE);
 				if (irq == autoirq_report(0)		 /* It's a good IRQ line! */
-					&& request_irq (irq, &ei_interrupt, 0, "hp", NULL) == 0) {
+					&& request_irq (irq, &ei_interrupt, 0, "hp", dev) == 0) {
 					printk(" selecting IRQ %d.\n", irq);
 					dev->irq = *irqp;
 					break;
@@ -171,7 +171,7 @@ __initfunc(int hp_probe1(struct device *dev, int ioaddr))
 	} else {
 		if (dev->irq == 2)
 			dev->irq = 9;
-		if (request_irq(dev->irq, ei_interrupt, 0, "hp", NULL)) {
+		if (request_irq(dev->irq, ei_interrupt, 0, "hp", dev)) {
 			printk (" unable to get IRQ %d.\n", dev->irq);
 			return EBUSY;
 		}
@@ -436,7 +436,6 @@ cleanup_module(void)
 			kfree(dev->priv);
 			dev->priv = NULL;
 			free_irq(dev->irq, NULL);
-			irq2dev_map[dev->irq] = NULL;
 			release_region(ioaddr, HP_IO_EXTENT);
 			unregister_netdev(dev);
 		}

@@ -33,9 +33,8 @@
 #define NFSDBG_FACILITY		NFSDBG_FILE
 
 static int  nfs_file_mmap(struct file *, struct vm_area_struct *);
-static long nfs_file_read(struct inode *, struct file *, char *, unsigned long);
-static long nfs_file_write(struct inode *, struct file *,
-					const char *, unsigned long);
+static ssize_t nfs_file_read(struct file *, char *, size_t, loff_t *);
+static ssize_t nfs_file_write(struct file *, const char *, size_t, loff_t *);
 static int  nfs_file_close(struct inode *, struct file *);
 static int  nfs_fsync(struct file *, struct dentry *dentry);
 
@@ -97,19 +96,19 @@ nfs_file_close(struct inode *inode, struct file *file)
 	return nfs_write_error(inode);
 }
 
-static long
-nfs_file_read(struct inode * inode, struct file * file,
-				char * buf, unsigned long count)
+static ssize_t
+nfs_file_read(struct file * file, char * buf, size_t count, loff_t *ppos)
 {
+	struct inode * inode = file->f_dentry->d_inode;
 	int	status;
 
 	dfprintk(VFS, "nfs: read(%x/%ld, %lu@%lu)\n",
 			inode->i_dev, inode->i_ino, count,
-			(unsigned long) file->f_pos);
+			(unsigned long) *ppos);
 
 	if ((status = nfs_revalidate_inode(NFS_SERVER(inode), inode)) < 0)
 		return status;
-	return generic_file_read(inode, file, buf, count);
+	return generic_file_read(file, buf, count, ppos);
 }
 
 static int
@@ -136,15 +135,15 @@ static int nfs_fsync(struct file *file, struct dentry *dentry)
 /* 
  * Write to a file (through the page cache).
  */
-static long
-nfs_file_write(struct inode *inode, struct file *file,
-			const char *buf, unsigned long count)
+static ssize_t
+nfs_file_write(struct file *file, const char *buf, size_t count, loff_t *ppos)
 {
+	struct inode * inode = file->f_dentry->d_inode;
 	int	result;
 
 	dfprintk(VFS, "nfs: write(%x/%ld (%d), %lu@%lu)\n",
 			inode->i_dev, inode->i_ino, inode->i_count,
-			count, (unsigned long) file->f_pos);
+			count, (unsigned long) *ppos);
 
 	if (!inode) {
 		printk("nfs_file_write: inode = NULL\n");
@@ -168,7 +167,7 @@ nfs_file_write(struct inode *inode, struct file *file,
 	if ((result = nfs_write_error(inode)) < 0)
 		return result;
 
-	return generic_file_write(inode, file, buf, count);
+	return generic_file_write(file, buf, count, ppos);
 }
 
 /*

@@ -37,12 +37,12 @@
 
 static int affs_bmap(struct inode *inode, int block);
 static struct buffer_head * affs_getblock(struct inode *inode, s32 block);
-static long affs_file_read_ofs(struct inode *inode, struct file *filp, char *buf,
-			       unsigned long count);
-static long affs_file_write(struct inode *inode, struct file *filp, const char *buf,
-			    unsigned long count);
-static long affs_file_write_ofs(struct inode *inode, struct file *filp, const char *buf,
-				unsigned long count);
+static ssize_t affs_file_read_ofs(struct file *filp, char *buf,
+				  size_t count, loff_t *ppos);
+static ssize_t affs_file_write(struct file *filp, const char *buf,
+			       size_t count, loff_t *ppos);
+static ssize_t affs_file_write_ofs(struct file *filp, const char *buf,
+				   size_t count, loff_t *ppos);
 static int affs_release_file(struct inode *inode, struct file *filp);
 static int alloc_ext_cache(struct inode *inode);
 
@@ -496,16 +496,17 @@ affs_getblock(struct inode *inode, s32 block)
 	return affs_bread(inode->i_dev,key,AFFS_I2BSIZE(inode));
 }
 
-static long
-affs_file_read_ofs(struct inode *inode, struct file *filp, char *buf, unsigned long count)
+static ssize_t
+affs_file_read_ofs(struct file *filp, char *buf, size_t count, loff_t *ppos)
 {
+	struct inode *inode = filp->f_dentry->d_inode;
 	char *start;
-	int left, offset, size, sector;
-	int blocksize;
+	ssize_t left, offset, size, sector;
+	ssize_t blocksize;
 	struct buffer_head *bh;
 	void *data;
 
-	pr_debug("AFFS: file_read_ofs(ino=%lu,pos=%lu,%d)\n",inode->i_ino,(long)filp->f_pos,count);
+	pr_debug("AFFS: file_read_ofs(ino=%lu,pos=%lu,%d)\n",inode->i_ino,(long)*ppos,count);
 
 	if (!inode) {
 		affs_error(inode->i_sb,"file_read_ofs","Inode = NULL");
@@ -516,24 +517,24 @@ affs_file_read_ofs(struct inode *inode, struct file *filp, char *buf, unsigned l
 		pr_debug("affs_file_read: mode = %07o",inode->i_mode);
 		return -EINVAL;
 	}
-	if (filp->f_pos >= inode->i_size || count <= 0)
+	if (*ppos >= inode->i_size || count <= 0)
 		return 0;
 
 	start = buf;
 	for (;;) {
-		left = MIN (inode->i_size - filp->f_pos,count - (buf - start));
+		left = MIN (inode->i_size - *ppos,count - (buf - start));
 		if (!left)
 			break;
-		sector = affs_bmap(inode,(u32)filp->f_pos / blocksize);
+		sector = affs_bmap(inode,(u32)*ppos / blocksize);
 		if (!sector)
 			break;
-		offset = (u32)filp->f_pos % blocksize;
+		offset = (u32)*ppos % blocksize;
 		bh = affs_bread(inode->i_dev,sector,AFFS_I2BSIZE(inode));
 		if (!bh)
 			break;
 		data = bh->b_data + 24;
 		size = MIN(blocksize - offset,left);
-		filp->f_pos += size;
+		*ppos += size;
 		copy_to_user(buf,data + offset,size);
 		buf += size;
 		affs_brelse(bh);
@@ -543,13 +544,14 @@ affs_file_read_ofs(struct inode *inode, struct file *filp, char *buf, unsigned l
 	return buf - start;
 }
 
-static long
-affs_file_write(struct inode *inode, struct file *filp, const char *buf, unsigned long count)
+static ssize_t
+affs_file_write(struct file *filp, const char *buf, size_t count, loff_t *ppos)
 {
+	struct inode		*inode = filp->f_dentry->d_inode;
 	off_t			 pos;
-	int			 written;
-	int			 c;
-	int			 blocksize;
+	ssize_t			 written;
+	ssize_t			 c;
+	ssize_t			 blocksize;
 	struct buffer_head	*bh;
 	struct inode		*ino;
 	char			*p;
@@ -558,7 +560,7 @@ affs_file_write(struct inode *inode, struct file *filp, const char *buf, unsigne
 	if (!count)
 		return 0;
 	pr_debug("AFFS: file_write(ino=%lu,pos=%lu,count=%d)\n",inode->i_ino,
-		(unsigned long)filp->f_pos,count);
+		(unsigned long)*ppos,count);
 
 	ino = NULL;
 	if (!inode) {
@@ -591,7 +593,7 @@ affs_file_write(struct inode *inode, struct file *filp, const char *buf, unsigne
 	if (filp->f_flags & O_APPEND) {
 		pos = inode->i_size;
 	} else
-		pos = filp->f_pos;
+		pos = *ppos;
 	written   = 0;
 	blocksize = AFFS_I2BSIZE(inode);
 
@@ -628,25 +630,26 @@ affs_file_write(struct inode *inode, struct file *filp, const char *buf, unsigne
 	if (pos > inode->i_size)
 		inode->i_size = pos;
 	inode->i_mtime = inode->i_ctime = CURRENT_TIME;
-	filp->f_pos    = pos;
+	*ppos = pos;
 	mark_inode_dirty(inode);
 	iput(ino);
 	return written;
 }
 
-static long
-affs_file_write_ofs(struct inode *inode, struct file *filp, const char *buf, unsigned long count)
+static ssize_t
+affs_file_write_ofs(struct file *filp, const char *buf, size_t count, loff_t *ppos)
 {
+	struct inode		*inode = filp->f_dentry->d_inode; 
 	off_t			 pos;
-	int			 written;
-	int			 c;
-	int			 blocksize;
+	ssize_t			 written;
+	ssize_t			 c;
+	ssize_t			 blocksize;
 	struct buffer_head	*bh;
 	struct inode		*ino;
 	char			*p;
 
 	pr_debug("AFFS: file_write_ofs(ino=%lu,pos=%lu,count=%d)\n",inode->i_ino,
-		(unsigned long)filp->f_pos,count);
+		(unsigned long)*ppos,count);
 
 	if (!count)
 		return 0;
@@ -675,7 +678,7 @@ affs_file_write_ofs(struct inode *inode, struct file *filp, const char *buf, uns
 	if (filp->f_flags & O_APPEND)
 		pos = inode->i_size;
 	else
-		pos = filp->f_pos;
+		pos = *ppos;
 
 	bh        = NULL;
 	blocksize = AFFS_I2BSIZE(inode) - 24;
@@ -715,7 +718,7 @@ affs_file_write_ofs(struct inode *inode, struct file *filp, const char *buf, uns
 	}
 	if (pos > inode->i_size)
 		inode->i_size = pos;
-	filp->f_pos = pos;
+	*ppos = pos;
 	inode->i_mtime = inode->i_ctime = CURRENT_TIME;
 	mark_inode_dirty(inode);
 	iput(ino);

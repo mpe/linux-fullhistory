@@ -10,7 +10,7 @@
 #define rti	.long PAL_rti
 #define SIGCHLD	20
 
-#define NR_SYSCALLS 350
+#define NR_SYSCALLS 352
 #define osf_vfork sys_fork
 
 /*
@@ -771,5 +771,5 @@ sys_call_table:
 	.quad sys_sched_get_priority_max, sys_sched_get_priority_min, sys_sched_rr_get_interval, do_entSys /* sys_afs_syscall */, sys_newuname
 	.quad sys_nanosleep, sys_mremap, sys_nfsservctl, sys_setresuid, sys_getresuid
 	.quad sys_pciconfig_read, sys_pciconfig_write, sys_query_module
-	.quad sys_prctl
+	.quad sys_prctl, sys_pread, sys_pwrite
 	.quad do_entSys, do_entSys

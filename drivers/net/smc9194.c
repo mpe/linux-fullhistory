@@ -1102,13 +1102,12 @@ __initfunc(static int  smc_initcard(struct device *dev, int ioaddr))
 	ether_setup(dev);
 
 	/* Grab the IRQ */
-      	irqval = request_irq(dev->irq, &smc_interrupt, 0, CARDNAME, NULL);
+      	irqval = request_irq(dev->irq, &smc_interrupt, 0, CARDNAME, dev);
       	if (irqval) {
        	  printk(CARDNAME": unable to get IRQ %d (irqval=%d).\n",
 		dev->irq, irqval);
        	  return -EAGAIN;
       	}
-	irq2dev_map[dev->irq] = dev;
 
 	/* Grab the region so that no one else tries to probe our ioports. */
 	request_region(ioaddr, SMC_IO_EXTENT, CARDNAME);
@@ -1274,7 +1273,7 @@ static void smc_interrupt(int irq, void * dev_id,  struct pt_regs * regs)
 static void smc_interrupt(int irq, struct pt_regs * regs)
 #endif
 {
-	struct device *dev 	= (struct device *)(irq2dev_map[irq]);
+	struct device *dev 	= dev_id;
 	int ioaddr 		= dev->base_addr;
 	struct smc_local *lp 	= (struct smc_local *)dev->priv;
 
@@ -1765,7 +1764,6 @@ void cleanup_module(void)
 	unregister_netdev(&devSMC9194);
 
 	free_irq(devSMC9194.irq, NULL );
-	irq2dev_map[devSMC9194.irq] = NULL;
 	release_region(devSMC9194.base_addr, SMC_IO_EXTENT);
 
 	if (devSMC9194.priv)

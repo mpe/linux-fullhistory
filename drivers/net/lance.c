@@ -643,14 +643,12 @@ lance_open(struct device *dev)
 	int i;
 
 	if (dev->irq == 0 ||
-		request_irq(dev->irq, &lance_interrupt, 0, lp->name, NULL)) {
+		request_irq(dev->irq, &lance_interrupt, 0, lp->name, dev)) {
 		return -EAGAIN;
 	}
 
 	/* We used to allocate DMA here, but that was silly.
 	   DMA lines can't be shared!  We now permanently allocate them. */
-
-	irq2dev_map[dev->irq] = dev;
 
 	/* Reset the LANCE */
 	inw(ioaddr+LANCE_RESET);
@@ -902,7 +900,7 @@ static int lance_start_xmit(struct sk_buff *skb, struct device *dev)
 static void
 lance_interrupt(int irq, void *dev_id, struct pt_regs * regs)
 {
-	struct device *dev = (struct device *)(irq2dev_map[irq]);
+	struct device *dev = dev_id;
 	struct lance_private *lp;
 	int csr0, ioaddr, boguscnt=10;
 	int must_restart;
@@ -1132,8 +1130,6 @@ lance_close(struct device *dev)
 		disable_dma(dev->dma);
 
 	free_irq(dev->irq, NULL);
-
-	irq2dev_map[dev->irq] = 0;
 
 	return 0;
 }

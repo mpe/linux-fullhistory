@@ -23,7 +23,7 @@
 /* #define SMBFS_DEBUG_VERBOSE 1 */
 /* #define pr_debug printk */
 
-static long smb_dir_read(struct inode *, struct file *, char *, unsigned long);
+static ssize_t smb_dir_read(struct file *, char *, size_t, loff_t *);
 static int smb_readdir(struct file *, void *, filldir_t);
 static int smb_dir_open(struct inode *, struct file *);
 
@@ -71,9 +71,8 @@ struct inode_operations smb_dir_inode_operations =
 	NULL			/* smap */
 };
 
-static long
-smb_dir_read(struct inode *inode, struct file *filp, char *buf,
-	     unsigned long count)
+static ssize_t
+smb_dir_read(struct file *filp, char *buf, size_t count, loff_t *ppos)
 {
 	return -EISDIR;
 }

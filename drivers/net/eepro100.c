@@ -447,11 +447,7 @@ static void speedo_timer(unsigned long data);
 static void speedo_init_rx_ring(struct device *dev);
 static int speedo_start_xmit(struct sk_buff *skb, struct device *dev);
 static int speedo_rx(struct device *dev);
-#ifdef SA_SHIRQ
 static void speedo_interrupt(int irq, void *dev_instance, struct pt_regs *regs);
-#else
-static void speedo_interrupt(int irq, struct pt_regs *regs);
-#endif
 static int speedo_close(struct device *dev);
 static struct enet_statistics *speedo_get_stats(struct device *dev);
 static void set_rx_mode(struct device *dev);
@@ -823,26 +819,10 @@ speedo_open(struct device *dev)
 		SLOW_DOWN_IO;			/* At least 250ns */
 #endif
 
-#ifdef SA_SHIRQ
 	if (request_irq(dev->irq, &speedo_interrupt, SA_SHIRQ,
 					"Intel EtherExpress Pro 10/100 Ethernet", dev)) {
 		return -EAGAIN;
 	}
-#else
-#ifdef USE_SHARED_IRQ
-	if (request_shared_irq(dev->irq, &speedo_interrupt, dev,
-						   "Intel EtherExpress Pro 10/100 Ethernet"))
-		return -EAGAIN;
-#else
-	if (dev->irq < 2  ||  dev->irq > 15  ||  irq2dev_map[dev->irq] != NULL)
-		return -EAGAIN;
-	irq2dev_map[dev->irq] = dev;
-	if (request_irq(dev->irq, &speedo_interrupt, 0, "Intel EtherExpress Pro 10/100 Ethernet")) {
-		irq2dev_map[dev->irq] = NULL;
-		return -EAGAIN;
-	}
-#endif
-#endif
 
 	if (speedo_debug > 1)
 		printk(KERN_DEBUG "%s: speedo_open() irq %d.\n", dev->name, dev->irq);
@@ -1116,21 +1096,9 @@ speedo_start_xmit(struct sk_buff *skb, struct device *dev)
 
 /* The interrupt handler does all of the Rx thread work and cleans up
    after the Tx thread. */
-#ifdef SA_SHIRQ
 static void speedo_interrupt(int irq, void *dev_instance, struct pt_regs *regs)
-#else
-static void speedo_interrupt(int irq, struct pt_regs *regs)
-#endif
 {
-#ifdef SA_SHIRQ
 	struct device *dev = (struct device *)dev_instance;
-#else
-#ifdef USE_SHARED_IRQ
-	struct device *dev = (struct device *)(irq == 0 ? regs : irq2dev_map[irq]);
-#else
-	struct device *dev = (struct device *)(irq2dev_map[irq]);
-#endif
-#endif
 	struct speedo_private *sp;
 	int ioaddr, boguscnt = INTR_WORK;
 	unsigned short status;
@@ -1254,11 +1222,7 @@ static void speedo_interrupt(int irq, struct pt_regs *regs)
 		if (dev->start == 0  &&  --stopit < 0) {
 			printk(KERN_ALERT "%s: Emergency stop, interrupt is stuck.\n",
 				   dev->name);
-#ifdef SA_SHIRQ
 			free_irq(irq, dev);
-#else
-			free_irq(irq);
-#endif
 		}
 	}
 #endif
@@ -1438,12 +1402,7 @@ speedo_close(struct device *dev)
 	outw(INT_MASK, ioaddr + SCBCmd);
 	outw(INT_MASK | RX_ABORT, ioaddr + SCBCmd);
 
-#ifdef SA_SHIRQ
 	free_irq(dev->irq, dev);
-#else
-	free_irq(dev->irq);
-	irq2dev_map[dev->irq] = 0;
-#endif
 
 	/* Free all the skbuffs in the Rx and Tx queues. */
 	for (i = 0; i < RX_RING_SIZE; i++) {

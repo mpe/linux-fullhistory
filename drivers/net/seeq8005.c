@@ -305,7 +305,7 @@ __initfunc(static int seeq8005_probe1(struct device *dev, int ioaddr))
 
 #if 0
 	{
-		 int irqval = request_irq(dev->irq, &seeq8005_interrupt, 0, "seeq8005", NULL);
+		 int irqval = request_irq(dev->irq, &seeq8005_interrupt, 0, "seeq8005", dev);
 		 if (irqval) {
 			 printk ("%s: unable to get IRQ %d (irqval=%d).\n", dev->name,
 					 dev->irq, irqval);
@@ -351,14 +351,13 @@ seeq8005_open(struct device *dev)
 	struct net_local *lp = (struct net_local *)dev->priv;
 
 	{
-		 int irqval = request_irq(dev->irq, &seeq8005_interrupt, 0, "seeq8005", NULL);
+		 int irqval = request_irq(dev->irq, &seeq8005_interrupt, 0, "seeq8005", dev);
 		 if (irqval) {
 			 printk ("%s: unable to get IRQ %d (irqval=%d).\n", dev->name,
 					 dev->irq, irqval);
 			 return EAGAIN;
 		 }
 	}
-	irq2dev_map[dev->irq] = dev;
 
 	/* Reset the hardware here.  Don't forget to set the station address. */
 	seeq8005_init(dev, 1);
@@ -413,7 +412,7 @@ seeq8005_send_packet(struct sk_buff *skb, struct device *dev)
 static void
 seeq8005_interrupt(int irq, void *dev_id, struct pt_regs * regs)
 {
-	struct device *dev = (struct device *)(irq2dev_map[irq]);
+	struct device *dev = dev_id;
 	struct net_local *lp;
 	int ioaddr, status, boguscount = 0;
 
@@ -575,8 +574,6 @@ seeq8005_close(struct device *dev)
 	outw( SEEQCMD_SET_ALL_OFF, SEEQ_CMD);
 
 	free_irq(dev->irq, NULL);
-
-	irq2dev_map[dev->irq] = 0;
 
 	/* Update the statistics here. */
 

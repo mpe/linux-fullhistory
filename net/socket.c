@@ -97,10 +97,10 @@
 
 
 static long long sock_lseek(struct file *file, long long offset, int whence);
-static long sock_read(struct inode *inode, struct file *file,
-		      char *buf, unsigned long size);
-static long sock_write(struct inode *inode, struct file *file,
-		       const char *buf, unsigned long size);
+static ssize_t sock_read(struct file *file, char *buf,
+			 size_t size, loff_t *ppos);
+static ssize_t sock_write(struct file *file, const char *buf,
+			  size_t size, loff_t *ppos);
 
 static int sock_close(struct inode *inode, struct file *file);
 static unsigned int sock_poll(struct file *file, poll_table *wait);
@@ -362,17 +362,19 @@ static long long sock_lseek(struct file *file,long long offset, int whence)
  *	area ubuf...ubuf+size-1 is writable before asking the protocol.
  */
 
-static long sock_read(struct inode *inode, struct file *file,
-		      char *ubuf, unsigned long size)
+static ssize_t sock_read(struct file *file, char *ubuf,
+			 size_t size, loff_t *ppos)
 {
 	struct socket *sock;
 	struct iovec iov;
 	struct msghdr msg;
 
-	sock = socki_lookup(inode); 
-  
+	if (ppos != &file->f_pos)
+		return -ESPIPE;
 	if (size==0)		/* Match SYS5 behaviour */
 		return 0;
+
+	sock = socki_lookup(file->f_dentry->d_inode); 
 
 	msg.msg_name=NULL;
 	msg.msg_namelen=0;
@@ -389,21 +391,23 @@ static long sock_read(struct inode *inode, struct file *file,
 
 
 /*
- *	Write data to a socket. We verify that the user area ubuf..ubuf+size-1 is
- *	readable by the user process.
+ *	Write data to a socket. We verify that the user area ubuf..ubuf+size-1
+ *	is readable by the user process.
  */
 
-static long sock_write(struct inode *inode, struct file *file,
-		       const char *ubuf, unsigned long size)
+static ssize_t sock_write(struct file *file, const char *ubuf,
+			  size_t size, loff_t *ppos)
 {
 	struct socket *sock;
 	struct msghdr msg;
 	struct iovec iov;
 	
-	sock = socki_lookup(inode); 
-
+	if (ppos != &file->f_pos)
+		return -ESPIPE;
 	if(size==0)		/* Match SYS5 behaviour */
 		return 0;
+
+	sock = socki_lookup(file->f_dentry->d_inode); 
 
 	msg.msg_name=NULL;
 	msg.msg_namelen=0;

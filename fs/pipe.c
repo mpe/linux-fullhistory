@@ -33,11 +33,15 @@
 /* in case of paging and multiple read/write on the same pipe. (FGC)         */
 
 
-static long pipe_read(struct inode * inode, struct file * filp,
-	char * buf, unsigned long count)
+static ssize_t pipe_read(struct file * filp, char * buf,
+			 size_t count, loff_t *ppos)
 {
-	int chars = 0, size = 0, read = 0;
+	struct inode * inode = filp->f_dentry->d_inode;
+	ssize_t chars = 0, size = 0, read = 0;
         char *pipebuf;
+
+	if (ppos != &filp->f_pos)
+		return -ESPIPE;
 
 	if (filp->f_flags & O_NONBLOCK) {
 		if (PIPE_LOCK(*inode))
@@ -83,17 +87,21 @@ static long pipe_read(struct inode * inode, struct file * filp,
 	return 0;
 }
 	
-static long pipe_write(struct inode * inode, struct file * filp,
-	const char * buf, unsigned long count)
+static ssize_t pipe_write(struct file * filp, const char * buf,
+			  size_t count, loff_t *ppos)
 {
-	int chars = 0, free = 0, written = 0;
+	struct inode * inode = filp->f_dentry->d_inode;
+	ssize_t chars = 0, free = 0, written = 0;
 	char *pipebuf;
+
+	if (ppos != &filp->f_pos)
+		return -ESPIPE;
 
 	if (!PIPE_READERS(*inode)) { /* no readers */
 		send_sig(SIGPIPE,current,0);
 		return -EPIPE;
 	}
-/* if count <= PIPE_BUF, we have to make it atomic */
+	/* if count <= PIPE_BUF, we have to make it atomic */
 	if (count <= PIPE_BUF)
 		free = count;
 	else
@@ -138,20 +146,20 @@ static long long pipe_lseek(struct file * file, long long offset, int orig)
 	return -ESPIPE;
 }
 
-static long bad_pipe_r(struct inode * inode, struct file * filp,
-	char * buf, unsigned long count)
+static ssize_t bad_pipe_r(struct file * filp, char * buf,
+			  size_t count, loff_t *ppos)
 {
 	return -EBADF;
 }
 
-static long bad_pipe_w(struct inode * inode, struct file * filp,
-	const char * buf, unsigned long count)
+static ssize_t bad_pipe_w(struct file * filp, const char * buf,
+			  size_t count, loff_t *ppos)
 {
 	return -EBADF;
 }
 
 static int pipe_ioctl(struct inode *pino, struct file * filp,
-	unsigned int cmd, unsigned long arg)
+		      unsigned int cmd, unsigned long arg)
 {
 	switch (cmd) {
 		case FIONREAD:
@@ -206,13 +214,14 @@ static unsigned int fifo_poll(struct file * filp, poll_table * wait)
  * the open() code hasn't guaranteed a connection (O_NONBLOCK),
  * and we need to act differently until we do get a writer..
  */
-static long connect_read(struct inode * inode, struct file * filp,
-	char * buf, unsigned long count)
+static ssize_t connect_read(struct file * filp, char * buf,
+			    size_t count, loff_t *ppos)
 {
+	struct inode * inode = filp->f_dentry->d_inode;
 	if (PIPE_EMPTY(*inode) && !PIPE_WRITERS(*inode))
 		return 0;
 	filp->f_op = &read_fifo_fops;
-	return pipe_read(inode,filp,buf,count);
+	return pipe_read(filp,buf,count,ppos);
 }
 
 static unsigned int connect_poll(struct file * filp, poll_table * wait)

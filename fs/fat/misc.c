@@ -14,7 +14,11 @@
 
 #include "msbuffer.h"
 
-#define PRINTK(x)
+#if 0
+#  define PRINTK(x)	printk x
+#else
+#  define PRINTK(x)
+#endif
 #define Printk(x)	printk x
 
 /* Well-known binary file extensions - of course there are many more */
@@ -106,6 +110,34 @@ void unlock_fat(struct super_block *sb)
 	wake_up(&MSDOS_SB(sb)->fat_wait);
 }
 
+/* Flushes the number of free clusters on FAT32 */
+/* XXX: Need to write one per FSINFO block.  Currently only writes 1 */
+void fat_clusters_flush(struct super_block *sb)
+{
+	int offset;
+	struct buffer_head *bh;
+	struct fat_boot_fsinfo *fsinfo;
+
+	/* The fat32 boot fs info is at offset 0x3e0 by observation */
+	offset = MSDOS_SB(sb)->fsinfo_offset;
+	bh = fat_bread(sb, (offset >> SECTOR_BITS));
+	if (bh == NULL) {
+		printk("FAT bread failed in fat_clusters_flush\n");
+		return;
+	}
+	fsinfo = (struct fat_boot_fsinfo *)
+		&bh->b_data[offset & (SECTOR_SIZE-1)];
+
+	/* Sanity check */
+	if (CF_LE_L(fsinfo->signature) != 0x61417272) {
+		printk("fat_clusters_flush: Did not find valid FSINFO signature. Found 0x%x.  offset=0x%x\n", CF_LE_L(fsinfo->signature), offset);
+		fat_brelse(sb, bh);
+		return;
+	}
+	fsinfo->free_clusters = CF_LE_L(MSDOS_SB(sb)->free_clusters);
+	fat_mark_buffer_dirty(sb, bh, 1);
+	fat_brelse(sb, bh);
+}
 
 /*
  * fat_add_cluster tries to allocate a new cluster and adds it to the file
@@ -119,7 +151,9 @@ int fat_add_cluster(struct inode *inode)
 	struct buffer_head *bh;
 	int cluster_size = MSDOS_SB(sb)->cluster_size;
 
-	if (inode->i_ino == MSDOS_ROOT_INO) return -ENOSPC;
+	if (MSDOS_SB(sb)->fat_bits != 32) {
+		if (inode->i_ino == MSDOS_ROOT_INO) return -ENOSPC;
+	}
 	if (!MSDOS_SB(sb)->free_clusters) return -ENOSPC;
 	lock_fat(sb);
 	limit = MSDOS_SB(sb)->clusters;
@@ -141,6 +175,8 @@ printk("free cluster: %d\n",nr);
 	fat_access(sb,nr,EOF_FAT(sb));
 	if (MSDOS_SB(sb)->free_clusters != -1)
 		MSDOS_SB(sb)->free_clusters--;
+	if (MSDOS_SB(sb)->fat_bits == 32)
+		fat_clusters_flush(sb);
 	unlock_fat(sb);
 #ifdef DEBUG
 printk("set to %x\n",fat_access(sb,nr,-1));
@@ -177,6 +213,7 @@ printk("last = %d\n",last);
 	if (last) fat_access(sb,last,nr);
 	else {
 		MSDOS_I(inode)->i_start = nr;
+		MSDOS_I(inode)->i_logstart = nr;
 		mark_inode_dirty(inode);
 	}
 #ifdef DEBUG
@@ -260,6 +297,8 @@ void fat_date_unix2dos(int unix_date,unsigned short *time,
 		unix_date += 3600;
 	}
 	unix_date -= sys_tz.tz_minuteswest*60;
+	if (sys_tz.tz_dsttime) unix_date += 3600;
+
 	*time = (unix_date % 60)/2+(((unix_date/60) % 60) << 5)+
 	    (((unix_date/3600) % 24) << 11);
 	day = unix_date/86400-3652;
@@ -302,7 +341,7 @@ int fat_get_entry(struct inode *dir, loff_t *pos,struct buffer_head **bh,
 			fat_brelse(sb, *bh);
 		PRINTK (("get_entry sector apres brelse\n"));
 		if (!(*bh = fat_bread(sb, sector))) {
-			printk("Directory sread (sector %d) failed\n",sector);
+			printk("Directory sread (sector 0x%x) failed\n",sector);
 			continue;
 		}
 		PRINTK (("get_entry apres sread\n"));
@@ -344,7 +383,13 @@ int fat_get_entry(struct inode *dir, loff_t *pos,struct buffer_head **bh,
      !(data[entry].attr & ATTR_VOLUME);
 
 #define RSS_START /* search for start cluster */ \
-    done = !IS_FREE(data[entry].name) && CF_LE_W(data[entry].start) == *number;
+    done = !IS_FREE(data[entry].name) \
+      && ( \
+           ( \
+             (MSDOS_SB(sb)->fat_bits != 32) ? 0 : (CF_LE_W(data[entry].starthi) << 16) \
+           ) \
+           | CF_LE_W(data[entry].start) \
+         ) == *number;
 
 #define RSS_FREE /* search for free entry */ \
     { \
@@ -397,6 +442,9 @@ static int raw_scan_sector(struct super_block *sb,int sector,const char *name,
 		if (done) {
 			if (ino) *ino = sector*MSDOS_DPS+entry;
 			start = CF_LE_W(data[entry].start);
+			if (MSDOS_SB(sb)->fat_bits == 32) {
+				start |= (CF_LE_W(data[entry].starthi) << 16);
+			}
 			if (!res_bh)
 				fat_brelse(sb, bh);
 			else {
@@ -492,6 +540,7 @@ int fat_parent_ino(struct inode *dir,int locked)
 	static int zero = 0;
 	int error,curr,prev,nr;
 
+	PRINTK(("fat_parent_ino: Debug 0\n"));
 	if (!S_ISDIR(dir->i_mode)) panic("Non-directory fed to m_p_i");
 	if (dir->i_ino == MSDOS_ROOT_INO) return dir->i_ino;
 	if (!locked) fat_lock_creation(); /* prevent renames */
@@ -500,18 +549,27 @@ int fat_parent_ino(struct inode *dir,int locked)
 		if (!locked) fat_unlock_creation();
 		return curr;
 	}
+	PRINTK(("fat_parent_ino: Debug 1 curr=%d\n", curr));
 	if (!curr) nr = MSDOS_ROOT_INO;
 	else {
+		PRINTK(("fat_parent_ino: Debug 2\n"));
 		if ((prev = raw_scan(dir->i_sb,curr,MSDOS_DOTDOT,&zero,NULL,
 		    NULL,NULL,SCAN_ANY)) < 0) {
+			PRINTK(("fat_parent_ino: Debug 3 prev=%d\n", prev));
 			if (!locked) fat_unlock_creation();
 			return prev;
 		}
+		PRINTK(("fat_parent_ino: Debug 4 prev=%d\n", prev));
+		if (prev == 0 && MSDOS_SB(dir->i_sb)->fat_bits == 32) {
+			prev = MSDOS_SB(dir->i_sb)->root_cluster;
+		}
 		if ((error = raw_scan(dir->i_sb,prev,NULL,&curr,&nr,NULL,
 		    NULL,SCAN_ANY)) < 0) {
+			PRINTK(("fat_parent_ino: Debug 5 error=%d\n", error));
 			if (!locked) fat_unlock_creation();
 			return error;
 		}
+		PRINTK(("fat_parent_ino: Debug 6 nr=%d\n", nr));
 	}
 	if (!locked) fat_unlock_creation();
 	return nr;
@@ -528,10 +586,12 @@ int fat_subdirs(struct inode *dir)
 	int count;
 
 	count = 0;
-	if (dir->i_ino == MSDOS_ROOT_INO)
+	if ((dir->i_ino == MSDOS_ROOT_INO) &&
+	    (MSDOS_SB(dir->i_sb)->fat_bits != 32)) {
 		(void) raw_scan_root(dir->i_sb,NULL,&count,NULL,NULL,NULL,SCAN_ANY);
-	else {
-		if (!MSDOS_I(dir)->i_start) return 0; /* in mkdir */
+	} else {
+		if ((dir->i_ino != MSDOS_ROOT_INO) &&
+		    !MSDOS_I(dir)->i_start) return 0; /* in mkdir */
 		else (void) raw_scan_nonroot(dir->i_sb,MSDOS_I(dir)->i_start,
 		    NULL,&count,NULL,NULL,NULL,SCAN_ANY);
 	}
@@ -549,10 +609,7 @@ int fat_scan(struct inode *dir,const char *name,struct buffer_head **res_bh,
 {
 	int res;
 
-	res = (name)
-		? raw_scan(dir->i_sb,MSDOS_I(dir)->i_start,
-		    name, NULL, ino, res_bh, res_de, scantype)
-		: raw_scan(dir->i_sb,MSDOS_I(dir)->i_start,
-		    NULL, NULL, ino, res_bh, res_de, scantype);
+	res = raw_scan(dir->i_sb,MSDOS_I(dir)->i_start,
+		       name, NULL, ino, res_bh, res_de, scantype);
 	return res<0 ? res : 0;
 }

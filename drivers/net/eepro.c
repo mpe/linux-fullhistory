@@ -420,7 +420,7 @@ __initfunc(int eepro_probe1(struct device *dev, short ioaddr))
 			if (dev->irq > 2) {
 				printk(", IRQ %d, %s.\n", dev->irq,
 						ifmap[dev->if_port]);
-				if (request_irq(dev->irq, &eepro_interrupt, 0, "eepro", NULL)) {
+				if (request_irq(dev->irq, &eepro_interrupt, 0, "eepro", dev)) {
 					printk("%s: unable to get IRQ %d.\n", dev->name, dev->irq);
 					return -EAGAIN;
 				}
@@ -513,7 +513,7 @@ static int	eepro_grab_irq(struct device *dev)
 			outb(DIAGNOSE_CMD, ioaddr); /* RESET the 82595 */
 
 			if (*irqp == autoirq_report(2) &&  /* It's a good IRQ line */
-				(request_irq(dev->irq = *irqp, &eepro_interrupt, 0, "eepro", NULL) == 0))
+				(request_irq(dev->irq = *irqp, &eepro_interrupt, 0, "eepro", dev) == 0))
 					break;
 
 			/* clear all interrupts */
@@ -559,10 +559,6 @@ eepro_open(struct device *dev)
 		printk("%s: unable to get IRQ %d.\n", dev->name, dev->irq);
 		return -EAGAIN;
 	}
-
-	if (irq2dev_map[dev->irq] != 0
-		|| (irq2dev_map[dev->irq] = dev) == 0)
-		return -EAGAIN;
 
 	/* Initialize the 82595. */
 
@@ -741,7 +737,7 @@ eepro_send_packet(struct sk_buff *skb, struct device *dev)
 static void
 eepro_interrupt(int irq, void *dev_id, struct pt_regs * regs)
 {
-	struct device *dev = (struct device *)(irq2dev_map[irq]);
+	struct device *dev = dev_id;
 	int ioaddr, status, boguscount = 20;
 
 	if (net_debug > 5)
@@ -824,8 +820,6 @@ eepro_close(struct device *dev)
 
 	/* release the interrupt */
 	free_irq(dev->irq, NULL);
-
-	irq2dev_map[dev->irq] = 0;
 
 	/* Update the statistics here. What statistics? */
 

@@ -69,10 +69,8 @@ static ctl_table dev_table[];
 
 #ifdef CONFIG_PROC_FS
 
-static long proc_readsys(struct inode * inode, struct file * file,
-			char * buf, unsigned long count);
-static long proc_writesys(struct inode * inode, struct file * file,
-			 const char * buf, unsigned long count);
+static ssize_t proc_readsys(struct file *, char *, size_t, loff_t *);
+static ssize_t proc_writesys(struct file *, const char *, size_t, loff_t *);
 static int proc_sys_permission(struct inode *, int);
 
 struct file_operations proc_sys_file_operations =
@@ -113,6 +111,7 @@ struct inode_operations proc_sys_inode_operations =
 extern struct proc_dir_entry proc_sys_root;
 
 extern int inodes_stat[];
+extern int dentry_stat[];
 static void register_proc_table(ctl_table *, struct proc_dir_entry *);
 static void unregister_proc_table(ctl_table *, struct proc_dir_entry *);
 #endif
@@ -151,6 +150,8 @@ static ctl_table kern_table[] = {
 	 0444, NULL, &proc_dointvec},
 	{KERN_MAXFILE, "file-max", &max_files, sizeof(int),
 	 0644, NULL, &proc_dointvec},
+	{KERN_DENTRY, "dentry-state", &dentry_stat, 6*sizeof(int),
+	 0444, NULL, &proc_dointvec},
 	{KERN_SECURELVL, "securelevel", &securelevel, sizeof(int),
 	 0444, NULL, &proc_dointvec, (ctl_handler *)&do_securelevel_strategy},
 	{KERN_PANIC, "panic", &panic_timeout, sizeof(int),
@@ -522,17 +523,16 @@ static void unregister_proc_table(ctl_table * table, struct proc_dir_entry *root
 	}
 }
 
-
-static long do_rw_proc(int write, struct inode * inode, struct file * file,
-		      char * buf, unsigned long count)
+static ssize_t do_rw_proc(int write, struct file * file, char * buf,
+			  size_t count, loff_t *ppos)
 {
 	int op;
 	struct proc_dir_entry *de;
 	struct ctl_table *table;
 	size_t res;
-	long error;
+	ssize_t error;
 	
-	de = (struct proc_dir_entry*) inode->u.generic_ip;
+	de = (struct proc_dir_entry*) file->f_dentry->d_inode->u.generic_ip;
 	if (!de || !de->data)
 		return -ENOTDIR;
 	table = (struct ctl_table *) de->data;
@@ -543,22 +543,27 @@ static long do_rw_proc(int write, struct inode * inode, struct file * file,
 		return -EPERM;
 	
 	res = count;
+
+	/*
+	 * FIXME: we need to pass on ppos to the handler.
+	 */
+
 	error = (*table->proc_handler) (table, write, file, buf, &res);
 	if (error)
 		return error;
 	return res;
 }
 
-static long proc_readsys(struct inode * inode, struct file * file,
-			char * buf, unsigned long count)
+static ssize_t proc_readsys(struct file * file, char * buf,
+			    size_t count, loff_t *ppos)
 {
-	return do_rw_proc(0, inode, file, buf, count);
+	return do_rw_proc(0, file, buf, count, ppos);
 }
 
-static long proc_writesys(struct inode * inode, struct file * file,
-			 const char * buf, unsigned long count)
+static ssize_t proc_writesys(struct file * file, const char * buf,
+			     size_t count, loff_t *ppos)
 {
-	return do_rw_proc(1, inode, file, (char *) buf, count);
+	return do_rw_proc(1, file, (char *) buf, count, ppos);
 }
 
 static int proc_sys_permission(struct inode *inode, int op)

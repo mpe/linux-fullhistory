@@ -180,7 +180,7 @@ __initfunc(int fmv18x_probe1(struct device *dev, short ioaddr))
 	irq = irqmap[(inb(ioaddr + FJ_CONFIG0)>>6) & 0x03];
 
 	/* Snarf the interrupt vector now. */
-	if (request_irq(irq, &net_interrupt, 0, "fmv18x", NULL)) {
+	if (request_irq(irq, &net_interrupt, 0, "fmv18x", dev)) {
 		printk ("FMV-18x found at %#3x, but it's unusable due to a conflict on"
 				"IRQ %d.\n", ioaddr, irq);
 		return EAGAIN;
@@ -199,7 +199,6 @@ __initfunc(int fmv18x_probe1(struct device *dev, short ioaddr))
 
 	dev->base_addr = ioaddr;
 	dev->irq = irq;
-	irq2dev_map[irq] = dev;
 
 	for(i = 0; i < 6; i++) {
 		unsigned char val = inb(ioaddr + FJ_MACADDR + i);
@@ -399,7 +398,7 @@ net_send_packet(struct sk_buff *skb, struct device *dev)
 static void
 net_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 {
-	struct device *dev = (struct device *)(irq2dev_map[irq]);
+	struct device *dev = dev_id;
 	struct net_local *lp;
 	int ioaddr, status;
 
@@ -643,7 +642,6 @@ cleanup_module(void)
 
 	/* If we don't do this, we can't re-insmod it later. */
 	free_irq(dev_fmv18x.irq, NULL);
-	irq2dev_map[dev_fmv18x.irq] = NULL;
 	release_region(dev_fmv18x.base_addr, FMV18X_IO_EXTENT);
 }
 #endif /* MODULE */

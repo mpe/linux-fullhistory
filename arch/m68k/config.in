@@ -209,6 +209,8 @@ fi
 
 source fs/Config.in
 
+source fs/nls/Config.in
+
 mainmenu_option next_comment
 comment 'Character devices'
 

@@ -919,7 +919,7 @@ int arcnet_go_tx(struct device *dev,int enable_irq)
 void
 arcnet_interrupt(int irq,void *dev_id,struct pt_regs *regs)
 {
-	struct device *dev = (struct device *)(irq2dev_map[irq]);
+	struct device *dev = dev_id;
 	struct arcnet_local *lp;
 
 	if (dev==NULL)

@@ -23,6 +23,7 @@
 #include <linux/errno.h>
 #include <linux/cdrom.h>
 #include <linux/init.h>
+#include <linux/nls.h>
 
 #include <asm/system.h>
 #include <asm/uaccess.h>
@@ -40,6 +41,12 @@ static int check_bread = 0;
 
 void isofs_put_super(struct super_block *sb)
 {
+#ifdef CONFIG_JOLIET
+	if (sb->u.isofs_sb.s_nls_iocharset) {
+		unload_nls(sb->u.isofs_sb.s_nls_iocharset);
+		sb->u.isofs_sb.s_nls_iocharset = NULL;
+	}
+#endif
 	lock_super(sb);
 
 #ifdef LEAK_CHECK
@@ -67,6 +74,7 @@ static struct super_operations isofs_sops = {
 struct iso9660_options{
   char map;
   char rock;
+  char joliet;
   char cruft;
   char unhide;
   unsigned char check;
@@ -75,14 +83,18 @@ struct iso9660_options{
   mode_t mode;
   gid_t gid;
   uid_t uid;
+  char *iocharset;
+  unsigned char utf8;
 };
 
 static int parse_options(char *options, struct iso9660_options * popt)
 {
-	char *this_char,*value;
+	char *this_char,*value,*p;
+	int len;
 
 	popt->map = 'n';
 	popt->rock = 'y';
+	popt->joliet = 'y';
 	popt->cruft = 'n';
 	popt->unhide = 'n';
 	popt->check = 's';		/* default: strict */
@@ -94,10 +106,16 @@ static int parse_options(char *options, struct iso9660_options * popt)
 					   a valid executable. */
 	popt->gid = 0;
 	popt->uid = 0;
+	popt->iocharset = NULL;
+	popt->utf8 = 0;
 	if (!options) return 1;
 	for (this_char = strtok(options,","); this_char; this_char = strtok(NULL,",")) {
 	        if (strncmp(this_char,"norock",6) == 0) {
 		  popt->rock = 'n';
+		  continue;
+		}
+	        if (strncmp(this_char,"nojoliet",8) == 0) {
+		  popt->joliet = 'n';
 		  continue;
 		}
 	        if (strncmp(this_char,"unhide",6) == 0) {
@@ -108,8 +126,28 @@ static int parse_options(char *options, struct iso9660_options * popt)
 		  popt->cruft = 'y';
 		  continue;
 		}
+	        if (strncmp(this_char,"utf8",4) == 0) {
+		  popt->utf8 = 1;
+		  continue;
+		}
 		if ((value = strchr(this_char,'=')) != NULL)
 			*value++ = 0;
+
+#ifdef CONFIG_JOLIET
+		if (!strcmp(this_char,"iocharset")) {
+			p = value;
+			while (*value && *value != ',') value++;
+			len = value - p;
+			if (len) {
+				popt->iocharset = kmalloc(len+1, GFP_KERNEL);
+				memcpy(popt->iocharset, p, len);
+				popt->iocharset[len] = 0;
+			} else {
+				popt->iocharset = NULL;
+				return 0;
+			}
+		} else
+#endif
 		if (!strcmp(this_char,"map") && value) {
 			if (value[0] && !value[1] && strchr("on",*value))
 				popt->map = *value;
@@ -234,10 +272,13 @@ struct super_block *isofs_read_super(struct super_block *s,void *data,
 	struct hs_primary_descriptor  * h_pri = NULL;
 	int				high_sierra;
 	int				iso_blknum;
+	int				joliet_level = 0;
 	struct iso9660_options		opt;
 	int				orig_zonesize;
+	char			      * p;
 	struct iso_primary_descriptor * pri = NULL;
 	struct iso_directory_record   * rootp;
+	struct iso_supplementary_descriptor *sec = NULL;
 	struct iso_volume_descriptor  * vdp;
 	unsigned int			vol_desc_start;
 
@@ -254,6 +295,7 @@ struct super_block *isofs_read_super(struct super_block *s,void *data,
 #if 0
 	printk("map = %c\n", opt.map);
 	printk("rock = %c\n", opt.rock);
+	printk("joliet = %c\n", opt.joliet);
 	printk("check = %c\n", opt.check);
 	printk("cruft = %c\n", opt.cruft);
 	printk("unhide = %c\n", opt.unhide);
@@ -297,57 +339,91 @@ struct super_block *isofs_read_super(struct super_block *s,void *data,
 
 	vol_desc_start = isofs_get_last_session(dev);
 
-	for (iso_blknum = vol_desc_start+16;
-             iso_blknum < vol_desc_start+100; iso_blknum++) {
-                int b = iso_blknum << (ISOFS_BLOCK_BITS-blocksize_bits);
+  	for (iso_blknum = vol_desc_start+16;
+             iso_blknum < vol_desc_start+100; iso_blknum++)
+	{
+	    int b = iso_blknum << (ISOFS_BLOCK_BITS-blocksize_bits);
 
-		if (!(bh = bread(dev,b,opt.blocksize))) {
-			s->s_dev = 0;
-			printk("isofs_read_super: bread failed, dev "
-			       "%s iso_blknum %d block %d\n",
-			       kdevname(dev), iso_blknum, b);
-			unlock_super(s);
-			MOD_DEC_USE_COUNT;
-			return NULL;
-		}
-
-		vdp = (struct iso_volume_descriptor *)bh->b_data;
-		hdp = (struct hs_volume_descriptor *)bh->b_data;
-
-
-		if (strncmp (hdp->id, HS_STANDARD_ID, sizeof hdp->id) == 0) {
-		  if (isonum_711 (hdp->type) != ISO_VD_PRIMARY)
-			goto out;
-		  if (isonum_711 (hdp->type) == ISO_VD_END)
-		        goto out;
-
-		        s->u.isofs_sb.s_high_sierra = 1;
-			high_sierra = 1;
-		        opt.rock = 'n';
-		        h_pri = (struct hs_primary_descriptor *)vdp;
-			break;
-		}
-
-		if (strncmp (vdp->id, ISO_STANDARD_ID, sizeof vdp->id) == 0) {
-		  if (isonum_711 (vdp->type) != ISO_VD_PRIMARY)
-			goto out;
-		  if (isonum_711 (vdp->type) == ISO_VD_END)
-			goto out;
-
-		        pri = (struct iso_primary_descriptor *)vdp;
-			break;
-	        }
-
-		brelse(bh);
-	      }
-	if(iso_blknum == vol_desc_start + 100) {
-		if (!silent)
-			printk("Unable to identify CD-ROM format.\n");
+	    if (!(bh = bread(dev,b,opt.blocksize))) {
 		s->s_dev = 0;
+		printk("isofs_read_super: bread failed, dev "
+		       "%s iso_blknum %d block %d\n",
+		       kdevname(dev), iso_blknum, b);
 		unlock_super(s);
 		MOD_DEC_USE_COUNT;
 		return NULL;
+	    }
+
+	    vdp = (struct iso_volume_descriptor *)bh->b_data;
+	    hdp = (struct hs_volume_descriptor *)bh->b_data;
+	    
+	    if (strncmp (hdp->id, HS_STANDARD_ID, sizeof hdp->id) == 0) {
+		if (isonum_711 (hdp->type) != ISO_VD_PRIMARY)
+		    goto out;
+		if (isonum_711 (hdp->type) == ISO_VD_END)
+		    goto out;
+		
+		s->u.isofs_sb.s_high_sierra = 1;
+		high_sierra = 1;
+		opt.rock = 'n';
+		h_pri = (struct hs_primary_descriptor *)vdp;
+		break;
+	    }
+
+	    if (strncmp (vdp->id, ISO_STANDARD_ID, sizeof vdp->id) == 0) {
+		if (isonum_711 (vdp->type) == ISO_VD_END)
+		    break;
+		if (isonum_711 (vdp->type) == ISO_VD_PRIMARY) {
+		    if (pri == NULL) {
+			pri = (struct iso_primary_descriptor *)vdp;
+		    }
+#ifdef CONFIG_JOLIET
+		} else if (isonum_711 (vdp->type) == ISO_VD_SUPPLEMENTARY) {
+		    sec = (struct iso_supplementary_descriptor *)vdp;
+		    if (sec->escape[0] == 0x25 && sec->escape[1] == 0x2f) {
+			if (opt.joliet == 'y') {
+			    opt.rock = 'n';
+			    if (sec->escape[2] == 0x40) {
+				joliet_level = 1;
+			    } else if (sec->escape[2] == 0x43) {
+				joliet_level = 2;
+			    } else if (sec->escape[2] == 0x45) {
+				joliet_level = 3;
+			    }
+			    printk("ISO9660 Extensions: Microsoft Joliet Level %d\n",
+				   joliet_level);
+			}
+			break;
+		    } else {
+			/* Unknown supplementary volume descriptor */
+			sec = NULL;
+		    }
+#endif
+		}
+		/* Just skip any volume descriptors we don't recognize */
+	    }
+
+	    brelse(bh);
 	}
+	if ((pri == NULL) && (sec == NULL) && (h_pri == NULL)) {
+	    if (!silent)
+		printk("Unable to identify CD-ROM format.\n");
+	    s->s_dev = 0;
+	    unlock_super(s);
+	    MOD_DEC_USE_COUNT;
+	    return NULL;
+	}
+#ifdef CONFIG_JOLIET
+	s->u.isofs_sb.s_joliet_level = joliet_level;
+	if (joliet_level) {
+	    /* Note: In theory, it is possible to have Rock Ridge
+	     * extensions mixed with Joliet. All character strings
+	     * would just be saved as Unicode. Until someone sees such
+	     * a disc, do not allow the two to be mixed
+	     */
+	    pri = (struct iso_primary_descriptor *) sec;
+	}
+#endif
 
 	if(high_sierra){
 	  rootp = (struct iso_directory_record *) h_pri->root_directory_record;
@@ -465,6 +541,27 @@ struct super_block *isofs_read_super(struct super_block *s,void *data,
 	    printk(KERN_DEBUG "Forcing new log zone size:%d\n", opt.blocksize);
 	  }
 
+#ifdef CONFIG_JOLIET
+	s->u.isofs_sb.s_nls_iocharset = NULL;
+	if (joliet_level == 0) {
+		if (opt.iocharset) {
+			kfree(opt.iocharset);
+			opt.iocharset = NULL;
+		}
+	} else if (opt.utf8 == 0) {
+		p = opt.iocharset ? opt.iocharset : "iso8859-1";
+		s->u.isofs_sb.s_nls_iocharset = load_nls(p);
+		if (! s->u.isofs_sb.s_nls_iocharset) {
+			/* Fail only if explicit charset specified */
+			if (opt.iocharset) {
+				kfree(opt.iocharset);
+				goto out;
+			} else {
+				s->u.isofs_sb.s_nls_iocharset = load_nls_default();
+			}
+		}
+	}
+#endif
 	s->s_dev = dev;
 	s->s_op = &isofs_sops;
 	s->u.isofs_sb.s_mapping = opt.map;
@@ -475,6 +572,7 @@ struct super_block *isofs_read_super(struct super_block *s,void *data,
 	s->u.isofs_sb.s_unhide = opt.unhide;
 	s->u.isofs_sb.s_uid = opt.uid;
 	s->u.isofs_sb.s_gid = opt.gid;
+	s->u.isofs_sb.s_utf8 = opt.utf8;
 	/*
 	 * It would be incredibly stupid to allow people to mark every file on the disk
 	 * as suid, so we merely allow them to set the default permissions.
@@ -490,13 +588,24 @@ struct super_block *isofs_read_super(struct super_block *s,void *data,
 	if (!(s->s_root)) {
 		s->s_dev = 0;
 		printk("get root inode failed\n");
+#ifdef CONFIG_JOLIET
+		if (s->u.isofs_sb.s_nls_iocharset)
+			unload_nls(s->u.isofs_sb.s_nls_iocharset);
+		if (opt.iocharset) kfree(opt.iocharset);
+#endif
 		MOD_DEC_USE_COUNT;
 		return NULL;
 	}
 
 	if(!check_disk_change(s->s_dev)) {
-	  return s;
+		return s;
 	}
+#ifdef CONFIG_JOLIET
+	if (s->u.isofs_sb.s_nls_iocharset)
+		unload_nls(s->u.isofs_sb.s_nls_iocharset);
+#endif
+	if (opt.iocharset) kfree(opt.iocharset);
+
  out: /* Kick out for various error conditions */
 	brelse(bh);
 	s->s_dev = 0;

@@ -19,8 +19,13 @@
 #include <linux/malloc.h>
 #include <linux/init.h>
 
+#define DCACHE_PARANOIA 1
+/* #define DCACHE_DEBUG 1 */
+
 /* For managing the dcache */
-extern int nr_free_pages, free_pages_low;
+extern unsigned long num_physpages, page_cache_size;
+extern int inodes_stat[];
+#define nr_inodes (inodes_stat[0])
 
 /*
  * This is the single most critical data structure when it comes
@@ -36,6 +41,14 @@ extern int nr_free_pages, free_pages_low;
 
 static struct list_head dentry_hashtable[D_HASHSIZE];
 static LIST_HEAD(dentry_unused);
+
+struct {
+	int nr_dentry;
+	int nr_unused;
+	int age_limit;		/* age in seconds */
+	int want_pages;		/* pages requested by system */
+	int dummy[2];
+} dentry_stat = {0, 0, 45, 0,};
 
 static inline void d_free(struct dentry *dentry)
 {
@@ -84,12 +97,16 @@ repeat:
 			goto out;
 	}
 
+	if (!list_empty(&dentry->d_lru))
+		dentry_stat.nr_unused--;
 	list_del(&dentry->d_lru);
 	if (list_empty(&dentry->d_hash)) {
 		struct inode *inode = dentry->d_inode;
 		struct dentry * parent;
-		if (inode)
+		if (inode) {
+			dentry->d_inode = NULL;
 			iput(inode);
+		}
 		parent = dentry->d_parent;
 		d_free(dentry);
 		if (dentry == parent)
@@ -98,6 +115,7 @@ repeat:
 		goto repeat;
 	}
 	list_add(&dentry->d_lru, &dentry_unused);
+	dentry_stat.nr_unused++;
 out:
 	if (count >= 0) {
 		dentry->d_count = count;
@@ -129,6 +147,94 @@ int d_invalidate(struct dentry * dentry)
 
 	d_drop(dentry);
 	return 0;
+}
+
+/*
+ * Selects less valuable dentries to be pruned when
+ * we need inodes or memory. The selected dentries
+ * are moved to the old end of the list where
+ * prune_dcache() can find them.
+ */
+int select_dcache(int count, int page_count)
+{
+	struct list_head *tail = &dentry_unused;
+	struct list_head *next = dentry_unused.prev;
+	int forward = 0, young = 0, depth = dentry_stat.nr_unused >> 1;
+	int found = 0, pages = 0;
+
+#ifdef DCACHE_DEBUG
+printk("select_dcache: %d unused, count=%d, pages=%d\n",
+dentry_stat.nr_unused, count, page_count);
+#endif
+	while (next != &dentry_unused && depth--) {
+		struct list_head *tmp = next;
+		struct dentry *dentry = list_entry(tmp, struct dentry, d_lru);
+		struct inode *inode = dentry->d_inode;
+		unsigned long value = 0;
+
+		next = tmp->prev;
+		if (forward)
+			next = tmp->next;
+		if (dentry->d_count) {
+			dentry_stat.nr_unused--;
+			list_del(tmp);
+			INIT_LIST_HEAD(tmp);
+			continue;
+		}
+		/*
+		 * Select dentries based on the page cache count ...
+		 * should factor in number of uses as well.
+		 */
+		if (inode) {
+			if (inode->i_state)
+				continue;
+			value = inode->i_nrpages;	
+		}
+		/*
+		 * Consider various exemptions ...
+		 */
+		if (!page_count) {
+			if (!inode)
+				continue;
+			if (value >= 3)
+				continue;
+		} else if (!forward) {
+			if (inode) {
+				int age = CURRENT_TIME - inode->i_atime;
+				if (age < dentry_stat.age_limit) {
+					if (++young > 8) {
+						forward = 1;
+						next = dentry_unused.next;
+#ifdef DCACHE_DEBUG
+printk("select_dcache: age=%d, pages=%d, scanning forward\n", age, pages);
+#endif
+					}
+					continue;
+				}
+			}
+		} else {
+			/*
+			 * If we're scanning from the front, don't take
+			 * files with only a trivial amount of memory.
+			 */
+			if (value < 3 || value > 15)
+				continue;
+		}
+		/*
+		 * Move the dentry behind the tail
+		 */
+		if (tmp != tail->prev) {
+			list_del(tmp);
+			list_add(tmp, tail->prev);
+		}
+		tail = tmp;
+		pages += value;
+		if (++found >= count)
+			break;
+		if (page_count && pages >= page_count)
+			break;
+	}
+	return found;
 }
 
 /*
@@ -166,6 +272,7 @@ void prune_dcache(int count)
 
 		if (tmp == &dentry_unused)
 			break;
+		dentry_stat.nr_unused--;
 		list_del(tmp);
 		INIT_LIST_HEAD(tmp);
 		dentry = list_entry(tmp, struct dentry, d_lru);
@@ -222,10 +329,50 @@ repeat:
 			continue;
 		if (dentry->d_count)
 			continue;
+		dentry_stat.nr_unused--;
 		list_del(tmp);
 		INIT_LIST_HEAD(tmp);
 		prune_one_dentry(dentry);
 		goto repeat;
+	}
+}
+
+/*
+ * This is called from do_try_to_free_page() to indicate
+ * that we should reduce the dcache and inode cache memory.
+ */
+void shrink_dcache_memory()
+{
+	dentry_stat.want_pages++;
+}
+
+/*
+ * This carries out the request received by the above routine.
+ */
+void check_dcache_memory()
+{
+	if (dentry_stat.want_pages) {
+		unsigned int count, goal = 0;
+		/*
+		 * Set the page goal.  We don't necessarily need to trim
+		 * the dcache just because the system needs memory ...
+		 */
+		if (page_cache_size > (num_physpages >> 1))
+			goal = (dentry_stat.want_pages * page_cache_size)
+				/ num_physpages;
+		dentry_stat.want_pages = 0;
+		if (goal) {
+			if (goal > 50)
+				goal = 50;
+			count = select_dcache(128, goal);
+#ifdef DCACHE_DEBUG
+printk("check_dcache_memory: goal=%d, count=%d\n", goal, count);
+#endif
+			if (count) {
+				prune_dcache(count);
+				free_inode_memory(count);
+			}
+		}
 	}
 }
 
@@ -237,11 +384,15 @@ struct dentry * d_alloc(struct dentry * parent, const struct qstr *name)
 	struct dentry *dentry;
 
 	/*
-	 * Check whether to shrink the dcache ... this greatly reduces
-	 * the likelyhood that kmalloc() will need additional memory.
+	 * Prune the dcache if there are too many unused dentries.
 	 */
-	if (nr_free_pages < free_pages_low)
-		shrink_dcache();
+	if (dentry_stat.nr_unused > 3*(nr_inodes >> 1)) {
+#ifdef DCACHE_PARANOIA
+printk("d_alloc: %d unused, pruning dcache\n", dentry_stat.nr_unused);
+#endif
+		prune_dcache(8);
+		free_inode_memory(8);
+	}
 
 	dentry = kmalloc(sizeof(struct dentry), GFP_KERNEL);
 	if (!dentry)

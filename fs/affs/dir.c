@@ -24,8 +24,8 @@
 #include <linux/amigaffs.h>
 
 static int affs_readdir(struct file *, void *, filldir_t);
-static long affs_dir_read(struct inode * inode, struct file * filp, char * buf,
-			  unsigned long count);
+static ssize_t affs_dir_read(struct file * filp, char * buf,
+			     size_t count, loff_t *ppos);
 
 static struct file_operations affs_dir_operations = {
 	NULL,			/* lseek - default */
@@ -62,8 +62,8 @@ struct inode_operations affs_dir_inode_operations = {
 	NULL			/* permissions */
 };
 
-static long
-affs_dir_read(struct inode *inode, struct file *filp, char *buf, unsigned long count)
+static ssize_t
+affs_dir_read(struct file *filp, char *buf, size_t count, loff_t *ppos)
 {
 	return -EISDIR;
 }

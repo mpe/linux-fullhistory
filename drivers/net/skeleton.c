@@ -221,7 +221,7 @@ __initfunc(static int netcard_probe1(struct device *dev, int ioaddr))
 		dev->irq = 9;
 
 	{
-		int irqval = request_irq(dev->irq, &net_interrupt, 0, cardname, NULL);
+		int irqval = request_irq(dev->irq, &net_interrupt, 0, cardname, dev);
 		if (irqval) {
 			printk("%s: unable to get IRQ %d (irqval=%d).\n",
 				   dev->name, dev->irq, irqval);
@@ -314,7 +314,7 @@ net_open(struct device *dev)
 	 * This is used if the interrupt line can turned off (shared).
 	 * See 3c503.c for an example of selecting the IRQ at config-time.
 	 */
-	if (request_irq(dev->irq, &net_interrupt, 0, cardname, NULL)) {
+	if (request_irq(dev->irq, &net_interrupt, 0, cardname, dev)) {
 		return -EAGAIN;
 	}
 	/*
@@ -325,7 +325,6 @@ net_open(struct device *dev)
 		free_irq(dev->irq, NULL);
 		return -EAGAIN;
 	}
-	irq2dev_map[dev->irq] = dev;
 
 	/* Reset the hardware here. Don't forget to set the station address. */
 	/*chipset_init(dev, 1);*/
@@ -390,7 +389,7 @@ static int net_send_packet(struct sk_buff *skb, struct device *dev)
  */
 static void net_interrupt(int irq, void *dev_id, struct pt_regs * regs)
 {
-	struct device *dev = (struct device *)(irq2dev_map[irq]);
+	struct device *dev = dev_id;
 	struct net_local *lp;
 	int ioaddr, status, boguscount = 0;
 
@@ -500,8 +499,6 @@ net_close(struct device *dev)
 
 	free_irq(dev->irq, NULL);
 	free_dma(dev->dma);
-
-	irq2dev_map[dev->irq] = 0;
 
 	/* Update the statistics here. */
 

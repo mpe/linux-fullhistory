@@ -9,6 +9,8 @@
  *  the 386bsd iso9660 filesystem, by Pace Willisson <pace@blitz.com>.
  */
 
+#include <linux/time.h>
+
 int
 isonum_711 (char * p)
 {
@@ -112,6 +114,8 @@ int iso_date(char * p, int flag)
 		crtime = 0;
 	} else {
 		int monlen[12] = {31,28,31,30,31,30,31,31,30,31,30,31};
+		extern struct timezone sys_tz;
+
 		days = year * 365;
 		if (year > 2)
 			days += (year+1) / 4;
@@ -122,7 +126,9 @@ int iso_date(char * p, int flag)
 		days += day - 1;
 		crtime = ((((days * 24) + hour) * 60 + minute) * 60)
 			+ second;
-		
+		if (sys_tz.tz_dsttime)
+			crtime -= 3600;
+
 		/* sign extend */
 		if (tz & 0x80)
 			tz |= (-1 << 8);

@@ -37,7 +37,7 @@
 #include <linux/ext2_fs.h>
 
 static long long ext2_file_lseek(struct file *, long long, int);
-static long ext2_file_write (struct inode *, struct file *, const char *, unsigned long);
+static ssize_t ext2_file_write (struct file *, const char *, size_t, loff_t *);
 static int ext2_release_file (struct inode *, struct file *);
 
 /*
@@ -127,9 +127,10 @@ static inline void remove_suid(struct inode *inode)
 	}
 }
 
-static long ext2_file_write (struct inode * inode, struct file * filp,
-			    const char * buf, unsigned long count)
+static ssize_t ext2_file_write (struct file * filp, const char * buf,
+				size_t count, loff_t *ppos)
 {
+	struct inode * inode = filp->f_dentry->d_inode;
 	__u32 pos;
 	long block;
 	int offset;
@@ -163,8 +164,12 @@ static long ext2_file_write (struct inode * inode, struct file * filp,
 
 	if (filp->f_flags & O_APPEND)
 		pos = inode->i_size;
-	else
-		pos = filp->f_pos;
+	else {
+		pos = *ppos;
+		if (pos != *ppos)
+			return -EINVAL;
+	}
+
 	/* Check for overflow.. */
 	if (pos > (__u32) (pos + count)) {
 		count = ~pos; /* == 0xFFFFFFFF - pos */
@@ -251,7 +256,7 @@ static long ext2_file_write (struct inode * inode, struct file * filp,
 	if (filp->f_flags & O_SYNC)
 		inode->u.ext2_i.i_osync--;
 	inode->i_ctime = inode->i_mtime = CURRENT_TIME;
-	filp->f_pos = pos;
+	*ppos = pos;
 	mark_inode_dirty(inode);
 	return written;
 }

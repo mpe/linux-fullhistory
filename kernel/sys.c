@@ -358,8 +358,8 @@ int acct_process(long exitcode)
       fs = get_fs();
       set_fs(KERNEL_DS);
 
-      acct_file.f_op->write(acct_file.f_dentry->d_inode, &acct_file,
-                             (char *)&ac, sizeof(struct acct));
+      acct_file.f_op->write(&acct_file, (char *)&ac, sizeof(struct acct),
+			    &acct_file.f_pos);
       set_fs(fs);
    }
    return 0;

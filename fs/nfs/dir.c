@@ -52,7 +52,7 @@ struct nfs_dirent {
 };
 
 static int nfs_dir_open(struct inode * inode, struct file * file);
-static long nfs_dir_read(struct inode *, struct file *, char *, unsigned long);
+static ssize_t nfs_dir_read(struct file *, char *, size_t, loff_t *);
 static int nfs_readdir(struct file *, void *, filldir_t);
 static int nfs_lookup(struct inode *, struct dentry *);
 static int nfs_create(struct inode *, struct dentry *, int);
@@ -107,8 +107,8 @@ nfs_dir_open(struct inode *dir, struct file *file)
 	return nfs_revalidate_inode(NFS_SERVER(dir), dir);
 }
 
-static long
-nfs_dir_read(struct inode *inode, struct file *filp, char *buf, unsigned long count)
+static ssize_t
+nfs_dir_read(struct file *filp, char *buf, size_t count, loff_t *ppos)
 {
 	return -EISDIR;
 }
@@ -317,7 +317,7 @@ nfs_invalidate_dircache(struct inode *inode)
 			continue;
 		if (cache->locked) {
 			printk("NFS: cache locked for %s/%ld\n",
-				kdevname(dev), ino);
+				kdevname(dev), (long) ino);
 			continue;
 		}
 		cache->valid = 0;	/* brute force */

@@ -178,12 +178,11 @@ __initfunc(int arcrimi_found(struct device *dev,int node,int airq, u_long shmem)
   int mirror_size;
 
   /* reserve the irq */
-  if (request_irq(airq,&arcnet_interrupt,0,"arcnet (RIM I)",NULL))
+  if (request_irq(airq,&arcnet_interrupt,0,"arcnet (RIM I)",dev))
     {
       BUGMSG(D_NORMAL,"Can't get IRQ %d!\n",airq);
       return -ENODEV;
     }
-  irq2dev_map[airq]=dev;
   dev->irq=airq;
 
   dev->base_addr=0;
@@ -221,7 +220,6 @@ __initfunc(int arcrimi_found(struct device *dev,int node,int airq, u_long shmem)
   dev->priv = kmalloc(sizeof(struct arcnet_local), GFP_KERNEL);
   if (dev->priv == NULL)
     {
-      irq2dev_map[airq] = NULL;
       free_irq(airq,NULL);
       return -ENOMEM;
     }
@@ -792,7 +790,6 @@ void cleanup_module(void)
 
   if (dev->irq)
     {
-      irq2dev_map[dev->irq] = NULL;
       free_irq(dev->irq,NULL);
     }
 

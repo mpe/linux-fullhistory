@@ -26,8 +26,8 @@
 #include <linux/sched.h>
 #include <linux/stat.h>
 
-static long ext2_dir_read (struct inode * inode, struct file * filp,
-			    char * buf, unsigned long count)
+static ssize_t ext2_dir_read (struct file * filp, char * buf,
+			      size_t count, loff_t *ppos)
 {
 	return -EISDIR;
 }

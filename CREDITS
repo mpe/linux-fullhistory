@@ -215,8 +215,9 @@ S: Fremont, California 94539
 S: USA
 
 N: Gordon Chaffee
-E: chaffee@plateau.cs.berkeley.edu
-D: vfat filesystem
+E: chaffee@bmrc.berkeley.edu
+W: http://bmrc.berkeley.edu/people/chaffee/
+D: vfat, fat32, joliet, native language support
 S: 3674 Oakwood Terrace #201
 S: Fremont, California 94536
 S: USA

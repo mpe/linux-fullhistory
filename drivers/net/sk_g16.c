@@ -451,8 +451,6 @@ struct priv
 
 /* IRQ map used to reserve a IRQ (see SK_open()) */
 
-/* extern void *irq2dev_map[16]; */ /* Declared in <linux/ioport.h> */
-
 /* static variables */
 
 static SK_RAM *board;  /* pointer to our memory mapped board components */
@@ -610,8 +608,7 @@ __initfunc(int SK_init(struct device *dev))
  * Return Value   : 0 = Initialization done             
  * Errors         : ENODEV - No SK_G16 found
  *                  -1     - Configuration problem
- * Globals        : irq2dev_map - Which device uses which IRQ
- *                : board       - pointer to SK_RAM
+ * Globals        : board       - pointer to SK_RAM
  * Update History :
  *     YY/MM/DD  uid  Description
  *     94/06/30  pwe  SK_ADDR now checked and at the correct place
@@ -838,7 +835,6 @@ __initfunc(int SK_probe(struct device *dev, short ioaddr))
  * Parameters     : I : struct device *dev - SK_G16 device structure
  * Return Value   : 0 - Device opened
  * Errors         : -EAGAIN - Open failed
- * Globals        : irq2dev_map - which device uses which irq
  * Side Effects   : None
  * Update History :
  *     YY/MM/DD  uid  Description
@@ -872,7 +868,7 @@ static int SK_open(struct device *dev)
 
 	do
 	{
-	  irqval = request_irq(irqtab[i], &SK_interrupt, 0, "sk_g16", NULL);
+	  irqval = request_irq(irqtab[i], &SK_interrupt, 0, "sk_g16", dev);
 	  i++;
 	} while (irqval && irqtab[i]);
 
@@ -889,7 +885,7 @@ static int SK_open(struct device *dev)
     }
     else if (dev->irq == 2) /* IRQ2 is always IRQ9 */
     {
-	if (request_irq(9, &SK_interrupt, 0, "sk_g16", NULL))
+	if (request_irq(9, &SK_interrupt, 0, "sk_g16", dev))
 	{
 	    printk("%s: unable to get IRQ 9\n", dev->name);
 	    return -EAGAIN;
@@ -910,7 +906,7 @@ static int SK_open(struct device *dev)
 
 	/* check if IRQ free and valid. Then install Interrupt handler */
 
-	if (request_irq(dev->irq, &SK_interrupt, 0, "sk_g16", NULL))
+	if (request_irq(dev->irq, &SK_interrupt, 0, "sk_g16", dev))
 	{
 	    printk("%s: unable to get selected IRQ\n", dev->name);
 	    return -EAGAIN;
@@ -937,8 +933,6 @@ static int SK_open(struct device *dev)
 	outb(i<<2, SK_POS4);           /* Set IRQ on card */
     }
 
-    irq2dev_map[dev->irq] = dev;       /* Set IRQ as used by us */
-    
     printk("%s: Schneider & Koch G16 at %#3x, IRQ %d, shared mem at %#08x\n",
 	    dev->name, (unsigned int)dev->base_addr, 
 	    (int) dev->irq, (unsigned int) p->ram);
@@ -1282,7 +1276,7 @@ static int SK_send_packet(struct sk_buff *skb, struct device *dev)
 static void SK_interrupt(int irq, void *dev_id, struct pt_regs * regs)
 {
     int csr0;
-    struct device *dev = (struct device *) irq2dev_map[irq];
+    struct device *dev = dev_id;
     struct priv *p = (struct priv *) dev->priv;
 
 
@@ -1637,7 +1631,6 @@ static int SK_close(struct device *dev)
     SK_write_reg(CSR0, CSR0_STOP); /* STOP the LANCE */
 
     free_irq(dev->irq, NULL);      /* Free IRQ */
-    irq2dev_map[dev->irq] = 0;     /* Mark IRQ as unused */
 
     return 0; /* always succeed */
     

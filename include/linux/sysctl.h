@@ -69,7 +69,8 @@ enum
 	KERN_CTLALTDEL,		/* int: allow ctl-alt-del to reboot */
 	KERN_PRINTK,            /* sturct: control printk logging parameters */
 	KERN_NAMETRANS,		/* Name translation */
-	KERN_STATINODE
+	KERN_STATINODE,
+	KERN_DENTRY		/* dentry statistics */
 };
 
 

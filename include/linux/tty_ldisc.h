@@ -25,22 +25,22 @@
  * 	buffers of any input characters it may have queued to be
  * 	delivered to the user mode process.
  * 
- * int	(*chars_in_buffer)(struct tty_struct *tty);
+ * ssize_t (*chars_in_buffer)(struct tty_struct *tty);
  *
  * 	This function returns the number of input characters the line
  *	iscpline may have queued up to be delivered to the user mode
  *	process.
  * 
- * int	(*read)(struct tty_struct * tty, struct file * file,
- *		unsigned char * buf, unsigned int nr);
+ * ssize_t (*read)(struct tty_struct * tty, struct file * file,
+ *		   unsigned char * buf, size_t nr);
  *
  * 	This function is called when the user requests to read from
  * 	the tty.  The line discpline will return whatever characters
  * 	it has buffered up for the user.  If this function is not
  * 	defined, the user will receive an EIO error.
  * 
- * int	(*write)(struct tty_struct * tty, struct file * file,
- * 		 const unsigned char * buf, unsigned int nr);
+ * ssize_t (*write)(struct tty_struct * tty, struct file * file,
+ * 		    const unsigned char * buf, size_t nr);
  *
  * 	This function is called when the user requests to write to the
  * 	tty.  The line discpline will deliver the characters to the
@@ -111,11 +111,11 @@ struct tty_ldisc {
 	int	(*open)(struct tty_struct *);
 	void	(*close)(struct tty_struct *);
 	void	(*flush_buffer)(struct tty_struct *tty);
-	int	(*chars_in_buffer)(struct tty_struct *tty);
-	int	(*read)(struct tty_struct * tty, struct file * file,
-			unsigned char * buf, unsigned int nr);
-	int	(*write)(struct tty_struct * tty, struct file * file,
-			 const unsigned char * buf, unsigned int nr);	
+	ssize_t	(*chars_in_buffer)(struct tty_struct *tty);
+	ssize_t	(*read)(struct tty_struct * tty, struct file * file,
+			unsigned char * buf, size_t nr);
+	ssize_t	(*write)(struct tty_struct * tty, struct file * file,
+			 const unsigned char * buf, size_t nr);	
 	int	(*ioctl)(struct tty_struct * tty, struct file * file,
 			 unsigned int cmd, unsigned long arg);
 	void	(*set_termios)(struct tty_struct *tty, struct termios * old);

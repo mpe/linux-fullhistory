@@ -336,12 +336,11 @@ __initfunc(int arc20020_found(struct device *dev,int ioaddr,int airq))
   struct arcnet_local *lp;
   
   /* reserve the irq */
-  if (request_irq(airq,&arcnet_interrupt,0,"arcnet (COM20020)",NULL))
+  if (request_irq(airq,&arcnet_interrupt,0,"arcnet (COM20020)",dev))
     {
       BUGMSG(D_NORMAL,"Can't get IRQ %d!\n",airq);
       return -ENODEV;
     }
-  irq2dev_map[airq]=dev;
   dev->irq=airq;
   
   /* reserve the I/O region - guaranteed to work by check_region */
@@ -355,7 +354,6 @@ __initfunc(int arc20020_found(struct device *dev,int ioaddr,int airq))
   dev->priv = kmalloc(sizeof(struct arcnet_local), GFP_KERNEL);
   if (dev->priv == NULL)
     {
-      irq2dev_map[airq] = NULL;
       free_irq(airq,NULL);
       release_region(ioaddr,ARCNET_TOTAL_SIZE);
       return -ENOMEM;
@@ -1026,7 +1024,6 @@ void cleanup_module(void)
 
   if (dev->irq)
     {
-      irq2dev_map[dev->irq] = NULL;
       free_irq(dev->irq,NULL);
     }
 

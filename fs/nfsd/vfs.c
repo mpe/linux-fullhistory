@@ -364,7 +364,7 @@ nfsd_read(struct svc_rqst *rqstp, struct svc_fh *fhp, loff_t offset, char *buf,
 	file.f_pos = offset;
 
 	oldfs = get_fs(); set_fs(KERNEL_DS);
-	err = file.f_op->read(inode, &file, buf, *count);
+	err = file.f_op->read(&file, buf, *count, &file.f_pos);
 	set_fs(oldfs);
 
 	/* Write back readahead params */
@@ -432,7 +432,7 @@ nfsd_write(struct svc_rqst *rqstp, struct svc_fh *fhp, loff_t offset,
 
 	/* Write the data. */
 	oldfs = get_fs(); set_fs(KERNEL_DS);
-	err = file.f_op->write(inode, &file, buf, cnt);
+	err = file.f_op->write(&file, buf, cnt, &file.f_pos);
 	set_fs(oldfs);
 
 	/* clear setuid/setgid flag after write */

@@ -256,6 +256,7 @@ static inline int do_load_aout32_binary(struct linux_binprm * bprm,
 	unsigned long p = bprm->p;
 	unsigned long fd_offset;
 	unsigned long rlim;
+	int retval;
 
 	ex = *((struct exec *) bprm->buf);		/* exec-header */
 	if ((N_MAGIC(ex) != ZMAGIC && N_MAGIC(ex) != OMAGIC &&
@@ -278,8 +279,12 @@ static inline int do_load_aout32_binary(struct linux_binprm * bprm,
 	if (ex.a_data + ex.a_bss > rlim)
 		return -ENOMEM;
 
+	/* Flush all traces of the currently running executable */
+	retval = flush_old_exec(bprm);
+	if (retval)
+		return retval;
+
 	/* OK, This is the point of no return */
-	flush_old_exec(bprm);
 	memcpy(&current->tss.core_exec, &ex, sizeof(struct exec));
 
 	current->mm->end_code = ex.a_text +

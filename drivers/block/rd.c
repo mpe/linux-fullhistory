@@ -184,16 +184,16 @@ static int rd_ioctl(struct inode *inode, struct file *file, unsigned int cmd, un
 
 #ifdef CONFIG_BLK_DEV_INITRD
 
-static long initrd_read(struct inode *inode,struct file *file,
-	char *buf, unsigned long count)
+static ssize_t initrd_read(struct file *file, char *buf,
+			   size_t count, loff_t *ppos)
 {
 	int left;
 
-	left = initrd_end-initrd_start-file->f_pos;
+	left = initrd_end - initrd_start - *ppos;
 	if (count > left) count = left;
 	if (count == 0) return 0;
-	copy_to_user(buf,(char *) initrd_start+file->f_pos,count);
-	file->f_pos += count;
+	copy_to_user(buf, (char *)initrd_start + *ppos, count);
+	*ppos += count;
 	return count;
 }
 
@@ -363,7 +363,7 @@ identify_ramdisk_image(kdev_t device, struct file *fp, int start_block))
 		fp->f_op->llseek(fp, start_block * BLOCK_SIZE, 0);
 	fp->f_pos = start_block * BLOCK_SIZE;
 	
-	fp->f_op->read(fp->f_dentry->d_inode, fp, buf, size);
+	fp->f_op->read(fp, buf, size, &fp->f_pos);
 
 	/*
 	 * If it matches the gzip magic numbers, return -1
@@ -393,7 +393,7 @@ identify_ramdisk_image(kdev_t device, struct file *fp, int start_block))
 		fp->f_op->llseek(fp, (start_block+1) * BLOCK_SIZE, 0);
 	fp->f_pos = (start_block+1) * BLOCK_SIZE;
 
-	fp->f_op->read(fp->f_dentry->d_inode, fp, buf, size);
+	fp->f_op->read(fp, buf, size, &fp->f_pos);
 		
 	/* Try minix */
 	if (minixsb->s_magic == MINIX_SUPER_MAGIC ||
@@ -510,10 +510,8 @@ __initfunc(static void rd_load_image(kdev_t device,int offset))
 
 	printk(KERN_NOTICE "RAMDISK: Loading %d blocks into ram disk... ", nblocks);
 	for (i=0; i < nblocks; i++) {
-		infile.f_op->read(infile.f_dentry->d_inode, &infile, buf,
-				  BLOCK_SIZE);
-		outfile.f_op->write(outfile.f_dentry->d_inode, &outfile, buf,
-				    BLOCK_SIZE);
+		infile.f_op->read(&infile, buf, BLOCK_SIZE, &infile.f_pos);
+		outfile.f_op->write(&outfile, buf, BLOCK_SIZE, &outfile.f_pos);
 		if (!(i % 16)) {
 			printk("%c\b", rotator[rotate & 0x3]);
 			rotate++;
@@ -641,8 +639,8 @@ __initfunc(static int fill_inbuf(void))
 {
 	if (exit_code) return -1;
 	
-	insize = crd_infp->f_op->read(crd_infp->f_dentry->d_inode, crd_infp,
-				      inbuf, INBUFSIZ);
+	insize = crd_infp->f_op->read(crd_infp, inbuf, INBUFSIZ,
+				      &crd_infp->f_pos);
 	if (insize == 0) return -1;
 
 	inptr = 1;
@@ -660,8 +658,7 @@ __initfunc(static void flush_window(void))
     unsigned n;
     uch *in, ch;
     
-    crd_outfp->f_op->write(crd_outfp->f_dentry->d_inode, crd_outfp, window,
-			   outcnt);
+    crd_outfp->f_op->write(crd_outfp, window, outcnt, &crd_outfp->f_pos);
     in = window;
     for (n = 0; n < outcnt; n++) {
 	    ch = *in++;

@@ -7,6 +7,9 @@
  *	mmap handling for fat-based filesystems
  */
 
+#define ASC_LINUX_VERSION(V, P, S)	(((V) * 65536) + ((P) * 256) + (S))
+#include <linux/version.h>
+
 #include <linux/stat.h>
 #include <linux/sched.h>
 #include <linux/kernel.h>
@@ -18,7 +21,11 @@
 #include <linux/malloc.h>
 #include <linux/msdos_fs.h>
 
+#if LINUX_VERSION_CODE >= ASC_LINUX_VERSION(2,1,0)
 #include <asm/uaccess.h>
+#else
+#include <asm/segment.h>
+#endif
 #include <asm/system.h>
 
 /*
@@ -59,8 +66,8 @@ static unsigned long fat_file_mmap_nopage(
 		{
 			unsigned long cur_fs = get_fs();
 			set_fs (KERNEL_DS);
-			cur_read = fat_file_read (inode,&filp,(char*)page
-				,need_read);
+			cur_read = fat_file_read (&filp, (char*)page,
+						  need_read, &filp.f_pos);
 			set_fs (cur_fs);
 		}
 		if (cur_read != need_read){

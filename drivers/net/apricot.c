@@ -537,10 +537,8 @@ i596_open(struct device *dev)
     if (i596_debug > 1)
 	printk("%s: i596_open() irq %d.\n", dev->name, dev->irq);
 
-    if (request_irq(dev->irq, &i596_interrupt, 0, "apricot", NULL))
+    if (request_irq(dev->irq, &i596_interrupt, 0, "apricot", dev))
 	return -EAGAIN;
-
-    irq2dev_map[dev->irq] = dev;
 
     i = init_rx_bufs(dev, RX_RING_SIZE);
 
@@ -550,7 +548,6 @@ i596_open(struct device *dev)
     if (i < 4)
     {
         free_irq(dev->irq, NULL);
-        irq2dev_map[dev->irq] = 0;
         return -EAGAIN;
     }
 
@@ -746,7 +743,7 @@ __initfunc(int apricot_probe(struct device *dev))
 static void
 i596_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 {
-    struct device *dev = (struct device *)(irq2dev_map[irq]);
+    struct device *dev = dev_id;
     struct i596_private *lp;
     short ioaddr;
     int boguscnt = 200;
@@ -934,7 +931,6 @@ i596_close(struct device *dev)
 	    break;
     	}
     free_irq(dev->irq, NULL);
-    irq2dev_map[dev->irq] = 0;
     remove_rx_bufs(dev);
     MOD_DEC_USE_COUNT;
 

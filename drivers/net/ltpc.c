@@ -755,7 +755,7 @@ static int sendup_buffer (struct device *dev)
  
 static void ltpc_interrupt(int irq, void *dev_id, struct pt_regs *reg_ptr)
 {
-	struct device *dev = (struct device *) irq2dev_map[irq];
+	struct device *dev = dev_id;
 
 	if (dev==NULL) {
 		printk("ltpc_interrupt: unknown device.\n");
@@ -984,9 +984,9 @@ __initfunc(int ltpc_probe(struct device *dev))
 	save_flags(flags);
 	cli();
 
-	probe3 = request_irq( 3, &lt_probe_handler, 0, "ltpc_probe",NULL);
-	probe4 = request_irq( 4, &lt_probe_handler, 0, "ltpc_probe",NULL);
-	probe9 = request_irq( 9, &lt_probe_handler, 0, "ltpc_probe",NULL);
+	probe3 = request_irq( 3, &lt_probe_handler, 0, "ltpc_probe",dev);
+	probe4 = request_irq( 4, &lt_probe_handler, 0, "ltpc_probe",dev);
+	probe9 = request_irq( 9, &lt_probe_handler, 0, "ltpc_probe",dev);
 
 	irqhitmask = 0;
 
@@ -1193,8 +1193,7 @@ __initfunc(int ltpc_probe(struct device *dev))
 	ltpc_timer.data = (unsigned long) dev;
 
 	if (irq) {
-		irq2dev_map[irq] = dev;
-		(void) request_irq( irq, &ltpc_interrupt, 0, "ltpc",NULL);
+		(void) request_irq( irq, &ltpc_interrupt, 0, "ltpc", dev);
 		(void) inb_p(base+7);  /* enable interrupts from board */
 		(void) inb_p(base+7);  /* and reset irq line */
 		ltpc_timer.expires = 100;

@@ -30,8 +30,8 @@ static int kmsg_release(struct inode * inode, struct file * file)
 	return 0;
 }
 
-static long kmsg_read(struct inode * inode, struct file * file,
-	char * buf, unsigned long count)
+static ssize_t kmsg_read(struct file * file, char * buf,
+			 size_t count, loff_t *ppos)
 {
 	return sys_syslog(2,buf,count);
 }

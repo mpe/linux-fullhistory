@@ -12,10 +12,11 @@
 #include <linux/string.h>
 #include <linux/stat.h>
 #include <linux/fcntl.h>
-#include <asm/uaccess.h>
 #include <linux/malloc.h>
-
 #include <linux/errno.h>
+#include <linux/config.h>	/* Joliet? */
+
+#include <asm/uaccess.h>
 
 /*
  * ok, we cannot use strncmp, as the name is not in our data space.
@@ -67,8 +68,9 @@ static struct buffer_head * isofs_find_entry(struct inode * dir,
 		inode_number = 0; /* shut gcc up */
 	struct buffer_head * bh;
 	unsigned int old_offset;
-	int dlen, rrflag, match;
+	int dlen, match;
 	char * dpnt;
+	unsigned char *page = NULL;
 	struct iso_directory_record * de = NULL; /* shut gcc up */
 	char de_not_in_buf = 0;	  /* true if de is in kmalloc'd memory */
 	char c;
@@ -92,9 +94,8 @@ static struct buffer_head * isofs_find_entry(struct inode * dir,
 		if(!de_not_in_buf) {
 			de = (struct iso_directory_record *) 
 				(bh->b_data + offset);
-			inode_number = (block << bufbits) 
-				+ (offset & (bufsize - 1));
 		}
+		inode_number = (block << bufbits) + (offset & (bufsize - 1));
 
 		/* If byte is zero, or we had to fetch this de past
 		   the end of the buffer, this is the end of file, or
@@ -109,22 +110,22 @@ static struct buffer_head * isofs_find_entry(struct inode * dir,
                                    one */
 				de_not_in_buf = 0;
 				kfree(de);
-				offset -= bufsize;
+				f_pos += offset;
 			}
-			else 
+			else { 
 				offset = 0;
+				f_pos = ((f_pos & ~(ISOFS_BLOCK_SIZE - 1))
+					 + ISOFS_BLOCK_SIZE);
+			}
 			brelse(bh);
-			f_pos = ((f_pos & ~(ISOFS_BLOCK_SIZE - 1))
-				 + ISOFS_BLOCK_SIZE) + offset;
 
-			if( f_pos >= dir->i_size )
-			  {
-			    return 0;
-			  }
+			if (f_pos >= dir->i_size) 
+				return 0;
 
 			block = isofs_bmap(dir,f_pos>>bufbits);
 			if (!block || !(bh = bread(dir->i_dev,block,bufsize)))
-				return 0;
+				return NULL;
+
 			continue; /* Will kick out if past end of directory */
 		}
 
@@ -154,31 +155,44 @@ static struct buffer_head * isofs_find_entry(struct inode * dir,
 			       bh_next->b_data, offset - bufsize);
 			brelse(bh_next);
 			de_not_in_buf = 1;
+			offset -= bufsize;
 		}
-		
 		dlen = de->name_len[0];
 		dpnt = de->name;
-		/* Now convert the filename in the buffer to lower case */
-		rrflag = get_rock_ridge_filename(de, &dpnt, &dlen, dir);
-		if (rrflag) {
-		  if (rrflag == -1) goto out; /* Relocated deep directory */
-		} else {
-		  if(dir->i_sb->u.isofs_sb.s_mapping == 'n') {
-		    for (i = 0; i < dlen; i++) {
-		      c = dpnt[i];
-		      if (c >= 'A' && c <= 'Z') c |= 0x20;  /* lower case */
-		      if (c == ';' && i == dlen-2 && dpnt[i+1] == '1') {
-			dlen -= 2;
-			break;
-		      }
-		      if (c == ';') c = '.';
-		      de->name[i] = c;
-		    }
-		    /* This allows us to match with and without a trailing
-		       period.  */
-		    if(dpnt[dlen-1] == '.' && namelen == dlen-1)
-		      dlen--;
-		  }
+
+		if (dir->i_sb->u.isofs_sb.s_rock ||
+		    dir->i_sb->u.isofs_sb.s_joliet_level) {
+			page = (unsigned char *)
+				__get_free_page(GFP_KERNEL);
+			if (!page) return NULL;
+		}
+		if (dir->i_sb->u.isofs_sb.s_rock &&
+		    ((i = get_rock_ridge_filename(de, page, dir)))) {
+			if (i == -1)
+				goto out;/* Relocated deep directory */
+			dlen = i;
+			dpnt = page;
+#ifdef CONFIG_JOLIET
+		} else if (dir->i_sb->u.isofs_sb.s_joliet_level) {
+			dlen = get_joliet_filename(de, dir, page);
+			dpnt = page;
+#endif
+		} else if (dir->i_sb->u.isofs_sb.s_mapping == 'n') {
+			for (i = 0; i < dlen; i++) {
+				c = dpnt[i];
+				/* lower case */
+				if (c >= 'A' && c <= 'Z') c |= 0x20;
+				if (c == ';' && i == dlen-2 && dpnt[i+1] == '1') {
+					dlen -= 2;
+					break;
+				}
+				if (c == ';') c = '.';
+				dpnt[i] = c;
+			}
+			/* This allows us to match with and without
+			 * a trailing period. */
+			if(dpnt[dlen-1] == '.' && namelen == dlen-1)
+				dlen--;
 		}
 		/*
 		 * Skip hidden or associated files unless unhide is set 
@@ -190,7 +204,7 @@ static struct buffer_head * isofs_find_entry(struct inode * dir,
 			match = isofs_match(namelen,name,dpnt,dlen);
 		}
 
-		if(rrflag) kfree(dpnt);
+		if (page) free_page((unsigned long) page);
 		if (match) {
 			if(inode_number == -1) {
 				/* Should only happen for the '..' entry */

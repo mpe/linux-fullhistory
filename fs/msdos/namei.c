@@ -230,6 +230,7 @@ struct super_block *msdos_read_super(struct super_block *sb,void *data, int sile
 
 	MOD_INC_USE_COUNT;
 
+	MSDOS_SB(sb)->options.isvfat = 0;
 	sb->s_op = &msdos_sops;
 	res =  fat_read_super(sb, data, silent);
 	if (res == NULL) {
@@ -317,7 +318,9 @@ static int msdos_create_entry(struct inode *dir, const char *name,
 	*result = NULL;
 	if ((res = fat_scan(dir,NULL,&bh,&de,&ino,SCAN_ANY)) < 0) {
 		if (res != -ENOENT) return res;
-		if (dir->i_ino == MSDOS_ROOT_INO) return -ENOSPC;
+		if ((dir->i_ino == MSDOS_ROOT_INO) &&
+		    (MSDOS_SB(sb)->fat_bits != 32))
+			return -ENOSPC;
 		if ((res = fat_add_cluster(dir)) < 0) return res;
 		if ((res = fat_scan(dir,NULL,&bh,&de,&ino,SCAN_ANY)) < 0) return res;
 	}
@@ -327,10 +330,10 @@ static int msdos_create_entry(struct inode *dir, const char *name,
 	dir->i_ctime = dir->i_mtime = CURRENT_TIME;
 	mark_inode_dirty(dir);
 	memcpy(de->name,name,MSDOS_NAME);
-	memset(de->unused, 0, sizeof(de->unused));
 	de->attr = is_dir ? ATTR_DIR : ATTR_ARCH;
 	de->attr = is_hid ? (de->attr|ATTR_HIDDEN) : (de->attr&~ATTR_HIDDEN);
 	de->start = 0;
+	de->starthi = 0;
 	fat_date_unix2dos(dir->i_mtime,&de->time,&de->date);
 	de->size = 0;
 	fat_mark_buffer_dirty(sb, bh, 1);
@@ -502,6 +505,7 @@ int msdos_mkdir(struct inode *dir,struct dentry *dentry,int mode)
 		goto mkdir_error;
 	dot->i_size = inode->i_size; /* doesn't grow in the 2nd create_entry */
 	MSDOS_I(dot)->i_start = MSDOS_I(inode)->i_start;
+	MSDOS_I(dot)->i_logstart = MSDOS_I(inode)->i_logstart;
 	dot->i_nlink = inode->i_nlink;
 	mark_inode_dirty(dot);
 	iput(dot);
@@ -510,6 +514,7 @@ int msdos_mkdir(struct inode *dir,struct dentry *dentry,int mode)
 	fat_unlock_creation();
 	dot->i_size = dir->i_size;
 	MSDOS_I(dot)->i_start = MSDOS_I(dir)->i_start;
+	MSDOS_I(dot)->i_logstart = MSDOS_I(dir)->i_logstart;
 	dot->i_nlink = dir->i_nlink;
 	mark_inode_dirty(dot);
 	MSDOS_I(inode)->i_busy = 0;
@@ -737,8 +742,10 @@ static int rename_diff_dir(struct inode *old_dir,char *old_name,
 			error = -EIO;
 			goto rename_done;
 		}
-		dotdot_de->start = MSDOS_I(dotdot_inode)->i_start =
-		    MSDOS_I(new_dir)->i_start;
+		MSDOS_I(dotdot_inode)->i_start = MSDOS_I(new_dir)->i_start;
+		MSDOS_I(dotdot_inode)->i_logstart = MSDOS_I(new_dir)->i_logstart;
+		dotdot_de->start = CT_LE_W(MSDOS_I(new_dir)->i_logstart);
+		dotdot_de->starthi = CT_LE_W((MSDOS_I(new_dir)->i_logstart) >> 16);
 		mark_inode_dirty(dotdot_inode);
 		fat_mark_buffer_dirty(sb, dotdot_bh, 1);
 		old_dir->i_nlink--;

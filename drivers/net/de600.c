@@ -338,11 +338,10 @@ de600_read_byte(unsigned char type, struct device *dev) { /* dev used by macros 
 static int
 de600_open(struct device *dev)
 {
-	if (request_irq(DE600_IRQ, de600_interrupt, 0, "de600", NULL)) {
+	if (request_irq(DE600_IRQ, de600_interrupt, 0, "de600", dev)) {
 		printk ("%s: unable to get IRQ %d\n", dev->name, DE600_IRQ);
 		return 1;
 	}
-	irq2dev_map[DE600_IRQ] = dev;
 
 	MOD_INC_USE_COUNT;
 	dev->start = 1;
@@ -368,7 +367,6 @@ de600_close(struct device *dev)
 
 	if (dev->start) {
 		free_irq(DE600_IRQ, NULL);
-		irq2dev_map[DE600_IRQ] = NULL;
 		dev->start = 0;
 		MOD_DEC_USE_COUNT;
 	}
@@ -481,7 +479,7 @@ de600_start_xmit(struct sk_buff *skb, struct device *dev)
 static void
 de600_interrupt(int irq, void *dev_id, struct pt_regs * regs)
 {
-	struct device	*dev = irq2dev_map[irq];
+	struct device	*dev = dev_id;
 	byte		irq_status;
 	int		retrig = 0;
 	int		boguscount = 0;

@@ -872,7 +872,7 @@ static void sdla_isr(int irq, void *dev_id, struct pt_regs * regs)
 	struct frad_local *flp;
 	char              byte;
 
-	dev = irq2dev_map[irq];
+	dev = dev_id;
 
 	if (dev == NULL)
 	{
@@ -1475,10 +1475,8 @@ int sdla_set_config(struct device *dev, struct ifmap *map)
 	}
 	dev->irq = map->irq;
 
-	if (request_irq(dev->irq, &sdla_isr, 0, dev->name, NULL)) 
+	if (request_irq(dev->irq, &sdla_isr, 0, dev->name, dev)) 
 		return(-EAGAIN);
-
-	irq2dev_map[dev->irq] = dev;
 
 	if (flp->type == SDLA_S507)
 	{

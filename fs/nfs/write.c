@@ -68,6 +68,8 @@
 
 #define NFSDBG_FACILITY		NFSDBG_PAGECACHE
 
+int check_failed_request(struct inode *);
+
 static void			nfs_wback_lock(struct rpc_task *task);
 static void			nfs_wback_result(struct rpc_task *task);
 
@@ -120,6 +122,7 @@ struct nfs_wreq {
  * Limit number of delayed writes
  */
 static int			nr_write_requests = 0;
+static int			nr_failed_requests = 0;
 static struct rpc_wait_queue	write_queue = RPC_INIT_WAITQ("write_chain");
 struct nfs_wreq *		nfs_failed_requests = NULL;
 
@@ -282,18 +285,61 @@ find_write_request(struct inode *inode, struct page *page)
 /*
  * Find a failed write request by pid
  */
-static inline struct nfs_wreq *
-find_failed_request(struct inode *inode, pid_t pid)
+static struct nfs_wreq *
+find_failed_request(struct inode *inode, pid_t pid, int all)
 {
 	struct nfs_wreq	*head, *req;
 
 	if (!(req = head = nfs_failed_requests))
 		return NULL;
 	do {
-		if (req->wb_inode == inode && req->wb_pid == pid)
+		if (req->wb_inode == inode && (all || req->wb_pid == pid))
 			return req;
 	} while ((req = WB_NEXT(req)) != head);
 	return NULL;
+}
+
+/*
+ * Add a request to the failed list.
+ */
+static void
+append_failed_request(struct nfs_wreq * req)
+{
+	static int old_max = 16;
+
+	append_write_request(&nfs_failed_requests, req);
+	nr_failed_requests++;
+	if (nr_failed_requests >= old_max) {
+		printk("NFS: %d failed requests\n", nr_failed_requests);
+		old_max = old_max << 1;
+	}
+}
+
+/*
+ * Remove a request from the failed list and free it.
+ */
+static void
+remove_failed_request(struct nfs_wreq * req)
+{
+	remove_write_request(&nfs_failed_requests, req);
+	kfree(req);
+	nr_failed_requests--;
+}
+
+/*
+ * Find and release all failed requests for this inode.
+ */
+int
+check_failed_request(struct inode * inode)
+{
+	struct nfs_wreq * req;
+	int found = 0;
+
+	while ((req = find_failed_request(inode, 0, 1)) != NULL) {
+		remove_failed_request(req);
+		found++;
+	}
+	return found;
 }
 
 /*
@@ -301,9 +347,10 @@ find_failed_request(struct inode *inode, pid_t pid)
  * issued by the same user.
  */
 static inline int
-update_write_request(struct nfs_wreq *req, unsigned first, unsigned bytes)
+update_write_request(struct nfs_wreq *req, unsigned int first,
+			unsigned int bytes)
 {
-	unsigned	rqfirst = req->wb_offset,
+	unsigned int	rqfirst = req->wb_offset,
 			rqlast = rqfirst + req->wb_bytes,
 			last = first + bytes;
 
@@ -335,7 +382,7 @@ update_write_request(struct nfs_wreq *req, unsigned first, unsigned bytes)
  */
 static inline struct nfs_wreq *
 create_write_request(struct inode *inode, struct page *page,
-				unsigned offset, unsigned bytes)
+			unsigned int offset, unsigned int bytes)
 {
 	struct nfs_wreq *wreq;
 	struct rpc_clnt	*clnt = NFS_CLIENT(inode);
@@ -448,9 +495,9 @@ wait_on_write_request(struct nfs_wreq *req)
 	}
 	remove_wait_queue(&page->wait, &wait);
 	current->state = TASK_RUNNING;
-if (atomic_read(&page->count) == 1)
-printk("NFS: lost a page\n");
-	atomic_dec(&page->count);
+	if (atomic_read(&page->count) == 1)
+		printk("NFS: page unused while waiting\n");
+	free_page(page_address(page));
 	return retval;
 }
 
@@ -620,7 +667,7 @@ nfs_flush_pages(struct inode *inode, pid_t pid, off_t offset, off_t len,
 }
 
 /*
- * Cancel all writeback requests, both pending and in process.
+ * Cancel all writeback requests, both pending and in progress.
  */
 static void
 nfs_cancel_dirty(struct inode *inode, pid_t pid)
@@ -650,17 +697,18 @@ int
 nfs_flush_dirty_pages(struct inode *inode, off_t offset, off_t len)
 {
 	struct nfs_wreq *last = NULL;
+	int result = 0;
 
 	dprintk("NFS:      flush_dirty_pages(%x/%ld for pid %d %ld/%ld)\n",
 				inode->i_dev, inode->i_ino, current->pid,
 				offset, len);
 
-	if (IS_SOFT && signalled())
-		nfs_cancel_dirty(inode, current->pid);
-
 	for (;;) {
-		if (IS_SOFT && signalled())
-			return -ERESTARTSYS;
+		if (IS_SOFT && signalled()) {
+			nfs_cancel_dirty(inode, current->pid);
+			result = -ERESTARTSYS;
+			break;
+		}
 
 		/* Flush all pending writes for this pid and file region */
 		last = nfs_flush_pages(inode, current->pid, offset, len, 0);
@@ -669,7 +717,7 @@ nfs_flush_dirty_pages(struct inode *inode, off_t offset, off_t len)
 		wait_on_write_request(last);
 	}
 
-	return 0;
+	return result;
 }
 
 /*
@@ -732,15 +780,14 @@ nfs_check_error(struct inode *inode)
 	dprintk("nfs:      checking for write error inode %04x/%ld\n",
 			inode->i_dev, inode->i_ino);
 
-	if (!(req = find_failed_request(inode, current->pid)))
-		return 0;
-
-	dprintk("nfs: write error %d inode %04x/%ld\n",
+	req = find_failed_request(inode, current->pid, 0);
+	if (req) {
+		dprintk("nfs: write error %d inode %04x/%ld\n",
 			req->wb_task.tk_status, inode->i_dev, inode->i_ino);
 
-	status = req->wb_task.tk_status;
-	remove_write_request(&nfs_failed_requests, req);
-	kfree(req);
+		status = req->wb_task.tk_status;
+		remove_failed_request(req);
+	}
 	return status;
 }
 
@@ -816,23 +863,14 @@ nfs_wback_result(struct rpc_task *task)
 	page   = req->wb_page;
 	status = task->tk_status;
 
-	/* Remove request from writeback list and wake up tasks
-	 * sleeping on it. */
-	remove_write_request(&NFS_WRITEBACK(inode), req);
-
 	if (status < 0) {
 		/*
 		 * An error occurred. Report the error back to the
-		 * application by adding the failed request to the
-		 * inode's error list.
+		 * application by adding the request to the failed
+		 * requests list.
 		 */
-		if (find_failed_request(inode, req->wb_pid)) {
+		if (find_failed_request(inode, req->wb_pid, 0))
 			status = 0;
-		} else {
-			dprintk("NFS: %4d saving write failure code\n",
-						task->tk_pid);
-			append_write_request(&nfs_failed_requests, req);
-		}
 		clear_bit(PG_uptodate, &page->flags);
 	} else if (!WB_CANCELLED(req)) {
 		struct nfs_fattr *fattr = req->wb_fattr;
@@ -860,6 +898,10 @@ nfs_wback_result(struct rpc_task *task)
 		}
 	}
 
+	/*
+	 * This call might block, so we defer removing the request
+	 * from the inode's writeback list.
+	 */
 	rpc_release_task(task);
 
 	if (WB_INVALIDATE(req))
@@ -871,8 +913,20 @@ nfs_wback_result(struct rpc_task *task)
 		kfree(req->wb_args);
 		req->wb_args = 0;
 	}
+
+	/*
+	 * Now it's safe to remove the request from the inode's 
+	 * writeback list and wake up any tasks sleeping on it.
+	 * If the request failed, add it to the failed list.
+	 */
+	remove_write_request(&NFS_WRITEBACK(inode), req);
+
 	if (status >= 0)
 		kfree(req);
+	else {
+		dprintk("NFS: %4d saving write failure code\n", task->tk_pid);
+		append_failed_request(req);
+	}
 
 	free_page(page_address(page));
 	nr_write_requests--;

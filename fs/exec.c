@@ -372,13 +372,13 @@ int read_exec(struct dentry *dentry, unsigned long offset,
 	if (to_kmem) {
 		unsigned long old_fs = get_fs();
 		set_fs(get_ds());
-		result = file.f_op->read(inode, &file, addr, count);
+		result = file.f_op->read(&file, addr, count, &file.f_pos);
 		set_fs(old_fs);
 	} else {
 		result = verify_area(VERIFY_WRITE, addr, count);
 		if (result)
 			goto close_readexec;
-		result = file.f_op->read(inode, &file, addr, count);
+		result = file.f_op->read(&file, addr, count, &file.f_pos);
 	}
 close_readexec:
 	if (file.f_op->release)
@@ -427,15 +427,33 @@ fail_restore:
 	current->mm = old_mm;
 	mmput(mm);
 
-	/*
-	 * N.B. binfmt_xxx needs to handle the error instead of oom()
-	 */
 fail_nomem:
-	/* this is wrong, I think. */
-	oom(current);
 	return retval;
 }
 
+/*
+ * This function makes sure the current process has its own signal table,
+ * so that flush_old_signals can later reset the signals without disturbing
+ * other processes.  (Other processes might share the signal table via
+ * the CLONE_SIGHAND option to clone().)
+ */
+ 
+static inline int make_private_signals(void)
+{
+	struct signal_struct * newsig;
+
+	if (atomic_read(&current->sig->count) <= 1)
+		return 0;
+	newsig = kmalloc(sizeof(*newsig), GFP_KERNEL);
+	if (newsig == NULL)
+		return -ENOMEM;
+	spin_lock_init(&newsig->siglock);
+	atomic_set(&newsig->count, 1);
+	memcpy(newsig->action, current->sig->action, sizeof(newsig->action));
+	current->sig = newsig;
+	return 0;
+}
+	
 /*
  * These functions flushes out all traces of the currently running executable
  * so that a new one can be started
@@ -476,18 +494,24 @@ static inline void flush_old_files(struct files_struct * files)
 	}
 }
 
-void flush_old_exec(struct linux_binprm * bprm)
+int flush_old_exec(struct linux_binprm * bprm)
 {
 	char * name;
 	int i, ch, retval;
+	struct signal_struct * oldsig;
+
+	/*
+	 * Make sure we have a private signal table
+	 */
+	oldsig = current->sig;
+	retval = make_private_signals();
+	if (retval) goto flush_failed;
 
 	/* 
-	 * Release all of the old mmap stuff ... do this first
-	 * so we can bail out on failure.
+	 * Release all of the old mmap stuff
 	 */
 	retval = exec_mmap();
-	if (retval)
-		goto out;
+	if (retval) goto flush_failed;
 
 	if (current->euid == current->uid && current->egid == current->gid)
 		current->dumpable = 1;
@@ -509,8 +533,12 @@ void flush_old_exec(struct linux_binprm * bprm)
 
 	flush_old_signals(current->sig);
 	flush_old_files(current->files);
-out:
-	return; /* retval; FIXME. */
+
+	return 0;
+
+flush_failed:
+	current->sig = oldsig;
+	return retval;
 }
 
 /* 

@@ -268,13 +268,12 @@ static int ni65_open(struct device *dev)
 {
 	struct priv *p = (struct priv *) dev->priv;
 	int irqval = request_irq(dev->irq, &ni65_interrupt,0,
-                        cards[p->cardno].cardname,NULL);
+                        cards[p->cardno].cardname,dev);
 	if (irqval) {
 		printk ("%s: unable to get IRQ %d (irqval=%d).\n",
 		          dev->name,dev->irq, irqval);
 		return -EAGAIN;
 	}
-	irq2dev_map[dev->irq] = dev;
 
 	if(ni65_lance_reinit(dev))
 	{
@@ -286,7 +285,6 @@ static int ni65_open(struct device *dev)
 	}
 	else
 	{
-		irq2dev_map[dev->irq] = NULL;
 		free_irq(dev->irq,NULL);
 		dev->start = 0;
 		return -EAGAIN;
@@ -314,7 +312,6 @@ static int ni65_close(struct device *dev)
 		}
 	}
 #endif
-	irq2dev_map[dev->irq] = NULL;
 	free_irq(dev->irq,NULL);
 	dev->tbusy = 1;
 	dev->start = 0;
@@ -795,7 +792,7 @@ static int ni65_lance_reinit(struct device *dev)
 static void ni65_interrupt(int irq, void * dev_id, struct pt_regs * regs)
 {
 	int csr0;
-	struct device *dev = (struct device *) irq2dev_map[irq];
+	struct device *dev = dev_id;
 	struct priv *p;
 	int bcnt = 32;
 

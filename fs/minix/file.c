@@ -27,7 +27,7 @@
 #include <linux/fs.h>
 #include <linux/minix_fs.h>
 
-static long minix_file_write(struct inode *, struct file *, const char *, unsigned long);
+static ssize_t minix_file_write(struct file *, const char *, size_t, loff_t *);
 
 /*
  * We have mostly NULL's here: the current defaults are ok for
@@ -66,11 +66,12 @@ struct inode_operations minix_file_inode_operations = {
 	NULL			/* permission */
 };
 
-static long minix_file_write(struct inode * inode, struct file * filp,
-	const char * buf, unsigned long count)
+static ssize_t minix_file_write(struct file * filp, const char * buf,
+				size_t count, loff_t *ppos)
 {
+	struct inode * inode = filp->f_dentry->d_inode;
 	off_t pos;
-	int written,c;
+	ssize_t written, c;
 	struct buffer_head * bh;
 	char * p;
 
@@ -85,7 +86,7 @@ static long minix_file_write(struct inode * inode, struct file * filp,
 	if (filp->f_flags & O_APPEND)
 		pos = inode->i_size;
 	else
-		pos = filp->f_pos;
+		pos = *ppos;
 	written = 0;
 	while (written < count) {
 		bh = minix_getblk(inode,pos/BLOCK_SIZE,1);
@@ -126,7 +127,7 @@ static long minix_file_write(struct inode * inode, struct file * filp,
 	if (pos > inode->i_size)
 		inode->i_size = pos;
 	inode->i_mtime = inode->i_ctime = CURRENT_TIME;
-	filp->f_pos = pos;
+	*ppos = pos;
 	mark_inode_dirty(inode);
 	return written;
 }

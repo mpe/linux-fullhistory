@@ -327,9 +327,7 @@ static int net_open(struct device *dev)
 	/* The interrupt line is turned off (tri-stated) when the device isn't in
 	   use.  That's especially important for "attached" interfaces where the
 	   port or interrupt may be shared. */
-	if (irq2dev_map[dev->irq] != 0
-		|| (irq2dev_map[dev->irq] = dev) == 0
-		|| request_irq(dev->irq, &net_interrupt, 0, "ATP", NULL)) {
+	if (request_irq(dev->irq, &net_interrupt, 0, "ATP", dev)) {
 		return -EAGAIN;
 	}
 
@@ -479,7 +477,7 @@ net_send_packet(struct sk_buff *skb, struct device *dev)
 static void
 net_interrupt(int irq, void *dev_id, struct pt_regs * regs)
 {
-	struct device *dev = (struct device *)(irq2dev_map[irq]);
+	struct device *dev = dev_id;
 	struct net_local *lp;
 	int ioaddr, status, boguscount = 20;
 	static int num_tx_since_rx = 0;
@@ -730,7 +728,6 @@ net_close(struct device *dev)
 	/* Free the IRQ line. */
 	outb(0x00, ioaddr + PAR_CONTROL);
 	free_irq(dev->irq, NULL);
-	irq2dev_map[dev->irq] = 0;
 
 	/* Leave the hardware in a reset state. */
     write_reg_high(ioaddr, CMR1, CMR1h_RESET);

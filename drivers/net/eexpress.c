@@ -346,9 +346,7 @@ static int eexp_open(struct device *dev)
 	if (!irq || !irqrmap[irq])
 		return -ENXIO;
 
-	if (irq2dev_map[irq] ||
-	   ((irq2dev_map[irq]=dev),0) ||
-	     request_irq(irq,&eexp_irq,0,"EtherExpress",NULL))
+	if (request_irq(irq,&eexp_irq,0,"EtherExpress",dev))
 		return -EAGAIN;
 
 	request_region(ioaddr, EEXP_IO_EXTENT, "EtherExpress");
@@ -391,7 +389,6 @@ static int eexp_close(struct device *dev)
 	scb_command(dev, SCB_CUsuspend|SCB_RUsuspend);
 	outb(0,ioaddr+SIGNAL_CA);
 	free_irq(irq,NULL);
-	irq2dev_map[irq] = NULL;
 	outb(i586_RST,ioaddr+EEPROM_Ctrl);
 	release_region(ioaddr,16);
 
@@ -628,7 +625,7 @@ static void eexp_cmd_clear(struct device *dev)
 	
 static void eexp_irq(int irq, void *dev_info, struct pt_regs *regs)
 {
-	struct device *dev = irq2dev_map[irq];
+	struct device *dev = dev_info;
 	struct net_local *lp;
 	unsigned short ioaddr,status,ack_cmd;
 	unsigned short old_read_ptr, old_write_ptr;

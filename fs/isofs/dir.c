@@ -102,15 +102,14 @@ static int do_isofs_readdir(struct inode *inode, struct file *filp,
 	unsigned int block, offset;
 	int inode_number;
 	struct buffer_head *bh;
-	int len, rrflag;
+	int len;
+	int map;
 	int high_sierra = 0;
-	char *name;
+	char *p = NULL;		/* Quiet GCC */
 	struct iso_directory_record *de;
 
- 	if( filp->f_pos >= inode->i_size ) {
- 	  return 0;
- 
- 	}
+ 	if (filp->f_pos >= inode->i_size)
+		return 0;
  
 	offset = filp->f_pos & (bufsize - 1);
 	block = isofs_bmap(inode, filp->f_pos >> bufbits);
@@ -141,15 +140,19 @@ static int do_isofs_readdir(struct inode *inode, struct file *filp,
 		   CDROM sector.  If we are at the end of the directory, we
 		   kick out of the while loop. */
 
-		if ((de_len == 0) || (offset == bufsize) ) {
+		if ((de_len == 0) || (offset >= bufsize) ) {
 			brelse(bh);
-			filp->f_pos = ((filp->f_pos & ~(ISOFS_BLOCK_SIZE - 1))
-				       + ISOFS_BLOCK_SIZE);
-			offset = 0;
-			if( filp->f_pos >= inode->i_size )
-			  {
-			    return 0;
-			  }
+			if (de_len == 0) {
+				filp->f_pos = ((filp->f_pos & ~(ISOFS_BLOCK_SIZE - 1))
+					       + ISOFS_BLOCK_SIZE);
+				offset = 0;
+			} else {
+				offset -= bufsize;
+				filp->f_pos += offset;
+			}
+
+			if (filp->f_pos >= inode->i_size)
+				return 0;
 
 			block = isofs_bmap(inode, (filp->f_pos) >> bufbits);
 			if (!block)
@@ -181,6 +184,8 @@ static int do_isofs_readdir(struct inode *inode, struct file *filp,
 			continue;
 		}
 
+		len = 0;
+
 		/* Handle the case of the '..' directory */
 		if (de->name_len[0] == 1 && de->name[0] == 1) {
 			inode_number = filp->f_dentry->d_parent->d_inode->i_ino;
@@ -192,7 +197,6 @@ static int do_isofs_readdir(struct inode *inode, struct file *filp,
 
 		/* Handle everything else.  Do name translation if there
 		   is no Rock Ridge NM field. */
-
 		if (inode->i_sb->u.isofs_sb.s_unhide == 'n') {
 			/* Do not report hidden or associated files */
 			high_sierra = inode->i_sb->u.isofs_sb.s_high_sierra;
@@ -202,34 +206,35 @@ static int do_isofs_readdir(struct inode *inode, struct file *filp,
 			}
 		}
 
-		/* Check Rock Ridge name translation.. */
-		len = de->name_len[0];
-		name = de->name;
-		rrflag = get_rock_ridge_filename(de, &name, &len, inode);
-		if (rrflag) {
-			/* rrflag == 1 means that we have a new name (kmalloced) */
-			if (rrflag == 1) {
-				rrflag = filldir(dirent, name, len, filp->f_pos, inode_number);
-				kfree(name); /* this was allocated in get_r_r_filename.. */
-				if (rrflag < 0)
-					break;
+		if (inode->i_sb->u.isofs_sb.s_joliet_level) {
+			len = get_joliet_filename(de, inode, tmpname);
+			p = tmpname;
+		} else {
+			map = 1;
+			if (inode->i_sb->u.isofs_sb.s_rock) {
+				len = get_rock_ridge_filename(de, tmpname, inode);
+				if (len != 0) {
+					p = tmpname;
+					map = 0;
+				}
 			}
-			filp->f_pos += de_len;
-			continue;
+			if (map) {
+				if (inode->i_sb->u.isofs_sb.s_mapping == 'n') {
+					len = isofs_name_translate(de->name, de->name_len[0],
+								   tmpname);
+					p = tmpname;
+				} else {
+					p = de->name;
+					len = de->name_len[0];
+				}
+			}
 		}
-
-		if (inode->i_sb->u.isofs_sb.s_mapping == 'n') {
-			len = isofs_name_translate(name, len, tmpname);
-			if (filldir(dirent, tmpname, len, filp->f_pos, inode_number) < 0)
+		if (len > 0) {
+			if (filldir(dirent, p, len, filp->f_pos, inode_number) < 0)
 				break;
-			filp->f_pos += de_len;
-			continue;
 		}
-
-		if (filldir(dirent, name, len, filp->f_pos, inode_number) < 0)
-			break;
-
 		filp->f_pos += de_len;
+
 		continue;
 	}
 	brelse(bh);
@@ -255,7 +260,7 @@ static int isofs_readdir(struct file *filp,
 	tmpname = (char *) __get_free_page(GFP_KERNEL);
 	if (!tmpname)
 		return -ENOMEM;
-	tmpde = (struct iso_directory_record *) (tmpname+256);
+	tmpde = (struct iso_directory_record *) (tmpname+1024);
 
 	result = do_isofs_readdir(inode, filp, dirent, filldir, tmpname, tmpde);
 

@@ -130,6 +130,9 @@ struct module_info
 #define __MODULE_STRING_1(x)	#x
 #define __MODULE_STRING(x)	__MODULE_STRING_1(x)
 
+/* Find a symbol exported by the kernel or another module */
+extern unsigned long get_module_symbol(char *, char *);
+
 #if defined(MODULE) && !defined(__GENKSYMS__)
 
 /* Embedded module documentation macros.  */

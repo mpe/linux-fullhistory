@@ -116,6 +116,10 @@ __initfunc(static void do_sys_setup(void))
 	init_autofs_fs();
 #endif
 
+#ifdef CONFIG_NLS
+	init_nls();
+#endif
+
 	mount_root();
 }
 

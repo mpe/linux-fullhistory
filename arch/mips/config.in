@@ -181,6 +181,8 @@ fi
 
 source fs/Config.in
 
+source fs/nls/Config.in
+
 if [ "$CONFIG_SGI" != "y" ]; then
   source drivers/char/Config.in
 

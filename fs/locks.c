@@ -503,7 +503,7 @@ int locks_verify_locked(struct inode *inode)
 }
 
 int locks_verify_area(int read_write, struct inode *inode, struct file *filp,
-		      unsigned int offset, unsigned int count)
+		      loff_t offset, size_t count)
 {
 	/* Candidates for mandatory locking have the setgid bit set
 	 * but no group execute bit -  an otherwise meaningless combination.
@@ -531,8 +531,8 @@ int locks_mandatory_locked(struct inode *inode)
 }
 
 int locks_mandatory_area(int read_write, struct inode *inode,
-			 struct file *filp, unsigned int offset,
-			 unsigned int count)
+			 struct file *filp, loff_t offset,
+			 size_t count)
 {
 	struct file_lock *fl;
 	struct file_lock tfl;
@@ -1147,9 +1147,9 @@ static char *lock_get_status(struct file_lock *fl, int id, char *pfx)
 }
 
 static inline int copy_lock_status(char *p, char **q, off_t pos, int len,
-				   off_t offset, int length)
+				   off_t offset, off_t length)
 {
-	int i;
+	off_t i;
 
 	i = pos - offset;
 	if (i > 0) {
@@ -1171,15 +1171,13 @@ static inline int copy_lock_status(char *p, char **q, off_t pos, int len,
 	return (1);
 }
 
-int get_locks_status(char *buffer, char **start, off_t offset, int length)
+int get_locks_status(char *buffer, char **start, off_t offset, off_t length)
 {
 	struct file_lock *fl;
 	struct file_lock *bfl;
 	char *p;
 	char *q = buffer;
-	int i;
-	int len;
-	off_t pos = 0;
+	off_t i, len, pos = 0;
 
 	for (fl = file_lock_table, i = 1; fl != NULL; fl = fl->fl_nextlink, i++) {
 		p = lock_get_status(fl, i, "");

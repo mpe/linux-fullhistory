@@ -10,22 +10,31 @@
 #include <linux/fs.h>
 #include <linux/msdos_fs.h>
 
+#if 0
+#  define PRINTK(x) printk x
+#else
+#  define PRINTK(x)
+#endif
+
 struct buffer_head *fat_bread (
 	struct super_block *sb,
 	int block)
 {
 	struct buffer_head *ret = NULL;
 
-	/* Note that the blocksize is 512, 1024 or 2048, but the first read
-	   is always of size 1024 (or 2048). Doing readahead may be counterproductive
-	   or just plain wrong. */
+	PRINTK(("fat_bread: block=0x%x\n", block));
+	/*
+	 * Note that the blocksize is 512, 1024 or 2048, but the first read
+	 * is always of size 1024 (or 2048). Doing readahead may be
+	 * counterproductive or just plain wrong.
+	 */
 	if (sb->s_blocksize == 512) {
 		ret = bread (sb->s_dev,block,512);
 	} else {
 		struct buffer_head *real;
 		if (sb->s_blocksize == 1024){
 			real = bread (sb->s_dev,block>>1,1024);
-		}else{
+		} else {
 			real = bread (sb->s_dev,block>>2,2048);
 		}
 
@@ -82,6 +91,7 @@ struct buffer_head *fat_getblk (
 	int block)
 {
 	struct buffer_head *ret = NULL;
+	PRINTK(("fat_getblk: block=0x%x\n", block));
 	if (sb->s_blocksize == 512){
 		ret = getblk (sb->s_dev,block,512);
 	}else{

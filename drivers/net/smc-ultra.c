@@ -253,7 +253,7 @@ ultra_open(struct device *dev)
 {
 	int ioaddr = dev->base_addr - ULTRA_NIC_OFFSET; /* ASIC addr */
 
-	if (request_irq(dev->irq, ei_interrupt, 0, ei_status.name, NULL))
+	if (request_irq(dev->irq, ei_interrupt, 0, ei_status.name, dev))
 		return -EAGAIN;
 
 	outb(0x00, ioaddr);	/* Disable shared memory for safety. */
@@ -406,7 +406,6 @@ ultra_close_card(struct device *dev)
 
 	outb(0x00, ioaddr + 6);		/* Disable interrupts. */
 	free_irq(dev->irq, NULL);
-	irq2dev_map[dev->irq] = 0;
 
 	NS8390_init(dev, 0);
 
@@ -474,7 +473,7 @@ cleanup_module(void)
 	for (this_dev = 0; this_dev < MAX_ULTRA_CARDS; this_dev++) {
 		struct device *dev = &dev_ultra[this_dev];
 		if (dev->priv != NULL) {
-			/* NB: ultra_close_card() does free_irq + irq2dev */
+			/* NB: ultra_close_card() does free_irq */
 			int ioaddr = dev->base_addr - ULTRA_NIC_OFFSET;
 			kfree(dev->priv);
 			dev->priv = NULL;

@@ -33,7 +33,7 @@
 #include <linux/fs.h>
 #include <linux/sysv_fs.h>
 
-static long sysv_file_write(struct inode *, struct file *, const char *, unsigned long);
+static ssize_t sysv_file_write(struct file *, const char *, size_t, loff_t *);
 
 /*
  * We have mostly NULL's here: the current defaults are ok for
@@ -72,18 +72,19 @@ struct inode_operations sysv_file_inode_operations = {
 	NULL			/* permission */
 };
 
-long sysv_file_read(struct inode * inode, struct file * filp,
-	char * buf, unsigned long count)
+ssize_t sysv_file_read(struct file * filp, char * buf, 
+		       size_t count, loff_t *ppos)
 {
+	struct inode * inode = filp->f_dentry->d_inode;
 	struct super_block * sb = inode->i_sb;
-	int read,left,chars;
-	unsigned int block;
-	int blocks, offset;
+	ssize_t read,left,chars;
+	size_t block;
+	ssize_t blocks, offset;
 	int bhrequest, uptodate;
 	struct buffer_head ** bhb, ** bhe;
 	struct buffer_head * bhreq[NBUF];
 	struct buffer_head * buflist[NBUF];
-	unsigned int size;
+	size_t size;
 
 	if (!inode) {
 		printk("sysv_file_read: inode = NULL\n");
@@ -93,7 +94,7 @@ long sysv_file_read(struct inode * inode, struct file * filp,
 		printk("sysv_file_read: mode = %07o\n",inode->i_mode);
 		return -EINVAL;
 	}
-	offset = filp->f_pos;
+	offset = *ppos;
 	size = inode->i_size;
 	if (offset > size)
 		left = 0;
@@ -167,7 +168,7 @@ long sysv_file_read(struct inode * inode, struct file * filp,
 				chars = left;
 			else
 				chars = sb->sv_block_size - offset;
-			filp->f_pos += chars;
+			*ppos += chars;
 			left -= chars;
 			read += chars;
 			if (*bhe) {
@@ -200,12 +201,13 @@ long sysv_file_read(struct inode * inode, struct file * filp,
 	return read;
 }
 
-static long sysv_file_write(struct inode * inode, struct file * filp,
-	const char * buf, unsigned long count)
+static ssize_t sysv_file_write(struct file * filp, const char * buf,
+			       size_t count, loff_t *ppos)
 {
+	struct inode * inode = filp->f_dentry->d_inode;
 	struct super_block * sb = inode->i_sb;
 	off_t pos;
-	int written,c;
+	ssize_t written, c;
 	struct buffer_head * bh;
 	char * p;
 
@@ -227,7 +229,7 @@ static long sysv_file_write(struct inode * inode, struct file * filp,
 	if (filp->f_flags & O_APPEND)
 		pos = inode->i_size;
 	else
-		pos = filp->f_pos;
+		pos = *ppos;
 	written = 0;
 	while (written<count) {
 		bh = sysv_getblk (inode, pos >> sb->sv_block_size_bits, 1);
@@ -265,7 +267,7 @@ static long sysv_file_write(struct inode * inode, struct file * filp,
 		brelse(bh);
 	}
 	inode->i_mtime = inode->i_ctime = CURRENT_TIME;
-	filp->f_pos = pos;
+	*ppos = pos;
 	mark_inode_dirty(inode);
 	return written;
 }

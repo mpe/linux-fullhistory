@@ -683,9 +683,12 @@ static inline int do_load_irix_binary(struct linux_binprm * bprm,
 		}
 	}
 	
-	/* OK, This is the point of no return. */
-	flush_old_exec(bprm);
+	/* Flush all traces of the currently running executable */
+	retval = flush_old_exec(bprm);
+	if (retval)
+		return retval;
 
+	/* OK, This is the point of no return */
 	current->mm->end_data = 0;
 	current->mm->end_code = 0;
 	current->mm->start_mmap = ELF_START_MMAP;

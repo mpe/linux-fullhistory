@@ -302,7 +302,7 @@ static int cops_probe1(struct device *dev, int ioaddr)
 		dev->irq = 9;
 
 	/* Snarf the interrupt now. */
-        irqval = request_irq(dev->irq, &cops_interrupt, 0, cardname, NULL);
+        irqval = request_irq(dev->irq, &cops_interrupt, 0, cardname, dev);
         if (irqval)
 	{	
         	printk(KERN_WARNING "%s: Unable to get IRQ %d (irqval=%d).\n", dev->name, dev->irq, irqval);
@@ -398,8 +398,6 @@ static int cops_irq (int ioaddr, int board)
  */
 static int cops_open(struct device *dev)
 {
-        irq2dev_map[dev->irq] = dev;
-
 	cops_jumpstart(dev);	/* Start the card up. */
 
         dev->tbusy = 0;
@@ -666,7 +664,7 @@ static int cops_nodeid (struct device *dev, int nodeid)
  */
 static void cops_interrupt(int irq, void *dev_id, struct pt_regs * regs)
 {
-        struct device *dev = (struct device *) irq2dev_map[irq];
+        struct device *dev = dev_id;
         struct cops_local *lp;
         int ioaddr, status;
         int boguscount = 0;
@@ -954,7 +952,6 @@ static int cops_close(struct device *dev)
 {
         dev->tbusy = 1;
         dev->start = 0;
-        irq2dev_map[dev->irq] = 0;
 
 #ifdef MODULE
         MOD_DEC_USE_COUNT;

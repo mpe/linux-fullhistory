@@ -669,7 +669,7 @@ static void elp_interrupt(int irq, void *dev_id, struct pt_regs *reg_ptr)
 		printk("elp_interrupt(): illegal IRQ number found in interrupt routine (%i)\n", irq);
 		return;
 	}
-	dev = irq2dev_map[irq];
+	dev = dev_id;
 
 	if (dev == NULL) {
 		printk("elp_interrupt(): irq %d for unknown device.\n", irq);
@@ -926,15 +926,9 @@ static int elp_open(struct device *dev)
 	adapter->rx_backlog.out = 0;
 
 	/*
-	 * make sure we can find the device header given the interrupt number
-	 */
-	irq2dev_map[dev->irq] = dev;
-
-	/*
 	 * install our interrupt service routine
 	 */
-	if (request_irq(dev->irq, &elp_interrupt, 0, "3c505", NULL)) {
-		irq2dev_map[dev->irq] = NULL;
+	if (request_irq(dev->irq, &elp_interrupt, 0, "3c505", dev)) {
 		return -EAGAIN;
 	}
 	if (request_dma(dev->dma, "3c505")) {
@@ -1223,11 +1217,6 @@ static int elp_close(struct device *dev)
 	 * release the IRQ
 	 */
 	free_irq(dev->irq, NULL);
-
-	/*
-	 * and we no longer have to map irq to dev either
-	 */
-	irq2dev_map[dev->irq] = 0;
 
 	free_dma(dev->dma);
 	free_pages((unsigned long) adapter->dma_buffer, __get_order(DMA_BUFFER_SIZE));

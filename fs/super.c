@@ -594,31 +594,11 @@ static int do_umount(kdev_t dev,int unmount_root)
 
 	if (!sb->s_root)
 		return -ENOENT;
-
-	if (dev==ROOT_DEV && !unmount_root) {
-		/*
-		 * Special case for "unmounting" root. We just try to remount
-		 * it readonly, and sync() the device.
-		 */
-		if (!(sb->s_flags & MS_RDONLY)) {
-			/*
-			 * Make sure all quotas are turned off on this device we need to mount
-			 * it readonly so no more writes by the quotasystem.
-			 * If later on the remount fails too bad there are no quotas running
-			 * anymore. Turn them on again by hand.
-			 */
-			quota_off(dev, -1);
-			fsync_dev(dev);
-			retval = do_remount_sb(sb, MS_RDONLY, 0);
-			return retval;
-		}
-		return 0;
-	}
-
 	/*
-	 * Before checking if the filesystem is still busy make sure the kernel
-	 * doesn't hold any quotafiles open on that device. If the umount fails
-	 * too bad there are no quotas running anymore. Turn them on again by hand.
+	 * Before checking whether the filesystem is still busy,
+	 * make sure the kernel doesn't hold any quotafiles open
+	 * on the device. If the umount fails, too bad -- there
+	 * are no quotas running anymore. Just turn them on again.
 	 */
 	quota_off(dev, -1);
 
@@ -628,12 +608,23 @@ static int do_umount(kdev_t dev,int unmount_root)
 	 * root entry should be in use and (b) that root entry is
 	 * clean.
 	 */
-	shrink_dcache();
+	shrink_dcache_sb(sb);
 	fsync_dev(dev);
+
+	if (dev==ROOT_DEV && !unmount_root) {
+		/*
+		 * Special case for "unmounting" root ...
+		 * we just try to remount it readonly.
+		 */
+		retval = 0;
+		if (!(sb->s_flags & MS_RDONLY))
+			retval = do_remount_sb(sb, MS_RDONLY, 0);
+		return retval;
+	}
 
 	retval = d_umount(sb);
 	if (retval)
-		return retval;
+		goto out;
 
 	/* Forget any inodes */
 	if (invalidate_inodes(sb)) {
@@ -648,7 +639,9 @@ static int do_umount(kdev_t dev,int unmount_root)
 			sb->s_op->put_super(sb);
 	}
 	remove_vfsmnt(dev);
-	return 0;
+	retval = 0;
+out:
+	return retval;
 }
 
 static int umount_dev(kdev_t dev)

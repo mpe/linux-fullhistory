@@ -17,12 +17,11 @@
 #include <linux/kernel_stat.h>
 #include <linux/errno.h>
 #include <linux/string.h>
-#include <linux/stat.h>
 #include <linux/swap.h>
-#include <linux/fs.h>
 #include <linux/swapctl.h>
 #include <linux/smp_lock.h>
 #include <linux/slab.h>
+#include <linux/dcache.h>
 
 #include <asm/bitops.h>
 #include <asm/pgtable.h>
@@ -352,6 +351,8 @@ static inline int do_try_to_free_page(int priority, int dma, int wait)
 	int i=6;
 	int stop;
 
+	/* Let the dcache know we're looking for memory ... */
+	shrink_dcache_memory();
 	/* Always trim SLAB caches when memory gets low. */
 	(void) kmem_cache_reap(0, dma, wait);
 

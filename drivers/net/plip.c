@@ -797,7 +797,7 @@ plip_error(struct device *dev, struct net_local *nl,
 static void
 plip_interrupt(int irq, void *dev_id, struct pt_regs * regs)
 {
-	struct device *dev = (struct device *) irq2dev_map[irq];
+	struct device *dev = dev_id;
 	struct net_local *nl;
 	struct plip_local *rcv;
 	unsigned char c0;
@@ -981,7 +981,6 @@ plip_open(struct device *dev)
 	dev->interrupt = 0;
 	dev->start = 1;
 	dev->tbusy = 0;
-	irq2dev_map[dev->irq] = dev;
 
 	MOD_INC_USE_COUNT;
 	return 0;
@@ -998,7 +997,6 @@ plip_close(struct device *dev)
 	dev->tbusy = 1;
 	dev->start = 0;
 	cli();
-	irq2dev_map[dev->irq] = NULL;
 	sti();
 #ifdef NOTDEF
 	outb(0x00, PAR_DATA(dev));
@@ -1067,7 +1065,6 @@ plip_wakeup(void *handle)
 
 	if (!parport_claim(nl->pardev)) {
 		nl->port_owner = 1;
-		irq2dev_map[dev->irq] = dev;
 		/* Clear the data port. */
 		outb (0x00, PAR_DATA(dev));
 	}

@@ -154,6 +154,8 @@ endmenu
 
 source fs/Config.in
 
+source fs/nls/Config.in
+
 source drivers/char/Config.in
 if [ "$CONFIG_RTC" != "n" ]; then
   bool '  ARC console time' CONFIG_RTC_ARC y

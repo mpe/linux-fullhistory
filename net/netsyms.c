@@ -319,7 +319,6 @@ EXPORT_SYMBOL(skb_copy);
 EXPORT_SYMBOL(dev_alloc_skb);
 EXPORT_SYMBOL(netif_rx);
 EXPORT_SYMBOL(dev_tint);
-EXPORT_SYMBOL(irq2dev_map);
 EXPORT_SYMBOL(dev_add_pack);
 EXPORT_SYMBOL(dev_remove_pack);
 EXPORT_SYMBOL(dev_get);

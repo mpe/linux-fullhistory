@@ -3666,14 +3666,7 @@ wavelan_interrupt(int			irq,
   u_short	status;
   u_short	ack_cmd;
 
-  if((dev = (device *) (irq2dev_map[irq])) == (device *) NULL)
-    {
-#ifdef DEBUG_INTERRUPT_ERROR
-      printk(KERN_WARNING "wavelan_interrupt(): irq %d for unknown device.\n",
-	     irq);
-#endif
-      return;
-    }
+  dev = dev_id;
 
 #ifdef DEBUG_INTERRUPT_TRACE
   printk(KERN_DEBUG "%s: ->wavelan_interrupt()\n", dev->name);
@@ -3913,12 +3906,8 @@ wavelan_open(device *	dev)
       return -ENXIO;
     }
 
-  if((irq2dev_map[dev->irq] != (device *) NULL) ||
-     /* This is always true, but avoid the false IRQ. */
-     ((irq2dev_map[dev->irq] = dev) == (device *) NULL) ||
-     (request_irq(dev->irq, &wavelan_interrupt, 0, "WaveLAN", NULL) != 0))
+  if(request_irq(dev->irq, &wavelan_interrupt, 0, "WaveLAN", dev) != 0)
     {
-      irq2dev_map[dev->irq] = (device *) NULL;
 #ifdef DEBUG_CONFIG_ERRORS
       printk(KERN_WARNING "%s: wavelan_open(): invalid irq\n", dev->name);
 #endif
@@ -3934,7 +3923,6 @@ wavelan_open(device *	dev)
   else
     {
       free_irq(dev->irq, NULL);
-      irq2dev_map[dev->irq] = (device *) NULL;
 #ifdef DEBUG_CONFIG_ERRORS
       printk(KERN_INFO "%s: wavelan_open(): impossible to start the card\n",
 	     dev->name);
@@ -3983,7 +3971,6 @@ wavelan_close(device *	dev)
   wv_82586_stop(dev);
 
   free_irq(dev->irq, NULL);
-  irq2dev_map[dev->irq] = (device *) NULL;
 
   MOD_DEC_USE_COUNT;
 

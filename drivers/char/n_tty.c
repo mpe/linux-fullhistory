@@ -88,9 +88,8 @@ void n_tty_flush_buffer(struct tty_struct * tty)
 
 /*
  * Return number of characters buffered to be delivered to user
- * 
  */
-int n_tty_chars_in_buffer(struct tty_struct *tty)
+ssize_t n_tty_chars_in_buffer(struct tty_struct *tty)
 {
 	if (tty->icanon) {
 		if (!tty->canon_data) return 0;
@@ -817,10 +816,10 @@ static inline int input_available_p(struct tty_struct *tty, int amt)
  */
 static inline void copy_from_read_buf(struct tty_struct *tty,
 				      unsigned char **b,
-				      unsigned int *nr)
+				      size_t *nr)
 
 {
-	int	n;
+	ssize_t n;
 
 	n = MIN(*nr, MIN(tty->read_cnt, N_TTY_BUF_SIZE - tty->read_tail));
 	if (!n)
@@ -832,15 +831,15 @@ static inline void copy_from_read_buf(struct tty_struct *tty,
 	*nr -= n;
 }
 
-static int read_chan(struct tty_struct *tty, struct file *file,
-		     unsigned char *buf, unsigned int nr)
+static ssize_t read_chan(struct tty_struct *tty, struct file *file,
+			 unsigned char *buf, size_t nr)
 {
 	struct wait_queue wait = { current, NULL };
 	int c;
 	unsigned char *b = buf;
 	int minimum, time;
-	int retval = 0;
-	int size;
+	ssize_t retval = 0;
+	ssize_t size;
 
 do_it_again:
 
@@ -1004,13 +1003,13 @@ do_it_again:
 	return (size ? size : retval);
 }
 
-static int write_chan(struct tty_struct * tty, struct file * file,
-		      const unsigned char * buf, unsigned int nr)
+static ssize_t write_chan(struct tty_struct * tty, struct file * file,
+			  const unsigned char * buf, size_t nr)
 {
 	struct wait_queue wait = { current, NULL };
-	int c, num;
+	int c;
 	const unsigned char *b = buf;
-	int retval = 0;
+	ssize_t retval = 0, num;
 
 	/* Job control check -- must be done at start (POSIX.1 7.1.1.4). */
 	if (L_TOSTOP(tty) && file->f_dentry->d_inode->i_rdev != CONSOLE_DEV) {

@@ -259,7 +259,7 @@ hpp_open(struct device *dev)
 	int ioaddr = dev->base_addr - NIC_OFFSET;
 	int option_reg;
 
-	if (request_irq(dev->irq, &ei_interrupt, 0, "hp-plus", NULL)) {
+	if (request_irq(dev->irq, &ei_interrupt, 0, "hp-plus", dev)) {
 	    return -EAGAIN;
 	}
 
@@ -289,7 +289,6 @@ hpp_close(struct device *dev)
 	int option_reg = inw(ioaddr + HPP_OPTION);
 
 	free_irq(dev->irq, NULL);
-	irq2dev_map[dev->irq] = NULL;
 	ei_close(dev);
 	outw((option_reg & ~EnableIRQ) | MemDisable | NICReset | ChipReset,
 		 ioaddr + HPP_OPTION);
@@ -465,7 +464,7 @@ cleanup_module(void)
 	for (this_dev = 0; this_dev < MAX_HPP_CARDS; this_dev++) {
 		struct device *dev = &dev_hpp[this_dev];
 		if (dev->priv != NULL) {
-			/* NB: hpp_close() handles free_irq + irq2dev map */
+			/* NB: hpp_close() handles free_irq */
 			int ioaddr = dev->base_addr - NIC_OFFSET;
 			kfree(dev->priv);
 			dev->priv = NULL;

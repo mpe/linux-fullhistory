@@ -871,7 +871,6 @@ int get_module_list(char *p)
 			}
 			safe_copy_cstr("]");
 		}
-
 		safe_copy_cstr("\n");
 
 #undef safe_copy_str
@@ -930,6 +929,34 @@ leave_the_loop:
 	if (len > length)
 		len = length;
 	return len;
+}
+
+/*
+ * Gets the address for a symbol in the given module.  If modname is
+ * NULL, it looks for the name in any registered symbol table.  If the
+ * modname is an empty string, it looks for the symbol in kernel exported
+ * symbol tables.
+ */
+unsigned long
+get_module_symbol(char *modname, char *symname)
+{
+	struct module *mp;
+	struct module_symbol *sym;
+	int i;
+
+	for (mp = module_list; mp; mp = mp->next) {
+		if (((modname == NULL) || (strcmp(mp->name, modname) == 0)) &&
+			(mp->flags == MOD_RUNNING) && (mp->nsyms > 0)) {
+			for (i = mp->nsyms, sym = mp->syms;
+				i > 0; --i, ++sym) {
+
+				if (strcmp(sym->name, symname) == 0) {
+					return sym->value;
+				}
+			}
+		}
+	}
+	return 0;
 }
 
 #else		/* CONFIG_MODULES */

@@ -36,13 +36,14 @@
 #define NFS_PARANOIA 1
 
 extern void nfs_invalidate_dircache_sb(struct super_block *);
+extern int  check_failed_request(struct inode *);
 
-static int nfs_notify_change(struct inode *, struct iattr *);
+static void nfs_read_inode(struct inode *);
 static void nfs_put_inode(struct inode *);
 static void nfs_delete_inode(struct inode *);
+static int  nfs_notify_change(struct inode *, struct iattr *);
 static void nfs_put_super(struct super_block *);
-static void nfs_read_inode(struct inode *);
-static int nfs_statfs(struct super_block *, struct statfs *, int bufsiz);
+static int  nfs_statfs(struct super_block *, struct statfs *, int);
 
 static struct super_operations nfs_sops = { 
 	nfs_read_inode,		/* read inode */
@@ -91,6 +92,25 @@ static void
 nfs_delete_inode(struct inode * inode)
 {
 	dprintk("NFS: delete_inode(%x/%ld)\n", inode->i_dev, inode->i_ino);
+	/*
+	 * Flush out any pending write requests ...
+	 */
+	if (NFS_WRITEBACK(inode) != NULL) {
+		unsigned long timeout = jiffies + 5*HZ;
+		printk("NFS: invalidating pending RPC requests\n");
+		nfs_invalidate_pages(inode);
+		while (NFS_WRITEBACK(inode) != NULL && jiffies < timeout) {
+			current->state = TASK_UNINTERRUPTIBLE;
+			current->timeout = jiffies + HZ/10;
+			schedule();
+		}
+		current->state = TASK_RUNNING;
+		if (NFS_WRITEBACK(inode) != NULL)
+			printk("NFS: Arghhh, stuck RPC requests!\n");
+	}
+
+	if (check_failed_request(inode))
+		printk("NFS: inode had failed requests\n");
 	clear_inode(inode);
 }
 

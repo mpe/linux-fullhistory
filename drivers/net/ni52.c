@@ -241,7 +241,6 @@ struct priv
 static int ni52_close(struct device *dev)
 {
 	free_irq(dev->irq, NULL);
-	irq2dev_map[dev->irq] = NULL;
 
 	ni_reset586(); /* the hard way to stop the receiver */
 
@@ -264,12 +263,11 @@ static int ni52_open(struct device *dev)
 	startrecv586(dev);
 	ni_enaint();
 
-	if(request_irq(dev->irq, &ni52_interrupt,0,"ni5210",NULL))
+	if(request_irq(dev->irq, &ni52_interrupt,0,"ni5210",dev))
 	{
 		ni_reset586();
 		return -EAGAIN;
 	}
-	irq2dev_map[dev->irq] = dev;
 
 	dev->interrupt = 0;
 	dev->tbusy = 0;
@@ -819,7 +817,7 @@ static void *alloc_rfa(struct device *dev,void *ptr)
 
 static void ni52_interrupt(int irq,void *dev_id,struct pt_regs *reg_ptr)
 {
-	struct device *dev = (struct device *) irq2dev_map[irq];
+	struct device *dev = dev_id;
 	unsigned short stat;
 	int cnt=0;
 	struct priv *p;

@@ -438,8 +438,8 @@ extern void posix_unblock_lock(struct file_lock *);
 
 extern int locks_mandatory_locked(struct inode *inode);
 extern int locks_mandatory_area(int read_write, struct inode *inode,
-				struct file *filp, unsigned int offset,
-				unsigned int count);
+				struct file *filp, loff_t offset,
+				size_t count);
 
 extern inline int locks_verify_locked(struct inode *inode)
 {
@@ -451,9 +451,10 @@ extern inline int locks_verify_locked(struct inode *inode)
 		return (locks_mandatory_locked(inode));
 	return (0);
 }
+
 extern inline int locks_verify_area(int read_write, struct inode *inode,
-				    struct file *filp, unsigned int offset,
-				    unsigned int count)
+				    struct file *filp, loff_t offset,
+				    size_t count)
 {
 	/* Candidates for mandatory locking have the setgid bit set
 	 * but no group execute bit -  an otherwise meaningless combination.
@@ -533,9 +534,9 @@ struct super_block {
 typedef int (*filldir_t)(void *, const char *, int, off_t, ino_t);
 	
 struct file_operations {
-	long long (*llseek) (struct file *, long long, int);
-	long (*read) (struct inode *, struct file *, char *, unsigned long);
-	long (*write) (struct inode *, struct file *, const char *, unsigned long);
+	loff_t (*llseek) (struct file *, loff_t, int);
+	ssize_t (*read) (struct file *, char *, size_t, loff_t *);
+	ssize_t (*write) (struct file *, const char *, size_t, loff_t *);
 	int (*readdir) (struct file *, void *, filldir_t);
 	unsigned int (*poll) (struct file *, poll_table *);
 	int (*ioctl) (struct inode *, struct file *, unsigned int, unsigned long);
@@ -643,8 +644,6 @@ extern struct file_operations rdwr_pipe_fops;
 
 extern struct file_system_type *get_fs_type(const char *name);
 
-extern int fs_may_mount(kdev_t dev);
-extern int fs_may_umount(struct super_block *, struct dentry * root);
 extern int fs_may_remount_ro(struct super_block *);
 
 extern struct file *inuse_filps;
@@ -745,32 +744,23 @@ extern inline void vfs_unlock(void)
 #endif
 }
 
-/* Not to be used by ordinary vfs users */
-extern void _get_inode(struct inode * inode);
-extern void iput(struct inode * inode);
-
-extern struct inode * iget(struct super_block * sb, unsigned long nr);
-extern void clear_inode(struct inode * inode);
+extern void iput(struct inode *);
+extern struct inode * iget(struct super_block *, unsigned long);
+extern void clear_inode(struct inode *);
 extern struct inode * get_empty_inode(void);
-
-/* Please prefer to use this function in future, instead of using
- * a get_empty_inode()/insert_inode_hash() combination.
- * It allows for better checking and less race conditions.
- */
-extern struct inode * get_empty_inode_hashed(dev_t i_dev, unsigned long i_ino);
 
 extern void insert_inode_hash(struct inode *);
 extern int get_unused_fd(void);
 extern void put_unused_fd(int);
 extern struct file * get_empty_filp(void);
-extern int close_fp(struct file *filp);
-extern struct buffer_head * get_hash_table(kdev_t dev, int block, int size);
-extern struct buffer_head * getblk(kdev_t dev, int block, int size);
-extern void ll_rw_block(int rw, int nr, struct buffer_head * bh[]);
-extern void ll_rw_page(int rw, kdev_t dev, unsigned long nr, char * buffer);
-extern void ll_rw_swap_file(int rw, kdev_t dev, unsigned int *b, int nb, char *buffer);
-extern int is_read_only(kdev_t dev);
-extern void __brelse(struct buffer_head *buf);
+extern int close_fp(struct file *);
+extern struct buffer_head * get_hash_table(kdev_t, int, int);
+extern struct buffer_head * getblk(kdev_t, int, int);
+extern void ll_rw_block(int, int, struct buffer_head * bh[]);
+extern void ll_rw_page(int, kdev_t, unsigned long, char *);
+extern void ll_rw_swap_file(int, kdev_t, unsigned int *, int, char *);
+extern int is_read_only(kdev_t);
+extern void __brelse(struct buffer_head *);
 extern inline void brelse(struct buffer_head *buf)
 {
 	if (buf)
@@ -792,8 +782,8 @@ extern int brw_page(int, struct page *, kdev_t, int [], int, int);
 
 extern int generic_readpage(struct inode *, struct page *);
 extern int generic_file_mmap(struct file *, struct vm_area_struct *);
-extern long generic_file_read(struct inode *, struct file *, char *, unsigned long);
-extern long generic_file_write(struct inode *, struct file *, const char *, unsigned long);
+extern ssize_t generic_file_read(struct file *, char *, size_t, loff_t *);
+extern ssize_t generic_file_write(struct file *, const char*, size_t, loff_t*);
 
 extern struct super_block *get_super(kdev_t dev);
 extern void put_super(kdev_t dev);
@@ -809,18 +799,15 @@ extern kdev_t real_root_dev;
 extern int change_root(kdev_t new_root_dev,const char *put_old);
 #endif
 
-extern long char_read(struct inode *, struct file *, char *, unsigned long);
-extern long block_read(struct inode *, struct file *, char *, unsigned long);
+extern ssize_t char_read(struct file *, char *, size_t, loff_t *);
+extern ssize_t block_read(struct file *, char *, size_t, loff_t *);
 extern int read_ahead[];
 
-extern long char_write(struct inode *, struct file *, const char *, unsigned long);
-extern long block_write(struct inode *, struct file *, const char *, unsigned long);
+extern ssize_t char_write(struct file *, const char *, size_t, loff_t *);
+extern ssize_t block_write(struct file *, const char *, size_t, loff_t *);
 
 extern int block_fsync(struct file *, struct dentry *dir);
 extern int file_fsync(struct file *, struct dentry *dir);
-
-extern void dcache_add(struct inode *, const char *, int, unsigned long);
-extern int dcache_lookup(struct inode *, const char *, int, unsigned long *);
 
 extern int inode_change_ok(struct inode *, struct iattr *);
 extern void inode_setattr(struct inode *, struct iattr *);

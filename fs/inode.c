@@ -7,6 +7,7 @@
 #include <linux/fs.h>
 #include <linux/string.h>
 #include <linux/mm.h>
+#include <linux/dcache.h>
 
 /*
  * New inode.c implementation.
@@ -17,6 +18,9 @@
  *
  * Famous last words.
  */
+
+#define INODE_PARANOIA 1
+/* #define INODE_DEBUG 1 */
 
 /*
  * Inode lookup is no longer as critical as it used to be:
@@ -51,13 +55,14 @@ static struct list_head inode_hashtable[HASH_SIZE];
 spinlock_t inode_lock = SPIN_LOCK_UNLOCKED;
 
 /*
- * Statistics gathering.. Not actually done yet.
+ * Statistics gathering..
  */
 struct {
 	int nr_inodes;
 	int nr_free_inodes;
-	int dummy[10];
-} inodes_stat;
+	int preshrink;		/* pre-shrink dcache? */
+	int dummy[4];
+} inodes_stat = {0, 0, 0,};
 
 int max_inodes = NR_INODE;
 
@@ -138,8 +143,11 @@ static inline void sync_one(struct inode *inode)
 		__wait_on_inode(inode);
 		spin_lock(&inode_lock);
 	} else {
+		struct list_head *insert = &inode_in_use;
+		if (!inode->i_count)
+			insert = inode_in_use.prev;
 		list_del(&inode->i_list);
-		list_add(&inode->i_list, &inode_in_use);
+		list_add(&inode->i_list, insert);
 
 		/* Set I_LOCK, reset I_DIRTY */
 		inode->i_state ^= I_DIRTY | I_LOCK;
@@ -196,7 +204,7 @@ void write_inode_now(struct inode *inode)
 
 	if (sb) {
 		spin_lock(&inode_lock);
-		if (inode->i_state & I_DIRTY)
+		while (inode->i_state & I_DIRTY)
 			sync_one(inode);
 		spin_unlock(&inode_lock);
 	}
@@ -307,6 +315,9 @@ int invalidate_inodes(struct super_block * sb)
  * the in-use for the specified number of freeable inodes.
  * Freeable inodes are moved to a temporary list and then
  * placed on the unused list by dispose_list.
+ *
+ * Note that we do not expect to have to search very hard:
+ * the freeable inodes will be at the old end of the list.
  * 
  * N.B. The spinlock is released to call dispose_list.
  */
@@ -314,18 +325,15 @@ int invalidate_inodes(struct super_block * sb)
 	(((inode)->i_count == 0) && \
 	 (!(inode)->i_state))
 
-static void try_to_free_inodes(int goal)
+static int free_inodes(int goal)
 {
-	struct list_head * tmp;
-	struct list_head *head = &inode_in_use;
+	struct list_head *tmp, *head = &inode_in_use;
 	LIST_HEAD(freeable);
-	int found = 0, search = goal << 1;
+	int found = 0, depth = goal << 1;
 
-	while ((tmp = head->prev) != head && search--) {
-		struct inode * inode;
-
+	while ((tmp = head->prev) != head && depth--) {
+		struct inode * inode = list_entry(tmp, struct inode, i_list);
 		list_del(tmp);
-		inode = list_entry(tmp, struct inode, i_list);
 		if (CAN_UNUSE(inode)) {
 			list_del(&inode->i_hash);
 			INIT_LIST_HEAD(&inode->i_hash);
@@ -336,18 +344,61 @@ static void try_to_free_inodes(int goal)
 		}
 		list_add(tmp, head);
 	}
+	if (found) {
+		spin_unlock(&inode_lock);
+		dispose_list(&freeable);
+		spin_lock(&inode_lock);
+	}
+	return found;
+}
+
+/*
+ * Searches the inodes list for freeable inodes,
+ * possibly shrinking the dcache before or after.
+ */
+static void try_to_free_inodes(int goal)
+{
+	int retried = 0, found;
+
+	/*
+	 * Check whether to preshrink the dcache ...
+	 */
+	if (inodes_stat.preshrink) {
+		spin_unlock(&inode_lock);
+		select_dcache(goal, 0);
+		prune_dcache(goal);
+		spin_lock(&inode_lock);
+	}
+
+repeat:
+	found = free_inodes(goal);
+
 	/*
 	 * If we didn't free any inodes, do a limited
 	 * pruning of the dcache to help the next time.
 	 */
-	spin_unlock(&inode_lock);
-	if (found)
-		dispose_list(&freeable);
-	else
+	if (!found) {
+		spin_unlock(&inode_lock);
+		select_dcache(goal, 0);
 		prune_dcache(goal);
-	spin_lock(&inode_lock);
+		spin_lock(&inode_lock);
+		if (inodes_stat.preshrink && !retried++)
+			goto repeat;
+	}
 }
 
+/*
+ * This is the externally visible routine for
+ * inode memory management.
+ */
+void free_inode_memory(int goal)
+{
+	spin_lock(&inode_lock);
+	free_inodes(goal);
+	spin_unlock(&inode_lock);
+}
+
+#define INODES_PER_PAGE PAGE_SIZE/sizeof(struct inode)
 /*
  * This is called with the spinlock held, but releases
  * the lock when freeing or allocating inodes.
@@ -357,27 +408,6 @@ static void try_to_free_inodes(int goal)
 static struct inode * grow_inodes(void)
 {
 	struct inode * inode;
-
-	/*
-	 * Check whether to shrink the dcache ... if we've
-	 * allocated more than half of the nominal maximum,
-	 * try shrinking before allocating more. 
-	 */
-	if (inodes_stat.nr_inodes >= (max_inodes >> 1)) {
-		struct list_head * tmp;
-
-		spin_unlock(&inode_lock);
-		prune_dcache(128);
-		spin_lock(&inode_lock);
-		try_to_free_inodes(128);
-		tmp = inode_unused.next;
-		if (tmp != &inode_unused) {
-			inodes_stat.nr_free_inodes--;
-			list_del(tmp);
-			inode = list_entry(tmp, struct inode, i_list);
-			return inode;
-		}
-	}
 
 	spin_unlock(&inode_lock);
 	inode = (struct inode *)__get_free_page(GFP_KERNEL);
@@ -392,13 +422,42 @@ static struct inode * grow_inodes(void)
 			tmp++;
 			init_once(tmp);
 			list_add(&tmp->i_list, &inode_unused);
-			inodes_stat.nr_free_inodes++;
 			size -= sizeof(struct inode);
 		} while (size >= 0);
 		init_once(inode);
-		inodes_stat.nr_inodes += PAGE_SIZE / sizeof(struct inode);
+		/*
+		 * Update the inode statistics
+		 */
+		inodes_stat.nr_inodes += INODES_PER_PAGE;
+		inodes_stat.nr_free_inodes += INODES_PER_PAGE - 1;
+		inodes_stat.preshrink = 0;
+		if (inodes_stat.nr_inodes > max_inodes)
+			inodes_stat.preshrink = 1;
+		return inode;
 	}
-	return inode;
+
+	/*
+	 * If the allocation failed, do an extensive pruning of 
+	 * the dcache and then try again to free some inodes.
+	 */
+	prune_dcache(128);
+	inodes_stat.preshrink = 1;
+
+	spin_lock(&inode_lock);
+	free_inodes(128);
+	{
+		struct list_head *tmp = inode_unused.next;
+		if (tmp != &inode_unused) {
+			inodes_stat.nr_free_inodes--;
+			list_del(tmp);
+			inode = list_entry(tmp, struct inode, i_list);
+			return inode;
+		}
+	}
+	spin_unlock(&inode_lock);
+
+	printk("grow_inodes: allocation failed\n");
+	return NULL;
 }
 
 /*
@@ -627,6 +686,18 @@ void iput(struct inode *inode)
 				list_add(&inode->i_list, &inode_unused);
 				inodes_stat.nr_free_inodes++;
 			}
+			else if (!(inode->i_state & I_DIRTY)) {
+				list_del(&inode->i_list);
+				list_add(&inode->i_list, inode_in_use.prev);
+			}
+#ifdef INODE_PARANOIA
+if (inode->i_count)
+printk("iput: device %s inode %ld count changed, count=%d\n",
+kdevname(inode->i_dev), inode->i_ino, inode->i_count);
+if (atomic_read(&inode->i_sem.count) != 1)
+printk("iput: Aieee, semaphore in use device %s, count=%d\n",
+kdevname(inode->i_dev), atomic_read(&inode->i_sem.count));
+#endif
 		}
 		if (inode->i_count > (1<<15)) {
 			printk("iput: device %s inode %ld count wrapped\n",

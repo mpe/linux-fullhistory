@@ -108,8 +108,8 @@ struct tty_struct * redirect = NULL;
 
 static void initialize_tty_struct(struct tty_struct *tty);
 
-static long tty_read(struct inode *, struct file *, char *, unsigned long);
-static long tty_write(struct inode *, struct file *, const char *, unsigned long);
+static ssize_t tty_read(struct file *, char *, size_t, loff_t *);
+static ssize_t tty_write(struct file *, const char *, size_t, loff_t *);
 static unsigned int tty_poll(struct file *, poll_table *);
 static int tty_open(struct inode *, struct file *);
 static int tty_release(struct inode *, struct file *);
@@ -304,15 +304,21 @@ int tty_check_change(struct tty_struct * tty)
 	return -ERESTARTSYS;
 }
 
-static long hung_up_tty_read(struct inode * inode, struct file * file,
-	char * buf, unsigned long count)
+static ssize_t hung_up_tty_read(struct file * file, char * buf,
+				size_t count, loff_t *ppos)
 {
+	/* Can't seek (pread) on ttys.  */
+	if (ppos != &file->f_pos)
+		return -ESPIPE;
 	return 0;
 }
 
-static long hung_up_tty_write(struct inode * inode,
-	struct file * file, const char * buf, unsigned long count)
+static ssize_t hung_up_tty_write(struct file * file, const char * buf,
+				 size_t count, loff_t *ppos)
 {
+	/* Can't seek (pwrite) on ttys.  */
+	if (ppos != &file->f_pos)
+		return -ESPIPE;
 	return -EIO;
 }
 
@@ -543,13 +549,19 @@ void start_tty(struct tty_struct *tty)
 	wake_up_interruptible(&tty->write_wait);
 }
 
-static long tty_read(struct inode * inode, struct file * file,
-	char * buf, unsigned long count)
+static ssize_t tty_read(struct file * file, char * buf, size_t count, 
+			loff_t *ppos)
 {
 	int i;
 	struct tty_struct * tty;
+	struct inode *inode;
+
+	/* Can't seek (pread) on ttys.  */
+	if (ppos != &file->f_pos)
+		return -ESPIPE;
 
 	tty = (struct tty_struct *)file->private_data;
+	inode = file->f_dentry->d_inode;
 	if (tty_paranoia_check(tty, inode->i_rdev, "tty_read"))
 		return -EIO;
 	if (!tty || (test_bit(TTY_IO_ERROR, &tty->flags)))
@@ -584,15 +596,14 @@ static long tty_read(struct inode * inode, struct file * file,
  * Split writes up in sane blocksizes to avoid
  * denial-of-service type attacks
  */
-static inline int do_tty_write(
-	int (*write)(struct tty_struct *, struct file *, const unsigned char *, unsigned int),
-	struct inode *inode,
+static inline ssize_t do_tty_write(
+	ssize_t (*write)(struct tty_struct *, struct file *, const unsigned char *, size_t),
 	struct tty_struct *tty,
 	struct file *file,
 	const unsigned char *buf,
-	unsigned int count)
+	size_t count)
 {
-	int ret = 0, written = 0;
+	ssize_t ret = 0, written = 0;
 
 	for (;;) {
 		unsigned long size = PAGE_SIZE*2;
@@ -613,19 +624,25 @@ static inline int do_tty_write(
 			schedule();
 	}
 	if (written) {
-		inode->i_mtime = CURRENT_TIME;
+		file->f_dentry->d_inode->i_mtime = CURRENT_TIME;
 		ret = written;
 	}
 	return ret;
 }
 
 
-static long tty_write(struct inode * inode, struct file * file,
-	const char * buf, unsigned long count)
+static ssize_t tty_write(struct file * file, const char * buf, size_t count,
+			 loff_t *ppos)
 {
 	int is_console;
 	struct tty_struct * tty;
+	struct inode *inode;
 
+	/* Can't seek (pwrite) on ttys.  */
+	if (ppos != &file->f_pos)
+		return -ESPIPE;
+
+	inode = file->f_dentry->d_inode;
 	is_console = (inode->i_rdev == CONSOLE_DEV);
 
 	if (is_console && redirect)
@@ -649,22 +666,23 @@ static long tty_write(struct inode * inode, struct file * file,
 #endif
 	if (!tty->ldisc.write)
 		return -EIO;
-	return do_tty_write(tty->ldisc.write,
-		inode, tty, file,
-		(const unsigned char *)buf,
-		(unsigned int)count);
+	return do_tty_write(tty->ldisc.write, tty, file,
+			    (const unsigned char *)buf, count);
 }
 
 /* Semaphore to protect creating and releasing a tty */
 static struct semaphore tty_sem = MUTEX;
+
 static void down_tty_sem(int index)
 {
 	down(&tty_sem);
 }
+
 static void up_tty_sem(int index)
 {
 	up(&tty_sem);
 }
+
 static void release_mem(struct tty_struct *tty, int idx);
 
 /*

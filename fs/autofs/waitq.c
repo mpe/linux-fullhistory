@@ -55,7 +55,7 @@ static int autofs_write(struct file *file, const void *addr, int bytes)
 
 	old_signal = current->signal;
 
-	while ( bytes && (written = file->f_op->write(file->f_dentry->d_inode,file,data,bytes)) > 0 ) {
+	while ( bytes && (written = file->f_op->write(file,data,bytes,&file->f_pos)) > 0 ) {
 		data += written;
 		bytes -= written;
 	}

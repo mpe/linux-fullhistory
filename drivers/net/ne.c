@@ -427,7 +427,8 @@ __initfunc(static int ne_probe1(struct device *dev, int ioaddr))
     /* Snarf the interrupt now.  There's no point in waiting since we cannot
        share and the board will usually be enabled. */
     {
-	int irqval = request_irq(dev->irq, ei_interrupt, SA_INTERRUPT, name, NULL);
+	int irqval = request_irq(dev->irq, ei_interrupt,
+				 pci_irq_line ? SA_SHIRQ : 0, name, dev);
 	if (irqval) {
 	    printk (" unable to get IRQ %d (irqval=%d).\n", dev->irq, irqval);
 	    return EAGAIN;
@@ -785,7 +786,6 @@ cleanup_module(void)
 			kfree(dev->priv);
 			dev->priv = NULL;
 			free_irq(dev->irq, NULL);
-			irq2dev_map[dev->irq] = NULL;
 			release_region(dev->base_addr, NE_IO_EXTENT);
 			unregister_netdev(dev);
 		}

@@ -58,7 +58,7 @@ static void set_brk(unsigned long start, unsigned long end)
  * macros to write out all the necessary info.
  */
 #define DUMP_WRITE(addr,nr) \
-while (file.f_op->write(inode,&file,(char *)(addr),(nr)) != (nr)) goto close_coredump
+while (file.f_op->write(&file,(char *)(addr),(nr),&file.f_pos) != (nr)) goto close_coredump
 
 #define DUMP_SEEK(offset) \
 if (file.f_op->llseek) { \
@@ -306,6 +306,7 @@ static inline int do_load_aout_binary(struct linux_binprm * bprm, struct pt_regs
 	unsigned long p = bprm->p;
 	unsigned long fd_offset;
 	unsigned long rlim;
+	int retval;
 
 	ex = *((struct exec *) bprm->buf);		/* exec-header */
 	if ((N_MAGIC(ex) != ZMAGIC && N_MAGIC(ex) != OMAGIC &&
@@ -341,8 +342,12 @@ static inline int do_load_aout_binary(struct linux_binprm * bprm, struct pt_regs
 	if (ex.a_data + ex.a_bss > rlim)
 		return -ENOMEM;
 
+	/* Flush all traces of the currently running executable */
+	retval = flush_old_exec(bprm);
+	if (retval)
+		return retval;
+
 	/* OK, This is the point of no return */
-	flush_old_exec(bprm);
 #ifdef __sparc__
 	memcpy(&current->tss.core_exec, &ex, sizeof(struct exec));
 #endif
@@ -498,7 +503,7 @@ do_load_aout_library(int fd)
 		file->f_pos = 0;
 
 	set_fs(KERNEL_DS);
-	error = file->f_op->read(inode, file, (char *) &ex, sizeof(ex));
+	error = file->f_op->read(file, (char *) &ex, sizeof(ex), &file->f_pos);
 	set_fs(USER_DS);
 	if (error != sizeof(ex))
 		return -ENOEXEC;

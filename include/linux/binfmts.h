@@ -58,7 +58,7 @@ extern int init_misc_binfmt(void);
 extern int prepare_binprm(struct linux_binprm *);
 extern void remove_arg_zero(struct linux_binprm *);
 extern int search_binary_handler(struct linux_binprm *,struct pt_regs *);
-extern void flush_old_exec(struct linux_binprm * bprm);
+extern int flush_old_exec(struct linux_binprm * bprm);
 extern unsigned long setup_arg_pages(unsigned long p, struct linux_binprm * bprm);
 extern unsigned long copy_strings(int argc,char ** argv,unsigned long *page,
 		unsigned long p, int from_kmem);

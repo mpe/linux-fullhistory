@@ -362,7 +362,7 @@ __initfunc(int el16_probe1(struct device *dev, int ioaddr))
 
 	irq = inb(ioaddr + IRQ_CONFIG) & 0x0f;
 
-	irqval = request_irq(irq, &el16_interrupt, 0, "3c507", NULL);
+	irqval = request_irq(irq, &el16_interrupt, 0, "3c507", dev);
 	if (irqval) {
 		printk ("unable to get IRQ %d (irqval=%d).\n", irq, irqval);
 		return EAGAIN;
@@ -431,8 +431,6 @@ __initfunc(int el16_probe1(struct device *dev, int ioaddr))
 
 static int el16_open(struct device *dev)
 {
-	irq2dev_map[dev->irq] = dev;
-
 	/* Initialize the 82586 memory and start it. */
 	init_82586_mem(dev);
 
@@ -506,7 +504,7 @@ static int el16_send_packet(struct sk_buff *skb, struct device *dev)
 	Handle the network interface interrupts. */
 static void el16_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 {
-	struct device *dev = (struct device *)(irq2dev_map[irq]);
+	struct device *dev = dev_id;
 	struct net_local *lp;
 	int ioaddr, status, boguscount = 0;
 	ushort ack_cmd = 0;
@@ -619,10 +617,7 @@ static int el16_close(struct device *dev)
 	/* Disable the 82586's input to the interrupt line. */
 	outb(0x80, ioaddr + MISC_CTRL);
 
-	/* We always physically use the IRQ line, so we don't do free_irq().
-	   We do remove ourselves from the map. */
-
-	irq2dev_map[dev->irq] = 0;
+	/* We always physically use the IRQ line, so we don't do free_irq(). */
 
 	/* Update the statistics here. */
 

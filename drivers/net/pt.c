@@ -830,7 +830,7 @@ static int pt_probe(struct device *dev)
          * the interrupt, and this marks the 'irqaction' as busy.
          */
         {
-            int irqval = request_irq(dev->irq, &pt_interrupt,0, "pt", NULL);
+            int irqval = request_irq(dev->irq, &pt_interrupt,0, "pt", dev);
             if (irqval) {
                 printk(KERN_ERR "PT: ERROR: Unable to get IRQ %d (irqval = %d).\n",
                     dev->irq, irqval);
@@ -900,7 +900,6 @@ static int pt_open(struct device *dev)
                 return -EAGAIN;
             }
         }
- 	irq2dev_map[dev->irq] = dev;
 
          /* Reset hardware */
          chipset_init(dev);
@@ -1772,7 +1771,6 @@ void cleanup_module(void)
 {
 	free_irq(pt0a.irq, NULL);	/* IRQs and IO Ports are shared */
 	release_region(pt0a.base_addr & 0x3f0, PT_TOTAL_SIZE);
-	irq2dev_map[pt0a.irq] = NULL;
 
 	kfree(pt0a.priv);
 	pt0a.priv = NULL;

@@ -955,12 +955,12 @@ out:
 
 
 /* Write command */
-	static long
-st_write(struct inode * inode, struct file * filp, const char * buf,
-	 unsigned long count)
+static ssize_t
+st_write(struct file * filp, const char * buf, size_t count, loff_t *ppos)
 {
-    long total;
-    int i, do_count, blks, retval, transfer;
+    struct inode *inode = filp->f_dentry->d_inode;
+    ssize_t total;
+    ssize_t i, do_count, blks, retval, transfer;
     int write_threshold;
     int doing_write = 0;
     static unsigned char cmd[10];
@@ -970,6 +970,11 @@ st_write(struct inode * inode, struct file * filp, const char * buf,
     ST_mode * STm;
     ST_partstat * STps;
     int dev = TAPE_NR(inode->i_rdev);
+
+    if (ppos != &filp->f_pos) {
+      /* "A request was outside the capabilities of the device." */
+      return -ENXIO;
+    }
 
     STp = &(scsi_tapes[dev]);
     if (STp->ready != ST_READY)
@@ -1254,7 +1259,7 @@ st_write(struct inode * inode, struct file * filp, const char * buf,
 /* Read data from the tape. Returns zero in the normal case, one if the
    eof status has changed, and the negative error code in case of a
    fatal error. Otherwise updates the buffer and the eof state. */
-	static long
+static long
 read_tape(struct inode *inode, long count, Scsi_Cmnd **aSCpnt)
 {
     int transfer, blks, bytes;
@@ -1441,17 +1446,23 @@ read_tape(struct inode *inode, long count, Scsi_Cmnd **aSCpnt)
 
 
 /* Read command */
-	static long
-st_read(struct inode * inode, struct file * filp, char * buf, unsigned long count)
+static ssize_t
+st_read(struct file * filp, char * buf, size_t count, loff_t *ppos)
 {
-    long total;
-    int i, transfer;
+    struct inode * inode = filp->f_dentry->d_inode;
+    ssize_t total;
+    ssize_t i, transfer;
     int special;
     Scsi_Cmnd * SCpnt = NULL;
     Scsi_Tape * STp;
     ST_mode * STm;
     ST_partstat * STps;
     int dev = TAPE_NR(inode->i_rdev);
+
+    if (ppos != &filp->f_pos) {
+      /* "A request was outside the capabilities of the device." */
+      return -ENXIO;
+    }
 
     STp = &(scsi_tapes[dev]);
     if (STp->ready != ST_READY)

@@ -346,13 +346,13 @@ static struct timer_rand_state *blkdev_timer_state[MAX_BLKDEV];
 static struct wait_queue *random_read_wait;
 static struct wait_queue *random_write_wait;
 
-static long random_read(struct inode * inode, struct file * file,
-		       char * buf, unsigned long nbytes);
-static long random_read_unlimited(struct inode * inode, struct file * file,
-				 char * buf, unsigned long nbytes);
+static ssize_t random_read(struct file * file, char * buf,
+			   size_t nbytes, loff_t *ppos);
+static ssize_t random_read_unlimited(struct file * file, char * buf,
+				     size_t nbytes, loff_t *ppos);
 static unsigned int random_poll(struct file *file, poll_table * wait);
-static long random_write(struct inode * inode, struct file * file,
-			const char * buffer, unsigned long count);
+static ssize_t random_write(struct file * file, const char * buffer,
+			    size_t count, loff_t *ppos);
 static int random_ioctl(struct inode * inode, struct file * file,
 			unsigned int cmd, unsigned long arg);
 
@@ -983,10 +983,10 @@ static void MD5Transform(__u32 buf[4],
  * bits of entropy are left in the pool, but it does not restrict the
  * number of bytes that are actually obtained.
  */
-static int extract_entropy(struct random_bucket *r, char * buf,
-				  int nbytes, int to_user)
+static ssize_t extract_entropy(struct random_bucket *r, char * buf,
+			       size_t nbytes, int to_user)
 {
-	int ret, i;
+	ssize_t ret, i;
 	__u32 tmp[HASH_BUFFER_SIZE];
 	char *cp,*dp;
 
@@ -1075,13 +1075,11 @@ void get_random_bytes(void *buf, int nbytes)
 	extract_entropy(&random_state, (char *) buf, nbytes, 0);
 }
 
-static long
-random_read(struct inode * inode, struct file * file, char * buf, unsigned long nbytes)
+static ssize_t
+random_read(struct file * file, char * buf, size_t nbytes, loff_t *ppos)
 {
 	struct wait_queue 	wait = { current, NULL };
-	int			n;
-	int			retval = 0;
-	int			count = 0;
+	ssize_t			n, retval = 0, count = 0;
 	
 	if (nbytes == 0)
 		return 0;
@@ -1121,19 +1119,18 @@ random_read(struct inode * inode, struct file * file, char * buf, unsigned long 
 	remove_wait_queue(&random_read_wait, &wait);
 
 	/*
-	 * If we gave the user some bytes and we have an inode pointer,
-	 * update the access time.
+	 * If we gave the user some bytes, update the access time.
 	 */
-	if (inode && count != 0) {
-		UPDATE_ATIME(inode);
+	if (count != 0) {
+		UPDATE_ATIME(file->f_dentry->d_inode);
 	}
 	
 	return (count ? count : retval);
 }
 
-static long
-random_read_unlimited(struct inode * inode, struct file * file,
-		      char * buf, unsigned long nbytes)
+static ssize_t
+random_read_unlimited(struct file * file, char * buf,
+		      size_t nbytes, loff_t *ppos)
 {
 	return extract_entropy(&random_state, buf, nbytes, 1);
 }
@@ -1153,14 +1150,14 @@ random_poll(struct file *file, poll_table * wait)
 	return mask;
 }
 
-static long
-random_write(struct inode * inode, struct file * file,
-	     const char * buffer, unsigned long count)
+static ssize_t
+random_write(struct file * file, const char * buffer,
+	     size_t count, loff_t *ppos)
 {
-	int 		i, bytes, ret = 0;
+	ssize_t		i, bytes, ret = 0;
 	__u32 		buf[16];
 	const char 	*p = buffer;
-	int		c = count;
+	ssize_t		c = count;
 
 	while (c > 0) {
 		bytes = MIN(c, sizeof(buf));
@@ -1179,9 +1176,9 @@ random_write(struct inode * inode, struct file * file,
 		while (i--)
 			add_entropy_word(&random_state, buf[i]);
 	}
-	if ((ret > 0) && inode) {
-		inode->i_mtime = CURRENT_TIME;
-		mark_inode_dirty(inode);
+	if (ret > 0) {
+		file->f_dentry->d_inode->i_mtime = CURRENT_TIME;
+		mark_inode_dirty(file->f_dentry->d_inode);
 	}
 	return ret;
 }
@@ -1265,7 +1262,8 @@ random_ioctl(struct inode * inode, struct file * file,
 		retval = verify_area(VERIFY_READ, (void *) p, size);
 		if (retval)
 			return retval;
-		retval = random_write(0, file, (const char *) p, size);
+		retval = random_write(file, (const char *) p,
+				      size, &file->f_pos);
 		if (retval < 0)
 			return retval;
 		/*

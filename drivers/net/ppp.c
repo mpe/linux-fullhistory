@@ -190,10 +190,10 @@ static struct net_device_stats *ppp_dev_stats (struct device *);
  * TTY callbacks
  */
 
-static int ppp_tty_read (struct tty_struct *, struct file *, __u8 *,
-			 unsigned int);
-static int ppp_tty_write (struct tty_struct *, struct file *, const __u8 *,
-			  unsigned int);
+static ssize_t ppp_tty_read (struct tty_struct *, struct file *, __u8 *,
+			     size_t);
+static ssize_t ppp_tty_write (struct tty_struct *, struct file *,
+			      const __u8 *, size_t);
 static int ppp_tty_ioctl (struct tty_struct *, struct file *, unsigned int,
                           unsigned long);
 static unsigned int ppp_tty_poll (struct tty_struct *tty, struct file *filp, poll_table * wait);
@@ -1665,13 +1665,12 @@ ppp_doframe (struct ppp *ppp)
    waiting if necessary
 */
 
-static int
-ppp_tty_read (struct tty_struct *tty, struct file *file, __u8 * buf,
-	      unsigned int nr)
+static ssize_t
+ppp_tty_read (struct tty_struct *tty, struct file *file, __u8 * buf, size_t nr)
 {
 	struct ppp *ppp = tty2ppp (tty);
 	__u8 c;
-	int len, indx;
+	ssize_t len, indx;
 
 #define GETC(c)						\
 {							\
@@ -1692,8 +1691,8 @@ ppp_tty_read (struct tty_struct *tty, struct file *file, __u8 * buf,
 
 	if (ppp->flags & SC_DEBUG)
 		printk (KERN_DEBUG
-			"ppp_tty_read: called buf=%p nr=%u\n",
-			buf, nr);
+			"ppp_tty_read: called buf=%p nr=%lu\n",
+			buf, (unsigned long)nr);
 /*
  * Acquire the read lock.
  */
@@ -1761,7 +1760,8 @@ ppp_tty_read (struct tty_struct *tty, struct file *file, __u8 * buf,
  * Reset the time of the last read operation.
  */
 		if (ppp->flags & SC_DEBUG)
-			printk (KERN_DEBUG "ppp_tty_read: len = %d\n", len);
+			printk (KERN_DEBUG "ppp_tty_read: len = %ld\n",
+				(long)len);
 /*
  * Ensure that the frame will fit within the caller's buffer. If not, then
  * discard the frame from the input buffer.
@@ -1771,8 +1771,8 @@ ppp_tty_read (struct tty_struct *tty, struct file *file, __u8 * buf,
 
 			if (ppp->flags & SC_DEBUG)
 				printk (KERN_DEBUG
-				"ppp: read of %u bytes too small for %d "
-				"frame\n", nr, len + 2);
+				"ppp: read of %lu bytes too small for %ld "
+				"frame\n", (unsigned long)nr, (long)len + 2);
 			ppp->ubuf->tail += len;
 			ppp->ubuf->tail &= ppp->ubuf->size;
 			clear_bit (0, &ppp->ubuf->locked);
@@ -1811,7 +1811,8 @@ ppp_tty_read (struct tty_struct *tty, struct file *file, __u8 * buf,
 		len += 2; /* Account for ADDRESS and CONTROL bytes */
 		if (ppp->flags & SC_DEBUG)
 			printk (KERN_DEBUG
-				"ppp_tty_read: passing %d bytes up\n", len);
+				"ppp_tty_read: passing %ld bytes up\n",
+				(long) len);
 		return len;
 	}
 #undef GETC
@@ -2051,13 +2052,13 @@ send_revise_frame (register struct ppp *ppp, __u8 *data, int len)
  * we have to put the FCS field on ourselves
  */
 
-static int
+static ssize_t
 ppp_tty_write (struct tty_struct *tty, struct file *file, const __u8 * data,
-	       unsigned int count)
+	       size_t count)
 {
 	struct ppp *ppp = tty2ppp (tty);
 	__u8 *new_data;
-	int status;
+	ssize_t status;
 /*
  * Verify the pointers.
  */
@@ -2075,7 +2076,8 @@ ppp_tty_write (struct tty_struct *tty, struct file *file, const __u8 * data,
 		if (ppp->flags & SC_DEBUG)
 			printk (KERN_WARNING
 				"ppp_tty_write: truncating user packet "
-				"from %u to mtu %d\n", count, PPP_MTU);
+				"from %lu to mtu %d\n",
+				(unsigned long) count, PPP_MTU);
 		count = PPP_MTU;
 	}
 /*
@@ -2129,7 +2131,7 @@ ppp_tty_write (struct tty_struct *tty, struct file *file, const __u8 * data,
  */
 	ppp_dev_xmit_frame (ppp, ppp->tbuf, new_data, count);
 	kfree (new_data);
-	return (int) count;
+	return count;
 }
 
 /*

@@ -14,8 +14,8 @@
 
 #include <asm/uaccess.h>
 
-static long minix_dir_read(struct inode * inode, struct file * filp,
-	char * buf, unsigned long count)
+static ssize_t minix_dir_read(struct file * filp, char * buf,
+			      size_t count, loff_t *ppos)
 {
 	return -EISDIR;
 }

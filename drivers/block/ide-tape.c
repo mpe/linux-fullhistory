@@ -2883,11 +2883,18 @@ static int idetape_space_over_filemarks (ide_drive_t *drive,short mt_op,int mt_c
  *	size will only result in a (slightly) increased driver overhead, but
  *	will no longer hit performance.
  */
-static long idetape_chrdev_read (struct inode *inode, struct file *file, char *buf, unsigned long count)
+static ssize_t idetape_chrdev_read (struct file *file, char *buf,
+				    size_t count, loff_t *ppos)
 {
+	struct inode *inode = file->f_dentry->d_inode;
 	ide_drive_t *drive = get_drive_ptr (inode->i_rdev);
 	idetape_tape_t *tape = drive->driver_data;
-	int bytes_read,temp,actually_read=0;
+	ssize_t bytes_read,temp,actually_read=0;
+
+	if (ppos != &file->f_pos) {
+		/* "A request was outside the capabilities of the device." */
+		return -ENXIO;
+	}
 
 #if IDETAPE_DEBUG_LOG
 	printk (KERN_INFO "Reached idetape_chrdev_read\n");
@@ -2953,11 +2960,18 @@ finish:
 	return (actually_read);
 }
  
-static long idetape_chrdev_write (struct inode *inode, struct file *file, const char *buf, unsigned long count)
+static ssize_t idetape_chrdev_write (struct file *file, const char *buf,
+				     size_t count, loff_t *ppos)
 {
+	struct inode *inode = file->f_dentry->d_inode;
 	ide_drive_t *drive = get_drive_ptr (inode->i_rdev);
 	idetape_tape_t *tape = drive->driver_data;
-	int retval,actually_written=0;
+	ssize_t retval,actually_written=0;
+
+	if (ppos != &file->f_pos) {
+		/* "A request was outside the capabilities of the device." */
+		return -ENXIO;
+	}
 
 #if IDETAPE_DEBUG_LOG
 	printk (KERN_INFO "Reached idetape_chrdev_write\n");

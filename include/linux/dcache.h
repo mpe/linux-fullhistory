@@ -109,6 +109,12 @@ extern int d_invalidate(struct dentry *);
 
 #define shrink_dcache() prune_dcache(0)
 
+/* dcache memory management */
+extern int  select_dcache(int, int);
+extern void shrink_dcache_memory(void);
+extern void check_dcache_memory(void);
+extern void free_inode_memory(int);	/* defined in fs/inode.c */
+
 /* only used at mount-time */
 extern struct dentry * d_alloc_root(struct inode * root_inode, struct dentry * old_root);
 

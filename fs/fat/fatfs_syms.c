@@ -4,6 +4,8 @@
  * Exported kernel symbols for the low-level FAT-based fs support.
  *
  */
+#define ASC_LINUX_VERSION(V, P, S)	(((V) * 65536) + ((P) * 256) + (S))
+#include <linux/version.h>
 #include <linux/config.h>
 #include <linux/module.h>
 
@@ -15,16 +17,14 @@
 
 extern struct file_operations fat_dir_operations;
 
-EXPORT_SYMBOL(fat_a2alias);
-EXPORT_SYMBOL(fat_a2uni);
 EXPORT_SYMBOL(fat_add_cluster);
 EXPORT_SYMBOL(fat_bmap);
 EXPORT_SYMBOL(fat_brelse);
 EXPORT_SYMBOL(fat_cache_inval_inode);
-EXPORT_SYMBOL(fat_code2uni);
 EXPORT_SYMBOL(fat_date_unix2dos);
 EXPORT_SYMBOL(fat_delete_inode);
 EXPORT_SYMBOL(fat_dir_operations);
+EXPORT_SYMBOL(fat_esc2uni);
 EXPORT_SYMBOL(fat_file_read);
 EXPORT_SYMBOL(fat_file_write);
 EXPORT_SYMBOL(fat_fs_panic);
@@ -44,8 +44,7 @@ EXPORT_SYMBOL(fat_scan);
 EXPORT_SYMBOL(fat_smap);
 EXPORT_SYMBOL(fat_statfs);
 EXPORT_SYMBOL(fat_truncate);
-EXPORT_SYMBOL(fat_uni2asc_pg);
-EXPORT_SYMBOL(fat_uni2code);
+EXPORT_SYMBOL(fat_uni2esc);
 EXPORT_SYMBOL(fat_unlock_creation);
 EXPORT_SYMBOL(fat_write_inode);
 

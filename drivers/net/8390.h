@@ -45,7 +45,6 @@ extern void ei_interrupt(int irq, void *dev_id, struct pt_regs *regs);
 
 #ifndef HAVE_AUTOIRQ
 /* From auto_irq.c */
-extern struct device *irq2dev_map[16];
 extern void autoirq_setup(int waittime);
 extern unsigned long autoirq_report(int waittime);
 #endif

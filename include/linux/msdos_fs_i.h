@@ -26,6 +26,7 @@ struct msdos_inode_info {
 	*/
 	struct pipe_inode_info reserved;
 	int i_start;	/* first cluster or 0 */
+	int i_logstart;	/* logical first cluster */
 	int i_attrs;	/* unused attribute bits */
 	int i_busy;	/* file is either deleted but still open, or
 			   inconsistent (mkdir) */

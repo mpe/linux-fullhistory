@@ -121,7 +121,6 @@ int ei_open(struct device *dev)
 	return -ENXIO;
     }
     
-    irq2dev_map[dev->irq] = dev;
     NS8390_init(dev, 1);
     dev->start = 1;
     ei_local->irqlock = 0;
@@ -284,7 +283,7 @@ static int ei_start_xmit(struct sk_buff *skb, struct device *dev)
    Handle the ether interface interrupts. */
 void ei_interrupt(int irq, void *dev_id, struct pt_regs * regs)
 {
-    struct device *dev = (struct device *)(irq2dev_map[irq]);
+	struct device *dev = dev_id;
     int e8390_base;
     int interrupts, nr_serviced = 0;
     struct ei_device *ei_local;
@@ -296,12 +295,14 @@ void ei_interrupt(int irq, void *dev_id, struct pt_regs * regs)
     e8390_base = dev->base_addr;
     ei_local = (struct ei_device *) dev->priv;
     if (dev->interrupt || ei_local->irqlock) {
+#if 1 /* This might just be an interrupt for a PCI device sharing this line */
 		/* The "irqlock" check is only for testing. */
 		printk(ei_local->irqlock
 			   ? "%s: Interrupted while interrupts are masked! isr=%#2x imr=%#2x.\n"
 			   : "%s: Reentering the interrupt handler! isr=%#2x imr=%#2x.\n",
 			   dev->name, inb_p(e8390_base + EN0_ISR),
 			   inb_p(e8390_base + EN0_IMR));
+#endif
 		return;
     }
     

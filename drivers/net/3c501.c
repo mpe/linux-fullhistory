@@ -357,10 +357,9 @@ static int el_open(struct device *dev)
 	if (el_debug > 2)
 		printk("%s: Doing el_open()...", dev->name);
 
-	if (request_irq(dev->irq, &el_interrupt, 0, "3c501", NULL))
+	if (request_irq(dev->irq, &el_interrupt, 0, "3c501", dev))
 		return -EAGAIN;
 
-	irq2dev_map[dev->irq] = dev;
 	el_reset(dev);
 
 	dev->start = 1;
@@ -483,7 +482,7 @@ load_it_again_sam:
 
 static void el_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 {
-	struct device *dev = (struct device *)(irq2dev_map[irq]);
+	struct device *dev = dev_id;
 	struct net_local *lp;
 	int ioaddr;
 	int axsr;			/* Aux. status reg. */
@@ -761,7 +760,6 @@ static int el1_close(struct device *dev)
 
 	free_irq(dev->irq, NULL);
 	outb(AX_RESET, AX_CMD);		/* Reset the chip */
-	irq2dev_map[dev->irq] = 0;
 
 	MOD_DEC_USE_COUNT;
 	return 0;

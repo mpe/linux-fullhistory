@@ -39,8 +39,6 @@ static const char *version=
 #include <asm/irq.h>
 #include <linux/netdevice.h>
 
-struct device *irq2dev_map[NR_IRQS] = {0, 0, /* ... zeroed */};
-
 static unsigned long irqs;
 
 void autoirq_setup(int waittime)

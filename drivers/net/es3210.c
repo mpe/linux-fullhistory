@@ -214,7 +214,7 @@ __initfunc(int es_probe1(struct device *dev, int ioaddr))
 		printk(" assigning IRQ %d", dev->irq);
 	}
 
-	if (request_irq(dev->irq, ei_interrupt, 0, "es3210", NULL)) {
+	if (request_irq(dev->irq, ei_interrupt, 0, "es3210", dev)) {
 		printk (" unable to get IRQ %d.\n", dev->irq);
 		return EAGAIN;
 	}
@@ -433,7 +433,6 @@ cleanup_module(void)
 			kfree(dev->priv);
 			dev->priv = NULL;
 			free_irq(dev->irq, NULL);
-			irq2dev_map[dev->irq] = NULL;
 			release_region(dev->base_addr, ES_IO_EXTENT);
 			unregister_netdev(dev);
 		}

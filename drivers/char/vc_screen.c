@@ -103,12 +103,13 @@ static long long vcs_lseek(struct file *file, long long offset, int orig)
 }
 
 #define RETURN( x ) { enable_bh( CONSOLE_BH ); return x; }
-static long
-vcs_read(struct inode *inode, struct file *file, char *buf, unsigned long count)
+static ssize_t
+vcs_read(struct file *file, char *buf, size_t count, loff_t *ppos)
 {
-	int p = file->f_pos;
+	struct inode *inode = file->f_dentry->d_inode;
 	unsigned int currcons = MINOR(inode->i_rdev);
-	int viewed, attr, size, read;
+	long p = *ppos;
+	long viewed, attr, size, read;
 	char *buf0;
 	unsigned short *org = NULL;
 
@@ -160,16 +161,17 @@ vcs_read(struct inode *inode, struct file *file, char *buf, unsigned long count)
 			put_user(func_scr_readw(org) & 0xff, buf++);
 	}
 	read = buf - buf0;
-	file->f_pos += read;
+	*ppos += read;
 	RETURN( read );
 }
 
-static long
-vcs_write(struct inode *inode, struct file *file, const char *buf, unsigned long count)
+static ssize_t
+vcs_write(struct file *file, const char *buf, size_t count, loff_t *ppos)
 {
-	int p = file->f_pos;
+	struct inode *inode = file->f_dentry->d_inode;
 	unsigned int currcons = MINOR(inode->i_rdev);
-	int viewed, attr, size, written;
+	long p = *ppos;
+	long viewed, attr, size, written;
 	const char *buf0;
 	unsigned short *org = NULL;
 
@@ -242,7 +244,7 @@ vcs_write(struct inode *inode, struct file *file, const char *buf, unsigned long
 		update_screen(currcons);
 #endif
 	written = buf - buf0;
-	file->f_pos += written;
+	*ppos += written;
 	RETURN( written );
 }
 

@@ -36,11 +36,10 @@ void isdn_init(void);
 void pcwatchdog_init(void);
 #endif
 
-static long do_write_mem(struct file * file,
-	void *p, unsigned long realp, 					 
-	const char * buf, unsigned long count)
+static ssize_t do_write_mem(struct file * file, void *p, unsigned long realp,
+			    const char * buf, size_t count, loff_t *ppos)
 {
-	unsigned long written;
+	ssize_t written;
 
 	written = 0;
 #if defined(__sparc__) || defined(__mc68000__)
@@ -58,8 +57,8 @@ static long do_write_mem(struct file * file,
 	if (copy_from_user(p, buf, count) < 0) 
 		return -EFAULT;
 	written += count;
-	file->f_pos += written;
-	return count;
+	*ppos += written;
+	return written;
 }
 
 
@@ -67,12 +66,12 @@ static long do_write_mem(struct file * file,
  * This funcion reads the *physical* memory. The f_pos points directly to the 
  * memory location. 
  */
-static long read_mem(struct inode * inode, struct file * file,
-	char * buf, unsigned long count)
+static ssize_t read_mem(struct file * file, char * buf,
+			size_t count, loff_t *ppos)
 {
-	unsigned long p = file->f_pos;
+	unsigned long p = *ppos;
 	unsigned long end_mem;
-	unsigned long read;
+	ssize_t read;
 	
 	end_mem = __pa(high_memory);
 	if (p >= end_mem)
@@ -99,14 +98,14 @@ static long read_mem(struct inode * inode, struct file * file,
 	if (copy_to_user(buf, __va(p), count) < 0)
 		return -EFAULT;
 	read += count;
-	file->f_pos += read;
+	*ppos += read;
 	return read;
 }
 
-static long write_mem(struct inode * inode, struct file * file,
-	const char * buf, unsigned long count)
+static ssize_t write_mem(struct file * file, const char * buf, 
+			 size_t count, loff_t *ppos)
 {
-	unsigned long p = file->f_pos;
+	unsigned long p = *ppos;
 	unsigned long end_mem;
 
 	end_mem = __pa(high_memory);
@@ -114,7 +113,7 @@ static long write_mem(struct inode * inode, struct file * file,
 		return 0;
 	if (count > end_mem - p)
 		count = end_mem - p;
-	return do_write_mem(file,__va(p),p,buf,count);
+	return do_write_mem(file, __va(p), p, buf, count, ppos);
 }
 
 static int mmap_mem(struct file * file, struct vm_area_struct * vma)
@@ -135,9 +134,10 @@ static int mmap_mem(struct file * file, struct vm_area_struct * vma)
 #endif
 #ifdef __powerpc__
 	if (offset >= __pa(high_memory))
-		pgprot_val(vma->vm_page_prot) |= _PAGE_NO_CACHE | _PAGE_GUARDED;
+		pgprot_val(vma->vm_page_prot) |= _PAGE_NO_CACHE|_PAGE_GUARDED;
 #endif
-	if (remap_page_range(vma->vm_start, offset, vma->vm_end - vma->vm_start, vma->vm_page_prot))
+	if (remap_page_range(vma->vm_start, offset, vma->vm_end-vma->vm_start,
+			     vma->vm_page_prot))
 		return -EAGAIN;
 	vma->vm_dentry = dget(file->f_dentry);
 	return 0;
@@ -146,61 +146,63 @@ static int mmap_mem(struct file * file, struct vm_area_struct * vma)
 /*
  * This function reads the *virtual* memory as seen by the kernel.
  */
-static long read_kmem(struct inode *inode, struct file *file,
-	char *buf, unsigned long count)
+static ssize_t read_kmem(struct file *file, char *buf, 
+			 size_t count, loff_t *ppos)
 {
-	unsigned long p = file->f_pos;
-	unsigned long read = 0;
-	long virtr;
+	unsigned long p = *ppos;
+	ssize_t read = 0;
+	ssize_t virtr;
 		
 	if (p < (unsigned long) high_memory) { 
-		unsigned long tmp;
-		
+		read = count;
 		if (count > (unsigned long) high_memory - p)
-			tmp = (unsigned long) high_memory - p;
-		else
-			tmp = count;
-		read = tmp;
+			read = (unsigned long) high_memory - p;
+
 #if defined(__sparc__) || defined(__mc68000__)
 		/* we don't have page 0 mapped on sparc and m68k.. */
-		while (p < PAGE_SIZE && tmp > 0) {
-			put_user(0,buf);
-			buf++;
-			p++;
-			tmp--;
+		if (p < PAGE_SIZE && read > 0) {
+			size_t tmp = PAGE_SIZE - p;
+			if (tmp > read) tmp = read;
+			clear_user(buf, tmp);
+			buf += tmp;
+			p += tmp;
+			read -= tmp;
+			count -= tmp;
 		}
 #endif
-		copy_to_user(buf, (char *) p, tmp);
-		buf += tmp;
+		copy_to_user(buf, (char *)p, read);
+		p += read;
+		buf += read;
+		count -= read;
 	}
 
-	virtr = vread(buf, (char *) (unsigned long) file->f_pos, count - read);
+	virtr = vread(buf, (char *)p, count);
 	if (virtr < 0)
 		return virtr;
-	file->f_pos += virtr + read;
+	*ppos += p + virtr;
 	return virtr + read;
 }
 
 /*
  * This function writes to the *virtual* memory as seen by the kernel.
  */
-static long write_kmem(struct inode * inode, struct file * file,
-	const char * buf, unsigned long count)
+static ssize_t write_kmem(struct file * file, const char * buf, 
+			  size_t count, loff_t *ppos)
 {
-	unsigned long p = file->f_pos;
+	unsigned long p = *ppos;
 
 	if (p >= (unsigned long) high_memory)
 		return 0;
 	if (count > (unsigned long) high_memory - p)
 		count = (unsigned long) high_memory - p;
-	return do_write_mem(file,(void*)p,p,buf,count);
+	return do_write_mem(file, (void*)p, p, buf, count, ppos);
 }
 
-static long read_port(struct inode * inode, struct file * file,
-	char * buf, unsigned long count)
+static ssize_t read_port(struct file * file, char * buf,
+			 size_t count, loff_t *ppos)
 {
-	unsigned int i = file->f_pos;
-	char * tmp = buf;
+	unsigned long i = *ppos;
+	char *tmp = buf;
 
 	if (verify_area(VERIFY_WRITE,buf,count))
 		return -EFAULT; 
@@ -210,14 +212,14 @@ static long read_port(struct inode * inode, struct file * file,
 		i++;
 		tmp++;
 	}
-	file->f_pos = i;
+	*ppos = i;
 	return tmp-buf;
 }
 
-static long write_port(struct inode * inode, struct file * file,
-	const char * buf, unsigned long count)
+static ssize_t write_port(struct file * file, const char * buf,
+			  size_t count, loff_t *ppos)
 {
-	unsigned int i = file->f_pos;
+	unsigned long i = *ppos;
 	const char * tmp = buf;
 
 	if (verify_area(VERIFY_READ,buf,count))
@@ -230,18 +232,18 @@ static long write_port(struct inode * inode, struct file * file,
 		i++;
 		tmp++;
 	}
-	file->f_pos = i;
+	*ppos = i;
 	return tmp-buf;
 }
 
-static long read_null(struct inode * node, struct file * file,
-	char * buf, unsigned long count)
+static ssize_t read_null(struct file * file, char * buf,
+			 size_t count, loff_t *ppos)
 {
 	return 0;
 }
 
-static long write_null(struct inode * inode, struct file * file,
-	const char * buf, unsigned long count)
+static ssize_t write_null(struct file * file, const char * buf,
+			  size_t count, loff_t *ppos)
 {
 	return count;
 }
@@ -249,7 +251,7 @@ static long write_null(struct inode * inode, struct file * file,
 /*
  * For fun, we are using the MMU for this.
  */
-static inline unsigned long read_zero_pagealigned(char * buf, unsigned long size)
+static inline size_t read_zero_pagealigned(char * buf, size_t size)
 {
 	struct vm_area_struct * vma;
 	unsigned long addr=(unsigned long)buf;
@@ -292,8 +294,8 @@ static inline unsigned long read_zero_pagealigned(char * buf, unsigned long size
 	return size;
 }
 
-static long read_zero(struct inode * node, struct file * file,
-	char * buf, unsigned long count)
+static ssize_t read_zero(struct file * file, char * buf, 
+			 size_t count, loff_t *ppos)
 {
 	unsigned long left, unwritten, written = 0;
 
@@ -339,21 +341,23 @@ static int mmap_zero(struct file * file, struct vm_area_struct * vma)
 	return 0;
 }
 
-static long write_full(struct inode * inode, struct file * file,
-	const char * buf, unsigned long count)
+static ssize_t write_full(struct file * file, const char * buf,
+			  size_t count, loff_t *ppos)
 {
 	return -ENOSPC;
 }
 
 /*
- * Special lseek() function for /dev/null and /dev/zero.  Most notably, you can fopen()
- * both devices with "a" now.  This was previously impossible.  SRB.
+ * Special lseek() function for /dev/null and /dev/zero.  Most notably, you
+ * can fopen() both devices with "a" now.  This was previously impossible.
+ * -- SRB.
  */
 
-static long long null_lseek(struct file * file, long long offset, int orig)
+static loff_t null_lseek(struct file * file, loff_t offset, int orig)
 {
-	return file->f_pos=0;
+	return file->f_pos = 0;
 }
+
 /*
  * The memory devices use the full 32/64 bits of the offset, and so we cannot
  * check against negative addresses: they are ok. The return value is weird,
@@ -362,7 +366,7 @@ static long long null_lseek(struct file * file, long long offset, int orig)
  * also note that seeking relative to the "end of file" isn't supported:
  * it has no meaning, so it returns -EINVAL.
  */
-static long long memory_lseek(struct file * file, long long offset, int orig)
+static loff_t memory_lseek(struct file * file, loff_t offset, int orig)
 {
 	switch (orig) {
 		case 0:

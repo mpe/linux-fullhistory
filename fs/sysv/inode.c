@@ -46,13 +46,14 @@ void sysv_put_inode(struct inode *inode)
 
 static struct super_operations sysv_sops = {
 	sysv_read_inode,
-	sysv_notify_change,
 	sysv_write_inode,
 	sysv_put_inode,
+	NULL,			/* delete_inode */
+	sysv_notify_change,
 	sysv_put_super,
 	sysv_write_super,
 	sysv_statfs,
-	NULL
+	NULL			/* remount_fs */
 };
 
 /* The following functions try to recognize specific filesystems.

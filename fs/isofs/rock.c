@@ -153,15 +153,16 @@ int find_rock_ridge_relocation(struct iso_directory_record * de,
 }
 
 int get_rock_ridge_filename(struct iso_directory_record * de,
-			   char ** name, int * namlen, struct inode * inode)
+			    char * retname, struct inode * inode)
 {
   int len;
   unsigned char * chr;
   CONTINUE_DECLS;
-  char * retname = NULL;
   int retnamlen = 0, truncate=0;
  
   if (!inode->i_sb->u.isofs_sb.s_rock) return 0;
+  *retname = 0;
+  retnamlen = 0;
 
   SETUP_ROCK_RIDGE(de, chr, len);
  repeat:
@@ -203,18 +204,6 @@ int get_rock_ridge_filename(struct iso_directory_record * de,
 	  printk("Unsupported NM flag settings (%d)\n",rr->u.NM.flags);
 	  break;
 	};
-	if (!retname){
-	  retname = (char *) kmalloc (255,GFP_KERNEL);
-	  /* This may be a waste, but we only
-	     need this for a moment.  The layers
-	     that call this function should
-	     deallocate the mem fairly soon
-	     after control is returned */
-
-	  if (!retname) goto out;
-	  *retname = 0; /* Zero length string */
-	  retnamlen = 0;
-	};
 	if((strlen(retname) + rr->len - 5) >= 254) {
 	  truncate = 1;
 	  break;
@@ -227,7 +216,6 @@ int get_rock_ridge_filename(struct iso_directory_record * de,
 	printk("RR: RE (%x)\n", inode->i_ino);
 #endif
 	if (buffer) kfree(buffer);
-	if (retname) kfree(retname);
 	return -1;
       default:
 	break;
@@ -235,15 +223,9 @@ int get_rock_ridge_filename(struct iso_directory_record * de,
     };
   }
   MAYBE_CONTINUE(repeat,inode);
-  if(retname){
-    *name = retname;
-    *namlen = retnamlen;
-    return 1;
-  };
-  return 0;  /* This file did not have a NM field */
+  return retnamlen; /* If 0, this file did not have a NM field */
  out:
   if(buffer) kfree(buffer);
-  if (retname) kfree(retname);
   return 0;
 }
 

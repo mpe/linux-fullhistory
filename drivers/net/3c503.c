@@ -340,13 +340,13 @@ el2_open(struct device *dev)
 
 	outb(EGACFR_NORM, E33G_GACFR);	/* Enable RAM and interrupts. */
 	do {
-	    if (request_irq (*irqp, NULL, 0, "bogus", NULL) != -EBUSY) {
+	    if (request_irq (*irqp, NULL, 0, "bogus", dev) != -EBUSY) {
 		/* Twinkle the interrupt, and check if it's seen. */
 		autoirq_setup(0);
 		outb_p(0x04 << ((*irqp == 9) ? 2 : *irqp), E33G_IDCFR);
 		outb_p(0x00, E33G_IDCFR);
 		if (*irqp == autoirq_report(0)	 /* It's a good IRQ line! */
-		    && request_irq (dev->irq = *irqp, &ei_interrupt, 0, ei_status.name, NULL) == 0)
+		    && request_irq (dev->irq = *irqp, &ei_interrupt, 0, ei_status.name, dev) == 0)
 		    break;
 	    }
 	} while (*++irqp);
@@ -355,7 +355,7 @@ el2_open(struct device *dev)
 	    return -EAGAIN;
 	}
     } else {
-	if (request_irq(dev->irq, &ei_interrupt, 0, ei_status.name, NULL)) {
+	if (request_irq(dev->irq, &ei_interrupt, 0, ei_status.name, dev)) {
 	    return -EAGAIN;
 	}
     }
@@ -371,7 +371,6 @@ el2_close(struct device *dev)
 {
     free_irq(dev->irq, NULL);
     dev->irq = ei_status.saved_irq;
-    irq2dev_map[dev->irq] = NULL;
     outb(EGACFR_IRQOFF, E33G_GACFR);	/* disable interrupts. */
 
     ei_close(dev);
@@ -675,7 +674,7 @@ cleanup_module(void)
 	for (this_dev = 0; this_dev < MAX_EL2_CARDS; this_dev++) {
 		struct device *dev = &dev_el2[this_dev];
 		if (dev->priv != NULL) {
-			/* NB: el2_close() handles free_irq + irq2dev map */
+			/* NB: el2_close() handles free_irq */
 			kfree(dev->priv);
 			dev->priv = NULL;
 			release_region(dev->base_addr, EL2_IO_EXTENT);

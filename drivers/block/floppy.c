@@ -3463,20 +3463,22 @@ static void config_types(void)
 		printk("\n");
 }
 
-static long floppy_read(struct inode * inode, struct file * filp,
-		       char * buf, unsigned long count)
+static ssize_t floppy_read(struct file * filp, char *buf,
+			   size_t count, loff_t *ppos)
 {
+	struct inode *inode = filp->f_dentry->d_inode;
 	int drive = DRIVE(inode->i_rdev);
 
 	check_disk_change(inode->i_rdev);
 	if (UTESTF(FD_DISK_CHANGED))
 		return -ENXIO;
-	return block_read(inode, filp, buf, count);
+	return block_read(filp, buf, count, ppos);
 }
 
-static long floppy_write(struct inode * inode, struct file * filp,
-			const char * buf, unsigned long count)
+static ssize_t floppy_write(struct file * filp, const char * buf,
+			    size_t count, loff_t *ppos)
 {
+	struct inode * inode = filp->f_dentry->d_inode;
 	int block;
 	int ret;
 	int drive = DRIVE(inode->i_rdev);
@@ -3488,9 +3490,9 @@ static long floppy_write(struct inode * inode, struct file * filp,
 		return -ENXIO;
 	if (!UTESTF(FD_DISK_WRITABLE))
 		return -EROFS;
-	block = (filp->f_pos + count) >> 9;
+	block = (*ppos + count) >> 9;
 	INFBOUND(UDRS->maxblock, block);
-	ret= block_write(inode, filp, buf, count);
+	ret= block_write(filp, buf, count, ppos);
 	return ret;
 }
 

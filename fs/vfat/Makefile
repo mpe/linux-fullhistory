@@ -8,8 +8,8 @@
 # Note 2! The CFLAGS definitions are now in the main makefile...
 
 O_TARGET := vfat.o
-O_OBJS   := 
-OX_OBJS  := namei.o
+O_OBJS   := namei.o
+OX_OBJS  := vfatfs_syms.o
 M_OBJS   := $(O_TARGET)
 
 include $(TOPDIR)/Rules.make

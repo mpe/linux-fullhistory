@@ -628,9 +628,7 @@ ewrk3_open(struct device *dev)
   STOP_EWRK3;
 
   if (!lp->hard_strapped) {
-    irq2dev_map[dev->irq] = dev;                   /* For latched interrupts */
-
-    if (request_irq(dev->irq, (void *)ewrk3_interrupt, 0, "ewrk3", NULL)) {
+    if (request_irq(dev->irq, (void *)ewrk3_interrupt, 0, "ewrk3", dev)) {
       printk("ewrk3_open(): Requested IRQ%d is busy\n",dev->irq);
       status = -EAGAIN;
     } else {
@@ -877,7 +875,7 @@ ewrk3_queue_pkt(struct sk_buff *skb, struct device *dev)
 static void
 ewrk3_interrupt(int irq, void *dev_id, struct pt_regs * regs)
 {
-    struct device *dev = (struct device *)(irq2dev_map[irq]);
+    struct device *dev = dev_id;
     struct ewrk3_private *lp;
     u_long iobase;
     u_char icr, cr, csr;
@@ -1151,8 +1149,6 @@ ewrk3_close(struct device *dev)
 
   if (!lp->hard_strapped) {
     free_irq(dev->irq, NULL);
-
-    irq2dev_map[dev->irq] = 0;
   }
 
   MOD_DEC_USE_COUNT;
@@ -1177,24 +1173,22 @@ static void set_multicast_list(struct device *dev)
   u_long iobase = dev->base_addr;
   u_char csr;
 
-  if (irq2dev_map[dev->irq] != NULL) {
-    csr = inb(EWRK3_CSR);
+  csr = inb(EWRK3_CSR);
 
-    if (lp->shmem_length == IO_ONLY) {
-      lp->mctbl = (char *) PAGE0_HTE;
-    } else {
-      lp->mctbl = (char *)(lp->shmem_base + PAGE0_HTE);
-    }
+  if (lp->shmem_length == IO_ONLY) {
+    lp->mctbl = (char *) PAGE0_HTE;
+  } else {
+    lp->mctbl = (char *)(lp->shmem_base + PAGE0_HTE);
+  }
 
-    csr &= ~(CSR_PME | CSR_MCE);
-    if (dev->flags & IFF_PROMISC) {         /* set promiscuous mode */
-      csr |= CSR_PME;
-      outb(csr, EWRK3_CSR);
-    } else {
-      SetMulticastFilter(dev);
-      csr |= CSR_MCE;
-      outb(csr, EWRK3_CSR);
-    }
+  csr &= ~(CSR_PME | CSR_MCE);
+  if (dev->flags & IFF_PROMISC) {         /* set promiscuous mode */
+    csr |= CSR_PME;
+    outb(csr, EWRK3_CSR);
+  } else {
+    SetMulticastFilter(dev);
+    csr |= CSR_MCE;
+    outb(csr, EWRK3_CSR);
   }
 }
 

@@ -254,7 +254,7 @@ __initfunc(int wd_probe1(struct device *dev, int ioaddr))
 
 	/* Snarf the interrupt now.  There's no point in waiting since we cannot
 	   share and the board will usually be enabled. */
-	if (request_irq(dev->irq, ei_interrupt, 0, model_name, NULL)) {
+	if (request_irq(dev->irq, ei_interrupt, 0, model_name, dev)) {
 		printk (" unable to get IRQ %d.\n", dev->irq);
 		return EAGAIN;
 	}
@@ -500,7 +500,6 @@ cleanup_module(void)
 			kfree(dev->priv);
 			dev->priv = NULL;
 			free_irq(dev->irq, NULL);
-			irq2dev_map[dev->irq] = NULL;
 			release_region(ioaddr, WD_IO_EXTENT);
 			unregister_netdev(dev);
 		}

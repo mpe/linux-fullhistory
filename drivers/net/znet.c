@@ -247,13 +247,12 @@ __initfunc(int znet_probe(struct device *dev))
 	zn.tx_dma = netinfo->dma2;
 
 	/* These should never fail.  You can't add devices to a sealed box! */
-	if (request_irq(dev->irq, &znet_interrupt, 0, "ZNet", NULL)
+	if (request_irq(dev->irq, &znet_interrupt, 0, "ZNet", dev)
 		|| request_dma(zn.rx_dma,"ZNet rx")
 		|| request_dma(zn.tx_dma,"ZNet tx")) {
 		printk(KERN_WARNING "%s: Not opened -- resource busy?!?\n", dev->name);
 		return EBUSY;
 	}
-	irq2dev_map[dev->irq] = dev;
 
 	/* Allocate buffer memory.	We can cross a 128K boundary, so we
 	   must be careful about the allocation.  It's easiest to waste 8K. */
@@ -403,7 +402,7 @@ static int znet_send_packet(struct sk_buff *skb, struct device *dev)
 /* The ZNET interrupt handler. */
 static void	znet_interrupt(int irq, void *dev_id, struct pt_regs * regs)
 {
-	struct device *dev = irq2dev_map[irq];
+	struct device *dev = dev_id;
 	int ioaddr;
 	int boguscnt = 20;
 

@@ -17,7 +17,7 @@ O_OBJS    = open.o read_write.o devices.o file_table.o buffer.o \
 
 MOD_LIST_NAME := FS_MODULES
 ALL_SUB_DIRS = minix ext2 fat msdos vfat proc isofs nfs umsdos \
-		hpfs sysv smbfs ncpfs ufs affs romfs autofs lockd nfsd
+		hpfs sysv smbfs ncpfs ufs affs romfs autofs lockd nfsd nls
 
 ifeq ($(CONFIG_QUOTA),y)
 O_OBJS += dquot.o
@@ -107,6 +107,18 @@ SUB_DIRS += lockd
 else
   ifeq ($(CONFIG_LOCKD),m)
   MOD_SUB_DIRS := lockd $(MOD_SUB_DIRS)
+  endif
+endif
+
+# Since CONFIG_NLS might be set to y while there are modules
+# to be build in the nls/ directory, we need to enter the nls
+# directory every time, but with different rules.
+ifeq ($(CONFIG_NLS),y)
+SUB_DIRS += nls
+MOD_IN_SUB_DIRS += nls
+else
+  ifeq ($(CONFIG_NLS),m)
+  MOD_SUB_DIRS += nls
   endif
 endif
 

@@ -374,26 +374,26 @@ static int md_release (struct inode *inode, struct file *file)
 }
 
 
-static long md_read (struct inode *inode, struct file *file,
-		    char *buf, unsigned long count)
+static ssize_t md_read (struct file *file, char *buf, size_t count,
+			loff_t *ppos)
 {
-  int minor=MINOR(inode->i_rdev);
+  int minor=MINOR(file->f_dentry->d_inode->i_rdev);
 
   if (!md_dev[minor].pers)	/* Check if device is being run */
     return -ENXIO;
 
-  return block_read (inode, file, buf, count);
+  return block_read(file, buf, count, ppos);
 }
 
-static long md_write (struct inode *inode, struct file *file,
-		     const char *buf, unsigned long count)
+static ssize_t md_write (struct file *file, const char *buf,
+			 size_t count, loff_t *ppos)
 {
-  int minor=MINOR(inode->i_rdev);
+  int minor=MINOR(file->f_dentry->d_inode->i_rdev);
 
   if (!md_dev[minor].pers)	/* Check if device is being run */
     return -ENXIO;
 
-  return block_write (inode, file, buf, count);
+  return block_write(file, buf, count, ppos);
 }
 
 static struct file_operations md_fops=

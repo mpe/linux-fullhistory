@@ -70,9 +70,10 @@ static struct task_struct * get_task(int pid)
 	return tsk;
 }
 
-static long mem_read(struct inode * inode, struct file * file,
-	char * buf, unsigned long count)
+static ssize_t mem_read(struct file * file, char * buf,
+			size_t count, loff_t *ppos)
 {
+	struct inode * inode = file->f_dentry->d_inode;
 	pgd_t *page_dir;
 	pmd_t *page_middle;
 	pte_t pte;
@@ -80,17 +81,17 @@ static long mem_read(struct inode * inode, struct file * file,
 	struct task_struct * tsk;
 	unsigned long addr;
 	char *tmp;
-	int i;
+	ssize_t scount, i;
 
 	tsk = get_task(inode->i_ino >> 16);
 	if (!tsk)
 		return -ESRCH;
-	addr = file->f_pos;
-	count = check_range(tsk->mm, addr, count);
-	if (count < 0)
-		return count;
+	addr = *ppos;
+	scount = check_range(tsk->mm, addr, count);
+	if (scount < 0)
+		return scount;
 	tmp = buf;
-	while (count > 0) {
+	while (scount > 0) {
 		if (signal_pending(current))
 			break;
 		page_dir = pgd_offset(tsk->mm,addr);
@@ -114,22 +115,23 @@ static long mem_read(struct inode * inode, struct file * file,
 			break;
 		page = (char *) pte_page(pte) + (addr & ~PAGE_MASK);
 		i = PAGE_SIZE-(addr & ~PAGE_MASK);
-		if (i > count)
-			i = count;
+		if (i > scount)
+			i = scount;
 		copy_to_user(tmp, page, i);
 		addr += i;
 		tmp += i;
-		count -= i;
+		scount -= i;
 	}
-	file->f_pos = addr;
+	*ppos = addr;
 	return tmp-buf;
 }
 
 #ifndef mem_write
 
-static long mem_write(struct inode * inode, struct file * file,
-	char * buf, unsigned long count)
+static ssize_t mem_write(struct file * file, char * buf,
+			 size_t count, loff_t *ppos)
 {
+	struct inode * inode = file->f_dentry->d_inode;
 	pgd_t *page_dir;
 	pmd_t *page_middle;
 	pte_t pte;
@@ -137,9 +139,9 @@ static long mem_write(struct inode * inode, struct file * file,
 	struct task_struct * tsk;
 	unsigned long addr;
 	char *tmp;
-	int i;
+	long i;
 
-	addr = file->f_pos;
+	addr = *ppos;
 	tsk = get_task(inode->i_ino >> 16);
 	if (!tsk)
 		return -ESRCH;
@@ -177,7 +179,7 @@ static long mem_write(struct inode * inode, struct file * file,
 		tmp += i;
 		count -= i;
 	}
-	file->f_pos = addr;
+	*ppos = addr;
 	if (tmp != buf)
 		return tmp-buf;
 	if (signal_pending(current))

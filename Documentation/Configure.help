@@ -4218,6 +4218,154 @@ CONFIG_UMSDOS_FS
   umsdos.o. Note that the filesystem of your root partition cannot be
   a module, so this could be dangerous. If unsure, say N.
 
+nls: Native language codepages and Unicode support
+CONFIG_NLS
+  This is required by the FAT filesystems and by the ISO9660 filesystem
+  when it is compiled with Joliet support.  Joliet is a Microsoft
+  extension for CDROMs that supports Unicode.  This allows translation
+  between different character sets. When dealing with the FAT based
+  filesystems, there are two character sets that are important. The
+  first is the codepage.  Codepages are character sets that are used by
+  DOS to allow filenames to have native language characters when
+  character sets were limited to 256 characters. The codepage is the
+  character set that is used to store native language characters on
+  disk.  The two most common codepages are 437 in the United States and
+  850 in much of Europe. The second important character set is the
+  input/output character set. This is the character set that is
+  displayed on the screen. In the United States, this will almost always
+  be the ISO 8859-1 character set. This is the default. Linux will only
+  do a translation of the FAT filenames, not the contents of the files.
+
+nls iso8859-1
+CONFIG_NLS_ISO8859_1
+  ISO8859-1 is the Latin 1 character set, and it covers most West
+  European languages such as Albanian, Catalan, Danish, Dutch, English,
+  Faeroese, Finnish, French, German, Galician, Irish, Icelandic, Italian,
+  Norwegian, Portuguese, Spanish, Swedish, and Valencian.
+
+nls iso8859-2
+CONFIG_NLS_ISO8859_2
+  ISO8859-2 is the Latin 2 character set, and it works for most
+  Latin-written Slavic and Central European languages: Czech, German,
+  Hungarian, Polish, Rumanian, Croatian, Slovak, Slovene.
+
+nls iso8859-3
+CONFIG_NLS_ISO8859_3
+  ISO8859-3 is the Latin 3 character set, and it s popular with authors
+  of Esperanto, Galician, Maltese, and Turkish.
+
+nls iso8859-4
+CONFIG_NLS_ISO8859_4
+  ISO8859-4 is the Latin 4 character set, and it introduces letters
+  for Estonian, Latvian, and Lithuanian. It is an incomplete predecessor of
+  Latin 6.
+
+nls iso8859-5
+CONFIG_NLS_ISO8859_5
+  ISO8859-5 is a Cyrillic character set, and you can type Bulgarian,
+  Byelorussian, Macedonian, Russian, Serbian, and Ukrainian.
+  Note that the charset KOI8-R is preferred in Russia.
+
+nls iso8859-6
+CONFIG_NLS_ISO8859_6
+  ISO8859-6 is the Arabic character set.
+
+nls iso8859-7
+CONFIG_NLS_ISO8859_7
+  ISO8859-7 is the Modern Greek character set.
+
+nls iso8859-8
+CONFIG_NLS_ISO8859_8
+  ISO8859-8 is the Hebrew character set.
+
+nls iso8859-9
+CONFIG_NLS_ISO8859_9
+  ISO8859-9 is the Latin 5 character set, and it replaces the rarely
+  needed Icelandic letters in Latin 1 with the Turkish ones. Useful in
+  Turkey.
+
+nls iso8859-10
+CONFIG_NLS_ISO8859_10
+  ISO8859-10 is the Latin 6 character set, and it adds the last Inuit
+  (Greenlandic) and Sami (Lappish) letters that were missing in Latin 4 to
+  cover the entire Nordic area. 
+
+nls koi8-r
+CONFIG_NLS_KOI8_R
+  This is the preferred Russian character set.
+
+nls codepage 437
+CONFIG_NLS_CODEPAGE_437
+  This is the DOS codepage that is used in the United States and parts of
+  Canada.
+
+nls codepage 737
+CONFIG_NLS_CODEPAGE_737
+  This is the codepage used by DOS for Greek.
+
+nls codepage 775
+CONFIG_NLS_CODEPAGE_775
+  This is the codepage used by DOS for the Baltic Rim Languages.
+
+nls codepage 850
+CONFIG_NLS_CODEPAGE_850
+  This is the DOS codepage that is used in much of Europe--United Kingdom,
+  Germany, Spain, Italy, and [add more countries here]. It has some
+  characters useful to many European languages that are not part of
+  codepage 437.
+
+nls codepage 852
+CONFIG_NLS_CODEPAGE_852
+  This is the Latin 2 codepage used by DOS for much of Central and
+  Eastern Europe.  It has all the required characters for these languages:
+  Albanian, Croatian, Czech, English, Finnish, Hungarian, Irish, German,
+  Polish, Romanian, Serbian (Latin transcription), Slovak, Slovenian, and
+  Sorbian.
+
+nls codepage 855
+CONFIG_NLS_CODEPAGE_855
+  This is the DOS codepage that is used for Cyrillic.
+
+nls codepage 857
+CONFIG_NLS_CODEPAGE_857
+  This is the DOS codepage that is used for Turkish.
+
+nls codepage 860
+CONFIG_NLS_CODEPAGE_860
+  This is the DOS codepage that is used for Portuguese.
+
+nls codepage 861
+CONFIG_NLS_CODEPAGE_861
+  This is the DOS codepage that is used for Icelandic.
+
+nls codepage 862
+CONFIG_NLS_CODEPAGE_862
+  This is the DOS codepage that is used for Hebrew.
+
+nls codepage 863
+CONFIG_NLS_CODEPAGE_863
+  This is the DOS codepage that is used for Canadian French.
+
+nls codepage 864
+CONFIG_NLS_CODEPAGE_864
+  This is the DOS codepage that is used for Arabic.
+
+nls codepage 865
+CONFIG_NLS_CODEPAGE_865
+  This is the DOS codepage that is used in the Nordic European countries.
+
+nls codepage 866
+CONFIG_NLS_CODEPAGE_866
+  This is the DOS codepage that is used for Cyrillic/Russian.
+
+nls codepage 869
+CONFIG_NLS_CODEPAGE_869
+  This is the DOS codepage that is used for Greek.
+
+nls codepage 874
+CONFIG_NLS_CODEPAGE_874
+  This is the DOS codepage that is used for Thai.
+
 /proc filesystem support
 CONFIG_PROC_FS
   This is a virtual filesystem providing information about the status

@@ -29,10 +29,10 @@
 #include <asm/uaccess.h>
 
 /* forward references */
-static long proc_readscsi(struct inode * inode, struct file * file,
-			 char * buf, unsigned long count);
-static long proc_writescsi(struct inode * inode, struct file * file,
-			 const char * buf, unsigned long count);
+static ssize_t proc_readscsi(struct file * file, char * buf,
+                             size_t count, loff_t *ppos);
+static ssize_t proc_writescsi(struct file * file, const char * buf,
+                              size_t count, loff_t *ppos);
 static long long proc_scsilseek(struct file *, long long, int);
 
 extern void build_proc_dir_hba_entries(uint);
@@ -101,13 +101,14 @@ int get_not_present_info(char *buffer, char **start, off_t offset, int length)
 				      * use some slack for overruns 
 				      */
 
-static long proc_readscsi(struct inode * inode, struct file * file,
-			  char * buf, unsigned long count)
+static ssize_t proc_readscsi(struct file * file, char * buf,
+                             size_t count, loff_t *ppos)
 {
-    int length;
-    int bytes = count;
-    int copied = 0;
-    int thistime;
+    struct inode * inode = file->f_dentry->d_inode; 
+    ssize_t length;
+    ssize_t bytes = count;
+    ssize_t copied = 0;
+    ssize_t thistime;
     char * page;
     char * start;
     
@@ -121,9 +122,9 @@ static long proc_readscsi(struct inode * inode, struct file * file,
 	
 	if(dispatch_scsi_info_ptr)
 	    length = dispatch_scsi_info_ptr(inode->i_ino, page, &start, 
-					    file->f_pos, thistime, 0);
+					    *ppos, thistime, 0);
 	else
-	    length = get_not_present_info(page, &start, file->f_pos, thistime);
+	    length = get_not_present_info(page, &start, *ppos, thistime);
 	if(length < 0) {
 	    free_page((ulong) page);
 	    return(length);
@@ -140,7 +141,7 @@ static long proc_readscsi(struct inode * inode, struct file * file,
 	 *  Copy the bytes
 	 */
 	copy_to_user(buf + copied, start, length);
-	file->f_pos += length;	/* Move down the file */
+	*ppos += length;	/* Move down the file */
 	bytes -= length;
 	copied += length;
 	
@@ -154,10 +155,11 @@ static long proc_readscsi(struct inode * inode, struct file * file,
 }
 
 
-static long proc_writescsi(struct inode * inode, struct file * file,
-			   const char * buf, unsigned long count)
+static ssize_t proc_writescsi(struct file * file, const char * buf,
+                              size_t count, loff_t *ppos)
 {
-    int ret = 0;
+    struct inode * inode = file->f_dentry->d_inode;
+    ssize_t ret = 0;
     char * page;
     
     if(count > PROC_BLOCK_SIZE) {
