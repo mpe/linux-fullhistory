@@ -35,27 +35,6 @@
 #include <asm/segment.h>
 #include <asm/bitops.h>
 
-/*
- * Serial driver configuration section.  Here are the various options:
- *
- * CONFIG_AUTO_IRQ
- *		Enables automatic IRQ detection.  I've put in some
- * 		fixes to this which should make this work much more
- * 		cleanly than it used to in 0.98pl2-6.  It should be
- * 		much less vulnerable to false IRQs now.
- * 
- * CONFIG_AST_FOURPORT
- *		Enables support for the AST Fourport serial port.
- * 
- * CONFIG_ACCENT_ASYNC
- *		Enables support for the Accent Async 4 port serial
- * 		port.
- *
- * CONFIG_HUB6
- *		Enables support for the venerable Bell Technologies
- *		HUB6 card.
- */
-
 #undef ISR_HACK
 
 /*

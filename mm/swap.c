@@ -596,7 +596,7 @@ do { unsigned long size = PAGE_SIZE << high; \
 		add_mem_queue(free_area_list+high, addr); \
 		mark_used((unsigned long) addr, high); \
 		restore_flags(flags); \
-		addr = (void *) (size + (unsigned long) addr); \
+		addr = (struct mem_list *) (size + (unsigned long) addr); \
 	} mem_map[MAP_NR((unsigned long) addr)] = 1; \
 } while (0)
 

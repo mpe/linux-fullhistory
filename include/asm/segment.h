@@ -52,6 +52,20 @@ __asm__ ("movl %0,%%fs:%1": /* no outputs */ :"ir" (val),"m" (*addr));
 
 #define put_fs_long(x,addr) put_user_long((x),(int *)(addr))
 
+static inline void and_user_long(unsigned long val,int * addr)
+{
+__asm__ ("andl %0,%%fs:%1": /* no outputs */ :"ir" (val),"m" (*addr));
+}
+
+#define and_fs_long(x,addr) and_user_long((x),(int *)(addr))
+
+static inline void or_user_long(unsigned long val,int * addr)
+{
+__asm__ ("orl %0,%%fs:%1": /* no outputs */ :"ir" (val),"m" (*addr));
+}
+
+#define or_fs_long(x,addr) or_user_long((x),(int *)(addr))
+
 static inline void __generic_memcpy_tofs(void * to, const void * from, unsigned long n)
 {
 __asm__("cld\n\t"

@@ -754,6 +754,17 @@ struct linux_binfmt formats[] = {
 	{NULL, NULL}
 };
 
+static void set_brk(unsigned long start, unsigned long end)
+{
+	start = PAGE_ALIGN(start);
+	end = PAGE_ALIGN(end);
+	if (end <= start)
+		return;
+	do_mmap(NULL, start, end - start,
+		PROT_READ | PROT_WRITE | PROT_EXEC,
+		MAP_FIXED | MAP_PRIVATE, 0);
+}
+
 /*
  * These are the functions used to load a.out style executables and shared
  * libraries.  There is no binary dependent code anywhere else.
@@ -790,7 +801,8 @@ int load_aout_binary(struct linux_binprm * bprm, struct pt_regs * regs)
 
 	current->end_code = N_TXTADDR(ex) + ex.a_text;
 	current->end_data = ex.a_data + current->end_code;
-	current->start_brk = current->brk = current->end_data;
+	current->start_brk = current->end_data;
+	current->brk = current->start_brk + ex.a_bss;
 	current->start_code += N_TXTADDR(ex);
 	current->rss = 0;
 	current->suid = current->euid = bprm->e_uid;
@@ -842,7 +854,7 @@ int load_aout_binary(struct linux_binprm * bprm, struct pt_regs * regs)
 		bprm->inode->i_count++;
 	}
 beyond_if:
-	sys_brk(current->brk+ex.a_bss);
+	set_brk(current->start_brk, current->brk);
 	
 	p += change_ldt(ex.a_text,bprm->page);
 	p -= MAX_ARG_PAGES*PAGE_SIZE;

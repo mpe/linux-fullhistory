@@ -1767,7 +1767,7 @@ asmlinkage int sync_old_buffers(void)
 	repeat:
 		bh = lru_list[nlist];
 		if(bh) 
-			 for (i = nr_buffers_type[nlist]; --i > 0; bh = next) {
+			 for (i = nr_buffers_type[nlist]; i-- > 0; bh = next) {
 				 /* We may have stalled while waiting for I/O to complete. */
 				 if(bh->b_list != nlist) goto repeat;
 				 next = bh->b_next_free;
@@ -1909,6 +1909,9 @@ asmlinkage int sys_bdflush(int func, int data)
 		
 		if(nr_buffers_type[BUF_DIRTY] < (nr_buffers - nr_buffers_type[BUF_SHARED]) * 
 		   bdf_prm.b_un.nfract/100) {
+		   	if (current->signal & (1 << (SIGKILL-1)))
+		   		return 0;
+		   	current->signal = 0;
 			interruptible_sleep_on(&bdflush_wait);
 		}
 	}

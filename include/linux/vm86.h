@@ -1,7 +1,18 @@
 #ifndef _LINUX_VM86_H
 #define _LINUX_VM86_H
 
-#define VM_MASK 0x00020000
+#define TF_MASK		0x00000100
+#define IF_MASK		0x00000200
+#define IOPL_MASK	0x00003000
+#define NT_MASK		0x00004000
+#define VM_MASK		0x00020000
+#define AC_MASK		0x00040000
+
+#define BIOSSEG		0x0f000
+
+#define CPU_286		2
+#define CPU_386		3
+#define CPU_486		4
 
 /*
  * This is the stack-layout when we have done a "SAVE_ALL" from vm86
@@ -29,28 +40,39 @@ struct vm86_regs {
 	long __null_gs;
 	long orig_eax;
 	long eip;
-	long cs;
+	unsigned short cs, __csh;
 	long eflags;
 	long esp;
-	long ss;
+	unsigned short ss, __ssh;
 /*
  * these are specific to v86 mode:
  */
-	long es;
-	long ds;
-	long fs;
-	long gs;
+	unsigned short es, __esh;
+	unsigned short ds, __dsh;
+	unsigned short fs, __fsh;
+	unsigned short gs, __gsh;
 };
 
 struct vm86_struct {
 	struct vm86_regs regs;
 	unsigned long flags;
 	unsigned long screen_bitmap;
+	unsigned long v_eflags;
+	unsigned long cpu_type;
+	unsigned long return_if_iflag;
+	unsigned char int_revectored[0x100];
+	unsigned char int21_revectored[0x100];
 };
 
 /*
  * flags masks
  */
 #define VM86_SCREEN_BITMAP 1
+
+#ifdef __KERNEL__
+
+void handle_vm86_fault(struct vm86_regs *, long);
+
+#endif
 
 #endif

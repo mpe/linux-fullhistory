@@ -20,12 +20,6 @@
 #include <asm/segment.h>
 
  
-/*
- * The definition of file_systems that used to be here is now in
- * filesystems.c.  Now super.c contains no fs specific code.  -- jrs
- */
-
-extern struct file_system_type file_systems[];
 extern struct file_operations * get_blkfops(unsigned int);
 extern struct file_operations * get_chrfops(unsigned int);
 
@@ -41,16 +35,54 @@ static int do_remount_sb(struct super_block *sb, int flags, char * data);
 /* this is initialized in init/main.c */
 dev_t ROOT_DEV = 0;
 
+static struct file_system_type * file_systems = NULL;
+
+int register_filesystem(struct file_system_type * fs)
+{
+	struct file_system_type ** tmp;
+
+	if (!fs)
+		return -EINVAL;
+	if (fs->next)
+		return -EBUSY;
+	tmp = &file_systems;
+	while (*tmp) {
+		if (strcmp((*tmp)->name, fs->name) == 0)
+			return -EBUSY;
+		tmp = &(*tmp)->next;
+	}
+	*tmp = fs;
+	return 0;
+}
+
+int unregister_filesystem(struct file_system_type * fs)
+{
+	struct file_system_type ** tmp;
+
+	tmp = &file_systems;
+	while (*tmp) {
+		if (fs == *tmp) {
+			*tmp = fs->next;
+			fs->next = NULL;
+			return 0;
+		}
+		tmp = &(*tmp)->next;
+	}
+	return -EINVAL;
+}
+
 struct file_system_type *get_fs_type(char *name)
 {
-	int a;
+	struct file_system_type * fs = file_systems;
 	
 	if (!name)
-		return &file_systems[0];
-	for(a = 0 ; file_systems[a].read_super ; a++)
-		if (!strcmp(name,file_systems[a].name))
-			return(&file_systems[a]);
-	return NULL;
+		return fs;
+	while (fs) {
+		if (!strcmp(name,fs->name))
+			break;
+		fs = fs->next;
+	}
+	return fs;
 }
 
 void __wait_on_super(struct super_block * sb)
@@ -516,7 +548,7 @@ void mount_root(void)
 		printk(KERN_NOTICE "VFS: Insert root floppy and press ENTER\n");
 		wait_for_keypress();
 	}
-	for (fs_type = file_systems; fs_type->read_super; fs_type++) {
+	for (fs_type = file_systems ; fs_type ; fs_type = fs_type->next) {
 		if (!fs_type->requires_dev)
 			continue;
 		sb = read_super(ROOT_DEV,fs_type->name,root_mountflags,NULL,1);

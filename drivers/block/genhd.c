@@ -193,16 +193,10 @@ static void setup_dev(struct gendisk *dev)
 	blk_size[dev->major] = dev->sizes;
 }
 	
-/* This may be used only once, enforced by 'static int callable' */
-asmlinkage int sys_setup(void * BIOS)
+void device_setup(void * BIOS)
 {
-	static int callable = 1;
 	struct gendisk *p;
 	int nr=0;
-
-	if (!callable)
-		return -1;
-	callable = 0;
 
 	for (p = gendisk_head ; p ; p=p->next) {
 		setup_dev(p);
@@ -211,6 +205,4 @@ asmlinkage int sys_setup(void * BIOS)
 		
 	if (ramdisk_size)
 		rd_load();
-	mount_root();
-	return (0);
 }

@@ -492,6 +492,9 @@ extern inline void select_wait(struct wait_queue ** wait_address, select_table *
 
 extern void __down(struct semaphore * sem);
 
+/*
+ * These are not yet interrupt-safe
+ */
 extern inline void down(struct semaphore * sem)
 {
 	if (sem->count <= 0)

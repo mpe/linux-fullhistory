@@ -460,7 +460,7 @@ repeat:
 	    ((int) SCpnt->request.bh->b_data) + (SCpnt->request.nr_sectors << 9) - 1 > 
 	    ISA_DMA_THRESHOLD && SCpnt->host->unchecked_isa_dma) {
 	  if(((int) SCpnt->request.bh->b_data) > ISA_DMA_THRESHOLD)
-	    bounce_buffer = scsi_malloc(bounce_size);
+	    bounce_buffer = (char *) scsi_malloc(bounce_size);
 	  if(!bounce_buffer) contiguous = 0;
 	};
 
@@ -606,7 +606,7 @@ repeat:
 
 		if(!sgpnt[count].alt_address) {count--; continue; }
 		if(dma_free_sectors > 10)
-		  tmp = scsi_malloc(sgpnt[count].length + bhp->b_size);
+		  tmp = (char *) scsi_malloc(sgpnt[count].length + bhp->b_size);
 		else {
 		  tmp = NULL;
 		  max_sg = SCpnt->use_sg;

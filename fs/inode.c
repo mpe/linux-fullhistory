@@ -419,11 +419,6 @@ struct inode * get_pipe_inode(void)
 	return inode;
 }
 
-struct inode * iget(struct super_block * sb,int nr)
-{
-	return __iget(sb,nr,1);
-}
-
 struct inode * __iget(struct super_block * sb, int nr, int crossmntp)
 {
 	static struct wait_queue * update_wait = NULL;

@@ -125,9 +125,20 @@ DO_ERROR( 9, SIGFPE,  "coprocessor segment overrun", coprocessor_segment_overrun
 DO_ERROR(10, SIGSEGV, "invalid TSS", invalid_TSS, current)
 DO_ERROR(11, SIGSEGV, "segment not present", segment_not_present, current)
 DO_ERROR(12, SIGSEGV, "stack segment", stack_segment, current)
-DO_ERROR(13, SIGSEGV, "general protection", general_protection, current)
 DO_ERROR(15, SIGSEGV, "reserved", reserved, current)
 DO_ERROR(17, SIGSEGV, "alignment check", alignment_check, current)
+
+asmlinkage void do_general_protection(struct pt_regs * regs, long error_code)
+{
+	if (regs->eflags & VM_MASK) {
+		handle_vm86_fault((struct vm86_regs *) regs, error_code);
+		return;
+	}
+	current->tss.error_code = error_code;
+	current->tss.trap_no = 13;
+	send_sig(SIGSEGV, current, 1);
+	die_if_kernel("general protection",regs,error_code);
+}
 
 asmlinkage void do_nmi(struct pt_regs * regs, long error_code)
 {

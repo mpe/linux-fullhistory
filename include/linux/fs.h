@@ -316,9 +316,13 @@ struct file_system_type {
 	struct super_block *(*read_super) (struct super_block *, void *, int);
 	char *name;
 	int requires_dev;
+	struct file_system_type * next;
 };
 
 #ifdef __KERNEL__
+
+extern int register_filesystem(struct file_system_type *);
+extern int unregister_filesystem(struct file_system_type *);
 
 asmlinkage int sys_open(const char *, int, int);
 asmlinkage int sys_close(unsigned int);		/* yes, it's really unsigned */
@@ -359,12 +363,11 @@ extern int nr_files;
 extern struct super_block super_blocks[NR_SUPER];
 
 extern int shrink_buffers(unsigned int priority);
-
 extern void refile_buffer(struct buffer_head * buf);
-void set_writetime(struct buffer_head * buf, int flag);
+extern void set_writetime(struct buffer_head * buf, int flag);
+extern void refill_freelist(int size);
 
-struct buffer_head ** buffer_pages;
-
+extern struct buffer_head ** buffer_pages;
 extern int nr_buffers;
 extern int buffermem;
 extern int nr_buffer_heads;
@@ -413,7 +416,6 @@ extern int open_namei(const char * pathname, int flag, int mode,
 extern int do_mknod(const char * filename, int mode, dev_t dev);
 extern void iput(struct inode * inode);
 extern struct inode * __iget(struct super_block * sb,int nr,int crsmnt);
-extern struct inode * iget(struct super_block * sb,int nr);
 extern struct inode * get_empty_inode(void);
 extern void insert_inode_hash(struct inode *);
 extern void clear_inode(struct inode *);
@@ -448,6 +450,11 @@ extern int generic_mmap(struct inode *, struct file *, unsigned long, size_t, in
 
 extern int block_fsync(struct inode *, struct file *);
 extern int file_fsync(struct inode *, struct file *);
+
+extern inline struct inode * iget(struct super_block * sb,int nr)
+{
+	return __iget(sb,nr,1);
+}
 
 #endif /* __KERNEL__ */
 
