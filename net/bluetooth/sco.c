@@ -349,7 +349,7 @@ static void sco_sock_cleanup_listen(struct sock *parent)
 	}
 
 	parent->sk_state  = BT_CLOSED;
-	sock_set_flag(sk, SOCK_ZAPPED);
+	sock_set_flag(parent, SOCK_ZAPPED);
 }
 
 /* Kill socket (only if zapped and orphan)

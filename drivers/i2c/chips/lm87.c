@@ -317,20 +317,20 @@ show_temp(3);
 
 static void set_temp_low(struct device *dev, const char *buf, int nr)
 {
-    struct i2c_client *client = to_i2c_client(dev);
-    struct lm87_data *data = i2c_get_clientdata(client);
-    long val = simple_strtol(buf, NULL, 10);
-    data->temp_low[nr] = TEMP_TO_REG(val);
-    lm87_write_value(client, LM87_REG_TEMP_LOW[nr], data->temp_low[nr]);
+	struct i2c_client *client = to_i2c_client(dev);
+	struct lm87_data *data = i2c_get_clientdata(client);
+	long val = simple_strtol(buf, NULL, 10);
+	data->temp_low[nr] = TEMP_TO_REG(val);
+	lm87_write_value(client, LM87_REG_TEMP_LOW[nr], data->temp_low[nr]);
 }
 
 static void set_temp_high(struct device *dev, const char *buf, int nr)
 {
-    struct i2c_client *client = to_i2c_client(dev);
-    struct lm87_data *data = i2c_get_clientdata(client);
-    long val = simple_strtol(buf, NULL, 10);
-    data->temp_high[nr] = TEMP_TO_REG(val);
-    lm87_write_value(client, LM87_REG_TEMP_HIGH[nr], data->temp_high[nr]);
+	struct i2c_client *client = to_i2c_client(dev);
+	struct lm87_data *data = i2c_get_clientdata(client);
+	long val = simple_strtol(buf, NULL, 10);
+	data->temp_high[nr] = TEMP_TO_REG(val);
+	lm87_write_value(client, LM87_REG_TEMP_HIGH[nr], data->temp_high[nr]);
 }
 
 #define set_temp(offset) \

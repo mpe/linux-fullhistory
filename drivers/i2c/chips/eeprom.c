@@ -210,10 +210,11 @@ int eeprom_detect(struct i2c_adapter *adapter, int address, int kind)
 		if (i2c_smbus_read_byte_data(new_client, 0x80) == 'P'
 		 && i2c_smbus_read_byte(new_client) == 'C'
 		 && i2c_smbus_read_byte(new_client) == 'G'
-		 && i2c_smbus_read_byte(new_client) == '-')
+		 && i2c_smbus_read_byte(new_client) == '-') {
 			dev_info(&new_client->dev, "Vaio EEPROM detected, "
 				"enabling password protection\n");
 			data->nature = VAIO;
+		}
 	}
 
 	/* create the sysfs eeprom file */
