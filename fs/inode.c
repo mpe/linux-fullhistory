@@ -298,6 +298,7 @@ void clean_inode(struct inode *inode)
 	inode->i_op = NULL;
 	inode->i_nlink = 0;
 	inode->i_writecount = 0;
+	inode->i_size = 0;
 	memset(&inode->i_dquot, 0, sizeof(inode->i_dquot));
 	sema_init(&inode->i_sem, 1);
 }

@@ -313,15 +313,12 @@ asmlinkage int sys_chdir(const char * filename)
 
 	lock_kernel();
 	
-	dentry = lookup_dentry(filename, NULL, 1);
+	dentry = namei(filename);
 	error = PTR_ERR(dentry);
 	if (IS_ERR(dentry))
 		goto out;
 
-	error = -ENOENT;
 	inode = dentry->d_inode;
-	if (!inode)
-		goto dput_and_out;
 
 	error = -ENOTDIR;
 	if (!S_ISDIR(inode->i_mode))
@@ -390,15 +387,12 @@ asmlinkage int sys_chroot(const char * filename)
 
 	lock_kernel();
 	
-	dentry = lookup_dentry(filename, NULL, 1);
+	dentry = namei(filename);
 	error = PTR_ERR(dentry);
 	if (IS_ERR(dentry))
 		goto out;
 
-	error = -ENOENT;
 	inode = dentry->d_inode;
-	if (!inode)
-		goto dput_and_out;
 
 	error = -ENOTDIR;
 	if (!S_ISDIR(inode->i_mode))

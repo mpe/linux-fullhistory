@@ -728,15 +728,10 @@ int do_mount(kdev_t dev, const char * dev_name, const char * dir_name, const cha
 		return -EACCES;
 		/*flags |= MS_RDONLY;*/
 
-	dir_d = lookup_dentry(dir_name, NULL, 1);
+	dir_d = namei(dir_name);
 	error = PTR_ERR(dir_d);
 	if (IS_ERR(dir_d))
 		return error;
-
-	if (!dir_d->d_inode) {
-		dput(dir_d);
-		return -ENOENT;
-	}
 
 	if (dir_d->d_covers != dir_d) {
 		dput(dir_d);
