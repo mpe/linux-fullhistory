@@ -293,18 +293,10 @@ static void rw_intr (Scsi_Cmnd * SCpnt)
  *     
  *   - TOSHIBA: setting density is done here now, mounting PhotoCD's should
  *              work now without running the program "set_density"
- *              People reported that it is necessary to eject and reinsert
- *              the CD after the set-density call to get this working for
- *              old drives.
- *              And some very new drives don't need this call any more...
  *              Multisession CD's are supported too.
- *
- * Dec 1994: completely rewritten, uses kernel_scsi_ioctl() now
  *
  *   kraxel@cs.tu-berlin.de (Gerd Knorr)
  */
-
-#define DEBUG
 
 static void sr_photocd(struct inode *inode)
 {
@@ -345,12 +337,14 @@ static void sr_photocd(struct inode *inode)
     if (rc != 0) {
       printk("sr_photocd: ioctl error (NEC): 0x%x\n",rc);
       sector = 0;
+      is_xa = 0;
     } else {
       min   = (unsigned long) rec[15]/16*10 + (unsigned long) rec[15]%16;
       sec   = (unsigned long) rec[16]/16*10 + (unsigned long) rec[16]%16;
       frame = (unsigned long) rec[17]/16*10 + (unsigned long) rec[17]%16;
       /* if rec[14] isn't 0xb0, the drive does not support multisession CD's, use zero */
       sector = (0xb0 == rec[14]) ? min*CD_SECS*CD_FRAMES + sec*CD_FRAMES + frame : 0;
+      is_xa = (rec[14] == 0xb0);
 #ifdef DEBUG
       printk("NEC: (%2x) %2li:%02li:%02li = %li\n",buf[8+14],min,sec,frame,sector);
       if (sector) {
@@ -377,6 +371,7 @@ static void sr_photocd(struct inode *inode)
     if (rc != 0) {
       printk("sr_photocd: ioctl error (TOSHIBA #1): 0x%x\n",rc);
       sector = 0;
+      is_xa = 0;
       break; /* if the first ioctl fails, we don't call the second one */
     }
     is_xa  = (rec[0] == 0x20);
@@ -431,6 +426,8 @@ static void sr_photocd(struct inode *inode)
       if (rc != 0) {
 	printk("sr_photocd: ioctl error (TOSHIBA #3): 0x%x\n",rc);
       }
+      /* The set_density command may have changed the sector size or capacity. */
+      scsi_CDs[MINOR(inode->i_rdev)].needs_sector_size = 1;
     }
     break;
 
@@ -440,15 +437,13 @@ static void sr_photocd(struct inode *inode)
     printk("sr_photocd: unknown drive, no special multisession code\n");
 #endif
     sector = 0;
+    is_xa = 0;
     break; }
 
   scsi_CDs[MINOR(inode->i_rdev)].mpcd_sector = sector;
-  /* The code above may have changed the sector size or capacity. */
-  scsi_CDs[MINOR(inode->i_rdev)].needs_sector_size = 1;
+  scsi_CDs[MINOR(inode->i_rdev)].is_xa = is_xa;
   return;
 }
-
-#undef DEBUG
 
 static int sr_open(struct inode * inode, struct file * filp)
 {

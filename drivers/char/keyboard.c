@@ -164,9 +164,10 @@ static inline void kb_wait(void)
 {
 	int i;
 
-	for (i=0; i<0x10000; i++)
+	for (i=0; i<0x100000; i++)
 		if ((inb_p(0x64) & 0x02) == 0)
-			break;
+			return;
+	printk("Keyboard timed out\n");
 }
 
 static inline void send_cmd(unsigned char c)
@@ -1164,15 +1165,14 @@ unsigned long kbd_init(unsigned long kmem_start)
 	bh_base[KEYBOARD_BH].routine = kbd_bh;
 	request_irq(KEYBOARD_IRQ, keyboard_interrupt, 0, "keyboard");
 #ifdef __alpha__
-	/* enable keyboard interrupts */
-	outb(0x60,0x64);
-	while (inb(0x64) & 2)
-		/* nothing */;
-	outb(0x1,0x60);
-	while (inb(0x64) & 2)
-		/* nothing */;
-	if (!send_data(0xf0) || !send_data(0x01))
-		printk("Scanmode 1 change failed\n");
+	/* enable keyboard interrupts, PC/AT mode */
+	kb_wait();
+	outb(0x60,0x64);	/* write PS/2 Mode Register */
+	kb_wait();
+	outb(0x41,0x60);	/* KCC | EKI */
+	kb_wait();
+	if (!send_data(0xf0) || !send_data(0x02))
+		printk("Scanmode 2 change failed\n");
 #endif
 	mark_bh(KEYBOARD_BH);
 	enable_bh(KEYBOARD_BH);

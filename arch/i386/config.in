@@ -210,7 +210,7 @@ bool '/proc filesystem support' CONFIG_PROC_FS y
 if [ "$CONFIG_INET" = "y" ]; then
 bool 'NFS filesystem support' CONFIG_NFS_FS y
 fi
-if [ "$CONFIG_BLK_DEV_SR" = "y" -o "$CONFIG_CDU31A" = "y" -o "$CONFIG_MCD" = "y" -o "$CONFIG_SBPCD" = "y" -o "$CONFIG_BLK_DEV_IDECD" = "y" ]; then
+if [ "$CONFIG_BLK_DEV_SR" = "y" -o "$CONFIG_CDU31A" = "y" -o "$CONFIG_MCD" = "y" -o "$CONFIG_SBPCD" = "y" -o "$CONFIG_BLK_DEV_IDECD" = "y" -o "$CONFIG_AZTCD" = "y" ]; then
 	bool 'ISO9660 cdrom filesystem support' CONFIG_ISO9660_FS y
 else
 	bool 'ISO9660 cdrom filesystem support' CONFIG_ISO9660_FS n

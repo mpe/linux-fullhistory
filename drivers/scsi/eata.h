@@ -7,24 +7,24 @@
 
 #include <linux/scsicam.h>
 
-#define EATA_VERSION "1.14.03"
+#define EATA_VERSION "1.15.00"
 
-int eata_detect(Scsi_Host_Template *);
-int eata_queuecommand(Scsi_Cmnd *, void (*done)(Scsi_Cmnd *));
-int eata_abort(Scsi_Cmnd *);
-int eata_reset(Scsi_Cmnd *);
+int eata2x_detect(Scsi_Host_Template *);
+int eata2x_queuecommand(Scsi_Cmnd *, void (*done)(Scsi_Cmnd *));
+int eata2x_abort(Scsi_Cmnd *);
+int eata2x_reset(Scsi_Cmnd *);
 
-#define EATA {  NULL, /* Ptr for modules */                    \
+#define EATA {                                                 \
+                NULL, /* Ptr for modules */                    \
                 NULL, /* usage count for modules */	       \
-                "EATA/DMA 2.0 rev. " EATA_VERSION " by "       \
-                "Dario_Ballabio@milano.europe.dg.com.",        \
-                eata_detect,	        	               \
+                "EATA/DMA 2.0x rev. " EATA_VERSION " ",        \
+                eata2x_detect,	        	               \
                 NULL, /* Release */     	               \
 		NULL,	                                       \
 		NULL,    			       	       \
-		eata_queuecommand,			       \
-		eata_abort,				       \
-		eata_reset,				       \
+		eata2x_queuecommand,			       \
+		eata2x_abort,				       \
+		eata2x_reset,				       \
 	        NULL,		                               \
 		scsicam_bios_param,   			       \
 		0,   /* can_queue, reset by detect */          \

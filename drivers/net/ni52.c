@@ -11,7 +11,7 @@
  * CAN YOU PLEASE REPORT ME YOUR PERFORMANCE EXPERIENCES !!.
  * 
  * If you find a bug, please report me:
- *   The kernelpanic output and any kmsg from the ni52 driver
+ *   The kernel panic output and any kmsg from the ni52 driver
  *   the ni5210-driver-version and the linux-kernel version 
  *   how many shared memory (memsize) on the netcard, 
  *   bootprom: yes/no, base_addr, mem_start
@@ -55,10 +55,10 @@
  *
  * 19.Sep.94: Added Multicast support (not tested yet) (MH)
  * 
- * 18.Sep.94: Workarround for 'EL-Bug'. Removed flexible RBD-handling. 
+ * 18.Sep.94: Workaround for 'EL-Bug'. Removed flexible RBD-handling. 
  *            Now, every RFD has exact one RBD. (MH)
  *
- * 14.Sep.94: added promiscous mode, a few cleanups (MH)
+ * 14.Sep.94: added promiscuous mode, a few cleanups (MH)
  *
  * 19.Aug.94: changed request_irq() parameter (MH)
  * 
@@ -108,7 +108,7 @@
 
   * IMPORTANT NOTE: if you configure only one NUM_XMIT_BUFFS, the driver works
   * --------------- in a different (more stable?) mode. Only in this mode it's
-  *                 possbile to configure the driver with 'NO_NOPCOMMANDS'
+  *                 possible to configure the driver with 'NO_NOPCOMMANDS'
 
 sizeof(scp)=12; sizeof(scb)=16; sizeof(iscp)=8;
 sizeof(scp)+sizeof(iscp)+sizeof(scb) = 36 = INIT
@@ -272,7 +272,7 @@ static int check586(struct device *dev,char *where,unsigned size)
     ni_attn586();
     DELAY(2);	/* wait a while... */
 
-    if(p->iscp->busy) /* i82586 clears 'busy' after succesful init */
+    if(p->iscp->busy) /* i82586 clears 'busy' after successful init */
       return 0;
   }
   return 1;
@@ -611,7 +611,7 @@ static int init586(struct device *dev,int num_addrs,void *addrs)
       if(len < num_addrs)
       {
         num_addrs = len;
-        printk("%s: Sorry, can only apply %d MC-Addresse(s).\n",dev->name,num_addrs);
+        printk("%s: Sorry, can only apply %d MC-Address(es).\n",dev->name,num_addrs);
       }
       mc_cmd = (struct mcsetup_cmd_struct *) ptr;
       mc_cmd->cmd_status = 0;
@@ -845,7 +845,7 @@ static void ni52_rnr_int(struct device *dev)
   p->stats.rx_errors++;
 
   WAIT_4_SCB_CMD();    /* wait for the last cmd */
-  p->scb->cmd = RUC_ABORT; /* usually the RU is in the 'no ressource'-state .. abort it now. */
+  p->scb->cmd = RUC_ABORT; /* usually the RU is in the 'no resource'-state .. abort it now. */
   ni_attn586(); 
   WAIT_4_SCB_CMD();    /* wait for accept cmd. */
 
@@ -1081,7 +1081,7 @@ static void set_multicast_list(struct device *dev, int num_addrs, void *addrs)
 {
   if(!dev->start && !num_addrs)
   {
-    printk("%s: Can't apply promiscous/multicastmode to a not running interface.\n",dev->name);
+    printk("%s: Can't apply promiscuous/multicastmode to a not running interface.\n",dev->name);
     return;
   }
 

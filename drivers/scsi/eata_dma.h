@@ -137,7 +137,7 @@ int eata_release(struct Scsi_Host *);
 #define C_P_L_DIV          4  /* 1 <= C_P_L_DIV <= 8            
 			       * You can use this parameter to fine-tune
 			       * the driver. Depending on the number of 
-			       * devices and their ablilty to queue commands
+			       * devices and their ability to queue commands
 			       * you will get the best results with a value
 			       * ~= numdevices-(devices_unable_to_queue_commands/2)
 			       * The reason for this is that the disk driver tents 

@@ -638,7 +638,7 @@ azt_Play.end.min, azt_Play.end.sec, azt_Play.end.frame);
 		break;
 	case CDROMVOLCTRL:   /* Volume control 
 	 * With my Aztech CD268-01A volume control does not work, I can only
-	   turn the cannels on (any value !=0) or off (value==0). Maybe it
+	   turn the channels on (any value !=0) or off (value==0). Maybe it
            works better with your drive */
                 st=verify_area(VERIFY_READ,(void *) arg, sizeof(volctrl));
                 if (st) return (st);

@@ -1,6 +1,9 @@
 /*
  *      u14-34f.c - Low-level driver for UltraStor 14F/34F SCSI host adapters.
  *
+ *       8 Feb 1995 rev. 1.15 for linux 1.1.89
+ *          Cleared target_time_out counter while preforming a reset.
+ *
  *      28 Jan 1995 rev. 1.14 for linux 1.1.86
  *          Added module support.
  *          Log and do a retry when a disk drive returns a target status
@@ -34,7 +37,7 @@
  * 
  *          Multiple U14F and/or U34F host adapters are supported.
  *
- *      Released by Dario Ballabio (Dario_Ballabio@milano.europe.dg.com)
+ *      Copyright (C) 1994, 1995 Dario Ballabio (dario@milano.europe.dg.com)
  *
  *      WARNING: if your 14F board has an old firmware revision (see below)
  *               you must change "#undef" into "#define" in the following
@@ -113,6 +116,7 @@
 
 #if defined(MODULE)
 #include <linux/module.h>
+#include <linux/version.h>
 #endif
 
 #include <linux/string.h>
@@ -295,7 +299,7 @@ static int board_inquiry(unsigned int j) {
 
    sti();
    time = jiffies;
-   while (jiffies < (time + 100) && limit++ < 100000000) sti();
+   while (jiffies < (time + 100) && limit++ < 100000000);
    cli();
 
    if (cpp->adapter_status || HD(j)->cp_stat[0] != FREE) {
@@ -424,11 +428,7 @@ static inline int port_detect(ushort *port_base, unsigned int j,
       sprintf(BN(j), "U34F%d", j);
       }
    else {
-
-#if !defined(MODULE)
-      /* The module code does not checkin/checkout in the blocking list yet */
       sh[j]->block = sh[j];
-#endif
 
 #if defined (HAVE_OLD_U14F_FIRMWARE)
       sh[j]->hostt->use_clustering = DISABLE_CLUSTERING;
@@ -490,6 +490,9 @@ int u14_34f_detect (Scsi_Host_Template * tpnt) {
 
       port_base++;
       }
+
+   if (j > 0) 
+      printk("UltraStor 14F/34F: Copyright (C) 1994, 1995 Dario Ballabio.\n");
 
    restore_flags(flags);
    return j;
@@ -691,6 +694,8 @@ int u14_34f_reset(Scsi_Cmnd * SCarg) {
 
    for (k = 0; k < MAX_TARGET; k++) HD(j)->target_reset[k] = TRUE;
 
+   for (k = 0; k < MAX_TARGET; k++) HD(j)->target_time_out[k] = 0;
+
    for (i = 0; i < sh[j]->can_queue; i++) {
 
       if (HD(j)->cp_stat[i] == FREE) continue;
@@ -733,7 +738,7 @@ int u14_34f_reset(Scsi_Cmnd * SCarg) {
    HD(j)->in_reset = TRUE;
    sti();
    time = jiffies;
-   while (jiffies < (time + 200) && limit++ < 100000000) sti();
+   while (jiffies < (time + 100) && limit++ < 100000000);
    cli();
    printk("%s: reset, interrupts disabled, loops %d.\n", BN(j), limit);
 
@@ -879,8 +884,7 @@ static void u14_34f_interrupt_handler(int irq, struct pt_regs * regs) {
                   status = DID_BUS_BUSY << 16;
 
                else if (tstatus == CHECK_CONDITION
-                        && (SCpnt->device->type == TYPE_DISK
-                         || SCpnt->device->type == TYPE_ROM)
+                        && SCpnt->device->type == TYPE_DISK
                         && (SCpnt->sense_buffer[2] & 0xf) == UNIT_ATTENTION)
                   status = DID_ERROR << 16;
    
@@ -890,8 +894,7 @@ static void u14_34f_interrupt_handler(int irq, struct pt_regs * regs) {
                if (tstatus == GOOD)
                   HD(j)->target_reset[SCpnt->target] = FALSE;
 
-               if (spp->target_status && (SCpnt->device->type == TYPE_DISK
-                                       || SCpnt->device->type == TYPE_ROM))
+               if (spp->target_status && SCpnt->device->type == TYPE_DISK)
                   printk("%s: ihdlr, target %d:%d, pid %ld, target_status "\
                          "0x%x, sense key 0x%x.\n", BN(j), 
                          SCpnt->target, SCpnt->lun, SCpnt->pid,

@@ -37,9 +37,6 @@
  * ***FIXME*** should probably put this in nfs_fs.h */
 #define NFS_SLACK_SPACE 1024
 
-
-extern struct socket *socki_lookup(struct inode *inode);
-
 #define _S(nr) (1<<((nr)-1))
 
 /*
@@ -81,7 +78,7 @@ static int do_nfs_rpc_call(struct nfs_server *server, int *start, int *end, int 
 	file = server->file;
 	inode = file->f_inode;
 	select = file->f_op->select;
-	sock = socki_lookup(inode);
+	sock = &inode->u.socket_i;
 	if (!sock) {
 		printk("nfs_rpc_call: socki_lookup failed\n");
 		return -EBADF;

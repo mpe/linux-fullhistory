@@ -115,7 +115,7 @@ ethif_probe(struct device *dev)
 #ifdef CONFIG_EWRK3             /* DEC EtherWORKS 3 */
         && ewrk3_probe(dev)
 #endif
-#ifdef CONFIG_DE4X5             /* DEC DE425, DE434, DE435 adapters */
+#ifdef CONFIG_DE4x5             /* DEC DE425, DE434, DE435 adapters */
         && de4x5_probe(dev)
 #endif
 #ifdef CONFIG_APRICOT		/* Apricot I82596 */

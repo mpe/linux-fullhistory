@@ -254,6 +254,7 @@ asmlinkage int do_signal(unsigned long oldmask, struct pt_regs * regs)
 	}
 	regs->esp = (unsigned long) frame;
 	regs->eip = eip;		/* "return" to the first handler */
+	regs->eflags &= ~TF_MASK;
 	current->tss.trap_no = current->tss.error_code = 0;
 	return 1;
 }

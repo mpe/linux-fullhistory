@@ -1909,7 +1909,7 @@ cy_ioctl(struct tty_struct *tty, struct file * file,
 	    ret_val = tty_check_change(tty);
 	    if (ret_val)
 		return ret_val;
-            wait_until_sent(tty,0);
+            tty_wait_until_sent(tty,0);
             if (!arg)
                 send_break(info, HZ/4); /* 1/4 second */
             break;
@@ -1917,7 +1917,7 @@ cy_ioctl(struct tty_struct *tty, struct file * file,
 	    ret_val = tty_check_change(tty);
 	    if (ret_val)
 		return ret_val;
-            wait_until_sent(tty,0);
+            tty_wait_until_sent(tty,0);
             send_break(info, arg ? arg*(HZ/10) : HZ/4);
             break;
         case TIOCMBIS:
@@ -2060,7 +2060,7 @@ cy_close(struct tty_struct * tty, struct file * filp)
     if (info->flags & ASYNC_CALLOUT_ACTIVE)
 	info->callout_termios = *tty->termios;
     if (info->flags & ASYNC_INITIALIZED)
-	wait_until_sent(tty, 3000); /* 30 seconds timeout */
+	tty_wait_until_sent(tty, 3000); /* 30 seconds timeout */
     shutdown(info);
     if (tty->driver.flush_buffer)
 	tty->driver.flush_buffer(tty);

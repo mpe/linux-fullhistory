@@ -66,6 +66,7 @@ static int write_ldt(void * ptr, unsigned long bytecount)
 			if (task[i] == current) {
 				if (!(current->ldt = (struct desc_struct*) vmalloc(LDT_ENTRIES*LDT_ENTRY_SIZE)))
 					return -ENOMEM;
+				memset(current->ldt, 0, LDT_ENTRIES*LDT_ENTRY_SIZE);
 				set_ldt_desc(gdt+(i<<1)+FIRST_LDT_ENTRY, current->ldt, LDT_ENTRIES);
 				load_ldt(i);
 			}

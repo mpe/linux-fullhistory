@@ -173,6 +173,12 @@ struct symbol_table symbol_table = {
 	X(register_serial),
 	X(unregister_serial),
 
+	/* tty routines */
+	X(tty_hangup),
+	X(tty_wait_until_sent),
+	X(tty_check_change),
+	X(tty_hung_up_p),
+
 	/* filesystem registration */
 	X(register_filesystem),
 	X(unregister_filesystem),

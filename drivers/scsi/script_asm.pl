@@ -280,11 +280,11 @@ sub parse_conditional {
 	$conditional = $1;
 	print STDERR "$0 : parsed ATN\n" if ($debug);
     } elsif ($conditional =~ /^($phase)\s*(.*)/i) {
-	$1 = "\U$1\E";
-	$p = $scsi_phases{$1};
+	$phase_index = "\U$1\E";
+	$p = $scsi_phases{$phase_index};
 	$code[$address] |= $p | 0x00_02_00_00;
 	$conditional = $2;
-	print STDERR "$0 : parsed phase $1\n" if ($debug);
+	print STDERR "$0 : parsed phase $phase_index\n" if ($debug);
     } else {
 	$other = '';
 	$need_data = 1;
@@ -378,16 +378,17 @@ while (<STDIN>) {
 	$rest = $2;
 	foreach $rest (split (/\s*,\s*/, $rest)) {
 	    if ($rest =~ /^($identifier)\s*=\s*($constant)\s*$/) {
-		if ($symbol_values{$1} eq undef) {
-		    $symbol_values{$1} = eval $2;
-		    delete $forward{$1};
+	        local ($id, $cnst) = ($1, $2);
+		if ($symbol_values{$id} eq undef) {
+		    $symbol_values{$id} = eval $cnst;
+		    delete $forward{$id};
 		    if ($is_absolute =~ /ABSOLUTE/i) {
-			push (@absolute , $1);
+			push (@absolute , $id);
 		    } else {
-			push (@relative, $1);
+			push (@relative, $id);
 		    }
 		} else {
-		    die "$0 : redefinition of symbol $1 in line $lineno : $_\n";
+		    die "$0 : redefinition of symbol $id in line $lineno : $_\n";
 		}
 	    } else {
 		die 

@@ -35,16 +35,70 @@ restore the default behaviour.
 	Sets the bitmask of allowed drives to <mask>. By default, only units
 	0 and 1 of each floppy controller are allowed. This is done because
 	certain non-standard hardware (ASUS PCI motherboards) mess up the
-	keyboard when accessing units 2 or 3.
+	keyboard when accessing units 2 or 3. This option is somewhat
+	obsoleted by the cmos option.
+
+ floppy=all_drives
+	Sets the bitmask of allowed drives to all drives. Use this if you have
+	more than two drives connected to a floppy controller.
+
+ floppy=asus_pci
+	Sets the bitmask to allow only units 0 and 1. (The default)
+
+ floppy=daring
+	Tells the floppy driver that you have a well behaved floppy controller.
+	This allows more efficient and smoother operation, but may fail on
+	certain controllers. This may speed up certain operations.
+
+ floppy=0,daring
+	Tells the floppy driver that your floppy controller should be used
+	with caution.
+
+ floppy=one_fdc
+	Tells the floppy driver that you have only floppy controller (default)
 
  floppy=two_fdc
+ floppy=<address>,two_fdc
 	Tells the floppy driver that you have two floppy controllers. The
-	second floppy controller is assumed to be at io address 0x370.
+	second floppy controller is assumed to be at <address>. If <address>
+	is not given, 0x370 is assumed.
 
  floppy=thinkpad
 	Tells the floppy driver that you have a Thinkpad. Thinkpads use an
 	inverted convention for the disk change line.
 
+ floppy=0,thinkpad
+	Tells the floppy driver that you don't have a Thinkpad.
+
+ floppy=<drive>,<type>,cmos
+	Sets the cmos type of <drive> to <type>. Additionnaly, this drive is
+	allowed in the bitmask. This is useful if you have more than two
+	floppy drives (only two can be described in the physical cmos), or if
+	your BIOS uses non-standard CMOS types. The CMOS types are:
+		0 - unknown or not installed
+		1 - 5 1/4 DD
+		2 - 5 1/4 HD
+		3 - 3 1/2 DD
+		4 - 3 1/2 HD
+		5 - 3 1/2 ED
+		6 - 3 1/2 ED
+	(Note: there are two valid types for ED drives. This is because 5 was
+	initially chosen to represent floppy *tapes*, and 6 for ED drives.
+	AMI ignored this, and used 5 for ED drives. That's why the floppy
+	driver handles both)
+	Setting the CMOS to 0 for the first two drives (default) makes the
+	floppy driver read the physical cmos for those drives.
+
+ floppy=unexpected_interrupts
+	Print a warning message when an unexpected interrupt is received 
+	(default behaviour)
+
+ floppy=no_unexpected_interrupts
+ floppy=L40SX
+	Don't print a message when an unexpected interrupt is received. This
+	is needed on IBM L40SX laptops in certain video modes. (There seems
+	to be an interaction between video and floppy. The unexpected interrupts
+	only affect performance, and can safely be ignored.)
 
 
 Supporting utilities and additional documentation:

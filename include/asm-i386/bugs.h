@@ -94,7 +94,7 @@ static void check_fpu(void)
 		return;
 
 	}
-	printk("Ok, FDIV bug i%c86 system\n", '0'+x86);
+	printk("Hmm, FDIV bug i%c86 system\n", '0'+x86);
 }
 
 static void check_hlt(void)

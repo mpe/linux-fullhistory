@@ -408,11 +408,8 @@ int sr_ioctl(struct inode * inode, struct file * file, unsigned int cmd, unsigne
 			    ms_info.addr.lba=scsi_CDs[target].mpcd_sector;
 			  else return (-EINVAL);
 			
-			  if (scsi_CDs[target].mpcd_sector)
-			    ms_info.xa_flag=1; /* valid redirection address */
-			  else
-			    ms_info.xa_flag=0; /* invalid redirection address */
-			  
+			  ms_info.xa_flag=scsi_CDs[target].is_xa;
+			 			  
 			  err=verify_area(VERIFY_WRITE,(void *) arg,
 					  sizeof(struct cdrom_multisession));
 			  if (err) return (err);

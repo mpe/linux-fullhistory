@@ -61,6 +61,12 @@
     in group 224.0.0.1 and you will therefore be listening to all multicasts.
     One nv conference running over that ethernet and you can give up.
     
+    2/8/95 (invid@msen.com)
+
+    Removed calls to init_etherdev since they are no longer needed, and
+    cleaned up modularization just a bit. The driver still allows only
+    the default address for cards when loaded as a module, but that's
+    really less braindead than anyone using a 3c501 board. :)
 */
 
 static char *version =
@@ -75,6 +81,9 @@ static char *version =
 #ifdef MODULE
 #include <linux/module.h>
 #include <linux/version.h>
+#else
+#define MOD_INC_USE_COUNT
+#define MOD_DEC_USE_COUNT
 #endif
 
 #include <linux/kernel.h>
@@ -94,9 +103,6 @@ static char *version =
 #include <linux/netdevice.h>
 #include <linux/etherdevice.h>
 #include <linux/skbuff.h>
-
-extern struct device *init_etherdev(struct device *dev, int sizeof_private,
-				    unsigned long *mem_startp);
 
 /* A zero-terminated list of I/O addresses to be probed.
    The 3c501 can be at many locations, but here are the popular ones. */
@@ -208,6 +214,8 @@ el1_probe(struct device *dev)
 static int
 el1_probe1(struct device *dev, int ioaddr)
 {
+    #ifndef MODULE
+
     char *mname;		/* Vendor name */
     unsigned char station_addr[6];
     int autoirq = 0;
@@ -231,9 +239,6 @@ el1_probe1(struct device *dev, int ioaddr)
 
     /* Grab the region so we can find the another board if autoIRQ fails. */
     request_region(ioaddr, EL1_IO_EXTENT,"3c501");
-
-    if (dev == NULL)
-	dev = init_etherdev(0, sizeof(struct net_local), 0);
 
     /* We auto-IRQ by shutting off the interrupt line and letting it float
        high. */
@@ -290,6 +295,7 @@ el1_probe1(struct device *dev, int ioaddr)
     /* Setup the generic properties */
     ether_setup(dev);
 
+#endif /* !MODULE */
     return 0;
 }
 
@@ -312,9 +318,7 @@ el_open(struct device *dev)
     dev->start = 1;
 
     outb(AX_RX, AX_CMD);	/* Aux control, irq and receive enabled */
-#ifdef MODULE
     MOD_INC_USE_COUNT;
-#endif       
     return 0;
 }
 
@@ -618,9 +622,7 @@ el1_close(struct device *dev)
     outb(AX_RESET, AX_CMD);	/* Reset the chip */
     irq2dev_map[dev->irq] = 0;
 
-#ifdef MODULE
     MOD_DEC_USE_COUNT;
-#endif    
     return 0;
 }
 

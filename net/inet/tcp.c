@@ -371,7 +371,9 @@ static void tcp_close_pending (struct sock *sk)
 {
 	struct sk_buff *skb;
 
-	while ((skb = skb_dequeue(&sk->receive_queue)) != NULL) {
+	while ((skb = skb_dequeue(&sk->receive_queue)) != NULL) 
+	{
+		skb->sk->dead=1;
 		tcp_close(skb->sk, 0);
 		kfree_skb(skb, FREE_READ);
 	}
@@ -607,10 +609,11 @@ static int tcp_write_timeout(struct sock *sk)
 	{
 		sk->err = ETIMEDOUT;
 		sk->error_report(sk);
+		del_timer(&sk->retransmit_timer);
 		/*
 		 *	Time wait the socket 
 		 */
-		if (sk->state == TCP_FIN_WAIT1 || sk->state == TCP_FIN_WAIT2 || sk->state == TCP_CLOSING) 
+		if (sk->state == TCP_FIN_WAIT1 || sk->state == TCP_FIN_WAIT2 || sk->state == TCP_CLOSING ) 
 		{
 			tcp_set_state(sk,TCP_TIME_WAIT);
 			reset_msl_timer (sk, TIME_CLOSE, TCP_TIMEWAIT_LEN);
@@ -2850,6 +2853,8 @@ static void tcp_conn_request(struct sock *sk, struct sk_buff *skb,
 	{
 		sk->err = -ENOMEM;
 		newsk->dead = 1;
+		newsk->state = TCP_CLOSE;
+		/* And this will destroy it */
 		release_sock(newsk);
 		kfree_skb(skb, FREE_READ);
 		tcp_statistics.TcpAttemptFails++;
@@ -2879,6 +2884,7 @@ static void tcp_conn_request(struct sock *sk, struct sk_buff *skb,
 		buff->free = 1;
 		kfree_skb(buff,FREE_WRITE);
 		newsk->dead = 1;
+		newsk->state = TCP_CLOSE;
 		release_sock(newsk);
 		skb->sk = sk;
 		kfree_skb(skb, FREE_READ);
@@ -2917,8 +2923,6 @@ static void tcp_conn_request(struct sock *sk, struct sk_buff *skb,
 
 	tcp_send_check(t1, daddr, saddr, sizeof(*t1)+4, newsk);
 	newsk->prot->queue_xmit(newsk, ndev, buff, 0);
-	reset_xmit_timer(newsk, TIME_WRITE, newsk->rto);
-
 	reset_xmit_timer(newsk, TIME_WRITE , TCP_TIMEOUT_INIT);
 	skb->sk = newsk;
 

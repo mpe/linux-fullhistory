@@ -21,8 +21,6 @@
 #define UART_IER	1	/* Out: Interrupt Enable Register */
 #define UART_IIR	2	/* In:  Interrupt ID Register */
 #define UART_FCR	2	/* Out: FIFO Control Register */
-#define UART_EFR	2	/* I/O: Extended Features Register */
-				/* (DLAB=1, 16C660 only) */
 #define UART_LCR	3	/* Out: Line Control Register */
 #define UART_MCR	4	/* Out: Modem Control Register */
 #define UART_LSR	5	/* In:  Line Status Register */
@@ -31,7 +29,6 @@
 
 /*
  * These are the definitions for the FIFO Control Register
- * (16650 only)
  */
 #define UART_FCR_ENABLE_FIFO	0x01 /* Enable the FIFO */
 #define UART_FCR_CLEAR_RCVR	0x02 /* Clear the RCVR FIFO */
@@ -42,15 +39,6 @@
 #define UART_FCR_TRIGGER_4	0x40 /* Mask for trigger set at 4 */
 #define UART_FCR_TRIGGER_8	0x80 /* Mask for trigger set at 8 */
 #define UART_FCR_TRIGGER_14	0xC0 /* Mask for trigger set at 14 */
-/* 16650 redefinitions */
-#define UART_FCR6_R_TRIGGER_8	0x00 /* Mask for receive trigger set at 1 */
-#define UART_FCR6_R_TRIGGER_16	0x40 /* Mask for receive trigger set at 4 */
-#define UART_FCR6_R_TRIGGER_24  0x80 /* Mask for receive trigger set at 8 */
-#define UART_FCR6_R_TRIGGER_28	0xC0 /* Mask for receive trigger set at 14 */
-#define UART_FCR6_T_TRIGGER_16	0x00 /* Mask for transmit trigger set at 16 */
-#define UART_FCR6_T_TRIGGER_8	0x10 /* Mask for transmit trigger set at 8 */
-#define UART_FCR6_T_TRIGGER_24  0x20 /* Mask for transmit trigger set at 24 */
-#define UART_FCR6_T_TRIGGER_30	0x30 /* Mask for transmit trigger set at 30 */
 
 /*
  * These are the definitions for the Line Control Register
@@ -120,18 +108,6 @@
 #define UART_MSR_DDSR	0x02	/* Delta DSR */
 #define UART_MSR_DCTS	0x01	/* Delta CTS */
 #define UART_MSR_ANY_DELTA 0x0F	/* Any of the delta bits! */
-
-/*
- * These are the definitions for the Extended Features Register
- * (StarTech 16C660 only, when DLAB=1)
- */
-#define UART_EFR_CTS	0x80	/* CTS flow control */
-#define UART_EFR_RTS	0x40	/* RTS flow control */
-#define UART_EFR_SCD	0x20	/* Special character detect */
-#define UART_EFR_ENI	0x10	/* Enhanced Interrupt */
-/*
- * the low four bits control software flow control
- */
 
 #endif /* _LINUX_SERIAL_REG_H */
 

@@ -686,10 +686,12 @@ de600_probe(struct device *dev)
 		return ENODEV;
 	}
 
+#if 0 /* Not yet */
 	if (check_region(DE600_IO, 3)) {
 		printk(", port 0x%x busy\n", DE600_IO);
 		return EBUSY;
 	}
+#endif
 	request_region(DE600_IO, 3, "de600");
 
 	printk(", Ethernet Address: %02X", dev->dev_addr[0]);
@@ -840,10 +842,7 @@ init_module(void)
 void
 cleanup_module(void)
 {
-	if (MOD_IN_USE)
-		printk("de600: device busy, remove delayed\n");
-	else
-		unregister_netdev(&de600_dev);
+	unregister_netdev(&de600_dev);
 	release_region(DE600_IO, 3);
 }
 #endif /* MODULE */

@@ -824,10 +824,12 @@ de620_probe(struct device *dev)
 		return ENODEV;
 	}
 
+#if 0 /* Not yet */
 	if (check_region(DE620_IO, 3)) {
 		printk(", port 0x%x busy\n", DE620_IO);
 		return EBUSY;
 	}
+#endif
 	request_region(DE620_IO, 3, "de620");
 
 	/* else, got it! */
@@ -987,10 +989,7 @@ init_module(void)
 void
 cleanup_module(void)
 {
-	if (MOD_IN_USE)
-		printk("de620: device busy, remove delayed\n");
-	else
-		unregister_netdev(&de620_dev);
+	unregister_netdev(&de620_dev);
 	release_region(DE620_IO, 3);
 }
 #endif /* MODULE */

@@ -877,15 +877,7 @@ static int startup(struct async_struct * info)
 	 * Clear the FIFO buffers and disable them
 	 * (they will be reenabled in change_speed())
 	 */
-	if (info->type == PORT_16650) {
-		serial_outp(info, UART_FCR, (UART_FCR_CLEAR_RCVR |
-					     UART_FCR_CLEAR_XMIT));
-#if 0
-		info->xmit_fifo_size = 32;
-#else
-		info->xmit_fifo_size = 1;
-#endif
-	} else if (info->type == PORT_16550A) {
+	if (info->type == PORT_16550A) {
 		serial_outp(info, UART_FCR, (UART_FCR_CLEAR_RCVR |
 					     UART_FCR_CLEAR_XMIT));
 		info->xmit_fifo_size = 16;
@@ -1156,18 +1148,6 @@ static void change_speed(struct async_struct *info)
 			fcr = UART_FCR_ENABLE_FIFO | UART_FCR_TRIGGER_1;
 		else
 			fcr = UART_FCR_ENABLE_FIFO | UART_FCR_TRIGGER_8;
-	} else if (info->type == PORT_16650) {
-		/*
-		 * On the 16650, we disable the FIFOs altogether
-		 * because of a design bug in how the implement
-		 * things.  We could support it by completely changing
-		 * how we handle the interrupt driver, but not today....
-		 *
-		 * N.B.  Because there's no way to set a FIFO trigger
-		 * at 1 char, we'd probably disable at speed below
-		 * 2400 baud anyway...
-		 */
-		fcr = 0;
 	} else
 		fcr = 0;
 	
@@ -1424,8 +1404,6 @@ static int get_serial_info(struct async_struct * info,
 	tmp.flags = info->flags;
 	tmp.baud_base = info->baud_base;
 	tmp.close_delay = info->close_delay;
-	tmp.closing_wait = info->closing_wait;
-	tmp.closing_wait2 = info->closing_wait2;
 	tmp.custom_divisor = info->custom_divisor;
 	tmp.hub6 = info->hub6;
 	memcpy_tofs(retinfo,&tmp,sizeof(*retinfo));
@@ -1493,8 +1471,6 @@ static int set_serial_info(struct async_struct * info,
 	info->custom_divisor = new_serial.custom_divisor;
 	info->type = new_serial.type;
 	info->close_delay = new_serial.close_delay;
-	info->closing_wait = new_serial.closing_wait;
-	info->closing_wait2 = new_serial.closing_wait2;
 
 	release_region(info->port,8);
 	if (change_port || change_irq) {
@@ -1722,7 +1698,7 @@ static int rs_ioctl(struct tty_struct *tty, struct file * file,
 			retval = tty_check_change(tty);
 			if (retval)
 				return retval;
-			wait_until_sent(tty, 0);
+			tty_wait_until_sent(tty, 0);
 			if (!arg)
 				send_break(info, HZ/4);	/* 1/4 second */
 			return 0;
@@ -1730,7 +1706,7 @@ static int rs_ioctl(struct tty_struct *tty, struct file * file,
 			retval = tty_check_change(tty);
 			if (retval)
 				return retval;
-			wait_until_sent(tty, 0);
+			tty_wait_until_sent(tty, 0);
 			send_break(info, arg ? arg*(HZ/10) : HZ/4);
 			return 0;
 		case TIOCGSOFTCAR:
@@ -1895,8 +1871,6 @@ static void rs_close(struct tty_struct *tty, struct file * filp)
 		info->normal_termios = *tty->termios;
 	if (info->flags & ASYNC_CALLOUT_ACTIVE)
 		info->callout_termios = *tty->termios;
-	if (info->closing_wait != ASYNC_CLOSING_WAIT_NONE)
-		wait_until_sent(tty, info->closing_wait);
 	/*
 	 * At this point we stop accepting input.  To do this, we
 	 * disable the receive line status interrupts, and tell the
@@ -1907,7 +1881,7 @@ static void rs_close(struct tty_struct *tty, struct file * filp)
 	info->read_status_mask &= ~UART_LSR_DR;
 	if (info->flags & ASYNC_INITIALIZED) {
 		serial_out(info, UART_IER, info->IER);
-		wait_until_sent(tty, info->closing_wait2);
+		tty_wait_until_sent(tty, 3000); /* 30 seconds timeout */
 		/*
 		 * Before we drop DTR, make sure the UART transmitter
 		 * has completely drained; this is especially
@@ -2355,10 +2329,6 @@ static void autoconfig(struct async_struct * info)
 	if (info->flags & ASYNC_AUTO_IRQ)
 		info->irq = do_auto_irq(info);
 		
-	scratch2 = serial_in(info, UART_LCR);
-	serial_outp(info, UART_LCR, scratch2 | UART_LCR_DLAB);
-	serial_outp(info, UART_EFR, 0);	/* EFR is the same as FCR */
-	serial_outp(info, UART_LCR, scratch2);
 	serial_outp(info, UART_FCR, UART_FCR_ENABLE_FIFO);
 	scratch = serial_in(info, UART_IIR) >> 6;
 	info->xmit_fifo_size = 1;
@@ -2373,15 +2343,8 @@ static void autoconfig(struct async_struct * info)
 			info->type = PORT_16550;
 			break;
 		case 3:
-			serial_outp(info, UART_LCR, scratch2 | UART_LCR_DLAB);
-			if (serial_in(info, UART_EFR) == 0) {
-				info->type = PORT_16650;
-				info->xmit_fifo_size = 32;
-			} else {
-				info->type = PORT_16550A;
-				info->xmit_fifo_size = 16;
-			}
-			serial_outp(info, UART_LCR, scratch2);
+			info->type = PORT_16550A;
+			info->xmit_fifo_size = 16;
 			break;
 	}
 	if (info->type == PORT_16450) {
@@ -2495,8 +2458,6 @@ long rs_init(long kmem_start)
 		info->type = PORT_UNKNOWN;
 		info->custom_divisor = 0;
 		info->close_delay = 50;
-		info->closing_wait = ASYNC_CLOSING_WAIT_NONE;
-		info->closing_wait2 = 3000;
 		info->x_char = 0;
 		info->event = 0;
 		info->count = 0;
@@ -2531,9 +2492,6 @@ long rs_init(long kmem_start)
 				break;
 			case PORT_16550A:
 				printk(" is a 16550A\n");
-				break;
-			case PORT_16650:
-				printk(" is a 16650\n");
 				break;
 			default:
 				printk("\n");

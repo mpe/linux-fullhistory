@@ -1,6 +1,6 @@
 VERSION = 1
 PATCHLEVEL = 1
-SUBLEVEL = 89
+SUBLEVEL = 90
 
 ARCH = i386
 
@@ -217,7 +217,7 @@ modules_install:
 	\
 	ls *.o > .allmods; \
 	echo $$MODULES | tr ' ' '\n' | sort | comm -23 .allmods - > .misc; \
-	inst_mod .misc misc; \
+	if [ -s .misc ]; then inst_mod .misc misc; fi; \
 	rm -f .misc .allmods; \
 	)
 

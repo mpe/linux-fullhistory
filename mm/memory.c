@@ -268,116 +268,149 @@ int copy_page_tables(struct task_struct * tsk)
 	return 0;
 }
 
+static inline void forget_pte(pte_t page)
+{
+	if (pte_none(page))
+		return;
+	if (pte_present(page)) {
+		free_page(pte_page(page));
+		if (mem_map[MAP_NR(pte_page(page))] & MAP_PAGE_RESERVED)
+			return;
+		if (current->mm->rss <= 0)
+			return;
+		current->mm->rss--;
+		return;
+	}
+	swap_free(pte_val(page));
+}
+
+static inline void unmap_pte_range(pmd_t * pmd, unsigned long address, unsigned long size)
+{
+	pte_t * pte;
+	unsigned long end;
+
+	if (pmd_none(*pmd))
+		return;
+	if (pmd_bad(*pmd)) {
+		printk("unmap_pte_range: bad pmd (%08lx)\n", pmd_val(*pmd));
+		pmd_clear(pmd);
+		return;
+	}
+	pte = pte_offset(pmd, address);
+	address &= ~PMD_MASK;
+	end = address + size;
+	if (end >= PMD_SIZE)
+		end = PMD_SIZE;
+	do {
+		pte_t page = *pte;
+		pte_clear(pte);
+		forget_pte(page);
+		address += PAGE_SIZE;
+		pte++;
+	} while (address < end);
+}
+
+static inline void unmap_pmd_range(pgd_t * dir, unsigned long address, unsigned long size)
+{
+	pmd_t * pmd;
+	unsigned long end;
+
+	if (pgd_none(*dir))
+		return;
+	if (pgd_bad(*dir)) {
+		printk("unmap_pmd_range: bad pgd (%08lx)\n", pgd_val(*dir));
+		pgd_clear(dir);
+		return;
+	}
+	pmd = pmd_offset(dir, address);
+	address &= ~PGDIR_MASK;
+	end = address + size;
+	if (end > PGDIR_SIZE)
+		end = PGDIR_SIZE;
+	do {
+		unmap_pte_range(pmd, address, end - address);
+		address = (address + PMD_SIZE) & PMD_MASK; 
+		pmd++;
+	} while (address < end);
+}
+
 /*
  * a more complete version of free_page_tables which performs with page
  * granularity.
  */
-int unmap_page_range(unsigned long from, unsigned long size)
+int unmap_page_range(unsigned long address, unsigned long size)
 {
-	pgd_t page_dir, * dir;
-	pte_t page, * page_table;
-	unsigned long poff, pcnt, pc;
+	pgd_t * dir;
+	unsigned long end = address + size;
 
-	if (from & ~PAGE_MASK) {
-		printk("unmap_page_range called with wrong alignment\n");
-		return -EINVAL;
-	}
-	size = (size + ~PAGE_MASK) >> PAGE_SHIFT;
-	dir = PAGE_DIR_OFFSET(current,from);
-	poff = (from >> PAGE_SHIFT) & (PTRS_PER_PAGE-1);
-	if ((pcnt = PTRS_PER_PAGE - poff) > size)
-		pcnt = size;
-
-	for ( ; size > 0; ++dir, size -= pcnt,
-	     pcnt = (size > PTRS_PER_PAGE ? PTRS_PER_PAGE : size)) {
-	     	page_dir = *dir;
-	     	if (pgd_none(page_dir)) {
-			poff = 0;
-			continue;
-		}
-		if (pgd_bad(page_dir)) {
-			printk("unmap_page_range: bad page directory.");
-			continue;
-		}
-		page_table = (pte_t *) pgd_page(page_dir);
-		if (poff) {
-			page_table += poff;
-			poff = 0;
-		}
-		for (pc = pcnt; pc--; page_table++) {
-			page = *page_table;
-			if (!pte_none(page)) {
-				pte_clear(page_table);
-				if (pte_present(page)) {
-					if (!(mem_map[MAP_NR(pte_page(page))] & MAP_PAGE_RESERVED))
-						if (current->mm->rss > 0)
-							--current->mm->rss;
-					free_page(pte_page(page));
-				} else
-					swap_free(pte_val(page));
-			}
-		}
-		if (pcnt == PTRS_PER_PAGE) {
-			pgd_clear(dir);
-			free_page(pgd_page(page_dir));
-		}
+	dir = pgd_offset(current, address);
+	while (address < end) {
+		unmap_pmd_range(dir, address, end - address);
+		address = (address + PGDIR_SIZE) & PGDIR_MASK;
+		dir++;
 	}
 	invalidate();
 	return 0;
 }
 
-int zeromap_page_range(unsigned long from, unsigned long size, pgprot_t prot)
+static inline void zeromap_pte_range(pte_t * pte, unsigned long address, unsigned long size, pte_t zero_pte)
 {
+	unsigned long end;
+
+	address &= ~PMD_MASK;
+	end = address + size;
+	if (end > PMD_SIZE)
+		end = PMD_SIZE;
+	do {
+		pte_t oldpage = *pte;
+		*pte = zero_pte;
+		forget_pte(oldpage);
+		address += PAGE_SIZE;
+		pte++;
+	} while (address < end);
+}
+
+static inline int zeromap_pmd_range(pmd_t * pmd, unsigned long address, unsigned long size, pte_t zero_pte)
+{
+	unsigned long end;
+
+	address &= ~PGDIR_MASK;
+	end = address + size;
+	if (end > PGDIR_SIZE)
+		end = PGDIR_SIZE;
+	do {
+		pte_t * pte = pte_alloc(pmd, address);
+		if (!pte)
+			return -ENOMEM;
+		zeromap_pte_range(pte, address, end - address, zero_pte);
+		address = (address + PMD_SIZE) & PMD_MASK;
+		pmd++;
+	} while (address < end);
+	return 0;
+}
+
+int zeromap_page_range(unsigned long address, unsigned long size, pgprot_t prot)
+{
+	int error = 0;
 	pgd_t * dir;
-	pte_t * page_table;
-	unsigned long poff, pcnt;
+	unsigned long end = address + size;
 	pte_t zero_pte;
 
-	if (from & ~PAGE_MASK) {
-		printk("zeromap_page_range: from = %08lx\n",from);
-		return -EINVAL;
-	}
 	zero_pte = pte_wrprotect(mk_pte(ZERO_PAGE, prot));
-	dir = PAGE_DIR_OFFSET(current,from);
-	size = (size + ~PAGE_MASK) >> PAGE_SHIFT;
-	poff = (from >> PAGE_SHIFT) & (PTRS_PER_PAGE-1);
-	if ((pcnt = PTRS_PER_PAGE - poff) > size)
-		pcnt = size;
-
-	while (size > 0) {
-		if (!pgd_present(*dir)) {
-			if (!(page_table = (pte_t *) get_free_page(GFP_KERNEL))) {
-				invalidate();
-				return -ENOMEM;
-			}
-			if (pgd_present(*dir)) {
-				free_page((unsigned long) page_table);
-				page_table = (pte_t *) pgd_page(*dir);
-			} else
-				pgd_set(dir, page_table);
-		} else
-			page_table = (pte_t *) pgd_page(*dir);
+	dir = pgd_offset(current, address);
+	while (address < end) {
+		pmd_t *pmd = pmd_alloc(dir, address);
+		error = -ENOMEM;
+		if (!pmd)
+			break;
+		error = zeromap_pmd_range(pmd, address, end - address, zero_pte);
+		if (error)
+			break;
+		address = (address + PGDIR_SIZE) & PGDIR_MASK;
 		dir++;
-		page_table += poff;
-		poff = 0;
-		for (size -= pcnt; pcnt-- ;) {
-			pte_t page = *page_table;
-			if (!pte_none(page)) {
-				pte_clear(page_table);
-				if (pte_present(page)) {
-					if (!(mem_map[MAP_NR(pte_page(page))] & MAP_PAGE_RESERVED))
-						if (current->mm->rss > 0)
-							--current->mm->rss;
-					free_page(pte_page(page));
-				} else
-					swap_free(pte_val(page));
-			}
-			*page_table++ = zero_pte;
-		}
-		pcnt = (size > PTRS_PER_PAGE ? PTRS_PER_PAGE : size);
 	}
 	invalidate();
-	return 0;
+	return error;
 }
 
 /*

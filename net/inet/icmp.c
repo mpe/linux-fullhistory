@@ -372,11 +372,14 @@ static void icmp_redirect(struct icmphdr *icmph, struct sk_buff *skb,
 			 *	Add better route to host.
 			 *	But first check that the redirect
 			 *	comes from the old gateway..
+			 *	And make sure it's an ok host address
+			 *	(not some confused thing sending our
+			 *	address)
 			 */
 			rt = ip_rt_route(ip, NULL, NULL);
 			if (!rt)
 				break;
-			if (rt->rt_gateway != source)
+			if (rt->rt_gateway != source || ip_chk_addr(icmph->un.gateway))
 				break;
 			printk("redirect from %s\n", in_ntoa(source));
 			ip_rt_add((RTF_DYNAMIC | RTF_MODIFIED | RTF_HOST | RTF_GATEWAY),

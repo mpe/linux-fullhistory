@@ -22,17 +22,8 @@ struct serial_struct {
 	unsigned short	close_delay;
 	char	reserved_char[2];
 	int	hub6;
-	unsigned short	closing_wait; /* time to wait before rcvr shutdown */
-	unsigned short	closing_wait2; /* time to wait after rcvr shutdown */
-	int	reserved[4];
+	int	reserved[5];
 };
-
-/*
- * For the close wait times, 0 means wait forever for serial port to
- * flush its output.  65535 means don't wait at all.
- */
-#define ASYNC_CLOSING_WAIT_INF	0
-#define ASYNC_CLOSING_WAIT_NONE	65535
 
 /*
  * These are the supported serial types.
@@ -42,9 +33,8 @@ struct serial_struct {
 #define PORT_16450	2
 #define PORT_16550	3
 #define PORT_16550A	4
-#define PORT_CIRRUS     5	/* Hey!  Who put this there? */
-#define PORT_16650	6
-#define PORT_MAX	6
+#define PORT_CIRRUS     5
+#define PORT_MAX	5
 
 /*
  * Definitions for async_struct (and serial_struct) flags field
@@ -106,8 +96,6 @@ struct async_struct {
 	int			custom_divisor;
 	int			x_char;	/* xon/xoff character */
 	int			close_delay;
-	unsigned short		closing_wait;
-	unsigned short		closing_wait2;
 	int			IER; 	/* Interrupt Enable Register */
 	int			MCR; 	/* Modem control register */
 	int			MCR_noint; /* MCR with interrupts off */

@@ -9,7 +9,7 @@
  * wake up processes that were waiting for semval to go to 0 if the
  * value went to 0 and was then incremented rapidly enough. In solving
  * this problem I have also modified the implementation so that it
- * processes pending operations in a FIFO manner, thus give a guarentee
+ * processes pending operations in a FIFO manner, thus give a guarantee
  * that processes waiting for a lock on the semaphore won't starve
  * unless another locking process fails to unlock.
  * In addition the following two changes in behavior have been introduced:
@@ -20,7 +20,7 @@
  *   have read permissions. The implementation now returns 0
  *   on success as stated in the manual page.
  * - There is some confusion over whether the set of undo adjustments
- *   to be peformed at exit should be done in an atomic manner.
+ *   to be performed at exit should be done in an atomic manner.
  *   That is, if we are attempting to decrement the semval should we queue
  *   up and wait until we can do so legally?
  *   The original implementation attempted to do this.

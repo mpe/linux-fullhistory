@@ -178,23 +178,14 @@ DO_ERROR(17, SIGSEGV, "alignment check", alignment_check, current)
 
 asmlinkage void do_general_protection(struct pt_regs * regs, long error_code)
 {
-	int signr = SIGSEGV;
-
 	if (regs->eflags & VM_MASK) {
 		handle_vm86_fault((struct vm86_regs *) regs, error_code);
 		return;
 	}
 	die_if_kernel("general protection",regs,error_code);
-	switch (get_seg_byte(regs->cs, (char *)regs->eip)) {
-		case 0xCD: /* INT */
-		case 0xF4: /* HLT */
-		case 0xFA: /* CLI */
-		case 0xFB: /* STI */
-			signr = SIGILL;
-	}
 	current->tss.error_code = error_code;
 	current->tss.trap_no = 13;
-	send_sig(signr, current, 1);	
+	send_sig(SIGSEGV, current, 1);	
 }
 
 asmlinkage void do_nmi(struct pt_regs * regs, long error_code)

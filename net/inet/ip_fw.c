@@ -424,7 +424,7 @@ addr_match:
 } /* End of whole function */
 #endif /* CONFIG_IP_ACCT */
 
-#ifdef CONFIG_IP_ACCT
+#if defined(CONFIG_IP_ACCT) || defined(CONFIG_IP_FIREWALL)
 
 static void zero_fw_chain(struct ip_fw *chainptr)
 {
@@ -436,10 +436,6 @@ static void zero_fw_chain(struct ip_fw *chainptr)
 		ctmp=ctmp->next;
 	}
 }
-
-#endif
-
-#if defined(CONFIG_IP_ACCT) || defined(CONFIG_IP_FIREWALL)
 
 static void free_fw_chain(struct ip_fw *volatile* chainptr)
 {

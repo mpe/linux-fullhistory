@@ -76,6 +76,7 @@
 #define MODE_SELECT_10		0x55
 #define MODE_SENSE_10		0x5a
 
+extern void scsi_make_blocked_list(void);
 extern volatile int in_scan_scsis;
 extern const unsigned char scsi_command_size[8];
 #define COMMAND_SIZE(opcode) scsi_command_size[((opcode) >> 5) & 7]
@@ -528,6 +529,7 @@ extern int scsi_reset (Scsi_Cmnd *);
 extern int max_scsi_hosts;
 
 #if defined(MAJOR_NR) && (MAJOR_NR != SCSI_TAPE_MAJOR)
+#include "hosts.h"
 static Scsi_Cmnd * end_scsi_request(Scsi_Cmnd * SCpnt, int uptodate, int sectors)
 {
 	struct request * req;
@@ -566,6 +568,15 @@ static Scsi_Cmnd * end_scsi_request(Scsi_Cmnd * SCpnt, int uptodate, int sectors
 	if (req->sem != NULL) {
 		up(req->sem);
 	}
+
+        if (SCpnt->host->block) {
+           struct Scsi_Host * next;
+
+           for (next = SCpnt->host->block; next != SCpnt->host;
+                                                   next = next->block)
+              wake_up(&next->host_wait);
+           }
+
 	req->dev = -1;
 	wake_up(&wait_for_request);
 	wake_up(&SCpnt->device->device_wait);
@@ -595,11 +606,16 @@ static Scsi_Cmnd * end_scsi_request(Scsi_Cmnd * SCpnt, int uptodate, int sectors
 	if (CONDITION) {					\
 		struct wait_queue wait = { current, NULL};	\
 		add_wait_queue(QUEUE, &wait);			\
-sleep_repeat:							\
+        for(;;) {       					\
 		current->state = TASK_UNINTERRUPTIBLE;		\
 		if (CONDITION) {				\
-			schedule();				\
-			goto sleep_repeat;			\
+                   if (intr_count)                              \
+                      panic("scsi: trying to call schedule() in interrupt" \
+                            ", file %s, line %d.\n", __FILE__, __LINE__);  \
+		   schedule();				 	\
+		   }              			 	\
+	        else						\
+                   break;                            	        \
 		}						\
 		remove_wait_queue(QUEUE, &wait);		\
 		current->state = TASK_RUNNING;			\

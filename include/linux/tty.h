@@ -283,7 +283,7 @@ extern int tty_paranoia_check(struct tty_struct *tty, dev_t device,
 			      const char *routine);
 extern char *_tty_name(struct tty_struct *tty, char *buf);
 extern char *tty_name(struct tty_struct *tty);
-extern void wait_until_sent(struct tty_struct * tty, int timeout);
+extern void tty_wait_until_sent(struct tty_struct * tty, int timeout);
 extern int tty_check_change(struct tty_struct * tty);
 extern void stop_tty(struct tty_struct * tty);
 extern void start_tty(struct tty_struct * tty);
