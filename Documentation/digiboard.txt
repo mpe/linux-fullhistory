@@ -20,7 +20,7 @@ linux-2.1.x and may not be usable on other architectures than intel now.
 It is available from ftp.digi.com/ftp.digiboard.com. You can write me if
 you need an patch for this driver.
 
-  Bernhard Kaindl (bkaindl@netway.at)  6. April 1997.
+Bernhard Kaindl (bkaindl@netway.at)  6. April 1997.
 
 Configuring the Driver
 ----------------------
@@ -153,20 +153,18 @@ ports.
 Sources of Information
 ----------------------
 
-Web page: http://private.fuller.edu/clameter/digi.html
+Please contact digi directly digilnux@dgii.com. Forward any information of
+general interest to me.
 
-Mailing list: digiboard@list.fuller.edu
+Web page (mainly of historical interest): http://lameter.com/digi
 
-(Write e-mail to that address to subscribe. Common ListServ commands work.
-Archive of messages available)
-
-Christoph Lameter (clameter@fuller.edu) 16. April 1996.
+Christoph Lameter (christoph@lameter.com) Aug 14, 2000.
 
 Supporting Tools
 ----------------
 
-Some tools and more detailed information can be found at
-ftp://ftp.fuller.edu/Linux/digi
+Some (old) tools and more detailed information can be found at
+ftp://lameter.com/digi
 
 The "ditty" tool described in the Digiboard Manuals for other Unixes
 is also available.

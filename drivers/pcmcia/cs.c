@@ -596,9 +596,11 @@ static void unreset_socket(socket_info_t *s)
 	    s->state &= ~SOCKET_SETUP_PENDING;
 	} else {
 	    send_event(s, CS_EVENT_CARD_RESET, CS_EVENT_PRI_LOW);
-	    s->reset_handle->event_callback_args.info = NULL;
-	    EVENT(s->reset_handle, CS_EVENT_RESET_COMPLETE,
-		  CS_EVENT_PRI_LOW);
+	    if (s->reset_handle) { 
+		    s->reset_handle->event_callback_args.info = NULL;
+		    EVENT(s->reset_handle, CS_EVENT_RESET_COMPLETE,
+			  CS_EVENT_PRI_LOW);
+	    }
 	    s->state &= ~EVENT_MASK;
 	}
 } /* unreset_socket */

@@ -7219,7 +7219,29 @@ CONFIG_EQUALIZER
   module, say M here and read Documentation/modules.txt. If unsure,
   say N.
 
-Ethertap network tap (EXPERIMENTAL)
+Universal TUN/TAP device driver.
+CONFIG_TUN
+  TUN/TAP provides packet reception and transmission for user space programs.
+  It can be viewed as a simple Point-to-Point or Ethernet device, which
+  instead of receiving packets from a physical media, receives them from
+  user space program and instead of sending packets via physical media
+  writes them to the user space program.
+
+  When a program opens /dev/net/tun, driver creates and registers 
+  corresponding net device tunX or tapX. After a program closed above 
+  devices, driver will automatically delete tunXX or tapXX device and all 
+  routes corresponding to it.
+
+  Please read Documentation/networking/tuntap.txt for more information.
+
+  This driver is also available as a module ( = code which can be
+  inserted in and removed from the running kernel whenever you want).
+  The module will be called tun.o. If you want to compile it as a
+  module, say M here and read Documentation/modules.txt.
+
+  If you don't know what to use this for, you don't need it.
+
+Ethertap network tap (OBSOLETE)
 CONFIG_ETHERTAP
   If you say Y here (and have said Y to "Kernel/User network link
   driver", above) and create a character special file /dev/tap0 with

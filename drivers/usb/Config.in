@@ -74,16 +74,16 @@ comment 'USB Devices'
       dep_tristate '  USB Bluetooth support (EXPERIMENTAL)' CONFIG_USB_BLUETOOTH $CONFIG_USB
    fi
 
-   comment 'USB HID'
-   if [ "$CONFIG_INPUT" != "n" ]; then
+   comment 'USB Human Interface Devices (HID)'
+   if [ "$CONFIG_INPUT" = "n" ]; then
+      comment '  Input core support is needed for USB HID'
+   else
       dep_tristate '  USB Human Interface Device (HID) support' CONFIG_USB_HID $CONFIG_USB $CONFIG_INPUT
       if [ "$CONFIG_USB_HID" != "y" ]; then
          dep_tristate '  USB HIDBP Keyboard support' CONFIG_USB_KBD $CONFIG_USB $CONFIG_INPUT
          dep_tristate '  USB HIDBP Mouse support' CONFIG_USB_MOUSE $CONFIG_USB $CONFIG_INPUT
       fi
       dep_tristate '  Wacom Intuos/Graphire tablet support' CONFIG_USB_WACOM $CONFIG_USB $CONFIG_INPUT
-   else
-      comment '   Input core support is needed for USB HID'
    fi
 fi
 

@@ -124,13 +124,13 @@ int usb_kbd_event(struct input_dev *dev, unsigned int type, unsigned int code, i
 
 static void usb_kbd_led(struct urb *urb)
 {
-	struct usb_kbd *kbd = urb->private;
+	struct usb_kbd *kbd = urb->context;
 
 	if (urb->status)
 		warn("led urb status %d received", urb->status);
 	
 	if (kbd->leds == kbd->newleds)
-		return 0;
+		return;
 
 	kbd->leds = kbd->newleds;
 	if (usb_submit_urb(&kbd->led))

@@ -3063,7 +3063,7 @@ Some Examples:
 ** Tiara **
 (model unknown)
 -------------------------
-  - from Christoph Lameter <clameter@netcom.com>
+  - from Christoph Lameter <christoph@lameter.com>
   
 
 Here is information about my card as far as I could figure it out:

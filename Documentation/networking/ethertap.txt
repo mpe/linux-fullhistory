@@ -1,3 +1,9 @@
+NOTE: Ethertap is now an obsolete facility, and is scheduled
+      to be removed in the 2.5.x kernel series.  Those writing
+      applications using ethertap should convert their code to
+      use the TUN/TAP driver instead, see 'tuntap.txt' in this
+      directory for more details.  -DaveM
+
 Ethertap programming mini-HOWTO
 -------------------------------
 

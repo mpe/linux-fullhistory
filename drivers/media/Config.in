@@ -4,8 +4,10 @@
 mainmenu_option next_comment
 comment 'Multimedia devices'
 
-# wow, you just got to love this :)
-source drivers/media/video/Config.in
-source drivers/media/radio/Config.in
+tristate 'Video For Linux' CONFIG_VIDEO_DEV
+if [ "$CONFIG_VIDEO_DEV" != "n" ]; then
+   source drivers/media/video/Config.in
+   source drivers/media/radio/Config.in
+fi
 
 endmenu

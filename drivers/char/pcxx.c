@@ -1,5 +1,5 @@
 /*
- *  linux/drivers/char/pcxe.c
+ *  linux/drivers/char/pcxx.c
  * 
  *  Written by Troy De Jongh, November, 1994
  *
@@ -12,13 +12,11 @@
  *  This driver does NOT support DigiBoard's fastcook FEP option and
  *  does not support the transparent print (i.e. digiprint) option.
  *
- * This Driver is currently maintained by Christoph Lameter (clameter@fuller.edu)
- * Please contact the mailing list for problems first. 
+ * This Driver is currently maintained by Christoph Lameter (christoph@lameter.com)
  *
- * Sources of Information:
- * 1. The Linux Digiboard Page at http://private.fuller.edu/clameter/digi.html
- * 2. The Linux Digiboard Mailing list at digiboard@list.fuller.edu
- *    (Simply write a message to introduce yourself to subscribe)
+ * Please contact digi for support issues at digilnux@dgii.com. Some
+ * information (mostly of historical interest) can be found at
+ * http://lameter.com/digi.
  *
  *  1.5.2 Fall 1995 Bug fixes by David Nugent
  *  1.5.3 March 9, 1996 Christoph Lameter: Fixed 115.2K Support. Memory
@@ -39,6 +37,8 @@
  *              verbose messages to assist user during card configuration.
  *              Currently only tested on a PC/Xi card, but should work on Xe
  *              and Xeve also.
+ *  1.6.2 August, 7, 2000: Arnaldo Carvalho de Melo <acme@conectiva.com.br>
+ *  		get rid of panics, release previously allocated resources
  *
  */
 
@@ -81,7 +81,7 @@
 #include <asm/bitops.h>
 #include <asm/semaphore.h>
 
-#define VERSION 	"1.6.1"
+#define VERSION 	"1.6.2"
 
 #include "digi.h"
 #include "fep.h"
@@ -193,6 +193,30 @@ static inline void assertmemoff(struct channel *ch);
 #define TZ_BUFSZ 4096
 
 /* function definitions */
+
+/*****************************************************************************/
+
+static void cleanup_board_resources(void)
+{
+	int crd, i;
+	struct board_info *bd;
+	struct channel *ch;
+
+        for(crd = 0; crd < numcards; crd++) {
+                bd = &boards[crd];
+		ch = digi_channels + bd->first_minor;
+
+		if (bd->region)
+			release_region(bd->port, 4);
+
+		for(i = 0; i < bd->numports; i++, ch++)
+			if (ch->tmp_buf)
+				kfree(ch->tmp_buf);
+	}
+}
+
+/*****************************************************************************/
+
 #ifdef MODULE
 
 /*
@@ -209,10 +233,7 @@ void cleanup_module()
 {
 
 	unsigned long	flags;
-	int crd, i;
 	int e1, e2;
-	struct board_info *bd;
-	struct channel *ch;
 
 	printk(KERN_NOTICE "Unloading PC/Xx version %s\n", VERSION);
 
@@ -226,14 +247,7 @@ void cleanup_module()
 	if ((e2 = tty_unregister_driver(&pcxe_callout)))
 		printk("SERIAL: failed to unregister callout driver (%d)\n",e2);
 
-	for(crd=0; crd < numcards; crd++) {
-		bd = &boards[crd];
-		ch = digi_channels+bd->first_minor;
-		for(i=0; i < bd->numports; i++, ch++) {
-			kfree(ch->tmp_buf);
-		}
-		release_region(bd->port, 4);
-	}
+	cleanup_board_resources();
 	kfree(digi_channels);
 	kfree(pcxe_termios_locked);
 	kfree(pcxe_termios);
@@ -620,7 +634,7 @@ static void pcxe_close(struct tty_struct * tty, struct file * filp)
 ** worth noting that while I'm not sure what this hunk of code is supposed
 ** to do, it is not present in the serial.c driver.  Hmmm.  If you know,
 ** please send me a note.  brian@ilinx.com
-** Don't know either what this is supposed to do clameter@waterf.org.
+** Don't know either what this is supposed to do christoph@lameter.com.
 */
 		if(tty->ldisc.num != ldiscs[N_TTY].num) {
 			if(tty->ldisc.close)
@@ -1090,6 +1104,7 @@ int __init pcxe_init(void)
 {
 	ulong memory_seg=0, memory_size=0;
 	int lowwater, enabled_cards=0, i, crd, shrinkmem=0, topwin = 0xff00L, botwin=0x100L;
+	int ret = -ENOMEM;
 	unchar *fepos, *memaddr, *bios, v;
 	volatile struct global_data *gd;
 	volatile struct board_chan *bc;
@@ -1099,7 +1114,7 @@ int __init pcxe_init(void)
 	printk(KERN_NOTICE "Digiboard PC/X{i,e,eve} driver v%s\n", VERSION);
 
 #ifdef MODULE
-	for (i = 0; i < 4; i++) {
+	for (i = 0; i < MAX_DIGI_BOARDS; i++) {
 		if (io[i]) {
 			numcards = 0;
 			break;
@@ -1108,7 +1123,7 @@ int __init pcxe_init(void)
 	if (numcards == 0) {
 		int first_minor = 0;
 
-		for (i = 0; i < 4; i++) {
+		for (i = 0; i < MAX_DIGI_BOARDS; i++) {
 			if (io[i] == 0) {
 				boards[i].port    = 0;
 				boards[i].status  = DISABLED;
@@ -1139,6 +1154,7 @@ int __init pcxe_init(void)
 			else
 				boards[i].numports  = 16;
 
+			boards[i].region = NULL;
 			first_minor += boards[i].numports;
 		}
 	}
@@ -1178,23 +1194,31 @@ int __init pcxe_init(void)
 	 * unused spaces.
 	 */
 	digi_channels = kmalloc(sizeof(struct channel) * nbdevs, GFP_KERNEL);
-	if (!digi_channels)
-		panic("Unable to allocate digi_channel struct");
+	if (!digi_channels) {
+		printk(KERN_ERR "Unable to allocate digi_channel struct\n");
+		return -ENOMEM;
+	}
 	memset(digi_channels, 0, sizeof(struct channel) * nbdevs);
 
 	pcxe_table =  kmalloc(sizeof(struct tty_struct *) * nbdevs, GFP_KERNEL);
-	if (!pcxe_table)
-		panic("Unable to allocate pcxe_table struct");
+	if (!pcxe_table) {
+		printk(KERN_ERR "Unable to allocate pcxe_table struct\n");
+		goto cleanup_digi_channels;
+	}
 	memset(pcxe_table, 0, sizeof(struct tty_struct *) * nbdevs);
 
 	pcxe_termios = kmalloc(sizeof(struct termios *) * nbdevs, GFP_KERNEL);
-	if (!pcxe_termios)
-		panic("Unable to allocate pcxe_termios struct");
+	if (!pcxe_termios) {
+		printk(KERN_ERR "Unable to allocate pcxe_termios struct\n");
+		goto cleanup_pcxe_table;
+	}
 	memset(pcxe_termios,0,sizeof(struct termios *)*nbdevs);
 
 	pcxe_termios_locked = kmalloc(sizeof(struct termios *) * nbdevs, GFP_KERNEL);
-	if (!pcxe_termios_locked)
-		panic("Unable to allocate pcxe_termios_locked struct");
+	if (!pcxe_termios_locked) {
+		printk(KERN_ERR "Unable to allocate pcxe_termios_locked struct\n");
+		goto cleanup_pcxe_termios;
+	}
 	memset(pcxe_termios_locked,0,sizeof(struct termios *)*nbdevs);
 
 	init_bh(DIGI_BH,do_pcxe_bh);
@@ -1512,7 +1536,13 @@ load_fep:
 		if((bd->type == PCXEVE) && (*(ushort *)((ulong)memaddr+NPORT) < 3))
 			shrinkmem = 1;
 
-		request_region(bd->port, 4, "PC/Xx");
+		bd->region = request_region(bd->port, 4, "PC/Xx");
+
+		if (!bd->region) {
+			printk(KERN_ERR "I/O port 0x%x is already used\n", bd->port);
+			ret = -EBUSY;
+			goto cleanup_boards;
+		}
 
 		for(i=0; i < bd->numports; i++, ch++, bc++) {
 			if(((ushort *)((ulong)memaddr + PORTBASE))[i] == 0) {
@@ -1562,6 +1592,12 @@ load_fep:
 			ch->txbufsize = bc->tmax + 1;
 			ch->rxbufsize = bc->rmax + 1;
 			ch->tmp_buf = kmalloc(ch->txbufsize,GFP_KERNEL);
+
+			if (!ch->tmp_buf) {
+				printk(KERN_ERR "Unable to allocate memory for temp buffers\n");
+				goto cleanup_boards;
+			}
+
 			lowwater = ch->txbufsize >= 2000 ? 1024 : ch->txbufsize/2;
 			fepcmd(ch, STXLWATER, lowwater, 0, 10, 0);
 			fepcmd(ch, SRXLWATER, ch->rxbufsize/4, 0, 10, 0);
@@ -1608,14 +1644,21 @@ load_fep:
 
 	if (enabled_cards <= 0) {
 		printk(KERN_NOTICE "PC/Xx: No cards enabled, no driver.\n");
-		return -EIO;
+		ret = -EIO;
+		goto cleanup_boards;
 	}
 
-	if(tty_register_driver(&pcxe_driver))
-		panic("Couldn't register PC/Xe driver");
+	ret = tty_register_driver(&pcxe_driver);
+	if(ret) {
+		printk(KERN_ERR "Couldn't register PC/Xe driver\n");
+		goto cleanup_boards;
+	}
 
-	if(tty_register_driver(&pcxe_callout))
-		panic("Couldn't register PC/Xe callout");
+	ret = tty_register_driver(&pcxe_callout);
+	if(ret) {
+		printk(KERN_ERR "Couldn't register PC/Xe callout\n");
+		goto cleanup_pcxe_driver;
+	}
 
 	/*
 	 * Start up the poller to check for events on all enabled boards
@@ -1626,6 +1669,13 @@ load_fep:
 		printk(KERN_NOTICE "PC/Xx: Driver with %d card(s) ready.\n", enabled_cards);
 
 	return 0;
+cleanup_pcxe_driver:	tty_unregister_driver(&pcxe_driver);
+cleanup_boards:		cleanup_board_resources();
+			kfree(pcxe_termios_locked);
+cleanup_pcxe_termios:	kfree(pcxe_termios);
+cleanup_pcxe_table:	kfree(pcxe_table);
+cleanup_digi_channels:	kfree(digi_channels);
+	return ret;
 }
 
 

@@ -1,4 +1,4 @@
-/* $Id: systbls.S,v 1.76 2000/08/12 20:49:49 jj Exp $
+/* $Id: systbls.S,v 1.77 2000/08/22 10:09:10 jj Exp $
  * systbls.S: System call entry point tables for OS compatibility.
  *            The native Linux system call table lives here also.
  *
@@ -69,7 +69,7 @@ sys_call_table32:
 	.word sys_nis_syscall, sys_llseek, sys_mlock, sys_munlock, sys_mlockall
 /*240*/	.word sys_munlockall, sys_sched_setparam, sys_sched_getparam, sys_sched_setscheduler, sys_sched_getscheduler
 	.word sys_sched_yield, sys_sched_get_priority_max, sys_sched_get_priority_min, sys32_sched_rr_get_interval, sys32_nanosleep
-/*250*/	.word sys32_mremap, sys_sysctl, sys_getsid, sys_fdatasync, sys32_nfsservctl
+/*250*/	.word sys32_mremap, sys32_sysctl, sys_getsid, sys_fdatasync, sys32_nfsservctl
 	.word sys_aplib
 
 	/* Now the 64-bit native Linux syscall table. */

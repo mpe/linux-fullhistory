@@ -1463,6 +1463,12 @@ E: lam836@cs.cuhk.hk
 D: Author of the dialog utility, foundation
 D: for Menuconfig's lxdialog.
 
+N: Christoph Lameter
+E: christoph@lameter.com
+D: Digiboard PC/Xe and PC/Xi, Digiboard EPCA
+D: Early protocol filter for bridging code
+D: Bug fixes
+
 N: Paul Laufer
 E: pelaufer@csupomona.edu
 D: Soundblaster driver fixes, ISAPnP quirk

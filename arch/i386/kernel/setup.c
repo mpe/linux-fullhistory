@@ -16,7 +16,7 @@
  *  Intel Mobile Pentium II detection fix. Sean Gilley, June 1999.
  *
  *  IDT Winchip tweaks, misc clean ups.
- *	Dave Jones <dave@powertweak.com>, August 1999
+ *	Dave Jones <davej@suse.de>, August 1999
  *
  *  Support of BIGMEM added by Gerhard Wichert, Siemens AG, July 1999
  *
@@ -27,7 +27,7 @@
  *	David Parsons <orc@pell.chi.il.us>, July-August 1999
  *
  *  Cleaned up cache-detection code
- *	Dave Jones <dave@powertweak.com>, October 1999
+ *	Dave Jones <davej@suse.de>, October 1999
  *
  *	Added proper L2 cache detection for Coppermine
  *	Dragan Stancevic <visitor@valinux.com>, October 1999
@@ -38,7 +38,7 @@
  *
  *  Detection for Celeron coppermine, identify_cpu() overhauled,
  *  and a few other clean ups.
- *  Dave Jones <dave@powertweak.com>, April 2000
+ *  Dave Jones <davej@suse.de>, April 2000
  *
  *  Pentium III FXSR, SSE support
  *  General FPU state handling cleanups
@@ -47,6 +47,9 @@
  *  Added proper Cascades CPU and L2 cache detection for Cascades
  *  and 8-way type cache happy bunch from Intel:^)
  *  Dragan Stancevic <visitor@valinux.com>, May 2000 
+ *
+ *  Forward port AMD Duron errata T13 from 2.2.17pre
+ *  Dave Jones <davej@suse.de>, August 2000
  *
  */
 
@@ -934,7 +937,7 @@ static int __init amd_model(struct cpuinfo_x86 *c)
 				break;
 			}
 			break;
-		case 6:	/* An Athlon. We can trust the BIOS probably */
+		case 6:	/* An Athlon/Duron. We can trust the BIOS probably */
 			break;		
 	}
 
@@ -945,10 +948,19 @@ static int __init amd_model(struct cpuinfo_x86 *c)
 			edx>>24, ecx>>24, edx&0xFF);
 		c->x86_cache_size=(ecx>>24)+(edx>>24);	
 	}
-	if (n >= 0x80000006) {
-		cpuid(0x80000006, &dummy, &dummy, &ecx, &edx);
-		printk("CPU: L2 Cache: %dK\n", ecx>>16);
-		c->x86_cache_size=(ecx>>16);
+
+	/* AMD errata T13 (order #21922) */
+	if (boot_cpu_data.x86 == 6 && boot_cpu_data.x86_model == 3 &&
+		boot_cpu_data.x86_mask == 0)
+	{
+		c->x86_cache_size = 64;
+		printk("CPU: L2 Cache: 64K\n");
+	} else {
+		if (n >= 0x80000006) {
+			cpuid(0x80000006, &dummy, &dummy, &ecx, &edx);
+			printk("CPU: L2 Cache: %dK\n", ecx>>16);
+			c->x86_cache_size=(ecx>>16);
+		}
 	}
 
 	return r;
@@ -1547,7 +1559,7 @@ void __init identify_cpu(struct cpuinfo_x86 *c)
 	
 	if(c->x86_vendor == X86_VENDOR_NEXGEN)
 		c->x86_cache_size = 256;	/* A few had 1Mb.. */
-	
+
 	for (i = 0; i < sizeof(cpu_models)/sizeof(struct cpu_model_info); i++) {
 		if (cpu_models[i].vendor == c->x86_vendor &&
 		    cpu_models[i].x86 == c->x86) {
@@ -1579,8 +1591,8 @@ void __init dodgy_tsc(void)
 
 	cyrix_model(&boot_cpu_data);
 }
-	
-	
+
+
 
 static char *cpu_vendor_names[] __initdata = {
 	"Intel", "Cyrix", "AMD", "UMC", "NexGen", "Centaur", "Rise", "Transmeta" };

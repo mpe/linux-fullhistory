@@ -51,6 +51,7 @@ struct board_info	{
 	ulong  membase;
 	ulong  memsize;
 	ushort first_minor;
+	void *region;
 };
 
 

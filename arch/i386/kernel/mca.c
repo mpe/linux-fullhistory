@@ -15,7 +15,7 @@
  *
  *	Chris Beauregard August 9th, 1996
  *	- Rewrote /proc/mca
- *	
+ *
  *	Chris Beauregard January 7th, 1997
  *	- Added basic NMI-processing
  *	- Added more information to mca_info structure
@@ -30,8 +30,11 @@
  *	- Fixed the output of 'Driver Installed' in /proc/mca/pos
  *	- Made the Integrated Video & SCSI show up even if they have id 0000
  *
- *	AV November 9th, 1999
- *	- switched to regular procfs methods.
+ *	Alexander Viro November 9th, 1999
+ *	- Switched to regular procfs methods
+ *
+ *	Alfred Arnold & David Weinehall August 23rd, 2000
+ *	- Added support for Planar POS-registers
  */
 
 #include <linux/module.h>
@@ -50,9 +53,10 @@
 #include <asm/uaccess.h>
 #include <linux/init.h>
 
-/* This structure holds MCA information. Each (plug-in) adapter has 
+/* This structure holds MCA information. Each (plug-in) adapter has
  * eight POS registers. Then the machine may have integrated video and
  * SCSI subsystems, which also have eight POS registers.
+ * Finally, the motherboard (planar) has got POS-registers.
  * Other miscellaneous information follows.
  */
 
@@ -92,7 +96,7 @@ struct MCA_info {
 /* The mca_info structure pointer. If MCA bus is present, the function
  * mca_probe() is invoked. The function puts motherboard, then all
  * adapters into setup mode, allocates and fills an MCA_info structure,
- * and points this pointer to the structure. Otherwise the pointer 
+ * and points this pointer to the structure. Otherwise the pointer
  * is set to zero.
  */
 
@@ -194,7 +198,7 @@ void __init mca_init(void)
 	 */
 
 	/* Make sure the MCA bus is present */
-	
+
 	if(!MCA_bus)
 		return;
 	printk("Micro Channel bus detected.\n");
@@ -216,7 +220,16 @@ void __init mca_init(void)
 
 	outb_p(0, MCA_ADAPTER_SETUP_REG);
 
-	/* Put motherboard into video setup mode, read integrated video 
+	/* Read motherboard POS registers */
+
+	outb_p(0x7f, MCA_MOTHERBOARD_SETUP_REG);
+	mca_info->slot[MCA_MOTHERBOARD].name[0] = 0;
+	for(j=0; j<8; j++) {
+		mca_info->slot[MCA_MOTHERBOARD].pos[j] = inb_p(MCA_POS_REG(j));
+	}
+	mca_configure_adapter_status(MCA_MOTHERBOARD);
+
+	/* Put motherboard into video setup mode, read integrated video
 	 * POS registers, and turn motherboard setup off.
 	 */
 
@@ -242,7 +255,7 @@ void __init mca_init(void)
 	outb_p(0xf7, MCA_MOTHERBOARD_SETUP_REG);
 	mca_info->slot[MCA_INTEGSCSI].name[0] = 0;
 	for(j=0; j<8; j++) {
-		if((mca_info->slot[MCA_INTEGSCSI].pos[j] = inb_p(MCA_POS_REG(j))) != 0xff) 
+		if((mca_info->slot[MCA_INTEGSCSI].pos[j] = inb_p(MCA_POS_REG(j))) != 0xff)
 		{
 			/* 0xff all across means no device. 0x00 means
 			 * something's broken, but a device is probably there.
@@ -256,17 +269,17 @@ void __init mca_init(void)
 			mca_info->which_scsi = 0xf7;
 		}
 	}
-	if(!mca_info->which_scsi) { 
+	if(!mca_info->which_scsi) {
 
 		/* Didn't find it at 0xf7, try somewhere else... */
 		mca_info->which_scsi = 0xfd;
 
 		outb_p(0xfd, MCA_MOTHERBOARD_SETUP_REG);
-		for(j=0; j<8; j++) 
+		for(j=0; j<8; j++)
 			mca_info->slot[MCA_INTEGSCSI].pos[j] = inb_p(MCA_POS_REG(j));
 	}
 	mca_configure_adapter_status(MCA_INTEGSCSI);
-	
+
 	/* Turn off motherboard setup */
 
 	outb_p(0xff, MCA_MOTHERBOARD_SETUP_REG);
@@ -310,6 +323,9 @@ static void mca_handle_nmi_slot(int slot, int check_flag)
 			mca_info->slot[slot].name);
 	} else if(slot == MCA_INTEGVIDEO) {
 		printk("NMI: caused by MCA integrated video adapter (%s)\n",
+			mca_info->slot[slot].name);
+	} else if(slot == MCA_MOTHERBOARD) {
+		printk("NMI: caused by motherboard (%s)\n",
 			mca_info->slot[slot].name);
 	}
 
@@ -375,7 +391,7 @@ void mca_handle_nmi(void)
  *
  *	Disabled adapters are not reported.
  */
- 
+
 int mca_find_adapter(int id, int start)
 {
 	if(mca_info == NULL || id == 0xffff) {
@@ -423,7 +439,7 @@ EXPORT_SYMBOL(mca_find_adapter);
  *	to scan for further cards when some may already be driven.
  */
 
-int mca_find_unused_adapter(int id, int start) 
+int mca_find_unused_adapter(int id, int start)
 {
 	if(mca_info == NULL || id == 0xffff) {
 		return MCA_NOTFOUND;
@@ -450,7 +466,7 @@ int mca_find_unused_adapter(int id, int start)
 	}
 
 	return MCA_NOTFOUND;
-} /* mca_find_unused_adapter() */	
+} /* mca_find_unused_adapter() */
 
 EXPORT_SYMBOL(mca_find_unused_adapter);
 
@@ -465,8 +481,8 @@ EXPORT_SYMBOL(mca_find_unused_adapter);
  *	when it scanned the MCA space. The register value is returned.
  *	Missing or invalid registers report 0.
  */
- 
-unsigned char mca_read_stored_pos(int slot, int reg) 
+
+unsigned char mca_read_stored_pos(int slot, int reg)
 {
 	if(slot < 0 || slot >= MCA_NUMADAPTERS || mca_info == NULL) return 0;
 	if(reg < 0 || reg >= 8) return 0;
@@ -487,9 +503,8 @@ EXPORT_SYMBOL(mca_read_stored_pos);
  *	may not be invoked from interrupt context. It handles the
  *	deep magic required for onboard devices transparently.
  */
- 
 
-unsigned char mca_read_pos(int slot, int reg) 
+unsigned char mca_read_pos(int slot, int reg)
 {
 	unsigned int byte = 0;
 	unsigned long flags;
@@ -524,6 +539,14 @@ unsigned char mca_read_pos(int slot, int reg)
 
 		byte = inb_p(MCA_POS_REG(reg));
 		outb_p(0xff, MCA_MOTHERBOARD_SETUP_REG);
+	} else if(slot == MCA_MOTHERBOARD) {
+
+		/* Disable adapter setup, enable motherboard setup */
+		outb_p(0, MCA_ADAPTER_SETUP_REG);
+		outb_p(0x7f, MCA_MOTHERBOARD_SETUP_REG);
+
+		byte = inb_p(MCA_POS_REG(reg));
+		outp_b(0xff, MCA_MOTHERBOARD_SETUP_REG);
 	} else if(slot < MCA_MAX_SLOT_NR) {
 
 		/* Make sure motherboard setup is off */
@@ -556,7 +579,7 @@ EXPORT_SYMBOL(mca_read_pos);
  *	@reg:  register to read from
  *	@byte: byte to write to the POS registers
  *
- *	Store a POS value directly from the hardware. You should not 
+ *	Store a POS value directly from the hardware. You should not
  *	normally need to use this function and should have a very good
  *	knowledge of MCA bus before you do so. Doing this wrongly can
  *	damage the hardware.
@@ -574,7 +597,7 @@ EXPORT_SYMBOL(mca_read_pos);
  *	screws up.
  */
 
-void mca_write_pos(int slot, int reg, unsigned char byte) 
+void mca_write_pos(int slot, int reg, unsigned char byte)
 {
 	unsigned long flags;
 
@@ -615,11 +638,11 @@ EXPORT_SYMBOL(mca_write_pos);
  *	@name: text string for the namen
  *
  *	This function sets the name reported via /proc for this
- *	adapter slot. This is for user information only. Setting a 
+ *	adapter slot. This is for user information only. Setting a
  *	name deletes any previous name.
  */
- 
-void mca_set_adapter_name(int slot, char* name) 
+
+void mca_set_adapter_name(int slot, char* name)
 {
 	if(mca_info == NULL) return;
 
@@ -640,7 +663,7 @@ EXPORT_SYMBOL(mca_set_adapter_name);
 /**
  *	mca_set_adapter_procfn - Set the /proc callback
  *	@slot: slot to configure
- *	@procfn: callback function to call for /proc 
+ *	@procfn: callback function to call for /proc
  *	@dev: device information passed to the callback
  *
  *	This sets up an information callback for /proc/mca/slot?.  The
@@ -648,7 +671,7 @@ EXPORT_SYMBOL(mca_set_adapter_name);
  *	some equally informative context information, or nothing, if you
  *	prefer), and is expected to put useful information into the
  *	buffer.  The adapter name, ID, and POS registers get printed
- * 	before this is called though, so don't do it again.
+ *	before this is called though, so don't do it again.
  *
  *	This should be called with a %NULL @procfn when a module
  *	unregisters, thus preventing kernel crashes and other such
@@ -722,8 +745,8 @@ EXPORT_SYMBOL(mca_mark_as_unused);
  *	Return the adapter description if set. If it has not been
  *	set or the slot is out range then return NULL.
  */
- 
-char *mca_get_adapter_name(int slot) 
+
+char *mca_get_adapter_name(int slot)
 {
 	if(mca_info == NULL) return 0;
 
@@ -789,14 +812,12 @@ int get_mca_info(char *page, char **start, off_t off,
 {
 	int i, j, len = 0;
 
-	if(MCA_bus && mca_info != NULL) 
-	{
+	if(MCA_bus && mca_info != NULL) {
 		/* Format POS registers of eight MCA slots */
 
-		for(i=0; i<MCA_MAX_SLOT_NR; i++) 
-		{
+		for(i=0; i<MCA_MAX_SLOT_NR; i++) {
 			len += sprintf(page+len, "Slot %d: ", i+1);
-			for(j=0; j<8; j++) 
+			for(j=0; j<8; j++)
 				len += sprintf(page+len, "%02x ", mca_info->slot[i].pos[j]);
 			len += sprintf(page+len, " %s\n", mca_info->slot[i].name);
 		}
@@ -804,19 +825,26 @@ int get_mca_info(char *page, char **start, off_t off,
 		/* Format POS registers of integrated video subsystem */
 
 		len += sprintf(page+len, "Video : ");
-		for(j=0; j<8; j++) 
+		for(j=0; j<8; j++)
 			len += sprintf(page+len, "%02x ", mca_info->slot[MCA_INTEGVIDEO].pos[j]);
 		len += sprintf(page+len, " %s\n", mca_info->slot[MCA_INTEGVIDEO].name);
 
 		/* Format POS registers of integrated SCSI subsystem */
-	
+
 		len += sprintf(page+len, "SCSI  : ");
 		for(j=0; j<8; j++)
 			len += sprintf(page+len, "%02x ", mca_info->slot[MCA_INTEGSCSI].pos[j]);
 		len += sprintf(page+len, " %s\n", mca_info->slot[MCA_INTEGSCSI].name);
+
+		/* Format POS registers of motherboard */
+
+		len += sprintf(page+len, "Planar: ");
+		for(j=0; j<8; j++)
+			len += sprintf(page+len, "%02x ", mca_info->slot[MCA_MOTHERBOARD].pos[j]);
+		len += sprintf(page+len, " %s\n", mca_info->slot[MCA_MOTHERBOARD].name);
 	} else {
 		/* Leave it empty if MCA not detected - this should *never*
-		 * happen! 
+		 * happen!
 		 */
 	}
 
@@ -843,6 +871,8 @@ static int mca_default_procfn(char* buf, struct MCA_adapter *p)
 		len += sprintf(buf+len, "Integrated SCSI Adapter\n");
 	} else if(slot == MCA_INTEGVIDEO) {
 		len += sprintf(buf+len, "Integrated Video Adapter\n");
+	} else if(slot == MCA_MOTHERBOARD) {
+		len += sprintf(buf+len, "Motherboard\n");
 	}
 	if(p->name[0]) {
 
@@ -932,6 +962,7 @@ void __init mca_do_proc_init(void)
 		if(i < MCA_MAX_SLOT_NR) sprintf(p->procname,"slot%d", i+1);
 		else if(i == MCA_INTEGVIDEO) sprintf(p->procname,"video");
 		else if(i == MCA_INTEGSCSI) sprintf(p->procname,"scsi");
+		else if(i == MCA_MOTHERBOARD) sprintf(p->procname,"planar");
 
 		if(!mca_isadapter(i)) continue;
 

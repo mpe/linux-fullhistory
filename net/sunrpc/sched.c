@@ -369,8 +369,15 @@ rpc_sleep_locked(struct rpc_wait_queue *q, struct rpc_task *task,
 	spin_unlock_bh(&rpc_queue_lock);
 }
 
-/*
- * Wake up a single task -- must be invoked with spin lock held.
+/**
+ * __rpc_wake_up_task - wake up a single rpc_task
+ * @task: task to be woken up
+ *
+ * If the task is locked, it is merely removed from the queue, and
+ * 'task->tk_wakeup' is set. rpc_unlock_task() will then ensure
+ * that it is woken up as soon as the lock count goes to zero.
+ *
+ * Caller must hold rpc_queue_lock
  */
 static void
 __rpc_wake_up_task(struct rpc_task *task)
@@ -395,6 +402,8 @@ __rpc_wake_up_task(struct rpc_task *task)
 		return;
 
 	__rpc_disable_timer(task);
+	if (task->tk_rpcwait != &schedq)
+		__rpc_remove_wait_queue(task);
 
 	/* If the task has been locked, then set tk_wakeup so that
 	 * rpc_unlock_task() wakes us up... */
@@ -404,8 +413,6 @@ __rpc_wake_up_task(struct rpc_task *task)
 	} else
 		task->tk_wakeup = 0;
 
-	if (task->tk_rpcwait != &schedq)
-		__rpc_remove_wait_queue(task);
 	rpc_make_runnable(task);
 
 	dprintk("RPC:      __rpc_wake_up_task done\n");
@@ -452,8 +459,11 @@ rpc_wake_up_next(struct rpc_wait_queue *queue)
 	return task;
 }
 
-/*
- * Wake up all tasks on a queue
+/**
+ * rpc_wake_up - wake up all rpc_tasks
+ * @queue: rpc_wait_queue on which the tasks are sleeping
+ *
+ * Grabs rpc_queue_lock
  */
 void
 rpc_wake_up(struct rpc_wait_queue *queue)
@@ -464,8 +474,12 @@ rpc_wake_up(struct rpc_wait_queue *queue)
 	spin_unlock_bh(&rpc_queue_lock);
 }
 
-/*
- * Wake up all tasks on a queue, and set their status value.
+/**
+ * rpc_wake_up_status - wake up all rpc_tasks and set their status value.
+ * @queue: rpc_wait_queue on which the tasks are sleeping
+ * @status: status value to set
+ *
+ * Grabs rpc_queue_lock
  */
 void
 rpc_wake_up_status(struct rpc_wait_queue *queue, int status)
@@ -931,20 +945,27 @@ rpc_release_task(struct rpc_task *task)
 		task->tk_release(task);
 }
 
-/*
- * Handling of RPC child tasks
- * We can't simply call wake_up(parent) here, because the
- * parent task may already have gone away
+/**
+ * rpc_find_parent - find the parent of a child task.
+ * @child: child task
+ *
+ * Checks that the parent task is still sleeping on the
+ * queue 'childq'. If so returns a pointer to the parent.
+ * Upon failure returns NULL.
+ *
+ * Caller must hold rpc_queue_lock
  */
 static inline struct rpc_task *
 rpc_find_parent(struct rpc_task *child)
 {
-	struct rpc_task	*temp, *parent;
+	struct rpc_task	*task, *parent;
 
 	parent = (struct rpc_task *) child->tk_calldata;
-	for (temp = childq.task; temp; temp = temp->tk_next) {
-		if (temp == parent)
-			return parent;
+	if ((task = childq.task) != NULL) {
+		do {
+			if (task == parent)
+				return parent;
+		} while ((task = task->tk_next) != childq.task);
 	}
 	return NULL;
 }

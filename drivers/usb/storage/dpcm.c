@@ -29,6 +29,7 @@
  * 675 Mass Ave, Cambridge, MA 02139, USA.
  */
 
+#include <linux/config.h>
 #include "transport.h"
 #include "protocol.h"
 #include "usb.h"

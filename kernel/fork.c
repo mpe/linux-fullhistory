@@ -551,8 +551,6 @@ int do_fork(unsigned long clone_flags, unsigned long usp, struct pt_regs *regs)
 
 	*p = *current;
 
-	lock_kernel();
-
 	retval = -EAGAIN;
 	if (atomic_read(&p->user->processes) >= p->rlim[RLIMIT_NPROC].rlim_cur)
 		goto bad_fork_free;
@@ -675,8 +673,6 @@ int do_fork(unsigned long clone_flags, unsigned long usp, struct pt_regs *regs)
 	wake_up_process(p);		/* do this last */
 	++total_forks;
 
-bad_fork:
-	unlock_kernel();
 fork_out:
 	if ((clone_flags & CLONE_VFORK) && (retval > 0)) 
 		down(&sem);
@@ -697,7 +693,7 @@ bad_fork_cleanup_count:
 	free_uid(p->user);
 bad_fork_free:
 	free_task_struct(p);
-	goto bad_fork;
+	goto fork_out;
 }
 
 /* SLAB cache for signal_struct structures (tsk->sig) */

@@ -41,6 +41,7 @@
 #ifndef _TRANSPORT_H_
 #define _TRANSPORT_H_
 
+#include <linux/config.h>
 #include <linux/blk.h>
 #include "usb.h"
 #include "scsi.h"

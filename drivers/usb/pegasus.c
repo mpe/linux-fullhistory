@@ -42,7 +42,10 @@
 #include <linux/usb.h>
 
 
-static const char *version = __FILE__ ": v0.4.1 2000/08/08 (C) 1999-2000 Petko Manolov (petkan@dce.bg)\n";
+static const char *version = __FILE__ ": v0.4.3 2000/08/22 (C) 1999-2000 Petko Manolov (petkan@dce.bg)\n";
+
+
+#define	PEGASUS_USE_WAITQ
 
 
 #define	PEGASUS_MTU		1500
@@ -58,6 +61,7 @@ static const char *version = __FILE__ ": v0.4.1 2000/08/08 (C) 1999-2000 Petko M
 #define	PEGASUS_REQ_GET_REGS	0xf0
 #define	PEGASUS_REQ_SET_REGS	0xf1
 #define	PEGASUS_REQ_SET_REG	PEGASUS_REQ_SET_REGS
+#define	NUM_CTRL_URBS		0x10
 #define	ALIGN(x)		x __attribute__((aligned(L1_CACHE_BYTES)))
 
 
@@ -81,17 +85,26 @@ enum pegasus_registers {
 };
 
 
+struct	pegasus;
+struct ctrl_urb_pool {
+	struct pegasus	*pegasus;
+	struct urb	urb;
+	devrequest	dr;
+	__u8		busy;
+};
+
+
 struct pegasus {
 	struct usb_device	*usb;
 	struct net_device	*net;
 	struct net_device_stats	stats;
 	int			flags;
-	struct urb		rx_urb, tx_urb, intr_urb, ctrl_urb;
-	devrequest		dr;
+	struct urb		rx_urb, tx_urb, intr_urb;
+	struct ctrl_urb_pool	ALIGN(ctrl[NUM_CTRL_URBS]);
 	wait_queue_head_t	ctrl_wait;
 	struct semaphore	ctrl_sem;
-	unsigned char		ALIGN(rx_buff[PEGASUS_MAX_MTU]); 
-	unsigned char		ALIGN(tx_buff[PEGASUS_MAX_MTU]); 
+	unsigned char		ALIGN(rx_buff[PEGASUS_MAX_MTU]);
+	unsigned char		ALIGN(tx_buff[PEGASUS_MAX_MTU]);
 	unsigned char		ALIGN(intr_buff[8]);
 };
 
@@ -137,113 +150,144 @@ static struct usb_eth_dev usb_dev_id[] = {
 };
 
 
-
-static void pegasus_ctrl_end( urb_t *urb )
+static void pegasus_unlink_ctrl_urbs( struct pegasus *pegasus )
 {
-	struct pegasus *pegasus = urb->context;
+	int	i;
 
-	if ( pegasus->flags & PEGASUS_CTRL_WAIT ) {
-		wake_up_interruptible(&pegasus->ctrl_wait);
-		pegasus->flags &= ~PEGASUS_CTRL_WAIT;
+	for ( i=0; i < NUM_CTRL_URBS; i++ ) {
+		if ( pegasus->ctrl[i].urb.status == -EINPROGRESS )
+			usb_unlink_urb( &pegasus->ctrl[i].urb );
 	}
-	if ( urb->status )
-		warn("ctrl_urb end status %d", urb->status);
 }
 
 
-static int pegasus_ctrl_timeout( urb_t *ctrl_urb )
+static int pegasus_find_ctrl_urb( struct pegasus *pegasus )
 {
-	struct	pegasus *pegasus = ctrl_urb->context;
-	int	timeout=PEGASUS_CTRL_TIMEOUT;
-	
-	while ( ctrl_urb->status == -EINPROGRESS ) {
-		if ( timeout ) {
-			pegasus->flags |= PEGASUS_CTRL_WAIT;
-			timeout = interruptible_sleep_on_timeout(&pegasus->ctrl_wait,timeout);
-			pegasus->flags &= PEGASUS_CTRL_WAIT;
-			continue;
-		}
-		err("ctrl urb busy %d", ctrl_urb->status);
-		usb_unlink_urb( ctrl_urb );
-		return	ctrl_urb->status;
-	}
-	return	0;
+	int	i=0;
+
+	while( i < NUM_CTRL_URBS && (pegasus->ctrl[i].busy == 1 ||
+		(pegasus->ctrl[i].urb.status == -EINPROGRESS)) )
+		i++;
+
+	return	i;
+}
+
+
+static void pegasus_ctrl_end( urb_t *urb )
+{
+	struct ctrl_urb_pool	*ctrl = urb->context;
+	struct pegasus		*pegasus = ctrl->pegasus;
+
+
+	if ( !pegasus )
+		return;
+
+	if ( urb->status )
+		warn("ctrl_urb end status %d", urb->status);
+	ctrl->busy = 0;
+#ifdef	PEGASUS_USE_WAITQ
+	wake_up_interruptible( &pegasus->ctrl_wait );
+#endif
 }
 
 
 static int pegasus_get_registers( struct pegasus *pegasus, __u16 indx, __u16 size, void *data )
 {
-	int	ret;
-
-	down( &pegasus->ctrl_sem);
-	pegasus->dr.requesttype = PEGASUS_REQT_READ;
-	pegasus->dr.request = PEGASUS_REQ_GET_REGS;
-	pegasus->dr.value = 0;
-	pegasus->dr.index = cpu_to_le16p(&indx);
-	pegasus->dr.length = 
-	pegasus->ctrl_urb.transfer_buffer_length = cpu_to_le16p(&size);
-
-	FILL_CONTROL_URB( &pegasus->ctrl_urb, pegasus->usb,
-			  usb_rcvctrlpipe(pegasus->usb,0), (char *)&pegasus->dr,
-			  data, size, pegasus_ctrl_end, pegasus );
-
-	if ( (ret = usb_submit_urb( &pegasus->ctrl_urb )) ) 
-		err("BAD CTRLs %d", ret);
-	else
-		ret = pegasus_ctrl_timeout( &pegasus->ctrl_urb );
-	up( &pegasus->ctrl_sem );
+	int	ret, i;
+	struct ctrl_urb_pool	*ctrl;
 	
+	if ( (i = pegasus_find_ctrl_urb( pegasus )) == NUM_CTRL_URBS ) {
+		return	-1;
+	}
+
+	ctrl = &pegasus->ctrl[i];
+	ctrl->busy = 1;
+	ctrl->pegasus = pegasus;
+
+	ctrl->dr.requesttype = PEGASUS_REQT_READ;
+	ctrl->dr.request = PEGASUS_REQ_GET_REGS;
+	ctrl->dr.value = 0;
+	ctrl->dr.index = cpu_to_le16p(&indx);
+	ctrl->dr.length = 
+	ctrl->urb.transfer_buffer_length = cpu_to_le16p(&size);
+
+	FILL_CONTROL_URB( &ctrl->urb, pegasus->usb,
+			  usb_rcvctrlpipe(pegasus->usb,0),
+			  (char *)&ctrl->dr,
+			  data, size, pegasus_ctrl_end, ctrl );
+
+	if ( (ret = usb_submit_urb( &ctrl->urb )) ) 
+		err( __FUNCTION__ " BAD CTRLs %d", ret);
+#ifdef	PEGASUS_USE_WAITQ
+	interruptible_sleep_on( &pegasus->ctrl_wait );
+#endif	
 	return	ret;
 }
 
 
 static int pegasus_set_registers( struct pegasus *pegasus, __u16 indx, __u16 size, void *data )
 {
-	int	ret;
-
-	down( &pegasus->ctrl_sem );
-	pegasus->dr.requesttype = PEGASUS_REQT_WRITE;
-	pegasus->dr.request = PEGASUS_REQ_SET_REGS;
-	pegasus->dr.value = 0;
-	pegasus->dr.index = cpu_to_le16p( &indx );
-	pegasus->dr.length = 
-	pegasus->ctrl_urb.transfer_buffer_length = cpu_to_le16p( &size );
-
-	FILL_CONTROL_URB( &pegasus->ctrl_urb, pegasus->usb,
-			  usb_sndctrlpipe(pegasus->usb,0), (char *)&pegasus->dr,
-			  data, size, pegasus_ctrl_end, pegasus );
-
-	if ( (ret = usb_submit_urb( &pegasus->ctrl_urb )) )
-		err("BAD CTRL %d", ret);
-	else
-		ret = pegasus_ctrl_timeout( &pegasus->ctrl_urb );
-	up( &pegasus->ctrl_sem );
+	int	ret, i;
+	struct ctrl_urb_pool	*ctrl;
 	
+	if ( (i = pegasus_find_ctrl_urb( pegasus )) == NUM_CTRL_URBS ) {
+		return	-1;
+	}
+
+	ctrl = &pegasus->ctrl[i];
+	ctrl->busy = 1;
+	ctrl->pegasus = pegasus;
+
+	ctrl->dr.requesttype = PEGASUS_REQT_WRITE;
+	ctrl->dr.request = PEGASUS_REQ_SET_REGS;
+	ctrl->dr.value = 0;
+	ctrl->dr.index = cpu_to_le16p( &indx );
+	ctrl->dr.length = 
+	ctrl->urb.transfer_buffer_length = cpu_to_le16p( &size );
+
+	FILL_CONTROL_URB( &ctrl->urb, pegasus->usb,
+			  usb_sndctrlpipe(pegasus->usb,0),
+			  (char *)&ctrl->dr,
+			  data, size, pegasus_ctrl_end, ctrl );
+
+	if ( (ret = usb_submit_urb( &ctrl->urb )) )
+		err( __FUNCTION__ " BAD CTRL %d", ret);
+#ifdef	PEGASUS_USE_WAITQ
+	interruptible_sleep_on( &pegasus->ctrl_wait );
+#endif	
 	return	ret;
 }
 
 
 static int pegasus_set_register( struct pegasus *pegasus, __u16 indx,__u8 data )
 {
-	int	ret;
+	int	ret, i;
+	struct ctrl_urb_pool	*ctrl;
 	
-	down( &pegasus->ctrl_sem );
-	pegasus->dr.requesttype = PEGASUS_REQT_WRITE;
-	pegasus->dr.request = PEGASUS_REQ_SET_REG;
-	pegasus->dr.value = cpu_to_le16p( &data );
-	pegasus->dr.index = cpu_to_le16p( &indx );
-	pegasus->dr.length = pegasus->ctrl_urb.transfer_buffer_length = 1;
+	if ( (i = pegasus_find_ctrl_urb( pegasus )) == NUM_CTRL_URBS ) {
+		return	-1;
+	}
 
-	FILL_CONTROL_URB( &pegasus->ctrl_urb, pegasus->usb,
-			  usb_sndctrlpipe(pegasus->usb,0), (char *)&pegasus->dr,
-			  &data, 1, pegasus_ctrl_end, pegasus );
+	ctrl = &pegasus->ctrl[i];
+	ctrl->busy = 1;
+	ctrl->pegasus = pegasus;
 
-	if ( (ret = usb_submit_urb( &pegasus->ctrl_urb )) )
-		err("BAD CTRL %d", ret);
-	else
-		ret = pegasus_ctrl_timeout( &pegasus->ctrl_urb );
-	up( &pegasus->ctrl_sem );
+	ctrl->dr.requesttype = PEGASUS_REQT_WRITE;
+	ctrl->dr.request = PEGASUS_REQ_SET_REG;
+	ctrl->dr.value = cpu_to_le16p( &data );
+	ctrl->dr.index = cpu_to_le16p( &indx );
+	ctrl->dr.length = ctrl->urb.transfer_buffer_length = 1;
 
+	FILL_CONTROL_URB( &ctrl->urb, pegasus->usb,
+			  usb_sndctrlpipe(pegasus->usb,0),
+			  (char *)&ctrl->dr,
+			  &data, 1, pegasus_ctrl_end, ctrl );
+
+	if ( (ret = usb_submit_urb( &ctrl->urb )) )
+		err( __FUNCTION__ " BAD CTRL %d", ret);
+#ifdef	PEGASUS_USE_WAITQ
+	interruptible_sleep_on( &pegasus->ctrl_wait );
+#endif	
 	return	ret;
 }
 
@@ -372,17 +416,20 @@ static int pegasus_start_net(struct net_device *dev, struct usb_device *usb)
 }
 
 
-static void pegasus_read_bulk(struct urb *urb)
+static void pegasus_read_bulk_callback( struct urb *urb )
 {
 	struct pegasus *pegasus = urb->context;
-	struct net_device *net = pegasus->net;
+	struct net_device *net; /* = pegasus->net;*/
 	int count = urb->actual_length, res;
-	int rx_status = *(int *)(pegasus->rx_buff + count - 4);
+	int rx_status; /*= *(int *)(pegasus->rx_buff + count - 4);*/
 	struct sk_buff	*skb;
 	__u16 pkt_len;
 
-	if ( !(pegasus->flags & PEGASUS_RUNNING) )
+	if ( !pegasus || !(pegasus->flags & PEGASUS_RUNNING) )
 		return;
+
+	net = pegasus->net;
+	rx_status = *(int *)(pegasus->rx_buff + count - 4);
 
 	if (urb->status) {
 		dbg("%s: RX status %d", net->name, urb->status);
@@ -427,19 +474,22 @@ goon:
 }
 
 
-static void pegasus_irq(urb_t *urb)
+static void pegasus_irq_callback( urb_t *urb )
 {
 	__u8	*d = urb->transfer_buffer;
-	
+
+
 	if ( d[0] )
 		dbg("txst0=0x%2x", d[0]);
 }
 
 
-static void pegasus_write_bulk(struct urb *urb)
+static void pegasus_write_bulk_callback(struct urb *urb)
 {
 	struct pegasus *pegasus = urb->context;
 
+	if ( !pegasus )
+		return;
 
 	if (urb->status)
 		info("%s: TX status %d", pegasus->net->name, urb->status);
@@ -450,6 +500,8 @@ static void pegasus_tx_timeout(struct net_device *net)
 {
 	struct pegasus *pegasus = net->priv;
 
+	if ( !pegasus )
+		return;
 	
 	usb_unlink_urb(&pegasus->tx_urb);
 	warn("%s: Tx timed out.", net->name);
@@ -473,6 +525,7 @@ static int pegasus_start_xmit(struct sk_buff *skb, struct net_device *net)
 	((__u16 *)pegasus->tx_buff)[0] = skb->len;
 	memcpy(pegasus->tx_buff+2, skb->data, skb->len);
 	pegasus->tx_urb.transfer_buffer_length = count;
+	pegasus->tx_urb.transfer_flags |= USB_ASYNC_UNLINK;
 
 	if ((res = usb_submit_urb(&pegasus->tx_urb))) {
 		warn("failed tx_urb %d", res);
@@ -537,10 +590,10 @@ static int pegasus_close(struct net_device *net)
 	
 	netif_stop_queue(net);
 
-	usb_unlink_urb(&pegasus->ctrl_urb);
 	usb_unlink_urb(&pegasus->rx_urb);
 	usb_unlink_urb(&pegasus->tx_urb);
 	usb_unlink_urb(&pegasus->intr_urb);
+	pegasus_unlink_ctrl_urbs( pegasus );
 
 	return 0;
 }
@@ -570,22 +623,31 @@ static int pegasus_ioctl(struct net_device *net, struct ifreq *rq, int cmd)
 
 static void pegasus_set_rx_mode(struct net_device *net)
 {
-/*	struct pegasus *pegasus = net->priv;*/
+#ifndef	PEGASUS_USE_WAITQ
+	struct pegasus *pegasus = net->priv;
+	__u8	tmp;
+#endif
 
 	netif_stop_queue(net);
 
 	if (net->flags & IFF_PROMISC) {
-/*		pegasus_get_registers(pegasus, EthCtrl2, 1, &tmp);
-		pegasus_set_register(pegasus, EthCtrl2, tmp | 4);*/
+#ifndef	PEGASUS_USE_WAITQ
+		pegasus_get_registers(pegasus, EthCtrl2, 1, &tmp);
+		pegasus_set_register(pegasus, EthCtrl2, tmp | 4); 
+#endif		
 		info("%s: Promiscuous mode enabled", net->name);
 	} else if ((net->mc_count > multicast_filter_limit) ||
 			(net->flags & IFF_ALLMULTI)) {
-/*		pegasus_set_register(pegasus, EthCtrl0, 0xfa);
-		pegasus_set_register(pegasus, EthCtrl2, 0);*/
+#ifndef	PEGASUS_USE_WAITQ
+		pegasus_set_register(pegasus, EthCtrl0, 0xfa);
+		pegasus_set_register(pegasus, EthCtrl2, 0);
+#endif
 		info("%s set allmulti", net->name);
 	} else {
-/*		pegasus_get_registers(pegasus, EthCtrl2, 1, &tmp);
-		pegasus_set_register(pegasus, EthCtrl2, tmp & ~4);*/
+#ifndef	PEGASUS_USE_WAITQ
+		pegasus_get_registers(pegasus, EthCtrl2, 1, &tmp);
+		pegasus_set_register(pegasus, EthCtrl2, tmp & ~4);
+#endif		
 		info("%s: set Rx mode", net->name);
 	}
 
@@ -640,28 +702,30 @@ static void * pegasus_probe(struct usb_device *dev, unsigned int ifnum)
 	net->get_stats = pegasus_netdev_stats;
 	net->mtu = PEGASUS_MTU;
 
+	init_MUTEX( &pegasus-> ctrl_sem );
+	init_waitqueue_head( &pegasus->ctrl_wait );
+
 	pegasus->usb = dev;
 	pegasus->net = net;
 
-	init_waitqueue_head( &pegasus->ctrl_wait );
-	init_MUTEX( &pegasus->ctrl_sem );
-
-	FILL_BULK_URB(&pegasus->rx_urb, dev, usb_rcvbulkpipe(dev, 1),
-			pegasus->rx_buff, PEGASUS_MAX_MTU, pegasus_read_bulk, 
-			pegasus);
-	FILL_BULK_URB(&pegasus->tx_urb, dev, usb_sndbulkpipe(dev, 2),
-			pegasus->tx_buff, PEGASUS_MAX_MTU, pegasus_write_bulk,
-			pegasus);
-	FILL_INT_URB(&pegasus->intr_urb, dev, usb_rcvintpipe(dev, 3),
-			pegasus->intr_buff, 8, pegasus_irq, pegasus, 128);
+	FILL_BULK_URB( &pegasus->rx_urb, dev, usb_rcvbulkpipe(dev, 1),
+			pegasus->rx_buff, PEGASUS_MAX_MTU, 
+			pegasus_read_bulk_callback, pegasus );
+	FILL_BULK_URB( &pegasus->tx_urb, dev, usb_sndbulkpipe(dev, 2),
+			pegasus->tx_buff, PEGASUS_MAX_MTU, 
+			pegasus_write_bulk_callback, pegasus );
+	FILL_INT_URB( &pegasus->intr_urb, dev, usb_rcvintpipe(dev, 3),
+			pegasus->intr_buff, 8, pegasus_irq_callback, 
+			pegasus, 128 );
 
 	if (pegasus_reset_mac(pegasus)) {
 		err("can't reset MAC");
 		kfree(pegasus);
+		pegasus = NULL;
 		return NULL;
 	}
 	
-	printk(KERN_INFO "%s: %s\n", net->name, usb_dev_id[dev_indx].name);
+	info( "%s: %s\n", net->name, usb_dev_id[dev_indx].name );
 
 	MOD_INC_USE_COUNT;
 
@@ -681,15 +745,13 @@ static void pegasus_disconnect(struct usb_device *dev, void *ptr)
 	pegasus->flags &= ~PEGASUS_RUNNING;
 	unregister_netdev(pegasus->net);
 
-	if ( pegasus->flags & PEGASUS_CTRL_WAIT )
-		wake_up_interruptible( &pegasus->ctrl_wait );
-	
-	usb_unlink_urb(&pegasus->ctrl_urb);
 	usb_unlink_urb(&pegasus->rx_urb);
 	usb_unlink_urb(&pegasus->tx_urb);
 	usb_unlink_urb(&pegasus->intr_urb);
+	pegasus_unlink_ctrl_urbs( pegasus );
 
 	kfree(pegasus);
+	pegasus = NULL;
 
 	MOD_DEC_USE_COUNT;
 }
@@ -703,7 +765,7 @@ static struct usb_driver pegasus_driver = {
 
 int __init pegasus_init(void)
 {
-	printk( version );
+	info( "%s", version );
 	return usb_register(&pegasus_driver);
 }
 

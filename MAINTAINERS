@@ -325,6 +325,13 @@ L:	linux-net@vger.kernel.org
 W:	http://www.dgii.com/linux/
 S:	Maintained
 
+DIGIBOARD PC/XE AND PC/XI DRIVER
+P:	Christoph Lameter
+M:	christoph@lameter.com
+W:	http://www.dgii.com/linux,http://lameter.com/digi
+L:	digilnux@dgii.com
+S:	Maintained
+
 DISK GEOMETRY AND PARTITION HANDLING
 P:     Andries Brouwer
 M:     aeb@veritas.com

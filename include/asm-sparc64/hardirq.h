@@ -39,7 +39,7 @@ typedef struct {
 
 /*
  * Are we in an interrupt context? Either doing bottom half
- * or hardware interrupt processing?  On any cpu?
+ * or hardware interrupt processing?
  */
 #define in_interrupt() ((local_irq_count(smp_processor_id()) + \
 		         local_bh_count(smp_processor_id())) != 0)
@@ -52,22 +52,18 @@ typedef struct {
 #define hardirq_trylock(cpu)	((void)(cpu), local_irq_count(smp_processor_id()) == 0)
 #define hardirq_endlock(cpu)	do { (void)(cpu); } while(0)
 
-#define hardirq_enter(cpu)	((void)(cpu), local_irq_count(smp_processor_id())++)
-#define hardirq_exit(cpu)	((void)(cpu), local_irq_count(smp_processor_id())--)
-
 #define synchronize_irq()	barrier()
 
 #else /* (CONFIG_SMP) */
 
 static __inline__ int irqs_running(void)
 {
-	enum brlock_indices idx = BR_GLOBALIRQ_LOCK;
-	int i, count = 0;
+	int i;
 
 	for (i = 0; i < smp_num_cpus; i++)
-		count += (__brlock_array[cpu_logical_map(i)][idx] != 0);
-
-	return count;
+		if (local_irq_count(cpu_logical_map(i)))
+			return 1;
+	return 0;
 }
 
 extern unsigned char global_irq_holder;
@@ -85,7 +81,7 @@ static inline int hardirq_trylock(int cpu)
 {
 	spinlock_t *lock = &__br_write_locks[BR_GLOBALIRQ_LOCK].lock;
 
-	return (!irqs_running() && !spin_is_locked(lock));
+	return (!local_irq_count(cpu) && !spin_is_locked(lock));
 }
 
 #define hardirq_endlock(cpu)	do { (void)(cpu); } while (0)

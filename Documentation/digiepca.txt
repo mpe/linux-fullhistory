@@ -81,16 +81,12 @@ Digi Intl. products:
 
 -> FTP: ftp://dgii.com
 -> Webpage: http://www.dgii.com
--> Webpage: http://private.fuller.edu/clameter/digi.html
--> Mailing List: digiboard@list.fuller.edu  Note write e-mail to subscribe
-   common ListServ commands will not work.
+-> Webpage: http://lameter.com/digi
 
 Acknowledgments:
 ----------------
 Much of this work (And even text) was derived from a similar document 
 supporting the original public domain DigiBoard driver Copyright (C)
 1994,1995 Troy De Jongh.  Many thanks to Christoph Lameter 
-(clameter@fuller.edu) and Mike McLagan (mike.mclagan@linux.org) who authored 
+(christoph@lameter.com) and Mike McLagan (mike.mclagan@linux.org) who authored 
 and contributed to the original document. 
-
-

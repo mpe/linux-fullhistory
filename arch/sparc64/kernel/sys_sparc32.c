@@ -1,4 +1,4 @@
-/* $Id: sys_sparc32.c,v 1.162 2000/08/16 15:33:30 davem Exp $
+/* $Id: sys_sparc32.c,v 1.163 2000/08/22 10:09:10 jj Exp $
  * sys_sparc32.c: Conversion between 32bit and 64bit native syscalls.
  *
  * Copyright (C) 1997,1998 Jakub Jelinek (jj@sunsite.mff.cuni.cz)
@@ -48,6 +48,7 @@
 #include <linux/ipv6.h>
 #include <linux/in.h>
 #include <linux/icmpv6.h>
+#include <linux/sysctl.h>
 
 #include <asm/types.h>
 #include <asm/ipc.h>
@@ -4160,4 +4161,52 @@ asmlinkage int sys_setpriority32(u32 which, u32 who, u32 niceval)
 	return sys_setpriority((int) which,
 			       (int) who,
 			       (int) niceval);
+}
+
+struct __sysctl_args32 {
+	u32 name;
+	int nlen;
+	u32 oldval;
+	u32 oldlenp;
+	u32 newval;
+	u32 newlen;
+	u32 __unused[4];
+};
+
+extern asmlinkage long sys32_sysctl(struct __sysctl_args32 *args)
+{
+	struct __sysctl_args32 tmp;
+	int error;
+	size_t oldlen, *oldlenp = NULL;
+	unsigned long addr = (((long)&args->__unused[0]) + 7) & ~7;
+
+	if (copy_from_user(&tmp, args, sizeof(tmp)))
+		return -EFAULT;
+
+	if (tmp.oldval && tmp.oldlenp) {
+		/* Duh, this is ugly and might not work if sysctl_args
+		   is in read-only memory, but do_sysctl does indirectly
+		   a lot of uaccess in both directions and we'd have to
+		   basically copy the whole sysctl.c here, and
+		   glibc's __sysctl uses rw memory for the structure
+		   anyway.  */
+		if (get_user(oldlen, (u32 *)A(tmp.oldlenp)) ||
+		    put_user(oldlen, (size_t *)addr))
+			return -EFAULT;
+		oldlenp = (size_t *)addr;
+	}
+
+	lock_kernel();
+	error = do_sysctl((int *)A(tmp.name), tmp.nlen, (void *)A(tmp.oldval),
+			  oldlenp, (void *)A(tmp.newval), tmp.newlen);
+	unlock_kernel();
+	if (oldlenp) {
+		if (!error) {
+			if (get_user(oldlen, (size_t *)addr) ||
+			    put_user(oldlen, (u32 *)A(tmp.oldlenp)))
+				error = -EFAULT;
+		}
+		copy_to_user(args->__unused, tmp.__unused, sizeof(tmp.__unused));
+	}
+	return error;
 }

@@ -247,7 +247,7 @@ static inline void reschedule_idle(struct task_struct * p, unsigned long flags)
 	 * one will have the least active cache context.) Also find
 	 * the executing process which has the least priority.
 	 */
-	oldest_idle = -1ULL;
+	oldest_idle = (cycles_t) -1;
 	target_tsk = NULL;
 	max_prio = 1;
 
@@ -283,17 +283,11 @@ static inline void reschedule_idle(struct task_struct * p, unsigned long flags)
 			goto send_now_idle;
 		goto preempt_now;
 	}
-	if (p->has_cpu) {
-		p->need_resched = 1;
-		cpu_curr(p->processor)->need_resched = 1;
-	}
-
 
 	spin_unlock_irqrestore(&runqueue_lock, flags);
 	return;
 		
 send_now_idle:
-
 	/*
 	 * If need_resched == -1 then we can skip sending the IPI
 	 * altogether, tsk->need_resched is actively watched by the
@@ -460,22 +454,19 @@ signed long schedule_timeout(signed long timeout)
  */
 static inline void __schedule_tail(struct task_struct *prev)
 {
-	unsigned long flags;
-
-	/*
-	 * Wakeups to the previous process could result in
-	 * the process not being rescheduled properly, because
-	 * has_cpu is 1 until now. (so both the currently running
-	 * process and the previous process has has_cpu==1)
-	 */
-	spin_lock_irqsave(&runqueue_lock, flags);
-	current->need_resched |= prev->need_resched;
-	prev->has_cpu = 0;
+#ifdef CONFIG_SMP
 	if ((prev->state == TASK_RUNNING) &&
-			(prev != idle_task(smp_processor_id())))
+			(prev != idle_task(smp_processor_id()))) {
+		unsigned long flags;
+
+		spin_lock_irqsave(&runqueue_lock, flags);
+		prev->has_cpu = 0;
 		reschedule_idle(prev, flags); // spin_unlocks runqueue
-	else
-		spin_unlock_irqrestore(&runqueue_lock, flags);
+	} else {
+		wmb();
+		prev->has_cpu = 0;
+	}
+#endif /* CONFIG_SMP */
 }
 
 void schedule_tail(struct task_struct *prev)

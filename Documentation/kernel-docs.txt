@@ -278,7 +278,7 @@
        Author: Stephen C. Tweedie.
        URL:
        ftp://ftp.uk.linux.org:/pub/linux/sct/fs/jfs/journal-design.ps.gz
-       Keywords: ext3, journalist.
+       Keywords: ext3, journaling.
        Description: Excellent 8-pages paper explaining the journaling
        capabilities added to ext2 by the author, showing different
        problems faced and the alternatives chosen.
@@ -476,6 +476,14 @@
        URL: http://www.linux-mag.com/2000-03/gear_01.html
        Keywords: PCI, bus, bus-mastering.
        Description: The title says it all.
+
+     * Title: "Linux 2.4 Kernel Internals"
+       Author: Tigran Aivazian.
+       URL: http://www.moses.uklinux.net/patches/lki.html
+       Keywords: Linux, kernel, VFS, SMP boot
+       Description: A little book used for a short training course
+       I gave on this subject at VERITAS. Covers building the kernel
+       image, booting (including SMP), process management, VFS and more.
        
      BOOKS: (Not on-line)
    

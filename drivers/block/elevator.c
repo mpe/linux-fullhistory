@@ -14,6 +14,10 @@
  *   an existing request
  * - elevator_dequeue_fn, called when a request is taken off the active list
  *
+ * 20082000 Dave Jones <davej@suse.de> :
+ * Removed tests for max-bomb-segments, which was breaking elvtune
+ *  when run without -bN
+ *
  */
 
 #include <linux/fs.h>
@@ -147,7 +151,7 @@ int blkelvget_ioctl(elevator_t * elevator, blkelv_ioctl_arg_t * arg)
 	output.queue_ID			= elevator->queue_ID;
 	output.read_latency		= elevator->read_latency;
 	output.write_latency		= elevator->write_latency;
-	output.max_bomb_segments	= elevator->max_bomb_segments;
+	output.max_bomb_segments	= 0;
 
 	if (copy_to_user(arg, &output, sizeof(blkelv_ioctl_arg_t)))
 		return -EFAULT;
@@ -166,13 +170,9 @@ int blkelvset_ioctl(elevator_t * elevator, const blkelv_ioctl_arg_t * arg)
 		return -EINVAL;
 	if (input.write_latency < 0)
 		return -EINVAL;
-	if (input.max_bomb_segments <= 0)
-		return -EINVAL;
 
 	elevator->read_latency		= input.read_latency;
 	elevator->write_latency		= input.write_latency;
-	elevator->max_bomb_segments	= input.max_bomb_segments;
-
 	return 0;
 }
 

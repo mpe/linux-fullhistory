@@ -12,9 +12,9 @@ static inline int get_close_on_exec(unsigned int fd)
 {
 	struct files_struct *files = current->files;
 	int res;
-	write_lock(&files->file_lock);
+	read_lock(&files->file_lock);
 	res = FD_ISSET(fd, files->close_on_exec);
-	write_unlock(&files->file_lock);
+	read_unlock(&files->file_lock);
 	return res;
 }
 
