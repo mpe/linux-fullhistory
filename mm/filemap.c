@@ -414,6 +414,7 @@ static int do_buffer_fdatasync(struct inode *inode, unsigned long start, unsigne
 		next = page->next;
 		page_cache_release(page);
 	}
+	spin_unlock(&pagecache_lock);
 
 	return retval;
 }

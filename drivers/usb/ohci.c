@@ -121,7 +121,7 @@ static struct ohci_td *ohci_add_td_to_ed(struct ohci_td *td,
 	u32 new_dummy;
 
 	if (ed->tail_td == 0) {
-		printk("eek! an ED without a dummy_td\n");
+		printk(KERN_ERR "eek! an ED without a dummy_td\n");
 		return td;
 	}
 
@@ -234,8 +234,8 @@ void ohci_add_periodic_ed(struct ohci *ohci, struct ohci_ed *ed, int period)
 	 */
 	int_ed = &root_hub->ed[ms_to_ed_int(period)];
 #ifdef OHCI_DEBUG
-	printk("usb-ohci: Using INT ED queue %d for %dms period\n",
-			ms_to_ed_int(period), period);
+	printk(KERN_DEBUG "usb-ohci: Using INT ED queue %d for %dms period\n",
+	       ms_to_ed_int(period), period);
 #endif
 
 	spin_lock_irqsave(&ohci_edtd_lock, flags);
@@ -263,6 +263,21 @@ inline void ohci_add_isoc_ed(struct ohci *ohci, struct ohci_ed *ed)
  * This will be used for the interrupt to wake us up on the next SOF
  */
 DECLARE_WAIT_QUEUE_HEAD(start_of_frame_wakeup);
+
+static void ohci_wait_sof(struct ohci_regs *regs)
+{
+	DECLARE_WAITQUEUE(wait, current);
+
+	add_wait_queue(&start_of_frame_wakeup, &wait);
+
+	/* clear the SOF interrupt status and enable it */
+	writel(OHCI_INTR_SF, &regs->intrstatus);
+	writel(OHCI_INTR_SF, &regs->intrenable);
+
+	schedule_timeout(HZ/10);
+
+	remove_wait_queue(&start_of_frame_wakeup, &wait);
+}
 
 /*
  * Guarantee that an ED is safe to be modified by the HCD (us).
@@ -296,21 +311,11 @@ void ohci_wait_for_ed_safe(struct ohci_regs *regs, struct ohci_ed *ed, int ed_ty
 	 * at least the next frame.
 	 */
 	if (virt_to_bus(ed) == readl(hw_listcurrent)) {
-		DECLARE_WAITQUEUE(wait, current);
-
 #ifdef OHCI_DEBUG
-		printk("Waiting a frame for OHC to finish with ED %p [%x %x %x %x]\n", ed, FIELDS_OF_ED(ed));
+		printk(KERN_INFO "Waiting a frame for OHC to finish with ED %p [%x %x %x %x]\n", ed, FIELDS_OF_ED(ed));
 #endif
+		ohci_wait_sof(regs);
 
-		add_wait_queue(&start_of_frame_wakeup, &wait);
-
-		/* clear the SOF interrupt status and enable it */
-		writel(OHCI_INTR_SF, &regs->intrstatus);
-		writel(OHCI_INTR_SF, &regs->intrenable);
-
-		schedule_timeout(HZ/10);
-
-		remove_wait_queue(&start_of_frame_wakeup, &wait);
 	}
 
 	return; /* The ED is now safe */
@@ -334,6 +339,7 @@ void ohci_remove_norm_ed_from_hw(struct ohci *ohci, struct ohci_ed *ed, int ed_t
 
 	if (ed == NULL || !bus_ed)
 		return;
+	ed->status |= cpu_to_le32(OHCI_ED_SKIP);
 
 	switch (ed_type) {
 	case HCD_ED_CONTROL:
@@ -343,15 +349,9 @@ void ohci_remove_norm_ed_from_hw(struct ohci *ohci, struct ohci_ed *ed, int ed_t
 		hw_listhead_p = &regs->ed_bulkhead;
 		break;
 	default:
-		printk("Unknown HCD ED type %d.\n", ed_type);
+		printk(KERN_ERR "Unknown HCD ED type %d.\n", ed_type);
 		return;
 	}
-
-	/*
-	 * Tell the controller to this skip ED and make sure it is not the
-	 * being accessed by the HC as we speak.
-	 */
-	ohci_wait_for_ed_safe(regs, ed, ed_type);
 
 	bus_cur = readl(hw_listhead_p);
 
@@ -364,7 +364,7 @@ void ohci_remove_norm_ed_from_hw(struct ohci *ohci, struct ohci_ed *ed, int ed_t
 
 	/* if its the head ED, move the head */
 	if (bus_cur == bus_ed) {
-		writel(cur->next_ed, hw_listhead_p);
+		writel(le32_to_cpup(&cur->next_ed), hw_listhead_p);
 	} else if (cur->next_ed != 0) {
 		struct ohci_ed *prev;
 
@@ -373,13 +373,18 @@ void ohci_remove_norm_ed_from_hw(struct ohci *ohci, struct ohci_ed *ed, int ed_t
 			prev = cur;
 			cur = bus_to_virt(le32_to_cpup(&cur->next_ed));
 
-			if (virt_to_bus(cur) == bus_ed) {
+			if (cur == ed) {
 				/* unlink from the list */
 				prev->next_ed = cur->next_ed;
 				break;
 			}
 		} while (cur->next_ed != 0);
 	}
+
+	/*
+	 * Make sure this ED is not being accessed by the HC as we speak.
+	 */
+	ohci_wait_for_ed_safe(regs, ed, ed_type);
 
 	/* clear any links from the ED for safety */
 	ed->next_ed = 0;
@@ -405,6 +410,68 @@ inline void ohci_remove_bulk_ed(struct ohci *ohci, struct ohci_ed *ed)
 	ohci_remove_norm_ed_from_hw(ohci, ed, HCD_ED_BULK);
 }
 
+/*
+ * Remove all the EDs which have a given device address from a list.
+ * Used when the device is unplugged.
+ * Returns 1 if anything was changed.
+ */
+static int ohci_remove_device_list(__u32 *headp, int devnum)
+{
+	struct ohci_ed *ed;
+	__u32 *prevp = headp;
+	int removed = 0;
+
+	while (*prevp != 0) {
+		ed = bus_to_virt(le32_to_cpup(prevp));
+		if ((le32_to_cpup(&ed->status) & OHCI_ED_FA) == devnum) {
+			/* set the controller to skip this one
+			   and remove it from the list */
+			ed->status |= cpu_to_le32(OHCI_ED_SKIP);
+			*prevp = ed->next_ed;
+			removed = 1;
+		} else {
+			prevp = &ed->next_ed;
+		}
+	}
+	wmb();
+
+	return removed;
+}
+
+/*
+ * Remove all the EDs for a given device from all lists.
+ */
+void ohci_remove_device(struct ohci *ohci, int devnum)
+{
+	unsigned long flags;
+	__u32 head;
+	struct ohci_regs *regs = ohci->regs;
+	struct ohci_device *root_hub=usb_to_ohci(ohci->bus->root_hub);
+
+	spin_lock_irqsave(&ohci_edtd_lock, flags);
+
+	/* Control list */
+	head = cpu_to_le32(readl(&regs->ed_controlhead));
+	if (ohci_remove_device_list(&head, devnum))
+		writel(le32_to_cpup(&head), &regs->ed_controlhead);
+
+	/* Bulk list */
+	head = cpu_to_le32(readl(&regs->ed_bulkhead));
+	if (ohci_remove_device_list(&head, devnum))
+		writel(le32_to_cpup(&head), &regs->ed_bulkhead);
+
+	/* Interrupt/iso list */
+	head = cpu_to_le32(virt_to_bus(&root_hub->ed[ED_INT_32]));
+	ohci_remove_device_list(&head, devnum);
+
+	/*
+	 * Wait until the start of the next frame to ensure
+	 * that the HC has seen any changes.
+	 */
+	ohci_wait_sof(ohci->regs);
+
+	spin_unlock_irqrestore(&ohci_edtd_lock, flags);
+}
 
 /*
  *  Remove a TD from the given EDs TD list.
@@ -494,7 +561,7 @@ static struct ohci_td *ohci_get_free_td(struct ohci_device *dev)
 		}
 	}
 
-	printk("usb-ohci: unable to allocate a TD\n");
+	printk(KERN_ERR "usb-ohci: unable to allocate a TD\n");
 	return NULL;
 } /* ohci_get_free_td() */
 
@@ -521,7 +588,7 @@ static struct ohci_ed *ohci_get_free_ed(struct ohci_device *dev)
 		}
 	}
 
-	printk("usb-ohci: unable to allocate an ED\n");
+	printk(KERN_ERR "usb-ohci: unable to allocate an ED\n");
 	return NULL;
 } /* ohci_get_free_ed() */
 
@@ -594,12 +661,12 @@ struct ohci_ed *ohci_fill_ed(struct ohci_device *dev, struct ohci_ed *ed,
 	struct ohci_td *dummy_td;
 
 	if (ed_head_td(ed) != ed_tail_td(ed))
-		printk("Reusing a non-empty ED %p!\n", ed);
+		printk(KERN_ERR "Reusing a non-empty ED %p!\n", ed);
 
 	if (!ed->tail_td) {
 		dummy_td = ohci_get_free_td(dev);
 		if (dummy_td == NULL) {
-			printk("Error allocating dummy TD for ED %p\n", ed);
+			printk(KERN_ERR "Error allocating dummy TD for ED %p\n", ed);
 			return NULL;	/* no dummy available! */
 		}
 		make_dumb_td(dummy_td);	/* flag it as a dummy */
@@ -607,7 +674,7 @@ struct ohci_ed *ohci_fill_ed(struct ohci_device *dev, struct ohci_ed *ed,
 	} else {
 		dummy_td = bus_to_virt(ed_tail_td(ed));
 		if (!td_dummy(*dummy_td))
-			printk("ED %p's dummy %p is screwy\n", ed, dummy_td);
+			printk(KERN_ERR "ED %p's dummy %p is screwy\n", ed, dummy_td);
 	}
 
 	/* set the head TD to the dummy and clear the Carry & Halted bits */
@@ -650,13 +717,13 @@ static int ohci_request_irq(struct usb_device *usb, unsigned int pipe,
 	/* Get an ED and TD */
 	interrupt_ed = ohci_get_free_ed(dev);
 	if (!interrupt_ed) {
-		printk("Out of EDs on device %p in ohci_request_irq\n", dev);
+		printk(KERN_ERR "Out of EDs on device %p in ohci_request_irq\n", dev);
 		return -1;
 	}
 
 	td = ohci_get_free_td(dev);
 	if (!td) {
-		printk("Out of TDs in ohci_request_irq\n");
+		printk(KERN_ERR "Out of TDs in ohci_request_irq\n");
 		ohci_free_ed(interrupt_ed);
 		return -1;
 	}
@@ -759,14 +826,14 @@ static int ohci_control_msg(struct usb_device *usb, unsigned int pipe,
 	printk(KERN_DEBUG "ohci_control_msg %p (ohci_dev: %p) pipe %x, cmd %p, data %p, len %d\n", usb, dev, pipe, cmd, data, len);
 #endif
 	if (!control_ed) {
-		printk("usb-ohci: couldn't get ED for dev %p\n", dev);
+		printk(KERN_ERR "usb-ohci: couldn't get ED for dev %p\n", dev);
 		return -1;
 	}
 
 	/* get a TD to send this control message with */
 	setup_td = ohci_get_free_td(dev);
 	if (!setup_td) {
-		printk("usb-ohci: couldn't get TD for dev %p [cntl setup]\n", dev);
+		printk(KERN_ERR "usb-ohci: couldn't get TD for dev %p [cntl setup]\n", dev);
 		ohci_free_ed(control_ed);
 		return -1;
 	}
@@ -799,7 +866,7 @@ static int ohci_control_msg(struct usb_device *usb, unsigned int pipe,
 	/* allocate the next TD */
 	data_td = ohci_get_free_td(dev);
 	if (!data_td) {
-		printk("usb-ohci: couldn't get TD for dev %p [cntl data]\n", dev);
+		printk(KERN_ERR "usb-ohci: couldn't get TD for dev %p [cntl data]\n", dev);
 		ohci_free_td(setup_td);
 		ohci_free_ed(control_ed);
 		return -1;
@@ -833,7 +900,7 @@ static int ohci_control_msg(struct usb_device *usb, unsigned int pipe,
 
 		status_td = ohci_get_free_td(dev);  /* TODO check for NULL */
 		if (!status_td) {
-			printk("usb-ohci: couldn't get TD for dev %p [cntl status]\n", dev);
+			printk(KERN_ERR "usb-ohci: couldn't get TD for dev %p [cntl status]\n", dev);
 			ohci_free_td(setup_td);
 			ohci_free_td(data_td);
 			ohci_free_ed(control_ed);
@@ -918,15 +985,17 @@ static int ohci_control_msg(struct usb_device *usb, unsigned int pipe,
 
 #ifdef OHCI_DEBUG
 	if (completion_status != 0) {
-		printk(KERN_ERR "ohci_control_msg: %s on cmd %x %x %x %x %x\n",
-		       cc_names[completion_status & 0xf], cmd->requesttype,
-		       cmd->request, cmd->value, cmd->index, cmd->length);
+		char *what = (completion_status < 0)? "timed out":
+			cc_names[completion_status & 0xf];
+		printk(KERN_ERR "ohci_control_msg: %s on pipe %x cmd %x %x %x %x %x\n",
+		       what, pipe, cmd->requesttype, cmd->request,
+		       cmd->value, cmd->index, cmd->length);
 	} else if (!usb_pipeout(pipe)) {
 		unsigned char *q = data;
 		int i;
-		printk(KERN_DEBUG "ctrl msg %x %x %x %x %x returned:",
+		printk(KERN_DEBUG "ctrl msg %x %x %x %x %x on pipe %x returned:",
 		       cmd->requesttype, cmd->request, cmd->value, cmd->index,
-		       cmd->length);
+		       cmd->length, pipe);
 		for (i = 0; i < len; ++i) {
 			if (i % 16 == 0)
 				printk("\n" KERN_DEBUG);
@@ -1001,8 +1070,12 @@ static struct usb_device *ohci_usb_allocate(struct usb_device *parent)
  */
 static int ohci_usb_deallocate(struct usb_device *usb_dev)
 {
-	kfree(usb_to_ohci(usb_dev));
-	kfree(usb_dev);
+	struct ohci_device *dev = usb_to_ohci(usb_dev);
+
+	ohci_remove_device(dev->ohci, usb_dev->devnum);
+
+	/* kfree(usb_to_ohci(usb_dev)); */
+	/* kfree(usb_dev); */
 	return 0;
 }
 
@@ -1042,13 +1115,13 @@ static int reset_hc(struct ohci *ohci)
 
 	while ((readl(&ohci->regs->cmdstatus) & OHCI_CMDSTAT_HCR) != 0) {
 		if (!--timeout) {
-			printk("usb-ohci: USB HC reset timed out!\n");
+			printk(KERN_ERR "usb-ohci: USB HC reset timed out!\n");
 			return -1;
 		}
 		udelay(1);
 	}
 
-	printk(KERN_INFO "usb-ohci: HC %p reset.\n", ohci);
+	printk(KERN_DEBUG "usb-ohci: HC %p reset.\n", ohci);
 
 	return 0;
 } /* reset_hc() */
@@ -1080,7 +1153,8 @@ static int start_hc(struct ohci *ohci)
 	 * XXX Should fminterval also be set here?
 	 * The spec suggests 0x2edf [11,999]. (FIXME: make this a constant)
 	 */
-	fminterval |= (0x2edf << 16);
+	/* fminterval |= (0x2edf << 16); */
+	fminterval = (10240 << 16) | 11999;
 	writel(fminterval, &ohci->regs->fminterval);
 	/* Start periodic transfers at 90% of fminterval (fmremaining
 	 * counts down; this will put them in the first 10% of the
@@ -1122,7 +1196,7 @@ static int start_hc(struct ohci *ohci)
 	/* Turn on power to the root hub ports (thanks Roman!) */
 	writel( OHCI_ROOT_LPSC, &ohci->regs->roothub.status );
 
-	printk("usb-ohci: host controller operational\n");
+	printk(KERN_INFO "usb-ohci: host controller operational\n");
 
 	return ret;
 } /* start_hc() */
@@ -1137,7 +1211,7 @@ static void ohci_reset_port(struct ohci *ohci, unsigned int port)
 
 	/* Don't allow overflows. */
 	if (port >= MAX_ROOT_PORTS) {
-		printk("usb-ohci: bad port #%d in ohci_reset_port\n", port);
+		printk(KERN_ERR "usb-ohci: bad port #%d in ohci_reset_port\n", port);
 		port = MAX_ROOT_PORTS-1;
 	}
 
@@ -1152,7 +1226,7 @@ static void ohci_reset_port(struct ohci *ohci, unsigned int port)
 	status = readl(&ohci->regs->roothub.portstatus[port]);
 	if (status & PORT_PRS) {
 		/* reset failed, try harder? */
-		printk("usb-ohci: port %d reset failed, retrying\n", port);
+		printk(KERN_ERR "usb-ohci: port %d reset failed, retrying\n", port);
 		writel(PORT_PRS, &ohci->regs->roothub.portstatus[port]);
 		wait_ms(50);
 	}
@@ -1340,7 +1414,7 @@ static void ohci_reap_donelist(struct ohci *ohci)
 		int cc = OHCI_TD_CC_GET(le32_to_cpup(&td->info));
 
 		if (td_dummy(*td))
-			printk("yikes! reaping a dummy TD\n");
+			printk(KERN_ERR "yikes! reaping a dummy TD\n");
 
 		/* FIXME: munge td->info into a future standard status format */
 
@@ -1598,14 +1672,14 @@ static struct ohci *alloc_ohci(void* mem_base)
 	/* Get the number of ports on the root hub */
 	usb->maxchild = readl(&ohci->regs->roothub.a) & 0xff;
 	if (usb->maxchild > MAX_ROOT_PORTS) {
-		printk("usb-ohci: Limited to %d ports\n", MAX_ROOT_PORTS);
+		printk(KERN_INFO "usb-ohci: Limited to %d ports\n", MAX_ROOT_PORTS);
 		usb->maxchild = MAX_ROOT_PORTS;
 	}
 	if (usb->maxchild < 1) {
-		printk("usb-ohci: Less than one root hub port? Impossible!\n");
+		printk(KERN_ERR "usb-ohci: Less than one root hub port? Impossible!\n");
 		usb->maxchild = 1;
 	}
-	printk("usb-ohci: %d root hub ports found\n", usb->maxchild);
+	printk(KERN_DEBUG "usb-ohci: %d root hub ports found\n", usb->maxchild);
 
 	/*
 	 * Initialize the ED polling "tree" (for simplicity's sake in
@@ -1650,14 +1724,13 @@ static struct ohci *alloc_ohci(void* mem_base)
 	writel(0, &ohci->regs->ed_bulkhead);
 
 #ifdef OHCI_DEBUG
-	printk(KERN_INFO "alloc_ohci(): controller\n");
+	printk(KERN_DEBUG "alloc_ohci(): controller\n");
 	show_ohci_status(ohci);
 #endif
 
 #if 0
 	printk(KERN_DEBUG "leaving alloc_ohci %p\n", ohci);
 #endif
-printk("alloc_ohci done\n");
 
 	return ohci;
 } /* alloc_ohci() */
@@ -1722,7 +1795,7 @@ static int ohci_control_thread(void * __ohci)
 	 * This thread doesn't need any user-level access,
 	 * so get rid of all of our resources..
 	 */
-	printk(KERN_INFO "ohci-control thread code for 0x%p code at 0x%p\n", __ohci, &ohci_control_thread);
+	printk(KERN_DEBUG "ohci-control thread code for 0x%p code at 0x%p\n", __ohci, &ohci_control_thread);
 	exit_mm(current);
 	exit_files(current);
 	exit_fs(current);
@@ -1735,7 +1808,7 @@ static int ohci_control_thread(void * __ohci)
 	 * Damn the torpedoes, full speed ahead
 	 */
 	if (start_hc(ohci) < 0) {
-		printk("usb-ohci: failed to start the controller\n");
+		printk(KERN_ERR "usb-ohci: failed to start the controller\n");
 		release_ohci(ohci);
 		usb_deregister_bus(ohci->bus);
 		printk(KERN_INFO "leaving ohci_control_thread %p\n", __ohci);
@@ -1756,7 +1829,7 @@ static int ohci_control_thread(void * __ohci)
 		writel(OHCI_INTR_RHSC, &ohci->regs->intrenable);
 #endif
 
-		printk(KERN_INFO "ohci-control thread sleeping\n");
+		printk(KERN_DEBUG "ohci-control thread sleeping\n");
 		interruptible_sleep_on(&ohci_configure);
 #ifdef CONFIG_APM
 		if (apm_resume) {
@@ -1796,7 +1869,7 @@ static int ohci_control_thread(void * __ohci)
 	reset_hc(ohci);
 	release_ohci(ohci);
 	usb_deregister_bus(ohci->bus);
-	printk(KERN_INFO "ohci-control thread for 0x%p exiting\n", __ohci);
+	printk(KERN_DEBUG "ohci-control thread for 0x%p exiting\n", __ohci);
 
 	return 0;
 } /* ohci_control_thread() */
@@ -1891,7 +1964,7 @@ static int found_ohci(int irq, void* mem_base)
 		ohci->irq = irq;
 
 #ifdef OHCI_DEBUG
-		printk(KERN_INFO "usb-ohci: forking ohci-control thread for 0x%p\n", ohci);
+		printk(KERN_DEBUG "usb-ohci: forking ohci-control thread for 0x%p\n", ohci);
 #endif
 
 		/* fork off the handler */
@@ -1903,7 +1976,7 @@ static int found_ohci(int irq, void* mem_base)
 
 		retval = pid;
 	} else {
-		printk("usb-ohci: Couldn't allocate interrupt %d\n", irq);
+		printk(KERN_ERR "usb-ohci: Couldn't allocate interrupt %d\n", irq);
 	}
 	release_ohci(ohci);
 
@@ -1931,7 +2004,7 @@ static int init_ohci(struct pci_dev *dev)
 
 	/* no interrupt won't work... */
 	if (dev->irq == 0) {
-		printk("usb-ohci: no irq assigned? check your BIOS settings.\n");
+		printk(KERN_ERR "usb-ohci: no irq assigned? check your BIOS settings.\n");
 		return -ENODEV;
 	}
 
@@ -1944,14 +2017,14 @@ static int init_ohci(struct pci_dev *dev)
 	mem_base = (unsigned long) ioremap_nocache(mem_base, 4096);
 
 	if (!mem_base) {
-		printk("Error mapping OHCI memory\n");
+		printk(KERN_ERR "Error mapping OHCI memory\n");
 		return -EFAULT;
 	}
         MOD_INC_USE_COUNT;
 
 #ifdef OHCI_DEBUG
-	printk("usb-ohci: Warning! Gobs of debugging output has been enabled.\n");
-	printk("          Check your kern.debug logs for the bulk of it.\n");
+	printk(KERN_INFO "usb-ohci: Warning! Gobs of debugging output has been enabled.\n");
+	printk(KERN_INFO "          Check your kern.debug logs for the bulk of it.\n");
 #endif
 
 	if (found_ohci(dev->irq, (void *) mem_base) < 0) {
@@ -1978,11 +2051,11 @@ int ohci_init(void)
 	/*u8 type;*/
 
 	if (sizeof(struct ohci_device) > 4096) {
-		printk("usb-ohci: struct ohci_device to large\n");
+		printk(KERN_ERR "usb-ohci: struct ohci_device to large\n");
 		return -ENODEV;
 	}
 
-	printk("OHCI USB Driver loading\n");
+	printk(KERN_INFO "OHCI USB Driver loading\n");
 
 	retval = -ENODEV;
 	for (;;) {
@@ -2022,7 +2095,7 @@ void cleanup_module(void){
 #	ifdef CONFIG_APM
 	apm_unregister_callback(&handle_apm_event);
 #	endif
-	printk("usb-ohci: module unloaded\n");
+	printk(KERN_ERR "usb-ohci: module unloaded\n");
 }
 
 int init_module(void){
