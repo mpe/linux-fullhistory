@@ -119,7 +119,7 @@ packet_sendto(struct sock *sk, unsigned char *from, int len,
   	return -EMSGSIZE;
 
 /* Now allocate the buffer, knowing 4K pagelimits wont break this line */  
-  skb = (struct sk_buff *) sk->prot->wmalloc(sk, len+sizeof(*skb), 0, GFP_KERNEL);
+  skb = sk->prot->wmalloc(sk, len+sizeof(*skb), 0, GFP_KERNEL);
 
   /* This shouldn't happen, but it could. */
   if (skb == NULL) {

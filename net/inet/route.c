@@ -205,6 +205,7 @@ void rt_add(short flags, unsigned long dst, unsigned long mask,
 	rt->rt_dev = dev;
 	rt->rt_gateway = gw;
 	rt->rt_mask = mask;
+	rt->rt_mtu = dev->mtu;
 	rt_print(rt);
 	/*
 	 * What we have to do is loop though this until we have

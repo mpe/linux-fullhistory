@@ -28,10 +28,11 @@ struct rtable {
   unsigned long		rt_dst;
   unsigned long		rt_mask;
   unsigned long		rt_gateway;
-  u_char		rt_flags;
-  u_char		rt_metric;
+  unsigned char		rt_flags;
+  unsigned char		rt_metric;
   short			rt_refcnt;
-  u_long		rt_use;
+  unsigned long		rt_use;
+  unsigned short	rt_mss, rt_mtu;
   struct device		*rt_dev;
 };
 

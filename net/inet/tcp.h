@@ -41,9 +41,9 @@
 				 * 90 minutes to time out.
 				 */
 
-#define TCP_TIMEOUT_LEN	5000	/* should be about 5 mins		*/
-#define TCP_TIMEWAIT_LEN 1000	/* how long to wait to sucessfully 
-				 * close the socket, about 60 seconds	*/
+#define TCP_TIMEOUT_LEN	(5*60*HZ)/* should be about 5 mins		*/
+#define TCP_TIMEWAIT_LEN (60*HZ) /* how long to wait to sucessfully 
+				  * close the socket, about 60 seconds	*/
 #define TCP_ACK_TIME	3000	/* time to delay before sending an ACK	*/
 #define TCP_DONE_TIME	250	/* maximum time to wait before actually
 				 * destroying a socket			*/

@@ -160,10 +160,10 @@ struct sock {
 };
 
 struct proto {
-  void			*(*wmalloc)(struct sock *sk,
+  struct sk_buff *	(*wmalloc)(struct sock *sk,
 				    unsigned long size, int force,
 				    int priority);
-  void			*(*rmalloc)(struct sock *sk,
+  struct sk_buff *	(*rmalloc)(struct sock *sk,
 				    unsigned long size, int force,
 				    int priority);
   void			(*wfree)(struct sock *sk, void *mem,
@@ -192,7 +192,7 @@ struct proto {
 					struct options *opt, int len, int tos, int ttl);
   int			(*connect)(struct sock *sk,
 				  struct sockaddr_in *usin, int addr_len);
-  struct sock		*(*accept) (struct sock *sk, int flags);
+  struct sock *		(*accept) (struct sock *sk, int flags);
   void			(*queue_xmit)(struct sock *sk,
 				      struct device *dev, struct sk_buff *skb,
 				      int free);
@@ -215,7 +215,7 @@ struct proto {
   				char *optval, int *option);  	 
   unsigned short	max_header;
   unsigned long		retransmits;
-  struct sock		*sock_array[SOCK_ARRAY_SIZE];
+  struct sock *		sock_array[SOCK_ARRAY_SIZE];
   char			name[80];
 };
 
@@ -224,6 +224,7 @@ struct proto {
 #define TIME_KEEPOPEN	3
 #define TIME_DESTROY	4
 #define TIME_DONE	5	/* used to absorb those last few packets */
+#define TIME_PROBE0	6
 #define SOCK_DESTROY_TIME 1000	/* about 10 seconds			*/
 
 #define PROT_SOCK	1024	/* Sockets 0-1023 can't be bound too unless you are superuser */
@@ -241,10 +242,10 @@ extern struct sock		*get_sock(struct proto *, unsigned short,
 					  unsigned long, unsigned short,
 					  unsigned long);
 extern void			print_sk(struct sock *);
-extern void			*sock_wmalloc(struct sock *sk,
+extern struct sk_buff		*sock_wmalloc(struct sock *sk,
 					      unsigned long size, int force,
 					      int priority);
-extern void			*sock_rmalloc(struct sock *sk,
+extern struct sk_buff		*sock_rmalloc(struct sock *sk,
 					      unsigned long size, int force,
 					      int priority);
 extern void			sock_wfree(struct sock *sk, void *mem,

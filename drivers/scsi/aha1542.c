@@ -722,9 +722,12 @@ static int aha1542_query(int base_io, int * transl)
     printk("aha1542.c: Emulation mode not supported for AHA 174N hardware.\n");
     return 1;
   };
-  if (inquiry_result[0] == 0x44) { /* Detect 1542C  */
-    *transl = aha1542_mbenable(base_io);
-  };
+
+  /* 1542C returns 0x44, 1542CF returns 0x45 */
+  if (inquiry_result[0] == 0x44 || inquiry_result[0] == 0x45)
+    { /* Detect 1542C  */
+      *transl = aha1542_mbenable(base_io);
+    };
   return 0;
 }
 

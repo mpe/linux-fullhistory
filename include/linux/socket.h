@@ -43,12 +43,13 @@ struct linger {
 #define MSG_OOB		1
 #define MSG_PEEK	2
 
-/* Setsockoptions(2) level. */
+/* Setsockoptions(2) level. Thanks to BSD these must match IPPROTO_xxx */
 #define SOL_SOCKET	1
-#define SOL_IP		2
-#define SOL_IPX		3
-#define SOL_AX25	4
-#define SOL_TCP		5
+#define SOL_IP		0
+#define SOL_IPX		256
+#define SOL_AX25	257
+#define SOL_TCP		6
+#define SOL_UDP		17
 
 /* For setsockoptions(2) */
 #define SO_DEBUG	1
@@ -64,19 +65,23 @@ struct linger {
 #define SO_NO_CHECK	11
 #define SO_PRIORITY	12
 #define SO_LINGER	13
+
 /* IP options */
 #define IP_TOS		1
 #define	IPTOS_LOWDELAY		0x10
 #define	IPTOS_THROUGHPUT	0x08
 #define	IPTOS_RELIABILITY	0x04
 #define IP_TTL		2
+
 /* IPX options */
 #define IPX_TYPE	1
+
 /* AX.25 options */
 #define AX25_WINDOW	1
-/* TCP options */
-#define TCP_MSS		1
-#define TCP_NODELAY	2
+
+/* TCP options - this way around because someone left a set in the c library includes */
+#define TCP_NODELAY	1
+#define TCP_MAXSEG	2
 
 /* The various priorities. */
 #define SOPRI_INTERACTIVE	0

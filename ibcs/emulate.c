@@ -22,5 +22,6 @@
 
 asmlinkage void iABI_emulate(struct pt_regs * regs)
 {
-	printk("lcall 7,xxx: eax = %08lx\n",regs->eax);
+	printk("iBCS2 binaries not supported yet\n");
+	do_exit(SIGSEGV);
 }

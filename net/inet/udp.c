@@ -234,7 +234,7 @@ udp_send(struct sock *sk, struct sockaddr_in *sin,
 
   /* Allocate a copy of the packet. */
   size = sizeof(struct sk_buff) + sk->prot->max_header + len;
-  skb = (struct sk_buff *) sk->prot->wmalloc(sk, size, 0, GFP_KERNEL);
+  skb = sk->prot->wmalloc(sk, size, 0, GFP_KERNEL);
   if (skb == NULL) return(-ENOMEM);
 
   skb->mem_addr = skb;

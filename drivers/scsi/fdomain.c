@@ -1,10 +1,10 @@
 /* fdomain.c -- Future Domain TMC-16x0 SCSI driver
  * Created: Sun May  3 18:53:19 1992 by faith@cs.unc.edu
- * Revised: Tue Jan  4 20:43:57 1994 by faith@cs.unc.edu
+ * Revised: Sun Jan 23 08:59:04 1994 by faith@cs.unc.edu
  * Author: Rickard E. Faith, faith@cs.unc.edu
  * Copyright 1992, 1993, 1994 Rickard E. Faith
  *
- * $Id: fdomain.c,v 5.8 1994/01/05 01:44:16 root Exp $
+ * $Id: fdomain.c,v 5.9 1994/01/23 13:59:14 root Exp $
 
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -144,7 +144,7 @@
 #include <linux/string.h>
 #include <linux/ioport.h>
 
-#define VERSION          "$Revision: 5.8 $"
+#define VERSION          "$Revision: 5.9 $"
 
 /* START OF USER DEFINABLE OPTIONS */
 
@@ -305,6 +305,7 @@ struct signature {
    /*          1         2         3         4         5         6 */
    /* 123456789012345678901234567890123456789012345678901234567890 */
    { "FUTURE DOMAIN CORP. (C) 1986-1990 1800-V2.07/28/89", 5, 50,  2,  0 },
+   { "FUTURE DOMAIN CORP. (C) 1986-1990 1800-V1.07/28/89", 5, 50,  2,  0 },
    { "FUTURE DOMAIN CORP. (C) 1992 V3.00.004/02/92",       5, 44,  3,  0 },
    { "FUTURE DOMAIN TMC-18XX (C) 1993 V3.203/12/93",       5, 44,  3,  2 },
    { "FUTURE DOMAIN TMC-18XX",                             5, 22, -1, -1 },

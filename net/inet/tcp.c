@@ -175,7 +175,7 @@ diff(unsigned long seq1, unsigned long seq2)
    
 static int tcp_select_window(struct sock *sk)
 {
-	int new_window=sk->prot->rspace(sk)/2;
+	int new_window = sk->prot->rspace(sk);
 
 	/* Enforce RFC793 - we've offered it we must live with it */	
 	if(new_window<sk->window)
@@ -592,54 +592,81 @@ tcp_send_check(struct tcphdr *th, unsigned long saddr,
   return;
 }
 
+static struct sk_buff * dequeue_partial(struct sock * sk)
+{
+	struct sk_buff * skb;
+	unsigned long flags;
 
-static void
-tcp_send_partial(struct sock *sk)
+	save_flags(flags);
+	cli();
+	skb = sk->send_tmp;
+	if (skb) {
+		sk->send_tmp = skb->next;
+		skb->next = NULL;
+	}
+	restore_flags(flags);
+	return skb;
+}
+
+static void enqueue_partial(struct sk_buff * skb, struct sock * sk)
+{
+	unsigned long flags;
+
+	save_flags(flags);
+	cli();
+	skb->next = sk->send_tmp;
+	sk->send_tmp = skb;
+	restore_flags(flags);
+}
+
+static void tcp_send_partial(struct sock *sk)
 {
   struct sk_buff *skb;
+
+  if (sk == NULL)
+  	return;
+  while ((skb = dequeue_partial(sk)) != NULL) {
   
-  if (sk == NULL || sk->send_tmp == NULL) return;
-  
-  skb = sk->send_tmp;
-  
-  /* If we have queued a header size packet.. */
-  if(skb->len-(unsigned long)skb->h.th + (unsigned long)skb->data == sizeof(struct tcphdr))
-  {
-  	/* If its got a syn or fin its notionally included in the size..*/
-  	if(!skb->h.th->syn && !skb->h.th->fin)
-  	{
-  		printk("tcp_send_partial: attempt to queue a bogon.\n");
-  		kfree_skb(skb,FREE_WRITE);
-  		sk->send_tmp=NULL;
-		return;
-  	}
-  }
-  
-  /* We need to complete and send the packet. */
-  tcp_send_check(skb->h.th, sk->saddr, sk->daddr,
-		 skb->len-(unsigned long)skb->h.th +
-		(unsigned long)skb->data, sk);
-  
-  skb->h.seq = sk->send_seq;
-  if (after(sk->send_seq , sk->window_seq) ||
-      (sk->retransmits && sk->timeout == TIME_WRITE) ||
-      sk->packets_out >= sk->cong_window) {
-	DPRINTF((DBG_TCP, "sk->cong_window = %d, sk->packets_out = %d\n",
-					sk->cong_window, sk->packets_out));
-	DPRINTF((DBG_TCP, "sk->send_seq = %d, sk->window_seq = %d\n",
-					sk->send_seq, sk->window_seq));
-	skb->next = NULL;
-	skb->magic = TCP_WRITE_QUEUE_MAGIC;
-	if (sk->wback == NULL) {
-		sk->wfront=skb;
-	} else {
-		sk->wback->next = skb;
+	/* If we have queued a header size packet.. */
+	if(skb->len-(unsigned long)skb->h.th + (unsigned long)skb->data == sizeof(struct tcphdr)) {
+		/* If its got a syn or fin its notionally included in the size..*/
+		if(!skb->h.th->syn && !skb->h.th->fin) {
+			printk("tcp_send_partial: attempt to queue a bogon.\n");
+			kfree_skb(skb,FREE_WRITE);
+			return;
+		}
 	}
-	sk->wback = skb;
-  } else {
-	sk->prot->queue_xmit(sk, skb->dev, skb,0);
+  
+	/* We need to complete and send the packet. */
+	tcp_send_check(skb->h.th, sk->saddr, sk->daddr,
+			skb->len-(unsigned long)skb->h.th +
+			(unsigned long)skb->data, sk);
+
+	skb->h.seq = sk->send_seq;
+	if (after(sk->send_seq , sk->window_seq) ||
+	    (sk->retransmits && sk->timeout == TIME_WRITE) ||
+	     sk->packets_out >= sk->cong_window) {
+		DPRINTF((DBG_TCP, "sk->cong_window = %d, sk->packets_out = %d\n",
+					sk->cong_window, sk->packets_out));
+		DPRINTF((DBG_TCP, "sk->send_seq = %d, sk->window_seq = %d\n",
+					sk->send_seq, sk->window_seq));
+		skb->next = NULL;
+		skb->magic = TCP_WRITE_QUEUE_MAGIC;
+		if (sk->wback == NULL) {
+			sk->wfront=skb;
+		} else {
+			sk->wback->next = skb;
+		}
+		sk->wback = skb;
+		if (before(sk->window_seq, sk->wfront->h.seq) &&
+		    sk->send_head == NULL &&
+		    sk->ack_backlog == 0)
+		  reset_timer(sk, TIME_PROBE0, 
+			      backoff(sk->backoff) * (2 * sk->mdev + sk->rtt));
+	} else {
+		sk->prot->queue_xmit(sk, skb->dev, skb,0);
+	}
   }
-  sk->send_tmp = NULL;
 }
 
 
@@ -660,7 +687,7 @@ tcp_send_ack(unsigned long sequence, unsigned long ack,
    * We need to grab some memory, and put together an ack,
    * and then put it into the queue to be sent.
    */
-  buff = (struct sk_buff *) sk->prot->wmalloc(sk, MAX_ACK_SIZE, 1, GFP_ATOMIC);
+  buff = sk->prot->wmalloc(sk, MAX_ACK_SIZE, 1, GFP_ATOMIC);
   if (buff == NULL) {
 	/* Force it to send an ack. */
 	sk->ack_backlog++;
@@ -749,7 +776,6 @@ tcp_build_header(struct tcphdr *th, struct sock *sk, int push)
   return(sizeof(*th));
 }
 
-
 /*
  * This routine copies from a user buffer into a socket,
  * and starts the transmit system.
@@ -762,6 +788,7 @@ tcp_write(struct sock *sk, unsigned char *from,
   int copy;
   int tmp;
   struct sk_buff *skb;
+  struct sk_buff *send_tmp;
   unsigned char *buff;
   struct proto *prot;
   struct device *dev = NULL;
@@ -842,12 +869,10 @@ tcp_write(struct sock *sk, unsigned char *from,
 	}
 
 	/* Now we need to check if we have a half built packet. */
-	if (sk->send_tmp != NULL) {
+	if ((skb = dequeue_partial(sk)) != NULL) {
 	        int hdrlen;
 
-		skb = sk->send_tmp;
-
-		         /* IP header + TCP header */
+	         /* IP header + TCP header */
 		hdrlen = ((unsigned long)skb->h.th - (unsigned long)skb->data)
 		         + sizeof(struct tcphdr);
 
@@ -869,7 +894,7 @@ tcp_write(struct sock *sk, unsigned char *from,
 			len -= copy;
 			sk->send_seq += copy;
 		      }
-
+		enqueue_partial(skb, sk);
 		if ((skb->len - hdrlen) >= sk->mtu || (flags & MSG_OOB)) {
 		  tcp_send_partial(sk);
 		}
@@ -895,22 +920,15 @@ tcp_write(struct sock *sk, unsigned char *from,
 	if (sk->packets_out && copy < sk->mtu && !(flags & MSG_OOB)) {
 	/* We will release the socket incase we sleep here. */
 	  release_sock(sk);
-	  skb = (struct sk_buff *) prot->wmalloc(sk,
-			sk->mtu + 128 + prot->max_header +
-			sizeof(*skb), 0, GFP_KERNEL);
+	  skb = prot->wmalloc(sk, sk->mtu + 128 + prot->max_header + sizeof(*skb), 0, GFP_KERNEL);
 	  sk->inuse = 1;
-	  sk->send_tmp = skb;
-	  if (skb != NULL)
-		skb->mem_len = sk->mtu + 128 + prot->max_header + sizeof(*skb);
+	  send_tmp = skb;
 	} else {
 		/* We will release the socket incase we sleep here. */
 	  release_sock(sk);
-	  skb = (struct sk_buff *) prot->wmalloc(sk,
-						 copy + prot->max_header +
-						 sizeof(*skb), 0, GFP_KERNEL);
+	  skb = prot->wmalloc(sk, copy + prot->max_header + sizeof(*skb), 0, GFP_KERNEL);
 	  sk->inuse = 1;
-	  if (skb != NULL)
-	    skb->mem_len = copy+prot->max_header + sizeof(*skb);
+	  send_tmp = NULL;
 	}
 
 	/* If we didn't get any memory, we need to sleep. */
@@ -943,7 +961,6 @@ tcp_write(struct sock *sk, unsigned char *from,
 		continue;
 	}
 
-	skb->mem_addr = skb;
 	skb->len = 0;
 	skb->sk = sk;
 	skb->free = 0;
@@ -990,7 +1007,10 @@ tcp_write(struct sock *sk, unsigned char *from,
 	skb->free = 0;
 	sk->send_seq += copy;
 
-	if (sk->send_tmp != NULL) continue;
+	if (send_tmp != NULL) {
+		enqueue_partial(send_tmp, sk);
+		continue;
+	}
 
 	tcp_send_check((struct tcphdr *)buff, sk->saddr, sk->daddr,
 		        copy + sizeof(struct tcphdr), sk);
@@ -1011,6 +1031,11 @@ tcp_write(struct sock *sk, unsigned char *from,
 			sk->wback->next = skb;
 		}
 		sk->wback = skb;
+		if (before(sk->window_seq, sk->wfront->h.seq) &&
+		   sk->send_head == NULL &&
+		   sk->ack_backlog == 0)
+		        reset_timer(sk, TIME_PROBE0, 
+			    backoff(sk->backoff) * (2 * sk->mdev + sk->rtt));
 	} else {
 		prot->queue_xmit(sk, dev, skb,0);
 	}
@@ -1075,7 +1100,7 @@ tcp_read_wakeup(struct sock *sk)
    * We need to grab some memory, and put together an ack,
    * and then put it into the queue to be sent.
    */
-  buff = (struct sk_buff *) sk->prot->wmalloc(sk,MAX_ACK_SIZE,1, GFP_ATOMIC);
+  buff = sk->prot->wmalloc(sk,MAX_ACK_SIZE,1, GFP_ATOMIC);
   if (buff == NULL) {
 	/* Try again real soon. */
 	reset_timer(sk, TIME_WRITE, 10);
@@ -1550,7 +1575,7 @@ tcp_shutdown(struct sock *sk, int how)
   prot =(struct proto *)sk->prot;
   th =(struct tcphdr *)&sk->dummy_th;
   release_sock(sk); /* incase the malloc sleeps. */
-  buff = (struct sk_buff *) prot->wmalloc(sk, MAX_RESET_SIZE,1 , GFP_KERNEL);
+  buff = prot->wmalloc(sk, MAX_RESET_SIZE,1 , GFP_KERNEL);
   if (buff == NULL) return;
   sk->inuse = 1;
 
@@ -1659,7 +1684,7 @@ tcp_reset(unsigned long saddr, unsigned long daddr, struct tcphdr *th,
    * We need to grab some memory, and put together an RST,
    * and then put it into the queue to be sent.
    */
-  buff = (struct sk_buff *) prot->wmalloc(NULL, MAX_RESET_SIZE, 1, GFP_ATOMIC);
+  buff = prot->wmalloc(NULL, MAX_RESET_SIZE, 1, GFP_ATOMIC);
   if (buff == NULL) 
   	return;
 
@@ -1891,7 +1916,7 @@ tcp_conn_request(struct sock *sk, struct sk_buff *skb,
 /* this will min with what arrived in the packet */
   tcp_options(newsk,skb->h.th);
 
-  buff = (struct sk_buff *) newsk->prot->wmalloc(newsk, MAX_SYN_SIZE, 1, GFP_ATOMIC);
+  buff = newsk->prot->wmalloc(newsk, MAX_SYN_SIZE, 1, GFP_ATOMIC);
   if (buff == NULL) {
 	sk->err = -ENOMEM;
 	newsk->dead = 1;
@@ -2039,7 +2064,7 @@ tcp_close(struct sock *sk, int timeout)
 	case TCP_SYN_RECV:
 		prot =(struct proto *)sk->prot;
 		th =(struct tcphdr *)&sk->dummy_th;
-		buff = (struct sk_buff *) prot->wmalloc(sk, MAX_FIN_SIZE, 1, GFP_ATOMIC);
+		buff = prot->wmalloc(sk, MAX_FIN_SIZE, 1, GFP_ATOMIC);
 		if (buff == NULL) {
 			/* This will force it to try again later. */
 			/* Or it would have if someone released the socket
@@ -2288,13 +2313,27 @@ tcp_ack(struct sock *sk, struct tcphdr *th, unsigned long saddr, int len)
   sk->window_seq = ack + ntohs(th->window);
 
   /* We don't want too many packets out there. */
-  if (sk->cong_window < 2048 && ack != sk->rcv_ack_seq) {
+  if (sk->timeout == TIME_WRITE && 
+      sk->cong_window < 2048 && ack != sk->rcv_ack_seq) {
 	if (sk->exp_growth) sk->cong_window *= 2;
 	  else sk->cong_window++;
   }
 
   DPRINTF((DBG_TCP, "tcp_ack: Updating rcv ack sequence.\n"));
   sk->rcv_ack_seq = ack;
+
+  /*
+   * if this ack opens up a zero window, clear backoff.  It was
+   * being used to time the probes, and is probably far higher than
+   * it needs to be for normal retransmission
+   */
+  if (sk->timeout == TIME_PROBE0) {
+  	if (sk->wfront != NULL &&   /* should always be non-null */
+	    ! before (sk->window_seq, sk->wfront->h.seq)) {
+	  sk->retransmits = 0;
+	  sk->backoff = 0;
+	}
+  }
 
   /* See if we can take anything off of the retransmit queue. */
   while(sk->send_head != NULL) {
@@ -2348,6 +2387,20 @@ tcp_ack(struct sock *sk, struct tcphdr *th, unsigned long saddr, int len)
 		if (/* sk->retransmits == 0 && */ !(flag&2)) {
 		  long abserr, rtt = jiffies - oskb->when;
 
+		  /*
+		   * Berkeley's code puts these limits on a separate timeout
+		   * field, not on the RTT estimate itself.  However the way this
+		   * code is done, that would complicate things.  If we're going
+		   * to clamp the values, we have to do so before calculating
+		   * the mdev, or we'll get unreasonably large mdev's.  Experience
+		   * shows that with a minium rtt of .1 sec, we get spurious
+		   * retransmits, due to delayed acks on some hosts.  Berkeley uses
+		   * 1 sec, so why not?
+		   */
+
+		  if (rtt < 100) rtt = 100; /* 1 sec */
+		  if (rtt > 12000) rtt = 12000; /* 2 min - max rtt allowed by protocol */
+
 		  if (sk->state == TCP_SYN_SENT || sk->state == TCP_SYN_RECV) {
 		    /* first ack, so nothing else to average with */
 		    sk->rtt = rtt;
@@ -2361,10 +2414,6 @@ tcp_ack(struct sock *sk, struct tcphdr *th, unsigned long saddr, int len)
 		  sk->backoff = 0;
 		}
 		flag |= (2|4);
-		/* no point retransmitting faster than .1 sec */
-		/* 2 minutes is max legal rtt for Internet */
-		if (sk->rtt < 10) sk->rtt = 10;
-		if (sk->rtt > 12000) sk->rtt = 12000;
 
 		cli();
 
@@ -2398,7 +2447,13 @@ tcp_ack(struct sock *sk, struct tcphdr *th, unsigned long saddr, int len)
 		&& sk->packets_out < sk->cong_window) {
 		flag |= 1;
 		tcp_write_xmit(sk);
-	}
+ 	} else if (before(sk->window_seq, sk->wfront->h.seq) &&
+ 		   sk->send_head == NULL &&
+ 		   sk->ack_backlog == 0 &&
+ 		   sk->state != TCP_TIME_WAIT) {
+ 	        reset_timer(sk, TIME_PROBE0, 
+ 			    backoff(sk->backoff) * (2 * sk->mdev + sk->rtt));
+ 	}		
   } else {
 	if (sk->send_head == NULL && sk->ack_backlog == 0 &&
 	    sk->state != TCP_TIME_WAIT && !sk->keepopen) {
@@ -2884,7 +2939,7 @@ tcp_connect(struct sock *sk, struct sockaddr_in *usin, int addr_len)
   sk->dummy_th.dest = sin.sin_port;
   release_sock(sk);
 
-  buff = (struct sk_buff *) sk->prot->wmalloc(sk,MAX_SYN_SIZE,0, GFP_KERNEL);
+  buff = sk->prot->wmalloc(sk,MAX_SYN_SIZE,0, GFP_KERNEL);
   if (buff == NULL) {
 	return(-ENOMEM);
   }
@@ -3459,7 +3514,7 @@ tcp_write_wakeup(struct sock *sk)
 
   if (sk -> state != TCP_ESTABLISHED && sk->state != TCP_CLOSE_WAIT) return;
 
-  buff = (struct sk_buff *) sk->prot->wmalloc(sk,MAX_ACK_SIZE,1, GFP_ATOMIC);
+  buff = sk->prot->wmalloc(sk,MAX_ACK_SIZE,1, GFP_ATOMIC);
   if (buff == NULL) return;
 
   buff->mem_addr = buff;
@@ -3508,6 +3563,90 @@ tcp_write_wakeup(struct sock *sk)
 }
 
 /*
+ * This routine probes a zero window.  It makes a copy of the first
+ * packet in the write queue, but with just one byte of data.
+ */
+void
+tcp_send_probe0(struct sock *sk)
+{
+  unsigned char *raw;
+  struct iphdr *iph;
+  struct sk_buff *skb2, *skb;
+  int len, hlen, data;
+  struct tcphdr *t1;
+  struct device *dev;
+
+  if (sk->zapped)
+	return;	/* Afer a valid reset we can send no more */
+
+  if (sk -> state != TCP_ESTABLISHED && sk->state != TCP_CLOSE_WAIT &&
+      sk -> state != TCP_FIN_WAIT1 && sk->state != TCP_FIN_WAIT2)
+  	return;
+
+  skb = sk->wfront;
+  if (skb == NULL)
+        return;
+
+  dev = skb->dev;
+  /* I know this can't happen but as it does.. */
+  if(dev==NULL)
+    {
+      printk("tcp_send_probe0: NULL device bug!\n");
+      return;
+    }
+  IS_SKB(skb);
+
+  raw = skb->data;
+  iph = (struct iphdr *) (raw + dev->hard_header_len);
+
+  hlen = (iph->ihl * sizeof(unsigned long)) + dev->hard_header_len;
+  data = skb->len - hlen - sizeof(struct tcphdr);
+  len = hlen + sizeof(struct tcphdr) + (data ? 1 : 0);
+ 	
+  /* Allocate buffer. */
+  if ((skb2 = alloc_skb(sizeof(struct sk_buff) + len,GFP_KERNEL)) == NULL) {
+/*    printk("alloc failed raw %x th %x hlen %d data %d len %d\n",
+	   raw, skb->h.th, hlen, data, len); */
+    reset_timer (sk, TIME_PROBE0, 10);  /* try again real soon */
+    return;
+  }
+
+  skb2->arp = skb->arp;
+  skb2->len = len;
+  skb2->h.raw = (char *)(skb2->data);
+ 
+  sk->wmem_alloc += skb2->mem_len;
+ 
+  /* Copy the packet header into the new buffer. */
+  memcpy(skb2->h.raw, raw, len);
+ 
+  skb2->h.raw += hlen;  /* it's now h.th -- pointer to the tcp header */
+  t1 = skb2->h.th;
+ 
+/* source, dest, seq, from existing packet */
+  t1->ack_seq = ntohl(sk->acked_seq);
+  t1->res1 = 0;
+/* doff, fin, from existing packet.  Fin is safe because Linux always
+ * sends fin in a separate packet
+ * syn, rst, had better be zero in original */
+  t1->ack = 1;
+  t1->urg = 0;  /* urgent pointer might be beyond this fragment */
+  t1->res2 = 0;
+  t1->window = ntohs(tcp_select_window(sk)/*sk->prot->rspace(sk)*/);
+  t1->urg_ptr = 0;
+  tcp_send_check(t1, sk->saddr, sk->daddr, len - hlen, sk);
+  /* Send it and free it.
+   * This will prevent the timer from automatically being restarted.
+   */
+  sk->prot->queue_xmit(sk, dev, skb2, 1);
+  sk->backoff++;
+  reset_timer (sk, TIME_PROBE0, 
+	       backoff (sk->backoff) * (2 * sk->mdev + sk->rtt));
+  sk->retransmits++;
+  sk->prot->retransmits ++;
+}
+
+/*
  *	Socket option code for TCP. 
  */
   
@@ -3529,7 +3668,7 @@ int tcp_setsockopt(struct sock *sk, int level, int optname, char *optval, int op
 
 	switch(optname)
 	{
-		case TCP_MSS:
+		case TCP_MAXSEG:
 			if(val<200||val>2048 || val>sk->mtu)
 				return -EINVAL;
 			sk->mss=val;
@@ -3551,7 +3690,7 @@ int tcp_getsockopt(struct sock *sk, int level, int optname, char *optval, int *o
 			
 	switch(optname)
 	{
-		case TCP_MSS:
+		case TCP_MAXSEG:
 			val=sk->mss;
 			break;
 		case TCP_NODELAY:

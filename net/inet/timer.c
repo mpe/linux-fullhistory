@@ -148,6 +148,10 @@ net_timer (unsigned long data)
 	reset_timer (sk, TIME_DESTROY, TCP_DONE_TIME);
 	release_sock (sk);
 	break;
+    case TIME_PROBE0:
+	tcp_send_probe0(sk);
+	release_sock (sk);
+	break;
     case TIME_WRITE:	/* try to retransmit. */
 	/* It could be we got here because we needed to send an ack.
 	 * So we need to check for that.

@@ -1569,7 +1569,7 @@ inet_ioctl(struct socket *sock, unsigned int cmd, unsigned long arg)
 }
 
 
-void *
+struct sk_buff *
 sock_wmalloc(struct sock *sk, unsigned long size, int force,
 	     int priority)
 {
@@ -1588,7 +1588,7 @@ sock_wmalloc(struct sock *sk, unsigned long size, int force,
 }
 
 
-void *
+struct sk_buff *
 sock_rmalloc(struct sock *sk, unsigned long size, int force, int priority)
 {
   if (sk) {

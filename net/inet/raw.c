@@ -187,7 +187,7 @@ raw_sendto(struct sock *sk, unsigned char *from, int len,
   		return(err);
   	}
   	
-	skb = (struct sk_buff *) sk->prot->wmalloc(sk,
+	skb = sk->prot->wmalloc(sk,
 			len+sizeof(*skb) + sk->prot->max_header,
 			0, GFP_KERNEL);
 	if (skb == NULL) {

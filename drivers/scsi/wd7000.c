@@ -1,4 +1,4 @@
-/* $Id: $
+/* $Id: wd7000.c,v 1.2 1994/01/15 06:02:32 drew Exp $
  *  linux/kernel/wd7000.c
  *
  *  Copyright (C) 1992  Thomas Wuensche
@@ -508,7 +508,8 @@ void wd7000_revision(void)
 }
 
 
-static const char *wd_bases[] = {(char *)0xce000};
+static const char *wd_bases[] = {(char *)0xce000,(char *)d8000};
+
 typedef struct {
     char * signature;
     unsigned offset;

@@ -977,8 +977,10 @@ int ultrastor_biosparam(int size, int dev, int * dkinfo)
     dkinfo[0] = config.heads;
     dkinfo[1] = config.sectors;
     dkinfo[2] = size / s;	/* Ignore partial cylinders */
+#if 0
     if (dkinfo[2] > 1024)
 	dkinfo[2] = 1024;
+#endif
     return 0;
 }
 

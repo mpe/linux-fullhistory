@@ -529,7 +529,7 @@ arp_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
 	tbl->last_used = jiffies;
   } else {
 	memcpy(&dst, ptr + (arp->ar_hln * 2) + arp->ar_pln, arp->ar_pln);
-	if (chk_addr(dst) != IS_MYADDR) {
+	if (chk_addr(dst) != IS_MYADDR && arp_proxies == 0) {
 		kfree_skb(skb, FREE_READ);
 		return(0);
 	} else {
@@ -798,6 +798,7 @@ arp_get_info(char *buffer)
 				req->arp_ha.sa_family = apt->htype;
 			memcpy((char *) req->arp_ha.sa_data,
 		       		(char *) &apt->ha, apt->hlen);
+			req->arp_flags = apt->flags;
 		}
 		pos += sizeof(struct arpreq);
 		cli();

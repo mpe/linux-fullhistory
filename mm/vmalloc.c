@@ -67,6 +67,7 @@ static int free_area_pages(unsigned long dindex, unsigned long index, unsigned l
 	set_pgdir(dindex,0);
 	mem_map[MAP_NR(page)] = 1;
 	free_page(page);
+	invalidate();
 	return 0;
 }
 
@@ -98,6 +99,7 @@ static int alloc_area_pages(unsigned long dindex, unsigned long index, unsigned 
 		*pte = pg | PAGE_SHARED;
 		pte++;
 	} while (--nr);
+	invalidate();
 	return 0;
 }
 
