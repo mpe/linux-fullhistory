@@ -1602,21 +1602,22 @@ nfs4_upgrade_open(struct svc_rqst *rqstp, struct svc_fh *cur_fh, struct nfs4_sta
 	share_access = ~share_access;
 	share_access &= open->op_share_access;
 
-	/* update the struct file */
-	if (share_access & NFS4_SHARE_ACCESS_WRITE) {
-		status = get_write_access(inode);
-		if (status)
-			return nfserrno(status);
-		status = nfsd4_truncate(rqstp, cur_fh, open);
-		if (status) {
-			put_write_access(inode);
-			return status;
-		}
-		/* remember the open */
-		filp->f_mode = (filp->f_mode | FMODE_WRITE) & ~FMODE_READ;
-		set_bit(open->op_share_access, &stp->st_access_bmap);
-		set_bit(open->op_share_deny, &stp->st_deny_bmap);
+	if (!(share_access & NFS4_SHARE_ACCESS_WRITE))
+		return nfsd4_truncate(rqstp, cur_fh, open);
+
+	status = get_write_access(inode);
+	if (status)
+		return nfserrno(status);
+	status = nfsd4_truncate(rqstp, cur_fh, open);
+	if (status) {
+		put_write_access(inode);
+		return status;
 	}
+	/* remember the open */
+	filp->f_mode = (filp->f_mode | FMODE_WRITE) & ~FMODE_READ;
+	set_bit(open->op_share_access, &stp->st_access_bmap);
+	set_bit(open->op_share_deny, &stp->st_deny_bmap);
+
 	return nfs_ok;
 }
 
