@@ -341,7 +341,7 @@ static inline int set_video_mode_Timon(struct pwc_device *pdev, int size, int fr
 
 static inline int set_video_mode_Kiara(struct pwc_device *pdev, int size, int frames, int compression, int snapshot)
 {
-	const struct Kiara_table_entry *pChoose = 0;
+	const struct Kiara_table_entry *pChoose = NULL;
 	int fps, ret;
 	unsigned char buf[12];
 	struct Kiara_table_entry RawEntry = {6, 773, 1272, {0xAD, 0xF4, 0x10, 0x27, 0xB6, 0x24, 0x96, 0x02, 0x30, 0x05, 0x03, 0x80}};
@@ -1087,7 +1087,7 @@ static inline int pwc_get_dynamic_noise(struct pwc_device *pdev, int *noise)
 	return 0;
 }
 
-int pwc_mpt_reset(struct pwc_device *pdev, int flags)
+static int pwc_mpt_reset(struct pwc_device *pdev, int flags)
 {
 	unsigned char buf;
 	

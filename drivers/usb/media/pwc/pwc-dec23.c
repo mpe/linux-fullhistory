@@ -87,7 +87,7 @@ static void fill_table_d000(unsigned char *p)
  * Timon: 0 <= ver <= 15
  *
  */
-void fill_table_color(unsigned int version, const unsigned int *romtable, 
+static void fill_table_color(unsigned int version, const unsigned int *romtable, 
     unsigned char *p0004, 
     unsigned char *p8004)
 {
@@ -150,7 +150,7 @@ void fill_table_color(unsigned int version, const unsigned int *romtable,
  * precision = (pdev->xx + pdev->yy)
  *
  */
-void fill_table_dc00_d800(unsigned int precision, unsigned int *pdc00, unsigned int *pd800)
+static void fill_table_dc00_d800(unsigned int precision, unsigned int *pdc00, unsigned int *pd800)
 {
   int i;
   unsigned int offset1, offset2;
