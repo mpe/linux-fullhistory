@@ -42,6 +42,70 @@ ia64_ptce_info_t ia64_ptce_info;
  */
 spinlock_t ptcg_lock = SPIN_LOCK_UNLOCKED; /* see <asm/pgtable.h> */
 
+#if defined(CONFIG_SMP) && !defined(CONFIG_ITANIUM_PTCG)
+
+#include <linux/irq.h>
+
+unsigned long 	flush_end, flush_start, flush_nbits, flush_rid;
+atomic_t flush_cpu_count;
+
+/*
+ * flush_tlb_no_ptcg is called with ptcg_lock locked
+ */
+static inline void
+flush_tlb_no_ptcg (unsigned long start, unsigned long end, unsigned long nbits)
+{
+	extern void smp_send_flush_tlb (void);
+	unsigned long saved_tpr = 0;
+	unsigned long flags;
+
+	/*
+	 * Some times this is called with interrupts disabled and causes
+	 * dead-lock; to avoid this we enable interrupt and raise the TPR
+	 * to enable ONLY IPI.
+	 */
+	__save_flags(flags);
+	if (!(flags & IA64_PSR_I)) {
+		saved_tpr = ia64_get_tpr();
+		ia64_srlz_d();
+		ia64_set_tpr(IPI_IRQ - 16);
+		ia64_srlz_d();
+		local_irq_enable();
+	}
+
+	spin_lock(&ptcg_lock);
+	flush_rid = ia64_get_rr(start);
+	ia64_srlz_d();
+	flush_start = start;
+	flush_end = end;
+	flush_nbits = nbits;
+	atomic_set(&flush_cpu_count, smp_num_cpus - 1);
+	smp_send_flush_tlb();
+	/*
+	 * Purge local TLB entries. ALAT invalidation is done in ia64_leave_kernel.
+	 */
+	do {
+		asm volatile ("ptc.l %0,%1" :: "r"(start), "r"(nbits<<2) : "memory");
+		start += (1UL << nbits);
+	} while (start < end);
+
+	ia64_srlz_i();			/* srlz.i implies srlz.d */
+
+	/*
+	 * Wait for other CPUs to finish purging entries.
+	 */
+	while (atomic_read(&flush_cpu_count)) {
+		/* Nothing */
+	}
+	if (!(flags & IA64_PSR_I)) {
+		local_irq_disable();
+		ia64_set_tpr(saved_tpr);
+		ia64_srlz_d();
+	}
+}
+
+#endif /* CONFIG_SMP && !CONFIG_ITANIUM_PTCG */
+
 void
 get_new_mmu_context (struct mm_struct *mm)
 {
@@ -97,7 +161,7 @@ __flush_tlb_all (void)
 	stride0 = ia64_ptce_info.stride[0];
 	stride1 = ia64_ptce_info.stride[1];
 
-	__save_and_cli(flags);
+	local_irq_save(flags);
 	for (i = 0; i < count0; ++i) {
 		for (j = 0; j < count1; ++j) {
 			asm volatile ("ptc.e %0" :: "r"(addr));
@@ -105,7 +169,7 @@ __flush_tlb_all (void)
 		}
 		addr += stride0;
 	}
-	__restore_flags(flags);
+	local_irq_restore(flags);
 	ia64_insn_group_barrier();
 	ia64_srlz_i();			/* srlz.i implies srlz.d */
 	ia64_insn_group_barrier();
@@ -142,23 +206,29 @@ flush_tlb_range (struct mm_struct *mm, unsigned long start, unsigned long end)
 	}
 	start &= ~((1UL << nbits) - 1);
 
+#if defined(CONFIG_SMP) && !defined(CONFIG_ITANIUM_PTCG)
+	flush_tlb_no_ptcg(start, end, nbits);
+#else
 	spin_lock(&ptcg_lock);
 	do {
-#ifdef CONFIG_SMP
-		__asm__ __volatile__ ("ptc.g %0,%1;;srlz.i;;"
-				      :: "r"(start), "r"(nbits<<2) : "memory");
-#else
-		__asm__ __volatile__ ("ptc.l %0,%1" :: "r"(start), "r"(nbits<<2) : "memory");
-#endif
+# ifdef CONFIG_SMP
+		/*
+		 * Flush ALAT entries also.
+		 */
+		asm volatile ("ptc.ga %0,%1;;srlz.i;;" :: "r"(start), "r"(nbits<<2) : "memory");
+# else
+		asm volatile ("ptc.l %0,%1" :: "r"(start), "r"(nbits<<2) : "memory");
+# endif
 		start += (1UL << nbits);
 	} while (start < end);
+#endif /* CONFIG_SMP && !defined(CONFIG_ITANIUM_PTCG) */
 	spin_unlock(&ptcg_lock);
 	ia64_insn_group_barrier();
 	ia64_srlz_i();			/* srlz.i implies srlz.d */
 	ia64_insn_group_barrier();
 }
 
-void
+void __init
 ia64_tlb_init (void)
 {
 	ia64_get_ptce(&ia64_ptce_info);

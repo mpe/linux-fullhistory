@@ -3,12 +3,14 @@
 
 #define ELEVATOR_DEBUG
 
-struct elevator_s;
-typedef struct elevator_s elevator_t;
-
 typedef void (elevator_fn) (struct request *, elevator_t *,
 			    struct list_head *,
 			    struct list_head *, int);
+
+typedef int (elevator_merge_fn) (request_queue_t *, struct request **,
+				 struct buffer_head *, int, int *, int *);
+
+typedef void (elevator_dequeue_fn) (struct request *);
 
 struct elevator_s
 {
@@ -22,24 +24,20 @@ struct elevator_s
 	int read_pendings;
 
 	elevator_fn * elevator_fn;
+	elevator_merge_fn *elevator_merge_fn;
+	elevator_dequeue_fn *dequeue_fn;
 
 	unsigned int queue_ID;
 };
 
-#define ELEVATOR_DEFAULTS				\
-((elevator_t) {						\
-	0,			/* sequence */		\
-							\
-	128,			/* read_latency */	\
-	8192,			/* write_latency */	\
-	32,			/* max_bomb_segments */	\
-							\
-	0,			/* nr_segments */	\
-	0,			/* read_pendings */	\
-							\
-	elevator_default,	/* elevator_fn */	\
-	})
-
+void elevator_default(struct request *, elevator_t *, struct list_head *, struct list_head *, int);
+int elevator_default_merge(request_queue_t *, struct request **, struct buffer_head *, int, int *, int *);
+void elevator_default_dequeue(struct request *);
+void elevator_noop(struct request *, elevator_t *, struct list_head *, struct list_head *, int);
+int elevator_noop_merge(request_queue_t *, struct request **, struct buffer_head *, int, int *, int *);
+void elevator_noop_dequeue(struct request *);
+void elevator_linus(struct request *, elevator_t *, struct list_head *, struct list_head *, int);
+int elevator_linus_merge(request_queue_t *, struct request **, struct buffer_head *, int, int *, int *);
 
 typedef struct blkelv_ioctl_arg_s {
 	int queue_ID;
@@ -54,19 +52,25 @@ typedef struct blkelv_ioctl_arg_s {
 extern int blkelvget_ioctl(elevator_t *, blkelv_ioctl_arg_t *);
 extern int blkelvset_ioctl(elevator_t *, const blkelv_ioctl_arg_t *);
 
-
-extern void elevator_init(elevator_t *);
+extern void elevator_init(elevator_t *, elevator_t);
 
 #ifdef ELEVATOR_DEBUG
-extern void elevator_debug(request_queue_t *, kdev_t);
+extern void elevator_default_debug(request_queue_t *, kdev_t);
 #else
-#define elevator_debug(a,b) do { } while(0)
+#define elevator_default_debug(a,b) do { } while(0)
 #endif
 
 #define elevator_sequence_after(a,b) ((int)((b)-(a)) < 0)
 #define elevator_sequence_before(a,b) elevator_sequence_after(b,a)
 #define elevator_sequence_after_eq(a,b) ((int)((b)-(a)) <= 0)
 #define elevator_sequence_before_eq(a,b) elevator_sequence_after_eq(b,a)
+
+/*
+ * Return values from elevator merger
+ */
+#define ELEVATOR_NO_MERGE	0
+#define ELEVATOR_FRONT_MERGE	1
+#define ELEVATOR_BACK_MERGE	2
 
 /*
  * This is used in the elevator algorithm.  We don't prioritise reads
@@ -79,12 +83,12 @@ extern void elevator_debug(request_queue_t *, kdev_t);
 	   (s1)->sector < (s2)->sector)) ||	\
 	 (s1)->rq_dev < (s2)->rq_dev)
 
-static inline void elevator_merge_requests(elevator_t * e, struct request * req, struct request * next)
+static inline void elevator_merge_requests(struct request * req, struct request * next)
 {
 	if (elevator_sequence_before(next->elevator_sequence, req->elevator_sequence))
 		req->elevator_sequence = next->elevator_sequence;
 	if (req->cmd == READ)
-		e->read_pendings--;
+		req->e->read_pendings--;
 
 }
 
@@ -93,23 +97,23 @@ static inline int elevator_sequence(elevator_t * e, int latency)
 	return latency + e->sequence;
 }
 
-#define elevator_merge_before(q, req, lat)	__elevator_merge((q), (req), (lat), 0)
-#define elevator_merge_after(q, req, lat)	__elevator_merge((q), (req), (lat), 1)
-static inline void __elevator_merge(elevator_t * elevator, struct request * req, int latency, int after)
+#define elevator_merge_before(req, lat)	__elevator_merge((req), (lat), 0)
+#define elevator_merge_after(req, lat)	__elevator_merge((req), (lat), 1)
+static inline void __elevator_merge(struct request * req, int latency, int after)
 {
-	int sequence = elevator_sequence(elevator, latency);
+	int sequence = elevator_sequence(req->e, latency);
 	if (after)
 		sequence -= req->nr_segments;
 	if (elevator_sequence_before(sequence, req->elevator_sequence))
 		req->elevator_sequence = sequence;
 }
 
-static inline void elevator_account_request(elevator_t * elevator, struct request * req)
+static inline void elevator_account_request(struct request * req)
 {
-	elevator->sequence++;
+	req->e->sequence++;
 	if (req->cmd == READ)
-		elevator->read_pendings++;
-	elevator->nr_segments++;
+		req->e->read_pendings++;
+	req->e->nr_segments++;
 }
 
 static inline int elevator_request_latency(elevator_t * elevator, int rw)
@@ -122,5 +126,53 @@ static inline int elevator_request_latency(elevator_t * elevator, int rw)
 
 	return latency;
 }
+
+#define ELEVATOR_DEFAULT					\
+((elevator_t) {							\
+	0,				/* sequence */		\
+								\
+	100000,				/* read_latency */	\
+	100000,				/* write_latency */	\
+	128,				/* max_bomb_segments */	\
+								\
+	0,				/* nr_segments */	\
+	0,				/* read_pendings */	\
+								\
+	elevator_default,		/* elevator_fn */	\
+	elevator_default_merge,		/* elevator_merge_fn */ \
+	elevator_default_dequeue,	/* dequeue_fn */	\
+	})
+
+#define ELEVATOR_NOOP						\
+((elevator_t) {							\
+	0,				/* sequence */		\
+								\
+	0,				/* read_latency */	\
+	0,				/* write_latency */	\
+	0,				/* max_bomb_segments */	\
+								\
+	0,				/* nr_segments */	\
+	0,				/* read_pendings */	\
+								\
+	elevator_noop,			/* elevator_fn */	\
+	elevator_noop_merge,		/* elevator_merge_fn */ \
+	elevator_noop_dequeue,		/* dequeue_fn */	\
+	})
+
+#define ELEVATOR_LINUS						\
+((elevator_t) {							\
+	0,				/* not used */		\
+								\
+	1000000,				/* read passovers */	\
+	2000000,				/* write passovers */	\
+	0,				/* max_bomb_segments */	\
+								\
+	0,				/* not used */		\
+	0,				/* not used */		\
+								\
+	elevator_linus,			/* elevator_fn */	\
+	elevator_linus_merge,		/* elevator_merge_fn */ \
+	elevator_noop_dequeue,		/* dequeue_fn */	\
+	})
 
 #endif

@@ -23,8 +23,40 @@
 #include <asm/processor.h>
 #include <asm/sal.h>
 #include <asm/uaccess.h>
+#include <asm/unwind.h>
 #include <asm/user.h>
 
+static void
+do_show_stack (struct unw_frame_info *info, void *arg)
+{
+	unsigned long ip, sp, bsp;
+
+	printk("\nCall Trace: ");
+	do {
+		unw_get_ip(info, &ip);
+		if (ip == 0)
+			break;
+
+		unw_get_sp(info, &sp);
+		unw_get_bsp(info, &bsp);
+		printk("[<%016lx>] sp=0x%016lx bsp=0x%016lx\n", ip, sp, bsp);
+	} while (unw_unwind(info) >= 0);
+}
+
+void
+show_stack (struct task_struct *task)
+{
+#ifdef CONFIG_IA64_NEW_UNWIND
+	if (!task)
+		unw_init_running(do_show_stack, 0);
+	else {
+		struct unw_frame_info info;
+
+		unw_init_from_blocked_task(&info, task);
+		do_show_stack(&info, 0);
+	}
+#endif
+}
 
 void
 show_regs (struct pt_regs *regs)
@@ -71,6 +103,10 @@ show_regs (struct pt_regs *regs)
 			       ((i == sof - 1) || (i % 3) == 2) ? "\n" : " ");
 		}
 	}
+#ifdef CONFIG_IA64_NEW_UNWIND
+	if (!user_mode(regs))
+		show_stack(0);
+#endif
 }
 
 void __attribute__((noreturn))
@@ -98,14 +134,47 @@ cpu_idle (void *unused)
 		if (pm_idle)
 			(*pm_idle)();
 #ifdef CONFIG_ITANIUM_ASTEP_SPECIFIC
-		if (ia64_get_itm() < ia64_get_itc()) {
-			extern void ia64_reset_itm (void);
+		local_irq_disable();
+		{
+			u64 itc, itm;
 
-			printk("cpu_idle: ITM in past, resetting it...\n");
-			ia64_reset_itm();
+			itc = ia64_get_itc();
+			itm = ia64_get_itm();
+			if (time_after(itc, itm + 1000)) {
+				extern void ia64_reset_itm (void);
+
+				printk("cpu_idle: ITM in past (itc=%lx,itm=%lx:%lums)\n",
+				       itc, itm, (itc - itm)/500000);
+				ia64_reset_itm();
+			}
 		}
+		local_irq_enable();
 #endif
 	}
+}
+
+void
+ia64_save_extra (struct task_struct *task)
+{
+	extern void ia64_save_debug_regs (unsigned long *save_area);
+	extern void ia32_save_state (struct thread_struct *thread);
+
+	if ((task->thread.flags & IA64_THREAD_DBG_VALID) != 0)
+		ia64_save_debug_regs(&task->thread.dbr[0]);
+	if (IS_IA32_PROCESS(ia64_task_regs(task)))
+		ia32_save_state(&task->thread);
+}
+
+void
+ia64_load_extra (struct task_struct *task)
+{
+	extern void ia64_load_debug_regs (unsigned long *save_area);
+	extern void ia32_load_state (struct thread_struct *thread);
+
+	if ((task->thread.flags & IA64_THREAD_DBG_VALID) != 0)
+		ia64_load_debug_regs(&task->thread.dbr[0]);
+	if (IS_IA32_PROCESS(ia64_task_regs(task)))
+		ia32_load_state(&task->thread);
 }
 
 /*
@@ -234,9 +303,103 @@ copy_thread (int nr, unsigned long clone_flags, unsigned long usp,
 	return 0;
 }
 
+#ifdef CONFIG_IA64_NEW_UNWIND
+
+void
+do_copy_regs (struct unw_frame_info *info, void *arg)
+{
+	unsigned long ar_bsp, ndirty, *krbs, addr, mask, sp, nat_bits = 0, ip;
+	elf_greg_t *dst = arg;
+	struct pt_regs *pt;
+	char nat;
+	long val;
+	int i;
+
+	memset(dst, 0, sizeof(elf_gregset_t));	/* don't leak any kernel bits to user-level */
+
+	if (unw_unwind_to_user(info) < 0)
+		return;
+
+	unw_get_sp(info, &sp);
+	pt = (struct pt_regs *) (sp + 16);
+
+	krbs = (unsigned long *) current + IA64_RBS_OFFSET/8;
+	ndirty = ia64_rse_num_regs(krbs, krbs + (pt->loadrs >> 19));
+	ar_bsp = (unsigned long) ia64_rse_skip_regs((long *) pt->ar_bspstore, ndirty);
+
+	/*
+	 * Write portion of RSE backing store living on the kernel
+	 * stack to the VM of the process.
+	 */
+	for (addr = pt->ar_bspstore; addr < ar_bsp; addr += 8)
+		if (ia64_peek(pt, current, addr, &val) == 0)
+			access_process_vm(current, addr, &val, sizeof(val), 1);
+
+	/* r0 is zero */
+	for (i = 1, mask = (1UL << i); i < 32; ++i) {
+		unw_get_gr(info, i, &dst[i], &nat);
+		if (nat)
+			nat_bits |= mask;
+		mask <<= 1;
+	}
+	dst[32] = nat_bits;
+	unw_get_pr(info, &dst[33]);
+
+	for (i = 0; i < 8; ++i)
+		unw_get_br(info, i, &dst[34 + i]);
+
+	unw_get_rp(info, &ip);
+	dst[42] = ip + ia64_psr(pt)->ri;
+	dst[43] = pt->cr_ifs & 0x3fffffffff;
+	dst[44] = pt->cr_ipsr & IA64_PSR_UM;
+
+	unw_get_ar(info, UNW_AR_RSC, &dst[45]);
+	/*
+	 * For bsp and bspstore, unw_get_ar() would return the kernel
+	 * addresses, but we need the user-level addresses instead:
+	 */
+	dst[46] = ar_bsp;
+	dst[47] = pt->ar_bspstore;
+	unw_get_ar(info, UNW_AR_RNAT, &dst[48]);
+	unw_get_ar(info, UNW_AR_CCV, &dst[49]);
+	unw_get_ar(info, UNW_AR_UNAT, &dst[50]);
+	unw_get_ar(info, UNW_AR_FPSR, &dst[51]);
+	dst[52] = pt->ar_pfs;	/* UNW_AR_PFS is == to pt->cr_ifs for interrupt frames */
+	unw_get_ar(info, UNW_AR_LC, &dst[53]);
+	unw_get_ar(info, UNW_AR_EC, &dst[54]);
+}
+
+void
+do_dump_fpu (struct unw_frame_info *info, void *arg)
+{
+	struct task_struct *fpu_owner = ia64_get_fpu_owner();
+	elf_fpreg_t *dst = arg;
+	int i;
+
+	memset(dst, 0, sizeof(elf_fpregset_t));	/* don't leak any "random" bits */
+
+	if (unw_unwind_to_user(info) < 0)
+		return;
+
+	/* f0 is 0.0, f1 is 1.0 */
+
+	for (i = 2; i < 32; ++i)
+		unw_get_fr(info, i, dst + i);
+
+	if ((fpu_owner == current) || (current->thread.flags & IA64_THREAD_FPH_VALID)) {
+		ia64_sync_fph(current);
+		memcpy(dst + 32, current->thread.fph, 96*16);
+	}
+}
+
+#endif /* CONFIG_IA64_NEW_UNWIND */
+
 void
 ia64_elf_core_copy_regs (struct pt_regs *pt, elf_gregset_t dst)
 {
+#ifdef CONFIG_IA64_NEW_UNWIND
+	unw_init_running(do_copy_regs, dst);
+#else
 	struct switch_stack *sw = ((struct switch_stack *) pt) - 1;
 	unsigned long ar_ec, cfm, ar_bsp, ndirty, *krbs, addr;
 
@@ -270,7 +433,7 @@ ia64_elf_core_copy_regs (struct pt_regs *pt, elf_gregset_t dst)
 	 *	ar.rsc ar.bsp ar.bspstore ar.rnat
 	 *	ar.ccv ar.unat ar.fpsr ar.pfs ar.lc ar.ec
 	 */
-	memset(dst, 0, sizeof (dst));	/* don't leak any "random" bits */
+	memset(dst, 0, sizeof(dst));	/* don't leak any "random" bits */
 
 	/* r0 is zero */   dst[ 1] =  pt->r1; dst[ 2] =  pt->r2; dst[ 3] = pt->r3;
 	dst[ 4] =  sw->r4; dst[ 5] =  sw->r5; dst[ 6] =  sw->r6; dst[ 7] = sw->r7;
@@ -285,17 +448,22 @@ ia64_elf_core_copy_regs (struct pt_regs *pt, elf_gregset_t dst)
 	dst[34] = pt->b0; dst[35] = sw->b1; dst[36] = sw->b2; dst[37] = sw->b3;
 	dst[38] = sw->b4; dst[39] = sw->b5; dst[40] = pt->b6; dst[41] = pt->b7;
 
-	dst[42] = pt->cr_iip; dst[43] = pt->cr_ifs;
-	dst[44] = pt->cr_ipsr;	/* XXX perhaps we should filter out some bits here? --davidm */
+	dst[42] = pt->cr_iip + ia64_psr(pt)->ri;
+	dst[43] = pt->cr_ifs;
+	dst[44] = pt->cr_ipsr & IA64_PSR_UM;
 
 	dst[45] = pt->ar_rsc; dst[46] = ar_bsp; dst[47] = pt->ar_bspstore;  dst[48] = pt->ar_rnat;
 	dst[49] = pt->ar_ccv; dst[50] = pt->ar_unat; dst[51] = sw->ar_fpsr; dst[52] = pt->ar_pfs;
 	dst[53] = sw->ar_lc; dst[54] = (sw->ar_pfs >> 52) & 0x3f;
+#endif /* !CONFIG_IA64_NEW_UNWIND */
 }
 
 int
 dump_fpu (struct pt_regs *pt, elf_fpregset_t dst)
 {
+#ifdef CONFIG_IA64_NEW_UNWIND
+	unw_init_running(do_dump_fpu, dst);
+#else
 	struct switch_stack *sw = ((struct switch_stack *) pt) - 1;
 	struct task_struct *fpu_owner = ia64_get_fpu_owner();
 
@@ -312,6 +480,7 @@ dump_fpu (struct pt_regs *pt, elf_fpregset_t dst)
 		}
 		memcpy(dst + 32, current->thread.fph, 96*16);
 	}
+#endif
 	return 1;	/* f0-f31 are always valid so we always return 1 */
 }
 
@@ -384,7 +553,7 @@ release_thread (struct task_struct *dead_task)
 unsigned long
 get_wchan (struct task_struct *p)
 {
-	struct ia64_frame_info info;
+	struct unw_frame_info info;
 	unsigned long ip;
 	int count = 0;
 	/*
@@ -403,11 +572,11 @@ get_wchan (struct task_struct *p)
 	 * gracefully if the process wasn't really blocked after all.
 	 * --davidm 99/12/15
 	 */
-	ia64_unwind_init_from_blocked_task(&info, p);
+	unw_init_from_blocked_task(&info, p);
 	do {
-		if (ia64_unwind_to_previous_frame(&info) < 0)
+		if (unw_unwind(&info) < 0)
 			return 0;
-		ip = ia64_unwind_get_ip(&info);
+		unw_get_ip(&info, &ip);
 		if (ip < first_sched || ip >= last_sched)
 			return ip;
 	} while (count++ < 16);

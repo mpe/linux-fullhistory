@@ -1,4 +1,4 @@
-/* $Id: srmmu.c,v 1.212 2000/06/13 22:59:14 anton Exp $
+/* $Id: srmmu.c,v 1.214 2000/06/22 01:28:44 anton Exp $
  * srmmu.c:  SRMMU specific routines for memory management.
  *
  * Copyright (C) 1995 David S. Miller  (davem@caip.rutgers.edu)
@@ -88,6 +88,8 @@ ctxd_t *srmmu_context_table;
 int viking_mxcc_present = 0;
 spinlock_t srmmu_context_spinlock = SPIN_LOCK_UNLOCKED;
 
+int is_hypersparc;
+
 /*
  * In general all page table modifications should use the V8 atomic
  * swap instruction.  This insures the mmu and the cpu are in sync
@@ -124,6 +126,7 @@ void *srmmu_nocache_pool;
 void *srmmu_nocache_bitmap;
 int srmmu_nocache_low;
 int srmmu_nocache_used;
+spinlock_t srmmu_nocache_spinlock;
 
 /* This makes sense. Honest it does - Anton */
 #define __nocache_pa(VADDR) (((unsigned long)VADDR) - SRMMU_NOCACHE_VADDR + __pa((unsigned long)srmmu_nocache_pool))
@@ -237,7 +240,6 @@ static inline pmd_t *srmmu_pmd_offset(pgd_t * dir, unsigned long address)
 static inline pte_t *srmmu_pte_offset(pmd_t * dir, unsigned long address)
 { return (pte_t *) srmmu_pmd_page(*dir) + ((address >> PAGE_SHIFT) & (SRMMU_PTRS_PER_PTE - 1)); }
 
-/* XXX Make this SMP safe - Anton */
 unsigned long __srmmu_get_nocache(int size, int align)
 {
 	int offset = srmmu_nocache_low;
@@ -246,6 +248,8 @@ unsigned long __srmmu_get_nocache(int size, int align)
 	int lowest_failed = 0;
 
 	size = size >> SRMMU_NOCACHE_BITMAP_SHIFT;
+
+	spin_lock(&srmmu_nocache_spinlock);
 
 repeat:
 	offset = find_next_zero_bit(srmmu_nocache_bitmap, SRMMU_NOCACHE_BITMAP_SIZE, offset);
@@ -260,6 +264,7 @@ repeat:
 
 	if ((SRMMU_NOCACHE_BITMAP_SIZE - offset) < size) {
 		printk("Run out of nocached RAM!\n");
+		spin_unlock(&srmmu_nocache_spinlock);
 		return 0;
 	}
 
@@ -283,6 +288,8 @@ repeat:
 	if (!lowest_failed && ((align >> SRMMU_NOCACHE_BITMAP_SHIFT) <= 1) && (offset > srmmu_nocache_low))
 		srmmu_nocache_low = offset;
 
+	spin_unlock(&srmmu_nocache_spinlock);
+
 	return (SRMMU_NOCACHE_VADDR + (offset << SRMMU_NOCACHE_BITMAP_SHIFT));
 }
 
@@ -298,12 +305,13 @@ unsigned inline long srmmu_get_nocache(int size, int align)
 	return tmp;
 }
 
-/* XXX Make this SMP safe - Anton */
 void srmmu_free_nocache(unsigned long vaddr, int size)
 {
 	int offset = (vaddr - SRMMU_NOCACHE_VADDR) >> SRMMU_NOCACHE_BITMAP_SHIFT;
 
 	size = size >> SRMMU_NOCACHE_BITMAP_SHIFT;
+
+	spin_lock(&srmmu_nocache_spinlock);
 
 	while(size--) {
 		clear_bit(offset + size, srmmu_nocache_bitmap);
@@ -312,6 +320,8 @@ void srmmu_free_nocache(unsigned long vaddr, int size)
 
 	if (offset < srmmu_nocache_low)
 		srmmu_nocache_low = offset;
+
+	spin_unlock(&srmmu_nocache_spinlock);
 }
 
 void srmmu_early_allocate_ptable_skeleton(unsigned long start, unsigned long end);
@@ -335,6 +345,8 @@ void srmmu_nocache_init(void)
 	init_mm.pgd = srmmu_swapper_pg_dir;
 
 	srmmu_early_allocate_ptable_skeleton(SRMMU_NOCACHE_VADDR, SRMMU_NOCACHE_END);
+
+	spin_lock_init(&srmmu_nocache_spinlock);
 
 	paddr = __pa((unsigned long)srmmu_nocache_pool);
 	vaddr = SRMMU_NOCACHE_VADDR;
@@ -379,6 +391,51 @@ static void srmmu_pgd_free(pgd_t *pgd)
 	srmmu_free_nocache((unsigned long)pgd, SRMMU_PGD_TABLE_SIZE);
 }
 
+pmd_t *empty_bad_pmd_table;
+pte_t *empty_bad_pte_table;
+
+/*
+ * We init them before every return and make them writable-shared.
+ * This guarantees we get out of the kernel in some more or less sane
+ * way.
+ */
+static pmd_t * get_bad_pmd_table(void)
+{
+	int i;
+
+	for (i = 0; i < PAGE_SIZE/sizeof(pmd_t); i++)
+		srmmu_pmd_set(&(empty_bad_pmd_table[i]), empty_bad_pte_table);
+
+	return empty_bad_pmd_table;
+}
+
+static pte_t * get_bad_pte_table(void)
+{
+	pte_t v;
+	int i;
+
+	memset((void *)&empty_bad_page, 0, PAGE_SIZE);
+
+	v = srmmu_pte_mkdirty(srmmu_mk_pte_phys(__pa(&empty_bad_page) + phys_base, PAGE_SHARED));
+
+	for (i = 0; i < PAGE_SIZE/sizeof(pte_t); i++)
+		srmmu_set_pte(&(empty_bad_pte_table[i]), v);
+
+	return empty_bad_pte_table;
+}
+
+void __handle_bad_pgd(pgd_t *pgd)
+{
+	pgd_ERROR(*pgd);
+	srmmu_pgd_set(pgd, get_bad_pmd_table());
+}
+
+void __handle_bad_pmd(pmd_t *pmd)
+{
+	pmd_ERROR(*pmd);
+	srmmu_pmd_set(pmd, get_bad_pte_table());
+}
+
 static pte_t *srmmu_pte_alloc(pmd_t * pmd, unsigned long address)
 {
 	address = (address >> PAGE_SHIFT) & (SRMMU_PTRS_PER_PTE - 1);
@@ -389,14 +446,11 @@ static pte_t *srmmu_pte_alloc(pmd_t * pmd, unsigned long address)
 			srmmu_pmd_set(pmd, page);
 			return page + address;
 		}
-		/* XXX fix this - Anton */
-		pmd_set(pmd, BAD_PAGETABLE);
+		srmmu_pmd_set(pmd, get_bad_pte_table());
 		return NULL;
 	}
 	if(srmmu_pmd_bad(*pmd)) {
-		printk("Bad pmd in pte_alloc: %08lx\n", pmd_val(*pmd));
-		/* XXX fix this - Anton */
-		pmd_set(pmd, BAD_PAGETABLE);
+		__handle_bad_pmd(pmd);
 		return NULL;
 	}
 	return ((pte_t *) pmd_page(*pmd)) + address;
@@ -417,14 +471,11 @@ static pmd_t *srmmu_pmd_alloc(pgd_t * pgd, unsigned long address)
 			srmmu_pgd_set(pgd, page);
 			return page + address;
 		}
-		/* XXX fix this - Anton */
-		pgd_set(pgd, (pmd_t *) BAD_PAGETABLE);
+		srmmu_pgd_set(pgd, get_bad_pmd_table());
 		return NULL;
 	}
 	if(srmmu_pgd_bad(*pgd)) {
-		printk("Bad pgd in pmd_alloc: %08lx\n", pgd_val(*pgd));
-		/* XXX fix this - Anton */
-		pgd_set(pgd, (pmd_t *) BAD_PAGETABLE);
+		__handle_bad_pgd(pgd);
 		return NULL;
 	}
 	return (pmd_t *) srmmu_pgd_page(*pgd) + address;
@@ -493,7 +544,10 @@ static void srmmu_switch_mm(struct mm_struct *old_mm, struct mm_struct *mm,
 		spin_unlock(&srmmu_context_spinlock);
 		srmmu_ctxd_set(&srmmu_context_table[mm->context], mm->pgd);
 	}
-	/* XXX should we hyper_flush_whole_icache() here - Anton */
+
+	if (is_hypersparc)
+		hyper_flush_whole_icache();
+
 	srmmu_set_context(mm->context);
 }
 
@@ -1189,6 +1243,9 @@ void __init srmmu_paging_init(void)
 	flush_cache_all();
 	flush_tlb_all();
 
+	empty_bad_pmd_table = (pte_t *)srmmu_get_nocache(SRMMU_PMD_TABLE_SIZE, SRMMU_PMD_TABLE_SIZE);
+	empty_bad_pte_table = (pte_t *)srmmu_get_nocache(SRMMU_PTE_TABLE_SIZE, SRMMU_PTE_TABLE_SIZE);
+
 	/*
 	 * This does not logically belong here, but we need to
 	 * call it at the moment we are able to use the bootmem
@@ -1396,6 +1453,8 @@ static void __init init_hypersparc(void)
 	srmmu_name = "ROSS HyperSparc";
 
 	init_vac_layout();
+
+	is_hypersparc = 1;
 
 	BTFIXUPSET_CALL(pte_clear, srmmu_pte_clear, BTFIXUPCALL_NORM);
 	BTFIXUPSET_CALL(pmd_clear, srmmu_pmd_clear, BTFIXUPCALL_NORM);

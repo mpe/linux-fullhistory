@@ -14,7 +14,6 @@
 
 #include <asm/segment.h>
 #include <asm/io.h>
-#include <asm/smp.h>
 
 #include "pci-i386.h"
 
@@ -1046,13 +1045,6 @@ int pcibios_enable_device(struct pci_dev *dev)
 
 	if ((err = pcibios_enable_resources(dev)) < 0)
 		return err;
-	if (!dev->irq) {
-		u8 pin;
-		pci_read_config_byte(dev, PCI_INTERRUPT_PIN, &pin);
-		if (pin && !pcibios_lookup_irq(dev, 1))
-			printk(KERN_WARNING "PCI: No IRQ known for interrupt pin %c of device %s.%s\n",
-			       'A' + pin - 1, dev->slot_name,
-			       (pci_probe & PCI_BIOS_IRQ_SCAN) ? "" : " Please try using pci=biosirq.");
-	}
+	pcibios_enable_irq(dev);
 	return 0;
 }

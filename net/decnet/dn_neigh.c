@@ -441,7 +441,7 @@ int dn_neigh_router_hello(struct sk_buff *skb)
 	struct dn_dev *dn_db;
 	dn_address src;
 
-	src = dn_eth2dn(msg->id);
+	src = dn_htons(dn_eth2dn(msg->id));
 
 	neigh = __neigh_lookup(&dn_neigh_table, &src, skb->dev, 1);
 
@@ -498,7 +498,7 @@ int dn_neigh_endnode_hello(struct sk_buff *skb)
 	struct dn_neigh *dn;
 	dn_address src;
 
-	src = dn_eth2dn(msg->id);
+	src = dn_htons(dn_eth2dn(msg->id));
 
 	neigh = __neigh_lookup(&dn_neigh_table, &src, skb->dev, 1);
 

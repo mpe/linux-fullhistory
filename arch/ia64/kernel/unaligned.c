@@ -1,8 +1,8 @@
 /*
  * Architecture-specific unaligned trap handling.
  *
- * Copyright (C) 1999 Hewlett-Packard Co
- * Copyright (C) 1999 Stephane Eranian <eranian@hpl.hp.com>
+ * Copyright (C) 1999-2000 Hewlett-Packard Co
+ * Copyright (C) 1999-2000 Stephane Eranian <eranian@hpl.hp.com>
  */
 #include <linux/kernel.h>
 #include <linux/sched.h>
@@ -460,32 +460,15 @@ setfpreg(unsigned long regnum, struct ia64_fpreg *fpval, struct pt_regs *regs)
 	 * enabled.
 	 *
 	 * The registers [32-127] are ususally saved in the tss. When get here,
-	 * they are NECESSARY live because they are only saved explicitely.
+	 * they are NECESSARILY live because they are only saved explicitely.
 	 * We have 3 ways of updating the values: force a save of the range
 	 * in tss, use a gigantic switch/case statement or generate code on the
 	 * fly to store to the right register.
 	 * For now, we are using the (slow) save/restore way.
 	 */
  	if (regnum >= IA64_FIRST_ROTATING_FR) {
-		/*
-		 * force a save of [32-127] to tss
-		 * we use the __() form to avoid fiddling with the dfh bit
-		 */
-		__ia64_save_fpu(&current->thread.fph[0]);
-
+		ia64_sync_fph(current);
 		current->thread.fph[IA64_FPH_OFFS(regnum)] = *fpval;
-
-		__ia64_load_fpu(&current->thread.fph[0]);
-
-		/*
-	 	 * mark the high partition as being used now
-		 *
-		 * This is REQUIRED because the disabled_fph_fault() does
-		 * not set it, it's relying on the faulting instruction to
-		 * do it. In our case the faulty instruction never gets executed
-		 * completely, so we need to toggle the bit.
-	 	 */
-		regs->cr_ipsr |= IA64_PSR_MFH;
 	} else {
 		/*
 		 * pt_regs or switch_stack ?
@@ -544,15 +527,8 @@ getfpreg(unsigned long regnum, struct ia64_fpreg *fpval, struct pt_regs *regs)
 	 * See discussion in setfpreg() for reasons and other ways of doing this.
 	 */
  	if (regnum >= IA64_FIRST_ROTATING_FR) {
-	
-		/*
-		 * force a save of [32-127] to tss
-		 * we use the__ia64_save_fpu() form to avoid fiddling with
-		 * the dfh bit.
-		 */
-		__ia64_save_fpu(&current->thread.fph[0]);
-
-		*fpval =  current->thread.fph[IA64_FPH_OFFS(regnum)];
+		ia64_sync_fph(current);
+		*fpval = current->thread.fph[IA64_FPH_OFFS(regnum)];
 	} else {
 		/*
 		 * f0 = 0.0, f1= 1.0. Those registers are constant and are thus
@@ -1410,6 +1386,25 @@ ia64_handle_unaligned(unsigned long ifa, struct pt_regs *regs)
 		die_if_kernel("Unaligned reference while in kernel\n", regs, 30);
 		/* NOT_REACHED */
 	}
+	/*
+	 * For now, we don't support user processes running big-endian
+	 * which do unaligned accesses
+	 */
+	if (ia64_psr(regs)->be) {
+		struct siginfo si;
+
+		printk(KERN_ERR "%s(%d): big-endian unaligned access %016lx (ip=%016lx) not "
+		       "yet supported\n",
+		       current->comm, current->pid, ifa, regs->cr_iip + ipsr->ri);
+
+		si.si_signo = SIGBUS;
+		si.si_errno = 0;
+		si.si_code = BUS_ADRALN;
+		si.si_addr = (void *) ifa;
+		force_sig_info(SIGBUS, &si, current);
+		return;
+	}
+
 	if (current->thread.flags & IA64_THREAD_UAC_SIGBUS) {
 		struct siginfo si;
 
@@ -1417,7 +1412,7 @@ ia64_handle_unaligned(unsigned long ifa, struct pt_regs *regs)
 		si.si_errno = 0;
 		si.si_code = BUS_ADRALN;
 		si.si_addr = (void *) ifa;
-		send_sig_info (SIGBUS, &si, current);
+		force_sig_info(SIGBUS, &si, current);
 		return;
 	}
 

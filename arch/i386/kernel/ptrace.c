@@ -5,7 +5,6 @@
  *	Gareth Hughes <gareth@valinux.com>, May 2000
  */
 
-#include <linux/config.h> /* for CONFIG_MATH_EMULATION */
 #include <linux/kernel.h>
 #include <linux/sched.h>
 #include <linux/mm.h>

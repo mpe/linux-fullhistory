@@ -1,4 +1,4 @@
-/* $Id: sys_sparc.c,v 1.62 2000/06/19 06:24:37 davem Exp $
+/* $Id: sys_sparc.c,v 1.63 2000/06/22 11:42:25 davem Exp $
  * linux/arch/sparc/kernel/sys_sparc.c
  *
  * This file contains various random system calls that
@@ -215,6 +215,7 @@ static unsigned long do_mmap2(unsigned long addr, unsigned long len,
 			goto out;
 	}
 
+	down(&current->mm->mmap_sem);
 	lock_kernel();
 	retval = -EINVAL;
 	len = PAGE_ALIGN(len);
@@ -229,12 +230,11 @@ static unsigned long do_mmap2(unsigned long addr, unsigned long len,
 		goto out_putf;
 
 	flags &= ~(MAP_EXECUTABLE | MAP_DENYWRITE);
-	down(&current->mm->mmap_sem);
 	retval = do_mmap_pgoff(file, addr, len, prot, flags, pgoff);
-	up(&current->mm->mmap_sem);
 
 out_putf:
 	unlock_kernel();
+	up(&current->mm->mmap_sem);
 	if (file)
 		fput(file);
 out:

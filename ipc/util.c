@@ -312,6 +312,8 @@ void ipc64_perm_to_ipc_perm (struct ipc64_perm *in, struct ipc_perm *out)
 	out->seq	= in->seq;
 }
 
+#ifndef __ia64__
+
 /**
  *	ipc_parse_version	-	IPC call version
  *	@cmd: pointer to command
@@ -330,6 +332,8 @@ int ipc_parse_version (int *cmd)
 		return IPC_OLD;
 	}
 }
+
+#endif /* __ia64__ */
 
 #else
 /*

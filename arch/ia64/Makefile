@@ -12,15 +12,11 @@ NM := $(CROSS_COMPILE)nm -B
 AWK := awk
 
 LINKFLAGS = -static -T arch/$(ARCH)/vmlinux.lds
-# next line is for HP compiler backend:
-#AFLAGS += -DGCC_RETVAL_POINTER_IN_R8
-# The next line is needed when compiling with the July snapshot of the Cygnus compiler:
-#EXTRA	= -D__GCC_DOESNT_KNOW_IN_REGS__
-# next two lines are for the September snapshot of the Cygnus compiler:
-AFLAGS += -D__GCC_MULTIREG_RETVALS__ -Wa,-x
-EXTRA	= -D__GCC_MULTIREG_RETVALS__
+AFLAGS += -Wa,-x
+EXTRA	=
 
-CFLAGS := $(CFLAGS) -pipe $(EXTRA) -Wa,-x -ffixed-r13 -mfixed-range=f10-f15,f32-f127
+CFLAGS := $(CFLAGS) -pipe $(EXTRA) -Wa,-x -ffixed-r13 -mfixed-range=f10-f15,f32-f127 \
+	  -mconstant-gp -funwind-tables
 
 ifdef CONFIG_IA64_GENERIC
 	CORE_FILES      :=      arch/$(ARCH)/hp/hp.a	\

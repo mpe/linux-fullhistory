@@ -92,7 +92,7 @@ extern        struct  intr_routing_entry      intr_routing[];
  * }
  */
 extern unsigned int iosapic_version(unsigned long);
-extern void iosapic_init(unsigned long);
+extern void iosapic_init(unsigned long, int);
 
 struct iosapic_vector {
 	unsigned long iosapic_base; /* IOSAPIC Base address */

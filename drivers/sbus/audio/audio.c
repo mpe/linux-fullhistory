@@ -1,4 +1,4 @@
-/* $Id: audio.c,v 1.51 2000/06/19 06:24:47 davem Exp $
+/* $Id: audio.c,v 1.52 2000/06/22 11:42:27 davem Exp $
  * drivers/sbus/audio/audio.c
  *
  * Copyright 1996 Thomas K. Dyas (tdyas@noc.rutgers.edu)

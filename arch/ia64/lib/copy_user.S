@@ -29,6 +29,8 @@
  * 	- fix extraneous stop bit introduced by the EX() macro.
  */
 
+#include <asm/asmmacro.h>
+
 // The label comes first because our store instruction contains a comma
 // and confuse the preprocessor otherwise
 //
@@ -81,10 +83,9 @@
  	.psr	abi64
  	.psr	lsb
 
- 	.align	16
- 	.global	__copy_user
- 	.proc	__copy_user
-__copy_user:
+GLOBAL_ENTRY(__copy_user)
+	UNW(.prologue)
+	UNW(.save ar.pfs, saved_pfs)
 	alloc saved_pfs=ar.pfs,3,((2*PIPE_DEPTH+7)&~7),0,((2*PIPE_DEPTH+7)&~7)
 
 	.rotr val1[PIPE_DEPTH],val2[PIPE_DEPTH]
@@ -95,12 +96,16 @@ __copy_user:
 
 	;;			// RAW of cfm when len=0
 	cmp.eq p8,p0=r0,len	// check for zero length
+	UNW(.save ar.lc, saved_lc)
 	mov saved_lc=ar.lc	// preserve ar.lc (slow)
 (p8)	br.ret.spnt.few rp	// empty mempcy()
 	;;
 	add enddst=dst,len	// first byte after end of source
 	add endsrc=src,len	// first byte after end of destination
+	UNW(.save pr, saved_pr)
 	mov saved_pr=pr		// preserve predicates
+
+	UNW(.body)
 
 	mov dst1=dst		// copy because of rotation
 	mov ar.ec=PIPE_DEPTH
@@ -400,7 +405,4 @@ failure_out:
 
 	mov ar.pfs=saved_pfs
 	br.ret.dptk.few rp
-
-
- 	.endp __copy_user
-
+END(__copy_user)

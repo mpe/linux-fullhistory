@@ -12,6 +12,8 @@
  * Copyright (C) 1999 David Mosberger-Tang <davidm@hpl.hp.com>
  */
 
+#include <asm/asmmacro.h>
+
 /* If a fault occurs, r8 gets set to -EFAULT and r9 gets cleared.  */
 #define EX(x...)				\
 	.section __ex_table,"a";		\
@@ -25,12 +27,14 @@
 	.psr lsb
 	.lsb
 
-	.align 32
-	.global __strnlen_user
-	.proc __strnlen_user
-__strnlen_user:
+GLOBAL_ENTRY(__strnlen_user)
+	UNW(.prologue)
 	alloc r2=ar.pfs,2,0,0,0
+	UNW(.save ar.lc, r16)
 	mov r16=ar.lc			// preserve ar.lc
+
+	UNW(.body)
+
 	add r3=-1,in1
 	;;
 	mov ar.lc=r3
@@ -51,5 +55,4 @@ __strnlen_user:
 	mov r8=r9
 	mov ar.lc=r16			// restore ar.lc
 	br.ret.sptk.few rp
-
-	.endp __strnlen_user
+END(__strnlen_user)

@@ -5,7 +5,7 @@
  *
  *		IPv4 Forwarding Information Base: semantics.
  *
- * Version:	$Id: fib_semantics.c,v 1.15 1999/08/20 11:05:07 davem Exp $
+ * Version:	$Id: fib_semantics.c,v 1.16 2000/06/21 17:14:50 davem Exp $
  *
  * Authors:	Alexey Kuznetsov, <kuznet@ms2.inr.ac.ru>
  *
@@ -925,7 +925,7 @@ int fib_sync_up(struct net_device *dev)
 			nh->nh_flags &= ~RTNH_F_DEAD;
 		} endfor_nexthops(fi)
 
-		if (alive == fi->fib_nhs) {
+		if (alive > 0) {
 			fi->fib_flags &= ~RTNH_F_DEAD;
 			ret++;
 		}

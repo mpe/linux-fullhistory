@@ -112,7 +112,7 @@ struct adi {
 	char buttons;
 	char axes10;
 	char axes8;
-	char pad;
+	signed char pad;
 	char hats;
 	char *abs;
 	short *key;

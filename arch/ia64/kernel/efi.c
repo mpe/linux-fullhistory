@@ -5,15 +5,18 @@
  *
  * Copyright (C) 1999 VA Linux Systems
  * Copyright (C) 1999 Walt Drummond <drummond@valinux.com>
- * Copyright (C) 1999 Hewlett-Packard Co.
+ * Copyright (C) 1999-2000 Hewlett-Packard Co.
  * Copyright (C) 1999 David Mosberger-Tang <davidm@hpl.hp.com>
- * Copyright (C) 1999 Stephane Eranian <eranian@hpl.hp.com>
+ * Copyright (C) 1999-2000 Stephane Eranian <eranian@hpl.hp.com>
  *
  * All EFI Runtime Services are not implemented yet as EFI only
  * supports physical mode addressing on SoftSDV. This is to be fixed
  * in a future version.  --drummond 1999-07-20
  *
  * Implemented EFI runtime services and virtual mode calls.  --davidm
+ *
+ * Goutham Rao: <goutham.rao@intel.com>
+ * 	Skip non-WB memory and ignore empty memory ranges.
  */
 #include <linux/kernel.h>
 #include <linux/init.h>
@@ -22,6 +25,7 @@
 
 #include <asm/efi.h>
 #include <asm/io.h>
+#include <asm/pgtable.h>
 #include <asm/processor.h>
 
 #define EFI_DEBUG	0
@@ -172,6 +176,14 @@ efi_memmap_walk (efi_freemem_callback_t callback, void *arg)
 				continue;
 			}
 
+			if (!(md->attribute & EFI_MEMORY_WB))
+				continue;
+			if (md->num_pages == 0) {
+				printk("efi_memmap_walk: ignoring empty region at 0x%lx",
+				       md->phys_addr);
+				continue;
+			}
+
 			curr.start = PAGE_OFFSET + md->phys_addr;
 			curr.end   = curr.start + (md->num_pages << 12);
 
@@ -204,6 +216,61 @@ efi_memmap_walk (efi_freemem_callback_t callback, void *arg)
 		end = prev.end & PAGE_MASK;
 		if (end > start)
 			(*callback)(start, end, arg);
+	}
+}
+
+/*
+ * Look for the PAL_CODE region reported by EFI and maps it using an
+ * ITR to enable safe PAL calls in virtual mode.  See IA-64 Processor
+ * Abstraction Layer chapter 11 in ADAG
+ */
+static void
+map_pal_code (void)
+{
+	void *efi_map_start, *efi_map_end, *p;
+	efi_memory_desc_t *md;
+	u64 efi_desc_size;
+	int pal_code_count=0;
+	u64 mask, flags;
+	u64 vaddr;
+
+	efi_map_start = __va(ia64_boot_param.efi_memmap);
+	efi_map_end   = efi_map_start + ia64_boot_param.efi_memmap_size;
+	efi_desc_size = ia64_boot_param.efi_memdesc_size;
+
+	for (p = efi_map_start; p < efi_map_end; p += efi_desc_size) {
+		md = p;
+		if (md->type != EFI_PAL_CODE) continue;
+
+		if (++pal_code_count > 1) {
+			printk(KERN_ERR "Too many EFI Pal Code memory ranges, dropped @ %lx\n",
+			       md->phys_addr);
+			continue;
+		} 
+		mask  = ~((1 << _PAGE_SIZE_4M)-1);	/* XXX should be dynamic? */
+		vaddr = PAGE_OFFSET + md->phys_addr;
+
+	  	printk(__FUNCTION__": mapping PAL code [0x%lx-0x%lx) into [0x%lx-0x%lx)\n",
+		       md->phys_addr, md->phys_addr + (md->num_pages << 12),
+		       vaddr & mask, (vaddr & mask) + 4*1024*1024);
+
+		/*
+		 * Cannot write to CRx with PSR.ic=1
+		 */
+		ia64_clear_ic(flags);
+
+		/*
+		 * ITR0/DTR0: used for kernel code/data
+		 * ITR1/DTR1: used by HP simulator
+		 * ITR2/DTR2: map PAL code
+		 * ITR3/DTR3: used to map PAL calls buffer
+		 */
+		ia64_itr(0x1, 2, vaddr & mask,
+			 pte_val(mk_pte_phys(md->phys_addr,
+					     __pgprot(__DIRTY_BITS|_PAGE_PL_0|_PAGE_AR_RX))),
+			 _PAGE_SIZE_4M);
+		local_irq_restore(flags);
+		ia64_srlz_i ();
 	}
 }
 
@@ -291,6 +358,8 @@ efi_init (void)
 		}
 	}
 #endif
+
+	map_pal_code();
 }
 
 void

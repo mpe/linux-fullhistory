@@ -1,4 +1,4 @@
-/* $Id: pcic.c,v 1.14 2000/03/01 02:53:28 davem Exp $
+/* $Id: pcic.c,v 1.15 2000/06/20 01:10:00 anton Exp $
  * pcic.c: Sparc/PCI controller support
  *
  * Copyright (C) 1998 V. Roganov and G. Raiko
@@ -155,8 +155,15 @@ static struct pcic_ca2irq pcic_i_se6[] = {
 
 /*
  * Krups (courtesy of Varol Kaptan)
- * No documentation available, so we guess it, based on Espresso layout.
- * Since we always run PROLL on Krups we may put map in there.
+ * No documentation available, but it was easy to guess
+ * because it was very similar to Espresso.
+ *  
+ * pin 0 - kbd, mouse, serial;
+ * pin 1 - Ethernet;
+ * pin 2 - igs (we do not use it);
+ * pin 3 - audio;
+ * pin 4,5,6 - unused;
+ * pin 7 - RTC (from P2 onwards as David B. says).
  */
 static struct pcic_ca2irq pcic_i_jk[] = {
 	{ 0, 0x00, 0, 13, 0 },		/* Ebus - serial and keyboard */
@@ -600,10 +607,10 @@ pcic_fill_irq(struct linux_pcic *pcic, struct pci_dev *dev, int node)
 	} else {					/* Corrupted map */
 		printk("PCIC: BAD PIN %d\n", i); for (;;) {}
 	}
-/* P3 remove later */ printk("PCIC: device %s pin %d ivec 0x%x irq %x\n", namebuf, i, ivec, dev->irq);
+/* P3 */ /* printk("PCIC: device %s pin %d ivec 0x%x irq %x\n", namebuf, i, ivec, dev->irq); */
 
 	/*
-	 * dev->irq=0 means PROM did not bothered to program the upper
+	 * dev->irq=0 means PROM did not bother to program the upper
 	 * half of PCIC. This happens on JS-E with PROM 3.11, for instance.
 	 */
 	if (dev->irq == 0 || p->force) {
@@ -730,7 +737,7 @@ pcic_pin_to_irq(unsigned int pin, char *name)
 		printk("PCIC: BAD PIN %d FOR %s\n", pin, name);
 		for (;;) {}	/* XXX Cannot panic properly in case of PROLL */
 	}
-/* P3 remove later */ printk("PCIC: dev %s pin %d ivec 0x%x irq %x\n", name, pin, ivec, irq);
+/* P3 */ /* printk("PCIC: dev %s pin %d ivec 0x%x irq %x\n", name, pin, ivec, irq); */
 	return irq;
 }
 

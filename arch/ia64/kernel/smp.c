@@ -21,11 +21,13 @@
 #include <linux/smp.h>
 #include <linux/kernel_stat.h>
 #include <linux/mm.h>
+#include <linux/delay.h>
 
 #include <asm/atomic.h>
 #include <asm/bitops.h>
 #include <asm/current.h>
 #include <asm/delay.h>
+
 #include <asm/io.h>
 #include <asm/irq.h>
 #include <asm/page.h>
@@ -39,6 +41,7 @@
 
 extern int cpu_idle(void * unused);
 extern void _start(void);
+extern void machine_halt(void);
 
 extern int cpu_now_booting;			     /* Used by head.S to find idle task */
 extern volatile unsigned long cpu_online_map;	     /* Bitmap of available cpu's */
@@ -66,15 +69,18 @@ struct smp_call_struct {
 	atomic_t unstarted_count;
 	atomic_t unfinished_count;
 };
-static struct smp_call_struct *smp_call_function_data;
+static volatile struct smp_call_struct *smp_call_function_data;
 
-#ifdef	CONFIG_ITANIUM_ASTEP_SPECIFIC
+#ifdef	CONFIG_ITANIUM_A1_SPECIFIC
 extern spinlock_t ivr_read_lock;
 #endif
 
 #define IPI_RESCHEDULE	        0
 #define IPI_CALL_FUNC	        1
 #define IPI_CPU_STOP	        2
+#ifndef CONFIG_ITANIUM_PTCG
+# define IPI_FLUSH_TLB		3
+#endif	/*!CONFIG_ITANIUM_PTCG */
 
 /*
  *	Setup routine for controlling SMP activation
@@ -126,6 +132,22 @@ halt_processor(void)
 
 }
 
+static inline int
+pointer_lock(void *lock, void *data, int retry)
+{
+ again:
+	if (cmpxchg_acq((void **) lock, 0, data) == 0)
+		return 0;
+
+	if (!retry)
+		return -EBUSY;
+
+	while (*(void **) lock)
+		;
+
+	goto again;
+}
+
 void
 handle_IPI(int irq, void *dev_id, struct pt_regs *regs) 
 {
@@ -160,13 +182,14 @@ handle_IPI(int irq, void *dev_id, struct pt_regs *regs)
 				void *info;
 				int wait;
 
+				/* release the 'pointer lock' */
 				data = smp_call_function_data;
 				func = data->func;
 				info = data->info;
 				wait = data->wait;
 
 				mb();
-				atomic_dec (&data->unstarted_count);
+				atomic_dec(&data->unstarted_count);
 
 				/* At this point the structure may be gone unless wait is true.  */
 				(*func)(info);
@@ -174,13 +197,58 @@ handle_IPI(int irq, void *dev_id, struct pt_regs *regs)
 				/* Notify the sending CPU that the task is done.  */
 				mb();
 				if (wait) 
-					atomic_dec (&data->unfinished_count);
+					atomic_dec(&data->unfinished_count);
 			}
 			break;
 
 		case IPI_CPU_STOP:
 			halt_processor();
 			break;
+
+#ifndef CONFIG_ITANIUM_PTCG
+		case IPI_FLUSH_TLB:
+                {
+			extern unsigned long flush_start, flush_end, flush_nbits, flush_rid;
+			extern atomic_t flush_cpu_count;
+			unsigned long saved_rid = ia64_get_rr(flush_start);
+			unsigned long end = flush_end;
+			unsigned long start = flush_start;
+			unsigned long nbits = flush_nbits;
+
+			/*
+			 * Current CPU may be running with different
+			 * RID so we need to reload the RID of flushed
+			 * address.  Purging the translation also
+			 * needs ALAT invalidation; we do not need
+			 * "invala" here since it is done in
+			 * ia64_leave_kernel.
+			 */
+			ia64_srlz_d();
+			if (saved_rid != flush_rid) {
+				ia64_set_rr(flush_start, flush_rid);
+				ia64_srlz_d();
+			}
+			
+			do {
+				/*
+				 * Purge local TLB entries.
+				 */
+				__asm__ __volatile__ ("ptc.l %0,%1" ::
+						      "r"(start), "r"(nbits<<2) : "memory");
+				start += (1UL << nbits);
+			} while (start < end);
+
+			ia64_insn_group_barrier();
+			ia64_srlz_i();			/* srlz.i implies srlz.d */
+
+			if (saved_rid != flush_rid) {
+				ia64_set_rr(flush_start, saved_rid);
+				ia64_srlz_d();
+			}
+			atomic_dec(&flush_cpu_count);
+			break;
+		}
+#endif	/* !CONFIG_ITANIUM_PTCG */
 
 		default:
 			printk(KERN_CRIT "Unknown IPI on CPU %d: %lu\n", this_cpu, which);
@@ -199,7 +267,7 @@ send_IPI_single(int dest_cpu, int op)
 	if (dest_cpu == -1) 
                 return;
         
-        ipi_op[dest_cpu] |= (1 << op);
+	set_bit(op, &ipi_op[dest_cpu]);
 	ipi_send(dest_cpu, IPI_IRQ, IA64_IPI_DM_INT, 0);
 }
 
@@ -243,6 +311,14 @@ smp_send_stop(void)
 	send_IPI_allbutself(IPI_CPU_STOP);
 }
 
+#ifndef CONFIG_ITANIUM_PTCG
+void
+smp_send_flush_tlb(void)
+{
+	send_IPI_allbutself(IPI_FLUSH_TLB);
+}
+#endif	/* !CONFIG_ITANIUM_PTCG */
+
 /*
  * Run a function on all other CPUs.
  *  <func>	The function to run. This must be fast and non-blocking.
@@ -260,63 +336,35 @@ smp_call_function (void (*func) (void *info), void *info, int retry, int wait)
 {
 	struct smp_call_struct data;
 	long timeout;
-	static spinlock_t lock = SPIN_LOCK_UNLOCKED;
+	int cpus = smp_num_cpus - 1;
+
+	if (cpus == 0)
+		return 0;
 	
 	data.func = func;
 	data.info = info;
 	data.wait = wait;
-	atomic_set(&data.unstarted_count, smp_num_cpus - 1);
-	atomic_set(&data.unfinished_count, smp_num_cpus - 1);
+	atomic_set(&data.unstarted_count, cpus);
+	atomic_set(&data.unfinished_count, cpus);
 
-	if (retry) {
-		while (1) {
-			if (smp_call_function_data) {
-				schedule ();  /*  Give a mate a go  */
-				continue;
-			}
-			spin_lock (&lock);
-			if (smp_call_function_data) {
-				spin_unlock (&lock);  /*  Bad luck  */
-				continue;
-			}
-			/*  Mine, all mine!  */
-			break;
-		}
-	}
-	else {
-		if (smp_call_function_data) 
-			return -EBUSY;
-		spin_lock (&lock);
-		if (smp_call_function_data) {
-			spin_unlock (&lock);
-			return -EBUSY;
-		}
-	}
+	if (pointer_lock(&smp_call_function_data, &data, retry))
+		return -EBUSY;
 
-	smp_call_function_data = &data;
-	spin_unlock (&lock);
-	data.func = func;
-	data.info = info;
-	atomic_set (&data.unstarted_count, smp_num_cpus - 1);
-	data.wait = wait;
-	if (wait) 
-		atomic_set (&data.unfinished_count, smp_num_cpus - 1);
-	
 	/*  Send a message to all other CPUs and wait for them to respond  */
 	send_IPI_allbutself(IPI_CALL_FUNC);
 
 	/*  Wait for response  */
 	timeout = jiffies + HZ;
-	while ( (atomic_read (&data.unstarted_count) > 0) &&
-		time_before (jiffies, timeout) )
-		barrier ();
-	if (atomic_read (&data.unstarted_count) > 0) {
+	while ((atomic_read(&data.unstarted_count) > 0) && time_before(jiffies, timeout))
+		barrier();
+	if (atomic_read(&data.unstarted_count) > 0) {
 		smp_call_function_data = NULL;
 		return -ETIMEDOUT;
 	}
 	if (wait)
-		while (atomic_read (&data.unfinished_count) > 0)
-			barrier ();
+		while (atomic_read(&data.unfinished_count) > 0)
+			barrier();
+	/* unlock pointer */
 	smp_call_function_data = NULL;
 	return 0;
 }
@@ -382,17 +430,21 @@ smp_do_timer(struct pt_regs *regs)
 	}
 }
 
-
-/*
- * Called by both boot and secondaries to move global data into
- * per-processor storage.
- */
 static inline void __init
-smp_store_cpu_info(int cpuid)
+smp_calibrate_delay(int cpuid)
 {
 	struct cpuinfo_ia64 *c = &cpu_data[cpuid];
-
-	identify_cpu(c);
+#if 0
+	unsigned long old = loops_per_sec;
+	extern void calibrate_delay(void);
+	
+	loops_per_sec = 0;
+	calibrate_delay();
+	c->loops_per_sec = loops_per_sec;
+	loops_per_sec = old;
+#else
+	c->loops_per_sec = loops_per_sec;
+#endif
 }
 
 /* 
@@ -446,15 +498,16 @@ smp_callin(void)
 	extern void ia64_init_itm(void);
 	extern void ia64_cpu_local_tick(void);
 
-	ia64_set_dcr(IA64_DCR_DR | IA64_DCR_DK | IA64_DCR_DX | IA64_DCR_PP);
-	ia64_set_fpu_owner(0);	       
-	ia64_rid_init();		/* initialize region ids */
-
 	cpu_init();
-	__flush_tlb_all();
 
-	smp_store_cpu_info(smp_processor_id());
 	smp_setup_percpu_timer(smp_processor_id());
+
+	/* setup the CPU local timer tick */
+	ia64_init_itm();
+
+	/* Disable all local interrupts */
+	ia64_set_lrr0(0, 1);	
+	ia64_set_lrr1(0, 1);	
 
 	if (test_and_set_bit(smp_processor_id(), &cpu_online_map)) {
 		printk("CPU#%d already initialized!\n", smp_processor_id());
@@ -463,17 +516,8 @@ smp_callin(void)
 	while (!smp_threads_ready) 
 		mb();
 
-	normal_xtp();
-
-	/* setup the CPU local timer tick */
-	ia64_cpu_local_tick();
-
-	/* Disable all local interrupts */
-	ia64_set_lrr0(0, 1);	
-	ia64_set_lrr1(0, 1);	
-
-	__sti();		/* Interrupts have been off till now. */
-
+	local_irq_enable();		/* Interrupts have been off until now */
+	smp_calibrate_delay(smp_processor_id());
 	printk("SMP: CPU %d starting idle loop\n", smp_processor_id());
 
 	cpu_idle(NULL);
@@ -583,16 +627,8 @@ smp_boot_cpus(void)
 	/* Setup BSP mappings */
 	__cpu_number_map[bootstrap_processor] = 0;
 	__cpu_logical_map[0] = bootstrap_processor;
-	current->processor = bootstrap_processor;
 
-	/* Mark BSP booted and get active_mm context */
-	cpu_init();
-
-	/* reset XTP for interrupt routing */
-	normal_xtp();
-
-	/* And generate an entry in cpu_data */
-	smp_store_cpu_info(bootstrap_processor);
+	smp_calibrate_delay(smp_processor_id());
 #if 0
 	smp_tune_scheduling();
 #endif

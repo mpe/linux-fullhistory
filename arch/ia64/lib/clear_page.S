@@ -10,10 +10,11 @@
  * Output:
  * 	none
  *
- * Copyright (C) 1999 Hewlett-Packard Co
+ * Copyright (C) 1999-2000 Hewlett-Packard Co
  * Copyright (C) 1999 Stephane Eranian <eranian@hpl.hp.com>
- * Copyright (C) 1999 David Mosberger-Tang <davidm@hpl.hp.com>
+ * Copyright (C) 1999-2000 David Mosberger-Tang <davidm@hpl.hp.com>
  */
+#include <asm/asmmacro.h>
 #include <asm/page.h>
 
 	.text
@@ -21,12 +22,14 @@
 	.psr lsb
 	.lsb
 
-	.align 32
-	.global clear_page
-	.proc clear_page
-clear_page:
+GLOBAL_ENTRY(clear_page)
+	UNW(.prologue)
 	alloc r11=ar.pfs,1,0,0,0
+	UNW(.save ar.lc, r16)
 	mov r16=ar.lc		// slow
+
+	UNW(.body)
+
 	mov r17=PAGE_SIZE/32-1	// -1 = repeat/until
 	;;
 	adds r18=16,in0
@@ -38,5 +41,4 @@ clear_page:
 	;;
 	mov ar.lc=r16		// restore lc
 	br.ret.sptk.few rp
-
-	.endp clear_page
+END(clear_page)

@@ -14,6 +14,7 @@
  * Copyright (C) 1999 Stephane Eranian <eranian@hpl.hp.com>
  */
 
+#include <asm/asmmacro.h>
 
 // arguments
 //
@@ -28,22 +29,23 @@
 #define cnt		r18
 #define buf2		r19
 #define saved_lc	r20
-#define saved_pr	r21
-#define tmp		r22
+#define tmp		r21
 
  	.text
  	.psr	abi64
  	.psr	lsb
 
- 	.align	16
- 	.global	memset
- 	.proc	memset
-
-memset:
+GLOBAL_ENTRY(memset)
+	UNW(.prologue)
+	UNW(.save ar.pfs, saved_pfs)
  	alloc	saved_pfs=ar.pfs,3,0,0,0	// cnt is sink here
 	cmp.eq p8,p0=r0,len	// check for zero length
+	UNW(.save ar.lc, saved_lc)
 	mov saved_lc=ar.lc	// preserve ar.lc (slow)
 	;; 
+
+	UNW(.body)
+
 	adds tmp=-1,len		// br.ctop is repeat/until
 	tbit.nz p6,p0=buf,0	// odd alignment
 (p8)	br.ret.spnt.few rp
@@ -108,4 +110,4 @@ long_memset:
 	;;
 (p6)	st1 [buf]=val		// only 1 byte left
 	br.ret.dptk.few rp
- 	.endp
+END(memset)

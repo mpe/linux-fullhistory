@@ -6,8 +6,8 @@
 
 typedef unsigned short dn_address;
 
-#define dn_ntohs(x) le16_to_cpu(x)
-#define dn_htons(x) cpu_to_le16(x)
+#define dn_ntohs(x) le16_to_cpu((unsigned short)(x))
+#define dn_htons(x) cpu_to_le16((unsigned short)(x))
 
 struct dn_scp                                   /* Session Control Port */
 {

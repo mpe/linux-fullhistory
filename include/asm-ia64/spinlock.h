@@ -9,6 +9,8 @@
  * This file is used for SMP configurations only.
  */
 
+#include <linux/kernel.h>
+
 #include <asm/system.h>
 #include <asm/bitops.h>
 #include <asm/atomic.h>
@@ -40,7 +42,7 @@ typedef struct {
        "cmp4.eq p0,p7 = r0, r2\n" \
        "(p7) br.cond.spnt.few 1b\n" \
        ";;\n" \
-       :: "m" __atomic_fool_gcc((x)) : "r2", "r29")
+       :: "m" __atomic_fool_gcc((x)) : "r2", "r29", "memory")
  
 #else 
 #define spin_lock(x)					\
@@ -55,22 +57,12 @@ typedef struct {
 
 #define spin_is_locked(x)	((x)->lock != 0)
 
-#define spin_unlock(x)		(((spinlock_t *) x)->lock = 0)
+#define spin_unlock(x)		({((spinlock_t *) x)->lock = 0; barrier();})
 
 /* Streamlined !test_and_set_bit(0, (x)) */
-#define spin_trylock(x)						\
-({								\
-	spinlock_t *__x = (x);					\
-	__u32 old;						\
-								\
-	do {							\
-		old = __x->lock;				\
-	} while (cmpxchg_acq(&__x->lock, old, 1) != old);	\
-	old == 0;						\
-})
+#define spin_trylock(x)		(cmpxchg_acq(&(x)->lock, 0, 1) == 0)
 
-#define spin_unlock_wait(x) \
-	({ do { barrier(); } while(((volatile spinlock_t *)x)->lock); })
+#define spin_unlock_wait(x)	({ do { barrier(); } while ((x)->lock); })
 
 typedef struct {
 	volatile int read_counter:31;
@@ -78,45 +70,49 @@ typedef struct {
 } rwlock_t;
 #define RW_LOCK_UNLOCKED (rwlock_t) { 0, 0 }
 
-#define read_lock(rw)									\
-do {											\
-	int tmp = 0;									\
-	__asm__ __volatile__ ("1:\tfetchadd4.acq %0 = %1, 1\n"				\
-			      ";;\n"							\
-			      "tbit.nz p6,p0 = %0, 31\n"				\
-			      "(p6) br.cond.sptk.few 2f\n"				\
-			      ".section .text.lock,\"ax\"\n"				\
-			      "2:\tfetchadd4.rel %0 = %1, -1\n"				\
-			      ";;\n"							\
-			      "3:\tld4.acq %0 = %1\n"					\
-			      ";;\n"							\
-			      "tbit.nz p6,p0 = %0, 31\n"				\
-			      "(p6) br.cond.sptk.few 3b\n"				\
-			      "br.cond.sptk.few 1b\n"					\
-			      ";;\n"							\
-			      ".previous\n": "=r" (tmp), "=m" (__atomic_fool_gcc(rw)));	\
+#define read_lock(rw)							 \
+do {									 \
+	int tmp = 0;							 \
+	__asm__ __volatile__ ("1:\tfetchadd4.acq %0 = %1, 1\n"		 \
+			      ";;\n"					 \
+			      "tbit.nz p6,p0 = %0, 31\n"		 \
+			      "(p6) br.cond.sptk.few 2f\n"		 \
+			      ".section .text.lock,\"ax\"\n"		 \
+			      "2:\tfetchadd4.rel %0 = %1, -1\n"		 \
+			      ";;\n"					 \
+			      "3:\tld4.acq %0 = %1\n"			 \
+			      ";;\n"					 \
+			      "tbit.nz p6,p0 = %0, 31\n"		 \
+			      "(p6) br.cond.sptk.few 3b\n"		 \
+			      "br.cond.sptk.few 1b\n"			 \
+			      ";;\n"					 \
+			      ".previous\n"				 \
+			      : "=r" (tmp), "=m" (__atomic_fool_gcc(rw)) \
+			      :: "memory");				 \
 } while(0)
 
-#define read_unlock(rw)								\
-do {										\
-	int tmp = 0;								\
-	__asm__ __volatile__ ("fetchadd4.rel %0 = %1, -1\n"			\
-			      : "=r" (tmp) : "m" (__atomic_fool_gcc(rw)));	\
+#define read_unlock(rw)						\
+do {								\
+	int tmp = 0;						\
+	__asm__ __volatile__ ("fetchadd4.rel %0 = %1, -1\n"	\
+			      : "=r" (tmp)			\
+			      : "m" (__atomic_fool_gcc(rw))	\
+			      : "memory");			\
 } while(0)
 
 #define write_lock(rw)				\
-while(1) {					\
+do {						\
 	do {					\
-	} while (!test_and_set_bit(31, (rw)));	\
-	if ((rw)->read_counter) {		\
-		clear_bit(31, (rw));		\
-		while ((rw)->read_counter)	\
-			;			\
-	} else {				\
-		break;				\
-	}					\
-}
+		while ((rw)->write_lock);	\
+	} while (test_and_set_bit(31, (rw)));	\
+	while ((rw)->read_counter);		\
+	barrier();				\
+} while (0)
 
-#define write_unlock(x)				(clear_bit(31, (x)))
+/*
+ * clear_bit() has "acq" semantics; we're really need "rel" semantics,
+ * but for simplicity, we simply do a fence for now...
+ */
+#define write_unlock(x)				({clear_bit(31, (x)); mb();})
 
 #endif /*  _ASM_IA64_SPINLOCK_H */

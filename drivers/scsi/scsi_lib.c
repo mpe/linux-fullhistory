@@ -855,10 +855,9 @@ void scsi_request_fn(request_queue_t * q)
 	 * if the device itself is blocked, or if the host is fully
 	 * occupied.
 	 */
-	if (SHpnt->in_recovery
-	    || q->plugged) {
+	if (SHpnt->in_recovery || q->plugged)
 		return;
-	}
+
 	/*
 	 * To start with, we keep looping until the queue is empty, or until
 	 * the host is no longer able to accept any more requests.
@@ -869,10 +868,8 @@ void scsi_request_fn(request_queue_t * q)
 		 * released the lock and grabbed it again, so each time
 		 * we need to check to see if the queue is plugged or not.
 		 */
-		if (SHpnt->in_recovery
-		    || q->plugged) {
+		if (SHpnt->in_recovery || q->plugged)
 			return;
-		}
 
 		/*
 		 * If the device cannot accept another request, then quit.
@@ -1019,8 +1016,7 @@ void scsi_request_fn(request_queue_t * q)
 			 * We have copied the data out of the request block - it is now in
 			 * a field in SCpnt.  Release the request block.
 			 */
-			req->rq_status = RQ_INACTIVE;
-			wake_up(&wait_for_request);
+			blkdev_release_request(req);
 		}
 		/*
 		 * Now it is finally safe to release the lock.  We are

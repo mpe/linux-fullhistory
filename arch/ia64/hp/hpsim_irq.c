@@ -6,6 +6,8 @@
  */
 
 #include <linux/init.h>
+#include <linux/kernel.h>
+#include <linux/sched.h>
 #include <linux/irq.h>
 
 static unsigned int

@@ -218,7 +218,7 @@ static struct {
 };
 #define CMD_MAX (sizeof(sizes)/sizeof(sizes[0])-1)
 
-int
+long
 asmlinkage handle_sys_nfsservctl(int cmd, void *opaque_argp, void *opaque_resp)
 {
 	struct nfsctl_arg *	argp = opaque_argp;

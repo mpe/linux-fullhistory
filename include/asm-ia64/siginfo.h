@@ -56,6 +56,8 @@ typedef struct siginfo {
 		struct {
 			void *_addr;		/* faulting insn/memory ref. */
 			int _imm;		/* immediate value for "break" */
+			int _pad0;
+			unsigned long _isr;	/* isr */
 		} _sigfault;
 
 		/* SIGPOLL */
@@ -79,6 +81,7 @@ typedef struct siginfo {
 #define si_ptr		_sifields._rt._sigval.sival_ptr
 #define si_addr		_sifields._sigfault._addr
 #define si_imm		_sifields._sigfault._imm	/* as per UNIX SysV ABI spec */
+#define si_isr		_sifields._sigfault._isr	/* valid if si_code==FPE_FLTxxx */
 #define si_band		_sifields._sigpoll._band
 #define si_fd		_sifields._sigpoll._fd
 

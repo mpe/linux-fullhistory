@@ -64,7 +64,9 @@ struct ifmcaddr6
 	struct ifmcaddr6	*next;
 	struct timer_list	mca_timer;
 	unsigned		mca_flags;
-	atomic_t		mca_users;	
+	int			mca_users;
+	atomic_t		mca_refcnt;
+	spinlock_t		mca_lock;
 };
 
 #define	IFA_HOST	IPV6_ADDR_LOOPBACK

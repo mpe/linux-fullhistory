@@ -17,6 +17,11 @@ extern inline void pcibios_set_master(struct pci_dev *dev)
 	/* No special bus mastering setup handling */
 }
 
+extern inline void pcibios_penalize_isa_irq(int irq)
+{
+	/* We don't do dynamic PCI IRQ allocation */
+}
+
 /* Dynamic DMA mapping stuff.
  */
 

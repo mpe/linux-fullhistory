@@ -25,7 +25,8 @@ endif
 all:	$(TARGETS)
 
 bootloader: $(OBJECTS)
-	$(LD) $(LINKFLAGS) $(OBJECTS) $(LIBS) -o bootloader
+	$(LD) $(LINKFLAGS) $(OBJECTS) $(TOPDIR)/lib/lib.a $(TOPDIR)/arch/$(ARCH)/lib/lib.a \
+	-o bootloader
 
 clean:
 	rm -f $(TARGETS)

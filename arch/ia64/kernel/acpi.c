@@ -89,16 +89,16 @@ acpi_iosapic(char *p)
 #ifdef CONFIG_IA64_DIG
 	acpi_entry_iosapic_t *iosapic = (acpi_entry_iosapic_t *) p;
 	unsigned int ver, v;
-	int l, pins;
+	int l, max_pin;
 
 	ver = iosapic_version(iosapic->address);
-	pins = (ver >> 16) & 0xff;
+	max_pin = (ver >> 16) & 0xff;
 	
 	printk("IOSAPIC Version %x.%x: address 0x%lx IRQs 0x%x - 0x%x\n", 
 	       (ver & 0xf0) >> 4, (ver & 0x0f), iosapic->address, 
-	       iosapic->irq_base, iosapic->irq_base + pins);
+	       iosapic->irq_base, iosapic->irq_base + max_pin);
 	
-	for (l = 0; l < pins; l++) {
+	for (l = 0; l <= max_pin; l++) {
 		v = iosapic->irq_base + l;
 		if (v < 16)
 			v = isa_irq_to_vector(v);
@@ -110,7 +110,7 @@ acpi_iosapic(char *p)
 		iosapic_addr(v) = (unsigned long) ioremap(iosapic->address, 0);
 		iosapic_baseirq(v) = iosapic->irq_base;
 	}
-	iosapic_init(iosapic->address);
+	iosapic_init(iosapic->address, iosapic->irq_base);
 #endif
 }
 

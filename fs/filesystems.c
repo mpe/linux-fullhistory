@@ -52,7 +52,7 @@ void __init filesystem_setup(void)
 #ifdef CONFIG_NFSD_MODULE
 int (*do_nfsservctl)(int, void *, void *);
 #endif
-int
+long
 asmlinkage sys_nfsservctl(int cmd, void *argp, void *resp)
 {
 #ifndef CONFIG_NFSD_MODULE

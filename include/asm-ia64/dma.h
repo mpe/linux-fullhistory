@@ -21,7 +21,7 @@
 #define dma_inb		inb
 
 #define MAX_DMA_CHANNELS	8
-#define MAX_DMA_ADDRESS		(~0UL)		/* no limits on DMAing, for now */
+#define MAX_DMA_ADDRESS		0xffffffffUL
 
 extern spinlock_t  dma_spin_lock;
 

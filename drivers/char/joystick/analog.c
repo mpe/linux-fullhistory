@@ -30,6 +30,7 @@
  * Vojtech Pavlik, Ucitelska 1576, Prague 8, 182 00 Czech Republic
  */
 
+#include <linux/config.h>
 #include <linux/delay.h>
 #include <linux/kernel.h>
 #include <linux/module.h>
@@ -113,7 +114,7 @@ struct analog_port {
 	struct gameport *gameport;
 	struct timer_list timer;
 	struct analog analog[2];
-	char mask;
+	unsigned char mask;
 	char saitek;
 	char cooked;
 	int bads;

@@ -5,7 +5,7 @@
  *	Authors:
  *	Pedro Roque		<roque@di.fc.ul.pt>	
  *
- *	$Id: mcast.c,v 1.30 2000/02/08 21:27:23 davem Exp $
+ *	$Id: mcast.c,v 1.31 2000/06/21 17:23:54 davem Exp $
  *
  *	Based on linux/ipv4/igmp.c and linux/ipv4/ip_sockglue.c 
  *
@@ -196,16 +196,26 @@ int inet6_mc_check(struct sock *sk, struct in6_addr *addr)
 	return 0;
 }
 
+static void ma_put(struct ifmcaddr6 *mc)
+{
+	if (atomic_dec_and_test(&mc->mca_refcnt)) {
+		in6_dev_put(mc->idev);
+		kfree_s(mc, sizeof(*mc));
+	}
+}
+
 static int igmp6_group_added(struct ifmcaddr6 *mc)
 {
 	struct net_device *dev = mc->idev->dev;
 	char buf[MAX_ADDR_LEN];
 
+	spin_lock_bh(&mc->mca_lock);
 	if (!(mc->mca_flags&MAF_LOADED)) {
 		mc->mca_flags |= MAF_LOADED;
 		if (ndisc_mc_map(&mc->mca_addr, buf, dev, 0) == 0)
 			dev_mc_add(dev, buf, dev->addr_len, 0);
 	}
+	spin_unlock_bh(&mc->mca_lock);
 
 	if (dev->flags&IFF_UP)
 		igmp6_join_group(mc);
@@ -217,11 +227,13 @@ static int igmp6_group_dropped(struct ifmcaddr6 *mc)
 	struct net_device *dev = mc->idev->dev;
 	char buf[MAX_ADDR_LEN];
 
+	spin_lock_bh(&mc->mca_lock);
 	if (mc->mca_flags&MAF_LOADED) {
 		mc->mca_flags &= ~MAF_LOADED;
 		if (ndisc_mc_map(&mc->mca_addr, buf, dev, 0) == 0)
 			dev_mc_delete(dev, buf, dev->addr_len, 0);
 	}
+	spin_unlock_bh(&mc->mca_lock);
 
 	if (dev->flags&IFF_UP)
 		igmp6_leave_group(mc);
@@ -251,7 +263,7 @@ int ipv6_dev_mc_inc(struct net_device *dev, struct in6_addr *addr)
 
 	for (mc = idev->mc_list; mc; mc = mc->next) {
 		if (ipv6_addr_cmp(&mc->mca_addr, addr) == 0) {
-			atomic_inc(&mc->mca_users);
+			mc->mca_users++;
 			write_unlock_bh(&idev->lock);
 			in6_dev_put(idev);
 			return 0;
@@ -276,15 +288,16 @@ int ipv6_dev_mc_inc(struct net_device *dev, struct in6_addr *addr)
 
 	memcpy(&mc->mca_addr, addr, sizeof(struct in6_addr));
 	mc->idev = idev;
-	atomic_set(&mc->mca_users, 1);
+	mc->mca_users = 1;
+	atomic_set(&mc->mca_refcnt, 2);
+	mc->mca_lock = SPIN_LOCK_UNLOCKED;
 
 	mc->next = idev->mc_list;
 	idev->mc_list = mc;
-
-	igmp6_group_added(mc);
-
 	write_unlock_bh(&idev->lock);
 
+	igmp6_group_added(mc);
+	ma_put(mc);
 	return 0;
 }
 
@@ -303,16 +316,13 @@ int ipv6_dev_mc_dec(struct net_device *dev, struct in6_addr *addr)
 	write_lock_bh(&idev->lock);
 	for (map = &idev->mc_list; (ma=*map) != NULL; map = &ma->next) {
 		if (ipv6_addr_cmp(&ma->mca_addr, addr) == 0) {
-			if (atomic_dec_and_test(&ma->mca_users)) {
+			if (--ma->mca_users == 0) {
 				*map = ma->next;
 				write_unlock_bh(&idev->lock);
 
 				igmp6_group_dropped(ma);
 
-				if (ma->idev)
-					__in6_dev_put(ma->idev);
-
-				kfree(ma);
+				ma_put(ma);
 				in6_dev_put(idev);
 				return 0;
 			}
@@ -363,8 +373,11 @@ static void igmp6_group_queried(struct ifmcaddr6 *ma, unsigned long resptime)
 	if (ipv6_addr_type(&ma->mca_addr)&(IPV6_ADDR_LINKLOCAL|IPV6_ADDR_LOOPBACK))
 		return;
 
-	if (del_timer(&ma->mca_timer))
+	spin_lock(&ma->mca_lock);
+	if (del_timer(&ma->mca_timer)) {
+		atomic_dec(&ma->mca_refcnt);
 		delay = ma->mca_timer.expires - jiffies;
+	}
 
 	if (delay >= resptime) {
 		if (resptime)
@@ -373,9 +386,10 @@ static void igmp6_group_queried(struct ifmcaddr6 *ma, unsigned long resptime)
 			delay = 1;
 	}
 
-	ma->mca_flags |= MAF_TIMER_RUNNING;
 	ma->mca_timer.expires = jiffies + delay;
-	add_timer(&ma->mca_timer);
+	if (!mod_timer(&ma->mca_timer, jiffies + delay))
+		atomic_inc(&ma->mca_refcnt);
+	spin_unlock(&ma->mca_lock);
 }
 
 int igmp6_event_query(struct sk_buff *skb, struct icmp6hdr *hdr, int len)
@@ -453,12 +467,11 @@ int igmp6_event_report(struct sk_buff *skb, struct icmp6hdr *hdr, int len)
 	read_lock(&idev->lock);
 	for (ma = idev->mc_list; ma; ma=ma->next) {
 		if (ipv6_addr_cmp(&ma->mca_addr, addrp) == 0) {
-			if (ma->mca_flags & MAF_TIMER_RUNNING) {
-				del_timer(&ma->mca_timer);
-				ma->mca_flags &= ~MAF_TIMER_RUNNING;
-			}
-
-			ma->mca_flags &= ~MAF_LAST_REPORTER;
+			spin_lock(&ma->mca_lock);
+			if (del_timer(&ma->mca_timer))
+				atomic_dec(&ma->mca_refcnt);
+			ma->mca_flags &= ~(MAF_LAST_REPORTER|MAF_TIMER_RUNNING);
+			spin_unlock(&ma->mca_lock);
 			break;
 		}
 	}
@@ -552,13 +565,17 @@ static void igmp6_join_group(struct ifmcaddr6 *ma)
 	igmp6_send(&ma->mca_addr, ma->idev->dev, ICMPV6_MGM_REPORT);
 
 	delay = net_random() % IGMP6_UNSOLICITED_IVAL;
-	if (del_timer(&ma->mca_timer))
+
+	spin_lock_bh(&ma->mca_lock);
+	if (del_timer(&ma->mca_timer)) {
+		atomic_dec(&ma->mca_refcnt);
 		delay = ma->mca_timer.expires - jiffies;
+	}
 
-	ma->mca_timer.expires = jiffies + delay;
-
-	add_timer(&ma->mca_timer);
+	if (!mod_timer(&ma->mca_timer, jiffies + delay))
+		atomic_inc(&ma->mca_refcnt);
 	ma->mca_flags |= MAF_TIMER_RUNNING | MAF_LAST_REPORTER;
+	spin_unlock_bh(&ma->mca_lock);
 }
 
 static void igmp6_leave_group(struct ifmcaddr6 *ma)
@@ -573,17 +590,23 @@ static void igmp6_leave_group(struct ifmcaddr6 *ma)
 	if (ma->mca_flags & MAF_LAST_REPORTER)
 		igmp6_send(&ma->mca_addr, ma->idev->dev, ICMPV6_MGM_REDUCTION);
 
-	if (ma->mca_flags & MAF_TIMER_RUNNING)
-		del_timer(&ma->mca_timer);
+	spin_lock_bh(&ma->mca_lock);
+	if (del_timer(&ma->mca_timer))
+		atomic_dec(&ma->mca_refcnt);
+	spin_unlock_bh(&ma->mca_lock);
 }
 
 void igmp6_timer_handler(unsigned long data)
 {
 	struct ifmcaddr6 *ma = (struct ifmcaddr6 *) data;
 
-	ma->mca_flags |=  MAF_LAST_REPORTER;
 	igmp6_send(&ma->mca_addr, ma->idev->dev, ICMPV6_MGM_REPORT);
+
+	spin_lock(&ma->mca_lock);
+	ma->mca_flags |=  MAF_LAST_REPORTER;
 	ma->mca_flags &= ~MAF_TIMER_RUNNING;
+	spin_unlock(&ma->mca_lock);
+	ma_put(ma);
 }
 
 /* Device going down */
@@ -640,10 +663,7 @@ void ipv6_mc_destroy_dev(struct inet6_dev *idev)
 		write_unlock_bh(&idev->lock);
 
 		igmp6_group_dropped(i);
-
-		if (i->idev)
-			in6_dev_put(i->idev);
-		kfree(i);
+		ma_put(i);
 
 		write_lock_bh(&idev->lock);
 	}
@@ -677,7 +697,7 @@ static int igmp6_read_proc(char *buffer, char **start, off_t offset,
 
 			len+=sprintf(buffer+len,
 				     " %5d %08X %ld\n",
-				     atomic_read(&im->mca_users),
+				     im->mca_users,
 				     im->mca_flags,
 				     (im->mca_flags&MAF_TIMER_RUNNING) ? im->mca_timer.expires-jiffies : 0);
 

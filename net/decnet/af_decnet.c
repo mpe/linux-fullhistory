@@ -285,7 +285,7 @@ int dn_username2sockaddr(unsigned char *data, int len, struct sockaddr_dn *sdn, 
 
 	switch(*fmt) {
 		case 0:
-			sdn->sdn_objnum = dn_htons(type);
+			sdn->sdn_objnum = type;
 			return 2;
 		case 1:
 			namel = 16;
@@ -526,10 +526,6 @@ static void dn_destroy_sock(struct sock *sk)
 {
 	struct dn_scp *scp = &sk->protinfo.dn;
 
-	if (sk->dead)
-		return;
-
-	sk->dead = 1;
 	scp->nsp_rxtshift = 0; /* reset back off */
 
 	if (sk->socket) {
@@ -661,11 +657,12 @@ dn_release(struct socket *sock)
 	struct sock *sk = sock->sk;
 
 	if (sk) {
+		sock_orphan(sk);
+		sock_hold(sk);
 		lock_sock(sk);
-		sock->sk = NULL;
-		sk->socket = NULL;
 		dn_destroy_sock(sk);
 		release_sock(sk);
+		sock_put(sk);
 	}
 
         return 0;

@@ -109,9 +109,9 @@
 #define __NR_syslog			1117
 #define __NR_setitimer			1118
 #define __NR_getitimer			1119
-#define __NR_stat			1120
-#define __NR_lstat			1121
-#define __NR_fstat			1122
+#define __NR_old_stat			1120
+#define __NR_old_lstat			1121
+#define __NR_old_fstat			1122
 #define __NR_vhangup			1123
 #define __NR_lchown			1124
 #define __NR_vm86			1125
@@ -199,6 +199,9 @@
 #define __NR_sys_pivot_root		1207
 #define __NR_mincore			1208
 #define __NR_madvise			1209
+#define __NR_stat			1210
+#define __NR_lstat			1211
+#define __NR_fstat			1212
 
 #if !defined(__ASSEMBLY__) && !defined(ASSEMBLER)
 
@@ -269,7 +272,7 @@ type											\
 name (type1 arg1, type2 arg2, type3 arg3, type4 arg4, type5 arg5)			\
 {											\
 	return __ia64_syscall((long) arg1, (long) arg2, (long) arg3,			\
-			      (long) arg4, (long), __NR_##name);			\
+			      (long) arg4, (long) arg5, __NR_##name);			\
 }
 
 #ifdef __KERNEL_SYSCALLS__

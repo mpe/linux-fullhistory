@@ -857,7 +857,6 @@ void cleanup_module(void)
 	}
 	blksize_size[MAJOR_NR] = NULL;
         hardsect_size[MAJOR_NR] = NULL;
-	blk_cleanup_queue(BLK_DEFAULT_QUEUE(MAJOR_NR));
 	blk_size[MAJOR_NR] = NULL;
 	read_ahead[MAJOR_NR] = 0;
 

@@ -124,7 +124,18 @@ asm ("
 	.proc pal_emulator_static
 pal_emulator_static:
 	mov r8=-1
-	cmp.eq p6,p7=6,r28		/* PAL_PTCE_INFO */
+
+	mov r9=256
+	;;
+	cmp.gtu p6,p7=r9,r28		/* r28 <= 255? */
+(p6)	br.cond.sptk.few static
+	;;
+	mov r9=512
+	;;
+	cmp.gtu p6,p7=r9,r28
+(p6)	br.cond.sptk.few stacked
+	;;
+static:	cmp.eq p6,p7=6,r28		/* PAL_PTCE_INFO */
 (p7)	br.cond.sptk.few 1f
 	;;
 	mov r8=0			/* status = 0 */
@@ -157,7 +168,12 @@ pal_emulator_static:
 	;;
 	mov ar.lc=r9
 	mov r8=r0
-1:	br.cond.sptk.few rp
+1:
+	br.cond.sptk.few rp
+
+stacked:
+	br.ret.sptk.few rp
+
 	.endp pal_emulator_static\n");
 
 /* Macro to emulate SAL call using legacy IN and OUT calls to CF8, CFC etc.. */

@@ -1,6 +1,9 @@
 /*
  * IA32 helper functions
+ *
+ * 06/16/00	A. Mallick	added csd/ssd/tssd for ia32 thread context
  */
+
 #include <linux/kernel.h>
 #include <linux/init.h>
 #include <linux/mm.h>
@@ -15,6 +18,57 @@
 extern unsigned long *ia32_gdt_table, *ia32_tss;
 
 extern void die_if_kernel (char *str, struct pt_regs *regs, long err);
+
+void
+ia32_save_state (struct thread_struct *thread)
+{
+	unsigned long eflag, fsr, fcr, fir, fdr, csd, ssd, tssd;
+
+	asm ("mov %0=ar.eflag;"
+	     "mov %1=ar.fsr;"
+	     "mov %2=ar.fcr;"
+	     "mov %3=ar.fir;"
+	     "mov %4=ar.fdr;"
+	     "mov %5=ar.csd;"
+	     "mov %6=ar.ssd;"
+	     "mov %7=ar.k1"
+	     : "=r"(eflag), "=r"(fsr), "=r"(fcr), "=r"(fir), "=r"(fdr),
+	       "=r"(csd), "=r"(ssd), "=r"(tssd));
+	thread->eflag = eflag;
+	thread->fsr = fsr;
+	thread->fcr = fcr;
+	thread->fir = fir;
+	thread->fdr = fdr;
+	thread->csd = csd;
+	thread->ssd = ssd;
+	thread->tssd = tssd;
+}
+
+void
+ia32_load_state (struct thread_struct *thread)
+{
+	unsigned long eflag, fsr, fcr, fir, fdr, csd, ssd, tssd;
+
+	eflag = thread->eflag;
+	fsr = thread->fsr;
+	fcr = thread->fcr;
+	fir = thread->fir;
+	fdr = thread->fdr;
+	csd = thread->csd;
+	ssd = thread->ssd;
+	tssd = thread->tssd;
+
+	asm volatile ("mov ar.eflag=%0;"
+		      "mov ar.fsr=%1;"
+		      "mov ar.fcr=%2;"
+		      "mov ar.fir=%3;"
+		      "mov ar.fdr=%4;"
+		      "mov ar.csd=%5;"
+		      "mov ar.ssd=%6;"
+		      "mov ar.k1=%7"
+		      :: "r"(eflag), "r"(fsr), "r"(fcr), "r"(fir), "r"(fdr),
+		         "r"(csd), "r"(ssd), "r"(tssd));
+}
 
 /*
  * Setup IA32 GDT and TSS 

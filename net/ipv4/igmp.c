@@ -8,7 +8,7 @@
  *	the older version didn't come out right using gcc 2.5.8, the newer one
  *	seems to fall out with gcc 2.6.2.
  *
- *	Version: $Id: igmp.c,v 1.38 2000/02/27 01:20:02 davem Exp $
+ *	Version: $Id: igmp.c,v 1.39 2000/06/21 17:17:32 davem Exp $
  *
  *	Authors:
  *		Alan Cox <Alan.Cox@linux.org>
@@ -150,15 +150,14 @@ static __inline__ void igmp_stop_timer(struct ip_mc_list *im)
 	spin_unlock_bh(&im->lock);
 }
 
-static __inline__ void igmp_start_timer(struct ip_mc_list *im, int max_delay)
+/* It must be called with locked im->lock */
+static void igmp_start_timer(struct ip_mc_list *im, int max_delay)
 {
 	int tv=net_random() % max_delay;
 
-	spin_lock_bh(&im->lock);
 	im->tm_running=1;
 	if (!mod_timer(&im->timer, jiffies+tv+2))
 		atomic_inc(&im->refcnt);
-	spin_unlock_bh(&im->lock);
 }
 
 static void igmp_mod_timer(struct ip_mc_list *im, int max_delay)
@@ -174,9 +173,8 @@ static void igmp_mod_timer(struct ip_mc_list *im, int max_delay)
 		}
 		atomic_dec(&im->refcnt);
 	}
-	spin_unlock_bh(&im->lock);
-
 	igmp_start_timer(im, max_delay);
+	spin_unlock_bh(&im->lock);
 }
 
 
@@ -259,6 +257,7 @@ static void igmp_timer_expire(unsigned long data)
 	struct in_device *in_dev = im->interface;
 	int err;
 
+	spin_lock(&im->lock);
 	im->tm_running=0;
 
 	if (IGMP_V1_SEEN(in_dev))
@@ -270,8 +269,7 @@ static void igmp_timer_expire(unsigned long data)
 	if (err) {
 		if (!in_dev->dead)
 			igmp_start_timer(im, IGMP_Unsolicited_Report_Interval);
-		ip_ma_put(im);
-		return;
+		goto out;
 	}
 
 	if (im->unsolicit_count) {
@@ -279,6 +277,8 @@ static void igmp_timer_expire(unsigned long data)
 		igmp_start_timer(im, IGMP_Unsolicited_Report_Interval);
 	}
 	im->reporter = 1;
+out:
+	spin_unlock(&im->lock);
 	ip_ma_put(im);
 }
 
@@ -455,7 +455,9 @@ static void igmp_group_added(struct ip_mc_list *im)
 	if (im->multiaddr == IGMP_ALL_HOSTS)
 		return;
 
+	spin_lock_bh(&im->lock);
 	igmp_start_timer(im, IGMP_Initial_Report_Delay);
+	spin_unlock_bh(&im->lock);
 #endif
 }
 

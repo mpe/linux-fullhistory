@@ -1,4 +1,4 @@
-/* $Id: ioport.c,v 1.38 2000/06/04 06:23:52 anton Exp $
+/* $Id: ioport.c,v 1.39 2000/06/20 01:10:00 anton Exp $
  * ioport.c:  Simple io mapping allocator.
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
@@ -42,6 +42,8 @@
 #include <asm/page.h>
 #include <asm/pgalloc.h>
 #include <asm/pgtable.h>
+
+#define mmu_inval_dma_area(p, l)	/* Anton pulled it out for 2.4.0-xx */
 
 struct resource *_sparc_find_resource(struct resource *r, unsigned long);
 

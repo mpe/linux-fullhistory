@@ -14,13 +14,6 @@
 extern spinlock_t io_request_lock;
 
 /*
- * NR_REQUEST is the number of entries in the request-queue.
- * NOTE that writes may use only the low 2/3 of these: reads
- * take precedence.
- */
-#define NR_REQUEST	256
-
-/*
  * Initialization functions.
  */
 extern int isp16_init(void);
@@ -94,12 +87,9 @@ void initrd_init(void);
 
 extern inline void blkdev_dequeue_request(struct request * req)
 {
-	if (req->q)
-	{
-		if (req->cmd == READ)
-			req->q->elevator.read_pendings--;
-		req->q->elevator.nr_segments -= req->nr_segments;
-		req->q = NULL;
+	if (req->e) {
+		req->e->dequeue_fn(req);
+		req->e = NULL;
 	}
 	list_del(&req->queue);
 }

@@ -31,6 +31,7 @@
 	  nops while maximizing parallelism
 */
 
+#include <asm/asmmacro.h>
 #include <asm/break.h>
 
 	.text
@@ -73,12 +74,10 @@
 #define PASTE(a,b)	PASTE1(a,b)
 #define NAME		PASTE(PASTE(__,SGN),PASTE(OP,PASTE(PREC,3)))
 
-	.align 32
-	.global NAME
-	.proc NAME
-NAME:
-
+GLOBAL_ENTRY(NAME)
+	UNW(.prologue)
 	alloc r2=ar.pfs,2,6,0,8
+	UNW(.save pr, r18)
 	mov r18=pr
 #ifdef SINGLE
 # ifdef UNSIGNED
@@ -101,6 +100,10 @@ NAME:
 #endif
 
 	setf.sig f8=in0
+	UNW(.save ar.lc, r3)
+
+	UNW(.body)
+
 	mov r3=ar.lc		// save ar.lc
 	setf.sig f9=in1
 	;;
@@ -156,3 +159,4 @@ NAME:
 	mov ar.lc=r3		// restore ar.lc
 	mov pr=r18,0xffffffffffff0000	// restore p16-p63
 	br.ret.sptk.few rp
+END(NAME)

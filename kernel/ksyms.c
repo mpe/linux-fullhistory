@@ -271,7 +271,6 @@ EXPORT_SYMBOL(tty_std_termios);
 /* block device driver support */
 EXPORT_SYMBOL(block_read);
 EXPORT_SYMBOL(block_write);
-EXPORT_SYMBOL(wait_for_request);
 EXPORT_SYMBOL(blksize_size);
 EXPORT_SYMBOL(hardsect_size);
 EXPORT_SYMBOL(blk_size);

@@ -1,7 +1,8 @@
 /*
  * EFI call stub.
  *
- * Copyright (C) 1999 David Mosberger <davidm@hpl.hp.com>
+ * Copyright (C) 1999-2000 Hewlett-Packard Co
+ * Copyright (C) 1999-2000 David Mosberger <davidm@hpl.hp.com>
  *
  * This stub allows us to make EFI calls in physical mode with interrupts
  * turned off.  We need this because we can't call SetVirtualMap() until
@@ -30,6 +31,7 @@
 	(IA64_PSR_BN)
 
 #include <asm/processor.h>
+#include <asm/asmmacro.h>
 
 	.text
 	.psr abi64
@@ -37,53 +39,6 @@
 	.lsb
 
 	.text
-
-/*
- * Switch execution mode from virtual to physical or vice versa.
- *
- * Inputs:
- *	r16 = new psr to establish
- */
-	.proc switch_mode
-switch_mode:
- {
-	alloc r2=ar.pfs,0,0,0,0
-	rsm psr.i | psr.ic		// disable interrupts and interrupt collection
-	mov r15=ip
- }
-	;;
- {
-	flushrs				// must be first insn in group
-	srlz.i
-	shr.u r19=r15,61		// r19 <- top 3 bits of current IP
- }
-	;;
-	mov cr.ipsr=r16			// set new PSR
-	add r3=1f-switch_mode,r15
-	xor r15=0x7,r19			// flip the region bits
-
-	mov r17=ar.bsp
-	mov r14=rp			// get return address into a general register
-
-	// switch RSE backing store:
-	;;
-	dep r17=r15,r17,61,3		// make ar.bsp physical or virtual
-	mov r18=ar.rnat			// save ar.rnat
-	;;
-	mov ar.bspstore=r17		// this steps on ar.rnat
-	dep r3=r15,r3,61,3		// make rfi return address physical or virtual
-	;;
-	mov cr.iip=r3
-	mov cr.ifs=r0
-	dep sp=r15,sp,61,3		// make stack pointer physical or virtual
-	;;
-	mov ar.rnat=r18			// restore ar.rnat
-	dep r14=r15,r14,61,3		// make function return address physical or virtual
-	rfi				// must be last insn in group
-	;;
-1:	mov rp=r14
-	br.ret.sptk.few rp
-	.endp switch_mode
 
 /*
  * Inputs:
@@ -94,13 +49,12 @@ switch_mode:
  *	r8 = EFI_STATUS returned by called function
  */
 
-	.global efi_call_phys
-	.proc efi_call_phys
-efi_call_phys:
-
-	alloc loc0=ar.pfs,8,5,7,0
+GLOBAL_ENTRY(efi_call_phys)
+	UNW(.prologue ASM_UNW_PRLG_RP|ASM_UNW_PRLG_PFS, ASM_UNW_PRLG_GRSAVE(8))
+	alloc loc1=ar.pfs,8,5,7,0
 	ld8 r2=[in0],8			// load EFI function's entry point
-	mov loc1=rp
+	mov loc0=rp
+	UNW(.body)
 	;;
 	mov loc2=gp			// save global pointer
 	mov loc4=ar.rsc			// save RSE configuration
@@ -121,7 +75,7 @@ efi_call_phys:
 	;;
 	andcm r16=loc3,r16		// get psr with IT, DT, and RT bits cleared
 	mov out3=in4
-	br.call.sptk.few rp=switch_mode
+	br.call.sptk.few rp=ia64_switch_mode
 .ret0:
 	mov out4=in5
 	mov out5=in6
@@ -130,12 +84,11 @@ efi_call_phys:
 .ret1:
 	mov ar.rsc=r0			// put RSE in enforced lazy, LE mode
 	mov r16=loc3
-	br.call.sptk.few rp=switch_mode	// return to virtual mode
+	br.call.sptk.few rp=ia64_switch_mode // return to virtual mode
 .ret2:
 	mov ar.rsc=loc4			// restore RSE configuration
-	mov ar.pfs=loc0
-	mov rp=loc1
+	mov ar.pfs=loc1
+	mov rp=loc0
 	mov gp=loc2
 	br.ret.sptk.few rp
-	
-	.endp efi_call_phys
+END(efi_call_phys)

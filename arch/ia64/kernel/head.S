@@ -16,6 +16,7 @@
 
 #include <linux/config.h>
 
+#include <asm/asmmacro.h>
 #include <asm/fpu.h>
 #include <asm/pal.h>
 #include <asm/offsets.h>
@@ -54,10 +55,12 @@ halt_msg:
 	stringz "Halting kernel\n"
 
 	.text
-	.align 16
-	.global _start
-	.proc _start
-_start:
+
+GLOBAL_ENTRY(_start)
+	UNW(.prologue)
+	UNW(.save rp, r4)		// terminate unwind chain with a NULL rp
+	UNW(mov r4=r0)
+	UNW(.body)
 	// set IVT entry point---can't access I/O ports without it
 	movl r3=ia64_ivt
 	;;
@@ -156,12 +159,9 @@ alive_msg:
 	ld8 out0=[r2]
 	br.call.sptk.few b0=console_print
 self:	br.sptk.few self		// endless loop
-	.endp _start
+END(_start)
 
-	.align 16
-	.global ia64_save_debug_regs
-	.proc ia64_save_debug_regs
-ia64_save_debug_regs:
+GLOBAL_ENTRY(ia64_save_debug_regs)
 	alloc r16=ar.pfs,1,0,0,0
 	mov r20=ar.lc			// preserve ar.lc
 	mov ar.lc=IA64_NUM_DBG_REGS-1
@@ -177,13 +177,10 @@ ia64_save_debug_regs:
 	br.cloop.sptk.few 1b
 	;;
 	mov ar.lc=r20			// restore ar.lc
-	br.ret.sptk.few b0
-	.endp ia64_save_debug_regs
+	br.ret.sptk.few rp
+END(ia64_save_debug_regs)
 
-	.align 16
-	.global ia64_load_debug_regs
-	.proc ia64_load_debug_regs
-ia64_load_debug_regs:
+GLOBAL_ENTRY(ia64_load_debug_regs)
 	alloc r16=ar.pfs,1,0,0,0
 	lfetch.nta [in0]
 	mov r20=ar.lc			// preserve ar.lc
@@ -200,13 +197,10 @@ ia64_load_debug_regs:
 	br.cloop.sptk.few 1b
 	;;
 	mov ar.lc=r20			// restore ar.lc
-	br.ret.sptk.few b0
-	.endp ia64_load_debug_regs
+	br.ret.sptk.few rp
+END(ia64_load_debug_regs)
 
-	.align 16
-	.global __ia64_save_fpu
-	.proc __ia64_save_fpu
-__ia64_save_fpu:
+GLOBAL_ENTRY(__ia64_save_fpu)
 	alloc r2=ar.pfs,1,0,0,0
 	adds r3=16,in0
 	;;
@@ -354,12 +348,9 @@ __ia64_save_fpu:
 	stf.spill.nta [in0]=f126,32
 	stf.spill.nta [ r3]=f127,32
 	br.ret.sptk.few rp
-	.endp __ia64_save_fpu
+END(__ia64_save_fpu)
 
-	.align 16
-	.global __ia64_load_fpu
-	.proc __ia64_load_fpu
-__ia64_load_fpu:
+GLOBAL_ENTRY(__ia64_load_fpu)
 	alloc r2=ar.pfs,1,0,0,0
 	adds r3=16,in0
 	;;
@@ -507,12 +498,9 @@ __ia64_load_fpu:
 	ldf.fill.nta f126=[in0],32
 	ldf.fill.nta f127=[ r3],32
 	br.ret.sptk.few rp
-	.endp __ia64_load_fpu
+END(__ia64_load_fpu)
 
-	.align 16
-	.global __ia64_init_fpu
-	.proc __ia64_init_fpu
-__ia64_init_fpu:
+GLOBAL_ENTRY(__ia64_init_fpu)
 	alloc r2=ar.pfs,0,0,0,0
 	stf.spill [sp]=f0
 	mov      f32=f0
@@ -644,4 +632,74 @@ __ia64_init_fpu:
 	ldf.fill f126=[sp]
 	mov      f127=f0
 	br.ret.sptk.few rp
-	.endp __ia64_init_fpu
+END(__ia64_init_fpu)
+
+/*
+ * Switch execution mode from virtual to physical or vice versa.
+ *
+ * Inputs:
+ *	r16 = new psr to establish
+ *
+ * Note: RSE must already be in enforced lazy mode
+ */
+GLOBAL_ENTRY(ia64_switch_mode)
+ {
+	alloc r2=ar.pfs,0,0,0,0
+	rsm psr.i | psr.ic		// disable interrupts and interrupt collection
+	mov r15=ip
+ }
+	;;
+ {
+	flushrs				// must be first insn in group
+	srlz.i
+	shr.u r19=r15,61		// r19 <- top 3 bits of current IP
+ }
+	;;
+	mov cr.ipsr=r16			// set new PSR
+	add r3=1f-ia64_switch_mode,r15
+	xor r15=0x7,r19			// flip the region bits
+
+	mov r17=ar.bsp
+	mov r14=rp			// get return address into a general register
+
+	// switch RSE backing store:
+	;;
+	dep r17=r15,r17,61,3		// make ar.bsp physical or virtual
+	mov r18=ar.rnat			// save ar.rnat
+	;;
+	mov ar.bspstore=r17		// this steps on ar.rnat
+	dep r3=r15,r3,61,3		// make rfi return address physical or virtual
+	;;
+	mov cr.iip=r3
+	mov cr.ifs=r0
+	dep sp=r15,sp,61,3		// make stack pointer physical or virtual
+	;;
+	mov ar.rnat=r18			// restore ar.rnat
+	dep r14=r15,r14,61,3		// make function return address physical or virtual
+	rfi				// must be last insn in group
+	;;
+1:	mov rp=r14
+	br.ret.sptk.few rp
+END(ia64_switch_mode)
+
+#ifdef CONFIG_IA64_BRL_EMU
+
+/*
+ *  Assembly routines used by brl_emu.c to set preserved register state.
+ */
+
+#define SET_REG(reg)				\
+ GLOBAL_ENTRY(ia64_set_##reg);			\
+	alloc r16=ar.pfs,1,0,0,0;		\
+	mov reg=r32;				\
+	;;					\
+	br.ret.sptk rp;				\
+ END(ia64_set_##reg)
+
+SET_REG(b1);
+SET_REG(b2);
+SET_REG(b3);
+SET_REG(b4);
+SET_REG(b5);
+
+#endif /* CONFIG_IA64_BRL_EMU */

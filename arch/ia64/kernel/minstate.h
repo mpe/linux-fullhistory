@@ -101,7 +101,6 @@
 	;;											  \
 	st8 [r16]=r18,16;	/* save ar.rsc value for "loadrs" */				  \
 	st8.spill [r17]=rR1,16;	/* save original r1 */						  \
-	cmp.ne pEOI,p0=r0,r0	/* clear pEOI by default */					  \
 	;;											  \
 .mem.offset 0,0;	st8.spill [r16]=r2,16;							  \
 .mem.offset 8,0;	st8.spill [r17]=r3,16;							  \

@@ -271,7 +271,7 @@ static loff_t jsf_lseek(struct file * file, loff_t offset, int orig)
 }
 
 /*
- * P3: OS SIMM Cannot be read in other size but a 32bits word.
+ * OS SIMM Cannot be read in other size but a 32bits word.
  */
 static ssize_t jsf_read(struct file * file, char * buf, 
     size_t togo, loff_t *ppos)
@@ -647,8 +647,7 @@ int jsfd_init(void) {
 	int i;
 
 	if (jsf0.base == 0) {
-		printk("jsfd_init: no flash\n"); /* P3 */
-		return -EIO;
+		return -ENXIO;
 	}
 
 	if (register_blkdev(JSFD_MAJOR, "jsfd", &jsfd_fops)) {
@@ -656,8 +655,6 @@ int jsfd_init(void) {
 		    JSFD_MAJOR);
 		return -EIO;
 	}
-
-	printk("jsfd0: at major %d\n", MAJOR_NR); /* P3 */
 
 	blksize_size[JSFD_MAJOR] = jsfd_blksizes;
 	blk_size[JSFD_MAJOR] = jsfd_sizes;

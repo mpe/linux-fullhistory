@@ -23,17 +23,7 @@
 
 extern spinlock_t sal_lock;
 
-#ifdef __GCC_MULTIREG_RETVALS__
-  /* If multi-register return values are returned according to the
-     ia-64 calling convention, we can call ia64_sal directly.  */
-# define __SAL_CALL(result,args...)	result = (*ia64_sal)(args)
-#else
-  /* If multi-register return values are returned through an aggregate
-     allocated in the caller, we need to use the stub implemented in
-     sal-stub.S.  */
-  extern struct ia64_sal_retval ia64_sal_stub (u64 index, ...);
-# define __SAL_CALL(result,args...)	result = ia64_sal_stub(args)
-#endif
+#define __SAL_CALL(result,args...)	result = (*ia64_sal)(args)
 
 #ifdef CONFIG_SMP
 # define SAL_CALL(result,args...) do {		\
@@ -494,7 +484,19 @@ extern inline s64
 ia64_sal_pci_config_read (u64 pci_config_addr, u64 size, u64 *value)
 {
 	struct ia64_sal_retval isrv;
+#ifdef CONFIG_ITANIUM_A1_SPECIFIC
+	extern spinlock_t ivr_read_lock;
+	unsigned long flags;
+
+	/*
+	 * Avoid PCI configuration read/write overwrite -- A0 Interrupt loss workaround
+	 */
+	spin_lock_irqsave(&ivr_read_lock, flags);
+#endif
 	SAL_CALL(isrv, SAL_PCI_CONFIG_READ, pci_config_addr, size);
+#ifdef CONFIG_ITANIUM_A1_SPECIFIC
+	spin_unlock_irqrestore(&ivr_read_lock, flags);
+#endif
 	if (value)
 		*value = isrv.v0;
 	return isrv.status;
@@ -505,7 +507,7 @@ extern inline s64
 ia64_sal_pci_config_write (u64 pci_config_addr, u64 size, u64 value)
 {
 	struct ia64_sal_retval isrv;
-#if defined(CONFIG_ITANIUM_ASTEP_SPECIFIC) && !defined(SAPIC_FIXED)
+#ifdef CONFIG_ITANIUM_A1_SPECIFIC
 	extern spinlock_t ivr_read_lock;
 	unsigned long flags;
 
@@ -515,7 +517,7 @@ ia64_sal_pci_config_write (u64 pci_config_addr, u64 size, u64 value)
 	spin_lock_irqsave(&ivr_read_lock, flags);
 #endif
 	SAL_CALL(isrv, SAL_PCI_CONFIG_WRITE, pci_config_addr, size, value);
-#if defined(CONFIG_ITANIUM_ASTEP_SPECIFIC) && !defined(SAPIC_FIXED)
+#ifdef CONFIG_ITANIUM_A1_SPECIFIC
 	spin_unlock_irqrestore(&ivr_read_lock, flags);
 #endif
 	return isrv.status;

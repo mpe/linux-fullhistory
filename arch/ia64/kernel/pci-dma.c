@@ -23,8 +23,8 @@ pci_alloc_consistent (struct pci_dev *hwdev, size_t size, dma_addr_t *dma_handle
 	void *ret;
 	int gfp = GFP_ATOMIC;
 
-	if (!hwdev || hwdev->dma_mask != 0xffffffff)
-		gfp |= GFP_DMA;
+	if (!hwdev || hwdev->dma_mask == 0xffffffff)
+		gfp |= GFP_DMA;	/* XXX fix me: should change this to GFP_32BIT or ZONE_32BIT */
 	ret = (void *)__get_free_pages(gfp, get_order(size));
 
 	if (ret) {

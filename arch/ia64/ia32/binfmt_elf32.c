@@ -2,6 +2,8 @@
  * IA-32 ELF support.
  *
  * Copyright (C) 1999 Arun Sharma <arun.sharma@intel.com>
+ *
+ * 06/16/00	A. Mallick	initialize csd/ssd/tssd/cflg for ia32_load_state
  */
 #include <linux/config.h>
 #include <linux/posix_types.h>
@@ -84,6 +86,15 @@ void ia64_elf32_init(struct pt_regs *regs)
 
 	current->thread.map_base = 0x40000000;
 
+ 
+	/* setup ia32 state for ia32_load_state */
+
+	current->thread.eflag = IA32_EFLAG;
+	current->thread.csd = IA64_SEG_DESCRIPTOR(0L, 0xFFFFFL, 0xBL, 1L, 3L, 1L, 1L, 1L);
+	current->thread.ssd = IA64_SEG_DESCRIPTOR(0L, 0xFFFFFL, 0x3L, 1L, 3L, 1L, 1L, 1L);
+	current->thread.tssd = IA64_SEG_DESCRIPTOR(IA32_PAGE_OFFSET + PAGE_SIZE, 0x1FFFL, 0xBL,
+						   1L, 3L, 1L, 1L, 1L);
+
 	/* CS descriptor */
 	__asm__("mov ar.csd = %0" : /* no outputs */
 		: "r" IA64_SEG_DESCRIPTOR(0L, 0xFFFFFL, 0xBL, 1L,
@@ -96,9 +107,6 @@ void ia64_elf32_init(struct pt_regs *regs)
 	__asm__("mov ar.eflag = %0" : /* no outputs */ : "r" (IA32_EFLAG));
 
 	/* Control registers */
-	__asm__("mov ar.cflg = %0"
-		: /* no outputs */
-		: "r" (((ulong) IA32_CR4 << 32) | IA32_CR0));
 	__asm__("mov ar.fsr = %0"
 		: /* no outputs */
 		: "r" ((ulong)IA32_FSR_DEFAULT));

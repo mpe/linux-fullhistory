@@ -33,9 +33,9 @@
 
 struct pci_vector_struct {
 	__u16 bus;	/* PCI Bus number */
-        __u32 pci_id;	/* ACPI split 16 bits device, 16 bits function (see section 6.1.1) */
-        __u8 pin;	/* PCI PIN (0 = A, 1 = B, 2 = C, 3 = D) */
-        __u8 irq;	/* IRQ assigned */
+	__u32 pci_id;	/* ACPI split 16 bits device, 16 bits function (see section 6.1.1) */
+	__u8 pin;	/* PCI PIN (0 = A, 1 = B, 2 = C, 3 = D) */
+	__u8 irq;	/* IRQ assigned */
 };
 
 extern struct ia64_boot_param {
@@ -54,6 +54,8 @@ extern struct ia64_boot_param {
 	__u16 num_pci_vectors;	/* number of ACPI derived PCI IRQ's*/
 	__u64 pci_vectors;	/* physical address of PCI data (pci_vector_struct)*/
 	__u64 fpswa;		/* physical address of the the fpswa interface */
+	__u64 initrd_start;
+	__u64 initrd_size;
 } ia64_boot_param;
 
 extern inline void
@@ -135,7 +137,7 @@ do {											\
 do {									 \
 	unsigned long ip, old_psr, psr = (x);				 \
 									 \
-	__asm__ __volatile__ ("mov %0=psr; mov psr.l=%1;; srlz.d"	 \
+	__asm__ __volatile__ (";;mov %0=psr; mov psr.l=%1;; srlz.d"	 \
 			      : "=&r" (old_psr) : "r" (psr) : "memory"); \
 	if ((old_psr & (1UL << 14)) && !(psr & (1UL << 14))) {		 \
 		__asm__ ("mov %0=ip" : "=r"(ip));			 \
@@ -149,7 +151,7 @@ do {									 \
 						      : "=r" (x) :: "memory")
 # define local_irq_disable()	__asm__ __volatile__ (";; rsm psr.i;;" ::: "memory")
 /* (potentially) setting psr.i requires data serialization: */
-# define local_irq_restore(x)	__asm__ __volatile__ ("mov psr.l=%0;; srlz.d"		\
+# define local_irq_restore(x)	__asm__ __volatile__ (";; mov psr.l=%0;; srlz.d"	\
 						      :: "r" (x) : "memory")
 #endif /* !CONFIG_IA64_DEBUG_IRQ */
 
@@ -394,32 +396,13 @@ struct __xchg_dummy { unsigned long a[100]; };
 
 #ifdef __KERNEL__
 
-extern void ia64_save_debug_regs (unsigned long *save_area);
-extern void ia64_load_debug_regs (unsigned long *save_area);
-
 #define prepare_to_switch()    do { } while(0)
 
 #ifdef CONFIG_IA32_SUPPORT
 # define IS_IA32_PROCESS(regs)	(ia64_psr(regs)->is != 0)
-# define IA32_STATE(prev,next)							\
-	if (IS_IA32_PROCESS(ia64_task_regs(prev))) {				\
-	    __asm__ __volatile__("mov %0=ar.eflag":"=r"((prev)->thread.eflag));	\
-	    __asm__ __volatile__("mov %0=ar.fsr":"=r"((prev)->thread.fsr));	\
-	    __asm__ __volatile__("mov %0=ar.fcr":"=r"((prev)->thread.fcr));	\
-	    __asm__ __volatile__("mov %0=ar.fir":"=r"((prev)->thread.fir));	\
-	    __asm__ __volatile__("mov %0=ar.fdr":"=r"((prev)->thread.fdr));	\
-	}									\
-	if (IS_IA32_PROCESS(ia64_task_regs(next))) {				\
-	    __asm__ __volatile__("mov ar.eflag=%0"::"r"((next)->thread.eflag));	\
-	    __asm__ __volatile__("mov ar.fsr=%0"::"r"((next)->thread.fsr));	\
-	    __asm__ __volatile__("mov ar.fcr=%0"::"r"((next)->thread.fcr));	\
-	    __asm__ __volatile__("mov ar.fir=%0"::"r"((next)->thread.fir));	\
-	    __asm__ __volatile__("mov ar.fdr=%0"::"r"((next)->thread.fdr));	\
-	}
-#else /* !CONFIG_IA32_SUPPORT */
-# define IA32_STATE(prev,next)
+#else
 # define IS_IA32_PROCESS(regs)		0
-#endif /* CONFIG_IA32_SUPPORT */
+#endif
 
 /*
  * Context switch from one thread to another.  If the two threads have
@@ -432,15 +415,18 @@ extern void ia64_load_debug_regs (unsigned long *save_area);
  * ia64_ret_from_syscall_clear_r8.
  */
 extern struct task_struct *ia64_switch_to (void *next_task);
+
+extern void ia64_save_extra (struct task_struct *task);
+extern void ia64_load_extra (struct task_struct *task);
+
 #define __switch_to(prev,next,last) do {					\
+	if (((prev)->thread.flags & IA64_THREAD_DBG_VALID)			\
+	    || IS_IA32_PROCESS(ia64_task_regs(prev)))				\
+		ia64_save_extra(prev);						\
+	if (((next)->thread.flags & IA64_THREAD_DBG_VALID)			\
+	    || IS_IA32_PROCESS(ia64_task_regs(next)))				\
+		ia64_load_extra(next);						\
 	ia64_psr(ia64_task_regs(next))->dfh = (ia64_get_fpu_owner() != (next));	\
-	if ((prev)->thread.flags & IA64_THREAD_DBG_VALID) {			\
-		ia64_save_debug_regs(&(prev)->thread.dbr[0]);			\
-	}									\
-	if ((next)->thread.flags & IA64_THREAD_DBG_VALID) {			\
-		ia64_load_debug_regs(&(next)->thread.dbr[0]);			\
-	}									\
-	IA32_STATE(prev,next);							\
 	(last) = ia64_switch_to((next));					\
 } while (0)
 

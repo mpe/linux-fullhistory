@@ -86,7 +86,7 @@ nlm_decode_fh(u32 *p, struct nfs_fh *f)
 
 	if ((len = ntohl(*p++)) != NFS2_FHSIZE) {
 		printk(KERN_NOTICE
-			"lockd: bad fhandle size %x (should be %Zu)\n",
+			"lockd: bad fhandle size %x (should be %u)\n",
 			len, NFS2_FHSIZE);
 		return NULL;
 	}

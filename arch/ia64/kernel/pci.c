@@ -133,7 +133,7 @@ pci_find_bios(void)
  * Initialization. Uses the SAL interface
  */
 
-#define PCI_BUSSES_TO_SCAN 2	/* On "real" ;) hardware this will be 255 */
+#define PCI_BUSES_TO_SCAN 255
 
 void __init 
 pcibios_init(void)
@@ -147,7 +147,7 @@ pcibios_init(void)
 	}
 
 	printk("PCI: Probing PCI hardware\n");
-	for (i = 0; i < PCI_BUSSES_TO_SCAN; i++) 
+	for (i = 0; i < PCI_BUSES_TO_SCAN; i++) 
 		pci_scan_bus(i, ops, NULL);
 	platform_pci_fixup();
 	return;
@@ -197,7 +197,7 @@ pcibios_fixup_pbus_ranges (struct pci_bus * bus, struct pbus_set_ranges_data * r
 	ranges->mem_end -= bus->resource[1]->start;
 }
 
-int __init
+int
 pcibios_enable_device (struct pci_dev *dev)
 {
 	/* Not needed, since we enable all devices at startup.  */

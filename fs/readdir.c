@@ -90,6 +90,8 @@ int dcache_readdir(struct file * filp, void * dirent, filldir_t filldir)
 #define NAME_OFFSET(de) ((int) ((de)->d_name - (char *) (de)))
 #define ROUND_UP(x) (((x)+sizeof(long)-1) & ~(sizeof(long)-1))
 
+#ifndef __ia64__
+
 struct old_linux_dirent {
 	unsigned long	d_ino;
 	unsigned long	d_offset;
@@ -143,6 +145,8 @@ asmlinkage int old_readdir(unsigned int fd, void * dirent, unsigned int count)
 out:
 	return error;
 }
+
+#endif /* !__ia64__ */
 
 /*
  * New, all-improved, singing, dancing, iBCS2-compliant getdents()

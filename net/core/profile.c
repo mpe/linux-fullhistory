@@ -145,11 +145,12 @@ int whitehole_count;
 static int whitehole_xmit(struct sk_buff *skb, struct net_device *dev)
 {
 	struct net_device_stats *stats;
-	dev_kfree_skb(skb);
+
 	stats = (struct net_device_stats *)dev->priv;
 	stats->tx_packets++;
 	stats->tx_bytes+=skb->len;
 
+	dev_kfree_skb(skb);
 	return 0;
 }
 

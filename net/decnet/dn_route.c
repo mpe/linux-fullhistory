@@ -131,7 +131,7 @@ static __inline__ unsigned dn_hash(unsigned short src, unsigned short dst)
 	return dn_rt_hash_mask & (unsigned)tmp;
 }
 
-static void dn_dst_check_expire(unsigned long dummy)
+static void SMP_TIMER_NAME(dn_dst_check_expire)(unsigned long dummy)
 {
 	int i;
 	struct dn_route *rt, **rtp;
@@ -142,10 +142,12 @@ static void dn_dst_check_expire(unsigned long dummy)
 		rtp = &dn_rt_hash_table[i].chain;
 
 		write_lock(&dn_rt_hash_table[i].lock);
-		for(;(rt=*rtp); rtp = &rt->u.rt_next) {
+		while((rt=*rtp) != NULL) {
 			if (atomic_read(&rt->u.dst.__refcnt) ||
-					(now - rt->u.dst.lastuse) < expire)
+					(now - rt->u.dst.lastuse) < expire) {
+				rtp = &rt->u.rt_next;
 				continue;
+			}
 			*rtp = rt->u.rt_next;
 			rt->u.rt_next = NULL;
 			dst_free(&rt->u.dst);
@@ -156,9 +158,10 @@ static void dn_dst_check_expire(unsigned long dummy)
 			break;
 	}
 
-	dn_route_timer.expires = now + decnet_dst_gc_interval * HZ;
-	add_timer(&dn_route_timer);
+	mod_timer(&dn_route_timer, now + decnet_dst_gc_interval * HZ);
 }
+
+SMP_TIMER_DEFINE(dn_dst_check_expire, dn_dst_task);
 
 static int dn_dst_gc(void)
 {
@@ -172,10 +175,12 @@ static int dn_dst_gc(void)
 		write_lock_bh(&dn_rt_hash_table[i].lock);
 		rtp = &dn_rt_hash_table[i].chain;
 
-		for(; (rt=*rtp); rtp = &rt->u.rt_next) {
+		while((rt=*rtp) != NULL) {
 			if (atomic_read(&rt->u.dst.__refcnt) ||
-					(now - rt->u.dst.lastuse) < expire)
+					(now - rt->u.dst.lastuse) < expire) {
+				rtp = &rt->u.rt_next;
 				continue;
+			}
 			*rtp = rt->u.rt_next;
 			rt->u.rt_next = NULL;
 			dst_free(&rt->u.dst);
@@ -229,7 +234,7 @@ static void dn_insert_route(struct dn_route *rt, unsigned hash)
 	write_unlock_bh(&dn_rt_hash_table[hash].lock);
 }
 
-void dn_run_flush(unsigned long dummy)
+void SMP_TIMER_NAME(dn_run_flush)(unsigned long dummy)
 {
 	int i;
 	struct dn_route *rt, *next;
@@ -250,6 +255,8 @@ nothing_to_declare:
 		write_unlock_bh(&dn_rt_hash_table[i].lock);
 	}
 }
+
+SMP_TIMER_DEFINE(dn_run_flush, dn_flush_task);
 
 static spinlock_t dn_rt_flush_lock = SPIN_LOCK_UNLOCKED;
 

@@ -34,7 +34,10 @@ unsigned long last_cli_ip;
 
 static struct {
 	unsigned long delta;
-	unsigned long next[NR_CPUS];
+	union {
+		unsigned long count;
+		unsigned char pad[SMP_CACHE_BYTES];
+	} next[NR_CPUS];
 } itm;
 
 static void
@@ -69,16 +72,27 @@ do_profile (unsigned long ip)
 static inline unsigned long
 gettimeoffset (void)
 {
-	unsigned long now = ia64_get_itc();
-	unsigned long elapsed_cycles, lost;
+#ifdef CONFIG_SMP
+	/*
+	 * The code below doesn't work for SMP because only CPU 0
+	 * keeps track of the time.
+	 */
+	return 0;
+#else
+	unsigned long now = ia64_get_itc(), last_tick;
+	unsigned long elapsed_cycles, lost = lost_ticks;
 
-	elapsed_cycles = now - (itm.next[smp_processor_id()] - itm.delta);
-
-	lost = lost_ticks;
-	if (lost)
-		elapsed_cycles += lost*itm.delta;
-
+	last_tick = (itm.next[smp_processor_id()].count - (lost+1)*itm.delta);
+# if 1
+	if ((long) (now - last_tick) < 0) {
+		printk("Yikes: now < last_tick (now=0x%lx,last_tick=%lx)!  No can do.\n",
+		       now, last_tick);
+		return 0;
+	}
+# endif
+	elapsed_cycles = now - last_tick;
 	return (elapsed_cycles*my_cpu_data.usec_per_cyc) >> IA64_USEC_PER_CYC_SHIFT;
+#endif
 }
 
 void
@@ -137,6 +151,7 @@ timer_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 	static unsigned long last_time;
 	static unsigned char count;
 	int cpu = smp_processor_id();
+	unsigned long new_itm;
 	int printed = 0;
 
 	/*
@@ -146,6 +161,12 @@ timer_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 	 * xtime_lock.
 	 */
 	write_lock(&xtime_lock);
+	new_itm = itm.next[cpu].count;
+
+	if (!time_after(ia64_get_itc(), new_itm))
+		printk("Oops: timer tick before it's due (itc=%lx,itm=%lx)\n",
+		       ia64_get_itc(), new_itm);
+
 	while (1) {
 		/*
 		 * Do kernel PC profiling here.  We multiply the
@@ -164,18 +185,10 @@ timer_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 		do_timer(regs);
 #endif
 
-		itm.next[cpu] += itm.delta;
-		/*
-		 * There is a race condition here: to be on the "safe"
-		 * side, we process timer ticks until itm.next is
-		 * ahead of the itc by at least half the timer
-		 * interval.  This should give us enough time to set
-		 * the new itm value without losing a timer tick.
-		 */
-		if (time_after(itm.next[cpu], ia64_get_itc() + itm.delta/2)) {
-			ia64_set_itm(itm.next[cpu]);
+		new_itm += itm.delta;
+		itm.next[cpu].count = new_itm;
+		if (time_after(new_itm, ia64_get_itc()))
 			break;
-		}
 
 #if !(defined(CONFIG_IA64_SOFTSDV_HACKS) && defined(CONFIG_SMP))
 		/*
@@ -188,28 +201,39 @@ timer_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 			last_time = jiffies;
 			if (!printed) {
 				printk("Lost clock tick on CPU %d (now=%lx, next=%lx)!!\n",
-				       cpu, ia64_get_itc(), itm.next[cpu]);
+				       cpu, ia64_get_itc(), itm.next[cpu].count);
 				printed = 1;
-			}
 # ifdef CONFIG_IA64_DEBUG_IRQ
-			printk("last_cli_ip=%lx\n", last_cli_ip);
+				printk("last_cli_ip=%lx\n", last_cli_ip);
 # endif
+			}
 		}
 #endif
 	}
 	write_unlock(&xtime_lock);
+
+	/*
+	 * If we're too close to the next clock tick for comfort, we
+	 * increase the saftey margin by intentionally dropping the
+	 * next tick(s).  We do NOT update itm.next accordingly
+	 * because that would force us to call do_timer() which in
+	 * turn would let our clock run too fast (with the potentially
+	 * devastating effect of losing monotony of time).
+	 */
+	while (!time_after(new_itm, ia64_get_itc() + itm.delta/2))
+		new_itm += itm.delta;
+	ia64_set_itm(new_itm);
 }
 
-#ifdef CONFIG_ITANIUM_ASTEP_SPECIFIC
+#if defined(CONFIG_ITANIUM_ASTEP_SPECIFIC) || defined(CONFIG_IA64_SOFTSDV_HACKS)
 
-void 
+/*
+ * Interrupts must be disabled before calling this routine.
+ */
+void
 ia64_reset_itm (void)
 {
-	unsigned long flags;
-
-	local_irq_save(flags);
 	timer_interrupt(0, 0, ia64_task_regs(current));
-	local_irq_restore(flags);
 }
 
 #endif /* CONFIG_ITANIUM_ASTEP_SPECIFIC */
@@ -220,11 +244,14 @@ ia64_reset_itm (void)
 void __init
 ia64_cpu_local_tick(void)
 {
+#ifdef CONFIG_IA64_SOFTSDV_HACKS
+	ia64_set_itc(0);
+#endif
+
 	/* arrange for the cycle counter to generate a timer interrupt: */
 	ia64_set_itv(TIMER_IRQ, 0);
-	ia64_set_itc(0);
-	itm.next[smp_processor_id()] = ia64_get_itc() + itm.delta;
-	ia64_set_itm(itm.next[smp_processor_id()]);
+	itm.next[smp_processor_id()].count = ia64_get_itc() + itm.delta;
+	ia64_set_itm(itm.next[smp_processor_id()].count);
 }
 
 void __init
@@ -254,25 +281,7 @@ ia64_init_itm (void)
 		itc_ratio.num = 3;
 		itc_ratio.den = 1;
 	}
-#if defined(CONFIG_IA64_LION_HACKS)
-	/* Our Lion currently returns base freq 104.857MHz, which
-	   ain't right (it really is 100MHz).  */
-	printk("SAL/PAL returned: base-freq=%lu, itc-ratio=%lu/%lu, proc-ratio=%lu/%lu\n",
-	       platform_base_freq, itc_ratio.num, itc_ratio.den,
-	       proc_ratio.num, proc_ratio.den);
-	platform_base_freq = 100000000;
-#elif 0 && defined(CONFIG_IA64_BIGSUR_HACKS)
-	/* BigSur with 991020 firmware returned itc-ratio=9/2 and base
-	   freq 75MHz, which wasn't right.  The 991119 firmware seems
-	   to return the right values, so this isn't necessary
-	   anymore... */
-	printk("SAL/PAL returned: base-freq=%lu, itc-ratio=%lu/%lu, proc-ratio=%lu/%lu\n",
-	       platform_base_freq, itc_ratio.num, itc_ratio.den,
-	       proc_ratio.num, proc_ratio.den);
-	platform_base_freq = 100000000;
-	proc_ratio.num = 5; proc_ratio.den = 1;
-	itc_ratio.num  = 5; itc_ratio.den  = 1;
-#elif defined(CONFIG_IA64_SOFTSDV_HACKS)
+#ifdef CONFIG_IA64_SOFTSDV_HACKS
 	platform_base_freq = 10000000;
 	proc_ratio.num = 4; proc_ratio.den = 1;
 	itc_ratio.num  = 4; itc_ratio.den  = 1;
@@ -290,8 +299,9 @@ ia64_init_itm (void)
 
         itc_freq = (platform_base_freq*itc_ratio.num)/itc_ratio.den;
         itm.delta = itc_freq / HZ;
-        printk("timer: base freq=%lu.%03luMHz, ITC ratio=%lu/%lu, ITC freq=%lu.%03luMHz\n",
-               platform_base_freq / 1000000, (platform_base_freq / 1000) % 1000,
+        printk("timer: CPU %d base freq=%lu.%03luMHz, ITC ratio=%lu/%lu, ITC freq=%lu.%03luMHz\n",
+	       smp_processor_id(),
+	       platform_base_freq / 1000000, (platform_base_freq / 1000) % 1000,
                itc_ratio.num, itc_ratio.den, itc_freq / 1000000, (itc_freq / 1000) % 1000);
 
 	my_cpu_data.proc_freq = (platform_base_freq*proc_ratio.num)/proc_ratio.den;
@@ -313,6 +323,8 @@ void __init
 time_init (void)
 {
 	/* we can't do request_irq() here because the kmalloc() would fail... */
+	irq_desc[TIMER_IRQ].status |= IRQ_PER_CPU;
+	irq_desc[TIMER_IRQ].handler = &irq_type_ia64_sapic;
 	setup_irq(TIMER_IRQ, &timer_irqaction);
 
 	efi_gettimeofday(&xtime);

@@ -13,6 +13,7 @@
  * Copyright (C) 1999 Hewlett-Packard Co
  * Copyright (C) 1999 Stephane Eranian <eranian@hpl.hp.com>
  */
+#include <asm/asmmacro.h>
 #include <asm/page.h>
 
 #define PIPE_DEPTH	6
@@ -32,19 +33,21 @@
 	.psr lsb
 	.lsb
 
-	.align 32
-	.global copy_page
-	.proc copy_page
-
-copy_page:
+GLOBAL_ENTRY(copy_page)
+	UNW(.prologue)
+	UNW(.save ar.pfs, saved_pfs)
 	alloc saved_pfs=ar.pfs,3,((2*PIPE_DEPTH+7)&~7),0,((2*PIPE_DEPTH+7)&~7)
 
 	.rotr t1[PIPE_DEPTH], t2[PIPE_DEPTH]
 	.rotp p[PIPE_DEPTH]
 
+	UNW(.save ar.lc, saved_lc)
 	mov saved_lc=ar.lc	// save ar.lc ahead of time
+	UNW(.save pr, saved_pr)
 	mov saved_pr=pr		// rotating predicates are preserved
 				// resgisters we must save.
+	UNW(.body)
+
 	mov src1=in1		// initialize 1st stream source 
 	adds src2=8,in1		// initialize 2nd stream source 
 	mov lcount=PAGE_SIZE/16-1 // as many 16bytes as there are on a page
@@ -87,5 +90,4 @@ copy_page:
 	mov ar.pfs=saved_pfs	// restore ar.ec 
 	mov ar.lc=saved_lc	// restore saved lc
 	br.ret.sptk.few rp	// bye...
-
-	.endp copy_page
+END(copy_page)

@@ -7,7 +7,6 @@ mainmenu_option next_comment
 comment 'General setup'
 
 define_bool CONFIG_IA64 y
-define_bool CONFIG_ITANIUM y	# easy choice for now... ;-)
 
 define_bool CONFIG_ISA n
 define_bool CONFIG_SBUS n
@@ -25,10 +24,13 @@ choice 'Kernel page size'						\
 	 64KB			CONFIG_IA64_PAGE_SIZE_64KB" 16KB
 
 if [ "$CONFIG_IA64_DIG" = "y" ]; then
+	define_bool CONFIG_ITANIUM y
+	define_bool CONFIG_IA64_BRL_EMU y
 	bool '  Enable Itanium A-step specific code' CONFIG_ITANIUM_ASTEP_SPECIFIC
+	bool '  Enable Itanium A1-step specific code' CONFIG_ITANIUM_A1_SPECIFIC
+	bool '  Enable use of global TLB purge instruction (ptc.g)' CONFIG_ITANIUM_PTCG
 	bool '  Enable SoftSDV hacks' CONFIG_IA64_SOFTSDV_HACKS
-	bool '  Enable BigSur hacks' CONFIG_IA64_BIGSUR_HACKS
-	bool '  Enable Lion hacks' CONFIG_IA64_LION_HACKS
+	bool '  Enable AzusA hacks' CONFIG_IA64_AZUSA_HACKS
 	bool '  Emulate PAL/SAL/EFI firmware' CONFIG_IA64_FW_EMU
 	bool '  Enable IA64 Machine Check Abort' CONFIG_IA64_MCA
 fi
@@ -46,6 +48,7 @@ define_bool CONFIG_KCORE_ELF y	# On IA-64, we always want an ELF /proc/kcore.
 
 bool 'SMP support' CONFIG_SMP
 bool 'Performance monitor support' CONFIG_PERFMON
+bool '/proc/palinfo support' CONFIG_IA64_PALINFO
 
 bool 'Networking support' CONFIG_NET
 bool 'System V IPC' CONFIG_SYSVIPC
@@ -190,5 +193,6 @@ bool 'Early printk support (requires VGA!)' CONFIG_IA64_EARLY_PRINTK
 bool 'Turn on compare-and-exchange bug checking (slow!)' CONFIG_IA64_DEBUG_CMPXCHG
 bool 'Turn on irq debug checks (slow!)' CONFIG_IA64_DEBUG_IRQ
 bool 'Print possible IA64 hazards to console' CONFIG_IA64_PRINT_HAZARDS
+bool 'Enable new unwind support' CONFIG_IA64_NEW_UNWIND
 
 endmenu

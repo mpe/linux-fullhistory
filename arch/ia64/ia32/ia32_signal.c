@@ -55,7 +55,7 @@ struct rt_sigframe_ia32
 };
 
 static int
-copy_siginfo_to_user32(siginfo_t32 *to, siginfo_t *from)
+copy_siginfo_to_user32 (siginfo_t32 *to, siginfo_t *from)
 {
 	int err;
 
@@ -104,6 +104,7 @@ setup_sigcontext_ia32(struct sigcontext_ia32 *sc, struct _fpstate_ia32 *fpstate,
                 struct pt_regs *regs, unsigned long mask)
 {
        int  err = 0;
+       unsigned long flag;
 
        err |= __put_user((regs->r16 >> 32) & 0xffff , (unsigned int *)&sc->fs);
        err |= __put_user((regs->r16 >> 48) & 0xffff , (unsigned int *)&sc->gs);
@@ -124,9 +125,11 @@ setup_sigcontext_ia32(struct sigcontext_ia32 *sc, struct _fpstate_ia32 *fpstate,
 #endif
        err |= __put_user(regs->cr_iip, &sc->eip);
        err |= __put_user(regs->r17 & 0xffff, (unsigned int *)&sc->cs);
-#if 0
-       err |= __put_user(regs->eflags, &sc->eflags);
-#endif
+       /*
+	*  `eflags' is in an ar register for this context
+	*/
+       asm volatile ("mov %0=ar.eflag ;;" : "=r"(flag));
+       err |= __put_user((unsigned int)flag, &sc->eflags);
        
        err |= __put_user(regs->r12, &sc->esp_at_signal);
        err |= __put_user((regs->r17 >> 16) & 0xffff, (unsigned int *)&sc->ss);
@@ -190,15 +193,26 @@ restore_sigcontext_ia32(struct pt_regs *regs, struct sigcontext_ia32 *sc, int *p
        COPY(cr_iip, eip);
        COPY_SEG_STRICT(cs);
        COPY_SEG_STRICT(ss);
-#if 0
        {
-               unsigned int tmpflags;
-               err |= __get_user(tmpflags, &sc->eflags);
-               /* XXX: Change this to ar.eflags */
-               regs->eflags = (regs->eflags & ~0x40DD5) | (tmpflags & 0x40DD5);
-               regs->orig_eax = -1;            /* disable syscall checks */
+		unsigned int tmpflags;
+		unsigned long flag;
+
+		/*
+		 *  IA32 `eflags' is not part of `pt_regs', it's
+		 *  in an ar register which is part of the thread
+		 *  context.  Fortunately, we are executing in the
+		 *  IA32 process's context.
+		 */
+		err |= __get_user(tmpflags, &sc->eflags);
+		asm volatile ("mov %0=ar.eflag ;;" : "=r"(flag));
+		flag &= ~0x40DD5;
+		flag |= (tmpflags & 0x40DD5);
+		asm volatile ("mov ar.eflag=%0 ;;" :: "r"(flag));
+
+		regs->r1 = -1;	/* disable syscall checks, r1 is orig_eax */
        }
 
+#if 0
        {
                struct _fpstate * buf;
                err |= __get_user(buf, &sc->fpstate);
@@ -271,7 +285,7 @@ setup_frame_ia32(int sig, struct k_sigaction *ka, sigset_t *set,
 
        /* Set up to return from userspace.  If provided, use a stub
           already in userspace.  */
-       err |= __put_user(frame->retcode, &frame->pretcode);
+       err |= __put_user((long)frame->retcode, &frame->pretcode);
        /* This is popl %eax ; movl $,%eax ; int $0x80 */
        err |= __put_user(0xb858, (short *)(frame->retcode+0));
 #define __IA32_NR_sigreturn            119
@@ -326,8 +340,8 @@ setup_rt_frame_ia32(int sig, struct k_sigaction *ka, siginfo_t *info,
                           ? current->exec_domain->signal_invmap[sig]
                           : sig),
                          &frame->sig);
-       err |= __put_user(&frame->info, &frame->pinfo);
-       err |= __put_user(&frame->uc, &frame->puc);
+       err |= __put_user((long)&frame->info, &frame->pinfo);
+       err |= __put_user((long)&frame->uc, &frame->puc);
        err |= copy_siginfo_to_user32(&frame->info, info);
 
        /* Create the ucontext.  */
@@ -341,7 +355,7 @@ setup_rt_frame_ia32(int sig, struct k_sigaction *ka, siginfo_t *info,
                                regs, set->sig[0]);
        err |= __copy_to_user(&frame->uc.uc_sigmask, set, sizeof(*set));
        
-       err |= __put_user(frame->retcode, &frame->pretcode);
+       err |= __put_user((long)frame->retcode, &frame->pretcode);
        /* This is movl $,%eax ; int $0x80 */
        err |= __put_user(0xb8, (char *)(frame->retcode+0));
 #define __IA32_NR_rt_sigreturn         173

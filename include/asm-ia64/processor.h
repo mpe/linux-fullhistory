@@ -10,6 +10,7 @@
  *
  * 11/24/98	S.Eranian	added ia64_set_iva()
  * 12/03/99	D. Mosberger	implement thread_saved_pc() via kernel unwind API
+ * 06/16/00	A. Mallick	added csd/ssd/tssd for ia32 support
  */
 
 #include <linux/config.h>
@@ -237,6 +238,8 @@ struct cpuinfo_ia64 {
 	__u64 proc_freq;	/* frequency of processor */
 	__u64 cyc_per_usec;	/* itc_freq/1000000 */
 	__u64 usec_per_cyc;	/* 2^IA64_USEC_PER_CYC_SHIFT*1000000/itc_freq */
+	__u64 unimpl_va_mask;	/* mask of unimplemented virtual address bits (from PAL) */
+	__u64 unimpl_pa_mask;	/* mask of unimplemented physical address bits (from PAL) */
 #ifdef CONFIG_SMP
 	__u64 loops_per_sec;
 	__u64 ipi_count;
@@ -264,7 +267,8 @@ typedef struct {
 
 #define SET_UNALIGN_CTL(task,value)								\
 ({												\
-	(task)->thread.flags |= ((value) << IA64_THREAD_UAC_SHIFT) & IA64_THREAD_UAC_MASK;	\
+	(task)->thread.flags = (((task)->thread.flags & ~IA64_THREAD_UAC_MASK)			\
+				| (((value) << IA64_THREAD_UAC_SHIFT) & IA64_THREAD_UAC_MASK));	\
 	0;											\
 })
 #define GET_UNALIGN_CTL(task,addr)								\
@@ -288,10 +292,13 @@ struct thread_struct {
 	__u64 fcr;			/* IA32 floating pt control reg */
 	__u64 fir;			/* IA32 fp except. instr. reg */
 	__u64 fdr;			/* IA32 fp except. data reg */
+	__u64 csd;			/* IA32 code selector descriptor */
+	__u64 ssd;			/* IA32 stack selector descriptor */
+	__u64 tssd;			/* IA32 TSS descriptor */
 	union {
 		__u64 sigmask;		/* aligned mask for sigsuspend scall */
 	} un;
-# define INIT_THREAD_IA32	, 0, 0, 0, 0, 0, {0}
+# define INIT_THREAD_IA32	, 0, 0, 0x17800000037fULL, 0, 0, 0, 0, 0, {0}
 #else
 # define INIT_THREAD_IA32
 #endif /* CONFIG_IA32_SUPPORT */
@@ -318,6 +325,7 @@ struct thread_struct {
 	set_fs(USER_DS);							\
 	ia64_psr(regs)->cpl = 3;	/* set user mode */			\
 	ia64_psr(regs)->ri = 0;		/* clear return slot number */		\
+	ia64_psr(regs)->is = 0;		/* IA-64 instruction set */		\
 	regs->cr_iip = new_ip;							\
 	regs->ar_rsc = 0xf;		/* eager mode, privilege level 3 */	\
 	regs->r12 = new_sp - 16;	/* allocate 16 byte scratch area */	\
@@ -434,6 +442,14 @@ extern inline void
 ia64_srlz_d (void)
 {
 	__asm__ __volatile__ (";; srlz.d" ::: "memory");
+}
+
+extern inline __u64
+ia64_get_rr (__u64 reg_bits)
+{
+	__u64 r;
+	__asm__ __volatile__ ("mov %0=rr[%1]" : "=r"(r) : "r"(reg_bits) : "memory");
+	return r;
 }
 
 extern inline void
@@ -645,14 +661,17 @@ ia64_set_unat (__u64 *unat, void *spill_addr, unsigned long nat)
 extern inline unsigned long
 thread_saved_pc (struct thread_struct *t)
 {
-	struct ia64_frame_info info;
+	struct unw_frame_info info;
+	unsigned long ip;
+
 	/* XXX ouch: Linus, please pass the task pointer to thread_saved_pc() instead! */
 	struct task_struct *p = (void *) ((unsigned long) t - IA64_TASK_THREAD_OFFSET);
 
-	ia64_unwind_init_from_blocked_task(&info, p);
-	if (ia64_unwind_to_previous_frame(&info) < 0)
+	unw_init_from_blocked_task(&info, p);
+	if (unw_unwind(&info) < 0)
 		return 0;
-	return ia64_unwind_get_ip(&info);
+	unw_get_ip(&info, &ip);
+	return ip;
 }
 
 /*

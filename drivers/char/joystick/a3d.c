@@ -110,7 +110,7 @@ static int a3d_csum(char *data, int count)
 	return (csum & 0x3f) != ((data[count - 2] << 3) | data[count - 1]);
 }
 
-static void a3d_read(struct a3d *a3d, char *data)
+static void a3d_read(struct a3d *a3d, unsigned char *data)
 {
 	struct input_dev *dev = &a3d->dev;
 
@@ -127,10 +127,10 @@ static void a3d_read(struct a3d *a3d, char *data)
 			input_report_key(dev, BTN_LEFT,   data[3] & 2);
 			input_report_key(dev, BTN_MIDDLE, data[3] & 4);
 
-			a3d->axes[0] = ((char)((data[11] << 6) | (data[12] << 3) | (data[13]))) + 128;
-			a3d->axes[1] = ((char)((data[14] << 6) | (data[15] << 3) | (data[16]))) + 128;
-			a3d->axes[2] = ((char)((data[17] << 6) | (data[18] << 3) | (data[19]))) + 128;
-			a3d->axes[3] = ((char)((data[20] << 6) | (data[21] << 3) | (data[22]))) + 128;
+			a3d->axes[0] = ((signed char)((data[11] << 6) | (data[12] << 3) | (data[13]))) + 128;
+			a3d->axes[1] = ((signed char)((data[14] << 6) | (data[15] << 3) | (data[16]))) + 128;
+			a3d->axes[2] = ((signed char)((data[17] << 6) | (data[18] << 3) | (data[19]))) + 128;
+			a3d->axes[3] = ((signed char)((data[20] << 6) | (data[21] << 3) | (data[22]))) + 128;
 
 			a3d->buttons = ((data[3] << 3) | data[4]) & 0xf;
 
@@ -147,10 +147,10 @@ static void a3d_read(struct a3d *a3d, char *data)
 			input_report_key(dev, BTN_SIDE,   data[7] & 2);
 			input_report_key(dev, BTN_EXTRA,  data[7] & 4);
 
-			input_report_abs(dev, ABS_X,        ((char)((data[15] << 6) | (data[16] << 3) | (data[17]))) + 128);
-			input_report_abs(dev, ABS_Y,        ((char)((data[18] << 6) | (data[19] << 3) | (data[20]))) + 128);
-			input_report_abs(dev, ABS_RUDDER,   ((char)((data[21] << 6) | (data[22] << 3) | (data[23]))) + 128);
-			input_report_abs(dev, ABS_THROTTLE, ((char)((data[24] << 6) | (data[25] << 3) | (data[26]))) + 128);
+			input_report_abs(dev, ABS_X,        ((signed char)((data[15] << 6) | (data[16] << 3) | (data[17]))) + 128);
+			input_report_abs(dev, ABS_Y,        ((signed char)((data[18] << 6) | (data[19] << 3) | (data[20]))) + 128);
+			input_report_abs(dev, ABS_RUDDER,   ((signed char)((data[21] << 6) | (data[22] << 3) | (data[23]))) + 128);
+			input_report_abs(dev, ABS_THROTTLE, ((signed char)((data[24] << 6) | (data[25] << 3) | (data[26]))) + 128);
 
 			input_report_abs(dev, ABS_HAT0X, ( data[5]       & 1) - ((data[5] >> 2) & 1));
 			input_report_abs(dev, ABS_HAT0Y, ((data[5] >> 1) & 1) - ((data[6] >> 2) & 1));
@@ -174,7 +174,7 @@ static void a3d_read(struct a3d *a3d, char *data)
 static void a3d_timer(unsigned long private)
 {
 	struct a3d *a3d = (void *) private;
-	char data[A3D_MAX_LENGTH];
+	unsigned char data[A3D_MAX_LENGTH];
 	a3d->reads++;
 	if (a3d_read_packet(a3d->gameport, a3d->length, data) != a3d->length
 		|| data[0] != a3d->mode || a3d_csum(data, a3d->length))
@@ -254,7 +254,7 @@ static void a3d_close(struct input_dev *dev)
 static void a3d_connect(struct gameport *gameport, struct gameport_dev *dev)
 {
 	struct a3d *a3d;
-	char data[A3D_MAX_LENGTH];
+	unsigned char data[A3D_MAX_LENGTH];
 	int i;
 
 	if (!(a3d = kmalloc(sizeof(struct a3d), GFP_KERNEL)))

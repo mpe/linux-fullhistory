@@ -16,23 +16,16 @@
 
 #include <asm/mman.h>
 #include <asm/page.h>
+#include <asm/processor.h>
 #include <asm/types.h>
 
-/* Size of virtuaql and physical address spaces: */
-#ifdef CONFIG_ITANIUM
-# define IA64_IMPL_VA_MSB	50
-# define IA64_PHYS_BITS		44		/* Itanium PRM defines 44 bits of ppn */
-#else
-# define IA64_IMPL_VA_MSB	60		/* maximum value (bits 61-63 are region bits) */
-# define IA64_PHYS_BITS		50		/* EAS2.6 allows up to 50 bits of ppn */
-#endif
-#define IA64_PHYS_SIZE		(__IA64_UL(1) << IA64_PHYS_BITS)
+#define IA64_MAX_PHYS_BITS	50	/* max. number of physical address bits (architected) */
 
 /* Is ADDR a valid kernel address? */
 #define kern_addr_valid(addr)	((addr) >= TASK_SIZE)
 
 /* Is ADDR a valid physical address? */
-#define phys_addr_valid(addr)	((addr) < IA64_PHYS_SIZE)
+#define phys_addr_valid(addr)	(((addr) & my_cpu_data.unimpl_pa_mask) == 0)
 
 /*
  * First, define the various bits in a PTE.  Note that the PTE format
@@ -63,7 +56,7 @@
 #define _PAGE_AR_SHIFT		9
 #define _PAGE_A			(1 <<  5)	/* page accessed bit */
 #define _PAGE_D			(1 <<  6)	/* page dirty bit */
-#define _PAGE_PPN_MASK		((IA64_PHYS_SIZE - 1) & ~0xfffUL)
+#define _PAGE_PPN_MASK		(((__IA64_UL(1) << IA64_MAX_PHYS_BITS) - 1) & ~0xfffUL)
 #define _PAGE_ED		(__IA64_UL(1) << 52)	/* exception deferral */
 #define _PAGE_PROTNONE		(__IA64_UL(1) << 63)
 
@@ -133,7 +126,7 @@
 #define PAGE_READONLY	__pgprot(__ACCESS_BITS | _PAGE_PL_3 | _PAGE_AR_R)
 #define PAGE_COPY	__pgprot(__ACCESS_BITS | _PAGE_PL_3 | _PAGE_AR_RX)
 #define PAGE_GATE	__pgprot(__ACCESS_BITS | _PAGE_PL_0 | _PAGE_AR_X_RX)
-#define PAGE_KERNEL	__pgprot(__DIRTY_BITS  | _PAGE_PL_0 | _PAGE_AR_RW)
+#define PAGE_KERNEL	__pgprot(__DIRTY_BITS  | _PAGE_PL_0 | _PAGE_AR_RWX)
 
 /*
  * Next come the mappings that determine how mmap() protection bits

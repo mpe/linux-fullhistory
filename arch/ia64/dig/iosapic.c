@@ -67,6 +67,12 @@ set_rte (unsigned long iosapic_addr, int entry, int pol, int trigger, int delive
 		 (delivery << IO_SAPIC_DELIVERY_SHIFT) |
 		 vector);
 
+#ifdef CONFIG_IA64_AZUSA_HACKS
+	/* set Flush Disable bit */
+	if (iosapic_addr != 0xc0000000fec00000)
+		low32 |= (1 << 17);
+#endif
+
 	/* dest contains both id and eid */
 	high32 = (dest << IO_SAPIC_DEST_SHIFT);	
 
@@ -216,30 +222,33 @@ iosapic_version (unsigned long base_addr)
 }
 
 void
-iosapic_init (unsigned long address)
+iosapic_init (unsigned long address, int irqbase)
 {
 	struct hw_interrupt_type *irq_type;
 	struct pci_vector_struct *vectors;
 	int i, irq;
 
-	/* 
-	 * Map the legacy ISA devices into the IOSAPIC data.  Some of
-	 * these may get reprogrammed later on with data from the ACPI
-	 * Interrupt Source Override table.
-	 */
-	for (i = 0; i < 16; i++) {
-		irq = isa_irq_to_vector(i);
-		iosapic_pin(irq) = i; 
-		iosapic_bus(irq) = BUS_ISA;
-		iosapic_busdata(irq) = 0;
-		iosapic_dmode(irq) = IO_SAPIC_LOWEST_PRIORITY;
-		iosapic_trigger(irq)  = IO_SAPIC_EDGE;
-		iosapic_polarity(irq) = IO_SAPIC_POL_HIGH;
+	if (irqbase == 0)
+		/* 
+		 * Map the legacy ISA devices into the IOSAPIC data.
+		 * Some of these may get reprogrammed later on with
+		 * data from the ACPI Interrupt Source Override table.
+		 */
+		for (i = 0; i < 16; i++) {
+			irq = isa_irq_to_vector(i);
+			iosapic_pin(irq) = i; 
+			iosapic_bus(irq) = BUS_ISA;
+			iosapic_busdata(irq) = 0;
+			iosapic_dmode(irq) = IO_SAPIC_LOWEST_PRIORITY;
+			iosapic_trigger(irq)  = IO_SAPIC_EDGE;
+			iosapic_polarity(irq) = IO_SAPIC_POL_HIGH;
 #ifdef DEBUG_IRQ_ROUTING
-		printk("ISA: IRQ %02x -> Vector %02x IOSAPIC Pin %d\n", i, irq, iosapic_pin(irq));
+			printk("ISA: IRQ %02x -> Vector %02x IOSAPIC Pin %d\n",
+			       i, irq, iosapic_pin(irq));
 #endif
-	}
+		}
 
+#ifndef CONFIG_IA64_SOFTSDV_HACKS
 	/* 
 	 * Map the PCI Interrupt data into the ACPI IOSAPIC data using
 	 * the info that the bootstrap loader passed to us.
@@ -250,6 +259,8 @@ iosapic_init (unsigned long address)
 		irq = vectors[i].irq;
 		if (irq < 16)
 			irq = isa_irq_to_vector(irq);
+		if (iosapic_baseirq(irq) != irqbase)
+			continue;
 
 		iosapic_bustype(irq) = BUS_PCI;
 		iosapic_pin(irq) = irq - iosapic_baseirq(irq);
@@ -270,8 +281,12 @@ iosapic_init (unsigned long address)
 		       irq, iosapic_pin(irq));
 #endif
 	}
+#endif /* CONFIG_IA64_SOFTSDV_HACKS */
 
 	for (i = 0; i < NR_IRQS; ++i) {
+		if (iosapic_baseirq(i) != irqbase)
+			continue;
+
 		if (iosapic_pin(i) != -1) {
 			if (iosapic_trigger(i) == IO_SAPIC_LEVEL)
 			  irq_type = &irq_type_iosapic_level;

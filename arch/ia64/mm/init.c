@@ -14,6 +14,7 @@
 #include <linux/slab.h>
 #include <linux/swap.h>
 
+#include <asm/bitops.h>
 #include <asm/dma.h>
 #include <asm/efi.h>
 #include <asm/ia32.h>
@@ -182,6 +183,19 @@ free_initmem (void)
 }
 
 void
+free_initrd_mem(unsigned long start, unsigned long end)
+{
+	if (start < end)
+		printk ("Freeing initrd memory: %ldkB freed\n", (end - start) >> 10);
+	for (; start < end; start += PAGE_SIZE) {
+		clear_bit(PG_reserved, &mem_map[MAP_NR(start)].flags);
+		set_page_count(&mem_map[MAP_NR(start)], 1);
+		free_page(start);
+		++totalram_pages;
+	}
+}
+
+void
 si_meminfo (struct sysinfo *val)
 {
 	val->totalram = totalram_pages;
@@ -265,7 +279,7 @@ put_gate_page (struct page *page, unsigned long address)
 void __init
 ia64_rid_init (void)
 {
-	unsigned long flags, rid, pta;
+	unsigned long flags, rid, pta, impl_va_msb;
 
 	/* Set up the kernel identity mappings (regions 6 & 7) and the vmalloc area (region 5): */
 	ia64_clear_ic(flags);
@@ -300,11 +314,15 @@ ia64_rid_init (void)
 #	define ld_max_addr_space_size	(ld_max_addr_space_pages + PAGE_SHIFT)
 #	define ld_max_vpt_size		(ld_max_addr_space_pages + ld_pte_size)
 #	define POW2(n)			(1ULL << (n))
-#	define IMPL_VA_MSB		50
-	if (POW2(ld_max_addr_space_size - 1) + POW2(ld_max_vpt_size) > POW2(IMPL_VA_MSB))
+	impl_va_msb = ffz(~my_cpu_data.unimpl_va_mask) - 1;
+
+	if (impl_va_msb < 50 || impl_va_msb > 60)
+		panic("Bogus impl_va_msb value of %lu!\n", impl_va_msb);
+
+	if (POW2(ld_max_addr_space_size - 1) + POW2(ld_max_vpt_size) > POW2(impl_va_msb))
 		panic("mm/init: overlap between virtually mapped linear page table and "
 		      "mapped kernel space!");
-	pta = POW2(61) - POW2(IMPL_VA_MSB);
+	pta = POW2(61) - POW2(impl_va_msb);
 	/*
 	 * Set the (virtually mapped linear) page table address.  Bit
 	 * 8 selects between the short and long format, bits 2-7 the
@@ -313,54 +331,6 @@ ia64_rid_init (void)
 	 */
 	ia64_set_pta(pta | (0<<8) | ((3*(PAGE_SHIFT-3)+3)<<2) | 1);
 }
-
-#ifdef CONFIG_IA64_VIRTUAL_MEM_MAP
-
-static int
-create_mem_map_page_table (u64 start, u64 end, void *arg)
-{
-	unsigned long address, start_page, end_page;
-	struct page *map_start, *map_end;
-	pgd_t *pgd;
-	pmd_t *pmd;
-	pte_t *pte;
-	void *page;
-
-	map_start = mem_map + MAP_NR(start);
-	map_end   = mem_map + MAP_NR(end);
-
-	start_page = (unsigned long) map_start & PAGE_MASK;
-	end_page = PAGE_ALIGN((unsigned long) map_end);
-
-	printk("[%lx,%lx) -> %lx-%lx\n", start, end, start_page, end_page);
-
-	for (address = start_page; address < end_page; address += PAGE_SIZE) {
-		pgd = pgd_offset_k(address);
-		if (pgd_none(*pgd)) {
-			pmd = alloc_bootmem_pages(PAGE_SIZE);
-			clear_page(pmd);
-			pgd_set(pgd, pmd);
-			pmd += (address >> PMD_SHIFT) & (PTRS_PER_PMD - 1);
-		} else
-			pmd = pmd_offset(pgd, address);
-		if (pmd_none(*pmd)) {
-			pte = alloc_bootmem_pages(PAGE_SIZE);
-			clear_page(pte);
-			pmd_set(pmd, pte);
-			pte += (address >> PAGE_SHIFT) & (PTRS_PER_PTE - 1);
-		} else
-			pte = pte_offset(pmd, address);
-
-		if (pte_none(*pte)) {
-			page = alloc_bootmem_pages(PAGE_SIZE);
-			clear_page(page);
-			set_pte(pte, mk_pte_phys(__pa(page), PAGE_KERNEL));
-		}
-	}
-	return 0;
-}
-
-#endif /* CONFIG_IA64_VIRTUAL_MEM_MAP */
 
 /*
  * Set up the page tables.
@@ -372,14 +342,11 @@ paging_init (void)
 
 	clear_page((void *) ZERO_PAGE_ADDR);
 
-	ia64_rid_init();
-	__flush_tlb_all();
-
 	/* initialize mem_map[] */
 
 	memset(zones_size, 0, sizeof(zones_size));
 
-	max_dma = virt_to_phys((void *) MAX_DMA_ADDRESS);
+	max_dma = (PAGE_ALIGN(MAX_DMA_ADDRESS) >> PAGE_SHIFT);
 	if (max_low_pfn < max_dma)
 		zones_size[ZONE_DMA] = max_low_pfn;
 	else {
@@ -426,8 +393,6 @@ mem_init (void)
 
 	max_mapnr = max_low_pfn;
 	high_memory = __va(max_low_pfn * PAGE_SIZE);
-
-	ia64_tlb_init();
 
 	totalram_pages += free_all_bootmem();
 

@@ -101,6 +101,10 @@ EXPORT_SYMBOL(strnlen_user);
 EXPORT_SYMBOL(pci_alloc_consistent);
 EXPORT_SYMBOL(pci_free_consistent);
 
+#ifdef CONFIG_PCI
+EXPORT_SYMBOL(pcibios_penalize_isa_irq);
+#endif
+
 #ifdef CONFIG_X86_USE_3DNOW
 EXPORT_SYMBOL(_mmx_memcpy);
 EXPORT_SYMBOL(mmx_clear_page);

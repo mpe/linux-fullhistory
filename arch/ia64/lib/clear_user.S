@@ -11,6 +11,8 @@
  * Copyright (C) 1999 Stephane Eranian <eranian@hpl.hp.com>
  */
 
+#include <asm/asmmacro.h>
+
 //
 // arguments
 //
@@ -23,11 +25,10 @@
 #define cnt		r16
 #define buf2		r17
 #define saved_lc	r18
-#define saved_pr	r19
-#define saved_pfs	r20
-#define tmp		r21
-#define len2		r22
-#define len3		r23
+#define saved_pfs	r19
+#define tmp		r20
+#define len2		r21
+#define len3		r22
 
 //
 // Theory of operations:
@@ -65,14 +66,14 @@
 	.psr lsb
 	.lsb
 
-	.align 32
- 	.global	__do_clear_user
- 	.proc	__do_clear_user
-
-__do_clear_user:
+GLOBAL_ENTRY(__do_clear_user)
+	UNW(.prologue)
+	UNW(.save ar.pfs, saved_pfs)
  	alloc	saved_pfs=ar.pfs,2,0,0,0
 	cmp.eq p6,p0=r0,len		// check for zero length
+	UNW(.save ar.lc, saved_lc)
 	mov saved_lc=ar.lc		// preserve ar.lc (slow)
+	.body
 	;;				// avoid WAW on CFM
 	adds tmp=-1,len			// br.ctop is repeat/until
 	mov ret0=len			// return value is length at this point
@@ -222,4 +223,4 @@ long_do_clear:
 	mov ret0=len
 	mov ar.lc=saved_lc
 	br.ret.dptk.few rp
- 	.endp
+END(__do_clear_user)

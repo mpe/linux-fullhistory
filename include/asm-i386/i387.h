@@ -11,7 +11,6 @@
 #ifndef __ASM_I386_I387_H
 #define __ASM_I386_I387_H
 
-#include <linux/config.h>
 #include <linux/sched.h>
 #include <asm/processor.h>
 #include <asm/sigcontext.h>

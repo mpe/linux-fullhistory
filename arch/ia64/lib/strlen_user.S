@@ -15,6 +15,8 @@
  * 09/24/99 S.Eranian added speculation recovery code
  */
 
+#include <asm/asmmacro.h>
+
 //
 // int strlen_user(char *)
 // ------------------------
@@ -93,10 +95,9 @@
 	.psr lsb
 	.lsb
 
-	.align 32
-	.global __strlen_user
-	.proc __strlen_user
-__strlen_user:
+GLOBAL_ENTRY(__strlen_user)
+	UNW(.prologue)
+	UNW(.save ar.pfs, saved_pfs)
 	alloc saved_pfs=ar.pfs,11,0,0,8
 
 	.rotr v[2], w[2]	// declares our 4 aliases
@@ -104,8 +105,12 @@ __strlen_user:
 	extr.u tmp=in0,0,3	// tmp=least significant 3 bits
 	mov orig=in0		// keep trackof initial byte address
 	dep src=0,in0,0,3	// src=8byte-aligned in0 address
+	UNW(.save pr, saved_pr)
 	mov saved_pr=pr		// preserve predicates (rotation)
 	;;
+
+	.body
+
 	ld8.s v[1]=[src],8	// load the initial 8bytes (must speculate)
 	shl tmp=tmp,3		// multiply by 8bits/byte
 	mov mask=-1		// our mask
@@ -209,5 +214,4 @@ recover:
 	mov pr=saved_pr,0xffffffffffff0000
 	mov ar.pfs=saved_pfs	// because of ar.ec, restore no matter what
 	br.ret.sptk.few rp
-	
-	.endp __strlen_user
+END(__strlen_user)

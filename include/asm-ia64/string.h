@@ -12,4 +12,7 @@
 #define __HAVE_ARCH_STRLEN	1 /* see arch/ia64/lib/strlen.S */
 #define __HAVE_ARCH_MEMSET	1 /* see arch/ia64/lib/memset.S */
 
+extern __kernel_size_t strlen (const char *);
+extern void *memset (void *,int,__kernel_size_t);
+
 #endif /* _ASM_IA64_STRING_H */

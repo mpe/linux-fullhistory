@@ -14,10 +14,10 @@
 #include <linux/irq.h>
 
 #include <asm/io.h>
+#include <asm/smp.h>
+#include <asm/io_apic.h>
 
 #include "pci-i386.h"
-
-extern int skip_ioapic_setup;
 
 #define PIRQ_SIGNATURE	(('$' << 0) + ('P' << 8) + ('I' << 16) + ('R' << 24))
 #define PIRQ_VERSION 0x0100
@@ -27,13 +27,13 @@ static struct irq_routing_table *pirq_table;
 /*
  * Never use: 0, 1, 2 (timer, keyboard, and cascade)
  * Avoid using: 13, 14 and 15 (FP error and IDE).
- * Penalize: 3, 4, 7, 12 (known ISA uses: serial, parallel and mouse)
+ * Penalize: 3, 4, 6, 7, 12 (known ISA uses: serial, floppy, parallel and mouse)
  */
 unsigned int pcibios_irq_mask = 0xfff8;
 
-static unsigned pirq_penalty[16] = {
-	10000, 10000, 10000, 100, 100, 0, 0, 100,
-	0, 0, 0, 0, 100, 1000, 1000, 1000
+static int pirq_penalty[16] = {
+	1000000, 1000000, 1000000, 1000, 1000, 0, 1000, 1000,
+	0, 0, 0, 0, 1000, 100000, 100000, 100000
 };
 
 struct irq_router {
@@ -222,7 +222,7 @@ static struct irq_router pirq_routers[] = {
 	{ "PIIX", PCI_VENDOR_ID_INTEL, PCI_DEVICE_ID_INTEL_82371FB_0, pirq_piix_get, pirq_piix_set },
 	{ "PIIX", PCI_VENDOR_ID_INTEL, PCI_DEVICE_ID_INTEL_82371SB_0, pirq_piix_get, pirq_piix_set },
 	{ "PIIX", PCI_VENDOR_ID_INTEL, PCI_DEVICE_ID_INTEL_82371AB_0, pirq_piix_get, pirq_piix_set },
-	{ "PIIX", PCI_VENDOR_ID_INTEL, PCI_DEVICE_ID_INTEL_82440MX_1, pirq_piix_get, pirq_piix_set },
+	{ "PIIX", PCI_VENDOR_ID_INTEL, PCI_DEVICE_ID_INTEL_82443MX_0, pirq_piix_get, pirq_piix_set },
 	{ "ALI", PCI_VENDOR_ID_AL, PCI_DEVICE_ID_AL_M1533, pirq_ali_get, pirq_ali_set },
 	{ "VIA", PCI_VENDOR_ID_VIA, PCI_DEVICE_ID_VIA_82C586_0, pirq_via_get, pirq_via_set },
 	{ "VIA", PCI_VENDOR_ID_VIA, PCI_DEVICE_ID_VIA_82C596, pirq_via_get, pirq_via_set },
@@ -287,7 +287,11 @@ static struct irq_info *pirq_get_info(struct pci_dev *dev, int pin)
 	return NULL;
 }
 
-int pcibios_lookup_irq(struct pci_dev *dev, int assign)
+static void pcibios_test_irq_handler(int irq, void *dev_id, struct pt_regs *regs)
+{
+}
+
+static int pcibios_lookup_irq(struct pci_dev *dev, int assign)
 {
 	struct irq_info *info;
 	int i, pirq, pin, newirq;
@@ -323,19 +327,24 @@ int pcibios_lookup_irq(struct pci_dev *dev, int assign)
 
 	/* Find the best IRQ to assign */
 	newirq = 0;
-	for (i = 0; i < 16; i++) {
-		if (!(mask & (1 << i)))
-			continue;
-		if (pirq_penalty[i] < pirq_penalty[newirq])
-			newirq = i;
+	if (assign) {
+		for (i = 0; i < 16; i++) {
+			if (!(mask & (1 << i)))
+				continue;
+			if (pirq_penalty[i] < pirq_penalty[newirq] &&
+			    !request_irq(i, pcibios_test_irq_handler, SA_SHIRQ, "pci-test", dev)) {
+				free_irq(i, dev);
+				newirq = i;
+			}
+		}
+		DBG(" -> newirq=%d", newirq);
 	}
-	DBG(" -> newirq=%d", newirq);
 
 	/* Try to get current IRQ */
 	if (r->get && (irq = r->get(pirq_router_dev, d, pirq))) {
 		DBG(" -> got IRQ %d\n", irq);
 		msg = "Found";
-	} else if (assign && newirq && r->set && (dev->class >> 8) != PCI_CLASS_DISPLAY_VGA) {
+	} else if (newirq && r->set && (dev->class >> 8) != PCI_CLASS_DISPLAY_VGA) {
 		DBG(" -> assigning IRQ %d", newirq);
 		if (r->set(pirq_router_dev, d, pirq, newirq)) {
 			DBG(" ... OK\n");
@@ -346,7 +355,7 @@ int pcibios_lookup_irq(struct pci_dev *dev, int assign)
 
 	if (!irq) {
 		DBG(" ... failed\n");
-		if (assign && newirq && mask == (1 << newirq)) {
+		if (newirq && mask == (1 << newirq)) {
 			msg = "Guessed";
 			irq = newirq;
 		} else
@@ -379,6 +388,15 @@ void __init pcibios_irq_init(void)
 	if (pirq_table) {
 		pirq_peer_trick();
 		pirq_find_router();
+		if (pirq_table->exclusive_irqs) {
+			int i;
+			for (i=0; i<16; i++)
+				if (!(pirq_table->exclusive_irqs & (1 << i)))
+					pirq_penalty[i] += 100;
+		}
+		/* If we're using the I/O APIC, avoid using the PCI IRQ routing table */
+		if (io_apic_assign_pci_irqs)
+			pirq_table = NULL;
 	}
 }
 
@@ -397,16 +415,19 @@ void __init pcibios_fixup_irqs(void)
 			DBG("%s: ignoring bogus IRQ %d\n", dev->slot_name, dev->irq);
 			dev->irq = 0;
 		}
+		/* If the IRQ is already assigned to a PCI device, ignore its ISA use penalty */
+		if (pirq_penalty[dev->irq] >= 100 && pirq_penalty[dev->irq] < 100000)
+			pirq_penalty[dev->irq] = 0;
 		pirq_penalty[dev->irq]++;
 	}
 
 	pci_for_each_dev(dev) {
 		pci_read_config_byte(dev, PCI_INTERRUPT_PIN, &pin);
-#if defined(CONFIG_X86_IO_APIC)
+#ifdef CONFIG_X86_IO_APIC
 		/*
 		 * Recalculate IRQ numbers if we use the I/O APIC.
 		 */
-		if (!skip_ioapic_setup)
+		if (io_apic_assign_pci_irqs)
 		{
 			int irq;
 
@@ -441,5 +462,33 @@ void __init pcibios_fixup_irqs(void)
 		 */
 		if (pin && !dev->irq)
 			pcibios_lookup_irq(dev, 0);
+	}
+}
+
+void __init pcibios_penalize_isa_irq(int irq)
+{
+	/*
+	 *  If any ISAPnP device reports an IRQ in its list of possible
+	 *  IRQ's, we try to avoid assigning it to PCI devices.
+	 */
+	pirq_penalty[irq] += 100;
+}
+
+void pcibios_enable_irq(struct pci_dev *dev)
+{
+	if (!dev->irq) {
+		u8 pin;
+		pci_read_config_byte(dev, PCI_INTERRUPT_PIN, &pin);
+		if (pin && !pcibios_lookup_irq(dev, 1)) {
+			char *msg;
+			if (io_apic_assign_pci_irqs)
+				msg = " Probably buggy MP table.";
+			else if (pci_probe & PCI_BIOS_IRQ_SCAN)
+				msg = "";
+			else
+				msg = " Please try using pci=biosirq.";
+			printk(KERN_WARNING "PCI: No IRQ known for interrupt pin %c of device %s.%s\n",
+			       'A' + pin - 1, dev->slot_name, msg);
+		}
 	}
 }

@@ -13,6 +13,8 @@
  *
  */
 
+#include <asm/asmmacro.h>
+
 //
 // Theory of operations:
 //	The goal is to go as quickly as possible to the point where
@@ -100,10 +102,9 @@
 
 // unsigned long do_csum(unsigned char *buf,int len)
 
-	.align 32
-	.global do_csum
-	.proc do_csum
-do_csum:
+GLOBAL_ENTRY(do_csum)
+	UNW(.prologue)
+	UNW(.save ar.pfs, saved_pfs)
 	alloc saved_pfs=ar.pfs,2,8,0,8
 
 	.rotr p[4], result[3]
@@ -125,6 +126,7 @@ do_csum:
 	;;
 	and lastoff=7,tmp1	// how many bytes off for last element
 	andcm last=tmp2,tmp3	// address of word containing last byte
+	UNW(.save pr, saved_pr)
 	mov saved_pr=pr		// preserve predicates (rotation)
 	;;
 	sub tmp3=last,first	// tmp3=distance from first to last
@@ -145,8 +147,12 @@ do_csum:
 	shl hmask=hmask,tmp2 	// build head mask, mask off [0,firstoff[
 	;;
 	shr.u tmask=tmask,tmp1	// build tail mask, mask off ]8,lastoff]
+	UNW(.save ar.lc, saved_lc)
 	mov saved_lc=ar.lc	// save lc
 	;;
+
+	UNW(.body)
+
 (p8)	and hmask=hmask,tmask	// apply tail mask to head mask if 1 word only
 (p9)	and p[1]=lastval,tmask	// mask last it as appropriate
 	shr.u tmp3=tmp3,3	// we do 8 bytes per loop
@@ -228,3 +234,4 @@ do_csum:
 	mov ar.lc=saved_lc
 (p10)	shr.u ret0=ret0,64-16	// + shift back to position = swap bytes
 	br.ret.sptk.few rp
+END(do_csum)

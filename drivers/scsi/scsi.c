@@ -176,6 +176,8 @@ extern void scsi_old_times_out(Scsi_Cmnd * SCpnt);
  */
 void  scsi_initialize_queue(Scsi_Device * SDpnt, struct Scsi_Host * SHpnt) {
 	blk_init_queue(&SDpnt->request_queue, scsi_request_fn);
+        blk_queue_headactive(&SDpnt->request_queue, 0);
+        SDpnt->request_queue.queuedata = (void *) SDpnt;
 }
 
 #ifdef MODULE
@@ -2567,7 +2569,6 @@ static void scsi_dump_status(int level)
 			}
 		}
 	}
-	printk("wait_for_request = %p\n", &wait_for_request);
 #endif	/* CONFIG_SCSI_LOGGING */ /* } */
 }
 #endif				/* CONFIG_PROC_FS */
@@ -2728,8 +2729,6 @@ Scsi_Device * scsi_get_host_dev(struct Scsi_Host * SHpnt)
 	scsi_build_commandblocks(SDpnt);
 
 	scsi_initialize_queue(SDpnt, SHpnt);
-        blk_queue_headactive(&SDpnt->request_queue, 0);
-        SDpnt->request_queue.queuedata = (void *) SDpnt;
 
 	SDpnt->online = TRUE;
 

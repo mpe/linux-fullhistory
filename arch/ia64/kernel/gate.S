@@ -3,10 +3,11 @@
  * each task's text region.  For now, it contains the signal
  * trampoline code only.
  *
- * Copyright (C) 1999 Hewlett-Packard Co
- * Copyright (C) 1999 David Mosberger-Tang <davidm@hpl.hp.com>
+ * Copyright (C) 1999-2000 Hewlett-Packard Co
+ * Copyright (C) 1999-2000 David Mosberger-Tang <davidm@hpl.hp.com>
  */
 
+#include <asm/asmmacro.h>
 #include <asm/offsets.h>
 #include <asm/sigcontext.h>
 #include <asm/system.h>
@@ -75,15 +76,12 @@
 	 *	[sp+16] = sigframe
 	 */
 
-	.global ia64_sigtramp
-	.proc ia64_sigtramp
-ia64_sigtramp:
+GLOBAL_ENTRY(ia64_sigtramp)
 	ld8 r10=[r3],8				// get signal handler entry point
 	br.call.sptk.many rp=invoke_sighandler
-	.endp ia64_sigtramp
+END(ia64_sigtramp)
 
-	.proc invoke_sighandler
-invoke_sighandler:
+ENTRY(invoke_sighandler)
 	ld8 gp=[r3]			// get signal handler's global pointer
 	mov b6=r10
 	cover				// push args in interrupted frame onto backing store
@@ -152,10 +150,9 @@ back_from_restore_rbs:
 	ldf.fill f15=[base1],32
 	mov r15=__NR_rt_sigreturn
 	break __BREAK_SYSCALL
-	.endp invoke_sighandler
+END(invoke_sighandler)
 
-	.proc setup_rbs
-setup_rbs:
+ENTRY(setup_rbs)
 	flushrs					// must be first in insn
 	mov ar.rsc=r0				// put RSE into enforced lazy mode
 	adds r16=(RNAT_OFF+SIGCONTEXT_OFF),sp
@@ -167,9 +164,9 @@ setup_rbs:
 	mov ar.rsc=0xf				// set RSE into eager mode, pl 3
 	invala					// invalidate ALAT
 	br.cond.sptk.many back_from_setup_rbs
+END(setup_rbs)
 
-	.proc restore_rbs
-restore_rbs:
+ENTRY(restore_rbs)
 	flushrs
 	mov ar.rsc=r0				// put RSE into enforced lazy mode
 	adds r16=(RNAT_OFF+SIGCONTEXT_OFF),sp
@@ -181,5 +178,4 @@ restore_rbs:
 	mov ar.rsc=0xf				// (will be restored later on from sc_ar_rsc)
 	// invala not necessary as that will happen when returning to user-mode
 	br.cond.sptk.many back_from_restore_rbs
-
-	.endp restore_rbs
+END(restore_rbs)

@@ -28,6 +28,7 @@
 #include <linux/console.h>
 
 #include <asm/acpi-ext.h>
+#include <asm/ia32.h>
 #include <asm/page.h>
 #include <asm/machvec.h>
 #include <asm/processor.h>
@@ -35,6 +36,10 @@
 #include <asm/system.h>
 #include <asm/efi.h>
 #include <asm/mca.h>
+
+#ifdef CONFIG_BLK_DEV_RAM
+# include <linux/blk.h>
+#endif
 
 extern char _end;
 
@@ -108,6 +113,8 @@ setup_arch (char **cmdline_p)
 {
 	unsigned long max_pfn, bootmap_start, bootmap_size;
 
+	unw_init();
+
 	/*
 	 * The secondary bootstrap loader passes us the boot
 	 * parameters at the beginning of the ZERO_PAGE, so let's
@@ -125,11 +132,22 @@ setup_arch (char **cmdline_p)
 	 * change APIs, they'd do things for the better.  Grumble...
 	 */
 	bootmap_start = PAGE_ALIGN(__pa(&_end));
+	if (ia64_boot_param.initrd_size)
+		bootmap_start = PAGE_ALIGN(bootmap_start + ia64_boot_param.initrd_size);
 	bootmap_size = init_bootmem(bootmap_start >> PAGE_SHIFT, max_pfn);
 
 	efi_memmap_walk(free_available_memory, 0);
 
 	reserve_bootmem(bootmap_start, bootmap_size);
+#ifdef CONFIG_BLK_DEV_INITRD
+	initrd_start = ia64_boot_param.initrd_start;
+	if (initrd_start) {
+		initrd_end = initrd_start+ia64_boot_param.initrd_size;
+		printk("Initial ramdisk at: 0x%p (%lu bytes)\n",
+		       (void *) initrd_start, ia64_boot_param.initrd_size);
+		reserve_bootmem(virt_to_phys(initrd_start), ia64_boot_param.initrd_size);
+	}
+#endif
 #if 0
 	/* XXX fix me */
 	init_mm.start_code = (unsigned long) &_stext;
@@ -155,10 +173,8 @@ setup_arch (char **cmdline_p)
 #ifdef CONFIG_SMP
 	bootstrap_processor = hard_smp_processor_id();
 	current->processor = bootstrap_processor;
-#else
-	cpu_init();
-	identify_cpu(&cpu_data[0]);
 #endif
+	cpu_init();	/* initialize the bootstrap CPU */
 
 	if (efi.acpi) {
 		/* Parse the ACPI tables */
@@ -270,35 +286,18 @@ identify_cpu (struct cpuinfo_ia64 *c)
 			u64 features;
 		} field;
 	} cpuid;
+	pal_vm_info_1_u_t vm1;
+	pal_vm_info_2_u_t vm2;
+	pal_status_t status;
+	unsigned long impl_va_msb = 50, phys_addr_size = 44;	/* Itanium defaults */
 	int i;
 
-	for (i = 0; i < 5; ++i) {
+	for (i = 0; i < 5; ++i)
 		cpuid.bits[i] = ia64_get_cpuid(i);
-	}
 
-#ifdef CONFIG_SMP
-	/*
-	 * XXX Instead of copying the ITC info from the bootstrap
-	 * processor, ia64_init_itm() should be done per CPU.  That
-	 * should get you the right info.  --davidm 1/24/00
-	 */
-	if (c != &cpu_data[bootstrap_processor]) {
-		memset(c, 0, sizeof(struct cpuinfo_ia64));
-		c->proc_freq = cpu_data[bootstrap_processor].proc_freq;
-		c->itc_freq = cpu_data[bootstrap_processor].itc_freq;
-		c->cyc_per_usec = cpu_data[bootstrap_processor].cyc_per_usec;
-		c->usec_per_cyc = cpu_data[bootstrap_processor].usec_per_cyc;
-	}
-#else
 	memset(c, 0, sizeof(struct cpuinfo_ia64));
-#endif
 
 	memcpy(c->vendor, cpuid.field.vendor, 16);
-#ifdef CONFIG_IA64_SOFTSDV_HACKS
-        /* BUG: SoftSDV doesn't support the cpuid registers. */
-	if (c->vendor[0] == '\0') 
-		memcpy(c->vendor, "Intel", 6);
-#endif                                   
 	c->ppn = cpuid.field.ppn;
 	c->number = cpuid.field.number;
 	c->revision = cpuid.field.revision;
@@ -306,8 +305,29 @@ identify_cpu (struct cpuinfo_ia64 *c)
 	c->family = cpuid.field.family;
 	c->archrev = cpuid.field.archrev;
 	c->features = cpuid.field.features;
-#ifdef CONFIG_SMP
-	c->loops_per_sec = loops_per_sec;
+
+	status = ia64_pal_vm_summary(&vm1, &vm2);
+	if (status == PAL_STATUS_SUCCESS) {
+#if 1
+		/*
+		 * XXX the current PAL code returns IMPL_VA_MSB==60, which is dead-wrong.
+		 * --davidm 00/05/26
+		 s*/
+		impl_va_msb = 50;
+#else
+		impl_va_msb = vm2.pal_vm_info_2_s.impl_va_msb;
+#endif
+		phys_addr_size = vm1.pal_vm_info_1_s.phys_add_size;
+	}
+	printk("processor implements %lu virtual and %lu physical address bits\n",
+	       impl_va_msb + 1, phys_addr_size);
+	c->unimpl_va_mask = ~((7L<<61) | ((1L << (impl_va_msb + 1)) - 1));
+	c->unimpl_pa_mask = ~((1L<<63) | ((1L << phys_addr_size) - 1));
+
+#ifdef CONFIG_IA64_SOFTSDV_HACKS
+	/* BUG: SoftSDV doesn't support the cpuid registers. */
+	if (c->vendor[0] == '\0') 
+		memcpy(c->vendor, "Intel", 6);
 #endif
 }
 
@@ -318,6 +338,11 @@ identify_cpu (struct cpuinfo_ia64 *c)
 void
 cpu_init (void)
 {
+	extern void __init ia64_rid_init (void);
+	extern void __init ia64_tlb_init (void);
+
+	identify_cpu(&my_cpu_data);
+
 	/* Clear the stack memory reserved for pt_regs: */
 	memset(ia64_task_regs(current), 0, sizeof(struct pt_regs));
 
@@ -331,6 +356,21 @@ cpu_init (void)
 	 */
 	ia64_set_dcr(IA64_DCR_DR | IA64_DCR_DK | IA64_DCR_DX | IA64_DCR_PP);
 	ia64_set_fpu_owner(0);		/* initialize ar.k5 */
+
 	atomic_inc(&init_mm.mm_count);
 	current->active_mm = &init_mm;
+
+	ia64_rid_init();
+	ia64_tlb_init();
+
+#ifdef	CONFIG_IA32_SUPPORT
+	/* initialize global ia32 state - CR0 and CR4 */
+	__asm__("mov ar.cflg = %0"
+		: /* no outputs */
+		: "r" (((ulong) IA32_CR4 << 32) | IA32_CR0));
+#endif
+
+#ifdef CONFIG_SMP
+	normal_xtp();
+#endif
 }

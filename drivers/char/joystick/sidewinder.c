@@ -279,7 +279,7 @@ static int sw_parity(__u64 t)
 
 static int sw_check(__u64 t)
 {
-	char sum = 0;
+	unsigned char sum = 0;
 
 	if ((t & 0x8080808080808080ULL) ^ 0x80)			/* Sync */
 		return -1;

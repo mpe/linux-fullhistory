@@ -1,5 +1,5 @@
 /*
- *  $Id: ipconfig.c,v 1.32 2000/06/19 06:24:59 davem Exp $
+ *  $Id: ipconfig.c,v 1.33 2000/06/21 17:21:43 davem Exp $
  *
  *  Automatic Configuration of IP -- use BOOTP or RARP or user-supplied
  *  information to configure own IP address and routes.
@@ -166,6 +166,7 @@ static void __init ic_close_devs(void)
 	struct ic_device *d, *next;
 	struct net_device *dev;
 
+	rtnl_shlock();
 	next = ic_first_dev;
 	while ((d = next)) {
 		next = d->next;
@@ -176,6 +177,7 @@ static void __init ic_close_devs(void)
 		}
 		kfree_s(d, sizeof(struct ic_device));
 	}
+	rtnl_shunlock();
 }
 
 /*

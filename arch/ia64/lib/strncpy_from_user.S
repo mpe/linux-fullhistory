@@ -16,6 +16,8 @@
  *			 by Andreas Schwab <schwab@suse.de>).
  */
 
+#include <asm/asmmacro.h>
+
 #define EX(x...)				\
 99:	x;					\
 	.section __ex_table,"a";		\
@@ -28,10 +30,7 @@
 	.psr lsb
 	.lsb
 
-	.align 32
-	.global __strncpy_from_user
-	.proc __strncpy_from_user
-__strncpy_from_user:
+GLOBAL_ENTRY(__strncpy_from_user)
 	alloc r2=ar.pfs,3,0,0,0
 	mov r8=0
 	mov r9=in1
@@ -53,5 +52,4 @@ __strncpy_from_user:
 
 .Lexit:
 	br.ret.sptk.few rp
-
-	.endp __strncpy_from_user
+END(__strncpy_from_user)

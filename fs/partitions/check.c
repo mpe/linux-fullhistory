@@ -349,8 +349,8 @@ static void devfs_register_disc (struct gendisk *dev, int minor)
 	devfs_mk_symlink (devfs_handle, symlink, 0, DEVFS_FL_DEFAULT,
 			  dirname + pos, 0, &slave, NULL);
 	dev->part[minor].de =
-	    devfs_register (dir, "disc", 4, devfs_flags, dev->major, minor,
-			    S_IFBLK | S_IRUSR | S_IWUSR, 0, 0, dev->fops,NULL);
+	    devfs_register (dir, "disc", devfs_flags, dev->major, minor,
+			    S_IFBLK | S_IRUSR | S_IWUSR, dev->fops, NULL);
 	devfs_auto_unregister (dev->part[minor].de, slave);
 	if (!dev->de_arr)
 		devfs_auto_unregister (slave, dir);

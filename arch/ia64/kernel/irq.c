@@ -201,10 +201,14 @@ static void show(char * str)
 		printk(" %d",local_bh_count(i));
 
 	printk(" ]\nStack dumps:");
-#ifdef __ia64__
-	printk(" ]\nStack dumps: <unimplemented on IA-64---please fix me>");
-	/* for now we don't have stack dumping support... */
-#elif __i386__
+#if defined(__ia64__)
+	/*
+	 * We can't unwind the stack of another CPU without access to
+	 * the registers of that CPU.  And sending an IPI when we're
+	 * in a potentially wedged state doesn't sound like a smart
+	 * idea.
+	 */
+#elif defined(__i386__)
 	for(i=0;i< smp_num_cpus;i++) {
 		unsigned long esp;
 		if(i==cpu)
@@ -227,9 +231,7 @@ static void show(char * str)
 	You lose...
 #endif
 	printk("\nCPU %d:",cpu);
-#ifdef __i386__
 	show_stack(NULL);
-#endif
 	printk("\n");
 }
 	
@@ -582,7 +584,8 @@ unsigned int do_IRQ(unsigned long irq, struct pt_regs *regs)
 	if (!(status & (IRQ_DISABLED | IRQ_INPROGRESS))) {
 		action = desc->action;
 		status &= ~IRQ_PENDING; /* we commit to handling */
-		status |= IRQ_INPROGRESS; /* we are handling it */
+		if (!(status & IRQ_PER_CPU))
+			status |= IRQ_INPROGRESS; /* we are handling it */
 	}
 	desc->status = status;
 

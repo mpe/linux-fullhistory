@@ -3,7 +3,11 @@
  *
  * Copyright (C) 1998-2000 Hewlett-Packard Co
  * Copyright (C) 1998-2000 David Mosberger-Tang <davidm@hpl.hp.com>
+ *
+ * 05/12/00 grao <goutham.rao@intel.com> : added isr in siginfo for SIGFPE
  */
+
+#define FPSWA_DEBUG	1
 
 /*
  * The fpu_fault() handler needs to be able to access and update all
@@ -168,7 +172,7 @@ ia64_bad_break (unsigned long break_num, struct pt_regs *regs)
 	siginfo.si_signo = sig;
 	siginfo.si_errno = 0;
 	siginfo.si_code = code;
-	send_sig_info(sig, &siginfo, current);
+	force_sig_info(sig, &siginfo, current);
 }
 
 /*
@@ -300,6 +304,7 @@ handle_fpu_swa (int fp_fault, struct pt_regs *regs, unsigned long isr)
 	if (copy_from_user(bundle, (void *) fault_ip, sizeof(bundle)))
 		return -1;
 
+#ifdef FPSWA_DEBUG
 	if (fpu_swa_count > 5 && jiffies - last_time > 5*HZ)
 		fpu_swa_count = 0;
 	if (++fpu_swa_count < 5) {
@@ -307,7 +312,7 @@ handle_fpu_swa (int fp_fault, struct pt_regs *regs, unsigned long isr)
 		printk("%s(%d): floating-point assist fault at ip %016lx\n",
 		       current->comm, current->pid, regs->cr_iip + ia64_psr(regs)->ri);
 	}
-
+#endif
 	exception = fp_emulate(fp_fault, bundle, &regs->cr_ipsr, &regs->ar_fpsr, &isr, &regs->pr,
  			       &regs->cr_ifs, regs);
 	if (fp_fault) {
@@ -331,7 +336,8 @@ handle_fpu_swa (int fp_fault, struct pt_regs *regs, unsigned long isr)
 			} else if (isr & 0x44) {
 				siginfo.si_code = FPE_FLTDIV;
 			}
-			send_sig_info(SIGFPE, &siginfo, current);
+			siginfo.si_isr = isr;
+			force_sig_info(SIGFPE, &siginfo, current);
 		}
 	} else {
 		if (exception == -1) {
@@ -350,10 +356,47 @@ handle_fpu_swa (int fp_fault, struct pt_regs *regs, unsigned long isr)
 			} else if (isr & 0x2200) {
 				siginfo.si_code = FPE_FLTRES;
 			}
-			send_sig_info(SIGFPE, &siginfo, current);
+			siginfo.si_isr = isr;
+			force_sig_info(SIGFPE, &siginfo, current);
 		}
 	}
 	return 0;
+}
+
+struct illegal_op_return {
+	unsigned long fkt, arg1, arg2, arg3;
+};
+
+struct illegal_op_return
+ia64_illegal_op_fault (unsigned long ec, unsigned long arg1, unsigned long arg2,
+		       unsigned long arg3, unsigned long arg4, unsigned long arg5,
+		       unsigned long arg6, unsigned long arg7, unsigned long stack)
+{
+	struct pt_regs *regs = (struct pt_regs *) &stack;
+	struct illegal_op_return rv;
+	struct siginfo si;
+	char buf[128];
+
+#ifdef CONFIG_IA64_BRL_EMU	
+	{
+		extern struct illegal_op_return ia64_emulate_brl (struct pt_regs *, unsigned long);
+
+		rv = ia64_emulate_brl(regs, ec);
+		if (rv.fkt != (unsigned long) -1)
+			return rv;
+	}
+#endif
+
+	sprintf(buf, "IA-64 Illegal operation fault");
+	die_if_kernel(buf, regs, 0);
+
+	memset(&si, 0, sizeof(si));
+	si.si_signo = SIGILL;
+	si.si_code = ILL_ILLOPC;
+	si.si_addr = (void *) (regs->cr_iip + ia64_psr(regs)->ri);
+	force_sig_info(SIGILL, &si, current);
+	rv.fkt = 0;
+	return rv;
 }
 
 void
@@ -449,11 +492,6 @@ ia64_fault (unsigned long vector, unsigned long isr, unsigned long ifa,
 		siginfo.si_errno = 0;
 		force_sig_info(SIGTRAP, &siginfo, current);
 		return;
-
-	      case 30: /* Unaligned fault */
-		sprintf(buf, "Kernel unaligned trap accessing %016lx (ip=%016lx)!",
-			ifa, regs->cr_iip + ia64_psr(regs)->ri);
-		break;
 
 	      case 32: /* fp fault */
 	      case 33: /* fp trap */

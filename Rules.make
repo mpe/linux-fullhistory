@@ -291,9 +291,12 @@ FILES_FLAGS_CHANGED := $(strip \
 	))
 
 # A kludge: .S files don't get flag dependencies (yet),
-#   because that will involve changing a lot of Makefiles.
+#   because that will involve changing a lot of Makefiles.  Also
+#   suppress object files explicitly listed in $(IGNORE_FLAGS_OBJS).
+#   This allows handling of assembly files that get translated into
+#   multiple object files (see arch/ia64/lib/idiv.S, for example).
 FILES_FLAGS_CHANGED := $(strip \
-    $(filter-out $(patsubst %.S, %.o, $(wildcard *.S)), \
+    $(filter-out $(patsubst %.S, %.o, $(wildcard *.S) $(IGNORE_FLAGS_OBJS)), \
     $(FILES_FLAGS_CHANGED)))
 
 ifneq ($(FILES_FLAGS_CHANGED),)

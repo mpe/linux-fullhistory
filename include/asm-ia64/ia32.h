@@ -112,10 +112,16 @@ struct sigaction32 {
        sigset32_t sa_mask;     /* A 32 bit mask */
 };
 
+typedef struct sigaltstack_ia32 {
+	unsigned int	ss_sp;
+	int		ss_flags;
+	unsigned int	ss_size;
+} stack_ia32_t;
+
 struct ucontext_ia32 {
-	unsigned long	  uc_flags;
-	struct ucontext_ia32  *uc_link;
-	stack_t		  uc_stack;
+	unsigned int	  uc_flags;
+	unsigned int 	  uc_link;
+	stack_ia32_t	  uc_stack;
 	struct sigcontext_ia32 uc_mcontext;
 	sigset_t	  uc_sigmask;	/* mask last for extensibility */
 };
@@ -276,7 +282,8 @@ typedef elf_fpreg_t elf_fpregset_t[ELF_NFPREG];
 #define ELF_PLATFORM	0
 
 #ifdef __KERNEL__
-#define SET_PERSONALITY(ex, ibcs2) set_personality((ibcs2)?PER_SVR4:PER_LINUX)
+# define SET_PERSONALITY(EX,IBCS2)				\
+	(current->personality = (IBCS2) ? PER_SVR4 : PER_LINUX)
 #endif
 
 #define IA32_EFLAG	0x200
@@ -342,8 +349,8 @@ typedef elf_fpreg_t elf_fpregset_t[ELF_NFPREG];
  *  IA32 floating point control registers starting values
  */
 
-#define IA32_FSR_DEFAULT	0x55550000	/* set all tag bits */
-#define IA32_FCR_DEFAULT	0x33f		/* single precision, all masks */
+#define IA32_FSR_DEFAULT	0x55550000		/* set all tag bits */
+#define IA32_FCR_DEFAULT	0x17800000037fULL	/* extended precision, all masks */
 
 #define IA32_PTRACE_GETREGS	12
 #define IA32_PTRACE_SETREGS	13

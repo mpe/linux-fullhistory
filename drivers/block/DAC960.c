@@ -1473,9 +1473,8 @@ static boolean DAC960_ProcessRequest(DAC960_Controller_T *Controller,
   Command->SegmentCount = Request->nr_segments;
   Command->BufferHeader = Request->bh;
   RequestBuffer = Request->buffer;
-  Request->rq_status = RQ_INACTIVE;
   blkdev_dequeue_request(Request);
-  wake_up(&wait_for_request);
+  blkdev_release_request(Request);
   if (Command->SegmentCount == 1)
     {
       DAC960_CommandMailbox_T *CommandMailbox = &Command->CommandMailbox;

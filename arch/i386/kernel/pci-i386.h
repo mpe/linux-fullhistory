@@ -68,4 +68,4 @@ extern unsigned int pcibios_irq_mask;
 
 void pcibios_irq_init(void);
 void pcibios_fixup_irqs(void);
-int pcibios_lookup_irq(struct pci_dev *dev, int assign);
+void pcibios_enable_irq(struct pci_dev *dev);

@@ -53,6 +53,10 @@ dig_setup (char **cmdline_p)
 	 */
 	ROOT_DEV = to_kdev_t(0x0802);		/* default to second partition on first drive */
 
+#ifdef	CONFIG_IA64_SOFTSDV_HACKS
+	ROOT_DEV = to_kdev_t(0x0302);		/* 2nd partion on 1st IDE */
+#endif /* CONFIG_IA64_SOFTSDV_HACKS */
+
 #ifdef CONFIG_SMP
 	init_smp_config();
 #endif

@@ -1,8 +1,8 @@
 /*
  * MMU fault handling support.
  *
- * Copyright (C) 1998, 1999 Hewlett-Packard Co
- * Copyright (C) 1998, 1999 David Mosberger-Tang <davidm@hpl.hp.com>
+ * Copyright (C) 1998-2000 Hewlett-Packard Co
+ * Copyright (C) 1998-2000 David Mosberger-Tang <davidm@hpl.hp.com>
  */
 #include <linux/sched.h>
 #include <linux/kernel.h>
@@ -94,7 +94,14 @@ ia64_do_page_fault (unsigned long address, unsigned long isr, struct pt_regs *re
 	 * sure we exit gracefully rather than endlessly redo the
 	 * fault.
 	 */
-	if (!handle_mm_fault(mm, vma, address, (isr & IA64_ISR_W) != 0)) {
+	switch (handle_mm_fault(mm, vma, address, (mask & VM_WRITE) != 0)) {
+	      case 1:
+		++current->min_flt;
+		break;
+	      case 2:
+		++current->maj_flt;
+		break;
+	      case 0:
 		/*
 		 * We ran out of memory, or some other thing happened
 		 * to us that made us unable to handle the page fault
@@ -102,6 +109,8 @@ ia64_do_page_fault (unsigned long address, unsigned long isr, struct pt_regs *re
 		 */
 		signal = SIGBUS;
 		goto bad_area;
+	      default:
+		goto out_of_memory;
 	}
 	up(&mm->mmap_sem);
 	return;
@@ -128,15 +137,11 @@ ia64_do_page_fault (unsigned long address, unsigned long isr, struct pt_regs *re
 		return;
 	}
 	if (user_mode(regs)) {
-#if 0
-printk("%s(%d): segfault accessing %lx\n", current->comm, current->pid, address);
-show_regs(regs);
-#endif
 		si.si_signo = signal;
 		si.si_errno = 0;
 		si.si_code = SI_KERNEL;
 		si.si_addr = (void *) address;
-		force_sig_info(SIGSEGV, &si, current);
+		force_sig_info(signal, &si, current);
 		return;
 	}
 
@@ -161,4 +166,11 @@ show_regs(regs);
 	die_if_kernel("Oops", regs, isr);
 	do_exit(SIGKILL);
 	return;
+
+  out_of_memory:
+	up(&mm->mmap_sem);
+	printk("VM: killing process %s\n", current->comm);
+	if (user_mode(regs))
+		do_exit(SIGKILL);
+	goto no_context;
 }

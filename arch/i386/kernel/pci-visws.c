@@ -135,3 +135,7 @@ int pcibios_enable_device(struct pci_dev *dev)
 {
 	return pcibios_enable_resources(dev);
 }
+
+void __init pcibios_penalize_isa_irq(irq)
+{
+}

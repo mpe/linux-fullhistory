@@ -127,6 +127,12 @@ typedef union ia64_va {
 #define __pa(x)		({ia64_va _v; _v.l = (long) (x); _v.f.reg = 0; _v.l;})
 #define __va(x)		({ia64_va _v; _v.l = (long) (x); _v.f.reg = -1; _v.p;})
 
+#define REGION_NUMBER(x)	({ia64_va _v; _v.l = (long) (x); _v.f.reg;})
+#define REGION_OFFSET(x)	({ia64_va _v; _v.l = (long) (x); _v.f.off;})
+
+#define REGION_SIZE		REGION_NUMBER(1)
+#define REGION_KERNEL	7
+
 #define BUG() do { printk("kernel BUG at %s:%d!\n", __FILE__, __LINE__); *(int *)0=0; } while (0)
 #define PAGE_BUG(page) do { BUG(); } while (0)
 

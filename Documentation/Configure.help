@@ -14290,7 +14290,7 @@ CONFIG_OBP_FLASH
   The OpenBoot PROM on Ultra systems is flashable. If you want to be
   able to upgrade the OBP firmware, say Y here.
 
-JavaStation OS Flash SIMM (EXPERIMENTAL)
+JavaStation OS Flash SIMM
 CONFIG_SUN_JSFLASH
   If you say Y here, you will be able to boot from your JavaStation's
   Flash memory.

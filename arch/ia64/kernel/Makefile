@@ -1,11 +1,6 @@
 #
 # Makefile for the linux kernel.
 #
-# Note! Dependencies are done automagically by 'make dep', which also
-# removes any old dependencies. DON'T put your own dependencies here
-# unless it's something special (ie not a .c file).
-#
-# Note 2! The CFLAGS definitions are now in the main makefile...
 
 .S.s:
 	$(CPP) $(AFLAGS) -o $*.s $<
@@ -15,14 +10,17 @@
 all: kernel.o head.o init_task.o
 
 O_TARGET := kernel.o
-O_OBJS	 := acpi.o entry.o gate.o efi.o efi_stub.o irq.o irq_ia64.o irq_sapic.o ivt.o \
-	    pal.o pci-dma.o process.o perfmon.o ptrace.o sal.o sal_stub.o semaphore.o setup.o \
+O_OBJS	 := acpi.o entry.o gate.o efi.o efi_stub.o irq.o irq_ia64.o irq_sapic.o ivt.o	\
+	    pal.o pci-dma.o process.o perfmon.o ptrace.o sal.o semaphore.o setup.o	\
 	    signal.o sys_ia64.o traps.o time.o unaligned.o unwind.o
-#O_OBJS   := fpreg.o
-#OX_OBJS  := ia64_ksyms.o
+OX_OBJS  := ia64_ksyms.o
 
 ifdef CONFIG_IA64_GENERIC
 O_OBJS	+= machvec.o
+endif
+
+ifdef CONFIG_IA64_PALINFO
+O_OBJS	+= palinfo.o
 endif
 
 ifdef CONFIG_PCI
@@ -35,6 +33,10 @@ endif
 
 ifdef CONFIG_IA64_MCA
 O_OBJS	+= mca.o mca_asm.o
+endif
+
+ifdef CONFIG_IA64_BRL_EMU
+O_OBJS  += brl_emu.o
 endif
 
 clean::

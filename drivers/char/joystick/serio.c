@@ -68,12 +68,9 @@ void serio_rescan(struct serio *serio)
 
 void serio_register_port(struct serio *serio)
 {
-	MOD_INC_USE_COUNT;
-
 	serio->number = serio_number++;
 	serio->next = serio_list;	
 	serio_list = serio;
-
 	serio_find_dev(serio);
 }
 
@@ -88,15 +85,11 @@ void serio_unregister_port(struct serio *serio)
 		serio->dev->disconnect(serio);
 
 	serio_number--;
-
-	MOD_DEC_USE_COUNT;
 }
 
 void serio_register_device(struct serio_dev *dev)
 {
 	struct serio *serio = serio_list;
-
-	MOD_INC_USE_COUNT;
 
 	dev->next = serio_dev;	
 	serio_dev = dev;
@@ -122,25 +115,18 @@ void serio_unregister_device(struct serio_dev *dev)
 		serio_find_dev(serio);
 		serio = serio->next;
 	}
-
-	MOD_DEC_USE_COUNT;
 }
 
 int serio_open(struct serio *serio, struct serio_dev *dev)
 {
-	MOD_INC_USE_COUNT;
-	if (serio->open(serio)) {
-		MOD_DEC_USE_COUNT;
+	if (serio->open(serio))
 		return -1;
-	}
 	serio->dev = dev;
-	
 	return 0;
 }
 
 void serio_close(struct serio *serio)
 {
-	MOD_DEC_USE_COUNT;
 	serio->close(serio);
 	serio->dev = NULL;
 }

@@ -44,7 +44,7 @@ static struct file_operations proc_file_operations = {
 #endif
 
 /* 4K page size but our output routines use some slack for overruns */
-#define PROC_BLOCK_SIZE	(3*1024)
+#define PROC_BLOCK_SIZE	(PAGE_SIZE - 1024)
 
 static ssize_t
 proc_file_read(struct file * file, char * buf, size_t nbytes, loff_t *ppos)

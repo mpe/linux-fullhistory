@@ -500,6 +500,7 @@ static void __init isapnp_add_irq_resource(struct pci_dev *dev,
                                                int dependent, int size)
 {
 	unsigned char tmp[3];
+	int i;
 	struct isapnp_irq *irq, *ptr;
 
 	isapnp_peek(tmp, size);
@@ -526,6 +527,9 @@ static void __init isapnp_add_irq_resource(struct pci_dev *dev,
 		ptr->next = irq;
 	else
 		(*res)->irq = irq;
+	for (i=0; i<16; i++)
+		if (irq->map & i)
+			pcibios_penalize_isa_irq(i);
 }
 
 /*
@@ -1603,6 +1607,14 @@ static int isapnp_check_interrupt(struct isapnp_cfgtmp *cfg, int irq, int idx)
 				return 1;
 		}
 	}
+#ifdef CONFIG_PCI
+	if (!isapnp_skip_pci_scan) {
+		pci_for_each_dev(dev) {
+			if (dev->irq == irq)
+				return 1;
+		}
+	}
+#endif
 	if (request_irq(irq, isapnp_test_handler, SA_INTERRUPT, "isapnp", NULL))
 		return 1;
 	free_irq(irq, NULL);
@@ -2070,45 +2082,6 @@ static void isapnp_free_all_resources(void)
 #endif
 }
 
-static int __init isapnp_do_reserve_irq(int irq)
-{
-	int i;
-	
-	if (irq < 0 || irq > 15)
-		return -EINVAL;
-	for (i = 0; i < 16; i++) {
-		if (isapnp_reserve_irq[i] == irq)
-			return 0;
-	}
-	for (i = 0; i < 16; i++) {
-		if (isapnp_reserve_irq[i] < 0) {
-			isapnp_reserve_irq[i] = irq;
-#ifdef ISAPNP_DEBUG
-			printk("isapnp: IRQ %i is reserved now.\n", irq);
-#endif
-			return 0;
-		}
-	}
-	return -ENOMEM;
-}
-
-#ifdef CONFIG_PCI
-
-static void __init isapnp_pci_init(void)
-{
-	struct pci_dev *dev;
-
-	pci_for_each_dev(dev) {
-#ifdef ISAPNP_DEBUG
-		printk("isapnp: PCI: reserved IRQ: %i\n", dev->irq);
-#endif
-		if (dev->irq > 0)
-			isapnp_do_reserve_irq(dev->irq);
-	}
-}
-
-#endif /* CONFIG_PCI */
-
 EXPORT_SYMBOL(isapnp_cards);
 EXPORT_SYMBOL(isapnp_devices);
 EXPORT_SYMBOL(isapnp_present);
@@ -2200,10 +2173,6 @@ int __init isapnp_init(void)
 	} else {
 		printk("isapnp: No Plug & Play card found\n");
 	}
-#ifdef CONFIG_PCI
-	if (!isapnp_skip_pci_scan)
-		isapnp_pci_init();
-#endif
 #ifdef CONFIG_PROC_FS
 	isapnp_proc_init();
 #endif

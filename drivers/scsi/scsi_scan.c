@@ -271,8 +271,8 @@ void scan_scsis(struct Scsi_Host *shpnt,
 	if (SDpnt) {
 		memset(SDpnt, 0, sizeof(Scsi_Device));
 		/*
-		 * Register the queue for the device.  All I/O requests will come
-		 * in through here.  We also need to register a pointer to
+		 * Register the queue for the device.  All I/O requests will
+		 * come in through here.  We also need to register a pointer to
 		 * ourselves, since the queue handler won't know what device
 		 * the queue actually represents.   We could look it up, but it
 		 * is pointless work.

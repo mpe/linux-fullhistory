@@ -805,7 +805,7 @@ void ide_end_drive_cmd (ide_drive_t *drive, byte stat, byte err)
 	spin_lock_irqsave(&io_request_lock, flags);
 	blkdev_dequeue_request(rq);
 	HWGROUP(drive)->rq = NULL;
-	rq->rq_status = RQ_INACTIVE;
+	blkdev_release_request(rq);
 	spin_unlock_irqrestore(&io_request_lock, flags);
 	if (rq->sem != NULL)
 		up(rq->sem);	/* inform originator that rq has been serviced */
