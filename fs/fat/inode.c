@@ -10,6 +10,7 @@
  *  	Max Cohan: Fixed invalid FSINFO offset when info_sector is 0
  */
 
+#include <linux/config.h>
 #include <linux/version.h>
 #define __NO_VERSION__
 #include <linux/module.h>

@@ -231,7 +231,7 @@ char *disk_name (struct gendisk *hd, int minor, char *buf);
 extern void devfs_register_partitions (struct gendisk *dev, int minor,
 				       int unregister);
 
-int get_hardsect_size(kdev_t dev);
+
 
 /*
  * FIXME: this should use genhd->minor_shift, but that is slow to look up.

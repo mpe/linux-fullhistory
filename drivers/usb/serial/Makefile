@@ -3,30 +3,41 @@
 #
 
 O_TARGET	:= usb-serial.o
-M_OBJS		:= usb-serial.o
-O_OBJS		:= usbserial.o
+M_OBJS		:=
+O_OBJS		:=
 MOD_LIST_NAME	:= USB_SERIAL_MODULES
 
-ifeq ($(CONFIG_USB_SERIAL_VISOR),y)
-	O_OBJS += visor.o
+# Object file lists.
+
+obj-y	:=
+obj-m	:=
+obj-n	:=
+obj-	:=
+
+ifeq ($(CONFIG_USB_SERIAL),y)
+	obj-y += usbserial.o
 endif
-ifeq ($(CONFIG_USB_SERIAL_WHITEHEAT),y)
-	O_OBJS += whiteheat.o
+ifeq ($(CONFIG_USB_SERIAL),m)
+	obj-m += usbserial.o
 endif
-ifeq ($(CONFIG_USB_SERIAL_FTDI_SIO),y)
-	O_OBJS += ftdi_sio.o
-endif
-ifeq ($(CONFIG_USB_SERIAL_KEYSPAN_PDA),y)
-	O_OBJS += keyspan_pda.o
-endif
-ifeq ($(CONFIG_USB_SERIAL_KEYSPAN),y)
-	O_OBJS += keyspan.o
-endif
-ifeq ($(CONFIG_USB_SERIAL_OMNINET),y)
-	O_OBJS += omninet.o
-endif
-ifeq ($(CONFIG_USB_SERIAL_DIGI_ACCELEPORT),y)
-	O_OBJS += digi_acceleport.o
-endif
+
+obj-$(CONFIG_USB_SERIAL_VISOR)			+= visor.o
+obj-$(CONFIG_USB_SERIAL_WHITEHEAT)		+= whiteheat.o
+obj-$(CONFIG_USB_SERIAL_FTDI_SIO)		+= ftdi_sio.o
+obj-$(CONFIG_USB_SERIAL_KEYSPAN_PDA)		+= keyspan_pda.o
+obj-$(CONFIG_USB_SERIAL_KEYSPAN)		+= keyspan.o
+obj-$(CONFIG_USB_SERIAL_OMNINET)		+= omninet.o
+obj-$(CONFIG_USB_SERIAL_DIGI_ACCELEPORT)	+= digi_acceleport.o
  
+# Objects that export symbols.
+export-objs	:= usbserial.o
+
+# Translate to Rules.make lists.
+
+O_OBJS		:= $(sort $(filter-out $(export-objs), $(obj-y)))
+OX_OBJS		:= $(sort $(filter     $(export-objs), $(obj-y)))
+M_OBJS		:= $(sort $(filter-out $(export-objs), $(obj-m)))
+MX_OBJS		:= $(sort $(filter     $(export-objs), $(obj-m)))
+
 include $(TOPDIR)/Rules.make
+

@@ -1,7 +1,8 @@
 /* gamma.c -- 3dlabs GMX 2000 driver -*- linux-c -*-
  * Created: Mon Jan  4 08:58:31 1999 by faith@precisioninsight.com
  *
- * Copyright 1999, 2000 Precision Insight, Inc., Cedar Park, Texas.
+ * Copyright 1999 Precision Insight, Inc., Cedar Park, Texas.
+ * Copyright 2000 VA Linux Systems, Inc., Sunnyvale, California.
  * All Rights Reserved.
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
@@ -24,37 +25,50 @@
  * DEALINGS IN THE SOFTWARE.
  * 
  * Authors:
- *    Rickard E. (Rik) Faith <faith@precisioninsight.com>
+ *    Rickard E. (Rik) Faith <faith@valinux.com>
  *
  */
 
 #include <linux/config.h>
-#include <linux/sched.h>
-#include <linux/smp_lock.h>
+#ifndef EXPORT_SYMTAB
+#define EXPORT_SYMTAB
+#endif
 #include "drmP.h"
 #include "gamma_drv.h"
+#include <linux/pci.h>
+#include <linux/smp_lock.h>	/* For (un)lock_kernel */
 EXPORT_SYMBOL(gamma_init);
 EXPORT_SYMBOL(gamma_cleanup);
 
+#ifndef PCI_DEVICE_ID_3DLABS_GAMMA
+#define PCI_DEVICE_ID_3DLABS_GAMMA 0x0008
+#endif
+#ifndef PCI_DEVICE_ID_3DLABS_MX
+#define PCI_DEVICE_ID_3DLABS_MX 0x0006
+#endif
+
 #define GAMMA_NAME	 "gamma"
 #define GAMMA_DESC	 "3dlabs GMX 2000"
-#define GAMMA_DATE	 "19990830"
-#define GAMMA_MAJOR	 0
+#define GAMMA_DATE	 "20000719"
+#define GAMMA_MAJOR	 1
 #define GAMMA_MINOR	 0
-#define GAMMA_PATCHLEVEL 5
+#define GAMMA_PATCHLEVEL 0
 
 static drm_device_t	      gamma_device;
 
 static struct file_operations gamma_fops = {
-	owner:		THIS_MODULE,
-	open:		gamma_open,
-	flush:		drm_flush,
-	release:	gamma_release,
-	ioctl:		gamma_ioctl,
-	mmap:		drm_mmap,
-	read:		drm_read,
-	fasync:		drm_fasync,
-	poll:		drm_poll,
+#if LINUX_VERSION_CODE >= 0x020322
+				/* This started being used approx. 2.3.34 */
+	owner:   THIS_MODULE,
+#endif
+	open:	 gamma_open,
+	flush:	 drm_flush,
+	release: gamma_release,
+	ioctl:	 gamma_ioctl,
+	mmap:	 drm_mmap,
+	read:	 drm_read,
+	fasync:	 drm_fasync,
+	poll:	 drm_poll,
 };
 
 static struct miscdevice      gamma_misc = {
@@ -98,46 +112,34 @@ static drm_ioctl_desc_t	      gamma_ioctls[] = {
 #define GAMMA_IOCTL_COUNT DRM_ARRAY_SIZE(gamma_ioctls)
 
 #ifdef MODULE
-int			      init_module(void);
-void			      cleanup_module(void);
 static char		      *gamma = NULL;
+#endif
+static int 		      devices = 0;
 
-MODULE_AUTHOR("Precision Insight, Inc., Cedar Park, Texas.");
+MODULE_AUTHOR("VA Linux Systems, Inc.");
 MODULE_DESCRIPTION("3dlabs GMX 2000");
 MODULE_PARM(gamma, "s");
+MODULE_PARM(devices, "i");
+MODULE_PARM_DESC(devices,
+		 "devices=x, where x is the number of MX chips on card\n");
 
-/* init_module is called when insmod is used to load the module */
-
-int init_module(void)
-{
-	return gamma_init();
-}
-
-/* cleanup_module is called when rmmod is used to unload the module */
-
-void cleanup_module(void)
-{
-	gamma_cleanup();
-}
-#endif
+module_init(gamma_init);
+module_exit(gamma_cleanup);
 
 #ifndef MODULE
-/* gamma_setup is called by the kernel to parse command-line options passed
- * via the boot-loader (e.g., LILO).  It calls the insmod option routine,
- * drm_parse_options.
- *
- * This is not currently supported, since it requires changes to
- * linux/init/main.c. */
+/* gamma_options is called by the kernel to parse command-line options
+ * passed via the boot-loader (e.g., LILO).  It calls the insmod option
+ * routine, drm_parse_options.
+ */
  
 
-void __init gamma_setup(char *str, int *ints)
+static int __init gamma_options(char *str)
 {
-	if (ints[0] != 0) {
-		DRM_ERROR("Illegal command line format, ignored\n");
-		return;
-	}
 	drm_parse_options(str);
+	return 1;
 }
+
+__setup("gamma=", gamma_options);
 #endif
 
 static int gamma_setup(drm_device_t *dev)
@@ -274,6 +276,10 @@ static int gamma_takedown(drm_device_t *dev)
 					       - PAGE_SHIFT,
 					       DRM_MEM_SAREA);
 				break;
+			case _DRM_AGP:
+				/* Do nothing here, because this is all
+                                   handled in the AGP/GART driver. */
+				break;
 			}
 			drm_free(map, sizeof(*map), DRM_MEM_MAPS);
 		}
@@ -313,6 +319,34 @@ static int gamma_takedown(drm_device_t *dev)
 	return 0;
 }
 
+int gamma_found(void)
+{
+	return devices;
+}
+
+int gamma_find_devices(void)
+{
+	struct pci_dev *d = NULL, *one = NULL, *two = NULL;
+
+	d = pci_find_device(PCI_VENDOR_ID_3DLABS,PCI_DEVICE_ID_3DLABS_GAMMA,d);
+	if (!d) return 0;
+
+	one = pci_find_device(PCI_VENDOR_ID_3DLABS,PCI_DEVICE_ID_3DLABS_MX,d);
+	if (!one) return 0;
+
+	/* Make sure it's on the same card, if not - no MX's found */
+	if (PCI_SLOT(d->devfn) != PCI_SLOT(one->devfn)) return 0;
+
+	two = pci_find_device(PCI_VENDOR_ID_3DLABS,PCI_DEVICE_ID_3DLABS_MX,one);
+	if (!two) return 1;
+
+	/* Make sure it's on the same card, if not - only 1 MX found */
+	if (PCI_SLOT(d->devfn) != PCI_SLOT(two->devfn)) return 1;
+
+	/* Two MX's found - we don't currently support more than 2 */
+	return 2;
+}
+
 /* gamma_init is called via init_module at module load time, or via
  * linux/init/main.c (this is not currently supported). */
 
@@ -330,6 +364,8 @@ int gamma_init(void)
 #ifdef MODULE
 	drm_parse_options(gamma);
 #endif
+	devices = gamma_find_devices();
+	if (devices == 0) return -1;
 
 	if ((retcode = misc_register(&gamma_misc))) {
 		DRM_ERROR("Cannot register \"%s\"\n", GAMMA_NAME);
@@ -341,13 +377,14 @@ int gamma_init(void)
 	drm_mem_init();
 	drm_proc_init(dev);
 
-	DRM_INFO("Initialized %s %d.%d.%d %s on minor %d\n",
+	DRM_INFO("Initialized %s %d.%d.%d %s on minor %d with %d MX devices\n",
 		 GAMMA_NAME,
 		 GAMMA_MAJOR,
 		 GAMMA_MINOR,
 		 GAMMA_PATCHLEVEL,
 		 GAMMA_DATE,
-		 gamma_misc.minor);
+		 gamma_misc.minor,
+		 devices);
 	
 	return 0;
 }
@@ -410,6 +447,7 @@ int gamma_open(struct inode *inode, struct file *filp)
 	
 	DRM_DEBUG("open_count = %d\n", dev->open_count);
 	if (!(retcode = drm_open_helper(inode, filp, dev))) {
+		MOD_INC_USE_COUNT;
 		atomic_inc(&dev->total_open);
 		spin_lock(&dev->count_lock);
 		if (!dev->open_count++) {
@@ -424,13 +462,13 @@ int gamma_open(struct inode *inode, struct file *filp)
 int gamma_release(struct inode *inode, struct file *filp)
 {
 	drm_file_t    *priv   = filp->private_data;
-	drm_device_t  *dev;
+	drm_device_t  *dev    = priv->dev;
 	int	      retcode = 0;
 
-	lock_kernel();
-	dev    = priv->dev;
 	DRM_DEBUG("open_count = %d\n", dev->open_count);
+	lock_kernel();
 	if (!(retcode = drm_release(inode, filp))) {
+		MOD_DEC_USE_COUNT;
 		atomic_inc(&dev->total_close);
 		spin_lock(&dev->count_lock);
 		if (!--dev->open_count) {

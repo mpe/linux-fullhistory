@@ -2,6 +2,7 @@
  * Created: Mon Jan 11 09:48:47 1999 by faith@precisioninsight.com
  *
  * Copyright 1999 Precision Insight, Inc., Cedar Park, Texas.
+ * Copyright 2000 VA Linux Systems, Inc., Sunnyvale, California.
  * All Rights Reserved.
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
@@ -22,10 +23,9 @@
  * OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,
  * ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
  * DEALINGS IN THE SOFTWARE.
- * 
- * Authors:
- *    Rickard E. (Rik) Faith <faith@precisioninsight.com>
  *
+ * Authors:
+ *    Rickard E. (Rik) Faith <faith@valinux.com>
  */
 
 #define __NO_VERSION__
@@ -164,7 +164,10 @@ static int _drm_vm_info(char *buf, char **start, off_t offset, int len,
 {
 	drm_device_t *dev = (drm_device_t *)data;
 	drm_map_t    *map;
-	const char   *types[] = { "FB", "REG", "SHM" };
+				/* Hardcoded from _DRM_FRAME_BUFFER,
+                                   _DRM_REGISTERS, _DRM_SHM, and
+                                   _DRM_AGP. */
+	const char   *types[] = { "FB", "REG", "SHM", "AGP" };
 	const char   *type;
 	int	     i;
 
@@ -175,7 +178,7 @@ static int _drm_vm_info(char *buf, char **start, off_t offset, int len,
 		       "address mtrr\n\n");
 	for (i = 0; i < dev->map_count; i++) {
 		map = dev->maplist[i];
-		if (map->type < 0 || map->type > 2) type = "??";
+		if (map->type < 0 || map->type > 3) type = "??";
 		else				    type = types[map->type];
 		DRM_PROC_PRINT("%4d 0x%08lx 0x%08lx %4.4s  0x%02x 0x%08lx ",
 			       i,
@@ -348,17 +351,21 @@ static int drm_clients_info(char *buf, char **start, off_t offset, int len,
 
 #if DRM_DEBUG_CODE
 
+#define DRM_VMA_VERBOSE 0
+
 static int _drm_vma_info(char *buf, char **start, off_t offset, int len,
 			 int *eof, void *data)
 {
 	drm_device_t	      *dev = (drm_device_t *)data;
 	drm_vma_entry_t	      *pt;
+	struct vm_area_struct *vma;
+#if DRM_VMA_VERBOSE
+	unsigned long	      i;
+	unsigned long	      address;
 	pgd_t		      *pgd;
 	pmd_t		      *pmd;
 	pte_t		      *pte;
-	unsigned long	      i;
-	struct vm_area_struct *vma;
-	unsigned long	      address;
+#endif
 #if defined(__i386__)
 	unsigned int	      pgprot;
 #endif
@@ -397,6 +404,7 @@ static int _drm_vma_info(char *buf, char **start, off_t offset, int len,
 			       pgprot & _PAGE_GLOBAL   ? 'g' : 'l' );
 #endif		
 		DRM_PROC_PRINT("\n");
+#if 0
 		for (i = vma->vm_start; i < vma->vm_end; i += PAGE_SIZE) {
 			pgd = pgd_offset(vma->vm_mm, i);
 			pmd = pmd_offset(pgd, i);
@@ -417,6 +425,7 @@ static int _drm_vma_info(char *buf, char **start, off_t offset, int len,
 				DRM_PROC_PRINT("      0x%08lx\n", i);
 			}
 		}
+#endif
 	}
 	
 	return len;
@@ -512,9 +521,9 @@ static int _drm_histo_info(char *buf, char **start, off_t offset, int len,
 	} else {
 		DRM_PROC_PRINT("lock		     none\n");
 	}
-	DRM_PROC_PRINT("context_flag   0x%08lx\n", dev->context_flag);
-	DRM_PROC_PRINT("interrupt_flag 0x%08lx\n", dev->interrupt_flag);
-	DRM_PROC_PRINT("dma_flag       0x%08lx\n", dev->dma_flag);
+	DRM_PROC_PRINT("context_flag   0x%08x\n", dev->context_flag);
+	DRM_PROC_PRINT("interrupt_flag 0x%08x\n", dev->interrupt_flag);
+	DRM_PROC_PRINT("dma_flag       0x%08x\n", dev->dma_flag);
 
 	DRM_PROC_PRINT("queue_count    %10d\n",	 dev->queue_count);
 	DRM_PROC_PRINT("last_context   %10d\n",	 dev->last_context);

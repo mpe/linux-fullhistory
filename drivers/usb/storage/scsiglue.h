@@ -1,7 +1,7 @@
 /* Driver for USB Mass Storage compliant devices
  * SCSI Connecting Glue Header File
  *
- * $Id: scsiglue.h,v 1.1 2000/06/27 01:25:28 mdharm Exp $
+ * $Id: scsiglue.h,v 1.2 2000/07/19 22:12:07 mdharm Exp $
  *
  * Current development and maintainance by:
  *   (c) 1999, 2000 Matthew Dharm (mdharm-usb@one-eyed-alien.net)
@@ -45,7 +45,7 @@
 #include "scsi.h"
 #include "hosts.h"
 
-extern unsigned char usb_stor_sense_notready[12];
+extern unsigned char usb_stor_sense_notready[18];
 extern unsigned char us_direction[256/8];
 extern Scsi_Host_Template usb_stor_host_template;
 extern int usb_stor_scsiSense10to6(Scsi_Cmnd*);

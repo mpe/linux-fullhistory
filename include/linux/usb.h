@@ -10,10 +10,12 @@
 #define USB_CLASS_AUDIO			1
 #define USB_CLASS_COMM			2
 #define USB_CLASS_HID			3
+#define USB_CLASS_PHYSICAL		5
 #define USB_CLASS_PRINTER		7
 #define USB_CLASS_MASS_STORAGE		8
 #define USB_CLASS_HUB			9
 #define USB_CLASS_DATA			10
+#define USB_CLASS_APP_SPEC		0xfe
 #define USB_CLASS_VENDOR_SPEC		0xff
 
 /*

@@ -136,7 +136,7 @@ static void __fput(struct file *filp)
 		mntput(mnt);
 }
 
-void _fput(struct file *file)
+static void _fput(struct file *file)
 {
 	locks_remove_flock(file);
 	__fput(file);
@@ -146,6 +146,25 @@ void _fput(struct file *file)
 	list_add(&file->f_list, &free_list);
 	files_stat.nr_free_files++;
 	file_list_unlock();
+}
+
+void fput(struct file * file)
+{
+	if (atomic_dec_and_test(&file->f_count))
+		_fput(file);
+}
+
+struct file * fget(unsigned int fd)
+{
+	struct file * file = NULL;
+	struct files_struct *files = current->files;
+
+	read_lock(&files->file_lock);
+	file = fcheck(fd);
+	if (file)
+		get_file(file);
+	read_unlock(&files->file_lock);
+	return file;
 }
 
 /* Here. put_filp() is SMP-safe now. */

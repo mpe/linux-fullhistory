@@ -24,6 +24,21 @@
 #define ROUND_UP(x,y) (((x)+(y)-1)/(y))
 #define DEFAULT_POLLMASK (POLLIN | POLLOUT | POLLRDNORM | POLLWRNORM)
 
+struct poll_table_entry {
+	struct file * filp;
+	wait_queue_t wait;
+	wait_queue_head_t * wait_address;
+};
+
+struct poll_table_page {
+	struct poll_table_page * next;
+	struct poll_table_entry * entry;
+	struct poll_table_entry entries[0];
+};
+
+#define POLL_TABLE_FULL(table) \
+	((unsigned long)(table->entry+1) > PAGE_SIZE + (unsigned long)(table))
+
 /*
  * Ok, Peter made a complicated, but straightforward multiple_wait() function.
  * I have rewritten this, taking some shortcuts: This code may not be easy to
@@ -44,13 +59,12 @@ void poll_freewait(poll_table* pt)
 		struct poll_table_entry * entry;
 		struct poll_table_page *old;
 
-		entry = p->entry + p->nr;
-		while (p->nr > 0) {
-			p->nr--;
+		entry = p->entry;
+		do {
 			entry--;
 			remove_wait_queue(entry->wait_address,&entry->wait);
 			fput(entry->filp);
-		}
+		} while (entry > p->entries);
 		old = p;
 		p = p->next;
 		free_page((unsigned long) old);
@@ -61,7 +75,7 @@ void __pollwait(struct file * filp, wait_queue_head_t * wait_address, poll_table
 {
 	struct poll_table_page *table = p->table;
 
-	if (!table || table->nr >= __MAX_POLL_TABLE_ENTRIES) {
+	if (!table || POLL_TABLE_FULL(table)) {
 		struct poll_table_page *new_table;
 
 		new_table = (struct poll_table_page *) __get_free_page(GFP_KERNEL);
@@ -70,8 +84,7 @@ void __pollwait(struct file * filp, wait_queue_head_t * wait_address, poll_table
 			__set_current_state(TASK_RUNNING);
 			return;
 		}
-		new_table->nr = 0;
-		new_table->entry = (struct poll_table_entry *)(new_table + 1);
+		new_table->entry = new_table->entries;
 		new_table->next = table;
 		p->table = new_table;
 		table = new_table;
@@ -79,9 +92,8 @@ void __pollwait(struct file * filp, wait_queue_head_t * wait_address, poll_table
 
 	/* Add a new entry */
 	{
-		struct poll_table_entry * entry;
-	 	entry = table->entry + table->nr;
-		table->nr++;
+		struct poll_table_entry * entry = table->entry;
+		table->entry = entry+1;
 	 	get_file(filp);
 	 	entry->filp = filp;
 		entry->wait_address = wait_address;

@@ -12,7 +12,7 @@
 	(1000000/CLOCK_TICK_FACTOR) / (CLOCK_TICK_RATE/CLOCK_TICK_FACTOR)) \
 		<< (SHIFT_SCALE-SHIFT_HZ)) / HZ)
 
-typedef unsigned long cycles_t;
+typedef unsigned long long cycles_t;
 
 extern cycles_t cacheflush_time;
 

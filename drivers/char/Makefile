@@ -76,18 +76,10 @@ ifeq ($(ARCH),sh)
   KEYMAP   =
   KEYBD    =
   CONSOLE  =
-  SERIAL =
   ifeq ($(CONFIG_SH_HP600),y)
   KEYMAP   = defkeymap.o
   KEYBD    = scan_keyb.o hp600_keyb.o
   CONSOLE  = console.o
-  endif
-  ifeq ($(CONFIG_SERIAL),y)
-  SERIAL = generic_serial.o sh-sci.o
-  else
-    ifeq ($(CONFIG_SERIAL),m)
-    SERIAL = sh-sci.o
-    endif
   endif
 endif
 
@@ -149,7 +141,7 @@ obj-$(CONFIG_AMIGA_BUILTIN_SERIAL) += amiserial.o
 # So this should simply provide the wanted functionality!
 obj-$(CONFIG_SX) += sx.o generic_serial.o
 obj-$(CONFIG_RIO) += rio/rio.o generic_serial.o
-
+obj-$(CONFIG_SH_SCI) += sh-sci.o generic_serial.o
 
 ifeq ($(CONFIG_RIO),y)
   SUB_DIRS += rio

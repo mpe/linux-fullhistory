@@ -22,6 +22,10 @@
   Tip 'o the hat to Linuxcare for supporting staff in their work on
   open source projects.
 
+  Wed Jul 19 14:00:42 EST 2000 gkh
+	Added module_init and module_exit functions to handle the fact that this
+	driver is a loadable module now.
+
   Tue Jul 18 16:14:52 EST 2000 Hugh
     Basic character input/output for USA-19 now mostly works,
     fixed at 9600 baud for the moment.
@@ -30,9 +34,6 @@
 
 
 #include <linux/config.h>
-
-#ifdef CONFIG_USB_SERIAL_KEYSPAN
-
 #include <linux/kernel.h>
 #include <linux/sched.h>
 #include <linux/signal.h>
@@ -685,5 +686,38 @@ static void keyspan_shutdown (struct usb_serial *serial)
 	
 }
 
-#endif	/* CONFIG_USB_SERIAL_KEYSPAN */
+
+int keyspan_init (void)
+{
+	usb_serial_register (&keyspan_usa18x_pre_device);
+	usb_serial_register (&keyspan_usa19_pre_device);
+	usb_serial_register (&keyspan_usa19w_pre_device);
+	usb_serial_register (&keyspan_usa28_pre_device);
+	usb_serial_register (&keyspan_usa28x_pre_device);
+	usb_serial_register (&keyspan_usa18x_device);
+	usb_serial_register (&keyspan_usa19_device);
+	usb_serial_register (&keyspan_usa19w_device);
+	usb_serial_register (&keyspan_usa28_device);
+	usb_serial_register (&keyspan_usa28x_device);
+	return 0;
+}
+
+
+void keyspan_exit (void)
+{
+	usb_serial_deregister (&keyspan_usa18x_pre_device);
+	usb_serial_deregister (&keyspan_usa19_pre_device);
+	usb_serial_deregister (&keyspan_usa19w_pre_device);
+	usb_serial_deregister (&keyspan_usa28_pre_device);
+	usb_serial_deregister (&keyspan_usa28x_pre_device);
+	usb_serial_deregister (&keyspan_usa18x_device);
+	usb_serial_deregister (&keyspan_usa19_device);
+	usb_serial_deregister (&keyspan_usa19w_device);
+	usb_serial_deregister (&keyspan_usa28_device);
+	usb_serial_deregister (&keyspan_usa28x_device);
+}
+
+
+module_init(keyspan_init);
+module_exit(keyspan_exit);
 

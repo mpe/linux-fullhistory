@@ -258,24 +258,25 @@ fi
 endmenu
 
 bool 'Direct Rendering Manager (XFree86 DRI support)' CONFIG_DRM
-dep_tristate '  3dfx Banshee/Voodoo3' CONFIG_DRM_TDFX $CONFIG_DRM
 if [ "$CONFIG_DRM" = "y" ]; then
-  dep_tristate '  3dlabs GMX 2000' CONFIG_DRM_GAMMA m
+    tristate '  3dfx Banshee/Voodoo3+' CONFIG_DRM_TDFX
+    tristate '  3dlabs GMX 2000' CONFIG_DRM_GAMMA
+    tristate '  ATI Rage 128' CONFIG_DRM_R128
+    tristate '  Intel I810' CONFIG_DRM_I810
+    tristate '  Matrox g200/g400' CONFIG_DRM_MGA
+fi
+
+tristate '/dev/agpgart (AGP Support)' CONFIG_AGP $CONFIG_DRM_AGP
+if [ "$CONFIG_AGP" != "n" ]; then
+   bool '  Intel 440LX/BX/GX support' CONFIG_AGP_INTEL
+   bool '  Intel I810/I810 DC100/I810e support' CONFIG_AGP_I810
+   bool '  VIA chipset support' CONFIG_AGP_VIA
+   bool '  AMD Irongate support' CONFIG_AGP_AMD
+   bool '  Generic SiS support' CONFIG_AGP_SIS
+   bool '  ALI M1541 support' CONFIG_AGP_ALI
 fi
 
 if [ "$CONFIG_HOTPLUG" = "y" -a "$CONFIG_PCMCIA" != "n" ]; then
    source drivers/char/pcmcia/Config.in
-fi
-
-if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
-   tristate '/dev/agpgart (AGP Support) (EXPERIMENTAL)' CONFIG_AGP
-   if [ "$CONFIG_AGP" != "n" ]; then
-      bool '  Intel 440LX/BX/GX support' CONFIG_AGP_INTEL
-      bool '  Intel I810/I810 DC100/I810e support' CONFIG_AGP_I810
-      bool '  VIA chipset support' CONFIG_AGP_VIA
-      bool '  AMD Irongate support' CONFIG_AGP_AMD
-      bool '  Generic SiS support' CONFIG_AGP_SIS
-      bool '  ALI M1541 support' CONFIG_AGP_ALI
-   fi
 fi
 endmenu

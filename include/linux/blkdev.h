@@ -196,4 +196,14 @@ extern int * max_segments[MAX_BLKDEV];
 extern void drive_stat_acct (kdev_t dev, int rw,
 					unsigned long nr_sectors, int new_io);
 
+static inline int get_hardsect_size(kdev_t dev)
+{
+	extern int *hardsect_size[];
+	if (hardsect_size[MAJOR(dev)] != NULL)
+		return hardsect_size[MAJOR(dev)][MINOR(dev)];
+	else
+		return 512;
+}
+
+
 #endif

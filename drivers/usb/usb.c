@@ -25,6 +25,21 @@
 #include <linux/bitops.h>
 #include <linux/malloc.h>
 #include <linux/interrupt.h>  /* for in_interrupt() */
+
+
+#if	defined(CONFIG_KMOD) && defined(CONFIG_HOTPLUG)
+#include <linux/kmod.h>
+#include <linux/sched.h>
+#include <asm/uaccess.h>
+
+#define __KERNEL_SYSCALLS__
+#include <linux/unistd.h>
+
+/* waitpid() call glue uses this */
+static int errno;
+#endif
+
+
 #ifdef CONFIG_USB_DEBUG
 	#define DEBUG
 #else
@@ -481,6 +496,213 @@ static int usb_find_interface_driver(struct usb_device *dev, unsigned ifnum)
 	return -1;
 }
 
+
+#if	defined(CONFIG_KMOD) && defined(CONFIG_HOTPLUG)
+
+/*
+ * USB hotplugging invokes what /proc/sys/kernel/hotplug says
+ * (normally /sbin/hotplug) when USB devices get added or removed.
+ */
+
+static int exec_helper (void *arg)
+{
+	void **params = (void **) arg;
+	char *path = (char *) params [0];
+	char **argv = (char **) params [1];
+	char **envp = (char **) params [2];
+	return exec_usermodehelper (path, argv, envp);
+}
+
+int call_usermodehelper (char *path, char **argv, char **envp)
+{
+	void *params [3] = { path, argv, envp };
+	int pid, pid2, retval;
+	mm_segment_t fs;
+
+	if ((pid = kernel_thread (exec_helper, (void *) params, 0)) < 0) {
+		err ("failed fork of %s, errno = %d", argv [0], -pid);
+		return -1;
+	}
+
+	/* set signal mask? */
+	fs = get_fs ();
+	set_fs (KERNEL_DS);				/* retval is in kernel space. */
+	pid2 = waitpid (pid, &retval, __WCLONE);	/* "errno" gets assigned */
+	set_fs (fs);
+	/* restore signal mask? */
+
+	if (pid2 != pid) {
+		err ("waitpid(%d) failed, returned %d\n", pid, pid2);
+			return -1;
+	}
+	return retval;
+}
+
+static int to_bcd (char *buf, __u16 *bcdValue)
+{
+	int	retval = 0;
+	char	*value = (char *) bcdValue;
+	int	temp;
+
+	/* digits are 0-9 then ":;<=>?" for devices using
+	 * non-bcd (non-standard!) values here ... */
+
+	/* No leading (or later, trailing) zeroes since scripts do
+	 * literal matches, and that's how they're doing them. */
+	if ((temp = value [1] & 0xf0) != 0) {
+		temp >>= 4;
+		temp += '0';
+		*buf++ = (char) temp;
+		retval++;
+	}
+
+	temp = value [1] & 0x0f;
+	temp += '0';
+	*buf++ = (char) temp;
+	retval++;
+
+	*buf++ = '.';
+	retval++;
+
+	temp = value [0] & 0xf0;
+	temp >>= 4;
+	temp += '0';
+	*buf++ = (char) temp;
+	retval++;
+
+	if ((temp = value [0] & 0x0f) != 0) {
+		temp += '0';
+		*buf++ = (char) temp;
+		retval++;
+	}
+	*buf++ = 0;
+
+	return retval;
+}
+
+/*
+ * This invokes a user mode policy agent, typically helping to load driver
+ * or other modules, configure the device, or both.
+ *
+ * Some synchronization is important: removes can't start processing
+ * before the add-device processing completes, and vice versa.  That keeps
+ * a stack of USB-related identifiers stable while they're in use.  If we
+ * know that agents won't complete after they return (such as by forking
+ * a process that completes later), it's enough to just waitpid() for the
+ * agent -- as is currently done.
+ *
+ * The reason: we know we're called either from khubd (the typical case)
+ * or from root hub initialization (init, kapmd, modprobe, etc).  In both
+ * cases, we know no other thread can recycle our address, since we must
+ * already have been serialized enough to prevent that.
+ */
+static void call_policy (char *verb, struct usb_device *dev)
+{
+	char *argv [3], **envp, *buf, *scratch;
+	int i = 0, value;
+
+	if (!hotplug_path [0])
+		return;
+	if (in_interrupt ()) {
+		dbg ("In_interrupt");
+		return;
+	}
+	if (!(envp = (char **) kmalloc (20 * sizeof (char *), GFP_KERNEL))) {
+		dbg ("enomem");
+		return;
+	}
+	if (!(buf = kmalloc (256, GFP_KERNEL))) {
+		kfree (envp);
+		dbg ("enomem2");
+		return;
+	}
+
+	/* only one standardized param to hotplug command: type */
+	argv [0] = hotplug_path;
+	argv [1] = "usb";
+	argv [2] = 0;
+
+	/* minimal command environment */
+	envp [i++] = "HOME=/";
+	envp [i++] = "PATH=/sbin:/bin:/usr/sbin:/usr/bin";
+
+#ifdef	DEBUG
+	/* hint that policy agent should enter no-stdout debug mode */
+	envp [i++] = "DEBUG=kernel";
+#endif
+	/* extensible set of named bus-specific parameters,
+	 * supporting multiple driver selection algorithms.
+	 */
+	scratch = buf;
+
+	/* action:  add, remove */
+	envp [i++] = scratch;
+	scratch += sprintf (scratch, "ACTION=%s", verb) + 1;
+
+#ifdef	CONFIG_USB_DEVICEFS
+	/* If this is available, userspace programs can directly read
+	 * all the device descriptors we don't tell them about.  Or
+	 * even act as usermode drivers.
+	 *
+	 * XXX how little intelligence can we hardwire?
+	 * (a) mount point: /devfs, /dev, /proc/bus/usb etc.
+	 * (b) naming convention: bus1/device3, 001/003 etc.
+	 */
+	envp [i++] = "DEVFS=/proc/bus/usb";
+	envp [i++] = scratch;
+	scratch += sprintf (scratch, "DEVICE=/proc/bus/usb/%03d/%03d",
+		dev->bus->busnum, dev->devnum) + 1;
+#endif
+
+	/* per-device configuration hacks are often necessary */
+	envp [i++] = scratch;
+	scratch += sprintf (scratch, "PRODUCT=%x/%x/",
+		dev->descriptor.idVendor,
+		dev->descriptor.idProduct);
+	scratch += to_bcd (scratch, &dev->descriptor.bcdDevice) + 1;
+
+	/* otherwise, use a simple (so far) generic driver binding model */
+	envp [i++] = scratch;
+	if (dev->descriptor.bDeviceClass == 0) {
+		int alt = dev->actconfig->interface [0].act_altsetting;
+
+		/* simple/common case: one config, one interface, one driver
+		 * unsimple cases:  everything else
+		 */
+		scratch += sprintf (scratch, "INTERFACE=%d/%d/%d",
+			dev->actconfig->interface [0].altsetting [alt].bInterfaceClass,
+			dev->actconfig->interface [0].altsetting [alt].bInterfaceSubClass,
+			dev->actconfig->interface [0].altsetting [alt].bInterfaceProtocol)
+			+ 1;
+		/* INTERFACE-0, INTERFACE-1, ... ? */
+	} else {
+		/* simple/common case: generic device, handled generically */
+		scratch += sprintf (scratch, "TYPE=%d/%d/%d",
+			dev->descriptor.bDeviceClass,
+			dev->descriptor.bDeviceSubClass,
+			dev->descriptor.bDeviceProtocol) + 1;
+	}
+	envp [i++] = 0;
+	/* assert: (scratch - buf) < sizeof buf */
+
+	/* NOTE: user mode daemons can call the agents too */
+
+	dbg ("kusbd: %s %s", argv [0], argv [1]);
+	value = call_usermodehelper (argv [0], argv, envp);
+	kfree (buf);
+	kfree (envp);
+	dbg ("kusbd policy returned 0x%x", value);
+}
+
+#else
+
+static inline void
+call_policy (char *verb, struct usb_device *dev)
+{ } 
+
+#endif	/* KMOD && HOTPLUG */
+
+
 /*
  * This entrypoint gets called for each new device.
  *
@@ -506,7 +728,8 @@ static void usb_find_drivers(struct usb_device *dev)
 		dbg("unhandled interfaces on device");
 
 	if (!claimed) {
-		warn("This device is not recognized by any installed USB driver.");
+		warn("USB device %d is not claimed by any active driver.",
+			dev->devnum);
 #ifdef DEBUG
 		usb_show_device(dev);
 #endif
@@ -1195,6 +1418,8 @@ void usb_disconnect(struct usb_device **pdev)
 
 	info("USB disconnect on device %d", dev->devnum);
 
+	call_policy ("remove", dev);
+
 	if (dev->actconfig) {
 		for (i = 0; i < dev->actconfig->bNumInterfaces; i++) {
 			struct usb_interface *interface = &dev->actconfig->interface[i];
@@ -1711,6 +1936,9 @@ int usb_new_device(struct usb_device *dev)
 
 	/* find drivers willing to handle this device */
 	usb_find_drivers(dev);
+
+	/* userspace may load modules and/or configure further */
+	call_policy ("add", dev);
 
 	return 0;
 }

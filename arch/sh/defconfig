@@ -10,6 +10,11 @@ CONFIG_UID16=y
 # CONFIG_EXPERIMENTAL is not set
 
 #
+# Loadable module support
+#
+# CONFIG_MODULES is not set
+
+#
 # Processor type and features
 #
 CONFIG_SH_GENERIC=y
@@ -21,14 +26,9 @@ CONFIG_CPU_SUBTYPE_SH7708=y
 # CONFIG_CPU_SUBTYPE_SH7750 is not set
 CONFIG_CPU_SH3=y
 # CONFIG_CPU_SH4 is not set
-CONFIG_LITTLE_ENDIAN=y
+CONFIG_CPU_LITTLE_ENDIAN=y
 CONFIG_MEMORY_START=0c000000
 CONFIG_IOPORT_START=ba000000
-
-#
-# Loadable module support
-#
-# CONFIG_MODULES is not set
 
 #
 # General setup
@@ -53,6 +53,11 @@ CONFIG_BINFMT_ELF=y
 # Parallel port support
 #
 # CONFIG_PARPORT is not set
+
+#
+# Memory Technology Devices (MTD)
+#
+# CONFIG_MTD is not set
 
 #
 # Block devices
@@ -126,7 +131,8 @@ CONFIG_BLK_DEV_IDEDISK=y
 # Character devices
 #
 # CONFIG_VT is not set
-CONFIG_SERIAL=y
+# CONFIG_SERIAL is not set
+CONFIG_SH_SCI=y
 CONFIG_SERIAL_CONSOLE=y
 
 #
@@ -150,6 +156,7 @@ CONFIG_SERIAL_CONSOLE=y
 # CONFIG_UMSDOS_FS is not set
 # CONFIG_VFAT_FS is not set
 # CONFIG_EFS_FS is not set
+# CONFIG_JFFS_FS is not set
 # CONFIG_CRAMFS is not set
 # CONFIG_RAMFS is not set
 # CONFIG_ISO9660_FS is not set
@@ -191,4 +198,6 @@ CONFIG_MSDOS_PARTITION=y
 # Kernel hacking
 #
 # CONFIG_MAGIC_SYSRQ is not set
+CONFIG_SH_STANDARD_BIOS=y
 CONFIG_DEBUG_KERNEL_WITH_GDB_STUB=y
+CONFIG_SH_EARLY_PRINTK=y

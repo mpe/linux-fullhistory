@@ -54,18 +54,19 @@ extern void mem_use(void);
  * calculation depends on the value of HZ.
  */
 #if HZ < 200
-#define LOG2_HZ 7
+#define TICK_SCALE(x)	((x) >> 2)
 #elif HZ < 400
-#define LOG2_HZ 8
+#define TICK_SCALE(x)	((x) >> 1)
 #elif HZ < 800
-#define LOG2_HZ 9
+#define TICK_SCALE(x)	(x)
 #elif HZ < 1600
-#define LOG2_HZ 10
+#define TICK_SCALE(x)	((x) << 1)
 #else
-#define LOG2_HZ 11
+#define TICK_SCALE(x)	((x) << 2)
 #endif
 
-#define NICE_TO_TICKS(nice)	((((20)-(nice)) >> (LOG2_HZ-5))+1)
+#define NICE_TO_TICKS(nice)	(TICK_SCALE(20-(nice))+1)
+
 
 /*
  *	Init task must be ok at boot for the ix86 as we will check its signals
@@ -769,7 +770,6 @@ void __wake_up_sync(wait_queue_head_t *q, unsigned int mode)
 {
 	__wake_up_common(q, mode, 1);
 }
-
 
 #define	SLEEP_ON_VAR				\
 	unsigned long flags;			\

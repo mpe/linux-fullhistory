@@ -1,5 +1,5 @@
 /*
- *	$Id: hp600_keyb.c,v 1.1 2000/06/10 21:45:30 yaegashi Exp $ 
+ *	$Id: hp600_keyb.c,v 1.1 2000/06/10 21:45:30 yaegashi Exp $
  *	Copyright (C) 2000 YAEGASHI Takeshi
  *	HP600 keyboard scan routine and translate table
  */

@@ -1,7 +1,7 @@
 /* Driver for USB Mass Storage compliant devices
  * SCSI layer glue code
  *
- * $Id: scsiglue.c,v 1.2 2000/06/27 10:20:39 mdharm Exp $
+ * $Id: scsiglue.c,v 1.4 2000/07/20 01:14:56 mdharm Exp $
  *
  * Current development and maintainance by:
  *   (c) 1999, 2000 Matthew Dharm (mdharm-usb@one-eyed-alien.net)
@@ -135,7 +135,7 @@ static int release(struct Scsi_Host *psh)
 	 */
 	US_DEBUGP("-- sending US_ACT_EXIT command to thread\n");
 	us->action = US_ACT_EXIT;
-	up(&(us->sleeper));
+	wake_up(&(us->wqh));
 	down(&(us->notify));
 	
 	/* free the data structure we were using */
@@ -171,9 +171,11 @@ static int queuecommand( Scsi_Cmnd *srb , void (*done)(Scsi_Cmnd *))
 	srb->scsi_done = done;
 	us->action = US_ACT_COMMAND;
 
-	/* wake up the process task */
+	/* release the lock on the structure */
 	up(&(us->queue_exclusion));
-	up(&(us->sleeper));
+
+	/* wake up the process task */
+	wake_up(&(us->wqh));
 
 	return 0;
 }
@@ -335,7 +337,7 @@ Scsi_Host_Template usb_stor_host_template = {
 	emulated:		TRUE
 };
 
-unsigned char usb_stor_sense_notready[12] = {
+unsigned char usb_stor_sense_notready[18] = {
 	[0]	= 0x70,			    /* current error */
 	[2]	= 0x02,			    /* not ready */
 	[5]	= 0x0a,			    /* additional length */

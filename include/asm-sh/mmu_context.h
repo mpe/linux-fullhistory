@@ -112,6 +112,16 @@ extern __inline__ void destroy_context(struct mm_struct *mm)
 
 #define MMU_NTLB_ENTRIES	64	/* for 7750 */
 #define MMU_CONTROL_INIT	0x205	/* SQMD=1, SV=0, TI=1, AT=1 */
+
+#define MMU_ITLB_DATA_ARRAY	0xF3000000
+#define MMU_UTLB_DATA_ARRAY	0xF7000000
+
+#define MMU_UTLB_ENTRIES	   64
+#define MMU_U_ENTRY_SHIFT	    8
+#define MMU_UTLB_VALID		0x100
+#define MMU_ITLB_ENTRIES	    4
+#define MMU_I_ENTRY_SHIFT	    8
+#define MMU_ITLB_VALID		0x100
 #endif
 
 extern __inline__ void set_asid(unsigned long asid)

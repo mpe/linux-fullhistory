@@ -2,6 +2,7 @@
  * Created: Tue Feb  2 08:37:54 1999 by faith@precisioninsight.com
  *
  * Copyright 1999, 2000 Precision Insight, Inc., Cedar Park, Texas.
+ * Copyright 2000 VA Linux Systems, Inc., Sunnyvale, California.
  * All Rights Reserved.
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
@@ -24,7 +25,7 @@
  * DEALINGS IN THE SOFTWARE.
  * 
  * Authors:
- *    Rickard E. (Rik) Faith <faith@precisioninsight.com>
+ *    Rickard E. (Rik) Faith <faith@valinux.com>
  *
  */
 
@@ -71,7 +72,7 @@ int drm_addmap(struct inode *inode, struct file *filp, unsigned int cmd,
 
 	switch (map->type) {
 	case _DRM_REGISTERS:
-	case _DRM_FRAME_BUFFER:	
+	case _DRM_FRAME_BUFFER:
 #ifndef __sparc__
 		if (map->offset + map->size < map->offset
 		    || map->offset < virt_to_phys(high_memory)) {
@@ -105,6 +106,11 @@ int drm_addmap(struct inode *inode, struct file *filp, unsigned int cmd,
 			dev->lock.hw_lock = map->handle; /* Pointer to lock */
 		}
 		break;
+#ifdef DRM_AGP
+	case _DRM_AGP:
+		map->offset = map->offset + dev->agp->base;
+		break;
+#endif
 	default:
 		drm_free(map, sizeof(*map), DRM_MEM_MAPS);
 		return -EINVAL;
@@ -175,7 +181,7 @@ int drm_addbufs(struct inode *inode, struct file *filp, unsigned int cmd,
 	if (order < DRM_MIN_ORDER || order > DRM_MAX_ORDER) return -EINVAL;
 	if (dev->queue_count) return -EBUSY; /* Not while in use */
 
-	alignment  = (request.flags & DRM_PAGE_ALIGN) ? PAGE_ALIGN(size) :size;
+	alignment  = (request.flags & _DRM_PAGE_ALIGN) ? PAGE_ALIGN(size):size;
 	page_order = order - PAGE_SHIFT > 0 ? order - PAGE_SHIFT : 0;
 	total	   = PAGE_SIZE << page_order;
 

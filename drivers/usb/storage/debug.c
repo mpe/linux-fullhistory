@@ -1,7 +1,7 @@
 /* Driver for USB Mass Storage compliant devices
  * Debugging Functions Source Code File
  *
- * $Id: debug.c,v 1.1 2000/06/27 01:25:28 mdharm Exp $
+ * $Id: debug.c,v 1.2 2000/07/19 17:21:39 groovyjava Exp $
  *
  * Current development and maintainance by:
  *   (c) 1999, 2000 Matthew Dharm (mdharm-usb@one-eyed-alien.net)
@@ -97,22 +97,47 @@ void usb_stor_show_command(Scsi_Cmnd *srb)
 	case WRITE_LONG: what = "WRITE_LONG"; break;
 	case CHANGE_DEFINITION: what = "CHANGE_DEFINITION"; break;
 	case WRITE_SAME: what = "WRITE_SAME"; break;
+	case GPCMD_READ_SUBCHANNEL: what = "READ SUBCHANNEL"; break;
 	case READ_TOC: what = "READ_TOC"; break;
+	case GPCMD_READ_HEADER: what = "READ HEADER"; break;
+	case GPCMD_PLAY_AUDIO_10: what = "PLAY AUDIO (10)"; break;
+	case GPCMD_PLAY_AUDIO_MSF: what = "PLAY AUDIO MSF"; break;
+	case GPCMD_GET_EVENT_STATUS_NOTIFICATION:
+		what = "GET EVENT/STATUS NOTIFICATION"; break;
+	case GPCMD_PAUSE_RESUME: what = "PAUSE/RESUME"; break;
 	case LOG_SELECT: what = "LOG_SELECT"; break;
 	case LOG_SENSE: what = "LOG_SENSE"; break;
+	case GPCMD_STOP_PLAY_SCAN: what = "STOP PLAY/SCAN"; break;
+	case GPCMD_READ_DISC_INFO: what = "READ DISC INFORMATION"; break;
+	case GPCMD_READ_TRACK_RZONE_INFO:
+		what = "READ TRACK INFORMATION"; break;
+	case GPCMD_RESERVE_RZONE_TRACK: what = "RESERVE TRACK"; break;
+	case GPCMD_SEND_OPC: what = "SEND OPC"; break;
 	case MODE_SELECT_10: what = "MODE_SELECT_10"; break;
+	case GPCMD_REPAIR_RZONE_TRACK: what = "REPAIR TRACK"; break;
+	case 0x59: what = "READ MASTER CUE"; break;
 	case MODE_SENSE_10: what = "MODE_SENSE_10"; break;
-	case MOVE_MEDIUM: what = "MOVE_MEDIUM"; break;
+	case GPCMD_CLOSE_TRACK: what = "CLOSE TRACK/SESSION"; break;
+	case 0x5C: what = "READ BUFFER CAPACITY"; break;
+	case 0x5D: what = "SEND CUE SHEET"; break;
+	case GPCMD_BLANK: what = "BLANK"; break;
+	case MOVE_MEDIUM: what = "MOVE_MEDIUM or PLAY AUDIO (12)"; break;
 	case READ_12: what = "READ_12"; break;
 	case WRITE_12: what = "WRITE_12"; break;
 	case WRITE_VERIFY_12: what = "WRITE_VERIFY_12"; break;
 	case SEARCH_HIGH_12: what = "SEARCH_HIGH_12"; break;
 	case SEARCH_EQUAL_12: what = "SEARCH_EQUAL_12"; break;
 	case SEARCH_LOW_12: what = "SEARCH_LOW_12"; break;
-	case READ_ELEMENT_STATUS: what = "READ_ELEMENT_STATUS"; break;
 	case SEND_VOLUME_TAG: what = "SEND_VOLUME_TAG"; break;
+	case READ_ELEMENT_STATUS: what = "READ_ELEMENT_STATUS"; break;
+	case GPCMD_READ_CD_MSF: what = "READ CD MSF"; break;
+	case GPCMD_SCAN: what = "SCAN"; break;
+	case GPCMD_SET_SPEED: what = "SET CD SPEED"; break;
+	case GPCMD_MECHANISM_STATUS: what = "MECHANISM STATUS"; break;
+	case GPCMD_READ_CD: what = "READ CD"; break;
+	case 0xE1: what = "WRITE CONTINUE"; break;
 	case WRITE_LONG_2: what = "WRITE_LONG_2"; break;
-	default: break;
+	default: what = "(unknown command)"; break;
 	}
 	US_DEBUGP("Command %s (%d bytes)\n", what, srb->cmd_len);
 	US_DEBUGP("%02x %02x %02x %02x "

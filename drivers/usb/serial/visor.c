@@ -11,6 +11,10 @@
  *
  * See Documentation/usb/usb-serial.txt for more information on using this driver
  * 
+ * (07/19/2000) gkh
+ *	Added module_init and module_exit functions to handle the fact that this
+ *	driver is a loadable module now.
+ *
  * (07/03/2000) gkh
  *	Added visor_set_ioctl and visor_set_termios functions (they don't do much
  *	of anything, but are good for debugging.)
@@ -293,4 +297,19 @@ static void visor_set_termios (struct usb_serial_port *port, struct termios *old
 }
 
 
+int visor_init (void)
+{
+	usb_serial_register (&handspring_device);
+	return 0;
+}
+
+
+void visor_exit (void)
+{
+	usb_serial_deregister (&handspring_device);
+}
+
+
+module_init(visor_init);
+module_exit(visor_exit);
 

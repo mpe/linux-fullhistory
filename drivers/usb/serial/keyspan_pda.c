@@ -11,6 +11,10 @@
  *
  * See Documentation/usb/usb-serial.txt for more information on using this driver
  * 
+ * (07/19/2000) gkh
+ *	Added module_init and module_exit functions to handle the fact that this
+ *	driver is a loadable module now.
+ *
  * (03/26/2000) gkh
  *	Split driver up into device specific pieces.
  * 
@@ -696,4 +700,23 @@ struct usb_serial_device_type keyspan_pda_device = {
 	startup:		keyspan_pda_startup,
 	shutdown:		keyspan_pda_shutdown,
 };
+
+
+int keyspan_pda_init (void)
+{
+	usb_serial_register (&keyspan_pda_fake_device);
+	usb_serial_register (&keyspan_pda_device);
+	return 0;
+}
+
+
+void keyspan_pda_exit (void)
+{
+	usb_serial_deregister (&keyspan_pda_fake_device);
+	usb_serial_deregister (&keyspan_pda_device);
+}
+
+
+module_init(keyspan_pda_init);
+module_exit(keyspan_pda_exit);
 

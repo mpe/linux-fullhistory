@@ -5,7 +5,8 @@
 #ifndef __LINUX_FILE_H
 #define __LINUX_FILE_H
 
-extern void _fput(struct file *);
+extern void FASTCALL(fput(struct file *));
+extern struct file * FASTCALL(fget(unsigned int fd));
 
 static inline struct file * fcheck_files(struct files_struct *files, unsigned int fd)
 {
@@ -38,40 +39,6 @@ static inline struct file * frip(struct files_struct *files, unsigned int fd)
 	return file;
 }
 
-static inline struct file * fget(unsigned int fd)
-{
-	struct file * file = NULL;
-	struct files_struct *files = current->files;
-
-	read_lock(&files->file_lock);
-	file = fcheck(fd);
-	if (file)
-		get_file(file);
-	read_unlock(&files->file_lock);
-	return file;
-}
-
-/*
- * 23/12/1998 Marcin Dalecki <dalecki@cs.net.pl>: 
- * 
- * Since those functions where calling other functions, it was completely 
- * bogus to make them all "extern inline".
- *
- * The removal of this pseudo optimization saved me scandalous:
- *
- * 		3756 (i386 arch) 
- *
- * precious bytes from my kernel, even without counting all the code compiled
- * as module!
- *
- * I suspect there are many other similar "optimizations" across the
- * kernel...
- */
-static inline void fput(struct file * file)
-{
-	if (atomic_dec_and_test(&file->f_count))
-		_fput(file);
-}
 extern void put_filp(struct file *);
 
 extern int get_unused_fd(void);

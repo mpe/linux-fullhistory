@@ -151,6 +151,7 @@ extern void con3215_init(void);
 extern void rs285_console_init(void);
 extern void sa1100_rs_console_init(void);
 extern void sgi_serial_console_init(void);
+extern void sci_console_init(void);
 
 #ifndef MIN
 #define MIN(a,b)	((a) < (b) ? (a) : (b))
@@ -2180,6 +2181,9 @@ void __init console_init(void)
 #endif
 #if defined(CONFIG_SERIAL167)
 	serial167_console_init();
+#endif
+#if defined(CONFIG_SH_SCI)
+	sci_console_init();
 #endif
 #endif
 #ifdef CONFIG_3215

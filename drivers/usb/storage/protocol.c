@@ -1,6 +1,6 @@
 /* Driver for USB Mass Storage compliant devices
  *
- * $Id: protocol.c,v 1.1 2000/06/27 01:25:28 mdharm Exp $
+ * $Id: protocol.c,v 1.2 2000/07/19 17:21:39 groovyjava Exp $
  *
  * Current development and maintainance by:
  *   (c) 1999, 2000 Matthew Dharm (mdharm-usb@one-eyed-alien.net)
@@ -63,6 +63,11 @@ void usb_stor_ATAPI_command(Scsi_Cmnd *srb, struct us_data *us)
 	 * NOTE: This only works because a Scsi_Cmnd struct field contains
 	 * a unsigned char cmnd[12], so we know we have storage available
 	 */
+
+	/* Pad the ATAPI command with zeros */
+
+	for (; srb->cmd_len<12; srb->cmd_len++)
+		srb->cmnd[srb->cmd_len] = 0;
 
 	/* set command length to 12 bytes */
 	srb->cmd_len = 12;

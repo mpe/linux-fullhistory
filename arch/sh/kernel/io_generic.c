@@ -6,10 +6,20 @@
  *
  * Generic I/O routine.
  *
+ * This file is subject to the terms and conditions of the GNU General Public
+ * License.  See the file "COPYING" in the main directory of this archive
+ * for more details.
+ *
  */
 
 #include <linux/config.h>
 #include <asm/io.h>
+
+#if defined(__sh3__)
+/* I'm not sure SH7709 has this kind of bug */
+#define SH3_PCMCIA_BUG_WORKAROUND 1
+#define DUMMY_READ_AREA6	  0xba000000
+#endif
 
 #define PORT2ADDR(x) (CONFIG_IOPORT_START+(x))
 
@@ -51,12 +61,18 @@ void insw(unsigned int port, void *buffer, unsigned long count)
 {
 	unsigned short *buf=buffer;
 	while(count--) *buf++=inw(port);
+#ifdef SH3_PCMCIA_BUG_WORKAROUND
+	ctrl_inb (DUMMY_READ_AREA6);
+#endif
 }
 
 void insl(unsigned int port, void *buffer, unsigned long count)
 {
 	unsigned long *buf=buffer;
 	while(count--) *buf++=inl(port);
+#ifdef SH3_PCMCIA_BUG_WORKAROUND
+	ctrl_inb (DUMMY_READ_AREA6);
+#endif
 }
 
 void outb(unsigned long b, unsigned int port)
@@ -90,10 +106,16 @@ void outsw(unsigned int port, const void *buffer, unsigned long count)
 {
 	const unsigned short *buf=buffer;
 	while(count--) outw(*buf++, port);
+#ifdef SH3_PCMCIA_BUG_WORKAROUND
+	ctrl_inb (DUMMY_READ_AREA6);
+#endif
 }
 
 void outsl(unsigned int port, const void *buffer, unsigned long count)
 {
 	const unsigned long *buf=buffer;
 	while(count--) outl(*buf++, port);
+#ifdef SH3_PCMCIA_BUG_WORKAROUND
+	ctrl_inb (DUMMY_READ_AREA6);
+#endif
 }

@@ -112,6 +112,7 @@ enum
 	KERN_OVERFLOWUID=46,	/* int: overflow UID */
 	KERN_OVERFLOWGID=47,	/* int: overflow GID */
 	KERN_SHMPATH=48,	/* string: path to shm fs */
+	KERN_HOTPLUG=49,	/* string: path to hotplug policy agent */
 };
 
 

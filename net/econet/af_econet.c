@@ -594,7 +594,7 @@ static int ec_dev_ioctl(struct socket *sock, unsigned int cmd, void *arg)
 		if (edev == NULL)
 		{
 			/* Magic up a new one. */
-			edev = kmalloc(GFP_KERNEL, sizeof(struct ec_device));
+			edev = kmalloc(sizeof(struct ec_device), GFP_KERNEL);
 			if (edev == NULL) {
 				printk("af_ec: memory squeeze.\n");
 				dev_put(dev);

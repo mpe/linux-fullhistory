@@ -1744,9 +1744,7 @@ static int msync_interval(struct vm_area_struct * vma,
 			struct file * file = vma->vm_file;
 			if (file && file->f_op && file->f_op->fsync) {
 				down(&file->f_dentry->d_inode->i_sem);
-				lock_kernel();
 				error = file->f_op->fsync(file, file->f_dentry, 1);
-				unlock_kernel();
 				up(&file->f_dentry->d_inode->i_sem);
 			}
 		}

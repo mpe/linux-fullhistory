@@ -6,10 +6,10 @@
 /* For __swab32 */
 #include <asm/byteorder.h>
 
-extern __inline__ void set_bit(int nr, void * addr)
+extern __inline__ void set_bit(int nr, volatile void * addr)
 {
 	int	mask;
-	unsigned int *a = addr;
+	volatile unsigned int *a = addr;
 	unsigned long flags;
 
 	a += nr >> 5;
@@ -19,10 +19,10 @@ extern __inline__ void set_bit(int nr, void * addr)
 	restore_flags(flags);
 }
 
-extern __inline__ void clear_bit(int nr, void * addr)
+extern __inline__ void clear_bit(int nr, volatile void * addr)
 {
 	int	mask;
-	unsigned int *a = addr;
+	volatile unsigned int *a = addr;
 	unsigned long flags;
 
 	a += nr >> 5;
@@ -32,10 +32,10 @@ extern __inline__ void clear_bit(int nr, void * addr)
 	restore_flags(flags);
 }
 
-extern __inline__ void change_bit(int nr, void * addr)
+extern __inline__ void change_bit(int nr, volatile void * addr)
 {
 	int	mask;
-	unsigned int *a = addr;
+	volatile unsigned int *a = addr;
 	unsigned long flags;
 
 	a += nr >> 5;
@@ -45,10 +45,10 @@ extern __inline__ void change_bit(int nr, void * addr)
 	restore_flags(flags);
 }
 
-extern __inline__ int test_and_set_bit(int nr, void * addr)
+extern __inline__ int test_and_set_bit(int nr, volatile void * addr)
 {
 	int	mask, retval;
-	unsigned int *a = addr;
+	volatile unsigned int *a = addr;
 	unsigned long flags;
 
 	a += nr >> 5;
@@ -61,10 +61,10 @@ extern __inline__ int test_and_set_bit(int nr, void * addr)
 	return retval;
 }
 
-extern __inline__ int test_and_clear_bit(int nr, void * addr)
+extern __inline__ int test_and_clear_bit(int nr, volatile void * addr)
 {
 	int	mask, retval;
-	unsigned int *a = addr;
+	volatile unsigned int *a = addr;
 	unsigned long flags;
 
 	a += nr >> 5;
@@ -77,10 +77,10 @@ extern __inline__ int test_and_clear_bit(int nr, void * addr)
 	return retval;
 }
 
-extern __inline__ int test_and_change_bit(int nr, void * addr)
+extern __inline__ int test_and_change_bit(int nr, volatile void * addr)
 {
 	int	mask, retval;
-	unsigned int *a = addr;
+	volatile unsigned int *a = addr;
 	unsigned long flags;
 
 	a += nr >> 5;
@@ -94,9 +94,9 @@ extern __inline__ int test_and_change_bit(int nr, void * addr)
 }
 
 
-extern __inline__ int test_bit(int nr, const void *addr)
+extern __inline__ int test_bit(int nr, const volatile void *addr)
 {
-	return 1UL & (((const unsigned int *) addr)[nr >> 5] >> (nr & 31));
+	return 1UL & (((const volatile unsigned int *) addr)[nr >> 5] >> (nr & 31));
 }
 
 extern __inline__ unsigned long ffz(unsigned long word)
@@ -159,11 +159,11 @@ found_middle:
 #define ext2_find_next_zero_bit(addr, size, offset) \
                 find_next_zero_bit((addr), (size), (offset))
 #else
-extern __inline__ int ext2_set_bit(int nr,void * addr)
+extern __inline__ int ext2_set_bit(int nr, volatile void * addr)
 {
 	int		mask, retval;
 	unsigned long	flags;
-	unsigned char	*ADDR = (unsigned char *) addr;
+	volatile unsigned char	*ADDR = (unsigned char *) addr;
 
 	ADDR += nr >> 3;
 	mask = 1 << (nr & 0x07);
@@ -174,11 +174,11 @@ extern __inline__ int ext2_set_bit(int nr,void * addr)
 	return retval;
 }
 
-extern __inline__ int ext2_clear_bit(int nr, void * addr)
+extern __inline__ int ext2_clear_bit(int nr, volatile void * addr)
 {
 	int		mask, retval;
 	unsigned long	flags;
-	unsigned char	*ADDR = (unsigned char *) addr;
+	volatile unsigned char	*ADDR = (unsigned char *) addr;
 
 	ADDR += nr >> 3;
 	mask = 1 << (nr & 0x07);
@@ -189,10 +189,10 @@ extern __inline__ int ext2_clear_bit(int nr, void * addr)
 	return retval;
 }
 
-extern __inline__ int ext2_test_bit(int nr, const void * addr)
+extern __inline__ int ext2_test_bit(int nr, const volatile void * addr)
 {
 	int			mask;
-	const unsigned char	*ADDR = (const unsigned char *) addr;
+	const volatile unsigned char	*ADDR = (const unsigned char *) addr;
 
 	ADDR += nr >> 3;
 	mask = 1 << (nr & 0x07);

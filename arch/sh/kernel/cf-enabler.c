@@ -84,7 +84,7 @@ int __init cf_init(void)
 int __init cf_init(void)
 {
 	/* Enable the card, and set the level interrupt */
-	outw(0x0042, CF_CIS_BASE+0x0200);
+	ctrl_outw(0x0042, CF_CIS_BASE+0x0200);
 	make_imask_irq(14);
 	disable_irq(14);
 	return 0;

@@ -3,7 +3,7 @@
  * Written by Niibe Yutaka
  */
 #include <linux/config.h>
-#ifdef CONFIG_LITTLE_ENDIAN
+#ifdef CONFIG_CPU_LITTLE_ENDIAN
 OUTPUT_FORMAT("elf32-shl", "elf32-shl", "elf32-shl")
 #else
 OUTPUT_FORMAT("elf32-sh", "elf32-sh", "elf32-sh")
@@ -77,6 +77,16 @@ SECTIONS
 	}
   . = ALIGN(4);
   _end = . ;
+
+  /* When something in the kernel is NOT compiled as a module, the
+   * module cleanup code and data are put into these segments.  Both
+   * can then be thrown away, as cleanup code is never called unless
+   * it's a module.
+   */
+  /DISCARD/ : {
+	*(.text.exit)
+	*(.data.exit)
+	}
 
   /* Stabs debugging sections.  */
   .stab 0 : { *(.stab) }

@@ -622,10 +622,29 @@ static int sohci_free_dev (struct usb_device * usb_dev)
   		spin_unlock_irqrestore (&usb_ed_lock, flags);
   		
 		if (cnt > 0) {
-			add_wait_queue (&op_wakeup, &wait);
-			current->state = TASK_UNINTERRUPTIBLE;
-			schedule_timeout (HZ / 10);
-			remove_wait_queue (&op_wakeup, &wait);
+
+			if (ohci->disabled) {
+				/* FIXME: Something like this should kick in,
+				 * though it's currently an exotic case ...
+				 * the controller won't ever be touching
+				 * these lists again!!
+				dl_del_list (ohci,
+					le16_to_cpu (ohci->hcca.frame_no) & 1);
+				 */
+				warn ("TD leak, %d", cnt);
+
+
+			} else if (!in_interrupt ()) {
+				/* SF interrupt handler calls dl_del_list */
+				add_wait_queue (&op_wakeup, &wait);
+				current->state = TASK_UNINTERRUPTIBLE;
+				schedule_timeout (HZ / 10);
+				remove_wait_queue (&op_wakeup, &wait);
+
+			} else {
+				/* drivers mustn't expect this to work */
+				err ("can't free tds, interrupt context");
+			}
 		}
 	}
 	kfree (dev);

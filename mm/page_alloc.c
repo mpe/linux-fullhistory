@@ -64,7 +64,8 @@ static int zone_balance_max[MAX_NR_ZONES] = { 255 , 255, 255, };
  * Hint: -mask = 1+~mask
  */
 
-void __free_pages_ok (struct page *page, unsigned long order)
+static void FASTCALL(__free_pages_ok (struct page *page, unsigned long order));
+static void __free_pages_ok (struct page *page, unsigned long order)
 {
 	unsigned long index, page_idx, mask, flags;
 	free_area_t *area;
@@ -313,6 +314,50 @@ struct page * __alloc_pages(zonelist_t *zonelist, unsigned long order)
 fail:
 	/* No luck.. */
 	return NULL;
+}
+
+/*
+ * Common helper functions.
+ */
+unsigned long __get_free_pages(int gfp_mask, unsigned long order)
+{
+	struct page * page;
+
+	page = alloc_pages(gfp_mask, order);
+	if (!page)
+		return 0;
+	return page_address(page);
+}
+
+unsigned long get_zeroed_page(int gfp_mask)
+{
+	struct page * page;
+
+	page = alloc_pages(gfp_mask, 0);
+	if (page) {
+		unsigned long address = page_address(page);
+		clear_page((void *)address);
+		return address;
+	}
+	return 0;
+}
+
+void __free_pages(struct page *page, unsigned long order)
+{
+	if (put_page_testzero(page))
+		__free_pages_ok(page, order);
+}
+
+void free_pages(unsigned long addr, unsigned long order)
+{
+	unsigned long map_nr;
+
+#ifdef CONFIG_DISCONTIGMEM
+	if (addr == 0) return;
+#endif
+	map_nr = MAP_NR(addr);
+	if (map_nr < max_mapnr)
+		__free_pages(mem_map + map_nr, order);
 }
 
 /*

@@ -114,18 +114,18 @@
 #endif
 
 extern rwlock_t xtime_lock;
+extern unsigned long wall_jiffies;
 #define TICK_SIZE tick
 
 void do_gettimeofday(struct timeval *tv)
 {
-	extern volatile unsigned long lost_ticks;
 	unsigned long flags;
 	unsigned long usec, sec;
 
 	read_lock_irqsave(&xtime_lock, flags);
 	usec = 0;
 	{
-		unsigned long lost = lost_ticks;
+		unsigned long lost = jiffies - wall_jiffies;
 		if (lost)
 			usec += lost * (1000000 / HZ);
 	}
@@ -142,9 +142,28 @@ void do_gettimeofday(struct timeval *tv)
 	tv->tv_usec = usec;
 }
 
+/*
+ * Could someone please implement this...
+ */
+#define do_gettimeoffset() 0
+
 void do_settimeofday(struct timeval *tv)
 {
 	write_lock_irq(&xtime_lock);
+	/*
+	 * This is revolting. We need to set "xtime" correctly. However, the
+	 * value in this location is the value at the most recent update of
+	 * wall time.  Discover what correction gettimeofday() would have
+	 * made, and then undo it!
+	 */
+	tv->tv_usec -= do_gettimeoffset();
+	tv->tv_usec -= (jiffies - wall_jiffies) * (1000000 / HZ);
+
+	while (tv->tv_usec < 0) {
+		tv->tv_usec += 1000000;
+		tv->tv_sec--;
+	}
+
 	xtime = *tv;
 	time_adjust = 0;		/* stop active adjtime() */
 	time_status |= STA_UNSYNC;

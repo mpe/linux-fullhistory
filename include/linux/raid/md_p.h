@@ -115,7 +115,7 @@ typedef struct mdp_superblock_s {
 	__u32 not_persistent;	/* 12 does it have a persistent superblock    */
 	__u32 set_uuid1;	/* 13 Raid set identifier #2		      */
 	__u32 set_uuid2;	/* 14 Raid set identifier #3		      */
-	__u32 set_uuid3;	/* 14 Raid set identifier #4		      */
+	__u32 set_uuid3;	/* 15 Raid set identifier #4		      */
 	__u32 gstate_creserved[MD_SB_GENERIC_CONSTANT_WORDS - 16];
 
 	/*
@@ -128,7 +128,13 @@ typedef struct mdp_superblock_s {
 	__u32 failed_disks;	/*  4 Number of failed disks		      */
 	__u32 spare_disks;	/*  5 Number of spare disks		      */
 	__u32 sb_csum;		/*  6 checksum of the whole superblock        */
-	__u64 events;		/*  7 number of superblock updates (64-bit!)  */
+#ifdef __BIG_ENDIAN
+	__u32 events_hi;	/*  7 high-order of superblock update count   */
+	__u32 events_lo;	/*  8 low-order of superblock update count    */
+#else
+	__u32 events_lo;	/*  7 low-order of superblock update count    */
+	__u32 events_hi;	/*  8 high-order of superblock update count   */
+#endif
 	__u32 gstate_sreserved[MD_SB_GENERIC_STATE_WORDS - 9];
 
 	/*
@@ -156,6 +162,11 @@ typedef struct mdp_superblock_s {
 	mdp_disk_t this_disk;
 
 } mdp_super_t;
+
+static inline __u64 md_event(mdp_super_t *sb) {
+	__u64 ev = sb->events_hi;
+	return (ev<<32)| sb->events_lo;
+}
 
 #endif _MD_P_H
 

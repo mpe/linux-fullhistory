@@ -100,6 +100,7 @@ static ctl_table raid_root_table[] = {
  */
 struct hd_struct md_hd_struct[MAX_MD_DEVS];
 static int md_blocksizes[MAX_MD_DEVS];
+static int md_hardsect_sizes[MAX_MD_DEVS];
 static int md_maxreadahead[MAX_MD_DEVS];
 static mdk_thread_t *md_recovery_thread = NULL;
 
@@ -569,7 +570,7 @@ static int read_disk_sb (mdk_rdev_t * rdev)
 		printk (NO_SB,partition_name(rdev->dev));
 		goto abort;
 	}
-	printk(" [events: %08lx]\n", (unsigned long)get_unaligned(&rdev->sb->events));
+	printk(" [events: %08lx]\n", (unsigned long)rdev->sb->events_lo);
 	ret = 0;
 abort:
 	if (bh)
@@ -834,7 +835,7 @@ static void print_sb(mdp_super_t *sb)
 	printk("     UT:%08x ST:%d AD:%d WD:%d FD:%d SD:%d CSUM:%08x E:%08lx\n",
 		sb->utime, sb->state, sb->active_disks, sb->working_disks,
 		sb->failed_disks, sb->spare_disks,
-		sb->sb_csum, (unsigned long)get_unaligned(&sb->events));
+		sb->sb_csum, (unsigned long)sb->events_lo);
 
 	for (i = 0; i < MD_SB_DISKS; i++) {
 		mdp_disk_t *desc;
@@ -1064,22 +1065,20 @@ int md_update_sb(mddev_t * mddev)
 	int first, err, count = 100;
 	struct md_list_head *tmp;
 	mdk_rdev_t *rdev;
-	__u64 ev;
 
 repeat:
 	mddev->sb->utime = CURRENT_TIME;
-	ev = get_unaligned(&mddev->sb->events);
-	++ev;
-	put_unaligned(ev,&mddev->sb->events);
-	if (ev == (__u64)0) {
+	if ((++mddev->sb->events_lo)==0)
+		++mddev->sb->events_hi;
+
+	if ((mddev->sb->events_lo|mddev->sb->events_hi)==0) {
 		/*
 		 * oops, this 64-bit counter should never wrap.
 		 * Either we are in around ~1 trillion A.C., assuming
 		 * 1 reboot per second, or we have a bug:
 		 */
 		MD_BUG();
-		--ev;
-		put_unaligned(ev,&mddev->sb->events);
+		mddev->sb->events_lo = mddev->sb->events_hi = 0xffffffff;
 	}
 	sync_sbs(mddev);
 
@@ -1105,7 +1104,7 @@ repeat:
 		printk("%s ", partition_name(rdev->dev));
 		if (!rdev->faulty) {
 			printk("[events: %08lx]",
-				(unsigned long)get_unaligned(&rdev->sb->events));
+				(unsigned long)rdev->sb->events_lo);
 			err += write_disk_sb(rdev);
 		} else
 			printk(")\n");
@@ -1288,15 +1287,13 @@ static int analyze_sbs (mddev_t * mddev)
 		 * one event)
 		 */
 		if (calc_sb_csum(rdev->sb) != rdev->sb->sb_csum) {
-			__u64 ev = get_unaligned(&rdev->sb->events);
-			if (ev != (__u64)0) {
-				--ev;
-				put_unaligned(ev,&rdev->sb->events);
-			}
+			if (rdev->sb->events_lo || rdev->sb->events_hi)
+				if ((rdev->sb->events_lo--)==0)
+					rdev->sb->events_hi--;
 		}
 
 		printk("%s's event counter: %08lx\n", partition_name(rdev->dev),
-			(unsigned long)get_unaligned(&rdev->sb->events));
+			(unsigned long)rdev->sb->events_lo);
 		if (!freshest) {
 			freshest = rdev;
 			continue;
@@ -1304,8 +1301,8 @@ static int analyze_sbs (mddev_t * mddev)
 		/*
 		 * Find the newest superblock version
 		 */
-		ev1 = get_unaligned(&rdev->sb->events);
-		ev2 = get_unaligned(&freshest->sb->events);
+		ev1 = md_event(rdev->sb);
+		ev2 = md_event(freshest->sb);
 		if (ev1 != ev2) {
 			out_of_date = 1;
 			if (ev1 > ev2)
@@ -1329,8 +1326,8 @@ static int analyze_sbs (mddev_t * mddev)
 		 * Kick all non-fresh devices faulty
 		 */
 		__u64 ev1, ev2;
-		ev1 = get_unaligned(&rdev->sb->events);
-		ev2 = get_unaligned(&sb->events);
+		ev1 = md_event(rdev->sb);
+		ev2 = md_event(sb);
 		++ev1;
 		if (ev1 < ev2) {
 			printk("md: kicking non-fresh %s from array!\n",
@@ -1350,8 +1347,8 @@ static int analyze_sbs (mddev_t * mddev)
 			MD_BUG();
 			goto abort;
 		}
-		ev1 = get_unaligned(&rdev->sb->events);
-		ev2 = get_unaligned(&sb->events);
+		ev1 = md_event(rdev->sb);
+		ev2 = md_event(sb);
 		ev3 = ev2;
 		--ev3;
 		if ((rdev->dev != rdev->old_dev) &&
@@ -1694,14 +1691,22 @@ static int do_md_run (mddev_t * mddev)
 	 * Drop all container device buffers, from now on
 	 * the only valid external interface is through the md
 	 * device.
+	 * Also find largest hardsector size
 	 */
+	md_hardsect_sizes[mdidx(mddev)] = 512;
 	ITERATE_RDEV(mddev,rdev,tmp) {
 		if (rdev->faulty)
 			continue;
 		fsync_dev(rdev->dev);
 		invalidate_buffers(rdev->dev);
+		if (get_hardsect_size(rdev->dev)
+		    > md_hardsect_sizes[mdidx(mddev)]) 
+			md_hardsect_sizes[mdidx(mddev)] =
+				get_hardsect_size(rdev->dev);
 	}
-
+	md_blocksizes[mdidx(mddev)] = 1024;
+	if (md_blocksizes[mdidx(mddev)] < md_hardsect_sizes[mdidx(mddev)])
+		md_blocksizes[mdidx(mddev)] = md_hardsect_sizes[mdidx(mddev)];
 	mddev->pers = pers[pnum];
 
 	err = mddev->pers->run(mddev);
@@ -3578,7 +3583,7 @@ struct notifier_block md_notifier = {
 	0
 };
 
-void md__init raid_setup(char *str)
+static int md__init raid_setup(char *str)
 {
 	int len, pos;
 
@@ -3597,7 +3602,7 @@ void md__init raid_setup(char *str)
 		pos += wlen+1;
 	}
 	raid_setup_args.set = 1;
-	return;
+	return 1;
 }
 __setup("raid=", raid_setup);
 
@@ -3608,12 +3613,14 @@ static void md_geninit (void)
 	for(i = 0; i < MAX_MD_DEVS; i++) {
 		md_blocksizes[i] = 1024;
 		md_size[i] = 0;
+		md_hardsect_sizes[i] = 512;
 		md_maxreadahead[i] = MD_READAHEAD;
 		register_disk(&md_gendisk, MKDEV(MAJOR_NR,i), 1, &md_fops, 0);
 	}
-	blksize_size[MD_MAJOR] = md_blocksizes;
+	blksize_size[MAJOR_NR] = md_blocksizes;
 	blk_size[MAJOR_NR] = md_size;
-	max_readahead[MD_MAJOR] = md_maxreadahead;
+	max_readahead[MAJOR_NR] = md_maxreadahead;
+	hardsect_size[MAJOR_NR] = md_hardsect_sizes;
 
 	printk("md.c: sizeof(mdp_super_t) = %d\n", (int)sizeof(mdp_super_t));
 
@@ -3636,9 +3643,9 @@ int md__init md_init (void)
 			MD_MAJOR_VERSION, MD_MINOR_VERSION,
 			MD_PATCHLEVEL_VERSION, MAX_MD_DEVS, MAX_REAL);
 
-	if (devfs_register_blkdev (MD_MAJOR, "md", &md_fops))
+	if (devfs_register_blkdev (MAJOR_NR, "md", &md_fops))
 	{
-		printk (KERN_ALERT "Unable to get major %d for md\n", MD_MAJOR);
+		printk (KERN_ALERT "Unable to get major %d for md\n", MAJOR_NR);
 		return (-1);
 	}
 	devfs_handle = devfs_mk_dir (NULL, "md", NULL);
@@ -3646,9 +3653,9 @@ int md__init md_init (void)
 				MAJOR_NR, 0, S_IFBLK | S_IRUSR | S_IWUSR,
 				&md_fops, NULL);
 
-	blk_dev[MD_MAJOR].queue = md_get_queue;
+	blk_dev[MAJOR_NR].queue = md_get_queue;
 
-	read_ahead[MD_MAJOR] = INT_MAX;
+	read_ahead[MAJOR_NR] = INT_MAX;
 	md_gendisk.next = gendisk_head;
 
 	gendisk_head = &md_gendisk;

@@ -7,10 +7,15 @@
  * malloc by Hannu Savolainen 1993 and Matthias Urlichs 1994
  *
  * Adapted for SH by Stuart Menefy, Aug 1999
+ *
+ * Modified to use standard LinuxSH BIOS by Greg Banks 7Jul2000
  */
 
 #include <linux/config.h>
 #include <asm/uaccess.h>
+#ifdef CONFIG_SH_STANDARD_BIOS
+#include <asm/sh_bios.h>
+#endif
 
 /*
  * gzip declarations
@@ -128,12 +133,7 @@ static void gzip_release(void **ptr)
 	free_mem_ptr = (long) *ptr;
 }
 
-#ifdef CONFIG_DEBUG_KERNEL_WITH_GDB_STUB
-#define IN_GDB 1
-#endif
-#include <asm/io.h>
-#include "../../../../drivers/char/sh-sci.h"
-
+#ifdef CONFIG_SH_STANDARD_BIOS
 static int strlen(const char *s)
 {
 	int i = 0;
@@ -145,8 +145,14 @@ static int strlen(const char *s)
 
 void puts(const char *s)
 {
-	put_string(s, strlen(s));
+	sh_bios_console_write(s, strlen(s));
 }
+#else
+void puts(const char *s)
+{
+  /* This should be updated to use the sh-sci routines */
+}
+#endif
 
 void* memset(void* s, int c, size_t n)
 {

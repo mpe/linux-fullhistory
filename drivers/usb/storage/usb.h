@@ -1,7 +1,7 @@
 /* Driver for USB Mass Storage compliant devices
  * Main Header File
  *
- * $Id: usb.h,v 1.1 2000/06/27 01:25:28 mdharm Exp $
+ * $Id: usb.h,v 1.3 2000/07/20 01:14:56 mdharm Exp $
  *
  * Current development and maintainance by:
  *   (c) 1999, 2000 Matthew Dharm (mdharm-usb@one-eyed-alien.net)
@@ -103,6 +103,7 @@ struct us_unusual_dev {
 #define US_FL_ALT_LENGTH      0x00000008 /* use the alternate algorithm for
 						    us_transfer_length()    */
 #define US_FL_IGNORE_SER      0x00000010 /* Ignore the serial number given  */
+#define US_FL_NEED_INIT	      0x00000020 /* Device needs initialization     */
 
 #define USB_STOR_STRING_LEN 32
 
@@ -169,9 +170,11 @@ struct us_data {
 	struct semaphore	current_urb_sem; /* to protect irq_urb	 */
 	struct urb		*current_urb;	 /* non-int USB requests */
 
+	/* the waitqueue for sleeping the control thread */
+	wait_queue_head_t	wqh;		 /* to sleep thread on   */
+
 	/* mutual exclusion structures */
 	struct semaphore	notify;		 /* thread begin/end	    */
-	struct semaphore	sleeper;	 /* to sleep the thread on  */
 	struct semaphore	queue_exclusion; /* to protect data structs */
 };
 

@@ -277,7 +277,7 @@ static int ManagementDaemon(void *unused)
 		while (I<ActualThreads)
 		{
 			atomic_set(&Running[I],1);
-			(void)kernel_thread(MainDaemon,&(CountBuf[I]),0);
+			(void)kernel_thread(MainDaemon,&(CountBuf[I]), CLONE_FS | CLONE_FILES | CLONE_SIGHAND);
 			I++;
 		}
 		
@@ -294,7 +294,7 @@ static int ManagementDaemon(void *unused)
 					if (atomic_read(&Running[I])==0)
 					{
 						atomic_set(&Running[I],1);
-						(void)kernel_thread(MainDaemon,&(CountBuf[I]),0);
+						(void)kernel_thread(MainDaemon,&(CountBuf[I]), CLONE_FS | CLONE_FILES | CLONE_SIGHAND);
 						(void)printk(KERN_CRIT "kHTTPd: Restarting daemon %i \n",I);
 					}
 					I++;
@@ -383,7 +383,7 @@ int __init khttpd_init(void)
 
 	StartSysctl();
 	
-	(void)kernel_thread(ManagementDaemon,NULL,0);
+	(void)kernel_thread(ManagementDaemon,NULL, CLONE_FS | CLONE_FILES | CLONE_SIGHAND);
 	
 	return 0;
 }

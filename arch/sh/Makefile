@@ -15,9 +15,9 @@
 #
 # Select the object file format to substitute into the linker script.
 #
-tool-prefix	= sh-linux-gnu-
+tool_prefix	= sh-linux-gnu-
 
-ifdef CONFIG_LITTLE_ENDIAN
+ifdef CONFIG_CPU_LITTLE_ENDIAN
 CFLAGS		+= -ml
 AFLAGS		+= -ml
 # LINKFLAGS	+= -EL
@@ -30,7 +30,7 @@ LDFLAGS		:= -EB
 endif
 
 # ifdef CONFIG_CROSSCOMPILE
-CROSS_COMPILE  = $(tool-prefix)
+CROSS_COMPILE  = $(tool_prefix)
 # endif
 
 LD	=$(CROSS_COMPILE)ld $(LDFLAGS)

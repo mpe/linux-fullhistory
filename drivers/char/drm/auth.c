@@ -2,6 +2,7 @@
  * Created: Tue Feb  2 08:37:54 1999 by faith@precisioninsight.com
  *
  * Copyright 1999 Precision Insight, Inc., Cedar Park, Texas.
+ * Copyright 2000 VA Linux Systems, Inc., Sunnyvale, California.
  * All Rights Reserved.
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
@@ -24,7 +25,7 @@
  * DEALINGS IN THE SOFTWARE.
  *
  * Authors:
- *    Rickard E. (Rik) Faith <faith@precisioninsight.com>
+ *    Rickard E. (Rik) Faith <faith@valinux.com>
  *
  */
 
@@ -44,7 +45,6 @@ static drm_file_t *drm_find_file(drm_device_t *dev, drm_magic_t magic)
 
 	down(&dev->struct_sem);
 	for (pt = dev->magiclist[hash].head; pt; pt = pt->next) {
-		if (pt->priv->authenticated) continue;
 		if (pt->magic == magic) {
 			retval = pt->priv;
 			break;

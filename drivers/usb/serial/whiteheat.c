@@ -11,6 +11,11 @@
  *
  * See Documentation/usb/usb-serial.txt for more information on using this driver
  * 
+ * (07/19/2000) gkh
+ *	Added module_init and module_exit functions to handle the fact that this
+ *	driver is a loadable module now.
+ *	Fixed bug with port->minor that was found by Al Borchers
+ *
  * (07/04/2000) gkh
  *	Added support for port settings. Baud rate can now be changed. Line signals
  *	are not transferred to and from the tty layer yet, but things seem to be 
@@ -258,7 +263,7 @@ static int whiteheat_open (struct usb_serial_port *port, struct file *filp)
 		dbg(__FUNCTION__ " - usb_submit_urb(read bulk) failed");
 
 	/* send an open port command */
-	open_command.port = port->number - port->minor;
+	open_command.port = port->number - port->serial->minor;
 	whiteheat_send_cmd (port->serial, WHITEHEAT_OPEN, (__u8 *)&open_command, sizeof(open_command));
 
 	/* Need to do device specific setup here (control lines, baud rate, etc.) */
@@ -277,7 +282,7 @@ static void whiteheat_close(struct usb_serial_port *port, struct file * filp)
 	dbg(__FUNCTION__ " - port %d", port->number);
 	
 	/* send a close command to the port */
-	close_command.port = port->number - port->minor;
+	close_command.port = port->number - port->serial->minor;
 	whiteheat_send_cmd (port->serial, WHITEHEAT_CLOSE, (__u8 *)&close_command, sizeof(close_command));
 
 	/* Need to change the control lines here */
@@ -501,7 +506,7 @@ static void set_command (struct usb_serial_port *port, unsigned char state, unsi
 	struct whiteheat_rdb_set rdb_command;
 	
 	/* send a set rts command to the port */
-	rdb_command.port = port->number - port->minor;
+	rdb_command.port = port->number - port->serial->minor;
 	rdb_command.state = state;
 
 	whiteheat_send_cmd (port->serial, command, (__u8 *)&rdb_command, sizeof(rdb_command));
@@ -524,4 +529,23 @@ static inline void set_break (struct usb_serial_port *port, unsigned char brk)
 {
 	set_command (port, brk, WHITEHEAT_SET_BREAK);
 }
+
+
+int whiteheat_init (void)
+{
+	usb_serial_register (&whiteheat_fake_device);
+	usb_serial_register (&whiteheat_device);
+	return 0;
+}
+
+
+void whiteheat_exit (void)
+{
+	usb_serial_deregister (&whiteheat_fake_device);
+	usb_serial_deregister (&whiteheat_device);
+}
+
+
+module_init(whiteheat_init);
+module_exit(whiteheat_exit);
 

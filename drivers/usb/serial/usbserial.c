@@ -14,6 +14,9 @@
  *
  * See Documentation/usb/usb-serial.txt for more information on using this driver
  * 
+ * (07/19/2000) gkh, pberger, and borchers
+ *	Modifications to allow usb-serial drivers to be modules.
+ *
  * (07/03/2000) gkh
  *	Added more debugging to serial_ioctl call
  * 
@@ -284,49 +287,6 @@ static struct usb_serial_device_type generic_device = {
 #endif
 
 
-/* To add support for another serial converter, create a usb_serial_device_type
-   structure for that device, and add it to this list, making sure that the
-   last  entry is NULL. */
-static struct usb_serial_device_type *usb_serial_devices[] = {
-#ifdef CONFIG_USB_SERIAL_GENERIC
-	&generic_device,
-#endif
-#ifdef CONFIG_USB_SERIAL_WHITEHEAT
-	&whiteheat_fake_device,
-	&whiteheat_device,
-#endif
-#ifdef CONFIG_USB_SERIAL_VISOR
-	&handspring_device,
-#endif
-#ifdef CONFIG_USB_SERIAL_FTDI_SIO
-	&ftdi_sio_device,
-#endif
-#ifdef CONFIG_USB_SERIAL_KEYSPAN_PDA
-	&keyspan_pda_fake_device,
-	&keyspan_pda_device,
-#endif
-#ifdef CONFIG_USB_SERIAL_OMNINET
-	&zyxel_omninet_device,
-#endif
-#ifdef CONFIG_USB_SERIAL_DIGI_ACCELEPORT
-	&digi_acceleport_device,
-#endif
-#ifdef CONFIG_USB_SERIAL_KEYSPAN
-	&keyspan_usa18x_pre_device,
-	&keyspan_usa19_pre_device,
-	&keyspan_usa19w_pre_device,
-	&keyspan_usa28_pre_device,
-	&keyspan_usa28x_pre_device,
-	&keyspan_usa18x_device,
-	&keyspan_usa19_device,
-	&keyspan_usa19w_device,
-	&keyspan_usa28_device,
-	&keyspan_usa28x_device,
-#endif
-	NULL
-};
-
-
 /* local function prototypes */
 static int  serial_open (struct tty_struct *tty, struct file * filp);
 static void serial_close (struct tty_struct *tty, struct file * filp);
@@ -353,6 +313,8 @@ static struct tty_struct *	serial_tty[SERIAL_TTY_MINORS];
 static struct termios *		serial_termios[SERIAL_TTY_MINORS];
 static struct termios *		serial_termios_locked[SERIAL_TTY_MINORS];
 static struct usb_serial	*serial_table[SERIAL_TTY_MINORS] = {NULL, };
+
+LIST_HEAD(usb_serial_driver_list);
 
 
 static inline struct usb_serial* get_usb_serial (struct usb_serial_port *port, const char *function) 
@@ -950,13 +912,15 @@ static void * usb_serial_probe(struct usb_device *dev, unsigned int ifnum)
 {
 	struct usb_serial *serial = NULL;
 	struct usb_serial_port *port;
-	struct usb_interface_descriptor *interface;
+	struct usb_interface *interface;
+	struct usb_interface_descriptor *iface_desc;
 	struct usb_endpoint_descriptor *endpoint;
 	struct usb_endpoint_descriptor *interrupt_in_endpoint[MAX_NUM_PORTS];
 	struct usb_endpoint_descriptor *bulk_in_endpoint[MAX_NUM_PORTS];
 	struct usb_endpoint_descriptor *bulk_out_endpoint[MAX_NUM_PORTS];
-	struct usb_serial_device_type *type;
-	int device_num;
+	struct usb_serial_device_type *type = NULL;
+	struct list_head *tmp;
+	int found;
 	int minor;
 	int buffer_size;
 	int i;
@@ -968,34 +932,38 @@ static void * usb_serial_probe(struct usb_device *dev, unsigned int ifnum)
 	int num_bulk_out = 0;
 	int num_ports;
 	int max_endpoints;
+
 	
 	/* loop through our list of known serial converters, and see if this
-           device matches. */
-	for (device_num = 0; usb_serial_devices[device_num]; device_num++) {
-		type = usb_serial_devices[device_num];
+	   device matches. */
+	found = 0;
+	list_for_each (tmp, &usb_serial_driver_list) {
+		type = list_entry(tmp, struct usb_serial_device_type, driver_list);
 		dbg ("Looking at %s Vendor id=%.4x Product id=%.4x", 
-		     type->name, *(type->idVendor), *(type->idProduct));
+			type->name, *(type->idVendor), *(type->idProduct));
 
 		/* look at the device descriptor */
 		if ((dev->descriptor.idVendor == *(type->idVendor)) &&
 		    (dev->descriptor.idProduct == *(type->idProduct))) {
 			dbg("descriptor matches");
+			found = 1;
 			break;
 		}
 	}
-	if (!usb_serial_devices[device_num]) {
+	if (!found) {
 		/* no match */
 		dbg("none matched");
 		return(NULL);
 	}
-
+	
 	/* descriptor matches, let's find the endpoints needed */
 	interrupt_pipe = bulk_in_pipe = bulk_out_pipe = HAS_NOT;
 			
 	/* check out the endpoints */
-	interface = &dev->actconfig->interface[ifnum].altsetting[0];
-	for (i = 0; i < interface->bNumEndpoints; ++i) {
-		endpoint = &interface->endpoint[i];
+	interface = &dev->actconfig->interface[ifnum];
+	iface_desc = &interface->altsetting[0];
+	for (i = 0; i < iface_desc->bNumEndpoints; ++i) {
+		endpoint = &iface_desc->endpoint[i];
 		
 		if ((endpoint->bEndpointAddress & 0x80) &&
 		    ((endpoint->bmAttributes & 3) == 0x02)) {
@@ -1059,6 +1027,7 @@ static void * usb_serial_probe(struct usb_device *dev, unsigned int ifnum)
 	
 	serial->dev = dev;
 	serial->type = type;
+	serial->interface = interface;
 	serial->minor = minor;
 	serial->num_ports = num_ports;
 	serial->num_bulk_in = num_bulk_in;
@@ -1205,6 +1174,12 @@ static void usb_serial_disconnect(struct usb_device *dev, void *ptr)
 	int i;
 
 	if (serial) {
+		/* fail all future close/read/write/ioctl/etc calls */
+		for (i = 0; i < serial->num_ports; ++i) {
+			if (serial->port[i].tty != NULL)
+				serial->port[i].tty->driver_data = NULL;
+		}
+
 		if (serial->type->shutdown)
 			serial->type->shutdown(serial);
 
@@ -1290,24 +1265,12 @@ static struct tty_driver serial_tty_driver = {
 int usb_serial_init(void)
 {
 	int i;
-	int something;
 	int result;
 
 	/* Initalize our global data */
 	for (i = 0; i < SERIAL_TTY_MINORS; ++i) {
 		serial_table[i] = NULL;
 	}
-
-	/* tell the world what devices this driver currently supports */
-	something = 0;
-	for (i = 0; usb_serial_devices[i]; ++i) {
-		if (!strstr (usb_serial_devices[i]->name, "prerenumeration")) {
-			info ("USB Serial support registered for %s", usb_serial_devices[i]->name);
-			something = 1;
-		}
-	}
-	if (!something)
-		info ("USB Serial driver is not configured for any devices!");
 
 	/* register the tty driver */
 	serial_tty_driver.init_termios          = tty_std_termios;
@@ -1317,6 +1280,11 @@ int usb_serial_init(void)
 		return -1;
 	}
 
+#ifdef CONFIG_USB_SERIAL_GENERIC
+	/* register our generic driver with ourselves */
+	usb_serial_register (&generic_device);
+#endif
+	
 	/* register the USB driver */
 	result = usb_register(&usb_serial_driver);
 	if (result < 0) {
@@ -1325,12 +1293,19 @@ int usb_serial_init(void)
 		return -1;
 	}
 	
+	
 	return 0;
 }
 
 
 void usb_serial_exit(void)
 {
+
+#ifdef CONFIG_USB_SERIAL_GENERIC
+	/* remove our generic driver */
+	usb_serial_deregister (&generic_device);
+#endif
+	
 	usb_deregister(&usb_serial_driver);
 	tty_unregister_driver(&serial_tty_driver);
 }
@@ -1339,4 +1314,47 @@ void usb_serial_exit(void)
 module_init(usb_serial_init);
 module_exit(usb_serial_exit);
 
+
+int usb_serial_register(struct usb_serial_device_type *new_device)
+{
+	/* Add this device to our list of devices */
+	list_add(&new_device->driver_list, &usb_serial_driver_list);
+
+	info ("USB Serial support registered for %s", new_device->name);
+
+	usb_scan_devices();
+
+	return 0;
+}
+
+
+void usb_serial_deregister(struct usb_serial_device_type *device)
+{
+	struct usb_serial *serial;
+	int i;
+
+	info("USB Serial deregistering driver %s", device->name);
+
+	/* clear out the serial_table if the device is attached to a port */
+	for(i = 0; i < SERIAL_TTY_MINORS; ++i) {
+		serial = serial_table[i];
+		if ((serial != NULL) && (serial->type == device)) {
+			usb_driver_release_interface (&usb_serial_driver, serial->interface);
+			usb_serial_disconnect (NULL, serial);
+		}
+	}
+
+	list_del(&device->driver_list);
+}
+
+
+
+/* If the usb-serial core is build into the core, the usb-serial drivers
+   need these symbols to load properly as modules. */
+EXPORT_SYMBOL(usb_serial_register);
+EXPORT_SYMBOL(usb_serial_deregister);
+#ifdef USES_EZUSB_FUNCTIONS
+	EXPORT_SYMBOL(ezusb_writememory);
+	EXPORT_SYMBOL(ezusb_set_reset);
+#endif
 

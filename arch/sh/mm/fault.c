@@ -29,6 +29,9 @@
 
 extern void die(const char *,struct pt_regs *,long);
 static void __flush_tlb_page(struct mm_struct *mm, unsigned long page);
+#if defined(__SH4__)
+static void __flush_tlb_phys(struct mm_struct *mm, unsigned long phys);
+#endif
 
 /*
  * Ugly, ugly, but the goto's result in better assembly..
@@ -277,6 +280,19 @@ void update_mmu_cache(struct vm_area_struct * vma,
 
 	save_and_cli(flags);
 
+#if defined(__SH4__)
+	if ((vma->vm_flags & VM_SHARED)) {
+		pteval = pte_val(pte);
+		pteval &= PAGE_MASK; /* Physicall page address */
+
+		__flush_tlb_phys(vma->vm_mm, pteval);
+
+		/* It would be good we had routine which takes
+		   physical memory as argument */
+		flush_cache_page(vma, address&PAGE_MASK);
+	}
+#endif
+
 	/* Set PTEH register */
 	if (vma) {
 		pteaddr = (address & MMU_VPN_MASK) |
@@ -327,6 +343,33 @@ static void __flush_tlb_page(struct mm_struct *mm, unsigned long page)
 	if (saved_asid != MMU_NO_ASID)
 		set_asid(saved_asid);
 }
+
+#if defined(__SH4__)
+static void __flush_tlb_phys(struct mm_struct *mm, unsigned long phys)
+{
+	int i;
+	unsigned long addr, data;
+
+	jump_to_P2();
+	for (i = 0; i < MMU_UTLB_ENTRIES; i++) {
+		addr = MMU_UTLB_DATA_ARRAY | (i<<MMU_U_ENTRY_SHIFT);
+		data = ctrl_inl(addr);
+		if ((data & MMU_UTLB_VALID) && (data&PAGE_MASK) == phys) {
+			data &= ~MMU_UTLB_VALID;
+			ctrl_outl(data, addr);
+		}
+	}
+	for (i = 0; i < MMU_ITLB_ENTRIES; i++) {
+		addr = MMU_ITLB_DATA_ARRAY | (i<<MMU_I_ENTRY_SHIFT);
+		data = ctrl_inl(addr);
+		if ((data & MMU_ITLB_VALID) && (data&PAGE_MASK) == phys) {
+			data &= ~MMU_ITLB_VALID;
+			ctrl_outl(data, addr);
+		}
+	}
+	back_to_P1();
+}
+#endif
 
 void flush_tlb_page(struct vm_area_struct *vma, unsigned long page)
 {

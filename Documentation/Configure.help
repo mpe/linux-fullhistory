@@ -2531,11 +2531,19 @@ CONFIG_ISAPNP
 
 Support for hot-pluggable devices
 CONFIG_HOTPLUG
-  Say Y here if you want to attach devices to your computer that can
-  be attached and detached while the system is running. The most
-  prominent example of this are PCMCIA- or PC-cards, credit-card size
-  devices such as network cards, modems or hard drives which are
+  Say Y here if you want to plug devices into your computer while
+  the system is running, and be able to use them quickly.  In many
+  cases, the devices can likewise be unplugged at any time too.
+
+  One well known example of this is PCMCIA- or PC-cards, credit-card
+  size devices such as network cards, modems or hard drives which are
   plugged into slots found on all modern laptop computers.
+
+  Another example, used on modern desktops as well as laptops, is USB.
+  Enable HOTPLUG with USB and KMOD, and your kernel will automatically
+  call out to a user mode "policy agent" to load modules and set up
+  software needed to use USB devices you plug in.  Get agent software
+  (at http://www.linux-usb.org/policy.html) and install it.
 
 PCMCIA/Cardbus support
 CONFIG_PCMCIA
@@ -12608,21 +12616,40 @@ CONFIG_FT_FDC_MAX_RATE
 Direct Rendering Manager (XFree86 DRI support)
 CONFIG_DRM
   Kernel-level support for the Direct Rendering Infrastructure (DRI)
-  introduced in XFree86 4.x. If you say Y here, you need to select 
+  introduced in XFree86 4.0. If you say Y here, you need to select
   the module that's right for your graphics card from the list below.
-  These modules provide support for synchronization, security, and 
-  DMA transfers. Please read drivers/char/drm/README.drm for more 
-  details. 
+  These modules provide support for synchronization, security, and
+  DMA transfers. Please see http://dri.sourceforge.net for more
+  details.  You should also select and configure AGP
+  (/dev/agpgart) support.
 
-3dfx Banshee/Voodoo3
+3dfx Banshee/Voodoo3+
 CONFIG_DRM_TDFX
-  Choose M here if you have a 3dfx Banshee/Voodoo3 graphics card.
-  The module will be called tdfx.o.
+  Choose this option if you have a 3dfx Banshee or Voodoo3 (or later),
+  graphics card.  If M is selected, the module will be called tdfx.o.
 
-3dlabs GMX 2000 Direct Rendering Driver (XFree86 DRI support)
+3dlabs GMX 2000
 CONFIG_DRM_GAMMA
-  Choose M here if you have a 3dlabs GMX 2000 graphics card.
-  The module will be called gamma.o.
+  Choose this option if you have a 3dlabs GMX 2000 graphics card.
+  If M is selected, the module will be called gamma.o.
+
+ATI Rage 128
+CONFIG_DRM_R128
+  Choose this option if you have an ATI Rage 128 graphics card.  If M
+  is selected, the module will be called r128.o.  AGP support for
+  this card is strongly suggested (unless you have a PCI version).
+
+Intel I810
+CONFIG_DRM_I810
+  Choose this option if you have an Intel I810 graphics card.  If M is
+  selected, the module will be called i810.o.  AGP support is required
+  for this driver to work.
+
+Matrox g200/g400
+CONFIG_DRM_MGA
+  Choose this option if you have a Matrox g200 or g400 graphics card.  If M
+  is selected, the module will be called mga.o.  AGP support is required
+  for this driver to work.
 
 MTRR control and configuration
 CONFIG_MTRR

@@ -1539,7 +1539,7 @@ static idetape_pc_t *idetape_next_pc_storage (ide_drive_t *drive)
  
 /**************************************************************
  *                                                            *
- *  This should get fixed to use kmalloc(GFP_ATOMIC, ..)      *
+ *  This should get fixed to use kmalloc(.., GFP_ATOMIC)      *
  *  followed later on by kfree().   -ml                       *
  *                                                            *
  **************************************************************/

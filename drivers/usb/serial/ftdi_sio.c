@@ -12,6 +12,10 @@
  *
  * See Documentation/usb/usb-serial.txt for more information on using this driver
  *
+ * (07/19/2000) gkh
+ *	Added module_init and module_exit functions to handle the fact that this
+ *	driver is a loadable module now.
+ *
  * (04/04/2000) Bill Ryder 
  *         Fixed bugs in TCGET/TCSET ioctls (by removing them - they are 
  *             handled elsewhere in the serial driver chain).
@@ -719,4 +723,21 @@ static int ftdi_sio_ioctl (struct usb_serial_port *port, struct file * file, uns
 	dbg("ftdi_sio_ioctl returning 0");
 	return 0;
 } /* ftdi_sio_ioctl */
+
+
+int ftdi_sio_init (void)
+{
+	usb_serial_register (&ftdi_sio_device);
+	return 0;
+}
+
+
+void ftdi_sio_exit (void)
+{
+	usb_serial_deregister (&ftdi_sio_device);
+}
+
+
+module_init(ftdi_sio_init);
+module_exit(ftdi_sio_exit);
 

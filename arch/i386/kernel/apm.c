@@ -1423,6 +1423,8 @@ static int apm(void *unused)
 	kapmd_running = 1;
 
 	exit_files(current);	/* daemonize doesn't do exit_files */
+	current->files = init_task.files;
+	atomic_inc(&current->files->count);
 	daemonize();
 
 	strcpy(current->comm, "kapmd");

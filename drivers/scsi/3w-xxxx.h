@@ -2,6 +2,8 @@
    3w-xxxx.h -- 3ware Storage Controller device driver for Linux.
    
    Written By: Adam Radford <linux@3ware.com>
+   Modifications By: Joel Jacobson <linux@3ware.com>
+
    Copyright (C) 1999 3ware Inc.
 
    Kernel compatablity By:	Andre Hedrick <andre@suse.com>
@@ -106,6 +108,7 @@
 #define TW_OP_SET_PARAM	      0x13
 #define TW_OP_SECTOR_INFO     0x1a
 #define TW_OP_AEN_LISTEN      0x1c
+#define TW_CMD_PACKET         0x1d
 
 /* Asynchronous Event Notification (AEN) Codes */
 #define TW_AEN_QUEUE_EMPTY       0x0000
@@ -135,7 +138,7 @@
 #define TW_BLOCK_SIZE			      0x200 /* 512-byte blocks */
 #define TW_IOCTL                              0x80
 #define TW_MAX_AEN_TRIES                      100
-
+#define TW_UNIT_ONLINE                        1
 #define TW_IN_INTR                            1
 
 /* Macros */
@@ -303,7 +306,7 @@ int tw_empty_response_que(TW_Device_Extension *tw_dev);
 void tw_enable_interrupts(TW_Device_Extension *tw_dev);
 int tw_findcards(Scsi_Host_Template *tw_host);
 void tw_free_device_extension(TW_Device_Extension *tw_dev);
-int tw_initconnection(TW_Device_Extension *tw_dev);
+int tw_initconnection(TW_Device_Extension *tw_dev, int message_credits);
 int tw_initialize_device_extension(TW_Device_Extension *tw_dev);
 int tw_initialize_units(TW_Device_Extension *tw_dev);
 int tw_ioctl(TW_Device_Extension *tw_dev, int request_id);
@@ -326,7 +329,10 @@ int tw_scsiop_read_capacity(TW_Device_Extension *tw_dev, int request_id);
 int tw_scsiop_read_capacity_complete(TW_Device_Extension *tw_dev, int request_id);
 int tw_scsiop_read_write(TW_Device_Extension *tw_dev, int request_id);
 int tw_scsiop_test_unit_ready(TW_Device_Extension *tw_dev, int request_id);
+int tw_setfeature(TW_Device_Extension *tw_dev, int parm, int param_size, 
+		  unsigned char *val);
 int tw_setup_irq(TW_Device_Extension *tw_dev);
+int tw_shutdown_device(TW_Device_Extension *tw_dev);
 void tw_soft_reset(TW_Device_Extension *tw_dev);
 int tw_state_request_finish(TW_Device_Extension *tw_dev,int request_id);
 int tw_state_request_start(TW_Device_Extension *tw_dev, int *request_id);

@@ -234,8 +234,9 @@ asmlinkage long sys_setpriority(int which, int who, int niceval)
 
 /*
  * Ugh. To avoid negative return values, "getpriority()" will
- * not return the normal nice-value, but a value that has been
- * offset by 20 (ie it returns 0..39 instead of -20..19)
+ * not return the normal nice-value, but a negated value that
+ * has been offset by 20 (ie it returns 40..1 instead of -20..19)
+ * to stay compatible.
  */
 asmlinkage long sys_getpriority(int which, int who)
 {
@@ -247,11 +248,11 @@ asmlinkage long sys_getpriority(int which, int who)
 
 	read_lock(&tasklist_lock);
 	for_each_task (p) {
-		unsigned niceval;
+		long niceval;
 		if (!proc_sel(p, which, who))
 			continue;
 		niceval = 20 - p->nice;
-		if (niceval < (unsigned)retval)
+		if (niceval > retval)
 			retval = niceval;
 	}
 	read_unlock(&tasklist_lock);

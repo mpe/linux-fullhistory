@@ -1361,7 +1361,7 @@ void scsi_finish_command(Scsi_Cmnd * SCpnt)
 	SCpnt->done(SCpnt);
 }
 
-#ifdef CONFIG_MODULES
+#if defined(CONFIG_MODULES) || defined(CONFIG_BLK_DEV_IDESCSI) || defined(CONFIG_USB_STORAGE)
 static int scsi_register_host(Scsi_Host_Template *);
 static void scsi_unregister_host(Scsi_Host_Template *);
 #endif

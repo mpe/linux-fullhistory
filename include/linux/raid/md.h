@@ -19,7 +19,6 @@
 #define _MD_H
 
 #include <linux/mm.h>
-#include <linux/config.h>
 #include <linux/fs.h>
 #include <linux/blkdev.h>
 #include <asm/semaphore.h>
@@ -83,8 +82,6 @@ extern struct gendisk * find_gendisk (kdev_t dev);
 extern int md_notify_reboot(struct notifier_block *this,
 					unsigned long code, void *x);
 extern int md_error (kdev_t mddev, kdev_t rdev);
-
-extern void raid_setup(char *str) md__init;
 
 extern void md_print_devices (void);
 

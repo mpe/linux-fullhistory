@@ -212,7 +212,7 @@ static inline void *
 static inline void ncp_kfree_s(void *obj, int size)
 {
 	ncp_current_malloced -= 1;
-	kfree(obj, size);
+	kfree(obj);
 }
 
 #else				/* DEBUG_NCP_MALLOC */

@@ -148,7 +148,7 @@ static int linear_make_request (request_queue_t *q, mddev_t *mddev,
 		return -1;
 	}
 	bh->b_rdev = tmp_dev->dev;
-	bh->b_rsector = ((block - tmp_dev->offset) << 1) + (bh->b_rsector & 1);
+	bh->b_rsector = bh->b_rsector - (tmp_dev->offset << 1);
 
 	return 1;
 }

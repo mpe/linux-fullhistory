@@ -13,6 +13,7 @@
 /* Values for sci_port->type */
 #define PORT_SCI  0
 #define PORT_SCIF 1
+#define PORT_IRDA 1		/* XXX: temporary assignment */
 
 /* Offsets into the sci_port->irqs array */
 #define SCIx_ERI_IRQ 0
@@ -22,6 +23,7 @@
 /*                     ERI, RXI, TXI,   INTC reg, INTC pos */
 #define SCI_IRQS      { 23,  24,  25 }, INTC_IPRB, 1
 #define SH3_SCIF_IRQS { 56,  57,  59 }, INTC_IPRE, 1
+#define SH3_IRDA_IRQS { 52,  53,  55 }, INTC_IPRE, 2
 #define SH4_SCIF_IRQS { 40,  41,  43 }, INTC_IPRC, 1
 
 #if defined(CONFIG_CPU_SUBTYPE_SH7708)
@@ -33,10 +35,11 @@
 # define SCSCR_INIT(port)          0x30 /* TIE=0,RIE=0,TE=1,RE=1 */
 # define SCI_ONLY
 #elif defined(CONFIG_CPU_SUBTYPE_SH7709)
-# define SCI_NPORTS 2
+# define SCI_NPORTS 3
 # define SCI_INIT { \
-  { {}, PORT_SCI,  0xfffffe80, SCI_IRQS,      sci_init_pins_sci  }, \
-  { {}, PORT_SCIF, 0xA4000150, SH3_SCIF_IRQS, sci_init_pins_scif }  \
+  { {}, PORT_SCI,  0xfffffe80, SCI_IRQS,        sci_init_pins_sci  }, \
+  { {}, PORT_SCIF, 0xA4000150, SH3_SCIF_IRQS, sci_init_pins_scif },   \
+  { {}, PORT_SCIF, 0xA4000140, SH3_IRDA_IRQS, sci_init_pins_irda }    \
 }
 # define SCPCR  0xA4000116 /* 16 bit SCI and SCIF */
 # define SCPDR  0xA4000136 /* 8  bit SCI and SCIF */
@@ -127,7 +130,7 @@
 
 #define SCI_PRIORITY	3
 
-#define SCI_MAJOR	      204
+#define SCI_MAJOR		204
 #define SCI_MINOR_START		8
 
 /* Generic serial flags */
@@ -261,11 +264,20 @@ SCIF_FNS(SCFDR,                      0x0e, 16, 0x1C, 16)
  * scaling the value which is needed in SCBRR.
  *
  * -- Stuart Menefy - 23 May 2000
+ *
+ * I meant, why would anyone bother with bitrates below 2400.
+ *
+ * -- Greg Banks - 7Jul2000
+ *
+ * You "speedist"!  How will I use my 110bps ASR-33 teletype with paper
+ * tape reader as a console!
+ *
+ * -- Mitch Davis - 15 Jul 2000
  */
 
 #define PCLK           (current_cpu_data.module_clock)
 
-#define SCBRR_VALUE(bps) (PCLK/(32*bps)-1)
+#define SCBRR_VALUE(bps) ((PCLK+16*bps)/(32*bps)-1)
 #define BPS_2400       SCBRR_VALUE(2400)
 #define BPS_4800       SCBRR_VALUE(4800)
 #define BPS_9600       SCBRR_VALUE(9600)
@@ -273,106 +285,3 @@ SCIF_FNS(SCFDR,                      0x0e, 16, 0x1C, 16)
 #define BPS_38400      SCBRR_VALUE(38400)
 #define BPS_115200     SCBRR_VALUE(115200)
 
-#ifdef CONFIG_DEBUG_KERNEL_WITH_GDB_STUB
-/* Taken from sh-stub.c of GDB 4.18 */
-static const char hexchars[] = "0123456789abcdef";
-
-static __inline__ char highhex(int  x)
-{
-	return hexchars[(x >> 4) & 0xf];
-}
-
-static __inline__ char lowhex(int  x)
-{
-	return hexchars[x & 0xf];
-}
-#endif
-
-static __inline__ void put_char(struct sci_port *port, char c)
-{
-	unsigned long flags;
-	unsigned short status;
-
-	save_and_cli(flags);
-
-	do
-		status = sci_in(port, SCxSR);
-	while (!(status & SCxSR_TDxE(port)));
-
-	sci_out(port, SCxTDR, c);
-	sci_in(port, SCxSR);            /* Dummy read */
-	sci_out(port, SCxSR, SCxSR_TDxE_CLEAR(port));
-
-	restore_flags(flags);
-}
-
-static __inline__ void handle_error(struct sci_port *port)
-{				/* Clear error flags */
-	sci_out(port, SCxSR, SCxSR_ERROR_CLEAR(port));
-}
-
-static __inline__ int get_char(struct sci_port *port)
-{
-	unsigned long flags;
-	unsigned short status;
-	int c;
-
-	save_and_cli(flags);
-        do {
-		status = sci_in(port, SCxSR);
-		if (status & SCxSR_ERRORS(port)) {
-			handle_error(port);
-			continue;
-		}
-	} while (!(status & SCxSR_RDxF(port)));
-	c = sci_in(port, SCxRDR);
-	sci_in(port, SCxSR);            /* Dummy read */
-	sci_out(port, SCxSR, SCxSR_RDxF_CLEAR(port));
-	restore_flags(flags);
-
-	return c;
-}
-
-/*
- * Send the packet in buffer.  The host get's one chance to read it.
- * This routine does not wait for a positive acknowledge.
- */
-
-static __inline__ void put_string(struct sci_port *port,
-				  const char *buffer, int count)
-{
-	int i;
-	const unsigned char *p = buffer;
-#ifdef CONFIG_DEBUG_KERNEL_WITH_GDB_STUB
-	int checksum;
-
-if (IN_GDB) {
-	/*  $<packet info>#<checksum>. */
-	do {
-		unsigned char c;
-		put_char(port, '$');
-		put_char(port, 'O'); /* 'O'utput to console */
-		checksum = 'O';
-
-		for (i=0; i<count; i++) { /* Don't use run length encoding */
-			int h, l;
-
-			c = *p++;
-			h = highhex(c);
-			l = lowhex(c);
-			put_char(port, h);
-			put_char(port, l);
-			checksum += h + l;
-		}
-		put_char(port, '#');
-		put_char(port, highhex(checksum));
-		put_char(port, lowhex(checksum));
-	} while  (get_char(port) != '+');
-} else
-#endif
-	for (i=0; i<count; i++) {
-		if (*p == 10)
-			put_char(port, '\r');
-		put_char(port, *p++);
-	}
-}

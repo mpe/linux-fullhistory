@@ -1085,7 +1085,7 @@ static int fd_ioctl_trans(unsigned int fd, unsigned int cmd, unsigned long arg)
 		{
 			struct floppy_struct *f;
 
-			f = karg = kmalloc(GFP_KERNEL, sizeof(struct floppy_struct));
+			f = karg = kmalloc(sizeof(struct floppy_struct), GFP_KERNEL);
 			if (!karg)
 				return -ENOMEM;
 			if (cmd == FDGETPRM32)
@@ -1111,7 +1111,7 @@ static int fd_ioctl_trans(unsigned int fd, unsigned int cmd, unsigned long arg)
 		{
 			struct floppy_drive_params *f;
 
-			f = karg = kmalloc(GFP_KERNEL, sizeof(struct floppy_drive_params));
+			f = karg = kmalloc(sizeof(struct floppy_drive_params), GFP_KERNEL);
 			if (!karg)
 				return -ENOMEM;
 			if (cmd == FDGETDRVPRM32)
@@ -1143,17 +1143,17 @@ static int fd_ioctl_trans(unsigned int fd, unsigned int cmd, unsigned long arg)
 		}
 		case FDGETDRVSTAT32:
 		case FDPOLLDRVSTAT32:
-			karg = kmalloc(GFP_KERNEL, sizeof(struct floppy_drive_struct));
+			karg = kmalloc(sizeof(struct floppy_drive_struct), GFP_KERNEL);
 			if (!karg)
 				return -ENOMEM;
 			break;
 		case FDGETFDCSTAT32:
-			karg = kmalloc(GFP_KERNEL, sizeof(struct floppy_fdc_state));
+			karg = kmalloc(sizeof(struct floppy_fdc_state), GFP_KERNEL);
 			if (!karg)
 				return -ENOMEM;
 			break;
 		case FDWERRORGET32:
-			karg = kmalloc(GFP_KERNEL, sizeof(struct floppy_write_errors));
+			karg = kmalloc(sizeof(struct floppy_write_errors), GFP_KERNEL);
 			if (!karg)
 				return -ENOMEM;
 			break;

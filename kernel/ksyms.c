@@ -77,6 +77,9 @@ __attribute__((section("__ksymtab"))) = {
 #ifdef CONFIG_KMOD
 EXPORT_SYMBOL(request_module);
 EXPORT_SYMBOL(exec_usermodehelper);
+#ifdef CONFIG_HOTPLUG
+EXPORT_SYMBOL(hotplug_path);
+#endif
 #endif
 
 #ifdef CONFIG_MODULES
@@ -97,7 +100,10 @@ EXPORT_SYMBOL(exit_sighand);
 /* internal kernel memory management */
 EXPORT_SYMBOL(__alloc_pages);
 EXPORT_SYMBOL(alloc_pages_node);
-EXPORT_SYMBOL(__free_pages_ok);
+EXPORT_SYMBOL(__get_free_pages);
+EXPORT_SYMBOL(get_zeroed_page);
+EXPORT_SYMBOL(__free_pages);
+EXPORT_SYMBOL(free_pages);
 #ifndef CONFIG_DISCONTIGMEM
 EXPORT_SYMBOL(contig_page_data);
 #endif
@@ -134,7 +140,7 @@ EXPORT_SYMBOL(get_super);
 EXPORT_SYMBOL(get_empty_super);
 EXPORT_SYMBOL(getname);
 EXPORT_SYMBOL(names_cachep);
-EXPORT_SYMBOL(_fput);
+EXPORT_SYMBOL(fput);
 EXPORT_SYMBOL(igrab);
 EXPORT_SYMBOL(iunique);
 EXPORT_SYMBOL(iget4);

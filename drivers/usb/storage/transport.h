@@ -1,7 +1,7 @@
 /* Driver for USB Mass Storage compliant devices
  * Transport Functions Header File
  *
- * $Id: transport.h,v 1.1 2000/06/27 01:25:28 mdharm Exp $
+ * $Id: transport.h,v 1.3 2000/07/20 23:36:22 mdharm Exp $
  *
  * Current development and maintainance by:
  *   (c) 1999, 2000 Matthew Dharm (mdharm-usb@one-eyed-alien.net)
@@ -54,6 +54,9 @@ extern unsigned char us_direction[256/8];
 #define US_PR_CBI	0x00		/* Control/Bulk/Interrupt */
 #define US_PR_CB	0x01		/* Control/Bulk w/o interrupt */
 #define US_PR_BULK	0x50		/* bulk only */
+#ifdef CONFIG_USB_STORAGE_HP8200e
+#define US_PR_SCM_ATAPI	0x80		/* SCM-ATAPI bridge */
+#endif
 
 /*
  * Bulk only data structures

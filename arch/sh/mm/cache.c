@@ -2,7 +2,7 @@
  *
  *  linux/arch/sh/mm/cache.c
  *
- * Copyright (C) 1999  Niibe Yutaka
+ * Copyright (C) 1999, 2000  Niibe Yutaka
  *
  */
 
@@ -36,7 +36,10 @@ struct _cache_system_info {
 	int num_entries;
 };
 
-static struct _cache_system_info cache_system_info;
+/* Data at BSS is cleared after setting this variable.
+   So, we Should not placed this variable at BSS section.
+   Initialize this, it is placed at data section. */
+static struct _cache_system_info cache_system_info = {0,};
 
 #define CACHE_OC_WAY_SHIFT	(cache_system_info.way_shift)
 #define CACHE_IC_WAY_SHIFT	(cache_system_info.way_shift)
@@ -97,7 +100,7 @@ static inline void cache_wback_all(void)
 	}
 }
 
-static void
+static void __init
 detect_cpu_and_cache_system(void)
 {
 #if defined(__sh3__)
@@ -338,6 +341,7 @@ void flush_cache_range(struct mm_struct *mm, unsigned long start,
 
 void flush_cache_page(struct vm_area_struct *vma, unsigned long addr)
 {
+	/* XXX: Umm... this flush out all the cache lines.  Any improvement? */
 	flush_cache_range(vma->vm_mm, addr, addr+PAGE_SIZE);
 }
 

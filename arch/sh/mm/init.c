@@ -1,4 +1,4 @@
-/* $Id: init.c,v 1.16 2000/02/14 15:19:05 gniibe Exp $
+/* $Id: init.c,v 1.17 2000-04-08 15:38:54+09 gniibe Exp $
  *
  *  linux/arch/sh/mm/init.c
  *
@@ -206,6 +206,9 @@ void __init paging_init(void)
 
 	/* Enable MMU */
 	ctrl_outl(MMU_CONTROL_INIT, MMUCR);
+
+	/* The manual suggests doing some nops after turning on the MMU */
+	asm volatile("nop;nop;nop;nop;nop;nop;");
 
 	mmu_context_cache = MMU_CONTEXT_FIRST_VERSION;
 	set_asid(mmu_context_cache & MMU_CONTEXT_ASID_MASK);

@@ -41,8 +41,8 @@
 #include <asm/hd64461.h>
 #endif
 
-unsigned int local_bh_count[NR_CPUS];
-unsigned int local_irq_count[NR_CPUS];
+unsigned int __local_bh_count[NR_CPUS];
+unsigned int __local_irq_count[NR_CPUS];
 
 /*
  * Micro-access to controllers is serialized over the whole
@@ -183,7 +183,7 @@ void disable_irq(unsigned int irq)
 {
 	disable_irq_nosync(irq);
 
-	if (!local_irq_count[smp_processor_id()]) {
+	if (!__local_irq_count[smp_processor_id()]) {
 		do {
 			barrier();
 		} while (irq_desc[irq].status & IRQ_INPROGRESS);

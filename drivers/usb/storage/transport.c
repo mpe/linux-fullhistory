@@ -1,6 +1,6 @@
 /* Driver for USB Mass Storage compliant devices
  *
- * $Id: transport.c,v 1.2 2000/06/27 10:20:39 mdharm Exp $
+ * $Id: transport.c,v 1.3 2000/07/20 01:06:40 mdharm Exp $
  *
  * Current development and maintainance by:
  *   (c) 1999, 2000 Matthew Dharm (mdharm-usb@one-eyed-alien.net)
@@ -60,10 +60,10 @@
  */
 static void usb_stor_blocking_completion(urb_t *urb)
 {
-	api_wrapper_data *awd = (api_wrapper_data *)urb->context;
+	wait_queue_head_t *wqh_ptr = (wait_queue_head_t *)urb->context;
 
-	if (waitqueue_active(awd->wakeup))
-		wake_up(awd->wakeup);
+	if (waitqueue_active(wqh_ptr))
+		wake_up(wqh_ptr);
 }
 
 /* This is our function to emulate usb_control_msg() but give us enough
@@ -73,9 +73,8 @@ int usb_stor_control_msg(struct us_data *us, unsigned int pipe,
 			 u8 request, u8 requesttype, u16 value, u16 index, 
 			 void *data, u16 size)
 {
-	DECLARE_WAITQUEUE(wait, current);
-	DECLARE_WAIT_QUEUE_HEAD(wqh);
-	api_wrapper_data awd;
+	wait_queue_head_t wqh;
+	wait_queue_t wait;
 	int status;
 	devrequest *dr;
 
@@ -92,9 +91,8 @@ int usb_stor_control_msg(struct us_data *us, unsigned int pipe,
 	dr->length = cpu_to_le16(size);
 
 	/* set up data structures for the wakeup system */
-	awd.wakeup = &wqh;
-	awd.handler = 0;
 	init_waitqueue_head(&wqh); 	
+	init_waitqueue_entry(&wait, current); 	
 	add_wait_queue(&wqh, &wait);
 
 	/* lock the URB */
@@ -103,7 +101,7 @@ int usb_stor_control_msg(struct us_data *us, unsigned int pipe,
 	/* fill the URB */
 	FILL_CONTROL_URB(us->current_urb, us->pusb_dev, pipe, 
 			 (unsigned char*) dr, data, size, 
-			 usb_stor_blocking_completion, &awd);
+			 usb_stor_blocking_completion, &wqh);
 
 	/* submit the URB */
 	set_current_state(TASK_UNINTERRUPTIBLE);
@@ -143,15 +141,13 @@ int usb_stor_control_msg(struct us_data *us, unsigned int pipe,
 int usb_stor_bulk_msg(struct us_data *us, void *data, int pipe,
 		      unsigned int len, unsigned int *act_len)
 {
-	DECLARE_WAITQUEUE(wait, current);
-	DECLARE_WAIT_QUEUE_HEAD(wqh);
-	api_wrapper_data awd;
+	wait_queue_head_t wqh;
+	wait_queue_t wait;
 	int status;
 
 	/* set up data structures for the wakeup system */
-	awd.wakeup = &wqh;
-	awd.handler = 0;
 	init_waitqueue_head(&wqh); 	
+	init_waitqueue_entry(&wait, current); 	
 	add_wait_queue(&wqh, &wait);
 
 	/* lock the URB */
@@ -159,7 +155,7 @@ int usb_stor_bulk_msg(struct us_data *us, void *data, int pipe,
 
 	/* fill the URB */
 	FILL_BULK_URB(us->current_urb, us->pusb_dev, pipe, data, len,
-		      usb_stor_blocking_completion, &awd);
+		      usb_stor_blocking_completion, &wqh);
 
 	/* submit the URB */
 	set_current_state(TASK_UNINTERRUPTIBLE);

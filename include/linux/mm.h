@@ -327,34 +327,16 @@ static inline struct page * alloc_pages(int gfp_mask, unsigned long order)
 extern struct page * alloc_pages(int gfp_mask, unsigned long order);
 #endif /* !CONFIG_DISCONTIGMEM */
 
-#define alloc_page(gfp_mask) \
-		alloc_pages(gfp_mask, 0)
+#define alloc_page(gfp_mask) alloc_pages(gfp_mask, 0)
 
-static inline unsigned long __get_free_pages (int gfp_mask, unsigned long order)
-{
-	struct page * page;
-
-	page = alloc_pages(gfp_mask, order);
-	if (!page)
-		return 0;
-	return page_address(page);
-}
+extern unsigned long FASTCALL(__get_free_pages(int gfp_mask, unsigned long order));
+extern unsigned long FASTCALL(get_zeroed_page(int gfp_mask));
 
 #define __get_free_page(gfp_mask) \
 		__get_free_pages((gfp_mask),0)
 
 #define __get_dma_pages(gfp_mask, order) \
 		__get_free_pages((gfp_mask) | GFP_DMA,(order))
-
-static inline unsigned long get_zeroed_page(int gfp_mask)
-{
-	unsigned long page;
-
-	page = __get_free_page(gfp_mask);
-	if (page)
-		clear_page((void *)page);
-	return page;
-}
 
 /*
  * The old interface name will be removed in 2.5:
@@ -364,29 +346,10 @@ static inline unsigned long get_zeroed_page(int gfp_mask)
 /*
  * There is only one 'core' page-freeing function.
  */
-extern void FASTCALL(__free_pages_ok(struct page * page, unsigned long order));
+extern void FASTCALL(__free_pages(struct page *page, unsigned long order));
+extern void FASTCALL(free_pages(unsigned long addr, unsigned long order));
 
-static inline void __free_pages(struct page *page, unsigned long order)
-{
-	if (!put_page_testzero(page))
-		return;
-	__free_pages_ok(page, order);
-}
-
-#define __free_page(page) __free_pages(page, 0)
-
-static inline void free_pages(unsigned long addr, unsigned long order)
-{
-	unsigned long map_nr;
-
-#ifdef CONFIG_DISCONTIGMEM
-	if (addr == 0) return;
-#endif
-	map_nr = MAP_NR(addr);
-	if (map_nr < max_mapnr)
-		__free_pages(mem_map + map_nr, order);
-}
-
+#define __free_page(page) __free_pages((page), 0)
 #define free_page(addr) free_pages((addr),0)
 
 extern void show_free_areas(void);

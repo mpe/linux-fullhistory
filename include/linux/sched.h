@@ -725,33 +725,9 @@ extern void daemonize(void);
 extern int do_execve(char *, char **, char **, struct pt_regs *);
 extern int do_fork(unsigned long, unsigned long, struct pt_regs *);
 
-static inline void add_wait_queue(wait_queue_head_t *q, wait_queue_t * wait)
-{
-	unsigned long flags;
-
-	wq_write_lock_irqsave(&q->lock, flags);
-	__add_wait_queue(q, wait);
-	wq_write_unlock_irqrestore(&q->lock, flags);
-}
-
-static inline void add_wait_queue_exclusive(wait_queue_head_t *q,
-							wait_queue_t * wait)
-{
-	unsigned long flags;
-
-	wq_write_lock_irqsave(&q->lock, flags);
-	__add_wait_queue_tail(q, wait);
-	wq_write_unlock_irqrestore(&q->lock, flags);
-}
-
-static inline void remove_wait_queue(wait_queue_head_t *q, wait_queue_t * wait)
-{
-	unsigned long flags;
-
-	wq_write_lock_irqsave(&q->lock, flags);
-	__remove_wait_queue(q, wait);
-	wq_write_unlock_irqrestore(&q->lock, flags);
-}
+extern void FASTCALL(add_wait_queue(wait_queue_head_t *q, wait_queue_t * wait));
+extern void FASTCALL(add_wait_queue_exclusive(wait_queue_head_t *q, wait_queue_t * wait));
+extern void FASTCALL(remove_wait_queue(wait_queue_head_t *q, wait_queue_t * wait));
 
 #define __wait_event(wq, condition) 					\
 do {									\

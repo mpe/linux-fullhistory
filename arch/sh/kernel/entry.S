@@ -52,7 +52,7 @@
 flags		=  4
 sigpending	=  8
 need_resched	= 20
-tsk_ptrace	= 60
+tsk_ptrace	= 24
 
 PT_TRACESYS  = 0x00000002
 PF_USEDFPU   = 0x00100000
@@ -275,12 +275,26 @@ ENTRY(ret_from_fork)
  *	Arguments #4 to #6: R0, R1, R2
  *	TRA: (number of arguments + 0x10) x 4
  *
+ * This code also handles delegating other traps to the BIOS/gdb stub
+ * according to:
+ *
+ * Trap number
+ * (TRA>>2) 	    Purpose
+ * -------- 	    -------
+ * 0x0-0xf  	    old syscall ABI
+ * 0x10-0x1f  	    new syscall ABI
+ * 0x20-0xff  	    delegated through debug_trap to BIOS/gdb stub.
+ *
+ * Note: When we're first called, the TRA value must be shifted
+ * right 2 bits in order to get the value that was used as the "trapa"
+ * argument.
  */
 
 system_call:
 	mov.l	1f, $r9
 	mov.l	@$r9, $r8
 	!
+	! Is the trap argument >= 0x20? (TRA will be >= 0x80)
 	mov	#0x20, $r9
 	extu.b	$r9, $r9
 	shll2	$r9
@@ -531,9 +545,9 @@ restore_all:
 	shlr2	$k0
 	and	#0x3c, $k0
 	cmp/eq	#0x3c, $k0
-	bf/s	7f
-	 mov	$g_imask, $k0
-	shll2	$k0
+	bt/s	7f
+	 shll2	$k0
+	mov	$g_imask, $k0
 	!
 7:	or	$k0, $k2	! Set the IMASK-bits
 	ldc	$k2, $ssr
@@ -648,19 +662,20 @@ handle_exception:
 	! save all registers onto stack.
 	!
 	stc	$ssr, $k0	! from kernel space?
-	shll	$k0		! Check MD bit (bit30)
+	shll	$k0		! Check MD bit (bit30) by shifting it into the T bit
 	shll	$k0
 #if defined(__SH4__)
 	bf/s	8f		! it's from user to kernel transition
 	 mov	$r15, $k0	! save original stack to k0
-	/* Kernel to kernel transition */
+	/* It's a kernel to kernel transition. */
+	/* Is the FPU disabled? */
 	mov.l	2f, $k1
 	stc	$ssr, $k0
 	tst	$k1, $k0
 	mov.l	4f, $k1
-	bf/s	9f		! FPU is not used
+	bf/s	9f		! FPU is not enabled, no need to save it
 	 mov	$r15, $k0	! save original stack to k0
-	! FPU is used, save FPU
+	! FPU is enabled, save it
 	! /* XXX: Need to save another bank of FPU if all FPU feature is used */
 	! /* Currently it's not the case for GCC (only udivsi3_i4, divsi3_i4) */
 	sts.l	$fpul,  @-$r15
@@ -687,7 +702,7 @@ handle_exception:
 	 fmov.s	$fr0, @-$r15
 #else
 	mov.l	3f, $k1
-	bt/s	9f		! it's from kernel to kernel transition
+	bt/s	9f		! it's a kernel to kernel transition, and skip the FPU save.
 	 mov	$r15, $k0	! save original stack to k0 anyway
 #endif
 8:	/* User space to kernel */
@@ -697,7 +712,9 @@ handle_exception:
 	mov	$k1, $r15		! change to kernel stack
 	!
 	mov.l	4f, $k1			! let kernel release FPU
-9:	mov	#-1, $k4
+9:	! Save the user registers on the stack.
+	! At this point, k1 should have been set to the new SR value
+  	mov	#-1, $k4
 	mov.l	$k4, @-$r15		! syscall_nr (default: -1)
 	!
 	sts.l	$macl, @-$r15

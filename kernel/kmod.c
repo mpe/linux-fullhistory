@@ -218,3 +218,26 @@ int request_module(const char * module_name)
 	}
 	return 0;
 }
+
+
+#ifdef CONFIG_HOTPLUG
+/*
+	hotplug path is set via /proc/sys
+	invoked by hotplug-aware bus drivers,
+	with exec_usermodehelper and some thread-spawner
+
+	argv [0] = hotplug_path;
+	argv [1] = "usb", "scsi", "pci", "network", etc;
+	... plus optional type-specific parameters
+	argv [n] = 0;
+
+	envp [*] = HOME, PATH; optional type-specific parameters
+
+	a hotplug bus should invoke this for device add/remove
+	events.  the command is expected to load drivers when
+	necessary, and may perform additional system setup.
+*/
+char hotplug_path[256] = "/sbin/hotplug";
+
+#endif
+

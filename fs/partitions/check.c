@@ -185,14 +185,6 @@ void add_gd_partition(struct gendisk *hd, int minor, int start, int size)
 #endif
 }
 
-int get_hardsect_size(kdev_t dev)
-{
-	if (hardsect_size[MAJOR(dev)] != NULL)
-		return hardsect_size[MAJOR(dev)][MINOR(dev)];
-	else
-		return 512;
-}
-
 unsigned int get_ptable_blocksize(kdev_t dev)
 {
 	int ret = 1024;

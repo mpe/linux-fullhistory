@@ -46,7 +46,7 @@ if [ "$CONFIG_CPU_SUBTYPE_SH7750" = "y" ]; then
    define_bool CONFIG_CPU_SH3 n
    define_bool CONFIG_CPU_SH4 y
 fi
-bool 'Little Endian' CONFIG_LITTLE_ENDIAN
+bool 'Little Endian' CONFIG_CPU_LITTLE_ENDIAN
 if [ "$CONFIG_SH_SOLUTION_ENGINE" = "y" -o "$CONFIG_SH_HP600" = "y" -o \
      "$CONFIG_SH_OVERDRIVE" = "y" ]; then
   define_hex CONFIG_MEMORY_START 0c000000
@@ -168,8 +168,9 @@ if [ "$CONFIG_VT" = "y" ]; then
    bool '  Support for console on virtual terminal' CONFIG_VT_CONSOLE
 fi
 
-tristate 'Serial support' CONFIG_SERIAL
-if [ "$CONFIG_SERIAL" = "y" ]; then
+tristate 'Serial (8250, 16450, 16550 or compatible) support' CONFIG_SERIAL
+tristate 'Serial (SCI, SCIF) support' CONFIG_SH_SCI
+if [ "$CONFIG_SERIAL" = "y" -o "$CONFIG_SH_SCI" = "y" ]; then
    bool '  Support for console on serial port' CONFIG_SERIAL_CONSOLE
 fi
 comment 'Unix 98 PTY support'
@@ -218,5 +219,9 @@ mainmenu_option next_comment
 comment 'Kernel hacking'
 
 bool 'Magic SysRq key' CONFIG_MAGIC_SYSRQ
-bool 'GDB Stub kernel debug' CONFIG_DEBUG_KERNEL_WITH_GDB_STUB
+bool 'Use LinuxSH standard BIOS' CONFIG_SH_STANDARD_BIOS
+if [ "$CONFIG_SH_STANDARD_BIOS" = "y" ]; then
+    bool 'GDB Stub kernel debug' CONFIG_DEBUG_KERNEL_WITH_GDB_STUB
+    bool 'Early printk support' CONFIG_SH_EARLY_PRINTK
+fi
 endmenu

@@ -226,12 +226,12 @@ static int raid0_stop (mddev_t *mddev)
 static int raid0_make_request (request_queue_t *q, mddev_t *mddev,
 					int rw, struct buffer_head * bh)
 {
-	int blk_in_chunk, chunksize_bits, chunk, chunk_size;
+	unsigned int sect_in_chunk, chunksize_bits, chunk, chunk_size;
 	raid0_conf_t *conf = mddev_to_conf(mddev);
 	struct raid0_hash *hash;
 	struct strip_zone *zone;
 	mdk_rdev_t *tmp_dev;
-	long block, rblock;
+	unsigned long block, rsect;
 
 	chunk_size = mddev->param.chunk_size >> 10;
 	chunksize_bits = ffz(~chunk_size);
@@ -255,17 +255,18 @@ static int raid0_make_request (request_queue_t *q, mddev_t *mddev,
 	} else
 		zone = hash->zone0;
     
-	blk_in_chunk = block & (chunk_size -1);
+	sect_in_chunk = bh->b_rsector & ((chunk_size<<1) -1);
 	chunk = (block - zone->zone_offset) / (zone->nb_dev << chunksize_bits);
 	tmp_dev = zone->dev[(block >> chunksize_bits) % zone->nb_dev];
-	rblock = (chunk << chunksize_bits) + blk_in_chunk + zone->dev_offset;
+	rsect = ((chunk << chunksize_bits) + zone->dev_offset)<<1
+		+ sect_in_chunk;
  
 	/*
 	 * The new BH_Lock semantics in ll_rw_blk.c guarantee that this
 	 * is the only IO operation happening on this bh.
 	 */
 	bh->b_rdev = tmp_dev->dev;
-	bh->b_rsector = rblock << 1;
+	bh->b_rsector = rsect;
 
 	/*
 	 * Let the main block layer submit the IO and resolve recursion:

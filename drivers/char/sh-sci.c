@@ -45,21 +45,23 @@
 #include <linux/generic_serial.h>
 
 #ifdef CONFIG_DEBUG_KERNEL_WITH_GDB_STUB
-static void gdb_detach(void);
-static int in_gdb = 1;
-#define IN_GDB in_gdb
+#include <asm/sh_bios.h>
 #endif
+
 #include "sh-sci.h"
 
 #ifdef CONFIG_SERIAL_CONSOLE
 static struct console sercons;
-static struct sci_port* sercons_port;
+static struct sci_port* sercons_port=0;
 static int sercons_baud;
 #endif
 
 /* Function prototypes */
 static void sci_init_pins_sci(struct sci_port* port, unsigned int cflag);
+#ifndef SCI_ONLY
 static void sci_init_pins_scif(struct sci_port* port, unsigned int cflag);
+#endif
+static void sci_init_pins_irda(struct sci_port* port, unsigned int cflag);
 static void sci_disable_tx_interrupts(void *ptr);
 static void sci_enable_tx_interrupts(void *ptr);
 static void sci_disable_rx_interrupts(void *ptr);
@@ -85,6 +87,117 @@ int sci_debug = 0;
 #ifdef MODULE
 MODULE_PARM(sci_debug, "i");
 #endif
+
+static void put_char(struct sci_port *port, char c)
+{
+	unsigned long flags;
+	unsigned short status;
+
+	save_and_cli(flags);
+
+	do
+		status = sci_in(port, SCxSR);
+	while (!(status & SCxSR_TDxE(port)));
+  
+	sci_out(port, SCxTDR, c);
+	sci_in(port, SCxSR);            /* Dummy read */
+	sci_out(port, SCxSR, SCxSR_TDxE_CLEAR(port));
+
+	restore_flags(flags);
+}
+
+static void handle_error(struct sci_port *port)
+{				/* Clear error flags */
+	sci_out(port, SCxSR, SCxSR_ERROR_CLEAR(port));
+}
+
+static int get_char(struct sci_port *port)
+{
+	unsigned long flags;
+	unsigned short status;
+	int c;
+
+	save_and_cli(flags);
+        do {
+		status = sci_in(port, SCxSR);
+		if (status & SCxSR_ERRORS(port)) {
+			handle_error(port);
+			continue;
+		}
+	} while (!(status & SCxSR_RDxF(port)));
+	c = sci_in(port, SCxRDR);
+	sci_in(port, SCxSR);            /* Dummy read */
+	sci_out(port, SCxSR, SCxSR_RDxF_CLEAR(port));
+	restore_flags(flags);
+
+	return c;
+}
+
+#ifdef CONFIG_DEBUG_KERNEL_WITH_GDB_STUB
+
+/* Taken from sh-stub.c of GDB 4.18 */
+static const char hexchars[] = "0123456789abcdef";
+
+static __inline__ char highhex(int  x)
+{
+	return hexchars[(x >> 4) & 0xf];
+}
+
+static __inline__ char lowhex(int  x)
+{
+	return hexchars[x & 0xf];
+}
+
+#endif
+
+/*
+ * Send the packet in buffer.  The host gets one chance to read it.
+ * This routine does not wait for a positive acknowledge.
+ */
+
+static void put_string(struct sci_port *port,
+				  const char *buffer, int count)
+{
+	int i;
+	const unsigned char *p = buffer;
+#ifdef CONFIG_DEBUG_KERNEL_WITH_GDB_STUB
+	int checksum;
+
+    	/* This call only does a trap the first time it is
+	 * called, and so is safe to do here unconditionally
+	 */
+	if (sh_bios_in_gdb_mode()) {
+	    /*  $<packet info>#<checksum>. */
+	    do {
+		unsigned char c;
+		put_char(port, '$');
+		put_char(port, 'O'); /* 'O'utput to console */
+		checksum = 'O';
+
+		for (i=0; i<count; i++) { /* Don't use run length encoding */
+			int h, l;
+
+			c = *p++;
+			h = highhex(c);
+			l = lowhex(c);
+			put_char(port, h);
+			put_char(port, l);
+			checksum += h + l;
+		}
+		put_char(port, '#');
+		put_char(port, highhex(checksum));
+		put_char(port, lowhex(checksum));
+	    } while  (get_char(port) != '+');
+	} else
+#endif
+	for (i=0; i<count; i++) {
+		if (*p == 10)
+			put_char(port, '\r');
+		put_char(port, *p++);
+	}
+}
+
+
 
 static struct real_driver sci_real_driver = {
 	sci_disable_tx_interrupts,
@@ -136,6 +249,16 @@ static void sci_init_pins_scif(struct sci_port* port, unsigned int cflag)
 		/* Set /RTS2 (bit6) = 0 */
 		ctrl_outb(data&0xbf, SCPDR);
 	}
+	sci_out(port, SCFCR, fcr_val);
+}
+
+static void sci_init_pins_irda(struct sci_port* port, unsigned int cflag)
+{
+	unsigned int fcr_val = 0;
+
+	if (cflag & CRTSCTS)
+		fcr_val |= SCFCR_MCE;
+
 	sci_out(port, SCFCR, fcr_val);
 }
 
@@ -359,7 +482,7 @@ static void sci_transmit_chars(struct sci_port *port)
 	} else {
 		if (port->type == PORT_SCIF) {
 			sci_in(port, SCxSR); /* Dummy read */
-			sci_out(port, SCxSR, SCIF_TDFE);
+			sci_out(port, SCxSR, SCxSR_TDxE_CLEAR(port));
 		}
 		ctrl |= SCI_CTRL_FLAGS_TIE;
 	}
@@ -715,7 +838,7 @@ static int sci_read_proc(char *page, char **start, off_t off, int count,
 	struct sci_port *port;
 	int len = 0;
 	
-        len += sprintf(page, "serinfo:1.0\n");
+        len += sprintf(page, "sciinfo:0.1\n");
 	for (i = 0; i < SCI_NPORTS && len < 4000; i++) {
 		port = &sci_ports[i];
 		len += sprintf(page+len, "%d: uart:%s address: %08x\n", i,
@@ -737,8 +860,8 @@ static int sci_init_drivers(void)
 
 	memset(&sci_driver, 0, sizeof(sci_driver));
 	sci_driver.magic = TTY_DRIVER_MAGIC;
-	sci_driver.driver_name = "serial";
-	sci_driver.name = "ttyS";
+	sci_driver.driver_name = "sci";
+	sci_driver.name = "ttySC";
 	sci_driver.major = SCI_MAJOR;
 	sci_driver.minor_start = SCI_MINOR_START;
 	sci_driver.num = SCI_NPORTS;
@@ -774,7 +897,7 @@ static int sci_init_drivers(void)
 
 	sci_callout_driver = sci_driver;
 	sci_callout_driver.name = "cusc";
-	sci_callout_driver.major = SCI_MAJOR + 1;
+	sci_callout_driver.major = SCI_MAJOR+1;
 	sci_callout_driver.subtype = SERIAL_TYPE_CALLOUT;
 	sci_callout_driver.read_proc = NULL;
 
@@ -808,17 +931,22 @@ static int sci_init_drivers(void)
 int __init sci_init(void)
 {
 	struct sci_port *port;
-	int i;
+	int i, j;
 	void (*handlers[3])(int irq, void *ptr, struct pt_regs *regs) = {
 		sci_er_interrupt, sci_rx_interrupt, sci_tx_interrupt
 	};
 
-	for (port = &sci_ports[0]; port < &sci_ports[SCI_NPORTS]; port++) {
+	printk("SuperH SCI(F) driver initialized\n");
+
+	for (j=0; j<SCI_NPORTS; j++) {
+		port = &sci_ports[j];
+		printk("ttySC%d at 0x%08x is a %s\n", j, port->base,
+		       (port->type == PORT_SCI) ? "SCI" : "SCIF");
 		for (i=0; i<3; i++) {
 			set_ipr_data(port->irqs[i], port->intc_addr, port->intc_pos, SCI_PRIORITY);
 
 			if (request_irq(port->irqs[i], handlers[i], SA_INTERRUPT,
-					"serial", port)) {
+					"sci", port)) {
 				printk(KERN_ERR "sci: Cannot allocate irq.\n");
 				return -ENODEV;
 			}
@@ -829,7 +957,7 @@ int __init sci_init(void)
 	sci_init_drivers();
 
 #ifdef CONFIG_DEBUG_KERNEL_WITH_GDB_STUB
-	gdb_detach();
+	sh_bios_gdb_detach();
 #endif
 	return 0;		/* Return -EIO when not detected */
 }
@@ -855,27 +983,6 @@ void cleanup_module(void)
 #endif
 
 #ifdef CONFIG_SERIAL_CONSOLE
-/*
- * ------------------------------------------------------------
- * Serial console driver for SH-3/SH-4 SCI (with no FIFO)
- * ------------------------------------------------------------
- */
-
-#ifdef CONFIG_DEBUG_KERNEL_WITH_GDB_STUB
-
-static void __init gdb_detach(void)
-{
-	asm volatile("trapa	#0xff");
-
-	if (in_gdb == 1) {
-		in_gdb = 0;
-		get_char(sercons_port);
-		put_char(sercons_port, '\r');
-		put_char(sercons_port, '\n');
-	}
-}
-#endif
-
 /*
  *	Print a string to the serial port trying not to disturb
  *	any possible real use of the port...
@@ -992,8 +1099,18 @@ static struct console sercons = {
  *	Register console.
  */
 
-void __init serial_console_init(void)
+#ifdef CONFIG_SH_EARLY_PRINTK
+extern void sh_console_unregister (void);
+#endif
+
+void __init sci_console_init(void)
 {
 	register_console(&sercons);
+#ifdef CONFIG_SH_EARLY_PRINTK
+	/* Now that the real console is available, unregister the one we
+	 * used while first booting.
+	 */
+	sh_console_unregister();
+#endif
 }
 #endif /* CONFIG_SERIAL_CONSOLE */

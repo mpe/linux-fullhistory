@@ -44,6 +44,10 @@ ifdef CONFIG_HD64461
 O_OBJS += setup_hd64461.o
 endif
 
+ifdef CONFIG_SH_STANDARD_BIOS
+O_OBJS += sh_bios.o
+endif
+
 all: kernel.o head.o init_task.o
 
 entry.o: entry.S

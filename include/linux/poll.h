@@ -10,25 +10,12 @@
 #include <linux/mm.h>
 #include <asm/uaccess.h>
 
-
-struct poll_table_entry {
-	struct file * filp;
-	wait_queue_t wait;
-	wait_queue_head_t * wait_address;
-};
-
-struct poll_table_page {
-	struct poll_table_page * next;
-	unsigned int nr;
-	struct poll_table_entry * entry;
-};
+struct poll_table_page;
 
 typedef struct poll_table_struct {
 	int error;
 	struct poll_table_page * table;
 } poll_table;
-
-#define __MAX_POLL_TABLE_ENTRIES ((PAGE_SIZE - sizeof (struct poll_table_page)) / sizeof (struct poll_table_entry))
 
 extern void __pollwait(struct file * filp, wait_queue_head_t * wait_address, poll_table *p);
 

@@ -52,6 +52,13 @@ static void __init init_smsc(void)
 	smsc_config(ACTIVATE_INDEX, 0x01);
 	smsc_config(IO_BASE_HI_INDEX, 0x03);
 	smsc_config(IO_BASE_LO_INDEX, 0xf8);
+	smsc_config(IRQ_SELECT_INDEX, 4); /* IRQ4 */
+
+	/* COM2 */
+	smsc_config(CURRENT_LDN_INDEX, LDN_COM2);
+	smsc_config(ACTIVATE_INDEX, 0x01);
+	smsc_config(IO_BASE_HI_INDEX, 0x02);
+	smsc_config(IO_BASE_LO_INDEX, 0xf8);
 	smsc_config(IRQ_SELECT_INDEX, 3); /* IRQ3 */
 
 	/* RTC */
@@ -59,7 +66,7 @@ static void __init init_smsc(void)
 	smsc_config(ACTIVATE_INDEX, 0x01);
 	smsc_config(IRQ_SELECT_INDEX, 8); /* IRQ8 */
 
-	/* XXX: COM2, PARPORT, KBD, and MOUSE will come here... */
+	/* XXX: PARPORT, KBD, and MOUSE will come here... */
 	outb_p(CONFIG_EXIT, CONFIG_PORT);
 }
 

@@ -31,7 +31,7 @@ static int chandev_conf_read=FALSE;
 
 static void *chandev_alloc_listmember(list **listhead,size_t size)
 {
-	void *newmember=kmalloc(GFP_KERNEL,size);
+	void *newmember=kmalloc(size, GFP_KERNEL);
 	if(newmember)
 		add_to_list(listhead,newmember);
 	return(newmember);

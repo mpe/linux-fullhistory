@@ -1,6 +1,6 @@
 /* Driver for USB Mass Storage compliant devices
  *
- * $Id: usb.c,v 1.3 2000/06/27 10:20:39 mdharm Exp $
+ * $Id: usb.c,v 1.6 2000/07/20 23:36:22 mdharm Exp $
  *
  * Current development and maintainance by:
  *   (c) 1999, 2000 Matthew Dharm (mdharm-usb@one-eyed-alien.net)
@@ -48,11 +48,11 @@
 #include "transport.h"
 #include "protocol.h"
 #include "debug.h"
+#ifdef CONFIG_USB_STORAGE_HP8200e
+#include "scm.h"
+#endif
 
 #include <linux/module.h>
- /*FIXME: note that this next include is needed for the new sleeping system
-  * which is not implemented yet
-  */
 #include <linux/sched.h>
 #include <linux/errno.h>
 #include <linux/init.h>
@@ -88,6 +88,7 @@ static struct usb_driver storage_driver = {
 
 static int usb_stor_control_thread(void * __us)
 {
+	wait_queue_t wait;
 	struct us_data *us = (struct us_data *)__us;
 	int action;
 
@@ -104,14 +105,22 @@ static int usb_stor_control_thread(void * __us)
 
 	unlock_kernel();
 
+	/* set up for wakeups by new commands */
+	init_waitqueue_entry(&wait, current);
+	init_waitqueue_head(&(us->wqh));
+	add_wait_queue(&(us->wqh), &wait);
+
 	/* signal that we've started the thread */
 	up(&(us->notify));
 
 	for(;;) {
+		set_current_state(TASK_INTERRUPTIBLE);
 		US_DEBUGP("*** thread sleeping.\n");
-		down(&(us->sleeper));
-		down(&(us->queue_exclusion));
+		schedule();
 		US_DEBUGP("*** thread awakened.\n");
+
+		/* lock access to the queue element */
+		down(&(us->queue_exclusion));
 
 		/* take the command off the queue */
 		action = us->action;
@@ -216,6 +225,11 @@ static int usb_stor_control_thread(void * __us)
 static struct us_unusual_dev us_unusual_dev_list[] = {
 	{ 0x03f0, 0x0107, 0x0200, 0x0200, "HP USB CD-Writer Plus",
 		US_SC_8070, US_PR_CB, 0}, 
+#ifdef CONFIG_USB_STORAGE_HP8200e
+	{ 0x03f0, 0x0207, 0x0001, 0x0001, "HP USB CD-Writer Plus 8200e",
+		US_SC_8070, US_PR_SCM_ATAPI, 
+		US_FL_ALT_LENGTH | US_FL_NEED_INIT | US_FL_SINGLE_LUN}, 
+#endif
 	{ 0x04e6, 0x0001, 0x0200, 0x0200, "Matshita LS-120",
 		US_SC_8020, US_PR_CB, US_FL_SINGLE_LUN},
 	{ 0x04e6, 0x0002, 0x0100, 0x0100, "Shuttle eUSCSI Bridge",
@@ -518,7 +532,6 @@ static void * storage_probe(struct usb_device *dev, unsigned int ifnum)
 		}
 
 		/* Initialize the mutexes only when the struct is new */
-		init_MUTEX_LOCKED(&(ss->sleeper));
 		init_MUTEX_LOCKED(&(ss->notify));
 		init_MUTEX_LOCKED(&(ss->ip_waitq));
 		init_MUTEX(&(ss->queue_exclusion));
@@ -582,6 +595,15 @@ static void * storage_probe(struct usb_device *dev, unsigned int ifnum)
 			ss->transport = usb_stor_Bulk_transport;
 			ss->transport_reset = usb_stor_Bulk_reset;
 			ss->max_lun = usb_stor_Bulk_max_lun(ss);
+			break;
+			
+#ifdef CONFIG_USB_STORAGE_HP8200e
+		case US_PR_SCM_ATAPI:
+			ss->transport_name = "SCM/ATAPI";
+			ss->transport = hp8200e_transport;
+			ss->transport_reset = usb_stor_CB_reset;
+			ss->max_lun = 1;
+#endif
 			break;
 			
 		default:

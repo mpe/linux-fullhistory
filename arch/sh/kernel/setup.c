@@ -37,7 +37,10 @@
 #include <asm/system.h>
 #include <asm/io.h>
 #include <asm/smp.h>
-
+#ifdef CONFIG_SH_EARLY_PRINTK
+#include <linux/console.h>
+#include <asm/sh_bios.h>
+#endif
 
 /*
  * Machine setup..
@@ -101,14 +104,83 @@ static struct resource ram_resources[] = {
 	{ "Kernel data", 0, 0 }
 };
 
-/* System ROM resources */
-#define MAXROMS 6
-static struct resource rom_resources[MAXROMS] = {
-	{ "System ROM", 0xF0000, 0xFFFFF, IORESOURCE_BUSY },
-	{ "Video ROM", 0xc0000, 0xc7fff }
+static unsigned long memory_start, memory_end;
+
+#ifdef CONFIG_SH_EARLY_PRINTK
+/*
+ *	Print a string through the BIOS
+ */
+static void sh_console_write(struct console *co, const char *s,
+				 unsigned count)
+{
+    	sh_bios_console_write(s, count);
+}
+
+/*
+ *	Receive character from the serial port
+ */
+static int sh_console_wait_key(struct console *co)
+{
+	/* Not implemented yet */
+	return 0;
+}
+
+static kdev_t sh_console_device(struct console *c)
+{
+    	/* TODO: this is totally bogus */
+	/* return MKDEV(SCI_MAJOR, SCI_MINOR_START + c->index); */
+	return 0;
+}
+
+/*
+ *	Setup initial baud/bits/parity. We do two things here:
+ *	- construct a cflag setting for the first rs_open()
+ *	- initialize the serial port
+ *	Return non-zero if we didn't find a serial port.
+ */
+static int __init sh_console_setup(struct console *co, char *options)
+{
+	int	cflag = CREAD | HUPCL | CLOCAL;
+
+	/*
+	 *	Now construct a cflag setting.
+	 *  	TODO: this is a totally bogus cflag, as we have
+	 *  	no idea what serial settings the BIOS is using, or
+	 *  	even if its using the serial port at all.
+	 */
+    	cflag |= B115200 | CS8 | /*no parity*/0;
+
+	co->cflag = cflag;
+
+	return 0;
+}
+
+static struct console sh_console = {
+	"bios",
+	sh_console_write,
+	NULL,
+	sh_console_device,
+	sh_console_wait_key,
+	NULL,
+	sh_console_setup,
+	CON_PRINTBUFFER,
+	-1,
+	0,
+	NULL
 };
 
-static unsigned long memory_start, memory_end;
+void sh_console_init(void)
+{
+	register_console(&sh_console);
+}
+
+void sh_console_unregister(void)
+{
+	unregister_console(&sh_console);
+}
+
+#endif
+
 
 static inline void parse_mem_cmdline (char ** cmdline_p)
 {
@@ -153,6 +225,10 @@ void __init setup_arch(char **cmdline_p)
 	unsigned long bootmap_size;
 	unsigned long start_pfn, max_pfn, max_low_pfn;
 
+#ifdef CONFIG_SH_EARLY_PRINTK
+	sh_console_init();
+#endif
+	
 	ROOT_DEV = to_kdev_t(ORIG_ROOT_DEV);
 
 #ifdef CONFIG_BLK_DEV_RAM
