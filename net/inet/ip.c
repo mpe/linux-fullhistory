@@ -284,7 +284,10 @@ int ip_build_header(struct sk_buff *skb, unsigned long saddr, unsigned long dadd
 	 
 	if (*dev == NULL) 
 	{
-		rt = ip_rt_route(daddr, &optmem, &src);
+		if(skb->localroute)
+			rt = ip_rt_local(daddr, &optmem, &src);
+		else
+			rt = ip_rt_route(daddr, &optmem, &src);
 		if (rt == NULL) 
 		{
 			ip_statistics.IpOutNoRoutes++;
@@ -308,7 +311,10 @@ int ip_build_header(struct sk_buff *skb, unsigned long saddr, unsigned long dadd
 		/* 
 		 *	We still need the address of the first hop. 
 		 */
-		rt = ip_rt_route(daddr, &optmem, &src);
+		if(skb->localroute)
+			rt = ip_rt_local(daddr, &optmem, &src);
+		else
+			rt = ip_rt_route(daddr, &optmem, &src);
 		/*
 		 *	If the frame is from us and going off machine it MUST MUST MUST
 		 *	have the output device ip address and never the loopback

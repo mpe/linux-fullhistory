@@ -644,32 +644,7 @@ depca_probe1(struct device *dev, short ioaddr)
 	dev->mem_start = 0;
 	
 	/* Fill in the generic field of the device structure. */
-	for (i = 0; i < DEV_NUMBUFFS; i++) {
-	  dev->buffs[i] = NULL;
-	}
-
-	dev->hard_header     = eth_header;
-	dev->add_arp	     = eth_add_arp;
-	dev->queue_xmit	     = dev_queue_xmit;
-	dev->rebuild_header  = eth_rebuild_header;
-	dev->type_trans	     = eth_type_trans;
-	
-	dev->type	     = ARPHRD_ETHER;
-	dev->hard_header_len = ETH_HLEN;
-	dev->mtu	     = 1500; /* eth_mtu */
-	dev->addr_len	     = ETH_ALEN;
-
-	for (i = 0; i < dev->addr_len; i++) {
-	  dev->broadcast[i]=0xff;
-	}
-	
-	/* New-style flags. */
-	dev->flags	     = IFF_BROADCAST;
-	dev->family	     = AF_INET;
-	dev->pa_addr	     = 0;
-	dev->pa_brdaddr	     = 0;
-	dev->pa_mask	     = 0;
-	dev->pa_alen	     = sizeof(unsigned long);
+	ether_setup(dev);
       }
     } else {
       status = -ENXIO;
@@ -831,14 +806,6 @@ depca_start_xmit(struct sk_buff *skb, struct device *dev)
 	dev_tint(dev);
 	return 0;
     }
-
-    /* Fill in the ethernet header. */
-    if (!skb->arp  &&  dev->rebuild_header(skb->data, dev)) {
-	skb->dev = dev;
-	arp_queue (skb);
-	return 0;
-    }
-    skb->arp=1;
 
     if (skb->len <= 0) {
       return 0;

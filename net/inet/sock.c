@@ -489,7 +489,8 @@ int sock_setsockopt(struct sock *sk, int level, int optname,
 
 		case SO_DEBUG:	
 			sk->debug=val?1:0;
-		case SO_DONTROUTE:	/* Still to be implemented */
+		case SO_DONTROUTE:
+			sk->localroute=val?1:0;
 			return(0);
 		case SO_BROADCAST:
 			sk->broadcast=val?1:0;
@@ -580,8 +581,8 @@ int sock_getsockopt(struct sock *sk, int level, int optname,
 			val = sk->debug;
 			break;
 		
-		case SO_DONTROUTE:	/* One last option to implement */
-			val = 0;
+		case SO_DONTROUTE:
+			val = sk->localroute;
 			break;
 		
 		case SO_BROADCAST:
@@ -852,6 +853,7 @@ inet_create(struct socket *sock, int protocol)
   sk->send_head = NULL;
   sk->timeout = 0;
   sk->broadcast = 0;
+  sk->localroute = 0;
   sk->timer.data = (unsigned long)sk;
   sk->timer.function = &net_timer;
   skb_queue_head_init(&sk->back_log);

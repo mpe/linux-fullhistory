@@ -68,7 +68,7 @@ struct sk_buff {
 				used,
 				free,
 				arp;
-  unsigned char			tries,lock;
+  unsigned char			tries,lock,localroute;
   unsigned short		users;		/* User count - see datagram.c (and soon seqpacket.c/stream.c) */
   unsigned long			padding[0];
   unsigned char			data[0];

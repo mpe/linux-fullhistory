@@ -142,143 +142,162 @@ raw_rcv(struct sk_buff *skb, struct device *dev, struct options *opt,
   return(0);
 }
 
+/*
+ *	Send a RAW IP packet.
+ */
 
-/* This will do terrible things if len + ipheader + devheader > dev->mtu */
-static int
-raw_sendto(struct sock *sk, unsigned char *from, int len,
-	   int noblock,
-	   unsigned flags, struct sockaddr_in *usin, int addr_len)
+static int raw_sendto(struct sock *sk, unsigned char *from, 
+	int len, int noblock, unsigned flags, struct sockaddr_in *usin, int addr_len)
 {
-  struct sk_buff *skb;
-  struct device *dev=NULL;
-  struct sockaddr_in sin;
-  int tmp;
-  int err;
+	struct sk_buff *skb;
+	struct device *dev=NULL;
+	struct sockaddr_in sin;
+	int tmp;
+	int err;
 
-  DPRINTF((DBG_RAW, "raw_sendto(sk=%X, from=%X, len=%d, noblock=%d, flags=%X,\n"
-	   "            usin=%X, addr_len = %d)\n", sk, from, len, noblock,
-	   flags, usin, addr_len));
+	DPRINTF((DBG_RAW, "raw_sendto(sk=%X, from=%X, len=%d, noblock=%d, flags=%X,\n"
+		"            usin=%X, addr_len = %d)\n", sk, from, len, noblock,
+		flags, usin, addr_len));
 
-  /* Check the flags. */
-  if (flags) return(-EINVAL);
-  if (len < 0) return(-EINVAL);
+	/*
+	 *	Check the flags. Only MSG_DONTROUTE is permitted.
+	 */
+	 
+	if (flags&MSG_DONTROUTE)
+		return(-EINVAL);
+	if (len < 0) 
+		return(-EINVAL);
 
-  err=verify_area(VERIFY_READ,from,len);
-  if(err)
-  	return err;
-  /* Get and verify the address. */
-  if (usin) {
-	if (addr_len < sizeof(sin)) return(-EINVAL);
-	err=verify_area (VERIFY_READ, usin, sizeof (sin));
+	err=verify_area(VERIFY_READ,from,len);
 	if(err)
 		return err;
-	memcpy_fromfs(&sin, usin, sizeof(sin));
-	if (sin.sin_family && sin.sin_family != AF_INET) return(-EINVAL);
-  } else {
-	if (sk->state != TCP_ESTABLISHED) return(-EINVAL);
-	sin.sin_family = AF_INET;
-	sin.sin_port = sk->protocol;
-	sin.sin_addr.s_addr = sk->daddr;
-  }
-  if (sin.sin_port == 0) sin.sin_port = sk->protocol;
-  
-  if (sk->broadcast == 0 && ip_chk_addr(sin.sin_addr.s_addr)==IS_BROADCAST)
-  	return -EACCES;
+	/*
+	 *	Get and verify the address. 
+	 */
 
-  sk->inuse = 1;
-  skb = NULL;
-  while (skb == NULL) {
-  	if(sk->err!=0)
-  	{
-  		err= -sk->err;
-  		sk->err=0;
-  		release_sock(sk);
-  		return(err);
-  	}
-  	
-	skb = sk->prot->wmalloc(sk,
-			len + sk->prot->max_header,
-			0, GFP_KERNEL);
-	if (skb == NULL) {
-		int tmp;
-
-		DPRINTF((DBG_RAW, "raw_sendto: write buffer full?\n"));
-		if (noblock) 
-			return(-EAGAIN);
-		tmp = sk->wmem_alloc;
-		release_sock(sk);
-		cli();
-		if (tmp <= sk->wmem_alloc) {
-			interruptible_sleep_on(sk->sleep);
-			if (current->signal & ~current->blocked) {
-				sti();
-				return(-ERESTARTSYS);
-			}
-		}
-		sk->inuse = 1;
-		sti();
+	if (usin) 
+	{
+		if (addr_len < sizeof(sin)) 
+			return(-EINVAL);
+		err=verify_area (VERIFY_READ, usin, sizeof (sin));
+		if(err)
+			return err;
+		memcpy_fromfs(&sin, usin, sizeof(sin));
+		if (sin.sin_family && sin.sin_family != AF_INET) 
+			return(-EINVAL);
 	}
-  }
-  skb->sk = sk;
+	else 
+	{
+		if (sk->state != TCP_ESTABLISHED) 
+			return(-EINVAL);
+		sin.sin_family = AF_INET;
+		sin.sin_port = sk->protocol;
+		sin.sin_addr.s_addr = sk->daddr;
+	}
+	if (sin.sin_port == 0) 
+		sin.sin_port = sk->protocol;
+  
+	if (sk->broadcast == 0 && ip_chk_addr(sin.sin_addr.s_addr)==IS_BROADCAST)
+		return -EACCES;
 
-  skb->free = 1;
+	sk->inuse = 1;
+	skb = NULL;
+	while (skb == NULL) 
+	{
+  		if(sk->err!=0)
+  		{
+  			err= -sk->err;
+  			sk->err=0;
+  			release_sock(sk);
+  			return(err);
+  		}
+  	
+		skb = sk->prot->wmalloc(sk,
+				len + sk->prot->max_header,
+				0, GFP_KERNEL);
+		if (skb == NULL) 
+		{
+			int tmp;
 
-  tmp = sk->prot->build_header(skb, sk->saddr, 
+			DPRINTF((DBG_RAW, "raw_sendto: write buffer full?\n"));
+			if (noblock) 
+				return(-EAGAIN);
+			tmp = sk->wmem_alloc;
+			release_sock(sk);
+			cli();
+			if (tmp <= sk->wmem_alloc) {
+				interruptible_sleep_on(sk->sleep);
+				if (current->signal & ~current->blocked) {
+					sti();
+					return(-ERESTARTSYS);
+				}
+			}
+			sk->inuse = 1;
+			sti();
+		}
+	}
+	skb->sk = sk;
+	skb->free = 1;
+	skb->localroute = sk->localroute | (flags&MSG_DONTROUTE);
+
+	tmp = sk->prot->build_header(skb, sk->saddr, 
 			       sin.sin_addr.s_addr, &dev,
 			       sk->protocol, sk->opt, skb->mem_len, sk->ip_tos,sk->ip_ttl);
-  if (tmp < 0) {
-	DPRINTF((DBG_RAW, "raw_sendto: error building ip header.\n"));
-	kfree_skb(skb,FREE_WRITE);
-	release_sock(sk);
-	return(tmp);
-  }
+	if (tmp < 0) 
+	{
+		DPRINTF((DBG_RAW, "raw_sendto: error building ip header.\n"));
+		kfree_skb(skb,FREE_WRITE);
+		release_sock(sk);
+		return(tmp);
+	}
 
-  /* verify_area(VERIFY_WRITE, from, len);*/
-  memcpy_fromfs(skb->data + tmp, from, len);
+	memcpy_fromfs(skb->data + tmp, from, len);
 
-  /* If we are using IPPROTO_RAW, we need to fill in the source address in
-     the IP header */
+	/*
+	 *	If we are using IPPROTO_RAW, we need to fill in the source address in
+	 *     	the IP header 
+	 */
 
-  if(sk->protocol==IPPROTO_RAW) {
-    unsigned char *buff;
-    struct iphdr *iph;
+	if(sk->protocol==IPPROTO_RAW) 
+	{
+		unsigned char *buff;
+		struct iphdr *iph;
 
-    buff = skb->data;
-    buff += tmp;
-    iph = (struct iphdr *)buff;
-    iph->saddr = sk->saddr;
-  }
+		buff = skb->data;
+		buff += tmp;
 
-  skb->len = tmp + len;
+		iph = (struct iphdr *)buff;
+		iph->saddr = sk->saddr;
+	}
+
+	skb->len = tmp + len;
   
-  sk->prot->queue_xmit(sk, dev, skb, 1);
-  release_sock(sk);
-  return(len);
+	sk->prot->queue_xmit(sk, dev, skb, 1);
+	release_sock(sk);
+	return(len);
 }
 
 
-static int
-raw_write(struct sock *sk, unsigned char *buff, int len, int noblock,
+static int raw_write(struct sock *sk, unsigned char *buff, int len, int noblock,
 	   unsigned flags)
 {
-  return(raw_sendto(sk, buff, len, noblock, flags, NULL, 0));
+	return(raw_sendto(sk, buff, len, noblock, flags, NULL, 0));
 }
 
 
-static void
-raw_close(struct sock *sk, int timeout)
+static void raw_close(struct sock *sk, int timeout)
 {
-  sk->inuse = 1;
-  sk->state = TCP_CLOSE;
+	sk->inuse = 1;
+	sk->state = TCP_CLOSE;
 
-  DPRINTF((DBG_RAW, "raw_close: deleting protocol %d\n",
+	DPRINTF((DBG_RAW, "raw_close: deleting protocol %d\n",
 	   ((struct inet_protocol *)sk->pair)->protocol));
 
-  if (inet_del_protocol((struct inet_protocol *)sk->pair) < 0)
+	if (inet_del_protocol((struct inet_protocol *)sk->pair) < 0)
 		DPRINTF((DBG_RAW, "raw_close: del_protocol failed.\n"));
-  kfree_s((void *)sk->pair, sizeof (struct inet_protocol));
-  sk->pair = NULL;
-  release_sock(sk);
+	kfree_s((void *)sk->pair, sizeof (struct inet_protocol));
+	sk->pair = NULL;
+	release_sock(sk);
 }
 
 

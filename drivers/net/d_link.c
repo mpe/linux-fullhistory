@@ -201,9 +201,10 @@ static unsigned int d_link_debug = D_LINK_DEBUG;
 /*
  * Index to functions, as function prototypes.
  */
-
+#if 0
 /* For tricking tcp.c to announce a small max window (max 2 fast packets please :-) */
 static unsigned long	d_link_rspace(struct sock *sk);
+#endif
 
 /* Routines used internally. (See "convenience macros") */
 static int		d_link_read_status(struct device *dev);
@@ -689,6 +690,10 @@ adapter_init(struct device *dev)
 	sti();
 }
 
+#if 0
+/*
+ *	The new router code (coming soon 8-) ) will fix this properly.
+ */
 #define D_LINK_MIN_WINDOW 1024
 #define D_LINK_MAX_WINDOW 2048
 #define D_LINK_TCP_WINDOW_DIFF 1024
@@ -724,3 +729,6 @@ d_link_rspace(struct sock *sk)
   }
   return(0);
 }
+
+
+#endif

@@ -549,7 +549,7 @@ void dev_transmit(void)
 
 	for (dev = dev_base; dev != NULL; dev = dev->next) 
 	{
-		if (!dev->tbusy) {
+		if (dev->flags != 0 && !dev->tbusy) {
 			/*
 			 *	Kick the device
 			 */

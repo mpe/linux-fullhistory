@@ -364,17 +364,6 @@ fake_volatile:
 		sem_exit();
 	if (current->shm)
 		shm_exit();
-	free_page_tables(current);
-	for (i=0 ; i<NR_OPEN ; i++)
-		if (current->filp[i])
-			sys_close(i);
-	forget_original_parent(current);
-	iput(current->pwd);
-	current->pwd = NULL;
-	iput(current->root);
-	current->root = NULL;
-	iput(current->executable);
-	current->executable = NULL;
 	/* Release all of the old mmap stuff. */
 	
 	{
@@ -390,17 +379,28 @@ fake_volatile:
 		}
 	}
 
+	/* forget local segments */
+	__asm__ __volatile__("mov %w0,%%fs ; mov %w0,%%gs ; lldt %w0"
+		: /* no outputs */
+		: "r" (0));
+	current->tss.ldt = 0;
 	if (current->ldt) {
-		vfree(current->ldt);
+		void * ldt = current->ldt;
 		current->ldt = NULL;
-		for (i=1 ; i<NR_TASKS ; i++) {
-			if (task[i] == current) {
-				set_ldt_desc(gdt+(i<<1)+FIRST_LDT_ENTRY, &default_ldt, 1);
-				load_ldt(i);
-			}
-		}
+		vfree(ldt);
 	}
 
+	free_page_tables(current);
+	for (i=0 ; i<NR_OPEN ; i++)
+		if (current->filp[i])
+			sys_close(i);
+	forget_original_parent(current);
+	iput(current->pwd);
+	current->pwd = NULL;
+	iput(current->root);
+	current->root = NULL;
+	iput(current->executable);
+	current->executable = NULL;
 	/* 
 	 * Check to see if any process groups have become orphaned
 	 * as a result of our exiting, and if they have any stopped

@@ -250,7 +250,7 @@ static void udp_send_check(struct udphdr *uh, unsigned long saddr,
 
 
 static int udp_send(struct sock *sk, struct sockaddr_in *sin,
-	 unsigned char *from, int len)
+	 unsigned char *from, int len, int rt)
 {
 	struct sk_buff *skb;
 	struct device *dev;
@@ -281,6 +281,7 @@ static int udp_send(struct sock *sk, struct sockaddr_in *sin,
 
 	skb->sk       = NULL;	/* to avoid changing sk->saddr */
 	skb->free     = 1;
+	skb->localroute = sk->localroute|(rt&MSG_DONTROUTE);
 
 	/*
 	 *	Now build the IP and MAC header. 
@@ -357,7 +358,7 @@ static int udp_sendto(struct sock *sk, unsigned char *from, int len, int noblock
 	/* 
 	 *	Check the flags. We support no flags for UDP sending
 	 */
-	if (flags) 
+	if (flags&~MSG_DONTROUTE) 
 	  	return(-EINVAL);
 	if (len < 0) 
  	 	return(-EINVAL);
@@ -400,7 +401,7 @@ static int udp_sendto(struct sock *sk, unsigned char *from, int len, int noblock
 	sk->inuse = 1;
 
 	/* Send the packet. */
-	tmp = udp_send(sk, &sin, from, len);
+	tmp = udp_send(sk, &sin, from, len, flags);
 
 	/* The datagram has been sent off.  Release the socket. */
 	release_sock(sk);
@@ -601,27 +602,29 @@ int udp_read(struct sock *sk, unsigned char *buff, int len, int noblock,
 int
 udp_connect(struct sock *sk, struct sockaddr_in *usin, int addr_len)
 {
-  struct sockaddr_in sin;
-  int er;
+	struct sockaddr_in sin;
+	int er;
   
-  if (addr_len < sizeof(sin)) 
-  	return(-EINVAL);
+	if (addr_len < sizeof(sin)) 
+	  	return(-EINVAL);
 
-  er=verify_area(VERIFY_READ, usin, sizeof(sin));
-  if(er)
-  	return er;
+	er=verify_area(VERIFY_READ, usin, sizeof(sin));
+	if(er)
+		return er;
 
-  memcpy_fromfs(&sin, usin, sizeof(sin));
-  if (sin.sin_family && sin.sin_family != AF_INET) 
-  	return(-EAFNOSUPPORT);
+	memcpy_fromfs(&sin, usin, sizeof(sin));
+	if (sin.sin_family && sin.sin_family != AF_INET) 
+	  	return(-EAFNOSUPPORT);
+	if (sin.sin_addr.s_addr==INADDR_ANY)
+		sin.sin_addr.s_addr=ip_my_addr();
 
-  if(!sk->broadcast && ip_chk_addr(sin.sin_addr.s_addr)==IS_BROADCAST)
-    	return -EACCES;			/* Must turn broadcast on first */
+	if(!sk->broadcast && ip_chk_addr(sin.sin_addr.s_addr)==IS_BROADCAST)
+		return -EACCES;			/* Must turn broadcast on first */
   	
-  sk->daddr = sin.sin_addr.s_addr;
-  sk->dummy_th.dest = sin.sin_port;
-  sk->state = TCP_ESTABLISHED;
-  return(0);
+	sk->daddr = sin.sin_addr.s_addr;
+	sk->dummy_th.dest = sin.sin_port;
+	sk->state = TCP_ESTABLISHED;
+	return(0);
 }
 
 

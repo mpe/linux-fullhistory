@@ -132,6 +132,7 @@ struct sock {
   unsigned short		rcvbuf;
   unsigned short		sndbuf;
   unsigned short		type;
+  unsigned char			localroute;	/* Route locally only */
 #ifdef CONFIG_IPX
   ipx_address			ipx_source_addr,ipx_dest_addr;
   unsigned short		ipx_type;

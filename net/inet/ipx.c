@@ -503,6 +503,7 @@ static int ipx_create(struct socket *sock, int protocol)
 	sk->type=sock->type;
 	sk->ipx_type=0;		/* General user level IPX */
 	sk->debug=0;
+	sk->localroute=0;
 	
 	memset(&sk->ipx_dest_addr,'\0',sizeof(sk->ipx_dest_addr));
 	memset(&sk->ipx_source_addr,'\0',sizeof(sk->ipx_source_addr));
@@ -836,7 +837,7 @@ static int ipx_sendto(struct socket *sock, void *ubuf, int len, int noblock,
 	int size;
 	ipx_route *rt;
 
-	if(flags)
+	if(flags&~MSG_DONTROUTE)
 		return -EINVAL;
 	if(len<0)
 		return -EINVAL;
@@ -882,7 +883,8 @@ static int ipx_sendto(struct socket *sock, void *ubuf, int len, int noblock,
 
 	/* Find out where this has to go */
 	rt=ipxrtr_get_dev(sipx.sipx_network);
-	if(rt==NULL)
+	/* No suitable route - no gateways when not routing */
+	if(rt==NULL || ((flags&IPX_RT_ROUTED)&& ((flags&MSG_DONTROUTE)||sk->localroute)))
 	{
 		return -ENETUNREACH;
 	}
@@ -917,7 +919,7 @@ static int ipx_sendto(struct socket *sock, void *ubuf, int len, int noblock,
 	skb->dev=rt->dev;
 	
 	dev->hard_header(skb->data,skb->dev,
-		(rt->flags&IPX_RT_BLUEBOOK)?ntohs(ETH_P_IPX):ntohs(len+sizeof(ipx_packet)),
+		(rt->flags&IPX_RT_BLUEBOOK)?ETH_P_IPX:ETH_P_802_3),
 		(rt->flags&IPX_RT_ROUTED)?rt->router_node:sipx.sipx_node,
 		NULL,
 		len+sizeof(ipx_packet),

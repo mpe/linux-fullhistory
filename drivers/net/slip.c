@@ -1030,6 +1030,12 @@ int sl_set_mac_address(struct device *dev, void *addr)
 	memcpy_fromfs(dev->dev_addr,addr,7);	/* addr is an AX.25 shifted ASCII mac address */
 	return 0;
 }
+
+static int sl_set_dev_mac_address(struct device *dev, void *addr)
+{
+	memcpy(dev->dev_addr,addr,7);
+	return 0;
+}
 #endif
 
 
@@ -1144,7 +1150,7 @@ slip_init(struct device *dev)
   dev->get_stats	= sl_get_stats;
 #ifdef HAVE_SET_MAC_ADDR
 #ifdef CONFIG_AX25
-  dev->set_mac_address  = sl_set_mac_address;
+  dev->set_mac_address  = sl_set_dev_mac_address;
 #endif
 #endif
   dev->hard_header_len	= 0;

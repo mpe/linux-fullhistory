@@ -573,6 +573,42 @@ no_route:
 	return NULL;
 }
 
+struct rtable * ip_rt_local(unsigned long daddr, struct options *opt, unsigned long *src_addr)
+{
+	struct rtable *rt;
+
+	for (rt = rt_base; rt != NULL || early_out ; rt = rt->rt_next) 
+	{
+		/*
+		 *	No routed addressing.
+		 */
+		if (rt->rt_flags&RTF_GATEWAY)
+			continue;
+			
+		if (!((rt->rt_dst ^ daddr) & rt->rt_mask))
+			break;
+		/*
+		 *	broadcast addresses can be special cases.. 
+		 */
+		 
+		if ((rt->rt_dev->flags & IFF_BROADCAST) &&
+		     rt->rt_dev->pa_brdaddr == daddr)
+			break;
+	}
+	
+	if(src_addr!=NULL)
+		*src_addr= rt->rt_dev->pa_addr;
+		
+	if (daddr == rt->rt_dev->pa_addr) {
+		if ((rt = rt_loopback) == NULL)
+			goto no_route;
+	}
+	rt->rt_use++;
+	return rt;
+no_route:
+	return NULL;
+}
+
 /*
  *	Backwards compatibility
  */
