@@ -1,4 +1,5 @@
                 Tulip Ethernet Card Driver
+	  Maintained by Jeff Garzik <jgarzik@mandrakesoft.com>
 
 The Tulip driver is developed by Donald Becker and changed by
 Takashi Manabe and a cast of thousands.

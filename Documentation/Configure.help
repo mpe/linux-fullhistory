@@ -1392,20 +1392,47 @@ CONFIG_DESKSTATION_RPC44
   This is a machine with a R4400 100 MHz CPU. To compile a Linux
   kernel that runs on these, say Y here. For details about Linux
   on the MIPS architecture, check out the Linux/MIPS FAQ on the WWW at
-  http://lena.fnet.fr/ .
+  http://oss.sgi.com/mips.
 
 Support for Acer PICA 1 chipset
 CONFIG_ACER_PICA_61
   This is a machine with a R4400 133/150 MHz CPU. To compile a Linux
   kernel that runs on these, say Y here. For details about Linux on
   the MIPS architecture, check out the Linux/MIPS FAQ on the WWW at
-  http://lena.fnet.fr/ .
+  http://oss.sgi.com/mips.
 
 Support for Algorithmics P4032 (EXPERIMENTAL)
 CONFIG_ALGOR_P4032
   This is an evaluation board of the British company Algorithmics. The
   board uses the R4300 and a R5230 CPUs. For more information about
-  this board see http://www.algor.co.uk .
+  this board see http://www.algor.co.uk.
+
+Support for BAGET MIPS series
+CONFIG_BAGET_MIPS
+  This enables support for the Baget, a Russian embedded system.  For 
+  more details about the Baget see the Linux/MIPS FAQ on 
+  http://oss.sgi.com/mips.
+
+Support for DECstations
+CONFIG_DECSTATION
+  This enables support for DEC's MIPS based workstations.  For details
+  see the Linux/MIPS FAQ on http://oss.sgi.com/mips. the 
+  DECstation porting pages on http://decstation.unix-ag.org.
+
+  If you have one of the following DECstation Models you definitely
+  want to choose R4xx0 for the CPU Type:
+
+	DECstation 5000/50
+	DECstation 5000/150
+	DECstation 5000/260
+	DECsystem 5900/260
+
+  otherwise choose R3000.
+
+Support for NEC DDB Vrc-5074
+CONFIG_DDB5074
+  This enables support for the VR5000-based NEC DDB Vrc-5074 evaluation
+  board.
 
 IDE card support
 CONFIG_BLK_DEV_IDE_CARDS
@@ -1423,34 +1450,67 @@ CONFIG_BLK_DEV_PART
   This allows Linux on Acorn systems to determine its partitions in
   the 'non-ADFS' partition area of the hard disk - usually located
   after the ADFS partition.  You are probably using this system, so
-  you should say Y here.
+  you should say Y it.
 
 Support for Mips Magnum 4000
 CONFIG_MIPS_MAGNUM_4000
   This is a machine with a R4000 100 MHz CPU. To compile a Linux
   kernel that runs on these, say Y here. For details about Linux on
   the MIPS architecture, check out the Linux/MIPS FAQ on the WWW at
-  http://lena.fnet.fr/ .
+  http://oss.sgi.com/mips.
 
 Support for Olivetti M700
 CONFIG_OLIVETTI_M700
   This is a machine with a R4000 100 MHz CPU. To compile a Linux
   kernel that runs on these, say Y here. For details about Linux on
   the MIPS architecture, check out the Linux/MIPS FAQ on the WWW at
-  http://lena.fnet.fr/ .
+  http://oss.sgi.com/mips.
+
+Support for SGI IP22
+CONFIG_SGI_IP22
+  This are the SGI Indy, Challenge S and Indigo2, as well as certain OEM
+  variants like the Tandem CMN B006S.  To compile a Linux kernel that
+  runs on these, say Y here.
+
+Support for SGI IP27
+  This are the SGI Origin 200, Origin 2000 and Onyx 2 Graphics
+  workstations.  To compile a Linux kernel that runs on these, say Y
+  here.
+
+IP27 N-Mode
+CONFIG_SGI_SN0_N_MODE
+  The nodes of Origin 200, Origin 2000 and Onyx 2 systems can be
+  configured in either N-Modes which allows for more nodes or M-Mode
+  which allows for more more memory.  Your system is most probly
+  running in M-Mode, so you should say N here.
+
+MIPS JAZZ onboard SONIC Ethernet support
+CONFIG_MIPS_JAZZ_SONIC
+  This is the driver for the onboard card of of MIPS Magnum 4000,
+  Acer PICA, Olivetti M700-10 and a few other identical OEM systems.
+
+MIPS JAZZ FAS216 SCSI support
+CONFIG_JAZZ_ESP
+  This is the driver for the onboard SCSI hostadapter of MIPS Magnum 4000,
+  Acer PICA, Olivetti M700-10 and a few other identical OEM systems.
 
 CPU type
 CONFIG_CPU_R3000
-  Give the type of your machine's MIPS CPU. For this question, it
-  suffices to give a unique prefix of the option you want to choose.
-  In case of doubt select the R3000 CPU. The kernel will then run on
-  other MIPS machines but with slightly reduced performance.
+  Please make shure to pick the right CPU type. Linux/MIPS is not
+  designed to be generic, i.e. Kernels compiled for R3000 CPUs will
+  *not* work on R4000 Machines and vice versa.
+  However, since most the supported Machines have an R4000 (or similar)
+  CPU R4xx0 might be a safe bet.
+  If the resulting Kernel does not work try to recompile with R3000.
 
-Compile the kernel into the ECOFF object format
-CONFIG_ECOFF_KERNEL
-  Some machines require a kernel in the ECOFF format. You will have to
-  say Y here for example if you want to use a Mips Magnum 3000 or a
-  DECstation.
+Support for large 64-bit configurations
+CONFIG_MIPS_INSANE_LARGE
+  MIPS R10000 does support a 44 bit / 16TB address space as opposed to
+  previous 64-bit processors which only did only support 40 bit / 1TB.  If
+  you need processes of more than 1TB virtual address space activate this.
+  Activating CONFIG_MIPS_INSANE_LARGE results in additional memory usage,
+  so only activate this if you really need.  Very few people will need
+  this.
 
 Generate little endian code
 CONFIG_CPU_LITTLE_ENDIAN
@@ -1712,6 +1772,10 @@ CONFIG_SERIAL_MULTIPORT
   servicing. Say Y here to enable the serial driver to take advantage
   of those special I/O ports.
 
+SGI PROM Console Support
+CONFIG_SGI_PROM_CONSOLE
+  Enable this if you want to use the PROMs for console I/O.
+
 SGI Zilog85C30 serial support
 CONFIG_SGI_SERIAL
   If you want to use your SGI's built-in serial ports under Linux,
@@ -1723,6 +1787,25 @@ CONFIG_SGI_NEWPORT_GFX
   drivers, say Y here. This will include the code for the
   /dev/graphics and /dev/gfx drivers into the kernel for supporting
   virtualized access to your graphics hardware.
+
+SGI Newport Console support
+CONFIG_SGI_NEWPORT_CONSOLE
+  Enable this if you want the console on the Newport aka XL graphics
+  card of your Indy.  Most people say Y here.
+
+SGI DS1286 RTC support
+CONFIG_SGI_DS1286
+  If you say Y here and create a character special file /dev/rtc with
+  major number 10 and minor number 135 using mknod ("man mknod"), you
+  will get access to the real time clock built into your computer.
+  Every SGI has such a clock built in.  It reports status information 
+  via the file /proc/rtc and its behaviour is set by various ioctls on 
+  /dev/rtc.
+
+SGI Vino Video For Linux (EXPERIMENTAL)
+CONFIG_SGI_VIDEO_VINO
+  Support for the SGI Vino Video hardware which is part of the Newport
+  aka XL graphics card.  Most people will say N here.
 
 Support the Bell Technologies HUB6 card
 CONFIG_HUB6
@@ -11806,6 +11889,12 @@ CONFIG_CROSSCOMPILE
   Say Y here if you are compiling the kernel on a different
   architecture than the one it is intended to run on.
 
+Kernel support for Linux/MIPS 32-bit binary compatibility
+CONFIG_MIPS32_COMPAT
+  Select this option this option if you want Linux/MIPS 32-bit binary
+  compatibility.  Since all software available available for Linux/MIPS
+  is currently 32-bit you should say Y here.
+
 Build fp exception handler module
 CONFIG_MIPS_FPE_MODULE
   Build the floating point exception handler module. This option is
@@ -14065,7 +14154,7 @@ CONFIG_I2C_CHARDEV
 # LocalWords:  PMAX MILO Alphas Multia Tseng linuxelf endian mipsel mips drv HT
 # LocalWords:  kerneld callouts AdvanSys advansys Admin WDT DataStor EP verden
 # LocalWords:  wdt hdb hdc bugfix SiS vlb Acculogic CSA DTC dtc Holtek ht QDI
-# LocalWords:  QD qd UMC umc ALI ali lena fnet fr azstarnet cdr fb MDA ps esdi
+# LocalWords:  QD qd UMC umc ALI ali oss sgi com azstarnet cdr fb MDA ps esdi
 # LocalWords:  Avanti XL AlphaStations Jensen DECpc AXPpci UDB Cabriolet MCA RC
 # LocalWords:  AlphaPC mca AOUT OUTput PPro sipx gwdg lo nwe FourPort Boca unm
 # LocalWords:  Keepalive linefill RELCOM keepalive analogue CDR conf CDI INIT

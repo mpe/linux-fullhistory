@@ -1,11 +1,15 @@
 /*
 	drivers/net/tulip/interrupt.c
 
+	Maintained by Jeff Garzik <jgarzik@mandrakesoft.com>
 	Copyright 2000  The Linux Kernel Team
 	Written/copyright 1994-1999 by Donald Becker.
 
 	This software may be used and distributed according to the terms
 	of the GNU Public License, incorporated herein by reference.
+
+	Please refer to Documentation/networking/tulip.txt for more
+	information on this driver.
 
 */
 
@@ -175,7 +179,7 @@ void tulip_interrupt(int irq, void *dev_instance, struct pt_regs *regs)
 		if (csr5 & (TxNoBuf | TxDied | TxIntr | TimerInt)) {
 			unsigned int dirty_tx;
 
-			spin_lock(&tp->tx_lock);
+			spin_lock(&tp->lock);
 
 			for (dirty_tx = tp->dirty_tx; tp->cur_tx - dirty_tx > 0;
 				 dirty_tx++) {
@@ -186,7 +190,7 @@ void tulip_interrupt(int irq, void *dev_instance, struct pt_regs *regs)
 					break;			/* It still has not been Txed */
 				/* Check for Rx filter setup frames. */
 				if (tp->tx_skbuff[entry] == NULL)
-				  continue;
+					continue;
 				
 				if (status & 0x8000) {
 					/* There was an major error, log it. */
@@ -243,7 +247,7 @@ void tulip_interrupt(int irq, void *dev_instance, struct pt_regs *regs)
 				tulip_outl_CSR6(tp, tp->csr6 | 0x0002);
 				tulip_outl_CSR6(tp, tp->csr6 | 0x2002);
 			}
-			spin_unlock(&tp->tx_lock);
+			spin_unlock(&tp->lock);
 		}
 
 		/* Log errors. */

@@ -438,10 +438,6 @@ void __init paging_init(void)
 
 	__flush_tlb_all();
 
-#ifdef CONFIG_X86_LOCAL_APIC
-	init_apic_mappings();
-#endif
-
 #ifdef CONFIG_HIGHMEM
 	kmap_init();
 #endif

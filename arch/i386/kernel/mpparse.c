@@ -316,11 +316,14 @@ static int __init smp_read_mpc(struct mp_config_table *mpc)
 	return num_processors;
 }
 
+static struct intel_mp_floating *mpf_found;
+
 /*
  * Scan the memory blocks for an SMP configuration block.
  */
-static int __init smp_get_mpf(struct intel_mp_floating *mpf)
+void __init get_smp_config (void)
 {
+	struct intel_mp_floating *mpf = mpf_found;
 	printk("Intel MultiProcessor Specification v1.%d\n", mpf->mpf_specification);
 	if (mpf->mpf_feature2 & (1<<7)) {
 		printk("    IMCR and PIC compatibility mode.\n");
@@ -329,7 +332,6 @@ static int __init smp_get_mpf(struct intel_mp_floating *mpf)
 		printk("    Virtual Wire compatibility mode.\n");
 		pic_mode = 0;
 	}
-	smp_found_config = 1;
 	/*
 	 * default CPU id - if it's different in the mptable
 	 * then we change it before first using it.
@@ -388,7 +390,7 @@ static int __init smp_get_mpf(struct intel_mp_floating *mpf)
 		default:
 			printk("???\nUnknown standard configuration %d\n",
 				mpf->mpf_feature1);
-			return 1;
+			return;
 	}
 	if (mpf->mpf_feature1 > 4) {
 		printk("Bus #1 is PCI\n");
@@ -412,10 +414,9 @@ static int __init smp_get_mpf(struct intel_mp_floating *mpf)
 	/*
 	 * Only use the first configuration found.
 	 */
-	return 1;
 }
 
-static int __init smp_scan_config(unsigned long base, unsigned long length)
+static int __init smp_scan_config (unsigned long base, unsigned long length)
 {
 	unsigned long *bp = phys_to_virt(base);
 	struct intel_mp_floating *mpf;
@@ -432,9 +433,13 @@ static int __init smp_scan_config(unsigned long base, unsigned long length)
 			((mpf->mpf_specification == 1)
 				|| (mpf->mpf_specification == 4)) ) {
 
-			printk("found SMP MP-table at %08ld\n",
+			smp_found_config = 1;
+			printk("found SMP MP-table at %08lx\n",
 						virt_to_phys(mpf));
-			smp_get_mpf(mpf);
+			reserve_bootmem((unsigned long)mpf, PAGE_SIZE);
+			if (mpf->mpf_physptr)
+				reserve_bootmem(mpf->mpf_physptr, PAGE_SIZE);
+			mpf_found = mpf;
 			return 1;
 		}
 		bp += 4;
@@ -443,7 +448,7 @@ static int __init smp_scan_config(unsigned long base, unsigned long length)
 	return 0;
 }
 
-void __init init_intel_smp (void)
+void __init find_intel_smp (void)
 {
 	unsigned int address;
 
@@ -488,7 +493,7 @@ void __init init_intel_smp (void)
  * sense, but it doesnt have a BIOS(-configuration table).
  * No problem for Linux.
  */
-void __init init_visws_smp(void)
+void __init find_visws_smp(void)
 {
 	smp_found_config = 1;
 
@@ -505,13 +510,13 @@ void __init init_visws_smp(void)
  * - Intel MP Configuration Table
  * - or SGI Visual Workstation configuration
  */
-void __init init_smp_config (void)
+void __init find_smp_config (void)
 {
 #ifdef CONFIG_X86_IO_APIC
-	init_intel_smp();
+	find_intel_smp();
 #endif
 #ifdef CONFIG_VISWS
-	init_visws_smp();
+	find_visws_smp();
 #endif
 }
 

@@ -14,6 +14,9 @@
  *    after patches by harald to irq code.  
  * [09-JAN-99] triemer minor fix for schedule - due to removal of timeout
  *            field from "current" - somewhere between 2.1.121 and 2.1.131
+ *  
+ * Parts (C) 1999 David Airlie, airlied@linux.ie 
+ * [07-SEP-99] Bugfixes 
  */
 
 #define DEBUG_DZ 1
@@ -26,7 +29,6 @@
 #define MOD_DEC_USE_COUNT
 #endif
 
-#include <linux/config.h>
 #include <linux/kernel.h>
 #include <linux/sched.h>
 #include <linux/init.h> 
@@ -74,7 +76,7 @@ extern int (*prom_printf) (char *,...);
 
 DECLARE_TASK_QUEUE(tq_serial);
 
-extern struct wait_queue *keypress_wait;
+extern wait_queue_head_t keypress_wait; 
 static struct dz_serial *lines[4];
 static unsigned char tmp_buffer[256];
 
@@ -131,9 +133,13 @@ static inline void dz_out (struct dz_serial *info, unsigned offset, unsigned sho
 
 static void dz_stop (struct tty_struct *tty)
 {
-  struct dz_serial *info = (struct dz_serial *)tty->driver_data;
+  struct dz_serial *info; 
   unsigned short mask, tmp;
 
+  if (tty==0) 
+    return; 
+ 
+  info = (struct dz_serial *)tty->driver_data; 
          
   mask = 1 << info->line;
   tmp = dz_in (info, DZ_TCR);       /* read the TX flag */
@@ -1040,7 +1046,7 @@ static void dz_close (struct tty_struct *tty, struct file *filp)
   }
 
   if (--info->count < 0) {
-    printk("rs_close: bad serial port count for ttys%d: %d\n",
+    printk("ds_close: bad serial port count for ttys%d: %d\n",
 	   info->line, info->count);
     info->count = 0;
   }
@@ -1127,7 +1133,7 @@ static void dz_hangup (struct tty_struct *tty)
  */
 static int block_til_ready (struct tty_struct *tty, struct file *filp, struct dz_serial *info)
 {
-  struct wait_queue wait = { current, NULL };
+  DECLARE_WAITQUEUE(wait, current); 
   int retval;
   int do_clocal = 0;
 
@@ -1339,9 +1345,9 @@ int __init dz_init(void)
     panic("Couldn't register callout driver\n");
   save_flags(flags); cli();
  
-  i = 0;
-  for (info = &multi[i]; i < DZ_NB_PORT;  i++) 
+  for (i=0; i < DZ_NB_PORT;  i++)  
     {
+      info = &multi[i]; 
       lines[i] = info;
     info->magic = SERIAL_MAGIC;
 
@@ -1364,8 +1370,8 @@ int __init dz_init(void)
     info->tqueue_hangup.data = info;
     info->callout_termios = callout_driver.init_termios;
     info->normal_termios = serial_driver.init_termios;
-    info->open_wait = 0;
-    info->close_wait = 0;
+    init_waitqueue_head(&info->open_wait); 
+    init_waitqueue_head(&info->close_wait); 
 
     /* If we are pointing to address zero then punt - not correctly
        set up in setup.c to handle this. */
@@ -1400,7 +1406,7 @@ int __init dz_init(void)
 #ifdef CONFIG_SERIAL_CONSOLE
 static void dz_console_put_char (unsigned char ch)
 {
-  long flags;
+  unsigned long flags;
   int  loops = 2500;
   unsigned short tmp = ch;
   /* this code sends stuff out to serial device - spinning its
@@ -1414,7 +1420,7 @@ static void dz_console_put_char (unsigned char ch)
   
 
   /* spin our wheels */
-  while (((dz_in(dz_console,DZ_TCR) & DZ_TRDY) != DZ_TRDY) &&  loops--)
+  while (((dz_in(dz_console,DZ_CSR) & DZ_TRDY) != DZ_TRDY) &&  loops--)
     ;
   
   /* Actually transmit the character. */
@@ -1533,38 +1539,6 @@ static int __init dz_console_setup(struct console *co, char *options)
 	dz_console->cflags |= DZ_CS8;
 	dz_console->cflags |= DZ_PARENB;
 	dz_out (dz_console, DZ_LPR, dz_console->cflags);
-
-
-	mask = 1 << dz_console->line;
-	tmp = dz_in (dz_console, DZ_TCR);       /* read the TX flag */
-	if (!(tmp & mask)) {
-	  tmp |= mask;                   /* set the TX flag */
-	  dz_out (dz_console, DZ_TCR, tmp); 
-	}
-	
-
-	/* TOFIX: force to console line */
-	dz_console = &multi[CONSOLE_LINE];
-    	if ((mips_machtype == MACH_DS23100) || (mips_machtype == MACH_DS5100)) 
-	dz_console->port = KN01_DZ11_BASE;
-       	else 
-       		dz_console->port = KN02_DZ11_BASE; 
-	dz_console->line = CONSOLE_LINE;
-
-	dz_out(dz_console, DZ_CSR, DZ_CLR);
-	while ((tmp = dz_in(dz_console,DZ_CSR)) & DZ_CLR)
-	  ;
-
-	/* enable scanning */
-	dz_out(dz_console, DZ_CSR, DZ_MSE); 
-
-        /*  Set up flags... */
-	dz_console->cflags = 0;
-	dz_console->cflags |= DZ_B9600;
-	dz_console->cflags |= DZ_CS8;
-	dz_console->cflags |= DZ_PARENB;
-	dz_out (dz_console, DZ_LPR, dz_console->cflags);
-
 
 	mask = 1 << dz_console->line;
 	tmp = dz_in (dz_console, DZ_TCR);       /* read the TX flag */

@@ -41,6 +41,8 @@ enum tbl_flag {
 };
 
 
+/* chip types.  careful!  order is VERY IMPORTANT here, as these
+ * are used throughout the driver as indices into arrays */
 /* Note 21142 == 21143. */
 enum chips {
 	DC21040 = 0,
@@ -48,6 +50,7 @@ enum chips {
 	DC21140 = 2,
 	DC21142 = 3, DC21143 = 3,
 	LC82C168,
+	NGMC169,
 	MX98713,
 	MX98715,
 	MX98725,
@@ -252,7 +255,7 @@ struct tulip_private {
 	int flags;
 	struct net_device_stats stats;
 	struct timer_list timer;	/* Media selection timer. */
-	spinlock_t tx_lock;
+	spinlock_t lock;
 	unsigned int cur_rx, cur_tx;	/* The next free ring entry */
 	unsigned int dirty_rx, dirty_tx;	/* The ring entries to be free()ed. */
 	unsigned int tx_full:1;	/* The Tx queue is full. */

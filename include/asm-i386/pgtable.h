@@ -18,6 +18,7 @@
 #include <linux/threads.h>
 
 extern pgd_t swapper_pg_dir[1024];
+extern void paging_init(void);
 
 /* Caches aren't brain-dead on the intel. */
 #define flush_cache_all()			do { } while (0)

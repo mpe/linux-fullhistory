@@ -209,6 +209,9 @@ int __init misc_init(void)
 #if defined(CONFIG_SUN_MOSTEK_RTC)
 	rtc_sun_init();
 #endif
+#ifdef CONFIG_SGI_DS1286
+	ds1286_init();
+#endif
 #ifdef CONFIG_ATARI_DSP56K
 	dsp56k_init();
 #endif
@@ -221,7 +224,7 @@ int __init misc_init(void)
 #ifdef CONFIG_SGI_NEWPORT_GFX
 	gfx_register ();
 #endif
-#ifdef CONFIG_SGI
+#ifdef CONFIG_SGI_IP22
 	streamable_init ();
 #endif
 #ifdef CONFIG_SGI_NEWPORT_GFX

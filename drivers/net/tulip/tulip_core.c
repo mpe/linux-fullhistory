@@ -1,6 +1,7 @@
 /* tulip_core.c: A DEC 21040-family ethernet driver for Linux. */
 
 /*
+	Maintained by Jeff Garzik <jgarzik@mandrakesoft.com>
 	Copyright 2000  The Linux Kernel Team
 	Written/copyright 1994-1999 by Donald Becker.
 
@@ -25,8 +26,8 @@ static const char version[] = "Linux Tulip driver version 0.9.3 (Feb 23, 2000)\n
 #include <linux/pci.h>
 #include <linux/init.h>
 #include <linux/etherdevice.h>
+#include <linux/delay.h>
 #include <asm/io.h>
-#include <asm/delay.h>
 #include <asm/unaligned.h>
 
 
@@ -122,6 +123,8 @@ struct tulip_chip_table tulip_tbl[] = {
 	t21142_timer },
   { "Lite-On 82c168 PNIC", 256, 0x0001ebef,
 	HAS_MII | HAS_PNICNWAY, pnic_timer },
+  { "NETGEAR NGMC169 MAC", 256, 0x0001ebef,
+	HAS_MII | HAS_PNICNWAY, pnic_timer },
   { "Macronix 98713 PMAC", 128, 0x0001ebef,
 	HAS_MII | HAS_MEDIA_TABLE | CSR12_IN_SROM, mxic_timer },
   { "Macronix 98715 PMAC", 256, 0x0001ebef,
@@ -152,6 +155,7 @@ static struct pci_device_id tulip_pci_tbl[] __devinitdata = {
 	{ 0x1011, 0x0009, PCI_ANY_ID, PCI_ANY_ID, 0, 0, DC21140 },
 	{ 0x1011, 0x0019, PCI_ANY_ID, PCI_ANY_ID, 0, 0, DC21143 },
 	{ 0x11AD, 0x0002, PCI_ANY_ID, PCI_ANY_ID, 0, 0, LC82C168 },
+	{ 0x1385, 0xf004, PCI_ANY_ID, PCI_ANY_ID, 0, 0, NGMC169 },
 	{ 0x10d9, 0x0512, PCI_ANY_ID, PCI_ANY_ID, 0, 0, MX98713 },
 	{ 0x10d9, 0x0531, PCI_ANY_ID, PCI_ANY_ID, 0, 0, MX98715 },
 	{ 0x10d9, 0x0531, PCI_ANY_ID, PCI_ANY_ID, 0, 0, MX98725 },
@@ -197,13 +201,12 @@ void tulip_outl_CSR6 (struct tulip_private *tp, u32 newcsr6)
 	long ioaddr = tp->base_addr;
 	const int strict_bits = 0x0060e202;
 	int csr5, csr5_22_20, csr5_19_17, currcsr6, attempts = 200;
-	long flags;
 
-	/* really a hw lock */
-	spin_lock_irqsave (&tp->tx_lock, flags);
-
-	if (tp->chip_id != X3201_3)
-		goto out_write;
+	/* common path */
+	if (tp->chip_id != X3201_3) {
+		outl (newcsr6, ioaddr + CSR6);
+		return;
+	}
 
 	newcsr6 &= 0x726cfeca;	/* mask out the reserved CSR6 bits that always */
 	/* read 0 on the Xircom cards */
@@ -236,8 +239,6 @@ void tulip_outl_CSR6 (struct tulip_private *tp, u32 newcsr6)
 out_write:
 	/* now it is safe to change csr6 */
 	outl (newcsr6, ioaddr + CSR6);
-
-	spin_unlock_irqrestore (&tp->tx_lock, flags);
 }
 
 
@@ -265,7 +266,7 @@ static void tulip_up(struct net_device *dev)
 	outl(tp->csr0, ioaddr + CSR0);
 
 	if (tulip_debug > 1)
-		printk(KERN_DEBUG "%s: tulip_open() irq %d.\n", dev->name, dev->irq);
+		printk(KERN_DEBUG "%s: tulip_up(), irq==%d.\n", dev->name, dev->irq);
 
 	if (tp->flags & MC_HASH_ONLY) {
 		u32 addr_low = cpu_to_le32(get_unaligned((u32 *)dev->dev_addr));
@@ -447,6 +448,9 @@ static void tulip_tx_timeout(struct net_device *dev)
 {
 	struct tulip_private *tp = (struct tulip_private *)dev->priv;
 	long ioaddr = dev->base_addr;
+	unsigned long flags;
+	
+	spin_lock_irqsave (&tp->lock, flags);
 
 	if (tulip_media_cap[dev->if_port] & MediaIsMII) {
 		/* Do nothing -- the media monitor should handle this. */
@@ -456,13 +460,12 @@ static void tulip_tx_timeout(struct net_device *dev)
 	} else if (tp->chip_id == DC21040) {
 		if ( !tp->medialock  &&  inl(ioaddr + CSR12) & 0x0002) {
 			dev->if_port = (dev->if_port == 2 ? 0 : 2);
-			printk(KERN_INFO "%s: transmit timed out, switching to "
+			printk(KERN_INFO "%s: 21040 transmit timed out, switching to "
 				   "%s.\n",
 				   dev->name, medianame[dev->if_port]);
 			tulip_select_media(dev, 0);
 		}
-		dev->trans_start = jiffies;
-		return;
+		goto out;
 	} else if (tp->chip_id == DC21041) {
 		int csr12 = inl(ioaddr + CSR12);
 
@@ -541,9 +544,12 @@ static void tulip_tx_timeout(struct net_device *dev)
 	/* Trigger an immediate transmit demand. */
 	outl(0, ioaddr + CSR1);
 
-	dev->trans_start = jiffies;
 	tp->stats.tx_errors++;
-	return;
+
+out:
+	dev->trans_start = jiffies;
+	netif_start_queue (dev);
+	spin_unlock_irqrestore (&tp->lock, flags);
 }
 
 
@@ -605,7 +611,7 @@ tulip_start_xmit(struct sk_buff *skb, struct net_device *dev)
 	/* Caution: the write order is important here, set the field
 	   with the ownership bits last. */
 
-	spin_lock_irqsave(&tp->tx_lock, cpuflags);
+	spin_lock_irqsave(&tp->lock, cpuflags);
 
 	/* Calculate the next Tx descriptor entry. */
 	entry = tp->cur_tx % TX_RING_SIZE;
@@ -630,10 +636,11 @@ tulip_start_xmit(struct sk_buff *skb, struct net_device *dev)
 	tp->tx_ring[entry].length = cpu_to_le32(skb->len | flag);
 	tp->tx_ring[entry].status = cpu_to_le32(DescOwned);
 	tp->cur_tx++;
-	spin_unlock_irqrestore(&tp->tx_lock, cpuflags);
 
 	/* Trigger an immediate transmit demand. */
 	outl(0, dev->base_addr + CSR1);
+
+	spin_unlock_irqrestore(&tp->lock, cpuflags);
 
 	dev->trans_start = jiffies;
 
@@ -644,10 +651,13 @@ static void tulip_down (struct net_device *dev)
 {
 	long ioaddr = dev->base_addr;
 	struct tulip_private *tp = (struct tulip_private *) dev->priv;
+	unsigned long flags;
 
 	netif_device_detach (dev);
 
 	del_timer (&tp->timer);
+
+	spin_lock_irqsave (&tp->lock, flags);
 
 	/* Disable interrupts by clearing the interrupt mask. */
 	outl (0x00000000, ioaddr + CSR7);
@@ -661,6 +671,8 @@ static void tulip_down (struct net_device *dev)
 
 	if (inl (ioaddr + CSR6) != 0xffffffff)
 		tp->stats.rx_missed_errors += inl (ioaddr + CSR8) & 0xffff;
+
+	spin_unlock_irqrestore (&tp->lock, flags);
 
 	dev->if_port = tp->saved_if_port;
 
@@ -711,8 +723,15 @@ static struct enet_statistics *tulip_get_stats(struct net_device *dev)
 	struct tulip_private *tp = (struct tulip_private *)dev->priv;
 	long ioaddr = dev->base_addr;
 
-	if (netif_running(dev))
+	if (netif_running(dev)) {
+		unsigned long flags;
+
+		spin_lock_irqsave (&tp->lock, flags);
+
 		tp->stats.rx_missed_errors += inl(ioaddr + CSR8) & 0xffff;
+
+		spin_unlock_irqrestore(&tp->lock, flags);
+	}
 
 	return &tp->stats;
 }
@@ -758,10 +777,9 @@ static int private_ioctl(struct net_device *dev, struct ifreq *rq, int cmd)
 			default: data[3] = 0; break;
 			}
 		} else {
-			save_flags(flags);
-			cli();
+			spin_lock_irqsave (&tp->lock, flags);
 			data[3] = tulip_mdio_read(dev, data[0] & 0x1f, data[1] & 0x1f);
-			restore_flags(flags);
+			spin_unlock_irqrestore (&tp->lock, flags);
 		}
 		return 0;
 	case SIOCDEVPRIVATE+2:		/* Write the specified MII register */
@@ -771,10 +789,9 @@ static int private_ioctl(struct net_device *dev, struct ifreq *rq, int cmd)
 			if (data[1] == 5)
 				tp->to_advertise = data[2];
 		} else {
-			save_flags(flags);
-			cli();
+			spin_lock_irqsave (&tp->lock, flags);
 			tulip_mdio_write(dev, data[0] & 0x1f, data[1] & 0x1f, data[2]);
-			restore_flags(flags);
+			spin_unlock_irqrestore(&tp->lock, flags);
 		}
 		return 0;
 	default:
@@ -830,7 +847,6 @@ static void set_rx_mode(struct net_device *dev)
 	struct tulip_private *tp = (struct tulip_private *)dev->priv;
 	long ioaddr = dev->base_addr;
 	int csr6 = inl(ioaddr + CSR6) & ~0x00D5;
-	unsigned long cpuflags;
 
 	tp->csr6 &= ~0x00D5;
 	if (dev->flags & IFF_PROMISC) {			/* Set promiscuous. */
@@ -871,6 +887,7 @@ static void set_rx_mode(struct net_device *dev)
 		struct dev_mc_list *mclist;
 		u32 tx_flags = 0x08000000 | 192;
 		int i;
+		unsigned long flags;
 
 		/* Note that only the low-address shortword of setup_frame is valid!
 		   The values are doubled for big-endian architectures. */
@@ -901,20 +918,22 @@ static void set_rx_mode(struct net_device *dev)
 			memset(setup_frm, 0xff, (15-i)*12);
 			setup_frm = &tp->setup_frame[15*6];
 		}
+
 		/* Fill the final entry with our physical address. */
 		eaddrs = (u16 *)dev->dev_addr;
 		*setup_frm++ = *setup_frm++ = eaddrs[0];
 		*setup_frm++ = *setup_frm++ = eaddrs[1];
 		*setup_frm++ = *setup_frm++ = eaddrs[2];
-		/* Now add this frame to the Tx list. */
-		spin_lock_irqsave(&tp->tx_lock, cpuflags);
+
+		spin_lock_irqsave(&tp->lock, flags);
+
 		if (tp->cur_tx - tp->dirty_tx > TX_RING_SIZE - 2) {
 			/* Same setup recently queued, we need not add it. */
 		} else {
-			unsigned long flags;
 			unsigned int entry;
 
-			save_flags(flags); cli();
+			/* Now add this frame to the Tx list. */
+
 			entry = tp->cur_tx++ % TX_RING_SIZE;
 
 			if (entry != 0) {
@@ -938,10 +957,13 @@ static void set_rx_mode(struct net_device *dev)
 				netif_stop_queue(dev);
 				tp->tx_full = 1;
 			}
-			spin_unlock_irqrestore(&tp->tx_lock, cpuflags);
+
 			/* Trigger an immediate transmit demand. */
 			outl(0, ioaddr + CSR1);
+
 		}
+
+		spin_unlock_irqrestore(&tp->lock, flags);
 	}
 	tulip_outl_CSR6(tp, csr6 | 0x0000);
 }
@@ -1005,7 +1027,10 @@ static int __devinit tulip_init_one (struct pci_dev *pdev,
 
 	pci_read_config_byte (pdev, PCI_REVISION_ID, &chip_rev);
 
-	/* tp/dev->priv zeroed in init_etherdev */
+	/*
+	 * initialize priviate data structure 'tp'
+	 * it is zeroed and aligned in init_etherdev
+	 */
 	tp = dev->priv;
 
 	tp->chip_id = chip_idx;
@@ -1013,7 +1038,18 @@ static int __devinit tulip_init_one (struct pci_dev *pdev,
 	tp->pdev = pdev;
 	tp->base_addr = ioaddr;
 	tp->revision = chip_rev;
-	spin_lock_init(&tp->tx_lock);
+	spin_lock_init(&tp->lock);
+
+#ifdef TULIP_FULL_DUPLEX
+	tp->full_duplex = 1;
+	tp->full_duplex_lock = 1;
+#endif
+#ifdef TULIP_DEFAULT_MEDIA
+	tp->default_port = TULIP_DEFAULT_MEDIA;
+#endif
+#ifdef TULIP_NO_MEDIA_SWITCH
+	tp->medialock = 1;
+#endif
 
 	printk(KERN_INFO "%s: %s rev %d at %#3lx,",
 		   dev->name, tulip_tbl[chip_idx].chip_name, chip_rev, ioaddr);
@@ -1123,18 +1159,6 @@ static int __devinit tulip_init_one (struct pci_dev *pdev,
 		tp->csr0 &= ~0x01000000;
 	else if (chip_idx == AX88140)
 		tp->csr0 |= 0x2000;
-
-#ifdef TULIP_FULL_DUPLEX
-	tp->full_duplex = 1;
-	tp->full_duplex_lock = 1;
-#endif
-#ifdef TULIP_DEFAULT_MEDIA
-	tp->default_port = TULIP_DEFAULT_MEDIA;
-#endif
-#ifdef TULIP_NO_MEDIA_SWITCH
-	tp->medialock = 1;
-#endif
-	tp->tx_lock = SPIN_LOCK_UNLOCKED;
 
 	/* The lower four bits are the media type. */
 	if (board_idx >= 0  &&  board_idx < MAX_UNITS) {

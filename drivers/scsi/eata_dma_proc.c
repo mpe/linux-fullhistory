@@ -167,7 +167,7 @@ int eata_proc_info(char *buffer, char **start, off_t offset, int length,
 	cmnd[9] = 0;
 
 	scmd->cmd_len = 10;
-	scmd->sc_data_direction = DATA_READ;
+	scmd->sc_data_direction = SCSI_DATA_READ;
 	
 	/*
 	 * Do the command and wait for it to finish.

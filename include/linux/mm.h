@@ -393,7 +393,6 @@ extern int ptrace_writedata(struct task_struct *tsk, char * src, unsigned long d
 extern int pgt_cache_water[2];
 extern int check_pgt_cache(void);
 
-extern void paging_init(void);
 extern void free_area_init(unsigned long * zones_size);
 extern void free_area_init_node(int nid, pg_data_t *pgdat, 
 		unsigned long * zones_size, unsigned long zone_start_paddr);

@@ -80,7 +80,7 @@ else
   endif
 endif 
 
-ifdef CONFIG_SGI
+ifdef CONFIG_SGI_IP22
 SUB_DIRS += sgi
 MOD_SUB_DIRS += sgi
 endif

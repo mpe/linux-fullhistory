@@ -709,9 +709,20 @@ void __init setup_arch(char **cmdline_p)
 
 #ifdef CONFIG_X86_IO_APIC
 	/*
-	 *	Save possible boot-time SMP configuration:
+	 * Find and reserve possible boot-time SMP configuration:
 	 */
-	init_smp_config();
+	find_smp_config();
+#endif
+	paging_init();
+#ifdef CONFIG_X86_IO_APIC
+	/*
+	 * get boot-time SMP configuration:
+	 */
+	if (smp_found_config)
+		get_smp_config();
+#endif
+#ifdef CONFIG_X86_LOCAL_APIC
+	init_apic_mappings();
 #endif
 
 #ifdef CONFIG_BLK_DEV_INITRD

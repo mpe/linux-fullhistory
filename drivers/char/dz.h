@@ -158,8 +158,8 @@ struct dz_serial {
   struct tq_struct        tqueue_hangup;
   struct termios          normal_termios;
   struct termios          callout_termios;
-  struct wait_queue       *open_wait;
-  struct wait_queue       *close_wait;
+  wait_queue_head_t       open_wait;
+  wait_queue_head_t       close_wait;
 
   long                    session;             /* Session of opening process */
   long                    pgrp;                /* pgrp of opening process */
@@ -188,7 +188,7 @@ static int serial_refcount;
  * memory if large numbers of serial ports are open.
  */
 static unsigned char *tmp_buf;
-static struct semaphore tmp_buf_sem = MUTEX;
+static DECLARE_MUTEX(tmp_buf_sem);
 
 static char *dz_name = "DECstation DZ serial driver version ";
 static char *dz_version = "1.02";

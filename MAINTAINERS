@@ -726,6 +726,12 @@ M:	emoenke@gwdg.de
 L:	linux-kernel@vger.rutgers.edu
 S:	Maintained
 
+NVIDIA (RIVA) FRAMEBUFFER DRIVER
+P:	Jeff Garzik
+M:	jgarzik@mandrakesoft.com
+L:	linux-nvidia@lists.surfsouth.com
+S:	Maintained
+
 OLYMPIC NETWORK DRIVER
 P:	Peter De Shrijver
 M:	p2@ace.ulyssis.sutdent.kuleuven.ac.be	
@@ -1021,6 +1027,12 @@ L:	linux-tr@linuxtr.net
 W:	http://www.auk.cx/tms380tr/
 S:	Maintained
 
+TULIP NETWORK DRIVER
+P:	Jeff Garzik
+M:	jgarzik@mandrakesoft.com
+L:	linux-tulip@cesdis.gsfc.nasa.gov
+S:	Maintained
+
 U14-34F SCSI DRIVER
 P:	Dario Ballabio
 M:	dario@milano.europe.dg.com
@@ -1112,6 +1124,7 @@ S:	Maintained
 VIA 82Cxxx AUDIO DRIVER
 P:	Jeff Garzik
 M:	jgarzik@mandrakesoft.com
+L:	linux-via@gtf.org
 S:	Maintained
 
 VIDEO FOR LINUX

@@ -61,6 +61,16 @@ ifeq ($(ARCH),arm)
   SERIAL   =
 endif
 
+ifeq ($(CONFIG_DECSTATION),y)
+  KEYBD    =
+  SERIAL   =
+endif
+
+ifeq ($(CONFIG_BAGET_MIPS),y)
+  KEYBD    =
+  SERIAL   =
+endif
+
 ifneq ($(CONFIG_SUN_SERIAL),)
   SERIAL   =
 endif
@@ -267,6 +277,10 @@ obj-$(L_DECODERS) += saa7110.o saa7111.o saa7185.o
 
 # set when a framegrabber implements i2c support
 obj-$(L_I2C) += i2c-old.o
+
+ifeq ($(CONFIG_DZ),y)
+  L_OBJS += dz.o
+endif
 
 obj-$(CONFIG_NWBUTTON) += nwbutton.o
 obj-$(CONFIG_NWFLASH) += nwflash.o

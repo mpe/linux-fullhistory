@@ -27,6 +27,7 @@ CPP	=$(CC) -E
 AR	=$(CROSS_COMPILE)ar
 NM	=$(CROSS_COMPILE)nm
 STRIP	=$(CROSS_COMPILE)strip
+OBJCOPY	=$(CROSS_COMPILE)objcopy
 OBJDUMP	=$(CROSS_COMPILE)objdump
 MAKE	=make
 GENKSYMS=/sbin/genksyms
@@ -94,9 +95,6 @@ endif
 
 CFLAGS := $(CPPFLAGS) -Wall -Wstrict-prototypes -O2 -fomit-frame-pointer
 AFLAGS := $(CPPFLAGS)
-
-# use '-fno-strict-aliasing', but only if the compiler can take it
-CFLAGS += $(shell if $(CC) -fno-strict-aliasing -S -o /dev/null -xc /dev/null >/dev/null 2>&1; then echo "-fno-strict-aliasing"; fi)
 
 #
 # if you want the RAM disk device, define this to be the
@@ -214,7 +212,7 @@ ifeq ($(CONFIG_ISAPNP),y)
 DRIVERS := $(DRIVERS) drivers/pnp/pnp.o
 endif
 
-ifdef CONFIG_SGI
+ifdef CONFIG_SGI_IP22
 DRIVERS := $(DRIVERS) drivers/sgi/sgi.a
 endif
 
@@ -255,6 +253,9 @@ DRIVERS := $(DRIVERS) drivers/telephony/telephony.a
 endif
 
 include arch/$(ARCH)/Makefile
+
+# use '-fno-strict-aliasing', but only if the compiler can take it
+CFLAGS += $(shell if $(CC) -fno-strict-aliasing -S -o /dev/null -xc /dev/null >/dev/null 2>&1; then echo "-fno-strict-aliasing"; fi)
 
 .S.s:
 	$(CC) -D__ASSEMBLY__ $(AFLAGS) -traditional -E -o $*.s $<
@@ -363,7 +364,7 @@ tags: dummy
 	find include -type d \( -name "asm-*" -o -name config \) -prune -o -name '*.h' -print | xargs ctags $$CTAGSF -a && \
 	find $(SUBDIRS) init -name '*.c' | xargs ctags $$CTAGSF -a
 
-MODFLAGS = -DMODULE
+MODFLAGS += -DMODULE
 ifdef CONFIG_MODULES
 ifdef CONFIG_MODVERSIONS
 MODFLAGS += -DMODVERSIONS -include $(HPATH)/linux/modversions.h

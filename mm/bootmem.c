@@ -82,7 +82,7 @@ static void __init reserve_bootmem_core(bootmem_data_t *bdata, unsigned long add
 		BUG();
 	for (i = sidx; i < eidx; i++)
 		if (test_and_set_bit(i, bdata->node_bootmem_map))
-			BUG();
+			printk("hm, page %08x reserved twice.\n", i*PAGE_SIZE);
 }
 
 static void __init free_bootmem_core(bootmem_data_t *bdata, unsigned long addr, unsigned long size)
