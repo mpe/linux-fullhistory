@@ -298,10 +298,10 @@ kern_fpucheck:	ldub			[%g6 + TI_FPDEPTH], %l5
 		andcc			%l2, FPRS_FEF, %g0
 		be,pn			%icc, 5f
 		 sll			%o0, 3, %o5
-		rd			%fprs, %g5
+		rd			%fprs, %g1
 
-		wr			%g5, FPRS_FEF, %fprs
-		ldx			[%o1 + %o5], %g5
+		wr			%g1, FPRS_FEF, %fprs
+		ldx			[%o1 + %o5], %g1
 		add			%g6, TI_XFSR, %o1
 		membar			#StoreLoad | #LoadLoad
 		sll			%o0, 8, %o2
@@ -313,7 +313,7 @@ kern_fpucheck:	ldub			[%g6 + TI_FPDEPTH], %l5
 		ldda			[%o4 + %o2] ASI_BLK_P, %f16
 1:		andcc			%l2, FPRS_DU, %g0
 		be,pn			%icc, 1f
-		 wr			%g5, 0, %gsr
+		 wr			%g1, 0, %gsr
 		add			%o2, 0x80, %o2
 		ldda			[%o3 + %o2] ASI_BLK_P, %f32
 		ldda			[%o4 + %o2] ASI_BLK_P, %f48

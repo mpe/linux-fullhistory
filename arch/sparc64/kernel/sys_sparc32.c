@@ -264,7 +264,7 @@ asmlinkage long compat_sys_ipc(u32 call, u32 first, u32 second, u32 third, compa
 
 	switch (call) {
 	case SEMTIMEDOP:
-		if (third)
+		if (fifth)
 			/* sign extend semid */
 			return compat_sys_semtimedop((int)first,
 						     compat_ptr(ptr), second,
