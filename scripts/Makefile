@@ -2,29 +2,21 @@ HOSTCFLAGS:=$(HOSTCFLAGS) -g -Wall
 HEADER=header.tk
 TAIL=tail.tk
 
-# We allow the Makefile in drivers/sound to decide when to rebuild its
-# files, rather than trying to second-guess it like we did before.
-#
-soundscript:
-	make -C ${TOPDIR}/drivers/sound mkscript
-	@echo
+# Previous versions always remade kconfig.tk because they always depended
+# on soundscript.  This runs fairly fast, and I can't find all the
+# Config.in files to depend on anyways.  So I'll force it to remake.
 
-# There is probably a better way to decide when to rebuild kconfig.tk; this
-# one won't catch every last change to the various Config.in files.  However,
-# the reliance on ${TOPDIR}/Makefile makes sure we at least rebuild when the
-# kernel version number changes.
-#
-kconfig.tk: soundscript ${TOPDIR}/Makefile ${TOPDIR}/arch/${ARCH}/config.in \
+kconfig.tk: dummy
+
+kconfig.tk: ${TOPDIR}/Makefile ${TOPDIR}/arch/${ARCH}/config.in \
 		tkparse ${HEADER} ${TAIL}
-	./tkparse < ../arch/${ARCH}/config.in  > kconfig.tmp
 	@if [ -f /usr/local/bin/wish ];	then \
 		echo '#!'"/usr/local/bin/wish -f" > kconfig.tk; \
 	else \
 		echo '#!'"/usr/bin/wish -f" > kconfig.tk; \
 	fi
 	cat ${HEADER} >> ./kconfig.tk
-	cat kconfig.tmp >> kconfig.tk
-	rm -f kconfig.tmp
+	./tkparse < ../arch/${ARCH}/config.in >> kconfig.tk
 	echo "set defaults \"arch/${ARCH}/defconfig\"" >> kconfig.tk
 	cat ${TAIL} >> kconfig.tk
 	chmod 755 kconfig.tk

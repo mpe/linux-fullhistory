@@ -238,7 +238,7 @@ EXPORT_SYMBOL(resetup_one_dev);
 EXPORT_SYMBOL(unplug_device);
 EXPORT_SYMBOL(make_request);
 EXPORT_SYMBOL(tq_disk);
-EXPORT_SYMBOL(efind_buffer);
+EXPORT_SYMBOL(find_buffer);
 EXPORT_SYMBOL(init_buffer);
 EXPORT_SYMBOL(max_sectors);
 EXPORT_SYMBOL(max_readahead);

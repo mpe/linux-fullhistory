@@ -1,14 +1,14 @@
-/*	$Id: zlib.h,v 1.1 1997/10/02 02:35:37 paulus Exp $	*/
+/*	$Id: zlib.h,v 1.2 1997/12/23 10:47:44 paulus Exp $	*/
 
 /*
- * This file is derived from zlib.h and zconf.h from the zlib-0.95
+ * This file is derived from zlib.h and zconf.h from the zlib-1.0.4
  * distribution by Jean-loup Gailly and Mark Adler, with some additions
  * by Paul Mackerras to aid in implementing Deflate compression and
  * decompression for PPP packets.
  */
 
 /*
- *  ==FILEVERSION 970501==
+ *  ==FILEVERSION 971127==
  *
  * This marker is used by the Linux installation script to determine
  * whether an up-to-date version of this file is already installed.

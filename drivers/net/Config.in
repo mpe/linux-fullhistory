@@ -15,7 +15,9 @@ fi
 tristate 'Dummy net driver support' CONFIG_DUMMY
 tristate 'EQL (serial line load balancing) support' CONFIG_EQUALIZER
 if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
-  tristate 'Ethertap network tap' CONFIG_ETHERTAP
+  if [ "CONFIG_NETLINK_DEV" != "n" ]; then
+     dep_tristate 'Ethertap network tap' CONFIG_ETHERTAP $CONFIG_NETLINK_DEV
+  fi
 fi
 #
 #	Ethernet

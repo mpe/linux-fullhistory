@@ -386,6 +386,12 @@ static inline int close(int fd)
 	return sys_close(fd);
 }
 
+extern off_t sys_lseek(int, off_t, int);
+static inline off_t lseek(int fd, off_t off, int whense)
+{
+	return sys_lseek(fd, off, whense);
+}
+
 extern int sys_exit(int);
 static inline int _exit(int value)
 {
@@ -406,22 +412,12 @@ static inline int read(int fd, char * buf, int nr)
 	return sys_read(fd, buf, nr);
 }
 
-extern int do_execve(char *, char **, char **, struct pt_regs *);
-extern void ret_from_sys_call(void);
+extern int __kernel_execve(char *, char **, char **, struct pt_regs *);
 static inline int execve(char * file, char ** argvp, char ** envp)
 {
-	int i;
 	struct pt_regs regs;
-
 	memset(&regs, 0, sizeof(regs));
-	i = do_execve(file, argvp, envp, &regs);
-	if (!i) {
-		__asm__ __volatile__("bis %0,%0,$30\n\t"
-				"bis %1,%1,$26\n\t"
-				"ret $31,($26),1\n\t"
-				: :"r" (&regs), "r" (ret_from_sys_call));
-	}
-	return -1;
+	return __kernel_execve(file, argvp, envp, &regs);
 }
 
 extern int sys_setsid(void);

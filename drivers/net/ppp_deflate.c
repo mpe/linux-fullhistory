@@ -55,11 +55,7 @@
 #include <linux/ioctl.h>
 
 #include <linux/ppp_defs.h>
-
-#undef	 PACKETPTR
-#define	 PACKETPTR 1
 #include <linux/ppp-comp.h>
-#undef	 PACKETPTR
 
 #include "zlib.c"
 

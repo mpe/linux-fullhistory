@@ -2,11 +2,12 @@
  *
  *  Michael Callahan <callahan@maths.ox.ac.uk>
  *  Al Longyear <longyear@netcom.com>
+ *  Paul Mackerras <Paul.Mackerras@cs.anu.edu.au>
  *
  *  Dynamic PPP devices by Jim Freeman <jfree@caldera.com>.
  *  ppp_tty_receive ``noisy-raise-bug'' fixed by Ove Ewerlid <ewerlid@syscon.uu.se>
  *
- *  ==FILEVERSION 970126==
+ *  ==FILEVERSION 971205==
  *
  *  NOTE TO MAINTAINERS:
  *     If you modify this file at all, please set the number above to the
@@ -47,19 +48,8 @@
 #define CHECK_CHARACTERS	1
 #define PPP_COMPRESS		1
 
-#ifndef PPP_MAX_DEV
-#define PPP_MAX_DEV	256
-#endif
+/* $Id: ppp.c,v 1.14 1997/11/27 06:04:45 paulus Exp $ */
 
-/* $Id: ppp.c,v 1.27 1997/01/26 07:13:29 davem Exp $
- * Added dynamic allocation of channels to eliminate
- *   compiled-in limits on the number of channels.
- *
- * Dynamic channel allocation code Copyright 1995 Caldera, Inc.,
- *   released under the GNU General Public License Version 2.
- */
-
-#include <linux/config.h>
 #include <linux/module.h>
 #include <linux/kernel.h>
 #include <linux/sched.h>
@@ -68,7 +58,6 @@
 #include <linux/poll.h>
 #include <linux/interrupt.h>
 #include <linux/ptrace.h>
-#include <linux/ioport.h>
 #include <linux/in.h>
 #include <linux/malloc.h>
 #include <linux/tty.h>
@@ -102,14 +91,11 @@ typedef struct sk_buff	     sk_buff;
 #include <linux/socket.h>
 #include <linux/if_ppp.h>
 #include <linux/if_pppvar.h>
-
-#undef	 PACKETPTR
-#define	 PACKETPTR 1
 #include <linux/ppp-comp.h>
-#undef	 PACKETPTR
 
-#define bsd_decompress	(*ppp->sc_rcomp->decompress)
-#define bsd_compress	(*ppp->sc_xcomp->compress)
+#ifdef CONFIG_KERNELD
+#include <linux/kerneld.h>
+#endif
 
 #ifndef PPP_IPX
 #define PPP_IPX 0x2b  /* IPX protocol over PPP */
@@ -129,7 +115,6 @@ static void ppp_unregister_compressor (struct compressor *cp);
 static struct compressor *find_compressor (int type);
 static void ppp_init_ctrl_blk (register struct ppp *);
 static void ppp_kick_tty (struct ppp *, struct ppp_buffer *bfr);
-static int ppp_doframe (struct ppp *);
 static struct ppp *ppp_alloc (void);
 static struct ppp *ppp_find (int pid_value);
 static void ppp_print_buffer (const __u8 *, const __u8 *, int);
@@ -137,6 +122,8 @@ extern inline void ppp_stuff_char (struct ppp *ppp,
 				   register struct ppp_buffer *buf,
 				   register __u8 chr);
 extern inline int lock_buffer (register struct ppp_buffer *buf);
+static int ppp_dev_xmit_ip (struct ppp *ppp, struct ppp_buffer *buf,
+			    __u8 *data, int len, enum NPmode npmode);
 
 static int rcv_proto_ip		(struct ppp *, __u16, __u8 *, int);
 static int rcv_proto_ipx	(struct ppp *, __u16, __u8 *, int);
@@ -147,7 +134,6 @@ static int rcv_proto_lqr	(struct ppp *, __u16, __u8 *, int);
 static void ppp_doframe_lower	(struct ppp *, __u8 *, int);
 static int ppp_doframe		(struct ppp *);
 
-extern int  ppp_bsd_compressor_init(void);
 static void ppp_proto_ccp (struct ppp *ppp, __u8 *dp, int len, int rcvd);
 static int  rcv_proto_ccp (struct ppp *, __u16, __u8 *, int);
 
@@ -157,19 +143,12 @@ static int  rcv_proto_ccp (struct ppp *, __u16, __u8 *, int);
 #define OPTIMIZE_FLAG_TIME	0
 #endif
 
-#ifndef PPP_MAX_DEV
-#define PPP_MAX_DEV 256
-#endif
-
 /*
  * Parameters which may be changed via insmod.
  */
 
 static int  flag_time = OPTIMIZE_FLAG_TIME;
-static int  max_dev   = PPP_MAX_DEV;
-
 MODULE_PARM(flag_time, "i");
-MODULE_PARM(max_dev, "i");
 
 /*
  * The "main" procedure to the ppp device
@@ -196,8 +175,9 @@ static ssize_t ppp_tty_read (struct tty_struct *, struct file *, __u8 *,
 static ssize_t ppp_tty_write (struct tty_struct *, struct file *,
 			      const __u8 *, size_t);
 static int ppp_tty_ioctl (struct tty_struct *, struct file *, unsigned int,
-                          unsigned long);
-static unsigned int ppp_tty_poll (struct tty_struct *tty, struct file *filp, poll_table * wait);
+			  unsigned long);
+static unsigned int ppp_tty_poll (struct tty_struct *tty, struct file *filp,
+				  poll_table * wait);
 static int ppp_tty_open (struct tty_struct *);
 static void ppp_tty_close (struct tty_struct *);
 static int ppp_tty_room (struct tty_struct *tty);
@@ -205,8 +185,25 @@ static void ppp_tty_receive (struct tty_struct *tty, const __u8 * cp,
 			     char *fp, int count);
 static void ppp_tty_wakeup (struct tty_struct *tty);
 
-#define CHECK_PPP(a)  if (!ppp->inuse) { printk (ppp_warning, __LINE__); return a;}
-#define CHECK_PPP_VOID()  if (!ppp->inuse) { printk (ppp_warning, __LINE__); return;}
+#define CHECK_PPP_MAGIC(ppp)	do { \
+	if (ppp->magic != PPP_MAGIC) { \
+		printk(KERN_WARNING "bad magic for ppp %p at %s:%d\n", \
+		       ppp, __FILE__, __LINE__); \
+	} \
+} while (0)
+#define CHECK_PPP(a)	do { \
+	CHECK_PPP_MAGIC(ppp); \
+	if (!ppp->inuse) { \
+		printk (ppp_warning, __LINE__); \
+		return a; \
+	} \
+} while (0)
+#define CHECK_PPP_VOID() do { \
+	CHECK_PPP_MAGIC(ppp); \
+	if (!ppp->inuse) { \
+		printk (ppp_warning, __LINE__); \
+	} \
+} while (0)
 
 #define in_xmap(ppp,c)	(ppp->xmit_async_map[(c) >> 5] & (1 << ((c) & 0x1f)))
 #define in_rmap(ppp,c)	((((unsigned int) (__u8) (c)) < 0x20) && \
@@ -214,31 +211,13 @@ static void ppp_tty_wakeup (struct tty_struct *tty);
 
 #define bset(p,b)	((p)[(b) >> 5] |= (1 << ((b) & 0x1f)))
 
-#define tty2ppp(tty)	((struct ppp *) (tty->disc_data))
-#define dev2ppp(dev)	((struct ppp *) (dev->priv))
-#define ppp2tty(ppp)	((struct tty_struct *) ppp->tty)
-#define ppp2dev(ppp)	((struct device *) ppp->dev)
+#define tty2ppp(tty)	((struct ppp *) ((tty)->disc_data))
+#define dev2ppp(dev)	((struct ppp *) ((dev)->priv))
+#define ppp2tty(ppp)	((ppp)->tty)
+#define ppp2dev(ppp)	(&(ppp)->dev)
 
-struct ppp_hdr {
-	__u8 address;
-	__u8 control;
-	__u8 protocol[2];
-};
-
-#define PPP_HARD_HDR_LEN	(sizeof (struct ppp_hdr))
-
-typedef struct	ppp_ctrl {
-	struct ppp_ctrl *next;		/* Next structure in the list	*/
-	char		name [8];	/* Name of the device		*/
-	struct ppp	ppp;		/* PPP control table		*/
-	struct device	dev;		/* Device information table	*/
-} ppp_ctrl_t;
-
-static ppp_ctrl_t *ppp_list = NULL;
-
-#define ctl2ppp(ctl) (struct ppp *)    &ctl->ppp
-#define ctl2dev(ctl) (struct device *) &ctl->dev
-#undef	PPP_NRUNIT
+static struct ppp *ppp_list = NULL;
+static struct ppp *ppp_last = NULL;
 
 /* Buffer types */
 #define BUFFER_TYPE_DEV_RD	0  /* ppp read buffer	    */
@@ -343,7 +322,7 @@ ppp_first_time (void))
 	int    status;
 
 	printk (KERN_INFO
-		"PPP: version %s (dynamic channel allocation)"
+		"PPP: version %s (demand dialling)"
 		"\n", szVersion);
 
 #ifndef MODULE /* slhc module logic has its own copyright announcement */
@@ -352,9 +331,6 @@ ppp_first_time (void))
 		"University of California\n");
 #endif
 
-	printk (KERN_INFO
-		"PPP Dynamic channel allocation code copyright 1995 "
-		"Caldera, Inc.\n");
 /*
  * Register the tty discipline
  */
@@ -389,7 +365,7 @@ ppp_first_time (void))
 static int
 ppp_init_dev (struct device *dev)
 {
-	dev->hard_header_len  = PPP_HARD_HDR_LEN;
+	dev->hard_header_len  = PPP_HDRLEN;
 
 	/* device INFO */
 	dev->mtu	      = PPP_MTU;
@@ -403,9 +379,9 @@ ppp_init_dev (struct device *dev)
 	dev->type	      = ARPHRD_PPP;
 
 	dev_init_buffers(dev);
-	
+
 	/* New-style flags */
-	dev->flags	= IFF_POINTOPOINT;
+	dev->flags	= IFF_POINTOPOINT | IFF_NOARP | IFF_MULTICAST;
 
 	return 0;
 }
@@ -438,13 +414,11 @@ ppp_init_ctrl_blk (register struct ppp *ppp)
 	ppp->read_wait	= NULL;
 	ppp->write_wait = NULL;
 	ppp->last_xmit	= jiffies - flag_time;
+	ppp->last_recv  = jiffies;
 
 	/* clear statistics */
-	memset (&ppp->stats, '\0', sizeof (struct pppstat));
-
-	/* Reset the demand dial information */
-	ppp->ddinfo.xmit_idle=	       /* time since last NP packet sent */
-	ppp->ddinfo.recv_idle=jiffies; /* time since last NP packet received */
+	memset(&ppp->stats, 0, sizeof (struct pppstat));
+	memset(&ppp->estats, 0, sizeof(ppp->estats));
 
 	/* PPP compression data */
 	ppp->sc_xc_state =
@@ -474,6 +448,14 @@ ppp_init (struct device *dev)
 }
 #endif
 
+#define BUFFER_MAGIC	0x1d10
+#define CHECK_BUF_MAGIC(buf)	do { \
+	if (buf->magic != BUFFER_MAGIC) { \
+		printk(KERN_WARNING "bad magic for ppp buffer %p at %s:%d\n", \
+		       buf, __FILE__, __LINE__); \
+	} \
+} while (0)
+
 /*
  * Routine to allocate a buffer for later use by the driver.
  */
@@ -494,7 +476,7 @@ ppp_alloc_buf (int size, int type)
 		buf->head   = 0;
 		buf->tail   = 0;
 		buf->fcs    = PPP_INITFCS;
-
+		buf->magic  = BUFFER_MAGIC;
 	}
 	return (buf);
 }
@@ -506,8 +488,10 @@ ppp_alloc_buf (int size, int type)
 static void
 ppp_free_buf (struct ppp_buffer *ptr)
 {
-	if (ptr != NULL)
+	if (ptr != NULL) {
+		CHECK_BUF_MAGIC(ptr);
 		kfree (ptr);
+	}
 }
 
 /*
@@ -517,11 +501,12 @@ ppp_free_buf (struct ppp_buffer *ptr)
 extern inline int
 lock_buffer (register struct ppp_buffer *buf)
 {
-	register long state;
-	int flags;
+	unsigned long state;
+	unsigned long flags;
 /*
  * Save the current state and if free then set it to the "busy" state
  */
+	CHECK_BUF_MAGIC(buf);
 	save_flags (flags);
 	cli ();
 	state = buf->locked;
@@ -542,6 +527,7 @@ static int
 ppp_changedmtu (struct ppp *ppp, int new_mtu, int new_mru)
 {
 	struct device *dev;
+	unsigned long flags;
 
 	struct ppp_buffer *new_rbuf;
 	struct ppp_buffer *new_wbuf;
@@ -557,7 +543,11 @@ ppp_changedmtu (struct ppp *ppp, int new_mtu, int new_mru)
 /*
  *  Allocate the buffer from the kernel for the data
  */
+	CHECK_PPP(0);
 	dev = ppp2dev (ppp);
+	if (ppp->flags & SC_DEBUG)
+		printk(KERN_DEBUG "%s: changedmtu %d %d\n", ppp->name,
+		       new_mtu, new_mru);
 	mru = new_mru;
 	/* allow for possible escaping of every character */
 	mtu = (new_mtu * 2) + 20;
@@ -568,14 +558,10 @@ ppp_changedmtu (struct ppp *ppp, int new_mtu, int new_mru)
 
 	mru += 10;
 
-	if (ppp->flags & SC_DEBUG)
-		printk (KERN_INFO "ppp: channel %s mtu = %d, mru = %d\n",
-			dev->name, new_mtu, new_mru);
-
-	new_wbuf = ppp_alloc_buf (mtu+PPP_HARD_HDR_LEN,	BUFFER_TYPE_DEV_WR);
+	new_wbuf = ppp_alloc_buf (mtu+PPP_HDRLEN,	BUFFER_TYPE_DEV_WR);
 	new_tbuf = ppp_alloc_buf ((PPP_MTU * 2) + 24,	BUFFER_TYPE_TTY_WR);
 	new_rbuf = ppp_alloc_buf (mru + 84,		BUFFER_TYPE_DEV_RD);
-	new_cbuf = ppp_alloc_buf (mru+PPP_HARD_HDR_LEN,	BUFFER_TYPE_VJ);
+	new_cbuf = ppp_alloc_buf (mru+PPP_HDRLEN,	BUFFER_TYPE_VJ);
 /*
  *  If the buffers failed to allocate then complain and release the partial
  *  allocations.
@@ -595,6 +581,7 @@ ppp_changedmtu (struct ppp *ppp, int new_mtu, int new_mru)
 /*
  *  Update the pointers to the new buffer structures.
  */
+	save_flags(flags);
 	cli ();
 	old_wbuf = ppp->wbuf;
 	old_rbuf = ppp->rbuf;
@@ -605,6 +592,9 @@ ppp_changedmtu (struct ppp *ppp, int new_mtu, int new_mru)
 	ppp->rbuf = new_rbuf;
 	ppp->cbuf = new_cbuf;
 	ppp->tbuf = new_tbuf;
+
+	if (old_wbuf)
+		new_wbuf->locked = old_wbuf->locked;
 
 	ppp->rbuf->size -= 80;	/* reserve space for vj header expansion */
 
@@ -629,7 +619,7 @@ ppp_changedmtu (struct ppp *ppp, int new_mtu, int new_mru)
 	ppp->tty->flags &= ~(1 << TTY_DO_WRITE_WAKEUP);
 	ppp->flags	&= ~SC_XMIT_BUSY;
 
-	sti ();
+	restore_flags(flags);
 /*
  *  Release old buffer pointers
  */
@@ -647,6 +637,14 @@ ppp_changedmtu (struct ppp *ppp, int new_mtu, int new_mru)
 static void
 ppp_ccp_closed (struct ppp *ppp)
 {
+	unsigned long flags;
+
+	save_flags(flags);
+	cli();
+	ppp->flags &= ~(SC_CCP_OPEN | SC_CCP_UP | SC_COMP_RUN | SC_DECOMP_RUN);
+	restore_flags(flags);
+	if (ppp->flags & SC_DEBUG)
+		printk(KERN_DEBUG "%s: ccp closed\n", ppp->name);
 	if (ppp->sc_xc_state) {
 		(*ppp->sc_xcomp->comp_free) (ppp->sc_xc_state);
 		ppp->sc_xc_state = NULL;
@@ -671,23 +669,27 @@ ppp_release (struct ppp *ppp)
 	struct tty_struct *tty;
 	struct device *dev;
 
+	CHECK_PPP_MAGIC(ppp);
 	tty = ppp2tty (ppp);
 	dev = ppp2dev (ppp);
 
+	if (ppp->flags & SC_DEBUG)
+		printk(KERN_DEBUG "%s released\n", ppp->name);
+
 	ppp_ccp_closed (ppp);
 
-        /* Ensure that the pppd process is not hanging on poll() */
-        wake_up_interruptible (&ppp->read_wait);
-        wake_up_interruptible (&ppp->write_wait);
+	/* Ensure that the pppd process is not hanging on poll() */
+	wake_up_interruptible (&ppp->read_wait);
+	wake_up_interruptible (&ppp->write_wait);
 
 	if (tty != NULL && tty->disc_data == ppp)
 		tty->disc_data = NULL;	/* Break the tty->ppp link */
 
 	rtnl_lock();
 	/* Strong layering violation. */
- 	if (dev && dev->flags & IFF_UP) {
- 		dev_close (dev); /* close the device properly */
- 	}
+	if (dev && dev->flags & IFF_UP) {
+		dev_close (dev); /* close the device properly */
+	}
 	rtnl_unlock();
 
 	ppp_free_buf (ppp->rbuf);
@@ -712,16 +714,18 @@ ppp_release (struct ppp *ppp)
 
 	ppp->inuse = 0;
 	ppp->tty   = NULL;
+	ppp->backup_tty = NULL;
 }
 
 /*
- * Device callback.
+ * TTY callback.
  *
- * Called when the PPP device goes down in response to an ifconfig request.
+ * Called when the line discipline is changed to something
+ * else, the tty is closed, or the tty detects a hangup.
  */
 
 static void
-ppp_tty_close_local (struct tty_struct *tty, int sc_xfer)
+ppp_tty_close (struct tty_struct *tty)
 {
 	struct ppp *ppp = tty2ppp (tty);
 
@@ -730,22 +734,25 @@ ppp_tty_close_local (struct tty_struct *tty, int sc_xfer)
 			if (ppp->flags & SC_DEBUG)
 				printk (KERN_WARNING
 				       "ppp: trying to close unopened tty!\n");
+			return;
+		}
+		CHECK_PPP_VOID();
+		tty->disc_data = NULL;
+		if (tty == ppp->backup_tty)
+			ppp->backup_tty = 0;
+		if (tty != ppp->tty)
+			return;
+		if (ppp->backup_tty) {
+			ppp->tty = ppp->backup_tty;
 		} else {
-			CHECK_PPP_VOID();
-			ppp->sc_xfer = sc_xfer;
+			ppp->sc_xfer = 0;
 			if (ppp->flags & SC_DEBUG)
 				printk (KERN_INFO "ppp: channel %s closing.\n",
-					ppp2dev(ppp) -> name);
+					ppp2dev(ppp)->name);
 			ppp_release (ppp);
 			MOD_DEC_USE_COUNT;
 		}
 	}
-}
-
-static void
-ppp_tty_close (struct tty_struct *tty)
-{
-	ppp_tty_close_local (tty, 0);
 }
 
 /*
@@ -774,24 +781,67 @@ ppp_tty_open (struct tty_struct *tty)
  * Allocate the structure from the system
  */
 	ppp = ppp_find(current->pid);
-	if (ppp == NULL) {
-                ppp = ppp_find(0);
-        	if (ppp == NULL)
-			ppp = ppp_alloc();
-        }
+	if (ppp != NULL) {
+		/*
+		 * If we are taking over a ppp unit which is currently
+		 * connected to a loopback pty, there's not much to do.
+		 */
+		CHECK_PPP(-EINVAL);
+		tty->disc_data = ppp;
+		ppp->tty       = tty;
 
-	if (ppp == NULL) {
-		if (ppp->flags & SC_DEBUG)
-			printk (KERN_ERR
-			"ppp_tty_open: couldn't allocate ppp channel\n");
-		return -ENFILE;
-	}
+	} else {
+		ppp = ppp_alloc();
+		if (ppp == NULL) {
+			if (ppp->flags & SC_DEBUG)
+				printk (KERN_ERR "ppp_alloc failed\n");
+			return -ENFILE;
+		}
 /*
  * Initialize the control block
  */
-	ppp_init_ctrl_blk (ppp);
-	ppp->tty       = tty;
-	tty->disc_data = ppp;
+		ppp_init_ctrl_blk (ppp);
+		tty->disc_data = ppp;
+		ppp->tty       = tty;
+/*
+ * Allocate space for the default VJ header compression slots
+ */
+		ppp->slcomp = slhc_init (16, 16);
+		if (ppp->slcomp == NULL) {
+			if (ppp->flags & SC_DEBUG)
+				printk (KERN_ERR "ppp_tty_open: "
+					"no space for compression buffers!\n");
+			ppp_release (ppp);
+			return -ENOMEM;
+		}
+/*
+ * Allocate space for the MTU and MRU buffers
+ */
+		if (ppp_changedmtu (ppp, ppp2dev(ppp)->mtu, ppp->mru) == 0) {
+			ppp_release (ppp);
+			return -ENOMEM;
+		}
+/*
+ * Allocate space for a user level buffer
+ */
+		ppp->ubuf = ppp_alloc_buf (RBUFSIZE, BUFFER_TYPE_TTY_RD);
+		if (ppp->ubuf == NULL) {
+			if (ppp->flags & SC_DEBUG)
+				printk (KERN_ERR "ppp_tty_open: "
+					"no space for user receive buffer\n");
+			ppp_release (ppp);
+			return -ENOMEM;
+		}
+
+		if (ppp->flags & SC_DEBUG)
+			printk (KERN_INFO "ppp: channel %s open\n",
+				ppp2dev(ppp)->name);
+
+		for (indx = 0; indx < NUM_NP; ++indx)
+			ppp->sc_npmode[indx] = NPMODE_PASS;
+
+		MOD_INC_USE_COUNT;
+	}
 /*
  * Flush any pending characters in the driver and discipline.
  */
@@ -800,44 +850,6 @@ ppp_tty_open (struct tty_struct *tty)
 
 	if (tty->driver.flush_buffer)
 		tty->driver.flush_buffer (tty);
-/*
- * Allocate space for the default VJ header compression slots
- */
-	ppp->slcomp = slhc_init (16, 16);
-	if (ppp->slcomp == NULL) {
-		if (ppp->flags & SC_DEBUG)
-			printk (KERN_ERR
-			"ppp_tty_open: no space for compression buffers!\n");
-		ppp_release (ppp);
-		return -ENOMEM;
-	}
-/*
- * Allocate space for the MTU and MRU buffers
- */
-	if (ppp_changedmtu (ppp, ppp2dev(ppp)->mtu, ppp->mru) == 0) {
-		ppp_release (ppp);
-		return -ENOMEM;
-	}
-/*
- * Allocate space for a user level buffer
- */
-	ppp->ubuf = ppp_alloc_buf (RBUFSIZE, BUFFER_TYPE_TTY_RD);
-	if (ppp->ubuf == NULL) {
-		if (ppp->flags & SC_DEBUG)
-			printk (KERN_ERR
-		       "ppp_tty_open: no space for user receive buffer\n");
-		ppp_release (ppp);
-		return -ENOMEM;
-	}
-
-	if (ppp->flags & SC_DEBUG)
-		printk (KERN_INFO "ppp: channel %s open\n",
-			ppp2dev(ppp)->name);
-
-	for (indx = 0; indx < NUM_NP; ++indx)
-		ppp->sc_npmode[indx] = NPMODE_PASS;
-
-	MOD_INC_USE_COUNT;
 	return (ppp->line);
 }
 
@@ -857,16 +869,21 @@ ppp_tty_wakeup_code (struct ppp *ppp, struct tty_struct *tty,
 		     struct ppp_buffer *xbuf)
 {
 	register int count, actual;
+	unsigned long flags;
+
+	CHECK_PPP_VOID();
+	CHECK_BUF_MAGIC(xbuf);
 /*
  * Prevent re-entrancy by ensuring that this routine is called only once.
  */
+	save_flags(flags);
 	cli ();
 	if (ppp->flags & SC_XMIT_BUSY) {
-		sti ();
+		restore_flags(flags);
 		return;
 	}
 	ppp->flags |= SC_XMIT_BUSY;
-	sti ();
+	restore_flags(flags);
 /*
  * Send the next block of data to the modem
  */
@@ -901,11 +918,8 @@ ppp_tty_wakeup_code (struct ppp *ppp, struct tty_struct *tty,
  * If the completed buffer came from the device write, then complete the
  * transmission block.
  */
-			if (ppp2dev (ppp) -> flags & IFF_UP) {
-				if (xbuf->type == BUFFER_TYPE_DEV_WR)
-					ppp2dev (ppp)->tbusy = 0;
-				mark_bh (NET_BH);
-			}
+			ppp2dev (ppp)->tbusy = 0;
+			mark_bh (NET_BH);
 /*
  * Wake up the transmission queue for all completion events.
  */
@@ -913,6 +927,7 @@ ppp_tty_wakeup_code (struct ppp *ppp, struct tty_struct *tty,
 /*
  * Look at the priorities. Choose a daemon write over the device driver.
  */
+			save_flags(flags);
 			cli();
 			xbuf = ppp->s1buf;
 			ppp->s1buf = NULL;
@@ -920,21 +935,25 @@ ppp_tty_wakeup_code (struct ppp *ppp, struct tty_struct *tty,
 				xbuf = ppp->s2buf;
 				ppp->s2buf = NULL;
 			}
-			sti();
 /*
  * If there is a pending buffer then transmit it now.
  */
 			if (xbuf != NULL) {
 				ppp->flags &= ~SC_XMIT_BUSY;
 				ppp_kick_tty (ppp, xbuf);
+				restore_flags(flags);
 				return;
 			}
+			restore_flags(flags);
 		}
 	}
 /*
  * Clear the re-entry flag
  */
+	save_flags(flags);	/* &=~ may not be atomic */
+	cli ();
 	ppp->flags &= ~SC_XMIT_BUSY;
+	restore_flags(flags);
 }
 
 /*
@@ -954,9 +973,12 @@ ppp_tty_wakeup (struct tty_struct *tty)
 
 	if (!ppp)
 		return;
+	CHECK_PPP_VOID();
 
-	if (ppp->magic != PPP_MAGIC)
+	if (tty != ppp->tty) {
+		tty->flags &= ~(1 << TTY_DO_WRITE_WAKEUP);
 		return;
+	}
 /*
  * Ensure that there is a transmission pending. Clear the re-entry flag if
  * there is no pending buffer. Otherwise, send the buffer.
@@ -977,7 +999,10 @@ ppp_tty_wakeup (struct tty_struct *tty)
 static void
 ppp_kick_tty (struct ppp *ppp, struct ppp_buffer *xbuf)
 {
-	register int flags;
+	unsigned long flags;
+
+	CHECK_PPP_VOID();
+	CHECK_BUF_MAGIC(xbuf);
 /*
  * Hold interrupts.
  */
@@ -1036,7 +1061,6 @@ ppp_tty_room (struct tty_struct *tty)
 /*
  * Callback function when data is available at the tty driver.
  */
-
 static void
 ppp_tty_receive (struct tty_struct *tty, const __u8 * data,
 		 char *flags, int count)
@@ -1044,12 +1068,18 @@ ppp_tty_receive (struct tty_struct *tty, const __u8 * data,
 	register struct ppp *ppp = tty2ppp (tty);
 	register struct ppp_buffer *buf = NULL;
 	__u8 chr;
+
+	if (ppp != 0)
+		CHECK_PPP_VOID();
+	/*
+	 * This can happen if stuff comes in on the backup tty.
+	 */
+	if (ppp == 0 || tty != ppp->tty)
+		return;
 /*
  * Fetch the pointer to the buffer. Be careful about race conditions.
  */
-	if (ppp != NULL)
-		buf = ppp->rbuf;
-
+	buf = ppp->rbuf;
 	if (buf == NULL)
 		return;
 /*
@@ -1059,7 +1089,7 @@ ppp_tty_receive (struct tty_struct *tty, const __u8 * data,
 	if (ppp->magic != PPP_MAGIC) {
 		if (ppp->flags & SC_DEBUG)
 			printk (KERN_DEBUG
-				"PPP: handler called but couldn't find "
+				"PPP: tty_receive called but couldn't find "
 				"PPP struct.\n");
 		return;
 	}
@@ -1078,17 +1108,25 @@ ppp_tty_receive (struct tty_struct *tty, const __u8 * data,
 		ppp->bytes_rcvd++;
 		chr = *data++;
 		if (flags) {
-			if (*flags && ppp->toss == 0)
+			if (*flags && ppp->toss == 0) {
 				ppp->toss = *flags;
+				switch (ppp->toss) {
+				case TTY_OVERRUN:
+					++ppp->estats.rx_fifo_errors;
+					break;
+				case TTY_FRAME:
+				case TTY_BREAK:
+					++ppp->estats.rx_frame_errors;
+					break;
+				}
+			}
 			++flags;
 		}
 
 /*
- * Set the flags for 8 data bits and no parity.
- *
- * Actually, it sets the flags for d7 being 0/1 and parity being even/odd
- * so that the normal processing would have all flags set at the end of the
- * session. A missing flag bit would denote an error condition.
+ * Set the flags for d7 being 0/1 and parity being even/odd so that
+ * the normal processing would have all flags set at the end of the
+ * session.  A missing flag bit indicates an error condition.
  */
 
 #ifdef CHECK_CHARACTERS
@@ -1103,13 +1141,9 @@ ppp_tty_receive (struct tty_struct *tty, const __u8 * data,
 			ppp->flags |= SC_RCV_EVNP;
 #endif
 /*
- * Branch on the character. Process the escape character. The sequence ESC ESC
- * is defined to be ESC.
+ * Branch on the character.
  */
 		switch (chr) {
-		case PPP_ESCAPE: /* PPP_ESCAPE: invert bit in next character */
-			ppp->escape = PPP_TRANS;
-			break;
 /*
  * FLAG. This is the end of the block. If the block terminated by ESC FLAG,
  * then the block is to be ignored. In addition, characters before the very
@@ -1123,8 +1157,8 @@ ppp_tty_receive (struct tty_struct *tty, const __u8 * data,
  * Process frames which are not to be ignored. If the processing failed,
  * then clean up the VJ tables.
  */
-			if ((ppp->toss & 0x80) != 0 ||
-			    ppp_doframe (ppp) == 0) {
+			if (ppp_doframe (ppp) == 0) {
+				++ppp->stats.ppp_ierrors;
 				slhc_toss (ppp->slcomp);
 			}
 /*
@@ -1140,17 +1174,39 @@ ppp_tty_receive (struct tty_struct *tty, const __u8 * data,
  * receive mask then ignore the character.
  */
 		default:
-			if (in_rmap (ppp, chr))
-				break;
-/*
- * Adjust the character and if the frame is to be discarded then simply
- * ignore the character until the ending FLAG is received.
- */
-			chr ^= ppp->escape;
-			ppp->escape = 0;
-
+			/* If we're tossing, look no further. */
 			if (ppp->toss != 0)
 				break;
+
+			/* If this is a control char to be ignored, do so */
+			if (in_rmap (ppp, chr))
+				break;
+
+			/*
+			 * Modify the next character if preceded by escape.
+			 * The escape character (0x7d) could be an escaped
+			 * 0x5d, if it follows an escape :-)
+			 */
+			if (ppp->escape) {
+				chr ^= PPP_TRANS;
+				ppp->escape = 0;
+			} else if (chr == PPP_ESCAPE) {
+				ppp->escape = PPP_TRANS;
+				break;
+			}
+
+			/*
+			 * Decompress A/C and protocol compression here.
+			 */
+			if (buf->count == 0 && chr != PPP_ALLSTATIONS) {
+				buf_base(buf)[0] = PPP_ALLSTATIONS;
+				buf_base(buf)[1] = PPP_UI;
+				buf->count = 2;
+			}
+			if (buf->count == 2 && (chr & 1) != 0) {
+				buf_base(buf)[2] = 0;
+				buf->count = 3;
+			}
 /*
  * If the count sent is within reason then store the character, bump the
  * count, and update the FCS for the character.
@@ -1164,11 +1220,167 @@ ppp_tty_receive (struct tty_struct *tty, const __u8 * data,
  * The peer sent too much data. Set the flags to discard the current frame
  * and wait for the re-synchronization FLAG to be sent.
  */
-			ppp->stats.ppp_ierrors++;
+			++ppp->estats.rx_length_errors;
 			ppp->toss |= 0xC0;
 			break;
 		}
 	}
+}
+
+/* on entry, a received frame is in ppp->rbuf.bufr
+   check it and dispose as appropriate */
+
+static int
+ppp_doframe (struct ppp *ppp)
+{
+	__u8	*data = buf_base (ppp->rbuf);
+	int	count = ppp->rbuf->count;
+	int	proto;
+	int	new_count;
+	__u8 *new_data;
+
+	CHECK_PPP(0);
+	CHECK_BUF_MAGIC(ppp->rbuf);
+
+/*
+ * If there is a pending error from the receiver then log it and discard
+ * the damaged frame.
+ */
+	if (ppp->toss) {
+		if ((ppp->flags & SC_DEBUG) && count > 0)
+			printk (KERN_DEBUG
+				"ppp_toss: tossing frame, reason = %x\n",
+				ppp->toss);
+		return 0;
+	}
+/*
+ * An empty frame is ignored. This occurs if the FLAG sequence precedes and
+ * follows each frame.
+ */
+	if (count == 0)
+		return 1;
+/*
+ * Generate an error if the frame is too small.
+ */
+	if (count < PPP_HDRLEN + 2) {
+		if (ppp->flags & SC_DEBUG)
+			printk (KERN_DEBUG
+				"ppp: got runt ppp frame, %d chars\n", count);
+		++ppp->estats.rx_length_errors;
+		return 0;
+	}
+/*
+ * Verify the CRC of the frame and discard the CRC characters from the
+ * end of the buffer.
+ */
+	if (ppp->rbuf->fcs != PPP_GOODFCS) {
+		if (ppp->flags & SC_DEBUG) {
+			printk (KERN_DEBUG
+				"ppp: frame with bad fcs, length = %d\n",
+				count);
+			ppp_print_buffer("bad frame", data, count);
+		}
+		++ppp->estats.rx_crc_errors;
+		return 0;
+	}
+	count -= 2;		/* ignore the fcs characters */
+/*
+ * Obtain the protocol from the frame
+ */
+	proto = PPP_PROTOCOL(data);
+/*
+ * Process the active decompressor.
+ */
+	if ((ppp->sc_rc_state != (void *) 0) &&
+	    (ppp->flags & SC_DECOMP_RUN)     &&
+	    ((ppp->flags & (SC_DC_FERROR | SC_DC_ERROR)) == 0)) {
+		if (proto == PPP_COMP) {
+/*
+ * If the frame is compressed then decompress it.
+ */
+			new_data = kmalloc (ppp->mru + PPP_HDRLEN, GFP_ATOMIC);
+			if (new_data == NULL) {
+				if (ppp->flags & SC_DEBUG)
+					printk (KERN_ERR
+						"ppp_doframe: no memory\n");
+				new_count = DECOMP_ERROR;
+			} else {
+				new_count = (*ppp->sc_rcomp->decompress)
+					(ppp->sc_rc_state, data, count,
+					 new_data, ppp->mru + PPP_HDRLEN);
+			}
+			switch (new_count) {
+			default:
+				ppp_doframe_lower (ppp, new_data, new_count);
+				kfree (new_data);
+				return 1;
+
+			case DECOMP_ERROR:
+				ppp->flags |= SC_DC_ERROR;
+				break;
+
+			case DECOMP_FATALERROR:
+				ppp->flags |= SC_DC_FERROR;
+				if (ppp->flags & SC_DEBUG)
+					printk(KERN_ERR "ppp: fatal decomp error\n");
+				break;
+			}
+/*
+ * Log the error condition and discard the frame.
+ */
+			if (new_data != 0)
+				kfree (new_data);
+			slhc_toss (ppp->slcomp);
+			++ppp->stats.ppp_ierrors;
+		} else {
+/*
+ * The frame is not special. Pass it through the compressor without
+ * actually compressing the data
+ */
+			(*ppp->sc_rcomp->incomp) (ppp->sc_rc_state,
+						  data, count);
+		}
+	}
+/*
+ * Process the uncompressed frame.
+ */
+	ppp_doframe_lower (ppp, data, count);
+	return 1;
+}
+
+static void ppp_doframe_lower (struct ppp *ppp, __u8 *data, int count)
+{
+	__u16		proto = PPP_PROTOCOL (data);
+	ppp_proto_type	*proto_ptr;
+
+	CHECK_PPP_VOID();
+/*
+ * Ignore empty frames
+ */
+	if (count <= PPP_HDRLEN)
+		return;
+/*
+ * Count the frame and print it
+ */
+	++ppp->stats.ppp_ipackets;
+	if (ppp->flags & SC_LOG_INPKT)
+		ppp_print_buffer ("receive frame", data, count);
+/*
+ * Find the procedure to handle this protocol. The last one is marked
+ * as a protocol 0 which is the 'catch-all' to feed it to the pppd daemon.
+ */
+	proto_ptr = proto_list;
+	while (proto_ptr->proto != 0 && proto_ptr->proto != proto)
+		++proto_ptr;
+/*
+ * Update the appropriate statistic counter.
+ */
+	if ((*proto_ptr->func) (ppp, proto,
+				&data[PPP_HDRLEN],
+				count - PPP_HDRLEN))
+		ppp->stats.ppp_ioctects += count;
+	else
+		++ppp->stats.ppp_discards;
 }
 
 /*
@@ -1199,7 +1411,7 @@ ppp_rcv_rx (struct ppp *ppp, __u16 proto, __u8 * data, int count)
 /*
  * Tag the frame and kick it to the proper receive routine
  */
-	ppp->ddinfo.recv_idle = jiffies;
+	ppp->last_recv = jiffies;
 	netif_rx (skb);
 	return 1;
 }
@@ -1211,6 +1423,7 @@ ppp_rcv_rx (struct ppp *ppp, __u16 proto, __u8 * data, int count)
 static int
 rcv_proto_ip (struct ppp *ppp, __u16 proto, __u8 * data, int count)
 {
+	CHECK_PPP(0);
 	if ((ppp2dev (ppp)->flags & IFF_UP) && (count > 0))
 		if (ppp->sc_npmode[NP_IP] == NPMODE_PASS)
 			return ppp_rcv_rx (ppp, htons (ETH_P_IP), data, count);
@@ -1224,6 +1437,7 @@ rcv_proto_ip (struct ppp *ppp, __u16 proto, __u8 * data, int count)
 static int
 rcv_proto_ipx (struct ppp *ppp, __u16 proto, __u8 * data, int count)
 {
+	CHECK_PPP(0);
 	if (((ppp2dev (ppp)->flags & IFF_UP) != 0) && (count > 0))
 		return ppp_rcv_rx (ppp, htons (ETH_P_IPX), data, count);
 	return 0;
@@ -1237,6 +1451,7 @@ static int
 rcv_proto_vjc_comp (struct ppp *ppp, __u16 proto,
 		    __u8 *data, int count)
 {
+	CHECK_PPP(0);
 	if ((ppp->flags & SC_REJ_COMP_TCP) == 0) {
 		int new_count = slhc_uncompress (ppp->slcomp, data, count);
 		if (new_count >= 0) {
@@ -1257,6 +1472,7 @@ static int
 rcv_proto_vjc_uncomp (struct ppp *ppp, __u16 proto,
 		      __u8 *data, int count)
 {
+	CHECK_PPP(0);
 	if ((ppp->flags & SC_REJ_COMP_TCP) == 0) {
 		if (slhc_remember (ppp->slcomp, data, count) > 0) {
 			return rcv_proto_ip (ppp, PPP_IP, data, count);
@@ -1287,6 +1503,7 @@ rcv_proto_unknown (struct ppp *ppp, __u16 proto,
 	    goto failure;				 \
 }
 
+	CHECK_PPP(0);
 /*
  * The total length includes the protocol data.
  * Lock the user information buffer.
@@ -1294,8 +1511,9 @@ rcv_proto_unknown (struct ppp *ppp, __u16 proto,
 	if (test_and_set_bit (0, &ppp->ubuf->locked)) {
 		if (ppp->flags & SC_DEBUG)
 			printk (KERN_DEBUG
-				"ppp_us_queue: can't get lock\n");
+				"ppp: rcv_proto_unknown: can't get lock\n");
 	} else {
+		CHECK_BUF_MAGIC(ppp->ubuf);
 		current_idx = ppp->ubuf->head;
 /*
  * Insert the buffer length (not counted), the protocol, and the data
@@ -1323,11 +1541,6 @@ rcv_proto_unknown (struct ppp *ppp, __u16 proto,
 		if (ppp->tty->fasync != NULL)
 			kill_fasync (ppp->tty->fasync, SIGIO);
 
-		if (ppp->flags & SC_DEBUG)
-			printk (KERN_INFO
-				"ppp: successfully queued %d bytes, flags = %x\n",
-				len + 2, ppp->flags);
-
 		return 1;
 /*
  * The buffer is full. Unlock the header
@@ -1335,16 +1548,15 @@ rcv_proto_unknown (struct ppp *ppp, __u16 proto,
 failure:
 		clear_bit (0, &ppp->ubuf->locked);
 		if (ppp->flags & SC_DEBUG)
-			printk (KERN_INFO
-				"ppp_us_queue: ran out of buffer space.\n");
+			printk (KERN_DEBUG
+				"ppp: rcv_proto_unknown: buffer overflow\n");
 	}
 /*
  * Discard the frame. There are no takers for this protocol.
  */
 	if (ppp->flags & SC_DEBUG)
-		printk (KERN_WARNING
-			"ppp: dropping packet on the floor.\n");
-	slhc_toss (ppp->slcomp);
+		printk (KERN_DEBUG
+			"ppp: rcv_proto_unknown: dropping packet\n");
 	return 0;
 }
 
@@ -1361,10 +1573,12 @@ static void ppp_proto_ccp (struct ppp *ppp, __u8 *dp, int len, int rcvd)
 	int slen    = CCP_LENGTH(dp);
 	__u8 *opt = dp	 + CCP_HDRLEN;
 	int opt_len = slen - CCP_HDRLEN;
+	unsigned long flags;
 
 	if (slen > len)
 		return;
 
+	save_flags(flags);
 	switch (CCP_CODE(dp)) {
 	case CCP_CONFREQ:
 	case CCP_TERMREQ:
@@ -1373,6 +1587,7 @@ static void ppp_proto_ccp (struct ppp *ppp, __u8 *dp, int len, int rcvd)
  * CCP must be going down - disable compression
  */
 		if (ppp->flags & SC_CCP_UP) {
+			cli();
 			ppp->flags &= ~(SC_CCP_UP   |
 					SC_COMP_RUN |
 					SC_DECOMP_RUN);
@@ -1401,8 +1616,13 @@ static void ppp_proto_ccp (struct ppp *ppp, __u8 *dp, int len, int rcvd)
 			     opt_len,
 			     ppp2dev (ppp)->base_addr,
 			     0,
-			     ppp->flags))
+			     ppp->flags & SC_DEBUG)) {
+				if (ppp->flags & SC_DEBUG)
+					printk(KERN_DEBUG "%s: comp running\n",
+					       ppp->name);
+				cli();
 				ppp->flags |= SC_COMP_RUN;
+			}
 			break;
 		}
 /*
@@ -1418,34 +1638,48 @@ static void ppp_proto_ccp (struct ppp *ppp, __u8 *dp, int len, int rcvd)
 		     ppp2dev (ppp)->base_addr,
 		     0,
 		     ppp->mru,
-		     ppp->flags)) {
+		     ppp->flags & SC_DEBUG)) {
+			if (ppp->flags & SC_DEBUG)
+				printk(KERN_DEBUG "%s: decomp running\n",
+				       ppp->name);
+			cli();
 			ppp->flags |= SC_DECOMP_RUN;
 			ppp->flags &= ~(SC_DC_ERROR | SC_DC_FERROR);
 		}
 		break;
 /*
- * The protocol sequence is complete at this end
+ * CCP Reset-ack resets compressors and decompressors as it passes through.
  */
 	case CCP_RESETACK:
 		if ((ppp->flags & SC_CCP_UP) == 0)
 			break;
 
 		if (!rcvd) {
-			if (ppp->sc_xc_state && (ppp->flags & SC_COMP_RUN))
+			if (ppp->sc_xc_state && (ppp->flags & SC_COMP_RUN)) {
 				(*ppp->sc_xcomp->comp_reset)(ppp->sc_xc_state);
+				if (ppp->flags & SC_DEBUG)
+					printk(KERN_DEBUG "%s: comp reset\n",
+					       ppp->name);
+			}
 		} else {
 			if (ppp->sc_rc_state && (ppp->flags & SC_DECOMP_RUN)) {
 			      (*ppp->sc_rcomp->decomp_reset)(ppp->sc_rc_state);
-				ppp->flags &= ~SC_DC_ERROR;
+			      if (ppp->flags & SC_DEBUG)
+					printk(KERN_DEBUG "%s: decomp reset\n",
+					       ppp->name);
+			      cli();
+			      ppp->flags &= ~SC_DC_ERROR;
 			}
 		}
 		break;
 	}
+	restore_flags(flags);
 }
 
 static int
 rcv_proto_ccp (struct ppp *ppp, __u16 proto, __u8 *dp, int len)
 {
+	CHECK_PPP(0);
 	ppp_proto_ccp (ppp, dp, len, 1);
 	return rcv_proto_unknown (ppp, proto, dp, len);
 }
@@ -1458,197 +1692,6 @@ static int
 rcv_proto_lqr (struct ppp *ppp, __u16 proto, __u8 * data, int len)
 {
 	return rcv_proto_unknown (ppp, proto, data, len);
-}
-
-/* on entry, a received frame is in ppp->rbuf.bufr
-   check it and dispose as appropriate */
-
-static void ppp_doframe_lower (struct ppp *ppp, __u8 *data, int count)
-{
-	__u16		proto = PPP_PROTOCOL (data);
-	ppp_proto_type	*proto_ptr;
-
-/*
- * Ignore empty frames
- */
-	if (count <= 4)
-		return;
-/*
- * Count the frame and print it
- */
-	++ppp->stats.ppp_ipackets;
-	if (ppp->flags & SC_LOG_INPKT)
-		ppp_print_buffer ("receive frame", data, count);
-/*
- * Find the procedure to handle this protocol. The last one is marked
- * as a protocol 0 which is the 'catch-all' to feed it to the pppd daemon.
- */
-	proto_ptr = proto_list;
-	while (proto_ptr->proto != 0 && proto_ptr->proto != proto)
-		++proto_ptr;
-/*
- * Update the appropriate statistic counter.
- */
-	if ((*proto_ptr->func) (ppp, proto,
-				&data[PPP_HARD_HDR_LEN],
-				count - PPP_HARD_HDR_LEN))
-		ppp->stats.ppp_ioctects += count;
-	else
-		++ppp->stats.ppp_discards;
-}
-
-/* on entry, a received frame is in ppp->rbuf.bufr
-   check it and dispose as appropriate */
-
-static int
-ppp_doframe (struct ppp *ppp)
-{
-	__u8	*data = buf_base (ppp->rbuf);
-	int	count = ppp->rbuf->count;
-	int	addr, ctrl, proto;
-	int	new_count;
-	__u8 *new_data;
-
-/*
- * If there is a pending error from the receiver then log it and discard
- * the damaged frame.
- */
-	if (ppp->toss) {
-		if (ppp->flags & SC_DEBUG)
-			printk (KERN_WARNING
-				"ppp_toss: tossing frame, reason = %d\n",
-				ppp->toss);
-		ppp->stats.ppp_ierrors++;
-		return 0;
-	}
-/*
- * An empty frame is ignored. This occurs if the FLAG sequence precedes and
- * follows each frame.
- */
-	if (count == 0)
-		return 1;
-/*
- * Generate an error if the frame is too small.
- */
-	if (count < PPP_HARD_HDR_LEN) {
-		if (ppp->flags & SC_DEBUG)
-			printk (KERN_WARNING
-				"ppp: got runt ppp frame, %d chars\n", count);
-		slhc_toss (ppp->slcomp);
-		ppp->stats.ppp_ierrors++;
-		return 1;
-	}
-/*
- * Verify the CRC of the frame and discard the CRC characters from the
- * end of the buffer.
- */
-	if (ppp->rbuf->fcs != PPP_GOODFCS) {
-		if (ppp->flags & SC_DEBUG)
-			printk (KERN_WARNING
-				"ppp: frame with bad fcs, excess = %x\n",
-				ppp->rbuf->fcs ^ PPP_GOODFCS);
-		ppp->stats.ppp_ierrors++;
-		return 0;
-	}
-	count -= 2;		/* ignore the fcs characters */
-/*
- * Ignore the leading ADDRESS and CONTROL fields in the frame.
- */
-	addr   = PPP_ALLSTATIONS;
-	ctrl   = PPP_UI;
-
-	if ((data[0] == PPP_ALLSTATIONS) && (data[1] == PPP_UI)) {
-		data  += 2;
-		count -= 2;
-	}
-/*
- * Obtain the protocol from the frame
- */
-	proto = (__u16) *data++;
-	if ((proto & 1) == 0) {
-		proto = (proto << 8) | (__u16) *data++;
-		--count;
-	}
-/*
- * Rewrite the header with the full information. This may encroach upon
- * the 'filler' area in the buffer header. This is the purpose for the
- * filler.
- */
-	*(--data) = proto;
-	*(--data) = proto >> 8;
-	*(--data) = ctrl;
-	*(--data) = addr;
-	count	 += 3;
-/*
- * Process the active decompressor.
- */
-	if ((ppp->sc_rc_state != (void *) 0) &&
-	    (ppp->flags & SC_DECOMP_RUN)     &&
-	    ((ppp->flags & (SC_DC_FERROR | SC_DC_ERROR)) == 0)) {
-		if (proto == PPP_COMP) {
-/*
- * If the frame is compressed then decompress it.
- */
-			new_data = kmalloc (ppp->mru + 4, GFP_ATOMIC);
-			if (new_data == NULL) {
-				if (ppp->flags & SC_DEBUG)
-					printk (KERN_ERR
-						"ppp_doframe: no memory\n");
-				slhc_toss (ppp->slcomp);
-				(*ppp->sc_rcomp->incomp) (ppp->sc_rc_state,
-							  data,
-							  count);
-				return 1;
-			}
-/*
- * Decompress the frame
- */
-			new_count = bsd_decompress (ppp->sc_rc_state,
-						    data,
-						    count,
-						    new_data,
-						    ppp->mru + 4);
-			switch (new_count) {
-			default:
-				ppp_doframe_lower (ppp, new_data, new_count);
-				kfree (new_data);
-				return 1;
-
-			case DECOMP_OK:
-				break;
-
-			case DECOMP_ERROR:
-				ppp->flags |= SC_DC_ERROR;
-				break;
-
-			case DECOMP_FATALERROR:
-				ppp->flags |= SC_DC_FERROR;
-				break;
-			}
-/*
- * Log the error condition and discard the frame.
- */
-			if (ppp->flags & SC_DEBUG)
-				printk (KERN_ERR
-					"ppp_proto_comp: "
-					"decompress err %d\n", new_count);
-			kfree (new_data);
-			slhc_toss (ppp->slcomp);
-			return 1;
-		}
-/*
- * The frame is not special. Pass it through the compressor without
- * actually compressing the data
- */
-		(*ppp->sc_rcomp->incomp) (ppp->sc_rc_state,
-					  data,
-					  count);
-	}
-/*
- * Process the uncompressed frame.
- */
-	ppp_doframe_lower (ppp, data, count);
-	return 1;
 }
 
 /*************************************************************
@@ -1668,7 +1711,8 @@ ppp_tty_read (struct tty_struct *tty, struct file *file, __u8 * buf, size_t nr)
 {
 	struct ppp *ppp = tty2ppp (tty);
 	__u8 c;
-	ssize_t len, indx;
+	int error;
+	ssize_t len, ret;
 
 #define GETC(c)						\
 {							\
@@ -1682,28 +1726,34 @@ ppp_tty_read (struct tty_struct *tty, struct file *file, __u8 * buf, size_t nr)
 	if (!ppp)
 		return -EIO;
 
-	if (ppp->magic != PPP_MAGIC)
-		return -EIO;
+	/* if (ppp->magic != PPP_MAGIC)
+		return -EIO; */
 
 	CHECK_PPP (-ENXIO);
 
-	if (ppp->flags & SC_DEBUG)
-		printk (KERN_DEBUG
-			"ppp_tty_read: called buf=%p nr=%lu\n",
-			buf, (unsigned long)nr);
+/*
+ * Before we attempt to write the frame to the user, ensure that the
+ * user has access to the pages for the total buffer length.
+ */
+	error = verify_area (VERIFY_WRITE, buf, nr);
+	if (error != 0)
+		return (error);
+
 /*
  * Acquire the read lock.
  */
 	for (;;) {
 		ppp = tty2ppp (tty);
-		if (!ppp || ppp->magic != PPP_MAGIC || !ppp->inuse)
+		if (!ppp || ppp->magic != PPP_MAGIC || !ppp->inuse
+		    || tty != ppp->tty)
 			return 0;
 
 		if (test_and_set_bit (0, &ppp->ubuf->locked) != 0) {
+#if 0
 			if (ppp->flags & SC_DEBUG)
 				printk (KERN_DEBUG
 				     "ppp_tty_read: sleeping(ubuf)\n");
-
+#endif
 			current->timeout = 0;
 			current->state	 = TASK_INTERRUPTIBLE;
 			schedule ();
@@ -1712,13 +1762,7 @@ ppp_tty_read (struct tty_struct *tty, struct file *file, __u8 * buf, size_t nr)
 				return -EINTR;
 			continue;
 		}
-/*
- * Before we attempt to write the frame to the user, ensure that the
- * user has access to the pages for the total buffer length.
- */
-		indx = verify_area (VERIFY_WRITE, buf, nr);
-		if (indx != 0)
-			return (indx);
+
 /*
  * Fetch the length of the buffer from the first two bytes.
  */
@@ -1729,90 +1773,77 @@ ppp_tty_read (struct tty_struct *tty, struct file *file, __u8 * buf, size_t nr)
 			len = c << 8;
 			GETC (c);
 			len += c;
+			if (len)
+				break;
 		}
+
 /*
  * If there is no length then wait for the data to arrive.
  */
-		if (len == 0) {
-			/* no data */
-			clear_bit (0, &ppp->ubuf->locked);
-			if (file->f_flags & O_NONBLOCK) {
-				if (ppp->flags & SC_DEBUG)
-					printk (KERN_DEBUG
-						"ppp_tty_read: no data "
-						"(EAGAIN)\n");
-				return -EAGAIN;
-			}
-			current->timeout = 0;
-
-			if (ppp->flags & SC_DEBUG)
-				printk (KERN_DEBUG
-					"ppp_tty_read: sleeping(read_wait)\n");
-
-			interruptible_sleep_on (&ppp->read_wait);
-			if (signal_pending(current))
-				return -EINTR;
-			continue;
-		}
-/*
- * Reset the time of the last read operation.
- */
+		/* no data */
+		clear_bit (0, &ppp->ubuf->locked);
+		if (file->f_flags & O_NONBLOCK)
+			return -EAGAIN;
+		current->timeout = 0;
+#if 0
 		if (ppp->flags & SC_DEBUG)
-			printk (KERN_DEBUG "ppp_tty_read: len = %ld\n",
-				(long)len);
+			printk (KERN_DEBUG
+				"ppp_tty_read: sleeping(read_wait)\n");
+#endif
+		interruptible_sleep_on (&ppp->read_wait);
+		if (signal_pending(current))
+			return -EINTR;
+	}
+
 /*
  * Ensure that the frame will fit within the caller's buffer. If not, then
  * discard the frame from the input buffer.
  */
-		if (len + 2 > nr) {
-			/* Can't copy it, update us_rbuff_head */
+	if (len + 2 > nr) {
+		/* Can't copy it, update us_rbuff_head */
 
-			if (ppp->flags & SC_DEBUG)
-				printk (KERN_DEBUG
+		if (ppp->flags & SC_DEBUG)
+			printk (KERN_DEBUG
 				"ppp: read of %lu bytes too small for %ld "
-				"frame\n", (unsigned long)nr, (long)len + 2);
-			ppp->ubuf->tail += len;
-			ppp->ubuf->tail &= ppp->ubuf->size;
-			clear_bit (0, &ppp->ubuf->locked);
-			ppp->stats.ppp_ierrors++;
-			return -EOVERFLOW;
-		}
-/*
- * Before we attempt to write the frame to the user, ensure that the
- * page tables are proper.
- */
-		indx = verify_area (VERIFY_WRITE, buf, len + 2);
-		if (indx != 0) {
-			ppp->ubuf->tail += len;
-			ppp->ubuf->tail &= ppp->ubuf->size;
-			clear_bit (0, &ppp->ubuf->locked);
-			return (indx);
-		}
+				"frame\n", (unsigned long) nr, (long) len + 2);
+		ppp->stats.ppp_ierrors++;
+		error = -EOVERFLOW;
+		goto out;
+	}
+
 /*
  * Fake the insertion of the ADDRESS and CONTROL information because these
  * were not saved in the buffer.
  */
-		put_user (PPP_ALLSTATIONS, buf++);
-		put_user (PPP_UI,	   buf++);
+	error = put_user((u_char) PPP_ALLSTATIONS, buf);
+	if (error)
+		goto out;
+	++buf;
+	error = put_user((u_char) PPP_UI, buf);
+	if (error)
+		goto out;
+	++buf;
 
-		indx = len;
 /*
  * Copy the received data from the buffer to the caller's area.
  */
-		while (indx-- > 0) {
-			GETC (c);
-			put_user (c, buf);
-			++buf;
-		}
-
-		clear_bit (0, &ppp->ubuf->locked);
-		len += 2; /* Account for ADDRESS and CONTROL bytes */
-		if (ppp->flags & SC_DEBUG)
-			printk (KERN_DEBUG
-				"ppp_tty_read: passing %ld bytes up\n",
-				(long) len);
-		return len;
+	ret = len + 2; 	/* Account for ADDRESS and CONTROL bytes */
+	while (len-- > 0) {
+		GETC (c);
+		error = put_user(c, buf);
+		if (error)
+			goto out;
+		++buf;
 	}
+
+	clear_bit (0, &ppp->ubuf->locked);
+	return ret;
+
+out:
+	ppp->ubuf->tail += len;
+	ppp->ubuf->tail &= ppp->ubuf->size;
+	clear_bit (0, &ppp->ubuf->locked);
+	return error;
 #undef GETC
 }
 
@@ -1829,7 +1860,7 @@ ppp_stuff_char (struct ppp *ppp, register struct ppp_buffer *buf,
  */
 	if (ppp->flags & SC_DEBUG) {
 		if ((buf->count < 0) || (buf->count > 3000))
-			printk (KERN_DEBUG "ppp_stuff_char: %x %d\n",
+			printk (KERN_DEBUG "ppp_stuff_char: %d %x\n",
 				(unsigned int) buf->count,
 				(unsigned int) chr);
 	}
@@ -1859,6 +1890,12 @@ ppp_dev_xmit_lower (struct ppp *ppp, struct ppp_buffer *buf,
 	__u16   write_fcs;
 	int	address, control;
 	int	proto;
+
+	CHECK_PPP_VOID();
+	CHECK_BUF_MAGIC(buf);
+	++ppp->stats.ppp_opackets;
+	ppp->stats.ppp_ooctects += count;
+
 /*
  * Insert the leading FLAG character
  */
@@ -1867,7 +1904,7 @@ ppp_dev_xmit_lower (struct ppp *ppp, struct ppp_buffer *buf,
 	if (non_ip || flag_time == 0)
 		ins_char (buf, PPP_FLAG);
 	else {
-		if (jiffies - ppp->last_xmit > flag_time)
+		if (jiffies - ppp->last_xmit >= flag_time)
 			ins_char (buf, PPP_FLAG);
 	}
 	ppp->last_xmit = jiffies;
@@ -1906,26 +1943,10 @@ ppp_dev_xmit_lower (struct ppp *ppp, struct ppp_buffer *buf,
 	write_fcs = buf->fcs ^ 0xFFFF;
 	ppp_stuff_char (ppp, buf, write_fcs);
 	ppp_stuff_char (ppp, buf, write_fcs >> 8);
-
-	if (ppp->flags & SC_DEBUG)
-		printk (KERN_DEBUG "ppp_dev_xmit_lower: fcs is %hx\n",
-			write_fcs);
 /*
  * Add the trailing flag character
  */
 	ins_char (buf, PPP_FLAG);
-/*
- * Print the buffer
- */
-	if (ppp->flags & SC_LOG_FLUSH)
-		ppp_print_buffer ("ppp flush", buf_base (buf),
-				  buf->count);
-	else {
-		if (ppp->flags & SC_DEBUG)
-			printk (KERN_DEBUG
-				"ppp_dev_xmit: writing %d chars\n",
-				buf->count);
-	}
 /*
  * Send the block to the tty driver.
  */
@@ -1934,7 +1955,7 @@ ppp_dev_xmit_lower (struct ppp *ppp, struct ppp_buffer *buf,
 }
 
 /*
- * Send an frame to the remote with the proper bsd compression.
+ * Compress and send an frame to the peer.
  *
  * Return 0 if frame was queued for transmission.
  *	  1 if frame must be re-queued for later driver support.
@@ -1948,6 +1969,9 @@ ppp_dev_xmit_frame (struct ppp *ppp, struct ppp_buffer *buf,
 	int	address, control;
 	__u8 *new_data;
 	int	new_count;
+
+	CHECK_PPP(0);
+	CHECK_BUF_MAGIC(buf);
 /*
  * Print the buffer
  */
@@ -1967,7 +1991,7 @@ ppp_dev_xmit_frame (struct ppp *ppp, struct ppp_buffer *buf,
 	    (control == PPP_UI)			&&
 	    (proto != PPP_LCP)			&&
 	    (proto != PPP_CCP)) {
-		new_data = kmalloc (count, GFP_ATOMIC);
+		new_data = kmalloc (ppp->mtu, GFP_ATOMIC);
 		if (new_data == NULL) {
 			if (ppp->flags & SC_DEBUG)
 				printk (KERN_ERR
@@ -1975,32 +1999,20 @@ ppp_dev_xmit_frame (struct ppp *ppp, struct ppp_buffer *buf,
 			return 1;
 		}
 
-		new_count = bsd_compress (ppp->sc_xc_state,
-					  data,
-					  new_data,
-					  count,
-					  count);
+		new_count = (*ppp->sc_xcomp->compress)
+		    (ppp->sc_xc_state, data, new_data, count, ppp->mtu);
 
-		if (new_count > 0) {
-			++ppp->stats.ppp_opackets;
-			ppp->stats.ppp_ooctects += new_count;
-
-			ppp_dev_xmit_lower (ppp, buf, new_data,
-					    new_count, 0);
+		if (new_count > 0 && (ppp->flags & SC_CCP_UP)) {
+			ppp_dev_xmit_lower (ppp, buf, new_data, new_count, 0);
 			kfree (new_data);
 			return 0;
 		}
 /*
- * The frame could not be compressed.
+ * The frame could not be compressed, or it could not be sent in
+ * compressed form because CCP is not yet up.
  */
 		kfree (new_data);
 	}
-/*
- * The frame may not be compressed. Update the statistics before the
- * count field is destroyed. The frame will be transmitted.
- */
-	++ppp->stats.ppp_opackets;
-	ppp->stats.ppp_ooctects += count;
 /*
  * Go to the escape encoding
  */
@@ -2033,8 +2045,8 @@ send_revise_frame (register struct ppp *ppp, __u8 *data, int len)
  */
 	case PPP_CCP:
 		ppp_proto_ccp (ppp,
-			       data + PPP_HARD_HDR_LEN,
-			       len  - PPP_HARD_HDR_LEN,
+			       data + PPP_HDRLEN,
+			       len  - PPP_HDRLEN,
 			       0);
 		break;
 
@@ -2056,7 +2068,8 @@ ppp_tty_write (struct tty_struct *tty, struct file *file, const __u8 * data,
 {
 	struct ppp *ppp = tty2ppp (tty);
 	__u8 *new_data;
-	ssize_t status;
+	int error;
+
 /*
  * Verify the pointers.
  */
@@ -2070,13 +2083,13 @@ ppp_tty_write (struct tty_struct *tty, struct file *file, const __u8 * data,
 /*
  * Ensure that the caller does not wish to send too much.
  */
-	if (count > PPP_MTU) {
+	if (count > PPP_MTU + PPP_HDRLEN) {
 		if (ppp->flags & SC_DEBUG)
 			printk (KERN_WARNING
 				"ppp_tty_write: truncating user packet "
-				"from %lu to mtu %d\n",
-				(unsigned long) count, PPP_MTU);
-		count = PPP_MTU;
+				"from %lu to mtu %d\n", (unsigned long) count,
+				PPP_MTU + PPP_HDRLEN);
+		count = PPP_MTU + PPP_HDRLEN;
 	}
 /*
  * Allocate a buffer for the data and fetch it from the user space.
@@ -2089,17 +2102,28 @@ ppp_tty_write (struct tty_struct *tty, struct file *file, const __u8 * data,
 		return 0;
 	}
 /*
+ * Retrieve the user's buffer
+ */
+	error = copy_from_user(new_data, data, count);
+	if (error) {
+		kfree (new_data);
+		return error;
+	}
+/*
  * lock this PPP unit so we will be the only writer;
  * sleep if necessary
  */
 	while (lock_buffer (ppp->tbuf) != 0) {
 		current->timeout = 0;
+#if 0
 		if (ppp->flags & SC_DEBUG)
 			printk (KERN_DEBUG "ppp_tty_write: sleeping\n");
+#endif
 		interruptible_sleep_on (&ppp->write_wait);
 
 		ppp = tty2ppp (tty);
-		if (!ppp || ppp->magic != PPP_MAGIC || !ppp->inuse) {
+		if (!ppp || ppp->magic != PPP_MAGIC || !ppp->inuse
+		    || tty != ppp->tty) {
 			kfree (new_data);
 			return 0;
 		}
@@ -2110,24 +2134,25 @@ ppp_tty_write (struct tty_struct *tty, struct file *file, const __u8 * data,
 		}
 	}
 /*
- * Ensure that the caller's buffer is valid.
- */
-	status = verify_area (VERIFY_READ, data, count);
-	if (status != 0) {
-		kfree (new_data);
-		ppp->tbuf->locked = 0;
-		return status;
-	}
-
-	copy_from_user (new_data, data, count);
-/*
  * Change the LQR frame
  */
 	count = send_revise_frame (ppp, new_data, count);
 /*
  * Send the data
  */
-	ppp_dev_xmit_frame (ppp, ppp->tbuf, new_data, count);
+	if (PPP_PROTOCOL(new_data) == PPP_IP) {
+		/*
+		 * IP frames can be sent by pppd when we're doing
+		 * demand-dialling.  We send them via ppp_dev_xmit_ip
+		 * to make sure that VJ compression happens properly.
+		 */
+		ppp_dev_xmit_ip(ppp, ppp->tbuf, new_data + PPP_HDRLEN,
+				count - PPP_HDRLEN, NPMODE_PASS);
+
+	} else {
+		ppp_dev_xmit_frame (ppp, ppp->tbuf, new_data, count);
+	}
+
 	kfree (new_data);
 	return count;
 }
@@ -2145,28 +2170,42 @@ ppp_set_compression (struct ppp *ppp, struct ppp_option_data *odp)
 	int nb;
 	__u8 *ptr;
 	__u8 ccp_option[CCP_MAX_OPTION_LENGTH];
+	unsigned long flags;
+
 /*
  * Fetch the compression parameters
  */
-	error = verify_area (VERIFY_READ, odp, sizeof (data));
-	if (error == 0) {
-		copy_from_user (&data, odp, sizeof (data));
-		nb  = data.length;
-		ptr = data.ptr;
-		if ((__u32) nb >= (__u32)CCP_MAX_OPTION_LENGTH)
-			nb = CCP_MAX_OPTION_LENGTH;
+	error = copy_from_user(&data, odp, sizeof (data));
+	if (error != 0)
+		return error;
 
-		error = verify_area (VERIFY_READ, ptr, nb);
-		if(!error)
-			copy_from_user (ccp_option, ptr, nb);
-	}
+	nb  = data.length;
+	ptr = data.ptr;
+	if ((__u32) nb >= (__u32)CCP_MAX_OPTION_LENGTH)
+		nb = CCP_MAX_OPTION_LENGTH;
+
+	error = copy_from_user(ccp_option, ptr, nb);
 	if (error != 0)
 		return error;
 
 	if (ccp_option[1] < 2)	/* preliminary check on the length byte */
 		return (-EINVAL);
 
-	cp = find_compressor ((int) (unsigned int) (__u8) ccp_option[0]);
+	save_flags(flags);
+	cli();
+	ppp->flags &= ~(SC_COMP_RUN | SC_DECOMP_RUN);
+	restore_flags(flags);
+
+	cp = find_compressor (ccp_option[0]);
+#ifdef CONFIG_KERNELD
+	if (cp == NULL) {
+		char modname[32];
+		sprintf(modname, "ppp-compress-%d", ccp_option[0]);
+		request_module(modname);
+		cp = find_compressor(ccp_option[0]);
+	}
+#endif /* CONFIG_KERNELD */
+
 	if (cp != (struct compressor *) 0) {
 		/*
 		 * Found a handler for the protocol - try to allocate
@@ -2182,11 +2221,14 @@ ppp_set_compression (struct ppp *ppp, struct ppp_option_data *odp)
 
 			if (ppp->sc_xc_state == NULL) {
 				if (ppp->flags & SC_DEBUG)
-					printk("ppp%ld: comp_alloc failed\n",
-					       ppp2dev (ppp)->base_addr);
+					printk(KERN_DEBUG "%s: comp_alloc failed\n",
+					       ppp->name);
 				error = -ENOBUFS;
+			} else {
+				if (ppp->flags & SC_DEBUG)
+					printk(KERN_DEBUG "%s: comp_alloc -> %p\n",
+					       ppp->name, ppp->sc_xc_state);
 			}
-			ppp->flags &= ~SC_COMP_RUN;
 		} else {
 			if (ppp->sc_rc_state != NULL)
 				(*ppp->sc_rcomp->decomp_free)(ppp->sc_rc_state);
@@ -2194,18 +2236,21 @@ ppp_set_compression (struct ppp *ppp, struct ppp_option_data *odp)
 			ppp->sc_rc_state = cp->decomp_alloc(ccp_option, nb);
 			if (ppp->sc_rc_state == NULL) {
 				if (ppp->flags & SC_DEBUG)
-					printk("ppp%ld: decomp_alloc failed\n",
-					       ppp2dev (ppp)->base_addr);
-				error = ENOBUFS;
+					printk(KERN_DEBUG "%s: decomp_alloc failed\n",
+					       ppp->name);
+				error = -ENOBUFS;
+			} else {
+				if (ppp->flags & SC_DEBUG)
+					printk(KERN_DEBUG "%s: decomp_alloc -> %p\n",
+					       ppp->name, ppp->sc_rc_state);
 			}
-			ppp->flags &= ~SC_DECOMP_RUN;
 		}
 		return (error);
 	}
 
 	if (ppp->flags & SC_DEBUG)
-		printk(KERN_DEBUG "ppp%ld: no compressor for [%x %x %x], %x\n",
-		       ppp2dev (ppp)->base_addr, ccp_option[0], ccp_option[1],
+		printk(KERN_DEBUG "%s: no compressor for [%x %x %x], %x\n",
+		       ppp->name, ccp_option[0], ccp_option[1],
 		       ccp_option[2], nb);
 	return (-EINVAL);	/* no handler found */
 }
@@ -2241,57 +2286,45 @@ ppp_tty_ioctl (struct tty_struct *tty, struct file * file,
  */
 	switch (param2) {
 	case PPPIOCSMRU:
-		error = verify_area (VERIFY_READ, (void *) param3,
-				     sizeof (temp_i));
-		if (error == 0) {
-			get_user (temp_i, (int *) param3);
-			if (ppp->flags & SC_DEBUG)
-				printk (KERN_INFO
-				 "ppp_tty_ioctl: set mru to %x\n", temp_i);
+		error = get_user(temp_i, (int *) param3);
+		if (error != 0)
+			break;
+		if (ppp->flags & SC_DEBUG)
+			printk (KERN_INFO
+				"ppp_tty_ioctl: set mru to %x\n", temp_i);
 
-			if (ppp->mru != temp_i)
-				ppp_changedmtu (ppp, ppp2dev (ppp)->mtu, temp_i);
-		}
+		if (ppp->mru != temp_i)
+			ppp_changedmtu (ppp, ppp2dev (ppp)->mtu, temp_i);
 		break;
 /*
  * Fetch the flags
  */
 	case PPPIOCGFLAGS:
-		error = verify_area (VERIFY_WRITE, (void *) param3,
-				     sizeof (temp_i));
-		if (error == 0) {
-			temp_i = (ppp->flags & SC_MASK);
+		temp_i = (ppp->flags & SC_MASK);
 #ifndef CHECK_CHARACTERS /* Don't generate errors if we don't check chars. */
-			temp_i |= SC_RCV_B7_1 | SC_RCV_B7_0 |
-				  SC_RCV_ODDP | SC_RCV_EVNP;
+		temp_i |= SC_RCV_B7_1 | SC_RCV_B7_0 |
+			  SC_RCV_ODDP | SC_RCV_EVNP;
 #endif
-			put_user (temp_i, (int *) param3);
-			if (ppp->flags & SC_DEBUG)
-				printk (KERN_DEBUG
-				"ppp_tty_ioctl: get flags: addr %lx flags "
-				"%x\n", param3, temp_i);
-		}
+		error = put_user(temp_i, (int *) param3);
 		break;
 /*
  * Set the flags for the various options
  */
 	case PPPIOCSFLAGS:
-		error = verify_area (VERIFY_READ, (void *) param3,
-				     sizeof (temp_i));
-		if (error == 0) {
-			get_user (temp_i, (int *) param3);
-			temp_i &= SC_MASK;
-			temp_i |= (ppp->flags & ~SC_MASK);
+		error = get_user(temp_i, (int *) param3);
+		if (error != 0)
+			break;
+		temp_i &= SC_MASK;
+		temp_i |= (ppp->flags & ~SC_MASK);
 
-			if ((ppp->flags & SC_CCP_OPEN) &&
-			    (temp_i & SC_CCP_OPEN) == 0)
-				ppp_ccp_closed (ppp);
+		if ((ppp->flags & SC_CCP_OPEN) &&
+		    (temp_i & SC_CCP_OPEN) == 0)
+			ppp_ccp_closed (ppp);
 
-			if ((ppp->flags | temp_i) & SC_DEBUG)
-				printk (KERN_INFO
-			       "ppp_tty_ioctl: set flags to %x\n", temp_i);
-			ppp->flags = temp_i;
-		}
+		if ((ppp->flags | temp_i) & SC_DEBUG)
+			printk (KERN_INFO
+				"ppp_tty_ioctl: set flags to %x\n", temp_i);
+		ppp->flags = temp_i;
 		break;
 /*
  * Set the compression mode
@@ -2304,142 +2337,101 @@ ppp_tty_ioctl (struct tty_struct *tty, struct file * file,
  * Retrieve the transmit async map
  */
 	case PPPIOCGASYNCMAP:
-		error = verify_area (VERIFY_WRITE, (void *) param3,
-				     sizeof (temp_i));
-		if (error == 0) {
-			put_user (ppp->xmit_async_map[0], (int *) param3);
-			if (ppp->flags & SC_DEBUG)
-				printk (KERN_INFO
-				     "ppp_tty_ioctl: get asyncmap: addr "
-				     "%lx asyncmap %x\n",
-				     param3,
-				     ppp->xmit_async_map[0]);
-		}
+		error = put_user(ppp->xmit_async_map[0], (int *) param3);
 		break;
 /*
  * Set the transmit async map
  */
 	case PPPIOCSASYNCMAP:
-		error = verify_area (VERIFY_READ, (void *) param3,
-				     sizeof (temp_i));
-		if (error == 0) {
-			get_user (ppp->xmit_async_map[0],(int *) param3);
-			if (ppp->flags & SC_DEBUG)
-				printk (KERN_INFO
-				     "ppp_tty_ioctl: set xmit asyncmap %x\n",
-				     ppp->xmit_async_map[0]);
-		}
+		error = get_user(temp_i, (int *) param3);
+		if (error != 0)
+			break;
+		ppp->xmit_async_map[0] = temp_i;
+		if (ppp->flags & SC_DEBUG)
+			printk (KERN_INFO
+				"ppp_tty_ioctl: set xmit asyncmap %x\n",
+				ppp->xmit_async_map[0]);
 		break;
 /*
  * Set the receive async map
  */
 	case PPPIOCSRASYNCMAP:
-		error = verify_area (VERIFY_READ, (void *) param3,
-				     sizeof (temp_i));
-		if (error == 0) {
-			get_user (ppp->recv_async_map,(int *) param3);
-			if (ppp->flags & SC_DEBUG)
-				printk (KERN_INFO
-				     "ppp_tty_ioctl: set rcv asyncmap %x\n",
-				     ppp->recv_async_map);
-		}
+		error = get_user(temp_i, (int *) param3);
+		if (error != 0)
+			break;
+		ppp->recv_async_map = temp_i;
+		if (ppp->flags & SC_DEBUG)
+			printk (KERN_INFO
+				"ppp_tty_ioctl: set rcv asyncmap %x\n",
+				ppp->recv_async_map);
 		break;
 /*
  * Obtain the unit number for this device.
  */
 	case PPPIOCGUNIT:
-		error = verify_area (VERIFY_WRITE, (void *) param3,
-				     sizeof (temp_i));
-		if (error == 0) {
-			put_user (ppp2dev (ppp)->base_addr, (int *) param3);
-			if (ppp->flags & SC_DEBUG)
-				printk (KERN_INFO
-					"ppp_tty_ioctl: get unit: %ld",
-					ppp2dev (ppp)->base_addr);
-		}
+		error = put_user(ppp2dev (ppp)->base_addr, (int *) param3);
+		if (error != 0)
+			break;
+		if (ppp->flags & SC_DEBUG)
+			printk (KERN_INFO
+				"ppp_tty_ioctl: get unit: %ld\n",
+				ppp2dev (ppp)->base_addr);
 		break;
 /*
  * Set the debug level
  */
 	case PPPIOCSDEBUG:
-		error = verify_area (VERIFY_READ, (void *) param3,
-				     sizeof (temp_i));
-		if (error == 0) {
-			get_user (temp_i, (int *) param3);
-			temp_i	= (temp_i & 0x1F) << 16;
-			temp_i |= (ppp->flags & ~0x1F0000);
+		error = get_user(temp_i, (int *) param3);
+		if (error != 0)
+			break;
+		temp_i	= (temp_i & 0x1F) << 16;
+		temp_i |= (ppp->flags & ~0x1F0000);
 
-			if ((ppp->flags | temp_i) & SC_DEBUG)
-				printk (KERN_INFO
-			       "ppp_tty_ioctl: set flags to %x\n", temp_i);
-			ppp->flags = temp_i;
-		}
+		if ((ppp->flags | temp_i) & SC_DEBUG)
+			printk (KERN_INFO
+				"ppp_tty_ioctl: set flags to %x\n", temp_i);
+		ppp->flags = temp_i;
 		break;
 /*
  * Get the debug level
  */
 	case PPPIOCGDEBUG:
-		error = verify_area (VERIFY_WRITE, (void *) param3,
-				     sizeof (temp_i));
-		if (error == 0) {
-			temp_i = (ppp->flags >> 16) & 0x1F;
-			put_user (temp_i, (int *) param3);
-
-			if (ppp->flags & SC_DEBUG)
-				printk (KERN_INFO
-					"ppp_tty_ioctl: get debug level %d\n",
-					temp_i);
-		}
+		temp_i = (ppp->flags >> 16) & 0x1F;
+		error = put_user(temp_i, (int *) param3);
 		break;
 /*
  * Get the times since the last send/receive frame operation
  */
 	case PPPIOCGIDLE:
-		error = verify_area (VERIFY_WRITE, (void *) param3,
-				     sizeof (struct ppp_idle));
-		if (error == 0) {
+		{
 			struct ppp_idle cur_ddinfo;
-			unsigned long cur_jiffies = jiffies;
 
 			/* change absolute times to relative times. */
-			cur_ddinfo.xmit_idle = (cur_jiffies - ppp->ddinfo.xmit_idle) / HZ;
-			cur_ddinfo.recv_idle = (cur_jiffies - ppp->ddinfo.recv_idle) / HZ;
-			copy_to_user ((void *) param3, &cur_ddinfo,
-				     sizeof (cur_ddinfo));
-			if (ppp->flags & SC_DEBUG)
-				printk (KERN_INFO
-				"ppp_tty_ioctl: read demand dial info\n");
+			cur_ddinfo.xmit_idle = (jiffies - ppp->last_xmit) / HZ;
+			cur_ddinfo.recv_idle = (jiffies - ppp->last_recv) / HZ;
+			error = copy_to_user((void *) param3, &cur_ddinfo,
+					     sizeof (cur_ddinfo));
 		}
 		break;
 /*
  * Retrieve the extended async map
  */
 	case PPPIOCGXASYNCMAP:
-		error = verify_area (VERIFY_WRITE,
-				     (void *) param3,
+		error = copy_to_user((void *) param3, ppp->xmit_async_map,
 				     sizeof (ppp->xmit_async_map));
-		if (error == 0) {
-			copy_to_user ((void *) param3,
-				     ppp->xmit_async_map,
-				     sizeof (ppp->xmit_async_map));
-
-			if (ppp->flags & SC_DEBUG)
-				printk (KERN_INFO
-				"ppp_tty_ioctl: get xasyncmap: addr %lx\n",
-				param3);
-		}
 		break;
 /*
  * Set the async extended map
  */
 	case PPPIOCSXASYNCMAP:
-		error = verify_area (VERIFY_READ, (void *) param3,
-				     sizeof (ppp->xmit_async_map));
-		if (error == 0) {
+		{
 			__u32 temp_tbl[8];
 
-			copy_from_user (temp_tbl, (void *) param3,
-				       sizeof (ppp->xmit_async_map));
+			error = copy_from_user(temp_tbl, (void *) param3,
+					       sizeof (temp_tbl));
+			if (error != 0)
+				break;
+
 			temp_tbl[1]  =	0x00000000;
 			temp_tbl[2] &= ~0x40000000;
 			temp_tbl[3] |=	0x60000000;
@@ -2449,12 +2441,13 @@ ppp_tty_ioctl (struct tty_struct *tty, struct file * file,
 			    (temp_tbl[6] & temp_tbl[7]) != 0)
 				error = -EINVAL;
 			else {
-				memcpy (ppp->xmit_async_map, temp_tbl,
+				memcpy (ppp->xmit_async_map,
+					temp_tbl,
 					sizeof (ppp->xmit_async_map));
 
 				if (ppp->flags & SC_DEBUG)
 					printk (KERN_INFO
-					"ppp_tty_ioctl: set xasyncmap\n");
+						"ppp_tty_ioctl: set xasyncmap\n");
 			}
 		}
 		break;
@@ -2462,48 +2455,50 @@ ppp_tty_ioctl (struct tty_struct *tty, struct file * file,
  * Set the maximum VJ header compression slot number.
  */
 	case PPPIOCSMAXCID:
-		error = verify_area (VERIFY_READ, (void *) param3,
-				     sizeof (temp_i));
-		if (error == 0) {
-			get_user (temp_i, (int *) param3);
-			++temp_i;
-			if (ppp->flags & SC_DEBUG)
-				printk (KERN_INFO
-				     "ppp_tty_ioctl: set maxcid to %d\n",
-				     temp_i);
-			if (ppp->slcomp != NULL)
-				slhc_free (ppp->slcomp);
-			ppp->slcomp = slhc_init (16, temp_i);
+		error = get_user(temp_i, (int *) param3);
+		if (error != 0)
+			break;
+		temp_i = (temp_i & 255) + 1;
+		if (ppp->flags & SC_DEBUG)
+			printk (KERN_INFO
+				"ppp_tty_ioctl: set maxcid to %d\n",
+				temp_i);
+		if (ppp->slcomp != NULL)
+			slhc_free (ppp->slcomp);
+		ppp->slcomp = slhc_init (16, temp_i);
 
-			if (ppp->slcomp == NULL) {
-				if (ppp->flags & SC_DEBUG)
-					printk (KERN_ERR
+		if (ppp->slcomp == NULL) {
+			if (ppp->flags & SC_DEBUG)
+				printk (KERN_ERR
 					"ppp: no space for compression buffers!\n");
-				ppp_release (ppp);
-				error = -ENOMEM;
-			}
+			ppp_release (ppp);
+			error = -ENOMEM;
 		}
 		break;
 
     case PPPIOCXFERUNIT:
-		ppp_tty_close_local (tty, current->pid);
+		ppp->backup_tty = tty;
+		ppp->sc_xfer = current->pid;
 		break;
 
     case PPPIOCGNPMODE:
     case PPPIOCSNPMODE:
-		error = verify_area (VERIFY_READ, (void *) param3,
-				     sizeof (struct npioctl));
-		if (error == 0) {
+		{
 			struct npioctl npi;
-			copy_from_user (&npi,
-				       (void *) param3,
-				       sizeof (npi));
+
+			error = copy_from_user(&npi, (void *) param3,
+					sizeof (npi));
+			if (error != 0)
+				break;
 
 			switch (npi.protocol) {
 			case PPP_IP:
 				npi.protocol = NP_IP;
 				break;
 			default:
+				if (ppp->flags & SC_DEBUG)
+					printk(KERN_DEBUG "pppioc[gs]npmode: "
+					       "invalid proto %d\n", npi.protocol);
 				error = -EINVAL;
 			}
 
@@ -2512,25 +2507,18 @@ ppp_tty_ioctl (struct tty_struct *tty, struct file * file,
 
 			if (param2 == PPPIOCGNPMODE) {
 				npi.mode = ppp->sc_npmode[npi.protocol];
-				error = verify_area (VERIFY_WRITE,
-						     (void *) param3,
-						     sizeof (npi));
-				if (error != 0)
-					break;
 
-				copy_to_user ((void *) param3,
-					     &npi,
-					     sizeof (npi));
+				error = copy_to_user((void *) param3, &npi,
+						     sizeof (npi));
 				break;
 			}
 
-			if (npi.mode != ppp->sc_npmode[npi.protocol]) {
-				ppp->sc_npmode[npi.protocol] = npi.mode;
-				if (npi.mode != NPMODE_QUEUE) {
-					/* ppp_requeue(ppp); maybe needed */
-					ppp_tty_wakeup (ppp2tty(ppp));
-				}
-			}
+			ppp->sc_npmode[npi.protocol] = npi.mode;
+			if (ppp->flags & SC_DEBUG)
+				printk(KERN_DEBUG "ppp: set np %d to %d\n",
+				       npi.protocol, npi.mode);
+			ppp2dev(ppp)->tbusy = 0;
+			mark_bh(NET_BH);
 		}
 		break;
 /*
@@ -2542,15 +2530,11 @@ ppp_tty_ioctl (struct tty_struct *tty, struct file * file,
 		break;
 
 	case FIONREAD:
-		error = verify_area (VERIFY_WRITE,
-				     (void *) param3,
-				     sizeof (int));
-		if (error == 0) {
+		{
 			int count = ppp->ubuf->tail - ppp->ubuf->head;
 			if (count < 0)
 				count += (ppp->ubuf->size + 1);
-
-			put_user (count, (int *) param3);
+			error = put_user(count, (int *) param3);
 		}
 		break;
 /*
@@ -2581,13 +2565,14 @@ ppp_tty_poll (struct tty_struct *tty, struct file *filp, poll_table * wait)
 	struct ppp *ppp = tty2ppp (tty);
 	unsigned int mask = 0;
 
-	if(ppp && ppp->magic == PPP_MAGIC) {
+	if (ppp && ppp->magic == PPP_MAGIC && tty == ppp->tty) {
 		CHECK_PPP (0);
 
 		poll_wait(&ppp->read_wait, wait);
 		poll_wait(&ppp->write_wait, wait);
 
 		/* Must lock the user buffer area while checking. */
+		CHECK_BUF_MAGIC(ppp->ubuf);
 		if(test_and_set_bit(0, &ppp->ubuf->locked) == 0) {
 			if(ppp->ubuf->head != ppp->ubuf->tail)
 				mask |= POLLIN | POLLRDNORM;
@@ -2647,10 +2632,6 @@ ppp_dev_close (struct device *dev)
 	struct ppp *ppp = dev2ppp (dev);
 
 	if (ppp2tty (ppp) == NULL) {
-		if (ppp->flags & SC_DEBUG)
-			printk (KERN_ERR
-			"ppp: %s not connected to a TTY! can't go down!\n",
-			dev->name);
 		return -ENXIO;
 	}
 /*
@@ -2673,19 +2654,12 @@ static int
 ppp_dev_ioctl_version (struct ppp *ppp, struct ifreq *ifr)
 {
 	int error;
-	int len;
-	char *result;
-/*
- * Must have write access to the buffer.
- */
-	result = (char *) ifr->ifr_ifru.ifru_data;
-	len    = strlen (szVersion) + 1;
-	error  = verify_area (VERIFY_WRITE, result, len);
+	char *result  = (char *) ifr->ifr_ifru.ifru_data;
+	int  len      = strlen (szVersion) + 1;
 /*
  * Move the version data
  */
-	if (error == 0)
-		copy_to_user (result, szVersion, len);
+	error = copy_to_user(result, szVersion, len);
 
 	return error;
 }
@@ -2700,18 +2674,11 @@ ppp_dev_ioctl_stats (struct ppp *ppp, struct ifreq *ifr, struct device *dev)
 	struct ppp_stats *result, temp;
 	int    error;
 /*
- * Must have write access to the buffer.
- */
-	result = (struct ppp_stats *) ifr->ifr_ifru.ifru_data;
-	error = verify_area (VERIFY_WRITE,
-			     result,
-			     sizeof (temp));
-/*
  * Supply the information for the caller. First move the version data
  * then move the ppp stats; and finally the vj stats.
  */
 	memset (&temp, 0, sizeof(temp));
-	if (error == 0 && dev->flags & IFF_UP) {
+	if (dev->flags & IFF_UP) {
 		memcpy (&temp.p, &ppp->stats, sizeof (struct pppstat));
 		if (ppp->slcomp != NULL) {
 			temp.vj.vjs_packets    = ppp->slcomp->sls_o_compressed+
@@ -2726,8 +2693,10 @@ ppp_dev_ioctl_stats (struct ppp *ppp, struct ifreq *ifr, struct device *dev)
 		}
 	}
 
-	if (error == 0)
-		copy_to_user (result, &temp, sizeof (temp));
+	result = (struct ppp_stats *) ifr->ifr_ifru.ifru_data;
+
+	error = copy_to_user(result, &temp, sizeof (temp));
+
 	return error;
 }
 
@@ -2741,17 +2710,10 @@ ppp_dev_ioctl_comp_stats (struct ppp *ppp, struct ifreq *ifr, struct device *dev
 	struct ppp_comp_stats *result, temp;
 	int    error;
 /*
- * Must have write access to the buffer.
- */
-	result = (struct ppp_comp_stats *) ifr->ifr_ifru.ifru_data;
-	error = verify_area (VERIFY_WRITE,
-			     result,
-			     sizeof (temp));
-/*
  * Supply the information for the caller.
  */
 	memset (&temp, 0, sizeof(temp));
-	if (error == 0 && dev->flags & IFF_UP) {
+	if (dev->flags & IFF_UP) {
 		if (ppp->sc_xc_state != NULL)
 			(*ppp->sc_xcomp->comp_stat) (ppp->sc_xc_state,
 						     &temp.c);
@@ -2763,8 +2725,10 @@ ppp_dev_ioctl_comp_stats (struct ppp *ppp, struct ifreq *ifr, struct device *dev
 /*
  * Move the data to the caller's buffer
  */
-	if (error == 0)
-		copy_to_user (result, &temp, sizeof (temp));
+	result = (struct ppp_comp_stats *) ifr->ifr_ifru.ifru_data;
+
+	error = copy_to_user(result, &temp, sizeof (temp));
+
 	return error;
 }
 
@@ -2777,6 +2741,8 @@ ppp_dev_ioctl (struct device *dev, struct ifreq *ifr, int cmd)
 {
 	struct ppp *ppp = dev2ppp (dev);
 	int error;
+
+	CHECK_PPP_MAGIC(ppp);
 /*
  * Process the requests
  */
@@ -2805,94 +2771,48 @@ ppp_dev_ioctl (struct device *dev, struct ifreq *ifr, int cmd)
  *
  * Return 0 if frame was queued for transmission.
  *	  1 if frame must be re-queued for later driver support.
+ *	  -1 if frame should be dropped.
  */
 
 static int
-ppp_dev_xmit_ip (struct device *dev, struct ppp *ppp, __u8 *data)
+ppp_dev_xmit_ip (struct ppp *ppp, struct ppp_buffer *buf,
+		 __u8 *data, int len, enum NPmode npmode)
 {
-	int		  proto = PPP_IP;
-	int		  len;
-	struct ppp_hdr	  *hdr;
-	struct tty_struct *tty = ppp2tty (ppp);
-/*
- * Obtain the length from the IP header.
- */
-	len = ((struct iphdr *)data) -> tot_len;
-	len = ntohs (len);
-/*
- * Validate the tty interface
- */
-	if (tty == NULL) {
-		if (ppp->flags & SC_DEBUG)
-			printk (KERN_ERR
-				"ppp_dev_xmit: %s not connected to a TTY!\n",
-				dev->name);
-		return 0;
-	}
-/*
- * Ensure that the PPP device is still up
- */
-	if (!(dev->flags & IFF_UP)) {
-		if (ppp->flags & SC_DEBUG)
-			printk (KERN_WARNING
-				"ppp_dev_xmit: packet sent on interface %s,"
-				" which is down for IP\n",
-				dev->name);
-		return 0;
-	}
+	int	proto = PPP_IP;
+	__u8	*hdr;
 /*
  * Branch on the type of processing for the IP frame.
  */
-	switch (ppp->sc_npmode[NP_IP]) {
+	switch (npmode) {
 	case NPMODE_PASS:
 		break;
 
-	case NPMODE_ERROR:
+	case NPMODE_QUEUE:
+		/*
+		 * We may not send the packet now, so drop it.
+		 * XXX It would be nice to be able to return it to the
+		 * network system to be queued and retransmitted later.
+		 */
 		if (ppp->flags & SC_DEBUG)
-			printk (KERN_WARNING
-				"ppp_dev_xmit: npmode = NPMODE_ERROR on %s\n",
-				dev->name);
-		return 0;
+			printk(KERN_DEBUG "%s: returning frame\n",
+			       ppp->name);
+		return -1;
 
+	case NPMODE_ERROR:
 	case NPMODE_DROP:
 		if (ppp->flags & SC_DEBUG)
-			printk (KERN_WARNING
-				"ppp_dev_xmit: npmode = NPMODE_DROP on %s\n",
-				dev->name);
-		return 0;
-
-	case NPMODE_QUEUE:
-		break;
+			printk (KERN_DEBUG
+				"ppp_dev_xmit: npmode = %d on %s\n",
+				ppp->sc_npmode[NP_IP], ppp->name);
+		return -1;
 
 	default:
 		if (ppp->flags & SC_DEBUG)
 			printk (KERN_WARNING
 				"ppp_dev_xmit: unknown npmode %d on %s\n",
-				ppp->sc_npmode[NP_IP],
-				dev->name);
-		return 0;
+				ppp->sc_npmode[NP_IP], ppp->name);
+		return -1;
 	}
-/*
- * Detect a change in the transfer size
- */
-	if (ppp->mtu != ppp2dev (ppp)->mtu) {
-		ppp_changedmtu (ppp,
-				ppp2dev (ppp)->mtu,
-				ppp->mru);
-	}
-/*
- * Acquire the lock on the transmission buffer. If the buffer was busy then
- * mark the device as busy.
- */
-	if (lock_buffer (ppp->wbuf) != 0) {
-		dev->tbusy = 1;
-		return 1;
-	}
-/*
- * Print the frame being sent
- */
-	if (ppp->flags & SC_LOG_OUTPKT)
-		ppp_print_buffer ("ppp outpkt", data, len);
 /*
  * At this point, the buffer will be transmitted. There is no other exit.
  *
@@ -2900,7 +2820,7 @@ ppp_dev_xmit_ip (struct device *dev, struct ppp *ppp, __u8 *data)
  */
 	if (ppp->flags & SC_COMP_TCP) {
 		len = slhc_compress (ppp->slcomp, data, len,
-				     buf_base (ppp->cbuf) + PPP_HARD_HDR_LEN,
+				     buf_base (ppp->cbuf) + PPP_HDRLEN,
 				     &data,
 				     (ppp->flags & SC_NO_TCP_CCID) == 0);
 
@@ -2916,83 +2836,40 @@ ppp_dev_xmit_ip (struct device *dev, struct ppp *ppp, __u8 *data)
 /*
  * Send the frame
  */
-	len  += PPP_HARD_HDR_LEN;
-	hdr   = &((struct ppp_hdr *) data)[-1];
+	len  += PPP_HDRLEN;
+	hdr   = data - PPP_HDRLEN;
 
-	hdr->address	 = PPP_ALLSTATIONS;
-	hdr->control	 = PPP_UI;
-	hdr->protocol[0] = 0;
-	hdr->protocol[1] = proto;
+	hdr[0] = PPP_ALLSTATIONS;
+	hdr[1] = PPP_UI;
+	hdr[2] = 0;
+	hdr[3] = proto;
 
-	return ppp_dev_xmit_frame (ppp, ppp->wbuf, (__u8 *) hdr, len);
+	return ppp_dev_xmit_frame (ppp, buf, hdr, len);
 }
 
 /*
- * Send an IPX (or any other non-IP) frame to the remote.
+ * Send a non-IP data frame (such as an IPX frame) to the remote.
  *
  * Return 0 if frame was queued for transmission.
  *	  1 if frame must be re-queued for later driver support.
  */
 static int
-ppp_dev_xmit_ipx (struct device *dev, struct ppp *ppp,
+ppp_dev_xmit_other (struct device *dev, struct ppp *ppp,
 		  __u8 *data, int len, int proto)
 {
-	struct tty_struct *tty = ppp2tty (ppp);
-	struct ppp_hdr	  *hdr;
-/*
- * Validate the tty interface
- */
-	if (tty == NULL) {
-		if (ppp->flags & SC_DEBUG)
-			printk (KERN_ERR
-				"ppp_dev_xmit: %s not connected to a TTY!\n",
-				dev->name);
-		return 0;
-	}
-/*
- * Ensure that the PPP device is still up
- */
-	if (!(dev->flags & IFF_UP)) {
-		if (ppp->flags & SC_DEBUG)
-			printk (KERN_WARNING
-				"ppp_dev_xmit: packet sent on interface %s,"
-				" which is down\n",
-				dev->name);
-		return 0;
-	}
-/*
- * Detect a change in the transfer size
- */
-	if (ppp->mtu != ppp2dev (ppp)->mtu) {
-		ppp_changedmtu (ppp,
-				ppp2dev (ppp)->mtu,
-				ppp->mru);
-	}
-/*
- * Acquire the lock on the transmission buffer. If the buffer was busy then
- * mark the device as busy.
- */
-	if (lock_buffer (ppp->wbuf) != 0) {
-		dev->tbusy = 1;
-		return 1;
-	}
-/*
- * Print the frame being sent
- */
-	if (ppp->flags & SC_LOG_OUTPKT)
-		ppp_print_buffer ("ppp outpkt", data, len);
+	__u8	*hdr;
 /*
  * Send the frame
  */
-	len  += PPP_HARD_HDR_LEN;
-	hdr   = &((struct ppp_hdr *) data)[-1];
+	len += PPP_HDRLEN;
+	hdr = data - PPP_HDRLEN;
 
-	hdr->address	 = PPP_ALLSTATIONS;
-	hdr->control	 = PPP_UI;
-	hdr->protocol[0] = proto >> 8;
-	hdr->protocol[1] = proto;
+	hdr[0] = PPP_ALLSTATIONS;
+	hdr[1] = PPP_UI;
+	hdr[2] = proto >> 8;
+	hdr[3] = proto;
 
-	return ppp_dev_xmit_frame (ppp, ppp->wbuf, (__u8 *) hdr, len);
+	return ppp_dev_xmit_frame (ppp, ppp->wbuf, hdr, len);
 }
 
 /*
@@ -3014,24 +2891,13 @@ ppp_dev_xmit (sk_buff *skb, struct device *dev)
 			printk (KERN_WARNING "ppp_dev_xmit: null packet!\n");
 		return 0;
 	}
-
 /*
  * Avoid timing problem should tty hangup while data is queued to be sent
  */
 	if (!ppp->inuse) {
 		dev_kfree_skb (skb, FREE_WRITE);
-		printk(KERN_WARNING "ppp: I am dying to know, are you still alive?\n");
-#if 0
-		dev_close (dev);
-#endif
 		return 0;
 	}
-/*
- * Validate the tty linkage
- */
-	if (ppp->flags & SC_DEBUG)
-		printk (KERN_DEBUG "ppp_dev_xmit [%s]: skb %p\n",
-			dev->name, skb);
 /*
  * Validate the tty interface
  */
@@ -3048,13 +2914,36 @@ ppp_dev_xmit (sk_buff *skb, struct device *dev)
  */
 	len   = skb->len;
 	data  = skb_data(skb);
-/*
- * Bug trap for null data. Release the skb and bail out.
- */
-	if(data == NULL) {
-		printk("ppp_dev_xmit: data=NULL before ppp_dev_xmit_ip.\n");
+
+	if (data == (__u8 *) 0) {
+		if (ppp->flags & SC_DEBUG)
+			printk (KERN_CRIT "ppp_dev_xmit: %s Null skb data\n",
+				dev->name);
 		dev_kfree_skb (skb, FREE_WRITE);
 		return 0;
+	}
+/*
+ * Detect a change in the transfer size
+ */
+	if (ppp->mtu != ppp2dev (ppp)->mtu) {
+		ppp_changedmtu (ppp,
+				ppp2dev (ppp)->mtu,
+				ppp->mru);
+	}
+/*
+ * Acquire the lock on the transmission buffer. If the buffer was busy then
+ * mark the device as busy.
+ * We also require that ppp->tbuf be unlocked, in order to serialize
+ * calls to ppp_dev_xmit_frame (which does compression) and the output
+ * of frames w.r.t. tty writes from pppd.
+ */
+	CHECK_BUF_MAGIC(ppp->wbuf);
+	if (ppp->tbuf->locked || lock_buffer (ppp->wbuf) != 0) {
+		dev->tbusy = 1;
+		if (ppp->flags & SC_DEBUG)
+			printk(KERN_DEBUG "dev_xmit blocked, t=%lu w=%lu\n",
+			       ppp->tbuf->locked, ppp->wbuf->locked);
+		return 1;
 	}
 /*
  * Look at the protocol in the skb to determine the difference between
@@ -3062,11 +2951,12 @@ ppp_dev_xmit (sk_buff *skb, struct device *dev)
  */
 	switch (ntohs (skb->protocol)) {
 	case ETH_P_IPX:
-		answer = ppp_dev_xmit_ipx (dev, ppp, data, len, PPP_IPX);
+		answer = ppp_dev_xmit_other (dev, ppp, data, len, PPP_IPX);
 		break;
 
 	case ETH_P_IP:
-		answer = ppp_dev_xmit_ip (dev, ppp, data);
+		answer = ppp_dev_xmit_ip (ppp, ppp->wbuf, data, len,
+					  ppp->sc_npmode[NP_IP]);
 		break;
 
 	default: /* All others have no support at this time. */
@@ -3077,8 +2967,18 @@ ppp_dev_xmit (sk_buff *skb, struct device *dev)
  * This is the end of the transmission. Release the buffer if it was sent.
  */
 	if (answer == 0) {
+		/* packet queued OK */
 		dev_kfree_skb (skb, FREE_WRITE);
-		ppp->ddinfo.xmit_idle = jiffies;
+	} else {
+		ppp->wbuf->locked = 0;
+		if (answer < 0) {
+			/* packet should be dropped */
+			dev_kfree_skb (skb, FREE_WRITE);
+			answer = 0;
+		} else {
+			/* packet should be queued for later */
+			dev->tbusy = 1;
+		}
 	}
 	return answer;
 }
@@ -3091,29 +2991,15 @@ static struct net_device_stats *
 ppp_dev_stats (struct device *dev)
 {
 	struct ppp *ppp = dev2ppp (dev);
-	static struct net_device_stats ppp_stats;
 
-	ppp_stats.rx_packets	      = ppp->stats.ppp_ipackets;
-	ppp_stats.rx_errors	      = ppp->stats.ppp_ierrors;
-	ppp_stats.rx_dropped	      = ppp->stats.ppp_ierrors;
-	ppp_stats.rx_fifo_errors      = 0;
-	ppp_stats.rx_length_errors    = 0;
-	ppp_stats.rx_over_errors      = 0;
-	ppp_stats.rx_crc_errors	      = 0;
-	ppp_stats.rx_frame_errors     = 0;
-	ppp_stats.tx_packets	      = ppp->stats.ppp_opackets;
-	ppp_stats.tx_errors	      = ppp->stats.ppp_oerrors;
-	ppp_stats.tx_dropped	      = 0;
-	ppp_stats.tx_fifo_errors      = 0;
-	ppp_stats.collisions	      = 0;
-	ppp_stats.tx_carrier_errors   = 0;
-	ppp_stats.tx_aborted_errors   = 0;
-	ppp_stats.tx_window_errors    = 0;
-	ppp_stats.tx_heartbeat_errors = 0;
+	ppp->estats.rx_packets = ppp->stats.ppp_ipackets;
+	ppp->estats.rx_errors  = ppp->stats.ppp_ierrors;
+	ppp->estats.tx_packets = ppp->stats.ppp_opackets;
+	ppp->estats.tx_errors  = ppp->stats.ppp_oerrors;
+	ppp->estats.rx_bytes   = ppp->stats.ppp_ibytes;
+	ppp->estats.tx_bytes   = ppp->stats.ppp_obytes;
 
-	if (ppp->flags & SC_DEBUG)
-		printk (KERN_INFO "ppp_dev_stats called");
-	return &ppp_stats;
+	return &ppp->estats;
 }
 
 /*************************************************************
@@ -3125,28 +3011,16 @@ ppp_dev_stats (struct device *dev)
 static struct ppp *
 ppp_find (int pid_value)
 {
-	int		if_num;
-	ppp_ctrl_t	*ctl;
 	struct ppp	*ppp;
 
-	/* try to find the exact same free device which we had before */
-	ctl	 = ppp_list;
-	if_num	 = 0;
-
-	while (ctl) {
-		ppp = ctl2ppp (ctl);
-		if (!test_and_set_bit(0, &ppp->inuse)) {
-			if (ppp->sc_xfer == pid_value) {
-				ppp->sc_xfer = 0;
-				return (ppp);
-			}
-			clear_bit (0, &ppp->inuse);
-		}
-		ctl = ctl->next;
-		if (++if_num == max_dev)
+	/* try to find the device which this pid is already using */
+	for (ppp = ppp_list; ppp != 0; ppp = ppp->next) {
+		if (ppp->inuse && ppp->sc_xfer == pid_value) {
+			ppp->sc_xfer = 0;
 			break;
+		}
 	}
-	return NULL;
+	return ppp;
 }
 
 /* allocate or create a PPP channel */
@@ -3155,65 +3029,58 @@ ppp_alloc (void)
 {
 	int		if_num;
 	int		status;
-	ppp_ctrl_t	*ctl;
 	struct device	*dev;
 	struct ppp	*ppp;
 
 	/* try to find an free device */
-	ctl	 = ppp_list;
-	if_num	 = 0;
-
-	while (ctl) {
-		ppp = ctl2ppp (ctl);
+	if_num = 0;
+	for (ppp = ppp_list; ppp != 0; ppp = ppp->next) {
 		if (!test_and_set_bit(0, &ppp->inuse))
-			return (ppp);
-		ctl = ctl->next;
-		if (++if_num == max_dev)
-			return (NULL);
+			return ppp;
+		++if_num;
 	}
 /*
- * There are no available items. Allocate a device from the system pool
+ * There are no available units, so make a new one.
  */
-	ctl = (ppp_ctrl_t *) kmalloc (sizeof(ppp_ctrl_t), GFP_KERNEL);
-	if (ctl) {
-		(void) memset(ctl, 0, sizeof(ppp_ctrl_t));
-		ppp = ctl2ppp (ctl);
-		dev = ctl2dev (ctl);
+	ppp = (struct ppp *) kmalloc (sizeof(struct ppp), GFP_KERNEL);
+	if (ppp == 0)
+		return 0;
+	memset(ppp, 0, sizeof(*ppp));
 
-		/* initialize channel control data */
-		set_bit(0, &ppp->inuse);
+	/* initialize channel control data */
+	set_bit(0, &ppp->inuse);
 
-		ppp->line      = if_num;
-		ppp->tty       = NULL;
-		ppp->dev       = dev;
+	ppp->line      = if_num;
+	ppp->tty       = NULL;
+	ppp->backup_tty = NULL;
+	if (ppp_last == 0)
+		ppp_list = ppp;
+	else
+		ppp_last->next = ppp;
+	ppp_last = ppp;
+	ppp->next = 0;
 
-		dev->next      = NULL;
-		dev->init      = ppp_init_dev;
-		dev->name      = ctl->name;
-		dev->base_addr = (__u32) if_num;
-		dev->priv      = (void *) ppp;
+	dev = ppp2dev(ppp);
+	dev->next      = NULL;
+	dev->init      = ppp_init_dev;
+	dev->name      = ppp->name;
+	sprintf(dev->name, "ppp%d", if_num);
+	dev->base_addr = (__u32) if_num;
+	dev->priv      = (void *) ppp;
 
-		sprintf (dev->name, "ppp%d", if_num);
-
-		/* link in the new channel */
-		ctl->next      = ppp_list;
-		ppp_list       = ctl;
-
-		/* register device so that we can be ifconfig'd */
-		/* ppp_init_dev() will be called as a side-effect */
-
-		status = register_netdev (dev);
-		if (status == 0) {
-			printk (KERN_INFO "registered device %s\n", dev->name);
-			return (ppp);
-		}
-
+	/* register device so that we can be ifconfig'd */
+	/* ppp_init_dev() will be called as a side-effect */
+	status = register_netdev (dev);
+	if (status == 0) {
+		printk (KERN_INFO "registered device %s\n", dev->name);
+	} else {
 		printk (KERN_ERR
 		       "ppp_alloc - register_netdev(%s) = %d failure.\n",
 			dev->name, status);
+		ppp = NULL;
 		/* This one will forever be busy as it is not initialized */
 	}
-	return (NULL);
+	return ppp;
 }
 
 /*
@@ -3292,7 +3159,7 @@ static struct compressor_link *ppp_compressors = (struct compressor_link *) 0;
 static struct compressor *find_compressor (int type)
 {
 	struct compressor_link *lnk;
-	__u32 flags;
+	unsigned long flags;
 
 	save_flags(flags);
 	cli();
@@ -3310,12 +3177,10 @@ static struct compressor *find_compressor (int type)
 	return (struct compressor *) 0;
 }
 
-#ifdef CONFIG_MODULES
-
 static int ppp_register_compressor (struct compressor *cp)
 {
 	struct compressor_link *new;
-	__u32 flags;
+	unsigned long flags;
 
 	new = (struct compressor_link *) kmalloc (sizeof (struct compressor_link), GFP_KERNEL);
 
@@ -3343,7 +3208,7 @@ static void ppp_unregister_compressor (struct compressor *cp)
 {
 	struct compressor_link *prev = (struct compressor_link *) 0;
 	struct compressor_link *lnk;
-	__u32 flags;
+	unsigned long flags;
 
 	save_flags(flags);
 	cli();
@@ -3364,8 +3229,6 @@ static void ppp_unregister_compressor (struct compressor *cp)
 	restore_flags(flags);
 }
 
-#endif
-
 /*************************************************************
  * Module support routines
  *************************************************************/
@@ -3381,7 +3244,6 @@ init_module(void)
 	if (status != 0)
 		printk (KERN_INFO
 		       "PPP: ppp_init() failure %d\n", status);
-
 	return (status);
 }
 
@@ -3389,27 +3251,23 @@ void
 cleanup_module(void)
 {
 	int status;
-	ppp_ctrl_t *ctl, *next_ctl;
 	struct device *dev;
-	struct ppp *ppp;
+	struct ppp *ppp, *next_ppp;
 	int busy_flag = 0;
 /*
  * Ensure that the devices are not in operation.
  */
-	ctl = ppp_list;
-	while (ctl) {
-		ppp = ctl2ppp (ctl);
+	for (ppp = ppp_list; ppp != 0; ppp = ppp->next) {
 		if (ppp->inuse && ppp->tty != NULL) {
 			busy_flag = 1;
 			break;
 		}
 
-		dev = ctl2dev (ctl);
+		dev = ppp2dev (ppp);
 		if (dev->start || dev->flags & IFF_UP) {
 			busy_flag = 1;
 			break;
 		}
-		ctl = ctl->next;
 	}
 /*
  * Ensure that there are no compressor modules registered
@@ -3437,16 +3295,11 @@ cleanup_module(void)
 /*
  * De-register the devices so that there is no problem with them
  */
-	next_ctl = ppp_list;
-	while (next_ctl) {
-		ctl	 = next_ctl;
-		next_ctl = ctl->next;
-		ppp	 = ctl2ppp (ctl);
-		dev	 = ctl2dev (ctl);
-
-		ppp_release	  (ppp);
-		unregister_netdev (dev);
-		kfree (ctl);
+	for (ppp = ppp_list; ppp != 0; ppp = next_ppp) {
+		next_ppp = ppp->next;
+		ppp_release (ppp);
+		unregister_netdev (&ppp->dev);
+		kfree (ppp);
 	}
 }
 #endif

@@ -252,6 +252,28 @@ __kernel_thread:
 	call_pal PAL_halt
 .end	__kernel_thread
 
+/*
+ * __kernel_execve(path, argv, envp, regs)
+ */
+.align 3
+.globl	__kernel_execve
+.ent	__kernel_execve
+__kernel_execve:
+	ldgp	$29,0($27)	/* we can be called from modules.  */
+	subq	$30,16,$30
+	.frame	$30,16,$26,0
+	stq	$26,0($30)
+	stq	$19,8($30)
+	.prologue 1
+	jsr	$26,do_execve
+	bne	$0,1f		/* error! */
+	ldq	$30,8($30)
+	br	$31,ret_from_sys_call
+1:	ldq	$26,0($30)
+	addq	$30,16,$30
+	ret
+.end	__kernel_execve
+
 .align 3
 .ent	do_switch_stack
 do_switch_stack:

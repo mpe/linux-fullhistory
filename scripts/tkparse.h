@@ -13,7 +13,6 @@ enum token {
   tok_int,
   tok_hex,
   tok_string,
-  tok_make,
   tok_define,
   tok_choose,
   tok_choice,

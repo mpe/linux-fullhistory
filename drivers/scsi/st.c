@@ -995,7 +995,6 @@ st_write(struct file * filp, const char * buf, size_t count, loff_t *ppos)
       return -ENXIO;
     }
 
-    STp = &(scsi_tapes[dev]);
     if (STp->ready != ST_READY) {
       if (STp->ready == ST_NO_TAPE)
 	return (-ENOMEDIUM);
@@ -1510,7 +1509,6 @@ st_read(struct file * filp, char * buf, size_t count, loff_t *ppos)
       return -ENXIO;
     }
 
-    STp = &(scsi_tapes[dev]);
     if (STp->ready != ST_READY) {
       if (STp->ready == ST_NO_TAPE)
 	return (-ENOMEDIUM);
@@ -2298,10 +2296,9 @@ st_int_ioctl(struct inode * inode,
 
    ioctl_result = (STp->buffer)->last_result_fatal;
 
-   scsi_release_command(SCpnt);
-   SCpnt = NULL;
-
    if (!ioctl_result) {  /* SCSI command successful */
+     scsi_release_command(SCpnt);
+     SCpnt = NULL;
      STps->drv_block = blkno;
      STps->drv_file = fileno;
      STps->at_sm = at_sm;
@@ -2349,7 +2346,8 @@ st_int_ioctl(struct inode * inode,
        STp->partition = 0;
      }
 
-   } else {  /* SCSI command was not completely successful */
+   } else {  /* SCSI command was not completely successful. Don't return
+	        from this block without releasing the SCSI command block! */
 
      if (SCpnt->sense_buffer[2] & 0x40) {
        if (cmd_in != MTBSF && cmd_in != MTBSFM &&
@@ -2430,6 +2428,9 @@ st_int_ioctl(struct inode * inode,
 
      if (cmd_in == MTLOCK)
        STp->door_locked = ST_LOCK_FAILS;
+
+     scsi_release_command(SCpnt);
+     SCpnt = NULL;
    }
 
    return ioctl_result;
@@ -2591,7 +2592,6 @@ set_location(struct inode * inode, unsigned int block, int partition,
     if (!SCpnt)
       return (-EBUSY);
 
-    SCpnt->request.rq_status = RQ_INACTIVE;  /* Mark as not busy */
     STps->drv_block = STps->drv_file = (-1);
     STps->eof = ST_NOEOF;
     if ((STp->buffer)->last_result_fatal != 0) {

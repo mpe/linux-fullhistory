@@ -50,6 +50,9 @@
  * Avery Pennarun - Reduced flicker when creating windows, even with "update
  *                  idletasks" hack.
  *
+ * 1997 12 08
+ * Michael Chastain - Remove sound driver special cases.
+ *
  * TO DO:
  *   - clean up - there are useless ifdef's everywhere.
  *   - better comments throughout - C code generating tcl is really cryptic.
@@ -492,9 +495,6 @@ void generate_if_for_outfile(struct kconfig * item,
       printf("} then { write_string $cfg $autocfg %s $%s $notmod }\n",
              item->optionname, item->optionname);
       break;
-    case tok_make:
-      printf("} then { do_make {%s} }\n",item->value);
-      break;
     case tok_choose:
     case tok_choice:
       fprintf(stderr,"Fixme\n");
@@ -893,25 +893,6 @@ void dump_tk_script(struct kconfig *scfg)
    */
   end_proc(menu_num);
 
-#ifdef ERIC_DONT_DEF
-  /*
-   * Generate the code for configuring the sound driver.  Right now this
-   * cannot be done from the X script, but we insert the menu anyways.
-   */
-  start_proc("Configure sound driver", ++menu_num, TRUE);
-#if 0
-  printf("\tdo_make -C drivers/sound config\n");
-  printf("\techo check_sound_config %d\n",menu_num);
-#endif
-  printf("\tlabel $w.config.f.m0 -bitmap error\n");
-  printf("\tmessage $w.config.f.m1 -width 400 -aspect 300 -text \"The sound drivers cannot as of yet be configured via the X-based interface\" -relief raised\n");
-  printf("\tpack $w.config.f.m0 $w.config.f.m1 -side top -pady 10 -expand on\n");
-  /*
-   * Close out the last menu.
-   */
-  end_proc(menu_num);
-#endif
-
   /*
    * The top level menu also needs an update function.  When we exit a
    * submenu, we may need to disable one or more of the submenus on
@@ -1018,7 +999,6 @@ void dump_tk_script(struct kconfig *scfg)
 	      printf("\tglobal %s\n", cfg->optionname);
 	    }
 	  /* fall through */
-	case tok_make:
 	case tok_comment:
 	  if (cfg->cond != NULL ) 
 	    generate_if_for_outfile(cfg, cfg->cond);
@@ -1077,10 +1057,6 @@ void dump_tk_script(struct kconfig *scfg)
 		  printf("\twrite_string $cfg $autocfg %s $%s $notmod\n",
 			 cfg->optionname,
 			 cfg->optionname);
-	        }
-	      else if (cfg->tok == tok_make )
-	        {
-	          printf("\tdo_make {%s}\n",cfg->value);
 	        }
 	      else
 		{

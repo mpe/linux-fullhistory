@@ -24,10 +24,14 @@
 # 070497 Bernhard Kaindl (bkaindl@netway.at) - get default values for
 # new bool, tristate and dep_tristate parameters from the defconfig file.
 # new configuration parameters are marked with '(NEW)' as in make config.
+#
 # 180697 Bernhard Kaindl (bkaindl@netway.at) - added the needed support
 # for string options. They are handled like the int and hex options.
+#
 # 081297 Pavel Machek (pavel@atrey.karlin.mff.cuni.cz) - better error 
 # handling
+#
+# 101297 Michael Chastain (mec@shout.net) - remove sound driver cruft.
 #----------------------------------------------------------------------------
 
 
@@ -326,23 +330,6 @@ function submenu () {
 }
 
 #
-# Create a menu entry to handle the traditional sound configuration.
-#
-function soundcfg () {
-	echo -ne "'l_soundcfg' "\
-		 "'Old configuration script "\
-		 "(For: SM Wave, PSS & AudioTrix Pro) -->' " >>MCmenu
-}
-
-#
-# Startup the traditional sound configuration program.
-#
-function l_soundcfg () {
-	clear
-	$MAKE -C drivers/sound config
-}
-
-#
 # Handle a boolean (Yes/No) option.
 #
 function l_bool () {
@@ -629,11 +616,6 @@ function parser(ifile,menu) {
 			printf("") >>menu
 		}
 		else if ($1 == "source") {
-			# Yuk!  Blah!  Phooey!
-			if ($2 ~ "drivers/sound") {
-				printf("soundcfg\n") >>menu
-			}
-
 			parser($2,menu)
 		}
 		else {
@@ -662,9 +644,6 @@ function parser(ifile,menu) {
 			printf("") >>menu
 		}
 		else if ($1 == "source") {
-			if ($2 ~ "drivers/sound") {
-				printf("soundcfg\n") >>menu
-			}
 			parser($2,menu)
 		}
 		else {
@@ -1121,25 +1100,11 @@ save_configuration () {
 	echo " */" >>$CONFIG_H
 	echo "#define AUTOCONF_INCLUDED" >> $CONFIG_H
 
-	MAKE=:	#To prevent sound Makefile from running.
-
 	echo -n "."
 	if . $CONFIG_IN >>.menuconfig.log 2>&1
 	then
 		if [ "$DEF_CONFIG" = ".config" ]
 		then
-			#
-			# Create the sound driver's config files for cards
-			# Which are compatible with the new config method.
-			#
-			if [ "_$CONFIG_TRIX"   != "_y" -a\
-			     "_$CONFIG_PSS"    != "_y" -a\
-			     "_$CONFIG_SMWAVE" != "_y"   ]
-			then
-				echo -n ", sound..."
-				make -C drivers/sound kernelconfig >>.menuconfig.log 2>&1
-			fi
-
 			mv $CONFIG_H $DEF_CONFIG_H
 		fi
 
@@ -1231,7 +1196,7 @@ kernel_version="${VERSION}.${PATCHLEVEL}.${SUBLEVEL}"
 
 backtitle="Linux Kernel v$kernel_version Configuration"
 
-trap "cleanup ; rm -f .menuconfig ; exit 1" 1 2 15
+trap "cleanup ; exit 1" 1 2 15
 
 
 #
@@ -1260,32 +1225,6 @@ fi
 >.menuconfig.log
 
 echo -n "Preparing configuration scripts: version" 
-
-#
-# Check kernel version of previous menuconfig build.
-# If it's different then we should tell the sound driver
-# to rebuild its Config.in file.
-#
-rebuildsound=TRUE
-if [ -e .menuconfig ]
-then
-	read x <.menuconfig
-	if [ "$x" = "# $kernel_version" ]
-	then
-		rebuildsound=
-	fi
-fi
-
-if [ "$rebuildsound" ]
-then
-	echo -n ", sound"
-	# Activate the Linux compatible sound configuration.
-	# This may not work for all sound cards.  (See sound docs)
-	#
-	make -C drivers/sound mkscript kernelconfig >>.menuconfig.log 2>&1
-
-	echo "# $kernel_version" >.menuconfig
-fi
 
 # Load the functions used by the config.in files.
 echo -n ", functions"

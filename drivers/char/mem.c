@@ -550,5 +550,8 @@ __initfunc(int chr_dev_init(void))
 #ifdef CONFIG_FTAPE
 	ftape_init();
 #endif
+#ifdef CONFIG_VIDEO_DEV
+	videodev_init();
+#endif
 	return 0;
 }

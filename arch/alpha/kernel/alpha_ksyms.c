@@ -22,9 +22,11 @@
 #include <linux/interrupt.h>
 #include <asm/softirq.h>
 
+#define __KERNEL_SYSCALLS__
+#include <asm/unistd.h>
+
 extern void bcopy (const char *src, char *dst, int len);
 extern struct hwrpb_struct *hwrpb;
-extern long __kernel_thread(unsigned long, int (*)(void *), void *);
 extern void dump_thread(struct pt_regs *, struct user *);
 extern int dump_fpu(struct pt_regs *, elf_fpregset_t *);
 
@@ -71,6 +73,7 @@ EXPORT_SYMBOL(strncat);
 EXPORT_SYMBOL(strstr);
 EXPORT_SYMBOL(strtok);
 EXPORT_SYMBOL(strchr);
+EXPORT_SYMBOL(strrchr);
 EXPORT_SYMBOL(memcmp);
 EXPORT_SYMBOL(memmove);
 EXPORT_SYMBOL(__memcpy);
@@ -81,8 +84,20 @@ EXPORT_SYMBOL(dump_thread);
 EXPORT_SYMBOL(dump_fpu);
 EXPORT_SYMBOL(hwrpb);
 EXPORT_SYMBOL(wrusp);
-EXPORT_SYMBOL(__kernel_thread);
 EXPORT_SYMBOL(start_thread);
+
+/* In-kernel system calls.  */
+EXPORT_SYMBOL(__kernel_thread);
+EXPORT_SYMBOL(sys_open);
+EXPORT_SYMBOL(sys_dup);
+EXPORT_SYMBOL(sys_exit);
+EXPORT_SYMBOL(sys_write);
+EXPORT_SYMBOL(sys_read);
+EXPORT_SYMBOL(sys_lseek);
+EXPORT_SYMBOL(__kernel_execve);
+EXPORT_SYMBOL(sys_setsid);
+EXPORT_SYMBOL(sys_sync);
+EXPORT_SYMBOL(sys_wait4);
 
 /* Networking helper routines. */
 EXPORT_SYMBOL(csum_tcpudp_magic);

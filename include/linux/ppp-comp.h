@@ -28,7 +28,7 @@
  */
 
 /*
- *  ==FILEVERSION 970501==
+ *  ==FILEVERSION 971024==
  *
  *  NOTE TO MAINTAINERS:
  *     If you modify this file at all, please set the above date.
@@ -120,9 +120,8 @@ struct compressor {
  * Don't you just lurve software patents.
  */
 
-#define DECOMP_OK		0	/* no error occured */
-#define DECOMP_ERROR		1	/* error detected before decomp. */
-#define DECOMP_FATALERROR	2	/* error detected after decomp. */
+#define DECOMP_ERROR		-1	/* error detected before decomp. */
+#define DECOMP_FATALERROR	-2	/* error detected after decomp. */
 
 /*
  * CCP codes.

@@ -1204,7 +1204,6 @@ void cleanup_module(void)
 {
 	if (devc)
 	{
-		vfree(devc);
 		devc = NULL;
 		sound_unload_synthdev(me);
 	}

@@ -27,12 +27,11 @@
 #endif
 #endif
 
-#ifdef INCLUDE_TRIX_BOOT
+#ifdef TRIX_HAVE_BOOT
 #include "trix_boot.h"
 #else
 static unsigned char *trix_boot = NULL;
-static int      trix_boot_len = 0;
-
+static int trix_boot_len = 0;
 #endif
 
 

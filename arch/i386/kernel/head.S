@@ -172,7 +172,7 @@ checkCPUtype:
 	 * if CPUID works.
 	 */
 	movl $0x69727943,X86_VENDOR_ID			# low 4 chars
-	movl $0x00000078,X86_VENDOR_ID			# next 4 chars
+	movl $0x00000078,X86_VENDOR_ID+4		# next 4 chars
 
 	/*
 	 * N.B. The pattern of accesses to 0x22 and 0x23 is *important*

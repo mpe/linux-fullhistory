@@ -105,7 +105,7 @@ nfsd_lookup(struct svc_rqst *rqstp, struct svc_fh *fhp, const char *name,
 					int len, struct svc_fh *resfh)
 {
 	struct svc_export	*exp;
-	struct dentry		*dparent;
+	struct dentry		*dparent, *dchild;
 	int			err;
 
 	dprintk("nfsd: nfsd_lookup(fh %p, %s)\n", SVCFH_DENTRY(fhp), name);
@@ -118,34 +118,48 @@ nfsd_lookup(struct svc_rqst *rqstp, struct svc_fh *fhp, const char *name,
 	dparent = fhp->fh_dentry;
 	exp  = fhp->fh_export;
 
-	/* Fast path... */
 	err = nfsd_permission(exp, dparent, MAY_EXEC);
-	if ((err == 0)					&&
-	    !fs_off_limits(dparent->d_inode->i_sb)	&&
-	    !nfsd_iscovered(dparent, exp)) {
-		struct dentry *dchild;
+	if (err)
+		goto out;
+	err = nfserr_noent;
+	if (fs_off_limits(dparent->d_sb))
+		goto out;
+	err = nfserr_acces;
+	if (nfsd_iscovered(dparent, exp))
+		goto out;
 
-		/* Lookup the name, but don't follow links */
-		dchild = lookup_dentry(name, dget(dparent), 0);
-		err = PTR_ERR(dchild);
-		if (IS_ERR(dchild))
-			return nfserrno(-err);
-
-		/*
-		 * Note: we compose the filehandle now, but as the
-		 * dentry may be negative, it may need to be updated.
-		 */
-		fh_compose(resfh, exp, dchild);
-		return (dchild->d_inode ? 0 : nfserr_noent);
+	/* Lookup the name, but don't follow links */
+	dchild = lookup_dentry(name, dget(dparent), 0);
+	if (IS_ERR(dchild))
+		goto out_nfserr;
+	/*
+	 * Make sure we haven't crossed a mount point ...
+	 */
+	if (dchild->d_sb != dparent->d_sb) {
+#ifdef NFSD_PARANOIA
+printk("nfsd_lookup: %s/%s crossed mount point!\n", dparent->d_name.name, name);
+#endif
+		goto out_dput;
 	}
 
-	/* Slow path... */
-	if (fs_off_limits(dparent->d_inode->i_sb))
-		return nfserr_noent;
-	if (nfsd_iscovered(dparent, exp))
-		return nfserr_acces;
+	/*
+	 * Note: we compose the filehandle now, but as the
+	 * dentry may be negative, it may need to be updated.
+	 */
+	fh_compose(resfh, exp, dchild);
+	err = nfserr_noent;
+	if (dchild->d_inode)
+		err = 0;
 out:
 	return err;
+
+out_nfserr:
+	err = nfserrno(-PTR_ERR(dchild));
+	goto out;
+out_dput:
+	dput(dchild);
+	err = nfserr_acces;
+	goto out;
 }
 
 /*

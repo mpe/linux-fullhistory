@@ -198,7 +198,7 @@ else
 endif
 
 ifdef CONFIG_PPP
-  M_OBJS += bsd_comp.o
+  M_OBJS += bsd_comp.o ppp_deflate.o
 endif
 
 ifeq ($(CONFIG_SLIP),y)

@@ -126,20 +126,22 @@ void wakeup_bdflush(int);
  */
 void __wait_on_buffer(struct buffer_head * bh)
 {
-	struct wait_queue wait = { current, NULL };
+	struct task_struct *tsk = current;
+	struct wait_queue wait;
 
 	bh->b_count++;
+	wait.task = tsk;
 	add_wait_queue(&bh->b_wait, &wait);
 repeat:
+	tsk->state = TASK_UNINTERRUPTIBLE;
 	run_task_queue(&tq_disk);
-	current->state = TASK_UNINTERRUPTIBLE;
 	if (buffer_locked(bh)) {
 		schedule();
 		goto repeat;
 	}
+	tsk->state = TASK_RUNNING;
 	remove_wait_queue(&bh->b_wait, &wait);
 	bh->b_count--;
-	current->state = TASK_RUNNING;
 }
 
 /* Call sync_buffers with wait!=0 to ensure that the call does not
@@ -561,7 +563,7 @@ static inline void insert_into_queues(struct buffer_head * bh)
 	}
 }
 
-static inline struct buffer_head * find_buffer(kdev_t dev, int block, int size)
+struct buffer_head * find_buffer(kdev_t dev, int block, int size)
 {		
 	struct buffer_head * next;
 
@@ -577,11 +579,6 @@ static inline struct buffer_head * find_buffer(kdev_t dev, int block, int size)
 		break;
 	}
 	return next;
-}
-
-struct buffer_head *efind_buffer(kdev_t dev, int block, int size)
-{
-	return find_buffer(dev, block, size);
 }
 
 /*
@@ -600,7 +597,7 @@ struct buffer_head * get_hash_table(kdev_t dev, int block, int size)
 			break;
 		bh->b_count++;
 		bh->b_lru_time = jiffies;
-		if (!test_bit(BH_Lock, &bh->b_state)) 
+		if (!buffer_locked(bh)) 
 			break;
 		__wait_on_buffer(bh);
 		if (bh->b_dev == dev		&&

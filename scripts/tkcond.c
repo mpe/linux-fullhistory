@@ -361,7 +361,6 @@ void fix_conditionals(struct kconfig * scfg)
 	case tok_hex:
 	case tok_string:
 	case tok_choice:
-	case tok_make:
 	  /*
 	   * We need to duplicate the chain of conditions and attach them to
 	   * this token.

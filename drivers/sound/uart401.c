@@ -452,8 +452,8 @@ unload_uart401(struct address_info *hw_config)
 	if (!devc->share_irq)
 		snd_release_irq(devc->irq);
 
-	if (!devc)
-		vfree(devc);
+	if (devc)
+		devc = NULL;
 	sound_unload_mididev(hw_config->slots[4]);
 }
 

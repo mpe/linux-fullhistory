@@ -537,15 +537,6 @@ S: P.O. Box 76, Epping
 S: N.S.W., 2121
 S: Australia
 
-N: Richard E. Gooch
-E: rgooch@atnf.csiro.au
-D: parent process death signal to children
-D: prctl() syscall
-S: CSIRO Australia Telescope National Facility
-S: P.O. Box 76, Epping
-S: N.S.W., 2121
-S: Australia
-
 N: Dmitry S. Gorodchanin
 E: begemot@bgm.rosprint.net
 D: RISCom/8 driver, misc kernel fixes.

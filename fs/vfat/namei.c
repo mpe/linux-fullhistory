@@ -649,29 +649,55 @@ static int vfat_create_shortname(struct inode *dir, const char *name,
 		qname.len=totlen;
 		res = vfat_find(dir, &qname, 0, 0, 0, &sinfo);
 	}
-	i = 0;
-	while (res > -1) {
-		/* Create the next shortname to try */
-		i++;
-		if (i == 10000000) return -EEXIST;
-		sprintf(buf, "%d", i);
-		sz = strlen(buf);
-		if (sz + 1 > spaces) {
-			baselen = baselen - (sz + 1 - spaces);
-			spaces = sz + 1;
+
+	if (res > -1) {
+		/*
+		 * Try to find a unique extension.  This used to
+		 * iterate through all possibilities sequentially,
+		 * but that gave extremely bad performance.  Windows
+		 * only tries a few cases before using random
+		 * values for part of the base.
+		 */
+
+		if (2 > spaces) {
+			baselen = baselen - (2 - spaces);
+			spaces = 2;
 		}
-
-		strncpy(msdos_name, base, baselen);
-		msdos_name[baselen] = '~';
-		strcpy(&msdos_name[baselen+1], buf);
-		msdos_name[baselen+sz+1] = '.';
-		strcpy(&msdos_name[baselen+sz+2], ext);
-
-		totlen = baselen + sz + 1 + extlen + (extlen > 0);
+		msdos_name[baselen]   = '~';
+		msdos_name[baselen+2] = '.';
+		strcpy(&msdos_name[baselen+3], ext);
+		totlen = baselen + 2 + extlen + (extlen > 0);
 		qname.name=msdos_name;
 		qname.len=totlen;
-		res = vfat_find(dir, &qname, 0, 0, 0, &sinfo);
+		for (i = 1; res > -1 && i < 10; i++) {
+			strncpy(msdos_name, base, baselen);
+			msdos_name[baselen+1] = i + '0';
+			res = vfat_find(dir, &qname, 0, 0, 0, &sinfo);
+		}
 	}
+	if (res > -1) {
+		i = jiffies & 0xffff;
+		sz = (jiffies >> 16) & 0x7;
+		if (6 > spaces) {
+			baselen = baselen - (6 - spaces);
+			spaces = 6;
+		}
+		msdos_name[baselen+4] = '~';
+		msdos_name[baselen+5] = '1' + sz;
+		msdos_name[baselen+6] = '.';
+		strcpy(&msdos_name[baselen+7], ext);
+		totlen = baselen + 6 + extlen + (extlen > 0);
+		qname.name=msdos_name;
+		qname.len=totlen;
+		while (res > -1) {
+			sprintf(buf, "%04x", i);
+			memcpy(&msdos_name[baselen], buf, 4);
+			msdos_name[12] = 0;
+			res = vfat_find(dir, &qname, 0, 0, 0, &sinfo);
+			i -= 11;
+		}
+	}
+
 	res = vfat_format_name(msdos_name, totlen, name_res, 1, utf8);
 	return res;
 }
@@ -1082,7 +1108,6 @@ static int vfat_find(struct inode *dir,struct qstr* qname,
 		sinfo_out->shortname_offset = offset - sizeof(struct msdos_dir_slot);
 		sinfo_out->longname_offset = offset - sizeof(struct msdos_dir_slot) * slots;
 		res = 0;
-		return 0;
 	} else {
 		res = -ENOENT;
 	}
@@ -1584,7 +1609,7 @@ int vfat_rename(struct inode *old_dir,struct dentry *old_dentry,
 			/* Is this the same file, different case? */
 			if (new_inode != old_inode) {
 				PRINTK(("vfat_rename 9\n"));
-				res = vfat_unlinkx(new_dir,new_dentry,1);
+				res = vfat_unlink(new_dir,new_dentry);
 				PRINTK(("vfat_rename 10\n"));
 				if (res < 0) goto rename_done;
 			}

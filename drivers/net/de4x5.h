@@ -166,11 +166,7 @@
 /*
 ** PCI Configuration Base I/O Address Register (PCI_CBIO)
 */
-#ifdef __sparc_v9__
-#define CBIO_MASK   0xffffffffffffff80       /* Base I/O Address Mask */
-#else
-#define CBIO_MASK   0xffffff80       /* Base I/O Address Mask */
-#endif
+#define CBIO_MASK   -128             /* Base I/O Address Mask */
 #define CBIO_IOSI   0x00000001       /* I/O Space Indicator (RO, value is 1) */
 
 /*
@@ -368,7 +364,7 @@
 #define OMR_SIA     (OMR_SDP | OMR_TTM)
 #define OMR_SYM     (OMR_SDP | OMR_SCR | OMR_PCS | OMR_HBD | OMR_PS)
 #define OMR_MII_10  (OMR_SDP | OMR_TTM | OMR_PS)
-#define OMR_MII_100 (OMR_SDP | OMR_SCR | OMR_HBD | OMR_PS)
+#define OMR_MII_100 (OMR_SDP | OMR_HBD | OMR_PS)
 
 /*
 ** DC21040 Interrupt Mask Register (DE4X5_IMR)
@@ -813,16 +809,22 @@
 
 /*
 ** Media / mode state machine definitions
+** User selectable:
 */
-#define NC              0x0000     /* No Connection                        */
 #define TP              0x0001     /* 10Base-T                             */
 #define TP_NW           0x0002     /* 10Base-T with Nway                   */
 #define BNC             0x0004     /* Thinwire                             */
 #define AUI             0x0008     /* Thickwire                            */
 #define BNC_AUI         0x0010     /* BNC/AUI on DC21040 indistinguishable */
-#define ANS             0x0020     /* Intermediate AutoNegotiation State   */
 #define _10Mb           0x0040     /* 10Mb/s Ethernet                      */
 #define _100Mb          0x0080     /* 100Mb/s Ethernet                     */
+#define AUTO            0x4000     /* Auto sense the media or speed        */
+
+/*
+** Internal states
+*/
+#define NC              0x0000     /* No Connection                        */
+#define ANS             0x0020     /* Intermediate AutoNegotiation State   */
 #define SPD_DET         0x0100     /* Parallel speed detection             */
 #define INIT            0x0200     /* Initial state                        */
 #define EXT_SIA         0x0400     /* External SIA for motherboard chip    */
@@ -834,7 +836,6 @@
 #define AUI_SUSPECT     0x0807     /* Suspect the AUI port is down         */
 #define MII             0x1000     /* MII on the 21143                     */
 
-#define AUTO            0x4000     /* Auto sense the media or speed        */
 #define TIMER_CB        0x80000000 /* Timer callback detection             */
 
 /*
@@ -907,6 +908,7 @@
 #define OPEN                 2     /* Running */
 
 /*
+** Various wait times
 */
 #define PDET_LINK_WAIT    1200    /* msecs to wait for link detect bits     */
 #define ANS_FINISH_WAIT   1000    /* msecs to wait for link detect bits     */
@@ -936,12 +938,13 @@
   } else if (lp->useSROM && !lp->useMII) {\
     omr = (inl(DE4X5_OMR) & ~(OMR_PS | OMR_HBD | OMR_TTM | OMR_PCS | OMR_SCR | OMR_FDX));\
     omr |= (lp->fdx ? OMR_FDX : 0);\
-    outl(omr | lp->infoblock_csr6, DE4X5_OMR);\
+    outl(omr | (lp->infoblock_csr6 & ~(OMR_SCR | OMR_HBD)), DE4X5_OMR);\
   } else {\
     omr = (inl(DE4X5_OMR) & ~(OMR_PS | OMR_HBD | OMR_TTM | OMR_PCS | OMR_SCR | OMR_FDX));\
     omr |= (lp->fdx ? OMR_FDX : 0);\
-    outl(omr | OMR_TTM, DE4X5_OMR);\
+    outl(omr | OMR_SDP | OMR_TTM, DE4X5_OMR);\
     lp->cache.gep = (lp->fdx ? 0 : GEP_FDXD);\
+    gep_wr(lp->cache.gep, dev);\
   }\
 }
 
@@ -964,12 +967,13 @@
   } else if (lp->useSROM && !lp->useMII) {\
     omr = (inl(DE4X5_OMR) & ~(OMR_PS | OMR_HBD | OMR_TTM | OMR_PCS | OMR_SCR | OMR_FDX));\
     omr |= (lp->fdx ? OMR_FDX : 0);\
-    outl(omr | (lp->infoblock_csr6 & ~(OMR_SCR | OMR_HBD)), DE4X5_OMR);\
+    outl(omr | lp->infoblock_csr6, DE4X5_OMR);\
   } else {\
     omr = (inl(DE4X5_OMR) & ~(OMR_PS | OMR_HBD | OMR_TTM | OMR_PCS | OMR_SCR | OMR_FDX));\
     omr |= (lp->fdx ? OMR_FDX : 0);\
-    outl(omr | OMR_PS | OMR_HBD | OMR_PCS | OMR_SCR, DE4X5_OMR);\
+    outl(omr | OMR_SDP | OMR_PS | OMR_HBD | OMR_PCS | OMR_SCR, DE4X5_OMR);\
     lp->cache.gep = (lp->fdx ? 0 : GEP_FDXD) | GEP_MODE;\
+    gep_wr(lp->cache.gep, dev);\
   }\
 }
 
@@ -981,11 +985,12 @@
     outl(omr, DE4X5_OMR);\
   } else if (lp->useSROM && !lp->useMII) {\
     omr = (inl(DE4X5_OMR) & ~(OMR_TTM | OMR_PCS | OMR_SCR | OMR_FDX));\
-    outl(omr | lp->infoblock_csr6, DE4X5_OMR);\
+    outl(omr, DE4X5_OMR);\
   } else {\
     omr = (inl(DE4X5_OMR) & ~(OMR_PS | OMR_HBD | OMR_TTM | OMR_PCS | OMR_SCR | OMR_FDX));\
-    outl(omr | OMR_PS | OMR_HBD | OMR_PCS | OMR_SCR, DE4X5_OMR);\
+    outl(omr | OMR_SDP | OMR_PS | OMR_HBD | OMR_PCS, DE4X5_OMR);\
     lp->cache.gep = (GEP_FDXD | GEP_MODE);\
+    gep_wr(lp->cache.gep, dev);\
   }\
 }
 

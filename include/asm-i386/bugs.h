@@ -224,8 +224,8 @@ __initfunc(static void check_pentium_f00f(void))
 
 __initfunc(static void check_bugs(void))
 {
-#ifndef __SMP__
 	identify_cpu(&boot_cpu_data);
+#ifndef __SMP__
 	printk("CPU: ");
 	print_cpu_info(&boot_cpu_data);
 #endif

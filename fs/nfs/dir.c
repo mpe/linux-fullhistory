@@ -522,34 +522,6 @@ out:
 }
 
 /*
- * Attempt to patch up certain errors following a create or
- * mkdir operation. We clear the original error if the new
- * lookup succeeds and has the correct mode.
- */
-static int nfs_fixup(struct inode *dir, struct dentry *dentry, int mode,
-		struct nfs_fh *fhandle, struct nfs_fattr *fattr, int error)
-{
-	int newerr;
-
-#ifdef NFS_PARANOIA
-printk("nfs_fixup: %s/%s, error=%d, mode=%x\n",
-dentry->d_parent->d_name.name, dentry->d_name.name, error, mode);
-#endif
-	if (error == -EEXIST) {
-		newerr = nfs_proc_lookup(NFS_SERVER(dir), NFS_FH(dir), 
-					dentry->d_name.name, fhandle, fattr);
-		if (!newerr) {
-#ifdef NFS_PARANOIA
-printk("nfs_fixup: lookup OK, got mode=%x, want mode=%x\n", fattr->mode, mode);
-#endif
-			if ((fattr->mode & S_IFMT) == (mode & S_IFMT))
-				error = 0;
-		}
-	}
-	return error;
-}
-
-/*
  * Code common to create, mkdir, and mknod.
  */
 static int nfs_instantiate(struct dentry *dentry, struct nfs_fh *fhandle,
@@ -608,8 +580,6 @@ static int nfs_create(struct inode *dir, struct dentry *dentry, int mode)
 	nfs_invalidate_dircache(dir);
 	error = nfs_proc_create(NFS_SERVER(dir), NFS_FH(dir),
 			dentry->d_name.name, &sattr, &fhandle, &fattr);
-	if (error)
-		error = nfs_fixup(dir, dentry, mode, &fhandle, &fattr, error);
 	if (!error)
 		error = nfs_instantiate(dentry, &fhandle, &fattr);
 	if (error)
@@ -648,8 +618,6 @@ static int nfs_mknod(struct inode *dir, struct dentry *dentry, int mode, int rde
 	nfs_invalidate_dircache(dir);
 	error = nfs_proc_create(NFS_SERVER(dir), NFS_FH(dir),
 				dentry->d_name.name, &sattr, &fhandle, &fattr);
-	if (error)
-		error = nfs_fixup(dir, dentry, mode, &fhandle, &fattr, error);
 	if (!error)
 		error = nfs_instantiate(dentry, &fhandle, &fattr);
 	if (error)
@@ -688,8 +656,6 @@ static int nfs_mkdir(struct inode *dir, struct dentry *dentry, int mode)
 	nfs_invalidate_dircache(dir);
 	error = nfs_proc_mkdir(NFS_SERVER(dir), NFS_FH(dir),
 				dentry->d_name.name, &sattr, &fhandle, &fattr);
-	if (error)
-		error = nfs_fixup(dir, dentry, mode, &fhandle, &fattr, error);
 	if (!error) {
 		/*
 		 * Some AIX servers reportedly fail to fill out the fattr.

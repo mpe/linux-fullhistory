@@ -299,18 +299,20 @@ static unsigned long try_to_read_ahead(struct inode * inode, unsigned long offse
  */
 void __wait_on_page(struct page *page)
 {
-	struct wait_queue wait = { current, NULL };
+	struct task_struct *tsk = current;
+	struct wait_queue wait;
 
+	wait.task = tsk;
 	add_wait_queue(&page->wait, &wait);
 repeat:
+	tsk->state = TASK_UNINTERRUPTIBLE;
 	run_task_queue(&tq_disk);
-	current->state = TASK_UNINTERRUPTIBLE;
 	if (PageLocked(page)) {
 		schedule();
 		goto repeat;
 	}
+	tsk->state = TASK_RUNNING;
 	remove_wait_queue(&page->wait, &wait);
-	current->state = TASK_RUNNING;
 }
 
 #if 0

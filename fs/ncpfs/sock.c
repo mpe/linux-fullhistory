@@ -18,6 +18,7 @@
 #include <linux/net.h>
 #include <linux/mm.h>
 #include <linux/netdevice.h>
+#include <linux/signal.h>
 #include <net/scm.h>
 #include <net/sock.h>
 #include <linux/ipx.h>
@@ -124,12 +125,12 @@ static int do_ncp_rpc_call(struct ncp_server *server, int size)
 		   What if we've blocked it ourselves?  What about
 		   alarms?  Why, in fact, are we mucking with the
 		   sigmask at all? -- r~ */
-		if (current->sig->action[SIGINT - 1].sa_handler == SIG_DFL)
+		if (current->sig->action[SIGINT - 1].sa.sa_handler == SIG_DFL)
 			mask |= sigmask(SIGINT);
-		if (current->sig->action[SIGQUIT - 1].sa_handler == SIG_DFL)
+		if (current->sig->action[SIGQUIT - 1].sa.sa_handler == SIG_DFL)
 			mask |= sigmask(SIGQUIT);
 	}
-	siginitmaskinv(&current->blocked, mask);
+	siginitsetinv(&current->blocked, mask);
 	recalc_sigpending(current);
 	spin_unlock_irqrestore(&current->sigmask_lock, flags);
 
@@ -278,7 +279,7 @@ static int do_ncp_rpc_call(struct ncp_server *server, int size)
 	}
 
 	spin_lock_irqsave(&current->sigmask_lock, flags);
-	current->blocked = old_mask;
+	current->blocked = old_set;
 	recalc_sigpending(current);
 	spin_unlock_irqrestore(&current->sigmask_lock, flags);
 	

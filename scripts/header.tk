@@ -50,9 +50,6 @@ proc menu_option { w menu_num text } {
 # Not used at the moment, but this runs a command in a subprocess and
 # displays the result in a window with a scrollbar.
 #
-# For now, we just do external "make" commands to stdout with do_make, so
-# this function is never called.
-#
 proc do_cmd { w command } {
 	catch {destroy $w}
 	toplevel $w -class Dialog
@@ -209,7 +206,7 @@ proc read_config { filename } {
 			set cmd "global $var; set $var $value"
 			eval $cmd
 		}
-		if [regexp {([0-9A-Za-z_]+)="([0-9A-Za-z]+)"} $line foo var value] {
+		if [regexp {([0-9A-Za-z_]+)="([^"]*)"} $line foo var value] {
 			set cmd "global $var; set $var $value"
 			eval $cmd
 		}
@@ -349,11 +346,6 @@ proc comment {w line text } {
 #nothing done for comments now.
 }
 
-proc do_make { command } {
-	exec sh -c $command <@stdin >@stdout 2>@stderr
-#	do_cmd .make_window "sh -c $command"
-}
-
 proc dohelp {w var }  {
 	catch {destroy $w}
 	toplevel $w -class Dialog
@@ -441,15 +433,6 @@ proc wrapup {w }  {
 	set winx [expr [winfo x .]+30]; set winy [expr [winfo y .]+30]
 	wm geometry $w +$winx+$winy
 
-}
-
-proc check_sound_config { num } {
-#nothing for now.
-}
-
-proc do_sound {w mnum line} {
-	message $w.x$line -width 400 -aspect 300 -text "Note: The sound drivers cannot as of yet be configured via the X-based interface" -relief raised
-	pack $w.x$line -side top -pady 10
 }
 
 #

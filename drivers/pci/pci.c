@@ -50,11 +50,12 @@ struct pci_dev_info dev_info[] = {
 	DEVICE( NCR,		NCR_53C895,	"53c895"),
 	DEVICE( NCR,		NCR_53C885,	"53c885"),
 	DEVICE( NCR,		NCR_53C875,	"53c875"),
-	DEVICE( NCR,		NCR_53C876,	"53c876"),
+	DEVICE( NCR,		NCR_53C875J,	"53c875J"),
 	DEVICE( ATI,		ATI_68800,      "68800AX"),
 	DEVICE( ATI,		ATI_215CT222,   "215CT222"),
 	DEVICE( ATI,		ATI_210888CX,   "210888CX"),
 	DEVICE( ATI,		ATI_215GB,	"Mach64 GB"),
+	DEVICE( ATI,		ATI_215GD,	"Mach64 GD (Rage Pro)"),
 	DEVICE( ATI,		ATI_215GP,	"Mach64 GP (Rage Pro)"),
 	DEVICE( ATI,		ATI_215GT,	"Mach64 GT (Rage II)"),
 	DEVICE( ATI,		ATI_215GTB,	"Mach64 GT (Rage II)"),
@@ -110,7 +111,7 @@ struct pci_dev_info dev_info[] = {
 	DEVICE( AMD,		AMD_SCSI,	"53C974"),
 	DEVICE( TRIDENT,	TRIDENT_9420,	"TG 9420"),
 	DEVICE( TRIDENT,	TRIDENT_9440,	"TG 9440"),
-	DEVICE( TRIDENT,	TRIDENT_9660,	"TG 9660"),
+	DEVICE( TRIDENT,	TRIDENT_9660,	"TG 9660 / Cyber9385"),
 	DEVICE( TRIDENT,	TRIDENT_9750,	"Image 975"),
 	DEVICE( AI,		AI_M1435,	"M1435"),
 	DEVICE( MATROX,		MATROX_MGA_2,	"Atlas PX2085"),
@@ -186,6 +187,14 @@ struct pci_dev_info dev_info[] = {
 	DEVICE( NEXGEN,		NEXGEN_82C501,	"82C501"),
 	DEVICE( QLOGIC,		QLOGIC_ISP1020,	"ISP1020"),
 	DEVICE( QLOGIC,		QLOGIC_ISP1022,	"ISP1022"),
+	DEVICE( CYRIX,		CYRIX_5510,	"5510"),
+	DEVICE( CYRIX,		CYRIX_PCI_MASTER,"PCI Master"),
+	DEVICE( CYRIX,		CYRIX_5520,	"5520"),
+	DEVICE( CYRIX,		CYRIX_5530_LEGACY,"5530 Kahlua Legacy"),
+	DEVICE( CYRIX,		CYRIX_5530_SMI,	"5530 Kahlua SMI"),
+	DEVICE( CYRIX,		CYRIX_5530_IDE,	"5530 Kahlua IDE"),
+	DEVICE( CYRIX,		CYRIX_5530_AUDIO,"5530 Kahlua Audio"),
+	DEVICE( CYRIX,		CYRIX_5530_VIDEO,"5530 Kahlua Video"),
 	DEVICE( LEADTEK,	LEADTEK_805,	"S3 805"),
 	DEVICE( CONTAQ,		CONTAQ_82C599,	"82C599"),
 	DEVICE( OLICOM,		OLICOM_OC3136,	"OC-3136/3137"),
@@ -245,7 +254,8 @@ struct pci_dev_info dev_info[] = {
 	DEVICE( TEKRAM2,	TEKRAM2_690c,	"DC690c"),
 	DEVICE( TUNDRA,		TUNDRA_CA91C042,"CA91C042 Universe"),
 	DEVICE( AMCC,		AMCC_MYRINET,	"Myrinet PCI (M2-PCI-32)"),
-	DEVICE( AMCC,		AMCC_S5933,	"S5933"),
+	DEVICE( AMCC,		AMCC_S5933,	"S5933 PCI44"),
+	DEVICE( AMCC,		AMCC_S5933_HEPC3,"S5933 Traquair HEPC3"),
 	DEVICE( INTERG,		INTERG_1680,	"IGA-1680"),
 	DEVICE( INTERG,         INTERG_1682,    "IGA-1682"),
 	DEVICE( REALTEK,	REALTEK_8029,	"8029"),
@@ -311,6 +321,7 @@ struct pci_dev_info dev_info[] = {
  	DEVICE( DIGI,		DIGI_RIGHTSWITCH, "RightSwitch SE-6"),
 	DEVICE( MUTECH,		MUTECH_MV1000,	"MV-1000"),
 	DEVICE( RENDITION,	RENDITION_VERITE,"Verite 1000"),
+	DEVICE( RENDITION,	RENDITION_VERITE2100,"Verite 2100"),
 	DEVICE( TOSHIBA,	TOSHIBA_601,	"Laptop"),
 	DEVICE( RICOH,		RICOH_RL5C466,	"RL5C466"),
 	DEVICE( ZEITNET,	ZEITNET_1221,	"1221"),
@@ -336,6 +347,9 @@ struct pci_dev_info dev_info[] = {
 	DEVICE( CYCLADES,	CYCLOM_Z_Lo,	"Cyclom-Z below 1Mbyte"),
 	DEVICE( CYCLADES,	CYCLOM_Z_Hi,	"Cyclom-Z above 1Mbyte"),
 	DEVICE( 3DFX,		3DFX_VOODOO,	"Voodoo"),
+	DEVICE( STALLION,	STALLION_ECHPCI832,"EasyConnection 8/32"),
+	DEVICE( STALLION,	STALLION_ECHPCI864,"EasyConnection 8/64"),
+	DEVICE( STALLION,	STALLION_EIOPCI,"EasyIO"),
 	DEVICE( SIGMADES,	SIGMADES_6425,	"REALmagic64/GX"),
 	DEVICE( OPTIBASE,	OPTIBASE_FORGE,	"MPEG Forge"),
 	DEVICE( OPTIBASE,	OPTIBASE_FUSION,"MPEG Fusion"),
@@ -371,6 +385,9 @@ struct pci_dev_info dev_info[] = {
 	DEVICE( S3,		S3_PLATO_PXG,	"PLATO/PX (graphics)"),
 	DEVICE( S3,		S3_ViRGE_DXGX,	"ViRGE/DX or /GX"),
 	DEVICE( S3,		S3_ViRGE_GX2,	"ViRGE/GX2"),
+	DEVICE( S3,		S3_ViRGE_MX,	"ViRGE/MX"),
+	DEVICE( S3,		S3_ViRGE_MXP,	"ViRGE/MX+"),
+	DEVICE( S3,		S3_ViRGE_MXPMV,	"ViRGE/MX+MV"),
 	DEVICE( INTEL,		INTEL_82375,	"82375EB"),
 	DEVICE( INTEL,		INTEL_82424,	"82424ZX Saturn"),
 	DEVICE( INTEL,		INTEL_82378,	"82378IB"),
@@ -582,6 +599,7 @@ const char *pci_strvendor(unsigned int vendor)
 	      case PCI_VENDOR_ID_APPLE:		return "Apple";
 	      case PCI_VENDOR_ID_NEXGEN:	return "Nexgen";
 	      case PCI_VENDOR_ID_QLOGIC:	return "Q Logic";
+	      case PCI_VENDOR_ID_CYRIX:		return "Cyrix";
 	      case PCI_VENDOR_ID_LEADTEK:	return "Leadtek Research";
 	      case PCI_VENDOR_ID_CONTAQ:	return "Contaq";
 	      case PCI_VENDOR_ID_FOREX:		return "Forex";
@@ -637,6 +655,7 @@ const char *pci_strvendor(unsigned int vendor)
 	      case PCI_VENDOR_ID_RP:		return "Comtrol";
 	      case PCI_VENDOR_ID_CYCLADES:	return "Cyclades";
 	      case PCI_VENDOR_ID_3DFX:		return "3Dfx";
+	      case PCI_VENDOR_ID_STALLION:	return "Stallion Technologies";
 	      case PCI_VENDOR_ID_SIGMADES:	return "Sigma Designs";
 	      case PCI_VENDOR_ID_OPTIBASE:	return "Optibase";
 	      case PCI_VENDOR_ID_ENSONIQ:	return "Ensoniq";

@@ -1019,7 +1019,7 @@ static void handle_stripe(struct stripe_head *sh)
 				if (sh->bh_new[i])
 					continue;
 				block = (int) compute_blocknr(sh, i);
-				bh = efind_buffer(MKDEV(MD_MAJOR, minor), block, sh->size);
+				bh = find_buffer(MKDEV(MD_MAJOR, minor), block, sh->size);
 				if (bh && bh->b_count == 0 && buffer_dirty(bh) && !buffer_locked(bh)) {
 					PRINTK(("Whee.. sector %lu, index %d (%d) found in the buffer cache!\n", sh->sector, i, block));
 					add_stripe_bh(sh, bh, i, WRITE);

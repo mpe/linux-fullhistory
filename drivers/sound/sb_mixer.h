@@ -17,6 +17,8 @@
  *	Added defines for the Sound Galaxy NX Pro mixer.
  * 
  */
+#include <linux/config.h>
+
 #ifdef CONFIG_SBDSP
 
 #define SBPRO_RECORDING_DEVICES	(SOUND_MASK_LINE | SOUND_MASK_MIC | SOUND_MASK_CD)

@@ -775,7 +775,7 @@ extern struct file * get_empty_filp(void);
 extern int close_fp(struct file *);
 extern struct buffer_head * get_hash_table(kdev_t, int, int);
 extern struct buffer_head * getblk(kdev_t, int, int);
-extern struct buffer_head *efind_buffer(kdev_t dev, int block, int size);
+extern struct buffer_head * find_buffer(kdev_t dev, int block, int size);
 extern void ll_rw_block(int, int, struct buffer_head * bh[]);
 extern void ll_rw_page(int, kdev_t, unsigned long, char *);
 extern void ll_rw_swap_file(int, kdev_t, unsigned int *, int, char *);

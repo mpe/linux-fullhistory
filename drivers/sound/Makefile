@@ -24,21 +24,9 @@ ifeq ($(ARCH),m68k)
   clean:
 	rm -f core *.o *.a *.s
 
-  # dummy rule to keep 'make xconfig' happy
-  mkscript:
-
-# More dummy targets for make [menu]config
-mkscript:
-kernelconfig:
-
 else
 
-ifeq (.defines,$(wildcard .defines))
-include .defines
-#include .objects
-endif
-
-TARGET_OS=linux
+include Defines
 
 ifndef TOPDIR
 TOPDIR=/usr/src/linux
@@ -92,7 +80,7 @@ else
   ifeq ($(CONFIG_GUS),m)
     M_OBJS += gus.o
   endif
-  ifeq ($(CONFIG_GUSMAX),m)
+  ifeq ($(CONFIG_GUSMAX),y)
     ifneq ($(CONFIG_MSS),y)
       CONFIG_MSS = m
     endif
@@ -259,33 +247,80 @@ sound.o: soundcard.o dev_table.o sound_switch.o audio.o dmabuf.o sequencer.o sys
 gus.o: gus_card.o gus_midi.o gus_vol.o gus_wave.o ics2101.o
 	ld -r -o gus.o gus_card.o gus_midi.o gus_vol.o gus_wave.o ics2101.o
 
-kernelconfig: setup
-	rm -f configure
-	$(HOSTCC) -o configure configure.c
-	./configure fixedlocal > local.h
-	./configure fixeddefines > .defines
-	@echo \#define SOUND_CONFIG_DATE \"`date`\" >> local.h
-	@echo \#define SOUND_CONFIG_BY \"`whoami`\" >> local.h
-#	@echo \#define SOUND_CONFIG_HOST \"`hostname`\" >> local.h 2>/dev/null
-#	@echo \#define SOUND_CONFIG_DOMAIN \"`hostname -d`\" >> local.h 2>/dev/null
-	@echo \#define SOUND_UNAME_A \"`uname -a`\" >> local.h
+# Firmware files that need translation
+#
+# The translated files are protected by a file that keeps track
+# of what name was used to build them.  If the name changes, they
+# will be forced to be remade.
 
-configure: configure.c
-	$(HOSTCC) -o configure configure.c
-	@cat .blurb
+bin2hex: bin2hex.c
+	$(HOSTCC) -o bin2hex bin2hex.c
 
-setup:
-	@echo Compiling Sound Driver v $(VERSION) for Linux
+hex2hex: hex2hex.c
+	$(HOSTCC) -o hex2hex hex2hex.c
 
-mkscript:
+ifeq ($(MAUI_HAVE_BOOT),y)
 
-config: configure
-	@$(MAKE) setup
-	@./configure > local.h
-	@echo \#define SOUND_CONFIG_DATE \"`date`\" >> local.h
-	@echo \#define SOUND_CONFIG_BY \"`whoami`\" >> local.h
-#	@echo \#define SOUND_CONFIG_HOST \"`hostname`\" >> local.h 2>/dev/null
-#	@echo \#define SOUND_CONFIG_DOMAIN \"`hostname -d`\" >> local.h 2>/dev/null
-	@echo \#define SOUND_UNAME_A \"`uname -a`\" >> local.h
+MAUI_BOOT_FILE := $(patsubst "%", %, $(MAUI_BOOT_FILE))
 
+maui.o: maui_boot.h
+
+maui_boot.h: $(MAUI_BOOT_FILE) bin2hex
+	bin2hex maui_os < "$(MAUI_BOOT_FILE)" > $@
+	@ ( \
+	    echo 'ifeq ($(strip $(MAUI_BOOT_FILE)),$$(strip $$(MAUI_BOOT_FILE)))'; \
+	    echo 'FILES_BOOT_UP_TO_DATE += $@'; \
+	    echo 'endif' \
+	) > .$@.boot
+
+endif
+
+ifeq ($(PSS_HAVE_BOOT),y)
+
+PSS_BOOT_FILE := $(patsubst "%", %, $(PSS_BOOT_FILE))
+
+pss.o: pss_boot.h
+
+pss_boot.h: $(PSS_BOOT_FILE) bin2hex
+	bin2hex pss_synth < "$(PSS_BOOT_FILE)" > $@
+	@ ( \
+	    echo 'ifeq ($(strip $(PSS_BOOT_FILE)),$$(strip $$(PSS_BOOT_FILE)))'; \
+	    echo 'FILES_BOOT_UP_TO_DATE += $@'; \
+	    echo 'endif' \
+	) > .$@.boot
+
+endif
+
+ifeq ($(TRIX_HAVE_BOOT),y)
+
+TRIX_BOOT_FILE := $(patsubst "%", %, $(TRIX_BOOT_FILE))
+
+trix.o: trix_boot.h
+
+trix_boot.h: $(TRIX_BOOT_FILE) hex2hex
+	hex2hex trix_boot < "$(TRIX_BOOT_FILE)" > $@
+	@ ( \
+	    echo 'ifeq ($(strip $(TRIX_BOOT_FILE)),$$(strip $$(strip $$(TRIX_BOOT_FILE)))'; \
+	    echo 'FILES_BOOT_UP_TO_DATE += $@'; \
+	    echo 'endif' \
+	) > .$@.boot
+
+endif
+
+# Find boot files whose source file names have changed and force rebuild.
+
+FILES_BOOT_UP_TO_DATE :=
+
+FILES_BOOT_EXIST := $(wildcard .*.boot)
+ifneq ($(FILES_BOOT_EXIST),)
+include $(FILES_BOOT_EXIST)
+endif
+
+FILES_BOOT_CHANGED := $(strip \
+    $(filter-out $(FILES_BOOT_UP_TO_DATE), \
+	maui_boot.h pss_boot.h trix_boot.h))
+
+ifneq ($(FILES_BOOT_CHANGED),)
+$(FILES_BOOT_CHANGED): dummy
+endif
 endif

@@ -10,11 +10,6 @@ if [ "$CONFIG_NETLINK" = "y" ]; then
   tristate 'Netlink device emulation' CONFIG_NETLINK_DEV
 fi
 bool 'Network firewalls' CONFIG_FIREWALL
-if [ "$CONFIG_FIREWALL" = "y" ]; then
-  if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
-    bool 'Socket Security API Support (EXPERIMENTAL)' CONFIG_NET_SECURITY
-  fi
-fi
 bool 'Network aliasing'  CONFIG_NET_ALIAS
 bool 'Socket Filtering'  CONFIG_FILTER
 tristate 'Unix domain sockets' CONFIG_UNIX

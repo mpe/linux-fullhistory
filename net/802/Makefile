@@ -17,7 +17,8 @@ endif
 ifeq ($(CONFIG_LLC),y)
 SUB_DIRS += transit
 O_OBJS += llc_sendpdu.o llc_utility.o cl2llc.o
-OX_OBJS += llc_macinit.o p8022.o psnap.o p8022tr.o
+OX_OBJS += llc_macinit.o
+SNAP = y
 endif
 
 ifdef CONFIG_TR
@@ -29,14 +30,17 @@ O_OBJS += fddi.o
 endif
 
 ifdef CONFIG_IPX
-OX_OBJS += p8022.o psnap.o p8022tr.o
+	SNAP=y
 endif
 
 ifdef CONFIG_ATALK
-ifndef CONFIG_IPX
+	SNAP=y
+endif
+
+ifeq ($(SNAP),y)
 OX_OBJS += p8022.o psnap.o p8022tr.o
 endif
-endif
+
 
 include $(TOPDIR)/Rules.make
 

@@ -1,3 +1,5 @@
+#include <linux/config.h>
+
 #ifdef CONFIG_SBDSP
 #define DSP_RESET	(devc->base + 0x6)
 #define DSP_READ	(devc->base + 0xA)

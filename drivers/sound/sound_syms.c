@@ -5,7 +5,6 @@
  *      (C) Copyright 1997      Alan Cox, Licensed under the GNU GPL
  */
 
-#include <linux/config.h>
 #include <linux/module.h>
 #include "sound_config.h"
 #define _MIDI_SYNTH_C_

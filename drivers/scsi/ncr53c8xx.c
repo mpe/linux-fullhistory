@@ -9359,8 +9359,7 @@ static int ncr53c8xx_pci_init(Scsi_Host_Template *tpnt,
 #if defined(__i386) && !defined(MODULE)
 	if ((driver_setup.pci_fix_up & 1) &&
 	    (chip->features & FE_CLSE) && cache_line_size == 0) {
-		extern char x86;
-		switch(x86) {
+	    	switch(boot_cpu_data.x86) {
 		case 4:	cache_line_size = 4; break;
 		case 5:	cache_line_size = 8; break;
 		}

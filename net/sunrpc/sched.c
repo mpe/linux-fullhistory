@@ -92,7 +92,8 @@ rpc_add_wait_queue(struct rpc_wait_queue *queue, struct rpc_task *task)
 }
 
 /*
- * Remove request from queue
+ * Remove request from queue.
+ * Note: must be called with interrupts disabled.
  */
 void
 rpc_remove_wait_queue(struct rpc_task *task)
@@ -149,6 +150,9 @@ rpc_del_timer(struct rpc_task *task)
 
 /*
  * Make an RPC task runnable.
+ *
+ * Note: If the task is ASYNC, this must be called with 
+ * interrupts disabled to protect the wait queue operation.
  */
 static inline void
 rpc_make_runnable(struct rpc_task *task)
@@ -687,20 +691,26 @@ rpc_new_child(struct rpc_clnt *clnt, struct rpc_task *parent)
 {
 	struct rpc_task	*task;
 
-	if (!(task = rpc_new_task(clnt, NULL, RPC_TASK_ASYNC|RPC_TASK_CHILD))) {
-		parent->tk_status = -ENOMEM;
-		return NULL;
-	}
+	task = rpc_new_task(clnt, NULL, RPC_TASK_ASYNC | RPC_TASK_CHILD);
+	if (!task)
+		goto fail;
 	task->tk_exit = rpc_child_exit;
 	task->tk_calldata = parent;
-
 	return task;
+
+fail:
+	parent->tk_status = -ENOMEM;
+	return NULL;
 }
 
 void
 rpc_run_child(struct rpc_task *task, struct rpc_task *child, rpc_action func)
 {
+	unsigned long oldflags;
+
+	save_flags(oldflags); cli();
 	rpc_make_runnable(child);
+	restore_flags(oldflags);
 	rpc_sleep_on(&childq, task, func, NULL);
 }
 

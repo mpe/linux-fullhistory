@@ -51,13 +51,11 @@
 
 #include "coproc.h"
 
-#ifdef PSS_HAVE_LD
-#include "synth-ld.h"
+#ifdef PSS_HAVE_BOOT
+#include "pss_boot.h"
 #else
-static int      pss_synthLen = 0;
-static unsigned char *pss_synth =
-NULL;
-
+static unsigned char *pss_synth = NULL;
+static int pss_synthLen = 0;
 #endif
 
 typedef struct pss_confdata

@@ -1,28 +1,10 @@
 dep_tristate 'ProAudioSpectrum 16 support' CONFIG_PAS $CONFIG_SOUND
+if [ "$CONFIG_PAS" = "y" ]; then
+    int 'PAS16 IRQ 3, 4, 5, 7, 9, 10, 11, 12, 14 or 15' PAS_IRQ 10
+    int 'PAS16 DMA 0, 1, 3, 5, 6 or 7' PAS_DMA 3
+fi
+
 dep_tristate '100% Sound Blaster compatibles (SB16/32/64, ESS, Jazz16) support' CONFIG_SB $CONFIG_SOUND
-dep_tristate 'Generic OPL2/OPL3 FM synthesizer support' CONFIG_ADLIB $CONFIG_SOUND
-dep_tristate 'Gravis Ultrasound support' CONFIG_GUS $CONFIG_SOUND
-if [ "$CONFIG_GUS" != "n" ]; then
-	bool '16 bit sampling option of GUS (_NOT_ GUS MAX)' CONFIG_GUS16 
-	bool 'GUS MAX support' CONFIG_GUSMAX
-fi
-dep_tristate 'MPU-401 support (NOT for SB16)' CONFIG_MPU401 $CONFIG_SOUND
-dep_tristate 'PSS (ECHO-ADI2111) support' CONFIG_PSS $CONFIG_SOUND
-dep_tristate 'Microsoft Sound System support' CONFIG_MSS $CONFIG_SOUND
-dep_tristate 'Ensoniq SoundScape support' CONFIG_SSCAPE $CONFIG_SOUND
-dep_tristate 'MediaTrix AudioTrix Pro support' CONFIG_TRIX $CONFIG_SOUND
-dep_tristate 'Support for OPTi MAD16 and/or Mozart based cards' CONFIG_MAD16 $CONFIG_SOUND
-dep_tristate 'Support for Crystal CS4232 based (PnP) cards' CONFIG_CS4232 $CONFIG_SOUND
-dep_tristate 'Support for Turtle Beach Wave Front (Maui, Tropez) synthesizers' CONFIG_MAUI $CONFIG_SOUND
-dep_tristate 'Yamaha OPL3-SA1 audio controller' CONFIG_OPL3SA1 $CONFIG_SOUND
-dep_tristate 'SoftOSS software wave table engine' CONFIG_SOFTOSS $CONFIG_SOUND
-dep_tristate 'FM synthesizer (YM3812/OPL-3) support' CONFIG_YM3812 $CONFIG_SOUND
-dep_tristate 'Loopback MIDI device support' CONFIG_VMIDI $CONFIG_VMIDI
-
-if [ "$CONFIG_AEDSP16" = "y" ]; then
-    hex 'I/O base for Audio Excel DSP 16 220 or 240' AEDSP16_BASE 220
-fi
-
 if [ "$CONFIG_SB" = "y" ]; then
     hex 'I/O base for SB Check from manual of the card' SBC_BASE 220
     int 'Sound Blaster IRQ Check from manual of the card' SBC_IRQ 7
@@ -34,50 +16,46 @@ if [ "$CONFIG_SB" = "y" ]; then
     int 'SB MPU401 IRQ (Jazz16, SM Wave and ES1688) Check from manual of the card' SB_MPU_IRQ -1
 fi
 
-if [ "$CONFIG_PAS" = "y" ]; then
-    int 'PAS16 IRQ 3, 4, 5, 7, 9, 10, 11, 12, 14 or 15' PAS_IRQ 10
-    int 'PAS16 DMA 0, 1, 3, 5, 6 or 7' PAS_DMA 3
+dep_tristate 'Generic OPL2/OPL3 FM synthesizer support' CONFIG_ADLIB $CONFIG_SOUND
+
+dep_tristate 'Gravis Ultrasound support' CONFIG_GUS $CONFIG_SOUND
+if [ "$CONFIG_GUS" != "n" ]; then
+    bool '16 bit sampling option of GUS (_NOT_ GUS MAX)' CONFIG_GUS16 
+    bool 'GUS MAX support' CONFIG_GUSMAX
+    if [ "$CONFIG_GUS" = "y" ]; then
+	hex 'I/O base for GUS 210, 220, 230, 240, 250 or 260' GUS_BASE 220
+	int 'GUS IRQ 3, 5, 7, 9, 11, 12 or 15' GUS_IRQ 15
+	int 'GUS DMA 1, 3, 5, 6 or 7' GUS_DMA 6
+	int 'Second DMA channel for GUS 1, 3, 5, 6 or 7' GUS_DMA2 -1
+	if [ "$CONFIG_GUS16" = "y" ]; then
+	    hex 'I/O base for the 16 bit daughtercard of GUS 530, 604, E80 or F40' GUS16_BASE 530
+	    int 'GUS 16 bit daughtercard IRQ 3, 4, 5, 7, or 9' GUS16_IRQ 7
+	    int 'GUS DMA 0, 1 or 3' GUS16_DMA 3
+	fi
+    fi
 fi
 
-if [ "$CONFIG_GUS" = "y" ]; then
-    hex 'I/O base for GUS 210, 220, 230, 240, 250 or 260' GUS_BASE 220
-    int 'GUS IRQ 3, 5, 7, 9, 11, 12 or 15' GUS_IRQ 15
-    int 'GUS DMA 1, 3, 5, 6 or 7' GUS_DMA 6
-    int 'Second DMA channel for GUS 1, 3, 5, 6 or 7' GUS_DMA2 -1
-fi
-
-if [ "$CONFIG_GUS16" = "y" ]; then
-    hex 'I/O base for the 16 bit daughtercard of GUS 530, 604, E80 or F40' GUS16_BASE 530
-    int 'GUS 16 bit daughtercard IRQ 3, 4, 5, 7, or 9' GUS16_IRQ 7
-    int 'GUS DMA 0, 1 or 3' GUS16_DMA 3
-fi
-
+dep_tristate 'MPU-401 support (NOT for SB16)' CONFIG_MPU401 $CONFIG_SOUND
 if [ "$CONFIG_MPU401" = "y" ]; then
     hex 'I/O base for MPU401 Check from manual of the card' MPU_BASE 330
     int 'MPU401 IRQ Check from manual of the card' MPU_IRQ 9
 fi
 
-if [ "$CONFIG_MAUI" = "y" ]; then
-    comment 'ERROR! You have to use old sound configuration method with Maui.'
-    hex 'I/O base for Maui 210, 230, 260, 290, 300, 320, 338 or 330' MAUI_BASE 330
-    int 'Maui IRQ 5, 9, 12 or 15' MAUI_IRQ 9
-fi
-
-if [ "$CONFIG_UART6850" = "y" ]; then
-    hex 'I/O base for UART 6850 MIDI port (Unknown)' U6850_BASE 0
-    int 'UART6850 IRQ (Unknown)' U6850_IRQ -1
-fi
-
+dep_tristate 'PSS (ECHO-ADI2111) support' CONFIG_PSS $CONFIG_SOUND
 if [ "$CONFIG_PSS" = "y" ]; then
-    comment 'ERROR! You have to use old sound configuration method with PSS cards.'
     hex 'PSS I/O base 220 or 240' PSS_BASE 220
     hex 'PSS audio I/O base 530, 604, E80 or F40' PSS_MSS_BASE 530
     int 'PSS audio IRQ 7, 9, 10 or 11' PSS_MSS_IRQ 11
     int 'PSS audio DMA 0, 1 or 3' PSS_MSS_DMA 3
     hex 'PSS MIDI I/O base ' PSS_MPU_BASE 330
     int 'PSS MIDI IRQ 3, 4, 5, 7 or 9' PSS_MPU_IRQ 9
+    bool '  Have DSPxxx.LD firmware file' PSS_HAVE_BOOT
+    if [ "$PSS_HAVE_BOOT" = "y" ]; then
+       string '  Full pathname of DSPxxx.LD firmware file' PSS_BOOT_FILE
+    fi
 fi
 
+dep_tristate 'Microsoft Sound System support' CONFIG_MSS $CONFIG_SOUND
 if [ "$CONFIG_MSS" = "y" ]; then
     hex 'MSS/WSS I/O base 530, 604, E80 or F40' MSS_BASE 530
     int 'MSS/WSS IRQ 7, 9, 10 or 11' MSS_IRQ 11
@@ -85,6 +63,7 @@ if [ "$CONFIG_MSS" = "y" ]; then
     int 'MSS/WSS second DMA (if possible) 0, 1 or 3' MSS_DMA2 -1
 fi
 
+dep_tristate 'Ensoniq SoundScape support' CONFIG_SSCAPE $CONFIG_SOUND
 if [ "$CONFIG_SSCAPE" = "y" ]; then
     hex 'SoundScape MIDI I/O base 320, 330, 340 or 350' SSCAPE_BASE 330
     int 'SoundScape MIDI IRQ ' SSCAPE_IRQ 9
@@ -93,8 +72,8 @@ if [ "$CONFIG_SSCAPE" = "y" ]; then
     int 'SoundScape audio IRQ 7, 9, 10 or 11' SSCAPE_MSS_IRQ 11
 fi
 
+dep_tristate 'MediaTrix AudioTrix Pro support' CONFIG_TRIX $CONFIG_SOUND
 if [ "$CONFIG_TRIX" = "y" ]; then
-    comment 'ERROR! You have to use old sound configuration method with OPL3-SA1.'
     hex 'OPL3-SA1 audio I/O base 530, 604, E80 or F40' TRIX_BASE 530
     int 'OPL3-SA1 audio IRQ 7, 9, 10 or 11' TRIX_IRQ 11
     int 'OPL3-SA1 audio DMA 0, 1 or 3' TRIX_DMA 0
@@ -104,26 +83,13 @@ if [ "$CONFIG_TRIX" = "y" ]; then
     hex 'OPL3-SA1 SB I/O base 220, 210, 230, 240, 250, 260 or 270' TRIX_SB_BASE 220
     int 'OPL3-SA1 SB IRQ 3, 4, 5 or 7' TRIX_SB_IRQ 7
     int 'OPL3-SA1 SB DMA 1 or 3' TRIX_SB_DMA 1
+    bool '  Have TRXPRO.HEX firmware file' TRIX_HAVE_BOOT
+    if [ "$TRIX_HAVE_BOOT" = "y" ]; then
+	string '  Full pathname of TRXPRO.HEX firmware file' TRIX_BOOT_FILE
+    fi
 fi
 
-if [ "$CONFIG_OPL3SA1" = "y" ]; then
-    hex 'OPL3-SA1 audio I/O base 530, 604, E80 or F40' OPL3SA1_BASE 530
-    int 'OPL3-SA1 audio IRQ 7, 9, 10 or 11' OPL3SA1_IRQ 11
-    int 'OPL3-SA1 audio DMA 0, 1 or 3' OPL3SA1_DMA 0
-    int 'OPL3-SA1 second (duplex) DMA 0, 1 or 3' OPL3SA1_DMA2 3
-    hex 'OPL3-SA1 MIDI I/O base 330, 370, 3B0 or 3F0' OPL3SA1_MPU_BASE 330
-    int 'OPL3-SA1 MIDI IRQ 3, 4, 5, 7 or 9' OPL3SA1_MPU_IRQ 9
-fi
-
-if [ "$CONFIG_CS4232" = "y" ]; then
-    hex 'CS4232 audio I/O base 530, 604, E80 or F40' CS4232_BASE 530
-    int 'CS4232 audio IRQ 5, 7, 9, 11, 12 or 15' CS4232_IRQ 11
-    int 'CS4232 audio DMA 0, 1 or 3' CS4232_DMA 0
-    int 'CS4232 second (duplex) DMA 0, 1 or 3' CS4232_DMA2 3
-    hex 'CS4232 MIDI I/O base 330, 370, 3B0 or 3F0' CS4232_MPU_BASE 330
-    int 'CS4232 MIDI IRQ 5, 7, 9, 11, 12 or 15' CS4232_MPU_IRQ 9
-fi
-
+dep_tristate 'Support for OPTi MAD16 and/or Mozart based cards' CONFIG_MAD16 $CONFIG_SOUND
 if [ "$CONFIG_MAD16" = "y" ]; then
     hex 'MAD16 audio I/O base 530, 604, E80 or F40' MAD16_BASE 530
     int 'MAD16 audio IRQ 7, 9, 10 or 11' MAD16_IRQ 11
@@ -133,19 +99,60 @@ if [ "$CONFIG_MAD16" = "y" ]; then
     int 'MAD16 MIDI IRQ 5, 7, 9 or 10' MAD16_MPU_IRQ 9
 fi
 
+dep_tristate 'Support for Crystal CS4232 based (PnP) cards' CONFIG_CS4232 $CONFIG_SOUND
+if [ "$CONFIG_CS4232" = "y" ]; then
+    hex 'CS4232 audio I/O base 530, 604, E80 or F40' CS4232_BASE 530
+    int 'CS4232 audio IRQ 5, 7, 9, 11, 12 or 15' CS4232_IRQ 11
+    int 'CS4232 audio DMA 0, 1 or 3' CS4232_DMA 0
+    int 'CS4232 second (duplex) DMA 0, 1 or 3' CS4232_DMA2 3
+    hex 'CS4232 MIDI I/O base 330, 370, 3B0 or 3F0' CS4232_MPU_BASE 330
+    int 'CS4232 MIDI IRQ 5, 7, 9, 11, 12 or 15' CS4232_MPU_IRQ 9
+fi
+
+dep_tristate 'Support for Turtle Beach Wave Front (Maui, Tropez) synthesizers' CONFIG_MAUI $CONFIG_SOUND
+if [ "$CONFIG_MAUI" = "y" ]; then
+    hex 'I/O base for Maui 210, 230, 260, 290, 300, 320, 338 or 330' MAUI_BASE 330
+    int 'Maui IRQ 5, 9, 12 or 15' MAUI_IRQ 9
+    bool '  Have OSWF.MOT firmware file' MAUI_HAVE_BOOT
+    if [ "$MAUI_HAVE_BOOT" = "y" ]; then
+	string '  Full pathname of OSWF.MOT firmware file' MAUI_BOOT_FILE
+    fi
+fi
+
+dep_tristate 'Yamaha OPL3-SA1 audio controller' CONFIG_OPL3SA1 $CONFIG_SOUND
+if [ "$CONFIG_OPL3SA1" = "y" ]; then
+    hex 'OPL3-SA1 audio I/O base 530, 604, E80 or F40' OPL3SA1_BASE 530
+    int 'OPL3-SA1 audio IRQ 7, 9, 10 or 11' OPL3SA1_IRQ 11
+    int 'OPL3-SA1 audio DMA 0, 1 or 3' OPL3SA1_DMA 0
+    int 'OPL3-SA1 second (duplex) DMA 0, 1 or 3' OPL3SA1_DMA2 3
+    hex 'OPL3-SA1 MIDI I/O base 330, 370, 3B0 or 3F0' OPL3SA1_MPU_BASE 330
+    int 'OPL3-SA1 MIDI IRQ 3, 4, 5, 7 or 9' OPL3SA1_MPU_IRQ 9
+fi
+
+dep_tristate 'SoftOSS software wave table engine' CONFIG_SOFTOSS $CONFIG_SOUND
 if [ "$CONFIG_SOFTOSS" = "y" ]; then
     int 'Sampling rate for SoftOSS 8000 to 48000' SOFTOSS_RATE 22050
     int 'Max # of concurrent voices for SoftOSS 4 to 32' SOFTOSS_VOICES 32
 fi
 
-#
-$MAKE -C drivers/sound kernelconfig || exit 1
+dep_tristate 'FM synthesizer (YM3812/OPL-3) support' CONFIG_YM3812 $CONFIG_SOUND
+dep_tristate 'Loopback MIDI device support' CONFIG_VMIDI $CONFIG_VMIDI
+
+if [ "$CONFIG_UART6850" = "y" ]; then
+    hex 'I/O base for UART 6850 MIDI port (Unknown)' U6850_BASE 0
+    int 'UART6850 IRQ (Unknown)' U6850_IRQ -1
+fi
+
+
 bool 'Additional low level drivers' CONFIG_LOWLEVEL_SOUND
 
 if [ "$CONFIG_LOWLEVEL_SOUND" = "y" ]; then
    dep_tristate 'ACI mixer (miroPCM12)' CONFIG_ACI_MIXER $CONFIG_SOUND
    dep_tristate 'AWE32 synth' CONFIG_AWE32_SYNTH $CONFIG_SOUND
    bool 'Gallant Audio Cards (SC-6000 and SC-6600 based)' CONFIG_AEDSP16
+   if [ "$CONFIG_AEDSP16" = "y" -o "$CONFIG_AEDSP16" = "m" ]; then
+      hex '  I/O base for Audio Excel DSP 16 220 or 240' AEDSP16_BASE 220
+   fi
 
    if [ "$CONFIG_AEDSP16" = "y" ]; then
       comment 'SC-6600 Audio Cards have no jumper switches at all'

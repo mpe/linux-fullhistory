@@ -1,6 +1,6 @@
 VERSION = 2
 PATCHLEVEL = 1
-SUBLEVEL = 75
+SUBLEVEL = 76
 
 ARCH := $(shell uname -m | sed -e s/i.86/i386/ -e s/sun4u/sparc64/)
 
@@ -206,7 +206,6 @@ symlinks:
 	fi
 
 oldconfig: symlinks
-	$(MAKE) -C drivers/sound mkscript
 	$(CONFIG_SHELL) scripts/Configure -d arch/$(ARCH)/config.in
 
 xconfig: symlinks
@@ -339,23 +338,24 @@ clean:	archclean
 	rm -f core `find . -name '*.[oas]' ! -regex '.*lxdialog/.*' -print`
 	rm -f core `find . -type f -name 'core' -print`
 	rm -f vmlinux System.map
-	rm -f .tmp* drivers/sound/configure
+	rm -f .tmp*
 	rm -f drivers/char/consolemap_deftbl.c drivers/char/conmakehash
+	rm -f drivers/sound/bin2hex drivers/sound/hex2hex
 	rm -f `find modules/ -type f -print`
 	rm -f submenu*
 
 mrproper: clean
 	rm -f include/linux/autoconf.h include/linux/version.h
-	rm -f drivers/sound/local.h drivers/sound/.defines
 	rm -f drivers/net/soundmodem/sm_tbl_{afsk1200,afsk2666,fsk9600}.h
 	rm -f drivers/net/soundmodem/sm_tbl_{hapn4800,psk4800}.h
 	rm -f drivers/net/soundmodem/sm_tbl_{afsk2400_7,afsk2400_8}.h
 	rm -f drivers/net/soundmodem/gentbl
 	rm -f drivers/char/hfmodem/gentbl drivers/char/hfmodem/tables.h
+	rm -f drivers/sound/*_boot.h drivers/sound/.*.boot
 	rm -f .version .config* config.in config.old
 	rm -f scripts/tkparse scripts/kconfig.tk scripts/kconfig.tmp
 	rm -f scripts/lxdialog/*.o scripts/lxdialog/lxdialog
-	rm -f .menuconfig .menuconfig.log
+	rm -f .menuconfig.log
 	rm -f include/asm
 	rm -f .depend `find . -name .depend -print`
 	rm -f .hdepend scripts/mkdep
@@ -367,8 +367,6 @@ distclean: mrproper
 	rm -f core `find . \( -name '*.orig' -o -name '*.rej' -o -name '*~' \
                 -o -name '*.bak' -o -name '#*#' -o -name '.*.orig' \
                 -o -name '.*.rej' -o -name '.SUMS' -o -size 0 \) -print` TAGS
-#	rm -f drivers/sound/Config.in
-#	cp drivers/sound/Config.std drivers/sound/Config.in
 
 backup: mrproper
 	cd .. && tar cf - linux/ | gzip -9 > backup.gz

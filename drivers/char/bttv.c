@@ -1265,11 +1265,11 @@ static int bttv_ioctl(struct video_device *dev, unsigned int cmd, void *arg)
 	
 		case VIDIOCGAUDIO:
 		{
-			struct video_audio vp;
-			vp=btv->audio_dev;
-			vp.flags&=~(VIDEO_AUDIO_MUTE|VIDEO_AUDIO_MUTABLE);
-			vp.flags|=VIDEO_AUDIO_MUTABLE;
-			strcpy(vp.name,"TV");
+			struct video_audio v;
+			v=btv->audio_dev;
+			v.flags&=~(VIDEO_AUDIO_MUTE|VIDEO_AUDIO_MUTABLE);
+			v.flags|=VIDEO_AUDIO_MUTABLE;
+			strcpy(v.name,"TV");
 			if(copy_to_user(&v,arg,sizeof(v)))
 				return -EFAULT;
 			return 0;

@@ -326,10 +326,6 @@ void parse(char * pnt) {
       tok = tok_menuoption;
       pnt += 15;
     }
-  else if (strncmp(pnt, "$MAKE ", 6) == 0) 
-    {
-      tok = tok_make;
-    }
   else if (strncmp(pnt, "comment", 7) == 0) 
     {
       tok = tok_comment;
@@ -512,9 +508,6 @@ void parse(char * pnt) {
 	{
 	  pnt = get_qstring(pnt, &kcfg->label);
 	}
-      break;
-    case tok_make:
-      kcfg->value=strdup(pnt);
       break;
     case tok_else:
     case tok_fi:

@@ -1,5 +1,7 @@
 /* Computer generated file. Please don't edit! */
 
+#include <linux/config.h>
+
 #define KERNEL_COMPATIBLE_CONFIG
 
 #define SELECTED_SOUND_OPTIONS	0x00000000

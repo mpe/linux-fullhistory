@@ -1,5 +1,5 @@
 /*
- * This file is derived from various .h and .c files from the zlib-0.95
+ * This file is derived from various .h and .c files from the zlib-1.0.4
  * distribution by Jean-loup Gailly and Mark Adler, with some additions
  * by Paul Mackerras to aid in implementing Deflate compression and
  * decompression for PPP packets.  See zlib.h for conditions of
@@ -8,15 +8,13 @@
  * Changes that have been made include:
  * - added Z_PACKET_FLUSH (see zlib.h for details)
  * - added inflateIncomp and deflateOutputPending
- * - changed DEBUG_ZLIB to DEBUG_ZLIB
- * - use ZALLOC_INIT rather than ZALLOC for allocations during initialization
  * - allow strm->next_out to be NULL, meaning discard the output
  *
- * $Id: zlib.c,v 1.2 1997/10/02 17:59:23 davem Exp $
+ * $Id: zlib.c,v 1.3 1997/12/23 10:47:42 paulus Exp $
  */
 
 /* 
- *  ==FILEVERSION 970501==
+ *  ==FILEVERSION 971210==
  *
  * This marker is used by the Linux installation script to determine
  * whether an up-to-date version of this file is already installed.
@@ -50,23 +48,20 @@
 #include "zlib.h"
 
 #if defined(KERNEL) || defined(_KERNEL)
-/* Assume this is a *BSD kernel */
+/* Assume this is a *BSD or SVR4 kernel */
 #include <sys/types.h>
 #include <sys/time.h>
 #include <sys/systm.h>
 #  define HAVE_MEMCPY
-#  define zmemcpy(d, s, n)	bcopy((s), (d), (n))
-#  define zmemzero		bzero
-#  define zmemcmp		bcmp
+#  define memcpy(d, s, n)	bcopy((s), (d), (n))
+#  define memset(d, v, n)	bzero((d), (n))
+#  define memcmp		bcmp
 
 #else
 #if defined(__KERNEL__)
 /* Assume this is a Linux kernel */
 #include <linux/string.h>
 #define HAVE_MEMCPY
-#define zmemcpy 		memcpy
-#define zmemzero(dest, len)	memset(dest, 0, len)
-#define zmemcmp			memcmp
 
 #else /* not kernel */
 
@@ -959,7 +954,7 @@ local void flush_pending(strm)
     if (len > strm->avail_out) len = strm->avail_out;
     if (len == 0) return;
 
-    if (strm->next_out != NULL) {
+    if (strm->next_out != Z_NULL) {
 	zmemcpy(strm->next_out, s->pending_out, len);
 	strm->next_out += len;
     }
@@ -4893,7 +4888,7 @@ int r;
     z->adler = s->check = (*s->checkfn)(s->check, q, n);
 
   /* copy as far as end of window */
-  if (p != NULL) {
+  if (p != Z_NULL) {
     zmemcpy(p, q, n);
     p += n;
   }
@@ -4921,7 +4916,7 @@ int r;
       z->adler = s->check = (*s->checkfn)(s->check, q, n);
 
     /* copy */
-    if (p != NULL) {
+    if (p != Z_NULL) {
       zmemcpy(p, q, n);
       p += n;
     }
