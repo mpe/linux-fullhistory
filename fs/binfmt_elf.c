@@ -179,6 +179,7 @@ static unsigned long load_elf_interp(struct elfhdr * interp_elf_ex,
 	struct elf_phdr *elf_phdata  =  NULL;
 	struct elf_phdr *eppnt;
 	unsigned long load_addr;
+	int load_addr_set = 0;
 	int elf_exec_fileno;
 	int retval;
 	unsigned long last_bss, elf_bss;
@@ -247,7 +248,7 @@ static unsigned long load_elf_interp(struct elfhdr * interp_elf_ex,
 	    if (eppnt->p_flags & PF_R) elf_prot =  PROT_READ;
 	    if (eppnt->p_flags & PF_W) elf_prot |= PROT_WRITE;
 	    if (eppnt->p_flags & PF_X) elf_prot |= PROT_EXEC;
-	    if (interp_elf_ex->e_type == ET_EXEC || load_addr != 0) {
+	    if (interp_elf_ex->e_type == ET_EXEC || load_addr_set) {
 	    	elf_type |= MAP_FIXED;
 	    	vaddr = eppnt->p_vaddr;
 	    }
@@ -266,8 +267,10 @@ static unsigned long load_elf_interp(struct elfhdr * interp_elf_ex,
 	      return ~0UL;
 	    }
 
-	    if (!load_addr && interp_elf_ex->e_type == ET_DYN)
+	    if (!load_addr_set && interp_elf_ex->e_type == ET_DYN) {
 	      load_addr = error;
+	      load_addr_set = 1;
+	    }
 
 	    /*
 	     * Find the end of the file  mapping for this phdr, and keep
@@ -365,6 +368,7 @@ do_load_elf_binary(struct linux_binprm * bprm, struct pt_regs * regs)
   	struct exec interp_ex;
 	struct inode *interpreter_inode;
 	unsigned long load_addr;
+	int load_addr_set = 0;
 	unsigned int interpreter_type = INTERPRETER_NONE;
 	unsigned char ibcs2_interpreter;
 	int i;
@@ -588,8 +592,10 @@ do_load_elf_binary(struct linux_binprm * bprm, struct pt_regs * regs)
 				elf_stack = ELF_PAGESTART(elf_ppnt->p_vaddr);
 #endif
 			
-			if (!load_addr) 
+			if (!load_addr_set) { 
 			  load_addr = elf_ppnt->p_vaddr - elf_ppnt->p_offset;
+			  load_addr_set = 1;
+			}
 			k = elf_ppnt->p_vaddr;
 			if (k < start_code) start_code = k;
 			k = elf_ppnt->p_vaddr + elf_ppnt->p_filesz;

@@ -117,7 +117,7 @@
  *	Implement IP packet firewall
  */
 
-#ifdef CONFIG_IP_FIREWALL_DEBUG 
+#ifdef DEBUG_IP_FIREWALL 
 #define dprintf1(a)		printk(a)
 #define dprintf2(a1,a2)		printk(a1,a2)
 #define dprintf3(a1,a2,a3)	printk(a1,a2,a3)
@@ -134,7 +134,7 @@
 					      (ntohl(a)>>8)&0xFF,\
 					      (ntohl(a))&0xFF);
 
-#ifdef CONFIG_IP_FIREWALL_DEBUG
+#ifdef DEBUG_IP_FIREWALL
 #define dprint_ip(a)	print_ip(a)
 #else
 #define dprint_ip(a)	
@@ -291,7 +291,7 @@ int ip_fw_chk(struct iphdr *ip, struct device *rif, __u16 *redirport, struct ip_
 			if (!offset) {
 				src_port=ntohs(tcp->source);
 				dst_port=ntohs(tcp->dest);
-				if(!tcp->ack)
+				if(!tcp->ack && !tcp->rst)
 					/* We do NOT have ACK, value TRUE */
 					notcpack=1;
 				if(!tcp->syn || !notcpack)
@@ -321,7 +321,7 @@ int ip_fw_chk(struct iphdr *ip, struct device *rif, __u16 *redirport, struct ip_
 			prt=IP_FW_F_ALL;
 			break;
 	}
-#ifdef CONFIG_IP_FIREWALL_DEBUG
+#ifdef DEBUG_IP_FIREWALL
 	dprint_ip(ip->saddr);
 	
 	if (ip->protocol==IPPROTO_TCP || ip->protocol==IPPROTO_UDP)
@@ -610,7 +610,7 @@ static int insert_in_chain(struct ip_fw *volatile* chainptr, struct ip_fw *frwl,
 	ftmp = kmalloc( sizeof(struct ip_fw), GFP_ATOMIC );
 	if ( ftmp == NULL ) 
 	{
-#ifdef DEBUG_CONFIG_IP_FIREWALL
+#ifdef DEBUG_IP_FIREWALL
 		printk("ip_fw_ctl:  malloc said no\n");
 #endif
 		return( ENOMEM );
@@ -652,7 +652,7 @@ static int append_to_chain(struct ip_fw *volatile* chainptr, struct ip_fw *frwl,
 	ftmp = kmalloc( sizeof(struct ip_fw), GFP_ATOMIC );
 	if ( ftmp == NULL ) 
 	{
-#ifdef DEBUG_CONFIG_IP_FIREWALL
+#ifdef DEBUG_IP_FIREWALL
 		printk("ip_fw_ctl:  malloc said no\n");
 #endif
 		return( ENOMEM );
@@ -704,7 +704,7 @@ static int del_from_chain(struct ip_fw *volatile*chainptr, struct ip_fw *frwl)
 
 	if ( ftmp == NULL ) 
 	{
-#ifdef DEBUG_CONFIG_IP_FIREWALL
+#ifdef DEBUG_IP_FIREWALL
 		printk("ip_fw_ctl:  chain is empty\n");
 #endif
 		restore_flags(flags);
@@ -773,7 +773,7 @@ struct ip_fw *check_ipfw_struct(struct ip_fw *frwl, int len)
 
 	if ( len != sizeof(struct ip_fw) )
 	{
-#ifdef DEBUG_CONFIG_IP_FIREWALL
+#ifdef DEBUG_IP_FIREWALL
 		printk("ip_fw_ctl: len=%d, want %d\n",len, sizeof(struct ip_fw));
 #endif
 		return(NULL);
@@ -781,7 +781,7 @@ struct ip_fw *check_ipfw_struct(struct ip_fw *frwl, int len)
 
 	if ( (frwl->fw_flg & ~IP_FW_F_MASK) != 0 )
 	{
-#ifdef DEBUG_CONFIG_IP_FIREWALL
+#ifdef DEBUG_IP_FIREWALL
 		printk("ip_fw_ctl: undefined flag bits set (flags=%x)\n",
 			frwl->fw_flg);
 #endif
@@ -790,7 +790,7 @@ struct ip_fw *check_ipfw_struct(struct ip_fw *frwl, int len)
 
 #ifndef CONFIG_IP_TRANSPARENT_PROXY
 	if (frwl->fw_flg & IP_FW_F_REDIR) {
-#ifdef DEBUG_CONFIG_IP_FIREWALL
+#ifdef DEBUG_IP_FIREWALL
 		printk("ip_fw_ctl: unsupported flag IP_FW_F_REDIR\n");
 #endif
 		return(NULL);
@@ -799,7 +799,7 @@ struct ip_fw *check_ipfw_struct(struct ip_fw *frwl, int len)
 
 #ifndef CONFIG_IP_MASQUERADE
 	if (frwl->fw_flg & IP_FW_F_MASQ) {
-#ifdef DEBUG_CONFIG_IP_FIREWALL
+#ifdef DEBUG_IP_FIREWALL
 		printk("ip_fw_ctl: unsupported flag IP_FW_F_MASQ\n");
 #endif
 		return(NULL);
@@ -808,7 +808,7 @@ struct ip_fw *check_ipfw_struct(struct ip_fw *frwl, int len)
 
 	if ( (frwl->fw_flg & IP_FW_F_SRNG) && frwl->fw_nsp < 2 ) 
 	{
-#ifdef DEBUG_CONFIG_IP_FIREWALL
+#ifdef DEBUG_IP_FIREWALL
 		printk("ip_fw_ctl: src range set but fw_nsp=%d\n",
 			frwl->fw_nsp);
 #endif
@@ -817,7 +817,7 @@ struct ip_fw *check_ipfw_struct(struct ip_fw *frwl, int len)
 
 	if ( (frwl->fw_flg & IP_FW_F_DRNG) && frwl->fw_ndp < 2 ) 
 	{
-#ifdef DEBUG_CONFIG_IP_FIREWALL
+#ifdef DEBUG_IP_FIREWALL
 		printk("ip_fw_ctl: dst range set but fw_ndp=%d\n",
 			frwl->fw_ndp);
 #endif
@@ -826,7 +826,7 @@ struct ip_fw *check_ipfw_struct(struct ip_fw *frwl, int len)
 
 	if ( frwl->fw_nsp + frwl->fw_ndp > (frwl->fw_flg & IP_FW_F_REDIR ? IP_FW_MAX_PORTS - 1 : IP_FW_MAX_PORTS) ) 
 	{
-#ifdef DEBUG_CONFIG_IP_FIREWALL
+#ifdef DEBUG_IP_FIREWALL
 		printk("ip_fw_ctl: too many ports (%d+%d)\n",
 			frwl->fw_nsp,frwl->fw_ndp);
 #endif
@@ -873,13 +873,13 @@ int ip_acct_ctl(int stage, void *m, int len)
 				/*
  				 *	Should be panic but... (Why ??? - AC)
 				 */
-#ifdef DEBUG_CONFIG_IP_FIREWALL
+#ifdef DEBUG_IP_FIREWALL
 				printk("ip_acct_ctl:  unknown request %d\n",stage);
 #endif
 				return(EINVAL);
 		}
 	}
-#ifdef DEBUG_CONFIG_IP_FIREWALL
+#ifdef DEBUG_IP_FIREWALL
 	printk("ip_acct_ctl:  unknown request %d\n",stage);
 #endif
 	return(EINVAL);
@@ -922,7 +922,7 @@ int ip_fw_ctl(int stage, void *m, int len)
 
 		if ( len != sizeof(struct ip_fwpkt) )
 		{
-#ifdef DEBUG_CONFIG_IP_FIREWALL
+#ifdef DEBUG_IP_FIREWALL
 			printk("ip_fw_ctl: length=%d, expected %d\n",
 				len, sizeof(struct ip_fwpkt));
 #endif
@@ -933,18 +933,18 @@ int ip_fw_ctl(int stage, void *m, int len)
 	 	ip = &(ipfwp->fwp_iph);
 
 		if ( !(viadev = dev_get(ipfwp->fwp_vianame)) ) {
-#ifdef DEBUG_CONFIG_IP_FIREWALL
+#ifdef DEBUG_IP_FIREWALL
 			printk("ip_fw_ctl: invalid device \"%s\"\n", ipfwp->fwp_vianame);
 #endif
 			return(EINVAL);
 		} else if ( viadev->pa_addr != ipfwp->fwp_via.s_addr ) {
-#ifdef DEBUG_CONFIG_IP_FIREWALL
+#ifdef DEBUG_IP_FIREWALL
 			printk("ip_fw_ctl: device \"%s\" has another IP address\n",
 				ipfwp->fwp_vianame);
 #endif
 			return(EINVAL);
 		} else if ( ip->ihl != sizeof(struct iphdr) / sizeof(int)) {
-#ifdef DEBUG_CONFIG_IP_FIREWALL
+#ifdef DEBUG_IP_FIREWALL
 			printk("ip_fw_ctl: ip->ihl=%d, want %d\n",ip->ihl,
 					sizeof(struct iphdr)/sizeof(int));
 #endif
@@ -974,7 +974,7 @@ int ip_fw_ctl(int stage, void *m, int len)
 
 		if ( len != sizeof(struct ip_fw_masq) )
 		{
-#ifdef DEBUG_CONFIG_IP_FIREWALL
+#ifdef DEBUG_IP_FIREWALL
 			printk("ip_fw_ctl (masq): length %d, expected %d\n",
 				len, sizeof(struct ip_fw_masq));
 
@@ -1032,14 +1032,14 @@ int ip_fw_ctl(int stage, void *m, int len)
 			/*
 	 		 *	Should be panic but... (Why are BSD people panic obsessed ??)
 			 */
-#ifdef DEBUG_CONFIG_IP_FIREWALL
+#ifdef DEBUG_IP_FIREWALL
 				printk("ip_fw_ctl:  unknown request %d\n",stage);
 #endif
 				return(EINVAL);
 		}
 	} 
 
-#ifdef DEBUG_CONFIG_IP_FIREWALL
+#ifdef DEBUG_IP_FIREWALL
 	printk("ip_fw_ctl:  unknown request %d\n",stage);
 #endif
 	return(EINVAL);

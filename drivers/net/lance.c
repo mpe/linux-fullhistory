@@ -30,9 +30,10 @@
 	to Donald Becker. I didn't receive any answer on all my letters
 	to him. Who knows why... But may be you are more lucky?  ;-)
                                                           SAW
+    Fixed 7990 autoIRQ failure and reversed unneeded alignment. 8/20/96 djb
 */
 
-static const char *version = "lance.c:v1.08.02 Mar 17 1996 tsbogend@bigbug.franken.de\n";
+static const char *version = "lance.c:v1.09 Aug 20 1996 dplatt@3do.com, becker@cesdis.gsfc.nasa.gov\n";
 
 #include <linux/config.h>
 #include <linux/kernel.h>
@@ -314,7 +315,8 @@ int lance_init(void)
 #if defined(CONFIG_PCI)
     if (pcibios_present()) {
 	    int pci_index;
-		printk("lance.c: PCI bios is present, checking for devices...\n");
+		if (lance_debug > 1)
+			printk("lance.c: PCI bios is present, checking for devices...\n");
 		for (pci_index = 0; pci_index < 8; pci_index++) {
 			unsigned char pci_bus, pci_device_fn;
 			unsigned int pci_ioaddr;
@@ -449,16 +451,19 @@ void lance_probe1(int ioaddr)
 	}
 #endif    
 	/* Make certain the data structures used by the LANCE are aligned and DMAble. */
-	lp = (struct lance_private *) LANCE_KMALLOC(sizeof(*lp));
+	lp = (struct lance_private *)(((unsigned long)kmalloc(sizeof(*lp)+7,
+										   GFP_DMA | GFP_KERNEL)+7) & ~7);
 	if (lance_debug > 6) printk(" (#0x%05lx)", (unsigned long)lp);
 	memset(lp, 0, sizeof(*lp));
 	dev->priv = lp;
 	lp->name = chipname;
-	/* I'm not sure that buffs also must be aligned but it's safer to do it -- SAW */
-	lp->rx_buffs = (unsigned long) LANCE_KMALLOC(PKT_BUF_SZ*RX_RING_SIZE);
-	lp->tx_bounce_buffs = NULL;
+	lp->rx_buffs = (unsigned long)kmalloc(PKT_BUF_SZ*RX_RING_SIZE,
+										  GFP_DMA | GFP_KERNEL);
 	if (lance_need_isa_bounce_buffers)
-		lp->tx_bounce_buffs = LANCE_KMALLOC(PKT_BUF_SZ*TX_RING_SIZE);
+		lp->tx_bounce_buffs = kmalloc(PKT_BUF_SZ*TX_RING_SIZE,
+									  GFP_DMA | GFP_KERNEL);
+	else
+		lp->tx_bounce_buffs = NULL;
 
 	lp->chip_version = lance_version;
 
@@ -516,7 +521,7 @@ void lance_probe1(int ioaddr)
 	}
 	if (dev->irq >= 2)
 		printk(" assigned IRQ %d", dev->irq);
-	else {
+	else if (lance_version != 0)  {	/* 7990 boards need DMA detection first. */
 		/* To auto-IRQ we enable the initialization-done and DMA error
 		   interrupts. For ISA boards we get a DMA error, but VLB and PCI
 		   boards will work. */
@@ -525,7 +530,7 @@ void lance_probe1(int ioaddr)
 		/* Trigger an initialization just for the interrupt. */
 		outw(0x0041, ioaddr+LANCE_DATA);
 
-		dev->irq = autoirq_report(1);
+		dev->irq = autoirq_report(2);
 		if (dev->irq)
 			printk(", probed IRQ %d", dev->irq);
 		else {
@@ -581,6 +586,20 @@ void lance_probe1(int ioaddr)
 			printk("DMA detection failed.\n");
 			return;
 		}
+	}
+
+	if (lance_version == 0 && dev->irq == 0) {
+		/* We may auto-IRQ now that we have a DMA channel. */
+		/* Trigger an initialization just for the interrupt. */
+		autoirq_setup(0);
+		outw(0x0041, ioaddr+LANCE_DATA);
+
+		dev->irq = autoirq_report(4);
+		if (dev->irq == 0) {
+			printk("  Failed to detect the 7990 IRQ line.\n");
+			return;
+		}
+		printk("  Auto-IRQ detected IRQ%d.\n", dev->irq);
 	}
 
 	if (chip_table[lp->chip_version].flags & LANCE_ENABLE_AUTOSELECT) {

@@ -38,11 +38,12 @@
  * (assuming they are running OSF/1 PALcode, I guess).
  */
 struct el_common {
-        unsigned int	size;		/* size in bytes of logout area */
-        int		sbz1	: 31;	/* should be zero */
-        char		retry	:  1;	/* retry flag */
-        unsigned int	proc_offset;	/* processor-specific offset */
-        unsigned int	sys_offset;	/* system-specific offset */
+	unsigned int	size;		/* size in bytes of logout area */
+	int		sbz1	: 31;	/* should be zero */
+	char		retry	:  1;	/* retry flag */
+	unsigned int	proc_offset;	/* processor-specific offset */
+	unsigned int	sys_offset;	/* system-specific offset */
+	unsigned long	code;		/* machine check code */
 };
 
 extern void wrent(void *, unsigned long);

@@ -482,7 +482,7 @@ int default_blu[] = {0x00,0x00,0x00,0x00,0xaa,0xaa,0xaa,0xaa,
  */
 static void gotoxy(int currcons, int new_x, int new_y)
 {
-	int max_y;
+	int min_y, max_y;
 
 	if (new_x < 0)
 		x = 0;
@@ -492,19 +492,26 @@ static void gotoxy(int currcons, int new_x, int new_y)
 		else
 			x = new_x;
  	if (decom) {
-		new_y += top;
+		min_y = top;
 		max_y = bottom;
-	} else
+	} else {
+		min_y = 0;
 		max_y = video_num_lines;
-	if (new_y < 0)
-		y = 0;
+	}
+	if (new_y < min_y)
+		y = min_y;
+	else if (new_y >= max_y)
+		y = max_y - 1;
 	else
-		if (new_y >= max_y)
-			y = max_y - 1;
-		else
-			y = new_y;
+		y = new_y;
 	pos = origin + y*video_size_row + (x<<1);
 	need_wrap = 0;
+}
+
+/* for absolute user moves, when decom is set */
+static void gotoxay(int currcons, int new_x, int new_y)
+{
+	gotoxy(currcons, new_x, decom ? (top+new_y) : new_y);
 }
 
 /*
@@ -1075,7 +1082,7 @@ static void set_mode(int currcons, int on_off)
 				break;
 			case 6:			/* Origin relative/absolute */
 				decom = on_off;
-				gotoxy(currcons,0,0);
+				gotoxay(currcons,0,0);
 				break;
 			case 7:			/* Autowrap on/off */
 				decawm = on_off;
@@ -1683,12 +1690,12 @@ static int con_write(struct tty_struct * tty, int from_user,
 						continue;
 					case 'd':
 						if (par[0]) par[0]--;
-						gotoxy(currcons,x,par[0]);
+						gotoxay(currcons,x,par[0]);
 						continue;
 					case 'H': case 'f':
 						if (par[0]) par[0]--;
 						if (par[1]) par[1]--;
-						gotoxy(currcons,par[1],par[0]);
+						gotoxay(currcons,par[1],par[0]);
 						continue;
 					case 'J':
 						csi_J(currcons,par[0]);
@@ -1739,7 +1746,7 @@ static int con_write(struct tty_struct * tty, int from_user,
 						    par[1] <= video_num_lines) {
 							top=par[0]-1;
 							bottom=par[1];
-							gotoxy(currcons,0,0);
+							gotoxay(currcons,0,0);
 						}
 						continue;
 					case 's':

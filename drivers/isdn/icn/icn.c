@@ -687,6 +687,7 @@ static int icn_sendbuf(int channel, struct sk_buff *skb, icn_card * card)
 {
         int len = skb->len;
         unsigned long flags;
+        struct sk_buff *nskb;
 
         if (len > 4000) {
                 printk(KERN_WARNING
@@ -701,8 +702,14 @@ static int icn_sendbuf(int channel, struct sk_buff *skb, icn_card * card)
                 save_flags(flags);
                 cli();
                 card->sndcount[channel] += len;
-                skb_queue_tail(&card->spqueue[channel], skb);
+                nskb = skb_clone(skb, GFP_ATOMIC);
+                if (nskb) {
+                   skb_queue_tail(&card->spqueue[channel], nskb);
+                   dev_kfree_skb(skb, FREE_WRITE);
+                }
                 restore_flags(flags);
+                if (!nskb) 
+                   return 0;
         }
         return len;
 }

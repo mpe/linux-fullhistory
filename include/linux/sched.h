@@ -398,70 +398,58 @@ extern inline struct file *file_from_fd(const unsigned int fd)
  * to keep them correct. Use only these two functions to add/remove
  * entries in the queues.
  */
+extern inline void __add_wait_queue(struct wait_queue ** p, struct wait_queue * wait)
+{
+	struct wait_queue *head = *p;
+	struct wait_queue *next = wait;
+
+	if (head) {
+		next = head->next;
+		p = &head->next;
+	}
+	*p = wait;
+	wait->next = next;
+}
+
 extern inline void add_wait_queue(struct wait_queue ** p, struct wait_queue * wait)
 {
 	unsigned long flags;
 
-#ifdef DEBUG
-	if (wait->next) {
-		__label__ here;
-		unsigned long pc;
-		pc = (unsigned long) &&here;
-	      here:
-		printk("add_wait_queue (%08lx): wait->next = %08lx\n",pc,(unsigned long) wait->next);
-	}
-#endif
 	save_flags(flags);
 	cli();
-	if (!*p) {
-		wait->next = wait;
-		*p = wait;
-	} else {
-		wait->next = (*p)->next;
-		(*p)->next = wait;
-	}
+	__add_wait_queue(p, wait);
 	restore_flags(flags);
+}
+
+extern inline void __remove_wait_queue(struct wait_queue ** p, struct wait_queue * wait)
+{
+	struct wait_queue * next = wait->next;
+
+	if (wait == next) {
+		*p = NULL;
+	} else {
+		struct wait_queue *head = *p;
+		if (head == wait)
+			*p = next;
+		for (;;) {
+			struct wait_queue *nextlist = head->next;
+			if (nextlist == wait)
+				break;
+			head = nextlist;
+		}
+		head->next = next;
+	}
+	wait->next = NULL;
 }
 
 extern inline void remove_wait_queue(struct wait_queue ** p, struct wait_queue * wait)
 {
 	unsigned long flags;
-	struct wait_queue * tmp;
-#ifdef DEBUG
-	unsigned long ok = 0;
-#endif
 
 	save_flags(flags);
 	cli();
-	if ((*p == wait) &&
-#ifdef DEBUG
-	    (ok = 1) &&
-#endif
-	    ((*p = wait->next) == wait)) {
-		*p = NULL;
-	} else {
-		tmp = wait;
-		while (tmp->next != wait) {
-			tmp = tmp->next;
-#ifdef DEBUG
-			if (tmp == *p)
-				ok = 1;
-#endif
-		}
-		tmp->next = wait->next;
-	}
-	wait->next = NULL;
+	__remove_wait_queue(p, wait);
 	restore_flags(flags);
-#ifdef DEBUG
-	if (!ok) {
-		__label__ here;
-		ok = (unsigned long) &&here;
-		printk("removed wait_queue not on list.\n");
-		printk("list = %08lx, queue = %08lx\n",(unsigned long) p, (unsigned long) wait);
-	      here:
-		printk("eip = %08lx\n",ok);
-	}
-#endif
 }
 
 extern inline void select_wait(struct wait_queue ** wait_address, select_table * p)

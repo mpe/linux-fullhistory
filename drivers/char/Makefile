@@ -141,6 +141,16 @@ else
   endif   
 endif
 
+ifeq ($(CONFIG_PCWATCHDOG),y)
+M = y
+L_OBJS += pcwd.o
+else
+  ifeq ($(CONFIG_PCWATCHDOG),m)
+  M_OBJS += pcwd.o
+  MM = m
+  endif
+endif
+
 ifdef CONFIG_SUN_MOUSE
 M = y
 endif
@@ -193,16 +203,6 @@ else
   M_OBJS += scc.o
   endif
 endif  
-
-ifeq ($(CONFIG_PCWATCHDOG),y)
-M = y
-L_OBJS += pcwd.o
-else
-  ifeq ($(CONFIG_PCWATCHDOG),m)
-  M_OBJS += pcwd.o
-  MM = m
-  endif
-endif
 
 ifeq ($(CONFIG_BAYCOM),y)
 L_OBJS += baycom.o

@@ -867,15 +867,24 @@ static inline int tcp_memory_free(struct sock *sk)
 static void wait_for_tcp_memory(struct sock * sk)
 {
 	release_sock(sk);
-	cli();
-	if (!tcp_memory_free(sk) &&
-	    (sk->state == TCP_ESTABLISHED||sk->state == TCP_CLOSE_WAIT)
-		&& sk->err == 0 /* && check shutdown ?? */)
-	{
+	if (!tcp_memory_free(sk)) {
+		struct wait_queue wait = { current, NULL };
+
 		sk->socket->flags &= ~SO_NOSPACE;
-		interruptible_sleep_on(sk->sleep);
+		add_wait_queue(sk->sleep, &wait);
+		for (;;) {
+			current->state = TASK_INTERRUPTIBLE;
+			if (tcp_memory_free(sk))
+				break;
+			if (sk->shutdown & SEND_SHUTDOWN)
+				break;
+			if (sk->err)
+				break;
+			schedule();
+		}
+		current->state = TASK_RUNNING;
+		remove_wait_queue(sk->sleep, &wait);
 	}
-	sti();
 	lock_sock(sk);
 }
 

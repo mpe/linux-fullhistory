@@ -67,6 +67,7 @@ extern int ms_bus_mouse_init(void);
 extern int atixl_busmouse_init(void);
 extern int sun_mouse_init(void);
 extern void watchdog_init(void);
+extern void pcwatchdog_init(void);
 extern int rtc_init(void);
 
 #ifdef CONFIG_PROC_FS
@@ -218,6 +219,9 @@ int misc_init(void)
 #ifdef CONFIG_SOFT_WATCHDOG
 	watchdog_init();
 #endif	
+#ifdef CONFIG_PCWATCHDOG
+	pcwatchdog_init();
+#endif
 #ifdef CONFIG_APM
 	apm_bios_init();
 #endif

@@ -13,6 +13,8 @@
  *		inclusion in Linux 2.0.x kernels, thanks to Alan Cox.
  * 960717	Removed read/seek routines, replaced with ioctl.  Also, added
  *		check_region command due to Alan's suggestion.
+ * 960821	Made changes to compile in newer 2.0.x kernels.  Added
+ *		"cold reboot sense" entry.
  */
 
 #include <linux/module.h>
@@ -35,7 +37,7 @@
 
 #include <asm/io.h>
 
-#define WD_VER                  "0.41 (07/17/96)"
+#define WD_VER                  "0.50 (08/21/96)"
 #define	WD_MINOR		130	/* Minor device number */
 
 #define	WD_TIMEOUT		3	/* 1 1/2 seconds for a timeout */
@@ -160,7 +162,11 @@ void pcwd_showprevstate(void)
 		printk("pcwd: Previous reboot was caused by the card.\n");
 
 	if (card_status & WD_T110)
-		printk("pcwd: CPU overheat sense\n");
+		printk("pcwd: CPU overheat sense.\n");
+
+	if ((!(card_status & WD_WDRST)) &&
+	    (!(card_status & WD_T110)))
+		printk("pcwd: Cold boot sense.\n");
 }
 
 static int pcwd_return_data(void)
@@ -190,7 +196,7 @@ static int pcwd_write(struct inode *inode, struct file *file, const char *data,
 	return(1);
 }
 
-static int pcwd_ioctl(struct tty_struct *tty, struct file *file,
+static int pcwd_ioctl(struct inode *inode, struct file *file,
 	unsigned int cmd, unsigned long arg)
 {
 	int i, cdat, rv;
@@ -246,7 +252,7 @@ static void pcwd_close(struct inode *ino, struct file *filep)
 	MOD_DEC_USE_COUNT;
 }
 
-struct file_operations pcwd_fops = {
+static struct file_operations pcwd_fops = {
 	NULL,		/* Seek */
 	NULL,		/* Read */
 	pcwd_write,	/* Write */
@@ -255,8 +261,7 @@ struct file_operations pcwd_fops = {
 	pcwd_ioctl,	/* IOctl */
 	NULL,		/* MMAP */
 	pcwd_open,	/* Open */
-	pcwd_close,	/* Close */
-	NULL
+	pcwd_close	/* Close */
 };
 
 static struct miscdevice pcwd_miscdev = {
@@ -295,12 +300,12 @@ int pcwatchdog_init(void)
 		current_readport = WD_CTLSTAT_PORT2;
 
 		if (!pcwd_checkcard()) {
-			printk("pcwd: No card detected.\n");
+			printk("pcwd: No card detected, or wrong port assigned.\n");
 			return(-EIO);
 		} else
-			printk("pcwd: Port available at 0x370.\n");
+			printk("pcwd: Watchdog Rev.A detected at port 0x370\n");
 	} else
-		printk("pcwd: Port available at 0x270.\n");
+		printk("pcwd: Watchdog Rev.A detected at port 0x270\n");
 
 	pcwd_showprevstate();
 
@@ -308,7 +313,7 @@ int pcwatchdog_init(void)
 	printk("pcwd: Requesting region entry\n");
 #endif
 
-	request_region(current_ctlport, WD_PORT_EXTENT, "PCWD (Berkshire)");
+	request_region(current_ctlport, WD_PORT_EXTENT, "PCWD Rev.A (Berkshire)");
 
 #ifdef	DEBUG
 	printk("pcwd: character device creation.\n");
@@ -329,3 +334,20 @@ void cleanup_module(void)
 #endif
 }
 #endif
+
+/*
+** TODO:
+**
+**	Both Revisions:
+**	o) Support for revision B of the Watchdog Card
+**	o) Implement the rest of the IOCTLs as discussed with Alan Cox
+**	o) Implement only card heartbeat reset via IOCTL, not via write
+**	o) Faster card detection routines
+**	o) /proc device creation
+**
+**	Revision B functions:
+**	o) /dev/temp device creation for temperature device (possibly use
+**	   the one from the WDT drivers?)
+**	o) Direct Motorola controller chip access via read/write routines
+**	o) Autoprobe IO Ports for autodetection (possibly by chip detect?)
+*/

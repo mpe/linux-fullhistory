@@ -206,6 +206,7 @@ struct tok_info {
 	struct tr_statistics tr_stats;
 	unsigned char auto_ringspeedsave;
 	open_state open_status;
+	unsigned char readlog_pending;
 };
 
 /* token ring adapter commands */

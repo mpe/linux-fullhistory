@@ -662,7 +662,7 @@ static int disk_change(int drive)
 {
 	int fdc=FDC(drive);
 #ifdef FLOPPY_SANITY_CHECK
-	if (jiffies < UDP->select_delay + UDRS->select_date)
+	if (jiffies - UDRS->select_date < UDP->select_delay)
 		DPRINT("WARNING disk change called early\n");
 	if (!(FDCS->dor & (0x10 << UNIT(drive))) ||
 	   (FDCS->dor & 3) != UNIT(drive) ||
@@ -966,7 +966,7 @@ static int wait_for_completion(int delay, timeout_fn function)
 		return 1;
 	}
 
-	if (jiffies < delay){
+	if (jiffies - delay < 0){
 		del_timer(&fd_timer);
 		fd_timer.function = function;
 		fd_timer.expires = delay;
@@ -1415,7 +1415,7 @@ static void setup_rw_floppy(void)
 		 * again just before spinup completion. Beware that
 		 * after scandrives, we must again wait for selection.
 		 */
-		if (ready_date > jiffies + DP->select_delay){
+		if (ready_date - jiffies > DP->select_delay){
 			ready_date -= DP->select_delay;
 			function = (timeout_fn) floppy_start;
 		} else
@@ -1685,9 +1685,13 @@ void floppy_interrupt(int irq, void *dev_id, struct pt_regs * regs)
 		} while ((ST0 & 0x83) != UNIT(current_drive) && inr == 2);
 	}
 	if (handler) {
-		/* expected interrupt */
-		floppy_tq.routine = (void *)(void *) handler;
-		queue_task_irq(&floppy_tq, &tq_timer);
+		if(intr_count >= 2) {
+			/* expected interrupt */
+			floppy_tq.routine = (void *)(void *) handler;
+			queue_task_irq(&floppy_tq, &tq_immediate);
+			mark_bh(IMMEDIATE_BH);
+		} else
+			handler();
 	} else
 		FDCS->reset = 1;
 	is_alive("normal interrupt end");
@@ -1925,7 +1929,8 @@ static int wait_til_done(void (*handler)(void), int interruptible)
 	unsigned long flags;
 
 	floppy_tq.routine = (void *)(void *) handler;
-	queue_task(&floppy_tq, &tq_timer);
+	queue_task(&floppy_tq, &tq_immediate);
+ 	mark_bh(IMMEDIATE_BH);
 	INT_OFF;
 	while(command_status < 2 && NO_SIGNAL){
 		is_alive("wait_til_done");
@@ -2733,7 +2738,8 @@ static void redo_fd_request(void)
 		if (TESTF(FD_NEED_TWADDLE))
 			twaddle();
 		floppy_tq.routine = (void *)(void *) floppy_start;
-		queue_task(&floppy_tq, &tq_timer);
+		queue_task(&floppy_tq, &tq_immediate);
+		mark_bh(IMMEDIATE_BH);
 #ifdef DEBUGT
 		debugt("queue fd request");
 #endif
@@ -2754,7 +2760,8 @@ static struct tq_struct request_tq =
 static void process_fd_request(void)
 {
 	cont = &rw_cont;
-	queue_task(&request_tq, &tq_timer);
+	queue_task(&request_tq, &tq_immediate);
+	mark_bh(IMMEDIATE_BH);
 }
 
 static void do_fd_request(void)
@@ -3649,7 +3656,7 @@ static int check_floppy_change(kdev_t dev)
 	if (UTESTF(FD_DISK_CHANGED) || UTESTF(FD_VERIFY))
 		return 1;
 
-	if (UDRS->last_checked + UDP->checkfreq < jiffies){
+	if (UDP->checkfreq < jiffies - UDRS->last_checked){
 		lock_fdc(drive,0);
 		poll_drive(0,0);
 		process_fd_request();

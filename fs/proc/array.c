@@ -860,13 +860,16 @@ static int get_statm(int pid, char * buffer)
  * f_pos = (number of the vma in the task->mm->mmap list) * MAPS_LINE_LENGTH
  *         + (index into the line)
  */
-#ifdef __alpha__
-#define MAPS_LINE_FORMAT	  "%016lx-%016lx %s %016lx %s %lu\n"
-#define MAPS_LINE_MAX	73 /* sum of 16  1  16  1 4 1 16 1 5 1 10 1 */
-#else
-#define MAPS_LINE_FORMAT	  "%08lx-%08lx %s %08lx %s %lu\n"
-#define MAPS_LINE_MAX	49 /* sum of 8  1  8  1 4 1 8 1 5 1 10 1 */
-#endif
+/* for systems with sizeof(void*) == 4: */
+#define MAPS_LINE_FORMAT4	  "%08lx-%08lx %s %08lx %s %lu\n"
+#define MAPS_LINE_MAX4	49 /* sum of 8  1  8  1 4 1 8 1 5 1 10 1 */
+
+/* for systems with sizeof(void*) == 8: */
+#define MAPS_LINE_FORMAT8	  "%016lx-%016lx %s %016lx %s %lu\n"
+#define MAPS_LINE_MAX8	73 /* sum of 16  1  16  1 4 1 16 1 5 1 10 1 */
+
+#define MAPS_LINE_MAX	MAPS_LINE_MAX8
+
 
 static int read_maps (int pid, struct file * file, char * buf, int count)
 {
@@ -918,7 +921,8 @@ static int read_maps (int pid, struct file * file, char * buf, int count)
 			ino = 0;
 		}
 
-		len = sprintf(line, MAPS_LINE_FORMAT,
+		len = sprintf(line,
+			      sizeof(void*) == 4 ? MAPS_LINE_FORMAT4 : MAPS_LINE_FORMAT8,
 			      map->vm_start, map->vm_end, str, map->vm_offset,
 			      kdevname(dev), ino);
 

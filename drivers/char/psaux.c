@@ -25,6 +25,9 @@
  * Rearranged SIGIO support to use code from tty_io.  9Sept95 ctm@ardi.com
  *
  * Modularised 8-Sep-95 Philip Blundell <pjb27@cam.ac.uk>
+ *
+ * Fixed keyboard lockups at open time
+ * 3-Jul-96, 22-Aug-96 Roman Hodek <Roman.Hodek@informatik.uni-erlangen.de>
  */
 
 /* Uncomment the following line if your mouse needs initialization. */
@@ -35,6 +38,7 @@
  
 #include <linux/sched.h>
 #include <linux/kernel.h>
+#include <linux/interrupt.h>
 #include <linux/fcntl.h>
 #include <linux/errno.h>
 #include <linux/timer.h>
@@ -258,10 +262,14 @@ static void release_aux(struct inode * inode, struct file * file)
 	fasync_aux(inode, file, 0);
 	if (--aux_count)
 		return;
+	/* disable kbd bh to avoid mixing of cmd bytes */
+	disable_bh(KEYBOARD_BH);
 	aux_write_cmd(AUX_INTS_OFF);		/* disable controller ints */
 	poll_aux_status();
 	outb_p(AUX_DISABLE,AUX_COMMAND);      	/* Disable Aux device */
 	poll_aux_status();
+	/* reenable kbd bh */
+	enable_bh(KEYBOARD_BH);
 	free_irq(AUX_IRQ, NULL);
 	MOD_DEC_USE_COUNT;
 }
@@ -316,11 +324,16 @@ static int open_aux(struct inode * inode, struct file * file)
 		return -EBUSY;
 	}
 	MOD_INC_USE_COUNT;
+	/* disable kbd bh to avoid mixing of cmd bytes */
+	disable_bh(KEYBOARD_BH);
 	poll_aux_status();
 	outb_p(AUX_ENABLE,AUX_COMMAND);		/* Enable Aux */
 	aux_write_dev(AUX_ENABLE_DEV);		/* enable aux device */
 	aux_write_cmd(AUX_INTS_ON);		/* enable controller ints */
 	poll_aux_status();
+	/* reenable kbd bh */
+	enable_bh(KEYBOARD_BH);
+
 	aux_ready = 0;
 	return 0;
 }
@@ -377,18 +390,33 @@ static int open_qp(struct inode * inode, struct file * file)
 
 static int write_aux(struct inode * inode, struct file * file, const char * buffer, int count)
 {
-	int i = count;
+	int retval = 0;
 
-	while (i--) {
-		if (!poll_aux_status())
-			return -EIO;
-		outb_p(AUX_MAGIC_WRITE,AUX_COMMAND);
-		if (!poll_aux_status())
-			return -EIO;
-		outb_p(get_user(buffer++),AUX_OUTPUT_PORT);
+	if (count > 0) {
+		int written = 0;
+
+		/* disable kbd bh to avoid mixing of cmd bytes */
+		disable_bh(KEYBOARD_BH);
+
+		do {
+			if (!poll_aux_status())
+				break;
+			outb_p(AUX_MAGIC_WRITE,AUX_COMMAND);
+			if (!poll_aux_status())
+				break;
+			outb_p(get_user(buffer++),AUX_OUTPUT_PORT);
+			written++;
+		} while (--count);
+		/* reenable kbd bh */
+		enable_bh(KEYBOARD_BH);
+		retval = -EIO;
+		if (written) {
+			retval = written;
+			inode->i_mtime = CURRENT_TIME;
+		}
 	}
-	inode->i_mtime = CURRENT_TIME;
-	return count;
+
+	return retval;
 }
 
 

@@ -501,11 +501,13 @@ static inline void __sleep_on(struct wait_queue **p, int state)
 	if (current == task[0])
 		panic("task[0] trying to sleep");
 	current->state = state;
-	add_wait_queue(p, &wait);
 	save_flags(flags);
+	cli();
+	__add_wait_queue(p, &wait);
 	sti();
 	schedule();
-	remove_wait_queue(p, &wait);
+	cli();
+	__remove_wait_queue(p, &wait);
 	restore_flags(flags);
 }
 
