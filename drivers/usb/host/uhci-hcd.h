@@ -368,11 +368,11 @@ struct uhci_hcd {
 	int resume_detect;			/* Need a Global Resume */
 	unsigned int saved_framenumber;		/* Save during PM suspend */
 
-	/* Support for port suspend/resume */
+	/* Support for port suspend/resume/reset */
 	unsigned long port_c_suspend;		/* Bit-arrays of ports */
 	unsigned long suspended_ports;
 	unsigned long resuming_ports;
-	unsigned long resume_timeout;		/* Time to stop signalling */
+	unsigned long ports_timeout;		/* Time to stop signalling */
 
 	/* Main list of URB's currently controlled by this HC */
 	struct list_head urb_list;		/* P: uhci->lock */
