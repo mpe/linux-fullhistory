@@ -549,7 +549,7 @@ static int nbd_ioctl(struct inode *inode, struct file *file,
 		file = fget(arg);
 		if (file) {
 			inode = file->f_dentry->d_inode;
-			if (inode->i_sock) {
+			if (S_ISSOCK(inode->i_mode)) {
 				lo->file = file;
 				lo->sock = SOCKET_I(inode);
 				error = 0;
