@@ -7,7 +7,6 @@
 #include <asm/sn/klconfig.h>
 #include <asm/ioc3.h>
 #include <asm/mipsregs.h>
-#include <asm/sn/klconfig.h>
 #include <asm/sn/gda.h>
 
 typedef unsigned long cpumask_t;	/* into asm/sn/types.h */

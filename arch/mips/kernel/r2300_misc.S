@@ -10,8 +10,6 @@
  * Copyright (c) 1998 Harald Koerfgen
  * Copyright (c) 1998, 1999 Gleb Raiko & Vladimir Roganov
  */
-#include <linux/config.h>
-
 #include <asm/asm.h>
 #include <asm/current.h>
 #include <asm/bootinfo.h>

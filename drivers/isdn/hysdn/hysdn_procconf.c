@@ -403,17 +403,11 @@ hysdn_conf_close(struct inode *ino, struct file *filep)
 /******************************************************/
 static struct file_operations conf_fops =
 {
-	hysdn_dummy_lseek,
-	hysdn_conf_read,
-	hysdn_conf_write,
-	NULL,			/* readdir */
-	NULL,			/* poll */
-	NULL,			/* ioctl */
-	NULL,			/* mmap */
-	hysdn_conf_open,
-	NULL,			/* flush */
-	hysdn_conf_close,
-	NULL			/* fsync */
+	llseek:		hysdn_dummy_lseek,
+	read:		hysdn_conf_read,
+	write:		hysdn_conf_write,
+	open:		hysdn_conf_open,
+	release:	hysdn_conf_close,
 };
 
 /*****************************/

@@ -11,6 +11,7 @@
  * Copyright (C) 1999-2000  Andre Hedrick (andre@suse.com)
  */
 
+#include <linux/config.h>
 #include <linux/types.h>
 #include <linux/pci.h>
 #include <linux/delay.h>

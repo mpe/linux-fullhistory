@@ -207,16 +207,9 @@ static int button_release (struct inode *inode, struct file *filp)
  */
 
 static struct file_operations button_fops = {
-	NULL,		/* lseek */
-	button_read,
-	NULL,		/* write */
-	NULL,		/* readdir */
-	NULL,		/* select */
-	NULL,		/* ioctl */
-	NULL,		/* mmap */
-	button_open,
-	NULL,		/* flush */
-	button_release,
+	read:		button_read,
+	open:		button_open,
+	release:	button_release,
 };
 
 /* 

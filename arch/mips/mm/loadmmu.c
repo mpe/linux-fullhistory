@@ -5,6 +5,7 @@
  *
  * $Id: loadmmu.c,v 1.15 2000/02/24 00:12:40 ralf Exp $
  */
+#include <linux/config.h>
 #include <linux/init.h>
 #include <linux/kernel.h>
 #include <linux/sched.h>

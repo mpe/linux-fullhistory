@@ -1,5 +1,5 @@
 /*
- *      linux/arch/alpha/kernel/i8259.c
+ *      linux/arch/alpha/kernel/irq_i8259.c
  *
  * This is the 'legacy' 8259A Programmable Interrupt Controller,
  * present in the majority of PC/AT boxes.
@@ -113,3 +113,74 @@ init_i8259a_irqs(void)
 
 	setup_irq(2, &cascade);
 }
+
+
+#if defined(CONFIG_ALPHA_GENERIC)
+# define IACK_SC	alpha_mv.iack_sc
+#elif defined(CONFIG_ALPHA_APECS)
+# define IACK_SC	APECS_IACK_SC
+#elif defined(CONFIG_ALPHA_LCA)
+# define IACK_SC	LCA_IACK_SC
+#elif defined(CONFIG_ALPHA_CIA)
+# define IACK_SC	CIA_IACK_SC
+#elif defined(CONFIG_ALPHA_PYXIS)
+# define IACK_SC	PYXIS_IACK_SC
+#elif defined(CONFIG_ALPHA_TSUNAMI)
+# define IACK_SC	TSUNAMI_IACK_SC
+#elif defined(CONFIG_ALPHA_POLARIS)
+# define IACK_SC	POLARIS_IACK_SC
+#elif defined(CONFIG_ALPHA_IRONGATE)
+# define IACK_SC        IRONGATE_IACK_SC
+#endif
+
+#if defined(IACK_SC)
+void
+isa_device_interrupt(unsigned long vector, struct pt_regs *regs)
+{
+	/*
+	 * Generate a PCI interrupt acknowledge cycle.  The PIC will
+	 * respond with the interrupt vector of the highest priority
+	 * interrupt that is pending.  The PALcode sets up the
+	 * interrupts vectors such that irq level L generates vector L.
+	 */
+	int j = *(vuip) IACK_SC;
+	j &= 0xff;
+	if (j == 7) {
+		if (!(inb(0x20) & 0x80)) {
+			/* It's only a passive release... */
+			return;
+		}
+	}
+	handle_irq(j, regs);
+}
+#endif
+
+#if defined(CONFIG_ALPHA_GENERIC) || !defined(IACK_SC)
+void
+isa_no_iack_sc_device_interrupt(unsigned long vector, struct pt_regs *regs)
+{
+	unsigned long pic;
+
+	/*
+	 * It seems to me that the probability of two or more *device*
+	 * interrupts occurring at almost exactly the same time is
+	 * pretty low.  So why pay the price of checking for
+	 * additional interrupts here if the common case can be
+	 * handled so much easier?
+	 */
+	/* 
+	 *  The first read of gives you *all* interrupting lines.
+	 *  Therefore, read the mask register and and out those lines
+	 *  not enabled.  Note that some documentation has 21 and a1 
+	 *  write only.  This is not true.
+	 */
+	pic = inb(0x20) | (inb(0xA0) << 8);	/* read isr */
+	pic &= 0xFFFB;				/* mask out cascade & hibits */
+
+	while (pic) {
+		int j = ffz(~pic);
+		pic &= pic - 1;
+		handle_irq(j, regs);
+	}
+}
+#endif

@@ -218,6 +218,7 @@ static void update_scsi_oxid(struct fc_info *fi);
 
 Scsi_Host_Template driver_template = IPH5526_SCSI_FC;
 
+static void iph5526_timeout(struct net_device *dev);
 
 #ifdef CONFIG_PCI
 static int iph5526_probe_pci(struct net_device *dev);
@@ -286,6 +287,8 @@ static int __init fcdev_init(struct net_device *dev)
 	dev->get_stats = iph5526_get_stats;
 	dev->set_multicast_list = NULL;
 	dev->change_mtu = iph5526_change_mtu; 
+	dev->tx_timeout = iph5526_timeout;
+	dev->watchdog_timeo = 5*HZ;
 #ifndef MODULE
 	fc_setup(dev);
 #endif

@@ -2134,7 +2134,7 @@ struct awc_rid_dir awc_rids[]={
 int awc_nof_rids = (sizeof(awc_rids) / sizeof(struct awc_rid_dir)) -1;
 
 
-int awc_rids_setup(struct NET_DEVICE * dev){
+int awc_rids_setup(struct net_device * dev){
 
 	struct awc_private * priv = (struct awc_private *) dev->priv;
 	int i=0;

@@ -102,6 +102,7 @@ static  int	arlan_hw_config			(struct net_device * dev);
 static  void 	arlan_tx_done_interrupt		(struct net_device * dev, int status);
 static  void	arlan_rx_interrupt		(struct net_device * dev, u_char rxStatus, u_short, u_short);
 static  void	arlan_process_interrupt		(struct net_device * dev);
+static	void	arlan_tx_timeout		(struct net_device *dev);
 int	arlan_command(struct net_device * dev, int command);
 
 EXPORT_SYMBOL(arlan_command);
@@ -182,10 +183,7 @@ extern inline int arlan_drop_tx(struct net_device *dev)
 		priv->txOffset = 0;
 		priv->bad = 0;
 		if (!priv->under_reset && !priv->under_config)
-		{
-			dev->tbusy = 0;
-			mark_bh(NET_BH);
-		}
+			netif_wake_queue (dev);
 	}
 	return 1;
 };
@@ -288,15 +286,9 @@ int arlan_command(struct net_device *dev, int command_p)
 		}
 	}
 	if (priv->waiting_command_mask & ARLAN_COMMAND_RESET)
-	{
 		priv->under_reset = 1;
-		dev->start = 0;
-	}
 	if (priv->waiting_command_mask & ARLAN_COMMAND_CONF)
-	{
 		priv->under_config = 1;
-		dev->start = 0;
-	}
 
 	/* Issuing command */
 	arlan_lock_card_access(dev);
@@ -341,14 +333,14 @@ int arlan_command(struct net_device *dev, int command_p)
 	else if (priv->waiting_command_mask & ARLAN_COMMAND_RESET)
 	{
 		priv->under_reset=1;
-		dev->tbusy = 1;
+		netif_stop_queue (dev);
 
 		arlan_drop_tx(dev);
 		if (priv->tx_command_given || priv->rx_command_given)
 		{
 			printk(KERN_ERR "%s: Reset under tx or rx command \n", dev->name);
 		};
-		dev->tbusy = 1;
+		netif_stop_queue (dev);
 		if (arlan_debug & ARLAN_DEBUG_RESET)
 			printk(KERN_ERR "%s: Doing chip reset\n", dev->name);
 		priv->lastReset = jiffies;
@@ -388,7 +380,6 @@ int arlan_command(struct net_device *dev, int command_p)
 		{
 			printk(KERN_ERR "%s: Reset under tx or rx command \n", dev->name);
 		}
-		dev->start = 0;
 		arlan_drop_tx(dev);
 		setInterruptEnable(dev);
 		arlan_hw_config(dev);
@@ -437,13 +428,11 @@ int arlan_command(struct net_device *dev, int command_p)
 	}
 	else if (priv->waiting_command_mask & ARLAN_COMMAND_TBUSY_CLEAR)
 	{
-		if ( !registrationBad(dev) && (dev->tbusy || !dev->start) )
+		if ( !registrationBad(dev) &&
+		     (netif_queue_stopped(dev) || !netif_running(dev)) )
 			{
 				priv->waiting_command_mask &= ~ARLAN_COMMAND_TBUSY_CLEAR;
-
-				dev->tbusy = 0;
-				dev->start = 1;
-				mark_bh(NET_BH);
+				netif_wake_queue (dev);
 			};
 	}
 	else if (priv->waiting_command_mask & ARLAN_COMMAND_TX)
@@ -587,8 +576,7 @@ extern inline void arlan_retransmit_now(struct net_device *dev)
 		else
 			IFDEBUG(ARLAN_DEBUG_TX_CHAIN) printk(KERN_ERR "ReTransmit buff empty");
 		priv->txOffset = 0;
-		dev->tbusy = 0;
-		mark_bh(NET_BH);
+		netif_wake_queue (dev);
 		return;
 
 	}
@@ -650,11 +638,8 @@ static void arlan_registration_timer(unsigned long data)
 		priv->registrationLastSeen = jiffies;
 		priv->registrationLostCount = 0;
 		priv->reRegisterExp = 1;
-		if (dev->start == 0)
-		{
-			dev->start = 1;
-			mark_bh(NET_BH);
-		}
+		if (!netif_running(dev))
+			netif_wake_queue(dev);
 	}
 
 
@@ -682,8 +667,7 @@ static void arlan_registration_timer(unsigned long data)
 		if (!(TXHEAD(dev).offset && TXTAIL(dev).offset))
 		{
 			priv->txOffset = 0;
-			dev->tbusy = 0;
-			mark_bh(NET_BH);
+			netif_wake_queue (dev);
 		}
 		priv->tx_done_delayed = 0;
 		bh_mark_needed = 1;
@@ -691,8 +675,7 @@ static void arlan_registration_timer(unsigned long data)
 	if (bh_mark_needed)
 	{
 		priv->txOffset = 0;
-		dev->tbusy = 0;
-		mark_bh(NET_BH);
+		netif_wake_queue (dev);
 	}
 	arlan_process_interrupt(dev);
 
@@ -788,7 +771,7 @@ static int arlan_hw_tx(struct net_device *dev, char *buf, int length)
 	}
 	else
 	{
-		dev->tbusy = 1;
+		netif_stop_queue (dev);
 		return -1;
 		IFDEBUG(ARLAN_DEBUG_TX_CHAIN)
 			printk(KERN_ERR "TX TAIL & HEAD full, return, tailStart %d headEnd %d\n", tailStarts, headEnds);
@@ -811,11 +794,11 @@ static int arlan_hw_tx(struct net_device *dev, char *buf, int length)
 	}
 	if (TXHEAD(dev).offset && TXTAIL(dev).offset)
 	{
-		dev->tbusy = 1;
+		netif_stop_queue (dev);
 		return 0;
 	}
 	else
-		dev->tbusy = 0;
+		netif_start_queue (dev);
 
 
 	IFDEBUG(ARLAN_DEBUG_HEADER_DUMP)
@@ -1161,7 +1144,7 @@ static int arlan_mac_addr(struct net_device *dev, void *p)
 	ARLAN_DEBUG_ENTRY("arlan_mac_addr");
 	return -EINVAL;
 
-	if (dev->start)
+	if (!netif_running(dev))
 		return -EBUSY;
 	memcpy(dev->dev_addr, addr->sa_data, dev->addr_len);
 
@@ -1223,8 +1206,8 @@ static int __init
 	dev->set_multicast_list = arlan_set_multicast;
 	dev->change_mtu = arlan_change_mtu;
 	dev->set_mac_address = arlan_mac_addr;
-	dev->tbusy = 1;
-	dev->start = 0;
+	dev->tx_timeout = arlan_tx_timeout;
+	dev->watchdog_timeo = 3*HZ;
 	
 	((struct arlan_private *) dev->priv)->irq_test_done = 0;
 	arlan_device[num] = dev;
@@ -1302,13 +1285,12 @@ static int arlan_open(struct net_device *dev)
 	priv->open_time = jiffies;
 	memcpy_fromio(dev->dev_addr, arlan->lanCardNodeId, 6);
 	memset(dev->broadcast, 0xff, 6);
-	dev->tbusy = 1;
 	priv->txOffset = 0;
-	dev->interrupt = 0;
-	dev->start = 0;
 	dev->tx_queue_len = tx_queue_len;
 	priv->interrupt_processing_active = 0;
 	priv->command_lock = 0;
+
+	netif_start_queue (dev);
 
 	init_MUTEX(&priv->card_lock);
 	myATOMIC_INIT(priv->card_users, 1);	/* damn 2.0.33 */
@@ -1327,7 +1309,6 @@ static int arlan_open(struct net_device *dev)
 	priv->Conf->writeEEPROM = 0;
 	priv->Conf->registrationInterrupts = 1;
 
-	dev->tbusy = 0;
 	init_timer(&priv->timer);
 	priv->timer.expires = jiffies + HZ / 10;
 	priv->timer.data = (unsigned long) dev;
@@ -1335,8 +1316,6 @@ static int arlan_open(struct net_device *dev)
 
 	arlan_command(dev, ARLAN_COMMAND_POWERUP | ARLAN_COMMAND_LONG_WAIT_NOW);
 	udelay(200000);
-	dev->tbusy = 0;
-	dev->start = 1;
 	add_timer(&priv->timer);
 
 	MOD_INC_USE_COUNT;
@@ -1351,69 +1330,43 @@ static int arlan_open(struct net_device *dev)
 }
 
 
+static void arlan_tx_timeout (struct net_device *dev)
+{
+	printk(KERN_ERR "%s: arlan transmit timed out, kernel decided\n", dev->name);
+	/* Try to restart the adaptor. */
+	arlan_command(dev, ARLAN_COMMAND_CLEAN_AND_RESET);
+	dev->trans_start = jiffies;
+	netif_start_queue (dev);
+}
 
 
 static int arlan_tx(struct sk_buff *skb, struct net_device *dev)
 {
 	struct arlan_private *priv = ((struct arlan_private *) dev->priv);
-	struct arlan_conf_stru *conf = ((struct arlan_private *) dev->priv)->Conf;
+	short length;
+	unsigned char *buf;
 
 	ARLAN_DEBUG_ENTRY("arlan_tx");
+	
+	/*
+	 * If some higher layer thinks we've missed an tx-done interrupt
+	 * we are passed NULL. Caution: dev_tint() handles the cli()/sti()
+	 * itself.
+	 */
 
-	if (dev->tbusy)
-	{
-		/*
-		 * If we get here, some higher level has decided we are broken.
-		 * There should really be a "kick me" function call instead.
-		 */
-		int tickssofar = jiffies - dev->trans_start;
+	length = ETH_ZLEN < skb->len ? skb->len : ETH_ZLEN;
+	buf = skb->data;
 
-		if (((tickssofar * 1000) / HZ) * 2 > conf->txTimeoutMs)
-			arlan_command(dev, ARLAN_COMMAND_TX_ABORT);
+	if (priv->txOffset + length + 0x12 > 0x800) {
+		printk(KERN_ERR "TX RING overflow \n");
+		netif_stop_queue (dev);
+	}
 
-		if (((tickssofar * 1000) / HZ) < conf->txTimeoutMs)
-		{
-			// up(&priv->card_lock);
-			goto bad_end;
-		}
-		printk(KERN_ERR "%s: arlan transmit timed out, kernel decided\n", dev->name);
-		/* Try to restart the adaptor. */
-		arlan_command(dev, ARLAN_COMMAND_CLEAN_AND_RESET);
-		dev->trans_start = jiffies;
+	if (arlan_hw_tx(dev, buf, length) == -1)
 		goto bad_end;
 
-	}
-	/*
-	 * Block a timer-based transmit from overlapping. This could better be
-	 * done with atomic_swap(1, dev->tbusy), but set_bit() works as well.
-	 */
-	if (test_and_set_bit(0, (void *) &dev->tbusy) != 0)
-	{
-		printk(KERN_ERR "%s: Transmitter access conflict.\n",
-			dev->name);
-	}
-	else
-	{
-		short length;
-		unsigned char *buf;
-		
-		/*
-		 * If some higher layer thinks we've missed an tx-done interrupt
-		 * we are passed NULL. Caution: dev_tint() handles the cli()/sti()
-		 * itself.
-		 */
+	dev->trans_start = jiffies;
 
-		length = ETH_ZLEN < skb->len ? skb->len : ETH_ZLEN;
-		buf = skb->data;
-
-		if (priv->txOffset + length + 0x12 > 0x800)
-			printk(KERN_ERR "TX RING overflow \n");
-
-		if (arlan_hw_tx(dev, buf, length) == -1)
-			goto bad_end;
-
-		dev->trans_start = jiffies;
-	}
 	dev_kfree_skb(skb);
 
 	arlan_process_interrupt(dev);
@@ -1424,6 +1377,7 @@ static int arlan_tx(struct sk_buff *skb, struct net_device *dev)
 bad_end:
 	arlan_process_interrupt(dev);
 	priv->tx_chain_active = 0;
+	netif_stop_queue (dev);
 	ARLAN_DEBUG_EXIT("arlan_tx");
 	return 1;
 }
@@ -1522,8 +1476,7 @@ static void arlan_tx_done_interrupt(struct net_device *dev, int status)
 				if (!TXHEAD(dev).offset || !TXTAIL(dev).offset)
 				{
 					priv->txOffset = 0;
-					dev->tbusy = 0;
-					mark_bh(NET_BH);
+					netif_wake_queue (dev);
 				}
 			}
 		}
@@ -1852,15 +1805,12 @@ static void arlan_process_interrupt(struct net_device *dev)
 			WRITESHMB(arlan->rxStatus, 0x00);
 			arlan_command(dev, ARLAN_COMMAND_RX);
 			if (registrationBad(dev))
-				dev->start = 0;
+				netif_device_detach(dev);
 			if (!registrationBad(dev))
 			{
 				priv->registrationLastSeen = jiffies;
-				if (!dev->tbusy && !priv->under_reset && !priv->under_config)
-				{
-					mark_bh(NET_BH);
-					dev->start = 1;
-				}
+				if (!netif_queue_stopped(dev) && !priv->under_reset && !priv->under_config)
+					netif_wake_queue (dev);
 			}
 			goto ends;
 		}
@@ -1900,12 +1850,10 @@ static void arlan_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 
 	if (!rxStatus && !txStatus)
 		priv->interrupt_ack_requested++;
-	dev->interrupt++;
 
 	arlan_process_interrupt(dev);
 	
 	priv->irq_test_done = 1;
-	dev->interrupt--;
 
 	ARLAN_DEBUG_EXIT("arlan_interrupt");
 	return;
@@ -1938,8 +1886,7 @@ static int arlan_close(struct net_device *dev)
 		printk(KERN_NOTICE "%s: Closing device\n", dev->name);
 
 	priv->open_time = 0;
-	dev->tbusy = 1;
-	dev->start = 0;
+	netif_stop_queue(dev);
 	free_irq(dev->irq, dev);
 	MOD_DEC_USE_COUNT;
 

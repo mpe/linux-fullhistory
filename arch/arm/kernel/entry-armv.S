@@ -24,6 +24,12 @@
 #define MODE_SVC 0x13
 #endif
 
+		.macro	zero_fp
+#ifdef CONFIG_FRAME_POINTER
+		mov	fp, #0
+#endif
+		.endm
+
 		.text
 
 #define PF_TRACESYS	0x20
@@ -421,7 +427,7 @@ __und_invalid:	sub	sp, sp, #S_FRAME_SIZE
 		ldr	r4, .LCund
 		mov	r1, #BAD_UNDEFINSTR		@ int reason
 
-1:		mov	fp, #0
+1:		zero_fp
 		ldmia	r4, {r5 - r7}			@ Get XXX pc, cpsr, old_r0
 		add	r4, sp, #S_PC
 		stmia	r4, {r5 - r7}			@ Save XXX pc, cpsr, old_r0
@@ -573,7 +579,7 @@ __dabt_usr:	sub	sp, sp, #S_FRAME_SIZE		@ Allocate frame size in one go
 		stmia	r3, {r0 - r2}			@ Save USR pc, cpsr, old_r0
 		stmdb	r3, {sp, lr}^
 		alignment_trap r4, r7, __temp_abt
-		mov	fp, #0
+		zero_fp
 #ifdef MULTI_CPU
 		ldr	r2, .LCprocfns
 		mov	lr, pc
@@ -595,7 +601,7 @@ __irq_usr:	sub	sp, sp, #S_FRAME_SIZE
 		stmia	r8, {r5 - r7}			@ save pc, psr, old_r0
 		stmdb	r8, {sp, lr}^
 		alignment_trap r4, r7, __temp_irq
-		mov	fp, #0
+		zero_fp
 1:		get_irqnr_and_base r0, r6, r5
 		movne	r1, sp
 		adrsvc	ne, lr, 1b
@@ -615,7 +621,7 @@ __und_usr:	sub	sp, sp, #S_FRAME_SIZE		@ Allocate frame size in one go
 		stmia	r8, {r5 - r7}			@ Save USR pc, cpsr, old_r0
 		stmdb	r8, {sp, lr}^			@ Save user r0 - r12
 		alignment_trap r4, r7, __temp_und
-		mov	fp, #0
+		zero_fp
 		adrsvc	al, r9, ret_from_sys_call	@ r9  = normal FP return
 		adrsvc	al, lr, fpundefinstr		@ lr  = undefined instr return
 
@@ -641,7 +647,7 @@ __pabt_usr:	sub	sp, sp, #S_FRAME_SIZE		@ Allocate frame size in one go
 		stmia	r8, {r5 - r7}			@ Save USR pc, cpsr, old_r0
 		stmdb	r8, {sp, lr}^			@ Save sp_usr lr_usr
 		alignment_trap r4, r7, __temp_abt
-		mov	fp, #0
+		zero_fp
 		msr	cpsr_c, #MODE_SVC		@ Enable interrupts
 		mov	r0, r5				@ address (pc)
 		mov	r1, sp				@ regs
@@ -688,11 +694,11 @@ t:		.ascii "Prefetch -> undefined instruction\n\0"
 ENTRY(__switch_to)
 		stmfd	sp!, {r4 - sl, fp, lr}		@ Store most regs on stack
 		mrs	ip, cpsr
-		stmfd	sp!, {ip}			@ Save cpsr_SVC
+		str	ip, [sp, #-4]!			@ Save cpsr_SVC
 		str	sp, [r0, #TSS_SAVE]		@ Save sp_SVC
 		ldr	sp, [r1, #TSS_SAVE]		@ Get saved sp_SVC
 		ldr	r2, [r1, #TSS_DOMAIN]
-		ldmfd	sp!, {ip}
+		ldr	ip, [sp], #4
 		mcr	p15, 0, r2, c3, c0		@ Set domain register
 		msr	spsr, ip			@ Save tasks CPSR into SPSR for this return
 		ldmfd	sp!, {r4 - sl, fp, pc}^		@ Load all regs saved previously

@@ -7,7 +7,6 @@
  * Copyright (C) 1995 - 1999 by Ralf Baechle
  * Copyright (C) 1999 Silicon Graphics, Inc.
  */
-#include <linux/config.h>
 #include <linux/errno.h>
 #include <linux/linkage.h>
 #include <linux/mm.h>

@@ -515,3 +515,11 @@ Description (Verbose) : Updated driver:
 Files affected        : epca.c
 Release version       : 1.3.0-K 
 -----------------------------------------------------------------------
+Programmer            : Jeff Garzik
+Date                  : February 26, 2000
+Description (Verbose) : Updated driver:
+			1.  Use new kernel PCI interfaces.
+			2.  Updated list of includes.
+Files affected        : epca.c
+Release version       : 1.3.0.1-LK
+-----------------------------------------------------------------------

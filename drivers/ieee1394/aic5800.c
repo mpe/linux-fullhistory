@@ -26,11 +26,11 @@
 #include <linux/pci.h>
 #include <linux/fs.h>
 #include <linux/poll.h>
+#include <linux/delay.h>
 #include <asm/byteorder.h>
 #include <asm/atomic.h>
 #include <asm/io.h>
 #include <asm/uaccess.h>
-#include <asm/delay.h>
 
 #include "ieee1394_types.h"
 #include "hosts.h"

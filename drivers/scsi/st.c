@@ -11,7 +11,7 @@
    Copyright 1992 - 2000 Kai Makisara
    email Kai.Makisara@metla.fi
 
-   Last modified: Sat Feb 19 17:22:34 2000 by makisara@kai.makisara.local
+   Last modified: Tue Feb 29 20:47:03 2000 by makisara@kai.makisara.local
    Some small formal changes - aeb, 950809
 
    Last modified: 18-JAN-1998 Richard Gooch <rgooch@atnf.csiro.au> Devfs support
@@ -172,21 +172,22 @@ static int st_int_ioctl(struct inode *inode, unsigned int cmd_in,
 /* Convert the result to success code */
 static int st_chk_result(Scsi_Request * SRpnt)
 {
-	int dev = TAPE_NR(SRpnt->sr_request.rq_dev);
+	int dev;
 	int result = SRpnt->sr_result;
 	unsigned char *sense = SRpnt->sr_sense_buffer, scode;
 	DEB(const char *stp;)
 
-	if (!result)
+	if (!result) {
+		sense[0] = 0;	/* We don't have sense data if this byte is zero */
 		return 0;
+	}
 
 	if (driver_byte(result) & DRIVER_SENSE)
 		scode = sense[2] & 0x0f;
-	else {
-		sense[0] = 0;	/* We don't have sense data if this byte is zero */
+	else
 		scode = 0;
-	}
 
+	dev = TAPE_NR(SRpnt->sr_request.rq_dev);
         DEB(
         if (debugging) {
                 printk(ST_DEB_MSG "st%d: Error: %x, cmd: %x %x %x %x %x %x Len: %d\n",
@@ -294,7 +295,7 @@ static Scsi_Request *
 {
 	unsigned char *bp;
 
-	if (SRpnt == NULL)
+	if (SRpnt == NULL) {
 		SRpnt = scsi_allocate_request(STp->device);
 		if (SRpnt == NULL) {
 			DEBC( printk(KERN_ERR "st%d: Can't get SCSI request.\n",
@@ -305,6 +306,7 @@ static Scsi_Request *
 				(STp->buffer)->syscall_result = (-EBUSY);
 			return NULL;
 		}
+	}
 
 	cmd[1] |= (SRpnt->sr_device->lun << 5) & 0xe0;
 	init_MUTEX_LOCKED(&STp->sem);

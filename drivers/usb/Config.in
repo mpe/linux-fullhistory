@@ -43,8 +43,9 @@ comment 'USB Devices'
       bool '    USB Mass Storage verbose debug' CONFIG_USB_STORAGE_DEBUG
    fi
    dep_tristate '  USS720 parport driver' CONFIG_USB_USS720 $CONFIG_USB $CONFIG_PARPORT
-   dep_tristate '  DABUSB driver' CONFIG_USB_DABUSB $CONFIG_USB 
-   dep_tristate '  PLUSB Prolific USB-Network driver' CONFIG_USB_PLUSB $CONFIG_USB 
+   dep_tristate '  DABUSB driver' CONFIG_USB_DABUSB $CONFIG_USB
+   dep_tristate '  PLUSB Prolific USB-Network driver' CONFIG_USB_PLUSB $CONFIG_USB
+   dep_tristate '  USB ADMteks Pegasus based devices support' CONFIG_USB_PEGASUS $CONFIG_USB
    
 comment 'USB HID'
    dep_tristate '  USB Human Interface Device (HID) support' CONFIG_USB_HID $CONFIG_USB
@@ -52,7 +53,7 @@ comment 'USB HID'
       dep_tristate '  USB HIDBP Keyboard support' CONFIG_USB_KBD $CONFIG_USB
       dep_tristate '  USB HIDBP Mouse support' CONFIG_USB_MOUSE $CONFIG_USB
    fi
-   dep_tristate '  Wacom Graphire tablet support' CONFIG_USB_GRAPHIRE $CONFIG_USB
+   dep_tristate '  Wacom Intuos/Graphire tablet support' CONFIG_USB_WACOM $CONFIG_USB
    dep_tristate '  Logitech WingMan Force joystick support' CONFIG_USB_WMFORCE $CONFIG_USB
    dep_tristate '  Keyboard support' CONFIG_INPUT_KEYBDEV $CONFIG_USB
    dep_tristate '  Mouse support' CONFIG_INPUT_MOUSEDEV $CONFIG_USB

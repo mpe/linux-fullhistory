@@ -228,13 +228,11 @@ static inline void reschedule_idle(struct task_struct * p, unsigned long flags)
 	/*
 	 * We will get here often - or in the high CPU contention
 	 * case. No CPU is idle and this process is either lowprio or
-	 * the preferred CPU is highprio. Try to preemt some other CPU
+	 * the preferred CPU is highprio. Try to preempt some other CPU
 	 * only if it's RT or if it's iteractive and the preferred
 	 * cpu won't reschedule shortly.
 	 */
-	if ((p->avg_slice < cacheflush_time && cpu_curr(best_cpu)->avg_slice > cacheflush_time) ||
-	    p->policy != SCHED_OTHER)
-	{
+	if (p->avg_slice < cacheflush_time || (p->policy & ~SCHED_YIELD) != SCHED_OTHER) {
 		for (i = smp_num_cpus - 1; i >= 0; i--) {
 			cpu = cpu_logical_map(i);
 			if (cpu == best_cpu)

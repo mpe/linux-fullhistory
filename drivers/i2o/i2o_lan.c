@@ -131,7 +131,7 @@ static void i2o_lan_reply(struct i2o_handler *h, struct i2o_controller *iop,
 	switch (msg[1] >> 24) {
 	case LAN_RECEIVE_POST:
 	{
-		if (dev->start) {
+		if (netif_running(dev)) {
 			if (!(msg[4]>>24)) {
 				i2o_lan_receive_post_reply(dev,msg);
 				break;
@@ -162,10 +162,8 @@ static void i2o_lan_reply(struct i2o_handler *h, struct i2o_controller *iop,
 			trl_count--;
 		}
 
-		if (dev->tbusy) {
-			clear_bit(0,(void*)&dev->tbusy);
-			mark_bh(NET_BH); /* inform upper layers */
-		}
+		if (netif_queue_stopped(dev))
+			netif_wake_queue(dev);
 	
 		break;	
 	}
@@ -536,8 +534,7 @@ static int i2o_lan_open(struct net_device *dev)
 		return -ENOMEM;
 	priv->i2o_fbl_tail = -1;
 
-	dev->tbusy = 0;
-	dev->start = 1;
+	netif_start_queue(dev);
 
 	i2o_set_batch_mode(dev);
 	i2o_lan_receive_post(dev);
@@ -562,8 +559,7 @@ static int i2o_lan_close(struct net_device *dev)
 		printk(KERN_WARNING "%s: Unable to clear the event mask.\n",
 #endif				dev->name);
 
-	dev->tbusy = 1;
-	dev->start = 0;
+	netif_stop_queue(dev);
 	i2o_lan_suspend(dev);
 
 	if (i2o_release_device(i2o_dev, &i2o_lan_handler, I2O_CLAIM_PRIMARY))
@@ -617,15 +613,6 @@ static int i2o_lan_packet_send(struct sk_buff *skb, struct net_device *dev)
 	u32 m, *msg;
 	u32 *sgl_elem;
 
-	/*
-	 * Keep interrupt from changing dev->tbusy from underneath us
-	 * (Do we really need to do this?)
-	 */
-
-	if (test_and_set_bit(0,(void*)&dev->tbusy) != 0) {
-        	return 1;
-        }
-
 	priv->tx_count++;
 	priv->tx_out++;
 
@@ -673,8 +660,8 @@ static int i2o_lan_packet_send(struct sk_buff *skb, struct net_device *dev)
 	
 	/* If HDMs TxMaxPktOut reached, stay busy (don't clean tbusy) */
 
-	if (priv->tx_out < priv->tx_max_out)
-		clear_bit(0, (void *)&dev->tbusy);
+	if (priv->tx_out >= priv->tx_max_out)
+		netif_stop_queue(dev);
 	
 	return 0;
 }

@@ -206,6 +206,7 @@ if [ "$CONFIG_VIDEO_DEV" != "n" ]; then
       fi
    fi
    dep_tristate '  SAA5249 Teletext processor' CONFIG_VIDEO_SAA5249 $CONFIG_VIDEO_DEV
+   dep_tristate '  SAB3036 tuner' CONFIG_TUNER_3036 $CONFIG_VIDEO_DEV
    if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
       if [ "$CONFIG_SGI" = "y" ]; then
          dep_tristate '  SGI Vino Video For Linux (EXPERIMENTAL)' CONFIG_VIDEO_VINO $CONFIG_VIDEO_DEV $CONFIG_SGI

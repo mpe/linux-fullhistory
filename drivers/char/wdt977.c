@@ -162,18 +162,9 @@ static ssize_t wdt977_write(struct file *file, const char *data, size_t len, lof
 
 static struct file_operations wdt977_fops=
 {
-	NULL,		/* Seek */
-	NULL,		/* Read */
-	wdt977_write,	/* Write */
-	NULL,		/* Readdir */
-	NULL,		/* Select */
-	NULL,		/* Ioctl */
-	NULL,		/* MMap */
-	wdt977_open,
-	NULL,		/* flush */
-	wdt977_release,
-	NULL,		
-	NULL		/* Fasync */
+	write:		wdt977_write,
+	open:		wdt977_open,
+	release:	wdt977_release,
 };
 
 static struct miscdevice wdt977_miscdev=

@@ -74,9 +74,10 @@ CONFIG_KCORE_ELF=y
 CONFIG_BINFMT_AOUT=y
 CONFIG_BINFMT_ELF=y
 CONFIG_BINFMT_MISC=y
-# CONFIG_PARPORT is not set
+CONFIG_PM=y
 CONFIG_ACPI=y
 # CONFIG_APM is not set
+# CONFIG_PARPORT is not set
 
 #
 # Plug and Play configuration
@@ -264,6 +265,7 @@ CONFIG_NETDEVICES=y
 #
 # CONFIG_ARCNET is not set
 CONFIG_DUMMY=m
+# CONFIG_BONDING is not set
 # CONFIG_EQUALIZER is not set
 # CONFIG_NET_SB1000 is not set
 

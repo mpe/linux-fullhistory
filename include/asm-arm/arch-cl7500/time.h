@@ -17,12 +17,11 @@ static void timer_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 
 	{
 		/* Twinkle the lights. */
-		static int count, bit = 8, dir = 1;
+		static int count, state = 0xff;
 		if (count-- == 0) {
-			bit += dir;
-			if (bit == 8 || bit == 15) dir = -dir;
-			count = 5;
-			*((volatile unsigned int *)(0xe002ba00)) = 1 << bit;
+			state ^= 1;
+			count = 25;
+			*((volatile unsigned int *)(0xe002ba00)) = state;
 		}
 	}
 

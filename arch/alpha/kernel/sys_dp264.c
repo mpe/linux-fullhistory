@@ -51,16 +51,17 @@ tsunami_update_irq_hw(unsigned long mask, unsigned long isa_enable)
 	volatile unsigned long *dim0, *dim1, *dim2, *dim3;
 	unsigned long mask0, mask1, mask2, mask3, maskB, dummy;
 
-	mask0 = mask & cpu_irq_affinity[0];
-	mask1 = mask & cpu_irq_affinity[1];
-	mask2 = mask & cpu_irq_affinity[2];
-	mask3 = mask & cpu_irq_affinity[3];
-
+	mask0 = mask1 = mask2 = mask3 = mask;
 	maskB = mask | isa_enable;
-	if (bcpu == 0) mask0 = maskB & cpu_irq_affinity[0];
-	else if (bcpu == 1) mask1 = maskB & cpu_irq_affinity[1];
-	else if (bcpu == 2) mask2 = maskB & cpu_irq_affinity[2];
-	else if (bcpu == 3) mask3 = maskB & cpu_irq_affinity[3];
+	if (bcpu == 0) mask0 = maskB;
+	else if (bcpu == 1) mask1 = maskB;
+	else if (bcpu == 2) mask2 = maskB;
+	else if (bcpu == 3) mask3 = maskB;
+
+	mask0 &= cpu_irq_affinity[0];
+	mask1 &= cpu_irq_affinity[1];
+	mask2 &= cpu_irq_affinity[2];
+	mask3 &= cpu_irq_affinity[3];
 
 	dim0 = &cchip->dim0.csr;
 	dim1 = &cchip->dim1.csr;
@@ -105,7 +106,7 @@ clipper_update_irq_hw(unsigned long mask)
 	tsunami_update_irq_hw(mask, 1UL << 55);
 }
 
-static inline void
+static void
 dp264_enable_irq(unsigned int irq)
 {
 	spin_lock(&dp264_irq_lock);
@@ -137,7 +138,7 @@ dp264_end_irq(unsigned int irq)
 		dp264_enable_irq(irq);
 }
 
-static inline void
+static void
 clipper_enable_irq(unsigned int irq)
 {
 	spin_lock(&dp264_irq_lock);
@@ -175,10 +176,12 @@ cpu_set_irq_affinity(unsigned int irq, unsigned long affinity)
 	int cpu;
 
 	for (cpu = 0; cpu < 4; cpu++) {
+		unsigned long aff = cpu_irq_affinity[cpu];
 		if (affinity & (1UL << cpu))
-			cpu_irq_affinity[cpu] |= 1UL << irq;
+			aff |= 1UL << irq;
 		else
-			cpu_irq_affinity[cpu] &= ~(1UL << irq);
+			aff &= ~(1UL << irq);
+		cpu_irq_affinity[cpu] = aff;
 	}
 
 }

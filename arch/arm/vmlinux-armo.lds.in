@@ -28,6 +28,11 @@ SECTIONS
 	*(.init.task)
   }
 
+  /DISCARD/ : {			/* Exit code and data		*/
+	*(.text.exit)
+	*(.data.exit)
+  }
+
   _text = .;			/* Text and read-only data	*/
   .text : {
 	*(.text)

@@ -18,7 +18,6 @@
  *	Untested
  */
 
-#include <linux/config.h>
 #include <linux/module.h>
 
 #include "sound_config.h"

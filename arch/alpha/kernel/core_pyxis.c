@@ -389,7 +389,7 @@ init_pyxis_irqs(unsigned long ignore_mask)
 	for (i = 16; i < 48; ++i) {
 		if ((ignore_mask >> i) & 1)
 			continue;
-		irq_desc[i].status = IRQ_DISABLED;
+		irq_desc[i].status = IRQ_DISABLED | IRQ_LEVEL;
 		irq_desc[i].handler = &pyxis_irq_type;
 	}
 
@@ -560,6 +560,7 @@ pyxis_init_arch(void)
 		pyxis_enable_broken_tbi(hose->sg_pci);
 
 	alpha_mv.mv_pci_tbi(hose, 0, -1);
+alpha_mv.mv_pci_tbi = 0;
 
 	/*
 	 * Next, clear the PYXIS_CFG register, which gets used

@@ -60,20 +60,12 @@ extern spinlock_t gpio_lock;
 
 static struct file_operations flash_fops =
 {
-	flash_llseek,		/* llseek			 */
-	flash_read,		/* read				 */
-	flash_write,		/* write			 */
-	NULL,			/* no special readdir            */
-	NULL,			/* no special select             */
-	flash_ioctl,
-	NULL,			/* no special mmap               */
-	open_flash,
-	NULL,			/* no special flush		 */
-	release_flash,
-	NULL,			/* no special fsync              */
-	NULL,			/* no special fasync             */
-	NULL,			/* no special check_media_change */
-	NULL			/* no special revaldate          */
+	llseek:		flash_llseek,
+	read:		flash_read,
+	write:		flash_write,
+	ioctl:		flash_ioctl,
+	open:		open_flash,
+	release:	release_flash,
 };
 
 static struct miscdevice flash_miscdev =

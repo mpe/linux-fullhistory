@@ -72,7 +72,7 @@ const char *  awc_print_string( struct awc_strings* strings, int code){
 	return "UNKNOWN";
 };
 
-int awc_dump_registers(struct NET_DEVICE * dev){
+int awc_dump_registers(struct net_device * dev){
 
 #ifdef AWC_DEBUG
 	int i;
@@ -108,7 +108,7 @@ int awc_dump_registers(struct NET_DEVICE * dev){
 
 
 inline 
-int	awc_command_busy_clear_wait(struct NET_DEVICE * dev){
+int	awc_command_busy_clear_wait(struct net_device * dev){
 //	long long jiff = jiffies;
         u16  active_interrupts;
         int  cnt= 0;
@@ -319,7 +319,7 @@ awc_issue_command(struct awc_command * cmd){
 
 inline 
 unsigned short 
-awc_issue_command_no_ack(struct NET_DEVICE * dev,
+awc_issue_command_no_ack(struct net_device * dev,
 			u16 com, u16 par1, u16 par2, u16 par3){
 
      struct awc_private * priv = (struct awc_private *)dev->priv;
@@ -695,7 +695,7 @@ struct awc_rid_dir awc_rids_temp[]={
 
 
 int 
-awc_readrid(struct NET_DEVICE * dev, struct aironet4500_RID * rid, void *pBuf ){
+awc_readrid(struct net_device * dev, struct aironet4500_RID * rid, void *pBuf ){
 	  struct awc_command cmd;
 
 	  int sleep_state ;
@@ -728,7 +728,7 @@ awc_readrid(struct NET_DEVICE * dev, struct aironet4500_RID * rid, void *pBuf ){
 }
 
 int 
-awc_writerid(struct NET_DEVICE * dev, struct aironet4500_RID * rid, void *pBuf){
+awc_writerid(struct net_device * dev, struct aironet4500_RID * rid, void *pBuf){
 
 	  struct awc_command cmd;
 	  int sleep_state ;
@@ -765,7 +765,7 @@ awc_writerid(struct NET_DEVICE * dev, struct aironet4500_RID * rid, void *pBuf){
 }
 
 int 
-awc_readrid_dir(struct NET_DEVICE * dev, struct awc_rid_dir * rid ){
+awc_readrid_dir(struct net_device * dev, struct awc_rid_dir * rid ){
 	  struct awc_command cmd;
 	  int sleep_state;
 
@@ -798,7 +798,7 @@ awc_readrid_dir(struct NET_DEVICE * dev, struct awc_rid_dir * rid ){
 }
 
 int 
-awc_writerid_dir(struct NET_DEVICE * dev, struct awc_rid_dir * rid){
+awc_writerid_dir(struct net_device * dev, struct awc_rid_dir * rid){
 
 	  struct awc_command cmd;
 	  int sleep_state ;
@@ -847,7 +847,7 @@ EXPORT_SYMBOL(awc_writerid_dir);
 
 inline
 int
-awc_issue_blocking_command(struct NET_DEVICE * dev,u16 comm){
+awc_issue_blocking_command(struct net_device * dev,u16 comm){
 
 	  struct awc_command cmd;
 //	  struct awc_private * priv = (struct awc_private *)dev->priv;
@@ -872,7 +872,7 @@ awc_issue_blocking_command(struct NET_DEVICE * dev,u16 comm){
 };
 
 int 
-awc_issue_soft_reset(struct NET_DEVICE * dev){
+awc_issue_soft_reset(struct net_device * dev){
 
 	u16 status ;
 //	int i= 0;
@@ -912,7 +912,7 @@ awc_issue_soft_reset(struct NET_DEVICE * dev){
 };
 
 int
-awc_issue_noop(struct NET_DEVICE * dev){
+awc_issue_noop(struct net_device * dev){
 	int retval;
 	AWC_OUT(dev->base_addr + 0x28, 0);
 	AWC_OUT(dev->base_addr + 0x2A, 0);
@@ -925,7 +925,7 @@ awc_issue_noop(struct NET_DEVICE * dev){
 EXPORT_SYMBOL(awc_enable_MAC);
 
 int
-awc_enable_MAC(struct NET_DEVICE * dev){
+awc_enable_MAC(struct net_device * dev){
         
    struct awc_private * priv = (struct awc_private *)dev->priv;
      AWC_ENTRY_EXIT_DEBUG(" entry awc_enable_MAC ");
@@ -950,7 +950,7 @@ awc_enable_MAC(struct NET_DEVICE * dev){
 
 EXPORT_SYMBOL(awc_disable_MAC);
 int
-awc_disable_MAC(struct NET_DEVICE * dev){
+awc_disable_MAC(struct net_device * dev){
         
    struct awc_private * priv = (struct awc_private *)dev->priv;
      AWC_ENTRY_EXIT_DEBUG(" entry awc_disable_MAC ");
@@ -973,7 +973,7 @@ awc_disable_MAC(struct NET_DEVICE * dev){
 
 
 int
-awc_read_all_rids(struct NET_DEVICE * dev){
+awc_read_all_rids(struct net_device * dev){
 
 	struct awc_private * priv = (struct awc_private *)dev->priv;
 	int status,i;
@@ -992,7 +992,7 @@ awc_read_all_rids(struct NET_DEVICE * dev){
 }
 
 int
-awc_write_all_rids(struct NET_DEVICE * dev){
+awc_write_all_rids(struct net_device * dev){
 
 	struct awc_private * priv = (struct awc_private *)dev->priv;
   	int i,status ;
@@ -1012,7 +1012,7 @@ awc_write_all_rids(struct NET_DEVICE * dev){
 
 
 
-int  awc_tx_alloc(struct NET_DEVICE * dev) {
+int  awc_tx_alloc(struct net_device * dev) {
 
 	  struct awc_command cmd;
 	  int k=0;
@@ -1116,7 +1116,7 @@ int  awc_tx_alloc(struct NET_DEVICE * dev) {
 };
 
 int 
-awc_tx_dealloc_fid(struct NET_DEVICE * dev,struct awc_fid * fid){
+awc_tx_dealloc_fid(struct net_device * dev,struct awc_fid * fid){
 
 	  struct awc_command cmd;
 	  int fid_handle = 0;
@@ -1150,7 +1150,7 @@ awc_tx_dealloc_fid(struct NET_DEVICE * dev,struct awc_fid * fid){
 };
 
 int
-awc_tx_dealloc(struct NET_DEVICE * dev){
+awc_tx_dealloc(struct net_device * dev){
 
  	struct awc_private * priv = (struct awc_private *)dev->priv;
 
@@ -1177,7 +1177,7 @@ awc_tx_dealloc(struct NET_DEVICE * dev){
 
 
 inline struct awc_fid *
-awc_tx_fid_lookup_and_remove(struct NET_DEVICE * dev, u16 fid_handle){
+awc_tx_fid_lookup_and_remove(struct net_device * dev, u16 fid_handle){
 
  	struct awc_private * priv = (struct awc_private *)dev->priv;
 //	int k = 0;
@@ -1272,7 +1272,7 @@ awc_tx_fid_lookup_and_remove(struct NET_DEVICE * dev, u16 fid_handle){
 
 
 int 
-awc_queues_init(struct NET_DEVICE * dev){
+awc_queues_init(struct net_device * dev){
  	struct awc_private * priv = (struct awc_private *)dev->priv;
 	struct awc_fid * fid = NULL;
 	int retv =0;
@@ -1302,7 +1302,7 @@ awc_queues_init(struct NET_DEVICE * dev){
 
 
 int 
-awc_queues_destroy(struct NET_DEVICE * dev){
+awc_queues_destroy(struct net_device * dev){
  	struct awc_private * priv = (struct awc_private *)dev->priv;
 	struct awc_fid * fid = NULL;
 	int retv =0;
@@ -1325,7 +1325,7 @@ awc_queues_destroy(struct NET_DEVICE * dev){
 
 /****************************** 	802.11router	******************/
 inline int 
-awc_802_11_copy_path_skb(struct NET_DEVICE * dev, struct awc_fid * rx_buff){
+awc_802_11_copy_path_skb(struct net_device * dev, struct awc_fid * rx_buff){
 
 	struct awc_private * priv = (struct awc_private * )dev->priv;
 
@@ -1360,7 +1360,7 @@ awc_802_11_copy_path_skb(struct NET_DEVICE * dev, struct awc_fid * rx_buff){
 
 
 int
-awc_802_11_find_copy_path(struct NET_DEVICE * dev, struct awc_fid * rx_buff){
+awc_802_11_find_copy_path(struct net_device * dev, struct awc_fid * rx_buff){
 
 //        struct awc_private * priv = (struct awc_private * )dev->priv;
 //        u8 is_802_3 = 0;
@@ -1386,7 +1386,7 @@ awc_802_11_find_copy_path(struct NET_DEVICE * dev, struct awc_fid * rx_buff){
 int parse_not_8023= 0;
        
 void
-awc_802_11_router_rx(struct NET_DEVICE * dev,struct awc_fid * rx_buff){
+awc_802_11_router_rx(struct net_device * dev,struct awc_fid * rx_buff){
 
         struct awc_private * priv = (struct awc_private * )dev->priv;
 	struct sk_buff * skb = rx_buff->skb;
@@ -1531,7 +1531,7 @@ awc_802_11_router_rx(struct NET_DEVICE * dev,struct awc_fid * rx_buff){
    	DEBUG(0x200,"%s packet dropped in packet hdr parse \n ",dev->name);
 	if (rx_buff->skb && (rx_buff->type & p80211copy_path_skb)){
 
-		FREE_SKB(rx_buff->skb);		
+		dev_kfree_skb_irq(rx_buff->skb);		
 		rx_buff->skb = NULL;
 		rx_buff->u.rx.payload = NULL;
 	};
@@ -1541,13 +1541,13 @@ awc_802_11_router_rx(struct NET_DEVICE * dev,struct awc_fid * rx_buff){
 };
 
 void
-awc_802_11_failed_rx_copy(struct NET_DEVICE * dev,struct awc_fid * rx_buff){
+awc_802_11_failed_rx_copy(struct net_device * dev,struct awc_fid * rx_buff){
 	struct awc_private * priv = (struct awc_private * )dev->priv;
 
 
 	AWC_ENTRY_EXIT_DEBUG("awc_802_11_failed_rx_copy");
 	if (rx_buff->skb)
-                FREE_SKB(rx_buff->skb);
+                dev_kfree_skb_irq(rx_buff->skb);
         rx_buff->skb = NULL;
         rx_buff->u.rx.payload = NULL;
 	priv->stats.rx_errors++;
@@ -1566,7 +1566,7 @@ awc_802_11_failed_rx_copy(struct NET_DEVICE * dev,struct awc_fid * rx_buff){
 
 
 int
-awc_802_11_tx_find_path_and_post(struct NET_DEVICE * dev,
+awc_802_11_tx_find_path_and_post(struct net_device * dev,
 				 struct sk_buff * skb){
 
 
@@ -1750,10 +1750,6 @@ awc_802_11_tx_find_path_and_post(struct NET_DEVICE * dev,
 	udelay(1);
 	awc_transmit_packet(dev,fid);
 	UP(&priv->tx_buff_semaphore);
-	if (priv->tx_large_ready.size > 0 ){
-		dev->tbusy = 0;
-		mark_bh(NET_BH);
-	}
 	AWC_ENTRY_EXIT_DEBUG("exit\n");
 	return 0;
 
@@ -1763,7 +1759,7 @@ awc_802_11_tx_find_path_and_post(struct NET_DEVICE * dev,
 	#ifdef AWC_DEBUG
 //		printk("s");
 	#endif
-   	dev->tbusy = 1; //weell, here it must be set anyway and before
+   	netif_stop_queue (dev); //weell, here it must be set anyway and before
    	//priv->stats.tx_fifo_errors++;
    	UP(&priv->tx_buff_semaphore);
 	AWC_ENTRY_EXIT_DEBUG("NoSpaceExit\n");
@@ -1771,9 +1767,7 @@ awc_802_11_tx_find_path_and_post(struct NET_DEVICE * dev,
   final:
 	priv->stats.tx_errors++;
 	UP(&priv->tx_buff_semaphore);
-	dev->tbusy = 0;
-	FREE_SKB(skb);
-	mark_bh(NET_BH);
+	dev_kfree_skb(skb);
 	AWC_ENTRY_EXIT_DEBUG("BADExit\n");
 	return -1;
   
@@ -1788,7 +1782,7 @@ awc_802_11_tx_find_path_and_post(struct NET_DEVICE * dev,
   
   
 void
-awc_802_11_after_tx_packet_to_card_write(struct NET_DEVICE * dev,
+awc_802_11_after_tx_packet_to_card_write(struct net_device * dev,
 					 struct awc_fid * tx_buff){
 
 
@@ -1799,10 +1793,10 @@ awc_802_11_after_tx_packet_to_card_write(struct NET_DEVICE * dev,
 	};
 
 	if(tx_buff->skb){
-		FREE_SKB(tx_buff->skb);
+		dev_kfree_skb(tx_buff->skb);
 		tx_buff->skb = NULL;
 	}
-	mark_bh(NET_BH);
+	netif_wake_queue (dev);
 
 	AWC_ENTRY_EXIT_DEBUG("exit\n");
 };
@@ -1815,7 +1809,7 @@ awc_802_11_after_tx_packet_to_card_write(struct NET_DEVICE * dev,
 */
                         
 void
-awc_802_11_after_failed_tx_packet_to_card_write(struct NET_DEVICE * dev,
+awc_802_11_after_failed_tx_packet_to_card_write(struct net_device * dev,
                                          struct awc_fid * tx_buff){
         struct awc_private * priv = (struct awc_private *)dev->priv;
 
@@ -1827,7 +1821,7 @@ awc_802_11_after_failed_tx_packet_to_card_write(struct NET_DEVICE * dev,
 	};
 
 	if(tx_buff->skb){
-		FREE_SKB(tx_buff->skb);
+		dev_kfree_skb(tx_buff->skb);
 		tx_buff->skb = NULL;
 		tx_buff->busy =0;
 		printk(KERN_ERR "%s packet to card write failed \n",dev->name);
@@ -1845,7 +1839,7 @@ awc_802_11_after_failed_tx_packet_to_card_write(struct NET_DEVICE * dev,
 };
                                          
 void 
-awc_802_11_after_tx_complete(struct NET_DEVICE * dev, struct awc_fid * tx_buff){
+awc_802_11_after_tx_complete(struct net_device * dev, struct awc_fid * tx_buff){
 
         struct awc_private * priv = (struct awc_private *)dev->priv;
 
@@ -1866,8 +1860,7 @@ awc_802_11_after_tx_complete(struct NET_DEVICE * dev, struct awc_fid * tx_buff){
 	}
 
 	tx_buff->busy = 0;
-	dev->tbusy = 0;
-	mark_bh(NET_BH);
+	netif_wake_queue (dev);
 
 	AWC_ENTRY_EXIT_DEBUG("exit\n");
 };
@@ -1880,7 +1873,7 @@ awc_802_11_after_tx_complete(struct NET_DEVICE * dev, struct awc_fid * tx_buff){
 
 
 inline int
-awc_receive_packet(struct NET_DEVICE * dev){
+awc_receive_packet(struct net_device * dev){
 	
     struct awc_command cmd;
     u16	Fid;
@@ -2010,7 +2003,7 @@ awc_receive_packet(struct NET_DEVICE * dev){
 
 
 int
-awc_transmit_packet(struct NET_DEVICE * dev, struct awc_fid * tx_buff) {
+awc_transmit_packet(struct net_device * dev, struct awc_fid * tx_buff) {
 	
 	struct awc_command cmd;
 	u16 size ;
@@ -2143,7 +2136,7 @@ awc_transmit_packet(struct NET_DEVICE * dev, struct awc_fid * tx_buff) {
 
 
 inline int
-awc_tx_complete_check(struct NET_DEVICE * dev){
+awc_tx_complete_check(struct net_device * dev){
 
 	struct awc_fid	* fid;
 	struct awc_command cmd;
@@ -2197,7 +2190,7 @@ awc_tx_complete_check(struct NET_DEVICE * dev){
 
 
 void
-awc_bh(struct NET_DEVICE *dev){
+awc_bh(struct net_device *dev){
 
         struct awc_private * priv = (struct awc_private *)dev->priv;
       	int  active_interrupts;
@@ -2226,8 +2219,7 @@ start:
 	if (active_interrupts == 0xffff){
 	
 		printk(KERN_CRIT "%s device ejected in interrupt, disabling\n",dev->name);
-		dev->tbusy = 1;
-		dev->start = 0;
+		netif_device_detach (dev);
 		if (priv->command_semaphore_on){
 			priv->command_semaphore_on--;
 			AWC_UNLOCK_COMMAND_ISSUING(priv);
@@ -2286,7 +2278,7 @@ start:
 
 
 inline int
-awc_interrupt_process(struct NET_DEVICE * dev){
+awc_interrupt_process(struct net_device * dev){
 
 	struct awc_private * priv ;
       	int  active_interrupts;
@@ -2327,10 +2319,6 @@ awc_interrupt_process(struct NET_DEVICE * dev){
 //	printk("ikka interruptis\n");
 
 
-        if (test_and_set_bit( 0, (void *) &dev->interrupt) ) {
-		printk("RI\n");
-		goto reenter_end_here;
-	}
 	priv->interrupt_count++;
 	if (priv->interrupt_count > 1 )
 		printk(" interrupt count on\n ");
@@ -2354,12 +2342,10 @@ start:
 	
 		printk(KERN_CRIT "%s device ejected, got interrupt, disabling\n",dev->name);
 		//priv->
-		dev->tbusy = 1;
-		dev->start = 0;
+		netif_device_detach (dev);
 		priv->ejected = 1;
 		if (priv->bh_active || priv->bh_running){
 			priv->interrupt_count--;
-			dev->interrupt = 0;
 			goto bad_end;
 		} else if (priv->command_semaphore_on){
 			
@@ -2368,7 +2354,6 @@ start:
 			 AWC_QUEUE_BH;    
 		}
 		priv->interrupt_count--;
-		dev->interrupt = 0;
 		goto bad_end;
 	}
 
@@ -2458,8 +2443,7 @@ start:
     					awc_fid_queue_push_tail(&priv->tx_small_ready,fid);
           			else
       					awc_fid_queue_push_tail(&priv->tx_large_ready,fid);
-          			dev->tbusy = 0;
-				mark_bh(NET_BH);
+				netif_wake_queue (dev);
 			}
 		} else 
 			printk(KERN_ERR "awc fid %x not found\n",tx_fid);
@@ -2502,7 +2486,6 @@ start:
 
  
 	priv->interrupt_count--;
-	dev->interrupt = 0;
 
 	awc_ints_enable(dev->base_addr, 0x0000);
 
@@ -2523,15 +2506,8 @@ start:
 //  	restore_flags(flags);
 
         return 0;
-reenter_end_here:
-
-        AWC_ENTRY_EXIT_DEBUG(" reenter-bad end exit \n"); 
-//	enable_irq(dev->irq);
-//  	restore_flags(flags);
-        return 0;
 
 bad_end:
-	dev->interrupt = 0;
         AWC_ENTRY_EXIT_DEBUG(" bad_end exit \n"); 	
 //	enable_irq(dev->irq);
 //	restore_flags(flags);
@@ -2543,7 +2519,7 @@ bad_end:
 static const char *aironet4500_core_version =
 "aironet4500.c v0.1 1/1/99 Elmer Joandi, elmer@ylenurme.ee.\n";
 
-struct NET_DEVICE * aironet4500_devices[MAX_AWCS]  = {NULL,NULL,NULL,NULL};
+struct net_device * aironet4500_devices[MAX_AWCS]  = {NULL,NULL,NULL,NULL};
 
 static int awc_debug = 0; //  0xffffff;
 static int p802_11_send  =  0; // 1
@@ -2595,7 +2571,6 @@ EXPORT_SYMBOL(awc_debug);
 EXPORT_SYMBOL(awc_private_init);
 EXPORT_SYMBOL(awc_tx_timeout);
 EXPORT_SYMBOL(awc_start_xmit);
-EXPORT_SYMBOL(awc_tx_done);
 EXPORT_SYMBOL(awc_rx);
 EXPORT_SYMBOL(awc_interrupt);
 EXPORT_SYMBOL(awc_get_stats);
@@ -2611,7 +2586,7 @@ EXPORT_SYMBOL(awc_unregister_proc);
 /***************************  RESET INIT CONFIG ***********************/
 
 
- void awc_reset(struct NET_DEVICE *dev)
+ void awc_reset(struct net_device *dev)
 {
 
 	long long jiff;
@@ -2633,7 +2608,7 @@ EXPORT_SYMBOL(awc_unregister_proc);
 
 }
 
- int awc_config(struct NET_DEVICE *dev)
+ int awc_config(struct net_device *dev)
 {
 //	struct awc_private *priv = (struct awc_private *)dev->priv;
 
@@ -2654,7 +2629,7 @@ EXPORT_SYMBOL(awc_unregister_proc);
 
 char name[] = "ElmerLinux";
 
- int awc_init(struct NET_DEVICE *dev){
+ int awc_init(struct net_device *dev){
         struct awc_private *priv = (struct awc_private *)dev->priv;
 	int i;        
 	const char * radioType;
@@ -2785,8 +2760,6 @@ char name[] = "ElmerLinux";
 	// here we go, bad aironet
 	memset(&priv->SSIDs,0,sizeof(priv->SSIDs));
 
-	my_spin_lock_init(&priv->queues_lock);
-
         priv->SSIDs.ridLen		=0;
         if (!SSID) {
 	        priv->SSIDs.SSID[0].SSID[0] 	='a';
@@ -2834,7 +2807,7 @@ char name[] = "ElmerLinux";
    	
  };
 
-int awc_private_init(struct NET_DEVICE * dev){
+int awc_private_init(struct net_device * dev){
 	struct awc_private * priv = (struct awc_private *) dev->priv;
 	int i = 0;
 
@@ -2906,7 +2879,6 @@ int awc_private_init(struct NET_DEVICE * dev){
 	
 
 	priv->ejected		=0;	
-	dev->interrupt		=0;
 	priv->interrupt_count	=0;
 	
 	return 0;
@@ -2916,16 +2888,13 @@ int awc_private_init(struct NET_DEVICE * dev){
 /****************************	OPEN	CLOSE	**********************/
 
  
- int awc_open(struct NET_DEVICE *dev)
+ int awc_open(struct net_device *dev)
 {
 	struct awc_private *priv = (struct awc_private *)dev->priv;
 
 
 
 	DEBUG(2, "%s: awc_open \n",  dev->name);
-
-	dev->interrupt = 0; dev->tbusy = 1; dev->start = 0;
-
 
 	if( awc_queues_init(dev) )		goto final;
 	if( awc_config(dev) )		goto final;
@@ -2945,24 +2914,23 @@ int awc_private_init(struct NET_DEVICE * dev){
 	MOD_INC_USE_COUNT;
 //	kernel_thread(awc_thread,dev,0);
 
-	dev->tbusy = 0; dev->start = 1;
+	netif_start_queue (dev);
 	return 0;					/* Always succeed */
 
    final:
-   	dev->tbusy = 0; dev->start = 0;
+   	netif_device_detach (dev);
    	printk(KERN_ERR "aironet open failed \n");
    	return -1;
 }
 
 
- int awc_close(struct NET_DEVICE *dev)
+ int awc_close(struct net_device *dev)
 {
 	struct awc_private * priv = (struct awc_private *) dev->priv;
 
 	DEBUG(2, "%s: closing device.\n", dev->name);
 
-	dev->start = 0;
-	dev->tbusy=1;
+	netif_stop_queue (dev);
 	
 	awc_disable_MAC(dev);
 	awc_queues_destroy(dev);
@@ -2986,32 +2954,58 @@ int awc_private_init(struct NET_DEVICE * dev){
 
 
 
- void awc_tx_timeout(struct NET_DEVICE *dev)
+void awc_tx_timeout (struct net_device *dev)
 {
-	struct awc_private *priv = (struct awc_private *)dev->priv;
+	struct awc_private *priv = (struct awc_private *) dev->priv;
+	struct awc_fid * fid;
+	int cnt;
 
-	DEBUG(2, "%s: awc_tx_timeout \n",  dev->name);
+	DEBUG (2, "%s: awc_tx_timeout \n", dev->name);
 
-	printk(KERN_NOTICE "%s: Transmit timed out , buffs %d %d, queues tx %d pp %d lrg %d sm %d  \n ",
-			dev->name,priv->tx_small_buffs_total ,priv->tx_buffs_total,
-			priv->tx_in_transmit.size,priv->tx_post_process.size,
-			priv->tx_large_ready.size,priv->tx_small_ready.size);
+	printk (KERN_NOTICE "%s: Transmit timed out , buffs %d %d, queues tx %d pp %d lrg %d sm %d  \n ",
+	     dev->name, priv->tx_small_buffs_total, priv->tx_buffs_total,
+		priv->tx_in_transmit.size, priv->tx_post_process.size,
+		priv->tx_large_ready.size, priv->tx_small_ready.size);
 	priv->stats.tx_errors++;
 
+	// save_flags(flags);
+	// cli();
+	fid = priv->tx_in_transmit.head;
+	cnt = 0;
+	while (fid) {
+		if (jiffies - fid->transmit_start_time > (HZ)) {
+			//      printk(KERN_ERR "%s staled tx_buff found, age %uld jiffies\n",dev->name,
+			//              jiffies - fid->transmit_start_time );
+			awc_fid_queue_remove (&priv->tx_in_transmit, fid);
+			if (fid->u.tx.fid_size <= AWC_TX_ALLOC_SMALL_SIZE)
+				awc_fid_queue_push_tail (&priv->tx_small_ready, fid);
+			else
+				awc_fid_queue_push_tail (&priv->tx_large_ready, fid);
+		}
+		fid = fid->next;
+		if (cnt++ > 200) {
+			printk ("bbb in awc_fid_queue\n");
+			//              restore_flags(flags);
+			return;
+		};
+
+	}
+	//restore_flags(flags);
+	//debug =0x8;
+
 	dev->trans_start = jiffies;
-	dev->tbusy = 0;
+	netif_start_queue (dev);
 }
+
 
 long long last_tx_q_hack = 0;
 int direction = 1;
 
- int awc_start_xmit(struct sk_buff *skb, struct NET_DEVICE *dev) {
+ int awc_start_xmit(struct sk_buff *skb, struct net_device *dev) {
 
 	struct awc_private *priv = (struct awc_private *)dev->priv;
 	int retval = 0;
 //	unsigned long flags;
-	struct awc_fid * fid = NULL;
-	int cnt=0;
 
 	DEBUG(2, "%s: awc_start_xmit \n",  dev->name);
 
@@ -3021,48 +3015,13 @@ int direction = 1;
 		return -1;
 	};
 
-	/* Transmitter timeout, serious problems. */
-	if (test_and_set_bit( 0, (void *) &dev->tbusy) ) {
-		if (jiffies - dev->trans_start > 3* HZ ){
-			// save_flags(flags);
-        		// cli();
-        		fid = priv->tx_in_transmit.head;
-        		cnt = 0;
-			while (fid){
-				if (jiffies - fid->transmit_start_time > (HZ)){
-				//	printk(KERN_ERR "%s staled tx_buff found, age %uld jiffies\n",dev->name,
-				//		jiffies - fid->transmit_start_time );
-					awc_fid_queue_remove(&priv->tx_in_transmit, fid);
-					if (fid->u.tx.fid_size <= AWC_TX_ALLOC_SMALL_SIZE)
-                				awc_fid_queue_push_tail(&priv->tx_small_ready,fid);
-        				else
-                				awc_fid_queue_push_tail(&priv->tx_large_ready,fid);
-					dev->tbusy = 0;
-				}
-				fid = fid->next;
-                		if (cnt++ > 200) {
-                        		printk("bbb in awc_fid_queue\n");
-                        //		restore_flags(flags);
-                        		return -1;
-                		};
-
-			}
-			//restore_flags(flags);
-			//debug =0x8;
-		};
-		if (jiffies - dev->trans_start >= (5* HZ) ) {
-			awc_tx_timeout(dev);
-		}
-		return 1;
-	}
-
 	if (!skb) {
 		DEBUG(1, " xmit skb=NULL, jiffie %ld \n",jiffies);
 		return -1;
 	};
 	
 	if (test_and_set_bit( 0, (void *) &priv->tx_chain_active) ) {
-		dev->tbusy=0;
+		netif_start_queue (dev);
 		return 1;
 	}
 
@@ -3075,15 +3034,7 @@ int direction = 1;
 	return retval;
 }
 
-int awc_tx_done(struct awc_fid * rx_fid){
- 	
-// 	dev->tbusy = 0;
- 	mark_bh(NET_BH);
- 	
-	return 0;
-};
-
-int awc_rx(struct NET_DEVICE *dev, struct awc_fid * rx_fid) {
+int awc_rx(struct net_device *dev, struct awc_fid * rx_fid) {
 
 //	struct awc_private *lp = (struct awc_private *)dev->priv;
 
@@ -3109,7 +3060,7 @@ int awc_rx(struct NET_DEVICE *dev, struct awc_fid * rx_fid) {
 
  void awc_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 {
-	struct NET_DEVICE *dev = (struct NET_DEVICE *)dev_id;
+	struct net_device *dev = (struct net_device *)dev_id;
 //	struct awc_private *lp;
 //	unsigned long flags;
 
@@ -3133,7 +3084,7 @@ int awc_rx(struct NET_DEVICE *dev, struct awc_fid * rx_fid) {
 
 
 
- struct enet_statistics *awc_get_stats(struct NET_DEVICE *dev)
+ struct enet_statistics *awc_get_stats(struct net_device *dev)
 {
 	struct awc_private *priv = (struct awc_private *)dev->priv;
 //        unsigned long flags;
@@ -3142,7 +3093,7 @@ int awc_rx(struct NET_DEVICE *dev, struct awc_fid * rx_fid) {
 	
 	DEBUG(2, "%s: awc_get_stats \n",  dev->name);
 
-	if (!dev->start) {
+	if (!netif_running(dev)) {
 		return 0;			
 	}
 //	save_flags(flags);
@@ -3175,7 +3126,7 @@ int awc_rx(struct NET_DEVICE *dev, struct awc_fid * rx_fid) {
 }
 
 
-int awc_change_mtu(struct NET_DEVICE *dev, int new_mtu){
+int awc_change_mtu(struct net_device *dev, int new_mtu){
 
 //	struct awc_private *priv = (struct awc_private *)dev->priv;
 //        unsigned long flags;
@@ -3183,7 +3134,7 @@ int awc_change_mtu(struct NET_DEVICE *dev, int new_mtu){
        if ((new_mtu < 256 ) || (new_mtu > 2312) || (max_mtu && new_mtu > max_mtu) )
                 return -EINVAL;
 
-	if (dev->start) {
+	if (netif_running(dev)) {
 		printk("PLEASE, ifconfig %s down for mtu change\n",dev->name);
 
 	};
@@ -3207,7 +3158,7 @@ int awc_change_mtu(struct NET_DEVICE *dev, int new_mtu){
 
 
  void
-awc_set_multicast_list(struct NET_DEVICE *dev) {
+awc_set_multicast_list(struct net_device *dev) {
 //	int ioaddr = dev->base_addr;
 
 /*	if (dev->flags & IFF_PROMISC)

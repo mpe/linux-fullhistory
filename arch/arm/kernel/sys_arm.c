@@ -50,7 +50,7 @@ asmlinkage int sys_pipe(unsigned long * fildes)
 }
 
 /* common code for old and new mmaps */
-static inline long do_mmap2(
+inline long do_mmap2(
 	unsigned long addr, unsigned long len,
 	unsigned long prot, unsigned long flags,
 	unsigned long fd, unsigned long pgoff)
@@ -77,27 +77,6 @@ static inline long do_mmap2(
 		fput(file);
 out:
 	return error;
-}
-
-#define PGOFF_SHIFT (PAGE_SHIFT - 12)
-#define PGOFF_MASK  (~((1 << PGOFF_SHIFT) - 1))
-
-/*
- * Note: off_4k is always units of 4K.  If we can't do the requested
- * offset, we return EINVAL.
- */
-asmlinkage long
-sys_mmap2(unsigned long addr, unsigned long len, unsigned long prot,
-	  unsigned long flags, unsigned long fd, unsigned long off_4k)
-{
-	unsigned long pgoff;
-
-	if (off_4k & ~PGOFF_MASK)
-		return -EINVAL;
-
-	pgoff = off_4k >> PGOFF_SHIFT;
-
-	return do_mmap2(addr, len, prot, flags, fd, pgoff);
 }
 
 struct mmap_arg_struct {

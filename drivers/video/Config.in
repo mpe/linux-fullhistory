@@ -11,7 +11,7 @@ if [ "$CONFIG_FB" = "y" ]; then
    define_bool CONFIG_DUMMY_CONSOLE y
    if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
       if [ "$CONFIG_PCI" = "y" ]; then
-         bool '  nVidia Riva support (EXPERIMENTAL)' CONFIG_FB_RIVA
+         tristate '  nVidia Riva support (EXPERIMENTAL)' CONFIG_FB_RIVA
       fi
       if [ "$CONFIG_AMIGA" = "y" -o "$CONFIG_PCI" = "y" ]; then
 	 tristate '  Cirrus Logic support (EXPERIMENTAL)' CONFIG_FB_CLGEN

@@ -2,109 +2,50 @@
 # Makefile for drivers/acorn/scsi
 #
 
-L_TARGET := acorn-scsi.a
-L_OBJS   :=
-LX_OBJS  :=
-M_OBJS   :=
-MX_OBJS  :=
-MOD_LIST_NAME := ACORN_SCSI_MODULES
+L_TARGET	:= acorn-scsi.a
+MOD_LIST_NAME	:= ACORN_SCSI_MODULES
 
-CONFIG_QUEUE_BUILTIN :=
-CONFIG_FAS216_BUILTIN :=
-CONFIG_QUEUE_MODULE :=
-CONFIG_FAS216_MODULE :=
+obj-y		:=
+obj-m		:=
+obj-n		:=
+obj-		:=
 
-ifeq ($(CONFIG_SCSI_ACORNSCSI_3),y)
-  L_OBJS += acornscsi.o acornscsi-io.o
-  CONFIG_QUEUE_BUILTIN=y
-else
-  ifeq ($(CONFIG_SCSI_ACORNSCSI_3),m)
-    M_OBJS += acornscsi_mod.o
-    CONFIG_QUEUE_MODULE=y
-  endif
-endif
+export-objs		:= fas216.o queue.o msgqueue.o
+list-multi		:= acornscsi_mod.o
+acornscsi_mod-objs	:= acornscsi.o acornscsi-io.o
 
-ifeq ($(CONFIG_SCSI_ARXESCSI),y)
-  L_OBJS += arxescsi.o
-  CONFIG_FAS216_BUILTIN=y
-else
-  ifeq ($(CONFIG_SCSI_ARXESCSI),m)
-    M_OBJS += arxescsi.o
-    CONFIG_FAS216_MODULE=y
-  endif
-endif
+obj-$(CONFIG_SCSI_ACORNSCSI_3)	+= acornscsi_mod.o queue.o msgqueue.o
+obj-$(CONFIG_SCSI_ARXESCSI)	+= arxescsi.o fas216.o queue.o msgqueue.o
+obj-$(CONFIG_SCSI_CUMANA_1)	+= cumana_1.o
+obj-$(CONFIG_SCSI_CUMANA_2)	+= cumana_2.o fas216.o queue.o msgqueue.o
+obj-$(CONFIG_SCSI_ECOSCSI)	+= ecoscsi.o
+obj-$(CONFIG_SCSI_OAK1)		+= oak.o
+obj-$(CONFIG_SCSI_POWERTECSCSI)	+= powertec.o fas216.o queue.o msgqueue.o
+obj-$(CONFIG_SCSI_EESOXSCSI)	+= eesox.o fas216.o queue.o msgqueue.o
 
-ifeq ($(CONFIG_SCSI_CUMANA_1),y)
-  L_OBJS += cumana_1.o
-else
-  ifeq ($(CONFIG_SCSI_CUMANA_1),m)
-    M_OBJS += cumana_1.o
-  endif
-endif
+# Extract lists of the multi-part drivers.
+# The 'int-*' lists are intermediate files used to build the multi's.
 
-ifeq ($(CONFIG_SCSI_CUMANA_2),y)
-  L_OBJS += cumana_2.o
-  CONFIG_FAS216_BUILTIN=y
-else
-  ifeq ($(CONFIG_SCSI_CUMANA_2),m)
-    M_OBJS += cumana_2.o
-    CONFIG_FAS216_MODULE=y
-  endif
-endif
+multi-y		:= $(filter $(list-multi), $(obj-y))
+multi-m		:= $(filter $(list-multi), $(obj-m))
+int-y		:= $(sort $(foreach m, $(multi-y), $($(basename $(m))-objs)))
+int-m		:= $(sort $(foreach m, $(multi-m), $($(basename $(m))-objs)))
 
-ifeq ($(CONFIG_SCSI_ECOSCSI),y)
-  L_OBJS += ecoscsi.o
-else
-  ifeq ($(CONFIG_SCSI_ECOSCSI),m)
-    M_OBJS += ecoscsi.o
-  endif
-endif
+# Files that are both resident and modular; remove from modular.
 
-ifeq ($(CONFIG_SCSI_OAK1),y)
-  L_OBJS += oak.o
-else
-  ifeq ($(CONFIG_SCSI_OAK1),m)
-    M_OBJS += oak.o
-  endif
-endif
+obj-m		:= $(filter-out $(obj-y), $(obj-m))
+int-m		:= $(filter-out $(int-y), $(int-m))
 
-ifeq ($(CONFIG_SCSI_POWERTECSCSI),y)
-  L_OBJS += powertec.o
-  CONFIG_FAS216_BUILTIN=y
-else
-  ifeq ($(CONFIG_SCSI_POWERTECSCSI),m)
-    M_OBJS += powertec.o
-    CONFIG_FAS216_MODULE=y
-  endif
-endif
+# Take multi-part drivers out of obj-y and put components in.
 
-ifeq ($(CONFIG_SCSI_EESOXSCSI),y)
-  L_OBJS += eesox.o
-  CONFIG_FAS216_BUILTIN=y
-else
-  ifeq ($(CONFIG_SCSI_EESOXSCSI),m)
-    M_OBJS += eesox.o
-    CONFIG_FAS216_MODULE=y
-  endif
-endif
+obj-y		:= $(filter-out $(list-multi), $(obj-y)) $(int-y)
 
-ifeq ($(CONFIG_FAS216_BUILTIN),y)
-  LX_OBJS += fas216.o
-  CONFIG_QUEUE_BUILTIN=y
-else
-  ifeq ($(CONFIG_FAS216_MODULE),y)
-    MX_OBJS += fas216.o
-    CONFIG_QUEUE_MODULE=y
-  endif
-endif
+# Translate to Rules.make lists.
 
-ifeq ($(CONFIG_QUEUE_BUILTIN),y)
-  LX_OBJS += queue.o msgqueue.o
-else
-  ifeq ($(CONFIG_QUEUE_MODULE),y)
-    MX_OBJS += queue.o msgqueue.o
-  endif
-endif
+L_OBJS		:= $(filter-out $(export-objs), $(obj-y))
+LX_OBJS		:= $(filter     $(export-objs), $(obj-y))
+M_OBJS		:= $(sort $(filter-out $(export-objs), $(obj-m)))
+MX_OBJS		:= $(sort $(filter     $(export-objs), $(obj-m)))
 
 include $(TOPDIR)/Rules.make
 

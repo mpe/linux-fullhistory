@@ -352,18 +352,10 @@ static struct proc_dir_entry *proc_therm_ds1620;
 #endif
 
 static struct file_operations ds1620_fops = {
-	NULL,			/* lseek		*/
-	ds1620_read,		/* read			*/
-	NULL,			/* write		*/
-	NULL,			/* readdir		*/
-	NULL,			/* select		*/
-	ds1620_ioctl,		/* ioctl		*/
-	NULL,			/* mmap			*/
-	ds1620_open,		/* open			*/
-	NULL,			/* flush		*/
-	ds1620_release,		/* release		*/
-	NULL,			/* fsync		*/
-	NULL,			/* fasync		*/
+	read:		ds1620_read,
+	ioctl:		ds1620_ioctl,
+	open:		ds1620_open,
+	release:	ds1620_release,
 };
 
 static struct miscdevice ds1620_miscdev = {

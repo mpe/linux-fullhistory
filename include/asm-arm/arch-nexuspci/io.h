@@ -1,147 +1,96 @@
 /*
  * linux/include/asm-arm/arch-nexuspci/io.h
  *
- * Copyright (C) 1997,1998 Russell King
- *
- * Modifications:
- *  06-Dec-1997	RMK	Created.
+ * Copyright (C) 1997-1999 Russell King
+ * Copyright (C) 2000 FutureTV Labs Ltd.
  */
 #ifndef __ASM_ARM_ARCH_IO_H
 #define __ASM_ARM_ARCH_IO_H
 
-#define IO_SPACE_LIMIT 0xffffffff
+#define IO_SPACE_LIMIT 0xffff
 
 /*
- * Dynamic IO functions - let the compiler
- * optimize the expressions
+ * Translation of various region addresses to virtual addresses
  */
-#define DECLARE_DYN_OUT(fnsuffix,instr,typ)					\
-extern __inline__ void __out##fnsuffix (unsigned int value, unsigned int port)	\
-{										\
-	__asm__ __volatile__(							\
-	"str" ##instr## "	%0, [%1, %2]"					\
-	: 									\
-	: "r" (value), "r" (PCIO_BASE), typ (port));				\
+#define __io_pci(a)		(PCIO_BASE + (a))
+#if 1
+#define __mem_pci(a)		((unsigned long)(a))
+#define __mem_isa(a)		(PCIMEM_BASE + (unsigned long)(a))
+#else
+
+extern __inline__ unsigned long ___mem_pci(unsigned long a)
+{
+	/* PCI addresses must have been ioremapped */
+	if (a <= 0xc0000000 || a >= 0xe0000000)
+		*((int *)0) = 0;
+	return a;
 }
 
-#define DECLARE_DYN_IN(sz,fnsuffix,instr,typ)					\
-extern __inline__ unsigned sz __in##fnsuffix (unsigned int port)		\
-{										\
-	unsigned long value;							\
-	__asm__ __volatile__(							\
-	"ldr" ##instr## "	%0, [%1, %2]"					\
-	: "=&r" (value)								\
-	: "r" (PCIO_BASE), typ (port));						\
-	return (unsigned sz)value;						\
+extern __inline__ unsigned long ___mem_isa(unsigned long a)
+{
+	if (a >= 16*1048576)
+		BUG();
+	return PCIMEM_BASE + a;
 }
+#define __mem_pci(a)		___mem_pci((unsigned long)(a))
+#define __mem_isa(a)		___mem_isa((unsigned long)(a))
+#endif
 
-extern __inline__ unsigned int __ioaddr (unsigned int port)			\
-{										\
-	return (unsigned int)(PCIO_BASE + port);				\
-}
-
-#define DECLARE_IO(sz,fnsuffix,instr,typ)	\
-	DECLARE_DYN_OUT(fnsuffix,instr,typ)	\
-	DECLARE_DYN_IN(sz,fnsuffix,instr,typ)
-
-DECLARE_IO(char,b,"b","Jr")
-DECLARE_IO(short,w,"h","r")
-DECLARE_IO(int,l,"","Jr")
-
-#undef DECLARE_IO
-#undef DECLARE_DYN_OUT
-#undef DECLARE_DYN_IN
+/* the following macro is depreciated */
+#define __ioaddr(p)		__io_pci(p)
 
 /*
- * Constant address IO functions
- *
- * These have to be macros for the 'J' constraint to work -
- * +/-4096 immediate operand.
+ * Generic virtual read/write
  */
-#define __outbc(value,port)							\
-({										\
-	__asm__ __volatile__(							\
-	"strb	%0, [%1, %2]"							\
-	:									\
-	: "r" (value), "r" (PCIO_BASE), "Jr" (port));				\
-})
+#define __arch_getb(a)		(*(volatile unsigned char *)(a))
+#define __arch_getl(a)		(*(volatile unsigned int *)(a))
 
-#define __inbc(port)								\
-({										\
-	unsigned char result;							\
-	__asm__ __volatile__(							\
-	"ldrb	%0, [%1, %2]"							\
-	: "=r" (result)								\
-	: "r" (PCIO_BASE), "Jr" (port));					\
-	result;									\
-})
+extern __inline__ unsigned int __arch_getw(unsigned long a)
+{
+	unsigned int value;
+	__asm__ __volatile__("ldr%?h	%0, [%1, #0]	@ getw"
+		: "=&r" (value)
+		: "r" (a));
+	return value;
+}
 
-#define __outwc(value,port)							\
-({										\
-	__asm__ __volatile__(							\
-	"strh	%0, [%1, %2]"							\
-	:									\
-	: "r" (value), "r" (PCIO_BASE), "r" (port));				\
-})
 
-#define __inwc(port)								\
-({										\
-	unsigned short result;							\
-	__asm__ __volatile__(							\
-	"ldrh	%0, [%1, %2]"							\
-	: "=r" (result)								\
-	: "r" (PCIO_BASE), "r" (port));						\
-	result & 0xffff;							\
-})
+#define __arch_putb(v,a)	(*(volatile unsigned char *)(a) = (v))
+#define __arch_putl(v,a)	(*(volatile unsigned int *)(a) = (v))
 
-#define __outlc(value,port)							\
-({										\
-	__asm__ __volatile__(							\
-	"str	%0, [%1, %2]"							\
-	:									\
-	: "r" (value), "r" (PCIO_BASE), "Jr" (port));				\
-})
+extern __inline__ void __arch_putw(unsigned int value, unsigned long a)
+{
+	__asm__ __volatile__("str%?h	%0, [%1, #0]	@ putw"
+		: : "r" (value), "r" (a));
+}
 
-#define __inlc(port)								\
-({										\
-	unsigned long result;							\
-	__asm__ __volatile__(							\
-	"ldr	%0, [%1, %2]"							\
-	: "=r" (result)								\
-	: "r" (PCIO_BASE), "Jr" (port));					\
-	result;									\
-})
+#define inb(p)			__arch_getb(__io_pci(p))
+#define inw(p)			__arch_getw(__io_pci(p))
+#define inl(p)			__arch_getl(__io_pci(p))
 
-#define __ioaddrc(port)								\
-({										\
-	unsigned long addr;							\
-	addr = PCIO_BASE + port;						\
-	addr;									\
-})
-
-#define inb(p)	 	(__builtin_constant_p((p)) ? __inbc(p)    : __inb(p))
-#define inw(p)	 	(__builtin_constant_p((p)) ? __inwc(p)    : __inw(p))
-#define inl(p)	 	(__builtin_constant_p((p)) ? __inlc(p)    : __inl(p))
-#define outb(v,p)	(__builtin_constant_p((p)) ? __outbc(v,p) : __outb(v,p))
-#define outw(v,p)	(__builtin_constant_p((p)) ? __outwc(v,p) : __outw(v,p))
-#define outl(v,p)	(__builtin_constant_p((p)) ? __outlc(v,p) : __outl(v,p))
-#define __ioaddr(p)	(__builtin_constant_p((p)) ? __ioaddr(p)  : __ioaddrc(p))
+#define outb(v,p)		__arch_putb(v,__io_pci(p))
+#define outw(v,p)		__arch_putw(v,__io_pci(p))
+#define outl(v,p)		__arch_putl(v,__io_pci(p))
 
 /*
- * Translated address IO functions
- *
- * IO address has already been translated to a virtual address
+ * ioremap support - validate a PCI memory address,
+ * and convert a PCI memory address to a physical
+ * address for the page tables.
  */
-#define outb_t(v,p)								\
-	(*(volatile unsigned char *)(p) = (v))
+#define valid_ioaddr(off,sz)	((off) < 0x80000000 && (off) + (sz) <= 0x80000000)
+#define io_to_phys(off)		((off) + PLX_MEM_START)
 
-#define inb_t(p)								\
-	(*(volatile unsigned char *)(p))
-
-#define outl_t(v,p)								\
-	(*(volatile unsigned long *)(p) = (v))
-
-#define inl_t(p)								\
-	(*(volatile unsigned long *)(p))
+/*
+ * ioremap takes a PCI memory address, as specified in
+ * linux/Documentation/IO-mapping.txt
+ */
+#define __arch_ioremap(off,size,nocache)			\
+({								\
+	unsigned long _off = (off), _size = (size);		\
+	void *_ret = (void *)0;					\
+	if (valid_ioaddr(_off, _size))				\
+		_ret = __ioremap(io_to_phys(_off), _size, 0);	\
+	_ret;							\
+})
 
 #endif

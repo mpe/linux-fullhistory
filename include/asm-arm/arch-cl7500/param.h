@@ -3,3 +3,5 @@
  *
  * Copyright (C) 1999 Nexus Electronics Ltd
  */
+
+#define HZ 100

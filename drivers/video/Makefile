@@ -5,7 +5,7 @@
 SUB_DIRS        :=
 MOD_SUB_DIRS    := $(SUB_DIRS)
 MOD_IN_SUB_DIRS :=
-ALL_SUB_DIRS    := $(SUB_DIRS) matrox
+ALL_SUB_DIRS    := $(SUB_DIRS) matrox riva
 
 O_TARGET := video.o
 O_OBJS   :=
@@ -63,7 +63,6 @@ obj-$(CONFIG_FB_CT65550)          += chipsfb.o
 obj-$(CONFIG_FB_CYBER)            += cyberfb.o
 obj-$(CONFIG_FB_CYBER2000)        += cyber2000fb.o
 obj-$(CONFIG_FB_SGIVW)            += sgivwfb.o
-obj-$(CONFIG_FB_RIVA)             += rivafb.o riva_hw.o
 obj-$(CONFIG_FB_3DFX)             += tdfxfb.o
 obj-$(CONFIG_FB_MAC)              += macfb.o macmodes.o
 obj-$(CONFIG_FB_HP300)            += hpfb.o
@@ -97,6 +96,16 @@ MOD_SUB_DIRS			  += matrox
 else
   ifeq ($(CONFIG_FB_MATROX),m)
   MOD_SUB_DIRS			  += matrox
+  endif
+endif
+
+ifeq ($(CONFIG_FB_RIVA),y)
+SUB_DIRS			  += riva
+obj-y				  += riva/rivafb.o
+MOD_SUB_DIRS			  += riva
+else
+  ifeq ($(CONFIG_FB_RIVA),m)
+  MOD_SUB_DIRS			  += riva
   endif
 endif
 

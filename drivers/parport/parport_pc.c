@@ -1503,7 +1503,7 @@ out:
 
 /* --- DMA detection -------------------------------------- */
 
-/* Only if supports ECP mode */
+/* Only if chipset conforms to ECP ISA Interface Standard */
 static int __devinit programmable_dma_support (struct parport *p)
 {
 	unsigned char oecr = inb (ECONTROL (p));
@@ -1511,8 +1511,10 @@ static int __devinit programmable_dma_support (struct parport *p)
 
 	frob_econtrol (p, 0xe0, ECR_CNF << 5);
 	
-	dma = inb (CONFIGB(p)) & 0x03;
-	if (!dma)
+	dma = inb (CONFIGB(p)) & 0x07;
+	/* 000: Indicates jumpered 8-bit DMA if read-only.
+	   100: Indicates jumpered 16-bit DMA if read-only. */
+	if ((dma & 0x03) == 0)
 		dma = PARPORT_DMA_NONE;
 
 	outb (oecr, ECONTROL (p));
@@ -1722,6 +1724,7 @@ struct parport *__devinit parport_pc_probe_port (unsigned long int base,
 }
 
 
+/* Via support maintained by Jeff Garzik <jgarzik@mandrakesoft.com> */
 static int __devinit sio_via_686a_probe (struct pci_dev *pdev)
 {
 	u8 dma, irq, tmp;
@@ -1835,6 +1838,7 @@ static struct pci_device_id parport_pc_pci_tbl[] __devinitdata = {
 
 static int __devinit parport_pc_init_superio(void)
 {
+#ifdef CONFIG_PCI
 	const struct pci_device_id *id;
 	struct pci_dev *pdev;
 	
@@ -1845,10 +1849,10 @@ static int __devinit parport_pc_init_superio(void)
 		
 		return parport_pc_superio_info[id->driver_data].probe (pdev);
 	}
+#endif /* CONFIG_PCI */
 	
 	return 0; /* zero devices found */
 }
-
 
 /* Look for PCI parallel port cards. */
 static int __init parport_pc_init_pci (int irq, int dma)
@@ -2036,9 +2040,16 @@ static int dmaval[PARPORT_PC_MAX_PORTS] = { [0 ... PARPORT_PC_MAX_PORTS-1] = PAR
 static int irqval[PARPORT_PC_MAX_PORTS] = { [0 ... PARPORT_PC_MAX_PORTS-1] = PARPORT_IRQ_PROBEONLY };
 static const char *irq[PARPORT_PC_MAX_PORTS] = { NULL, };
 static const char *dma[PARPORT_PC_MAX_PORTS] = { NULL, };
+
+MODULE_AUTHOR("Phil Blundell, Tim Waugh, others");
+MODULE_DESCRIPTION("PC-style parallel port driver");
+MODULE_PARM_DESC(io, "Base I/O address (SPP regs)");
 MODULE_PARM(io, "1-" __MODULE_STRING(PARPORT_PC_MAX_PORTS) "i");
+MODULE_PARM_DESC(io_hi, "Base I/O address (ECR)");
 MODULE_PARM(io_hi, "1-" __MODULE_STRING(PARPORT_PC_MAX_PORTS) "i");
+MODULE_PARM_DESC(irq, "IRQ line");
 MODULE_PARM(irq, "1-" __MODULE_STRING(PARPORT_PC_MAX_PORTS) "s");
+MODULE_PARM_DESC(dma, "DMA channel");
 MODULE_PARM(dma, "1-" __MODULE_STRING(PARPORT_PC_MAX_PORTS) "s");
 
 int init_module(void)

@@ -115,7 +115,7 @@ mikasa_init_irq(void)
 	mikasa_update_irq_hw(0);
 
 	for (i = 16; i < 32; ++i) {
-		irq_desc[i].status = IRQ_DISABLED;
+		irq_desc[i].status = IRQ_DISABLED | IRQ_LEVEL;
 		irq_desc[i].handler = &mikasa_irq_type;
 	}
 

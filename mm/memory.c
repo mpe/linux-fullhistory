@@ -70,16 +70,6 @@ static inline void copy_cow_page(struct page * from, struct page * to, unsigned 
 mem_map_t * mem_map = NULL;
 
 /*
- * oom() prints a message (so that the user knows why the process died),
- * and gives the process an untrappable SIGKILL.
- */
-void oom(struct task_struct * task)
-{
-	printk("\nOut of memory for %s.\n", task->comm);
-	force_sig(SIGKILL, task);
-}
-
-/*
  * Note: this doesn't free the actual pages themselves. That
  * has been handled earlier when unmapping all the memory regions.
  */

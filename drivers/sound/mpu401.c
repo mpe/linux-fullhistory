@@ -15,7 +15,6 @@
  * Alan Cox		modularisation, use normal request_irq, use dev_id
  */
 
-#include <linux/config.h>
 #include <linux/module.h>
 
 #define USE_SEQ_MACROS

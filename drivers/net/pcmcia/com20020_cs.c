@@ -309,7 +309,7 @@ static void com20020_detach(dev_link_t *link)
 	    {
 		DEBUG(1,"unregister...\n");
 
-		if (dev->start)
+		if (netif_running(dev))
 		    dev->stop(dev);
 	    
 		/*
@@ -501,7 +501,7 @@ static int com20020_event(event_t event, int priority,
     case CS_EVENT_CARD_REMOVAL:
         link->state &= ~DEV_PRESENT;
         if (link->state & DEV_CONFIG) {
-            dev->tbusy = 1; dev->start = 0;
+            netif_device_detach(dev);
             link->release.expires = jiffies + HZ/20;
             link->state |= DEV_RELEASE_PENDING;
             add_timer(&link->release);
@@ -517,7 +517,7 @@ static int com20020_event(event_t event, int priority,
     case CS_EVENT_RESET_PHYSICAL:
         if (link->state & DEV_CONFIG) {
             if (link->open) {
-                dev->tbusy = 1; dev->start = 0;
+                netif_device_detach(dev);
             }
             CardServices(ReleaseConfiguration, link->handle);
         }

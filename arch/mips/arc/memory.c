@@ -13,7 +13,6 @@
 #include <linux/mm.h>
 #include <linux/bootmem.h>
 #include <linux/swap.h>
-#include <linux/config.h>
 
 #include <asm/sgialib.h>
 #include <asm/page.h>

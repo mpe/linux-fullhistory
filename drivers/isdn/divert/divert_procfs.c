@@ -302,17 +302,13 @@ isdn_divert_lseek(struct file *file, loff_t offset, int orig)
 
 static struct file_operations isdn_fops =
 {
-	isdn_divert_lseek,
-	isdn_divert_read,
-	isdn_divert_write,
-	NULL,			/* isdn_readdir */
-	isdn_divert_poll,	/* isdn_poll */
-	isdn_divert_ioctl,	/* isdn_ioctl */
-	NULL,			/* isdn_mmap */
-	isdn_divert_open,
-	NULL,			/* flush */
-	isdn_divert_close,
-	NULL			/* fsync */
+	llseek:		isdn_divert_lseek,
+	read:		isdn_divert_read,
+	write:		isdn_divert_write,
+	poll:		isdn_divert_poll,
+	ioctl:		isdn_divert_ioctl,
+	open:		isdn_divert_open,
+	release:	isdn_divert_close,
 };
 
 /****************************/

@@ -1044,6 +1044,45 @@ static void __init pcibios_irq_peer_trick(struct irq_routing_table *rt)
 			printk("PCI: Discovered primary peer bus %02x [IRQ]\n", i);
 }
 
+static void set_level_irq(unsigned irq)
+{
+	unsigned char mask = 1 << (irq & 7);
+	unsigned int port = 0x4d0 + (irq >> 3);
+	unsigned char val = inb(port);
+
+	if (val & mask) {
+		printk("PCI irq %d was level\n", irq);
+		return;
+	}
+	printk("PCI irq %d was edge, turning into level-triggered\n", irq);
+	outb(val | mask, port);
+}
+
+static int ali_set_irq(struct pci_dev *router, unsigned pirq, unsigned irq)
+{
+	if (irq < 15) {
+		static unsigned char irqmap[16] = {
+			0, 8, 0, 2, 4, 5, 7, 6, 0, 1, 3, 9, 11, 0, 13, 15
+		};
+		unsigned char val = irqmap[irq];
+		if (val && pirq < 8) {
+			u8 byte;
+			unsigned offset = 0x48 + (pirq >> 1);
+			unsigned shift = (pirq & 1) << 2;
+			pci_read_config_byte(router, offset, &byte);
+			printk("ALI: old %04x=%02x\n", offset, byte);
+			byte &= ~(0xf << shift);
+			byte |= val << shift;
+			printk("ALI: new %04x=%02x\n", offset, byte);
+			pci_write_config_byte(router, offset, byte);
+			set_level_irq(irq);
+			return irq;
+		}
+	}
+	return 0;
+}
+		
+
 /*
  *  In case BIOS forgets to tell us about IRQ, we try to look it up in the routing
  *  table, but unfortunately we have to know the interrupt router chip.
@@ -1135,6 +1174,10 @@ static char *pcibios_lookup_irq(struct pci_dev *dev, struct irq_routing_table *r
 			DBG(" -> [PIIX] sink\n");
 		break;
 	case ID(PCI_VENDOR_ID_AL, PCI_DEVICE_ID_AL_M1533):
+		newirq = ali_set_irq(router, pirq-1, newirq);
+		if (newirq)
+			msg = "ALI";
+		break;
 	default:
 		DBG(" -> unknown router %04x/%04x\n", rt->rtr_vendor, rt->rtr_device);
 		if (newirq && mask == (1 << newirq)) {

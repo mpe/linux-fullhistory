@@ -11,7 +11,6 @@
 
 #ifdef __KERNEL__
 
-#include <linux/config.h>
 #include <linux/delay.h>
 #include <linux/ioport.h>
 #include <asm/bootinfo.h>

@@ -9,26 +9,45 @@
 # parent makefile.
 #
 
-L_TARGET := acorn-block.a
-L_OBJS   :=
-M_OBJS   :=
-MOD_LIST_NAME := ACORN_BLOCK_MODULES
+L_TARGET	:= acorn-block.a
+MOD_LIST_NAME	:= ACORN_BLOCK_MODULES
 
-ifeq ($(CONFIG_BLK_DEV_FD1772),y)
-  L_OBJS += fd1772.o fd1772dma.o
-else
-  ifeq ($(CONFIG_BLK_DEV_FD1772),m)
-    M_OBJS += fd1772_mod.o
-  endif
-endif
+obj-y		:=
+obj-m		:=
+obj-n		:=
+obj-		:=
 
-ifeq ($(CONFIG_BLK_DEV_MFM),y)
-  L_OBJS += mfmhd.o mfm.o
-else
-  ifeq ($(CONFIG_BLK_DEV_MFM),m)
-    M_OBJS += mfmhd_mod.o
-  endif
-endif
+export-objs	:=
+list-multi	:= fd1772_mod.o mfmhd_mod.o
+fd1772_mod-objs	:= fd1772.o fd1772dma.o
+mfmhd_mod-objs	:= mfmhd.o mfm.o
+
+obj-$(CONFIG_BLK_DEV_FD1772)	+= fd1772_mod.o
+obj-$(CONFIG_BLK_DEV_MFM)	+= mfmhd.o mfm.o
+
+# Extract lists of the multi-part drivers.
+# The 'int-*' lists are intermediate files used to build the multi's.
+
+multi-y		:= $(filter $(list-multi), $(obj-y))
+multi-m		:= $(filter $(list-multi), $(obj-m))
+int-y		:= $(sort $(foreach m, $(multi-y), $($(basename $(m))-objs)))
+int-m		:= $(sort $(foreach m, $(multi-m), $($(basename $(m))-objs)))
+
+# Files that are both resident and modular; remove from modular.
+
+obj-m		:= $(filter-out $(obj-y), $(obj-m))
+int-m		:= $(filter-out $(int-y), $(int-m))
+
+# Take multi-part drivers out of obj-y and put components in.
+
+obj-y		:= $(filter-out $(list-multi), $(obj-y)) $(int-y)
+
+# Translate to Rules.make lists.
+
+L_OBJS		:= $(filter-out $(export-objs), $(obj-y))
+LX_OBJS		:= $(filter     $(export-objs), $(obj-y))
+M_OBJS		:= $(sort $(filter-out $(export-objs), $(obj-m)))
+MX_OBJS		:= $(sort $(filter     $(export-objs), $(obj-m)))
 
 include $(TOPDIR)/Rules.make
 

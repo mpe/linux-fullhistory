@@ -1,5 +1,3 @@
-#include <linux/config.h>
-
 #define DSP_RESET	(devc->base + 0x6)
 #define DSP_READ	(devc->base + 0xA)
 #define DSP_WRITE	(devc->base + 0xC)

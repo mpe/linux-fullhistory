@@ -21,6 +21,7 @@
 #include <linux/init.h>
 #include <linux/delay.h>
 #include <linux/spinlock.h>
+#include <linux/interrupt.h>
 
 #ifdef CONFIG_MCA
 #include <linux/mca.h>

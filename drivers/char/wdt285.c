@@ -153,18 +153,10 @@ static int watchdog_ioctl(struct inode *inode, struct file *file,
 
 static struct file_operations watchdog_fops=
 {
-	NULL,		/* Seek */
-	NULL,		/* Read */
-	watchdog_write,	/* Write */
-	NULL,		/* Readdir */
-	NULL,		/* Select */
-	watchdog_ioctl,	/* Ioctl */
-	NULL,		/* MMap */
-	watchdog_open,
-	NULL,		/* flush */
-	watchdog_release,
-	NULL,		
-	NULL		/* Fasync */
+	write:		watchdog_write,
+	ioctl:		watchdog_ioctl,
+	open:		watchdog_open,
+	release:	watchdog_release,
 };
 
 static struct miscdevice watchdog_miscdev=

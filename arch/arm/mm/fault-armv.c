@@ -351,7 +351,7 @@ do_sect_fault(unsigned long addr, int error_code, struct pt_regs *regs)
 
 #endif
 
-static struct fsr_info {
+static const struct fsr_info {
 	int	(*fn)(unsigned long addr, int error_code, struct pt_regs *regs);
 	int	sig;
 	char	*name;
@@ -384,7 +384,7 @@ static struct fsr_info {
 asmlinkage void
 do_DataAbort(unsigned long addr, int fsr, int error_code, struct pt_regs *regs)
 {
-	struct fsr_info *inf;
+	const struct fsr_info *inf;
 
 	if (user_mode(regs) && addr == regs->ARM_pc) {
 		static int first = 1;

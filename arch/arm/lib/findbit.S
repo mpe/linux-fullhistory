@@ -53,10 +53,10 @@ ENTRY(find_next_zero_bit)
 		beq	Lfindzbit1lp		@ If new byte, goto old routine
 		ldrb	r3, [r0, r2, lsr#3]
 		orr	r3, r3, #0xFF00		@ Set top bits so we wont get confused
-		stmfd	sp!, {r4}
+		str	r4, [sp, #-4]!
 		and	r4, r2, #7
 		mov	r3, r3, lsr r4		@ Shift right by no. of bits
-		ldmfd	sp!, {r4}
+		ldr	r4, [sp], #4
 		and	r3, r3, #0xFF
 		teq	r3, #0xFF
 		orreq	r2, r2, #7

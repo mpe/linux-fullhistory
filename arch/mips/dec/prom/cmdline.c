@@ -7,7 +7,6 @@
  */
 #include <linux/init.h>
 #include <linux/kernel.h>
-#include <linux/config.h>
 #include <linux/string.h>
 
 #include <asm/bootinfo.h>

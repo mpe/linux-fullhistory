@@ -2448,15 +2448,9 @@ static USHORT GetRegs (struct Scsi_Host *pshost, BOOL bigd, UCHAR pci_bus, UCHAR
 	memset (&DaleSetup, 0, sizeof (DaleSetup));
 	memset (DiskMirror, 0, sizeof (DiskMirror));
 
-#if LINUX_VERSION_CODE > LINUXVERSION(2,1,92)
-	zr = pcidev->base_address[1] & 0xFFFE;
-	zl = pcidev->base_address[2] & 0xFFFE;
-#else
-	pcibios_read_config_word (pci_bus, pci_device_fn, PCI_BASE_ADDRESS_1, &zr);
-	zr &= 0xFFFE;
-	pcibios_read_config_word (pci_bus, pci_device_fn, PCI_BASE_ADDRESS_2, &zl);
-	zl &= 0xFFFE;
-#endif
+	zr = pci_resource_start (pcidev, 1);
+	zl = pci_resource_start (pcidev, 2);
+
 	padapter->basePort = zr;
 	padapter->regRemap		= zr + RTR_LOCAL_REMAP;					// 32 bit local space remap
 	padapter->regDesc		= zr + RTR_REGIONS;	  					// 32 bit local region descriptor

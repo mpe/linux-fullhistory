@@ -15,9 +15,6 @@
  * Thomas Sailer   : ioctl code reworked (vmalloc/vfree removed)
  * Andrew Veliath  : adapted tmr2ticks from level 1 sequencer (avoid overflow)
  */
-#include <linux/config.h>
-
-
 #include "sound_config.h"
 
 static volatile int opened = 0, tmr_running = 0;

@@ -45,7 +45,6 @@
 
 /* $XFree86: xc/programs/Xserver/hw/xfree86/vga256/drivers/nv/riva_hw.c,v 1.1.2.3 1998/12/26 00:12:39 dawes Exp $ */
 
-#include <linux/module.h>
 #include <linux/kernel.h>
 #include <asm/io.h>
 #include "riva_hw.h"
@@ -175,7 +174,7 @@ typedef struct {
 static int nv3_iterate(nv3_fifo_info *res_info, nv3_sim_state * state, nv3_arb_info *ainfo)
 {
     int iter = 0;
-    int tmp, t;
+    int tmp;
     int vfsize, mfsize, gfsize;
     int mburst_size = 32;
     int mmisses, gmisses, vmisses;
@@ -359,7 +358,6 @@ static int nv3_iterate(nv3_fifo_info *res_info, nv3_sim_state * state, nv3_arb_i
 }
 static char nv3_arb(nv3_fifo_info * res_info, nv3_sim_state * state,  nv3_arb_info *ainfo) 
 {
-    int  g, v, not_done;
     long ens, vns, mns, gns;
     int mmisses, gmisses, vmisses, eburst_size, mburst_size;
     int refresh_cycle;
@@ -468,7 +466,6 @@ static char nv3_arb(nv3_fifo_info * res_info, nv3_sim_state * state,  nv3_arb_in
 static char nv3_get_param(nv3_fifo_info *res_info, nv3_sim_state * state, nv3_arb_info *ainfo)
 {
     int done, g,v, p;
-    int priority, gburst_size, vburst_size, iter;
     
     done = 0;
     if (state->gr_during_vid && ainfo->vid_en)
@@ -594,10 +591,10 @@ static void nv4CalcArbitration
     nv4_sim_state *arb
 )
 {
-    int data, m,n,p, pagemiss, cas,width, video_enable, color_key_enable, bpp, align;
+    int data, pagemiss, cas,width, video_enable, color_key_enable, bpp, align;
     int nvclks, mclks, pclks, vpagemiss, crtpagemiss, vbs;
     int found, mclk_extra, mclk_loop, cbs, m1, p1;
-    int xtal_freq, mclk_freq, pclk_freq, nvclk_freq, mp_enable;
+    int mclk_freq, pclk_freq, nvclk_freq, mp_enable;
     int us_m, us_n, us_p, video_drain_rate, crtc_drain_rate;
     int vpm_us, us_video, vlwm, video_fill_us, cpm_us, us_crt,clwm;
     int craw, vraw;
@@ -794,7 +791,7 @@ static int CalcVClock
     unsigned lowM, highM, highP;
     unsigned DeltaNew, DeltaOld;
     unsigned VClk, Freq;
-    unsigned M, N, O, P;
+    unsigned M, N, P;
     
     DeltaOld = 0xFFFFFFFF;
     VClk     = (unsigned)clockIn;

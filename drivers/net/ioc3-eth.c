@@ -48,7 +48,6 @@
  *  - Use hardware checksums.
  *  - Convert to using the PCI infrastructure / IOC3 meta driver.
  */
-#include <linux/config.h>
 #include <linux/init.h>
 #include <linux/delay.h>
 #include <linux/kernel.h>

@@ -32,7 +32,6 @@
 #include "udfdecl.h"
 
 #if defined(__linux__) && defined(__KERNEL__)
-#include <linux/config.h>
 #include <linux/version.h>
 #include "udf_i.h"
 #include "udf_sb.h"

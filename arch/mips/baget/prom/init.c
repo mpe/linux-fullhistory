@@ -6,7 +6,6 @@
  * $Id: init.c,v 1.3 1999/10/09 00:00:57 ralf Exp $
  */
 #include <linux/init.h>
-#include <linux/config.h>
 #include <asm/bootinfo.h>
 
 char arcs_cmdline[CL_SIZE];

@@ -1,13 +1,14 @@
 /*
  * Dynamic DMA mapping support.
  */
-
+#include <linux/config.h>
 #include <linux/types.h>
 #include <linux/mm.h>
 #include <linux/string.h>
 #include <linux/vmalloc.h>
 #include <linux/interrupt.h>
 #include <linux/errno.h>
+#include <linux/pci.h>
 
 #include <asm/io.h>
 #include <asm/pgalloc.h>
@@ -47,6 +48,22 @@ void *consistent_alloc(int gfp, size_t size, dma_addr_t *dma_handle)
 no_page:
 	BUG();
 	return NULL;
+}
+
+void *pci_alloc_consistent(struct pci_dev *hwdev, size_t size, dma_addr_t *handle)
+{
+	void *__ret;
+	int __gfp = GFP_KERNEL;
+
+#ifdef CONFIG_PCI
+	if ((hwdev) == NULL ||
+	    (hwdev)->dma_mask != 0xffffffff)
+#endif
+		__gfp |= GFP_DMA;
+
+	__ret = consistent_alloc(__gfp, (size),
+				 (handle));
+	return __ret;
 }
 
 /*

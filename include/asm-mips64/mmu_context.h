@@ -12,7 +12,6 @@
 #ifndef _ASM_MMU_CONTEXT_H
 #define _ASM_MMU_CONTEXT_H
 
-#include <linux/config.h>
 #include <asm/pgalloc.h>
 
 /* Fuck.  The f-word is here so you can grep for it :-)  */

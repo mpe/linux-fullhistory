@@ -91,3 +91,5 @@ unsigned long PAGE_SZ = PAGE_SIZE;
 unsigned long KSWI_BASE = 0x900000;
 unsigned long KSWI_SYS_BASE = 0x9f0000;
 unsigned long SYS_ERROR0 = 0x9f0000;
+unsigned long PGOFF_SHIFT = PAGE_SHIFT - 12;
+unsigned long PGOFF_MASK = (1 << (PAGE_SHIFT - 12)) - 1;

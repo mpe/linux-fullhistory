@@ -53,7 +53,6 @@ Changes:
 	
 */
 
-#include <linux/config.h>
 #include <linux/module.h>
 #include <linux/stddef.h>
 #include "soundmodule.h"

@@ -11,6 +11,7 @@
 *		as published by the Free Software Foundation; either version
 *		2 of the License, or (at your option) any later version.
 * ============================================================================
+* Feb 28, 2000  Jeff Garzik	softnet updates
 * Nov 20, 1999  Nenad Corbic 	Fixed zero length API bug.
 * Sep 30, 1999  Nenad Corbic    Fixed dynamic IP and route setup.
 * Sep 23, 1999  Nenad Corbic    Added SMP support, fixed tracing 
@@ -64,6 +65,7 @@
 
 #define PORT(x)   (x == 0 ? "PRIMARY" : "SECONDARY" )
 
+#define TX_TIMEOUT	(5*HZ)
  
 /******Data Structures*****************************************************/
 
@@ -130,6 +132,7 @@ static int del_if (wan_device_t* wandev, struct net_device* dev);
 static int if_init   (struct net_device* dev);
 static int if_open   (struct net_device* dev);
 static int if_close  (struct net_device* dev);
+static void if_tx_timeout (struct net_device *dev);
 static int if_header (struct sk_buff* skb, struct net_device* dev,
 	unsigned short type, void* daddr, void* saddr, unsigned len);
 #ifdef LINUX_2_1
@@ -441,7 +444,7 @@ static int update (wan_device_t* wandev)
 	if(test_bit(1, (void*)&card->wandev.critical))
                 return -EAGAIN;
 
-	if(!dev->start)
+	if(!netif_running(dev))
 		return -ENODEV;
 
       	flags = card->u.c.flags;
@@ -652,6 +655,8 @@ static int if_init (struct net_device* dev)
 	dev->rebuild_header	= &if_rebuild_hdr;
 	dev->hard_start_xmit	= &if_send;
 	dev->get_stats		= &if_stats;
+	dev->tx_timeout		= &if_tx_timeout;
+	dev->watchdog_timeo	= TX_TIMEOUT;
 
 	/* Initialize media-specific parameters */
 	dev->flags		|= IFF_POINTTOPOINT;
@@ -709,7 +714,7 @@ static int if_open (struct net_device* dev)
 
 	/* Only one open per interface is allowed */
 
-	if(dev->start)
+	if(netif_running(dev))
 		return -EBUSY;
 	
 	if(test_and_set_bit(1, (void*)&card->wandev.critical)) {
@@ -774,9 +779,7 @@ static int if_open (struct net_device* dev)
 	do_gettimeofday(&tv);
 	chdlc_priv_area->router_start_time = tv.tv_sec;
  
-	dev->interrupt = 0;
-	dev->tbusy = 0;
-	dev->start = 1;
+	netif_start_queue(dev);
 	dev->flags |= IFF_POINTTOPOINT;
 	wanpipe_open(card);
 
@@ -796,7 +799,7 @@ static int if_close (struct net_device* dev)
 	if(test_and_set_bit(1, (void*)&card->wandev.critical))
 		return -EAGAIN;
 
-	dev->start = 0;
+	netif_stop_queue(dev);
 	wanpipe_close(card);
 	port_set_state(card, WAN_DISCONNECTED);
 	chdlc_set_intr_mode(card, 0);
@@ -843,6 +846,30 @@ static int if_rebuild_hdr (void* hdr, struct net_device* dev, unsigned long radd
 }
 #endif
 
+
+/*============================================================================
+ * Handle transmit timeout event from netif watchdog
+ */
+static void if_tx_timeout (struct net_device *dev)
+{
+	chdlc_private_area_t *chdlc_priv_area = dev->priv;
+	sdla_t *card = chdlc_priv_area->card;
+
+	/* If our device stays busy for at least 5 seconds then we will
+	 * kick start the device by making dev->tbusy = 0.  We expect 
+	 * that our device never stays busy more than 5 seconds. So this
+	 * is only used as a last resort. 
+	 */
+	++card->wandev.stats.collisions;
+
+	printk (KERN_INFO "%s: Transmit timeout !\n",
+		card->devname);
+
+	/* unbusy the interface */
+	netif_start_queue (dev);
+}
+
+
 /*============================================================================
  * Send a packet on a network interface.
  * o set tbusy flag (marks start of the transmission) to block a timer-based
@@ -875,30 +902,10 @@ static int if_send (struct sk_buff* skb, struct net_device* dev)
 		 */
 		printk(KERN_INFO "%s: interface %s got kicked!\n",
 			card->devname, dev->name);
-		mark_bh(NET_BH);
+		netif_wake_queue(dev);
 		return 0;
 	}
 
-	if(dev->tbusy) {
-
-		/* If our device stays busy for at least 5 seconds then we will
-		 * kick start the device by making dev->tbusy = 0.  We expect 
-		 * that our device never stays busy more than 5 seconds. So this
-		 * is only used as a last resort. 
-		 */
-                ++card->wandev.stats.collisions;
-
-		if((jiffies - chdlc_priv_area->tick_counter) < (5 * HZ)) {
-			return 1;
-		}
-
-		printk (KERN_INFO "%s: Transmit timeout !\n",
-			card->devname);
-
-		/* unbusy the interface */
-		dev->tbusy = 0;
-	}
-	
    	if(ntohs(skb->protocol) != 0x16) {
 
 		/* check the udp packet type */
@@ -977,31 +984,24 @@ static int if_send (struct sk_buff* skb, struct net_device* dev)
 		}
 
 		if(chdlc_send(card, data, len)) {
-			dev->tbusy = 1;
+			netif_stop_queue(dev);
 			chdlc_priv_area->tick_counter = jiffies;
 			chdlc_int->interrupt_permission |= APP_INT_ON_TX_FRAME;
 		}
 		else {
 			++card->wandev.stats.tx_packets;
-#ifdef LINUX_2_1
                         card->wandev.stats.tx_bytes += len;
-#endif
 		}	
 	}
 
-	if (!dev->tbusy) {
-#ifdef LINUX_2_1
+	if (!netif_queue_stopped(dev))
 		dev_kfree_skb(skb);
-#else
-                dev_kfree_skb(skb, FREE_WRITE);
-#endif
-	}
 
 	clear_bit(0, (void*)&card->wandev.critical);
 	if(card->hw.type != SDLA_S514){
 		s508_unlock(card,&smp_flags);
 	}
-	return dev->tbusy;
+	return netif_queue_stopped(dev);
 }
 
 
@@ -1521,8 +1521,7 @@ STATIC void wpc_isr (sdla_t* card)
 				 ~APP_INT_ON_TX_FRAME;
 
 			chdlc_priv_area = dev->priv;
-			dev->tbusy = 0;	
-			mark_bh(NET_BH);
+			netif_wake_queue(dev);
 			break;
 
 		case COMMAND_COMPLETE_APP_INT_PEND:/* 0x04: cmd cplt */
@@ -1606,7 +1605,7 @@ static void rx_intr (sdla_t* card)
 	dev = card->wandev.dev;
 	chdlc_priv_area = dev->priv;
 
-	if(dev && dev->start) {
+	if(dev && netif_running(dev)) {
 
 		len  = rxbuf->frame_length;
 

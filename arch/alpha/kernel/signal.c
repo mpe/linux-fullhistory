@@ -437,6 +437,8 @@ setup_frame(int sig, struct k_sigaction *ka, sigset_t *set,
 		err |= __copy_to_user(frame->extramask, &set->sig[1], 
 				      sizeof(frame->extramask));
 	}
+	if (err)
+		goto give_sigsegv;
 
 	/* Set up to return from userspace.  If provided, use a stub
 	   already in userspace.  */
@@ -499,6 +501,8 @@ setup_rt_frame(int sig, struct k_sigaction *ka, siginfo_t *info,
 	err |= setup_sigcontext(&frame->uc.uc_mcontext, regs, sw,
 				set->sig[0], oldsp);
 	err |= __copy_to_user(&frame->uc.uc_sigmask, set, sizeof(*set));
+	if (err)
+		goto give_sigsegv;
 
 	/* Set up to return from userspace.  If provided, use a stub
 	   already in userspace.  */

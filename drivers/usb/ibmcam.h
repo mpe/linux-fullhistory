@@ -153,6 +153,7 @@ struct ibmcam_sbuf {
 struct ibmcam_frame {
 	char *data;		/* Frame buffer */
 	int order_uv;		/* True=UV False=VU */
+	int order_yc;		/* True=Yc False=cY ('c'=either U or V) */
 	unsigned char hdr_sig;	/* "00 FF 00 ??" where 'hdr_sig' is '??' */
 
 	int width;		/* Width application is expecting */
@@ -172,6 +173,9 @@ struct ibmcam_frame {
 	wait_queue_head_t wq;	/* Processes waiting */
 };
 
+#define	IBMCAM_MODEL_1	1	/* XVP-501, 3 interfaces, rev. 0.02 */
+#define IBMCAM_MODEL_2	2	/* KSX-X9903, 2 interfaces, rev. 3.0a */
+
 struct usb_ibmcam {
 	struct video_device vdev;
 
@@ -186,6 +190,7 @@ struct usb_ibmcam {
 
 	int ibmcam_used;        /* Is this structure in use? */
 	int initialized;	/* Had we already sent init sequence? */
+	int camera_model;	/* What type of IBM camera we got? */
 	int streaming;		/* Are we streaming Isochronous? */
 	int grabbing;		/* Are we grabbing? */
 	int last_error;		/* What calamity struck us? */
@@ -201,7 +206,6 @@ struct usb_ibmcam {
 	int cursbuf;		/* Current receiving sbuf */
 	struct ibmcam_sbuf sbuf[IBMCAM_NUMSBUF];	/* Double buffering */
 	volatile int remove_pending;	/* If set then about to exit */
-	wait_queue_head_t remove_ok;	/* Wait here until removal is safe */
 
         /*
 	 * Scratch space from the Isochronous pipe.

@@ -123,7 +123,7 @@ cabriolet_init_irq(void)
 		outb(0xff, 0x806);
 
 		for (i = 16; i < 35; ++i) {
-			irq_desc[i].status = IRQ_DISABLED;
+			irq_desc[i].status = IRQ_DISABLED | IRQ_LEVEL;
 			irq_desc[i].handler = &cabriolet_irq_type;
 		}
 	}

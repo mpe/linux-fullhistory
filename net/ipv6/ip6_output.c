@@ -24,6 +24,7 @@
  *      H. von Brand    :       Added missing #include <linux/string.h>
  */
 
+#include <linux/config.h>
 #include <linux/errno.h>
 #include <linux/types.h>
 #include <linux/string.h>

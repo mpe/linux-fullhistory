@@ -142,9 +142,8 @@
 #define NUM_AUTH_REQ_WITHOUT_REPLY      10
 
 #define END_OFFSET 0x1F0
-#if LINUX_VERSION_CODE < 0x020125
-#define test_and_set_bit set_bit
-#endif
+
+#define TX_TIMEOUT (5*HZ)
 
 /******Data Structures*****************************************************/
 
@@ -213,6 +212,7 @@ static int wpp_exec (struct sdla *card, void *u_cmd, void *u_data);
 static int if_init(struct net_device *dev);
 static int if_open(struct net_device *dev);
 static int if_close(struct net_device *dev);
+static void if_tx_timeout (struct net_device *dev);
 static int if_header(struct sk_buff *skb, struct net_device *dev, unsigned short type, 
 		     void *daddr, void *saddr, unsigned len);
 static int if_rebuild_hdr(struct sk_buff *skb);
@@ -585,7 +585,8 @@ static int if_init(struct net_device *dev)
 	dev->rebuild_header	= &if_rebuild_hdr;
 	dev->hard_start_xmit	= &if_send;
 	dev->get_stats		= &if_stats;
-
+	dev->tx_timeout		= &if_tx_timeout;
+	dev->watchdog_timeo	= TX_TIMEOUT;
 
 	/* Initialize media-specific parameters */
 	dev->type		= ARPHRD_PPP;	/* ARP h/w type */
@@ -632,7 +633,7 @@ static int if_open(struct net_device *dev)
 	struct timeval tv;
 	int err = 0;
 
-	if (dev->start)
+	if (netif_running(dev))
 		return -EBUSY;		/* only one open is allowed */
 	
 	if (test_and_set_bit(0, (void*)&card->wandev.critical))
@@ -714,13 +715,10 @@ static int if_open(struct net_device *dev)
 		return err;
 	}
 	
-	
 	wanpipe_set_state(card, WAN_CONNECTING);
 	wanpipe_open(card);
 	dev->mtu = min(dev->mtu, card->wandev.mtu);
-	dev->interrupt = 0;
-	dev->tbusy = 0;
-	dev->start = 1;
+	netif_start_queue(dev);	
 	do_gettimeofday( &tv );
 	ppp_priv_area->router_start_time = tv.tv_sec;
 	card->wandev.critical = 0;
@@ -741,7 +739,7 @@ static int if_close(struct net_device *dev)
 	if (test_and_set_bit(0, (void*)&card->wandev.critical))
 		return -EAGAIN;
 	
-	dev->start = 0;
+	netif_stop_queue(dev);
 	wanpipe_close(card);
 	wanpipe_set_state(card, WAN_DISCONNECTED);
 	ppp_set_intr_mode(card, 0);
@@ -795,6 +793,35 @@ static int if_rebuild_hdr (struct sk_buff *skb)
 	return 1;
 }
 
+
+/*============================================================================
+ * Handle transmit timeout from netif watchdog
+ */
+static void if_tx_timeout (struct net_device *dev)
+{
+	ppp_private_area_t *ppp_priv_area = dev->priv;
+	sdla_t *card = ppp_priv_area->card;
+
+
+	/* If our device stays busy for at least 5 seconds then we will
+	 * kick start the device by making dev->tbusy = 0.  We expect 
+	 * that our device never stays busy more than 5 seconds. So this
+	 * is only used as a last resort. 
+	 */
+
+	++ppp_priv_area->if_send_stat.if_send_tbusy;
+	++card->wandev.stats.collisions;
+
+	printk (KERN_INFO "%s: Transmit times out\n", card->devname);
+
+	++ppp_priv_area->if_send_stat.if_send_tbusy_timeout;
+	++card->wandev.stats.collisions;
+
+	/* unbusy the card (because only one interface per card) */
+	netif_start_queue(dev);
+}
+
+
 /*============================================================================
  * Send a packet on a network interface.
  * o set tbusy flag (marks start of the transmission) to block a timer-based
@@ -835,34 +862,11 @@ static int if_send (struct sk_buff *skb, struct net_device *dev)
 		
 		++ppp_priv_area->if_send_stat.if_send_skb_null;
 		
-		mark_bh(NET_BH);
+		netif_wake_queue(dev);
 		return 0;
 
 	}
 
-	if (dev->tbusy) {
-
-		/* If our device stays busy for at least 5 seconds then we will
-		 * kick start the device by making dev->tbusy = 0.  We expect 
-		 * that our device never stays busy more than 5 seconds. So this
-		 * is only used as a last resort. 
-		 */
-              
-		++ppp_priv_area->if_send_stat.if_send_tbusy;
-        	++card->wandev.stats.collisions;
-
-		if ((jiffies - ppp_priv_area->tick_counter) < (5*HZ)) {
-			return 1;
-		}
-
-		printk (KERN_INFO "%s: Transmit times out\n",card->devname);
-	
-		++ppp_priv_area->if_send_stat.if_send_tbusy_timeout;
-		++card->wandev.stats.collisions;
-
-		/* unbusy the card (because only one interface per card)*/
-		dev->tbusy = 0;
-	}	
 	sendpacket = skb->data;
 
 	udp_type = udp_pkt_type( skb, card );
@@ -930,7 +934,7 @@ static int if_send (struct sk_buff *skb, struct net_device *dev)
 
 		if (ppp_send(card, skb->data, skb->len, skb->protocol)) {
 			retry = 1;
-			dev->tbusy = 1;
+			netif_stop_queue(dev);
 			++ppp_priv_area->if_send_stat.if_send_adptr_bfrs_full;
 			++ppp_priv_area->if_send_stat.if_send_tx_int_enabled;
 			ppp_priv_area->tick_counter = jiffies;
@@ -1530,7 +1534,7 @@ STATIC void wpp_isr(sdla_t *card)
 		case PPP_INTR_TXRDY:	/* transmit interrupt  0x02 (bit 1)*/
 			++card->statistics.isr_tx;
 			flags->imask &= ~PPP_INTR_TXRDY;
-			dev->tbusy = 0;		
+			netif_wake_queue (dev);
 			card->buff_int_mode_unbusy = 1;
 			break;
 
@@ -1564,9 +1568,8 @@ STATIC void wpp_isr(sdla_t *card)
 	flags->iflag = 0;
 	card->wandev.critical = 0;
 
-	if(card->buff_int_mode_unbusy) {	
-		mark_bh(NET_BH);
-	}
+	if(card->buff_int_mode_unbusy)
+		netif_wake_queue(dev);
 }
 
 /*============================================================================
@@ -1603,7 +1606,7 @@ static void rx_intr(sdla_t *card)
 
 	}
 
-	if (dev && dev->start) {
+	if (dev && netif_running(dev)) {
 	
 		len  = rxbuf->length;
 		ppp_priv_area = dev->priv;
@@ -2006,7 +2009,7 @@ static void poll_disconnected(sdla_t *card)
 {
 	struct net_device *dev = card->wandev.dev;
 
-	if (dev && dev->start &&
+	if (dev && netif_running(dev) &&
 	    ((jiffies - card->state_tick) > HOLD_DOWN_TIME)) {
 	
 		wanpipe_set_state(card, WAN_CONNECTING);

@@ -977,11 +977,9 @@ static void acpi_enter_sx(acpi_sstate_t state)
 		typa = ((typa << ACPI_SLP_TYP_SHIFT) & ACPI_SLP_TYP_MASK);
 		typb = ((typb << ACPI_SLP_TYP_SHIFT) & ACPI_SLP_TYP_MASK);
 
-		if (state != ACPI_S0) {
-			acpi_sleep_start = get_cmos_time();
-			acpi_enter_dx(ACPI_D3);
-			acpi_sleep_state = state;
-		}
+		acpi_sleep_start = get_cmos_time();
+		acpi_enter_dx(ACPI_D3);
+		acpi_sleep_state = state;
 
 		// clear wake status
 		acpi_write_pm1_status(acpi_facp, ACPI_WAK);
@@ -996,17 +994,11 @@ static void acpi_enter_sx(acpi_sstate_t state)
 			outw(value | typb | ACPI_SLP_EN, acpi_facp->pm1b_cnt);
 		}
 
-		if (state == ACPI_S0) {
-			acpi_sleep_state = state;
-			acpi_enter_dx(ACPI_D0);
-			acpi_sleep_start = 0;
-		}
-		else if (state == ACPI_S1) {
-			// wait until S1 is entered
-			while (!(acpi_read_pm1_status(acpi_facp) & ACPI_WAK)) ;
-			// finished sleeping, update system time
-			acpi_update_clock();
-		}
+		// wait until S1 is entered
+		while (!(acpi_read_pm1_status(acpi_facp) & ACPI_WAK)) ;
+		// finished sleeping, update system time
+		acpi_update_clock();
+		acpi_enter_dx(ACPI_D0);
 	}
 }
 
@@ -1292,7 +1284,6 @@ static int acpi_do_sleep(ctl_table *ctl,
 	{
 #ifdef CONFIG_ACPI_S1_SLEEP
 		acpi_enter_sx(ACPI_S1);
-		acpi_enter_sx(ACPI_S0);
 #endif
 	}
 	file->f_pos += *len;

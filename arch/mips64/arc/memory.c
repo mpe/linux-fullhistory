@@ -13,7 +13,6 @@
  * because on some machines like SGI IP27 the ARC memory configuration data
  * completly bogus and alternate easier to use mechanisms are available.
  */
-#include <linux/config.h>
 #include <linux/init.h>
 #include <linux/kernel.h>
 #include <linux/types.h>
@@ -21,7 +20,6 @@
 #include <linux/mm.h>
 #include <linux/bootmem.h>
 #include <linux/swap.h>
-#include <linux/config.h>
 
 #include <asm/sgialib.h>
 #include <asm/page.h>

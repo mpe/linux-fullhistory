@@ -660,7 +660,7 @@ int Pci2000_Detect (Scsi_Host_Template *tpnt)
 		padapter = HOSTDATA(pshost);
 
 #if LINUX_VERSION_CODE > LINUXVERSION(2,1,92)
-		padapter->basePort = pdev->base_address[1] & 0xFFFE;
+		padapter->basePort = pci_resource_start (pdev, 1);
 #else
 		pcibios_read_config_word (pci_bus, pci_device_fn, PCI_BASE_ADDRESS_1, &padapter->basePort);
 		padapter->basePort &= 0xFFFE;

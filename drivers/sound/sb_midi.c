@@ -11,7 +11,6 @@
  * for more info.
  */
 
-#include <linux/config.h>
 #include "sound_config.h"
 
 #include "sb.h"

@@ -6,14 +6,21 @@
 
 #include <linux/config.h>
 
-#if defined(CONFIG_SA1100_EMPEG) || \
-    defined(CONFIG_SA1100_VICTOR) || \
-    defined(CONFIG_SA1100_LART)
+#if	defined(CONFIG_SA1100_EMPEG) || \
+	defined(CONFIG_SA1100_VICTOR) || \
+	defined(CONFIG_SA1100_LART)
+#define SERBASE _Ser3UTCR0;
+#elif	defined(CONFIG_SA1100_BRUTUS)
+#define SERBASE _Ser1UTCR0;
+#endif
+
+
+#ifdef SERBASE
 
 #include "hardware.h"
 #include "serial_reg.h"
 
-static volatile unsigned long* serial_port = (unsigned long*)_Ser3UTCR0;
+static volatile unsigned long* serial_port = (unsigned long*)SERBASE;
 
 /*
  * The following code assumes the serial port has already been
@@ -41,7 +48,7 @@ static void puts( const char *s )
 
 #else
 
-#define puts( x )
+static inline void puts( const char *s ) {}
 
 #endif
 

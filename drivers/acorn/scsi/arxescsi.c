@@ -24,8 +24,8 @@
 #include <linux/proc_fs.h>
 #include <linux/unistd.h>
 #include <linux/stat.h>
+#include <linux/delay.h>
 
-#include <asm/delay.h>
 #include <asm/dma.h>
 #include <asm/io.h>
 #include <asm/irq.h>

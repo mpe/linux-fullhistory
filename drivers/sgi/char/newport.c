@@ -12,7 +12,6 @@
 #include <asm/ng1.h>
 #include <asm/uaccess.h>
 #include <video/newport.h>
-#include <linux/config.h>
 #include <linux/module.h>
 
 struct newport_regs *npregs;

@@ -14,7 +14,6 @@
  * Thomas Sailer   : ioctl code reworked (vmalloc/vfree removed)
  * Alan Cox	   : reformatted and fixed a pair of null pointer bugs
  */
-#include <linux/config.h>
 #include <linux/kmod.h>
 
 #define SEQUENCER_C

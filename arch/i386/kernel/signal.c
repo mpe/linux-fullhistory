@@ -419,13 +419,19 @@ static void setup_frame(int sig, struct k_sigaction *ka,
 		           ? current->exec_domain->signal_invmap[sig]
 		           : sig),
 		          &frame->sig);
+	if (err)
+		goto give_sigsegv;
 
 	err |= setup_sigcontext(&frame->sc, &frame->fpstate, regs, set->sig[0]);
+	if (err)
+		goto give_sigsegv;
 
 	if (_NSIG_WORDS > 1) {
 		err |= __copy_to_user(frame->extramask, &set->sig[1],
 				      sizeof(frame->extramask));
 	}
+	if (err)
+		goto give_sigsegv;
 
 	/* Set up to return from userspace.  If provided, use a stub
 	   already in userspace.  */
@@ -486,6 +492,8 @@ static void setup_rt_frame(int sig, struct k_sigaction *ka, siginfo_t *info,
 	err |= __put_user(&frame->info, &frame->pinfo);
 	err |= __put_user(&frame->uc, &frame->puc);
 	err |= __copy_to_user(&frame->info, info, sizeof(*info));
+	if (err)
+		goto give_sigsegv;
 
 	/* Create the ucontext.  */
 	err |= __put_user(0, &frame->uc.uc_flags);
@@ -497,6 +505,8 @@ static void setup_rt_frame(int sig, struct k_sigaction *ka, siginfo_t *info,
 	err |= setup_sigcontext(&frame->uc.uc_mcontext, &frame->fpstate,
 			        regs, set->sig[0]);
 	err |= __copy_to_user(&frame->uc.uc_sigmask, set, sizeof(*set));
+	if (err)
+		goto give_sigsegv;
 
 	/* Set up to return from userspace.  If provided, use a stub
 	   already in userspace.  */

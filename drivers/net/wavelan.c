@@ -3726,7 +3726,7 @@ static void wavelan_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 	}
 
 	/* Release spinlock here so that wv_hw_reset() can grab it */
-	spin_unlock (&lp->lock);
+	spin_unlock (&lp->spinlock);
 
 	/* Check the state of the command unit. */
 	if (((status & SCB_ST_CNA) == SCB_ST_CNA) ||
@@ -4006,7 +4006,7 @@ static int __init wavelan_config(device * dev)
 	lp->mc_count = 0;
 
 	/* Init spinlock */
-	spin_lock_init(&lp->lock);
+	spin_lock_init(&lp->spinlock);
 
 	/*
 	 * Fill in the fields of the device structure

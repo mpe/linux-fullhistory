@@ -53,6 +53,7 @@ typedef struct {
 	".section .text.lock,\"ax\"\n" \
 	"2:\t" \
 	"testb $1,%0\n\t" \
+	"rep;nop\n\t" \
 	"jne 2b\n\t" \
 	"jmp 1b\n" \
 	".previous"

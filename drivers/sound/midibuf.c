@@ -13,7 +13,6 @@
 /*
  * Thomas Sailer   : ioctl code reworked (vmalloc/vfree removed)
  */
-#include <linux/config.h>
 #include <linux/stddef.h>
 #include <linux/kmod.h>
 

@@ -10,37 +10,35 @@
 #
 
 O_TARGET 	:= acorn-char.o
-M_OBJS   	:=
-O_OBJS   	:= i2c.o pcf8583.o
 
-O_OBJS_arc	:= keyb_arc.o
-O_OBJS_a5k	:= keyb_arc.o
-O_OBJS_rpc	:= keyb_ps2.o
+O_OBJS		:=
+OX_OBJS		:=
+M_OBJS		:=
+MX_OBJS		:=
 
-ifeq ($(CONFIG_RPCMOUSE),y)
-  OX_OBJS += mouse_rpc.o
-else
-  ifeq ($(CONFIG_RPCSMOUSE),m)
-    MX_OBJS += mouse_rpc.o
-  endif
-endif
+# Object file lists.
 
-ifeq ($(CONFIG_ATOMWIDE_SERIAL),y)
-  O_OBJS += serial-atomwide.o
-else
-  ifeq ($(CONFIG_ATOMWIDE_SERIAL),m)
-    O_OBJS += serial-atomwide.o
-  endif
-endif
+obj-y   	:= i2c.o pcf8583.o
+obj-m		:=
+obj-n		:=
+obj-		:=
 
-ifeq ($(CONFIG_DUALSP_SERIAL),y)
-  O_OBJS += serial-dualsp.o
-else
-  ifeq ($(CONFIG_DUALSP_SERIAL),m)
-    M_OBJS += serial-dualsp.o
-  endif
-endif
+# All the objects that export symbols.
+export-objs	:= mouse_rpc.o
 
-O_OBJS += $(O_OBJS_$(MACHINE))
+obj-arc		:= keyb_arc.o
+obj-a5k		:= keyb_arc.o
+obj-rpc		:= keyb_ps2.o
+
+obj-$(CONFIG_RPCMOUSE)		+= mouse_rpc.o
+obj-$(CONFIG_ATOMWIDE_SERIAL)	+= serial-atomwide.o
+obj-$(CONFIG_DUALSP_SERIAL)	+= serial-dualsp.o
+
+obj-y		+= $(obj-$(MACHINE))
+
+O_OBJS		:= $(filter-out $(export-objs), $(obj-y))
+OX_OBJS		:= $(filter     $(export-objs), $(obj-y))
+M_OBJS		:= $(sort $(filter-out $(export-objs), $(obj-m)))
+MX_OBJS		:= $(sort $(filter     $(export-objs), $(obj-m)))
 
 include $(TOPDIR)/Rules.make

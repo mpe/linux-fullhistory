@@ -6,8 +6,8 @@
  * This file should only be included by drivers/parport/parport_pc.c.
  */
 
-#ifndef __ASM_ARM_PARPORT_H
-#define __ASM_ARM_PARPORT_H
+#ifndef __ASMARM_PARPORT_H
+#define __ASMARM_PARPORT_H
 
 #include <linux/config.h>
 
@@ -26,8 +26,11 @@
 #endif
 
 static int __maybe_init parport_pc_init_pci(int irq, int dma);
+static int __devinit parport_pc_init_superio(void);
 
 static int user_specified __maybe_initdata = 0;
+
+
 int __init
 parport_pc_init(int *io, int *io_hi, int *irq, int *dma)
 {
@@ -43,7 +46,9 @@ parport_pc_init(int *io, int *io_hi, int *irq, int *dma)
 				count++;
 		} while (*io && (++i < PARPORT_PC_MAX_PORTS));
 	} else {
+#ifdef CONFIG_PCI
 		count += parport_pc_init_superio ();
+#endif
 
 		/* Probe all the likely ports. */
 		if (parport_pc_probe_port(0x3bc, 0x7bc, irq[0], dma[0], NULL))
@@ -52,10 +57,12 @@ parport_pc_init(int *io, int *io_hi, int *irq, int *dma)
 			count++;
 		if (parport_pc_probe_port(0x278, 0x678, irq[0], dma[0], NULL))
 			count++;
+#ifdef CONFIG_PCI
 		count += parport_pc_init_pci (irq[0], dma[0]);
+#endif
 	}
 
         return count;
 }
 
-#endif /* !(_ASM_I386_PARPORT_H) */
+#endif /* !(_ASMARM_PARPORT_H) */

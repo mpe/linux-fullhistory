@@ -22,12 +22,19 @@
  * adhering to the above criteria.
  */
 #include <linux/linkage.h>
+#include <linux/config.h>
 
 #include <asm/assembler.h>
 #include <asm/errno.h>
 #include <asm/hardware.h>
 
 #include "../lib/constants.h"
+
+		.macro	zero_fp
+#ifdef CONFIG_FRAME_POINTER
+		mov	fp, #0
+#endif
+		.endm
 
 		.text
 
@@ -213,7 +220,7 @@ irq_prio_h:	.byte	 0, 8, 9, 8,10,10,10,10,11,11,11,11,10,10,10,10
 		stmfd	sp!, {r0 - r12}		;\
 		mov	r0, #-1			;\
 		str	r0, [sp, #S_OLD_R0]	;\
-		mov	fp, #0
+		zero_fp
 
 #define SVC_IRQ_SAVE_ALL			\
 		str	sp, [sp, #-16]!		;\
@@ -224,7 +231,7 @@ irq_prio_h:	.byte	 0, 8, 9, 8,10,10,10,10,11,11,11,11,10,10,10,10
 		stmfd	sp!, {r0 - r12}		;\
 		mov	r0, #-1			;\
 		str	r0, [sp, #S_OLD_R0]	;\
-		mov	fp, #0
+		zero_fp
 
 #define SVC_RESTORE_ALL				\
 		ldmfd	sp, {r0 - pc}^
@@ -261,7 +268,7 @@ vector_undefinstr:
 		tst	lr,#3
 		bne	__und_svc
 		save_user_regs
-		mov	fp, #0
+		zero_fp
 		teqp	pc, #I_BIT | MODE_SVC
 .Lbug_undef:
 		ldr	r4, .LC2
@@ -283,6 +290,10 @@ __und_svc:	SVC_SAVE_ALL				@ Non-user mode
 		bl	SYMBOL_NAME(do_undefinstr)
 		SVC_RESTORE_ALL
 
+#ifdef CONFIG_NWFPE
+		/* The FPE is always present */
+		.equ	fpe_not_present, 0
+#else
 /* We get here if an undefined instruction happens and the floating
  * point emulator is not present.  If the offending instruction was
  * a WFS, we just perform a normal return as if we had emulated the
@@ -319,6 +330,7 @@ wfs_mask_data:	.word	0x0e200110			@ WFS/RFS
 		.word	0x0d0d0100			@ LDF [sp]/STF [sp]
 		.word	0x0d0b0100			@ LDF [fp]/STF [fp]
 		.word	0x0f0f0f00
+#endif
 
 .LC2:		.word	SYMBOL_NAME(fp_enter)
 
@@ -686,7 +698,7 @@ ENTRY(__switch_to)
 /*
  * initialise the trap system
  */
-ENTRY(trap_init)
+ENTRY(__trap_init)
 		stmfd	sp!, {r4 - r7, lr}
 		adr	r1, .Ljump_addresses
 		ldmia	r1, {r1 - r7, ip, lr}

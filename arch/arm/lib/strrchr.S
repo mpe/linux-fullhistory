@@ -12,7 +12,7 @@
 
 		.text
 ENTRY(strrchr)
-		stmfd	sp!, {lr}
+		str	lr, [sp, #-4]!
 		mov	r3, #0
 1:		ldrb	r2, [r0], #1
 		teq	r2, r1

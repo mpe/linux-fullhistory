@@ -3583,7 +3583,7 @@ static void DAC960_DestroyProcEntries(void)
 
 int init_module(void)
 {
-  int ControllerNumber, LogicalDriveNumber;
+  int ControllerNumber;
   DAC960_Initialize();
   if (DAC960_ActiveControllerCount == 0) return -1;
   for (ControllerNumber = 0;

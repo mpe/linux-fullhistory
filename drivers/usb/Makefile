@@ -47,7 +47,7 @@ obj-$(CONFIG_USB_OHCI)		+= usb-ohci.o
 obj-$(CONFIG_USB_MOUSE)		+= usbmouse.o input.o
 obj-$(CONFIG_USB_HID)		+= hid.o input.o
 obj-$(CONFIG_USB_KBD)		+= usbkbd.o input.o
-obj-$(CONFIG_USB_GRAPHIRE)	+= graphire.o input.o
+obj-$(CONFIG_USB_WACOM)		+= wacom.o input.o
 obj-$(CONFIG_USB_WMFORCE)	+= wmforce.o input.o
 obj-$(CONFIG_INPUT_KEYBDEV)	+= keybdev.o input.o
 obj-$(CONFIG_INPUT_MOUSEDEV)	+= mousedev.o input.o
@@ -67,6 +67,7 @@ obj-$(CONFIG_USB_USS720)	+= uss720.o
 obj-$(CONFIG_USB_DABUSB)	+= dabusb.o
 obj-$(CONFIG_USB_PLUSB)		+= plusb.o
 obj-$(CONFIG_USB_OV511)		+= ov511.o
+obj-$(CONFIG_USB_PEGASUS)	+= pegasus.o
 
 # Extract lists of the multi-part drivers.
 # The 'int-*' lists are the intermediate files used to build the multi's.

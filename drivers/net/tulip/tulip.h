@@ -50,7 +50,6 @@ enum chips {
 	DC21140 = 2,
 	DC21142 = 3, DC21143 = 3,
 	LC82C168,
-	NGMC169,
 	MX98713,
 	MX98715,
 	MX98725,
@@ -242,8 +241,10 @@ struct mediainfo {
 struct tulip_private {
 	const char *product_name;
 	struct net_device *next_module;
-	struct tulip_rx_desc rx_ring[RX_RING_SIZE];
-	struct tulip_tx_desc tx_ring[TX_RING_SIZE];
+	struct tulip_rx_desc *rx_ring;
+	struct tulip_tx_desc *tx_ring;
+	dma_addr_t rx_ring_dma;
+	dma_addr_t tx_ring_dma;
 	/* The saved address of a sent-in-place packet/buffer, for skfree(). */
 	struct sk_buff *tx_skbuff[TX_RING_SIZE];
 	/* The addresses of receive-in-place skbuffs. */

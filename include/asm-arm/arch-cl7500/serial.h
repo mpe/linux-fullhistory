@@ -20,10 +20,12 @@
  */
 #define BASE_BAUD (1843200 / 16)
 
+#define RS_TABLE_SIZE	16
+
 #define STD_COM_FLAGS (ASYNC_BOOT_AUTOCONF | ASYNC_SKIP_TEST)
 
      /* UART CLK        PORT  IRQ     FLAGS        */
-#define SERIAL_PORT_DFNS \
+#define STD_SERIAL_PORT_DEFNS \
 	{ 0, BASE_BAUD, 0x3F8, 10, STD_COM_FLAGS },	/* ttyS0 */	\
 	{ 0, BASE_BAUD, 0x2F8, 10, STD_COM_FLAGS },	/* ttyS1 */	\
 	{ 0, BASE_BAUD, 0x804002e8,  41, STD_COM_FLAGS },	/* ttyS2 */	\
@@ -38,5 +40,7 @@
 	{ 0, BASE_BAUD, 0    ,  0, STD_COM_FLAGS },	/* ttyS11 */	\
 	{ 0, BASE_BAUD, 0    ,  0, STD_COM_FLAGS },	/* ttyS12 */	\
 	{ 0, BASE_BAUD, 0    ,  0, STD_COM_FLAGS },	/* ttyS13 */
+
+#define EXTRA_SERIAL_PORT_DEFNS
 
 #endif

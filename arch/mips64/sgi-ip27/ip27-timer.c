@@ -148,13 +148,10 @@ void do_settimeofday(struct timeval *tv)
 }
 
 /* Includes for ioc3_init().  */
-#include <linux/init.h>
 #include <asm/sn/types.h>
 #include <asm/sn/sn0/addrs.h>
 #include <asm/sn/sn0/hubni.h>
 #include <asm/sn/sn0/hubio.h>
-#include <asm/sn/klconfig.h>
-#include <asm/ioc3.h>
 #include <asm/pci/bridge.h>
 
 /* Converts Gregorian date to seconds since 1970-01-01 00:00:00.

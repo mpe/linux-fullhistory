@@ -1242,12 +1242,12 @@ static void elp_set_mc_list(struct net_device *dev)
 	adapter->got[CMD_CONFIGURE_82586] = 0;
 	if (!send_pcb(dev, &adapter->tx_pcb))
 	{
-		spin_unlock_irqrestore(&lp->lock, flags);
+		spin_unlock_irqrestore(&adapter->lock, flags);
 		printk("%s: couldn't send 82586 configure command\n", dev->name);
 	}
 	else {
 		int timeout = jiffies + TIMEOUT;
-		spin_unlock_irqrestore(&lp->lock, flags);
+		spin_unlock_irqrestore(&adapter->lock, flags);
 		while (adapter->got[CMD_CONFIGURE_82586] == 0 && time_before(jiffies, timeout));
 		if (time_after_eq(jiffies, timeout))
 			TIMEOUT_MSG(__LINE__);

@@ -65,14 +65,15 @@ static unsigned char hid_keyboard[256] = {
 	 65, 66, 67, 68, 87, 88, 99, 70,119,110,102,104,111,107,109,106,
 	105,108,103, 69, 98, 55, 74, 78, 96, 79, 80, 81, 75, 76, 77, 71,
 	 72, 73, 82, 83, 86,127,116,117, 85, 89, 90, 91, 92, 93, 94, 95,
-	120,121,122,123,unk,138,unk,unk,128,129,131,137,133,135,136,113,
+	120,121,122,123,134,138,130,132,128,129,131,137,133,135,136,113,
 	115,114,unk,unk,unk,unk,unk,124,unk,unk,unk,unk,unk,unk,unk,unk,
 	unk,unk,unk,unk,unk,unk,unk,unk,unk,unk,unk,unk,unk,unk,unk,unk,
 	unk,unk,unk,unk,unk,unk,unk,unk,unk,unk,unk,unk,unk,unk,unk,unk,
 	unk,unk,unk,unk,unk,unk,unk,unk,unk,unk,unk,unk,unk,unk,unk,unk,
-	134,130,132,unk,unk,unk,unk,unk,unk,unk,unk,unk,unk,unk,unk,unk,
 	unk,unk,unk,unk,unk,unk,unk,unk,unk,unk,unk,unk,unk,unk,unk,unk,
-	 29, 42, 56,125, 97, 54,100,126
+	unk,unk,unk,unk,unk,unk,unk,unk,unk,unk,unk,unk,unk,unk,unk,unk,
+	 29, 42, 56,125, 97, 54,100,126,164,166,165,163,161,115,114,113,
+	150,158,159,128,136,177,178,176,142,152,173,140,unk,unk,unk,unk
 };
 
 static struct {
@@ -728,14 +729,16 @@ static void hid_configure_usage(struct hid_device *device, struct hid_field *fie
 
 		case HID_UP_KEYBOARD:
 
+			set_bit(EV_REP, input->evbit);
+			usage->type = EV_KEY; bit = input->keybit; max = KEY_MAX;
+
 			if ((usage->hid & HID_USAGE) < 256) {
 				if (!(usage->code = hid_keyboard[usage->hid & HID_USAGE]))
 					return;
+				clear_bit(usage->code, bit);
 			} else
 				usage->code = KEY_UNKNOWN;
 
-			set_bit(EV_REP, input->evbit);
-			usage->type = EV_KEY; bit = input->keybit; max = KEY_MAX;
 			break; 
 
 		case HID_UP_BUTTON:

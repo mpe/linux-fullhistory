@@ -11,6 +11,7 @@
 #include <linux/malloc.h>
 #include <linux/binfmts.h>
 #include <linux/init.h>
+#include <linux/smp_lock.h>
 
 static int do_load_script(struct linux_binprm *bprm,struct pt_regs *regs)
 {
@@ -27,7 +28,9 @@ static int do_load_script(struct linux_binprm *bprm,struct pt_regs *regs)
 	 */
 
 	bprm->sh_bang++;
+	lock_kernel();
 	dput(bprm->dentry);
+	unlock_kernel();
 	bprm->dentry = NULL;
 
 	bprm->buf[127] = '\0';
@@ -78,7 +81,9 @@ static int do_load_script(struct linux_binprm *bprm,struct pt_regs *regs)
 	/*
 	 * OK, now restart the process with the interpreter's dentry.
 	 */
+	lock_kernel();
 	dentry = open_namei(interp, 0, 0);
+	unlock_kernel();
 	if (IS_ERR(dentry))
 		return PTR_ERR(dentry);
 

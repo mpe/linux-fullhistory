@@ -192,16 +192,9 @@ static int rtc_release(struct inode *inode, struct file *file)
  */
 
 static struct file_operations rtc_fops = {
-	NULL,		/* No llseek (yet) */
-	NULL,		/* No read (yet) */
-	NULL,		/* No write */
-	NULL,		/* No readdir */
-	NULL,		/* No poll (yet) */
-	rtc_ioctl,
-	NULL,		/* No mmap */
-	rtc_open,
-	NULL,		/* flush */
-	rtc_release
+	ioctl:		rtc_ioctl,
+	open:		rtc_open,
+	release:	rtc_release,
 };
 
 static struct miscdevice rtc_dev=

@@ -243,9 +243,12 @@ extern void ide_init_sis5513(ide_hwif_t *);
 
 #ifdef CONFIG_BLK_DEV_SL82C105
 extern void ide_init_sl82c105(ide_hwif_t *);
+extern void ide_dmacapable_sl82c105(ide_hwif_t *, unsigned long);
 #define INIT_W82C105	&ide_init_sl82c105
+#define DMA_W82C105	&ide_dmacapable_sl82c105
 #else
 #define INIT_W82C105	IDE_IGNORE
+#define DMA_W82C105	NULL
 #endif
 
 #ifdef CONFIG_BLK_DEV_TRM290
@@ -316,7 +319,7 @@ static ide_pci_device_t ide_pci_chipsets[] __initdata = {
 	{DEVID_TRM290,	"TRM290",	NULL,		NULL,		INIT_TRM290,	NULL,		{{0x00,0x00,0x00}, {0x00,0x00,0x00}}, 	ON_BOARD,	0 },
 	{DEVID_NS87415,	"NS87415",	NULL,		NULL,		INIT_NS87415,	NULL,		{{0x00,0x00,0x00}, {0x00,0x00,0x00}}, 	ON_BOARD,	0 },
 	{DEVID_AEC6210,	"AEC6210",	PCI_AEC6210,	NULL,		INIT_AEC6210,	DMA_AEC6210,	{{0x00,0x00,0x00}, {0x00,0x00,0x00}}, 	OFF_BOARD,	0 },
-	{DEVID_W82C105,	"W82C105",	NULL,		NULL,		INIT_W82C105,	NULL,		{{0x40,0x01,0x01}, {0x40,0x10,0x10}}, 	ON_BOARD,	0 },
+	{DEVID_W82C105,	"W82C105",	NULL,		NULL,		INIT_W82C105,	DMA_W82C105,	{{0x40,0x01,0x01}, {0x40,0x10,0x10}}, 	ON_BOARD,	0 },
 	{DEVID_UM8673F,	"UM8673F",	NULL,		NULL,		NULL,		NULL,		{{0x00,0x00,0x00}, {0x00,0x00,0x00}},	ON_BOARD,	0 },
 	{DEVID_UM8886A,	"UM8886A",	NULL,		NULL,		NULL,		NULL,		{{0x00,0x00,0x00}, {0x00,0x00,0x00}},	ON_BOARD,	0 },
 	{DEVID_UM8886BF,"UM8886BF",	NULL,		NULL,		NULL,		NULL,		{{0x00,0x00,0x00}, {0x00,0x00,0x00}}, 	ON_BOARD,	0 },

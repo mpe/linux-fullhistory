@@ -19,7 +19,6 @@
 #include <asm/sn/klconfig.h>
 #include <asm/ioc3.h>
 #include <asm/mipsregs.h>
-#include <asm/sn/klconfig.h>
 
 /* Check against user dumbness.  */
 #ifdef CONFIG_VT

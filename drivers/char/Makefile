@@ -251,6 +251,7 @@ obj-$(CONFIG_RADIO_ZOLTRIX) += radio-zoltrix.o
 obj-$(CONFIG_RADIO_MIROPCM20) += radio-miropcm20.o
 obj-$(CONFIG_RADIO_GEMTEK) += radio-gemtek.o
 obj-$(CONFIG_RADIO_TRUST) += radio-trust.o
+obj-$(CONFIG_TUNER_3036) += tuner-3036.o
 obj-$(CONFIG_QIC02_TAPE) += tpqic02.o
 
 ifeq ($(CONFIG_FTAPE),y)

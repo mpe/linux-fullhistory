@@ -106,7 +106,7 @@ struct pm_dev
 	struct list_head entry;
 };
 
-#if defined(CONFIG_ACPI) || defined(CONFIG_APM) || defined(CONFIG_APM_MODULE)
+#ifdef CONFIG_PM
 
 extern int pm_active;
 
@@ -147,7 +147,7 @@ struct pm_dev *pm_find(pm_dev_t type, struct pm_dev *from);
 extern inline void pm_access(struct pm_dev *dev) {}
 extern inline void pm_dev_idle(struct pm_dev *dev) {}
 
-#else /* CONFIG_ACPI || CONFIG_APM || CONFIG_APM_MODULE */
+#else /* CONFIG_PM */
 
 #define PM_IS_ACTIVE() 0
 
@@ -180,7 +180,7 @@ extern inline struct pm_dev *pm_find(pm_dev_t type, struct pm_dev *from)
 extern inline void pm_access(struct pm_dev *dev) {}
 extern inline void pm_dev_idle(struct pm_dev *dev) {}
 
-#endif /* CONFIG_ACPI || CONFIG_APM || CONFIG_APM_MODULE */
+#endif /* CONFIG_PM */
 
 extern void (*pm_idle)(void);
 extern void (*pm_power_off)(void);

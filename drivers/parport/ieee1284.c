@@ -165,6 +165,7 @@ int parport_wait_peripheral(struct parport *port,
 /* Terminate a negotiated mode. */
 static void parport_ieee1284_terminate (struct parport *port)
 {
+	int r;
 	port = port->physport;
 
 	/* EPP terminates differently. */
@@ -199,9 +200,12 @@ static void parport_ieee1284_terminate (struct parport *port)
 					      | PARPORT_CONTROL_AUTOFD);
 
 			/* Event 49: PError goes high */
-			parport_wait_peripheral (port,
-						 PARPORT_STATUS_PAPEROUT,
-						 PARPORT_STATUS_PAPEROUT);
+			r = parport_wait_peripheral (port,
+						     PARPORT_STATUS_PAPEROUT,
+						     PARPORT_STATUS_PAPEROUT);
+			if (r)
+				DPRINTK (KERN_INFO "%s: Timeout at event 49\n",
+					 port->name);
 
 			parport_data_forward (port);
 			DPRINTK (KERN_DEBUG "%s: ECP direction: forward\n",
@@ -221,7 +225,10 @@ static void parport_ieee1284_terminate (struct parport *port)
 				      PARPORT_CONTROL_SELECT);
 
 		/* Event 24: nAck goes low */
-		parport_wait_peripheral (port, PARPORT_STATUS_ACK, 0);
+		r = parport_wait_peripheral (port, PARPORT_STATUS_ACK, 0);
+		if (r)
+			DPRINTK (KERN_INFO "%s: Timeout at event 24\n",
+				 port->name);
 
 		/* Event 25: Set nAutoFd low */
 		parport_frob_control (port,
@@ -229,9 +236,12 @@ static void parport_ieee1284_terminate (struct parport *port)
 				      PARPORT_CONTROL_AUTOFD);
 
 		/* Event 27: nAck goes high */
-		parport_wait_peripheral (port,
-					 PARPORT_STATUS_ACK, 
-					 PARPORT_STATUS_ACK);
+		r = parport_wait_peripheral (port,
+					     PARPORT_STATUS_ACK, 
+					     PARPORT_STATUS_ACK);
+		if (r)
+			DPRINTK (KERN_INFO "%s: Timeout at event 27\n",
+				 port->name);
 
 		/* Event 29: Set nAutoFd high */
 		parport_frob_control (port, PARPORT_CONTROL_AUTOFD, 0);
@@ -260,6 +270,7 @@ int parport_negotiate (struct parport *port, int mode)
 	return -1;
 #else
 	int m = mode & ~IEEE1284_ADDR;
+	int r;
 	unsigned char xflag;
 
 	port = port->physport;
@@ -367,7 +378,7 @@ int parport_negotiate (struct parport *port, int mode)
 	/* xflag should be high for all modes other than nibble (0). */
 	if (mode && !xflag) {
 		/* Mode not supported. */
-		DPRINTK (KERN_DEBUG "%s: Mode 0x%02x not supported\n",
+		DPRINTK (KERN_DEBUG "%s: Mode 0x%02x rejected by peripheral\n",
 			 port->name, mode);
 		parport_ieee1284_terminate (port);
 		return 1;
@@ -434,7 +445,7 @@ int parport_negotiate (struct parport *port, int mode)
 	port->ieee1284.mode = mode;
 
 	/* But ECP is special */
-	if (!(mode & IEEE1284_EXT_LINK) && (mode & IEEE1284_MODE_ECP)) {
+	if (!(mode & IEEE1284_EXT_LINK) && (m & IEEE1284_MODE_ECP)) {
 		port->ieee1284.phase = IEEE1284_PH_ECP_SETUP;
 
 		/* Event 30: Set nAutoFd low */
@@ -443,10 +454,11 @@ int parport_negotiate (struct parport *port, int mode)
 				      PARPORT_CONTROL_AUTOFD);
 
 		/* Event 31: PError goes high. */
-		parport_wait_peripheral (port,
-					 PARPORT_STATUS_PAPEROUT,
-					 PARPORT_STATUS_PAPEROUT);
-		/* (Should check that this works..) */
+		r = parport_wait_peripheral (port,
+					     PARPORT_STATUS_PAPEROUT,
+					     PARPORT_STATUS_PAPEROUT);
+		if (r)
+			DPRINTK (KERN_INFO "%s: Timeout at event 31\n");
 
 		port->ieee1284.phase = IEEE1284_PH_FWD_IDLE;
 		DPRINTK (KERN_DEBUG "%s: ECP direction: forward\n",

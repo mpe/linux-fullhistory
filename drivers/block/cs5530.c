@@ -8,6 +8,7 @@
  * by the nice folks at National Semiconductor.
  */
 
+#include <linux/config.h>
 #include <linux/types.h>
 #include <linux/kernel.h>
 #include <linux/delay.h>

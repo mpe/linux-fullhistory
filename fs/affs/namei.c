@@ -21,6 +21,8 @@
 
 #include <linux/errno.h>
 
+extern struct inode_operations affs_symlink_inode_operations;
+
 /* Simple toupper() for DOS\1 */
 
 static unsigned int

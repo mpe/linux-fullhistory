@@ -326,6 +326,7 @@ static int swap_out(unsigned int priority, int gfp_mask)
 	struct task_struct * p;
 	int counter;
 	int __ret = 0;
+	int assign = 0;
 
 	lock_kernel();
 	/* 
@@ -345,12 +346,9 @@ static int swap_out(unsigned int priority, int gfp_mask)
 	counter = nr_threads / (priority+1);
 	if (counter < 1)
 		counter = 1;
-	if (counter > nr_threads)
-		counter = nr_threads;
 
 	for (; counter >= 0; counter--) {
-		int assign = 0;
-		int max_cnt = 0;
+		unsigned long max_cnt = 0;
 		struct mm_struct *best = NULL;
 		int pid = 0;
 	select:
@@ -363,7 +361,7 @@ static int swap_out(unsigned int priority, int gfp_mask)
 	 		if (mm->rss <= 0)
 				continue;
 			/* Refresh swap_cnt? */
-			if (assign)
+			if (assign == 1)
 				mm->swap_cnt = mm->rss;
 			if (mm->swap_cnt > max_cnt) {
 				max_cnt = mm->swap_cnt;
@@ -372,6 +370,8 @@ static int swap_out(unsigned int priority, int gfp_mask)
 			}
 		}
 		read_unlock(&tasklist_lock);
+		if (assign == 1)
+			assign = 2;
 		if (!best) {
 			if (!assign) {
 				assign = 1;

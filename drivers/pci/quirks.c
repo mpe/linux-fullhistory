@@ -113,6 +113,55 @@ static void __init quirk_s3_64M(struct pci_dev *dev)
 	}
 }
 
+static void __init quirk_io_region(struct pci_dev *dev, unsigned region, unsigned size, int nr)
+{
+	region &= ~(size-1);
+	if (region) {
+		struct resource *res = dev->resource + nr;
+
+		res->name = dev->name;
+		res->start = region;
+		res->end = region + size - 1;
+		res->flags = IORESOURCE_IO;
+		pci_claim_resource(dev, nr);
+	}
+}	
+
+/*
+ * Let's make the southbridge information explicit instead
+ * of having to worry about people probing the ACPI areas,
+ * for example.. (Yes, it happens, and if you read the wrong
+ * ACPI register it will put the machine to sleep with no
+ * way of waking it up again. Bummer).
+ *
+ * ALI M7101: Two IO regions pointed to by words at
+ *	0xE0 (64 bytes of ACPI registers)
+ *	0xE2 (32 bytes of SMB registers)
+ */
+static void __init quirk_ali7101(struct pci_dev *dev)
+{
+	u16 region;
+
+	pci_read_config_word(dev, 0xE0, &region);
+	quirk_io_region(dev, region, 64, PCI_BRIDGE_RESOURCES);
+	pci_read_config_word(dev, 0xE2, &region);
+	quirk_io_region(dev, region, 32, PCI_BRIDGE_RESOURCES+1);
+}
+
+/*
+ * PIIX4 ACPI: Two IO regions pointed to by longwords at
+ *	0x40 (64 bytes of ACPI registers)
+ *	0x90 (32 bytes of SMB registers)
+ */
+static void __init quirk_piix4acpi(struct pci_dev *dev)
+{
+	u32 region;
+
+	pci_read_config_dword(dev, 0x40, &region);
+	quirk_io_region(dev, region, 64, PCI_BRIDGE_RESOURCES);
+	pci_read_config_dword(dev, 0x90, &region);
+	quirk_io_region(dev, region, 32, PCI_BRIDGE_RESOURCES+1);
+}
 
 /*
  *  The main table of quirks.
@@ -143,6 +192,8 @@ static struct pci_fixup pci_fixups[] __initdata = {
 	{ PCI_FIXUP_FINAL,	PCI_VENDOR_ID_INTEL, 	PCI_DEVICE_ID_INTEL_82443BX_2, 	quirk_natoma },
 	{ PCI_FIXUP_FINAL,	PCI_VENDOR_ID_SI,	PCI_DEVICE_ID_SI_5597,		quirk_nopcipci },
 	{ PCI_FIXUP_FINAL,	PCI_VENDOR_ID_SI,	PCI_DEVICE_ID_SI_496,		quirk_nopcipci },
+	{ PCI_FIXUP_FINAL,	PCI_VENDOR_ID_INTEL,	PCI_DEVICE_ID_INTEL_82371AB_3,	quirk_piix4acpi },
+	{ PCI_FIXUP_FINAL,	PCI_VENDOR_ID_AL,	PCI_DEVICE_ID_AL_M7101,		quirk_ali7101 },
 	{ 0 }
 };
 

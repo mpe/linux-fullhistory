@@ -234,11 +234,15 @@ struct input_event {
 #define KEY_RECORD		167		
 #define KEY_REWIND		168		
 #define KEY_PHONE		169
+
 #define KEY_CONFIG		171
 #define KEY_HOMEPAGE		172
 #define KEY_REFRESH		173
 #define KEY_EXIT		174
 #define KEY_MOVE		175
+#define KEY_EDIT		176
+#define KEY_SCROLLUP		177
+#define KEY_SCROLLDOWN		178
 
 #define KEY_UNKNOWN		180
 
@@ -339,7 +343,9 @@ struct input_event {
 #define ABS_HAT3Y		0x17
 #define ABS_PRESSURE		0x18
 #define ABS_DISTANCE		0x19
-#define ABS_MISC		0x1a
+#define ABS_TILT_X		0x1a
+#define ABS_TILT_Y		0x1b
+#define ABS_MISC		0x1c
 #define ABS_MAX			0x1f
 
 /*
@@ -442,11 +448,6 @@ struct input_handle {
 	struct input_handle *hnext;
 };
 
-int keybdev_init(void);
-int mousedev_init(void);
-int joydev_init(void);
-int evdev_init(void);
-
 void input_register_device(struct input_dev *);
 void input_unregister_device(struct input_dev *);
 
@@ -459,6 +460,7 @@ void input_close_device(struct input_handle *);
 void input_event(struct input_dev *dev, unsigned int type, unsigned int code, int value);
 
 #define input_report_key(a,b,c) input_event(a, EV_KEY, b, c)
+#define input_report_btn(a,b,c) input_event(a, EV_KEY, b, !!(c))
 #define input_report_rel(a,b,c) input_event(a, EV_REL, b, c)
 #define input_report_abs(a,b,c) input_event(a, EV_ABS, b, c)
 

@@ -6,6 +6,7 @@
  *
  * $Id: printf.c,v 1.3 1999/10/09 00:00:57 ralf Exp $
  */
+#include <linux/config.h>
 #include <linux/init.h>
 #include <linux/kernel.h>
 

@@ -277,13 +277,13 @@ void put_dirty_page(struct task_struct * tsk, struct page *page, unsigned long a
 	pmd = pmd_alloc(pgd, address);
 	if (!pmd) {
 		__free_page(page);
-		oom(tsk);
+		force_sig(SIGKILL, tsk);
 		return;
 	}
 	pte = pte_alloc(pmd, address);
 	if (!pte) {
 		__free_page(page);
-		oom(tsk);
+		force_sig(SIGKILL, tsk);
 		return;
 	}
 	if (!pte_none(*pte)) {
@@ -738,14 +738,18 @@ int search_binary_handler(struct linux_binprm *bprm,struct pt_regs *regs)
 		char * dynloader[] = { "/sbin/loader" };
 		struct dentry * dentry;
 
+		lock_kernel();
 		dput(bprm->dentry);
+		unlock_kernel();
 		bprm->dentry = NULL;
 
 	        bprm_loader.p = PAGE_SIZE*MAX_ARG_PAGES-sizeof(void *);
 	        for (i = 0 ; i < MAX_ARG_PAGES ; i++)	/* clear page-table */
                     bprm_loader.page[i] = NULL;
 
+		lock_kernel();
 		dentry = open_namei(dynloader[0], 0, 0);
+		unlock_kernel();
 		retval = PTR_ERR(dentry);
 		if (IS_ERR(dentry))
 			return retval;
@@ -766,8 +770,11 @@ int search_binary_handler(struct linux_binprm *bprm,struct pt_regs *regs)
 				continue;
 			retval = fn(bprm, regs);
 			if (retval >= 0) {
-				if (bprm->dentry)
+				if (bprm->dentry) {
+					lock_kernel();
 					dput(bprm->dentry);
+					unlock_kernel();
+				}
 				bprm->dentry = NULL;
 				current->did_exec = 1;
 				return retval;
@@ -810,7 +817,10 @@ int do_execve(char * filename, char ** argv, char ** envp, struct pt_regs * regs
 	bprm.p = PAGE_SIZE*MAX_ARG_PAGES-sizeof(void *);
 	memset(bprm.page, 0, MAX_ARG_PAGES*sizeof(bprm.page[0])); 
 
+	lock_kernel();
 	dentry = open_namei(filename, 0, 0);
+	unlock_kernel();
+
 	retval = PTR_ERR(dentry);
 	if (IS_ERR(dentry))
 		return retval;
@@ -821,12 +831,16 @@ int do_execve(char * filename, char ** argv, char ** envp, struct pt_regs * regs
 	bprm.loader = 0;
 	bprm.exec = 0;
 	if ((bprm.argc = count(argv, bprm.p / sizeof(void *))) < 0) {
+		lock_kernel();
 		dput(dentry);
+		unlock_kernel();
 		return bprm.argc;
 	}
 
 	if ((bprm.envc = count(envp, bprm.p / sizeof(void *))) < 0) {
+		lock_kernel();
 		dput(dentry);
+		unlock_kernel();
 		return bprm.envc;
 	}
 
@@ -854,8 +868,11 @@ int do_execve(char * filename, char ** argv, char ** envp, struct pt_regs * regs
 
 out:
 	/* Something went wrong, return the inode and free the argument pages*/
-	if (bprm.dentry)
+	if (bprm.dentry) {
+		lock_kernel();
 		dput(bprm.dentry);
+		unlock_kernel();
+	}
 
 	/* Assumes that free_page() can take a NULL argument. */ 
 	/* I hope this is ok for all architectures */ 

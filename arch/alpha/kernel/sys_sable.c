@@ -30,7 +30,7 @@
 #include "pci_impl.h"
 #include "machvec_impl.h"
 
-spinlock_t sable_irq_lock = SPIN_LOCK_UNLOCKED:
+spinlock_t sable_irq_lock = SPIN_LOCK_UNLOCKED;
 
 /*
  *   For SABLE, which is really baroque, we manage 40 IRQ's, but the
@@ -218,7 +218,7 @@ sable_init_irq(void)
 	outb(0x44, 0x535);	/* enable cascades in master */
 
 	for (i = 0; i < 40; ++i) {
-		irq_desc[i].status = IRQ_DISABLED;
+		irq_desc[i].status = IRQ_DISABLED | IRQ_LEVEL;
 		irq_desc[i].handler = &sable_irq_type;
 	}
 	

@@ -11,6 +11,7 @@
 *		as published by the Free Software Foundation; either version
 *		2 of the License, or (at your option) any later version.
 * ============================================================================
+* Feb 28, 2000  Jeff Garzik	o softnet updates
 * Nov 08, 1999  Nenad Corbic    o Combined all debug UDP calls into one function
 *                               o Removed the ARP support. This has to be done
 *                                 in the next version.
@@ -108,7 +109,6 @@
 * Jan 02, 1997	Gene Kozin	Initial version.
 *****************************************************************************/
 
-#include <linux/version.h>
 #include <linux/kernel.h>	/* printk(), and other useful stuff */
 #include <linux/stddef.h>	/* offsetof(), etc. */
 #include <linux/errno.h>	/* return codes */
@@ -129,9 +129,6 @@
 #include <linux/if.h>
 
 #include <linux/sdla_fr.h>	/* frame relay firmware API definitions */
-#if LINUX_VERSION_CODE < 0x020125
-#define test_and_set_bit set_bit
-#endif
  
 /****** Defines & Macros ****************************************************/
 
@@ -156,6 +153,8 @@
 #define WANPIPE 0x00
 #define API     0x01
 #define FRAME_RELAY_API 1
+
+#define TX_TIMEOUT	(5*HZ)
 
 /* For handle_IPXWAN() */
 #define CVHexToAscii(b) (((unsigned char)(b) > (unsigned char)9) ? ((unsigned char)'A' + ((unsigned char)(b) - (unsigned char)10)) : ((unsigned char)'0' + (unsigned char)(b)))
@@ -273,6 +272,7 @@ static int if_close(struct net_device *dev);
 static int if_header(struct sk_buff *skb, struct net_device *dev, unsigned short type, void *daddr, void *saddr, unsigned len);
 static int if_rebuild_hdr(struct sk_buff *skb);
 static int if_send(struct sk_buff *skb, struct net_device *dev);
+static void if_tx_timeout (struct net_device *dev);
 static int chk_bcast_mcast_addr(sdla_t *card, struct net_device* dev,
                                 struct sk_buff *skb);
 static struct net_device_stats *if_stats(struct net_device *dev);
@@ -939,6 +939,8 @@ static int if_init (struct net_device* dev)
 	dev->rebuild_header	= &if_rebuild_hdr;
 	dev->hard_start_xmit	= &if_send;
 	dev->get_stats		= &if_stats;
+	dev->tx_timeout		= &if_tx_timeout;
+	dev->watchdog_timeo	= TX_TIMEOUT;
 
 	/* Initialize media-specific parameters */
 	dev->type		= ARPHRD_DLCI;	/* ARP h/w type */
@@ -993,7 +995,7 @@ static int if_open (struct net_device* dev)
 	int err = 0;
 	struct timeval tv;
 
-	if (dev->start)
+	if (netif_running(dev))
 		return -EBUSY;		/* only one open is allowed */
 
 	if (test_and_set_bit(1, (void*)&card->wandev.critical))
@@ -1034,9 +1036,7 @@ static int if_open (struct net_device* dev)
 		fr_activate_dlci(card, chan->dlci);
 	}
 
-	dev->interrupt = 0;
-	dev->tbusy = 0;
-	dev->start = 1;
+	netif_start_queue(dev);
 	wanpipe_open(card);
 	update_chan_state(dev);
 	do_gettimeofday( &tv );
@@ -1058,7 +1058,7 @@ static int if_close (struct net_device* dev)
 	if (test_and_set_bit(1, (void*)&card->wandev.critical))
 		return -EAGAIN;
 
-	dev->start = 0;
+	netif_stop_queue(dev);
 	wanpipe_close(card);
 	if (card->wandev.station == WANOPT_NODE) {
 		fr_delete_dlci (card,chan->dlci);
@@ -1113,6 +1113,30 @@ static int if_rebuild_hdr (struct sk_buff* skb)
 	return 1;
 }
 
+
+/*============================================================================
+ * Handle transmit timeout event from netif watchdog
+ */
+static void if_tx_timeout (struct net_device *dev)
+{
+    	fr_channel_t* chan = dev->priv;
+
+	/* If our device stays busy for at least 5 seconds then we will
+	 * kick start the device by making dev->tbusy = 0.  We expect
+	 * that our device never stays busy more than 5 seconds. So this                 
+	 * is only used as a last resort.
+	 */
+
+	chan->drvstats_if_send.if_send_tbusy++;
+	++chan->ifstats.collisions;
+
+	printk (KERN_INFO "%s: Transmit timed out\n", chan->name);
+	chan->drvstats_if_send.if_send_tbusy_timeout++;
+	netif_start_queue (dev);
+
+}
+
+
 /*============================================================================
  * Send a packet on a network interface.
  * o set tbusy flag (marks start of the transmission) to block a timer-based
@@ -1153,7 +1177,7 @@ static int if_send (struct sk_buff* skb, struct net_device* dev)
 		printk(KERN_INFO "%s: interface %s got kicked!\n", 
 			card->devname, dev->name);
 		chan->drvstats_if_send.if_send_skb_null ++;
-		mark_bh(NET_BH);
+		netif_wake_queue(dev);
 		return 0;
 	}
 
@@ -1164,33 +1188,13 @@ static int if_send (struct sk_buff* skb, struct net_device* dev)
 	*/
 	set_bit(2, (void*)&card->wandev.critical);
         if(chan->transmit_length) {
-        	dev->tbusy = 1;
+		netif_stop_queue(dev);
 	        chan->tick_counter = jiffies;
  		clear_bit(2, (void*)&card->wandev.critical);
 		return 1;
 	}
        	clear_bit(2, (void*)&card->wandev.critical);
   
-    	if (dev->tbusy) {
-
-		/* If our device stays busy for at least 5 seconds then we will
-                 * kick start the device by making dev->tbusy = 0.  We expect
-                 * that our device never stays busy more than 5 seconds. So this                 
-		 * is only used as a last resort.
-                 */
-		
-		chan->drvstats_if_send.if_send_tbusy++;
-		++chan->ifstats.collisions;
-
-		if ((jiffies - chan->tick_counter) < (5 * HZ)) {
-			return 1;
-		}
-
-		printk(KERN_INFO "%s: Transmit timed out\n", chan->name);
-		chan->drvstats_if_send.if_send_tbusy_timeout ++;
-		dev->tbusy = 0;
-    	}
-
 	data = skb->data;
 	sendpacket = skb->data;
         len = skb->len;
@@ -1318,15 +1322,14 @@ static int if_send (struct sk_buff* skb, struct net_device* dev)
 		}
 	}
 
-        if (!dev->tbusy) {
+        if (!netif_queue_stopped(dev))
 		dev_kfree_skb(skb);
-	}
 
         clear_bit(0, (void*)&card->wandev.critical);
 
 	s508_s514_unlock(card,&smp_flags);
 
-        return (dev->tbusy);
+        return (netif_queue_stopped(dev));
 }
 
 
@@ -1743,10 +1746,10 @@ static void rx_intr (sdla_t* card)
 
    		skb = dev_alloc_skb(len); 
 
-		if (!dev->start || (skb == NULL)) { 
+		if (!netif_running(dev) || (skb == NULL)) { 
 			++chan->ifstats.rx_dropped;
 		
-			if(dev->start) {
+			if(netif_running(dev)) {
 
 				printk(KERN_INFO 
 				"%s: no socket buffers available!\n", 
@@ -1920,8 +1923,7 @@ static void tx_intr(sdla_t *card)
 		if(!(-- card->u.f.tx_interrupts_pending))
         	        flags->imask &= ~FR_INTR_TXRDY;
 
- 		dev->tbusy = 0;
-		mark_bh(NET_BH);
+		netif_wake_queue (dev);
 	}
 }
 
@@ -2704,7 +2706,7 @@ static int fr_dlci_change (sdla_t *card, fr_mbox_t* mbox)
 					"%s: DLCI %u is inactive!\n",
 					card->devname, dlci);
 
-				if (dev && dev->start)
+				if (dev && netif_running(dev))
 					set_chan_state(dev, WAN_DISCONNECTED);
 			}
 	
@@ -2714,7 +2716,7 @@ static int fr_dlci_change (sdla_t *card, fr_mbox_t* mbox)
 					"%s: DLCI %u has been deleted!\n",
 					card->devname, dlci);
 
-				if (dev && dev->start) {
+				if (dev && netif_running(dev)) {
 					fr_channel_t *chan = dev->priv;
 
 					if (chan->route_flag == ROUTE_ADDED) {
@@ -2738,7 +2740,7 @@ static int fr_dlci_change (sdla_t *card, fr_mbox_t* mbox)
 			 	*/ 
 				chan->dlci_configured = DLCI_CONFIG_PENDING;
 			
-				if (dev && dev->start)
+				if (dev && netif_running(dev))
 					set_chan_state(dev, WAN_CONNECTED);
 		
 			}
@@ -3004,7 +3006,7 @@ static int process_udp_mgmt_pkt(sdla_t* card)
 			test_bit(2, (void*)&card->wandev.critical)) {
 			return 0;
   		}
-		if((dev->tbusy) || (card->u.f.tx_interrupts_pending)) {
+		if((netif_queue_stopped(dev)) || (card->u.f.tx_interrupts_pending)) {
 			return 0;
 		}
         }

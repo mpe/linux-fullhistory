@@ -19,7 +19,7 @@
 
 */
 
-static const char version[] = "Linux Tulip driver version 0.9.3 (Feb 23, 2000)\n";
+static const char version[] = "Linux Tulip driver version 0.9.4 (Feb 28, 2000)\n";
 
 #include <linux/module.h>
 #include "tulip.h"
@@ -51,7 +51,7 @@ const char * const medianame[] = {
 };
 
 /* Set the copy breakpoint for the copy-only-tiny-buffer Rx structure. */
-#ifdef __alpha__
+#if defined(__alpha__) || defined(__arm__)
 static int rx_copybreak = 1518;
 #else
 static int rx_copybreak = 100;
@@ -74,6 +74,8 @@ static int rx_copybreak = 100;
 static int csr0 = 0x01A00000 | 0xE000;
 #elif defined(__i386__) || defined(__powerpc__) || defined(__sparc__)
 static int csr0 = 0x01A00000 | 0x8000;
+#elif defined(__arm__)
+static int csr0 = 0x01A00000 | 0x4800;
 #else
 #warning Processor architecture undefined!
 static int csr0 = 0x00A00000 | 0x4800;
@@ -123,8 +125,6 @@ struct tulip_chip_table tulip_tbl[] = {
 	t21142_timer },
   { "Lite-On 82c168 PNIC", 256, 0x0001ebef,
 	HAS_MII | HAS_PNICNWAY, pnic_timer },
-  { "NETGEAR NGMC169 MAC", 256, 0x0001ebef,
-	HAS_MII | HAS_PNICNWAY, pnic_timer },
   { "Macronix 98713 PMAC", 128, 0x0001ebef,
 	HAS_MII | HAS_MEDIA_TABLE | CSR12_IN_SROM, mxic_timer },
   { "Macronix 98715 PMAC", 256, 0x0001ebef,
@@ -155,7 +155,6 @@ static struct pci_device_id tulip_pci_tbl[] __devinitdata = {
 	{ 0x1011, 0x0009, PCI_ANY_ID, PCI_ANY_ID, 0, 0, DC21140 },
 	{ 0x1011, 0x0019, PCI_ANY_ID, PCI_ANY_ID, 0, 0, DC21143 },
 	{ 0x11AD, 0x0002, PCI_ANY_ID, PCI_ANY_ID, 0, 0, LC82C168 },
-	{ 0x1385, 0xf004, PCI_ANY_ID, PCI_ANY_ID, 0, 0, NGMC169 },
 	{ 0x10d9, 0x0512, PCI_ANY_ID, PCI_ANY_ID, 0, 0, MX98713 },
 	{ 0x10d9, 0x0531, PCI_ANY_ID, PCI_ANY_ID, 0, 0, MX98715 },
 	{ 0x10d9, 0x0531, PCI_ANY_ID, PCI_ANY_ID, 0, 0, MX98725 },
@@ -301,8 +300,8 @@ static void tulip_up(struct net_device *dev)
 		tp->cur_tx++;
 	}
 
-	outl(virt_to_bus(tp->rx_ring), ioaddr + CSR3);
-	outl(virt_to_bus(tp->tx_ring), ioaddr + CSR4);
+	outl(tp->rx_ring_dma, ioaddr + CSR3);
+	outl(tp->tx_ring_dma, ioaddr + CSR4);
 
 	tp->saved_if_port = dev->if_port;
 	if (dev->if_port == 0)
@@ -569,12 +568,12 @@ static void tulip_init_ring(struct net_device *dev)
 	for (i = 0; i < RX_RING_SIZE; i++) {
 		tp->rx_ring[i].status = 0x00000000;
 		tp->rx_ring[i].length = cpu_to_le32(PKT_BUF_SZ);
-		tp->rx_ring[i].buffer2 = virt_to_le32desc(&tp->rx_ring[i+1]);
+		tp->rx_ring[i].buffer2 = cpu_to_le32(tp->rx_ring_dma + sizeof(struct tulip_rx_desc) * (i + 1));
 		tp->rx_skbuff[i] = NULL;
 	}
 	/* Mark the last entry as wrapping the ring. */
 	tp->rx_ring[i-1].length = cpu_to_le32(PKT_BUF_SZ | DESC_RING_WRAP);
-	tp->rx_ring[i-1].buffer2 = virt_to_le32desc(&tp->rx_ring[0]);
+	tp->rx_ring[i-1].buffer2 = cpu_to_le32(tp->rx_ring_dma);
 
 	for (i = 0; i < RX_RING_SIZE; i++) {
 		/* Note the receive buffer must be longword aligned.
@@ -595,9 +594,9 @@ static void tulip_init_ring(struct net_device *dev)
 	for (i = 0; i < TX_RING_SIZE; i++) {
 		tp->tx_skbuff[i] = 0;
 		tp->tx_ring[i].status = 0x00000000;
-		tp->tx_ring[i].buffer2 = virt_to_le32desc(&tp->tx_ring[i+1]);
+		tp->tx_ring[i].buffer2 = cpu_to_le32(tp->tx_ring_dma + sizeof(struct tulip_tx_desc) * (i + 1));
 	}
-	tp->tx_ring[i-1].buffer2 = virt_to_le32desc(&tp->tx_ring[0]);
+	tp->tx_ring[i-1].buffer2 = cpu_to_le32(tp->tx_ring_dma);
 }
 
 static int
@@ -1033,6 +1032,13 @@ static int __devinit tulip_init_one (struct pci_dev *pdev,
 	 */
 	tp = dev->priv;
 
+	tp->rx_ring = pci_alloc_consistent(pdev,
+					   sizeof(struct tulip_rx_desc) * RX_RING_SIZE +
+					   sizeof(struct tulip_tx_desc) * TX_RING_SIZE,
+					   &tp->rx_ring_dma);
+	tp->tx_ring = (struct tulip_tx_desc *)(tp->rx_ring + RX_RING_SIZE);
+	tp->tx_ring_dma = tp->rx_ring_dma + sizeof(struct tulip_rx_desc) * RX_RING_SIZE;
+
 	tp->chip_id = chip_idx;
 	tp->flags = tulip_tbl[chip_idx].flags;
 	tp->pdev = pdev;
@@ -1352,6 +1358,11 @@ static void __devexit tulip_remove_one (struct pci_dev *pdev)
 
 	if (dev) {
 		struct tulip_private *tp = (struct tulip_private *)dev->priv;
+		pci_free_consistent(pdev,
+				    sizeof(struct tulip_rx_desc) * RX_RING_SIZE +
+				    sizeof(struct tulip_tx_desc) * TX_RING_SIZE,
+				    tp->rx_ring,
+				    tp->rx_ring_dma);
 		unregister_netdev(dev);
 		release_region(dev->base_addr,
 			       tulip_tbl[tp->chip_id].io_size);

@@ -103,6 +103,22 @@ static int gx_fix = 0;
 #define le32desc_to_virt(addr)  bus_to_virt(le32_to_cpu(addr))
 
 
+#ifdef USE_IO_OPS
+#define YF_INB	inb
+#define YF_INW	inw
+#define YF_INL	inl
+#define YF_OUTB	outb
+#define YF_OUTW	outw
+#define YF_OUTL	outl
+#else
+#define YF_INB	readb
+#define YF_INW	readw
+#define YF_INL	readl
+#define YF_OUTB	writeb
+#define YF_OUTW	writew
+#define YF_OUTL	writel
+#endif
+
 /*
 				Theory of Operation
 
@@ -357,11 +373,11 @@ static int __devinit read_eeprom(long ioaddr, int location)
 {
 	int bogus_cnt = 10000;		/* Typical 33Mhz: 1050 ticks */
 
-	outb(location, ioaddr + EEAddr);
-	outb(0x30 | ((location >> 8) & 7), ioaddr + EECtrl);
-	while ((inb(ioaddr + EEStatus) & 0x80)  &&  --bogus_cnt > 0)
+	YF_OUTB(location, ioaddr + EEAddr);
+	YF_OUTB(0x30 | ((location >> 8) & 7), ioaddr + EECtrl);
+	while ((YF_INB(ioaddr + EEStatus) & 0x80)  &&  --bogus_cnt > 0)
 		;
-	return inb(ioaddr + EERead);
+	return YF_INB(ioaddr + EERead);
 }
 
 /* MII Managemen Data I/O accesses.
@@ -372,24 +388,24 @@ static int mdio_read(long ioaddr, int phy_id, int location)
 {
 	int i;
 
-	outw((phy_id<<8) + location, ioaddr + MII_Addr);
-	outw(1, ioaddr + MII_Cmd);
+	YF_OUTW((phy_id<<8) + location, ioaddr + MII_Addr);
+	YF_OUTW(1, ioaddr + MII_Cmd);
 	for (i = 10000; i >= 0; i--)
-		if ((inw(ioaddr + MII_Status) & 1) == 0)
+		if ((YF_INW(ioaddr + MII_Status) & 1) == 0)
 			break;
-	return inw(ioaddr + MII_Rd_Data);
+	return YF_INW(ioaddr + MII_Rd_Data);
 }
 
 static void mdio_write(long ioaddr, int phy_id, int location, int value)
 {
 	int i;
 
-	outw((phy_id<<8) + location, ioaddr + MII_Addr);
-	outw(value, ioaddr + MII_Wr_Data);
+	YF_OUTW((phy_id<<8) + location, ioaddr + MII_Addr);
+	YF_OUTW(value, ioaddr + MII_Wr_Data);
 
 	/* Wait for the command to finish. */
 	for (i = 10000; i >= 0; i--)
-		if ((inw(ioaddr + MII_Status) & 1) == 0)
+		if ((YF_INW(ioaddr + MII_Status) & 1) == 0)
 			break;
 	return;
 }
@@ -402,7 +418,7 @@ static int yellowfin_open(struct net_device *dev)
 	int i;
 
 	/* Reset the chip. */
-	outl(0x80000000, ioaddr + DMACtrl);
+	YF_OUTL(0x80000000, ioaddr + DMACtrl);
 
 	if (request_irq(dev->irq, &yellowfin_interrupt, SA_SHIRQ, dev->name, dev))
 		return -EAGAIN;
@@ -415,30 +431,30 @@ static int yellowfin_open(struct net_device *dev)
 
 	yellowfin_init_ring(dev);
 
-	outl(virt_to_bus(yp->rx_ring), ioaddr + RxPtr);
-	outl(virt_to_bus(yp->tx_ring), ioaddr + TxPtr);
+	YF_OUTL(virt_to_bus(yp->rx_ring), ioaddr + RxPtr);
+	YF_OUTL(virt_to_bus(yp->tx_ring), ioaddr + TxPtr);
 
 	for (i = 0; i < 6; i++)
-		outb(dev->dev_addr[i], ioaddr + StnAddr + i);
+		YF_OUTB(dev->dev_addr[i], ioaddr + StnAddr + i);
 
 	/* Set up various condition 'select' registers.
 	   There are no options here. */
-	outl(0x00800080, ioaddr + TxIntrSel); 	/* Interrupt on Tx abort */
-	outl(0x00800080, ioaddr + TxBranchSel);	/* Branch on Tx abort */
-	outl(0x00400040, ioaddr + TxWaitSel); 	/* Wait on Tx status */
-	outl(0x00400040, ioaddr + RxIntrSel);	/* Interrupt on Rx done */
-	outl(0x00400040, ioaddr + RxBranchSel);	/* Branch on Rx error */
-	outl(0x00400040, ioaddr + RxWaitSel);	/* Wait on Rx done */
+	YF_OUTL(0x00800080, ioaddr + TxIntrSel); 	/* Interrupt on Tx abort */
+	YF_OUTL(0x00800080, ioaddr + TxBranchSel);	/* Branch on Tx abort */
+	YF_OUTL(0x00400040, ioaddr + TxWaitSel); 	/* Wait on Tx status */
+	YF_OUTL(0x00400040, ioaddr + RxIntrSel);	/* Interrupt on Rx done */
+	YF_OUTL(0x00400040, ioaddr + RxBranchSel);	/* Branch on Rx error */
+	YF_OUTL(0x00400040, ioaddr + RxWaitSel);	/* Wait on Rx done */
 
 	/* Initialize other registers: with so many this eventually this will
 	   converted to an offset/value list. */
-	outl(dma_ctrl, ioaddr + DMACtrl);
-	outw(fifo_cfg, ioaddr + FIFOcfg);
+	YF_OUTL(dma_ctrl, ioaddr + DMACtrl);
+	YF_OUTW(fifo_cfg, ioaddr + FIFOcfg);
 	/* Enable automatic generation of flow control frames, period 0xffff. */
-	outl(0x0030FFFF, ioaddr + FlowCtrl);
+	YF_OUTL(0x0030FFFF, ioaddr + FlowCtrl);
 
 	yp->tx_threshold = 32;
-	outl(yp->tx_threshold, ioaddr + TxThreshold);
+	YF_OUTL(yp->tx_threshold, ioaddr + TxThreshold);
 
 	if (dev->if_port == 0)
 		dev->if_port = yp->default_port;
@@ -449,19 +465,19 @@ static int yellowfin_open(struct net_device *dev)
 	if (yp->flags & IsGigabit) {
 		/* We are always in full-duplex mode with gigabit! */
 		yp->full_duplex = 1;
-		outw(0x01CF, ioaddr + Cnfg);
+		YF_OUTW(0x01CF, ioaddr + Cnfg);
 	} else {
-		outw(0x0018, ioaddr + FrameGap0); /* 0060/4060 for non-MII 10baseT */
-		outw(0x1018, ioaddr + FrameGap1);
-		outw(0x101C | (yp->full_duplex ? 2 : 0), ioaddr + Cnfg);
+		YF_OUTW(0x0018, ioaddr + FrameGap0); /* 0060/4060 for non-MII 10baseT */
+		YF_OUTW(0x1018, ioaddr + FrameGap1);
+		YF_OUTW(0x101C | (yp->full_duplex ? 2 : 0), ioaddr + Cnfg);
 	}
 	set_rx_mode(dev);
 
 	/* Enable interrupts by setting the interrupt mask. */
-	outw(0x81ff, ioaddr + IntrEnb);			/* See enum intr_status_bits */
-	outw(0x0000, ioaddr + EventStatus);		/* Clear non-interrupting events */
-	outl(0x80008000, ioaddr + RxCtrl);		/* Start Rx and Tx channels. */
-	outl(0x80008000, ioaddr + TxCtrl);
+	YF_OUTW(0x81ff, ioaddr + IntrEnb);			/* See enum intr_status_bits */
+	YF_OUTW(0x0000, ioaddr + EventStatus);		/* Clear non-interrupting events */
+	YF_OUTL(0x80008000, ioaddr + RxCtrl);		/* Start Rx and Tx channels. */
+	YF_OUTL(0x80008000, ioaddr + TxCtrl);
 
 	if (yellowfin_debug > 2) {
 		printk(KERN_DEBUG "%s: Done yellowfin_open().\n",
@@ -486,7 +502,7 @@ static void yellowfin_timer(unsigned long data)
 
 	if (yellowfin_debug > 3) {
 		printk(KERN_DEBUG "%s: Yellowfin timer tick, status %8.8x.\n",
-			   dev->name, inw(ioaddr + IntrStatus));
+			   dev->name, YF_INW(ioaddr + IntrStatus));
 	}
 
 	if (yp->mii_cnt) {
@@ -503,7 +519,7 @@ static void yellowfin_timer(unsigned long data)
 			  || (negotiated & 0x00C0) == 0x0040)) {
 			yp->full_duplex = 1;
 		}
-		outw(0x101C | (yp->full_duplex ? 2 : 0), ioaddr + Cnfg);
+		YF_OUTW(0x101C | (yp->full_duplex ? 2 : 0), ioaddr + Cnfg);
 
 		if (mii_reg1 & 0x0004)
 			next_tick = 60*HZ;
@@ -523,7 +539,7 @@ static void yellowfin_tx_timeout(struct net_device *dev)
 	printk(KERN_WARNING "%s: Yellowfin transmit timed out at %d/%d Tx "
 		   "status %4.4x, Rx status %4.4x, resetting...\n",
 		   dev->name, yp->cur_tx, yp->dirty_tx,
-		   inl(ioaddr + TxStatus), inl(ioaddr + RxStatus));
+		   YF_INL(ioaddr + TxStatus), YF_INL(ioaddr + RxStatus));
 
 	/* Note: these should be KERN_DEBUG. */
 	if (yellowfin_debug) {
@@ -543,7 +559,7 @@ static void yellowfin_tx_timeout(struct net_device *dev)
 	dev->if_port = 0;
 
 	/* Wake the potentially-idle transmit channel. */
-	outl(0x10001000, dev->base_addr + TxCtrl);
+	YF_OUTL(0x10001000, dev->base_addr + TxCtrl);
 	if (yp->cur_tx - yp->dirty_tx < TX_QUEUE_SIZE)
 		netif_wake_queue (dev);		/* Typical path */
 
@@ -681,7 +697,7 @@ static int yellowfin_start_xmit(struct sk_buff *skb, struct net_device *dev)
 	/* Non-x86 Todo: explicitly flush cache lines here. */
 
 	/* Wake the potentially-idle transmit channel. */
-	outl(0x10001000, dev->base_addr + TxCtrl);
+	YF_OUTL(0x10001000, dev->base_addr + TxCtrl);
 
 	if (yp->cur_tx - yp->dirty_tx < TX_QUEUE_SIZE)
 		netif_start_queue (dev);		/* Typical path */
@@ -717,7 +733,7 @@ static void yellowfin_interrupt(int irq, void *dev_instance, struct pt_regs *reg
 	spin_lock (&yp->lock);
 
 	do {
-		u16 intr_status = inw(ioaddr + IntrClear);
+		u16 intr_status = YF_INW(ioaddr + IntrClear);
 
 		if (yellowfin_debug > 4)
 			printk(KERN_DEBUG "%s: Yellowfin interrupt, status %4.4x.\n",
@@ -728,7 +744,7 @@ static void yellowfin_interrupt(int irq, void *dev_instance, struct pt_regs *reg
 
 		if (intr_status & (IntrRxDone | IntrEarlyRx)) {
 			yellowfin_rx(dev);
-			outl(0x10001000, ioaddr + RxCtrl);		/* Wake Rx engine. */
+			YF_OUTL(0x10001000, ioaddr + RxCtrl);		/* Wake Rx engine. */
 		}
 
 #ifdef NO_TXSTATS
@@ -845,7 +861,7 @@ static void yellowfin_interrupt(int irq, void *dev_instance, struct pt_regs *reg
 
 	if (yellowfin_debug > 3)
 		printk(KERN_DEBUG "%s: exiting interrupt, status=%#4.4x.\n",
-			   dev->name, inw(ioaddr + IntrStatus));
+			   dev->name, YF_INW(ioaddr + IntrStatus));
 
 	/* Code that should never be run!  Perhaps remove after testing.. */
 	{
@@ -1023,18 +1039,19 @@ static int yellowfin_close(struct net_device *dev)
 
 	if (yellowfin_debug > 1) {
 		printk(KERN_DEBUG "%s: Shutting down ethercard, status was Tx %4.4x Rx %4.4x Int %2.2x.\n",
-			   dev->name, inw(ioaddr + TxStatus),
-			   inw(ioaddr + RxStatus), inw(ioaddr + IntrStatus));
+			   dev->name, YF_INW(ioaddr + TxStatus),
+			   YF_INW(ioaddr + RxStatus),
+			   YF_INW(ioaddr + IntrStatus));
 		printk(KERN_DEBUG "%s: Queue pointers were Tx %d / %d,  Rx %d / %d.\n",
 			   dev->name, yp->cur_tx, yp->dirty_tx, yp->cur_rx, yp->dirty_rx);
 	}
 
 	/* Disable interrupts by clearing the interrupt mask. */
-	outw(0x0000, ioaddr + IntrEnb);
+	YF_OUTW(0x0000, ioaddr + IntrEnb);
 
 	/* Stop the chip's Tx and Rx processes. */
-	outl(0x80000000, ioaddr + RxCtrl);
-	outl(0x80000000, ioaddr + TxCtrl);
+	YF_OUTL(0x80000000, ioaddr + RxCtrl);
+	YF_OUTL(0x80000000, ioaddr + TxCtrl);
 
 	del_timer(&yp->timer);
 
@@ -1043,7 +1060,7 @@ static int yellowfin_close(struct net_device *dev)
 		printk("\n"KERN_DEBUG"  Tx ring at %8.8x:\n", (int)virt_to_bus(yp->tx_ring));
 		for (i = 0; i < TX_RING_SIZE*2; i++)
 			printk(" %c #%d desc. %8.8x %8.8x %8.8x %8.8x.\n",
-				   inl(ioaddr + TxPtr) == (long)&yp->tx_ring[i] ? '>' : ' ',
+				   YF_INL(ioaddr + TxPtr) == (long)&yp->tx_ring[i] ? '>' : ' ',
 				   i, yp->tx_ring[i].dbdma_cmd, yp->tx_ring[i].addr,
 				   yp->tx_ring[i].branch_addr, yp->tx_ring[i].result_status);
 		printk(KERN_DEBUG "  Tx status %p:\n", yp->tx_status);
@@ -1055,7 +1072,7 @@ static int yellowfin_close(struct net_device *dev)
 		printk("\n"KERN_DEBUG "  Rx ring %8.8x:\n", (int)virt_to_bus(yp->rx_ring));
 		for (i = 0; i < RX_RING_SIZE; i++) {
 			printk(KERN_DEBUG " %c #%d desc. %8.8x %8.8x %8.8x\n",
-				   inl(ioaddr + RxPtr) == (long)&yp->rx_ring[i] ? '>' : ' ',
+				   YF_INL(ioaddr + RxPtr) == (long)&yp->rx_ring[i] ? '>' : ' ',
 				   i, yp->rx_ring[i].dbdma_cmd, yp->rx_ring[i].addr,
 				   yp->rx_ring[i].result_status);
 			if (yellowfin_debug > 6) {
@@ -1134,17 +1151,17 @@ static void set_rx_mode(struct net_device *dev)
 {
 	struct yellowfin_private *yp = (struct yellowfin_private *)dev->priv;
 	long ioaddr = dev->base_addr;
-	u16 cfg_value = inw(ioaddr + Cnfg);
+	u16 cfg_value = YF_INW(ioaddr + Cnfg);
 
 	/* Stop the Rx process to change any value. */
-	outw(cfg_value & ~0x1000, ioaddr + Cnfg);
+	YF_OUTW(cfg_value & ~0x1000, ioaddr + Cnfg);
 	if (dev->flags & IFF_PROMISC) {			/* Set promiscuous. */
 		/* Unconditionally log net taps. */
 		printk(KERN_NOTICE "%s: Promiscuous mode enabled.\n", dev->name);
-		outw(0x000F, ioaddr + AddrMode);
+		YF_OUTW(0x000F, ioaddr + AddrMode);
 	} else if ((dev->mc_count > 64)  ||  (dev->flags & IFF_ALLMULTI)) {
 		/* Too many to filter well, or accept all multicasts. */
-		outw(0x000B, ioaddr + AddrMode);
+		YF_OUTW(0x000B, ioaddr + AddrMode);
 	} else if (dev->mc_count > 0) { /* Must use the multicast hash table. */
 		struct dev_mc_list *mclist;
 		u16 hash_table[4];
@@ -1167,13 +1184,13 @@ static void set_rx_mode(struct net_device *dev)
 		}
 		/* Copy the hash table to the chip. */
 		for (i = 0; i < 4; i++)
-			outw(hash_table[i], ioaddr + HashTbl + i*2);
-		outw(0x0003, ioaddr + AddrMode);
+			YF_OUTW(hash_table[i], ioaddr + HashTbl + i*2);
+		YF_OUTW(0x0003, ioaddr + AddrMode);
 	} else {					/* Normal, unicast/broadcast-only mode. */
-		outw(0x0001, ioaddr + AddrMode);
+		YF_OUTW(0x0001, ioaddr + AddrMode);
 	}
 	/* Restart the Rx process. */
-	outw(cfg_value | 0x1000, ioaddr + Cnfg);
+	YF_OUTW(cfg_value | 0x1000, ioaddr + Cnfg);
 }
 
 #ifdef HAVE_PRIVATE_IOCTL
@@ -1209,7 +1226,7 @@ static int __devinit yellowfin_init_one(struct pci_dev *pdev,
 	int option, i, irq;
 	int flags, chip_idx;
 	static int find_cnt = 0;
-	long ioaddr;
+	long ioaddr, real_ioaddr;
 	
 	chip_idx = ent->driver_data;
 	flags = chip_info[chip_idx].flags;
@@ -1243,18 +1260,20 @@ static int __devinit yellowfin_init_one(struct pci_dev *pdev,
 	pci_set_master (pdev);
 
 #ifdef USE_IO_OPS
-	ioaddr = pci_resource_start (pdev, 0);
+	real_ioaddr = ioaddr = pci_resource_start (pdev, 0);
 #else
-	ioaddr = pci_resource_start (pdev, 1);
+	real_ioaddr = ioaddr = pci_resource_start (pdev, 1);
+	ioaddr = ioremap(ioaddr, YELLOWFIN_SIZE);
 #endif
 	irq = pdev->irq;
 
 	printk(KERN_INFO "%s: %s type %8x at 0x%lx, ",
-		   dev->name, chip_info[chip_idx].name, inl(ioaddr + ChipRev), ioaddr);
+	       dev->name, chip_info[chip_idx].name,
+	       YF_INL(ioaddr + ChipRev), real_ioaddr);
 
 	if (flags & IsGigabit)
 		for (i = 0; i < 6; i++)
-			dev->dev_addr[i] = inb(ioaddr + StnAddr + i);
+			dev->dev_addr[i] = YF_INB(ioaddr + StnAddr + i);
 	else {
 		int ee_offset = (read_eeprom(ioaddr, 6) == 0xff ? 0x100 : 0);
 		for (i = 0; i < 6; i++)
@@ -1265,7 +1284,7 @@ static int __devinit yellowfin_init_one(struct pci_dev *pdev,
 	printk("%2.2x, IRQ %d.\n", dev->dev_addr[i], irq);
 
 	/* Reset the chip. */
-	outl(0x80000000, ioaddr + DMACtrl);
+	YF_OUTL(0x80000000, ioaddr + DMACtrl);
 
 	dev->base_addr = ioaddr;
 	dev->irq = irq;

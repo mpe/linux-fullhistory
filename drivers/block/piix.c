@@ -85,8 +85,8 @@
 #include <linux/pci.h>
 #include <linux/hdreg.h>
 #include <linux/ide.h>
+#include <linux/delay.h>
 
-#include <asm/delay.h>
 #include <asm/io.h>
 
 #include "ide_modes.h"

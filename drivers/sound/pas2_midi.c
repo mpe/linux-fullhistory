@@ -10,8 +10,6 @@
  * Version 2 (June 1991). See the "COPYING" file distributed with this software
  * for more info.
  */
-#include <linux/config.h>
-
 #include "sound_config.h"
 
 static int      midi_busy = 0, input_opened = 0;

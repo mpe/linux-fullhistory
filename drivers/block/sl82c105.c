@@ -26,6 +26,8 @@
 
 #include "ide_modes.h"
 
+extern char *ide_xfer_verbose (byte xfer_rate);
+
 #ifdef CONFIG_ARCH_NETWINDER
 /*
  * Convert a PIO mode and cycle time to the required on/off
@@ -50,42 +52,7 @@ static unsigned int get_timing_sl82c105(ide_pio_data_t *p)
 	if (cmd_off == 0)
 		cmd_off = 1;
 
-	return (cmd_on - 1) << 8 | (cmd_off - 1);
-}
-
-/*
- * Tell the drive to enable the specified PIO mode.
- * This should be in ide.c, maybe as a special command
- * (see do_special).
- */
-static int ide_set_drive_pio_mode(ide_drive_t *drive, byte pio)
-{
-	ide_hwif_t *hwif = HWIF(drive);
-	ide_startstop_t startstop;
-
-	if (pio > 2) {
-		/* FIXME: I don't believe that this SELECT_DRIVE is required,
-		 * since ide.c only calls tuneproc from do_special, after
-		 * the correct drive has been selected.
-		 */
-		SELECT_DRIVE(hwif, drive);
-		if (IDE_CONTROL_REG)
-			OUT_BYTE(drive->ctl | 2, IDE_CONTROL_REG);
-		OUT_BYTE(0x08 | pio,  IDE_NSECTOR_REG);
-		OUT_BYTE(0x03, IDE_FEATURE_REG);
-		OUT_BYTE(WIN_SETFEATURES, IDE_COMMAND_REG);
-
-		if (ide_wait_stat(&startstop, drive, DRIVE_READY,
-				  BUSY_STAT|DRQ_STAT|ERR_STAT, WAIT_CMD)) {
-			printk("%s: drive not ready for command\n",
-			       drive->name);
-			return 1;	/* return startstop; ?? */
-		}
-		if (IDE_CONTROL_REG)
-			OUT_BYTE(drive->ctl, IDE_CONTROL_REG);
-	}
-
-	return 0;	/* return startstop; ?? */
+	return (cmd_on - 1) << 8 | (cmd_off - 1) | (p->use_iordy ? 0x40 : 0x00);
 }
 
 /*
@@ -97,26 +64,48 @@ static void tune_sl82c105(ide_drive_t *drive, byte pio)
 	ide_hwif_t *hwif = HWIF(drive);
 	struct pci_dev *dev = hwif->pci_dev;
 	ide_pio_data_t p;
-	unsigned int drv_ctrl = 0x909;
+	unsigned short drv_ctrl = 0x909;
+	unsigned int xfer_mode, reg;
+
+	reg = (hwif->channel ? 0x4c : 0x44) + (drive->select.b.unit ? 4 : 0);
 
 	pio = ide_get_best_pio_mode(drive, pio, 5, &p);
 
-	if (!ide_set_drive_pio_mode(drive, pio)) {
-		drv_ctrl = get_timing_sl82c105(&p);
-
-		if (p.use_iordy)
-			drv_ctrl |= 0x40;
+	switch (pio) {
+	default:
+	case 0:		xfer_mode = XFER_PIO_0;		break;
+	case 1:		xfer_mode = XFER_PIO_1;		break;
+	case 2:		xfer_mode = XFER_PIO_2;		break;
+	case 3:		xfer_mode = XFER_PIO_3;		break;
+	case 4:		xfer_mode = XFER_PIO_4;		break;
 	}
 
-	pci_write_config_word(dev,
-			      (hwif->channel ? 0x4c : 0x44)
-			       + (drive->select.b.unit ? 4 : 0),
-			      drv_ctrl);
+	if (ide_config_drive_speed(drive, xfer_mode) == 0)
+		drv_ctrl = get_timing_sl82c105(&p);
 
-	printk("%s: selected PIO mode %d (%dns)\n",
-		drive->name, p.pio_mode, p.cycle_time);
+	pci_write_config_word(dev, reg, drv_ctrl);
+	pci_read_config_word(dev, reg, &drv_ctrl);
+
+	printk("%s: selected %s (%dns) (%04X)\n", drive->name,
+	       ide_xfer_verbose(xfer_mode), p.cycle_time, drv_ctrl);
 }
 #endif
+
+void ide_dmacapable_sl82c105(ide_hwif_t *hwif, unsigned long dmabase)
+{
+	unsigned char rev;
+
+	pci_read_config_byte(hwif->pci_dev, PCI_REVISION_ID, &rev);
+
+	if (rev <= 5) {
+		hwif->autodma = 0;
+		hwif->drives[0].autotune = 1;
+		hwif->drives[1].autotune = 1;
+		printk("    %s: revision %d, Bus-Master DMA disabled\n",
+		       hwif->name, rev);
+	}
+	ide_setup_dma(hwif, dmabase, 8);
+}
 
 void ide_init_sl82c105(ide_hwif_t *hwif)
 {

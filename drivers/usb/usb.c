@@ -1375,8 +1375,13 @@ static void usb_set_maxpacket(struct usb_device *dev)
 			int e;
 
 			for (e=0; e<as->bNumEndpoints; e++) {
-				b = ep[e].bEndpointAddress & 0x0f;
-				if (usb_endpoint_out(ep[e].bEndpointAddress)) {
+				b = ep[e].bEndpointAddress & USB_ENDPOINT_NUMBER_MASK;
+				if ((ep[e].bmAttributes & USB_ENDPOINT_XFERTYPE_MASK) ==
+					USB_ENDPOINT_XFER_CONTROL) {	/* Control => bidirectional */
+					dev->epmaxpacketout[b] = ep[e].wMaxPacketSize;
+					dev->epmaxpacketin [b] = ep[e].wMaxPacketSize;
+					}
+				else if (usb_endpoint_out(ep[e].bEndpointAddress)) {
 					if (ep[e].wMaxPacketSize > dev->epmaxpacketout[b])
 						dev->epmaxpacketout[b] = ep[e].wMaxPacketSize;
 				}

@@ -201,7 +201,7 @@ struct hid_global {
  * This is the local enviroment. It is resistent up the the next main-item.
  */
 
-#define MAX_USAGES 512
+#define MAX_USAGES 1024
 
 struct hid_local {
 	unsigned usage[MAX_USAGES]; /* usage array */

@@ -160,10 +160,10 @@ void parport_daisy_fini (struct parport *port)
 
 	while (prev) {
 		dev = prev->next;
-		if (dev && dev->port == port)
+		if (dev && dev->port == port) {
 			prev->next = dev->next;
-
-		kfree (dev);
+			kfree (dev);
+		}
 		prev = prev->next;
 	}
 

@@ -6,7 +6,7 @@
  */
 #include <linux/config.h>
 
-extern void die(const char *msg, struct pt_regs *regs, unsigned int err);
+extern void die(const char *msg, struct pt_regs *regs, int err);
 
 /*
  * This is useful to dump out the page tables associated with

@@ -8,7 +8,6 @@
  *   it's amazing what adding a bunch of 6s can do =8^)
  */
 
-#include <linux/config.h>
 #include <linux/netfilter.h>
 
 /* IP Cache bits. */

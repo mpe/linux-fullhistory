@@ -1948,7 +1948,7 @@ int u14_34f_release(struct Scsi_Host *shpnt) {
    if (sh[j] == NULL) panic("%s: release, invalid Scsi_Host pointer.\n",
                             driver_name);
 
-   if( sh[j]->block != NULL ) {
+   if( sh[j]->unchecked_isa_dma ) {
 	   scsi_deregister_blocked_host(sh[j]);
    }
 

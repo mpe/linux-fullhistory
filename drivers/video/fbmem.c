@@ -247,15 +247,20 @@ static int fbmem_read_proc(char *buf, char **start, off_t offset,
 			   int len, int *eof, void *private)
 {
 	struct fb_info **fi;
+	int clen;
 
-	len = 0;
+	clen = 0;
 	for (fi = registered_fb; fi < &registered_fb[FB_MAX] && len < 4000; fi++)
 		if (*fi)
-			len += sprintf(buf + len, "%d %s\n",
-				       GET_FB_IDX((*fi)->node),
-				       (*fi)->modename);
+			clen += sprintf(buf + clen, "%d %s\n",
+				        GET_FB_IDX((*fi)->node),
+				        (*fi)->modename);
 	*start = buf + offset;
-	return len > offset ? len - offset : 0;
+	if (clen > offset)
+		clen -= offset;
+	else
+		clen = 0;
+	return clen < len ? clen : len;
 }
 
 static ssize_t

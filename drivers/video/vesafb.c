@@ -550,7 +550,7 @@ int __init vesafb_init(void)
 
         video_vbase = ioremap(video_base, video_size);
 
-	printk(KERN_INFO "vesafb: framebuffer at 0x%lu, mapped to 0x%p, size %dk\n",
+	printk(KERN_INFO "vesafb: framebuffer at 0x%lx, mapped to 0x%p, size %dk\n",
 	       video_base, video_vbase, video_size/1024);
 	printk(KERN_INFO "vesafb: mode is %dx%dx%d, linelength=%d, pages=%d\n",
 	       video_width, video_height, video_bpp, video_linelength, screen_info.pages);

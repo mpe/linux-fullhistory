@@ -30,6 +30,7 @@
 #include <linux/elfcore.h>
 #include <linux/init.h>
 #include <linux/highuid.h>
+#include <linux/smp_lock.h>
 
 #include <asm/uaccess.h>
 #include <asm/pgalloc.h>
@@ -496,13 +497,19 @@ do_load_elf_binary(struct linux_binprm * bprm, struct pt_regs * regs)
 				unsigned long old_pers = current->personality;
 					
 				current->personality = PER_SVR4;
+				lock_kernel();
 				interpreter_dentry = open_namei(elf_interpreter,
 								0, 0);
+				unlock_kernel();
 				current->personality = old_pers;
 			} else
-#endif					
+#endif
+			{
+				lock_kernel();
 				interpreter_dentry = open_namei(elf_interpreter,
 								0, 0);
+				unlock_kernel();
+			}
 			set_fs(old_fs);
 			retval = PTR_ERR(interpreter_dentry);
 			if (IS_ERR(interpreter_dentry))
@@ -670,7 +677,9 @@ do_load_elf_binary(struct linux_binprm * bprm, struct pt_regs * regs)
 						    interpreter_dentry,
 						    &interp_load_addr);
 
+		lock_kernel();
 		dput(interpreter_dentry);
+		unlock_kernel();
 		kfree(elf_interpreter);
 
 		if (elf_entry == ~0UL) {
@@ -767,7 +776,9 @@ out:
 
 	/* error cleanup */
 out_free_dentry:
+	lock_kernel();
 	dput(interpreter_dentry);
+	unlock_kernel();
 out_free_interp:
 	if (elf_interpreter)
 		kfree(elf_interpreter);

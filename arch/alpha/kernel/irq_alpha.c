@@ -39,82 +39,6 @@ dummy_perf(unsigned long vector, struct pt_regs *regs)
 void (*perf_irq)(unsigned long, struct pt_regs *) = dummy_perf;
 
 /*
- * Dispatch device interrupts.
- */
-
-/* Handle ISA interrupt via the PICs. */
-
-#if defined(CONFIG_ALPHA_GENERIC)
-# define IACK_SC	alpha_mv.iack_sc
-#elif defined(CONFIG_ALPHA_APECS)
-# define IACK_SC	APECS_IACK_SC
-#elif defined(CONFIG_ALPHA_LCA)
-# define IACK_SC	LCA_IACK_SC
-#elif defined(CONFIG_ALPHA_CIA)
-# define IACK_SC	CIA_IACK_SC
-#elif defined(CONFIG_ALPHA_PYXIS)
-# define IACK_SC	PYXIS_IACK_SC
-#elif defined(CONFIG_ALPHA_TSUNAMI)
-# define IACK_SC	TSUNAMI_IACK_SC
-#elif defined(CONFIG_ALPHA_POLARIS)
-# define IACK_SC	POLARIS_IACK_SC
-#elif defined(CONFIG_ALPHA_IRONGATE)
-# define IACK_SC        IRONGATE_IACK_SC
-#endif
-
-#if defined(IACK_SC)
-void
-isa_device_interrupt(unsigned long vector, struct pt_regs *regs)
-{
-	/*
-	 * Generate a PCI interrupt acknowledge cycle.  The PIC will
-	 * respond with the interrupt vector of the highest priority
-	 * interrupt that is pending.  The PALcode sets up the
-	 * interrupts vectors such that irq level L generates vector L.
-	 */
-	int j = *(vuip) IACK_SC;
-	j &= 0xff;
-	if (j == 7) {
-		if (!(inb(0x20) & 0x80)) {
-			/* It's only a passive release... */
-			return;
-		}
-	}
-	handle_irq(j, regs);
-}
-#endif
-
-#if defined(CONFIG_ALPHA_GENERIC) || !defined(IACK_SC)
-void
-isa_no_iack_sc_device_interrupt(unsigned long vector, struct pt_regs *regs)
-{
-	unsigned long pic;
-
-	/*
-	 * It seems to me that the probability of two or more *device*
-	 * interrupts occurring at almost exactly the same time is
-	 * pretty low.  So why pay the price of checking for
-	 * additional interrupts here if the common case can be
-	 * handled so much easier?
-	 */
-	/* 
-	 *  The first read of gives you *all* interrupting lines.
-	 *  Therefore, read the mask register and and out those lines
-	 *  not enabled.  Note that some documentation has 21 and a1 
-	 *  write only.  This is not true.
-	 */
-	pic = inb(0x20) | (inb(0xA0) << 8);	/* read isr */
-	pic &= 0xFFFB;				/* mask out cascade & hibits */
-
-	while (pic) {
-		int j = ffz(~pic);
-		pic &= pic - 1;
-		handle_irq(j, regs);
-	}
-}
-#endif
-
-/*
  * The main interrupt entry point.
  */
 
@@ -274,35 +198,39 @@ process_mcheck_info(unsigned long vector, unsigned long la_ptr,
 #endif
 }
 
-/* RTC */
-static void enable_rtc(unsigned int irq) { }
-static unsigned int startup_rtc(unsigned int irq) { return 0; }
-#define shutdown_rtc	enable_rtc
-#define end_rtc		enable_rtc
-#define ack_rtc		enable_rtc
-#define disable_rtc	enable_rtc
+/*
+ * The special RTC interrupt type.  The interrupt itself was
+ * processed by PALcode, and comes in via entInt vector 1.
+ */
 
-struct irqaction timer_irqaction  = { timer_interrupt,
-				      SA_INTERRUPT, 0, "timer",
-				      NULL, NULL};
+static void rtc_enable_disable(unsigned int irq) { }
+static unsigned int rtc_startup(unsigned int irq) { return 0; }
+
+struct irqaction timer_irqaction = {
+	handler:	timer_interrupt,
+	flags:		SA_INTERRUPT,
+	name:		"timer",
+};
+
+static struct hw_interrupt_type rtc_irq_type = {
+	typename:	"RTC",
+	startup:	rtc_startup,
+	shutdown:	rtc_enable_disable,
+	enable:		rtc_enable_disable,
+	disable:	rtc_enable_disable,
+	ack:		rtc_enable_disable,
+	end:		rtc_enable_disable,
+};
 
 void __init
 init_rtc_irq(void)
 {
-	static struct hw_interrupt_type rtc_irq_type = { "RTC",
-							 startup_rtc,
-							 shutdown_rtc,
-							 enable_rtc,
-							 disable_rtc,
-							 ack_rtc,
-							 end_rtc };
 	irq_desc[RTC_IRQ].status = IRQ_DISABLED;
 	irq_desc[RTC_IRQ].handler = &rtc_irq_type;
-
 	setup_irq(RTC_IRQ, &timer_irqaction);
 }
 
-/* dummy irqactions */
+/* Dummy irqactions.  */
 struct irqaction isa_cascade_irqaction = {
 	handler:	no_action,
 	name:		"isa-cascade"

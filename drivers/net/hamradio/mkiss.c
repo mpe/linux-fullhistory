@@ -320,16 +320,14 @@ static void ax_changedmtu(struct ax_disp *ax)
 /* Set the "sending" flag.  This must be atomic, hence the ASM. */
 static inline void ax_lock(struct ax_disp *ax)
 {
-	if (test_and_set_bit(0, (void *)&ax->dev->tbusy))
-		printk(KERN_ERR "mkiss: %s: trying to lock already locked device!\n", ax->dev->name);
+	netif_stop_queue(ax->dev);
 }
 
 
 /* Clear the "sending" flag.  This must be atomic, hence the ASM. */
 static inline void ax_unlock(struct ax_disp *ax)
 {
-	if (!test_and_clear_bit(0, (void *)&ax->dev->tbusy))
-		printk(KERN_ERR "mkiss: %s: trying to unlock already unlocked device!\n", ax->dev->name);
+	netif_start_queue(ax->dev);
 }
 
 /* Send one completely decapsulated AX.25 packet to the AX.25 layer. */
@@ -435,7 +433,7 @@ static void ax25_write_wakeup(struct tty_struct *tty)
 	struct mkiss_channel *mkiss;
 
 	/* First make sure we're connected. */
-	if (ax == NULL || ax->magic != AX25_MAGIC || !ax->dev->start)
+	if (ax == NULL || ax->magic != AX25_MAGIC || !netif_running(ax->dev))
 		return;
 	if (ax->xleft <= 0)  {
 		/* Now serial buffer is almost free & we can start
@@ -449,8 +447,7 @@ static void ax25_write_wakeup(struct tty_struct *tty)
 				ax_unlock(ax->mkiss);
 	        }
 
-		ax_unlock(ax);
-		mark_bh(NET_BH);
+		netif_wake_queue(ax->dev);
 		return;
 	}
 
@@ -474,22 +471,22 @@ static int ax_xmit(struct sk_buff *skb, struct net_device *dev)
 		tmp_ax = ax->mkiss;
 	}
 
-	if (!dev->start)  {
+	if (!netif_running(dev))  {
 		printk(KERN_ERR "mkiss: %s: xmit call when iface is down\n", dev->name);
 		return 1;
 	}
 
 	if (tmp_ax != NULL)
-		if (tmp_ax->dev->tbusy)
+		if (netif_queue_stopped(tmp_ax->dev))
 			return 1;
 
 	if (tmp_ax != NULL)
-		if (dev->tbusy) {
+		if (netif_queue_stopped(dev)) {
 			printk(KERN_ERR "mkiss: dev busy while serial dev is free\n");
 			ax_unlock(ax);
 	        }
 
-	if (dev->tbusy) {
+	if (netif_queue_stopped(dev)) {
 		/*
 		 * May be we must check transmitter timeout here ?
 		 *      14 Oct 1994 Dmitry Gorodchanin.
@@ -583,9 +580,8 @@ static int ax_open(struct net_device *dev)
 	ax->xleft    = 0;
 
 	ax->flags   &= (1 << AXF_INUSE);      /* Clear ESCAPE & ERROR flags */
-	dev->tbusy  = 0;
-	dev->start  = 1;
 
+	netif_start_queue(dev);
 	return 0;
 
 	/* Cleanup */
@@ -609,8 +605,7 @@ static int ax_close(struct net_device *dev)
 
 	ax->tty->flags &= ~(1 << TTY_DO_WRITE_WAKEUP);
 
-	dev->tbusy = 1;
-	dev->start = 0;
+	netif_stop_queue(dev);
 
 	return 0;
 }
@@ -630,7 +625,7 @@ static void ax25_receive_buf(struct tty_struct *tty, const unsigned char *cp, ch
 {
 	struct ax_disp *ax = (struct ax_disp *)tty->disc_data;
 
-	if (ax == NULL || ax->magic != AX25_MAGIC || !ax->dev->start)
+	if (ax == NULL || ax->magic != AX25_MAGIC || !netif_running(ax->dev))
 		return;
 
 	/*
@@ -691,7 +686,7 @@ static int ax25_open(struct tty_struct *tty)
 	if (mkiss->magic  == MKISS_DRIVER_MAGIC) {
 		for (cnt = 1; cnt < ax25_maxdev; cnt++) {
 			if (ax25_ctrls[cnt]) {
-				if (ax25_ctrls[cnt]->dev.start) {
+				if (netif_running(&ax25_ctrls[cnt]->dev)) {
 					if (ax == &ax25_ctrls[cnt]->ctrl) {
 						cnt--;
 						tmp_ax = &ax25_ctrls[cnt]->ctrl;
@@ -802,7 +797,7 @@ int kiss_esc(unsigned char *s, unsigned char *d, int len)
 static int kiss_esc_crc(unsigned char *s, unsigned char *d, unsigned short crc, int len)
 {
 	unsigned char *ptr = d;
-	unsigned char c;
+	unsigned char c=0;
 
 	*ptr++ = END;
 	while (len > 0) {
@@ -1221,7 +1216,7 @@ void cleanup_module(void)
 				 * VSV = if dev->start==0, then device
 				 * unregistred while close proc.
 				 */
-				if (ax25_ctrls[i]->dev.start)
+				if (netif_running(&ax25_ctrls[i]->dev))
 					unregister_netdev(&(ax25_ctrls[i]->dev));
 
 				kfree(ax25_ctrls[i]);

@@ -9,7 +9,6 @@
  */
 #include <linux/init.h>
 #include <linux/kernel.h>
-#include <linux/config.h>
 
 #include <asm/sgialib.h>
 

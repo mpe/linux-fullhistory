@@ -21,7 +21,6 @@
 #include <linux/malloc.h>
 #include <linux/random.h>
 #include <linux/init.h>
-#include <linux/delay.h>
 #include <linux/irq.h>
 #include <linux/proc_fs.h>
 
@@ -33,12 +32,13 @@
 /*
  * Controller mappings for all interrupt sources:
  */
-irq_desc_t irq_desc[NR_IRQS] __cacheline_aligned =
-	{ [0 ... NR_IRQS-1] = { 0, &no_irq_type, NULL, 0, SPIN_LOCK_UNLOCKED}};
+irq_desc_t irq_desc[NR_IRQS] __cacheline_aligned = {
+	[0 ... NR_IRQS-1] = { 0, &no_irq_type, NULL, 0, SPIN_LOCK_UNLOCKED}
+};
 
-static void register_irq_proc (unsigned int irq);
+static void register_irq_proc(unsigned int irq);
 
-volatile unsigned long irq_err_count;
+unsigned long irq_err_count;
 
 /*
  * Special irq handlers.
@@ -50,30 +50,29 @@ void no_action(int cpl, void *dev_id, struct pt_regs *regs) { }
  * Generic no controller code
  */
 
-static void enable_none(unsigned int irq) { }
-static unsigned int startup_none(unsigned int irq) { return 0; }
-static void disable_none(unsigned int irq) { }
-static void ack_none(unsigned int irq)
+static void no_irq_enable_disable(unsigned int irq) { }
+static unsigned int no_irq_startup(unsigned int irq) { return 0; }
+
+static void
+no_irq_ack(unsigned int irq)
 {
 	irq_err_count++;
-	printk("unexpected IRQ trap at vector %02x\n", irq);
+	printk(KERN_CRIT "Unexpected IRQ trap at vector %u\n", irq);
 }
 
-/* startup is the same as "enable", shutdown is same as "disable" */
-#define shutdown_none	disable_none
-#define end_none	enable_none
-
 struct hw_interrupt_type no_irq_type = {
-	"none",
-	startup_none,
-	shutdown_none,
-	enable_none,
-	disable_none,
-	ack_none,
-	end_none,
+	typename:	"none",
+	startup:	no_irq_startup,
+	shutdown:	no_irq_enable_disable,
+	enable:		no_irq_enable_disable,
+	disable:	no_irq_enable_disable,
+	ack:		no_irq_ack,
+	end:		no_irq_enable_disable,
 };
 
-int handle_IRQ_event(unsigned int irq, struct pt_regs * regs, struct irqaction * action)
+int
+handle_IRQ_event(unsigned int irq, struct pt_regs *regs,
+		 struct irqaction *action)
 {
 	int status;
 	int cpu = smp_processor_id();
@@ -232,7 +231,8 @@ static unsigned long irq_affinity [NR_IRQS] = { [0 ... NR_IRQS-1] = ~0UL };
 
 #define HEX_DIGITS 16
 
-static int irq_affinity_read_proc (char *page, char **start, off_t off,
+static int
+irq_affinity_read_proc (char *page, char **start, off_t off,
 			int count, int *eof, void *data)
 {
 	if (count < HEX_DIGITS+1)
@@ -240,8 +240,9 @@ static int irq_affinity_read_proc (char *page, char **start, off_t off,
 	return sprintf (page, "%016lx\n", irq_affinity[(long)data]);
 }
 
-static unsigned int parse_hex_value (const char *buffer,
-		unsigned long count, unsigned long *ret)
+static unsigned int
+parse_hex_value (const char *buffer,
+		 unsigned long count, unsigned long *ret)
 {
 	unsigned char hexnum [HEX_DIGITS];
 	unsigned long value;
@@ -277,8 +278,9 @@ out:
 	return 0;
 }
 
-static int irq_affinity_write_proc (struct file *file, const char *buffer,
-					unsigned long count, void *data)
+static int
+irq_affinity_write_proc(struct file *file, const char *buffer,
+			unsigned long count, void *data)
 {
 	int irq = (long) data, full_count = count, err;
 	unsigned long new_value;
@@ -304,7 +306,8 @@ static int irq_affinity_write_proc (struct file *file, const char *buffer,
 	return full_count;
 }
 
-static int prof_cpu_mask_read_proc (char *page, char **start, off_t off,
+static int
+prof_cpu_mask_read_proc(char *page, char **start, off_t off,
 			int count, int *eof, void *data)
 {
 	unsigned long *mask = (unsigned long *) data;
@@ -313,8 +316,9 @@ static int prof_cpu_mask_read_proc (char *page, char **start, off_t off,
 	return sprintf (page, "%08lx\n", *mask);
 }
 
-static int prof_cpu_mask_write_proc (struct file *file, const char *buffer,
-					unsigned long count, void *data)
+static int
+prof_cpu_mask_write_proc(struct file *file, const char *buffer,
+			 unsigned long count, void *data)
 {
 	unsigned long *mask = (unsigned long *) data, full_count = count, err;
 	unsigned long new_value;
@@ -329,7 +333,8 @@ static int prof_cpu_mask_write_proc (struct file *file, const char *buffer,
 
 #define MAX_NAMELEN 10
 
-static void register_irq_proc (unsigned int irq)
+static void
+register_irq_proc (unsigned int irq)
 {
 	struct proc_dir_entry *entry;
 	char name [MAX_NAMELEN];
@@ -356,7 +361,8 @@ static void register_irq_proc (unsigned int irq)
 
 unsigned long prof_cpu_mask = ~0UL;
 
-void init_irq_proc (void)
+void
+init_irq_proc (void)
 {
 	struct proc_dir_entry *entry;
 	int i;
@@ -472,7 +478,8 @@ free_irq(unsigned int irq, void *dev_id)
 	}
 }
 
-int get_irq_list(char *buf)
+int
+get_irq_list(char *buf)
 {
 	int i, j;
 	struct irqaction * action;
@@ -525,241 +532,6 @@ int get_irq_list(char *buf)
 	return p - buf;
 }
 
-#ifdef CONFIG_SMP
-/* Who has global_irq_lock. */
-int global_irq_holder = NO_PROC_ID;
-
-/* This protects IRQ's. */
-spinlock_t global_irq_lock = SPIN_LOCK_UNLOCKED;
-
-/* Global IRQ locking depth. */
-static void *previous_irqholder = NULL;
-
-#define MAXCOUNT 100000000
-
-static void show(char * str, void *where);
-
-static inline void
-wait_on_irq(int cpu, void *where)
-{
-	int count = MAXCOUNT;
-
-	for (;;) {
-
-		/*
-		 * Wait until all interrupts are gone. Wait
-		 * for bottom half handlers unless we're
-		 * already executing in one..
-		 */
-		if (!irqs_running()) {
-			if (local_bh_count(cpu)
-			    || !spin_is_locked(&global_bh_lock))
-				break;
-		}
-
-		/* Duh, we have to loop. Release the lock to avoid deadlocks */
-		spin_unlock(&global_irq_lock);
-
-		for (;;) {
-			if (!--count) {
-				show("wait_on_irq", where);
-				count = MAXCOUNT;
-			}
-			__sti();
-			udelay(1); /* make sure to run pending irqs */
-			__cli();
-
-			if (irqs_running())
-				continue;
-			if (spin_is_locked(&global_irq_lock))
-				continue;
-			if (!local_bh_count(cpu)
-			    && spin_is_locked(&global_bh_lock))
-				continue;
-			if (spin_trylock(&global_irq_lock))
-				break;
-		}
-	}
-}
-
-static inline void
-get_irqlock(int cpu, void* where)
-{
-	if (!spin_trylock(&global_irq_lock)) {
-		/* Do we already hold the lock?  */
-		if (cpu == global_irq_holder)
-			return;
-		/* Uhhuh.. Somebody else got it.  Wait.  */
-		spin_lock(&global_irq_lock);
-	}
-
-	/*
-	 * Ok, we got the lock bit.
-	 * But that's actually just the easy part.. Now
-	 * we need to make sure that nobody else is running
-	 * in an interrupt context. 
-	 */
-	wait_on_irq(cpu, where);
-
-	/*
-	 * Finally.
-	 */
-#if DEBUG_SPINLOCK
-	global_irq_lock.task = current;
-	global_irq_lock.previous = where;
-#endif
-	global_irq_holder = cpu;
-	previous_irqholder = where;
-}
-
-void
-__global_cli(void)
-{
-	int cpu = smp_processor_id();
-	void *where = __builtin_return_address(0);
-
-	/*
-	 * Maximize ipl.  If ipl was previously 0 and if this thread
-	 * is not in an irq, then take global_irq_lock.
-	 */
-	if (swpipl(IPL_MAX) == IPL_MIN && !local_irq_count(cpu))
-		get_irqlock(cpu, where);
-}
-
-void
-__global_sti(void)
-{
-        int cpu = smp_processor_id();
-
-        if (!local_irq_count(cpu))
-		release_irqlock(cpu);
-	__sti();
-}
-
-/*
- * SMP flags value to restore to:
- * 0 - global cli
- * 1 - global sti
- * 2 - local cli
- * 3 - local sti
- */
-unsigned long
-__global_save_flags(void)
-{
-        int retval;
-        int local_enabled;
-        unsigned long flags;
-	int cpu = smp_processor_id();
-
-        __save_flags(flags);
-        local_enabled = (!(flags & 7));
-        /* default to local */
-        retval = 2 + local_enabled;
-
-        /* Check for global flags if we're not in an interrupt.  */
-        if (!local_irq_count(cpu)) {
-                if (local_enabled)
-                        retval = 1;
-                if (global_irq_holder == cpu)
-                        retval = 0;
-	}
-	return retval;
-}
-
-void
-__global_restore_flags(unsigned long flags)
-{
-        switch (flags) {
-        case 0:
-                __global_cli();
-                break;
-        case 1:
-                __global_sti();
-                break;
-        case 2:
-                __cli();
-                break;
-        case 3:
-                __sti();
-                break;
-        default:
-                printk(KERN_ERR "global_restore_flags: %08lx (%p)\n",
-                        flags, __builtin_return_address(0));
-        }
-}
-
-static void
-show(char * str, void *where)
-{
-#if 0
-	int i;
-        unsigned long *stack;
-#endif
-        int cpu = smp_processor_id();
-
-        printk("\n%s, CPU %d: %p\n", str, cpu, where);
-        printk("irq:  %d [%d %d]\n",
-	       irqs_running(),
-               cpu_data[0].irq_count,
-	       cpu_data[1].irq_count);
-
-        printk("bh:   %d [%d %d]\n",
-	       spin_is_locked(&global_bh_lock) ? 1 : 0,
-	       cpu_data[0].bh_count,
-	       cpu_data[1].bh_count);
-#if 0
-        stack = (unsigned long *) &str;
-        for (i = 40; i ; i--) {
-		unsigned long x = *++stack;
-                if (x > (unsigned long) &init_task_union &&
-		    x < (unsigned long) &vsprintf) {
-			printk("<[%08lx]> ", x);
-                }
-        }
-#endif
-}
-        
-/*
- * From its use, I infer that synchronize_irq() stalls a thread until
- * the effects of a command to an external device are known to have
- * taken hold.  Typically, the command is to stop sending interrupts.
- * The strategy here is wait until there is at most one processor
- * (this one) in an irq.  The memory barrier serializes the write to
- * the device and the subsequent accesses of global_irq_count.
- * --jmartin
- */
-#define DEBUG_SYNCHRONIZE_IRQ 0
-
-void
-synchronize_irq(void)
-{
-#if 0
-	/* Joe's version.  */
-	int cpu = smp_processor_id();
-	int local_count;
-	int global_count;
-	int countdown = 1<<24;
-	void *where = __builtin_return_address(0);
-
-	mb();
-	do {
-		local_count = local_irq_count(cpu);
-		global_count = atomic_read(&global_irq_count);
-		if (DEBUG_SYNCHRONIZE_IRQ && (--countdown == 0)) {
-			printk("%d:%d/%d\n", cpu, local_count, global_count);
-			show("synchronize_irq", where);
-			break;
-		}
-	} while (global_count != local_count);
-#else
-	/* Jay's version.  */
-	if (irqs_running()) {
-		cli();
-		sti();
-	}
-#endif
-}
-#endif /* CONFIG_SMP */
 
 /*
  * do_IRQ handles all normal device IRQ's (the special
@@ -933,7 +705,8 @@ probe_irq_on(void)
  * Return a mask of triggered interrupts (this
  * can handle only legacy ISA interrupts).
  */
-unsigned int probe_irq_mask(unsigned long val)
+unsigned int
+probe_irq_mask(unsigned long val)
 {
 	int i;
 	unsigned int mask;

@@ -19,17 +19,7 @@
 /*#include <linux/module.h>
  #include <linux/kernel.h>
 */
-#if LINUX_VERSION_CODE < 0x2030E
-#define NET_DEVICE device 
-#error bad kernel version code
 
-#else 
-#define NET_DEVICE net_device
-#endif                         
-
-#if LINUX_VERSION_CODE < 0x20300
-#define init_MUTEX(a)  *(a) = MUTEX;
-#endif
 /*
 #include <linux/types.h>
 #include <linux/netdevice.h>
@@ -63,11 +53,6 @@ typedef spinlock_t 			my_spinlock_t	;
 #define my_spin_unlock_irqrestore(a,b) 	spin_unlock_irqrestore(a,b)
 
 
-#if LINUX_VERSION_CODE <= 0x20100
-#define in_interrupt() intr_count
-#endif
-
-
 #define AWC_ERROR	-1
 #define AWC_SUCCESS	0
 
@@ -79,6 +64,10 @@ struct awc_cis {
 	unsigned short socket_and_copy_register;
 
 };
+
+
+/* timeout for transmit watchdog timer */
+#define TX_TIMEOUT			(HZ * 3)
 
 
 
@@ -137,7 +126,7 @@ struct awc_bap {
 struct awc_command {
 	volatile int		state;
 	volatile int		lock_state;
-	struct NET_DEVICE *		dev;
+	struct net_device *		dev;
 	struct awc_private *	priv;
 	u16			port;
 	struct awc_bap * 	bap;
@@ -1293,7 +1282,7 @@ struct awc_strings {
 /*****************************     R  I  D	***************/
 
 #define AWC_NOF_RIDS	18
-extern int awc_rid_setup(struct NET_DEVICE * dev);
+extern int awc_rid_setup(struct net_device * dev);
 
 struct aironet4500_rid_selector{
 	const u16 selector;
@@ -1427,7 +1416,7 @@ struct awc_rid_dir{
 	const struct aironet4500_rid_selector *	selector;
 	const int size;
 	const struct aironet4500_RID * rids;
-	struct NET_DEVICE * dev ;
+	struct net_device * dev ;
 	void * 	buff;
 	int	bufflen; // just checking
 };
@@ -1490,8 +1479,6 @@ struct awc_private {
 	int			large_buff_mem;
 	int			small_buff_no;
 	
-	int tx_timeout;
-	
 	volatile int		mac_enabled;
 	u16			link_status;
 	u8			link_status_changed;
@@ -1533,60 +1520,59 @@ struct awc_private {
 	int 			card_type;
 };
 
-extern int 		awc_init(struct NET_DEVICE * dev);
-extern void 		awc_reset(struct NET_DEVICE *dev);
-extern int 		awc_config(struct NET_DEVICE *dev);
-extern int 		awc_open(struct NET_DEVICE *dev);
-extern void 		awc_tx_timeout(struct NET_DEVICE *dev);
-extern int 		awc_tx_done(struct awc_fid * rx_fid); 
-extern int 		awc_start_xmit(struct sk_buff *, struct NET_DEVICE *);
+extern int 		awc_init(struct net_device * dev);
+extern void 		awc_reset(struct net_device *dev);
+extern int 		awc_config(struct net_device *dev);
+extern int 		awc_open(struct net_device *dev);
+extern void 		awc_tx_timeout(struct net_device *dev);
+extern int 		awc_start_xmit(struct sk_buff *, struct net_device *);
 extern void 		awc_interrupt(int irq, void *dev_id, struct pt_regs *regs);
-extern struct enet_statistics *	awc_get_stats(struct NET_DEVICE *dev);
-extern int 		awc_rx(struct NET_DEVICE *dev, struct awc_fid * rx_fid);
-extern void		awc_set_multicast_list(struct NET_DEVICE *dev);
-extern int awc_change_mtu(struct NET_DEVICE *dev, int new_mtu);  
-extern int 		awc_close(struct NET_DEVICE *dev);
-extern int		awc_private_init(struct NET_DEVICE * dev);
+extern struct enet_statistics *	awc_get_stats(struct net_device *dev);
+extern int 		awc_rx(struct net_device *dev, struct awc_fid * rx_fid);
+extern void		awc_set_multicast_list(struct net_device *dev);
+extern int awc_change_mtu(struct net_device *dev, int new_mtu);  
+extern int 		awc_close(struct net_device *dev);
+extern int		awc_private_init(struct net_device * dev);
 extern int awc_register_proc(int (*awc_proc_set_device) (int),int (*awc_proc_unset_device)(int));
 extern int awc_unregister_proc(void);
 extern int (* awc_proc_set_fun) (int) ;
 extern int (* awc_proc_unset_fun) (int) ;
-extern int	awc_interrupt_process(struct NET_DEVICE * dev);
-extern int	awc_readrid(struct NET_DEVICE * dev, struct aironet4500_RID * rid, void *pBuf );
-extern int 	awc_writerid(struct NET_DEVICE * dev, struct aironet4500_RID * rid, void *pBuf);
-extern int 	awc_readrid_dir(struct NET_DEVICE * dev, struct awc_rid_dir * rid );
-extern int 	awc_writerid_dir(struct NET_DEVICE * dev, struct awc_rid_dir * rid);
-extern int 	awc_tx_alloc(struct NET_DEVICE * dev) ;
-extern int	awc_tx_dealloc(struct NET_DEVICE * dev);
-extern struct awc_fid *awc_tx_fid_lookup(struct NET_DEVICE * dev, u16 fid);
-extern int 	awc_issue_soft_reset(struct NET_DEVICE * dev);
-extern int	awc_issue_noop(struct NET_DEVICE * dev);
-extern int 	awc_dump_registers(struct NET_DEVICE * dev);
+extern int	awc_interrupt_process(struct net_device * dev);
+extern int	awc_readrid(struct net_device * dev, struct aironet4500_RID * rid, void *pBuf );
+extern int 	awc_writerid(struct net_device * dev, struct aironet4500_RID * rid, void *pBuf);
+extern int 	awc_readrid_dir(struct net_device * dev, struct awc_rid_dir * rid );
+extern int 	awc_writerid_dir(struct net_device * dev, struct awc_rid_dir * rid);
+extern int 	awc_tx_alloc(struct net_device * dev) ;
+extern int	awc_tx_dealloc(struct net_device * dev);
+extern struct awc_fid *awc_tx_fid_lookup(struct net_device * dev, u16 fid);
+extern int 	awc_issue_soft_reset(struct net_device * dev);
+extern int	awc_issue_noop(struct net_device * dev);
+extern int 	awc_dump_registers(struct net_device * dev);
 extern unsigned short  awc_issue_command_and_block(struct awc_command * cmd);
-extern int	awc_enable_MAC(struct NET_DEVICE * dev);
-extern int	awc_disable_MAC(struct NET_DEVICE * dev);
-extern int	awc_read_all_rids(struct NET_DEVICE * dev);
-extern int	awc_write_all_rids(struct NET_DEVICE * dev);
-extern int	awc_receive_packet(struct NET_DEVICE * dev);
-extern int	awc_transmit_packet(struct NET_DEVICE * dev, struct awc_fid * tx_buff) ;
-extern int	awc_tx_complete_check(struct NET_DEVICE * dev);
-extern int	awc_interrupt_process(struct NET_DEVICE * dev);
-extern void 	awc_bh(struct NET_DEVICE *dev);
-extern int 	awc_802_11_find_copy_path(struct NET_DEVICE * dev, struct awc_fid * rx_buff);
-extern void 	awc_802_11_router_rx(struct NET_DEVICE * dev,struct awc_fid * rx_buff);
-extern int 	awc_802_11_tx_find_path_and_post(struct NET_DEVICE * dev, struct sk_buff * skb);
-extern void 	awc_802_11_after_tx_packet_to_card_write(struct NET_DEVICE * dev, struct awc_fid * tx_buff);
-extern void 	awc_802_11_after_failed_tx_packet_to_card_write(struct NET_DEVICE * dev,struct awc_fid * tx_buff);
-extern void 	awc_802_11_after_tx_complete(struct NET_DEVICE * dev, struct awc_fid * tx_buff);
-extern void 	awc_802_11_failed_rx_copy(struct NET_DEVICE * dev,struct awc_fid * rx_buff);
-extern int 	awc_tx_alloc(struct NET_DEVICE * dev) ;
-extern int 	awc_tx_dealloc_fid(struct NET_DEVICE * dev,struct awc_fid * fid);
-extern int	awc_tx_dealloc(struct NET_DEVICE * dev);
+extern int	awc_enable_MAC(struct net_device * dev);
+extern int	awc_disable_MAC(struct net_device * dev);
+extern int	awc_read_all_rids(struct net_device * dev);
+extern int	awc_write_all_rids(struct net_device * dev);
+extern int	awc_receive_packet(struct net_device * dev);
+extern int	awc_transmit_packet(struct net_device * dev, struct awc_fid * tx_buff) ;
+extern int	awc_tx_complete_check(struct net_device * dev);
+extern int	awc_interrupt_process(struct net_device * dev);
+extern void 	awc_bh(struct net_device *dev);
+extern int 	awc_802_11_find_copy_path(struct net_device * dev, struct awc_fid * rx_buff);
+extern void 	awc_802_11_router_rx(struct net_device * dev,struct awc_fid * rx_buff);
+extern int 	awc_802_11_tx_find_path_and_post(struct net_device * dev, struct sk_buff * skb);
+extern void 	awc_802_11_after_tx_packet_to_card_write(struct net_device * dev, struct awc_fid * tx_buff);
+extern void 	awc_802_11_after_failed_tx_packet_to_card_write(struct net_device * dev,struct awc_fid * tx_buff);
+extern void 	awc_802_11_after_tx_complete(struct net_device * dev, struct awc_fid * tx_buff);
+extern void 	awc_802_11_failed_rx_copy(struct net_device * dev,struct awc_fid * rx_buff);
+extern int 	awc_tx_alloc(struct net_device * dev) ;
+extern int 	awc_tx_dealloc_fid(struct net_device * dev,struct awc_fid * fid);
+extern int	awc_tx_dealloc(struct net_device * dev);
 extern struct awc_fid *
-	awc_tx_fid_lookup_and_remove(struct NET_DEVICE * dev, u16 fid_handle);
-extern int 	awc_queues_init(struct NET_DEVICE * dev);
-extern int 	awc_queues_destroy(struct NET_DEVICE * dev);
-extern int 	awc_rids_setup(struct NET_DEVICE * dev);
+	awc_tx_fid_lookup_and_remove(struct net_device * dev, u16 fid_handle);
+extern int 	awc_queues_init(struct net_device * dev);
+extern int 	awc_queues_destroy(struct net_device * dev);
+extern int 	awc_rids_setup(struct net_device * dev);
 
 
 
@@ -1603,7 +1589,7 @@ extern int tx_rate;
 extern int awc_full_stats;
 
 #define MAX_AWCS	4
-extern struct NET_DEVICE * aironet4500_devices[MAX_AWCS];
+extern struct net_device * aironet4500_devices[MAX_AWCS];
 
 #define AWC_DEBUG 1
 
@@ -1613,18 +1599,6 @@ extern struct NET_DEVICE * aironet4500_devices[MAX_AWCS];
 #else
 	#define DEBUG(a, args...)
 	#define AWC_ENTRY_EXIT_DEBUG(a)
-#endif
-
-#if LINUX_VERSION_CODE < 0x20100
-#ifndef test_and_set_bit
-          #define test_and_set_bit(a,b)           set_bit(a,b)
-#endif                         
-#endif
-
-#if LINUX_VERSION_CODE  < 0x20100
-	#define FREE_SKB(a) dev_kfree_skb(a, FREE_WRITE)
-#else
-	#define FREE_SKB(a) dev_kfree_skb(a)
 #endif
 
 #endif /* AIRONET4500_H */

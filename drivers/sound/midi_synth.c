@@ -14,8 +14,6 @@
  * Thomas Sailer   : ioctl code reworked (vmalloc/vfree removed)
  * Andrew Veliath  : fixed running status in MIDI input state machine
  */
-#include <linux/config.h>
-
 #define USE_SEQ_MACROS
 #define USE_SIMPLE_MACROS
 

@@ -112,13 +112,13 @@ static void flush_stale_links(void)
    by the net software, because we only register already-found cards.
 */
 
-static int awc_pcmcia_init(struct NET_DEVICE *dev)
+static int awc_pcmcia_init(struct net_device *dev)
 {
 	return awc_init(dev);
 
 }
 
-static int awc_pcmcia_open(struct NET_DEVICE *dev)
+static int awc_pcmcia_open(struct net_device *dev)
 {
 	dev_link_t *link;
 	int status;
@@ -136,7 +136,7 @@ static int awc_pcmcia_open(struct NET_DEVICE *dev)
 	return status;
 }
 
-static int awc_pcmcia_close(struct NET_DEVICE *dev)
+static int awc_pcmcia_close(struct net_device *dev)
 {
 //	int ioaddr = dev->base_addr;
 	dev_link_t *link;
@@ -170,7 +170,7 @@ static dev_link_t *awc_attach(void)
 {
 	client_reg_t client_reg;
 	dev_link_t *link = NULL;
-	struct NET_DEVICE *dev = NULL;
+	struct net_device *dev = NULL;
 	int  ret;
 
 	PC_DEBUG(0, "awc_attach()\n");
@@ -199,8 +199,8 @@ static dev_link_t *awc_attach(void)
 
 	/* Create the network device object. */
 
-	dev = kmalloc(sizeof(struct NET_DEVICE ), GFP_KERNEL);
-	memset(dev,0,sizeof(struct NET_DEVICE));
+	dev = kmalloc(sizeof(struct net_device ), GFP_KERNEL);
+	memset(dev,0,sizeof(struct net_device));
 //	dev =  init_etherdev(0, sizeof(struct awc_private) );
 	if (!dev ) {
 		printk(KERN_CRIT "out of mem on dev alloc \n");
@@ -321,10 +321,10 @@ static void awc_detach(dev_link_t *link)
 	}
 	
 	if (link->priv) {
-		//struct NET_DEVICE *dev = link->priv;
+		//struct net_device *dev = link->priv;
 		// dam dam damn mif (dev->priv)
 		//	kfree_s(dev->priv, sizeof(struct awc_private));
-		kfree_s(link->priv, sizeof(struct NET_DEVICE));
+		kfree_s(link->priv, sizeof(struct net_device));
 	}
 	kfree_s(link->dev, sizeof(struct dev_node_t));
 	kfree_s(link, sizeof(struct dev_link_t));
@@ -345,7 +345,7 @@ while ((last_ret=CardServices(last_fn=(fn), args))!=0) goto cs_failed
 static void awc_pcmcia_config(dev_link_t *link)
 {
 	client_handle_t handle;
-	struct NET_DEVICE *dev;
+	struct net_device *dev;
 	struct awc_private *lp;
 	tuple_t tuple;
 	int ii;
@@ -520,7 +520,7 @@ failed:
 static void awc_release(u_long arg)
 {
 	dev_link_t *link = (dev_link_t *)arg;
-	struct NET_DEVICE *dev = link->priv;
+	struct net_device *dev = link->priv;
 
 	DEBUG(0, "awc_release(0x%p)\n", link);
 
@@ -558,7 +558,7 @@ static int awc_event(event_t event, int priority,
 					   event_callback_args_t *args)
 {
 	dev_link_t *link = args->client_data;
-	struct NET_DEVICE *dev = link->priv;
+	struct net_device *dev = link->priv;
 
 	PC_DEBUG(1, "awc_event(0x%06x)\n", event);
 

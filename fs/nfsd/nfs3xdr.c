@@ -181,7 +181,11 @@ encode_fattr3(struct svc_rqst *rqstp, u32 *p, struct dentry *dentry)
 	} else {
 		p = xdr_encode_hyper(p, (u64) inode->i_size);
 	}
-	p = xdr_encode_hyper(p, ((u64)inode->i_blocks) << 9);
+	if (inode->i_blksize == 0 && inode->i_blocks == 0)
+		/* Minix file system(?) i_size is (hopefully) close enough */
+		p = xdr_encode_hyper(p, (u64)(inode->i_size +511)& ~511);
+	else
+		p = xdr_encode_hyper(p, ((u64)inode->i_blocks) << 9);
 	*p++ = htonl((u32) MAJOR(inode->i_rdev));
 	*p++ = htonl((u32) MINOR(inode->i_rdev));
 	p = xdr_encode_hyper(p, (u64) inode->i_dev);

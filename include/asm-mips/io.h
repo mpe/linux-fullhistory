@@ -16,8 +16,6 @@
  */
 #undef CONF_SLOWDOWN_IO
 
-#include <linux/config.h>
-
 #include <asm/addrspace.h>
 
 /*

@@ -1,13 +1,8 @@
 /* $Id: aty128fb.c,v 1.1.1.1.36.1 1999/12/11 09:03:05 Exp $
  *  linux/drivers/video/aty128fb.c -- Frame buffer device for ATI Rage128
  *
- *  Copyright (C) 1999-2000, Anthony Tong <atong@uiuc.edu>
- *
- *                Brad Douglas <brad@neruo.com>
- *				- x86 support
- *				- MTRR
- *				- Probe ROM for PLL
- *				- modedb
+ *  Copyright (C) 1999-2000, Brad Douglas <brad@neruo.com>
+ *  Copyright (C) 1999, Anthony Tong <atong@uiuc.edu>
  *
  *                Ani Joshi / Jeff Garzik
  *                      - Code cleanup
@@ -23,7 +18,7 @@
  *		- determine MCLK from previous setting -done for x86            
  *              - calculate XCLK, rather than probe BIOS
  *		- hardware cursor support
- *              - acceleration
+ *              - acceleration (do not use with Rage128 Pro!)
  *		- ioctl()'s
  */
 
@@ -56,7 +51,9 @@
 #if defined(CONFIG_PPC)
 #include <asm/prom.h>
 #include <asm/pci-bridge.h>
+#ifdef CONFIG_NVRAM
 #include <linux/nvram.h>
+#endif
 #include <video/macmodes.h>
 #endif
 
@@ -76,16 +73,6 @@
 
 #include "aty128.h"
 
-/* compatibility with older kernels */
-#ifndef LINUX_VERSION_CODE
-#include <linux/version.h>
-#endif
-
-#ifndef KERNEL_VERSION
-#define KERNEL_VERSION(x,y,z) (((x)<<16)+(y)<<8)+(z))
-#endif
-
-
 /* Debug flag */
 #undef DEBUG
 
@@ -104,7 +91,6 @@ static struct fb_var_screeninfo default_var = {
     0, FB_VMODE_NONINTERLACED
 };
 
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(2,3,1)
 #ifndef MODULE
 /* default modedb mode */
 static struct fb_videomode defaultmode __initdata = {
@@ -112,7 +98,6 @@ static struct fb_videomode defaultmode __initdata = {
     NULL, 60, 640, 480, 39722, 48, 16, 33, 10, 96, 2,
     0, FB_VMODE_NONINTERLACED
 };
-#endif
 #endif
 
 /* chip description information */
@@ -192,9 +177,14 @@ static unsigned int initdepth __initdata = 8;
 static const char *mode_option __initdata = NULL;
 #endif
 
-#if defined(CONFIG_PPC)
+#ifdef CONFIG_PPC
+#ifdef CONFIG_NVRAM_NOT_DEFINED
+static int default_vmode __initdata = VMODE_NVRAM;
+static int default_cmode __initdata = CMODE_NVRAM;
+#else
 static int default_vmode __initdata = VMODE_CHOOSE;
 static int default_cmode __initdata = CMODE_8;
+#endif
 #endif
 
 #ifdef CONFIG_MTRR
@@ -313,10 +303,7 @@ static int aty128fb_ioctl(struct inode *inode, struct file *file, u_int cmd,
      *  Interface to the low level console driver
      */
 
-void aty128fb_init(void);
-#ifdef CONFIG_FB_OF
-void aty128fb_of_init(struct device_node *dp);
-#endif
+int aty128fb_init(void);
 static int aty128fbcon_switch(int con, struct fb_info *info);
 static void aty128fbcon_blank(int blank, struct fb_info *info);
 
@@ -334,11 +321,8 @@ static int aty128_getcolreg(u_int regno, u_int *red, u_int *green, u_int *blue,
 static int aty128_setcolreg(u_int regno, u_int red, u_int green, u_int blue,
 				u_int transp, struct fb_info *info);
 static void do_install_cmap(int con, struct fb_info *info);
-#ifndef CONFIG_FB_OF
-static void aty128pci_probe(void);
 static int aty128_pci_register(struct pci_dev *pdev,
                                const struct aty128_chip_info *aci);
-#endif
 static struct fb_info_aty128 *aty128_board_list_add(struct fb_info_aty128
 				*board_list, struct fb_info_aty128 *new_node);
 #ifndef CONFIG_PPC
@@ -1444,10 +1428,16 @@ aty128_encode_fix(struct fb_fix_screeninfo *fix,
     memset(fix, 0, sizeof(struct fb_fix_screeninfo));
     
     strcpy(fix->id, aty128fb_name);
-    fix->smem_start = (long)info->frame_buffer_phys;
-    fix->smem_len = (u32)info->vram_size;
 
+#ifdef CONFIG_PPC /* why?  I don't know */
+    *fix->smem_start = (long)info->frame_buffer_phys;
+    *fix->mmio_start = (long)info->regbase_phys;
+#else
+    fix->smem_start = (long)info->frame_buffer_phys;
     fix->mmio_start = (long)info->regbase_phys;
+#endif
+
+    fix->smem_len = (u32)info->vram_size;
     fix->mmio_len = 0x1fff;
 
     fix->type = FB_TYPE_PACKED_PIXELS;
@@ -1673,7 +1663,7 @@ aty128_init(struct fb_info_aty128 *info, const char *name)
     int j, k;
     u8 chip_rev;
     const struct aty128_chip_info *aci = &aty128_pci_probe_list[0];
-    char *video_card = NULL;
+    char *video_card = "Rage128";
 
     if (!register_test(info)) {
 	printk(KERN_ERR "aty128fb: Can't write to video registers\n");
@@ -1712,23 +1702,29 @@ aty128_init(struct fb_info_aty128 *info, const char *name)
     var = default_var;
 #else
     memset(&var, 0, sizeof(var));
+#ifdef CONFIG_NVRAM
+    if (default_vmode == VMODE_NVRAM) {
+        default_vmode = nvram_read_byte(NV_VMODE);
+        if (default_vmode <= 0 || default_vmode > VMODE_MAX)
+            default_vmode = VMODE_CHOOSE;
+    }
+#endif
 #ifdef CONFIG_PPC
     if (default_vmode == VMODE_CHOOSE) {
         var = default_var;
 #endif /* CONFIG_PPC */
 
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(2,3,1)
 	if (!fb_find_mode(&var, &info->fb_info, mode_option, NULL, 0,
 			  &defaultmode, initdepth))
 	    var = default_var;
-#endif
 
 #ifdef CONFIG_PPC
-    } else {
-        if (mac_vmode_to_var(default_vmode, default_cmode, &var))
-            var = default_var;
+#ifdef CONFIG_NVRAM
+    if (default_cmode == CMODE_NVRAM)
+        default_cmode = nvram_read_byte(NV_CMODE);
+#endif
     }
-#endif /* CONFIG_PPC */
+#endif
 #endif /* MODULE */
 
     if (noaccel)
@@ -1737,7 +1733,7 @@ aty128_init(struct fb_info_aty128 *info, const char *name)
         var.accel_flags |= FB_ACCELF_TEXT;
 
     if (aty128_decode_var(&var, &info->default_par, info)) {
-	printk(KERN_ERR "Cannot set default mode.\n");
+	printk(KERN_ERR "aty128fb: Cannot set default mode.\n");
 	return 0;
     }
 
@@ -1790,21 +1786,10 @@ fb_info_aty128 *aty128_board_list_add(struct fb_info_aty128 *board_list,
 }
 
 
-void __init
+int __init
 aty128fb_init(void)
 {
-#if defined(CONFIG_FB_OF)
-    /* let offb handle init */
-#elif defined (CONFIG_PCI)
-    aty128pci_probe();
-#endif
-}
-
-
-#ifndef CONFIG_FB_OF
-void __init
-aty128pci_probe(void)
-{
+#ifdef CONFIG_PCI
     struct pci_dev *pdev = NULL;
     const struct aty128_chip_info *aci = &aty128_pci_probe_list[0];
 
@@ -1812,16 +1797,18 @@ aty128pci_probe(void)
         pdev = pci_find_device(PCI_VENDOR_ID_ATI, aci->device, pdev);
         while (pdev != NULL) {
             if (aty128_pci_register(pdev, aci) == 0)
-                return;
+                return 0;
             pdev = pci_find_device(PCI_VENDOR_ID_ATI, aci->device, pdev);
         }
 	aci++;
     }
+#endif
 
-    return;
+    return 0;
 }
 
 
+#ifdef CONFIG_PCI
 /* register a card    ++ajoshi */
 static int __init
 aty128_pci_register(struct pci_dev *pdev,
@@ -1831,31 +1818,27 @@ aty128_pci_register(struct pci_dev *pdev,
     unsigned long fb_addr, reg_addr = 0;
     u16 tmp;
 
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(2,3,1)
     struct resource *rp;
 
     rp = &pdev->resource[0];
     fb_addr = rp->start;
     fb_addr &= PCI_BASE_ADDRESS_MEM_MASK;
 
-    request_mem_region(rp->start, rp->end - rp->start + 1, "aty128fb");
-
-    rp = &pdev->resource[2];
-    reg_addr = rp->start;
-    reg_addr &= PCI_BASE_ADDRESS_MEM_MASK;
-
-    if (!reg_addr) {
+    if (!request_mem_region(rp->start, rp->end - rp->start + 1,
+                            "aty128fb FB")) {
         release_mem_region(pdev->resource[0].start,
                            pdev->resource[0].end -
                            pdev->resource[0].start + 1);
         return -1;
     }
-#else
-    fb_addr = pdev->base_address[0] & PCI_BASE_ADDRESS_MEM_MASK;
-    reg_addr = pdev->base_address[2] & PCI_BASE_ADDRESS_MEM_MASK;
-    if (!reg_addr)
-        return -1;
-#endif
+
+    rp = &pdev->resource[2];
+    reg_addr = rp->start;
+    reg_addr &= PCI_BASE_ADDRESS_MEM_MASK;
+
+    if (!request_mem_region(rp->start, rp->end - rp->start + 1,
+                            "aty128fb MMIO"))
+        goto unmap_out;
 
     info = kmalloc(sizeof(struct fb_info_aty128), GFP_ATOMIC);
     if(!info) {
@@ -1917,18 +1900,16 @@ aty128_pci_register(struct pci_dev *pdev,
 err_out:
     kfree(info);
 unmap_out:
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(2,3,1)
     release_mem_region(pdev->resource[0].start,
 			pdev->resource[0].end -
 			pdev->resource[0].start + 1);
     release_mem_region(pdev->resource[2].start,
 			pdev->resource[2].end -
 			pdev->resource[2].start + 1);
-#endif
 
     return -1;
 }
-#endif /* ! CONFIG_FB_OF */
+#endif /* CONFIG_PCI */
 
 
 #ifndef CONFIG_PPC
@@ -2060,76 +2041,6 @@ aty128_get_pllinfo(struct fb_info_aty128 *info)
     return;
 }           
 #endif /* ! CONFIG_PPC */
-
-
-#ifdef CONFIG_FB_OF
-void __init
-aty128fb_of_init(struct device_node *dp)
-{
-    unsigned long addr, reg_addr, fb_addr;
-    struct fb_info_aty128 *info;
-    u8 bus, devfn;
-    u16 cmd;
-
-    switch (dp->n_addrs) {
-    case 3:
-	fb_addr = dp->addrs[0].address;
-	reg_addr = dp->addrs[2].address;
-	break;
-    default:
-	printk(KERN_ERR "aty128fb: TODO unexpected addresses\n");
-	return;
-    }
-
-    addr = (unsigned long) ioremap(reg_addr, 0x1FFF);
-    if (!addr) {
-	printk(KERN_ERR "aty128fb: can't map memory registers\n");
-	return;
-    }
-
-    info = kmalloc(sizeof(struct fb_info_aty128), GFP_ATOMIC);
-    if (!info) {
-	printk(KERN_ERR "aty128fb: can't alloc fb_info_aty128\n");
-	return;
-    }
-    memset((void *) info, 0, sizeof(struct fb_info_aty128));
-
-    info->regbase_phys = reg_addr;
-    info->regbase = (void *) addr;
-
-    /* enabled memory-space accesses using config-space command register */
-    if (pci_device_loc(dp, &bus, &devfn) == 0) {
-	pcibios_read_config_word(bus, devfn, PCI_COMMAND, &cmd);
-	if (!(cmd & PCI_COMMAND_MEMORY)) {
-	    cmd |= PCI_COMMAND_MEMORY;
-	    pcibios_write_config_word(bus, devfn, PCI_COMMAND, cmd);
-	}
-    }
-
-    info->vram_size = aty_ld_le32(CONFIG_MEMSIZE) & 0x03FFFFFF;
-    info->frame_buffer_phys = fb_addr;
-    info->frame_buffer = (void *) ioremap(fb_addr, info->vram_size);
-
-    if (!info->frame_buffer) {
-        printk(KERN_ERR "aty128fb: can't map frame buffer\n");
-        kfree(info);
-        return;
-    }
-
-    /* fall back to defaults */
-    aty128_timings(info);
-
-    if (!aty128_init(info, dp->full_name)) {
-	kfree(info);
-	return;
-    }
-
-#ifdef CONFIG_FB_COMPAT_XPMAC
-    if (!console_fb_info)
-	console_fb_info = &info->fb_info;
-#endif
-}
-#endif /* CONFIG_FB_OF */
 
 
 /* fill in known card constants if pll_block is not available */
@@ -2572,7 +2483,7 @@ MODULE_DESCRIPTION("FBDev driver for ATI Rage128 cards");
 int __init
 init_module(void)
 {
-    aty128pci_probe();
+    aty128fb_init();
     return 0;
 }
 
@@ -2594,14 +2505,12 @@ cleanup_module(void)
         iounmap(info->regbase);
         iounmap(&info->frame_buffer);
 
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(2,3,1)
         release_mem_region(info->pdev->resource[0].start,
                            info->pdev->resource[0].end -
                            info->pdev->resource[0].start + 1);
         release_mem_region(info->pdev->resource[2].start,
                            info->pdev->resource[2].end -
                            info->pdev->resource[2].start + 1);
-#endif
 
         kfree(info);
     }

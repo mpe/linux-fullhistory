@@ -21,7 +21,6 @@
  *                       the same.
  */
 
-#include <linux/config.h>
 #include "sound_config.h"
 
 #include "sb_mixer.h"

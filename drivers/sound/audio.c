@@ -23,7 +23,6 @@
  * Horst von Brand:  Add missing #include <linux/string.h>
  */
 
-#include <linux/config.h>
 #include <linux/stddef.h>
 #include <linux/string.h>
 #include <linux/kmod.h>

@@ -235,16 +235,18 @@ static int yenta_set_socket(pci_socket_t *socket, socket_state_t *state)
 	socket->io_irq = state->io_irq;
 	bridge = config_readw(socket, CB_BRIDGE_CONTROL) & ~(CB_BRIDGE_CRST | CB_BRIDGE_INTR);
 	if (cb_readl(socket, CB_SOCKET_STATE) & CB_CBCARD) {
+		u8 intr;
 		bridge |= (state->flags & SS_RESET) ? CB_BRIDGE_CRST : 0;
 
 		/* ISA interrupt control? */
+		intr = exca_readb(socket, I365_INTCTL);
+		intr = (intr & ~0xf);
 		if (!socket->cb_irq) {
-			u8 intr = exca_readb(socket, I365_INTCTL);
-			intr = (intr & ~0xf) | state->io_irq;
-			exca_writeb(socket, I365_INTCTL, intr);
+			intr |= state->io_irq;
 			bridge |= CB_BRIDGE_INTR;
 		}
-	} else {
+		exca_writeb(socket, I365_INTCTL, intr);
+	}  else {
 		u8 reg;
 
 		bridge |= CB_BRIDGE_INTR;

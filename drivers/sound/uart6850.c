@@ -16,7 +16,6 @@
  *	Status: Testing required
  *
  */
-#include <linux/config.h>
 #include <linux/module.h>
 
 /* Mon Nov 22 22:38:35 MET 1993 marco@driq.home.usn.nl:

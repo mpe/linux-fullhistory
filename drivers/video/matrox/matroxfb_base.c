@@ -1954,6 +1954,7 @@ static int matroxfb_probe(struct pci_dev* pdev, const struct pci_device_id* dumm
 	struct matrox_fb_info* minfo;
 	struct display* d;
 	int err;
+	u_int32_t cmd;
 #ifndef CONFIG_FB_MATROX_MULTIHEAD
 	static int registered = 0;
 #endif
@@ -1976,6 +1977,7 @@ static int matroxfb_probe(struct pci_dev* pdev, const struct pci_device_id* dumm
 		dev--;
 		return -1;
 	}
+	pci_read_config_dword(pdev, PCI_COMMAND, &cmd);
 	if (pci_enable_device(pdev)) {
 		return -1;
 	}
@@ -2008,9 +2010,19 @@ static int matroxfb_probe(struct pci_dev* pdev, const struct pci_device_id* dumm
 	memcpy(ACCESS_FBINFO(fbcon.fontname), fontname, sizeof(ACCESS_FBINFO(fbcon.fontname)));
 	/* DEVFLAGS */
 	ACCESS_FBINFO(devflags.inverse) = inverse;
-	ACCESS_FBINFO(devflags.novga) = novga;
-	ACCESS_FBINFO(devflags.nobios) = nobios;
-	ACCESS_FBINFO(devflags.noinit) = noinit;
+	if (cmd & PCI_COMMAND_MEMORY) {
+		ACCESS_FBINFO(devflags.novga) = novga;
+		ACCESS_FBINFO(devflags.nobios) = nobios;
+		ACCESS_FBINFO(devflags.noinit) = noinit;
+		/* subsequent heads always needs initialization and must not enable BIOS */
+		novga = 1;
+		nobios = 1;
+		noinit = 0;
+	} else {
+		ACCESS_FBINFO(devflags.novga) = 1;
+		ACCESS_FBINFO(devflags.nobios) = 1;
+		ACCESS_FBINFO(devflags.noinit) = 0;
+	}
 	ACCESS_FBINFO(devflags.nopciretry) = no_pci_retry;
 	ACCESS_FBINFO(devflags.mga_24bpp_fix) = inv24;
 	ACCESS_FBINFO(devflags.precise_width) = option_precise_width;
@@ -2033,13 +2045,11 @@ static int matroxfb_probe(struct pci_dev* pdev, const struct pci_device_id* dumm
 	ACCESS_FBINFO(output.ph) = MATROXFB_OUTPUT_CONN_PRIMARY;
 	ACCESS_FBINFO(output.sh) = 0;
 
-	/* subsequent heads always needs initialization and must not enable BIOS */
-	noinit = 0;
-	nobios = 1;
-	novga = 1;
-
 	err = initMatrox2(PMINFO d, b);
 	if (!err) {
+#ifndef CONFIG_FB_MATROX_MULTIHEAD
+		registered = 1;
+#endif
 		matroxfb_register_device(MINFO);
 		return 0;
 	}

@@ -21,8 +21,6 @@
  *
  * Rob Riggs		Added persistent DMA buffers (1998/10/17)
  */
- 
-#include <linux/config.h>
 
 #define BE_CONSERVATIVE
 #define SAMPLE_ROUNDUP 0

@@ -216,8 +216,10 @@ nfsd_setattr(struct svc_rqst *rqstp, struct svc_fh *fhp, struct iattr *iap)
 
 	if (iap->ia_valid & (ATTR_ATIME | ATTR_MTIME | ATTR_SIZE))
 		accmode |= MAY_WRITE;
-	if (iap->ia_valid & ATTR_SIZE)
+	if (iap->ia_valid & ATTR_SIZE) {
+		accmode |= MAY_OWNER_OVERRIDE;
 		ftype = S_IFREG;
+	}
 
 	/* Get inode */
 	err = fh_verify(rqstp, fhp, ftype, accmode);
@@ -247,7 +249,7 @@ nfsd_setattr(struct svc_rqst *rqstp, struct svc_fh *fhp, struct iattr *iap)
 	    if (delta<0) delta = -delta;
 	    if (delta < MAX_TOUCH_TIME_ERROR) {
 		/* turn off ATTR_[AM]TIME_SET but leave ATTR_[AM]TIME
-		 * this will cause notify_change to setthese times to "now"
+		 * this will cause notify_change to set these times to "now"
 		 */
 		iap->ia_valid &= ~BOTH_TIME_SET;
 		err = inode_change_ok(inode, iap);
@@ -262,7 +264,7 @@ nfsd_setattr(struct svc_rqst *rqstp, struct svc_fh *fhp, struct iattr *iap)
 if (!S_ISREG(inode->i_mode))
 printk("nfsd_setattr: size change??\n");
 		if (iap->ia_size < inode->i_size) {
-			err = nfsd_permission(fhp->fh_export, dentry, MAY_TRUNC);
+			err = nfsd_permission(fhp->fh_export, dentry, MAY_TRUNC|MAY_OWNER_OVERRIDE);
 			if (err)
 				goto out;
 		}
@@ -369,7 +371,7 @@ nfsd_access(struct svc_rqst *rqstp, struct svc_fh *fhp, u32 *access)
 	struct svc_export	*export;
 	struct dentry		*dentry;
 	u32			query, result = 0;
-	int			error;
+	unsigned int		error;
 
 	error = fh_verify(rqstp, fhp, 0, MAY_NOP);
 	if (error)
@@ -378,28 +380,39 @@ nfsd_access(struct svc_rqst *rqstp, struct svc_fh *fhp, u32 *access)
 	export = fhp->fh_export;
 	dentry = fhp->fh_dentry;
 
-	if (S_ISREG(dentry->d_inode->i_mode)) {
+	if (S_ISREG(dentry->d_inode->i_mode))
 		map = nfs3_regaccess;
-	} else if (S_ISDIR(dentry->d_inode->i_mode)) {
+	else if (S_ISDIR(dentry->d_inode->i_mode))
 		map = nfs3_diraccess;
-	} else {
+	else
 		map = nfs3_anyaccess;
-	}
+
 
 	query = *access;
-	while (map->access) {
+	for  (; map->access; map++) {
 		if (map->access & query) {
-			error = nfsd_permission(export, dentry, map->how);
-			if (error == 0)
+			unsigned int err2;
+			err2 = nfsd_permission(export, dentry, map->how);
+			/* cannot use a "switch" as nfserr_* are variables, even though they are constant :-( */
+			if (err2 == 0)
 				result |= map->access;
-			else if (error != -EPERM)
+			/* the following error codes just mean the access was not allowed,
+			 * rather than an error occurred */
+			else if (err2 == nfserr_rofs ||
+				 err2 == nfserr_acces ||
+				 err2 == nfserr_perm
+				)
+				/* simply don't "or" in the access bit. */
+					;
+			else {
+				error = err2;
 				goto out;
+			}
 		}
-		map++;
 	}
 	*access = result;
 
-out:
+ out:
 	return error;
 }
 #endif
@@ -419,7 +432,10 @@ nfsd_open(struct svc_rqst *rqstp, struct svc_fh *fhp, int type,
 	struct inode	*inode;
 	int		err;
 
-	err = fh_verify(rqstp, fhp, type, access);
+	/* If we get here, then the client has already done an "open", and (hopefully)
+	 * checked permission - so allow OWNER_OVERRIDE in case a chmod has now revoked
+	 * permission */
+	err = fh_verify(rqstp, fhp, type, access | MAY_OWNER_OVERRIDE);
 	if (err)
 		goto out;
 
@@ -1029,60 +1045,6 @@ nfsd_create_v3(struct svc_rqst *rqstp, struct svc_fh *fhp,
 #endif /* CONFIG_NFSD_V3 */
 
 /*
- * Truncate a file.
- * The calling routines must make sure to update the ctime
- * field and call notify_change.
- *
- * XXX Nobody calls this thing? -DaveM
- * N.B. After this call fhp needs an fh_put
- */
-int
-nfsd_truncate(struct svc_rqst *rqstp, struct svc_fh *fhp, unsigned long size)
-{
-	struct dentry	*dentry;
-	struct inode	*inode;
-	struct iattr	newattrs;
-	int		err;
-	kernel_cap_t	saved_cap = 0;
-
-	err = fh_verify(rqstp, fhp, S_IFREG, MAY_WRITE | MAY_TRUNC);
-	if (err)
-		goto out;
-
-	dentry = fhp->fh_dentry;
-	inode = dentry->d_inode;
-
-	err = get_write_access(inode);
-	if (err)
-		goto out_nfserr;
-	err = locks_verify_truncate(inode, NULL, size);
-	if (err)
-		goto out_nfserr;
-
-	/* Things look sane, lock and do it. */
-	fh_lock(fhp);
-	DQUOT_INIT(inode);
-	newattrs.ia_size = size;
-	newattrs.ia_valid = ATTR_SIZE | ATTR_CTIME;
-	if (current->fsuid != 0) {
-		saved_cap = current->cap_effective;
-		cap_clear(current->cap_effective);
-	}
-	err = notify_change(dentry, &newattrs);
-	if (current->fsuid != 0)
-		current->cap_effective = saved_cap;
-	put_write_access(inode);
-	if (EX_ISSYNC(fhp->fh_export))
-		nfsd_sync_dir(dentry);
-	fh_unlock(fhp);
-out_nfserr:
-	if (err)
-		err = nfserrno(-err);
-out:
-	return err;
-}
-
-/*
  * Read a symlink. On entry, *lenp must contain the maximum path length that
  * fits into the buffer. On return, it contains the true length.
  * N.B. After this call fhp needs an fh_put
@@ -1627,7 +1589,7 @@ nfsd_permission(struct svc_export *exp, struct dentry *dentry, int acc)
 	if (acc == MAY_NOP)
 		return 0;
 #if 0
-	dprintk("nfsd: permission 0x%x%s%s%s%s%s%s mode 0%o%s%s%s\n",
+	dprintk("nfsd: permission 0x%x%s%s%s%s%s%s%s mode 0%o%s%s%s\n",
 		acc,
 		(acc & MAY_READ)?	" read"  : "",
 		(acc & MAY_WRITE)?	" write" : "",
@@ -1635,6 +1597,7 @@ nfsd_permission(struct svc_export *exp, struct dentry *dentry, int acc)
 		(acc & MAY_SATTR)?	" sattr" : "",
 		(acc & MAY_TRUNC)?	" trunc" : "",
 		(acc & MAY_LOCK)?	" lock"  : "",
+		(acc & MAY_OWNER_OVERRIDE)? " owneroverride" : "",
 		inode->i_mode,
 		IS_IMMUTABLE(inode)?	" immut" : "",
 		IS_APPEND(inode)?	" append" : "",
@@ -1654,23 +1617,30 @@ nfsd_permission(struct svc_export *exp, struct dentry *dentry, int acc)
 
 	if (acc & MAY_LOCK) {
 		/* If we cannot rely on authentication in NLM requests,
-		 * just allow locks, others require read permission
+		 * just allow locks, otherwise require read permission, or
+		 * ownership
 		 */
 		if (exp->ex_flags & NFSEXP_NOAUTHNLM)
 			return 0;
 		else
-			acc = MAY_READ;
+			acc = MAY_READ | MAY_OWNER_OVERRIDE;
 	}
 	/*
-	 * The file owner always gets access permission. This is to make
+	 * The file owner always gets access permission for accesses that
+	 * would normally be checked at open time. This is to make
 	 * file access work even when the client has done a fchmod(fd, 0).
 	 *
 	 * However, `cp foo bar' should fail nevertheless when bar is
 	 * readonly. A sensible way to do this might be to reject all
 	 * attempts to truncate a read-only file, because a creat() call
 	 * always implies file truncation.
+	 * ... but this isn't really fair.  A process may reasonably call
+	 * ftruncate on an open file descriptor on a file with perm 000.
+	 * We must trust the client to do permission checking - using "ACCESS"
+	 * with NFSv3.
 	 */
-	if (inode->i_uid == current->fsuid /* && !(acc & MAY_TRUNC) */)
+	if ((acc & MAY_OWNER_OVERRIDE) &&
+	    inode->i_uid == current->fsuid)
 		return 0;
 
 	if (current->fsuid != 0) {

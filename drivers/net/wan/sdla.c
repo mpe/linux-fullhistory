@@ -565,7 +565,7 @@ int sdla_assoc(struct net_device *slave, struct net_device *master)
 	flp->dlci[i] = -*(short *)(master->dev_addr);
 	master->mtu = slave->mtu;
 
-	if (netif_running(dev)) {
+	if (netif_running(slave)) {
 		if (flp->config.station == FRAD_STATION_CPE)
 			sdla_reconfig(slave);
 		else

@@ -14,8 +14,6 @@
  *		     more things module options.
  */
 
-#include <linux/config.h>
-
 #include "sound_config.h"
 
 #ifndef DEB

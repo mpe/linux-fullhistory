@@ -14,11 +14,8 @@ L_TARGET := pci.a
 # Nasty trick as we need to link files with no references from the outside.
 O_TARGET := pci_core.o
 L_OBJS	 := pci_core.o
-O_OBJS   := pci.o quirks.o
-
-ifdef CONFIG_MODULES
-OX_OBJS  += pcisyms.o
-endif
+O_OBJS   := quirks.o
+OX_OBJS   := pci.o
 
 ifdef CONFIG_PROC_FS
 O_OBJS   += proc.o

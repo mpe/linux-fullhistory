@@ -193,10 +193,13 @@ static void acm_ctrl_irq(struct urb *urb)
 
 			newctrl = le16_to_cpup((__u16 *) data);
 
+#if 0
+			/* Please someone tell me how to do this properly to kill pppd and not kill minicom */
 			if (acm->tty && !acm->clocal && (acm->ctrlin & ~newctrl & ACM_CTRL_DCD)) {
 				dbg("calling hangup");
 				tty_hangup(acm->tty);
 			}
+#endif
 
 			acm->ctrlin = newctrl;
 
@@ -428,6 +431,7 @@ static void acm_tty_set_termios(struct tty_struct *tty, struct termios *termios_
 	struct acm *acm = tty->driver_data;
 	struct termios *termios = tty->termios;
 	struct acm_line newline;
+	int newctrl = acm->ctrlout;
 
 	if (!ACM_READY(acm)) return;
 
@@ -439,20 +443,20 @@ static void acm_tty_set_termios(struct tty_struct *tty, struct termios *termios_
 	newline.databits = acm_tty_size[(termios->c_cflag & CSIZE) >> 4];
 
 	acm->clocal = termios->c_cflag & CLOCAL;
-
-	if (!memcmp(&acm->line, &newline, sizeof(struct acm_line)))
-		return;
-
-	memcpy(&acm->line, &newline, sizeof(struct acm_line));
-
+	
 	if (!newline.speed) {
-		if (acm->ctrlout) acm_set_control(acm, acm->ctrlout = 0);
-		return;
+		newline.speed = acm->line.speed;
+		newctrl &= ~ACM_CTRL_DTR;
+	} else  newctrl |=  ACM_CTRL_DTR;
+
+	if (newctrl != acm->ctrlout)
+		acm_set_control(acm, acm->ctrlout = newctrl);
+
+	if (memcmp(&acm->line, &newline, sizeof(struct acm_line))) {
+		memcpy(&acm->line, &newline, sizeof(struct acm_line));
+		dbg("set line: %d %d %d %d", newline.speed, newline.stopbits, newline.parity, newline.databits);
+		acm_set_line(acm, &acm->line);
 	}
-
-	acm_set_line(acm, &acm->line);
-
-	dbg("set line: %d %d %d %d", newline.speed, newline.stopbits, newline.parity, newline.databits);
 }
 
 /*

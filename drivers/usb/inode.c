@@ -45,9 +45,6 @@
 
 static LIST_HEAD(superlist);
 
-extern struct inode_operations usbdevfs_bus_inode_operations;
-extern struct file_operations usbdevfs_bus_file_operations;
-
 struct special {
 	const char *name;
 	struct file_operations *fops;

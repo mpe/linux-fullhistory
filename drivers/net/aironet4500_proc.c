@@ -264,7 +264,7 @@ int awc_proc_fun(ctl_table *ctl, int write, struct file * filp,
 
 	struct awc_rid_dir * rid_dir;
 
-	struct NET_DEVICE * dev= NULL;
+	struct net_device * dev= NULL;
 	struct aironet4500_RID * rid = (struct aironet4500_RID * ) ctl->extra2;
 	
  

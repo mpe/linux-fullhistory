@@ -18,7 +18,6 @@
  * 	Check for install of mpu etc is wrong, should check result of the mss stuff
  */
  
-#include <linux/config.h>
 #include <linux/module.h>
 
 #undef  SB_OK

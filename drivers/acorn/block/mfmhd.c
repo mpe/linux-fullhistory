@@ -1280,7 +1280,6 @@ void mfm_setup(char *str, int *ints)
  * Set the CHS from the ADFS boot block if it is present.  This is not ideal
  * since if there are any non-ADFS partitions on the disk, this won't work!
  * Hence, I want to get rid of this...
- * 	Please, do. It does seriously sucking things.
  */
 void xd_set_geometry(kdev_t dev, unsigned char secsptrack, unsigned char heads,
 		     unsigned long discsize, unsigned int secsize)

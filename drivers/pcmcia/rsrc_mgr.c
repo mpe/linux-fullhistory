@@ -102,10 +102,11 @@ static irq_info_t irq_table[NR_IRQS] = { { 0, 0, 0 }, /* etc */ };
 /*======================================================================
 
     Linux resource management extensions
-    
+
 ======================================================================*/
 
-#define check_io_region(b,n) (0)
+#define check_io_resource(b,n)	check_resource(&ioport_resource, (b), (n))
+#define check_mem_resource(b,n)	check_resource(&iomem_resource, (b), (n))
 
 /*======================================================================
 
@@ -191,7 +192,7 @@ static void do_io_probe(ioaddr_t base, ioaddr_t num)
     b = kmalloc(256, GFP_KERNEL);
     memset(b, 0, 256);
     for (i = base, most = 0; i < base+num; i += 8) {
-	if (check_region(i, 8) || check_io_region(i, 8))
+	if (check_io_resource(i, 8))
 	    continue;
 	hole = inb(i);
 	for (j = 1; j < 8; j++)
@@ -204,7 +205,7 @@ static void do_io_probe(ioaddr_t base, ioaddr_t num)
 
     bad = any = 0;
     for (i = base; i < base+num; i += 8) {
-	if (check_region(i, 8) || check_io_region(i, 8))
+	if (check_io_resource(i, 8))
 	    continue;
 	for (j = 0; j < 8; j++)
 	    if (inb(i+j) != most) break;
@@ -255,13 +256,13 @@ static int do_mem_probe(u_long base, u_long num,
     for (i = base; i < base+num; i = j + step) {
 	if (!fail) {	
 	    for (j = i; j < base+num; j += step)
-		if ((check_mem_region(j, step) == 0) && is_valid(j))
+		if ((check_mem_resource(j, step) == 0) && is_valid(j))
 		    break;
 	    fail = ((i == base) && (j == base+num));
 	}
 	if (fail) {
 	    for (j = i; j < base+num; j += 2*step)
-		if ((check_mem_region(j, 2*step) == 0) &&
+		if ((check_mem_resource(j, 2*step) == 0) &&
 		    do_cksum(j) && do_cksum(j+step))
 		    break;
 	}
@@ -375,8 +376,7 @@ int find_io_region(ioaddr_t *base, ioaddr_t num, ioaddr_t align,
 	for (try = (try >= m->base) ? try : try+align;
 	     (try >= m->base) && (try+num <= m->base+m->num);
 	     try += align) {
-	    if ((check_region(try, num) == 0) &&
-		(check_io_region(try, num) == 0)) {
+	    if (check_io_resource(try, num) == 0) {
 		*base = try;
 		request_region(try, num, name);
 		return 0;
@@ -401,7 +401,7 @@ int find_mem_region(u_long *base, u_long num, u_long align,
 	    for (try = (try >= m->base) ? try : try+align;
 		 (try >= m->base) && (try+num <= m->base+m->num);
 		 try += align) {
-		if (check_mem_region(try, num) == 0) {
+		if (check_mem_resource(try, num) == 0) {
 		    request_mem_region(try, num, name);
 		    *base = try;
 		    return 0;

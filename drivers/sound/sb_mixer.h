@@ -23,8 +23,6 @@
  *	Moved static stuff to sb_mixer.c
  *
  */
-#include <linux/config.h>
-
 /*
  * Mixer registers
  * 

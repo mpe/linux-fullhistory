@@ -92,6 +92,8 @@ else
    if [ "$CONFIG_ARCH_EBSA110" = "y" -o \
         "$CONFIG_ARCH_SA1100" = "y" -o \
         "$CONFIG_FOOTBRIDGE" = "y" -o \
+	"$CONFIG_ARCH_TBOX" = "y" -o \
+	"$CONFIG_ARCH_SHARK" = "y" -o \
         "$CONFIG_ARCH_NEXUSPCI" = "y" ]; then
       define_bool CONFIG_CPU_32v4 y
       if [ "$CONFIG_ARCH_SA1100" = "y" ]; then
@@ -122,6 +124,7 @@ fi
 # These machines have ISA-DMA
 #
 if [ "$CONFIG_CATS" = "y" -o \
+     "$CONFIG_ARCH_SHARK" = "y" -o \
      "$CONFIG_ARCH_NETWINDER" = "y" ]; then
    define_bool CONFIG_ISA_DMA y
 else
@@ -186,6 +189,8 @@ if [ "$CONFIG_ARCH_NETWINDER" = "y" -o \
 fi
 endmenu
 
+source drivers/ieee1394/Config.in
+
 source drivers/i2o/Config.in
 
 source drivers/pnp/Config.in
@@ -208,6 +213,8 @@ if [ "$CONFIG_ARCH_ACORN" = "y" ]; then
 fi
 
 source drivers/usb/Config.in
+
+source drivers/misc/Config.in
 
 if [ "$CONFIG_VT" = "y" ]; then
    mainmenu_option next_comment
@@ -256,7 +263,10 @@ if [ "$CONFIG_SCSI" != "n" ]; then
 fi
 endmenu
 
-if [ "$CONFIG_ARCH_ACORN" = "y" -o "$CONFIG_PCI" = "y" ]; then
+if [ "$CONFIG_ARCH_ACORN" = "y" -o \
+     "$CONFIG_ARCH_CLPS7500" = "y" -o \
+     "$CONFIG_ARCH_SHARK" = "y" -o \
+     "$CONFIG_PCI" = "y" ]; then
    mainmenu_option next_comment
    comment 'Sound'
 

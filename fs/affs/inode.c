@@ -31,6 +31,7 @@
 
 extern int *blk_size[];
 extern struct timezone sys_tz;
+extern struct inode_operations affs_symlink_inode_operations;
 
 #define MIN(a,b) (((a)<(b))?(a):(b))
 

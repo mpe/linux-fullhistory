@@ -693,7 +693,6 @@ asmlinkage int sys_execve(struct pt_regs regs)
 	int error;
 	char * filename;
 
-	lock_kernel();
 	filename = getname((char *) regs.ebx);
 	error = PTR_ERR(filename);
 	if (IS_ERR(filename))
@@ -703,7 +702,6 @@ asmlinkage int sys_execve(struct pt_regs regs)
 		current->flags &= ~PF_DTRACE;
 	putname(filename);
 out:
-	unlock_kernel();
 	return error;
 }
 

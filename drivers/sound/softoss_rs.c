@@ -13,9 +13,6 @@
  * Version 2 (June 1991). See the "COPYING" file distributed with this software
  * for more info.
  */
-#include <linux/config.h>
-
-
 #include "sound_config.h"
 #include "softoss.h"
 

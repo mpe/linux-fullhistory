@@ -42,9 +42,9 @@ static const char *version =
 #include <linux/malloc.h>
 #include <linux/string.h>
 #include <linux/init.h>
+#include <linux/delay.h>
 #include <asm/system.h>
 #include <asm/bitops.h>
-#include <asm/delay.h>
 #include <asm/io.h>
 #include <asm/dma.h>
 #include <linux/errno.h>

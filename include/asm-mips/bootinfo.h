@@ -12,9 +12,6 @@
 #ifndef __ASM_MIPS_BOOTINFO_H
 #define __ASM_MIPS_BOOTINFO_H
 
-/* XXX */
-#include <linux/config.h>
-
 /*
  * Values for machgroup
  */

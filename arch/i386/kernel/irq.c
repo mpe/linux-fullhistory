@@ -32,7 +32,6 @@
 #include <linux/kernel_stat.h>
 #include <linux/irq.h>
 #include <linux/proc_fs.h>
-#include <linux/irq.h>
 
 #include <asm/io.h>
 #include <asm/smp.h>
@@ -184,24 +183,43 @@ int get_irq_list(char *buf)
 unsigned char global_irq_holder = NO_PROC_ID;
 unsigned volatile int global_irq_lock;
 
+extern void show_stack(unsigned long* esp);
+
 static void show(char * str)
 {
 	int i;
-	unsigned long *stack;
 	int cpu = smp_processor_id();
 
 	printk("\n%s, CPU %d:\n", str, cpu);
-	printk("irq:  %d [%d %d]\n",
-		irqs_running(), local_irq_count(0), local_irq_count(1));
-	printk("bh:   %d [%d %d]\n",
-		spin_is_locked(&global_bh_lock) ? 1 : 0, local_bh_count(0), local_bh_count(1));
-	stack = (unsigned long *) &stack;
-	for (i = 40; i ; i--) {
-		unsigned long x = *++stack;
-		if (x > (unsigned long) &get_option && x < (unsigned long) &vsprintf) {
-			printk("<[%08lx]> ", x);
+	printk("irq:  %d [",irqs_running());
+	for(i=0;i < smp_num_cpus;i++)
+		printk(" %d",local_irq_count(i));
+	printk(" ]\nbh:   %d [",spin_is_locked(&global_bh_lock) ? 1 : 0);
+	for(i=0;i < smp_num_cpus;i++)
+		printk(" %d",local_bh_count(i));
+
+	printk(" ]\nStack dumps:");
+	for(i=0;i< smp_num_cpus;i++) {
+		unsigned long esp;
+		if(i==cpu)
+			continue;
+		printk("\nCPU %d:",i);
+		esp = init_tss[i].esp0;
+		if(esp==NULL) {
+			/* tss->esp0 is set to NULL in cpu_init(),
+			 * it's initialized when the cpu returns to user
+			 * space. -- manfreds
+			 */
+			printk(" <unknown> ");
+			continue;
 		}
-	}
+		esp &= ~(THREAD_SIZE-1);
+		esp += sizeof(struct task_struct);
+		show_stack((void*)esp);
+ 	}
+	printk("\nCPU %d:",cpu);
+	show_stack(NULL);
+	printk("\n");
 }
 	
 #define MAXCOUNT 100000000

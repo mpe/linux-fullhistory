@@ -143,14 +143,17 @@ void usb_show_endpoint_descriptor(struct usb_endpoint_descriptor *desc)
 		USB_DT_ENDPOINT_AUDIO_SIZE) ? " (Audio)" : (desc->bLength ==
 		USB_DT_ENDPOINT_SIZE) ? "" : " (!!!)";
 	char *EndpointType[4] = { "Control", "Isochronous", "Bulk", "Interrupt" };
+
 	printk("    Endpoint:\n");
-	printk("      bLength             = %4d%s\n", desc->bLength,
-		LengthCommentString);
+	printk("      bLength             = %4d%s\n",
+		desc->bLength, LengthCommentString);
 	printk("      bDescriptorType     =   %02x\n", desc->bDescriptorType);
 	printk("      bEndpointAddress    =   %02x (%s)\n", desc->bEndpointAddress,
-		(desc->bEndpointAddress & 0x80) ? "in" : "out");
+		(desc->bmAttributes & USB_ENDPOINT_XFERTYPE_MASK) ==
+			USB_ENDPOINT_XFER_CONTROL ? "i/o" :
+		(desc->bEndpointAddress & USB_ENDPOINT_DIR_MASK) ? "in" : "out");
 	printk("      bmAttributes        =   %02x (%s)\n", desc->bmAttributes,
-		EndpointType[3 & desc->bmAttributes]);
+		EndpointType[USB_ENDPOINT_XFERTYPE_MASK & desc->bmAttributes]);
 	printk("      wMaxPacketSize      = %04x\n", desc->wMaxPacketSize);
 	printk("      bInterval           =   %02x\n", desc->bInterval);
 

@@ -4,16 +4,6 @@
  */
 
 #define S_OFF		8
-#define SYSCALL_REGS	r4, r5
-
-/*
- * Define to favour ARM8, ARM9 and StrongARM cpus.  This says that it is
- * cheaper to use two LDR instructions than a two-register LDM, if the
- * latter would entail calculating an address specially.
- */
-#if defined(CONFIG_CPU_SA110)
-#define HARVARD_CACHE
-#endif
 
 		.macro	get_softirq, rd
 #ifdef __SMP__
@@ -85,7 +75,7 @@ tip		.req	r7			@ temporary IP
 		.align	5
 vector_swi:	save_user_regs
 		mask_pc	lr, lr
-		mov	fp, #0
+		zero_fp
 		ldr	scno, [lr, #-4]		@ get SWI instruction
 		arm700_bug_check scno, ip
 #ifdef CONFIG_ALIGNMENT_TRAP
@@ -95,9 +85,7 @@ vector_swi:	save_user_regs
 #endif
 		enable_irqs ip
 
-		stmdb	sp!, {SYSCALL_REGS}	@ new style: (r0 = arg1, r4 = arg5, r5 = arg6)
-						@ Note that we dont have to handle
-						@ sys_syscalls arg7 here
+		str	r4, [sp, #-S_OFF]!	@ push fifth arg
 		adrsvc	al, lr, fast_syscall_return
 
 		bic	scno, scno, #0xff000000	@ mask off SWI op-code
@@ -141,10 +129,11 @@ vector_swi:	save_user_regs
 		b	SYMBOL_NAME(deferred)
 
 		.align	5
-
+		.type	__softirq_state, #object
 __softirq_state:
 		.word	SYMBOL_NAME(softirq_state)
 
+		.type	sys_call_table, #object
 ENTRY(sys_call_table)
 #include "calls.S"
 
@@ -153,15 +142,18 @@ ENTRY(sys_call_table)
  */
 @ r0 = syscall number
 @ r5 = syscall table
+		.type	sys_syscall, #function
 SYMBOL_NAME(sys_syscall):
 		eor	scno, r0, #OS_NUMBER << 20
 		cmp	scno, #NR_syscalls	@ check range
 		add	ip, sp, #S_OFF
-		ldmleib	ip, {r0 - r3, SYSCALL_REGS}	@ get our args
-		stmleia	sp, {SYSCALL_REGS}	@ Put our arg on the stack
+		stmleia	sp, {r5, r6}		@ shuffle args
+		movle	r0, r1
+		movle	r1, r2
+		movle	r2, r3
+		movle	r3, r4
 		ldrle	pc, [tbl, scno, lsl #2]
-		mov	r0, #-ENOSYS
-		RETINSTR(mov,pc,lr)
+		b	sys_ni_syscall
 
 sys_fork_wrapper:
 		add	r0, sp, #S_OFF
@@ -198,6 +190,23 @@ sys_rt_sigreturn_wrapper:
 sys_sigaltstack_wrapper:
 		ldr	r2, [sp, #S_OFF + S_SP]
 		b	do_sigaltstack
+
+/*
+ * Note: off_4k (r5) is always units of 4K.  If we can't do the requested
+ * offset, we return EINVAL.
+ */
+sys_mmap2:
+#if PAGE_SHIFT > 12
+		tst	r5, #PGOFF_MASK
+		moveq	r5, r5, lsr #PGOFF_SHIFT
+		streq	r5, [sp, #4]
+		beq	do_mmap2
+		mov	r0, #-EINVAL
+		RETINSTR(mov,pc, lr)
+#else
+		str	r5, [sp, #4]
+		b	do_mmap2
+#endif
 
 		.data
 

@@ -464,7 +464,7 @@ static struct input_handler joydev_handler = {
 	disconnect:	joydev_disconnect,
 };
 
-static int joydev_init(void)
+static int __init joydev_init(void)
 {
 	if (register_chrdev(JOYDEV_MAJOR, "js", &joydev_fops)) {
 		printk(KERN_ERR "joydev: unable to get major %d for joystick\n", JOYDEV_MAJOR);
@@ -474,7 +474,7 @@ static int joydev_init(void)
 	return 0;
 }
 
-static void joydev_exit(void)
+static void __exit joydev_exit(void)
 {
 	input_unregister_handler(&joydev_handler);
 	if (unregister_chrdev(JOYSTICK_MAJOR, "js"))

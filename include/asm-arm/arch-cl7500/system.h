@@ -8,21 +8,20 @@
 
 #include <asm/iomd.h>
 
-#define arch_reset(mode) {			\
-	outb (0, IOMD_ROMCR0);			\
-	cli();					\
-	__asm__ __volatile__(			\
-		"mcr	p15, 0, %0, c1, c0, 0;"	\
-		"mov	pc, #0"			\
-	 : 					\
-	 : "r" (cpu_reset()));			\
+#define arch_do_idle()							\
+	outb(0, IOMD_SUSMODE)
+
+#define arch_reset(mode) {						\
+	outb (0, IOMD_ROMCR0);						\
+	cli();								\
+	__asm__ __volatile__("msr  spsr, r1;"				\
+			     "mcr  p15, 0, %0, c1, c0, 0;"		\
+			     "movs pc, #0"				\
+			 : 						\
+			 : "r" (cpu_reset()));				\
 	}
 
-/*
- * We can wait for an interrupt...
- */
-#define arch_do_idle()				\
-	outb(0, IOMD_SUSMODE)
+#define arch_power_off()	do { } while (0)
 
 #define arch_power_off()	do { } while (0)
 

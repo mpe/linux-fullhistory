@@ -7,11 +7,13 @@
  *
  *	Revision 0.1 ,started  30.12.1998
  *
+ *	Revision 0.2, Feb 27, 2000
+ *		Jeff Garzik - softnet, cleanups
  *
  */
 #ifdef MODULE
 static const char *awc_version =
-"aironet4500_cards.c v0.1 28/03/99 Elmer Joandi, elmer@ylenurme.ee.\n";
+"aironet4500_cards.c v0.2  Feb 27, 2000  Elmer Joandi, elmer@ylenurme.ee.\n";
 #endif
 
 #include <linux/version.h>
@@ -36,9 +38,6 @@ static const char *awc_version =
 #include <linux/if_arp.h>
 #include <linux/ioport.h>
 #include <linux/delay.h>
-#if LINUX_VERSION_CODE < 0x20100
-#include <linux/bios32.h>
-#endif
 
 #include "aironet4500.h"
 
@@ -64,11 +63,11 @@ static const char *awc_version =
 static int reverse_probe =0 ;
 
 
-static int awc_pci_init(struct NET_DEVICE * dev, int pci_bus, int device_nr,
+static int awc_pci_init(struct net_device * dev, struct pci_dev *pdev,
  			int ioaddr, int cis_addr, int mem_addr,u8 pci_irq_line) ;
 
 
-int awc4500_pci_probe(struct NET_DEVICE *dev)
+int awc4500_pci_probe(struct net_device *dev)
 {
 	int cards_found = 0;
 	static int pci_index = 0;	/* Static, for multiple probe calls. */
@@ -77,7 +76,7 @@ int awc4500_pci_probe(struct NET_DEVICE *dev)
 
 	unsigned char awc_pci_dev, awc_pci_bus;
 
-	if (!pcibios_present()) 
+	if (!pci_present()) 
 		return -1;
 
 	for (;pci_index < 0xff; pci_index++) {
@@ -85,10 +84,8 @@ int awc4500_pci_probe(struct NET_DEVICE *dev)
 		u32 pci_memaddr;
 		u32 pci_ioaddr;
 		u32 pci_cisaddr;
-#if LINUX_VERSION_CODE < 0x20100
-		u16 pci_caps =0;
-		u8  pci_caps_ptr =0;
-#endif
+		struct pci_dev *pdev;
+
 		if (pcibios_find_class	(PCI_CLASS_NETWORK_OTHER << 8,
 			 reverse_probe ? 0xfe - pci_index : pci_index,
 				 &awc_pci_bus, &awc_pci_dev) != PCIBIOS_SUCCESSFUL){
@@ -98,31 +95,16 @@ int awc4500_pci_probe(struct NET_DEVICE *dev)
 					break;
 				}
 		}
-		pcibios_read_config_word(awc_pci_bus, awc_pci_dev,
-									 PCI_VENDOR_ID, &vendor);
-		pcibios_read_config_word(awc_pci_bus, awc_pci_dev,
-									 PCI_DEVICE_ID, &device);
-#if LINUX_VERSION_CODE >= 0x20300
-	        pci_irq_line = pci_find_slot(awc_pci_bus, awc_pci_dev)->irq;
-		pci_memaddr = pci_find_slot(awc_pci_bus, awc_pci_dev)->resource[0].start;
-                pci_cisaddr = pci_find_slot(awc_pci_bus, awc_pci_dev)->resource[1].start;
-		pci_ioaddr = pci_find_slot(awc_pci_bus, awc_pci_dev)->resource[2].start;
-#else
-#if LINUX_VERSION_CODE >= 0x20155
-	        pci_irq_line = pci_find_slot(awc_pci_bus, awc_pci_dev)->irq;
-		pci_memaddr = pci_find_slot(awc_pci_bus, awc_pci_dev)->base_address[0];
-                pci_cisaddr = pci_find_slot(awc_pci_bus, awc_pci_dev)->base_address[1];
-		pci_ioaddr = pci_find_slot(awc_pci_bus, awc_pci_dev)->base_address[2];		
-#else
-		pcibios_read_config_dword(awc_pci_bus, awc_pci_dev,PCI_BASE_ADDRESS_0, &pci_memaddr);
-		pcibios_read_config_dword(awc_pci_bus, awc_pci_dev,PCI_BASE_ADDRESS_1, &pci_cisaddr);
-		pcibios_read_config_dword(awc_pci_bus, awc_pci_dev,PCI_BASE_ADDRESS_2, &pci_ioaddr);
-		pcibios_read_config_byte(awc_pci_bus, awc_pci_dev, PCI_INTERRUPT_LINE, &pci_irq_line);
-		pcibios_read_config_word(awc_pci_bus, awc_pci_dev,PCI_STATUS, &pci_caps);
-		pcibios_read_config_byte(awc_pci_bus, awc_pci_dev, 0x34, &pci_caps_ptr);
+		pdev = pci_find_slot(awc_pci_bus, awc_pci_dev);
+		if (!pdev)
+			continue;
+		vendor = pdev->vendor;
+		device = pdev->device;
+	        pci_irq_line = pdev->irq;
+		pci_memaddr = pci_resource_start (pdev, 0);
+                pci_cisaddr = pci_resource_start (pdev, 1);
+		pci_ioaddr = pci_resource_start (pdev, 2);
 
-#endif // 2.2
-#endif // 2.3
 //		printk("\n pci capabilities %x and ptr %x \n",pci_caps,pci_caps_ptr);
 		/* Remove I/O space marker in bit 0. */
 
@@ -132,17 +114,7 @@ int awc4500_pci_probe(struct NET_DEVICE *dev)
 				device != PCI_DEVICE_AIRONET_4800 &&
 				device != PCI_DEVICE_AIRONET_4500 )
                         continue;
-#if LINUX_VERSION_CODE < 0x20300
 
-		if (!(pci_ioaddr & 1)){
-			printk("awc4X00 ioaddr location mismatch \n");
-			return -1;
-		};
-
-		pci_ioaddr &= ~3;
-		pci_cisaddr &= ~0xf;
-		pci_memaddr &= ~0xf;
-#endif		
 //		if (check_region(pci_ioaddr, AIRONET4X00_IO_SIZE) ||
 //			check_region(pci_cisaddr, AIRONET4X00_CIS_SIZE) ||
 //			check_region(pci_memaddr, AIRONET4X00_MEM_SIZE)) {
@@ -153,33 +125,28 @@ int awc4500_pci_probe(struct NET_DEVICE *dev)
 //		request_region(pci_cisaddr, AIRONET4X00_CIS_SIZE, "aironet4x00 cis");
 //		request_region(pci_memaddr, AIRONET4X00_MEM_SIZE, "aironet4x00 mem");
 
-//		pcibios_write_config_word(awc_pci_bus, awc_pci_dev,
-//						  PCI_COMMAND, 0);
+//		pci_write_config_word(pdev, PCI_COMMAND, 0);
 		udelay(10000);
 
-		pcibios_read_config_word(awc_pci_bus, awc_pci_dev,
-					 PCI_COMMAND, &pci_command);
+		pci_read_config_word(pdev, PCI_COMMAND, &pci_command);
 		new_command = pci_command |0x100 | PCI_COMMAND_MEMORY|PCI_COMMAND_IO;
 		if (pci_command != new_command) {
 			printk(KERN_INFO "  The PCI BIOS has not enabled this"
 				   " device!  Updating PCI command %4.4x->%4.4x.\n",
 				   pci_command, new_command);
-			pcibios_write_config_word(awc_pci_bus, awc_pci_dev,
-						  PCI_COMMAND, new_command);
+			pci_write_config_word(pdev, PCI_COMMAND, new_command);
 		}
 
 
 /*		if (device == PCI_DEVICE_AIRONET_4800)
-			pcibios_write_config_dword(awc_pci_bus, awc_pci_dev,
-				0x40, 0x00000000);
+			pci_write_config_dword(pdev, 0x40, 0x00000000);
 
 		udelay(1000);
 */
 		if (device == PCI_DEVICE_AIRONET_4800)
-			pcibios_write_config_dword(awc_pci_bus, awc_pci_dev,
-				0x40, 0x40000000);
+			pci_write_config_dword(pdev, 0x40, 0x40000000);
 
-		if (awc_pci_init(dev, awc_pci_bus, awc_pci_dev, pci_ioaddr,pci_cisaddr,pci_memaddr,pci_irq_line)){
+		if (awc_pci_init(dev, pdev, pci_ioaddr,pci_cisaddr,pci_memaddr,pci_irq_line)){
 			printk(KERN_ERR "awc4800 pci init failed \n");
 			break;
 		}
@@ -191,7 +158,7 @@ int awc4500_pci_probe(struct NET_DEVICE *dev)
 }
 
 
-static int awc_pci_init(struct NET_DEVICE * dev, int pci_bus, int device_nr,
+static int awc_pci_init(struct net_device * dev, struct pci_dev *pdev,
  			int ioaddr, int cis_addr, int mem_addr, u8 pci_irq_line) {
 
 	int i;
@@ -218,18 +185,15 @@ static int awc_pci_init(struct NET_DEVICE * dev, int pci_bus, int device_nr,
 	dev->init = &awc_init;
 	dev->open = &awc_open;
 	dev->stop = &awc_close;
-	dev->tbusy = 1;
-	dev->start  = 0;
-
     	dev->base_addr = ioaddr;
-
-
     	dev->irq = pci_irq_line;
-#if LINUX_VERSION_CODE > 0x20100
+	dev->tx_timeout = &awc_tx_timeout;
+	dev->watchdog_timeo = TX_TIMEOUT;
+	
+	netif_start_queue (dev);
+
 	request_irq(dev->irq,awc_interrupt, SA_SHIRQ | SA_INTERRUPT ,"Aironet 4X00",dev);
-#else 
-	request_irq(dev->irq,awc_interrupt, SA_SHIRQ | SA_INTERRUPT ,"Aironet 4X00",dev);
-#endif
+
 	awc_private_init( dev);
 	awc_init(dev);
 
@@ -244,16 +208,10 @@ static int awc_pci_init(struct NET_DEVICE * dev, int pci_bus, int device_nr,
 			awc_proc_set_fun(i);
 	}
 
-	dev->tbusy = 1;
-	dev->start = 0;
-
-	
 //	if (register_netdev(dev) != 0) {
 //		printk(KERN_NOTICE "awc_cs: register_netdev() failed\n");
 //		goto failed;
 //	}
-
-	
 
 	return 0; 
 //  failed:
@@ -285,7 +243,7 @@ static void awc_pci_release(void) {
 		unregister_netdev(aironet4500_devices[i]);
 		free_irq(aironet4500_devices[i]->irq,aironet4500_devices[i]);
 		kfree_s(aironet4500_devices[i]->priv, sizeof(struct awc_private));
-		kfree_s(aironet4500_devices[i], sizeof(struct NET_DEVICE));
+		kfree_s(aironet4500_devices[i], sizeof(struct net_device));
 
 		aironet4500_devices[i]=0;
 
@@ -304,14 +262,9 @@ static void awc_pci_release(void) {
 
 #ifdef CONFIG_AIRONET4500_PNP
 
-#if LINUX_VERSION_CODE > 0x20300
 #include <linux/isapnp.h>
-#else
-#include "isapnp.h"
-#endif
 #define AIRONET4X00_IO_SIZE 	0x40
 
-#if LINUX_VERSION_CODE > 0x20300
 #define isapnp_logdev pci_dev
 #define isapnp_dev    pci_bus
 #define isapnp_find_device isapnp_find_card
@@ -319,17 +272,11 @@ static void awc_pci_release(void) {
 #define PNP_BUS bus
 #define PNP_BUS_NUMBER number
 #define PNP_DEV_NUMBER devfn
-#else 
-#define PNP_BUS dev
-#define PNP_BUS_NUMBER csn
-#define PNP_DEV_NUMBER number
-#endif
 
-int awc4500_pnp_hw_reset(struct NET_DEVICE *dev){
+
+int awc4500_pnp_hw_reset(struct net_device *dev){
 	struct isapnp_logdev *logdev;
-#if LINUX_VERSION_CODE < 0x20300
-	struct isapnp_config cfg;
-#endif
+
 	DEBUG(0, "awc_pnp_reset \n");
 
 	if (!dev->priv ) {
@@ -357,30 +304,14 @@ int awc4500_pnp_hw_reset(struct NET_DEVICE *dev){
 				dev->name, logdev->PNP_BUS->PNP_BUS_NUMBER, logdev->PNP_DEV_NUMBER);
 		return -EAGAIN;
 	}
-#if LINUX_VERSION_CODE < 0x20300
-	if (isapnp_config_init(&cfg, logdev)<0) {
-		printk("cfg init failed \n");
-		isapnp_cfg_end();
-		return -EAGAIN;
-	}
-	cfg.port[0] 	= dev->base_addr;
-	cfg.irq[0]	= dev->irq;
 
-	if (isapnp_configure(&cfg)<0) {
-		printk("%s hw_reset, isapnp configure failed (out of resources?)\n",dev->name);
-		isapnp_cfg_end();
-		return -ENOMEM;
-	}
-#else
-	
-#endif
 	isapnp_activate(logdev->PNP_DEV_NUMBER);	/* activate device */
 	isapnp_cfg_end();
 
 	return 0;
 }
 
-int awc4500_pnp_probe(struct NET_DEVICE *dev)
+int awc4500_pnp_probe(struct net_device *dev)
 {
 	int isa_index = 0;
 	int isa_irq_line = 0;
@@ -389,21 +320,13 @@ int awc4500_pnp_probe(struct NET_DEVICE *dev)
 	int i=0;
 	struct isapnp_dev * pnp_dev ;
 	struct isapnp_logdev *logdev;
-#if LINUX_VERSION_CODE < 0x20300
-	struct isapnp_config cfg;
-#endif
 
 	while (1) {
 
 		pnp_dev = isapnp_find_device(
 						ISAPNP_VENDOR('A','W','L'), 
 						ISAPNP_DEVICE(1),
-#if LINUX_VERSION_CODE < 0x20300						
-						 isa_index 
-#else
-						0
-#endif						 
-						 );
+						0);
 	
 		if (!pnp_dev) break;  
 		
@@ -421,28 +344,11 @@ int awc4500_pnp_probe(struct NET_DEVICE *dev)
 					logdev->PNP_BUS->PNP_BUS_NUMBER, logdev->PNP_DEV_NUMBER);
 			return -EAGAIN;
 		}
-#if LINUX_VERSION_CODE < 0x20300
-		if (isapnp_config_init(&cfg, logdev)<0) {
-			printk("cfg init failed \n");
-			isapnp_cfg_end();
-			return -EAGAIN;
-		}
-		if (isapnp_configure(&cfg)<0) {
-			printk("isapnp configure failed (out of resources?)\n");
-			isapnp_cfg_end();
-			return -ENOMEM;
-		}
-#endif
 		isapnp_activate(logdev->PNP_DEV_NUMBER);	/* activate device */
 		isapnp_cfg_end();
 
-#if LINUX_VERSION_CODE < 0x20300		
-		isa_ioaddr = cfg.port[0];
-		isa_irq_line = cfg.irq[0];
-#else
 		isa_irq_line = logdev->irq;
 		isa_ioaddr = logdev->resource[0].start;
-#endif
 		request_region(isa_ioaddr, AIRONET4X00_IO_SIZE, "aironet4x00 ioaddr");
 
 		if (!dev) {
@@ -468,18 +374,14 @@ int awc4500_pnp_probe(struct NET_DEVICE *dev)
 		dev->init = &awc_init;
 		dev->open = &awc_open;
 		dev->stop = &awc_close;
-		dev->tbusy = 1;
-		dev->start  = 0;
-		
 	    	dev->base_addr = isa_ioaddr;
-
-
 	    	dev->irq = isa_irq_line;
-#if LINUX_VERSION_CODE > 0x20100
+		dev->tx_timeout = &awc_tx_timeout;
+		dev->watchdog_timeo = TX_TIMEOUT;
+		
+		netif_start_queue (dev);
+		
 		request_irq(dev->irq,awc_interrupt , SA_SHIRQ | SA_INTERRUPT ,"Aironet 4X00",dev);
-#else
-		request_irq(dev->irq,awc_interrupt, SA_SHIRQ  ,"Aironet 4X00",dev);
-#endif
 
 		awc_private_init( dev);
 
@@ -511,9 +413,6 @@ int awc4500_pnp_probe(struct NET_DEVICE *dev)
 			printk(KERN_CRIT "Out of resources (MAX_AWCS) \n");
 			return -1;
 		}
-
-		dev->tbusy = 1;
-		dev->start = 0;
 
 		card++;	
 	}
@@ -557,7 +456,7 @@ static void awc_pnp_release(void) {
 		unregister_netdev(aironet4500_devices[i]);
 		free_irq(aironet4500_devices[i]->irq,aironet4500_devices[i]);
 		kfree_s(aironet4500_devices[i]->priv, sizeof(struct awc_private));
-		kfree_s(aironet4500_devices[i], sizeof(struct NET_DEVICE));
+		kfree_s(aironet4500_devices[i], sizeof(struct net_device));
 
 		aironet4500_devices[i]=0;
 
@@ -580,16 +479,14 @@ static int io[] = {0,0,0,0,0};
 	EXPORT_SYMBOL(irq);
 	EXPORT_SYMBOL(io);
 */
-#if LINUX_VERSION_CODE >= 0x20100
 MODULE_PARM(irq,"i");
 MODULE_PARM_DESC(irq,"Aironet 4x00 ISA non-PNP irqs,required");
 MODULE_PARM(io,"i");
 MODULE_PARM_DESC(io,"Aironet 4x00 ISA non-PNP ioports,required");
-#endif
 
 
 
-int awc4500_isa_probe(struct NET_DEVICE *dev)
+int awc4500_isa_probe(struct net_device *dev)
 {
 //	int cards_found = 0;
 //	static int isa_index = 0;	/* Static, for multiple probe calls. */
@@ -638,19 +535,14 @@ int awc4500_isa_probe(struct NET_DEVICE *dev)
 		dev->init = &awc_init;
 		dev->open = &awc_open;
 		dev->stop = &awc_close;
-		dev->tbusy = 1;
-		dev->start  = 0;
-		
 	    	dev->base_addr = isa_ioaddr;
-
-
 	    	dev->irq = isa_irq_line;
+		dev->tx_timeout = &awc_tx_timeout;
+		dev->watchdog_timeo = TX_TIMEOUT;
+		
+		netif_start_queue (dev);
 
-#if LINUX_VERSION_CODE > 0x20100
 		request_irq(dev->irq,awc_interrupt ,SA_INTERRUPT ,"Aironet 4X00",dev);
-#else
-		request_irq(dev->irq,awc_interrupt ,0 ,"Aironet 4X00",dev);
-#endif
 
 		awc_private_init( dev);
 		if ( awc_init(dev) ){
@@ -670,9 +562,6 @@ int awc4500_isa_probe(struct NET_DEVICE *dev)
 			if (awc_proc_set_fun)
 				awc_proc_set_fun(i);	
 		}
-
-		dev->tbusy = 1;
-		dev->start = 0;
 
 		card++;	
 	}
@@ -707,7 +596,7 @@ static void awc_isa_release(void) {
 		unregister_netdev(aironet4500_devices[i]);
 		free_irq(aironet4500_devices[i]->irq,aironet4500_devices[i]);
 		kfree_s(aironet4500_devices[i]->priv, sizeof(struct awc_private));
-		kfree_s(aironet4500_devices[i], sizeof(struct NET_DEVICE));
+		kfree_s(aironet4500_devices[i], sizeof(struct net_device));
 
 		aironet4500_devices[i]=0;
 
@@ -906,7 +795,7 @@ int awc_i365_probe_once(struct i365_socket * s ){
 
 static int awc_i365_init(struct i365_socket * s) {
 
-	struct NET_DEVICE * dev;
+	struct net_device * dev;
 	int i;
 
 
@@ -923,11 +812,12 @@ static int awc_i365_init(struct i365_socket * s) {
 	dev->init = &awc_init;
 	dev->open = &awc_open;
 	dev->stop = &awc_close;
-	dev->tbusy = 1;
-	dev->start  = 0;
     	dev->irq = s->irq;
     	dev->base_addr = s->io;
+	dev->tx_timeout = &awc_tx_timeout;
+	dev->watchdog_timeo = TX_TIMEOUT;
 
+	netif_start_queue (dev);
 
 	awc_private_init( dev);
 
@@ -943,23 +833,17 @@ static int awc_i365_init(struct i365_socket * s) {
 			awc_proc_set_fun(i);
 	}
 
-	dev->tbusy = 1;
-	dev->start = 0;
-
-	
 	if (register_netdev(dev) != 0) {
 		printk(KERN_NOTICE "awc_cs: register_netdev() failed\n");
 		goto failed;
 	}
 
-	
-
 	return 0;
  
   failed:
   	return -1;
-
 }
+
 
 static void awc_i365_release(void) {
 
@@ -983,7 +867,7 @@ static void awc_i365_release(void) {
 		unregister_netdev(aironet4500_devices[i]);
 
 		//kfree_s(aironet4500_devices[i]->priv, sizeof(struct awc_private));
-		kfree_s(aironet4500_devices[i], sizeof(struct NET_DEVICE));
+		kfree_s(aironet4500_devices[i], sizeof(struct net_device));
 
 		aironet4500_devices[i]=0;
 

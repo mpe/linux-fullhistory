@@ -161,16 +161,16 @@ fh_init(struct svc_fh *fhp)
 static inline void
 fill_pre_wcc(struct svc_fh *fhp)
 {
-        struct inode    *inode;
+	struct inode    *inode;
 
-        inode = fhp->fh_dentry->d_inode;
-        if (!fhp->fh_pre_saved) {
-                fhp->fh_pre_mtime = inode->i_mtime;
-                        fhp->fh_pre_ctime = inode->i_ctime;
-                        fhp->fh_pre_size  = inode->i_size;
-                        fhp->fh_pre_saved = 1;
-        }
-        fhp->fh_locked = 1;
+	inode = fhp->fh_dentry->d_inode;
+	if (!fhp->fh_pre_saved) {
+		fhp->fh_pre_mtime = inode->i_mtime;
+			fhp->fh_pre_ctime = inode->i_ctime;
+			fhp->fh_pre_size  = inode->i_size;
+			fhp->fh_pre_saved = 1;
+	}
+	fhp->fh_locked = 1;
 }
 
 /*
@@ -179,24 +179,30 @@ fill_pre_wcc(struct svc_fh *fhp)
 static inline void
 fill_post_wcc(struct svc_fh *fhp)
 {
-        struct inode    *inode = fhp->fh_dentry->d_inode;
+	struct inode    *inode = fhp->fh_dentry->d_inode;
 
-        if (fhp->fh_post_saved)
-                printk("nfsd: inode locked twice during operation.\n");
+	if (fhp->fh_post_saved)
+		printk("nfsd: inode locked twice during operation.\n");
 
-        fhp->fh_post_mode       = inode->i_mode;
-        fhp->fh_post_nlink      = inode->i_nlink;
-        fhp->fh_post_uid        = inode->i_uid;
-        fhp->fh_post_gid        = inode->i_gid;
-        fhp->fh_post_size       = inode->i_size;
-        fhp->fh_post_blksize    = inode->i_blksize;
-        fhp->fh_post_blocks     = inode->i_blocks;
-        fhp->fh_post_rdev       = inode->i_rdev;
-        fhp->fh_post_atime      = inode->i_atime;
-        fhp->fh_post_mtime      = inode->i_mtime;
-        fhp->fh_post_ctime      = inode->i_ctime;
-        fhp->fh_post_saved      = 1;
-        fhp->fh_locked          = 0;
+	fhp->fh_post_mode       = inode->i_mode;
+	fhp->fh_post_nlink      = inode->i_nlink;
+	fhp->fh_post_uid	= inode->i_uid;
+	fhp->fh_post_gid	= inode->i_gid;
+	fhp->fh_post_size       = inode->i_size;
+	if (inode->i_blksize) {
+		fhp->fh_post_blksize    = inode->i_blksize;
+		fhp->fh_post_blocks     = inode->i_blocks;
+	} else {
+		fhp->fh_post_blksize    = BLOCK_SIZE;
+		/* how much do we care for accuracy with MinixFS? */
+		fhp->fh_post_blocks     = (inode->i_size+511) >> 9;
+	}
+	fhp->fh_post_rdev       = inode->i_rdev;
+	fhp->fh_post_atime      = inode->i_atime;
+	fhp->fh_post_mtime      = inode->i_mtime;
+	fhp->fh_post_ctime      = inode->i_ctime;
+	fhp->fh_post_saved      = 1;
+	fhp->fh_locked	  = 0;
 }
 #endif /* CONFIG_NFSD_V3 */
 
