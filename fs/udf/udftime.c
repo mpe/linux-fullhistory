@@ -54,12 +54,12 @@
 
 /* How many days come before each month (0-12).  */
 const unsigned short int __mon_yday[2][13] =
-  {
-    /* Normal years.  */
-    { 0, 31, 59, 90, 120, 151, 181, 212, 243, 273, 304, 334, 365 },
-    /* Leap years.  */
-    { 0, 31, 60, 91, 121, 152, 182, 213, 244, 274, 305, 335, 366 }
-  };
+{
+	/* Normal years.  */
+	{ 0, 31, 59, 90, 120, 151, 181, 212, 243, 273, 304, 334, 365 },
+	/* Leap years.  */
+	{ 0, 31, 60, 91, 121, 152, 182, 213, 244, 274, 305, 335, 366 }
+};
 
 #define MAX_YEAR_SECONDS	69
 #define SPD 0x15180 /*3600*24*/
@@ -90,8 +90,8 @@ time_t year_seconds[MAX_YEAR_SECONDS]= {
 extern struct timezone sys_tz;
 #endif
 
-#define SECS_PER_HOUR   (60 * 60)
-#define SECS_PER_DAY    (SECS_PER_HOUR * 24)
+#define SECS_PER_HOUR	(60 * 60)
+#define SECS_PER_DAY	(SECS_PER_HOUR * 24)
 
 time_t *
 udf_stamp_to_time(time_t *dest, long *dest_usec, timestamp src)
@@ -139,10 +139,10 @@ udf_time_to_stamp(timestamp *dest, time_t tv_sec, long tv_usec)
 
 	gettimeofday(&tv, &sys_tz);
 #endif
-	offset = (-sys_tz.tz_minuteswest);
+	offset = -sys_tz.tz_minuteswest;
 
-    if (!dest)
-        return NULL;
+	if (!dest)
+		return NULL;
 
 	dest->typeAndTimezone = 0x1000 | (offset & 0x0FFF);
 
@@ -180,7 +180,7 @@ udf_time_to_stamp(timestamp *dest, time_t tv_sec, long tv_usec)
 	dest->hundredsOfMicroseconds = (tv_usec - dest->centiseconds * 10000) / 100;
 	dest->microseconds = (tv_usec - dest->centiseconds * 10000 -
 		dest->hundredsOfMicroseconds * 100);
-    return dest;
+	return dest;
 }
 
 /* EOF */

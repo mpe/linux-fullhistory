@@ -40,14 +40,12 @@ else
   endif
 endif
 
-ifeq ($(CONFIG_PROC_FS),y)
 ifeq ($(CONFIG_MICROCODE),y)
 OX_OBJS += microcode.o
 else
   ifeq ($(CONFIG_MICROCODE),m)
   MX_OBJS += microcode.o
   endif
-endif
 endif
 
 ifeq ($(CONFIG_ACPI),y)

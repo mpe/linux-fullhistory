@@ -59,11 +59,14 @@
  * Revision 1.8:  Jul 1  1997
  *                port to linux-2.1.43 kernel.
  * Revision 1.9:  Oct 9  1998
- *                Added stuff for the IO8+/PCI version. . 
+ *                Added stuff for the IO8+/PCI version.
+ * Revision 1.10: Oct 22  1999 / Jan 21 2000. 
+ *                Added stuff for setserial. 
+ *                Nicolas Mailhot (Nicolas.Mailhot@email.enst.fr)
  * 
  */
 
-#define VERSION "1.8"
+#define VERSION "1.10"
 
 
 /*
@@ -1070,10 +1073,17 @@ static void sx_change_speed(struct specialix_board *bp, struct specialix_port *p
 	/*
 	 * Now we must calculate some speed depended things 
 	 */
-	
+
 	/* Set baud rate for port */
-	tmp = (((SX_OSCFREQ + baud_table[baud]/2) / baud_table[baud] +
-		CD186x_TPC/2) / CD186x_TPC);
+	tmp = port->custom_divisor ;
+	if ( tmp )
+		printk (KERN_INFO "sx%d: Using custom baud rate divisor %ld. \n"
+		                  "This is an untested option, please be carefull.\n",
+		                  port_No (port), tmp);
+	else
+		tmp = (((SX_OSCFREQ + baud_table[baud]/2) / baud_table[baud] +
+		         CD186x_TPC/2) / CD186x_TPC);
+
 	if ((tmp < 0x10) && time_before(again, jiffies)) { 
 		again = jiffies + HZ * 60;
 		/* Page 48 of version 2.0 of the CL-CD1865 databook */
@@ -1095,9 +1105,13 @@ static void sx_change_speed(struct specialix_board *bp, struct specialix_port *p
 	sx_out(bp, CD186x_TBPRH, (tmp >> 8) & 0xff); 
 	sx_out(bp, CD186x_RBPRL, tmp & 0xff); 
 	sx_out(bp, CD186x_TBPRL, tmp & 0xff);
-	
-	baud = (baud_table[baud] + 5) / 10;   /* Estimated CPS */
-	
+
+	if (port->custom_divisor) {
+		baud = (SX_OSCFREQ + port->custom_divisor/2) / port->custom_divisor;
+		baud = ( baud + 5 ) / 10;
+	} else 
+		baud = (baud_table[baud] + 5) / 10;   /* Estimated CPS */
+
 	/* Two timer ticks seems enough to wakeup something like SLIP driver */
 	tmp = ((baud + HZ/2) / HZ) * 2 - CD186x_NFIFO;		
 	port->wakeup_chars = (tmp < 0) ? 0 : ((tmp >= SERIAL_XMIT_SIZE) ?
@@ -1860,7 +1874,8 @@ extern inline int sx_set_serial_info(struct specialix_port * port,
 	if (error)
 		return error;
 
-	copy_from_user(&tmp, newinfo, sizeof(tmp));
+	if (copy_from_user(&tmp, newinfo, sizeof(tmp)))
+		return -EFAULT;
 	
 #if 0	
 	if ((tmp.irq != bp->irq) ||
@@ -1875,6 +1890,7 @@ extern inline int sx_set_serial_info(struct specialix_port * port,
 
 	change_speed = ((port->flags & ASYNC_SPD_MASK) !=
 			(tmp.flags & ASYNC_SPD_MASK));
+	change_speed |= (tmp.custom_divisor != port->custom_divisor);
 	
 	if (!capable(CAP_SYS_ADMIN)) {
 		if ((tmp.close_delay != port->close_delay) ||
@@ -1884,11 +1900,13 @@ extern inline int sx_set_serial_info(struct specialix_port * port,
 			return -EPERM;
 		port->flags = ((port->flags & ~ASYNC_USR_MASK) |
 		                  (tmp.flags & ASYNC_USR_MASK));
+		port->custom_divisor = tmp.custom_divisor;
 	} else {
 		port->flags = ((port->flags & ~ASYNC_FLAGS) |
 		                  (tmp.flags & ASYNC_FLAGS));
 		port->close_delay = tmp.close_delay;
 		port->closing_wait = tmp.closing_wait;
+		port->custom_divisor = tmp.custom_divisor;
 	}
 	if (change_speed) {
 		save_flags(flags); cli();
@@ -1919,8 +1937,10 @@ extern inline int sx_get_serial_info(struct specialix_port * port,
 	tmp.baud_base = (SX_OSCFREQ + CD186x_TPC/2) / CD186x_TPC;
 	tmp.close_delay = port->close_delay * HZ/100;
 	tmp.closing_wait = port->closing_wait * HZ/100;
+	tmp.custom_divisor =  port->custom_divisor;
 	tmp.xmit_fifo_size = CD186x_NFIFO;
-	copy_to_user(retinfo, &tmp, sizeof(tmp));
+	if (copy_to_user(retinfo, &tmp, sizeof(tmp)))
+		return -EFAULT;
 	return 0;
 }
 

@@ -26,6 +26,7 @@
 #include "udfdecl.h"
 #include <linux/fs.h>
 #include <linux/locks.h>
+#include <linux/quotaops.h>
 #include <linux/udf_fs.h>
 
 #include "udf_i.h"
@@ -59,6 +60,13 @@ void udf_free_inode(struct inode * inode)
 	}
 
 	ino = inode->i_ino;
+
+	/*
+	 * Note: we must free any quota before locking the superblock,
+	 * as writing the quota to disk may need the lock as well.
+	 */
+	DQUOT_FREE_INODE(sb, inode);
+	DQUOT_DROP(inode);
 
 	lock_super(sb);
 
@@ -132,7 +140,9 @@ struct inode * udf_new_inode (const struct inode *dir, int mode, int * err)
 	inode->i_nlink = 1;
 	inode->i_dev = sb->s_dev;
 	inode->i_uid = current->fsuid;
-	if (dir->i_mode & S_ISGID)
+	if (test_opt (sb, GRPID))
+		inode->i_gid = dir->i_gid;
+	else if (dir->i_mode & S_ISGID)
 	{
 		inode->i_gid = dir->i_gid;
 		if (S_ISDIR(mode))
@@ -140,6 +150,7 @@ struct inode * udf_new_inode (const struct inode *dir, int mode, int * err)
 	}
 	else
 		inode->i_gid = current->fsgid;
+
 	UDF_I_LOCATION(inode).logicalBlockNum = block;
 	UDF_I_LOCATION(inode).partitionReferenceNum = UDF_I_LOCATION(dir).partitionReferenceNum;
 	inode->i_ino = udf_get_lb_pblock(sb, UDF_I_LOCATION(inode), 0);
@@ -148,12 +159,35 @@ struct inode * udf_new_inode (const struct inode *dir, int mode, int * err)
 	inode->i_size = 0;
 	UDF_I_LENEATTR(inode) = 0;
 	UDF_I_LENALLOC(inode) = 0;
-	UDF_I_ALLOCTYPE(inode) = ICB_FLAG_AD_IN_ICB;
+	if (UDF_QUERY_FLAG(inode->i_sb, UDF_FLAG_USE_EXTENDED_FE))
+	{
+		UDF_I_EXTENDED_FE(inode) = 1;
+		UDF_UPDATE_UDFREV(inode->i_sb, UDF_VERS_USE_EXTENDED_FE);
+	}
+	else
+		UDF_I_EXTENDED_FE(inode) = 0;
+	if (UDF_QUERY_FLAG(inode->i_sb, UDF_FLAG_USE_AD_IN_ICB))
+		UDF_I_ALLOCTYPE(inode) = ICB_FLAG_AD_IN_ICB;
+	else if (UDF_QUERY_FLAG(inode->i_sb, UDF_FLAG_USE_SHORT_AD))
+		UDF_I_ALLOCTYPE(inode) = ICB_FLAG_AD_SHORT;
+	else
+		UDF_I_ALLOCTYPE(inode) = ICB_FLAG_AD_LONG;
 	inode->i_mtime = inode->i_atime = inode->i_ctime = CURRENT_TIME;
 	UDF_I_UMTIME(inode) = UDF_I_UATIME(inode) = UDF_I_UCTIME(inode) = CURRENT_UTIME;
+	UDF_I_NEW_INODE(inode) = 1;
 	insert_inode_hash(inode);
 	mark_inode_dirty(inode);
+
 	unlock_super(sb);
+	if (DQUOT_ALLOC_INODE(sb, inode))
+	{
+		sb->dq_op->drop(inode);
+		inode->i_nlink = 0;
+		iput(inode);
+		*err = -EDQUOT;
+		return NULL;
+	}
+
 	*err = 0;
 	return inode;
 }

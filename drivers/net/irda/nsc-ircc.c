@@ -6,7 +6,7 @@
  * Status:        Stable.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Sat Nov  7 21:43:15 1998
- * Modified at:   Fri Feb 18 01:48:51 2000
+ * Modified at:   Wed Mar  1 11:29:34 2000
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
  *     Copyright (c) 1998-2000 Dag Brattli <dagb@cs.uit.no>
@@ -715,9 +715,9 @@ static int nsc_ircc_setup(chipio_t *info)
 	switch_bank(iobase, BANK2);
 	outb(EXCR2_RFSIZ|EXCR2_TFSIZ, iobase+EXCR2);
 
-	/* IRCR2: FEND_MD is set */
+	/* IRCR2: FEND_MD is not set */
 	switch_bank(iobase, BANK5);
- 	outb(0x2a, iobase+4);
+ 	outb(0x02, iobase+4);
 
 	/* Make sure that some defaults are OK */
 	switch_bank(iobase, BANK6);

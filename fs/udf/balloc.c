@@ -15,7 +15,7 @@
  *		ftp://prep.ai.mit.edu/pub/gnu/GPL
  *	Each contributing author retains all rights to their own work.
  *
- *  (C) 1999 Ben Fennema
+ *  (C) 1999-2000 Ben Fennema
  *  (C) 1999 Stelias Computing Inc
  *
  * HISTORY
@@ -27,6 +27,7 @@
 #include "udfdecl.h"
 #include <linux/fs.h>
 #include <linux/locks.h>
+#include <linux/quotaops.h>
 #include <linux/udf_fs.h>
 
 #include <asm/bitops.h>
@@ -171,8 +172,8 @@ static inline int load_block_bitmap(struct super_block *sb,
 	unsigned int block_group)
 {
 	int slot;
-    int nr_groups = (UDF_SB_PARTLEN(sb, UDF_SB_PARTITION(sb)) +
-        (sizeof(struct SpaceBitmapDesc) << 3) + (sb->s_blocksize * 8) - 1) / (sb->s_blocksize * 8);
+	int nr_groups = (UDF_SB_PARTLEN(sb, UDF_SB_PARTITION(sb)) +
+		(sizeof(struct SpaceBitmapDesc) << 3) + (sb->s_blocksize * 8) - 1) / (sb->s_blocksize * 8);
 
 	if (UDF_SB_LOADED_BLOCK_BITMAPS(sb) > 0 &&
 		UDF_SB_BLOCK_BITMAP_NUMBER(sb, 0) == block_group &&
@@ -259,10 +260,14 @@ do_more:
 			udf_debug("bit %ld already set\n", bit + i);
 			udf_debug("byte=%2x\n", ((char *)bh->b_data)[(bit + i) >> 3]);
 		}
-		else if (UDF_SB_LVIDBH(sb))
+		else
 		{
-			UDF_SB_LVID(sb)->freeSpaceTable[UDF_SB_PARTITION(sb)] =
-				cpu_to_le32(le32_to_cpu(UDF_SB_LVID(sb)->freeSpaceTable[UDF_SB_PARTITION(sb)])+1);
+			DQUOT_FREE_BLOCK(sb, inode, 1);
+			if (UDF_SB_LVIDBH(sb))
+			{
+				UDF_SB_LVID(sb)->freeSpaceTable[UDF_SB_PARTITION(sb)] =
+					cpu_to_le32(le32_to_cpu(UDF_SB_LVID(sb)->freeSpaceTable[UDF_SB_PARTITION(sb)])+1);
+			}
 		}
 	}
 	mark_buffer_dirty(bh, 1);
@@ -280,7 +285,7 @@ error_return:
 	return;
 }
 
-int udf_alloc_blocks(const struct inode * inode, Uint16 partition,
+int udf_prealloc_blocks(const struct inode * inode, Uint16 partition,
 	Uint32 first_block, Uint32 block_count)
 {
 	int alloc_count = 0;
@@ -318,16 +323,18 @@ repeat:
 	{
 		if (!udf_test_bit(bit, bh->b_data))
 			goto out;
-		if (!udf_clear_bit(bit, bh->b_data))
+		else if (DQUOT_PREALLOC_BLOCK(sb, inode, 1))
+			goto out;
+		else if (!udf_clear_bit(bit, bh->b_data))
 		{
 			udf_debug("bit already cleared for block %d\n", bit);
+			DQUOT_FREE_BLOCK(sb, inode, 1);
 			goto out;
 		}
 		block_count --;
 		alloc_count ++;
 		bit ++;
 		block ++;
-
 	}
 	mark_buffer_dirty(bh, 1);
 	if (block_count > 0)
@@ -451,6 +458,17 @@ search_back:
 	for (i=0; i<7 && bit > (group_start << 3) && udf_test_bit(bit - 1, bh->b_data); i++, bit--);
 
 got_block:
+
+	/*
+	 * Check quota for allocation of this block.
+	 */
+	if (DQUOT_ALLOC_BLOCK(sb, inode, 1))
+	{
+		unlock_super(sb);
+		*err = -EDQUOT;
+		return 0;
+	}
+
 	newblock = bit + (block_group << (sb->s_blocksize_bits + 3)) -
 		(sizeof(struct SpaceBitmapDesc) << 3);
 

@@ -6,10 +6,10 @@
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Thu Aug 21 00:02:07 1997
- * Modified at:   Sat Dec 25 21:09:47 1999
+ * Modified at:   Wed Mar  1 11:28:34 2000
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
- *     Copyright (c) 1997, 1999 Dag Brattli <dagb@cs.uit.no>, 
+ *     Copyright (c) 1997, 1999-2000 Dag Brattli <dagb@cs.uit.no>, 
  *     All Rights Reserved.
  *     
  *     This program is free software; you can redistribute it and/or 
@@ -294,7 +294,7 @@ static void state_s_outstanding(struct iriap_cb *self, IRIAP_EVENT event,
 
 	switch (event) {
 	case IAP_RECV_F_LST:
-		iriap_send_ack(self);
+		/*iriap_send_ack(self);*/
 		/*LM_Idle_request(idle); */
 
 		iriap_next_call_state(self, S_WAIT_FOR_CALL);

@@ -91,8 +91,7 @@ int notify_change(struct dentry * dentry, struct iattr * attr)
 	if (!(ia_valid & ATTR_MTIME_SET))
 		attr->ia_mtime = now;
 
-	if (inode->i_sb && inode->i_sb->s_op &&
-	    inode->i_op->setattr) 
+	if (inode && inode->i_op && inode->i_op->setattr) 
 		error = inode->i_op->setattr(dentry, attr);
 	else {
 		error = inode_change_ok(inode, attr);

@@ -432,7 +432,7 @@ void dn_neigh_pointopoint_hello(struct sk_buff *skb)
 /*
  * Ethernet router hello message received
  */
-void dn_neigh_router_hello(struct sk_buff *skb)
+int dn_neigh_router_hello(struct sk_buff *skb)
 {
 	struct rtnode_hello_message *msg = (struct rtnode_hello_message *)skb->data;
 
@@ -485,12 +485,13 @@ void dn_neigh_router_hello(struct sk_buff *skb)
 	}
 
 	kfree_skb(skb);
+	return 0;
 }
 
 /*
  * Endnode hello message received
  */
-void dn_neigh_endnode_hello(struct sk_buff *skb)
+int dn_neigh_endnode_hello(struct sk_buff *skb)
 {
 	struct endnode_hello_message *msg = (struct endnode_hello_message *)skb->data;
 	struct neighbour *neigh;
@@ -523,6 +524,7 @@ void dn_neigh_endnode_hello(struct sk_buff *skb)
 	}
 
 	kfree_skb(skb);
+	return 0;
 }
 
 

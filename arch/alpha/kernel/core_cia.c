@@ -405,10 +405,12 @@ cia_init_arch(void)
 	 * ??? We ought to scale window 1 with memory.
 	 */
 
-	/* NetBSD hints that page tables must be aligned to 32K due
-	   to a hardware bug.  No description of what models affected.  */
-	hose->sg_isa = iommu_arena_new(0x00800000, 0x00800000, 32768);
-	hose->sg_pci = iommu_arena_new(0x40000000, 0x08000000, 32768);
+	/* ??? NetBSD hints that page tables must be aligned to 32K,
+	   possibly due to a hardware bug.  This is over-aligned
+	   from the 8K alignment one would expect for an 8MB window. 
+	   No description of what CIA revisions affected.  */
+	hose->sg_isa = iommu_arena_new(hose, 0x00800000, 0x00800000, 0x8000);
+	hose->sg_pci = iommu_arena_new(hose, 0x40000000, 0x08000000, 0);
 	__direct_map_base = 0x80000000;
 	__direct_map_size = 0x80000000;
 

@@ -356,21 +356,23 @@ int irda_param_pack(__u8 *buf, char *fmt, ...)
 	for (p = fmt; *p != '\0'; p++) {
 		switch (*p) {
 		case 'b':  /* 8 bits unsigned byte */
-			buf[n++] = va_arg(args, __u8);
+			buf[n++] = (__u8)va_arg(args, int);
 			break;
 		case 's':  /* 16 bits unsigned short */
-			arg.s = va_arg(args, __u16);
+			arg.s = (__u16)va_arg(args, int);
 			put_unaligned(arg.s, (__u16 *)(buf+n)); n+=2;
 			break;
 		case 'i':  /* 32 bits unsigned integer */
 			arg.i = va_arg(args, __u32);
 			put_unaligned(arg.i, (__u32 *)(buf+n)); n+=4;
 			break;
+#if 0
 		case 'c': /* \0 terminated string */
 			arg.c = va_arg(args, char *);
 			strcpy(buf+n, arg.c);
 			n += strlen(arg.c) + 1;
 			break;
+#endif
 		default:
 			va_end(args);
 			return -1;

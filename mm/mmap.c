@@ -860,7 +860,7 @@ void exit_mmap(struct mm_struct * mm)
 	if (mm->map_count)
 		printk("exit_mmap: map count is %d\n", mm->map_count);
 
-	clear_page_tables(mm, 0, USER_PTRS_PER_PGD);
+	clear_page_tables(mm, FIRST_USER_PGD_NR, USER_PTRS_PER_PGD);
 }
 
 /* Insert vm structure into process list sorted by address

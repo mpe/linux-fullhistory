@@ -11,6 +11,8 @@
 	Center of Excellence in Space Data and Information Sciences
 	   Code 930.5, Goddard Space Flight Center, Greenbelt MD 20771
 
+	2/2/00- Added support for kernel-level ISAPnP 
+		by Stephen Frost <sfrost@snowman.net> and Alessandro Zummo
 	Cleaned up for 2.3.x/softnet by Jeff Garzik and Alan Cox.
 */
 
@@ -46,6 +48,7 @@ static int max_interrupt_work = 20;
 
 #include <linux/module.h>
 #include <linux/version.h>
+#include <linux/isapnp.h>
 
 #include <linux/kernel.h>
 #include <linux/sched.h>
@@ -349,6 +352,21 @@ static struct media_table {
 	{ "Default", 0, 0xFF, XCVR_10baseT, 10000},
 };
 
+#ifdef CONFIG_ISAPNP
+struct corkscrew_isapnp_adapters_struct {
+	unsigned short vendor, function;
+	char *name;
+};
+struct corkscrew_isapnp_adapters_struct corkscrew_isapnp_adapters[] = {
+	{ISAPNP_VENDOR('T', 'C', 'M'), ISAPNP_FUNCTION(0x5051), "3Com Fast EtherLink ISA"},
+	{0, }
+};
+int corkscrew_isapnp_phys_addr[3] = {
+	0, 0, 0
+};
+#endif
+static int nopnp = 0;
+
 static int corkscrew_scan(struct net_device *dev);
 static struct net_device *corkscrew_found_device(struct net_device *dev,
 						 int ioaddr, int irq,
@@ -422,11 +440,79 @@ int tc515_probe(struct net_device *dev)
 static int corkscrew_scan(struct net_device *dev)
 {
 	int cards_found = 0;
-	static int ioaddr = 0x100;
+	short i;
+	static int ioaddr;
+	static int pnp_cards = 0;
+
+#ifdef CONFIG_ISAPNP
+	if(nopnp == 1)
+		goto no_pnp;
+	for(i=0; corkscrew_isapnp_adapters[i].vendor != 0; i++) {
+		struct pci_dev *idev = NULL;
+		int irq, j;
+		while((idev = isapnp_find_dev(NULL,
+						corkscrew_isapnp_adapters[i].vendor,
+						corkscrew_isapnp_adapters[i].function,
+						idev))) {
+
+			if(idev->active) idev->deactivate(idev);
+
+			if(idev->prepare(idev)<0)
+				continue;
+			if (!(idev->resource[0].flags & IORESOURCE_IO))
+				continue;
+			if(idev->activate(idev)<0) {
+				printk("isapnp configure failed (out of resources?)\n");
+				return -ENOMEM;
+			}
+			if (!idev->resource[0].start || check_region(idev->resource[0].start,16))
+				continue;
+			ioaddr = idev->resource[0].start;
+			irq = idev->irq_resource[0].start;
+			if(corkscrew_debug)
+				printk ("ISAPNP reports %s at i/o 0x%x, irq %d\n",
+					corkscrew_isapnp_adapters[i].name,ioaddr, irq);
+					
+			if ((inw(ioaddr + 0x2002) & 0x1f0) != (ioaddr & 0x1f0))
+				continue;
+			/* Verify by reading the device ID from the EEPROM. */
+			{
+				int timer;
+				outw(EEPROM_Read + 7, ioaddr + Wn0EepromCmd);
+				/* Pause for at least 162 us. for the read to take place. */
+				for (timer = 4; timer >= 0; timer--) {
+					udelay(162);
+					if ((inw(ioaddr + Wn0EepromCmd) & 0x0200)
+				    		== 0)
+							break;
+				}
+				if (inw(ioaddr + Wn0EepromData) != 0x6d50)
+					continue;
+			}
+			printk(KERN_INFO "3c515 Resource configuraiton register %#4.4x, DCR %4.4x.\n",
+		     		inl(ioaddr + 0x2002), inw(ioaddr + 0x2000));
+			/* irq = inw(ioaddr + 0x2002) & 15; */ /* Use the irq from isapnp */
+			corkscrew_isapnp_phys_addr[pnp_cards] = ioaddr;
+			corkscrew_found_device(dev, ioaddr, irq, CORKSCREW_ID, dev
+				       	&& dev->mem_start ? dev->
+				       	mem_start : options[cards_found]);
+			dev = 0;
+			pnp_cards++;
+			cards_found++;
+		}
+	}
+no_pnp:
+#endif /* not CONFIG_ISAPNP */
 
 	/* Check all locations on the ISA bus -- evil! */
-	for (; ioaddr < 0x400; ioaddr += 0x20) {
+	for (ioaddr = 0x100; ioaddr < 0x400; ioaddr += 0x20) {
 		int irq;
+#ifdef CONFIG_ISAPNP
+		/* Make sure this was not already picked up by isapnp */
+		if(ioaddr == corkscrew_isapnp_phys_addr[0]) continue;
+		if(ioaddr == corkscrew_isapnp_phys_addr[1]) continue;
+		if(ioaddr == corkscrew_isapnp_phys_addr[2]) continue;
+#endif
 		if (check_region(ioaddr, CORKSCREW_TOTAL_SIZE))
 			continue;
 		/* Check the resource configuration for a matching ioaddr. */
@@ -455,7 +541,6 @@ static int corkscrew_scan(struct net_device *dev)
 		dev = 0;
 		cards_found++;
 	}
-
 	if (corkscrew_debug)
 		printk(KERN_INFO "%d 3c515 cards found.\n", cards_found);
 	return cards_found;

@@ -45,7 +45,6 @@
 #include <linux/fb.h>
 #include <linux/init.h>
 #include <linux/selection.h>
-#include <linux/delay.h>
 #include <asm/pgtable.h>
 #include <asm/io.h>
 #ifdef CONFIG_ZORRO

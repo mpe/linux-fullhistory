@@ -1,4 +1,4 @@
-/* $Id: time.c,v 1.23 1999/09/21 14:35:27 davem Exp $
+/* $Id: time.c,v 1.24 2000/03/02 02:00:25 davem Exp $
  * time.c: UltraSparc timer and TOD clock support.
  *
  * Copyright (C) 1997 David S. Miller (davem@caip.rutgers.edu)
@@ -69,20 +69,53 @@ static __inline__ void timer_check_rtc(void)
 
 static void timer_interrupt(int irq, void *dev_id, struct pt_regs * regs)
 {
-	unsigned long ticks;
+	unsigned long ticks, pstate;
 
 	write_lock(&xtime_lock);
 
 	do {
 		do_timer(regs);
 
+		/* Guarentee that the following sequences execute
+		 * uninterrupted.
+		 */
+		__asm__ __volatile__("rdpr	%%pstate, %0\n\t"
+				     "wrpr	%0, %1, %%pstate"
+				     : "=r" (pstate)
+				     : "i" (PSTATE_IE));
+
+		/* Workaround for Spitfire Errata (#54 I think??), I discovered
+		 * this via Sun BugID 4008234, mentioned in Solaris-2.5.1 patch
+		 * number 103640.
+		 *
+		 * On Blackbird writes to %tick_cmpr can fail, the
+		 * workaround seems to be to execute the wr instruction
+		 * at the start of an I-cache line, and perform a dummy
+		 * read back from %tick_cmpr right after writing to it. -DaveM
+		 *
+		 * Just to be anal we add a workaround for Spitfire
+		 * Errata 50 by preventing pipeline bypasses on the
+		 * final read of the %tick register into a compare
+		 * instruction.  The Errata 50 description states
+		 * that %tick is not prone to this bug, but I am not
+		 * taking any chances.
+		 */
 		__asm__ __volatile__("
 			rd	%%tick_cmpr, %0
-			add	%0, %2, %0
-			wr	%0, 0, %%tick_cmpr
-			rd	%%tick, %1"
+			ba,pt	%%xcc, 1f
+			 add	%0, %2, %0
+			.align	64
+		     1: wr	%0, 0, %%tick_cmpr
+		        rd	%%tick_cmpr, %%g0
+			rd	%%tick, %1
+			mov	%1, %1"
 			: "=&r" (timer_tick_compare), "=r" (ticks)
 			: "r" (timer_tick_offset));
+
+		/* Restore PSTATE_IE. */
+		__asm__ __volatile__("wrpr	%0, 0x0, %%pstate"
+				     : /* no outputs */
+				     : "r" (pstate));
 	} while (ticks >= timer_tick_compare);
 
 	timer_check_rtc();

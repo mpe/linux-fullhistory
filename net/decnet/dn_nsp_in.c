@@ -320,7 +320,7 @@ static void dn_nsp_disc_conf(struct sock *sk, struct sk_buff *skb)
 	struct dn_scp *scp = &sk->protinfo.dn;
 	unsigned short reason;
 
-	if (skb->len != 2)
+	if (skb->len < 2)
 		goto out;
 
 	reason = dn_ntohs(*(__u16 *)skb->data);

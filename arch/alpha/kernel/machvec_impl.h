@@ -44,7 +44,6 @@
 	mv_switch_mm:			ev4_switch_mm,			\
 	mv_activate_mm:			ev4_activate_mm,		\
 	mv_flush_tlb_current:		ev4_flush_tlb_current,		\
-	mv_flush_tlb_other:		ev4_flush_tlb_other,		\
 	mv_flush_tlb_current_page:	ev4_flush_tlb_current_page
 
 #define DO_EV5_MMU							\
@@ -52,7 +51,6 @@
 	mv_switch_mm:			ev5_switch_mm,			\
 	mv_activate_mm:			ev5_activate_mm,		\
 	mv_flush_tlb_current:		ev5_flush_tlb_current,		\
-	mv_flush_tlb_other:		ev5_flush_tlb_other,		\
 	mv_flush_tlb_current_page:	ev5_flush_tlb_current_page
 
 #define DO_EV6_MMU							\
@@ -60,7 +58,6 @@
 	mv_switch_mm:			ev5_switch_mm,			\
 	mv_activate_mm:			ev5_activate_mm,		\
 	mv_flush_tlb_current:		ev5_flush_tlb_current,		\
-	mv_flush_tlb_other:		ev5_flush_tlb_other,		\
 	mv_flush_tlb_current_page:	ev5_flush_tlb_current_page
 
 #define IO_LITE(UP,low)							\

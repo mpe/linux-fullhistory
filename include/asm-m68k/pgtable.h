@@ -43,6 +43,7 @@
 #define PTRS_PER_PMD	8
 #define PTRS_PER_PGD	128
 #define USER_PTRS_PER_PGD	(TASK_SIZE/PGDIR_SIZE)
+#define FIRST_USER_PGD_NR	0
 
 /* Virtual address region for use by kernel_map() */
 #define	KMAP_START	0xd0000000

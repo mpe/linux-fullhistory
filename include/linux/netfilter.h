@@ -6,6 +6,7 @@
 #include <linux/types.h>
 #include <linux/skbuff.h>
 #include <linux/net.h>
+#include <linux/if.h>
 #include <linux/wait.h>
 #include <linux/list.h>
 #endif
@@ -28,7 +29,7 @@
 extern void netfilter_init(void);
 
 /* Largest hook number + 1 */
-#define NF_MAX_HOOKS 5
+#define NF_MAX_HOOKS 8
 
 struct sk_buff;
 struct net_device;
@@ -39,19 +40,12 @@ typedef unsigned int nf_hookfn(unsigned int hooknum,
 			       const struct net_device *out,
 			       int (*okfn)(struct sk_buff *));
 
-typedef unsigned int nf_cacheflushfn(const void *packet,
-				     const struct net_device *in,
-				     const struct net_device *out,
-				     u_int32_t packetcount,
-				     u_int32_t bytecount);
-
 struct nf_hook_ops
 {
 	struct list_head list;
 
 	/* User fills in from here down. */
 	nf_hookfn *hook;
-	nf_cacheflushfn *flush;
 	int pf;
 	int hooknum;
 	/* Hooks are ordered in ascending priority. */
@@ -74,6 +68,19 @@ struct nf_sockopt_ops
 	int (*get)(struct sock *sk, int optval, void *user, int *len);
 };
 
+/* Each queued (to userspace) skbuff has one of these. */
+struct nf_info
+{
+	/* The ops struct which sent us to userspace. */
+	struct nf_hook_ops *elem;
+	
+	/* If we're sent to userspace, this keeps housekeeping info */
+	int pf;
+	unsigned int hook;
+	struct net_device *indev, *outdev;
+	int (*okfn)(struct sk_buff *);
+};
+                                                                                
 /* Function to register/unregister hook points. */
 int nf_register_hook(struct nf_hook_ops *reg);
 void nf_unregister_hook(struct nf_hook_ops *reg);
@@ -85,7 +92,7 @@ void nf_unregister_sockopt(struct nf_sockopt_ops *reg);
 
 extern struct list_head nf_hooks[NPROTO][NF_MAX_HOOKS];
 
-/* Activate hook/flush; either okfn or kfree_skb called, unless a hook
+/* Activate hook; either okfn or kfree_skb called, unless a hook
    returns NF_STOLEN (in which case, it's up to the hook to deal with
    the consequences).
 
@@ -117,47 +124,20 @@ int nf_hook_slow(int pf, unsigned int hook, struct sk_buff *skb,
 		 struct net_device *indev, struct net_device *outdev,
 		 int (*okfn)(struct sk_buff *));
 
-void nf_cacheflush(int pf, unsigned int hook, const void *packet,
-		   const struct net_device *indev, const struct net_device *outdev,
-		   __u32 packetcount, __u32 bytecount);
-
 /* Call setsockopt() */
 int nf_setsockopt(struct sock *sk, int pf, int optval, char *opt, 
 		  int len);
 int nf_getsockopt(struct sock *sk, int pf, int optval, char *opt,
 		  int *len);
 
-struct nf_wakeme
-{
-	wait_queue_head_t sleep;
-	struct sk_buff_head skbq;
-};
-
-/* For netfilter device. */
-struct nf_interest
-{
-	struct list_head list;
-
-	int pf;
-	/* Bitmask of hook numbers to match (1 << hooknum). */
-	unsigned int hookmask;
-	/* If non-zero, only catch packets with this mark. */
-	unsigned int mark;
-	/* If non-zero, only catch packets of this reason. */
-	unsigned int reason;
-
-	struct nf_wakeme *wake;
-};
-
-/* For asynchronous packet handling. */
-extern void nf_register_interest(struct nf_interest *interest);
-extern void nf_unregister_interest(struct nf_interest *interest);
-extern void nf_getinfo(const struct sk_buff *skb,
-		       struct net_device **indev,
-		       struct net_device **outdev,
-		       unsigned long *mark);
+/* Packet queuing */
+typedef int (*nf_queue_outfn_t)(struct sk_buff *skb, 
+                                struct nf_info *info, void *data);
+extern int nf_register_queue_handler(int pf, 
+                                     nf_queue_outfn_t outfn, void *data);
+extern int nf_unregister_queue_handler(int pf);
 extern void nf_reinject(struct sk_buff *skb,
-			unsigned long mark,
+			struct nf_info *info,
 			unsigned int verdict);
 
 #ifdef CONFIG_NETFILTER_DEBUG

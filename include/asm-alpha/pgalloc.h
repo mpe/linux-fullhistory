@@ -3,50 +3,84 @@
 
 #include <linux/config.h>
 
+#ifndef __EXTERN_INLINE
+#define __EXTERN_INLINE extern inline
+#define __MMU_EXTERN_INLINE
+#endif
+
+extern void __load_new_mm_context(struct mm_struct *);
+
+
 /* Caches aren't brain-dead on the Alpha. */
 #define flush_cache_all()			do { } while (0)
 #define flush_cache_mm(mm)			do { } while (0)
 #define flush_cache_range(mm, start, end)	do { } while (0)
 #define flush_cache_page(vma, vmaddr)		do { } while (0)
 #define flush_page_to_ram(page)			do { } while (0)
-/*
- * The icache is not coherent with the dcache on alpha, thus before
- * running self modified code like kernel modules we must always run
- * an imb().
- */
+
+/* Note that the following two definitions are _highly_ dependent
+   on the contexts in which they are used in the kernel.  I personally
+   think it is criminal how loosely defined these macros are.  */
+
+/* We need to flush the kernel's icache after loading modules.  The
+   only other use of this macro is in load_aout_interp which is not
+   used on Alpha. 
+
+   Note that this definition should *not* be used for userspace
+   icache flushing.  While functional, it is _way_ overkill.  The
+   icache is tagged with ASNs and it suffices to allocate a new ASN
+   for the process.  */
 #ifndef __SMP__
 #define flush_icache_range(start, end)		imb()
 #else
 #define flush_icache_range(start, end)		smp_imb()
 extern void smp_imb(void);
 #endif
-#define flush_icache_page(vma, page)		do { } while (0)
+
+/* We need to flush the userspace icache after setting breakpoints in
+   ptrace.  I don't think it's needed in do_swap_page, or do_no_page,
+   but I don't know how to get rid of it either.
+
+   Instead of indiscriminately using imb, take advantage of the fact
+   that icache entries are tagged with the ASN and load a new mm context.  */
+/* ??? Ought to use this in arch/alpha/kernel/signal.c too.  */
+
+#ifndef __SMP__
+static inline void
+flush_icache_page(struct vm_area_struct *vma, struct page *page)
+{
+	if (vma->vm_flags & VM_EXEC) {
+		struct mm_struct *mm = vma->vm_mm;
+		mm->context = 0;
+		if (current->active_mm == mm)
+			__load_new_mm_context(mm);
+	}
+}
+#else
+extern void flush_icache_page(struct vm_area_struct *vma, struct page *page);
+#endif
+
 
 /*
  * Use a few helper functions to hide the ugly broken ASN
  * numbers on early Alphas (ev4 and ev45)
  */
 
-#ifndef __EXTERN_INLINE
-#define __EXTERN_INLINE extern inline
-#define __MMU_EXTERN_INLINE
-#endif
-
 __EXTERN_INLINE void
 ev4_flush_tlb_current(struct mm_struct *mm)
 {
+	__load_new_mm_context(mm);
 	tbiap();
 }
 
 __EXTERN_INLINE void
-ev4_flush_tlb_other(struct mm_struct *mm)
+ev5_flush_tlb_current(struct mm_struct *mm)
 {
+	__load_new_mm_context(mm);
 }
 
-extern void ev5_flush_tlb_current(struct mm_struct *mm);
-
-__EXTERN_INLINE void
-ev5_flush_tlb_other(struct mm_struct *mm)
+extern inline void
+flush_tlb_other(struct mm_struct *mm)
 {
 	mm->context = 0;
 }
@@ -62,7 +96,12 @@ ev4_flush_tlb_current_page(struct mm_struct * mm,
 			   struct vm_area_struct *vma,
 			   unsigned long addr)
 {
-	tbi(2 + ((vma->vm_flags & VM_EXEC) != 0), addr);
+	int tbi_flag = 2;
+	if (vma->vm_flags & VM_EXEC) {
+		__load_new_mm_context(mm);
+		tbi_flag = 3;
+	}
+	tbi(tbi_flag, addr);
 }
 
 __EXTERN_INLINE void
@@ -71,7 +110,7 @@ ev5_flush_tlb_current_page(struct mm_struct * mm,
 			   unsigned long addr)
 {
 	if (vma->vm_flags & VM_EXEC)
-		ev5_flush_tlb_current(mm);
+		__load_new_mm_context(mm);
 	else
 		tbi(2, addr);
 }
@@ -79,16 +118,13 @@ ev5_flush_tlb_current_page(struct mm_struct * mm,
 
 #ifdef CONFIG_ALPHA_GENERIC
 # define flush_tlb_current		alpha_mv.mv_flush_tlb_current
-# define flush_tlb_other		alpha_mv.mv_flush_tlb_other
 # define flush_tlb_current_page		alpha_mv.mv_flush_tlb_current_page
 #else
 # ifdef CONFIG_ALPHA_EV4
 #  define flush_tlb_current		ev4_flush_tlb_current
-#  define flush_tlb_other		ev4_flush_tlb_other
 #  define flush_tlb_current_page	ev4_flush_tlb_current_page
 # else
 #  define flush_tlb_current		ev5_flush_tlb_current
-#  define flush_tlb_other		ev5_flush_tlb_other
 #  define flush_tlb_current_page	ev5_flush_tlb_current_page
 # endif
 #endif

@@ -1133,6 +1133,13 @@ M:	jgarzik@mandrakesoft.com
 L:	linux-via@gtf.org
 S:	Maintained
 
+USB DIAMOND RIO500 DRIVER
+P:	Cesar Miquel
+M:	miquel@df.uba.ar
+L:	rio500-users@lists.sourceforge.net
+W:	http://rio500.sourceforge.net
+S:	Maintained
+
 VIDEO FOR LINUX
 P:	Alan Cox
 M:	Alan.Cox@linux.org

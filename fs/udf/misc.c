@@ -69,7 +69,7 @@ udf64_high32(Uint64 indat)
 extern struct buffer_head *
 udf_tread(struct super_block *sb, int block, int size)
 {
-	if (UDF_SB(sb)->s_flags & UDF_FLAG_VARCONV)
+	if (UDF_QUERY_FLAG(sb, UDF_FLAG_VARCONV))
 		return bread(sb->s_dev, udf_fixed_to_variable(block), size);
 	else
 		return bread(sb->s_dev, block, size);

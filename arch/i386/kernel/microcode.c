@@ -23,20 +23,23 @@
  *	1.02	21 February 2000, Tigran Aivazian <tigran@sco.com>
  *		Added 'device trimming' support. open(O_WRONLY) zeroes
  *		and frees the saved copy of applied microcode.
+ *	1.03	29 February 2000, Tigran Aivazian <tigran@sco.com>
+ *		Made to use devfs (/dev/cpu/microcode) + cleanups.
  */
 
 #include <linux/init.h>
+#include <linux/slab.h>
 #include <linux/sched.h>
 #include <linux/module.h>
 #include <linux/vmalloc.h>
 #include <linux/smp_lock.h>
-#include <linux/proc_fs.h>
+#include <linux/devfs_fs_kernel.h>
 
 #include <asm/msr.h>
 #include <asm/uaccess.h>
 #include <asm/processor.h>
 
-#define MICROCODE_VERSION 	"1.02"
+#define MICROCODE_VERSION 	"1.03"
 
 MODULE_DESCRIPTION("CPU (P6) microcode update driver");
 MODULE_AUTHOR("Tigran Aivazian <tigran@ocston.org>");
@@ -60,9 +63,10 @@ static void do_update_one(void *);
 static unsigned long microcode_status = 0;
 
 /* the actual array of microcode blocks, each 2048 bytes */
-static struct microcode * microcode = NULL;
+static struct microcode *microcode = NULL;
 static unsigned int microcode_num = 0;
 static char *mc_applied = NULL; /* holds an array of applied microcode blocks */
+static unsigned int mc_fsize;   /* used often, so compute once at microcode_init() */
 
 static struct file_operations microcode_fops = {
 	read:		microcode_read,
@@ -71,23 +75,25 @@ static struct file_operations microcode_fops = {
 	release:	microcode_release,
 };
 
-static struct proc_dir_entry *proc_microcode;
+static devfs_handle_t devfs_handle;
 
 static int __init microcode_init(void)
 {
-	proc_microcode = create_proc_entry("microcode", S_IWUSR|S_IRUSR, proc_root_driver);
-	if (!proc_microcode) {
-		printk(KERN_ERR "microcode: can't create /proc/driver/microcode\n");
-		return -ENOMEM;
-	}
-	proc_microcode->proc_fops = &microcode_fops;
+	devfs_handle = devfs_register(NULL, "cpu/microcode", 0, DEVFS_FL_DEFAULT, 0, 0,
+				   S_IFREG | S_IRUSR | S_IWUSR, 0, 0, &microcode_fops, NULL);
+	if (!devfs_handle) {
+		printk(KERN_ERR "microcode: can't create /dev/cpu/microcode\n");
+ 		return -ENOMEM;
+ 	}
+	/* XXX assume no hotplug CPUs so smp_num_cpus does not change */
+	mc_fsize = smp_num_cpus * sizeof(struct microcode);
 	printk(KERN_INFO "P6 Microcode Update Driver v%s registered\n", MICROCODE_VERSION);
 	return 0;
 }
 
 static void __exit microcode_exit(void)
 {
-	remove_proc_entry("microcode", proc_root_driver);
+	devfs_unregister(devfs_handle);
 	if (mc_applied)
 		kfree(mc_applied);
 	printk(KERN_INFO "P6 Microcode Update Driver v%s unregistered\n", MICROCODE_VERSION);
@@ -108,25 +114,21 @@ static int microcode_open(struct inode *inode, struct file *file)
 	if (test_and_set_bit(MICROCODE_IS_OPEN, &microcode_status))
 		return -EBUSY;
 
-	if ((file->f_flags & O_ACCMODE) == O_WRONLY) {
-		proc_microcode->size = 0;
-		if (mc_applied) {
-			memset(mc_applied, 0, smp_num_cpus * sizeof(struct microcode));
-			kfree(mc_applied);
-			mc_applied = NULL;
-		}
+	if ((file->f_flags & O_ACCMODE) == O_WRONLY && mc_applied) {
+		devfs_set_file_size(devfs_handle, 0);
+		memset(mc_applied, 0, mc_fsize);
+		kfree(mc_applied);
+		mc_applied = NULL;
 	}
 
 	MOD_INC_USE_COUNT;
-
 	return 0;
 }
 
 static int microcode_release(struct inode *inode, struct file *file)
 {
-	MOD_DEC_USE_COUNT;
-
 	clear_bit(MICROCODE_IS_OPEN, &microcode_status);
+	MOD_DEC_USE_COUNT;
 	return 0;
 }
 
@@ -156,19 +158,17 @@ static int do_microcode_update(void)
 			memcpy(m, &microcode[update_req[i].slot], sizeof(struct microcode));
 		}
 	}
-	return error ? -EIO : 0;
+	return error;
 }
 
 static void do_update_one(void *arg)
 {
-	struct update_req *req;
-	struct cpuinfo_x86 * c;
+	int cpu_num = smp_processor_id();
+	struct cpuinfo_x86 *c = cpu_data + cpu_num;
+	struct update_req *req = (struct update_req *)arg + cpu_num;
 	unsigned int pf = 0, val[2], rev, sig;
-	int i, cpu_num;
+	int i;
 
-	cpu_num = smp_processor_id();
-	c = cpu_data + cpu_num;
-	req = (struct update_req *)arg + cpu_num;
 	req->err = 1; /* be pessimistic */
 
 	if (c->x86_vendor != X86_VENDOR_INTEL || c->x86 < 6)
@@ -210,8 +210,8 @@ static void do_update_one(void *arg)
 
 				req->err = 0;
 				req->slot = i;
-				printk(KERN_ERR "microcode: CPU%d microcode updated "
-						"from revision %d to %d, date=%08x\n", 
+				printk(KERN_ERR "microcode: CPU%d updated from revision "
+						"%d to %d, date=%08x\n", 
 						cpu_num, rev, val[1], m->date);
 			}
 			break;
@@ -220,12 +220,10 @@ static void do_update_one(void *arg)
 
 static ssize_t microcode_read(struct file *file, char *buf, size_t len, loff_t *ppos)
 {
-	size_t fsize = smp_num_cpus * sizeof(struct microcode);
-
-	if (!proc_microcode->size || *ppos >= fsize)
-		return 0; /* EOF */
-	if (*ppos + len > fsize)
-		len = fsize - *ppos;
+	if (*ppos >= mc_fsize)
+		return 0;
+	if (*ppos + len > mc_fsize)
+		len = mc_fsize - *ppos;
 	if (copy_to_user(buf, mc_applied + *ppos, len))
 		return -EFAULT;
 	*ppos += len;
@@ -242,33 +240,34 @@ static ssize_t microcode_write(struct file *file, const char *buf, size_t len, l
 		return -EINVAL;
 	}
 	if (!mc_applied) {
-		int size = smp_num_cpus * sizeof(struct microcode);
-		mc_applied = kmalloc(size, GFP_KERNEL);
+		mc_applied = kmalloc(mc_fsize, GFP_KERNEL);
 		if (!mc_applied) {
-			printk(KERN_ERR "microcode: can't allocate memory for saved microcode\n");
+			printk(KERN_ERR "microcode: out of memory for saved microcode\n");
 			return -ENOMEM;
 		}
-		memset(mc_applied, 0, size);
+		memset(mc_applied, 0, mc_fsize);
 	}
 	
 	lock_kernel();
 	microcode_num = len/sizeof(struct microcode);
 	microcode = vmalloc(len);
 	if (!microcode) {
-		unlock_kernel();
-		return -ENOMEM;
+		ret = -ENOMEM;
+		goto out_unlock;
 	}
 	if (copy_from_user(microcode, buf, len)) {
-		vfree(microcode);
-		unlock_kernel();
-		return -EFAULT;
+		ret = -EFAULT;
+		goto out_vfree;
 	}
-	ret = do_microcode_update();
-	if (!ret) {
-		proc_microcode->size = smp_num_cpus * sizeof(struct microcode);
-		ret = (ssize_t)len;
+	if(do_microcode_update()) {
+		ret = -EIO;
+		goto out_vfree;
 	}
+	devfs_set_file_size(devfs_handle, mc_fsize);
+	ret = (ssize_t)len;
+out_vfree:
 	vfree(microcode);
+out_unlock:
 	unlock_kernel();
 	return ret;
 }

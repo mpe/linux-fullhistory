@@ -343,13 +343,9 @@ tsunami_init_one_pchip(tsunami_pchip *pchip, int index)
 	 * because of an idiot-syncrasy of the CYPRESS chip.  It may
 	 * respond to a PCI bus address in the last 1MB of the 4GB
 	 * address range.
-	 *
-	 * Note that the TLB lookup logic uses bitwise concatenation,
-	 * not addition, so the required arena alignment is based on
-	 * the size of the window.
 	 */
-	hose->sg_isa = iommu_arena_new(0x00800000, 0x00800000, 0x00800000>>10);
-	hose->sg_pci = iommu_arena_new(0xc0000000, 0x08000000, 0x08000000>>10);
+	hose->sg_isa = iommu_arena_new(hose, 0x00800000, 0x00800000, 0);
+	hose->sg_pci = iommu_arena_new(hose, 0xc0000000, 0x08000000, 0);
 	__direct_map_base = 0x40000000;
 	__direct_map_size = 0x80000000;
 

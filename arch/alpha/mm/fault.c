@@ -38,9 +38,18 @@ extern void die_if_kernel(char *,struct pt_regs *,long, unsigned long *);
 unsigned long last_asn = ASN_FIRST_VERSION;
 #endif
 
-void ev5_flush_tlb_current(struct mm_struct *mm)
+extern void
+__load_new_mm_context(struct mm_struct *next_mm)
 {
-	ev5_activate_mm(NULL, mm, smp_processor_id());
+	unsigned long mmc;
+
+	mmc = __get_new_mm_context(next_mm, smp_processor_id());
+	next_mm->context = mmc;
+	current->thread.asn = mmc & HARDWARE_ASN_MASK;
+        current->thread.ptbr
+	  = ((unsigned long) next_mm->pgd - IDENT_ADDR) >> PAGE_SHIFT;
+
+	__reload_thread(&current->thread);
 }
 
 

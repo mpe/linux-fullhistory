@@ -27,6 +27,7 @@ else
    if [ "$CONFIG_BLK_DEV_IDEDISK" != "n" ]; then
       bool '    Use multi-mode by default' CONFIG_IDEDISK_MULTI_MODE
    fi
+   dep_tristate '  PCMCIA IDE support' CONFIG_BLK_DEV_IDECS $CONFIG_BLK_DEV_IDE $CONFIG_PCMCIA
    dep_tristate '  Include IDE/ATAPI CDROM support' CONFIG_BLK_DEV_IDECD $CONFIG_BLK_DEV_IDE
    dep_tristate '  Include IDE/ATAPI TAPE support' CONFIG_BLK_DEV_IDETAPE $CONFIG_BLK_DEV_IDE
    dep_tristate '  Include IDE/ATAPI FLOPPY support' CONFIG_BLK_DEV_IDEFLOPPY $CONFIG_BLK_DEV_IDE

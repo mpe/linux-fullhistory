@@ -1,4 +1,4 @@
-/*  $Id: process.c,v 1.103 2000/01/21 11:38:53 jj Exp $
+/*  $Id: process.c,v 1.104 2000/03/01 02:53:32 davem Exp $
  *  arch/sparc64/kernel/process.c
  *
  *  Copyright (C) 1995, 1996 David S. Miller (davem@caip.rutgers.edu)
@@ -779,24 +779,22 @@ asmlinkage int sparc_execve(struct pt_regs *regs)
 	/* User register window flush is done by entry.S */
 
 	/* Check for indirect call. */
-	if(regs->u_regs[UREG_G1] == 0)
+	if (regs->u_regs[UREG_G1] == 0)
 		base = 1;
 
-	lock_kernel();
 	filename = getname((char *)regs->u_regs[base + UREG_I0]);
 	error = PTR_ERR(filename);
-	if(IS_ERR(filename))
+	if (IS_ERR(filename))
 		goto out;
 	error = do_execve(filename, (char **) regs->u_regs[base + UREG_I1],
 			  (char **) regs->u_regs[base + UREG_I2], regs);
 	putname(filename);
-	if(!error) {
+	if (!error) {
 		fprs_write(0);
 		current->thread.xfsr[0] = 0;
 		current->thread.fpsaved[0] = 0;
 		regs->tstate &= ~TSTATE_PEF;
 	}
 out:
-	unlock_kernel();
 	return error;
 }

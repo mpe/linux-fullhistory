@@ -1,4 +1,4 @@
-/*  $Id: process.c,v 1.145 2000/01/29 01:08:56 anton Exp $
+/*  $Id: process.c,v 1.146 2000/03/01 02:53:27 davem Exp $
  *  linux/arch/sparc/kernel/process.c
  *
  *  Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
@@ -652,7 +652,6 @@ asmlinkage int sparc_execve(struct pt_regs *regs)
 	if(regs->u_regs[UREG_G1] == 0)
 		base = 1;
 
-	lock_kernel();
 	filename = getname((char *)regs->u_regs[base + UREG_I0]);
 	error = PTR_ERR(filename);
 	if(IS_ERR(filename))
@@ -661,7 +660,6 @@ asmlinkage int sparc_execve(struct pt_regs *regs)
 			  (char **) regs->u_regs[base + UREG_I2], regs);
 	putname(filename);
 out:
-	unlock_kernel();
 	return error;
 }
 

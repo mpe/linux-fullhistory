@@ -36,7 +36,6 @@
  */
 
 #define DEBUG_CONFIG 0
-
 #if DEBUG_CONFIG
 # define DBG_CNF(args)	printk args
 #else
@@ -434,6 +433,8 @@ pyxis_broken_pci_tbi(struct pci_controler *hose,
 	ctrl = *(vuip)PYXIS_CTRL;
 	*(vuip)PYXIS_CTRL = ctrl | 4;
 	mb();
+	*(vuip)PYXIS_CTRL;
+	mb();
 
 	/* Read from PCI dense memory space at TBI_ADDR, skipping 64k
 	   on each read.  This forces SG TLB misses.  It appears that
@@ -447,6 +448,8 @@ pyxis_broken_pci_tbi(struct pci_controler *hose,
 	/* Restore normal PCI operation.  */
 	mb();
 	*(vuip)PYXIS_CTRL = ctrl;
+	mb();
+	*(vuip)PYXIS_CTRL;
 	mb();
 
 	__restore_flags(flags);
@@ -480,31 +483,31 @@ pyxis_init_arch(void)
 	struct pci_controler *hose;
 	unsigned int temp;
 
-#if 0
-	printk("pyxis_init: PYXIS_ERR_MASK 0x%x\n", *(vuip)PYXIS_ERR_MASK);
-	printk("pyxis_init: PYXIS_ERR 0x%x\n", *(vuip)PYXIS_ERR);
-	printk("pyxis_init: PYXIS_INT_REQ 0x%lx\n", *(vulp)PYXIS_INT_REQ);
-	printk("pyxis_init: PYXIS_INT_MASK 0x%lx\n", *(vulp)PYXIS_INT_MASK);
-	printk("pyxis_init: PYXIS_INT_ROUTE 0x%lx\n", *(vulp)PYXIS_INT_ROUTE);
-	printk("pyxis_init: PYXIS_INT_HILO 0x%lx\n", *(vulp)PYXIS_INT_HILO);
-	printk("pyxis_init: PYXIS_INT_CNFG 0x%x\n", *(vuip)PYXIS_INT_CNFG);
-	printk("pyxis_init: PYXIS_RT_COUNT 0x%lx\n", *(vulp)PYXIS_RT_COUNT);
-#endif
-
-	/* 
-	 * Set up error reporting. Make sure CPU_PE is OFF in the mask.
-	 */
+	/* Set up error reporting. Make sure CPU_PE is OFF in the mask.  */
 	temp = *(vuip)PYXIS_ERR_MASK;
-	temp &= ~4;   
-	*(vuip)PYXIS_ERR_MASK = temp;
-	mb();
-	*(vuip)PYXIS_ERR_MASK;	/* re-read to force write */
+	*(vuip)PYXIS_ERR_MASK = temp & ~4;
 
+	/* Enable master/target abort.  */
 	temp = *(vuip)PYXIS_ERR;
-	temp |= 0x180;		/* master/target abort */
-	*(vuip)PYXIS_ERR = temp;
+	*(vuip)PYXIS_ERR = temp | 0x180;
+
+	/* Clear the PYXIS_CFG register, which gets used  for PCI Config
+	   Space accesses.  That is the way we want to use it, and we do
+	   not want to depend on what ARC or SRM might have left behind.  */
+	*(vuip)PYXIS_CFG = 0;
+ 
+	/* Zero the HAEs.  */
+	*(vuip)PYXIS_HAE_MEM = 0;
+	*(vuip)PYXIS_HAE_IO = 0;
+
+	/* Finally, check that the PYXIS_CTRL1 has IOA_BEN set for
+	   enabling byte/word PCI bus space(s) access.  */
+	temp = *(vuip)PYXIS_CTRL1;
+	*(vuip)PYXIS_CTRL1 = temp | 1;
+
+	/* Syncronize with all previous changes.  */
 	mb();
-	*(vuip)PYXIS_ERR;	/* re-read to force write */
+	*(vuip)PYXIS_REV;
 
  	/*
 	 * Create our single hose.
@@ -531,10 +534,41 @@ pyxis_init_arch(void)
 	 * address range.
 	 */
 
-	/* NetBSD hints that page tables must be aligned to 32K due
-	   to a hardware bug.  No description of what models affected.  */
-	hose->sg_isa = iommu_arena_new(0x00800000, 0x00800000, 32768);
-	hose->sg_pci = iommu_arena_new(0xc0000000, 0x08000000, 32768);
+#if 1
+	/* ??? There's some bit of syncronization wrt writing new tlb
+	   entries that's missing.  Sometimes it works, sometimes invalid
+	   tlb machine checks, sometimes hard lockup.  And this just within
+	   the boot sequence.
+
+	   I've tried extra memory barriers, extra alignment, pyxis
+	   register reads, tlb flushes, and loopback tlb accesses.
+
+	   I guess the pyxis revision in the sx164 is just too buggy...  */
+
+	hose->sg_isa = hose->sg_pci = NULL;
+	__direct_map_base = 0x40000000;
+	__direct_map_size = 0x80000000;
+
+	*(vuip)PYXIS_W0_BASE = 0x40000000 | 1;
+	*(vuip)PYXIS_W0_MASK = (0x40000000 - 1) & 0xfff00000;
+	*(vuip)PYXIS_T0_BASE = 0;
+
+	*(vuip)PYXIS_W1_BASE = 0x80000000 | 1;
+	*(vuip)PYXIS_W1_MASK = (0x40000000 - 1) & 0xfff00000;
+	*(vuip)PYXIS_T1_BASE = 0;
+
+	*(vuip)PYXIS_W2_BASE = 0;
+	*(vuip)PYXIS_W3_BASE = 0;
+
+	alpha_mv.mv_pci_tbi = NULL;
+	mb();
+#else
+	/* ??? NetBSD hints that page tables must be aligned to 32K,
+	   possibly due to a hardware bug.  This is over-aligned
+	   from the 8K alignment one would expect for an 8MB window. 
+	   No description of what CIA revisions affected.  */
+	hose->sg_isa = iommu_arena_new(hose, 0x00800000, 0x00800000, 0x08000);
+	hose->sg_pci = iommu_arena_new(hose, 0xc0000000, 0x08000000, 0x20000);
 	__direct_map_base = 0x40000000;
 	__direct_map_size = 0x80000000;
 
@@ -560,37 +594,7 @@ pyxis_init_arch(void)
 		pyxis_enable_broken_tbi(hose->sg_pci);
 
 	alpha_mv.mv_pci_tbi(hose, 0, -1);
-alpha_mv.mv_pci_tbi = 0;
-
-	/*
-	 * Next, clear the PYXIS_CFG register, which gets used
-	 *  for PCI Config Space accesses. That is the way
-	 *  we want to use it, and we do not want to depend on
-	 *  what ARC or SRM might have left behind...
-	 */
-	temp = *(vuip)PYXIS_CFG;
-	if (temp != 0) {
-		*(vuip)PYXIS_CFG = 0;
-		mb();
-		*(vuip)PYXIS_CFG; /* re-read to force write */
-	}
- 
-	/* Zero the HAE.  */
-	*(vuip)PYXIS_HAE_MEM = 0U; mb();
-	*(vuip)PYXIS_HAE_MEM;	/* re-read to force write */
-	*(vuip)PYXIS_HAE_IO = 0; mb();
-	*(vuip)PYXIS_HAE_IO;	/* re-read to force write */
-
-	/*
-	 * Finally, check that the PYXIS_CTRL1 has IOA_BEN set for
-	 * enabling byte/word PCI bus space(s) access.
-	 */
-	temp = *(vuip) PYXIS_CTRL1;
-	if (!(temp & 1)) {
-		*(vuip)PYXIS_CTRL1 = temp | 1;
-		mb();
-		*(vuip)PYXIS_CTRL1; /* re-read */
-	}
+#endif
 }
 
 static inline void

@@ -16,10 +16,6 @@ Steve's quick list of things that need finishing off:
 
  o sendmsg() in the raw socket layer (yes, its for sending routing messages)
 
- o Better filtering of traffic in raw sockets. Aside from receiving routing
-   messages, there really doesn't seem to be a lot else that raw sockets
-   could be useful for... suggestions on a postcard please :-)
-
  o Fix /proc for raw sockets
 
  o Lots of testing with real applications

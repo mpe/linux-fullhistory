@@ -1,4 +1,4 @@
-/* $Id: irq.c,v 1.84 2000/02/25 05:44:41 davem Exp $
+/* $Id: irq.c,v 1.85 2000/03/02 02:00:24 davem Exp $
  * irq.c: UltraSparc IRQ handling/init/registry.
  *
  * Copyright (C) 1997  David S. Miller  (davem@caip.rutgers.edu)
@@ -955,7 +955,7 @@ int probe_irq_off(unsigned long mask)
 void init_timers(void (*cfunc)(int, void *, struct pt_regs *),
 		 unsigned long *clock)
 {
-	unsigned long flags;
+	unsigned long pstate;
 	extern unsigned long timer_tick_offset;
 	int node, err;
 #ifdef __SMP__
@@ -978,31 +978,57 @@ void init_timers(void (*cfunc)(int, void *, struct pt_regs *),
 		prom_halt();
 	}
 
-	save_and_cli(flags);
+	/* Guarentee that the following sequences execute
+	 * uninterrupted.
+	 */
+	__asm__ __volatile__("rdpr	%%pstate, %0\n\t"
+			     "wrpr	%0, %1, %%pstate"
+			     : "=r" (pstate)
+			     : "i" (PSTATE_IE));
 
 	/* Set things up so user can access tick register for profiling
-	 * purposes.
+	 * purposes.  Also workaround BB_ERRATA_1 by doing a dummy
+	 * read back of %tick after writing it.
 	 */
 	__asm__ __volatile__("
 		sethi	%%hi(0x80000000), %%g1
-		sllx	%%g1, 32, %%g1
-		rd	%%tick, %%g2
+		ba,pt	%%xcc, 1f
+		 sllx	%%g1, 32, %%g1
+		.align	64
+	1:	rd	%%tick, %%g2
 		add	%%g2, 6, %%g2
 		andn	%%g2, %%g1, %%g2
 		wrpr	%%g2, 0, %%tick
-"	: /* no outputs */
+		rdpr	%%tick, %%g0"
+	: /* no outputs */
 	: /* no inputs */
 	: "g1", "g2");
 
+	/* Workaround for Spitfire Errata (#54 I think??), I discovered
+	 * this via Sun BugID 4008234, mentioned in Solaris-2.5.1 patch
+	 * number 103640.
+	 *
+	 * On Blackbird writes to %tick_cmpr can fail, the
+	 * workaround seems to be to execute the wr instruction
+	 * at the start of an I-cache line, and perform a dummy
+	 * read back from %tick_cmpr right after writing to it. -DaveM
+	 */
 	__asm__ __volatile__("
 		rd	%%tick, %%g1
-		add	%%g1, %0, %%g1
-		wr	%%g1, 0x0, %%tick_cmpr"
+		ba,pt	%%xcc, 1f
+		 add	%%g1, %0, %%g1
+		.align	64
+	1:	wr	%%g1, 0x0, %%tick_cmpr
+		rd	%%tick_cmpr, %%g0"
 	: /* no outputs */
 	: "r" (timer_tick_offset)
 	: "g1");
 
-	restore_flags(flags);
+	/* Restore PSTATE_IE. */
+	__asm__ __volatile__("wrpr	%0, 0x0, %%pstate"
+			     : /* no outputs */
+			     : "r" (pstate));
+
 	sti();
 }
 

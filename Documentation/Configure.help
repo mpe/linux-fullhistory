@@ -8747,7 +8747,18 @@ CONFIG_USB_PLUSB
   5Mbit/s.  Configure this driver after connecting the USB cable via
   ifconfig plusb0 10.0.0.1 pointopoint 10.0.0.2 
   (and vice versa on the other host).
- 
+
+USB Diamond Rio500 support
+CONFIG_USB_RIO500
+  Say Y here if you want to connect a USB rio500 to your
+  computer's USB port. Please read Documentation/usb/rio.txt
+  for more information.
+
+  This code is also available as a module ( = code which can be
+  inserted in and removed from the running kernel whenever you want).
+  The module will be called rio500.o. If you want to compile it as
+  a module, say M here and read Documentation/modules.txt.
+  
 ACPI support
 CONFIG_ACPI
   Advanced Configuration and Power Interface (ACPI) is an interface
@@ -11120,13 +11131,15 @@ CONFIG_MICROCODE
   Intel processors in P6 family, e.g.  Pentium Pro, Pentium II, 
   Pentium III, Xeon etc. You will obviously need the actual microcode
   binary data itself which is not shipped with the Linux kernel. 
-  Contact Intel to obtain the latest revision of microcode for 
-  your CPU(s). With this support compiled you can use dd(1) to write
-  microcode, for example:
+  With this support compiled you can use dd(1) to write microcode,
+  for example:
 
-     # dd if=/etc/microcode of=/proc/driver/microcode bs=98304 count=1
+     # dd if=/etc/microcode of=/dev/cpu/microcode bs=98304 count=1
 
-  You need to be superuser to do that.
+  You need to be superuser to do that. For latest news and information
+  on obtaining all the required ingredients for this driver, check:
+
+     http://www.ocston.org/~tigran/patches/microcode
 
   This driver is also available as a module ( = code which can be
   inserted in and removed from the running kernel whenever you want).

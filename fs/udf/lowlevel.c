@@ -68,39 +68,40 @@ udf_get_last_session(struct super_block *sb)
 }
 
 unsigned int
-udf_get_last_block(struct super_block *sb, int *flags)
+udf_get_last_block(struct super_block *sb)
 {
 	extern int *blksize_size[];
 	kdev_t dev = sb->s_dev;
 	struct block_device *bdev = sb->s_bdev;
 	int ret;
-	unsigned long lblock;
-	unsigned int hbsize = get_hardblocksize(dev);
-	unsigned int secsize = 512;
-	unsigned int mult = 0;
-	unsigned int div = 0;
+	unsigned long lblock = 0;
 
-	if (!hbsize)
-		hbsize = blksize_size[MAJOR(dev)][MINOR(dev)];
+	ret = ioctl_by_bdev(bdev, CDROM_LAST_WRITTEN, (unsigned long) &lblock);
 
-	if (secsize > hbsize)
-		mult = secsize / hbsize;
-	else if (hbsize > secsize)
-		div = hbsize / secsize;
-
-	lblock = 0;
-	ret = ioctl_by_bdev(bdev, BLKGETSIZE, (unsigned long) &lblock);
-
-	if (!ret && lblock != 0x7FFFFFFF) /* Hard Disk */
+	if (ret) /* Hard Disk */
 	{
-		if (mult)
-			lblock *= mult;
-		else if (div)
-			lblock /= div;
-	}
-	else /* CDROM */
-	{
-		ret = ioctl_by_bdev(bdev, CDROM_LAST_WRITTEN, (unsigned long) &lblock);
+		unsigned int hbsize = get_hardblocksize(dev);
+		unsigned int blocksize = sb->s_blocksize;
+		unsigned int mult = 0;
+		unsigned int div = 0;
+
+		if (!hbsize)
+			hbsize = blksize_size[MAJOR(dev)][MINOR(dev)];
+
+		if (hbsize > blocksize)
+			mult = hbsize / blocksize;
+		else if (blocksize > hbsize)
+			div = blocksize / hbsize;
+
+		ret = ioctl_by_bdev(bdev, BLKGETSIZE, (unsigned long) &lblock);
+
+		if (!ret && lblock != 0x7FFFFFFF)
+		{
+			if (mult)
+				lblock *= mult;
+			else if (div)
+				lblock /= div;
+		}
 	}
 
 	if (!ret && lblock)

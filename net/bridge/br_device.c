@@ -5,7 +5,7 @@
  *	Authors:
  *	Lennert Buytenhek		<buytenh@gnu.org>
  *
- *	$Id: br_device.c,v 1.2 2000/02/24 19:48:06 davem Exp $
+ *	$Id: br_device.c,v 1.3 2000/03/01 02:58:09 davem Exp $
  *
  *	This program is free software; you can redistribute it and/or
  *	modify it under the terms of the GNU General Public License

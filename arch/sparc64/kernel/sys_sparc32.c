@@ -1,4 +1,4 @@
-/* $Id: sys_sparc32.c,v 1.132 2000/02/16 07:31:35 davem Exp $
+/* $Id: sys_sparc32.c,v 1.133 2000/03/01 02:53:33 davem Exp $
  * sys_sparc32.c: Conversion between 32bit and 64bit native syscalls.
  *
  * Copyright (C) 1997,1998 Jakub Jelinek (jj@sunsite.mff.cuni.cz)
@@ -3086,7 +3086,10 @@ do_execve32(char * filename, u32 * argv, u32 * envp, struct pt_regs * regs)
 	bprm.p = PAGE_SIZE*MAX_ARG_PAGES-sizeof(void *);
 	memset(bprm.page, 0, MAX_ARG_PAGES * sizeof(bprm.page[0]));
 
+	lock_kernel();
 	dentry = open_namei(filename, 0, 0);
+	unlock_kernel();
+
 	retval = PTR_ERR(dentry);
 	if (IS_ERR(dentry))
 		return retval;
@@ -3097,11 +3100,15 @@ do_execve32(char * filename, u32 * argv, u32 * envp, struct pt_regs * regs)
 	bprm.loader = 0;
 	bprm.exec = 0;
 	if ((bprm.argc = count32(argv)) < 0) {
+		lock_kernel();
 		dput(dentry);
+		unlock_kernel();
 		return bprm.argc;
 	}
 	if ((bprm.envc = count32(envp)) < 0) {
+		lock_kernel();
 		dput(dentry);
+		unlock_kernel();
 		return bprm.envc;
 	}
 
@@ -3129,8 +3136,11 @@ do_execve32(char * filename, u32 * argv, u32 * envp, struct pt_regs * regs)
 
 out:
 	/* Something went wrong, return the inode and free the argument pages*/
-	if (bprm.dentry)
+	if (bprm.dentry) {
+		lock_kernel();
 		dput(bprm.dentry);
+		unlock_kernel();
+	}
 
 	for (i=0 ; i<MAX_ARG_PAGES ; i++)
 		if (bprm.page[i])
@@ -3154,7 +3164,6 @@ asmlinkage int sparc32_execve(struct pt_regs *regs)
         if((u32)regs->u_regs[UREG_G1] == 0)
                 base = 1;
 
-	lock_kernel();
         filename = getname32((char *)AA(regs->u_regs[base + UREG_I0]));
 	error = PTR_ERR(filename);
         if(IS_ERR(filename))
@@ -3171,7 +3180,6 @@ asmlinkage int sparc32_execve(struct pt_regs *regs)
 		regs->tstate &= ~TSTATE_PEF;
 	}
 out:
-	unlock_kernel();
         return error;
 }
 

@@ -66,10 +66,9 @@ struct alpha_machine_vector
 
 	void (*mv_switch_mm)(struct mm_struct *, struct mm_struct *,
 			     struct task_struct *, long);
-	void (*mv_activate_mm)(struct mm_struct *, struct mm_struct *, long);
+	void (*mv_activate_mm)(struct mm_struct *, struct mm_struct *);
 
 	void (*mv_flush_tlb_current)(struct mm_struct *);
-	void (*mv_flush_tlb_other)(struct mm_struct *);
 	void (*mv_flush_tlb_current_page)(struct mm_struct * mm,
 					  struct vm_area_struct *vma,
 					  unsigned long addr);

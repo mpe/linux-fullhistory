@@ -87,6 +87,7 @@
 #define PGDIR_MASK		(~(PGDIR_SIZE-1))
 #define PTRS_PER_PGD		(__IA64_UL(1) << (PAGE_SHIFT-3))
 #define USER_PTRS_PER_PGD	PTRS_PER_PGD
+#define FIRST_USER_PGD_NR	0
 
 /*
  * Definitions for second level:

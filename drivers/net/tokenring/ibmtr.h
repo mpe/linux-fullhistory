@@ -133,9 +133,9 @@
 #define TCR_ODD         0x0D
 #define TVR_EVEN        0x0E    /* Timer value registers - even and odd */
 #define TVR_ODD         0x0F
-#define SRPR_EVEN       0x10    /* Shared RAM paging registers - even and odd */
+#define SRPR_EVEN       0x18    /* Shared RAM paging registers - even and odd */
 #define SRPR_ENABLE_PAGING 0xc0
-#define SRPR_ODD        0x11 /* Not used. */
+#define SRPR_ODD        0x19 /* Not used. */
 #define TOKREAD         0x60
 #define TOKOR           0x40
 #define TOKAND          0x20
@@ -162,7 +162,7 @@
 #define ACA_RW 0x00
 
 #ifdef ENABLE_PAGING
-#define SET_PAGE(x) (isa_writeb(((x>>8)&ti.page_mask), \
+#define SET_PAGE(x) (isa_writeb((x), \
   ti->mmio + ACA_OFFSET + ACA_RW + SRPR_EVEN))
 #else
 #define SET_PAGE(x)
@@ -205,6 +205,11 @@ struct tok_info {
 	__u32 ssb;                        /* System Status Block address */
 	__u32 arb;                        /* Adapter Request Block address */
 	__u32 asb;                        /* Adapter Status Block address */
+        __u8  init_srb_page;
+        __u8  srb_page;
+        __u8  ssb_page;
+        __u8  arb_page;
+        __u8  asb_page;
 	unsigned short exsap_station_id;
 	unsigned short global_int_enable;
 	struct sk_buff *current_skb;

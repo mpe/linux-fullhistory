@@ -1,17 +1,15 @@
 #ifndef __UDF_DECL_H
 #define __UDF_DECL_H
 
-#define UDF_VERSION_NOTICE "v0.9.0"
-
 #include <linux/udf_167.h>
 #include <linux/udf_udf.h>
 #include "udfend.h"
 
+#include <linux/udf_fs.h>
+
 #ifdef __KERNEL__
 
 #include <linux/types.h>
-#include <linux/udf_fs.h>
-#include <linux/config.h>
 
 #ifndef LINUX_VERSION_CODE
 #include <linux/version.h>
@@ -62,9 +60,10 @@ struct buffer_head;
 struct super_block;
 
 extern struct inode_operations udf_dir_inode_operations;
-extern struct inode_operations udf_file_inode_operations;
 extern struct file_operations udf_dir_operations;
+extern struct inode_operations udf_file_inode_operations;
 extern struct file_operations udf_file_operations;
+extern struct address_space_operations udf_aops;
 extern struct address_space_operations udf_adinicb_aops;
 extern struct address_space_operations udf_symlink_aops;
 
@@ -127,7 +126,7 @@ extern int udf_ioctl(struct inode *, struct file *, unsigned int, unsigned long)
 /* inode.c */
 extern struct inode *udf_iget(struct super_block *, lb_addr);
 extern int udf_sync_inode(struct inode *);
-extern void udf_expand_file_adinicb(struct file *, int, int *);
+extern void udf_expand_file_adinicb(struct inode *, int, int *);
 extern struct buffer_head * udf_expand_dir_adinicb(struct inode *, int *, int *);
 extern struct buffer_head * udf_getblk(struct inode *, long, int, int *);
 extern struct buffer_head * udf_bread(struct inode *, int, int, int *);
@@ -158,7 +157,7 @@ extern void udf_release_data(struct buffer_head *);
 
 /* lowlevel.c */
 extern unsigned int udf_get_last_session(struct super_block *);
-extern unsigned int udf_get_last_block(struct super_block *, int *);
+extern unsigned int udf_get_last_block(struct super_block *);
 
 /* partition.c */
 extern Uint32 udf_get_pblock(struct super_block *, Uint32, Uint16, Uint32);
@@ -180,13 +179,13 @@ extern void udf_truncate(struct inode *);
 
 /* balloc.c */
 extern void udf_free_blocks(const struct inode *, lb_addr, Uint32, Uint32);
-extern int udf_alloc_blocks(const struct inode *, Uint16, Uint32, Uint32);
+extern int udf_prealloc_blocks(const struct inode *, Uint16, Uint32, Uint32);
 extern int udf_new_block(const struct inode *, Uint16, Uint32, int *);
 extern int udf_sync_file(struct file *, struct dentry *);
 
 /* directory.c */
 extern Uint8 * udf_filead_read(struct inode *, Uint8 *, Uint8, lb_addr, int *, int *, struct buffer_head **, int *);
-extern struct FileIdentDesc * udf_fileident_read(struct inode *, loff_t *, struct udf_fileident_bh *, struct FileIdentDesc *, lb_addr *, Uint32 *, Uint32 *, struct buffer_head **);
+extern struct FileIdentDesc * udf_fileident_read(struct inode *, loff_t *, struct udf_fileident_bh *, struct FileIdentDesc *, lb_addr *, Uint32 *, lb_addr *, Uint32 *, Uint32 *, struct buffer_head **);
 
 #endif /* __KERNEL__ */
 

@@ -106,6 +106,7 @@ Version 0.0.6    2.1.110   07-aug-98   Eduardo Marcelo Serrat
 #include <linux/netdevice.h>
 #include <linux/inet.h>
 #include <linux/route.h>
+#include <linux/netfilter.h>
 #include <net/sock.h>
 #include <asm/segment.h>
 #include <asm/system.h>
@@ -1005,6 +1006,12 @@ static int dn_accept(struct socket *sock, struct socket *newsock, int flags)
 
 	memcpy(&newsk->protinfo.dn.addr, &sk->protinfo.dn.addr, sizeof(struct sockaddr_dn));
 
+	/*
+	 * If we are listening on a wild socket, we don't want
+	 * the newly created socket on the wrong hash queue.
+	 */
+	newsk->protinfo.dn.addr.sdn_flags &= ~SDF_WILD;
+
 	skb_pull(skb, dn_username2sockaddr(skb->data, skb->len, &newsk->protinfo.dn.addr, &type));
 	skb_pull(skb, dn_username2sockaddr(skb->data, skb->len, &newsk->protinfo.dn.peer, &type));
 	*(dn_address *)newsk->protinfo.dn.peer.sdn_add.a_addr = cb->src;
@@ -1300,9 +1307,6 @@ static int __dn_setsockopt(struct socket *sock, int level,int optname, char *opt
 	struct dn_scp *scp = &sk->protinfo.dn;
 	struct optdata_dn opt;
 	struct accessdata_dn acc;
-#ifdef CONFIG_DECNET_FW
-	char tmp_fw[MAX(sizeof(struct dn_fwtest),sizeof(struct dn_fwnew))];
-#endif
 	int err;
 
 	if (optlen && !optval)
@@ -1404,34 +1408,15 @@ static int __dn_setsockopt(struct socket *sock, int level,int optname, char *opt
 			dn_nsp_send_disc(sk, 0x38, 0, GFP_KERNEL);
 			break;
 
-#ifdef CONFIG_DECNET_FW
-                case DN_FW_APPEND:
-                case DN_FW_REPLACE:
-                case DN_FW_DELETE:
-                case DN_FW_DELETE_NUM:
-                case DN_FW_INSERT:
-                case DN_FW_FLUSH:
-                case DN_FW_ZERO:
-                case DN_FW_CHECK:
-                case DN_FW_CREATECHAIN:
-                case DN_FW_DELETECHAIN:
-                case DN_FW_POLICY:
-
-                        if (!capable(CAP_NET_ADMIN))
-                                return -EACCES;
-                        if ((optlen > sizeof(tmp_fw)) || (optlen < 1))
-                                return -EINVAL;
-                        if (copy_from_user(&tmp_fw, optval, optlen))
-                                return -EFAULT;
-                        err = dn_fw_ctl(optname, &tmp_fw, optlen);
-                        return err;
-#endif
 		default:
+#ifdef CONFIG_NETFILTER
+		return nf_setsockopt(sk, PF_DECnet, optname, optval, optlen);
+#endif
 		case DSO_LINKINFO:
 		case DSO_STREAM:
 		case DSO_SEQPACKET:
 
-			return -EOPNOTSUPP;
+			return -ENOPROTOOPT;
 	}
 
 	return 0;
@@ -1511,12 +1496,22 @@ static int __dn_getsockopt(struct socket *sock, int level,int optname, char *opt
 				return -EFAULT;
 			break;
 
+		default:
+#ifdef CONFIG_NETFILTER
+		{
+			int val, len = *optlen;
+			val = nf_getsockopt(sk, PF_DECnet, optname, 
+							optval, &len);
+			if (val >= 0)
+				val = put_user(len, optlen);
+			return val;
+		}
+#endif
 		case DSO_STREAM:
 		case DSO_SEQPACKET:
 		case DSO_CONACCEPT:
 		case DSO_CONREJECT:
-		default:
-        		return -EOPNOTSUPP;
+        		return -ENOPROTOOPT;
 	}
 
 	return 0;
@@ -1975,7 +1970,7 @@ static struct packet_type dn_dix_packet_type =
 	__constant_htons(ETH_P_DNA_RT),
 	NULL,		/* All devices */
 	dn_route_rcv,
-	NULL,
+	(void*)1,
 	NULL,
 };
 

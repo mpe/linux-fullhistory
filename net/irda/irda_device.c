@@ -46,6 +46,7 @@
 #include <asm/segment.h>
 #include <asm/uaccess.h>
 #include <asm/dma.h>
+#include <asm/io.h>
 
 #include <net/pkt_sched.h>
 

@@ -12,22 +12,7 @@
 struct pci_dev;
 struct pci_bus;
 struct resource;
-
-/* A PCI IOMMU allocation arena.  There are typically two of these
-   regions per bus.  */
-/* ??? The 8400 has a 32-byte pte entry, and the entire table apparently
-   lives directly on the host bridge (no tlb?).  We don't support this
-   machine, but if we ever did, we'd need to parameterize all this quite
-   a bit further.  Probably with per-bus operation tables.  */
-
-struct pci_iommu_arena
-{
-	spinlock_t lock;
-	unsigned long *ptes;
-	dma_addr_t dma_base;
-	unsigned int size;
-	unsigned int alloc_hint;
-};
+struct pci_iommu_arena;
 
 /* A controler.  Used to manage multiple PCI busses.  */
 

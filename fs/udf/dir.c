@@ -15,7 +15,7 @@
  *		ftp://prep.ai.mit.edu/pub/gnu/GPL
  *	Each contributing author retains all rights to their own work.
  *
- *  (C) 1998-1999 Ben Fennema
+ *  (C) 1998-2000 Ben Fennema
  *
  * HISTORY
  *
@@ -49,10 +49,10 @@ static int do_udf_readdir(struct inode *, struct file *, filldir_t, void *);
 /* readdir and lookup functions */
 
 struct file_operations udf_dir_operations = {
-	read:		generic_read_dir,
-	readdir:	udf_readdir,
-	ioctl:		udf_ioctl,
-	fsync:		udf_sync_file,
+	read:				generic_read_dir,
+	readdir:			udf_readdir,
+	ioctl:				udf_ioctl,
+	fsync:				udf_sync_file,
 };
 
 /*
@@ -158,7 +158,7 @@ do_udf_readdir(struct inode * dir, struct file *filp, filldir_t filldir, void *d
 	{
 		filp->f_pos = nf_pos;
 
-		fi = udf_fileident_read(dir, &nf_pos, &fibh, &cfi, &bloc, &extoffset, &offset, &bh);
+		fi = udf_fileident_read(dir, &nf_pos, &fibh, &cfi, &bloc, &extoffset, &eloc, &elen, &offset, &bh);
 
 		if (!fi)
 		{
@@ -192,13 +192,13 @@ do_udf_readdir(struct inode * dir, struct file *filp, filldir_t filldir, void *d
 
 		if ( (cfi.fileCharacteristics & FILE_DELETED) != 0 )
 		{
-			if ( !IS_UNDELETE(dir->i_sb) )
+			if ( !UDF_QUERY_FLAG(dir->i_sb, UDF_FLAG_UNDELETE) )
 				continue;
 		}
 		
 		if ( (cfi.fileCharacteristics & FILE_HIDDEN) != 0 )
 		{
-			if ( !IS_UNHIDE(dir->i_sb) )
+			if ( !UDF_QUERY_FLAG(dir->i_sb, UDF_FLAG_UNHIDE) )
 				continue;
 		}
 

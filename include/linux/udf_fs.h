@@ -29,10 +29,6 @@
  *
  * HISTORY
  *
- * 10/02/98 dgb	rearranged all headers
- * 11/26/98 blf	added byte order macros
- * 12/05/98 dgb	removed other includes to reduce kernel namespace pollution.
- *		This should only be included by the kernel now!
  */
 
 #if !defined(_LINUX_UDF_FS_H)
@@ -40,10 +36,10 @@
 
 #define UDF_PREALLOCATE
 #define UDF_DEFAULT_PREALLOC_BLOCKS		8
-#define UDF_DEFAULT_PREALLOC_DIR_BLOCKS	0
 
-#define UDFFS_DATE		"2000/01/17"
-#define UDFFS_VERSION	"0.9.0"
+#define UDFFS_DATE		"2000/02/29"
+#define UDFFS_VERSION	"0.9.1"
+
 #define UDFFS_DEBUG
 
 #ifdef UDFFS_DEBUG
@@ -60,7 +56,12 @@
 #define udf_info(f, a...) \
 		printk (KERN_INFO "UDF-fs INFO " ## f, ## a);
 
-/* Prototype for fs/filesystem.c (the only thing really required in this file) */
+#ifdef __KERNEL__
+/*
+ * Function prototypes (all other prototypes included in udfdecl.h)
+ */
 extern int init_udf_fs(void);
+
+#endif /* __KERNEL__ */
 
 #endif /* !defined(_LINUX_UDF_FS_H) */

@@ -51,6 +51,7 @@
 /* Kernel has a separate 44bit address space. */
 #define USER_PTRS_PER_PGD	((const int)((current->thread.flags & SPARC_FLAG_32BIT) ? \
 				 (1) : (PTRS_PER_PGD)))
+#define FIRST_USER_PGD_NR	0
 
 #define PTE_TABLE_SIZE	0x2000	/* 1024 entries 8 bytes each */
 #define PMD_TABLE_SIZE	0x2000	/* 2048 entries 4 bytes each */

@@ -96,6 +96,9 @@ struct udf_sb_info
 	/* Fileset Info */
 	__u16 s_serialnum;
 
+	/* highest UDF revision we have recorded to this media */
+	__u16 s_udfrev;
+
 	/* Miscellaneous flags */
 	__u32 s_flags;
 

@@ -1,7 +1,7 @@
 *
 * ./Documentation/filesystems/udf.txt
 *
-UDF Filesystem version 0.9.0
+UDF Filesystem version 0.9.1
 
 If you encounter problems with reading UDF discs using this driver,
 please report them to linux_udf@hootie.lvld.hp.com, which is the
@@ -16,13 +16,17 @@ The following mount options are supported:
 	gid=		Set the default group.
 	umask=		Set the default umask.
 	uid=		Set the default user.
+	bs=			Set the block size. 
 	unhide		Show otherwise hidden files.
 	undelete	Show deleted files in lists.
+	adinicb		Embed data in the inode (default)
+	noadinicb	Don't embed data in the inode
+	shortad		Use short ad's
+	longad		Use long ad's (default)
 	strict		Set strict conformance (unused)
 
 The remaining are for debugging and disaster recovery:
 
-	bs=			Set the block size. (may not work unless 2048)
 	novrs		Skip volume sequence recognition 
 
 The following expect a offset from 0.
@@ -46,7 +50,8 @@ For more information see:
 	http://www.trylinux.com/projects/udf/index.html
 
 For the latest version and toolset see:
-	 http://www.csc.calpoly.edu/~bfennema/udf.html
+	http://www.csc.calpoly.edu/~bfennema/udf.html
+	http://linux-udf.sourceforge.net/
 
 Documentation on UDF and ECMA 167 is available FREE from:
     http://www.osta.org/

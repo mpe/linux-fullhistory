@@ -972,6 +972,33 @@ flush_tlb_range(struct mm_struct *mm, unsigned long start, unsigned long end)
 	flush_tlb_mm(mm);
 }
 
+static void
+ipi_flush_icache_page(void *x)
+{
+	struct mm_struct *mm = (struct mm_struct *) x;
+	if (mm == current->active_mm)
+		__load_new_mm_context(mm);
+}
+
+void
+flush_icache_page(struct vm_area_struct *vma, struct page *page)
+{
+	struct mm_struct *mm = vma->vm_mm;
+
+	if ((vma->vm_flags & VM_EXEC) == 0)
+		return;
+
+	mm->context = 0;
+	if (mm == current->active_mm) {
+		__load_new_mm_context(mm);
+		if (atomic_read(&mm->mm_users) <= 1)
+			return;
+	}
+
+	if (smp_call_function(ipi_flush_icache_page, mm, 1, 1)) {
+		printk(KERN_CRIT "flush_icache_page: timed out\n");
+	}
+}
 
 int
 smp_info(char *buffer)

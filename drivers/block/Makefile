@@ -262,6 +262,14 @@ endif
 
 ############
 
+ifeq ($(CONFIG_BLK_DEV_IDECS),y)
+L_OBJS += ide-cs.o
+else
+  ifeq ($(CONFIG_BLK_DEV_IDECS),m)
+  M_OBJS += ide-cs.o
+  endif
+endif
+
 ifeq ($(CONFIG_BLK_DEV_IDEDISK),y)
 L_OBJS += ide-disk.o
 else

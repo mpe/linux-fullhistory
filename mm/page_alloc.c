@@ -337,7 +337,7 @@ unsigned int nr_free_buffer_pages (void)
 	zone_t *zone;
 	int i;
 
-	sum = nr_lru_pages - atomic_read(&page_cache_size);
+	sum = nr_lru_pages;
 	for (i = 0; i < NUMNODES; i++)
 		for (zone = NODE_DATA(i)->node_zones; zone <= NODE_DATA(i)->node_zones+ZONE_NORMAL; zone++)
 			sum += zone->free_pages;

@@ -49,8 +49,8 @@ if [ "$CONFIG_MK7" = "y" ]; then
    define_bool CONFIG_X86_USE_3DNOW y
 fi
 
-if [ "$CONFIG_PROC_FS" = "y" ]; then
-   tristate '/proc/driver/microcode - Intel P6 CPU microcode support' CONFIG_MICROCODE
+if [ "$CONFIG_DEVFS_FS" = "y" ]; then
+   tristate '/dev/cpu/microcode - Intel P6 CPU microcode support' CONFIG_MICROCODE
 fi
 
 choice 'High Memory Support' \

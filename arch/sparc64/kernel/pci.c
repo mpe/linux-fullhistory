@@ -1,4 +1,4 @@
-/* $Id: pci.c,v 1.15 2000/02/08 05:11:29 jj Exp $
+/* $Id: pci.c,v 1.16 2000/03/01 02:53:33 davem Exp $
  * pci.c: UltraSparc PCI controller support.
  *
  * Copyright (C) 1997, 1998, 1999 David S. Miller (davem@redhat.com)
@@ -216,11 +216,6 @@ void pcibios_fixup_pbus_ranges(struct pci_bus *pbus,
 
 void pcibios_align_resource(void *data, struct resource *res, unsigned long size)
 {
-}
-
-int pci_assign_resource(struct pci_dev *dev, int i)
-{
-	return -ENOSYS; /* :-)... actually implement this soon */
 }
 
 int pcibios_enable_device(struct pci_dev *pdev)

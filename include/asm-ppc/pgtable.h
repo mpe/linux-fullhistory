@@ -138,6 +138,7 @@ extern unsigned long ioremap_bot, ioremap_base;
 #define PTRS_PER_PMD	1
 #define PTRS_PER_PGD	1024
 #define USER_PTRS_PER_PGD	(TASK_SIZE / PGDIR_SIZE)
+#define FIRST_USER_PGD_NR	0
 
 #define USER_PGD_PTRS (PAGE_OFFSET >> PGDIR_SHIFT)
 #define KERNEL_PGD_PTRS (PTRS_PER_PGD-USER_PGD_PTRS)

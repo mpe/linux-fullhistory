@@ -30,6 +30,9 @@
  *                                 my copying the IPv4 routing code. The
  *                                 hooks here are modified and will continue
  *                                 to evolve for a while.
+ *              Steve Whitehouse : Real SMP at last :-) Also new netfilter
+ *                                 stuff. Look out raw sockets your days
+ *                                 are numbered!
  */
 
 /******************************************************************************
@@ -359,9 +362,22 @@ drop_it:
         return 0;
 }
 
+static int dn_route_discard(struct sk_buff *skb)
+{
+	kfree_skb(skb);
+	return 0;
+}
+
+static int dn_route_ptp_hello(struct sk_buff *skb)
+{
+	dn_dev_hello(skb);
+	dn_neigh_pointopoint_hello(skb);
+	return 0;
+}
+
 int dn_route_rcv(struct sk_buff *skb, struct net_device *dev, struct packet_type *pt)
 {
-	struct dn_skb_cb *cb = (struct dn_skb_cb *)skb->cb;
+	struct dn_skb_cb *cb;
 	unsigned char flags = 0;
 	int padlen = 0;
 	__u16 len = dn_ntohs(*(__u16 *)skb->data);
@@ -370,8 +386,8 @@ int dn_route_rcv(struct sk_buff *skb, struct net_device *dev, struct packet_type
 	if (dn == NULL)
 		goto dump_it;
 
-	cb->stamp = jiffies;
-	cb->iif = dev->ifindex;
+	if ((skb = skb_share_check(skb, GFP_ATOMIC)) == NULL)
+		goto out;
 
 	skb_pull(skb, 2);
 
@@ -381,6 +397,10 @@ int dn_route_rcv(struct sk_buff *skb, struct net_device *dev, struct packet_type
 	skb_trim(skb, len);
 
 	flags = *skb->data;
+
+	cb = (struct dn_skb_cb *)skb->cb;
+	cb->stamp = jiffies;
+	cb->iif = dev->ifindex;
 
 	/*
 	 * If we have padding, remove it.
@@ -426,24 +446,20 @@ int dn_route_rcv(struct sk_buff *skb, struct net_device *dev, struct packet_type
 
 		switch(flags & DN_RT_CNTL_MSK) {
                 	case DN_RT_PKT_HELO:
-				dn_dev_hello(skb);
-				dn_neigh_pointopoint_hello(skb);
-				return 0;
+				NF_HOOK(PF_DECnet, NF_DN_HELLO, skb, skb->dev, NULL, dn_route_ptp_hello);
+				goto out;
 
                 	case DN_RT_PKT_L1RT:
                 	case DN_RT_PKT_L2RT:
-#ifdef CONFIG_DECNET_ROUTER
-				return dn_fib_rt_message(skb);
-#else
-                      		break;
-#endif /* CONFIG_DECNET_ROUTER */
+                                NF_HOOK(PF_DECnet, NF_DN_ROUTE, skb, skb->dev, NULL, dn_route_discard);
+                      		goto out;
                 	case DN_RT_PKT_ERTH:
-				dn_neigh_router_hello(skb);
-                        	return 0;
+				NF_HOOK(PF_DECnet, NF_DN_HELLO, skb, skb->dev, NULL, dn_neigh_router_hello);
+                        	goto out;
 
                 	case DN_RT_PKT_EEDH:
-				dn_neigh_endnode_hello(skb);
-                        	return 0;
+				NF_HOOK(PF_DECnet, NF_DN_HELLO, skb, skb->dev, NULL, dn_neigh_endnode_hello);
+                        	goto out;
                 }
         } else {
 		if (dn->parms.state != DN_DEV_S_RU)
@@ -461,6 +477,7 @@ int dn_route_rcv(struct sk_buff *skb, struct net_device *dev, struct packet_type
 
 dump_it:
 	kfree_skb(skb);
+out:
 	return 0;
 }
 

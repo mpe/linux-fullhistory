@@ -936,11 +936,13 @@ void (*br_handle_frame_hook)(struct sk_buff *skb) = NULL;
 static void __inline__ handle_bridge(struct sk_buff *skb,
 				     struct packet_type *pt_prev)
 {
-	if (pt_prev)
-		deliver_to_old_ones(pt_prev, skb, 0);
-	else {
-		atomic_inc(&skb->users);
-		pt_prev->func(skb, skb->dev, pt_prev);
+	if (pt_prev) {
+		if (!pt_prev->data)
+			deliver_to_old_ones(pt_prev, skb, 0);
+		else {
+			atomic_inc(&skb->users);
+			pt_prev->func(skb, skb->dev, pt_prev);
+		}
 	}
 
 	br_handle_frame_hook(skb);

@@ -123,6 +123,24 @@ static inline u8 bridge_swizzle(u8 pin, u8 slot)
    _ctl_; })
 
 
+/* A PCI IOMMU allocation arena.  There are typically two of these
+   regions per bus.  */
+/* ??? The 8400 has a 32-byte pte entry, and the entire table apparently
+   lives directly on the host bridge (no tlb?).  We don't support this
+   machine, but if we ever did, we'd need to parameterize all this quite
+   a bit further.  Probably with per-bus operation tables.  */
+
+struct pci_iommu_arena
+{
+	spinlock_t lock;
+	struct pci_controler *hose;
+	unsigned long *ptes;
+	dma_addr_t dma_base;
+	unsigned int size;
+	unsigned int next_entry;
+};
+
+
 /* The hose list.  */
 extern struct pci_controler *hose_head, **hose_tail;
 extern struct pci_controler *pci_isa_hose;
@@ -132,8 +150,9 @@ extern u8 common_swizzle(struct pci_dev *, u8 *);
 extern struct pci_controler *alloc_pci_controler(void);
 extern struct resource *alloc_resource(void);
 
-extern struct pci_iommu_arena *iommu_arena_new(dma_addr_t, unsigned long,
-					   unsigned long);
+extern struct pci_iommu_arena *iommu_arena_new(struct pci_controler *,
+					       dma_addr_t, unsigned long,
+					       unsigned long);
 extern long iommu_arena_alloc(struct pci_iommu_arena *arena, long n);
 
 extern const char *const pci_io_names[];

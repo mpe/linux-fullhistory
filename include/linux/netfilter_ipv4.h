@@ -51,7 +51,6 @@
 
 #ifdef CONFIG_NETFILTER_DEBUG
 #ifdef __KERNEL__
-void debug_print_hooks_ip(unsigned int nf_debug);
 void nf_debug_ip_local_deliver(struct sk_buff *skb);
 void nf_debug_ip_loopback_xmit(struct sk_buff *newskb);
 void nf_debug_ip_finish_output2(struct sk_buff *skb);

@@ -186,6 +186,9 @@ void read_cb_mem(socket_info_t * s, u_char fn, int space,
 
 	DEBUG(3, "cs: read_cb_mem(%d, %#x, %u)\n", space, addr, len);
 
+	if (!s->cb_config)
+		goto fail;
+
 	dev = &s->cb_config[fn].dev;
 
 	/* Config space? */

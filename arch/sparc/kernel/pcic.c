@@ -1,4 +1,4 @@
-/* $Id: pcic.c,v 1.13 2000/02/12 03:05:37 zaitcev Exp $
+/* $Id: pcic.c,v 1.14 2000/03/01 02:53:28 davem Exp $
  * pcic.c: Sparc/PCI controller support
  *
  * Copyright (C) 1998 V. Roganov and G. Raiko
@@ -883,13 +883,6 @@ void pcibios_fixup_pbus_ranges(struct pci_bus *pbus,
 void pcibios_align_resource(void *data, struct resource *res, unsigned long size)
 {
 }
-
-#if 0
-int pci_assign_resource(struct pci_dev *dev, int i)
-{
-	return -ENOSYS; /* :-)... actually implement this soon */
-}
-#endif
 
 int pcibios_enable_device(struct pci_dev *pdev)
 {

@@ -88,11 +88,10 @@ udf_fileident_read(struct inode *dir, loff_t *nf_pos,
 	struct udf_fileident_bh *fibh,
 	struct FileIdentDesc *cfi,
 	lb_addr *bloc, Uint32 *extoffset, 
+	lb_addr *eloc, Uint32 *elen,
 	Uint32 *offset, struct buffer_head **bh)
 {
 	struct FileIdentDesc *fi;
-	lb_addr eloc;
-	Uint32 elen;
 	int block;
 
 	fibh->soffset = fibh->eoffset;
@@ -101,17 +100,17 @@ udf_fileident_read(struct inode *dir, loff_t *nf_pos,
 	{
 		int lextoffset = *extoffset;
 
-		if (udf_next_aext(dir, bloc, extoffset, &eloc, &elen, bh, 1) !=
+		if (udf_next_aext(dir, bloc, extoffset, eloc, elen, bh, 1) !=
 			EXTENT_RECORDED_ALLOCATED)
 		{
 			return NULL;
 		}
 
-		block = udf_get_lb_pblock(dir->i_sb, eloc, *offset);
+		block = udf_get_lb_pblock(dir->i_sb, *eloc, *offset);
 
 		(*offset) ++;
 
-		if ((*offset << dir->i_sb->s_blocksize_bits) >= elen)
+		if ((*offset << dir->i_sb->s_blocksize_bits) >= *elen)
 			*offset = 0;
 		else
 			*extoffset = lextoffset;
@@ -143,17 +142,17 @@ udf_fileident_read(struct inode *dir, loff_t *nf_pos,
 	{
 		int lextoffset = *extoffset;
 
-		if (udf_next_aext(dir, bloc, extoffset, &eloc, &elen, bh, 1) !=
+		if (udf_next_aext(dir, bloc, extoffset, eloc, elen, bh, 1) !=
 			EXTENT_RECORDED_ALLOCATED)
 		{
 			return NULL;
 		}
 
-		block = udf_get_lb_pblock(dir->i_sb, eloc, *offset);
+		block = udf_get_lb_pblock(dir->i_sb, *eloc, *offset);
 
 		(*offset) ++;
 
-		if ((*offset << dir->i_sb->s_blocksize_bits) >= elen)
+		if ((*offset << dir->i_sb->s_blocksize_bits) >= *elen)
 			*offset = 0;
 		else
 			*extoffset = lextoffset;

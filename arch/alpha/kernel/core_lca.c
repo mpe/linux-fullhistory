@@ -307,7 +307,7 @@ lca_init_arch(void)
 	 * Window 0 is direct access 1GB at 1GB
 	 * Window 1 is scatter-gather 8MB at 8MB (for isa)
 	 */
-	hose->sg_isa = iommu_arena_new(0x00800000, 0x00800000, PAGE_SIZE);
+	hose->sg_isa = iommu_arena_new(hose, 0x00800000, 0x00800000, 0);
 	hose->sg_pci = NULL;
 	__direct_map_base = 0x40000000;
 	__direct_map_size = 0x40000000;

@@ -32,7 +32,8 @@ extern void __pgd_error(const char *file, int line, unsigned long val);
 #define PGDIR_SIZE		(1UL << PGDIR_SHIFT)
 #define PGDIR_MASK		(~(PGDIR_SIZE-1))
 
-#define USER_PTRS_PER_PGD	(TASK_SIZE/PGDIR_SIZE)
+#define FIRST_USER_PGD_NR	1
+#define USER_PTRS_PER_PGD	((TASK_SIZE/PGDIR_SIZE) - FIRST_USER_PGD_NR)
 
 /*
  * The table below defines the page protection levels that we insert into our

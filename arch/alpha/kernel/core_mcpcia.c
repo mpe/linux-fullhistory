@@ -404,8 +404,8 @@ mcpcia_startup_hose(struct pci_controler *hose)
 	 * ??? We ought to scale window 1 with memory.
 	 */
 
-	hose->sg_isa = iommu_arena_new(0x00800000, 0x00800000, PAGE_SIZE);
-	hose->sg_pci = iommu_arena_new(0x40000000, 0x08000000, PAGE_SIZE);
+	hose->sg_isa = iommu_arena_new(hose, 0x00800000, 0x00800000, 0);
+	hose->sg_pci = iommu_arena_new(hose, 0x40000000, 0x08000000, 0);
 	__direct_map_base = 0x80000000;
 	__direct_map_size = 0x80000000;
 

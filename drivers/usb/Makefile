@@ -68,6 +68,7 @@ obj-$(CONFIG_USB_DABUSB)	+= dabusb.o
 obj-$(CONFIG_USB_PLUSB)		+= plusb.o
 obj-$(CONFIG_USB_OV511)		+= ov511.o
 obj-$(CONFIG_USB_PEGASUS)	+= pegasus.o
+obj-$(CONFIG_USB_RIO500)	+= rio500.o
 
 # Extract lists of the multi-part drivers.
 # The 'int-*' lists are the intermediate files used to build the multi's.

@@ -22,7 +22,8 @@
 #include <asm/io.h>
 #endif
 
-static inline void enter_lazy_tlb(struct mm_struct *mm, struct task_struct *tsk, unsigned cpu)
+static inline void
+enter_lazy_tlb(struct mm_struct *mm, struct task_struct *tsk, unsigned cpu)
 {
 }
 
@@ -58,8 +59,7 @@ __reload_thread(struct thread_struct *pcb)
  * in use) and the Valid bit set, then entries can also effectively be
  * made coherent by assigning a new, unused ASN to the currently
  * running process and not reusing the previous ASN before calling the
- * appropriate PALcode routine to invalidate the translation buffer
- * (TB)". 
+ * appropriate PALcode routine to invalidate the translation buffer (TB)". 
  *
  * In short, the EV4 has a "kind of" ASN capability, but it doesn't actually
  * work correctly and can thus not be used (explaining the lack of PAL-code
@@ -123,8 +123,6 @@ extern unsigned long last_asn;
 #define __MMU_EXTERN_INLINE
 #endif
 
-extern void get_new_mm_context(struct task_struct *p, struct mm_struct *mm);
-
 static inline unsigned long
 __get_new_mm_context(struct mm_struct *mm, long cpu)
 {
@@ -133,39 +131,11 @@ __get_new_mm_context(struct mm_struct *mm, long cpu)
 
 	if ((asn & HARDWARE_ASN_MASK) >= MAX_ASN) {
 		tbiap();
+		imb();
 		next = (asn & ~HARDWARE_ASN_MASK) + ASN_FIRST_VERSION;
 	}
 	cpu_last_asn(cpu) = next;
 	return next;
-}
-
-__EXTERN_INLINE void
-ev4_switch_mm(struct mm_struct *prev_mm, struct mm_struct *next_mm,
-	      struct task_struct *next, long cpu)
-{
-	/* As described, ASN's are broken.  But we can optimize for
-	   switching between threads -- if the mm is unchanged from
-	   current we needn't flush.  */
-	/* ??? May not be needed because EV4 PALcode recognizes that
-	   ASN's are broken and does a tbiap itself on swpctx, under
-	   the "Must set ASN or flush" rule.  At least this is true
-	   for a 1992 SRM, reports Joseph Martin (jmartin@hlo.dec.com).
-	   I'm going to leave this here anyway, just to Be Sure.  -- r~  */
-
-	if (prev_mm != next_mm)
-		tbiap();
-}
-
-__EXTERN_INLINE void
-ev4_activate_mm(struct mm_struct *prev_mm, struct mm_struct *next_mm, long cpu)
-{
-	/* This is only called after changing mm on current.  */
-	tbiap();
-
-        current->thread.ptbr
-	  = ((unsigned long) next_mm->pgd - IDENT_ADDR) >> PAGE_SHIFT;
-
-	__reload_thread(&current->thread);
 }
 
 __EXTERN_INLINE void
@@ -193,28 +163,50 @@ ev5_switch_mm(struct mm_struct *prev_mm, struct mm_struct *next_mm,
 }
 
 __EXTERN_INLINE void
-ev5_activate_mm(struct mm_struct *prev_mm, struct mm_struct *next_mm, long cpu)
+ev4_switch_mm(struct mm_struct *prev_mm, struct mm_struct *next_mm,
+	      struct task_struct *next, long cpu)
 {
-	unsigned long mmc = __get_new_mm_context(next_mm, cpu);
-	next_mm->context = mmc;
-	current->thread.asn = mmc & HARDWARE_ASN_MASK;
-        current->thread.ptbr
-	  = ((unsigned long) next_mm->pgd - IDENT_ADDR) >> PAGE_SHIFT;
+	/* As described, ASN's are broken for TLB usage.  But we can
+	   optimize for switching between threads -- if the mm is
+	   unchanged from current we needn't flush.  */
+	/* ??? May not be needed because EV4 PALcode recognizes that
+	   ASN's are broken and does a tbiap itself on swpctx, under
+	   the "Must set ASN or flush" rule.  At least this is true
+	   for a 1992 SRM, reports Joseph Martin (jmartin@hlo.dec.com).
+	   I'm going to leave this here anyway, just to Be Sure.  -- r~  */
+	if (prev_mm != next_mm)
+		tbiap();
 
-	__reload_thread(&current->thread);
+	/* Do continue to allocate ASNs, because we can still use them
+	   to avoid flushing the icache.  */
+	ev5_switch_mm(prev_mm, next_mm, next, cpu);
 }
 
+extern void __load_new_mm_context(struct mm_struct *);
+
+__EXTERN_INLINE void
+ev5_activate_mm(struct mm_struct *prev_mm, struct mm_struct *next_mm)
+{
+	__load_new_mm_context(next_mm);
+}
+
+__EXTERN_INLINE void
+ev4_activate_mm(struct mm_struct *prev_mm, struct mm_struct *next_mm)
+{
+	__load_new_mm_context(next_mm);
+	tbiap();
+}
 
 #ifdef CONFIG_ALPHA_GENERIC
-# define switch_mm			alpha_mv.mv_switch_mm
-# define activate_mm(x,y)		alpha_mv.mv_activate_mm((x),(y),smp_processor_id())
+# define switch_mm(a,b,c,d)	alpha_mv.mv_switch_mm((a),(b),(c),(d))
+# define activate_mm(x,y)	alpha_mv.mv_activate_mm((x),(y))
 #else
 # ifdef CONFIG_ALPHA_EV4
-#  define switch_mm			ev4_switch_mm
-#  define activate_mm(x,y)		ev4_activate_mm((x),(y),smp_processor_id())
+#  define switch_mm(a,b,c,d)	ev4_switch_mm((a),(b),(c),(d))
+#  define activate_mm(x,y)	ev4_activate_mm((x),(y))
 # else
-#  define switch_mm			ev5_switch_mm
-#  define activate_mm(x,y)		ev5_activate_mm((x),(y),smp_processor_id())
+#  define switch_mm(a,b,c,d)	ev5_switch_mm((a),(b),(c),(d))
+#  define activate_mm(x,y)	ev5_activate_mm((x),(y))
 # endif
 #endif
 

@@ -30,6 +30,10 @@
 #define NF_DN_LOCAL_OUT		3
 /* Packets about to hit the wire. */
 #define NF_DN_POST_ROUTING	4
-#define NF_DN_NUMHOOKS		5
+/* Input Hello Packets */
+#define NF_DN_HELLO		5
+/* Input Routing Packets */
+#define NF_DN_ROUTE		6
+#define NF_DN_NUMHOOKS		7
 
 #endif /*__LINUX_DECNET_NETFILTER_H*/

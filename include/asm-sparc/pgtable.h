@@ -118,6 +118,7 @@ BTFIXUPDEF_INT(page_kernel)
 #define PTRS_PER_PMD    	BTFIXUP_SIMM13(ptrs_per_pmd)
 #define PTRS_PER_PGD    	BTFIXUP_SIMM13(ptrs_per_pgd)
 #define USER_PTRS_PER_PGD	BTFIXUP_SIMM13(user_ptrs_per_pgd)
+#define FIRST_USER_PGD_NR	0
 
 #define PAGE_NONE      __pgprot(BTFIXUP_INT(page_none))
 #define PAGE_SHARED    __pgprot(BTFIXUP_INT(page_shared))

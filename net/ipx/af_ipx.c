@@ -2352,13 +2352,10 @@ static struct proto_ops SOCKOPS_WRAPPED(ipx_dgram_ops) = {
 #include <linux/smp_lock.h>
 SOCKOPS_WRAP(ipx_dgram, PF_IPX);
 
-
-/* Called by protocol.c on kernel start up */
-
 static struct packet_type ipx_8023_packet_type =
 
 {
-	0,	/* MUTTER ntohs(ETH_P_802_3),*/
+	__constant_htons(ETH_P_802_3),
 	NULL,		/* All devices */
 	ipx_rcv,
 	NULL,
@@ -2367,7 +2364,7 @@ static struct packet_type ipx_8023_packet_type =
 
 static struct packet_type ipx_dix_packet_type =
 {
-	0,	/* MUTTER ntohs(ETH_P_IPX),*/
+	__constant_htons(ETH_P_IPX),
 	NULL,		/* All devices */
 	ipx_rcv,
 	NULL,
@@ -2389,16 +2386,18 @@ extern void destroy_8023_client(struct datalink_proto *);
 static unsigned char ipx_8022_type = 0xE0;
 static unsigned char ipx_snap_id[5] = { 0x0, 0x0, 0x0, 0x81, 0x37 };
 
+
+
+/* Called by protocols.c on kernel start up */
+
 void ipx_proto_init(struct net_proto *pro)
 {
 	(void) sock_register(&ipx_family_ops);
 
 	pEII_datalink = make_EII_client();
-	ipx_dix_packet_type.type = htons(ETH_P_IPX);
 	dev_add_pack(&ipx_dix_packet_type);
 
 	p8023_datalink = make_8023_client();
-	ipx_8023_packet_type.type = htons(ETH_P_802_3);
 	dev_add_pack(&ipx_8023_packet_type);
 
 	if((p8022_datalink = register_8022_client(ipx_8022_type,ipx_rcv)) == NULL)

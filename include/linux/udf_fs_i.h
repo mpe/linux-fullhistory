@@ -43,7 +43,8 @@ struct udf_inode_info
 	unsigned i_alloc_type : 3;
 	unsigned i_extended_fe : 1;
 	unsigned i_strat_4096 : 1;
-	unsigned reserved : 27;
+	unsigned i_new_inode : 1;
+	unsigned reserved : 26;
 };
 
 #endif
