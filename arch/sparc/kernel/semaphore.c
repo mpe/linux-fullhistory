@@ -1,5 +1,5 @@
-/* $Id: semaphore.c,v 1.1 1999/08/31 13:26:15 anton Exp $
- *  Generic semaphore code. Buyer beware. Do your own
+/* $Id: semaphore.c,v 1.2 1999/12/28 11:50:37 jj Exp $
+ * Generic semaphore code. Buyer beware. Do your own
  * specific changes in <asm/semaphore-helper.h>
  */
 
@@ -62,8 +62,7 @@ void __up(struct semaphore *sem)
 
 #define DOWN_VAR				\
 	struct task_struct *tsk = current;	\
-	wait_queue_t wait;			\
-	init_waitqueue_entry(&wait, tsk);
+	DECLARE_WAITQUEUE(wait, tsk);
 
 #define DOWN_HEAD(task_state)						\
 									\
@@ -126,4 +125,116 @@ int __down_interruptible(struct semaphore * sem)
 int __down_trylock(struct semaphore * sem)
 {
 	return waking_non_zero_trylock(sem);
+}
+
+/* rw mutexes
+ * Implemented by Jakub Jelinek (jakub@redhat.com) based on
+ * i386 implementation by Ben LaHaise (bcrl@redhat.com).
+ */
+
+extern inline int ldstub(unsigned char *p)
+{
+	int ret;
+	asm volatile("ldstub %1, %0" : "=r" (ret) : "m" (*p) : "memory");
+	return ret;
+}
+
+void down_read_failed_biased(struct rw_semaphore *sem)
+{
+	DOWN_VAR
+
+	add_wait_queue(&sem->wait, &wait);	/* put ourselves at the head of the list */
+
+	for (;;) {
+		if (!ldstub(&sem->read_not_granted))
+			break;
+		set_task_state(tsk, TASK_UNINTERRUPTIBLE);
+		if (sem->read_not_granted)
+			schedule();
+	}
+
+	remove_wait_queue(&sem->wait, &wait);
+	tsk->state = TASK_RUNNING;
+}
+
+void down_write_failed_biased(struct rw_semaphore *sem)
+{
+	DOWN_VAR
+
+	add_wait_queue_exclusive(&sem->write_bias_wait, &wait); /* put ourselves at the end of the list */
+
+	for (;;) {
+		if (!ldstub(&sem->write_not_granted))
+			break;
+		set_task_state(tsk, TASK_UNINTERRUPTIBLE | TASK_EXCLUSIVE);
+		if (sem->write_not_granted)
+			schedule();
+	}
+
+	remove_wait_queue(&sem->write_bias_wait, &wait);
+	tsk->state = TASK_RUNNING;
+
+	/* if the lock is currently unbiased, awaken the sleepers
+	 * FIXME: this wakes up the readers early in a bit of a
+	 * stampede -> bad!
+	 */
+	if (sem->count >= 0)
+		wake_up(&sem->wait);
+}
+
+/* Wait for the lock to become unbiased.  Readers
+ * are non-exclusive. =)
+ */
+void down_read_failed(struct rw_semaphore *sem)
+{
+	DOWN_VAR
+
+	__up_read(sem); /* this takes care of granting the lock */
+
+	add_wait_queue(&sem->wait, &wait);
+
+	while (sem->count < 0) {
+		set_task_state(tsk, TASK_UNINTERRUPTIBLE);
+		if (sem->count >= 0)
+			break;
+		schedule();
+	}
+
+	remove_wait_queue(&sem->wait, &wait);
+	tsk->state = TASK_RUNNING;
+}
+
+/* Wait for the lock to become unbiased. Since we're
+ * a writer, we'll make ourselves exclusive.
+ */
+void down_write_failed(struct rw_semaphore *sem)
+{
+	DOWN_VAR
+
+	__up_write(sem);	/* this takes care of granting the lock */
+
+	add_wait_queue_exclusive(&sem->wait, &wait);
+
+	while (sem->count < 0) {
+		set_task_state(tsk, TASK_UNINTERRUPTIBLE | TASK_EXCLUSIVE);
+		if (sem->count >= 0)
+			break;  /* we must attempt to aquire or bias the lock */
+		schedule();
+	}
+
+	remove_wait_queue(&sem->wait, &wait);
+	tsk->state = TASK_RUNNING;
+}
+
+void __rwsem_wake(struct rw_semaphore *sem, unsigned long readers)
+{
+	if (readers) {
+		/* Due to lame ldstub we don't do here
+		   a BUG() consistency check */
+		sem->read_not_granted = 0;
+		wake_up(&sem->wait);
+	} else {
+		sem->write_not_granted = 0;
+		wake_up(&sem->write_bias_wait);
+	}
 }

@@ -1,4 +1,4 @@
-/* $Id: iommu.c,v 1.15 1999/11/19 04:11:53 davem Exp $
+/* $Id: iommu.c,v 1.16 1999/12/28 04:28:54 anton Exp $
  * iommu.c:  IOMMU specific routines for memory management.
  *
  * Copyright (C) 1995 David S. Miller  (davem@caip.rutgers.edu)
@@ -13,6 +13,7 @@
 #include <linux/mm.h>
 #include <linux/malloc.h>
 #include <asm/scatterlist.h>
+#include <asm/pgalloc.h>
 #include <asm/pgtable.h>
 #include <asm/sbus.h>
 #include <asm/io.h>

@@ -30,8 +30,6 @@ struct pci_socket_ops {
 	int (*set_io_map)(struct pci_socket *, struct pccard_io_map *);
 	int (*get_mem_map)(struct pci_socket *, struct pccard_mem_map *);
 	int (*set_mem_map)(struct pci_socket *, struct pccard_mem_map *);
-	int (*get_bridge)(struct pci_socket *, struct cb_bridge_map *);
-	int (*set_bridge)(struct pci_socket *, struct cb_bridge_map *);
 	void (*proc_setup)(struct pci_socket *, struct proc_dir_entry *base);
 };
 

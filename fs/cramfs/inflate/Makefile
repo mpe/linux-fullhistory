@@ -26,9 +26,9 @@
 # uncompression can be done without blocking on allocation).
 #
 
-OBJECTFILES=adler32.o infblock.o infcodes.o inffast.o inflate.o inftrees.o infutil.o uncompr.o
+O_TARGET := zlib.o
 
-zlib.o: $(OBJECTFILES)
-	ld -r -o zlib.o $(OBJECTFILES)
+O_OBJS := adler32.o infblock.o infcodes.o inffast.o inflate.o \
+          inftrees.o infutil.o uncompr.o
 
 include $(TOPDIR)/Rules.make

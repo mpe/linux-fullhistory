@@ -123,7 +123,6 @@ pci_class_name(u32 class)
 
 void __init pci_name_device(struct pci_dev *dev)
 {
-	sprintf(dev->name, "PCI device %04x:%04x", dev->vendor, dev->device);
 }
 
 char *

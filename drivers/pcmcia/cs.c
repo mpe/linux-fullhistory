@@ -59,6 +59,7 @@
 #include <pcmcia/cistpl.h>
 #include <pcmcia/cisreg.h>
 #include <pcmcia/bus_ops.h>
+
 #include "cs_internal.h"
 #include "rsrc_mgr.h"
 

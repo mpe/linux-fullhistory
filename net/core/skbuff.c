@@ -4,7 +4,7 @@
  *	Authors:	Alan Cox <iiitac@pyr.swan.ac.uk>
  *			Florian La Roche <rzsfl@rz.uni-sb.de>
  *
- *	Version:	$Id: skbuff.c,v 1.62 1999/12/23 02:13:42 davem Exp $
+ *	Version:	$Id: skbuff.c,v 1.63 2000/01/02 09:15:17 davem Exp $
  *
  *	Fixes:	
  *		Alan Cox	:	Fixed the worst of the load balancer bugs.
@@ -358,8 +358,9 @@ struct sk_buff *skb_copy_expand(const struct sk_buff *skb,
 
 	/* Set the tail pointer and length */
 	skb_put(n,skb->len);
-	/* Copy the bytes: data pointers must point to same data. */
-	memcpy(n->data - skb_headroom(skb), skb->head, skb->end-skb->head);
+
+	/* Copy the data only. */
+	memcpy(n->data, skb->data, skb->len);
 
 	copy_skb_header(n, skb);
 	return n;

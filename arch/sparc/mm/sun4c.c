@@ -1,4 +1,4 @@
-/* $Id: sun4c.c,v 1.181 1999/12/16 14:34:21 anton Exp $
+/* $Id: sun4c.c,v 1.182 1999/12/27 06:30:04 anton Exp $
  * sun4c.c: Doing in software what should be done in hardware.
  *
  * Copyright (C) 1996 David S. Miller (davem@caip.rutgers.edu)
@@ -18,6 +18,7 @@
 
 #include <asm/scatterlist.h>
 #include <asm/page.h>
+#include <asm/pgalloc.h>
 #include <asm/pgtable.h>
 #include <asm/vaddrs.h>
 #include <asm/idprom.h>
@@ -1967,10 +1968,6 @@ static void sun4c_switch_mm_hw(struct mm_struct *old_mm, struct mm_struct *mm, s
 	} else {
 		/* Update the LRU ring of contexts. */
 		ctx = ctx_list_pool + mm->context;
-#ifdef DEBUG_SUN4C_MM
-		if (!ctx->ctx_mm)
-			panic("context was not set up");
-#endif
 		remove_from_ctx_list(ctx);
 		add_to_used_ctxlist(ctx);
 	}
@@ -2027,10 +2024,6 @@ static void sun4c_switch_mm_sw(struct mm_struct *old_mm, struct mm_struct *mm, s
 	} else {
 		/* Update the LRU ring of contexts. */
 		ctx = ctx_list_pool + mm->context;
-#ifdef DEBUG_SUN4C_MM
-		if (!ctx->ctx_mm)
-			panic("context was not set up");
-#endif
 		remove_from_ctx_list(ctx);
 		add_to_used_ctxlist(ctx);
 	}
@@ -2464,7 +2457,7 @@ static void sun4c_vac_alias_fixup(struct vm_area_struct *vma, unsigned long addr
 			pgdp = sun4c_pgd_offset(vma->vm_mm, address);
 			ptep = sun4c_pte_offset((pmd_t *) pgdp, address);
 			*ptep = __pte(pte_val(*ptep) | _SUN4C_PAGE_NOCACHE);
-			pte = pte_val(*ptep);
+			pte = *ptep;
 		}
 	}
 }
@@ -2586,7 +2579,14 @@ void __init sun4c_paging_init(void)
 	swapper_pg_dir[vaddr>>SUN4C_PGDIR_SHIFT] = __pgd(PGD_TABLE | (unsigned long) pg3);
 	sun4c_init_ss2_cache_bug();
 	sparc_context_init(num_contexts);
-	free_area_init(end_pfn);
+
+	{
+		unsigned int zones_size[MAX_NR_ZONES] = { 0, 0, 0};
+
+		zones_size[ZONE_DMA] = end_pfn;
+		free_area_init(zones_size);
+	}
+
 	cnt = 0;
 	for (i = 0; i < num_segmaps; i++)
 		if (mmu_entry_pool[i].locked)

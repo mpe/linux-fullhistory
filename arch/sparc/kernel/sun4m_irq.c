@@ -30,6 +30,7 @@
 #include <asm/openprom.h>
 #include <asm/oplib.h>
 #include <asm/traps.h>
+#include <asm/pgalloc.h>
 #include <asm/pgtable.h>
 #include <asm/smp.h>
 #include <asm/irq.h>

@@ -1,20 +1,12 @@
 #
-# Makefile for the kernel usb device drivers.
+# Makefile for the kernel USB device drivers.
 #
-# Note! Dependencies are done automagically by 'make dep', which also
-# removes any old dependencies. DON'T put your own dependencies here
-# unless it's something special (ie not a .c file).
-#
-# Note 2! The CFLAGS definitions are now inherited from the
-# parent makes..
 
 SUB_DIRS     :=
 MOD_SUB_DIRS := $(SUB_DIRS)
 ALL_SUB_DIRS := $(SUB_DIRS)
 
 L_TARGET := usb.a
-M_OBJS   :=
-L_OBJS   :=
 MOD_LIST_NAME := USB_MODULES
 
 ifeq ($(CONFIG_USB),y)
@@ -48,13 +40,6 @@ ifeq ($(CONFIG_USB_OHCI_HCD),m)
       MI_OBJS += ohci-hcd.o
 endif
 
-ifeq ($(CONFIG_USB_MOUSE),y)
-  L_OBJS += mouse.o
-endif
-ifeq ($(CONFIG_USB_MOUSE),m)
-  M_OBJS += mouse.o	
-endif
-
 ifeq ($(CONFIG_USB_SCANNER),y)
   L_OBJS += scanner.o
 endif
@@ -85,21 +70,6 @@ ifeq ($(CONFIG_USB_SERIAL),m)
   M_OBJS += usb-serial.o
 endif
 
-ifneq ($(CONFIG_ADB_KEYBOARD),y)
-KEYMAP=keymap
-else
-KEYMAP=keymap-mac
-endif
-
-ifeq ($(CONFIG_USB_KBD),y)
-  L_OBJS += keyboard.o $(KEYMAP).o
-endif
-
-ifeq ($(CONFIG_USB_KBD),m)
-  M_OBJS += usb-keyboard.o
-  MI_OBJS += keyboard.o $(KEYMAP).o
-endif
-
 ifeq ($(CONFIG_USB_AUDIO),y)
   L_OBJS += audio.o
 endif
@@ -114,6 +84,24 @@ endif
 
 ifeq ($(CONFIG_USB_CPIA),m)
   M_OBJS += cpia.o
+endif
+
+ifeq ($(CONFIG_USB_OV511),y)
+  L_OBJS += ov511.o
+endif
+
+ifeq ($(CONFIG_USB_OV511),m)
+  M_OBJS += ov511.o
+  MI_OBJS += ov511.o
+endif
+
+ifeq ($(CONFIG_USB_OV511),y)
+  L_OBJS += ov511.o
+endif
+
+ifeq ($(CONFIG_USB_OV511),m)
+  M_OBJS += ov511.o
+  MI_OBJS += ov511.o
 endif
 
 ifeq ($(CONFIG_USB_DC2XX),y)
@@ -146,6 +134,71 @@ ifeq ($(CONFIG_USB_EZUSB),m)
   M_OBJS += ezusb.o
 endif
 
+ifeq ($(CONFIG_USB_HID),y)
+  L_OBJS += hid.o
+  ILX_OBJS := input.o
+endif
+
+ifeq ($(CONFIG_USB_HID),m)
+  M_OBJS += hid.o
+  IMX_OBJS := input.o
+endif
+
+ifeq ($(CONFIG_USB_KBD),y)
+  L_OBJS += usbkbd.o
+  ILX_OBJS := input.o
+endif
+
+ifeq ($(CONFIG_USB_KBD),m)
+  M_OBJS += usbkbd.o
+  IMX_OBJS := input.o
+endif
+
+ifeq ($(CONFIG_USB_MOUSE),y)
+  L_OBJS += usbmouse.o
+  ILX_OBJS := input.o
+endif
+
+ifeq ($(CONFIG_USB_MOUSE),m)
+  M_OBJS += usbmouse.o
+  IMX_OBJS := input.o
+endif
+
+LX_OBJS += $(ILX_OBJS)
+MX_OBJS += $(IMX_OBJS)
+
+ifeq ($(CONFIG_INPUT_KEYBDEV),y)
+  L_OBJS += keybdev.o
+endif
+
+ifeq ($(CONFIG_INPUT_KEYBDEV),m)
+  M_OBJS += keybdev.o
+endif
+
+ifeq ($(CONFIG_INPUT_MOUSEDEV),y)
+  L_OBJS += mousedev.o
+endif
+
+ifeq ($(CONFIG_INPUT_MOUSEDEV),m)
+  M_OBJS += mousedev.o
+endif
+
+ifeq ($(CONFIG_INPUT_JOYDEV),y)
+  L_OBJS += joydev.o
+endif
+
+ifeq ($(CONFIG_INPUT_JOYDEV),m)
+  M_OBJS += joydev.o
+endif
+
+ifeq ($(CONFIG_INPUT_EVDEV),y)
+  L_OBJS += evdev.o
+endif
+
+ifeq ($(CONFIG_INPUT_EVDEV),m)
+  M_OBJS += evdev.o
+endif
+
 ifeq ($(CONFIG_USB_USS720),y)
   L_OBJS += uss720.o
 endif
@@ -163,18 +216,6 @@ ifeq ($(CONFIG_USB_DABUSB),m)
 endif
 
 include $(TOPDIR)/Rules.make
-
-keymap.o: keymap.c
-
-keymap.c: maps/serial.map maps/usb.map maps/fixup.map
-	./mkmap > $@
-
-keymap-mac.o: keymap-mac.c
-keymap-mac.c: maps/mac.map maps/usb.map
-	./mkmap.adb > $@
-
-usb-keyboard.o: $(KEYMAP).o keyboard.o
-	$(LD) $(LD_RFLAG) -r -o $@  $(KEYMAP).o keyboard.o 
 
 ifeq ($(CONFIG_USB_SCSI_DEBUG),y)
 usb-scsi.o: usb_scsi.o usb_scsi_debug.o

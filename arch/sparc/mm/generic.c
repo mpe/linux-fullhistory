@@ -1,4 +1,4 @@
-/* $Id: generic.c,v 1.8 1999/12/20 05:01:49 davem Exp $
+/* $Id: generic.c,v 1.9 1999/12/27 06:30:03 anton Exp $
  * generic.c: Generic Sparc mm routines that are not dependent upon
  *            MMU type but are Sparc specific.
  *
@@ -9,6 +9,7 @@
 #include <linux/mm.h>
 #include <linux/swap.h>
 
+#include <asm/pgalloc.h>
 #include <asm/pgtable.h>
 #include <asm/page.h>
 
@@ -27,7 +28,7 @@ static inline void forget_pte(pte_t page)
 		free_page_and_swap_cache(mem_map+nr);
 		return;
 	}
-	swap_free(page);
+	swap_free(pte_to_swp_entry(page));
 }
 
 /* Remap IO memory, the same way as remap_page_range(), but use

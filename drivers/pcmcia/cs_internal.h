@@ -136,8 +136,7 @@ typedef struct socket_info_t {
     u_char			*cis_virt;
     config_t			*config;
 #ifdef CONFIG_CARDBUS
-    u_int			cb_cis_space;
-    cb_bridge_map		cb_cis_map;
+    struct resource *		cb_cis_res;
     u_char			*cb_cis_virt;
     struct cb_config_t		*cb_config;
 #endif
@@ -206,8 +205,7 @@ void cb_enable(socket_info_t *s);
 void cb_disable(socket_info_t *s);
 void read_cb_mem(socket_info_t *s, u_char fn, int space,
 		 u_int addr, u_int len, void *ptr);
-int cb_setup_cis_mem(socket_info_t *s, int space);
-void cb_release_cis_mem(socket_info_t *s);
+void cb_release_cis_mem(socket_info_t * s);
 
 /* In cistpl.c */
 void read_cis_mem(socket_info_t *s, int attr,

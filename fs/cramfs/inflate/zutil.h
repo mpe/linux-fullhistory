@@ -8,23 +8,15 @@
    subject to change. Applications should only use zlib.h.
  */
 
-/* @(#) $Id$ */
+/* @(#) $Id: zutil.h,v 1.1 2000/01/01 03:32:23 davem Exp $ */
 
 #ifndef _Z_UTIL_H
 #define _Z_UTIL_H
 
 #include "zlib.h"
 
-#  include <stddef.h>
-#  include <stdlib.h>
-
-#ifdef __KERNEL__
-#  include <linux/string.h>
-#  include <linux/errno.h>
-#else
-#  include <string.h>
-#  include <errno.h>
-#endif
+#include <linux/string.h>
+#include <linux/errno.h>
 
 #ifndef local
 #  define local static
@@ -36,15 +28,6 @@ typedef uch FAR uchf;
 typedef unsigned short ush;
 typedef ush FAR ushf;
 typedef unsigned long  ulg;
-
-extern const char *z_errmsg[10]; /* indexed by 2-zlib_error */
-/* (size given to avoid silly warnings with Visual C++) */
-
-#define ERR_MSG(err) z_errmsg[Z_NEED_DICT-(err)]
-
-#define ERR_RETURN(strm,err) \
-  return (strm->msg = (char*)ERR_MSG(err), (err))
-/* To be used only when the state is known to be valid */
 
         /* common constants */
 
@@ -79,42 +62,9 @@ extern const char *z_errmsg[10]; /* indexed by 2-zlib_error */
 #  define OS_CODE  0x03  /* assume Unix */
 #endif
 
-#ifndef F_OPEN
-#  define F_OPEN(name, mode) fopen((name), (mode))
-#endif
-
          /* functions */
-
-/* Diagnostic functions */
-#ifdef DEBUG
-#  include <stdio.h>
-   extern int z_verbose;
-   extern void z_error    OF((char *m));
-#  define Assert(cond,msg) {if(!(cond)) z_error(msg);}
-#  define Trace(x) {if (z_verbose>=0) fprintf x ;}
-#  define Tracev(x) {if (z_verbose>0) fprintf x ;}
-#  define Tracevv(x) {if (z_verbose>1) fprintf x ;}
-#  define Tracec(c,x) {if (z_verbose>0 && (c)) fprintf x ;}
-#  define Tracecv(c,x) {if (z_verbose>1 && (c)) fprintf x ;}
-#else
-#  define Assert(cond,msg)
-#  define Trace(x)
-#  define Tracev(x)
-#  define Tracevv(x)
-#  define Tracec(c,x)
-#  define Tracecv(c,x)
-#endif
-
 
 typedef uLong (ZEXPORT *check_func) OF((uLong check, const Bytef *buf,
 				       uInt len));
-voidpf zcalloc OF((voidpf opaque, unsigned items, unsigned size));
-void   zcfree  OF((voidpf opaque, voidpf ptr));
-
-#define ZALLOC(strm, items, size) ({ \
-	printf("alloc %d %d at %s:%d\n", items, size, __FILE__, __LINE__); \
-	calloc((items), (size)); })
-#define ZFREE(strm, addr)  free(addr)
-#define TRY_FREE(s, p) {if (p) ZFREE(s, p);}
 
 #endif /* _Z_UTIL_H */

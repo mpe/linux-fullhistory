@@ -1,4 +1,4 @@
-/* $Id: sys_sunos.c,v 1.106 1999/12/16 11:57:27 anton Exp $
+/* $Id: sys_sunos.c,v 1.107 1999/12/27 06:08:37 anton Exp $
  * sys_sunos.c: SunOS specific syscall compatibility support.
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
@@ -198,7 +198,7 @@ asmlinkage int sunos_brk(unsigned long brk)
 	freepages = atomic_read(&buffermem_pages) >> PAGE_SHIFT;
 	freepages += atomic_read(&page_cache_size);
 	freepages >>= 1;
-	freepages += nr_free_pages;
+	freepages += nr_free_pages();
 	freepages += nr_swap_pages;
 	freepages -= num_physpages >> 4;
 	freepages -= (newbrk-oldbrk) >> PAGE_SHIFT;

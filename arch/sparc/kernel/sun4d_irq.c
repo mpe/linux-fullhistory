@@ -1,4 +1,4 @@
-/*  $Id: sun4d_irq.c,v 1.23 1999/10/19 04:33:26 zaitcev Exp $
+/*  $Id: sun4d_irq.c,v 1.24 1999/12/27 06:08:34 anton Exp $
  *  arch/sparc/kernel/sun4d_irq.c:
  *			SS1000/SC2000 interrupt handling.
  *
@@ -32,6 +32,7 @@
 #include <asm/traps.h>
 #include <asm/irq.h>
 #include <asm/io.h>
+#include <asm/pgalloc.h>
 #include <asm/pgtable.h>
 #include <asm/sbus.h>
 #include <asm/sbi.h>

@@ -929,13 +929,6 @@ static int tcic_set_mem_map(unsigned int lsock, struct pccard_mem_map *mem)
 
 /*====================================================================*/
 
-static int tcic_get_bridge(unsigned int sock, struct cb_bridge_map *m)
-{
-	return -EINVAL;
-}
-
-#define tcic_set_bridge tcic_get_bridge
-
 static void tcic_proc_setup(unsigned int sock, struct proc_dir_entry *base)
 {
 }
@@ -976,8 +969,6 @@ static struct pccard_operations tcic_operations = {
 	tcic_set_io_map,
 	tcic_get_mem_map,
 	tcic_set_mem_map,
-	tcic_get_bridge,
-	tcic_set_bridge,
 	tcic_proc_setup
 };
 

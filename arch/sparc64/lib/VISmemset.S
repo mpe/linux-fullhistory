@@ -1,9 +1,9 @@
-/* $Id: VISmemset.S,v 1.9 1999/05/25 16:53:01 jj Exp $
+/* $Id: VISmemset.S,v 1.10 1999/12/23 17:02:16 jj Exp $
  * VISmemset.S: High speed memset operations utilizing the UltraSparc
  *        Visual Instruction Set.
  *
  * Copyright (C) 1997 David S. Miller (davem@caip.rutgers.edu)
- * Copyright (C) 1996, 1997 Jakub Jelinek (jj@sunsite.mff.cuni.cz)
+ * Copyright (C) 1996, 1997, 1999 Jakub Jelinek (jakub@redhat.com)
  */
 
 #include "VIS.h"
@@ -32,12 +32,7 @@
 #endif
 
 #ifdef __KERNEL__
-
 #include <asm/visasm.h>
-
-#define RETL	clr %o0
-#else
-#define RETL	mov %g3, %o0
 #endif
 
 	/* Well, memset is a lot easier to get right than bcopy... */
@@ -55,8 +50,8 @@ memset:
 #ifndef REGS_64BIT
 	srl		%o2, 0, %o2
 #endif
-	mov		%o0, %g3
 #endif
+	mov		%o0, %o4
 	cmp		%o2, 7
 	bleu,pn		%xcc, 17f
 	 andcc		%o0, 3, %g5
@@ -188,19 +183,19 @@ memset:
 	 andcc		%o2, 7, %o2
 #ifdef __KERNEL__
 14:	srl		%g5, 1, %o3
-	sethi		%hi(13f), %o4
-	sub		%o4, %o3, %o4
-	jmpl		%o4 + %lo(13f), %g0
+	sethi		%hi(13f), %g3
+	sub		%g3, %o3, %g3
+	jmpl		%g3 + %lo(13f), %g0
 	 add		%o0, %g5, %o0
 #else
-14:	rd		%pc, %o4
+14:	rd		%pc, %g3
 #ifdef REGS_64BIT
 	srl		%g5, 1, %o3
-	sub		%o4, %o3, %o4
+	sub		%g3, %o3, %g3
 #else
-	sub		%o4, %g5, %o4
+	sub		%g3, %g5, %g3
 #endif
-	jmpl		%o4 + (13f - 14b), %g0
+	jmpl		%g3 + (13f - 14b), %g0
 	 add		%o0, %g5, %o0
 #endif
 12:	SET_BLOCKS(%o0, 0x68, %o1)
@@ -220,14 +215,14 @@ memset:
 1:	bne,a,pn	%xcc, 8f
 	 stb		%o1, [%o0]
 8:	retl
-	 RETL
+	 mov		%o4, %o0
 17:	brz,pn		%o2, 0f
 8:	 add		%o0, 1, %o0
 	subcc		%o2, 1, %o2
 	bne,pt		%xcc, 8b
 	 stb		%o1, [%o0 - 1]
 0:	retl
-	 RETL
+	 mov		%o4, %o0
 6:
 #ifdef REGS_64BIT
 	stx		%o1, [%o0]

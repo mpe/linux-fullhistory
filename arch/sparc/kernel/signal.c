@@ -1,4 +1,4 @@
-/*  $Id: signal.c,v 1.98 1999/12/15 22:24:23 davem Exp $
+/*  $Id: signal.c,v 1.99 1999/12/27 06:08:32 anton Exp $
  *  linux/arch/sparc/kernel/signal.c
  *
  *  Copyright (C) 1991, 1992  Linus Torvalds
@@ -22,6 +22,7 @@
 #include <asm/bitops.h>
 #include <asm/ptrace.h>
 #include <asm/svr4.h>
+#include <asm/pgalloc.h>
 #include <asm/pgtable.h>
 
 #define _BLOCKABLE (~(sigmask(SIGKILL) | sigmask(SIGSTOP)))

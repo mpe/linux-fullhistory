@@ -1,7 +1,7 @@
 /*
  * Regular lowlevel cardbus driver ("yenta")
  *
- * (C) Copyright 1999 Linus Torvalds
+ * (C) Copyright 1999, 2000 Linus Torvalds
  */
 #include <linux/init.h>
 #include <linux/pci.h>
@@ -185,44 +185,20 @@ static void yenta_set_power(pci_socket_t *socket, socket_state_t *state)
 		cb_writel(socket, CB_SOCKET_CONTROL, reg);
 }
 
-static void yenta_bridge_control(pci_socket_t *socket, u16 bridgectl)
-{
-	struct pci_dev *dev = socket->dev;
-
-	/* MAGIC NUMBERS! Fixme */
-	config_writew(socket, CB_BRIDGE_CONTROL, bridgectl);
-	config_writel(socket, CB_LEGACY_MODE_BASE, 0);
-
-	config_writel(socket, PCI_BASE_ADDRESS_0, dev->resource[0].start);
-	config_writew(socket, PCI_COMMAND,
-			PCI_COMMAND_IO |
-			PCI_COMMAND_MEMORY |
-			PCI_COMMAND_MASTER |
-			PCI_COMMAND_WAIT);
-	config_writeb(socket, PCI_CACHE_LINE_SIZE, 32);
-	config_writeb(socket, PCI_LATENCY_TIMER, 168);
-	config_writeb(socket, PCI_SEC_LATENCY_TIMER, 176);
-	config_writeb(socket, PCI_PRIMARY_BUS, dev->bus->number);
-	config_writeb(socket, PCI_SECONDARY_BUS, dev->subordinate->number);
-	config_writeb(socket, PCI_SUBORDINATE_BUS, dev->subordinate->number);
-	config_writew(socket, CB_BRIDGE_CONTROL, bridgectl);
-}
-
 static int yenta_set_socket(pci_socket_t *socket, socket_state_t *state)
 {
 	u16 bridge;
 
 	yenta_set_power(socket, state);
-
 	bridge = config_readw(socket, CB_BRIDGE_CONTROL) & ~CB_BRIDGE_CRST;
-
 	if (cb_readl(socket, CB_SOCKET_STATE) & CB_CBCARD) {
 		bridge |= (state->flags & SS_RESET) ? CB_BRIDGE_CRST : 0;
+		bridge |= CB_BRIDGE_PREFETCH0 | CB_BRIDGE_POSTEN;
 
 		/* ISA interrupt control? */
 		if (bridge & CB_BRIDGE_INTR) {
 			u8 intr = exca_readb(socket, I365_INTCTL);
-			intr = (intr & ~0xf) | state->io_irq;
+			intr = (intr & ~0xf) ; // | state->io_irq;
 			exca_writeb(socket, I365_INTCTL, intr);
 		}
 	} else {
@@ -254,8 +230,7 @@ static int yenta_set_socket(pci_socket_t *socket, socket_state_t *state)
 		exca_writeb(socket, I365_CSCINT, reg);
 		exca_readb(socket, I365_CSC);
 	}
-	yenta_bridge_control(socket, bridge);
-
+	config_writew(socket, CB_BRIDGE_CONTROL, bridge);
 	/* Socket event mask: get card insert/remove events.. */
 	cb_writel(socket, CB_SOCKET_EVENT, -1);
 	cb_writel(socket, CB_SOCKET_MASK, CB_CDMASK);
@@ -406,69 +381,6 @@ static int yenta_set_mem_map(pci_socket_t *socket, struct pccard_mem_map *mem)
 	return 0;
 }
 
-static int yenta_get_bridge(pci_socket_t *socket, struct cb_bridge_map *m)
-{
-	unsigned map;
-	
-	map = m->map;
-	if (map > 1)
-		return -EINVAL;
-
-	m->flags &= MAP_IOSPACE;
-	map += (m->flags & MAP_IOSPACE) ? 2 : 0;
-	m->start = config_readl(socket, CB_BRIDGE_BASE(map));
-	m->stop = config_readl(socket, CB_BRIDGE_LIMIT(map));
-	if (m->start || m->stop) {
-		m->flags |= MAP_ACTIVE;
-		m->stop |= (map > 1) ? 3 : 0x0fff;
-	}
-
-	/* Get prefetch state for memory mappings */
-	if (map < 2) {
-		u16 ctrl, prefetch_mask = CB_BRIDGE_PREFETCH0 << map;
-
-		ctrl = config_readw(socket, CB_BRIDGE_CONTROL);
-		m->flags |= (ctrl & prefetch_mask) ? MAP_PREFETCH : 0;
-	}
-	return 0;
-}
-
-static int yenta_set_bridge(pci_socket_t *socket, struct cb_bridge_map *m)
-{
-	unsigned map;
-	u32 start, end;
-	
-	map = m->map;
-	if (map > 1 || m->stop < m->start)
-		return -EINVAL;
-
-	if (m->flags & MAP_IOSPACE) {
-		if ((m->stop > 0xffff) || (m->start & 3) ||
-		    ((m->stop & 3) != 3))
-			return -EINVAL;
-		map += 2;
-	} else {
-		u16 ctrl, prefetch_mask = CB_BRIDGE_PREFETCH0 << map;
-
-		if ((m->start & 0x0fff) || ((m->stop & 0x0fff) != 0x0fff))
-			return -EINVAL;
-		ctrl = config_readw(socket, CB_BRIDGE_CONTROL);
-		ctrl &= ~prefetch_mask;
-		ctrl |= (m->flags & MAP_PREFETCH) ? prefetch_mask : 0;
-		config_writew(socket, CB_BRIDGE_CONTROL, ctrl);
-	}
-
-	start = 0;
-	end = 0;
-	if (m->flags & MAP_ACTIVE) {
-		start = m->start;
-		end = m->stop;
-	}
-	config_writel(socket, CB_BRIDGE_BASE(map), start);
-	config_writel(socket, CB_BRIDGE_LIMIT(map), end);
-	return 0;
-}
-
 static void yenta_proc_setup(pci_socket_t *socket, struct proc_dir_entry *base)
 {
 	/* Not done yet */
@@ -533,21 +445,11 @@ static unsigned int yenta_probe_irq(pci_socket_t *socket)
 	return probe_irq_mask(val);
 }
 
-/* Called at resume and initialization events */
-static int yenta_init(pci_socket_t *socket)
+static void yenta_clear_maps(pci_socket_t *socket)
 {
 	int i;
 	pccard_io_map io = { 0, 0, 0, 0, 1 };
 	pccard_mem_map mem = { 0, 0, 0, 0, 0, 0 };
-
-	pci_set_power_state(socket->dev, 0);
-
-	/* MAGIC NUMBERS! Fixme */
-	config_writeb(socket, PCI_LATENCY_TIMER, 168);
-	config_writeb(socket, PCI_SEC_LATENCY_TIMER, 176);
-
-	exca_writeb(socket, I365_GBLCTL, 0x00);
-	exca_writeb(socket, I365_GENCTL, 0x00);
 
 	mem.sys_stop = 0x0fff;
 	yenta_set_socket(socket, &dead_socket);
@@ -559,6 +461,35 @@ static int yenta_init(pci_socket_t *socket)
 		mem.map = i;
 		yenta_set_mem_map(socket, &mem);
 	}
+}
+
+/* Called at resume and initialization events */
+static int yenta_init(pci_socket_t *socket)
+{
+	struct pci_dev *dev = socket->dev;
+
+	pci_set_power_state(socket->dev, 0);
+
+	config_writel(socket, CB_LEGACY_MODE_BASE, 0);
+	config_writel(socket, PCI_BASE_ADDRESS_0, dev->resource[0].start);
+	config_writew(socket, PCI_COMMAND,
+			PCI_COMMAND_IO |
+			PCI_COMMAND_MEMORY |
+			PCI_COMMAND_MASTER |
+			PCI_COMMAND_WAIT);
+
+	/* MAGIC NUMBERS! Fixme */
+	config_writeb(socket, PCI_CACHE_LINE_SIZE, 32);
+	config_writeb(socket, PCI_LATENCY_TIMER, 168);
+	config_writeb(socket, PCI_SEC_LATENCY_TIMER, 176);
+	config_writeb(socket, PCI_PRIMARY_BUS, dev->bus->number);
+	config_writeb(socket, PCI_SECONDARY_BUS, dev->subordinate->number);
+	config_writeb(socket, PCI_SUBORDINATE_BUS, dev->subordinate->number);
+
+	exca_writeb(socket, I365_GBLCTL, 0x00);
+	exca_writeb(socket, I365_GENCTL, 0x00);
+
+	yenta_clear_maps(socket);
 	return 0;
 }
 
@@ -607,6 +538,63 @@ static void yenta_get_socket_capabilities(pci_socket_t *socket)
 	printk("Yenta IRQ list %04x\n", socket->cap.irq_mask);
 }
 
+static void yenta_allocate_res(pci_socket_t *socket, int nr, unsigned type)
+{
+	struct pci_bus *bus;
+	struct resource *root, *res;
+	u32 start, end;
+	u32 align, size, min, max;
+	unsigned offset;
+
+	offset = 0x1c + 8*nr;
+	bus = socket->dev->subordinate;
+	res = socket->dev->resource + PCI_BRIDGE_RESOURCES + nr;
+	printk("dev=%p, bus=%p, parent=%p\n", socket->dev, bus, socket->dev->bus);
+	printk("res = %p, bus->res = %p\n", res, bus->resource[nr]);
+	res->name = bus->name;
+	res->flags = type;
+	res->start = 0;
+	res->end = 0;
+	root = pci_find_parent_resource(socket->dev, res);
+
+	if (!root)
+		return;
+
+	start = config_readl(socket, offset);
+	end = config_readl(socket, offset+4) | 0xfff;
+	if (start && end > start) {
+		res->start = start;
+		res->end = end;
+		request_resource(root, res);
+		return;
+	}
+
+	align = size = 4*1024*1024;
+	min = 0x10000000; max = ~0U;
+	if (type & IORESOURCE_IO) {
+		align = 1024;
+		size = 256;
+		min = 0x1000;
+		max = 0xffff;
+	}
+		
+	if (allocate_resource(root, res, size, min, max, align, NULL, NULL) < 0)
+		return;
+
+	config_writel(socket, offset, res->start);
+	config_writel(socket, offset+4, res->end);
+}
+
+/*
+ * Allocate the bridge mappings for the device..
+ */
+static void yenta_allocate_resources(pci_socket_t *socket)
+{
+	yenta_allocate_res(socket, 0, IORESOURCE_MEM|IORESOURCE_PREFETCH);
+	yenta_allocate_res(socket, 1, IORESOURCE_MEM);
+	yenta_allocate_res(socket, 2, IORESOURCE_IO);
+}
+
 /*
  * Initialize a cardbus controller. Make sure we have a usable
  * interrupt, and that we can map the cardbus area. Fill in the
@@ -636,14 +624,17 @@ static int yenta_open(pci_socket_t *socket)
 	if (!socket->base)
 		return -1;
 
+	/* Disable all events */
+	cb_writel(socket, CB_SOCKET_MASK, 0x0);
+
 	if (dev->irq && !request_irq(dev->irq, yenta_interrupt, SA_SHIRQ, dev->name, socket))
 		socket->cb_irq = dev->irq;
 
 	/* Figure out what the dang thing can do.. */
 	yenta_get_socket_capabilities(socket);
 
-	/* Disable all events */
-	cb_writel(socket, CB_SOCKET_MASK, 0x0);
+	/* Set up the bridge regions.. */
+	yenta_allocate_resources(socket);
 
 	printk("Socket status: %08x\n", cb_readl(socket, CB_SOCKET_STATE));
 	return 0;
@@ -676,8 +667,6 @@ struct pci_socket_ops yenta_operations = {
 	yenta_set_io_map,
 	yenta_get_mem_map,
 	yenta_set_mem_map,
-	yenta_get_bridge,
-	yenta_set_bridge,
 	yenta_proc_setup
 };
 
@@ -698,7 +687,5 @@ struct pci_socket_ops ricoh_operations = {
 	yenta_set_io_map,
 	yenta_get_mem_map,
 	yenta_set_mem_map,
-	yenta_get_bridge,
-	yenta_set_bridge,
 	yenta_proc_setup
 };

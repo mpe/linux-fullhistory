@@ -40,15 +40,9 @@ int usb_init(void)
 #	ifdef CONFIG_USB_OHCI_HCD
 		ohci_hcd_init(); 
 #	endif
-#	ifdef CONFIG_USB_MOUSE
-		usb_mouse_init();
-#	endif
 #       ifdef CONFIG_USB_SCANNER
                 usb_scanner_init();
 #       endif
-#	ifdef CONFIG_USB_KBD
-		usb_kbd_init();
-#	endif
 #	ifdef CONFIG_USB_AUDIO
 		usb_audio_init();
 #	endif
@@ -64,6 +58,9 @@ int usb_init(void)
 #	ifdef CONFIG_USB_CPIA
 		usb_cpia_init();
 #	endif
+#	ifdef CONFIG_USB_OV511
+		usb_ov511_init();
+#	endif
 #	ifdef CONFIG_USB_DC2XX
 		usb_dc2xx_init();
 #	endif
@@ -72,6 +69,18 @@ int usb_init(void)
 #	endif
 #	ifdef CONFIG_USB_DABUSB
 		dabusb_init();
+#	endif
+#	if defined(CONFIG_USB_HID) || defined(CONFIG_USB_MOUSE) || defined(CONFIG_USB_KBD)
+		input_init();
+#	endif
+#	ifdef CONFIG_USB_HID
+		hid_init();
+#	endif
+#	ifdef CONFIG_USB_MOUSE
+		usb_mouse_init();
+#	endif
+#	ifdef CONFIG_USB_KBD
+		usb_kbd_init();
 #	endif
 #endif
 	return 0;
@@ -106,6 +115,9 @@ void cleanup_drivers(void)
 #	endif
 #	ifdef CONFIG_USB_CPIA
 		usb_cpia_cleanup();
+#	endif
+#	ifdef CONFIG_USB_OV511
+		usb_ov511_cleanup();
 #	endif
 #	ifdef CONFIG_USB_DC2XX
 		usb_dc2xx_cleanup();

@@ -1,9 +1,9 @@
-/* $Id: string.h,v 1.14 1998/10/20 03:09:18 jj Exp $
+/* $Id: string.h,v 1.15 1999/12/23 17:02:20 jj Exp $
  * string.h: External definitions for optimized assembly string
  *           routines for the Linux Kernel.
  *
  * Copyright (C) 1995,1996 David S. Miller (davem@caip.rutgers.edu)
- * Copyright (C) 1996,1997 Jakub Jelinek (jj@sunsite.mff.cuni.cz)
+ * Copyright (C) 1996,1997,1999 Jakub Jelinek (jakub@redhat.com)
  */
 
 #ifndef __SPARC64_STRING_H__
@@ -21,7 +21,9 @@ extern __kernel_size_t __memcpy_short(void *,const void *,__kernel_size_t,long,l
 extern __kernel_size_t __memcpy_entry(void *,const void *,__kernel_size_t,long,long);
 extern __kernel_size_t __memcpy_16plus(void *,const void *,__kernel_size_t,long,long);
 extern __kernel_size_t __memcpy_384plus(void *,const void *,__kernel_size_t,long,long);
-extern __kernel_size_t __memset(void *,int,__kernel_size_t);
+extern void *__memset(void *,int,__kernel_size_t);
+extern void *__builtin_memcpy(void *,const void *,__kernel_size_t);
+extern void *__builtin_memset(void *,int,__kernel_size_t);
 
 #ifndef EXPORT_SYMTAB_STROPS
 
@@ -65,28 +67,24 @@ extern inline void *__nonconstant_memcpy(void *to, const void *from, __kernel_si
 
 #define __HAVE_ARCH_MEMSET
 
-extern inline void *__constant_memset(void *s, char c, __kernel_size_t count)
+extern inline void *__constant_memset(void *s, int c, __kernel_size_t count)
 {
 	extern __kernel_size_t __bzero(void *, __kernel_size_t);
 
-	if(!c)
+	if(!c) {
 		__bzero(s, count);
-	else
-		__memset(s, c, count);
-	return s;
-}
-
-extern inline void *__nonconstant_memset(void *s, char c, __kernel_size_t count)
-{
-	__memset(s, c, count);
-	return s;
+		return s;
+	} else
+		return __memset(s, c, count);
 }
 
 #undef memset
 #define memset(s, c, count) \
-(__builtin_constant_p(c) ? \
- __constant_memset((s), (c), (count)) : \
- __nonconstant_memset((s), (c), (count)))
+((__builtin_constant_p(count) && (count) <= 32) ? \
+ __builtin_memset((s), (c), (count)) : \
+ (__builtin_constant_p(c) ? \
+  __constant_memset((s), (c), (count)) : \
+  __memset((s), (c), (count))))
 
 #define __HAVE_ARCH_MEMSCAN
 

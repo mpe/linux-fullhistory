@@ -1,4 +1,4 @@
-/* $Id: btfixup.c,v 1.8 1999/08/31 06:54:31 davem Exp $
+/* $Id: btfixup.c,v 1.9 1999/12/27 06:30:02 anton Exp $
  * btfixup.c: Boot time code fixup and relocator, so that
  * we can get rid of most indirect calls to achieve single
  * image sun4c and srmmu kernel.
@@ -11,6 +11,7 @@
 #include <linux/init.h>
 #include <asm/btfixup.h>
 #include <asm/page.h>
+#include <asm/pgalloc.h>
 #include <asm/pgtable.h>
 #include <asm/oplib.h>
 #include <asm/system.h>

@@ -580,6 +580,7 @@ EXPORT_SYMBOL(nf_reinject);
 EXPORT_SYMBOL(nf_register_interest);
 EXPORT_SYMBOL(nf_unregister_interest);
 EXPORT_SYMBOL(nf_hook_slow);
+EXPORT_SYMBOL(nf_hooks);
 #endif
 
 EXPORT_SYMBOL(register_gifconf);

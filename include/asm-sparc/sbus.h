@@ -1,4 +1,4 @@
-/* $Id: sbus.h,v 1.19 1999/10/25 06:17:56 zaitcev Exp $
+/* $Id: sbus.h,v 1.20 1999/12/27 06:37:17 anton Exp $
  * sbus.h:  Defines for the Sun SBus.
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
@@ -108,7 +108,7 @@ extern void sbus_free_consistant(struct sbus_dev *, long, void *, u32);
 /* All the rest use streaming mode mappings. */
 extern u32 sbus_map_single(struct sbus_dev *, void *, long);
 extern void sbus_unmap_single(struct sbus_dev *, u32, long);
-extern void sbus_map_sg(struct sbus_dev *, struct scatterlist *, int);
+extern int sbus_map_sg(struct sbus_dev *, struct scatterlist *, int);
 extern void sbus_unmap_sg(struct sbus_dev *, struct scatterlist *, int);
 
 /* Finally, allow explicit synchronization of streamable mappings. */

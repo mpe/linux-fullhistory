@@ -18,18 +18,15 @@ ifeq ($(CONFIG_PCMCIA),y)
   O_OBJS   := cistpl.o rsrc_mgr.o bulkmem.o
   OX_OBJS  := ds.o cs.o
   O_TARGET := pcmcia.o
+  ifeq ($(CONFIG_CARDBUS),y)
+    O_OBJS += cardbus.o
+    OX_OBJS += cb_enabler.o yenta.o pci_socket.o
+  endif
   ifeq ($(CONFIG_I82365),y)
     O_OBJS += i82365.o
   endif
   ifeq ($(CONFIG_TCIC),y)
     O_OBJS += tcic.o
-  endif
-  ifeq ($(CONFIG_YENTA),y)
-    OX_OBJS += yenta.o pci_socket.o
-  endif
-  ifeq ($(CONFIG_CARDBUS),y)
-    O_OBJS += cardbus.o
-    OX_OBJS += cb_enabler.o
   endif
 else
   ifeq ($(CONFIG_PCMCIA),m)
@@ -45,7 +42,7 @@ else
     endif
      ifeq ($(CONFIG_CARDBUS),y)
 	CORE_OBJS += cardbus.o
-	MX_OBJS += cb_enabler.o
+	MX_OBJS += cb_enabler.o yenta.o pci_socket.o
      endif
   endif
 endif

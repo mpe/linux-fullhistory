@@ -8,7 +8,6 @@ tristate 'PCMCIA/CardBus support' CONFIG_PCMCIA
 if [ "$CONFIG_PCMCIA" != "n" ]; then
    if [ "$CONFIG_PCI" != "n" ]; then
       bool '  CardBus support' CONFIG_CARDBUS
-      dep_tristate '  Yenta Cardbus support' CONFIG_YENTA $CONFIG_CARDBUS
    fi
    bool '  i82365 compatible bridge support' CONFIG_I82365
    bool '  Databook TCIC host bridge support' CONFIG_TCIC

@@ -52,6 +52,10 @@ extern int init_coda(void);
 extern int init_devpts_fs(void);
 #endif
 
+#ifdef CONFIG_SUN_OPENPROMFS
+extern int init_openprom_fs(void);
+#endif
+
 void __init filesystem_setup(void)
 {
 #ifdef CONFIG_MINIX_FS

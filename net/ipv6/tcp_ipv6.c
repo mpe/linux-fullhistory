@@ -5,7 +5,7 @@
  *	Authors:
  *	Pedro Roque		<roque@di.fc.ul.pt>	
  *
- *	$Id: tcp_ipv6.c,v 1.113 1999/12/15 22:39:58 davem Exp $
+ *	$Id: tcp_ipv6.c,v 1.114 2000/01/03 17:19:17 davem Exp $
  *
  *	Based on: 
  *	linux/net/ipv4/tcp.c
@@ -273,8 +273,8 @@ static struct sock *tcp_v6_lookup_listener(struct in6_addr *daddr, unsigned shor
 			}
 		}
 	}
-	if (sk)
-		sock_hold(sk);
+	if (result)
+		sock_hold(result);
 	read_unlock(&tcp_lhash_lock);
 	return result;
 }
@@ -730,7 +730,6 @@ void tcp_v6_err(struct sk_buff *skb, struct ipv6hdr *hdr,
 
 		if (dst == NULL) {
 			struct flowi fl;
-			struct dst_entry *dst;
 
 			/* BUGGG_FUTURE: Again, it is not clear how
 			   to handle rthdr case. Ignore this complexity

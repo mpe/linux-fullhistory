@@ -21,6 +21,7 @@
 #include <asm/delay.h>
 #include <asm/irq.h>
 #include <asm/page.h>
+#include <asm/pgalloc.h>
 #include <asm/pgtable.h>
 #include <asm/oplib.h>
 #include <asm/atops.h>

@@ -1,6 +1,8 @@
-/* $Id: scatterlist.h,v 1.3 1999/10/18 01:47:13 zaitcev Exp $ */
+/* $Id: scatterlist.h,v 1.4 1999/12/27 06:37:20 anton Exp $ */
 #ifndef _SPARC_SCATTERLIST_H
 #define _SPARC_SCATTERLIST_H
+
+#include <linux/types.h>
 
 struct scatterlist {
     char *  address;    /* Location data is to be transferred to */

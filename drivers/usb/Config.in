@@ -19,14 +19,31 @@ comment 'Miscellaneous USB options'
    fi
 
 comment 'USB Devices'
-   dep_tristate '  USB keyboard support' CONFIG_USB_KBD $CONFIG_USB
-   dep_tristate '  USB mouse support' CONFIG_USB_MOUSE $CONFIG_USB
+   dep_tristate '  USB Human Interface Device (HID) support' CONFIG_USB_HID $CONFIG_USB
+   if [ "$CONFIG_USB_HID" != "y" ]; then
+      dep_tristate '  USB HIDBP Keyboard support' CONFIG_USB_KBD $CONFIG_USB
+      dep_tristate '  USB HIDBP Mouse support' CONFIG_USB_MOUSE $CONFIG_USB
+   fi
+   if [ "$CONFIG_USB_HID" != "n" ]; then
+      dep_tristate '    Keyboard support' CONFIG_INPUT_KEYBDEV $CONFIG_USB_HID
+      dep_tristate '    Mouse support' CONFIG_INPUT_MOUSEDEV $CONFIG_USB_HID
+      if [ "$CONFIG_INPUT_MOUSEDEV" != "n" ]; then
+	 bool '      Mix all mice into one device' CONFIG_INPUT_MOUSEDEV_MIX $CONFIG_USB_HID
+      fi
+      dep_tristate '    Joystick support' CONFIG_INPUT_JOYDEV $CONFIG_USB_HID
+      dep_tristate '    Event interface support' CONFIG_INPUT_EVDEV $CONFIG_USB_HID
+      bool '    USB HID debug output' CONFIG_USB_HID_DEBUG
+      if [ "$CONFIG_USB_HID_DEBUG" != "n" ]; then
+	 bool '      USB HID lots of debug output' CONFIG_USB_HID_DEBUG_LOTS
+      fi
+   fi
    dep_tristate '  USB Printer support' CONFIG_USB_PRINTER $CONFIG_USB
    dep_tristate '  USB Scanner support' CONFIG_USB_SCANNER $CONFIG_USB
    dep_tristate '  USB Audio support' CONFIG_USB_AUDIO $CONFIG_USB
    dep_tristate '  USB Communications Device Class (ACM) support' CONFIG_USB_ACM $CONFIG_USB
    dep_tristate '  USB Serial Converter support' CONFIG_USB_SERIAL $CONFIG_USB
    dep_tristate '  USB CPiA Camera support' CONFIG_USB_CPIA $CONFIG_USB
+   dep_tristate '  USB OV511 Camera support' CONFIG_USB_OV511 $CONFIG_USB
    dep_tristate '  USB Kodak DC-2xx Camera support' CONFIG_USB_DC2XX $CONFIG_USB
    dep_tristate '  USB SCSI (mass storage) support' CONFIG_USB_SCSI $CONFIG_USB
    if [ "$CONFIG_USB_SCSI" != "n" ]; then

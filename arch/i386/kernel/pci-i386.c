@@ -256,25 +256,31 @@ static void __init pcibios_assign_resources(void)
 	struct resource *r;
 
 	for(dev=pci_devices; dev; dev=dev->next) {
+		int class = dev->class >> 8;
+
+		/* Don't touch classless devices and host bridges */
+		if (!class || class == PCI_CLASS_BRIDGE_HOST)
+			continue;
+
 		for(idx=0; idx<6; idx++) {
 			r = &dev->resource[idx];
-			if (((dev->class >> 8) == PCI_CLASS_STORAGE_IDE && idx < 4) ||
-			    ((dev->class >> 8) == PCI_CLASS_DISPLAY_VGA && (r->flags & IORESOURCE_IO)) ||
-			    !dev->class || (dev->class >> 8) == PCI_CLASS_BRIDGE_HOST)
-				/*
-				 *  Don't touch IDE controllers and I/O ports of video cards!
-				 *  Also avoid classless devices and host bridges.
-				 */
+
+			/*
+			 *  Don't touch IDE controllers and I/O ports of video cards!
+			 */
+			if ((class == PCI_CLASS_STORAGE_IDE && idx < 4) ||
+			    (class == PCI_CLASS_DISPLAY_VGA && (r->flags & IORESOURCE_IO)))
 				continue;
-			if (!r->start && r->end) {
-				/*
-				 *  We shall assign a new address to this resource, either because
-				 *  the BIOS forgot to do so or because we have decided the old
-				 *  address was unusable for some reason.
-				 */
+
+			/*
+			 *  We shall assign a new address to this resource, either because
+			 *  the BIOS forgot to do so or because we have decided the old
+			 *  address was unusable for some reason.
+			 */
+			if (!r->start && r->end)
 				pci_assign_resource(dev, idx);
-			}
 		}
+
 		if (pci_probe & PCI_ASSIGN_ROMS) {
 			r = &dev->resource[PCI_ROM_RESOURCE];
 			r->end -= r->start;

@@ -1,4 +1,4 @@
-/* $Id: pgtable.h,v 1.86 1999/12/16 14:41:19 anton Exp $ */
+/* $Id: pgtable.h,v 1.87 1999/12/27 06:37:14 anton Exp $ */
 #ifndef _SPARC_PGTABLE_H
 #define _SPARC_PGTABLE_H
 
@@ -9,7 +9,6 @@
  *  Copyright (C) 1998 Jakub Jelinek (jj@sunsite.mff.cuni.cz)
  */
 
-#include <linux/mm.h>
 #include <linux/config.h>
 #include <linux/spinlock.h>
 #include <asm/asi.h>
@@ -23,10 +22,11 @@
 #include <asm/oplib.h>
 #include <asm/sbus.h>
 #include <asm/btfixup.h>
+#include <asm/system.h>
+
+#ifndef __ASSEMBLY__
 
 extern void load_mmu(void);
-extern int io_remap_page_range(unsigned long from, unsigned long to,
-			       unsigned long size, pgprot_t prot, int space);
 			       
 BTFIXUPDEF_CALL(void, quick_kernel_fault, unsigned long)
 
@@ -119,10 +119,6 @@ BTFIXUPDEF_INT(page_kernel)
 #define PAGE_COPY      __pgprot(BTFIXUP_INT(page_copy))
 #define PAGE_READONLY  __pgprot(BTFIXUP_INT(page_readonly))
 #define PAGE_KERNEL    __pgprot(BTFIXUP_INT(page_kernel))
-
-BTFIXUPDEF_CALL(void, set_pgdir, unsigned long, pgd_t)
-
-#define set_pgdir(address,entry) BTFIXUP_CALL(set_pgdir)(address,entry)
 
 /* Top-level page directory */
 extern pgd_t swapper_pg_dir[1024];
@@ -297,7 +293,7 @@ BTFIXUPDEF_CALL_CONST(pte_t, pte_mkyoung, pte_t)
 #define page_pte(page)			page_pte_prot(page, __pgprot(0))
 
 /* Permanent address of a page. */
-#define page_address(page) (PAGE_OFFSET + (((page) - mem_map) << PAGE_SHIFT))
+#define page_address(page) ({ if (!(page)->virtual) BUG(); (page)->virtual; })
 #define pte_page(x) (mem_map+pte_pagenr(x))
 
 /*
@@ -342,149 +338,6 @@ BTFIXUPDEF_CALL(pte_t *, pte_offset, pmd_t *, unsigned long)
 /* Find an entry in the third-level page table.. */ 
 #define pte_offset(dir,addr) BTFIXUP_CALL(pte_offset)(dir,addr)
 
-extern struct pgtable_cache_struct {
-	unsigned long *pgd_cache;
-	unsigned long *pte_cache;
-	unsigned long pgtable_cache_sz;
-	unsigned long pgd_cache_sz;
-	spinlock_t pgd_spinlock;
-	spinlock_t pte_spinlock;
-} pgt_quicklists;
-#define pgd_quicklist           (pgt_quicklists.pgd_cache)
-#define pmd_quicklist           ((unsigned long *)0)
-#define pte_quicklist           (pgt_quicklists.pte_cache)
-#define pgd_spinlock		(pgt_quicklists.pgd_spinlock)
-#define pte_spinlock		(pgt_quicklists.pte_spinlock)
-#define pgtable_cache_size      (pgt_quicklists.pgtable_cache_sz)
-#define pgd_cache_size		(pgt_quicklists.pgd_cache_sz)
-
-BTFIXUPDEF_CALL(pte_t *, get_pte_fast, void)
-BTFIXUPDEF_CALL(pgd_t *, get_pgd_fast, void)
-BTFIXUPDEF_CALL(void,    free_pte_slow, pte_t *)
-BTFIXUPDEF_CALL(void,    free_pgd_slow, pgd_t *)
-BTFIXUPDEF_CALL(int,	 do_check_pgt_cache, int, int)
-
-#define get_pte_fast() BTFIXUP_CALL(get_pte_fast)()
-extern __inline__ pmd_t *get_pmd_fast(void)
-{
-	return (pmd_t *)0;
-}
-#define get_pgd_fast() BTFIXUP_CALL(get_pgd_fast)()
-#define free_pte_slow(pte) BTFIXUP_CALL(free_pte_slow)(pte)
-extern __inline__ void free_pmd_slow(pmd_t *pmd)
-{
-}
-#define free_pgd_slow(pgd) BTFIXUP_CALL(free_pgd_slow)(pgd)
-#define do_check_pgt_cache(low,high) BTFIXUP_CALL(do_check_pgt_cache)(low,high)
-
-/*
- * Allocate and free page tables. The xxx_kernel() versions are
- * used to allocate a kernel page table - this turns on ASN bits
- * if any, and marks the page tables reserved.
- */
-BTFIXUPDEF_CALL(void,    pte_free_kernel, pte_t *)
-BTFIXUPDEF_CALL(pte_t *, pte_alloc_kernel, pmd_t *, unsigned long)
-
-#define pte_free_kernel(pte) BTFIXUP_CALL(pte_free_kernel)(pte)
-#define pte_alloc_kernel(pmd,addr) BTFIXUP_CALL(pte_alloc_kernel)(pmd,addr)
-
-BTFIXUPDEF_CALL(void,    pmd_free_kernel, pmd_t *)
-BTFIXUPDEF_CALL(pmd_t *, pmd_alloc_kernel, pgd_t *, unsigned long)
-
-#define pmd_free_kernel(pmd) BTFIXUP_CALL(pmd_free_kernel)(pmd)
-#define pmd_alloc_kernel(pgd,addr) BTFIXUP_CALL(pmd_alloc_kernel)(pgd,addr)
-
-BTFIXUPDEF_CALL(void,    pte_free, pte_t *)
-BTFIXUPDEF_CALL(pte_t *, pte_alloc, pmd_t *, unsigned long)
-
-#define pte_free(pte) BTFIXUP_CALL(pte_free)(pte)
-#define pte_alloc(pmd,addr) BTFIXUP_CALL(pte_alloc)(pmd,addr)
-
-BTFIXUPDEF_CALL(void,    pmd_free, pmd_t *)
-BTFIXUPDEF_CALL(pmd_t *, pmd_alloc, pgd_t *, unsigned long)
-
-#define pmd_free(pmd) BTFIXUP_CALL(pmd_free)(pmd)
-#define pmd_alloc(pgd,addr) BTFIXUP_CALL(pmd_alloc)(pgd,addr)
-
-BTFIXUPDEF_CALL(void,    pgd_free, pgd_t *)
-BTFIXUPDEF_CALL(pgd_t *, pgd_alloc, void)
-
-#define pgd_free(pgd) BTFIXUP_CALL(pgd_free)(pgd)
-#define pgd_alloc() BTFIXUP_CALL(pgd_alloc)()
-
-/* Fine grained cache/tlb flushing. */
-
-#ifdef __SMP__
-BTFIXUPDEF_CALL(void, local_flush_cache_all, void)
-BTFIXUPDEF_CALL(void, local_flush_cache_mm, struct mm_struct *)
-BTFIXUPDEF_CALL(void, local_flush_cache_range, struct mm_struct *, unsigned long, unsigned long)
-BTFIXUPDEF_CALL(void, local_flush_cache_page, struct vm_area_struct *, unsigned long)
-
-#define local_flush_cache_all() BTFIXUP_CALL(local_flush_cache_all)()
-#define local_flush_cache_mm(mm) BTFIXUP_CALL(local_flush_cache_mm)(mm)
-#define local_flush_cache_range(mm,start,end) BTFIXUP_CALL(local_flush_cache_range)(mm,start,end)
-#define local_flush_cache_page(vma,addr) BTFIXUP_CALL(local_flush_cache_page)(vma,addr)
-
-BTFIXUPDEF_CALL(void, local_flush_tlb_all, void)
-BTFIXUPDEF_CALL(void, local_flush_tlb_mm, struct mm_struct *)
-BTFIXUPDEF_CALL(void, local_flush_tlb_range, struct mm_struct *, unsigned long, unsigned long)
-BTFIXUPDEF_CALL(void, local_flush_tlb_page, struct vm_area_struct *, unsigned long)
-
-#define local_flush_tlb_all() BTFIXUP_CALL(local_flush_tlb_all)()
-#define local_flush_tlb_mm(mm) BTFIXUP_CALL(local_flush_tlb_mm)(mm)
-#define local_flush_tlb_range(mm,start,end) BTFIXUP_CALL(local_flush_tlb_range)(mm,start,end)
-#define local_flush_tlb_page(vma,addr) BTFIXUP_CALL(local_flush_tlb_page)(vma,addr)
-
-BTFIXUPDEF_CALL(void, local_flush_page_to_ram, struct page *)
-BTFIXUPDEF_CALL(void, local_flush_sig_insns, struct mm_struct *, unsigned long)
-
-#define local_flush_page_to_ram(page) BTFIXUP_CALL(local_flush_page_to_ram)(page)
-#define local_flush_sig_insns(mm,insn_addr) BTFIXUP_CALL(local_flush_sig_insns)(mm,insn_addr)
-
-extern void smp_flush_cache_all(void);
-extern void smp_flush_cache_mm(struct mm_struct *mm);
-extern void smp_flush_cache_range(struct mm_struct *mm,
-				  unsigned long start,
-				  unsigned long end);
-extern void smp_flush_cache_page(struct vm_area_struct *vma, unsigned long page);
-
-extern void smp_flush_tlb_all(void);
-extern void smp_flush_tlb_mm(struct mm_struct *mm);
-extern void smp_flush_tlb_range(struct mm_struct *mm,
-				  unsigned long start,
-				  unsigned long end);
-extern void smp_flush_tlb_page(struct vm_area_struct *mm, unsigned long page);
-extern void smp_flush_page_to_ram(struct page *page);
-extern void smp_flush_sig_insns(struct mm_struct *mm, unsigned long insn_addr);
-#endif
-
-BTFIXUPDEF_CALL(void, flush_cache_all, void)
-BTFIXUPDEF_CALL(void, flush_cache_mm, struct mm_struct *)
-BTFIXUPDEF_CALL(void, flush_cache_range, struct mm_struct *, unsigned long, unsigned long)
-BTFIXUPDEF_CALL(void, flush_cache_page, struct vm_area_struct *, unsigned long)
-
-#define flush_cache_all() BTFIXUP_CALL(flush_cache_all)()
-#define flush_cache_mm(mm) BTFIXUP_CALL(flush_cache_mm)(mm)
-#define flush_cache_range(mm,start,end) BTFIXUP_CALL(flush_cache_range)(mm,start,end)
-#define flush_cache_page(vma,addr) BTFIXUP_CALL(flush_cache_page)(vma,addr)
-#define flush_icache_range(start, end)		do { } while (0)
-
-BTFIXUPDEF_CALL(void, flush_tlb_all, void)
-BTFIXUPDEF_CALL(void, flush_tlb_mm, struct mm_struct *)
-BTFIXUPDEF_CALL(void, flush_tlb_range, struct mm_struct *, unsigned long, unsigned long)
-BTFIXUPDEF_CALL(void, flush_tlb_page, struct vm_area_struct *, unsigned long)
-
-#define flush_tlb_all() BTFIXUP_CALL(flush_tlb_all)()
-#define flush_tlb_mm(mm) BTFIXUP_CALL(flush_tlb_mm)(mm)
-#define flush_tlb_range(mm,start,end) BTFIXUP_CALL(flush_tlb_range)(mm,start,end)
-#define flush_tlb_page(vma,addr) BTFIXUP_CALL(flush_tlb_page)(vma,addr)
-
-BTFIXUPDEF_CALL(void, flush_page_to_ram, struct page *)
-BTFIXUPDEF_CALL(void, flush_sig_insns, struct mm_struct *, unsigned long)
-
-#define flush_page_to_ram(page) BTFIXUP_CALL(flush_page_to_ram)(page)
-#define flush_sig_insns(mm,insn_addr) BTFIXUP_CALL(flush_sig_insns)(mm,insn_addr)
-
 /* The permissions for pgprot_val to make a page mapped on the obio space */
 extern unsigned int pg_iobits;
 
@@ -512,9 +365,12 @@ BTFIXUPDEF_CALL(void, update_mmu_cache, struct vm_area_struct *, unsigned long, 
 
 extern int invalid_segment;
 
-#define SWP_TYPE(entry) (((entry) >> 2) & 0x7f)
-#define SWP_OFFSET(entry) (((entry) >> 9) & 0x3ffff)
-#define SWP_ENTRY(type,offset) ((((type) & 0x7f) << 2) | (((offset) & 0x3ffff) << 9))
+/* Encode and de-code a swap entry */
+#define SWP_TYPE(x)			(((x).val >> 2) & 0x7f)
+#define SWP_OFFSET(x)			(((x).val >> 9) & 0x3ffff)
+#define SWP_ENTRY(type,offset)		((swp_entry_t) { (((type) & 0x7f) << 2) | (((offset) & 0x3ffff) << 9) })
+#define pte_to_swp_entry(pte)		((swp_entry_t) { pte_val(pte) })
+#define swp_entry_to_pte(x)		((pte_t) { (x).val })
 
 struct ctx_list {
 	struct ctx_list *next;
@@ -579,6 +435,12 @@ __get_iospace (unsigned long addr)
 extern unsigned long *sparc_valid_addr_bitmap;
 
 /* Needs to be defined here and not in linux/mm.h, as it is arch dependent */
-#define kern_addr_valid(addr)	(test_bit(__pa((unsigned long)(addr))>>20, sparc_valid_addr_bitmap))
+#define kern_addr_valid(addr) \
+	(test_bit(__pa((unsigned long)(addr))>>20, sparc_valid_addr_bitmap))
+
+extern int io_remap_page_range(unsigned long from, unsigned long to,
+			       unsigned long size, pgprot_t prot, int space);
+
+#endif /* !(__ASSEMBLY__) */
 
 #endif /* !(_SPARC_PGTABLE_H) */

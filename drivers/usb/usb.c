@@ -1179,6 +1179,34 @@ void usb_init_root_hub(struct usb_device *dev)
 }
 
 /*
+ * __usb_get_extra_descriptor() finds a descriptor of specific type in the
+ * extra field of the interface and endpoint descriptor structs.
+ */
+
+int __usb_get_extra_descriptor(char *buffer, unsigned size, unsigned char type, void **ptr)
+{
+	struct usb_descriptor_header *header;
+
+	while (size >= sizeof(struct usb_descriptor_header)) {
+		header = (struct usb_descriptor_header *)buffer;
+
+		if (header->bLength < 2) {
+			printk(KERN_ERR "usb: invalid descriptor length of %d\n", header->bLength);
+			return -1;
+		}
+
+		if (header->bDescriptorType == type) {
+			*ptr = header;
+			return 0;
+		}
+
+		buffer += header->bLength;
+		size -= header->bLength;
+	}
+	return -1;
+}
+
+/*
  * Something got disconnected. Get rid of it, and all of its children.
  */
 void usb_disconnect(struct usb_device **pdev)
@@ -1268,6 +1296,14 @@ int usb_get_descriptor(struct usb_device *dev, unsigned char type, unsigned char
 	return result;
 }
 
+int usb_get_class_descriptor(struct usb_device *dev, unsigned char type,
+		unsigned char id, unsigned char index, void *buf, int size)
+{
+	return usb_control_msg(dev, usb_rcvctrlpipe(dev, 0),
+		USB_REQ_GET_DESCRIPTOR, USB_RT_INTERFACE | USB_DIR_IN,
+		(type << 8) + id, index, buf, size, HZ * GET_TIMEOUT);
+}
+
 int usb_get_string(struct usb_device *dev, unsigned short langid, unsigned char index, void *buf, int size)
 {
 	return usb_control_msg(dev, usb_rcvctrlpipe(dev, 0),
@@ -1313,8 +1349,6 @@ int usb_set_protocol(struct usb_device *dev, int protocol)
 		USB_REQ_SET_PROTOCOL, USB_RT_HIDD, protocol, 1, NULL, 0, HZ * SET_TIMEOUT);
 }
 
-/* keyboards want a nonzero duration according to HID spec, but
-   mice should use infinity (0) -keryan */
 int usb_set_idle(struct usb_device *dev,  int duration, int report_id)
 {
 	return usb_control_msg(dev, usb_sndctrlpipe(dev, 0), USB_REQ_SET_IDLE,
@@ -1444,6 +1478,13 @@ int usb_get_report(struct usb_device *dev, unsigned char type, unsigned char id,
 	return usb_control_msg(dev, usb_rcvctrlpipe(dev, 0),
 		USB_REQ_GET_REPORT, USB_DIR_IN | USB_RT_HIDD,
 		(type << 8) + id, index, buf, size, HZ * GET_TIMEOUT);
+}
+
+int usb_set_report(struct usb_device *dev, unsigned char type, unsigned char id, unsigned char index, void *buf, int size)
+{
+	return usb_control_msg(dev, usb_rcvctrlpipe(dev, 0),
+		USB_REQ_SET_REPORT, USB_RT_HIDD,
+		(type << 8) + id, index, buf, size, HZ);
 }
 
 int usb_get_configuration(struct usb_device *dev)
@@ -1737,11 +1778,14 @@ EXPORT_SYMBOL(usb_release_bandwidth);
 
 EXPORT_SYMBOL(usb_set_address);
 EXPORT_SYMBOL(usb_get_descriptor);
+EXPORT_SYMBOL(usb_get_class_descriptor);
+EXPORT_SYMBOL(__usb_get_extra_descriptor);
 EXPORT_SYMBOL(usb_get_string);
 EXPORT_SYMBOL(usb_string);
 EXPORT_SYMBOL(usb_get_protocol);
 EXPORT_SYMBOL(usb_set_protocol);
 EXPORT_SYMBOL(usb_get_report);
+EXPORT_SYMBOL(usb_set_report);
 EXPORT_SYMBOL(usb_set_idle);
 EXPORT_SYMBOL(usb_clear_halt);
 EXPORT_SYMBOL(usb_set_interface);

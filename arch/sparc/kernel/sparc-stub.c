@@ -1,4 +1,4 @@
-/* $Id: sparc-stub.c,v 1.25 1999/07/23 01:56:13 davem Exp $
+/* $Id: sparc-stub.c,v 1.26 1999/12/27 06:08:34 anton Exp $
  * sparc-stub.c:  KGDB support for the Linux kernel.
  *
  * Modifications to run under Linux
@@ -107,6 +107,7 @@
 #include <asm/traps.h>
 #include <asm/vac-ops.h>
 #include <asm/kgdb.h>
+#include <asm/pgalloc.h>
 #include <asm/pgtable.h>
 /*
  *

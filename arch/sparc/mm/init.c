@@ -1,4 +1,4 @@
-/*  $Id: init.c,v 1.71 1999/12/16 12:58:33 anton Exp $
+/*  $Id: init.c,v 1.72 1999/12/27 06:30:06 anton Exp $
  *  linux/arch/sparc/mm/init.c
  *
  *  Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
@@ -82,7 +82,7 @@ void show_mem(void)
 	printk("Free swap:       %6dkB\n",
 	       nr_swap_pages << (PAGE_SHIFT-10));
 	printk("%ld pages of RAM\n", totalram_pages);
-	printk("%d free pages\n", nr_free_pages);
+	printk("%d free pages\n", nr_free_pages());
 	printk("%ld pages in page table cache\n",pgtable_cache_size);
 #ifndef __SMP__
 	if (sparc_cpu_model == sun4m || sparc_cpu_model == sun4d)
@@ -395,15 +395,17 @@ void __init mem_init(void)
 
 	taint_real_pages();
 
+	max_mapnr = last_valid_pfn;
+	high_memory = __va(last_valid_pfn << PAGE_SHIFT);
+
 #ifdef DEBUG_BOOTMEM
 	prom_printf("mem_init: Calling free_all_bootmem().\n");
 #endif
 	num_physpages = totalram_pages = free_all_bootmem();
 
+#if 0
 	free_unused_mem_map();
-
-	max_mapnr = last_valid_pfn;
-	high_memory = __va(last_valid_pfn << PAGE_SHIFT);
+#endif
 
 	codepages = (((unsigned long) &etext) - ((unsigned long)&_start));
 	codepages = PAGE_ALIGN(codepages) >> PAGE_SHIFT;
@@ -413,7 +415,7 @@ void __init mem_init(void)
 	initpages = PAGE_ALIGN(initpages) >> PAGE_SHIFT;
 
 	printk("Memory: %dk available (%dk kernel code, %dk data, %dk init) [%08lx,%08lx]\n",
-	       nr_free_pages << (PAGE_SHIFT-10),
+	       nr_free_pages() << (PAGE_SHIFT-10),
 	       codepages << (PAGE_SHIFT-10),
 	       datapages << (PAGE_SHIFT-10), 
 	       initpages << (PAGE_SHIFT-10),
@@ -423,7 +425,7 @@ void __init mem_init(void)
 	 * Please keep track of things and make sure this
 	 * always matches the code in mm/page_alloc.c -DaveM
 	 */
-	i = nr_free_pages >> 7;
+	i = nr_free_pages() >> 7;
 	if (i < 48)
 		i = 48;
 	if (i > 256)
@@ -439,9 +441,17 @@ void free_initmem (void)
 
 	addr = (unsigned long)(&__init_begin);
 	for (; addr < (unsigned long)(&__init_end); addr += PAGE_SIZE) {
-		ClearPageReserved(mem_map + MAP_NR(addr));
-		set_page_count(mem_map + MAP_NR(addr), 1);
-		free_page(addr);
+		unsigned long page;
+		struct page *p;
+
+		page = (addr +
+			((unsigned long) __va(phys_base)) -
+			PAGE_OFFSET);
+		p = mem_map + MAP_NR(page);
+
+		ClearPageReserved(p);
+		set_page_count(p, 1);
+		__free_page(p);
 		totalram_pages++;
 		num_physpages++;
 	}
@@ -451,11 +461,11 @@ void si_meminfo(struct sysinfo *val)
 {
 	val->totalram = totalram_pages;
 	val->sharedram = 0;
-	val->freeram = nr_free_pages;
+	val->freeram = nr_free_pages();
 	val->bufferram = atomic_read(&buffermem_pages);
 
 	val->totalhigh = 0;
-	val->freehigh = nr_free_highpages;
+	val->freehigh = 0;
 
 	val->mem_unit = PAGE_SIZE;
 }

@@ -1,4 +1,4 @@
-/*  $Id: process.c,v 1.141 1999/10/24 06:25:02 anton Exp $
+/*  $Id: process.c,v 1.142 1999/12/27 06:08:31 anton Exp $
  *  linux/arch/sparc/kernel/process.c
  *
  *  Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
@@ -33,6 +33,7 @@
 #include <asm/uaccess.h>
 #include <asm/system.h>
 #include <asm/page.h>
+#include <asm/pgalloc.h>
 #include <asm/pgtable.h>
 #include <asm/delay.h>
 #include <asm/processor.h>

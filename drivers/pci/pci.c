@@ -269,7 +269,7 @@ static inline unsigned int pci_resource_flags(unsigned int flags)
 	return IORESOURCE_MEM;
 }
 
-static void __init pci_read_bases(struct pci_dev *dev, unsigned int howmany, int rom)
+static void pci_read_bases(struct pci_dev *dev, unsigned int howmany, int rom)
 {
 	unsigned int pos, reg, next;
 	u32 l, sz, tmp;
@@ -447,6 +447,7 @@ static struct pci_bus * __init pci_add_new_bus(struct pci_bus *parent, struct pc
  */
 static int __init pci_scan_cardbus(struct pci_bus *bus, struct pci_dev *dev, int busnr)
 {
+	int i;
 	unsigned short cr;
 	unsigned int buses;
 	struct pci_bus *child;
@@ -455,7 +456,14 @@ static int __init pci_scan_cardbus(struct pci_bus *bus, struct pci_dev *dev, int
 	 * Insert it into the tree of buses.
 	 */
 	child = pci_add_new_bus(bus, dev, ++busnr);
-	child->subordinate = busnr;
+
+	for (i = 0; i < 4; i++)
+		child->resource[i] = &dev->resource[PCI_BRIDGE_RESOURCES+i];
+
+	/*
+	 * Maybe we'll have another bus behind this one?
+	 */
+	child->subordinate = ++busnr;
 	sprintf(child->name, "PCI CardBus #%02x", child->number);
 
 	/*
@@ -566,7 +574,7 @@ static int __init pci_scan_bridge(struct pci_bus *bus, struct pci_dev * dev, int
  * Read interrupt line and base address registers.
  * The architecture-dependent code can tweak these, of course.
  */
-static void __init pci_read_irq(struct pci_dev *dev)
+static void pci_read_irq(struct pci_dev *dev)
 {
 	unsigned char irq;
 
@@ -577,31 +585,15 @@ static void __init pci_read_irq(struct pci_dev *dev)
 }
 
 /*
- * Read the config data for a PCI device, sanity-check it
- * and fill in the dev structure...
+ * Fill in class and map information of a device
  */
-static struct pci_dev * __init pci_scan_device(struct pci_dev *temp)
+int pci_setup_device(struct pci_dev * dev)
 {
-	struct pci_dev *dev;
-	u32 l, class;
+	u32 class;
 
-	if (pci_read_config_dword(temp, PCI_VENDOR_ID, &l))
-		return NULL;
-
-	/* some broken boards return 0 or ~0 if a slot is empty: */
-	if (l == 0xffffffff || l == 0x00000000 || l == 0x0000ffff || l == 0xffff0000)
-		return NULL;
-
-	dev = kmalloc(sizeof(*dev), GFP_KERNEL);
-	if (!dev)
-		return NULL;
-
-	memcpy(dev, temp, sizeof(*dev));
-	dev->vendor = l & 0xffff;
-	dev->device = (l >> 16) & 0xffff;
 	sprintf(dev->slot_name, "%02x:%02x.%d", dev->bus->number, PCI_SLOT(dev->devfn), PCI_FUNC(dev->devfn));
-	pci_name_device(dev);
-
+	sprintf(dev->name, "PCI device %04x:%04x", dev->vendor, dev->device);
+	
 	pci_read_config_dword(dev, PCI_CLASS_REVISION, &class);
 	class >>= 8;				    /* upper 3 bytes */
 	dev->class = class;
@@ -635,8 +627,7 @@ static struct pci_dev * __init pci_scan_device(struct pci_dev *temp)
 	default:				    /* unknown header */
 		printk(KERN_ERR "PCI: device %s has unknown header type %02x, ignoring.\n",
 			dev->slot_name, dev->hdr_type);
-		kfree(dev);
-		return NULL;
+		return -1;
 
 	bad:
 		printk(KERN_ERR "PCI: %s: class %x doesn't match header type %02x. Ignoring class.\n",
@@ -645,6 +636,36 @@ static struct pci_dev * __init pci_scan_device(struct pci_dev *temp)
 	}
 
 	/* We found a fine healthy device, go go go... */
+	return 0;
+}
+
+/*
+ * Read the config data for a PCI device, sanity-check it
+ * and fill in the dev structure...
+ */
+static struct pci_dev * __init pci_scan_device(struct pci_dev *temp)
+{
+	struct pci_dev *dev;
+	u32 l;
+
+	if (pci_read_config_dword(temp, PCI_VENDOR_ID, &l))
+		return NULL;
+
+	/* some broken boards return 0 or ~0 if a slot is empty: */
+	if (l == 0xffffffff || l == 0x00000000 || l == 0x0000ffff || l == 0xffff0000)
+		return NULL;
+
+	dev = kmalloc(sizeof(*dev), GFP_KERNEL);
+	if (!dev)
+		return NULL;
+
+	memcpy(dev, temp, sizeof(*dev));
+	dev->vendor = l & 0xffff;
+	dev->device = (l >> 16) & 0xffff;
+	if (pci_setup_device(dev) < 0) {
+		kfree(dev);
+		dev = NULL;
+	}
 	return dev;
 }
 
@@ -667,6 +688,7 @@ struct pci_dev * __init pci_scan_slot(struct pci_dev *temp)
 		dev = pci_scan_device(temp);
 		if (!dev)
 			continue;
+		pci_name_device(dev);
 		if (!func) {
 			is_multi = hdr_type & 0x80;
 			first_dev = dev;

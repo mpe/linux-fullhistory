@@ -1,4 +1,4 @@
-/* $Id: ioport.c,v 1.27 1999/11/14 06:23:04 zaitcev Exp $
+/* $Id: ioport.c,v 1.28 1999/12/27 06:08:28 anton Exp $
  * ioport.c:  Simple io mapping allocator.
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
@@ -20,6 +20,7 @@
 #include <asm/vaddrs.h>
 #include <asm/oplib.h>
 #include <asm/page.h>
+#include <asm/pgalloc.h>
 #include <asm/pgtable.h>
 
 struct resource *sparc_find_resource_bystart(struct resource *, unsigned long);
@@ -228,7 +229,7 @@ _sparc_ioremap(struct resource *res, u32 bus, u32 pa, int sz)
 
 	if (allocate_resource(&sparc_iomap, res,
 	    (offset + sz + PAGE_SIZE-1) & PAGE_MASK,
-	    sparc_iomap.start, sparc_iomap.end, PAGE_SIZE) != 0) {
+	    sparc_iomap.start, sparc_iomap.end, PAGE_SIZE, NULL, NULL) != 0) {
 		/* Usually we cannot see printks in this case. */
 		prom_printf("alloc_io_res(%s): cannot occupy\n",
 		    (res->name != NULL)? res->name: "???");
@@ -320,7 +321,7 @@ void *sbus_alloc_consistant(struct sbus_dev *sdev, long len, u32 *dma_addrp)
 	}
 
 	if (allocate_resource(&sparc_dvma, res, len_total,
-	    sparc_dvma.start, sparc_dvma.end, PAGE_SIZE) != 0) {
+	    sparc_dvma.start, sparc_dvma.end, PAGE_SIZE, NULL, NULL) != 0) {
 		printk("sbus_alloc_consistant: cannot occupy 0x%lx", len);
 		free_pages(va, order);
 		kfree(res);
@@ -460,10 +461,16 @@ void sbus_unmap_single(struct sbus_dev *sdev, u32 ba, long n)
 #endif
 }
 
-void sbus_map_sg(struct sbus_dev *sdev, struct scatterlist *sg, int n)
+int sbus_map_sg(struct sbus_dev *sdev, struct scatterlist *sg, int n)
 {
 /* BTFIXUPDEF_CALL(void,  mmu_get_scsi_sgl, struct scatterlist *, int, struct sbus_bus *sbus) */
 	mmu_get_scsi_sgl(sg, n, sdev->bus);
+
+	/*
+	 * XXX sparc64 can return a partial length here. sun4c should do this
+	 * but it currently panics if it can't fulfill the request - Anton
+	 */
+	return n;
 }
 
 void sbus_unmap_sg(struct sbus_dev *sdev, struct scatterlist *sg, int n)

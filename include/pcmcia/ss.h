@@ -130,8 +130,6 @@ struct pccard_operations {
 	int (*set_io_map)(unsigned int sock, struct pccard_io_map *io);
 	int (*get_mem_map)(unsigned int sock, struct pccard_mem_map *mem);
 	int (*set_mem_map)(unsigned int sock, struct pccard_mem_map *mem);
-	int (*get_bridge)(unsigned int sock, struct cb_bridge_map *m);
-	int (*set_bridge)(unsigned int sock, struct cb_bridge_map *m);
 	void (*proc_setup)(unsigned int sock, struct proc_dir_entry *base);
 };
 

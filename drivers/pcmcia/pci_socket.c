@@ -28,13 +28,6 @@
 
 #include "pci_socket.h"
 
-static struct pci_simple_probe_entry controller_list[] = {
-	{ PCI_VENDOR_ID_TI, PCI_DEVICE_ID_TI_1225, 0, 0, &yenta_operations },
-	{ 0x1180, 0x0475, 0, 0, &ricoh_operations },
-	{ 0, 0, 0, 0, NULL }
-};
-
-
 /*
  * Arbitrary define. This is the array of active cardbus
  * entries.
@@ -146,24 +139,6 @@ static int pci_set_mem_map(unsigned int sock, struct pccard_mem_map *mem)
 	return -EINVAL;
 }
 
-static int pci_get_bridge(unsigned int sock, struct cb_bridge_map *m)
-{
-	pci_socket_t *socket = pci_socket_array + sock;
-
-	if (socket->op && socket->op->get_bridge)
-		return socket->op->get_bridge(socket, m);
-	return -EINVAL;
-}
-
-static int pci_set_bridge(unsigned int sock, struct cb_bridge_map *m)
-{
-	pci_socket_t *socket = pci_socket_array + sock;
-
-	if (socket->op && socket->op->set_bridge)
-		return socket->op->set_bridge(socket, m);
-	return -EINVAL;
-}
-
 static void pci_proc_setup(unsigned int sock, struct proc_dir_entry *base)
 {
 	pci_socket_t *socket = pci_socket_array + sock;
@@ -184,29 +159,32 @@ static struct pccard_operations pci_socket_operations = {
 	pci_set_io_map,
 	pci_get_mem_map,
 	pci_set_mem_map,
-	pci_get_bridge,
-	pci_set_bridge,
 	pci_proc_setup
 };
 
-static int __init pci_socket_probe(struct pci_dev *dev, int nr, const struct pci_simple_probe_entry * entry, void *data)
+static int __init add_pci_socket(int nr, struct pci_dev *dev, struct pci_socket_ops *ops)
 {
 	pci_socket_t *socket = nr + pci_socket_array;
 
-	printk("Found controller %d: %s\n", nr, dev->name);
 	socket->dev = dev;
-	socket->op = entry->dev_data;
-	socket->op->open(socket);
-	return 0;
+	socket->op = ops;
+	return socket->op->open(socket);
 }
 
 static int __init pci_socket_init(void)
 {
-	int sockets = pci_simple_probe(controller_list, MAX_SOCKETS, pci_socket_probe, NULL);
+	struct pci_dev *dev = NULL;
+	int nr = 0;
 
-	if (sockets <= 0)
+	while ((dev = pci_find_class(PCI_CLASS_BRIDGE_CARDBUS << 8, dev)) != NULL) {
+		printk("Adding cardbus controller %d: %s\n", nr, dev->name);
+		add_pci_socket(nr, dev, &yenta_operations);
+		nr++;
+	}
+
+	if (nr <= 0)
 		return -1;
-	register_ss_entry(sockets, &pci_socket_operations);
+	register_ss_entry(nr, &pci_socket_operations);
 	return 0;
 }
 
