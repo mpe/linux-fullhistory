@@ -245,14 +245,16 @@ static ssize_t read_kmem(struct file *file, char *buf,
 		if (p < PAGE_SIZE && read > 0) {
 			size_t tmp = PAGE_SIZE - p;
 			if (tmp > read) tmp = read;
-			clear_user(buf, tmp);
+			if (clear_user(buf, tmp))
+				return -EFAULT;
 			buf += tmp;
 			p += tmp;
 			read -= tmp;
 			count -= tmp;
 		}
 #endif
-		copy_to_user(buf, (char *)p, read);
+		if (copy_to_user(buf, (char *)p, read))
+			return -EFAULT;
 		p += read;
 		buf += read;
 		count -= read;

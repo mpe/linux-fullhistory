@@ -18,25 +18,6 @@
  * modified to deal properly with readl/writel usage.
  */
 
-typedef struct {
-	u32 addrhi;
-	u32 addrlo;
-} aceaddr;
-
-
-static inline void set_aceaddr(aceaddr *aa, dma_addr_t addr)
-{
-	unsigned long baddr = (unsigned long) addr;
-#if (BITS_PER_LONG == 64)
-	aa->addrlo = cpu_to_le32(baddr & 0xffffffff);
-	aa->addrhi = cpu_to_le32(baddr >> 32);
-#else
-    /* Don't bother setting zero every time */
-	aa->addrlo = cpu_to_le32(baddr);
-#endif
-	mb();
-}
-
 struct ace_regs {
 	u32	pad0[16];	/* PCI control registers */
 
@@ -167,6 +148,13 @@ struct ace_regs {
 	u32	Window[0x200];
 };
 
+
+typedef struct {
+	u32 addrhi;
+	u32 addrlo;
+} aceaddr;
+
+
 #define ACE_WINDOW_SIZE	0x800
 
 #define ACE_JUMBO_MTU 9000
@@ -180,6 +168,7 @@ struct ace_regs {
 	
 #define IN_INT		0x01
 #define CLR_INT		0x02
+#define HW_RESET	0x08
 #define BYTE_SWAP	0x10
 #define WORD_SWAP	0x20
 #define MASK_INTS	0x40
@@ -199,6 +188,13 @@ struct ace_regs {
 #define EEPROM_READ_SELECT	0xa1
 
 #define SRAM_BANK_512K		0x200
+
+
+/*
+ * udelay() values for when clocking the eeprom
+ */
+#define ACE_SHORT_DELAY		1
+#define ACE_LONG_DELAY		2
 
 
 /*
@@ -239,6 +235,7 @@ struct ace_regs {
 #define DMA_WRITE_MAX_1K	0xe0
 #define MEM_READ_MULTIPLE	0x00020000
 #define PCI_66MHZ		0x00080000
+#define PCI_32BIT		0x00100000
 #define DMA_WRITE_ALL_ALIGN	0x00800000
 #define READ_CMD_MEM		0x06000000
 #define WRITE_CMD_MEM		0x70000000
@@ -251,6 +248,7 @@ struct ace_regs {
 #define ACE_BYTE_SWAP_DATA	0x10
 #define ACE_WARN		0x08
 #define ACE_WORD_SWAP		0x04
+#define ACE_BYTE_SWAP		0x02
 #define ACE_NO_JUMBO_FRAG	0x200
 #define ACE_FATAL		0x40000000
 
@@ -300,20 +298,15 @@ struct ace_regs {
 #define EVT_RING_SIZE	(EVT_RING_ENTRIES * sizeof(struct event))
 
 struct event {
-	union {
-		u32 word;
-		struct {
-#if defined(__LITTLE_ENDIAN_BITFIELD)
-			u32	idx:12;
-			u32	code:12;
-			u32	evt:8;
+#ifdef __LITTLE_ENDIAN
+	u32	idx:12;
+	u32	code:12;
+	u32	evt:8;
 #else
-			u32	evt:8;
-			u32	code:12;
-			u32	idx:12;
+	u32	evt:8;
+	u32	code:12;
+	u32	idx:12;
 #endif
-		} data;
-	} u;
 	u32     pad;
 };
 
@@ -351,7 +344,7 @@ struct event {
 #define CMD_RING_ENTRIES	64
 
 struct cmd {
-#if defined(__LITTLE_ENDIAN_BITFIELD)
+#ifdef __LITTLE_ENDIAN
 	u32	idx:12;
 	u32	code:12;
 	u32	evt:8;
@@ -435,10 +428,17 @@ struct tx_desc{
  * This is in PCI shared mem and must be accessed with readl/writel
  * real layout is:
  */
+#if __LITTLE_ENDIAN
 	u16	flags;
 	u16	size;
 	u16	vlan;
 	u16	reserved;
+#else
+	u16	size;
+	u16	flags;
+	u16	reserved;
+	u16	vlan;
+#endif
 #endif
 	u32	vlanres;
 };
@@ -459,14 +459,34 @@ struct tx_desc{
 
 struct rx_desc{
 	aceaddr	addr;
+#ifdef __LITTLE_ENDIAN
 	u16	size;
 	u16	idx;
+#else
+	u16	idx;
+	u16	size;
+#endif
+#ifdef __LITTLE_ENDIAN
 	u16	flags;
 	u16	type;
+#else
+	u16	type;
+	u16	flags;
+#endif
+#ifdef __LITTLE_ENDIAN
 	u16	tcp_udp_csum;
 	u16	ip_csum;
+#else
+	u16	ip_csum;
+	u16	tcp_udp_csum;
+#endif
+#ifdef __LITTLE_ENDIAN
 	u16	vlan;
 	u16	err_flags;
+#else
+	u16	err_flags;
+	u16	vlan;
+#endif
 	u32	reserved;
 	u32	opague;
 };
@@ -477,8 +497,13 @@ struct rx_desc{
  */
 struct ring_ctrl {
 	aceaddr	rngptr;
+#ifdef __LITTLE_ENDIAN
 	u16	flags;
 	u16	max_len;
+#else
+	u16	max_len;
+	u16	flags;
+#endif
 	u32	pad;
 };
 
@@ -535,16 +560,17 @@ struct ace_info {
 };
 
 
-/*
- * struct ace_skb holding the rings of skb's. This is an awful lot of
- * pointers, but I don't see any other smart mode to do this in an
- * efficient manner ;-(
- */
 struct ring_info {
 	struct sk_buff		*skb;
 	dma_addr_t		mapping;
 };
 
+
+/*
+ * struct ace_skb holding the rings of skb's. This is an awful lot of
+ * pointers, but I don't see any other smart mode to do this in an
+ * efficient manner ;-(
+ */
 struct ace_skb
 {
 	struct ring_info	tx_skbuff[TX_RING_ENTRIES];
@@ -568,16 +594,16 @@ struct ace_private
 {
 	struct ace_skb		*skb;
 	struct ace_regs		*regs;		/* register base */
-	volatile int		fw_running;
-	int			version, fw_up, link;
+	int			version, fw_running, fw_up, link;
 	int			promisc, mcast_all;
 	/*
 	 * The send ring is located in the shared memory window
 	 */
 	struct ace_info		*info;
-	dma_addr_t		info_dma;
 	struct tx_desc		*tx_ring;
-	u32			tx_prd, tx_full, tx_ret_csm;
+	dma_addr_t		info_dma;
+	u32			tx_prd;
+	volatile u32		tx_full, tx_ret_csm;
 	struct timer_list	timer;
 
 	unsigned long		std_refill_busy
@@ -590,9 +616,8 @@ struct ace_private
 	u32			cur_rx;
 	struct tq_struct	immediate;
 	int			bh_pending, jumbo;
-
-	/* These elements are allocated using consistent PCI
-	 * dma memory.
+	/*
+	 * These elements are allocated using consistent PCI dma memory.
 	 */
 	struct rx_desc		*rx_std_ring;
 	struct rx_desc		*rx_jumbo_ring;
@@ -611,9 +636,73 @@ struct ace_private
 	struct net_device	*next;
 	u16			pci_command;
 	u8			pci_latency;
-	char			name[24];
+	char			name[48];
+#ifdef INDEX_DEBUG
+	spinlock_t		debug_lock
+				__attribute__ ((aligned (L1_CACHE_BYTES)));;
+	u32			last_tx, last_std_rx, last_mini_rx;
+#endif
 	struct net_device_stats stats;
 };
+
+
+static inline void set_aceaddr(aceaddr *aa, dma_addr_t addr)
+{
+#if (BITS_PER_LONG == 64)
+	aa->addrlo = addr & 0xffffffff;
+	aa->addrhi = addr >> 32;
+#else
+    /* Don't bother setting zero every time */
+	aa->addrlo = addr;
+#endif
+	mb();
+}
+
+
+static inline void *get_aceaddr(aceaddr *aa)
+{
+	unsigned long addr;
+	mb();
+#if (BITS_PER_LONG == 64)
+	addr = (u64)aa->addrhi << 32 | aa->addrlo;
+#else
+	addr = aa->addrlo;
+#endif
+	return bus_to_virt(addr);
+}
+
+
+static inline void *get_aceaddr_bus(aceaddr *aa)
+{
+	unsigned long addr;
+	mb();
+#if (BITS_PER_LONG == 64)
+	addr = (u64)aa->addrhi << 32 | aa->addrlo;
+#else
+	addr = aa->addrlo;
+#endif
+	return (void *)addr;
+}
+
+
+static inline void ace_set_txprd(struct ace_regs *regs,
+				 struct ace_private *ap, u32 value)
+{
+#ifdef INDEX_DEBUG
+	unsigned long flags;
+	spin_lock_irqsave(&ap->debug_lock, flags);
+	writel(value, &regs->TxPrd);
+	if (value == ap->last_tx)
+		printk(KERN_ERR "AceNIC RACE ALERT! writing identical value "
+		       "to tx producer (%i)\n", value);
+	ap->last_tx = value;
+	spin_unlock_irqrestore(&ap->debug_lock, flags);
+#else
+	writel(value, &regs->TxPrd);
+#endif
+	wmb();
+}
+
 
 /*
  * Prototypes
@@ -622,7 +711,6 @@ static int ace_init(struct net_device *dev, int board_idx);
 static void ace_load_std_rx_ring(struct ace_private *ap, int nr_bufs);
 static void ace_load_mini_rx_ring(struct ace_private *ap, int nr_bufs);
 static void ace_load_jumbo_rx_ring(struct ace_private *ap, int nr_bufs);
-static int ace_flush_jumbo_rx_ring(struct net_device *dev);
 static void ace_interrupt(int irq, void *dev_id, struct pt_regs *regs);
 static int ace_load_firmware(struct net_device *dev);
 static int ace_open(struct net_device *dev);
@@ -638,7 +726,9 @@ extern int ace_recycle(struct sk_buff *skb);
 #endif
 static int ace_ioctl(struct net_device *dev, struct ifreq *ifr, int cmd);
 static int ace_set_mac_addr(struct net_device *dev, void *p);
+static int ace_allocate_descriptors(struct net_device *dev);
+static void ace_free_descriptors(struct net_device *dev);
 static struct net_device_stats *ace_get_stats(struct net_device *dev);
-static u8 read_eeprom_byte(struct ace_regs *regs, unsigned long offset);
+static int read_eeprom_byte(struct net_device *dev, unsigned long offset);
 
 #endif /* _ACENIC_H_ */
