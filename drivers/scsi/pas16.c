@@ -360,7 +360,7 @@ int pas16_detect(Scsi_Host_Template * tpnt) {
 	instance = scsi_register (tpnt, sizeof(struct NCR5380_hostdata));
 	instance->io_port = io_port;
 
-	NCR5380_init(instance);
+	NCR5380_init(instance, 0);
 
 	if (overrides[current_override].irq != IRQ_AUTO)
 	    instance->irq = overrides[current_override].irq;

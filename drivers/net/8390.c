@@ -85,15 +85,11 @@ int ei_debug = 1;
 static int high_water_mark = 0;
 
 /* Index to functions. */
-int ei_open(struct device *dev);	/* Put into the device structure. */
-void ei_interrupt(int reg_ptr);		/* Installed as the interrupt handler. */
-
 static void ei_tx_intr(struct device *dev);
 static void ei_receive(struct device *dev);
 static void ei_rx_overrun(struct device *dev);
 
 /* Routines generic to NS8390-based boards. */
-void NS8390_init(struct device *dev, int startp);
 static void NS8390_trigger_send(struct device *dev, unsigned int length,
 								int start_page);
 #ifdef HAVE_MULTICAST
@@ -288,7 +284,6 @@ void ei_interrupt(int reg_ptr)
 		if (interrupts & ENISR_TX) {
 			ei_tx_intr(dev);
 		} else if (interrupts & ENISR_COUNTERS) {
-			struct ei_device *ei_local = (struct ei_device *) dev->priv;
 			ei_local->stat.rx_frame_errors += inb_p(e8390_base + EN0_COUNTER0);
 			ei_local->stat.rx_crc_errors   += inb_p(e8390_base + EN0_COUNTER1);
 			ei_local->stat.rx_missed_errors+= inb_p(e8390_base + EN0_COUNTER2);

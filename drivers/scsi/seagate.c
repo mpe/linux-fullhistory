@@ -672,7 +672,7 @@ static int internal_command(unsigned char target, unsigned char lun, const void 
  */
 		
 		for (clock = jiffies + 10, temp = 0; (jiffies < clock) &&
-		    !((temp = STATUS) & STAT_IO) || (STAT & STAT_BSY););
+		    !((temp = STATUS) & (STAT_IO | STAT_BSY)););
 
 		if (jiffies >= clock)
 			{

@@ -116,18 +116,20 @@ static struct buffer_head * isofs_find_entry(struct inode * dir,
 		/* Handle case where the directory entry spans two blocks.
 		   Usually 1024 byte boundaries */
 		if (offset >= bufsize) {
-			cpnt = kmalloc(1 << ISOFS_BLOCK_BITS, GFP_KERNEL);
-			memcpy(cpnt, bh->b_data, bufsize);
-			de = (struct iso_directory_record *)
-			  ((char *)cpnt + old_offset);
+		        unsigned int frag1;
+			frag1 = bufsize - old_offset;
+			cpnt = kmalloc(*((unsigned char *) de),GFP_KERNEL);
+			memcpy(cpnt, bh->b_data + old_offset, frag1);
+
+			de = (struct iso_directory_record *) cpnt;
 			brelse(bh);
 			offset = f_pos & (bufsize - 1);
 			block = isofs_bmap(dir,f_pos>>bufbits);
 			if (!block || !(bh = bread(dir->i_dev,block,bufsize))) {
-			        kfree_s(cpnt, 1 << ISOFS_BLOCK_BITS);
+			        kfree(cpnt);
 				return 0;
 			};
-			memcpy((char *)cpnt+bufsize,bh->b_data,bufsize);
+			memcpy((char *)cpnt+frag1, bh->b_data, offset);
 		}
 		
 		/* Handle the '.' case */
@@ -179,7 +181,7 @@ static struct buffer_head * isofs_find_entry(struct inode * dir,
 		}
 		match = isofs_match(namelen,name,dpnt,dlen);
 		if (cpnt) {
-			kfree_s(cpnt, 1 << ISOFS_BLOCK_BITS);
+			kfree(cpnt);
 			cpnt = NULL;
 		}
 
@@ -203,7 +205,7 @@ static struct buffer_head * isofs_find_entry(struct inode * dir,
 	}
  out:
 	if (cpnt)
-		kfree_s(cpnt, 1 << ISOFS_BLOCK_BITS);
+		kfree(cpnt);
 	brelse(bh);
 	return NULL;
 }
@@ -227,25 +229,16 @@ int isofs_lookup(struct inode * dir,const char * name, int len,
 	}
 
 	ino = 0;
-	if (dir->i_dev == cache.dev && 
-	    dir->i_ino == cache.dir &&
-	    len == cache.dlen && 
-	    isofs_match(len, name, cache.filename, cache.dlen))
-	  {
-	    ino = cache.ino;
-	    ino_back = dir->i_ino;
-	    /* These two cases are special, but since they are at the start
-	       of the directory, we can just as easily search there */
-	    if (cache.dlen == 1 && cache.filename[0] == '.') ino = 0;
-	    if (cache.dlen == 2 && cache.filename[0] == '.' && 
-		cache.filename[1] == '.') ino = 0;
-	  };
+
+	if (dcache_lookup(dir, name, len, &ino)) ino_back = dir->i_ino;
 
 	if (!ino) {
 	  if (!(bh = isofs_find_entry(dir,name,len, &ino, &ino_back))) {
 	    iput(dir);
 	    return -ENOENT;
 	  }
+	  if (ino_back == dir->i_ino)
+		dcache_add(dir, name, len, ino);
 	  brelse(bh);
 	};
 

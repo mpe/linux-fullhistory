@@ -346,22 +346,26 @@ void isofs_read_inode(struct inode * inode)
 	high_sierra = inode->i_sb->u.isofs_sb.s_high_sierra;
 
 	if ((inode->i_ino & (bufsize - 1)) + *pnt > bufsize){
-		cpnt = kmalloc(1 << ISOFS_BLOCK_BITS, GFP_KERNEL);
+	        int frag1, offset;
+
+		offset = (inode->i_ino & (bufsize - 1));
+		frag1 = bufsize - offset;
+	        cpnt = kmalloc(*pnt,GFP_KERNEL);
 		if (cpnt == NULL) {
 			printk(KERN_INFO "NoMem ISO inode %lu\n",inode->i_ino);
 			brelse(bh);
 			goto fail;
 		}
-		memcpy(cpnt, bh->b_data, bufsize);
+		memcpy(cpnt, bh->b_data + offset, frag1);
 		brelse(bh);
 		if (!(bh = bread(inode->i_dev,++block, bufsize))) {
-			kfree_s(cpnt, 1 << ISOFS_BLOCK_BITS);
+			kfree(cpnt);
 			printk("unable to read i-node block");
 			goto fail;
 		}
-		memcpy((char *)cpnt + bufsize, bh->b_data, bufsize);
-		pnt = ((unsigned char *) cpnt
-		       + (inode->i_ino & (bufsize - 1)));
+		offset += *pnt - bufsize;
+		memcpy((char *)cpnt+frag1, bh->b_data, offset);
+		pnt = ((unsigned char *) cpnt);
 		raw_inode = ((struct iso_directory_record *) pnt);
 	}
 
@@ -370,8 +374,11 @@ void isofs_read_inode(struct inode * inode)
 	
 	if (raw_inode->flags[-high_sierra] & 2) {
 		inode->i_mode = S_IRUGO | S_IXUGO | S_IFDIR;
-		inode->i_nlink = 2; /* There are always at least 2.  It is
-				       hard to figure out what is correct*/
+		inode->i_nlink = 1; /* Set to 1.  We know there are 2, but
+				       the find utility tries to optimize
+				       if it is 2, and it screws up.  It is
+				       easier to give 1 which tells find to
+				       do it the hard way. */
 	} else {
 		inode->i_mode = S_IRUGO; /* Everybody gets to read the file. */
 		inode->i_nlink = 1;
@@ -491,7 +498,7 @@ void isofs_read_inode(struct inode * inode)
 	    init_fifo(inode);
 	}
 	if (cpnt) {
-		kfree_s (cpnt, 1 << ISOFS_BLOCK_BITS);
+		kfree (cpnt);
 		cpnt = NULL;
 	}
 	return;
@@ -536,6 +543,7 @@ int isofs_lookup_grandparent(struct inode * parent, int extent)
 	int old_offset;
 	void * cpnt = NULL;
 	int result;
+	int directory_size;
 	struct buffer_head * bh;
 	struct iso_directory_record * de;
 	
@@ -564,6 +572,7 @@ int isofs_lookup_grandparent(struct inode * parent, int extent)
 		if (de->name_len[0] == 1 && de->name[0] == 1) 
 		{
 			parent_dir = find_rock_ridge_relocation(de, parent);
+			directory_size = isonum_733 (de->size);
 			brelse(bh);
 			break;
 		}
@@ -571,9 +580,7 @@ int isofs_lookup_grandparent(struct inode * parent, int extent)
 #ifdef DEBUG
 	printk("Parent dir:%x\n",parent_dir);
 #endif
-	/* Now we know the extent where the parent dir starts on.  We have no
-	   idea how long it is, so we just start reading until we either find
-	   it or we find some kind of unreasonable circumstance. */
+	/* Now we know the extent where the parent dir starts on. */
 	
 	result = -1;
 
@@ -596,6 +603,8 @@ int isofs_lookup_grandparent(struct inode * parent, int extent)
 			brelse(bh);
 			offset = 0;
 			block++;
+			directory_size -= bufsize;
+			if(directory_size < 0) return -1;
 			if((block & 1) && (ISOFS_BLOCK_BITS - bufbits))
 			  return -1;
 			if (!block
@@ -613,19 +622,21 @@ int isofs_lookup_grandparent(struct inode * parent, int extent)
 
 		if (offset >= bufsize)
 		{
-			if((block & 1) != 0) return -1;
-			cpnt = kmalloc(1<<ISOFS_BLOCK_BITS,GFP_KERNEL);
-			memcpy(cpnt, bh->b_data, bufsize);
-			de = (struct iso_directory_record *)
-				((char *)cpnt + old_offset);
+ 		        unsigned int frag1;
+ 			frag1 = bufsize - old_offset;
+ 			cpnt = kmalloc(*((unsigned char *) de),GFP_KERNEL);
+ 			memcpy(cpnt, bh->b_data + old_offset, frag1);
+ 			de = (struct iso_directory_record *) ((char *)cpnt);
 			brelse(bh);
 			offset -= bufsize;
+ 			directory_size -= bufsize;
+			if(directory_size < 0) return -1;
 			block++;
-			if (!(bh = bread(parent->i_dev,block,bufsize))) {
-			        kfree_s(cpnt, 1 << ISOFS_BLOCK_BITS);
+			if(!(bh = bread(parent->i_dev,block,bufsize))) {
+ 			        kfree(cpnt);
 				return -1;
 			};
-			memcpy((char *)cpnt+bufsize, bh->b_data, bufsize);
+ 			memcpy((char *)cpnt+frag1, bh->b_data, offset);
 		}
 		
 		if (find_rock_ridge_relocation(de, parent) == extent){
@@ -634,7 +645,7 @@ int isofs_lookup_grandparent(struct inode * parent, int extent)
 		}
 		
 		if (cpnt) {
-			kfree_s(cpnt, 1 << ISOFS_BLOCK_BITS);
+			kfree(cpnt);
 			cpnt = NULL;
 		}
 	}
@@ -644,7 +655,7 @@ int isofs_lookup_grandparent(struct inode * parent, int extent)
 
  out:
 	if (cpnt) {
-	        kfree_s(cpnt, 1 << ISOFS_BLOCK_BITS);
+	        kfree(cpnt);
 		cpnt = NULL;
 	}
 	brelse(bh);

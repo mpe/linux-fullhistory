@@ -439,8 +439,6 @@ int vt_waitactive(void)
 
 #define vt_wake_waitactive() wake_up(&vt_activate_queue)
 
-extern int kill_proc(int pid, int sig, int priv);
-
 /*
  * Performs the back end of a vt switch
  */

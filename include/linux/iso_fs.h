@@ -190,16 +190,6 @@ extern struct inode_operations isofs_chrdev_inode_operations;
 extern struct inode_operations isofs_blkdev_inode_operations;
 extern struct inode_operations isofs_fifo_inode_operations;
 
-struct lookup_cache{
-  unsigned long dir; /* If this matches... */
-  dev_t dev;  /* And this matches */
-  unsigned short dlen; /* and this matches... */
-  char filename[256]; /* and this matches... */
-  unsigned long ino; /* Then this is the file we are looking for */
-};
-
-extern struct lookup_cache cache;
-
 /* The following macros are used to check for memory leaks. */
 #ifdef LEAK_CHECK
 #define free_s leak_check_free_s

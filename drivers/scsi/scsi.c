@@ -384,7 +384,6 @@ static void scan_scsis (struct Scsi_Host * shpnt)
 	      
 	      if (type != -1)
 		{
-		  struct Scsi_Device_Template * sdtpnt;
 		  print_inquiry(scsi_result);
 
 		  for(sdtpnt = scsi_devicelist; sdtpnt; sdtpnt = sdtpnt->next)
@@ -767,7 +766,6 @@ update_timeout(SCpnt, SCpnt->timeout_per_command);
 
         if (host->hostt->can_queue)
 		{
-		  extern unsigned long intr_count;
 #ifdef DEBUG
 	printk("queuecommand : routine at %08x\n", 
 		host->hostt->queuecommand);

@@ -72,14 +72,19 @@ struct inode_operations isofs_file_inode_operations = {
  * a 0x0a.  A control-Z is also turned into a linefeed.
  */
 
-static inline void unixify_text_buffer(char * buffer, int chars, int mode)
+static inline void unixify_to_fs(char * outbuf, char * buffer, int chars,
+				 int mode)
 {
+	char outchar;
+
 	while(chars--){
-		if(*buffer == 0x1a) *buffer = 0x0a;
-		if(*buffer == 0x0d){
-			if(mode == ISOFS_FILE_TEXT_M) *buffer = 0x0a;
-			if(mode == ISOFS_FILE_TEXT) *buffer = ' ';
+	  	outchar = *buffer;
+		if(outchar == 0x1a) outchar = 0x0a;
+		if(outchar == 0x0d){
+			if(mode == ISOFS_FILE_TEXT_M) outchar = 0x0a;
+			if(mode == ISOFS_FILE_TEXT) outchar = ' ';
 		}
+		put_fs_byte(outchar, outbuf++);
 		buffer++;
 	}
 }
@@ -210,9 +215,10 @@ static int isofs_file_read(struct inode * inode, struct file * filp, char * buf,
 		  if (*bhe) {
 		    if (inode->u.isofs_i.i_file_format == ISOFS_FILE_TEXT ||
 			inode->u.isofs_i.i_file_format == ISOFS_FILE_TEXT_M)
-		      unixify_text_buffer(offset+(*bhe)->b_data,
-					  chars, inode->u.isofs_i.i_file_format);
-		    memcpy_tofs(buf,offset+(*bhe)->b_data,chars);
+		      unixify_to_fs(buf, offset+(*bhe)->b_data, chars, 
+				    inode->u.isofs_i.i_file_format);
+		    else
+		      memcpy_tofs(buf,offset+(*bhe)->b_data,chars);
 		    brelse(*bhe);
 		    buf += chars;
 		  } else {

@@ -468,7 +468,6 @@ void dev_queue_xmit(struct sk_buff *skb, struct device *dev, int pri)
 void netif_rx(struct sk_buff *skb)
 {
 	static int dropping = 0;
-	extern struct timeval xtime;
 
 	/*
 	 *	Any received buffers are un-owned and should be discarded

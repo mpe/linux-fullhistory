@@ -1750,6 +1750,7 @@ static void st_init()
 
   for (i=0, SDp = scsi_devices; i < st_template.dev_noticed; ++i) {
     STp = &(scsi_tapes[i]);
+    STp->device = NULL;
     STp->capacity = 0xfffff;
     STp->dirty = 0;
     STp->rw = ST_IDLE;

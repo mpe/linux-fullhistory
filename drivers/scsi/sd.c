@@ -1014,6 +1014,7 @@ static void sd_init()
 
 	rscsi_disks = (Scsi_Disk *) 
 	  scsi_init_malloc(sd_template.dev_max * sizeof(Scsi_Disk));
+	memset(rscsi_disks, 0, sd_template.dev_max * sizeof(Scsi_Disk));
 
 	sd_sizes = (int *) scsi_init_malloc((sd_template.dev_max << 4) * 
 					    sizeof(int));

@@ -289,19 +289,6 @@ pas_mixer_set (int whichDev, unsigned int level)
 
 /*****/
 
-static int
-getmixer (int dev, int chn)
-{
-  if (chn == P_M_MV508_RIGHT)
-    {
-      return (levels[dev] >> 8) & 0x7f;
-    }
-  else
-    {
-      return levels[dev] & 0x7f;
-    }
-}
-
 static void
 pas_mixer_reset (void)
 {

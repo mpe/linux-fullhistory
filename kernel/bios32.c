@@ -397,7 +397,7 @@ void NCR53c810_test(void) {
 }
 
 char *pcibios_strerror (int error) {
-    char buf[80];
+    static char buf[80];
     switch (error) {
     case PCIBIOS_SUCCESFUL:
         return "SUCCESFUL";

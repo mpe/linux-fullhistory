@@ -68,7 +68,6 @@ static char printbuf[1024];
 extern int console_loglevel;
 
 extern char empty_zero_page[PAGE_SIZE];
-extern int vsprintf(char *,const char *,va_list);
 extern void init(void);
 extern void init_IRQ(void);
 extern void init_modules(void);

@@ -25,8 +25,6 @@
 #include <linux/string.h>
 #include <linux/locks.h>
 
-extern int vsprintf (char *, const char *, va_list);
-
 void ext2_error (struct super_block * sb, const char * function,
 		 const char * fmt, ...)
 {

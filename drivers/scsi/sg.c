@@ -340,6 +340,7 @@ static void sg_init()
 
    scsi_generics = (struct scsi_generic *) 
      scsi_init_malloc(sg_template.dev_noticed * sizeof(struct scsi_generic));
+   memset(scsi_generics, 0, sg_template.dev_noticed * sizeof(struct scsi_generic));
 
    sg_template.dev_max = sg_template.dev_noticed;
  }

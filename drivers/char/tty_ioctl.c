@@ -31,9 +31,6 @@
 # define	PRINTK(x)	/**/
 #endif
 
-extern int session_of_pgrp(int pgrp);
-extern int kill_pg(int pgrp, int sig, int priv);
-
 void wait_until_sent(struct tty_struct * tty, int timeout)
 {
 	struct wait_queue wait = { current, NULL };

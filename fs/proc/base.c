@@ -58,7 +58,6 @@ static struct proc_dir_entry base_dir[] = {
 	{ 5,4,"root" },
 	{ 6,3,"exe" },
 	{ 7,2,"fd" },
-	{ 8,4,"mmap" },
 	{ 9,7,"environ" },
 	{ 10,7,"cmdline" },
 	{ 11,4,"stat" },

@@ -27,6 +27,7 @@ extern struct file_operations * get_chrfops(unsigned int);
 
 extern void wait_for_keypress(void);
 extern void fcntl_init_locks(void);
+extern int floppy_grab_irq_and_dma(void);
 
 extern int root_mountflags;
 

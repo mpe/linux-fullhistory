@@ -768,6 +768,7 @@ static void sr_init()
 
 	sr_template.dev_max = sr_template.dev_noticed;
 	scsi_CDs = (Scsi_CD *) scsi_init_malloc(sr_template.dev_max * sizeof(Scsi_CD));
+	memset(scsi_CDs, 0, sr_template.dev_max * sizeof(Scsi_CD));
 
 	sr_sizes = (int *) scsi_init_malloc(sr_template.dev_max * sizeof(int));
 	memset(sr_sizes, 0, sr_template.dev_max * sizeof(int));

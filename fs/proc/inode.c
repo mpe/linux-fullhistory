@@ -152,7 +152,6 @@ void proc_read_inode(struct inode * inode)
 			inode->i_mode = S_IFLNK | S_IRWXU;
 			return;
 		case 7:
-		case 8:
 			inode->i_mode = S_IFDIR | S_IRUSR | S_IXUSR;
 			inode->i_op = &proc_fd_inode_operations;
 			inode->i_nlink = 2;

@@ -45,26 +45,14 @@ extern void free_dma(unsigned int dmanr);
 
 extern int do_execve(char * filename, char ** argv, char ** envp,
 		struct pt_regs * regs);
-extern void flush_old_exec(struct linux_binprm * bprm);
-extern int open_inode(struct inode * inode, int mode);
-extern int read_exec(struct inode *inode, unsigned long offset,
-	char * addr, unsigned long count);
 extern int do_signal(unsigned long oldmask, struct pt_regs * regs);
 
 extern void (* iABI_hook)(struct pt_regs * regs);
 
 #ifdef CONFIG_INET
-extern int register_netdev(struct device *);
-extern void unregister_netdev(struct device *);
-extern void ether_setup(struct device *);
-extern struct sk_buff *alloc_skb(unsigned int,int);
-extern void kfree_skb(struct sk_buff *, int);
 extern void snarf_region(unsigned int, unsigned int);
-extern void netif_rx(struct sk_buff *);
-extern int dev_rint(unsigned char *, long, int, struct device *);
 extern void dev_tint(struct device *);
 extern struct device *irq2dev_map[];
-extern void dev_kfree_skb(struct sk_buff *, int);
 #endif
 
 
@@ -83,6 +71,8 @@ struct symbol_table symbol_table = { 0, 0, 0, /* for stacked module support */
 	X(do_munmap),
 	X(zeromap_page_range),
 	X(unmap_page_range),
+	X(insert_vm_struct),
+	X(merge_segments),
 
 	/* internal kernel memory management */
 	X(__get_free_pages),

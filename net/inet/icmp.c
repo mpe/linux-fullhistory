@@ -423,7 +423,6 @@ static void icmp_timestamp(struct icmphdr *icmph, struct sk_buff *skb, struct de
 	struct sk_buff *skb2;
 	int size, offset;
 	unsigned long *timeptr, midtime;
-	extern struct timeval xtime;			/* kernel/time.c */
 	struct device *ndev=NULL;
  
 	size = dev->hard_header_len + 64 + len;

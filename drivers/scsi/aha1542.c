@@ -1083,6 +1083,7 @@ int aha1542_reset(Scsi_Cmnd * SCpnt)
 	      SCtmp->scsi_done(SCpnt);
 	      
 	      HOSTDATA(SCpnt->host)->SCint[i] = NULL;
+	      HOSTDATA(SCpnt->host)->mb[i].status = 0;
 	    }
 	  return SCSI_RESET_SUCCESS;
 #else

@@ -20,10 +20,6 @@ static int msdos_dir_read(struct inode * inode,struct file * filp, char * buf,in
 	return -EISDIR;
 }
 
-int msdos_readdir(struct inode *inode,struct file *filp,
-    struct dirent *dirent,int count);
-
-
 static struct file_operations msdos_dir_operations = {
 	NULL,			/* lseek - default */
 	msdos_dir_read,		/* read */

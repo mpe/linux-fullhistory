@@ -2737,7 +2737,7 @@ int NCR5380_abort (Scsi_Cmnd *cmd) {
  * 
  * Purpose : reset the SCSI bus.
  *
- * Returns : 0
+ * Returns : SCSI_RESET_WAKEUP
  *
  */ 
 
@@ -2756,6 +2756,6 @@ int NCR5380_reset (Scsi_Cmnd *cmd) {
     NCR5380_write(INITIATOR_COMMAND_REG, ICR_BASE);
     sti();
 
-    return 0;
+    return SCSI_RESET_WAKEUP;
 }
 

@@ -48,8 +48,6 @@
 #include <asm/system.h>
 
 asmlinkage int sys_exit(int exit_code);
-asmlinkage int sys_close(unsigned fd);
-asmlinkage int sys_open(const char *, int, int);
 asmlinkage int sys_brk(unsigned long);
 
 extern void shm_exit (void);
