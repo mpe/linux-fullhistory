@@ -263,7 +263,6 @@ void pd_setup(char * str, int * ints);
 #ifdef MODULE
 void cleanup_module( void );
 #endif
-static void pd_geninit(void);
 static int pd_open(struct inode *inode, struct file *file);
 static void do_pd_request(request_queue_t * q);
 static int pd_ioctl(struct inode *inode,struct file *file,
@@ -406,22 +405,18 @@ int pd_init (void)
 
 	printk("%s: %s version %s, major %d, cluster %d, nice %d\n",
 		name,name,PD_VERSION,major,cluster,nice);
-	pd_geninit();
-	
-        return 0;
-}
-
-static void pd_geninit (void)
-{
 	pd_init_units();
 	pd_valid = 0;
 	pd_gendisk.nr_real = pd_detect();
 	pd_valid = 1;
 
 #ifdef MODULE
-        if (!pd_gendisk.nr_real) cleanup_module();
+        if (!pd_gendisk.nr_real) {
+		cleanup_module();
+		return -1;
+	}
 #endif
-
+        return 0;
 }
 
 static int pd_open (struct inode *inode, struct file *file)
@@ -589,13 +584,7 @@ int     init_module(void)
          paride_init();
        } 
 #endif
-
-        err = pd_init();
-        if (err) return err;
-
-        if (!pd_gendisk.nr_real)  return -1;
-
-        return 0;
+        return pd_init();
 }
 
 void    cleanup_module(void)
@@ -833,7 +822,6 @@ static int pd_detect( void )
 	             PI_PD,verbose,PD.name)) {
 		if (pd_probe_drive(unit)) {
 			PD.present = 1;
-			grok_partitions(&pd_gendisk,unit,PD_PARTNS,PD.capacity);
 			k = 1;
 		} else pi_release(PI);
 	    }
@@ -844,10 +832,13 @@ static int pd_detect( void )
 			PI_PD,verbose,PD.name)) {
                 if (pd_probe_drive(unit)) {
                         PD.present = 1;
-			grok_partitions(&pd_gendisk,unit,PD_PARTNS,PD.capacity);
                         k = unit+1;
                 } else pi_release(PI);
             }
+	for (unit=0;unit<PD_UNITS;unit++)
+		register_disk(&pd_gendisk,MKDEV(MAJOR_NR,unit<<PD_BITS),
+				PD_PARTNS,&pd_fops,
+				PD.present?PD.capacity:0);
 
 /* We lie about the number of drives found, as the generic partition
    scanner assumes that the drives are numbered sequentially from 0.

@@ -24,7 +24,7 @@ static const int rx_copybreak = 200;
 /* Allow setting MTU to a larger size, bypassing the normal ethernet setup. */
 static const int mtu = 1500;
 /* Maximum events (Rx packets, etc.) to handle at each interrupt. */
-static int max_interrupt_work = 20;
+static int max_interrupt_work = 32;
 
 /* Put out somewhat more debugging messages. (0: no msg, 1 minimal .. 6). */
 #define vortex_debug debug
@@ -40,7 +40,7 @@ static int rx_nocopy = 0, rx_copy = 0, queued_packet = 0, rx_csumhits;
 
 /* A few values that may be tweaked. */
 /* Time in jiffies before concluding the transmitter is hung. */
-#define TX_TIMEOUT  (2*HZ)
+#define TX_TIMEOUT  ((400*HZ)/1000)
 
 /* Keep the ring sizes a power of two for efficiency. */
 #define TX_RING_SIZE	16
@@ -442,13 +442,15 @@ struct vortex_private {
 		full_bus_master_tx:1, full_bus_master_rx:2, /* Boomerang  */
 		hw_csums:1,				/* Has hardware checksums. */
 		tx_full:1,
-		open:1;
+		open:1,
+		reap:1;
 	u16 status_enable;
 	u16 intr_enable;
 	u16 available_media;				/* From Wn3_Options. */
 	u16 capabilities, info1, info2;		/* Various, from EEPROM. */
 	u16 advertising;					/* NWay media advertisement */
 	unsigned char phys[2];				/* MII device addresses. */
+	u16 deferred;
 };
 
 /* The action to take with a media selection timer tick.
@@ -520,6 +522,22 @@ static int compaq_ioaddr = 0, compaq_irq = 0, compaq_device_id = 0x5900;
 
 #include <pcmcia/driver_ops.h>
 
+static void vortex_reap(void)
+{
+	struct net_device **devp, **next;
+	printk(KERN_DEBUG "vortex_reap()\n");
+	for (devp = &root_vortex_dev; *devp; devp = next) {
+		struct vortex_private *vp = (*devp)->priv;
+		next = &vp->next_module;
+		if (vp->open || !vp->reap) continue;
+		unregister_netdev(*devp);
+		if (vp->cb_fn_base) iounmap(vp->cb_fn_base);
+		kfree(*devp);
+		kfree(vp->priv_addr);
+		*devp = *next; next = devp;
+	}
+}
+
 static dev_node_t *vortex_attach(dev_locator_t *loc)
 {
 	u16 dev_id, vendor_id;
@@ -528,6 +546,7 @@ static dev_node_t *vortex_attach(dev_locator_t *loc)
 	struct net_device *dev;
 	int chip_idx;
 
+	vortex_reap();
 	if (loc->bus != LOC_PCI) return NULL;
 	bus = loc->b.pci.bus; devfn = loc->b.pci.devfn;
 	pcibios_read_config_dword(bus, devfn, PCI_BASE_ADDRESS_0, &io);
@@ -567,23 +586,16 @@ static dev_node_t *vortex_attach(dev_locator_t *loc)
 
 static void vortex_detach(dev_node_t *node)
 {
-	struct net_device **devp, **next;
-	printk(KERN_INFO "vortex_detach(%s)\n", node->dev_name);
-	for (devp = &root_vortex_dev; *devp; devp = next) {
-		next = &((struct vortex_private *)(*devp)->priv)->next_module;
-		if (strcmp((*devp)->name, node->dev_name) == 0) break;
+	struct net_device *dev, *next;
+	printk(KERN_DEBUG "vortex_detach(%s)\n", node->dev_name);
+	for (dev = root_vortex_dev; dev; dev = next) {
+		next = ((struct vortex_private *)dev->priv)->next_module;
+		if (strcmp(dev->name, node->dev_name) == 0) break;
 	}
-	if (*devp) {
-		struct net_device *dev = *devp;
+	if (dev && dev->priv) {
 		struct vortex_private *vp = dev->priv;
-		if (dev->flags & IFF_UP)
-			vortex_close(dev);
-		dev->flags &= ~(IFF_UP|IFF_RUNNING);
-		unregister_netdev(dev);
-		if (vp->cb_fn_base) iounmap(vp->cb_fn_base);
-		kfree(dev);
-		*devp = *next;
-		kfree(vp->priv_addr);
+		if (vp->open) vortex_down(dev);
+		vp->reap = 1;
 		kfree(node);
 		MOD_DEC_USE_COUNT;
 	}
@@ -592,7 +604,7 @@ static void vortex_detach(dev_node_t *node)
 static void vortex_suspend(dev_node_t *node)
 {
 	struct net_device *dev, *next;
-	printk(KERN_INFO "vortex_suspend(%s)\n", node->dev_name);
+	printk(KERN_DEBUG "vortex_suspend(%s)\n", node->dev_name);
 	for (dev = root_vortex_dev; dev; dev = next) {
 		next = ((struct vortex_private *)dev->priv)->next_module;
 		if (strcmp(dev->name, node->dev_name) == 0) break;
@@ -606,7 +618,7 @@ static void vortex_suspend(dev_node_t *node)
 static void vortex_resume(dev_node_t *node)
 {
 	struct net_device *dev, *next;
-	printk(KERN_INFO "vortex_resume(%s)\n", node->dev_name);
+	printk(KERN_DEBUG "vortex_resume(%s)\n", node->dev_name);
 	for (dev = root_vortex_dev; dev; dev = next) {
 		next = ((struct vortex_private *)dev->priv)->next_module;
 		if (strcmp(dev->name, node->dev_name) == 0) break;
@@ -797,9 +809,9 @@ static struct net_device *vortex_probe1(int pci_bus, int pci_devfn,
 	{
 		void *mem = kmalloc(sizeof(*vp) + 15, GFP_KERNEL);
 		vp =  (void *)(((long)mem + 15) & ~15);
+		memset(vp, 0, sizeof(*vp));
 		vp->priv_addr = mem;
 	}
-	memset(vp, 0, sizeof(*vp));
 	dev->priv = vp;
 
 	vp->next_module = root_vortex_dev;
@@ -1133,7 +1145,9 @@ vortex_up(struct net_device *dev)
 		dev->hard_start_xmit = &boomerang_start_xmit;
 		vp->cur_tx = vp->dirty_tx = 0;
 		outb(PKT_BUF_SZ>>8, ioaddr + TxFreeThreshold); /* Room for a packet. */
-		/* Clear the Tx ring. */
+		/* Clear the Rx, Tx rings. */
+		for (i = 0; i < RX_RING_SIZE; i++)
+			vp->rx_ring[i].status = 0;
 		for (i = 0; i < TX_RING_SIZE; i++)
 			vp->tx_skbuff[i] = 0;
 		outl(0, ioaddr + DownListPtr);
@@ -1172,6 +1186,10 @@ vortex_open(struct net_device *dev)
 	struct vortex_private *vp = (struct vortex_private *)dev->priv;
 	int i;
 
+#ifdef CARDBUS
+	if (vp->reap)
+		return -ENODEV;
+#endif
 	/* Use the now-standard shared IRQ implementation. */
 	if (request_irq(dev->irq, &vortex_interrupt, SA_SHIRQ, dev->name, dev)) {
 		return -EAGAIN;
@@ -1306,6 +1324,8 @@ static void vortex_timer(unsigned long data)
 
 	vp->timer.expires = RUN_AT(next_tick);
 	add_timer(&vp->timer);
+	if (vp->deferred)
+		outw(FakeIntr, ioaddr + EL3_CMD);
 	return;
 }
 
@@ -1431,10 +1451,10 @@ vortex_error(struct net_device *dev, int status)
 			   dev->name, fifo_diag);
 		/* Adapter failure requires Tx/Rx reset and reinit. */
 		if (vp->full_bus_master_tx) {
+			/* In this case, blow the card away */
+			vortex_down(dev);
 			wait_for_completion(dev, TotalReset | 0xff);
-			/* Re-enable the receiver. */
-			outw(RxEnable, ioaddr + EL3_CMD);
-			outw(TxEnable, ioaddr + EL3_CMD);
+			vortex_up(dev);
 		} else if (fifo_diag & 0x0400)
 			do_tx_reset = 1;
 		if (fifo_diag & 0x3000) {
@@ -1597,6 +1617,10 @@ static void vortex_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 	ioaddr = dev->base_addr;
 	latency = inb(ioaddr + Timer);
 	status = inw(ioaddr + EL3_STATUS);
+	if (status & IntReq) {
+		status |= vp->deferred;
+		vp->deferred = 0;
+	}
 
 	if (status == 0xffff)
 		goto handler_exit;
@@ -1665,19 +1689,20 @@ static void vortex_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 		}
 
 		if (--work_done < 0) {
-			if ((status & (0x7fe - (UpComplete | DownComplete))) == 0) {
-				/* Just ack these and return. */
-				outw(AckIntr | UpComplete | DownComplete, ioaddr + EL3_CMD);
-			} else {
-				printk(KERN_WARNING "%s: Too much work in interrupt, status "
-					   "%4.4x.  Temporarily disabling functions (%4.4x).\n",
-					   dev->name, status, SetStatusEnb | ((~status) & 0x7FE));
-				/* Disable all pending interrupts. */
-				outw(SetStatusEnb | ((~status) & 0x7FE), ioaddr + EL3_CMD);
-				outw(AckIntr | 0x7FF, ioaddr + EL3_CMD);
-				/* The timer will reenable interrupts. */
-				break;
-			}
+			printk(KERN_WARNING "%s: Too much work in interrupt, status "
+				   "%4.4x.\n", dev->name, status);
+			/* Disable all pending interrupts. */
+			do {
+				vp->deferred |= status;
+				outw(SetStatusEnb | (~vp->deferred & vp->status_enable),
+					 ioaddr + EL3_CMD);
+				outw(AckIntr | (vp->deferred & 0x7ff), ioaddr + EL3_CMD);
+			} while ((status = inw(ioaddr + EL3_CMD)) & IntLatch);
+			/* The timer will reenable interrupts. */
+			del_timer(&vp->timer);
+			vp->timer.expires = RUN_AT(1);
+			add_timer(&vp->timer);
+			break;
 		}
 		/* Acknowledge the IRQ. */
 		outw(AckIntr | IntReq | IntLatch, ioaddr + EL3_CMD);
@@ -1758,12 +1783,8 @@ static int vortex_rx(struct net_device *dev)
 				printk(KERN_NOTICE "%s: No memory to allocate a sk_buff of "
 					   "size %d.\n", dev->name, pkt_len);
 		}
-		outw(RxDiscard, ioaddr + EL3_CMD);
 		vp->stats.rx_dropped++;
-		/* Wait a limited time to skip this packet. */
-		for (i = 200; i >= 0; i--)
-			if ( ! (inw(ioaddr + EL3_STATUS) & CmdInProgress))
-				break;
+		wait_for_completion(dev, RxDiscard);
 	}
 
 	return 0;
@@ -2185,6 +2206,7 @@ void cleanup_module(void)
 
 #ifdef CARDBUS
 	unregister_driver(&vortex_ops);
+	vortex_reap();
 #endif
 
 	/* No need to check MOD_IN_USE, as sys_delete_module() checks. */

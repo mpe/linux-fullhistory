@@ -688,6 +688,7 @@ static void ddv_open_reply(struct cap_request *creq)
 	wake_up(&busy_wait);	
 }
 
+extern struct block_device_operations ddv_fops;
 
 static void ddv_load_opiu(void)
 {
@@ -731,7 +732,8 @@ static void ddv_load_opiu(void)
 	ddv_geometry.cylinders = ddv_sect_length[0] / 
 		(ddv_geometry.heads*ddv_geometry.sectors);
 
-	grok_partitions(&ddv_gendisk, 0, 1<<PARTN_BITS, ddv_sect_length[0]);
+	register_disk(&ddv_gendisk, MKDEV(MAJOR_NR,0), 1<<PARTN_BITS,
+			&ddv_fops, ddv_sect_length[0]);
 	
 	/* FIXME. The crap below is, well, crap. Pseudo-RAID and unsafe one */
 	for (i=0;i<PARDISK_BASE;i++) {

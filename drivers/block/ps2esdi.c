@@ -420,12 +420,13 @@ static void __init ps2esdi_geninit(void)
 	blksize_size[MAJOR_NR] = ps2esdi_blocksizes;
 
 	for (i = 0; i < ps2esdi_drives; i++) {
-		grok_partitions(&ps2esdi_gendisk,i,1<<6,ps2esdi_info[i].head *
-				    ps2esdi_info[i].sect * ps2esdi_info[i].cyl);
+		register_disk(&ps2esdi_gendisk,MKDEV(MAJOR_NR,i<<6),1<<6,
+				&ps2esdi_fops,
+				ps2esdi_info[i].head * ps2esdi_info[i].sect *
+				ps2esdi_info[i].cyl);
 		ps2esdi_valid[i] = 1;
 	}
 }
-
 
 static void __init ps2esdi_get_device_cfg(void)
 {

@@ -11,7 +11,7 @@
 
     Copyright (C) 1999 David A. Hinds -- dhinds@pcmcia.sourceforge.org
 
-    pcnet_cs.c 1.106 1999/11/09 21:53:13
+    pcnet_cs.c 1.110 1999/12/06 21:39:18
     
     The network driver code is based on Donald Becker's NE2000 code:
 
@@ -72,7 +72,7 @@ static int pc_debug = PCMCIA_DEBUG;
 MODULE_PARM(pc_debug, "i");
 #define DEBUG(n, args...) if (pc_debug>(n)) printk(KERN_DEBUG args)
 static char *version =
-"pcnet_cs.c 1.106 1999/11/09 21:53:13 (David Hinds)";
+"pcnet_cs.c 1.110 1999/12/06 21:39:18 (David Hinds)";
 #else
 #define DEBUG(n, args...)
 #endif
@@ -122,26 +122,21 @@ static void pcnet_config(dev_link_t *link);
 static void pcnet_release(u_long arg);
 static int pcnet_event(event_t event, int priority,
 		       event_callback_args_t *args);
-
 static int pcnet_open(struct net_device *dev);
 static int pcnet_close(struct net_device *dev);
 static void ei_irq_wrapper(int irq, void *dev_id, struct pt_regs *regs);
 static void ei_watchdog(u_long arg);
-
 static void pcnet_reset_8390(struct net_device *dev);
-
 static int set_config(struct net_device *dev, struct ifmap *map);
-
 static int setup_shmem_window(dev_link_t *link, int start_pg,
 			      int stop_pg, int cm_offset);
 static int setup_dma_config(dev_link_t *link, int start_pg,
 			    int stop_pg);
 
-static dev_info_t dev_info = "pcnet_cs";
-
 static dev_link_t *pcnet_attach(void);
 static void pcnet_detach(dev_link_t *);
 
+static dev_info_t dev_info = "pcnet_cs";
 static dev_link_t *dev_list;
 
 /*====================================================================*/
@@ -215,7 +210,8 @@ static hw_info_t hw_info[] = {
     { /* Socket EA */ 0x4000, 0x00, 0xc0, 0x1b,
       DELAY_OUTPUT | HAS_MISC_REG | USE_BIG_BUF },
     { /* SuperSocket RE450T */ 0x0110, 0x00, 0xe0, 0x98, 0 },
-    { /* Volktek NPL-402CT */ 0x0060, 0x00, 0x40, 0x05, 0 }
+    { /* Volktek NPL-402CT */ 0x0060, 0x00, 0x40, 0x05, 0 },
+    { /* NEC PC-9801N-J12 */ 0x0ff0, 0x00, 0x00, 0x4c, 0 }
 };
 
 #define NR_INFO		(sizeof(hw_info)/sizeof(hw_info_t))
@@ -226,12 +222,13 @@ static hw_info_t dl_fast_info =
 { /* D-Link EtherFast */ 0x00, 0x00, 0x00, 0x00, IS_DL10019A };
 
 typedef struct pcnet_dev_t {
-    struct net_device	dev;
+    struct net_device	dev; /* so &dev == &pcnet_dev_t */
+    dev_link_t		link;
     dev_node_t		node;
     u_long		flags;
     caddr_t		base;
     struct timer_list	watchdog;
-    int			stale, link;
+    int			stale, state;
     u_short		fast_poll;
 } pcnet_dev_t;
 
@@ -283,18 +280,22 @@ static int pcnet_init(struct net_device *dev)
 
 static dev_link_t *pcnet_attach(void)
 {
-    client_reg_t client_reg;
-    dev_link_t *link;
     pcnet_dev_t *info;
+    dev_link_t *link;
     struct net_device *dev;
+    client_reg_t client_reg;
     int i, ret;
 
     DEBUG(0, "pcnet_attach()\n");
     flush_stale_links();
 
     /* Create new ethernet device */
-    link = kmalloc(sizeof(struct dev_link_t), GFP_KERNEL);
-    memset(link, 0, sizeof(struct dev_link_t));
+    info = kmalloc(sizeof(*info), GFP_KERNEL);
+    if (!info) return NULL;
+    memset(info, 0, sizeof(*info));
+    link = &info->link; dev = &info->dev;
+    link->priv = info;
+    
     link->release.function = &pcnet_release;
     link->release.data = (u_long)link;
     link->irq.Attributes = IRQ_TYPE_EXCLUSIVE;
@@ -308,9 +309,6 @@ static dev_link_t *pcnet_attach(void)
     link->conf.Vcc = 50;
     link->conf.IntType = INT_MEMORY_AND_IO;
 
-    info = kmalloc(sizeof(struct pcnet_dev_t), GFP_KERNEL);
-    memset(info, 0, sizeof(struct pcnet_dev_t));
-    dev = &info->dev;
     ethdev_init(dev);
     dev->name = info->node.dev_name;
     dev->init = &pcnet_init;
@@ -318,7 +316,6 @@ static dev_link_t *pcnet_attach(void)
     dev->stop = &pcnet_close;
     dev->set_config = &set_config;
     dev->tbusy = 1;
-    link->priv = info;
 
     /* Register with Card Services */
     link->next = dev_list;
@@ -353,6 +350,7 @@ static dev_link_t *pcnet_attach(void)
 
 static void pcnet_detach(dev_link_t *link)
 {
+    pcnet_dev_t *info = link->priv;
     dev_link_t **linkp;
     long flags;
 
@@ -385,15 +383,9 @@ static void pcnet_detach(dev_link_t *link)
 
     /* Unlink device structure, free bits */
     *linkp = link->next;
-    if (link->priv) {
-	struct net_device *dev = link->priv;
-	if (link->dev != NULL)
-	    unregister_netdev(dev);
-	if (dev->priv)
-	    kfree_s(dev->priv, sizeof(struct ei_device));
-	kfree_s(dev, sizeof(struct pcnet_dev_t));
-    }
-    kfree_s(link, sizeof(struct dev_link_t));
+    if (link->dev)
+	unregister_netdev(&info->dev);
+    kfree(info);
 
 } /* pcnet_detach */
 
@@ -595,19 +587,15 @@ static int try_io_port(dev_link_t *link)
 
 static void pcnet_config(dev_link_t *link)
 {
-    client_handle_t handle;
+    client_handle_t handle = link->handle;
+    pcnet_dev_t *info = link->priv;
+    struct net_device *dev = &info->dev;
     tuple_t tuple;
     cisparse_t parse;
-    pcnet_dev_t *info;
-    struct net_device *dev;
     int i, last_ret, last_fn, start_pg, stop_pg, cm_offset;
     int manfid = 0, prodid = 0, has_shmem = 0;
     u_short buf[64];
     hw_info_t *hw_info;
-
-    handle = link->handle;
-    info = link->priv;
-    dev = &info->dev;
 
     DEBUG(0, "pcnet_config(0x%p)\n", link);
 
@@ -881,12 +869,10 @@ static void set_misc_reg(struct net_device *dev)
 static int pcnet_open(struct net_device *dev)
 {
     pcnet_dev_t *info = (pcnet_dev_t *)dev;
-    dev_link_t *link;
+    dev_link_t *link = &info->link;
     
     DEBUG(2, "pcnet_open('%s')\n", dev->name);
 
-    for (link = dev_list; link; link = link->next)
-	if (link->priv == dev) break;
     if (!DEV_OK(link))
 	return -ENODEV;
 
@@ -897,7 +883,7 @@ static int pcnet_open(struct net_device *dev)
     request_irq(dev->irq, ei_irq_wrapper, SA_SHIRQ, dev_info, dev);
 
     /* Start by assuming the link is bad */
-    info->link = 1;
+    info->state = 1;
     info->watchdog.function = &ei_watchdog;
     info->watchdog.data = (u_long)info;
     info->watchdog.expires = jiffies + HZ;
@@ -910,18 +896,15 @@ static int pcnet_open(struct net_device *dev)
 
 static int pcnet_close(struct net_device *dev)
 {
-    dev_link_t *link;
+    pcnet_dev_t *info = (pcnet_dev_t *)dev;
+    dev_link_t *link = &info->link;
 
     DEBUG(2, "pcnet_close('%s')\n", dev->name);
 
-    for (link = dev_list; link; link = link->next)
-	if (link->priv == dev) break;
-    if (link == NULL)
-	return -ENODEV;
     free_irq(dev->irq, dev);
     
     link->open--; dev->start = 0;
-    del_timer(&((pcnet_dev_t *)dev)->watchdog);
+    del_timer(&info->watchdog);
     if (link->state & DEV_STALE_CONFIG) {
 	link->release.expires = jiffies + HZ/20;
 	link->state |= DEV_RELEASE_PENDING;
@@ -1016,12 +999,12 @@ static void ei_watchdog(u_long arg)
 
     if (info->flags & IS_DL10019A) {
 	int state = inb(dev->base_addr+0x1c) & 0x01;
-	if (state != info->link) {
+	if (state != info->state) {
 	    printk(KERN_INFO "%s: %s link beat\n", dev->name,
 		   (state) ? "lost" : "found");
 	    if (!state)
 		NS8390_init(dev, 1);
-	    info->link = state;
+	    info->state = state;
 	}
     }
 

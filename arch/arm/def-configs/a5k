@@ -167,11 +167,6 @@ CONFIG_MOUSE=y
 # CONFIG_FTAPE is not set
 # CONFIG_DRM is not set
 # CONFIG_DRM_TDFX is not set
-
-#
-# PCMCIA character device support
-#
-# CONFIG_PCMCIA_SERIAL_CS is not set
 # CONFIG_AGP is not set
 
 #
@@ -327,11 +322,6 @@ CONFIG_ARM_ETHER3=y
 # Wan interfaces
 #
 # CONFIG_WAN is not set
-
-#
-# PCMCIA network device support
-#
-# CONFIG_NET_PCMCIA is not set
 
 #
 # SCSI support

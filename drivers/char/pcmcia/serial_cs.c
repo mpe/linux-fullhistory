@@ -2,7 +2,7 @@
 
     A driver for PCMCIA serial devices
 
-    serial_cs.c 1.114 1999/11/11 00:54:46
+    serial_cs.c 1.117 1999/12/11 03:59:18
 
     The contents of this file are subject to the Mozilla Public
     License Version 1.1 (the "License"); you may not use this file
@@ -58,7 +58,7 @@ static int pc_debug = PCMCIA_DEBUG;
 MODULE_PARM(pc_debug, "i");
 #define DEBUG(n, args...) if (pc_debug>(n)) printk(KERN_DEBUG args)
 static char *version =
-"serial_cs.c 1.114 1999/11/11 00:54:46 (David Hinds)";
+"serial_cs.c 1.117 1999/12/11 03:59:18 (David Hinds)";
 #else
 #define DEBUG(n, args...)
 #endif
@@ -100,6 +100,7 @@ static multi_id_t multi_id[] = {
 #define MULTI_COUNT (sizeof(multi_id)/sizeof(multi_id_t))
 
 typedef struct serial_info_t {
+    dev_link_t	link;
     int		ndev;
     int		multi;
     int		slave;
@@ -138,6 +139,7 @@ static void cs_error(client_handle_t handle, int func, int ret)
 
 static dev_link_t *serial_attach(void)
 {
+    serial_info_t *info;
     client_reg_t client_reg;
     dev_link_t *link;
     int i, ret;
@@ -145,8 +147,11 @@ static dev_link_t *serial_attach(void)
     DEBUG(0, "serial_attach()\n");
 
     /* Create new serial device */
-    link = kmalloc(sizeof(struct dev_link_t), GFP_KERNEL);
-    memset(link, 0, sizeof(struct dev_link_t));
+    info = kmalloc(sizeof(*info), GFP_KERNEL);
+    if (!info) return NULL;
+    memset(info, 0, sizeof(*info));
+    link = &info->link; link->priv = info;
+
     link->release.function = &serial_release;
     link->release.data = (u_long)link;
     link->io.Attributes1 = IO_DATA_PATH_WIDTH_8;
@@ -165,8 +170,6 @@ static dev_link_t *serial_attach(void)
 	link->conf.Status = CCSR_AUDIO_ENA;
     }
     link->conf.IntType = INT_MEMORY_AND_IO;
-    link->priv = kmalloc(sizeof(struct serial_info_t), GFP_KERNEL);
-    memset(link->priv, 0, sizeof(struct serial_info_t));
     
     /* Register with Card Services */
     link->next = dev_list;
@@ -201,6 +204,7 @@ static dev_link_t *serial_attach(void)
 
 static void serial_detach(dev_link_t *link)
 {
+    serial_info_t *info = link->priv;
     dev_link_t **linkp;
     long flags;
     int ret;
@@ -232,8 +236,7 @@ static void serial_detach(dev_link_t *link)
     
     /* Unlink device structure, free bits */
     *linkp = link->next;
-    kfree_s(link->priv, sizeof(serial_info_t));
-    kfree_s(link, sizeof(struct dev_link_t));
+    kfree(info);
     
 } /* serial_detach */
 
@@ -326,7 +329,8 @@ static int simple_config(dev_link_t *link)
 	if (cf->vpp1.present & (1<<CISTPL_POWER_VNOM))
 	    link->conf.Vpp1 = link->conf.Vpp2 =
 		cf->vpp1.param[CISTPL_POWER_VNOM]/10000;
-	if ((cf->io.nwin > 0) && ((cf->io.win[0].base & 0xf) == 8)) {
+	if ((cf->io.nwin > 0) && (cf->io.win[0].len == 8) &&
+	    (cf->io.win[0].base != 0)) {
 	    link->conf.ConfigIndex = cf->index;
 	    link->io.BasePort1 = cf->io.win[0].base;
 	    link->io.IOAddrLines = cf->io.flags & CISTPL_IO_LINES_MASK;
@@ -347,6 +351,7 @@ static int simple_config(dev_link_t *link)
 	    link->conf.ConfigIndex = cf->index;
 	    for (j = 0; j < 5; j++) {
 		link->io.BasePort1 = base[j];
+		link->io.IOAddrLines = base[j] ? 16 : 3;
 		i = CardServices(RequestIO, link->handle,
 				 &link->io);
 		if (i == CS_SUCCESS) goto found_port;
@@ -470,18 +475,14 @@ while ((last_ret=CardServices(last_fn=(fn), args))!=0) goto cs_failed
 
 void serial_config(dev_link_t *link)
 {
-    client_handle_t handle;
-    serial_info_t *info;
+    client_handle_t handle = link->handle;
+    serial_info_t *info = link->priv;
     tuple_t tuple;
     u_short buf[128];
     cisparse_t parse;
     cistpl_cftable_entry_t *cf = &parse.cftable_entry;
     int i, last_ret, last_fn;
 
-    sti();
-    handle = link->handle;
-    info = link->priv;
-    
     DEBUG(0, "serial_config(0x%p)\n", link);
     
     tuple.TupleData = (cisdata_t *)buf;
@@ -571,8 +572,6 @@ void serial_release(u_long arg)
     dev_link_t *link = (dev_link_t *)arg;
     serial_info_t *info = link->priv;
     int i;
-    
-    sti();
     
     DEBUG(0, "serial_release(0x%p)\n", link);
 

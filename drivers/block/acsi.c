@@ -1653,6 +1653,14 @@ EXPORT_SYMBOL(acsi_attach_SLMs);
 int SLM_devices[8];
 #endif
 
+static struct block_device_operations acsi_fops = {
+	open:			acsi_open,
+	release:		acsi_release,
+	ioctl:			acsi_ioctl,
+	check_media_change:	acsi_media_change,
+	revalidate:		acsi_revalidate,
+};
+
 static void acsi_geninit(void)
 {
 	int i, target, lun;
@@ -1739,8 +1747,9 @@ static void acsi_geninit(void)
 		acsi_blocksizes[i] = 1024;
 	blksize_size[MAJOR_NR] = acsi_blocksizes;
 	for( i = 0; i < NDevices; ++i )
-		grok_partitions(&acsi_gendisk, i,
+		register_disk(&acsi_gendisk, MKDEV(MAJOR_NR,i<<4),
 				(acsi_info[i].type==HARDDISK)?1<<4:1,
+				&acsi_fops,
 				acsi_info[i].size);
 	acsi_gendisk.nr_real = NDevices;
 }
@@ -1759,14 +1768,6 @@ void acsi_attach_SLMs( int (*attach_func)( int, int ) )
 	printk( KERN_INFO "Found %d SLM printer(s) total.\n", n );
 }
 #endif /* CONFIG_ATARI_SLM_MODULE */
-
-static struct block_device_operations acsi_fops = {
-	open:			acsi_open,
-	release:		acsi_release,
-	ioctl:			acsi_ioctl,
-	check_media_change:	acsi_media_change,
-	revalidate:		acsi_revalidate,
-};
 
 
 int acsi_init( void )

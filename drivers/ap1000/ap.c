@@ -274,6 +274,8 @@ int ap_init(void)
   blksize_size[MAJOR_NR] = ap_blocksizes;
 
   read_ahead[MAJOR_NR] = 32; /* 16k read ahead */
+  for (i=0;i<NUM_APDEVS;i++)
+	register_disk(NILL, MKDEV(MAJOR_NR,i), 1, &ap_fops, 0);
 
   return(0);
 }

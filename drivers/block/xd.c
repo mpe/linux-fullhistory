@@ -248,8 +248,9 @@ static void __init xd_geninit (void)
 
 	for (i = 0; i < xd_drives; i++) {
 		xd_valid[i] = 1;
-		grok_partitions(&xd_gendisk, i, 1<<6, xd_info[i].heads *
-				xd_info[i].cylinders * xd_info[i].sectors);
+		register_disk(&xd_gendisk, MKDEV(MAJOR_NR,i<<6), 1<<6, &xd_fops,
+				xd_info[i].heads * xd_info[i].cylinders *
+				xd_info[i].sectors);
 	}
 
 	xd_gendisk.nr_real = xd_drives;

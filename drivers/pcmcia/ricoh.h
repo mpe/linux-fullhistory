@@ -112,7 +112,7 @@
 #define  RL5C4XX_HOLD_MASK		0x1c00
 #define  RL5C4XX_HOLD_SHIFT		10
 
-#ifdef CONFIG_CARDBUS
+#ifdef __YENTA_H
 
 #define rl_misc(socket)		((socket)->private[0])
 #define rl_ctl(socket)		((socket)->private[1])

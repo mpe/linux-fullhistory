@@ -916,7 +916,7 @@ static void md_geninit (void)
     md_blocksizes[i] = 1024;
     md_maxreadahead[i] = MD_DEFAULT_DISK_READAHEAD;
     md_dev[i].pers=NULL;
-    grok_partitions(&md_gendisk, i, 1, 0);
+    register_disk(&md_gendisk, MKDEV(MAJOR_NR,i), 1, &md_fops, 0);
   }
 
 #ifdef CONFIG_PROC_FS

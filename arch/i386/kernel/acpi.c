@@ -172,6 +172,14 @@ static struct ctl_table acpi_table[] =
 	 &acpi_p_lvl3_lat, sizeof(acpi_p_lvl3_lat),
 	 0644, NULL, &acpi_do_ulong},
 
+	{ACPI_P_LVL2_LAT, "enter_lvl2_lat",
+	 &acpi_enter_lvl2_lat, sizeof(acpi_enter_lvl2_lat),
+	 0644, NULL, &acpi_do_ulong},
+
+	{ACPI_ENTER_LVL3_LAT, "enter_lvl3_lat",
+	 &acpi_enter_lvl3_lat, sizeof(acpi_enter_lvl3_lat),
+	 0644, NULL, &acpi_do_ulong},
+
 	{ACPI_S0_SLP_TYP, "s0_slp_typ",
 	 &acpi_slp_typ[ACPI_S0], sizeof(acpi_slp_typ[ACPI_S0]),
 	 0600, NULL, &acpi_do_ulong},
@@ -195,6 +203,17 @@ static struct ctl_table acpi_dir_table[] =
 	{0}
 };
 
+static u32 FASTCALL(acpi_read_pm1_control(struct acpi_facp *));
+static u32 FASTCALL(acpi_read_pm1_status(struct acpi_facp *));
+static u32 FASTCALL(acpi_read_pm1_enable(struct acpi_facp *));
+static u32 FASTCALL(acpi_read_gpe_status(struct acpi_facp *));
+static u32 FASTCALL(acpi_read_gpe_enable(struct acpi_facp *));
+
+static void FASTCALL(acpi_write_pm1_control(struct acpi_facp *, u32));
+static void FASTCALL(acpi_write_pm1_status(struct acpi_facp *, u32));
+static void FASTCALL(acpi_write_pm1_enable(struct acpi_facp *, u32));
+static void FASTCALL(acpi_write_gpe_status(struct acpi_facp *, u32));
+static void FASTCALL(acpi_write_gpe_enable(struct acpi_facp *, u32));
 
 /*
  * Get the value of the PM1 control register (SCI_EN, ...)
@@ -501,14 +520,21 @@ static void acpi_destroy_tables(void)
 }
 
 /*
- * Init PIIX4 device and create a fake FACP
+ * Locate PIIX4 device and create a fake FACP
  */
-static int __init acpi_init_piix4(struct pci_dev *dev)
+static int __init acpi_find_piix4(void)
 {
+	struct pci_dev *dev;
 	u32 base;
 	u16 cmd;
 	u8 pmregmisc;
 
+	dev = pci_find_device(PCI_VENDOR_ID_INTEL,
+			      PCI_DEVICE_ID_INTEL_82371AB_3,
+			      NULL);
+	if (!dev)
+		return -ENODEV;
+	
 	pci_read_config_word(dev, PCI_COMMAND, &cmd);
 	if (!(cmd & PCI_COMMAND_IO))
 		return -ENODEV;
@@ -556,72 +582,6 @@ static int __init acpi_init_piix4(struct pci_dev *dev)
 	acpi_dsdt_addr = 0;
 
 	acpi_p_blk = base + ACPI_PIIX4_P_BLK;
-
-	return 0;
-}
-
-/*
- * Init VIA ACPI device and create a fake FACP
- */
-static int __init acpi_init_via(struct pci_dev *dev)
-{
-	u32 base;
-	u8 tmp, irq;
-	
-	pci_read_config_byte(dev, 0x41, &tmp);
-	if (!(tmp & 0x80))
-		return -ENODEV;
-	
-	pci_read_config_byte(dev, 8, &tmp);
-	tmp = (tmp & 0x10 ? 0x48 : 0x20);
-	
-	pci_read_config_dword(dev, tmp, &base);
-	if (!(base & PCI_BASE_ADDRESS_SPACE_IO))
-		return -ENODEV;
-	
-	base &= PCI_BASE_ADDRESS_IO_MASK;
-	if (!base)
-		return -ENODEV;
-
-	pci_read_config_byte(dev, 0x42, &irq);
-
-	printk(KERN_INFO "ACPI: found %s at 0x%04x\n", dev->name, base);
-
-	acpi_facp = kmalloc(sizeof(struct acpi_facp), GFP_KERNEL);
-	if (!acpi_facp)
-		return -ENOMEM;
-
-	acpi_fake_facp = 1;
-	memset(acpi_facp, 0, sizeof(struct acpi_facp));
-
-	acpi_facp->int_model = ACPI_VIA_INT_MODEL;
-	acpi_facp->sci_int = irq;
-	acpi_facp->smi_cmd = base + ACPI_VIA_SMI_CMD;
-	acpi_facp->acpi_enable = ACPI_VIA_ACPI_ENABLE;
-	acpi_facp->acpi_disable = ACPI_VIA_ACPI_DISABLE;
-	acpi_facp->pm1a_evt = base + ACPI_PIIX4_PM1_EVT;
-	acpi_facp->pm1a_cnt = base + ACPI_PIIX4_PM1_CNT;
-	acpi_facp->pm_tmr = base + ACPI_VIA_PM_TMR;
-	acpi_facp->gpe0 = base + ACPI_VIA_GPE0;
-
-	acpi_facp->pm1_evt_len = ACPI_VIA_PM1_EVT_LEN;
-	acpi_facp->pm1_cnt_len = ACPI_VIA_PM1_CNT_LEN;
-	acpi_facp->pm_tm_len = ACPI_VIA_PM_TM_LEN;
-	acpi_facp->gpe0_len = ACPI_VIA_GPE0_LEN;
-	acpi_facp->p_lvl2_lat = (__u16) ACPI_INFINITE_LAT;
-	acpi_facp->p_lvl3_lat = (__u16) ACPI_INFINITE_LAT;
-
-	acpi_facp->duty_offset = ACPI_VIA_DUTY_OFFSET;
-	acpi_facp->duty_width = ACPI_VIA_DUTY_WIDTH;
-
-	acpi_facp->day_alarm = ACPI_VIA_DAY_ALARM;
-	acpi_facp->mon_alarm = ACPI_VIA_MON_ALARM;
-	acpi_facp->century = ACPI_VIA_CENTURY;
-
-	acpi_facp_addr = virt_to_phys(acpi_facp);
-	acpi_dsdt_addr = 0;
-
-	acpi_p_blk = base + ACPI_VIA_P_BLK;
 
 	return 0;
 }
@@ -702,34 +662,39 @@ static int acpi_disable(struct acpi_facp *facp)
 	return 0;
 }
 
-static inline int bm_activity(void)
+static inline int bm_activity(struct acpi_facp *facp)
 {
-	return 0 && acpi_read_pm1_status(acpi_facp) & ACPI_BM;
+	return acpi_read_pm1_status(facp) & ACPI_BM;
 }
 
-static inline void clear_bm_activity(void)
+static inline void clear_bm_activity(struct acpi_facp *facp)
 {
-	acpi_write_pm1_status(acpi_facp, ACPI_BM);
+	acpi_write_pm1_status(facp, ACPI_BM);
 }
 
-static void sleep_on_busmaster(void)
+static void sleep_on_busmaster(struct acpi_facp *facp)
 {
-	u32 pm1_cntr = acpi_read_pm1_control(acpi_facp);
+	u32 pm1_cntr = acpi_read_pm1_control(facp);
 	if (pm1_cntr & ACPI_BM_RLD) {
 		pm1_cntr &= ~ACPI_BM_RLD;
-		acpi_write_pm1_control(acpi_facp, pm1_cntr);
+		acpi_write_pm1_control(facp, pm1_cntr);
 	}
 }
 
-static void wake_on_busmaster(void)
+static void wake_on_busmaster(struct acpi_facp *facp)
 {
-	u32 pm1_cntr = acpi_read_pm1_control(acpi_facp);
+	u32 pm1_cntr = acpi_read_pm1_control(facp);
 	if (!(pm1_cntr & ACPI_BM_RLD)) {
 		pm1_cntr |= ACPI_BM_RLD;
-		acpi_write_pm1_control(acpi_facp, pm1_cntr);
+		acpi_write_pm1_control(facp, pm1_cntr);
 	}
-	clear_bm_activity();
+	clear_bm_activity(facp);
 }
+
+/* The ACPI timer is just the low 24 bits */
+#define TIME_BEGIN(tmr)			inl(tmr)
+#define TIME_END(tmr, begin) 		((inl(tmr) - (begin)) & 0x00ffffff)
+
 
 /*
  * Idle loop (uniprocessor only)
@@ -737,8 +702,9 @@ static void wake_on_busmaster(void)
 static void acpi_idle_handler(void)
 {
 	static int sleep_level = 1;
+	struct acpi_facp *facp = acpi_facp;
 
-	if (!acpi_facp->pm_tmr || !acpi_p_blk)
+	if (!facp || !facp->pm_tmr || !acpi_p_blk)
 		goto not_initialized;
 
 	/*
@@ -746,86 +712,109 @@ static void acpi_idle_handler(void)
 	 */
 	if (sleep_level == 1)
 		goto sleep1;
-	if (sleep_level == 2 || bm_activity())
+	if (sleep_level == 2)
 		goto sleep2;
 sleep3:
 	sleep_level = 3;
 	if (!acpi_p_lvl3_tested) {
-		printk(KERN_INFO "ACPI C3 works\n");
+		printk("ACPI C3 works\n");
 		acpi_p_lvl3_tested = 1;
 	}
-	wake_on_busmaster();
-	if (acpi_facp->pm2_cnt)
+	wake_on_busmaster(facp);
+	if (facp->pm2_cnt)
 		goto sleep3_with_arbiter;
 
 	for (;;) {
 		unsigned long time;
+		unsigned int pm_tmr = facp->pm_tmr;
+
 		__cli();
 		if (current->need_resched)
 			goto out;
-		time = inl(acpi_facp->pm_tmr);
+		if (bm_activity(facp))
+			goto sleep2;
+
+		time = TIME_BEGIN(pm_tmr);
 		inb(acpi_p_blk + ACPI_P_LVL3);
-		time = inl(acpi_facp->pm_tmr) - time;
+		inl(pm_tmr);					/* Dummy read, force synchronization with the PMU */
+		time = TIME_END(pm_tmr, time);
+
 		__sti();
-		if (time > acpi_p_lvl3_lat || bm_activity())
+		if (time < acpi_p_lvl3_lat)
 			goto sleep2;
 	}
 
 sleep3_with_arbiter:
 	for (;;) {
 		unsigned long time;
-		unsigned int pm2_cntr = acpi_facp->pm2_cnt;
+		u8 arbiter;
+		unsigned int pm2_cntr = facp->pm2_cnt;
+		unsigned int pm_tmr = facp->pm_tmr;
+
 		__cli();
 		if (current->need_resched)
 			goto out;
-		time = inl(acpi_facp->pm_tmr);
-		outb(inb(pm2_cntr) | ACPI_ARB_DIS, pm2_cntr);
+		if (bm_activity(facp))
+			goto sleep2;
+
+		time = TIME_BEGIN(pm_tmr);
+		arbiter = inb(pm2_cntr) & ~ACPI_ARB_DIS;
+		outb(arbiter | ACPI_ARB_DIS, pm2_cntr);		/* Disable arbiter, park on CPU */
 		inb(acpi_p_blk + ACPI_P_LVL3);
-		outb(inb(pm2_cntr) & ~ACPI_ARB_DIS, pm2_cntr);
-		time = inl(acpi_facp->pm_tmr) - time;
+		inl(pm_tmr);					/* Dummy read, force synchronization with the PMU */
+		time = TIME_END(pm_tmr, time);
+		outb(arbiter, pm2_cntr);			/* Enable arbiter again.. */
+
 		__sti();
-		if (time > acpi_p_lvl3_lat || bm_activity())
+		if (time < acpi_p_lvl3_lat)
 			goto sleep2;
 	}
 
 sleep2:
 	sleep_level = 2;
 	if (!acpi_p_lvl2_tested) {
-		printk(KERN_INFO "ACPI C2 works\n");
+		printk("ACPI C2 works\n");
 		acpi_p_lvl2_tested = 1;
 	}
-	wake_on_busmaster();	/* Required to track BM activity.. */
+	wake_on_busmaster(facp);	/* Required to track BM activity.. */
 	for (;;) {
 		unsigned long time;
+		unsigned int pm_tmr = facp->pm_tmr;
+
 		__cli();
 		if (current->need_resched)
 			goto out;
-		time = inl(acpi_facp->pm_tmr);
+
+		time = TIME_BEGIN(pm_tmr);
 		inb(acpi_p_blk + ACPI_P_LVL2);
-		time = inl(acpi_facp->pm_tmr) - time;
+		inl(pm_tmr);					/* Dummy read, force synchronization with the PMU */
+		time = TIME_END(pm_tmr, time);
+
 		__sti();
-		if (time > acpi_p_lvl2_lat)
+		if (time < acpi_p_lvl2_lat)
 			goto sleep1;
-		if (bm_activity()) {
-			clear_bm_activity();
+		if (bm_activity(facp)) {
+			clear_bm_activity(facp);
 			continue;
 		}
-		if (time < acpi_enter_lvl3_lat)
+		if (time > acpi_enter_lvl3_lat)
 			goto sleep3;
 	}
 
 sleep1:
 	sleep_level = 1;
-	sleep_on_busmaster();
+	sleep_on_busmaster(facp);
 	for (;;) {
 		unsigned long time;
+		unsigned int pm_tmr = facp->pm_tmr;
+
 		__cli();
 		if (current->need_resched)
 			goto out;
-		time = inl(acpi_facp->pm_tmr);
+		time = TIME_BEGIN(pm_tmr);
 		__asm__ __volatile__("sti ; hlt": : :"memory");
-		time = inl(acpi_facp->pm_tmr) - time;
-		if (time < acpi_enter_lvl2_lat)
+		time = TIME_END(pm_tmr, time);
+		if (time > acpi_enter_lvl2_lat)
 			goto sleep2;
 	}
 
@@ -1219,34 +1208,6 @@ static int acpi_do_sleep(ctl_table *ctl,
 	return 0;
 }
 
-static struct acpi_device {
-	unsigned short vendor, device;
-	int (*init)(struct pci_dev *);
-} acpi_devices[] __initdata = {
-	{PCI_VENDOR_ID_INTEL, PCI_DEVICE_ID_INTEL_82371AB_3, acpi_init_piix4 },
-	{PCI_VENDOR_ID_VIA, PCI_DEVICE_ID_VIA_82C586_3, acpi_init_via },
-};
-
-#define NR_ACPI_DEVICES	(sizeof(acpi_devices)/sizeof(struct acpi_device))
-
-static int __init acpi_find_devices(void)
-{
-	struct pci_dev *dev;
-
-	pci_for_each_dev(dev) {
-		int i;
-
-		for (i = 0; i < NR_ACPI_DEVICES; i++) {
-			struct acpi_device *p = acpi_devices + i;
-
-			if (dev->vendor == p->vendor && dev->device == p->device)
-				return p->init(dev);
-		}
-	}
-	return -ENOENT;
-}
-
-
 /*
  * Initialize and enable ACPI
  */
@@ -1257,17 +1218,17 @@ static int __init acpi_init(void)
 	if (acpi_disabled)
 		return -ENODEV;
 
-	if (acpi_find_tables() && acpi_find_devices()) {
-		// no ACPI tables and not a recognized ACPI chipset
+	if (acpi_find_tables() && acpi_find_piix4()) {
+		// no ACPI tables and not PIIX4
 		return -ENODEV;
 	}
 
-	/*
-	 * Internally we always keep latencies in timer
-	 * ticks, which is simpler and more consistent (what is
-	 * an uS to us?). Besides, that gives people more
-	 * control in the /proc interfaces.
-	 */
+    	/*
+    	 * Internally we always keep latencies in timer
+    	 * ticks, which is simpler and more consistent (what is
+    	 * an uS to us?). Besides, that gives people more
+    	 * control in the /proc interfaces.
+    	 */
 	if (acpi_facp->p_lvl2_lat
 	    && acpi_facp->p_lvl2_lat <= ACPI_MAX_P_LVL2_LAT) {
 		acpi_p_lvl2_lat = ACPI_uS_TO_TMR_TICKS(acpi_facp->p_lvl2_lat);

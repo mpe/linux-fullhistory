@@ -759,6 +759,8 @@ int __init loop_init(void)
 	memset(loop_blksizes, 0, max_loop * sizeof(int));
 	blk_size[MAJOR_NR] = loop_sizes;
 	blksize_size[MAJOR_NR] = loop_blksizes;
+	for (i=0; i < max_loop; i++)
+		register_disk(NULL, MKDEV(MAJOR_NR,i), 1, &lo_fops, 0);
 
 	return 0;
 }

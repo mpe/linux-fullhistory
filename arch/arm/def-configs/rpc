@@ -50,7 +50,6 @@ CONFIG_BINFMT_ELF=y
 CONFIG_PARPORT=y
 CONFIG_PARPORT_PC=y
 # CONFIG_PARPORT_PC_FIFO is not set
-# CONFIG_PARPORT_PC_PCMCIA is not set
 # CONFIG_PARPORT_ARC is not set
 # CONFIG_PARPORT_AMIGA is not set
 # CONFIG_PARPORT_MFC3 is not set
@@ -177,11 +176,6 @@ CONFIG_MOUSE=y
 # CONFIG_FTAPE is not set
 # CONFIG_DRM is not set
 # CONFIG_DRM_TDFX is not set
-
-#
-# PCMCIA character device support
-#
-# CONFIG_PCMCIA_SERIAL_CS is not set
 # CONFIG_AGP is not set
 CONFIG_RPCMOUSE=y
 
@@ -353,11 +347,6 @@ CONFIG_PPP=m
 # Wan interfaces
 #
 # CONFIG_WAN is not set
-
-#
-# PCMCIA network device support
-#
-# CONFIG_NET_PCMCIA is not set
 
 #
 # SCSI support

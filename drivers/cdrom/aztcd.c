@@ -1796,6 +1796,7 @@ int __init aztcd_init(void)
 	blksize_size[MAJOR_NR] = aztcd_blocksizes;
 #endif
 	read_ahead[MAJOR_NR] = 4;
+	register_disk(NULL, MKDEV(MAJOR_NR,0), 1, &azt_fops, 0);
 
         if ((azt_port==0x1f0)||(azt_port==0x170))  
 	   request_region(azt_port, 8, "aztcd");  /*IDE-interface*/

@@ -125,10 +125,10 @@ static void flush_all_zero_pkmaps(void)
 		page = pte_page(pte);
 		page->virtual = 0;
 	}
-	flush_tlb_all();
+	flush_tlb_all_kernel();
 }
 
-static unsigned long map_new_virtual(struct page *page)
+static inline unsigned long map_new_virtual(struct page *page)
 {
 	unsigned long vaddr;
 	int count;
@@ -170,12 +170,6 @@ start:
 	}
 	vaddr = PKMAP_ADDR(last_pkmap_nr);
 	pkmap_page_table[last_pkmap_nr] = mk_pte(page, kmap_prot);
-	/*
-	 * Subtle! For some reason if we dont do this TLB flush then
-	 * we get data corruption and weird behavior in dbench runs.
-	 * But invlpg this should not be necessery ... Any ideas?
-	 */
-	__flush_tlb_one(vaddr);
 
 	pkmap_count[last_pkmap_nr] = 1;
 	page->virtual = vaddr;

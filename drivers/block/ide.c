@@ -547,6 +547,7 @@ unsigned long current_capacity (ide_drive_t *drive)
 	return 0;
 }
 
+extern struct block_device_operations ide_fops[];
 /*
  * ide_geninit() is called exactly *once* for each interface.
  */
@@ -555,16 +556,19 @@ void ide_geninit (ide_hwif_t *hwif)
 	unsigned int unit;
 	struct gendisk *gd = hwif->gd;
 
-	for (unit = 0; unit < gd->nr_real; ++unit) {
+	for (unit = 0; unit < MAX_DRIVES; ++unit) {
 		ide_drive_t *drive = &hwif->drives[unit];
 
-		grok_partitions(gd,unit,
+		if (!drive->present)
+			continue;
+		if (drive->media!=ide_disk && drive->media!=ide_floppy)
+			continue;
+		register_disk(gd,MKDEV(hwif->major,unit<<PARTN_BITS),
 #ifdef CONFIG_BLK_DEV_ISAPNP
-			(drive->forced_geom && drive->noprobe) ||
+			(drive->forced_geom && drive->noprobe) ? 1 :
 #endif /* CONFIG_BLK_DEV_ISAPNP */
-			(drive->media != ide_disk &&
-			 drive->media != ide_floppy) ? 1 : 1<<PARTN_BITS,
-				current_capacity(drive));
+			1<<PARTN_BITS, ide_fops,
+			current_capacity(drive));
 	}
 }
 

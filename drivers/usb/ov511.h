@@ -6,9 +6,9 @@
 #define OV511_DEBUG	/* Turn on debug messages */
 
 #ifdef OV511_DEBUG
-#  define PDEBUG(fmt, args...) printk("ov511: " fmt, ## args)
+#  define PDEBUG(fmt, args...) printk("ov511: " fmt "\n" , ## args)
 #else
-#  define PDEBUG(fmt, args...) /* Nothing */
+#  define PDEBUG(fmt, args...) do {} while(0)
 #endif
 
 /* Camera interface register numbers */
@@ -102,6 +102,50 @@
 #define OV511_ALTERNATE_SIZE_513	5
 #define OV511_ALTERNATE_SIZE_257	6
 #define OV511_ALTERNATE_SIZE_0		7
+
+/* ov7610 registers */
+#define OV7610_REG_GAIN          0x00
+#define OV7610_REG_BLUE          0x01
+#define OV7610_REG_RED           0x02
+#define OV7610_REG_SAT           0x03
+#define OV7610_REG_CNT           0x05
+#define OV7610_REG_BRT           0x06
+#define OV7610_REG_BLUE_BIAS     0x0C
+#define OV7610_REG_RED_BIAS      0x0D
+#define OV7610_REG_GAMMA_COEFF   0x0E
+#define OV7610_REG_WB_RANGE      0x0F
+#define OV7610_REG_EXP           0x10
+#define OV7610_REG_CLOCK         0x11
+#define OV7610_REG_COM_A         0x12
+#define OV7610_REG_COM_B         0x13
+#define OV7610_REG_COM_C         0x14
+#define OV7610_REG_COM_D         0x15
+#define OV7610_REG_FIELD_DIVIDE  0x16
+#define OV7610_REG_HWIN_START    0x17
+#define OV7610_REG_HWIN_END      0x18
+#define OV7610_REG_VWIN_START    0x19
+#define OV7610_REG_VWIN_END      0x1A
+#define OV7610_REG_PIXEL_SHIFT   0x1B
+#define OV7610_REG_ID_HIGH       0x1C
+#define OV7610_REG_ID_LOW        0x1D
+#define OV7610_REG_COM_E         0x20
+#define OV7610_REG_YOFFSET       0x21
+#define OV7610_REG_UOFFSET       0x22
+#define OV7610_REG_ECW           0x24
+#define OV7610_REG_ECB           0x25
+#define OV7610_REG_COM_F         0x26
+#define OV7610_REG_COM_G         0x27
+#define OV7610_REG_COM_H         0x28
+#define OV7610_REG_COM_I         0x29
+#define OV7610_REG_FRAMERATE_H   0x2A
+#define OV7610_REG_FRAMERATE_L   0x2B
+#define OV7610_REG_ALC           0x2C
+#define OV7610_REG_COM_J         0x2D
+#define OV7610_REG_VOFFSET       0x2E
+#define OV7610_REG_YGAMMA        0x33
+#define OV7610_REG_BIAS_ADJUST   0x34
+#define OV7610_REG_COM_L         0x35
+#define OV7610_REG_COM_K         0x38
 
 
 #define STREAM_BUF_SIZE	(PAGE_SIZE * 4)

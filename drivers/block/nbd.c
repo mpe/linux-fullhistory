@@ -489,6 +489,8 @@ int nbd_init(void)
 		nbd_blksize_bits[i] = 10;
 		nbd_bytesizes[i] = 0x7ffffc00; /* 2GB */
 		nbd_sizes[i] = nbd_bytesizes[i] >> nbd_blksize_bits[i];
+		register_disk(NULL, MKDEV(MAJOR_NR,i), 1, &nbd_fops,
+				nbd_bytesizes[i]>>9);
 	}
 	return 0;
 }

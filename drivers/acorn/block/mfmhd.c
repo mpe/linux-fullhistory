@@ -1323,6 +1323,13 @@ static struct gendisk mfm_gendisk = {
 	NULL			/* next */
 };
 
+static struct block_device_operations mfm_fops =
+{
+	open:		mfm_open,
+	release:	mfm_release,
+	ioctl:		mfm_ioctl,
+};
+
 static void mfm_geninit (void)
 {
 	int i;
@@ -1349,18 +1356,12 @@ static void mfm_geninit (void)
 
 	for (i = 0; i < mfm_drives; i++) {
 		mfm_geometry (i);
-		grok_partitions(&mfm_gendisk, i, 1<<6, mfm_info[i].cylinders *
-				mfm_info[i].heads * mfm_info[i].sectors / 2);
+		register_disk(&mfm_gendisk, MKDEV(MAJOR_NR,i<<6), 1<<6,
+				&mfm_fops,
+				mfm_info[i].cylinders * mfm_info[i].heads *
+				mfm_info[i].sectors / 2);
 	}
 }
-
-static struct block_device_operations mfm_fops =
-{
-	open:		mfm_open,
-	release:	mfm_release,
-	ioctl:		mfm_ioctl,
-};
-
 
 static struct expansion_card *ecs;
 
@@ -1510,7 +1511,7 @@ static int mfm_reread_partitions(kdev_t dev)
 #ifdef MODULE
 int init_module(void)
 {
-	return mfm_geninit();
+	return mfm_init();
 }
 
 void cleanup_module(void)

@@ -390,9 +390,25 @@ static inline void do_flush_tlb_all_local(void)
 	}
 }
 
+static inline void do_flush_tlb_all_kernel_local(void)
+{
+	__flush_tlb_global();
+	if (!current->mm && current->active_mm) {
+		unsigned long cpu = smp_processor_id();
+
+		clear_bit(cpu, &current->active_mm->cpu_vm_mask);
+		cpu_tlbbad[cpu] = 1;
+	}
+}
+
 static void flush_tlb_all_ipi(void* info)
 {
 	do_flush_tlb_all_local();
+}
+
+static void flush_tlb_all_kernel_ipi(void* info)
+{
+	do_flush_tlb_all_kernel_local();
 }
 
 void flush_tlb_all(void)
@@ -400,6 +416,12 @@ void flush_tlb_all(void)
 	smp_call_function (flush_tlb_all_ipi,0,1,1);
 
 	do_flush_tlb_all_local();
+}
+
+void flush_tlb_all_kernel(void)
+{
+	smp_call_function (flush_tlb_all_kernel_ipi,0,1,1);
+	do_flush_tlb_all_kernel_local();
 }
 
 /*

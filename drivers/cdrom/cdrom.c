@@ -353,6 +353,8 @@ int register_cdrom(struct cdrom_device_info *cdi)
 	cdinfo(CD_REG_UNREG, "drive \"/dev/%s\" registered\n", cdi->name);
 	cdi->next = topCdromPtr; 	
 	topCdromPtr = cdi;
+	/*FIXME:as soon as we'll switch to real thing, pass device number here*/
+	register_disk(NULL, cdi->dev, 1, &cdrom_fops, 0);
 	return 0;
 }
 #undef ENSURE
@@ -380,6 +382,7 @@ int unregister_cdrom(struct cdrom_device_info *unreg)
 		prev->next = cdi->next;
 	else
 		topCdromPtr = cdi->next;
+/*	unregister_disk();	*/
 	cdi->ops->n_minors--;
 	cdinfo(CD_REG_UNREG, "drive \"/dev/%s\" unregistered\n", cdi->name);
 	return 0;

@@ -3,7 +3,7 @@
 /*
  *      esssolo1.c  --  ESS Technology Solo1 (ES1946) audio driver.
  *
- *      Copyright (C) 1998-1999  Thomas Sailer (sailer@ife.ee.ethz.ch)
+ *      Copyright (C) 1998-2000  Thomas Sailer (sailer@ife.ee.ethz.ch)
  *
  *      This program is free software; you can redistribute it and/or modify
  *      it under the terms of the GNU General Public License as published by
@@ -28,41 +28,44 @@
  *  /dev/midi   simple MIDI UART interface, no ioctl
  *
  *  Revision history
- *    10.11.98   0.1   Initial release (without any hardware)
- *    22.03.99   0.2   cinfo.blocks should be reset after GETxPTR ioctl.
- *                     reported by Johan Maes <joma@telindus.be>
- *                     return EAGAIN instead of EBUSY when O_NONBLOCK
- *                     read/write cannot be executed
- *    07.04.99   0.3   implemented the following ioctl's: SOUND_PCM_READ_RATE, 
- *                     SOUND_PCM_READ_CHANNELS, SOUND_PCM_READ_BITS; 
- *                     Alpha fixes reported by Peter Jones <pjones@redhat.com>
- *    15.06.99   0.4   Fix bad allocation bug.
- *                     Thanks to Deti Fliegl <fliegl@in.tum.de>
- *    28.06.99   0.5   Add pci_set_master
- *    12.08.99   0.6   Fix MIDI UART crashing the driver
- *                     Changed mixer semantics from OSS documented
- *                     behaviour to OSS "code behaviour".
- *                     Recording might actually work now.
- *                     The real DDMA controller address register is at PCI config
- *                     0x60, while the register at 0x18 is used as a placeholder
- *                     register for BIOS address allocation. This register
- *                     is supposed to be copied into 0x60, according
- *                     to the Solo1 datasheet. When I do that, I can access
- *                     the DDMA registers except the mask bit, which
- *                     is stuck at 1. When I copy the contents of 0x18 +0x10
- *                     to the DDMA base register, everything seems to work.
- *                     The fun part is that the Windows Solo1 driver doesn't
- *                     seem to do these tricks.
- *                     Bugs remaining: plops and clicks when starting/stopping playback
- *    31.08.99   0.7   add spin_lock_init
- *                     replaced current->state = x with set_current_state(x)
- *    03.09.99   0.8   change read semantics for MIDI to match
- *                     OSS more closely; remove possible wakeup race
- *    07.10.99   0.9   Fix initialization; complain if sequencer writes time out
- *                     Revised resource grabbing for the FM synthesizer
- *    28.10.99   0.10  More waitqueue races fixed
- *    09.12.99   0.11  Work around stupid Alpha port issue (virt_to_bus(kmalloc(GFP_DMA)) > 16M)
- *                     Disabling recording on Alpha
+ *    10.11.1998   0.1   Initial release (without any hardware)
+ *    22.03.1999   0.2   cinfo.blocks should be reset after GETxPTR ioctl.
+ *                       reported by Johan Maes <joma@telindus.be>
+ *                       return EAGAIN instead of EBUSY when O_NONBLOCK
+ *                       read/write cannot be executed
+ *    07.04.1999   0.3   implemented the following ioctl's: SOUND_PCM_READ_RATE, 
+ *                       SOUND_PCM_READ_CHANNELS, SOUND_PCM_READ_BITS; 
+ *                       Alpha fixes reported by Peter Jones <pjones@redhat.com>
+ *    15.06.1999   0.4   Fix bad allocation bug.
+ *                       Thanks to Deti Fliegl <fliegl@in.tum.de>
+ *    28.06.1999   0.5   Add pci_set_master
+ *    12.08.1999   0.6   Fix MIDI UART crashing the driver
+ *                       Changed mixer semantics from OSS documented
+ *                       behaviour to OSS "code behaviour".
+ *                       Recording might actually work now.
+ *                       The real DDMA controller address register is at PCI config
+ *                       0x60, while the register at 0x18 is used as a placeholder
+ *                       register for BIOS address allocation. This register
+ *                       is supposed to be copied into 0x60, according
+ *                       to the Solo1 datasheet. When I do that, I can access
+ *                       the DDMA registers except the mask bit, which
+ *                       is stuck at 1. When I copy the contents of 0x18 +0x10
+ *                       to the DDMA base register, everything seems to work.
+ *                       The fun part is that the Windows Solo1 driver doesn't
+ *                       seem to do these tricks.
+ *                       Bugs remaining: plops and clicks when starting/stopping playback
+ *    31.08.1999   0.7   add spin_lock_init
+ *                       replaced current->state = x with set_current_state(x)
+ *    03.09.1999   0.8   change read semantics for MIDI to match
+ *                       OSS more closely; remove possible wakeup race
+ *    07.10.1999   0.9   Fix initialization; complain if sequencer writes time out
+ *                       Revised resource grabbing for the FM synthesizer
+ *    28.10.1999   0.10  More waitqueue races fixed
+ *    09.12.1999   0.11  Work around stupid Alpha port issue (virt_to_bus(kmalloc(GFP_DMA)) > 16M)
+ *                       Disabling recording on Alpha
+ *    12.01.2000   0.12  Prevent some ioctl's from returning bad count values on underrun/overrun;
+ *                       Tim Janik's BSE (Bedevilled Sound Engine) found this
+ *                       Integrated (aka redid 8-)) APM support patch by Zach Brown
  *
  */
 
@@ -79,6 +82,7 @@
 #include <linux/soundcard.h>
 #include <linux/pci.h>
 #include <linux/bitops.h>
+#include <linux/apm_bios.h>
 #include <asm/io.h>
 #include <asm/dma.h>
 #include <linux/init.h>
@@ -1224,7 +1228,7 @@ static int solo1_ioctl(struct inode *inode, struct file *file, unsigned int cmd,
 	unsigned long flags;
         audio_buf_info abinfo;
         count_info cinfo;
-	int val, mapped, ret;
+	int val, mapped, ret, count;
         int div1, div2;
         unsigned rate1, rate2;
 
@@ -1304,7 +1308,7 @@ static int solo1_ioctl(struct inode *inode, struct file *file, unsigned int cmd,
 			stop_dac(s);
 			s->dma_adc.ready = s->dma_dac.ready = 0;
 			/* program channels */
-			s->channels = val ? 2 : 1;
+			s->channels = (val >= 2) ? 2 : 1;
 			prog_codec(s);
 		}
 		return put_user(s->channels, (int *)arg);
@@ -1368,7 +1372,10 @@ static int solo1_ioctl(struct inode *inode, struct file *file, unsigned int cmd,
 		spin_lock_irqsave(&s->lock, flags);
 		solo1_update_ptr(s);
 		abinfo.fragsize = s->dma_dac.fragsize;
-                abinfo.bytes = s->dma_dac.dmasize - s->dma_dac.count;
+		count = s->dma_dac.count;
+		if (count < 0)
+			count = 0;
+                abinfo.bytes = s->dma_dac.dmasize - count;
                 abinfo.fragstotal = s->dma_dac.numfrag;
                 abinfo.fragments = abinfo.bytes >> s->dma_dac.fragshift;      
 		spin_unlock_irqrestore(&s->lock, flags);
@@ -1397,9 +1404,11 @@ static int solo1_ioctl(struct inode *inode, struct file *file, unsigned int cmd,
 			return -EINVAL;
 		spin_lock_irqsave(&s->lock, flags);
 		solo1_update_ptr(s);
-                val = s->dma_dac.count;
+                count = s->dma_dac.count;
 		spin_unlock_irqrestore(&s->lock, flags);
-		return put_user(val, (int *)arg);
+		if (count < 0)
+			count = 0;
+		return put_user(count, (int *)arg);
 
         case SNDCTL_DSP_GETIPTR:
 		if (!(file->f_mode & FMODE_READ))
@@ -1420,7 +1429,10 @@ static int solo1_ioctl(struct inode *inode, struct file *file, unsigned int cmd,
 		spin_lock_irqsave(&s->lock, flags);
 		solo1_update_ptr(s);
                 cinfo.bytes = s->dma_dac.total_bytes;
-                cinfo.blocks = s->dma_dac.count >> s->dma_dac.fragshift;
+		count = s->dma_dac.count;
+		if (count < 0)
+			count = 0;
+                cinfo.blocks = count >> s->dma_dac.fragshift;
                 cinfo.ptr = s->dma_dac.hwptr;
 		if (s->dma_dac.mapped)
 			s->dma_dac.count &= s->dma_dac.fragsize-1;
@@ -2132,6 +2144,79 @@ static struct initvol {
 	{ SOUND_MIXER_WRITE_MIC, 0x4040 }
 };
 
+static int setup_solo1(struct solo1_state *s)
+{
+	struct pci_dev *pcidev = s->pcidev;
+	mm_segment_t fs;
+	int i, val;
+
+	/* initialize the chips */
+	if (!reset_ctrl(s)) {
+		printk(KERN_ERR "esssolo1: cannot reset controller\n");
+		return -1;
+	}
+	outb(0xb0, s->iobase+7); /* enable A1, A2, MPU irq's */
+	
+	/* initialize mixer regs */
+	write_mixer(s, 0x7f, 0); /* disable music digital recording */
+	write_mixer(s, 0x7d, 0x0c); /* enable mic preamp, MONO_OUT is 2nd DAC right channel */
+	write_mixer(s, 0x64, 0x45); /* volume control */
+	write_mixer(s, 0x48, 0x10); /* enable music DAC/ES6xx interface */
+	write_mixer(s, 0x50, 0);  /* disable spatializer */
+	write_mixer(s, 0x52, 0);
+	write_mixer(s, 0x14, 0);  /* DAC1 minimum volume */
+	write_mixer(s, 0x71, 0x20); /* enable new 0xA1 reg format */
+	outb(0, s->ddmabase+0xd); /* DMA master clear */
+	outb(1, s->ddmabase+0xf); /* mask channel */
+	/*outb(0, s->ddmabase+0x8);*/ /* enable controller (enable is low active!!) */
+
+	pci_set_master(pcidev);  /* enable bus mastering */
+	
+	fs = get_fs();
+	set_fs(KERNEL_DS);
+	val = SOUND_MASK_LINE;
+	mixer_ioctl(s, SOUND_MIXER_WRITE_RECSRC, (unsigned long)&val);
+	for (i = 0; i < sizeof(initvol)/sizeof(initvol[0]); i++) {
+		val = initvol[i].vol;
+		mixer_ioctl(s, initvol[i].mixch, (unsigned long)&val);
+	}
+	val = 1; /* enable mic preamp */
+	mixer_ioctl(s, SOUND_MIXER_PRIVATE1, (unsigned long)&val);
+	set_fs(fs);
+	return 0;
+}
+
+#ifdef CONFIG_APM
+
+static int solo1_apm_callback(apm_event_t event)
+{
+	struct solo1_state *s;
+
+	switch(event) {
+	case APM_NORMAL_RESUME:
+	case APM_CRITICAL_RESUME:
+	case APM_STANDBY_RESUME:
+		for(s = devs ; s ; s = s->next)
+			setup_solo1(s);
+		break;
+
+		default: 
+			for(s = devs ; s ; s = s->next) {
+				outb(0, s->iobase+6);
+				/* DMA master clear */
+				outb(0, s->ddmabase+0xd); 
+				/* reset sequencer and FIFO */
+				outb(3, s->sbbase+6); 
+				/* turn off DDMA controller address space */
+				pci_write_config_word(s->pcidev, 0x60, 0); 
+			}
+	}
+	return 0;
+}
+
+#endif
+
+
 #define RSRCISIOREGION(dev,num) ((dev)->resource[(num)].start != 0 && \
 				 ((dev)->resource[(num)].flags & PCI_BASE_ADDRESS_SPACE) == PCI_BASE_ADDRESS_SPACE_IO)
 #define RSRCADDRESS(dev,num) ((dev)->resource[(num)].start)
@@ -2141,12 +2226,11 @@ static int __init init_solo1(void)
 {
 	struct solo1_state *s;
 	struct pci_dev *pcidev = NULL;
-	mm_segment_t fs;
-	int i, val, index = 0;
+	int index = 0;
 
 	if (!pci_present())   /* No PCI bus in this machine! */
 		return -ENODEV;
-	printk(KERN_INFO "solo1: version v0.11 time " __TIME__ " " __DATE__ "\n");
+	printk(KERN_INFO "solo1: version v0.12 time " __TIME__ " " __DATE__ "\n");
 	while (index < NR_DEVICE && 
 	       (pcidev = pci_find_device(PCI_VENDOR_ID_ESS, PCI_DEVICE_ID_ESS_SOLO1, pcidev))) {
 		if (!RSRCISIOREGION(pcidev, 0) ||
@@ -2192,13 +2276,7 @@ static int __init init_solo1(void)
 			printk(KERN_ERR "solo1: irq %u in use\n", s->irq);
 			goto err_irq;
 		}
-		/* initialize DDMA base address */
 		printk(KERN_DEBUG "solo1: ddma base address: 0x%lx\n", s->ddmabase);
-		pci_write_config_word(pcidev, 0x60, (s->ddmabase & (~0xf)) | 1);
-		/* set DMA policy to DDMA, IRQ emulation off (CLKRUN disabled for now) */
-		pci_write_config_dword(pcidev, 0x50, 0);
-		/* disable legacy audio address decode */
-		pci_write_config_word(pcidev, 0x40, 0x907f);
 
 		printk(KERN_INFO "solo1: joystick port at %#lx\n", s->gpbase+1);
 
@@ -2211,39 +2289,8 @@ static int __init init_solo1(void)
 			goto err_dev3;
 		if ((s->dev_dmfm = register_sound_special(&solo1_dmfm_fops, 15 /* ?? */)) < 0)
 			goto err_dev4;
-		/* initialize the chips */
-		if (!reset_ctrl(s)) {
-			printk(KERN_ERR "esssolo1: cannot reset controller\n");
+		if (setup_solo1(s))
 			goto err;
-		}
-		outb(0xb0, s->iobase+7); /* enable A1, A2, MPU irq's */
-
-		/* initialize mixer regs */
-		write_mixer(s, 0x7f, 0); /* disable music digital recording */
-		write_mixer(s, 0x7d, 0x0c); /* enable mic preamp, MONO_OUT is 2nd DAC right channel */
-		write_mixer(s, 0x64, 0x45); /* volume control */
-		write_mixer(s, 0x48, 0x10); /* enable music DAC/ES6xx interface */
-		write_mixer(s, 0x50, 0);  /* disable spatializer */
-		write_mixer(s, 0x52, 0);
-		write_mixer(s, 0x14, 0);  /* DAC1 minimum volume */
-		write_mixer(s, 0x71, 0x20); /* enable new 0xA1 reg format */
-		outb(0, s->ddmabase+0xd); /* DMA master clear */
-		outb(1, s->ddmabase+0xf); /* mask channel */
-		/*outb(0, s->ddmabase+0x8);*/ /* enable controller (enable is low active!!) */
-
-		pci_set_master(pcidev);  /* enable bus mastering */
-		
-		fs = get_fs();
-		set_fs(KERNEL_DS);
-		val = SOUND_MASK_LINE;
-		mixer_ioctl(s, SOUND_MIXER_WRITE_RECSRC, (unsigned long)&val);
-		for (i = 0; i < sizeof(initvol)/sizeof(initvol[0]); i++) {
-			val = initvol[i].vol;
-			mixer_ioctl(s, initvol[i].mixch, (unsigned long)&val);
-		}
-		val = 1; /* enable mic preamp */
-		mixer_ioctl(s, SOUND_MIXER_PRIVATE1, (unsigned long)&val);
-		set_fs(fs);
 		/* queue it for later freeing */
 		s->next = devs;
 		devs = s;
@@ -2259,7 +2306,7 @@ static int __init init_solo1(void)
 	err_dev2:
 		unregister_sound_dsp(s->dev_audio);
 	err_dev1:
-		printk(KERN_ERR "solo1: cannot register misc device\n");
+		printk(KERN_ERR "solo1: initialisation error\n");
 		free_irq(s->irq, s);
 	err_irq:
 		release_region(s->iobase, IOBASE_EXTENT);
@@ -2271,6 +2318,9 @@ static int __init init_solo1(void)
 	}
 	if (!devs)
 		return -ENODEV;
+#ifdef CONFIG_APM
+	apm_register_callback(solo1_apm_callback);
+#endif
 	return 0;
 }
 
@@ -2302,6 +2352,9 @@ static void __exit cleanup_solo1(void)
 		unregister_sound_special(s->dev_dmfm);
 		kfree_s(s, sizeof(struct solo1_state));
 	}
+#ifdef CONFIG_APM
+	apm_unregister_callback(solo1_apm_callback);
+#endif
 	printk(KERN_INFO "solo1: unloading\n");
 }
 

@@ -47,6 +47,7 @@ CONFIG_ALPHA_GENERIC=y
 CONFIG_PCI=y
 # CONFIG_SMP is not set
 CONFIG_PCI_NAMES=y
+# CONFIG_HOTPLUG is not set
 CONFIG_NET=y
 CONFIG_SYSVIPC=y
 # CONFIG_BSD_PROCESS_ACCT is not set
@@ -249,11 +250,6 @@ CONFIG_DE4X5=y
 # CONFIG_WAN is not set
 
 #
-# PCMCIA network device support
-#
-# CONFIG_NET_PCMCIA is not set
-
-#
 # Amateur Radio support
 #
 # CONFIG_HAMRADIO is not set
@@ -321,12 +317,6 @@ CONFIG_PSMOUSE=y
 # CONFIG_FTAPE is not set
 # CONFIG_DRM is not set
 # CONFIG_DRM_TDFX is not set
-CONFIG_PCMCIA_SERIAL=y
-
-#
-# PCMCIA character device support
-#
-# CONFIG_PCMCIA_SERIAL_CS is not set
 
 #
 # USB support

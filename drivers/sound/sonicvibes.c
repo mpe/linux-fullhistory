@@ -84,6 +84,9 @@
  *    28.10.1999   0.22  More waitqueue races fixed
  *    01.12.1999   0.23  New argument to allocate_resource
  *    07.12.1999   0.24  More allocate_resource semantics change
+ *    08.01.2000   0.25  Prevent some ioctl's from returning bad count values on underrun/overrun;
+ *                       Tim Janik's BSE (Bedevilled Sound Engine) found this
+ *                       use Martin Mares' pci_assign_resource
  *
  */
 
@@ -131,6 +134,10 @@
 #define SV_EXTENT_GAME    0x8
 #define SV_EXTENT_DMA     0x10
 
+/*
+ * we are not a bridge and thus use a resource for DDMA that is used for bridges but
+ * left empty for normal devices
+ */
 #define RESOURCE_SB       0
 #define RESOURCE_ENH      1
 #define RESOURCE_SYNTH    2
@@ -1533,6 +1540,7 @@ static int sv_ioctl(struct inode *inode, struct file *file, unsigned int cmd, un
 	unsigned long flags;
         audio_buf_info abinfo;
         count_info cinfo;
+	int count;
 	int val, mapped, ret;
 	unsigned char fmtm, fmtd;
 
@@ -1700,7 +1708,10 @@ static int sv_ioctl(struct inode *inode, struct file *file, unsigned int cmd, un
 		spin_lock_irqsave(&s->lock, flags);
 		sv_update_ptr(s);
 		abinfo.fragsize = s->dma_dac.fragsize;
-                abinfo.bytes = s->dma_dac.dmasize - s->dma_dac.count;
+		count = s->dma_dac.count;
+		if (count < 0)
+			count = 0;
+                abinfo.bytes = s->dma_dac.dmasize - count;
                 abinfo.fragstotal = s->dma_dac.numfrag;
                 abinfo.fragments = abinfo.bytes >> s->dma_dac.fragshift;      
 		spin_unlock_irqrestore(&s->lock, flags);
@@ -1714,7 +1725,10 @@ static int sv_ioctl(struct inode *inode, struct file *file, unsigned int cmd, un
 		spin_lock_irqsave(&s->lock, flags);
 		sv_update_ptr(s);
 		abinfo.fragsize = s->dma_adc.fragsize;
-                abinfo.bytes = s->dma_adc.count;
+		count = s->dma_adc.count;
+		if (count < 0)
+			count = 0;
+                abinfo.bytes = count;
                 abinfo.fragstotal = s->dma_adc.numfrag;
                 abinfo.fragments = abinfo.bytes >> s->dma_adc.fragshift;      
 		spin_unlock_irqrestore(&s->lock, flags);
@@ -1729,9 +1743,11 @@ static int sv_ioctl(struct inode *inode, struct file *file, unsigned int cmd, un
 			return -EINVAL;
 		spin_lock_irqsave(&s->lock, flags);
 		sv_update_ptr(s);
-                val = s->dma_dac.count;
+                count = s->dma_dac.count;
 		spin_unlock_irqrestore(&s->lock, flags);
-		return put_user(val, (int *)arg);
+		if (count < 0)
+			count = 0;
+		return put_user(count, (int *)arg);
 
         case SNDCTL_DSP_GETIPTR:
 		if (!(file->f_mode & FMODE_READ))
@@ -1739,7 +1755,10 @@ static int sv_ioctl(struct inode *inode, struct file *file, unsigned int cmd, un
 		spin_lock_irqsave(&s->lock, flags);
 		sv_update_ptr(s);
                 cinfo.bytes = s->dma_adc.total_bytes;
-                cinfo.blocks = s->dma_adc.count >> s->dma_adc.fragshift;
+		count = s->dma_adc.count;
+		if (count < 0)
+			count = 0;
+                cinfo.blocks = count >> s->dma_adc.fragshift;
                 cinfo.ptr = s->dma_adc.hwptr;
 		if (s->dma_adc.mapped)
 			s->dma_adc.count &= s->dma_adc.fragsize-1;
@@ -1752,7 +1771,10 @@ static int sv_ioctl(struct inode *inode, struct file *file, unsigned int cmd, un
 		spin_lock_irqsave(&s->lock, flags);
 		sv_update_ptr(s);
                 cinfo.bytes = s->dma_dac.total_bytes;
-                cinfo.blocks = s->dma_dac.count >> s->dma_dac.fragshift;
+		count = s->dma_dac.count;
+		if (count < 0)
+			count = 0;
+                cinfo.blocks = count >> s->dma_dac.fragshift;
                 cinfo.ptr = s->dma_dac.hwptr;
 		if (s->dma_dac.mapped)
 			s->dma_dac.count &= s->dma_dac.fragsize-1;
@@ -2427,7 +2449,7 @@ static int __init init_sonicvibes(void)
 
 	if (!pci_present())   /* No PCI bus in this machine! */
 		return -ENODEV;
-	printk(KERN_INFO "sv: version v0.24 time " __TIME__ " " __DATE__ "\n");
+	printk(KERN_INFO "sv: version v0.25 time " __TIME__ " " __DATE__ "\n");
 #if 0
 	if (!(wavetable_mem = __get_free_pages(GFP_KERNEL, 20-PAGE_SHIFT)))
 		printk(KERN_INFO "sv: cannot allocate 1MB of contiguous nonpageable memory for wavetable data\n");
@@ -2444,20 +2466,20 @@ static int __init init_sonicvibes(void)
 			continue;
 		/* try to allocate a DDMA resource if not already available */
 		if (!RSRCISIOREGION(pcidev, RESOURCE_DDMA)) {
-			/* take care of ISA aliases */
+			pcidev->resource[RESOURCE_DDMA].start = 0;
+			pcidev->resource[RESOURCE_DDMA].end = 2*SV_EXTENT_DMA-1;
+			pcidev->resource[RESOURCE_DDMA].flags = PCI_BASE_ADDRESS_SPACE_IO | IORESOURCE_IO;
 			ddmanamelen = strlen(sv_ddma_name)+1;
 			if (!(ddmaname = kmalloc(ddmanamelen, GFP_KERNEL)))
 				continue;
 			memcpy(ddmaname, sv_ddma_name, ddmanamelen);
 			pcidev->resource[RESOURCE_DDMA].name = ddmaname;
-			if (allocate_resource(&ioport_resource, pcidev->resource+RESOURCE_DDMA, 
-					      2*SV_EXTENT_DMA, 0x1000, 0x10000-2*SV_EXTENT_DMA, 1024, NULL, NULL)) {
+			if (pci_assign_resource(pcidev, RESOURCE_DDMA)) {
 				pcidev->resource[RESOURCE_DDMA].name = NULL;
 				kfree(ddmaname);
 				printk(KERN_ERR "sv: cannot allocate DDMA controller io ports\n");
 				continue;
 			}
-			pcidev->resource[RESOURCE_DDMA].flags = PCI_BASE_ADDRESS_SPACE_IO | IORESOURCE_IO;
 		}
 		if (!(s = kmalloc(sizeof(struct sv_state), GFP_KERNEL))) {
 			printk(KERN_WARNING "sv: out of memory\n");

@@ -2,22 +2,28 @@
 Readme for Linux device driver for the OmniVision OV511 USB to camera bridge IC
 -------------------------------------------------------------------------------
 
+Author: Mark McClelland
+Homepage: http://people.delphi.com/mmcclelland/linux/
+
 INTRODUCTION:
 
 This is a preliminary version of my OV511 Linux device driver. Currently, it can
-grab a frame in black-and-white at 640x480 using the vidcat utility. Color,
-variable image size, and compatibility with other apps are currently under
-development.
+grab a frame in color (YUV420) at 640x480 or 320x240 using either vidcat or
+xawtv. Other utilities may work but have not yet been tested.
+
+NOTE: 320x240 does not work reliably for me, and causes complete system crashes.
+      I recommend not using it until a later version, and if you do, run "sync"
+      first.
 
 SUPPORTED CAMERAS:
 ________________________________________________________
 Manufacturer     | Model          | Custom ID | Status
 -----------------+----------------+-----------+---------
 MediaForte       | MV300          | 0         | Untested
-D-Link           | DSB-C300	      | 3         | Working
+D-Link           | DSB-C300       | 3         | Working
 Creative Labs    | WebCam 3       | 21        | Working
-Lifeview         | RoboCam        |	100       | Untested
-AverMedia        | InterCam Elite | 102       | Untested
+Lifeview         | RoboCam        | 100       | Untested
+AverMedia        | InterCam Elite | 102       | Working
 --------------------------------------------------------
 
 Any camera using the OV511 and the OV7610 CCD should work with this driver. The
@@ -32,9 +38,55 @@ WHAT YOU NEED:
 - If you want to help with the development, get the chip's specification docs at
   http://www.ovt.com/omniusbp.html
 
-- A Video4Linux compatible frame grabber program (I recommend vidcat)
+- A Video4Linux compatible frame grabber program (I recommend vidcat and xawtv)
   (see: http://www.exploits.org/v4l/ )
-  
+
+HOW TO USE IT:
+
+You must have first compiled USB support, support for your specific USB host
+controller (UHCI or OHCI), and Video4Linux support for your kernel (I recommend
+making them modules.) 
+
+Next, (as root) from your appropriate modules directory (lib/modules/2.3.XX):
+
+	insmod usb/usbcore.o
+	insmod usb/usb-uhci.o  <OR>  insmod usb/ohci-hcd.o
+	insmod misc/videodev.o
+	insmod usb/ov511.o
+
+If it is not already there (it usually is), create the video device:
+
+	mknod /dev/video c 81 0
+	
+Now you are ready to run a video app! Both vidcat and xawtv work well for me
+at 640x480.
+	
+[Using vidcat:]
+
+	vidcat -s 640x480 > test.jpg
+	xview test.jpg
+	
+[Using xawtv:]
+
+You must make some modifications to the source and compile it before you use it.
+(Note: this may not be applicable to versions other than 3.06)
+
+In src/Xawtv.ad, change xawtv.tv.width to 640 and xawtv.tv.height to 480. Next,
+in src/grab-v4l.c, change SYNC_TIMEOUT from 1 to 2. Then, from the main xawtv
+directory:
+
+	make clean
+	./configure
+	make
+	make install
+
+Now you should be able to run xawtv. Right click for the options dialog.
+
+WORKING FEATURES:
+ o Color streaming/capture at 640x480 (reliably) and 320x240 (unreliably)
+ o YUV420 color
+ o Setting/getting of saturation, contrast and brightness (no color yet)
+
 WHAT NEEDS TO BE DONE:
 
 The rest of the work will involve implementing support for all the different
@@ -55,4 +107,4 @@ CREDITS:
 The code is based in no small part on the CPiA driver by Johannes Erdfelt,
 Randy Dunlap, and others. Big thanks to them for their pioneering work on that
 and the USB stack. Thanks to Bret Wallach for getting camera reg IO , ISOC, and
-preliminary image capture working.
+image capture working.

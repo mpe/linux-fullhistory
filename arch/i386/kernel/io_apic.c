@@ -997,7 +997,7 @@ void disable_IO_APIC(void)
 	}
 }
 
-static void __init setup_ioapic_id(void)
+static void __init setup_ioapic_default_id(void)
 {
 	struct IO_APIC_reg_00 reg_00;
 
@@ -1029,6 +1029,47 @@ static void __init setup_ioapic_id(void)
 	*(int *)&reg_00 = io_apic_read(0, 0);
 	if (reg_00.ID != 0x2)
 		panic("could not set ID");
+}
+
+/*
+ * function to set the IO-APIC physical IDs based on the
+ * values stored in the MPC table.
+ *
+ * by Matt Domsch <Matt_Domsch@dell.com>  Tue Dec 21 12:25:05 CST 1999
+ */
+
+static void __init setup_ioapic_ids_from_mpc (void)
+{
+	struct IO_APIC_reg_00 reg_00;
+	int apic;
+
+	/*
+	 * Set the IOAPIC ID to the value stored in the MPC table.
+	 */
+	for (apic = 0; apic < nr_ioapics; apic++) {
+
+		/* Read the register 0 value */
+		*(int *)&reg_00 = io_apic_read(apic, 0);
+		
+		/*
+		 * Read the right value from the MPC table and
+		 * write it into the ID register.
+	 	 */
+		printk("...changing IO-APIC physical APIC ID to %d ...",
+					mp_ioapics[apic].mpc_apicid);
+
+		reg_00.ID = mp_ioapics[apic].mpc_apicid;
+		io_apic_write(apic, 0, *(int *)&reg_00);
+
+		/*
+		 * Sanity check
+		 */
+		*(int *)&reg_00 = io_apic_read(apic, 0);
+		if (reg_00.ID != mp_ioapics[apic].mpc_apicid)
+			panic("could not set ID!\n");
+		else
+			printk(" ok.\n");
+	}
 }
 
 static void __init construct_default_ISA_mptable(void)
@@ -1071,7 +1112,7 @@ static void __init construct_default_ISA_mptable(void)
 			mp_irqs[0].mpc_dstirq = 2;
 	}
 
-	setup_ioapic_id();
+	setup_ioapic_default_id();
 }
 
 /*
@@ -1424,6 +1465,7 @@ void __init setup_IO_APIC(void)
 	 * Set up the IO-APIC IRQ routing table by parsing the MP-BIOS
 	 * mptable:
 	 */
+	setup_ioapic_ids_from_mpc();
 	setup_IO_APIC_irqs();
 	init_IO_APIC_traps();
 	check_timer();

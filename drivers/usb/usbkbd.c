@@ -148,7 +148,7 @@ static void *usb_kbd_probe(struct usb_device *dev, unsigned int ifnum)
 	kbd->dev.private = kbd;
 	kbd->dev.event = usb_kbd_event;
 
-	kbd->dr.requesttype = USB_RT_HIDD;
+	kbd->dr.requesttype = USB_TYPE_CLASS | USB_RECIP_INTERFACE;
 	kbd->dr.request = USB_REQ_SET_REPORT;
 	kbd->dr.value = 0x200;
 	kbd->dr.index = 1;

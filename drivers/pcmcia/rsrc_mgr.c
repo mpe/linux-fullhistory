@@ -2,7 +2,7 @@
 
     Resource management routines
 
-    rsrc_mgr.c 1.76 1999/11/08 20:47:02
+    rsrc_mgr.c 1.77 1999/11/16 03:32:59
 
     The contents of this file are subject to the Mozilla Public
     License Version 1.1 (the "License"); you may not use this file
@@ -124,10 +124,11 @@ static int add_interval(resource_map_t *map, u_long base, u_long num)
 	    break;
     }
     q = kmalloc(sizeof(resource_map_t), GFP_KERNEL);
+    if (!q) return CS_OUT_OF_RESOURCE;
     q->base = base; q->num = num;
     q->next = p->next; p->next = q;
-    return 0;
-} /* add_interval */
+    return CS_SUCCESS;
+}
 
 /*====================================================================*/
 
@@ -158,6 +159,7 @@ static int sub_interval(resource_map_t *map, u_long base, u_long num)
 	    } else {
 		/* Split the block into two pieces */
 		p = kmalloc(sizeof(resource_map_t), GFP_KERNEL);
+		if (!p) return CS_OUT_OF_RESOURCE;
 		p->base = base+num;
 		p->num = q->base+q->num - p->base;
 		q->num = base - q->base;
@@ -165,8 +167,8 @@ static int sub_interval(resource_map_t *map, u_long base, u_long num)
 	    }
 	}
     }
-    return 0;
-} /* sub_interval */
+    return CS_SUCCESS;
+}
 
 /*======================================================================
 
@@ -383,7 +385,7 @@ int find_io_region(ioaddr_t *base, ioaddr_t num, ioaddr_t align,
 	}
     }
     return -1;
-} /* find_io_region */
+}
 
 int find_mem_region(u_long *base, u_long num, u_long align,
 		    int force_low, char *name)
@@ -411,7 +413,7 @@ int find_mem_region(u_long *base, u_long num, u_long align,
 	force_low++;
     }
     return -1;
-} /* find_mem_region */
+}
 
 /*======================================================================
 
@@ -482,7 +484,7 @@ int try_irq(u_int Attributes, int irq, int specific)
 	}
     }
     return 0;
-} /* try_irq */
+}
 
 #endif
 
@@ -524,34 +526,35 @@ void undo_irq(u_int Attributes, int irq)
 static int adjust_memory(adjust_t *adj)
 {
     u_long base, num;
-    int i;
+    int i, ret;
 
     base = adj->resource.memory.Base;
     num = adj->resource.memory.Size;
     if ((num == 0) || (base+num-1 < base))
 	return CS_BAD_SIZE;
 
+    ret = CS_SUCCESS;
     switch (adj->Action) {
     case ADD_MANAGED_RESOURCE:
-	if (add_interval(&mem_db, base, num) != 0)
-	    return CS_IN_USE;
+	ret = add_interval(&mem_db, base, num);
 	break;
     case REMOVE_MANAGED_RESOURCE:
-	sub_interval(&mem_db, base, num);
-	for (i = 0; i < sockets; i++) {
-	    release_cis_mem(socket_table[i]);
+	ret = sub_interval(&mem_db, base, num);
+	if (ret == CS_SUCCESS) {
+	    for (i = 0; i < sockets; i++) {
+		release_cis_mem(socket_table[i]);
 #ifdef CONFIG_CARDBUS
-	    cb_release_cis_mem(socket_table[i]);
+		cb_release_cis_mem(socket_table[i]);
 #endif
+	    }
 	}
 	break;
     default:
-	return CS_UNSUPPORTED_FUNCTION;
-	break;
+	ret = CS_UNSUPPORTED_FUNCTION;
     }
     
-    return CS_SUCCESS;
-} /* adjust_mem */
+    return ret;
+}
 
 /*====================================================================*/
 
@@ -584,7 +587,7 @@ static int adjust_io(adjust_t *adj)
     }
 
     return CS_SUCCESS;
-} /* adjust_io */
+}
 
 /*====================================================================*/
 
@@ -625,7 +628,7 @@ static int adjust_irq(adjust_t *adj)
     }
 #endif
     return CS_SUCCESS;
-} /* adjust_irq */
+}
 
 /*====================================================================*/
 
@@ -646,7 +649,7 @@ int pcmcia_adjust_resource_info(client_handle_t handle, adjust_t *adj)
 	break;
     }
     return CS_UNSUPPORTED_FUNCTION;
-} /* adjust_resource_info */
+}
 
 /*====================================================================*/
 

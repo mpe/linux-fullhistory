@@ -2,7 +2,7 @@
 
     A driver for CardBus serial devices
 
-    serial_cb.c 1.14 1999/11/11 02:18:08
+    serial_cb.c 1.15 1999/11/24 02:52:06
 
     Copyright 1998, 1999 by Donald Becker and David Hinds
     
@@ -39,7 +39,7 @@ static int pc_debug = PCMCIA_DEBUG;
 MODULE_PARM(pc_debug, "i");
 #define DEBUG(n, args...) if (pc_debug>(n)) printk(KERN_DEBUG args)
 static char *version =
-"serial_cb.c 1.14 1999/11/11 02:18:08 (David Hinds)";
+"serial_cb.c 1.15 1999/11/24 02:52:06 (David Hinds)";
 #else
 #define DEBUG(n, args...)
 #endif
@@ -56,8 +56,9 @@ static void device_setup(u_char bus, u_char devfn, u_int ioaddr)
 
     pcibios_read_config_word(bus, devfn, PCI_SUBSYSTEM_VENDOR_ID, &a);
     pcibios_read_config_word(bus, devfn, PCI_SUBSYSTEM_ID, &b);
-    if ((a == 0x13a2) && (b == 0x8007)) {
-	/* Ositech Jack of Spades */
+    if (((a == 0x13a2) && (b == 0x8007)) ||
+	((a == 0x1420) && (b == 0x8003))) {
+	/* Ositech, Psion 83c175-based cards */
 	DEBUG(0, "  83c175 NVCTL_m = 0x%4.4x.\n", inl(ioaddr+0x80));
 	outl(0x4C00, ioaddr + 0x80);
 	outl(0x4C80, ioaddr + 0x80);

@@ -2,7 +2,7 @@
 
     PCMCIA Bulk Memory Services
 
-    bulkmem.c 1.33 1999/10/25 20:03:33
+    bulkmem.c 1.34 1999/11/17 01:37:55
 
     The contents of this file are subject to the Mozilla Public
     License Version 1.1 (the "License"); you may not use this file
@@ -179,7 +179,7 @@ static void retry_erase(erase_busy_t *busy, u_int cause)
 	}
 	busy->client->event_callback_args.info = erase;
 	EVENT(busy->client, CS_EVENT_ERASE_COMPLETE, CS_EVENT_PRI_LOW);
-	kfree_s(busy, sizeof(*busy));
+	kfree(busy);
 	/* Resubmit anything waiting for a request to finish */
 	wake_up_interruptible(&mtd->mtd_req);
 	retry_erase_list(&mtd->erase_busy, 0);
@@ -484,6 +484,7 @@ int pcmcia_register_erase_queue(client_handle_t *handle, eraseq_hdr_t *header,
     if ((handle == NULL) || CHECK_HANDLE(*handle))
 	return CS_BAD_HANDLE;
     queue = kmalloc(sizeof(*queue), GFP_KERNEL);
+    if (!queue) return CS_OUT_OF_RESOURCE;
     queue->eraseq_magic = ERASEQ_MAGIC;
     queue->handle = *handle;
     queue->count = header->QueueEntryCnt;
@@ -502,7 +503,7 @@ int pcmcia_deregister_erase_queue(eraseq_handle_t eraseq)
     if (i < eraseq->count)
 	return CS_BUSY;
     eraseq->eraseq_magic = 0;
-    kfree_s(eraseq, sizeof(*eraseq));
+    kfree(eraseq);
     return CS_SUCCESS;
 } /* deregister_erase_queue */
 

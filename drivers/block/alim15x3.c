@@ -313,6 +313,7 @@ static void ali15x3_tune_drive (ide_drive_t *drive, byte pio)
 
 static int ali15x3_tune_chipset (ide_drive_t *drive, byte speed)
 {
+	ide_hwif_t *hwif = HWIF(drive);
 	struct pci_dev *dev	= hwif->pci_dev;
 	byte unit		= (drive->select.b.unit & 0x01);
 	byte tmpbyte		= 0x00;

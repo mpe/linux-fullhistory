@@ -288,7 +288,7 @@ static int pop_CB_reset(struct us_data *us)
 	cmd[0] = SEND_DIAGNOSTIC;
 	cmd[1] = 4;
 	result = usb_control_msg(us->pusb_dev, usb_sndctrlpipe(us->pusb_dev,0),
-				 US_CBI_ADSC, USB_TYPE_CLASS | USB_RT_INTERFACE,
+				 US_CBI_ADSC, USB_TYPE_CLASS | USB_RECIP_INTERFACE,
 				 0, us->ifnum, cmd, sizeof(cmd), HZ*5);
 
 	/* long wait for reset */
@@ -346,7 +346,7 @@ static int pop_CB_command(Scsi_Cmnd *srb)
 			} /* switch */
 
 			result = usb_control_msg(us->pusb_dev, usb_sndctrlpipe(us->pusb_dev,0),
-						 US_CBI_ADSC, USB_TYPE_CLASS | USB_RT_INTERFACE,
+						 US_CBI_ADSC, USB_TYPE_CLASS | USB_RECIP_INTERFACE,
 						 0, us->ifnum,
 						 cmd, us->fixedlength, HZ*5);
 			US_DEBUGP("First usb_control_msg returns %d\n", result);
@@ -367,7 +367,7 @@ static int pop_CB_command(Scsi_Cmnd *srb)
 
 				result = usb_control_msg(us->pusb_dev, usb_sndctrlpipe(us->pusb_dev,0),
 							 US_CBI_ADSC, 
-							 USB_TYPE_CLASS | USB_RT_INTERFACE,
+							 USB_TYPE_CLASS | USB_RECIP_INTERFACE,
 							 0, us->ifnum,
 							 cmd, us->fixedlength, HZ*5);
 				US_DEBUGP("Next usb_control_msg returns %d\n", result);
@@ -378,7 +378,7 @@ static int pop_CB_command(Scsi_Cmnd *srb)
 			}
 		} else { /* !US_FL_FIXED_COMMAND */
 			result = usb_control_msg(us->pusb_dev, usb_sndctrlpipe(us->pusb_dev,0),
-						 US_CBI_ADSC, USB_TYPE_CLASS | USB_RT_INTERFACE,
+						 US_CBI_ADSC, USB_TYPE_CLASS | USB_RECIP_INTERFACE,
 						 0, us->ifnum,
 						 srb->cmnd, srb->cmd_len, HZ*5);
 		}
@@ -411,7 +411,7 @@ static int pop_CB_status(Scsi_Cmnd *srb)
 		while (retry--) {
 			result = usb_control_msg(us->pusb_dev, usb_rcvctrlpipe(us->pusb_dev,0),
 						 USB_REQ_GET_STATUS, USB_DIR_IN |
-						 USB_TYPE_STANDARD | USB_RT_DEVICE,
+						 USB_TYPE_STANDARD | USB_RECIP_DEVICE,
 						 0, us->ifnum, status, sizeof(status), HZ*5);
 			if (result != USB_ST_TIMEOUT)
 				break;
@@ -517,7 +517,7 @@ static int pop_Bulk_reset(struct us_data *us)
 	int result;
 
 	result = usb_control_msg(us->pusb_dev, usb_sndctrlpipe(us->pusb_dev,0),
-				 US_BULK_RESET, USB_TYPE_CLASS | USB_RT_INTERFACE,
+				 US_BULK_RESET, USB_TYPE_CLASS | USB_RECIP_INTERFACE,
 				 US_BULK_RESET_HARD, us->ifnum,
 				 NULL, 0, HZ*5);
 	if (result)

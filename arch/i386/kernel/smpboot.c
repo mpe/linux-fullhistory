@@ -865,7 +865,7 @@ void __init init_smp_mappings(void)
 		apic_phys = (unsigned long) alloc_bootmem_pages(PAGE_SIZE);
 		apic_phys = __pa(apic_phys);
 	}
-	set_fixmap(FIX_APIC_BASE, apic_phys);
+	set_fixmap_nocache(FIX_APIC_BASE, apic_phys);
 	dprintk("mapped APIC to %08lx (%08lx)\n", APIC_BASE, apic_phys);
 
 #ifdef CONFIG_X86_IO_APIC
@@ -880,7 +880,7 @@ void __init init_smp_mappings(void)
 				ioapic_phys = (unsigned long) alloc_bootmem_pages(PAGE_SIZE);
 				ioapic_phys = __pa(ioapic_phys);
 			}
-			set_fixmap(idx,ioapic_phys);
+			set_fixmap_nocache(idx, ioapic_phys);
 			dprintk("mapped IOAPIC to %08lx (%08lx)\n",
 					__fix_to_virt(idx), ioapic_phys);
 			idx++;

@@ -2,8 +2,7 @@
 # PCMCIA character device configuration
 #
 
-if [ "$CONFIG_SERIAL" = "n" -o "$CONFIG_PCMCIA" = "n" -o \
-     "$CONFIG_HOTPLUG" = "n" ]; then
+if [ "$CONFIG_SERIAL" = "n" ]; then
    define_bool CONFIG_PCMCIA_SERIAL n
 else
    if [ "$CONFIG_SERIAL" = "m" -o "$CONFIG_PCMCIA" = "m" ]; then
@@ -22,10 +21,10 @@ if [ "$CONFIG_PCMCIA_SERIAL" != "n" ]; then
       dep_tristate 'CardBus serial device support' CONFIG_PCMCIA_SERIAL_CB $CONFIG_PCMCIA_SERIAL
    fi
 
-   endmenu
-fi
+   if [ "$CONFIG_PCMCIA_SERIAL_CS" = "y" -o \
+        "$CONFIG_PCMCIA_SERIAL_CB" = "y" ]; then
+      define_bool CONFIG_PCMCIA_CHRDEV y
+   fi
 
-if [ "$CONFIG_PCMCIA_SERIAL_CS" = "y" -o \
-     "$CONFIG_PCMCIA_SERIAL_CB" = "y" ]; then
-   define_bool CONFIG_PCMCIA_CHRDEV y
+   endmenu
 fi

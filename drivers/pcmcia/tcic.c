@@ -2,7 +2,7 @@
 
     Device driver for Databook TCIC-2 PCMCIA controller
 
-    tcic.c 1.107 1999/10/25 20:03:34
+    tcic.c 1.108 1999/12/09 20:17:29
 
     The contents of this file are subject to the Mozilla Public
     License Version 1.1 (the "License"); you may not use this file
@@ -60,11 +60,14 @@
 static int pc_debug = PCMCIA_DEBUG;
 MODULE_PARM(pc_debug, "i");
 static const char *version =
-"tcic.c 1.107 1999/10/25 20:03:34 (David Hinds)";
+"tcic.c 1.108 1999/12/09 20:17:29 (David Hinds)";
 #define DEBUG(n, args...) if (pc_debug>(n)) printk(KERN_DEBUG args)
 #else
 #define DEBUG(n, args...)
 #endif
+
+MODULE_AUTHOR("David Hinds <dhinds@pcmcia.sourceforge.org>");
+MODULE_DESCRIPTION("Databook TCIC-2 PCMCIA socket driver");
 
 /*====================================================================*/
 

@@ -69,16 +69,6 @@ MODULE_PARM(pc_debug, "i");
 #define DEBUG(n, args...)
 #endif
 
-/*
-   For debugging this driver you may need more information.
-   To enable printing registers or status, set 'fmvj18x_debug=#' option .
- */
-#ifdef FMVJ18X_DEBUG
-static int fmvj18x_debug = FMVJ18X_DEBUG;
-#else
-static int fmvj18x_debug = 2;
-#endif /* FMVJ18X_DEBUG */
-
 /* Bit map of interrupts to choose from */
 /* This means pick from 15, 14, 12, 11, 10, 9, 7, 5, 4, and 3 */
 static u_int irq_mask = 0xdeb8;
@@ -138,6 +128,8 @@ typedef enum { MBH10302, MBH10304, TDK, CONTEC, LA501 } cardtype_t;
     driver specific data structure
 */
 typedef struct local_info_t {
+    dev_link_t link;
+    struct net_device dev;
     dev_node_t node;
     struct net_device_stats stats;
     long open_time;
@@ -273,17 +265,21 @@ static void cs_error(client_handle_t handle, int func, int ret)
 
 static dev_link_t *fmvj18x_attach(void)
 {
-    client_reg_t client_reg;
+    local_info_t *lp;
     dev_link_t *link;
     struct net_device *dev;
+    client_reg_t client_reg;
     int i, ret;
     
     DEBUG(0, "fmvj18x_attach()\n");
     flush_stale_links();
 
-    /* Initialize the dev_link_t structure */
-    link = kmalloc(sizeof(struct dev_link_t), GFP_KERNEL);
-    memset(link, 0, sizeof(struct dev_link_t));
+    /* Make up a FMVJ18x specific data structure */
+    lp = kmalloc(sizeof(*lp), GFP_KERNEL);
+    if (!lp) return NULL;
+    memset(lp, 0, sizeof(*lp));
+    link = &lp->link; dev = &lp->dev;
+    link->priv = dev->priv = link->irq.Instance = lp;
 
     link->release.function = &fmvj18x_release;
     link->release.data = (u_long)link;
@@ -308,24 +304,17 @@ static dev_link_t *fmvj18x_attach(void)
     link->conf.Vcc = 50;
     link->conf.IntType = INT_MEMORY_AND_IO;
 
-    /* Make up a FMVJ18x specific data structure */
-    dev = kmalloc(sizeof(struct net_device), GFP_KERNEL);
-    memset(dev, 0, sizeof(struct net_device));
-    dev->priv = kmalloc(sizeof(local_info_t), GFP_KERNEL);
-    memset(dev->priv, 0, sizeof(local_info_t));
-
     /* The FMVJ18x specific entries in the device structure. */
     dev->hard_start_xmit = &fjn_start_xmit;
     dev->set_config = &fjn_config;
     dev->get_stats = &fjn_get_stats;
     dev->set_multicast_list = &set_rx_mode;
     ether_setup(dev);
-    dev->name = ((local_info_t *)dev->priv)->node.dev_name;
+    dev->name = lp->node.dev_name;
     dev->init = &fmvj18x_init;
     dev->open = &fjn_open;
     dev->stop = &fjn_close;
     dev->tbusy = 0xFF;
-    link->priv = link->irq.Instance = dev;
     
     /* Register with Card Services */
     link->next = dev_list;
@@ -353,6 +342,7 @@ static dev_link_t *fmvj18x_attach(void)
 
 static void fmvj18x_detach(dev_link_t *link)
 {
+    local_info_t *lp = link->priv;
     dev_link_t **linkp;
     long flags;
     
@@ -386,15 +376,9 @@ static void fmvj18x_detach(dev_link_t *link)
     
     /* Unlink device structure, free pieces */
     *linkp = link->next;
-    if (link->priv) {
-	struct net_device *dev = link->priv;
-	if (link->dev != NULL)
-	    unregister_netdev(dev);
-	if (dev->priv) 
-	    kfree(dev->priv);
-	kfree(dev);
-    }
-    kfree(link);
+    if (link->dev)
+	unregister_netdev(&lp->dev);
+    kfree(lp);
     
 } /* fmvj18x_detach */
 
@@ -405,10 +389,11 @@ while ((last_ret=CardServices(last_fn=(fn), args))!=0) goto cs_failed
 
 static void fmvj18x_config(dev_link_t *link)
 {
-    client_handle_t handle;
+    client_handle_t handle = link->handle;
+    local_info_t *lp = link->priv;
+    struct net_device *dev = &lp->dev;
     tuple_t tuple;
     cisparse_t parse;
-    struct net_device *dev;
     u_short buf[32];
     int i, last_fn, last_ret;
     ioaddr_t ioaddr;
@@ -416,9 +401,6 @@ static void fmvj18x_config(dev_link_t *link)
     char *card_name = "unknown";
     u_char *node_id;
     
-    handle = link->handle;
-    dev =link->priv;
-
     DEBUG(0, "fmvj18x_config(0x%p)\n", link);
 
     /*
@@ -538,10 +520,10 @@ static void fmvj18x_config(dev_link_t *link)
 	break;
     }
 
-    link->dev = &((local_info_t *)dev->priv)->node;
+    link->dev = &lp->node;
     link->state &= ~DEV_CONFIG_PENDING;
 
-    ((struct local_info_t *)dev->priv)->cardtype = cardtype ;
+    lp->cardtype = cardtype;
     /* print current configuration */
     printk(KERN_INFO "%s: %s, sram %s, port %#3lx, irq %d, hw_addr ", 
 	   dev->name, card_name, sram_config == 0 ? "4K TX*2" : "8K TX*2", 
@@ -594,7 +576,8 @@ static int fmvj18x_event(event_t event, int priority,
 			  event_callback_args_t *args)
 {
     dev_link_t *link = args->client_data;
-    struct net_device *dev = link->priv;
+    local_info_t *lp = link->priv;
+    struct net_device *dev = &lp->dev;
 
     DEBUG(1, "fmvj18x_event(0x%06x)\n", event);
     
@@ -677,12 +660,12 @@ module_exit(exit_fmvj18x_cs);
 
 static void fjn_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 {
-    struct net_device *dev = (struct net_device *)dev_id;
+    local_info_t *lp = dev_id;
+    struct net_device *dev = &lp->dev;
     ioaddr_t ioaddr;
-    local_info_t *lp;
     unsigned short tx_stat, rx_stat;
 
-    if (dev == NULL) {
+    if (lp == NULL) {
         printk(KERN_NOTICE "fjn_interrupt(): irq %d for "
 	       "unknown device.\n", irq);
         return;
@@ -693,7 +676,6 @@ static void fjn_interrupt(int irq, void *dev_id, struct pt_regs *regs)
         return;
     }
     dev->interrupt = 1;
-    lp = (struct local_info_t *)dev->priv;
     ioaddr = dev->base_addr;
 
     /* avoid multiple interrupts */
@@ -710,12 +692,8 @@ static void fjn_interrupt(int irq, void *dev_id, struct pt_regs *regs)
     outb(tx_stat, ioaddr + TX_STATUS);
     outb(rx_stat, ioaddr + RX_STATUS);
     
-    if (fmvj18x_debug > 4) {
-        printk(KERN_DEBUG "%s: interrupt, rx_status %02x.\n",
-	       dev->name, rx_stat);
-        printk(KERN_DEBUG "               tx_status %02x.\n",
-	       tx_stat);
-    }
+    DEBUG(4, "%s: interrupt, rx_status %02x.\n", dev->name, rx_stat);
+    DEBUG(4, "               tx_status %02x.\n", tx_stat);
     
     if (rx_stat || (inb(ioaddr + RX_MODE) & F_BUF_EMP) == 0) {
 	/* there is packet(s) in rx buffer */
@@ -738,11 +716,8 @@ static void fjn_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 	    mark_bh(NET_BH);	/* Inform upper layers. */
 	}
     }
-    if (fmvj18x_debug > 4) {
-        printk(KERN_DEBUG "%s: exiting interrupt,\n", dev->name);
-        printk(KERN_DEBUG "    tx_status %02x, rx_status %02x.\n",
-	       tx_stat, rx_stat);
-    }
+    DEBUG(4, "%s: exiting interrupt,\n", dev->name);
+    DEBUG(4, "    tx_status %02x, rx_status %02x.\n", tx_stat, rx_stat);
 
     dev->interrupt = 0;
     outb(D_TX_INTR, ioaddr + TX_INTR);
@@ -802,15 +777,13 @@ static int fjn_start_xmit(struct sk_buff *skb, struct net_device *dev)
 	unsigned char *buf = skb->data;
 
 	if (length > ETH_FRAME_LEN) {
-	    if (fmvj18x_debug)
-		printk(KERN_NOTICE "%s: Attempting to send a large packet"
-		       " (%d bytes).\n", dev->name, length);
+	    printk(KERN_NOTICE "%s: Attempting to send a large packet"
+		   " (%d bytes).\n", dev->name, length);
 	    return 1;
 	}
 
-	if (fmvj18x_debug > 4)
-	    printk(KERN_DEBUG "%s: Transmitting a packet of length %lu.\n",
-		   dev->name, (unsigned long)skb->len);
+	DEBUG(4, "%s: Transmitting a packet of length %lu.\n",
+	      dev->name, (unsigned long)skb->len);
 	lp->stats.tx_bytes += skb->len;
 
 	/* Disable both interrupts. */
@@ -864,9 +837,7 @@ static void fjn_reset(struct net_device *dev)
     ioaddr_t ioaddr = dev->base_addr;
     int i;
 
-    if (fmvj18x_debug > 4) {
-	printk(KERN_DEBUG "fjn_reset(%s) called.\n",dev->name);
-    }
+    DEBUG(4, "fjn_reset(%s) called.\n",dev->name);
 
     /* Power On chip and select bank 0 */
     outb(BANK_0, ioaddr + CONFIG_1);
@@ -885,12 +856,6 @@ static void fjn_reset(struct net_device *dev)
     for (i = 0; i < 6; i++) 
         outb(dev->dev_addr[i], ioaddr + NODE_ID + i);
 
-    if (fmvj18x_debug > 4) {
-	printk(KERN_DEBUG "node id: ");
-	for (i = 0; i < 6; i++) 
-	    printk("%02X ",inb(ioaddr + NODE_ID + i));
-	printk("\n");
-    }
     /* Switch to bank 1 */
     outb(BANK_1, ioaddr + CONFIG_1);
 
@@ -948,16 +913,14 @@ static void fjn_rx(struct net_device *dev)
     ioaddr_t ioaddr = dev->base_addr;
     int boguscount = 10;	/* 5 -> 10: by agy 19940922 */
 
-    if (fmvj18x_debug > 4)
-        printk(KERN_DEBUG "%s: in rx_packet(), rx_status %02x.\n",
-               dev->name, inb(ioaddr + RX_STATUS));
+    DEBUG(4, "%s: in rx_packet(), rx_status %02x.\n",
+	  dev->name, inb(ioaddr + RX_STATUS));
 
     while ((inb(ioaddr + RX_MODE) & F_BUF_EMP) == 0) {
 	u_short status = inw(ioaddr + DATAPORT);
 
-	if (fmvj18x_debug > 4)
-	    printk(KERN_DEBUG "%s: Rxing packet mode %02x status %04x.\n",
-		   dev->name, inb(ioaddr + RX_MODE), status);
+	DEBUG(4, "%s: Rxing packet mode %02x status %04x.\n",
+	      dev->name, inb(ioaddr + RX_MODE), status);
 #ifndef final_version
 	if (status == 0) {
 	    outb(F_SKP_PKT, ioaddr + RX_SKIP);
@@ -997,7 +960,8 @@ static void fjn_rx(struct net_device *dev)
 		    (pkt_len + 1) >> 1);
 	    skb->protocol = eth_type_trans(skb, dev);
 
-	    if (fmvj18x_debug > 5) {
+#ifdef PCMCIA_DEBUG
+	    if (pc_debug > 5) {
 		int i;
 		printk(KERN_DEBUG "%s: Rxed packet of length %d: ",
 		       dev->name, pkt_len);
@@ -1005,6 +969,7 @@ static void fjn_rx(struct net_device *dev)
 		    printk(" %02x", skb->data[i]);
 		printk(".\n");
 	    }
+#endif
 
 	    netif_rx(skb);
 	    lp->stats.rx_packets++;
@@ -1027,9 +992,9 @@ static void fjn_rx(struct net_device *dev)
 	    outb(F_SKP_PKT, ioaddr + RX_SKIP);
 	}
 
-	if (fmvj18x_debug > 5 && i > 0)
-	    printk(KERN_DEBUG "%s: Exint Rx packet with mode %02x after"
-		   " %d ticks.\n", dev->name, inb(ioaddr + RX_MODE), i);
+	if (i > 0)
+	    DEBUG(5, "%s: Exint Rx packet with mode %02x after "
+		  "%d ticks.\n", dev->name, inb(ioaddr + RX_MODE), i);
     }
 */
 
@@ -1040,18 +1005,15 @@ static void fjn_rx(struct net_device *dev)
 
 static int fjn_config(struct net_device *dev, struct ifmap *map){
     return 0;
-} /* fjn_config */
+}
 
 static int fjn_open(struct net_device *dev)
 {
     struct local_info_t *lp = (struct local_info_t *)dev->priv;
-    dev_link_t *link;
+    dev_link_t *link = &lp->link;
 
-    if (fmvj18x_debug > 4)
-        printk(KERN_DEBUG "fjn_open('%s').\n", dev->name);
+    DEBUG(4, "fjn_open('%s').\n", dev->name);
 
-    for (link = dev_list; link; link = link->next)
-	if (link->priv == dev) break;
     if (!DEV_OK(link))
 	return -ENODEV;
     
@@ -1076,23 +1038,13 @@ static int fjn_open(struct net_device *dev)
 
 static int fjn_close(struct net_device *dev)
 {
-    ioaddr_t ioaddr = dev->base_addr;
     struct local_info_t *lp = (struct local_info_t *)dev->priv;
-    dev_link_t *link;
+    dev_link_t *link = &lp->link;
+    ioaddr_t ioaddr = dev->base_addr;
 
-    if (fmvj18x_debug > 4)
-        printk(KERN_DEBUG "fjn_open('%s').\n", dev->name);
+    DEBUG(4, "fjn_close('%s').\n", dev->name);
 
-    for (link = dev_list; link; link = link->next)
-	if (link->priv == dev) break;
-    if (link == NULL)
-	return -ENODEV;
-    
-    if (fmvj18x_debug > 2)
-	printk(KERN_DEBUG "%s: shutting down ethercard.\n", dev->name);
-
-    ((struct local_info_t *)dev->priv)->open_time = 0;
-
+    lp->open_time = 0;
     dev->tbusy = 1;
     dev->start = 0;
 
@@ -1109,7 +1061,7 @@ static int fjn_close(struct net_device *dev)
 
     /* Set the ethernet adaptor disable IRQ */
     if( lp->cardtype != TDK ) 
-    		outb(INTR_OFF, ioaddr + LAN_CTRL);
+	outb(INTR_OFF, ioaddr + LAN_CTRL);
 
     link->open--;
     dev->start = 0;

@@ -1117,6 +1117,9 @@ int i2o_block_init(void)
 	 *	Finally see what is actually plugged in to our controllers
 	 */
 
+	for (i = 0; i < MAX_I2OB; i++)
+		register_disk(&i2ob_gendisk, MKDEV(MAJOR_NR,i<<4), 1<<4,
+			&i2ob_fops, 0);
 	i2ob_probe();
 	
 	register_reboot_notifier(&i2ob_reboot_notifier);

@@ -4,6 +4,9 @@
  * (C) Copyright 1999 Linus Torvalds
  */
 
+#ifndef __PCI_SOCKET_H
+#define __PCI_SOCKET_H
+
 struct pci_socket_ops;
 
 typedef struct pci_socket {
@@ -40,3 +43,4 @@ struct pci_socket_ops {
 extern struct pci_socket_ops yenta_operations;
 extern struct pci_socket_ops ricoh_operations;
 
+#endif

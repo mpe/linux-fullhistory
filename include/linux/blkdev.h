@@ -105,6 +105,7 @@ extern struct sec_size * blk_sec[MAX_BLKDEV];
 extern struct blk_dev_struct blk_dev[MAX_BLKDEV];
 extern wait_queue_head_t wait_for_request;
 extern void grok_partitions(struct gendisk *dev, int drive, unsigned minors, long size);
+extern void register_disk(struct gendisk *dev, kdev_t first, unsigned minors, struct block_device_operations *ops, long size);
 extern void unplug_device(void * data);
 extern void make_request(int major,int rw, struct buffer_head * bh);
 

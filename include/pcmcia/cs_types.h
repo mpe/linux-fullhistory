@@ -1,5 +1,5 @@
 /*
- * cs_types.h 1.16 1999/10/25 20:23:17
+ * cs_types.h 1.17 2000/01/18 01:14:36
  *
  * The contents of this file are subject to the Mozilla Public License
  * Version 1.1 (the "License"); you may not use this file except in
@@ -30,7 +30,11 @@
 #ifndef _LINUX_CS_TYPES_H
 #define _LINUX_CS_TYPES_H
 
+#ifdef __KERNEL__
 #include <linux/types.h>
+#else
+#include <sys/types.h>
+#endif
 
 typedef u_short	socket_t;
 typedef u_short	ioaddr_t;

@@ -686,6 +686,12 @@ static void hd_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 	sti();
 }
 
+static struct block_device_operations hd_fops = {
+	open:		hd_open,
+	release:	hd_release,
+	ioctl:		hd_ioctl,
+};
+
 /*
  * This is the hard disk IRQ description. The SA_INTERRUPT in sa_flags
  * means we run the IRQ-handler with interrupts disabled:  this is bad for
@@ -787,15 +793,10 @@ static void hd_geninit(void)
 	hd_gendisk.nr_real = NR_HD;
 
 	for(drive=0; drive < NR_HD; drive++)
-		grok_partitions(&hd_gendisk, drive, 1<<6, hd_info[drive].head *
-			hd_info[drive].sect * hd_info[drive].cyl);
+		register_disk(&hd_gendisk, MKDEV(MAJOR_NR,drive<<6), 1<<6,
+			&hd_fops, hd_info[drive].head * hd_info[drive].sect *
+			hd_info[drive].cyl);
 }
-
-static struct block_device_operations hd_fops = {
-	open:		hd_open,
-	release:	hd_release,
-	ioctl:		hd_ioctl,
-};
 
 int __init hd_init(void)
 {

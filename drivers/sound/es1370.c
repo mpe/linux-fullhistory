@@ -114,6 +114,8 @@
  *    03.09.1999   0.30  change read semantics for MIDI to match
  *                       OSS more closely; remove possible wakeup race
  *    28.10.1999   0.31  More waitqueue races fixed
+ *    08.01.2000   0.32  Prevent some ioctl's from returning bad count values on underrun/overrun;
+ *                       Tim Janik's BSE (Bedevilled Sound Engine) found this
  *
  * some important things missing in Ensoniq documentation:
  *
@@ -1331,6 +1333,7 @@ static int es1370_ioctl(struct inode *inode, struct file *file, unsigned int cmd
 	unsigned long flags;
         audio_buf_info abinfo;
         count_info cinfo;
+	int count;
 	int val, mapped, ret;
 
 	VALIDATE_STATE(s);
@@ -1508,7 +1511,10 @@ static int es1370_ioctl(struct inode *inode, struct file *file, unsigned int cmd
 		spin_lock_irqsave(&s->lock, flags);
 		es1370_update_ptr(s);
 		abinfo.fragsize = s->dma_dac2.fragsize;
-                abinfo.bytes = s->dma_dac2.dmasize - s->dma_dac2.count;
+		count = s->dma_dac2.count;
+		if (count < 0)
+			count = 0;
+                abinfo.bytes = s->dma_dac2.dmasize - count;
                 abinfo.fragstotal = s->dma_dac2.numfrag;
                 abinfo.fragments = abinfo.bytes >> s->dma_dac2.fragshift;      
 		spin_unlock_irqrestore(&s->lock, flags);
@@ -1522,7 +1528,10 @@ static int es1370_ioctl(struct inode *inode, struct file *file, unsigned int cmd
 		spin_lock_irqsave(&s->lock, flags);
 		es1370_update_ptr(s);
 		abinfo.fragsize = s->dma_adc.fragsize;
-                abinfo.bytes = s->dma_adc.count;
+		count = s->dma_adc.count;
+		if (count < 0)
+			count = 0;
+                abinfo.bytes = count;
                 abinfo.fragstotal = s->dma_adc.numfrag;
                 abinfo.fragments = abinfo.bytes >> s->dma_adc.fragshift;      
 		spin_unlock_irqrestore(&s->lock, flags);
@@ -1537,9 +1546,11 @@ static int es1370_ioctl(struct inode *inode, struct file *file, unsigned int cmd
 			return -EINVAL;
 		spin_lock_irqsave(&s->lock, flags);
 		es1370_update_ptr(s);
-                val = s->dma_dac2.count;
+                count = s->dma_dac2.count;
 		spin_unlock_irqrestore(&s->lock, flags);
-		return put_user(val, (int *)arg);
+		if (count < 0)
+			count = 0;
+		return put_user(count, (int *)arg);
 
         case SNDCTL_DSP_GETIPTR:
 		if (!(file->f_mode & FMODE_READ))
@@ -1547,7 +1558,10 @@ static int es1370_ioctl(struct inode *inode, struct file *file, unsigned int cmd
 		spin_lock_irqsave(&s->lock, flags);
 		es1370_update_ptr(s);
                 cinfo.bytes = s->dma_adc.total_bytes;
-                cinfo.blocks = s->dma_adc.count >> s->dma_adc.fragshift;
+		count = s->dma_adc.count;
+		if (count < 0)
+			count = 0;
+                cinfo.blocks = count >> s->dma_adc.fragshift;
                 cinfo.ptr = s->dma_adc.hwptr;
 		if (s->dma_adc.mapped)
 			s->dma_adc.count &= s->dma_adc.fragsize-1;
@@ -1560,7 +1574,10 @@ static int es1370_ioctl(struct inode *inode, struct file *file, unsigned int cmd
 		spin_lock_irqsave(&s->lock, flags);
 		es1370_update_ptr(s);
                 cinfo.bytes = s->dma_dac2.total_bytes;
-                cinfo.blocks = s->dma_dac2.count >> s->dma_dac2.fragshift;
+		count = s->dma_dac2.count;
+		if (count < 0)
+			count = 0;
+                cinfo.blocks = count >> s->dma_dac2.fragshift;
                 cinfo.ptr = s->dma_dac2.hwptr;
 		if (s->dma_dac2.mapped)
 			s->dma_dac2.count &= s->dma_dac2.fragsize-1;
@@ -1853,6 +1870,7 @@ static int es1370_ioctl_dac(struct inode *inode, struct file *file, unsigned int
 	unsigned long flags;
         audio_buf_info abinfo;
         count_info cinfo;
+	int count;
 	unsigned ctrl;
 	int val, ret;
 
@@ -1961,7 +1979,10 @@ static int es1370_ioctl_dac(struct inode *inode, struct file *file, unsigned int
 		spin_lock_irqsave(&s->lock, flags);
 		es1370_update_ptr(s);
 		abinfo.fragsize = s->dma_dac1.fragsize;
-                abinfo.bytes = s->dma_dac1.dmasize - s->dma_dac1.count;
+		count = s->dma_dac1.count;
+		if (count < 0)
+			count = 0;
+                abinfo.bytes = s->dma_dac1.dmasize - count;
                 abinfo.fragstotal = s->dma_dac1.numfrag;
                 abinfo.fragments = abinfo.bytes >> s->dma_dac1.fragshift;      
 		spin_unlock_irqrestore(&s->lock, flags);
@@ -1974,9 +1995,11 @@ static int es1370_ioctl_dac(struct inode *inode, struct file *file, unsigned int
         case SNDCTL_DSP_GETODELAY:
 		spin_lock_irqsave(&s->lock, flags);
 		es1370_update_ptr(s);
-                val = s->dma_dac1.count;
+                count = s->dma_dac1.count;
 		spin_unlock_irqrestore(&s->lock, flags);
-		return put_user(val, (int *)arg);
+		if (count < 0)
+			count = 0;
+		return put_user(count, (int *)arg);
 
         case SNDCTL_DSP_GETOPTR:
 		if (!(file->f_mode & FMODE_WRITE))
@@ -1984,7 +2007,10 @@ static int es1370_ioctl_dac(struct inode *inode, struct file *file, unsigned int
 		spin_lock_irqsave(&s->lock, flags);
 		es1370_update_ptr(s);
                 cinfo.bytes = s->dma_dac1.total_bytes;
-                cinfo.blocks = s->dma_dac1.count >> s->dma_dac1.fragshift;
+		count = s->dma_dac1.count;
+		if (count < 0)
+			count = 0;
+                cinfo.blocks = count >> s->dma_dac1.fragshift;
                 cinfo.ptr = s->dma_dac1.hwptr;
 		if (s->dma_dac1.mapped)
 			s->dma_dac1.count &= s->dma_dac1.fragsize-1;
@@ -2444,7 +2470,7 @@ static int __init init_es1370(void)
 
 	if (!pci_present())   /* No PCI bus in this machine! */
 		return -ENODEV;
-	printk(KERN_INFO "es1370: version v0.31 time " __TIME__ " " __DATE__ "\n");
+	printk(KERN_INFO "es1370: version v0.32 time " __TIME__ " " __DATE__ "\n");
 	while (index < NR_DEVICE && 
 	       (pcidev = pci_find_device(PCI_VENDOR_ID_ENSONIQ, PCI_DEVICE_ID_ENSONIQ_ES1370, pcidev))) {
 		if (!RSRCISIOREGION(pcidev, 0))

@@ -4,6 +4,13 @@
 #include <linux/list.h>
 
 /*
+ * Hub request types
+ */
+
+#define USB_RT_HUB	(USB_TYPE_CLASS | USB_RECIP_DEVICE)
+#define USB_RT_PORT	(USB_TYPE_CLASS | USB_RECIP_OTHER)
+
+/*
  * Hub Class feature numbers
  */
 #define C_HUB_LOCAL_POWER	0

@@ -302,6 +302,8 @@ struct site_survey {
 };	
    
 typedef struct netwave_private {
+    dev_link_t link;
+    struct net_device      dev;
     dev_node_t node;
     u_char     *ramBase;
     int        timeoutCounter;
@@ -440,7 +442,7 @@ static dev_link_t *netwave_attach(void)
     client_reg_t client_reg;
     dev_link_t *link;
     struct net_device *dev;
-    netwave_private *priv; 
+    netwave_private *priv;
     int i, ret;
     
     DEBUG(0, "netwave_attach()\n");
@@ -449,8 +451,11 @@ static dev_link_t *netwave_attach(void)
     netwave_flush_stale_links();
 
     /* Initialize the dev_link_t structure */
-    link = kmalloc(sizeof(struct dev_link_t), GFP_KERNEL);
-    memset(link, 0, sizeof(struct dev_link_t));
+    priv = kmalloc(sizeof(*priv), GFP_KERNEL);
+    if (!priv) return NULL;
+    memset(priv, 0, sizeof(*priv));
+    link = &priv->link; dev = &priv->dev;
+    link->priv = dev->priv = priv;
     link->release.function = &netwave_release;
     link->release.data = (u_long)link;
 	
@@ -478,15 +483,7 @@ static dev_link_t *netwave_attach(void)
     link->conf.ConfigIndex = 1;
     link->conf.Present = PRESENT_OPTION;
 
-    /* Allocate space for private device-specific data */
-    dev = kmalloc(sizeof(struct net_device), GFP_KERNEL);
-    memset(dev, 0, sizeof(struct net_device));
-
-    dev->priv = kmalloc(sizeof(netwave_private), GFP_KERNEL);
-    memset(dev->priv, 0, sizeof(netwave_private));
-
     /* Set the watchdog timer */
-    priv = (netwave_private *) dev->priv;
     priv->watchdog.function = &netwave_watchdog;
     priv->watchdog.data = (unsigned long) dev;
 
@@ -502,12 +499,12 @@ static dev_link_t *netwave_attach(void)
     dev->do_ioctl = &netwave_ioctl;
 
     ether_setup(dev);
-    dev->name = ((struct netwave_private *)dev->priv)->node.dev_name;
+    dev->name = priv->node.dev_name;
     dev->init = &netwave_init;
     dev->open = &netwave_open;
     dev->stop = &netwave_close;
     dev->tbusy = 1;
-    link->priv = link->irq.Instance = dev;
+    link->irq.Instance = dev;
     
     /* Register with Card Services */
     link->next = dev_list;
@@ -541,6 +538,7 @@ static dev_link_t *netwave_attach(void)
  */
 static void netwave_detach(dev_link_t *link)
 {
+    netwave_private *priv = link->priv;
     dev_link_t **linkp;
     long flags;
 
@@ -587,16 +585,9 @@ static void netwave_detach(dev_link_t *link)
 
     /* Unlink device structure, free pieces */
     *linkp = link->next;
-    if (link->priv) {
-	struct net_device *dev = link->priv;
-	if (link->dev != NULL)
-	  unregister_netdev(dev);
-	link->dev = NULL;
-	if (dev->priv)
-	    kfree(dev->priv);
-	kfree(link->priv);
-    }
-    kfree(link);
+    if (link->dev)
+	unregister_netdev(&priv->dev);
+    kfree(priv);
     
 } /* netwave_detach */
 
@@ -633,8 +624,8 @@ static void netwave_flush_stale_links(void)
  *
  */
 static int netwave_ioctl(struct net_device *dev, /* ioctl device */
-						 struct ifreq *rq,	 /* Data passed */
-						 int	cmd)	     /* Ioctl number */
+			 struct ifreq *rq,	 /* Data passed */
+			 int	cmd)	     /* Ioctl number */
 {
     unsigned long flags;
     int			ret = 0;
@@ -839,20 +830,16 @@ static int netwave_ioctl(struct net_device *dev, /* ioctl device */
 while ((last_ret=CardServices(last_fn=(fn), args))!=0) goto cs_failed
 
 static void netwave_pcmcia_config(dev_link_t *link) {
-    client_handle_t handle;
+    client_handle_t handle = link->handle;
+    netwave_private *priv = link->priv;
+    struct net_device *dev = &priv->dev;
     tuple_t tuple;
     cisparse_t parse;
-    struct net_device *dev;
     int i, j, last_ret, last_fn;
     u_char buf[64];
     win_req_t req;
     memreq_t mem;
     u_char *ramBase = NULL;
-    /*    modwin_t mod;
-	  short iobase, *phys_addr;
-	  */  
-    handle = link->handle;
-    dev = link->priv;
 
     DEBUG(0, "netwave_pcmcia_config(0x%p)\n", link);
 
@@ -969,7 +956,7 @@ failed:
  */
 static void netwave_release(u_long arg) {
     dev_link_t *link = (dev_link_t *)arg;
-    struct net_device *dev = link->priv;
+    netwave_private *priv = link->priv;
 
     DEBUG(0, "netwave_release(0x%p)\n", link);
 
@@ -986,7 +973,7 @@ static void netwave_release(u_long arg) {
 	
     /* Don't bother checking to see if these succeed or not */
     if (link->win) {
-	iounmap(((netwave_private *)dev->priv)->ramBase);
+	iounmap(priv->ramBase);
 	CardServices(ReleaseWindow, link->win);
     }
     CardServices(ReleaseConfiguration, link->handle);
@@ -1014,7 +1001,8 @@ static void netwave_release(u_long arg) {
 static int netwave_event(event_t event, int priority,
 			 event_callback_args_t *args) {
     dev_link_t *link = args->client_data;
-    struct net_device *dev = link->priv;
+    netwave_private *priv = link->priv;
+    struct net_device *dev = &priv->dev;
 	
     DEBUG(1, "netwave_event(0x%06x)\n", event);
   
@@ -1027,7 +1015,6 @@ static int netwave_event(event_t event, int priority,
 	link->state &= ~DEV_PRESENT;
 	if (link->state & DEV_CONFIG) {
 	    dev->tbusy = 1; dev->start = 0;
-	    /* ((netwave_private *)link->priv)->block = 1; */
 	    link->release.expires = jiffies + 5;
 	    add_timer(&link->release);
 	}
@@ -1312,24 +1299,18 @@ static void netwave_interrupt(int irq, void* dev_id, struct pt_regs *regs) {
     ioaddr_t iobase;
     u_char *ramBase;
     struct net_device *dev = (struct net_device *)dev_id;
-    struct netwave_private *priv;
+    struct netwave_private *priv = dev->priv;
+    dev_link_t *link = &priv->link;
     int i;
-    dev_link_t *link;
     
-	if ((dev == NULL) | (!dev->start))
-		return;
-    
-    priv = (netwave_private *)dev->priv;
+    if ((dev == NULL) | (!dev->start))
+	return;
     
     if (dev->interrupt) {
 	printk("%s: re-entering the interrupt handler.\n", dev->name);
 	return;
     }
     dev->interrupt = 1;
-	
-    /* Find the correct dev_link_t */
-    for (link = dev_list; NULL != link; link = link->next)
-	if (dev == link->priv) break;
     
     iobase = dev->base_addr;
     ramBase = priv->ramBase;
@@ -1592,12 +1573,10 @@ static int netwave_rx(struct net_device *dev) {
 }
 
 static int netwave_open(struct net_device *dev) {
-    dev_link_t *link;
+    netwave_private *priv = dev->priv;
+    dev_link_t *link = &priv->link;
 
     DEBUG(1, "netwave_open: starting.\n");
-
-    for (link = dev_list; link; link = link->next)
-	if (link->priv == dev) break;
     
     if (!DEV_OK(link))
 	return -ENODEV;
@@ -1612,16 +1591,11 @@ static int netwave_open(struct net_device *dev) {
 }
 
 static int netwave_close(struct net_device *dev) {
-    dev_link_t *link;
-    netwave_private *priv = (netwave_private *) dev->priv;
+    netwave_private *priv = (netwave_private *)dev->priv;
+    dev_link_t *link = &priv->link;
 
     DEBUG(1, "netwave_close: finishing.\n");
 
-    for (link = dev_list; link; link = link->next)
-	if (link->priv == dev) break;
-    if (link == NULL)
-	return -ENODEV;
-	
     /* If watchdog was activated, kill it ! */
     del_timer(&priv->watchdog);
 	

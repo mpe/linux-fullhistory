@@ -2,7 +2,7 @@
 
     PCMCIA Card Services -- core services
 
-    cs.c 1.235 1999/11/11 17:52:05
+    cs.c 1.247 2000/01/15 04:30:35
     
     The contents of this file are subject to the Mozilla Public
     License Version 1.1 (the "License"); you may not use this file
@@ -59,7 +59,6 @@
 #include <pcmcia/cistpl.h>
 #include <pcmcia/cisreg.h>
 #include <pcmcia/bus_ops.h>
-
 #include "cs_internal.h"
 #include "rsrc_mgr.h"
 
@@ -72,28 +71,40 @@ static int handle_apm_event(apm_event_t event);
 int pc_debug = PCMCIA_DEBUG;
 MODULE_PARM(pc_debug, "i");
 static const char *version =
-"cs.c 1.235 1999/11/11 17:52:05 (David Hinds)";
+"cs.c 1.247 2000/01/15 04:30:35 (David Hinds)";
+#endif
+
+#ifdef CONFIG_PCI
+#define PCI_OPT " [pci]"
+#else
+#define PCI_OPT ""
+#endif
+#ifdef CONFIG_CARDBUS
+#define CB_OPT " [cardbus]"
+#else
+#define CB_OPT ""
+#endif
+#ifdef CONFIG_APM
+#define APM_OPT " [apm]"
+#else
+#define APM_OPT ""
+#endif
+#if !defined(CONFIG_CARDBUS) && !defined(CONFIG_PCI) && \
+    !defined(CONFIG_APM)
+#define OPTIONS " none"
+#else
+#define OPTIONS PCI_OPT CB_OPT APM_OPT
 #endif
 
 static const char *release = "Linux PCMCIA Card Services " CS_RELEASE;
 #ifdef MODULE
 static const char *kernel = "kernel build: " UTS_RELEASE " " UTS_VERSION;
 #endif
-static const char *options = "options: "
-#ifdef CONFIG_PCI
-" [pci]"
-#endif
-#ifdef CONFIG_CARDBUS
-" [cardbus]"
-#endif
-#ifdef CONFIG_APM
-" [apm]"
-#endif
-#if !defined(CONFIG_CARDBUS) && !defined(CONFIG_PCI) && \
-    !defined(CONFIG_APM) && !defined(CONFIG_PNP_BIOS)
-" none"
-#endif
-;
+static const char *options = "options: " OPTIONS;
+
+MODULE_AUTHOR("David Hinds <dhinds@pcmcia.sourceforge.org>");
+MODULE_DESCRIPTION("Linux PCMCIA Card Services " CS_RELEASE
+		   "\n  options:" OPTIONS);
 
 /*====================================================================*/
 
@@ -261,11 +272,6 @@ static int get_socket_status(socket_info_t *s, int *val)
 static int set_socket(socket_info_t *s, socket_state_t *state)
 {
 	return s->ss_entry->set_socket(s->sock, state);
-}
-
-static int get_io_map(socket_info_t *s, struct pccard_io_map *io)
-{
-	return s->ss_entry->get_io_map(s->sock, io);
 }
 
 static int set_io_map(socket_info_t *s, struct pccard_io_map *io)
@@ -734,18 +740,18 @@ static int alloc_io_space(socket_info_t *s, u_int attr, ioaddr_t *base,
     int i;
     ioaddr_t try, align;
 
-    align = (*base) ? (1<<lines) : 1;
+    align = (*base) ? (lines ? 1<<lines : 0) : 1;
     if (align && (align < num)) {
-	printk(KERN_INFO "odd IO request: num %04x align %04x\n",
-	       num, align);
-	if (*base)
+	if (*base) {
+	    DEBUG(0, "odd IO request: num %04x align %04x\n",
+		  num, align);
 	    align = 0;
-	else
+	} else
 	    while (align && (align < num)) align <<= 1;
     }
-    if (align && (*base & (align-1))) {
-	printk(KERN_INFO "odd IO request: base %04x align %04x\n",
-	       *base, align);
+    if (*base & ~(align-1)) {
+	DEBUG(0, "odd IO request: base %04x align %04x\n",
+	      *base, align);
 	align = 0;
     }
     for (i = 0; i < MAX_IO_WIN; i++) {
@@ -862,6 +868,7 @@ int pcmcia_bind_device(bind_req_t *req)
     s = SOCKET(req);
 
     client = (client_t *)kmalloc(sizeof(client_t), GFP_KERNEL);
+    if (!client) return CS_OUT_OF_RESOURCE;
     memset(client, '\0', sizeof(client_t));
     client->client_magic = CLIENT_MAGIC;
     strncpy(client->dev_info, (char *)req->dev_info, DEV_NAME_LEN);
@@ -1122,7 +1129,7 @@ int pcmcia_get_window(window_handle_t *handle, int idx, win_req_t *req)
     if (win->ctl.flags & MAP_ACTIVE)
 	req->Attributes |= WIN_ENABLE;
     if (win->ctl.flags & MAP_16BIT)
-	req->Attributes |= WIN_DATA_WIDTH;
+	req->Attributes |= WIN_DATA_WIDTH_16;
     if (win->ctl.flags & MAP_USE_WAIT)
 	req->Attributes |= WIN_USE_WAIT;
     *handle = win;
@@ -1331,7 +1338,7 @@ int pcmcia_modify_window(window_handle_t win, modwin_t *req)
 	win->ctl.flags |= MAP_ATTRIB;
     if (req->Attributes & WIN_ENABLE)
 	win->ctl.flags |= MAP_ACTIVE;
-    if (req->Attributes & WIN_DATA_WIDTH)
+    if (req->Attributes & WIN_DATA_WIDTH_16)
 	win->ctl.flags |= MAP_16BIT;
     if (req->Attributes & WIN_USE_WAIT)
 	win->ctl.flags |= MAP_USE_WAIT;
@@ -1426,7 +1433,7 @@ int pcmcia_register_client(client_handle_t *handle, client_reg_t *req)
 
 int pcmcia_release_configuration(client_handle_t handle)
 {
-    pccard_io_map io;
+    pccard_io_map io = { 0, 0, 0, 0, 1 };
     socket_info_t *s;
     int i;
     
@@ -1460,8 +1467,6 @@ int pcmcia_release_configuration(client_handle_t handle)
 		if (s->io[i].Config != 0)
 		    continue;
 		io.map = i;
-		get_io_map(s, &io);
-		io.flags &= ~MAP_ACTIVE;
 		set_io_map(s, &io);
 	    }
 	c->state &= ~CONFIG_LOCKED;
@@ -1863,7 +1868,8 @@ int pcmcia_request_window(client_handle_t *handle, win_req_t *req, window_handle
 {
     socket_info_t *s;
     window_t *win;
-    int w, align;
+    u_long align;
+    int w;
     
     if (CHECK_HANDLE(*handle))
 	return CS_BAD_HANDLE;
@@ -1873,16 +1879,25 @@ int pcmcia_request_window(client_handle_t *handle, win_req_t *req, window_handle
     if (req->Attributes & (WIN_PAGED | WIN_SHARED))
 	return CS_BAD_ATTRIBUTE;
 
+    /* Window size defaults to smallest available */
+    if (req->Size == 0)
+	req->Size = s->cap.map_size;
+    align = (((s->cap.features & SS_CAP_MEM_ALIGN) ||
+	      (req->Attributes & WIN_STRICT_ALIGN)) ?
+	     req->Size : s->cap.map_size);
+    if (req->Size & (s->cap.map_size-1))
+	return CS_BAD_SIZE;
+    if (req->Base & (align-1))
+	return CS_BAD_BASE;
+    if (req->Base)
+	align = 0;
+    
+    /* Allocate system memory window */
     for (w = 0; w < MAX_WIN; w++)
 	if (!(s->state & SOCKET_WIN_REQ(w))) break;
     if (w == MAX_WIN)
 	return CS_OUT_OF_RESOURCE;
 
-    /* Window size defaults to smallest available */
-    if (req->Size == 0)
-	req->Size = s->cap.map_size;
-    
-    /* Allocate system memory window */
     win = &s->win[w];
     win->magic = WINDOW_MAGIC;
     win->index = w;
@@ -1890,10 +1905,8 @@ int pcmcia_request_window(client_handle_t *handle, win_req_t *req, window_handle
     win->sock = s;
     win->base = req->Base;
     win->size = req->Size;
-    align = ((s->cap.features & SS_CAP_MEM_ALIGN) ||
-	     (req->Attributes & WIN_STRICT_ALIGN));
-    if (find_mem_region(&win->base, win->size,
-			(align ? req->Size : s->cap.map_size),
+	
+    if (find_mem_region(&win->base, win->size, align,
 			(req->Attributes & WIN_MAP_BELOW_1MB) ||
 			!(s->cap.features & SS_CAP_PAGE_REGS),
 			(*handle)->dev_info))
@@ -1909,7 +1922,7 @@ int pcmcia_request_window(client_handle_t *handle, win_req_t *req, window_handle
 	win->ctl.flags |= MAP_ATTRIB;
     if (req->Attributes & WIN_ENABLE)
 	win->ctl.flags |= MAP_ACTIVE;
-    if (req->Attributes & WIN_DATA_WIDTH)
+    if (req->Attributes & WIN_DATA_WIDTH_16)
 	win->ctl.flags |= MAP_16BIT;
     if (req->Attributes & WIN_USE_WAIT)
 	win->ctl.flags |= MAP_USE_WAIT;

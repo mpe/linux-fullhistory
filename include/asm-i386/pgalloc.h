@@ -184,6 +184,7 @@ extern inline void set_pgdir(unsigned long address, pgd_t entry)
  *
  *  - flush_tlb() flushes the current mm struct TLBs
  *  - flush_tlb_all() flushes all processes TLBs
+ *  - flush_tlb_all_kernel() flushes all processes TLBs, including special TLBs
  *  - flush_tlb_mm(mm) flushes the specified mm context TLB's
  *  - flush_tlb_page(vma, vmaddr) flushes one page
  *  - flush_tlb_range(mm, start, end) flushes a range of pages
@@ -196,6 +197,7 @@ extern inline void set_pgdir(unsigned long address, pgd_t entry)
 
 #define flush_tlb() __flush_tlb()
 #define flush_tlb_all() __flush_tlb()
+#define flush_tlb_all_kernel() __flush_tlb_global()
 #define local_flush_tlb() __flush_tlb()
 
 static inline void flush_tlb_mm(struct mm_struct *mm)
@@ -231,6 +233,7 @@ static inline void flush_tlb_range(struct mm_struct *mm,
 	__flush_tlb()
 
 extern void flush_tlb_all(void);
+extern void flush_tlb_all_kernel(void);
 extern void flush_tlb_current_task(void);
 extern void flush_tlb_mm(struct mm_struct *);
 extern void flush_tlb_page(struct vm_area_struct *, unsigned long);

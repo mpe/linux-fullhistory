@@ -21,6 +21,28 @@
 #define USB_CLASS_VENDOR_SPEC		0xff
 
 /*
+ * USB types
+ */
+#define USB_TYPE_STANDARD		(0x00 << 5)
+#define USB_TYPE_CLASS			(0x01 << 5)
+#define USB_TYPE_VENDOR			(0x02 << 5)
+#define USB_TYPE_RESERVED		(0x03 << 5)
+
+/*
+ * USB recipients
+ */
+#define USB_RECIP_DEVICE		0x00
+#define USB_RECIP_INTERFACE		0x01
+#define USB_RECIP_ENDPOINT		0x02
+#define USB_RECIP_OTHER			0x03
+
+/*
+ * USB directions
+ */
+#define USB_DIR_OUT			0
+#define USB_DIR_IN			0x80
+
+/*
  * Descriptor types
  */
 #define USB_DT_DEVICE			0x01
@@ -29,10 +51,10 @@
 #define USB_DT_INTERFACE		0x04
 #define USB_DT_ENDPOINT			0x05
 
-#define USB_DT_HUB			0x29
-#define USB_DT_HID			0x21
-#define USB_DT_REPORT			0x22
-#define USB_DT_PHYSICAL			0x23
+#define USB_DT_HID			(USB_TYPE_CLASS | 0x01)
+#define USB_DT_REPORT			(USB_TYPE_CLASS | 0x02)
+#define USB_DT_PHYSICAL			(USB_TYPE_CLASS | 0x03)
+#define USB_DT_HUB			(USB_TYPE_CLASS | 0x09)
 
 /*
  * Descriptor sizes per descriptor type
@@ -46,11 +68,8 @@
 #define USB_DT_HID_SIZE			9
 
 /*
- * USB Request Type and Endpoint Directions
+ * Endpoints
  */
-#define USB_DIR_OUT			0
-#define USB_DIR_IN			0x80
-
 #define USB_ENDPOINT_NUMBER_MASK	0x0f	/* in bEndpointAddress */
 #define USB_ENDPOINT_DIR_MASK		0x80
 
@@ -72,9 +91,7 @@
  */
 #define USB_REQ_GET_STATUS		0x00
 #define USB_REQ_CLEAR_FEATURE		0x01
-/* 0x02 is reserved */
 #define USB_REQ_SET_FEATURE		0x03
-/* 0x04 is reserved */
 #define USB_REQ_SET_ADDRESS		0x05
 #define USB_REQ_GET_DESCRIPTOR		0x06
 #define USB_REQ_SET_DESCRIPTOR		0x07
@@ -85,7 +102,7 @@
 #define USB_REQ_SYNCH_FRAME		0x0C
 
 /*
- * HIDD requests
+ * HID requests
  */
 #define USB_REQ_GET_REPORT		0x01
 #define USB_REQ_GET_IDLE		0x02
@@ -94,34 +111,9 @@
 #define USB_REQ_SET_IDLE		0x0A
 #define USB_REQ_SET_PROTOCOL		0x0B
 
-#define USB_TYPE_STANDARD		(0x00 << 5)
-#define USB_TYPE_CLASS			(0x01 << 5)
-#define USB_TYPE_VENDOR			(0x02 << 5)
-#define USB_TYPE_RESERVED		(0x03 << 5)
-
-#define USB_RECIP_DEVICE		0x00
-#define USB_RECIP_INTERFACE		0x01
-#define USB_RECIP_ENDPOINT		0x02
-#define USB_RECIP_OTHER			0x03
-
-#define USB_HID_RPT_INPUT		0x01
-#define USB_HID_RPT_OUTPUT		0x02
-#define USB_HID_RPT_FEATURE		0x03
-
 /*
- * Request target types.
+ * /proc/bus/usb ioctl structs and codes
  */
-#define USB_RT_DEVICE			0x00
-#define USB_RT_INTERFACE		0x01
-#define USB_RT_ENDPOINT			0x02
-
-#define USB_RT_HUB			(USB_TYPE_CLASS | USB_RECIP_DEVICE)
-#define USB_RT_PORT			(USB_TYPE_CLASS | USB_RECIP_OTHER)
-
-#define USB_RT_HIDD			(USB_TYPE_CLASS | USB_RECIP_INTERFACE)
-
-/* /proc/bus/usb/xxx/yyy ioctl codes */
-
 struct usb_proc_ctrltransfer {
 	__u8 requesttype;
 	__u8 request;
@@ -227,9 +219,10 @@ typedef struct {
 	__u16 length;
 } devrequest __attribute__ ((packed));
 
-/* USB-status codes:
+/*
+ * USB-status codes:
  * USB_ST* maps to -E* and should go away in the future
-*/
+ */
 
 #define USB_ST_NOERROR		0
 #define USB_ST_CRC		(-EILSEQ)
@@ -316,22 +309,6 @@ struct usb_endpoint_descriptor {
 
    	unsigned char *extra;   /* Extra descriptors */
 	int extralen;
-} __attribute__ ((packed));
-
-/* HID descriptor */
-struct usb_hid_class_descriptor {
-	__u8  bDescriptorType;
-	__u16 wDescriptorLength;
-} __attribute__ ((packed));
-
-struct usb_hid_descriptor {
-	__u8  bLength;
-	__u8  bDescriptorType;
-	__u16 bcdHID;
-	__u8  bCountryCode;
-	__u8  bNumDescriptors;
-
-	struct usb_hid_class_descriptor desc[1];
 } __attribute__ ((packed));
 
 /* Interface descriptor */
@@ -782,7 +759,6 @@ int usb_clear_halt(struct usb_device *dev, int endp);
 void usb_show_device_descriptor(struct usb_device_descriptor *);
 void usb_show_config_descriptor(struct usb_config_descriptor *);
 void usb_show_interface_descriptor(struct usb_interface_descriptor *);
-void usb_show_hid_descriptor(struct usb_hid_descriptor * desc);
 void usb_show_endpoint_descriptor(struct usb_endpoint_descriptor *);
 void usb_show_device(struct usb_device *);
 void usb_show_string(struct usb_device *dev, char *id, int index);

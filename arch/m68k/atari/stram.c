@@ -1255,6 +1255,8 @@ int __init stram_device_init(void)
     blksize_size[STRAM_MAJOR] = stram_blocksizes;
 	stram_sizes[STRAM_MINOR] = (swap_end - swap_start)/1024;
     blk_size[STRAM_MAJOR] = stram_sizes;
+	register_disk(NULL, MKDEV(STRAM_MAJOR, STRAM_MINOR), 1, &stram_fops,
+			(swap_end-swap_start)>>9);
 	do_z2_request(); /* to avoid warning */
 	return( 0 );
 }

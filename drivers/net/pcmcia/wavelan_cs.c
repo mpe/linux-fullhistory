@@ -2105,7 +2105,7 @@ wavelan_ioctl(struct net_device *	dev,	/* Device on wich the ioctl apply */
 	}
 
       /* only super-user can see encryption key */
-      if(!suser())
+      if(!capable(CAP_NET_ADMIN))
 	{
 	  ret = -EPERM;
 	  break;
@@ -2437,7 +2437,7 @@ wavelan_ioctl(struct net_device *	dev,	/* Device on wich the ioctl apply */
       /* ------------------ PRIVATE IOCTL ------------------ */
 
     case SIOCSIPQTHR:
-      if(!suser())
+      if(!capable(CAP_NET_ADMIN))
 	{
 	  ret = -EPERM;
 	  break;
@@ -2476,7 +2476,7 @@ wavelan_ioctl(struct net_device *	dev,	/* Device on wich the ioctl apply */
 #ifdef HISTOGRAM
     case SIOCSIPHISTO:
       /* Verif if the user is root */
-      if(!suser())
+      if(!capable(CAP_NET_ADMIN))
 	{
 	  ret = -EPERM;
 	}

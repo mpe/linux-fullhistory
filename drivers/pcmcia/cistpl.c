@@ -2,7 +2,7 @@
 
     PCMCIA Card Information Structure parser
 
-    cistpl.c 1.74 1999/11/08 20:47:02
+    cistpl.c 1.77 2000/01/16 19:19:01
 
     The contents of this file are subject to the Mozilla Public
     License Version 1.1 (the "License"); you may not use this file
@@ -52,6 +52,7 @@
 #include <pcmcia/ss.h>
 #include <pcmcia/cs.h>
 #include <pcmcia/bulkmem.h>
+#include <pcmcia/cisreg.h>
 #include <pcmcia/cistpl.h>
 #include "cs_internal.h"
 #include "rsrc_mgr.h"
@@ -83,12 +84,15 @@ static const u_int exponent[] = {
     
 ======================================================================*/
 
+/* Bits in attr field */
+#define IS_ATTR		1
+#define IS_INDIRECT	8
+
 void read_cis_mem(socket_info_t *s, int attr, u_int addr,
 		  u_int len, void *ptr)
 {
     pccard_mem_map *mem = &s->cis_mem;
-    u_char *sys;
-    u_int inc = 1;
+    u_char *sys, *buf = ptr;
     
     DEBUG(3, "cs: read_cis_mem(%d, %#x, %u)\n", attr, addr, len);
     if (setup_cis_mem(s) != 0) {
@@ -96,47 +100,81 @@ void read_cis_mem(socket_info_t *s, int attr, u_int addr,
 	return;
     }
     mem->flags |= MAP_ACTIVE; mem->flags &= ~MAP_ATTRIB;
-    if (attr) { mem->flags |= MAP_ATTRIB; inc++; addr *= 2; }
-    sys = s->cis_virt + (addr & (s->cap.map_size-1));
-    mem->card_start = addr & ~(s->cap.map_size-1);
+    sys = s->cis_virt;
 
-    for (; len > 0; sys = s->cis_virt) {
+    if (attr & IS_INDIRECT) {
+	/* Indirect accesses use a bunch of special registers at fixed
+	   locations in common memory */
+	u_char flags = ICTRL0_COMMON|ICTRL0_AUTOINC|ICTRL0_BYTEGRAN;
+	if (attr & IS_ATTR) { addr *= 2; flags = ICTRL0_AUTOINC; }
+	mem->card_start = 0;
 	s->ss_entry->set_mem_map(s->sock, mem);
-	DEBUG(3,  "cs:  %#2.2x %#2.2x %#2.2x %#2.2x %#2.2x ...\n",
-	      bus_readb(s->cap.bus, sys),
-	      bus_readb(s->cap.bus, sys+inc),
-	      bus_readb(s->cap.bus, sys+2*inc),
-	      bus_readb(s->cap.bus, sys+3*inc),
-	      bus_readb(s->cap.bus, sys+4*inc));
-	for ( ; len > 0; len--, ((u_char *)ptr)++, sys += inc) {
-	    if (sys == s->cis_virt+s->cap.map_size) break;
-	    *(u_char *)ptr = bus_readb(s->cap.bus, sys);
+	bus_writeb(s->cap.bus, flags, sys+CISREG_ICTRL0);
+	bus_writeb(s->cap.bus, addr & 0xff, sys+CISREG_IADDR0);
+	bus_writeb(s->cap.bus, (addr>>8) & 0xff, sys+CISREG_IADDR1);
+	bus_writeb(s->cap.bus, (addr>>16) & 0xff, sys+CISREG_IADDR2);
+	bus_writeb(s->cap.bus, (addr>>24) & 0xff, sys+CISREG_IADDR3);
+	for ( ; len > 0; len--, buf++)
+	    *buf = bus_readb(s->cap.bus, sys+CISREG_IDATA0);
+    } else {
+	u_int inc = 1;
+	if (attr) { mem->flags |= MAP_ATTRIB; inc++; addr *= 2; }
+	sys += (addr & (s->cap.map_size-1));
+	mem->card_start = addr & ~(s->cap.map_size-1);
+
+	for (; len > 0; sys = s->cis_virt) {
+	    s->ss_entry->set_mem_map(s->sock, mem);
+	    for ( ; len > 0; len--, buf++, sys += inc) {
+		if (sys == s->cis_virt+s->cap.map_size) break;
+		*buf = bus_readb(s->cap.bus, sys);
+	    }
+	    mem->card_start += s->cap.map_size;
 	}
-	mem->card_start += s->cap.map_size;
     }
+    DEBUG(3, "cs:  %#2.2x %#2.2x %#2.2x %#2.2x ...\n",
+	  *(u_char *)(ptr+0), *(u_char *)(ptr+1),
+	  *(u_char *)(ptr+2), *(u_char *)(ptr+3));
 }
 
 void write_cis_mem(socket_info_t *s, int attr, u_int addr,
 		   u_int len, void *ptr)
 {
     pccard_mem_map *mem = &s->cis_mem;
-    u_char *sys;
-    int inc = 1;
+    u_char *sys, *buf = ptr;
     
     DEBUG(3, "cs: write_cis_mem(%d, %#x, %u)\n", attr, addr, len);
     if (setup_cis_mem(s) != 0) return;
-    mem->flags &= ~MAP_ATTRIB;
-    if (attr) { mem->flags |= MAP_ATTRIB; inc++; addr *= 2; }
-    sys = s->cis_virt + (addr & (s->cap.map_size-1));
-    mem->card_start = addr & ~(s->cap.map_size-1);
-    
-    for (; len > 0; sys = s->cis_virt) {
+    mem->flags |= MAP_ACTIVE; mem->flags &= ~MAP_ATTRIB;
+    sys = s->cis_virt;
+
+    if (attr & IS_INDIRECT) {
+	/* Indirect accesses use a bunch of special registers at fixed
+	   locations in common memory */
+	u_char flags = ICTRL0_COMMON|ICTRL0_AUTOINC|ICTRL0_BYTEGRAN;
+	if (attr & IS_ATTR) { addr *= 2; flags = ICTRL0_AUTOINC; }
+	mem->card_start = 0;
 	s->ss_entry->set_mem_map(s->sock, mem);
-	for ( ; len > 0; len--, ((u_char *)ptr)++, sys += inc) {
-	    if (sys == s->cis_virt+s->cap.map_size) break;
-	    bus_writeb(s->cap.bus, *(u_char *)ptr, sys);
+	bus_writeb(s->cap.bus, flags, sys+CISREG_ICTRL0);
+	bus_writeb(s->cap.bus, addr & 0xff, sys+CISREG_IADDR0);
+	bus_writeb(s->cap.bus, (addr>>8) & 0xff, sys+CISREG_IADDR1);
+	bus_writeb(s->cap.bus, (addr>>16) & 0xff, sys+CISREG_IADDR2);
+	bus_writeb(s->cap.bus, (addr>>24) & 0xff, sys+CISREG_IADDR3);
+	for ( ; len > 0; len--, buf++)
+	    bus_writeb(s->cap.bus, *buf, sys+CISREG_IDATA0);
+    } else {
+	int inc = 1;
+	if (attr & IS_ATTR) { mem->flags |= MAP_ATTRIB; inc++; addr *= 2; }
+	sys += (addr & (s->cap.map_size-1));
+	mem->card_start = addr & ~(s->cap.map_size-1);
+
+	for (; len > 0; sys = s->cis_virt) {
+	    s->ss_entry->set_mem_map(s->sock, mem);
+	    for ( ; len > 0; len--, buf++, sys += inc) {
+		if (sys == s->cis_virt+s->cap.map_size) break;
+		bus_writeb(s->cap.bus, *buf, sys);
+	    }
+	    mem->card_start += s->cap.map_size;
 	}
-	mem->card_start += s->cap.map_size;
     }
 }
 
@@ -342,10 +380,10 @@ int pcmcia_replace_cis(client_handle_t handle, cisdump_t *cis)
 ======================================================================*/
 
 typedef struct tuple_flags {
-    u_int		link_space:3;
+    u_int		link_space:4;
     u_int		has_link:1;
     u_int		mfc_fn:3;
-    u_int		space:3;
+    u_int		space:4;
 } tuple_flags;
 
 #define LINK_SPACE(f)	(((tuple_flags *)(&(f)))->link_space)
@@ -469,17 +507,23 @@ int pcmcia_get_next_tuple(client_handle_t handle, tuple_t *tuple)
 	    (link[0] == CISTPL_LONGLINK_C) ||
 	    (link[0] == CISTPL_LONGLINK_MFC) ||
 	    (link[0] == CISTPL_LINKTARGET) ||
+	    (link[0] == CISTPL_INDIRECT) ||
 	    (link[0] == CISTPL_NO_LINK)) {
 	    switch (link[0]) {
 	    case CISTPL_LONGLINK_A:
 		HAS_LINK(tuple->Flags) = 1;
-		LINK_SPACE(tuple->Flags) = 1;
+		LINK_SPACE(tuple->Flags) = attr | IS_ATTR;
 		read_cis_cache(s, attr, ofs+2, 4, &tuple->LinkOffset);
 		break;
 	    case CISTPL_LONGLINK_C:
 		HAS_LINK(tuple->Flags) = 1;
-		LINK_SPACE(tuple->Flags) = 0;
+		LINK_SPACE(tuple->Flags) = attr & ~IS_ATTR;
 		read_cis_cache(s, attr, ofs+2, 4, &tuple->LinkOffset);
+		break;
+	    case CISTPL_INDIRECT:
+		HAS_LINK(tuple->Flags) = 1;
+		LINK_SPACE(tuple->Flags) = IS_ATTR | IS_INDIRECT;
+		tuple->LinkOffset = 0;
 		break;
 	    case CISTPL_LONGLINK_MFC:
 		tuple->LinkOffset = ofs + 3;

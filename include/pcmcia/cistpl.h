@@ -1,5 +1,5 @@
 /*
- * cistpl.h 1.31 1999/10/25 20:23:17
+ * cistpl.h 1.32 2000/01/11 19:06:50
  *
  * The contents of this file are subject to the Mozilla Public License
  * Version 1.1 (the "License"); you may not use this file except in
@@ -33,10 +33,13 @@
 #define CISTPL_NULL		0x00
 #define CISTPL_DEVICE		0x01
 #define CISTPL_LONGLINK_CB	0x02
+#define CISTPL_INDIRECT		0x03
 #define CISTPL_CONFIG_CB	0x04
 #define CISTPL_CFTABLE_ENTRY_CB	0x05
 #define CISTPL_LONGLINK_MFC	0x06
 #define CISTPL_BAR		0x07
+#define CISTPL_PWR_MGMNT	0x08
+#define CISTPL_EXTDEVICE	0x09
 #define CISTPL_CHECKSUM		0x10
 #define CISTPL_LONGLINK_A	0x11
 #define CISTPL_LONGLINK_C	0x12
@@ -67,6 +70,7 @@
 #define CISTPL_BATTERY		0x45
 /* Layer 3 tuples */
 #define CISTPL_ORG		0x46
+#define CISTPL_SPCL		0x90
 
 typedef struct cistpl_longlink_t {
     u_int	addr;

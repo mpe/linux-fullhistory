@@ -206,7 +206,7 @@ ifdef CONFIG_PPC
 DRIVERS := $(DRIVERS) drivers/macintosh/macintosh.a
 endif
 
-ifeq ($(CONFIG_PNP),y)
+ifeq ($(CONFIG_ISAPNP),y)
 DRIVERS := $(DRIVERS) drivers/pnp/isa-pnp.o
 endif
 
@@ -487,7 +487,7 @@ depend dep: dep-files $(MODVERFILE)
 
 # make checkconfig: Prune 'scripts' directory to avoid "false positives".
 checkconfig:
-	perl -w scripts/checkconfig.pl `find * -path 'scripts' -prune -o -name '*.[hcS]' -print | sort`
+	find * -name '*.[hcS]' -type f -print | grep -v scripts/ | sort | xargs perl -w scripts/checkconfig.pl
 
 checkhelp:
 	perl -w scripts/checkhelp.pl `find * -name [cC]onfig.in -print`

@@ -1478,6 +1478,7 @@ int __init sjcd_init( void ){
   
   blk_init_queue(BLK_DEFAULT_QUEUE(MAJOR_NR), DEVICE_REQUEST);
   read_ahead[ MAJOR_NR ] = 4;
+  register_disk(NULL, MKDEV(MAJOR_NR,0), 1, &sjcd_fops, 0);
   
   if( check_region( sjcd_base, 4 ) ){
     printk( "SJCD: Init failed, I/O port (%X) is already in use\n",

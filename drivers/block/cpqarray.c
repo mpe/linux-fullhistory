@@ -480,8 +480,8 @@ void __init cpqarray_init(void)
 
 		ida_geninit(i);
 		for(j=0; j<NWD; j++)	
-			grok_partitions(&ida_gendisk[i], j, 16,
-					hba[i]->drv[j].nr_blks);
+			register_disk(&ida_gendisk[i], MKDEV(MAJOR_NR+i,j<<4),
+					16, &ida_fops, hba[i]->drv[j].nr_blks);
 	}
 	/* done ! */
 	return;

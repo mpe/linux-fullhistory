@@ -2,7 +2,7 @@
  *  hid.c  Version 0.8
  *
  *  Copyright (c) 1999 Andreas Gal
- *  Copyright (c) 1999 Vojtech Pavlik
+ *  Copyright (c) 2000 Vojtech Pavlik
  *
  *  USB HID support for the Linux input drivers
  *
@@ -1074,7 +1074,7 @@ int hid_set_field(struct hid_field *field, unsigned offset, __s32 value)
 static struct hid_device *usb_hid_configure(struct usb_device *dev, int ifnum)
 {
 	struct usb_interface_descriptor *interface = &dev->actconfig->interface[ifnum].altsetting[0];
-	struct usb_hid_descriptor *hdesc;
+	struct hid_descriptor *hdesc;
 	struct hid_device *hid;
 	unsigned rsize = 0;
 	int n;

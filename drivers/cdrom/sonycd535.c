@@ -798,9 +798,6 @@ do_cdu535_request(request_queue_t * q)
 	Byte status[2];
 	Byte cmd[2];
 
-	if (!sony_inuse) {
-		cdu_open(NULL, NULL);
-	}
 	while (1) {
 		/*
 		 * The beginning here is stolen from the hard disk driver.  I hope
@@ -1396,7 +1393,6 @@ cdu_open(struct inode *inode,
 {
 	Byte status[2], cmd_buff[2];
 
-
 	if (sony_inuse)
 		return -EBUSY;
 	if (check_drive_status() != 0)
@@ -1638,6 +1634,7 @@ sony535_init(void)
 		return -EIO;
 	}
 	request_region(sony535_cd_base_io, 4, CDU535_HANDLE);
+	register_disk(NULL, MKDEV(MAJOR_NR,0), 1, &cdu_fops, 0);
 	return 0;
 }
 

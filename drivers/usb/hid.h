@@ -4,8 +4,8 @@
 /*
  *  drivers/usb/hid.h  Version 0.8
  *
- *  Copyright (c) 1999 Vojtech Pavlik
  *  Copyright (c) 1999 Andreas Gal
+ *  Copyright (c) 2000 Vojtech Pavlik
  *
  *  Sponsored by SuSE
  */
@@ -36,35 +36,10 @@
 #include <linux/list.h>
 
 /*
- * Enable/Disable debug information.
- */
-
-#ifdef CONFIG_USB_HID_DEBUG
-#define hid_debug(fmt,arg...) printk(KERN_DEBUG "hid: " fmt "\n" , ##arg)
-#else
-#define hid_debug(fmt,arg...) do { } while (0)
-#endif
-
-/*
  * USB HID (Human Interface Device) interface class code
  */
 
 #define USB_INTERFACE_CLASS_HID		3
-
-/*
- * USB interface subclass codes. 
- */
-
-#define USB_INTERFACE_SUBCLASS_NONE	0 
-#define USB_INTERFACE_SUBCLASS_HID_BP	1
-
-/*
- * HID protocol codes (only for boot protocol)
- */
-
-#define HID_PROTOCOL_NONE	0
-#define HID_PROTOCOL_KBD	1
-#define HID_PROTOCOL_MOUSE	2
 
 /*
  * We parse each description item into this structure. Short items data
@@ -122,7 +97,6 @@ struct hid_item {
 
 /*
  * HID report descriptor main item contents
- * Warning: VOLATILE is not available for TAG_INPUT
  */
 
 #define HID_MAIN_ITEM_CONSTANT		0x001
@@ -196,31 +170,12 @@ struct hid_item {
 #define HID_GD_HATSWITCH	0x00010039
 
 /*
- * HID interface requests (this belongs here, the USB_REQ_xxx stuff should
- * disapear).
- */
-
-#define HID_REQ_GET_REPORT   0x01
-#define HID_REQ_GET_IDLE     0x02
-#define HID_REQ_GET_PROTOCOL 0x03
-#define HID_REQ_SET_REPORT   0x09
-#define HID_REQ_SET_IDLE     0x0A
-#define HID_REQ_SET_PROTOCOL 0x0B
-
-/*
  * HID report types --- Ouch! HID spec says 1 2 3!
  */
 
 #define HID_INPUT_REPORT	0
 #define HID_OUTPUT_REPORT	1
 #define HID_FEATURE_REPORT	2
-
-/*
- * HID protocols
- */
-
-#define HID_PROTOCOL_BOOT	0
-#define HID_PROTOCOL_REPORT	1
 
 /*
  * This is the global enviroment of the parser. This information is
@@ -340,6 +295,22 @@ struct hid_parser {
 	unsigned              collection_stack_ptr;
 	struct hid_device    *device;
 };
+
+struct hid_class_descriptor {
+	__u8  bDescriptorType;
+	__u16 wDescriptorLength;
+} __attribute__ ((packed));
+
+struct hid_descriptor {
+	__u8  bLength;
+	__u8  bDescriptorType;
+	__u16 bcdHID;
+	__u8  bCountryCode;
+	__u8  bNumDescriptors;
+
+	struct hid_class_descriptor desc[1];
+} __attribute__ ((packed));
+
 
 #endif
 

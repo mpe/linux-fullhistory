@@ -31,6 +31,7 @@
 
 #define IDESCSI_VERSION "0.9"
 
+#include <linux/config.h>
 #include <linux/module.h>
 #include <linux/types.h>
 #include <linux/string.h>

@@ -21,16 +21,6 @@
 
 #include <linux/config.h>
 #include <linux/module.h>
-#ifdef MODULE
-/*
- * This is a variable in scsi.c that is set when we are processing something
- * after boot time.  By definition, this is true when we are a loadable module
- * ourselves.
- */
-#define MODULE_FLAG 1
-#else
-#define MODULE_FLAG scsi_loadable_module_flag
-#endif				/* MODULE */
 
 #include <linux/fs.h>
 #include <linux/kernel.h>
@@ -500,16 +490,6 @@ static struct gendisk *sd_gendisks = &sd_gendisk;
 
 #define SD_GENDISK(i)    sd_gendisks[(i) / SCSI_DISKS_PER_MAJOR]
 #define LAST_SD_GENDISK  sd_gendisks[N_USED_SD_MAJORS - 1]
-
-static void sd_geninit(void)
-{
-	int i;
-
-	for (i = 0; i < sd_template.dev_max; ++i)
-		if (rscsi_disks[i].device)
-			grok_partitions(&SD_GENDISK(i), i%SCSI_DISKS_PER_MAJOR,
-					1<<4, rscsi_disks[i].capacity);
-}
 
 /*
  * rw_intr is the interrupt routine for the device driver.
@@ -1024,7 +1004,6 @@ static int sd_init()
 	}
 
 	LAST_SD_GENDISK.next = NULL;
-	sd_geninit();
 	return 0;
 }
 
@@ -1045,16 +1024,15 @@ static void sd_finish()
 		gendisk_head = sd_gendisks;
 	}
 	for (i = 0; i < sd_template.dev_max; ++i)
-		if (!rscsi_disks[i].capacity &&
-		    rscsi_disks[i].device) {
-			if (MODULE_FLAG
-			    && !rscsi_disks[i].has_part_table) {
+		if (!rscsi_disks[i].capacity && rscsi_disks[i].device) {
+			sd_init_onedisk(i);
+			if (!rscsi_disks[i].has_part_table) {
 				sd_sizes[i << 4] = rscsi_disks[i].capacity;
-				/* revalidate does sd_init_onedisk via MAYBE_REINIT */
-				revalidate_scsidisk(MKDEV_SD(i), 0);
-			} else
-				i = sd_init_onedisk(i);
-			rscsi_disks[i].has_part_table = 1;
+				register_disk(&SD_GENDISK(i), MKDEV_SD(i),
+						1<<4, &sd_fops,
+						rscsi_disks[i].capacity);
+				rscsi_disks[i].has_part_table = 1;
+			}
 		}
 	/* If our host adapter is capable of scatter-gather, then we increase
 	 * the read-ahead to 60 blocks (120 sectors).  If not, we use
@@ -1207,6 +1185,7 @@ static void sd_detach(Scsi_Device * SDp)
 				sd_gendisks->part[index].nr_sects = 0;
 				sd_sizes[index] = 0;
 			}
+			/* unregister_disk() */
 			dpnt->has_part_table = 0;
 			dpnt->device = NULL;
 			dpnt->capacity = 0;

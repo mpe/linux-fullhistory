@@ -360,6 +360,8 @@ int pf_init (void)      /* preliminary initialisation */
         
 	for (i=0;i<PF_UNITS;i++) pf_blocksizes[i] = 1024;
 	blksize_size[MAJOR_NR] = pf_blocksizes;
+	for (i=0;i<PF_UNITS;i++)
+		register_disk(NULL, MKDEV(MAJOR_NR, i), 1, &pf_fops, 0);
 
         return 0;
 }

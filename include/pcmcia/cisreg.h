@@ -1,5 +1,5 @@
 /*
- * cisreg.h 1.14 1999/10/25 20:23:17
+ * cisreg.h 1.16 2000/01/16 19:19:14
  *
  * The contents of this file are subject to the Mozilla Public License
  * Version 1.1 (the "License"); you may not use this file except in
@@ -30,7 +30,9 @@
 #ifndef _LINUX_CISREG_H
 #define _LINUX_CISREG_H
 
-/* Offsets from ConfigBase for CIS registers */
+/*
+ * Offsets from ConfigBase for CIS registers
+ */
 #define CISREG_COR		0x00
 #define CISREG_CCSR		0x02
 #define CISREG_PRR		0x04
@@ -112,5 +114,22 @@
 #define FEMR_BAM_ENA		0x0020
 #define FEMR_PWM_ENA		0x0040
 #define FEMR_WKUP_MASK		0x4000
+
+/*
+ * Indirect Addressing Registers for Zoomed Video: these are addresses
+ * in common memory space
+ */
+#define CISREG_ICTRL0		0x02	/* control registers */
+#define CISREG_ICTRL1		0x03
+#define CISREG_IADDR0		0x04	/* address registers */
+#define CISREG_IADDR1		0x05
+#define CISREG_IADDR2		0x06
+#define CISREG_IADDR3		0x07
+#define CISREG_IDATA0		0x08	/* data registers */
+#define CISREG_IDATA1		0x09
+
+#define ICTRL0_COMMON		0x01
+#define ICTRL0_AUTOINC		0x02
+#define ICTRL0_BYTEGRAN		0x04
 
 #endif /* _LINUX_CISREG_H */

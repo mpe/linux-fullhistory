@@ -1,8 +1,8 @@
 /*
  *  driver/usb/hid-debug.h
  *
- *  (c) 1999 Andreas Gal <gal@cs.uni-magdeburg.de>
- *  (c) 1999 Vojtech Pavlik <vojtech@suse.cz>
+ *  (c) 1999 Andreas Gal	<gal@cs.uni-magdeburg.de>
+ *  (c) 2000 Vojtech Pavlik	<vojtech@suse.cz>
  *
  *  Some debug stuff for the HID parser.
  *

@@ -566,9 +566,10 @@ static int usb_start_wait_urb(urb_t *urb, int timeout, unsigned long* rval)
 		return status;
 	}
 
-	if (urb->status == -EINPROGRESS)
-		status=schedule_timeout(timeout); // ZZzzzz....
-	else
+	if (urb->status == -EINPROGRESS) {
+		while (timeout && urb->status == -EINPROGRESS)
+			status = timeout = schedule_timeout(timeout);
+	} else
 		status = 1;
 
 	remove_wait_queue(&wqh, &wait);
@@ -1291,7 +1292,7 @@ int usb_get_class_descriptor(struct usb_device *dev, unsigned char type,
 		unsigned char id, unsigned char index, void *buf, int size)
 {
 	return usb_control_msg(dev, usb_rcvctrlpipe(dev, 0),
-		USB_REQ_GET_DESCRIPTOR, USB_RT_INTERFACE | USB_DIR_IN,
+		USB_REQ_GET_DESCRIPTOR, USB_RECIP_INTERFACE | USB_DIR_IN,
 		(type << 8) + id, index, buf, size, HZ * GET_TIMEOUT);
 }
 
@@ -1327,7 +1328,7 @@ int usb_get_protocol(struct usb_device *dev)
 	int ret;
 
 	if ((ret = usb_control_msg(dev, usb_rcvctrlpipe(dev, 0),
-	    USB_REQ_GET_PROTOCOL, USB_DIR_IN | USB_RT_HIDD,
+	    USB_REQ_GET_PROTOCOL, USB_DIR_IN | USB_TYPE_CLASS | USB_RECIP_INTERFACE,
 	    0, 1, &type, 1, HZ * GET_TIMEOUT)) < 0)
 		return ret;
 
@@ -1337,13 +1338,15 @@ int usb_get_protocol(struct usb_device *dev)
 int usb_set_protocol(struct usb_device *dev, int protocol)
 {
 	return usb_control_msg(dev, usb_sndctrlpipe(dev, 0),
-		USB_REQ_SET_PROTOCOL, USB_RT_HIDD, protocol, 1, NULL, 0, HZ * SET_TIMEOUT);
+		USB_REQ_SET_PROTOCOL, USB_TYPE_CLASS | USB_RECIP_INTERFACE,
+		protocol, 1, NULL, 0, HZ * SET_TIMEOUT);
 }
 
 int usb_set_idle(struct usb_device *dev,  int duration, int report_id)
 {
-	return usb_control_msg(dev, usb_sndctrlpipe(dev, 0), USB_REQ_SET_IDLE,
-		USB_RT_HIDD, (duration << 8) | report_id, 1, NULL, 0, HZ * SET_TIMEOUT);
+	return usb_control_msg(dev, usb_sndctrlpipe(dev, 0),
+		USB_REQ_SET_IDLE, USB_TYPE_CLASS | USB_RECIP_INTERFACE,
+		(duration << 8) | report_id, 1, NULL, 0, HZ * SET_TIMEOUT);
 }
 
 static void usb_set_maxpacket(struct usb_device *dev)
@@ -1386,14 +1389,14 @@ int usb_clear_halt(struct usb_device *dev, int endp)
 */
 
 	result = usb_control_msg(dev, usb_sndctrlpipe(dev, 0),
-		USB_REQ_CLEAR_FEATURE, USB_RT_ENDPOINT, 0, endp, NULL, 0, HZ * SET_TIMEOUT);
+		USB_REQ_CLEAR_FEATURE, USB_RECIP_ENDPOINT, 0, endp, NULL, 0, HZ * SET_TIMEOUT);
 
 	/* don't clear if failed */
 	if (result < 0)
 		return result;
 
 	result = usb_control_msg(dev, usb_rcvctrlpipe(dev, 0),
-		USB_REQ_GET_STATUS, USB_DIR_IN | USB_RT_ENDPOINT, 0, endp,
+		USB_REQ_GET_STATUS, USB_DIR_IN | USB_RECIP_ENDPOINT, 0, endp,
 		&status, sizeof(status), HZ * SET_TIMEOUT);
 	if (result < 0)
 		return result;
@@ -1427,7 +1430,7 @@ int usb_set_interface(struct usb_device *dev, int interface, int alternate)
 	}
 
 	if ((ret = usb_control_msg(dev, usb_sndctrlpipe(dev, 0),
-	    USB_REQ_SET_INTERFACE, USB_RT_INTERFACE, alternate,
+	    USB_REQ_SET_INTERFACE, USB_RECIP_INTERFACE, alternate,
 	    interface, NULL, 0, HZ * 5)) < 0)
 		return ret;
 
@@ -1467,14 +1470,14 @@ int usb_set_configuration(struct usb_device *dev, int configuration)
 int usb_get_report(struct usb_device *dev, unsigned char type, unsigned char id, unsigned char index, void *buf, int size)
 {
 	return usb_control_msg(dev, usb_rcvctrlpipe(dev, 0),
-		USB_REQ_GET_REPORT, USB_DIR_IN | USB_RT_HIDD,
+		USB_REQ_GET_REPORT, USB_DIR_IN | USB_TYPE_CLASS | USB_RECIP_INTERFACE,
 		(type << 8) + id, index, buf, size, HZ * GET_TIMEOUT);
 }
 
 int usb_set_report(struct usb_device *dev, unsigned char type, unsigned char id, unsigned char index, void *buf, int size)
 {
 	return usb_control_msg(dev, usb_sndctrlpipe(dev, 0),
-		USB_REQ_SET_REPORT, USB_RT_HIDD,
+		USB_REQ_SET_REPORT, USB_TYPE_CLASS | USB_RECIP_INTERFACE,
 		(type << 8) + id, index, buf, size, HZ);
 }
 

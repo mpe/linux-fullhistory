@@ -1,4 +1,4 @@
-/* $Revision: 2.6 $$Date: 1998/08/10 16:57:01 $
+/* $Revision: 3.0 $$Date: 1998/11/02 14:20:59 $
  * linux/include/linux/cyclades.h
  *
  * This file was initially written by
@@ -7,6 +7,9 @@
  *
  * This file contains the general definitions for the cyclades.c driver
  *$Log: cyclades.h,v $
+ *Revision 3.0  1998/11/02 14:20:59  ivan
+ *added nports field on cyclades_card structure;
+ *
  *Revision 2.5  1998/08/03 16:57:01  ivan
  *added cyclades_idle_stats structure;
  * 
@@ -502,6 +505,7 @@ struct cyclades_card {
     int irq;
     int num_chips;	/* 0 if card absent, -1 if Z/PCI, else Y */
     int first_line;	/* minor number of first channel on card */
+    int nports;		/* Number of ports in the card */
     int bus_index;	/* address shift - 0 for ISA, 1 for PCI */
     int	intr_enabled;	/* FW Interrupt flag - 0 disabled, 1 enabled */
 #ifdef __KERNEL__

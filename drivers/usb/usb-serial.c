@@ -14,6 +14,13 @@
  *
  * See Documentation/usb-serial.txt for more information on using this driver.
  * 
+ *
+ * (01/17/2000) gkh
+ *	Fixed the WhiteHEAT firmware (my processing tool had a bug)
+ *	and added new debug loader firmware for it.
+ *	Removed the put_char function as it isn't really needed.
+ *	Added visor startup commands as found by the Win98 dump.
+ * 
  * (01/13/2000) gkh
  *	Fixed the vendor id for the generic driver to the one I meant it to be.
  *
@@ -82,6 +89,7 @@
  * 
  */
 
+#include <linux/config.h>
 #include <linux/kernel.h>
 #include <linux/sched.h>
 #include <linux/signal.h>
@@ -96,13 +104,13 @@
 #include <linux/module.h>
 #include <linux/spinlock.h>
 
-#ifdef CONFIG_USB_SERIAL_WHITEHEAT
-#include "whiteheat.h"		/* firmware for the ConnectTech WhiteHEAT device */
-#endif
-
 #define DEBUG
 
 #include "usb.h"
+
+#ifdef CONFIG_USB_SERIAL_WHITEHEAT
+#include "whiteheat.h"		/* firmware for the ConnectTech WhiteHEAT device */
+#endif
 
 /* Module information */
 MODULE_AUTHOR("Greg Kroah-Hartman, greg@kroah.com, http://www.kroah.com/linux-usb/");
@@ -193,7 +201,6 @@ struct usb_serial_state {
 static int serial_open (struct tty_struct *tty, struct file * filp);
 static void serial_close (struct tty_struct *tty, struct file * filp);
 static int serial_write (struct tty_struct * tty, int from_user, const unsigned char *buf, int count);
-static void serial_put_char (struct tty_struct *tty, unsigned char ch);
 static int serial_write_room (struct tty_struct *tty);
 static int serial_chars_in_buffer (struct tty_struct *tty);
 static void serial_throttle (struct tty_struct * tty);
@@ -219,7 +226,6 @@ struct usb_serial_device_type {
 	int  (*open)(struct tty_struct * tty, struct file * filp);
 	void (*close)(struct tty_struct * tty, struct file * filp);
 	int  (*write)(struct tty_struct * tty, int from_user,const unsigned char *buf, int count);
-	void (*put_char)(struct tty_struct *tty, unsigned char ch);
 	int  (*write_room)(struct tty_struct *tty);
 	int  (*chars_in_buffer)(struct tty_struct *tty);
 	void (*throttle)(struct tty_struct * tty);
@@ -232,7 +238,6 @@ struct usb_serial_device_type {
 static int  generic_serial_open		(struct tty_struct *tty, struct file *filp);
 static void generic_serial_close	(struct tty_struct *tty, struct file *filp);
 static int  generic_serial_write	(struct tty_struct *tty, int from_user, const unsigned char *buf, int count);
-static void generic_serial_put_char	(struct tty_struct *tty, unsigned char ch);
 static int  generic_write_room		(struct tty_struct *tty);
 static int  generic_chars_in_buffer	(struct tty_struct *tty);
 
@@ -251,7 +256,6 @@ static struct usb_serial_device_type generic_device = {
 	open:			generic_serial_open,
 	close:			generic_serial_close,
 	write:			generic_serial_write,
-	put_char:		generic_serial_put_char,
 	write_room:		generic_write_room,
 	chars_in_buffer:	generic_chars_in_buffer,
 };
@@ -280,7 +284,6 @@ static struct usb_serial_device_type belkin_device = {
 	open:			etek_serial_open,
 	close:			etek_serial_close,
 	write:			generic_serial_write,
-	put_char:		generic_serial_put_char,
 	write_room:		generic_write_room,
 	chars_in_buffer:	generic_chars_in_buffer,
 };
@@ -304,7 +307,6 @@ static struct usb_serial_device_type peracom_device = {
 	open:			etek_serial_open,
 	close:			etek_serial_close,
 	write:			generic_serial_write,
-	put_char:		generic_serial_put_char,
 	write_room:		generic_write_room,
 	chars_in_buffer:	generic_chars_in_buffer,
 };
@@ -348,7 +350,6 @@ static struct usb_serial_device_type whiteheat_device = {
 	open:			whiteheat_serial_open,
 	close:			whiteheat_serial_close,
 	write:			generic_serial_write,
-	put_char:		generic_serial_put_char,
 	write_room:		generic_write_room,
 	chars_in_buffer:	generic_chars_in_buffer,
 	throttle:		whiteheat_throttle,
@@ -363,6 +364,7 @@ static int  visor_serial_open		(struct tty_struct *tty, struct file *filp);
 static void visor_serial_close		(struct tty_struct *tty, struct file *filp);
 static void visor_throttle		(struct tty_struct *tty);
 static void visor_unthrottle		(struct tty_struct *tty);
+static int  visor_startup		(struct usb_serial_state *serial);
 
 /* All of the device info needed for the Handspring Visor */
 static __u16	handspring_vendor_id	= HANDSPRING_VENDOR_ID;
@@ -380,11 +382,11 @@ static struct usb_serial_device_type handspring_device = {
 	open:			visor_serial_open,
 	close:			visor_serial_close,
 	write:			generic_serial_write,
-	put_char:		generic_serial_put_char,
 	write_room:		generic_write_room,
 	chars_in_buffer:	generic_chars_in_buffer,
 	throttle:		visor_throttle,
-	unthrottle:		visor_unthrottle
+	unthrottle:		visor_unthrottle,
+	startup:		visor_startup
 };
 #endif
 
@@ -578,39 +580,6 @@ static int serial_write (struct tty_struct * tty, int from_user, const unsigned 
 	/* no specific driver, so return that we didn't write anything */
 	return (0);
 }
-
-
-static void serial_put_char (struct tty_struct *tty, unsigned char ch)
-{
-	struct usb_serial_state *serial = (struct usb_serial_state *)tty->driver_data; 
-	
-	dbg("serial_put_char");
-	
-	/* do some sanity checking that we really have a device present */
-	if (!serial) {
-		dbg("serial == NULL!");
-		return;
-	}
-	if (!serial->type) {
-		dbg("serial->type == NULL!");
-		return;
-	}
-	if (!serial->present) {
-		dbg("no device registered");
-		return;
-	}
-	if (!serial->active) {
-		dbg ("device not open");
-		return;
-	}
-
-	/* pass on to the driver specific version of this function */
-	if (serial->type->put_char) {
-		serial->type->put_char(tty, ch);
-	}
-
-	return;
-}	
 
 
 static int serial_write_room (struct tty_struct *tty) 
@@ -868,6 +837,9 @@ static int whiteheat_writememory (struct usb_serial_state *serial, int address, 
 {
 	int result;
 	unsigned char *transfer_buffer =  kmalloc (length, GFP_KERNEL);
+
+//	dbg("whiteheat_writememory %x, %d", address, length);
+
 	if (!transfer_buffer) {
 		err("whiteheat_writememory: kmalloc(%d) failed.\n", length);
 		return -ENOMEM;
@@ -883,8 +855,13 @@ static int whiteheat_writememory (struct usb_serial_state *serial, int address, 
 
 static int whiteheat_set_reset (struct usb_serial_state *serial, unsigned char reset_bit)
 {
+	int	response;
 	dbg("whiteheat_set_reset: %d", reset_bit);
-	return (whiteheat_writememory (serial, CPUCS_REG, &reset_bit, 1, 0xa0));
+	response = whiteheat_writememory (serial, CPUCS_REG, &reset_bit, 1, 0xa0);
+	if (response < 0) {
+		err("whiteheat_set_reset %d failed", reset_bit);
+	}
+	return (response);
 }
 
 
@@ -906,7 +883,7 @@ static int  whiteheat_startup (struct usb_serial_state *serial)
 	int response;
 	const struct whiteheat_hex_record *record;
 	
-	dbg("whiteheat_startup\n");
+	dbg("whiteheat_startup");
 	
 	response = whiteheat_set_reset (serial, 1);
 
@@ -925,12 +902,12 @@ static int  whiteheat_startup (struct usb_serial_state *serial)
 	response = whiteheat_set_reset (serial, 0);
 
 	record = &whiteheat_firmware[0];
-	while (record->address < 0x8000) {
+	while (record->address < 0x1b40) {
 		++record;
 	}
 	while (record->address != 0xffff) {
 		response = whiteheat_writememory (serial, record->address, 
-				(unsigned char *)record->data, record->data_size, 0xa3);
+				(unsigned char *)record->data, record->data_size, 0xa0);
 		if (response < 0) {
 			err("whiteheat_writememory failed for first firmware step (%d %04X %p %d)", 
 				response, record->address, record->data, record->data_size);
@@ -942,11 +919,11 @@ static int  whiteheat_startup (struct usb_serial_state *serial)
 	response = whiteheat_set_reset (serial, 1);
 
 	record = &whiteheat_firmware[0];
-	while (record->address < 0x8000) {
+	while (record->address < 0x1b40) {
 		response = whiteheat_writememory (serial, record->address, 
 				(unsigned char *)record->data, record->data_size, 0xa0);
 		if (response < 0) {
-			err("whiteheat_writememory failed for first firmware step (%d %04X %p %d)\n", 
+			err("whiteheat_writememory failed for second firmware step (%d %04X %p %d)\n", 
 				response, record->address, record->data, record->data_size);
 			break;
 		}
@@ -1025,6 +1002,79 @@ static void visor_unthrottle (struct tty_struct * tty)
 
 	return;
 }
+
+
+/*
+ Here's the raw dump of the vendor specific command data that the Visor sends on Win98
+______________________________________________________________________
+SETUP(0xB4) ADDR(0x02) ENDP(0x0) CRC5(0x15)
+______________________________________________________________________
+DATA0(0xC3) DATA(C2 03 00 00 00 00 12 00 ) CRC16(0xB0BB)
+______________________________________________________________________
+ACK(0x4B)
+______________________________________________________________________
+IN(0x96) ADDR(0x02) ENDP(0x0) CRC5(0x15)
+______________________________________________________________________
+DATA1(0xD2) DATA(02 00 00 01 02 02 ) CRC16(0xF4E6)
+______________________________________________________________________
+ACK(0x4B)
+______________________________________________________________________
+OUT(0x87) ADDR(0x02) ENDP(0x0) CRC5(0x15)
+______________________________________________________________________
+DATA1(0xD2) DATA() CRC16(0x0000)
+______________________________________________________________________
+ACK(0x4B)
+______________________________________________________________________
+SETUP(0xB4) ADDR(0x02) ENDP(0x0) CRC5(0x15)
+______________________________________________________________________
+DATA0(0xC3) DATA(C2 01 00 00 05 00 02 00 ) CRC16(0xC488)
+______________________________________________________________________
+ACK(0x4B)
+______________________________________________________________________
+IN(0x96) ADDR(0x02) ENDP(0x0) CRC5(0x15)
+______________________________________________________________________
+DATA1(0xD2) DATA(01 00 ) CRC16(0xFFFB)
+______________________________________________________________________
+ACK(0x4B)
+______________________________________________________________________
+OUT(0x87) ADDR(0x02) ENDP(0x0) CRC5(0x15)
+______________________________________________________________________
+DATA1(0xD2) DATA() CRC16(0x0000)
+______________________________________________________________________
+ACK(0x4B)
+______________________________________________________________________
+*/
+
+static int  visor_startup (struct usb_serial_state *serial)
+{
+	/* send out two unknown commands that I found by looking at a Win98 trace */
+	int response;
+	unsigned char *transfer_buffer =  kmalloc (256, GFP_KERNEL);
+
+	if (!transfer_buffer) {
+		err("visor_startup: kmalloc(%d) failed.\n", 256);
+		return -ENOMEM;
+	}
+
+	dbg("visor_startup");
+
+	response = usb_control_msg (serial->dev, usb_sndctrlpipe(serial->dev, 0), 0x03, 0xc2, 0x0000, 0x0000, transfer_buffer, 0x12, 300);
+	if (response < 0) {
+		err("visor_startup: error getting first vendor specific message");
+	}
+
+	response = usb_control_msg (serial->dev, usb_sndctrlpipe(serial->dev, 0), 0x01, 0xc2, 0x0000, 0x0005, transfer_buffer, 0x02, 300);
+	if (response < 0) {
+		err("visor_startup: error getting first vendor specific message");
+	}
+
+	kfree (transfer_buffer);
+
+	/* continue on with initialization */
+	return (0);
+}
+
+
 #endif	/* CONFIG_USB_SERIAL_VISOR*/
 
 
@@ -1115,27 +1165,6 @@ static int generic_serial_write (struct tty_struct * tty, int from_user, const u
 	/* no bulk out, so return 0 bytes written */
 	return (0);
 } 
-
-
-static void generic_serial_put_char (struct tty_struct *tty, unsigned char ch)
-{
-	struct usb_serial_state *serial = (struct usb_serial_state *)tty->driver_data; 
-	
-	dbg("generic_serial_put_char");
-	
-	/* if we have a bulk out endpoint, then shove a character out it */
-	if (serial->num_bulk_out) {
-		/* send the single character out the bulk port */
-		memcpy (serial->write_urb.transfer_buffer, &ch, 1);
-		serial->write_urb.transfer_buffer_length = 1;
-
-		if (usb_submit_urb(&serial->write_urb))
-			dbg("usb_submit_urb(write bulk) failed");
-
-	}
-
-	return;
-}
 
 
 static int generic_write_room (struct tty_struct *tty) 
@@ -1431,7 +1460,7 @@ static struct tty_driver serial_tty_driver = {
 	open:			serial_open,
 	close:			serial_close,
 	write:			serial_write,
-	put_char:		serial_put_char,
+	put_char:		NULL,
 	flush_chars:		NULL,
 	write_room:		serial_write_room,
 	ioctl:			NULL,

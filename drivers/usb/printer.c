@@ -1,481 +1,459 @@
-/* Driver for USB Printers
- * 
- * Copyright 1999 Michael Gee (michael@linuxspecific.com)
- * Copyright 1999 Pavel Machek (pavel@suse.cz)
+/*
+ * printer.c  Version 0.1
  *
- * Distribute under GPL version 2 or later.
+ * Copyright (c) 1999 Michael Gee 	<michael@linuxspecific.com>
+ * Copyright (c) 1999 Pavel Machek      <pavel@suse.cz>
+ * Copyright (c) 2000 Vojtech Pavlik    <vojtech@suse.cz>
+ *
+ * USB Printer Device Class driver for USB printers and printer cables
+ *
+ * Sponsored by SuSE
+ *
+ * ChangeLog:
+ *	v0.1 - thorough cleaning, URBification, almost a rewrite
+ *	v0.2 - some more cleanups
+ */
+
+/*
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307 USA
  */
 
 #include <linux/module.h>
 #include <linux/kernel.h>
 #include <linux/sched.h>
 #include <linux/signal.h>
-#include <linux/errno.h>
-#include <linux/miscdevice.h>
-#include <linux/random.h>
 #include <linux/poll.h>
 #include <linux/init.h>
 #include <linux/malloc.h>
 #include <linux/lp.h>
-#include <linux/spinlock.h>
+
+#define DEBUG
 
 #include "usb.h"
 
-/* Define IEEE_DEVICE_ID if you want to see the IEEE-1284 Device ID string.
- * This may include the printer's serial number.
- * An example from an HP 970C DeskJet printer is (this is one long string,
- * with the serial number changed):
-MFG:HEWLETT-PACKARD;MDL:DESKJET 970C;CMD:MLC,PCL,PML;CLASS:PRINTER;DESCRIPTION:Hewlett-Packard DeskJet 970C;SERN:US970CSEPROF;VSTATUS:$HB0$NC0,ff,DN,IDLE,CUT,K1,C0,DP,NR,KP000,CP027;VP:0800,FL,B0;VJ:                    ;
- */
-#define IEEE_DEVICE_ID
-
-#define NAK_TIMEOUT (HZ)				/* stall wait for printer */
-#define MAX_RETRY_COUNT ((60*60*HZ)/NAK_TIMEOUT)	/* should not take 1 minute a page! */
-
-#define BIG_BUF_SIZE			8192
-#define SUBCLASS_PRINTERS		1
-#define PROTOCOL_UNIDIRECTIONAL		1
-#define PROTOCOL_BIDIRECTIONAL		2
+#define USBLP_BUF_SIZE		8192
 
 /*
  * USB Printer Requests
  */
-#define USB_PRINTER_REQ_GET_DEVICE_ID	0
-#define USB_PRINTER_REQ_GET_PORT_STATUS	1
-#define USB_PRINTER_REQ_SOFT_RESET	2
 
-#define MAX_PRINTERS	8
+#define USBLP_REQ_GET_ID	0x00
+#define USBLP_REQ_GET_STATUS	0x01
+#define USBLP_REQ_RESET		0x02
 
-struct pp_usb_data {
-	struct usb_device 	*pusb_dev;
-	__u8			isopen;			/* True if open */
-	__u8			noinput;		/* True if no input stream */
-	__u8			minor;			/* minor number of device */
-	__u8			status;			/* last status from device */
-	int			maxin, maxout;		/* max transfer size in and out */
-	char			*obuf;			/* transfer buffer (out only) */
-	wait_queue_head_t	wait_q;			/* for timeouts */
-	unsigned int		last_error;		/* save for checking */
-	int			bulk_in_ep;		/* Bulk IN endpoint */
-	int			bulk_out_ep;		/* Bulk OUT endpoint */
-	int			bulk_in_index;		/* endpoint[bulk_in_index] */
-	int			bulk_out_index;		/* endpoint[bulk_out_index] */
+#define USBLP_MINORS		16
+#define USBLP_MINOR_BASE	0
+
+#define USBLP_WRITE_TIMEOUT	(60*HZ)				/* 60 seconds */
+
+struct usblp {
+	struct usb_device 	*dev;				/* USB device */
+	struct urb		readurb, writeurb;		/* The urbs */
+	wait_queue_head_t	readwait, writewait, pollwait;	/* Zzzzz ... */
+	int			readcount;			/* Counter for reads */
+	int			ifnum;				/* Interface number */
+	unsigned int		minor;				/* minor number of device */
+	unsigned char		used;				/* True if open */
+	unsigned char		bidir;				/* interface is bidirectional */
 };
 
-static struct pp_usb_data *minor_data[MAX_PRINTERS];
+static struct usblp *usblp_table[USBLP_MINORS] = { NULL, /* ... */ };
 
-#define PPDATA(x) ((struct pp_usb_data *)(x))
+/*
+ * Functions for usblp control messages.
+ */
 
-static unsigned char printer_read_status(struct pp_usb_data *p)
+static int usblp_ctrl_msg(struct usblp *usblp, int request, int dir, int recip, void *buf, int len)
 {
-	__u8 status;
-	int err;
-	struct usb_device *dev = p->pusb_dev;
+	int retval = usb_control_msg(usblp->dev,
+		dir ? usb_rcvctrlpipe(usblp->dev, 0) : usb_sndctrlpipe(usblp->dev, 0),
+		request, USB_TYPE_CLASS | dir | recip, 0, usblp->ifnum, buf, len, HZ * 5);
+	dbg("usblp_control_msg: rq: 0x%02x dir: %d recip: %d len: %#x result: %d", request, !!dir, recip, len, retval);
+	return retval < 0 ? retval : 0;
+}
 
-	err = usb_control_msg(dev, usb_rcvctrlpipe(dev,0),
-		USB_PRINTER_REQ_GET_PORT_STATUS,
-		USB_TYPE_CLASS | USB_RT_INTERFACE | USB_DIR_IN,
-		0, 0, &status, sizeof(status), HZ);
-	if (err < 0) {
-		printk(KERN_ERR "usblp%d: read_status control_msg error = %d\n",
-			p->minor, err);
- 		return 0;
+#define usblp_read_status(usblp, status)\
+	usblp_ctrl_msg(usblp, USBLP_REQ_GET_STATUS, USB_DIR_IN, USB_RECIP_INTERFACE, status, 1)
+#define usblp_get_id(usblp, id, maxlen)\
+	usblp_ctrl_msg(usblp, USBLP_REQ_GET_ID, USB_DIR_IN, USB_RECIP_INTERFACE, id, maxlen)
+#define usblp_reset(usblp)\
+	usblp_ctrl_msg(usblp, USBLP_REQ_RESET, USB_DIR_OUT, USB_RECIP_OTHER, NULL, 0)
+
+/*
+ * URB callback.
+ */
+
+static void usblp_bulk(struct urb *urb)
+{
+	struct usblp *usblp = urb->context;
+
+	if (!usblp || !usblp->dev || !usblp->used)
+		return;
+
+	if (urb->status)
+		warn("nonzero read bulk status received: %d", urb->status);
+
+	if (urb == &usblp->writeurb)
+		wake_up_interruptible(&usblp->writewait);
+
+	if (urb == &usblp->readurb)
+		wake_up_interruptible(&usblp->readwait);
+
+	wake_up_interruptible(&usblp->pollwait);
+}
+
+/*
+ * Get and print printer errors.
+ */
+
+static int usblp_check_status(struct usblp *usblp)
+{
+	unsigned char status;
+
+	if (usblp_read_status(usblp, &status)) {
+		err("failed reading usblp status");
+		return -EIO;
 	}
-	return status;
-}
 
-static int printer_check_status(struct pp_usb_data *p)
-{
-	unsigned int last = p->last_error;
-	unsigned char status = printer_read_status(p);
-
-	if (status & LP_PERRORP)
-		/* No error. */
-		last = 0;
-	else if ((status & LP_POUTPA)) {
-		if (last != LP_POUTPA) {
-			last = LP_POUTPA;
-			printk(KERN_INFO "usblp%d out of paper (%x)\n", p->minor, status);
+	if (status & LP_PERRORP) {
+	
+		if (status & LP_POUTPA) {
+			info("usblp%d: out of paper", usblp->minor);
+			return -ENOSPC;
 		}
-	} else if (!(status & LP_PSELECD)) {
-		if (last != LP_PSELECD) {
-			last = LP_PSELECD;
-			printk(KERN_INFO "usblp%d off-line (%x)\n", p->minor, status);
+		if (~status & LP_PSELECD) {
+			info("usblp%d: off-line", usblp->minor);
+			return -EIO;
 		}
-	} else {
-		if (last != LP_PERRORP) {
-			last = LP_PERRORP;
-			printk(KERN_INFO "usblp%d on fire (%x)\n", p->minor, status);
+		if (~status & LP_PERRORP) {
+			info("usblp%d: on fire", usblp->minor);
+			return -EIO;
 		}
 	}
 
-	p->last_error = last;
-	return status;
+	return 0;
 }
 
-static void printer_reset(struct pp_usb_data *p)
+/*
+ * File op functions.
+ */
+
+static int usblp_open(struct inode *inode, struct file *file)
 {
-	struct usb_device *dev = p->pusb_dev;
-	int err;
+	int minor = MINOR(inode->i_rdev) - USBLP_MINOR_BASE;
+	struct usblp *usblp;
+	int retval;
 
-	err = usb_control_msg(dev, usb_sndctrlpipe(dev,0),
-		USB_PRINTER_REQ_SOFT_RESET,
-		USB_TYPE_CLASS | USB_RECIP_OTHER,
-		0, 0, NULL, 0, HZ);
-	if (err < 0)
-		printk(KERN_ERR "usblp%d: reset control_msg error = %d\n",
-			p->minor, err);
-}
-
-static int open_printer(struct inode *inode, struct file *file)
-{
-	struct pp_usb_data *p;
-
-	if (MINOR(inode->i_rdev) >= MAX_PRINTERS ||
-	   !minor_data[MINOR(inode->i_rdev)]) {
+	if (minor < 0 || minor >= USBLP_MINORS)
 		return -ENODEV;
-	}
 
-	p = minor_data[MINOR(inode->i_rdev)];
-	p->minor = MINOR(inode->i_rdev);
+	usblp  = usblp_table[minor];
 
-	if (p->isopen++) {
-		printk(KERN_ERR "usblp%d: printer is already open\n",
-			p->minor);
+	if (!usblp || !usblp->dev)
+		return -ENODEV;
+
+	if (usblp->used)
 		return -EBUSY;
-	}
-	if (!(p->obuf = (char *)__get_free_page(GFP_KERNEL))) {
-		p->isopen = 0;
-		printk(KERN_ERR "usblp%d: cannot allocate memory\n",
-			p->minor);
-		return -ENOMEM;
-	}
 
-	printer_check_status(p);
-
-	file->private_data = p;
-//	printer_reset(p);
-	init_waitqueue_head(&p->wait_q);
+	if ((retval = usblp_check_status(usblp)))
+		return retval;
 
 	MOD_INC_USE_COUNT;
+	usblp->used = 1;
+	file->private_data = usblp;
+
+	usblp->writeurb.transfer_buffer_length = 0;
+	usblp->writeurb.status = 0;
+	usblp->readcount = 0;
+
+	usb_submit_urb(&usblp->readurb);
 	return 0;
 }
 
-static int close_printer(struct inode *inode, struct file *file)
+static int usblp_release(struct inode *inode, struct file *file)
 {
-	struct pp_usb_data *p = file->private_data;
+	struct usblp *usblp = file->private_data;
 
-	free_page((unsigned long)p->obuf);
-	p->isopen = 0;
-	file->private_data = NULL;
-	/* free the resources if the printer is no longer around */
-	if (!p->pusb_dev) {
-		minor_data[p->minor] = NULL;
-		kfree(p);
-	}
 	MOD_DEC_USE_COUNT;
+	usblp->used = 0;
+			
+	if (usblp->dev) {
+        	usb_unlink_urb(&usblp->readurb);
+        	usb_unlink_urb(&usblp->writeurb);
+		return 0;
+	}
+
+	usblp_table[usblp->minor] = NULL;
+	kfree(usblp);
+
 	return 0;
 }
 
-static ssize_t write_printer(struct file *file,
-       const char *buffer, size_t count, loff_t *ppos)
+static unsigned int usblp_poll(struct file *file, struct poll_table_struct *wait)
 {
-	struct pp_usb_data *p = file->private_data;
-	unsigned long copy_size;
-	unsigned long bytes_written = 0;
-	unsigned long partial;
-	int result = USB_ST_NOERROR;
-	int maxretry;
+	struct usblp *usblp = file->private_data;
 
-	do {
-		char *obuf = p->obuf;
-		unsigned long thistime;
+	poll_wait(file, &usblp->pollwait, wait);
 
-		thistime = copy_size = (count > p->maxout) ? p->maxout : count;
-		if (copy_from_user(p->obuf, buffer, copy_size))
-			return -EFAULT;
-		maxretry = MAX_RETRY_COUNT;
+	return (usblp->readurb.status  == -EINPROGRESS ? 0 : POLLIN  | POLLRDNORM)
+	     | (usblp->writeurb.status == -EINPROGRESS ? 0 : POLLOUT | POLLWRNORM);
+}
 
-		while (thistime) {
-			if (!p->pusb_dev)
-				return -ENODEV;
-			if (signal_pending(current)) {
-				return bytes_written ? bytes_written : -EINTR;
+static ssize_t usblp_write(struct file *file, const char *buffer, size_t count, loff_t *ppos)
+{
+	DECLARE_WAITQUEUE(wait, current);
+	struct usblp *usblp = file->private_data;
+	int retval, timeout, writecount = 0;
+
+	while (writecount < count) {
+
+		if (usblp->writeurb.status == -EINPROGRESS) {
+
+			if (file->f_flags & O_NONBLOCK)
+				return -EAGAIN;
+
+			timeout = USBLP_WRITE_TIMEOUT;
+			while (timeout && usblp->writeurb.status == -EINPROGRESS) {
+
+				if (signal_pending(current))
+					return writecount ? writecount : -EINTR;
+
+				timeout = interruptible_sleep_on_timeout(&usblp->writewait, timeout);	
 			}
-			result = usb_bulk_msg(p->pusb_dev,
-					 usb_sndbulkpipe(p->pusb_dev, p->bulk_out_ep),
-					 obuf, thistime, &partial, HZ*20);
-			if (partial) {
-				obuf += partial;
-				thistime -= partial;
-				maxretry = MAX_RETRY_COUNT;
-			}
-			if (result == USB_ST_TIMEOUT) {	/* NAK - so hold for a while */
-				if (!maxretry--)
-					return -ETIME;
-                                interruptible_sleep_on_timeout(&p->wait_q, NAK_TIMEOUT);
-				continue;
-			} else if (!result && !partial) {
-				break;
-			}
-		};
-		if (result) {
-			/* whoops - let's reset and fail the request */
-//			printk("Whoops - %x\n", result);
-			printer_reset(p);
-			interruptible_sleep_on_timeout(&p->wait_q, 5*HZ);  /* let reset do its stuff */
+		}
+
+		if (usblp->writeurb.status == -EINPROGRESS) {
+			usb_unlink_urb(&usblp->writeurb);
+			err("usblp%d: timed out", usblp->minor);
 			return -EIO;
 		}
-		bytes_written += copy_size;
-		count -= copy_size;
-		buffer += copy_size;
-	} while ( count > 0 );
 
-	return bytes_written ? bytes_written : -EIO;
-}
-
-static ssize_t read_printer(struct file *file,
-       char *buffer, size_t count, loff_t *ppos)
-{
-	struct pp_usb_data *p = file->private_data;
-	int read_count = 0;
-	int this_read;
-	char buf[64];
-	unsigned long partial;
-	int result;
-	
-	if (p->noinput)
-		return -EINVAL;
-
-	while (count) {
-		if (signal_pending(current)) {
-			return read_count ? read_count : -EINTR;
-		}
-		if (!p->pusb_dev)
+		if (!usblp->dev)
 			return -ENODEV;
 
-		this_read = (count > sizeof(buf)) ? sizeof(buf) : count;
-		result = usb_bulk_msg(p->pusb_dev,
-			  usb_rcvbulkpipe(p->pusb_dev, p->bulk_in_ep),
-			  buf, this_read, &partial, HZ*20);
-		if (result < 0)
-			printk(KERN_ERR "usblp%d read_printer bulk_msg error = %d\n",
-				p->minor, result);
+		if (!usblp->writeurb.status)
+			writecount += usblp->writeurb.transfer_buffer_length;
+		else {
+			if (!(retval = usblp_check_status(usblp))) {
+				err("usblp%d: error %d writing to printer",
+					usblp->minor, usblp->writeurb.status);
+				return -EIO;
+			}
 
-		/* unlike writes, we don't retry a NAK, just stop now */
-		if (!result & partial)
-			count = this_read = partial;
-		else if (result)
-			return -EIO;
+			return retval;
+		}
+	
+		if (writecount == count)
+			continue;
 
-		if (this_read) {
-			if (copy_to_user(buffer, buf, this_read))
-				return -EFAULT;
-			count -= this_read;
-			read_count += this_read;
-			buffer += this_read;
+		usblp->writeurb.transfer_buffer_length = (count - writecount) < USBLP_BUF_SIZE ?
+							 (count - writecount) : USBLP_BUF_SIZE;
+
+		if (copy_from_user(usblp->writeurb.transfer_buffer, buffer + writecount,
+				usblp->writeurb.transfer_buffer_length)) return -EFAULT;
+
+		usb_submit_urb(&usblp->writeurb);
+	}
+
+	return count;
+}
+
+static ssize_t usblp_read(struct file *file, char *buffer, size_t count, loff_t *ppos)
+{
+	struct usblp *usblp = file->private_data;
+	DECLARE_WAITQUEUE(wait, current);
+
+	if (!usblp->bidir)
+		return -EINVAL;
+
+	if (usblp->readurb.status == -EINPROGRESS) {
+
+		if (file->f_flags & O_NONBLOCK)
+			return -EAGAIN;
+
+		while (usblp->readurb.status == -EINPROGRESS) {
+			if (signal_pending(current))
+				return -EINTR;
+			interruptible_sleep_on(&usblp->readwait);	
 		}
 	}
 
-	return read_count;
+	if (!usblp->dev)
+		return -ENODEV;
+
+	if (usblp->readurb.status) {
+		err("usblp%d: error %d reading from printer",
+			usblp->minor, usblp->readurb.status);
+		usb_submit_urb(&usblp->readurb);
+		return -EIO;
+	}
+
+	count = count < usblp->readurb.actual_length - usblp->readcount ?
+		count :	usblp->readurb.actual_length - usblp->readcount;
+
+	if (copy_to_user(buffer, usblp->readurb.transfer_buffer + usblp->readcount, count))
+		return -EFAULT;
+
+	if ((usblp->readcount += count) == usblp->readurb.actual_length)
+		usb_submit_urb(&usblp->readurb);
+
+	return count;
 }
 
-static void *printer_probe(struct usb_device *dev, unsigned int ifnum)
+static void *usblp_probe(struct usb_device *dev, unsigned int ifnum)
 {
 	struct usb_interface_descriptor *interface;
-	struct pp_usb_data *pp;
-	int i;
-	__u8 status;
+	struct usb_endpoint_descriptor *epread, *epwrite;
+	struct usblp *usblp;
+	int minor, i, alts = -1, bidir = 0;
+	char *buf;
 
-	/*
-	 * FIXME - this will not cope with combined printer/scanners
-	 */
-	if ((dev->descriptor.bDeviceClass != USB_CLASS_PRINTER &&
-	    dev->descriptor.bDeviceClass != 0) ||
-	    dev->descriptor.bNumConfigurations != 1 ||
-	    dev->actconfig->bNumInterfaces != 1) {
-		return NULL;
-	}
 
-	interface = &dev->actconfig->interface[ifnum].altsetting[0];
+	for (i = 0; i < dev->actconfig->interface[ifnum].num_altsetting; i++) {
 
-	/* Let's be paranoid (for the moment). */
-	if (interface->bInterfaceClass != USB_CLASS_PRINTER ||
-	    interface->bInterfaceSubClass != SUBCLASS_PRINTERS ||
-	    (interface->bInterfaceProtocol != PROTOCOL_BIDIRECTIONAL &&
-	    interface->bInterfaceProtocol != PROTOCOL_UNIDIRECTIONAL) ||
-	    interface->bNumEndpoints > 2) {
-		return NULL;
-	}
+		interface = &dev->actconfig->interface[ifnum].altsetting[i];
 
-	/* Does this (these) interface(s) support bulk transfers? */
-	if ((interface->endpoint[0].bmAttributes & USB_ENDPOINT_XFERTYPE_MASK)
-	      != USB_ENDPOINT_XFER_BULK) {
-		return NULL;
-	}
-	if ((interface->bNumEndpoints > 1) &&
-	      ((interface->endpoint[1].bmAttributes & USB_ENDPOINT_XFERTYPE_MASK)
-	      != USB_ENDPOINT_XFER_BULK)) {
-		return NULL;
-	}
+		if (interface->bInterfaceClass != 7 || interface->bInterfaceSubClass != 1 ||
+		   (interface->bInterfaceProtocol != 1 && interface->bInterfaceProtocol != 2) ||
+		   (interface->bInterfaceProtocol > interface->bNumEndpoints))
+			continue;
 
-	/*
-	 *  Does this interface have at least one OUT endpoint
-	 *  that we can write to: endpoint index 0 or 1?
-	 */
-	if ((interface->endpoint[0].bEndpointAddress & USB_ENDPOINT_DIR_MASK)
-	      != USB_DIR_OUT &&
-	    (interface->bNumEndpoints > 1 &&
-	      (interface->endpoint[1].bEndpointAddress & USB_ENDPOINT_DIR_MASK)
-	      != USB_DIR_OUT)) {
- 		return NULL;
- 	}
+		if (alts == -1)
+			alts = i;
 
-	for (i=0; i<MAX_PRINTERS; i++) {
-		if (!minor_data[i])
-			break;
-	}
-	if (i >= MAX_PRINTERS) {
-		printk(KERN_ERR "No minor table space available for new USB printer\n");
-		return NULL;
-	}
-
-	printk(KERN_INFO "USB printer found at address %d\n", dev->devnum);
-
-	if (!(pp = kmalloc(sizeof(struct pp_usb_data), GFP_KERNEL))) {
-		printk(KERN_DEBUG "USB printer: no memory!\n");
-		return NULL;
-	}
-
-	memset(pp, 0, sizeof(struct pp_usb_data));
-	minor_data[i] = PPDATA(pp);
-
-	pp->minor = i;
-	pp->pusb_dev = dev;
-	pp->maxout = (BIG_BUF_SIZE > PAGE_SIZE) ? PAGE_SIZE : BIG_BUF_SIZE;
-	if (interface->bInterfaceProtocol != PROTOCOL_BIDIRECTIONAL)
-		pp->noinput = 1;
-
-	pp->bulk_out_index =
-		((interface->endpoint[0].bEndpointAddress & USB_ENDPOINT_DIR_MASK)
-		  == USB_DIR_OUT) ? 0 : 1;
-	pp->bulk_in_index = pp->noinput ? -1 :
-		(pp->bulk_out_index == 0) ? 1 : 0;
-	pp->bulk_in_ep = pp->noinput ? -1 :
-		interface->endpoint[pp->bulk_in_index].bEndpointAddress &
-		USB_ENDPOINT_NUMBER_MASK;
-	pp->bulk_out_ep =
-		interface->endpoint[pp->bulk_out_index].bEndpointAddress &
-		USB_ENDPOINT_NUMBER_MASK;
-	if (interface->bInterfaceProtocol == PROTOCOL_BIDIRECTIONAL) {
-		pp->maxin =
-			interface->endpoint[pp->bulk_in_index].wMaxPacketSize;
-	}
-
-	printk(KERN_INFO "usblp%d Summary:\n", pp->minor);
-	printk(KERN_INFO "index=%d, maxout=%d, noinput=%d, maxin=%d\n",
-		i, pp->maxout, pp->noinput, pp->maxin);
-	printk(KERN_INFO "bulk_in_ix=%d, bulk_in_ep=%d, bulk_out_ix=%d, bulk_out_ep=%d\n",
-		pp->bulk_in_index,
-		pp->bulk_in_ep,
-		pp->bulk_out_index,
-		pp->bulk_out_ep);
-
-#ifdef IEEE_DEVICE_ID
-	{
-		__u8 ieee_id[64]; /* first 2 bytes are (big-endian) length */
-				/* This string space may be too short. */
-		int length = (ieee_id[0] << 8) + ieee_id[1]; /* high-low */
-				/* This calc. or be16_to_cpu() both get
-				 * some weird results for <length>. */
-		int err;
-
-		/* Let's get the device id if possible. */
-		err = usb_control_msg(dev, usb_rcvctrlpipe(dev,0),
-		    USB_PRINTER_REQ_GET_DEVICE_ID,
-		    USB_TYPE_CLASS | USB_RT_INTERFACE | USB_DIR_IN,
-		    0, 0, ieee_id,
-		    sizeof(ieee_id)-1, HZ);
-		if (err >= 0) {
-			if (ieee_id[1] < sizeof(ieee_id) - 1)
-				ieee_id[ieee_id[1]+2] = '\0';
-			else
-				ieee_id[sizeof(ieee_id)-1] = '\0';
-			printk(KERN_INFO "usblp%d Device ID length=%d [%x:%x]\n",
-				pp->minor, length, ieee_id[0], ieee_id[1]);
-			printk(KERN_INFO "usblp%d Device ID=%s\n",
-				pp->minor, &ieee_id[2]);
+		if (!bidir && interface->bInterfaceProtocol == 2) {
+			bidir = 1;
+			alts = i;
 		}
-		else
-			printk(KERN_INFO "usblp%d: error = %d reading IEEE-1284 Device ID\n",
-				pp->minor, err);
 	}
-#endif
 
-	status = printer_read_status(PPDATA(pp));
-	printk(KERN_INFO "usblp%d probe status is %x: %s,%s,%s\n",
-		pp->minor, status,
-		(status & LP_PSELECD) ? "Selected" : "Not Selected",
-		(status & LP_POUTPA)  ? "No Paper" : "Paper",
-		(status & LP_PERRORP) ? "No Error" : "Error");
+	if (alts == -1)
+		return NULL;
 
-	return pp;
+	interface = &dev->actconfig->interface[ifnum].altsetting[alts];
+	if (usb_set_interface(dev, ifnum, alts))
+		err("can't set desired altsetting %d on interface %d", alts, ifnum);
+
+	epwrite = interface->endpoint + 0;
+	epread = NULL;
+
+	if (bidir) {
+		epread  = interface->endpoint + 1;
+		if ((epread->bEndpointAddress & 0x80) != 0x80) {
+			epwrite = interface->endpoint + 1;
+			epread  = interface->endpoint + 0;
+
+			if ((epread->bEndpointAddress & 0x80) != 0x80)
+				return NULL;
+		}
+	}
+
+	if ((epwrite->bEndpointAddress & 0x80) == 0x80)
+		return NULL;
+
+	for (minor = 0; minor < USBLP_MINORS && usblp_table[minor]; minor++);
+	if (usblp_table[minor]) {
+		err("no more free usblp devices");
+		return NULL;
+	}
+
+	if (!(usblp = kmalloc(sizeof(struct usblp), GFP_KERNEL))) {
+		err("out of memory");
+		return NULL;
+	}
+	memset(usblp, 0, sizeof(struct usblp));
+
+	usblp->dev = dev;
+	usblp->ifnum = ifnum;
+	usblp->minor = minor;
+	usblp->bidir = bidir;
+
+	init_waitqueue_head(&usblp->writewait);
+	init_waitqueue_head(&usblp->readwait);
+	init_waitqueue_head(&usblp->pollwait);
+
+	if (!(buf = kmalloc(USBLP_BUF_SIZE * (bidir ? 2 : 1), GFP_KERNEL))) {
+		err("out of memory");
+		kfree(usblp);
+		return NULL;
+	}
+
+	FILL_BULK_URB(&usblp->writeurb, dev, usb_sndbulkpipe(dev, epwrite->bEndpointAddress),
+		buf, 0, usblp_bulk, usblp);
+
+	if (bidir) {
+		FILL_BULK_URB(&usblp->readurb, dev, usb_rcvbulkpipe(dev, epread->bEndpointAddress),
+			buf + USBLP_BUF_SIZE, USBLP_BUF_SIZE, usblp_bulk, usblp);
+	}
+
+	printk(KERN_INFO "usblp%d: USB %sdirectional printer dev %d if %d alt %d\n",
+		minor, bidir ? "Bi" : "Uni", dev->devnum, ifnum, alts);
+
+	return usblp_table[minor] = usblp;
 }
 
-static void printer_disconnect(struct usb_device *dev, void *ptr)
+static void usblp_disconnect(struct usb_device *dev, void *ptr)
 {
-	struct pp_usb_data *pp = ptr;
+	struct usblp *usblp = ptr;
 
-	if (pp->isopen) {
-		/* better let it finish - the release will do whats needed */
-		pp->pusb_dev = NULL;
+	if (!usblp || !usblp->dev) {
+		err("disconnect on nonexisting interface");
 		return;
 	}
-	minor_data[pp->minor] = NULL;
-	kfree(pp);
+
+	usblp->dev = NULL;
+
+	usb_unlink_urb(&usblp->readurb);
+	usb_unlink_urb(&usblp->writeurb);
+
+	kfree(usblp->writeurb.transfer_buffer);
+
+	if (usblp->used) return;
+
+	usblp_table[usblp->minor] = NULL;
+	kfree(usblp);
 }
 
-static struct file_operations usb_printer_fops = {
-	NULL,		/* seek */
-	read_printer,
-	write_printer,
-	NULL,		/* readdir */
-	NULL,		/* poll - out for the moment */
-	NULL,		/* ioctl */
-	NULL,		/* mmap */
-	open_printer,
-	NULL,		/* flush ? */
-	close_printer,
-	NULL,
-	NULL
+static struct file_operations usblp_fops = {
+	read:		usblp_read,
+	write:		usblp_write,
+	open:		usblp_open,
+	release:	usblp_release,
+	poll:		usblp_poll
 };
 
-static struct usb_driver printer_driver = {
-	"printer",
-	printer_probe,
-	printer_disconnect,
-	{ NULL, NULL },
-	&usb_printer_fops,
-	0
+static struct usb_driver usblp_driver = {
+	name:		"usblp",
+	probe:		usblp_probe,
+	disconnect:	usblp_disconnect,
+	fops:		&usblp_fops,
+	minor:		USBLP_MINOR_BASE
 };
-
-int usb_printer_init(void)
-{
-	if (usb_register(&printer_driver))
-		return -1;
-
-	printk(KERN_INFO "USB Printer driver registered.\n");
-	return 0;
-}
 
 #ifdef MODULE
-int init_module(void)
-{
-	return usb_printer_init();
-}
-
 void cleanup_module(void)
 {
-	usb_deregister(&printer_driver);
+	usb_deregister(&usblp_driver);
 }
+int init_module(void)
+#else
+int usb_printer_init(void)
 #endif
+{
+	if (usb_register(&usblp_driver))
+		return -1;
+
+	return 0;
+}

@@ -1,37 +1,44 @@
-/* [xirc2ps_cs.c wk 14.04.97] (1.31 1998/12/09 19:32:55)
- * Xircom Creditcard Ethernet Adapter IIps driver
+/* [xirc2ps_cs.c wk 03.11.99] (1.40 1999/11/18 00:06:03)
+ * Xircom CreditCard Ethernet Adapter IIps driver
+ * Xircom Realport 10/100 (RE-100) driver 
  *
- * This driver works for the CE2, CEM28, CEM33, CE3 and CEM56 cards.
- * The CEM56 has some problems, but it works.
- * The CEII card with the 14k4 modem and other old cards do not work.
+ * This driver originally was made by Werner Koch. Since the driver was left
+ * unmaintained for some time, there have been some improvements and changes
+ * since. These include supporting some of the "Realport" cards and develop-
+ * ing enhancements to support the new ones.
+ * It is made for CE2, CEM28, CEM33, CE33 and 
+ * CEM56 cards. The CEM56 cards work both with their modem and ethernet
+ * interface. The RealPort 10/100 Modem and similar cards are supported but
+ * with some bugs which are being corrected as they are detected. 
+ * 
+ * Code revised and maintained by Allan Baker Ortegon
+ * al527261@prodigy.net.mx
+ * Written originally by Werner Koch based on David Hinds' skeleton of the
+ * PCMCIA driver. The code has been modified as to make the newer cards
+ * available.
  *
- * Written by Werner Koch (werner.koch@guug.de),
- * based on David Hinds skeleton driver.
+ * The latest code for the driver, information on the development project
+ * for the Xircom RealPort and CE cards for the PCMCIA driver, and other
+ * related material, can be found at the following URL, which is underway:
+ * 
+ * "http://xirc2ps.linuxbox.com/index.html"
  *
- * You can get the latest driver revision from
- *	"http://www.d.shuttle.de/isil/xircom/xirc2ps.html"
+ * Any bugs regarding this driver, please send them to:
+ * alanyuu@linuxbox.com
  *
- * Please report bugs to: "xircom-bugs@isil.d.shuttle.de"
- *
- * A bug fix for the CEM56 to use modem and ethernet simultaneously
- * was provided by Koen Van Herck (Koen.Van.Herck@xircom.com).
- *
- * If your card locks up you should use the option "lockup_hack=1";
- * this may solve the problem but violates a kernel timing convention
- * (Thanks to David Luyer).
- *
- * Thanks to David Hinds for the PCMCIA package, Donald Becker for some
- * advice, Xircom for providing specs and help, 4PC GmbH Duesseldorf for
- * providing some hardware and last not least to all folks who helped to
- * develop this driver.
- *
- * For those, who are willing to do alpha testing of drivers, I have setup
- * the mailing list "xircom-devel@isil.d.shuttle.de" (To subscribe send a
- * message containing the word "subscribe" in the subject or somewhere at
- * the beginning of a line to "xircom-devel-request@isil.d.shuttle.de").
+ * The driver is still evolving and there are many cards which will benefit
+ * from having alpha testers. If you have a particular card and would like
+ * to be involved in this ongoing effort, please send mail to the maintainer.
+ * 
+ * Special thanks to David Hinds, to Xircom for the specifications and their
+ * software development kit, and all others who may have colaborated in the
+ * development of the driver: Koen Van Herck (Koen.Van.Herck@xircom.com),
+ * 4PC GmbH Duesseldorf, David Luger, et al.
+ * 
  *
  ************************************************************************
  * Copyright (c) 1997,1998 Werner Koch (dd9jn)
+ * Copyright (c) 1999 Allan Baker Ortegon 
  *
  * This driver is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -70,7 +77,7 @@
  * THIS SOFTWARE IS PROVIDED ``AS IS'' AND ANY EXPRESS OR IMPLIED
  * WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
  * OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
- * DISCLAIMED.	IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY DIRECT,
+ * DISCLAIMED.  IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY DIRECT,
  * INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
  * (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
  * SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
@@ -388,6 +395,8 @@ static dev_link_t *dev_list = NULL;
  */
 
 typedef struct local_info_t {
+    dev_link_t link;
+    struct net_device dev;
     dev_node_t node;
     struct enet_statistics stats;
     int card_type;
@@ -472,14 +481,18 @@ get_tuple(int fn, client_handle_t handle, tuple_t *tuple, cisparse_t *parse)
 static void
 busy_loop(u_long len)
 {
-    u_long timeout = jiffies + len;
-    u_long flags;
-
-    save_flags(flags);
-    sti();
-    while (timeout >= jiffies)
-	;
-    restore_flags(flags);
+    if (in_interrupt()) {
+	u_long timeout = jiffies + len;
+	u_long flags;
+	save_flags(flags);
+	sti();
+	while (timeout >= jiffies)
+	    ;
+	restore_flags(flags);
+    } else {
+	__set_current_state(TASK_UNINTERRUPTIBLE);
+	schedule_timeout(len);
+    }
 }
 
 /*====== Functions used for debugging =================================*/
@@ -674,9 +687,13 @@ xirc2ps_attach(void)
     DEBUG(0, "attach()\n");
     flush_stale_links();
 
-    /* Initialize the dev_link_t structure */
-    link = kmalloc(sizeof(struct dev_link_t), GFP_KERNEL);
-    memset(link, 0, sizeof(struct dev_link_t));
+    /* Allocate the device structure */
+    local = kmalloc(sizeof(*local), GFP_KERNEL);
+    if (!local) return NULL;
+    memset(local, 0, sizeof(*local));
+    link = &local->link; dev = &local->dev;
+    link->priv = dev->priv = local;
+
     link->release.function = &xirc2ps_release;
     link->release.data = (u_long) link;
 
@@ -686,13 +703,8 @@ xirc2ps_attach(void)
     link->conf.IntType = INT_MEMORY_AND_IO;
     link->conf.ConfigIndex = 1;
     link->conf.Present = PRESENT_OPTION;
-
-    /* Allocate space for a device structure */
-    dev = kmalloc(sizeof(struct net_device), GFP_KERNEL);
-    memset(dev, 0, sizeof(struct net_device));
-    local = kmalloc(sizeof(local_info_t), GFP_KERNEL);
-    memset(local, 0, sizeof(local_info_t));
-    dev->priv = local;
+    link->irq.Handler = xirc2ps_interrupt;
+    link->irq.Instance = dev;
 
     /* Fill in card specific entries */
     dev->hard_start_xmit = &do_start_xmit;
@@ -706,7 +718,6 @@ xirc2ps_attach(void)
     dev->open = &do_open;
     dev->stop = &do_stop;
     dev->tbusy = 1;
-    link->priv = dev;
 
     /* Register with Card Services */
     link->next = dev_list;
@@ -739,6 +750,7 @@ xirc2ps_attach(void)
 static void
 xirc2ps_detach(dev_link_t * link)
 {
+    local_info_t *local = link->priv;
     dev_link_t **linkp;
     long flags;
 
@@ -778,17 +790,11 @@ xirc2ps_detach(dev_link_t * link)
     if (link->handle)
 	CardServices(DeregisterClient, link->handle);
 
-    /* Unlink device structure, free pieces */
+    /* Unlink device structure, free it */
     *linkp = link->next;
-    if (link->priv) {
-	struct net_device *dev = link->priv;
-	if (link->dev != NULL)
-	    unregister_netdev(dev);
-	if (dev->priv)
-	    kfree(dev->priv);
-	kfree(link->priv);
-    }
-    kfree(link);
+    if (link->dev)
+	unregister_netdev(&local->dev);
+    kfree(local);
 
 } /* xirc2ps_detach */
 
@@ -813,8 +819,7 @@ xirc2ps_detach(dev_link_t * link)
 static int
 set_card_type(dev_link_t *link, const void *s)
 {
-    struct net_device *dev = link->priv;
-    local_info_t *local = dev->priv;
+    local_info_t *local = link->priv;
   #ifdef PCMCIA_DEBUG
     unsigned cisrev = ((const unsigned char *)s)[2];
   #endif
@@ -907,20 +912,17 @@ has_ce2_string(dev_link_t * link)
 static void
 xirc2ps_config(dev_link_t * link)
 {
-    client_handle_t handle;
+    client_handle_t handle = link->handle;
+    local_info_t *local = link->priv;
+    struct net_device *dev = &local->dev;
     tuple_t tuple;
     cisparse_t parse;
-    struct net_device *dev;
-    local_info_t *local;
     ioaddr_t ioaddr;
     int err, i;
     u_char buf[64];
     cistpl_lan_node_id_t *node_id = (cistpl_lan_node_id_t*)parse.funce.data;
     cistpl_cftable_entry_t *cf = &parse.cftable_entry;
 
-    handle = link->handle;
-    dev = link->priv;
-    local = dev->priv;
     local->dingo_ccr = 0;
 
     DEBUG(0, "config(0x%p)\n", link);
@@ -1034,8 +1036,6 @@ xirc2ps_config(dev_link_t * link)
 	for (i = 0; i < 4; i++)
 	    link->irq.IRQInfo2 |= 1 << irq_list[i];
     }
-    link->irq.Handler = xirc2ps_interrupt;
-    link->irq.Instance = dev;
     if (local->modem) {
 	int pass;
 
@@ -1124,7 +1124,7 @@ xirc2ps_config(dev_link_t * link)
      * the I/O windows and the interrupt mapping.
      */
     if ((err=CardServices(RequestConfiguration,
-					link->handle, &link->conf))) {
+			  link->handle, &link->conf))) {
 	cs_error(link->handle, RequestConfiguration, err);
 	goto config_error;
     }
@@ -1146,7 +1146,7 @@ xirc2ps_config(dev_link_t * link)
 	reg.Offset = CISREG_IOBASE_0;
 	reg.Value = link->io.BasePort2 & 0xff;
 	if ((err = CardServices(AccessConfigurationRegister, link->handle,
-							     &reg))) {
+				&reg))) {
 	    cs_error(link->handle, AccessConfigurationRegister, err);
 	    goto config_error;
 	}
@@ -1154,7 +1154,7 @@ xirc2ps_config(dev_link_t * link)
 	reg.Offset = CISREG_IOBASE_1;
 	reg.Value = (link->io.BasePort2 >> 8) & 0xff;
 	if ((err = CardServices(AccessConfigurationRegister, link->handle,
-							      &reg))) {
+				&reg))) {
 	    cs_error(link->handle, AccessConfigurationRegister, err);
 	    goto config_error;
 	}
@@ -1213,20 +1213,19 @@ xirc2ps_config(dev_link_t * link)
 	}
       #endif
 
-	writeb(0x01		  , local->dingo_ccr + 0x20);
-	writeb(0x0c		  , local->dingo_ccr + 0x22);
-	writeb(0x00		  , local->dingo_ccr + 0x24);
-	writeb(0x00		  , local->dingo_ccr + 0x26);
-	writeb(0x00		  , local->dingo_ccr + 0x28);
+	writeb(0x01, local->dingo_ccr + 0x20);
+	writeb(0x0c, local->dingo_ccr + 0x22);
+	writeb(0x00, local->dingo_ccr + 0x24);
+	writeb(0x00, local->dingo_ccr + 0x26);
+	writeb(0x00, local->dingo_ccr + 0x28);
     }
 
     /* The if_port symbol can be set when the module is loaded */
     local->probe_port=0;
     if (!if_port) {
-	local->probe_port=1;
-	dev->if_port = 1;
-    }
-    else if ((if_port >= 1 && if_port <= 2) || (local->mohawk && if_port==4))
+	local->probe_port = dev->if_port = 1;
+    } else if ((if_port >= 1 && if_port <= 2) ||
+	       (local->mohawk && if_port==4))
 	dev->if_port = if_port;
     else
 	printk(KNOT_XIRC "invalid if_port requested\n");
@@ -1275,7 +1274,8 @@ static void
 xirc2ps_release(u_long arg)
 {
     dev_link_t *link = (dev_link_t *) arg;
-    struct net_device *dev = link->priv;
+    local_info_t *local = link->priv;
+    struct net_device *dev = &local->dev;
 
     DEBUG(0, "release(0x%p)\n", link);
 
@@ -1322,8 +1322,8 @@ xirc2ps_event(event_t event, int priority,
 	      event_callback_args_t * args)
 {
     dev_link_t *link = args->client_data;
-    struct net_device *dev = link->priv;
-    local_info_t *lp = dev? dev->priv : NULL;
+    local_info_t *lp = link->priv;
+    struct net_device *dev = &lp->dev;
 
     DEBUG(0, "event(%d)\n", (int)event);
 
@@ -1382,7 +1382,7 @@ static void
 xirc2ps_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 {
     struct net_device *dev = (struct net_device *)dev_id;
-    local_info_t *lp;
+    local_info_t *lp = dev->priv;
     ioaddr_t ioaddr;
     u_char saved_page;
     unsigned bytes_rcvd;
@@ -1401,7 +1401,6 @@ xirc2ps_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 	return;
     }
     dev->interrupt = 1;
-    lp = dev->priv;
     ioaddr = dev->base_addr;
     if (lp->mohawk) { /* must disable the interrupt */
 	PutByte(XIRCREG_CR, 0);
@@ -1441,7 +1440,7 @@ xirc2ps_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 	    /* too many bytes received during this int, drop the rest of the
 	     * packets */
 	    lp->stats.rx_dropped++;
-	    printk(KINF_XIRC "%s: RX drop, too much done\n", dev->name);
+	    DEBUG(2, "%s: RX drop, too much done\n", dev->name);
 	    PutWord(XIRCREG0_DO, 0x8000); /* issue cmd: skip_rx_packet */
 	} else if (rsr & PktRxOk) {
 	    struct sk_buff *skb;
@@ -1782,8 +1781,6 @@ do_config(struct net_device *dev, struct ifmap *map)
 
     DEBUG(0, "do_config(%p)\n", dev);
     if (map->port != 255 && map->port != dev->if_port) {
-	if (local->new_mii)
-	    return -EOPNOTSUPP;
 	if (map->port > 4)
 	    return -EINVAL;
 	if (!map->port) {
@@ -1813,14 +1810,11 @@ static int
 do_open(struct net_device *dev)
 {
     local_info_t *lp = dev->priv;
-    dev_link_t *link;
+    dev_link_t *link = &lp->link;
 
     DEBUG(0, "do_open(%p)\n", dev);
 
     /* Check that the PCMCIA card is still here. */
-    for (link = dev_list; link; link = link->next)
-	if (link->priv == dev)
-	    break;
     /* Physical device present signature. */
     if (!DEV_OK(link))
 	return -ENODEV;
@@ -1858,7 +1852,7 @@ do_ioctl(struct net_device *dev, struct ifreq *rq, int cmd)
 	data[3] = mii_rd(ioaddr, data[0] & 0x1f, data[1] & 0x1f);
 	break;
       case SIOCDEVPRIVATE+2:	/* Write the specified MII register */
-	if (!suser())
+	if (!capable(CAP_NET_ADMIN))
 	    return -EPERM;
 	mii_wr(ioaddr, data[0] & 0x1f, data[1] & 0x1f, data[2], 16);
 	break;
@@ -2064,7 +2058,7 @@ init_mii(struct net_device *dev)
 
     local->new_mii = (mii_rd(ioaddr, 0, 2) != 0xffff);
     
-    if (local->new_mii || local->probe_port)
+    if (local->probe_port)
 	control = 0x1000; /* auto neg */
     else if (dev->if_port == 4)
 	control = 0x2000; /* no auto neg, 100mbs mode */
@@ -2081,8 +2075,8 @@ init_mii(struct net_device *dev)
 	return 0;
     }
 
-    if (local->new_mii || local->probe_port) {
-	/* according to the DP83840A specs the auto negotation process
+    if (local->probe_port) {
+	/* according to the DP83840A specs the auto negotiation process
 	 * may take up to 3.5 sec, so we use this also for our ML6692
 	 * Fixme: Better to use a timer here!
 	 */
@@ -2094,7 +2088,7 @@ init_mii(struct net_device *dev)
 	}
 
 	if (!(status & 0x0020)) {
-	    printk(KERN_INFO "%s: auto negotation failed;"
+	    printk(KERN_INFO "%s: autonegotiation failed;"
 		   " using 10mbs\n", dev->name);
 	    if (!local->new_mii) {
 		control = 0x0000;
@@ -2112,7 +2106,6 @@ init_mii(struct net_device *dev)
 	    } else
 		dev->if_port = 1;
 	}
-	local->probe_port = 0;
     }
 
   #ifdef PCMCIA_DEBUG
@@ -2140,13 +2133,11 @@ static int
 do_stop(struct net_device *dev)
 {
     ioaddr_t ioaddr = dev->base_addr;
-    dev_link_t *link;
+    local_info_t *lp = dev->priv;
+    dev_link_t *link = &lp->link;
 
     DEBUG(0, "do_stop(%p)\n", dev);
 
-    for (link = dev_list; link; link = link->next)
-	if (link->priv == dev)
-	    break;
     if (!link)
 	return -ENODEV;
 

@@ -4164,6 +4164,16 @@ int __init floppy_init(void)
 		blk_cleanup_queue(BLK_DEFAULT_QUEUE(MAJOR_NR));
 		unregister_blkdev(MAJOR_NR,"fd");		
 	}
+	
+	for (drive = 0; drive < N_DRIVE; drive++) {
+		if (!(allowed_drive_mask & (1 << drive)))
+			continue;
+		if (fdc_state[FDC(drive)].version == FDC_NONE)
+			continue;
+		for (i = 0; i<NUMBER(floppy_type); i++)
+			register_disk(NULL, MKDEV(MAJOR_NR,TOMINOR(drive)+i*4),
+					1, &floppy_fops, 0);
+	}
 	return have_no_fdc;
 }
 

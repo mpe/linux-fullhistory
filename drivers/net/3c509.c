@@ -251,6 +251,7 @@ int el3_probe(struct net_device *dev)
 				if (el3_debug > 2) {
 					printk("3c529: irq %d  ioaddr 0x%x  ifport %d\n", irq, ioaddr, if_port);
 				}
+				EL3WINDOW(0);
 				for (i = 0; i < 3; i++) {
 					phys_addr[i] = htons(read_eeprom(ioaddr, i));
 				}

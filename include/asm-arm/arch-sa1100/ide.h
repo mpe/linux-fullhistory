@@ -5,6 +5,8 @@
  *
  */
 
+#include <linux/config.h>
+
 #ifdef CONFIG_BLK_DEV_IDE
 
 #include <asm/irq.h>

@@ -30,6 +30,23 @@ extern pgd_t swapper_pg_dir[1024];
 #define __flush_tlb() \
 do { unsigned long tmpreg; __asm__ __volatile__("movl %%cr3,%0\n\tmovl %0,%%cr3":"=r" (tmpreg) : :"memory"); } while (0)
 
+/*
+ * Global pages have to be flushed a bit differently. Not a real
+ * performance problem because this does not happen often.
+ */
+#define __flush_tlb_global()						\
+    do { __asm__ __volatile__( "					\
+	movl %%cr4,%%eax;						\
+	movl %%eax,%%ecx;						\
+	andl $0xffffff7f,%%eax; # turn off PGE (CR4[7]) in EAX \n	\
+	movl %%eax,%%cr4;						\
+	movl %%cr3,%%ebx;						\
+	movl %%ebx,%%cr3;						\
+	movl %%ecx,%%cr4;						\
+	" : : : "cc", "eax", "ebx", "ecx", "memory"			\
+    );									\
+} while (0)
+
 #ifndef CONFIG_X86_INVLPG
 #define __flush_tlb_one(addr) __flush_tlb()
 #else
@@ -117,6 +134,7 @@ extern unsigned long empty_zero_page[1024];
 #define PAGE_COPY	__pgprot(_PAGE_PRESENT | _PAGE_USER | _PAGE_ACCESSED)
 #define PAGE_READONLY	__pgprot(_PAGE_PRESENT | _PAGE_USER | _PAGE_ACCESSED)
 #define PAGE_KERNEL	__pgprot(_PAGE_PRESENT | _PAGE_RW | _PAGE_DIRTY | _PAGE_ACCESSED)
+#define PAGE_KERNEL_NOCACHE	__pgprot(_PAGE_PRESENT | _PAGE_RW | _PAGE_DIRTY | _PAGE_PCD | _PAGE_ACCESSED)
 #define PAGE_KERNEL_RO	__pgprot(_PAGE_PRESENT | _PAGE_DIRTY | _PAGE_ACCESSED)
 
 /*

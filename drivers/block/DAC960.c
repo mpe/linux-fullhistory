@@ -2899,7 +2899,9 @@ static void DAC960_InitializeGenericDiskInfo(GenericDiskInfo_T *GenericDiskInfo)
   for (LogicalDriveNumber = 0;
        LogicalDriveNumber < Controller->LogicalDriveCount;
        LogicalDriveNumber++)
-	grok_partitions(GenericDiskInfo,LogicalDriveNumber,DAC960_MaxPartitions,
+	register_disk(GenericDiskInfo, MKDEV(GenericDiskInfo->major,
+				       LogicalDriveNumber*DAC960_MaxPartitions),
+		DAC960_MaxPartitions, &DAC960_FileOperations,
 		LogicalDriveInformation[LogicalDriveNumber].LogicalDriveSize);
 }
 

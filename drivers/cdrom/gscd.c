@@ -1082,6 +1082,7 @@ int result;
         gscdPresent = 1;
 
 	request_region(gscd_port, 4, "gscd");
+	register_disk(NULL, MKDEV(MAJOR_NR,0), 1, &gscd_fops, 0);
 
         printk (KERN_INFO "GSCD: GoldStar CD-ROM Drive found.\n" );
 	return 0;

@@ -1,10 +1,10 @@
 /*
- * acm.c  Version 0.13
+ * acm.c  Version 0.14
  *
  * Copyright (c) 1999 Armin Fuerst	<fuerst@in.tum.de>
  * Copyright (c) 1999 Pavel Machek	<pavel@suse.cz>
  * Copyright (c) 1999 Johannes Erdfelt	<jerdfelt@valinux.com>
- * Copyright (c) 1999 Vojtech Pavlik	<vojtech@suse.cz>
+ * Copyright (c) 2000 Vojtech Pavlik	<vojtech@suse.cz>
  *
  * USB Abstract Control Model driver for USB modems and ISDN adapters
  *
@@ -16,6 +16,7 @@
  *	v0.11 - fixed flow control, read error doesn't stop reads
  *	v0.12 - added TIOCM ioctls, added break handling, made struct acm kmalloced
  *	v0.13 - added termios, added hangup
+ *	v0.14 - sized down struct acm
  */
 
 /*
@@ -129,21 +130,20 @@ struct acm {
 	struct usb_device *dev;				/* the coresponding usb device */
 	struct usb_interface *iface;			/* the interfaces - +0 control +1 data */
 	struct tty_struct *tty;				/* the coresponding tty */
+	struct urb ctrlurb, readurb, writeurb;		/* urbs */
+	struct acm_line line;				/* line coding (bits, stop, parity) */
 	unsigned int ctrlin;				/* input control lines (DCD, DSR, RI, break, overruns) */
 	unsigned int ctrlout;				/* output control lines (DTR, RTS) */
-	struct acm_line line;				/* line coding (bits, stop, parity) */
 	unsigned int writesize;				/* max packet size for the output bulk endpoint */
-	struct urb ctrlurb, readurb, writeurb;		/* urbs */
-	unsigned int minor;				/* acm minor number */
-	unsigned int present;				/* this device is connected to the usb bus */
 	unsigned int used;				/* someone has this acm's device open */
-	unsigned int clocal;				/* termios CLOCAL */
+	unsigned int minor;				/* acm minor number */
+	unsigned char clocal;				/* termios CLOCAL */
 };
 
 static struct usb_driver acm_driver;
 static struct acm *acm_table[ACM_TTY_MINORS] = { NULL, /* .... */ };
 
-#define ACM_READY(acm)	(acm && acm->present && acm->used)
+#define ACM_READY(acm)	(acm && acm->dev && acm->used)
 
 /*
  * Functions for ACM control messages.
@@ -265,7 +265,7 @@ static int acm_tty_open(struct tty_struct *tty, struct file *filp)
 {
 	struct acm *acm = acm_table[MINOR(tty->device)];
 
-	if (!acm || !acm->present) return -EINVAL;
+	if (!acm || !acm->dev) return -EINVAL;
 
 	tty->driver_data = acm;
 	acm->tty = tty;
@@ -295,7 +295,7 @@ static void acm_tty_close(struct tty_struct *tty, struct file *filp)
 
 	if (--acm->used) return;
 	
-	if (acm->present) {
+	if (acm->dev) {
 		acm_set_control(acm, acm->ctrlout = 0);
 		usb_unlink_urb(&acm->ctrlurb);
 		usb_unlink_urb(&acm->writeurb);
@@ -519,7 +519,6 @@ static void *acm_probe(struct usb_device *dev, unsigned int ifnum)
 		acm->writesize = epwrite->wMaxPacketSize;
 		acm->iface = cfacm->interface;
 		acm->minor = minor;
-		acm->present = 1;
 		acm->dev = dev;
 
 		if (!(buf = kmalloc(ctrlsize + readsize + acm->writesize, GFP_KERNEL))) {
@@ -558,12 +557,12 @@ static void acm_disconnect(struct usb_device *dev, void *ptr)
 {
 	struct acm *acm = ptr;
 
-	if (!acm || !acm->present) {
+	if (!acm || !acm->dev) {
 		dbg("disconnect on nonexisting interface");
 		return;
 	}
 
-	acm->present = 0;
+	acm->dev = NULL;
 
 	usb_unlink_urb(&acm->ctrlurb);
 	usb_unlink_urb(&acm->readurb);

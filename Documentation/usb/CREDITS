@@ -6,6 +6,7 @@ difficult to maintain, add yourself with a patch if desired.
 
   Georg Acher <acher@informatik.tu-muenchen.de>
   Alan Cox <alan@lxorguk.ukuu.org.uk>
+  Randy Dunlap <randy.dunlap@intel.com>
   Johannes Erdfelt <jerdfelt@sventech.com>
   Deti Fliegl <deti@fliegl.de>
   ham <ham@unsuave.com>
@@ -164,4 +165,3 @@ THANKS file in Inaky's driver):
           for convincing me USB Standard hubs are not that standard
           and that's good to allow for vendor specific quirks on the
           standard hub driver.
-
