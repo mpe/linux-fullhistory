@@ -169,7 +169,7 @@ static int ohci_hub_resume (struct usb_hcd *hcd)
 		ohci_info (ohci, "wakeup\n");
 		break;
 	case OHCI_USB_OPER:
-		ohci_dbg (ohci, "odd resume\n");
+		ohci_dbg (ohci, "already resumed\n");
 		status = 0;
 		break;
 	default:		/* RESET, we lost power */
@@ -197,7 +197,7 @@ static int ohci_hub_resume (struct usb_hcd *hcd)
 				&ohci->regs->roothub.portstatus [temp]);
 	}
 
-	/* Some controllers (lucent) need extra-long delays */
+	/* Some controllers (lucent erratum) need extra-long delays */
 	hcd->state = HC_STATE_RESUMING;
 	mdelay (20 /* usb 11.5.1.10 */ + 15);
 
@@ -216,6 +216,7 @@ static int ohci_hub_resume (struct usb_hcd *hcd)
 	ohci_writel (ohci, 0, &ohci->regs->ed_periodcurrent);
 	ohci_writel (ohci, (u32) ohci->hcca_dma, &ohci->regs->hcca);
 
+	/* Sometimes PCI D3 suspend trashes frame timings ... */
 	periodic_reinit (ohci);
 
 	/* interrupts might have been disabled */
