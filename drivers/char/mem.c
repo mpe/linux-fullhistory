@@ -257,6 +257,23 @@ static int mmap_mem(struct file * file, struct vm_area_struct * vma)
 	return 0;
 }
 
+static int mmap_kmem(struct file * file, struct vm_area_struct * vma)
+{
+        unsigned long long val;
+	/*
+	 * RED-PEN: on some architectures there is more mapped memory
+	 * than available in mem_map which pfn_valid checks
+	 * for. Perhaps should add a new macro here.
+	 *
+	 * RED-PEN: vmalloc is not supported right now.
+	 */
+	if (!pfn_valid(vma->vm_pgoff))
+		return -EIO;
+	val = (u64)vma->vm_pgoff << PAGE_SHIFT;
+	vma->vm_pgoff = __pa(val) >> PAGE_SHIFT;
+	return mmap_mem(file, vma);
+}
+
 extern long vread(char *buf, char *addr, unsigned long count);
 extern long vwrite(char *buf, char *addr, unsigned long count);
 
@@ -698,7 +715,6 @@ static int open_port(struct inode * inode, struct file * filp)
 	return capable(CAP_SYS_RAWIO) ? 0 : -EPERM;
 }
 
-#define mmap_kmem	mmap_mem
 #define zero_lseek	null_lseek
 #define full_lseek      null_lseek
 #define write_zero	write_null
