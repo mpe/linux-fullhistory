@@ -336,9 +336,7 @@ acpi_thread(void *context)
 		interruptible_sleep_on(&acpi_thread_wait);
 		if (signal_pending(current))
 			break;
-		do {
-			run_task_queue(&acpi_thread_run);
-		} while (acpi_thread_run);
+		run_task_queue(&acpi_thread_run);
 	}
 
 	/*

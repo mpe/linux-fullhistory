@@ -1072,9 +1072,9 @@ smb_close_fileid(struct dentry *dentry, __u16 fileid)
    file-id would not be valid after a reconnection. */
 
 int
-smb_proc_read(struct dentry *dentry, off_t offset, int count, char *data)
+smb_proc_read(struct inode *inode, off_t offset, int count, char *data)
 {
-	struct smb_sb_info *server = server_from_dentry(dentry);
+	struct smb_sb_info *server = server_from_inode(inode);
 	__u16 returned_count, data_len;
 	unsigned char *buf;
 	int result;
@@ -1082,7 +1082,7 @@ smb_proc_read(struct dentry *dentry, off_t offset, int count, char *data)
 	smb_lock_server(server);
 	smb_setup_header(server, SMBread, 5, 0);
 	buf = server->packet;
-	WSET(buf, smb_vwv0, dentry->d_inode->u.smbfs_i.fileid);
+	WSET(buf, smb_vwv0, inode->u.smbfs_i.fileid);
 	WSET(buf, smb_vwv1, count);
 	DSET(buf, smb_vwv2, offset);
 	WSET(buf, smb_vwv4, 0);
@@ -1114,25 +1114,26 @@ smb_proc_read(struct dentry *dentry, off_t offset, int count, char *data)
 	result = data_len;
 
 out:
-	VERBOSE("file %s/%s, count=%d, result=%d\n",
-		DENTRY_PATH(dentry), count, result);
+	VERBOSE("ino=%ld, fileid=%d, count=%d, result=%d\n",
+		inode->ino, inode->u.smbfs_i.fileid, count, result);
 	smb_unlock_server(server);
 	return result;
 }
 
 int
-smb_proc_write(struct dentry *dentry, off_t offset, int count, const char *data)
+smb_proc_write(struct inode *inode, off_t offset, int count, const char *data)
 {
-	struct smb_sb_info *server = server_from_dentry(dentry);
+	struct smb_sb_info *server = server_from_inode(inode);
 	int result;
 	__u8 *p;
 	
-	VERBOSE("file %s/%s, count=%d@%ld, packet_size=%d\n",
-		DENTRY_PATH(dentry), count, offset, server->packet_size);
+	VERBOSE("ino=%ld, fileid=%d, count=%d@%ld, packet_size=%d\n",
+		inode->ino, inode->u.smbfs_i.fileid, count, offset,
+		server->packet_size);
 
 	smb_lock_server(server);
 	p = smb_setup_header(server, SMBwrite, 5, count + 3);
-	WSET(server->packet, smb_vwv0, dentry->d_inode->u.smbfs_i.fileid);
+	WSET(server->packet, smb_vwv0, inode->u.smbfs_i.fileid);
 	WSET(server->packet, smb_vwv1, count);
 	DSET(server->packet, smb_vwv2, offset);
 	WSET(server->packet, smb_vwv4, 0);

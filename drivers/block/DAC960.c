@@ -19,8 +19,8 @@
 */
 
 
-#define DAC960_DriverVersion			"2.4.8"
-#define DAC960_DriverDate			"19 August 2000"
+#define DAC960_DriverVersion			"2.4.9"
+#define DAC960_DriverDate			"7 September 2000"
 
 
 #include <linux/version.h>
@@ -300,13 +300,8 @@ static inline void DAC960_DeallocateCommand(DAC960_Command_T *Command)
 
 static void DAC960_WaitForCommand(DAC960_Controller_T *Controller)
 {
-  DECLARE_WAITQUEUE(WaitQueueEntry, current);
-  add_wait_queue(&Controller->CommandWaitQueue, &WaitQueueEntry);
-  current->state = TASK_UNINTERRUPTIBLE;
-  spin_unlock(&io_request_lock);
-  schedule();
-  current->state = TASK_RUNNING;
-  remove_wait_queue(&Controller->CommandWaitQueue, &WaitQueueEntry);
+  spin_unlock_irq(&io_request_lock);
+  __wait_event(Controller->CommandWaitQueue, Controller->FreeCommands);
   spin_lock_irq(&io_request_lock);
 }
 
@@ -4957,7 +4952,8 @@ static int DAC960_IOCTL(Inode_T *Inode, File_T *File,
 	}
       Geometry.start =
 	Controller->GenericDiskInfo.part[MINOR(Inode->i_rdev)].start_sect;
-      return copy_to_user(UserGeometry, &Geometry, sizeof(DiskGeometry_T));
+      return (copy_to_user(UserGeometry, &Geometry,
+			   sizeof(DiskGeometry_T)) ? -EFAULT : 0);
     case BLKGETSIZE:
       /* Get Device Size. */
       if ((long *) Argument == NULL) return -EINVAL;
@@ -5078,8 +5074,8 @@ static int DAC960_UserIOCTL(Inode_T *Inode, File_T *File,
 	ControllerInfo.PCI_Address = Controller->PCI_Address;
 	strcpy(ControllerInfo.ModelName, Controller->ModelName);
 	strcpy(ControllerInfo.FirmwareVersion, Controller->FirmwareVersion);
-	return copy_to_user(UserSpaceControllerInfo, &ControllerInfo,
-			    sizeof(DAC960_ControllerInfo_T));
+	return (copy_to_user(UserSpaceControllerInfo, &ControllerInfo,
+			     sizeof(DAC960_ControllerInfo_T)) ? -EFAULT : 0);
       }
     case DAC960_IOCTL_V1_EXECUTE_COMMAND:
       {
@@ -6401,7 +6397,7 @@ static int DAC960_ProcWriteUserCommand(File_T *File, const char *Buffer,
   unsigned char CommandBuffer[80];
   int Length;
   if (Count > sizeof(CommandBuffer)-1) return -EINVAL;
-  copy_from_user(CommandBuffer, Buffer, Count);
+  if (copy_from_user(CommandBuffer, Buffer, Count)) return -EFAULT;
   CommandBuffer[Count] = '\0';
   Length = strlen(CommandBuffer);
   if (CommandBuffer[Length-1] == '\n')

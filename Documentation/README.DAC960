@@ -1,11 +1,11 @@
    Linux Driver for Mylex DAC960/AcceleRAID/eXtremeRAID PCI RAID Controllers
 
-			Version 2.2.8 for Linux 2.2.16
-			Version 2.4.8 for Linux 2.4.0
+			Version 2.2.9 for Linux 2.2.17
+			Version 2.4.9 for Linux 2.4.0
 
 			      PRODUCTION RELEASE
 
-				19 August 2000
+			       7 September 2000
 
 			       Leonard N. Zubkoff
 			       Dandelion Digital
@@ -203,13 +203,13 @@ ftp://ftp.mylex.com/pub/dac960/diskcomp.html.
 
 			      DRIVER INSTALLATION
 
-This distribution was prepared for Linux kernel version 2.2.16 or 2.4.0.
+This distribution was prepared for Linux kernel version 2.2.17 or 2.4.0.
 
 To install the DAC960 RAID driver, you may use the following commands,
 replacing "/usr/src" with wherever you keep your Linux kernel source tree:
 
   cd /usr/src
-  tar -xvzf DAC960-2.2.8.tar.gz (or DAC960-2.4.8.tar.gz)
+  tar -xvzf DAC960-2.2.9.tar.gz (or DAC960-2.4.9.tar.gz)
   mv README.DAC960 linux/Documentation
   mv DAC960.[ch] linux/drivers/block
   patch -p0 < DAC960.patch (if DAC960.patch is included)

@@ -10392,6 +10392,16 @@ CONFIG_USB_SERIAL_EMPEG
   The module will be called empeg.o. If you want to compile it as a
   module, say M here and read Documentation/modules.txt.
 
+USB MCT Single Port Serial Driver
+CONFIG_USB_SERIAL_MCT_U232
+  Say Y here if you want to use a USB Serial single port adapter from
+  Magic Control Technology Corp. (U232 is one of the model numbers).
+
+  This code is also available as a module ( = code which can be
+  inserted in and removed from the running kernel whenever you want).
+  The module will be called mct_u232.o.  If you want to compile it as
+  a module, say M here and read Documentation/modules.txt.
+
 USB Serial Converter verbose debug
 CONFIG_USB_SERIAL_DEBUG
   Say Y here if you want verbose debug messages from the USB Serial

@@ -63,6 +63,8 @@ extern int vsprintf(char *buf, const char *, va_list);
 extern int get_option(char **str, int *pint);
 extern char *get_options(char *str, int nints, int *ints);
 extern unsigned long memparse(char *ptr, char **retptr);
+extern void dev_probe_lock(void);
+extern void dev_probe_unlock(void);
 
 extern int session_of_pgrp(int pgrp);
 

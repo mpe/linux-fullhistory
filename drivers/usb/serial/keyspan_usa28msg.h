@@ -94,16 +94,8 @@
 #ifndef	__USA28MSG__
 #define	__USA28MSG__
 
-/*#ifndef STUBS
-#include "datadefs.h"
-#endif*/
 
-typedef struct txAckMessage
-{
-	u8	dummy;
-} txAckMessage;
-
-typedef struct portControlMessage
+typedef struct keyspan_usa28_portControlMessage
 {
 	/*
 		there are four types of "commands" sent in the control message:
@@ -153,9 +145,9 @@ typedef struct portControlMessage
 		returnStatus,	// return current status n times (1 or 2)
 		resetDataToggle;// reset data toggle state to DATA0
 	
-} portControlMessage;
+} keyspan_usa28_portControlMessage;
 
-typedef struct portStatusMessage
+typedef struct keyspan_usa28_portStatusMessage
 {
 	u8	port,			// 0=first, 1=second, 2=global (see below)
 		cts,
@@ -171,32 +163,32 @@ typedef struct portStatusMessage
 		rxBreak,		// 1=we're in break state
 		rs232invalid,	// 1=no valid signals on rs-232 inputs
 		controlResponse;// 1=a control messages has been processed
-} portStatusMessage;
+} keyspan_usa28_portStatusMessage;
 
 // bit defines in txState
 #define	TX_OFF			0x01	// requested by host txOff command
 #define	TX_XOFF			0x02	// either real, or simulated by host
 
-typedef struct globalControlMessage
+typedef struct keyspan_usa28_globalControlMessage
 {
 	u8	sendGlobalStatus,	// 2=request for two status responses
 		resetStatusToggle,	// 1=reset global status toggle
 		resetStatusCount;	// a cycling value
-} globalControlMessage;
+} keyspan_usa28_globalControlMessage;
 
-typedef struct globalStatusMessage
+typedef struct keyspan_usa28_globalStatusMessage
 {
 	u8	port,				// 3
 		sendGlobalStatus,	// from request, decremented
 		resetStatusCount;	// as in request
-} globalStatusMessage;
+} keyspan_usa28_globalStatusMessage;
 
-typedef struct globalDebugMessage
+typedef struct keyspan_usa28_globalDebugMessage
 {
 	u8	port,				// 2
 		n,					// typically a count/status byte
 		b;					// typically a data byte
-} globalDebugMessage;
+} keyspan_usa28_globalDebugMessage;
 
 // ie: the maximum length of an EZUSB endpoint buffer
 #define	MAX_DATA_LEN			64

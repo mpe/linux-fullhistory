@@ -1755,11 +1755,11 @@ static void rh_int_timer_do(unsigned long ptr)
 		urbp = (struct urb_priv *)u->hcpriv;
 		if (urbp) {
 			/* Check if the FSBR timed out */
-			if (urbp->fsbr && time_after(urbp->inserttime + IDLE_TIMEOUT, jiffies))
+			if (urbp->fsbr && time_after_eq(jiffies, urbp->inserttime + IDLE_TIMEOUT))
 				uhci_fsbr_timeout(uhci, u);
 
 			/* Check if the URB timed out */
-			if (u->timeout && time_after(u->timeout, jiffies)) {
+			if (u->timeout && time_after_eq(jiffies, u->timeout)) {
 				u->transfer_flags |= USB_ASYNC_UNLINK | USB_TIMEOUT_KILLED;
 				uhci_unlink_urb(u);
 			}

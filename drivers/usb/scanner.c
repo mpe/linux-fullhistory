@@ -252,6 +252,7 @@ static struct usb_device_id scanner_device_ids [] = {
     { idVendor: 0x04a5, idProduct: 0x2022 },/* Vuego Scan Brisa 340U */
 	/* Agfa */
     { idVendor: 0x06bd, idProduct: 0x0001 },	/* SnapScan 1212U */
+    { idVendor: 0x06bd, idProduct: 0x0002 },	/* SnapScan 1236U */
     { idVendor: 0x06bd, idProduct: 0x2061 },	/* Another SnapScan 1212U (?)*/
     { idVendor: 0x06bd, idProduct: 0x0100 },	/* SnapScan Touch */
 	/* Colorado -- See Primax/Colorado below */
@@ -300,10 +301,10 @@ static struct usb_device_id scanner_device_ids [] = {
     { idVendor: 0x04b8, idProduct: 0x0101 },/* Perfection 636U and 636Photo */
     { idVendor: 0x04b8, idProduct: 0x0103 },/* Perfection 610 */
     { idVendor: 0x04b8, idProduct: 0x0104 },/* Perfection 1200U and 1200Photo*/
+    { idVendor: 0x04b8, idProduct: 0x0106 },/* Stylus Scan 2500 */
     { idVendor: 0x04b8, idProduct: 0x0107 },/* Expression 1600 */
 	/* Umax */
     { idVendor: 0x1606, idProduct: 0x0010 },	/* Astra 1220U */
-    { idVendor: 0x1606, idProduct: 0x0002 },	/* Astra 1236U */
     { idVendor: 0x1606, idProduct: 0x0030 },	/* Astra 2000U */
     { idVendor: 0x1606, idProduct: 0x0230 },	/* Astra 2200U */
 	/* Visioneer */

@@ -126,7 +126,7 @@ unsigned int mca_pentium_flag;
  */
 struct drive_info_struct { char dummy[32]; } drive_info;
 struct screen_info screen_info;
-struct apm_bios_info apm_bios_info;
+struct apm_info apm_info;
 struct sys_desc_table_struct {
 	unsigned short length;
 	unsigned char table[0];
@@ -608,7 +608,7 @@ void __init setup_arch(char **cmdline_p)
  	ROOT_DEV = to_kdev_t(ORIG_ROOT_DEV);
  	drive_info = DRIVE_INFO;
  	screen_info = SCREEN_INFO;
-	apm_bios_info = APM_BIOS_INFO;
+	apm_info.bios = APM_BIOS_INFO;
 	if( SYS_DESC_TABLE.length != 0 ) {
 		MCA_bus = SYS_DESC_TABLE.table[3] &0x2;
 		machine_id = SYS_DESC_TABLE.table[0];

@@ -1193,6 +1193,7 @@ extern void file_moveto(struct file *new, struct file *old);
 extern struct buffer_head * get_hash_table(kdev_t, int, int);
 extern struct buffer_head * getblk(kdev_t, int, int);
 extern void ll_rw_block(int, int, struct buffer_head * bh[]);
+extern void submit_bh(int, struct buffer_head *);
 extern int is_read_only(kdev_t);
 extern void __brelse(struct buffer_head *);
 static inline void brelse(struct buffer_head *buf)
@@ -1209,7 +1210,6 @@ static inline void bforget(struct buffer_head *buf)
 extern void set_blocksize(kdev_t, int);
 extern unsigned int get_hardblocksize(kdev_t);
 extern struct buffer_head * bread(kdev_t, int, int);
-extern struct buffer_head * breada(kdev_t, int, int, unsigned int, unsigned int);
 extern void wakeup_bdflush(int wait);
 
 extern int brw_page(int, struct page *, kdev_t, int [], int);

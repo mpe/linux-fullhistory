@@ -2626,14 +2626,14 @@ _static int process_urb (uhci_t *s, struct list_head *p)
 			// Completion
 			if (urb->complete) {
 				urb->dev = NULL;
+				spin_unlock(&s->urb_list_lock);
 				urb->complete ((struct urb *) urb);
 				// Re-submit the URB if ring-linked
 				if (is_ring && (urb->status != -ENOENT) && !contains_killed) {
 					urb->dev=usb_dev;
-					spin_unlock(&s->urb_list_lock);
 					uhci_submit_urb (urb);
-					spin_lock(&s->urb_list_lock);
 				}
+				spin_lock(&s->urb_list_lock);
 			}
 			
 			usb_dec_dev_use (usb_dev);

@@ -716,14 +716,6 @@ static void __init do_basic_setup(void)
 	/* Mount the root filesystem.. */
 	mount_root();
 
-#if defined(CONFIG_HOTPLUG) && defined(CONFIG_NET)
-	/* do this after other 'do this last' stuff, because we want
-	 * to minimize spurious executions of /sbin/hotplug
-	 * during boot-up
-	 */
-	net_notifier_init();
-#endif
-
 	mount_devfs_fs ();
 
 #ifdef CONFIG_BLK_DEV_INITRD

@@ -545,7 +545,7 @@ struct usb_bus {
 	struct list_head inodes;
 };
 
-#define USB_MAXCHILDREN (8)	/* This is arbitrary */
+#define USB_MAXCHILDREN		(16)	/* This is arbitrary */
 
 struct usb_device {
 	int devnum;			/* Device number on USB bus */

@@ -300,18 +300,25 @@ static int
 pci_announce_device(struct pci_driver *drv, struct pci_dev *dev)
 {
 	const struct pci_device_id *id;
+	int ret = 0;
 
 	if (drv->id_table) {
 		id = pci_match_device(drv->id_table, dev);
-		if (!id)
-			return 0;
+		if (!id) {
+			ret = 0;
+			goto out;
+		}
 	} else
 		id = NULL;
+
+	dev_probe_lock();
 	if (drv->probe(dev, id) >= 0) {
 		dev->driver = drv;
-		return 1;
+		ret = 1;
 	}
-	return 0;
+	dev_probe_unlock();
+out:
+	return ret;
 }
 
 int
@@ -360,9 +367,9 @@ run_sbin_hotplug(struct pci_dev *pdev, int insert)
 	if (!hotplug_path[0])
 		return;
 
-	sprintf(class_id, "PCI_CLASS=%X", pdev->class);
-	sprintf(id, "PCI_ID=%X/%X", pdev->vendor, pdev->device);
-	sprintf(sub_id, "PCI_SUBSYS_ID=%X/%X", pdev->subsystem_vendor, pdev->subsystem_device);
+	sprintf(class_id, "PCI_CLASS=%04X", pdev->class);
+	sprintf(id, "PCI_ID=%04X:%04X", pdev->vendor, pdev->device);
+	sprintf(sub_id, "PCI_SUBSYS_ID=%04X:%04X", pdev->subsystem_vendor, pdev->subsystem_device);
 	sprintf(bus_id, "PCI_SLOT_NAME=%s", pdev->slot_name);
 
 	i = 0;
@@ -704,6 +711,7 @@ static struct pci_bus * __init pci_alloc_bus(void)
 static struct pci_bus * __init pci_add_new_bus(struct pci_bus *parent, struct pci_dev *dev, int busnr)
 {
 	struct pci_bus *child;
+	int i;
 
 	/*
 	 * Allocate a new bus, and inherit stuff from the parent..
@@ -724,6 +732,10 @@ static struct pci_bus * __init pci_add_new_bus(struct pci_bus *parent, struct pc
 	child->number = child->secondary = busnr;
 	child->primary = parent->secondary;
 	child->subordinate = 0xff;
+
+	/* Set up default resource pointers.. */
+	for (i = 0; i < 4; i++)
+		child->resource[i] = &dev->resource[PCI_BRIDGE_RESOURCES+i];
 
 	return child;
 }
@@ -765,10 +777,7 @@ static int __init pci_scan_bridge(struct pci_bus *bus, struct pci_dev * dev, int
 			unsigned int cmax = pci_do_scan_bus(child);
 			if (cmax > max) max = cmax;
 		} else {
-			int i;
 			unsigned int cmax = child->subordinate;
-			for (i = 0; i < 4; i++)
-				child->resource[i] = &dev->resource[PCI_BRIDGE_RESOURCES+i];
 			if (cmax > max) max = cmax;
 		}
 	} else {
@@ -782,6 +791,7 @@ static int __init pci_scan_bridge(struct pci_bus *bus, struct pci_dev * dev, int
 		pci_read_config_word(dev, PCI_COMMAND, &cr);
 		pci_write_config_word(dev, PCI_COMMAND, 0x0000);
 		pci_write_config_word(dev, PCI_STATUS, 0xffff);
+
 		child = pci_add_new_bus(bus, dev, ++max);
 		buses = (buses & 0xff000000)
 		      | ((unsigned int)(child->primary)     <<  0)
@@ -795,15 +805,12 @@ static int __init pci_scan_bridge(struct pci_bus *bus, struct pci_dev * dev, int
 			/* Now we can scan all subordinate buses... */
 			max = pci_do_scan_bus(child);
 		} else {
-			int i;
 			/*
 			 * For CardBus bridges, we leave 4 bus numbers
 			 * as cards with a PCI-to-PCI bridge can be
 			 * inserted later.
 			 */
 			max += 3;
-			for (i = 0; i < 4; i++)
-				child->resource[i] = &dev->resource[PCI_BRIDGE_RESOURCES+i];
 		}
 		/*
 		 * Set the subordinate bus number to its real value.
@@ -1082,6 +1089,9 @@ static int pci_pm_resume_device(struct pci_dev *dev)
 	return 0;
 }
 
+
+/* take care to suspend/resume bridges only once */
+
 static int pci_pm_suspend_bus(struct pci_bus *bus)
 {
 	struct list_head *list;
@@ -1093,17 +1103,12 @@ static int pci_pm_suspend_bus(struct pci_bus *bus)
 	/* Walk the device children list */
 	list_for_each(list, &bus->devices)
 		pci_pm_suspend_device(pci_dev_b(list));
-
-	/* Suspend the bus controller.. */
-	pci_pm_suspend_device(bus->self);
 	return 0;
 }
 
 static int pci_pm_resume_bus(struct pci_bus *bus)
 {
 	struct list_head *list;
-
-	pci_pm_resume_device(bus->self);
 
 	/* Walk the device children list */
 	list_for_each(list, &bus->devices)
@@ -1118,18 +1123,26 @@ static int pci_pm_resume_bus(struct pci_bus *bus)
 static int pci_pm_suspend(void)
 {
 	struct list_head *list;
+	struct pci_bus *bus;
 
-	list_for_each(list, &pci_root_buses)
-		pci_pm_suspend_bus(pci_bus_b(list));
+	list_for_each(list, &pci_root_buses) {
+		bus = pci_bus_b(list);
+		pci_pm_suspend_bus(bus);
+		pci_pm_suspend_device(bus->self);
+	}
 	return 0;
 }
 
 static int pci_pm_resume(void)
 {
 	struct list_head *list;
+	struct pci_bus *bus;
 
-	list_for_each(list, &pci_root_buses)
-		pci_pm_resume_bus(pci_bus_b(list));
+	list_for_each(list, &pci_root_buses) {
+		bus = pci_bus_b(list);
+		pci_pm_resume_device(bus->self);
+		pci_pm_resume_bus(bus);
+	}
 	return 0;
 }
 

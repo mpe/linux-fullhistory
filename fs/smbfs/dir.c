@@ -124,7 +124,7 @@ smb_readdir(struct file *filp, void *dirent, filldir_t filldir)
 			qname.len  = entry->len;
 			entry->ino = find_inode_number(dentry, &qname);
 			if (!entry->ino)
-				entry->ino = smb_invent_inos(1);
+				entry->ino = iunique(dentry->d_sb, 2);
 		}
 
 		if (filldir(dirent, entry->name, entry->len, 
@@ -325,7 +325,7 @@ smb_lookup(struct inode *dir, struct dentry *dentry)
 		goto add_entry;
 	if (!error) {
 		error = -EACCES;
-		finfo.f_ino = smb_invent_inos(1);
+		finfo.f_ino = iunique(dentry->d_sb, 2);
 		inode = smb_iget(dir->i_sb, &finfo);
 		if (inode) {
 	add_entry:
@@ -362,7 +362,7 @@ smb_instantiate(struct dentry *dentry, __u16 fileid, int have_id)
 		goto out_close;
 
 	smb_renew_times(dentry);
-	fattr.f_ino = smb_invent_inos(1);
+	fattr.f_ino = iunique(dentry->d_sb, 2);
 	inode = smb_iget(dentry->d_sb, &fattr);
 	if (!inode)
 		goto out_no_inode;

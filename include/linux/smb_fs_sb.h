@@ -14,8 +14,9 @@
 #include <linux/types.h>
 #include <linux/smb.h>
 
-/* Get the server for the specified dentry */
-#define server_from_dentry(dentry) &dentry->d_sb->u.smbfs_sb
+/* structure access macros */
+#define server_from_inode(inode) (&(inode)->i_sb->u.smbfs_sb)
+#define server_from_dentry(dentry) (&(dentry)->d_sb->u.smbfs_sb)
 #define SB_of(server) ((struct super_block *) ((char *)(server) - \
 	(unsigned long)(&((struct super_block *)0)->u.smbfs_sb)))
 

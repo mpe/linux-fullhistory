@@ -38,12 +38,21 @@ struct apm_bios_info {
 	unsigned short	dseg_len;
 };
 
-				/* Results of APM Installation Check */
+/* Results of APM Installation Check */
 #define APM_16_BIT_SUPPORT	0x0001
 #define APM_32_BIT_SUPPORT	0x0002
 #define APM_IDLE_SLOWS_CLOCK	0x0004
 #define APM_BIOS_DISABLED      	0x0008
 #define APM_BIOS_DISENGAGED     0x0010
+
+/*
+ * Data for APM that is persistant across module unload/load
+ */
+struct apm_info {
+	struct apm_bios_info	bios;
+	unsigned short		connection_version;
+	int			get_power_status_broken;
+};
 
 /*
  * The APM function codes
@@ -91,12 +100,9 @@ struct apm_bios_info {
 #define	APM_FUNC_TIMER_GET	2
 
 /*
- * in init/main.c
+ * in arch/i386/kernel/setup.c
  */
-extern struct apm_bios_info	apm_bios_info;
-
-extern int		apm_register_callback(int (*callback)(apm_event_t));
-extern void		apm_unregister_callback(int (*callback)(apm_event_t));
+extern struct apm_info	apm_info;
 
 #endif	/* __KERNEL__ */
 
@@ -176,7 +182,7 @@ extern void		apm_unregister_callback(int (*callback)(apm_event_t));
 /*
  * This is the "All Devices" ID communicated to the BIOS
  */
-#define APM_DEVICE_BALL		((apm_bios_info.version > 0x0100) ? \
+#define APM_DEVICE_BALL		((apm_info.connection_version > 0x0100) ? \
 				 APM_DEVICE_ALL : APM_DEVICE_OLD_ALL)
 #endif
 

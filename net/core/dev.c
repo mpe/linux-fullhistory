@@ -154,6 +154,12 @@ static void sample_queue(unsigned long dummy);
 static struct timer_list samp_timer = { function: sample_queue };
 #endif
 
+#ifdef CONFIG_HOTPLUG
+static int net_run_sbin_hotplug(struct net_device *dev, char *action);
+#else
+#define net_run_sbin_hotplug(dev, action) ({ 0; })
+#endif
+
 /*
  *	Our notifier list
  */
@@ -2196,9 +2202,11 @@ int dev_ioctl(unsigned int cmd, void *arg)
 			if (!capable(CAP_NET_ADMIN))
 				return -EPERM;
 			dev_load(ifr.ifr_name);
+			dev_probe_lock();
 			rtnl_lock();
 			ret = dev_ifsioc(&ifr, cmd);
 			rtnl_unlock();
+			dev_probe_unlock();
 			return ret;
 	
 		case SIOCGIFMEM:
@@ -2217,9 +2225,11 @@ int dev_ioctl(unsigned int cmd, void *arg)
 			if (cmd >= SIOCDEVPRIVATE &&
 			    cmd <= SIOCDEVPRIVATE + 15) {
 				dev_load(ifr.ifr_name);
+				dev_probe_lock();
 				rtnl_lock();
 				ret = dev_ifsioc(&ifr, cmd);
 				rtnl_unlock();
+				dev_probe_unlock();
 				if (!ret && copy_to_user(arg, &ifr, sizeof(struct ifreq)))
 					return -EFAULT;
 				return ret;
@@ -2388,9 +2398,11 @@ int register_netdevice(struct net_device *dev)
 	if (ret)
 		return ret;
 #endif /* CONFIG_NET_DIVERT */
-	
+
 	/* Notify protocols, that a new device appeared. */
 	notifier_call_chain(&netdev_chain, NETDEV_REGISTER, dev);
+
+	net_run_sbin_hotplug(dev, "register");
 
 	return 0;
 }
@@ -2474,6 +2486,8 @@ int unregister_netdevice(struct net_device *dev)
 
 		/* Shutdown queueing discipline. */
 		dev_shutdown(dev);
+
+		net_run_sbin_hotplug(dev, "unregister");
 
 		/* Notify protocols, that we are about to destroy
 		   this device. They should clean all the things.
@@ -2714,29 +2728,15 @@ int __init net_dev_init(void)
 /* Notify userspace when a netdevice event occurs,
  * by running '/sbin/hotplug net' with certain
  * environment variables set.
- *
- * Currently reported events are listed in netdev_event_names[].
  */
 
-/* /sbin/hotplug ONLY executes for events named here */
-static char *netdev_event_names[] = {
-	[NETDEV_REGISTER]	= "register",
-	[NETDEV_UNREGISTER]	= "unregister",
-};
-
-static int run_sbin_hotplug(struct notifier_block *this,
-			    unsigned long event, void *ptr)
+static int net_run_sbin_hotplug(struct net_device *dev, char *action)
 {
-	struct net_device *dev = (struct net_device *) ptr;
-	char *argv[3], *envp[5], ifname[12 + IFNAMSIZ], action[32];
+	char *argv[3], *envp[5], ifname[12 + IFNAMSIZ], action_str[32];
 	int i;
 
-	if ((event >= ARRAY_SIZE(netdev_event_names)) ||
-	    !netdev_event_names[event])
-		return NOTIFY_DONE;
-
 	sprintf(ifname, "INTERFACE=%s", dev->name);
-	sprintf(action, "ACTION=%s", netdev_event_names[event]);
+	sprintf(action_str, "ACTION=%s", action);
 
         i = 0;
         argv[i++] = hotplug_path;
@@ -2748,27 +2748,9 @@ static int run_sbin_hotplug(struct notifier_block *this,
 	envp [i++] = "HOME=/";
 	envp [i++] = "PATH=/sbin:/bin:/usr/sbin:/usr/bin";
 	envp [i++] = ifname;
-	envp [i++] = action;
+	envp [i++] = action_str;
 	envp [i] = 0;
 	
-	call_usermodehelper (argv [0], argv, envp);
-
-	return NOTIFY_DONE;
-}
-
-static struct notifier_block sbin_hotplug = {
-	notifier_call: run_sbin_hotplug,
-};
-
-/*
- * called from init/main.c, -after- all the initcalls are complete.
- * Registers a hook that calls /sbin/hotplug on every netdev
- * addition and removal.
- */
-void __init net_notifier_init (void)
-{
-	if (register_netdevice_notifier(&sbin_hotplug))
-		printk (KERN_WARNING "unable to register netdev notifier\n"
-			KERN_WARNING "/sbin/hotplug will not be run.\n");
+	return call_usermodehelper(argv [0], argv, envp);
 }
 #endif

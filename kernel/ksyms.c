@@ -185,7 +185,6 @@ EXPORT_SYMBOL(getblk);
 EXPORT_SYMBOL(bdget);
 EXPORT_SYMBOL(bdput);
 EXPORT_SYMBOL(bread);
-EXPORT_SYMBOL(breada);
 EXPORT_SYMBOL(__brelse);
 EXPORT_SYMBOL(__bforget);
 EXPORT_SYMBOL(ll_rw_block);

@@ -1,5 +1,5 @@
 /*
-	usa26msg.h
+	usa49msg.h
 
 	Copyright (c) 1998-2000 InnoSys Incorporated.  All Rights Reserved
 	This file is available under a BSD-style copyright
@@ -39,6 +39,10 @@
 	OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
 	SUCH DAMAGE.    
 
+	4th revision: USA49W version
+
+	See usa26msg.h for description of message formats
+
 	Third revision: USA28X version (aka USA26)
 
 	Buffer formats for RX/TX data messages are not defined by
@@ -69,8 +73,13 @@
 		FRAMING	0x08
 		BREAK	0x10
 
-	Note: a "no status" RX data message (first byte zero) can serve as
-	a "break off" indicator.
+	Notes:
+	
+	1.	a "no status" RX data message (first byte zero) can serve as
+		a "break off" indicator.
+	2.	a control message specifying disablePort will be answered
+		with a status message, but no further status will be sent
+		until a control messages with enablePort is sent
 
 	revision history:
 
@@ -79,22 +88,33 @@
 	1999mar30	beef up support for RX error reporting
 	1999apr14	add resetDataToggle to control message
 	2000jan04	merge with usa17msg.h
+	2000mar08	clone from usa26msg.h -> usa49msg.h
+	2000mar09	change to support 4 ports
+	2000may03	change external clocking to match USA-49W hardware
 	2000jun01	add extended BSD-style copyright text
-
-	Note on shared names:
-
-	In the case of fields which have been merged between the USA17
-	and USA26 definitions, the USA26 definition is the first part
-	of the name and the USA17 definition is the second part of the
-	name; both meanings are described below.
 */
 
-#ifndef	__USA26MSG__
-#define	__USA26MSG__
+#ifndef	__USA49MSG__
+#define	__USA49MSG__
 
 
-typedef struct keyspan_usa26_portControlMessage
+/*
+	Host->device messages sent on the global control endpoint:
+
+	portNumber	message
+	----------	--------------------
+	0,1,2,3		portControlMessage
+	0x80		globalControlMessage
+*/
+
+typedef struct keyspan_usa49_portControlMessage
 {
+	/*
+		0.	0/1/2/3 	port control message follows
+			0x80 set	non-port control message follows
+	*/
+	u8	portNumber,
+
 	/*
 		there are three types of "commands" sent in the control message:
 
@@ -102,100 +122,106 @@ typedef struct keyspan_usa26_portControlMessage
 			the corresponding "set" flag (and should only be requested
 			when necessary, to reduce overhead on the USA26):
 	*/
-	u8	setClocking,	// BOTH: host requests baud rate be set
-		baudLo,			// BOTH: host does baud divisor calculation
-		baudHi,			// BOTH: baudHi is only used for first port (gives lower rates)
-		externalClock_txClocking,
-						// USA26: 0=internal, other=external
-						// USA17: 0=internal, other=external/RI
-		rxClocking,		// USA17: 0=internal, 1=external/RI, other=external/DSR
-
-
-		setLcr,			// BOTH: host requests lcr be set
-		lcr,			// BOTH: use PARITY, STOPBITS, DATABITS below
-
-		setFlowControl,	// BOTH: host requests flow control be set
-		ctsFlowControl,	// BOTH: 1=use CTS flow control, 0=don't
-		xonFlowControl,	// BOTH: 1=use XON/XOFF flow control, 0=don't
-		xonChar,		// BOTH: specified in current character format
-		xoffChar,		// BOTH: specified in current character format
-
-		setTxTriState_setRts,
-						// USA26: host requests TX tri-state be set
-						// USA17: host requests RTS output be set
-		txTriState_rts,	// BOTH: 1=active (normal), 0=tristate (off)
-
-		setHskoa_setDtr,
-						// USA26: host requests HSKOA output be set
-						// USA17: host requests DTR output be set
-		hskoa_dtr,		// BOTH: 1=on, 0=off
-
-		setPrescaler,	// USA26: host requests prescalar be set (default: 13)
-		prescaler;		// BOTH: specified as N/8; values 8-ff are valid
+		setClocking,	// host requests baud rate be set
+		baudLo,			// host does baud divisor calculation
+		baudHi,			// baudHi is only used for first port (gives lower rates)
+		prescaler,		// specified as N/8; values 8-ff are valid
 						// must be set any time internal baud rate is set;
-						// must not be set when external clocking is used
-						// note: in USA17, prescaler is applied whenever
-						// setClocking is requested
+		txClocking,		// 0=internal, 1=external/DSR
+		rxClocking,		// 0=internal, 1=external/DSR
+
+		setLcr,			// host requests lcr be set
+		lcr,			// use PARITY, STOPBITS, DATABITS below
+
+		setFlowControl,	// host requests flow control be set
+		ctsFlowControl,	// 1=use CTS flow control, 0=don't
+		xonFlowControl,	// 1=use XON/XOFF flow control, 0=don't
+		xonChar,		// specified in current character format
+		xoffChar,		// specified in current character format
+
+		setRts,			// host requests RTS output be set
+		rts,			// 1=active, 0=inactive
+
+		setDtr,			// host requests DTR output be set
+		dtr;			// 1=on, 0=off
+
 
 	/*
 		3.	configuration data which is simply used as is (no overhead,
 			but must be specified correctly in every host message).
 	*/
-	u8	forwardingLength,  // BOTH: forward when this number of chars available
-		reportHskiaChanges_dsrFlowControl,
-						// USA26: 1=normal; 0=ignore external clock
-						// USA17: 1=use DSR flow control, 0=don't
-		txAckThreshold,	// BOTH: 0=not allowed, 1=normal, 2-255 deliver ACK faster
-		loopbackMode;	// BOTH: 0=no loopback, 1=loopback enabled
+	u8	forwardingLength,  // forward when this number of chars available
+		dsrFlowControl,	// 1=use DSR flow control, 0=don't
+		txAckThreshold,	// 0=not allowed, 1=normal, 2-255 deliver ACK faster
+		loopbackMode;	// 0=no loopback, 1=loopback enabled
 
 	/*
 		4.	commands which are flags only; these are processed in order
 			(so that, e.g., if both _txOn and _txOff flags are set, the
 			port ends in a TX_OFF state); any non-zero value is respected
 	*/
-	u8	_txOn,			// BOTH: enable transmitting (and continue if there's data)
-		_txOff,			// BOTH: stop transmitting
-		txFlush,		// BOTH: toss outbound data
-		txBreak,		// BOTH: turn on break (cleared by _txOn)
-		rxOn,			// BOTH: turn on receiver
-		rxOff,			// BOTH: turn off receiver
-		rxFlush,		// BOTH: toss inbound data
-		rxForward,		// BOTH: forward all inbound data, NOW (as if fwdLen==1)
-		returnStatus,	// BOTH: return current status (even if it hasn't changed)
-		resetDataToggle;// BOTH: reset data toggle state to DATA0
+	u8	_txOn,			// enable transmitting (and continue if there's data)
+		_txOff,			// stop transmitting
+		txFlush,		// toss outbound data
+		txBreak,		// turn on break (cleared by _txOn)
+		rxOn,			// turn on receiver
+		rxOff,			// turn off receiver
+		rxFlush,		// toss inbound data
+		rxForward,		// forward all inbound data, NOW (as if fwdLen==1)
+		returnStatus,	// return current status (even if it hasn't changed)
+		resetDataToggle,// reset data toggle state to DATA0
+		enablePort,		// start servicing port (move data, check status)
+		disablePort;	// stop servicing port (does implicit tx/rx flush/off)
 	
-} keyspan_usa26_portControlMessage;
+} keyspan_usa49_portControlMessage;
 
 // defines for bits in lcr
 #define	USA_DATABITS_5		0x00
 #define	USA_DATABITS_6		0x01
 #define	USA_DATABITS_7		0x02
 #define	USA_DATABITS_8		0x03
-#define	STOPBITS_5678_1	0x00	// 1 stop bit for all byte sizes
-#define	STOPBITS_5_1p5	0x04	// 1.5 stop bits for 5-bit byte
-#define	STOPBITS_678_2	0x04	// 2 stop bits for 6/7/8-bit byte
+#define	STOPBITS_5678_1		0x00	// 1 stop bit for all byte sizes
+#define	STOPBITS_5_1p5		0x04	// 1.5 stop bits for 5-bit byte
+#define	STOPBITS_678_2		0x04	// 2 stop bits for 6/7/8-bit byte
 #define	USA_PARITY_NONE		0x00
 #define	USA_PARITY_ODD		0x08
 #define	USA_PARITY_EVEN		0x18
-#define	PARITY_1		0x28
-#define	PARITY_0		0x38
+#define	PARITY_1			0x28
+#define	PARITY_0			0x38
 
-// all things called "StatusMessage" are sent on the status endpoint
-
-typedef struct keyspan_usa26_portStatusMessage	// one for each port
+typedef struct keyspan_usa49_globalControlMessage
 {
-	u8	port,			// BOTH: 0=first, 1=second, other=see below
-		hskia_cts,		// USA26: reports HSKIA pin
-						// USA17: reports CTS pin
-		gpia_dcd,		// USA26: reports GPIA pin
-						// USA17: reports DCD pin
-		dsr,			// USA17: reports DSR pin
-		ri,				// USA17: reports RI pin
-		_txOff,			// port has been disabled (by host)
-		_txXoff,		// port is in XOFF state (either host or RX XOFF)
+	u8	portNumber,			// 0x80
+		sendGlobalStatus,	// 1/2=number of status responses requested
+		resetStatusToggle,	// 1=reset global status toggle
+		resetStatusCount,	// a cycling value
+		remoteWakeupEnable;	// 0x10=P1, 0x20=P2, 0x40=P3, 0x80=P3
+} keyspan_usa49_globalControlMessage;
+
+/*
+	Device->host messages send on the global status endpoint
+
+	portNumber			message
+	----------			--------------------
+	0x00,0x01,0x02,0x03	portStatusMessage
+	0x80				globalStatusMessage
+	0x81				globalDebugMessage
+*/
+
+typedef struct keyspan_usa49_portStatusMessage	// one for each port
+{
+	u8	portNumber,		// 0,1,2,3
+		cts,			// reports CTS pin
+		dcd,			// reports DCD pin
+		dsr,			// reports DSR pin
+		ri,				// reports RI pin
+		_txOff,			// transmit has been disabled (by host)
+		_txXoff,		// transmit is in XOFF state (either host or RX XOFF)
 		rxEnabled,		// as configured by rxOn/rxOff 1=on, 0=off
-		controlResponse;// 1=a control message has been processed
-} keyspan_usa26_portStatusMessage;
+		controlResponse,// 1=a control message has been processed
+		txAck,			// ACK (data TX complete)
+		rs232valid;		// RS-232 signal valid
+} keyspan_usa49_portStatusMessage;
 
 // bits in RX data message when STAT byte is included
 #define	RXERROR_OVERRUN	0x02
@@ -203,28 +229,19 @@ typedef struct keyspan_usa26_portStatusMessage	// one for each port
 #define	RXERROR_FRAMING	0x08
 #define	RXERROR_BREAK	0x10
 
-typedef struct keyspan_usa26_globalControlMessage
+typedef struct keyspan_usa49_globalStatusMessage
 {
-	u8	sendGlobalStatus,	// 2=request for two status responses
-		resetStatusToggle,	// 1=reset global status toggle
-		resetStatusCount;	// a cycling value
-} keyspan_usa26_globalControlMessage;
-
-typedef struct keyspan_usa26_globalStatusMessage
-{
-	u8	port,				// 3
+	u8	portNumber,			// 0x80=globalStatusMessage
 		sendGlobalStatus,	// from request, decremented
 		resetStatusCount;	// as in request
-} keyspan_usa26_globalStatusMessage;
+} keyspan_usa49_globalStatusMessage;
 
-typedef struct keyspan_usa26_globalDebugMessage
+typedef struct keyspan_usa49_globalDebugMessage
 {
-	u8	port,				// 2
-		a,
-		b,
-		c,
-		d;
-} keyspan_usa26_globalDebugMessage;
+	u8	portNumber,			// 0x81=globalDebugMessage
+		n,					// typically a count/status byte
+		b;					// typically a data byte
+} keyspan_usa49_globalDebugMessage;
 
 // ie: the maximum length of an EZUSB endpoint buffer
 #define	MAX_DATA_LEN			64
@@ -236,5 +253,3 @@ typedef struct keyspan_usa26_globalDebugMessage
 #define	STATUS_RATION	10
 
 #endif
-
-

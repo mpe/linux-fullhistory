@@ -150,8 +150,9 @@ extern signed long FASTCALL(schedule_timeout(signed long timeout));
 asmlinkage void schedule(void);
 
 extern int schedule_task(struct tq_struct *task);
-extern void run_schedule_tasks(void);
+extern void flush_scheduled_tasks(void);
 extern int start_context_thread(void);
+extern int current_is_keventd(void);
 
 /*
  * The default fd array needs to be at least BITS_PER_LONG,

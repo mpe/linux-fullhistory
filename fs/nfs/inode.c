@@ -613,7 +613,7 @@ nfs_find_actor(struct inode *inode, unsigned long ino, void *opaque)
 	return 1;
 }
 
-static int
+int
 nfs_inode_is_stale(struct inode *inode, struct nfs_fh *fh, struct nfs_fattr *fattr)
 {
 	/* Empty inodes are not stale */
@@ -628,7 +628,7 @@ nfs_inode_is_stale(struct inode *inode, struct nfs_fh *fh, struct nfs_fattr *fat
 
 	/* Has the filehandle changed? If so is the old one stale? */
 	if (memcmp(&inode->u.nfs_i.fh, fh, sizeof(inode->u.nfs_i.fh)) != 0 &&
-	    __nfs_revalidate_inode(NFS_SERVER(inode),inode) < 0)
+	    __nfs_revalidate_inode(NFS_SERVER(inode),inode) == -ESTALE)
 		return 1;
 
 	return 0;
@@ -866,7 +866,7 @@ __nfs_revalidate_inode(struct nfs_server *server, struct inode *inode)
 		inode->i_dev, (long long)NFS_FILEID(inode));
 
 	lock_kernel();
-	if (!inode || is_bad_inode(inode)) {
+	if (!inode || is_bad_inode(inode) || NFS_STALE(inode)) {
 		unlock_kernel();
 		return -ESTALE;
 	}
@@ -878,8 +878,8 @@ __nfs_revalidate_inode(struct nfs_server *server, struct inode *inode)
 			return status;
 		}
 		if (time_before(jiffies,NFS_READTIME(inode)+NFS_ATTRTIMEO(inode))) {
-			unlock_kernel();
-			return 0;
+			status = NFS_STALE(inode) ? -ESTALE : 0;
+			goto out_nowait;
 		}
 	}
 	NFS_FLAGS(inode) |= NFS_INO_REVALIDATING;
@@ -888,6 +888,10 @@ __nfs_revalidate_inode(struct nfs_server *server, struct inode *inode)
 	if (status) {
 		dfprintk(PAGECACHE, "nfs_revalidate_inode: (%x/%Ld) getattr failed, error=%d\n",
 			 inode->i_dev, (long long)NFS_FILEID(inode), status);
+		if (status == -ESTALE) {
+			NFS_FLAGS(inode) |= NFS_INO_STALE;
+			remove_inode_hash(inode);
+		}
 		goto out;
 	}
 
@@ -902,6 +906,7 @@ __nfs_revalidate_inode(struct nfs_server *server, struct inode *inode)
 out:
 	NFS_FLAGS(inode) &= ~NFS_INO_REVALIDATING;
 	wake_up(&inode->i_wait);
+ out_nowait:
 	unlock_kernel();
 	return status;
 }

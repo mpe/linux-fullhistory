@@ -26,9 +26,9 @@ USB-specific:
 -ENODEV		specified USB-device or bus doesn't exist
 
 USB_ST_REQUEST_ERROR
--ENXIO		a) specified endpoint doesn't exist on the device
-		b) an URB is already queued to this endpoint and
-		   USB_QUEUE_BULK wasn't used (UHCI HCDs only)
+-ENXIO		a control or interrupt URB is already queued to this endpoint; or
+		  a bulk URB is already queued to this endpoint and
+		  USB_QUEUE_BULK wasn't used (UHCI HCDs only)
 
 USB_ST_URB_INVALID_ERROR
 -EINVAL		a) Invalid transfer type specified (or not supported)

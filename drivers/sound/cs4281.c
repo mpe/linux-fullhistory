@@ -258,7 +258,7 @@ struct cs4281_state {
 #define SNDCTL_DSP_CS_GETDBGMASK 	_SIOWR('P', 52, int)
 #define SNDCTL_DSP_CS_SETDBGMASK 	_SIOWR('P', 53, int)
 
-void printioctl(unsigned int x)
+static void printioctl(unsigned int x)
 {
 	unsigned int i;
 	unsigned char vidx;

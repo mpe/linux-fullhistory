@@ -2053,9 +2053,9 @@ int usb_new_device(struct usb_device *dev)
 	if (err < 0) {
 		err("unable to get device %d configuration (error=%d)",
 			dev->devnum, err);
-		usb_destroy_configuration(dev);
 		clear_bit(dev->devnum, &dev->bus->devmap.devicemap);
 		dev->devnum = -1;
+		usb_free_dev(dev);
 		return 1;
 	}
 

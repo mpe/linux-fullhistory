@@ -885,6 +885,36 @@ void generic_make_request (int rw, struct buffer_head * bh)
 	while (q->make_request_fn(q, rw, bh));
 }
 
+
+/*
+ * Submit a buffer head for IO.
+ */
+void submit_bh(int rw, struct buffer_head * bh)
+{
+	if (!test_bit(BH_Lock, &bh->b_state))
+		BUG();
+
+	set_bit(BH_Req, &bh->b_state);
+
+	/*
+	 * First step, 'identity mapping' - RAID or LVM might
+	 * further remap this.
+	 */
+	bh->b_rdev = bh->b_dev;
+	bh->b_rsector = bh->b_blocknr * (bh->b_size>>9);
+
+	generic_make_request(rw, bh);
+}
+
+/*
+ * Default IO end handler, used by "ll_rw_block()".
+ */
+static void end_buffer_io_sync(struct buffer_head *bh, int uptodate)
+{
+	mark_buffer_uptodate(bh, uptodate);
+	unlock_buffer(bh);
+}
+
 /* This function can be used to request a number of buffers from a block
    device. Currently the only restriction is that all buffers must belong to
    the same device */
@@ -931,7 +961,8 @@ void ll_rw_block(int rw, int nr, struct buffer_head * bhs[])
 		if (test_and_set_bit(BH_Lock, &bh->b_state))
 			continue;
 
-		set_bit(BH_Req, &bh->b_state);
+		/* We have the buffer lock */
+		bh->b_end_io = end_buffer_io_sync;
 
 		switch(rw) {
 		case WRITE:
@@ -954,17 +985,9 @@ void ll_rw_block(int rw, int nr, struct buffer_head * bhs[])
 	end_io:
 			bh->b_end_io(bh, test_bit(BH_Uptodate, &bh->b_state));
 			continue;
-			
 		}
 
-		/*
-		 * First step, 'identity mapping' - RAID or LVM might
-		 * further remap this.
-		 */
-		bh->b_rdev = bh->b_dev;
-		bh->b_rsector = bh->b_blocknr * (bh->b_size>>9);
-
-		generic_make_request(rw, bh);
+		submit_bh(rw, bh);
 	}
 	return;
 
@@ -972,7 +995,6 @@ sorry:
 	for (i = 0; i < nr; i++)
 		buffer_IO_error(bhs[i]);
 }
-
 
 #ifdef CONFIG_STRAM_SWAP
 extern int stram_device_init (void);

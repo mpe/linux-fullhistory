@@ -302,9 +302,9 @@ static inline void __exit_mm(struct task_struct * tsk)
 {
 	struct mm_struct * mm = tsk->mm;
 
+	mm_release();
 	if (mm) {
 		atomic_inc(&mm->mm_count);
-		mm_release();
 		if (mm != tsk->active_mm) BUG();
 		/* more a memory barrier than a real lock */
 		task_lock(tsk);

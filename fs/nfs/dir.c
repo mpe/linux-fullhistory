@@ -533,12 +533,11 @@ static int nfs_lookup_revalidate(struct dentry * dentry, int flags)
 	    NFS_FILEID(inode) != fattr.fileid)
 		goto out_bad;
 
-	/* Filehandle matches? */
-	if (memcmp(NFS_FH(inode), fhandle.data, sizeof(struct nfs_fh)))
-		goto out_bad;
-
 	/* Ok, remember that we successfully checked it.. */
 	nfs_refresh_inode(inode, &fattr);
+
+	if (nfs_inode_is_stale(inode, &fhandle, &fattr))
+		goto out_bad;
 
  out_valid_renew:
 	nfs_renew_times(dentry);

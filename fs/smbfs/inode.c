@@ -53,22 +53,6 @@ static struct super_operations smb_sops =
 	statfs:		smb_statfs,
 };
 
-/* FIXME: Look at all inodes whether so that we do not get duplicate
- * inode numbers. */
-
-unsigned long
-smb_invent_inos(unsigned long n)
-{
-	static unsigned long ino = 2;
-
-	if (ino + 2*n < ino)
-	{
-		/* wrap around */
-		ino = 2;
-	}
-	ino += n;
-	return ino;
-}
 
 /* We are always generating a new inode here */
 struct inode *
@@ -282,7 +266,7 @@ out:
 static void
 smb_delete_inode(struct inode *ino)
 {
-	DEBUG1("\n");
+	DEBUG1("ino=%ld\n", ino->i_ino);
 	lock_kernel();
 	if (smb_close(ino))
 		PARANOIA("could not close inode %ld\n", ino->i_ino);

@@ -48,8 +48,7 @@ smb_readpage_sync(struct dentry *dentry, struct page *page)
 		DENTRY_PATH(dentry), count, offset, rsize);
 
 	result = smb_open(dentry, SMB_O_RDONLY);
-	if (result < 0)
-	{
+	if (result < 0) {
 		PARANOIA("%s/%s open failed, error=%d\n",
 			 DENTRY_PATH(dentry), result);
 		goto io_error;
@@ -59,7 +58,7 @@ smb_readpage_sync(struct dentry *dentry, struct page *page)
 		if (count < rsize)
 			rsize = count;
 
-		result = smb_proc_read(dentry, offset, rsize, buffer);
+		result = smb_proc_read(dentry->d_inode, offset, rsize, buffer);
 		if (result < 0)
 			goto io_error;
 
@@ -103,25 +102,27 @@ smb_readpage(struct file *file, struct page *page)
  * Offset is the data offset within the page.
  */
 static int
-smb_writepage_sync(struct dentry *dentry, struct page *page,
+smb_writepage_sync(struct inode *inode, struct page *page,
 		   unsigned long offset, unsigned int count)
 {
-	struct inode *inode = dentry->d_inode;
 	u8 *buffer = page_address(page) + offset;
-	int wsize = smb_get_wsize(server_from_dentry(dentry));
+	int wsize = smb_get_wsize(server_from_inode(inode));
 	int result, written = 0;
 
 	offset += page->index << PAGE_CACHE_SHIFT;
-	VERBOSE("file %s/%s, count=%d@%ld, wsize=%d\n",
-		DENTRY_PATH(dentry), count, offset, wsize);
+	VERBOSE("file ino=%ld, fileid=%d, count=%d@%ld, wsize=%d\n",
+		inode->i_ino, inode->u.smbfs_i.fileid, count, offset, wsize);
 
 	do {
 		if (count < wsize)
 			wsize = count;
 
-		result = smb_proc_write(dentry, offset, wsize, buffer);
-		if (result < 0)
+		result = smb_proc_write(inode, offset, wsize, buffer);
+		if (result < 0) {
+			PARANOIA("failed write, wsize=%d, result=%d\n",
+				 wsize, result);
 			break;
+		}
 		/* N.B. what if result < wsize?? */
 #ifdef SMBFS_PARANOIA
 		if (result < wsize)
@@ -153,9 +154,7 @@ static int
 smb_writepage(struct page *page)
 {
 	struct address_space *mapping = page->mapping;
-	struct dentry *dentry;
 	struct inode *inode;
-	struct list_head *head;
 	unsigned long end_index;
 	unsigned offset = PAGE_CACHE_SIZE;
 	int err;
@@ -165,12 +164,6 @@ smb_writepage(struct page *page)
 	inode = (struct inode *)mapping->host;
 	if (!inode)
 		BUG();
-
-	/* Pick the first dentry for this inode. */
-	head = &inode->i_dentry;
-	if (list_empty(head))
-		BUG();	/* We need one, are we guaranteed to have one?  */
-	dentry = list_entry(head->next, struct dentry, d_alias);
 
 	end_index = inode->i_size >> PAGE_CACHE_SHIFT;
 
@@ -184,7 +177,7 @@ smb_writepage(struct page *page)
 		return -EIO;
 do_it:
 	get_page(page);
-	err = smb_writepage_sync(dentry, page, 0, offset);
+	err = smb_writepage_sync(inode, page, 0, offset);
 	SetPageUptodate(page);
 	UnlockPage(page);
 	put_page(page);
@@ -200,7 +193,7 @@ smb_updatepage(struct file *file, struct page *page, unsigned long offset,
 	DEBUG1("(%s/%s %d@%ld)\n", DENTRY_PATH(dentry), 
 	       count, (page->index << PAGE_CACHE_SHIFT)+offset);
 
-	return smb_writepage_sync(dentry, page, offset, count);
+	return smb_writepage_sync(dentry->d_inode, page, offset, count);
 }
 
 static ssize_t
@@ -281,7 +274,7 @@ static int smb_commit_write(struct file *file, struct page *page,
 
 struct address_space_operations smb_file_aops = {
 	readpage: smb_readpage,
-	/* writepage: smb_writepage, */
+	writepage: smb_writepage,
 	prepare_write: smb_prepare_write,
 	commit_write: smb_commit_write
 };
@@ -325,8 +318,16 @@ out:
 static int
 smb_file_open(struct inode *inode, struct file * file)
 {
+	int result;
+	struct dentry *dentry = file->f_dentry;
+	int smb_mode = (file->f_mode & O_ACCMODE) - 1;
+
 	lock_kernel();
+	result = smb_open(dentry, smb_mode);
+	if (result)
+		goto out;
 	inode->u.smbfs_i.openers++;
+out:
 	unlock_kernel();
 	return 0;
 }

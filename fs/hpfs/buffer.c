@@ -127,7 +127,7 @@ void *hpfs_map_sector(struct super_block *s, unsigned secno, struct buffer_head 
 
 	if (!ahead || secno + ahead >= s->s_hpfs_fs_size)
 		*bhp = bh = bread(dev, secno, 512);
-	else *bhp = bh = breada(dev, secno, 512, 0, (ahead + 1) << 9);
+	else *bhp = bh = bread(dev, secno, 512);
 	if (bh != NULL)
 		return bh->b_data;
 	else {
@@ -175,7 +175,7 @@ void *hpfs_map_4sectors(struct super_block *s, unsigned secno, struct quad_buffe
 
 	if (!ahead || secno + 4 + ahead > s->s_hpfs_fs_size)
 		qbh->bh[0] = bh = bread(dev, secno, 512);
-	else qbh->bh[0] = bh = breada(dev, secno, 512, 0, (ahead + 4) << 9);
+	else qbh->bh[0] = bh = bread(dev, secno, 512);
 	if (!bh)
 		goto bail0;
 	memcpy(data, bh->b_data, 512);

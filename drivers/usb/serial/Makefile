@@ -23,6 +23,7 @@ obj-$(CONFIG_USB_SERIAL_OMNINET)		+= omninet.o
 obj-$(CONFIG_USB_SERIAL_DIGI_ACCELEPORT)	+= digi_acceleport.o
 obj-$(CONFIG_USB_SERIAL_BELKIN)			+= belkin_sa.o
 obj-$(CONFIG_USB_SERIAL_EMPEG)			+= empeg.o
+obj-$(CONFIG_USB_SERIAL_MCT_U232)		+= mct_u232.o
  
 # Objects that export symbols.
 export-objs	:= usbserial.o

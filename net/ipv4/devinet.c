@@ -519,6 +519,7 @@ int devinet_ioctl(unsigned int cmd, void *arg)
 		return -EINVAL;
 	}
 
+	dev_probe_lock();
 	rtnl_lock();
 
 	if ((dev = __dev_get_by_name(ifr.ifr_name)) == NULL) {
@@ -649,10 +650,12 @@ int devinet_ioctl(unsigned int cmd, void *arg)
 	}
 done:
 	rtnl_unlock();
+	dev_probe_unlock();
 	return ret;
 
 rarok:
 	rtnl_unlock();
+	dev_probe_unlock();
 	if (copy_to_user(arg, &ifr, sizeof(struct ifreq)))
 		return -EFAULT;
 	return 0;

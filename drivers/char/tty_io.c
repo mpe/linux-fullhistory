@@ -1262,7 +1262,7 @@ static void release_dev(struct file * filp)
 	 * Make sure that the tty's task queue isn't activated. 
 	 */
 	run_task_queue(&tq_timer);
-	run_schedule_tasks();
+	flush_scheduled_tasks();
 
 	/* 
 	 * The release_mem function takes care of the details of clearing

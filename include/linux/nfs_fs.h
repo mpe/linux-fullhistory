@@ -92,6 +92,7 @@ do { \
 
 #define NFS_FLAGS(inode)		((inode)->u.nfs_i.flags)
 #define NFS_REVALIDATING(inode)		(NFS_FLAGS(inode) & NFS_INO_REVALIDATING)
+#define NFS_STALE(inode)		(NFS_FLAGS(inode) & NFS_INO_STALE)
 
 #define NFS_FILEID(inode)		((inode)->u.nfs_i.fileid)
 #define NFS_FSID(inode)			((inode)->u.nfs_i.fsid)
@@ -138,6 +139,8 @@ unsigned long page_index(struct page *page)
 extern struct super_block *nfs_read_super(struct super_block *, void *, int);
 extern int init_nfs_fs(void);
 extern void nfs_zap_caches(struct inode *);
+extern int nfs_inode_is_stale(struct inode *, struct nfs_fh *,
+				struct nfs_fattr *);
 extern struct inode *nfs_fhget(struct dentry *, struct nfs_fh *,
 				struct nfs_fattr *);
 extern int nfs_refresh_inode(struct inode *, struct nfs_fattr *);

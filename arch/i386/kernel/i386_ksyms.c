@@ -68,7 +68,7 @@ EXPORT_SYMBOL(kernel_thread);
 EXPORT_SYMBOL(pm_idle);
 EXPORT_SYMBOL(pm_power_off);
 EXPORT_SYMBOL(get_cmos_time);
-EXPORT_SYMBOL(apm_bios_info);
+EXPORT_SYMBOL(apm_info);
 EXPORT_SYMBOL(gdt);
 
 EXPORT_SYMBOL_NOVERS(__down_failed);
