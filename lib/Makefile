@@ -11,7 +11,7 @@ AS	=as
 LD	=ld
 LDFLAGS	=-s -x
 CC	=gcc -nostdinc -I../include
-CPP	=cpp -nostdinc -I../include
+CPP	=gcc -E -nostdinc -I../include
 
 .c.s:
 	$(CC) $(CFLAGS) \
@@ -40,32 +40,35 @@ dep:
 	cp tmp_make Makefile
 
 ### Dependencies:
-_exit.s _exit.o : _exit.c ../include/unistd.h ../include/sys/stat.h \
-  ../include/sys/types.h ../include/sys/times.h ../include/sys/utsname.h \
-  ../include/utime.h 
-close.s close.o : close.c ../include/unistd.h ../include/sys/stat.h \
-  ../include/sys/types.h ../include/sys/times.h ../include/sys/utsname.h \
-  ../include/utime.h 
-ctype.s ctype.o : ctype.c ../include/ctype.h 
-dup.s dup.o : dup.c ../include/unistd.h ../include/sys/stat.h \
-  ../include/sys/types.h ../include/sys/times.h ../include/sys/utsname.h \
-  ../include/utime.h 
+_exit.s _exit.o : _exit.c ../include/unistd.h ../include/sys/stat.h ../include/sys/types.h \
+  ../include/sys/time.h ../include/time.h ../include/sys/times.h ../include/sys/utsname.h \
+  ../include/sys/param.h ../include/sys/resource.h ../include/utime.h ../include/linux/unistd.h 
+close.s close.o : close.c ../include/unistd.h ../include/sys/stat.h ../include/sys/types.h \
+  ../include/sys/time.h ../include/time.h ../include/sys/times.h ../include/sys/utsname.h \
+  ../include/sys/param.h ../include/sys/resource.h ../include/utime.h ../include/linux/unistd.h 
+ctype.s ctype.o : ctype.c ../include/linux/ctype.h 
+dup.s dup.o : dup.c ../include/unistd.h ../include/sys/stat.h ../include/sys/types.h \
+  ../include/sys/time.h ../include/time.h ../include/sys/times.h ../include/sys/utsname.h \
+  ../include/sys/param.h ../include/sys/resource.h ../include/utime.h ../include/linux/unistd.h 
 errno.s errno.o : errno.c 
-execve.s execve.o : execve.c ../include/unistd.h ../include/sys/stat.h \
-  ../include/sys/types.h ../include/sys/times.h ../include/sys/utsname.h \
-  ../include/utime.h 
-malloc.s malloc.o : malloc.c ../include/linux/kernel.h ../include/linux/mm.h \
+execve.s execve.o : execve.c ../include/unistd.h ../include/sys/stat.h ../include/sys/types.h \
+  ../include/sys/time.h ../include/time.h ../include/sys/times.h ../include/sys/utsname.h \
+  ../include/sys/param.h ../include/sys/resource.h ../include/utime.h ../include/linux/unistd.h 
+malloc.s malloc.o : malloc.c ../include/linux/kernel.h ../include/linux/mm.h ../include/linux/fs.h \
+  ../include/sys/types.h ../include/sys/dirent.h ../include/limits.h ../include/signal.h \
   ../include/asm/system.h 
-open.s open.o : open.c ../include/unistd.h ../include/sys/stat.h \
-  ../include/sys/types.h ../include/sys/times.h ../include/sys/utsname.h \
-  ../include/utime.h ../include/stdarg.h 
-setsid.s setsid.o : setsid.c ../include/unistd.h ../include/sys/stat.h \
-  ../include/sys/types.h ../include/sys/times.h ../include/sys/utsname.h \
-  ../include/utime.h 
-string.s string.o : string.c ../include/string.h 
-wait.s wait.o : wait.c ../include/unistd.h ../include/sys/stat.h \
-  ../include/sys/types.h ../include/sys/times.h ../include/sys/utsname.h \
-  ../include/utime.h ../include/sys/wait.h 
-write.s write.o : write.c ../include/unistd.h ../include/sys/stat.h \
-  ../include/sys/types.h ../include/sys/times.h ../include/sys/utsname.h \
-  ../include/utime.h 
+open.s open.o : open.c ../include/unistd.h ../include/sys/stat.h ../include/sys/types.h \
+  ../include/sys/time.h ../include/time.h ../include/sys/times.h ../include/sys/utsname.h \
+  ../include/sys/param.h ../include/sys/resource.h ../include/utime.h ../include/linux/unistd.h \
+  ../include/stdarg.h 
+setsid.s setsid.o : setsid.c ../include/unistd.h ../include/sys/stat.h ../include/sys/types.h \
+  ../include/sys/time.h ../include/time.h ../include/sys/times.h ../include/sys/utsname.h \
+  ../include/sys/param.h ../include/sys/resource.h ../include/utime.h ../include/linux/unistd.h 
+string.s string.o : string.c ../include/linux/string.h 
+wait.s wait.o : wait.c ../include/unistd.h ../include/sys/stat.h ../include/sys/types.h \
+  ../include/sys/time.h ../include/time.h ../include/sys/times.h ../include/sys/utsname.h \
+  ../include/sys/param.h ../include/sys/resource.h ../include/utime.h ../include/linux/unistd.h \
+  ../include/sys/wait.h 
+write.s write.o : write.c ../include/unistd.h ../include/sys/stat.h ../include/sys/types.h \
+  ../include/sys/time.h ../include/time.h ../include/sys/times.h ../include/sys/utsname.h \
+  ../include/sys/param.h ../include/sys/resource.h ../include/utime.h ../include/linux/unistd.h 

@@ -50,6 +50,7 @@ int block_write(struct inode * inode, struct file * filp, char * buf, int count)
 		memcpy_fromfs(p,buf,chars);
 		p += chars;
 		buf += chars;
+		bh->b_uptodate = 1;
 		bh->b_dirt = 1;
 		brelse(bh);
 	}

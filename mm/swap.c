@@ -9,11 +9,11 @@
  * Started 18.12.91
  */
 
-#include <string.h>
 #include <errno.h>
+#include <sys/stat.h>
 
 #include <linux/mm.h>
-#include <sys/stat.h>
+#include <linux/string.h>
 #include <linux/sched.h>
 #include <linux/head.h>
 #include <linux/kernel.h>
@@ -149,6 +149,12 @@ int try_to_swap_out(unsigned long * table_ptr)
 /*
  * Go through the page tables, searching for a user page that
  * we can swap out.
+ *
+ * Here it's easy to add a check for tasks that may not be swapped out:
+ * loadable device drivers or similar. Just add an entry to the task-struct
+ * and check it at the same time you check for the existence of the task.
+ * The code assumes tasks are page-table aligned, but so do other parts
+ * of the memory manager...
  */
 int swap_out(void)
 {
@@ -156,12 +162,18 @@ int swap_out(void)
 	static int page_entry = -1;
 	int counter = VM_PAGES;
 	int pg_table;
+	struct task_struct * p;
 
 check_dir:
 	if (counter < 0)
 		goto no_swap;
 	if (dir_entry >= 1024)
 		dir_entry = FIRST_VM_PAGE>>10;
+	if (!(p = task[dir_entry >> 4])) {
+		counter -= 1024;
+		dir_entry++;
+		goto check_dir;
+	}
 	if (!(1 & (pg_table = pg_dir[dir_entry]))) {
 		if (pg_table) {
 			printk("bad page-table at pg_dir[%d]: %08x\n\r",
@@ -184,10 +196,7 @@ check_table:
 		goto check_dir;
 	}
 	if (try_to_swap_out(page_entry + (unsigned long *) pg_table)) {
-		if (! task[dir_entry >> 4])
-			printk("swapping out page from non-existent task\n\r");
-		else
-			task[dir_entry >> 4]->rss--;
+		p->rss--;
 		return 1;
 	}
 	goto check_table;
@@ -236,10 +245,10 @@ repeat:
  *
  * The swapon system call
  */
-
 int sys_swapon(const char * specialfile)
 {
 	struct inode * swap_inode;
+	char * tmp;
 	int i,j;
 
 	if (!suser())
@@ -259,38 +268,39 @@ int sys_swapon(const char * specialfile)
 		iput(swap_inode);
 		return -EINVAL;
 	}
-	swap_bitmap = (char *) get_free_page();
-	if (!swap_bitmap) {
+	tmp = (char *) get_free_page();
+	if (!tmp) {
 		iput(swap_file);
 		swap_device = 0;
 		swap_file = NULL;
 		printk("Unable to start swapping: out of memory :-)\n");
 		return -ENOMEM;
 	}
-	read_swap_page(0,swap_bitmap);
-	if (strncmp("SWAP-SPACE",swap_bitmap+4086,10)) {
+	read_swap_page(0,tmp);
+	if (strncmp("SWAP-SPACE",tmp+4086,10)) {
 		printk("Unable to find swap-space signature\n\r");
-		free_page((long) swap_bitmap);
+		free_page((long) tmp);
 		iput(swap_file);
 		swap_device = 0;
 		swap_file = NULL;
 		swap_bitmap = NULL;
 		return -EINVAL;
 	}
-	memset(swap_bitmap+4086,0,10);
+	memset(tmp+4086,0,10);
 	j = 0;
 	for (i = 1 ; i < SWAP_BITS ; i++)
-		if (bit(swap_bitmap,i))
+		if (bit(tmp,i))
 			j++;
 	if (!j) {
 		printk("Empty swap-file\n");
-		free_page((long) swap_bitmap);
+		free_page((long) tmp);
 		iput(swap_file);
 		swap_device = 0;
 		swap_file = NULL;
 		swap_bitmap = NULL;
 		return -EINVAL;
 	}
+	swap_bitmap = tmp;
 	printk("Adding Swap: %d pages (%d bytes) swap-space\n\r",j,j*4096);
 	return 0;
 }

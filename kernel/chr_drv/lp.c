@@ -3,12 +3,16 @@
   james_r_wiegand Exp james_r_wiegand $
 */
 
+/*
+ * Edited by Linus - cleaner interface etc. Still not using interrupts, so
+ * it eats more resources than necessary, but it was easy to code this way...
+ */
+
+#include <linux/sched.h>
 #define __LP_C__
 #include <linux/lp.h>
 
-#include <checkpoint.h>
-
-int lp_reset(int minor)
+static int lp_reset(int minor)
 {
 	int testvalue;
 
@@ -20,31 +24,7 @@ int lp_reset(int minor)
 	return LP_S(minor);
 }
 
-void lp_init(void)
-{
-	int offset = 0;
-	unsigned int testvalue = 0;
-	int count = 0;
-
-	/* take on all known port values */
-	for (offset = 0; offset < LP_NO; offset++) {
-		/* write to port & read back to check */
-		outb( LP_DUMMY, LP_B(offset));
-		for (testvalue = 0 ; testvalue < LP_DELAY ; testvalue++)
-			;
-		testvalue = inb(LP_B(offset));
-		if (testvalue != 255) {
-			LP_F(offset) |= LP_EXIST;
-			lp_reset(offset);
-			printk("lp_init: lp%d exists (%d)\n", offset, testvalue);
-			count++;
-		}
-	}
-	if (count == 0)
-		printk("lp_init: no lp devices found\n");
-}
-
-int lp_char(char lpchar, int minor)
+static int lp_char(char lpchar, int minor)
 {
 	int retval = 0;
 	unsigned long count  = 0; 
@@ -67,61 +47,102 @@ int lp_char(char lpchar, int minor)
 	return LP_S(minor);
 }
 
-int lp_write(unsigned minor, char *buf, int count)
+static int lp_write(struct inode * inode, struct file * file, char * buf, int count)
 {
 	int  retval;
-	int  loop;
-	int  tcount;
+	unsigned int minor = MINOR(inode->i_rdev);
 	char c, *temp = buf;
 
-	if (minor > LP_NO - 1)
-		return -ENODEV;
-	if ((LP_F(minor) & LP_EXIST) == 0)
-		return -ENODEV;
-
-/* if we aren't the "owner task", check if the old owner has died... */
-	if (LP_T(minor) != current->pid && (LP_F(minor) & LP_BUSY)) {
-		for(tcount = 0; tcount < NR_TASKS; tcount++) { 
-			if (!task[tcount])
-				continue;
-			if (task[tcount]->state == TASK_ZOMBIE)
-				continue;
-			if (task[tcount]->pid == LP_T(minor)) {
-			        tcount = -1;
-				break;
-			}
-		}
-		if (tcount == -1)
-			return -EBUSY;
-	}
-
-	LP_T(minor) = current->pid;
-	LP_F(minor) |= LP_BUSY;
-	LP_R(minor) = count;
 	temp = buf;
-
-	for (loop = 0 ; loop < count ; loop++, temp++) {
-		c = get_fs_byte(temp);
+	while (count > 0) {
+		c = get_fs_byte(temp++);
 		retval = lp_char(c, minor);
-		LP_R(minor)--;
+		count--;
 		if (retval & LP_POUTPA) {
 			LP_F(minor) |= LP_NOPA;
-			return loop?loop:-ENOSPC;
+			return temp-buf?temp-buf:-ENOSPC;
 		} else
 			LP_F(minor) &= ~LP_NOPA;
 
 		if (!(retval & LP_PSELECD)) {
 			LP_F(minor) &= ~LP_SELEC;
-			return loop?loop:-EFAULT;
+			return temp-buf?temp-buf:-EFAULT;
 		} else
 			LP_F(minor) &= ~LP_SELEC;
 
     /* not offline or out of paper. on fire? */
 		if (!(retval & LP_PERRORP)) {
 			LP_F(minor) |= LP_ERR;
-			return loop?loop:-EIO;
+			return temp-buf?temp-buf:-EIO;
 		} else
 			LP_F(minor) &= ~LP_SELEC;
 	}
-	return count;
+	return temp-buf;
+}
+
+static int lp_read(struct inode * inode, struct file * file, char * buf, int count)
+{
+	return -EINVAL;
+}
+
+static int lp_lseek(struct inode * inode, struct file * file, off_t offset, int origin)
+{
+	return -EINVAL;
+}
+
+static int lp_open(struct inode * inode, struct file * file)
+{
+	unsigned int minor = MINOR(inode->i_rdev);
+
+	if (minor >= LP_NO)
+		return -ENODEV;
+	if ((LP_F(minor) & LP_EXIST) == 0)
+		return -ENODEV;
+	if (LP_F(minor) & LP_BUSY)
+		return -EBUSY;
+	LP_F(minor) |= LP_BUSY;
+	return 0;
+}
+
+static void lp_release(struct inode * inode, struct file * file)
+{
+	unsigned int minor = MINOR(inode->i_rdev);
+
+	LP_F(minor) &= ~LP_BUSY;
+}
+
+static struct file_operations lp_fops = {
+	lp_lseek,
+	lp_read,
+	lp_write,
+	NULL,		/* lp_readdir */
+	NULL,		/* lp_select */
+	NULL,		/* lp_ioctl */
+	lp_open,
+	lp_release
+};
+
+void lp_init(void)
+{
+	int offset = 0;
+	unsigned int testvalue = 0;
+	int count = 0;
+
+	chrdev_fops[6] = &lp_fops;
+	/* take on all known port values */
+	for (offset = 0; offset < LP_NO; offset++) {
+		/* write to port & read back to check */
+		outb( LP_DUMMY, LP_B(offset));
+		for (testvalue = 0 ; testvalue < LP_DELAY ; testvalue++)
+			;
+		testvalue = inb(LP_B(offset));
+		if (testvalue != 255) {
+			LP_F(offset) |= LP_EXIST;
+			lp_reset(offset);
+			printk("lp_init: lp%d exists (%d)\n", offset, testvalue);
+			count++;
+		}
+	}
+	if (count == 0)
+		printk("lp_init: no lp devices found\n");
 }

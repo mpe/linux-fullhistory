@@ -7,6 +7,11 @@
 #define TASK_SIZE	0x04000000
 #define LIBRARY_SIZE	0x00400000
 
+/*
+ * Size of io_bitmap in longwords: 32 is ports 0-0x3ff.
+ */
+#define IO_BITMAP_SIZE	32
+
 #if (TASK_SIZE & 0x3fffff)
 #error "TASK_SIZE must be multiple of 4M"
 #endif
@@ -53,6 +58,8 @@
 #define NULL ((void *) 0)
 #endif
 
+#define MAX_SHARED_LIBS 6
+
 extern int copy_page_tables(unsigned long from, unsigned long to, long size);
 extern int free_page_tables(unsigned long from, unsigned long size);
 
@@ -60,7 +67,6 @@ extern void sched_init(void);
 extern void schedule(void);
 extern void trap_init(void);
 extern void panic(const char * str);
-extern int tty_write(unsigned minor,char * buf,int count);
 
 typedef int (*fn_ptr)();
 
@@ -76,29 +82,30 @@ struct i387_struct {
 };
 
 struct tss_struct {
-	long	back_link;	/* 16 high bits zero */
-	long	esp0;
-	long	ss0;		/* 16 high bits zero */
-	long	esp1;
-	long	ss1;		/* 16 high bits zero */
-	long	esp2;
-	long	ss2;		/* 16 high bits zero */
-	long	cr3;
-	long	eip;
-	long	eflags;
-	long	eax,ecx,edx,ebx;
-	long	esp;
-	long	ebp;
-	long	esi;
-	long	edi;
-	long	es;		/* 16 high bits zero */
-	long	cs;		/* 16 high bits zero */
-	long	ss;		/* 16 high bits zero */
-	long	ds;		/* 16 high bits zero */
-	long	fs;		/* 16 high bits zero */
-	long	gs;		/* 16 high bits zero */
-	long	ldt;		/* 16 high bits zero */
-	long	trace_bitmap;	/* bits: trace 0, bitmap 16-31 */
+	unsigned long	back_link;	/* 16 high bits zero */
+	unsigned long	esp0;
+	unsigned long	ss0;		/* 16 high bits zero */
+	unsigned long	esp1;
+	unsigned long	ss1;		/* 16 high bits zero */
+	unsigned long	esp2;
+	unsigned long	ss2;		/* 16 high bits zero */
+	unsigned long	cr3;
+	unsigned long	eip;
+	unsigned long	eflags;
+	unsigned long	eax,ecx,edx,ebx;
+	unsigned long	esp;
+	unsigned long	ebp;
+	unsigned long	esi;
+	unsigned long	edi;
+	unsigned long	es;		/* 16 high bits zero */
+	unsigned long	cs;		/* 16 high bits zero */
+	unsigned long	ss;		/* 16 high bits zero */
+	unsigned long	ds;		/* 16 high bits zero */
+	unsigned long	fs;		/* 16 high bits zero */
+	unsigned long	gs;		/* 16 high bits zero */
+	unsigned long	ldt;		/* 16 high bits zero */
+	unsigned long	trace_bitmap;	/* bits: trace 0, bitmap 16-31 */
+	unsigned long	io_bitmap[IO_BITMAP_SIZE];
 	struct i387_struct i387;
 };
 
@@ -143,9 +150,14 @@ struct task_struct {
 	struct inode * pwd;
 	struct inode * root;
 	struct inode * executable;
-	struct inode * library;
-	unsigned long close_on_exec;
+	struct {
+		struct inode * library;
+		unsigned long start;
+		unsigned long length;
+	} libraries[MAX_SHARED_LIBS];
+	int numlibraries;
 	struct file * filp[NR_OPEN];
+	unsigned long close_on_exec;
 /* ldt for this task 0 - zero 1 - cs 2 - ds&ss */
 	struct desc_struct ldt[3];
 /* tss for this task */
@@ -183,17 +195,18 @@ struct task_struct {
 /* math */	0, \
 /* rss */	2, \
 /* comm */	"swapper", \
-/* fs info */	0,-1,0022,NULL,NULL,NULL,NULL,0, \
-/* filp */	{NULL,}, \
-	{ \
-		{0,0}, \
-/* ldt */	{0x9f,0xc0fa00}, \
-		{0x9f,0xc0f200}, \
-	}, \
+/* fs info */	0,-1,0022,NULL,NULL,NULL, \
+/* libraries */	{ { NULL, 0, 0}, }, 0, \
+/* filp */	{NULL,}, 0, \
+		{ \
+			{0,0}, \
+/* ldt */		{0x9f,0xc0fa00}, \
+			{0x9f,0xc0f200} \
+		}, \
 /*tss*/	{0,PAGE_SIZE+(long)&init_task,0x10,0,0,0,0,(long)&pg_dir,\
 	 0,0,0,0,0,0,0,0, \
 	 0,0,0x17,0x17,0x17,0x17,0x17,0x17, \
-	 _LDT(0),0x80000000, \
+	 _LDT(0),0x80000000,{0xffffffff}, \
 		{} \
 	}, \
 }
@@ -209,6 +222,7 @@ extern int jiffies_offset;
 
 extern void add_timer(long jiffies, void (*fn)(void));
 extern void sleep_on(struct task_struct ** p);
+extern int send_sig(long sig,struct task_struct * p,int priv);
 extern void interruptible_sleep_on(struct task_struct ** p);
 extern void wake_up(struct task_struct ** p);
 extern int in_group_p(gid_t grp);

@@ -4,7 +4,7 @@
  *  (C) 1991  Linus Torvalds
  */
 
-#include <ctype.h>
+#include <linux/ctype.h>
 
 char _ctmp;
 unsigned char _ctype[] = {0x00,			/* EOF */

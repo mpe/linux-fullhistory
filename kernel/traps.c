@@ -10,7 +10,7 @@
  * to mainly kill the offending process (probably by giving it a signal,
  * but possibly by killing it outright if necessary).
  */
-#include <string.h>
+#include <linux/string.h>
 
 #include <linux/head.h>
 #include <linux/sched.h>
@@ -60,7 +60,6 @@ void reserved(void);
 void parallel_interrupt(void);
 void irq13(void);
 void alignment_check(void);
-int send_sig(long, struct task_struct *, int);
 
 static void die(char * str,long esp_ptr,long nr)
 {
@@ -84,7 +83,10 @@ static void die(char * str,long esp_ptr,long nr)
 	for(i=0;i<10;i++)
 		printk("%02x ",0xff & get_seg_byte(esp[1],(i+(char *)esp[0])));
 	printk("\n\r");
-	do_exit(11);		/* play segment exception */
+	if ((0xffff & esp[1]) == 0xf)
+		send_sig(SIGSEGV, current, 0);
+	else
+		do_exit(SIGSEGV);
 }
 
 void do_double_fault(long esp, long error_code)
@@ -99,7 +101,7 @@ void do_general_protection(long esp, long error_code)
 
 void do_alignment_check(long esp, long error_code)
 {
-    die("alignment check",esp,error_code);
+	die("alignment check",esp,error_code);
 }
 
 void do_divide_error(long esp, long error_code)
@@ -119,7 +121,7 @@ void do_nmi(long esp, long error_code)
 
 void do_debug(long esp, long error_code)
 {
-  send_sig(SIGTRAP, current, 0);
+	send_sig(SIGTRAP, current, 0);
 }
 
 void do_overflow(long esp, long error_code)

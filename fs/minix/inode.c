@@ -4,7 +4,7 @@
  *  (C) 1991  Linus Torvalds
  */
 
-#include <string.h>
+#include <linux/string.h>
 #include <sys/stat.h>
 
 #include <linux/sched.h>
@@ -14,6 +14,13 @@
 #include <asm/system.h>
 
 int sync_dev(int dev);
+
+void minix_put_inode(struct inode *inode)
+{
+	inode->i_size = 0;
+	minix_truncate(inode);
+	minix_free_inode(inode);
+}
 
 void minix_put_super(struct super_block *sb)
 {
@@ -31,6 +38,8 @@ void minix_put_super(struct super_block *sb)
 
 static struct super_operations minix_sops = { 
 	minix_read_inode,
+	minix_write_inode,
+	minix_put_inode,
 	minix_put_super
 };
 
@@ -199,7 +208,17 @@ void minix_read_inode(struct inode * inode)
 	else for (block = 0; block < 9; block++)
 		inode->i_data[block] = raw_inode->i_zone[block];
 	brelse(bh);
-	inode->i_op = &minix_inode_operations;
+	inode->i_op = NULL;
+	if (S_ISREG(inode->i_mode))
+		inode->i_op = &minix_file_inode_operations;
+	else if (S_ISDIR(inode->i_mode))
+		inode->i_op = &minix_dir_inode_operations;
+	else if (S_ISLNK(inode->i_mode))
+		inode->i_op = &minix_symlink_inode_operations;
+	else if (S_ISCHR(inode->i_mode))
+		inode->i_op = &minix_chrdev_inode_operations;
+	else if (S_ISBLK(inode->i_mode))
+		inode->i_op = &minix_blkdev_inode_operations;
 }
 
 void minix_write_inode(struct inode * inode)

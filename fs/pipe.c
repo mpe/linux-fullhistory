@@ -9,11 +9,12 @@
 #include <termios.h>
 #include <fcntl.h>
 
-#include <linux/sched.h>
 #include <asm/segment.h>
+
+#include <linux/sched.h>
 #include <linux/kernel.h>
 
-int pipe_read(struct inode * inode, struct file * filp, char * buf, int count)
+static int pipe_read(struct inode * inode, struct file * filp, char * buf, int count)
 {
 	int chars, size, read = 0;
 
@@ -44,7 +45,7 @@ int pipe_read(struct inode * inode, struct file * filp, char * buf, int count)
 	return read?read:-EAGAIN;
 }
 	
-int pipe_write(struct inode * inode, struct file * filp, char * buf, int count)
+static int pipe_write(struct inode * inode, struct file * filp, char * buf, int count)
 {
 	int chars, size, written = 0;
 
@@ -75,6 +76,68 @@ int pipe_write(struct inode * inode, struct file * filp, char * buf, int count)
 	wake_up(& PIPE_READ_WAIT(*inode));
 	return written;
 }
+
+static int pipe_lseek(struct inode * inode, struct file * file, off_t offset, int orig)
+{
+	return -ESPIPE;
+}
+
+static int pipe_readdir(struct inode * inode, struct file * file, struct dirent * de, int count)
+{
+	return -ENOTDIR;
+}
+
+static int bad_pipe_rw(struct inode * inode, struct file * filp, char * buf, int count)
+{
+	return -EBADF;
+}
+
+static int pipe_ioctl(struct inode *pino, struct file * filp,
+	unsigned int cmd, unsigned int arg)
+{
+	switch (cmd) {
+		case FIONREAD:
+			verify_area((void *) arg,4);
+			put_fs_long(PIPE_SIZE(*pino),(unsigned long *) arg);
+			return 0;
+		default:
+			return -EINVAL;
+	}
+}
+
+/*
+ * Ok, these two routines should keep track of readers/writers,
+ * but it's currently done with the inode->i_count checking.
+ */
+static void pipe_read_release(struct inode * inode, struct file * filp)
+{
+}
+
+static void pipe_write_release(struct inode * inode, struct file * filp)
+{
+}
+
+static struct file_operations read_pipe_fops = {
+	pipe_lseek,
+	pipe_read,
+	bad_pipe_rw,
+	pipe_readdir,
+	NULL,		/* pipe_select */
+	pipe_ioctl,
+	NULL,		/* no special open code */
+	pipe_read_release
+};
+
+static struct file_operations write_pipe_fops = {
+	pipe_lseek,
+	bad_pipe_rw,
+	pipe_write,
+	pipe_readdir,
+	NULL,		/* pipe_select */
+	pipe_ioctl,
+	NULL,		/* no special open code */
+	pipe_write_release
+};
 
 int sys_pipe(unsigned long * fildes)
 {
@@ -111,21 +174,11 @@ int sys_pipe(unsigned long * fildes)
 	}
 	f[0]->f_inode = f[1]->f_inode = inode;
 	f[0]->f_pos = f[1]->f_pos = 0;
+	f[0]->f_op = &read_pipe_fops;
 	f[0]->f_mode = 1;		/* read */
+	f[1]->f_op = &write_pipe_fops;
 	f[1]->f_mode = 2;		/* write */
 	put_fs_long(fd[0],0+fildes);
 	put_fs_long(fd[1],1+fildes);
 	return 0;
-}
-
-int pipe_ioctl(struct inode *pino, int cmd, int arg)
-{
-	switch (cmd) {
-		case FIONREAD:
-			verify_area((void *) arg,4);
-			put_fs_long(PIPE_SIZE(*pino),(unsigned long *) arg);
-			return 0;
-		default:
-			return -EINVAL;
-	}
 }

@@ -47,18 +47,12 @@ static void sync_buffers(int dev)
 	struct buffer_head * bh;
 
 	bh = free_list;
-	for (i=0 ; i<NR_BUFFERS ; i++,bh = bh->b_next_free) {
-#if 0
-		if (dev && (bh->b_dev != dev))
+	for (i = NR_BUFFERS*2 ; i-- > 0 ; bh = bh->b_next_free) {
+		if (bh->b_lock)
 			continue;
-#endif
-		wait_on_buffer(bh);
-#if 0
-		if (dev && (bh->b_dev != dev))
+		if (!bh->b_dirt)
 			continue;
-#endif
-		if (bh->b_dirt)
-			ll_rw_block(WRITE,bh);
+		ll_rw_block(WRITE,bh);
 	}
 }
 
@@ -200,7 +194,8 @@ static inline void insert_into_queues(struct buffer_head * bh)
 		return;
 	bh->b_next = hash(bh->b_dev,bh->b_blocknr);
 	hash(bh->b_dev,bh->b_blocknr) = bh;
-	bh->b_next->b_prev = bh;
+	if (bh->b_next)
+		bh->b_next->b_prev = bh;
 }
 
 static struct buffer_head * find_buffer(int dev, int block)
@@ -257,9 +252,7 @@ repeat:
 	if (bh = get_hash_table(dev,block))
 		return bh;
 	buffers = NR_BUFFERS;
-	tmp = free_list;
-	do {
-		tmp = tmp->b_next_free;
+	for (tmp = free_list ; buffers-- > 0 ; tmp = tmp->b_next_free) {
 		if (tmp->b_count)
 			continue;
 		if (!bh || BADNESS(tmp)<BADNESS(bh)) {
@@ -267,10 +260,12 @@ repeat:
 			if (!BADNESS(tmp))
 				break;
 		}
+#if 0
 		if (tmp->b_dirt)
 			ll_rw_block(WRITEA,tmp);
+#endif
+	}
 /* and repeat until we find something good */
-	} while (buffers--);
 	if (!bh) {
 		sleep_on(&buffer_wait);
 		goto repeat;
@@ -279,7 +274,7 @@ repeat:
 	if (bh->b_count)
 		goto repeat;
 	while (bh->b_dirt) {
-		sync_dev(bh->b_dev);
+		sync_buffers(bh->b_dev);
 		wait_on_buffer(bh);
 		if (bh->b_count)
 			goto repeat;
@@ -383,7 +378,7 @@ struct buffer_head * breada(int dev,int first, ...)
 		tmp=getblk(dev,first);
 		if (tmp) {
 			if (!tmp->b_uptodate)
-				ll_rw_block(READA,bh);
+				ll_rw_block(READA,tmp);
 			tmp->b_count--;
 		}
 	}
@@ -419,6 +414,7 @@ void buffer_init(long buffer_end)
 		h->b_next = NULL;
 		h->b_prev = NULL;
 		h->b_data = (char *) b;
+		h->b_reqnext = NULL;
 		h->b_prev_free = h-1;
 		h->b_next_free = h+1;
 		h++;

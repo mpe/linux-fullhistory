@@ -36,7 +36,10 @@ struct blk_dev_struct blk_dev[NR_BLK_DEV] = {
 	{ NULL, NULL },		/* dev hd */
 	{ NULL, NULL },		/* dev ttyx */
 	{ NULL, NULL },		/* dev tty */
-	{ NULL, NULL }		/* dev lp */
+	{ NULL, NULL },		/* dev lp */
+	{ NULL, NULL },		/* dev pipes */
+	{ NULL, NULL },		/* dev sd */
+	{ NULL, NULL }		/* dev st */
 };
 
 /*
@@ -128,6 +131,23 @@ static void make_request(int major,int rw, struct buffer_head * bh)
 		return;
 	}
 repeat:
+	cli();
+	if (major == 3 && (req = blk_dev[major].current_request)) {
+		while (req = req->next) {
+			if (req->dev == bh->b_dev &&
+			    !req->waiting &&
+			    req->cmd == rw &&
+			    req->sector + req->nr_sectors == bh->b_blocknr << 1 &&
+			    req->nr_sectors < 254) {
+				req->bhtail->b_reqnext = bh;
+				req->bhtail = bh;
+				req->nr_sectors += 2;
+				bh->b_dirt = 0;
+				sti();
+				return;
+			}
+		}
+	}
 /* we don't allow the write-requests to fill up the queue completely:
  * we want some room for reads: they take precedence. The last third
  * of the requests are only for reads.
@@ -135,9 +155,8 @@ repeat:
 	if (rw == READ)
 		req = request+NR_REQUEST;
 	else
-		req = request+((NR_REQUEST*2)/3);
+		req = request+(NR_REQUEST/2);
 /* find an empty request */
-	cli();
 	while (--req >= request)
 		if (req->dev < 0)
 			goto found;
@@ -161,6 +180,7 @@ found:	sti();
 	req->buffer = bh->b_data;
 	req->waiting = NULL;
 	req->bh = bh;
+	req->bhtail = bh;
 	req->next = NULL;
 	add_request(major+blk_dev,req);
 }
@@ -206,6 +226,8 @@ void ll_rw_block(int rw, struct buffer_head * bh)
 {
 	unsigned int major;
 
+	if (!bh)
+		return;
 	if ((major=MAJOR(bh->b_dev)) >= NR_BLK_DEV ||
 	!(blk_dev[major].request_fn)) {
 		printk("ll_rw_block: Trying to read nonexistent block-device\n\r");

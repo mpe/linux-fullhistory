@@ -11,6 +11,7 @@
  * management can be a bitch. See 'mm/mm.c': 'copy_page_tables()'
  */
 #include <errno.h>
+#include <stddef.h>
 
 #include <linux/sched.h>
 #include <linux/kernel.h>
@@ -69,7 +70,8 @@ static int find_empty_process(void)
 	int i;
 
 	repeat:
-		if ((++last_pid)<0) last_pid=1;
+		if ((++last_pid) & 0xffff0000)
+			last_pid=1;
 		for(i=0 ; i<NR_TASKS ; i++)
 			if (task[i] && ((task[i]->pid == last_pid) ||
 				        (task[i]->pgrp == last_pid)))
@@ -106,6 +108,12 @@ int sys_fork(long ebx,long ecx,long edx,
 	*p = *current;	/* NOTE! this doesn't copy the supervisor stack */
 	p->state = TASK_UNINTERRUPTIBLE;
 	p->pid = last_pid;
+	p->p_pptr = current;
+	p->p_cptr = NULL;
+	p->p_ysptr = NULL;
+	if (p->p_osptr = current->p_cptr)
+		p->p_osptr->p_ysptr = p;
+	current->p_cptr = p;
 	p->counter = p->priority;
 	p->signal = 0;
 	p->alarm = 0;
@@ -135,11 +143,19 @@ int sys_fork(long ebx,long ecx,long edx,
 	p->tss.fs = fs & 0xffff;
 	p->tss.gs = gs & 0xffff;
 	p->tss.ldt = _LDT(nr);
-	p->tss.trace_bitmap = 0x80000000;
+	p->tss.trace_bitmap = offsetof(struct tss_struct,io_bitmap) << 16;
+	for (i = 0; i<IO_BITMAP_SIZE ; i++)
+		p->tss.io_bitmap[i] = ~0;
 	if (last_task_used_math == current)
 		__asm__("clts ; fnsave %0 ; frstor %0"::"m" (p->tss.i387));
 	if (copy_mem(nr,p)) {
 		task[nr] = NULL;
+		if (p->p_pptr->p_cptr == p)
+			p->p_pptr->p_cptr = p->p_osptr;
+		if (p->p_osptr)
+			p->p_osptr->p_ysptr = p->p_ysptr;
+		if (p->p_ysptr)
+			p->p_ysptr->p_osptr = p->p_osptr;
 		free_page((long) p);
 		return -EAGAIN;
 	}
@@ -152,17 +168,11 @@ int sys_fork(long ebx,long ecx,long edx,
 		current->root->i_count++;
 	if (current->executable)
 		current->executable->i_count++;
-	if (current->library)
-		current->library->i_count++;
+	for (i=0; i < current->numlibraries ; i++)
+		if (current->libraries[i].library)
+			current->libraries[i].library->i_count++;
 	set_tss_desc(gdt+(nr<<1)+FIRST_TSS_ENTRY,&(p->tss));
 	set_ldt_desc(gdt+(nr<<1)+FIRST_LDT_ENTRY,&(p->ldt));
-	p->p_pptr = current;
-	p->p_cptr = 0;
-	p->p_ysptr = 0;
-	p->p_osptr = current->p_cptr;
-	if (p->p_osptr)
-		p->p_osptr->p_ysptr = p;
-	current->p_cptr = p;
 	p->state = TASK_RUNNING;	/* do this last, just in case */
 	return p->pid;
 }

@@ -15,7 +15,7 @@
 #include <sys/utsname.h>
 #include <sys/param.h>
 #include <sys/resource.h>
-#include <string.h>
+#include <linux/string.h>
 
 /*
  * this indicates wether you can reboot with ctrl-alt-del: the deault is yes
@@ -29,6 +29,79 @@ static int C_A_D = 1;
 struct timezone sys_tz = { 0, 0};
 
 extern int session_of_pgrp(int pgrp);
+
+#define	PZERO	15
+
+static int proc_sel(struct task_struct *p, int which, int who)
+{
+	switch (which) {
+		case PRIO_PROCESS:
+			if (!who && p == current)
+				return 1;
+			return(p->pid == who);
+		case PRIO_PGRP:
+			if (!who)
+				who = current->pgrp;
+			return(p->pgrp == who);
+		case PRIO_USER:
+			if (!who)
+				who = current->uid;
+			return(p->uid == who);
+	}
+	return 0;
+}
+
+int sys_setpriority(int which, int who, int niceval)
+{
+	struct task_struct **p;
+	int error = ESRCH;
+	int priority;
+
+	if (which > 2 || which < 0)
+		return -EINVAL;
+
+	if ((priority = PZERO - niceval) <= 0)
+		priority = 1;
+
+	for(p = &LAST_TASK; p > &FIRST_TASK; --p) {
+		if (!*p || !proc_sel(*p, which, who))
+			continue;
+		if ((*p)->uid != current->euid &&
+			(*p)->uid != current->uid && !suser()) {
+			error = EPERM;
+			continue;
+		}
+		if (error == ESRCH)
+			error = 0;
+		if (priority > (*p)->priority && !suser())
+			error = EACCES;
+		else
+			(*p)->priority = priority;
+	}
+	return -error;
+}
+
+int sys_getpriority(int which, int who)
+{
+	struct task_struct **p;
+	int max_prio = 0;
+
+	if (which > 2 || which < 0)
+		return -EINVAL;
+
+	for(p = &LAST_TASK; p > &FIRST_TASK; --p) {
+		if (!*p || !proc_sel(*p, which, who))
+			continue;
+		if ((*p)->priority > max_prio)
+			max_prio = (*p)->priority;
+	}
+	return(max_prio ? max_prio : -ESRCH);
+}
+
+int sys_profil()
+{
+	return -ENOSYS;
+}
 
 int sys_ftime()
 {
@@ -378,7 +451,8 @@ int sys_uname(struct utsname * name)
 {
 	int i;
 
-	if (!name) return -ERROR;
+	if (!name)
+		return -EINVAL;
 	verify_area(name,sizeof *name);
 	for(i=0;i<sizeof *name;i++)
 		put_fs_byte(((char *) &thisname)[i],i+(char *) name);

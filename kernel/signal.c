@@ -11,9 +11,7 @@
 #include <signal.h>
 #include <sys/wait.h>
 #include <errno.h>
-  
-int send_sig (int, struct task_struct *, int);
-  
+
 int sys_sgetmask()
 {
 	return current->blocked;

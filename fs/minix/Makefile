@@ -22,7 +22,8 @@ CPP	=cpp -nostdinc -I../../include
 .s.o:
 	$(AS) -o $*.o $<
 
-OBJS=	minix_op.o bitmap.o truncate.o namei.o inode.o file_dev.o
+OBJS=	bitmap.o truncate.o namei.o inode.o \
+	file.o dir.o symlink.o blkdev.o chrdev.o
 
 minix.o: $(OBJS)
 	$(LD) -r -o minix.o $(OBJS)
@@ -37,46 +38,52 @@ dep:
 	cp tmp_make Makefile
 
 ### Dependencies:
-bitmap.o : bitmap.c ../../include/string.h ../../include/linux/sched.h \
-  ../../include/linux/head.h ../../include/linux/fs.h \
+bitmap.o : bitmap.c ../../include/linux/string.h ../../include/linux/sched.h \
+  ../../include/linux/head.h ../../include/linux/fs.h ../../include/sys/types.h \
+  ../../include/sys/dirent.h ../../include/limits.h ../../include/linux/mm.h ../../include/linux/kernel.h \
+  ../../include/signal.h ../../include/sys/param.h ../../include/sys/time.h ../../include/time.h \
+  ../../include/sys/resource.h ../../include/linux/minix_fs.h 
+blkdev.o : blkdev.c ../../include/linux/sched.h ../../include/linux/head.h ../../include/linux/fs.h \
   ../../include/sys/types.h ../../include/sys/dirent.h ../../include/limits.h \
-  ../../include/linux/mm.h ../../include/linux/kernel.h \
-  ../../include/signal.h ../../include/sys/param.h ../../include/sys/time.h \
-  ../../include/time.h ../../include/sys/resource.h \
-  ../../include/linux/minix_fs.h 
-file_dev.o : file_dev.c ../../include/errno.h ../../include/fcntl.h \
+  ../../include/linux/mm.h ../../include/linux/kernel.h ../../include/signal.h \
+  ../../include/sys/param.h ../../include/sys/time.h ../../include/time.h ../../include/sys/resource.h \
+  ../../include/linux/minix_fs.h ../../include/linux/tty.h ../../include/asm/system.h \
+  ../../include/termios.h ../../include/errno.h ../../include/fcntl.h ../../include/sys/stat.h 
+chrdev.o : chrdev.c ../../include/linux/sched.h ../../include/linux/head.h ../../include/linux/fs.h \
   ../../include/sys/types.h ../../include/sys/dirent.h ../../include/limits.h \
-  ../../include/sys/stat.h ../../include/linux/sched.h \
-  ../../include/linux/head.h ../../include/linux/fs.h \
-  ../../include/linux/mm.h ../../include/linux/kernel.h \
-  ../../include/signal.h ../../include/sys/param.h ../../include/sys/time.h \
-  ../../include/time.h ../../include/sys/resource.h \
-  ../../include/linux/minix_fs.h ../../include/asm/segment.h 
-inode.o : inode.c ../../include/string.h ../../include/sys/stat.h \
-  ../../include/sys/types.h ../../include/linux/sched.h \
-  ../../include/linux/head.h ../../include/linux/fs.h \
-  ../../include/sys/dirent.h ../../include/limits.h ../../include/linux/mm.h \
-  ../../include/linux/kernel.h ../../include/signal.h \
-  ../../include/sys/param.h ../../include/sys/time.h ../../include/time.h \
-  ../../include/sys/resource.h ../../include/linux/minix_fs.h \
-  ../../include/asm/system.h 
-minix_op.o : minix_op.c ../../include/linux/fs.h ../../include/sys/types.h \
-  ../../include/sys/dirent.h ../../include/limits.h \
-  ../../include/linux/minix_fs.h 
-namei.o : namei.c ../../include/linux/sched.h ../../include/linux/head.h \
-  ../../include/linux/fs.h ../../include/sys/types.h \
-  ../../include/sys/dirent.h ../../include/limits.h ../../include/linux/mm.h \
-  ../../include/linux/kernel.h ../../include/signal.h \
-  ../../include/sys/param.h ../../include/sys/time.h ../../include/time.h \
-  ../../include/sys/resource.h ../../include/linux/minix_fs.h \
-  ../../include/asm/segment.h ../../include/string.h ../../include/fcntl.h \
-  ../../include/errno.h ../../include/const.h ../../include/sys/stat.h 
-truncate.o : truncate.c ../../include/linux/sched.h \
-  ../../include/linux/head.h ../../include/linux/fs.h \
+  ../../include/linux/mm.h ../../include/linux/kernel.h ../../include/signal.h \
+  ../../include/sys/param.h ../../include/sys/time.h ../../include/time.h ../../include/sys/resource.h \
+  ../../include/linux/minix_fs.h ../../include/linux/tty.h ../../include/asm/system.h \
+  ../../include/termios.h ../../include/errno.h ../../include/fcntl.h ../../include/sys/stat.h 
+dir.o : dir.c ../../include/errno.h ../../include/sys/stat.h ../../include/sys/types.h \
+  ../../include/asm/segment.h ../../include/linux/fs.h ../../include/sys/dirent.h \
+  ../../include/limits.h ../../include/linux/minix_fs.h 
+file.o : file.c ../../include/errno.h ../../include/fcntl.h ../../include/sys/types.h \
+  ../../include/sys/dirent.h ../../include/limits.h ../../include/sys/stat.h ../../include/asm/segment.h \
+  ../../include/asm/system.h ../../include/linux/sched.h ../../include/linux/head.h \
+  ../../include/linux/fs.h ../../include/linux/mm.h ../../include/linux/kernel.h \
+  ../../include/signal.h ../../include/sys/param.h ../../include/sys/time.h ../../include/time.h \
+  ../../include/sys/resource.h ../../include/linux/minix_fs.h 
+inode.o : inode.c ../../include/linux/string.h ../../include/sys/stat.h ../../include/sys/types.h \
+  ../../include/linux/sched.h ../../include/linux/head.h ../../include/linux/fs.h \
+  ../../include/sys/dirent.h ../../include/limits.h ../../include/linux/mm.h ../../include/linux/kernel.h \
+  ../../include/signal.h ../../include/sys/param.h ../../include/sys/time.h ../../include/time.h \
+  ../../include/sys/resource.h ../../include/linux/minix_fs.h ../../include/asm/system.h 
+namei.o : namei.c ../../include/linux/sched.h ../../include/linux/head.h ../../include/linux/fs.h \
   ../../include/sys/types.h ../../include/sys/dirent.h ../../include/limits.h \
-  ../../include/linux/mm.h ../../include/linux/kernel.h \
-  ../../include/signal.h ../../include/sys/param.h ../../include/sys/time.h \
-  ../../include/time.h ../../include/sys/resource.h \
-  ../../include/linux/minix_fs.h ../../include/linux/tty.h \
-  ../../include/termios.h ../../include/errno.h ../../include/fcntl.h \
+  ../../include/linux/mm.h ../../include/linux/kernel.h ../../include/signal.h \
+  ../../include/sys/param.h ../../include/sys/time.h ../../include/time.h ../../include/sys/resource.h \
+  ../../include/linux/minix_fs.h ../../include/asm/segment.h ../../include/linux/string.h \
+  ../../include/fcntl.h ../../include/errno.h ../../include/const.h ../../include/sys/stat.h 
+symlink.o : symlink.c ../../include/errno.h ../../include/sys/stat.h ../../include/sys/types.h \
+  ../../include/asm/segment.h ../../include/linux/sched.h ../../include/linux/head.h \
+  ../../include/linux/fs.h ../../include/sys/dirent.h ../../include/limits.h ../../include/linux/mm.h \
+  ../../include/linux/kernel.h ../../include/signal.h ../../include/sys/param.h \
+  ../../include/sys/time.h ../../include/time.h ../../include/sys/resource.h ../../include/linux/minix_fs.h 
+truncate.o : truncate.c ../../include/linux/sched.h ../../include/linux/head.h \
+  ../../include/linux/fs.h ../../include/sys/types.h ../../include/sys/dirent.h \
+  ../../include/limits.h ../../include/linux/mm.h ../../include/linux/kernel.h \
+  ../../include/signal.h ../../include/sys/param.h ../../include/sys/time.h ../../include/time.h \
+  ../../include/sys/resource.h ../../include/linux/minix_fs.h ../../include/linux/tty.h \
+  ../../include/asm/system.h ../../include/termios.h ../../include/errno.h ../../include/fcntl.h \
   ../../include/sys/stat.h 

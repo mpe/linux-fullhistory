@@ -63,6 +63,7 @@ extern void floppy_deselect(unsigned int nr);
 #define FD_WRITE	0xC5		/* write with MT, MFM */
 #define FD_SENSEI	0x08		/* Sense Interrupt Status */
 #define FD_SPECIFY	0x03		/* specify HUT etc */
+#define FD_FORMAT	0x4D		/* format one track */
 
 /* DMA commands */
 #define DMA_READ	0x46

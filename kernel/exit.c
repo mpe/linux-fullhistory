@@ -17,11 +17,12 @@
 
 int sys_close(int fd);
 
-inline int send_sig(long sig,struct task_struct * p,int priv)
+int send_sig(long sig,struct task_struct * p,int priv)
 {
 	if (!p || (sig < 0) || (sig > 32))
 		return -EINVAL;
-	if (!priv && (current->euid!=p->euid) && !suser())
+	if (!priv && ((sig != SIGCONT) || (current->session != p->session)) &&
+	    (current->euid != p->euid) && !suser())
 		return -EPERM;
 	if (!sig)
 		return 0;
@@ -167,14 +168,26 @@ void audit_ptree()
 }
 #endif /* DEBUG_PROC_TREE */
 
+/*
+ * This checks not only the pgrp, but falls back on the pid if no
+ * satisfactory prgp is found. I dunno - gdb doesn't work correctly
+ * without this...
+ */
 int session_of_pgrp(int pgrp)
 {
 	struct task_struct **p;
+	int fallback;
 
- 	for (p = &LAST_TASK ; p > &FIRST_TASK ; --p)
+	fallback = -1;
+ 	for (p = &LAST_TASK ; p > &FIRST_TASK ; --p) {
+ 		if (!*p || (*p)->session <= 0)
+ 			continue;
 		if ((*p)->pgrp == pgrp)
-			return((*p)->session);
-	return -1;
+			return (*p)->session;
+		if ((*p)->pid == pgrp)
+			fallback = (*p)->session;
+	}
+	return fallback;
 }
 
 int kill_pg(int pgrp, int sig, int priv)
@@ -186,7 +199,7 @@ int kill_pg(int pgrp, int sig, int priv)
 	if (sig<0 || sig>32 || pgrp<=0)
 		return -EINVAL;
  	for (p = &LAST_TASK ; p > &FIRST_TASK ; --p)
-		if ((*p)->pgrp == pgrp) {
+		if (*p && (*p)->pgrp == pgrp) {
 			if (sig && (err = send_sig(sig,*p,priv)))
 				retval = err;
 			else
@@ -202,7 +215,7 @@ int kill_proc(int pid, int sig, int priv)
 	if (sig<0 || sig>32)
 		return -EINVAL;
 	for (p = &LAST_TASK ; p > &FIRST_TASK ; --p)
-		if ((*p)->pid == pid)
+		if (*p && (*p)->pid == pid)
 			return(sig ? send_sig(sig,*p,priv) : 0);
 	return(-ESRCH);
 }
@@ -220,7 +233,7 @@ int sys_kill(int pid,int sig)
 		return(kill_pg(current->pgrp,sig,0));
 	if (pid == -1) {
 		while (--p > &FIRST_TASK)
-			if ((*p)->pid > 1 && *p != current) {
+			if (*p && (*p)->pid > 1 && *p != current) {
 				++count;
 				if ((err = send_sig(sig,*p,0)) != -EPERM)
 					retval = err;
@@ -263,7 +276,7 @@ static int has_stopped_jobs(int pgrp)
 	struct task_struct ** p;
 
 	for (p = &LAST_TASK ; p > &FIRST_TASK ; --p) {
-		if ((*p)->pgrp != pgrp)
+		if (!*p || (*p)->pgrp != pgrp)
 			continue;
 		if ((*p)->state == TASK_STOPPED)
 			return(1);
@@ -287,8 +300,10 @@ volatile void do_exit(long code)
 	current->root = NULL;
 	iput(current->executable);
 	current->executable = NULL;
-	iput(current->library);
-	current->library = NULL;
+	for (i=0; i < current->numlibraries; i++) {
+		iput(current->libraries[i].library);
+		current->libraries[i].library = NULL;
+	}	
 	current->state = TASK_ZOMBIE;
 	current->exit_code = code;
 	current->rss = 0;
@@ -355,7 +370,7 @@ volatile void do_exit(long code)
 			tty->session = 0;
 		}
 	 	for (p = &LAST_TASK ; p > &FIRST_TASK ; --p)
-			if ((*p)->session == current->session)
+			if (*p && (*p)->session == current->session)
 				(*p)->tty = -1;
 	}
 	if (last_task_used_math == current)
@@ -394,8 +409,9 @@ repeat:
 		}
 		switch (p->state) {
 			case TASK_STOPPED:
-				if (!(options & WUNTRACED) || 
-				    !p->exit_code)
+				if (!p->exit_code)
+					continue;
+				if (!(options & WUNTRACED) && !(p->flags & PF_PTRACED))
 					continue;
 				if (stat_addr)
 					put_fs_long((p->exit_code << 8) | 0x7f,

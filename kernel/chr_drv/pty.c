@@ -12,14 +12,15 @@
  *	void spty_write(struct tty_struct * queue);
  */
 
-#include <linux/tty.h>
 #include <linux/sched.h>
+#include <linux/tty.h>
+
 #include <asm/system.h>
 #include <asm/io.h>
 
 static inline void pty_copy(struct tty_struct * from, struct tty_struct * to)
 {
-	char c;
+	int c;
 
 	while (!from->stopped && !EMPTY(from->write_q)) {
 		if (FULL(to->read_q)) {
@@ -28,7 +29,7 @@ static inline void pty_copy(struct tty_struct * from, struct tty_struct * to)
 			TTY_READ_FLUSH(to);
 			continue;
 		}
-		GETCH(from->write_q,c);
+		c = GETCH(from->write_q);
 		PUTCH(c,to->read_q);
 		if (current->signal & ~current->blocked)
 			break;

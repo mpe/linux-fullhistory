@@ -12,93 +12,132 @@
 #include <fcntl.h>
 #include <sys/stat.h>
 
-static int minix_free_ind(int dev,int block)
-{
-	struct buffer_head * bh;
-	unsigned short * p;
-	int i;
-	int block_busy;
+/*
+ * Truncate has the most races in the whole filesystem: coding it is
+ * a pain in the a**. Especially as I don't do any locking...
+ *
+ * The code may look a bit weird, but that's just because I've tried to
+ * handle things like file-size changes in a somewhat graceful manner.
+ * Anyway, truncating a file at the same time somebody else writes to it
+ * is likely to result in pretty weird behaviour...
+ *
+ * The new code handles normal truncates (size = 0) as well as the more
+ * general case (size = XXX). I hope.
+ */
 
-	if (!block)
-		return 1;
-	block_busy = 0;
-	if (bh=bread(dev,block)) {
-		p = (unsigned short *) bh->b_data;
-		for (i=0;i<512;i++,p++)
-			if (*p)
-				if (minix_free_block(dev,*p)) {
-					*p = 0;
-					bh->b_dirt = 1;
-				} else
-					block_busy = 1;
-		brelse(bh);
+static int trunc_direct(struct inode * inode)
+{
+	int i;
+	int result = 0;
+#define DIRECT_BLOCK ((inode->i_size + 1023) >> 10)
+
+repeat:
+	for (i = DIRECT_BLOCK ; i < 7 ; i++) {
+		if (i < DIRECT_BLOCK)
+			goto repeat;
+		if (!inode->i_data[i])
+			continue;
+		result = 1;
+		if (minix_free_block(inode->i_dev,inode->i_data[i]))
+			inode->i_data[i] = 0;
 	}
-	if (block_busy)
-		return 0;
-	else
-		return minix_free_block(dev,block);
+	return result;
 }
 
-static int minix_free_dind(int dev,int block)
+static int trunc_indirect(struct inode * inode, int offset, unsigned short * p)
 {
-	struct buffer_head * bh;
-	unsigned short * p;
 	int i;
-	int block_busy;
+	struct buffer_head * bh = NULL;
+	unsigned short * ind;
+	int result = 0;
+#define INDIRECT_BLOCK (DIRECT_BLOCK-offset)
 
-	if (!block)
-		return 1;
-	block_busy = 0;
-	if (bh=bread(dev,block)) {
-		p = (unsigned short *) bh->b_data;
-		for (i=0;i<512;i++,p++)
-			if (*p)
-				if (minix_free_ind(dev,*p)) {
-					*p = 0;
-					bh->b_dirt = 1;
-				} else
-					block_busy = 1;
-		brelse(bh);
-	}
-	if (block_busy)
+	if (*p)
+		bh = bread(inode->i_dev,*p);
+	if (!bh)
 		return 0;
-	else
-		return minix_free_block(dev,block);
+repeat:
+	for (i = INDIRECT_BLOCK ; i < 512 ; i++) {
+		if (i < 0)
+			i = 0;
+		if (i < INDIRECT_BLOCK)
+			goto repeat;
+		ind = i+(unsigned short *) bh->b_data;
+		if (!*ind)
+			continue;
+		result = 1;
+		if (minix_free_block(inode->i_dev,*ind))
+			*ind = 0;
+	}
+	ind = (unsigned short *) bh->b_data;
+	for (i = 0; i < 512; i++)
+		if (*(ind++))
+			break;
+	brelse(bh);
+	if (i >= 512) {
+		result = 1;
+		if (minix_free_block(inode->i_dev,*p))
+			*p = 0;
+	}
+	return result;
 }
+		
+static int trunc_dindirect(struct inode * inode)
+{
+	int i;
+	struct buffer_head * bh = NULL;
+	unsigned short * dind;
+	int result = 0;
+#define DINDIRECT_BLOCK ((DIRECT_BLOCK-(512+7))>>9)
 
+	if (inode->i_data[8])
+		bh = bread(inode->i_dev,inode->i_data[8]);
+	if (!bh)
+		return 0;
+repeat:
+	for (i = DINDIRECT_BLOCK ; i < 512 ; i ++) {
+		if (i < 0)
+			i = 0;
+		if (i < DINDIRECT_BLOCK)
+			goto repeat;
+		dind = i+(unsigned short *) bh->b_data;
+		if (!*dind)
+			continue;
+		result |= trunc_indirect(inode,7+512+(i<<9),dind);
+	}
+	dind = (unsigned short *) bh->b_data;
+	for (i = 0; i < 512; i++)
+		if (*(dind++))
+			break;
+	brelse(bh);
+	if (i >= 512) {
+		result = 1;
+		if (minix_free_block(inode->i_dev,inode->i_data[8]))
+			inode->i_data[8] = 0;
+	}
+	return result;
+}
+		
 void minix_truncate(struct inode * inode)
 {
-	int i;
-	int block_busy;
+	int flag;
 
 	if (!(S_ISREG(inode->i_mode) || S_ISDIR(inode->i_mode) ||
 	     S_ISLNK(inode->i_mode)))
 		return;
-repeat:
-	block_busy = 0;
-	for (i=0;i<7;i++)
-		if (inode->i_data[i]) {
-			if (minix_free_block(inode->i_dev,inode->i_data[i]))
-				inode->i_data[i]=0;
-			else
-				block_busy = 1;
-		}
-	if (minix_free_ind(inode->i_dev,inode->i_data[7]))
-		inode->i_data[7] = 0;
-	else
-		block_busy = 1;
-	if (minix_free_dind(inode->i_dev,inode->i_data[8]))
-		inode->i_data[8] = 0;
-	else
-		block_busy = 1;
-	inode->i_dirt = 1;
-	if (block_busy) {
+	if (inode->i_data[7] & 0xffff0000)
+		printk("BAD! minix inode has 16 high bits set\n");
+	while (1) {
+		flag = trunc_direct(inode);
+		flag |= trunc_indirect(inode,7,(unsigned short *)&inode->i_data[7]);
+		flag |= trunc_dindirect(inode);
+		if (!flag)
+			break;
 		current->counter = 0;
 		schedule();
-		goto repeat;
 	}
-	inode->i_size = 0;
 	inode->i_mtime = inode->i_ctime = CURRENT_TIME;
+	inode->i_dirt = 1;
 }
 
 /*
@@ -109,48 +148,4 @@ repeat:
 void minix_release(struct inode * inode, struct file * filp)
 {
 	printk("minix_release not implemented\n");
-}
-
-static int check_char_dev(struct inode * inode, struct file * filp)
-{
-	struct tty_struct *tty;
-	int min, dev;
-
-	dev = inode->i_rdev;
-	if (MAJOR(dev) == 4 || MAJOR(dev) == 5) {
-		if (MAJOR(dev) == 5)
-			min = current->tty;
-		else
-			min = MINOR(dev);
-		if (min < 0)
-			return -1;
-		if ((IS_A_PTY_MASTER(min)) && (inode->i_count>1))
-			return -1;
-		tty = TTY_TABLE(min);
-		if (!(filp->f_flags & O_NOCTTY) &&
-		    current->leader &&
-		    current->tty<0 &&
-		    tty->session==0) {
-			current->tty = min;
-			tty->session= current->session;
-			tty->pgrp = current->pgrp;
-		}
-		if (IS_A_SERIAL(min))
-			serial_open(min-64);
-	}
-	return 0;
-}
-
-/*
- * Called every time a minix-file is opened
- */
-int minix_open(struct inode * inode, struct file * filp)
-{
-	if (S_ISCHR(inode->i_mode)) {
-		if (check_char_dev(inode,filp))
-			return -EAGAIN;
-	} else if (S_ISBLK(inode->i_mode))
-		check_disk_change(inode->i_rdev);
-	filp->f_op = &minix_file_operations;
-	return 0;
 }

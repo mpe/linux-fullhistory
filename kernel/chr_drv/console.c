@@ -40,8 +40,11 @@
 #include <asm/system.h>
 #include <asm/segment.h>
 
-#include <string.h>
+#include <linux/string.h>
 #include <errno.h>
+
+#include <sys/kd.h>
+#include "vt_kern.h"
 
 #define DEF_TERMIOS \
 (struct termios) { \
@@ -79,11 +82,14 @@ static void unblank_screen(void);
 
 int NR_CONSOLES = 0;
 
+extern void vt_init(void);
 extern void keyboard_interrupt(void);
 extern void set_leds(void);
 extern unsigned char kapplic;
 extern unsigned char kleds;
 extern unsigned char kmode;
+extern unsigned char kraw;
+extern unsigned char ke0;
 
 unsigned long	video_num_columns;		/* Number of text columns	*/
 unsigned long	video_num_lines;		/* Number of test lines		*/
@@ -118,9 +124,9 @@ static struct {
 	unsigned int	vc_saved_y;
 	unsigned int	vc_iscolor;
 	unsigned char	vc_kbdapplic;
-	unsigned char   vc_kbdleds;
 	unsigned char	vc_kbdmode;
 	char *		vc_translate;
+	/* additional information is in vt_kern.h */
 } vc_cons [MAX_CONSOLES];
 
 #define MEM_BUFFER_SIZE (2*80*50*8) 
@@ -153,7 +159,9 @@ static int console_blanked = 0;
 #define iscolor		(vc_cons[currcons].vc_iscolor)
 #define kbdapplic	(vc_cons[currcons].vc_kbdapplic)
 #define kbdmode		(vc_cons[currcons].vc_kbdmode)
-#define kbdleds		(vc_cons[currcons].vc_kbdleds)
+#define kbdraw		(vt_cons[currcons].vc_kbdraw)
+#define kbde0		(vt_cons[currcons].vc_kbde0)
+#define kbdleds		(vt_cons[currcons].vc_kbdleds)
 
 int blankinterval = 5*60*HZ;
 static int screen_size = 0;
@@ -465,12 +473,10 @@ static void respond(int currcons, struct tty_struct * tty)
 {
 	char * p = RESPONSE;
 
-	cli();
 	while (*p) {
 		PUTCH(*p,tty->read_q);
 		p++;
 	}
-	sti();
 	TTY_READ_FLUSH(tty);
 }
 
@@ -569,7 +575,7 @@ enum { ESnormal, ESesc, ESsquare, ESgetpars, ESgotpars, ESfunckey,
 
 void con_write(struct tty_struct * tty)
 {
-	unsigned char c;
+	int c;
 	unsigned int currcons;
 
 	wake_up(&tty->write_q->proc_list);
@@ -578,10 +584,11 @@ void con_write(struct tty_struct * tty)
 		printk("con_write: illegal tty\n\r");
 		return;
 	}
-	while (!EMPTY(tty->write_q)) {
-		if (tty->stopped)
-			break;
-		GETCH(tty->write_q,c);
+	if (vt_cons[currcons].vt_mode == KD_GRAPHICS) {
+		flush(tty->write_q);
+		return;			/* no output in graphics mode */
+	}
+	while (!tty->stopped &&	(c = GETCH(tty->write_q)) >= 0) {
 		if (c == 24 || c == 26)
 			state = ESnormal;
 		switch(state) {
@@ -778,6 +785,7 @@ void con_write(struct tty_struct * tty)
 						    par[1] <= video_num_lines) {
 							top=par[0];
 							bottom=par[1];
+							gotoxy(currcons,0,0);
 						}
 						break;
 					case 's':
@@ -828,19 +836,22 @@ void con_write(struct tty_struct * tty)
 	}
 	set_cursor(currcons);
 	timer_active &= ~(1<<BLANK_TIMER);
-	if (console_blanked) {
-		timer_table[BLANK_TIMER].expires = 0;
-		timer_active |= 1<<BLANK_TIMER;
-	} else if (blankinterval) {
-		timer_table[BLANK_TIMER].expires = jiffies + blankinterval;
-		timer_active |= 1<<BLANK_TIMER;
-	}
+	if (currcons == fg_console)
+		if (console_blanked) {
+			timer_table[BLANK_TIMER].expires = 0;
+			timer_active |= 1<<BLANK_TIMER;
+		} else if (blankinterval) {
+			timer_table[BLANK_TIMER].expires = jiffies + blankinterval;
+			timer_active |= 1<<BLANK_TIMER;
+		}
 }
 
 void do_keyboard_interrupt(void)
 {
 	TTY_READ_FLUSH(TTY_TABLE(0));
 	timer_active &= ~(1<<BLANK_TIMER);
+	if (vt_cons[fg_console].vt_mode == KD_GRAPHICS)
+		return;
 	if (console_blanked) {
 		timer_table[BLANK_TIMER].expires = 0;
 		timer_active |= 1<<BLANK_TIMER;
@@ -876,9 +887,7 @@ void con_init(void)
 	char *display_desc = "????";
 	char *display_ptr;
 	int currcons = 0;
-	long base, term;
-	long video_memory;
-	long saveterm, savebase;
+	long base;
 
 	video_num_columns = ORIG_VIDEO_COLS;
 	video_size_row = video_num_columns * 2;
@@ -939,25 +948,20 @@ void con_init(void)
 		display_ptr++;
 	}
 	
-	savebase = video_mem_base;
-	saveterm = video_mem_term;
 	memsetw(vc_scrmembuf,video_erase_char,MEM_BUFFER_SIZE/2);
-	video_mem_base = (long)vc_scrmembuf;
-	video_mem_term = (long)&(vc_scrmembuf[MEM_BUFFER_SIZE/2]);
-	video_memory = video_mem_term - video_mem_base;
+	base = (long)vc_scrmembuf;
 	screen_size = (video_num_lines * video_size_row);
-	NR_CONSOLES = video_memory / screen_size;
+	NR_CONSOLES = MEM_BUFFER_SIZE / screen_size;
 	if (NR_CONSOLES > MAX_CONSOLES)
 		NR_CONSOLES = MAX_CONSOLES;
 	if (!NR_CONSOLES)
 		NR_CONSOLES = 1;
-	video_memory = screen_size;
 	
 	/* Initialize the variables used for scrolling (mostly EGA/VGA)	*/
 	
-	base = origin = video_mem_start = video_mem_base;
-	term = video_mem_end = base + video_memory;
-	scr_end	= video_mem_start + screen_size;
+	base = origin = video_mem_start = (long)vc_scrmembuf;
+	scr_end = video_mem_end = base + screen_size;
+	vc_scrbuf[0] = (unsigned short *) origin;
 	top	= 0;
 	bottom	= video_num_lines;
   	attr = 0x07;
@@ -970,22 +974,23 @@ void con_init(void)
 	translate = NORM_TRANS;
 	kbdleds = 2;
 	kbdmode = 0;
+	kbdraw = 0;
+	kbde0 = 0;
 	kbdapplic = 0;
+	vt_cons[0].vt_mode = KD_TEXT;
         vc_cons[0].vc_bold_attr = -1;
 
 	gotoxy(currcons,ORIG_X,ORIG_Y);
   	for (currcons = 1; currcons<NR_CONSOLES; currcons++) {
 		vc_cons[currcons] = vc_cons[0];
-		origin = video_mem_start = (base += video_memory);
-		scr_end = origin + video_num_lines * video_size_row;
-		video_mem_end = (term += video_memory);
+		vt_cons[currcons] = vt_cons[0];
+		base += screen_size;
+		origin = video_mem_start = base;
+		scr_end = video_mem_end = base + screen_size;
+		vc_scrbuf[currcons] = (unsigned short *) origin;
 		gotoxy(currcons,0,0);
 	}
-  	for (currcons = 0; currcons<NR_CONSOLES; currcons++) 
-		vc_scrbuf[currcons] = (unsigned short *)origin;
 	currcons = 0;	
-	video_mem_base = savebase;
-	video_mem_term = saveterm;
 	
 	video_mem_start = video_mem_base;
 	video_mem_end = video_mem_term;
@@ -1006,10 +1011,14 @@ void kbdsave(int new_console)
 {
 	int currcons = fg_console;
 	kbdmode = kmode;
+	kbdraw = kraw;
+	kbde0 = ke0;
 	kbdleds = kleds;
 	kbdapplic = kapplic;
 	currcons = new_console;
 	kmode = (kmode & 0x3F) | (kbdmode & 0xC0);
+	kraw = kbdraw;
+	ke0 = kbde0;
 	kleds = kbdleds;
 	kapplic = kbdapplic;
 	set_leds();
@@ -1120,6 +1129,8 @@ void console_print(const char * b)
 
 	if (currcons<0 || currcons>=NR_CONSOLES)
 		currcons = 0;
+	if (vt_cons[currcons].vt_mode == KD_GRAPHICS)
+		return;	/* no output in graphics mode */
 	while (c = *(b++)) {
 		if (c == 10) {
 			cr(currcons);

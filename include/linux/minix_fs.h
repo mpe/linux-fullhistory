@@ -45,7 +45,6 @@ struct minix_dir_entry {
 
 extern int minix_open(struct inode * inode, struct file * filp);
 extern void minix_release(struct inode * inode, struct file * filp);
-extern struct inode * minix_follow_link(struct inode * dir, struct inode * inode);
 extern int minix_lookup(struct inode * dir,const char * name, int len,
 	struct inode ** result);
 extern int minix_create(struct inode * dir,const char * name, int len, int mode,
@@ -59,29 +58,33 @@ extern int minix_link(struct inode * oldinode, struct inode * dir, const char * 
 extern int minix_mknod(struct inode * dir, const char * name, int len, int mode, int rdev);
 extern int minix_rename(struct inode * old_dir, const char * old_name, int old_len,
 	struct inode * new_dir, const char * new_name, int new_len);
-extern int minix_readlink(struct inode * inode, char * buffer, int buflen);
 extern struct inode * minix_new_inode(int dev);
 extern void minix_free_inode(struct inode * inode);
 extern int minix_new_block(int dev);
 extern int minix_free_block(int dev, int block);
 
-extern int minix_create_block(struct inode * inode, int block);
-extern int minix_bmap(struct inode * inode,int block);
+extern int minix_create_block(struct inode *, int);
+extern int minix_bmap(struct inode *,int);
 
-extern void minix_truncate(struct inode * inode);
-extern void minix_put_super(struct super_block *sb);
-extern struct super_block *minix_read_super(struct super_block *s,void *data);
-extern void minix_read_inode(struct inode * inode);
-extern void minix_write_inode(struct inode * inode);
+extern void minix_truncate(struct inode *);
+extern void minix_put_super(struct super_block *);
+extern struct super_block *minix_read_super(struct super_block *,void *);
+extern void minix_read_inode(struct inode *);
+extern void minix_write_inode(struct inode *);
+extern void minix_put_inode(struct inode *);
 
-extern int minix_lseek(struct inode * inode, struct file * filp, off_t offset, int origin);
-extern int minix_read(struct inode * inode, struct file * filp, char * buf, int count);
-extern int minix_write(struct inode * inode, struct file * filp, char * buf, int count);
-extern int minix_readdir(struct inode * inode, struct file * filp, struct dirent * dirent);
+extern int minix_lseek(struct inode *, struct file *, off_t, int);
+extern int minix_read(struct inode *, struct file *, char *, int);
+extern int minix_write(struct inode *, struct file *, char *, int);
 extern int minix_file_read(struct inode *, struct file *, char *, int);
-extern int minix_file_write(struct inode *, struct file *, char *, int);
 
-extern struct inode_operations minix_inode_operations;
+extern struct inode_operations minix_file_inode_operations;
+extern struct inode_operations minix_dir_inode_operations;
+extern struct inode_operations minix_symlink_inode_operations;
+extern struct inode_operations minix_chrdev_inode_operations;
+extern struct inode_operations minix_blkdev_inode_operations;
+
 extern struct file_operations minix_file_operations;
+extern struct file_operations minix_dir_operations;
 
 #endif

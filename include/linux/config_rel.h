@@ -1,1 +1,1 @@
-#define UTS_RELEASE "0.95c-18"
+#define UTS_RELEASE "0.96a-10"

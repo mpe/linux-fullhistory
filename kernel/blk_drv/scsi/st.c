@@ -1,0 +1,36 @@
+/*
+	The st.c file is a sub-stub file.  I just wanted to have all the detect code, etc in the
+	mid level driver present and working.  If no one else volunteers for this, I'll
+	do it - but it's low on my list of priorities.
+*/
+#include <linux/config.h>
+
+#ifdef CONFIG_BLK_DEV_ST
+#include "scsi.h"
+#include "st.h"
+
+#define MAJOR_NR 9
+#include <linux/fs.h>
+#include <linux/kernel.h>
+#include <linux/sched.h>
+#include "../blk.h" 
+
+/*
+static const char RCSid[] = "$Header: /usr/src/linux/kernel/blk_drv/scsi/RCS/st.c,v 1.1 1992/04/24 18:01:50 root Exp root $";
+*/
+
+Scsi_Tape scsi_tapes[MAX_ST];
+static int st_sizes[MAX_ST];
+int NR_ST=0;
+
+void do_st_request(void)
+{
+	panic("There is no st driver.\n\r");
+}
+
+void st_init(void)
+{
+	blk_dev[MAJOR_NR].request_fn = do_st_request;
+	blk_size[MAJOR_NR] = st_sizes;
+}
+#endif	

@@ -31,6 +31,8 @@ typedef unsigned short nlink_t;
 typedef int daddr_t;
 typedef long off_t;
 typedef unsigned char u_char;
+typedef unsigned short u_short;
+typedef unsigned long u_long;
 typedef unsigned short ushort;
 typedef char *caddr_t;
 

@@ -12,6 +12,7 @@
 #include <linux/minix_fs.h>
 #include <linux/kernel.h>
 #include <asm/system.h>
+#include <asm/segment.h>
 
 #include <errno.h>
 #include <sys/stat.h>
@@ -146,7 +147,9 @@ int sys_umount(char * dev_name)
 	struct super_block * sb;
 	int dev;
 
-	if (!(inode=namei(dev_name)))
+	if (!suser())
+		return -EPERM;
+	if (!(inode = namei(dev_name)))
 		return -ENOENT;
 	dev = inode->i_rdev;
 	if (!S_ISBLK(inode->i_mode)) {
@@ -176,13 +179,17 @@ int sys_umount(char * dev_name)
 	return 0;
 }
 
-int sys_mount(char * dev_name, char * dir_name, int rw_flag)
+int sys_mount(char * dev_name, char * dir_name, char * type, int rw_flag)
 {
 	struct inode * dev_i, * dir_i;
 	struct super_block * sb;
 	int dev;
+	char tmp[100],*t;
+	int i;
 
-	if (!(dev_i=namei(dev_name)))
+	if (!suser())
+		return -EPERM;
+	if (!(dev_i = namei(dev_name)))
 		return -ENOENT;
 	dev = dev_i->i_rdev;
 	if (!S_ISBLK(dev_i->i_mode)) {
@@ -204,7 +211,14 @@ int sys_mount(char * dev_name, char * dir_name, int rw_flag)
 		iput(dir_i);
 		return -EPERM;
 	}
-	if (!(sb=read_super(dev,"minix",NULL))) {
+	if (type) {
+		i = 0;
+		while (i < 100 && (tmp[i] = get_fs_byte(type++)))
+			i++;
+		t = tmp;
+	} else
+		t = "minix";
+	if (!(sb = read_super(dev,t,NULL))) {
 		iput(dir_i);
 		return -EBUSY;
 	}

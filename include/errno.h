@@ -16,7 +16,6 @@
 
 extern int errno;
 
-#define ERROR		99
 #define EPERM		 1
 #define ENOENT		 2
 #define ESRCH		 3

@@ -13,16 +13,110 @@
  * and all interrupts pertaining to serial IO.
  */
 
-#include <linux/tty.h>
+#include <signal.h>
+ 
 #include <linux/sched.h>
 #include <linux/timer.h>
+#include <linux/tty.h>
+
 #include <asm/system.h>
 #include <asm/io.h>
 
-#define WAKEUP_CHARS (TTY_BUF_SIZE/4)
+#define WAKEUP_CHARS (3*TTY_BUF_SIZE/4)
 
-extern void rs1_interrupt(void);
-extern void rs2_interrupt(void);
+extern void IRQ3_interrupt(void);
+extern void IRQ4_interrupt(void);
+
+static void modem_status_intr(unsigned line, unsigned port, struct tty_struct * tty)
+{
+	unsigned char status = inb(port+6);
+
+	if ((status & 0x88) == 0x08 && tty->pgrp > 0)
+		kill_pg(tty->pgrp,SIGHUP,1);
+}
+
+/*
+ * There are several races here: we avoid most of them by disabling timer_active
+ * for the crucial part of the process.. That's a good idea anyway.
+ *
+ * The problem is that we have to output characters /both/ from interrupts
+ * and from the normal write: the latter to be sure the interrupts start up
+ * again. With serial lines, the interrupts can happen so often that the
+ * races actually are noticeable.
+ */
+static void send_intr(unsigned line, unsigned port, struct tty_struct * tty)
+{
+	int c;
+
+#define TIMER ((SER1_TIMEOUT-1)+line)
+	timer_active &= ~(1 << TIMER);
+	if ((c = GETCH(tty->write_q)) < 0)
+		return;
+	outb(c,port);
+	timer_table[TIMER].expires = jiffies + 10;
+	timer_active |= 1 << TIMER;
+	if (LEFT(tty->write_q) > WAKEUP_CHARS)
+		wake_up(&tty->write_q->proc_list);
+#undef TIMER
+}
+
+static void receive_intr(unsigned line, unsigned port, struct tty_struct * tty)
+{
+	if (FULL(tty->read_q))
+		return;
+	PUTCH(inb(port),tty->read_q);
+	timer_active |= (1<<(SER1_TIMER-1))<<line;
+}
+
+static void line_status_intr(unsigned line, unsigned port, struct tty_struct * tty)
+{
+	unsigned char status = inb(port+5);
+
+/*	printk("line status: %02x\n",status); */
+}
+
+static void (*jmp_table[4])(unsigned,unsigned,struct tty_struct *) = {
+	modem_status_intr,
+	send_intr,
+	receive_intr,
+	line_status_intr
+};
+
+static void check_tty(unsigned line,struct tty_struct * tty)
+{
+	unsigned short port;
+	unsigned char ident;
+
+	if (!(port = tty->read_q->data))
+		return;
+	while (1) {
+		ident = inb(port+2);
+		if (ident & 1)
+			return;
+		ident >>= 1;
+		if (ident > 3)
+			return;
+		jmp_table[ident](line,port,tty);
+	}
+}
+
+/*
+ * IRQ3 normally handles com2 and com4
+ */
+void do_IRQ3(void)
+{
+	check_tty(2,tty_table+65);
+	check_tty(4,tty_table+67);
+}
+
+/*
+ * IRQ4 normally handles com1 and com2
+ */
+void do_IRQ4(void)
+{
+	check_tty(1,tty_table+64);
+	check_tty(3,tty_table+66);	
+}
 
 static void com1_timer(void)
 {
@@ -44,46 +138,48 @@ static void com4_timer(void)
 	TTY_READ_FLUSH(tty_table+67);
 }
 
-static inline void do_rs_write(unsigned int port)
+/*
+ * Again, we disable interrupts to be sure there aren't any races:
+ * see send_intr for details.
+ */
+static inline void do_rs_write(unsigned line, struct tty_struct * tty)
 {
-	char c;
+	int port;
 
-#define TTY (tty_table[64+port].write_q)
-#define TIMER (SER1_TIMEOUT+port)
+#define TIMER ((SER1_TIMEOUT-1)+line)
+	if (!tty || !tty->write_q || EMPTY(tty->write_q))
+		return;
+	if (!(port = tty->write_q->data))
+		return;
 	cli();
-	if (!EMPTY(TTY)) {
-		outb_p(inb_p(TTY->data+1)|0x02,TTY->data+1);
-		if (inb(TTY->data+5) & 0x20) {
-			GETCH(TTY,c);
-			outb(c,TTY->data);
-		}
-		timer_table[TIMER].expires = jiffies + 50;
+	if (inb_p(port+5) & 0x20)
+		send_intr(line,port,tty);
+	else {
+		timer_table[TIMER].expires = jiffies + 10;
 		timer_active |= 1 << TIMER;
-	} else
-		timer_active &= ~(1 << TIMER);
+	}
 	sti();
 #undef TIMER
-#undef TTY
 }
 
 static void com1_timeout(void)
 {
-	do_rs_write(0);
+	do_rs_write(1,tty_table+64);
 }
 
 static void com2_timeout(void)
 {
-	do_rs_write(1);
+	do_rs_write(2,tty_table+65);
 }
 
 static void com3_timeout(void)
 {
-	do_rs_write(2);
+	do_rs_write(3,tty_table+66);
 }
 
 static void com4_timeout(void)
 {
-	do_rs_write(3);
+	do_rs_write(4,tty_table+67);
 }
 
 static void init(int port)
@@ -93,7 +189,7 @@ static void init(int port)
 	outb_p(0x00,port+1);	/* MS of divisor */
 	outb_p(0x03,port+3);	/* reset DLAB */
 	outb_p(0x00,port+4);	/* reset DTR,RTS, OUT_2 */
-	outb_p(0x0d,port+1);	/* enable all intrs but writes */
+	outb_p(0x0f,port+1);	/* enable all intrs */
 	(void)inb(port);	/* read data port to reset things (?) */
 }
 
@@ -101,7 +197,7 @@ static void init(int port)
  * this routine enables interrupts on 'line', and disables them on
  * 'line ^ 2', as they share the same IRQ. Braindamaged AT hardware.
  */
-void serial_open(unsigned int line)
+void serial_open(unsigned line)
 {
 	unsigned short port;
 	unsigned short port2;
@@ -117,10 +213,10 @@ void serial_open(unsigned int line)
 		outb_p(0x00,port2+4);
 	outb_p(0x03,port+3);	/* reset DLAB */
 	outb_p(0x0f,port+4);	/* set DTR,RTS, OUT_2 */
-	outb_p(0x0d,port+1);	/* enable all intrs but writes */
+	outb_p(0x0f,port+1);	/* enable all intrs */
 	inb_p(port+5);
 	inb_p(port+0);
-	inb(port+6);
+	inb_p(port+6);
 	inb(port+2);
 	sti();
 }
@@ -145,8 +241,8 @@ void rs_init(void)
 	timer_table[SER3_TIMEOUT].expires = 0;
 	timer_table[SER4_TIMEOUT].fn = com4_timeout;
 	timer_table[SER4_TIMEOUT].expires = 0;
-	set_intr_gate(0x24,rs1_interrupt);
-	set_intr_gate(0x23,rs2_interrupt);
+	set_intr_gate(0x23,IRQ3_interrupt);
+	set_intr_gate(0x24,IRQ4_interrupt);
 	init(tty_table[64].read_q->data);
 	init(tty_table[65].read_q->data);
 	init(tty_table[66].read_q->data);
@@ -163,9 +259,7 @@ void rs_init(void)
  */
 void rs_write(struct tty_struct * tty)
 {
-	cli();
-	if (!EMPTY(tty->write_q))
-		outb_p(inb_p(tty->write_q->data+1)|0x02,tty->write_q->data+1);
-	timer_active |= 15 << SER1_TIMEOUT;
-	sti();
+	int line = tty - tty_table - 63;
+
+	do_rs_write(line,tty);
 }

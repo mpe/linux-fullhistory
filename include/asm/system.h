@@ -50,7 +50,7 @@ __asm__ ("movw %%dx,%%ax\n\t" \
 		((limit) & 0x0ffff); }
 
 #define _set_tssldt_desc(n,addr,type) \
-__asm__ ("movw $104,%1\n\t" \
+__asm__ ("movw $232,%1\n\t" \
 	"movw %%ax,%2\n\t" \
 	"rorl $16,%%eax\n\t" \
 	"movb %%al,%3\n\t" \

@@ -9,16 +9,17 @@
 #include <linux/kernel.h>
 #include <linux/tty.h>
 #include <linux/sched.h>
+#include <linux/string.h>
 
 #include <asm/segment.h>
 #include <asm/system.h>
 
 #include <sys/stat.h>
 #include <sys/types.h>
-#include <string.h>
+#include <sys/time.h>
+
 #include <const.h>
 #include <errno.h>
-#include <sys/time.h>
 #include <signal.h>
 
 /*
@@ -33,18 +34,6 @@
  * such a loss: sleeping automatically frees interrupts when we aren't in this
  * task.
  */
-
-typedef struct {
-	struct task_struct * old_task;
-	struct task_struct ** wait_address;
-} wait_entry;
-
-typedef struct select_table_struct {
-	int nr, woken;
-	struct task_struct * current;
-	struct select_table_struct * next_table;
-	wait_entry entry[NR_OPEN*3];
-} select_table;
 
 static select_table * sel_tables = NULL;
 
@@ -138,6 +127,11 @@ static int check_in(select_table * wait, struct inode * inode)
 			return 1;
 		else
 			add_wait(&inode->i_wait, wait);
+	else if (S_ISSOCK(inode->i_mode))
+		if (sock_select(inode, NULL, SEL_IN, wait))
+			return 1;
+		else
+			add_wait(&inode->i_wait, wait);
 	return 0;
 }
 
@@ -152,6 +146,11 @@ static int check_out(select_table * wait, struct inode * inode)
 			add_wait(&tty->write_q->proc_list, wait);
 	else if (inode->i_pipe)
 		if (!PIPE_FULL(*inode))
+			return 1;
+		else
+			add_wait(&inode->i_wait, wait);
+	else if (S_ISSOCK(inode->i_mode))
+		if (sock_select(inode, NULL, SEL_OUT, wait))
 			return 1;
 		else
 			add_wait(&inode->i_wait, wait);
@@ -172,6 +171,11 @@ static int check_ex(select_table * wait, struct inode * inode)
 			return 1;
 		else
 			add_wait(&inode->i_wait,wait);
+	else if (S_ISSOCK(inode->i_mode))
+		if (sock_select(inode, NULL, SEL_EX, wait))
+			return 1;
+		else
+			add_wait(&inode->i_wait, wait);
 	return 0;
 }
 
@@ -197,6 +201,8 @@ int do_select(fd_set in, fd_set out, fd_set ex,
 			continue;
 		if (S_ISFIFO(current->filp[i]->f_inode->i_mode))
 			continue;
+		if (S_ISSOCK(current->filp[i]->f_inode->i_mode))
+			continue;
 		return -EBADF;
 	}
 repeat:
@@ -207,6 +213,7 @@ repeat:
 	sel_tables = &wait_table;
 	*inp = *outp = *exp = 0;
 	count = 0;
+	current->state = TASK_INTERRUPTIBLE;
 	mask = 1;
 	for (i = 0 ; i < NR_OPEN ; i++, mask += mask) {
 		if (mask & in)
@@ -227,14 +234,12 @@ repeat:
 	}
 	if (!(current->signal & ~current->blocked) &&
 	    current->timeout && !count) {
-		current->state = TASK_INTERRUPTIBLE;
-		sti();
 		schedule();
-		cli();
 		free_wait(&wait_table);
 		goto repeat;
 	}
 	free_wait(&wait_table);
+	current->state = TASK_RUNNING;
 	return count;
 }
 
@@ -277,13 +282,11 @@ int sys_select( unsigned long *buffer )
 		timeout += jiffies;
 	}
 	current->timeout = timeout;
-	cli();
 	i = do_select(in, out, ex, &res_in, &res_out, &res_ex);
 	if (current->timeout > jiffies)
 		timeout = current->timeout - jiffies;
 	else
 		timeout = 0;
-	sti();
 	current->timeout = 0;
 	if (i < 0)
 		return i;

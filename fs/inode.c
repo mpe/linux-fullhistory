@@ -4,7 +4,7 @@
  *  (C) 1991  Linus Torvalds
  */
 
-#include <string.h>
+#include <linux/string.h>
 #include <sys/stat.h>
 
 #include <linux/sched.h>
@@ -39,13 +39,13 @@ static inline void unlock_inode(struct inode * inode)
 
 static void write_inode(struct inode * inode)
 {
-	lock_inode(inode);
-	if (!inode->i_dirt || !inode->i_dev) {
-		unlock_inode(inode);
+	if (!inode->i_dirt)
 		return;
-	}
-	if (inode->i_op && inode->i_op->write_inode)
-		inode->i_op->write_inode(inode);
+	inode->i_dirt = 0;
+	lock_inode(inode);
+	if (inode->i_dev && inode->i_sb &&
+	    inode->i_sb->s_op && inode->i_sb->s_op->write_inode)
+		inode->i_sb->s_op->write_inode(inode);
 	unlock_inode(inode);
 }
 
@@ -110,8 +110,12 @@ void iput(struct inode * inode)
 	if (!inode)
 		return;
 	wait_on_inode(inode);
-	if (!inode->i_count)
-		panic("iput: trying to free free inode");
+	if (!inode->i_count) {
+		printk("iput: trying to free free inode\n");
+		printk("device %04x, inode %d, mode=%07o\n",inode->i_rdev,
+			inode->i_ino,inode->i_mode);
+		return;
+	}
 	if (inode->i_pipe) {
 		wake_up(&inode->i_wait);
 		wake_up(&inode->i_wait2);
@@ -127,18 +131,14 @@ void iput(struct inode * inode)
 		inode->i_count--;
 		return;
 	}
-	if (S_ISBLK(inode->i_mode)) {
-		sync_dev(inode->i_rdev);
-		wait_on_inode(inode);
-	}
 repeat:
 	if (inode->i_count>1) {
 		inode->i_count--;
 		return;
 	}
 	if (!inode->i_nlink) {
-		if (inode->i_op && inode->i_op->put_inode)
-			inode->i_op->put_inode(inode);
+		if (inode->i_sb && inode->i_sb->s_op && inode->i_sb->s_op->put_inode)
+			inode->i_sb->s_op->put_inode(inode);
 		return;
 	}
 	if (inode->i_dirt) {
