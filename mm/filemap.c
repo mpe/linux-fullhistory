@@ -106,26 +106,21 @@ repeat:
 	while (curr != head) {
 		page = list_entry(curr, struct page, list);
 		curr = curr->next;
-		get_page(page);
-		if (TryLockPage(page)) {
-			spin_unlock(&pagecache_lock);
-			wait_on_page(page);
-			page_cache_release(page);
-			goto repeat;
-		}
-		if (page_count(page) != 2)
-			printk("hm, busy page invalidated? (not necessarily a bug)\n");
+
+		/* We cannot invalidate a locked page */
+		if (PageLocked(page))
+			continue;
+
 		lru_cache_del(page);
 
 		remove_page_from_inode_queue(page);
 		remove_page_from_hash_queue(page);
 		page->inode = NULL;
-		UnlockPage(page);
-		page_cache_release(page);
 		page_cache_release(page);
 	}
 	spin_unlock(&pagecache_lock);
 }
+
 /*
  * Truncate the page cache at a set offset, removing the pages
  * that are beyond that offset (and zeroing out partial pages).
