@@ -40,6 +40,7 @@
 #include <linux/spinlock.h>
 #include <linux/usb.h>
 #include <linux/smp_lock.h>
+#include <linux/wait.h>
 
 #include "rio500_usb.h"
 
@@ -264,6 +265,7 @@ static ssize_t
 write_rio(struct file *file, const char __user *buffer,
 	  size_t count, loff_t * ppos)
 {
+	DEFINE_WAIT(wait);
 	struct rio_usb_data *rio = &rio_instance;
 
 	unsigned long copy_size;
@@ -319,7 +321,9 @@ write_rio(struct file *file, const char __user *buffer,
 					errn = -ETIME;
 					goto error;
 				}
-				interruptible_sleep_on_timeout(&rio-> wait_q, NAK_TIMEOUT);
+				prepare_to_wait(&rio->wait_q, &wait, TASK_INTERRUPTIBLE);
+				schedule_timeout(NAK_TIMEOUT);
+				finish_wait(&rio->wait_q, &wait);
 				continue;
 			} else if (!result && partial) {
 				obuf += partial;
@@ -349,6 +353,7 @@ error:
 static ssize_t
 read_rio(struct file *file, char __user *buffer, size_t count, loff_t * ppos)
 {
+	DEFINE_WAIT(wait);
 	struct rio_usb_data *rio = &rio_instance;
 	ssize_t read_count;
 	unsigned int partial;
@@ -399,8 +404,9 @@ read_rio(struct file *file, char __user *buffer, size_t count, loff_t * ppos)
 				err("read_rio: maxretry timeout");
 				return -ETIME;
 			}
-			interruptible_sleep_on_timeout(&rio->wait_q,
-						       NAK_TIMEOUT);
+			prepare_to_wait(&rio->wait_q, &wait, TASK_INTERRUPTIBLE);
+			schedule_timeout(NAK_TIMEOUT);
+			finish_wait(&rio->wait_q, &wait);
 			continue;
 		} else if (result != -EREMOTEIO) {
 			up(&(rio->lock));
