@@ -3,13 +3,14 @@
  * linux/drivers/block/ide-cd.c
  * Copyright (C) 1994, 1995, 1996  scott snyder  <snyder@fnald0.fnal.gov>
  * Copyright (C) 1996-1998  Erik Andersen <andersee@debian.org>
+ *
  * May be copied or modified under the terms of the GNU General Public
  * License.  See linux/COPYING for more information.
  *
  * ATAPI CD-ROM driver.  To be used with ide.c.
  * See Documentation/cdrom/ide-cd for usage information.
  *
- * Suggestions are welcome. Patches that work are more welcome though.
+ * Suggestions are welcome. Patches that work are more welcome though. ;-)
  * For those wishing to work on this driver, please be sure you download
  * and comply with the latest ATAPI standard. This document can be
  * obtained by anonymous ftp from fission.dt.wdc.com in directory:
@@ -182,10 +183,16 @@
  *                     -- fix speed display for ACER 24X, 18X
  * 4.09  Jan 04, 1998  -- fix handling of the last block so we return
  *                         an end of file instead of an I/O error (Gadi)
+ * 4.10  Jan 24, 1998  -- fixed a bug so now changers can change to a new
+ *                         slot when there is no disc in the current slot.
+ *                     -- Fixed a memory leak where info->changer_info was
+ *                         malloc'ed but never free'd when closing the device.
+ *                     -- Cleaned up the global namespace a bit by making more
+ *                         functions static that should already have been.
  *
  *************************************************************************/
 
-#define IDECD_VERSION "4.09"
+#define IDECD_VERSION "4.10"
 
 #include <linux/config.h>
 #include <linux/module.h>
@@ -1309,7 +1316,7 @@ int cdrom_queue_packet_command (ide_drive_t *drive, struct packet_command *pc)
 /****************************************************************************
  * cdrom driver request routine.
  */
-
+static
 void ide_do_rw_cdrom (ide_drive_t *drive, struct request *rq, unsigned long block)
 {
 	if (rq -> cmd == PACKET_COMMAND || rq -> cmd == REQUEST_SENSE_COMMAND)
@@ -2467,10 +2474,6 @@ int ide_cdrom_select_disc (struct cdrom_device_info *cdi, int slot)
 	if (drive->usage > 1)
 		return -EBUSY;
 
-	stat = cdrom_check_status (drive, &my_reqbuf);
-	if (stat && my_reqbuf.sense_key == NOT_READY)
-		return -ENOENT;
-
 	if (slot == CDSL_NONE) {
 		(void) cdrom_load_unload (drive, -1, NULL);
 		cdrom_saw_media_change (drive);
@@ -2765,8 +2768,7 @@ int ide_cdrom_probe_capabilities (ide_drive_t *drive)
         	printk (" changer w/%d slots", nslots);
         else 	
         	printk (" drive");
-	printk (" %s/%dkB Cache\n", 
-		(CDROM_CONFIG_FLAGS (drive)->is_changer)? "&" : "w",  
+	printk (", %dkB Cache\n", 
         	ntohs(buf.cap.buffer_size) );
 
 	return nslots;
@@ -2900,7 +2902,7 @@ int ide_cdrom_setup (ide_drive_t *drive)
 }
 
 /* Forwarding functions to generic routines. */
-
+static
 int ide_cdrom_ioctl (ide_drive_t *drive,
 		     struct inode *inode, struct file *file,
 		     unsigned int cmd, unsigned long arg)
@@ -2908,6 +2910,7 @@ int ide_cdrom_ioctl (ide_drive_t *drive,
 	return cdrom_fops.ioctl (inode, file, cmd, arg);
 }
 
+static
 int ide_cdrom_open (struct inode *ip, struct file *fp, ide_drive_t *drive)
 {
 	int rc;
@@ -2921,6 +2924,7 @@ int ide_cdrom_open (struct inode *ip, struct file *fp, ide_drive_t *drive)
 	return rc;
 }
 
+static
 void ide_cdrom_release (struct inode *inode, struct file *file,
 			ide_drive_t *drive)
 {
@@ -2928,6 +2932,7 @@ void ide_cdrom_release (struct inode *inode, struct file *file,
 	MOD_DEC_USE_COUNT;
 }
 
+static
 int ide_cdrom_check_media_change (ide_drive_t *drive)
 {
 	return cdrom_fops.check_media_change
@@ -2936,6 +2941,7 @@ int ide_cdrom_check_media_change (ide_drive_t *drive)
 }
 
 
+static
 int ide_cdrom_cleanup(ide_drive_t *drive)
 {
 	struct cdrom_info *info = drive->driver_data;
@@ -2947,6 +2953,8 @@ int ide_cdrom_cleanup(ide_drive_t *drive)
 		kfree (info->sector_buffer);
 	if (info->toc != NULL)
 		kfree (info->toc);
+	if (info->changer_info != NULL)
+		kfree (info->changer_info);
 	if (devinfo->handle == drive && unregister_cdrom (devinfo))
 		printk ("%s: ide_cdrom_cleanup failed to unregister device from the cdrom driver.\n", drive->name);
 	kfree (info);

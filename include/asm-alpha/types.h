@@ -63,11 +63,13 @@ typedef unsigned int u32;
 
 typedef signed long long s64;
 typedef unsigned long long u64;
+#define BITS_PER_LONG 32
 
 #else
 
 typedef signed long s64;
 typedef unsigned long u64;
+#define BITS_PER_LONG 64
 
 #endif
 

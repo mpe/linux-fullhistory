@@ -1799,8 +1799,8 @@ tulip_start_xmit(struct sk_buff *skb, struct device *dev)
 	if (entry == TX_RING_SIZE-1)
 		flag |= 0xe2000000;
 
-	tp->tx_ring[entry].length = skb->len | flag;
 	tp->stats.tx_bytes += skb->len;
+	tp->tx_ring[entry].length = skb->len | flag;
 	tp->tx_ring[entry].status = 0x80000000;	/* Pass ownership to the chip. */
 	tp->cur_tx++;
 	/* Trigger an immediate transmit demand. */

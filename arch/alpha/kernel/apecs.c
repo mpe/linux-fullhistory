@@ -18,6 +18,10 @@
 #include <asm/hwrpb.h>
 #include <asm/ptrace.h>
 
+/* NOTE: Herein are back-to-back mb insns.  They are magic. 
+   A plausible explanation is that the i/o controler does not properly
+   handle the system transaction.  Another involves timing.  Ho hum.  */
+
 extern struct hwrpb_struct *hwrpb;
 extern asmlinkage void wrmces(unsigned long mces);
 extern int alpha_sys_type;
@@ -162,6 +166,7 @@ static unsigned int conf_read(unsigned long addr, unsigned char type1)
 	/* access configuration space: */
 	value = *(vuip)addr;
 	mb();
+	mb();  /* magic */
 	if (apecs_mcheck_taken) {
 		apecs_mcheck_taken = 0;
 		value = 0xffffffffU;
@@ -242,6 +247,7 @@ static void conf_write(unsigned long addr, unsigned int value, unsigned char typ
 	/* access configuration space: */
 	*(vuip)addr = value;
 	mb();
+	mb();  /* magic */
 	apecs_mcheck_expected = 0;
 	mb();
 
@@ -539,7 +545,7 @@ void apecs_machine_check(unsigned long vector, unsigned long la_ptr,
 		apecs_mcheck_expected = 0;
 		apecs_mcheck_taken = 1;
 		mb();
-		mb();
+		mb(); /* magic */
 		apecs_pci_clr_err();
 		wrmces(0x7);
 		mb();

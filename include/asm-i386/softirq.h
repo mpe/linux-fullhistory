@@ -91,8 +91,8 @@ extern inline void end_bh_atomic(void)
 }
 
 /* These are for the irq's testing the lock */
-#define softirq_trylock()	(in_bh ? 0 : (local_bh_count[smp_processor_id()]=1))
-#define softirq_endlock()	(local_bh_count[smp_processor_id()] = 0)
+#define softirq_trylock(cpu)	(in_bh() ? 0 : (local_bh_count[smp_processor_id()]=1))
+#define softirq_endlock(cpu)	(local_bh_count[smp_processor_id()] = 0)
 #define synchronize_bh()	do { } while (0)
 
 #endif	/* SMP */

@@ -71,7 +71,7 @@ unsigned long adfs_inode_objid (struct inode *inode)
 	return inode->u.adfs_i.file_id;
 }
 
-unsigned int adfs_bmap (struct inode *inode, int block)
+int adfs_bmap (struct inode *inode, int block)
 {
 	struct super_block *sb = inode->i_sb;
 	unsigned int blk;

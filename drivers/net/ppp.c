@@ -7,7 +7,7 @@
  *  Dynamic PPP devices by Jim Freeman <jfree@caldera.com>.
  *  ppp_tty_receive ``noisy-raise-bug'' fixed by Ove Ewerlid <ewerlid@syscon.uu.se>
  *
- *  ==FILEVERSION 971205==
+ *  ==FILEVERSION 980123==
  *
  *  NOTE TO MAINTAINERS:
  *     If you modify this file at all, please set the number above to the
@@ -568,9 +568,7 @@ ppp_changedmtu (struct ppp *ppp, int new_mtu, int new_mru)
  */
 	if (new_wbuf == NULL || new_tbuf == NULL ||
 	    new_rbuf == NULL || new_cbuf == NULL) {
-		if (ppp->flags & SC_DEBUG)
-			printk (KERN_ERR
-				"ppp: failed to allocate new buffers\n");
+		printk (KERN_ERR "ppp: failed to allocate new buffers\n");
 
 		ppp_free_buf (new_wbuf);
 		ppp_free_buf (new_tbuf);
@@ -770,8 +768,7 @@ ppp_tty_open (struct tty_struct *tty)
  * There should not be an existing table for this slot.
  */
 	if (ppp) {
-		if (ppp->flags & SC_DEBUG)
-			printk (KERN_ERR
+		printk (KERN_ERR
 			"ppp_tty_open: gack! tty already associated to %s!\n",
 			ppp->magic == PPP_MAGIC ? ppp2dev(ppp)->name
 						: "unknown");
@@ -793,8 +790,7 @@ ppp_tty_open (struct tty_struct *tty)
 	} else {
 		ppp = ppp_alloc();
 		if (ppp == NULL) {
-			if (ppp->flags & SC_DEBUG)
-				printk (KERN_ERR "ppp_alloc failed\n");
+			printk (KERN_ERR "ppp_alloc failed\n");
 			return -ENFILE;
 		}
 /*
@@ -808,9 +804,8 @@ ppp_tty_open (struct tty_struct *tty)
  */
 		ppp->slcomp = slhc_init (16, 16);
 		if (ppp->slcomp == NULL) {
-			if (ppp->flags & SC_DEBUG)
-				printk (KERN_ERR "ppp_tty_open: "
-					"no space for compression buffers!\n");
+			printk (KERN_ERR "ppp_tty_open: "
+				"no space for compression buffers!\n");
 			ppp_release (ppp);
 			return -ENOMEM;
 		}
@@ -826,9 +821,8 @@ ppp_tty_open (struct tty_struct *tty)
  */
 		ppp->ubuf = ppp_alloc_buf (RBUFSIZE, BUFFER_TYPE_TTY_RD);
 		if (ppp->ubuf == NULL) {
-			if (ppp->flags & SC_DEBUG)
-				printk (KERN_ERR "ppp_tty_open: "
-					"no space for user receive buffer\n");
+			printk (KERN_ERR "ppp_tty_open: "
+				"no space for user receive buffer\n");
 			ppp_release (ppp);
 			return -ENOMEM;
 		}
@@ -1300,9 +1294,7 @@ ppp_doframe (struct ppp *ppp)
  */
 			new_data = kmalloc (ppp->mru + PPP_HDRLEN, GFP_ATOMIC);
 			if (new_data == NULL) {
-				if (ppp->flags & SC_DEBUG)
-					printk (KERN_ERR
-						"ppp_doframe: no memory\n");
+				printk (KERN_ERR "ppp_doframe: no memory\n");
 				new_count = DECOMP_ERROR;
 			} else {
 				new_count = (*ppp->sc_rcomp->decompress)
@@ -1321,8 +1313,7 @@ ppp_doframe (struct ppp *ppp)
 
 			case DECOMP_FATALERROR:
 				ppp->flags |= SC_DC_FERROR;
-				if (ppp->flags & SC_DEBUG)
-					printk(KERN_ERR "ppp: fatal decomp error\n");
+				printk(KERN_ERR "ppp: fatal decomp error\n");
 				break;
 			}
 /*
@@ -2069,15 +2060,16 @@ ppp_tty_write (struct tty_struct *tty, struct file *file, const __u8 * data,
 	struct ppp *ppp = tty2ppp (tty);
 	__u8 *new_data;
 	int error;
+	struct wait_queue wait = {current, NULL};
 
 /*
  * Verify the pointers.
  */
+	error = -EIO;
 	if (!ppp)
-		return -EIO;
-
+		goto out;
 	if (ppp->magic != PPP_MAGIC)
-		return -EIO;
+		goto out;
 
 	CHECK_PPP (-ENXIO);
 /*
@@ -2096,43 +2088,48 @@ ppp_tty_write (struct tty_struct *tty, struct file *file, const __u8 * data,
  */
 	new_data = kmalloc (count, GFP_KERNEL);
 	if (new_data == NULL) {
-		if (ppp->flags & SC_DEBUG)
-			printk (KERN_ERR
-				"ppp_tty_write: no memory\n");
+		printk (KERN_ERR "ppp_tty_write: no memory\n");
 		return 0;
 	}
 /*
  * Retrieve the user's buffer
  */
-	error = copy_from_user(new_data, data, count);
-	if (error) {
-		kfree (new_data);
-		return error;
-	}
+	error = -EFAULT;
+	if (copy_from_user(new_data, data, count))
+		goto out_free;
 /*
- * lock this PPP unit so we will be the only writer;
- * sleep if necessary
+ * Lock this PPP unit so we will be the only writer,
+ * sleeping if necessary.
+ *
+ * Note that we add our task to the wait queue before
+ * attempting to lock, as the lock flag may be cleared
+ * from an interrupt.
  */
-	while (lock_buffer (ppp->tbuf) != 0) {
+	add_wait_queue(&ppp->write_wait, &wait);
+	while (1) {
+		error = 0;
 		current->timeout = 0;
-#if 0
-		if (ppp->flags & SC_DEBUG)
-			printk (KERN_DEBUG "ppp_tty_write: sleeping\n");
-#endif
-		interruptible_sleep_on (&ppp->write_wait);
+		current->state = TASK_INTERRUPTIBLE;
+		if (lock_buffer(ppp->tbuf) == 0)
+			break;
+		schedule();
 
+		error = -EINVAL;
 		ppp = tty2ppp (tty);
-		if (!ppp || ppp->magic != PPP_MAGIC || !ppp->inuse
-		    || tty != ppp->tty) {
-			kfree (new_data);
-			return 0;
+		if (!ppp || ppp->magic != PPP_MAGIC || 
+		    !ppp->inuse || tty != ppp->tty) {
+			printk("ppp_tty_write: %p invalid after wait!\n", ppp);
+			break;
 		}
-
-		if (signal_pending(current)) {
-			kfree (new_data);
-			return -EINTR;
-		}
+		error = -EINTR;
+		if (signal_pending(current))
+			break;
 	}
+	current->state = TASK_RUNNING;
+	remove_wait_queue(&ppp->write_wait, &wait);
+	if (error)
+		goto out_free;
+
 /*
  * Change the LQR frame
  */
@@ -2152,9 +2149,12 @@ ppp_tty_write (struct tty_struct *tty, struct file *file, const __u8 * data,
 	} else {
 		ppp_dev_xmit_frame (ppp, ppp->tbuf, new_data, count);
 	}
+	error = count;
 
+out_free:
 	kfree (new_data);
-	return count;
+out:
+	return error;
 }
 
 /*
@@ -2165,31 +2165,30 @@ static int
 ppp_set_compression (struct ppp *ppp, struct ppp_option_data *odp)
 {
 	struct compressor *cp;
-	struct ppp_option_data data;
-	int error;
-	int nb;
+	int error, nb;
+	unsigned long flags;
 	__u8 *ptr;
 	__u8 ccp_option[CCP_MAX_OPTION_LENGTH];
-	unsigned long flags;
+	struct ppp_option_data data;
 
 /*
  * Fetch the compression parameters
  */
-	error = copy_from_user(&data, odp, sizeof (data));
-	if (error != 0)
-		return error;
+	error = -EFAULT;
+	if (copy_from_user(&data, odp, sizeof (data)))
+		goto out;
 
 	nb  = data.length;
 	ptr = data.ptr;
 	if ((__u32) nb >= (__u32)CCP_MAX_OPTION_LENGTH)
 		nb = CCP_MAX_OPTION_LENGTH;
 
-	error = copy_from_user(ccp_option, ptr, nb);
-	if (error != 0)
-		return error;
+	if (copy_from_user(ccp_option, ptr, nb))
+		goto out;
 
+	error = -EINVAL;
 	if (ccp_option[1] < 2)	/* preliminary check on the length byte */
-		return (-EINVAL);
+		goto out;
 
 	save_flags(flags);
 	cli();
@@ -2206,53 +2205,52 @@ ppp_set_compression (struct ppp *ppp, struct ppp_option_data *odp)
 	}
 #endif /* CONFIG_KERNELD */
 
-	if (cp != (struct compressor *) 0) {
-		/*
-		 * Found a handler for the protocol - try to allocate
-		 * a compressor or decompressor.
-		 */
-		error = 0;
-		if (data.transmit) {
-			if (ppp->sc_xc_state != NULL)
-				(*ppp->sc_xcomp->comp_free)(ppp->sc_xc_state);
+	if (cp == NULL)
+		goto out_no_comp;
+	/*
+	 * Found a handler for the protocol - try to allocate
+	 * a compressor or decompressor.
+	 */
+	error = 0;
+	if (data.transmit) {
+		if (ppp->sc_xc_state != NULL)
+			(*ppp->sc_xcomp->comp_free)(ppp->sc_xc_state);
+		ppp->sc_xc_state = NULL;
 
-			ppp->sc_xcomp	 = cp;
-			ppp->sc_xc_state = cp->comp_alloc(ccp_option, nb);
+		ppp->sc_xcomp	 = cp;
+		ppp->sc_xc_state = cp->comp_alloc(ccp_option, nb);
+		if (ppp->sc_xc_state == NULL) {
+			printk(KERN_WARNING "%s: comp_alloc failed\n",
+				ppp->name);
+			error = -ENOBUFS;
+		} else if (ppp->flags & SC_DEBUG)
+			printk(KERN_DEBUG "%s: comp_alloc -> %p\n",
+			       ppp->name, ppp->sc_xc_state);
+	} else {
+		if (ppp->sc_rc_state != NULL)
+			(*ppp->sc_rcomp->decomp_free)(ppp->sc_rc_state);
+		ppp->sc_rc_state = NULL;
 
-			if (ppp->sc_xc_state == NULL) {
-				if (ppp->flags & SC_DEBUG)
-					printk(KERN_DEBUG "%s: comp_alloc failed\n",
-					       ppp->name);
-				error = -ENOBUFS;
-			} else {
-				if (ppp->flags & SC_DEBUG)
-					printk(KERN_DEBUG "%s: comp_alloc -> %p\n",
-					       ppp->name, ppp->sc_xc_state);
-			}
-		} else {
-			if (ppp->sc_rc_state != NULL)
-				(*ppp->sc_rcomp->decomp_free)(ppp->sc_rc_state);
-			ppp->sc_rcomp	 = cp;
-			ppp->sc_rc_state = cp->decomp_alloc(ccp_option, nb);
-			if (ppp->sc_rc_state == NULL) {
-				if (ppp->flags & SC_DEBUG)
-					printk(KERN_DEBUG "%s: decomp_alloc failed\n",
-					       ppp->name);
-				error = -ENOBUFS;
-			} else {
-				if (ppp->flags & SC_DEBUG)
-					printk(KERN_DEBUG "%s: decomp_alloc -> %p\n",
-					       ppp->name, ppp->sc_rc_state);
-			}
-		}
-		return (error);
+		ppp->sc_rcomp	 = cp;
+		ppp->sc_rc_state = cp->decomp_alloc(ccp_option, nb);
+		if (ppp->sc_rc_state == NULL) {
+			printk(KERN_WARNING "%s: decomp_alloc failed\n",
+				ppp->name);
+			error = -ENOBUFS;
+		} else if (ppp->flags & SC_DEBUG)
+			printk(KERN_DEBUG "%s: decomp_alloc -> %p\n",
+			       ppp->name, ppp->sc_rc_state);
 	}
+out:
+	return error;
 
+out_no_comp:
+	error = -EINVAL;	/* no handler found */
 	if (ppp->flags & SC_DEBUG)
 		printk(KERN_DEBUG "%s: no compressor for [%x %x %x], %x\n",
-		       ppp->name, ccp_option[0], ccp_option[1],
-		       ccp_option[2], nb);
-	return (-EINVAL);	/* no handler found */
+			ppp->name, ccp_option[0], ccp_option[1],
+			ccp_option[2], nb);
+	goto out;
 }
 
 /*
@@ -2409,16 +2407,20 @@ ppp_tty_ioctl (struct tty_struct *tty, struct file * file,
 			/* change absolute times to relative times. */
 			cur_ddinfo.xmit_idle = (jiffies - ppp->last_xmit) / HZ;
 			cur_ddinfo.recv_idle = (jiffies - ppp->last_recv) / HZ;
-			error = copy_to_user((void *) param3, &cur_ddinfo,
-					     sizeof (cur_ddinfo));
+			error = -EFAULT;
+			if (!copy_to_user((void *) param3, &cur_ddinfo,
+					     sizeof (cur_ddinfo)))
+				error = 0;
 		}
 		break;
 /*
  * Retrieve the extended async map
  */
 	case PPPIOCGXASYNCMAP:
-		error = copy_to_user((void *) param3, ppp->xmit_async_map,
-				     sizeof (ppp->xmit_async_map));
+		error = -EFAULT;
+		if (!copy_to_user((void *) param3, ppp->xmit_async_map,
+				     sizeof (ppp->xmit_async_map)))
+			error = 0;
 		break;
 /*
  * Set the async extended map
@@ -2427,15 +2429,16 @@ ppp_tty_ioctl (struct tty_struct *tty, struct file * file,
 		{
 			__u32 temp_tbl[8];
 
-			error = copy_from_user(temp_tbl, (void *) param3,
-					       sizeof (temp_tbl));
-			if (error != 0)
+			error = -EFAULT;
+			if (copy_from_user(temp_tbl, (void *) param3,
+					       sizeof (temp_tbl)))
 				break;
 
 			temp_tbl[1]  =	0x00000000;
 			temp_tbl[2] &= ~0x40000000;
 			temp_tbl[3] |=	0x60000000;
 
+			error = 0;
 			if ((temp_tbl[2] & temp_tbl[3]) != 0 ||
 			    (temp_tbl[4] & temp_tbl[5]) != 0 ||
 			    (temp_tbl[6] & temp_tbl[7]) != 0)
@@ -2461,16 +2464,15 @@ ppp_tty_ioctl (struct tty_struct *tty, struct file * file,
 		temp_i = (temp_i & 255) + 1;
 		if (ppp->flags & SC_DEBUG)
 			printk (KERN_INFO
-				"ppp_tty_ioctl: set maxcid to %d\n",
-				temp_i);
+				"ppp_tty_ioctl: set maxcid to %d\n", temp_i);
 		if (ppp->slcomp != NULL)
 			slhc_free (ppp->slcomp);
-		ppp->slcomp = slhc_init (16, temp_i);
+		ppp->slcomp = NULL;
 
+		ppp->slcomp = slhc_init (16, temp_i);
 		if (ppp->slcomp == NULL) {
-			if (ppp->flags & SC_DEBUG)
-				printk (KERN_ERR
-					"ppp: no space for compression buffers!\n");
+			printk (KERN_ERR "ppp_tty_ioctl: "
+				"no space for compression buffers!\n");
 			ppp_release (ppp);
 			error = -ENOMEM;
 		}
@@ -2486,39 +2488,35 @@ ppp_tty_ioctl (struct tty_struct *tty, struct file * file,
 		{
 			struct npioctl npi;
 
-			error = copy_from_user(&npi, (void *) param3,
-					sizeof (npi));
-			if (error != 0)
+			error = -EFAULT;
+			if (copy_from_user(&npi, (void *) param3, sizeof(npi)))
 				break;
 
-			switch (npi.protocol) {
-			case PPP_IP:
-				npi.protocol = NP_IP;
-				break;
-			default:
+			if (npi.protocol != PPP_IP) {
 				if (ppp->flags & SC_DEBUG)
 					printk(KERN_DEBUG "pppioc[gs]npmode: "
-					       "invalid proto %d\n", npi.protocol);
+					       "invalid protocol %d\n",
+						npi.protocol);
 				error = -EINVAL;
-			}
-
-			if (error != 0)
 				break;
+			}
+			npi.protocol = NP_IP;
 
 			if (param2 == PPPIOCGNPMODE) {
 				npi.mode = ppp->sc_npmode[npi.protocol];
-
-				error = copy_to_user((void *) param3, &npi,
-						     sizeof (npi));
-				break;
+				if (copy_to_user((void *) param3, &npi,
+						sizeof (npi)))
+					break;
 			}
 
 			ppp->sc_npmode[npi.protocol] = npi.mode;
 			if (ppp->flags & SC_DEBUG)
 				printk(KERN_DEBUG "ppp: set np %d to %d\n",
 				       npi.protocol, npi.mode);
+			/* N.B. Why is the busy flag cleared here? */
 			ppp2dev(ppp)->tbusy = 0;
 			mark_bh(NET_BH);
+			error = 0;
 		}
 		break;
 /*
@@ -2542,11 +2540,8 @@ ppp_tty_ioctl (struct tty_struct *tty, struct file * file,
  */
 	default:
 		if (ppp->flags & SC_DEBUG)
-			printk (KERN_ERR
-				"ppp_tty_ioctl: invalid ioctl: %x, addr %lx\n",
-				param2,
-				param3);
-
+			printk (KERN_WARNING "ppp_tty_ioctl: "
+				"invalid ioctl=%x, addr=%lx\n", param2, param3);
 		error = -ENOIOCTLCMD;
 		break;
 	}
@@ -2606,8 +2601,7 @@ ppp_dev_open (struct device *dev)
 	struct ppp *ppp = dev2ppp (dev);
 
 	if (ppp2tty (ppp) == NULL) {
-		if (ppp->flags & SC_DEBUG)
-			printk (KERN_ERR
+		printk (KERN_ERR
 			"ppp: %s not connected to a TTY! can't go open!\n",
 			dev->name);
 		return -ENXIO;
@@ -2659,8 +2653,9 @@ ppp_dev_ioctl_version (struct ppp *ppp, struct ifreq *ifr)
 /*
  * Move the version data
  */
-	error = copy_to_user(result, szVersion, len);
-
+	error = -EFAULT;
+	if (!copy_to_user(result, szVersion, len))
+		error = 0;
 	return error;
 }
 
@@ -2695,8 +2690,9 @@ ppp_dev_ioctl_stats (struct ppp *ppp, struct ifreq *ifr, struct device *dev)
 
 	result = (struct ppp_stats *) ifr->ifr_ifru.ifru_data;
 
-	error = copy_to_user(result, &temp, sizeof (temp));
-
+	error = -EFAULT;
+	if (!copy_to_user(result, &temp, sizeof (temp)))
+		error = 0;
 	return error;
 }
 
@@ -2727,8 +2723,9 @@ ppp_dev_ioctl_comp_stats (struct ppp *ppp, struct ifreq *ifr, struct device *dev
  */
 	result = (struct ppp_comp_stats *) ifr->ifr_ifru.ifru_data;
 
-	error = copy_to_user(result, &temp, sizeof (temp));
-
+	error = -EFAULT;
+	if (!copy_to_user(result, &temp, sizeof (temp)))
+		error = 0;
 	return error;
 }
 

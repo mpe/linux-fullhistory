@@ -117,8 +117,8 @@ extern void ufs_superblock_be_to_cpus(struct ufs_superblock * usb) {
 	be32_to_cpus(&usb->fs_cpc);
         be16_to_cpus__between(*usb,fs_opostbl,fs_sparecon);
         be32_to_cpus__between(*usb,fs_sparecon,fs_qbmask);
-        be64_to_cpus(&usb->fs_qbmask);
-        be64_to_cpus(&usb->fs_qfmask);
+        be64_to_cpus((__u64 *) &usb->fs_qbmask);
+        be64_to_cpus((__u64 *) &usb->fs_qfmask);
 	be32_to_cpus__between(*usb,fs_postblformat,fs_magic);
 #endif
 }

@@ -7,6 +7,11 @@
  * Interrupt support added 1993 Nigel Gamble
  */
 
+/* Magic numbers for defining port-device mappings */
+#define LP_PARPORT_AUTO -3
+#define LP_PARPORT_OFF -2
+#define LP_PARPORT_UNSPEC -1
+
 /*
  * Per POSIX guidelines, this module reserves the LP and lp prefixes
  * These are the lp_table[minor].flags flags...
@@ -89,20 +94,6 @@
 
 #define LP_BASE(x)	lp_table[(x)].dev->port->base
 
-#define r_dtr(x)	inb(LP_BASE(x))
-#define r_str(x)	inb(LP_BASE(x)+1)
-#define r_ctr(x)	inb(LP_BASE(x)+2)
-#define r_epp(x)	inb(LP_BASE(x)+4)
-#define r_fifo(x)	inb(LP_BASE(x)+0x400)
-#define r_ecr(x)	inb(LP_BASE(x)+0x402)
-
-#define w_dtr(x,y)	outb((y), LP_BASE(x))
-#define w_str(x,y)	outb((y), LP_BASE(x)+1)
-#define w_ctr(x,y)	outb((y), LP_BASE(x)+2)
-#define w_epp(x,y)	outb((y), LP_BASE(x)+4)
-#define w_fifo(x,y)	outb((y), LP_BASE(x)+0x400)
-#define w_ecr(x,y)	outb((y), LP_BASE(x)+0x402)
-
 struct lp_stats {
 	unsigned long chars;
 	unsigned long sleeps;
@@ -118,12 +109,10 @@ struct lp_struct {
 	unsigned int chars;
 	unsigned int time;
 	unsigned int wait;
-	struct wait_queue *lp_wait_q;
 	char *lp_buffer;
 	unsigned int lastcall;
 	unsigned int runchars;
 	unsigned int waittime;
-	unsigned int should_relinquish;
 	struct lp_stats stats;
 };
 
@@ -169,6 +158,9 @@ struct lp_struct {
  * It is used only in the lp_init() and lp_reset() routine.
  */
 #define LP_DELAY 	50
+
+#define LP_POLLING(minor) (lp_table[(minor)].dev->port->irq == PARPORT_IRQ_NONE)
+#define LP_PREEMPTED(minor) (lp_table[(minor)].dev->port->waithead != NULL)
 
 /*
  * function prototypes

@@ -304,6 +304,9 @@
  *       Heiko Eissfeldt <heiko@colossus.escape.de> with additional
  *       changes by Erik Andersen <andersee@debian.org>
  *
+ *  4.62 Fix a bug where playing audio left the drive in an unusable state.
+ *         Heiko Eissfeldt <heiko@colossus.escape.de>
+ *
  *
  *  TODO
  *     implement "read all subchannel data" (96 bytes per frame)
@@ -1046,7 +1049,7 @@ static int CDi_stat_loop(void)
 		sbp_sleep(1);
 		i = 1;
 	}
-	msg(DBG_LCS,"CDi_stat_loop failed\n");
+	msg(DBG_LCS,"CDi_stat_loop failed in line %d\n", __LINE__);
 	return (-1);
 }
 /*==========================================================================*/
@@ -4295,7 +4298,7 @@ static int sbpcd_dev_ioctl(struct cdrom_device_info *cdi, u_int cmd,
 			}
 			if (status_tries == 0)
 			{
-				msg(DBG_AUD,"read_audio: sbp_status: failed after 3 tries.\n");
+				msg(DBG_AUD,"read_audio: sbp_status: failed after 3 tries in line %d.\n", __LINE__);
 				continue;
 			}
 			msg(DBG_AUD,"read_audio: sbp_status: ok.\n");
@@ -4467,7 +4470,7 @@ static int sbpcd_dev_ioctl(struct cdrom_device_info *cdi, u_int cmd,
 #endif OLD_BUSY
 		if (data_tries == 0)
 		{
-			msg(DBG_AUD,"read_audio: failed after 5 tries.\n");
+			msg(DBG_AUD,"read_audio: failed after 5 tries in line %d.\n", __LINE__);
 			RETURN_UP(-EIO);
 		}
 		msg(DBG_AUD,"read_audio: successful return.\n");
@@ -4651,6 +4654,7 @@ static int sbpcd_audio_ioctl(struct cdrom_device_info *cdi, u_int cmd,
 #endif SAFE_MIXED
 		i=cc_Pause_Resume(1);
 		D_S[d].audio_state=0;
+		cc_DriveReset();
 		RETURN_UP(i);
 		
 	case CDROMSTART:  /* Spin up the drive */
@@ -4886,7 +4890,7 @@ static void DO_SBPCD_REQUEST(void)
 		}
 		if (status_tries == 0)
 		{
-			msg(DBG_INF,"sbp_status: failed after 3 tries\n");
+			msg(DBG_INF,"sbp_status: failed after 3 tries in line %d\n", __LINE__);
 			break;
 		}
 		

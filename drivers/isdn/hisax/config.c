@@ -179,23 +179,23 @@ static char HiSaxID[96] = "\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0" \
 char *HiSax_id = HiSaxID;
 #ifdef MODULE
 /* Variables for insmod */
-int type[] =
+static int type[] =
 {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
-int protocol[] =
+static int protocol[] =
 {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
-int io[] =
+static int io[] =
 {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
 #ifdef CONFIG_HISAX_16_3	/* For Creatix/Teles PnP */
-int io0[] =
+static int io0[] =
 {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
-int io1[] =
+static int io1[] =
 {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
 #endif
-int irq[] =
+static int irq[] =
 {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
-int mem[] =
+static int mem[] =
 {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
-char *id = HiSaxID;
+static char *id = HiSaxID;
 
 #if (LINUX_VERSION_CODE > 0x020111)
 MODULE_AUTHOR("Karsten Keil");

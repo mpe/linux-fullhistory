@@ -473,6 +473,11 @@ void	paride_init( void )
           pf_init();
         };
 #endif
+#ifdef CONFIG_PARIDE_PT
+        { extern int pt_init(void);
+          pt_init();
+        };
+#endif
 }
 
 #endif

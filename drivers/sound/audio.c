@@ -350,7 +350,7 @@ int audio_read(int dev, struct fileinfo *file, char *buf, int count)
 int audio_ioctl(int dev, struct fileinfo *file_must_not_be_used,
 		unsigned int cmd, caddr_t arg)
 {
-	int val = 0, info, count;
+	int val, count;
 	unsigned long flags;
 	struct dma_buffparms *dmap;
 
@@ -419,16 +419,16 @@ int audio_ioctl(int dev, struct fileinfo *file_must_not_be_used,
 			return 0;
 
 		case SNDCTL_DSP_GETCAPS:
-				info = 1 | DSP_CAP_MMAP;	/* Revision level of this ioctl() */
+				val = 1 | DSP_CAP_MMAP;	/* Revision level of this ioctl() */
 				if (audio_devs[dev]->flags & DMA_DUPLEX &&
 					audio_devs[dev]->open_mode == OPEN_READWRITE)
-					info |= DSP_CAP_DUPLEX;
+					val |= DSP_CAP_DUPLEX;
 				if (audio_devs[dev]->coproc)
-					info |= DSP_CAP_COPROC;
+					val |= DSP_CAP_COPROC;
 				if (audio_devs[dev]->d->local_qlen)	/* Device has hidden buffers */
-					info |= DSP_CAP_BATCH;
+					val |= DSP_CAP_BATCH;
 				if (audio_devs[dev]->d->trigger)	/* Supports SETTRIGGER */
-					info |= DSP_CAP_TRIGGER;
+					val |= DSP_CAP_TRIGGER;
 				break;
 			
 		case SOUND_PCM_WRITE_RATE:

@@ -200,7 +200,9 @@ static void gentbl_fsk9600(FILE *f)
 					? "\n\t" : "");
 		}
 	}
+#ifdef VERBOSE
 	fprintf(stderr, "fsk9600: txfilt4: min = %f; max = %f\n", min, max);
+#endif
 	fprintf(f, "\n};\n\n");
 	min = max = 0;
 	memset(c, 0, sizeof(c));
@@ -233,7 +235,9 @@ static void gentbl_fsk9600(FILE *f)
 					? "\n\t" : "");
 		}
 	}
+#ifdef VERBOSE
 	fprintf(stderr, "fsk9600: txfilt5: min = %f; max = %f\n", min, max);
+#endif
 	fprintf(f, "\n};\n\n");
 }
 	
@@ -466,7 +470,9 @@ static void gentbl_hapn4800(FILE *f)
 					? "\n\t" : "");
 		}
 	}
+#ifdef VERBOSE
 	fprintf(stderr, "hapn4800: txfilt8: min = %f; max = %f\n", min, max);
+#endif
 	fprintf(f, "\n};\n\n");
 	min = max = 0;
 	memset(c, 0, sizeof(c));
@@ -493,7 +499,9 @@ static void gentbl_hapn4800(FILE *f)
 					? "\n\t" : "");
 		}
 	}
+#ifdef VERBOSE
 	fprintf(stderr, "hapn4800: txfilt10: min = %f; max = %f\n", min, max);
+#endif
 	fprintf(f, "\n};\n\n");
 	/*
 	 * secondly generate tables for the PM transmitter modulator
@@ -524,7 +532,9 @@ static void gentbl_hapn4800(FILE *f)
 					? "\n\t" : "");
 		}
 	}
+#ifdef VERBOSE
 	fprintf(stderr, "hapn4800: txfiltpm8: min = %f; max = %f\n", min, max);
+#endif
 	fprintf(f, "\n};\n\n");
 	min = max = 0;
 	memset(c, 0, sizeof(c));
@@ -552,7 +562,9 @@ static void gentbl_hapn4800(FILE *f)
 					? "\n\t" : "");
 		}
 	}
+#ifdef VERBOSE
 	fprintf(stderr, "hapn4800: txfiltpm10: min = %f; max = %f\n", min, max);
+#endif
 	fprintf(f, "\n};\n\n");
 	
 }

@@ -583,23 +583,27 @@ EXPORT_SYMBOL(send_sig_info);
 asmlinkage int
 sys_rt_sigprocmask(int how, sigset_t *set, sigset_t *oset, size_t sigsetsize)
 {
+	int error = -EINVAL;
 	sigset_t old_set, new_set;
 
 	/* XXX: Don't preclude handling different sized sigset_t's.  */
 	if (sigsetsize != sizeof(sigset_t))
-		return -EINVAL;
+		goto out;
 
 	if (set) {
+		error = -EFAULT;
 		if (copy_from_user(&new_set, set, sizeof(*set)))
-			return -EFAULT;
+			goto out;
 		sigdelsetmask(&new_set, sigmask(SIGKILL)|sigmask(SIGSTOP));
 
 		spin_lock_irq(&current->sigmask_lock);
 		old_set = current->blocked;
 
+		error = 0;
 		switch (how) {
 		default:
-			return -EINVAL;
+			error = -EINVAL;
+			break;
 		case SIG_BLOCK:
 			sigorsets(&new_set, &old_set, &new_set);
 			break;
@@ -613,47 +617,54 @@ sys_rt_sigprocmask(int how, sigset_t *set, sigset_t *oset, size_t sigsetsize)
 		current->blocked = new_set;
 		recalc_sigpending(current);
 		spin_unlock_irq(&current->sigmask_lock);
-
-		if (oset) {
-			if (copy_to_user(oset, &old_set, sizeof(*oset)))
-				return -EFAULT;
-		}
+		if (error)
+			goto out;
+		if (oset)
+			goto set_old;
 	} else if (oset) {
 		spin_lock_irq(&current->sigmask_lock);
 		old_set = current->blocked;
 		spin_unlock_irq(&current->sigmask_lock);
 
+	set_old:
+		error = -EFAULT;
 		if (copy_to_user(oset, &old_set, sizeof(*oset)))
-			return -EFAULT;
+			goto out;
 	}
-
-	return 0;
+	error = 0;
+out:
+	return error;
 }
 
 asmlinkage int
 sys_rt_sigpending(sigset_t *set, size_t sigsetsize)
 {
+	int error = -EINVAL;
 	sigset_t pending;
 
 	/* XXX: Don't preclude handling different sized sigset_t's.  */
 	if (sigsetsize != sizeof(sigset_t))
-		return -EINVAL;
+		goto out;
 
 	spin_lock_irq(&current->sigmask_lock);
 	sigandsets(&pending, &current->blocked, &current->signal);
 	spin_unlock_irq(&current->sigmask_lock);
 
-	return copy_to_user(set, &pending, sizeof(*set));
+	error = -EFAULT;
+	if (!copy_to_user(set, &pending, sizeof(*set)))
+		error = 0;
+out:
+	return error;
 }
 
 asmlinkage int
 sys_rt_sigtimedwait(const sigset_t *uthese, siginfo_t *uinfo,
 		    const struct timespec *uts, size_t sigsetsize)
 {
+	int ret, sig;
 	sigset_t these;
 	struct timespec ts;
 	siginfo_t info;
-	int ret, sig;
 
 	/* XXX: Don't preclude handling different sized sigset_t's.  */
 	if (sigsetsize != sizeof(sigset_t))
@@ -825,19 +836,23 @@ do_sigaction(int sig, const struct k_sigaction *act, struct k_sigaction *oact)
 asmlinkage int
 sys_sigprocmask(int how, old_sigset_t *set, old_sigset_t *oset)
 {
+	int error;
 	old_sigset_t old_set, new_set;
 
 	if (set) {
+		error = -EFAULT;
 		if (copy_from_user(&new_set, set, sizeof(*set)))
-			return -EFAULT;
+			goto out;
 		new_set &= ~(sigmask(SIGKILL)|sigmask(SIGSTOP));
 
 		spin_lock_irq(&current->sigmask_lock);
 		old_set = current->blocked.sig[0];
 
+		error = 0;
 		switch (how) {
 		default:
-			return -EINVAL;
+			error = -EINVAL;
+			break;
 		case SIG_BLOCK:
 			sigaddsetmask(&current->blocked, new_set);
 			break;
@@ -851,30 +866,36 @@ sys_sigprocmask(int how, old_sigset_t *set, old_sigset_t *oset)
 
 		recalc_sigpending(current);
 		spin_unlock_irq(&current->sigmask_lock);
-
-		if (oset) {
-			if (copy_to_user(oset, &old_set, sizeof(*oset)))
-				return -EFAULT;
-		}
+		if (error)
+			goto out;
+		if (oset)
+			goto set_old;
 	} else if (oset) {
 		old_set = current->blocked.sig[0];
+	set_old:
+		error = -EFAULT;
 		if (copy_to_user(oset, &old_set, sizeof(*oset)))
-			return -EFAULT;
+			goto out;
 	}
-
-	return 0;
+	error = 0;
+out:
+	return error;
 }
 
 asmlinkage int
 sys_sigpending(old_sigset_t *set)
 {
+	int error;
 	old_sigset_t pending;
 
 	spin_lock_irq(&current->sigmask_lock);
 	pending = current->blocked.sig[0] & current->signal.sig[0];
 	spin_unlock_irq(&current->sigmask_lock);
 
-	return copy_to_user(set, &pending, sizeof(*set));
+	error = -EFAULT;
+	if (!copy_to_user(set, &pending, sizeof(*set)))
+		error = 0;
+	return error;
 }
 
 asmlinkage int
@@ -882,11 +903,11 @@ sys_rt_sigaction(int sig, const struct sigaction *act, struct sigaction *oact,
 		 size_t sigsetsize)
 {
 	struct k_sigaction new_sa, old_sa;
-	int ret;
+	int ret = -EINVAL;
 
 	/* XXX: Don't preclude handling different sized sigset_t's.  */
 	if (sigsetsize != sizeof(sigset_t))
-		return -EINVAL;
+		goto out;
 
 	if (act) {
 		if (copy_from_user(&new_sa.sa, act, sizeof(new_sa.sa)))
@@ -899,7 +920,7 @@ sys_rt_sigaction(int sig, const struct sigaction *act, struct sigaction *oact,
 		if (copy_to_user(oact, &old_sa.sa, sizeof(old_sa.sa)))
 			return -EFAULT;
 	}
-
+out:
 	return ret;
 }
 #endif

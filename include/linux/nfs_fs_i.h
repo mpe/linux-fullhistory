@@ -53,6 +53,7 @@ struct nfs_inode_info {
  * Legal inode flag values
  */
 #define NFS_INO_REVALIDATE	0x0001		/* revalidating attrs */
+#define NFS_IS_SNAPSHOT		0x0010		/* a snapshot file */
 
 /*
  * NFS lock info

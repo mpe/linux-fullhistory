@@ -425,25 +425,11 @@ typedef struct isdn_net_local_s {
   struct isdn_net_dev_s  *netdev;      /* Ptr to netdev                    */
   struct sk_buff         *first_skb;   /* Ptr to skb that triggers dialing */
   struct sk_buff         *sav_skb;     /* Ptr to skb, rejected by LL-driver*/
-#if (LINUX_VERSION_CODE < 0x02010F)
-                                       /* Ptr to orig. header_cache_bind   */
-  void                   (*org_hcb)(struct hh_cache **,
-				    struct device *,
-                                    unsigned short, 
-				    __u32);
-#else
-#if (LINUX_VERSION_CODE < 0x2011E)
+
                                        /* Ptr to orig. hard_header_cache   */
-  int                    (*org_hhc)(struct dst_entry *dst,
-				    struct dst_entry *neigh,
+  int                    (*org_hhc)(struct neighbour *neigh,
 				    struct hh_cache *hh);
-#else
-                                       /* Ptr to orig. hard_header_cache   */
-  int                    (*org_hhc)(struct dst_entry *dst,
-				    struct neighbour *neigh,
-				    struct hh_cache *hh);
-#endif
-#endif
+
                                        /* Ptr to orig. header_cache_update */
   void                   (*org_hcu)(struct hh_cache *,
 				    struct device *,

@@ -1,47 +1,26 @@
 /*
- * PCI defines and function prototypes
- * Copyright 1994, Drew Eckhardt
+ *	$Id: pci.h,v 1.51 1997/12/27 13:55:23 mj Exp $
  *
- * For more information, please consult 
+ *	PCI defines and function prototypes
+ *	Copyright 1994, Drew Eckhardt
+ *	Copyright 1997, Martin Mares <mj@atrey.karlin.mff.cuni.cz>
+ *
+ *	For more information, please consult 
  * 
- * PCI BIOS Specification Revision
- * PCI Local Bus Specification
- * PCI System Design Guide
+ *	PCI BIOS Specification Revision
+ *	PCI Local Bus Specification
+ *	PCI System Design Guide
  *
- * PCI Special Interest Group
- * M/S HF3-15A
- * 5200 N.E. Elam Young Parkway
- * Hillsboro, Oregon 97124-6497
- * +1 (503) 696-2000 
- * +1 (800) 433-5177
+ *	PCI Special Interest Group
+ *	M/S HF3-15A
+ *	5200 N.E. Elam Young Parkway
+ *	Hillsboro, Oregon 97124-6497
+ *	+1 (503) 696-2000 
+ *	+1 (800) 433-5177
  * 
- * Manuals are $25 each or $50 for all three, plus $7 shipping 
- * within the United States, $35 abroad.
+ *	Manuals are $25 each or $50 for all three, plus $7 shipping 
+ *	within the United States, $35 abroad.
  */
-
-
-
-/*	PROCEDURE TO REPORT NEW PCI DEVICES
- * We are trying to collect information on new PCI devices, using
- * the standard PCI identification procedure. If some warning is
- * displayed at boot time, please report 
- *	- /proc/pci
- *	- your exact hardware description. Try to find out
- *	  which device is unknown. It may be you mainboard chipset.
- *	  PCI-CPU bridge or PCI-ISA bridge.
- *	- If you can't find the actual information in your hardware
- *	  booklet, try to read the references of the chip on the board.
- *	- Send all that to linux-pcisupport@cck.uni-kl.de
- *	  and I'll add your device to the list as soon as possible
- *
- * BEFORE you send a mail, please check the latest linux releases
- * to be sure it has not been recently added.
- *
- *        Thanks
- *		Jens Maurer
- */
-
-
 
 #ifndef LINUX_PCI_H
 #define LINUX_PCI_H
@@ -102,7 +81,7 @@
  */
 #define PCI_BASE_ADDRESS_0	0x10	/* 32 bits */
 #define PCI_BASE_ADDRESS_1	0x14	/* 32 bits */
-#define PCI_BASE_ADDRESS_2	0x18	/* 32 bits */
+#define PCI_BASE_ADDRESS_2	0x18	/* 32 bits [htype 0 only] */
 #define PCI_BASE_ADDRESS_3	0x1c	/* 32 bits */
 #define PCI_BASE_ADDRESS_4	0x20	/* 32 bits */
 #define PCI_BASE_ADDRESS_5	0x24	/* 32 bits */
@@ -118,6 +97,7 @@
 #define  PCI_BASE_ADDRESS_IO_MASK	(~0x03)
 /* bit 1 is reserved if address_space = 1 */
 
+/* Header type 0 (normal devices) */
 #define PCI_CARDBUS_CIS		0x28
 #define PCI_SUBSYSTEM_ID	0x2c
 #define PCI_SUBSYSTEM_VENDOR_ID	0x2e  
@@ -130,6 +110,46 @@
 #define PCI_INTERRUPT_PIN	0x3d	/* 8 bits */
 #define PCI_MIN_GNT		0x3e	/* 8 bits */
 #define PCI_MAX_LAT		0x3f	/* 8 bits */
+
+/* Header type 1 (PCI-to-PCI bridges) */
+#define PCI_PRIMARY_BUS		0x18	/* Primary bus number */
+#define PCI_SECONDARY_BUS	0x19	/* Secondary bus number */
+#define PCI_SUBORDINATE_BUS	0x1a	/* Highest bus number behind the bridge */
+#define PCI_SEC_LATENCY_TIMER	0x1b	/* Latency timer for secondary interface */
+#define PCI_IO_BASE		0x1c	/* I/O range behind the bridge */
+#define PCI_IO_LIMIT		0x1d
+#define  PCI_IO_RANGE_TYPE_MASK	0x0f	/* I/O bridging type */
+#define  PCI_IO_RANGE_TYPE_16	0x00
+#define  PCI_IO_RANGE_TYPE_32	0x01
+#define  PCI_IO_RANGE_MASK	~0x0f
+#define PCI_SEC_STATUS		0x1e	/* Secondary status register, only bit 14 used */
+#define PCI_MEMORY_BASE		0x20	/* Memory range behind */
+#define PCI_MEMORY_LIMIT	0x22
+#define  PCI_MEMORY_RANGE_TYPE_MASK 0x0f
+#define  PCI_MEMORY_RANGE_MASK	~0x0f
+#define PCI_PREF_MEMORY_BASE	0x24	/* Prefetchable memory range behind */
+#define PCI_PREF_MEMORY_LIMIT	0x26
+#define  PCI_PREF_RANGE_TYPE_MASK 0x0f
+#define  PCI_PREF_RANGE_TYPE_32	0x00
+#define  PCI_PREF_RANGE_TYPE_64	0x01
+#define  PCI_PREF_RANGE_MASK	~0x0f
+#define PCI_PREF_BASE_UPPER32	0x28	/* Upper half of prefetchable memory range */
+#define PCI_PREF_LIMIT_UPPER32	0x2c
+#define PCI_IO_BASE_UPPER16	0x30	/* Upper half of I/O addresses */
+#define PCI_IO_LIMIT_UPPER16	0x32
+/* 0x34-0x3b is reserved */
+#define PCI_ROM_ADDRESS1	0x38	/* Same as PCI_ROM_ADDRESS, but for htype 1 */
+/* 0x3c-0x3d are same as for htype 0 */
+#define PCI_BRIDGE_CONTROL	0x3e
+#define  PCI_BRIDGE_CTL_PARITY	0x01	/* Enable parity detection on secondary interface */
+#define  PCI_BRIDGE_CTL_SERR	0x02	/* The same for SERR forwarding */
+#define  PCI_BRIDGE_CTL_NO_ISA	0x04	/* Disable bridging of ISA ports */
+#define  PCI_BRIDGE_CTL_VGA	0x08	/* Forward VGA addresses */
+#define  PCI_BRIDGE_CTL_MASTER_ABORT 0x20  /* Report master aborts */
+#define  PCI_BRIDGE_CTL_BUS_RESET 0x40	/* Secondary bus reset */
+#define  PCI_BRIDGE_CTL_FAST_BACK 0x80	/* Fast Back2Back enabled on secondary interface */
+
+/* Device classes and subclasses */
 
 #define PCI_CLASS_NOT_DEFINED		0x0000
 #define PCI_CLASS_NOT_DEFINED_VGA	0x0001
@@ -174,7 +194,6 @@
 #define  PCI_CLASS_BRIDGE_NUBUS		0x0606
 #define  PCI_CLASS_BRIDGE_CARDBUS	0x0607
 #define  PCI_CLASS_BRIDGE_OTHER		0x0680
-
 
 #define PCI_BASE_CLASS_COMMUNICATION	0x07
 #define PCI_CLASS_COMMUNICATION_SERIAL	0x0700
@@ -856,7 +875,6 @@
 #define PCI_DEVICE_ID_ARK_STINGARK	0xa099
 #define PCI_DEVICE_ID_ARK_2000MT	0xa0a1
 
-#ifdef __KERNEL__
 /*
  * The PCI interface treats multi-function devices as independent
  * devices.  The slot/function address of each device is encoded
@@ -869,6 +887,7 @@
 #define PCI_SLOT(devfn)		(((devfn) >> 3) & 0x1f)
 #define PCI_FUNC(devfn)		((devfn) & 0x07)
 
+#ifdef __KERNEL__
 /*
  * There is one pci_dev structure for each slot-number/function-number
  * combination:
@@ -920,34 +939,16 @@ struct pci_bus {
 	unsigned char	subordinate;	/* max number of subordinate buses */
 };
 
-/*
- * This is used to map a vendor-id/device-id pair into device-specific
- * information.
- */
-struct pci_dev_info {
-	unsigned short	vendor;		/* vendor id */
-	unsigned short	device;		/* device id */
-
-	const char	*name;		/* device name */
-	unsigned char	bridge_type;	/* bridge type or 0xff */
-};
-
 extern struct pci_bus	pci_root;	/* root bus */
 extern struct pci_dev	*pci_devices;	/* list of all devices */
 
-
 extern unsigned long pci_init (unsigned long mem_start, unsigned long mem_end);
 
-extern unsigned int pci_scan_bus(struct pci_bus *bus, unsigned long *mem_startp);
-
-extern struct pci_dev_info *pci_lookup_dev (unsigned int vendor,
-					    unsigned int dev);
-extern const char *pci_strclass (unsigned int class);
-extern const char *pci_strvendor (unsigned int vendor);
-extern const char *pci_strdev (unsigned int vendor, unsigned int device);
+extern unsigned int pci_scan_bus (struct pci_bus *bus, unsigned long *mem_startp);
 
 extern int get_pci_list (char *buf);
 
 extern void pci_quirks_init (void);
+
 #endif /* __KERNEL__ */
 #endif /* LINUX_PCI_H */

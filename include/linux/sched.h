@@ -332,7 +332,7 @@ struct task_struct {
 /* timeout */	0,SCHED_OTHER,0,0,0,0,0,0,0, \
 /* timer */	{ NULL, NULL, 0, 0, it_real_fn }, \
 /* utime */	{0,0,0,0},0, \
-/* per cpu times */ {0, 0, }, {0, 0, }, \
+/* per cpu times */ {0, }, {0, }, \
 /* flt */	0,0,0,0,0,0, \
 /* swp */	0,0,0,0,0, \
 /* rlimits */   INIT_RLIMITS, \

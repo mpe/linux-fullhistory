@@ -106,7 +106,7 @@ static struct synth_info softsyn_info =
 
 static struct softsyn_devc sdev_info =
 {0};
-static softsyn_devc   *devc = &sdev_info;
+softsyn_devc   *devc = &sdev_info;	/* used in softoss_rs.c */
 
 static struct voice_alloc_info *voice_alloc;
 

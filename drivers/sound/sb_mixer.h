@@ -136,7 +136,8 @@ MIX_ENT(SOUND_MIXER_LINE3,	0x00, 0, 0, 0x00, 0, 0)
 };
 
 #ifdef	__SGNXPRO__
-static mixer_tab sgnxpro_mix = {
+#if 0
+static mixer_tab sgnxpro_mix = { 	/* not used anywhere */
 MIX_ENT(SOUND_MIXER_VOLUME,	0x22, 7, 4, 0x22, 3, 4),
 MIX_ENT(SOUND_MIXER_BASS,	0x46, 2, 3, 0x00, 0, 0),
 MIX_ENT(SOUND_MIXER_TREBLE,	0x44, 2, 3, 0x00, 0, 0),
@@ -152,6 +153,7 @@ MIX_ENT(SOUND_MIXER_RECLEV,	0x00, 0, 0, 0x00, 0, 0),
 MIX_ENT(SOUND_MIXER_IGAIN,	0x00, 0, 0, 0x00, 0, 0),
 MIX_ENT(SOUND_MIXER_OGAIN,	0x00, 0, 0, 0x00, 0, 0)
 };
+#endif
 #endif
 
 static mixer_tab sb16_mix = {

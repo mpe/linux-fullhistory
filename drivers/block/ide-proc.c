@@ -274,11 +274,8 @@ static int proc_ide_read_imodel
 {
 	ide_hwif_t	*hwif = (ide_hwif_t *) data;
 	int		len;
-	const char	*vids, *dids;
 
-	vids = pci_strvendor(hwif->pci_devid.vid);
-	dids = pci_strdev(hwif->pci_devid.vid, hwif->pci_devid.did);
-	len = sprintf(page,"%s: %s\n", vids ? vids : "(none)", dids ? dids : "(none)");
+	len = sprintf(page,"%04x: %04x\n", hwif->pci_devid.vid, hwif->pci_devid.did);
 	PROC_IDE_READ_RETURN(page,start,off,count,eof,len);
 }
 #endif	/* CONFIG_PCI */

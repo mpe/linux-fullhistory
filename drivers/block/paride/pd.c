@@ -96,7 +96,14 @@
  
 */
 
-#define PD_VERSION      "1.0"
+/* Changes:
+
+	1.01	GRG 1997.01.24	Restored pd_reset()
+				Added eject ioctl
+
+*/
+
+#define PD_VERSION      "1.01"
 #define PD_MAJOR	45
 #define PD_NAME		"pd"
 #define PD_UNITS	4
@@ -141,6 +148,7 @@ static int pd_drive_count;
 #include <linux/delay.h>
 #include <linux/genhd.h>
 #include <linux/hdreg.h>
+#include <linux/cdrom.h>	/* for the eject ioctl */
 
 #include <asm/uaccess.h>
 
@@ -234,6 +242,7 @@ MODULE_PARM(drive3,"1-7i");
 #define IDE_DOORLOCK    	0xde
 #define IDE_DOORUNLOCK  	0xdf
 #define IDE_IDENTIFY    	0xec
+#define IDE_EJECT		0xed
 
 int pd_init(void);
 void pd_setup(char * str, int * ints);
@@ -257,6 +266,7 @@ static int pd_identify (int unit);
 static void pd_media_check(int unit);
 static void pd_doorlock(int unit, int func);
 static int pd_check_media(kdev_t dev);
+static void pd_eject( int unit);
 
 static struct hd_struct pd_hd[PD_DEVS];
 static int pd_sizes[PD_DEVS];
@@ -435,6 +445,9 @@ static int pd_ioctl(struct inode *inode,struct file *file,
 	if (!PD.present) return -ENODEV;
 
         switch (cmd) {
+	    case CDROMEJECT:
+		if (PD.access == 1) pd_eject(unit);
+		return 0;
             case HDIO_GETGEO:
                 if (!geo) return -EINVAL;
                 err = verify_area(VERIFY_WRITE,geo,sizeof(*geo));
@@ -642,7 +655,6 @@ static void pd_print_error( int unit, char * msg, int status )
 	printk("\n");
 }
 
-/*
 static void pd_reset( int unit )
 
 {       pi_connect(PI);
@@ -650,8 +662,8 @@ static void pd_reset( int unit )
         udelay(50);
         WR(1,6,0);
 	pi_disconnect(PI);
+	udelay(250);
 }
-*/
 
 #define DBMSG(msg)	NULL
 
@@ -730,6 +742,18 @@ static void pd_doorlock( int unit, int func )
         pi_disconnect(PI);
 }
 
+static void pd_eject( int unit )
+
+{	pi_connect(PI);
+        pd_wait_for(unit,0,DBMSG("before unlock on eject"));
+        pd_send_command(unit,1,0,0,0,0,IDE_DOORUNLOCK);
+        pd_wait_for(unit,0,DBMSG("after unlock on eject"));
+        pd_wait_for(unit,0,DBMSG("before eject"));
+        pd_send_command(unit,0,0,0,0,0,IDE_EJECT);
+        pd_wait_for(unit,0,DBMSG("after eject"));
+        pi_disconnect(PI);
+}
+
 static void pd_media_check( int unit )
 
 {       int 	r;
@@ -766,6 +790,8 @@ static int pd_identify( int unit )
 
 {       int	j;
 	char id[PD_ID_LEN+1];
+
+	pd_reset(unit);
 
         pi_connect(PI);
 	WR(0,6,0xa0);

@@ -156,7 +156,7 @@
 #define __NR_osf_pid_block	153	/* not implemented */
 #define __NR_osf_pid_unblock	154	/* not implemented */
 
-#define __NR_osf_sigaction	156
+#define __NR_sigaction		156
 #define __NR_osf_sigwaitprim	157	/* not implemented */
 #define __NR_osf_nfssvc		158	/* not implemented */
 #define __NR_osf_getdirentries	159
@@ -186,7 +186,7 @@
 #define __NR_semget		205
 #define __NR_semop		206
 #define __NR_osf_utsname	207
-#define __NR_osf_lchown		208	/* not implemented */
+#define __NR_lchown		208
 #define __NR_osf_shmat		209
 #define __NR_shmctl		210
 #define __NR_shmdt		211

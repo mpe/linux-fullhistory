@@ -373,7 +373,7 @@ int get_irq_list(char *buf)
 		if (!action) 
 			continue;
 		len += sprintf(buf+len, "%2d: %10u %c %s",
-			       i, kstat.interrupts[0][i],
+			       i, kstat.irqs[0][i],
 			       (action->flags & SA_INTERRUPT) ? '+' : ' ',
 			       action->name);
 		for (action=action->next; action; action = action->next) {
@@ -567,7 +567,7 @@ static inline void handle_irq(int irq, struct pt_regs * regs)
 	int cpu = smp_processor_id();
 
 	irq_enter(cpu, irq);
-	kstat.interrupts[0][irq] += 1;
+	kstat.irqs[0][irq] += 1;
 	if (!action) {
 		unexpected_irq(irq, regs);
 	} else {
@@ -590,7 +590,7 @@ static inline void device_interrupt(int irq, int ack, struct pt_regs * regs)
 	}
 
 	irq_enter(cpu, irq);
-	kstat.interrupts[0][irq] += 1;
+	kstat.irqs[0][irq] += 1;
 	action = irq_action[irq];
 	/*
 	 * For normal interrupts, we mask it out, and then ACK it.

@@ -103,8 +103,8 @@ struct nfs_wreq {
 	pid_t			wb_pid;		/* owner process */
 	unsigned short		wb_flags;	/* status flags */
 
-	struct nfs_writeargs *	wb_args;	/* NFS RPC stuff */
-	struct nfs_fattr *	wb_fattr;	/* file attributes */
+	struct nfs_writeargs	wb_args;	/* NFS RPC stuff */
+	struct nfs_fattr	wb_fattr;	/* file attributes */
 };
 #define wb_status		wb_task.tk_status
 
@@ -177,8 +177,8 @@ extern int nfs_proc_statfs(struct nfs_server *server, struct nfs_fh *fhandle,
  */
 extern struct super_block *nfs_read_super(struct super_block *, void *, int);
 extern int init_nfs_fs(void);
-extern struct inode *nfs_fhget(struct super_block *, struct nfs_fh *,
-			       struct nfs_fattr *);
+extern struct inode *nfs_fhget(struct dentry *, struct nfs_fh *,
+				struct nfs_fattr *);
 extern int nfs_refresh_inode(struct inode *, struct nfs_fattr *);
 extern int nfs_revalidate(struct dentry *);
 extern int _nfs_revalidate_inode(struct nfs_server *, struct dentry *);

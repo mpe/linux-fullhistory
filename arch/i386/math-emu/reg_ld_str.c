@@ -1329,11 +1329,11 @@ u_char *fstenv(fpu_addr_modes addr_modes, u_char *d)
       FPU_verify_area(VERIFY_WRITE, d, 7*4);
 #ifdef PECULIAR_486
       control_word &= ~0xe080;
-      /* An 80486 sets all the reserved bits to 1. */
-      control_word |= 0xffff0000;
+      /* An 80486 sets nearly all of the reserved bits to 1. */
+      control_word |= 0xffff0040;
       partial_status = status_word() | 0xffff0000;
       fpu_tag_word |= 0xffff0000;
-      I387.soft.fcs |= 0xf8000000;
+      I387.soft.fcs &= ~0xf8000000;
       I387.soft.fos |= 0xffff0000;
 #endif PECULIAR_486
       __copy_to_user(d, &control_word, 7*4);

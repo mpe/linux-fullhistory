@@ -11,10 +11,10 @@ const char version[] = "2.0b1";
 const char *boardname[] = { "DataCommute/BRI", "DataCommute/PRI", "TeleCommute/BRI" };
 
 /* insmod set parameters */
-unsigned int io[] = {0,0,0,0};
-unsigned char irq[] = {0,0,0,0};
-unsigned long ram[] = {0,0,0,0};
-int do_reset = 0;
+static unsigned int io[] = {0,0,0,0};
+static unsigned char irq[] = {0,0,0,0};
+static unsigned long ram[] = {0,0,0,0};
+static int do_reset = 0;
 
 static int sup_irq[] = { 11, 10, 9, 5, 12, 14, 7, 3, 4, 6 };
 #define MAX_IRQS	10

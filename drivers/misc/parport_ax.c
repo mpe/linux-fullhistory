@@ -1,4 +1,4 @@
-/* $Id: parport_ax.c,v 1.2 1997/10/25 17:27:03 philip Exp $
+/* $Id: parport_ax.c,v 1.5 1998/01/10 18:28:39 ecd Exp $
  * Parallel-port routines for Sun Ultra/AX architecture
  * 
  * Author: Eddie C. Dost <ecd@skynet.be>
@@ -18,6 +18,7 @@
 #include <linux/ioport.h>
 #include <linux/kernel.h>
 #include <linux/malloc.h>
+#include <linux/init.h>
 
 #include <linux/parport.h>
 
@@ -36,116 +37,126 @@
 #undef HAVE_SLOW_DEVICES
 
 
-#define DATA     0x00
-#define STATUS   0x01
-#define CONTROL  0x02
+#define DATA		0x00
+#define STATUS		0x01
+#define CONTROL		0x02
+#define EPPREG		0x04
 
-#define CFIFO	0x400
-#define DFIFO	0x400
-#define TFIFO	0x400
-#define CNFA	0x400
-#define CNFB	0x401
-#define ECR	0x402
+#define CFIFO		0x400
+#define DFIFO		0x400
+#define TFIFO		0x400
+#define CONFIGA		0x400
+#define CONFIGB		0x401
+#define ECONTROL	0x402
 
 static void
-ax_null_intr_func(int irq, void *dev_id, struct pt_regs *regs)
+parport_ax_null_intr_func(int irq, void *dev_id, struct pt_regs *regs)
 {
 	/* NULL function - Does nothing */
-	return;
 }
 
-#if 0
-static unsigned int
-ax_read_configb(struct parport *p)
+void
+parport_ax_write_epp(struct parport *p, unsigned int d)
 {
-	return (unsigned int)inb(p->base + CNFB);
+	outb(d, p->base + EPPREG);
 }
-#endif
 
-static void
-ax_write_data(struct parport *p, unsigned int d)
+unsigned int
+parport_ax_read_epp(struct parport *p)
+{
+	return (unsigned int)inb(p->base + EPPREG);
+}
+
+unsigned int
+parport_ax_read_configb(struct parport *p)
+{
+	return (unsigned int)inb(p->base + CONFIGB);
+}
+
+void
+parport_ax_write_data(struct parport *p, unsigned int d)
 {
 	outb(d, p->base + DATA);
 }
 
-static unsigned int
-ax_read_data(struct parport *p)
+unsigned int
+parport_ax_read_data(struct parport *p)
 {
 	return (unsigned int)inb(p->base + DATA);
 }
 
-static void
-ax_write_control(struct parport *p, unsigned int d)
+void
+parport_ax_write_control(struct parport *p, unsigned int d)
 {
 	outb(d, p->base + CONTROL);
 }
 
-static unsigned int
-ax_read_control(struct parport *p)
+unsigned int
+parport_ax_read_control(struct parport *p)
 {
 	return (unsigned int)inb(p->base + CONTROL);
 }
 
-static unsigned int
-ax_frob_control(struct parport *p, unsigned int mask,  unsigned int val)
+unsigned int
+parport_ax_frob_control(struct parport *p, unsigned int mask,  unsigned int val)
 {
 	unsigned int old = (unsigned int)inb(p->base + CONTROL);
 	outb(((old & ~mask) ^ val), p->base + CONTROL);
 	return old;
 }
 
-static void
-ax_write_status(struct parport *p, unsigned int d)
+void
+parport_ax_write_status(struct parport *p, unsigned int d)
 {
 	outb(d, p->base + STATUS);
 }
 
-static unsigned int
-ax_read_status(struct parport *p)
+unsigned int
+parport_ax_read_status(struct parport *p)
 {
 	return (unsigned int)inb(p->base + STATUS);
 }
 
-static void
-ax_write_econtrol(struct parport *p, unsigned int d)
+void
+parport_ax_write_econtrol(struct parport *p, unsigned int d)
 {
-	outb(d, p->base + ECR);
+	outb(d, p->base + ECONTROL);
 }
 
-static unsigned int
-ax_read_econtrol(struct parport *p)
+unsigned int
+parport_ax_read_econtrol(struct parport *p)
 {
-	return (unsigned int)inb(p->base + ECR);
+	return (unsigned int)inb(p->base + ECONTROL);
 }
 
-static unsigned int
-ax_frob_econtrol(struct parport *p, unsigned int mask,  unsigned int val)
+unsigned int
+parport_ax_frob_econtrol(struct parport *p, unsigned int mask, unsigned int val)
 {
-	unsigned int old = (unsigned int)inb(p->base + ECR);
-	outb(((old & ~mask) ^ val), p->base + ECR);
+	unsigned int old = (unsigned int)inb(p->base + ECONTROL);
+	outb(((old & ~mask) ^ val), p->base + ECONTROL);
 	return old;
 }
 
-static void
-ax_change_mode(struct parport *p, int m)
+void
+parport_ax_change_mode(struct parport *p, int m)
 {
-	ax_frob_econtrol(p, 0xe0, m << 5);
+	parport_ax_frob_econtrol(p, 0xe0, m << 5);
 }
 
-static void
-ax_write_fifo(struct parport *p, unsigned int v)
+void
+parport_ax_write_fifo(struct parport *p, unsigned int v)
 {
 	outb(v, p->base + DFIFO);
 }
 
-static unsigned int
-ax_read_fifo(struct parport *p)
+unsigned int
+parport_ax_read_fifo(struct parport *p)
 {
 	return inb(p->base + DFIFO);
 }
 
-static void
-ax_disable_irq(struct parport *p)
+void
+parport_ax_disable_irq(struct parport *p)
 {
 	struct linux_ebus_dma *dma = p->private_data;
 	unsigned int dcsr;
@@ -155,8 +166,8 @@ ax_disable_irq(struct parport *p)
 	writel(dcsr, (unsigned long)&dma->dcsr);
 }
 
-static void
-ax_enable_irq(struct parport *p)
+void
+parport_ax_enable_irq(struct parport *p)
 {
 	struct linux_ebus_dma *dma = p->private_data;
 	unsigned int dcsr;
@@ -166,11 +177,11 @@ ax_enable_irq(struct parport *p)
 	writel(dcsr, (unsigned long)&dma->dcsr);
 }
 
-static void
-ax_release_resources(struct parport *p)
+void
+parport_ax_release_resources(struct parport *p)
 {
 	if (p->irq != PARPORT_IRQ_NONE) {
-		ax_disable_irq(p);
+		parport_ax_disable_irq(p);
 		free_irq(p->irq, NULL);
 	}
 	release_region(p->base, p->size);
@@ -180,13 +191,14 @@ ax_release_resources(struct parport *p)
 		       sizeof(struct linux_ebus_dma));
 }
 
-static int
-ax_claim_resources(struct parport *p)
+int
+parport_ax_claim_resources(struct parport *p)
 {
 	/* FIXME check that resources are free */
 	if (p->irq != PARPORT_IRQ_NONE) {
-		request_irq(p->irq, ax_null_intr_func, 0, p->name, NULL);
-		ax_enable_irq(p);
+		request_irq(p->irq, parport_ax_null_intr_func,
+			    0, p->name, NULL);
+		parport_ax_enable_irq(p);
 	}
 	request_region(p->base, p->size, p->name);
 	if (p->modes & PARPORT_MODE_PCECR)
@@ -196,109 +208,109 @@ ax_claim_resources(struct parport *p)
 	return 0;
 }
 
-static void
-ax_save_state(struct parport *p, struct parport_state *s)
+void
+parport_ax_save_state(struct parport *p, struct parport_state *s)
 {
-	s->u.pc.ctr = ax_read_control(p);
-	s->u.pc.ecr = ax_read_econtrol(p);
+	s->u.pc.ctr = parport_ax_read_control(p);
+	s->u.pc.ecr = parport_ax_read_econtrol(p);
 }
 
-static void
-ax_restore_state(struct parport *p, struct parport_state *s)
+void
+parport_ax_restore_state(struct parport *p, struct parport_state *s)
 {
-	ax_write_control(p, s->u.pc.ctr);
-	ax_write_econtrol(p, s->u.pc.ecr);
+	parport_ax_write_control(p, s->u.pc.ctr);
+	parport_ax_write_econtrol(p, s->u.pc.ecr);
 }
 
-static unsigned int
-ax_epp_read_block(struct parport *p, void *buf, unsigned  int length)
-{
-	return 0; /* FIXME */
-}
-
-static unsigned int
-ax_epp_write_block(struct parport *p, void *buf, unsigned  int length)
+unsigned int
+parport_ax_epp_read_block(struct parport *p, void *buf, unsigned  int length)
 {
 	return 0; /* FIXME */
 }
 
-static unsigned int
-ax_ecp_read_block(struct parport *p, void *buf, unsigned  int length,
-		  void (*fn)(struct parport *, void *, unsigned int),
-		  void *handle)
+unsigned int
+parport_ax_epp_write_block(struct parport *p, void *buf, unsigned  int length)
 {
 	return 0; /* FIXME */
 }
 
-static unsigned int
-ax_ecp_write_block(struct parport *p, void *buf, unsigned  int length,
-		   void (*fn)(struct parport *, void *, unsigned int),
-		   void *handle)
+unsigned int
+parport_ax_ecp_read_block(struct parport *p, void *buf, unsigned  int length,
+			  void (*fn)(struct parport *, void *, unsigned int),
+			  void *handle)
 {
 	return 0; /* FIXME */
 }
 
-static int
-ax_examine_irq(struct parport *p)
+unsigned int
+parport_ax_ecp_write_block(struct parport *p, void *buf, unsigned  int length,
+			   void (*fn)(struct parport *, void *, unsigned int),
+			   void *handle)
 {
 	return 0; /* FIXME */
 }
 
-static void
-ax_inc_use_count(void)
+int
+parport_ax_examine_irq(struct parport *p)
+{
+	return 0; /* FIXME */
+}
+
+void
+parport_ax_inc_use_count(void)
 {
 #ifdef MODULE
 	MOD_INC_USE_COUNT;
 #endif
 }
 
-static void
-ax_dec_use_count(void)
+void
+parport_ax_dec_use_count(void)
 {
 #ifdef MODULE
 	MOD_DEC_USE_COUNT;
 #endif
 }
 
-static struct parport_operations ax_ops = 
+static struct parport_operations parport_ax_ops = 
 {
-	ax_write_data,
-	ax_read_data,
+	parport_ax_write_data,
+	parport_ax_read_data,
 
-	ax_write_control,
-	ax_read_control,
-	ax_frob_control,
+	parport_ax_write_control,
+	parport_ax_read_control,
+	parport_ax_frob_control,
 
-	ax_write_econtrol,
-	ax_read_econtrol,
-	ax_frob_econtrol,
+	parport_ax_write_econtrol,
+	parport_ax_read_econtrol,
+	parport_ax_frob_econtrol,
 
-	ax_write_status,
-	ax_read_status,
+	parport_ax_write_status,
+	parport_ax_read_status,
 
-	ax_write_fifo,
-	ax_read_fifo,
+	parport_ax_write_fifo,
+	parport_ax_read_fifo,
 	
-	ax_change_mode,
+	parport_ax_change_mode,
 	
-	ax_release_resources,
-	ax_claim_resources,
+	parport_ax_release_resources,
+	parport_ax_claim_resources,
 	
-	ax_epp_write_block,
-	ax_epp_read_block,
+	parport_ax_epp_write_block,
+	parport_ax_epp_read_block,
 
-	ax_ecp_write_block,
-	ax_ecp_read_block,
+	parport_ax_ecp_write_block,
+	parport_ax_ecp_read_block,
 	
-	ax_save_state,
-	ax_restore_state,
+	parport_ax_save_state,
+	parport_ax_restore_state,
 
-	ax_enable_irq,
-	ax_disable_irq,
-	ax_examine_irq,
+	parport_ax_enable_irq,
+	parport_ax_disable_irq,
+	parport_ax_examine_irq,
 
-	ax_inc_use_count,
-	ax_dec_use_count
+	parport_ax_inc_use_count,
+	parport_ax_dec_use_count
 };
 
 
@@ -308,14 +320,14 @@ static struct parport_operations ax_ops =
 
 /* Check for ECP
  *
- * Old style XT ports alias io ports every 0x400, hence accessing ECR
+ * Old style XT ports alias io ports every 0x400, hence accessing ECONTROL
  * on these cards actually accesses the CTR.
  *
- * Modern cards don't do this but reading from ECR will return 0xff
+ * Modern cards don't do this but reading from ECONTROL will return 0xff
  * regardless of what is written here if the card does NOT support
  * ECP.
  *
- * We will write 0x2c to ECR and 0xcc to CTR since both of these
+ * We will write 0x2c to ECONTROL and 0xcc to CTR since both of these
  * values are "safe" on the CTR since bits 6-7 of CTR are unused.
  */
 static int parport_ECR_present(struct parport *pb)
@@ -330,7 +342,7 @@ static int parport_ECR_present(struct parport *pb)
 		r = pb->ops->read_control(pb);	
 		if ((pb->ops->read_econtrol(pb) & 0x2) == (r & 0x2)) {
 			pb->ops->write_control(pb, octr);
-			return 0; /* Sure that no ECR register exists */
+			return 0; /* Sure that no ECONTROL register exists */
 		}
 	}
 	
@@ -351,12 +363,12 @@ static int parport_ECP_supported(struct parport *pb)
 {
 	int i, oecr = pb->ops->read_econtrol(pb);
 	
-	/* If there is no ECR, we have no hope of supporting ECP. */
+	/* If there is no ECONTROL, we have no hope of supporting ECP. */
 	if (!(pb->modes & PARPORT_MODE_PCECR))
 		return 0;
 
 	/*
-	 * Using LGS chipset it uses ECR register, but
+	 * Using LGS chipset it uses ECONTROL register, but
 	 * it doesn't support ECP or FIFO MODE
 	 */
 	
@@ -439,7 +451,7 @@ init_one_port(struct linux_ebus_device *dev)
 
 	/* Setup temporary access to Device operations */
 	tmpport.base = dev->base_address[0];
-	tmpport.ops = &ax_ops;
+	tmpport.ops = &parport_ax_ops;
 
 	/* Enable ECP mode, set bit 2 of the CTR first */
 	tmpport.ops->write_control(&tmpport, 0x04);
@@ -472,7 +484,7 @@ init_one_port(struct linux_ebus_device *dev)
 	irq = dev->irqs[0];
 	dma = PARPORT_DMA_AUTO;
 
-	if (!(p = parport_register_port(base, irq, dma, &ax_ops)))
+	if (!(p = parport_register_port(base, irq, dma, &parport_ax_ops)))
 		return 0;
 
 	/* Safe away pointer to our EBus DMA */
@@ -506,8 +518,8 @@ init_one_port(struct linux_ebus_device *dev)
 	parport_proc_register(p);
 	p->flags |= PARPORT_FLAG_COMA;
 
-	ax_write_control(p, 0x0c);
-	ax_write_data(p, 0);
+	p->ops->write_control(p, 0x0c);
+	p->ops->write_data(p, 0);
 
 	if (parport_probe_hook)
 		(*parport_probe_hook)(p);
@@ -515,8 +527,13 @@ init_one_port(struct linux_ebus_device *dev)
 	return 1;
 }
 
-int
-parport_ax_init(void)
+EXPORT_NO_SYMBOLS;
+
+#ifdef MODULE
+int init_module(void)
+#else
+__initfunc(int parport_ax_init(void))
+#endif
 {
 	struct linux_ebus *ebus;
 	struct linux_ebus_device *edev;
@@ -525,17 +542,10 @@ parport_ax_init(void)
 	for_all_ebusdev(edev, ebus)
 		if (!strcmp(edev->prom_name, "ecpp"))
 			count += init_one_port(edev);
-	return count;
+	return count ? 0 : -ENODEV;
 }
 
 #ifdef MODULE
-
-int
-init_module(void)
-{	
-	return (parport_ax_init() ? 0 : 1);
-}
-
 void
 cleanup_module(void)
 {

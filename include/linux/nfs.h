@@ -138,6 +138,13 @@ struct nfs_fsinfo {
 	__u32			bavail;
 };
 
+struct nfs_writeargs {
+	struct nfs_fh *		fh;
+	__u32			offset;
+	__u32			count;
+	const void *		buffer;
+};
+
 #ifdef NFS_NEED_XDR_TYPES
 
 struct nfs_sattrargs {
@@ -155,13 +162,6 @@ struct nfs_readargs {
 	__u32			offset;
 	__u32			count;
 	void *			buffer;
-};
-
-struct nfs_writeargs {
-	struct nfs_fh *		fh;
-	__u32			offset;
-	__u32			count;
-	const void *		buffer;
 };
 
 struct nfs_createargs {

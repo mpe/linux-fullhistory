@@ -5,6 +5,7 @@ comment 'Parallel IDE high-level drivers'
 dep_tristate '  Parallel port IDE disks' CONFIG_PARIDE_PD $CONFIG_PARIDE
 dep_tristate '  Parallel port ATAPI CD-ROMs' CONFIG_PARIDE_PCD $CONFIG_PARIDE
 dep_tristate '  Parallel port ATAPI disks' CONFIG_PARIDE_PF $CONFIG_PARIDE
+dep_tristate '  Parallel port ATAPI tapes' CONFIG_PARIDE_PT $CONFIG_PARIDE
 comment 'Parallel IDE protocol modules'
 dep_tristate '    ATEN EH-100 protocol' CONFIG_PARIDE_ATEN $CONFIG_PARIDE
 dep_tristate '    MicroSolutions backpack protocol' CONFIG_PARIDE_BPCK $CONFIG_PARIDE

@@ -535,11 +535,6 @@ void nfs_renew_times(struct dentry * dentry)
 	}
 }
 
-static void nfs_set_fh(struct dentry *dentry, struct nfs_fh *fhandle)
-{
-	*((struct nfs_fh *) dentry->d_fsdata) = *fhandle;
-}
-
 static int nfs_lookup(struct inode *dir, struct dentry * dentry)
 {
 	struct inode *inode;
@@ -574,8 +569,7 @@ static int nfs_lookup(struct inode *dir, struct dentry * dentry)
 		goto no_entry;
 	if (!error) {
 		error = -EACCES;
-		nfs_set_fh(dentry, &fhandle);
-		inode = nfs_fhget(dentry->d_sb, &fhandle, &fattr);
+		inode = nfs_fhget(dentry, &fhandle, &fattr);
 		if (inode) {
 #ifdef NFS_PARANOIA
 if (inode->i_count > (S_ISDIR(inode->i_mode) ? 1 : inode->i_nlink)) {
@@ -609,8 +603,7 @@ static int nfs_instantiate(struct dentry *dentry, struct nfs_fh *fhandle,
 	struct inode *inode;
 	int error = -EACCES;
 
-	nfs_set_fh(dentry, fhandle);
-	inode = nfs_fhget(dentry->d_sb, fhandle, fattr);
+	inode = nfs_fhget(dentry, fhandle, fattr);
 	if (inode) {
 #ifdef NFS_PARANOIA
 if (inode->i_count > (S_ISDIR(inode->i_mode) ? 1 : inode->i_nlink)) {

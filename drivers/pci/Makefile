@@ -12,7 +12,14 @@
 L_OBJS   := pci.o
 L_TARGET := pci.a
 
-ifeq ($(CONFIG_PCI_OPTIMIZE),y)
+ifdef CONFIG_PROC_FS
+L_OBJS   += proc.o
+ifdef CONFIG_PCI_OLD_PROC
+L_OBJS   += oldproc.o
+endif
+endif
+
+ifdef CONFIG_PCI_OPTIMIZE
 L_OBJS   += quirks.o
 endif
 

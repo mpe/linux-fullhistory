@@ -1041,7 +1041,7 @@ nfsd_readdir(struct svc_rqst *rqstp, struct svc_fh *fhp, loff_t offset,
 	memset(&cd, 0, sizeof(cd));
 	cd.rqstp  = rqstp;
 	cd.buffer = buffer;
-	cd.buflen = *countp >> 2;
+	cd.buflen = *countp; /* count of words */
 
 	/*
 	 * Read the directory entries. This silly loop is necessary because

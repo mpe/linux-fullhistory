@@ -32,8 +32,11 @@
 #include <asm/system.h>
 #include <asm/uaccess.h>
 
+#define CONFIG_NFS_SNAPSHOT 1
 #define NFSDBG_FACILITY		NFSDBG_VFS
 #define NFS_PARANOIA 1
+
+static struct inode * __nfs_fhget(struct super_block *, struct nfs_fattr *);
 
 static void nfs_read_inode(struct inode *);
 static void nfs_put_inode(struct inode *);
@@ -190,6 +193,7 @@ nfs_read_super(struct super_block *sb, void *raw_data, int silent)
 	int			tcp;
 	struct sockaddr_in	srvaddr;
 	struct rpc_timeout	timeparms;
+	struct nfs_fattr	fattr;
 
 	MOD_INC_USE_COUNT;
 	if (!data)
@@ -274,7 +278,10 @@ nfs_read_super(struct super_block *sb, void *raw_data, int silent)
 		goto out_no_fh;
 	*root_fh = data->root;
 
-	root_inode = nfs_fhget(sb, &data->root, NULL);
+	if (nfs_proc_getattr(server, root_fh, &fattr) != 0)
+		goto out_no_fattr;
+
+	root_inode = __nfs_fhget(sb, &fattr);
 	if (!root_inode)
 		goto out_no_root;
 	sb->s_root = d_alloc_root(root_inode, NULL);
@@ -295,6 +302,11 @@ nfs_read_super(struct super_block *sb, void *raw_data, int silent)
 out_no_root:
 	printk("nfs_read_super: get root inode failed\n");
 	iput(root_inode);
+	goto out_free_fh;
+
+out_no_fattr:
+	printk("nfs_read_super: get root fattr failed\n");
+out_free_fh:
 	kfree(root_fh);
 out_no_fh:
 	rpciod_down();
@@ -384,79 +396,11 @@ dentry->d_parent->d_name.name, dentry->d_name.name, inode->i_count);
 }
 
 /*
- * This is our own version of iget that looks up inodes by file handle
- * instead of inode number.  We use this technique instead of using
- * the vfs read_inode function because there is no way to pass the
- * file handle or current attributes into the read_inode function.
- *
- * Note carefully the special handling of busy inodes (i_count > 1).
- * With the Linux 2.1.xx dcache all inodes except hard links must
- * have i_count == 1 after iget(). Otherwise, it indicates that the
- * server has reused a fileid (i_ino) and we have a stale inode.
+ * Fill in inode information from the fattr.
  */
-struct inode *
-nfs_fhget(struct super_block *sb, struct nfs_fh *fhandle,
-				  struct nfs_fattr *fattr)
+static void
+nfs_fill_inode(struct inode *inode, struct nfs_fattr *fattr)
 {
-	int error, max_count;
-	struct inode *inode = NULL;
-	struct nfs_fattr newfattr;
-
-	if (!sb)
-		goto out_bad_args;
-	if (!fattr) {
-		fattr = &newfattr;
-		error = nfs_proc_getattr(&sb->u.nfs_sb.s_server, fhandle,fattr);
-		if (error)
-			goto out_bad_attr;
-	}
-
-retry:
-	inode = iget(sb, fattr->fileid);
-	if (!inode)
-		goto out_no_inode;
-#ifdef NFS_PARANOIA
-if (inode->i_dev != sb->s_dev)
-printk("nfs_fhget: impossible\n");
-#endif
-
-	if (inode->i_ino != fattr->fileid)
-		goto out_bad_id;
-
-	/*
-	 * Check for busy inodes, and attempt to get rid of any
-	 * unused local references. If successful, we release the
-	 * inode and try again.
-	 *
-	 * Note that the busy test uses the values in the fattr,
-	 * as the inode may have become a different object.
-	 * (We can probably handle modes changes here, too.)
-	 */
-	max_count = S_ISDIR(fattr->mode) ? 1 : fattr->nlink;
-	if (inode->i_count > max_count) {
-printk("nfs_fhget: inode %ld busy, i_count=%d, i_nlink=%d\n",
-inode->i_ino, inode->i_count, inode->i_nlink);
-		nfs_free_dentries(inode);
-		if (inode->i_count > max_count) {
-printk("nfs_fhget: inode %ld still busy, i_count=%d\n",
-inode->i_ino, inode->i_count);
-			if (!list_empty(&inode->i_dentry)) {
-				struct dentry *dentry;
-				dentry = list_entry(inode->i_dentry.next,
-						 struct dentry, d_alias);
-printk("nfs_fhget: killing %s/%s filehandle\n",
-dentry->d_parent->d_name.name, dentry->d_name.name);
-				memset(dentry->d_fsdata, 0, sizeof(*fhandle));
-			} else
-				printk("NFS: inode %ld busy, no aliases?\n",
-					inode->i_ino);
-			make_bad_inode(inode);
-			remove_inode_hash(inode);
-		}
-		iput(inode);
-		goto retry;
-	}
-
 	/*
 	 * Check whether the mode has been set, as we only want to
 	 * do this once. (We don't allow inodes to change types.)
@@ -488,24 +432,123 @@ dentry->d_parent->d_name.name, dentry->d_name.name);
 		NFS_OLDMTIME(inode) = fattr->mtime.seconds;
 	}
 	nfs_refresh_inode(inode, fattr);
-	dprintk("NFS: fhget(%x/%ld ct=%d)\n",
-		inode->i_dev, inode->i_ino,
-		inode->i_count);
+}
+
+/*
+ * This is our own version of iget that looks up inodes by file handle
+ * instead of inode number.  We use this technique instead of using
+ * the vfs read_inode function because there is no way to pass the
+ * file handle or current attributes into the read_inode function.
+ *
+ * We provide a special check for NetApp .snapshot directories to avoid
+ * inode aliasing problems. All snapshot inodes are anonymous (unhashed).
+ */
+struct inode *
+nfs_fhget(struct dentry *dentry, struct nfs_fh *fhandle,
+				 struct nfs_fattr *fattr)
+{
+	struct super_block *sb = dentry->d_sb;
+
+	dprintk("NFS: nfs_fhget(%s/%s fileid=%d)\n",
+		dentry->d_parent->d_name.name, dentry->d_name.name,
+		fattr->fileid);
+
+	/* Install the filehandle in the dentry */
+	*((struct nfs_fh *) dentry->d_fsdata) = *fhandle;
+
+#ifdef CONFIG_NFS_SNAPSHOT
+	/*
+	 * Check for NetApp snapshot dentries, and get an 
+	 * unhashed inode to avoid aliasing problems.
+	 */
+	if ((dentry->d_parent->d_inode->u.nfs_i.flags & NFS_IS_SNAPSHOT) ||
+	    (IS_ROOT(dentry->d_parent) && dentry->d_name.len == 9 &&
+	     memcmp(dentry->d_name.name, ".snapshot", 9) == 0)) {
+		struct inode *inode = get_empty_inode();
+		if (!inode)
+			goto out;	
+		inode->i_sb = sb;
+		inode->i_dev = sb->s_dev;
+		inode->i_ino = fattr->fileid;
+		nfs_read_inode(inode);
+		nfs_fill_inode(inode, fattr);
+		inode->u.nfs_i.flags |= NFS_IS_SNAPSHOT;
+		dprintk("NFS: nfs_fhget(snapshot ino=%ld)\n", inode->i_ino);
+	out:
+		return inode;
+	}
+#endif
+	return __nfs_fhget(sb, fattr);
+}
+
+/*
+ * Look up the inode by super block and fattr->fileid.
+ *
+ * Note carefully the special handling of busy inodes (i_count > 1).
+ * With the kernel 2.1.xx dcache all inodes except hard links must
+ * have i_count == 1 after iget(). Otherwise, it indicates that the
+ * server has reused a fileid (i_ino) and we have a stale inode.
+ */
+static struct inode *
+__nfs_fhget(struct super_block *sb, struct nfs_fattr *fattr)
+{
+	struct inode *inode;
+	int max_count;
+
+retry:
+	inode = iget(sb, fattr->fileid);
+	if (!inode)
+		goto out_no_inode;
+	/* N.B. This should be impossible ... */
+	if (inode->i_ino != fattr->fileid)
+		goto out_bad_id;
+
+	/*
+	 * Check for busy inodes, and attempt to get rid of any
+	 * unused local references. If successful, we release the
+	 * inode and try again.
+	 *
+	 * Note that the busy test uses the values in the fattr,
+	 * as the inode may have become a different object.
+	 * (We can probably handle modes changes here, too.)
+	 */
+	max_count = S_ISDIR(fattr->mode) ? 1 : fattr->nlink;
+	if (inode->i_count > max_count) {
+printk("__nfs_fhget: inode %ld busy, i_count=%d, i_nlink=%d\n",
+inode->i_ino, inode->i_count, inode->i_nlink);
+		nfs_free_dentries(inode);
+		if (inode->i_count > max_count) {
+printk("__nfs_fhget: inode %ld still busy, i_count=%d\n",
+inode->i_ino, inode->i_count);
+			if (!list_empty(&inode->i_dentry)) {
+				struct dentry *dentry;
+				dentry = list_entry(inode->i_dentry.next,
+						 struct dentry, d_alias);
+printk("__nfs_fhget: killing %s/%s filehandle\n",
+dentry->d_parent->d_name.name, dentry->d_name.name);
+				memset(dentry->d_fsdata, 0, 
+					sizeof(struct nfs_fh));
+			} else
+				printk("NFS: inode %ld busy, no aliases?\n",
+					inode->i_ino);
+			make_bad_inode(inode);
+			remove_inode_hash(inode);
+		}
+		iput(inode);
+		goto retry;
+	}
+	nfs_fill_inode(inode, fattr);
+	dprintk("NFS: __nfs_fhget(%x/%ld ct=%d)\n",
+		inode->i_dev, inode->i_ino, inode->i_count);
 
 out:
 	return inode;
 
-out_bad_args:
-	printk("nfs_fhget: super block is NULL\n");
-	goto out;
-out_bad_attr:
-	printk("nfs_fhget: getattr error = %d\n", -error);
-	goto out;
 out_no_inode:
-	printk("nfs_fhget: iget failed\n");
+	printk("__nfs_fhget: iget failed\n");
 	goto out;
 out_bad_id:
-	printk("nfs_fhget: unexpected inode from iget\n");
+	printk("__nfs_fhget: unexpected inode from iget\n");
 	goto out;
 }
 

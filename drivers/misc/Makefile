@@ -48,10 +48,10 @@ else
     M_OBJS += parport.o
   endif
   ifeq ($(CONFIG_PARPORT_PC),m)
-    MX_OBJS += parport_pc.o
+    M_OBJS += parport_pc.o
   endif
   ifeq ($(CONFIG_PARPORT_AX),m)
-    MX_OBJS += parport_ax.o
+    M_OBJS += parport_ax.o
   endif
 endif
 

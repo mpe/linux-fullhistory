@@ -1126,9 +1126,9 @@ static void mcd_release(struct cdrom_device_info * cdi)
 
 
 
-/* This routine gets called during initialization if thing go wrong,
+/* This routine gets called during initialization if things go wrong,
  * and is used in cleanup_module as well. */
-void cleanup(int level)
+static void cleanup(int level)
 {
   switch (level) {
   case 3:

@@ -70,6 +70,14 @@
 #include <linux/if_frad.h>
 #endif
 
+#ifdef CONFIG_BRIDGE
+#include <net/br.h>
+#endif
+
+#ifdef CONFIG_DLCI
+extern int dlci_ioctl(unsigned int, void*);
+#endif
+
 /*
    Old SOCK_PACKET. Do exist programs, which use it?
    (not counting tcpdump) - lots of them yes - AC. 

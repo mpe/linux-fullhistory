@@ -188,20 +188,20 @@ z_comp_alloc(options, opt_len)
 	struct ppp_deflate_state *state;
 	int w_size;
 
+	MOD_INC_USE_COUNT;
 	if (opt_len != CILEN_DEFLATE || options[0] != CI_DEFLATE
 	    || options[1] != CILEN_DEFLATE
 	    || DEFLATE_METHOD(options[2]) != DEFLATE_METHOD_VAL
 	    || options[3] != DEFLATE_CHK_SEQUENCE)
-		return NULL;
+		goto out_fail;
 	w_size = DEFLATE_SIZE(options[2]);
 	if (w_size < DEFLATE_MIN_SIZE || w_size > DEFLATE_MAX_SIZE)
-		return NULL;
+		goto out_fail;
 
 	state = (struct ppp_deflate_state *) kmalloc(sizeof(*state), GFP_KERNEL);
 	if (state == NULL)
-		return NULL;
+		goto out_fail;
 
-	MOD_INC_USE_COUNT;
 	memset (state, 0, sizeof (struct ppp_deflate_state));
 	state->strm.next_in = NULL;
 	state->strm.zalloc  = zalloc_init;
@@ -210,13 +210,16 @@ z_comp_alloc(options, opt_len)
 
 	if (deflateInit2(&state->strm, Z_DEFAULT_COMPRESSION,
 			 DEFLATE_METHOD_VAL, -w_size, 8, Z_DEFAULT_STRATEGY)
-	    != Z_OK) {
-		z_comp_free(state);
-		return NULL;
-	}
-
+	    != Z_OK)
+		goto out_free;
 	state->strm.zalloc = zalloc;
 	return (void *) state;
+
+out_free:
+	z_comp_free(state);
+out_fail:
+	MOD_DEC_USE_COUNT;
+	return NULL;
 }
 
 static int
@@ -369,33 +372,35 @@ z_decomp_alloc(options, opt_len)
 	struct ppp_deflate_state *state;
 	int w_size;
 
+	MOD_INC_USE_COUNT;
 	if (opt_len != CILEN_DEFLATE || options[0] != CI_DEFLATE
 	    || options[1] != CILEN_DEFLATE
 	    || DEFLATE_METHOD(options[2]) != DEFLATE_METHOD_VAL
 	    || options[3] != DEFLATE_CHK_SEQUENCE)
-		return NULL;
+		goto out_fail;
 	w_size = DEFLATE_SIZE(options[2]);
 	if (w_size < DEFLATE_MIN_SIZE || w_size > DEFLATE_MAX_SIZE)
-		return NULL;
+		goto out_fail;
 
 	state = (struct ppp_deflate_state *) kmalloc(sizeof(*state), GFP_KERNEL);
 	if (state == NULL)
-		return NULL;
-
-	MOD_INC_USE_COUNT;
+		goto out_fail;
 	memset (state, 0, sizeof (struct ppp_deflate_state));
 	state->w_size        = w_size;
 	state->strm.next_out = NULL;
 	state->strm.zalloc   = zalloc_init;
 	state->strm.zfree    = zfree;
 
-	if (inflateInit2(&state->strm, -w_size) != Z_OK) {
-		z_decomp_free(state);
-		return NULL;
-	}
-
+	if (inflateInit2(&state->strm, -w_size) != Z_OK)
+		goto out_free;
 	state->strm.zalloc = zalloc;
 	return (void *) state;
+
+out_free:
+	z_decomp_free(state);
+out_fail:
+	MOD_DEC_USE_COUNT;
+	return NULL;
 }
 
 static int

@@ -80,10 +80,10 @@ extern inline void end_bh_atomic(void)
 #ifndef __SMP__
 
 /* These are for the irq's testing the lock */
-#define softirq_trylock()	(atomic_read(&__alpha_bh_counter) ? \
+#define softirq_trylock(cpu)	(atomic_read(&__alpha_bh_counter) ? \
 				0 : \
 				((atomic_set(&__alpha_bh_counter,1)),1))
-#define softirq_endlock()	(atomic_set(&__alpha_bh_counter, 0))
+#define softirq_endlock(cpu)	(atomic_set(&__alpha_bh_counter, 0))
 
 #else
 

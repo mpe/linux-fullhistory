@@ -149,6 +149,8 @@ History:
 
 21 dec 1997   1.4 Upgrade to Linux 2.1.72.  
 
+24 jan 1998   Removed the cm206_disc_status() function, as it was now dead
+              code.  The Uniform CDROM driver now provides this functionality.
  * 
  * Parts of the code are based upon lmscd.c written by Kai Petzke,
  * sbpcd.c written by Eberhard Moenkeberg, and mcd.c by Martin
@@ -1140,24 +1142,6 @@ int cm206_drive_status(struct cdrom_device_info * cdi, int slot_nr)
   return CDS_DISC_OK;
 }
  
-/* gives current state of disc in drive */
-int cm206_disc_status(struct cdrom_device_info * cdi)
-{
-  uch xa;
-  get_drive_status();
-  if ((cd->dsb & dsb_not_useful) | !(cd->dsb & dsb_disc_present))
-    return CDS_NO_DISC;
-  get_disc_status();
-  if (DISC_STATUS & cds_all_audio) return CDS_AUDIO;
-  xa = DISC_STATUS >> 4;
-  switch (xa) {
-  case 0: return CDS_DATA_1;	/* can we detect CDS_DATA_2? */
-  case 1: return CDS_XA_2_1;	/* untested */
-  case 2: return CDS_XA_2_2;
-  }
-  return 0;
-}
-
 /* locks or unlocks door lock==1: lock; return 0 upon success */
 int cm206_lock_door(struct cdrom_device_info * cdi, int lock)
 {
@@ -1274,9 +1258,9 @@ static struct cdrom_device_info cm206_info = {
   "cm206"			/* name of the device type */
 };
 
-/* This routine gets called during initialization if thing go wrong,
+/* This routine gets called during initialization if things go wrong,
  * can be used in cleanup_module as well. */
-void cleanup(int level)
+static void cleanup(int level)
 {
   switch (level) {
   case 4: 

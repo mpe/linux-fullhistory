@@ -406,8 +406,9 @@ nfs_xdr_readdirres(struct rpc_rqst *req, u32 *p, struct nfs_readdirres *res)
 
 		len = ntohl(*p++);
 		if ((p + QUADLEN(len) + 3) > end) {
-			printk(KERN_NOTICE
-				"NFS: short packet in readdir reply!\n");
+			printk(KERN_WARNING "NFS: short readdir reply! "
+				"nr=%d, slots=%d, len=%d\n",
+				nr, (end - p), len);
 			break;
 		}
 		if (len > NFS_MAXNAMLEN) {

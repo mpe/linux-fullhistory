@@ -479,6 +479,17 @@ CONFIG_PARIDE_PF
   MicroSolutions backpack PD/CD drive and the Imation Superdisk
   LS-120 drive.
 
+Parallel port ATAPI tapes
+CONFIG_PARIDE_PT
+  This option enable the high-level driver for ATAPI tape devices
+  connected through a parallel port.  If you chose to build PARIDE
+  support into your kernel, you may answer Y here to build in the
+  parallel port ATAPI disk driver, otherwise you should answer M
+  to build it as a loadable module.  The module will be called pt.o.
+  You must also have at least one parallel port protocol driver in
+  your system.  Among the devices supported by this driver is the
+  parallel port version of the HP 5GB drive.
+
 ATEN EH-100 protocol
 CONFIG_PARIDE_ATEN 
   This option enables support for the ATEN EH-100 parallel port IDE
@@ -1181,6 +1192,12 @@ CONFIG_PARPORT_AX
   Say Y here if you need support for the parallel port hardware on Sun
   Ultra/AX machines.  This code is also available as a module (say M),
   called parport_ax.o.  If in doubt, saying N is the safe plan.
+
+Foreign parallel hardware
+CONFIG_PARPORT_OTHER
+  Say Y here if you want to be able to load driver modules to support
+  other types of parallel port.  This causes a performance loss, so most
+  people say N.
 
 Compile the kernel into the ELF object format 
 CONFIG_ELF_KERNEL

@@ -1,6 +1,6 @@
 /* linux/drivers/cdrom/cdrom.c. 
    Copyright (c) 1996, 1997 David A. van Leeuwen.
-   Copyright (c) 1997, 1998 Erik Andersen (andersee@debian.org)
+   Copyright (c) 1997, 1998 Erik Andersen <andersee@debian.org>
 
    May be copied or modified under the terms of the GNU General Public
    License.  See linux/COPYING for more information.
@@ -10,46 +10,71 @@
 
    The routines in the file provide a uniform interface between the
    software that uses CD-ROMs and the various low-level drivers that
-   actually talk to actual hardware devices. Suggestions are welcome.
+   actually talk to the hardware. Suggestions are welcome.
    Patches that work are more welcome though.  ;-)
 
+ To Do List:
+ ----------------------------------
 
-  Recent Changes:
-  ----------------------------------
+ -- Modify sysctl/proc interface. I plan on having one directory per
+ drive, with entries for outputing general drive information, and sysctl
+ based tunable parameters such as whether the tray should auto-close for
+ that drive. Suggestions (or patches) for this welcome!
 
-  New maintainer! As David A. van Leeuwen has been too busy to activly
+ -- Change the CDROMREADMODE1, CDROMREADMODE2, CDROMREADAUDIO, and 
+ CDROMREADRAW ioctls so they go through the Uniform CD-ROM driver.
+
+
+
+
+ Revision History
+ ----------------------------------
+ 1.00  Date Unknown -- David van Leeuwen <david@tm.tno.nl>
+ -- Initial version by David A. van Leeuwen. I don't have a detailed
+  changelog for the 1.x series, David?
+
+2.00  Dec  2, 1997 -- Erik Andersen <andersee@debian.org>
+  -- New maintainer! As David A. van Leeuwen has been too busy to activly
   maintain and improve this driver, I am now carrying on the torch. If
   you have a problem with this driver, please feel free to contact me.
 
-  Added (rudimentary) sysctl interface. I realize this is really weak
-  right now, and is _very_ badly implemented. It will be improved... I
-  plan on having one directory per drive, with entries for outputing
-  general drive information, and sysctl based tunable parameters such
-  as whether the tray should auto-close for that drive. Suggestions (or
-  patches) for improvements are very welcome.
+  -- Added (rudimentary) sysctl interface. I realize this is really weak
+  right now, and is _very_ badly implemented. It will be improved...
 
-  Modified CDROM_DISC_STATUS so that it is now incorporated into
+  -- Modified CDROM_DISC_STATUS so that it is now incorporated into
   the Uniform CD-ROM driver via the cdrom_count_tracks function.
   The cdrom_count_tracks function helps resolve some of the false
   assumptions of the CDROM_DISC_STATUS ioctl, and is also used to check
   for the correct media type when mounting or playing audio from a CD.
 
-  Remove the calls to verify_area and only use the copy_from_user and
+  -- Remove the calls to verify_area and only use the copy_from_user and
   copy_to_user stuff, since these calls now provide their own memory
   checking with the 2.1.x kernels.
 
-  Major update to return codes so that errors from low-level drivers
+  -- Major update to return codes so that errors from low-level drivers
   are passed on through (thanks to Gerd Knorr for pointing out this
   problem).
 
-  Made it so if a function isn't implemented in a low-level driver,
+  -- Made it so if a function isn't implemented in a low-level driver,
   ENOSYS is now returned instead of EINVAL.
 
-  Simplified some complex logic so that the source code is easier to read.
+  -- Simplified some complex logic so that the source code is easier to read.
 
-  Other stuff I probably forgot to mention (lots of changes).
+  -- Other stuff I probably forgot to mention (lots of changes).
 
- */
+2.01 to 2.11 Dec 1997-Jan 1998
+  -- TO-DO!  Write changelogs for 2.01 to 2.12.
+
+2.12  Jan  24, 1998 -- Erik Andersen <andersee@debian.org>
+  -- Fixed a bug in the IOCTL_IN and IOCTL_OUT macros.  It turns out that
+  copy_*_user does not return EFAULT on error, but instead return the number 
+  of bytes not copied.  I was returning whatever non-zero stuff came back from 
+  the copy_*_user functions directly, which would result in strange errors.
+
+-------------------------------------------------------------------------*/
+
+#define REVISION "Revision: 2.12"
+#define VERSION "Id: cdrom.c 2.12 1998/01/24 22:15:45 erik Exp"
 
 
 #include <linux/config.h>
@@ -67,10 +92,6 @@
 #include <asm/segment.h>
 #include <asm/uaccess.h>
 
-
-#define VERSION "$Id: cdrom.c,v 2.11 1998/01/04 01:11:18 erik Exp $"
-#define REVISION "Revision: 2.11"
-#define FM_WRITE	0x2                 /* file mode write bit */
 
 /* I use an error-log mask to give fine grain control over the type of
    error messages dumped to the system logs.  The available masks include: */
@@ -96,15 +117,17 @@
 #define cdinfo(type, fmt, args...) 
 #endif
 
-
 /* These are used to simplify getting data in from and back to user land */
 #define IOCTL_IN(arg, type, in) { \
-            int ret=copy_from_user(&in, (type *) arg, sizeof in); \
-            if (ret) return ret; }
+            if ( copy_from_user(&in, (type *) arg, sizeof in) ) \
+            	return -EFAULT; }
 
 #define IOCTL_OUT(arg, type, out) { \
-            int ret=copy_to_user((type *) arg, &out, sizeof out); \
-            if (ret) return ret; }
+            if ( copy_to_user((type *) arg, &out, sizeof out) ) \
+            	return -EFAULT; }
+
+
+#define FM_WRITE	0x2                 /* file mode write bit */
 
 /* Not-exported routines. */
 static int cdrom_open(struct inode *ip, struct file *fp);

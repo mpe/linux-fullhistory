@@ -20,6 +20,10 @@
 #include <asm/ptrace.h>
 #include <asm/mmu_context.h>
 
+/* NOTE: Herein are back-to-back mb insns.  They are magic.
+   A plausable explanation is that the i/o controler does not properly
+   handle the system transaction.  Another involves timing.  Ho hum.  */
+
 extern struct hwrpb_struct *hwrpb;
 extern asmlinkage void wrmces(unsigned long mces);
 extern asmlinkage unsigned long whami(void);
@@ -173,6 +177,7 @@ static unsigned int conf_read(unsigned long addr, unsigned char type1)
 	/* access configuration space: */
 	value = *(vuip)addr;
 	mb();
+	mb();  /* magic */
 	if (T2_mcheck_taken) {
 		T2_mcheck_taken = 0;
 		value = 0xffffffffU;
@@ -226,6 +231,7 @@ static void conf_write(unsigned long addr, unsigned int value,
 	/* access configuration space: */
 	*(vuip)addr = value;
 	mb();
+	mb();  /* magic */
 	T2_mcheck_expected = 0;
 	mb();
 
@@ -480,6 +486,7 @@ int t2_clear_errors(void)
 	*(vulp)T2_PERR1 |= *(vulp)T2_PERR1;
 
 	mb();
+	mb();  /* magic */
 	return 0;
 }
 
@@ -530,12 +537,14 @@ void t2_machine_check(unsigned long vector, unsigned long la_ptr,
 	 * ignore the machine check.
 	 */
 	mb();
+	mb();  /* magic */
 	if (T2_mcheck_expected/* && (mchk_sysdata->epic_dcsr && 0x0c00UL)*/) {
 		DBGMC(("T2 machine check expected\n"));
 		T2_mcheck_taken = 1;
 		t2_clear_errors();
 		T2_mcheck_expected = 0;
 		mb();
+		mb();  /* magic */
 		wrmces(rdmces()|1);/* ??? */
 		draina();
 		return;

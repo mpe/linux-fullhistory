@@ -16,11 +16,6 @@
 					   this, you must also change the number
 					   of elements in io, irq, and ram to
 					   match. Initialized in init.c */
-/*
-extern unsigned int io[];
-extern unsigned char irq[];
-extern unsigned long ram[];
-*/
 
 #define SIGNATURE	0x87654321	/* Board reset signature */
 #define SIG_OFFSET	0x1004		/* Where to find signature in shared RAM */

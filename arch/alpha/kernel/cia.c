@@ -17,6 +17,10 @@
 #include <asm/ptrace.h>
 #include <asm/mmu_context.h>
 
+/* NOTE: Herein are back-to-back mb insns.  They are magic.
+   A plausible explanation is that the i/o controler does not properly
+   handle the system transaction.  Another involves timing.  Ho hum.  */
+
 extern struct hwrpb_struct *hwrpb;
 extern asmlinkage void wrmces(unsigned long mces);
 extern int alpha_sys_type;
@@ -170,6 +174,7 @@ static unsigned int conf_read(unsigned long addr, unsigned char type1)
 	/* access configuration space: */
 	value = *(vuip)addr;
 	mb();
+	mb();  /* magic */
 	if (CIA_mcheck_taken) {
 		CIA_mcheck_taken = 0;
 		value = 0xffffffffU;
@@ -244,6 +249,7 @@ static void conf_write(unsigned long addr, unsigned int value,
 	/* access configuration space: */
 	*(vuip)addr = value;
 	mb();
+	mb();  /* magic */
 
 	CIA_mcheck_expected = 0;
 	mb();
@@ -555,12 +561,13 @@ void cia_machine_check(unsigned long vector, unsigned long la_ptr,
 	 * ignore the machine check.
 	 */
 	mb();
+	mb();  /* magic */
 	if (CIA_mcheck_expected) {
 		DBGM(("CIA machine check expected\n"));
 		CIA_mcheck_expected = 0;
 		CIA_mcheck_taken = 1;
 		mb();
-		mb();
+		mb();  /* magic */
 		draina();
 		cia_pci_clr_err();
 		wrmces(0x7);

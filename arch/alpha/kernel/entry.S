@@ -950,7 +950,7 @@ sys_call_table:
 	.quad sys_semget			/* 205 */
 	.quad sys_semop
 	.quad osf_utsname
-	.quad alpha_ni_syscall
+	.quad sys_lchown
 	.quad osf_shmat
 	.quad sys_shmctl			/* 210 */
 	.quad sys_shmdt

@@ -72,14 +72,14 @@ static unsigned int netcard_portlist[] __initdata =
 
 #ifdef CONFIG_PCI
 /* Ack! People are making PCI ne2000 clones! Oh the horror, the horror... */
-static struct { unsigned short vendor, dev_id;}
+static struct { unsigned short vendor, dev_id; char *name; }
 pci_clone_list[] __initdata = {
-	{PCI_VENDOR_ID_REALTEK,		PCI_DEVICE_ID_REALTEK_8029},
-	{PCI_VENDOR_ID_WINBOND2,	PCI_DEVICE_ID_WINBOND2_89C940},
-	{PCI_VENDOR_ID_COMPEX,		PCI_DEVICE_ID_COMPEX_RL2000},
-	{PCI_VENDOR_ID_KTI,		PCI_DEVICE_ID_KTI_ET32P2},
-	{PCI_VENDOR_ID_NETVIN,		PCI_DEVICE_ID_NETVIN_NV5000SC},
-	{PCI_VENDOR_ID_VIA,		PCI_DEVICE_ID_VIA_82C926},
+	{PCI_VENDOR_ID_REALTEK,		PCI_DEVICE_ID_REALTEK_8029,		"Realtek 8029" },
+	{PCI_VENDOR_ID_WINBOND2,	PCI_DEVICE_ID_WINBOND2_89C940,		"Winbond 89C940" },
+	{PCI_VENDOR_ID_COMPEX,		PCI_DEVICE_ID_COMPEX_RL2000,		"Compex ReadyLink 2000" },
+	{PCI_VENDOR_ID_KTI,		PCI_DEVICE_ID_KTI_ET32P2,		"KTI ET32P2" },
+	{PCI_VENDOR_ID_NETVIN,		PCI_DEVICE_ID_NETVIN_NV5000SC,		"NetVin NV5000" },
+	{PCI_VENDOR_ID_VIA,		PCI_DEVICE_ID_VIA_82C926,		"VIA 82C926 Amazon" },
 	{0,}
 };
 #endif
@@ -228,9 +228,8 @@ __initfunc(static int ne_probe_pci(struct device *dev))
 			break;	/* Beauty -- got a valid card. */
 		}
 		if (pci_irq_line == 0) continue;	/* Try next PCI ID */
-		printk("ne.c: PCI BIOS reports %s %s at i/o %#x, irq %d.\n",
-				pci_strvendor(pci_clone_list[i].vendor),
-				pci_strdev(pci_clone_list[i].vendor, pci_clone_list[i].dev_id),
+		printk("ne.c: PCI BIOS reports %s at i/o %#x, irq %d.\n",
+				pci_clone_list[i].name,
 				pci_ioaddr, pci_irq_line);
 		if (ne_probe1(dev, pci_ioaddr) != 0) {	/* Shouldn't happen. */
 			printk(KERN_ERR "ne.c: Probe of PCI card at %#x failed.\n", pci_ioaddr);

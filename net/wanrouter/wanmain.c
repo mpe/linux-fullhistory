@@ -80,8 +80,10 @@ static int delete_interface (wan_device_t* wandev, char* name, int forse);
  *	Global Data
  */
 
+#ifdef MODULE
 static char fullname[]		= "WAN Router";
 static char copyright[]		= "(c) 1995-1997 Sangoma Technologies Inc.";
+#endif
 static char modname[]		= ROUTER_NAME;	/* short module name */
 wan_device_t * router_devlist	= NULL;	/* list of registered devices */
 static int devcnt		= 0;
@@ -91,7 +93,9 @@ static int devcnt		= 0;
  */
  
 static unsigned char oui_ether[] = { 0x00, 0x00, 0x00 };
+#if 0
 static unsigned char oui_802_2[] = { 0x00, 0x80, 0xC2 };
+#endif
 
 #ifdef MODULE
 

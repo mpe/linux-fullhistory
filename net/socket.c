@@ -1432,6 +1432,9 @@ __initfunc(void proto_init(void))
 }
 
 extern void sk_init(void);
+#ifdef CONFIG_WAN_ROUTER
+extern void wanrouter_init(void);
+#endif
 
 __initfunc(void sock_init(void))
 {

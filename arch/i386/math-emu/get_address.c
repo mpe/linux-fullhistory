@@ -134,8 +134,8 @@ static int sib(int mod, unsigned long *fpu_eip)
 
 
 static unsigned long vm86_segment(u_char segment,
-				  unsigned short *selector)
-{ 
+				  struct address *addr)
+{
   segment--;
 #ifdef PARANOID
   if ( segment > PREFIX_SS_ )
@@ -144,14 +144,14 @@ static unsigned long vm86_segment(u_char segment,
       math_abort(FPU_info,SIGSEGV);
     }
 #endif PARANOID
-  *selector = VM86_REG_(segment);
+  addr->selector = VM86_REG_(segment);
   return (unsigned long)VM86_REG_(segment) << 4;
 }
 
 
 /* This should work for 16 and 32 bit protected mode. */
 static long pm_address(u_char FPU_modrm, u_char segment,
-		       unsigned short *selector, long offset)
+		       struct address *addr, long offset)
 { 
   struct desc_struct descriptor;
   unsigned long base_address, limit, address, seg_top;
@@ -172,13 +172,17 @@ static long pm_address(u_char FPU_modrm, u_char segment,
       /* fs and gs aren't used by the kernel, so they still have their
 	 user-space values. */
     case PREFIX_FS_-1:
-      __asm__("mov %%fs,%0":"=r" (*selector));
+      /* The cast is needed here to get gcc 2.8.0 to use a 16 bit register
+	 in the assembler statement. */
+      __asm__("mov %%fs,%0":"=r" ((unsigned short)addr->selector));
       break;
     case PREFIX_GS_-1:
-      __asm__("mov %%gs,%0":"=r" (*selector));
+      /* The cast is needed here to get gcc 2.8.0 to use a 16 bit register
+	 in the assembler statement. */
+      __asm__("mov %%gs,%0":"=r" ((unsigned short)addr->selector));
       break;
     default:
-      *selector = PM_REG_(segment);
+      addr->selector = PM_REG_(segment);
     }
 
   descriptor = LDT_DESCRIPTOR(PM_REG_(segment));
@@ -312,13 +316,12 @@ void *FPU_get_address(u_char FPU_modrm, unsigned long *fpu_eip,
     case 0:
       break;
     case VM86:
-      address += vm86_segment(addr_modes.override.segment,
-			      (unsigned short *)&(addr->selector));
+      address += vm86_segment(addr_modes.override.segment, addr);
       break;
     case PM16:
     case SEG32:
       address = pm_address(FPU_modrm, addr_modes.override.segment,
-			   (unsigned short *)&(addr->selector), address);
+			   addr, address);
       break;
     default:
       EXCEPTION(EX_INTERNAL|0x133);
@@ -427,13 +430,12 @@ void *FPU_get_address_16(u_char FPU_modrm, unsigned long *fpu_eip,
     case 0:
       break;
     case VM86:
-      address += vm86_segment(addr_modes.override.segment,
-			      (unsigned short *)&(addr->selector));
+      address += vm86_segment(addr_modes.override.segment, addr);
       break;
     case PM16:
     case SEG32:
       address = pm_address(FPU_modrm, addr_modes.override.segment,
-			   (unsigned short *)&(addr->selector), address);
+			   addr, address);
       break;
     default:
       EXCEPTION(EX_INTERNAL|0x131);

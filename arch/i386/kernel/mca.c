@@ -65,7 +65,7 @@ static struct MCA_info* mca_info = 0;
 static long mca_do_proc_init( long memory_start, long memory_end );
 static int mca_default_procfn( char* buf, int slot );
 
-static long proc_mca_read( struct inode*, struct file*, char* buf, unsigned long count );
+static ssize_t proc_mca_read( struct file*, char*, size_t, loff_t *);
 static struct file_operations proc_mca_operations = {
 	NULL, proc_mca_read,
 	NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL
@@ -527,7 +527,7 @@ static int mca_not_implemented( char* buf )
 */
 
 static int mca_fill( char* page, int pid, int type, char** start,
-	off_t offset, int length)
+	loff_t *offset, int length)
 {
 	int len = 0;
 	int slot = 0;
@@ -571,8 +571,8 @@ static int mca_fill( char* page, int pid, int type, char** start,
 
 #define PROC_BLOCK_SIZE	(3*1024)
 
-long proc_mca_read( struct inode* inode, struct file* file,
-	char* buf, unsigned long count)
+static ssize_t proc_mca_read( struct file* file,
+	char* buf, size_t count, loff_t *ppos)
 {
 	unsigned long page;
 	char *start;
@@ -580,6 +580,7 @@ long proc_mca_read( struct inode* inode, struct file* file,
 	int end;
 	unsigned int type, pid;
 	struct proc_dir_entry *dp;
+	struct inode *inode = file->f_dentry->d_inode;
 
 	if (count < 0)
 		return -EINVAL;
@@ -593,7 +594,7 @@ long proc_mca_read( struct inode* inode, struct file* file,
 	start = 0;
 	dp = (struct proc_dir_entry *) inode->u.generic_ip;
 	length = mca_fill((char *) page, pid, type,
-			    &start, file->f_pos, count);
+			    &start, ppos, count);
 	if (length < 0) {
 		free_page(page);
 		return length;
@@ -601,19 +602,19 @@ long proc_mca_read( struct inode* inode, struct file* file,
 	if (start != 0) {
 		/* We have had block-adjusting processing! */
 		copy_to_user(buf, start, length);
-		file->f_pos += length;
+		*ppos += length;
 		count = length;
 	} else {
 		/* Static 4kB (or whatever) block capacity */
-		if (file->f_pos >= length) {
+		if (*ppos >= length) {
 			free_page(page);
 			return 0;
 		}
-		if (count + file->f_pos > length)
-			count = length - file->f_pos;
-		end = count + file->f_pos;
-		copy_to_user(buf, (char *) page + file->f_pos, count);
-		file->f_pos = end;
+		if (count + *ppos > length)
+			count = length - *ppos;
+		end = count + *ppos;
+		copy_to_user(buf, (char *) page + *ppos, count);
+		*ppos = end;
 	}
 	free_page(page);
 	return count;

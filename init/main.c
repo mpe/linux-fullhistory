@@ -119,6 +119,9 @@ extern void pd_setup(char *str, int *ints);
 #ifdef CONFIG_PARIDE_PF
 extern void pf_setup(char *str, int *ints);
 #endif
+#ifdef CONFIG_PARIDE_PT
+extern void pt_setup(char *str, int *ints);
+#endif
 #ifdef CONFIG_PARIDE_PCD
 extern void pcd_setup(char *str, int *ints);
 #endif
@@ -701,7 +704,7 @@ static struct kernel_param cooked_params[] __initdata = {
 #ifdef CONFIG_PLIP
 	{ "plip=", plip_setup },
 #endif
-#ifdef CONFIG_SOUNDMODEM
+#ifdef CONFIG_HFMODEM
 	{ "hfmodem=", hfmodem_setup },
 #endif
 #ifdef CONFIG_PMAC_CONSOLE
@@ -731,6 +734,9 @@ static struct kernel_param raw_params[] __initdata = {
 #endif
 #ifdef CONFIG_PARIDE_PF
 	{ "pf.", pf_setup },
+#endif
+#ifdef CONFIG_PARIDE_PT
+        { "pt.", pt_setup },
 #endif
 	{ 0, 0 }
 };

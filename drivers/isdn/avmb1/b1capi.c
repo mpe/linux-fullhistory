@@ -52,10 +52,11 @@ static char *revision = "$Revision: 1.4 $";
 
 /* ------------------------------------------------------------- */
 
-int portbase = 0x150;
-int irq = 15;
 int showcapimsgs = 0;		/* used in lli.c */
 int loaddebug = 0;
+static int portbase = 0x150;
+#ifdef MODULE
+static int irq = 15;
 
 #ifdef HAS_NEW_SYMTAB
 MODULE_AUTHOR("Carsten Paeth <calle@calle.in-berlin.de>");
@@ -63,6 +64,7 @@ MODULE_PARM(portbase, "i");
 MODULE_PARM(irq, "2-15i");
 MODULE_PARM(showcapimsgs, "0-3i");
 MODULE_PARM(loaddebug, "0-1i");
+#endif
 #endif
 
 /* ------------------------------------------------------------- */

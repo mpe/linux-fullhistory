@@ -728,11 +728,11 @@ struct _fpstate * save_i387_soft(void *s387, struct _fpstate * buf)
   FPU_verify_area(VERIFY_WRITE, d, 7*4 + 8*10);
 #ifdef PECULIAR_486
   S387->cwd &= ~0xe080;
-  /* An 80486 sets all the reserved bits to 1. */
-  S387->cwd |= 0xffff0000;
+  /* An 80486 sets nearly all of the reserved bits to 1. */
+  S387->cwd |= 0xffff0040;
   S387->swd = sstatus_word() | 0xffff0000;
   S387->twd |= 0xffff0000;
-  S387->fcs |= 0xf8000000;
+  S387->fcs &= ~0xf8000000;
   S387->fos |= 0xffff0000;
 #endif PECULIAR_486
   __copy_to_user(d, &S387->cwd, 7*4);

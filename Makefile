@@ -1,6 +1,6 @@
 VERSION = 2
 PATCHLEVEL = 1
-SUBLEVEL = 81
+SUBLEVEL = 82
 
 ARCH := $(shell uname -m | sed -e s/i.86/i386/ -e s/sun4u/sparc64/)
 
@@ -211,21 +211,29 @@ symlinks:
 
 oldconfig: symlinks scripts/split-include
 	$(CONFIG_SHELL) scripts/Configure -d arch/$(ARCH)/config.in
-	scripts/split-include include/linux/autoconf.h include/config
+	if [ -r include/linux/autoconf.h ]; then \
+	    scripts/split-include include/linux/autoconf.h include/config; \
+	fi
 
 xconfig: symlinks scripts/split-include
 	$(MAKE) -C scripts kconfig.tk
 	wish -f scripts/kconfig.tk
-	scripts/split-include include/linux/autoconf.h include/config
+	if [ -r include/linux/autoconf.h ]; then \
+	    scripts/split-include include/linux/autoconf.h include/config; \
+	fi
 
 menuconfig: include/linux/version.h symlinks scripts/split-include
 	$(MAKE) -C scripts/lxdialog all
 	$(CONFIG_SHELL) scripts/Menuconfig arch/$(ARCH)/config.in
-	scripts/split-include include/linux/autoconf.h include/config
+	if [ -r include/linux/autoconf.h ]; then \
+	    scripts/split-include include/linux/autoconf.h include/config; \
+	fi
 
 config: symlinks scripts/split-include
 	$(CONFIG_SHELL) scripts/Configure arch/$(ARCH)/config.in
-	scripts/split-include include/linux/autoconf.h include/config
+	if [ -r include/linux/autoconf.h ]; then \
+	    scripts/split-include include/linux/autoconf.h include/config; \
+	fi
 
 linuxsubdirs: dummy
 	set -e; for i in $(SUBDIRS); do $(MAKE) -C $$i; done

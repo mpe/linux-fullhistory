@@ -1149,7 +1149,7 @@ extern int get_filesystem_info( char * );
 extern int get_irq_list(char *);
 extern int get_dma_list(char *);
 extern int get_cpuinfo(char *);
-extern int get_pci_list(char*);
+extern int get_pci_list(char *);
 extern int get_md_status (char *);
 extern int get_rtc_status (char *);
 extern int get_locks_status (char *, char **, off_t, int);
@@ -1174,7 +1174,7 @@ static long get_root_array(char * page, int type, char **start,
 		case PROC_MEMINFO:
 			return get_meminfo(page);
 
-#ifdef CONFIG_PCI
+#ifdef CONFIG_PCI_OLD_PROC
   	        case PROC_PCI:
 			return get_pci_list(page);
 #endif

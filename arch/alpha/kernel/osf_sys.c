@@ -246,7 +246,7 @@ asmlinkage unsigned long osf_mmap(unsigned long addr, unsigned long len,
 	unsigned long ret = -EBADF;
 
 	lock_kernel();
-	if (flags & (MAP_HASSEMAPHORE | MAP_INHERIT | MAP_UNALIGNED))
+	if (flags & (_MAP_HASSEMAPHORE | _MAP_INHERIT | _MAP_UNALIGNED))
 		printk("%s: unimplemented OSF mmap flags %04lx\n", current->comm, flags);
 	if (!(flags & MAP_ANONYMOUS)) {
 		if (fd >= NR_OPEN || !(file = current->files->fd[fd]))

@@ -503,6 +503,32 @@ scsi_register_device(struct Scsi_Device_Template * sdpnt)
     return 0;
 }
 
+/*
+ * Why is this a seperate function?  Because the kernel_thread code
+ * effectively does a fork, and there is a builtin exit() call when
+ * the child returns.   The difficulty is that scsi_init() is
+ * marked __initfunc(), which means the memory is unmapped after bootup
+ * is complete, which means that the thread's exit() call gets wiped.
+ *
+ * The lesson is to *NEVER*, *NEVER* call kernel_thread() from an
+ * __initfunc() function, if that function could ever return.
+ */
+static void launch_error_handler_thread(struct Scsi_Host * shpnt)
+{
+            struct semaphore sem = MUTEX_LOCKED;
+            
+            shpnt->eh_notify = &sem;
+
+            kernel_thread((int (*)(void *))scsi_error_handler, 
+                          (void *) shpnt, 0);
+            /*
+             * Now wait for the kernel error thread to initialize itself
+             * as it might be needed when we scan the bus.
+             */
+            down (&sem);
+            shpnt->eh_notify = NULL;
+}
+
 __initfunc(unsigned int scsi_init(void))
 {
     static int called = 0;
@@ -559,18 +585,7 @@ __initfunc(unsigned int scsi_init(void))
          */
         if( shpnt->hostt->use_new_eh_code )
         {
-            struct semaphore sem = MUTEX_LOCKED;
-            
-            shpnt->eh_notify = &sem;
-
-            kernel_thread((int (*)(void *))scsi_error_handler, 
-                          (void *) shpnt, 0);
-            /*
-             * Now wait for the kernel error thread to initialize itself
-             * as it might be needed when we scan the bus.
-             */
-            down (&sem);
-            shpnt->eh_notify = NULL;
+            launch_error_handler_thread(shpnt);
         }
     }
     

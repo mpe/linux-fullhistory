@@ -116,7 +116,7 @@ osf_sigaction(int sig, const struct osf_sigaction *act,
 
 asmlinkage int 
 sys_rt_sigaction(int sig, const struct sigaction *act, struct sigaction *oact,
-		 void *restorer, size_t sigsetsize)
+		 size_t sigsetsize, void *restorer)
 {
 	struct k_sigaction new_ka, old_ka;
 	int ret;

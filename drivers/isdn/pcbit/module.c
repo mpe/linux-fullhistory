@@ -22,10 +22,10 @@
 #include <linux/isdnif.h>
 #include "pcbit.h"
 
-int mem[MAX_PCBIT_CARDS] = {0, };
-int irq[MAX_PCBIT_CARDS] = {0, };
+static int mem[MAX_PCBIT_CARDS] = {0, };
+static int irq[MAX_PCBIT_CARDS] = {0, };
 
-int num_boards;
+static int num_boards;
 struct pcbit_dev * dev_pcbit[MAX_PCBIT_CARDS] = {0, 0, 0, 0};
 
 int init_module(void);

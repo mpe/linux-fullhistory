@@ -186,6 +186,10 @@
  *                 Heiko Eissfeldt <heiko@colossus.escape.de> with additional
  *                 changes by Erik Andersen <andersee@debian.org>
  *
+ *  24 January 1998 -- Removed the scd_disc_status() function, which was now
+ *                     just dead code left over from the port.
+ *                          Erik Andersen <andersee@debian.org>
+ *
 */
 
 #include <linux/major.h>
@@ -1241,35 +1245,6 @@ size_to_buf(unsigned int size,
    buf[1] = size / 256;
    buf[2] = size % 256;
 }
-
-#if 0
-/* Uniform cdrom interface function.
-   Return the status of the current disc:
-   If it is recognized as CD-I -> return XA Mode 2 Form 2
-   If it is recognized as XA   -> return XA Mode 2 Form 1
-   If there is at least one data track return Mode 1
-   else return type AUDIO
- */
-static int scd_disc_status(struct cdrom_device_info *cdi)
-{
-  if (sony_spun_up)
-  {
-    int i;
-
-    sony_get_toc();
-    /* look into the TOC */
-    if (sony_toc.disk_type == 0x10)   /* this is a CD-I disc */
-      return CDS_XA_2_2;
-    if (sony_toc.disk_type == 0x20)   /* this is a XA disc */
-      return CDS_XA_2_1;
-    for (i = 0; i < sony_toc.track_entries; i++)
-      if (sony_toc.tracks[i].control & CDROM_DATA_TRACK)
-        return CDS_DATA_1;
-    return CDS_AUDIO;
-  } else 
-    return CDS_NO_INFO;
-}
-#endif
 
 /* Starts a read operation. Returns 0 on success and 1 on failure. 
    The read operation used here allows multiple sequential sectors 

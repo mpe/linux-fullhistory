@@ -1,13 +1,19 @@
-/* $Id: parport_share.c,v 1.8 1997/11/08 18:55:29 philip Exp $
+/* $Id: parport_share.c,v 1.15 1998/01/11 12:06:17 philip Exp $
  * Parallel-port resource manager code.
  * 
  * Authors: David Campbell <campbell@tirian.che.curtin.edu.au>
  *          Tim Waugh <tim@cyberelk.demon.co.uk>
- *	    Jose Renau <renau@acm.org>
+ *          Jose Renau <renau@acm.org>
+ *          Philip Blundell <philb@gnu.org>
+ *	    Andrea Arcangeli <arcangeli@mbox.queen.it>
  *
  * based on work by Grant Guenther <grant@torque.net>
- *              and Philip Blundell <Philip.Blundell@pobox.com>
+ *          and Philip Blundell
  */
+
+#undef PARPORT_DEBUG_SHARING		/* undef for production */
+
+#include <linux/config.h>
 
 #include <linux/tasks.h>
 
@@ -18,14 +24,17 @@
 #include <linux/ioport.h>
 #include <linux/kernel.h>
 #include <linux/malloc.h>
+#include <linux/sched.h>
 
-#include <linux/config.h>
+#include <asm/spinlock.h>
 
 #ifdef CONFIG_KERNELD
 #include <linux/kerneld.h>
 #endif
 
 #undef PARPORT_PARANOID
+
+#define PARPORT_DEFAULT_TIMESLICE	(HZ/10)
 
 static struct parport *portlist = NULL, *portlist_tail = NULL;
 static int portcount = 0;
@@ -48,8 +57,8 @@ struct parport *parport_enumerate(void)
 
 void parport_null_intr_func(int irq, void *dev_id, struct pt_regs *regs)
 {
-	/* NULL function - Does nothing */
-	return;
+	/* Null function - does nothing.  IRQs are pointed here whenever
+	   there is no real handler for them.  */
 }
 
 struct parport *parport_register_port(unsigned long base, int irq, int dma,
@@ -58,9 +67,8 @@ struct parport *parport_register_port(unsigned long base, int irq, int dma,
 	struct parport *tmp;
 
 	/* Check for a previously registered port.
-	 * NOTE: we will ignore irq and dma if we find a previously
-	 * registered device.
-	 */
+	   NOTE: we will ignore irq and dma if we find a previously
+	   registered device.  */
 	for (tmp = portlist; tmp; tmp = tmp->next) {
 		if (tmp->base == base)
 			return tmp;
@@ -79,9 +87,10 @@ struct parport *parport_register_port(unsigned long base, int irq, int dma,
 	tmp->dma = dma;
 	tmp->modes = 0;
  	tmp->next = NULL;
-	tmp->devices = tmp->cad = tmp->lurker = NULL;
+	tmp->devices = tmp->cad = NULL;
 	tmp->flags = 0;
-	tmp->ops = ops; 
+	tmp->ops = ops;
+	spin_lock_init (&tmp->lock);
 
 	tmp->name = kmalloc(15, GFP_KERNEL);
 	if (!tmp->name) {
@@ -91,7 +100,7 @@ struct parport *parport_register_port(unsigned long base, int irq, int dma,
 	}
 	sprintf(tmp->name, "parport%d", portcount);
 
-	/* Here we chain the entry to our list. */
+	/* Chain the entry to our list. */
 	if (portlist_tail)
 		portlist_tail->next = tmp;
 	portlist_tail = tmp;
@@ -101,6 +110,8 @@ struct parport *parport_register_port(unsigned long base, int irq, int dma,
 	portcount++;
 
 	tmp->probe_info.class = PARPORT_CLASS_LEGACY;  /* assume the worst */
+	tmp->waithead = tmp->waittail = NULL;
+
 	return tmp;
 }
 
@@ -146,13 +157,7 @@ struct pardevice *parport_register_device(struct parport *port, const char *name
 {
 	struct pardevice *tmp;
 
-	/* We only allow one lurking device. */
 	if (flags & PARPORT_DEV_LURK) {
-		if (port->lurker) {
-			printk(KERN_INFO "%s: refused to register second lurker (%s)\n",
-				   port->name, name);
-			return NULL;
-		}
 		if (!pf || !kf) {
 			printk(KERN_INFO "%s: refused to register lurking device (%s) without callbacks\n", port->name, name);
 			return NULL;
@@ -189,6 +194,7 @@ struct pardevice *parport_register_device(struct parport *port, const char *name
 	tmp->flags = flags;
 	tmp->irq_func = irq_func;
 	port->ops->save_state(port, tmp->state);
+	tmp->waiting = 0;
 
 	/* Chain this onto the list */
 	tmp->prev = NULL;
@@ -197,11 +203,12 @@ struct pardevice *parport_register_device(struct parport *port, const char *name
 		port->devices->prev = tmp;
 	port->devices = tmp;
 
-	if (flags & PARPORT_DEV_LURK)
-		port->lurker = tmp;
-
 	inc_parport_count();
 	port->ops->inc_use_count();
+
+	init_waitqueue(&tmp->wait_q);
+	tmp->timeslice = PARPORT_DEFAULT_TIMESLICE;
+	tmp->waitnext = tmp->waitprev = NULL;
 
 	return tmp;
 }
@@ -209,28 +216,31 @@ struct pardevice *parport_register_device(struct parport *port, const char *name
 void parport_unregister_device(struct pardevice *dev)
 {
 	struct parport *port;
+	unsigned long flags;
 
+#ifdef PARPORT_PARANOID
 	if (dev == NULL) {
 		printk(KERN_ERR "parport_unregister_device: passed NULL\n");
 		return;
 	}
+#endif
 
 	port = dev->port;
 
 	if (port->cad == dev) {
-		printk(KERN_WARNING "%s: refused to unregister currently active device %s.\n", port->name, dev->name);
+		printk(KERN_WARNING "%s: refused to unregister "
+		       "currently active device %s.\n", port->name, dev->name);
 		return;
 	}
 
-	if (port->lurker == dev)
-		port->lurker = NULL;
-
+	spin_lock_irqsave (&port->lock, flags);
 	if (dev->next)
 		dev->next->prev = dev->prev;
 	if (dev->prev)
 		dev->prev->next = dev->next;
 	else
 		port->devices = dev->next;
+	spin_unlock_irqrestore (&port->lock, flags);
 
 	kfree(dev->state);
 	kfree(dev);
@@ -247,99 +257,184 @@ void parport_unregister_device(struct pardevice *dev)
 
 int parport_claim(struct pardevice *dev)
 {
-	struct pardevice *pd1;
+	struct pardevice *oldcad;
+	struct parport *port = dev->port;
+	unsigned long flags;
 
-	if (dev->port->cad == dev) {
+	if (port->cad == dev) {
 		printk(KERN_INFO "%s: %s already owner\n",
 			   dev->port->name,dev->name);
 		return 0;
 	}
 
+try_again:
 	/* Preempt any current device */
-	pd1 = dev->port->cad;
-	if (dev->port->cad) {
-		if (dev->port->cad->preempt) {
-			if (dev->port->cad->preempt(dev->port->cad->private))
-				return -EAGAIN;
-			dev->port->ops->save_state(dev->port, dev->state);
+	if ((oldcad = port->cad)) {
+		if (oldcad->preempt) {
+			if (oldcad->preempt(oldcad->private))
+				goto blocked;
+			port->ops->save_state(port, dev->state);
 		} else
-			return -EAGAIN;
+			goto blocked;
+
+		if (port->cad != oldcad) {
+			printk(KERN_WARNING 
+			       "%s: %s released port when preempted!\n",
+			       port->name, oldcad->name);
+			if (port->cad)
+				goto blocked;
+		}
 	}
 
-	/* Watch out for bad things */
-	if (dev->port->cad != pd1) {
-		printk(KERN_WARNING "%s: death while preempting %s\n",
-		       dev->port->name, dev->name);
-		if (dev->port->cad)
-			return -EAGAIN;
+	/* Can't fail from now on, so mark ourselves as no longer waiting.  */
+	if (dev->waiting & 1) {
+		dev->waiting = 0;
+
+		/* Take ourselves out of the wait list again.  */
+		spin_lock_irqsave (&port->lock, flags);
+		if (dev->waitprev)
+			dev->waitprev->waitnext = dev->waitnext;
+		else
+			port->waithead = dev->waitnext;
+		if (dev->waitnext)
+			dev->waitnext->waitprev = dev->waitprev;
+		else
+			port->waittail = dev->waitprev;
+		spin_unlock_irqrestore (&port->lock, flags);
+		dev->waitprev = dev->waitnext = NULL;
 	}
 
 	/* Now we do the change of devices */
-	dev->port->cad = dev;
+	port->cad = dev;
 
 	/* Swap the IRQ handlers. */
-	if (dev->port->irq != PARPORT_IRQ_NONE) {
-		free_irq(dev->port->irq, pd1?pd1->private:NULL);
-		request_irq(dev->port->irq, dev->irq_func ? dev->irq_func :
-			    parport_null_intr_func, SA_INTERRUPT, dev->name,
-			    dev->private);
+	if (port->irq != PARPORT_IRQ_NONE) {
+		if (oldcad && oldcad->irq_func) {
+			free_irq(port->irq, oldcad->private);
+			request_irq(port->irq, parport_null_intr_func,
+				    SA_INTERRUPT, port->name, NULL);
+		}
+		if (dev->irq_func) {
+			free_irq(port->irq, NULL);
+			request_irq(port->irq, dev->irq_func,
+				    SA_INTERRUPT, dev->name, dev->private);
+		}
 	}
 
 	/* Restore control registers */
-	dev->port->ops->restore_state(dev->port, dev->state);
-
+	port->ops->restore_state(port, dev->state);
+	dev->time = jiffies;
 	return 0;
+
+blocked:
+	/* If this is the first time we tried to claim the port, register an
+	   interest.  This is only allowed for devices sleeping in
+	   parport_claim_or_block(), or those with a wakeup function.  */
+	if (dev->waiting & 2 || dev->wakeup) {
+		spin_lock_irqsave (&port->lock, flags);
+		if (port->cad == NULL) {
+			/* The port got released in the meantime. */
+			spin_unlock_irqrestore (&port->lock, flags);
+			goto try_again;
+		}
+		if (test_and_set_bit(0, &dev->waiting) == 0) {
+			/* First add ourselves to the end of the wait list. */
+			dev->waitnext = NULL;
+			dev->waitprev = port->waittail;
+			if (port->waittail)
+				port->waittail->waitnext = dev;
+			else {
+				port->waithead = dev->port->waittail = dev;
+			}
+		}
+		spin_unlock_irqrestore (&port->lock, flags);
+	}
+	return -EAGAIN;
+}
+
+int parport_claim_or_block(struct pardevice *dev)
+{
+	int r;
+
+	/* Signal to parport_claim() that we can wait even without a
+	   wakeup function.  */
+	dev->waiting = 2;
+
+	/* Try to claim the port.  If this fails, we need to sleep.  */
+	r = parport_claim(dev);
+	if (r == -EAGAIN) {
+		unsigned long flags;
+#ifdef PARPORT_DEBUG_SHARING
+		printk(KERN_DEBUG "%s: parport_claim() returned -EAGAIN\n", dev->name);
+#endif
+		save_flags (flags);
+		cli();
+		/* If dev->waiting is clear now, an interrupt
+		   gave us the port and we would deadlock if we slept.  */
+		if (dev->waiting) {
+			sleep_on(&dev->wait_q);
+			r = 1;
+		} else {
+			r = 0;
+#ifdef PARPORT_DEBUG_SHARING
+			printk(KERN_DEBUG "%s: didn't sleep in parport_claim_or_block()\n",
+			       dev->name);
+#endif
+		}
+		restore_flags(flags);
+#ifdef PARPORT_DEBUG_SHARING
+		if (dev->port->cad != dev)
+			printk(KERN_DEBUG "%s: exiting parport_claim_or_block but %s owns port!\n", dev->name, dev->port->cad?dev->port->cad->name:"nobody");
+#endif
+	}
+	dev->waiting = 0;
+	return r;
 }
 
 void parport_release(struct pardevice *dev)
 {
-	struct pardevice *pd1;
+	struct parport *port = dev->port;
+	struct pardevice *pd;
 
 	/* Make sure that dev is the current device */
-	if (dev->port->cad != dev) {
-		printk(KERN_WARNING "%s: %s tried to release parport when not owner\n", dev->port->name, dev->name);
+	if (port->cad != dev) {
+		printk(KERN_WARNING "%s: %s tried to release parport "
+		       "when not owner\n", port->name, dev->name);
 		return;
 	}
-	dev->port->cad = NULL;
+	port->cad = NULL;
 
 	/* Save control registers */
-	dev->port->ops->save_state(dev->port, dev->state);
+	port->ops->save_state(port, dev->state);
 
 	/* Point IRQs somewhere harmless. */
-	if (dev->port->irq != PARPORT_IRQ_NONE) {
-		free_irq(dev->port->irq, dev->private);
-		request_irq(dev->port->irq, parport_null_intr_func,
-			    SA_INTERRUPT, dev->port->name, NULL);
+	if (port->irq != PARPORT_IRQ_NONE && dev->irq_func) {
+		free_irq(port->irq, dev->private);
+		request_irq(port->irq, parport_null_intr_func,
+			    SA_INTERRUPT, port->name, NULL);
  	}
 
-	/* Walk the list, offering a wakeup callback to everybody other
-	 * than the lurker and the device that called us.
-	 */
-	for (pd1 = dev->next; pd1; pd1 = pd1->next) {
-		if (!(pd1->flags & PARPORT_DEV_LURK)) {
-			if (pd1->wakeup) {
-				pd1->wakeup(pd1->private);
-				if (dev->port->cad)
-					return;
-			}
+	/* If anybody is waiting, find out who's been there longest and
+	   then wake them up. (Note: no locking required) */
+	for (pd = port->waithead; pd; pd = pd->waitnext) {
+		if (pd->waiting & 2) {
+			parport_claim(pd);
+			if (waitqueue_active(&pd->wait_q))
+				wake_up(&pd->wait_q);
+			return;
+		} else if (pd->wakeup) {
+			pd->wakeup(pd->private);
+			if (dev->port->cad)
+				return;
+		} else {
+			printk(KERN_ERR "%s: don't know how to wake %s\n", port->name, pd->name);
 		}
 	}
 
-	for (pd1 = dev->port->devices; pd1 && pd1 != dev; pd1 = pd1->next) {
-		if (!(pd1->flags & PARPORT_DEV_LURK)) {
-			if (pd1->wakeup) {
-				pd1->wakeup(pd1->private);
-				if (dev->port->cad)
-					return;
-			}
-		}
-	}
-
-	/* Now give the lurker a chance.
-	 * There must be a wakeup callback because we checked for it
-	 * at registration.
-	 */
-	if (dev->port->lurker && (dev->port->lurker != dev)) {
-		dev->port->lurker->wakeup(dev->port->lurker->private);
+	/* Nobody was waiting, so walk the list to see if anyone is
+	   interested in being woken up.  */
+	for (pd = port->devices; (port->cad == NULL) && pd; pd = pd->next) {
+		if (pd->wakeup && pd != dev)
+			pd->wakeup(pd->private);
 	}
 }

@@ -97,8 +97,8 @@ nfsd(struct svc_rqst *rqstp)
 
 	oldumask = current->fs->umask;		/* Set umask to 0.  */
 	current->fs->umask = 0;
-	nfssvc_boot = xtime;			/* record boot time */
-	nfsd_active++;
+	if (!nfsd_active++)
+		nfssvc_boot = xtime;		/* record boot time */
 	lockd_up();				/* start lockd */
 
 	/*

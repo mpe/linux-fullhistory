@@ -58,7 +58,11 @@ static long read_polled(struct parport *port, char *buf,
 	for (i=0; ; i++) {
 		parport_write_control(port, parport_read_control(port) | 2); /* AutoFeed high */
 		if (parport_wait_peripheral(port, 0x40, 0)) {
+#ifdef DEBUG_PROBE
+			/* Some peripherals just time out when they've sent
+			   all their data.  */
 			printk("%s: read1 timeout.\n", port->name);
+#endif
 			parport_write_control(port, parport_read_control(port) & ~2);
 			break;
 		}
@@ -68,36 +72,26 @@ static long read_polled(struct parport *port, char *buf,
 			printk("%s: read2 timeout.\n", port->name);
 			break;
 		}
-		if (( i & 1) != 0) {
-			Byte= (Byte | z<<4);
+		if ((i & 1) != 0) {
+			Byte |= (z<<4);
 			if (temp) 
 				*(temp++) = Byte; 
 			if (count++ == length)
 				temp = NULL;
 			/* Does the error line indicate end of data? */
-			if ((parport_read_status(port) & LP_PERRORP) == LP_PERRORP) 
+			if ((parport_read_status(port) & LP_PERRORP) == 
+			    LP_PERRORP) 
 				break;
-		} else Byte=z;
+		} else 
+			Byte=z;
 	}
 	read_terminate(port);
 	return count; 
 }
 
-static struct wait_queue *wait_q;
-
-static void wakeup(void *ref)
-{
-	struct pardevice **dev = (struct pardevice **)ref;
-	
-	if (!waitqueue_active || parport_claim(*dev))
-		return;
-
-	wake_up(&wait_q);
-}
-
 int parport_probe(struct parport *port, char *buffer, int len)
 {
-	struct pardevice *dev = parport_register_device(port, "IEEE 1284 probe", NULL, wakeup, NULL, PARPORT_DEV_TRAN, &dev);
+	struct pardevice *dev = parport_register_device(port, "IEEE 1284 probe", NULL, NULL, NULL, PARPORT_DEV_TRAN, &dev);
 
 	int result = 0;
 
@@ -106,9 +100,7 @@ int parport_probe(struct parport *port, char *buffer, int len)
 		return -EINVAL;
 	}
 
-	init_waitqueue (&wait_q);
-	if (parport_claim(dev))
-		sleep_on(&wait_q);
+	parport_claim_or_block(dev);
 
 	switch (parport_ieee1284_nibble_mode_ok(port, 4)) {
 	case 1:
@@ -233,6 +225,7 @@ void parport_probe_one(struct parport *port)
 	char *buffer = kmalloc(2048, GFP_KERNEL);
 	int r;
 
+	MOD_INC_USE_COUNT;
 	port->probe_info.model = "Unknown device";
 	port->probe_info.mfr = "Unknown vendor";
 	port->probe_info.description = NULL;
@@ -261,17 +254,16 @@ void parport_probe_one(struct parport *port)
 		pretty_print(port);
 	}
 	kfree(buffer);
+	MOD_DEC_USE_COUNT;
 }
 
 #if MODULE
 int init_module(void)
 {
 	struct parport *p;
-	MOD_INC_USE_COUNT;
 	for (p = parport_enumerate(); p; p = p->next) 
 		parport_probe_one(p);
 	parport_probe_hook = &parport_probe_one;
-	MOD_DEC_USE_COUNT;
 	return 0;
 }
 

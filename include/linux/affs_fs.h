@@ -89,6 +89,7 @@ extern void			 affs_write_inode(struct inode *inode);
 /* super.c */
 
 extern int			 affs_fs(void);
+extern int			 init_affs_fs(void);
 
 /* file.c */
 

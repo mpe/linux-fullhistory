@@ -11,12 +11,14 @@
 #include <linux/sched.h>
 
 /*
- * The follow_symlink operation must dput() the base.
+ * The follow_link operation is special: it must behave as a no-op
+ * so that a bad root inode can at least be unmounted. To do this
+ * we must dput() the base and return the dentry with a dget().
  */
 static struct dentry * bad_follow_link(struct dentry *dent, struct dentry *base)
 {
 	dput(base);
-	return ERR_PTR(-EIO);
+	return dget(dent);
 }
 
 static int return_EIO(void)
@@ -62,7 +64,9 @@ struct inode_operations bad_inode_ops =
 	EIO_ERROR,		/* bmap */
 	EIO_ERROR,		/* truncate */
 	EIO_ERROR,		/* permission */
-	EIO_ERROR		/* smap */
+	EIO_ERROR,		/* smap */
+	EIO_ERROR,		/* update_page */
+	EIO_ERROR		/* revalidate */
 };
 
 

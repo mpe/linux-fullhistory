@@ -1,6 +1,6 @@
 /* Parallel-port initialisation code.
  * 
- * Authors: David Campbell <campbell@tirian.che.curtin.edu.au>
+ * Authors: David Campbell <campbell@torque.net>
  *          Tim Waugh <tim@cyberelk.demon.co.uk>
  *	    Jose Renau <renau@acm.org>
  *
@@ -57,7 +57,7 @@ __initfunc(void parport_setup(char *str, int *ints))
 #ifdef MODULE
 int init_module(void)
 {
-	parport_proc_init();
+	(void)parport_proc_init();	/* We can go on without it. */
 	return 0;
 }
 
@@ -88,6 +88,7 @@ __initfunc(int parport_init(void))
 /* Exported symbols for modules. */
 
 EXPORT_SYMBOL(parport_claim);
+EXPORT_SYMBOL(parport_claim_or_block);
 EXPORT_SYMBOL(parport_release);
 EXPORT_SYMBOL(parport_register_port);
 EXPORT_SYMBOL(parport_unregister_port);

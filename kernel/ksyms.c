@@ -100,7 +100,6 @@ EXPORT_SYMBOL(kerneld_send);
 EXPORT_SYMBOL(get_options);
 
 #ifdef CONFIG_PCI
-/* PCI BIOS support */
 EXPORT_SYMBOL(pcibios_present);
 EXPORT_SYMBOL(pcibios_find_class);
 EXPORT_SYMBOL(pcibios_find_device);
@@ -111,8 +110,6 @@ EXPORT_SYMBOL(pcibios_write_config_byte);
 EXPORT_SYMBOL(pcibios_write_config_word);
 EXPORT_SYMBOL(pcibios_write_config_dword);
 EXPORT_SYMBOL(pcibios_strerror);
-EXPORT_SYMBOL(pci_strvendor);
-EXPORT_SYMBOL(pci_strdev);
 #endif
 
 /* process memory management */

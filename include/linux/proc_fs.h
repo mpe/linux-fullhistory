@@ -197,6 +197,12 @@ enum mca_directory_inos {
 	PROC_MCA_LAST = (PROC_MCA_SLOT + 8)
 };
 
+enum bus_directory_inos {
+	PROC_BUS_PCI = PROC_MCA_LAST,
+	PROC_BUS_PCI_DEVICES,
+	PROC_BUS_LAST
+};
+
 /* Finally, the dynamically allocatable proc entries are reserved: */
 
 #define PROC_DYNAMIC_FIRST 4096
@@ -263,12 +269,13 @@ extern struct proc_dir_entry proc_openprom;
 extern struct proc_dir_entry proc_pid;
 extern struct proc_dir_entry proc_pid_fd;
 extern struct proc_dir_entry proc_mca;
+extern struct proc_dir_entry *proc_bus;
 
 extern struct inode_operations proc_scsi_inode_operations;
 
 extern void proc_root_init(void);
 extern void proc_base_init(void);
-extern void proc_net_init(void);
+extern void proc_bus_pci_init(void);
 
 extern int proc_register(struct proc_dir_entry *, struct proc_dir_entry *);
 extern int proc_unregister(struct proc_dir_entry *, int);

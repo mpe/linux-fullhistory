@@ -83,7 +83,13 @@
 
 */
 
-#define	PCD_VERSION	"1.0"
+/* Changes:
+
+	1.01	GRG 1997.01.24	Added test unit ready support
+
+*/
+
+#define	PCD_VERSION	"1.01"
 #define PCD_MAJOR	46
 #define PCD_NAME	"pcd"
 #define PCD_UNITS	4
@@ -173,6 +179,7 @@ MODULE_PARM(drive3,"1-6i");
 #define PCD_RETRIES	     5
 #define PCD_TMO		   800		/* timeout in jiffies */
 #define PCD_DELAY           50          /* spin delay in uS */
+#define PCD_READY_TMO	    20
 
 #define PCD_SPIN		(10000/PCD_DELAY)*PCD_TMO
 
@@ -207,6 +214,7 @@ struct pcd_unit {
 	struct pi_adapter pia;	/* interface to paride layer */
 	struct pi_adapter *pi;
 	int drive;		/* master/slave */
+	int last_sense;		/* result of last request sense */
 	int access;		/* count of active opens */
 	int present;		/* does this unit exist ? */
 	char name[PCD_NAMELEN];	/* pcd0, pcd1, etc */
@@ -264,6 +272,7 @@ static void pcd_init_units( void )
                 PCD.pi = & PCD.pia;
                 PCD.access = 0;
                 PCD.present = 0;
+		PCD.last_sense = 0;
                 j = 0;
                 while ((j < PCD_NAMELEN-2) && (PCD.name[j]=name[j])) j++;
                 PCD.name[j++] = '0' + unit;
@@ -509,9 +518,13 @@ static void pcd_req_sense( int unit, int quiet )
 	udelay(1000);
 	if (!r) pcd_completion(unit,buf,"Request sense");
 
-        if ((!r)&&(!quiet)) 
-		printk("%s: Sense key: %x, ASC: %x, ASQ: %x\n",
-	               PCD.name,buf[2]&0xf,buf[12],buf[13]);
+	PCD.last_sense = -1;
+	if (!r) {
+            if (!quiet) printk("%s: Sense key: %x, ASC: %x, ASQ: %x\n",
+	                       PCD.name,buf[2]&0xf,buf[12],buf[13]);
+	    PCD.last_sense = (buf[2]&0xf) | ((buf[12]&0xff)<<8)
+                                          | ((buf[13]&0xff)<<16) ;
+        } 
 }
 
 static int pcd_atapi( int unit, char * cmd, int dlen, char * buf, char * fun )
@@ -607,13 +620,30 @@ static int pcd_reset( int unit )
 	return flg-1;	
 }
 
+static int pcd_ready_wait( int unit, int tmo )
+
+{       char    tr_cmd[12] = {0,0,0,0,0,0,0,0,0,0,0,0};
+        int     k, p;
+
+        k = 0;
+        while (k < tmo) {
+          PCD.last_sense = 0;
+          pcd_atapi(unit,tr_cmd,0,NULL,DBMSG("test unit ready"));
+          p = PCD.last_sense;
+          if (!p) return 0;
+          if (!((p == 0x010402)||((p & 0xff) == 6))) return p;
+          k++;
+          pcd_sleep(100);
+        }
+        return 0x000020;        /* timeout */
+}
+
 static int pcd_check_media( int unit )
 
 {	char    rc_cmd[12] = { 0x25,0,0,0,0,0,0,0,0,0,0,0};
 
-	pcd_atapi(unit,rc_cmd,8,pcd_scratch,DBMSG("cm1"));
-	pcd_atapi(unit,rc_cmd,8,pcd_scratch,DBMSG("cm2"));
-	return (pcd_atapi(unit,rc_cmd,8,pcd_scratch,DBMSG("cm3")));
+	pcd_ready_wait(unit,PCD_READY_TMO);
+	return (pcd_atapi(unit,rc_cmd,8,pcd_scratch,DBMSG("check media")));
 }
 
 static int pcd_identify( int unit, char * id )

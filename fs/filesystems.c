@@ -37,6 +37,10 @@
 #include <linux/init.h>
 #include <linux/nls.h>
 
+#ifdef CONFIG_CODA_FS
+extern int init_coda_fs(void);
+#endif
+
 extern void device_setup(void);
 extern void binfmt_setup(void);
 extern void free_initmem(void);

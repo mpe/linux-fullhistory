@@ -80,7 +80,6 @@ int keyboard_wait_for_keypress(struct console *co)
 /* shift state counters.. */
 static unsigned char k_down[NR_SHIFT] = {0, };
 /* keyboard key bitmap */
-#define BITS_PER_LONG (8*sizeof(unsigned long))
 static unsigned long key_down[256/BITS_PER_LONG] = { 0, };
 
 static int dead_key_next = 0;

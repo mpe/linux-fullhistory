@@ -248,6 +248,7 @@ static unsigned long do_slow_gettimeoffset(void)
 	return count;
 }
 
+#ifndef CONFIG_APM
 /*
  * this is only used if we have fast gettimeoffset:
  */
@@ -255,6 +256,7 @@ static void do_x86_get_fast_time(struct timeval * tv)
 {
 	do_gettimeofday(tv);
 }
+#endif
 
 static unsigned long (*do_gettimeoffset)(void) = do_slow_gettimeoffset;
 

@@ -369,11 +369,13 @@
                           Fix bug in pci_probe() for 64 bit systems reported
 			   by <belliott@accessone.com>.
       0.533   9-Jan-98    Fix more 64 bit bugs reported by <jal@cs.brown.edu>.
+      0.534  24-Jan-98    Fix last (?) endian bug from 
+                           <Geert.Uytterhoeven@cs.kuleuven.ac.be>
 
     =========================================================================
 */
 
-static const char *version = "de4x5.c:V0.533 1998/1/9 davies@maniac.ultranet.com\n";
+static const char *version = "de4x5.c:V0.534 1998/1/24 davies@maniac.ultranet.com\n";
 
 #include <linux/module.h>
 
@@ -2079,7 +2081,7 @@ eisa_probe(struct device *dev, u_long ioaddr))
 __initfunc(static void
 pci_probe(struct device *dev, u_long ioaddr))
 {
-    u_char pb, pbus, dev_num, dnum, dev_fn, timer;
+    u_char pb, pbus, dev_num, dnum, dev_fn, timer, tirq;
     u_short dev_id, vendor, index, status;
     u_int tmp, irq = 0, device, class = DE4X5_CLASS_CODE;
     u_long iobase = 0;                     /* Clear upper 32 bits in Alphas */
@@ -2151,8 +2153,8 @@ pci_probe(struct device *dev, u_long ioaddr))
 
 	    /* Fetch the IRQ to be used */
 #ifndef __sparc_v9__
-	    pcibios_read_config_byte(pb, PCI_DEVICE, PCI_INTERRUPT_LINE, 
-				                                 (char *)&irq);
+	    pcibios_read_config_byte(pb, PCI_DEVICE, PCI_INTERRUPT_LINE, &tirq);
+	    irq = tirq;
 #else
 	    irq = pdev->irq;
 #endif
@@ -2176,7 +2178,7 @@ pci_probe(struct device *dev, u_long ioaddr))
 	    }
 	    if (!(status & PCI_COMMAND_MASTER)) continue;
 
-	    /* Check the latency timer for values > 0x60 */
+	    /* Check the latency timer for values >= 0x60 */
 	    pcibios_read_config_byte(pb, PCI_DEVICE, PCI_LATENCY_TIMER, &timer);
 	    if (timer < 0x60) {
 		pcibios_write_config_byte(pb, PCI_DEVICE, PCI_LATENCY_TIMER, 0x60);

@@ -10,11 +10,8 @@
  *  sysv/namei.c
  *  Copyright (C) 1993  Bruno Haible
  *
- *
- *  Revised: 15 Dec 1997 by Krzysztof G. Baranowski <kgb@manjak.knm.org.pl>
- *    Driver updated to use dentries.
  */
-	 
+
 
 #include <linux/sched.h>
 #include <linux/kernel.h>

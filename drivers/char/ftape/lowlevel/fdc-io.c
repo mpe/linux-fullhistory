@@ -403,10 +403,10 @@ int fdc_interrupt_wait(unsigned int time)
 	current->state = TASK_INTERRUPTIBLE;
 
 	spin_lock_irq(&current->sigmask_lock);
-        old_sigmask = current->blocked;
-        siginitset(&current->blocked, _BLOCK_ALL);
-        recalc_sigpending(current);
-        spin_unlock_irq(&current->sigmask_lock);
+	old_sigmask = current->blocked;
+	sigfillset(&current->blocked);
+	recalc_sigpending(current);
+	spin_unlock_irq(&current->sigmask_lock);
 
 	add_wait_queue(&ftape_wait_intr, &wait);
 	while (!ft_interrupt_seen && current->state != TASK_RUNNING) {
@@ -414,9 +414,9 @@ int fdc_interrupt_wait(unsigned int time)
         }
 
 	spin_lock_irq(&current->sigmask_lock);
-        current->blocked = old_sigmask;
-        recalc_sigpending(current);
-        spin_unlock_irq(&current->sigmask_lock);
+	current->blocked = old_sigmask;
+	recalc_sigpending(current);
+	spin_unlock_irq(&current->sigmask_lock);
 	
 	remove_wait_queue(&ftape_wait_intr, &wait);
 	/*  the following IS necessary. True: as well

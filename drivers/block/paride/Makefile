@@ -50,6 +50,14 @@ else
   endif
 endif
 
+ifeq ($(CONFIG_PARIDE_PT),y)
+  LX_OBJS += pt.o
+else
+  ifeq ($(CONFIG_PARIDE_PT),m)
+    MX_OBJS += pt.o
+  endif
+endif
+
 ifeq ($(CONFIG_PARIDE_ATEN),y)
   LX_OBJS += aten.o
 else

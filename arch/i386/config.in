@@ -39,6 +39,7 @@ if [ "$CONFIG_PCI" = "y" ]; then
   if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
     bool '   PCI bridge optimization (experimental)' CONFIG_PCI_OPTIMIZE
   fi
+  bool '   Backward-compatible /proc/pci' CONFIG_PCI_OLD_PROC
 fi
 bool 'MCA support' CONFIG_MCA
 bool 'System V IPC' CONFIG_SYSVIPC
@@ -56,6 +57,9 @@ bool 'Video mode selection support' CONFIG_VIDEO_SELECT
 tristate 'Parallel port support' CONFIG_PARPORT
 if [ "$CONFIG_PARPORT" != "n" ]; then
   dep_tristate '   PC-style hardware' CONFIG_PARPORT_PC $CONFIG_PARPORT
+  if [ "$CONFIG_PARPORT_PC" != "n" ]; then
+    bool '   Support foreign hardware' CONFIG_PARPORT_OTHER
+  fi
 fi
 
 endmenu

@@ -27,12 +27,6 @@ typedef struct svc_buf	svc_buf;
 
 #define NFSDDBG_FACILITY		NFSDDBG_PROC
 
-#define sleep(msec)		\
-	{	printk(KERN_NOTICE "nfsd: sleeping %d msecs\n", msec); \
-		current->state = TASK_INTERRUPTIBLE;	\
-		current->timeout = jiffies + msec / 10;	\
-		schedule();	\
-	}
 #define RETURN(st)	return st
 
 static void
@@ -298,11 +292,6 @@ nfsd_proc_create(struct svc_rqst *rqstp, struct nfsd_createargs *argp,
 		 * size, so that creat() behaves exactly like
 		 * open(..., O_CREAT|O_TRUNC|O_WRONLY).
 		 */
-#if 0
-		/* N.B. What is this doing? ignores size?? */
-		if ((attr->ia_valid &= ~(ATTR_SIZE)) != 0)
-			nfserr = nfsd_setattr(rqstp, newfhp, attr);
-#endif
 		attr->ia_valid &= ATTR_SIZE;
 		if (attr->ia_valid)
 			nfserr = nfsd_setattr(rqstp, newfhp, attr);
@@ -435,22 +424,25 @@ nfsd_proc_readdir(struct svc_rqst *rqstp, struct nfsd_readdirargs *argp,
 	u32 *	buffer;
 	int	nfserr, count;
 
-	dprintk("nfsd: READDIR  %p %d bytes at %d\n",
-		SVCFH_DENTRY(&argp->fh),
+	dprintk("nfsd: READDIR  %d/%ld %d bytes at %d\n",
+		SVCFH_DEV(&argp->fh), SVCFH_INO(&argp->fh),
 		argp->count, argp->cookie);
 
 	/* Reserve buffer space for status */
 	svcbuf_reserve(&rqstp->rq_resbuf, &buffer, &count, 1);
 
-	/* Make sure we've room for the NULL ptr & eof flag, and shrink to
-	 * client read size */
-	if ((count -= 8) > argp->count)
-		count = argp->count;
+	/* Shrink to the client read size */
+	if (count > (argp->count >> 2))
+		count = argp->count >> 2;
+
+	/* Make sure we've room for the NULL ptr & eof flag */
+	count -= 2;
+	if (count < 0)
+		count = 0;
 
 	/* Read directory and encode entries on the fly */
 	nfserr = nfsd_readdir(rqstp, &argp->fh, (loff_t) argp->cookie, 
-					nfssvc_encode_entry,
-					buffer, &count);
+				nfssvc_encode_entry, buffer, &count);
 	resp->count = count;
 
 	fh_put(&argp->fh);

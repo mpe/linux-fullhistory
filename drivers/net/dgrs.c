@@ -1358,6 +1358,8 @@ dgrs_found_device(
 /*
  *	Scan for all boards
  */
+static int is2iv[8] __initdata = { 0, 3, 5, 7, 10, 11, 12, 15 };
+
 __initfunc(static int
 dgrs_scan(struct device *dev))
 {
@@ -1463,8 +1465,6 @@ dgrs_scan(struct device *dev))
 	 */
 	if (EISA_bus)
 	{
-		static int      is2iv[8] __initdata = { 0, 3, 5, 7, 10, 11, 12, 15 };
-
 		for (io = 0x1000; io < 0x9000; io += 0x1000)
 		{
 			if (inb(io+ES4H_MANUFmsb) != 0x10

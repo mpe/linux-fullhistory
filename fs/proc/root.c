@@ -152,7 +152,7 @@ struct proc_dir_entry proc_root = {
 	&proc_root, NULL
 };
 
-struct proc_dir_entry *proc_net, *proc_scsi;
+struct proc_dir_entry *proc_net, *proc_scsi, *proc_bus;
 
 #ifdef CONFIG_MCA
 struct proc_dir_entry proc_mca = {
@@ -636,7 +636,6 @@ static struct proc_dir_entry proc_root_ppc_htab = {
 	NULL, NULL,                		/* get_info, fill_inode */
 	NULL,					/* next */
 	NULL, NULL				/* parent, subdir */
-
 };
 #endif
 
@@ -712,6 +711,11 @@ void proc_root_init(void)
 #endif
 #ifdef CONFIG_PROC_DEVICETREE
 	proc_device_tree_init();
+#endif
+
+	proc_bus = create_proc_entry("bus", S_IFDIR, 0);
+#ifdef CONFIG_PCI
+	proc_bus_pci_init();
 #endif
 }
 

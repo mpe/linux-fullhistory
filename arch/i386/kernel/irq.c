@@ -639,6 +639,7 @@ static void do_8259A_IRQ(int irq, int cpu, struct pt_regs * regs)
 	irq_exit(cpu, irq);
 }
 
+#ifdef __SMP__
 /*
  * FIXME! This is completely broken.
  */
@@ -679,6 +680,7 @@ again:
 
 	enable_IO_APIC_irq(irq);
 }
+#endif
 
 /*
  * do_IRQ handles all normal device IRQ's (the special
@@ -714,8 +716,10 @@ asmlinkage void do_IRQ(struct pt_regs regs)
 	kstat.irqs[cpu][irq]++;
 
 	do_lowlevel_IRQ = do_8259A_IRQ;
+#ifdef __SMP__
 	if (IO_APIC_IRQ(irq))
 		do_lowlevel_IRQ = do_ioapic_IRQ;
+#endif
 	
 	do_lowlevel_IRQ(irq, cpu, &regs);
 

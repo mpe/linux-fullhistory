@@ -99,21 +99,18 @@ slhc_init(int rslots, int tslots)
 	register struct cstate *ts;
 	struct slcompress *comp;
 
+	MOD_INC_USE_COUNT;
 	comp = (struct slcompress *)kmalloc(sizeof(struct slcompress),
 					    GFP_KERNEL);
 	if (! comp)
-		return NULL;
-
+		goto out_fail;
 	memset(comp, 0, sizeof(struct slcompress));
 
 	if ( rslots > 0  &&  rslots < 256 ) {
 		size_t rsize = rslots * sizeof(struct cstate);
 		comp->rstate = (struct cstate *) kmalloc(rsize, GFP_KERNEL);
 		if (! comp->rstate)
-		{
-			kfree((unsigned char *)comp);
-			return NULL;
-		}
+			goto out_free;
 		memset(comp->rstate, 0, rsize);
 		comp->rslot_limit = rslots - 1;
 	}
@@ -122,11 +119,7 @@ slhc_init(int rslots, int tslots)
 		size_t tsize = tslots * sizeof(struct cstate);
 		comp->tstate = (struct cstate *) kmalloc(tsize, GFP_KERNEL);
 		if (! comp->tstate)
-		{
-			kfree((unsigned char *)comp->rstate);
-			kfree((unsigned char *)comp);
-			return NULL;
-		}
+			goto out_free2;
 		memset(comp->tstate, 0, tsize);
 		comp->tslot_limit = tslots - 1;
 	}
@@ -151,8 +144,15 @@ slhc_init(int rslots, int tslots)
 		ts[0].next = &(ts[comp->tslot_limit]);
 		ts[0].cs_this = 0;
 	}
-	MOD_INC_USE_COUNT;
 	return comp;
+
+out_free2:
+	kfree((unsigned char *)comp->rstate);
+out_free:
+	kfree((unsigned char *)comp);
+out_fail:
+	MOD_DEC_USE_COUNT;
+	return NULL;
 }
 
 
@@ -163,14 +163,14 @@ slhc_free(struct slcompress *comp)
 	if ( comp == NULLSLCOMPR )
 		return;
 
-	if ( comp->rstate != NULLSLSTATE )
-		kfree( comp->rstate );
-
 	if ( comp->tstate != NULLSLSTATE )
 		kfree( comp->tstate );
 
-	MOD_DEC_USE_COUNT;
+	if ( comp->rstate != NULLSLSTATE )
+		kfree( comp->rstate );
+
 	kfree( comp );
+	MOD_DEC_USE_COUNT;
 }
 
 

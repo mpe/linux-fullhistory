@@ -35,11 +35,11 @@ EXPORT_SYMBOL(dump_thread);
 EXPORT_SYMBOL(dump_fpu);
 EXPORT_SYMBOL(__ioremap);
 EXPORT_SYMBOL(iounmap);
+EXPORT_SYMBOL(local_bh_count);
 EXPORT_SYMBOL(local_irq_count);
 EXPORT_SYMBOL_NOVERS(__down_failed);
 EXPORT_SYMBOL_NOVERS(__down_failed_interruptible);
 EXPORT_SYMBOL_NOVERS(__up_wakeup);
-EXPORT_SYMBOL(global_bh_lock);
 /* Networking helper routines. */
 EXPORT_SYMBOL(csum_partial_copy);
 /* Delay loops */
@@ -73,6 +73,8 @@ EXPORT_SYMBOL(lk_lockmsg);
 
 /* Global SMP irq stuff */
 EXPORT_SYMBOL(synchronize_irq);
+EXPORT_SYMBOL(synchronize_bh);
+EXPORT_SYMBOL(global_bh_lock);
 EXPORT_SYMBOL(global_irq_holder);
 EXPORT_SYMBOL(__global_cli);
 EXPORT_SYMBOL(__global_sti);

@@ -148,7 +148,7 @@ extern int adfs_inode_validate (struct inode *inode);
 extern unsigned long adfs_inode_generate (unsigned long parent_id, int diridx);
 extern unsigned long adfs_inode_objid (struct inode *inode);
 extern unsigned int adfs_parent_bmap (struct inode *inode, int block);
-extern unsigned int adfs_bmap (struct inode *inode, int block);
+extern int adfs_bmap (struct inode *inode, int block);
 extern void adfs_read_inode (struct inode *inode);
 
 /* map.c */

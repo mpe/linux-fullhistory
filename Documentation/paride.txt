@@ -55,7 +55,7 @@ high-level drivers for each of the different type of supported device:
 	pd	IDE disk
 	pcd	ATAPI CD-ROM
 	pf	ATAPI disk
-	pt	ATAPI tape	(not yet available)
+	pt	ATAPI tape
 
 (Support for ATAPI CD-R and CD-RW drives is not yet in development,
 but this may change.)
