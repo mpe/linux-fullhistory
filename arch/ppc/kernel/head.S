@@ -375,7 +375,7 @@ HardwareInterrupt:
 	.globl do_IRQ_intercept
 do_IRQ_intercept:
 	.long	do_IRQ;
-	.long	ret_from_int
+	.long	ret_from_intercept
 #else
 	bl	apus_interrupt_entry
 #endif /* CONFIG_APUS */
@@ -425,7 +425,7 @@ Decrementer:
 	.globl timer_interrupt_intercept
 timer_interrupt_intercept:
 	.long	timer_interrupt
-	.long	ret_from_int
+	.long	ret_from_intercept
 
 	STD_EXCEPTION(0xa00, Trap_0a, UnknownException)
 	STD_EXCEPTION(0xb00, Trap_0b, UnknownException)

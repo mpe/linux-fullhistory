@@ -184,7 +184,7 @@ static int yenta_set_socket(pci_socket_t *socket, socket_state_t *state)
 
 	yenta_set_power(socket, state);
 	socket->io_irq = state->io_irq;
-	bridge = config_readw(socket, CB_BRIDGE_CONTROL) & ~CB_BRIDGE_CRST;
+	bridge = config_readw(socket, CB_BRIDGE_CONTROL) & ~(CB_BRIDGE_CRST | CB_BRIDGE_INTR);
 	if (cb_readl(socket, CB_SOCKET_STATE) & CB_CBCARD) {
 		bridge |= (state->flags & SS_RESET) ? CB_BRIDGE_CRST : 0;
 
@@ -193,15 +193,16 @@ static int yenta_set_socket(pci_socket_t *socket, socket_state_t *state)
 			u8 intr = exca_readb(socket, I365_INTCTL);
 			intr = (intr & ~0xf) | state->io_irq;
 			exca_writeb(socket, I365_INTCTL, intr);
+			bridge |= CB_BRIDGE_INTR;
 		}
 	} else {
 		u8 reg;
 
+		bridge |= CB_BRIDGE_INTR;
 		reg = exca_readb(socket, I365_INTCTL) & (I365_RING_ENA | I365_INTR_ENA);
 		reg |= (state->flags & SS_RESET) ? 0 : I365_PC_RESET;
 		reg |= (state->flags & SS_IOCARD) ? I365_PC_IOCARD : 0;
-		if (!socket->cb_irq)
-			reg |= state->io_irq;
+		reg |= state->io_irq;
 		exca_writeb(socket, I365_INTCTL, reg);
 
 		reg = exca_readb(socket, I365_POWER) & (I365_VCC_MASK|I365_VPP1_MASK);
@@ -451,20 +452,10 @@ static unsigned int yenta_probe_irq(pci_socket_t *socket)
 	int i;
 	unsigned long val;
 	u16 bridge_ctrl;
+	u32 mask;
 
-	/* Are we set up to route the IO irq to the PCI irq? */
+	/* Set up ISA irq routing to probe the ISA irqs.. */
 	bridge_ctrl = config_readw(socket, CB_BRIDGE_CONTROL);
-	if (socket->cb_irq) {
-		if (bridge_ctrl & CB_BRIDGE_INTR) {
-			bridge_ctrl &= ~CB_BRIDGE_INTR;
-			config_writew(socket, CB_BRIDGE_CONTROL, bridge_ctrl);
-		}
-		printk("CardBus: using PCI interrupt %d\n", socket->cb_irq);
-		return 1 << socket->cb_irq;
-	}
-
-	/* Uhhuh. No PCI interrupt: try falling back on ISA interrupts */
-	printk("CardBus: Hmm.. No PCI irq routing (irq%d).\n", socket->cb_irq);
 	if (!(bridge_ctrl & CB_BRIDGE_INTR)) {
 		bridge_ctrl |= CB_BRIDGE_INTR;
 		config_writew(socket, CB_BRIDGE_CONTROL, bridge_ctrl);
@@ -486,7 +477,13 @@ static unsigned int yenta_probe_irq(pci_socket_t *socket)
 		cb_writel(socket, CB_SOCKET_EVENT, -1);
 	}
 	cb_writel(socket, CB_SOCKET_MASK, 0);
-	return probe_irq_mask(val) & 0xffff;
+	
+	mask = probe_irq_mask(val) & 0xffff;
+
+	bridge_ctrl &= ~CB_BRIDGE_INTR;
+	config_writew(socket, CB_BRIDGE_CONTROL, bridge_ctrl);
+
+	return mask;
 }
 
 static void yenta_clear_maps(pci_socket_t *socket)
@@ -570,7 +567,7 @@ static void yenta_get_socket_capabilities(pci_socket_t *socket)
 	socket->cap.cb_dev = socket->dev;
 	socket->cap.bus = NULL;
 
-	printk("Yenta IRQ list %04x\n", socket->cap.irq_mask);
+	printk("Yenta IRQ list %04x, PCI irq%d\n", socket->cap.irq_mask, socket->cb_irq);
 }
 
 static void yenta_allocate_res(pci_socket_t *socket, int nr, unsigned type)

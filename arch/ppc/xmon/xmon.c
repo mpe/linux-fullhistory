@@ -469,7 +469,7 @@ backtrace(struct pt_regs *excp)
 	unsigned sp;
 	unsigned stack[2];
 	struct pt_regs regs;
-	extern char ret_from_int, ret_from_syscall_1, ret_from_syscall_2;
+	extern char ret_from_intercept, ret_from_syscall_1, ret_from_syscall_2;
 	extern char lost_irq_ret, do_bottom_half_ret, do_signal_ret;
 	extern char ret_from_except;
 
@@ -483,7 +483,7 @@ backtrace(struct pt_regs *excp)
 		if (mread(sp, stack, sizeof(stack)) != sizeof(stack))
 			break;
 		printf("%x ", stack[1]);
-		if (stack[1] == (unsigned) &ret_from_int
+		if (stack[1] == (unsigned) &ret_from_intercept
 		    || stack[1] == (unsigned) &ret_from_except
 		    || stack[1] == (unsigned) &ret_from_syscall_1
 		    || stack[1] == (unsigned) &ret_from_syscall_2

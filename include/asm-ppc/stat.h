@@ -38,39 +38,29 @@ struct stat {
 	unsigned long  	__unused5;
 };
 
-/* This matches struct stat64 in glibc2.1, hence the absolutely
- * insane amounts of padding around dev_t's.
+/* This matches struct stat64 in glibc2.1.
  */
 struct stat64 {
-	unsigned short	st_dev;
-	unsigned char	__pad0[10];
+	unsigned long long st_dev; 	/* Device.  */
+	unsigned short int __pad1;
+	unsigned long st_ino;		/* File serial number.  */
+	unsigned int st_mode;		/* File mode.  */
+	unsigned int st_nlink;		/* Link count.  */
+	unsigned int st_uid;		/* User ID of the file's owner.  */
+	unsigned int st_gid;		/* Group ID of the file's group. */
+	unsigned long long st_rdev; 	/* Device number, if device.  */
+	unsigned short int __pad2;
+	long long st_size;		/* Size of file, in bytes.  */
+	long st_blksize;		/* Optimal block size for I/O.  */
 
-	unsigned long	st_ino;
-	unsigned int	st_mode;
-	unsigned int	st_nlink;
-
-	unsigned long	st_uid;
-	unsigned long	st_gid;
-
-	unsigned short	st_rdev;
-	unsigned char	__pad3[10];
-
-	long long	st_size;
-	unsigned long	st_blksize;
-
-	unsigned long	st_blocks;	/* Number 512-byte blocks allocated. */
-	unsigned long	__pad4;		/* future possible st_blocks high bits */
-
-	unsigned long	st_atime;
-	unsigned long	__pad5;
-
-	unsigned long	st_mtime;
-	unsigned long	__pad6;
-
-	unsigned long	st_ctime;
-	unsigned long	__pad7;		/* will be high 32 bits of ctime someday */
-
-	unsigned long	__unused1;
-	unsigned long	__unused2;
+	long long st_blocks;		/* Number 512-byte blocks allocated. */
+	long st_atime;			/* Time of last access.  */
+	unsigned long int __unused1;
+	long st_mtime;			/* Time of last modification.  */
+	unsigned long int __unused2;
+	long st_ctime;			/* Time of last status change.  */
+	unsigned long int __unused3;
+	unsigned long int __unused4;
+	unsigned long int __unused5;
 };
 #endif

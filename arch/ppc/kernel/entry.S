@@ -265,30 +265,20 @@ _GLOBAL(_switch)
 	SYNC
 	rfi
 
-/*
- * ret_from_int():
- *
- * Return from an interrupt (external interrupt and
- * decrementer).  This checks the first argument so
- * we know if rtl_intercept wants us to check for
- * a bottom half, signals and so on (normal return) or
- * we're returning from a real-time interrupt or have
- * interrupts soft disabled so we cannot enter Linux.
- *   -- Cort
- */
-	.globl	ret_from_int
-ret_from_int:
-	cmpi	0,r3,0
-	beq	10f
-	/* we're allowed to do signal/bh checks */
-	b	ret_from_syscall
 #ifdef __SMP__	
 	.globl	ret_from_smpfork
 ret_from_smpfork:
 	bl	schedule_tail
+	b	ret_from_except
 #endif
-	.globl	ret_from_syscall
-ret_from_syscall:
+	.globl	ret_from_intercept
+ret_from_intercept:
+	/*
+	 * We may be returning from RTL and cannot do the normal checks
+	 * -- Cort
+	 */
+	cmpi	0,r3,0
+	beq	10f
 	.globl	ret_from_except
 ret_from_except:
 0:	/* disable interrupts */	

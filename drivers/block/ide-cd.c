@@ -2598,7 +2598,7 @@ void __exit ide_cdrom_exit(void)
 }
 #endif /* MODULE */
  
-int __init ide_cdrom_init (void)
+int ide_cdrom_init (void)
 {
 	ide_drive_t *drive;
 	struct cdrom_info *info;

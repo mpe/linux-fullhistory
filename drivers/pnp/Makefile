@@ -12,16 +12,26 @@ SUB_DIRS     :=
 MOD_SUB_DIRS := $(SUB_DIRS)
 ALL_SUB_DIRS := $(SUB_DIRS)
 
-ifeq ($(CONFIG_ISAPNP),m)
-M_OBJS   := isa-pnp.o
-endif
-
-O_TARGET := isa-pnp.o
-OX_OBJS  := isapnp.o
-O_OBJS   := quirks.o
+PROC_OBJS :=
 
 ifdef CONFIG_PROC_FS
-O_OBJS   += isapnp_proc.o
+PROC_OBJS   += isapnp_proc.o
 endif
 
+ifeq ($(CONFIG_ISAPNP),m)
+	M_OBJS   := isa-pnp.o
+	MIX_OBJS := isapnp.o
+	MI_OBJS  := quirks.o $(PROC_OBJS)
+endif
+
+ifeq ($(CONFIG_ISAPNP),y)
+	O_TARGET := isa-pnp.o
+	OX_OBJS  := isapnp.o
+	O_OBJS   := quirks.o $(PROC_OBJS)
+endif
+
+
 include $(TOPDIR)/Rules.make
+
+isa-pnp.o: isapnp.o quirks.o $(PROC_OBJS)
+	$(LD) $(LD_RFLAG) -r -o $@ isapnp.o quirks.o $(PROC_OBJS)

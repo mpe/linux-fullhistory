@@ -906,16 +906,16 @@ static td_t * dl_reverse_done_list (ohci_t * ohci)
   	
   	spin_lock_irqsave (&usb_ed_lock, flags);
   	
-	td_list_hc = le32_to_cpu (ohci->hcca.done_head) & 0xfffffff0;
+	td_list_hc = le32_to_cpup (&ohci->hcca.done_head) & 0xfffffff0;
 	ohci->hcca.done_head = 0;
 	
 	while (td_list_hc) {		
 		td_list = (td_t *) bus_to_virt (td_list_hc);
 
-		if (TD_CC_GET (le32_to_cpu (td_list->hwINFO))) {
+		if (TD_CC_GET (le32_to_cpup (&td_list->hwINFO))) {
 			urb_priv = (urb_priv_t *) td_list->urb->hcpriv;
 			dbg(" USB-error/status: %x : %p", 
-					TD_CC_GET (le32_to_cpu (td_list->hwINFO)), td_list);
+					TD_CC_GET (le32_to_cpup (&td_list->hwINFO)), td_list);
 			if (td_list->ed->hwHeadP & cpu_to_le32 (0x1)) {
 				if (urb_priv && ((td_list->index + 1) < urb_priv->length)) {
 					td_list->ed->hwHeadP = 
@@ -1022,9 +1022,9 @@ static void dl_done_list (ohci_t * ohci, td_t * td_list)
    		
   		urb = td_list->urb;
   		urb_priv = urb->hcpriv;
-  		tdINFO = le32_to_cpu (td_list->hwINFO);
-  		tdBE   = le32_to_cpu (td_list->hwBE);
-  		tdCBP  = le32_to_cpu (td_list->hwCBP);
+  		tdINFO = le32_to_cpup (&td_list->hwINFO);
+  		tdBE   = le32_to_cpup (&td_list->hwBE);
+  		tdCBP  = le32_to_cpup (&td_list->hwCBP);
   		
    		ed = td_list->ed;
    		

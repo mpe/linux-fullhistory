@@ -2460,7 +2460,7 @@ int __init i2o_init(void)
 #endif
 
 	if(i2o_num_controllers)
-		i2o_init();
+		i2o_sys_init();
 
 	i2o_config_init();
 #ifdef CONFIG_I2O_BLOCK

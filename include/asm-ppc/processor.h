@@ -99,10 +99,10 @@
 #define	  DBCR_EDM	0x80000000
 #define	  DBCR_IDM	0x40000000
 #define	  DBCR_RST(x)	(((x) & 0x3) << 28)
-#define	    NONE       	0
-#define	    CORE       	1
-#define	    CHIP       	2
-#define	    SYSTEM	3
+#define	    DBCR_RST_NONE       	0
+#define	    DBCR_RST_CORE       	1
+#define	    DBCR_RST_CHIP       	2
+#define	    DBCR_RST_SYSTEM		3
 #define	  DBCR_IC	0x08000000	/* Instruction Completion Debug Evnt */
 #define	  DBCR_BT	0x04000000	/* Branch Taken Debug Event */
 #define	  DBCR_EDE	0x02000000	/* Exception Debug Event */

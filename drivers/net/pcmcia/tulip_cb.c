@@ -3152,7 +3152,7 @@ static void __devexit tulip_remove(struct pci_dev *pdev)
 	kfree(tp);
 }
 
-struct pci_driver tulip_ops = {
+static struct pci_driver tulip_ops = {
 	name:		"tulip_cb",
 	id_table:	tulip_pci_table,
 	probe:		tulip_pci_probe,
@@ -3161,13 +3161,13 @@ struct pci_driver tulip_ops = {
 	resume:		tulip_resume
 };
 
-int tulip_init(void)
+static int tulip_init(void)
 {
 	pci_register_driver(&tulip_ops);
 	return 0;
 }
 
-void tulip_exit(void)
+static void tulip_exit(void)
 {
 	pci_unregister_driver(&tulip_ops);
 }

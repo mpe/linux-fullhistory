@@ -70,6 +70,7 @@ struct pci_ops generic_pci_ops =
 void __init pcibios_init(void)
 {
 	printk("PCI: Probing PCI hardware\n");
+	ioport_resource.end = ~0L;
 	pci_scan_bus(0, &generic_pci_ops, NULL);
 	pcibios_claim_resources(&pci_root_buses);
 	if (ppc_md.pcibios_fixup)

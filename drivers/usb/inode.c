@@ -30,6 +30,7 @@
 
 #define __NO_VERSION__
 #include <linux/module.h>
+#include <linux/sched.h>
 #include <linux/fs.h>
 #include <linux/smp_lock.h>
 #include <linux/locks.h>

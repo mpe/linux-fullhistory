@@ -9,7 +9,7 @@
 
 SUB_DIRS     := block char net parport sound misc
 MOD_SUB_DIRS := $(SUB_DIRS)
-ALL_SUB_DIRS := $(SUB_DIRS) pci sgi scsi sbus cdrom isdn pnp i2o \
+ALL_SUB_DIRS := $(SUB_DIRS) pci sgi scsi sbus cdrom isdn pnp i2o ieee1394 \
 				macintosh video dio zorro fc4 usb \
 				nubus tc ap1000 atm pcmcia i2c telephony
 
@@ -97,6 +97,15 @@ MOD_SUB_DIRS += scsi
 else
   ifeq ($(CONFIG_SCSI),m)
   MOD_SUB_DIRS += scsi
+  endif
+endif
+
+ifeq ($(CONFIG_IEEE1394),y)
+SUB_DIRS += ieee1394
+MOD_SUB_DIRS += ieee1394
+else
+  ifeq ($(CONFIG_IEEE1394),m)
+  MOD_SUB_DIRS += ieee1394
   endif
 endif
 

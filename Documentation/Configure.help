@@ -11788,6 +11788,84 @@ CONFIG_SUN_MOSTEK_RTC
 ### Please someone fill these in.
 ###
 
+IEEE 1394 (aka FireWire) support
+CONFIG_IEEE1394
+  IEEE 1394 describes a high performance serial bus, which is also
+  known as FireWire(tm) or i.Link(tm) and is used for connecting all
+  sorts of devices (most notably digital video cameras).
+
+  If you have FireWire hardware and want to use it, say Y here.  This
+  is the core support only, you will also need to select a driver for
+  your IEEE 1394 adapter.
+
+  If you want to compile this as a module ( = code which can be
+  inserted in and removed from the running kernel whenever you want),
+  say M here and read Documentation/modules.txt. The module will be
+  called ieee1394.o.
+
+  FireWire is a trademark by Apple Inc. and i.Link is a trademark by 
+  Sony.
+
+TI PCILynx IEEE 1394 support
+CONFIG_IEEE1394_PCILYNX
+  Say Y here if you have a IEEE-1394 controller with the Texas
+  Instruments PCILynx chip.  Note: this driver is written for revision
+  2 of this chip and may not work with revision 0.
+
+  If you want to compile this as a module ( = code which can be
+  inserted in and removed from the running kernel whenever you want),
+  say M here and read Documentation/modules.txt. The module will be
+  called pcilynx.o.
+
+Use local RAM on PCILynx board
+CONFIG_IEEE1394_PCILYNX_LOCALRAM
+  This option makes the PCILynx driver use local RAM available on some
+  PCILynx setups for Packet Control Lists.  Local RAM may speed up
+  command processing because no PCI transfers are necessary during 
+  use of the Packet Control Lists.
+  
+  Note that there are no known PCILynx systems providing local RAM
+  except for the evaluation boards by Texas Instruments and that the
+  PCILynx does not reliably report missing RAM.
+  
+  Unless you are absolutely sure that you have 64kB of local RAM and
+  that you want to use it or if you don't know what this is all about,
+  say N here.
+
+Adaptec AIC-5800 IEEE 1394 support
+CONFIG_IEEE1394_AIC5800
+  Say Y here if you have a IEEE 1394 controller using the Adaptec
+  AIC-5800 chip. All Adaptec host adapters (89xx series) use this
+  chip, as well as miro's DV boards.
+
+  If you want to compile this as a module ( = code which can be
+  inserted in and removed from the running kernel whenever you want),
+  say M here and read Documentation/modules.txt. The module will be
+  called aic5800.o.
+
+OHCI (Open Host Controller Interface) support
+CONFIG_IEEE1394_OHCI1394
+  Say Y here if you have a IEEE 1394 controller based on OHCI.
+  The current driver was only tested with OHCI chipsets made
+  by Texas Instruments. However, most third-party vendors use
+  TI chips.
+
+  If you want to compile this as a module ( = code which can be
+  inserted in and removed from the running kernel whenever you want),
+  say M here and read Documentation/modules.txt. The module will be
+  called ohci1394.o.
+
+RAW IEEE 1394 I/O support
+CONFIG_IEEE1394_RAWIO
+  Say Y here if you want support for the raw device. This is generally
+  a good idea, so you should say Y here. The raw device enables
+  direct communication of user programs to the IEEE 1394 bus.
+
+  If you want to compile this as a module ( = code which can be
+  inserted in and removed from the running kernel whenever you want),
+  say M here and read Documentation/modules.txt. The module will be
+  called raw1394.o.
+
 #
 # m68k-specific kernel options
 # Documented by Chris Lawrence <quango@themall.net> et al.

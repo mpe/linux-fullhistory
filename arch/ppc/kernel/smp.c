@@ -446,6 +446,8 @@ void __init smp_callin(void)
 	 */
 	if ( _machine & (_MACH_gemini|_MACH_chrp|_MACH_prep) )
 		do_openpic_setup_cpu();
+	if ( _machine == _MACH_gemini )
+		gemini_init_l2();
 	while(!smp_commenced)
 		barrier();
 	__sti();

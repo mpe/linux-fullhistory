@@ -266,7 +266,7 @@ label:
 	bl	transfer_to_handler
 _GLOBAL(do_IRQ_intercept)
 	.long	do_IRQ
-	.long	ret_from_except
+	.long	ret_from_intercept
 
 ### 0x0600 - Alignment Exception
 	
@@ -320,7 +320,7 @@ _GLOBAL(do_IRQ_intercept)
 	bl	transfer_to_handler
 _GLOBAL(timer_interrupt_intercept)
 	.long	timer_interrupt
-	.long	ret_from_except
+	.long	ret_from_intercept
 
 #if 0
 ### 0x1010 - Fixed Interval Timer (FIT) Exception
@@ -474,7 +474,7 @@ _GLOBAL(giveup_fpu)
 	
 _GLOBAL(abort)
 	mfspr	r13,SPRN_DBCR
-	oris	r13,r13,DBCR_RST(SYSTEM)@h
+	oris	r13,r13,DBCR_RST(DBCR_RST_SYSTEM)@h
 	mtspr	SPRN_DBCR,r13
 
 

@@ -91,10 +91,9 @@ if [ "$CONFIG_OAK" = "y" ]; then
 fi
 if [ "$CONFIG_8xx" = "y" ]; then
     bool 'QSpan PCI' CONFIG_PCI
-else
-  if [ "$CONFIG_APUS" != "y" ]; then
+fi
+if [ "$CONFIG_6xx" = "y" -a "$CONFIG_APUS" != "y" ]; then
     define_bool CONFIG_PCI y
-  fi
 fi
 
 bool 'Networking support' CONFIG_NET
@@ -191,6 +190,8 @@ if [ "$CONFIG_SCSI" != "n" ]; then
   source drivers/scsi/Config.in
 fi
 endmenu
+
+source drivers/ieee1394/Config.in
 
 if [ "$CONFIG_NET" = "y" ]; then
   mainmenu_option next_comment

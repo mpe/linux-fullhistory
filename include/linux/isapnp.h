@@ -128,7 +128,7 @@ struct isapnp_resources {
 	struct isapnp_resources *next;	/* next resource */
 };
 
-#if defined(CONFIG_ISAPNP) || (defined(CONFIG_ISAPNP_MODULE) && defined(MODULE))
+#if defined(CONFIG_ISAPNP) || defined(CONFIG_ISAPNP_MODULE)
 
 /* lowlevel configuration */
 int isapnp_present(void);

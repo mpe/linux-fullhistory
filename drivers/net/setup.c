@@ -30,6 +30,7 @@ extern int arcnet_init(void);
 extern int bigmac_probe(void); 
 extern int bmac_probe(void); 
 extern int cpm_enet_init(void); 
+extern int oaknet_init(void);
 extern int dlci_setup(void); 
 extern int dgrs_probe(void); 
 extern int dmfe_reg_board(void); 
@@ -162,6 +163,13 @@ struct net_probe pci_probes[] __initdata = {
 #endif
 #ifdef CONFIG_NCR885E
 	{ncr885e_probe, 0},
+#endif
+
+/*
+ *	IBM "Oak" Evaluation board
+ */
+#ifdef	CONFIG_OAKNET
+	{oaknet_init, 0},
 #endif
 
 /*
