@@ -326,7 +326,7 @@ static int ni65_close(struct device *dev)
 #ifdef MODULE
 static
 #endif
-__initfunc(int ni65_probe(struct device *dev))
+int __init ni65_probe(struct device *dev)
 {
 	int *port;
 	static int ports[] = {0x360,0x300,0x320,0x340, 0};
@@ -348,7 +348,7 @@ __initfunc(int ni65_probe(struct device *dev))
 /*
  * this is the real card probe ..
  */
-__initfunc(static int ni65_probe1(struct device *dev,int ioaddr))
+static int __init ni65_probe1(struct device *dev,int ioaddr)
 {
 	int i,j;
 	struct priv *p;

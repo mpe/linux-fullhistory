@@ -111,6 +111,8 @@ init_etherdev(struct device *dev, int sizeof_priv)
 		alloc_size &= ~3;		/* Round to dword boundary. */
 
 		dev = (struct device *)kmalloc(alloc_size, GFP_KERNEL);
+		if(dev==NULL)
+			return NULL;
 		memset(dev, 0, alloc_size);
 		if (sizeof_priv)
 			dev->priv = (void *) (dev + 1);
@@ -233,6 +235,8 @@ struct device *init_hippi_dev(struct device *dev, int sizeof_priv)
 		alloc_size &= ~3;		/* Round to dword boundary. */
 
 		dev = (struct device *)kmalloc(alloc_size, GFP_KERNEL);
+		if(dev==NULL)
+			return NULL;
 		memset(dev, 0, alloc_size);
 		if (sizeof_priv)
 			dev->priv = (void *) (dev + 1);
@@ -563,6 +567,8 @@ struct device *init_trdev(struct device *dev, int sizeof_priv)
 
 		alloc_size &= ~3;		/* Round to dword boundary. */
 		dev = (struct device *)kmalloc(alloc_size, GFP_KERNEL);
+		if(dev==NULL)
+			return NULL;
 		memset(dev, 0, alloc_size);
 		if (sizeof_priv)
 			dev->priv = (void *) (dev + 1);

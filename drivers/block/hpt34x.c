@@ -1,8 +1,7 @@
 /*
- * linux/drivers/block/hpt34x.c		Version 0.24	July 3, 1999
+ * linux/drivers/block/hpt34x.c		Version 0.25	July 11, 1999
  *
  * Copyright (C) 1998-99	Andre Hedrick
- *					(hedrick@astro.dyer.vanderbilt.edu)
  *
  * 00:12.0 Unknown mass storage controller:
  * Triones Technologies, Inc.
@@ -118,9 +117,14 @@ static int config_chipset_for_dma (ide_drive_t *drive)
 		return ((int) ide_dma_off_quietly);
 #endif /* HPT343_DISABLE_ALL_DMAING */
 
-	if (id->dma_ultra & 0x0004) {
+	if (id->dma_ultra & 0x0010) {
+		goto backspeed;
+	} else if (id->dma_ultra & 0x0008) {
+		goto backspeed;
+	} else if (id->dma_ultra & 0x0004) {
+backspeed:
 		if (!((id->dma_ultra >> 8) & 4)) {
-			drive->id->dma_ultra &= ~0x0F00;
+			drive->id->dma_ultra &= ~0xFF00;
 			drive->id->dma_ultra |= 0x0404;
 			drive->id->dma_mword &= ~0x0F00;
 			drive->id->dma_1word &= ~0x0F00;
@@ -128,7 +132,7 @@ static int config_chipset_for_dma (ide_drive_t *drive)
 		speed = XFER_UDMA_2;
 	} else if (id->dma_ultra & 0x0002) {
 		if (!((id->dma_ultra >> 8) & 2)) {
-			drive->id->dma_ultra &= ~0x0F00;
+			drive->id->dma_ultra &= ~0xFF00;
 			drive->id->dma_ultra |= 0x0202;
 			drive->id->dma_mword &= ~0x0F00;
 			drive->id->dma_1word &= ~0x0F00;
@@ -136,7 +140,7 @@ static int config_chipset_for_dma (ide_drive_t *drive)
 		speed = XFER_UDMA_1;
 	} else if (id->dma_ultra & 0x0001) {
 		if (!((id->dma_ultra >> 8) & 1)) {
-			drive->id->dma_ultra &= ~0x0F00;
+			drive->id->dma_ultra &= ~0xFF00;
 			drive->id->dma_ultra |= 0x0101;
 			drive->id->dma_mword &= ~0x0F00;
 			drive->id->dma_1word &= ~0x0F00;
@@ -190,7 +194,8 @@ static int config_chipset_for_dma (ide_drive_t *drive)
 
 	(void) hpt34x_tune_chipset(drive, speed);
 
-	return ((int)	((id->dma_ultra >> 8) & 7) ? ide_dma_on :
+	return ((int)	((id->dma_ultra >> 11) & 3) ? ide_dma_off :
+			((id->dma_ultra >> 8) & 7) ? ide_dma_on :
 			((id->dma_mword >> 8) & 7) ? ide_dma_on :
 			((id->dma_1word >> 8) & 7) ? ide_dma_on :
 						     ide_dma_off_quietly);
@@ -337,47 +342,10 @@ int hpt34x_dmaproc (ide_dma_action_t func, ide_drive_t *drive)
 
 __initfunc(unsigned int pci_init_hpt34x (struct pci_dev *dev, const char *name))
 {
-	int i;
 	unsigned short cmd;
-	unsigned long hpt34xIoBase = dev->base_address[4] & PCI_BASE_ADDRESS_IO_MASK;
-#if 0
-	unsigned char misc10 = inb(hpt34xIoBase + 0x0010);
-	unsigned char misc11 = inb(hpt34xIoBase + 0x0011);
-#endif
 
 	pci_write_config_byte(dev, HPT34X_PCI_INIT_REG, 0x00);
 	pci_read_config_word(dev, PCI_COMMAND, &cmd);
-	pci_write_config_word(dev, PCI_COMMAND, cmd & ~PCI_COMMAND_IO);
-
-	dev->base_address[0] = (hpt34xIoBase + 0x20);
-	dev->base_address[1] = (hpt34xIoBase + 0x34);
-	dev->base_address[2] = (hpt34xIoBase + 0x28);
-	dev->base_address[3] = (hpt34xIoBase + 0x3c);
-
-	for(i=0; i<4; i++)
-		dev->base_address[i] |= PCI_BASE_ADDRESS_SPACE_IO;
-
-	/*
-	 * Since 20-23 can be assigned and are R/W, we correct them.
-	 */
-	pci_write_config_dword(dev, PCI_BASE_ADDRESS_0, dev->base_address[0]);
-	pci_write_config_dword(dev, PCI_BASE_ADDRESS_1, dev->base_address[1]);
-	pci_write_config_dword(dev, PCI_BASE_ADDRESS_2, dev->base_address[2]);
-	pci_write_config_dword(dev, PCI_BASE_ADDRESS_3, dev->base_address[3]);
-	pci_write_config_word(dev, PCI_COMMAND, cmd);
-
-#if 0
-	outb(misc10|0x78, (hpt34xIoBase + 0x0010));
-	outb(misc11, (hpt34xIoBase + 0x0011));
-#endif
-
-#ifdef DEBUG
-	printk("%s: 0x%02x 0x%02x\n",
-		(pcicmd & PCI_COMMAND_MEMORY) ? "HPT345" : name,
-		inb(hpt34xIoBase + 0x0010),
-		inb(hpt34xIoBase + 0x0011));
-#endif
-
 	if (cmd & PCI_COMMAND_MEMORY) {
 		if (dev->rom_address) {
 			pci_write_config_byte(dev, PCI_ROM_ADDRESS, dev->rom_address | PCI_ROM_ADDRESS_ENABLE);
@@ -385,6 +353,25 @@ __initfunc(unsigned int pci_init_hpt34x (struct pci_dev *dev, const char *name))
 		}
 		pci_write_config_byte(dev, PCI_LATENCY_TIMER, 0xF0);
 	} else {
+		int i = 0;
+		unsigned long hpt34xIoBase = dev->resource[4].start;
+
+		pci_write_config_word(dev, PCI_COMMAND, cmd & ~PCI_COMMAND_IO);
+		dev->resource[0].start = (hpt34xIoBase + 0x20);
+		dev->resource[1].start = (hpt34xIoBase + 0x34);
+		dev->resource[2].start = (hpt34xIoBase + 0x28);
+		dev->resource[3].start = (hpt34xIoBase + 0x3c);
+		for(i=0; i<4; i++)
+			dev->resource[i].flags |= PCI_BASE_ADDRESS_SPACE_IO;
+		/*
+		 * Since 20-23 can be assigned and are R/W, we correct them.
+		 */
+		pci_write_config_dword(dev, PCI_BASE_ADDRESS_0, dev->resource[0].start);
+		pci_write_config_dword(dev, PCI_BASE_ADDRESS_1, dev->resource[1].start);
+		pci_write_config_dword(dev, PCI_BASE_ADDRESS_2, dev->resource[2].start);
+		pci_write_config_dword(dev, PCI_BASE_ADDRESS_3, dev->resource[3].start);
+
+		pci_write_config_word(dev, PCI_COMMAND, cmd);
 		pci_write_config_byte(dev, PCI_LATENCY_TIMER, 0x20);
 	}
 	return dev->irq;

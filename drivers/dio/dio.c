@@ -112,7 +112,7 @@ struct dioboard
 
 static struct dioboard *blist = NULL;
 
-__initfunc(static int dio_find_slow(int deviceid))
+static int __init dio_find_slow(int deviceid)
 {
 	/* Called to find a DIO device before the full bus scan has run.  Basically
 	   only used by the console driver.  */
@@ -151,7 +151,7 @@ int dio_find(int deviceid)
 /* This is the function that scans the DIO space and works out what
  * hardware is actually present.
  */
-__initfunc(void dio_init(void))
+void __init dio_init(void)
 {
         int scode;
         struct dioboard *b, *bprev = NULL;

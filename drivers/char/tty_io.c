@@ -125,10 +125,14 @@ static int tty_release(struct inode *, struct file *);
 int tty_ioctl(struct inode * inode, struct file * file,
 	      unsigned int cmd, unsigned long arg);
 static int tty_fasync(int fd, struct file * filp, int on);
+#ifdef CONFIG_SX
+extern int sx_init (void);
+#endif
 #ifdef CONFIG_8xx
 extern long console_8xx_init(long, long);
 extern int rs_8xx_init(void);
 #endif /* CONFIG_8xx */
+
 
 #ifndef MIN
 #define MIN(a,b)	((a) < (b) ? (a) : (b))
@@ -2080,7 +2084,7 @@ static struct tty_driver dev_console_driver;
  * Ok, now we can initialize the rest of the tty devices and can count
  * on memory allocations, interrupts etc..
  */
-__initfunc(int tty_init(void))
+int __init tty_init(void)
 {
 	if (sizeof(struct tty_struct) > PAGE_SIZE)
 		panic("size of tty structure > PAGE_SIZE!");
@@ -2177,6 +2181,9 @@ __initfunc(int tty_init(void))
 #endif
 #ifdef CONFIG_SPECIALIX
 	specialix_init();
+#endif
+#ifdef CONFIG_SX
+	sx_init();
 #endif
 #ifdef CONFIG_8xx
         rs_8xx_init();

@@ -11,7 +11,10 @@
 #define MAX_I2O_CONTROLLERS	32
 
 
+
 #ifdef __KERNEL__   /* ioctl stuff only thing exported to users */
+
+#define I2O_MAX_MANAGERS	4
 
 /*
  *	I2O Interface Objects
@@ -152,20 +155,28 @@ struct i2o_device
 	int i2oversion;		/* I2O version supported. Actually there
 				 * should be high and low version */
 	struct proc_dir_entry* proc_entry;	/* /proc dir */
-	struct i2o_driver *owner;		/* Owning device */
+
+	/* Primary user */
+	struct i2o_handler *owner;
+
+	/* Management users */
+	struct i2o_handler *managers[I2O_MAX_MANAGERS];		
+	int num_managers;
+
 	struct i2o_controller *controller;	/* Controlling IOP */
 	struct i2o_device *next;	/* Chain */
 	char dev_name[8];		/* linux /dev name if available */
 };
 
+#ifdef CONFIG_I2O_PCI_MODULE
 /*
  *	Resource data for each PCI I2O controller
  */	 	
-
 struct i2o_pci
 {
 	int irq;
 };
+#endif
 
 /*
  *	Each I2O controller has one of these objects
@@ -178,7 +189,9 @@ struct i2o_controller
 	int status;				/* I2O status */
 	int i2oversion;
 	int type;
+
 #define I2O_TYPE_PCI		0x01		/* PCI I2O controller */	
+
 	struct notifier_block *event_notifer;	/* Events */
 	atomic_t users;
 	struct i2o_device *devices;		/* I2O device chain */
@@ -201,9 +214,13 @@ struct i2o_controller
 	{					/* Bus information */
 		struct i2o_pci pci;
 	} bus;
-	void (*destructor)(struct i2o_controller *);			/* Bus specific destructor */
-	int (*bind)(struct i2o_controller *, struct i2o_device *);	/* Bus specific attach/detach */
+	/* Bus specific destructor */
+	void (*destructor)(struct i2o_controller *);		
+	/* Bus specific attach/detach */
+	int (*bind)(struct i2o_controller *, struct i2o_device *);	
+	/* Bus specific initiator */
 	int (*unbind)(struct i2o_controller *, struct i2o_device *);
+
 	void *page_frame;		/* Message buffers */
 	int inbound_size;		/* Inbound queue size */
 };
@@ -213,8 +230,32 @@ struct i2o_handler
 	void (*reply)(struct i2o_handler *, struct i2o_controller *, struct i2o_message *);
 	char *name;
 	int context;		/* Low 8 bits of the transaction info */
+	u32 class;			/* I2O classes that this driver handles */
 	/* User data follows */
 };
+
+#ifdef MODULE
+/*
+ * Used by bus specific modules to communicate with the core
+ *
+ * This is needed because the bus modules cannot make direct
+ * calls to the core as this results in the i2o_bus_specific_module
+ * being dependent on the core, not the otherway around.
+ * In that case, a 'modprobe i2o_lan' loads i2o_core & i2o_lan,
+ * but _not_ i2o_pci...which makes the whole thing pretty useless :)
+ *
+ */
+struct i2o_core_func_table
+{
+	int	(*install)(struct i2o_controller *);
+	int	(*activate)(struct i2o_controller *);
+	struct i2o_controller*	
+		(*find)(int);
+	void	(*unlock)(struct i2o_controller *);
+	void	(*run_queue)(struct i2o_controller *c);
+	int	(*delete)(struct i2o_controller *);
+};
+#endif
 
 /*
  *	Messenger inlines
@@ -282,12 +323,12 @@ extern int i2o_remove_handler(struct i2o_handler *);
 
 extern int i2o_install_device(struct i2o_controller *, struct i2o_device *);
 extern int i2o_delete_device(struct i2o_device *);
-extern int i2o_claim_device(struct i2o_device *, struct i2o_driver *);
-extern int i2o_release_device(struct i2o_device *);
+extern int i2o_claim_device(struct i2o_device *, struct i2o_handler *, u32);
+extern int i2o_release_device(struct i2o_device *, struct i2o_handler *, u32);
 
 extern int i2o_post_this(struct i2o_controller *, int, u32 *, int);
 extern int i2o_post_wait(struct i2o_controller *, int, u32 *, int, int *, int);
-extern int i2o_issue_claim(struct i2o_controller *, int, int, int, int *);
+extern int i2o_issue_claim(struct i2o_controller *, int, int, int, int *, u32);
 
 extern int i2o_query_scalar(struct i2o_controller *, int, int, int, int, 
 			void *, int, int *);
@@ -559,6 +600,12 @@ extern const char *i2o_get_class_name(int);
 #define I2O_DSC_UNSUPPORTED_VERSION            0x001A
 #define I2O_DSC_DEVICE_BUSY                    0x001B
 #define I2O_DSC_DEVICE_NOT_AVAILABLE           0x001C
+
+/* Device Claim Types */
+#define	I2O_CLAIM_PRIMARY						0x01000000
+#define	I2O_CLAIM_MANAGEMENT					0x02000000
+#define	I2O_CLAIM_AUTHORIZED					0x03000000
+#define	I2O_CLAIM_SECONDARY					0x04000000
  
 /* Message header defines for VersionOffset */
 #define I2OVER15	0x0001

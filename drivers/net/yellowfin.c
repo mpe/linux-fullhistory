@@ -377,23 +377,10 @@ int yellowfin_probe(struct device *dev)
 			continue;
 
 		{
-#if LINUX_VERSION_CODE >= 0x20155  ||  PCI_SUPPORT_1
 			struct pci_dev *pdev = pci_find_slot(pci_bus, pci_device_fn);
-			ioaddr = pdev->base_address[0];
+			ioaddr = pdev->resource[0].start;
 			irq = pdev->irq;
-#else
-			u32 pci_ioaddr;
-			u8 pci_irq_line;
-			pcibios_read_config_byte(pci_bus, pci_device_fn,
-									 PCI_INTERRUPT_LINE, &pci_irq_line);
-			pcibios_read_config_dword(pci_bus, pci_device_fn,
-									  PCI_BASE_ADDRESS_0, &pci_ioaddr);
-			ioaddr = pci_ioaddr;
-			irq = pci_irq_line;
-#endif
 		}
-		/* Remove I/O space marker in bit 0. */
-		ioaddr &= ~3;
 
 		if (yellowfin_debug > 2)
 			printk(KERN_INFO "Found %s at I/O %#lx, IRQ %d.\n",

@@ -75,7 +75,8 @@ struct i2o_handler cfg_handler=
 {
 	i2o_cfg_reply,
 	"Configuration",
-	0
+	0,
+	0xffffffff	// All classes
 };
 
 static long long cfg_llseek(struct file *file, long long offset, int origin)

@@ -755,6 +755,17 @@ static int lp_register(int nr, struct parport *port)
 	printk(KERN_INFO "lp%d: using %s (%s).\n", nr, port->name, 
 	       (port->irq == PARPORT_IRQ_NONE)?"polling":"interrupt-driven");
 
+#ifdef CONFIG_LP_CONSOLE
+	if (!nr) {
+		if (port->modes & PARPORT_MODE_SAFEININT) {
+			register_console (&lpcons);
+			printk (KERN_INFO "lp%d: console ready\n", CONSOLE_LP);
+		} else
+			printk (KERN_ERR "lp%d: cannot run console on %s\n",
+				CONSOLE_LP, port->name);
+	}
+#endif
+
 	return 0;
 }
 
@@ -842,12 +853,6 @@ int __init lp_init (void)
 			printk (KERN_INFO "lp: (is IEEE 1284.3 support enabled?)\n");
 #endif
 	}
-#ifdef CONFIG_LP_CONSOLE
-	else {
-		register_console (&lpcons);
-		printk (KERN_INFO "lp%d: console ready\n", CONSOLE_LP);
-	}
-#endif
 
 	return 0;
 }

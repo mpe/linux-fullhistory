@@ -3538,12 +3538,13 @@ int configure_bt848(struct pci_dev *dev, int bttv_num)
 
         btv->id=dev->device;
         btv->irq=dev->irq;
-        btv->bt848_adr=dev->base_address[0];
+        btv->bt848_adr=dev->resource[0].start;
         if (btv->id >= 878)
                 btv->i2c_command = 0x83;                   
         else
                 btv->i2c_command=(I2C_TIMING | BT848_I2C_SCL | BT848_I2C_SDA);
 
+#if 0
         if (remap[bttv_num])
         {
                 unsigned int dw = btv->bt848_adr;
@@ -3558,7 +3559,7 @@ int configure_bt848(struct pci_dev *dev, int bttv_num)
                 pci_read_config_dword(dev, PCI_BASE_ADDRESS_0, &dw);
                 btv->dev->base_address[0] = btv->bt848_adr;
         }					
-        btv->bt848_adr&=PCI_BASE_ADDRESS_MEM_MASK;
+#endif        
         pci_read_config_byte(dev, PCI_CLASS_REVISION, &btv->revision);
         printk(KERN_INFO "bttv%d: Brooktree Bt%d (rev %d) ",
                bttv_num,btv->id, btv->revision);

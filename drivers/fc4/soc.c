@@ -672,7 +672,7 @@ static inline void soc_init(struct linux_sbus_device *sdev, int no)
 }
 
 #ifndef MODULE
-__initfunc(int soc_probe(void))
+int __init soc_probe(void)
 #else
 int init_module(void)
 #endif

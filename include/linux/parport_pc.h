@@ -53,12 +53,16 @@ extern __inline__ unsigned char __frob_control (struct parport *p,
 						unsigned char mask,
 						unsigned char val)
 {
+	const unsigned char wm = (PARPORT_CONTROL_STROBE |
+				  PARPORT_CONTROL_AUTOFD |
+				  PARPORT_CONTROL_INIT |
+				  PARPORT_CONTROL_SELECT);
 	struct parport_pc_private *priv = p->physport->private_data;
 	unsigned char ctr = priv->ctr;
 	ctr = (ctr & ~mask) ^ val;
 	ctr &= priv->ctr_writable; /* only write writable bits. */
 	outb (ctr, CONTROL (p));
-	return priv->ctr = ctr; /* update soft copy */
+	return priv->ctr = ctr & wm; /* update soft copy */
 }
 
 extern __inline__ void parport_pc_data_reverse (struct parport *p)

@@ -310,7 +310,7 @@ static struct file_operations vcs_fops = {
 	NULL		/* fsync */
 };
 
-__initfunc(int vcs_init(void))
+int __init vcs_init(void)
 {
 	int error;
 

@@ -814,12 +814,15 @@ D: Selection mechanism
 
 N: Andre Hedrick
 E: hedrick@astro.dyer.vanderbilt.edu
+D: Random SMP kernel hacker...
 D: Uniform Multi-Platform E-IDE driver
-D: Aladdin 1533/1543(C) chipset IDE
-D: HighPoint HPT343/5 chipset IDE
-D: PIIX chipset IDE
-D: Promise Ultra/33 chipset IDE
-D: Promise Ultra/66 chipset IDE
+D: Aladdin 1533/1543(C) chipset
+D: Active-Chipset maddness..........
+D: HighPoint HPT343/5 Ultra/33 & HPT366 Ultra/66 chipsets
+D: Intel PIIX chipset
+D: Promise PDC20246/20247 & PDC20262 chipsets
+D: SiS5513 Ultra/66/33 chipsets
+D: VIA 82C586/596/686 chipsets
 S: Nashville, TN
 S: USA
 
@@ -2287,6 +2290,7 @@ N: Roger E. Wolff
 E: R.E.Wolff@BitWizard.nl
 D: Written kmalloc/kfree
 D: Written Specialix IO8+ driver
+D: Written Specialix SX driver
 S: van Bronckhorststraat 12
 S: 2612 XV Delft
 S: The Netherlands

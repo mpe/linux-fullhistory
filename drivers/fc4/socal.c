@@ -798,7 +798,7 @@ static inline void socal_init(struct linux_sbus_device *sdev, int no)
 }
 
 #ifndef MODULE
-__initfunc(int socal_probe(void))
+int __init socal_probe(void)
 #else
 int init_module(void)
 #endif

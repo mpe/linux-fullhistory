@@ -112,6 +112,8 @@
 
 #define IDE6_MAJOR	88
 #define IDE7_MAJOR	89
+#define IDE8_MAJOR	90
+#define IDE9_MAJOR	91
 
 #define AURORA_MAJOR 79
 

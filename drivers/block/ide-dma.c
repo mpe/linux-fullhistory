@@ -1,5 +1,5 @@
 /*
- *  linux/drivers/block/ide-dma.c	Version 4.09  April 23, 1999
+ *  linux/drivers/block/ide-dma.c	Version 4.09	April 23, 1999
  *
  *  Copyright (c) 1999  Andre Hedrick
  *  May be copied or modified under the terms of the GNU General Public License
@@ -357,12 +357,11 @@ static int config_drive_for_dma (ide_drive_t *drive)
 		/* Consult the list of known "bad" drives */
 		if (ide_dmaproc(ide_dma_bad_drive, drive))
 			return hwif->dmaproc(ide_dma_off, drive);
-#ifdef CONFIG_IDEDMA_ULTRA_66
+
 		/* Enable DMA on any drive that has UltraDMA (mode 3/4) enabled */
-		if ((id->field_valid & 4) && (id->word93 & 0x2000))
+		if ((id->field_valid & 4) && (hwif->udma_four) && (id->word93 & 0x2000))
 			if ((id->dma_ultra & (id->dma_ultra >> 11) & 3))
 				return hwif->dmaproc(ide_dma_on, drive);
-#endif /* CONFIG_IDEDMA_ULTRA_66 */
 		/* Enable DMA on any drive that has UltraDMA (mode 0/1/2) enabled */
 		if (id->field_valid & 4)	/* UltraDMA */
 			if ((id->dma_ultra & (id->dma_ultra >> 8) & 7))
@@ -443,6 +442,12 @@ int ide_dmaproc (ide_dma_action_t func, ide_drive_t *drive)
 		case ide_dma_bad_drive:
 		case ide_dma_good_drive:
 			return check_drive_lists(drive, (func == ide_dma_good_drive));
+		case ide_dma_lostirq:
+		case ide_dma_timeout:
+			/*
+			 * printk("ide_dmaproc: chipset supported func only: %d\n", func);
+			 */
+			return 1;
 		default:
 			printk("ide_dmaproc: unsupported func: %d\n", func);
 			return 1;
@@ -510,7 +515,7 @@ void ide_setup_dma (ide_hwif_t *hwif, unsigned long dma_base, unsigned int num_p
 /*
  * Fetch the DMA Bus-Master-I/O-Base-Address (BMIBA) from PCI space:
  */
-__initfunc(unsigned long ide_get_or_set_dma_base (ide_hwif_t *hwif, int extra, const char *name))
+unsigned long __init ide_get_or_set_dma_base (ide_hwif_t *hwif, int extra, const char *name)
 {
 	unsigned long	dma_base = 0;
 	struct pci_dev	*dev = hwif->pci_dev;
@@ -518,7 +523,7 @@ __initfunc(unsigned long ide_get_or_set_dma_base (ide_hwif_t *hwif, int extra, c
 	if (hwif->mate && hwif->mate->dma_base) {
 		dma_base = hwif->mate->dma_base - (hwif->channel ? 0 : 8);
 	} else {
-		dma_base = dev->base_address[4] & PCI_BASE_ADDRESS_IO_MASK;
+		dma_base = dev->resource[4].start;
 		if (!dma_base || dma_base == PCI_BASE_ADDRESS_IO_MASK) {
 			printk("%s: dma_base is invalid (0x%04lx)\n", name, dma_base);
 			dma_base = 0;
@@ -532,10 +537,6 @@ __initfunc(unsigned long ide_get_or_set_dma_base (ide_hwif_t *hwif, int extra, c
 
 		switch(dev->device) {
 			case PCI_DEVICE_ID_CMD_643:
-				/*
-				 * Lets attempt to use the same Ali tricks
-				 * to fix CMD643.....
-				 */
 #ifdef CONFIG_BLK_DEV_ALI15X3
 			case PCI_DEVICE_ID_AL_M5219:
 			case PCI_DEVICE_ID_AL_M5229:
@@ -550,9 +551,19 @@ __initfunc(unsigned long ide_get_or_set_dma_base (ide_hwif_t *hwif, int extra, c
 				}
 				break;
 			default:
-				if (inb(dma_base+2) & 0x80) {
-					printk("%s: simplex device:  DMA disabled\n", name);
-					dma_base = 0;
+				/*
+				 * If the device claims "simplex" DMA,
+				 * this means only one of the two interfaces
+				 * can be trusted with DMA at any point in time.
+				 * So we should enable DMA only on one of the
+				 * two interfaces.
+				 */
+				if ((inb(dma_base+2) & 0x80)) {	/* simplex device? */
+					if ((!hwif->drives[0].present && !hwif->drives[1].present) ||
+					    (hwif->mate && hwif->mate->dma_base)) {
+						printk("%s: simplex device:  DMA disabled\n", name);
+						dma_base = 0;
+					}
 				}
 		}
 	}

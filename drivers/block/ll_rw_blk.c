@@ -486,6 +486,8 @@ void make_request(int major,int rw, struct buffer_head * bh)
 	     case IDE5_MAJOR:
 	     case IDE6_MAJOR:
 	     case IDE7_MAJOR:
+	     case IDE8_MAJOR:
+	     case IDE9_MAJOR:
 	     case ACSI_MAJOR:
 	     case MFM_ACORN_MAJOR:
 		/*

@@ -17,8 +17,8 @@
 
 /* Tunable parameters first */
 
-#define I2O_BUCKET_COUNT 	16
-#define I2O_BUCKET_THRESH	0
+#define I2O_BUCKET_COUNT 	64
+#define I2O_BUCKET_THRESH	16
 
 /* LAN types */
 #define I2O_LAN_ETHERNET	0x0030

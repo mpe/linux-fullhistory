@@ -288,13 +288,13 @@ int __init acenic_probe (struct device *dev)
 			break;
 		}
 		printk("Gigabit Ethernet at 0x%08lx, irq %i, PCI latency %i "
-		       "clks\n", pdev->base_address[0], dev->irq, pci_latency);
+		       "clks\n", pdev->resource[0].start, dev->irq, pci_latency);
 
 		/*
 		 * Remap the regs into kernel space.
 		 */
 
-		ap->regs = (struct ace_regs *)ioremap(pdev->base_address[0],
+		ap->regs = (struct ace_regs *)ioremap(pdev->resource[0].start,
 						      0x4000);
 		if (!ap->regs){
 			printk(KERN_ERR "%s:  Unable to map I/O register, "

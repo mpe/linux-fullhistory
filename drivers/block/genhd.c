@@ -85,6 +85,10 @@ char *disk_name (struct gendisk *hd, int minor, char *buf)
 	 * This requires special handling here.
 	 */
 	switch (hd->major) {
+		case IDE9_MAJOR:
+			unit += 2;
+		case IDE8_MAJOR:
+			unit += 2;
 		case IDE7_MAJOR:
 			unit += 2;
 		case IDE6_MAJOR:

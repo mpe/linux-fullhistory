@@ -285,7 +285,7 @@ int epic100_probe(struct device *dev)
 	struct pci_dev *pcidev = NULL;
 	while ((pcidev = pci_find_class(PCI_CLASS_NETWORK_ETHERNET << 8, pcidev))
 			!= NULL) {
-		long pci_ioaddr = pcidev->base_address[0] & ~3;
+		long pci_ioaddr = pcidev->resource[0].start;
 		int vendor = pcidev->vendor;
 		int device = pcidev->device;
 

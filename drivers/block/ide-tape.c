@@ -3583,8 +3583,8 @@ static void idetape_setup (ide_drive_t *drive, idetape_tape_t *tape, int minor)
 	/*
 	 *  These two ide-pci host adapters appear to need this disabled.
 	 */
-	if ((hwif->pci_dev->device == PCI_DEVICE_ID_ARTOP_ATP850UF) ||
-	    (hwif->pci_dev->device == PCI_DEVICE_ID_TTI_HPT343)) {
+	if ((HWIF(drive)->pci_dev->device == PCI_DEVICE_ID_ARTOP_ATP850UF) ||
+	    (HWIF(drive)->pci_dev->device == PCI_DEVICE_ID_TTI_HPT343)) {
 		drive->dsc_overlap = 0;
 	} else
 #endif  /* CONFIG_BLK_DEV_IDEPCI */

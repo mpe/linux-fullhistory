@@ -229,12 +229,16 @@ unsigned char parport_pc_read_data(struct parport *p)
 unsigned char __frob_control (struct parport *p, unsigned char mask,
 			      unsigned char val)
 {
+	const unsigned char wm = (PARPORT_CONTROL_STROBE |
+				  PARPORT_CONTROL_AUTOFD |
+				  PARPORT_CONTROL_INIT |
+				  PARPORT_CONTROL_SELECT);
 	struct parport_pc_private *priv = p->physport->private_data;
 	unsigned char ctr = priv->ctr;
 	ctr = (ctr & ~mask) ^ val;
 	ctr &= priv->ctr_writable; /* only write writable bits. */
 	outb (ctr, CONTROL (p));
-	return priv->ctr = ctr; /* update soft copy */
+	return priv->ctr = ctr & wm; /* update soft copy */
 }
 
 void parport_pc_write_control(struct parport *p, unsigned char d)
@@ -939,7 +943,6 @@ struct parport_operations parport_pc_ops =
 	parport_pc_data_forward,
 	parport_pc_data_reverse,
 
-	parport_pc_interrupt,
 	parport_pc_init_state,
 	parport_pc_save_state,
 	parport_pc_restore_state,
@@ -1531,7 +1534,7 @@ struct parport *__maybe_init parport_pc_probe_port (unsigned long int base,
 	p->base_hi = base_hi;
 	p->irq = irq;
 	p->dma = dma;
-	p->modes = PARPORT_MODE_PCSPP;
+	p->modes = PARPORT_MODE_PCSPP | PARPORT_MODE_SAFEININT;
 	p->ops = ops;
 	p->private_data = priv;
 	p->physport = p;

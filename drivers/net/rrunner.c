@@ -72,7 +72,7 @@ extern __u32 sysctl_rmem_max;
 
 static int probed __initdata = 0;
 
-__initfunc(int rr_hippi_probe (struct device *dev))
+int __init rr_hippi_probe (struct device *dev)
 {
 	int boards_found = 0;
 	int version_disp;	/* was version info already displayed? */
@@ -502,7 +502,7 @@ static unsigned int write_eeprom(struct rr_private *rrpriv,
 }
 
 
-__initfunc(static int rr_init(struct device *dev))
+static int __init rr_init(struct device *dev)
 {
 	struct rr_private *rrpriv;
 	struct rr_regs *regs;

@@ -13,9 +13,9 @@ PLIP.txt
 alias.txt
 	- info on using alias network devices 
 arcnet-hardware.txt
-	- tons of info on arcnet, hubs, arcnet card jumper settings, etc.
+	- tons of info on ARCnet, hubs, jumper settings for ARCnet cards, etc.
 arcnet.txt
-	- info on the using the arcnet driver itself.
+	- info on the using the ARCnet driver itself.
 ax25.txt
 	- info on using AX.25 and NET/ROM code for Linux
 baycom.txt
@@ -69,13 +69,13 @@ shaper.txt
 smc9.txt
 	- the driver for SMC's 9000 series of Ethernet cards
 soundmodem.txt
-	- Linux driver for soundcards as AX.25 modems
+	- Linux driver for sound cards as AX.25 modems
 tcp.txt
 	- short blurb on how TCP output takes place.
 tulip.txt
 	- info on using DEC 21040/21041/21140 based PCI Ethernet cards.
 vortex.txt
-	- info on using 3Com Vortex (3c590, 3c592, 3c595, 3c597) e'net cards.
+	- info on using 3Com Vortex (3c590, 3c592, 3c595, 3c597) Ethernet cards.
 wan-router.txt
 	- Wan router documentation
 wanpipe.txt

@@ -497,7 +497,7 @@ int tulip_probe(struct device *dev)
 			continue;
 		}
 #if LINUX_VERSION_CODE >= 0x20155
-		pci_ioaddr = pci_find_slot(pci_bus, pci_device_fn)->base_address[0];
+		pci_ioaddr = pci_find_slot(pci_bus, pci_device_fn)->resource[0].start;
 #else
 		pcibios_read_config_dword(pci_bus, pci_device_fn, PCI_BASE_ADDRESS_0,
 								  &pci_ioaddr);
@@ -572,23 +572,8 @@ static struct device *tulip_probe1(int pci_bus, int pci_device_fn,
 
 	dev = init_etherdev(dev, 0);
 
-#if LINUX_VERSION_CODE >= 0x20155
 	irq = pci_find_slot(pci_bus, pci_device_fn)->irq;
-	ioaddr = pci_find_slot(pci_bus, pci_device_fn)->base_address[0];
-#else
-	{
-		u8 pci_irq_line;
-		u32 pci_ioaddr;
-		pcibios_read_config_byte(pci_bus, pci_device_fn,
-								 PCI_INTERRUPT_LINE, &pci_irq_line);
-		pcibios_read_config_dword(pci_bus, pci_device_fn, PCI_BASE_ADDRESS_0,
-								  &pci_ioaddr);
-		irq = pci_irq_line;
-		ioaddr = pci_ioaddr;
-	}
-#endif
-	/* Remove I/O space marker in bit 0. */
-	ioaddr &= ~3;
+	ioaddr = pci_find_slot(pci_bus, pci_device_fn)->resource[0].start;
 
 	printk(KERN_INFO "%s: %s at %#3lx,",
 		   dev->name, tulip_tbl[chip_id].chip_name, ioaddr);

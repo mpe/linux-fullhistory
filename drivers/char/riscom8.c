@@ -232,7 +232,7 @@ extern inline void rc_long_delay(unsigned long delay)
 }
 
 /* Reset and setup CD180 chip */
-__initfunc(static void rc_init_CD180(struct riscom_board const * bp))
+static void __init rc_init_CD180(struct riscom_board const * bp)
 {
 	unsigned long flags;
 	
@@ -257,7 +257,7 @@ __initfunc(static void rc_init_CD180(struct riscom_board const * bp))
 }
 
 /* Main probing routine, also sets irq. */
-__initfunc(static int rc_probe(struct riscom_board *bp))
+static int __init rc_probe(struct riscom_board *bp)
 {
 	unsigned char val1, val2;
 	int irqs = 0;
@@ -1820,7 +1820,7 @@ static void rc_release_drivers(void)
  * addresses in this case.
  *
  */ 
-__initfunc(void riscom8_setup(char *str, int * ints))
+void __init riscom8_setup(char *str, int * ints)
 {
 	int i;
 
@@ -1836,7 +1836,7 @@ __initfunc(void riscom8_setup(char *str, int * ints))
 /* 
  * This routine must be called by kernel at boot time 
  */
-__initfunc(int riscom8_init(void))
+int __init  riscom8_init(void)
 {
 	int i;
 	int found = 0;

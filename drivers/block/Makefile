@@ -94,116 +94,128 @@ else
   endif
 endif
 
-ifeq ($(CONFIG_BLK_DEV_HD),y)
-L_OBJS += hd.o
-endif
+#
+# IDE-STUFF
+#
 
-ifeq ($(CONFIG_BLK_DEV_RZ1000),y)
-IDE_OBJS += rz1000.o
-endif
-
-ifeq ($(CONFIG_BLK_DEV_CMD640),y)
-IDE_OBJS += cmd640.o
-endif
-
-ifeq ($(CONFIG_BLK_DEV_IDE_PMAC),y)
-IDE_OBJS += ide-pmac.o
-endif
-
-ifeq ($(CONFIG_BLK_DEV_IDEPCI),y)
-IDE_OBJS += ide-pci.o
-endif
-
-ifeq ($(CONFIG_BLK_DEV_IDEDMA),y)
-IDE_OBJS += ide-dma.o
-endif
-
-ifeq ($(CONFIG_BLK_DEV_DTC2278),y)
-IDE_OBJS += dtc2278.o
-endif
-
-ifeq ($(CONFIG_BLK_DEV_HT6560B),y)
-IDE_OBJS += ht6560b.o
-endif
-
-ifeq ($(CONFIG_BLK_DEV_QD6580),y)
-IDE_OBJS += qd6580.o
-endif
-
-ifeq ($(CONFIG_BLK_DEV_UMC8672),y)
-IDE_OBJS += umc8672.o
+ifeq ($(CONFIG_BLK_DEV_AEC6210),y)
+IDE_OBJS += aec6210.o
 endif
 
 ifeq ($(CONFIG_BLK_DEV_ALI14XX),y)
 IDE_OBJS += ali14xx.o
 endif
 
-ifeq ($(CONFIG_BLK_DEV_PDC4030),y)
-IDE_OBJS += pdc4030.o
-endif
-
-ifeq ($(CONFIG_BLK_DEV_TRM290),y)
-IDE_OBJS += trm290.o
-endif
-
-ifeq ($(CONFIG_BLK_DEV_OPTI621),y)
-IDE_OBJS += opti621.o
-endif
-
-ifeq ($(CONFIG_BLK_DEV_NS87415),y)
-IDE_OBJS += ns87415.o
-endif
-
-ifeq ($(CONFIG_BLK_DEV_VIA82C586),y)
-IDE_OBJS += via82c586.o
-endif
-
-ifeq ($(CONFIG_BLK_DEV_GAYLE),y)
-IDE_OBJS += gayle.o
-endif
-
-ifeq ($(CONFIG_BLK_DEV_FALCON_IDE),y)
-IDE_OBJS += falconide.o
-endif
-
-ifeq ($(CONFIG_BLK_DEV_MAC_IDE),y)
-IDE_OBJS += macide.o
+ifeq ($(CONFIG_BLK_DEV_ALI15X3),y)
+IDE_OBJS += alim15x3.o
 endif
 
 ifeq ($(CONFIG_BLK_DEV_BUDDHA),y)
 IDE_OBJS += buddha.o
 endif
 
+ifeq ($(CONFIG_BLK_DEV_CMD640),y)
+IDE_OBJS += cmd640.o
+endif
+
 ifeq ($(CONFIG_BLK_DEV_CMD646),y)
 IDE_OBJS += cmd646.o
-endif
-
-ifeq ($(CONFIG_BLK_DEV_SL82C105),y)
-IDE_OBJS += sl82c105.o
-endif
-
-ifeq ($(CONFIG_BLK_DEV_ALI15X3),y)
-IDE_OBJS += alim15x3.o
 endif
 
 ifeq ($(CONFIG_BLK_DEV_CY82C693),y)
 IDE_OBJS += cy82c693.o
 endif
 
-ifeq ($(CONFIG_BLK_DEV_PIIX),y)
-IDE_OBJS += piix.o
+ifeq ($(CONFIG_BLK_DEV_DTC2278),y)
+IDE_OBJS += dtc2278.o
+endif
+
+ifeq ($(CONFIG_BLK_DEV_FALCON_IDE),y)
+IDE_OBJS += falconide.o
+endif
+
+ifeq ($(CONFIG_BLK_DEV_GAYLE),y)
+IDE_OBJS += gayle.o
+endif
+
+ifeq ($(CONFIG_BLK_DEV_HD),y)
+L_OBJS += hd.o
+endif
+
+ifeq ($(CONFIG_BLK_DEV_HPT34X),y)
+IDE_OBJS += hpt34x.o
+endif
+
+ifeq ($(CONFIG_BLK_DEV_HPT366),y)
+IDE_OBJS += hpt366.o
+endif
+
+ifeq ($(CONFIG_BLK_DEV_HT6560B),y)
+IDE_OBJS += ht6560b.o
+endif
+
+ifeq ($(CONFIG_BLK_DEV_IDEDMA),y)
+IDE_OBJS += ide-dma.o
+endif
+
+ifeq ($(CONFIG_BLK_DEV_IDEPCI),y)
+IDE_OBJS += ide-pci.o
+endif
+
+ifeq ($(CONFIG_BLK_DEV_IDE_PMAC),y)
+IDE_OBJS += ide-pmac.o
+endif
+
+ifeq ($(CONFIG_BLK_DEV_MAC_IDE),y)
+IDE_OBJS += macide.o
+endif
+
+ifeq ($(CONFIG_BLK_DEV_NS87415),y)
+IDE_OBJS += ns87415.o
+endif
+
+ifeq ($(CONFIG_BLK_DEV_OPTI621),y)
+IDE_OBJS += opti621.o
 endif
 
 ifeq ($(CONFIG_BLK_DEV_PDC202XX),y)
 IDE_OBJS += pdc202xx.o
 endif
 
-ifeq ($(CONFIG_BLK_DEV_AEC6210),y)
-IDE_OBJS += aec6210.o
+ifeq ($(CONFIG_BLK_DEV_PDC4030),y)
+IDE_OBJS += pdc4030.o
 endif
 
-ifeq ($(CONFIG_BLK_DEV_HPT34X),y)
-IDE_OBJS += hpt34x.o
+ifeq ($(CONFIG_BLK_DEV_PIIX),y)
+IDE_OBJS += piix.o
+endif
+
+ifeq ($(CONFIG_BLK_DEV_QD6580),y)
+IDE_OBJS += qd6580.o
+endif
+
+ifeq ($(CONFIG_BLK_DEV_RZ1000),y)
+IDE_OBJS += rz1000.o
+endif
+
+ifeq ($(CONFIG_BLK_DEV_SIS5513),y)
+IDE_OBJS += sis5513.o
+endif
+
+ifeq ($(CONFIG_BLK_DEV_SL82C105),y)
+IDE_OBJS += sl82c105.o
+endif
+
+ifeq ($(CONFIG_BLK_DEV_TRM290),y)
+IDE_OBJS += trm290.o
+endif
+
+ifeq ($(CONFIG_BLK_DEV_UMC8672),y)
+IDE_OBJS += umc8672.o
+endif
+
+ifeq ($(CONFIG_BLK_DEV_VIA82C586),y)
+IDE_OBJS += via82c586.o
 endif
 
 ifeq ($(CONFIG_BLK_DEV_IDE_ICSIDE),y)

@@ -218,7 +218,7 @@ static int __init ne_probe_pci(struct device *dev)
 		unsigned int pci_ioaddr;
 
 		while ((pdev = pci_find_device(pci_clone_list[i].vendor, pci_clone_list[i].dev_id, pdev))) {
-			pci_ioaddr = pdev->base_address[0] & PCI_BASE_ADDRESS_IO_MASK;
+			pci_ioaddr = pdev->resource[0].start;
 			/* Avoid already found cards from previous calls */
 			if (check_region(pci_ioaddr, NE_IO_EXTENT))
 				continue;

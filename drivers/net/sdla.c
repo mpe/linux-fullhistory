@@ -1624,7 +1624,7 @@ static struct net_device_stats *sdla_stats(struct device *dev)
 	return(&flp->stats);
 }
 
-__initfunc(int sdla_init(struct device *dev))
+int __init sdla_init(struct device *dev)
 {
 	struct frad_local *flp;
 
@@ -1666,7 +1666,7 @@ __initfunc(int sdla_init(struct device *dev))
 	return(0);
 }
 
-__initfunc(void sdla_setup(void))
+void __init sdla_setup(void)
 {
 	printk("%s.\n", version);
 	register_frad(devname);

@@ -1958,7 +1958,7 @@ static struct pci_dev *pci_find_slot(unsigned char bus,
 }
 #endif
      
-__initfunc(int register_PCI(int i, unsigned int bus, unsigned int device_fn))
+int __init register_PCI(int i, unsigned int bus, unsigned int device_fn)
 {
 	int	num_aiops, aiop, max_num_aiops, num_chan, chan;
 	unsigned int	aiopio[MAX_AIOPS_PER_BOARD];
@@ -1973,15 +1973,7 @@ __initfunc(int register_PCI(int i, unsigned int bus, unsigned int device_fn))
 	if (!dev)
 		return 0;
 
-#if (LINUX_VERSION_CODE >= 0x020163) /* 2.1.99 */
-	rcktpt_io_addr[i] = dev->base_address[0] & PCI_BASE_ADDRESS_IO_MASK;
-#else
-	ret = pcibios_read_config_dword(bus, device_fn, PCI_BASE_ADDRESS_0,
-		&port);
-	if (ret)
-		return 0;
-	rcktpt_io_addr[i] = port & PCI_BASE_ADDRESS_IO_MASK;
-#endif	
+	rcktpt_io_addr[i] = dev->resource[0].start;
 	switch(dev->device) {
 	case PCI_DEVICE_ID_RP4QUAD:
 		str = "Quadcable";
@@ -2047,7 +2039,7 @@ __initfunc(int register_PCI(int i, unsigned int bus, unsigned int device_fn))
 	return(1);
 }
 
-__initfunc(static int init_PCI(int boards_found))
+static int __init init_PCI(int boards_found)
 {
 	unsigned char	bus, device_fn;
 	int	i, count = 0;
@@ -2102,7 +2094,7 @@ __initfunc(static int init_PCI(int boards_found))
 }
 #endif
 
-__initfunc(static int init_ISA(int i, int *reserved_controller))
+static int __init init_ISA(int i, int *reserved_controller)
 {
 	int	num_aiops, num_chan;
 	int	aiop, chan;
@@ -2154,7 +2146,7 @@ __initfunc(static int init_ISA(int i, int *reserved_controller))
 /*
  * The module "startup" routine; it's run when the module is loaded.
  */
-__initfunc(int rp_init(void))
+int __init rp_init(void)
 {
 	int i, retval, pci_boards_found, isa_boards_found;
 	int	reserved_controller = 0;

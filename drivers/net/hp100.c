@@ -419,7 +419,7 @@ int __init hp100_probe( struct device *dev )
             continue;
           }
           /* found... */
-          ioaddr = pci_dev -> base_address[ 0 ] & ~3;
+          ioaddr = pci_dev ->resource[ 0 ].start;
           if ( check_region( ioaddr, HP100_REGION_SIZE ) ) continue;
           pci_read_config_word( pci_dev, PCI_COMMAND, &pci_command );
           if ( !( pci_command & PCI_COMMAND_IO ) ) {

@@ -20,11 +20,11 @@ to Address Resolution Protocol (ARP) are very easily viewed and altered.
 	7000
 
 Others are already accessible via the related user space programs.
-For example, MAX_WINDOW has a default of 32k which is a good choice for
-modern hardware, but if you have a slow (8 bit) ethercard and/or a slow
+For example, MAX_WINDOW has a default of 32 k which is a good choice for
+modern hardware, but if you have a slow (8 bit) Ethernet card and/or a slow
 machine, then this will be far too big for the card to keep up with fast 
-Tx'ing machines on the same net, resulting in overruns and receive errors.
-A value of about 4k would be more appropriate, which can be set via:
+machines transmitting on the same net, resulting in overruns and receive errors.
+A value of about 4 k would be more appropriate, which can be set via:
 
 	# route add -net 192.168.3.0 window 4096
 

@@ -18,8 +18,8 @@ Released 1994-06-13
 	pocket adapters, for the parallel port on a Linux based machine.
 	Some adapter "clones" will also work.  Xircom is _not_ a clone...
 	These drivers _can_ be used as loadable modules,
-	and were developed for use on Linux v1.1.13 and above.
-	For use on Linux v1.0.X, or earlier releases, see below.
+	and were developed for use on Linux 1.1.13 and above.
+	For use on Linux 1.0.X, or earlier releases, see below.
 
 	I have used these drivers for NFS, ftp, telnet and X-clients on
 	remote machines. Transmissions with ftp seems to work as
@@ -57,7 +57,7 @@ Released 1994-06-13
 	de620.h       Macros for de620.c
 
 	If you are upgrading from the d-link tar release, there will
-	also be a "dlink-patches" file that will patch Linux v1.1.18:
+	also be a "dlink-patches" file that will patch Linux 1.1.18:
 		linux/drivers/net/Makefile
 		linux/drivers/net/CONFIG
 		linux/drivers/net/MODULES
@@ -162,10 +162,10 @@ Released 1994-06-13
 
 	6. USING THE DRIVERS WITH EARLIER RELEASES.
 
-	The later v1.1.X releases of the Linux kernel include some
+	The later 1.1.X releases of the Linux kernel include some
 	changes in the networking layer (a.k.a. NET3). This affects
 	these drivers in a few places.  The hints that follow are
-	_not_ tested by me, since I don't have the diskspace to keep
+	_not_ tested by me, since I don't have the disk space to keep
 	all releases on-line.
 	Known needed changes to date:
 	- release patchfile: some patches will fail, but they should

@@ -5,16 +5,18 @@
  *	(C) Copyright 1999   Red Hat Software
  *	
  *	Written by Alan Cox, Building Number Three Ltd
+ * Modified by Deepak Saxena <deepak@plexity.net>
  *
  *	This program is free software; you can redistribute it and/or
  *	modify it under the terms of the GNU General Public License
- * 	as published by the Free Software Foundation; either version
+ * as published by the Free Software Foundation; either version
  *	2 of the License, or (at your option) any later version.
  *
  *	TODO:
  *		Support polled I2O PCI controllers. 
  */
- 
+
+#include <linux/config.h> 
 #include <linux/module.h>
 #include <linux/kernel.h>
 #include <linux/pci.h>
@@ -24,10 +26,21 @@
 #include <linux/malloc.h>
 #include <asm/io.h>
 
+#ifdef MODULE
+/*
+ * Core function table
+ * See <include/linux/i2o.h> for an explanation
+ */
+static struct i2o_core_func_table *core;
+
+/* Core attach function */
+extern int i2o_pci_core_attach(struct i2o_core_func_table *);
+extern void i2o_pci_core_detach(void);
+#endif /* MODULE */
+
 /*
  *	Free bus specific resources
  */
- 
 static void i2o_pci_dispose(struct i2o_controller *c)
 {
 	I2O_IRQ_WRITE32(c,0xFFFFFFFF);
@@ -60,7 +73,11 @@ static int i2o_pci_unbind(struct i2o_controller *c, struct i2o_device *dev)
 static void i2o_pci_interrupt(int irq, void *dev_id, struct pt_regs *r)
 {
 	struct i2o_controller *c = dev_id;
+#ifdef MODULE
+	core->run_queue(c);
+#else
 	i2o_run_queue(c);
+#endif /* MODULE */
 }	
 
 /*
@@ -76,20 +93,20 @@ int __init i2o_pci_install(struct pci_dev *dev)
 	u32 size;
 	
 	int i;
-	
+
 	if(c==NULL)
 	{
 		printk(KERN_ERR "i2o_pci: insufficient memory to add controller.\n");
 		return -ENOMEM;
 	}
 	memset(c, 0, sizeof(*c));
-	
+
 	for(i=0; i<6; i++)
 	{
 		/* Skip I/O spaces */
-		if(!(dev->base_address[i]&PCI_BASE_ADDRESS_SPACE))
+		if(!(dev->resource[i].flags&PCI_BASE_ADDRESS_SPACE))
 		{
-			memptr=PCI_BASE_ADDRESS_MEM_MASK&dev->base_address[i];
+			memptr=dev->resource[i].flags;
 			break;
 		}
 	}
@@ -100,10 +117,7 @@ int __init i2o_pci_install(struct pci_dev *dev)
 		return -ENOMEM;
 	}
 	
-	pci_write_config_dword(dev, PCI_BASE_ADDRESS_0+4*i, 0xFFFFFFFF);
-	pci_read_config_dword(dev, PCI_BASE_ADDRESS_0+4*i, &size);
-	pci_write_config_dword(dev, PCI_BASE_ADDRESS_0+4*i, dev->base_address[i]);
-	
+	size = dev->resource[i].end-dev->resource[i].start+1;	
 	/* Map the I2O controller */
 	
 	printk(KERN_INFO "PCI I2O controller at 0x%08X size=%d\n", memptr, -size);
@@ -125,8 +139,12 @@ int __init i2o_pci_install(struct pci_dev *dev)
 	c->type = I2O_TYPE_PCI;
 
 	I2O_IRQ_WRITE32(c,0xFFFFFFFF);
-	
+
+#ifdef MODULE
+	i = core->install(c);
+#else
 	i = i2o_install_controller(c);
+#endif /* MODULE */
 	
 	if(i<0)
 	{
@@ -144,7 +162,11 @@ int __init i2o_pci_install(struct pci_dev *dev)
 			printk(KERN_ERR "%s: unable to allocate interrupt %d.\n",
 				c->name, dev->irq);
 			c->bus.pci.irq = -1;
+#ifdef MODULE
+			core->delete(c);
+#else
 			i2o_delete_controller(c);
+#endif /* MODULE */
 			return -EBUSY;
 		}
 	}
@@ -187,12 +209,27 @@ static void i2o_pci_unload(void)
 	
 	for(i = 0; i < MAX_I2O_CONTROLLERS; i++)
 	{
+#ifdef MODULE
+		c=core->find(i);
+#else
 		c=i2o_find_controller(i);
+#endif /* MODULE */
+
 		if(c==NULL)
 			continue;		
+
+#ifdef MODULE
+		core->unlock(c);
+#else
 		i2o_unlock_controller(c);
+#endif /* MODULE */
+
 		if(c->type == I2O_TYPE_PCI)
+#ifdef MODULE
+			core->delete(c);
+#else
 			i2o_delete_controller(c);
+#endif /* MODULE */
 	}
 }
 
@@ -203,50 +240,102 @@ static void i2o_pci_activate(void)
 	
 	for(i = 0; i < MAX_I2O_CONTROLLERS; i++)
 	{
+#ifdef MODULE
+		c=core->find(i);
+#else
 		c=i2o_find_controller(i);
+#endif /* MODULE */
+
 		if(c==NULL)
 			continue;		
 		if(c->type == I2O_TYPE_PCI)
 		{
+#ifdef MODULE
+			if(core->activate(c))
+#else
 			if(i2o_activate_controller(c))
+#endif /* MODULE */
 			{
 				printk("I2O: Failed to initialize iop%d\n", c->unit);
+#ifdef MODULE
+				core->unlock(c);
+				core->delete(c);
+#else
 				i2o_unlock_controller(c);
 				i2o_delete_controller(c);
+#endif
 				continue;
 			}
 		
 			I2O_IRQ_WRITE32(c,0);
 		}
+#ifdef MODULE
+		core->unlock(c);
+#else
 		i2o_unlock_controller(c);
+#endif
 	}
 }
 
+
 #ifdef MODULE
 
-EXPORT_NO_SYMBOLS;
-MODULE_AUTHOR("Red Hat Software");
-MODULE_DESCRIPTION("I2O PCI Interface");
+int i2o_pci_core_attach(struct i2o_core_func_table *table)
+{
+	int i;
+
+	MOD_INC_USE_COUNT;
+
+	core = table;
+ 
+	if((i = i2o_pci_scan())<0)
+ 		return -ENODEV;
+ 	i2o_pci_activate();
+
+	return i;
+}
+
+void i2o_pci_core_detach(void)
+{
+	i2o_pci_unload();
+
+	MOD_DEC_USE_COUNT;
+}
 
 int init_module(void)
 {
-	if(i2o_pci_scan()<0)
-		return -ENODEV;
-	i2o_pci_activate();
-	return 0;
+	printk(KERN_INFO "Linux I2O PCI support (c) 1999 Red Hat Software.\n");
+
+/*
+ * Let the core call the scan function for module dependency
+ * reasons.  See include/linux/i2o.h for the reason why this
+ * is done.
+ *
+ *	if(i2o_pci_scan()<0)
+ *		return -ENODEV;
+ *	i2o_pci_activate();
+ */
+
+ 	return 0;
+ 
 }
 
 void cleanup_module(void)
 {
-	i2o_pci_unload();
 }
+
+EXPORT_SYMBOL(i2o_pci_core_attach);
+EXPORT_SYMBOL(i2o_pci_core_detach);
+
+MODULE_AUTHOR("Red Hat Software");
+MODULE_DESCRIPTION("I2O PCI Interface");
 
 #else
 __init void i2o_pci_init(void)
 {
+	printk(KERN_INFO "Linux I2O PCI support (c) 1999 Red Hat Software.\n");
 	if(i2o_pci_scan()>=0)
 	{
-		printk(KERN_INFO "Linux I2O PCI support (c) 1999 Red Hat Software.\n");
 		i2o_pci_activate();
 	}
 }

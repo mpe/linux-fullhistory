@@ -3,7 +3,7 @@
  *
  *   Copyright (c) 1999 Intel Corporation
  *   
- *   Originally written by Deepak Saxena(deepak.saxena@intel.com)
+ *   Originally written by Deepak Saxena(deepak@plexity.net)
  *
  *   This program is free software. You can redistribute it and/or
  *   modify it under the terms of the GNU General Public License
@@ -38,6 +38,7 @@
 #define FMT_U64_HEX "0x%08x%08x"
 #define U64_VAL(pu64) *((u32*)(pu64)+1), *((u32*)(pu64))
 
+#include <linux/config.h>
 #include <linux/types.h>
 #include <linux/kernel.h>
 #include <linux/i2o.h>
@@ -143,7 +144,8 @@ static struct i2o_handler i2o_proc_handler =
 {
 	(void *)i2o_proc_reply,
 	"I2O procfs Layer",
-	0
+	0,
+	0xffffffff	// All classes
 };
 
 /*
@@ -3089,7 +3091,7 @@ __init int i2o_proc_init(void)
 #ifdef MODULE
 
 
-MODULE_AUTHOR("Intel Corporation");
+MODULE_AUTHOR("Deepak Saxena");
 MODULE_DESCRIPTION("I2O procfs Handler");
 
 void cleanup_module(void)

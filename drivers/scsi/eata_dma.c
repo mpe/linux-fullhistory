@@ -1414,12 +1414,12 @@ void find_PCI(struct get_conf *buf, Scsi_Host_Template * tpnt)
 	    DBG(DBG_PROBE && DBG_PCI, 
 		printk("eata_dma: find_PCI, HBA at %s\n", dev->name));
 	    pci_set_master(dev);
-	    base = dev->base_address[0];
+	    base = dev->resource[0].flags;
 	    if (!(base & PCI_BASE_ADDRESS_SPACE_IO)) {
 		printk("eata_dma: invalid base address of device %s\n", dev->name);
 		continue;
 	    }
-	    base &= PCI_BASE_ADDRESS_IO_MASK;
+	    base = dev->resource[0].start;
             /* EISA tag there ? */
 	    pal1 = inb(base);
 	    pal2 = inb(base + 1);

@@ -103,7 +103,7 @@ static int ultra32_close(struct device *dev);
 	following.
 */
 
-__initfunc(int ultra32_probe(struct device *dev))
+int __init ultra32_probe(struct device *dev)
 {
 	const char *ifmap[] = {"UTP No Link", "", "UTP/AUI", "UTP/BNC"};
 	int ioaddr, edge, media;
@@ -126,7 +126,7 @@ __initfunc(int ultra32_probe(struct device *dev))
 	return ENODEV;
 }
 
-__initfunc(int ultra32_probe1(struct device *dev, int ioaddr))
+int __init ultra32_probe1(struct device *dev, int ioaddr)
 {
 	int i;
 	int checksum = 0;

@@ -1395,28 +1395,14 @@ dgrs_scan(struct device *dev)
 							&pci_device_fn))
 					break;
 
-#if LINUX_VERSION_CODE < 0x20100
-			pcibios_read_config_byte(pci_bus, pci_device_fn,
-					PCI_INTERRUPT_LINE, &pci_irq);
-			pcibios_read_config_dword(pci_bus, pci_device_fn,
-					PCI_BASE_ADDRESS_0, &plxreg);
-			pcibios_read_config_dword(pci_bus, pci_device_fn,
-					PCI_BASE_ADDRESS_1, &io);
-			pcibios_read_config_dword(pci_bus, pci_device_fn,
-					PCI_BASE_ADDRESS_2, &mem);
-#else
 			pdev = pci_find_slot(pci_bus, pci_device_fn);
 			pci_irq = pdev->irq;
-			plxreg = pdev->base_address[0];
-			io = pdev->base_address[1];
-			mem = pdev->base_address[2];
-#endif
+			plxreg = pdev->resource[0].start;
+			io = pdev->resource[1].start;
+			mem = pdev->resource[2].start;
 			pcibios_read_config_dword(pci_bus, pci_device_fn,
 					0x30, &plxdma);
 			irq = pci_irq;
-			plxreg &= ~15;
-			io &= ~3;
-			mem &= ~15;
 			plxdma &= ~15;
 
 			/*

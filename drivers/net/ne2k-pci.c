@@ -208,7 +208,7 @@ int __init ne2k_pci_probe(struct device *dev)
 		if (pci_clone_list[i].vendor == 0)
 			continue;
 
-		pci_ioaddr = pdev->base_address[0] & PCI_BASE_ADDRESS_IO_MASK;
+		pci_ioaddr = pdev->resource[0].start;
 		pci_irq_line = pdev->irq;
 		pci_read_config_word(pdev, PCI_COMMAND, &pci_command);
 

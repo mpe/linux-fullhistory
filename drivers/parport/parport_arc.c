@@ -96,8 +96,6 @@ static struct parport_operations parport_arc_ops =
 	arc_data_forward,
 	arc_data_reverse,
 
-	arc_interrupt,
-
 	arc_init_state,
 	arc_save_state,
 	arc_restore_state,

@@ -41,6 +41,7 @@ if [ "$CONFIG_SERIAL_NONSTANDARD" = "y" ]; then
    if [ "$CONFIG_SPECIALIX" != "n" ]; then
      bool 'Specialix DTR/RTS pin is RTS' CONFIG_SPECIALIX_RTSCTS
    fi 
+   tristate 'Specialix SX (and SI) card support' CONFIG_SX
    tristate 'Hayes ESP serial port support' CONFIG_ESPSERIAL
    if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
 	dep_tristate 'Multi-Tech multiport card support' CONFIG_ISI m

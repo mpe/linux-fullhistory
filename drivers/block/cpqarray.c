@@ -631,7 +631,7 @@ static int cpqarray_pci_init(ctlr_info_t *c, unchar bus, unchar device_fn)
 	irq = pdev->irq;
 
 	for(i=0; i<6; i++)
-		addr[i] = pdev->base_address[i];
+		addr[i] = pdev->resource[i].flags;
 
 	(void) pcibios_read_config_word(bus, device_fn,
 					PCI_COMMAND,&command);
@@ -665,7 +665,7 @@ DBGINFO(
 	 */
 	for(i=0; i<6; i++)
 		if (!(addr[i] & 0x1)) {
-			c->paddr = addr[i];
+			c->paddr = pdev->resource[i].start;
 			break;
 		}
 	c->vaddr = remap_pci_mem(c->paddr, 128);

@@ -4370,7 +4370,7 @@ advansys_detect(Scsi_Host_Template *tpnt)
                     ASC_DBG2(2,
                         "advansys_detect: devfn %d, bus number %d\n",
                         pci_devp->devfn, pci_devp->bus->number);
-                    iop = pci_devp->base_address[0] & PCI_IOADDRESS_MASK;
+                    iop = pci_devp->resource[0].start;
                     ASC_DBG2(1,
                         "advansys_detect: vendorID %X, deviceID %X\n",
                         pci_devp->vendor, pci_devp->device);
@@ -4484,7 +4484,7 @@ advansys_detect(Scsi_Host_Template *tpnt)
 #endif /* ASC_CONFIG_PCI */
 #else /* version >= v2.1.93 */ 
 #ifdef CONFIG_PCI
-                pci_memory_address = pci_devp->base_address[1];
+                pci_memory_address = pci_devp->resource[1].start;
                 if ((boardp->ioremap_addr =
                     ioremap(pci_memory_address & PAGE_MASK,
                          PAGE_SIZE)) == 0) {

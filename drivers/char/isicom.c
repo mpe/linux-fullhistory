@@ -14,7 +14,8 @@
  *					Printk clean up
  *	9/12/98	alan@redhat.com		Rough port to 2.1.x
  *
- *
+ *	10/6/99 sameer			Merged the ISA and PCI drivers to
+ *					a new unified driver.
  *	***********************************************************
  *
  *	To use this driver you also need the support package. You 
@@ -51,7 +52,20 @@
 #include <asm/io.h>
 #include <asm/system.h>
 
+#include <linux/pci.h>
+
 #include <linux/isicom.h>
+
+static int device_id[] = {      0x2028,
+				0x2051,
+				0x2052,
+				0x2053,
+				0x2054,
+				0x2055,
+				0x2056,
+				0x2057,
+				0x2058
+			};
 
 static int isicom_refcount = 0;
 static int prev_card = 3;	/*	start servicing isi_card[0]	*/
@@ -147,7 +161,7 @@ static int ISILoad_release(struct inode *inode, struct file *filp)
 static int ISILoad_ioctl(struct inode *inode, struct file *filp,
 		         unsigned int cmd, unsigned long arg)
 {
-	unsigned int card, i, j, signature, status;
+	unsigned int card, i, j, signature, status, portcount = 0;
 	unsigned short word_count, base;
 	bin_frame frame;
 	/* exec_record exec_rec; */
@@ -180,19 +194,38 @@ static int ISILoad_ioctl(struct inode *inode, struct file *filp,
 				printk(".");
 			}	
 			signature=(inw(base+0x4)) & 0xff;	
-				
-			if (!(inw(base+0xe) & 0x1) || (inw(base+0x2))) {
+			if (isi_card[card].isa) {
+					
+				if (!(inw(base+0xe) & 0x1) || (inw(base+0x2))) {
 #ifdef ISICOM_DEBUG				
-				printk("\nbase+0x2=0x%x , base+0xe=0x%x",inw(base+0x2),inw(base+0xe));
+					printk("\nbase+0x2=0x%x , base+0xe=0x%x",inw(base+0x2),inw(base+0xe));
 #endif				
-				printk("\nISILoad:Card%d reset failure (Possible bad I/O Port Address 0x%x).\n",card+1,base);
-				return -EIO;					
-			}
-				
+					printk("\nISILoad:ISA Card%d reset failure (Possible bad I/O Port Address 0x%x).\n",card+1,base);
+					return -EIO;					
+				}
+			}	
+			else {
+				portcount = inw(base+0x2);
+				if (!(inw(base+0xe) & 0x1) || ((portcount!=0) && (portcount!=4) && (portcount!=8))) {	
+#ifdef ISICOM_DEBUG
+					printk("\nbase+0x2=0x%x , base+0xe=0x%x",inw(base+0x2),inw(base+0xe));
+#endif
+					printk("\nISILoad:PCI Card%d reset failure (Possible bad I/O Port Address 0x%x).\n",card+1,base);
+					return -EIO;
+				}
+			}	
 			switch(signature) {
 			case	0xa5:
 			case	0xbb:
-			case	0xdd:	isi_card[card].port_count = 8;
+			case	0xdd:	
+					if (isi_card[card].isa) 
+						isi_card[card].port_count = 8;
+					else {
+						if (portcount == 4)
+							isi_card[card].port_count = 4;
+						else
+							isi_card[card].port_count = 8;
+					}	
 				     	isi_card[card].shift_count = 12;
 				     	break;
 				        
@@ -310,7 +343,8 @@ static int ISILoad_ioctl(struct inode *inode, struct file *filp,
 			outw(0x0, base);
 			outw(0x0, base);
 			InterruptTheCard(base);
-			
+			outw(0x0, base+0x4);    /* for ISI4608 cards */
+							
 			isi_card[card].status |= FIRMWARE_LOADED;
 			return 0;	
 			
@@ -455,28 +489,7 @@ static void isicom_tx(unsigned long _data)
 				txcount--;
 			}
 		}
-/*
- *	Replaced the code below with hopefully a faster loop - sameer
- */
 
-/*					
-		while (1) {
-			wrd = port->xmit_buf[port->xmit_tail++];
-			port->xmit_tail = port->xmit_tail & (SERIAL_XMIT_SIZE - 1);
-			port->xmit_cnt--;
-			if (--txcount > 0) {
-				wrd |= (port->xmit_buf[port->xmit_tail++] << 8);
-				port->xmit_tail = port->xmit_tail & (SERIAL_XMIT_SIZE - 1);
-				port->xmit_cnt--;
-				outw(wrd, base);
-				if (--txcount <= 0) break;
-			}
-			else {
-				outw(wrd, base);
-				break;
-			}
-		}
-*/
 		InterruptTheCard(base);
 		if (port->xmit_cnt <= 0)
 			port->status &= ~ISI_TXOK;
@@ -531,12 +544,34 @@ static void isicom_interrupt(int irq, void * dev_id, struct pt_regs * regs)
 	unsigned char channel;
 	short byte_count;
 	
-	card = irq_to_board[irq];
+	/*
+	 *      find the source of interrupt
+	 */
+	 
+	for(count = 0; count < BOARD_COUNT; count++) { 
+		card = &isi_card[count];
+		if (card->base != 0) {
+			if (((card->isa == YES) && (card->irq == irq)) || 
+				((card->isa == NO) && (card->irq == irq) && (inw(card->base+0x0e) & 0x02)))
+				break;
+		}
+		card = NULL;
+	}
+
 	if (!card || !(card->status & FIRMWARE_LOADED)) {
-		printk(KERN_DEBUG "ISICOM: interrupt: not handling irq%d!.\n", irq);
+/*		printk(KERN_DEBUG "ISICOM: interrupt: not handling irq%d!.\n", irq);*/
 		return;
 	}
+	
 	base = card->base;
+	if (card->isa == NO) {
+	/*
+	 *      disable any interrupts from the PCI card and lower the
+	 *      interrupt line
+	 */
+		outw(0x8000, base+0x04);
+		ClearInterrupt(base);
+	}
 	
 	inw(base);		/* get the dummy word out */
 	header = inw(base);
@@ -548,12 +583,18 @@ static void isicom_interrupt(int irq, void * dev_id, struct pt_regs * regs)
 	if ((channel+1) > card->port_count) {
 		printk(KERN_WARNING "ISICOM: isicom_interrupt(0x%x): %d(channel) > port_count.\n",
 				base, channel+1);
-		ClearInterrupt(base);		
+		if (card->isa)
+			ClearInterrupt(base);
+		else
+			outw(0x0000, base+0x04); /* enable interrupts */		
 		return;			
 	}
 	port = card->ports + channel;
 	if (!(port->flags & ASYNC_INITIALIZED)) {
-		ClearInterrupt(base);
+		if (card->isa)
+			ClearInterrupt(base);
+		else
+			outw(0x0000, base+0x04); /* enable interrupts */
 		return;
 	}	
 		
@@ -681,7 +722,10 @@ static void isicom_interrupt(int irq, void * dev_id, struct pt_regs * regs)
 		}
 		queue_task(&tty->flip.tqueue, &tq_timer);
 	}
-	ClearInterrupt(base);
+	if (card->isa == YES)
+		ClearInterrupt(base);
+	else
+		outw(0x0000, base+0x04); /* enable interrupts */	
 	return;
 } 
 
@@ -1023,12 +1067,11 @@ static int isicom_open(struct tty_struct * tty, struct file * filp)
 		return -ENODEV;
 	}
 	
-	/*  open on higher 8 dev files on a 8 port card !!! */
-	if (card->port_count == 8) 
-		if (line > ((board * 16)+7)) {
-			printk(KERN_ERR "ISICOM: Opened >8 on a 8 port card.\n");
-			return -ENODEV;
-		}	
+	/*  open on a port greater than the port count for the card !!! */
+	if (line > ((board * 16) + card->port_count - 1)) {
+		printk(KERN_ERR "ISICOM: Open on a port which exceeds the port_count of the card!\n");
+		return -ENODEV;
+	}	
 	port = &isi_ports[line];	
 	if (isicom_paranoia_check(port, tty->device, "isicom_open"))
 		return -ENODEV;
@@ -1764,21 +1807,42 @@ static void unregister_drivers(void)
 
 static int register_isr(void)
 {
-	int count, done=0;
+	int count, done=0, card;
+	unsigned char request;
 	for (count=0; count < BOARD_COUNT; count++ ) {
 		if (isi_card[count].base) {
-			if (request_irq(isi_card[count].irq, isicom_interrupt, SA_INTERRUPT, ISICOM_NAME, NULL)) {
-				printk(KERN_WARNING "ISICOM: Could not install handler at Irq %d. Card%d will be disabled.\n",
-					isi_card[count].irq, count+1);
+		/*
+		 * verify if the required irq has already been requested for
+		 * another ISI Card, if so we already have it, else request it
+		 */
+			request = YES;
+			for(card = 0; card < count; card++)
+			if ((isi_card[card].base) && (isi_card[card].irq == isi_card[count].irq)) {
+				request = NO;
+				if ((isi_card[count].isa == NO) && (isi_card[card].isa == NO))
+					break;
+				/*
+				 * ISA cards cannot share interrupts with other
+				 * PCI or ISA devices hence disable this card.
+				 */
 				release_region(isi_card[count].base,16);
-				isi_card[count].base=0;
+				isi_card[count].base = 0;
+				break;
 			}
-			else {
-				printk(KERN_INFO "ISICOM: Card%d at 0x%x using irq %d.\n", 
-				count+1, isi_card[count].base, isi_card[count].irq); 
-				
-				irq_to_board[isi_card[count].irq]=&isi_card[count];
-				done++;
+			if (request == YES) { 
+				if (request_irq(isi_card[count].irq, isicom_interrupt, SA_INTERRUPT, ISICOM_NAME, NULL)) {
+					printk(KERN_WARNING "ISICOM: Could not install handler at Irq %d. Card%d will be disabled.\n",
+						isi_card[count].irq, count+1);
+					release_region(isi_card[count].base,16);
+					isi_card[count].base=0;
+				}
+				else {
+					printk(KERN_INFO "ISICOM: Card%d at 0x%x using irq %d.\n", 
+					count+1, isi_card[count].base, isi_card[count].irq); 
+					
+					irq_to_board[isi_card[count].irq]=&isi_card[count];
+					done++;
+				}
 			}
 		}	
 	}
@@ -1787,14 +1851,24 @@ static int register_isr(void)
 
 static void unregister_isr(void)
 {
-	int count;
-	for (count=0; count < BOARD_COUNT; count++ ) 
+	int count, card;
+	unsigned char freeirq;
+	for (count=0; count < BOARD_COUNT; count++ ) {
 		if (isi_card[count].base) {
-			free_irq(isi_card[count].irq, NULL);
+			freeirq = YES;
+			for(card = 0; card < count; card++)
+				if ((isi_card[card].base) && (isi_card[card].irq == isi_card[count].irq)) {
+					freeirq = NO;
+					break;
+				}
+			if (freeirq == YES) {
+				free_irq(isi_card[count].irq, NULL);
 #ifdef ISICOM_DEBUG			
-			printk(KERN_DEBUG "ISICOM: Irq %d released for Card%d.\n",isi_card[count].irq, count+1);
-#endif			
+				printk(KERN_DEBUG "ISICOM: Irq %d released for Card%d.\n",isi_card[count].irq, count+1);
+#endif	
+			}		
 		}
+	}
 }
 
 static int isicom_init(void)
@@ -1883,28 +1957,74 @@ MODULE_PARM_DESC(irq, "Interrupts for the cards");
 
 int init_module(void)
 {
-	int retval, card;
-
-	for(card=0; card < BOARD_COUNT; card++)
-	{	
-		isi_card[card].base=io[card];
-		isi_card[card].irq=irq[card];
+	struct pci_dev *dev = NULL;
+	int retval, card, idx, count;
+	unsigned char pciirq;
+	unsigned int ioaddr;
+	                
+	card = 0;
+	for(idx=0; idx < BOARD_COUNT; idx++) {	
+		if (io[idx]) {
+			isi_card[idx].base=io[idx];
+			isi_card[idx].irq=irq[idx];
+			isi_card[idx].isa=YES;
+			card++;
+		}
+		else {
+			isi_card[idx].base = 0;
+			isi_card[idx].irq = 0;
+		}
 	}
 	
-	for (card=0 ;card < BOARD_COUNT; card++) {
-		if (!((isi_card[card].irq==2)||(isi_card[card].irq==3)||
-		    (isi_card[card].irq==4)||(isi_card[card].irq==5)||
-		    (isi_card[card].irq==7)||(isi_card[card].irq==10)||
-		    (isi_card[card].irq==11)||(isi_card[card].irq==12)||
-		    (isi_card[card].irq==15))) {
+	for (idx=0 ;idx < card; idx++) {
+		if (!((isi_card[idx].irq==2)||(isi_card[idx].irq==3)||
+		    (isi_card[idx].irq==4)||(isi_card[idx].irq==5)||
+		    (isi_card[idx].irq==7)||(isi_card[idx].irq==10)||
+		    (isi_card[idx].irq==11)||(isi_card[idx].irq==12)||
+		    (isi_card[idx].irq==15))) {
 			
-			if (isi_card[card].base) {
+			if (isi_card[idx].base) {
 				printk(KERN_ERR "ISICOM: Irq %d unsupported. Disabling Card%d...\n",
-					isi_card[card].irq, card+1);
-				isi_card[card].base=0;
+					isi_card[idx].irq, idx+1);
+				isi_card[idx].base=0;
+				card--;
 			}	
 		}
 	}	
+	
+	if (pci_present() && (card < BOARD_COUNT)) {
+		for (idx=0; idx < DEVID_COUNT; idx++) {
+			dev = NULL;
+			for (;;){
+				if (!(dev = pci_find_device(VENDOR_ID, device_id[idx], dev)))
+					break;
+				if (card >= BOARD_COUNT)
+					break;
+					
+				/* found a PCI ISI card! */
+				ioaddr = dev->base_address[3]; /* i.e at offset 0x1c in the
+								* PCI configuration register
+								* space.
+								*/
+				ioaddr &= PCI_BASE_ADDRESS_IO_MASK;
+				pciirq = dev->irq;
+				printk(KERN_INFO "ISI PCI Card(Device ID 0x%x)\n", device_id[idx]);
+				/*
+				 * allot the first empty slot in the array
+				 */				
+				for (count=0; count < BOARD_COUNT; count++) {				
+					if (isi_card[count].base == 0) {
+						isi_card[count].base = ioaddr;
+						isi_card[count].irq = pciirq;
+						isi_card[count].isa = NO;
+						card++;
+						break;
+					}
+				}
+			}				
+			if (card >= BOARD_COUNT) break;
+		}
+	}
 	
 	if (!(isi_card[0].base || isi_card[1].base || isi_card[2].base || isi_card[3].base)) {
 		printk(KERN_ERR "ISICOM: No valid card configuration. Driver cannot be initialized...\n"); 

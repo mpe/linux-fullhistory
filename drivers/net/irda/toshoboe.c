@@ -713,7 +713,7 @@ toshoboe_open (struct pci_dev *pci_dev)
   dev_self[i] = self;
 
   self->pdev = pci_dev;
-  self->base = pci_dev->base_address[0] & PCI_BASE_ADDRESS_IO_MASK;
+  self->base = pci_dev->resource[0].start;
 
   idev = &self->idev;
 
@@ -850,7 +850,7 @@ int __init toshoboe_init (void)
       if (pci_dev)
         {
           printk (KERN_WARNING "ToshOboe: Found 701 chip at 0x%0lx irq %d\n",
-                  pci_dev->base_address[0] & PCI_BASE_ADDRESS_IO_MASK,
+                  pci_dev->resource[0],
                   pci_dev->irq);
 
           if (!toshoboe_open (pci_dev))

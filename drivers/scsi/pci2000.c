@@ -640,12 +640,8 @@ int Pci2000_Detect (Scsi_Host_Template *tpnt)
 		pshost = scsi_register (tpnt, sizeof(ADAPTER2000));
 		padapter = HOSTDATA(pshost);
 
-#if LINUX_VERSION_CODE > LINUXVERSION(2,1,92)
-		padapter->basePort = pdev->base_address[1] & 0xFFFE;
-#else
-		pcibios_read_config_word (pci_bus, pci_device_fn, PCI_BASE_ADDRESS_1, &padapter->basePort);
-		padapter->basePort &= 0xFFFE;
-#endif
+		padapter->basePort = pdev->resource[1].start;
+
 		DEB (printk ("\nBase Regs = %#04X", padapter->basePort));			// get the base I/O port address
 		padapter->mb0	= padapter->basePort + RTR_MAILBOX;		   			// get the 32 bit mail boxes
 		padapter->mb1	= padapter->basePort + RTR_MAILBOX + 4;

@@ -119,6 +119,14 @@
 /* This ioctl is only used by sbpcd at the moment */
 #define CDROMAUDIOBUFSIZ        0x5382	/* set the audio buffer size */
 
+/* DVD-ROM Specific ioctls */
+#define DVD_READ_STRUCT		0x5390  /* Read structure */
+#define DVD_WRITE_STRUCT	0x5391  /* Write structure */
+#define DVD_AUTH		0x5392  /* Authentication */
+
+#define CDROM_SEND_PACKET	0x5393	/* send a packet to the drive */
+#define CDROM_BLANK		0x5394	/* blank */
+
 /*******************************************************
  * CDROM IOCTL structures
  *******************************************************/
@@ -243,6 +251,17 @@ struct cdrom_blk
 	unsigned short len;
 };
 
+#define CDROM_PACKET_SIZE	12
+
+/* for CDROM_PACKET_COMMAND ioctl */
+struct cdrom_generic_command
+{
+	unsigned char 	cmd[CDROM_PACKET_SIZE];
+	unsigned char 	*buffer;
+	unsigned int 	buflen;
+	int		stat;
+};
+
 
 /*
  * A CD-ROM physical sector size is 2048, 2052, 2056, 2324, 2332, 2336, 
@@ -342,6 +361,12 @@ struct cdrom_blk
 #define CDC_RESET               0x200   /* hard reset device */
 #define CDC_IOCTLS              0x400   /* driver has non-standard ioctls */
 #define CDC_DRIVE_STATUS        0x800   /* driver implements drive status */
+#define CDC_GENERIC_PACKET	0x1000	/* driver implements generic packets */
+#define CDC_CD_R		0x2000	/* drive is a CD-R */
+#define CDC_CD_RW		0x4000	/* drive is a CD-RW */
+#define CDC_DVD			0x8000	/* drive is a DVD */
+#define CDC_DVD_R		0x10000	/* drive can write DVD-R */
+#define CDC_DVD_RAM		0x20000	/* drive can write DVD-RAM */
 
 /* drive status possibilities returned by CDROM_DRIVE_STATUS ioctl */
 #define CDS_NO_INFO		0	/* if not implemented */
@@ -369,6 +394,172 @@ struct cdrom_blk
 /* Special codes used when specifying changer slots. */
 #define CDSL_NONE       	((int) (~0U>>1)-1)
 #define CDSL_CURRENT    	((int) (~0U>>1))
+
+/*********************************************************************
+ * MMC commands and such
+ *********************************************************************/
+
+#define DVD_SEND_KEY		0xa3
+#define DVD_REPORT_KEY		0xa4
+#define DVD_READ_STRUCTURE	0xad
+
+#define DVD_STRUCT_PHYSICAL	0x00
+#define DVD_STRUCT_COPYRIGHT	0x01
+#define DVD_STRUCT_DISCKEY	0x02
+#define DVD_STRUCT_BCA		0x03
+#define DVD_STRUCT_MANUFACT	0x04
+
+struct dvd_layer {
+	u_char book_version	: 4;
+	u_char book_type	: 4;
+	u_char min_rate		: 4;
+	u_char disc_size	: 4;
+	u_char layer_type	: 4;
+	u_char track_path	: 1;
+	u_char nlayers		: 2;
+	u_char track_density	: 4;
+	u_char linear_density	: 4;
+	u_char bca		: 1;
+	u_char start_sector;
+	u_char end_sector;
+	u_char end_sector_l0;
+};
+
+struct dvd_physical {
+	u_char type;
+	u_char layer_num;
+	struct dvd_layer layer[4];
+};
+
+struct dvd_copyright {
+	u_char type;
+
+	u_char layer_num;
+	u_char cpst;
+	u_char rmi;
+};
+
+struct dvd_disckey {
+	u_char type;
+
+	unsigned agid			: 2;
+	u_char value[2048];
+};
+
+struct dvd_bca {
+	u_char type;
+
+	int len;
+	u_char value[188];
+};
+
+struct dvd_manufact {
+	u_char type;
+
+	u_char layer_num;
+	int len;
+	u_char value[2048];
+};
+
+typedef union {
+	u_char type;
+
+	struct dvd_physical	physical;
+	struct dvd_copyright	copyright;
+	struct dvd_disckey	disckey;
+	struct dvd_bca		bca;
+	struct dvd_manufact	manufact;
+} dvd_struct;
+
+/*
+ * DVD authentication ioctl
+ */
+
+/* Authentication states */
+#define DVD_LU_SEND_AGID	0
+#define DVD_HOST_SEND_CHALLENGE	1
+#define DVD_LU_SEND_KEY1	2
+#define DVD_LU_SEND_CHALLENGE	3
+#define DVD_HOST_SEND_KEY2	4
+
+/* Termination states */
+#define DVD_AUTH_ESTABLISHED	5
+#define DVD_AUTH_FAILURE	6
+
+/* Other functions */
+#define DVD_LU_SEND_TITLE_KEY	7
+#define DVD_LU_SEND_ASF		8
+#define DVD_INVALIDATE_AGID	9
+
+/* State data */
+typedef u_char dvd_key[5];		/* 40-bit value, MSB is first elem. */
+typedef u_char dvd_challenge[10];	/* 80-bit value, MSB is first elem. */
+
+struct dvd_lu_send_agid {
+	u_char type;
+	unsigned agid		: 2;
+};
+
+struct dvd_host_send_challenge {
+	u_char type;
+	unsigned agid		: 2;
+
+	dvd_challenge chal;
+};
+
+struct dvd_send_key {
+	u_char type;
+	unsigned agid		: 2;
+
+	dvd_key key;
+};
+
+struct dvd_lu_send_challenge {
+	u_char type;
+	unsigned agid		: 2;
+
+	dvd_challenge chal;
+};
+
+#define DVD_CPM_NO_COPYRIGHT	0
+#define DVD_CPM_COPYRIGHTED	1
+
+#define DVD_CP_SEC_NONE		0
+#define DVD_CP_SEC_EXIST	1
+
+#define DVD_CGMS_UNRESTRICTED	0
+#define DVD_CGMS_SINGLE		2
+#define DVD_CGMS_RESTRICTED	3
+
+struct dvd_lu_send_title_key {
+	u_char type;
+	unsigned agid		: 2;
+
+	dvd_key title_key;
+	int lba;
+	unsigned cpm		: 1;
+	unsigned cp_sec		: 1;
+	unsigned cgms		: 2;
+};
+
+struct dvd_lu_send_asf {
+	u_char type;
+	unsigned agid		: 2;
+
+	unsigned asf		: 1;
+};
+
+typedef union {
+	u_char type;
+
+	struct dvd_lu_send_agid		lsa;
+	struct dvd_host_send_challenge	hsc;
+	struct dvd_send_key		lsk;
+	struct dvd_lu_send_challenge	lsc;
+	struct dvd_send_key		hsk;
+	struct dvd_lu_send_title_key	lstk;
+	struct dvd_lu_send_asf		lsasf;
+} dvd_authinfo;
 
 #ifdef __KERNEL__
 /* Uniform cdrom data structures for cdrom.c */
@@ -413,6 +604,9 @@ struct cdrom_device_ops {
 /* driver specifications */
 	const int capability;   /* capability flags */
 	int n_minors;           /* number of active minor devices */
+	/* handle uniform packets for scsi type devices (scsi,atapi) */
+	int (*generic_packet) (struct cdrom_device_info *,
+			       struct cdrom_generic_command *);
 };
 
 /* the general file operations structure: */

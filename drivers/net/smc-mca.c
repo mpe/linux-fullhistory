@@ -66,8 +66,7 @@ static int ultramca_close_card(struct device *dev);
 #define ULTRA_IO_EXTENT 32
 #define EN0_ERWCNT      0x08  /* Early receive warning count. */
 
-
-__initfunc(int ultramca_probe(struct device *dev))
+int __init ultramca_probe(struct device *dev)
 {
 	unsigned short ioaddr;
 	unsigned char reg4, num_pages;

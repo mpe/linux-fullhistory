@@ -215,8 +215,8 @@ static int config_chipset_for_dma (ide_drive_t *drive, byte ultra)
 	byte			test1, test2, speed;
 	byte			AP, BP, CP, DP, EP;
 	int drive_number	= ((hwif->channel ? 2 : 0) + (drive->select.b.unit & 0x01));
-	byte udma_66		= ((id->word93 & 0x2000) && (dev->device == PCI_DEVICE_ID_PROMISE_20262)) ? 1 : 0;
-	byte udma_33		= ultra ? (inb((dev->base_address[4] & PCI_BASE_ADDRESS_IO_MASK) + 0x001f) & 1) : 0;
+	byte udma_66		= ((id->word93 & 0x2000) && (hwif->udma_four)) ? 1 : 0;
+	byte udma_33		= ultra ? (inb((dev->resource[4].start & PCI_BASE_ADDRESS_IO_MASK) + 0x001f) & 1) : 0;
 
 	pci_read_config_byte(dev, 0x50, &EP);
 
@@ -308,7 +308,7 @@ static int config_chipset_for_dma (ide_drive_t *drive, byte ultra)
 		speed = XFER_UDMA_3;
 	} else if ((id->dma_ultra & 0x0004) && (udma_33)) {
 		if (!((id->dma_ultra >> 8) & 4)) {
-			drive->id->dma_ultra &= ~0x0F00;
+			drive->id->dma_ultra &= ~0xFF00;
 			drive->id->dma_ultra |= 0x0404;
 			drive->id->dma_mword &= ~0x0F00;
 			drive->id->dma_1word &= ~0x0F00;
@@ -319,7 +319,7 @@ static int config_chipset_for_dma (ide_drive_t *drive, byte ultra)
 		speed = XFER_UDMA_2;
 	} else if ((id->dma_ultra & 0x0002) && (udma_33)) {
 		if (!((id->dma_ultra >> 8) & 2)) {
-			drive->id->dma_ultra &= ~0x0F00;
+			drive->id->dma_ultra &= ~0xFF00;
 			drive->id->dma_ultra |= 0x0202;
 			drive->id->dma_mword &= ~0x0F00;
 			drive->id->dma_1word &= ~0x0F00;
@@ -330,7 +330,7 @@ static int config_chipset_for_dma (ide_drive_t *drive, byte ultra)
 		speed = XFER_UDMA_1;
 	} else if ((id->dma_ultra & 0x0001) && (udma_33)) {
 		if (!((id->dma_ultra >> 8) & 1)) {
-			drive->id->dma_ultra &= ~0x0F00;
+			drive->id->dma_ultra &= ~0xFF00;
 			drive->id->dma_ultra |= 0x0101;
 			drive->id->dma_mword &= ~0x0F00;
 			drive->id->dma_1word &= ~0x0F00;
@@ -493,7 +493,7 @@ int pdc202xx_dmaproc (ide_dma_action_t func, ide_drive_t *drive)
 
 __initfunc(unsigned int pci_init_pdc202xx (struct pci_dev *dev, const char *name))
 {
-	unsigned long high_16	= dev->base_address[4] & PCI_BASE_ADDRESS_IO_MASK;
+	unsigned long high_16	= dev->resource[4].start & PCI_BASE_ADDRESS_IO_MASK;
 	byte udma_speed_flag	= inb(high_16 + 0x001f);
 	byte primary_mode	= inb(high_16 + 0x001a);
 	byte secondary_mode	= inb(high_16 + 0x001b);
@@ -551,5 +551,20 @@ __initfunc(void ide_init_pdc202xx (ide_hwif_t *hwif))
 {
 	if (hwif->dma_base) {
 		hwif->dmaproc = &pdc202xx_dmaproc;
+
+		switch(hwif->pci_dev->device) {
+			case PCI_DEVICE_ID_PROMISE_20262:
+#if 0
+				{
+					unsigned long high_16 = hwif->pci_dev->base_address[4] & PCI_BASE_ADDRESS_IO_MASK;
+					hwif->udma_four = 1;
+				}
+#endif
+				break;
+			case PCI_DEVICE_ID_PROMISE_20246:
+			default:
+				hwif->udma_four = 0;
+				break;
+		}
 	}
 }

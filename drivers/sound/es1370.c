@@ -2334,8 +2334,8 @@ int __init init_module(void)
 	printk(KERN_INFO "es1370: version v0.26 time " __TIME__ " " __DATE__ "\n");
 	while (index < NR_DEVICE && 
 	       (pcidev = pci_find_device(PCI_VENDOR_ID_ENSONIQ, PCI_DEVICE_ID_ENSONIQ_ES1370, pcidev))) {
-		if (pcidev->base_address[0] == 0 || 
-		    (pcidev->base_address[0] & PCI_BASE_ADDRESS_SPACE) != PCI_BASE_ADDRESS_SPACE_IO)
+		if (pcidev->resource[0].flags == 0 || 
+		    (pcidev->resource[0].flags & PCI_BASE_ADDRESS_SPACE) != PCI_BASE_ADDRESS_SPACE_IO)
 			continue;
 		if (pcidev->irq == 0) 
 			continue;
@@ -2352,7 +2352,7 @@ int __init init_module(void)
 		init_waitqueue_head(&s->midi.owait);
 		init_MUTEX(&s->open_sem);
 		s->magic = ES1370_MAGIC;
-		s->io = pcidev->base_address[0] & PCI_BASE_ADDRESS_IO_MASK;
+		s->io = pcidev->resource[0].start;
 		s->irq = pcidev->irq;
 		if (check_region(s->io, ES1370_EXTENT)) {
 			printk(KERN_ERR "es1370: io ports %#lx-%#lx in use\n", s->io, s->io+ES1370_EXTENT-1);

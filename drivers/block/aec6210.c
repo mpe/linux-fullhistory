@@ -1,7 +1,7 @@
 /*
- * linux/drivers/block/aec6210.c	Version 0.01	Nov 17, 1998
+ * linux/drivers/block/aec6210.c		Version 0.01	Nov 17, 1998
  *
- * Copyright (C) 1998	Andre Hedrick (hedrick@astro.dyer.vanderbilt.edu)
+ * Copyright (C) 1998-99	Andre Hedrick
  *
  *  pio 0 ::       40: 00 07 00 00 00 00 00 00 02 07 a6 04 00 02 00 02
  *  pio 1 ::       40: 0a 07 00 00 00 00 00 00 02 07 a6 05 00 02 00 02
@@ -31,7 +31,6 @@
  *                 NO-Devices
  *                 40: 00 00 00 00 00 00 00 00 02 05 a6 00 00 02 00 02
  *                 50: ff ff ff ff 00 06 00 00 00 00 00 00 00 00 00 00
-
  */
 
 #include <linux/types.h>
@@ -54,10 +53,8 @@
 __initfunc(unsigned int pci_init_aec6210 (struct pci_dev *dev, const char *name))
 {
 	if (dev->rom_address) {
-		pci_write_config_dword(dev, PCI_ROM_ADDRESS,
-			dev->rom_address | PCI_ROM_ADDRESS_ENABLE);
-		printk("%s: ROM enabled at 0x%08lx\n",
-			name, dev->rom_address);
+		pci_write_config_dword(dev, PCI_ROM_ADDRESS, dev->rom_address | PCI_ROM_ADDRESS_ENABLE);
+		printk("%s: ROM enabled at 0x%08lx\n", name, dev->rom_address);
 	}
 	return dev->irq;
 }

@@ -76,7 +76,7 @@ struct bridge_mapping_type {
 	{0x0	,0x0	,0x0	},
 };
 
-__initfunc(static void quirk_bridge(struct pci_dev *dev, int pos))
+static void __init quirk_bridge(struct pci_dev *dev, int pos)
 {
 	struct bridge_mapping_type *bmap;
 	unsigned char val;
@@ -108,7 +108,7 @@ __initfunc(static void quirk_bridge(struct pci_dev *dev, int pos))
 
 /* Deal with broken BIOS'es that neglect to enable passive release,
    which can cause problems in combination with the 82441FX/PPro MTRRs */
-__initfunc(static void quirk_passive_release(struct pci_dev *dev, int arg))
+static void __init quirk_passive_release(struct pci_dev *dev, int arg)
 {
 	struct pci_dev *d = NULL;
 	unsigned char dlc;
@@ -135,7 +135,7 @@ __initfunc(static void quirk_passive_release(struct pci_dev *dev, int arg))
 
 int isa_dma_bridge_buggy = 0;		/* Exported */
     
-__initfunc(static void quirk_isa_dma_hangs(struct pci_dev *dev, int arg))
+static void __init quirk_isa_dma_hangs(struct pci_dev *dev, int arg)
 {
 	if(!isa_dma_bridge_buggy)
 	{
@@ -204,7 +204,7 @@ static struct quirk_info quirk_list[] __initdata = {
 	{ PCI_VENDOR_ID_VIA,	PCI_DEVICE_ID_VIA_82C586_0,	quirk_isa_dma_hangs,	0x00 },
 };
 
-__initfunc(void pci_quirks_init(void))
+void __init pci_quirks_init(void)
 {
 	struct pci_dev *d;
 	int i;

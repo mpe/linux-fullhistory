@@ -334,7 +334,7 @@ static void pty_set_termios(struct tty_struct *tty, struct termios *old_termios)
         tty->termios->c_cflag |= (CS8 | CREAD);
 }
 
-__initfunc(int pty_init(void))
+int __init pty_init(void)
 {
 	int i;
 

@@ -750,7 +750,7 @@ static void smc_hardware_send_packet( struct device * dev )
  |
  ---------------------------------------------------------------------------
 */
-__initfunc(int smc_init(struct device *dev))
+int __init smc_init(struct device *dev)
 {
 	int i;
 	int base_addr = dev ? dev->base_addr : 0;
@@ -795,7 +795,7 @@ __initfunc(int smc_init(struct device *dev))
  . interrupt, so an auto-detect routine can detect it, and find the IRQ,
  ------------------------------------------------------------------------
 */
-__initfunc(int smc_findirq( int ioaddr ))
+int __init smc_findirq( int ioaddr )
 {
 	int	timeout = 20;
 
@@ -877,7 +877,7 @@ __initfunc(int smc_findirq( int ioaddr ))
  .---------------------------------------------------------------------
  */
 
-__initfunc(static int smc_probe( int ioaddr ))
+static int __init smc_probe( int ioaddr )
 {
 	unsigned int	bank;
 	word	revision_register;
@@ -942,7 +942,7 @@ __initfunc(static int smc_probe( int ioaddr ))
  . o  GRAB the region
  .-----------------------------------------------------------------
 */
-__initfunc(static int  smc_initcard(struct device *dev, int ioaddr))
+static int __init smc_initcard(struct device *dev, int ioaddr)
 {
 	int i;
 

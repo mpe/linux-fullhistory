@@ -1449,14 +1449,14 @@ static int found_ohci(int irq, void* mem_base)
  
 static int start_ohci(struct pci_dev *dev)
 {
-	unsigned int mem_base = dev->base_address[0];
+	unsigned int mem_base = dev->resource[0].flags;
 
 	/* If its OHCI, its memory */
 	if (mem_base & PCI_BASE_ADDRESS_SPACE_IO)
 		return -ENODEV;
 
 	/* Get the memory address and map it for IO */
-	mem_base &= PCI_BASE_ADDRESS_MEM_MASK;
+	mem_base = dev->resource[0].start;
 
 	/* 
 	 * FIXME ioremap_nocache isn't implemented on all CPUs (such

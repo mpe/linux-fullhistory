@@ -1241,10 +1241,24 @@ Your cooperation is appreciated.
 		 30 = /dev/mtd15	16th MTD (rw)
 		 31 = /dev/mtdr15	16th MTD (ro)
 
+    block	Eighth IDE hard disk/CD-ROM interface
+		  0 = /dev/hdq		Master: whole disk (or CD-ROM)
+		 64 = /dev/hdr		Slave: whole disk (or CD-ROM)
+
+		Partitions are handled the same way as for the first
+		interface (see major number 3).
+
  91 char	CAN-Bus devices
 		  0 = /dev/can0		First CAN-Bus controller
 		  1 = /dev/can1		Second CAN-Bus controller
 		    ...
+
+    block	Ninth IDE hard disk/CD-ROM interface
+		  0 = /dev/hds		Master: whole disk (or CD-ROM)
+		 64 = /dev/hdt		Slave: whole disk (or CD-ROM)
+
+		Partitions are handled the same way as for the first
+		interface (see major number 3).
 
  92 char	Reserved for ith Kommunikationstechnik MIC ISDN card
 

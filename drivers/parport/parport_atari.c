@@ -140,8 +140,6 @@ static struct parport_operations parport_atari_ops = {
 	NULL, /* data_forward - FIXME */
 	NULL, /* data_reverse - FIXME */
 
-	parport_atari_interrupt,
-
 	parport_atari_init_state,
 	parport_atari_save_state,
 	parport_atari_restore_state,

@@ -2607,14 +2607,14 @@ static int found_ohci(int irq, void* mem_base)
  */
 static int init_ohci(struct pci_dev *dev)
 {
-	unsigned long mem_base = dev->base_address[0];
+	unsigned long mem_base = dev->resource[0].flags;
 	
 	/* If its OHCI, its memory */
 	if (mem_base & PCI_BASE_ADDRESS_SPACE_IO)
 		return -ENODEV;
 
 	/* Get the memory address and map it for IO */
-	mem_base &= PCI_BASE_ADDRESS_MEM_MASK;
+	mem_base = dev->resource[0].start;
 
 	/* no interrupt won't work... */
 	if (dev->irq == 0) {

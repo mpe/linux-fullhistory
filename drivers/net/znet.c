@@ -200,7 +200,7 @@ static struct sigaction znet_sigaction = { &znet_interrupt, 0, 0, NULL, };
    BIOS area.  We just scan for the signature, and pull the vital parameters
    out of the structure. */
 
-__initfunc(int znet_probe(struct device *dev))
+int __init znet_probe(struct device *dev)
 {
 	int i;
 	struct netidblk *netinfo;

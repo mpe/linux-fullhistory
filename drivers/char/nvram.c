@@ -413,7 +413,7 @@ static struct miscdevice nvram_dev = {
 };
 
 
-__initfunc(int nvram_init(void))
+int __init nvram_init(void)
 {
 	/* First test whether the driver should init at all */
 	if (!CHECK_DRIVER_INIT())

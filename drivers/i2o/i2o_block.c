@@ -323,7 +323,8 @@ static struct i2o_handler i2o_block_handler =
 {
 	i2o_block_reply,
 	"I2O Block OSM",
-	0
+	0,
+	I2O_CLASS_RANDOM_BLOCK_STORAGE
 };
 
 
@@ -576,15 +577,6 @@ static int i2ob_ioctl(struct inode *inode, struct file *file,
 }
 
 /*
- *	Issue UTIL_CLAIM messages
- */
- 
-static int i2ob_claim_device(struct i2ob_device *dev, int onoff)
-{
-	return i2o_issue_claim(dev->controller, dev->tid, i2ob_context, onoff, &dev->done_flag);
-}
-
-/*
  *	Close the block device down
  */
  
@@ -625,10 +617,10 @@ static int i2ob_release(struct inode *inode, struct file *file)
 		i2o_post_wait(dev->controller, dev->tid, msg, 20, query_done,2);
 	
 		/*
-                 * Now unclaim the device.
-                 */
-                if (i2ob_claim_device(dev, 0)<0)
-                        printk(KERN_ERR "i2ob_release: controller rejected unclaim.\n");
+ 		 * Now unclaim the device.
+		 */
+		if (i2o_release_device(dev->i2odev, &i2o_block_handler, I2O_CLAIM_PRIMARY)<0)
+			printk(KERN_ERR "i2ob_release: controller rejected unclaim.\n");
 
 	}
 	MOD_DEC_USE_COUNT;
@@ -657,7 +649,7 @@ static int i2ob_open(struct inode *inode, struct file *file)
 		int *query_done;
 		
 		
-		if(i2ob_claim_device(dev, 1)<0)
+		if(i2o_claim_device(dev->i2odev, &i2o_block_handler, I2O_CLAIM_PRIMARY)<0)
 		{
 			dev->refcnt--;
 			return -EBUSY;
@@ -809,36 +801,35 @@ static void i2ob_probe(void)
 			if(unit<MAX_I2OB<<4)
 			{
  				/*
-                                 * Get the device and fill in the
-                                 * Tid and controller.
-                                 */
-                                struct i2ob_device *dev=&i2ob_dev[unit];
-       				dev->i2odev = d; 
+				 * Get the device and fill in the
+				 * Tid and controller.
+				 */
+				struct i2ob_device *dev=&i2ob_dev[unit];
+				dev->i2odev = d; 
 				dev->controller = c;
-                                dev->tid = d->id;
+				dev->tid = d->id;
  
-                                /*
-                                 * Insure the device can be claimed
-                                 * before installing it.
-                                 */
-                                if(i2ob_claim_device(dev, 1)==0)
-                                {
-                                        printk(KERN_INFO "Claimed Dev %p Tid %d Unit %d\n",dev,dev->tid,unit);
-                                        i2ob_install_device(c,d,unit);
+				/*
+				 * Insure the device can be claimed
+				 * before installing it.
+				 */
+				if(i2o_claim_device(dev->i2odev, &i2o_block_handler, I2O_CLAIM_PRIMARY )==0)
+				{
+					printk(KERN_INFO "Claimed Dev %p Tid %d Unit %d\n",dev,dev->tid,unit);
+					i2ob_install_device(c,d,unit);
                                         unit+=16;
  
-                                        /*
-                                         * Now that the device has been
-                                         * installed, unclaim it so that
-                                         * it can be claimed by either
-                                         * the block or scsi driver.
-                                         */
-                                        if (i2ob_claim_device(dev, 0)<0)
-                                                printk(KERN_INFO "Could not unclaim Dev %p Tid %d\n",dev,dev->tid);
- 
-                                }
-                                else
-                                        printk(KERN_INFO "TID %d not claimed\n",dev->tid);
+					/*
+					 * Now that the device has been
+					 * installed, unclaim it so that
+					 * it can be claimed by either
+					 * the block or scsi driver.
+					 */
+					if(i2o_release_device(dev->i2odev, &i2o_block_handler, I2O_CLAIM_PRIMARY))
+						printk(KERN_INFO "Could not unclaim Dev %p Tid %d\n",dev,dev->tid);
+				}
+				else
+					printk(KERN_INFO "TID %d not claimed\n",dev->tid);
 			}
 			else
 			{

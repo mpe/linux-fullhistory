@@ -1188,7 +1188,7 @@ static int isp1020_init(struct Scsi_Host *sh)
 		printk("qlogicisp : error reading PCI configuration\n");
 		return 1;
 	}
-	io_base = pdev->base_address[0];
+	io_base = pdev->resource[0].start;
 	irq = pdev->irq;
 
 	if (pdev->vendor != PCI_VENDOR_ID_QLOGIC) {

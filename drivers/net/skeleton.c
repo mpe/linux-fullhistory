@@ -127,8 +127,8 @@ extern void 	chipset_init(struct device *dev, int startp);
 struct netdev_entry netcard_drv =
 {cardname, netcard_probe1, NETCARD_IO_EXTENT, netcard_portlist};
 #else
-__initfunc(int
-netcard_probe(struct device *dev))
+int __init 
+netcard_probe(struct device *dev)
 {
 	int i;
 	int base_addr = dev ? dev->base_addr : 0;
@@ -155,7 +155,7 @@ netcard_probe(struct device *dev))
  * probes on the ISA bus. A good device probes avoids doing writes, and
  * verifies that the correct device exists and functions.
  */
-__initfunc(static int netcard_probe1(struct device *dev, int ioaddr))
+static int __init netcard_probe1(struct device *dev, int ioaddr)
 {
 	static unsigned version_printed = 0;
 	int i;

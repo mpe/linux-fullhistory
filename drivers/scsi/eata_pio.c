@@ -890,12 +890,12 @@ void find_pio_PCI(struct get_conf *buf, Scsi_Host_Template * tpnt)
 	    DBG(DBG_PROBE && DBG_PCI, 
 		printk("eata_pio: find_PCI, HBA at %s\n", dev->name));
 	    pci_set_master(dev);
-	    base = dev->base_address[0];
+	    base = dev->resource[0].flags;
 	    if (!(base & PCI_BASE_ADDRESS_SPACE_IO)) {
 		printk("eata_pio: invalid base address of device %s\n", dev->name);
 		continue;
 	    }
-	    base &= PCI_BASE_ADDRESS_IO_MASK;
+	    base = dev->resource[0].start;
             /* EISA tag there ? */
 	    if ((inb(base) == 0x12) && (inb(base + 1) == 0x14))
 		continue;   /* Jep, it's forced, so move on  */

@@ -2359,7 +2359,7 @@ static void release_planb(void)
 int init_module(void)
 {
 #else
-__initfunc(int init_planbs(struct video_init *unused))
+int __init init_planbs(struct video_init *unused)
 {
 #endif
 	int i;

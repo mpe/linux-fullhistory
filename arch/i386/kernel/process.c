@@ -80,6 +80,37 @@ static void default_idle(void)
 
 void (*idle)(void) = default_idle;
 
+#if 1
+
+#include <linux/pci.h>
+
+static int __init piix4_idle_init(void)
+{
+	/* This is the PIIX4 ACPI device */
+	struct pci_dev *dev = pci_find_device(PCI_VENDOR_ID_INTEL, PCI_DEVICE_ID_INTEL_82371AB_3, NULL);
+
+	if (dev) {
+		u32 base;
+
+		printk("Found PIIX4 ACPI device\n");
+		pci_read_config_dword(dev, 0x40, &base);
+		printk("  Base address %04x\n", base);
+#ifdef __SMP__
+		/*
+		 * We can't really do idle things with multiple CPU's, I'm
+		 * afraid.  We'd need a per-CPU ACPI device.
+		 */
+		if (smp_num_cpus > 1)
+			return 0;
+#endif
+	}
+	return 0;
+}
+
+__initcall(piix4_idle_init);
+
+#endif
+
 /*
  * The idle thread. There's no useful work to be
  * done, so just try to conserve power and have a

@@ -14,15 +14,20 @@
  *	Red Creek RCPCI45 adapter driver by Red Creek Communications
  *
  *	Fixes by Philipp Rumpf
- *		 Juha Sievänen <Juha.Sievanen@cs.Helsinki.FI>
+ *		      Juha Sievänen <Juha.Sievanen@cs.Helsinki.FI>
  *	         Auvo Häkkinen <Auvo.Hakkinen@cs.Helsinki.FI>
+ *				Deepak Saxena <deepak@plexity.net>
  */
- 
+
 #include <linux/config.h>
 #include <linux/module.h>
 #include <linux/kernel.h>
 #include <linux/pci.h>
+
+#if defined(CONFIG_I2O_PCI) || defined (CONFIG_I2O_PCI_MODULE)
 #include <linux/i2o.h>
+#endif
+
 #include <linux/errno.h>
 #include <linux/init.h>
 #include <linux/malloc.h>
@@ -32,6 +37,7 @@
 
 #include "i2o_lan.h"
 
+#define DRIVERDEBUG
 
 /*
  *	Size of the I2O module table
@@ -46,6 +52,32 @@ static int reply_flag = 0;
 extern int i2o_online_controller(struct i2o_controller *c);
 static void i2o_core_reply(struct i2o_handler *, struct i2o_controller *,
 			   struct i2o_message *);
+static int i2o_add_management_user(struct i2o_device *, struct i2o_handler *);
+static int i2o_remove_management_user(struct i2o_device *, struct i2o_handler *);
+static void i2o_dump_message(u32 *);
+
+#ifdef MODULE
+/* 
+ * Function table to send to bus specific layers
+ * See <include/linux/i2o.h> for explanation of this
+ */
+static struct i2o_core_func_table i2o_core_functions =
+{
+	i2o_install_controller,
+	i2o_activate_controller,
+	i2o_find_controller,
+	i2o_unlock_controller,
+	i2o_run_queue,
+	i2o_delete_controller
+};
+
+#ifdef CONFIG_I2O_PCI_MODULE
+extern int i2o_pci_core_attach(struct i2o_core_func_table *);
+extern void i2o_pci_core_detach(void);
+#endif /* CONFIG_I2O_PCI_MODULE */
+
+#endif /* MODULE */
+
 
 /* Message handler */ 
 static struct i2o_handler i2o_core_handler =
@@ -133,12 +165,19 @@ int i2o_remove_handler(struct i2o_handler *h)
  
 int i2o_install_device(struct i2o_controller *c, struct i2o_device *d)
 {
+	int i;
+
 	spin_lock(&i2o_configuration_lock);
 	d->controller=c;
 	d->owner=NULL;
 	d->next=c->devices;
 	c->devices=d;
 	*d->dev_name = 0;
+	d->owner = NULL;
+
+	for(i = 0; i < I2O_MAX_MANAGERS; i++)
+		d->managers[i] = NULL;
+
 	spin_unlock(&i2o_configuration_lock);
 	return 0;
 }
@@ -247,9 +286,12 @@ int i2o_delete_controller(struct i2o_controller *c)
 	while(*p)
 	{
 		if(*p!=c)
+		{
+			printk("Quiescing controller %p != %p\n", c, *p);
 			if(i2o_quiesce_controller(*p)<0)
 				printk(KERN_INFO "Unable to quiesce iop%d\n",
 				       (*p)->unit);
+		}
 		p=&((*p)->next);
 	}
 
@@ -308,11 +350,23 @@ struct i2o_controller *i2o_find_controller(int n)
 	
 
 /*
- *	Track if a device is being used by a driver
+ * Claim a device for use as either the primary user or just
+ * as a management/secondary user
  */
- 
-int i2o_claim_device(struct i2o_device *d, struct i2o_driver *r)
+int i2o_claim_device(struct i2o_device *d, struct i2o_handler *h, u32 type)
 {
+	/* Device already has a primary user or too many managers */
+	if((type == I2O_CLAIM_PRIMARY && d->owner) ||
+		(d->num_managers == I2O_MAX_MANAGERS))
+	{
+			return -EBUSY;
+	}
+
+	if(i2o_issue_claim(d->controller,d->id, h->context, 1, &reply_flag, type) < 0)
+	{
+		return -EBUSY;
+	}
+
 	spin_lock(&i2o_configuration_lock);
 	if(d->owner)
 	{
@@ -320,23 +374,90 @@ int i2o_claim_device(struct i2o_device *d, struct i2o_driver *r)
 		return -EBUSY;
 	}
 	atomic_inc(&d->controller->users);
-	d->owner=r;
+
+	if(type == I2O_CLAIM_PRIMARY)
+		d->owner=h;
+	else
+		i2o_add_management_user(d, h);
+
 	spin_unlock(&i2o_configuration_lock);
 	return 0;
 }
 
-int i2o_release_device(struct i2o_device *d)
+int i2o_release_device(struct i2o_device *d, struct i2o_handler *h, u32 type)
 {
+	int err = 0;
+
 	spin_lock(&i2o_configuration_lock);
-	if(d->owner==NULL)
+
+	/* Primary user */
+	if(type == I2O_CLAIM_PRIMARY)
 	{
+		if(d->owner != h)
+			err = -ENOENT;
+		else
+		{
+			if(i2o_issue_claim(d->controller,d->id, h->context, 0, &reply_flag, type) < 0)
+			{
+				err = -ENXIO;
+			}
+			else
+			{
+				d->owner = NULL;
+				atomic_dec(&d->controller->users);
+			}
+		}
+
 		spin_unlock(&i2o_configuration_lock);
-		return -EINVAL;
+		return err;
 	}
-	atomic_dec(&d->controller->users);
-	d->owner=NULL;
+
+	/* Management or other user */
+	if(i2o_remove_management_user(d, h))
+		err = -ENOENT;
+	else
+	{
+		atomic_dec(&d->controller->users);
+
+		if(i2o_issue_claim(d->controller,d->id, h->context, 0, 
+									&reply_flag, type) < 0)
+			err = -ENXIO;
+	}
+
 	spin_unlock(&i2o_configuration_lock);
+	return err;
+}
+
+int i2o_add_management_user(struct i2o_device *d, struct i2o_handler *h)
+{
+	int i;
+
+	if(d->num_managers == I2O_MAX_MANAGERS)
+		return 1;
+
+	for(i = 0; i < I2O_MAX_MANAGERS; i++)
+		if(!d->managers[i])
+			d->managers[i] = h;
+	
+	d->num_managers++;
+	
 	return 0;
+}
+
+int i2o_remove_management_user(struct i2o_device *d, struct i2o_handler *h)
+{
+	int i;
+
+	for(i=0; i < I2O_MAX_MANAGERS; i++)
+	{
+		if(d->managers[i] == h)
+		{
+			d->managers[i] = NULL;
+			return 0;
+		}
+	}
+
+	return -ENOENT;
 }
 
 /*
@@ -363,7 +484,11 @@ void i2o_run_queue(struct i2o_controller *c)
 		if(i)
 			i->reply(i,c,m);
 		else
-			printk("Spurious reply\n");
+		{
+			printk("Spurious reply to handler %d\n", 
+				m->initiator_context&(MAX_I2O_MODULES-1));
+			i2o_dump_message((u32*)m);
+		}	
 	 	i2o_flush_reply(c,mv);
 		mb();
 	}
@@ -803,7 +928,8 @@ int i2o_quiesce_controller(struct i2o_controller *c)
 	msg[2]=core_context;
 	msg[3]=(u32)&reply_flag;
 
-	return i2o_post_wait(c, ADAPTER_TID, msg, sizeof(msg), &reply_flag, 10);
+	/* Long timeout needed for quiesce if lots of devices */
+	return i2o_post_wait(c, ADAPTER_TID, msg, sizeof(msg), &reply_flag, 120);
 }
 
 
@@ -839,11 +965,15 @@ static int i2o_reset_controller(struct i2o_controller *c)
 	/* First stop external operations */
 	for(iop=i2o_controller_chain; iop != NULL; iop=iop->next)
 	{
-		if(i2o_quiesce_controller(iop)<0)
-			printk(KERN_INFO "Unable to quiesce iop%d\n",
-			       iop->unit);
-		else
-			printk(KERN_DEBUG "%s quiesced\n", iop->name);
+		/* Quiesce is rejected on hold state */
+		if(iop->status != ADAPTER_STATE_HOLD)
+		{
+			if(i2o_quiesce_controller(iop)<0)
+				printk(KERN_INFO "Unable to quiesce iop%d\n",
+				       iop->unit);
+			else
+				printk(KERN_DEBUG "%s quiesced\n", iop->name);
+		}
 	}
 
 	/* Then reset the IOP */
@@ -1398,7 +1528,7 @@ int i2o_post_wait(struct i2o_controller *c, int tid, u32 *data, int len, int *fl
  *	Issue UTIL_CLAIM messages
  */
  
-int i2o_issue_claim(struct i2o_controller *c, int tid, int context, int onoff, int *flag)
+int i2o_issue_claim(struct i2o_controller *c, int tid, int context, int onoff, int *flag, u32 type)
 {
 	u32 msg[6];
 
@@ -1412,7 +1542,7 @@ int i2o_issue_claim(struct i2o_controller *c, int tid, int context, int onoff, i
 	
 	msg[2] = 0x80000000|context;
 	msg[3] = (u32)flag;
-	msg[4] = 0x01<<24;	/* Primary user */
+	msg[4] = type;
 	
 	return i2o_post_wait(c, tid, msg, 20, flag,2);
 }
@@ -1999,8 +2129,19 @@ void i2o_report_status(const char *severity, const char *module, u32 *msg)
 	return;
 }
 
+/* Used to dump a message to syslog during debugging */
+static void i2o_dump_message(u32 *msg)
+{
+#ifdef DRIVERDEBUG
+	int i;
 
-#ifdef CONFIG_MODULE
+	printk(KERN_INFO "Dumping I2O message @ %p\n", msg);
+	for(i = 0; i < ((msg[0]>>16)&0xffff); i++)
+		printk(KERN_INFO "\tmsg[%d] = %#10x\n", i, msg[i]);
+#endif
+}
+
+#ifdef MODULE
 
 EXPORT_SYMBOL(i2o_install_handler);
 EXPORT_SYMBOL(i2o_remove_handler);
@@ -2040,19 +2181,31 @@ MODULE_DESCRIPTION("I2O Core");
 
 int init_module(void)
 {
-        if (i2o_install_handler(&i2o_core_handler) < 0)
-        {
-                printk(KERN_ERR "i2o_core: Unable to install core handler.\n");
-                return 0;
-        }
+	if (i2o_install_handler(&i2o_core_handler) < 0)
+	{
+		printk(KERN_ERR "i2o_core: Unable to install core handler.\n");
+		return 0;
+	}
 
-        core_context = i2o_core_handler.context;
+	core_context = i2o_core_handler.context;
 
-        return 0;
+	/*
+	 * Attach core to I2O PCI subsystem
+	 */
+#ifdef CONFIG_I2O_PCI_MODULE
+	if(i2o_pci_core_attach(&i2o_core_functions) < 0)
+		printk(KERN_INFO "No PCI I2O controllers found\n");
+#endif
+
+	return 0;
 }
 
 void cleanup_module(void)
 {
+#ifdef CONFIG_I2O_PCI_MODULE
+	i2o_pci_core_detach();
+#endif
+
 	i2o_remove_handler(&i2o_core_handler);
 }
 

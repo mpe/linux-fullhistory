@@ -213,7 +213,7 @@ static inline int pti_fddi_init(struct device *dev, struct linux_sbus_device *sd
 	pti_load_main_firmware(pp);
 }
 
-__initfunc(int ptifddi_sbus_probe(struct device *dev))
+int __init ptifddi_sbus_probe(struct device *dev)
 {
 	struct linux_sbus *bus;
 	struct linux_sbus_device *sdev = 0;

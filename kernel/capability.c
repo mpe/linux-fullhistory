@@ -17,6 +17,8 @@ spinlock_t task_capability_lock;
  * uninteresting and/or not to be changed.
  */
 
+kernel_cap_t cap_bset = CAP_FULL_SET;
+
 asmlinkage int sys_capget(cap_user_header_t header, cap_user_data_t dataptr)
 {
      int error, pid;

@@ -382,7 +382,7 @@ int lance_probe(struct device *dev)
 			unsigned short pci_command;
 
 			pci_irq_line = pdev->irq;
-			pci_ioaddr = pdev->base_address[0] & PCI_BASE_ADDRESS_IO_MASK;
+			pci_ioaddr = pdev->resource[0].start;
 			/* PCI Spec 2.1 states that it is either the driver or PCI card's
 	 		 * responsibility to set the PCI Master Enable Bit if needed.
 			 *	(From Mark Stockton <marks@schooner.sys.hou.compaq.com>)

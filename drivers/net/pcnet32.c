@@ -461,10 +461,7 @@ int __init pcnet32_probe (struct device *dev)
 	    if (pcnet32_tbl[chip_idx].vendor_id == 0)
 		continue;
 	    
-	    ioaddr = pdev->base_address[0] & PCI_BASE_ADDRESS_IO_MASK;
-#if defined(ADDR_64BITS) && defined(__alpha__)
-	    ioaddr |= ((long)pdev->base_address[1]) << 32;
-#endif
+	    ioaddr = pdev->resource[0].start;
 	    irq_line = pdev->irq;
 	    
 	    /* Avoid already found cards from previous pcnet32_probe() calls */

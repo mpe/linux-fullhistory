@@ -818,7 +818,7 @@ static int x25_asy_open_dev(struct device *dev)
 #ifdef MODULE
 static int x25_asy_init_ctrl_dev(void)
 #else	/* !MODULE */
-__initfunc(int x25_asy_init_ctrl_dev(struct device *dummy))
+int __init x25_asy_init_ctrl_dev(struct device *dummy)
 #endif	/* !MODULE */
 {
 	int status;

@@ -752,8 +752,7 @@ void cleanup_module(void)
 }
 
 #else /* MODULE */
-
-__initfunc(void slhc_install(void))
+void __init slhc_install(void)
 {
 }
 

@@ -1,7 +1,7 @@
 /*
- * linux/drivers/block/ide-floppy.c	Version 0.8		Dec   7, 1997
+ * linux/drivers/block/ide-floppy.c	Version 0.9		Jul   4, 1999
  *
- * Copyright (C) 1996, 1997 Gadi Oxman <gadio@netvision.net.il>
+ * Copyright (C) 1996 - 1999 Gadi Oxman <gadio@netvision.net.il>
  */
 
 /*
@@ -26,9 +26,12 @@
  *                       Issue START command only if TEST UNIT READY fails.
  *                       Add work-around for IOMEGA ZIP revision 21.D.
  *                       Remove idefloppy_get_capabilities().
+ * Ver 0.9   Jul  4 99   Fix a bug which might have caused the number of
+ *                        bytes requested on each interrupt to be zero.
+ *                        Thanks to <shanos@es.co.nz> for pointing this out.
  */
 
-#define IDEFLOPPY_VERSION "0.8"
+#define IDEFLOPPY_VERSION "0.9"
 
 #include <linux/config.h>
 #include <linux/module.h>
@@ -997,7 +1000,7 @@ static void idefloppy_issue_pc (ide_drive_t *drive, idefloppy_pc_t *pc)
 	pc->retries++;
 	pc->actually_transferred=0;					/* We haven't transferred any data yet */
 	pc->current_position=pc->buffer;
-	bcount.all=pc->request_transfer;				/* Request to transfer the entire buffer at once */
+	bcount.all = IDE_MIN(pc->request_transfer, 63 * 1024);
 
 #ifdef CONFIG_BLK_DEV_IDEDMA
 	if (test_and_clear_bit (PC_DMA_ERROR, &pc->flags)) {
@@ -1521,9 +1524,19 @@ static void idefloppy_setup (ide_drive_t *drive, idefloppy_floppy_t *floppy)
 	floppy->pc = floppy->pc_stack;
 	if (gcw.drq_type == 1)
 		set_bit (IDEFLOPPY_DRQ_INTERRUPT, &floppy->flags);
-	if (strcmp(drive->id->model, "IOMEGA ZIP 100 ATAPI") == 0 &&
-	    ((strcmp(drive->id->fw_rev, "21.D") == 0) ||
-	     (strcmp(drive->id->fw_rev, "23.D") == 0))) {
+	/*
+	 *	We used to check revisions here. At this point however
+	 *	I'm giving up. Just assume they are all broken, its easier.
+	 *
+	 *	The actual reason for the workarounds was likely
+	 *	a driver bug after all rather than a firmware bug,
+	 *	and the workaround below used to hide it. It should
+	 *	be fixed as of version 1.9, but to be on the safe side
+	 *	we'll leave the limitation below for the 2.2.x tree.
+	 */
+
+	if (strcmp(drive->id->model, "IOMEGA ZIP 100 ATAPI") == 0)
+	{
 		for (i = 0; i < 1 << PARTN_BITS; i++)
 			max_sectors[major][minor + i] = 64;
 	}

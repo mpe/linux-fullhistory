@@ -965,10 +965,10 @@ static void lance_set_multicast (struct device *dev)
 	mark_bh(NET_BH);
 }
 
-__initfunc(static int 
+static int __init 
 sparc_lance_init (struct device *dev, struct linux_sbus_device *sdev,
 		  struct Linux_SBus_DMA *ledma,
-		  struct linux_sbus_device *lebuffer))
+		  struct linux_sbus_device *lebuffer)
 {
 	static unsigned version_printed = 0;
 	int    i;
@@ -1157,7 +1157,7 @@ find_ledma (struct linux_sbus_device *dev)
 #include <asm/sun4paddr.h>
 
 /* Find all the lance cards on the system and initialize them */
-__initfunc(int sparc_lance_probe (struct device *dev))
+int __init sparc_lance_probe (struct device *dev)
 {
 	static struct linux_sbus_device sdev;
 	static int called = 0;
@@ -1179,7 +1179,7 @@ __initfunc(int sparc_lance_probe (struct device *dev))
 #else /* !CONFIG_SUN4 */
 
 /* Find all the lance cards on the system and initialize them */
-__initfunc(int sparc_lance_probe (struct device *dev))
+int __init sparc_lance_probe (struct device *dev)
 {
 	struct linux_sbus *bus;
 	struct linux_sbus_device *sdev = 0;

@@ -524,7 +524,7 @@ static struct miscdevice rtc_dev=
 	&rtc_fops
 };
 
-__initfunc(int rtc_init(void))
+int __init rtc_init(void)
 {
 	unsigned long flags;
 #ifdef __alpha__

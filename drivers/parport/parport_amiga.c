@@ -199,8 +199,6 @@ static struct parport_operations pp_amiga_ops = {
 	NULL, /* data_forward */
 	NULL, /* data_reverse */
 
-	amiga_interrupt, 
-
 	amiga_init_state,
 	amiga_save_state,
 	amiga_restore_state,

@@ -34,6 +34,7 @@
 #include <linux/interrupt.h>
 #include <asm/system.h>
 #include <asm/io.h>
+#include <asm/uaccess.h>
 
 #define MAJOR_NR SCSI_CDROM_MAJOR
 #include <linux/blk.h>
@@ -70,6 +71,7 @@ void get_capabilities(int);
 
 void requeue_sr_request (Scsi_Cmnd * SCpnt);
 static int sr_media_change(struct cdrom_device_info*, int);
+static int sr_packet(struct cdrom_device_info *, struct cdrom_generic_command *);
 
 static void sr_release(struct cdrom_device_info *cdi)
 {
@@ -99,8 +101,10 @@ static struct cdrom_device_ops sr_dops = {
         sr_dev_ioctl,                 /* device-specific ioctl */
         CDC_CLOSE_TRAY | CDC_OPEN_TRAY| CDC_LOCK | CDC_SELECT_SPEED |
         CDC_MULTI_SESSION | CDC_MCN | CDC_MEDIA_CHANGED | CDC_PLAY_AUDIO |
-        CDC_RESET | CDC_IOCTLS | CDC_DRIVE_STATUS,
-        0
+        CDC_RESET | CDC_IOCTLS | CDC_DRIVE_STATUS | CDC_CD_R | CDC_CD_RW |
+	CDC_DVD | CDC_DVD_R | CDC_DVD_RAM | CDC_GENERIC_PACKET,
+        0,
+	sr_packet
 };
 
 /*
@@ -988,25 +992,84 @@ void get_capabilities(int i){
         scsi_CDs[i].cdi.speed      = 1;
         /* disable speed select, drive probably can't do this either */
         scsi_CDs[i].cdi.mask      |= CDC_SELECT_SPEED;
-    } else {
-        n = buffer[3]+4;
-        scsi_CDs[i].cdi.speed    = ((buffer[n+8] << 8) + buffer[n+9])/176;
-      	scsi_CDs[i].readcd_known = 1;
-        scsi_CDs[i].readcd_cdda  = buffer[n+5] & 0x01;
-        /* print some capability bits */
-        printk("sr%i: scsi3-mmc drive: %dx/%dx %s%s%s%s%s\n",i,
-               ((buffer[n+14] << 8) + buffer[n+15])/176,
-               scsi_CDs[i].cdi.speed,
-               buffer[n+3]&0x01 ? "writer " : "",   /* CD Writer */
-               buffer[n+2]&0x02 ? "cd/rw " : "",    /* can read rewriteable */
-               buffer[n+4]&0x20 ? "xa/form2 " : "", /* can read xa/from2 */
-               buffer[n+5]&0x01 ? "cdda " : "",     /* can read audio data */
-               loadmech[buffer[n+6]>>5]);
-	if ((buffer[n+6] >> 5) == 0)
-		/* caddy drives can't close tray... */
-        	scsi_CDs[i].cdi.mask |= CDC_CLOSE_TRAY;
+	scsi_free(buffer, 512);
+	return;
     }
+    
+    n = buffer[3]+4;
+    scsi_CDs[i].cdi.speed    = ((buffer[n+8] << 8) + buffer[n+9])/176;
+    scsi_CDs[i].readcd_known = 1;
+    scsi_CDs[i].readcd_cdda  = buffer[n+5] & 0x01;
+    /* print some capability bits */
+    printk("sr%i: scsi3-mmc drive: %dx/%dx %s%s%s%s%s\n",i,
+    	((buffer[n+14] << 8) + buffer[n+15])/176,
+	scsi_CDs[i].cdi.speed,
+	buffer[n+3]&0x01 ? "writer " : "",   /* CD Writer */
+	buffer[n+2]&0x02 ? "cd/rw " : "",    /* can read rewriteable */
+	buffer[n+4]&0x20 ? "xa/form2 " : "", /* can read xa/from2 */
+	buffer[n+5]&0x01 ? "cdda " : "",     /* can read audio data */
+	loadmech[buffer[n+6]>>5]);
+    if ((buffer[n+6] >> 5) == 0)
+	/* caddy drives can't close tray... */
+        scsi_CDs[i].cdi.mask |= CDC_CLOSE_TRAY;
+    if ((buffer[n+2] & 0x8) == 0)
+	/* not a DVD drive */
+	scsi_CDs[i].cdi.mask |= CDC_DVD;
+    if ((buffer[n+3] & 0x20) == 0)
+    	/* can't write DVD-RAM media */
+	scsi_CDs[i].cdi.mask |= CDC_DVD_RAM;
+    if ((buffer[n+3] & 0x10) == 0)
+    	/* can't write DVD-R media */
+	scsi_CDs[i].cdi.mask |= CDC_DVD_R;
+    if ((buffer[n+3] & 0x2) == 0)
+    	/* can't write CD-RW media */
+	scsi_CDs[i].cdi.mask |= CDC_CD_RW;
+    if ((buffer[n+3] & 0x1) == 0)
+    	/* can't write CD-R media */
+	scsi_CDs[i].cdi.mask |= CDC_CD_R;
+
     scsi_free(buffer, 512);
+}
+
+/*
+ * sr_packet() is the entry point for the generic commands generated
+ * by the Uniform CD-ROM layer. 
+*/
+static int sr_packet(struct cdrom_device_info *cdi, struct cdrom_generic_command *cgc)
+{
+	Scsi_Cmnd *SCpnt;
+	Scsi_Device *device = scsi_CDs[MINOR(cdi->dev)].device;
+	DECLARE_MUTEX_LOCKED(sem);
+	unsigned long flags;
+	int stat;
+	
+	/* get the device */
+	SCpnt = scsi_allocate_device(NULL, device, 1);
+	if (SCpnt == NULL)
+		return -ENODEV;	/* this just doesn't seem right /axboe */
+	
+	/* set the LUN */
+	cgc->cmd[1] |= device->lun << 5;
+
+	/* do the locking and issue the command */
+	SCpnt->request.rq_dev = cdi->dev;
+	SCpnt->request.rq_status = RQ_SCSI_BUSY;
+	SCpnt->cmd_len = 0;
+	SCpnt->request.sem = &sem;
+	spin_lock_irqsave(&io_request_lock, flags);
+	scsi_do_cmd (SCpnt, (void *)cgc->cmd, (void *)cgc->buffer, cgc->buflen,
+		     sr_init_done, SR_TIMEOUT, MAX_RETRIES);
+	spin_unlock_irqrestore(&io_request_lock, flags);
+	down(&sem);
+	
+	stat = SCpnt->result;
+
+	/* release */
+	SCpnt->request.rq_dev = MKDEV(0,0);
+	scsi_release_command(SCpnt);
+	SCpnt = NULL;
+	
+	return stat;
 }
 
 static int sr_registered = 0;

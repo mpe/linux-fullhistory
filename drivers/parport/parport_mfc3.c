@@ -290,8 +290,6 @@ static struct parport_operations pp_mfc3_ops = {
 	NULL, /* data_forward - FIXME */
 	NULL, /* data_reverse - FIXME */
 
-	mfc3_interrupt,
-
 	mfc3_init_state,
 	mfc3_save_state,
 	mfc3_restore_state,

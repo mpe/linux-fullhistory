@@ -1784,11 +1784,31 @@ major number 3).
 \end{devicelist}
 
 \begin{devicelist}
+\major{  }{}{block}{Eighth IDE hard disk/CD-ROM interface}
+	\minor{0}{/dev/hdq}{Master: whole disk (or CD-ROM)}
+	\minor{64}{/dev/hdr}{Slave: whole disk (or CD-ROM)}
+\end{devicelist}
+
+\noindent
+Partitions are handled the same way as for the first interface (see
+major number 3).
+
+\begin{devicelist}
 \major{91}{}{char }{CAN-Bus controller}
 	\minor{0}{/dev/can0}{First CAN-Bus controller}
 	\minor{1}{/dev/can1}{Second CAN-Bus controller}
 	\minordots
 \end{devicelist}
+
+\begin{devicelist}
+\major{  }{}{block}{Ninth IDE hard disk/CD-ROM interface}
+	\minor{0}{/dev/hds}{Master: whole disk (or CD-ROM)}
+	\minor{64}{/dev/hdt}{Slave: whole disk (or CD-ROM)}
+\end{devicelist}
+
+\noindent
+Partitions are handled the same way as for the first interface (see
+major number 3).
 
 \begin{devicelist}
 \major{92}{}{char }{Reserved for ith Kommunikationstechnik MIC ISDN card}

@@ -233,8 +233,8 @@ struct net_local {
    then calls us here.
 
    */
-__initfunc(int
-plip_init_dev(struct device *dev, struct parport *pb))
+int __init
+plip_init_dev(struct device *dev, struct parport *pb)
 {
 	struct net_local *nl;
 	struct pardevice *pardev;
@@ -1223,8 +1223,8 @@ plip_searchfor(int list[], int a)
 	return 0;
 }
 
-__initfunc(int
-plip_init(void))
+int __init
+plip_init(void)
 {
 	struct parport *pb = parport_enumerate();
 	int i=0;

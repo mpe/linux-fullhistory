@@ -2192,7 +2192,7 @@ pci_probe(struct device *dev, u_long ioaddr)
 	lp->chipset = device;
 
 	/* Get the board I/O address (64 bits on sparc64) */
-	iobase = pdev->base_address[0] & CBIO_MASK;
+	iobase = pdev->resource[0].start;
 
 	/* Fetch the IRQ to be used */
 	irq = pdev->irq;
@@ -2278,7 +2278,7 @@ srom_search(struct pci_dev *dev)
 	lp->chipset = device;
 
 	/* Get the board I/O address (64 bits on sparc64) */
-	iobase = dev->base_address[0] & CBIO_MASK;
+	iobase = dev->resource[0].start;
 
 	/* Fetch the IRQ to be used */
 	irq = dev->irq;

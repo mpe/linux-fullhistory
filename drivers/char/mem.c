@@ -598,7 +598,7 @@ static struct file_operations memory_fops = {
 	NULL		/* fsync */
 };
 
-__initfunc(int chr_dev_init(void))
+int __init chr_dev_init(void)
 {
 	if (register_chrdev(MEM_MAJOR,"mem",&memory_fops))
 		printk("unable to get major %d for memory devs\n", MEM_MAJOR);

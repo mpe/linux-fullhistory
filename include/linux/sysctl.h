@@ -78,7 +78,7 @@ enum
 	KERN_NODENAME=7,
 	KERN_DOMAINNAME=8,
 
-	KERN_SECURELVL=14,	/* int: system security level */
+	KERN_CAP_BSET=14,	/* int: capability bounding set */
 	KERN_PANIC=15,		/* int: panic timeout */
 	KERN_REALROOTDEV=16,	/* real root device to mount after initrd */
 
@@ -100,8 +100,9 @@ enum
 	KERN_SHMMAX=34,         /* int: Maximum shared memory segment */
 	KERN_MSGMAX=35,         /* int: Maximum size of a messege */
 	KERN_MSGMNB=36,         /* int: Maximum message queue size */
-	KERN_MSGPOOL=37,        /* int: Maximum system message pool size */
-	KERN_MAX_THREADS=38     /* int: Maximum nr of threads in the system */
+	KERN_MSGPOOL=37,         /* int: Maximum system message pool size */
+	KERN_SYSRQ=38,		/* int: Sysreq enable */
+	KERN_MAX_THREADS=39     /* int: Maximum nr of threads in the system */
 };
 
 
@@ -457,7 +458,12 @@ enum {
 
 /* /proc/sys/dev/cdrom */
 enum {
-	DEV_CDROM_INFO=1
+	DEV_CDROM_INFO=1,
+	DEV_CDROM_AUTOCLOSE=2,
+	DEV_CDROM_AUTOEJECT=3,
+	DEV_CDROM_DEBUG=4,
+	DEV_CDROM_LOCK=5,
+	DEV_CDROM_CHECK_MEDIA=6
 };
 
 /* /proc/sys/dev/parport */
@@ -508,6 +514,8 @@ extern int proc_dostring(ctl_table *, int, struct file *,
 			 void *, size_t *);
 extern int proc_dointvec(ctl_table *, int, struct file *,
 			 void *, size_t *);
+extern int proc_dointvec_bset(ctl_table *, int, struct file *,
+			      void *, size_t *);
 extern int proc_dointvec_minmax(ctl_table *, int, struct file *,
 				void *, size_t *);
 extern int proc_dointvec_jiffies(ctl_table *, int, struct file *,

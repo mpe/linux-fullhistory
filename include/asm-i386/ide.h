@@ -14,7 +14,7 @@
 #ifdef __KERNEL__
 
 #ifndef MAX_HWIFS
-#define MAX_HWIFS	8
+#define MAX_HWIFS	10
 #endif
 
 #define ide__sti()	__sti()
@@ -67,7 +67,7 @@ static __inline__ void ide_init_hwif_ports(hw_regs_t *hw, ide_ioreg_t data_port,
 
 static __inline__ void ide_init_default_hwifs(void)
 {
-#ifdef __DO_I_NEED_THIS
+#ifndef CONFIG_BLK_DEV_IDEPCI
 	hw_regs_t hw;
 	int index;
 
@@ -76,7 +76,7 @@ static __inline__ void ide_init_default_hwifs(void)
 		hw.irq = ide_default_irq(ide_default_io_base(index));
 		ide_register_hw(&hw, NULL);
 	}
-#endif /* __DO_I_NEED_THIS */
+#endif /* CONFIG_BLK_DEV_IDEPCI */
 }
 
 typedef union {

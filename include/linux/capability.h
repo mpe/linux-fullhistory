@@ -264,6 +264,10 @@ typedef __u32 kernel_cap_t;
 #define CAP_SYS_TTY_CONFIG   26
 
 #ifdef __KERNEL__
+/* 
+ * Bounding set
+ */
+extern kernel_cap_t cap_bset;
 
 /*
  * Internal kernel functions only
@@ -289,7 +293,7 @@ typedef __u32 kernel_cap_t;
 #define CAP_TO_MASK(x) (1 << (x))
 #define cap_raise(c, flag)   (cap_t(c) |=  CAP_TO_MASK(flag))
 #define cap_lower(c, flag)   (cap_t(c) &= ~CAP_TO_MASK(flag))
-#define cap_raised(c, flag)  (cap_t(c) &   CAP_TO_MASK(flag))
+#define cap_raised(c, flag)  (cap_t(c) & CAP_TO_MASK(flag) & cap_bset)
 
 static inline kernel_cap_t cap_combine(kernel_cap_t a, kernel_cap_t b)
 {

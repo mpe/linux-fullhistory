@@ -353,7 +353,7 @@ int rtl8139_probe(struct device *dev)
 		{
 #if defined(PCI_SUPPORT_VER2)
 			struct pci_dev *pdev = pci_find_slot(pci_bus, pci_device_fn);
-			ioaddr = pdev->base_address[0] & ~3;
+			ioaddr = pdev->resource[0].start;
 			irq = pdev->irq;
 #else
 			u32 pci_ioaddr;

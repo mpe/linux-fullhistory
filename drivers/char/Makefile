@@ -156,6 +156,14 @@ else
   endif
 endif
 
+ifeq ($(CONFIG_SX),y)
+L_OBJS += sx.o generic_serial.o
+else
+  ifeq ($(CONFIG_SX),m)
+  M_OBJS += sx.o
+  endif
+endif
+
 ifeq ($(CONFIG_ATIXL_BUSMOUSE),y)
 O_OBJS += atixlmouse.o
 else

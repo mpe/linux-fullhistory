@@ -226,8 +226,7 @@ static int RCscan(struct device *dev)
 	    !((pdev = pci_find_slot(pci_bus, pci_device_fn))))
             break;
 	pci_irq_line = pdev->irq;
-	pci_ioaddr = pdev->base_address[0];
-        pci_ioaddr &= PCI_BASE_ADDRESS_MEM_MASK;
+	pci_ioaddr = pdev->resource[0].start;
 
 #ifdef RCDEBUG
         printk("rc: Found RedCreek PCI adapter\n");

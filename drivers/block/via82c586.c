@@ -1,8 +1,8 @@
 /*
- * linux/drivers/block/via82c586.c	Version 0.03	Nov. 19, 1998
+ * linux/drivers/block/via82c586.c	Version 0.04	July 11, 1999
  *
  *  Copyright (C) 1998 Michel Aubry, Maintainer
- *  Copyright (C) 1998 Andre Hedrick, Integrater
+ *  Copyright (C) 1998 Andre Hedrick, Maintainer
  *
  *  The VIA MVP-3 is reported OK with UDMA.
  *  The TX Pro III is also reported OK with UDMA.
@@ -56,6 +56,9 @@
 #include <linux/ide.h>
 
 #include <asm/io.h>
+
+static struct pci_dev *host_dev;
+static struct pci_dev *isa_dev;
 
 #define DISPLAY_VIA_TIMINGS
 
@@ -438,6 +441,137 @@ static int via_set_fifoconfig(ide_hwif_t *hwif)
 	return 0;
 }
 
+__initfunc(unsigned int pci_init_via82c568 (struct pci_dev *dev, const char *name))
+{
+	struct pci_dev *host;
+	struct pci_dev *isa;
+
+	byte revision = 0;
+
+	for (host = pci_devices; host; host=host->next) {
+		if (host->vendor == PCI_VENDOR_ID_VIA &&
+		    host->device == PCI_DEVICE_ID_VIA_82C585) {
+			host_dev = host;
+			printk("VT 82C585 Apollo VP1/VPX");
+			for (isa = pci_devices; isa; isa=isa->next) {
+				if (isa->vendor == PCI_VENDOR_ID_VIA &&
+				    isa->device == PCI_DEVICE_ID_VIA_82C586_1) {
+					isa_dev = isa;
+					pci_read_config_byte(isa_dev, 0x0d, &revision);
+					if (revision >= 0x20)
+						printk(" Chipset Core ATA-33");
+					break;
+				}
+			}
+			printk("\n");
+			break;
+		} else if (host->vendor == PCI_VENDOR_ID_VIA &&
+			   host->device == PCI_DEVICE_ID_VIA_82C595) {
+			host_dev = host;
+			printk("VT 82C595 Apollo VP2");
+			for (isa = pci_devices; isa; isa=isa->next) {
+				if (isa->vendor == PCI_VENDOR_ID_VIA &&
+				    isa->device == PCI_DEVICE_ID_VIA_82C586_1) {
+					isa_dev = isa;
+					pci_read_config_byte(isa_dev, 0x0d, &revision);
+					if (revision >= 0x20)
+						printk(" Chipset Core ATA-33");
+					break;
+				}
+			}
+			printk("\n");
+			break;
+		} else if (host->vendor == PCI_VENDOR_ID_VIA &&
+			   host->device == PCI_DEVICE_ID_VIA_82C597_0) {
+			host_dev = host;
+			printk("VT 82C597 Apollo VP3");
+			for (isa = pci_devices; isa; isa=isa->next) {
+				if (isa->vendor == PCI_VENDOR_ID_VIA &&
+				    isa->device == PCI_DEVICE_ID_VIA_82C586_1) {
+					isa_dev = isa;
+					pci_read_config_byte(isa_dev, 0x0d, &revision);
+					if (revision >= 0x20)
+						printk(" Chipset Core ATA-33");
+					break;
+				}
+			}
+			printk("\n");
+			break;
+	} else if (host->vendor == PCI_VENDOR_ID_VIA &&
+		   host->device == PCI_DEVICE_ID_VIA_82C598_0) {
+			host_dev = host;
+			printk("VT 82C598 Apollo MVP3");
+			for (isa = pci_devices; isa; isa=isa->next) {
+				if (isa->vendor == PCI_VENDOR_ID_VIA &&
+				    isa->device == PCI_DEVICE_ID_VIA_82C586_1) {
+					isa_dev = isa;
+					pci_read_config_byte(isa_dev, 0x0d, &revision);
+					if (revision >= 0x20)
+						printk(" Chipset Core ATA-33");
+					break;
+				} else if (isa->vendor == PCI_VENDOR_ID_VIA &&
+					   isa->device == PCI_DEVICE_ID_VIA_82C596) {
+					isa_dev = isa;
+					printk(" Chipset Core ATA-33");
+					break;
+				}
+			}
+			printk("\n");
+			break;
+	} else if (host->vendor == PCI_VENDOR_ID_VIA &&
+		   host->device == PCI_DEVICE_ID_VIA_82C680) {
+			host_dev = host;
+			printk("VT 82C680 Apollo P6");
+			for (isa = pci_devices; isa; isa=isa->next) {
+				if (isa->vendor == PCI_VENDOR_ID_VIA &&
+				    isa->device == PCI_DEVICE_ID_VIA_82C586_1) {
+					isa_dev = isa;
+					pci_read_config_byte(isa_dev, 0x0d, &revision);
+					if (revision >= 0x20)
+						printk(" Chipset Core ATA-33");
+					break;
+				}
+			}
+			printk("\n");
+			break;
+	} else if (host->vendor == PCI_VENDOR_ID_VIA &&
+		   host->device == PCI_DEVICE_ID_VIA_82C691) {
+			host_dev = host;
+			printk("VT 82C691 Apollo Pro");
+			for (isa = pci_devices; isa; isa=isa->next) {
+				if (isa->vendor == PCI_VENDOR_ID_VIA &&
+				    isa->device == PCI_DEVICE_ID_VIA_82C596) {
+					isa_dev = isa;
+					printk(" Chipset Core ATA-33");
+					break;
+				}
+			}
+			printk("\n");
+			break;
+	} else if (host->vendor == PCI_VENDOR_ID_VIA &&
+		   host->device == PCI_DEVICE_ID_VIA_82C693) {
+			host_dev = host;
+			printk("VT 82C693 Apollo Pro Plus");
+			for (isa = pci_devices; isa; isa=isa->next) {
+				if (isa->vendor == PCI_VENDOR_ID_VIA &&
+				    isa->device == PCI_DEVICE_ID_VIA_82C596) {
+					isa_dev = isa;
+					printk(" Chipset Core ATA-33");
+					break;
+				}
+			}
+			printk("\n");
+			break;
+		}
+	}
+	return 0;
+}
+
+__initfunc(void ide_init_via82c586 (ide_hwif_t *hwif))
+{
+	set_via_timings(hwif);
+}
+
 /*
  *  ide_dmacapable_via82c568(ide_hwif_t *, unsigned long)
  *  checks if channel "channel" of if hwif is dma
@@ -464,9 +598,3 @@ void ide_dmacapable_via82c586 (ide_hwif_t *hwif, unsigned long dmabase)
 		ide_setup_dma(hwif, dmabase, 8);
 	}
 }
-
-__initfunc(void ide_init_via82c586 (ide_hwif_t *hwif))
-{
-	set_via_timings(hwif);
-}
-

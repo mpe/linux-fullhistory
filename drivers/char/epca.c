@@ -4049,12 +4049,12 @@ int get_PCI_configuration(unsigned char bus, unsigned char device_fn,
 	if (!dev)
 		return(0);
 
-	*base_addr0 = dev->base_address[0];
-	*base_addr1 = dev->base_address[1];
-	*base_addr2 = dev->base_address[2];
-	*base_addr3 = dev->base_address[3];
-	*base_addr4 = dev->base_address[4];
-	*base_addr5 = dev->base_address[5];
+	*base_addr0 = dev->resource[0].start;
+	*base_addr1 = dev->resource[1].start;
+	*base_addr2 = dev->resource[2].start;
+	*base_addr3 = dev->resource[3].start;
+	*base_addr4 = dev->resource[4].start;
+	*base_addr5 = dev->resource[5].start;
 
 	/* ------------------------------------------------------------------------
 			 NOTE - The code below mask out either the 2 or 4 bits dependent on the
@@ -4063,36 +4063,6 @@ int get_PCI_configuration(unsigned char bus, unsigned char device_fn,
 				their first 4 bits mask out.)  These bits are flag bits and should always
 				be 0 when used as an address.
 	---------------------------------------------------------------------------- */
-
-	if ((*base_addr0) & PCI_BASE_ADDRESS_SPACE_IO) /* Is this an io address ? */
-		(*base_addr0) &= PCI_BASE_ADDRESS_IO_MASK;
-	else
-		(*base_addr0) &= PCI_BASE_ADDRESS_MEM_MASK;
-
-	if ((*base_addr1) & PCI_BASE_ADDRESS_SPACE_IO) /* Is this an io address ? */
-		(*base_addr1) &= PCI_BASE_ADDRESS_IO_MASK;
-	else
-		(*base_addr1) &= PCI_BASE_ADDRESS_MEM_MASK;
-
-	if ((*base_addr2) & PCI_BASE_ADDRESS_SPACE_IO) /* Is this an io address ? */
-		(*base_addr2) &= PCI_BASE_ADDRESS_IO_MASK;
-	else
-		(*base_addr2) &= PCI_BASE_ADDRESS_MEM_MASK;
-
-	if ((*base_addr3) & PCI_BASE_ADDRESS_SPACE_IO) /* Is this an io address ? */
-		(*base_addr3) &= PCI_BASE_ADDRESS_IO_MASK;
-	else
-		(*base_addr3) &= PCI_BASE_ADDRESS_MEM_MASK;
-
-	if ((*base_addr4) & PCI_BASE_ADDRESS_SPACE_IO) /* Is this an io address ? */
-		(*base_addr4) &= PCI_BASE_ADDRESS_IO_MASK;
-	else
-		(*base_addr4) &= PCI_BASE_ADDRESS_MEM_MASK;
-
-	if ((*base_addr5) & PCI_BASE_ADDRESS_SPACE_IO) /* Is this an io address ? */
-		(*base_addr5) &= PCI_BASE_ADDRESS_IO_MASK;
-	else
-		(*base_addr5) &= PCI_BASE_ADDRESS_MEM_MASK;
 
 	return(1);
 } /* End get_PCI_configuration */

@@ -458,13 +458,17 @@
 #define PCI_DEVICE_ID_SI_6205		0x0205
 #define PCI_DEVICE_ID_SI_501		0x0406
 #define PCI_DEVICE_ID_SI_496		0x0496
+#define PCI_DEVICE_ID_SI_530		0x0530
 #define PCI_DEVICE_ID_SI_601		0x0601
+#define PCI_DEVICE_ID_SI_620		0x0620
 #define PCI_DEVICE_ID_SI_5107		0x5107
 #define PCI_DEVICE_ID_SI_5511		0x5511
 #define PCI_DEVICE_ID_SI_5513		0x5513
 #define PCI_DEVICE_ID_SI_5571		0x5571
 #define PCI_DEVICE_ID_SI_5591		0x5591
 #define PCI_DEVICE_ID_SI_5597		0x5597
+#define PCI_DEVICE_ID_SI_5600		0x5600
+#define PCI_DEVICE_ID_SI_6306		0x6306
 #define PCI_DEVICE_ID_SI_7001		0x7001
 
 #define PCI_VENDOR_ID_HP		0x103c
@@ -748,6 +752,7 @@
 
 #define PCI_VENDOR_ID_TTI		0x1103
 #define PCI_DEVICE_ID_TTI_HPT343	0x0003
+#define PCI_DEVICE_ID_TTI_HPT366	0x0004
 
 #define PCI_VENDOR_ID_VIA		0x1106
 #define PCI_DEVICE_ID_VIA_82C505	0x0505
@@ -757,16 +762,24 @@
 #define PCI_DEVICE_ID_VIA_82C585	0x0585
 #define PCI_DEVICE_ID_VIA_82C586_0	0x0586
 #define PCI_DEVICE_ID_VIA_82C595	0x0595
+#define PCI_DEVICE_ID_VIA_82C596	0x0596
 #define PCI_DEVICE_ID_VIA_82C597_0	0x0597
-#define PCI_DEVICE_ID_VIA_82C598_0      0x0598
+#define PCI_DEVICE_ID_VIA_82C598_0	0x0598
+#define PCI_DEVICE_ID_VIA_82C680	0x0680
+#define PCI_DEVICE_ID_VIA_82C686	0x0686
+#define PCI_DEVICE_ID_VIA_82C691	0x0691
+#define PCI_DEVICE_ID_VIA_82C693	0x0693
 #define PCI_DEVICE_ID_VIA_82C926	0x0926
 #define PCI_DEVICE_ID_VIA_82C416	0x1571
 #define PCI_DEVICE_ID_VIA_82C595_97	0x1595
 #define PCI_DEVICE_ID_VIA_82C586_2	0x3038
 #define PCI_DEVICE_ID_VIA_82C586_3	0x3040
+#define PCI_DEVICE_ID_VIA_82C686_4	0x3057
+#define PCI_DEVICE_ID_VIA_82C686_5	0x3058
+#define PCI_DEVICE_ID_VIA_82C686_6	0x3068
 #define PCI_DEVICE_ID_VIA_86C100A	0x6100
 #define PCI_DEVICE_ID_VIA_82C597_1	0x8597
-#define PCI_DEVICE_ID_VIA_82C598_1      0x8598
+#define PCI_DEVICE_ID_VIA_82C598_1	0x8598
 
 #define PCI_VENDOR_ID_SMC2             0x1113
 #define PCI_DEVICE_ID_SMC2_1211TX      0x1211
@@ -971,6 +984,9 @@
 #define PCI_DEVICE_ID_OPTIBASE_VPLEX	0x2110
 #define PCI_DEVICE_ID_OPTIBASE_VPLEXCC	0x2120
 #define PCI_DEVICE_ID_OPTIBASE_VQUEST	0x2130
+
+#define PCI_VENDOR_ID_ESS		0x125d
+#define PCI_DEVICE_ID_ESS_AUDIOPCI	0x1969
 
 #define PCI_VENDOR_ID_SATSAGEM		0x1267
 #define PCI_DEVICE_ID_SATSAGEM_PCR2101	0x5352
@@ -1294,12 +1310,9 @@ int pcibios_find_device (unsigned short vendor, unsigned short dev_id,
 /* Generic PCI interface functions */
 
 void pci_init(void);
-void pci_setup(char *str, int *ints);
 void pci_quirks_init(void);
 unsigned int pci_scan_bus(struct pci_bus *bus);
 struct pci_bus *pci_scan_peer_bridge(int bus);
-void pci_proc_init(void);
-void proc_old_pci_init(void);
 int get_pci_list(char *buf);
 int pci_proc_attach_device(struct pci_dev *dev);
 int pci_proc_detach_device(struct pci_dev *dev);

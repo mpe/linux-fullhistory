@@ -220,7 +220,7 @@ __initfunc(void ide_init_trm290 (ide_hwif_t *hwif))
 	struct pci_dev *dev = hwif->pci_dev;
 
 	hwif->chipset = ide_trm290;
-	cfgbase = dev->base_address[4];
+	cfgbase = dev->resource[4].start;
 	if ((dev->class & 5) && cfgbase)
 	{
 		hwif->config_data = cfgbase & PCI_BASE_ADDRESS_IO_MASK;

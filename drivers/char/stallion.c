@@ -2280,7 +2280,7 @@ static void stl_offintr(void *private)
  *	interrupt across multiple boards.
  */
 
-__initfunc(static int stl_mapirq(int irq, char *name))
+static int __init stl_mapirq(int irq, char *name)
 {
 	int	rc, i;
 
@@ -2311,7 +2311,7 @@ __initfunc(static int stl_mapirq(int irq, char *name))
  *	Initialize all the ports on a panel.
  */
 
-__initfunc(static int stl_initports(stlbrd_t *brdp, stlpanel_t *panelp))
+static int __init stl_initports(stlbrd_t *brdp, stlpanel_t *panelp)
 {
 	stlport_t	*portp;
 	int		chipmask, i;
@@ -2700,7 +2700,7 @@ static int inline stl_initech(stlbrd_t *brdp)
  *	since the initial search and setup is very different.
  */
 
-__initfunc(static int stl_brdinit(stlbrd_t *brdp))
+static int __init stl_brdinit(stlbrd_t *brdp)
 {
 	int	i;
 
@@ -3204,7 +3204,7 @@ static int stl_memioctl(struct inode *ip, struct file *fp, unsigned int cmd, uns
 
 /*****************************************************************************/
 
-__initfunc(int stl_init(void))
+int __init stl_init(void)
 {
 	printk(KERN_INFO "%s: version %s\n", stl_drvtitle, stl_drvversion);
 

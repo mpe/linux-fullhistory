@@ -1822,12 +1822,7 @@ int Pci2220i_Detect (Scsi_Host_Template *tpnt)
 		padapter = HOSTDATA(pshost);
 		memset (padapter, 0, sizeof (ADAPTER2220I));
 
-#if LINUX_VERSION_CODE > LINUXVERSION(2,1,92)
-		zs = pdev->base_address[1] & 0xFFFE;
-#else
-		pcibios_read_config_word (pci_bus, pci_device_fn, PCI_BASE_ADDRESS_1, &zs);
-		zs &= 0xFFFE;
-#endif
+		zs = pdev->resource[1].start;
 		padapter->basePort = zs;
 		padapter->regRemap		= zs + RTR_LOCAL_REMAP;				// 32 bit local space remap
 		padapter->regDesc		= zs + RTR_REGIONS;	  				// 32 bit local region descriptor
@@ -1835,12 +1830,7 @@ int Pci2220i_Detect (Scsi_Host_Template *tpnt)
 		padapter->regIrqControl	= zs + RTR_INT_CONTROL_STATUS;		// 16 bit interupt control and status
 		padapter->regScratchPad	= zs + RTR_MAILBOX;	  				// 16 byte scratchpad I/O base address
 
-#if LINUX_VERSION_CODE > LINUXVERSION(2,1,92)
-		zs = pdev->base_address[2] & 0xFFFE;
-#else
-		pcibios_read_config_word (pci_bus, pci_device_fn, PCI_BASE_ADDRESS_2, &zs);
-		zs &= 0xFFFE;
-#endif
+		zs = pdev->resource[2].start;
 		padapter->regBase		= zs;
 		padapter->regData		= zs + REG_DATA;					// data register I/O address
 		padapter->regError		= zs + REG_ERROR;					// error register I/O address

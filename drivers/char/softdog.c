@@ -178,7 +178,7 @@ static struct miscdevice softdog_miscdev=
 	&softdog_fops
 };
 
-__initfunc(void watchdog_init(void))
+void __init watchdog_init(void)
 {
 	misc_register(&softdog_miscdev);
 	init_timer(&watchdog_ticktock);

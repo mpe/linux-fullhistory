@@ -531,7 +531,7 @@ void SK_print_ram(struct device *dev);
  *                         (detachable devices only).
  */
 
-__initfunc(int SK_init(struct device *dev))
+int __init SK_init(struct device *dev)
 {
 	int ioaddr         = 0;            /* I/O port address used for POS regs */
 	int *port, ports[] = SK_IO_PORTS;  /* SK_G16 supported ports */
@@ -614,7 +614,7 @@ __initfunc(int SK_init(struct device *dev))
  *     94/06/30  pwe  SK_ADDR now checked and at the correct place
 -*/
 
-__initfunc(int SK_probe(struct device *dev, short ioaddr))
+int __init SK_probe(struct device *dev, short ioaddr)
 {
     int i,j;                /* Counters */
     int sk_addr_flag = 0;   /* SK ADDR correct? 1 - no, 0 - yes */
@@ -1737,7 +1737,7 @@ static void set_multicast_list(struct device *dev)
  *     YY/MM/DD  uid  Description
 -*/
 
-__initfunc(unsigned int SK_rom_addr(void))
+unsigned int __init SK_rom_addr(void)
 {
     int i,j;
     int rom_found = 0;

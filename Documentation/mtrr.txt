@@ -52,7 +52,7 @@ reg00: base=0x00000000 (   0MB), size= 128MB: write-back, count=1
 reg01: base=0x08000000 ( 128MB), size=  64MB: write-back, count=1
 reg02: base=0xf8000000 (3968MB), size=   4MB: write-combining, count=1
 
-This is for videoram at base address 0xf8000000 and size 4 MBytes. To
+This is for video RAM at base address 0xf8000000 and size 4 megabytes. To
 find out your base address, you need to look at the output of your X
 server, which tells you where the linear framebuffer address is. A
 typical line that you may get is:
@@ -68,7 +68,7 @@ know?), the following line will tell you:
 
 (--) S3: videoram:  4096k
 
-That's 4 MBytes, which is 0x400000 bytes (in hexadecimal).
+That's 4 megabytes, which is 0x400000 bytes (in hexadecimal).
 A patch is being written for XFree86 which will make this automatic:
 in other words the X server will manipulate /proc/mtrr using the
 ioctl() interface, so users won't have to do anything. If you use a

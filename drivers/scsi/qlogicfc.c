@@ -1828,7 +1828,7 @@ static int isp2100_init(struct Scsi_Host *sh)
 		printk("qlogicfc%d : error reading PCI configuration\n", hostdata->host_id);
 		return 1;
 	}
-	io_base = pdev->base_address[0];
+	io_base = pdev->resource[0].start;
 	irq = pdev->irq;
 
 

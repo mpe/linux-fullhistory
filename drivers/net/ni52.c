@@ -358,7 +358,7 @@ void alloc586(struct device *dev)
 /**********************************************
  * probe the ni5210-card
  */
-__initfunc(int ni52_probe(struct device *dev))
+int __init ni52_probe(struct device *dev)
 {
 #ifndef MODULE
 	int *port;
@@ -409,7 +409,7 @@ __initfunc(int ni52_probe(struct device *dev))
 	return ENODEV;
 }
 
-__initfunc(static int ni52_probe1(struct device *dev,int ioaddr))
+static int __init ni52_probe1(struct device *dev,int ioaddr)
 {
 	int i,size;
 

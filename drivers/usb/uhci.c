@@ -1847,18 +1847,11 @@ static int start_uhci(struct pci_dev *dev)
 
 	/* Search for the IO base address.. */
 	for (i = 0; i < 6; i++) {
-		unsigned int io_addr = dev->base_address[i];
+		unsigned int io_addr = dev->resource[i].start;
 
 		/* IO address? */
-		if (!(io_addr & 1))
+		if (!(dev->resource[i].flags & 1))
 			continue;
-
-		io_addr &= PCI_BASE_ADDRESS_IO_MASK;
-
-		/* Is it already in use? */
-		if (check_region(io_addr, 32))
-			break;
-
 		return found_uhci(dev->irq, io_addr);
 	}
 	return -1;

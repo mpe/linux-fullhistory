@@ -242,7 +242,7 @@ void use_config(const char * name, int len)
  * Thus, there is one memory access per sizeof(unsigned long) characters.
  */
 
-#if defined(__alpha__) || defined(__i386__) || defined(__arm__)
+#if defined(__alpha__) || defined(__i386__) || defined(__MIPSEL__) || defined(__arm__)
 #define LE_MACHINE
 #endif
 

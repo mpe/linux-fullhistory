@@ -1,5 +1,5 @@
 /*
- * linux/drivers/block/piix.c	Version 0.24	June 28, 1999
+ * linux/drivers/block/piix.c	Version 0.25	July 11, 1999
  *
  *  Copyright (C) 1998-1999 Andrzej Krzysztofowicz, Author and Maintainer
  *  Copyright (C) 1998-1999 Andre Hedrick, Author and Maintainer
@@ -149,18 +149,19 @@ static void piix_tune_drive (ide_drive_t *drive, byte pio)
 
 #ifdef CONFIG_BLK_DEV_PIIX_TUNING
 
-static int piix_config_drive_for_dma(ide_drive_t *drive, int ultra)
+static int piix_config_drive_for_dma(ide_drive_t *drive)
 {
 	struct hd_driveid *id = drive->id;
 	ide_hwif_t *hwif = HWIF(drive);
 	struct pci_dev *dev = hwif->pci_dev;
 
-	unsigned long		flags;
 	int			sitre;
 	short			reg4042, reg44, reg48, reg4a;
 	byte			speed;
 	int			u_speed;
-	byte maslave		= hwif->channel ? 0x42 : 0x40;			
+
+	byte maslave		= hwif->channel ? 0x42 : 0x40;
+	int ultra		= (dev->device == PCI_DEVICE_ID_INTEL_82371AB) ? 1 : 0;
 	int drive_number	= ((hwif->channel ? 2 : 0) + (drive->select.b.unit & 0x01));
 	int a_speed		= 2 << (drive_number * 4);
 	int u_flag		= 1 << drive_number;
@@ -170,9 +171,6 @@ static int piix_config_drive_for_dma(ide_drive_t *drive, int ultra)
 	pci_read_config_word(dev, 0x44, &reg44);
 	pci_read_config_word(dev, 0x48, &reg48);
 	pci_read_config_word(dev, 0x4a, &reg4a);
-
-	save_flags(flags);
-	cli();
 
 	if (id->dma_ultra && (ultra)) {
 		if (!(reg48 & u_flag)) {
@@ -184,7 +182,12 @@ static int piix_config_drive_for_dma(ide_drive_t *drive, int ultra)
 		}
 	}
 
-	if ((id->dma_ultra & 0x0004) && (ultra)) {
+	if ((id->dma_ultra & 0x0010) && (ultra)) {
+		goto backspeed;
+	} else if ((id->dma_ultra & 0x0008) && (ultra)) {
+		goto backspeed;
+	} else if ((id->dma_ultra & 0x0004) && (ultra)) {
+backspeed:
 		drive->id->dma_mword &= ~0x0F00;
 		drive->id->dma_1word &= ~0x0F00;
 		if (!((id->dma_ultra >> 8) & 4)) {
@@ -256,7 +259,6 @@ static int piix_config_drive_for_dma(ide_drive_t *drive, int ultra)
 		speed = XFER_PIO_0 + ide_get_best_pio_mode(drive, 255, 5, NULL);
 	}
 
-	restore_flags(flags);
 	piix_tune_drive(drive, piix_dma_2_pio(speed));
 
 	(void) ide_config_drive_speed(drive, speed);
@@ -269,7 +271,8 @@ static int piix_config_drive_for_dma(ide_drive_t *drive, int ultra)
 	printk("\n");
 #endif /* PIIX_DEBUG_DRIVE_INFO */
 
-	return ((int)	((id->dma_ultra >> 8) & 7) ? ide_dma_on :
+	return ((int)	((id->dma_ultra >> 11) & 3) ? ide_dma_off :
+			((id->dma_ultra >> 8) & 7) ? ide_dma_on :
 			((id->dma_mword >> 8) & 7) ? ide_dma_on :
 			((id->dma_1word >> 8) & 7) ? ide_dma_on :
 						     ide_dma_off_quietly);
@@ -277,10 +280,9 @@ static int piix_config_drive_for_dma(ide_drive_t *drive, int ultra)
 
 static int piix_dmaproc(ide_dma_action_t func, ide_drive_t *drive)
 {
-	int ultra = (HWIF(drive)->pci_dev->device == PCI_DEVICE_ID_INTEL_82371AB) ? 1 : 0;
 	switch (func) {
 		case ide_dma_check:
-			 return ide_dmaproc((ide_dma_action_t) piix_config_drive_for_dma(drive, ultra), drive);
+			 return ide_dmaproc((ide_dma_action_t) piix_config_drive_for_dma(drive), drive);
 		default :
 			break;
 	}
@@ -292,12 +294,14 @@ static int piix_dmaproc(ide_dma_action_t func, ide_drive_t *drive)
 void ide_init_piix (ide_hwif_t *hwif)
 {
 	hwif->tuneproc = &piix_tune_drive;
-#ifdef CONFIG_BLK_DEV_PIIX_TUNING
+
 	if (hwif->dma_base) {
+#ifdef CONFIG_BLK_DEV_PIIX_TUNING
 		hwif->dmaproc = &piix_dmaproc;
-	} else
 #endif /* CONFIG_BLK_DEV_PIIX_TUNING */
-	{
+		hwif->drives[0].autotune = 0;
+		hwif->drives[1].autotune = 0;
+	} else {
 		hwif->drives[0].autotune = 1;
 		hwif->drives[1].autotune = 1;
 	}

@@ -2333,14 +2333,14 @@ int __init init_module(void)
 #endif
 	while (index < NR_DEVICE && 
 	       (pcidev = pci_find_device(PCI_VENDOR_ID_S3, PCI_DEVICE_ID_S3_SONICVIBES, pcidev))) {
-		if (pcidev->base_address[1] == 0 || 
-		    (pcidev->base_address[1] & PCI_BASE_ADDRESS_SPACE) != PCI_BASE_ADDRESS_SPACE_IO)
+		if (pcidev->resource[1].flags == 0 || 
+		    (pcidev->resource[1].flags & PCI_BASE_ADDRESS_SPACE) != PCI_BASE_ADDRESS_SPACE_IO)
 			continue;
-		if (pcidev->base_address[2] == 0 || 
-		    (pcidev->base_address[2] & PCI_BASE_ADDRESS_SPACE) != PCI_BASE_ADDRESS_SPACE_IO)
+		if (pcidev->resource[2].flags == 0 || 
+		    (pcidev->resource[2].flags & PCI_BASE_ADDRESS_SPACE) != PCI_BASE_ADDRESS_SPACE_IO)
 			continue;
-		if (pcidev->base_address[3] == 0 || 
-		    (pcidev->base_address[3] & PCI_BASE_ADDRESS_SPACE) != PCI_BASE_ADDRESS_SPACE_IO)
+		if (pcidev->resource[3].flags == 0 || 
+		    (pcidev->resource[3].flags & PCI_BASE_ADDRESS_SPACE) != PCI_BASE_ADDRESS_SPACE_IO)
 			continue;
 		if (pcidev->irq == 0)
 			continue;
@@ -2356,11 +2356,11 @@ int __init init_module(void)
 		init_waitqueue_head(&s->midi.owait);
 		init_MUTEX(&s->open_sem);
 		s->magic = SV_MAGIC;
-		s->iosb = pcidev->base_address[0] & PCI_BASE_ADDRESS_IO_MASK;
-		s->ioenh = pcidev->base_address[1] & PCI_BASE_ADDRESS_IO_MASK;
-		s->iosynth = pcidev->base_address[2] & PCI_BASE_ADDRESS_IO_MASK;
-		s->iomidi = pcidev->base_address[3] & PCI_BASE_ADDRESS_IO_MASK;
-		s->iogame = pcidev->base_address[4] & PCI_BASE_ADDRESS_IO_MASK;
+		s->iosb = pcidev->resource[0].start;
+		s->ioenh = pcidev->resource[1].start;
+		s->iosynth = pcidev->resource[2].start;
+		s->iomidi = pcidev->resource[3].start;
+		s->iogame = pcidev->resource[4].start;
 		pci_read_config_dword(pcidev, 0x40, &s->iodmaa);
 		pci_read_config_dword(pcidev, 0x48, &s->iodmac);
 		dmaio &= ~(SV_EXTENT_DMA-1);

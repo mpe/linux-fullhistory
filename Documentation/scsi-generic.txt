@@ -1,34 +1,38 @@
-            Notes on Linux's SG driver version 2.1.30
+            Notes on Linux's SG driver version 2.1.34
             -----------------------------------------
-                                                        990328
+                                                        990606
 
 Introduction
 ============
+Sg is one of the four "high level" SCSI device drivers along with
+sd, st and sr (disk, tape and CDROM respectively). Sg is more generalized
+(but lower level) than its siblings and tends to be used on SCSI devices
+that don't fit into the already serviced categories. Thus sg is used for
+scanners, cd writers and reading audio cds digitally amongst other things.
+
 These are notes on the Linux SCSI generic packet device driver (sg)
-describing version 2.1.30 . The original driver was written by Lawrence
-Foard and has remained in place with minimal changes since circa 1992.
+describing version 2.1.34 . The original driver was written by Lawrence
+Foard and remained in place with minimal changes since circa 1992.
 Version 2 of this driver remains backward compatible (binary and
 source **) with the original. It adds scatter gather, command queuing,
 per file descriptor sequencing, asynchronous notification and better
 error reporting.
 
-Sg is one of the four "high level" SCSI device drivers along with
-sd, st and sr (disk, tape and CDROM respectively). Sg is more generalized
-(but lower level) than its sibling and tends to be used on SCSI devices
-that don't fit into the already serviced categories. Thus sg is used for
-scanners, cd writers and reading audio cds amongst other things.
+This is an abridged version of the sg documentation that is targeted
+at the linux/Documentation directory. The full document can be found
+at http://www.torque.net/sg/p/scsi-generic_long.txt .
 
-The interface and usage of the original sg driver has been documented
+The interface and usage of the original sg driver have been documented
 by Heiko Eissfeldt in a HOWTO called SCSI-Programming-HOWTO. My copy
 of the document is version 1.5 dated 7th May 1996. It can found at
-ftp://sunsite.unc.edu/pub/Linux/docs/HOWTO/SCSI-Programming-HOWTO .
-Amongst other things it has a lot of tables from the SCSI-2 standard
-that are very useful for programming this interface.
+ftp://sunsite.unc.edu/pub/Linux/docs/HOWTO-SCSI-Programming-HOWTO .
+A copy of this document can be found at:
+http://www.torque.net/sg/p/original/HOWTO-SCSI-Programming-HOWTO .
 
 ** It is possible to write applications that perform differently
 depending on whether they are using the original or this version of
-the sg device driver. The author is not aware of any useful applications
-that have problems with version 2 (yet).
+the sg device driver. The author is not aware of any useful 
+pre-existing applications that have problems with version 2 (yet).
 
 
 Architecture
@@ -38,9 +42,11 @@ It is one of the four high level device driver in the SCSI sub-system;
 the others are sd (for direct-access devices - disks), st (for tapes)
 and sr (for data cdroms). The other three devices are block devices.
 
-The unifying layer of the SCSI sub-system in the so-called mid-level.
-Below that are all the drivers for the various adapters supported by
-Linux.
+The unifying layer of the SCSI sub-system is the so-called mid-level.
+Below that are the "low level" drivers which are the drivers for the
+various adapters supported by Linux. Also at this level are pseudo
+adapter drivers such as ide-scsi which converts the SCSI protocol to
+ATAPI (which are similar to one another) for use by IDE devices.
 
 Since sg is a character device it supports the traditional Unix
 system calls of open(), close(), read(), write() and ioctl(). Two other
@@ -85,8 +91,9 @@ struct sg_header {
     unsigned char sense_buffer[16];
 }; /* this structure is 36 bytes long */
 
-The 'pack_len' is bizzare and ends up having the 'reply_len' put in it
-(perhaps it had a use at some stage). 
+The 'pack_len' is bizarre and ends up having the 'reply_len' put in it
+(perhaps it had a use at some stage). Even though it looks like an
+input variable, it is not read by sg internally (only written).
 
 The 'reply_len' is the length of the data the corresponding read()
 will/should request (including the sg_header). 
@@ -95,14 +102,14 @@ The 'pack_id' is not acted upon by the sg device driver but is conveyed
 back to the corresponding read() so it can be used for sequencing by an
 application. 
 
-The 'result' is also bizzare, turning certain types of host codes it 0 (no
+The 'result' is also bizarre, turning certain types of host codes to 0 (no
 error), EBUSY or EIO. With better error reporting now available, the
 'result' is best ignored.
 
-The 'twelve_byte' field overrides the internal SCSI command length "guessing"
+The 'twelve_byte' field overrides the internal SCSI command length detection
 algorithm for group 6 and 7 commands (ie when 1st byte >= 0xc0) and forces
-a command lenth of 12 bytes.
-The command length "guessing" algorithm is as follows:
+a command length of 12 bytes.
+The command length detection algorithm is as follows:
 Group:  0    1    2    3    4    5    6    7
 Length: 6   10   10   12   12   12   10   10
 
@@ -115,6 +122,7 @@ or COMMAND_TERMINATED [or (driver_status & DRIVER_SENSE) is true]. This
 buffer should be at least 18 bytes long and arguably 32 bytes; unfortunately
 this is unlikely to happen in the 2.2.x series of kernels.
 
+
 The new sg_header offered in this driver is:
 #define SG_MAX_SENSE 16
 struct sg_header
@@ -122,15 +130,17 @@ struct sg_header
     int pack_len;    /* [o] reply_len (ie useless) ignored as input */
     int reply_len;   /* [i] max length of expected reply (inc. sg_header) */
     int pack_id;     /* [io] id number of packet (use ints >= 0) */
-    int result;      /* [o] 0==ok, else (+ve) Unix errno code (e.g. EIO) */
+    int result;      /* [o] 0==ok, else (+ve) Unix errno (best ignored) */
     unsigned int twelve_byte:1;
         /* [i] Force 12 byte command length for group 6 & 7 commands  */
     unsigned int target_status:5;   /* [o] scsi status from target */
     unsigned int host_status:8;     /* [o] host status (see "DID" codes) */
     unsigned int driver_status:8;   /* [o] driver status+suggestion */
     unsigned int other_flags:10;    /* unused */
-    unsigned char sense_buffer[SG_MAX_SENSE]; /* [o] when target_status is
-               CHECK_CONDITION or COMMAND_TERMINATED this is output. */
+    unsigned char sense_buffer[SG_MAX_SENSE]; /* [o] Output in 3 cases:
+           when target_status is CHECK_CONDITION or 
+           when target_status is COMMAND_TERMINATED or
+           when (driver_status & DRIVER_SENSE) is true. */
 };      /* This structure is 36 bytes long on i386 */
 
 Firstly the new header is binary compatible with the original. This is
@@ -145,6 +155,9 @@ waiting packet; any other value will cause the read() to wait (or yield
 EAGAIN) until a packet with that 'pack_id' becomes available. In all cases
 the value of 'pack_id' available after a read() is the value given to that
 variable in the prior, corresponding write().
+
+The SCSI command length can now be given directly using the SG_NEXT_CMD_LEN
+ioctl().
 
 The 'target_status' field is always output and is the (masked and shifted
 1 bit right) SCSI status code from the target device. The allowable
@@ -162,28 +175,28 @@ values are (found in <scsi/scsi.h>):
 When the 'target_status' is CHECK_CONDITION or COMMAND_TERMINATED the
 'sense_buffer' is output. Note that when (driver_status & DRIVER_SENSE)
 is true then the 'sense_buffer' is also output (this seems to occur when
-the scsi ide emulation is used). When the 'sense_buffer' is output the 
+the ide-scsi emulation is used). When the 'sense_buffer' is output the 
 SCSI Sense Key can be found at (sense_buffer[2] & 0x0f) .
 
 The 'host_status' field is always output and has the following values
-whose "defines" are not visible outside the kernel (unfortunately):
+whose "defines" are not visible outside the kernel. A copy of these
+defines can be found in sg_err.h (see the utilities section):
 #define DID_OK          0x00 /* NO error                                */
 #define DID_NO_CONNECT  0x01 /* Couldn't connect before timeout period  */
 #define DID_BUS_BUSY    0x02 /* BUS stayed busy through time out period */
 #define DID_TIME_OUT    0x03 /* TIMED OUT for other reason              */
-#define DID_BAD_TARGET  0x04 /* BAD target.                             */
+#define DID_BAD_TARGET  0x04 /* BAD target, device not responding?      */
 #define DID_ABORT       0x05 /* Told to abort for some other reason     */
 #define DID_PARITY      0x06 /* Parity error                            */
-#define DID_ERROR       0x07 /* Internal error                          */
+#define DID_ERROR       0x07 /* Internal error [DMA underrun on aic7xxx]*/
 #define DID_RESET       0x08 /* Reset by somebody.                      */
 #define DID_BAD_INTR    0x09 /* Got an interrupt we weren't expecting.  */
 #define DID_PASSTHROUGH 0x0a /* Force command past mid-layer            */
-#define DID_SOFT_ERROR  0x0b /* The low level driver just wish a retry  */
+#define DID_SOFT_ERROR  0x0b /* The low level driver wants a retry      */
 
 The 'driver_status' field is always output. When ('driver_status' &
-DRIVER_SENSE) is true the 'sense_buffer' is also output. The following
-values whose "defines" are not visible outside the kernel (unfortunately)
-can occur:
+DRIVER_SENSE) is true the 'sense_buffer' is also output. A copy of these
+defines can be found in sg_err.h (see the utilities section):
 #define DRIVER_OK           0x00 /* Typically no suggestion */
 #define DRIVER_BUSY         0x01
 #define DRIVER_SOFT         0x02
@@ -192,7 +205,7 @@ can occur:
 #define DRIVER_INVALID      0x05
 #define DRIVER_TIMEOUT      0x06
 #define DRIVER_HARD         0x07
-#define DRIVER_SENSE        0x08
+#define DRIVER_SENSE        0x08 /* Implies sense_buffer output */
 /* above status 'or'ed with one of the following suggestions */
 #define SUGGEST_RETRY       0x10
 #define SUGGEST_ABORT       0x20
@@ -200,55 +213,8 @@ can occur:
 #define SUGGEST_DIE         0x40
 #define SUGGEST_SENSE       0x80
 
-'other_flags' still remains as a 10 bit field, so code that places 0 in it
-will still be happy. It is not used.
-
-
-memory
-======
-Memory is a scarce resource in any computer. Sg needs to reserve memory
-suitable for DMA roughly equal in size to the maximum of the write and
-read data buffers for each packet. This DMA memory is obtained at the time
-of a write() and released when the corresponding read() is called (although
-if memory is tight it may be using the buffer reserved by the open() ).
-
-Linux obtaining memory a challenge for several reasons. The memory pool
-that sg uses is in common with all other device drivers and all user
-processes. In this environment the only way to 99.9% guarantee a driver
-will have memory in Linux is to build it into the kernel (ie not as a
-module) and then reserve it on initialization before user processes get
-a chance. [Of course, another driver initialized before sg could take
-all available memory ...] Another problem is the biggest contiguous
-chunk of memory that can be obtained from the kernel is 32 * PAGE_SIZE
-(which is 128KBytes on i386). As memory gets "splintered" there is a good
-chance that buffers won't be available (my machine has 64 MBytes of RAM
-and has 3 available at the moment).
-
-The original sg driver used the following technique: grab a SG_BIG_BUFF
-sized buffer at driver initialization and use it for all requests greater
-than PAGE_SIZE (4096 bytes on i386). By default SG_BIG_BUFF is set to
-32 KBytes in the origianl driver but many applications suggest that the
-user increases this number. Linux limits the biggest single buffer of
-this type to 32 * PAGE_SIZE (128KBytes on i386). Unfortunately if the
-sg driver is a module then there is a high chance a contiguous block of
-that large size will not be available at module initialization.
-
-The author has found no "silver bullet" solution but uses multiple
-techniques hoping that at least one is able provide memory at the critical
-time. Listed below are some of these techniques:
-        - use scatter gather: then instead of one large buffer needing to
-          be found, multiple smaller buffer can be used
-        - use memory above the 16MByte level: the original driver limited
-          itself to obtaining memory below the 16MByte level (on the i386)
-          due to the shortcomings of DMA on ISA adapters. Yet more and more
-          people use PCI adapters that don't have this problem. So make
-          the decision based on the capabilities of the host adpater
-          associated with the current SCSI device
-        - reserve some memory at open() for emergencies but otherwise
-          fetch and release it on a per packet basis
-        - if the kernel is short of memory then dip into the SCSI DMA
-          pool (maintained by the mid-level driver) to a limited amount
-
+'other_flags' still remains as a 10 bit field (reduced from 31 bits), so
+code that places 0 in it will still be happy. It is not used.
 
 
 System Calls
@@ -257,16 +223,16 @@ What follows are descriptions of the characteristics of the standard
 Unix operating system calls when applied to a SCSI generic device
 using this version of the device driver.
 
-open
-----
+open(const char * filename, int flags)
+--------------------------------------
 The filename should be an 'sg' device such as
 /dev/sg[a-z]
 /dev/sg[0,1,2,...]
 or a symbolic link to one of these. [Devfs has its own sub-directory for
-sg devices.] It seems as though SCSI devices are allocated to sg minor
-numbers in the same order as they appear in 'cat /proc/scsi/scsi'.
-Sg is a "character" based Linux device driver. This means it has an
-open/close/read/write/ioctl type interface.
+sg devices with entries like: /dev/sg/c1b2t3u4 .] It seems as though SCSI
+devices are allocated to sg minor numbers in the same order as they appear
+in 'cat /proc/scsi/scsi'. Sg is a "character" based Linux device driver.
+This means it has an open/close/read/write/ioctl type interface.
 
 Flags can be either O_RDONLY or O_RDWR or-ed with either
 O_EXCL          waits for other opens on sg device to be closed before
@@ -279,7 +245,7 @@ O_NONBLOCK      Sets non-blocking mode. Calls that would otherwise block
 The original version of sg did not allow the O_RDONLY (yielding a EACCES
 error). This version allows it for accessing ioctls (e.g. doing an sg
 device scan with the SG_GET_SCSI_ID ioctl) but write()s will not be
-allowed.
+allowed. These flags are found in <fcntl.h> .
 
 By default, sequencing is per file descriptor in this version of sg. This
 means, for example that 2 processes can independently manipulate the same
@@ -290,32 +256,38 @@ on the same device at the same time probably wouldn't be a good idea. The
 previous version of sg supported only per device sequencing and this can
 still be selected with the SG_SET_MERGE_FD,1 ioctl().
 
-The driver will attempt to reserve SG_SCATTER_SZ bytes (32KBytes in the
-current sg.h) on open() for "emergency" situations. If this is unavailable
-it will halve its request and try again. It gives up if PAGE_SIZE bytes
-(4096 bytes on i386) cannot be obtained so no memory is reserved. In this
-case open() will still return successfully. The actual amount of memory
-reserved can be found with the SG_GET_RESERVED_SIZE ioctl().
+The driver will attempt to reserve SG_DEF_RESERVED_SIZE bytes (32KBytes in
+the current sg.h) on open(). The size of this reserved buffer can
+subsequently be modified with the SG_SET_RESERVED_SIZE ioctl(). In both
+cases these are requests subject to various dynamic constraints. The actual
+amount of memory obtained can be found by the SG_GET_RESERVED_SIZE ioctl().
+The reserved buffer will be used if:
+    -  it is not already in use (eg when command queuing is in use)
+    -  a write() does not call for a buffer size larger than the
+       reserved size.
 
 Returns a file descriptor if >= 0 , otherwise -1 implies an error.
 
 Error codes (value in 'errno' after -1 returned):
-ENODEV          sg not compiled into kernel or the kernel cannot find the
-                sg module (or it can't initialize itself (low memory??))
-ENXIO           either scsi sub-system is currently processing some error
-                (eg doing a device reset) or the sg driver/module removed
-                or corrupted
+EACCES          Either the user doesn't have appropriate permissions on 
+                'filename' or attempted to use both O_RDONLY and O_EXCL
 EBUSY           O_NONBLOCK set and some user of this sg device has O_EXCL
                 set while someone is already using this device
 EINTR           while waiting for an "exclusive" lock to clear, a signal
                 is received, just try again ...        
+ENODEV          sg not compiled into kernel or the kernel cannot find the
+                sg module (or it can't initialize itself (low memory??))
+ENOENT          given filename not found
 ENOMEM          An attempt to get memory to store this open's context
                 failed (this was _not_ a request to reserve DMA memory)
-EACCES          An attempt to use both O_RDONLY and O_EXCL
+ENXIO           either there is no attached device corresponding to given
+                filename or scsi sub-system is currently processing some
+                error (eg doing a device reset) or the sg driver/module
+                removed or corrupted
 
 
-write
------
+write(int sg_fd, const void * buffer, size_t count)
+---------------------------------------------------
 Even though sg is a character-based device driver it sends and receives
 packets to/from the associated scsi device. Write() is used to send a
 packet containing 2 mandatory parts and 1 optional part. The mandatory
@@ -343,32 +315,33 @@ In this sg driver a write() should return more or less immediately.
 Returns number of bytes written if > 0 , otherwise -1 implies an error.
 
 Error codes (value in 'errno' after -1 returned):
-ENXIO           either scsi sub-system is currently processing some error
-                (eg doing a device reset) or the sg driver/module removed
-                or corrupted
 EACCES          opened with RD_ONLY flag
-EIO             incoming buffer too short. It should be at least (6 +
-                sizeof(struct sg_header))==42 bytes long
-EDOM            a) command queuing off: a packet is already queued
-                b) command queuing on: too many packets queued 
-                   (SG_MAX_QUEUE exceeded)
 EAGAIN          SCSI mid-level out of command blocks (rare), try again.
                 This is more likely to happen when queuing commands,
                 so wait a bit (eg usleep(10000) ) before trying again
+EDOM            a) command queuing off: a packet is already queued
+                b) command queuing on: too many packets queued 
+                   (SG_MAX_QUEUE exceeded)
+                c) SCSI command length given in SG_NEXT_CMD_LEN too long
+EFAULT          'buffer' for 'count' bytes is an invalid memory range
+EIO             incoming buffer too short. It should be at least (6 +
+                sizeof(struct sg_header))==42 bytes long
 ENOMEM          can't get memory for DMA. Take evasive action ...
-                (see section on memory)
+ENXIO           either scsi sub-system is currently processing some error
+                (eg doing a device reset) or the sg driver/module removed
+                or corrupted
 
 
-read
-----
+read(int sg_fd, void * buffer, size_t count)
+--------------------------------------------
 Read() is used to receive a packet containing 1 mandatory part and 1 
 optional part. The mandatory part is:
   - a control block (an instance of struct sg_header)
 The optional part is:
   - incoming data (eg if a SCSI read command was sent by earlier write() )
 The buffer given to a read() and its corresponding count should be
-sufficient to accommodate this packet to avoid truncation. Truncation has
-occurred if count < sg_header::replylen .
+sufficient to accommodate this packet to avoid truncation. Truncation occurs
+if count < sg_header::replylen .
 
 By default, read() will return the oldest packet queued up. If the 
 SG_SET_FORCE_PACK_ID,1 ioctl() is active then read() will attempt to
@@ -377,7 +350,6 @@ sg_header::pack_id given to this read(). If not available it will either
 wait or yield EAGAIN. As a special case, -1 in sg_header::pack_id given
 to read() will match the oldest packet.
 
-
 Returns number of bytes read if > 0 , otherwise -1 implies an error.
 Unfortunately the return value in the non-error case is simply the
 same as the count argument. It is not the actual number of bytes
@@ -385,25 +357,26 @@ DMA-ed by the SCSI device. This driver is currently unable to provide
 such an underrun indication.
 
 Error codes (value in 'errno' after -1 returned):
-ENXIO           either scsi sub-system is currently processing some error
-                (eg doing a device reset) or the sg driver/module removed
-                or corrupted
 EAGAIN          either no waiting packet or requested packet is not
                 available while O_NONBLOCK flag was set
+EFAULT          'buffer' for 'count' bytes is an invalid memory range
 EINTR           while waiting for a packet, a signal is received, just
                 try again ...        
 EIO             if the 'count' given to read() is < sizeof(struct sg_header)
                 and the 'result' element in sg_header is non-zero. Not a
                 recommended error reporting technique
+ENXIO           either scsi sub-system is currently processing some error
+                (eg doing a device reset) or the sg driver/module removed
+                or corrupted
 
 
-close
------
+close(int sg_fd)
+----------------
 Preferably a close() should be done after all issued write()s have had
 their corresponding read() calls completed. Unfortunately this is not
 always possible. The semantics of close() in Unix are to return more
 or less immediately (ie not wait on any event) so the driver needs to
-arrange to an orderly cleanup of those packets that are still "in
+arrange for an orderly cleanup of those packets that are still "in
 flight".
 
 A process that has an open file descriptor to an sg device may be aborted
@@ -411,22 +384,22 @@ A process that has an open file descriptor to an sg device may be aborted
 (which is called 'sg_release()' in the version 2 driver) to facilitate
 the cleanup mentioned above.
 
-A problem persists in version 2.1.8 if the sg driver is a module and is
-removed while packets are still "in flight". Hopefully this will be soon
-fixed.
+A problem persists in version 2.1.34 if the sg driver is a module and is
+removed while packets are still "in flight".
 
 Returns 0 if successful, otherwise -1 implies an error.
 
 Error codes (value in 'errno' after -1 returned):
 ENXIO           sg driver/module removed or corrupted
 
-ioctl (sg specific)
--------------------
+ioctl(int sg_fd, int command, ...)  [sg specific]
+-------------------------------------------------
 Ken Thompson (or perhaps some other Unix luminary) described ioctl() as 
 the "garbage bin of Unix". This driver compounds the situation by adding
-around 18 more commands. These commands either yield state information (10
-of them), change the driver's characteristics (8 of them) or allow direct
-communication with the common SCSI mid-level driver.
+more ...
+If a ioctl command is not recognized by sg (and the various lower levels
+that it may pass the command on to) then the error EINVAL occurs. If an
+invalid address is given (in the 3rd argument) then the error EFAULT occurs.
 
 Those commands with an appended "+" are new in version 2.
 
@@ -442,14 +415,37 @@ a manifest constant HZ which is the number of "jiffies" in 1 second.
 SG_SET_TIMEOUT:
 Assumes 3rd argument points to an int containing the new timeout value
 for this file descriptor. The unit is a "jiffy". Packets that are
-already "in flight" will not be effected. The default value is set
-on open() and is SG_DEFAULT_TIMEOUT (defined in sg.h).
+already "in flight" will not be affected. The default value is set
+on open() and is SG_DEFAULT_TIMEOUT (defined in sg.h). This default is
+currently 1 minute and may not be long enough for formats.
 
 SG_EMULATED_HOST:
 Assumes 3rd argument points to an int and outputs a flag indicating
-whether the host (adapter) is connected to a real SCSI bus or is
+whether the host (adapter) is connected to a real SCSI bus or is an
 emulated one (eg ide-scsi device driver). A value of 1 means emulated
 while 0 is not.
+
+SG_SET_TRANSFORM  W:
+Third argument is ignored. Only is meaningful when SG_EMULATED host has
+yielded 1 (ie the low-level is the ide-scsi device driver); otherwise
+an EINVAL error occurs. The default state is to _not_ transform SCSI
+commands to the corresponding ATAPI commands but pass them straight
+through as is. [Only certain classes of SCSI commands need to be
+transformed to their ATAPI equivalents.] Making this ioctl command causes
+transforms to occur thereafter. Subsequent calls to this ioctl command
+have no additional effect. Beware, this state will affect all devices
+(and hence all related sg file descriptors) associated with this ide-scsi
+"bus".
+The author of ide-scsi has pointed out that this is not the intended
+behaviour which is a 3rd argument of 0 to disable transforms and 1 to
+enable transforms. Note the 3rd argument is an 'int' not a 'int *'.
+Perhaps the intended behaviour will be implemented soon.
+
+SG_GET_TRANSFORM:
+Third argument is ignored. Only is meaningful when SG_EMULATED host has
+yielded 1 (ie the low-level is the ide-scsi device driver); otherwise
+an EINVAL error occurs. Returns 0 to indicate _not_ transforming SCSI
+to ATAPI commands (default). Returns 1 when it is transforming.
 
 SG_SET_FORCE_LOW_DMA +:
 Assumes 3rd argument points to an int containing 0 or 1. 0 (default)
@@ -459,10 +455,10 @@ PCI SCSI adapters will indicate they can DMA to the whole 32 bit address
 space. 
 If 1 is given then the host adapter is overridden and only memory below
 the 16MB level is used for DMA. A requirement for this should be
-extremely rare. If the "reserve" buffer allocated on open() is not in
+extremely rare. If the "reserved" buffer allocated on open() is not in
 use then it will be de-allocated and re-allocated under the 16MB level
 (and the latter operation could fail yielding ENOMEM).
-Only the current file descriptor is effected.
+Only the current file descriptor is affected.
 
 SG_GET_LOW_DMA +:
 Assumes 3rd argument points to an int and places 0 or 1 in it. 0
@@ -472,11 +468,11 @@ on this file descriptor. 1 indicates the memory below the 16MB level
 adapters setting has been overridden by SG_SET_FORCE_LOW_DMA,1 .
 
 SG_GET_SCSI_ID +:
-Assumes 3rd argument is pointing to an object of type Sg_scsi_id and
-populates it. That structure contains ints for host_no, channel,
-scsi_id, lun and scsi_type. Most of this information is available from
-other sources (eg SCSI_IOCTL_GET_IDLUN and SCSI_IOCTL_GET_BUS_NUMBER)
-but tends to be awkward to collect.
+Assumes 3rd argument is pointing to an object of type Sg_scsi_id (see
+sg.h) and populates it. That structure contains ints for host_no, 
+channel, scsi_id, lun and scsi_type. Most of this information is 
+available from other sources (eg SCSI_IOCTL_GET_IDLUN and 
+SCSI_IOCTL_GET_BUS_NUMBER) but tends to be awkward to collect.
 
 SG_SET_FORCE_PACK_ID +:
 Assumes 3rd argument is pointing to an int. 0 (default) instructs read()
@@ -486,9 +482,9 @@ waiting to be read (when command queuing is being used).
 oldest packet matching that pack_id or wait until it arrives (or yield
 EAGAIN if O_NONBLOCK is in force). As a special case the pack_id of -1
 given to read() in the mode will match the oldest packet.
-Only the current file descriptor is effected by this command.
+Only the current file descriptor is affected by this command.
 
-SG_GET_LOW_DMA +:
+SG_GET_PACK_ID +:
 Assumes 3rd argument points to an int and places the pack_id of the
 oldest (written) packet in it. If no packet is waiting to be read then
 yields -1.
@@ -503,30 +499,33 @@ scatter gather elements supported by the host adapter. 0 indicates that
 the adapter does support scatter gather.
 
 SG_SET_RESERVED_SIZE +W:
-This is not currently implemented. It is intended for reserving either a
-large buffer or scatter gather list that will be available until the
-current file descriptor is closed. The requested amount of memory may
-not be available so SG_GET_RESERVED_SIZE should be used after this call
-to see how much was reserved. (EBUSY error possible)
+Assumes 3rd argument is pointing to an int. That value will be used to
+request a new reserved buffer of that size. The previous reserved buffer
+is freed (if it is not in use; if it was in use -EBUSY is returned).
+A new reserved buffer is then allocated and its actual size can be found by
+calling the SG_GET_RESERVED_SIZE ioctl(). The reserved buffer is then used
+for DMA purposes by subsequent write() commands if it is not already in
+use and if the write() is not calling for a buffer size larger than that
+reserved. The reserved buffer may well be a series of kernel buffers if the
+adapter supports scatter-gather. Large buffers can be requested (eg 1 MB).
 
 SG_GET_RESERVED_SIZE +:
 Assumes 3rd argument points to an int and places the size in bytes of
-the DMA buffer reserved on open() for emergencies. If this is 0 then it
-is probably not wise to attempt on operation like burning a CD on this
-file descriptor.
+the reserved buffer from open() or the most recent SG_SET_RESERVED_SIZE
+ioctl() call on this fd.  The result can be 0 if memory is very tight. In
+this case it may not be wise to attempt something like burning a CD on
+this file descriptor.
 
 SG_SET_MERGE_FD +W:
 Assumes 3rd argument is pointing to an int. 0 (the default) causes all
 subsequent sequencing to be per file descriptor. 1 causes all subsequent
 sequencing to be per device. If this command tries to change the current
-state and the is one or more _other_ file descriptors using this sg
-device then an EBUSY error occurs. Also if this file descriptor was not
-open()ed with the O_RDWR flag then an EACCES error occurs.
-Per device sequencing was the original semantics and allowed, for example
-different processes to "share" the device, one perhaps write()ing with
-the other one read()ing. This command is supplied if anyone needs those
-semantics. Per file descriptor sequencing, perhaps with the usage of
-the O_EXCL flag, seems more sensible.
+state and there is one or more _other_ file descriptors using this sg
+device then an EBUSY error occurs. Per device sequencing was the original
+semantics and allowed, for example different processes to "share" the
+device, one perhaps write()ing with the other one read()ing. This command
+is supplied if anyone needs those semantics. Per file descriptor 
+sequencing, perhaps with the use of the O_EXCL flag, seems more sensible.
 
 SG_GET_MERGE_FD +:
 Assumes 3rd argument points to an int and places 0 or 1 in it. 0 implies
@@ -538,13 +537,41 @@ Assumes 3rd argument is pointing to an int. 0 (current default, set by
 SG_DEF_COMMAND_Q in sg.h) disables command queuing. Attempts to write()
 a packet while one is already queued will result in a EDOM error.
 1 turns command queuing on.
-Changing the queuing state only effects write()s done after the change.
-Only the current file descriptor is effected by this command.
+Changing the queuing state only affects write()s done after the change.
+Only the current file descriptor is affected by this command.
 
 SG_GET_COMMAND_Q +:
 Assumes 3rd argument points to an int and places 0 or 1 in it. 0 implies
 that command queuing is off on this file descriptor. 1 implies command
 queuing is on.
+
+SG_SET_UNDERRUN_FLAG +:
+Assumes 3rd argument is pointing to an int. 0 (current default, set by
+SG_DEF_UNDERRUN_FLAG in sg.h) requests underruns be ignored. 1 requests
+that underruns be flagged. [The only low level driver that acts on this 
+at the moment is the aic7xxx which yields a DID_ERROR error on underrun.]
+Only the current file descriptor is affected by this command (unless
+"per device" sequencing has been selected).
+
+SG_GET_UNDERRUN_FLAG +:
+Assumes 3rd argument points to an int and places 0 or 1 in it. 0 implies
+that underruns are not being reported. 1 implies that underruns are being
+reported (see SG_SET_UNDERRUN_FLAG for more details).
+
+SG_NEXT_CMD_LEN +:
+Assumes 3rd argument is pointing to an int. The value of the int (if > 0)
+will be used as the SCSI command length of the next SCSI command sent to
+a write() on this fd. After that write() the SCSI command length logic is
+reset to use automatic length detection (ie depending on SCSI command group
+and the 'twelve_byte' field). If the current SCSI command length maximum of
+12 is exceeded then the affected write() will yield an EDOM error.
+Giving this ioctl() a value of 0 will set automatic length detection for
+the next write(). N.B. Only the following write() on this fd is affected by
+this ioctl().
+
+SG_GET_VERSION_NUM +:
+Assumes 3rd argument points to an int. The version number is then placed
+in that int. A sg version such as 2.1.34 will yield "20134" from this ioctl.
 
 SG_SET_DEBUG +:
 Assumes 3rd argument is pointing to an int. 0 (default) turns debugging
@@ -556,73 +583,53 @@ If you need a _lot_ of the SCSI sub-system debug information (mainly from
 the mid-level) then try 'echo "scsi dump 0" > /proc/scsi/scsi' and lots of
 debug will appear in your console/log.
 
-ioctl (in common with sd, st + sr)
-----------------------------------
-The following ioctl()s can be called from any high-level scsi device
-driver (ie sd, st, sr + sg). Access permissions may differ a bit from
-one device to another, the access information given below is specific to
-the sg device driver.
 
-SCSI_IOCTL_GET_IDLUN:
-SCSI_IOCTL_GET_BUS_NUMBER:
-
-SCSI_IOCTL_SEND_COMMAND:  W
-If open()ed O_RDONLY yields an EACCESS error. Otherwise is forwarded onto
-the SCSI mid-level driver for processing.
-Don't know much about this one but it looks pretty powerful and
-dangerous. Some comments says it is also deprecated.
-
-<any_command_not matching_above>:  W
-If open()ed O_RDONLY yields an EACCESS error. Otherwise is forwarded onto
-the SCSI mid-level driver for processing.
-
-
-poll
-----
+poll(struct pollfd * udfds, unsigned int nfds, int timeout_ms)
+--------------------------------------------------------------
 This is a native call in Linux 2.2 but most of its capabilities are available
 through the older select() call. Given a choice poll() should probably be
 used. Typically poll() is used when a sg scsi device is open()ed O_NONBLOCK
-for polling; or alternatively with asynchronous notification using the
-fcntl() system call (below) and the SIGPOLL (aka SIGIO) signal.
+for polling; and optionally with asynchronous notification as well using
+the fcntl() system call (below) and the SIGPOLL (aka SIGIO) signal.
 Only if something drastically is wrong (eg file handle gone stale) will
 POLLERR ever be set. POLLPRI, POLLHUP and POLLNVAL are never set.
 POLLIN is set when there is one or more packets waiting to be read.
-When POLLIN is set it implies that a read() will not block (or yield
+When POLLIN is set it implies that a read() will not block (nor yield
 EAGAIN in non-blocking mode) but return a packet immediately.
 POLLOUT (aka POLLWRNORM) is set when write() is able to accept a packet
-(ie will _not_ yield an EDOM error). The setting of POLLOUT is effected
+(ie will _not_ yield an EDOM error). The setting of POLLOUT is affected
 by the SG_SET_COMMAND_Q state: if the state is on then POLLOUT will remain
 set until the number of queued packets reaches SG_MAX_QUEUE, if the
 state is off then POLLOUT is only set when no packets are queued.
 Note that a packet can be queued after write()ing but not available to be
 read(); this typically happens when a SCSI read command is issued while
-the data is being retreaved.
+the data is being retrieved.
 Poll() is per file descriptor unless SG_SET_MERGE_FD is set in which case
 it is per device.
 
 
-fcntl
------
+fcntl(int sg_fd, int cmd) or fcntl(int sg_fd, int cmd, long arg)
+----------------------------------------------------------------
 There are several uses for this system call in association with a sg
-file descriptor. The first pseudo code shows code that is useful for
+file descriptor. The following pseudo code shows code that is useful for
 scanning the sg devices, taking care not to be caught in a wait for
 an O_EXCL lock by another process, and when the appropriate device is
-found switching to normal blocked io. A working example of this logic
-is in the sg_scan.c utility program.
+found, switching to normal blocked io. A working example of this logic
+is in the sg_scan utility program.
 
 open("/dev/sga", O_RDONLY | O_NONBLOCK)
 /* check device, EBUSY means some other process has O_EXCL lock on it */
-/* one the device you want is found then ... */
+/* when the device you want is found then ... */
 flags = fcntl(sg_fd, F_GETFL)
 fcntl(sg_fd, F_SETFL, flags & (~ O_NONBLOCK))
-/* for simple apps is is easier to use normal blocked io */
+/* since, for simple apps, it is easier to use normal blocked io */
 
 
 Some work has to be done in Linux to set up for asynchronous notification.
-This is a non-blocking mode of operation in which when the driver receives
+This is a non-blocking mode of operation in which, when the driver receives
 data back from a device so that a read() can be done, it sends a SIGPOLL
 (aka SIGIO) signal to the owning process. A working example of this logic
-is in the sg_poll.c test program.
+is in the sg_poll test program.
 
 sigemptyset(&sig_set)
 sigaddset(&sig_set, SIGPOLL)
@@ -634,3 +641,91 @@ fcntl(sg_fd, F_SETFL, flags | O_ASYNC)
 
 Utility and Test Programs
 =========================
+See the README file in the sg_utils<date>.tgz tarball. At the time of
+writing this was sg_utils990527.tgz .
+
+Briefly, that tarball contains the following utilities:
+sg_dd512        'dd' like program that assumes 512 byte blocks size
+sg_dd2048       'dd' like program that assumes 2048 byte blocks size
+sgq_dd512       like 'sg_dd512' but does command queuing on "if"
+sg_scan         outputs information (optionally Inquiry) on SCSI devices
+sg_rbuf         tests SCSI bus transfer speed (without physical IO)
+sg_whoami       outputs info (optionally capacity) of given SCSI device
+sginfo          outputs "mode" information about SCSI devices (it is a
+                  re-port of the scsiinfo program onto the sg interface)
+
+It also contains the following test programs:
+sg_debug        outputs sg driver state to console/log file
+sg_poll         tests asynchronous notification
+sg_inquiry      does a SCSI Inquiry command (from original HOWTO)
+sg_tst_med      checks presence of media (from original HOWTO)
+
+There are also 2 source files (sg_err.[hc]) for outputting and categorizing
+SCSI 2 errors and warnings. This code is used by most of the above
+utility and test programs.
+
+The following programs: sg_dd512, sg_dd2048, sg_scan, sg_rbuf, sg_tst_med, 
+sg_inquiry and sginfo, can be compiled either for this new sg driver _or_
+the original sg driver.
+
+
+Header files
+============
+User applications need to find the correct "sg.h" header file matching
+their kernel in order to write code using the sg device driver. This is 
+sometimes more difficult than it should be. The correct "sg.h" will usually
+be found at /usr/src/linux/include/scsi/sg.h . Another important header 
+file is "scsi.h" which will be in the same directory.
+
+Several distributions have taken their own copies of these files and placed
+them in /usr/include/scsi which is where "#include <scsi/sg.h>" would go
+looking. The directory /usr/include/scsi _should_ be a symbolic link to
+/usr/src/linux/include/scsi/ . It was is Redhat 5.1 and 5.2 but it is
+not is Redhat 6.0 . Some other distributions have the same problem. To
+solve this (as root) do the following:
+
+# cd /usr/include
+# mv scsi scsi_orig
+# ln -s ../src/linux/include/scsi scsi
+
+This doesn't seem to be a problem with /usr/include/linux (at least in
+Redhat where it is a symbolic link) so it is hard to understand why
+/usr/include/scsi is defined the way it is. The fact the
+/usr/include/linux is a symbolic link opens up the following solution
+proposed by the author of cdparanoia (Monty):
+#include <linux/../scsi/sg.h>
+
+
+Extra information in scsi-generic_long.txt
+==========================================
+This document is an abridged form of a more comprehensive document called
+scsi-generic_long.txt (see www.torque.net/sg/p/scsi-generic_long.txt).
+
+The longer document contains additional sections on:
+   - memory issues
+   - ioctl()s in common with sd, st + sr
+   - distinguishing the original from the new driver
+   - SG_BIG_BUFF and friends
+   - shortcomings
+   - future directions
+   - an appendix with some SCSI 2 information in it
+
+
+Conclusion
+==========
+The SCSI generic packet device driver attempts to make as few assumptions
+as possible about the device it is connected to while giving applications
+using it as much flexibility as possible on the SCSI command level. Sg
+needs to hide the "messy" kernel related details while protecting
+the integrity of the kernel against sg "abuse". Some of these aims are
+contradictory and some compromises need to be made. For example: should
+a sg based application be able to reset a SCSI bus when that could cause
+collateral damage to a disk holding the root file system? There is no
+easy answer to this and many other related questions.
+
+If you have any suggestion about sg (or improving (the accuracy of) this
+document) please contact me.
+
+
+Douglas Gilbert
+dgilbert@interlog.com

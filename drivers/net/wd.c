@@ -86,7 +86,7 @@ struct netdev_entry wd_drv =
 {"wd", wd_probe1, WD_IO_EXTENT, wd_portlist};
 #else
 
-__initfunc(int wd_probe(struct device *dev))
+int __init wd_probe(struct device *dev)
 {
 	int i;
 	int base_addr = dev ? dev->base_addr : 0;
@@ -108,7 +108,7 @@ __initfunc(int wd_probe(struct device *dev))
 }
 #endif
 
-__initfunc(int wd_probe1(struct device *dev, int ioaddr))
+int __init wd_probe1(struct device *dev, int ioaddr)
 {
 	int i;
 	int checksum = 0;

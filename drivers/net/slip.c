@@ -1318,7 +1318,7 @@ static int sl_ioctl(struct device *dev,struct ifreq *rq,int cmd)
 #ifdef MODULE
 static int slip_init_ctrl_dev(void)
 #else	/* !MODULE */
-__initfunc(int slip_init_ctrl_dev(struct device *dummy))
+int __init slip_init_ctrl_dev(struct device *dummy)
 #endif	/* !MODULE */
 {
 	int status;

@@ -431,9 +431,9 @@ static int pci_etherdev_probe(struct device *dev, struct pci_id_info pci_tbl[])
 #if defined(PCI_SUPPORT_VER2)
 			struct pci_dev *pdev = pci_find_slot(pci_bus, pci_device_fn);
 #ifdef VIA_USE_IO
-			pciaddr = pdev->base_address[0];
+			pciaddr = pdev->resource[0].start;
 #else
-			pciaddr = pdev->base_address[1];
+			pciaddr = pdev->resource[1].start;
 #endif
 			irq = pdev->irq;
 #else

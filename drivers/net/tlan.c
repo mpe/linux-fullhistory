@@ -554,7 +554,7 @@ int TLan_PciProbe(u8 *pci_dfn, u8 *pci_irq, u8 *pci_rev, u32 *pci_io_base, u32 *
 			);
 
 			*pci_irq = pdev->irq;
-			*pci_io_base = pdev->base_address[0] & PCI_BASE_ADDRESS_IO_MASK;
+			*pci_io_base = pdev->resource[0].start;
 			*pci_dfn = pdev->devfn;
 			pci_read_config_byte ( pdev, PCI_REVISION_ID, pci_rev);
 			pci_read_config_word ( pdev,  PCI_COMMAND, &pci_command);

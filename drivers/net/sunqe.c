@@ -1173,7 +1173,7 @@ qec_free_devs:
 	return res;
 }
 
-__initfunc(int qec_probe(struct device *dev))
+int __init qec_probe(struct device *dev)
 {
 	struct linux_sbus *bus;
 	struct linux_sbus_device *sdev = 0;

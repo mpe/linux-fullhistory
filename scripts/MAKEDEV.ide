@@ -29,6 +29,18 @@ makedevs hde 33 0
 makedevs hdf 33 64
 makedevs hdg 34 0
 makedevs hdh 34 64
+makedevs hdi 56 0
+makedevs hdj 56 64
+makedevs hdk 57 0
+makedevs hdl 57 64
+makedevs hdm 88 0
+makedevs hdn 88 64
+makedevs hdo 89 0
+makedevs hdp 89 64
+makedevs hdq 90 0
+makedevs hdr 90 64
+makedevs hds 91 0
+makedevs hdt 91 64
 
 for tape in 0 1 2 3 4 5 6 7
 do

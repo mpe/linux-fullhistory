@@ -59,7 +59,7 @@ Here is a sample of the available modules included in the kernel sources:
 	Most low-level SCSI drivers: (i.e. aha1542, in2000)
 	All SCSI high-level drivers: disk, tape, cdrom, generic.
 
-	Most ethernet drivers: (too many to list, please see the file
+	Most Ethernet drivers: (too many to list, please see the file
 				./Documentation/networking/net-modules.txt)
 
 	Most CDROM drivers:

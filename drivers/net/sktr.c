@@ -186,7 +186,7 @@ static void 	sktr_write_tpl_status(TPL *tpl, unsigned int Status);
  * If dev->base_addr == 0, probe all likely locations.
  * If dev->base_addr == 1, always return failure.
  */
-__initfunc(int sktr_probe(struct device *dev))
+int __init sktr_probe(struct device *dev)
 {
 	int i;
 	int base_addr = dev ? dev->base_addr : 0;
@@ -217,7 +217,7 @@ __initfunc(int sktr_probe(struct device *dev))
 /*
  * Detect and setup the PCI SysKonnect TR cards in slot order.
  */
-__initfunc(static int sktr_pci_chk_card(struct device *dev))
+static int __init sktr_pci_chk_card(struct device *dev)
 {
 	static int pci_index = 0;
 	unsigned char pci_bus, pci_device_fn;
@@ -295,7 +295,7 @@ __initfunc(static int sktr_pci_chk_card(struct device *dev))
 /*
  * Detect and setup the ISA SysKonnect TR cards.
  */
-__initfunc(static int sktr_isa_chk_card(struct device *dev, int ioaddr))
+static int __init sktr_isa_chk_card(struct device *dev, int ioaddr)
 {
 	int i, err;
 	unsigned long flags;
@@ -386,7 +386,7 @@ __initfunc(static int sktr_isa_chk_card(struct device *dev, int ioaddr))
 	return (0);
 }
 
-__initfunc(static int sktr_probe1(struct device *dev, int ioaddr))
+static int __init sktr_probe1(struct device *dev, int ioaddr)
 {
 	static unsigned version_printed = 0;
 	struct net_local *tp;
@@ -428,7 +428,7 @@ __initfunc(static int sktr_probe1(struct device *dev, int ioaddr))
 }
 
 /* Dummy function */
-__initfunc(static int sktr_init_card(struct device *dev))
+static int __init sktr_init_card(struct device *dev)
 {
 	if(sktr_debug > 3)
 		printk("%s: sktr_init_card\n", dev->name);
@@ -440,7 +440,7 @@ __initfunc(static int sktr_init_card(struct device *dev))
  * This function tests if an adapter is really installed at the
  * given I/O address. Return negative if no adapter at IO addr.
  */
-__initfunc(static int sktr_isa_chk_ioaddr(int ioaddr))
+static int __init sktr_isa_chk_ioaddr(int ioaddr)
 {
 	unsigned char old, chk1, chk2;
 

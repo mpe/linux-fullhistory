@@ -1240,7 +1240,7 @@ __initfunc(void pcibios_init(void))
 		access_pci = bios;
 }
 
-__initfunc(char *pcibios_setup(char *str))
+char * __init pcibios_setup(char *str)
 {
 	if (!strcmp(str, "off")) {
 		pci_probe = 0;

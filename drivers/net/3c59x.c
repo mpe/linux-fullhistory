@@ -655,20 +655,9 @@ static int vortex_scan(struct device *dev, struct pci_id_info pci_tbl[])
 				continue;
 
 			{
-#if LINUX_VERSION_CODE >= 0x20155
 				struct pci_dev *pdev = pci_find_slot(pci_bus, pci_device_fn);
-				ioaddr = pdev->base_address[0] & ~3;
+				ioaddr = pdev->resource[0].start;
 				irq = pdev->irq;
-#else
-				u32 pci_ioaddr;
-				u8 pci_irq_line;
-				pcibios_read_config_byte(pci_bus, pci_device_fn,
-										 PCI_INTERRUPT_LINE, &pci_irq_line);
-				pcibios_read_config_dword(pci_bus, pci_device_fn,
-										  PCI_BASE_ADDRESS_0, &pci_ioaddr);
-				ioaddr = pci_ioaddr & ~3;;
-				irq = pci_irq_line;
-#endif
 			}
 
 			/* Power-up the card. */

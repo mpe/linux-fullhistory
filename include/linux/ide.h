@@ -1,7 +1,7 @@
 #ifndef _IDE_H
 #define _IDE_H
 /*
- *  linux/drivers/block/ide.h
+ *  linux/include/linux/ide.h
  *
  *  Copyright (C) 1994-1998  Linus Torvalds & authors
  */
@@ -318,7 +318,8 @@ typedef struct ide_drive_s {
 typedef enum {	ide_dma_read,	ide_dma_write,		ide_dma_begin,
 		ide_dma_end,	ide_dma_check,		ide_dma_on,
 		ide_dma_off,	ide_dma_off_quietly,	ide_dma_test_irq,
-		ide_dma_bad_drive,			ide_dma_good_drive
+		ide_dma_bad_drive,			ide_dma_good_drive,
+		ide_dma_lostirq,			ide_dma_timeout
 	} ide_dma_action_t;
 
 typedef int (ide_dmaproc_t)(ide_dma_action_t, ide_drive_t *);
@@ -757,6 +758,12 @@ void do_ide6_request (void);
 #endif
 #if MAX_HWIFS > 7
 void do_ide7_request (void);
+#endif
+#if MAX_HWIFS > 8
+void do_ide8_request (void);
+#endif
+#if MAX_HWIFS > 9
+void do_ide9_request (void);
 #endif
 void ide_init_subdrivers (void);
 

@@ -240,9 +240,8 @@ int sr_get_last_session(struct cdrom_device_info *cdi,
 int sr_get_mcn(struct cdrom_device_info *cdi,struct cdrom_mcn *mcn)
 {
         u_char  sr_cmd[10];
-	char * buffer;
+	char buffer[32];
         int result;
-        unsigned long flags;
         	
 	sr_cmd[0] = SCMD_READ_SUBCHANNEL;
 	sr_cmd[1] = ((scsi_CDs[MINOR(cdi->dev)].device->lun) << 5);
@@ -254,20 +253,11 @@ int sr_get_mcn(struct cdrom_device_info *cdi,struct cdrom_mcn *mcn)
 	sr_cmd[8] = 24;
 	sr_cmd[9] = 0;
 
-        spin_lock_irqsave(&io_request_lock, flags);
-	buffer = (unsigned char*) scsi_malloc(512);
-        spin_unlock_irqrestore(&io_request_lock, flags);
-	if(!buffer) return -ENOMEM;
-	
 	result = sr_do_ioctl(MINOR(cdi->dev), sr_cmd, buffer, 24, 0);
 	
 	memcpy (mcn->medium_catalog_number, buffer + 9, 13);
         mcn->medium_catalog_number[13] = 0;
 
-        spin_lock_irqsave(&io_request_lock, flags);
-	scsi_free(buffer, 512);
-        spin_unlock_irqrestore(&io_request_lock, flags);
-	
 	return result;
 }
 
@@ -395,8 +385,7 @@ int sr_audio_ioctl(struct cdrom_device_info *cdi, unsigned int cmd, void* arg)
     case CDROMREADTOCHDR:
     {
 	struct cdrom_tochdr* tochdr = (struct cdrom_tochdr*)arg;
-	char * buffer;
-        unsigned long flags;
+	char buffer[32];
 	
 	sr_cmd[0] = SCMD_READ_TOC;
 	sr_cmd[1] = ((scsi_CDs[target].device->lun) << 5);
@@ -406,27 +395,18 @@ int sr_audio_ioctl(struct cdrom_device_info *cdi, unsigned int cmd, void* arg)
 	sr_cmd[8] = 12;             /* LSB of length */
 	sr_cmd[9] = 0;
 	
-        spin_lock_irqsave(&io_request_lock, flags);
-	buffer = (unsigned char *) scsi_malloc(512);
-        spin_unlock_irqrestore(&io_request_lock, flags);
-	if(!buffer) return -ENOMEM;
-	
 	result = sr_do_ioctl(target, sr_cmd, buffer, 12, 1);
 	
 	tochdr->cdth_trk0 = buffer[2];
 	tochdr->cdth_trk1 = buffer[3];
 	
-        spin_lock_irqsave(&io_request_lock, flags);
-	scsi_free(buffer, 512);
-        spin_unlock_irqrestore(&io_request_lock, flags);
         break;
     }
 	
     case CDROMREADTOCENTRY:
     {
 	struct cdrom_tocentry* tocentry = (struct cdrom_tocentry*)arg;
-	unsigned char * buffer;
-        unsigned long flags;
+	unsigned char buffer[32];
 	
 	sr_cmd[0] = SCMD_READ_TOC;
 	sr_cmd[1] = ((scsi_CDs[target].device->lun) << 5) |
@@ -436,11 +416,6 @@ int sr_audio_ioctl(struct cdrom_device_info *cdi, unsigned int cmd, void* arg)
 	sr_cmd[7] = 0;             /* MSB of length (12)  */
 	sr_cmd[8] = 12;            /* LSB of length */
 	sr_cmd[9] = 0;
-	
-        spin_lock_irqsave(&io_request_lock, flags);
-	buffer = (unsigned char *) scsi_malloc(512);
-        spin_unlock_irqrestore(&io_request_lock, flags);
-	if(!buffer) return -ENOMEM;
 	
 	result = sr_do_ioctl (target, sr_cmd, buffer, 12, 0);
 	
@@ -455,151 +430,13 @@ int sr_audio_ioctl(struct cdrom_device_info *cdi, unsigned int cmd, void* arg)
 	    tocentry->cdte_addr.lba = (((((buffer[8] << 8) + buffer[9]) << 8)
                                        + buffer[10]) << 8) + buffer[11];
 	
-        spin_lock_irqsave(&io_request_lock, flags);
-	scsi_free(buffer, 512);
-        spin_unlock_irqrestore(&io_request_lock, flags);
-        break;
-    }
-	
-    case CDROMSTOP:
-	sr_cmd[0] = START_STOP;
-	sr_cmd[1] = ((scsi_CDs[target].device->lun) << 5) | 1;
-	sr_cmd[2] = sr_cmd[3] = sr_cmd[5] = 0;
-	sr_cmd[4] = 0;
-	
-	result = sr_do_ioctl(target, sr_cmd, NULL, 255, 0);
-        break;
-	
-    case CDROMSTART:
-	sr_cmd[0] = START_STOP;
-	sr_cmd[1] = ((scsi_CDs[target].device->lun) << 5) | 1;
-	sr_cmd[2] = sr_cmd[3] = sr_cmd[5] = 0;
-	sr_cmd[4] = 1;
-	
-	result = sr_do_ioctl(target, sr_cmd, NULL, 255, 0);
-        break;
-	
-    case CDROMVOLCTRL:
-    {
-	char * buffer, * mask;
-	struct cdrom_volctrl* volctrl = (struct cdrom_volctrl*)arg;
-        unsigned long flags;
-	
-	/* First we get the current params so we can just twiddle the volume */
-	
-	sr_cmd[0] = MODE_SENSE;
-	sr_cmd[1] = (scsi_CDs[target].device -> lun) << 5;
-	sr_cmd[2] = 0xe;    /* Want mode page 0xe, CDROM audio params */
-	sr_cmd[3] = 0;
-	sr_cmd[4] = 28;
-	sr_cmd[5] = 0;
-	
-        spin_lock_irqsave(&io_request_lock, flags);
-	buffer = (unsigned char *) scsi_malloc(512);
-        spin_unlock_irqrestore(&io_request_lock, flags);
-	if(!buffer) return -ENOMEM;
-	
-	if ((result = sr_do_ioctl (target, sr_cmd, buffer, 28, 0))) {
-	    printk ("Hosed while obtaining audio mode page\n");
-            spin_lock_irqsave(&io_request_lock, flags);
-	    scsi_free(buffer, 512);
-            spin_unlock_irqrestore(&io_request_lock, flags);
-            break;
-	}
-	
-	sr_cmd[0] = MODE_SENSE;
-	sr_cmd[1] = (scsi_CDs[target].device -> lun) << 5;
-	sr_cmd[2] = 0x4e;   /* Want the mask for mode page 0xe */
-	sr_cmd[3] = 0;
-	sr_cmd[4] = 28;
-	sr_cmd[5] = 0;
-	
-        spin_lock_irqsave(&io_request_lock, flags);
-	mask = (unsigned char *) scsi_malloc(512);
-        spin_unlock_irqrestore(&io_request_lock, flags);
-	if(!mask) {
-            spin_lock_irqsave(&io_request_lock, flags);
-	    scsi_free(buffer, 512);
-            spin_unlock_irqrestore(&io_request_lock, flags);
-	    result = -ENOMEM;
-            break;
-	};
-
-	if ((result = sr_do_ioctl (target, sr_cmd, mask, 28, 0))) {
-	    printk ("Hosed while obtaining mask for audio mode page\n");
-            spin_lock_irqsave(&io_request_lock, flags);
-	    scsi_free(buffer, 512);
-	    scsi_free(mask, 512);
-            spin_unlock_irqrestore(&io_request_lock, flags);
-	    break;
-	}
-	
-	/* Now mask and substitute our own volume and reuse the rest */
-	buffer[0] = 0;  /* Clear reserved field */
-	
-	buffer[21] = volctrl->channel0 & mask[21];
-	buffer[23] = volctrl->channel1 & mask[23];
-	buffer[25] = volctrl->channel2 & mask[25];
-	buffer[27] = volctrl->channel3 & mask[27];
-	
-	sr_cmd[0] = MODE_SELECT;
-	sr_cmd[1] = ((scsi_CDs[target].device -> lun) << 5) | 0x10;    /* Params are SCSI-2 */
-	sr_cmd[2] = sr_cmd[3] = 0;
-	sr_cmd[4] = 28;
-	sr_cmd[5] = 0;
-	
-	result = sr_do_ioctl (target, sr_cmd, buffer, 28, 0);
-        spin_lock_irqsave(&io_request_lock, flags);
-	scsi_free(buffer, 512);
-	scsi_free(mask, 512);
-        spin_unlock_irqrestore(&io_request_lock, flags);
-        break;
-    }
-	
-    case CDROMVOLREAD:
-    {
-	char * buffer;
-	struct cdrom_volctrl* volctrl = (struct cdrom_volctrl*)arg;
-        unsigned long flags;
-	
-	/* Get the current params */
-	
-	sr_cmd[0] = MODE_SENSE;
-	sr_cmd[1] = (scsi_CDs[target].device -> lun) << 5;
-	sr_cmd[2] = 0xe;    /* Want mode page 0xe, CDROM audio params */
-	sr_cmd[3] = 0;
-	sr_cmd[4] = 28;
-	sr_cmd[5] = 0;
-	
-        spin_lock_irqsave(&io_request_lock, flags);
-	buffer = (unsigned char *) scsi_malloc(512);
-        spin_unlock_irqrestore(&io_request_lock, flags);
-	if(!buffer) return -ENOMEM;
-	
-	if ((result = sr_do_ioctl (target, sr_cmd, buffer, 28, 0))) {
-	    printk ("(CDROMVOLREAD) Hosed while obtaining audio mode page\n");
-            spin_lock_irqsave(&io_request_lock, flags);
-	    scsi_free(buffer, 512);
-            spin_unlock_irqrestore(&io_request_lock, flags);
-            break;
-	}
-
-	volctrl->channel0 = buffer[21];
-	volctrl->channel1 = buffer[23];
-	volctrl->channel2 = buffer[25];
-	volctrl->channel3 = buffer[27];
-
-        spin_lock_irqsave(&io_request_lock, flags);
-	scsi_free(buffer, 512);
-        spin_unlock_irqrestore(&io_request_lock, flags);
         break;
     }
 	
     case CDROMSUBCHNL:
     {
 	struct cdrom_subchnl* subchnl = (struct cdrom_subchnl*)arg;
-	char * buffer;
-        unsigned long flags;
+	char buffer[32];
 	
 	sr_cmd[0] = SCMD_READ_SUBCHANNEL;
 	sr_cmd[1] = ((scsi_CDs[target].device->lun) << 5) | 0x02;    /* MSF format */
@@ -610,11 +447,6 @@ int sr_audio_ioctl(struct cdrom_device_info *cdi, unsigned int cmd, void* arg)
 	sr_cmd[7] = 0;
 	sr_cmd[8] = 16;
 	sr_cmd[9] = 0;
-	
-        spin_lock_irqsave(&io_request_lock, flags);
-	buffer = (unsigned char *) scsi_malloc(512);
-        spin_unlock_irqrestore(&io_request_lock, flags);
-	if(!buffer) return -ENOMEM;
 	
 	result = sr_do_ioctl(target, sr_cmd, buffer, 16, 0);
 	
@@ -631,9 +463,6 @@ int sr_audio_ioctl(struct cdrom_device_info *cdi, unsigned int cmd, void* arg)
 	subchnl->cdsc_absaddr.msf.second = buffer[10];
 	subchnl->cdsc_absaddr.msf.frame = buffer[11];
 	
-        spin_lock_irqsave(&io_request_lock, flags);
-	scsi_free(buffer, 512);
-        spin_unlock_irqrestore(&io_request_lock, flags);
         break;
     }
     default:

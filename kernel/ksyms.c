@@ -39,6 +39,7 @@
 #include <linux/console.h>
 #include <linux/poll.h>
 #include <linux/mm.h>
+#include <linux/capability.h>
 
 #if defined(CONFIG_PROC_FS)
 #include <linux/proc_fs.h>
@@ -172,6 +173,7 @@ EXPORT_SYMBOL(block_flushpage);
 EXPORT_SYMBOL(generic_file_read);
 EXPORT_SYMBOL(generic_file_write);
 EXPORT_SYMBOL(generic_file_mmap);
+EXPORT_SYMBOL(generic_buffer_fdatasync);
 EXPORT_SYMBOL(page_hash_bits);
 EXPORT_SYMBOL(page_hash_table);
 EXPORT_SYMBOL(file_lock_table);
@@ -355,6 +357,7 @@ EXPORT_SYMBOL(_ctype);
 EXPORT_SYMBOL(secure_tcp_sequence_number);
 EXPORT_SYMBOL(get_random_bytes);
 EXPORT_SYMBOL(securebits);
+EXPORT_SYMBOL(cap_bset);
 
 /* Program loader interfaces */
 EXPORT_SYMBOL(setup_arg_pages);

@@ -2232,7 +2232,7 @@ __initfunc(int init_cmpci(void))
 		init_waitqueue_head(&s->midi.owait);
 		init_MUTEX(&s->open_sem);
 		s->magic = CM_MAGIC;
-		s->iobase = pcidev->base_address[0] & PCI_BASE_ADDRESS_IO_MASK;
+		s->iobase = pcidev->resource[0].start;
 #ifdef CONFIG_SOUND_CMPCI_FM
 		s->iosynth = 0x388;
 #endif

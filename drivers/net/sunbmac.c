@@ -1253,7 +1253,7 @@ static void bigmac_set_multicast(struct device *dev)
 	bregs->rx_cfg |= BIGMAC_RXCFG_ENABLE;
 }
 
-__initfunc(static int bigmac_ether_init(struct device *dev, struct linux_sbus_device *qec_sdev))
+static int __init bigmac_ether_init(struct device *dev, struct linux_sbus_device *qec_sdev)
 {
 	static unsigned version_printed = 0;
 	struct bigmac *bp = 0;
@@ -1492,7 +1492,7 @@ fail_and_cleanup:
 	return res;	/* Return error code. */
 }
 
-__initfunc(int bigmac_probe(struct device *dev))
+int __init bigmac_probe(struct device *dev)
 {
 	struct linux_sbus *bus;
 	struct linux_sbus_device *sdev = 0;

@@ -680,6 +680,14 @@ static struct device mkiss_bootstrap = {
 #define NEXT_DEV (&mkiss_bootstrap)
 #endif	/* MKISS */
   
+#if defined(CONFIG_YAM)
+extern int yam_init(struct device *);
+static struct device yam_bootstrap = {
+  "yam", 0x0, 0x0, 0x0, 0x0, 0, 0, 0, 0, 0, NEXT_DEV, yam_init, };
+#undef NEXT_DEV
+#define NEXT_DEV (&yam_bootstrap)
+#endif	/* CONFIG_YAM */
+  
 #if defined(CONFIG_STRIP)
 extern int strip_init_ctrl_dev(struct device *);
 static struct device strip_bootstrap = {

@@ -85,21 +85,25 @@
 #define MECHANISM_STATUS        0xbd
 #define READ_CD                 0xbe
 
-/* DVD Opcodes */
-#define DVD_GET_PERFORMANCE	0xac
-
+/* MMC2/MTFuji Opcodes */
+#define BLANK			0xa1
+#define CLOSE_TRACK		0x5b
+#define ERASE			0x2c
+#define FORMAT_UNIT		0x04
+#define GET_CONFIGURATION	0x46
+#define GET_EVENT		0xa4
+#define GET_PERFORMANCE		0xac
+#define READ_BUFFER		0x3c
+#define READ_DISC_INFO		0x51
 
 /* Page codes for mode sense/set */
-
 #define PAGE_READERR            0x01
 #define PAGE_CDROM              0x0d
 #define PAGE_AUDIO              0x0e
 #define PAGE_CAPABILITIES       0x2a
 #define PAGE_ALL                0x3f
 
-
 /* ATAPI sense keys (from table 140 of ATAPI 2.6) */
-
 #define NO_SENSE                0x00
 #define RECOVERED_ERROR         0x01
 #define NOT_READY               0x02
@@ -111,38 +115,36 @@
 #define ABORTED_COMMAND         0x0b
 #define MISCOMPARE              0x0e
 
-/* We want some additional flags for CDROM drives.
-   To save space in the ide_drive_t struct, use some fields which
-   doesn't make sense for CDROMs -- `bios_cyl' and `bios_head'. */
-
 /* Configuration flags.  These describe the capabilities of the drive.
    They generally do not change after initialization, unless we learn
    more about the drive from stuff failing. */
 struct ide_cd_config_flags {
-	__u8 drq_interrupt    : 1; /* Device sends an interrupt when ready
-				      for a packet command. */
-	__u8 no_doorlock      : 1; /* Drive cannot lock the door. */
-	__u8 no_eject         : 1; /* Drive cannot eject the disc. */
-	__u8 nec260           : 1; /* Drive is a pre-1.2 NEC 260 drive. */
-	__u8 playmsf_as_bcd   : 1; /* PLAYMSF command takes BCD args. */
-	__u8 tocaddr_as_bcd   : 1; /* TOC addresses are in BCD. */
-	__u8 toctracks_as_bcd : 1; /* TOC track numbers are in BCD. */
-	__u8 subchan_as_bcd   : 1; /* Subchannel info is in BCD. */
-	__u8 is_changer       : 1; /* Drive is a changer. */
-	__u8 cd_r             : 1; /* Drive can write to CD-R media . */
-	__u8 cd_rw            : 1; /* Drive can write to CD-R/W media . */
-	__u8 dvd              : 1; /* Drive is a DVD-ROM */
-	__u8 dvd_r            : 1; /* Drive can write DVD-RAM */
-	__u8 dvd_rw           : 1; /* Drive can write DVD-R/W */
-	__u8 test_write       : 1; /* Drive can fake writes */
-	__u8 supp_disc_present: 1; /* Changer can report exact contents
-				      of slots. */
-	__u8 limit_nframes    : 1; /* Drive does not provide data in
-				      multiples of SECTOR_SIZE when more
-				      than one interrupt is needed. */
-	__u8 seeking          : 1; /* Seeking in progress */
-	__u8 reserved         : 6;
-	byte max_speed; 	   /* Max speed of the drive */
+	__u8 drq_interrupt	: 1; /* Device sends an interrupt when ready
+					for a packet command. */
+	__u8 no_doorlock	: 1; /* Drive cannot lock the door. */
+	__u8 no_eject		: 1; /* Drive cannot eject the disc. */
+	__u8 nec260		: 1; /* Drive is a pre-1.2 NEC 260 drive. */
+	__u8 playmsf_as_bcd	: 1; /* PLAYMSF command takes BCD args. */
+	__u8 tocaddr_as_bcd	: 1; /* TOC addresses are in BCD. */
+	__u8 toctracks_as_bcd	: 1; /* TOC track numbers are in BCD. */
+	__u8 subchan_as_bcd	: 1; /* Subchannel info is in BCD. */
+	__u8 is_changer		: 1; /* Drive is a changer. */
+	__u8 cd_r		: 1; /* Drive can write to CD-R media . */
+	__u8 cd_rw		: 1; /* Drive can write to CD-R/W media . */
+	__u8 dvd		: 1; /* Drive is a DVD-ROM */
+	__u8 dvd_r		: 1; /* Drive can write DVD-R */
+	__u8 dvd_ram		: 1; /* Drive can write DVD-RAM */
+	__u8 test_write		: 1; /* Drive can fake writes */
+	__u8 supp_disc_present	: 1; /* Changer can report exact contents
+					of slots. */
+	__u8 limit_nframes	: 1; /* Drive does not provide data in
+					multiples of SECTOR_SIZE when more
+					than one interrupt is needed. */
+	__u8 seeking		: 1; /* Seeking in progress */
+	__u8 audio_play		: 1; /* can do audio related commands */
+	__u8 close_tray		: 1; /* can close the tray */
+	__u8 reserved		: 4;
+	byte max_speed;		     /* Max speed of the drive */
 };
 #define CDROM_CONFIG_FLAGS(drive) (&(((struct cdrom_info *)(drive->driver_data))->config_flags))
 
@@ -518,9 +520,11 @@ struct atapi_mechstat_header {
 
 #if defined(__BIG_ENDIAN_BITFIELD)
 	__u8 mech_state    : 3;
-	__u8 reserved1     : 5;
+	__u8 door_open     : 1;
+	__u8 reserved1     : 4;
 #elif defined(__LITTLE_ENDIAN_BITFIELD)
-	__u8 reserved1     : 5;
+	__u8 reserved1     : 4;
+	__u8 door_open     : 1;
 	__u8 mech_state    : 3;
 #else
 #error "Please fix <asm/byteorder.h>"
@@ -653,13 +657,13 @@ const struct {
 	{ MODE_SENSE_10, "Mode Sense" },
 	{ LOAD_UNLOAD, "Load/Unload CD" },
 	{ READ_12, "Read(12)" },
+	{ GET_PERFORMANCE, "Get Performance" },
 	{ READ_CD_MSF, "Read CD MSF" },
 	{ SCAN, "Scan" },
 	{ SET_CD_SPEED, "Set CD Speed" },
 	{ PLAY_CD, "Play CD" },
 	{ MECHANISM_STATUS, "Mechanism Status" },
 	{ READ_CD, "Read CD" },
-	{ DVD_GET_PERFORMANCE, "Get Performance" },
 };
 
 

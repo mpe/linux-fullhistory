@@ -72,8 +72,8 @@
 #ifdef __sparc__
 #include <asm/pbm.h>
 #include <asm/fbio.h>
-#include <asm/uaccess.h>
 #endif
+#include <asm/uaccess.h>
 
 #include <video/fbcon.h>
 #include <video/fbcon-cfb8.h>
@@ -136,6 +136,8 @@ struct pll_ct {
     u8 pll_ext_cntl;
     u32 dsp_config;	/* Mach64 GTB DSP */
     u32 dsp_on_off;	/* Mach64 GTB DSP */
+    u8 mclk_post_div_real;
+    u8 vclk_post_div_real;
 };
 
 
@@ -340,16 +342,19 @@ static void aty_set_pll_gx(const struct fb_info_aty *info,
 			   const struct pll_gx *pll);
 static int aty_var_to_pll_18818(u32 vclk_per, struct pll_gx *pll);
 static int aty_var_to_pll_514(u32 vclk_per, struct pll_gx *pll);
-static int aty_pll_gx_to_var(const struct pll_gx *pll, u32 *vclk_per,
+static u32 aty_pll_gx_to_var(const struct pll_gx *pll,
 			     const struct fb_info_aty *info);
 static void aty_set_pll_ct(const struct fb_info_aty *info,
 			   const struct pll_ct *pll);
-static int aty_dsp_gt(const struct fb_info_aty *info, u8 mclk_fb_div,
-		      u8 mclk_post_div, u8 vclk_fb_div, u8 vclk_post_div,
-		      u8 bpp, struct pll_ct *pll);
+static int aty_valid_pll_ct(const struct fb_info_aty *info, u32 vclk_per,
+			    struct pll_ct *pll);
+static int aty_dsp_gt(const struct fb_info_aty *info, u8 bpp,
+		      struct pll_ct *pll);
+static void aty_calc_pll_ct(const struct fb_info_aty *info,
+			    struct pll_ct *pll);
 static int aty_var_to_pll_ct(const struct fb_info_aty *info, u32 vclk_per,
 			     u8 bpp, struct pll_ct *pll);
-static int aty_pll_ct_to_var(const struct pll_ct *pll, u32 *vclk_per,
+static u32 aty_pll_ct_to_var(const struct pll_ct *pll,
 			     const struct fb_info_aty *info);
 static void atyfb_set_par(const struct atyfb_par *par,
 			  struct fb_info_aty *info);
@@ -465,7 +470,7 @@ static const char *aty_ct_ram[8] __initdata = {
 };
 
 
-static inline u32 aty_ld_le32(volatile unsigned int regindex,
+static inline u32 aty_ld_le32(unsigned int regindex,
 			      const struct fb_info_aty *info)
 {
     unsigned long temp;
@@ -473,7 +478,7 @@ static inline u32 aty_ld_le32(volatile unsigned int regindex,
 
 #if defined(__powerpc__)
     temp = info->ati_regbase;
-    asm("lwbrx %0,%1,%2" : "=r"(val) : "r" (regindex), "r" (temp));
+    asm("lwbrx %0,%1,%2" : "=r"(val) : "b" (regindex), "r" (temp));
 #elif defined(__sparc_v9__)
     temp = info->ati_regbase + regindex;
     asm("lduwa [%1] %2, %0" : "=r" (val) : "r" (temp), "i" (ASI_PL));
@@ -484,14 +489,14 @@ static inline u32 aty_ld_le32(volatile unsigned int regindex,
     return val;
 }
 
-static inline void aty_st_le32(volatile unsigned int regindex, u32 val,
+static inline void aty_st_le32(unsigned int regindex, u32 val,
 			       const struct fb_info_aty *info)
 {
     unsigned long temp;
 
 #if defined(__powerpc__)
     temp = info->ati_regbase;
-    asm("stwbrx %0,%1,%2" : : "r" (val), "r" (regindex), "r" (temp) :
+    asm("stwbrx %0,%1,%2" : : "r" (val), "b" (regindex), "r" (temp) :
 	"memory");
 #elif defined(__sparc_v9__)
     temp = info->ati_regbase + regindex;
@@ -502,13 +507,13 @@ static inline void aty_st_le32(volatile unsigned int regindex, u32 val,
 #endif
 }
 
-static inline u8 aty_ld_8(volatile unsigned int regindex,
+static inline u8 aty_ld_8(unsigned int regindex,
 			  const struct fb_info_aty *info)
 {
     return *(volatile u8 *)(info->ati_regbase+regindex);
 }
 
-static inline void aty_st_8(volatile unsigned int regindex, u8 val,
+static inline void aty_st_8(unsigned int regindex, u8 val,
 			    const struct fb_info_aty *info)
 {
     *(volatile u8 *)(info->ati_regbase+regindex) = val;
@@ -1452,7 +1457,7 @@ static int aty_var_to_pll_514(u32 vclk_per, struct pll_gx *pll)
 
     /* FIXME: ATI18818?? */
 
-static int aty_pll_gx_to_var(const struct pll_gx *pll, u32 *vclk_per,
+static u32 aty_pll_gx_to_var(const struct pll_gx *pll,
 			     const struct fb_info_aty *info)
 {
     u8 df, vco_div_count, ref_div_count;
@@ -1461,9 +1466,7 @@ static int aty_pll_gx_to_var(const struct pll_gx *pll, u32 *vclk_per,
     vco_div_count = pll->m & 0x3f;
     ref_div_count = pll->n;
 
-    *vclk_per = ((info->ref_clk_per*ref_div_count)<<(3-df))/(vco_div_count+65);
-
-    return 0;
+    return ((info->ref_clk_per*ref_div_count)<<(3-df))/(vco_div_count+65);
 }
 
 
@@ -1495,16 +1498,15 @@ static void aty_set_pll_ct(const struct fb_info_aty *info,
     }
 }
 
-static int aty_dsp_gt(const struct fb_info_aty *info, u8 mclk_fb_div,
-		      u8 mclk_post_div, u8 vclk_fb_div, u8 vclk_post_div,
-		      u8 bpp, struct pll_ct *pll)
+static int aty_dsp_gt(const struct fb_info_aty *info, u8 bpp,
+		      struct pll_ct *pll)
 {
     u32 dsp_xclks_per_row, dsp_loop_latency, dsp_precision, dsp_off, dsp_on;
     u32 xclks_per_row, fifo_off, fifo_on, y, fifo_size, page_size;
 
     /* xclocks_per_row<<11 */
-    xclks_per_row = (mclk_fb_div*vclk_post_div*64<<11)/
-		    (vclk_fb_div*mclk_post_div*bpp);
+    xclks_per_row = (pll->mclk_fb_div*pll->vclk_post_div_real*64<<11)/
+		    (pll->vclk_fb_div*pll->mclk_post_div_real*bpp);
     if (xclks_per_row < (1<<11))
 	FAIL("Dotclock to high");
     if (Gx == GT_CHIP_ID || Gx == GU_CHIP_ID || Gx == VT_CHIP_ID ||
@@ -1564,63 +1566,59 @@ static int aty_dsp_gt(const struct fb_info_aty *info, u8 mclk_fb_div,
     return 0;
 }
 
-static int aty_var_to_pll_ct(const struct fb_info_aty *info, u32 vclk_per,
-			     u8 bpp, struct pll_ct *pll)
+static int aty_valid_pll_ct(const struct fb_info_aty *info, u32 vclk_per,
+			    struct pll_ct *pll)
 {
     u32 q, x;			/* x is a workaround for sparc64-linux-gcc */
-    u8 pll_ref_div, pll_gen_cntl, pll_ext_cntl;
-    u8 mclk_fb_div, mclk_post_div, mpostdiv = 0;
-    u8 vclk_fb_div, vclk_post_div, vpostdiv = 0;
-    int err;
-
     x = x;			/* x is a workaround for sparc64-linux-gcc */
 
-    pll->pll_vclk_cntl = 0x03;	/* VCLK = PLL_VCLK/VCLKx_POST */
-
-    pll_ref_div = info->pll_per*2*255/info->ref_clk_per;
+    pll->pll_ref_div = info->pll_per*2*255/info->ref_clk_per;
 
     /* FIXME: use the VTB/GTB /3 post divider if it's better suited */
-    q = info->ref_clk_per*pll_ref_div*4/info->mclk_per;	/* actually 8*q */
+    q = info->ref_clk_per*pll->pll_ref_div*4/info->mclk_per;	/* actually 8*q */
     if (q < 16*8 || q > 255*8)
 	FAIL("mclk out of range");
     else if (q < 32*8)
-	mclk_post_div = 8;
+	pll->mclk_post_div_real = 8;
     else if (q < 64*8)
-	mclk_post_div = 4;
+	pll->mclk_post_div_real = 4;
     else if (q < 128*8)
-	mclk_post_div = 2;
+	pll->mclk_post_div_real = 2;
     else
-	mclk_post_div = 1;
-    mclk_fb_div = q*mclk_post_div/8;
+	pll->mclk_post_div_real = 1;
+    pll->mclk_fb_div = q*pll->mclk_post_div_real/8;
 
     /* FIXME: use the VTB/GTB /{3,6,12} post dividers if they're better suited */
-    q = info->ref_clk_per*pll_ref_div*4/vclk_per;	/* actually 8*q */
+    q = info->ref_clk_per*pll->pll_ref_div*4/vclk_per;	/* actually 8*q */
     if (q < 16*8 || q > 255*8)
 	FAIL("vclk out of range");
     else if (q < 32*8)
-	vclk_post_div = 8;
+	pll->vclk_post_div_real = 8;
     else if (q < 64*8)
-	vclk_post_div = 4;
+	pll->vclk_post_div_real = 4;
     else if (q < 128*8)
-	vclk_post_div = 2;
+	pll->vclk_post_div_real = 2;
     else
-	vclk_post_div = 1;
-    vclk_fb_div = q*vclk_post_div/8;
+	pll->vclk_post_div_real = 1;
+    pll->vclk_fb_div = q*pll->vclk_post_div_real/8;
+    return 0;
+}
 
-    if ((err = aty_dsp_gt(info, mclk_fb_div, mclk_post_div, vclk_fb_div,
-			  vclk_post_div, bpp, pll)))
-	return err;
+static void aty_calc_pll_ct(const struct fb_info_aty *info, struct pll_ct *pll)
+{
+    u8 mpostdiv = 0;
+    u8 vpostdiv = 0;
 
     if ((((Gx == GT_CHIP_ID) && (Rev & 0x03)) || (Gx == GU_CHIP_ID) ||
 	 (Gx == GV_CHIP_ID) || (Gx == GW_CHIP_ID) || (Gx == GZ_CHIP_ID) ||
 	 (Gx == LG_CHIP_ID) || (Gx == GB_CHIP_ID) || (Gx == GD_CHIP_ID) ||
 	 (Gx == GI_CHIP_ID) || (Gx == GP_CHIP_ID) || (Gx == GQ_CHIP_ID) ||
 	 (Gx == VU_CHIP_ID)) && (info->ram_type >= SDRAM))
-	pll_gen_cntl = 0x04;
+	pll->pll_gen_cntl = 0x04;
     else
-	pll_gen_cntl = 0x84;
+	pll->pll_gen_cntl = 0x84;
 
-    switch (mclk_post_div) {
+    switch (pll->mclk_post_div_real) {
 	case 1:
 	    mpostdiv = 0;
 	    break;
@@ -1637,61 +1635,64 @@ static int aty_var_to_pll_ct(const struct fb_info_aty *info, u32 vclk_per,
 	    mpostdiv = 3;
 	    break;
     }
-    pll_gen_cntl |= mpostdiv<<4;	/* mclk */
+    pll->pll_gen_cntl |= mpostdiv<<4;	/* mclk */
 
     if (Gx == VT_CHIP_ID && (Rev == 0x40 || Rev == 0x48))
-	pll_ext_cntl = 0;
+	pll->pll_ext_cntl = 0;
     else
-    	pll_ext_cntl = mpostdiv;	/* xclk == mclk */
+    	pll->pll_ext_cntl = mpostdiv;	/* xclk == mclk */
 
-    switch (vclk_post_div) {
+    switch (pll->vclk_post_div_real) {
 	case 2:
 	    vpostdiv = 1;
 	    break;
 	case 3:
-	    pll_ext_cntl |= 0x10;
+	    pll->pll_ext_cntl |= 0x10;
 	case 1:
 	    vpostdiv = 0;
 	    break;
 	case 6:
-	    pll_ext_cntl |= 0x10;
+	    pll->pll_ext_cntl |= 0x10;
 	case 4:
 	    vpostdiv = 2;
 	    break;
 	case 12:
-	    pll_ext_cntl |= 0x10;
+	    pll->pll_ext_cntl |= 0x10;
 	case 8:
 	    vpostdiv = 3;
 	    break;
     }
-    vclk_post_div = vpostdiv;
 
-    pll->pll_ref_div = pll_ref_div;
-    pll->pll_gen_cntl = pll_gen_cntl;
-    pll->mclk_fb_div = mclk_fb_div;
-    pll->vclk_post_div = vclk_post_div;
-    pll->vclk_fb_div = vclk_fb_div;
-    pll->pll_ext_cntl = pll_ext_cntl;
+    pll->pll_vclk_cntl = 0x03;	/* VCLK = PLL_VCLK/VCLKx_POST */
+    pll->vclk_post_div = vpostdiv;
+}
+
+static int aty_var_to_pll_ct(const struct fb_info_aty *info, u32 vclk_per,
+			     u8 bpp, struct pll_ct *pll)
+{
+    int err;
+
+    if ((err = aty_valid_pll_ct(info, vclk_per, pll)))
+	return err;
+    if (!(Gx == GX_CHIP_ID || Gx == CX_CHIP_ID || Gx == CT_CHIP_ID ||
+	  Gx == ET_CHIP_ID ||
+	  ((Gx == VT_CHIP_ID || Gx == GT_CHIP_ID) && !(Rev & 0x07)))) {
+	if ((err = aty_dsp_gt(info, bpp, pll)))
+	    return err;
+    }
+    aty_calc_pll_ct(info, pll);
     return 0;
 }
 
-static int aty_pll_ct_to_var(const struct pll_ct *pll, u32 *vclk_per,
+static u32 aty_pll_ct_to_var(const struct pll_ct *pll,
 			     const struct fb_info_aty *info)
 {
+    u32 ref_clk_per = info->ref_clk_per;
     u8 pll_ref_div = pll->pll_ref_div;
     u8 vclk_fb_div = pll->vclk_fb_div;
-    u8 vclk_post_div = pll->vclk_post_div;
-    u8 pll_ext_cntl = pll->pll_ext_cntl;
-    static u8 vclk_post_div_tab[] = {
-	1, 2, 4, 8,
-	3, 0, 6, 12
-    };
-    u8 vpostdiv = vclk_post_div_tab[((pll_ext_cntl & 0x10) >> 2) |
-				    (vclk_post_div & 3)];
-    if (vpostdiv == 0)
-	return -EINVAL;
-    *vclk_per = pll_ref_div*vpostdiv*info->ref_clk_per/vclk_fb_div/2;
-    return 0;
+    u8 vclk_post_div = pll->vclk_post_div_real;
+
+    return ref_clk_per*pll_ref_div*vclk_post_div/vclk_fb_div/2;
 }
 
 /* ------------------------------------------------------------------------- */
@@ -1739,7 +1740,7 @@ static void atyfb_set_par(const struct atyfb_par *par,
 					
     } else {
 	aty_set_pll_ct(info, &par->pll.ct);
-	i = aty_ld_le32(MEM_CNTL, info) & 0xf30fffff;
+	i = aty_ld_le32(MEM_CNTL, info) & 0xf00fffff;
 	if (!(Gx == VT_CHIP_ID && (Rev == 0x40 || Rev == 0x48)))
 	    i |= info->mem_refresh_rate << 20;
 	switch (par->crtc.bpp) {
@@ -1844,11 +1845,9 @@ static int atyfb_encode_var(struct fb_var_screeninfo *var,
     if ((err = aty_crtc_to_var(&par->crtc, var)))
 	return err;
     if ((Gx == GX_CHIP_ID) || (Gx == CX_CHIP_ID))
-	err = aty_pll_gx_to_var(&par->pll.gx, &var->pixclock, info);
+	var->pixclock = aty_pll_gx_to_var(&par->pll.gx, info);
     else
-	err = aty_pll_ct_to_var(&par->pll.ct, &var->pixclock, info);
-    if (err)
-	return err;
+	var->pixclock = aty_pll_ct_to_var(&par->pll.ct, info);
 
     var->height = -1;
     var->width = -1;
@@ -2194,36 +2193,101 @@ static int atyfb_set_cmap(struct fb_cmap *cmap, int kspc, int con,
 }
 
 
+#ifdef DEBUG
+#define ATYIO_CLKR		0x41545900	/* ATY\00 */
+#define ATYIO_CLKW		0x41545901	/* ATY\01 */
+
+struct atyclk {
+    u32 ref_clk_per;
+    u8 pll_ref_div;
+    u8 mclk_fb_div;
+    u8 mclk_post_div;		/* 1,2,3,4,8 */
+    u8 vclk_fb_div;
+    u8 vclk_post_div;		/* 1,2,3,4,6,8,12 */
+    u32 dsp_xclks_per_row;	/* 0-16383 */
+    u32 dsp_loop_latency;	/* 0-15 */
+    u32 dsp_precision;		/* 0-7 */
+    u32 dsp_on;			/* 0-2047 */
+    u32 dsp_off;		/* 0-2047 */
+};
+#endif
+
 static int atyfb_ioctl(struct inode *inode, struct file *file, u_int cmd,
-		       u_long arg, int con, struct fb_info *info)
+		       u_long arg, int con, struct fb_info *info2)
 {
+    struct fb_info_aty *info = (struct fb_info_aty *)info2;
 #ifdef __sparc__
-    struct fb_info_aty *fb = (struct fb_info_aty *)info;
     struct fbtype fbtyp;
     struct display *disp;
     
     if (con >= 0)
     	disp = &fb_display[con];
     else
-        disp = info->disp;
+        disp = info2->disp;
+#endif
 
     switch (cmd) {
+#ifdef __sparc__
     case FBIOGTYPE:
 	fbtyp.fb_type = FBTYPE_PCI_GENERIC;
-	fbtyp.fb_width = fb->current_par.crtc.vxres;
-	fbtyp.fb_height = fb->current_par.crtc.vyres;
-	fbtyp.fb_depth = fb->current_par.crtc.bpp;
+	fbtyp.fb_width = info->current_par.crtc.vxres;
+	fbtyp.fb_height = info->current_par.crtc.vyres;
+	fbtyp.fb_depth = info->current_par.crtc.bpp;
 	fbtyp.fb_cmsize = disp->cmap.len;
-	fbtyp.fb_size = fb->total_vram;
+	fbtyp.fb_size = info->total_vram;
 	copy_to_user_ret((struct fbtype *)arg, &fbtyp, sizeof(fbtyp), -EFAULT);
 	break;
+#endif /* __sparc__ */
+#ifdef DEBUG
+    case ATYIO_CLKR:
+	if ((Gx != GX_CHIP_ID) && (Gx != CX_CHIP_ID)) {
+	    struct atyclk clk;
+	    struct pll_ct *pll = &info->current_par.pll.ct;
+	    u32 dsp_config = pll->dsp_config;
+	    u32 dsp_on_off = pll->dsp_on_off;
+	    clk.ref_clk_per = info->ref_clk_per;
+	    clk.pll_ref_div = pll->pll_ref_div;
+	    clk.mclk_fb_div = pll->mclk_fb_div;
+	    clk.mclk_post_div = pll->mclk_post_div_real;
+	    clk.vclk_fb_div = pll->vclk_fb_div;
+	    clk.vclk_post_div = pll->vclk_post_div_real;
+	    clk.dsp_xclks_per_row = dsp_config & 0x3fff;
+	    clk.dsp_loop_latency = (dsp_config>>16) & 0xf;
+	    clk.dsp_precision = (dsp_config>>20) & 7;
+	    clk.dsp_on = dsp_on_off & 0x7ff;
+	    clk.dsp_off = (dsp_on_off>>16) & 0x7ff;
+	    copy_to_user_ret((struct atyclk *)arg, &clk, sizeof(clk),
+			     -EFAULT);
+	} else
+	    return -EINVAL;
+	break;
+    case ATYIO_CLKW:
+	if ((Gx != GX_CHIP_ID) && (Gx != CX_CHIP_ID)) {
+	    struct atyclk clk;
+	    struct pll_ct *pll = &info->current_par.pll.ct;
+	    copy_from_user_ret(&clk, (struct atyclk *)arg, sizeof(clk),
+			       -EFAULT);
+	    info->ref_clk_per = clk.ref_clk_per;
+	    pll->pll_ref_div = clk.pll_ref_div;
+	    pll->mclk_fb_div = clk.mclk_fb_div;
+	    pll->mclk_post_div_real = clk.mclk_post_div;
+	    pll->vclk_fb_div = clk.vclk_fb_div;
+	    pll->vclk_post_div_real = clk.vclk_post_div;
+	    pll->dsp_config = (clk.dsp_xclks_per_row & 0x3fff) |
+			      ((clk.dsp_loop_latency & 0xf)<<16) |
+			      ((clk.dsp_precision & 7)<<20);
+	    pll->dsp_on_off = (clk.dsp_on & 0x7ff) |
+			      ((clk.dsp_off & 0x7ff)<<16);
+	    aty_calc_pll_ct(info, pll);
+	    aty_set_pll_ct(info, pll);
+	} else
+	    return -EINVAL;
+	break;
+#endif /* DEBUG */
     default:
 	return -EINVAL;
     }
     return 0;
-#else
-    return -EINVAL;
-#endif
 }
 
 #ifdef __sparc__

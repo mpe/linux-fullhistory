@@ -53,6 +53,7 @@ typedef enum {
 #define PARPORT_MODE_ECP	(1<<3) /* Hardware ECP. */
 #define PARPORT_MODE_COMPAT	(1<<4) /* Hardware 'printer protocol'. */
 #define PARPORT_MODE_DMA	(1<<5) /* Hardware can DMA. */
+#define PARPORT_MODE_SAFEININT	(1<<6) /* SPP registers accessible in IRQ. */
 
 /* IEEE1284 modes: 
    Nibble mode, byte mode, ECP, ECPRLE and EPP are their own
@@ -75,6 +76,9 @@ typedef enum {
  * other than to make parport_read/write use address transfers. */
 #define IEEE1284_ADDR			(1<<13)	/* This is a flag */
 #define IEEE1284_DATA			 0	/* So is this */
+
+/* Flags for block transfer operations. */
+#define PARPORT_EPP_FAST		(1<<0) /* Unreliable counts. */
 
 /* The rest is for the kernel only */
 #ifdef __KERNEL__
@@ -144,8 +148,6 @@ struct parport_operations {
 	void (*data_reverse) (struct parport *);
 
 	/* For core parport code. */
-	void (*interrupt)(int, void *, struct pt_regs *);
-
 	void (*init_state)(struct pardevice *, struct parport_state *);
 	void (*save_state)(struct parport *, struct parport_state *);
 	void (*restore_state)(struct parport *, struct parport_state *);

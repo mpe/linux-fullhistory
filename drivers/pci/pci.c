@@ -451,13 +451,9 @@ void __init pci_init(void)
 #ifdef CONFIG_PCI_QUIRKS
 	pci_quirks_init();
 #endif
-
-#ifdef CONFIG_PROC_FS
-	pci_proc_init();
-#endif
 }
 
-void __init pci_setup (char *str, int *ints)
+static int __init pci_setup(char *str)
 {
 	while (str) {
 		char *k = strchr(str, ',');
@@ -470,4 +466,7 @@ void __init pci_setup (char *str, int *ints)
 		}
 		str = k;
 	}
+	return 1;
 }
+
+__setup("pci=", pci_setup);

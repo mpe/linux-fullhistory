@@ -53,6 +53,14 @@ else
   endif
 endif
 
+ifeq ($(CONFIG_YAM),y)
+L_OBJS += yam.o
+else
+  ifeq ($(CONFIG_YAM),m)
+  M_OBJS += yam.o
+  endif
+endif
+
 ifeq ($(CONFIG_PI),y)
 L_OBJS += pi2.o
 else

@@ -3219,7 +3219,7 @@ static int zr36057_init(int i)
 	}
 	/* i2c */
 	memcpy(&zr->i2c, &zoran_i2c_bus_template, sizeof(struct i2c_bus));
-	sprintf(zr->i2c.name, "zoran%u%u", zr->id);
+	sprintf(zr->i2c.name, "zoran%u", zr->id);
 	zr->i2c.data = zr;
 	if (i2c_register_bus(&zr->i2c) < 0) {
 		kfree((void *) zr->stat_com);
@@ -3327,7 +3327,7 @@ static int find_zr36057(void)
 
 		spin_lock_init(&zr->lock);
 
-		zr->zr36057_adr = zr->pci_dev->base_address[0] & PCI_BASE_ADDRESS_MEM_MASK;
+		zr->zr36057_adr = zr->pci_dev->resource[0].start;
 		pci_read_config_byte(zr->pci_dev, PCI_CLASS_REVISION, &zr->revision);
 		if (zr->revision < 2) {
 			printk(KERN_INFO "%s: Zoran ZR36057 (rev %d) irq: %d, memory: 0x%08x.\n",

@@ -27,7 +27,7 @@ ifeq ($(CONFIG_I2O_PCI),y)
 L_OBJS += i2o_pci.o
 else
   ifeq ($(CONFIG_I2O_PCI),m)
-  M_OBJS += i2o_pci.o
+  MX_OBJS += i2o_pci.o
   endif
 endif
 

@@ -119,7 +119,7 @@ static void	dump_packet(void *buf, int len);
 static void 	show_registers(struct device *dev);
 
 
-__initfunc(int ni5010_probe(struct device *dev))
+int __init ni5010_probe(struct device *dev)
 {
 	int *port;
 
@@ -157,7 +157,7 @@ static inline int rd_port(int ioaddr)
 	return inb(IE_SAPROM);
 }
 
-__initfunc(void trigger_irq(int ioaddr))
+void __init trigger_irq(int ioaddr)
 {
 		outb(0x00, EDLC_RESET);	/* Clear EDLC hold RESET state */
 		outb(0x00, IE_RESET);	/* Board reset */
@@ -182,7 +182,7 @@ __initfunc(void trigger_irq(int ioaddr))
  *      verifies that the correct device exists and functions.
  */
 
-__initfunc(static int ni5010_probe1(struct device *dev, int ioaddr))
+static int __init ni5010_probe1(struct device *dev, int ioaddr)
 {
 	static unsigned version_printed = 0;
 	int i;

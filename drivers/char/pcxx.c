@@ -894,7 +894,7 @@ static void pcxe_flush_chars(struct tty_struct *tty)
  * Driver setup function when linked into the kernel to optionally parse multible
  * "digi="-lines and initialize the driver at boot time. No probing.
  */
-__initfunc(void pcxx_setup(char *str, int *ints))
+void __init pcxx_setup(char *str, int *ints)
 {
 
 	struct board_info board;
@@ -1085,7 +1085,7 @@ __initfunc(void pcxx_setup(char *str, int *ints))
  * function to initialize the driver with the given parameters, which are either
  * the default values from this file or the parameters given at boot.
  */
-__initfunc(int pcxe_init(void))
+int __init pcxe_init(void)
 {
 	ulong memory_seg=0, memory_size=0;
 	int lowwater, enabled_cards=0, i, crd, shrinkmem=0, topwin = 0xff00L, botwin=0x100L;

@@ -20,7 +20,7 @@
  * Version 1.04		fixed buggy treatments of known flash memory cards
  *
  * Version 1.05		fix for (hwif->chipset == ide_pdc4030)
- *			added ide6/7
+ *			added ide6/7/8/9
  *			allowed for secondary flash card to be detectable
  *			 with new flag : drive->ata_flash : 1;
  */
@@ -762,6 +762,12 @@ static int hwif_init (ide_hwif_t *hwif)
 #endif
 #if MAX_HWIFS > 7
 	case IDE7_MAJOR: rfn = &do_ide7_request; break;
+#endif
+#if MAX_HWIFS > 8
+	case IDE8_MAJOR: rfn = &do_ide8_request; break;
+#endif
+#if MAX_HWIFS > 9
+	case IDE9_MAJOR: rfn = &do_ide9_request; break;
 #endif
 	default:
 		printk("%s: request_fn NOT DEFINED\n", hwif->name);

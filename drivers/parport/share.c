@@ -48,7 +48,6 @@ static unsigned char dead_read_lines (struct parport *p) { return 0; }
 static unsigned char dead_frob_lines (struct parport *p, unsigned char b,
 			     unsigned char c) { return 0; }
 static void dead_onearg (struct parport *p){}
-static void dead_irq (int i, void *p, struct pt_regs *r) { }
 static void dead_initstate (struct pardevice *d, struct parport_state *s) { }
 static void dead_state (struct parport *p, struct parport_state *s) { }
 static void dead_noargs (void) { }
@@ -67,7 +66,6 @@ static struct parport_operations dead_ops = {
 	dead_onearg,		/* disable_irq */
 	dead_onearg,		/* data_forward */
 	dead_onearg,		/* data_reverse */
-	dead_irq,
 	dead_initstate,		/* init_state */
 	dead_state,
 	dead_state,
