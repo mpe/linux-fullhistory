@@ -1,5 +1,5 @@
 /*
- * linux/drivers/block/hpt366.c		Version 0.16	Feb. 10, 2000
+ * linux/drivers/ide/hpt366.c		Version 0.17	Mar. 18, 2000
  *
  * Copyright (C) 1999-2000		Andre Hedrick <andre@suse.com>
  * May be copied or modified under the terms of the GNU General Public License
@@ -259,6 +259,64 @@ static int hpt366_tune_chipset (ide_drive_t *drive, byte speed)
 	return(err);
 }
 
+static void config_chipset_for_pio (ide_drive_t *drive)
+{
+	unsigned short eide_pio_timing[6] = {960, 480, 240, 180, 120, 90};
+	unsigned short xfer_pio = drive->id->eide_pio_modes;
+	byte	timing, speed, pio;
+
+#if HPT366_DEBUG_DRIVE_INFO
+	printk("%s: config_chipset_for_pio\n", drive->name);
+#endif /* HPT366_DEBUG_DRIVE_INFO */
+	pio = ide_get_best_pio_mode(drive, 255, 5, NULL);
+
+	if (xfer_pio> 4)
+		xfer_pio = 0;
+
+	if (drive->id->eide_pio_iordy > 0) {
+		for (xfer_pio = 5;
+			xfer_pio>0 &&
+			drive->id->eide_pio_iordy>eide_pio_timing[xfer_pio];
+			xfer_pio--);
+	} else {
+		xfer_pio = (drive->id->eide_pio_modes & 4) ? 0x05 :
+			   (drive->id->eide_pio_modes & 2) ? 0x04 :
+			   (drive->id->eide_pio_modes & 1) ? 0x03 :
+			   (drive->id->tPIO & 2) ? 0x02 :
+			   (drive->id->tPIO & 1) ? 0x01 : xfer_pio;
+	}
+
+	timing = (xfer_pio >= pio) ? xfer_pio : pio;
+
+	switch(timing) {
+		case 4: speed = XFER_PIO_4;break;
+		case 3: speed = XFER_PIO_3;break;
+		case 2: speed = XFER_PIO_2;break;
+		case 1: speed = XFER_PIO_1;break;
+		default:
+			speed = (!drive->id->tPIO) ? XFER_PIO_0 : XFER_PIO_SLOW;
+			break;
+	}
+#if HPT366_DEBUG_DRIVE_INFO
+	printk("%s: config_chipset_for_pio:  speed=0x%04x\n", drive->name, speed);
+#endif /* HPT366_DEBUG_DRIVE_INFO */
+	(void) hpt366_tune_chipset(drive, speed);
+}
+
+static void hpt366_tune_drive (ide_drive_t *drive, byte pio)
+{
+	byte speed;
+	switch(pio) {
+		case 4:		speed = XFER_PIO_4;break;
+		case 3:		speed = XFER_PIO_3;break;
+		case 2:		speed = XFER_PIO_2;break;
+		case 1:		speed = XFER_PIO_1;break;
+		default:	speed = XFER_PIO_0;break;
+	}
+	(void) hpt366_tune_chipset(drive, speed);
+}
+
+#ifdef CONFIG_BLK_DEV_IDEDMA
 /*
  * This allows the configuration of ide_pci chipset registers
  * for cards that learn about the drive's UDMA, DMA, PIO capabilities
@@ -347,63 +405,6 @@ static int config_chipset_for_dma (ide_drive_t *drive)
 	return rval;
 }
 
-static void config_chipset_for_pio (ide_drive_t *drive)
-{
-	unsigned short eide_pio_timing[6] = {960, 480, 240, 180, 120, 90};
-	unsigned short xfer_pio	= drive->id->eide_pio_modes;
-	byte			timing, speed, pio;
-
-#if HPT366_DEBUG_DRIVE_INFO
-	printk("%s: config_chipset_for_pio\n", drive->name);
-#endif /* HPT366_DEBUG_DRIVE_INFO */
-	pio = ide_get_best_pio_mode(drive, 255, 5, NULL);
-
-	if (xfer_pio> 4)
-		xfer_pio = 0;
-
-	if (drive->id->eide_pio_iordy > 0) {
-		for (xfer_pio = 5;
-			xfer_pio>0 &&
-			drive->id->eide_pio_iordy>eide_pio_timing[xfer_pio];
-			xfer_pio--);
-	} else {
-		xfer_pio = (drive->id->eide_pio_modes & 4) ? 0x05 :
-			   (drive->id->eide_pio_modes & 2) ? 0x04 :
-			   (drive->id->eide_pio_modes & 1) ? 0x03 :
-			   (drive->id->tPIO & 2) ? 0x02 :
-			   (drive->id->tPIO & 1) ? 0x01 : xfer_pio;
-	}
-
-	timing = (xfer_pio >= pio) ? xfer_pio : pio;
-
-	switch(timing) {
-		case 4: speed = XFER_PIO_4;break;
-		case 3: speed = XFER_PIO_3;break;
-		case 2: speed = XFER_PIO_2;break;
-		case 1: speed = XFER_PIO_1;break;
-		default:
-			speed = (!drive->id->tPIO) ? XFER_PIO_0 : XFER_PIO_SLOW;
-			break;
-	}
-#if HPT366_DEBUG_DRIVE_INFO
-	printk("%s: config_chipset_for_pio:  speed=0x%04x\n", drive->name, speed);
-#endif /* HPT366_DEBUG_DRIVE_INFO */
-	(void) hpt366_tune_chipset(drive, speed);
-}
-
-static void hpt366_tune_drive (ide_drive_t *drive, byte pio)
-{
-	byte speed;
-	switch(pio) {
-		case 4:		speed = XFER_PIO_4;break;
-		case 3:		speed = XFER_PIO_3;break;
-		case 2:		speed = XFER_PIO_2;break;
-		case 1:		speed = XFER_PIO_1;break;
-		default:	speed = XFER_PIO_0;break;
-	}
-	(void) hpt366_tune_chipset(drive, speed);
-}
-
 static int config_drive_xfer_rate (ide_drive_t *drive)
 {
 	struct hd_driveid *id = drive->id;
@@ -478,6 +479,7 @@ int hpt366_dmaproc (ide_dma_action_t func, ide_drive_t *drive)
 	}
 	return ide_dmaproc(func, drive);	/* use standard DMA stuff */
 }
+#endif /* CONFIG_BLK_DEV_IDEDMA */
 
 unsigned int __init pci_init_hpt366 (struct pci_dev *dev, const char *name)
 {
@@ -532,13 +534,20 @@ unsigned int __init ata66_hpt366 (ide_hwif_t *hwif)
 void __init ide_init_hpt366 (ide_hwif_t *hwif)
 {
 	hwif->tuneproc = &hpt366_tune_drive;
+#ifdef CONFIG_BLK_DEV_IDEDMA
 	if (hwif->dma_base) {
 		hwif->dmaproc = &hpt366_dmaproc;
+		hwif->autodma = 1;
 	} else {
 		hwif->autodma = 0;
 		hwif->drives[0].autotune = 1;
 		hwif->drives[1].autotune = 1;
 	}
+#else /* !CONFIG_BLK_DEV_IDEDMA */
+	hwif->drives[0].autotune = 1;
+	hwif->drives[1].autotune = 1;
+	hwif->autodma = 0;
+#endif /* CONFIG_BLK_DEV_IDEDMA */
 }
 
 void ide_dmacapable_hpt366 (ide_hwif_t *hwif, unsigned long dmabase)

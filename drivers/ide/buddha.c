@@ -1,5 +1,5 @@
 /*
- *  linux/drivers/block/buddha.c -- Amiga Buddha and Catweasel IDE Driver
+ *  linux/drivers/ide/buddha.c -- Amiga Buddha and Catweasel IDE Driver
  *
  *	Copyright (C) 1997 by Geert Uytterhoeven
  *

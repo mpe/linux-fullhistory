@@ -1,3 +1,12 @@
+2000-03-22  Tim Waugh  <twaugh@redhat.com>
+
+	* init.c (parport_setup): Fix return value.
+
+2000-03-21  Tim Waugh  <twaugh@redhat.com>
+
+	* parport_pc.c (parport_pc_pci_probe): Fix return value; call
+	pci_enable_device.
+
 2000-03-16  Tim Waugh  <twaugh@redhat.com>
 
 	* parport_pc.c (parport_ECP_supported): This seems to trigger on

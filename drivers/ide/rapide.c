@@ -1,5 +1,5 @@
 /*
- * linux/drivers/block/rapide.c
+ * linux/drivers/ide/rapide.c
  *
  * Copyright (c) 1996-1998 Russell King.
  *

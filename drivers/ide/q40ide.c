@@ -1,5 +1,5 @@
 /*
- *  linux/drivers/block/q40ide.c -- Q40 I/O port IDE Driver
+ *  linux/drivers/ide/q40ide.c -- Q40 I/O port IDE Driver
  *
  *     original file created 12 Jul 1997 by Geert Uytterhoeven
  *

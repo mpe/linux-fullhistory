@@ -1,5 +1,5 @@
 /*
- * linux/drivers/block/amd7409.c		Version 0.03	Feb. 10, 2000
+ * linux/drivers/ide/amd7409.c		Version 0.04	Mar. 18, 2000
  *
  * Copyright (C) 2000			Andre Hedrick <andre@suse.com>
  * May be copied or modified under the terms of the GNU General Public License
@@ -194,49 +194,6 @@ static int amd7409_tune_chipset (ide_drive_t *drive, byte speed)
 	return (err);
 }
 
-/*
- * This allows the configuration of ide_pci chipset registers
- * for cards that learn about the drive's UDMA, DMA, PIO capabilities
- * after the drive is reported by the OS.
- */
-static int config_chipset_for_dma (ide_drive_t *drive)
-{
-	struct hd_driveid *id	= drive->id;
-	byte udma_66		= ((id->hw_config & 0x2000) &&
-				   (HWIF(drive)->udma_four)) ? 1 : 0;
-	byte speed		= 0x00;
-	int  rval;
-
-	if ((id->dma_ultra & 0x0010) && (udma_66)) {
-		speed = XFER_UDMA_4;
-	} else if ((id->dma_ultra & 0x0008) && (udma_66)) {
-		speed = XFER_UDMA_3;
-	} else if (id->dma_ultra & 0x0004) {
-		speed = XFER_UDMA_2;
-	} else if (id->dma_ultra & 0x0002) {
-		speed = XFER_UDMA_1;
-	} else if (id->dma_ultra & 0x0001) {
-		speed = XFER_UDMA_0;
-	} else if (id->dma_mword & 0x0004) {
-		speed = XFER_MW_DMA_2;
-	} else if (id->dma_mword & 0x0002) {
-		speed = XFER_MW_DMA_1;
-	} else if (id->dma_mword & 0x0001) {
-		speed = XFER_MW_DMA_0;
-        } else {
-		return ((int) ide_dma_off_quietly);
-	}
-
-	(void) amd7409_tune_chipset(drive, speed);
-
-	rval = (int)(	((id->dma_ultra >> 11) & 3) ? ide_dma_on :
-			((id->dma_ultra >> 8) & 7) ? ide_dma_on :
-			((id->dma_mword >> 8) & 7) ? ide_dma_on :
-						     ide_dma_off_quietly);
-
-	return rval;
-}
-
 static void config_chipset_for_pio (ide_drive_t *drive)
 {
 	unsigned short eide_pio_timing[6] = {960, 480, 240, 180, 120, 90};
@@ -287,6 +244,52 @@ static void amd7409_tune_drive (ide_drive_t *drive, byte pio)
 	}
 	(void) amd7409_tune_chipset(drive, speed);
 }
+
+#ifdef CONFIG_BLK_DEV_IDEDMA
+/*
+ * This allows the configuration of ide_pci chipset registers
+ * for cards that learn about the drive's UDMA, DMA, PIO capabilities
+ * after the drive is reported by the OS.
+ */
+static int config_chipset_for_dma (ide_drive_t *drive)
+{
+	struct hd_driveid *id	= drive->id;
+	byte udma_66		= ((id->hw_config & 0x2000) &&
+				   (HWIF(drive)->udma_four)) ? 1 : 0;
+	byte speed		= 0x00;
+	int  rval;
+
+	if ((id->dma_ultra & 0x0010) && (udma_66)) {
+		speed = XFER_UDMA_4;
+	} else if ((id->dma_ultra & 0x0008) && (udma_66)) {
+		speed = XFER_UDMA_3;
+	} else if (id->dma_ultra & 0x0004) {
+		speed = XFER_UDMA_2;
+	} else if (id->dma_ultra & 0x0002) {
+		speed = XFER_UDMA_1;
+	} else if (id->dma_ultra & 0x0001) {
+		speed = XFER_UDMA_0;
+	} else if (id->dma_mword & 0x0004) {
+		speed = XFER_MW_DMA_2;
+	} else if (id->dma_mword & 0x0002) {
+		speed = XFER_MW_DMA_1;
+	} else if (id->dma_mword & 0x0001) {
+		speed = XFER_MW_DMA_0;
+	} else {
+		return ((int) ide_dma_off_quietly);
+	}
+
+	(void) amd7409_tune_chipset(drive, speed);
+
+	rval = (int)(	((id->dma_ultra >> 11) & 3) ? ide_dma_on :
+			((id->dma_ultra >> 8) & 7) ? ide_dma_on :
+			((id->dma_mword >> 8) & 7) ? ide_dma_on :
+						     ide_dma_off_quietly);
+
+	return rval;
+}
+
+
 
 static int config_drive_xfer_rate (ide_drive_t *drive)
 {
@@ -351,6 +354,7 @@ int amd7409_dmaproc (ide_dma_action_t func, ide_drive_t *drive)
 	}
 	return ide_dmaproc(func, drive);	/* use standard DMA stuff */
 }
+#endif /* CONFIG_BLK_DEV_IDEDMA */
 
 unsigned int __init pci_init_amd7409 (struct pci_dev *dev, const char *name)
 {
@@ -370,9 +374,11 @@ unsigned int __init pci_init_amd7409 (struct pci_dev *dev, const char *name)
 			printk("%s: simplex device: DMA will fail!!\n", name);
 	}
 #if defined(DISPLAY_VIPER_TIMINGS) && defined(CONFIG_PROC_FS)
-	amd7409_proc = 1;
-	bmide_dev = dev;
-	amd7409_display_info = &amd7409_get_info;
+	if (!amd7409_proc) {
+		amd7409_proc = 1;
+		bmide_dev = dev;
+		amd7409_display_info = &amd7409_get_info;
+	}
 #endif /* DISPLAY_VIPER_TIMINGS && CONFIG_PROC_FS */
 
 	return 0;
@@ -396,8 +402,17 @@ unsigned int __init ata66_amd7409 (ide_hwif_t *hwif)
 void __init ide_init_amd7409 (ide_hwif_t *hwif)
 {
 	hwif->tuneproc = &amd7409_tune_drive;
+
+#ifndef CONFIG_BLK_DEV_IDEDMA
+	hwif->drives[0].autotune = 1;
+	hwif->drives[1].autotune = 1;
+	hwif->autodma = 0;
+	return;
+#endif /* CONFIG_BLK_DEV_IDEDMA */
+
 	if (hwif->dma_base) {
 		hwif->dmaproc = &amd7409_dmaproc;
+		hwif->autodma = 1;
 	} else {
 		hwif->autodma = 0;
 		hwif->drives[0].autotune = 1;

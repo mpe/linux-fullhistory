@@ -1,5 +1,5 @@
 /*
- *  linux/drivers/block/ide-probe.c	Version 1.05	July 3, 1999
+ *  linux/drivers/ide/ide-probe.c	Version 1.05	July 3, 1999
  *
  *  Copyright (C) 1994-1998  Linus Torvalds & authors (see below)
  */

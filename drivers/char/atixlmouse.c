@@ -127,7 +127,7 @@ static int __init atixl_busmouse_init(void)
 		printk(KERN_INFO "\nATI Inport ");
 	else
 	{
-		free_region(ATIXL_MSE_DATA_PORT,3);
+		release_region(ATIXL_MSE_DATA_PORT,3);
 		return -EIO;
 	}
 	outb(0x80, ATIXL_MSE_CONTROL_PORT);	/* Reset the Inport device */
@@ -138,7 +138,7 @@ static int __init atixl_busmouse_init(void)
 	if (msedev < 0)
 	{
 		printk("Bus mouse initialisation error.\n");
-		free_region(ATIXL_MSE_DATA_PORT,3);	/* Was missing */
+		release_region(ATIXL_MSE_DATA_PORT,3);	/* Was missing */
 	}
 	else
 		printk("Bus mouse detected and installed.\n");

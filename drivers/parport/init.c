@@ -49,13 +49,13 @@ static int __init parport_setup (char *str)
 	if (!str || !*str || (*str == '0' && !*(str+1))) {
 		/* Disable parport if "parport=0" in cmdline */
 		io[0] = PARPORT_DISABLE;
-		return 0;
+		return 1;
 	}
 
 	if (!strncmp (str, "auto", 4)) {
 		irq[0] = PARPORT_IRQ_AUTO;
 		dma[0] = PARPORT_DMA_AUTO;
-		return 0;
+		return 1;
 	}
 
 	val = simple_strtoul (str, &endptr, 0);
@@ -108,7 +108,7 @@ static int __init parport_setup (char *str)
 	}
 
 	parport_setup_ptr++;
-	return 0;
+	return 1;
 }
 
 __setup ("parport=", parport_setup);

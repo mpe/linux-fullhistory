@@ -1,5 +1,5 @@
 /*
- *  linux/drivers/block/ide-dma.c		Version 4.09	April 23, 1999
+ *  linux/drivers/ide/ide-dma.c		Version 4.09	April 23, 1999
  *
  *  Copyright (c) 1999  Andre Hedrick
  *  May be copied or modified under the terms of the GNU General Public License
@@ -354,6 +354,29 @@ int check_drive_lists (ide_drive_t *drive, int good_bad)
 	return 0;
 }
 
+int report_drive_dmaing (ide_drive_t *drive)
+{
+	struct hd_driveid *id = drive->id;
+
+	if ((id->field_valid & 4) && (id->hw_config & 0x2000) &&
+	    (HWIF(drive)->udma_four) &&
+	    (id->dma_ultra & (id->dma_ultra >> 11) & 3)) {
+		if ((id->dma_ultra >> 12) & 1) {
+			printk(", UDMA(66)");	/* UDMA BIOS-enabled! */
+		} else {
+			printk(", UDMA(44)");	/* UDMA BIOS-enabled! */
+		}
+	} else if ((id->field_valid & 4) &&
+		   (id->dma_ultra & (id->dma_ultra >> 8) & 7)) {
+		printk(", UDMA(33)");	/* UDMA BIOS-enabled! */
+	} else if (id->field_valid & 4) {
+		printk(", (U)DMA");	/* Can be BIOS-enabled! */
+	} else {
+		printk(", DMA");
+	}
+	return 1;
+}
+
 static int config_drive_for_dma (ide_drive_t *drive)
 {
 	struct hd_driveid *id = drive->id;
@@ -453,6 +476,9 @@ int ide_dmaproc (ide_dma_action_t func, ide_drive_t *drive)
 		case ide_dma_bad_drive:
 		case ide_dma_good_drive:
 			return check_drive_lists(drive, (func == ide_dma_good_drive));
+		case ide_dma_verbose:
+			return report_drive_dmaing(drive);
+		case ide_dma_retune:
 		case ide_dma_lostirq:
 		case ide_dma_timeout:
 			printk("ide_dmaproc: chipset supported %s func only: %d\n", ide_dmafunc_verbose(func),  func);

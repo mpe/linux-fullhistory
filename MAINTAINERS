@@ -1023,6 +1023,7 @@ S:	Maintained
 TLAN NETWORK DRIVER
 P:	Torben Mathiasen
 M:	torben.mathiasen@compaq.com
+M:	tmm@image.dk
 L:	tlan@vuser.vu.union.edu
 S:	Maintained
 

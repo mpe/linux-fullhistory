@@ -51,9 +51,6 @@ MX_OBJS		:= $(sort $(filter     $(export-objs), $(obj-m)))
 
 include $(TOPDIR)/Rules.make
 
-.S.o:
-	$(CC) -D__ASSEMBLY__ $(AFLAGS) -traditional -c -o $*.o $<
-
 fd1772_mod.o: $(FLOPPY)
 	$(LD) -r -o $@ $(FLOPPY)
 

@@ -1,5 +1,5 @@
 /*
- * linux/drivers/block/aec6210.c		Version 0.05	Feb. 10, 2000
+ * linux/drivers/ide/aec6210.c		Version 0.06	Mar. 18, 2000
  *
  * Copyright (C) 1998-2000	Andre Hedrick (andre@suse.com)
  * May be copied or modified under the terms of the GNU General Public License
@@ -191,6 +191,7 @@ static int aec6210_tune_chipset (ide_drive_t *drive, byte speed)
 	return(err);
 }
 
+#ifdef CONFIG_BLK_DEV_IDEDMA
 static int config_chipset_for_dma (ide_drive_t *drive, byte ultra)
 {
 	struct hd_driveid *id = drive->id;
@@ -230,6 +231,7 @@ static int config_chipset_for_dma (ide_drive_t *drive, byte ultra)
 			((id->dma_1word >> 8) & 7) ? ide_dma_on :
 						     ide_dma_off_quietly);
 }
+#endif /* CONFIG_BLK_DEV_IDEDMA */
 
 static void aec6210_tune_drive (ide_drive_t *drive, byte pio)
 {
@@ -252,6 +254,7 @@ static void aec6210_tune_drive (ide_drive_t *drive, byte pio)
 	(void) aec6210_tune_chipset(drive, speed);
 }
 
+#ifdef CONFIG_BLK_DEV_IDEDMA
 static int config_drive_xfer_rate (ide_drive_t *drive)
 {
 	struct hd_driveid *id = drive->id;
@@ -314,6 +317,7 @@ int aec6210_dmaproc (ide_dma_action_t func, ide_drive_t *drive)
 	}
 	return ide_dmaproc(func, drive);	/* use standard DMA stuff */
 }
+#endif /* CONFIG_BLK_DEV_IDEDMA */
 #endif /* CONFIG_AEC6210_TUNING */
 
 unsigned int __init pci_init_aec6210 (struct pci_dev *dev, const char *name)
@@ -336,13 +340,13 @@ void __init ide_init_aec6210 (ide_hwif_t *hwif)
 {
 #ifdef CONFIG_AEC6210_TUNING
 	hwif->tuneproc = &aec6210_tune_drive;
+	hwif->drives[0].autotune = 1;
+	hwif->drives[1].autotune = 1;
 
-	if (hwif->dma_base) {
+#ifdef CONFIG_BLK_DEV_IDEDMA
+	if (hwif->dma_base)
 		hwif->dmaproc = &aec6210_dmaproc;
-	} else {
-		hwif->drives[0].autotune = 1;
-		hwif->drives[1].autotune = 1;
-	}
+#endif /* CONFIG_BLK_DEV_IDEDMA */
 #endif /* CONFIG_AEC6210_TUNING */
 }
 

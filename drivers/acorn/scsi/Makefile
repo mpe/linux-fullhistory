@@ -49,8 +49,5 @@ MX_OBJS		:= $(sort $(filter     $(export-objs), $(obj-m)))
 
 include $(TOPDIR)/Rules.make
 
-.S.o:
-	$(CC) -D__ASSEMBLY__ $(AFLAGS) -traditional -c -o $*.o $<
-
 acornscsi_mod.o: acornscsi.o acornscsi-io.o
 	$(LD) $(LD_RFLAG) -r -o $@ acornscsi.o acornscsi-io.o

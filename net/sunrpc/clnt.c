@@ -717,10 +717,11 @@ call_decode(struct rpc_task *task)
 	 */
 	if (task->tk_client->cl_prog == 100003 && 
             (ntohl(*p) == NFSERR_ACCES || ntohl(*p) == NFSERR_PERM)) {
-		if (RPC_IS_SETUID(task) && (task->tk_suid_retry)--) {
+		if (RPC_IS_SETUID(task) && task->tk_suid_retry) {
 			dprintk("RPC: %4d retry squashed uid\n", task->tk_pid);
 			task->tk_flags ^= RPC_CALL_REALUID;
 			task->tk_action = call_encode;
+			task->tk_suid_retry--;
 			return;
 		}
 	}
@@ -808,8 +809,9 @@ call_verify(struct rpc_task *task)
 		switch ((n = ntohl(*p++))) {
 		case RPC_AUTH_REJECTEDCRED:
 		case RPC_AUTH_REJECTEDVERF:
-			if (!task->tk_cred_retry--)
+			if (!task->tk_cred_retry)
 				break;
+			task->tk_cred_retry--;
 			dprintk("RPC: %4d call_verify: retry stale creds\n",
 							task->tk_pid);
 			rpcauth_invalcred(task);
@@ -818,8 +820,9 @@ call_verify(struct rpc_task *task)
 		case RPC_AUTH_BADCRED:
 		case RPC_AUTH_BADVERF:
 			/* possibly garbled cred/verf? */
-			if (!task->tk_garb_retry--)
+			if (!task->tk_garb_retry)
 				break;
+			task->tk_garb_retry--;
 			dprintk("RPC: %4d call_verify: retry garbled creds\n",
 							task->tk_pid);
 			task->tk_action = call_encode;
@@ -853,7 +856,8 @@ call_verify(struct rpc_task *task)
 garbage:
 	dprintk("RPC: %4d call_verify: server saw garbage\n", task->tk_pid);
 	task->tk_client->cl_stats->rpcgarbage++;
-	if (task->tk_garb_retry--) {
+	if (task->tk_garb_retry) {
+		task->tk_garb_retry--;
 		printk(KERN_WARNING "RPC: garbage, retrying %4d\n", task->tk_pid);
 		task->tk_action = call_encode;
 		return NULL;

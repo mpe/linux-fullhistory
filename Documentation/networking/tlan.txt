@@ -1,8 +1,8 @@
 (C) 1997-1998 Caldera, Inc.
 (C) 1998 James Banks
-(C) 1999-2000 Torben Mathiasen <torben.mathiasen@compaq.com>
+(C) 1999-2000 Torben Mathiasen <tmm@image.dk, torben.mathiasen@compaq.com>
 
-TLAN driver for Linux, version 1.3
+TLAN driver for Linux, version 1.5
 README
 
 

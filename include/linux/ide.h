@@ -326,6 +326,7 @@ typedef enum {	ide_dma_read,	ide_dma_write,		ide_dma_begin,
 		ide_dma_end,	ide_dma_check,		ide_dma_on,
 		ide_dma_off,	ide_dma_off_quietly,	ide_dma_test_irq,
 		ide_dma_bad_drive,			ide_dma_good_drive,
+		ide_dma_verbose,			ide_dma_retune,
 		ide_dma_lostirq,			ide_dma_timeout
 } ide_dma_action_t;
 
@@ -857,6 +858,7 @@ int ide_build_dmatable (ide_drive_t *drive, ide_dma_action_t func);
 void ide_destroy_dmatable (ide_drive_t *drive);
 ide_startstop_t ide_dma_intr (ide_drive_t *drive);
 int check_drive_lists (ide_drive_t *drive, int good_bad);
+int report_drive_dmaing (ide_drive_t *drive);
 int ide_dmaproc (ide_dma_action_t func, ide_drive_t *drive);
 int ide_release_dma (ide_hwif_t *hwif);
 void ide_setup_dma (ide_hwif_t *hwif, unsigned long dmabase, unsigned int num_ports) __init;

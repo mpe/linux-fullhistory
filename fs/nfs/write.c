@@ -676,7 +676,7 @@ nfs_wait_on_requests(struct inode *inode, struct file *file, unsigned long start
 	if (count == 0)
 		idx_end = ~0;
 	else {
-		unsigned long idx_count = count >> PAGE_CACHE_SHIFT;
+		unsigned long idx_count = (count-1) >> PAGE_CACHE_SHIFT;
 		idx_end = idx_start + idx_count;
 	}
 	spin_lock(&nfs_wreq_lock);
@@ -781,7 +781,7 @@ nfs_scan_list(struct list_head *src, struct list_head *dst, struct file *file, u
 	if (count == 0)
 		idx_end = ~0;
 	else
-		idx_end = idx_start + (count >> PAGE_CACHE_SHIFT);
+		idx_end = idx_start + ((count-1) >> PAGE_CACHE_SHIFT);
 	p = src->next;
 	while (p != src) {
 		unsigned long pg_idx;

@@ -18,6 +18,10 @@
  *   the definition is inactivated, but I still used it.  It turns out this
  *   actually happens a few times in the kernel source.  The simple way to
  *   fix this problem is to remove this particular optimization.
+ *
+ * 2.3.99-pre1, Andrew Morton <andrewm@uow.edu.au>
+ * - Changed so that 'filename.o' depends upon 'filename.[cS]'.  This is so that
+ *   missing source files are noticed, rather than silently ignored.
  */
 
 #include <ctype.h>
@@ -47,6 +51,8 @@ struct path_struct {
 };
 
 
+/* Current input file */
+static const char *g_filename;
 
 /*
  * This records all the configuration options seen.
@@ -58,7 +64,16 @@ char * str_config  = NULL;
 int    size_config = 0;
 int    len_config  = 0;
 
-
+static void
+do_depname(void)
+{
+	if (!hasdep) {
+		hasdep = 1;
+		printf("%s:", depname);
+		if (g_filename)
+			printf(" %s", g_filename);
+	}
+}
 
 /*
  * Grow the configuration string to a desired length.
@@ -193,10 +208,7 @@ void handle_include(int type, const char * name, int len)
 	if (access(path->buffer, F_OK) != 0)
 		return;
 
-	if (!hasdep) {
-		hasdep = 1;
-		printf("%s:", depname);
-	}
+	do_depname();
 	printf(" \\\n   %s", path->buffer);
 }
 
@@ -227,10 +239,7 @@ void use_config(const char * name, int len)
 
 	define_config(pc, len);
 
-	if (!hasdep) {
-		hasdep = 1;
-		printf("%s: ", depname);
-	}
+	do_depname();
 	printf(" \\\n   $(wildcard %s.h)", path_array[0].buffer);
 }
 
@@ -549,11 +558,13 @@ int main(int argc, char **argv)
 	while (--argc > 0) {
 		const char * filename = *++argv;
 		const char * command  = __depname;
+		g_filename = 0;
 		len = strlen(filename);
 		memcpy(depname, filename, len+1);
 		if (len > 2 && filename[len-2] == '.') {
 			if (filename[len-1] == 'c' || filename[len-1] == 'S') {
 			    depname[len-1] = 'o';
+			    g_filename = filename;
 			    command = "";
 			}
 		}

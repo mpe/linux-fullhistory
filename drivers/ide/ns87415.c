@@ -1,10 +1,11 @@
 /*
- * linux/drivers/block/ns87415.c		Version 1.00  December 7, 1997
+ * linux/drivers/ide/ns87415.c		Version 1.01  Mar. 18, 2000
  *
- * Copyright (C) 1997-1998  Mark Lord
- * Copyright (C) 1998       Eddie C. Dost  (ecd@skynet.be)
+ * Copyright (C) 1997-1998	Mark Lord <mlord@pobox.com>
+ * Copyright (C) 1998		Eddie C. Dost <ecd@skynet.be>
+ * Copyright (C) 1999-2000	Andre Hedrick <andre@suse.com>
  *
- * Inspired by an earlier effort from David S. Miller (davem@caipfs.rutgers.edu)
+ * Inspired by an earlier effort from David S. Miller <davem@redhat.com>
  */
 
 #include <linux/types.h>
@@ -78,6 +79,7 @@ static void ns87415_selectproc (ide_drive_t *drive)
 	ns87415_prepare_drive (drive, drive->using_dma);
 }
 
+#ifdef CONFIG_BLK_DEV_IDEDMA
 static int ns87415_dmaproc(ide_dma_action_t func, ide_drive_t *drive)
 {
 	ide_hwif_t	*hwif = HWIF(drive);
@@ -106,6 +108,7 @@ static int ns87415_dmaproc(ide_dma_action_t func, ide_drive_t *drive)
 			return ide_dmaproc(func, drive);	/* use standard DMA stuff */
 	}
 }
+#endif /* CONFIG_BLK_DEV_IDEDMA */
 
 void __init ide_init_ns87415 (ide_hwif_t *hwif)
 {
@@ -179,7 +182,10 @@ void __init ide_init_ns87415 (ide_hwif_t *hwif)
 	else if (!hwif->irq && hwif->mate && hwif->mate->irq)
 		hwif->irq = hwif->mate->irq;	/* share IRQ with mate */
 
+#ifdef CONFIG_BLK_DEV_IDEDMA
 	if (hwif->dma_base)
 		hwif->dmaproc = &ns87415_dmaproc;
+#endif /* CONFIG_BLK_DEV_IDEDMA */
+
 	hwif->selectproc = &ns87415_selectproc;
 }

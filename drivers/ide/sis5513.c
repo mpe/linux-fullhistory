@@ -1,5 +1,5 @@
 /*
- * linux/drivers/block/sis5513.c		Version 0.09	Feb. 10, 2000
+ * linux/drivers/ide/sis5513.c		Version 0.10	Mar. 18, 2000
  *
  * Copyright (C) 1999-2000	Andre Hedrick (andre@suse.com)
  * May be copied or modified under the terms of the GNU General Public License
@@ -107,9 +107,9 @@ static __inline__ char * find_udma_mode (byte cycle_time)
 #include <linux/stat.h>
 #include <linux/proc_fs.h>
 
-static int __init sis_get_info(char *, char **, off_t, int);
+static int sis_get_info(char *, char **, off_t, int);
 extern int (*sis_display_info)(char *, char **, off_t, int); /* ide-proc.c */
-struct pci_dev *bmide_dev;
+static struct pci_dev *bmide_dev;
 
 static char *cable_type[] __initdata = {
 	"80 pins",
@@ -141,7 +141,7 @@ static char * active_time [] __initdata = {
 	"6 PCICLK", "12 PCICLK"
 };
 
-static int __init sis_get_info (char *buffer, char **addr, off_t offset, int count)
+static int sis_get_info (char *buffer, char **addr, off_t offset, int count)
 {
 	int rc;
 	char *p = buffer;
@@ -222,6 +222,123 @@ static int __init sis_get_info (char *buffer, char **addr, off_t offset, int cou
 byte sis_proc = 0;
 extern char *ide_xfer_verbose (byte xfer_rate);
 
+static void config_drive_art_rwp (ide_drive_t *drive)
+{
+	ide_hwif_t *hwif	= HWIF(drive);
+	struct pci_dev *dev	= hwif->pci_dev;
+
+	int drive_number	= ((hwif->channel ? 2 : 0) + (drive->select.b.unit & 0x01));
+	byte reg4bh		= 0;
+	byte rw_prefetch	= (0x11 << drive_number);
+
+	pci_read_config_byte(dev, 0x4b, &reg4bh);
+	if (drive->media != ide_disk)
+		return;
+	
+	if ((reg4bh & rw_prefetch) != rw_prefetch)
+		pci_write_config_byte(dev, 0x4b, reg4bh|rw_prefetch);
+}
+
+static void config_art_rwp_pio (ide_drive_t *drive, byte pio)
+{
+	ide_hwif_t *hwif	= HWIF(drive);
+	struct pci_dev *dev	= hwif->pci_dev;
+
+	byte			timing, drive_pci, test1, test2;
+
+	unsigned short eide_pio_timing[6] = {600, 390, 240, 180, 120, 90};
+	unsigned short xfer_pio = drive->id->eide_pio_modes;
+	int drive_number	= ((hwif->channel ? 2 : 0) + (drive->select.b.unit & 0x01));
+
+#if 0
+	config_drive_art_rwp(drive);
+#endif
+
+	pio = ide_get_best_pio_mode(drive, 255, pio, NULL);
+
+	if (xfer_pio> 4)
+		xfer_pio = 0;
+
+	if (drive->id->eide_pio_iordy > 0) {
+		for (xfer_pio = 5;
+			xfer_pio>0 &&
+			drive->id->eide_pio_iordy>eide_pio_timing[xfer_pio];
+			xfer_pio--);
+	} else {
+		xfer_pio = (drive->id->eide_pio_modes & 4) ? 0x05 :
+			   (drive->id->eide_pio_modes & 2) ? 0x04 :
+			   (drive->id->eide_pio_modes & 1) ? 0x03 : xfer_pio;
+	}
+
+	timing = (xfer_pio >= pio) ? xfer_pio : pio;
+
+/*
+ *               Mode 0       Mode 1     Mode 2     Mode 3     Mode 4
+ * Active time    8T (240ns)  6T (180ns) 4T (120ns) 3T  (90ns) 3T  (90ns)
+ * 0x41 2:0 bits  000          110        100        011        011
+ * Recovery time 12T (360ns)  7T (210ns) 4T (120ns) 3T  (90ns) 1T  (30ns)
+ * 0x40 3:0 bits 0000         0111       0100       0011       0001
+ * Cycle time    20T (600ns) 13T (390ns) 8T (240ns) 6T (180ns) 4T (120ns)
+ */
+
+	switch(drive_number) {
+		case 0:		drive_pci = 0x40; break;
+		case 1:		drive_pci = 0x42; break;
+		case 2:		drive_pci = 0x44; break;
+		case 3:		drive_pci = 0x46; break;
+		default:	return;
+	}
+
+	pci_read_config_byte(dev, drive_pci, &test1);
+	pci_read_config_byte(dev, drive_pci|0x01, &test2);
+
+	/*
+	 * Do a blanket clear of active and recovery timings.
+	 */
+
+	test1 &= ~0x07;
+	test2 &= ~0x0F;
+
+	switch(timing) {
+		case 4:		test1 |= 0x01; test2 |= 0x03; break;
+		case 3:		test1 |= 0x03; test2 |= 0x03; break;
+		case 2:		test1 |= 0x04; test2 |= 0x04; break;
+		case 1:		test1 |= 0x07; test2 |= 0x06; break;
+		default:	break;
+	}
+
+	pci_write_config_byte(dev, drive_pci, test1);
+	pci_write_config_byte(dev, drive_pci|0x01, test2);
+}
+
+static int config_chipset_for_pio (ide_drive_t *drive, byte pio)
+{
+	int err;
+	byte speed;
+
+	switch(pio) {
+		case 4:		speed = XFER_PIO_4; break;
+		case 3:		speed = XFER_PIO_3; break;
+		case 2:		speed = XFER_PIO_2; break;
+		case 1:		speed = XFER_PIO_1; break;
+		default:	speed = XFER_PIO_0; break;
+	}
+
+	config_art_rwp_pio(drive, pio);
+	err = ide_config_drive_speed(drive, speed);
+	return err;
+}
+
+#undef SIS5513_TUNEPROC
+
+#ifdef SIS5513_TUNEPROC
+static void sis5513_tune_drive (ide_drive_t *drive, byte pio)
+{
+	(void) config_chipset_for_pio(drive, pio);
+}
+#endif /* SIS5513_TUNEPROC */
+
+#ifdef CONFIG_BLK_DEV_IDEDMA
 /*
  * ((id->hw_config & 0x2000) && (HWIF(drive)->udma_four))
  */
@@ -331,84 +448,6 @@ static int config_chipset_for_dma (ide_drive_t *drive, byte ultra)
 						     ide_dma_off_quietly);
 }
 
-static void config_drive_art_rwp (ide_drive_t *drive)
-{
-	ide_hwif_t *hwif		= HWIF(drive);
-	struct pci_dev *dev		= hwif->pci_dev;
-
-	byte				timing, pio, drive_pci, test1, test2;
-
-	unsigned short eide_pio_timing[6] = {600, 390, 240, 180, 120, 90};
-	unsigned short xfer_pio		= drive->id->eide_pio_modes;
-	int drive_number		= ((hwif->channel ? 2 : 0) + (drive->select.b.unit & 0x01));
-
-	if (drive->media == ide_disk) {
-		struct pci_dev *dev	= hwif->pci_dev;
-		byte reg4bh		= 0;
-                byte rw_prefetch	= (0x11 << drive_number);
-
-		pci_read_config_byte(dev, 0x4b, &reg4bh);
-		if ((reg4bh & rw_prefetch) != rw_prefetch)
-			pci_write_config_byte(dev, 0x4b, reg4bh|rw_prefetch);
-	}
-
-	pio = ide_get_best_pio_mode(drive, 255, 5, NULL);
-
-	if (xfer_pio> 4)
-		xfer_pio = 0;
-
-	if (drive->id->eide_pio_iordy > 0) {
-		for (xfer_pio = 5;
-			xfer_pio>0 &&
-			drive->id->eide_pio_iordy>eide_pio_timing[xfer_pio];
-			xfer_pio--);
-	} else {
-		xfer_pio = (drive->id->eide_pio_modes & 4) ? 0x05 :
-			   (drive->id->eide_pio_modes & 2) ? 0x04 :
-			   (drive->id->eide_pio_modes & 1) ? 0x03 : xfer_pio;
-	}
-
-	timing = (xfer_pio >= pio) ? xfer_pio : pio;
-
-/*
- *               Mode 0       Mode 1     Mode 2     Mode 3     Mode 4
- * Active time    8T (240ns)  6T (180ns) 4T (120ns) 3T  (90ns) 3T  (90ns)
- * 0x41 2:0 bits  000          110        100        011        011
- * Recovery time 12T (360ns)  7T (210ns) 4T (120ns) 3T  (90ns) 1T  (30ns)
- * 0x40 3:0 bits 0000         0111       0100       0011       0001
- * Cycle time    20T (600ns) 13T (390ns) 8T (240ns) 6T (180ns) 4T (120ns)
- */
-
-	switch(drive_number) {
-		case 0:		drive_pci = 0x40;break;
-		case 1:		drive_pci = 0x42;break;
-		case 2:		drive_pci = 0x44;break;
-		case 3:		drive_pci = 0x46;break;
-		default:	return;
-	}
-
-	pci_read_config_byte(dev, drive_pci, &test1);
-	pci_read_config_byte(dev, drive_pci|0x01, &test2);
-
-	/*
-	 * Do a blanket clear of active and recovery timings.
-	 */
-
-	test1 &= ~0x07;
-	test2 &= ~0x0F;
-
-	switch(timing) {
-		case 4:		test1 |= 0x01;test2 |= 0x03;break;
-		case 3:		test1 |= 0x03;test2 |= 0x03;break;
-		case 2:		test1 |= 0x04;test2 |= 0x04;break;
-		case 1:		test1 |= 0x07;test2 |= 0x06;break;
-		default:	break;
-	}
-
-	pci_write_config_byte(dev, drive_pci, test1);
-	pci_write_config_byte(dev, drive_pci|0x01, test2);
-}
-
 static int config_drive_xfer_rate (ide_drive_t *drive)
 {
 	struct hd_driveid *id		= drive->id;
@@ -417,9 +456,10 @@ static int config_drive_xfer_rate (ide_drive_t *drive)
 	if (id && (id->capability & 1) && HWIF(drive)->autodma) {
 		/* Consult the list of known "bad" drives */
 		if (ide_dmaproc(ide_dma_bad_drive, drive)) {
-			return HWIF(drive)->dmaproc(ide_dma_off, drive);
+			dma_func = ide_dma_off;
+			goto fast_ata_pio;
 		}
-
+		dma_func = ide_dma_off_quietly;
 		if (id->field_valid & 4) {
 			if (id->dma_ultra & 0x001F) {
 				/* Force if Capable UltraDMA */
@@ -434,13 +474,25 @@ try_dma_modes:
 			    (id->dma_1word & 0x0007)) {
 				/* Force if Capable regular DMA modes */
 				dma_func = config_chipset_for_dma(drive, 0);
+				if (dma_func != ide_dma_on)
+					goto no_dma_set;
 			}
 		} else if ((ide_dmaproc(ide_dma_good_drive, drive)) &&
 			   (id->eide_dma_time > 150)) {
 			/* Consult the list of known "good" drives */
 			dma_func = config_chipset_for_dma(drive, 0);
+			if (dma_func != ide_dma_on)
+				goto no_dma_set;
+		} else {
+			goto fast_ata_pio;
 		}
+	} else if ((id->capability & 8) || (id->field_valid & 2)) {
+fast_ata_pio:
+		dma_func = ide_dma_off_quietly;
+no_dma_set:
+		(void) config_chipset_for_pio(drive, 5);
 	}
+
 	return HWIF(drive)->dmaproc(dma_func, drive);
 }
 
@@ -452,12 +504,14 @@ int sis5513_dmaproc (ide_dma_action_t func, ide_drive_t *drive)
 	switch (func) {
 		case ide_dma_check:
 			config_drive_art_rwp(drive);
+			config_art_rwp_pio(drive, 5);
 			return config_drive_xfer_rate(drive);
 		default:
 			break;
 	}
 	return ide_dmaproc(func, drive);	/* use standard DMA stuff */
 }
+#endif /* CONFIG_BLK_DEV_IDEDMA */
 
 unsigned int __init pci_init_sis5513 (struct pci_dev *dev, const char *name)
 {
@@ -492,9 +546,11 @@ unsigned int __init pci_init_sis5513 (struct pci_dev *dev, const char *name)
 			pci_write_config_byte(dev, 0x52, reg52h|0x04);
 		}
 #if defined(DISPLAY_SIS_TIMINGS) && defined(CONFIG_PROC_FS)
-		sis_proc = 1;
-		bmide_dev = dev;
-		sis_display_info = &sis_get_info;
+		if (!sis_proc) {
+			sis_proc = 1;
+			bmide_dev = dev;
+			sis_display_info = &sis_get_info;
+		}
 #endif /* defined(DISPLAY_SIS_TIMINGS) && defined(CONFIG_PROC_FS) */
 	}
 	return 0;
@@ -525,11 +581,16 @@ void __init ide_init_sis5513 (ide_hwif_t *hwif)
 
 	hwif->irq = hwif->channel ? 15 : 14;
 
+#ifdef SIS5513_TUNEPROC
+	hwif->tuneproc = &sis5513_tune_drive;
+#endif /* SIS5513_TUNEPROC */
+
 	if (!(hwif->dma_base))
 		return;
 
 	if (host_dev) {
 		switch(host_dev->device) {
+#ifdef CONFIG_BLK_DEV_IDEDMA
 			case PCI_DEVICE_ID_SI_530:
 			case PCI_DEVICE_ID_SI_540:
 			case PCI_DEVICE_ID_SI_620:
@@ -540,6 +601,7 @@ void __init ide_init_sis5513 (ide_hwif_t *hwif)
 				hwif->autodma = 1;
 				hwif->dmaproc = &sis5513_dmaproc;
 				break;
+#endif /* CONFIG_BLK_DEV_IDEDMA */
 			default:
 				hwif->autodma = 0;
 				break;

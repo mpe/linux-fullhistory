@@ -5,14 +5,14 @@
    History:
    Rewritten from Dwayne Forsyth's SCSI tape driver by Kai Makisara.
    Contribution and ideas from several people including (in alphabetical
-   order) Klaus Ehrenfried, Wolfgang Denk, Steve Hirsch, Andreas Koppenh"ofer,
-   Michael Leodolter, Eyal Lebedinsky, Michael Schaefer, J"org Weule, and
-   Eric Youngdale.
+   order) Klaus Ehrenfried, Eric Lee Green, Wolfgang Denk, Steve Hirsch,
+   Andreas Koppenh"ofer, Michael Leodolter, Eyal Lebedinsky, Michael Schaefer,
+   J"org Weule, and Eric Youngdale.
 
    Copyright 1992 - 2000 Kai Makisara
    email Kai.Makisara@metla.fi
 
-   Last modified: Mon Mar 13 21:15:29 2000 by makisara@kai.makisara.local
+   Last modified: Sun Mar 19 22:06:54 2000 by makisara@kai.makisara.local
    Some small formal changes - aeb, 950809
 
    Last modified: 18-JAN-1998 Richard Gooch <rgooch@atnf.csiro.au> Devfs support
@@ -2621,8 +2621,7 @@ static int update_partition(Scsi_Tape *STp)
 	return set_location(STp, STps->last_block_visited, STp->new_partition, 1);
 }
 
-/* Functions for reading and writing the medium partition mode page. These
-   seem to work with Wangtek 6200HS and HP C1533A. */
+/* Functions for reading and writing the medium partition mode page. */
 
 #define PART_PAGE   0x11
 #define PART_PAGE_FIXED_LENGTH 8
@@ -2675,6 +2674,11 @@ static int nbr_partitions(Scsi_Tape *STp)
    The following algorithm is used to accomodate both drives: if the number of
    partition size fields is greater than the maximum number of additional partitions
    in the mode page, the second field is used. Otherwise the first field is used.
+
+   For Seagate DDS drives the page length must be 8 when no partitions is defined
+   and 10 when 1 partition is defined (information from Eric Lee Green). This is
+   is acceptable also to some other old drives and enforced if the first partition
+   size field is used for the first additional partition size.
  */
 static int partition_tape(Scsi_Tape *STp, int size)
 {
@@ -2707,12 +2711,16 @@ static int partition_tape(Scsi_Tape *STp, int size)
 
 	if (size <= 0) {
 		bp[pgo + PP_OFF_NBR_ADD_PARTS] = 0;
+		if (psd_cnt <= bp[pgo + PP_OFF_MAX_ADD_PARTS])
+		    bp[pgo + MP_OFF_PAGE_LENGTH] = 6;
                 DEBC(printk(ST_DEB_MSG "st%d: Formatting tape with one partition.\n",
                             dev));
 	} else {
 		bp[psdo] = (size >> 8) & 0xff;
 		bp[psdo + 1] = size & 0xff;
 		bp[pgo + 3] = 1;
+		if (bp[pgo + MP_OFF_PAGE_LENGTH] < 8)
+		    bp[pgo + MP_OFF_PAGE_LENGTH] = 8;
                 DEBC(printk(ST_DEB_MSG
                             "st%d: Formatting tape with two partitions (1 = %d MB).\n",
                             dev, size));

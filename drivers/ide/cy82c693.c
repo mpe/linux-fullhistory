@@ -1,5 +1,5 @@
 /*
- * linux/drivers/block/cy82c693.c		Version 0.34	Dec. 13, 1999
+ * linux/drivers/ide/cy82c693.c		Version 0.34	Dec. 13, 1999
  *
  *  Copyright (C) 1998-99 Andreas S. Krebs (akrebs@altavista.net), Maintainer
  *  Copyright (C) 1998-99 Andre Hedrick, Integrater
@@ -176,6 +176,7 @@ static void compute_clocks (byte pio, pio_clocks_t *p_pclk)
 	p_pclk->time_8 = (byte)clk1;
 }
 
+#ifdef CONFIG_BLK_DEV_IDEDMA
 /*
  * set DMA mode a specific channel for CY82C693
  */
@@ -262,6 +263,7 @@ static int cy82c693_dmaproc(ide_dma_action_t func, ide_drive_t *drive)
 	}
         return ide_dmaproc(func, drive);
 }
+#endif /* CONFIG_BLK_DEV_IDEDMA */
 
 /*
  * tune ide drive - set PIO mode
@@ -432,10 +434,14 @@ void __init ide_init_cy82c693(ide_hwif_t *hwif)
 {
 	hwif->chipset = ide_cy82c693;
 	hwif->tuneproc = &cy82c693_tune_drive;
+	hwif->drives[0].autotune = 1;
+	hwif->drives[1].autotune = 1;
+	hwif->autodma = 0;
+
+#ifdef CONFIG_BLK_DEV_IDEDMA
 	if (hwif->dma_base) {
 		hwif->dmaproc = &cy82c693_dmaproc;
-	} else {
-		hwif->drives[0].autotune = 1;
-		hwif->drives[1].autotune = 1;
+		hwif->autodma = 1;
 	}
+#endif /* CONFIG_BLK_DEV_IDEDMA */
 }

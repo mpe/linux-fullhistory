@@ -1,5 +1,5 @@
 /*
- *  linux/drivers/block/hd.c
+ *  linux/drivers/ide/hd.c
  *
  *  Copyright (C) 1991, 1992  Linus Torvalds
  */

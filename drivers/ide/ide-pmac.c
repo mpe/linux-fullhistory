@@ -1,4 +1,6 @@
 /*
+ * linux/drivers/ide/ide-pmac.c		Version ?.??	Mar. 18, 2000
+ *
  * Support for IDE interfaces on PowerMacs.
  * These IDE interfaces are memory-mapped and have a DBDMA channel
  * for doing DMA.
@@ -10,7 +12,7 @@
  *  as published by the Free Software Foundation; either version
  *  2 of the License, or (at your option) any later version.
  *
- * Some code taken from drivers/block/ide-dma.c:
+ * Some code taken from drivers/ide/ide-dma.c:
  *
  *  Copyright (c) 1995-1998  Mark Lord
  *

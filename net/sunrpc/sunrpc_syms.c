@@ -35,6 +35,8 @@ EXPORT_SYMBOL(rpc_new_child);
 EXPORT_SYMBOL(rpc_run_child);
 EXPORT_SYMBOL(rpciod_down);
 EXPORT_SYMBOL(rpciod_up);
+EXPORT_SYMBOL(rpc_new_task);
+EXPORT_SYMBOL(rpc_wake_up_status);
 
 /* RPC client functions */
 EXPORT_SYMBOL(rpc_create_client);

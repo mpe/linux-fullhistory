@@ -1,5 +1,5 @@
 /*
- * linux/drivers/block/sl82c105.c
+ * linux/drivers/ide/sl82c105.c
  *
  * SL82C105/Winbond 553 IDE driver
  *

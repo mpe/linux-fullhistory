@@ -1,5 +1,5 @@
 /*
- * linux/drivers/block/piix.c		Version 0.30	Feb. 26, 2000
+ *  linux/drivers/ide/piix.c		Version 0.31	Mar. 18, 2000
  *
  *  Copyright (C) 1998-1999 Andrzej Krzysztofowicz, Author and Maintainer
  *  Copyright (C) 1998-2000 Andre Hedrick (andre@suse.com)
@@ -50,31 +50,6 @@
  * pci_read_config_word(HWIF(drive)->pci_dev, 0x48, &reg48);
  * pci_read_config_word(HWIF(drive)->pci_dev, 0x4a, &reg4a);
  * pci_read_config_word(HWIF(drive)->pci_dev, 0x54, &reg54);
- *
- * 00:1f.1 IDE interface: Intel Corporation:
- *                          Unknown device 2411 (rev 01) (prog-if 80 [Master])
- *         Control: I/O+ Mem- BusMaster+ SpecCycle- MemWINV- VGASnoop-
- *                          ParErr- Stepping- SERR- FastB2B-
- *         Status: Cap- 66Mhz- UDF- FastB2B+ ParErr- DEVSEL=medium >TAbort-
- *                          <TAbort- <MAbort- >SERR- <PERR-
- *         Latency: 0 set
- *         Region 4: I/O ports at ffa0
- * 00: 86 80 11 24 05 00 80 02 01 80 01 01 00 00 00 00
- * 10: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
- * 20: a1 ff 00 00 00 00 00 00 00 00 00 00 00 00 00 00
- * 30: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
- * 40: 07 a3 03 a3 00 00 00 00 05 00 02 02 00 00 00 00
- * 50: 00 00 00 00 11 04 00 00 00 00 00 00 00 00 00 00
- * 60: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
- * 70: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
- * 80: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
- * 90: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
- * a0: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
- * b0: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
- * c0: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
- * d0: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
- * e0: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
- * f0: 00 00 00 00 00 00 00 00 3a 0f 00 00 00 00 00 00
  *
  */
 
@@ -281,6 +256,7 @@ static void piix_tune_drive (ide_drive_t *drive, byte pio)
 	restore_flags(flags);
 }
 
+#if defined(CONFIG_BLK_DEV_IDEDMA) && defined(CONFIG_PIIX_TUNING)
 static int piix_config_drive_for_dma (ide_drive_t *drive)
 {
 	struct hd_driveid *id	= drive->id;
@@ -387,13 +363,16 @@ static int piix_dmaproc(ide_dma_action_t func, ide_drive_t *drive)
 	/* Other cases are done by generic IDE-DMA code. */
 	return ide_dmaproc(func, drive);
 }
+#endif /* defined(CONFIG_BLK_DEV_IDEDMA) && (CONFIG_PIIX_TUNING) */
 
 unsigned int __init pci_init_piix (struct pci_dev *dev, const char *name)
 {
 #if defined(DISPLAY_PIIX_TIMINGS) && defined(CONFIG_PROC_FS)
-	piix_proc = 1;
-	bmide_dev = dev;
-	piix_display_info = &piix_get_info;
+	if (!piix_proc) {
+		piix_proc = 1;
+		bmide_dev = dev;
+		piix_display_info = &piix_get_info;
+	}
 #endif /* DISPLAY_PIIX_TIMINGS && CONFIG_PROC_FS */
 	return 0;
 }
@@ -427,12 +406,12 @@ void __init ide_init_piix (ide_hwif_t *hwif)
 	if (!hwif->dma_base)
 		return;
 
+#ifndef CONFIG_BLK_DEV_IDEDMA
+	hwif->autodma = 0;
+#else /* CONFIG_BLK_DEV_IDEDMA */
 #ifdef CONFIG_PIIX_TUNING
 	hwif->autodma = 1;
 	hwif->dmaproc = &piix_dmaproc;
-#else
-	if (hwif->autodma)
-		hwif->autodma = 0;
-
 #endif /* CONFIG_PIIX_TUNING */
+#endif /* !CONFIG_BLK_DEV_IDEDMA */
 }

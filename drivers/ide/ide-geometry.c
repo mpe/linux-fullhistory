@@ -1,9 +1,9 @@
 /*
- * linux/drivers/block/ide-geometry.c
+ * linux/drivers/ide/ide-geometry.c
  */
 #include <linux/config.h>
 
-#if defined(CONFIG_BLK_DEV_IDE) || defined(CONFIG_BLK_DEV_IDE_MODULE)
+#ifdef CONFIG_IDE
 #include <linux/ide.h>
 
 #include <asm/io.h>
@@ -211,4 +211,4 @@ int ide_xlate_1024 (kdev_t i_rdev, int xparm, int ptheads, const char *msg)
 		       drive->bios_cyl, drive->bios_head, drive->bios_sect);
 	return ret;
 }
-#endif /* (CONFIG_BLK_DEV_IDE) || (CONFIG_BLK_DEV_IDE_MODULE) */
+#endif /* CONFIG_IDE */

@@ -1,5 +1,5 @@
 /*
- * linux/drivers/block/ide-tape.c		Version 1.16f	Dec  15, 1999
+ * linux/drivers/ide/ide-tape.c		Version 1.16f	Dec  15, 1999
  *
  * Copyright (C) 1995 - 1999 Gadi Oxman <gadio@netvision.net.il>
  *

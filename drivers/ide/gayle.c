@@ -1,5 +1,5 @@
 /*
- *  linux/drivers/block/gayle.c -- Amiga Gayle IDE Driver
+ *  linux/drivers/ide/gayle.c -- Amiga Gayle IDE Driver
  *
  *     Created 9 Jul 1997 by Geert Uytterhoeven
  *

@@ -1,5 +1,5 @@
 /*
- * linux/drivers/block/via82cxxx.c	Version 0.07	Feb. 10, 2000
+ * linux/drivers/ide/via82cxxx.c	Version 0.08	Mar. 18, 2000
  *
  *  Copyright (C) 1998-99	Michel Aubry, Maintainer
  *  Copyright (C) 1999		Jeff Garzik, MVP4 Support
@@ -143,14 +143,14 @@ static const struct {
 #include <linux/stat.h>
 #include <linux/proc_fs.h>
 
-static char *FIFO_str[] = {
+static char *FIFO_str[] __initdata = {
 	" 1 ",
 	"3/4",
 	"1/2",
 	"1/4"
 };
 
-static char *control3_str[] = {
+static char *control3_str[] __initdata = {
 	"No limitation",
 	"64",
 	"128",
@@ -516,6 +516,62 @@ static int via_set_fifoconfig(ide_hwif_t *hwif)
 
 #ifdef CONFIG_VIA82CXXX_TUNING
 
+struct chipset_bus_clock_list_entry {
+	unsigned short	bus_speed;
+	byte		xfer_speed;
+	byte		chipset_settings;
+};
+
+PCI_DEVICE_ID_VIA_82C586_1
+PCI_DEVICE_ID_VIA_82C596
+PCI_DEVICE_ID_VIA_82C686
+PCI_DEVICE_ID_VIA_8231
+
+PCI_DEVICE_ID_VIA_82C586_1	TYPE_1
+PCI_DEVICE_ID_VIA_82C596	TYPE_2
+PCI_DEVICE_ID_VIA_82C686	TYPE_2
+PCI_DEVICE_ID_VIA_82C596	TYPE_3
+PCI_DEVICE_ID_VIA_82C686	TYPE_3
+PCI_DEVICE_ID_VIA_8231		TYPE_4
+
+struct chipset_bus_clock_list_entry ultra_33_base [] = {
+{ TYPE_1,25,0x00,0x00,0x60,0x61,0x62,0x03,0x20,0x31,0x65,0x65,0xA8 },
+{ TYPE_1,33,0x00,0x00,0x60,0x61,0x62,0x03,0x20,0x31,0x65,0x65,0xA8 },
+{ TYPE_1,37,0x00,0x00,0x60,0x61,0x62,0x03,0x21,0x32,0x76,0x76,0xA9 },
+{ TYPE_2,25,0x00,0x00,0xE0,0xE1,0xE2,0x03,0x20,0x31,0x65,0x65,0xA8 },
+{ TYPE_2,33,0x00,0x00,0xE0,0xE1,0xE2,0x03,0x20,0x31,0x65,0x65,0xA8 },
+{ TYPE_2,37,0x00,0x00,0xE1,0xE2,0xE2,0x03,0x31,0x42,0x87,0x87,0xDB },
+{ TYPE_2,41,0x00,0x00,0xE1,0xE2,0xE2,0x03,0x32,0x53,0xA8,0xA8,0xFE },
+{ TYPE_3,25,0x00,0x00,0xE0,0xE1,0xE2,0x03,0x20,0x31,0x65,0x65,0xA8 },
+{ TYPE_3,33,0x00,0x00,0xE0,0xE1,0xE2,0x03,0x20,0x31,0x65,0x65,0xA8 },
+{ TYPE_3,37,0x00,0x00,0xE1,0xE2,0xE2,0x03,0x31,0x42,0x87,0x87,0xDB },
+{ TYPE_3,41,0x00,0x00,0xE1,0xE2,0xE2,0x03,0x32,0x53,0xA8,0xA8,0xFE },
+{ TYPE_4,0,0,0,0,0,0,0,0,0,0,0,0 },
+{ 0,0,0,0,0,0,0,0,0,0,0,0,0 }
+};
+
+struct chipset_bus_clock_list_entry timing_66_base [] = {
+	{ 37,	XFER_PIO_4,	0x21 },
+	{ 37,	XFER_PIO_3,	0x32 },
+	{ 37,	XFER_PIO_2,	0x76 },
+	{ 37,	XFER_PIO_1,	0x76 },
+	{ 37,	XFER_PIO_0,	0xA9 },
+	{ ANY,	XFER_PIO_4,	0x20 },
+	{ ANY,	XFER_PIO_3,	0x31 },
+	{ ANY,	XFER_PIO_2,	0x65 },
+	{ ANY,	XFER_PIO_1,	0x65 },
+	{ ANY,	XFER_PIO_0,	0xA8 },
+};
+
+static byte pci_bus_clock_list (byte speed, struct chipset_bus_clock_list_entry * chipset_table)
+{
+	for ( ; chipset_table->xfer_speed ; chipset_table++)
+		if (chipset_table->xfer_speed == speed) {
+			return chipset_table->chipset_settings;
+		}
+	return 0x01208585;
+}
+
 static int via82cxxx_tune_chipset (ide_drive_t *drive, byte speed)
 {
 	struct hd_driveid *id	= drive->id;
@@ -539,7 +595,7 @@ static int via82cxxx_tune_chipset (ide_drive_t *drive, byte speed)
 		case 2: ata2_pci = 0x4a; ata3_pci = 0x52; break;
 		case 3: ata2_pci = 0x4b; ata3_pci = 0x53; break;
 		default:
-			return err;
+			return -1;
 	}
 
 	pci_read_config_byte(dev, ata2_pci, &timing);
@@ -575,6 +631,57 @@ static int via82cxxx_tune_chipset (ide_drive_t *drive, byte speed)
 	return(err);
 }
 
+static void config_chipset_for_pio (ide_drive_t *drive)
+{
+	unsigned short eide_pio_timing[6] = {960, 480, 240, 180, 120, 90};
+	unsigned short xfer_pio		= drive->id->eide_pio_modes;
+	byte				timing, speed, pio;
+
+	pio = ide_get_best_pio_mode(drive, 255, 5, NULL);
+
+	if (xfer_pio> 4)
+		xfer_pio = 0;
+
+	if (drive->id->eide_pio_iordy > 0) {
+		for (xfer_pio = 5;
+			xfer_pio>0 &&
+			drive->id->eide_pio_iordy>eide_pio_timing[xfer_pio];
+			xfer_pio--);
+	} else {
+		xfer_pio = (drive->id->eide_pio_modes & 4) ? 0x05 :
+			   (drive->id->eide_pio_modes & 2) ? 0x04 :
+			   (drive->id->eide_pio_modes & 1) ? 0x03 :
+			   (drive->id->tPIO & 2) ? 0x02 :
+			   (drive->id->tPIO & 1) ? 0x01 : xfer_pio;
+	}
+
+	timing = (xfer_pio >= pio) ? xfer_pio : pio;
+	switch(timing) {
+		case 4:	speed = XFER_PIO_4; break;
+		case 3:	speed = XFER_PIO_3; break;
+		case 2:	speed = XFER_PIO_2; break;
+		case 1:	speed = XFER_PIO_1; break;
+		default:
+			speed = (!drive->id->tPIO) ? XFER_PIO_0 : XFER_PIO_SLOW;
+			break;
+	}
+	(void) via82cxxx_tune_chipset(drive, speed);
+}
+
+static void via82cxxx_tune_drive (ide_drive_t *drive, byte pio)
+{
+	byte speed;
+	switch(pio) {
+		case 4:		speed = XFER_PIO_4; break;
+		case 3:		speed = XFER_PIO_3; break;
+		case 2:		speed = XFER_PIO_2; break;
+		case 1:		speed = XFER_PIO_1; break;
+		default:	speed = XFER_PIO_0; break;
+	}
+	(void) via82cxxx_tune_chipset(drive, speed);
+}
+
+#ifdef CONFIG_BLK_DEV_IDEDMA
 static int config_chipset_for_dma (ide_drive_t *drive)
 {
 	struct hd_driveid *id	= drive->id;
@@ -615,56 +722,6 @@ static int config_chipset_for_dma (ide_drive_t *drive)
 			((id->dma_1word >> 8) & 7) ? ide_dma_on :
 						     ide_dma_off_quietly);
 	return rval;
-}
-
-static void config_chipset_for_pio (ide_drive_t *drive)
-{
-	unsigned short eide_pio_timing[6] = {960, 480, 240, 180, 120, 90};
-	unsigned short xfer_pio = drive->id->eide_pio_modes;
-	byte			timing, speed, pio;
-
-	pio = ide_get_best_pio_mode(drive, 255, 5, NULL);
-
-	if (xfer_pio> 4)
-		xfer_pio = 0;
-
-	if (drive->id->eide_pio_iordy > 0) {
-		for (xfer_pio = 5;
-			xfer_pio>0 &&
-			drive->id->eide_pio_iordy>eide_pio_timing[xfer_pio];
-			xfer_pio--);
-	} else {
-		xfer_pio = (drive->id->eide_pio_modes & 4) ? 0x05 :
-			   (drive->id->eide_pio_modes & 2) ? 0x04 :
-			   (drive->id->eide_pio_modes & 1) ? 0x03 :
-			   (drive->id->tPIO & 2) ? 0x02 :
-			   (drive->id->tPIO & 1) ? 0x01 : xfer_pio;
-	}
-
-	timing = (xfer_pio >= pio) ? xfer_pio : pio;
-
-	switch(timing) {
-		case 4: speed = XFER_PIO_4;break;
-		case 3: speed = XFER_PIO_3;break;
-		case 2: speed = XFER_PIO_2;break;
-		case 1: speed = XFER_PIO_1;break;
-		default:
-			speed = (!drive->id->tPIO) ? XFER_PIO_0 : XFER_PIO_SLOW;                        break;
-	}
-	(void) via82cxxx_tune_chipset(drive, speed);
-}
-
-static void via82cxxx_tune_drive (ide_drive_t *drive, byte pio)
-{
-	byte speed;
-	switch(pio) {
-		case 4:		speed = XFER_PIO_4;break;
-		case 3:		speed = XFER_PIO_3;break;
-		case 2:		speed = XFER_PIO_2;break;
-		case 1:		speed = XFER_PIO_1;break;
-		default:	speed = XFER_PIO_0;break;
-	}
-	(void) via82cxxx_tune_chipset(drive, speed);
 }
 
 static int config_drive_xfer_rate (ide_drive_t *drive)
@@ -726,6 +783,7 @@ int via82cxxx_dmaproc (ide_dma_action_t func, ide_drive_t *drive)
 	}
 	return ide_dmaproc(func, drive);	/* use standard DMA stuff */
 }
+#endif /* CONFIG_BLK_DEV_IDEDMA */
 #endif /* CONFIG_VIA82CXXX_TUNING */
 
 unsigned int __init pci_init_via82cxxx (struct pci_dev *dev, const char *name)
@@ -745,7 +803,7 @@ unsigned int __init pci_init_via82cxxx (struct pci_dev *dev, const char *name)
 
 		host_dev = host;
 		printk(ApolloHostChipInfo[i].name);
-
+		printk("\n");
 		for (j = 0; j < arraysize (ApolloISAChipInfo) && !isa_dev; j++) {
 			if (ApolloISAChipInfo[j].host_id !=
 			    ApolloHostChipInfo[i].host_id)
@@ -777,9 +835,11 @@ unsigned int __init pci_init_via82cxxx (struct pci_dev *dev, const char *name)
 	}
 
 #if defined(DISPLAY_VIA_TIMINGS) && defined(CONFIG_PROC_FS)
-	via_proc = 1;
-	bmide_dev = dev;
-	via_display_info = &via_get_info;
+	if (!via_proc) {
+		via_proc = 1;
+		bmide_dev = dev;
+		via_display_info = &via_get_info;
+	}
 #endif /* DISPLAY_VIA_TIMINGS &&  CONFIG_PROC_FS*/
 
 	return 0;
@@ -797,13 +857,15 @@ void __init ide_init_via82cxxx (ide_hwif_t *hwif)
 
 #ifdef CONFIG_VIA82CXXX_TUNING
 	hwif->tuneproc = &via82cxxx_tune_drive;
+	hwif->drives[0].autotune = 1;
+	hwif->drives[1].autotune = 1;
+	hwif->autodma = 0;
+#ifdef CONFIG_BLK_DEV_IDEDMA
 	if (hwif->dma_base) {
 		hwif->dmaproc = &via82cxxx_dmaproc;
-	} else {
-		hwif->autodma = 0;
-		hwif->drives[0].autotune = 1;
-		hwif->drives[1].autotune = 1;
+		hwif->autodma = 1;
 	}
+#endif /* CONFIG_BLK_DEV_IDEDMA */
 #endif /* CONFIG_VIA82CXXX_TUNING */
 }
 

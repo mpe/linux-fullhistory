@@ -1,5 +1,6 @@
 /*
- * linux/drivers/block/ide-cd.c
+ * linux/drivers/ide/ide-cd.c
+ *
  * Copyright (C) 1994, 1995, 1996  scott snyder  <snyder@fnald0.fnal.gov>
  * Copyright (C) 1996-1998  Erik Andersen <andersee@debian.org>
  * Copyright (C) 1998, 1999 Jens Axboe <axboe@image.dk>
@@ -2400,21 +2401,10 @@ int ide_cdrom_probe_capabilities (ide_drive_t *drive)
 
 	printk (", %dkB Cache", be16_to_cpu(buf.cap.buffer_size));
 
-	if (drive->using_dma) {
-		if ((drive->id->field_valid & 4) &&
-		    (drive->id->hw_config & 0x2000) &&
-		    (HWIF(drive)->udma_four) &&
-		    (drive->id->dma_ultra & (drive->id->dma_ultra >> 11) & 3)) {
-			printk(", UDMA(66)");	/* UDMA BIOS-enabled! */
-		} else if ((drive->id->field_valid & 4) &&
-			   (drive->id->dma_ultra & (drive->id->dma_ultra >> 8) & 7)) {
-			printk(", UDMA(33)");	/* UDMA BIOS-enabled! */
-		} else if (drive->id->field_valid & 4) {
-			printk(", (U)DMA");	/* Can be BIOS-enabled! */
-		} else {
-			printk(", DMA");
-		}
-	}
+#ifdef CONFIG_BLK_DEV_IDEDMA
+	if (drive->using_dma)
+		(void) HWIF(drive)->dmaproc(ide_dma_verbose, drive);
+#endif /* CONFIG_BLK_DEV_IDEDMA */
 	printk("\n");
 
 	return nslots;

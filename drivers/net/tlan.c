@@ -66,6 +66,12 @@
  *	                       network cleanup in 2.3.43pre7 (Tigran & myself)
  *	                     - Minor stuff.
  *
+ *	v1.5 March 22, 2000  - Fixed another timer bug that would hang the driver
+ *			       if no cable/link were present.
+ *			     - Cosmetic changes.
+ *			     - TODO: Port completely to new PCI/DMA API
+ *			     	     Auto-Neg fallback.
+ *
  *******************************************************************************/
 
 
@@ -106,7 +112,7 @@ static	int		bbuf = 0;
 static	u8		*TLanPadBuffer;
 static	char		TLanSignature[] = "TLAN";
 static	int		TLanVersionMajor = 1;
-static	int		TLanVersionMinor = 4;
+static	int		TLanVersionMinor = 5;
 
 
 static TLanAdapterEntry TLanAdapterList[] __initdata = {
@@ -430,7 +436,8 @@ static int __init tlan_probe(void)
 
 	}
 	
-	printk(KERN_INFO "TLAN: %d device(s) installed\n", TLanDevicesInstalled);
+	printk(KERN_INFO "TLAN: %d device%s installed\n", 
+		 TLanDevicesInstalled, TLanDevicesInstalled == 1 ? "" : "s");
 	
 	return ((TLanDevicesInstalled > 0) ? 0 : -ENODEV);
 }
@@ -839,8 +846,10 @@ static int TLan_Close(struct net_device *dev)
 
 	TLan_ReadAndClearStats( dev, TLAN_RECORD );
 	outl( TLAN_HC_AD_RST, dev->base_addr + TLAN_HOST_CMD );
-	if ( priv->timer.function != NULL )
+	if ( priv->timer.function != NULL ) {
 		del_timer( &priv->timer );
+		priv->timer.function = NULL;
+	}
 	free_irq( dev->irq, dev );
 	TLan_FreeLists( dev );
 	TLAN_DBG( TLAN_DEBUG_GNRL, "Device %s closed.\n", dev->name );

@@ -1,5 +1,7 @@
 /* $Id: cmd64x.c,v 1.21 2000/01/30 23:23:16
  *
+ * linux/drivers/ide/cmd64x.c		Version 1.21	Mar. 18, 2000
+ *
  * cmd64x.c: Enable interrupts at initialization time on Ultra/PCI machines.
  *           Note, this driver is not used at all on other systems because
  *           there the "BIOS" has done all of the following already.
@@ -116,19 +118,27 @@ static int cmd64x_get_info (char *buffer, char **addr, off_t offset, int count)
 
 	p += sprintf(p, "--------------- Primary Channel ---------------- Secondary Channel -------------\n");
 	p += sprintf(p, "                %sabled                         %sabled\n",
-		(reg72&0x80) ? "dis" : " en", (reg7a&0x80) ? "dis" : " en");
+		(reg72&0x80)?"dis":" en",(reg7a&0x80)?"dis":" en");
 	p += sprintf(p, "--------------- drive0 --------- drive1 -------- drive0 ---------- drive1 ------\n");
 	p += sprintf(p, "DMA enabled:    %s              %s             %s               %s\n",
-		(reg72&0x20) ? "yes" : "no ", (reg72&0x40) ? "yes" : "no ", (reg7a&0x20) ? "yes" : "no ", (reg7a&0x40) ? "yes" : "no " );
+		(reg72&0x20)?"yes":"no ",(reg72&0x40)?"yes":"no ",(reg7a&0x20)?"yes":"no ",(reg7a&0x40)?"yes":"no ");
 	p += sprintf(p, "DMA Mode:       %s(%s)          %s(%s)         %s(%s)           %s(%s)\n",
 		(reg72&0x20)?((reg73&0x01)?"UDMA":" DMA"):" PIO",
-		(reg72&0x20)?(((reg73&0x15)==0x15)?"4":((reg73&0x25)==0x25)?"3":((reg73&0x10)==0x10)?"2":((reg73&0x20)==0x20)?"1":((reg73&0x30)==0x30)?"0":"X"):"?",
+		(reg72&0x20)?(  ((reg73&0x30)==0x30)?(((reg73&0x35)==0x35)?"3":"0"):
+				((reg73&0x20)==0x20)?(((reg73&0x25)==0x25)?"3":"1"):
+				((reg73&0x10)==0x10)?(((reg73&0x15)==0x15)?"4":"2"):"X"):"?",
 		(reg72&0x40)?((reg73&0x02)?"UDMA":" DMA"):" PIO",
-		(reg72&0x40)?(((reg73&0x4A)==0x4A)?"4":((reg73&0x8A)==0x8A)?"3":((reg73&0x40)==0x40)?"2":((reg73&0x80)==0x80)?"1":((reg73&0xC0)==0xC0)?"0":"X"):"?",
+		(reg72&0x40)?(	((reg73&0xC0)==0xC0)?(((reg73&0xC5)==0xC5)?"3":"0"):
+				((reg73&0x80)==0x80)?(((reg73&0x85)==0x85)?"3":"1"):
+				((reg73&0x40)==0x40)?(((reg73&0x4A)==0x4A)?"4":"2"):"X"):"?",
 		(reg7a&0x20)?((reg7b&0x01)?"UDMA":" DMA"):" PIO",
-		(reg7a&0x20)?(((reg7b&0x15)==0x15)?"4":((reg7b&0x25)==0x25)?"3":((reg7b&0x10)==0x10)?"2":((reg7b&0x20)==0x20)?"1":((reg7b&0x30)==0x30)?"0":"X"):"?",
+		(reg7a&0x20)?(	((reg7b&0x30)==0x30)?(((reg7b&0x35)==0x35)?"3":"0"):
+				((reg7b&0x20)==0x20)?(((reg7b&0x25)==0x25)?"3":"1"):
+				((reg7b&0x10)==0x10)?(((reg7b&0x15)==0x15)?"4":"2"):"X"):"?",
 		(reg7a&0x40)?((reg7b&0x02)?"UDMA":" DMA"):" PIO",
-		(reg7a&0x40)?(((reg7b&0x4A)==0x4A)?"4":((reg7b&0x8A)==0x8A)?"3":((reg7b&0x40)==0x40)?"2":((reg7b&0x80)==0x80)?"1":((reg7b&0xC0)==0xC0)?"0":"X"):"?" );
+		(reg7a&0x40)?(	((reg7b&0xC0)==0xC0)?(((reg7b&0xC5)==0xC5)?"3":"0"):
+				((reg7b&0x80)==0x80)?(((reg7b&0x85)==0x85)?"3":"1"):
+				((reg7b&0x40)==0x40)?(((reg7b&0x4A)==0x4A)?"4":"2"):"X"):"?" );
 	p += sprintf(p, "PIO Mode:       %s                %s               %s                 %s\n",
 		"?", "?", "?", "?");
 
@@ -155,6 +165,22 @@ static int cmd64x_get_info (char *buffer, char **addr, off_t offset, int count)
 
 	return p-buffer;	/* => must be less than 4k! */
 }
+
+#if 0
+static char * cmd64x_chipset_data (char *buf, struct pci_dev *dev)
+{
+	char *p = buf;
+	p += sprintf(p, "thingy stuff\n");
+	return (char *)p;
+}
+static int __init cmd64x_get_info (char *buffer, char **addr, off_t offset, int count)
+{
+	char *p = buffer;
+	p = cmd64x_chipset_data(buffer, bmide_dev);
+	return p-buffer;	/* hoping it is less than 4K... */
+}
+#endif
+
 #endif	/* defined(DISPLAY_CMD64X_TIMINGS) && defined(CONFIG_PROC_FS) */
 
 byte cmd64x_proc = 0;
@@ -305,71 +331,10 @@ static void cmd64x_tuneproc (ide_drive_t *drive, byte mode_wanted)
 		setup_count, active_count, recovery_count);
 }
 
-static int tune_chipset_for_dma (ide_drive_t *drive, byte speed)
-{
-#if 0
-	struct hd_driveid *id	= drive->id;
-	ide_hwif_t *hwif	= HWIF(drive);
-	struct pci_dev *dev	= hwif->pci_dev;
-	unsigned long dma_base	= hwif->dma_base;
-	byte unit		= (drive->select.b.unit & 0x01);
-
-	u8 reg72 = 0, reg73 = 0;	/* primary */
-	u8 reg7a = 0, reg7b = 0;	/* secondary */
-	u8 pciU = (hwif->channel) ? UDIDETCR1 : UDIDETCR0;
-	u8 pciD = (hwif->channel) ? BMIDESR1 : BMIDESR0;
-	u8 regU = (hwif->channel) ? 2 : 0;
-	u8 regD = (hwif->channel) ? 2 : 0;
-
-	(void) pci_read_config_byte(dev, BMIDESR0,  &reg72);
-	(void) pci_read_config_byte(dev, UDIDETCR0, &reg73);
-	(void) pci_read_config_byte(dev, BMIDESR1,  &reg7a);
-	(void) pci_read_config_byte(dev, UDIDETCR1, &reg7b);
-
-	switch(speed) {
-		case XFER_UDMA_4:
-			pciU = unit ? 0x4A : 0x15;
-		case XFER_UDMA_3:
-			pciU = unit ? 0x8A : 0x25;
-		case XFER_UDMA_2:
-			pciU = unit ? 0x42 : 0x11;
-		case XFER_UDMA_1:
-			pciU = unit ? 0x82 : 0x21;
-		case XFER_UDMA_0:
-			pciU = unit ? 0xC2 : 0x31
-(reg73&0x15)?"4":(reg73&0x25)?"3":(reg73&0x11)?"2":(reg73&0x21)?"1":(reg73&0x31)?"0":"X",
-(reg73&0x4A)?"4":(reg73&0x8A)?"3":(reg73&0x42)?"2":(reg73&0x82)?"1":(reg73&0xC2)?"0":"X",
-(reg7b&0x15)?"4":(reg7b&0x25)?"3":(reg7b&0x11)?"2":(reg7b&0x21)?"1":(reg7b&0x31)?"0":"X",
-(reg7b&0x4A)?"4":(reg7b&0x8A)?"3":(reg7b&0x42)?"2":(reg7b&0x82)?"1":(reg7b&0xC2)?"0":"X",
-
-		case XFER_MW_DMA_2:
-			pciD = unit ? 0x40 : 0x10;
-		case XFER_MW_DMA_1:
-			pciD = unit ? 0x80 : 0x20;
-		case XFER_MW_DMA_0:
-			pciD = unit ? 0xC0 : 0x30;
-		case XFER_SW_DMA_2:
-		case XFER_SW_DMA_1:
-		case XFER_SW_DMA_0:
-(reg73&0x10)?"2":(reg73&0x20)?"1":(reg73&0x30)?"0":"X",
-(reg73&0x40)?"2":(reg73&0x80)?"1":(reg73&0xC0)?"0":"X",
-(reg7b&0x10)?"2":(reg7b&0x20)?"1":(reg7b&0x30)?"0":"X",
-(reg7b&0x40)?"2":(reg7b&0x80)?"1":(reg7b&0xC0)?"0":"X" );
-
-		default:
-			return 1;
-	}
-
-	(void) ide_config_drive_speed(drive, speed);
-	outb(inb(dma_base+2)|(1<<(5+unit)), dma_base+2);
-#endif
-	return 0;
-}
-
 static void config_chipset_for_pio (ide_drive_t *drive, byte set_speed)
 {
-	byte speed	= 0x00;
-	byte set_pio	= ide_get_best_pio_mode(drive, 4, 5, NULL);	
+	byte speed= 0x00;
+	byte set_pio= ide_get_best_pio_mode(drive, 4, 5, NULL);
 
 	cmd64x_tuneproc(drive, set_pio);
 	speed = XFER_PIO_0 + set_pio;
@@ -377,26 +342,67 @@ static void config_chipset_for_pio (ide_drive_t *drive, byte set_speed)
 		(void) ide_config_drive_speed(drive, speed);
 }
 
+#ifdef CONFIG_BLK_DEV_IDEDMA
+static int tune_chipset_for_dma (ide_drive_t *drive, byte speed)
+{
+	ide_hwif_t *hwif	= HWIF(drive);
+	struct pci_dev *dev	= hwif->pci_dev;
+	byte unit		= (drive->select.b.unit & 0x01);
+	int err			= 0;
+
+	u8 pciU			= (hwif->channel) ? UDIDETCR1 : UDIDETCR0;
+	u8 pciD			= (hwif->channel) ? BMIDESR1 : BMIDESR0;
+	u8 regU			= 0;
+	u8 regD			= 0;
+
+	(void) pci_read_config_byte(dev, pciD, &regD);
+	(void) pci_read_config_byte(dev, pciU, &regU);
+	regD &= ~(unit ? 0x40 : 0x20);
+	regU &= ~(unit ? 0xCA : 0x35);
+	(void) pci_write_config_byte(dev, pciD, regD);
+	(void) pci_write_config_byte(dev, pciU, regU);
+
+	(void) pci_read_config_byte(dev, pciD, &regD);
+	(void) pci_read_config_byte(dev, pciU, &regU);
+	switch(speed) {
+		case XFER_UDMA_4:	regU |= (unit ? 0x4A : 0x15); break;
+		case XFER_UDMA_3:	regU |= (unit ? 0x8A : 0x25); break;
+		case XFER_UDMA_2:	regU |= (unit ? 0x42 : 0x11); break;
+		case XFER_UDMA_1:	regU |= (unit ? 0x82 : 0x21); break;
+		case XFER_UDMA_0:	regU |= (unit ? 0xC2 : 0x31); break;
+		case XFER_MW_DMA_2:	regD |= (unit ? 0x40 : 0x10); break;
+		case XFER_MW_DMA_1:	regD |= (unit ? 0x80 : 0x20); break;
+		case XFER_MW_DMA_0:	regD |= (unit ? 0xC0 : 0x30); break;
+		case XFER_SW_DMA_2:	regD |= (unit ? 0x40 : 0x10); break;
+		case XFER_SW_DMA_1:	regD |= (unit ? 0x80 : 0x20); break;
+		case XFER_SW_DMA_0:	regD |= (unit ? 0xC0 : 0x30); break;
+		default:
+			return 1;
+	}
+	(void) pci_write_config_byte(dev, pciU, regU);
+	err = ide_config_drive_speed(drive, speed);
+	regD |= (unit ? 0x40 : 0x20);
+	(void) pci_write_config_byte(dev, pciD, regD);
+
+	return err;
+}
+
 static int config_chipset_for_dma (ide_drive_t *drive, unsigned int rev, byte ultra_66)
 {
 	struct hd_driveid *id	= drive->id;
 	ide_hwif_t *hwif	= HWIF(drive);
 	struct pci_dev *dev	= hwif->pci_dev;
-	unsigned long dma_base	= hwif->dma_base;
 
- 	byte unit		= (drive->select.b.unit & 0x01);
 	byte speed		= 0x00;
 	byte set_pio		= 0x00;
-	byte udma_timing_bits	= 0x00;
 	byte udma_33		= ((rev >= 0x05) || (ultra_66)) ? 1 : 0;
 	byte udma_66		= ((id->hw_config & 0x2000) && (hwif->udma_four)) ? 1 : 0;
-	/* int drive_number	= ((hwif->channel ? 2 : 0) + unit); */
 	int rval;
 
 	switch(dev->device) {
-		case PCI_DEVICE_ID_CMD_643:
-		case PCI_DEVICE_ID_CMD_646:
 		case PCI_DEVICE_ID_CMD_648:
+		case PCI_DEVICE_ID_CMD_646:
+		case PCI_DEVICE_ID_CMD_643:
 		default:
 			break;
 	}
@@ -416,22 +422,16 @@ static int config_chipset_for_dma (ide_drive_t *drive, unsigned int rev, byte ul
 	 * in the 646U2.
 	 * So we only do UltraDMA on revision 0x05 and 0x07 chipsets.
 	 */
-
 	if ((id->dma_ultra & 0x0010) && (udma_66) && (udma_33)) {
 		speed = XFER_UDMA_4;
-		udma_timing_bits = 0x10;	/* 2 clock */
 	} else if ((id->dma_ultra & 0x0008) && (udma_66) && (udma_33)) {
 		speed = XFER_UDMA_3;
-		udma_timing_bits = 0x20;	/* 3 clock */
 	} else if ((id->dma_ultra & 0x0004) && (udma_33)) {
 		speed = XFER_UDMA_2;
-		udma_timing_bits = 0x10;	/* 2 clock */
 	} else if ((id->dma_ultra & 0x0002) && (udma_33)) {
 		speed = XFER_UDMA_1;
-		udma_timing_bits = 0x20;	/* 3 clock */
 	} else if ((id->dma_ultra & 0x0001) && (udma_33)) {
 		speed = XFER_UDMA_0;
-		udma_timing_bits = 0x30;	/* 4 clock */
 	} else if (id->dma_mword & 0x0004) {
 		speed = XFER_MW_DMA_2;
 	} else if (id->dma_mword & 0x0002) {
@@ -452,27 +452,6 @@ static int config_chipset_for_dma (ide_drive_t *drive, unsigned int rev, byte ul
 
 	if (set_pio)
 		return ((int) ide_dma_off_quietly);
-
-#if 1
-	/*
-	 * This the alternate access method. :-(
-	 * The correct method is to directly setup the pci-config space.
-	 */ 
-	(void) ide_config_drive_speed(drive, speed);
-	outb(inb(dma_base+2)|(1<<(5+unit)), dma_base+2);
-
-	if (speed >= XFER_UDMA_0) {
-		byte udma_ctrl = inb(dma_base + 3);
-		/* Put this channel into UDMA mode. */
-		udma_ctrl |= (1 << unit);
-		udma_ctrl &= ~(0x04 << unit);
-		if (udma_66)
-			udma_ctrl |= (0x04 << unit);
-		udma_ctrl &= ~(0x30 << (unit * 2));
-		udma_ctrl |=  (udma_timing_bits << (unit * 2));
-		outb(udma_ctrl, dma_base+3);
-	}
-#endif
 
 	if (tune_chipset_for_dma(drive, speed))
 		return ((int) ide_dma_off);
@@ -500,17 +479,14 @@ static int cmd64x_config_drive_for_dma (ide_drive_t *drive)
 	class_rev &= 0xff;	
 
 	switch(dev->device) {
+		case PCI_DEVICE_ID_CMD_648:
+			can_ultra_66  = 1;
 		case PCI_DEVICE_ID_CMD_643:
-			can_ultra_33 = 1;
-			can_ultra_66 = 0;
+			can_ultra_33  = 1;
 			break;
 		case PCI_DEVICE_ID_CMD_646:
-			can_ultra_33 = (class_rev >= 0x05) ? 1 : 0;
-			can_ultra_66 = 0;
-			break;
-		case PCI_DEVICE_ID_CMD_648:
-			can_ultra_33 = 1;
-			can_ultra_66 = 1;
+			can_ultra_33  = (class_rev >= 0x05) ? 1 : 0;
+			can_ultra_66  = 0;
 			break;
 		default:
 			return hwif->dmaproc(ide_dma_off, drive);
@@ -595,6 +571,7 @@ static int cmd646_1_dmaproc (ide_dma_action_t func, ide_drive_t *drive)
 	/* Other cases are done by generic IDE-DMA code. */
 	return cmd64x_dmaproc(func, drive);
 }
+#endif /* CONFIG_BLK_DEV_IDEDMA */
 
 unsigned int __init pci_init_cmd64x (struct pci_dev *dev, const char *name)
 {
@@ -604,9 +581,11 @@ unsigned int __init pci_init_cmd64x (struct pci_dev *dev, const char *name)
 	pci_read_config_dword(dev, PCI_CLASS_REVISION, &class_rev);
 	class_rev &= 0xff;
 
-#if 0
-	if (dev->resource[PCI_ROM_RESOURCE].start)
+#ifdef __i386__
+	if (dev->resource[PCI_ROM_RESOURCE].start) {
 		pci_write_config_byte(dev, PCI_ROM_ADDRESS, dev->resource[PCI_ROM_RESOURCE].start | PCI_ROM_ADDRESS_ENABLE);
+		printk("%s: ROM enabled at 0x%08lx\n", name, dev->resource[PCI_ROM_RESOURCE].start);
+	}
 #endif
 
 	switch(dev->device) {
@@ -702,7 +681,9 @@ void __init ide_init_cmd64x (ide_hwif_t *hwif)
 	if (!hwif->dma_base)
 		return;
 
+#ifdef CONFIG_BLK_DEV_IDEDMA
 	switch(dev->device) {
+		case PCI_DEVICE_ID_CMD_648:
 		case PCI_DEVICE_ID_CMD_643:
 			hwif->dmaproc = &cmd64x_dmaproc;
 			break;
@@ -714,10 +695,8 @@ void __init ide_init_cmd64x (ide_hwif_t *hwif)
 				hwif->dmaproc = &cmd64x_dmaproc;
 			}
 			break;
-		case PCI_DEVICE_ID_CMD_648:
-			hwif->dmaproc = &cmd64x_dmaproc;
-			break;
 		default:
 			break;
 	}
+#endif /* CONFIG_BLK_DEV_IDEDMA */
 }

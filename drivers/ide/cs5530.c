@@ -1,5 +1,8 @@
 /*
- * linux/drivers/block/cs5530.c			Version 0.5	Feb 13, 2000
+ * linux/drivers/ide/cs5530.c		Version 0.6	Mar. 18, 2000
+ *
+ * Copyright (C) 2000			Andre Hedrick <andre@suse.com>
+ * Ditto of GNU General Public License.
  *
  * Copyright (C) 2000			Mark Lord <mlord@pobox.com>
  * May be copied or modified under the terms of the GNU General Public License
@@ -23,6 +26,7 @@
 #include <linux/ide.h>
 #include <asm/io.h>
 #include <asm/irq.h>
+
 #include "ide_modes.h"
 
 #define DISPLAY_CS5530_TIMINGS
@@ -120,6 +124,7 @@ static void cs5530_tuneproc (ide_drive_t *drive, byte pio)	/* pio=255 means "aut
 	}
 }
 
+#ifdef CONFIG_BLK_DEV_IDEDMA
 /*
  * cs5530_config_dma() handles selection/setting of DMA/UDMA modes
  * for both the chipset and drive.
@@ -241,6 +246,7 @@ int cs5530_dmaproc (ide_dma_action_t func, ide_drive_t *drive)
 	/* Other cases are done by generic IDE-DMA code. */
 	return ide_dmaproc(func, drive);
 }
+#endif /* CONFIG_BLK_DEV_IDEDMA */
 
 /*
  * Initialize the cs5530 bridge for reliable IDE DMA operation.
@@ -322,9 +328,11 @@ unsigned int __init pci_init_cs5530 (struct pci_dev *dev, const char *name)
 	restore_flags(flags);
 
 #if defined(DISPLAY_CS5530_TIMINGS) && defined(CONFIG_PROC_FS)
-	cs5530_proc = 1;
-	bmide_dev = dev;
-	cs5530_display_info = &cs5530_get_info;
+	if (!cs5530_proc) {
+		cs5530_proc = 1;
+		bmide_dev = dev;
+		cs5530_display_info = &cs5530_get_info;
+	}
 #endif /* DISPLAY_CS5530_TIMINGS && CONFIG_PROC_FS */
 
 	return 0;
@@ -343,7 +351,12 @@ void __init ide_init_cs5530 (ide_hwif_t *hwif)
 	} else {
 		unsigned int basereg, d0_timings;
 
+#ifdef CONFIG_BLK_DEV_IDEDMA
 		hwif->dmaproc  = &cs5530_dmaproc;
+#else
+		hwif->autodma = 0;
+#endif /* CONFIG_BLK_DEV_IDEDMA */
+
 		hwif->tuneproc = &cs5530_tuneproc;
 		basereg = CS5530_BASEREG(hwif);
 		d0_timings = inl(basereg+0);

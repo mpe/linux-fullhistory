@@ -1,5 +1,5 @@
 /*
- *  linux/drivers/block/ide-proc.c	Version 1.03	January  2, 1998
+ *  linux/drivers/ide/ide-proc.c	Version 1.03	January  2, 1998
  *
  *  Copyright (C) 1997-1998	Mark Lord
  */

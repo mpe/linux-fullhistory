@@ -1,5 +1,5 @@
 /*
- * linux/drivers/block/alim15x3.c		Version 0.08	Jan. 14, 2000
+ * linux/drivers/ide/alim15x3.c		Version 0.09	Mar. 18, 2000
  *
  *  Copyright (C) 1998-2000 Michel Aubry, Maintainer
  *  Copyright (C) 1998-2000 Andrzej Krzysztofowicz, Maintainer
@@ -37,7 +37,7 @@
 
 static int ali_get_info(char *buffer, char **addr, off_t offset, int count);
 extern int (*ali_display_info)(char *, char **, off_t, int);  /* ide-proc.c */
-struct pci_dev *bmide_dev;
+static struct pci_dev *bmide_dev;
 
 char *fifo[4] = {
 	"FIFO Off",
@@ -67,7 +67,7 @@ char *channel_status[8] = {
 	"error DRQ busy"
 };
 
-static int ali_get_info(char *buffer, char **addr, off_t offset, int count)
+static int ali_get_info (char *buffer, char **addr, off_t offset, int count)
 {
 	byte reg53h, reg5xh, reg5yh, reg5xh1, reg5yh1;
 	unsigned int bibma;
@@ -356,6 +356,12 @@ static int ali15x3_tune_chipset (ide_drive_t *drive, byte speed)
 	return (err);
 }
 
+static void config_chipset_for_pio (ide_drive_t *drive)
+{
+	ali15x3_tune_drive(drive, 5);
+}
+
+#ifdef CONFIG_BLK_DEV_IDEDMA
 static int config_chipset_for_dma (ide_drive_t *drive, byte ultra33)
 {
 	struct hd_driveid *id	= drive->id;
@@ -401,26 +407,21 @@ static int config_chipset_for_dma (ide_drive_t *drive, byte ultra33)
 	return rval;
 }
 
-static void config_chipset_for_pio (ide_drive_t *drive)
-{
-	ali15x3_tune_drive(drive, 5);
-}
-
-
 static byte ali15x3_can_ultra (ide_drive_t *drive)
 {
+#ifdef CONFIG_WDC_ALI15X3
 	struct hd_driveid *id	= drive->id;
+#endif /* CONFIG_WDC_ALI15X3 */
 
-#if 0
-	if (m5229_revision < 0x20) {
-#else
 	if (m5229_revision <= 0x20) {
-#endif
 		return 0;
 	} else if ((m5229_revision < 0xC2) &&
-		   ((drive->media!=ide_disk) ||
-		    (chip_is_1543c_e &&
-		     strstr(id->model, "WDC ")))) {
+#ifdef CONFIG_WDC_ALI15X3
+		   ((chip_is_1543c_e && strstr(id->model, "WDC ")) ||
+		    (drive->media!=ide_disk))) {
+#else /* CONFIG_WDC_ALI15X3 */
+		   (drive->media!=ide_disk)) {
+#endif /* CONFIG_WDC_ALI15X3 */
 		return 0;
 	} else {
 		return 1;
@@ -495,6 +496,7 @@ static int ali15x3_dmaproc (ide_dma_action_t func, ide_drive_t *drive)
 	}
 	return ide_dmaproc(func, drive);	/* use standard DMA stuff */
 }
+#endif /* CONFIG_BLK_DEV_IDEDMA */
 
 unsigned int __init pci_init_ali15x3 (struct pci_dev *dev, const char *name)
 {
@@ -519,9 +521,11 @@ unsigned int __init pci_init_ali15x3 (struct pci_dev *dev, const char *name)
 	}
 
 #if defined(DISPLAY_ALI_TIMINGS) && defined(CONFIG_PROC_FS)
-	ali_proc = 1;
-	bmide_dev = dev;
-	ali_display_info = &ali_get_info;
+	if (!ali_proc) {
+		ali_proc = 1;
+		bmide_dev = dev;
+		ali_display_info = &ali_get_info;
+	}
 #endif  /* defined(DISPLAY_ALI_TIMINGS) && defined(CONFIG_PROC_FS) */
 
 	return 0;
@@ -666,18 +670,20 @@ void __init ide_init_ali15x3 (ide_hwif_t *hwif)
 	}
 
 	hwif->tuneproc = &ali15x3_tune_drive;
+	hwif->drives[0].autotune = 1;
+	hwif->drives[1].autotune = 1;
+#ifndef CONFIG_BLK_DEV_IDEDMA
+	hwif->autodma = 0;
+	return;
+#endif /* CONFIG_BLK_DEV_IDEDMA */
+
 	if ((hwif->dma_base) && (m5229_revision >= 0x20)) {
 		/*
 		 * M1543C or newer for DMAing
 		 */
 		hwif->dmaproc = &ali15x3_dmaproc;
 		hwif->autodma = 1;
-	} else {
-		hwif->autodma = 0;
-		hwif->drives[0].autotune = 1;
-		hwif->drives[1].autotune = 1;
 	}
-	return;
 }
 
 void ide_dmacapable_ali15x3 (ide_hwif_t *hwif, unsigned long dmabase)

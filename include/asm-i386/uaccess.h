@@ -56,7 +56,7 @@ extern int __verify_write(const void *, unsigned long);
 			 segment_eq(get_fs(),KERNEL_DS) || \
 			  __verify_write((void *)(addr),(size))))
 
-#endif /* CPU */
+#endif
 
 extern inline int verify_area(int type, const void * addr, unsigned long size)
 {

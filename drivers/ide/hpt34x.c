@@ -1,5 +1,5 @@
 /*
- * linux/drivers/block/hpt34x.c		Version 0.29	Feb. 10, 2000
+ * linux/drivers/ide/hpt34x.c		Version 0.30	Mar. 18, 2000
  *
  * Copyright (C) 1998-2000	Andre Hedrick (andre@suse.com)
  * May be copied or modified under the terms of the GNU General Public License
@@ -144,6 +144,59 @@ static int hpt34x_tune_chipset (ide_drive_t *drive, byte speed)
 	return(err);
 }
 
+static void config_chipset_for_pio (ide_drive_t *drive)
+{
+	unsigned short eide_pio_timing[6] = {960, 480, 240, 180, 120, 90};
+	unsigned short xfer_pio = drive->id->eide_pio_modes;
+
+	byte	timing, speed, pio;
+
+	pio = ide_get_best_pio_mode(drive, 255, 5, NULL);
+
+	if (xfer_pio> 4)
+		xfer_pio = 0;
+
+	if (drive->id->eide_pio_iordy > 0) {
+		for (xfer_pio = 5;
+			xfer_pio>0 &&
+			drive->id->eide_pio_iordy>eide_pio_timing[xfer_pio];
+			xfer_pio--);
+	} else {
+		xfer_pio = (drive->id->eide_pio_modes & 4) ? 0x05 :
+			   (drive->id->eide_pio_modes & 2) ? 0x04 :
+			   (drive->id->eide_pio_modes & 1) ? 0x03 : xfer_pio;
+	}
+
+	timing = (xfer_pio >= pio) ? xfer_pio : pio;
+
+	switch(timing) {
+		case 4: speed = XFER_PIO_4;break;
+		case 3: speed = XFER_PIO_3;break;
+		case 2: speed = XFER_PIO_2;break;
+		case 1: speed = XFER_PIO_1;break;
+		default:
+			speed = (!drive->id->tPIO) ? XFER_PIO_0 : XFER_PIO_SLOW;
+			break;
+		}
+	(void) hpt34x_tune_chipset(drive, speed);
+}
+
+static void hpt34x_tune_drive (ide_drive_t *drive, byte pio)
+{
+	byte speed;
+
+	switch(pio) {
+		case 4:		speed = XFER_PIO_4;break;
+		case 3:		speed = XFER_PIO_3;break;
+		case 2:		speed = XFER_PIO_2;break;
+		case 1:		speed = XFER_PIO_1;break;
+		default:	speed = XFER_PIO_0;break;
+	}
+	hpt34x_clear_chipset(drive);
+	(void) hpt34x_tune_chipset(drive, speed);
+}
+
+#ifdef CONFIG_BLK_DEV_IDEDMA
 /*
  * This allows the configuration of ide_pci chipset registers
  * for cards that learn about the drive's UDMA, DMA, PIO capabilities
@@ -193,58 +246,6 @@ static int config_chipset_for_dma (ide_drive_t *drive, byte ultra)
 			((id->dma_mword >> 8) & 7) ? ide_dma_on :
 			((id->dma_1word >> 8) & 7) ? ide_dma_on :
 						     ide_dma_off_quietly);
-}
-
-static void config_chipset_for_pio (ide_drive_t *drive)
-{
-	unsigned short eide_pio_timing[6] = {960, 480, 240, 180, 120, 90};
-	unsigned short xfer_pio	= drive->id->eide_pio_modes;
-
-	byte			timing, speed, pio;
-
-	pio = ide_get_best_pio_mode(drive, 255, 5, NULL);
-
-	if (xfer_pio> 4)
-		xfer_pio = 0;
-
-	if (drive->id->eide_pio_iordy > 0) {
-		for (xfer_pio = 5;
-			xfer_pio>0 &&
-			drive->id->eide_pio_iordy>eide_pio_timing[xfer_pio];
-			xfer_pio--);
-	} else {
-		xfer_pio = (drive->id->eide_pio_modes & 4) ? 0x05 :
-			   (drive->id->eide_pio_modes & 2) ? 0x04 :
-			   (drive->id->eide_pio_modes & 1) ? 0x03 : xfer_pio;
-	}
-
-	timing = (xfer_pio >= pio) ? xfer_pio : pio;
-
-	switch(timing) {
-		case 4: speed = XFER_PIO_4;break;
-		case 3: speed = XFER_PIO_3;break;
-		case 2: speed = XFER_PIO_2;break;
-		case 1: speed = XFER_PIO_1;break;
-		default:
-			speed = (!drive->id->tPIO) ? XFER_PIO_0 : XFER_PIO_SLOW;
-			break;
-	}
-	(void) hpt34x_tune_chipset(drive, speed);
-}
-
-static void hpt34x_tune_drive (ide_drive_t *drive, byte pio)
-{
-	byte speed;
-
-	switch(pio) {
-		case 4:		speed = XFER_PIO_4;break;
-		case 3:		speed = XFER_PIO_3;break;
-		case 2:		speed = XFER_PIO_2;break;
-		case 1:		speed = XFER_PIO_1;break;
-		default:	speed = XFER_PIO_0;break;
-	}
-	hpt34x_clear_chipset(drive);
-	(void) hpt34x_tune_chipset(drive, speed);
 }
 
 static int config_drive_xfer_rate (ide_drive_t *drive)
@@ -347,6 +348,7 @@ int hpt34x_dmaproc (ide_dma_action_t func, ide_drive_t *drive)
 	}
 	return ide_dmaproc(func, drive);	/* use standard DMA stuff */
 }
+#endif /* CONFIG_BLK_DEV_IDEDMA */
 
 /*
  * If the BIOS does not set the IO base addaress to XX00, 343 will fail.
@@ -395,9 +397,11 @@ unsigned int __init pci_init_hpt34x (struct pci_dev *dev, const char *name)
 	__restore_flags(flags);	/* local CPU only */
 
 #if defined(DISPLAY_HPT34X_TIMINGS) && defined(CONFIG_PROC_FS)
-	hpt34x_proc = 1;
-	bmide_dev = dev;
-	hpt34x_display_info = &hpt34x_get_info;
+	if (!hpt34x_proc) {
+		hpt34x_proc = 1;
+		bmide_dev = dev;
+		hpt34x_display_info = &hpt34x_get_info;
+	}
 #endif /* DISPLAY_HPT34X_TIMINGS && CONFIG_PROC_FS */
 
 	return dev->irq;
@@ -406,6 +410,8 @@ unsigned int __init pci_init_hpt34x (struct pci_dev *dev, const char *name)
 void __init ide_init_hpt34x (ide_hwif_t *hwif)
 {
 	hwif->tuneproc = &hpt34x_tune_drive;
+
+#ifdef CONFIG_BLK_DEV_IDEDMA
 	if (hwif->dma_base) {
 		unsigned short pcicmd = 0;
 
@@ -416,4 +422,9 @@ void __init ide_init_hpt34x (ide_hwif_t *hwif)
 		hwif->drives[0].autotune = 1;
 		hwif->drives[1].autotune = 1;
 	}
+#else /* !CONFIG_BLK_DEV_IDEDMA */
+	hwif->drives[0].autotune = 1;
+	hwif->drives[1].autotune = 1;
+	hwif->autodma = 0;
+#endif /* CONFIG_BLK_DEV_IDEDMA */
 }

@@ -1,5 +1,5 @@
 /*
- *  linux/drivers/block/ide.c		Version 6.30	Dec 28, 1999
+ *  linux/drivers/ide/ide.c		Version 6.30	Dec 28, 1999
  *
  *  Copyright (C) 1994-1998  Linus Torvalds & authors (see below)
  */
@@ -1809,9 +1809,9 @@ static void revalidate_drives (void)
 static void ide_probe_module (void)
 {
 	if (!ide_probe) {
-#ifdef CONFIG_KMOD
+#if defined(CONFIG_KMOD) && defined(CONFIG_BLK_DEV_IDE_MODULE)
 		(void) request_module("ide-probe-mod");
-#endif /* CONFIG_KMOD */
+#endif /* (CONFIG_KMOD) && (CONFIG_BLK_DEV_IDE_MODULE) */
 	} else {
 		(void) ide_probe->init();
 	}
@@ -2491,6 +2491,30 @@ static int ide_ioctl (struct inode *inode, struct file *file,
 			return 0;
 		}
 
+		case HDIO_GETGEO_BIG:
+		{
+			struct hd_big_geometry *loc = (struct hd_big_geometry *) arg;
+			if (!loc || (drive->media != ide_disk && drive->media != ide_floppy)) return -EINVAL;
+			if (put_user(drive->bios_head, (byte *) &loc->heads)) return -EFAULT;
+			if (put_user(drive->bios_sect, (byte *) &loc->sectors)) return -EFAULT;
+			if (put_user(drive->bios_cyl, (unsigned int *) &loc->cylinders)) return -EFAULT;
+			if (put_user((unsigned)drive->part[MINOR(inode->i_rdev)&PARTN_MASK].start_sect,
+				(unsigned long *) &loc->start)) return -EFAULT;
+			return 0;
+		}
+
+		case HDIO_GETGEO_BIG_RAW:
+		{
+			struct hd_big_geometry *loc = (struct hd_big_geometry *) arg;
+			if (!loc || (drive->media != ide_disk && drive->media != ide_floppy)) return -EINVAL;
+			if (put_user(drive->head, (byte *) &loc->heads)) return -EFAULT;
+			if (put_user(drive->sect, (byte *) &loc->sectors)) return -EFAULT;
+			if (put_user(drive->cyl, (unsigned int *) &loc->cylinders)) return -EFAULT;
+			if (put_user((unsigned)drive->part[MINOR(inode->i_rdev)&PARTN_MASK].start_sect,
+				(unsigned long *) &loc->start)) return -EFAULT;
+			return 0;
+		}
+
 	 	case BLKGETSIZE:   /* Return device size */
 			return put_user(drive->part[MINOR(inode->i_rdev)&PARTN_MASK].nr_sects, (long *) arg);
 
@@ -2564,8 +2588,7 @@ static int ide_ioctl (struct inode *inode, struct file *file,
 		}
 	        case HDIO_UNREGISTER_HWIF:
 			if (!capable(CAP_SYS_ADMIN)) return -EACCES;
-			/* should I check here for arg > MAX_HWIFS, or
-			   just let ide_unregister fail silently? -- shaver */
+			/* (arg > MAX_HWIFS) checked in function */
 			ide_unregister(arg);
 			return 0;
 		case HDIO_SET_NICE:

@@ -1,5 +1,5 @@
 /*
- *  linux/drivers/block/ide_cd.h
+ *  linux/drivers/ide/ide_cd.h
  *
  *  Copyright (C) 1996-98  Erik Andersen
  *  Copyright (C) 1998-2000 Jens Axboe

@@ -1,5 +1,5 @@
 /*
- *  linux/drivers/block/qd6580.c		Version 0.02	Feb 09, 1996
+ *  linux/drivers/ide/qd6580.c		Version 0.02	Feb 09, 1996
  *
  *  Copyright (C) 1996  Linus Torvalds & author (see below)
  */

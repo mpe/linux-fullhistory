@@ -738,17 +738,11 @@ sim710_u.h: sim710_d.h
 
 sim710.o : sim710_d.h
  
-initio.o: ini9100u.c i91uscsi.c
-	$(CC) $(CFLAGS) -c ini9100u.c -o ini9100u.o
-	$(CC) $(CFLAGS) -c i91uscsi.c -o i91uscsi.o
+initio.o: ini9100u.o i91uscsi.o
 	$(LD) -r -o initio.o ini9100u.o i91uscsi.o
-	rm -f ini9100u.o i91uscsi.o
 
 a100u2w.o: inia100.o i60uscsi.o
 	$(LD) -r -o a100u2w.o inia100.o i60uscsi.o
-
-megaraid.o: megaraid.c
-	$(CC) $(CFLAGS) -c megaraid.c
 
 scsi_mod.o: $(MIX_OBJS) hosts.o scsi.o scsi_ioctl.o constants.o \
 		scsicam.o scsi_proc.o scsi_error.o scsi_obsolete.o \

@@ -1,7 +1,7 @@
 /*
- *  linux/drivers/block/ide-pci.c		Version 1.04	July 27, 1999
+ *  linux/drivers/ide/ide-pci.c		Version 1.04	July 27, 1999
  *
- *  Copyright (c) 1998-1999  Andre Hedrick
+ *  Copyright (c) 1998-2000  Andre Hedrick <andre@linux-ide.org>
  *
  *  Copyright (c) 1995-1998  Mark Lord
  *  May be copied or modified under the terms of the GNU General Public License

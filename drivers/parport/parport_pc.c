@@ -2348,7 +2348,7 @@ MODULE_DEVICE_TABLE(pci,parport_pc_pci_tbl);
 static int __devinit parport_pc_pci_probe (struct pci_dev *dev,
 					   const struct pci_device_id *id)
 {
-	int count, n, i = id->driver_data;
+	int err, count, n, i = id->driver_data;
 	if (i < last_sio)
 		/* This is an onboard Super-IO and has already been probed */
 		return 0;
@@ -2356,6 +2356,9 @@ static int __devinit parport_pc_pci_probe (struct pci_dev *dev,
 	/* This is a PCI card */
 	i -= last_sio;
 	count = 0;
+	if ((err = pci_enable_device (dev)) != 0)
+		return err;
+
 	for (n = 0; n < cards[i].numports; n++) {
 		int lo = cards[i].addr[n].lo;
 		int hi = cards[i].addr[n].hi;
@@ -2370,7 +2373,7 @@ static int __devinit parport_pc_pci_probe (struct pci_dev *dev,
 			count++;
 	}
 
-	return count;
+	return count == 0 ? -ENODEV : 0;
 }
 
 static struct pci_driver parport_pc_pci_driver = {

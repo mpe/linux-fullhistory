@@ -1,5 +1,5 @@
 /*
- * linux/drivers/block/ide-pnp.c
+ * linux/drivers/ide/ide-pnp.c
  *
  * This file provides autodetection for ISA PnP IDE interfaces.
  * It was tested with "ESS ES1868 Plug and Play AudioDrive" IDE interface.

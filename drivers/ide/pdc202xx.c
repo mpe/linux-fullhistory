@@ -1,5 +1,5 @@
 /*
- *  linux/drivers/block/pdc202xx.c	Version 0.29	Feb. 10, 2000
+ *  linux/drivers/ide/pdc202xx.c	Version 0.30	Mar. 18, 2000
  *
  *  Copyright (C) 1998-2000	Andre Hedrick (andre@suse.com)
  *  May be copied or modified under the terms of the GNU General Public License
@@ -9,6 +9,9 @@
  *  Note that BIOS v1.29 is reported to fix the problem.  Since this is
  *  safe chipset tuning, including this support is harmless
  *
+ *  Promise Ultra66 cards with BIOS v1.11 this
+ *  compiled into the kernel if you have more than one card installed.
+ *
  *  The latest chipset code will support the following ::
  *  Three Ultra33 controllers and 12 drives.
  *  8 are UDMA supported and 4 are limited to DMA mode 2 multi-word.
@@ -16,60 +19,6 @@
  *
  *  UNLESS you enable "CONFIG_PDC202XX_BURST"
  *
- *  There is only one BIOS in the three contollers.
- *
- *  May  8 20:56:17 Orion kernel:
- *  Uniform Multi-Platform E-IDE driver Revision: 6.19
- *  PDC20246: IDE controller on PCI bus 00 dev a0
- *  PDC20246: not 100% native mode: will probe irqs later
- *  PDC20246: ROM enabled at 0xfebd0000
- *  PDC20246: (U)DMA Burst Bit ENABLED Primary PCI Mode Secondary PCI Mode.
- *      ide0: BM-DMA at 0xef80-0xef87, BIOS settings: hda:DMA, hdb:DMA
- *      ide1: BM-DMA at 0xef88-0xef8f, BIOS settings: hdc:pio, hdd:pio
- *  PDC20246: IDE controller on PCI bus 00 dev 98
- *  PDC20246: not 100% native mode: will probe irqs later
- *  PDC20246: ROM enabled at 0xfebc0000
- *  PDC20246: (U)DMA Burst Bit ENABLED Primary PCI Mode Secondary PCI Mode.
- *      ide2: BM-DMA at 0xef40-0xef47, BIOS settings: hde:DMA, hdf:DMA
- *      ide3: BM-DMA at 0xef48-0xef4f, BIOS settings: hdg:DMA, hdh:DMA
- *  PDC20246: IDE controller on PCI bus 00 dev 90
- *  PDC20246: not 100% native mode: will probe irqs later
- *  PDC20246: ROM enabled at 0xfebb0000
- *  PDC20246: (U)DMA Burst Bit DISABLED Primary PCI Mode Secondary PCI Mode.
- *  PDC20246: FORCING BURST BIT 0x00 -> 0x01 ACTIVE
- *      ide4: BM-DMA at 0xef00-0xef07, BIOS settings: hdi:DMA, hdj:pio
- *      ide5: BM-DMA at 0xef08-0xef0f, BIOS settings: hdk:pio, hdl:pio
- *  PIIX3: IDE controller on PCI bus 00 dev 39
- *  PIIX3: device not capable of full native PCI mode
- *
- *  ide0 at 0xeff0-0xeff7,0xefe6 on irq 19
- *  ide1 at 0xefa8-0xefaf,0xebe6 on irq 19
- *  ide2 at 0xefa0-0xefa7,0xef7e on irq 18
- *  ide3 at 0xef68-0xef6f,0xef66 on irq 18
- *  ide4 at 0xef38-0xef3f,0xef62 on irq 17
- *  hda: QUANTUM FIREBALL ST6.4A, 6149MB w/81kB Cache, CHS=13328/15/63, UDMA(33)
- *  hdb: QUANTUM FIREBALL ST3.2A, 3079MB w/81kB Cache, CHS=6256/16/63, UDMA(33)
- *  hde: Maxtor 72004 AP, 1916MB w/128kB Cache, CHS=3893/16/63, DMA
- *  hdf: Maxtor 71626 A, 1554MB w/64kB Cache, CHS=3158/16/63, DMA
- *  hdi: Maxtor 90680D4, 6485MB w/256kB Cache, CHS=13176/16/63, UDMA(33)
- *  hdj: Maxtor 90680D4, 6485MB w/256kB Cache, CHS=13176/16/63, UDMA(33)
- *
- *  Promise Ultra66 cards with BIOS v1.11 this
- *  compiled into the kernel if you have more than one card installed.
- *
- *  PDC20262: IDE controller on PCI bus 00 dev a0
- *  PDC20262: not 100% native mode: will probe irqs later
- *  PDC20262: ROM enabled at 0xfebb0000
- *  PDC20262: (U)DMA Burst Bit ENABLED Primary PCI Mode Secondary PCI Mode.
- *      ide0: BM-DMA at 0xef00-0xef07, BIOS settings: hda:pio, hdb:pio
- *      ide1: BM-DMA at 0xef08-0xef0f, BIOS settings: hdc:pio, hdd:pio
- *
- *  UDMA 4/2 and UDMA 3/1 only differ by the testing bit 13 in word93.
- *  Chipset timing speeds must be identical
- *
- *  drive_number
- *      = ((HWIF(drive)->channel ? 2 : 0) + (drive->select.b.unit & 0x01));
- *      = ((hwif->channel ? 2 : 0) + (drive->select.b.unit & 0x01));
  */
 
 /*
@@ -100,7 +49,7 @@
 #define PDC202XX_DEBUG_DRIVE_INFO		0
 #define PDC202XX_DECODE_REGISTER_INFO		0
 
-#undef DISPLAY_PDC202XX_TIMINGS
+#define DISPLAY_PDC202XX_TIMINGS
 
 #if defined(DISPLAY_PDC202XX_TIMINGS) && defined(CONFIG_PROC_FS)
 #include <linux/stat.h>
@@ -111,12 +60,55 @@ extern int (*pdc202xx_display_info)(char *, char **, off_t, int); /* ide-proc.c 
 extern char *ide_media_verbose(ide_drive_t *);
 static struct pci_dev *bmide_dev;
 
+char *pdc202xx_pio_verbose (u32 drive_pci)
+{
+	if ((drive_pci & 0x000ff000) == 0x000ff000) return("NOTSET");
+	if ((drive_pci & 0x00000401) == 0x00000401) return("PIO 4");
+	if ((drive_pci & 0x00000602) == 0x00000602) return("PIO 3");
+	if ((drive_pci & 0x00000803) == 0x00000803) return("PIO 2");
+	if ((drive_pci & 0x00000C05) == 0x00000C05) return("PIO 1");
+	if ((drive_pci & 0x00001309) == 0x00001309) return("PIO 0");
+	return("PIO ?");
+}
+
+char *pdc202xx_dma_verbose (u32 drive_pci)
+{
+	if ((drive_pci & 0x00036000) == 0x00036000) return("MWDMA 2");
+	if ((drive_pci & 0x00046000) == 0x00046000) return("MWDMA 1");
+	if ((drive_pci & 0x00056000) == 0x00056000) return("MWDMA 0");
+	if ((drive_pci & 0x00056000) == 0x00056000) return("SWDMA 2");
+	if ((drive_pci & 0x00068000) == 0x00068000) return("SWDMA 1");
+	if ((drive_pci & 0x000BC000) == 0x000BC000) return("SWDMA 0");
+	return("PIO---");
+}
+
+char *pdc202xx_ultra_verbose (u32 drive_pci, u16 slow_cable)
+{
+	if ((drive_pci & 0x000ff000) == 0x000ff000)
+		return("NOTSET");
+	if ((drive_pci & 0x00012000) == 0x00012000)
+		return((slow_cable) ? "UDMA 2" : "UDMA 4");
+	if ((drive_pci & 0x00024000) == 0x00024000)
+		return((slow_cable) ? "UDMA 1" : "UDMA 3");
+	if ((drive_pci & 0x00036000) == 0x00036000)
+		return("UDMA 0");
+	return(pdc202xx_dma_verbose(drive_pci));
+}
+
 static int pdc202xx_get_info (char *buffer, char **addr, off_t offset, int count)
 {
 	char *p = buffer;
 
 	u32 bibma = bmide_dev->resource[4].start;
+	u32 reg60h = 0, reg64h = 0, reg68h = 0, reg6ch = 0;
+	u16 reg50h = 0, pmask = (1<<10), smask = (1<<11);
 	u8 c0 = 0, c1 = 0;
+
+	pci_read_config_word(bmide_dev, 0x50, &reg50h);
+	pci_read_config_dword(bmide_dev, 0x60, &reg60h);
+	pci_read_config_dword(bmide_dev, 0x64, &reg64h);
+	pci_read_config_dword(bmide_dev, 0x68, &reg68h);
+	pci_read_config_dword(bmide_dev, 0x6c, &reg6ch);
 
         /*
          * at that point bibma+0x2 et bibma+0xa are byte registers
@@ -131,6 +123,7 @@ static int pdc202xx_get_info (char *buffer, char **addr, off_t offset, int count
 			break;
 		case PCI_DEVICE_ID_PROMISE_20246:
 			p += sprintf(p, "\n                                PDC20246 Chipset.\n");
+			reg50h |= 0x0c00;
 			break;
 		default:
 			p += sprintf(p, "\n                                PDC202XX Chipset.\n");
@@ -139,17 +132,18 @@ static int pdc202xx_get_info (char *buffer, char **addr, off_t offset, int count
 
 	p += sprintf(p, "--------------- Primary Channel ---------------- Secondary Channel -------------\n");
 	p += sprintf(p, "                %sabled                         %sabled\n",
-			(c0&0x80) ? "dis" : " en",
-			(c1&0x80) ? "dis" : " en");
+		(c0&0x80)?"dis":" en",(c1&0x80)?"dis":" en");
 	p += sprintf(p, "--------------- drive0 --------- drive1 -------- drive0 ---------- drive1 ------\n");
 	p += sprintf(p, "DMA enabled:    %s              %s             %s               %s\n",
-			(c0&0x20) ? "yes" : "no ", (c0&0x40) ? "yes" : "no ",
-			(c1&0x20) ? "yes" : "no ", (c1&0x40) ? "yes" : "no " );
-
-	p += sprintf(p, "UDMA\n");
-	p += sprintf(p, "DMA\n");
-	p += sprintf(p, "PIO\n");
-
+		(c0&0x20)?"yes":"no ",(c0&0x40)?"yes":"no ",(c1&0x20)?"yes":"no ",(c1&0x40)?"yes":"no ");
+	p += sprintf(p, "DMA Mode:       %s           %s          %s            %s\n",
+		pdc202xx_ultra_verbose(reg60h, (reg50h & pmask)),
+		pdc202xx_ultra_verbose(reg64h, (reg50h & pmask)),
+		pdc202xx_ultra_verbose(reg68h, (reg50h & smask)),
+		pdc202xx_ultra_verbose(reg6ch, (reg50h & smask)));
+	p += sprintf(p, " PIO Mode:      %s            %s           %s             %s\n",
+		pdc202xx_pio_verbose(reg60h),pdc202xx_pio_verbose(reg64h),
+		pdc202xx_pio_verbose(reg68h),pdc202xx_pio_verbose(reg6ch));
 	return p-buffer;	/* => must be less than 4k! */
 }
 #endif  /* defined(DISPLAY_PDC202XX_TIMINGS) && defined(CONFIG_PROC_FS) */
@@ -268,6 +262,90 @@ static void decode_registers (byte registers, byte value)
 
 #endif /* PDC202XX_DECODE_REGISTER_INFO */
 
+/*   0    1    2    3    4    5    6   7   8
+ * 960, 480, 390, 300, 240, 180, 120, 90, 60
+ *           180, 150, 120,  90,  60
+ * DMA_Speed
+ * 180, 120,  90,  90,  90,  60,  30
+ *  11,   5,   4,   3,   2,   1,   0
+ */
+static int config_chipset_for_pio (ide_drive_t *drive, byte pio)
+{
+	ide_hwif_t *hwif	= HWIF(drive);
+	struct pci_dev *dev	= hwif->pci_dev;
+	byte			drive_pci, speed;
+	byte			AP, BP, TA, TB;
+
+	int drive_number	= ((hwif->channel ? 2 : 0) + (drive->select.b.unit & 0x01));
+	int err;
+
+	switch (drive_number) {
+		case 0: drive_pci = 0x60; break;
+		case 1: drive_pci = 0x64; break;
+		case 2: drive_pci = 0x68; break;
+		case 3: drive_pci = 0x6c; break;
+		default: return 1;
+	}
+
+	pci_read_config_byte(dev, (drive_pci), &AP);
+	pci_read_config_byte(dev, (drive_pci)|0x01, &BP);
+
+
+	if ((AP & 0x0F) || (BP & 0x07)) {
+		/* clear PIO modes of lower 8421 bits of A Register */
+		pci_write_config_byte(dev, (drive_pci), AP & ~0x0F);
+		pci_read_config_byte(dev, (drive_pci), &AP);
+
+		/* clear PIO modes of lower 421 bits of B Register */
+		pci_write_config_byte(dev, (drive_pci)|0x01, BP & ~0x07);
+		pci_read_config_byte(dev, (drive_pci)|0x01, &BP);
+
+		pci_read_config_byte(dev, (drive_pci), &AP);
+		pci_read_config_byte(dev, (drive_pci)|0x01, &BP);
+	}
+
+	pio = (pio == 5) ? 4 : pio;
+	switch (ide_get_best_pio_mode(drive, 255, pio, NULL)) {
+		case 4:speed = XFER_PIO_4; TA=0x01; TB=0x04; break;
+		case 3:speed = XFER_PIO_3; TA=0x02; TB=0x06; break;
+		case 2:speed = XFER_PIO_2; TA=0x03; TB=0x08; break;
+		case 1:speed = XFER_PIO_1; TA=0x05; TB=0x0C; break;
+		case 0:
+		default:speed = XFER_PIO_0; TA=0x09; TB=0x13; break;
+	}
+	pci_write_config_byte(dev, (drive_pci), AP|TA);
+	pci_write_config_byte(dev, (drive_pci)|0x01, BP|TB);
+
+#if PDC202XX_DECODE_REGISTER_INFO
+	pci_read_config_byte(dev, (drive_pci), &AP);
+	pci_read_config_byte(dev, (drive_pci)|0x01, &BP);
+	pci_read_config_byte(dev, (drive_pci)|0x02, &CP);
+	pci_read_config_byte(dev, (drive_pci)|0x03, &DP);
+
+	decode_registers(REG_A, AP);
+	decode_registers(REG_B, BP);
+	decode_registers(REG_C, CP);
+	decode_registers(REG_D, DP);
+#endif /* PDC202XX_DECODE_REGISTER_INFO */
+
+	err = ide_config_drive_speed(drive, speed);
+
+#if PDC202XX_DEBUG_DRIVE_INFO
+	printk("%s: %s drive%d 0x%08x ",
+		drive->name, ide_xfer_verbose(speed),
+		drive_number, drive_conf);
+		pci_read_config_dword(dev, drive_pci, &drive_conf);
+	printk("0x%08x\n", drive_conf);
+#endif /* PDC202XX_DEBUG_DRIVE_INFO */
+	return err;
+}
+
+static void pdc202xx_tune_drive (ide_drive_t *drive, byte pio)
+{
+	(void) config_chipset_for_pio(drive, pio);
+}
+
+#ifdef CONFIG_BLK_DEV_IDEDMA
 static int config_chipset_for_dma (ide_drive_t *drive, byte ultra)
 {
 	struct hd_driveid *id	= drive->id;
@@ -476,91 +554,6 @@ chipset_is_set:
 						     ide_dma_off_quietly);
 }
 
-/*   0    1    2    3    4    5    6   7   8
- * 960, 480, 390, 300, 240, 180, 120, 90, 60
- *           180, 150, 120,  90,  60
- * DMA_Speed
- * 180, 120,  90,  90,  90,  60,  30
- *  11,   5,   4,   3,   2,   1,   0
- */
-
-static int config_chipset_for_pio (ide_drive_t *drive, byte pio)
-{
-	ide_hwif_t *hwif	= HWIF(drive);
-	struct pci_dev *dev	= hwif->pci_dev;
-	byte			drive_pci, speed;
-	byte			AP, BP, TA, TB;
-
-	int drive_number	= ((hwif->channel ? 2 : 0) + (drive->select.b.unit & 0x01));
-	int err;
-
-	switch (drive_number) {
-		case 0: drive_pci = 0x60;	break;
-		case 1: drive_pci = 0x64;	break;
-		case 2: drive_pci = 0x68;	break;
-		case 3: drive_pci = 0x6c;	break;
-		default:			return 1;
-	}
-
-        pci_read_config_byte(dev, (drive_pci), &AP);
-        pci_read_config_byte(dev, (drive_pci)|0x01, &BP);
-
-
-        if ((AP & 0x0F) || (BP & 0x07)) {
-		/* clear PIO modes of lower 8421 bits of A Register */
-		pci_write_config_byte(dev, (drive_pci), AP & ~0x0F);
-		pci_read_config_byte(dev, (drive_pci), &AP);
-
-		/* clear PIO modes of lower 421 bits of B Register */
-		pci_write_config_byte(dev, (drive_pci)|0x01, BP & ~0x07);
-		pci_read_config_byte(dev, (drive_pci)|0x01, &BP);
-
-		pci_read_config_byte(dev, (drive_pci), &AP);
-		pci_read_config_byte(dev, (drive_pci)|0x01, &BP);
-	}
-
-	pio = (pio == 5) ? 4 : pio;
-	switch (ide_get_best_pio_mode(drive, 255, pio, NULL)) {
-		case 4:  speed = XFER_PIO_4; TA=0x01; TB=0x04; break;
-		case 3:  speed = XFER_PIO_3; TA=0x02; TB=0x06; break;
-		case 2:  speed = XFER_PIO_2; TA=0x03; TB=0x08; break;
-		case 1:  speed = XFER_PIO_1; TA=0x05; TB=0x0C; break;
-		case 0:
-		default: speed = XFER_PIO_0; TA=0x09; TB=0x13; break;
-	}
-	pci_write_config_byte(dev, (drive_pci), AP|TA);
-	pci_write_config_byte(dev, (drive_pci)|0x01, BP|TB);
-
-#if PDC202XX_DECODE_REGISTER_INFO
-	pci_read_config_byte(dev, (drive_pci), &AP);
-	pci_read_config_byte(dev, (drive_pci)|0x01, &BP);
-	pci_read_config_byte(dev, (drive_pci)|0x02, &CP);
-	pci_read_config_byte(dev, (drive_pci)|0x03, &DP);
-
-	decode_registers(REG_A, AP);
-	decode_registers(REG_B, BP);
-	decode_registers(REG_C, CP);
-	decode_registers(REG_D, DP);
-#endif /* PDC202XX_DECODE_REGISTER_INFO */
-
-	err = ide_config_drive_speed(drive, speed);
-
-#if PDC202XX_DEBUG_DRIVE_INFO
-	printk("%s: %s drive%d 0x%08x ",
-		drive->name, ide_xfer_verbose(speed),
-		drive_number, drive_conf);
-	pci_read_config_dword(dev, drive_pci, &drive_conf);
-	printk("0x%08x\n", drive_conf);
-#endif /* PDC202XX_DEBUG_DRIVE_INFO */
-
-	return err;
-}
-
-static void pdc202xx_tune_drive (ide_drive_t *drive, byte pio)
-{
-	(void) config_chipset_for_pio(drive, pio);
-}
-
 static int config_drive_xfer_rate (ide_drive_t *drive)
 {
 	struct hd_driveid *id = drive->id;
@@ -625,6 +618,7 @@ int pdc202xx_dmaproc (ide_dma_action_t func, ide_drive_t *drive)
 	}
 	return ide_dmaproc(func, drive);	/* use standard DMA stuff */
 }
+#endif /* CONFIG_BLK_DEV_IDEDMA */
 
 unsigned int __init pci_init_pdc202xx (struct pci_dev *dev, const char *name)
 {
@@ -701,11 +695,12 @@ unsigned int __init pci_init_pdc202xx (struct pci_dev *dev, const char *name)
 #endif /* CONFIG_PDC202XX_MASTER */
 
 #if defined(DISPLAY_PDC202XX_TIMINGS) && defined(CONFIG_PROC_FS)
-        pdc202xx_proc = 1;
-        bmide_dev = dev;
-        pdc202xx_display_info = &pdc202xx_get_info;
+	if (!pdc202xx_proc) {
+		pdc202xx_proc = 1;
+		bmide_dev = dev;
+		pdc202xx_display_info = &pdc202xx_get_info;
+	}
 #endif /* DISPLAY_PDC202XX_TIMINGS && CONFIG_PROC_FS */
-
 	return dev->irq;
 }
 
@@ -722,10 +717,18 @@ void __init ide_init_pdc202xx (ide_hwif_t *hwif)
 {
 	hwif->tuneproc = &pdc202xx_tune_drive;
 
+#ifdef CONFIG_BLK_DEV_IDEDMA
 	if (hwif->dma_base) {
 		hwif->dmaproc = &pdc202xx_dmaproc;
+		hwif->autodma = 1;
 	} else {
 		hwif->drives[0].autotune = 1;
 		hwif->drives[1].autotune = 1;
+		hwif->autodma = 0;
 	}
+#else /* !CONFIG_BLK_DEV_IDEDMA */
+	hwif->drives[0].autotune = 1;
+	hwif->drives[1].autotune = 1;
+	hwif->autodma = 0;
+#endif /* CONFIG_BLK_DEV_IDEDMA */
 }

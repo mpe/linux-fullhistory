@@ -1,5 +1,5 @@
 /*
- *  linux/drivers/block/ide-disk.c	Version 1.09	April 23, 1999
+ *  linux/drivers/ide/ide-disk.c	Version 1.09	April 23, 1999
  *
  *  Copyright (C) 1994-1998  Linus Torvalds & authors (see below)
  */
@@ -821,21 +821,10 @@ static void idedisk_setup (ide_drive_t *drive)
 			drive->name, id->model,
 			capacity/2048L, id->buf_size/2,
 			drive->bios_cyl, drive->bios_head, drive->bios_sect);
-
-	if (drive->using_dma) {
-		if ((id->field_valid & 4) && (id->hw_config & 0x2000) &&
-		    (HWIF(drive)->udma_four) &&
-		    (id->dma_ultra & (id->dma_ultra >> 11) & 3)) {
-			printk(", UDMA(66)");	/* UDMA BIOS-enabled! */
-		} else if ((id->field_valid & 4) &&
-			   (id->dma_ultra & (id->dma_ultra >> 8) & 7)) {
-			printk(", UDMA(33)");	/* UDMA BIOS-enabled! */
-		} else if (id->field_valid & 4) {
-			printk(", (U)DMA");	/* Can be BIOS-enabled! */
-		} else {
-			printk(", DMA");
-		}
-	}
+#ifdef CONFIG_BLK_DEV_IDEDMA
+	if (drive->using_dma)
+		(void) HWIF(drive)->dmaproc(ide_dma_verbose, drive);
+#endif /* CONFIG_BLK_DEV_IDEDMA */
 	printk("\n");
 
 	drive->mult_count = 0;

@@ -1325,7 +1325,7 @@ static void __exit plip_cleanup_module (void)
 
 static int parport_ptr = 0;
 
-static void __init plip_setup(char *str)
+static int __init plip_setup(char *str)
 {
 	int ints[4];
 
@@ -1350,6 +1350,7 @@ static void __init plip_setup(char *str)
 			       ints[1]);
 		}
 	}
+	return 1;
 }
 
 __setup("plip=", plip_setup);

@@ -1,5 +1,5 @@
 /*
- *  linux/drivers/block/ide_modes.h
+ *  linux/drivers/ide/ide_modes.h
  *
  *  Copyright (C) 1996  Linus Torvalds, Igor Abramov, and Mark Lord
  */

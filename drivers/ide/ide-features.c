@@ -100,6 +100,8 @@ char *ide_dmafunc_verbose (ide_dma_action_t dmafunc)
 		case ide_dma_test_irq:		return("ide_dma_test_irq");
 		case ide_dma_bad_drive:		return("ide_dma_bad_drive");
 		case ide_dma_good_drive:	return("ide_dma_good_drive");
+		case ide_dma_verbose:		return("ide_dma_verbose");
+		case ide_dma_retune:		return("ide_dma_retune");
 		case ide_dma_lostirq:		return("ide_dma_lostirq");
 		case ide_dma_timeout:		return("ide_dma_timeout");
 		default:			return("unknown");

@@ -193,8 +193,20 @@ struct hd_geometry {
 #define HDIO_SET_NICE		0x0329	/* set nice flags */
 #define HDIO_UNREGISTER_HWIF	0x032a  /* unregister interface */
 
-#define __NEW_HD_DRIVE_ID
+/* BIG GEOMETRY */
+struct hd_big_geometry {
+	unsigned char heads;
+	unsigned char sectors;
+	unsigned int cylinders;
+	unsigned long start;
+};
 
+/* hd/ide ctl's that pass (arg) ptrs to user space are numbered 0x033n/0x033n */
+#define HDIO_GETGEO_BIG		0x0330	/* */
+#define HDIO_GETGEO_BIG_RAW	0x0331	/* */
+
+
+#define __NEW_HD_DRIVE_ID
 /* structure returned by HDIO_GET_IDENTITY, as per ANSI ATA2 rev.2f spec */
 struct hd_driveid {
 	unsigned short	config;		/* lots of obsolete bit flags */

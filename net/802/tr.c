@@ -237,8 +237,9 @@ static void tr_source_route(struct sk_buff *skb,struct trh_hdr *trh,struct net_d
 	rif_cache entry;
 	unsigned char *olddata;
 	unsigned char mcast_func_addr[] = {0xC0,0x00,0x00,0x04,0x00,0x00};
+	unsigned long flags ; 
 	
-	spin_lock_bh(&rif_lock);
+	spin_lock_irqsave(&rif_lock,flags);
 
 	/*
 	 *	Broadcasts are single route as stated in RFC 1042 
@@ -308,7 +309,7 @@ printk("source routing for %02X %02X %02X %02X %02X %02X\n",trh->daddr[0],
 	else 
 		slack = 18 - ((ntohs(trh->rcf) & TR_RCF_LEN_MASK)>>8);
 	olddata = skb->data;
-	spin_unlock_bh(&rif_lock);
+	spin_unlock_irqrestore(&rif_lock,flags);
 
 	skb_pull(skb, slack);
 	memmove(skb->data, olddata, sizeof(struct trh_hdr) - slack);
@@ -418,8 +419,9 @@ static void rif_check_expire(unsigned long dummy)
 {
 	int i;
 	unsigned long now=jiffies;
+	unsigned long flags ; 
 
-	spin_lock(&rif_lock);
+	spin_lock_irqsave(&rif_lock,flags);
 	
 	for(i=0; i < RIF_TABLE_SIZE;i++) 
 	{
@@ -439,7 +441,7 @@ static void rif_check_expire(unsigned long dummy)
 		}
 	}
 	
-	spin_unlock(&rif_lock);
+	spin_unlock_irqrestore(&rif_lock,flags);
 
 	/*
 	 *	Reset the timer
