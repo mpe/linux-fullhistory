@@ -1670,7 +1670,6 @@ out3:
 
 int __init change_root(kdev_t new_root_dev,const char *put_old)
 {
-	kdev_t old_root_dev = ROOT_DEV;
 	struct vfsmount *old_rootmnt;
 	struct nameidata devfs_nd, nd;
 	int error = 0;
@@ -1682,8 +1681,6 @@ int __init change_root(kdev_t new_root_dev,const char *put_old)
 	if (path_init("/dev", LOOKUP_FOLLOW|LOOKUP_POSITIVE, &devfs_nd))
 		error = path_walk("/dev", &devfs_nd);
 	if (!error) {
-		struct super_block *sb = devfs_nd.dentry->d_inode->i_sb;
-
 		if (devfs_nd.mnt->mnt_sb->s_magic == DEVFS_SUPER_MAGIC &&
 		    devfs_nd.dentry == devfs_nd.mnt->mnt_root) {
 			dput(devfs_nd.dentry);
@@ -1717,7 +1714,7 @@ int __init change_root(kdev_t new_root_dev,const char *put_old)
 			printk("okay\n");
 			return 0;
 		}
-		printk(KERN_ERR "error %ld\n",blivet);
+		printk(KERN_ERR "error %d\n",blivet);
 		return error;
 	}
 	/* FIXME: we should hold i_zombie on nd.dentry */

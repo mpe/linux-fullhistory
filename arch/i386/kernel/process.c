@@ -344,7 +344,7 @@ void machine_power_off(void)
 
 void show_regs(struct pt_regs * regs)
 {
-	long cr0 = 0L, cr2 = 0L, cr3 = 0L;
+	unsigned long cr0 = 0L, cr2 = 0L, cr3 = 0L, cr4 = 0L;
 
 	printk("\n");
 	printk("EIP: %04x:[<%08lx>]",0xffff & regs->xcs,regs->eip);
@@ -361,7 +361,14 @@ void show_regs(struct pt_regs * regs)
 	__asm__("movl %%cr0, %0": "=r" (cr0));
 	__asm__("movl %%cr2, %0": "=r" (cr2));
 	__asm__("movl %%cr3, %0": "=r" (cr3));
-	printk("CR0: %08lx CR2: %08lx CR3: %08lx\n", cr0, cr2, cr3);
+	/* This could fault if %cr4 does not exist */
+	__asm__("1: movl %%cr4, %0		\n"
+		"2:				\n"
+		".section __ex_table,\"a\"	\n"
+		".long 1b,2b			\n"
+		".previous			\n"
+		: "=r" (cr4): "0" (0));
+	printk("CR0: %08lx CR2: %08lx CR3: %08lx CR4: %08lx\n", cr0, cr2, cr3, cr4);
 }
 
 /*

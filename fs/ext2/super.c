@@ -205,7 +205,7 @@ static int parse_options (char * options, unsigned long * sb_block,
 		else if (!strcmp (this_char, "resgid")) {
 			if (!value || !*value) {
 				printk ("EXT2-fs: the resgid option requires "
-					"an argument");
+					"an argument\n");
 				return 0;
 			}
 			*resgid = simple_strtoul (value, &value, 0);
