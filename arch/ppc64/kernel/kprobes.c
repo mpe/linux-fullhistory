@@ -128,10 +128,9 @@ static inline int kprobe_handler(struct pt_regs *regs)
 	kprobe_status = KPROBE_HIT_ACTIVE;
 	current_kprobe = p;
 	kprobe_saved_msr = regs->msr;
-	if (p->pre_handler(p, regs)) {
+	if (p->pre_handler && p->pre_handler(p, regs))
 		/* handler has already set things up, so skip ss setup */
 		return 1;
-	}
 
 ss_probe:
 	prepare_singlestep(p, regs);

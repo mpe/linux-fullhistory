@@ -128,7 +128,7 @@ static int kprobe_handler(struct pt_regs *regs)
 
 	kprobe_status = KPROBE_HIT_ACTIVE;
 	current_kprobe = p;
-	if (p->pre_handler(p, regs))
+	if (p->pre_handler && p->pre_handler(p, regs))
 		return 1;
 
 ss_probe:

@@ -159,17 +159,16 @@ static int kprobe_handler(struct pt_regs *regs)
 	if (is_IF_modifier(p->opcode))
 		kprobe_saved_eflags &= ~IF_MASK;
 
-	if (p->pre_handler(p, regs)) {
+	if (p->pre_handler && p->pre_handler(p, regs))
 		/* handler has already set things up, so skip ss setup */
 		return 1;
-	}
 
-      ss_probe:
+ss_probe:
 	prepare_singlestep(p, regs);
 	kprobe_status = KPROBE_HIT_SS;
 	return 1;
 
-      no_kprobe:
+no_kprobe:
 	preempt_enable_no_resched();
 	return ret;
 }
