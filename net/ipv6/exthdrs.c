@@ -4,8 +4,9 @@
  *
  *	Authors:
  *	Pedro Roque		<roque@di.fc.ul.pt>
+ *	Andi Kleen		<ak@muc.de>
  *
- *	$Id: exthdrs.c,v 1.5 1998/02/12 07:43:39 davem Exp $
+ *	$Id: exthdrs.c,v 1.6 1998/04/30 16:24:20 freitag Exp $
  *
  *	This program is free software; you can redistribute it and/or
  *      modify it under the terms of the GNU General Public License
@@ -33,6 +34,10 @@
 #include <net/ndisc.h>
 #include <net/ip6_route.h>
 #include <net/addrconf.h>
+
+#include <asm/uaccess.h>
+
+#define swap(a,b) do { typeof (a) tmp; tmp = (a); (a) = (b); (b) = (tmp); } while(0)
 
 /*
  *	inbound
@@ -135,7 +140,7 @@ int ipv6_routing_header(struct sk_buff **skb_ptr, struct device *dev,
  */
 
 int ipv6opt_bld_rthdr(struct sk_buff *skb, struct ipv6_options *opt,
-		      struct in6_addr *addr, int proto)		      
+		      struct in6_addr *addr)		      
 {
 	struct rt0_hdr *phdr, *ihdr;
 	int hops;
@@ -153,8 +158,76 @@ int ipv6opt_bld_rthdr(struct sk_buff *skb, struct ipv6_options *opt,
 
 	ipv6_addr_copy(phdr->addr + (hops - 1), addr);
 	
-	phdr->rt_hdr.nexthdr = proto;
-
+	phdr->rt_hdr.nexthdr = proto; 
 	return NEXTHDR_ROUTING;
 }
 #endif
+
+/* 
+ * find out if nexthdr is an extension header or a protocol
+ */
+
+static __inline__ int ipv6_ext_hdr(u8 nexthdr)
+{
+	/* 
+	 * find out if nexthdr is an extension header or a protocol
+	 */
+	return ( (nexthdr == NEXTHDR_HOP)	||
+		 (nexthdr == NEXTHDR_ROUTING)	||
+		 (nexthdr == NEXTHDR_FRAGMENT)	||
+		 (nexthdr == NEXTHDR_ESP)	||
+		 (nexthdr == NEXTHDR_AUTH)	||
+		 (nexthdr == NEXTHDR_NONE)	||
+		 (nexthdr == NEXTHDR_DEST) );
+		 
+}
+
+/*
+ * Skip any extension headers. This is used by the ICMP module.
+ *
+ * Note that strictly speaking this conflicts with RFC1883 4.0:
+ * ...The contents and semantics of each extension header determine whether 
+ * or not to proceed to the next header.  Therefore, extension headers must
+ * be processed strictly in the order they appear in the packet; a
+ * receiver must not, for example, scan through a packet looking for a
+ * particular kind of extension header and process that header prior to
+ * processing all preceding ones.
+ * 
+ * We do exactly this. This is a protocol bug. We can't decide after a
+ * seeing an unknown discard-with-error flavour TLV option if it's a 
+ * ICMP error message or not (errors should never be send in reply to
+ * ICMP error messages).
+ * 
+ * But I see no other way to do this. This might need to be reexamined
+ * when Linux implements ESP (and maybe AUTH) headers.
+ */
+struct ipv6_opt_hdr *ipv6_skip_exthdr(struct ipv6_opt_hdr *hdr, 
+				      u8 *nexthdrp, int len)
+{
+	u8 nexthdr = *nexthdrp;
+
+	while (ipv6_ext_hdr(nexthdr)) {
+		int hdrlen; 
+		
+		if (nexthdr == NEXTHDR_NONE)
+			return NULL;
+		if (len < sizeof(struct ipv6_opt_hdr)) /* be anal today */
+			return NULL;
+
+		hdrlen = ipv6_optlen(hdr); 
+		if (len < hdrlen)
+			return NULL; 
+
+		nexthdr = hdr->nexthdr;
+		hdr = (struct ipv6_opt_hdr *) ((u8*)hdr + hdrlen);
+		len -= hdrlen;
+	}
+
+	/* Hack.. Do the same for AUTH headers? */
+	if (nexthdr == NEXTHDR_ESP) 
+		return NULL; 
+
+	*nexthdrp = nexthdr;
+	return hdr;
+}
+

@@ -10,7 +10,6 @@ pages of code to determine what is expected when writing a filesystem.
 Hopefully this helps anyone attempting such a feat, as well as clearing up
 a few important points/dependencies.
 
-
 register_filesystem (struct file_system_type *fstype)
 =====================================================
 
@@ -133,10 +132,12 @@ struct inode_operations
 
 	int (*follow_link) (struct inode *,struct inode *,int,int,struct inode **);
 	[optional]
-		The follow_link function is only necessary if a filesystem uses a really
-		twisted form of symbolic links - namely if the symbolic link comes from a
-		foreign filesystem that makes no sense....
-		I threw this one out - too much redundant code!
+		follow_link must be implemented if readlink is implemented.
+		Note that follow_link can return a different inode than a
+		lookup_dentry() on the result of readlink() would return.
+		The proc filesystem, in particular, uses this feature heavily.
+		For most user filesystems, however, follow_link() and readlink()
+		should return consistent results.
 
 	int (*readpage) (struct inode *, struct page *);	[optional]
 	int (*writepage) (struct inode *, struct page *);	[mandatory with readpage]

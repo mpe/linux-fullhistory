@@ -101,6 +101,8 @@ extern int			igmp6_event_report(struct sk_buff *skb,
 						   struct icmp6hdr *hdr,
 						   int len);
 
+extern void			igmp6_cleanup(void);
+
 extern __inline__ struct neighbour * ndisc_get_neigh(struct device *dev, struct in6_addr *addr)
 {
 

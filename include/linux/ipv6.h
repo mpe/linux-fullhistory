@@ -42,6 +42,24 @@ struct ipv6_rt_hdr {
 	 */
 };
 
+
+struct ipv6_opt_hdr {
+	__u8 		nexthdr;
+	__u8 		hdrlen;
+	/* 
+	 * TLV encoded option data follows.
+	 */
+};
+
+#define ipv6_destopt_hdr ipv6_opt_hdr
+#define ipv6_hopopt_hdr  ipv6_opt_hdr
+
+#ifdef __KERNEL__
+#define ipv6_optlen(p)  (((p)->hdrlen+1) << 3)
+#endif
+
+
+
 /*
  *	routing header type 0 (used in cmsghdr struct)
  */
@@ -95,12 +113,12 @@ struct ipv6_options
 
 	/* 
 	 * protocol options 
-	 * usualy carried in IPv6 extension headers
+	 * usually carried in IPv6 extension headers
 	 */
 
 	struct ipv6_rt_hdr		*srcrt;	/* Routing Header */
-
 };
+
 
 #endif
 

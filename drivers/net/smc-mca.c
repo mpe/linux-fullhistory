@@ -337,7 +337,7 @@ int init_module(void)
 		dev->name = namelist+(NAMELEN*this_dev);
 		dev->irq = irq[this_dev];
 		dev->base_addr = io[this_dev];
-		dev->init = ultra_probe;
+		dev->init = ultramca_probe;
 		if (io[this_dev] == 0)
 		{
 			if (this_dev != 0)

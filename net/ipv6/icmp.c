@@ -5,7 +5,7 @@
  *	Authors:
  *	Pedro Roque		<roque@di.fc.ul.pt>
  *
- *	$Id: icmp.c,v 1.15 1998/03/21 07:28:03 davem Exp $
+ *	$Id: icmp.c,v 1.17 1998/05/01 10:31:41 davem Exp $
  *
  *	Based on net/ipv4/icmp.c
  *
@@ -21,6 +21,8 @@
  *	Changes:
  *
  *	Andi Kleen		:	exception handling
+ *	Andi Kleen			add rate limits. never reply to a icmp.
+ *					add more length checks and other fixes.
  */
 
 #define __NO_VERSION__
@@ -51,6 +53,7 @@
 #include <net/transp_v6.h>
 #include <net/ip6_route.h>
 #include <net/addrconf.h>
+#include <net/icmp.h>
 
 #include <asm/uaccess.h>
 #include <asm/system.h>
@@ -127,6 +130,62 @@ static int icmpv6_getfrag(const void *data, struct in6_addr *saddr,
 	icmph->icmp6_cksum = csum_ipv6_magic(saddr, msg->daddr, msg->len,
 					     IPPROTO_ICMPV6, csum);
 	return 0; 
+}
+
+
+/* 
+ * Slightly more convenient version of icmpv6_send.
+ */
+void icmpv6_param_prob(struct sk_buff *skb, int code, void *pos)
+{
+	int offset = (u8*)pos - (u8*)skb->nh.ipv6h; 
+	
+	icmpv6_send(skb, ICMPV6_PARAMPROB, code, offset, skb->dev);
+	kfree_skb(skb);
+}
+
+static inline int is_icmp(struct ipv6hdr *hdr, int len)
+{
+	__u8 nexthdr = hdr->nexthdr; 
+
+	if (!ipv6_skip_exthdr((struct ipv6_opt_hdr *)(hdr+1), &nexthdr, len))
+		return 0; 
+	return nexthdr == IPPROTO_ICMP; 
+}
+
+int sysctl_icmpv6_time = 1*HZ; 
+
+/* 
+ * Check the ICMP output rate limit 
+ */
+static inline int icmpv6_xrlim_allow(struct sock *sk, int type,
+				     struct flowi *fl)
+{
+#if 0
+	struct dst_entry *dst; 
+	int allow = 0;
+#endif
+	/* Informational messages are not limited. */
+	if (type & 0x80)
+		return 1; 
+
+#if 0 /* not yet, first fix routing COW */
+
+	/* 
+	 * Look up the output route.
+	 * XXX: perhaps the expire for routing entries cloned by
+	 * this lookup should be more aggressive (not longer than timeout).
+	 */
+	dst = ip6_route_output(sk, fl, 1);
+	if (dst->error) 
+		ipv6_statistics.Ip6OutNoRoutes++;
+	else 
+		allow = xrlim_allow(dst, sysctl_icmpv6_time);
+	dst_release(dst);
+	return allow;
+#else
+	return 1;
+#endif
 }
 
 /*
@@ -214,6 +273,24 @@ void icmpv6_send(struct sk_buff *skb, int type, int code, __u32 info,
 		return;
 	}
 
+	/* 
+	 *	Never answer to a ICMP packet.
+	 */
+	if (is_icmp(hdr, (u8*)skb->tail - (u8*)hdr)) {
+		printk(KERN_DEBUG "icmpv6_send: no reply to icmp\n"); 
+		return;
+	}
+
+	fl.proto = IPPROTO_ICMPV6;
+	fl.nl_u.ip6_u.daddr = &hdr->saddr;
+	fl.nl_u.ip6_u.saddr = saddr;
+	fl.oif = iif;
+	fl.uli_u.icmpt.type = type;
+	fl.uli_u.icmpt.code = code;
+
+	if (!icmpv6_xrlim_allow(sk, type, &fl)) 
+		return; 
+
 	/*
 	 *	ok. kick it. checksum will be provided by the 
 	 *	getfrag_t callback.
@@ -247,13 +324,6 @@ void icmpv6_send(struct sk_buff *skb, int type, int code, __u32 info,
 	len += sizeof(struct icmp6hdr);
 
 	msg.len = len;
-
-	fl.proto = IPPROTO_ICMPV6;
-	fl.nl_u.ip6_u.daddr = &hdr->saddr;
-	fl.nl_u.ip6_u.saddr = saddr;
-	fl.oif = iif;
-	fl.uli_u.icmpt.type = type;
-	fl.uli_u.icmpt.code = code;
 
 	ip6_build_xmit(sk, icmpv6_getfrag, &msg, &fl, len, NULL, -1,
 		       MSG_DONTWAIT);
@@ -312,21 +382,6 @@ static void icmpv6_echo_reply(struct sk_buff *skb)
 	dst_release(xchg(&sk->dst_cache, NULL));
 }
 
-static __inline__ int ipv6_ext_hdr(u8 nexthdr)
-{
-	/* 
-	 * find out if nexthdr is an extension header or a protocol
-	 */
-	return ( (nexthdr == NEXTHDR_HOP)	||
-		 (nexthdr == NEXTHDR_ROUTING)	||
-		 (nexthdr == NEXTHDR_FRAGMENT)	||
-		 (nexthdr == NEXTHDR_ESP)	||
-		 (nexthdr == NEXTHDR_AUTH)	||
-		 (nexthdr == NEXTHDR_NONE)	||
-		 (nexthdr == NEXTHDR_DEST) );
-		 
-}
-
 static void icmpv6_notify(struct sk_buff *skb,
 			  int type, int code, unsigned char *buff, int len,
 			  struct in6_addr *saddr, struct in6_addr *daddr, 
@@ -335,39 +390,22 @@ static void icmpv6_notify(struct sk_buff *skb,
 	struct ipv6hdr *hdr = (struct ipv6hdr *) buff;
 	struct inet6_protocol *ipprot;
 	struct sock *sk;
-	char * pbuff;
+	struct ipv6_opt_hdr *pb;
 	__u32 info = 0;
 	int hash;
 	u8 nexthdr;
 
-	/* now skip over extension headers */
-
 	nexthdr = hdr->nexthdr;
 
-	pbuff = (char *) (hdr + 1);
+	pb = (struct ipv6_opt_hdr *) (hdr + 1);
 	len -= sizeof(struct ipv6hdr);
+	if (len < 0)
+		return;
 
-	while (ipv6_ext_hdr(nexthdr)) {
-		int hdrlen;
-
-		if (nexthdr == NEXTHDR_NONE)
-			return;
-
-		nexthdr = *pbuff;
-
-		/* Header length is size in 8-octet units, not
-		 * including the first 8 octets.
-		 */
-		hdrlen = *(pbuff+1);
-		hdrlen = (hdrlen + 1) << 3;
-
-		if (hdrlen > len)
-			return;
-		
-		/* Now this is right. */
-		pbuff += hdrlen;
-		len -= hdrlen;
-	}
+	/* now skip over extension headers */
+	pb = ipv6_skip_exthdr(pb, &nexthdr, len);
+	if (!pb)
+		return;
 
 	hash = nexthdr & (MAX_INET_PROTOS - 1);
 
@@ -378,7 +416,7 @@ static void icmpv6_notify(struct sk_buff *skb,
 			continue;
 
 		if (ipprot->err_handler) 
-			ipprot->err_handler(skb, type, code, pbuff, info,
+			ipprot->err_handler(skb, type, code, (u8*)pb, info,
 					    saddr, daddr, ipprot);
 		return;
 	}
@@ -391,7 +429,7 @@ static void icmpv6_notify(struct sk_buff *skb,
 		return;
 
 	while((sk = raw_v6_lookup(sk, nexthdr, daddr, saddr))) {
-		rawv6_err(sk, type, code, pbuff, saddr, daddr);
+		rawv6_err(sk, type, code, (char*)pb, saddr, daddr);
 		sk = sk->next;
 	}
 }
@@ -514,7 +552,7 @@ discard_it:
 	return 0;
 }
 
-__initfunc(void icmpv6_init(struct net_proto_family *ops))
+__initfunc(int icmpv6_init(struct net_proto_family *ops))
 {
 	struct sock *sk;
 	int err;
@@ -528,11 +566,11 @@ __initfunc(void icmpv6_init(struct net_proto_family *ops))
 	icmpv6_socket->state = SS_UNCONNECTED;
 	icmpv6_socket->type=SOCK_RAW;
 
-	if((err=ops->create(icmpv6_socket, IPPROTO_ICMPV6))<0)
+	if((err=ops->create(icmpv6_socket, IPPROTO_ICMPV6))<0) {
 		printk(KERN_DEBUG 
 		       "Failed to create the ICMP6 control socket.\n");
-
-	MOD_DEC_USE_COUNT;
+		return 1;
+	}
 
 	sk = icmpv6_socket->sk;
 	sk->allocation = GFP_ATOMIC;
@@ -542,6 +580,16 @@ __initfunc(void icmpv6_init(struct net_proto_family *ops))
 
 	ndisc_init(ops);
 	igmp6_init(ops);
+	return 0; 
+}
+
+void icmpv6_cleanup(void)
+{
+	inet6_del_protocol(&icmpv6_protocol);
+#if 0
+	ndisc_cleanup();
+#endif
+	igmp6_cleanup();
 }
 
 static struct icmp6_err {

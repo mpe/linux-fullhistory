@@ -6,7 +6,7 @@
  *	license in recognition of the original copyright. 
  *				-- Alan Cox.
  *
- *	$Id: ip_fw.c,v 1.34 1998/03/20 09:12:06 davem Exp $
+ *	$Id: ip_fw.c,v 1.35 1998/04/30 16:29:51 freitag Exp $
  *
  *	Ported from BSD to Linux,
  *		Alan Cox 22/Nov/1994.
@@ -62,6 +62,7 @@
  *	Wouter Gadeyne		:	Fixed masquerading support of ftp PORT commands
  *
  *	Juan Jose Ciarlante	:	Masquerading code moved to ip_masq.c
+ *	Andi Kleen :		Print frag_offsets and the ip flags properly.
  *
  *	All the real work was done by .....
  *
@@ -202,6 +203,90 @@ extern inline int port_match(unsigned short *portptr,int nports,unsigned short p
 
 #if defined(CONFIG_IP_ACCT) || defined(CONFIG_IP_FIREWALL)
 
+#ifdef CONFIG_IP_FIREWALL_VERBOSE
+
+/* 
+ *	VERY ugly piece of code which actually makes kernel printf for
+ * 	matching packets. 
+ */
+
+static char *chain_name(struct ip_fw *chain, int mode)
+{
+	switch (mode) { 
+	case IP_FW_MODE_ACCT_IN: return "acct in";
+	case IP_FW_MODE_ACCT_OUT: return "acct out";
+	default:
+		if (chain == ip_fw_fwd_chain) 
+			return "fw-fwd";
+		else if (chain == ip_fw_in_chain)
+			return "fw-in";
+		else
+			return "fw-out"; 
+	}
+}
+
+static char *rule_name(struct ip_fw *f, int mode, char *buf)
+{
+	if (mode == IP_FW_MODE_ACCT_IN || mode == IP_FW_MODE_ACCT_OUT)
+		return "";
+
+	if(f->fw_flg&IP_FW_F_ACCEPT) {
+		if(f->fw_flg&IP_FW_F_REDIR) {
+			sprintf(buf, "acc/r%d ", f->fw_pts[f->fw_nsp+f->fw_ndp]);
+			return buf;
+		} else if(f->fw_flg&IP_FW_F_MASQ)
+			return "acc/masq ";
+		else
+			return "acc ";
+	} else if(f->fw_flg&IP_FW_F_ICMPRPL) {
+		return "rej ";
+	} else {
+		return "deny ";
+	}
+}
+
+static void print_packet(struct iphdr *ip, 
+			 u16 src_port, u16 dst_port, u16 icmp_type,
+			 char *chain, char *rule, char *devname)
+{
+	__u32 *opt = (__u32 *) (ip + 1);
+	int opti;
+	__u16 foff = ntohs(ip->frag_off); 
+
+	printk(KERN_INFO "IP %s %s%s", chain, rule, devname); 
+
+	switch(ip->protocol)
+	{
+	case IPPROTO_TCP:
+		printk(" TCP ");
+		break;
+	case IPPROTO_UDP:
+		printk(" UDP ");
+		break;
+	case IPPROTO_ICMP:
+		printk(" ICMP/%d ", icmp_type);
+		break;
+	default:
+		printk(" PROTO=%d ", ip->protocol);
+		break;
+	}
+	print_ip(ip->saddr);
+	if(ip->protocol == IPPROTO_TCP || ip->protocol == IPPROTO_UDP)
+		printk(":%hu", src_port);
+	printk(" ");
+	print_ip(ip->daddr);
+	if(ip->protocol == IPPROTO_TCP || ip->protocol == IPPROTO_UDP)
+		printk(":%hu", dst_port);
+	printk(" L=%hu S=0x%2.2hX I=%hu FO=0x%4.4hX T=%hu",
+	       ntohs(ip->tot_len), ip->tos, ntohs(ip->id),
+	       foff & IP_OFFSET, ip->ttl); 
+	if (foff & IP_DF) printk(" DF=1");
+	if (foff & IP_MF) printk(" MF=1"); 
+	for (opti = 0; opti < (ip->ihl - sizeof(struct iphdr) / 4); opti++)
+		printk(" O=0x%8.8X", *opt++);
+	printk("\n");	
+}
+#endif
 
 /*
  *	Returns one of the generic firewall policies, like FW_ACCEPT.
@@ -483,68 +568,14 @@ int ip_fw_chk(struct iphdr *ip, struct device *rif, __u16 *redirport, struct ip_
 		}
 
 #ifdef CONFIG_IP_FIREWALL_VERBOSE
-		/*
-		 * VERY ugly piece of code which actually
-		 * makes kernel printf for matching packets...
-		 */
-
 		if (f->fw_flg & IP_FW_F_PRN)
 		{
-			__u32 *opt = (__u32 *) (ip + 1);
-			int opti;
+			char buf[16]; 
 
-			if(mode == IP_FW_MODE_ACCT_IN)
-				printk(KERN_INFO "IP acct in ");
-			else if(mode == IP_FW_MODE_ACCT_OUT)
-				printk(KERN_INFO "IP acct out ");
-			else {
-				if(chain == ip_fw_fwd_chain)
-					printk(KERN_INFO "IP fw-fwd ");
-				else if(chain == ip_fw_in_chain)
-					printk(KERN_INFO "IP fw-in ");
-				else
-					printk(KERN_INFO "IP fw-out ");
-				if(f->fw_flg&IP_FW_F_ACCEPT) {
-					if(f->fw_flg&IP_FW_F_REDIR)
-						printk("acc/r%d ", f->fw_pts[f->fw_nsp+f->fw_ndp]);
-					else if(f->fw_flg&IP_FW_F_MASQ)
-						printk("acc/masq ");
-					else
-						printk("acc ");
-				} else if(f->fw_flg&IP_FW_F_ICMPRPL)
-					printk("rej ");
-				else
-					printk("deny ");
-			}
-			printk(rif ? rif->name : "-");
-			switch(ip->protocol)
-			{
-				case IPPROTO_TCP:
-					printk(" TCP ");
-					break;
-				case IPPROTO_UDP:
-					printk(" UDP ");
-					break;
-				case IPPROTO_ICMP:
-					printk(" ICMP/%d ", icmp_type);
-					break;
-				default:
-					printk(" PROTO=%d ", ip->protocol);
-					break;
-			}
-			print_ip(ip->saddr);
-			if(ip->protocol == IPPROTO_TCP || ip->protocol == IPPROTO_UDP)
-				printk(":%hu", src_port);
-			printk(" ");
-			print_ip(ip->daddr);
-			if(ip->protocol == IPPROTO_TCP || ip->protocol == IPPROTO_UDP)
-				printk(":%hu", dst_port);
-			printk(" L=%hu S=0x%2.2hX I=%hu F=0x%4.4hX T=%hu",
-				ntohs(ip->tot_len), ip->tos, ntohs(ip->id),
-				ip->frag_off, ip->ttl);
-			for (opti = 0; opti < (ip->ihl - sizeof(struct iphdr) / 4); opti++)
-				printk(" O=0x%8.8X", *opt++);
-			printk("\n");
+			print_packet(ip, src_port, dst_port, icmp_type,
+				     chain_name(chain, mode), 
+				     rule_name(f, mode, buf), 
+				     rif ? rif->name : "-");
 		}
 #endif		
 		if (mode != IP_FW_MODE_CHK) {

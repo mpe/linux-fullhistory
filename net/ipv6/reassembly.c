@@ -5,7 +5,7 @@
  *	Authors:
  *	Pedro Roque		<roque@di.fc.ul.pt>	
  *
- *	$Id: reassembly.c,v 1.9 1998/02/12 07:43:48 davem Exp $
+ *	$Id: reassembly.c,v 1.10 1998/04/30 16:24:32 freitag Exp $
  *
  *	Based on: net/ipv4/ip_fragment.c
  *
@@ -15,6 +15,11 @@
  *      2 of the License, or (at your option) any later version.
  */
 
+/* 
+ *	Fixes:	
+ *	Andi Kleen	Make it work with multiple hosts.
+ *			More RFC compliance.
+ */
 #include <linux/errno.h>
 #include <linux/types.h>
 #include <linux/socket.h>
@@ -39,8 +44,9 @@
 
 static struct frag_queue ipv6_frag_queue = {
 	&ipv6_frag_queue, &ipv6_frag_queue,
-	0, {0}, NULL, NULL,
-	0
+	0, {{{0}}}, {{{0}}},
+	{0}, NULL, NULL,
+	0, 0, NULL
 };
 
 static void			create_frag_entry(struct sk_buff *skb, 
@@ -72,12 +78,11 @@ static int reasm_frag(struct frag_queue *fq, struct sk_buff **skb,
 	 *	one it's the kmalloc for a struct ipv6_frag.
 	 *	Feel free to try other alternatives...
 	 */
-	reasm_queue(fq, *skb, fhdr);
-
 	if ((fhdr->frag_off & __constant_htons(0x0001)) == 0) {
 		fq->last_in = 1;
 		fq->nhptr = nhptr;
 	}
+	reasm_queue(fq, *skb, fhdr);
 
 	if (fq->last_in) {
 		if ((nh = reasm_frag_1(fq, skb)))
@@ -90,18 +95,27 @@ static int reasm_frag(struct frag_queue *fq, struct sk_buff **skb,
 	return 0;
 }
 
-int ipv6_reassembly(struct sk_buff **skb, struct device *dev, __u8 *nhptr,
+int ipv6_reassembly(struct sk_buff **skbp, struct device *dev, __u8 *nhptr,
 		    struct ipv6_options *opt)
 {
-	struct frag_hdr *fhdr = (struct frag_hdr *) ((*skb)->h.raw);
+	struct sk_buff *skb = *skbp; 
+	struct frag_hdr *fhdr = (struct frag_hdr *) (skb->h.raw);
 	struct frag_queue *fq;
-	
+	struct ipv6hdr *hdr;
+
+	if ((u8 *)(fhdr+1) > skb->tail) {
+		icmpv6_param_prob(skb, ICMPV6_HDR_FIELD, skb->h.raw);
+		return 0;
+	}
+	hdr = skb->nh.ipv6h;
 	for (fq = ipv6_frag_queue.next; fq != &ipv6_frag_queue; fq = fq->next) {
-		if (fq->id == fhdr->identification)
-			return reasm_frag(fq, skb, nhptr,fhdr);
+		if (fq->id == fhdr->identification && 
+		    !ipv6_addr_cmp(&hdr->saddr, &fq->saddr) &&
+		    !ipv6_addr_cmp(&hdr->daddr, &fq->daddr))
+			return reasm_frag(fq, skbp, nhptr,fhdr);
 	}
 	
-	create_frag_entry(*skb, dev, nhptr, fhdr);
+	create_frag_entry(skb, dev, nhptr, fhdr);
 
 	return 0;
 }
@@ -154,6 +168,7 @@ static void create_frag_entry(struct sk_buff *skb, struct device *dev,
 			      struct frag_hdr *fhdr)
 {
 	struct frag_queue *fq;
+	struct ipv6hdr *hdr; 
 
 	fq = (struct frag_queue *) kmalloc(sizeof(struct frag_queue), 
 					   GFP_ATOMIC);
@@ -166,6 +181,10 @@ static void create_frag_entry(struct sk_buff *skb, struct device *dev,
 	memset(fq, 0, sizeof(struct frag_queue));
 
 	fq->id = fhdr->identification;
+
+	hdr = skb->nh.ipv6h;
+	ipv6_addr_copy(&fq->saddr, &hdr->saddr);
+	ipv6_addr_copy(&fq->daddr, &hdr->daddr);
 
 	fq->dev = dev;
 
@@ -193,14 +212,14 @@ static void create_frag_entry(struct sk_buff *skb, struct device *dev,
 
 
 static void reasm_queue(struct frag_queue *fq, struct sk_buff *skb, 
-			struct frag_hdr *fhdr)
+				     struct frag_hdr *fhdr)
 {
 	struct ipv6_frag *nfp, *fp, **bptr;
 
 	nfp = (struct ipv6_frag *) kmalloc(sizeof(struct ipv6_frag), 
 					   GFP_ATOMIC);
 
-	if (nfp == NULL) {
+	if (nfp == NULL) {		
 		kfree_skb(skb);
 		return;
 	}
@@ -209,6 +228,10 @@ static void reasm_queue(struct frag_queue *fq, struct sk_buff *skb,
 	nfp->len = (ntohs(skb->nh.ipv6h->payload_len) -
 		    ((u8 *) (fhdr + 1) - (u8 *) (skb->nh.ipv6h + 1)));
 
+	if ((u32)nfp->offset + (u32)nfp->len > 65536) {
+		icmpv6_param_prob(skb,ICMPV6_HDR_FIELD, (u8*)&fhdr->frag_off); 
+		goto err;
+	}
 
 	nfp->skb  = skb;
 	nfp->fhdr = fhdr;
@@ -224,19 +247,37 @@ static void reasm_queue(struct frag_queue *fq, struct sk_buff *skb,
 	}
 	
 	if (fp && fp->offset == nfp->offset) {
-		if (fp->len != nfp->len) {
-			/* this cannot happen */
+		if (nfp->len != fp->len) {
 			printk(KERN_DEBUG "reasm_queue: dup with wrong len\n");
 		}
 
 		/* duplicate. discard it. */
-		kfree_skb(skb);
-		kfree(nfp);
-		return;
+		goto err;
 	}
 	
 	*bptr = nfp;
 	nfp->next = fp;
+
+#ifdef STRICT_RFC
+	if (fhdr->frag_off & __constant_htons(0x0001)) {
+		/* Check if the fragment is rounded to 8 bytes.
+		 * Required by the RFC.
+		 */
+		if (nfp->len & 0x7) {
+			printk(KERN_DEBUG "fragment not rounded to 8bytes\n");
+
+			icmpv6_param_prob(skb, ICMPV6_HDR_FIELD, 
+					  &skb->nh.ipv6h->payload_len);
+			goto err;
+		}
+	}
+#endif 
+
+	return;
+
+err:
+	kfree(nfp);
+	kfree_skb(skb);
 }
 
 /*
@@ -303,6 +344,8 @@ static int reasm_frag_1(struct frag_queue *fq, struct sk_buff **skb_in)
 	/*
 	 *	FIXME: If we don't have a checksum we ought to be able
 	 *	to defragment and checksum in this pass. [AC]
+	 *	Note that we don't really know yet whether the protocol
+	 *	needs checksums at all. It might still be a good idea. -AK
 	 */
 	for(fp = fq->fragments; fp; ) {
 		struct ipv6_frag *back;

@@ -6,7 +6,7 @@
  *	Pedro Roque		<roque@di.fc.ul.pt>
  *	Ian P. Morris		<I.P.Morris@soton.ac.uk>
  *
- *	$Id: ip6_input.c,v 1.8 1998/02/12 07:43:43 davem Exp $
+ *	$Id: ip6_input.c,v 1.9 1998/04/30 16:24:24 freitag Exp $
  *
  *	Based in linux/net/ipv4/ip_input.c
  *
@@ -69,12 +69,6 @@ struct ipv6_tlvtype {
 	u8 type;
 	u8 len;
 };
-
-struct ipv6_destopt_hdr {
-	u8 nexthdr;
-	u8 hdrlen;
-};
-
 
 struct tlvtype_proc {
 	u8	type;

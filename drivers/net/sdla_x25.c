@@ -649,7 +649,7 @@ static int if_header (struct sk_buff* skb, struct device* dev,
 	skb->protocol = type;
 	if (!chan->protocol)
 	{
-		hdr_len = wan_encapsulate(skb, dev);
+		hdr_len = wanrouter_encapsulate(skb, dev);
 		if (hdr_len < 0)
 		{
 			hdr_len = 0;
@@ -999,7 +999,7 @@ static void rx_intr (sdla_t* card)
 	chan->rx_skb = NULL;		/* dequeue packet */
 
 	/* Decapsulate packet, if necessary */
-	if (!skb->protocol && !wan_type_trans(skb, dev))
+	if (!skb->protocol && !wanrouter_type_trans(skb, dev))
 	{
 		/* can't decapsulate packet */
 		dev_kfree_skb(skb);

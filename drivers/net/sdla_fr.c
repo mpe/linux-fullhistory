@@ -831,7 +831,7 @@ static int if_header(struct sk_buff *skb, struct device *dev,
 {
 	int hdr_len = 0;
 	skb->protocol = type;
-	hdr_len = wan_encapsulate(skb, dev);
+	hdr_len = wanrouter_encapsulate(skb, dev);
 	if (hdr_len < 0) 
 	{
 		hdr_len = 0;
@@ -1486,7 +1486,7 @@ static void fr502_rx_intr(sdla_t * card)
 		/* Decapsulate packet and pass it up the protocol stack */
 		skb->dev = dev;
 		buf = skb_pull(skb, 1);		/* remove hardware header */
-		if (!wan_type_trans(skb, dev)) 
+		if (!wanrouter_type_trans(skb, dev)) 
 		{
 			/* can't decapsulate packet */
 			dev_kfree_skb(skb);
@@ -1601,7 +1601,7 @@ static void fr508_rx_intr(sdla_t * card)
 					skb->dev = dev;
 					/* remove hardware header */
 					buf = skb_pull(skb, 1);
-					if (!wan_type_trans(skb, dev)) 
+					if (!wanrouter_type_trans(skb, dev)) 
 					{
 						/* can't decapsulate packet */
 						dev_kfree_skb(skb);
@@ -2746,7 +2746,7 @@ static int process_udp_mgmt_pkt(char udp_pkt_src, sdla_t * card, struct sk_buff 
 			   stack */
 			new_skb->dev = dev;
 			buf = skb_pull(new_skb, 1);	/* remove hardware header */
-			if (!wan_type_trans(new_skb, dev)) 
+			if (!wanrouter_type_trans(new_skb, dev)) 
 			{
 				++chan->UDP_FPIPE_mgmt_not_passed_to_stack;
 				/* can't decapsulate packet */
@@ -2944,7 +2944,7 @@ static int process_udp_driver_call(char udp_pkt_src, sdla_t * card, struct sk_bu
 			new_skb->dev = dev;
 			/* remove hardware header */
 			buf = skb_pull(new_skb, 1);
-			if (!wan_type_trans(new_skb, dev)) 
+			if (!wanrouter_type_trans(new_skb, dev)) 
 			{
 				/* can't decapsulate packet */
 				++chan->UDP_DRVSTATS_mgmt_not_passed_to_stack;

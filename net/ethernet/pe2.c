@@ -11,7 +11,8 @@ pEII_datalink_header(struct datalink_proto *dl,
 	struct device	*dev = skb->dev;
 
 	skb->protocol = htons (ETH_P_IPX);
-	dev->hard_header(skb, dev, ETH_P_IPX, dest_node, NULL, skb->len);
+	if(dev->hard_header)
+		dev->hard_header(skb, dev, ETH_P_IPX, dest_node, NULL, skb->len);
 }
 
 struct datalink_proto *

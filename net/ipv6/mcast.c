@@ -5,7 +5,7 @@
  *	Authors:
  *	Pedro Roque		<roque@di.fc.ul.pt>	
  *
- *	$Id: mcast.c,v 1.14 1998/03/20 09:12:18 davem Exp $
+ *	$Id: mcast.c,v 1.15 1998/04/30 16:24:28 freitag Exp $
  *
  *	Based on linux/ipv4/igmp.c and linux/ipv4/ip_sockglue.c 
  *
@@ -619,8 +619,6 @@ __initfunc(void igmp6_init(struct net_proto_family *ops))
 		printk(KERN_DEBUG 
 		       "Failed to create the IGMP6 control socket.\n");
 
-	MOD_DEC_USE_COUNT;
-
 	sk = igmp6_socket->sk;
 	sk->allocation = GFP_ATOMIC;
 	sk->num = 256;			/* Don't receive any data */
@@ -632,3 +630,9 @@ __initfunc(void igmp6_init(struct net_proto_family *ops))
 #endif
 }
 
+void igmp6_cleanup(void)
+{
+#ifdef CONFIG_PROC_FS
+	remove_proc_entry("net/igmp6", 0); 
+#endif
+}

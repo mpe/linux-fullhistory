@@ -152,7 +152,7 @@ int init_module (void)
 		wandev->setup    = &setup;
 		wandev->shutdown = &shutdown;
 		wandev->ioctl    = &ioctl;
-		err = register_wandev(wandev);
+		err = register_wan_device(wandev);
 		if (err)
 		{
 			printk(KERN_ERR
@@ -179,7 +179,7 @@ void cleanup_module (void)
 	for (i = 0; i < ncards; ++i)
 	{
 		sdla_t* card = &card_array[i];
-		unregister_wandev(card->devname);
+		unregister_wan_device(card->devname);
 	}
 	kfree(card_array);
 }

@@ -5,7 +5,7 @@
  *	Authors:
  *	Pedro Roque		<roque@di.fc.ul.pt>	
  *
- *	$Id: tcp_ipv6.c,v 1.78 1998/04/16 16:29:22 freitag Exp $
+ *	$Id: tcp_ipv6.c,v 1.80 1998/05/02 12:47:15 davem Exp $
  *
  *	Based on: 
  *	linux/net/ipv4/tcp.c
@@ -123,10 +123,21 @@ static int tcp_v6_verify_bind(struct sock *sk, unsigned short snum)
 				result = 1;
 		}
 	}
-	if((result == 0) &&
-	   (tb == NULL) &&
-	   (tcp_bucket_create(snum) == NULL))
-		result = 1;
+	if(result == 0) {
+		if(tb == NULL) {
+			if(tcp_bucket_create(snum) == NULL)
+				result = 1;
+		} else {
+			/* It could be pending garbage collection, this
+			 * kills the race and prevents it from disappearing
+			 * out from under us by the time we use it.  -DaveM
+			 */
+			if(tb->owners == NULL && !(tb->flags & TCPB_FLAG_LOCKED)) {
+				tb->flags = TCPB_FLAG_LOCKED;
+				tcp_dec_slow_timer(TCP_SLT_BUCKETGC);
+			}
+		}
+	}
 go_like_smoke:
 	SOCKHASH_UNLOCK();
 	return result;
@@ -731,7 +742,7 @@ static int tcp_v6_conn_request(struct sock *sk, struct sk_buff *skb, void *ptr,
 		isn = tcp_v6_init_sequence(sk,skb);
 
 	/*
-	 *	There are no SYN attacks on IPv6, yet...
+	 *	There are no SYN attacks on IPv6, yet...	
 	 */
 	if (BACKLOG(sk) >= BACKLOGMAX(sk)) {
 		printk(KERN_DEBUG "droping syn ack:%d max:%d\n",

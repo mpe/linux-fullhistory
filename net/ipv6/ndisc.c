@@ -1152,9 +1152,6 @@ __initfunc(void ndisc_init(struct net_proto_family *ops))
 		printk(KERN_DEBUG 
 		       "Failed to create the NDISC control socket.\n");
 
-	/* Eeeh... What is it? --ANK */
-	MOD_DEC_USE_COUNT;
-
 	sk = ndisc_socket->sk;
 	sk->allocation = GFP_ATOMIC;
 	sk->net_pinfo.af_inet6.hop_limit = 255;

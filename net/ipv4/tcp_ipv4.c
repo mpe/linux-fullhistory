@@ -5,7 +5,7 @@
  *
  *		Implementation of the Transmission Control Protocol(TCP).
  *
- * Version:	$Id: tcp_ipv4.c,v 1.142 1998/04/30 12:00:45 davem Exp $
+ * Version:	$Id: tcp_ipv4.c,v 1.145 1998/05/02 12:47:13 davem Exp $
  *
  *		IPv4 specific functions
  *
@@ -48,7 +48,6 @@
 
 #include <linux/config.h>
 #include <linux/types.h>
-#include <linux/stddef.h>
 #include <linux/fcntl.h>
 #include <linux/random.h>
 #include <linux/init.h>
@@ -61,12 +60,15 @@
 #include <asm/segment.h>
 
 #include <linux/inet.h>
+#include <linux/stddef.h>
 
 extern int sysctl_tcp_timestamps;
 extern int sysctl_tcp_window_scaling;
 extern int sysctl_tcp_sack;
 extern int sysctl_tcp_syncookies;
 extern int sysctl_ip_dynaddr;
+extern __u32 sysctl_wmem_max;
+extern __u32 sysctl_rmem_max;
 
 /* Check TCP sequence numbers in ICMP packets. */
 #define ICMP_MIN_LENGTH 8
@@ -166,17 +168,21 @@ struct tcp_bind_bucket *tcp_bucket_create(unsigned short snum)
 	return tb;
 }
 
+#ifdef CONFIG_IP_TRANSPARENT_PROXY
 /* Ensure that the bound bucket for the port exists.
  * Return 0 on success.
  */
 static __inline__ int tcp_bucket_check(unsigned short snum)
 {
-	if (tcp_bound_hash[tcp_bhashfn(snum)] == NULL &&
-			tcp_bucket_create(snum) == NULL)
+	struct tcp_bind_bucket *tb = tcp_bound_hash[tcp_bhashfn(snum)];
+	for( ; (tb && (tb->port != snum)); tb = tb->next)
+		;
+	if(tb == NULL && tcp_bucket_create(snum) == NULL)
 		return 1;
 	else
 		return 0;
 }
+#endif
 
 static int tcp_v4_verify_bind(struct sock *sk, unsigned short snum)
 {
@@ -215,10 +221,21 @@ static int tcp_v4_verify_bind(struct sock *sk, unsigned short snum)
 				result = 1;
 		}
 	}
-	if((result == 0) &&
-	   (tb == NULL) &&
-	   (tcp_bucket_create(snum) == NULL))
-		result = 1;
+	if(result == 0) {
+		if(tb == NULL) {
+			if(tcp_bucket_create(snum) == NULL)
+				result = 1;
+		} else {
+			/* It could be pending garbage collection, this
+			 * kills the race and prevents it from disappearing
+			 * out from under us by the time we use it.  -DaveM
+			 */
+			if(tb->owners == NULL && !(tb->flags & TCPB_FLAG_LOCKED)) {
+				tb->flags = TCPB_FLAG_LOCKED;
+				tcp_dec_slow_timer(TCP_SLT_BUCKETGC);
+			}
+		}
+	}
 go_like_smoke:
 	SOCKHASH_UNLOCK();
 	return result;
@@ -1308,6 +1325,11 @@ struct sock * tcp_v4_syn_recv_sock(struct sock *sk, struct sk_buff *skb,
 	if (!newsk) 
 		goto exit;
 
+	if (newsk->rcvbuf < (3 * newsk->mtu))
+		newsk->rcvbuf = min ((3 * newsk->mtu), sysctl_rmem_max);
+	if (newsk->sndbuf < (3 * newsk->mtu))
+		newsk->sndbuf = min ((3 * newsk->mtu), sysctl_wmem_max);
+ 
 	sk->tp_pinfo.af_tcp.syn_backlog--;
 	sk->ack_backlog++;
 

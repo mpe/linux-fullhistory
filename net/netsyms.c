@@ -458,7 +458,7 @@ EXPORT_SYMBOL(qdisc_put_rtab);
 EXPORT_SYMBOL(qdisc_new_estimator);
 EXPORT_SYMBOL(qdisc_kill_estimator);
 #endif
-#ifdef CONFIG_NET_POLICE
+#ifdef CONFIG_NET_CLS_POLICE
 EXPORT_SYMBOL(tcf_police);
 EXPORT_SYMBOL(tcf_police_locate);
 EXPORT_SYMBOL(tcf_police_destroy);

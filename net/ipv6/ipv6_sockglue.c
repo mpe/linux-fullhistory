@@ -7,7 +7,7 @@
  *
  *	Based on linux/net/ipv4/ip_sockglue.c
  *
- *	$Id: ipv6_sockglue.c,v 1.18 1998/03/20 09:12:18 davem Exp $
+ *	$Id: ipv6_sockglue.c,v 1.19 1998/04/30 16:24:26 freitag Exp $
  *
  *	This program is free software; you can redistribute it and/or
  *      modify it under the terms of the GNU General Public License
@@ -242,7 +242,7 @@ void ipv6_cleanup(void)
 	ipv6_sysctl_unregister();	
 #endif
 	ip6_route_cleanup();
-	ndisc_cleanup();
+	icmpv6_cleanup();
 	addrconf_cleanup();	
 }
 #endif

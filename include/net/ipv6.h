@@ -4,7 +4,7 @@
  *	Authors:
  *	Pedro Roque		<roque@di.fc.ul.pt>
  *
- *	$Id: ipv6.h,v 1.9 1998/03/08 05:55:20 davem Exp $
+ *	$Id: ipv6.h,v 1.10 1998/04/30 16:24:14 freitag Exp $
  *
  *	This program is free software; you can redistribute it and/or
  *      modify it under the terms of the GNU General Public License
@@ -108,6 +108,8 @@ struct frag_queue {
 	struct frag_queue	*prev;
 
 	__u32			id;		/* fragment id		*/
+	struct in6_addr		saddr;
+	struct in6_addr		daddr;
 	struct timer_list	timer;		/* expire timer		*/
 	struct ipv6_frag	*fragments;
 	struct device		*dev;
@@ -247,6 +249,10 @@ extern int			ipv6opt_srt_tosin(struct ipv6_options *opt,
 						  int len);
 
 extern void			ipv6opt_free(struct ipv6_options *opt);
+
+extern struct ipv6_opt_hdr *	ipv6_skip_exthdr(struct ipv6_opt_hdr *hdr, 
+					         u8 *nexthdrp, int len);
+
 
 
 /*

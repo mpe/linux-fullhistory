@@ -1764,6 +1764,9 @@ extern int baycom_init(void);
 extern int lapbeth_init(void);
 extern void arcnet_init(void);
 extern void ip_auto_config(void);
+#ifdef CONFIG_8xx
+extern int cpm_enet_init(void);
+#endif /* CONFIG_8xx */
 
 #ifdef CONFIG_PROC_FS
 static struct proc_dir_entry proc_net_dev = {
@@ -1845,6 +1848,9 @@ __initfunc(int net_dev_init(void))
 #endif
 #if defined(CONFIG_ARCNET)
 	arcnet_init();
+#endif
+#if defined(CONFIG_8xx)
+        cpm_enet_init();
 #endif
 	/*
 	 *	SLHC if present needs attaching so other people see it

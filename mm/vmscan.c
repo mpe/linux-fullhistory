@@ -455,17 +455,20 @@ static inline int do_try_to_free_page(int gfp_mask)
 	switch (state) {
 		do {
 		case 0:
-			state = 1;
 			if (shrink_mmap(i, gfp_mask))
 				return 1;
+			state = 1;
 		case 1:
-			state = 2;
 			if ((gfp_mask & __GFP_IO) && shm_swap(i, gfp_mask))
 				return 1;
-		default:
-			state = 0;
+			state = 2;
+		case 2:
 			if (swap_out(i, gfp_mask))
 				return 1;
+			state = 3;
+		case 3:
+			shrink_dcache_memory(i, gfp_mask);
+			state = 0;
 		i--;
 		} while ((i - stop) >= 0);
 	}
@@ -545,9 +548,6 @@ int kswapd(void *unused)
 		schedule();
 		swapstats.wakeups++;
 
-		/* This will gently shrink the dcache.. */
-		shrink_dcache_memory();
-	
 		/*
 		 * Do the background pageout: be
 		 * more aggressive if we're really

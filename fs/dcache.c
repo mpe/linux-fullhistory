@@ -430,12 +430,17 @@ void shrink_dcache_parent(struct dentry * parent)
  * more memory, but aren't really sure how much. So we
  * carefully try to free a _bit_ of our dcache, but not
  * too much.
+ *
+ * Priority:
+ *   0 - very urgent: schrink everything
+ *  ...
+ *   6 - base-level: try to shrink a bit.
  */
-void shrink_dcache_memory(void)
+void shrink_dcache_memory(int priority, unsigned int gfp_mask)
 {
 	int count = select_dcache(32, 8);
 	if (count)
-		prune_dcache(count);
+		prune_dcache((count << 6) >> priority);
 }
 
 #define NAME_ALLOC_LEN(len)	((len+16) & ~15)

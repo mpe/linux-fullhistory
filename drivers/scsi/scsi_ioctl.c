@@ -17,8 +17,13 @@
 #include "hosts.h"
 #include <scsi/scsi_ioctl.h>
 
-#define MAX_RETRIES 5   
-#define MAX_TIMEOUT (9 * HZ)
+#define NORMAL_RETRIES 5   
+#define NORMAL_TIMEOUT (10 * HZ)
+#define FORMAT_UNIT_TIMEOUT (2 * 60 * 60 * HZ)
+#define START_STOP_TIMEOUT (60 * HZ)
+#define MOVE_MEDIUM_TIMEOUT (5 * 60 * HZ)
+#define READ_ELEMENT_STATUS_TIMEOUT (5 * 60 * HZ)
+
 #define MAX_BUF PAGE_SIZE
 
 #define max(a,b) (((a) > (b)) ? (a) : (b))
@@ -61,7 +66,7 @@ static int ioctl_probe(struct Scsi_Host * host, void *buffer)
 /*
  * 
  * The SCSI_IOCTL_SEND_COMMAND ioctl sends a command out to the SCSI host.
- * The MAX_TIMEOUT and MAX_RETRIES  variables are used.  
+ * The NORMAL_TIMEOUT and NORMAL_RETRIES  variables are used.  
  * 
  * dev is the SCSI device struct ptr, *(int *) arg is the length of the
  * input data, if any, not including the command string & counts, 
@@ -94,7 +99,8 @@ static void scsi_ioctl_done (Scsi_Cmnd * SCpnt)
     }
 }   
 
-static int ioctl_internal_command(Scsi_Device *dev, char * cmd)
+static int ioctl_internal_command(Scsi_Device *dev, char * cmd,
+				  int timeout, int retries)
 {
     unsigned long flags;
     int result;
@@ -107,9 +113,7 @@ static int ioctl_internal_command(Scsi_Device *dev, char * cmd)
 	struct semaphore sem = MUTEX_LOCKED;
 	SCpnt->request.sem = &sem;
 	spin_lock_irqsave(&io_request_lock, flags);
-	scsi_do_cmd(SCpnt,  cmd, NULL,  0,
-		    scsi_ioctl_done,  MAX_TIMEOUT,
-		    MAX_RETRIES);
+	scsi_do_cmd(SCpnt,  cmd, NULL,  0, scsi_ioctl_done,  timeout, retries);
 	spin_unlock_irqrestore(&io_request_lock, flags);
 	down(&sem);
         SCpnt->request.sem = NULL;
@@ -250,21 +254,24 @@ int scsi_ioctl_send_command(Scsi_Device *dev, Scsi_Ioctl_Command *sic)
     switch (opcode)
       {
       case FORMAT_UNIT:
-	timeout =  2 * 60 * 60 * HZ; /* 2 Hours */
+ 	timeout = FORMAT_UNIT_TIMEOUT;
 	retries = 1;
 	break;
       case START_STOP:
-	timeout =  2 * 60 * HZ;	/* 2 minutes */
-	retries = 1;
+ 	timeout = START_STOP_TIMEOUT;
+ 	retries = NORMAL_RETRIES;
 	break;
       case MOVE_MEDIUM:
+ 	timeout = MOVE_MEDIUM_TIMEOUT;
+ 	retries = NORMAL_RETRIES;
+ 	break;
       case READ_ELEMENT_STATUS:
-	timeout =  5 * 60 * HZ;	/* 5 minutes */
-	retries = 1;
+ 	timeout = READ_ELEMENT_STATUS_TIMEOUT;
+ 	retries = NORMAL_RETRIES;
 	break;
       default:
-	timeout = MAX_TIMEOUT;
-	retries = MAX_RETRIES;
+ 	timeout = NORMAL_TIMEOUT;
+ 	retries = NORMAL_RETRIES;
 	break;
       }
 
@@ -395,7 +402,8 @@ int scsi_ioctl (Scsi_Device *dev, int cmd, void *arg)
 	scsi_cmd[1] = dev->lun << 5;
 	scsi_cmd[2] = scsi_cmd[3] = scsi_cmd[5] = 0;
 	scsi_cmd[4] = SCSI_REMOVAL_PREVENT;
-	return ioctl_internal_command((Scsi_Device *) dev, scsi_cmd);
+	return ioctl_internal_command((Scsi_Device *) dev, scsi_cmd,
+				      NORMAL_TIMEOUT, NORMAL_RETRIES);
 	break;
     case SCSI_IOCTL_DOORUNLOCK:
 	if (!dev->removable || !dev->lockable) return 0;
@@ -403,13 +411,31 @@ int scsi_ioctl (Scsi_Device *dev, int cmd, void *arg)
 	scsi_cmd[1] = dev->lun << 5;
 	scsi_cmd[2] = scsi_cmd[3] = scsi_cmd[5] = 0;
 	scsi_cmd[4] = SCSI_REMOVAL_ALLOW;
-	return ioctl_internal_command((Scsi_Device *) dev, scsi_cmd);
+	return ioctl_internal_command((Scsi_Device *) dev, scsi_cmd,
+				      NORMAL_TIMEOUT, NORMAL_RETRIES);
     case SCSI_IOCTL_TEST_UNIT_READY:
 	scsi_cmd[0] = TEST_UNIT_READY;
 	scsi_cmd[1] = dev->lun << 5;
 	scsi_cmd[2] = scsi_cmd[3] = scsi_cmd[5] = 0;
 	scsi_cmd[4] = 0;
-	return ioctl_internal_command((Scsi_Device *) dev, scsi_cmd);
+	return ioctl_internal_command((Scsi_Device *) dev, scsi_cmd,
+				      NORMAL_TIMEOUT, NORMAL_RETRIES);
+	break;
+    case SCSI_IOCTL_START_UNIT:
+	scsi_cmd[0] = START_STOP;
+	scsi_cmd[1] = dev->lun << 5;
+	scsi_cmd[2] = scsi_cmd[3] = scsi_cmd[5] = 0;
+	scsi_cmd[4] = 1;
+	return ioctl_internal_command((Scsi_Device *) dev, scsi_cmd,
+				      START_STOP_TIMEOUT, NORMAL_RETRIES);
+	break;
+    case SCSI_IOCTL_STOP_UNIT:
+	scsi_cmd[0] = START_STOP;
+	scsi_cmd[1] = dev->lun << 5;
+	scsi_cmd[2] = scsi_cmd[3] = scsi_cmd[5] = 0;
+	scsi_cmd[4] = 0;
+	return ioctl_internal_command((Scsi_Device *) dev, scsi_cmd,
+				      START_STOP_TIMEOUT, NORMAL_RETRIES);
 	break;
     default :           
 	if (dev->host->hostt->ioctl)

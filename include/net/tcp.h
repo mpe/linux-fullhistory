@@ -642,7 +642,7 @@ static __inline__ unsigned int tcp_current_mss(struct sock *sk)
 
 		/* PMTU discovery event has occurred. */
 		sk->mtu = dst->pmtu;
-		sk->mss = sk->mtu - mss_distance;
+		mss_now = sk->mss = sk->mtu - mss_distance;
 	}
 
 	if(tp->sack_ok && tp->num_sacks)

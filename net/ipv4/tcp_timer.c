@@ -5,7 +5,7 @@
  *
  *		Implementation of the Transmission Control Protocol(TCP).
  *
- * Version:	$Id: tcp_timer.c,v 1.50 1998/04/14 09:08:59 davem Exp $
+ * Version:	$Id: tcp_timer.c,v 1.51 1998/05/02 15:19:26 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -448,26 +448,24 @@ void tcp_retransmit_timer(unsigned long data)
 	 */
 	if(tp->sack_ok) {
 		struct sk_buff *skb = skb_peek(&sk->write_queue);
-		__u8 toclear = TCPCB_SACKED_ACKED;
 
-		if(tp->retransmits == 0)
-			toclear |= TCPCB_SACKED_RETRANS;
 		while((skb != NULL) &&
 		      (skb != tp->send_head) &&
 		      (skb != (struct sk_buff *)&sk->write_queue)) {
-			TCP_SKB_CB(skb)->sacked &= ~(toclear);
+			TCP_SKB_CB(skb)->sacked &=
+				~(TCPCB_SACKED_ACKED | TCPCB_SACKED_RETRANS);
 			skb = skb->next;
 		}
-		tp->fackets_out = 0;
 	}
 
 	/* Retransmission. */
 	tp->retrans_head = NULL;
+	tp->fackets_out = 0;
+	tp->retrans_out = 0;
 	if (tp->retransmits == 0) {
 		/* remember window where we lost
 		 * "one half of the current window but at least 2 segments"
 		 */
-		tp->retrans_out = 0;
 		tp->snd_ssthresh = max(tp->snd_cwnd >> (1 + TCP_CWND_SHIFT), 2);
 		tp->snd_cwnd = (1 << TCP_CWND_SHIFT);
 	}

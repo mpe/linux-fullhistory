@@ -5,7 +5,7 @@
  *
  *		Implementation of the Transmission Control Protocol(TCP).
  *
- * Version:	$Id: tcp_input.c,v 1.114 1998/04/28 06:42:22 davem Exp $
+ * Version:	$Id: tcp_input.c,v 1.116 1998/05/02 14:50:11 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -421,33 +421,6 @@ static __inline__ int tcp_fast_parse_options(struct sock *sk, struct tcphdr *th,
 	return 1;
 }
 
-#if 0 /* Not working yet... -DaveM */
-static void tcp_compute_tsack(struct sock *sk, struct tcp_opt *tp)
-{
-	struct sk_buff *skb = skb_peek(&sk->write_queue);
-	__u32 tstamp = tp->rcv_tsecr;
-	int fack_count = 0;
-
-	while((skb != NULL) &&
-	      (skb != tp->send_head) &&
-	      (skb != (struct sk_buff *)&sk->write_queue)) {
-		if(TCP_SKB_CB(skb)->when == tstamp) {
-			__u8 sacked = TCP_SKB_CB(skb)->sacked;
-
-			sacked |= TCPCB_SACKED_ACKED;
-			if(sacked & TCPCB_SACKED_RETRANS)
-				tp->retrans_out--;
-			TCP_SKB_CB(skb)->sacked = sacked;
-		}
-		if(!before(TCP_SKB_CB(skb)->when, tstamp))
-			fack_count++;
-		skb = skb->next;
-	}
-	if(fack_count > tp->fackets_out)
-		tp->fackets_out = fack_count;
-}
-#endif
-
 #define FLAG_DATA		0x01 /* Incoming frame contained data.		*/
 #define FLAG_WIN_UPDATE		0x02 /* Incoming ACK was a window update.	*/
 #define FLAG_DATA_ACKED		0x04 /* This ACK acknowledged new data.		*/
@@ -481,13 +454,6 @@ static void tcp_fast_retrans(struct sock *sk, u32 ack, int not_dup)
 	if (ack == tp->snd_una && tp->packets_out && (not_dup == 0)) {
 		/* This is the standard reno style fast retransmit branch. */
 
-#if 0	/* Not working yet... -DaveM */
-		/* If not doing SACK, but doing timestamps, compute timestamp
-		 * based pseudo-SACKs when we see duplicate ACKs.
-		 */
-		if(!tp->sack_ok && tp->saw_tstamp)
-			tcp_compute_tsack(sk, tp);
-#endif
                 /* 1. When the third duplicate ack is received, set ssthresh 
                  * to one half the current congestion window, but no less 
                  * than two segments. Retransmit the missing segment.
@@ -611,6 +577,7 @@ static int tcp_clean_rtx_queue(struct sock *sk, __u32 ack,
 
 	while((skb=skb_peek(&sk->write_queue)) && (skb != tp->send_head)) {
 		struct tcp_skb_cb *scb = TCP_SKB_CB(skb); 
+		__u8 sacked = scb->sacked;
 		
 		/* If our packet is before the ack sequence we can
 		 * discard it as it's confirmed to have arrived at
@@ -626,22 +593,12 @@ static int tcp_clean_rtx_queue(struct sock *sk, __u32 ack,
 		 * connection startup slow start one packet too
 		 * quickly.  This is severely frowned upon behavior.
 		 */
+		if(sacked & TCPCB_SACKED_RETRANS && tp->retrans_out)
+			tp->retrans_out--;
 		if(!(scb->flags & TCPCB_FLAG_SYN)) {
-			__u8 sacked = scb->sacked;
-
 			acked |= FLAG_DATA_ACKED;
-			if(sacked & TCPCB_SACKED_RETRANS) {
+			if(sacked & TCPCB_SACKED_RETRANS)
 				acked |= FLAG_RETRANS_DATA_ACKED;
-
-				/* XXX The race is, fast retrans frame -->
-				 * XXX retrans timeout sends older frame -->
-				 * XXX ACK arrives for fast retrans frame -->
-				 * XXX retrans_out goes negative --> splat.
-				 * XXX Please help me find a better way -DaveM
-				 */
-				if(tp->retrans_out)
-					tp->retrans_out--;
-			}
 			if(tp->fackets_out)
 				tp->fackets_out--;
 		} else {
