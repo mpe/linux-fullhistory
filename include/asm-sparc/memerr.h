@@ -2,11 +2,11 @@
 #define _SPARC_MEMERR_H
 
 /* memerr.h:  Bit fields in the asynchronous and synchronous memory error
-              registers used to determine what 'type' of error has just
-	      induced a trap.
-
-   Copyright (C) 1994 David S. Miller (davem@caip.rutgers.edu)
-*/
+ *            registers used to determine what 'type' of error has just
+ *	      induced a trap.
+ *
+ * Copyright (C) 1994 David S. Miller (davem@caip.rutgers.edu)
+ */
 
 /* synchronous error register fields come first... */
 

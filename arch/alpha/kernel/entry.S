@@ -504,23 +504,23 @@ sys_call_table:
 	.quad sys_umask, do_entSys, do_entSys, sys_getpgrp, sys_getpagesize
 	.quad do_entSys, osf_vfork, sys_newstat, sys_newlstat, do_entSys
 	.quad do_entSys, osf_mmap, do_entSys, sys_munmap, sys_mprotect
-	.quad sys_madvise, do_entSys, do_entSys, do_entSys, sys_getgroups
+	.quad sys_madvise, sys_vhangup, do_entSys, do_entSys, sys_getgroups
 	/* map BSD's setpgrp to sys_setpgid for binary compatibility: */
 	.quad sys_setgroups, do_entSys, sys_setpgid, sys_setitimer, do_entSys
 	.quad do_entSys, sys_getitimer, sys_gethostname, sys_sethostname, sys_getdtablesize
 	.quad sys_dup2, sys_newfstat, sys_fcntl, sys_select, do_entSys
-	.quad sys_fsync, sys_setpriority, sys_socket, do_entSys, do_entSys
-/*100*/	.quad do_entSys, do_entSys, do_entSys, sys_sigreturn, sys_bind
-	.quad do_entSys, sys_listen, do_entSys, do_entSys, do_entSys
+	.quad sys_fsync, sys_setpriority, sys_socket, sys_connect, sys_accept
+/*100*/	.quad sys_getpriority, sys_send, sys_recv, sys_sigreturn, sys_bind
+	.quad sys_setsockopt, sys_listen, do_entSys, do_entSys, do_entSys
 	.quad do_entSys, sys_sigsuspend, do_entSys, do_entSys, do_entSys
-	.quad do_entSys, sys_gettimeofday, sys_getrusage, do_entSys, do_entSys
+	.quad do_entSys, sys_gettimeofday, sys_getrusage, sys_getsockopt, do_entSys
 	.quad do_entSys, do_entSys, sys_settimeofday, sys_fchown, sys_fchmod
-	.quad do_entSys, sys_setreuid, sys_setregid, sys_rename, sys_truncate
-	.quad sys_ftruncate, do_entSys, sys_setgid, do_entSys, do_entSys
-	.quad do_entSys, sys_mkdir, sys_rmdir, sys_utimes, do_entSys
-	.quad do_entSys, do_entSys, do_entSys, do_entSys, sys_getrlimit
+	.quad sys_recvfrom, sys_setreuid, sys_setregid, sys_rename, sys_truncate
+	.quad sys_ftruncate, do_entSys, sys_setgid, sys_sendto, sys_shutdown
+	.quad sys_socketpair, sys_mkdir, sys_rmdir, sys_utimes, do_entSys
+	.quad do_entSys, sys_getpeername, do_entSys, do_entSys, sys_getrlimit
 	.quad sys_setrlimit, do_entSys, sys_setsid, do_entSys, do_entSys
-/*150*/	.quad do_entSys, do_entSys, do_entSys, do_entSys, do_entSys
+/*150*/	.quad sys_getsockname, do_entSys, do_entSys, do_entSys, do_entSys
 	.quad do_entSys, sys_sigaction, do_entSys, do_entSys, osf_getdirentries
 	.quad osf_statfs, osf_fstatfs, do_entSys, do_entSys, do_entSys
 	.quad osf_getdomainname, do_entSys, do_entSys, do_entSys, do_entSys
@@ -538,7 +538,7 @@ sys_call_table:
 	.quad do_entSys, do_entSys, do_entSys, do_entSys, do_entSys
 	.quad do_entSys, do_entSys, do_entSys, do_entSys, do_entSys
 	.quad do_entSys, do_entSys, do_entSys, do_entSys, do_entSys
-	.quad do_entSys, do_entSys, do_entSys, do_entSys, do_entSys
+	.quad do_entSys, do_entSys, do_entSys, do_entSys, osf_proplist_syscall
 	.quad do_entSys, do_entSys, do_entSys, do_entSys, do_entSys
 /*250*/	.quad do_entSys, osf_usleep_thread, do_entSys, do_entSys, do_entSys
 	.quad do_entSys, do_entSys, do_entSys, do_entSys, do_entSys
@@ -552,4 +552,4 @@ sys_call_table:
 	.quad do_entSys, do_entSys, do_entSys, do_entSys, do_entSys
 /* linux-specific system calls start at 300 */
 /*300*/	.quad sys_bdflush, sys_sethae, sys_mount, sys_adjtimex, sys_swapoff
-	.quad do_entSys, do_entSys, do_entSys, do_entSys, do_entSys
+	.quad sys_getdents, sys_create_module, sys_init_module, sys_delete_module, sys_get_kernel_syms

@@ -958,7 +958,7 @@ eql_schedule_slaves(slave_queue_t *queue)
 
 	      if ( slave->dev != 0)
 		{
-		  if ( slave->dev->flags & IFF_UP == IFF_UP )
+		  if ((slave->dev->flags & IFF_UP) == IFF_UP )
 		    {
 		      slave_load = (ULONG_MAX - (ULONG_MAX / 2)) - 
 			(priority_Bps) + bytes_queued * 8;
@@ -1105,7 +1105,7 @@ eql_timer(unsigned long param)
 	{
 	  if (slave != 0)
 	    {
-	      if ( slave->dev->flags & IFF_UP == IFF_UP )
+	      if ((slave->dev->flags & IFF_UP) == IFF_UP )
 		{
 		  slave->bytes_queued -= slave->priority_Bps;
 	      

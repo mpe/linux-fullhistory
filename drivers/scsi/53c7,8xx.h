@@ -39,6 +39,26 @@
 #ifndef NCR53c7x0_H
 #define NCR53c7x0_H
 
+#ifdef __alpha__
+
+# define ncr_readb(a)		((unsigned int)readb((unsigned long)(a)))
+# define ncr_readw(a)		((unsigned int)readw((unsigned long)(a)))
+# define ncr_readl(a)		((unsigned int)readl((unsigned long)(a)))
+# define ncr_writeb(v,a)	(writeb((v), (unsigned long)(a)))
+# define ncr_writew(v,a)	(writew((v), (unsigned long)(a)))
+# define ncr_writel(v,a)	(writel((v), (unsigned long)(a)))
+
+#else
+
+# define ncr_readb(a)		(*(unsigned char*)(a))
+# define ncr_readw(a)		(*(unsigned short*)(a))
+# define ncr_readl(a)		(*(unsigned int*)(a))
+# define ncr_writeb(v,a)	(*(unsigned char*)(a) = (v))
+# define ncr_writew(v,a)	(*(unsigned short*)(a) = (v))
+# define ncr_writel(v,a)	(*(unsigned int*)(a) = (v))
+
+#endif
+
 
 /* 
  * Prevent name space pollution in hosts.c, and only provide the 
@@ -713,7 +733,7 @@ extern int NCR53c7xx_release(struct Scsi_Host *);
 #define DCMD_RWRI_OP_ADDC	0x07
 
 #define DCMD_TYPE_MMI		0xc0	/* Indicates a Memory Move instruction 
-					   (three longs) */
+					   (three words) */
 
 
 #define DNAD_REG		0x28	/* through 0x2b DMA next address for 
@@ -919,8 +939,8 @@ extern int NCR53c7xx_release(struct Scsi_Host *);
 #endif
 				
 struct NCR53c7x0_synchronous {
-    unsigned long select_indirect;	/* Value used for indirect selection */
-    unsigned long script[6];		/* Size ?? Script used when target is 
+    u32 select_indirect;		/* Value used for indirect selection */
+    u32 script[6];			/* Size ?? Script used when target is 
 						reselected */
     unsigned renegotiate:1;		/* Force renegotiation on next   
 					   select */
@@ -933,7 +953,7 @@ struct NCR53c7x0_synchronous {
 #define CMD_FLAG_DID_SDTR	4	/* did SDTR */
 
 struct NCR53c7x0_table_indirect {
-    unsigned long count;
+    u32 count;
     void *address;
 };
 
@@ -966,11 +986,11 @@ struct NCR53c7x0_cmd {
     					 
 
 
-    unsigned long *data_transfer_start;	/* Start of data transfer routines */
-    unsigned long *data_transfer_end;	/* Address after end of data transfer o
+    u32 *data_transfer_start;		/* Start of data transfer routines */
+    u32 *data_transfer_end;		/* Address after end of data transfer o
     	    	    	    	    	   routines */
 
-    unsigned long residual[8];		/* Residual data transfer
+    u32 residual[8];			/* Residual data transfer
 					   shadow of data_transfer code.
 
 					   Has instruction with modified
@@ -978,13 +998,13 @@ struct NCR53c7x0_cmd {
 					   CALL routine following command.
 					 */
 	     
-    unsigned long dsa[0];		/* Variable length (depending
+    u32 dsa[0];				/* Variable length (depending
 					   on host type, number of scatter /
 					   gather buffers, etc).  */
 };
 
 struct NCR53c7x0_break {
-    unsigned long *address, old_instruction[2];
+    u32 *address, old_instruction[2];
     struct NCR53c7x0_break *next;
     unsigned char old_size;		/* Size of old instruction */
 };
@@ -1050,7 +1070,7 @@ struct NCR53c7x0_hostdata {
     unsigned char pci_bus, pci_device_fn;
     unsigned pci_valid:1;
 
-    unsigned long *dsp;			/* dsp to restart with after
+    u32 *dsp;				/* dsp to restart with after
 					   all stacked interrupts are
 					   handled. */
 
@@ -1095,52 +1115,52 @@ struct NCR53c7x0_hostdata {
      * chip.  
      */
 
-    long dsa_start;			
-    long dsa_end;			
-    long dsa_next;
-    long dsa_prev;
-    long dsa_cmnd;
-    long dsa_select;
-    long dsa_msgout;
-    long dsa_cmdout;
-    long dsa_dataout;
-    long dsa_datain;
-    long dsa_msgin;
-    long dsa_msgout_other;
-    long dsa_write_sync;
-    long dsa_write_resume;
-    long dsa_jump_resume;
-    long dsa_check_reselect;
-    long dsa_status;
+    s32 dsa_start;			
+    s32 dsa_end;			
+    s32 dsa_next;
+    s32 dsa_prev;
+    s32 dsa_cmnd;
+    s32 dsa_select;
+    s32 dsa_msgout;
+    s32 dsa_cmdout;
+    s32 dsa_dataout;
+    s32 dsa_datain;
+    s32 dsa_msgin;
+    s32 dsa_msgout_other;
+    s32 dsa_write_sync;
+    s32 dsa_write_resume;
+    s32 dsa_jump_resume;
+    s32 dsa_check_reselect;
+    s32 dsa_status;
 
     /* 
      * Important entry points that generic fixup code needs
      * to know about, fixed up.
      */
 
-    long E_accept_message;
-    long E_dsa_code_template;
-    long E_dsa_code_template_end;
-    long E_command_complete;		
-    long E_msg_in;
-    long E_initiator_abort;
-    long E_other_transfer;
-    long E_target_abort;
-    long E_schedule;			
-    long E_debug_break;	
-    long E_reject_message;
-    long E_respond_message;
-    long E_select;
-    long E_select_msgout;
-    long E_test_0;
-    long E_test_1;
-    long E_test_2;
-    long E_test_3;
-    long E_dsa_zero;
-    long E_dsa_jump_resume;
+    s32 E_accept_message;
+    s32 E_dsa_code_template;
+    s32 E_dsa_code_template_end;
+    s32 E_command_complete;		
+    s32 E_msg_in;
+    s32 E_initiator_abort;
+    s32 E_other_transfer;
+    s32 E_target_abort;
+    s32 E_schedule;			
+    s32 E_debug_break;	
+    s32 E_reject_message;
+    s32 E_respond_message;
+    s32 E_select;
+    s32 E_select_msgout;
+    s32 E_test_0;
+    s32 E_test_1;
+    s32 E_test_2;
+    s32 E_test_3;
+    s32 E_dsa_zero;
+    s32 E_dsa_jump_resume;
 
     int options;			/* Bitfielded set of options enabled */
-    long test_completed;		/* Test completed */
+    volatile u32 test_completed;	/* Test completed */
     int test_running;			/* Test currently running */
     int test_source;
     volatile int test_dest;
@@ -1250,17 +1270,18 @@ struct NCR53c7x0_hostdata {
 						
 
     /* Shared variables between SCRIPT and host driver */
-    volatile unsigned char *issue_dsa_head;	
+    volatile u32 issue_dsa_head;
 						/* commands waiting to be 
 						   issued, insertions are 
 						   done by Linux driver,
 						   deletions are done by
 						   NCR */
-    volatile unsigned char *issue_dsa_tail;
+    u32 *issue_dsa_tail;			/* issue queue tail pointer;
+						   used by Linux driver only */
     volatile unsigned char msg_buf[16];		/* buffer for messages
 						   other than the command
 						   complete message */
-    volatile unsigned char *reconnect_dsa_head;	
+    volatile u32 reconnect_dsa_head;
 						/* disconnected commands,
 						   maintained by NCR */
     /* Data identifying nexus we are trying to match during reselection */
@@ -1269,14 +1290,14 @@ struct NCR53c7x0_hostdata {
 						   message or 0 */
     /* These were static variables before we moved them */
 
-    long NCR53c7xx_zero;
-    long NCR53c7xx_sink;
+    s32 NCR53c7xx_zero;
+    s32 NCR53c7xx_sink;
     char NCR53c7xx_msg_reject;
     char NCR53c7xx_msg_abort;
     char NCR53c7xx_msg_nop;
 
-    int script_count;				/* Size of script in longs */
-    unsigned long script[0];			/* Relocated SCSI script */
+    int script_count;				/* Size of script in words */
+    u32 script[0];				/* Relocated SCSI script */
 
 };
 
@@ -1293,62 +1314,59 @@ struct NCR53c7x0_hostdata {
 
 #define NCR53c7x0_local_declare()					\
     volatile unsigned char *NCR53c7x0_address_memory;			\
-    unsigned short NCR53c7x0_address_io;				\
+    unsigned int NCR53c7x0_address_io;					\
     int NCR53c7x0_memory_mapped
 
 #define NCR53c7x0_local_setup(host)					\
     NCR53c7x0_address_memory = (void *) (host)->base;			\
-    NCR53c7x0_address_io = (unsigned short) (host)->io_port;		\
+    NCR53c7x0_address_io = (unsigned int) (host)->io_port;		\
     NCR53c7x0_memory_mapped = ((struct NCR53c7x0_hostdata *) 		\
 	host->hostdata)-> options & OPTION_MEMORY_MAPPED 
 
 #define NCR53c7x0_read8(address) 					\
     (NCR53c7x0_memory_mapped ? 						\
-	*( (NCR53c7x0_address_memory) + (address))  : 			\
+	ncr_readb(NCR53c7x0_address_memory + (address))  :		\
 	inb(NCR53c7x0_address_io + (address)))
 
 #define NCR53c7x0_read16(address) 					\
     (NCR53c7x0_memory_mapped ? 						\
-	*((unsigned short *) (NCR53c7x0_address_memory) + (address))  :	\
+	ncr_readw(NCR53c7x0_address_memory + (address))  :		\
 	inw(NCR53c7x0_address_io + (address)))
 
 #define NCR53c7x0_read32(address) 					\
     (NCR53c7x0_memory_mapped ? 						\
-	*((unsigned long *) (NCR53c7x0_address_memory) + (address))  : 	\
+	ncr_readl(NCR53c7x0_address_memory + (address))  :		\
 	inl(NCR53c7x0_address_io + (address)))
 
 #define NCR53c7x0_write8(address,value) 				\
     (NCR53c7x0_memory_mapped ? 						\
-	*((unsigned char *) (NCR53c7x0_address_memory) + (address)) =	\
-	  (value) :							\
+	ncr_writeb((value), NCR53c7x0_address_memory + (address)) :	\
 	outb((value), NCR53c7x0_address_io + (address)))
 
 #define NCR53c7x0_write16(address,value) 				\
     (NCR53c7x0_memory_mapped ? 						\
-	*((unsigned short *) (NCR53c7x0_address_memory) + (address)) =	\
-	  (value) : 							\
+	ncr_writew((value), NCR53c7x0_address_memory + (address)) :	\
 	outw((value), NCR53c7x0_address_io + (address)))
 
 #define NCR53c7x0_write32(address,value) 				\
     (NCR53c7x0_memory_mapped ? 						\
-	*((unsigned long *) (NCR53c7x0_address_memory) + (address)) =  	\
-	  (value) : 							\
+	ncr_writel((value), NCR53c7x0_address_memory + (address)) :	\
 	outl((value), NCR53c7x0_address_io + (address)))
 
 #define patch_abs_32(script, offset, symbol, value)			\
     	for (i = 0; i < (sizeof (A_##symbol##_used) / sizeof 		\
-    	    (unsigned long)); ++i) {					\
+    	    (u32)); ++i) {						\
 	    (script)[A_##symbol##_used[i] - (offset)] += (value);	\
 	    if (hostdata->options & OPTION_DEBUG_FIXUP) 		\
-	      printk("scsi%d : %s reference %d at 0x%lx in %s is now 0x%lx\n",\
+	      printk("scsi%d : %s reference %d at 0x%x in %s is now 0x%x\n",\
 		host->host_no, #symbol, i, A_##symbol##_used[i] - 	\
-		(offset), #script, (script)[A_##symbol##_used[i] - 	\
+		(int)(offset), #script, (script)[A_##symbol##_used[i] -	\
 		(offset)]);						\
     	}
 
 #define patch_abs_rwri_data(script, offset, symbol, value)	        \
     	for (i = 0; i < (sizeof (A_##symbol##_used) / sizeof 		\
-    	    (unsigned long)); ++i)					\
+    	    (u32)); ++i)						\
     	    (script)[A_##symbol##_used[i] - (offset)] =			\
 	    	((script)[A_##symbol##_used[i] - (offset)] & 		\
 	    	~DBC_RWRI_IMMEDIATE_MASK) | 				\
@@ -1357,12 +1375,12 @@ struct NCR53c7x0_hostdata {
 
 #define patch_dsa_32(dsa, symbol, word, value)				\
 	{								\
-	(dsa)[(hostdata->##symbol - hostdata->dsa_start) / sizeof(long)	\
-		+ (word)] = (unsigned long) (value);			\
+	(dsa)[(hostdata->##symbol - hostdata->dsa_start) / sizeof(u32)	\
+		+ (word)] = (value);					\
 	if (hostdata->options & OPTION_DEBUG_DSA)			\
-	    printk("scsi : dsa %s symbol %s(%ld) word %d now 0x%lx\n",	\
-		#dsa, #symbol, (long) hostdata->##symbol, 		\
-		(int) (word), (long) (value));					\
+	    printk("scsi : dsa %s symbol %s(%d) word %d now 0x%x\n",	\
+		#dsa, #symbol, hostdata->##symbol,	 		\
+		(word), (u32)(value));				\
 	}
     
 

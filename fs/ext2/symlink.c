@@ -119,7 +119,7 @@ static int ext2_readlink (struct inode * inode, char * buffer, int buflen)
 	i = 0;
 	while (i < buflen && (c = link[i])) {
 		i++;
-		put_fs_byte (c, buffer++);
+		put_user (c, buffer++);
 	}
 	iput (inode);
 	if (bh)

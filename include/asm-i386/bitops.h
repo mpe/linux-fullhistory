@@ -25,7 +25,7 @@ extern __inline__ int set_bit(int nr, void * addr)
 
 	__asm__ __volatile__("btsl %2,%1\n\tsbbl %0,%0"
 		:"=r" (oldbit),"=m" (ADDR)
-		:"r" (nr));
+		:"ir" (nr));
 	return oldbit;
 }
 
@@ -35,7 +35,7 @@ extern __inline__ int clear_bit(int nr, void * addr)
 
 	__asm__ __volatile__("btrl %2,%1\n\tsbbl %0,%0"
 		:"=r" (oldbit),"=m" (ADDR)
-		:"r" (nr));
+		:"ir" (nr));
 	return oldbit;
 }
 
@@ -45,7 +45,7 @@ extern __inline__ int change_bit(int nr, void * addr)
 
 	__asm__ __volatile__("btcl %2,%1\n\tsbbl %0,%0"
 		:"=r" (oldbit),"=m" (ADDR)
-		:"r" (nr));
+		:"ir" (nr));
 	return oldbit;
 }
 
@@ -59,7 +59,7 @@ extern __inline__ int test_bit(int nr, void * addr)
 
 	__asm__ __volatile__("btl %2,%1\n\tsbbl %0,%0"
 		:"=r" (oldbit)
-		:"m" (ADDR),"r" (nr));
+		:"m" (ADDR),"ir" (nr));
 	return oldbit;
 }
 
@@ -75,20 +75,18 @@ extern inline int find_first_zero_bit(void * addr, unsigned size)
 	__asm__("
 		cld
 		movl $-1,%%eax
+		xorl %%edx,%%edx
 		repe; scasl
 		je 1f
+		xorl -4(%%edi),%%eax
 		subl $4,%%edi
-		movl (%%edi),%%eax
-		notl %%eax
 		bsfl %%eax,%%edx
-		jmp 2f
-1:		xorl %%edx,%%edx
-2:		subl %%ebx,%%edi
+1:		subl %%ebx,%%edi
 		shll $3,%%edi
 		addl %%edi,%%edx"
 		:"=d" (res)
 		:"c" ((size + 31) >> 5), "D" (addr), "b" (addr)
-		:"ax", "bx", "cx", "di");
+		:"ax", "cx", "di");
 	return res;
 }
 

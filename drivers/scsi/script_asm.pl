@@ -763,6 +763,8 @@ if ($#undefined >= 0) {
 
 @label_patches = ();
 
+@external_patches = ();
+
 @absolute = sort @absolute;
 
 foreach $i (@absolute) {
@@ -854,7 +856,7 @@ foreach $label (@label) {
 open (OUTPUT, ">$output") || die "$0 : can't open $output for writing\n";
 open (OUTPUTU, ">$outputu") || die "$0 : can't open $outputu for writing\n";
 
-print OUTPUT "unsigned long ".$prefix."SCRIPT[] = {\n";
+print OUTPUT "u32 ".$prefix."SCRIPT[] = {\n";
 $instructions = 0;
 for ($i = 0; $i < $#code; ) {
     if ($list_in_array) {
@@ -863,14 +865,16 @@ for ($i = 0; $i < $#code; ) {
     printf OUTPUT "\t0x%08x,", $code[$i];
     printf STDERR "Address $i = %x\n", $code[$i] if ($debug);
     if ($code[$i + 1] =~ /\s*($identifier)(.*)$/) {
-	printf OUTPUT "((unsigned long)&%s)%s,", $1, $2
+	push (@external_patches, $i+1, $1);
+	printf OUTPUT "0%s,", $2
     } else {
 	printf OUTPUT "0x%08x,",$code[$i+1];
     }
 
     if (($code[$i] & 0xff_00_00_00) == 0xc0_00_00_00) {
 	if ($code[$i + 2] =~ /$identifier/) {
-	    printf OUTPUT "(unsigned long)&%s,\n",$code[$i+2];
+	    push (@external_patches, $i+2, $code[$i+2]);
+	    printf OUTPUT "0,\n";
 	} else {
 	    printf OUTPUT "0x%08x,\n",$code[$i+2];
 	}
@@ -891,7 +895,7 @@ foreach $i (@absolute) {
     }
     printf OUTPUTU "#undef A_$i\n";
 
-    printf OUTPUT "unsigned long A_".$i."_used\[\] = {\n";
+    printf OUTPUT "u32 A_".$i."_used\[\] = {\n";
 printf STDERR "$i is used $symbol_references{$i}\n" if ($debug);
     foreach $j (split (/\s+/,$symbol_references{$i})) {
 	$j =~ /(ABS|REL),(.*),(.*)/;
@@ -913,15 +917,27 @@ foreach $i (sort @entry) {
 # NCR assembler outputs label patches in the form of indices into 
 # the code.
 #
-printf OUTPUT "unsigned long ".$prefix."LABELPATCHES[] = {\n";
+printf OUTPUT "u32 ".$prefix."LABELPATCHES[] = {\n";
 for $patch (sort {$a <=> $b} @label_patches) {
     printf OUTPUT "\t0x%08x,\n", $patch;
 }
 printf OUTPUT "};\n\n";
 
-printf OUTPUT "unsigned long ".$prefix."INSTRUCTIONS\t= 0x%08x;\n", 
+$num_external_patches = 0;
+printf OUTPUT "struct {\n\tu32\toffset;\n\tvoid\t\t*address;\n".
+    "} ".$prefix."EXTERNAL_PATCHES[] = {\n";
+while ($ident = pop(@external_patches)) {
+    $off = pop(@external_patches);
+    printf OUTPUT "\t{0x%08x, &%s},\n", $off, $ident;
+    ++$num_external_patches;
+}
+printf OUTPUT "};\n\n";
+
+printf OUTPUT "u32 ".$prefix."INSTRUCTIONS\t= %d;\n", 
     $instructions;
-printf OUTPUT "unsigned long ".$prefix."PATCHES\t= 0x%08x;\n", 
+printf OUTPUT "u32 ".$prefix."PATCHES\t= %d;\n", 
     $#label_patches+1;
+printf OUTPUT "u32 ".$prefix."EXTERNAL_PATCHES_LEN\t= %d;\n",
+    $num_external_patches;
 close OUTPUT;
 close OUTPUTU;

@@ -1,4 +1,4 @@
-unsigned long SCRIPT[] = {
+u32 SCRIPT[] = {
 /*
 ; NCR 53c810 driver, main script
 ; Sponsored by 
@@ -135,7 +135,7 @@ at 0x0000000c : */	0x80080000,0x000005ac,
 /*
 
 ABSOLUTE dsa_check_reselect = 0
-; dsa_check_reselect determines weather or not the current target and
+; dsa_check_reselect determines whether or not the current target and
 ; lun match the current DSA
 ENTRY dsa_code_check_reselect
 dsa_code_check_reselect:
@@ -578,7 +578,7 @@ at 0x0000007c : */	0x78380000,0x00000000,
 issue_remove:
 ;	The actual UPDATE of the issue_dsa_head variable is 
 ; 	atomic, with all of the setup code being irrelevant to
-;	weather the updated value being the old or new contents of 
+;	whether the updated value being the old or new contents of 
 ;	dsa_next field.
 ;
 ; 	To insure synchronization, the host system merely needs to 
@@ -1816,31 +1816,31 @@ at 0x0000021c : */	0x90080000,0x00000000,
 };
 
 #define A_NCR53c7xx_msg_abort	0x00000000
-unsigned long A_NCR53c7xx_msg_abort_used[] = {
+u32 A_NCR53c7xx_msg_abort_used[] = {
 	0x000001f5,
 };
 
 #define A_NCR53c7xx_msg_reject	0x00000000
-unsigned long A_NCR53c7xx_msg_reject_used[] = {
+u32 A_NCR53c7xx_msg_reject_used[] = {
 	0x00000133,
 };
 
 #define A_NCR53c7xx_sink	0x00000000
-unsigned long A_NCR53c7xx_sink_used[] = {
+u32 A_NCR53c7xx_sink_used[] = {
 	0x000001e5,
 	0x000001e9,
 	0x000001ed,
 };
 
 #define A_NCR53c7xx_zero	0x00000000
-unsigned long A_NCR53c7xx_zero_used[] = {
+u32 A_NCR53c7xx_zero_used[] = {
 	0x0000015d,
 	0x000001e1,
 	0x000001f1,
 };
 
 #define A_addr_scratch	0x00000000
-unsigned long A_addr_scratch_used[] = {
+u32 A_addr_scratch_used[] = {
 	0x00000007,
 	0x0000003a,
 	0x00000046,
@@ -1854,17 +1854,17 @@ unsigned long A_addr_scratch_used[] = {
 };
 
 #define A_addr_sfbr	0x00000000
-unsigned long A_addr_sfbr_used[] = {
+u32 A_addr_sfbr_used[] = {
 	0x00000016,
 };
 
 #define A_addr_temp	0x00000000
-unsigned long A_addr_temp_used[] = {
+u32 A_addr_temp_used[] = {
 	0x00000027,
 };
 
 #define A_dmode_memory_to_memory	0x00000000
-unsigned long A_dmode_memory_to_memory_used[] = {
+u32 A_dmode_memory_to_memory_used[] = {
 	0x00000008,
 	0x00000019,
 	0x00000029,
@@ -1880,7 +1880,7 @@ unsigned long A_dmode_memory_to_memory_used[] = {
 };
 
 #define A_dmode_memory_to_ncr	0x00000000
-unsigned long A_dmode_memory_to_ncr_used[] = {
+u32 A_dmode_memory_to_ncr_used[] = {
 	0x00000003,
 	0x00000012,
 	0x0000004c,
@@ -1888,7 +1888,7 @@ unsigned long A_dmode_memory_to_ncr_used[] = {
 };
 
 #define A_dmode_ncr_to_memory	0x00000000
-unsigned long A_dmode_ncr_to_memory_used[] = {
+u32 A_dmode_ncr_to_memory_used[] = {
 	0x00000024,
 	0x00000037,
 	0x00000043,
@@ -1900,140 +1900,140 @@ unsigned long A_dmode_ncr_to_memory_used[] = {
 };
 
 #define A_dmode_ncr_to_ncr	0x00000000
-unsigned long A_dmode_ncr_to_ncr_used[] = {
+u32 A_dmode_ncr_to_ncr_used[] = {
 };
 
 #define A_dsa_check_reselect	0x00000000
-unsigned long A_dsa_check_reselect_used[] = {
+u32 A_dsa_check_reselect_used[] = {
 	0x0000017f,
 };
 
 #define A_dsa_cmdout	0x00000048
-unsigned long A_dsa_cmdout_used[] = {
+u32 A_dsa_cmdout_used[] = {
 	0x0000008c,
 };
 
 #define A_dsa_cmnd	0x00000038
-unsigned long A_dsa_cmnd_used[] = {
+u32 A_dsa_cmnd_used[] = {
 };
 
 #define A_dsa_datain	0x00000054
-unsigned long A_dsa_datain_used[] = {
+u32 A_dsa_datain_used[] = {
 	0x000000b3,
 };
 
 #define A_dsa_dataout	0x00000050
-unsigned long A_dsa_dataout_used[] = {
+u32 A_dsa_dataout_used[] = {
 	0x0000009d,
 };
 
 #define A_dsa_end	0x00000070
-unsigned long A_dsa_end_used[] = {
+u32 A_dsa_end_used[] = {
 };
 
 #define A_dsa_fields_start	0x00000024
-unsigned long A_dsa_fields_start_used[] = {
+u32 A_dsa_fields_start_used[] = {
 };
 
 #define A_dsa_msgin	0x00000058
-unsigned long A_dsa_msgin_used[] = {
+u32 A_dsa_msgin_used[] = {
 	0x00000147,
 };
 
 #define A_dsa_msgout	0x00000040
-unsigned long A_dsa_msgout_used[] = {
+u32 A_dsa_msgout_used[] = {
 	0x0000006c,
 };
 
 #define A_dsa_msgout_other	0x00000068
-unsigned long A_dsa_msgout_other_used[] = {
+u32 A_dsa_msgout_other_used[] = {
 	0x0000013f,
 };
 
 #define A_dsa_next	0x00000030
-unsigned long A_dsa_next_used[] = {
+u32 A_dsa_next_used[] = {
 	0x0000002f,
 	0x0000006f,
 };
 
 #define A_dsa_select	0x0000003c
-unsigned long A_dsa_select_used[] = {
+u32 A_dsa_select_used[] = {
 	0x00000067,
 };
 
 #define A_dsa_status	0x00000060
-unsigned long A_dsa_status_used[] = {
+u32 A_dsa_status_used[] = {
 	0x00000143,
 };
 
 #define A_dsa_temp_dsa_next	0x00000000
-unsigned long A_dsa_temp_dsa_next_used[] = {
+u32 A_dsa_temp_dsa_next_used[] = {
 	0x00000001,
 	0x00000006,
 	0x0000001c,
 };
 
 #define A_dsa_temp_jump_resume	0x00000000
-unsigned long A_dsa_temp_jump_resume_used[] = {
+u32 A_dsa_temp_jump_resume_used[] = {
 	0x00000028,
 };
 
 #define A_dsa_temp_lun	0x00000000
-unsigned long A_dsa_temp_lun_used[] = {
+u32 A_dsa_temp_lun_used[] = {
 	0x00000017,
 };
 
 #define A_dsa_temp_sync	0x00000000
-unsigned long A_dsa_temp_sync_used[] = {
+u32 A_dsa_temp_sync_used[] = {
 	0x00000021,
 };
 
 #define A_dsa_temp_target	0x00000000
-unsigned long A_dsa_temp_target_used[] = {
+u32 A_dsa_temp_target_used[] = {
 	0x00000010,
 };
 
 #define A_int_debug_break	0x03000000
-unsigned long A_int_debug_break_used[] = {
+u32 A_int_debug_break_used[] = {
 	0x000001d3,
 };
 
 #define A_int_debug_dsa_loaded	0x03030000
-unsigned long A_int_debug_dsa_loaded_used[] = {
+u32 A_int_debug_dsa_loaded_used[] = {
 };
 
 #define A_int_debug_head	0x03050000
-unsigned long A_int_debug_head_used[] = {
+u32 A_int_debug_head_used[] = {
 };
 
 #define A_int_debug_idle	0x03020000
-unsigned long A_int_debug_idle_used[] = {
+u32 A_int_debug_idle_used[] = {
 };
 
 #define A_int_debug_reselected	0x03040000
-unsigned long A_int_debug_reselected_used[] = {
+u32 A_int_debug_reselected_used[] = {
 };
 
 #define A_int_debug_scheduled	0x03010000
-unsigned long A_int_debug_scheduled_used[] = {
+u32 A_int_debug_scheduled_used[] = {
 };
 
 #define A_int_err_check_condition	0x00030000
-unsigned long A_int_err_check_condition_used[] = {
+u32 A_int_err_check_condition_used[] = {
 	0x00000157,
 };
 
 #define A_int_err_no_phase	0x00040000
-unsigned long A_int_err_no_phase_used[] = {
+u32 A_int_err_no_phase_used[] = {
 };
 
 #define A_int_err_selected	0x00010000
-unsigned long A_int_err_selected_used[] = {
+u32 A_int_err_selected_used[] = {
 	0x0000019e,
 };
 
 #define A_int_err_unexpected_phase	0x00000000
-unsigned long A_int_err_unexpected_phase_used[] = {
+u32 A_int_err_unexpected_phase_used[] = {
 	0x00000084,
 	0x0000008a,
 	0x0000008e,
@@ -2046,73 +2046,73 @@ unsigned long A_int_err_unexpected_phase_used[] = {
 };
 
 #define A_int_err_unexpected_reselect	0x00020000
-unsigned long A_int_err_unexpected_reselect_used[] = {
+u32 A_int_err_unexpected_reselect_used[] = {
 	0x0000017c,
 };
 
 #define A_int_msg_1	0x01020000
-unsigned long A_int_msg_1_used[] = {
+u32 A_int_msg_1_used[] = {
 	0x000000e2,
 	0x000000e4,
 };
 
 #define A_int_msg_sdtr	0x01010000
-unsigned long A_int_msg_sdtr_used[] = {
+u32 A_int_msg_sdtr_used[] = {
 	0x0000012d,
 };
 
 #define A_int_msg_wdtr	0x01000000
-unsigned long A_int_msg_wdtr_used[] = {
+u32 A_int_msg_wdtr_used[] = {
 	0x00000121,
 };
 
 #define A_int_norm_aborted	0x02040000
-unsigned long A_int_norm_aborted_used[] = {
+u32 A_int_norm_aborted_used[] = {
 	0x000001f9,
 };
 
 #define A_int_norm_command_complete	0x02020000
-unsigned long A_int_norm_command_complete_used[] = {
+u32 A_int_norm_command_complete_used[] = {
 };
 
 #define A_int_norm_disconnected	0x02030000
-unsigned long A_int_norm_disconnected_used[] = {
+u32 A_int_norm_disconnected_used[] = {
 };
 
 #define A_int_norm_reselect_complete	0x02010000
-unsigned long A_int_norm_reselect_complete_used[] = {
+u32 A_int_norm_reselect_complete_used[] = {
 };
 
 #define A_int_norm_reset	0x02050000
-unsigned long A_int_norm_reset_used[] = {
+u32 A_int_norm_reset_used[] = {
 };
 
 #define A_int_norm_select_complete	0x02000000
-unsigned long A_int_norm_select_complete_used[] = {
+u32 A_int_norm_select_complete_used[] = {
 };
 
 #define A_int_test_1	0x04000000
-unsigned long A_int_test_1_used[] = {
+u32 A_int_test_1_used[] = {
 	0x000001b9,
 };
 
 #define A_int_test_2	0x04010000
-unsigned long A_int_test_2_used[] = {
+u32 A_int_test_2_used[] = {
 	0x000001d1,
 };
 
 #define A_int_test_3	0x04020000
-unsigned long A_int_test_3_used[] = {
+u32 A_int_test_3_used[] = {
 };
 
 #define A_issue_dsa_head	0x00000000
-unsigned long A_issue_dsa_head_used[] = {
+u32 A_issue_dsa_head_used[] = {
 	0x0000004f,
 	0x00000080,
 };
 
 #define A_msg_buf	0x00000000
-unsigned long A_msg_buf_used[] = {
+u32 A_msg_buf_used[] = {
 	0x000000d6,
 	0x0000010f,
 	0x00000119,
@@ -2122,7 +2122,7 @@ unsigned long A_msg_buf_used[] = {
 };
 
 #define A_reconnect_dsa_head	0x00000000
-unsigned long A_reconnect_dsa_head_used[] = {
+u32 A_reconnect_dsa_head_used[] = {
 	0x0000003f,
 	0x00000047,
 	0x00000162,
@@ -2130,23 +2130,23 @@ unsigned long A_reconnect_dsa_head_used[] = {
 };
 
 #define A_reselected_identify	0x00000000
-unsigned long A_reselected_identify_used[] = {
+u32 A_reselected_identify_used[] = {
 	0x00000015,
 	0x0000015b,
 };
 
 #define A_reselected_tag	0x00000000
-unsigned long A_reselected_tag_used[] = {
+u32 A_reselected_tag_used[] = {
 	0x0000015e,
 };
 
 #define A_test_dest	0x00000000
-unsigned long A_test_dest_used[] = {
+u32 A_test_dest_used[] = {
 	0x000001b7,
 };
 
 #define A_test_src	0x00000000
-unsigned long A_test_src_used[] = {
+u32 A_test_src_used[] = {
 	0x000001b6,
 };
 
@@ -2174,7 +2174,7 @@ unsigned long A_test_src_used[] = {
 #define Ent_test_1	0x000006d4
 #define Ent_test_2	0x000006e8
 #define Ent_test_2_msgout	0x00000700
-unsigned long LABELPATCHES[] = {
+u32 LABELPATCHES[] = {
 	0x00000002,
 	0x0000000b,
 	0x0000000d,
@@ -2249,5 +2249,12 @@ unsigned long LABELPATCHES[] = {
 	0x000001ef,
 };
 
-unsigned long INSTRUCTIONS	= 0x00000104;
-unsigned long PATCHES	= 0x00000048;
+struct {
+	u32	offset;
+	void		*address;
+} EXTERNAL_PATCHES[] = {
+};
+
+u32 INSTRUCTIONS	= 260;
+u32 PATCHES	= 72;
+u32 EXTERNAL_PATCHES_LEN	= 0;

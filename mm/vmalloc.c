@@ -228,7 +228,7 @@ int vread(char *buf, char *addr, int count)
 		while (addr < vaddr) {
 			if (count == 0)
 				goto finished;
-			put_fs_byte('\0', buf++), addr++, count--;
+			put_user('\0', buf++), addr++, count--;
 		}
 		n = tmp->size - PAGE_SIZE;
 		if (addr > vaddr)
@@ -236,7 +236,7 @@ int vread(char *buf, char *addr, int count)
 		while (--n >= 0) {
 			if (count == 0)
 				goto finished;
-			put_fs_byte(*addr++, buf++), count--;
+			put_user(*addr++, buf++), count--;
 		}
 	}
 finished:

@@ -7,75 +7,72 @@
  *  Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
  */
 
-/* PMD_SHIFT determines the size of the area a second-level page table can map */
-#define PMD_SHIFT       18
-#define PMD_SIZE        (1UL << PMD_SHIFT)
-#define PMD_MASK        (~(PMD_SIZE-1))
+#include <linux/mm.h>
+#include <asm/asi.h>
+#include <asm/pgtsun4c.h>
+#include <asm/pgtsrmmu.h>
 
-/* PGDIR_SHIFT determines what a third-level page table entry can map */
-#define PGDIR_SHIFT       18
-#define PGDIR_SIZE        (1UL << PGDIR_SHIFT)
-#define PGDIR_MASK        (~(PGDIR_SIZE-1))
-#define PGDIR_ALIGN(addr) (((addr)+PGDIR_SIZE-1)&PGDIR_MASK)
+extern void load_mmu(void);
 
-/*
- * Just following the i386 lead, because it works on the Sparc sun4c
- * machines.  Two-level, therefore there is no real PMD.
+extern unsigned int pmd_shift;
+extern unsigned int pmd_size;
+extern unsigned int pmd_mask;
+extern unsigned int (*pmd_align)(unsigned int);
+
+extern unsigned int pgdir_shift;
+extern unsigned int pgdir_size;
+extern unsigned int pgdir_mask;
+extern unsigned int (*pgdir_align)(unsigned int);
+
+extern unsigned int ptrs_per_pte;
+extern unsigned int ptrs_per_pmd;
+extern unsigned int ptrs_per_pgd;
+
+extern unsigned int ptrs_per_page;
+
+extern unsigned long (*(vmalloc_start))(void);
+
+#define VMALLOC_VMADDR(x) ((unsigned long)(x))
+#define VMALLOC_START vmalloc_start()
+
+extern pgprot_t page_none;
+extern pgprot_t page_shared;
+extern pgprot_t page_copy;
+extern pgprot_t page_readonly;
+extern pgprot_t page_kernel;
+extern pgprot_t page_invalid;
+
+#define PMD_SHIFT      (pmd_shift)
+#define PMD_SIZE       (pmd_size)
+#define PMD_MASK       (pmd_mask)
+#define PMD_ALIGN      (pmd_align)
+#define PGDIR_SHIFT    (pgdir_shift)
+#define PGDIR_SIZE     (pgdir_size)
+#define PGDIR_MASK     (pgdir_mask)
+#define PGDIR_ALIGN    (pgdir_align)
+#define PTRS_PER_PTE   (ptrs_per_pte)
+#define PTRS_PER_PMD   (ptrs_per_pmd)
+#define PTRS_PER_PGD   (ptrs_per_pgd)
+
+#define PAGE_NONE      (page_none)
+#define PAGE_SHARED    (page_shared)
+#define PAGE_COPY      (page_copy)
+#define PAGE_READONLY  (page_readonly)
+#define PAGE_KERNEL    (page_kernel)
+#define PAGE_INVALID   (page_invalid)
+
+/* Top-level page directory */
+extern pgd_t swapper_pg_dir[1024];
+
+/* Page table for 0-4MB for everybody, on the Sparc this
+ * holds the same as on the i386.
  */
+extern unsigned long pg0[1024];
 
-#define PTRS_PER_PTE    1024
-#define PTRS_PER_PMD    1
-#define PTRS_PER_PGD    1024
+extern unsigned long ptr_in_current_pgd;
 
 /* the no. of pointers that fit on a page: this will go away */
 #define PTRS_PER_PAGE   (PAGE_SIZE/sizeof(void*))
-
-/* Just any arbitrary offset to the start of the vmalloc VM area: the
- * current 8MB value just means that there will be a 8MB "hole" after the
- * physical memory until the kernel virtual memory starts.  That means that
- * any out-of-bounds memory accesses will hopefully be caught.
- * The vmalloc() routines leaves a hole of 4kB between each vmalloced
- * area for the same reason. ;)
- */
-#define VMALLOC_OFFSET  (8*1024*1024)
-#define VMALLOC_START ((high_memory + VMALLOC_OFFSET) & ~(VMALLOC_OFFSET-1))
-#define VMALLOC_VMADDR(x) (TASK_SIZE + (unsigned long)(x))
-
-/*
- * Sparc page table fields.
- */
-
-#define _PAGE_VALID     0x80000000   /* valid page */
-#define _PAGE_WRITE     0x40000000   /* can be written to */
-#define _PAGE_PRIV      0x20000000   /* bit to signify privileged page */
-#define _PAGE_NOCACHE   0x10000000   /* non-cacheable page */
-#define _PAGE_REF       0x02000000   /* Page has been accessed/referenced */
-#define _PAGE_DIRTY     0x01000000   /* Page has been modified, is dirty */
-#define _PAGE_COW       0x00800000   /* COW page, hardware ignores this bit (untested) */
-
-
-/* Sparc sun4c mmu has only a writable bit. Thus if a page is valid it can be
- * read in a load, and executed as code automatically. Although, the memory fault
- * hardware does make a distinction between date-read faults and insn-read faults
- * which is determined by which trap happened plus magic sync/async fault register
- * values which must be checked in the actual fault handler.
- */
-
-/* We want the swapper not to swap out page tables, thus dirty and writable
- * so that the kernel can change the entries as needed. Also valid for
- * obvious reasons.
- */
-#define _PAGE_TABLE     (_PAGE_VALID | _PAGE_WRITE | _PAGE_DIRTY)
-#define _PAGE_CHG_MASK  (PAGE_MASK | _PAGE_REF | _PAGE_DIRTY)
-
-#define PAGE_NONE       __pgprot(_PAGE_VALID | _PAGE_REF)
-#define PAGE_SHARED     __pgprot(_PAGE_VALID | _PAGE_WRITE | _PAGE_REF)
-#define PAGE_COPY       __pgprot(_PAGE_VALID | _PAGE_REF | _PAGE_COW)
-#define PAGE_READONLY   __pgprot(_PAGE_VALID | _PAGE_REF)
-#define PAGE_KERNEL     __pgprot(_PAGE_VALID | _PAGE_WRITE | _PAGE_NOCACHE | _PAGE_REF | _PAGE_PRIV)
-#define PAGE_INVALID    __pgprot(_PAGE_PRIV)
-
-#define _PAGE_NORMAL(x) __pgprot(_PAGE_VALID | _PAGE_REF | (x))
 
 /* I define these like the i386 does because the check for text or data fault
  * is done at trap time by the low level handler. Maybe I can set these bits
@@ -99,8 +96,39 @@
 #define __S110	PAGE_SHARED
 #define __S111	PAGE_SHARED
 
+/* Contexts on the Sparc. */
+#define MAX_CTXS 256
+#define NO_CTX   0xffff     /* In tss.context means task has no context currently */
+extern struct task_struct * ctx_tasks[MAX_CTXS];
+extern int ctx_tasks_last_frd;
 
-extern unsigned long pg0[1024];
+extern int num_contexts;
+
+/* This routine allocates a new context.  And 'p' must not be 'current'! */
+extern inline int alloc_mmu_ctx(struct task_struct *p)
+{
+	int i;
+
+	for(i=0; i<num_contexts; i++)
+		if(ctx_tasks[i] == NULL) break;
+
+	if(i<num_contexts) {
+		p->tss.context = i;
+		ctx_tasks[i] = p;
+		return i;
+	}
+
+	/* Have to free one up */
+	ctx_tasks_last_frd++;
+	if(ctx_tasks_last_frd >= num_contexts) ctx_tasks_last_frd=0;
+	/* Right here is where we invalidate the user mappings that were
+	 * present.  TODO
+	 */
+        ctx_tasks[ctx_tasks_last_frd]->tss.context = NO_CTX;
+	ctx_tasks[ctx_tasks_last_frd] = p;
+	p->tss.context = ctx_tasks_last_frd;
+	return ctx_tasks_last_frd;
+}
 
 /*
  * BAD_PAGETABLE is used when we need a bogus page-table, while
@@ -120,7 +148,7 @@ extern unsigned long __zero_page(void);
 #define ZERO_PAGE __zero_page()
 
 /* number of bits that fit into a memory pointer */
-#define BITS_PER_PTR      (8*sizeof(unsigned long))   /* better check this stuff */
+#define BITS_PER_PTR      (8*sizeof(unsigned long))
 
 /* to align the pointer to a pointer address */
 #define PTR_MASK          (~(sizeof(void*)-1))
@@ -128,6 +156,9 @@ extern unsigned long __zero_page(void);
 
 #define SIZEOF_PTR_LOG2   2
 
+extern unsigned long (*pte_page)(pte_t);
+extern unsigned long (*pmd_page)(pmd_t);
+extern unsigned long (*pgd_page)(pgd_t);
 
 /* to set the page-dir
  *
@@ -135,208 +166,187 @@ extern unsigned long __zero_page(void);
  * Therefore there is no global idea of 'the' page directory, although we
  * make a virtual one in kernel memory so that we can keep the stats on
  * all the pages since not all can be loaded at once in the mmu.
+ *
+ * Actually on the SRMMU things do work exactly like the i386, the
+ * page tables live in real physical ram, no funky TLB buisness.  But
+ * we have to do lots of flushing. And we have to update the root level
+ * page table pointer for this process if it has a context.
  */
 
-#define SET_PAGE_DIR(tsk,pgdir)
+extern void (*sparc_update_rootmmu_dir)(struct task_struct *, pgd_t *pgdir);
 
+#define SET_PAGE_DIR(tsk,pgdir) \
+do { sparc_update_rootmmu_dir(tsk, pgdir); } while (0)
+       
 /* to find an entry in a page-table */
 #define PAGE_PTR(address) \
 ((unsigned long)(address)>>(PAGE_SHIFT-SIZEOF_PTR_LOG2)&PTR_MASK&~PAGE_MASK)
 
 extern unsigned long high_memory;
 
-extern inline int pte_none(pte_t pte)		{ return !pte_val(pte); }
-extern inline int pte_present(pte_t pte)	{ return pte_val(pte) & _PAGE_VALID; }
-extern inline int pte_inuse(pte_t *ptep)        { return mem_map[MAP_NR(ptep)] > 1; }
-extern inline void pte_clear(pte_t *ptep)	{ pte_val(*ptep) = 0; }
-extern inline void pte_reuse(pte_t *ptep)
-{
-  if(!(mem_map[MAP_NR(ptep)] & MAP_PAGE_RESERVED))
-    mem_map[MAP_NR(ptep)]++;
-}
+extern int (*pte_none)(pte_t);
+extern int (*pte_present)(pte_t);
+extern int (*pte_inuse)(pte_t *);
+extern void (*pte_clear)(pte_t *);
+extern void (*pte_reuse)(pte_t *);
 
-extern inline int pmd_none(pmd_t pmd)		{ return !pmd_val(pmd); }
-extern inline int pmd_bad(pmd_t pmd)		{ return (pmd_val(pmd) & ~PAGE_MASK) != _PAGE_TABLE || pmd_val(pmd) > high_memory; }
-extern inline int pmd_present(pmd_t pmd)	{ return pmd_val(pmd) & _PAGE_VALID; }
-extern inline int pmd_inuse(pmd_t *pmdp)        { return 0; }
-extern inline void pmd_clear(pmd_t *pmdp)	{ pmd_val(*pmdp) = 0; }
-extern inline void pmd_reuse(pmd_t * pmdp)      { }
+extern int (*pmd_none)(pmd_t);
+extern int (*pmd_bad)(pmd_t);
+extern int (*pmd_present)(pmd_t);
+extern int (*pmd_inuse)(pmd_t *);
+extern void (*pmd_clear)(pmd_t *);
+extern void (*pmd_reuse)(pmd_t *);
 
-extern inline int pgd_none(pgd_t pgd)		{ return !pgd_val(pgd); }
-extern inline int pgd_bad(pgd_t pgd)		{ return (pgd_val(pgd) & ~PAGE_MASK) != _PAGE_TABLE || pgd_val(pgd) > high_memory; }
-extern inline int pgd_present(pgd_t pgd)	{ return pgd_val(pgd) & _PAGE_VALID; }
-extern inline int pgd_inuse(pgd_t *pgdp)        { return mem_map[MAP_NR(pgdp)] > 1; }
-extern inline void pgd_clear(pgd_t * pgdp)	{ pgd_val(*pgdp) = 0; }
-extern inline void pgd_reuse(pgd_t *pgdp)
-{
-  if (!(mem_map[MAP_NR(pgdp)] & MAP_PAGE_RESERVED))
-    mem_map[MAP_NR(pgdp)]++;
-}
+extern int (*pgd_none)(pgd_t);
+extern int (*pgd_bad)(pgd_t);
+extern int (*pgd_present)(pgd_t);
+extern int (*pgd_inuse)(pgd_t *);
+extern void (*pgd_clear)(pgd_t *);
+extern void (*pgd_reuse)(pgd_t *);
 
 /*
  * The following only work if pte_present() is true.
  * Undefined behaviour if not..
  */
-extern inline int pte_read(pte_t pte)		{ return pte_val(pte) & _PAGE_VALID; }
-extern inline int pte_write(pte_t pte)		{ return pte_val(pte) & _PAGE_WRITE; }
-extern inline int pte_exec(pte_t pte)		{ return pte_val(pte) & _PAGE_VALID; }
-extern inline int pte_dirty(pte_t pte)		{ return pte_val(pte) & _PAGE_REF; }
-extern inline int pte_young(pte_t pte)		{ return pte_val(pte) & _PAGE_REF; }
-extern inline int pte_cow(pte_t pte)		{ return pte_val(pte) & _PAGE_COW; }
+extern int (*pte_read)(pte_t);
+extern int (*pte_write)(pte_t);
+extern int (*pte_exec)(pte_t);
+extern int (*pte_dirty)(pte_t);
+extern int (*pte_young)(pte_t);
+extern int (*pte_cow)(pte_t);
 
-extern inline pte_t pte_wrprotect(pte_t pte)	{ pte_val(pte) &= ~_PAGE_WRITE; return pte; }
-extern inline pte_t pte_rdprotect(pte_t pte)	{ pte_val(pte) &= ~_PAGE_VALID; return pte; }
-extern inline pte_t pte_exprotect(pte_t pte)	{ pte_val(pte) &= ~_PAGE_VALID; return pte; }
-extern inline pte_t pte_mkclean(pte_t pte)	{ pte_val(pte) &= ~_PAGE_DIRTY; return pte; }
-extern inline pte_t pte_mkold(pte_t pte)	{ pte_val(pte) &= ~_PAGE_REF; return pte; }
-extern inline pte_t pte_uncow(pte_t pte)	{ pte_val(pte) &= ~_PAGE_COW; return pte; }
-extern inline pte_t pte_mkwrite(pte_t pte)	{ pte_val(pte) |= _PAGE_WRITE; return pte; }
-extern inline pte_t pte_mkread(pte_t pte)	{ pte_val(pte) |= _PAGE_VALID; return pte; }
-extern inline pte_t pte_mkexec(pte_t pte)	{ pte_val(pte) |= _PAGE_VALID; return pte; }
-extern inline pte_t pte_mkdirty(pte_t pte)	{ pte_val(pte) |= _PAGE_DIRTY; return pte; }
-extern inline pte_t pte_mkyoung(pte_t pte)	{ pte_val(pte) |= _PAGE_REF; return pte; }
-extern inline pte_t pte_mkcow(pte_t pte)	{ pte_val(pte) |= _PAGE_COW; return pte; }
+extern pte_t (*pte_wrprotect)(pte_t);
+extern pte_t (*pte_rdprotect)(pte_t);
+extern pte_t (*pte_exprotect)(pte_t);
+extern pte_t (*pte_mkclean)(pte_t);
+extern pte_t (*pte_mkold)(pte_t);
+extern pte_t (*pte_uncow)(pte_t);
+extern pte_t (*pte_mkwrite)(pte_t);
+extern pte_t (*pte_mkread)(pte_t);
+extern pte_t (*pte_mkexec)(pte_t);
+extern pte_t (*pte_mkdirty)(pte_t);
+extern pte_t (*pte_mkyoung)(pte_t);
+extern pte_t (*pte_mkcow)(pte_t);
 
 /*
  * Conversion functions: convert a page and protection to a page entry,
  * and a page entry and page directory to the page they refer to.
  */
-extern inline pte_t mk_pte(unsigned long page, pgprot_t pgprot)
-{ pte_t pte; pte_val(pte) = page | pgprot_val(pgprot); return pte; }
+extern pte_t (*mk_pte)(unsigned long, pgprot_t);
 
-extern inline pte_t pte_modify(pte_t pte, pgprot_t newprot)
-{ pte_val(pte) = (pte_val(pte) & _PAGE_CHG_MASK) | pgprot_val(newprot); return pte; }
+extern void (*pgd_set)(pgd_t *, pte_t *);
 
-extern inline unsigned long pte_page(pte_t pte)	{ return pte_val(pte) & PAGE_MASK; }
-
-extern inline unsigned long pmd_page(pmd_t pmd) { return pmd_val(pmd) & PAGE_MASK; }
-
-extern inline unsigned long pgd_page(pgd_t pgd)	{ return pgd_val(pgd) & PAGE_MASK; }
-
-extern inline void pgd_set(pgd_t * pgdp, pte_t * ptep)
-{ pgd_val(*pgdp) = _PAGE_TABLE | (unsigned long) ptep; }
+extern pte_t (*pte_modify)(pte_t, pgprot_t);
 
 /* to find an entry in a page-table-directory */
-#define PAGE_DIR_OFFSET(tsk,address) \
-((((unsigned long)(address)) >> 22) + (pgd_t *) (tsk)->tss.cr3)
-
-/* to find an entry in a page-table-directory */
-extern inline pgd_t * pgd_offset(struct task_struct * tsk, unsigned long address)
-{
-	return (pgd_t *) tsk->tss.cr3 + (address >> PGDIR_SHIFT);
-}
+extern pgd_t * (*pgd_offset)(struct task_struct *, unsigned long);
 
 /* Find an entry in the second-level page table.. */
-extern inline pmd_t * pmd_offset(pgd_t * dir, unsigned long address)
-{
-	return (pmd_t *) dir;
-}
+extern pmd_t * (*pmd_offset)(pgd_t *, unsigned long);
 
 /* Find an entry in the third-level page table.. */ 
-extern inline pte_t * pte_offset(pmd_t * dir, unsigned long address)
-{
-	return (pte_t *) pmd_page(*dir) + ((address >> PAGE_SHIFT) & (PTRS_PER_PTE - 1));
-}
-
+extern pte_t * (*pte_offset)(pmd_t *, unsigned long);
 
 /*
  * Allocate and free page tables. The xxx_kernel() versions are
  * used to allocate a kernel page table - this turns on ASN bits
  * if any, and marks the page tables reserved.
  */
-extern inline void pte_free_kernel(pte_t * pte)
-{
-	mem_map[MAP_NR(pte)] = 1;
-	free_page((unsigned long) pte);
-}
+extern void (*pte_free_kernel)(pte_t *);
 
-extern inline pte_t * pte_alloc_kernel(pmd_t * pmd, unsigned long address)
-{
-	address = (address >> PAGE_SHIFT) & (PTRS_PER_PTE - 1);
-	if (pmd_none(*pmd)) {
-		pte_t * page = (pte_t *) get_free_page(GFP_KERNEL);
-		if (pmd_none(*pmd)) {
-			if (page) {
-				pmd_val(*pmd) = _PAGE_TABLE | (unsigned long) page;
-				mem_map[MAP_NR(page)] = MAP_PAGE_RESERVED;
-				return page + address;
-			}
-			pmd_val(*pmd) = _PAGE_TABLE | (unsigned long) BAD_PAGETABLE;
-			return NULL;
-		}
-		free_page((unsigned long) page);
-	}
-	if (pmd_bad(*pmd)) {
-		printk("Bad pmd in pte_alloc: %08lx\n", pmd_val(*pmd));
-		pmd_val(*pmd) = _PAGE_TABLE | (unsigned long) BAD_PAGETABLE;
-		return NULL;
-	}
-	return (pte_t *) pmd_page(*pmd) + address;
-}
+extern pte_t * (*pte_alloc_kernel)(pmd_t *, unsigned long);
 
 /*
  * allocating and freeing a pmd is trivial: the 1-entry pmd is
  * inside the pgd, so has no extra memory associated with it.
  */
-extern inline void pmd_free_kernel(pmd_t * pmd)
-{
-}
+extern void (*pmd_free_kernel)(pmd_t *);
 
-extern inline pmd_t * pmd_alloc_kernel(pgd_t * pgd, unsigned long address)
-{
-	return (pmd_t *) pgd;
-}
+extern pmd_t * (*pmd_alloc_kernel)(pgd_t *, unsigned long);
 
-extern inline void pte_free(pte_t * pte)
-{
-	free_page((unsigned long) pte);
-}
+extern void (*pte_free)(pte_t *);
 
-extern inline pte_t * pte_alloc(pmd_t * pmd, unsigned long address)
-{
-	address = (address >> PAGE_SHIFT) & (PTRS_PER_PTE - 1);
-	if (pmd_none(*pmd)) {
-		pte_t * page = (pte_t *) get_free_page(GFP_KERNEL);
-		if (pmd_none(*pmd)) {
-			if (page) {
-				pmd_val(*pmd) = _PAGE_TABLE | (unsigned long) page;
-				return page + address;
-			}
-			pmd_val(*pmd) = _PAGE_TABLE | (unsigned long) BAD_PAGETABLE;
-			return NULL;
-		}
-		free_page((unsigned long) page);
-	}
-	if (pmd_bad(*pmd)) {
-		printk("Bad pmd in pte_alloc: %08lx\n", pmd_val(*pmd));
-		pmd_val(*pmd) = _PAGE_TABLE | (unsigned long) BAD_PAGETABLE;
-		return NULL;
-	}
-	return (pte_t *) pmd_page(*pmd) + address;
-}
+extern pte_t * (*pte_alloc)(pmd_t *, unsigned long);
 
 /*
  * allocating and freeing a pmd is trivial: the 1-entry pmd is
  * inside the pgd, so has no extra memory associated with it.
  */
-extern inline void pmd_free(pmd_t * pmd)
+extern void (*pmd_free)(pmd_t *);
+
+extern pmd_t * (*pmd_alloc)(pgd_t *, unsigned long);
+
+extern void (*pgd_free)(pgd_t *);
+
+/* A page directory on the sun4c needs 16k, thus we request an order of
+ * two.
+ *
+ * I need 16k for a sun4c page table, so I use kmalloc since kmalloc_init()
+ * is called before pgd_alloc ever is (I think).
+ */
+
+extern pgd_t * (*pgd_alloc)(void);
+
+extern int invalid_segment;
+
+/* Sun4c specific routines.  They can stay inlined. */
+extern inline int alloc_sun4c_pseg(void)
 {
+	int oldseg, i;
+	/* First see if any are free already */
+	for(i=0; i<PSEG_ENTRIES; i++)
+		if(phys_seg_map[i]==PSEG_AVL) return i;
+
+	/* Uh-oh, gotta unallocate a TLB pseg */
+	oldseg=0;
+	for(i=0; i<PSEG_ENTRIES; i++) {
+		/* Can not touch PSEG_KERNEL and PSEG_RSV segmaps */
+		if(phys_seg_map[i]!=PSEG_USED) continue;
+		/* Ok, take a look at it's lifespan */
+		oldseg = (phys_seg_life[i]>oldseg) ? phys_seg_life[i] : oldseg;
+	}
+	phys_seg_life[oldseg]=PSEG_BORN;
+	return oldseg;
 }
 
-extern inline pmd_t * pmd_alloc(pgd_t * pgd, unsigned long address)
+/* Age all psegs except pseg_skip */
+extern inline void age_sun4c_psegs(int pseg_skip)
 {
-	return (pmd_t *) pgd;
+	int i;
+
+	for(i=0; i<pseg_skip; i++) phys_seg_life[i]++;
+	i++;
+	while(i<PSEG_ENTRIES) phys_seg_life[i++]++;
+	return;
 }
 
-extern inline void pgd_free(pgd_t *pgd)
+/*
+ * This is only ever called when the sun4c page fault routines run
+ * so we can keep this here as the srmmu code will never get to it.
+ */
+extern inline void update_mmu_cache(struct vm_area_struct * vma,
+	unsigned long address, pte_t pte)
 {
-  free_page((unsigned long) pgd);
-}
-extern inline pgd_t *pgd_alloc(void)
-{
-  return (pgd_t *) get_free_page(GFP_KERNEL);
-}
+  unsigned long clr_addr;
+  int segmap;
 
-extern pgd_t swapper_pg_dir[1024];
+  segmap = (int) get_segmap(address & SUN4C_REAL_PGDIR_MASK);
+  if(segmap == invalid_segment) {
+    segmap = alloc_sun4c_pseg();
+    put_segmap((address & SUN4C_REAL_PGDIR_MASK), segmap);
+    phys_seg_map[segmap] = PSEG_USED;
+
+    /* We got a segmap, clear all the pte's in it. */
+    for(clr_addr=(address&SUN4C_REAL_PGDIR_MASK); clr_addr<((address&SUN4C_REAL_PGDIR_MASK) + SUN4C_REAL_PGDIR_SIZE); 
+	clr_addr+=PAGE_SIZE)
+	    put_pte(clr_addr, 0);
+  }
+
+  /* Do aging */
+  age_sun4c_psegs(segmap);
+  put_pte((address & PAGE_MASK), pte_val(pte));
+  return;
+
+}
 
 #endif /* !(_SPARC_PGTABLE_H) */

@@ -53,7 +53,7 @@ static struct swap_info_struct {
 	int next;			/* next entry on swap list */
 } swap_info[MAX_SWAPFILES];
 
-extern int shm_swap (int);
+extern int shm_swap (int, unsigned long);
 
 unsigned long *swap_cache;
 
@@ -345,7 +345,7 @@ void swap_in(struct vm_area_struct * vma, pte_t * page_table,
  * using a process that no longer actually exists (it might
  * have died while we slept).
  */
-static inline int try_to_swap_out(struct vm_area_struct* vma, unsigned long address, pte_t * page_table)
+static inline int try_to_swap_out(struct vm_area_struct* vma, unsigned long address, pte_t * page_table, unsigned long limit)
 {
 	pte_t pte;
 	unsigned long entry;
@@ -356,6 +356,8 @@ static inline int try_to_swap_out(struct vm_area_struct* vma, unsigned long addr
 		return 0;
 	page = pte_page(pte);
 	if (page >= high_memory)
+		return 0;
+	if (page >= limit)
 		return 0;
 	if (mem_map[MAP_NR(page)] & MAP_PAGE_RESERVED)
 		return 0;
@@ -428,7 +430,7 @@ static inline int try_to_swap_out(struct vm_area_struct* vma, unsigned long addr
 #define SWAP_RATIO	128
 
 static inline int swap_out_pmd(struct vm_area_struct * vma, pmd_t *dir,
-	unsigned long address, unsigned long end)
+	unsigned long address, unsigned long end, unsigned long limit)
 {
 	pte_t * pte;
 	unsigned long pmd_end;
@@ -450,7 +452,7 @@ static inline int swap_out_pmd(struct vm_area_struct * vma, pmd_t *dir,
 	do {
 		int result;
 		vma->vm_task->mm->swap_address = address + PAGE_SIZE;
-		result = try_to_swap_out(vma, address, pte);
+		result = try_to_swap_out(vma, address, pte, limit);
 		if (result)
 			return result;
 		address += PAGE_SIZE;
@@ -460,7 +462,7 @@ static inline int swap_out_pmd(struct vm_area_struct * vma, pmd_t *dir,
 }
 
 static inline int swap_out_pgd(struct vm_area_struct * vma, pgd_t *dir,
-	unsigned long address, unsigned long end)
+	unsigned long address, unsigned long end, unsigned long limit)
 {
 	pmd_t * pmd;
 	unsigned long pgd_end;
@@ -480,7 +482,7 @@ static inline int swap_out_pgd(struct vm_area_struct * vma, pgd_t *dir,
 		end = pgd_end;
 	
 	do {
-		int result = swap_out_pmd(vma, pmd, address, end);
+		int result = swap_out_pmd(vma, pmd, address, end, limit);
 		if (result)
 			return result;
 		address = (address + PMD_SIZE) & PMD_MASK;
@@ -490,7 +492,7 @@ static inline int swap_out_pgd(struct vm_area_struct * vma, pgd_t *dir,
 }
 
 static int swap_out_vma(struct vm_area_struct * vma, pgd_t *pgdir,
-	unsigned long start)
+	unsigned long start, unsigned long limit)
 {
 	unsigned long end;
 
@@ -501,7 +503,7 @@ static int swap_out_vma(struct vm_area_struct * vma, pgd_t *pgdir,
 
 	end = vma->vm_end;
 	while (start < end) {
-		int result = swap_out_pgd(vma, pgdir, start, end);
+		int result = swap_out_pgd(vma, pgdir, start, end, limit);
 		if (result)
 			return result;
 		start = (start + PGDIR_SIZE) & PGDIR_MASK;
@@ -510,7 +512,7 @@ static int swap_out_vma(struct vm_area_struct * vma, pgd_t *pgdir,
 	return 0;
 }
 
-static int swap_out_process(struct task_struct * p)
+static int swap_out_process(struct task_struct * p, unsigned long limit)
 {
 	unsigned long address;
 	struct vm_area_struct* vma;
@@ -531,7 +533,7 @@ static int swap_out_process(struct task_struct * p)
 		address = vma->vm_start;
 
 	for (;;) {
-		int result = swap_out_vma(vma, pgd_offset(p, address), address);
+		int result = swap_out_vma(vma, pgd_offset(p, address), address, limit);
 		if (result)
 			return result;
 		vma = vma->vm_next;
@@ -543,7 +545,7 @@ static int swap_out_process(struct task_struct * p)
 	return 0;
 }
 
-static int swap_out(unsigned int priority)
+static int swap_out(unsigned int priority, unsigned long limit)
 {
 	static int swap_task;
 	int loop, counter;
@@ -589,7 +591,7 @@ static int swap_out(unsigned int priority)
 		}
 		if (!--p->mm->swap_cnt)
 			swap_task++;
-		switch (swap_out_process(p)) {
+		switch (swap_out_process(p, limit)) {
 			case 0:
 				if (p->mm->swap_cnt)
 					swap_task++;
@@ -612,7 +614,7 @@ static int swap_out(unsigned int priority)
  * free'd, so hopefully we'll get reasonable behaviour even under very
  * different circumstances.
  */
-static int try_to_free_page(int priority)
+static int try_to_free_page(int priority, unsigned long limit)
 {
 	static int state = 0;
 	int i=6;
@@ -620,15 +622,15 @@ static int try_to_free_page(int priority)
 	switch (state) {
 		do {
 		case 0:
-			if (priority != GFP_NOBUFFER && shrink_buffers(i))
+			if (priority != GFP_NOBUFFER && shrink_buffers(i, limit))
 				return 1;
 			state = 1;
 		case 1:
-			if (shm_swap(i))
+			if (shm_swap(i, limit))
 				return 1;
 			state = 2;
 		default:
-			if (swap_out(i))
+			if (swap_out(i, limit))
 				return 1;
 			state = 0;
 		} while(i--);
@@ -730,18 +732,22 @@ void free_pages(unsigned long addr, unsigned long order)
 /*
  * Some ugly macros to speed up __get_free_pages()..
  */
-#define RMQUEUE(order) \
+#define RMQUEUE(order, limit) \
 do { struct mem_list * queue = free_area_list+order; \
      unsigned long new_order = order; \
-	do { struct mem_list *next = queue->next; \
-		if (queue != next) { \
-			(queue->next = next->next)->prev = queue; \
-			mark_used((unsigned long) next, new_order); \
-			nr_free_pages -= 1 << order; \
-			restore_flags(flags); \
-			EXPAND(next, order, new_order); \
-			return (unsigned long) next; \
-		} new_order++; queue++; \
+	do { struct mem_list *prev = queue, *ret; \
+		while (queue != (ret = prev->next)) { \
+			if ((unsigned long) ret < (limit)) { \
+				(prev->next = ret->next)->prev = prev; \
+				mark_used((unsigned long) ret, new_order); \
+				nr_free_pages -= 1 << order; \
+				restore_flags(flags); \
+				EXPAND(ret, order, new_order); \
+				return (unsigned long) ret; \
+			} \
+			prev = ret; \
+		} \
+		new_order++; queue++; \
 	} while (new_order < NR_MEM_LISTS); \
 } while (0)
 
@@ -761,7 +767,7 @@ do { unsigned long size = PAGE_SIZE << high; \
 	} mem_map[MAP_NR((unsigned long) addr)] = 1; \
 } while (0)
 
-unsigned long __get_free_pages(int priority, unsigned long order)
+unsigned long __get_free_pages(int priority, unsigned long order, unsigned long limit)
 {
 	unsigned long flags;
 	int reserved_pages;
@@ -781,41 +787,14 @@ unsigned long __get_free_pages(int priority, unsigned long order)
 repeat:
 	cli();
 	if ((priority==GFP_ATOMIC) || nr_free_pages > reserved_pages) {
-		RMQUEUE(order);
+		RMQUEUE(order, limit);
 		restore_flags(flags);
 		return 0;
 	}
 	restore_flags(flags);
-	if (priority != GFP_BUFFER && try_to_free_page(priority))
+	if (priority != GFP_BUFFER && try_to_free_page(priority, limit))
 		goto repeat;
 	return 0;
-}
-
-/*
- * Yes, I know this is ugly. Don't tell me.
- */
-unsigned long __get_dma_pages(int priority, unsigned long order)
-{
-	unsigned long list = 0;
-	unsigned long result;
-	unsigned long limit = MAX_DMA_ADDRESS;
-
-	/* if (EISA_bus) limit = ~0UL; */
-	if (priority != GFP_ATOMIC)
-		priority = GFP_BUFFER;
-	for (;;) {
-		result = __get_free_pages(priority, order);
-		if (result < limit) /* covers failure as well */
-			break;
-		*(unsigned long *) result = list;
-		list = result;
-	}
-	while (list) {
-		unsigned long tmp = list;
-		list = *(unsigned long *) list;
-		free_pages(tmp, order);
-	}
-	return result;
 }
 
 /*

@@ -57,7 +57,7 @@ void sem_exit (void)
     return;
 }
 
-int shm_swap (int prio)
+int shm_swap (int prio, unsigned long limit)
 {
     return 0;
 }

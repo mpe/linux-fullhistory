@@ -330,13 +330,13 @@ unsigned long * create_tables(char * p, struct linux_binprm * bprm, int ibcs)
 	current->mm->arg_start = (unsigned long) p;
 	while (argc-->0) {
 		put_user(p,argv++);
-		while (get_fs_byte(p++)) /* nothing */ ;
+		while (get_user(p++)) /* nothing */ ;
 	}
 	put_user(NULL,argv);
 	current->mm->arg_end = current->mm->env_start = (unsigned long) p;
 	while (envc-->0) {
 		put_user(p,envp++);
-		while (get_fs_byte(p++)) /* nothing */ ;
+		while (get_user(p++)) /* nothing */ ;
 	}
 	put_user(NULL,envp);
 	current->mm->env_end = (unsigned long) p;
@@ -358,7 +358,7 @@ static int count(char ** argv)
 		error = verify_area(VERIFY_READ, tmp, sizeof(char *));
 		if (error)
 			return error;
-		while ((p = (char *) get_user(tmp++)) != NULL) {
+		while ((p = get_user(tmp++)) != NULL) {
 			i++;
 			error = verify_area(VERIFY_READ, p, 1);
 			if (error)
@@ -401,14 +401,14 @@ unsigned long copy_strings(int argc,char ** argv,unsigned long *page,
 	while (argc-- > 0) {
 		if (from_kmem == 1)
 			set_fs(new_fs);
-		if (!(tmp = (char *)get_user(argv+argc)))
+		if (!(tmp = get_user(argv+argc)))
 			panic("VFS: argc is wrong");
 		if (from_kmem == 1)
 			set_fs(old_fs);
 		len=0;		/* remember zero-padding */
 		do {
 			len++;
-		} while (get_fs_byte(tmp++));
+		} while (get_user(tmp++));
 		if (p < len) {	/* this shouldn't happen - 128kB */
 			set_fs(old_fs);
 			return 0;
@@ -427,7 +427,7 @@ unsigned long copy_strings(int argc,char ** argv,unsigned long *page,
 					set_fs(new_fs);
 
 			}
-			*(pag + offset) = get_fs_byte(tmp);
+			*(pag + offset) = get_user(tmp);
 		}
 	}
 	if (from_kmem==2)

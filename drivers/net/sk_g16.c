@@ -1529,7 +1529,7 @@ static void SK_rxintr(struct device *dev)
 	 * not to be concerned (see Data sheet)
 	 */
 
-	if (rmdstat & (RX_STP | RX_ENP) != (RX_STP | RX_ENP))
+	if ((rmdstat & (RX_STP | RX_ENP)) != (RX_STP | RX_ENP))
 	{
 	    /* Start of a frame > 1518 Bytes ? */
 

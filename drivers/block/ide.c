@@ -155,6 +155,12 @@
 #define REALLY_SLOW_IO			/* most systems can safely undef this */
 #include <asm/io.h>
 
+#ifdef __alpha__
+# ifndef SUPPORT_VLB_SYNC
+#  define SUPPORT_VLB_SYNC	0
+# endif
+#endif
+
 #undef	REALLY_FAST_IO			/* define if ide ports are perfect */
 #define INITIAL_MULT_COUNT	0	/* off=0; on=2,4,8,16,32, etc.. */
 #ifndef SUPPORT_VLB_32BIT		/* 1 to support 32bit I/O on VLB */
@@ -286,11 +292,11 @@ static uint probe_dtc2278 = 0;
 /*
  * Timeouts for various operations:
  */
-#define WAIT_DRQ	5	/* 50msec - spec allows up to 20ms */
-#define WAIT_READY	3	/* 30msec - should be instantaneous */
-#define WAIT_PIDENTIFY	100	/* 1sec   - should be less than 3ms (?) */
-#define WAIT_WORSTCASE	3000	/* 30sec  - worst case when spinning up */
-#define WAIT_CMD	1000	/* 10sec  - maximum wait for an IRQ to happen */
+#define WAIT_DRQ	(5*HZ/100)	/* 50msec - spec allows up to 20ms */
+#define WAIT_READY	(3*HZ/100)	/* 30msec - should be instantaneous */
+#define WAIT_PIDENTIFY	(1*HZ)	/* 1sec   - should be less than 3ms (?) */
+#define WAIT_WORSTCASE	(30*HZ)	/* 30sec  - worst case when spinning up */
+#define WAIT_CMD	(10*HZ)	/* 10sec  - maximum wait for an IRQ to happen */
 
 /*
  * Now for the data we need to maintain per-device:  ide_dev_t
@@ -409,7 +415,7 @@ static struct gendisk	ide_gendisk  [2] =
 #include "blk.h"
 
 /*
- * For really screwy hardware (hey, at least it *can* be used with Linux!
+ * For really screwy hardware (hey, at least it *can* be used with Linux!)
  */
 #if (DISK_RECOVERY_TIME > 0)
 static unsigned long	ide_lastreq[] = {0,0}; /* completion time of last I/O */
@@ -1505,7 +1511,7 @@ static int write_fs_long (unsigned long useraddr, long value)
 		return -EINVAL;
 	if ((err = verify_area(VERIFY_WRITE, (long *)useraddr, sizeof(long))))
 		return err;
-	put_fs_long((unsigned)value, (long *) useraddr);
+	put_user((unsigned)value, (long *) useraddr);
 	return 0;
 }
 
@@ -1526,13 +1532,13 @@ static int ide_ioctl (struct inode *inode, struct file *file,
 			if (!loc || dev->type != disk) return -EINVAL;
 			err = verify_area(VERIFY_WRITE, loc, sizeof(*loc));
 			if (err) return err;
-			put_fs_byte(dev->bios_head,
+			put_user(dev->bios_head,
 				(char *) &loc->heads);
-			put_fs_byte(dev->bios_sect,
+			put_user(dev->bios_sect,
 				(char *) &loc->sectors);
-			put_fs_word(dev->bios_cyl,
+			put_user(dev->bios_cyl,
 				(short *) &loc->cylinders);
-			put_fs_long((unsigned)ide_hd[DEV_HWIF][MINOR(inode->i_rdev)].start_sect,
+			put_user((unsigned)ide_hd[DEV_HWIF][MINOR(inode->i_rdev)].start_sect,
 				(long *) &loc->start);
 			return 0;
 
@@ -1636,9 +1642,9 @@ static int ide_ioctl (struct inode *inode, struct file *file,
 			else {
 				if (!(err = verify_area(VERIFY_WRITE,(long *)arg,sizeof(long))))
 				{
-					args = get_fs_long((long *)arg);
+					args = get_user((long *)arg);
 					err = do_drive_cmd(inode->i_rdev,(char *)&args);
-					put_fs_long(args,(long *)arg);
+					put_user(args,(long *)arg);
 				}
 			}
 			return err;
@@ -1808,8 +1814,11 @@ static void do_identify (ide_dev_t *dev, byte cmd)
 
 		/* check for word-swapped "capacity" field in id information */
 		check = (id->cur_capacity0 << 16) | id->cur_capacity1;
-		if (check == capacity)		/* was it swapped? */
-			*((int *)&id->cur_capacity0) = capacity; /* fix it */
+		if (check == capacity) {	/* was it swapped? */
+			/* yes, bring it into little-endian order: */
+			id->cur_capacity0 = (capacity >>  0) & 0xffff;
+			id->cur_capacity1 = (capacity >> 16) & 0xffff;
+		}
 	}
 	/* Use physical geometry if what we have still makes no sense */
 	if ((!dev->head || dev->head > 16) && id->heads && id->heads <= 16) {
@@ -1848,9 +1857,13 @@ static void do_identify (ide_dev_t *dev, byte cmd)
 	printk("\n");
 }
 
+/*
+ * Delay for *at least* 10ms.  As we don't know how much time is left
+ * until the next tick occurs, we wait an extra tick to be safe.
+ */
 static void delay_10ms (void)
 {
-	unsigned long timer = jiffies + 2;
+	unsigned long timer = jiffies + (HZ + 99)/100 + 1;
 	while (timer > jiffies);
 }
 
@@ -1872,6 +1885,7 @@ static int try_to_identify (ide_dev_t *dev, byte cmd)
 	OUT_BYTE(dev->ctl|2,HD_CMD);		/* disable device irq */
 #if PROBE_FOR_IRQS
 	if (!irq_probed[DEV_HWIF]) {		/* already probed for IRQ? */
+		probe_irq_off(probe_irq_on());	/* clear dangling irqs */
 		irqs = probe_irq_on();		/* start monitoring irqs */
 		OUT_BYTE(dev->ctl,HD_CMD);	/* enable device irq */
 	}
@@ -2167,9 +2181,10 @@ void hdd_setup(char *str, int *ints)
  * 0x19 for an 8 bit type, drive 1, 0x1a for drive 2 in CMOS.  A non-zero value 
  * means we have an AT controller hard disk for that drive.
  */
-extern struct drive_info_struct drive_info;
 static void probe_cmos_for_drives (void)
 {
+#ifdef __i386__
+	extern struct drive_info_struct drive_info;
 	byte drive, cmos_disks, *BIOS = (byte *) &drive_info;
 
 	outb_p(0x12,0x70);		/* specify CMOS address 0x12 */
@@ -2190,6 +2205,7 @@ static void probe_cmos_for_drives (void)
 		}
 		BIOS += 16;
 	}
+#endif
 }
 #endif	/* CONFIG_BLK_DEV_HD */
 
@@ -2378,7 +2394,7 @@ unsigned long ide_init (unsigned long mem_start, unsigned long mem_end)
 				continue;
 #else
 				probe_cmos_for_drives ();
-#endif /* CONFIG_BLJ_DEV_HD */
+#endif /* CONFIG_BLK_DEV_HD */
 			probe_mem_start = (mem_start + 3uL) & ~3uL;
 			probe_for_drives (hwif);
 			mem_start = probe_mem_start;

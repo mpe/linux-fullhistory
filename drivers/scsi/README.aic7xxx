@@ -1,6 +1,6 @@
-@(#)README 1.15 94/10/29 jda
+@(#)README 1.19 94/11/30 jda
 
-AHA274x/284x DRIVER
+AHA274x/284x/294x DRIVER
 
 ***  THIS SHOULD BE CONSIDERED BETA SOFTWARE  ***
 
@@ -28,12 +28,12 @@ beta until the remaining device problems can be resolved.  The latest
 patches can be obtained via anonymous ftp from ftp.cpsc.ucalgary.ca in
 /pub/systems/linux/aha274x.
 
-It supports both EISA 274x and VL-bus 284x, either single or twin-bus cards
-(but not the second SCSI bus of twin cards - see aha274x.c), and supports
+It supports EISA 274x, VL-bus 284x, and PCI 294x, either single or twin-bus
+cards (but not the second SCSI bus of twin cards - see aha274x.c), and supports
 disconnection, synchronous SCSI, and scatter-gather.  Unlike previous
 versions, abort() and reset() are now implemented, and both hosts.c and
 aha274x.c should give a clean compile.  Code is now present to detect parity
-errors, but has not been tested.
+errors, but has not been tested.  Wide cards are not yet supported.
 
 I wrote this using a 1.0.9 kernel.  Unfortunately, I'm getting tired of
 #ifdef'ing everything to handle two or three different evolutionary steps
@@ -42,8 +42,8 @@ only leave in code to support versions from about 1.1.45 onward.
 
 Thanks to patches supplied by Mark Olson <molson@tricord.com>, this driver
 will now work with the 284x series (the VL-bus version of this card).  The
-294x (PCI-bus) is being worked on, and initial support for it will be ready
-soon.
+294x (PCI-bus) support is based on patches sent to me by Mark Olson and
+Alan Hourihane <alanh@fairlite.demon.co.uk>.
 
 Under protest, this driver is subject to the GPL - see the file
 COPYING for details.
@@ -64,6 +64,7 @@ thanks to the people who have sent me feedback):
 	Mark Olson <molson@tricord.com>
 	map@europa.ecn.uoknor.edu (Michael A. Parker)
 	Thomas Scheunemann <thomas@dagobert.uni-duisburg.de>
+	Eric Youngdale <eric@aib.com>
 
 Special thanks to Drew Eckhardt <drew@kinglear.cs.Colorado.EDU> for
 fielding my questions about synchronous negotiation.  Steffen Moeller
@@ -81,7 +82,7 @@ ftp.cpsc.ucalgary.ca in /pub/systems/linux/aha274x/slackware_boot.
 
 Carl Riches <cgr@poplar1.cfr.washington.edu> has set up a mailing list
 for aic7xxx driver development.  To subscribe, send a message to
-aic7770-list@poplar1.cfr.washington.edu with a message body of:
+aic7770-list-request@poplar1.cfr.washington.edu with a message body of:
 
     subscribe AIC7770-LIST <your name here, without the angle brackets>
 

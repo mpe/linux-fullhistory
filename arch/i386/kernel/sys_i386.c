@@ -14,15 +14,56 @@
 #include <linux/msg.h>
 #include <linux/shm.h>
 #include <linux/stat.h>
+#include <linux/mman.h>
 
 #include <asm/segment.h>
 
 /*
- * Perform the select(nd, in, out, ex, tv) system call.
- * Linux/i386 didn't use to be able to handle 5 system call
- * parameters, so the old select used a memory block for
- * parameter passing..
+ * sys_pipe() is the normal C calling standard for creating
+ * a pipe. It's not the way unix tranditionally does this, though.
  */
+asmlinkage int sys_pipe(unsigned long * fildes)
+{
+	int fd[2];
+	int error;
+
+	error = verify_area(VERIFY_WRITE,fildes,8);
+	if (error)
+		return error;
+	error = do_pipe(fd);
+	if (error)
+		return error;
+	put_fs_long(fd[0],0+fildes);
+	put_fs_long(fd[1],1+fildes);
+	return 0;
+}
+
+/*
+ * Perform the select(nd, in, out, ex, tv) and mmap() system
+ * calls. Linux/i386 didn't use to be able to handle more than
+ * 4 system call parameters, so these system calls used a memory
+ * block for parameter passing..
+ */
+asmlinkage int old_mmap(unsigned long *buffer)
+{
+	int error;
+	unsigned long flags;
+	struct file * file = NULL;
+
+	error = verify_area(VERIFY_READ, buffer, 6*sizeof(long));
+	if (error)
+		return error;
+	flags = get_user(buffer+3);
+	if (!(flags & MAP_ANONYMOUS)) {
+		unsigned long fd = get_user(buffer+4);
+		if (fd >= NR_OPEN || !(file = current->files->fd[fd]))
+			return -EBADF;
+	}
+	return do_mmap(file, get_user(buffer), get_user(buffer+1),
+		       get_user(buffer+2), flags, get_user(buffer+5));
+}
+
+
 extern asmlinkage int sys_select(int, fd_set *, fd_set *, fd_set *, struct timeval *);
 
 asmlinkage int old_select(unsigned long *buffer)

@@ -7,6 +7,7 @@
 
 
 #define PERM_OPTIONS (OPTION_IO_MAPPED|OPTION_DEBUG_TEST1)
+
 /*
  * Define SCSI_MALLOC to use scsi_malloc instead of kmalloc.  Other than
  * preventing deadlock, I'm not sure why we'd want to do this.
@@ -181,12 +182,12 @@ static int NCR53c8xx_run_tests (struct Scsi_Host *host);
 static int NCR53c8xx_script_len;
 static int NCR53c8xx_dsa_len;
 static void NCR53c7x0_intr(int irq, struct pt_regs * regs);
-static int halt (struct Scsi_Host *host);
+static int ncr_halt (struct Scsi_Host *host);
 static void intr_phase_mismatch (struct Scsi_Host *host, struct NCR53c7x0_cmd 
     *cmd);
 static void intr_dma (struct Scsi_Host *host, struct NCR53c7x0_cmd *cmd);
-static void print_dsa (struct Scsi_Host *host, unsigned long *dsa);
-static int print_insn (struct Scsi_Host *host, unsigned long *insn,
+static void print_dsa (struct Scsi_Host *host, u32 *dsa);
+static int print_insn (struct Scsi_Host *host, u32 *insn,
     char *prefix, int kernel);
 
 static void NCR53c8xx_dsa_fixup (struct NCR53c7x0_cmd *cmd);
@@ -271,8 +272,8 @@ static Scsi_Host_Template *the_template = NULL;
 struct pci_chip {
     unsigned short pci_device_id;
     int chip;
-    int max_revision;
     int min_revision;
+    int max_revision;
 };
 
 static struct pci_chip pci_chip_ids[] = { 
@@ -351,7 +352,7 @@ static void internal_setup(int board, int chip, char *str, int *ints) {
 	} else {
 	    overrides[commandline_current].data.pci.bus = ints[1];
 	    overrides[commandline_current].data.pci.device = ints[2];
-	    overrides[commandline_current].data.pci.device = ints[3];
+	    overrides[commandline_current].data.pci.function = ints[3];
     	    overrides[commandline_current].options = (ints[0] >= 4) ?
     	    	ints[4] : 0;
 	}
@@ -463,7 +464,7 @@ NCR53c7x0_init (struct Scsi_Host *host) {
 
 /* Only the ISTAT register is readable when the NCR is running, so make 
    sure it's halted. */
-    halt(host);
+    ncr_halt(host);
 
 /* 
  * XXX - the NCR53c700 uses bitfielded registers for SCID, SDID, etc,
@@ -533,7 +534,7 @@ NCR53c7x0_init (struct Scsi_Host *host) {
 	    case DMODE_BL_4: i = 4; break;
 	    case DMODE_BL_8: i = 8; break;
 	    case DMODE_BL_16: i = 16; break;
-            default: i = 0;
+	     default: i = 0;
 	    }
 	    printk ("scsi%d : burst length %d\n", host->host_no, i);
 	}
@@ -608,7 +609,7 @@ NCR53c7x0_init (struct Scsi_Host *host) {
 
     hostdata->issue_queue = hostdata->running_list = 
     	hostdata->finished_queue = NULL;
-    hostdata->issue_dsa_head = NULL;
+    hostdata->issue_dsa_head = 0;
     hostdata->issue_dsa_tail = NULL;
 
     if (hostdata->init_save_regs)
@@ -671,7 +672,7 @@ NCR53c7x0_init (struct Scsi_Host *host) {
  */
 
 static int normal_init (Scsi_Host_Template *tpnt, int board, int chip, 
-    int base, int io_port, int irq, int dma, int pci_valid, 
+    u32 base, int io_port, int irq, int dma, int pci_valid, 
     unsigned char pci_bus, unsigned char pci_device_fn, int options) {
     struct Scsi_Host *instance;
     struct NCR53c7x0_hostdata *hostdata;
@@ -708,7 +709,7 @@ static int normal_init (Scsi_Host_Template *tpnt, int board, int chip,
 	printk ("scsi-ncr53c7,8xx : for better reliability and performance, please use the\n" 
 		"        PCI override instead.\n"
 		"	 Syntax : ncr53c8{10,15,20,25}=pci,<bus>,<device>,<function>\n"
-		"	          <bus> and <device> are usually 0.\n");
+		"                 <bus> and <device> are usually 0.\n");
 
     if (options & OPTION_DEBUG_PROBE_ONLY) {
     	printk ("scsi-ncr53c7,8xx : probe only enabled, aborting initialization\n");
@@ -762,7 +763,7 @@ static int normal_init (Scsi_Host_Template *tpnt, int board, int chip,
     hostdata = (struct NCR53c7x0_hostdata *) 
     	instance->hostdata;
     hostdata->size = size;
-    hostdata->script_count = script_len / sizeof(long);
+    hostdata->script_count = script_len / sizeof(u32);
     hostdata = (struct NCR53c7x0_hostdata *) instance->hostdata;
     hostdata->board = board;
     hostdata->chip = chip;
@@ -786,7 +787,7 @@ static int normal_init (Scsi_Host_Template *tpnt, int board, int chip,
      */
 
     if (base) {
-	instance->base = (unsigned char *) base;
+	instance->base = (unsigned char*) (unsigned long) base;
 	/* Check for forced I/O mapping */
     	if (!(options & OPTION_IO_MAPPED)) {
 	    options |= OPTION_MEMORY_MAPPED;
@@ -831,7 +832,7 @@ static int normal_init (Scsi_Host_Template *tpnt, int board, int chip,
 
 
 /* 
- * Function : static int ncr_init(Scsi_Host_Template *tpnt, int board, 
+ * Function : static int pci_init(Scsi_Host_Template *tpnt, int board, 
  *	int chip, int bus, int device_fn, int options)
  *
  * Purpose : initializes a NCR53c800 family based on the PCI
@@ -851,10 +852,11 @@ static int normal_init (Scsi_Host_Template *tpnt, int board, int chip,
  *
  */
 
-static int ncr_init (Scsi_Host_Template *tpnt, int board, int chip, 
+static int ncr_pci_init (Scsi_Host_Template *tpnt, int board, int chip, 
     unsigned char bus, unsigned char device_fn, int options) {
     unsigned short vendor_id, device_id, command;
-    unsigned long base, io_port; 
+    u32 base;
+    int io_port; 
     unsigned char irq, revision;
     int error, expected_chip;
     int expected_id = -1, max_revision = -1, min_revision = -1;
@@ -885,8 +887,8 @@ static int ncr_init (Scsi_Host_Template *tpnt, int board, int chip,
 	(error = pcibios_read_config_byte (bus, device_fn, PCI_INTERRUPT_LINE,
 	    &irq))) {
 	printk ("scsi-ncr53c7,8xx : error %s not initializing due to error reading configuration space\n"
-		"	 perhaps you specified an incorrect PCI bus, device, or function.\n"
-		, pcibios_strerror(error));
+		"        perhaps you specified an incorrect PCI bus, device, or function.\n"
+		, pci_strbioserr(error));
 	return -1;
     }
 
@@ -907,13 +909,13 @@ static int ncr_init (Scsi_Host_Template *tpnt, int board, int chip,
 
     if (command & PCI_COMMAND_IO) { 
 	if ((io_port & 3) != 1) {
-	    printk ("scsi-ncr53c7,8xx : disabling I/O mapping since base address 0 (0x%lx)\n"
+	    printk ("scsi-ncr53c7,8xx : disabling I/O mapping since base address 0 (0x%x)\n"
     	    	    "        bits 0..1 indicate a non-IO mapping\n", io_port);
 	    io_port = 0;
 	} else
 	    io_port &= PCI_BASE_ADDRESS_IO_MASK;
     } else {
-    	io_port = 0;
+	    io_port = 0;
     }
 
     if (command & PCI_COMMAND_MEMORY) {
@@ -924,7 +926,7 @@ static int ncr_init (Scsi_Host_Template *tpnt, int board, int chip,
 	} else 
 	    base &= PCI_BASE_ADDRESS_MEM_MASK;
     } else {
-    	base = 0;
+	    base = 0;
     }
 	
     if (!io_port && !base) {
@@ -959,7 +961,7 @@ static int ncr_init (Scsi_Host_Template *tpnt, int board, int chip,
 	printk ("scsi-ncr53c7,8xx : warning : revision of %d is less than %d.\n",
 	    (int) revision, min_revision);
 
-    return normal_init (tpnt, board, chip, (int) base, (int) io_port, 
+    return normal_init (tpnt, board, chip, (int) base, io_port, 
 	(int) irq, DMA_NONE, 1, bus, device_fn, options);
 }
 
@@ -988,7 +990,7 @@ int NCR53c7xx_detect(Scsi_Host_Template *tpnt) {
     for (current_override = count = 0; current_override < OVERRIDE_LIMIT; 
 	 ++current_override) {
 	 if (overrides[current_override].pci ? 
-	    !ncr_init (tpnt, overrides[current_override].board,
+	    !ncr_pci_init (tpnt, overrides[current_override].board,
 		overrides[current_override].chip,
 		(unsigned char) overrides[current_override].data.pci.bus,
 		(((overrides[current_override].data.pci.device
@@ -1013,7 +1015,7 @@ int NCR53c7xx_detect(Scsi_Host_Template *tpnt) {
 		!pcibios_find_device (PCI_VENDOR_ID_NCR, 
 		    pci_chip_ids[i].pci_device_id, pci_index, &pci_bus, 
 		    &pci_device_fn) && 
-	        !ncr_init (tpnt, BOARD_GENERIC, pci_chip_ids[i].chip, 
+	        !ncr_pci_init (tpnt, BOARD_GENERIC, pci_chip_ids[i].chip, 
 		    pci_bus, pci_device_fn, /* no options */ 0); 
 		++count, ++pci_index);
     }
@@ -1042,7 +1044,7 @@ NCR53c8x0_init_fixup (struct Scsi_Host *host) {
 	host->hostdata;
     unsigned char tmp;
     int i, ncr_to_memory, memory_to_ncr, ncr_to_ncr;
-    unsigned long base;
+    u32 base;
     NCR53c7x0_local_setup(host);
 
 
@@ -1053,18 +1055,23 @@ NCR53c8x0_init_fixup (struct Scsi_Host *host) {
 	sizeof(SCRIPT));
     /* Fixup labels */
     for (i = 0; i < PATCHES; ++i) 
-	hostdata->script[LABELPATCHES[i]] += 
-    	    (unsigned long) hostdata->script;
+	hostdata->script[LABELPATCHES[i]] +=
+	    virt_to_bus(hostdata->script);
     /* Fixup addresses of constants that used to be EXTERNAL */
-    
+
     patch_abs_32 (hostdata->script, 0, NCR53c7xx_msg_abort, 
-    	(long) &(hostdata->NCR53c7xx_msg_abort));
+    	virt_to_bus(&hostdata->NCR53c7xx_msg_abort));
     patch_abs_32 (hostdata->script, 0, NCR53c7xx_msg_reject, 
-    	(long) &(hostdata->NCR53c7xx_msg_reject));
+    	virt_to_bus(&hostdata->NCR53c7xx_msg_reject));
     patch_abs_32 (hostdata->script, 0, NCR53c7xx_zero, 
-    	(long) &(hostdata->NCR53c7xx_zero));
+    	virt_to_bus(&hostdata->NCR53c7xx_zero));
     patch_abs_32 (hostdata->script, 0, NCR53c7xx_sink, 
-    	(long) &(hostdata->NCR53c7xx_sink));
+    	virt_to_bus(&hostdata->NCR53c7xx_sink));
+
+    /* Fixup references to external variables: */
+    for (i = 0; i < EXTERNAL_PATCHES_LEN; ++i)
+	hostdata->script[EXTERNAL_PATCHES[i].offset] +=
+	  virt_to_bus(EXTERNAL_PATCHES[i].address);
 
     /* 
      * Fixup absolutes set at boot-time.
@@ -1085,12 +1092,12 @@ NCR53c8x0_init_fixup (struct Scsi_Host *host) {
     tmp &= (DMODE_800_ERL | DMODE_BL_MASK);
 
     if (!(hostdata->options & OPTION_MEMORY_MAPPED)) {
-    	base = (long) host->io_port;
+    	base = (u32) host->io_port;
     	memory_to_ncr = tmp|DMODE_800_DIOM;
     	ncr_to_memory = tmp|DMODE_800_SIOM;
     	ncr_to_ncr = tmp|DMODE_800_DIOM|DMODE_800_SIOM;
     } else {
-    	base = (long) host->base;
+    	base = virt_to_phys(host->base);
     	ncr_to_ncr = memory_to_ncr = ncr_to_memory = tmp;
     }
 
@@ -1112,18 +1119,20 @@ NCR53c8x0_init_fixup (struct Scsi_Host *host) {
     patch_abs_rwri_data (hostdata->script, 0, dmode_ncr_to_memory, ncr_to_memory);
     patch_abs_rwri_data (hostdata->script, 0, dmode_ncr_to_ncr, ncr_to_ncr);
 
-    patch_abs_32 (hostdata->script, 0, issue_dsa_head, 
-    	(long) &(hostdata->issue_dsa_head));
-    patch_abs_32 (hostdata->script, 0, msg_buf, (long) &(hostdata->msg_buf));
-    patch_abs_32 (hostdata->script, 0, reconnect_dsa_head, 
-    	(long) &(hostdata->reconnect_dsa_head));
-    patch_abs_32 (hostdata->script, 0, reselected_identify, 
-    	(long) &(hostdata->reselected_identify));
-    patch_abs_32 (hostdata->script, 0, reselected_tag, 
-    	(long) &(hostdata->reselected_tag));
+    patch_abs_32 (hostdata->script, 0, issue_dsa_head,
+		  virt_to_bus((void*)&hostdata->issue_dsa_head));
+    patch_abs_32 (hostdata->script, 0, msg_buf,
+		  virt_to_bus((void*)&hostdata->msg_buf));
+    patch_abs_32 (hostdata->script, 0, reconnect_dsa_head,
+		  virt_to_bus((void*)&hostdata->reconnect_dsa_head));
+    patch_abs_32 (hostdata->script, 0, reselected_identify,
+		  virt_to_bus((void*)&hostdata->reselected_identify));
+    patch_abs_32 (hostdata->script, 0, reselected_tag,
+		  virt_to_bus((void*)&hostdata->reselected_tag));
 
-    patch_abs_32 (hostdata->script, 0, test_dest, (long) &(hostdata->test_dest));
-    patch_abs_32 (hostdata->script, 0, test_src, (long) &(hostdata->test_source));
+    patch_abs_32 (hostdata->script, 0, test_dest,
+		  virt_to_bus((void*)&hostdata->test_dest));
+    patch_abs_32 (hostdata->script, 0, test_src, virt_to_bus(&hostdata->test_source));
 
 
     /*
@@ -1132,7 +1141,7 @@ NCR53c8x0_init_fixup (struct Scsi_Host *host) {
      */
 
 /* 
- * XXX - for cleanness, E_* fields should be type unsigned long *
+ * XXX - for cleanness, E_* fields should be type u32 *
  * and should reflect the _relocated_ addresses.  Change this.
  */
     hostdata->E_accept_message = Ent_accept_message;
@@ -1178,8 +1187,8 @@ NCR53c8x0_init_fixup (struct Scsi_Host *host) {
     	    host->host_no, A_dsa_fields_start, Ent_dsa_code_template_end - 
     	    Ent_dsa_zero);
 
-    printk("scsi%d : NCR code relocated to 0x%lx\n", host->host_no,
-	(unsigned long) hostdata->script);
+    printk("scsi%d : NCR code relocated to 0x%p\n", host->host_no,
+	hostdata->script);
 }
 
 /*
@@ -1201,10 +1210,10 @@ static int NCR53c8xx_run_tests (struct Scsi_Host *host) {
     NCR53c7x0_local_declare();
     struct NCR53c7x0_hostdata *hostdata = (struct NCR53c7x0_hostdata *)
 	host->hostdata;
-    unsigned long timeout, start;
+    unsigned long timeout;
+    u32 start;
     int failed, i;
     unsigned long flags;
-	
     NCR53c7x0_local_setup(host);
 
     /* The NCR chip _must_ be idle to run the test scripts */
@@ -1225,7 +1234,7 @@ static int NCR53c8xx_run_tests (struct Scsi_Host *host) {
     if (hostdata->issue_dsa_head) {
 	printk ("scsi%d : hostdata->issue_dsa_head corrupt before test 1\n",
 	    host->host_no);
-	hostdata->issue_dsa_head = NULL;
+	hostdata->issue_dsa_head = 0;
     }
 	
     if (hostdata->options & OPTION_DEBUG_TEST1) {
@@ -1234,14 +1243,15 @@ static int NCR53c8xx_run_tests (struct Scsi_Host *host) {
 	hostdata->test_completed = -1;
 	hostdata->test_dest = 0;
 	hostdata->test_source = 0xdeadbeef;
-	start = ((unsigned long) hostdata->script) + hostdata->E_test_1;
+	start = virt_to_bus(hostdata->script) + hostdata->E_test_1;
     	hostdata->state = STATE_RUNNING;
 	printk ("scsi%d : test 1", host->host_no);
 	NCR53c7x0_write32 (DSP_REG, start);
+	mb();
 	printk (" started\n");
 	sti();
 
-	timeout = jiffies + 50;	/* arbitrary */
+	timeout = jiffies + 5 * HZ / 10;	/* arbitrary */
 	while ((hostdata->test_completed == -1) && jiffies < timeout)
 		barrier();
 
@@ -1251,31 +1261,31 @@ static int NCR53c8xx_run_tests (struct Scsi_Host *host) {
 		(hostdata->test_dest == 0xdeadbeef) ? 
 		    " due to lost interrupt.\n"
 		    "         Please verify that the correct IRQ is being used for your board,\n"
-		    "	      and that the motherboard IRQ jumpering matches the PCI setup on\n"
+		    "         and that the motherboard IRQ jumpering matches the PCI setup on\n"
 		    "         PCI systems.\n"
 		    "         If you are using a NCR53c810 board in a PCI system, you should\n" 
 		    "         also verify that the board is jumpered to use PCI INTA, since\n"
 		    "         most PCI motherboards lack support for INTB, INTC, and INTD.\n"
 		    : "");
 	else if (hostdata->test_completed != 1) 
-	    printk ("scsi%d : test 1 bad interrupt value (%ld)\n", host->host_no,
+	    printk ("scsi%d : test 1 bad interrupt value (%d)\n", host->host_no,
 		hostdata->test_completed);
 	else 
 	    failed = (hostdata->test_dest != 0xdeadbeef);
 
 	if (hostdata->test_dest != 0xdeadbeef) {
 	    printk ("scsi%d : driver test 1 read 0x%x instead of 0xdeadbeef indicating a\n"
-                    "         probable cache invalidation problem.  Please configure caching\n"
-		    "	      as write-through or disabled\n",
+                    "        probable cache invalidation problem.  Please configure caching\n"
+		    "        as write-through or disabled\n",
 		host->host_no, hostdata->test_dest);
 	}
 
 	if (failed) {
-	    printk ("scsi%d : DSP = 0x%lx (script at 0x%lx, start at 0x%lx)\n",
-		host->host_no, (unsigned long) NCR53c7x0_read32(DSP_REG),
-		(unsigned long) hostdata->script, start);
-	    printk ("scsi%d : DSPS = 0x%lx\n", host->host_no,
-		(unsigned long) NCR53c7x0_read32(DSPS_REG));
+	    printk ("scsi%d : DSP = 0x%x (script at 0x%p, start at 0x%x)\n",
+		host->host_no, NCR53c7x0_read32(DSP_REG),
+		hostdata->script, start);
+	    printk ("scsi%d : DSPS = 0x%x\n", host->host_no,
+		NCR53c7x0_read32(DSPS_REG));
 	    restore_flags(flags);
 	    return -1;
 	}
@@ -1285,11 +1295,11 @@ static int NCR53c8xx_run_tests (struct Scsi_Host *host) {
     if (hostdata->issue_dsa_head) {
 	printk ("scsi%d : hostdata->issue_dsa_head corrupt after test 1\n",
 	    host->host_no);
-	hostdata->issue_dsa_head = NULL;
+	hostdata->issue_dsa_head = 0;
     }
 
     if (hostdata->options & OPTION_DEBUG_TEST2) {
-	unsigned long dsa[48];
+	u32 dsa[48];
     	unsigned char identify = IDENTIFY(0, 0);
 	unsigned char cmd[6];
 	unsigned char data[36];
@@ -1301,18 +1311,18 @@ static int NCR53c8xx_run_tests (struct Scsi_Host *host) {
     	cmd[4] = sizeof(data); 
 
     	dsa[2] = 1;
-    	dsa[3] = (unsigned long) &identify;
+    	dsa[3] = virt_to_bus(&identify);
     	dsa[4] = 6;
-    	dsa[5] = (unsigned long) &cmd;
+    	dsa[5] = virt_to_bus(&cmd);
     	dsa[6] = sizeof(data);
-    	dsa[7] = (unsigned long) &data;
+    	dsa[7] = virt_to_bus(&data);
     	dsa[8] = 1;
-    	dsa[9] = (unsigned long) &status;
+    	dsa[9] = virt_to_bus(&status);
     	dsa[10] = 1;
-    	dsa[11] = (unsigned long) &msg;
+    	dsa[11] = virt_to_bus(&msg);
 
 	for (i = 0; i < 3; ++i) {
-    	    cli();
+	    cli();
 	    if (!hostdata->idle) {
 		printk ("scsi%d : chip not idle, aborting tests\n", host->host_no);
 		restore_flags(flags);
@@ -1324,16 +1334,18 @@ static int NCR53c8xx_run_tests (struct Scsi_Host *host) {
 	    hostdata->idle = 0;
 	    hostdata->test_running = 2;
 	    hostdata->test_completed = -1;
-	    start = ((unsigned long) hostdata->script) + hostdata->E_test_2;
+	    start = virt_to_bus(hostdata->script) + hostdata->E_test_2;
 	    hostdata->state = STATE_RUNNING;
-	    NCR53c7x0_write32 (DSA_REG, (unsigned long) dsa);
+	    NCR53c7x0_write32 (DSA_REG, virt_to_bus(dsa));
 	    NCR53c7x0_write32 (DSP_REG, start);
+	    mb();
 	    sti();
 
-	    timeout = jiffies + 500;	/* arbitrary */
+	    timeout = jiffies + 5 * HZ;	/* arbitrary */
 	    while ((hostdata->test_completed == -1) && jiffies < timeout)
 	    	barrier();
 	    NCR53c7x0_write32 (DSA_REG, 0);
+	    mb();
 
 	    if (hostdata->test_completed == 2) {
 		data[35] = 0;
@@ -1361,7 +1373,7 @@ static int NCR53c8xx_run_tests (struct Scsi_Host *host) {
 	    if (hostdata->issue_dsa_head) {
 		printk ("scsi%d : hostdata->issue_dsa_head corrupt after test 2 id %d\n",
 		    host->host_no, i);
-		hostdata->issue_dsa_head = NULL;
+		hostdata->issue_dsa_head = 0;
 	}
 	}
     }
@@ -1390,16 +1402,16 @@ static void NCR53c8xx_dsa_fixup (struct NCR53c7x0_cmd *cmd) {
     memcpy (cmd->dsa, hostdata->script + (hostdata->E_dsa_code_template / 4),
     	hostdata->E_dsa_code_template_end - hostdata->E_dsa_code_template);
 
-    patch_abs_32 (cmd->dsa, Ent_dsa_code_template / sizeof(long), 
-    	dsa_temp_jump_resume, ((unsigned long) cmd->dsa) + 
+    patch_abs_32 (cmd->dsa, Ent_dsa_code_template / sizeof(u32),
+    	dsa_temp_jump_resume, virt_to_bus(cmd->dsa) + 
     	Ent_dsa_jump_resume - Ent_dsa_zero);
-    patch_abs_rwri_data (cmd->dsa, Ent_dsa_code_template / sizeof(long),
+    patch_abs_rwri_data (cmd->dsa, Ent_dsa_code_template / sizeof(u32),
     	dsa_temp_lun, c->lun);
-    patch_abs_32 (cmd->dsa, Ent_dsa_code_template / sizeof(long),
-    	dsa_temp_dsa_next, ((unsigned long) cmd->dsa) + A_dsa_next);
-    patch_abs_32 (cmd->dsa, Ent_dsa_code_template / sizeof(long), 
+    patch_abs_32 (cmd->dsa, Ent_dsa_code_template / sizeof(u32),
+    	dsa_temp_dsa_next, virt_to_bus(cmd->dsa) + A_dsa_next);
+    patch_abs_32 (cmd->dsa, Ent_dsa_code_template / sizeof(u32),
     	dsa_temp_sync, hostdata->sync[c->target].select_indirect);
-    patch_abs_rwri_data (cmd->dsa, Ent_dsa_code_template / sizeof(long),
+    patch_abs_rwri_data (cmd->dsa, Ent_dsa_code_template / sizeof(u32),
     	dsa_temp_target, c->target);
 }
 
@@ -1424,21 +1436,21 @@ static void abnormal_finished (struct NCR53c7x0_cmd *cmd, int result) {
     struct NCR53c7x0_hostdata *hostdata = (struct NCR53c7x0_hostdata *)
     	host->hostdata;
     unsigned long flags;
-    char **prev, *search;
+    volatile u32 *prev, search;
     int i;
 
     save_flags(flags);
     cli();
     for (i = 0; i < 2; ++i) {
-    	for (search = (char *) (i ? hostdata->issue_dsa_head : 
-    	    	hostdata->reconnect_dsa_head), prev = (char **) (i ? 
-    	    	&(hostdata->issue_dsa_head) : &(hostdata->reconnect_dsa_head));
-    	     search && (search + hostdata->dsa_start) != (char *) cmd->dsa;
-    	     prev = (char **) (search + hostdata->dsa_next), 
+    	for (search = (i ? hostdata->issue_dsa_head :
+    	    	hostdata->reconnect_dsa_head), prev = (i ? 
+    	    	&hostdata->issue_dsa_head : &hostdata->reconnect_dsa_head);
+    	     search && ((char*)bus_to_virt(search) + hostdata->dsa_start) != (char *) cmd->dsa;
+    	     prev = (u32*) ((char*)bus_to_virt(search) + hostdata->dsa_next),
     	    	search = *prev);
 
     	if (search)
-    	    *prev = *(char **) (search + hostdata->dsa_next);
+    	    *prev = *(u32*) ((char*)bus_to_virt(search) + hostdata->dsa_next);
     }
 
     if (cmd->prev)
@@ -1479,7 +1491,7 @@ static void intr_break (struct Scsi_Host *host, struct
 #if 0
     Scsi_Cmnd *c = cmd ? cmd->cmd : NULL;
 #endif
-    unsigned long *dsp;
+    u32 *dsp;
     struct NCR53c7x0_hostdata *hostdata = (struct NCR53c7x0_hostdata *)
 	host->hostdata;		
     unsigned long flags;
@@ -1490,9 +1502,10 @@ static void intr_break (struct Scsi_Host *host, struct
      * dump the appropriate debugging information to standard 
      * output.  
      */
+
     save_flags(flags);
     cli();
-    dsp = (unsigned long *) NCR53c7x0_read32(DSP_REG);
+    dsp = (u32 *) bus_to_virt(NCR53c7x0_read32(DSP_REG));
     for (bp = hostdata->breakpoints; bp && bp->address != dsp; 
     	bp = bp->next);
     if (!bp) 
@@ -1507,13 +1520,14 @@ static void intr_break (struct Scsi_Host *host, struct
 
     NCR53c7x0_write8 (hostdata->dmode, 
 	NCR53c7x0_read8(hostdata->dmode)|DMODE_MAN);
+    mb();
 
     /*
      * And update the DSP register, using the size of the old 
      * instruction in bytes.
      */
 
-    restore_flags(flags);
+     restore_flags(flags);
 }
 
 /*
@@ -1552,6 +1566,7 @@ static int asynchronous (struct Scsi_Host *host, int target) {
 	}
     /* Offset = 0, transfer period = divide SCLK by 4 */
 	NCR53c7x0_write8 (SXFER_REG, 0);
+	mb();
     }
     return 0;
 }
@@ -1599,7 +1614,7 @@ static void synchronous (struct Scsi_Host *host, int target, char *msg) {
     struct NCR53c7x0_hostdata *hostdata = (struct NCR53c7x0_hostdata *)
 	host->hostdata;
     int desire, divisor, i, limit;
-    unsigned long *script;
+    u32 *script;
     unsigned char scntl3, sxfer;
    
 /* Scale divisor by 10 to accommodate fractions */ 
@@ -1628,7 +1643,7 @@ static void synchronous (struct Scsi_Host *host, int target, char *msg) {
 	hostdata->sync[target].select_indirect = (scntl3 << 24) | (target << 16) | 
 		(sxfer << 8);
 
-	script = (long *) hostdata->sync[target].script;
+	script = (u32*) hostdata->sync[target].script;
 
 	/* XXX - add NCR53c7x0 code to reprogram SCF bits if we want to */
 	if ((hostdata->chip / 100) == 8) {
@@ -1670,13 +1685,13 @@ static int NCR53c8x0_dstat_sir_intr (struct Scsi_Host *host, struct
     Scsi_Cmnd *c = cmd ? cmd->cmd : NULL;
     struct NCR53c7x0_hostdata *hostdata = (struct NCR53c7x0_hostdata *)
 	host->hostdata;		
-    unsigned long dsps,*dsp;	/* Argument of the INT instruction */
+    u32 dsps,*dsp;	/* Argument of the INT instruction */
     NCR53c7x0_local_setup(host);
     dsps = NCR53c7x0_read32(DSPS_REG);
-    dsp = (unsigned long *) NCR53c7x0_read32(DSP_REG);
+    dsp = bus_to_virt(NCR53c7x0_read32(DSP_REG));
 
     if (hostdata->options & OPTION_DEBUG_INTR) 
-	printk ("scsi%d : DSPS = 0x%lx\n", host->host_no, dsps);
+	printk ("scsi%d : DSPS = 0x%x\n", host->host_no, dsps);
 
     switch (dsps) {
     case A_int_msg_1:
@@ -1692,14 +1707,14 @@ static int NCR53c8x0_dstat_sir_intr (struct Scsi_Host *host, struct
 	 */
 	case MESSAGE_REJECT:
 	    hostdata->dsp = hostdata->script + hostdata->E_accept_message /
-		sizeof(long);
+		sizeof(u32);
 	    hostdata->dsp_changed = 1;
 	    break;
 	case INITIATE_RECOVERY:
 	    printk ("scsi%d : extended contingent allegiance not supported yet, rejecting\n",
 		host->host_no);
 	    hostdata->dsp = hostdata->script + hostdata->E_reject_message /
-		sizeof(long);
+		sizeof(u32);
 	    hostdata->dsp_changed = 1;
 	}
 	return SPECIFIC_INT_NOTHING;
@@ -1718,26 +1733,26 @@ static int NCR53c8x0_dstat_sir_intr (struct Scsi_Host *host, struct
    	 */
 	    if (cmd->flags & CMD_FLAG_SDTR) {
 		cmd->flags &= ~CMD_FLAG_SDTR; 
-		synchronous (host, c->target, (unsigned char *) 
+		synchronous (host, c->target, (unsigned char *)
 		    hostdata->msg_buf);
 		hostdata->dsp = hostdata->script + hostdata->E_accept_message /
-		    sizeof(long);
+		    sizeof(u32);
 		hostdata->dsp_changed = 1;
 		return SPECIFIC_INT_NOTHING;
 	    } else {
 		if (hostdata->options & OPTION_SYNCHRONOUS)  {
 		    cmd->flags |= CMD_FLAG_DID_SDTR;
 		    synchronous (host, c->target, (unsigned char *)
-		    	hostdata->msg_buf);
+			hostdata->msg_buf);
 		} else {
 		    hostdata->msg_buf[4] = 0;		/* 0 offset = async */
 		}
 
 		patch_dsa_32 (cmd->dsa, dsa_msgout_other, 0, 5);
 		patch_dsa_32 (cmd->dsa, dsa_msgout_other, 1, 
-		    hostdata->msg_buf);
+		    virt_to_bus((void*)hostdata->msg_buf));
 		hostdata->dsp = hostdata->script + 
-		hostdata->E_respond_message / sizeof(long);
+		hostdata->E_respond_message / sizeof(u32);
 		hostdata->dsp_changed = 1;
 	    }
 
@@ -1760,7 +1775,7 @@ static int NCR53c8x0_dstat_sir_intr (struct Scsi_Host *host, struct
 	/* Fall through to abort */
     case A_int_msg_wdtr:
 	hostdata->dsp = hostdata->script + hostdata->E_reject_message /
-	    sizeof(long);
+	    sizeof(u32);
 	hostdata->dsp_changed = 1;
 	return SPECIFIC_INT_NOTHING;
     case A_int_err_unexpected_phase:
@@ -1771,14 +1786,14 @@ static int NCR53c8x0_dstat_sir_intr (struct Scsi_Host *host, struct
 	printk ("scsi%d : selected by target %d\n", host->host_no,
 	    (int) NCR53c7x0_read8(SSID_REG_800) &7);
 	hostdata->dsp = hostdata->script + hostdata->E_target_abort / 
-    	    sizeof(long);
+    	    sizeof(u32);
 	hostdata->dsp_changed = 1;
 	return SPECIFIC_INT_NOTHING;
     case A_int_err_unexpected_reselect:
 	printk ("scsi%d : unexpected reselect by target %d\n", host->host_no,
 	    (int) NCR53c7x0_read8(SSID_REG_800));
 	hostdata->dsp = hostdata->script + hostdata->E_initiator_abort /
-    	    sizeof(long);
+    	    sizeof(u32);
 	hostdata->dsp_changed = 1;
 	return SPECIFIC_INT_NOTHING;
 /*
@@ -1841,10 +1856,10 @@ static int NCR53c8x0_dstat_sir_intr (struct Scsi_Host *host, struct
 	 */
 
     	patch_dsa_32 (cmd->dsa, dsa_dataout, 0, hostdata->E_other_transfer);
-    	patch_dsa_32 (cmd->dsa, dsa_datain, 0, cmd->data_transfer_start);
+    	patch_dsa_32 (cmd->dsa, dsa_datain, 0, virt_to_bus(cmd->data_transfer_start));
     	cmd->data_transfer_start[0] = (((DCMD_TYPE_BMI | DCMD_BMI_OP_MOVE_I | 
     	    DCMD_BMI_IO)) << 24) | sizeof(c->sense_buffer);
-    	cmd->data_transfer_start[1] = (unsigned long) c->sense_buffer;
+    	cmd->data_transfer_start[1] = virt_to_bus(c->sense_buffer);
 
 	cmd->data_transfer_start[2] = ((DCMD_TYPE_TCI | DCMD_TCI_OP_JUMP) 
     	    << 24) | DBC_TCI_TRUE;
@@ -1863,14 +1878,14 @@ static int NCR53c8x0_dstat_sir_intr (struct Scsi_Host *host, struct
 	 * Restart command as a REQUEST SENSE.
 	 */
 	hostdata->dsp = hostdata->script + hostdata->E_select /
-	    sizeof(long);
+	    sizeof(u32);
 	hostdata->dsp_changed = 1;
 	return SPECIFIC_INT_NOTHING;
     case A_int_debug_break:
 	return SPECIFIC_INT_BREAK;
     case A_int_norm_aborted:
 	hostdata->dsp = hostdata->script + hostdata->E_schedule / 
-		sizeof(long);
+		sizeof(u32);
 	hostdata->dsp_changed = 1;
 	if (cmd)
 	    abnormal_finished (cmd, DID_ERROR << 16);
@@ -1880,13 +1895,13 @@ static int NCR53c8x0_dstat_sir_intr (struct Scsi_Host *host, struct
 	hostdata->idle = 1;
 	hostdata->test_completed = (dsps - A_int_test_1) / 0x00010000 + 1;
 	if (hostdata->options & OPTION_DEBUG_INTR)
-	    printk("scsi%d : test%ld complete\n", host->host_no,
+	    printk("scsi%d : test %d complete\n", host->host_no,
 		hostdata->test_completed);
 	return SPECIFIC_INT_NOTHING;
 #ifdef A_int_debug_scheduled
     case A_int_debug_scheduled:
 	if (hostdata->options & (OPTION_DEBUG_SCRIPT|OPTION_DEBUG_INTR)) {
-	    printk("scsi%d : new I/O 0x%lx scheduled\n", host->host_no,
+	    printk("scsi%d : new I/O 0x%x scheduled\n", host->host_no,
 	    	NCR53c7x0_read32(DSA_REG));
 	}
 	return SPECIFIC_INT_RESTART;
@@ -1908,7 +1923,7 @@ static int NCR53c8x0_dstat_sir_intr (struct Scsi_Host *host, struct
 #ifdef A_int_debug_dsa_loaded
     case A_int_debug_dsa_loaded:
 	if (hostdata->options & (OPTION_DEBUG_SCRIPT|OPTION_DEBUG_INTR)) {
-	    printk("scsi%d : DSA loaded with 0x%lx\n", host->host_no,
+	    printk("scsi%d : DSA loaded with 0x%x\n", host->host_no,
 		NCR53c7x0_read32(DSA_REG));
 	}
 	return SPECIFIC_INT_RESTART; 
@@ -1925,14 +1940,14 @@ static int NCR53c8x0_dstat_sir_intr (struct Scsi_Host *host, struct
 #ifdef A_int_debug_head
     case A_int_debug_head:
 	if (hostdata->options & (OPTION_DEBUG_SCRIPT|OPTION_DEBUG_INTR)) {
-	    printk("scsi%d : issue_dsa_head now 0x%lx\n",
-		host->host_no, (unsigned long) hostdata->issue_dsa_head);
+	    printk("scsi%d : issue_dsa_head now 0x%x\n",
+		host->host_no, hostdata->issue_dsa_head);
 	}
     return SPECIFIC_INT_RESTART;
 #endif
     default:
 	if ((dsps & 0xff000000) == 0x03000000) {
-	     printk ("scsi%d : misc debug interrupt 0x%lx\n",
+	     printk ("scsi%d : misc debug interrupt 0x%x\n",
 		host->host_no, dsps);
 	    return SPECIFIC_INT_RESTART;
 	}
@@ -1989,7 +2004,7 @@ static const char debugger_help =
 "ms <addr> <size> <value>	- store memory\n"
 "rp <num> <size>		- print register\n"
 "rs <num> <size> <value> 	- store register\n"
-"s				- single step\n"	
+"s				- single step\n"
 "tb				- begin trace \n"
 "te				- end trace\n";
 
@@ -1999,7 +2014,7 @@ static const char debugger_help =
  */
 
 static int debugger_fn_bc (struct Scsi_Host *host, struct debugger_token *token,
-    unsigned long args[]) {
+    u32 args[]) {
     struct NCR53c7x0_hostdata *hostdata = (struct NCR53c7x0_hostdata *)
 	instance->hostdata;
     struct NCR53c7x0_break *bp, **prev;
@@ -2031,7 +2046,7 @@ static int debugger_fn_bc (struct Scsi_Host *host, struct debugger_token *token,
 
 
 static int debugger_fn_bl (struct Scsi_Host *host, struct debugger_token *token,
-    unsigned long args[]) {
+    u32 args[]) {
     struct NCR53c7x0_hostdata *hostdata = (struct NCR53c7x0_hostdata *)
 	host->hostdata;
     struct NCR53c7x0_break *bp;
@@ -2057,7 +2072,7 @@ static int debugger_fn_bl (struct Scsi_Host *host, struct debugger_token *token,
 	    len = strlen(buf);
 	    if ((bp->old[0] & (DCMD_TYPE_MASK << 24)) ==
 		(DCMD_TYPE_MMI << 24)) {
-		sprintf(buf + len, "%08x\n", * (long *) bp->addr);
+		sprintf(buf + len, "%08x\n", * (u32 *) bp->addr);
 	    } else {
 		sprintf(buf + len, "\n");
 	    }
@@ -2069,13 +2084,14 @@ static int debugger_fn_bl (struct Scsi_Host *host, struct debugger_token *token,
 }
 
 static int debugger_fn_bs (struct Scsi_Host *host, struct debugger_token *token,
-    unsigned long args[]) {
+    u32 args[]) {
     struct NCR53c7x0_hostdata *hostdata = (struct NCR53c7x0_hostdata *)
 	host->hostdata;
     struct NCR53c7x0_break *bp;
     char buf[80];
     size_t len;
     unsigned long flags;
+
     save_flags(flags);
     cli();
 
@@ -2093,10 +2109,10 @@ static int debugger_fn_bs (struct Scsi_Host *host, struct debugger_token *token,
 	return -1;
     }
 
-    bp->address = (unsigned long *) args[0];
+    bp->address = (u32 *) args[0];
     memcpy ((void *) bp->old_instruction, (void *) bp->address, 8);
     bp->old_size = (((bp->old_instruction[0] >> 24) & DCMD_TYPE_MASK) ==
-	DCMD_TYPE_MMI ? 3 : 2;
+	DCMD_TYPE_MMI ? 3 : 2);
     bp->next = hostdata->breakpoints;
     hostdata->breakpoints = bp->next;
     memcpy ((void *) bp->address, (void *) hostdata->E_debug_break, 8);
@@ -2109,7 +2125,7 @@ static int debugger_fn_bs (struct Scsi_Host *host, struct debugger_token *token,
 static const struct debugger_token {
     char *name;
     int numargs;
-    int (*fn)(struct debugger_token *token, unsigned long args[]);
+    int (*fn)(struct debugger_token *token, u32 args[]);
 } debugger_tokens[] = {
     TOKEN(bc,1), TOKEN(bl,0), TOKEN(bs,1), TOKEN(g,0), TOKEN(halt,0),
     {DT_help, "?", 0} , TOKEN(h,0), TOKEN(i,0), TOKEN(mp,2), 
@@ -2134,7 +2150,7 @@ static debugger_user_write (struct inode *inode,struct file *filp,
     struct NCR53c7x0_hostadata *hostdata;	
     char input_buf[80], 			/* Kernel space copy of buf */
 	*ptr;					/* Pointer to argument list */
-    unsigned long args[3];			/* Arguments */
+    u32 args[3];				/* Arguments */
     int i, j, error, len;
 
     if (!(host = inode_to_host(inode)))
@@ -2192,6 +2208,7 @@ static debugger_kernel_write (struct Scsi_Host *host, char *buf, size_t
 	host->hostdata;
     int copy, left;
     unsigned long flags;
+    
     save_flags(flags);
     cli();
     while (buflen) {
@@ -2242,7 +2259,9 @@ NCR53c8x0_soft_reset (struct Scsi_Host *host) {
      */
 
     NCR53c7x0_write8(ISTAT_REG_800, ISTAT_10_SRST);
+    mb();
     NCR53c7x0_write8(ISTAT_REG_800, 0);
+    mb();
     NCR53c7x0_write8(hostdata->dmode, hostdata->saved_dmode & ~DMODE_MAN);
 
 
@@ -2300,7 +2319,7 @@ NCR53c8x0_soft_reset (struct Scsi_Host *host) {
     /* Enable active negation */
     NCR53c7x0_write8(STEST3_REG_800, STEST3_800_TE);
 
-    
+    mb();
 }
 
 /*
@@ -2331,12 +2350,12 @@ create_cmd (Scsi_Cmnd *cmd) {
 	dataout;
     int data_transfer_instructions, /* Count of dynamic instructions */
     	i;			/* Counter */
-    unsigned long *cmd_datain,	/* Address of datain/dataout code */
+    u32 *cmd_datain,		/* Address of datain/dataout code */
 	*cmd_dataout;		/* Incremented as we assemble */
 #ifdef notyet
     void *real;			/* Real address */
     int size;			/* Size of *tmp */
-    int	alignment;		/* Alignment adjustment (0 - 4) */
+    int alignment;		/* Alignment adjustment (0 - sizeof(long)-1) */
 #endif
     unsigned long flags;
     NCR53c7x0_local_setup(cmd->host);
@@ -2367,9 +2386,9 @@ create_cmd (Scsi_Cmnd *cmd) {
 #else
     /* kmalloc() can allocate any size, but historically has returned 
        unaligned addresses, so we need to allow for alignment */
-	    size = hostdata->max_cmd_size + 4;
+	    size = hostdata->max_cmd_size + sizeof(void*);
 	    real = kmalloc (size, GFP_ATOMIC);
-	    alignment = 4 - (((unsigned) real) & 3);
+	    alignment = sizeof(void*) - (((unsigned) real) & (sizeof(void*)-1));
 	    tmp = (struct NCR53c7x0_cmd *) (((char *) real) + alignment);
 	    if (!tmp)
 		break;
@@ -2396,7 +2415,6 @@ create_cmd (Scsi_Cmnd *cmd) {
     	    return NULL;
     	}
     }
-
 
     /*
      * Decide whether we need to generate commands for DATA IN,
@@ -2465,7 +2483,6 @@ create_cmd (Scsi_Cmnd *cmd) {
     if (data_transfer_instructions < 2)
     	data_transfer_instructions = 2;
 
-
     /*
      * Initialize Linux specific fields.
      */
@@ -2479,7 +2496,7 @@ create_cmd (Scsi_Cmnd *cmd) {
      */
 
     tmp->data_transfer_start = tmp->dsa + (hostdata->dsa_end - 
-    	hostdata->dsa_start) / sizeof(long);
+    	hostdata->dsa_start) / sizeof(u32);
     tmp->data_transfer_end = tmp->data_transfer_start + 
     	2 * data_transfer_instructions;
 
@@ -2498,8 +2515,8 @@ create_cmd (Scsi_Cmnd *cmd) {
     if (hostdata->dsa_fixup)
     	hostdata->dsa_fixup(tmp);
 
-    patch_dsa_32(tmp->dsa, dsa_next, 0, NULL);
-    patch_dsa_32(tmp->dsa, dsa_cmnd, 0, cmd);
+    patch_dsa_32(tmp->dsa, dsa_next, 0, 0);
+    patch_dsa_32(tmp->dsa, dsa_cmnd, 0, virt_to_bus(cmd));
     patch_dsa_32(tmp->dsa, dsa_select, 0, hostdata->sync[cmd->target].
     	select_indirect);
     /*
@@ -2512,26 +2529,24 @@ create_cmd (Scsi_Cmnd *cmd) {
 #else
     tmp->select[0] = IDENTIFY (0, cmd->lun);
 #endif
-    patch_dsa_32(tmp->dsa, dsa_msgout, 1, tmp->select);
+    patch_dsa_32(tmp->dsa, dsa_msgout, 1, virt_to_bus(tmp->select));
     patch_dsa_32(tmp->dsa, dsa_cmdout, 0, cmd->cmd_len);
-    patch_dsa_32(tmp->dsa, dsa_cmdout, 1, cmd->cmnd);
-    patch_dsa_32(tmp->dsa, dsa_dataout, 0, cmd_dataout ? 
-    	cmd_dataout : hostdata->script + hostdata->E_other_transfer / 
-    	    sizeof (long));
-    patch_dsa_32(tmp->dsa, dsa_datain, 0, cmd_datain ? 
-    	cmd_datain : hostdata->script + hostdata->E_other_transfer / 
-    	    sizeof (long));
+    patch_dsa_32(tmp->dsa, dsa_cmdout, 1, virt_to_bus(cmd->cmnd));
+    patch_dsa_32(tmp->dsa, dsa_dataout, 0, cmd_dataout ?
+    	virt_to_bus(cmd_dataout) : virt_to_bus(hostdata->script) + hostdata->E_other_transfer);
+    patch_dsa_32(tmp->dsa, dsa_datain, 0, cmd_datain ?
+    	virt_to_bus(cmd_datain) : virt_to_bus(hostdata->script) + hostdata->E_other_transfer);
     /* 
      * XXX - need to make endian aware, should use separate variables
      * for both status and message bytes.
      */
     patch_dsa_32(tmp->dsa, dsa_msgin, 0, 1);
-    patch_dsa_32(tmp->dsa, dsa_msgin, 1, (((unsigned long) &cmd->result) + 1));
+    patch_dsa_32(tmp->dsa, dsa_msgin, 1, virt_to_bus(&cmd->result) + 1);
     patch_dsa_32(tmp->dsa, dsa_status, 0, 1);
-    patch_dsa_32(tmp->dsa, dsa_status, 1, &cmd->result);
+    patch_dsa_32(tmp->dsa, dsa_status, 1, virt_to_bus(&cmd->result));
     patch_dsa_32(tmp->dsa, dsa_msgout_other, 0, 1);
     patch_dsa_32(tmp->dsa, dsa_msgout_other, 1, 
-    	&(hostdata->NCR53c7xx_msg_nop));
+    	virt_to_bus(&hostdata->NCR53c7xx_msg_nop));
 
     
     /*
@@ -2571,12 +2586,12 @@ create_cmd (Scsi_Cmnd *cmd) {
 
     for (i = 0; cmd->use_sg ? (i < cmd->use_sg) : !i; cmd_datain += 4, 
 	cmd_dataout += 4, ++i) {
-	unsigned long buf = (unsigned long) (cmd->use_sg ? 
-	    ((struct scatterlist *)cmd->buffer)[i].address :
-	    cmd->request_buffer);
-	unsigned long count = (unsigned long) (cmd->use_sg ?
+	u32 buf = cmd->use_sg ?
+	    virt_to_bus(((struct scatterlist *)cmd->buffer)[i].address) :
+	    virt_to_bus(cmd->request_buffer);
+	u32 count = cmd->use_sg ?
 	    ((struct scatterlist *)cmd->buffer)[i].length :
-	    cmd->request_bufflen);
+	    cmd->request_bufflen;
 
 	if (datain) {
 	    cmd_datain[0] = ((DCMD_TYPE_BMI | DCMD_BMI_OP_MOVE_I | DCMD_BMI_IO) 
@@ -2585,8 +2600,8 @@ create_cmd (Scsi_Cmnd *cmd) {
 	    cmd_datain[2] = ((DCMD_TYPE_TCI | DCMD_TCI_OP_CALL | 
 		DCMD_TCI_CD | DCMD_TCI_IO | DCMD_TCI_MSG) << 24) | 
 		DBC_TCI_WAIT_FOR_VALID | DBC_TCI_COMPARE_PHASE | DBC_TCI_TRUE;
-	    cmd_datain[3] = (unsigned long) hostdata->script + 
-    	    	hostdata->E_msg_in;
+	    cmd_datain[3] = virt_to_bus(hostdata->script) +
+	        hostdata->E_msg_in;
 #if 0
 	    print_insn (host, cmd_datain, "dynamic ", 1);
 	    print_insn (host, cmd_datain + 2, "dynamic ", 1);
@@ -2599,8 +2614,8 @@ create_cmd (Scsi_Cmnd *cmd) {
 	    cmd_dataout[2] = ((DCMD_TYPE_TCI | DCMD_TCI_OP_CALL | 
 		DCMD_TCI_CD | DCMD_TCI_IO | DCMD_TCI_MSG) << 24) | 
 		DBC_TCI_WAIT_FOR_VALID | DBC_TCI_COMPARE_PHASE | DBC_TCI_TRUE;
-	    cmd_dataout[3] = (unsigned long) hostdata->script + 
-    	    	hostdata->E_msg_in;
+	    cmd_dataout[3] = virt_to_bus(hostdata->script) +
+	        hostdata->E_msg_in;
 #if 0
 	    print_insn (host, cmd_dataout, "dynamic ", 1);
 	    print_insn (host, cmd_dataout + 2, "dynamic ", 1);
@@ -2617,8 +2632,8 @@ create_cmd (Scsi_Cmnd *cmd) {
     if (datain) {
 	cmd_datain[0] = ((DCMD_TYPE_TCI | DCMD_TCI_OP_JUMP) << 24) |
     	    DBC_TCI_TRUE;
-	cmd_datain[1] = (unsigned long) hostdata->script + 
-    	    hostdata->E_other_transfer;
+	cmd_datain[1] = virt_to_bus(hostdata->script) +
+	    hostdata->E_other_transfer;
 #if 0
 	print_insn (host, cmd_datain, "dynamic jump ", 1);
 #endif
@@ -2636,8 +2651,8 @@ create_cmd (Scsi_Cmnd *cmd) {
     if (dataout) {
 	cmd_dataout[0] = ((DCMD_TYPE_TCI | DCMD_TCI_OP_JUMP) << 24) |
     	    DBC_TCI_TRUE;
-	cmd_dataout[1] = (unsigned long) hostdata->script + 
-    	    hostdata->E_other_transfer;
+	cmd_dataout[1] = virt_to_bus(hostdata->script) +
+	    hostdata->E_other_transfer;
 #if 0
 	print_insn (host, cmd_dataout, "dynamic jump ", 1);
 #endif
@@ -2762,23 +2777,24 @@ int NCR53c7xx_queue_command (Scsi_Cmnd *cmd, void (* done)(Scsi_Cmnd *)) {
 		- hostdata->dsa_start;	
     	    	/* dsa start is negative, so subtraction is used */
 #if 0	
-	printk("scsi%d : new dsa is 0x%x\n", host->host_no, (unsigned) dsa);
+	printk("scsi%d : new dsa is 0x%p\n", host->host_no, dsa);
 #endif
 
     	if (hostdata->running_list)
     	    hostdata->running_list->prev = tmp;
 
-    	tmp->next = hostdata->running_list;
+    	tmp->next = (struct NCR53c7x0_cmd*) hostdata->running_list;
 
 	if (!hostdata->running_list)
-	    hostdata->running_list = tmp;
+	    hostdata->running_list = (struct NCR53c7x0_cmd*) tmp;
     	
 
 	if (hostdata->idle) {
 	    hostdata->idle = 0;
     	    hostdata->state = STATE_RUNNING;
-	    NCR53c7x0_write32 (DSP_REG,  ((unsigned long) hostdata->script) +
+	    NCR53c7x0_write32 (DSP_REG,  virt_to_bus(hostdata->script) +
 		hostdata->E_schedule);
+	    mb();
 	}
 
 /* XXX - make function */
@@ -2793,9 +2809,11 @@ int NCR53c7xx_queue_command (Scsi_Cmnd *cmd, void (* done)(Scsi_Cmnd *)) {
 #if 0
 		printk ("scsi%d : no issue queue\n", host->host_no);
 #endif
-    	    	hostdata->issue_dsa_tail = hostdata->issue_dsa_head = dsa;
+    	    	hostdata->issue_dsa_tail = (u32 *) dsa;
+		hostdata->issue_dsa_head = virt_to_bus(dsa);
     	    	NCR53c7x0_write8(hostdata->istat, 
     	    	    NCR53c7x0_read8(hostdata->istat) | ISTAT_10_SIGP);
+		mb();
 		break;
 	    /*
 	     * Otherwise, we blindly perform an atomic write 
@@ -2806,9 +2824,9 @@ int NCR53c7xx_queue_command (Scsi_Cmnd *cmd, void (* done)(Scsi_Cmnd *)) {
  	     */
  	    } else {
 		printk ("scsi%d : existing issue queue\n", host->host_no);
-	    /* XXX - Replace with XCHG or equivalent */
-    	    	hostdata->issue_dsa_tail = *((unsigned char **) 
-    	    	    (hostdata->issue_dsa_tail + hostdata->dsa_next)) = dsa;
+		hostdata->issue_dsa_tail[hostdata->dsa_next/sizeof(u32)]
+		  = virt_to_bus(dsa);
+		hostdata->issue_dsa_tail = (u32 *) dsa;
 	    /*
 	     * After which, one of two things will happen : 
 	     * The NCR will have scheduled a command, either this
@@ -2839,7 +2857,7 @@ int NCR53c7xx_queue_command (Scsi_Cmnd *cmd, void (* done)(Scsi_Cmnd *)) {
 }
 
 
-int fix_pointers (unsigned long dsa) {
+int fix_pointers (u32 dsa) {
     return 0;
 }
 
@@ -2861,11 +2879,13 @@ static void intr_scsi (struct Scsi_Host *host, struct NCR53c7x0_cmd *cmd) {
     unsigned char sstat0_sist0, sist1, 		/* Registers */
 	    fatal; 				/* Did a fatal interrupt 
 						   occur ? */
+    int is_8xx_chip;
     NCR53c7x0_local_setup(host);
 
     fatal = 0;
   
-    if ((hostdata->chip / 100) == 8) {
+    is_8xx_chip = ((unsigned) (hostdata->chip - 800)) < 100;
+    if (is_8xx_chip) {
     	sstat0_sist0 = NCR53c7x0_read8(SIST0_REG_800);
 	udelay(1);
     	sist1 = NCR53c7x0_read8(SIST1_REG_800);
@@ -2878,9 +2898,9 @@ static void intr_scsi (struct Scsi_Host *host, struct NCR53c7x0_cmd *cmd) {
 	printk ("scsi%d : SIST0 0x%0x, SIST1 0x%0x\n", host->host_no,
 	    sstat0_sist0, sist1);
 
-    /* 250ms selection timeout */
-    if ((((hostdata->chip / 100) == 8) && (sist1 & SIST1_800_STO)) || 
-        (((hostdata->chip / 100) != 8) && (sstat0_sist0 & SSTAT0_700_STO))) {
+    /* selection timeout */
+    if ((is_8xx_chip && (sist1 & SIST1_800_STO)) ||
+        (!is_8xx_chip && (sstat0_sist0 & SSTAT0_700_STO))) {
 	fatal = 1;
 	if (hostdata->options & OPTION_DEBUG_INTR) {
 	    printk ("scsi%d : Selection Timeout\n", host->host_no);
@@ -2924,7 +2944,7 @@ static void intr_scsi (struct Scsi_Host *host, struct NCR53c7x0_cmd *cmd) {
 	    abnormal_finished(cmd, DID_ERROR << 16);
 	}
 	hostdata->dsp = hostdata->script + hostdata->E_schedule / 
-	    sizeof(long);
+	    sizeof(u32);
 	hostdata->dsp_changed = 1;
     /* SCSI PARITY error */
     } 
@@ -2941,7 +2961,7 @@ static void intr_scsi (struct Scsi_Host *host, struct NCR53c7x0_cmd *cmd) {
 
 	/* XXX - Reduce synchronous transfer rate! */
 	hostdata->dsp = hostdata->script + hostdata->E_initiator_abort /
-    	    sizeof(long);
+    	    sizeof(u32);
 	hostdata->dsp_changed = 1; 
     /* SCSI GROSS error */
     } 
@@ -2951,7 +2971,7 @@ static void intr_scsi (struct Scsi_Host *host, struct NCR53c7x0_cmd *cmd) {
 	printk("scsi%d : gross error\n", host->host_no);
 	/* XXX Reduce synchronous transfer rate! */
 	hostdata->dsp = hostdata->script + hostdata->E_initiator_abort /
-    	    sizeof(long);
+    	    sizeof(u32);
 	hostdata->dsp_changed = 1;
     /* Phase mismatch */
     } 
@@ -2981,17 +3001,20 @@ static void intr_scsi (struct Scsi_Host *host, struct NCR53c7x0_cmd *cmd) {
 #if 0
     	    if (NCR53c7x0_read8 (CTEST2_REG_800) & CTEST2_800_DDIR) {
     	    	NCR53c7x0_write8 (CTEST3_REG_800, CTEST3_800_FLF);
+		mb();
     	    	while (!((hostdata->dstat = NCR53c7x0_read8(DSTAT_REG)) &
     	    	    DSTAT_DFE));
     	    } else 
 #endif
 	    {
     	    	NCR53c7x0_write8 (CTEST3_REG_800, CTEST3_800_CLF);
+		mb();
     	    	while (NCR53c7x0_read8 (CTEST3_REG_800) & CTEST3_800_CLF);
     	    }
     	}
 
 	NCR53c7x0_write8 (STEST3_REG_800, STEST3_800_CSF);
+	mb();
 	while (NCR53c7x0_read8 (STEST3_REG_800) & STEST3_800_CSF);
     }
 #endif
@@ -3015,12 +3038,12 @@ static void NCR53c7x0_intr (int irq, struct pt_regs * regs) {
     struct NCR53c7x0_hostdata *hostdata;	/* host->hostdata */
     struct NCR53c7x0_cmd *cmd,			/* command which halted */
 	**cmd_prev_ptr;
-    unsigned long *dsa;				/* DSA */
+    u32 *dsa;					/* DSA */
     int done = 1;				/* Indicates when handler 
 						   should terminate */
     int interrupted = 0;			/* This HA generated 
 						   an interrupt */
-    unsigned long flags;				
+    unsigned long flags;
 
 #ifdef NCR_DEBUG
     char buf[80];				/* Debugging sprintf buffer */
@@ -3033,8 +3056,7 @@ static void NCR53c7x0_intr (int irq, struct pt_regs * regs) {
 
     do {
 	done = 1;
-	for (host = first_host; host; host = hostdata->next ?
-	     hostdata->next : NULL) {
+	for (host = first_host; host; host = hostdata->next) {
     	    NCR53c7x0_local_setup(host);
 
 	    hostdata = (struct NCR53c7x0_hostdata *) host->hostdata;
@@ -3043,6 +3065,8 @@ static void NCR53c7x0_intr (int irq, struct pt_regs * regs) {
 
 
 	    do {
+		int is_8xx_chip;
+
 		hostdata->dstat_valid = 0;
 		interrupted = 0;
 		/*
@@ -3058,8 +3082,9 @@ static void NCR53c7x0_intr (int irq, struct pt_regs * regs) {
 		 * at the contents of the DSA register and continue running.
 		 */
 /* XXX - this is getting big, and should move to intr_intfly() */
+		is_8xx_chip = ((unsigned) (hostdata->chip - 800)) < 100;
 		if ((hostdata->options & OPTION_INTFLY) && 
-		    ((hostdata->chip / 100) == 8 && (istat & ISTAT_800_INTF))) {
+		    (is_8xx_chip && (istat & ISTAT_800_INTF))) {
 		    char search_found = 0;	/* Got at least one ? */
 		    done = 0;
 		    interrupted = 1;
@@ -3069,6 +3094,7 @@ static void NCR53c7x0_intr (int irq, struct pt_regs * regs) {
 		     * is self-clearing.
 		     */
 		    NCR53c7x0_write8(hostdata->istat, istat|ISTAT_800_INTF);
+		    mb();
 
 		    if (hostdata->options & OPTION_DEBUG_INTR)
 			printk ("scsi%d : INTFLY\n", host->host_no); 
@@ -3170,10 +3196,10 @@ restart:
 		    if (hostdata->options & OPTION_700) {
 			cmd = (struct NCR53c7x0_cmd *) hostdata->current;
 		    } else {
-			dsa = (unsigned long *) NCR53c7x0_read32(DSA_REG);
+			dsa = bus_to_virt(NCR53c7x0_read32(DSA_REG));
 			for (cmd = (struct NCR53c7x0_cmd *) 
 			    hostdata->running_list; cmd &&
-    	    	    	    (dsa + (hostdata->dsa_start / sizeof(long))) != 
+    	    	    	    (dsa + (hostdata->dsa_start / sizeof(u32))) != 
     	    	    	    	cmd->dsa;
 			    cmd = (struct NCR53c7x0_cmd *)(cmd->next));
 		    }
@@ -3212,12 +3238,14 @@ restart:
 	    #if 0
 			if (NCR53c7x0_read8 (CTEST2_REG_800) & CTEST2_800_DDIR) {
 			    NCR53c7x0_write8 (CTEST3_REG_800, CTEST3_800_FLF);
+			    mb();
 			    while (!((hostdata->dstat = NCR53c7x0_read8(DSTAT_REG)) &
 				DSTAT_DFE));
 			} else 
 	    #endif
 			{
 			    NCR53c7x0_write8 (CTEST3_REG_800, CTEST3_800_CLF);
+			    mb();
 			    while (NCR53c7x0_read8 (CTEST3_REG_800) & CTEST3_800_CLF);
 			}
 		    }
@@ -3240,16 +3268,17 @@ restart:
 
 	    if (!hostdata->idle && hostdata->state == STATE_HALTED) {
 		if (!hostdata->dsp_changed) {
-		    hostdata->dsp = (unsigned long *) NCR53c7x0_read32(DSP_REG);
+		    hostdata->dsp = bus_to_virt(NCR53c7x0_read32(DSP_REG));
 		}
 			
 #if 0
-		printk("scsi%d : new dsp is 0x%lx\n", host->host_no, 
-		    (long) hostdata->dsp);
+		printk("scsi%d : new dsp is 0x%p\n", host->host_no, 
+		    hostdata->dsp);
 #endif
 		
 		hostdata->state = STATE_RUNNING;
-		NCR53c7x0_write32 (DSP_REG, (unsigned long) hostdata->dsp);
+		NCR53c7x0_write32 (DSP_REG, virt_to_bus(hostdata->dsp));
+		mb();
 	    }
 	}
     } while (!done);
@@ -3274,7 +3303,7 @@ abort_connected (struct Scsi_Host *host) {
 	host->hostdata;
 
     hostdata->dsp = hostdata->script + hostdata->E_initiator_abort /
-	sizeof(long);
+	sizeof(u32);
     hostdata->dsp_changed = 1;
     printk ("scsi%d : DANGER : abort_connected() called \n",
 	host->host_no);
@@ -3304,7 +3333,7 @@ abort_connected (struct Scsi_Host *host) {
 static void intr_phase_mismatch (struct Scsi_Host *host, struct NCR53c7x0_cmd
     *cmd) {
     NCR53c7x0_local_declare();
-    unsigned long dbc_dcmd, *dsp, *dsp_next;
+    u32 dbc_dcmd, *dsp, *dsp_next;
     unsigned char dcmd, sbcl;
     struct NCR53c7x0_hostdata *hostdata = (struct NCR53c7x0_hostdata *)
     	host->hostdata;
@@ -3323,12 +3352,12 @@ static void intr_phase_mismatch (struct Scsi_Host *host, struct NCR53c7x0_cmd
      * occurred, as well as which SCSI phase we are currently in.
      */
 
-    dsp_next = (unsigned long *) NCR53c7x0_read32(DSP_REG);
+    dsp_next = bus_to_virt(NCR53c7x0_read32(DSP_REG));
 
     /*
      * Like other processors, the NCR adjusts the DSP pointer before
      * instruction decode.  Set the DSP address back to what it should
-     * be for this instruction based on its size (2 or 3 longs).
+     * be for this instruction based on its size (2 or 3 words).
      */
 
     dbc_dcmd = NCR53c7x0_read32(DBC_REG);
@@ -3372,7 +3401,7 @@ static void intr_phase_mismatch (struct Scsi_Host *host, struct NCR53c7x0_cmd
      * mismatches should only occur in the data transfer routines, or
      * when a command is being aborted.  
      */
-    if (dsp >= cmd->data_transfer_start & dsp < cmd->data_transfer_end) {
+    if (dsp >= cmd->data_transfer_start && dsp < cmd->data_transfer_end) {
 
 	/*
 	 * There are three instructions used in our data transfer routines with
@@ -3391,7 +3420,7 @@ static void intr_phase_mismatch (struct Scsi_Host *host, struct NCR53c7x0_cmd
 	    if (hostdata->options & OPTION_DEBUG_INTR) 
 		printk ("scsi%d : new phase = STATIN\n", host->host_no);
 	    hostdata->dsp = hostdata->script + hostdata->E_command_complete /
-    	    	sizeof(long);
+    	    	sizeof(u32);
 	    hostdata->dsp_changed = 1;
 	    return;
 	/*
@@ -3409,9 +3438,10 @@ static void intr_phase_mismatch (struct Scsi_Host *host, struct NCR53c7x0_cmd
 		    DCMD_BMI_OP_MOVE_I)) {
 		dsp[0] = dbc_dcmd;
 		dsp[1] = NCR53c7x0_read32(DNAD_REG);
-		NCR53c7x0_write32(TEMP_REG, (unsigned long) dsp);
+		NCR53c7x0_write32(TEMP_REG, virt_to_bus(dsp));
+		mb();
 		hostdata->dsp = hostdata->script + hostdata->E_msg_in /
-    	    	    sizeof(long);
+    	    	    sizeof(u32);
 		hostdata->dsp_changed = 1;
 	    } else {
 		printk("scsi%d : unexpected MSGIN in dynamic NCR code, dcmd=0x%x.\n",
@@ -3440,8 +3470,8 @@ static void intr_phase_mismatch (struct Scsi_Host *host, struct NCR53c7x0_cmd
      * Any other phase mismatches abort the currently executing command.
      */
     } else {
-	printk ("scsi%d : unexpected phase %s at dsp = 0x%x\n",
-	    host->host_no, phase, (unsigned) dsp);
+	printk ("scsi%d : unexpected phase %s at dsp = 0x%p\n",
+	    host->host_no, phase, dsp);
 	print_insn (host, dsp, "", 1);
 	print_insn (host, dsp_next, "", 1);
 	abort_connected(host);
@@ -3464,7 +3494,7 @@ static void intr_dma (struct Scsi_Host *host, struct NCR53c7x0_cmd *cmd) {
     struct NCR53c7x0_hostdata *hostdata = (struct NCR53c7x0_hostdata *)
 	host->hostdata;
     unsigned char dstat;	/* DSTAT */	
-    unsigned long *dsp,
+    u32 *dsp,
 	*next_dsp,		/* Current dsp */
     	*dsa,
 	dbc_dcmd;		/* DCMD (high eight bits) + DBC */
@@ -3483,10 +3513,10 @@ static void intr_dma (struct Scsi_Host *host, struct NCR53c7x0_cmd *cmd) {
 	printk("scsi%d : DSTAT=0x%x\n", host->host_no, (int) dstat);
 
     dbc_dcmd = NCR53c7x0_read32 (DBC_REG);
-    next_dsp = (unsigned long *) NCR53c7x0_read32(DSP_REG);
+    next_dsp = bus_to_virt(NCR53c7x0_read32(DSP_REG));
     dsp = next_dsp - NCR53c7x0_insn_size ((dbc_dcmd >> 24) & 0xff);
 /* XXX - check chip type */
-    dsa = (unsigned long *) NCR53c7x0_read32(DSA_REG);
+    dsa = bus_to_virt(NCR53c7x0_read32(DSA_REG));
 
     /*
      * DSTAT_ABRT is the aborted interrupt.  This is set whenever the 
@@ -3529,6 +3559,7 @@ static void intr_dma (struct Scsi_Host *host, struct NCR53c7x0_cmd *cmd) {
 
 	    NCR53c7x0_write8 (DCNTL_REG, (NCR53c7x0_read8(DCNTL_REG) & 
     	    	~DCNTL_SSM) | DCNTL_STD);
+	    mb();
 	    restore_flags(flags);
 	} else {
 	    printk("scsi%d : unexpected single step interrupt at\n"
@@ -3561,9 +3592,9 @@ static void intr_dma (struct Scsi_Host *host, struct NCR53c7x0_cmd *cmd) {
      * can ignore it.
      */
 
-	if (((dsp >= (hostdata->script + hostdata->E_select / sizeof(long))) &&
+	if (((dsp >= (hostdata->script + hostdata->E_select / sizeof(u32))) &&
 	    (dsp <= (hostdata->script + hostdata->E_select_msgout / 
-    	    sizeof(long) + 8))) || (hostdata->test_running == 2)) {
+    	    sizeof(u32) + 8))) || (hostdata->test_running == 2)) {
 	    if (hostdata->options & OPTION_DEBUG_INTR) 
 		printk ("scsi%d : ignoring DSTAT_IID for SSTAT_STO\n",
 		    host->host_no);
@@ -3581,12 +3612,12 @@ static void intr_dma (struct Scsi_Host *host, struct NCR53c7x0_cmd *cmd) {
 	} else {
 	    printk("scsi%d : illegal instruction ", host->host_no);
 	    print_insn (host, dsp, "", 1);
-	    printk("scsi%d : DSP=0x%lx, DCMD|DBC=0x%lx, DSA=0x%lx\n"
-	       "         DSPS=0x%lx, TEMP=0x%lx, DMODE=0x%x,\n" 
-	       "	 DNAD=0x%lx\n",
-	     host->host_no, (unsigned long) dsp, dbc_dcmd,
-	     (unsigned long) dsa, NCR53c7x0_read32(DSPS_REG),
-	     NCR53c7x0_read32(TEMP_REG), (int) NCR53c7x0_read8(hostdata->dmode),
+	    printk("scsi%d : DSP=0x%p, DCMD|DBC=0x%x, DSA=0x%p\n"
+	       "         DSPS=0x%x, TEMP=0x%x, DMODE=0x%x,\n" 
+	       "         DNAD=0x%x\n",
+	     host->host_no, dsp, dbc_dcmd,
+	     dsa, NCR53c7x0_read32(DSPS_REG),
+	     NCR53c7x0_read32(TEMP_REG), NCR53c7x0_read8(hostdata->dmode),
 	     NCR53c7x0_read32(DNAD_REG));
 	    panic("         mail drew@Colorado.EDU\n");
 	}
@@ -3598,11 +3629,11 @@ static void intr_dma (struct Scsi_Host *host, struct NCR53c7x0_cmd *cmd) {
      */
     
     if (dstat & DSTAT_800_BF) {
-	printk("scsi%d : BUS FAULT, DSP=0x%lx, DCMD|DBC=0x%lx, DSA=0x%lx\n"
-	       "         DSPS=0x%lx, TEMP=0x%lx, DMODE=0x%x\n", 
-	     host->host_no, (unsigned long) dsp, NCR53c7x0_read32(DBC_REG),
-	     (unsigned long) dsa, NCR53c7x0_read32(DSPS_REG),
-	     NCR53c7x0_read32(TEMP_REG), (int) NCR53c7x0_read8(hostdata->dmode));
+	printk("scsi%d : BUS FAULT, DSP=0x%p, DCMD|DBC=0x%x, DSA=0x%p\n"
+	       "         DSPS=0x%x, TEMP=0x%x, DMODE=0x%x\n", 
+	     host->host_no, dsp, NCR53c7x0_read32(DBC_REG),
+	     dsa, NCR53c7x0_read32(DSPS_REG),
+	     NCR53c7x0_read32(TEMP_REG), NCR53c7x0_read8(hostdata->dmode));
 	print_dsa (host, dsa);
 	printk("scsi%d : DSP->\n", host->host_no);
 	print_insn(host, dsp, "", 1);
@@ -3652,12 +3683,13 @@ static void intr_dma (struct Scsi_Host *host, struct NCR53c7x0_cmd *cmd) {
 
 /* All DMA interrupts are fatal.  Flush SCSI queue */
     NCR53c7x0_write8 (STEST3_REG_800, STEST3_800_CSF);
+    mb();
     while (NCR53c7x0_read8 (STEST3_REG_800) & STEST3_800_CSF);
 }
 
 /*
  * Function : static int print_insn (struct Scsi_Host *host, 
- * 	unsigned long *insn, int kernel)
+ * 	u32 *insn, int kernel)
  *
  * Purpose : print numeric representation of the instruction pointed
  * 	to by insn to the debugging or kernel message buffer
@@ -3669,10 +3701,10 @@ static void intr_dma (struct Scsi_Host *host, struct NCR53c7x0_cmd *cmd) {
  * Inputs : host, insn - host, pointer to instruction, prefix - 
  *	string to prepend, kernel - use printk instead of debugging buffer.
  *
- * Returns : size, in longs, of instruction printed.
+ * Returns : size, in ints, of instruction printed.
  */
 
-static int print_insn (struct Scsi_Host *host, unsigned long *insn,
+static int print_insn (struct Scsi_Host *host, u32 *insn,
     char *prefix, int kernel) {
     char buf[80], 		/* Temporary buffer and pointer */
 	*tmp;			
@@ -3680,11 +3712,11 @@ static int print_insn (struct Scsi_Host *host, unsigned long *insn,
     int size;
 
     dcmd = (insn[0] >> 24) & 0xff;
-    sprintf(buf, "%s%08lx : 0x%08lx 0x%08lx", (prefix ? prefix : ""), 
-	(unsigned long) insn, insn[0], insn[1]);
+    sprintf(buf, "%s%p : 0x%08x 0x%08x", (prefix ? prefix : ""), 
+	insn, insn[0], insn[1]);
     tmp = buf + strlen(buf);
     if ((dcmd & DCMD_TYPE_MASK) == DCMD_TYPE_MMI)  {
-	sprintf (tmp, " 0x%08lx\n", insn[2]);
+	sprintf (tmp, " 0x%08x\n", insn[2]);
 	size = 3;
     } else {
 	sprintf (tmp, "\n");
@@ -3719,7 +3751,7 @@ int NCR53c7xx_abort (Scsi_Cmnd *cmd) {
     struct NCR53c7x0_hostdata *hostdata = (struct NCR53c7x0_hostdata *) 
 	host->hostdata;
     unsigned long flags;
-    struct NCR53c7x0_cmd *curr, **prev;
+    volatile struct NCR53c7x0_cmd *curr, **prev;
     save_flags(flags);
     cli();
 
@@ -3733,10 +3765,10 @@ int NCR53c7xx_abort (Scsi_Cmnd *cmd) {
  * pull the command out of the old queue, and call it aborted.
  */
 
-    for (curr = (struct NCR53c7x0_cmd *) hostdata->issue_queue, 
-         prev = (struct NCR53c7x0_cmd **) &(hostdata->issue_queue);
-	 curr && curr->cmd != cmd; prev = (struct NCR53c7x0_cmd **)
-         &(curr->next), curr = (struct NCR53c7x0_cmd *) curr->next);
+    for (curr = (volatile struct NCR53c7x0_cmd *) hostdata->issue_queue, 
+         prev = (volatile struct NCR53c7x0_cmd **) &(hostdata->issue_queue);
+	 curr && curr->cmd != cmd; prev = (volatile struct NCR53c7x0_cmd **)
+         &(curr->next), curr = (volatile struct NCR53c7x0_cmd *) curr->next);
 
     if (curr) {
 	*prev = (struct NCR53c7x0_cmd *) curr->next;
@@ -3758,10 +3790,10 @@ int NCR53c7xx_abort (Scsi_Cmnd *cmd) {
  * commands.  If this is the case, drastic measures are called for.  
  */ 
 
-    for (curr = (struct NCR53c7x0_cmd *) hostdata->running_list, 
-    	 prev = (struct NCR53c7x0_cmd **) &(hostdata->running_list);
-	 curr && curr->cmd != cmd; prev = (struct NCR53c7x0_cmd **) 
-         &(curr->next), curr = (struct NCR53c7x0_cmd *) curr->next);
+    for (curr = (volatile struct NCR53c7x0_cmd *) hostdata->running_list, 
+    	 prev = (volatile struct NCR53c7x0_cmd **) &(hostdata->running_list);
+	 curr && curr->cmd != cmd; prev = (volatile struct NCR53c7x0_cmd **) 
+         &(curr->next), curr = (volatile struct NCR53c7x0_cmd *) curr->next);
 
     if (curr) {
 	restore_flags(flags);
@@ -3802,8 +3834,8 @@ int NCR53c7xx_abort (Scsi_Cmnd *cmd) {
  *
  * Returns : 0 on success.
  */
- 
-int 
+
+int
 NCR53c7xx_reset (Scsi_Cmnd *cmd) {
     NCR53c7x0_local_declare();
     unsigned long flags;
@@ -3814,8 +3846,9 @@ NCR53c7xx_reset (Scsi_Cmnd *cmd) {
     struct NCR53c7x0_hostdata *hostdata = host ? 
     (struct NCR53c7x0_hostdata *) host->hostdata : NULL;
     NCR53c7x0_local_setup(host);
+
     save_flags(flags);
-    halt (host);
+    ncr_halt (host);
     NCR53c7x0_write8(SCNTL1_REG, SCNTL1_RST);
     udelay(25);	/* Minimum amount of time to assert RST */
     NCR53c7x0_write8(SCNTL1_REG, SCNTL1_RST);
@@ -3840,9 +3873,6 @@ NCR53c7xx_reset (Scsi_Cmnd *cmd) {
     	cmd->scsi_done(cmd);
     }
     restore_flags(flags);
-
-    printk ("scsi%d : DANGER : NCR53c7xx_reset is NOP\n",
-	cmd->host->host_no);
     return SCSI_RESET_SUCCESS;
 }
 
@@ -3851,20 +3881,20 @@ NCR53c7xx_reset (Scsi_Cmnd *cmd) {
  * therefore shares the scsicam_bios_param function.
  */
 
-static void print_dsa (struct Scsi_Host *host, unsigned long *dsa) {
+static void print_dsa (struct Scsi_Host *host, u32 *dsa) {
     struct NCR53c7x0_hostdata *hostdata = (struct NCR53c7x0_hostdata *)
 	host->hostdata;
     int i, len;
     char *ptr;
 
-    printk("scsi%d : dsa at 0x%x\n"
-	    "        + %ld : dsa_msgout length = %lu, data = 0x%lx\n" ,
-    	    host->host_no, (unsigned) dsa, hostdata->dsa_msgout,
-    	    dsa[hostdata->dsa_msgout / sizeof(long)],
-	    dsa[hostdata->dsa_msgout / sizeof(long) + 1]);
+    printk("scsi%d : dsa at 0x%p\n"
+	    "        + %d : dsa_msgout length = %d, data = 0x%x\n" ,
+    	    host->host_no, dsa, hostdata->dsa_msgout,
+    	    dsa[hostdata->dsa_msgout / sizeof(u32)],
+	    dsa[hostdata->dsa_msgout / sizeof(u32) + 1]);
 
-    for (i = dsa[hostdata->dsa_msgout / sizeof(long)],
-	ptr = (char *) dsa[hostdata->dsa_msgout / sizeof(long) + 1]; i > 0;
+    for (i = dsa[hostdata->dsa_msgout / sizeof(u32)],
+	ptr = bus_to_virt(dsa[hostdata->dsa_msgout / sizeof(u32) + 1]); i > 0;
 	ptr += len, i -= len) {
 	printk("               ");
 	len = print_msg (ptr);
@@ -3891,7 +3921,7 @@ shutdown (struct Scsi_Host *host) {
     NCR53c7x0_local_setup(host);
     save_flags (flags);
     cli();
-    halt (host);
+    ncr_halt (host);
     hostdata->soft_reset(host);
 /* 
  * For now, we take the simplest solution : reset the SCSI bus. Eventually,
@@ -3910,7 +3940,7 @@ shutdown (struct Scsi_Host *host) {
 
 
 /*
- * Function : static int halt (struct Scsi_Host *host)
+ * Function : static int ncr_halt (struct Scsi_Host *host)
  * 
  * Purpose : halts the SCSI SCRIPTS(tm) processor on the NCR chip
  *
@@ -3920,7 +3950,7 @@ shutdown (struct Scsi_Host *host) {
  */
 
 static int 
-halt (struct Scsi_Host *host) {
+ncr_halt (struct Scsi_Host *host) {
     NCR53c7x0_local_declare();
     unsigned long flags;
     unsigned char istat, tmp;

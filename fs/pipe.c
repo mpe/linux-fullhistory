@@ -135,7 +135,7 @@ static int pipe_ioctl(struct inode *pino, struct file * filp,
 		case FIONREAD:
 			error = verify_area(VERIFY_WRITE, (void *) arg, sizeof(int));
 			if (!error)
-				put_fs_long(PIPE_SIZE(*pino),(int *) arg);
+				put_user(PIPE_SIZE(*pino),(int *) arg);
 			return error;
 		default:
 			return -EINVAL;

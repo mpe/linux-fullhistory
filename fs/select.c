@@ -227,8 +227,8 @@ asmlinkage int sys_select(int n, fd_set *inp, fd_set *outp, fd_set *exp, struct 
 		i = verify_area(VERIFY_WRITE, tvp, sizeof(*tvp));
 		if (i)
 			return i;
-		timeout = ROUND_UP(get_fs_long((unsigned long *)&tvp->tv_usec),(1000000/HZ));
-		timeout += get_fs_long((unsigned long *)&tvp->tv_sec) * HZ;
+		timeout = ROUND_UP(get_user(&tvp->tv_usec),(1000000/HZ));
+		timeout += get_user(&tvp->tv_sec) * (unsigned long) HZ;
 		if (timeout)
 			timeout += jiffies + 1;
 	}
@@ -239,10 +239,10 @@ asmlinkage int sys_select(int n, fd_set *inp, fd_set *outp, fd_set *exp, struct 
 	if ((long) timeout < 0)
 		timeout = 0;
 	if (tvp && !(current->personality & STICKY_TIMEOUTS)) {
-		put_fs_long(timeout/HZ, (unsigned long *) &tvp->tv_sec);
+		put_user(timeout/HZ, &tvp->tv_sec);
 		timeout %= HZ;
 		timeout *= (1000000/HZ);
-		put_fs_long(timeout, (unsigned long *) &tvp->tv_usec);
+		put_user(timeout, &tvp->tv_usec);
 	}
 	if (i < 0)
 		return i;

@@ -1018,7 +1018,7 @@ static inline int is_grouped(register struct scc_channel *scc)
 		if (scc2 == scc || !(scc2->tty && grp2)) 
 			return 0;
 		
-		if (grp1 & 0x3f == grp2 & 0x3f)
+		if ((grp1 & 0x3f) == (grp2 & 0x3f))
 		{
 			if ( (grp1 & TXGROUP) && (scc2->wreg[R5] & RTS) )
 				return 1;
@@ -1821,7 +1821,7 @@ scc_ioctl(struct tty_struct *tty, struct file * file, unsigned int cmd, unsigned
 		
 		restore_flags(flags);
 			
-		put_fs_long(result,(unsigned long *) arg);
+		put_user(result,(unsigned int *) arg);
 		return 0;
 	case TIOCMBIS:
 	case TIOCMBIC:
@@ -1836,7 +1836,7 @@ scc_ioctl(struct tty_struct *tty, struct file * file, unsigned int cmd, unsigned
 			scc->wreg[R5] &= ~RTS;
 			break;
 		case TIOCMSET:
-			value = get_fs_long((unsigned long *) arg);
+			value = get_user((unsigned int *) arg);
 			
 			if(value & TIOCM_DTR)
 				scc->wreg[R5] |= DTR;

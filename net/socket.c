@@ -136,7 +136,7 @@ static int move_addr_to_user(void *kaddr, int klen, void *uaddr, int *ulen)
 		
 	if((err=verify_area(VERIFY_WRITE,ulen,sizeof(*ulen)))<0)
 		return err;
-	len=get_fs_long(ulen);
+	len=get_user(ulen);
 	if(len>klen)
 		len=klen;
 	if(len<0 || len> MAX_SOCK_ADDR)
@@ -147,7 +147,7 @@ static int move_addr_to_user(void *kaddr, int klen, void *uaddr, int *ulen)
 			return err;
 		memcpy_tofs(uaddr,kaddr,len);
 	}
- 	put_fs_long(len,ulen);
+ 	put_user(len,ulen);
  	return 0;
 }
 
@@ -625,7 +625,7 @@ asmlinkage int sys_socket(int family, int type, int protocol)
  *	Create a pair of connected sockets.
  */
 
-asmlinkage int sys_socketpair(int family, int type, int protocol, unsigned long usockvec[2])
+asmlinkage int sys_socketpair(int family, int type, int protocol, int usockvec[2])
 {
 	int fd1, fd2, i;
 	struct socket *sock1, *sock2;
@@ -668,15 +668,15 @@ asmlinkage int sys_socketpair(int family, int type, int protocol, unsigned long 
 	sock1->state = SS_CONNECTED;
 	sock2->state = SS_CONNECTED;
 
-	er=verify_area(VERIFY_WRITE, usockvec, 2 * sizeof(int));
+	er=verify_area(VERIFY_WRITE, usockvec, sizeof(usockvec));
 	if(er)
 	{
 		sys_close(fd1);
 		sys_close(fd2);
 	 	return er;
 	}
-	put_fs_long(fd1, &usockvec[0]);
-	put_fs_long(fd2, &usockvec[1]);
+	put_user(fd1, &usockvec[0]);
+	put_user(fd2, &usockvec[1]);
 
 	return(0);
 }
@@ -1132,72 +1132,72 @@ asmlinkage int sys_socketcall(int call, unsigned long *args)
 	if(er)
 		return er;
 		
-	a0=get_fs_long(args);
-	a1=get_fs_long(args+1);
+	a0=get_user(args);
+	a1=get_user(args+1);
 	
 		
 	switch(call) 
 	{
 		case SYS_SOCKET:
-			return(sys_socket(a0,a1,get_fs_long(args+2)));
+			return(sys_socket(a0,a1,get_user(args+2)));
 		case SYS_BIND:
 			return(sys_bind(a0,(struct sockaddr *)a1,
-				get_fs_long(args+2)));
+					get_user(args+2)));
 		case SYS_CONNECT:
 			return(sys_connect(a0, (struct sockaddr *)a1,
-				get_fs_long(args+2)));
+					   get_user(args+2)));
 		case SYS_LISTEN:
 			return(sys_listen(a0,a1));
 		case SYS_ACCEPT:
 			return(sys_accept(a0,(struct sockaddr *)a1,
-				(int *)get_fs_long(args+2)));
+					  (int *)get_user(args+2)));
 		case SYS_GETSOCKNAME:
 			return(sys_getsockname(a0,(struct sockaddr *)a1,
-				(int *)get_fs_long(args+2)));
+					       (int *)get_user(args+2)));
 		case SYS_GETPEERNAME:
 			return(sys_getpeername(a0, (struct sockaddr *)a1,
-				(int *)get_fs_long(args+2)));
+					       (int *)get_user(args+2)));
 		case SYS_SOCKETPAIR:
 			return(sys_socketpair(a0,a1,
-				get_fs_long(args+2),
-				(unsigned long *)get_fs_long(args+3)));
+					      get_user(args+2),
+					      (int *)get_user(args+3)));
 		case SYS_SEND:
 			return(sys_send(a0,
 				(void *)a1,
-				get_fs_long(args+2),
-				get_fs_long(args+3)));
+				get_user(args+2),
+				get_user(args+3)));
 		case SYS_SENDTO:
 			return(sys_sendto(a0,(void *)a1,
-				get_fs_long(args+2),
-				get_fs_long(args+3),
-				(struct sockaddr *)get_fs_long(args+4),
-				get_fs_long(args+5)));
+				get_user(args+2),
+				get_user(args+3),
+				(struct sockaddr *)get_user(args+4),
+				get_user(args+5)));
 		case SYS_RECV:
 			return(sys_recv(a0,
 				(void *)a1,
-				get_fs_long(args+2),
-				get_fs_long(args+3)));
+				get_user(args+2),
+				get_user(args+3)));
 		case SYS_RECVFROM:
 			return(sys_recvfrom(a0,
 				(void *)a1,
-				get_fs_long(args+2),
-				get_fs_long(args+3),
-				(struct sockaddr *)get_fs_long(args+4),
-				(int *)get_fs_long(args+5)));
+				get_user(args+2),
+				get_user(args+3),
+				(struct sockaddr *)get_user(args+4),
+				(int *)get_user(args+5)));
 		case SYS_SHUTDOWN:
 			return(sys_shutdown(a0,a1));
 		case SYS_SETSOCKOPT:
 			return(sys_setsockopt(a0,
 				a1,
-				get_fs_long(args+2),
-				(char *)get_fs_long(args+3),
-				get_fs_long(args+4)));
+				get_user(args+2),
+				(char *)get_user(args+3),
+				get_user(args+4)));
 		case SYS_GETSOCKOPT:
 			return(sys_getsockopt(a0,
 				a1,
-				get_fs_long(args+2),
-				(char *)get_fs_long(args+3),
-				(int *)get_fs_long(args+4)));
+				get_user(args+2),
+				(char *)get_user(args+3),
+				(int *)get_user(args+4)));
 	}
 	return -EINVAL; /* to keep gcc happy */
 }

@@ -1,34 +1,40 @@
 /* probe.c: Preliminary device tree probing routines...
-
-   Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
-*/
+ *
+ * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
+ */
 
 #include <linux/kernel.h>
+#include <linux/mm.h>
+#include <linux/sched.h>
 #include <linux/string.h>
+
+#include <asm/oplib.h>
 #include <asm/vac-ops.h>
+#include <asm/idprom.h>
 #include <asm/io.h>
 #include <asm/vaddrs.h>
 #include <asm/param.h>
-#include <asm/clock.h>
+#include <asm/timer.h>
+#include <asm/mostek.h>
+#include <asm/auxio.h>
 #include <asm/system.h>
+#include <asm/mp.h>
+#include <asm/mbus.h>
 
 /* #define DEBUG_PROBING */
 
-char promstr_buf[64];         /* overkill */
-unsigned int promint_buf[1];
+/* XXX Grrr, this stuff should have it's own file, only generic stuff goes
+ * XXX here.  Possibly clock.c and timer.c?
+ */
+enum sparc_clock_type sp_clock_typ;
+struct mostek48t02 *mstk48t02_regs;
+struct mostek48t08 *mstk48t08_regs;
+volatile unsigned int *master_l10_limit = 0;
+struct sun4m_timer_regs *sun4m_timers;
 
-extern int prom_node_root;
-extern int num_segmaps, num_contexts;
-
-extern int node_get_sibling(int node);
-extern int node_get_child(int node);
-extern char* get_str_from_prom(int node, char* name, char* value);
-extern unsigned int* get_int_from_prom(int node, char* name, unsigned int *value);
-
-int first_descent;
+static char node_str[128];
 
 /* Cpu-type information and manufacturer strings */
-
 
 struct cpu_iu_info {
   int psr_impl;
@@ -42,19 +48,24 @@ struct cpu_fp_info {
   char* fp_name;
 };
 
+/* In order to get the fpu type correct, you need to take the IDPROM's
+ * machine type value into consideration too.  I will fix this.
+ */
 struct cpu_fp_info linux_sparc_fpu[] = {
   { 0, 0, "Fujitsu MB86910 or Weitek WTL1164/5"},
-  { 0, 1, "Fujitsu MB86911 or Weitek WTL1164/5"},
+  { 0, 1, "Fujitsu MB86911 or Weitek WTL1164/5 or LSI L64831"},
   { 0, 2, "LSI Logic L64802 or Texas Instruments ACT8847"},
+  /* SparcStation SLC, SparcStation1 */
   { 0, 3, "Weitek WTL3170/2"},
-  { 0, 4, "Lsi Logic/Meiko L64804"},
+  /* SPARCstation-5 */
+  { 0, 4, "Lsi Logic/Meiko L64804 or compatible"},
   { 0, 5, "reserved"},
   { 0, 6, "reserved"},
   { 0, 7, "No FPU"},
-  { 1, 0, "Lsi Logic L64812 or Texas Instruments ACT8847"},
+  { 1, 0, "ROSS HyperSparc combined IU/FPU"},
   { 1, 1, "Lsi Logic L64814"},
   { 1, 2, "Texas Instruments TMS390-C602A"},
-  { 1, 3, "Weitek WTL3171"},
+  { 1, 3, "Cypress CY7C602 FPU"},
   { 1, 4, "reserved"},
   { 1, 5, "reserved"},
   { 1, 6, "reserved"},
@@ -63,10 +74,14 @@ struct cpu_fp_info linux_sparc_fpu[] = {
   { 2, 1, "reserved"},
   { 2, 2, "reserved"},
   { 2, 3, "reserved"},
-  { 2, 4,  "reserved"},
+  { 2, 4, "reserved"},
   { 2, 5, "reserved"},
   { 2, 6, "reserved"},
   { 2, 7, "No FPU"},
+  /* SuperSparc 50 module */
+  { 4, 0, "SuperSparc on-chip FPU"},
+  /* SparcClassic */
+  { 4, 4, "TI MicroSparc on chip FPU"},
   { 5, 0, "Matsushita MN10501"},
   { 5, 1, "reserved"},
   { 5, 2, "reserved"},
@@ -77,22 +92,37 @@ struct cpu_fp_info linux_sparc_fpu[] = {
   { 5, 7, "No FPU"},
 };
 
+#define NSPARCFPU  (sizeof(linux_sparc_fpu)/sizeof(struct cpu_fp_info))
+
 struct cpu_iu_info linux_sparc_chips[] = {
-  { 0, 0, "Fujitsu Microelectronics, Inc. - MB86900/1A"},
-  { 1, 0, "Cypress CY7C601"},
-  { 1, 1, "LSI Logic Corporation - L64811"},
-  { 1, 3, "Cypress CY7C611"},
+  /* Sun4/100, 4/200, SLC */
+  { 0, 0, "Fujitsu  MB86900/1A or LSI L64831 SparcKIT-40"},
+  /* borned STP1012PGA */
+  { 0, 4, "Fujitsu  MB86904"},
+  /* SparcStation2, SparcServer 490 & 690 */
+  { 1, 0, "LSI Logic Corporation - L64811"},
+  /* SparcStation2 */
+  { 1, 1, "Cypress/ROSS CY7C601"},
+  /* Embedded controller */
+  { 1, 3, "Cypress/ROSS CY7C611"},
+  /* Ross Technologies HyperSparc */
+  { 1, 0xf, "ROSS HyperSparc RT620"},
+  { 1, 0xe, "ROSS HyperSparc RT625"},
+  /* ECL Implementation, CRAY S-MP Supercomputer... AIEEE! */
+  /* Someone please write the code to support this beast! ;) */
   { 2, 0, "Bipolar Integrated Technology - B5010"},
   { 3, 0, "LSI Logic Corporation - unknown-type"},
-  { 4, 0, "Texas Instruments, Inc. - unknown"},
-  { 4, 1, "Texas Instruments, Inc. - Sparc Classic"},
-  { 4, 2, "Texas Instruments, Inc. - unknown"},
-  { 4, 3, "Texas Instruments, Inc. - unknown"},
-  { 4, 4, "Texas Instruments, Inc. - unknown"},
+  { 4, 0, "Texas Instruments, Inc. - SuperSparc 50"},
+  /* SparcClassic  --  borned STP1010TAB-50*/
+  { 4, 1, "Texas Instruments, Inc. - MicroSparc"},
+  { 4, 2, "Texas Instruments, Inc. - MicroSparc II"},
+  { 4, 3, "Texas Instruments, Inc. - SuperSparc 51"},
+  { 4, 4, "Texas Instruments, Inc. - SuperSparc 61"},
   { 4, 5, "Texas Instruments, Inc. - unknown"},
   { 5, 0, "Matsushita - MN10501"},
   { 6, 0, "Philips Corporation - unknown"},
   { 7, 0, "Harvest VLSI Design Center, Inc. - unknown"},
+  /* Gallium arsenide 200MHz, BOOOOGOOOOMIPS!!! */
   { 8, 0, "Systems and Processes Engineering Corporation (SPEC)"},
   { 9, 0, "UNKNOWN CPU-VENDOR/TYPE"},
   { 0xa, 0, "UNKNOWN CPU-VENDOR/TYPE"},
@@ -103,8 +133,10 @@ struct cpu_iu_info linux_sparc_chips[] = {
   { 0xf, 0, "UNKNOWN CPU-VENDOR/TYPE"},
 };
 
-char *sparc_cpu_type = "cpu-oops";
-char *sparc_fpu_type = "fpu-oops";
+#define NSPARCCHIPS  (sizeof(linux_sparc_chips)/sizeof(struct cpu_iu_info))
+
+char *sparc_cpu_type[NCPUS] = { "cpu-oops", "cpu-oops1", "cpu-oops2", "cpu-oops3" };
+char *sparc_fpu_type[NCPUS] = { "fpu-oops", "fpu-oops1", "fpu-oops2", "fpu-oops3" };
 
 /* various Virtual Address Cache parameters we find at boot time... */
 
@@ -115,82 +147,72 @@ extern int vac_entries_per_page;
 extern int find_vac_size(void);
 extern int find_vac_linesize(void);
 extern int find_vac_hwflushes(void);
-extern void find_mmu_num_segmaps(void);
-extern void find_mmu_num_contexts(void);
+
+static inline int find_mmu_num_contexts(int cpu)
+{
+	return prom_getintdefault(cpu, "mmu-nctx", 0x8);
+}
+
+unsigned int fsr_storage;
 
 void
 probe_cpu(void)
 {
-  register int psr_impl=0;
-  register int psr_vers = 0;
-  register int fpu_vers = 0;
-  register int i = 0;
-  unsigned int tmp_fsr;
+  int psr_impl, psr_vers, fpu_vers;
+  int i, cpuid;
 
-  &tmp_fsr;   /* GCC grrr... */
+  cpuid = get_cpuid();
 
-  __asm__("rd %%psr, %0\n\t"
-	  "mov %0, %1\n\t"
-	  "srl %0, 28, %0\n\t"
-	  "srl %1, 24, %1\n\t"
-	  "and %0, 0xf, %0\n\t"
-	  "and %1, 0xf, %1\n\t" :
-	  "=r" (psr_impl),
-	  "=r" (psr_vers) :
-	  "0" (psr_impl),
-	  "1" (psr_vers));
+  psr_impl = ((get_psr()>>28)&0xf);
+  psr_vers = ((get_psr()>>24)&0xf);
 
+  fpu_vers = ((get_fsr()>>17)&0x7);
 
-  __asm__("st %%fsr, %1\n\t"
-	  "ld %1, %0\n\t"
-	  "srl %0, 17, %0\n\t"
-	  "and %0, 0x7, %0\n\t" :
-	  "=r" (fpu_vers),
-	  "=m" (tmp_fsr) :
-	  "0" (fpu_vers),
-	  "1" (tmp_fsr));
-
-  printk("fpu_vers: %d ", fpu_vers);
-  printk("psr_impl: %d ", psr_impl);
-  printk("psr_vers: %d \n\n", psr_vers);
-
-  for(i = 0; i<23; i++)
+  for(i = 0; i<NSPARCCHIPS; i++)
     {
       if(linux_sparc_chips[i].psr_impl == psr_impl)
 	if(linux_sparc_chips[i].psr_vers == psr_vers)
 	  {
-	    sparc_cpu_type = linux_sparc_chips[i].cpu_name;
+	    sparc_cpu_type[cpuid] = linux_sparc_chips[i].cpu_name;
 	    break;
 	  }
     }
 
-  if(i==23)
+  if(i==NSPARCCHIPS)
     {
       printk("No CPU type! You lose\n");
       printk("DEBUG: psr.impl = 0x%x   psr.vers = 0x%x\n", psr_impl, 
 	     psr_vers);
-      return;
+      printk("Send this information and the type of SUN and CPU/FPU type you have\n");
+      printk("to davem@caip.rutgers.edu so that this can be fixed.\n");
+      printk("halting...\n\r\n");
+      /* If I don't know about this CPU, I don't want people running on it
+       * until I do.....
+       */
+      halt();
     }
 
-  for(i = 0; i<32; i++)
+  for(i = 0; i<NSPARCFPU; i++)
     {
       if(linux_sparc_fpu[i].psr_impl == psr_impl)
 	if(linux_sparc_fpu[i].fp_vers == fpu_vers)
 	  {
-	    sparc_fpu_type = linux_sparc_fpu[i].fp_name;
+	    sparc_fpu_type[cpuid] = linux_sparc_fpu[i].fp_name;
 	    break;
 	  }
     }
 
-  if(i == 32)
+  if(i == NSPARCFPU)
     {
       printk("No FPU type! You don't completely lose though...\n");
       printk("DEBUG: psr.impl = 0x%x  fsr.vers = 0x%x\n", psr_impl, fpu_vers);
-      sparc_fpu_type = linux_sparc_fpu[31].fp_name;
+      printk("Send this information and the type of SUN and CPU/FPU type you have\n");
+      printk("to davem@caip.rutgers.edu so that this can be fixed.\n");
+      sparc_fpu_type[cpuid] = linux_sparc_fpu[31].fp_name;
     }
 
-  printk("CPU: %s \n", sparc_cpu_type);
-  printk("FPU: %s \n", sparc_fpu_type);
+  printk("cpu%d CPU: %s \n", cpuid, sparc_cpu_type[cpuid]);
+  printk("cpu%d FPU: %s \n", cpuid, sparc_fpu_type[cpuid]);
 
   return;
 }
@@ -198,205 +220,295 @@ probe_cpu(void)
 void
 probe_vac(void)
 {
-  register unsigned int x,y;
+	unsigned int x,y;
 
-#ifndef CONFIG_SRMMU
-  vac_size = find_vac_size();
-  vac_linesize = find_vac_linesize();
-  vac_do_hw_vac_flushes = find_vac_hwflushes();
+	vac_size = find_vac_size();
+	vac_linesize = find_vac_linesize();
+	vac_do_hw_vac_flushes = find_vac_hwflushes();
 
-  /* Calculate various constants that make the cache-flushing code
-   * mode speedy.
-   */
+	/* Calculate various constants that make the cache-flushing code
+	 * mode speedy.
+	 */
 
-  vac_entries_per_segment = vac_entries_per_context = vac_size >> 12;
+	vac_entries_per_segment = vac_entries_per_context = vac_size >> 12;
+	for(x=0,y=vac_linesize; ((1<<x)<y); x++);
+	if((1<<x) != vac_linesize) printk("Warning BOGUS VAC linesize 0x%x",
+					  vac_size);
+	vac_entries_per_page = x;
 
-  for(x=0,y=vac_linesize; ((1<<x)<y); x++);
-  if((1<<x) != vac_linesize) printk("Warning BOGUS VAC linesize 0x%x",
-				    vac_size);
+	/* Here we want to 'invalidate' all the software VAC "tags"
+	 * just in case there is garbage in there. Then we enable it.
+	 */
 
-  vac_entries_per_page = x;
-
-  printk("Sparc VAC cache: Size=%d bytes  Line-Size=%d bytes ... ", vac_size,
-	 vac_linesize);
-
-  /* Here we want to 'invalidate' all the software VAC "tags"
-   * just in case there is garbage in there. Then we enable it.
-   */
-
-  for(x=0x80000000, y=(x+vac_size); x<y; x+=vac_linesize)
-    __asm__("sta %0, [%1] %2" : : "r" (0), "r" (x), "n" (0x2));
-
-  x=enable_vac();
-  printk("ENABLED\n");
-#endif
-
-  return;
+	/* flush flush flush */
+	for(x=AC_CACHETAGS; x<(AC_CACHETAGS+vac_size); x+=vac_linesize)
+		__asm__("sta %%g0, [%0] %1" : : "r" (x), "i" (0x2));
+	x=enable_vac();
+	return;
 }
+
+extern int num_segmaps, num_contexts;
 
 void
-probe_mmu(void)
+probe_mmu(int prom_node_cpu)
 {
-  find_mmu_num_segmaps();
-  find_mmu_num_contexts();
+	int cpuid;
 
-  printk("MMU segmaps: %d     MMU contexts: %d\n", num_segmaps, 
-	 num_contexts);
+	/* who are we? */
+	cpuid = get_cpuid();
+	switch(sparc_cpu_model) {
+	case sun4:
+		break;
+	case sun4c:
+		/* A sun4, sun4c. */
+		num_segmaps = prom_getintdefault(prom_node_cpu, "mmu-npmg", 128);
+		num_contexts = find_mmu_num_contexts(prom_node_cpu);
 
-  return;
+		printk("cpu%d MMU segmaps: %d     MMU contexts: %d\n", cpuid,
+		       num_segmaps, num_contexts);
+		break;
+	case sun4m:
+	case sun4d:
+	case sun4e:
+		/* Any Reference MMU derivate should be handled here, hopefuly. */
+		num_segmaps = 0;
+		num_contexts = find_mmu_num_contexts(prom_node_cpu);
+		vac_linesize = prom_getint(prom_node_cpu, "cache-line-size");
+		vac_size = (prom_getint(prom_node_cpu, "cache-nlines")*vac_linesize);
+		printk("cpu%d MMU contexts: %d\n", cpuid, num_contexts);
+		printk("cpu%d CACHE linesize %d total size %d\n", cpuid, vac_linesize,
+		       vac_size);
+		break;
+	default:
+		printk("cpu%d probe_mmu: sparc_cpu_model botch\n", cpuid);
+		break;
+	};
+
+	return;
 }
+
+/* Clock probing, we probe the timers here also. */
+/* #define DEBUG_PROBE_CLOCK */
+volatile unsigned int foo_limit;
 
 void
 probe_clock(int fchild)
 {
   register int node, type;
-  register char *node_str;
+  struct linux_prom_registers clk_reg[2];
 
   /* This will basically traverse the node-tree of the prom to see
    * which timer chip is on this machine.
    */
 
-  printk("Probing timer chip... ");
-
-  type = 0;
-  for(node = fchild ; ; )
-    {
-      node_str = get_str_from_prom(node, "model", promstr_buf);
-      if(strcmp(node_str, "mk48t02") == 0)
-	{
-	  type = 2;
-	  break;
-	}
-
-      if(strcmp(node_str, "mk48t08") == 0)
-	{
-	  type = 8;
-	  break;
-	}
-
-      node = node_get_sibling(node);
-      if(node == fchild)
-	{
-	  printk("Aieee, could not find timer chip type\n");
+  node = 0;
+  if(sparc_cpu_model == sun4) {
+	  printk("probe_clock: No SUN4 Clock/Timer support yet...\n");
 	  return;
-	}
-    }
+  }
+  if(sparc_cpu_model == sun4c) node=prom_getchild(prom_root_node);
+  else
+	  if(sparc_cpu_model == sun4m)
+		  node=prom_getchild(prom_searchsiblings(prom_getchild(prom_root_node), "obio"));
+  type = 0;
+  sp_clock_typ = MSTK_INVALID;
+  for(;;) {
+	  prom_getstring(node, "model", node_str, sizeof(node_str));
+	  if(strcmp(node_str, "mk48t02") == 0) {
+		  sp_clock_typ = MSTK48T02;
+		  if(prom_getproperty(node, "reg", (char *) clk_reg, sizeof(clk_reg)) == -1) {
+			  printk("probe_clock: FAILED!\n");
+			  halt();
+		  }
+		  prom_apply_obio_ranges(clk_reg, 1);
+		  /* Map the clock register io area read-only */
+		  mstk48t02_regs = (struct mostek48t02 *) 
+			  sparc_alloc_io((void *) clk_reg[0].phys_addr,
+					 (void *) 0, sizeof(*mstk48t02_regs),
+					 "clock", 0x0, 0x1);
+		  mstk48t08_regs = 0;  /* To catch weirdness */
+		  break;
+	  }
 
-  printk("Mostek %s\n", node_str);
-  printk("At OBIO address: 0x%x Virtual address: 0x%x\n",
-	 (unsigned int) TIMER_PHYSADDR, (unsigned int) TIMER_STRUCT);
+	  if(strcmp(node_str, "mk48t08") == 0) {
+		  sp_clock_typ = MSTK48T08;
+		  if(prom_getproperty(node, "reg", (char *) clk_reg,
+				      sizeof(clk_reg)) == -1) {
+			  printk("probe_clock: FAILED!\n");
+			  halt();
+		  }
+		  prom_apply_obio_ranges(clk_reg, 1);
+		  /* Map the clock register io area read-only */
+		  mstk48t08_regs = (struct mostek48t08 *)
+			  sparc_alloc_io((void *) clk_reg[0].phys_addr,
+					 (void *) 0, sizeof(*mstk48t08_regs),
+					 "clock", 0x0, 0x1);
 
-  mapioaddr((unsigned long) TIMER_PHYSADDR,
-	    (unsigned long) TIMER_STRUCT);
+		  mstk48t02_regs = &mstk48t08_regs->regs;
+		  break;
+	  }
 
-  TIMER_STRUCT->timer_limit14=(((1000000/HZ) << 10) | 0x80000000);
-
-  return;
-}
-
-
-void
-probe_esp(register int esp_node)
-{
-  register int nd;
-  register char* lbuf;
-
-  nd = node_get_child(esp_node);
-
-  printk("\nProbing ESP:\n");
-  lbuf = get_str_from_prom(nd, "name", promstr_buf);
-
-  if(*get_int_from_prom(nd, "name", promint_buf) != 0)
-  printk("Node: 0x%x Name: %s\n", nd, lbuf);
-
-  while((nd = node_get_sibling(nd)) != 0) {
-    lbuf = get_str_from_prom(nd, "name", promstr_buf);
-    printk("Node: 0x%x Name: %s\n", nd, lbuf);
+	  node = prom_getsibling(node);
+	  if(node == 0) {
+		  printk("Aieee, could not find timer chip type\n");
+		  return;
+	  }
   }
 
-  printk("\n");
+  if(sparc_cpu_model == sun4c) {
+
+  /* Map the Timer chip, this is implemented in hardware inside
+   * the cache chip on the sun4c.
+   */
+  sparc_alloc_io ((void *) SUN4C_TIMER_PHYSADDR, (void *) TIMER_VADDR,
+		  sizeof (*SUN4C_TIMER_STRUCT), "timer", 0x0, 0x0);
+
+  /* Have the level 10 timer tick at 100HZ.  We don't touch the
+   * level 14 timer limit since we are letting the prom handle
+   * them until we have a real console driver so L1-A works.
+   */
+  SUN4C_TIMER_STRUCT->timer_limit10 = (((1000000/HZ) + 1) << 10);
+  master_l10_limit = &(SUN4C_TIMER_STRUCT->timer_limit10);
+
+  } else {
+	  int reg_count;
+	  struct linux_prom_registers cnt_regs[PROMREG_MAX];
+	  int obio_node, cnt_node;
+
+	  cnt_node = 0;
+	  if((obio_node =
+	      prom_searchsiblings (prom_getchild(prom_root_node), "obio")) == 0 ||
+	     (obio_node = prom_getchild (obio_node)) == 0 ||
+	     (cnt_node = prom_searchsiblings (obio_node, "counter")) == 0) {
+		  printk ("Cannot find /obio/counter node\n");
+		  prom_halt ();
+	  }
+	  reg_count = prom_getproperty(cnt_node, "reg",
+				       (void *) cnt_regs, sizeof(cnt_regs));
+
+	  reg_count = (reg_count/sizeof(struct linux_prom_registers));
+
+	  /* Apply the obio ranges to the timer registers. */
+	  prom_apply_obio_ranges(cnt_regs, reg_count);
+
+	  /* Map the per-cpu Counter registers. */
+	  sparc_alloc_io(cnt_regs[0].phys_addr, (void *) TIMER_VADDR,
+			 PAGE_SIZE*NCPUS, "counters_percpu", cnt_regs[0].which_io, 0x0);
+
+	  /* Map the system Counter register. */
+	  sparc_alloc_io(cnt_regs[reg_count-1].phys_addr,
+			 (void *) TIMER_VADDR+(NCPUS*PAGE_SIZE),
+			 cnt_regs[reg_count-1].reg_size,
+			 "counters_system", cnt_regs[reg_count-1].which_io, 0x0);
+
+
+	  sun4m_timers = (struct sun4m_timer_regs *) TIMER_VADDR;
+
+	  foo_limit = (volatile) sun4m_timers->l10_timer_limit;
+
+/*	  printk("Timer register dump:\n"); */
+#if 0
+	  printk("cpu0: l14limit %08x l14curcount %08x\n",
+		 sun4m_timers->cpu_timers[0].l14_timer_limit,
+		 sun4m_timers->cpu_timers[0].l14_cur_count);
+#endif
+#if 0
+	  printk("sys: l10limit %08x l10curcount %08x\n",
+		 sun4m_timers->l10_timer_limit,
+		 sun4m_timers->l10_cur_count);
+#endif
+
+	  /* Must set the master pointer first or we will lose badly. */
+	  master_l10_limit =
+		  &(((struct sun4m_timer_regs *)TIMER_VADDR)->l10_timer_limit);
+
+          ((struct sun4m_timer_regs *)TIMER_VADDR)->l10_timer_limit =
+		  (((1000000/HZ) + 1) << 10);   /* 0x9c4000 */
+
+	  /* We should be getting level 10 interrupts now. */
+  }
 
   return;
 }
 
+/* Probe and map in the Auxiliaary I/O register */
 void
-probe_sbus(register int cpu_child_node)
+probe_auxio(void)
 {
-  register int nd, savend;
-  register char* lbuf;
+	int node, auxio_nd;
+	struct linux_prom_registers auxregs[1];
 
-  nd = cpu_child_node;
-
-  lbuf = (char *) 0;
-
-  while((nd = node_get_sibling(nd)) != 0) {
-    lbuf = get_str_from_prom(nd, "name", promstr_buf);
-    if(strcmp(lbuf, "sbus") == 0)
-      break;
-  };
-
-  nd = node_get_child(nd);
-
-  printk("Node: 0x%x Name: %s\n", nd,
-	 get_str_from_prom(nd, "name", promstr_buf));
-
-  if(strcmp(lbuf, "esp") == 0) {
-    probe_esp(nd);
-  };
-
-  while((nd = node_get_sibling(nd)) != 0) {
-    printk("Node: 0x%x Name: %s\n", nd,
-	   lbuf = get_str_from_prom(nd, "name", promstr_buf));
-    
-    if(strcmp(lbuf, "esp") == 0) {
-      savend = nd;
-      probe_esp(nd);
-      nd = savend;
-    };
-  };
-
-  printk("\n");
-  return;
+	node = prom_getchild(prom_root_node);
+	auxio_nd = prom_searchsiblings(node, "auxiliary-io");
+	if(!auxio_nd) {
+		node = prom_searchsiblings(node, "obio");
+		node = prom_getchild(node);
+		auxio_nd = prom_searchsiblings(node, "auxio");
+		if(!auxio_nd) {
+			printk("Cannot find auxio node, cannot continue...\n");
+			prom_halt();
+		}
+	}
+	prom_getproperty(auxio_nd, "reg", (char *) auxregs, sizeof(auxregs));
+	prom_apply_obio_ranges(auxregs, 0x1);
+	/* Map the register both read and write */
+	sparc_alloc_io(auxregs[0].phys_addr, (void *) AUXIO_VADDR,
+		       auxregs[0].reg_size, "auxilliaryIO", auxregs[0].which_io, 0x0);
+	printk("Mapped AUXIO at paddr %08lx vaddr %08lx\n",
+	       (unsigned long) auxregs[0].phys_addr,
+	       (unsigned long) AUXIO_VADDR);
+	return;
 }
 
 extern unsigned long probe_memory(void);
-extern struct sparc_phys_banks sp_banks[14];
+extern struct sparc_phys_banks sp_banks[SPARC_PHYS_BANKS];
 unsigned int phys_bytes_of_ram, end_of_phys_memory;
+extern unsigned long probe_sbus(int, unsigned long);
+extern void probe_mbus(void);
 
-void
-probe_devices(void)
+/* #define DEBUG_PROBE_DEVICES */
+struct prom_cpuinfo linux_cpus[NCPUS];
+int linux_num_cpus;
+
+unsigned long
+probe_devices(unsigned long mem_start)
 {
-  register int nd, i;
-  register char* str;
+  int nd, i, prom_node_cpu, thismid;
+  int cpu_nds[NCPUS];  /* One node for each cpu */
+  int cpu_ctr = 0;
 
-  nd = prom_node_root;
-
-  printk("PROBING DEVICES:\n");
-
-  str = get_str_from_prom(nd, "device_type", promstr_buf);
-  if(strcmp(str, "cpu") == 0) {
-    printk("Found CPU root prom device tree node.\n");
+  prom_getstring(prom_root_node, "device_type", node_str, sizeof(node_str));
+  if(strcmp(node_str, "cpu") == 0) {
+    cpu_nds[0] = prom_root_node;
+    cpu_ctr++;
   } else {
-    printk("Root node in device tree was not 'cpu' cannot continue.\n");
-    halt();
+    int scan;
+    scan = prom_getchild(prom_root_node);
+    nd = 0;
+    while((scan = prom_getsibling(scan)) != 0) {
+      prom_getstring(scan, "device_type", node_str, sizeof(node_str));
+      if(strcmp(node_str, "cpu") == 0) {
+	      cpu_nds[cpu_ctr] = scan;
+	      linux_cpus[cpu_ctr].prom_node = scan;
+	      prom_getproperty(scan, "mid", (char *) &thismid, sizeof(thismid));
+	      linux_cpus[cpu_ctr].mid = thismid;
+	      cpu_ctr++;
+      }
+    };
+    if(cpu_ctr == 0) {
+      printk("No CPU nodes found, cannot continue.\n");
+      /* Probably a sun4d or sun4e, Sun is trying to trick us ;-) */
+      halt();
+    }
+    printk("Found %d CPU prom device tree node(s).\n", cpu_ctr);
   };
+  prom_node_cpu = cpu_nds[0];
 
-#ifdef DEBUG_PROBING
-  printk("String address for d_type: 0x%x\n", (unsigned int) str);
-  printk("str[0] = %c  str[1] = %c  str[2] = %c \n", str[0], str[1], str[2]);
-#endif
-
-  str = get_str_from_prom(nd, "name", promstr_buf);
-
-#ifdef DEBUG_PROBING
-  printk("String address for name: 0x%x\n", (unsigned int) str);
-  printk("str[0] = %c  str[1] = %c  str[2] = %c \n", str[0], str[1], str[2]);
-#endif
-
-  printk("Name: %s \n", str);
-
-  first_descent = nd = node_get_child(nd);
-
+  linux_num_cpus = cpu_ctr;
+  for(i=0; i<cpu_ctr; i++) {
+	  prom_getstring(cpu_nds[i], "name", node_str, sizeof(node_str));
+	  printk("cpu%d: %s \n", i, node_str);
+  }
 
 /* Ok, here will go a call to each specific device probe. We can
  * call these now that we have the 'root' node and the child of
@@ -404,29 +516,11 @@ probe_devices(void)
  */
 
   probe_cpu();
-  probe_vac();
-  probe_mmu();
-  phys_bytes_of_ram = probe_memory();
+  probe_auxio();
+  if(sparc_cpu_model == sun4c) probe_vac();
+  if(sparc_cpu_model != sun4c) probe_mbus(); /* Are MBUS's relevant on sun4c's? */
 
-  printk("Physical Memory: %d bytes\n", (int) phys_bytes_of_ram);
-  for(i=0; sp_banks[i].num_bytes != 0; i++) {
-    printk("Bank %d:  base 0x%x  bytes %d\n", i,
-	   (unsigned int) sp_banks[i].base_addr, 
-	   (int) sp_banks[i].num_bytes);
-    end_of_phys_memory = sp_banks[i].base_addr + sp_banks[i].num_bytes;
-  }
+  mem_start = probe_sbus(prom_getchild(prom_root_node), mem_start);
 
-  printk("PROM Root Child Node: 0x%x Name: %s \n", nd,
-	 get_str_from_prom(nd, "name", promstr_buf));
-
-  while((nd = node_get_sibling(nd)) != 0) {
-    printk("Node: 0x%x Name: %s", nd,
-	   get_str_from_prom(nd, "name", promstr_buf));
-    printk("\n");
-  };
-
-  printk("\nProbing SBUS:\n");
-  probe_sbus(first_descent);
-
-  return;
+  return mem_start;
 }

@@ -375,9 +375,9 @@ static void reset_controller(void)
 	int	i;
 
 	outb_p(4,HD_CMD);
-	for(i = 0; i < 1000; i++) nop();
+	for(i = 0; i < 1000; i++) barrier();
 	outb_p(hd_info[0].ctl & 0x0f,HD_CMD);
-	for(i = 0; i < 1000; i++) nop();
+	for(i = 0; i < 1000; i++) barrier();
 	if (drive_busy())
 		printk("hd: controller still busy\n");
 	else if ((hd_error = inb(HD_ERROR)) != 1)
@@ -794,13 +794,13 @@ static int hd_ioctl(struct inode * inode, struct file * file,
 			err = verify_area(VERIFY_WRITE, loc, sizeof(*loc));
 			if (err)
 				return err;
-			put_fs_byte(bios_info[dev].head,
+			put_user(bios_info[dev].head,
 				(char *) &loc->heads);
-			put_fs_byte(bios_info[dev].sect,
+			put_user(bios_info[dev].sect,
 				(char *) &loc->sectors);
-			put_fs_word(bios_info[dev].cyl,
+			put_user(bios_info[dev].cyl,
 				(short *) &loc->cylinders);
-			put_fs_long(hd[MINOR(inode->i_rdev)].start_sect,
+			put_user(hd[MINOR(inode->i_rdev)].start_sect,
 				(long *) &loc->start);
 			return 0;
 		case BLKRASET:
@@ -813,14 +813,14 @@ static int hd_ioctl(struct inode * inode, struct file * file,
 			err = verify_area(VERIFY_WRITE, (long *) arg, sizeof(long));
 			if (err)
 				return err;
-			put_fs_long(read_ahead[MAJOR(inode->i_rdev)],(long *) arg);
+			put_user(read_ahead[MAJOR(inode->i_rdev)],(long *) arg);
 			return 0;
          	case BLKGETSIZE:   /* Return device size */
 			if (!arg)  return -EINVAL;
 			err = verify_area(VERIFY_WRITE, (long *) arg, sizeof(long));
 			if (err)
 				return err;
-			put_fs_long(hd[MINOR(inode->i_rdev)].nr_sects, (long *) arg);
+			put_user(hd[MINOR(inode->i_rdev)].nr_sects, (long *) arg);
 			return 0;
 		case BLKFLSBUF:
 			if(!suser())  return -EACCES;
@@ -843,7 +843,7 @@ static int hd_ioctl(struct inode * inode, struct file * file,
 			err = verify_area(VERIFY_WRITE, (long *) arg, sizeof(long));
 			if (err)
 				return err;
-			put_fs_long(unmask_intr[dev], (long *) arg);
+			put_user(unmask_intr[dev], (long *) arg);
 			return 0;
 
                 case HDIO_GET_MULTCOUNT:
@@ -851,7 +851,7 @@ static int hd_ioctl(struct inode * inode, struct file * file,
 			err = verify_area(VERIFY_WRITE, (long *) arg, sizeof(long));
 			if (err)
 				return err;
-			put_fs_long(mult_count[dev], (long *) arg);
+			put_user(mult_count[dev], (long *) arg);
 			return 0;
 
 		case HDIO_SET_MULTCOUNT:
@@ -954,12 +954,14 @@ static void hd_interrupt(int irq, struct pt_regs *regs)
  */
 static void hd_geninit(void)
 {
-	int drive, i;
-	extern struct drive_info drive_info;
-	unsigned char *BIOS = (unsigned char *) &drive_info;
-	int cmos_disks;
+	int i;
 
-	if (!NR_HD) {	   
+#ifdef __i386__
+	if (!NR_HD) {
+		extern struct drive_info drive_info;
+		unsigned char *BIOS = (unsigned char *) &drive_info;
+		int cmos_disks, drive;
+
 		for (drive=0 ; drive<2 ; drive++) {
 			bios_info[drive].cyl   = hd_info[drive].cyl = *(unsigned short *) BIOS;
 			bios_info[drive].head  = hd_info[drive].head = *(2+BIOS);
@@ -1002,6 +1004,7 @@ static void hd_geninit(void)
 			else
 				NR_HD = 1;
 	}
+#endif /* __i386__ */
 	i = NR_HD;
 	while (i-- > 0) {
 		/*

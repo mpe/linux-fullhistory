@@ -75,7 +75,7 @@ void raw_err (int err, unsigned char *header, unsigned long daddr,
 		return;
 
 	/* This is meaningless in raw sockets. */
-	if (err & 0xff00 == (ICMP_SOURCE_QUENCH << 8)) 
+	if ((err & 0xff00) == (ICMP_SOURCE_QUENCH << 8)) 
 	{
 		if (sk->cong_window > 1) sk->cong_window = sk->cong_window/2;
 		return;

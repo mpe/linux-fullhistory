@@ -20,6 +20,37 @@
 #define PRINTK(x)
 #define Printk(x) printk x
 
+struct UMSDOS_DIR_ONCE {
+	struct dirent *ent;
+	int count;
+};
+
+/*
+	Record a single entry the first call.
+	Return -EINVAL the next one.
+*/
+static int umsdos_ioctl_fill(
+	void * buf,
+	char * name,
+	int name_len,
+	off_t offset,
+	ino_t ino)
+{
+	int ret = -EINVAL;
+	struct UMSDOS_DIR_ONCE *d = (struct UMSDOS_DIR_ONCE *)buf;
+	if (d->count == 0){
+		memcpy_tofs (d->ent->d_name,name,name_len);
+		put_user ('\0',d->ent->d_name+name_len);
+		put_user (name_len,&d->ent->d_reclen);
+		put_user (ino,&d->ent->d_ino);
+		put_user (offset,&d->ent->d_off);
+		d->count = 1;
+		ret = 0;
+	}
+	return ret;
+}
+
+
 /*
 	Perform special function on a directory
 */
@@ -80,7 +111,11 @@ int UMSDOS_ioctl_dir (
 
 				Return > 0 if success.
 			*/
-			ret = msdos_readdir(dir,filp,&idata->dos_dirent,1);
+			struct UMSDOS_DIR_ONCE bufk;
+			bufk.count = 0;
+			bufk.ent = &idata->dos_dirent;
+			msdos_readdir(dir,filp,&bufk,umsdos_ioctl_fill);
+			ret = bufk.count == 1 ? 1 : 0;
 		}else if (cmd == UMSDOS_READDIR_EMD){
 			/* #Specification: ioctl / UMSDOS_READDIR_EMD
 				One entry is read from the EMD at the current

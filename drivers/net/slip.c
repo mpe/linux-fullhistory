@@ -996,19 +996,19 @@ slip_ioctl(struct tty_struct *tty, void *file, int cmd, void *arg)
 		return 0;
 
 	case SIOCGIFENCAP:
-		err = verify_area(VERIFY_WRITE, arg, sizeof(long));
+		err = verify_area(VERIFY_WRITE, arg, sizeof(int));
 		if (err)  {
 			return -err;
 		}
-		put_fs_long(sl->mode, (long *)arg);
+		put_user(sl->mode, (int *)arg);
 		return 0;
 
 	case SIOCSIFENCAP:
-		err = verify_area(VERIFY_READ, arg, sizeof(long));
+		err = verify_area(VERIFY_READ, arg, sizeof(int));
 		if (err)  {
 			return -err;
 		}
-		tmp = get_fs_long((long *)arg);
+		tmp = get_user((int *)arg);
 #ifndef SL_INCLUDE_CSLIP
 		if (tmp & (SL_MODE_CSLIP|SL_MODE_ADAPTIVE))  {
 			return -EINVAL;

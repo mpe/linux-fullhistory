@@ -36,14 +36,43 @@ int UMSDOS_dir_read(struct inode *inode,struct file *filp,char *buf,
 {
 	return -EISDIR;
 }
-#define NAME_OFFSET(de) ((int) ((de)->d_name - (char *) (de)))
-#define ROUND_UP(x) (((x)+3) & ~3)
+
+struct UMSDOS_DIR_ONCE {
+	void *dirbuf;
+	filldir_t filldir;
+	int count;
+	int stop;
+};
+
+/*
+	Record a single entry the first call.
+	Return -EINVAL the next one.
+*/
+static int umsdos_dir_once(
+	void * buf,
+	char * name,
+	int name_len,
+	off_t offset,
+	ino_t ino)
+{
+	int ret = -EINVAL;
+	struct UMSDOS_DIR_ONCE *d = (struct UMSDOS_DIR_ONCE *)buf;
+	if (d->count == 0){
+		char zname[100];
+		memcpy (zname,name,name_len);
+		zname[name_len] = '\0';
+		PRINTK (("dir_once :%s: offset %ld\n",zname,offset));
+		ret = d->filldir (d->dirbuf,name,name_len,offset,ino);
+		d->stop = ret < 0;
+		d->count = 1;
+	}
+	return ret;
+}
 
 /*
 	Read count directory entries from directory filp
 	Return a negative value from linux/errno.h.
-	Return > 0 if success (The amount of byte written in
-	dirent round_up to a word size (32 bits).
+	Return > 0 if success (The amount of byte written by filldir).
 
 	This function is used by the normal readdir VFS entry point and by
 	some function who try to find out info on a file from a pure MSDOS
@@ -52,19 +81,19 @@ int UMSDOS_dir_read(struct inode *inode,struct file *filp,char *buf,
 static int umsdos_readdir_x(
 	struct inode *dir,		/* Point to a description of the super block */
 	struct file *filp,		/* Point to a directory which is read */
-    struct dirent *dirent,	/* Will hold count directory entry */
-	int dirent_in_fs,		/* dirent point in user's space ? */
-	int count,
+    void *dirbuf,			/* Will hold count directory entry */
+							/* but filled by the filldir function */
+	int internal_read,		/* Called for internal purpose */
 	struct umsdos_dirent *u_entry,	/* Optional umsdos entry */
 	int follow_hlink,
-	off_t *pt_f_pos)		/* will hold the offset of the entry in EMD */
+	filldir_t filldir)
 {
 	int ret = 0;
 	
 	umsdos_startlookup(dir);	
 	if (filp->f_pos == UMSDOS_SPECIAL_DIRFPOS
 		&& dir == pseudo_root
-		&& dirent_in_fs){
+		&& !internal_read){
 		/*
 			We don't need to simulate this pseudo directory
 			when umsdos_readdir_x is called for internal operation
@@ -75,13 +104,10 @@ static int umsdos_readdir_x(
 			linux root), it simulate a directory /DOS which points to
 			the real root of the file system.
 		*/
-		put_fs_long(dir->i_sb->s_mounted->i_ino,&dirent->d_ino);
-		memcpy_tofs (dirent->d_name,"DOS",3);
-		put_fs_byte(0,dirent->d_name+3);
-		put_fs_word (3,&dirent->d_reclen);
-		if (u_entry != NULL) u_entry->flags = 0;
-		ret = ROUND_UP(NAME_OFFSET(dirent) + 3 + 1);
-		filp->f_pos++;
+		if (filldir (dirbuf,"DOS",3,UMSDOS_SPECIAL_DIRFPOS
+			,dir->i_sb->s_mounted->i_ino) == 0){
+			filp->f_pos++;
+		}
 	}else if (filp->f_pos < 2
 		|| (dir != dir->i_sb->s_mounted && filp->f_pos == 32)){
 		/* #Specification: readdir / . and ..
@@ -116,15 +142,26 @@ static int umsdos_readdir_x(
 			EMD, we are back at offset 64. So we set the offset
 			to UMSDOS_SPECIAL_DIRFPOS(3) as soon as we have read the
 			.. entry from msdos.
+			
+			Now (linux 1.3), umsdos_readdir can read more than one
+			entry even if we limit (umsdos_dir_once) to only one:
+			It skips over hidden file. So we switch to
+			UMSDOS_SPECIAL_DIRFPOS as soon as we have read successfully
+			the .. entry.
 		*/
-		ret = msdos_readdir(dir,filp,dirent,count);
-		if (filp->f_pos == 64) filp->f_pos = UMSDOS_SPECIAL_DIRFPOS;
+		int last_f_pos = filp->f_pos;	
+		struct UMSDOS_DIR_ONCE bufk;
+		bufk.dirbuf = dirbuf;
+		bufk.filldir = filldir;
+		bufk.count = 0;
+		ret = msdos_readdir(dir,filp,&bufk,umsdos_dir_once);
+		if (last_f_pos > 0 && filp->f_pos > last_f_pos) filp->f_pos = UMSDOS_SPECIAL_DIRFPOS;
 		if (u_entry != NULL) u_entry->flags = 0;
 	}else{
 		struct inode *emd_dir = umsdos_emd_dir_lookup(dir,0);
 		if (emd_dir != NULL){
 			if (filp->f_pos <= UMSDOS_SPECIAL_DIRFPOS+1) filp->f_pos = 0;
-			PRINTK (("f_pos %ld i_size %d\n",filp->f_pos,emd_dir->i_size));
+			PRINTK (("f_pos %lu i_size %ld\n",filp->f_pos,emd_dir->i_size));
 			ret = 0;
 			while (filp->f_pos < emd_dir->i_size){
 				struct umsdos_dirent entry;
@@ -156,7 +193,6 @@ static int umsdos_readdir_x(
 					int lret;
 					umsdos_parse (entry.name,entry.name_len,&info);
 					info.f_pos = cur_f_pos;
-					*pt_f_pos = cur_f_pos;
 					umsdos_manglename (&info);
 					lret = umsdos_real_lookup (dir,info.fake.fname
 						,info.fake.len,&inode);
@@ -177,29 +213,16 @@ static int umsdos_readdir_x(
 							infinite recursion /DOS/linux/DOS/linux while
 							walking the file system.
 						*/
-						if (inode != pseudo_root){
-							PRINTK (("Trouve ino %d ",inode->i_ino));
-							if (dirent_in_fs){
-								put_fs_long(inode->i_ino,&dirent->d_ino);
-								memcpy_tofs (dirent->d_name,entry.name
-									,entry.name_len);
-								put_fs_byte(0,dirent->d_name+entry.name_len);
-								put_fs_word (entry.name_len
-									,&dirent->d_reclen);
-								/* In this case, the caller only needs */
-								/* flags */
-								if (u_entry != NULL){
-									u_entry->flags = entry.flags;
-								}
-							}else{
-								dirent->d_ino = inode->i_ino;
-								memcpy (dirent->d_name,entry.name
-									,entry.name_len);
-								dirent->d_name[entry.name_len] = '\0';
-								dirent->d_reclen = entry.name_len;
-								if (u_entry != NULL) *u_entry = entry;
+						if (inode != pseudo_root
+							&& (internal_read
+								|| !(entry.flags & UMSDOS_HIDDEN))){
+							if (filldir (dirbuf 
+								,entry.name,entry.name_len
+								,cur_f_pos, inode->i_ino) < 0){
+								filp->f_pos = cur_f_pos;
 							}
-							ret = ROUND_UP(NAME_OFFSET(dirent) + entry.name_len + 1);
+							PRINTK (("Trouve ino %ld ",inode->i_ino));
+							if (u_entry != NULL) *u_entry = entry;
 							iput (inode);
 							break;
 						}
@@ -217,11 +240,18 @@ static int umsdos_readdir_x(
 					}
 				}
 			}
+			/*
+				If the fillbuf has failed, f_pos is back to 0.
+				To avoid getting back into the . and .. state
+				(see comments at the beginning), we put back
+				the special offset.
+			*/
+			if (filp->f_pos == 0) filp->f_pos = UMSDOS_SPECIAL_DIRFPOS;
 			iput(emd_dir);
 		}
 	}
 	umsdos_endlookup(dir);	
-	PRINTK (("read dir %p pos %d ret %d\n",dir,filp->f_pos,ret));
+	PRINTK (("read dir %p pos %lu ret %d\n",dir,filp->f_pos,ret));
 	return ret;
 }
 /*
@@ -232,17 +262,26 @@ static int umsdos_readdir_x(
 static int UMSDOS_readdir(
 	struct inode *dir,		/* Point to a description of the super block */
 	struct file *filp,		/* Point to a directory which is read */
-    struct dirent *dirent,	/* Will hold count directory entry */
-	int count)
+	void *dirbuf,			/* Will hold directory entries  */
+	filldir_t filldir)
 {
-	int ret = -ENOENT;
-	while (1){
+	int ret = 0;
+	int count = 0;
+	struct UMSDOS_DIR_ONCE bufk;
+	bufk.dirbuf = dirbuf;
+	bufk.filldir = filldir;
+	bufk.stop = 0;
+	PRINTK (("UMSDOS_readdir in\n"));
+	while (ret == 0 && bufk.stop == 0){
 		struct umsdos_dirent entry;
-		off_t f_pos;
-		ret = umsdos_readdir_x (dir,filp,dirent,1,count,&entry,1,&f_pos);
-		if (ret <= 0 || !(entry.flags & UMSDOS_HIDDEN)) break;
+		bufk.count = 0;
+		ret = umsdos_readdir_x (dir,filp,&bufk,0,&entry,1,umsdos_dir_once);
+		if (bufk.count == 0) break;
+		count += bufk.count;
 	}
-	return ret;
+	PRINTK (("UMSDOS_readdir out %d count %d pos %lu\n",ret,count
+		,filp->f_pos));
+	return count == 0 ? -ENOENT : ret;
 }
 /*
 	Complete the inode content with info from the EMD file
@@ -331,6 +370,53 @@ void umsdos_lookup_patch (
 if (inode->u.umsdos_i.i_emd_owner==0) printk ("emd_owner still 0 ???\n");
 	}
 }
+struct UMSDOS_DIRENT_K{
+	off_t f_pos; /* will hold the offset of the entry in EMD */
+	ino_t ino;
+};
+
+/*
+	Just to record the offset of one entry.
+*/
+static int umsdos_filldir_k(
+	void * buf,
+	char * name,
+	int name_len,
+	off_t offset,
+	ino_t ino)
+{
+	struct UMSDOS_DIRENT_K *d = (struct UMSDOS_DIRENT_K *)buf;
+	d->f_pos = offset;
+	d->ino = ino;
+	return 0;
+}
+
+struct UMSDOS_DIR_SEARCH{
+	struct umsdos_dirent *entry;
+	int found;
+	ino_t search_ino;
+};
+
+static int umsdos_dir_search (
+	void * buf,
+	char * name,
+	int name_len,
+	off_t offset,
+	ino_t ino)
+{
+	int ret = 0;
+	struct UMSDOS_DIR_SEARCH *d = (struct UMSDOS_DIR_SEARCH *)buf;
+	if (d->search_ino == ino){
+		d->found = 1;
+		memcpy (d->entry->name,name,name_len);
+		d->entry->name[name_len] = '\0';
+		d->entry->name_len = name_len;
+		ret = 1;	/* So msdos_readdir will terminate */
+	}
+	return ret;
+}
+
+
 /*
 	Locate entry of an inode in a directory.
 	Return 0 or a negative error code.
@@ -357,24 +443,18 @@ int umsdos_inode2entry (
 		iput (emddir);
 		if (emddir == NULL){
 			/* This is a DOS directory */
+			struct UMSDOS_DIR_SEARCH bufk;
 			struct file filp;
 			filp.f_reada = 1;
 			filp.f_pos = 0;
-			while (1){
-				struct dirent dirent;
-				if (umsdos_readdir_kmem (dir,&filp,&dirent,1) <= 0){
-					printk ("UMSDOS: can't locate inode %ld in DOS directory???\n"
-						,inode->i_ino);
-				}else if (dirent.d_ino == inode->i_ino){
-					ret = 0;
-					memcpy (entry->name,dirent.d_name,dirent.d_reclen);
-					entry->name[dirent.d_reclen] = '\0';
-					entry->name_len = dirent.d_reclen;
-					inode->u.umsdos_i.i_dir_owner = dir->i_ino;
-					inode->u.umsdos_i.i_emd_owner = 0;
-					umsdos_setup_dir_inode(inode);
-					break;
-				}
+			bufk.entry = entry;
+			bufk.search_ino = inode->i_ino;
+			msdos_readdir (dir,&filp,&bufk,umsdos_dir_search);
+			if (bufk.found){
+				ret = 0;
+				inode->u.umsdos_i.i_dir_owner = dir->i_ino;
+				inode->u.umsdos_i.i_emd_owner = 0;
+				umsdos_setup_dir_inode(inode);
 			}
 		}else{
 			/* skip . and .. see umsdos_readdir_x() */
@@ -382,16 +462,15 @@ int umsdos_inode2entry (
 			filp.f_reada = 1;
 			filp.f_pos = UMSDOS_SPECIAL_DIRFPOS;
 			while (1){
-				struct dirent dirent;
-				off_t f_pos;
-				if (umsdos_readdir_x(dir,&filp,&dirent
-					,0,1,entry,0,&f_pos) <= 0){
+				struct UMSDOS_DIRENT_K bufk;
+				if (umsdos_readdir_x(dir,&filp,&bufk
+					,1,entry,0,umsdos_filldir_k) < 0){
 					printk ("UMSDOS: can't locate inode %ld in EMD file???\n"
 						,inode->i_ino);
 					break;
-				}else if (dirent.d_ino == inode->i_ino){
+				}else if (bufk.ino == inode->i_ino){
 					ret = 0;
-					umsdos_lookup_patch (dir,inode,entry,f_pos);
+					umsdos_lookup_patch (dir,inode,entry,bufk.f_pos);
 					break;
 				}
 			}
@@ -411,7 +490,7 @@ static int umsdos_locate_ancestor (
 	int ret;
 	umsdos_patch_inode (dir,NULL,0);
 	ret = umsdos_real_lookup (dir,"..",2,result);
-	PRINTK (("result %d %x ",ret,*result));
+	PRINTK (("result %d %p ",ret,*result));
 	if (ret == 0){
 		struct inode *adir = *result;
 		ret = umsdos_inode2entry (adir,dir,entry);
@@ -560,7 +639,7 @@ static int umsdos_lookup_x (
 		struct umsdos_info info;
 		ret = umsdos_parse (name,len,&info);
 		if (ret == 0) ret = umsdos_findentry (dir,&info,0);
-		PRINTK (("lookup %s pos %d ret %d len %d ",info.fake.fname,info.f_pos,ret
+		PRINTK (("lookup %s pos %lu ret %d len %d ",info.fake.fname,info.f_pos,ret
 			,info.fake.len));
 		if (ret == 0){
 			/* #Specification: umsdos / lookup
@@ -581,7 +660,7 @@ static int umsdos_lookup_x (
 				umsdos_delentry (dir,&info,S_ISDIR(info.entry.mode));
 			}else{
 				umsdos_lookup_patch (dir,inode,&info.entry,info.f_pos);
-				PRINTK (("lookup ino %d flags %d\n",inode->i_ino
+				PRINTK (("lookup ino %ld flags %d\n",inode->i_ino
 					,info.entry.flags));
 				if (info.entry.flags & UMSDOS_HLINK){
 					ret = umsdos_hlink2inode (inode,result);

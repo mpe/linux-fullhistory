@@ -28,7 +28,7 @@ asmlinkage int sys_sigprocmask(int how, sigset_t *set, sigset_t *oset)
 		error = verify_area(VERIFY_READ, set, sizeof(sigset_t));
 		if (error)
 			return error;
-		new_set = get_fs_long((unsigned long *) set) & _BLOCKABLE;
+		new_set = get_user(set) & _BLOCKABLE;
 		switch (how) {
 		case SIG_BLOCK:
 			current->blocked |= new_set;
@@ -47,7 +47,7 @@ asmlinkage int sys_sigprocmask(int how, sigset_t *set, sigset_t *oset)
 		error = verify_area(VERIFY_WRITE, oset, sizeof(sigset_t));
 		if (error)
 			return error;
-		put_fs_long(old_set, (unsigned long *) oset);
+		put_user(old_set, oset);
 	}
 	return 0;
 }
@@ -71,7 +71,7 @@ asmlinkage int sys_sigpending(sigset_t *set)
 	/* fill in "set" with signals pending but blocked. */
 	error = verify_area(VERIFY_WRITE, set, 4);
 	if (!error)
-		put_fs_long(current->blocked & current->signal, (unsigned long *)set);
+		put_user(current->blocked & current->signal, set);
 	return error;
 }
 

@@ -28,6 +28,8 @@ BLOCK_MODULE_OBJS =
 ifdef CONFIG_BLK_DEV_FD
 OBJS := $(OBJS) floppy.o
 SRCS := $(SRCS) floppy.c
+else
+BLOCK_MODULE_OBJS := $(MODULES) floppy.o
 endif
 
 ifdef CONFIG_CDU31A

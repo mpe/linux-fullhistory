@@ -10,22 +10,19 @@
    stack during a system call. */
 
 struct pt_regs {
-	unsigned long ps;    /* previous supervisor, same as alpha I believe */
+	unsigned long psr;   /* for condition codes */
 	unsigned long pc;    /* current and next program counter */
 	unsigned long npc;
-	unsigned long sp;    /* stack and frame pointer */
-	unsigned long fp;
-	unsigned long psr;   /* for condition codes */
-	unsigned long nuwin; /* number of user windows */
+	unsigned long y;
 	/* not sure yet whether all regs are necessary
 	 * but this is how it is traditionally done on the sparc.
 	 */
-	unsigned long u_regs[24*16];
-	unsigned long f_regs[64];    /* yuck yuck yuck */
+	unsigned long u_regs[16]; /* globals and ins */
 };
 
 #ifdef __KERNEL__
-#define user_mode(regs) (0x0)  /* if previous supervisor is 0, came from user */
+/* if previous supervisor is 0, came from user */
+#define user_mode(regs) (0x0)
 extern void show_regs(struct pt_regs *);
 #endif
 

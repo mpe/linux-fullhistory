@@ -54,6 +54,9 @@
 			     512 : 128 << FD_SIZECODE(floppy) )
 #define FD_PERP 0x40
 
+#define FD_STRETCH 1
+#define FD_SWAPSIDES 2
+
 #ifndef __ASSEMBLY__
 /* the following structure is used by FDSETPRM, FDDEFPRM and FDGETPRM */
 struct floppy_struct {
@@ -184,7 +187,8 @@ struct floppy_drive_struct {
   int fd_device;
   int last_checked; /* when was the drive last checked for a disk change? */
 
-
+  char *dmabuf;
+  int bufblocks;
 };
 
 struct floppy_write_errors {

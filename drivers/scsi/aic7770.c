@@ -1,5 +1,5 @@
 /*
- * Adaptec 274x device driver for Linux.
+ * Adaptec 274x/284x/294x device driver for Linux.
  * Copyright (c) 1994 The University of Calgary Department of Computer Science.
  * 
  * This program is free software; you can redistribute it and/or modify

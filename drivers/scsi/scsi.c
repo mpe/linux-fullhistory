@@ -1900,7 +1900,7 @@ int scsi_free(void *obj, unsigned int len)
 
   save_flags(flags);
   cli();
-  if(dma_malloc_freelist[page] & (mask << sector) != (mask<<sector))
+  if((dma_malloc_freelist[page] & (mask << sector)) != (mask<<sector))
     panic("Trying to free unused memory");
 
   dma_free_sectors += nbits;

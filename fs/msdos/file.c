@@ -247,7 +247,7 @@ int msdos_file_read(
 					filp->f_pos = inode->i_size;
 					break;
 				}else if (ch != '\r'){
-					put_fs_byte(ch,buf++);
+					put_user(ch,buf++);
 				}
 			}
 		}
@@ -330,7 +330,7 @@ int msdos_file_write(
 				carry = 0;
 			}
 			for (size = 0; size < count && left; size++) {
-				if ((ch = get_fs_byte(buf++)) == '\n') {
+				if ((ch = get_user(buf++)) == '\n') {
 					*to++ = '\r';
 					left--;
 				}

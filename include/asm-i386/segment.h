@@ -15,7 +15,7 @@
  * pointer type..
  */
 #define put_user(x,ptr) __put_user((unsigned long)(x),(ptr),sizeof(*(ptr)))
-#define get_user(ptr) __get_user((ptr),sizeof(*(ptr)))
+#define get_user(ptr) ((__typeof__(*(ptr)))__get_user((ptr),sizeof(*(ptr))))
 
 /*
  * This is a silly but good way to make sure that
@@ -127,21 +127,27 @@ static inline void put_user_long(unsigned long val,int * addr)
 
 static inline void __generic_memcpy_tofs(void * to, const void * from, unsigned long n)
 {
-__asm__("cld\n\t"
-	"push %%es\n\t"
-	"push %%fs\n\t"
-	"pop %%es\n\t"
-	"testb $1,%%cl\n\t"
-	"je 1f\n\t"
-	"movsb\n"
-	"1:\ttestb $2,%%cl\n\t"
-	"je 2f\n\t"
-	"movsw\n"
-	"2:\tshrl $2,%%ecx\n\t"
-	"rep ; movsl\n\t"
-	"pop %%es"
-	: /* no outputs */
-	:"c" (n),"D" ((long) to),"S" ((long) from)
+    __asm__ volatile
+	("	cld
+		push %%es
+		movw %%fs,%%cx
+		movw %%cx,%%es
+		cmpl $3,%0
+		jbe 1f
+		movl %%edi,%%ecx
+		negl %%ecx
+		andl $3,%%ecx
+		subl %%ecx,%0
+		rep; movsb
+		movl %0,%%ecx
+		shrl $2,%%ecx
+		rep; movsl
+		andl $3,%0
+	1:	movl %0,%%ecx
+		rep; movsb
+		pop %%es"
+	:"=abd" (n)
+	:"0" (n),"D" ((long) to),"S" ((long) from)
 	:"cx","di","si");
 }
 
@@ -210,18 +216,24 @@ __asm__("cld\n\t" \
 
 static inline void __generic_memcpy_fromfs(void * to, const void * from, unsigned long n)
 {
-__asm__("cld\n\t"
-	"testb $1,%%cl\n\t"
-	"je 1f\n\t"
-	"fs ; movsb\n"
-	"1:\ttestb $2,%%cl\n\t"
-	"je 2f\n\t"
-	"fs ; movsw\n"
-	"2:\tshrl $2,%%ecx\n\t"
-	"rep ; fs ; movsl"
-	: /* no outputs */
-	:"c" (n),"D" ((long) to),"S" ((long) from)
-	:"cx","di","si","memory");
+    __asm__ volatile
+	("	cld
+		cmpl $3,%0
+		jbe 1f
+		movl %%edi,%%ecx
+		negl %%ecx
+		andl $3,%%ecx
+		subl %%ecx,%0
+		fs; rep; movsb
+		movl %0,%%ecx
+		shrl $2,%%ecx
+		fs; rep; movsl
+		andl $3,%0
+	1:	movl %0,%%ecx
+		fs; rep; movsb"
+	:"=abd" (n)
+	:"0" (n),"D" ((long) to),"S" ((long) from)
+	:"cx","di","si", "memory");
 }
 
 static inline void __constant_memcpy_fromfs(void * to, const void * from, unsigned long n)

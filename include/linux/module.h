@@ -85,7 +85,7 @@ extern int register_symtab(struct symbol_table *);
 /*
  * The first word of the module contains the use count.
  */
-#define GET_USE_COUNT(module)	(* (int *) (module)->addr)
+#define GET_USE_COUNT(module)	(* (long *) (module)->addr)
 /*
  * define the count variable, and usage macros.
  */

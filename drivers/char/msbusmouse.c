@@ -109,13 +109,13 @@ static int read_mouse(struct inode * inode, struct file * file, char * buffer, i
 		return -EINVAL;
 	if (!mouse.ready)
 		return -EAGAIN;
-	put_fs_byte(mouse.buttons | 0x80, buffer);
+	put_user(mouse.buttons | 0x80, buffer);
 	dx = mouse.dx < -127 ? -127 : mouse.dx > 127 ?  127 :  mouse.dx;
 	dy = mouse.dy < -127 ?  127 : mouse.dy > 127 ? -127 : -mouse.dy;
-	put_fs_byte((char)dx, buffer + 1);
-	put_fs_byte((char)dy, buffer + 2);
+	put_user((char)dx, buffer + 1);
+	put_user((char)dy, buffer + 2);
 	for (i = 3; i < count; i++)
-		put_fs_byte(0x00, buffer + i);
+		put_user(0x00, buffer + i);
 	mouse.dx -= dx;
 	mouse.dy += dy;
 	mouse.ready = 0;

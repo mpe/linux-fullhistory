@@ -88,7 +88,7 @@ static inline void unixify_to_fs(char * outbuf, char * buffer, int chars,
 			if(mode == ISOFS_FILE_TEXT_M) outchar = 0x0a;
 			if(mode == ISOFS_FILE_TEXT) outchar = ' ';
 		}
-		put_fs_byte(outchar, outbuf++);
+		put_user(outchar, outbuf++);
 		buffer++;
 	}
 }
@@ -240,7 +240,7 @@ static int isofs_file_read(struct inode * inode, struct file * filp, char * buf,
 		    buf += chars;
 		  } else {
 		    while (chars-->0)
-		      put_fs_byte(0,buf++);
+		      put_user(0,buf++);
 		  }
 		  offset = 0;
 		  if (++bhe == &buflist[NBUF])

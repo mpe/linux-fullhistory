@@ -342,7 +342,7 @@ ne_reset_8390(struct device *dev)
 	    printk("%s: ne_reset_8390() did not complete.\n", dev->name);
 	    break;
 	}
-    outb_p(ENISR_RESET, NE_BASE + NE_RESET);	/* Ack intr. */
+    outb_p(ENISR_RESET, NE_BASE + EN0_ISR);	/* Ack intr. */
 }
 
 /* Block input and output, similar to the Crynwr packet driver.  If you

@@ -191,6 +191,6 @@ static int proc_readlink(struct inode * inode, char * buffer, int buflen)
 		buflen = i;
 	i = 0;
 	while (i < buflen)
-		put_fs_byte(buf[i++],buffer++);
+		put_user(buf[i++],buffer++);
 	return i;
 }

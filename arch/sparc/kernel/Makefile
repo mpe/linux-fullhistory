@@ -18,15 +18,15 @@
 .S.o:
 	$(CC) -D__ASSEMBLY__ -ansi -c $< -o $*.o
 
-OBJS  = entry.o traps.o irq.o process.o promops.o signal.o ioport.o setup.o \
-	idprom.o probe.o
+OBJS  = entry.o traps.o irq.o process.o signal.o ioport.o setup.o \
+	idprom.o probe.o mp.o c_mp.o
 
 all: kernel.o head.o
 
 head.o: head.s
 
-head.s: head.S $(TOPDIR)/include/asm-sparc/head.h
-	$(CPP) -D__ASSEMBLY__ -ansi -o $*.s $<
+head.s: head.S
+	$(CPP) -D__KERNEL__ -D__ASSEMBLY__ -ansi -o $*.s $<
 
 kernel.o: $(OBJS)
 	$(LD) -r -o kernel.o $(OBJS)
@@ -34,6 +34,7 @@ kernel.o: $(OBJS)
 
 dep:
 	$(CPP) -M *.c > .depend
+	$(CPP) -M -D__ASSEMBLY__ -ansi *.S >>.depend
 
 dummy:
 

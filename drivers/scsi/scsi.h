@@ -349,7 +349,11 @@ struct scatterlist {
      unsigned int length;
      };
 
-#define ISA_DMA_THRESHOLD (0x00ffffff)
+#ifdef __alpha__
+# define ISA_DMA_THRESHOLD (~0UL)
+#else
+# define ISA_DMA_THRESHOLD (0x00ffffff)
+#endif
 #define CONTIGUOUS_BUFFERS(X,Y) ((X->b_data+X->b_size) == Y->b_data)
 
 

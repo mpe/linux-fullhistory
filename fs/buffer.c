@@ -1340,8 +1340,12 @@ static int maybe_shrink_lav_buffers(int size)
  * Priority tells the routine how hard to try to shrink the
  * buffers: 3 means "don't bother too much", while a value
  * of 0 means "we'd better get some free pages now".
+ *
+ * "limit" is meant to limit the shrink-action only to pages
+ * that are in the 0 - limit address range, for DMA re-allocations.
+ * We ignore that right now.
  */
-int shrink_buffers(unsigned int priority)
+int shrink_buffers(unsigned int priority, unsigned long limit)
 {
 	if (priority < 2) {
 		sync_buffers(0,0);

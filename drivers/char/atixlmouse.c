@@ -128,19 +128,19 @@ static int read_mouse(struct inode * inode, struct file * file, char * buffer, i
 		return -EAGAIN;
 	ATIXL_MSE_DISABLE_UPDATE();
 	/* Allowed interrupts to occur during data gathering - shouldn't hurt */
-	put_fs_byte((char)(~mouse.latch_buttons&7) | 0x80 , buffer);
+	put_user((char)(~mouse.latch_buttons&7) | 0x80 , buffer);
 	if (mouse.dx < -127)
 		mouse.dx = -127;
 	if (mouse.dx > 127)
 		mouse.dx =  127;
-	put_fs_byte((char)mouse.dx, buffer + 1);
+	put_user((char)mouse.dx, buffer + 1);
 	if (mouse.dy < -127)
 		mouse.dy = -127;
 	if (mouse.dy > 127)
 		mouse.dy =  127;
-	put_fs_byte((char)-mouse.dy, buffer + 2);
+	put_user((char)-mouse.dy, buffer + 2);
 	for(i = 3; i < count; i++)
-		put_fs_byte(0x00, buffer + i);
+		put_user(0x00, buffer + i);
 	mouse.dx = 0;
 	mouse.dy = 0;
 	mouse.latch_buttons = mouse.buttons;

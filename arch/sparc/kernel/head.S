@@ -1,52 +1,53 @@
-/* boot.S: The initial boot code for the Sparc port of Linux.
-
-   Copyright (C) 1994 David S. Miller (davem@caip.rutgers.edu)
-
-           This file has to serve three purposes.
-
-	   1) determine the prom-version and cpu/architecture
-	   2) print enough useful info before we start to execute
-	      c-code that I can possibly begin to debug things
-	   3) Hold the vector of trap entry points
-
-   The Sparc offers many challenges to kernel design. Here I will
-   document those I have come across thus far. Upon bootup the boot
-   prom loads your a.out image into memory. This memory the prom has
-   already mapped for you in two places, however as far as I can tell
-   the virtual address cache is not turned on although the MMU is
-   translating things. You get loaded at 0x4000 exactly and you are
-   aliased to 0xf8004000 with the appropriate mmu entries. So, when
-   you link a boot-loadable object you want to do something like:
-
-        ld -e start -Ttext 4000 -o mykernel myobj1.o myobj2.o ....
-
-   to produce a proper image.
-
-   At boot time you are given (as far as I can tell at this time)
-   one key to figure out what machine you are one and what devices
-   are available. The prom when it loads you leaves a pointer to
-   the 'rom vector' in register %o0 right before it jumps to your
-   starting address. This is a pointer to a struct that is full of
-   pointer to functions (ie. printf, halt, reboot), pointers to
-   linked lists (ie. memory mappings), and pointer to empirical
-   constants (ie. stdin and stdout magic cookies + rom version).
-   Starting with this piece of information you can figure out 
-   just about anything you want about the machine you are on.
-
-   Although I don't use it now, if you are on a Multiprocessor and
-   therefore a v3 or above prom, register %o2 at boot contains a
-   function pointer you must call before you proceed to invoke the
-   other cpu's on the machine. I have no idea what kind of magic this
-   is, give me time.
-*/
+/* head.S: The initial boot code for the Sparc port of Linux.
+ *
+ * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
+ *
+ *         This file has to serve three purposes.
+ *
+ *	   1) determine the prom-version and cpu/architecture
+ *	   2) print enough useful info before we start to execute
+ *	      c-code that I can possibly begin to debug things
+ *	   3) Hold the vector of trap entry points
+ *
+ *  The Sparc offers many challenges to kernel design. Here I will
+ * document those I have come across thus far. Upon bootup the boot
+ * prom loads your a.out image into memory. This memory the prom has
+ * already mapped for you in two places, however as far as I can tell
+ * the virtual address cache is not turned on although the MMU is
+ * translating things. You get loaded at 0x4000 exactly and you are
+ * aliased to 0xf8004000 with the appropriate mmu entries. So, when
+ * you link a boot-loadable object you want to do something like
+ *
+ *      ld -e start -Ttext 4000 -o mykernel myobj1.o myobj2.o ....
+ *
+ * to produce a proper image.
+ *
+ * At boot time you are given (as far as I can tell at this time)
+ * one key to figure out what machine you are one and what devices
+ * are available. The prom when it loads you leaves a pointer to
+ * the 'rom vector' in register %o0 right before it jumps to your
+ * starting address. This is a pointer to a struct that is full of
+ * pointer to functions (ie. printf, halt, reboot), pointers to
+ * linked lists (ie. memory mappings), and pointer to empirical
+ * constants (ie. stdin and stdout magic cookies + rom version).
+ * Starting with this piece of information you can figure out 
+ * just about anything you want about the machine you are on.
+ *
+ * Although I don't use it now, if you are on a Multiprocessor and
+ * therefore a v3 or above prom, register %o2 at boot contains a
+ * function pointer you must call before you proceed to invoke the
+ * other cpu's on the machine. I have no idea what kind of magic this
+ * is, give me time.
+ */
 
 #include <asm/cprefix.h>
 #include <asm/head.h>
-#include <asm/version.h>
+#include <linux/version.h>
 #include <asm/asi.h>
 #include <asm/contregs.h>
 #include <asm/psr.h>
 #include <asm/page.h>
+#include <asm/kdebug.h>
 
 	.data
 
@@ -54,6 +55,7 @@
 
         .globl  C_LABEL(intstack)
         .globl  C_LABEL(eintstack)
+	.align 4
 C_LABEL(intstack):
         .skip   4 * PAGE_SIZE                ! 16k = 128 128-byte stack frames
 C_LABEL(eintstack):
@@ -61,18 +63,23 @@ C_LABEL(eintstack):
 
 
 /* 
-   The following are used with the prom_vector node-ops to figure out
-   the cpu-type 
-*/
+ * The following are used with the prom_vector node-ops to figure out
+ * the cpu-type 
+ */
 
+	.align 4
         .globl  C_LABEL(cputyp)
-
 C_LABEL(cputyp):
         .word   1
 
+	.align 4
+	.globl C_LABEL(cputypval)
 C_LABEL(cputypval):
 	.asciz "sun4c"
 	.ascii "     "
+
+C_LABEL(cputypvalend):
+C_LABEL(cputypvallen) = C_LABEL(cputypvar) - C_LABEL(cputypval)
 
 	.align 4
 /*
@@ -86,142 +93,61 @@ C_LABEL(cputypval):
 C_LABEL(cputypvar):
 	.asciz "compatability"
 
-C_LABEL(cputypvallen) = C_LABEL(cputypvar) - C_LABEL(cputypval)
-
-/* This hold the prom-interface-version number for either v0 or v2. */
-
+/* Tested on SS-5, SS-10. Probably someone at Sun applied a spell-checker. --P3 */
 	.align 4
-	.globl 	C_LABEL(prom_iface_vers)
-
-C_LABEL(prom_iface_vers):	.skip 4
+C_LABEL(cputypvar_sun4m):
+	.asciz "compatible"
 
 /* WARNING: evil messages follow */
 
 	.align 4
 
 sun4_notsup:
-	.asciz  "Sparc-Linux: sun4 support not implemented yet\n\n"
-	.align 4
-
-sun4m_notsup:
-        .asciz  "Sparc-Linux: sun4m support does not exist\n\n"
+	.asciz  "Sparc-Linux sun4 support not implemented yet\n\n"
 	.align 4
 
 sun4d_notsup:
-        .asciz  "Sparc-Linux: sun4d support does not exist\n\n"
+        .asciz  "Sparc-Linux sun4d support does not exist\n\n"
 	.align 4
 
-you_lose:
-	.asciz	"You lose..... Thanks for playing...\n"
+sun4e_notsup:
+        .asciz  "Sparc-Linux sun4e support does not exist\n\n"
 	.align 4
 
-
-	.globl boot_msg
-
-/* memory descriptor property strings, v2 = yuk yuk yuk  */
-/* XXX how to figure out vm mapped by prom? May have to scan magic addresses */
-
-mem_prop_physavail:	.asciz "available"
-	
-			.align 4
-mem_prop_phystot:	.asciz "reg"
-
-/* v2_memory descriptor struct kludged here for assembly, if it ain't broke */
-
-		.align 4
-v2_mem_struct: 	.skip 0xff
-
-			.align 4
-v2_printf_physavail:	.asciz "Physical Memory Available: 0x%x bytes"
-	
-			.align 4
-v2_printf_phystot:	.asciz "Physical Memory: 0x%x bytes"
-
-/* A place to store property strings returned from the prom 'node' funcs */
-
-			.align 4
-prop_string_buf:	.skip 32
-
-		.align 4
-prop_name:	.asciz "name"
-	
-		.align 4
-current_node:	.skip 4
-
-
-/* nice little boot message */
-
-		.align 4
-boot_msg:	
-	.ascii "Booting Sparc-Linux V0.00PRE-ALPHA "
-	.ascii WHO_COMPILED_ME 
-	.ascii "\r\n"
+sun4u_notsup:
+        .asciz  "Sparc-Linux sun4u support does not exist\n\n"
 	.align 4
 
-	.globl boot_msg2
-
-boot_msg2:
-	.asciz "Booting Sparclinux V0.00 PRE-ALPHA on a (SUN4C)\r\n\n"
-
-	.align 4
-
-pstring1:
-	.asciz "Prom Magic Cookie: 0x%x  \n"
-	.align 4
-
-pstring2:
-	.asciz "Interface Version: v%d\n"
-	.align 4
-
-pstring3:
-	.asciz "Prom Revision: V%d\n\n"
-	.align 4
-
-pstring4:
-	.ascii "Total Physical Memory: %d bytes\nVM mapped by Prom: %d bytes\n"
-	.asciz "Available Physical Memory: %d bytes\n"
-	.align 4
-
+/* Ok, things start to get interesting. We get linked such that 'start'
+ * is the entry symbol. However, it is real low in kernel address space
+ * and as such a nifty place to place the trap table. We achieve this goal
+ * by just jumping to 'gokernel' for the first trap's entry as the sparc
+ * never receives the zero trap as it is real special (hw reset).
+ *
+ * Each trap entry point is the size of 4 sparc instructions (or 4 bytes
+ * * 4 insns = 16 bytes). There are 128 hardware traps (some undefined
+ * or unimplemented) and 128 software traps (sys-calls, etc.).
+ *
+ * One of the instructions must be a branch. More often than not this
+ * will be to a trap handler entry point because it is completely
+ * impossible to handle any trap in 4 insns. I welcome anyone to 
+ * challenge this theory. :-)
+ *
+ * On entry into this table the hardware has loaded the program counter
+ * at which the trap occurred into register %l1 and the next program
+ * counter into %l2, this way we can return from the trap with a simple
+ *
+ *         jmp %l1; rett %l2  ! poof...
+ *
+ * after properly servicing the trap. It wouldn't be a bad idea to load
+ * some more information into the local regs since we have technically
+ * 2 or 3 instructions to play with besides the jmp to the 'real' trap
+ * handler (one can even go in the delay slot). For now I am going to put
+ * the %psr (processor status register) and the trap-type value in %l0
+ * and %l3 respectively. Also, for IRQ's I'll put the level in %l4.
+ */
 
 	.text
-
-        .globl  C_LABEL(msgbuf)
-msgbufsize = PAGE_SIZE                       ! 1 page for msg buffer
-C_LABEL(msgbuf) =  PAGE_SIZE
-
-
-IE_reg_addr = C_LABEL(msgbuf) + msgbufsize   ! this page not used; points to IEreg
-
-	
-/* Ok, things start to get interesting. We get linked such that 'start'
-   is the entry symbol. However, it is real low in kernel address space
-   and as such a nifty place to place the trap table. We achieve this goal
-   by just jumping to 'gokernel' for the first trap's entry as the sparc
-   never receives the zero trap as it is real special (hw reset).
-
-   Each trap entry point is the size of 4 sparc instructions (or 4 bytes
-   * 4 insns = 16 bytes). There are 128 hardware traps (some undefined
-   or unimplemented) and 128 software traps (sys-calls, etc.).
-
-   One of the instructions must be a branch. More often than not this
-   will be to a trap handler entry point because it is completely
-   impossible to handle any trap in 4 insns. I welcome anyone to 
-   challenge this theory. :-)
-
-   On entry into this table the hardware has loaded the program counter
-   at which the trap occurred into register %l1 and the next program
-   counter into %l2, this way we can return from the trap with a simple
-
-           jmp %l1; rett %l2  ! poof...
-
-   after properly servicing the trap. It wouldn't be a bad idea to load
-   some more information into the local regs since we have technically
-   2 or 3 instructions to play with besides the jmp to the 'real' trap
-   handler (one can even go in the delay slot). For now I am going to put
-   the %psr (processor status register) and the trap-type value in %l0
-   and %l3 respectively. Also, for IRQ's I'll put the level in %l4.
-
-*/
 
 	.globl	start
 	.globl 	_start  /* warning, solaris hack */
@@ -229,358 +155,678 @@ IE_reg_addr = C_LABEL(msgbuf) + msgbufsize   ! this page not used; points to IEr
 _start:   /* danger danger */
 start:
 C_LABEL(trapbase):
-	b gokernel; nop; nop; nop;	! we never get trap #0 it is special 
+/* XXX Grrr, this table is basically sun4c specific, sort of... XXX */
+/* We get control passed to us here at t_zero. */
+t_zero:	b gokernel; nop; nop; nop;
 
-	TRAP_ENTRY(0x1, my_trap_handler) /* Instruction Access Exception */
-	TRAP_ENTRY(0x2, my_trap_handler) /* Illegal Instruction */
-	TRAP_ENTRY(0x3, my_trap_handler) /* Privileged Instruction */
-	TRAP_ENTRY(0x4, my_trap_handler) /* Floating Point Disabled */
-	TRAP_ENTRY(0x5, spill_window_entry)   /* Window Overflow */
-	TRAP_ENTRY(0x6, fill_window_entry)  /* Window Underflow */
-	TRAP_ENTRY(0x7, my_trap_handler) /* Memory Address Not Aligned */
-	TRAP_ENTRY(0x8, my_trap_handler) /* Floating Point Exception */
-	TRAP_ENTRY(0x9, my_trap_handler) /* Data Miss Exception */
-	TRAP_ENTRY(0xa, my_trap_handler) /* Tagged Instruction Overflow */
-	TRAP_ENTRY(0xb, my_trap_handler) /* Watchpoint Detected */
-	TRAP_ENTRY(0xc, my_trap_handler) /* Undefined... */
-	TRAP_ENTRY(0xd, my_trap_handler) /* Undefined... */
-	TRAP_ENTRY(0xe, my_trap_handler) /* Undefined... */
-	TRAP_ENTRY(0xf, my_trap_handler) /* Undefined... */
-	TRAP_ENTRY(0x10, my_trap_handler) /* Undefined... */
+t_tflt:	TRAP_ENTRY(0x1, sparc_text_fault)    /* Inst. Access Exception        */
+t_bins:	TRAP_ENTRY(0x2, bad_instruction)     /* Illegal Instruction           */
+t_pins:	TRAP_ENTRY(0x3, bad_instruction)     /* Privileged Instruction        */
+t_fpd:	TRAP_ENTRY(0x4, fpd_trap_handler)    /* Floating Point Disabled       */
+t_wovf:	TRAP_ENTRY(0x5, spill_window_entry)  /* Window Overflow               */
+t_wunf:	TRAP_ENTRY(0x6, fill_window_entry)   /* Window Underflow              */
+t_mna:	TRAP_ENTRY(0x7, mna_handler)         /* Memory Address Not Aligned    */
+t_fpe:	TRAP_ENTRY(0x8, fpe_trap_handler)    /* Floating Point Exception      */
+t_dflt:	TRAP_ENTRY(0x9, sparc_data_fault)    /* Data Miss Exception           */
+t_tio:	TRAP_ENTRY(0xa, do_tag_overflow)     /* Tagged Instruction Ovrflw     */
+t_wpt:	TRAP_ENTRY(0xb, do_watchpoint)       /* Watchpoint Detected           */
+t_badc:	TRAP_ENTRY(0xc, bad_trap_handler)    /* Undefined...                  */
+t_badd:	TRAP_ENTRY(0xd, bad_trap_handler)    /* Undefined...                  */
+t_bade:	TRAP_ENTRY(0xe, bad_trap_handler)    /* Undefined...                  */
+t_badf:	TRAP_ENTRY(0xf, bad_trap_handler)    /* Undefined...                  */
+t_bad10:TRAP_ENTRY(0x10, bad_trap_handler)   /* Undefined...                  */
+t_irq1:	TRAP_ENTRY_INTERRUPT(1)	             /* IRQ Software/SBUS Level 1     */
+t_irq2:	TRAP_ENTRY_INTERRUPT(2)              /* IRQ SBUS Level 2              */
+t_irq3:	TRAP_ENTRY_INTERRUPT(3)              /* IRQ SCSI/DMA/SBUS Level 3     */
+t_irq4:	TRAP_ENTRY_INTERRUPT(4)              /* IRQ Software Level 4          */
+t_irq5:	TRAP_ENTRY_INTERRUPT(5)              /* IRQ SBUS/Ethernet Level 5     */
+t_irq6:	TRAP_ENTRY_INTERRUPT(6)              /* IRQ Software Level 6          */
+t_irq7:	TRAP_ENTRY_INTERRUPT(7)              /* IRQ Video/SBUS Level 5        */
+t_irq8:	TRAP_ENTRY_INTERRUPT(8)              /* IRQ SBUS Level 6              */
+t_irq9:	TRAP_ENTRY_INTERRUPT(9)              /* IRQ SBUS Level 7              */
+t_irq10:TRAP_ENTRY_TIMER                     /* IRQ Timer #1 (one we use)     */
+t_irq11:TRAP_ENTRY_INTERRUPT(11)             /* IRQ Floppy Intr.              */
+t_irq12:TRAP_ENTRY_INTERRUPT(12)             /* IRQ Zilog serial chip         */
+t_irq13:TRAP_ENTRY_INTERRUPT(13)             /* IRQ Audio Intr.               */
+t_irq14:TRAP_ENTRY_INTERRUPT(14)             /* IRQ Timer #2                  */
+t_nmi:	NMI_TRAP                             /* Level 15 (NMI)                */
+t_racc:	TRAP_ENTRY(0x20, do_reg_access)      /* General Register Access Error */
+t_iacce:TRAP_ENTRY(0x21, do_iacc_error)      /* Instruction Access Error      */
+t_bad22:TRAP_ENTRY(0x22, bad_trap_handler)   /* Undefined...                  */
+t_bad23:TRAP_ENTRY(0x23, bad_trap_handler)   /* Undefined...                  */
+t_cpdis:TRAP_ENTRY(0x24, do_cp_disabled)     /* Co-Processor Disabled         */
+t_uflsh:TRAP_ENTRY(0x25, do_bad_flush)       /* Unimplemented FLUSH inst.     */
+t_bad26:TRAP_ENTRY(0x26, bad_trap_handler)   /* Undefined...                  */
+t_bad27:TRAP_ENTRY(0x27, bad_trap_handler)   /* Undefined...                  */
+t_cpexc:TRAP_ENTRY(0x28, do_cp_exception)    /* Co-Processor Exception        */
+t_dacce:TRAP_ENTRY(0x29, do_dacc_error)      /* Data Access Error             */
+t_hwdz:	TRAP_ENTRY(0x2a, do_hw_divzero)      /* Division by zero, you lose... */
+t_dserr:TRAP_ENTRY(0x2b, do_dstore_err)      /* Data Store Error              */
+t_daccm:TRAP_ENTRY(0x2c, do_dacc_mmu_miss)   /* Data Access MMU-Miss          */
+t_bad2d:TRAP_ENTRY(0x2d, bad_trap_handler)   /* Undefined...                  */
+t_bad2e:TRAP_ENTRY(0x2e, bad_trap_handler)   /* Undefined...                  */
+t_bad2f:TRAP_ENTRY(0x2f, bad_trap_handler)   /* Undefined...                  */
+t_bad30:TRAP_ENTRY(0x30, bad_trap_handler)   /* Undefined...                  */
+t_bad31:TRAP_ENTRY(0x31, bad_trap_handler)   /* Undefined...                  */
+t_bad32:TRAP_ENTRY(0x32, bad_trap_handler)   /* Undefined...                  */
+t_bad33:TRAP_ENTRY(0x33, bad_trap_handler)   /* Undefined...                  */
+t_bad34:TRAP_ENTRY(0x34, bad_trap_handler)   /* Undefined...                  */
+t_bad35:TRAP_ENTRY(0x35, bad_trap_handler)   /* Undefined...                  */
+t_bad36:TRAP_ENTRY(0x36, bad_trap_handler)   /* Undefined...                  */
+t_bad37:TRAP_ENTRY(0x37, bad_trap_handler)   /* Undefined...                  */
+t_bad38:TRAP_ENTRY(0x38, bad_trap_handler)   /* Undefined...                  */
+t_bad39:TRAP_ENTRY(0x39, bad_trap_handler)   /* Undefined...                  */
+t_bad3a:TRAP_ENTRY(0x3a, bad_trap_handler)   /* Undefined...                  */
+t_bad3b:TRAP_ENTRY(0x3b, bad_trap_handler)   /* Undefined...                  */
+t_iaccm:TRAP_ENTRY(0x3c, do_iacc_mmu_miss)   /* Instruction Access MMU-Miss   */
+t_bad3d:TRAP_ENTRY(0x3d, bad_trap_handler)   /* Undefined...                  */
+t_bad3e:TRAP_ENTRY(0x3e, bad_trap_handler)   /* Undefined...                  */
+t_bad3f:TRAP_ENTRY(0x3f, bad_trap_handler)   /* Undefined...                  */
+t_bad40:TRAP_ENTRY(0x40, bad_trap_handler)   /* Undefined...                  */
+t_bad41:TRAP_ENTRY(0x41, bad_trap_handler)   /* Undefined...                  */
+t_bad42:TRAP_ENTRY(0x42, bad_trap_handler)   /* Undefined...                  */
+t_bad43:TRAP_ENTRY(0x43, bad_trap_handler)   /* Undefined...                  */
+t_bad44:TRAP_ENTRY(0x44, bad_trap_handler)   /* Undefined...                  */
+t_bad45:TRAP_ENTRY(0x45, bad_trap_handler)   /* Undefined...                  */
+t_bad46:TRAP_ENTRY(0x46, bad_trap_handler)   /* Undefined...                  */
+t_bad47:TRAP_ENTRY(0x47, bad_trap_handler)   /* Undefined...                  */
+t_bad48:TRAP_ENTRY(0x48, bad_trap_handler)   /* Undefined...                  */
+t_bad49:TRAP_ENTRY(0x49, bad_trap_handler)   /* Undefined...                  */
+t_bad4a:TRAP_ENTRY(0x4a, bad_trap_handler)   /* Undefined...                  */
+t_bad4b:TRAP_ENTRY(0x4b, bad_trap_handler)   /* Undefined...                  */
+t_bad4c:TRAP_ENTRY(0x4c, bad_trap_handler)   /* Undefined...                  */
+t_bad4d:TRAP_ENTRY(0x4d, bad_trap_handler)   /* Undefined...                  */
+t_bad4e:TRAP_ENTRY(0x4e, bad_trap_handler)   /* Undefined...                  */
+t_bad4f:TRAP_ENTRY(0x4f, bad_trap_handler)   /* Undefined...                  */
+t_bad50:TRAP_ENTRY(0x50, bad_trap_handler)   /* Undefined...                  */
+t_bad51:TRAP_ENTRY(0x51, bad_trap_handler)   /* Undefined...                  */
+t_bad52:TRAP_ENTRY(0x52, bad_trap_handler)   /* Undefined...                  */
+t_bad53:TRAP_ENTRY(0x53, bad_trap_handler)   /* Undefined...                  */
+t_bad54:TRAP_ENTRY(0x54, bad_trap_handler)   /* Undefined...                  */
+t_bad55:TRAP_ENTRY(0x55, bad_trap_handler)   /* Undefined...                  */
+t_bad56:TRAP_ENTRY(0x56, bad_trap_handler)   /* Undefined...                  */
+t_bad57:TRAP_ENTRY(0x57, bad_trap_handler)   /* Undefined...                  */
+t_bad58:TRAP_ENTRY(0x58, bad_trap_handler)   /* Undefined...                  */
+t_bad59:TRAP_ENTRY(0x59, bad_trap_handler)   /* Undefined...                  */
+t_bad5a:TRAP_ENTRY(0x5a, bad_trap_handler)   /* Undefined...                  */
+t_bad5b:TRAP_ENTRY(0x5b, bad_trap_handler)   /* Undefined...                  */
+t_bad5c:TRAP_ENTRY(0x5c, bad_trap_handler)   /* Undefined...                  */
+t_bad5d:TRAP_ENTRY(0x5d, bad_trap_handler)   /* Undefined...                  */
+t_bad5e:TRAP_ENTRY(0x5e, bad_trap_handler)   /* Undefined...                  */
+t_bad5f:TRAP_ENTRY(0x5f, bad_trap_handler)   /* Undefined...                  */
+t_bad60:TRAP_ENTRY(0x60, bad_trap_handler)   /* Impl-Dep Exception            */
+t_bad61:TRAP_ENTRY(0x61, bad_trap_handler)   /* Impl-Dep Exception            */
+t_bad62:TRAP_ENTRY(0x62, bad_trap_handler)   /* Impl-Dep Exception            */
+t_bad63:TRAP_ENTRY(0x63, bad_trap_handler)   /* Impl-Dep Exception            */
+t_bad64:TRAP_ENTRY(0x64, bad_trap_handler)   /* Impl-Dep Exception            */
+t_bad65:TRAP_ENTRY(0x65, bad_trap_handler)   /* Impl-Dep Exception            */
+t_bad66:TRAP_ENTRY(0x66, bad_trap_handler)   /* Impl-Dep Exception            */
+t_bad67:TRAP_ENTRY(0x67, bad_trap_handler)   /* Impl-Dep Exception            */
+t_bad68:TRAP_ENTRY(0x68, bad_trap_handler)   /* Impl-Dep Exception            */
+t_bad69:TRAP_ENTRY(0x69, bad_trap_handler)   /* Impl-Dep Exception            */
+t_bad6a:TRAP_ENTRY(0x6a, bad_trap_handler)   /* Impl-Dep Exception            */
+t_bad6b:TRAP_ENTRY(0x6b, bad_trap_handler)   /* Impl-Dep Exception            */
+t_bad6c:TRAP_ENTRY(0x6c, bad_trap_handler)   /* Impl-Dep Exception            */
+t_bad6d:TRAP_ENTRY(0x6d, bad_trap_handler)   /* Impl-Dep Exception            */
+t_bad6e:TRAP_ENTRY(0x6e, bad_trap_handler)   /* Impl-Dep Exception            */
+t_bad6f:TRAP_ENTRY(0x6f, bad_trap_handler)   /* Impl-Dep Exception            */
+t_bad70:TRAP_ENTRY(0x70, bad_trap_handler)   /* Impl-Dep Exception            */
+t_bad71:TRAP_ENTRY(0x71, bad_trap_handler)   /* Impl-Dep Exception            */
+t_bad72:TRAP_ENTRY(0x72, bad_trap_handler)   /* Impl-Dep Exception            */
+t_bad73:TRAP_ENTRY(0x73, bad_trap_handler)   /* Impl-Dep Exception            */
+t_bad74:TRAP_ENTRY(0x74, bad_trap_handler)   /* Impl-Dep Exception            */
+t_bad75:TRAP_ENTRY(0x75, bad_trap_handler)   /* Impl-Dep Exception            */
+t_bad76:TRAP_ENTRY(0x76, bad_trap_handler)   /* Impl-Dep Exception            */
+t_bad77:TRAP_ENTRY(0x77, bad_trap_handler)   /* Impl-Dep Exception            */
+t_bad78:TRAP_ENTRY(0x78, bad_trap_handler)   /* Impl-Dep Exception            */
+t_bad79:TRAP_ENTRY(0x79, bad_trap_handler)   /* Impl-Dep Exception            */
+t_bad7a:TRAP_ENTRY(0x7a, bad_trap_handler)   /* Impl-Dep Exception            */
+t_bad7b:TRAP_ENTRY(0x7b, bad_trap_handler)   /* Impl-Dep Exception            */
+t_bad7c:TRAP_ENTRY(0x7c, bad_trap_handler)   /* Impl-Dep Exception            */
+t_bad7d:TRAP_ENTRY(0x7d, bad_trap_handler)   /* Impl-Dep Exception            */
+t_bad7e:TRAP_ENTRY(0x7e, bad_trap_handler)   /* Impl-Dep Exception            */
+t_bad7f:TRAP_ENTRY(0x7f, bad_trap_handler)   /* Impl-Dep Exception            */
+t_sunos:SUNOS_SYSCALL_TRAP                   /* SunOS System Call             */
+t_sbkpt:TRAP_ENTRY(0x81, bad_trap_handler)   /* Software Breakpoint           */
+t_divz:	TRAP_ENTRY(0x82, bad_trap_handler)   /* Divide by zero trap           */
+t_flwin:TRAP_ENTRY(0x83, bad_trap_handler)   /* Flush Windows Trap            */
+t_clwin:TRAP_ENTRY(0x84, bad_trap_handler)   /* Clean Windows Trap            */
+t_rchk:	TRAP_ENTRY(0x85, bad_trap_handler)   /* Range Check                   */
+t_funal:TRAP_ENTRY(0x86, bad_trap_handler)   /* Fix Unaligned Access Trap     */
+t_iovf:	TRAP_ENTRY(0x87, bad_trap_handler)   /* Integer Overflow Trap         */
+t_slowl:SOLARIS_SYSCALL_TRAP                 /* Slowaris System Call          */
+t_netbs:NETBSD_SYSCALL_TRAP                  /* Net-B.S. System Call          */
+t_bad8a:TRAP_ENTRY(0x8a, bad_trap_handler)   /* Software Trap                 */
+t_bad8b:TRAP_ENTRY(0x8b, bad_trap_handler)   /* Software Trap                 */
+t_bad8c:TRAP_ENTRY(0x8c, bad_trap_handler)   /* Software Trap                 */
+t_bad8d:TRAP_ENTRY(0x8d, bad_trap_handler)   /* Software Trap                 */
+t_bad8e:TRAP_ENTRY(0x8e, bad_trap_handler)   /* Software Trap                 */
+t_bad8f:TRAP_ENTRY(0x8f, bad_trap_handler)   /* Software Trap                 */
+t_linux:LINUX_SYSCALL_TRAP                   /* Linux System Call             */
+t_bad91:TRAP_ENTRY(0x91, bad_trap_handler)   /* Software Trap                 */
+t_bad92:TRAP_ENTRY(0x92, bad_trap_handler)   /* Software Trap                 */
+t_bad93:TRAP_ENTRY(0x93, bad_trap_handler)   /* Software Trap                 */
+t_bad94:TRAP_ENTRY(0x94, bad_trap_handler)   /* Software Trap                 */
+t_bad95:TRAP_ENTRY(0x95, bad_trap_handler)   /* Software Trap                 */
+t_bad96:TRAP_ENTRY(0x96, bad_trap_handler)   /* Software Trap                 */
+t_bad97:TRAP_ENTRY(0x97, bad_trap_handler)   /* Software Trap                 */
+t_bad98:TRAP_ENTRY(0x98, bad_trap_handler)   /* Software Trap                 */
+t_bad99:TRAP_ENTRY(0x99, bad_trap_handler)   /* Software Trap                 */
+t_bad9a:TRAP_ENTRY(0x9a, bad_trap_handler)   /* Software Trap                 */
+t_bad9b:TRAP_ENTRY(0x9b, bad_trap_handler)   /* Software Trap                 */
+t_bad9c:TRAP_ENTRY(0x9c, bad_trap_handler)   /* Software Trap                 */
+t_bad9d:TRAP_ENTRY(0x9d, bad_trap_handler)   /* Software Trap                 */
+t_bad9e:TRAP_ENTRY(0x9e, bad_trap_handler)   /* Software Trap                 */
+t_bad9f:TRAP_ENTRY(0x9f, bad_trap_handler)   /* Software Trap                 */
+t_getcc:GETCC_TRAP                           /* Get Condition Codes           */
+t_setcc:SETCC_TRAP                           /* Set Condition Codes           */
+t_bada2:TRAP_ENTRY(0xa2, bad_trap_handler)   /* Software Trap                 */
+t_bada3:TRAP_ENTRY(0xa3, bad_trap_handler)   /* Software Trap                 */
+t_bada4:TRAP_ENTRY(0xa4, bad_trap_handler)   /* Software Trap                 */
+t_bada5:TRAP_ENTRY(0xa5, bad_trap_handler)   /* Software Trap                 */
+t_bada6:TRAP_ENTRY(0xa6, bad_trap_handler)   /* Software Trap                 */
+t_bada7:TRAP_ENTRY(0xa7, bad_trap_handler)   /* Software Trap                 */
+t_bada8:TRAP_ENTRY(0xa8, bad_trap_handler)   /* Software Trap                 */
+t_bada9:TRAP_ENTRY(0xa9, bad_trap_handler)   /* Software Trap                 */
+t_badaa:TRAP_ENTRY(0xaa, bad_trap_handler)   /* Software Trap                 */
+t_badab:TRAP_ENTRY(0xab, bad_trap_handler)   /* Software Trap                 */
+t_badac:TRAP_ENTRY(0xac, bad_trap_handler)   /* Software Trap                 */
+t_badad:TRAP_ENTRY(0xad, bad_trap_handler)   /* Software Trap                 */
+t_badae:TRAP_ENTRY(0xae, bad_trap_handler)   /* Software Trap                 */
+t_badaf:TRAP_ENTRY(0xaf, bad_trap_handler)   /* Software Trap                 */
+t_badb0:TRAP_ENTRY(0xb0, bad_trap_handler)   /* Software Trap                 */
+t_badb1:TRAP_ENTRY(0xb1, bad_trap_handler)   /* Software Trap                 */
+t_badb2:TRAP_ENTRY(0xb2, bad_trap_handler)   /* Software Trap                 */
+t_badb3:TRAP_ENTRY(0xb3, bad_trap_handler)   /* Software Trap                 */
+t_badb4:TRAP_ENTRY(0xb4, bad_trap_handler)   /* Software Trap                 */
+t_badb5:TRAP_ENTRY(0xb5, bad_trap_handler)   /* Software Trap                 */
+t_badb6:TRAP_ENTRY(0xb6, bad_trap_handler)   /* Software Trap                 */
+t_badb7:TRAP_ENTRY(0xb7, bad_trap_handler)   /* Software Trap                 */
+t_badb8:TRAP_ENTRY(0xb8, bad_trap_handler)   /* Software Trap                 */
+t_badb9:TRAP_ENTRY(0xb9, bad_trap_handler)   /* Software Trap                 */
+t_badba:TRAP_ENTRY(0xba, bad_trap_handler)   /* Software Trap                 */
+t_badbb:TRAP_ENTRY(0xbb, bad_trap_handler)   /* Software Trap                 */
+t_badbc:TRAP_ENTRY(0xbc, bad_trap_handler)   /* Software Trap                 */
+t_badbd:TRAP_ENTRY(0xbd, bad_trap_handler)   /* Software Trap                 */
+t_badbe:TRAP_ENTRY(0xbe, bad_trap_handler)   /* Software Trap                 */
+t_badbf:TRAP_ENTRY(0xbf, bad_trap_handler)   /* Software Trap                 */
+t_badc0:TRAP_ENTRY(0xc0, bad_trap_handler)   /* Software Trap                 */
+t_badc1:TRAP_ENTRY(0xc1, bad_trap_handler)   /* Software Trap                 */
+t_badc2:TRAP_ENTRY(0xc2, bad_trap_handler)   /* Software Trap                 */
+t_badc3:TRAP_ENTRY(0xc3, bad_trap_handler)   /* Software Trap                 */
+t_badc4:TRAP_ENTRY(0xc4, bad_trap_handler)   /* Software Trap                 */
+t_badc5:TRAP_ENTRY(0xc5, bad_trap_handler)   /* Software Trap                 */
+t_badc6:TRAP_ENTRY(0xc6, bad_trap_handler)   /* Software Trap                 */
+t_badc7:TRAP_ENTRY(0xc7, bad_trap_handler)   /* Software Trap                 */
+t_badc8:TRAP_ENTRY(0xc8, bad_trap_handler)   /* Software Trap                 */
+t_badc9:TRAP_ENTRY(0xc9, bad_trap_handler)   /* Software Trap                 */
+t_badca:TRAP_ENTRY(0xca, bad_trap_handler)   /* Software Trap                 */
+t_badcb:TRAP_ENTRY(0xcb, bad_trap_handler)   /* Software Trap                 */
+t_badcc:TRAP_ENTRY(0xcc, bad_trap_handler)   /* Software Trap                 */
+t_badcd:TRAP_ENTRY(0xcd, bad_trap_handler)   /* Software Trap                 */
+t_badce:TRAP_ENTRY(0xce, bad_trap_handler)   /* Software Trap                 */
+t_badcf:TRAP_ENTRY(0xcf, bad_trap_handler)   /* Software Trap                 */
+t_badd0:TRAP_ENTRY(0xd0, bad_trap_handler)   /* Software Trap                 */
+t_badd1:TRAP_ENTRY(0xd1, bad_trap_handler)   /* Software Trap                 */
+t_badd2:TRAP_ENTRY(0xd2, bad_trap_handler)   /* Software Trap                 */
+t_badd3:TRAP_ENTRY(0xd3, bad_trap_handler)   /* Software Trap                 */
+t_badd4:TRAP_ENTRY(0xd4, bad_trap_handler)   /* Software Trap                 */
+t_badd5:TRAP_ENTRY(0xd5, bad_trap_handler)   /* Software Trap                 */
+t_badd6:TRAP_ENTRY(0xd6, bad_trap_handler)   /* Software Trap                 */
+t_badd7:TRAP_ENTRY(0xd7, bad_trap_handler)   /* Software Trap                 */
+t_badd8:TRAP_ENTRY(0xd8, bad_trap_handler)   /* Software Trap                 */
+t_badd9:TRAP_ENTRY(0xd9, bad_trap_handler)   /* Software Trap                 */
+t_badda:TRAP_ENTRY(0xda, bad_trap_handler)   /* Software Trap                 */
+t_baddb:TRAP_ENTRY(0xdb, bad_trap_handler)   /* Software Trap                 */
+t_baddc:TRAP_ENTRY(0xdc, bad_trap_handler)   /* Software Trap                 */
+t_baddd:TRAP_ENTRY(0xdd, bad_trap_handler)   /* Software Trap                 */
+t_badde:TRAP_ENTRY(0xde, bad_trap_handler)   /* Software Trap                 */
+t_baddf:TRAP_ENTRY(0xdf, bad_trap_handler)   /* Software Trap                 */
+t_bade0:TRAP_ENTRY(0xe0, bad_trap_handler)   /* Software Trap                 */
+t_bade1:TRAP_ENTRY(0xe1, bad_trap_handler)   /* Software Trap                 */
+t_bade2:TRAP_ENTRY(0xe2, bad_trap_handler)   /* Software Trap                 */
+t_bade3:TRAP_ENTRY(0xe3, bad_trap_handler)   /* Software Trap                 */
+t_bade4:TRAP_ENTRY(0xe4, bad_trap_handler)   /* Software Trap                 */
+t_bade5:TRAP_ENTRY(0xe5, bad_trap_handler)   /* Software Trap                 */
+t_bade6:TRAP_ENTRY(0xe6, bad_trap_handler)   /* Software Trap                 */
+t_bade7:TRAP_ENTRY(0xe7, bad_trap_handler)   /* Software Trap                 */
+t_bade8:TRAP_ENTRY(0xe8, bad_trap_handler)   /* Software Trap                 */
+t_bade9:TRAP_ENTRY(0xe9, bad_trap_handler)   /* Software Trap                 */
+t_badea:TRAP_ENTRY(0xea, bad_trap_handler)   /* Software Trap                 */
+t_badeb:TRAP_ENTRY(0xeb, bad_trap_handler)   /* Software Trap                 */
+t_badec:TRAP_ENTRY(0xec, bad_trap_handler)   /* Software Trap                 */
+t_baded:TRAP_ENTRY(0xed, bad_trap_handler)   /* Software Trap                 */
+t_badee:TRAP_ENTRY(0xee, bad_trap_handler)   /* Software Trap                 */
+t_badef:TRAP_ENTRY(0xef, bad_trap_handler)   /* Software Trap                 */
+t_badf0:TRAP_ENTRY(0xf0, bad_trap_handler)   /* Software Trap                 */
+t_badf1:TRAP_ENTRY(0xf1, bad_trap_handler)   /* Software Trap                 */
+t_badf2:TRAP_ENTRY(0xf2, bad_trap_handler)   /* Software Trap                 */
+t_badf3:TRAP_ENTRY(0xf3, bad_trap_handler)   /* Software Trap                 */
+t_badf4:TRAP_ENTRY(0xf4, bad_trap_handler)   /* Software Trap                 */
+t_badf5:TRAP_ENTRY(0xf5, bad_trap_handler)   /* Software Trap                 */
+t_badf6:TRAP_ENTRY(0xf6, bad_trap_handler)   /* Software Trap                 */
+t_badf7:TRAP_ENTRY(0xf7, bad_trap_handler)   /* Software Trap                 */
+t_badf8:TRAP_ENTRY(0xf8, bad_trap_handler)   /* Software Trap                 */
+t_badf9:TRAP_ENTRY(0xf9, bad_trap_handler)   /* Software Trap                 */
+t_badfa:TRAP_ENTRY(0xfa, bad_trap_handler)   /* Software Trap                 */
+t_badfb:TRAP_ENTRY(0xfb, bad_trap_handler)   /* Software Trap                 */
+t_badfc:TRAP_ENTRY(0xfc, bad_trap_handler)   /* Software Trap                 */
+t_badfd:TRAP_ENTRY(0xfd, bad_trap_handler)   /* Software Trap                 */
+dbtrap:	TRAP_ENTRY(0xfe, bad_trap_handler)   /* Debugger/PROM breakpoint #1   */
+dbtrap2:TRAP_ENTRY(0xff, bad_trap_handler)   /* Debugger/PROM breakpoint #2   */	
 
-/* Level'd interrupt entry points, see macro defs above */
-
-        TRAP_ENTRY_INTERRUPT_SOFT(1, 0x101) /* IRQ Software/SBUS Level 1  */
-        TRAP_ENTRY_INTERRUPT(2)             /* IRQ SBUS Level 2           */
-        TRAP_ENTRY_INTERRUPT(3)             /* IRQ SCSI/DMA/SBUS Level 3  */
-        TRAP_ENTRY_INTERRUPT_SOFT(4, 0x104) /* IRQ Software Level 4       */
-        TRAP_ENTRY_INTERRUPT(5)             /* IRQ SBUS/Ethernet Level 5  */
-        TRAP_ENTRY_INTERRUPT_SOFT(6, 0x106) /* IRQ Software Level 6       */
-        TRAP_ENTRY_INTERRUPT(7)             /* IRQ Video/SBUS Level 5     */
-        TRAP_ENTRY_INTERRUPT(8)             /* IRQ SBUS Level 6           */
-        TRAP_ENTRY_INTERRUPT(9)             /* IRQ SBUS Level 7           */
-        TRAP_ENTRY_INTERRUPT(10)            /* IRQ Timer #1               */
-        TRAP_ENTRY_INTERRUPT(11)            /* IRQ Floppy Intr.           */
-        TRAP_ENTRY_INTERRUPT(12)            /* IRQ Zilog serial chip      */
-        TRAP_ENTRY_INTERRUPT(13)            /* IRQ Audio Intr.            */
-        TRAP_ENTRY_TIMER                    /* IRQ Timer #2 (one we use)  */
-        TRAP_ENTRY_INTERRUPT_NMI(15, linux_trap_nmi) /* Level 15 (nmi) */
-
-	TRAP_ENTRY(0x20, my_trap_handler)   /* General Register Access Error */
-	TRAP_ENTRY(0x21, my_trap_handler)   /* Instruction Access Error      */
-	TRAP_ENTRY(0x22, my_trap_handler)   /* Undefined...                  */
-	TRAP_ENTRY(0x23, my_trap_handler)   /* Undefined...                  */
-	TRAP_ENTRY(0x24, my_trap_handler)   /* Co-Processor Disabled         */
-	TRAP_ENTRY(0x25, my_trap_handler)   /* Unimplemented FLUSH inst.     */
-	TRAP_ENTRY(0x26, my_trap_handler)   /* Undefined...                  */
-	TRAP_ENTRY(0x27, my_trap_handler)   /* Undefined...                  */
-	TRAP_ENTRY(0x28, my_trap_handler)   /* Co-Processor Exception        */
-	TRAP_ENTRY(0x29, my_trap_handler)   /* Data Access Error             */
-	TRAP_ENTRY(0x2a, my_trap_handler)   /* Division by zero, you lose... */
-	TRAP_ENTRY(0x2b, my_trap_handler)   /* Data Store Error              */
-	TRAP_ENTRY(0x2c, my_trap_handler)   /* Data Access MMU-Miss          */
-	TRAP_ENTRY(0x2d, my_trap_handler)   /* Undefined...                  */
-	TRAP_ENTRY(0x2e, my_trap_handler)   /* Undefined...                  */
-	TRAP_ENTRY(0x2f, my_trap_handler)   /* Undefined...                  */
-	TRAP_ENTRY(0x30, my_trap_handler)   /* Undefined...                  */
-	TRAP_ENTRY(0x31, my_trap_handler)   /* Undefined...                  */
-	TRAP_ENTRY(0x32, my_trap_handler)   /* Undefined...                  */
-	TRAP_ENTRY(0x33, my_trap_handler)   /* Undefined...                  */
-	TRAP_ENTRY(0x34, my_trap_handler)   /* Undefined...                  */
-	TRAP_ENTRY(0x35, my_trap_handler)   /* Undefined...                  */
-	TRAP_ENTRY(0x36, my_trap_handler)   /* Undefined...                  */
-	TRAP_ENTRY(0x37, my_trap_handler)   /* Undefined...                  */
-	TRAP_ENTRY(0x38, my_trap_handler)   /* Undefined...                  */
-	TRAP_ENTRY(0x39, my_trap_handler)   /* Undefined...                  */
-	TRAP_ENTRY(0x3a, my_trap_handler)   /* Undefined...                  */
-	TRAP_ENTRY(0x3b, my_trap_handler)   /* Undefined...                  */
-	TRAP_ENTRY(0x3c, my_trap_handler)   /* Instruction Access MMU-Miss   */
-	TRAP_ENTRY(0x3d, my_trap_handler)   /* Undefined...                  */
-	TRAP_ENTRY(0x3e, my_trap_handler)   /* Undefined...                  */
-	TRAP_ENTRY(0x3f, my_trap_handler)   /* Undefined...                  */
-	TRAP_ENTRY(0x40, my_trap_handler)   /* Undefined...                  */
-	TRAP_ENTRY(0x41, my_trap_handler)   /* Undefined...                  */
-	TRAP_ENTRY(0x42, my_trap_handler)   /* Undefined...                  */
-	TRAP_ENTRY(0x43, my_trap_handler)   /* Undefined...                  */
-	TRAP_ENTRY(0x44, my_trap_handler)   /* Undefined...                  */
-	TRAP_ENTRY(0x45, my_trap_handler)   /* Undefined...                  */
-	TRAP_ENTRY(0x46, my_trap_handler)   /* Undefined...                  */
-	TRAP_ENTRY(0x47, my_trap_handler)   /* Undefined...                  */
-	TRAP_ENTRY(0x48, my_trap_handler)   /* Undefined...                  */
-	TRAP_ENTRY(0x49, my_trap_handler)   /* Undefined...                  */
-	TRAP_ENTRY(0x4a, my_trap_handler)   /* Undefined...                  */
-	TRAP_ENTRY(0x4b, my_trap_handler)   /* Undefined...                  */
-	TRAP_ENTRY(0x4c, my_trap_handler)   /* Undefined...                  */
-	TRAP_ENTRY(0x4d, my_trap_handler)   /* Undefined...                  */
-	TRAP_ENTRY(0x4e, my_trap_handler)   /* Undefined...                  */
-	TRAP_ENTRY(0x4f, my_trap_handler)   /* Undefined...                  */
-	TRAP_ENTRY(0x50, my_trap_handler)   /* Undefined...                  */
-	TRAP_ENTRY(0x51, my_trap_handler)   /* Undefined...                  */
-	TRAP_ENTRY(0x52, my_trap_handler)   /* Undefined...                  */
-	TRAP_ENTRY(0x53, my_trap_handler)   /* Undefined...                  */
-	TRAP_ENTRY(0x54, my_trap_handler)   /* Undefined...                  */
-	TRAP_ENTRY(0x55, my_trap_handler)   /* Undefined...                  */
-	TRAP_ENTRY(0x56, my_trap_handler)   /* Undefined...                  */
-	TRAP_ENTRY(0x57, my_trap_handler)   /* Undefined...                  */
-	TRAP_ENTRY(0x58, my_trap_handler)   /* Undefined...                  */
-	TRAP_ENTRY(0x59, my_trap_handler)   /* Undefined...                  */
-	TRAP_ENTRY(0x5a, my_trap_handler)   /* Undefined...                  */
-	TRAP_ENTRY(0x5b, my_trap_handler)   /* Undefined...                  */
-	TRAP_ENTRY(0x5c, my_trap_handler)   /* Undefined...                  */
-	TRAP_ENTRY(0x5d, my_trap_handler)   /* Undefined...                  */
-	TRAP_ENTRY(0x5e, my_trap_handler)   /* Undefined...                  */
-	TRAP_ENTRY(0x5f, my_trap_handler)   /* Undefined...                  */
-	TRAP_ENTRY(0x60, my_trap_handler)   /* Impl-Dep Exception            */
-	TRAP_ENTRY(0x61, my_trap_handler)   /* Impl-Dep Exception            */
-	TRAP_ENTRY(0x62, my_trap_handler)   /* Impl-Dep Exception            */
-	TRAP_ENTRY(0x63, my_trap_handler)   /* Impl-Dep Exception            */
-	TRAP_ENTRY(0x64, my_trap_handler)   /* Impl-Dep Exception            */
-	TRAP_ENTRY(0x65, my_trap_handler)   /* Impl-Dep Exception            */
-	TRAP_ENTRY(0x66, my_trap_handler)   /* Impl-Dep Exception            */
-	TRAP_ENTRY(0x67, my_trap_handler)   /* Impl-Dep Exception            */
-	TRAP_ENTRY(0x68, my_trap_handler)   /* Impl-Dep Exception            */
-	TRAP_ENTRY(0x69, my_trap_handler)   /* Impl-Dep Exception            */
-	TRAP_ENTRY(0x6a, my_trap_handler)   /* Impl-Dep Exception            */
-	TRAP_ENTRY(0x6b, my_trap_handler)   /* Impl-Dep Exception            */
-	TRAP_ENTRY(0x6c, my_trap_handler)   /* Impl-Dep Exception            */
-	TRAP_ENTRY(0x6d, my_trap_handler)   /* Impl-Dep Exception            */
-	TRAP_ENTRY(0x6e, my_trap_handler)   /* Impl-Dep Exception            */
-	TRAP_ENTRY(0x6f, my_trap_handler)   /* Impl-Dep Exception            */
-	TRAP_ENTRY(0x70, my_trap_handler)   /* Impl-Dep Exception            */
-	TRAP_ENTRY(0x71, my_trap_handler)   /* Impl-Dep Exception            */
-	TRAP_ENTRY(0x72, my_trap_handler)   /* Impl-Dep Exception            */
-	TRAP_ENTRY(0x73, my_trap_handler)   /* Impl-Dep Exception            */
-	TRAP_ENTRY(0x74, my_trap_handler)   /* Impl-Dep Exception            */
-	TRAP_ENTRY(0x75, my_trap_handler)   /* Impl-Dep Exception            */
-	TRAP_ENTRY(0x76, my_trap_handler)   /* Impl-Dep Exception            */
-	TRAP_ENTRY(0x77, my_trap_handler)   /* Impl-Dep Exception            */
-	TRAP_ENTRY(0x78, my_trap_handler)   /* Impl-Dep Exception            */
-	TRAP_ENTRY(0x79, my_trap_handler)   /* Impl-Dep Exception            */
-	TRAP_ENTRY(0x7a, my_trap_handler)   /* Impl-Dep Exception            */
-	TRAP_ENTRY(0x7b, my_trap_handler)   /* Impl-Dep Exception            */
-	TRAP_ENTRY(0x7c, my_trap_handler)   /* Impl-Dep Exception            */
-	TRAP_ENTRY(0x7d, my_trap_handler)   /* Impl-Dep Exception            */
-	TRAP_ENTRY(0x7e, my_trap_handler)   /* Impl-Dep Exception            */
-	TRAP_ENTRY(0x7f, my_trap_handler)   /* Impl-Dep Exception            */
-	TRAP_ENTRY(0x80, my_trap_handler)   /* SunOS System Call             */
-	TRAP_ENTRY(0x81, my_trap_handler)   /* Software Trap                 */
-	TRAP_ENTRY(0x82, my_trap_handler)   /* Divide by zero trap XXX       */
-	TRAP_ENTRY(0x83, my_trap_handler)   /* Flush Windows Trap XXX        */
-	TRAP_ENTRY(0x84, my_trap_handler)   /* Clean Windows Trap XXX        */
-	TRAP_ENTRY(0x85, my_trap_handler)   /* Software Trap                 */
-	TRAP_ENTRY(0x86, my_trap_handler)   /* Fix Unaligned Access Trap XXX */
-	TRAP_ENTRY(0x87, my_trap_handler)   /* Integer Overflow Trap XXX     */
-	TRAP_ENTRY(0x88, my_trap_handler)   /* Slowaris System Call          */
-	TRAP_ENTRY(0x89, my_trap_handler)   /* NetBSD System Call            */
-	TRAP_ENTRY(0x8a, my_trap_handler)   /* Software Trap                 */
-	TRAP_ENTRY(0x8b, my_trap_handler)   /* Software Trap                 */
-	TRAP_ENTRY(0x8c, my_trap_handler)   /* Software Trap                 */
-	TRAP_ENTRY(0x8d, my_trap_handler)   /* Software Trap                 */
-	TRAP_ENTRY(0x8e, my_trap_handler)   /* Software Trap                 */
-	TRAP_ENTRY(0x8f, my_trap_handler)   /* Software Trap                 */
-	TRAP_ENTRY(0x90, my_trap_handler)   /* SparcLinux System Call        */
-	TRAP_ENTRY(0x91, my_trap_handler)   /* Software Trap                 */
-	TRAP_ENTRY(0x92, my_trap_handler)   /* Software Trap                 */
-	TRAP_ENTRY(0x93, my_trap_handler)   /* Software Trap                 */
-	TRAP_ENTRY(0x94, my_trap_handler)   /* Software Trap                 */
-	TRAP_ENTRY(0x95, my_trap_handler)   /* Software Trap                 */
-	TRAP_ENTRY(0x96, my_trap_handler)   /* Software Trap                 */
-	TRAP_ENTRY(0x97, my_trap_handler)   /* Software Trap                 */
-	TRAP_ENTRY(0x98, my_trap_handler)   /* Software Trap                 */
-	TRAP_ENTRY(0x99, my_trap_handler)   /* Software Trap                 */
-	TRAP_ENTRY(0x9a, my_trap_handler)   /* Software Trap                 */
-	TRAP_ENTRY(0x9b, my_trap_handler)   /* Software Trap                 */
-	TRAP_ENTRY(0x9c, my_trap_handler)   /* Software Trap                 */
-	TRAP_ENTRY(0x9d, my_trap_handler)   /* Software Trap                 */
-	TRAP_ENTRY(0x9e, my_trap_handler)   /* Software Trap                 */
-	TRAP_ENTRY(0x9f, my_trap_handler)   /* Software Trap                 */
-	TRAP_ENTRY(0xa0, my_trap_handler)   /* Software Trap                 */
-	TRAP_ENTRY(0xa1, my_trap_handler)   /* Software Trap                 */
-	TRAP_ENTRY(0xa2, my_trap_handler)   /* Software Trap                 */
-	TRAP_ENTRY(0xa3, my_trap_handler)   /* Software Trap                 */
-	TRAP_ENTRY(0xa4, my_trap_handler)   /* Software Trap                 */
-	TRAP_ENTRY(0xa5, my_trap_handler)   /* Software Trap                 */
-	TRAP_ENTRY(0xa6, my_trap_handler)   /* Software Trap                 */
-	TRAP_ENTRY(0xa7, my_trap_handler)   /* Software Trap                 */
-	TRAP_ENTRY(0xa8, my_trap_handler)   /* Software Trap                 */
-	TRAP_ENTRY(0xa9, my_trap_handler)   /* Software Trap                 */
-	TRAP_ENTRY(0xaa, my_trap_handler)   /* Software Trap                 */
-	TRAP_ENTRY(0xab, my_trap_handler)   /* Software Trap                 */
-	TRAP_ENTRY(0xac, my_trap_handler)   /* Software Trap                 */
-	TRAP_ENTRY(0xad, my_trap_handler)   /* Software Trap                 */
-	TRAP_ENTRY(0xae, my_trap_handler)   /* Software Trap                 */
-	TRAP_ENTRY(0xaf, my_trap_handler)   /* Software Trap                 */
-	TRAP_ENTRY(0xb0, my_trap_handler)   /* Software Trap                 */
-	TRAP_ENTRY(0xb1, my_trap_handler)   /* Software Trap                 */
-	TRAP_ENTRY(0xb2, my_trap_handler)   /* Software Trap                 */
-	TRAP_ENTRY(0xb3, my_trap_handler)   /* Software Trap                 */
-	TRAP_ENTRY(0xb4, my_trap_handler)   /* Software Trap                 */
-	TRAP_ENTRY(0xb5, my_trap_handler)   /* Software Trap                 */
-	TRAP_ENTRY(0xb6, my_trap_handler)   /* Software Trap                 */
-	TRAP_ENTRY(0xb7, my_trap_handler)   /* Software Trap                 */
-	TRAP_ENTRY(0xb8, my_trap_handler)   /* Software Trap                 */
-	TRAP_ENTRY(0xb9, my_trap_handler)   /* Software Trap                 */
-	TRAP_ENTRY(0xba, my_trap_handler)   /* Software Trap                 */
-	TRAP_ENTRY(0xbb, my_trap_handler)   /* Software Trap                 */
-	TRAP_ENTRY(0xbc, my_trap_handler)   /* Software Trap                 */
-	TRAP_ENTRY(0xbd, my_trap_handler)   /* Software Trap                 */
-	TRAP_ENTRY(0xbe, my_trap_handler)   /* Software Trap                 */
-	TRAP_ENTRY(0xbf, my_trap_handler)   /* Software Trap                 */
-	TRAP_ENTRY(0xc0, my_trap_handler)   /* Software Trap                 */
-	TRAP_ENTRY(0xc1, my_trap_handler)   /* Software Trap                 */
-	TRAP_ENTRY(0xc2, my_trap_handler)   /* Software Trap                 */
-	TRAP_ENTRY(0xc3, my_trap_handler)   /* Software Trap                 */
-	TRAP_ENTRY(0xc4, my_trap_handler)   /* Software Trap                 */
-	TRAP_ENTRY(0xc5, my_trap_handler)   /* Software Trap                 */
-	TRAP_ENTRY(0xc6, my_trap_handler)   /* Software Trap                 */
-	TRAP_ENTRY(0xc7, my_trap_handler)   /* Software Trap                 */
-	TRAP_ENTRY(0xc8, my_trap_handler)   /* Software Trap                 */
-	TRAP_ENTRY(0xc9, my_trap_handler)   /* Software Trap                 */
-	TRAP_ENTRY(0xca, my_trap_handler)   /* Software Trap                 */
-	TRAP_ENTRY(0xcb, my_trap_handler)   /* Software Trap                 */
-	TRAP_ENTRY(0xcc, my_trap_handler)   /* Software Trap                 */
-	TRAP_ENTRY(0xcd, my_trap_handler)   /* Software Trap                 */
-	TRAP_ENTRY(0xce, my_trap_handler)   /* Software Trap                 */
-	TRAP_ENTRY(0xcf, my_trap_handler)   /* Software Trap                 */
-	TRAP_ENTRY(0xd0, my_trap_handler)   /* Software Trap                 */
-	TRAP_ENTRY(0xd1, my_trap_handler)   /* Software Trap                 */
-	TRAP_ENTRY(0xd2, my_trap_handler)   /* Software Trap                 */
-	TRAP_ENTRY(0xd3, my_trap_handler)   /* Software Trap                 */
-	TRAP_ENTRY(0xd4, my_trap_handler)   /* Software Trap                 */
-	TRAP_ENTRY(0xd5, my_trap_handler)   /* Software Trap                 */
-	TRAP_ENTRY(0xd6, my_trap_handler)   /* Software Trap                 */
-	TRAP_ENTRY(0xd7, my_trap_handler)   /* Software Trap                 */
-	TRAP_ENTRY(0xd8, my_trap_handler)   /* Software Trap                 */
-	TRAP_ENTRY(0xd9, my_trap_handler)   /* Software Trap                 */
-	TRAP_ENTRY(0xda, my_trap_handler)   /* Software Trap                 */
-	TRAP_ENTRY(0xdb, my_trap_handler)   /* Software Trap                 */
-	TRAP_ENTRY(0xdc, my_trap_handler)   /* Software Trap                 */
-	TRAP_ENTRY(0xdd, my_trap_handler)   /* Software Trap                 */
-	TRAP_ENTRY(0xde, my_trap_handler)   /* Software Trap                 */
-	TRAP_ENTRY(0xdf, my_trap_handler)   /* Software Trap                 */
-	TRAP_ENTRY(0xe0, my_trap_handler)   /* Software Trap                 */
-	TRAP_ENTRY(0xe1, my_trap_handler)   /* Software Trap                 */
-	TRAP_ENTRY(0xe2, my_trap_handler)   /* Software Trap                 */
-	TRAP_ENTRY(0xe3, my_trap_handler)   /* Software Trap                 */
-	TRAP_ENTRY(0xe4, my_trap_handler)   /* Software Trap                 */
-	TRAP_ENTRY(0xe5, my_trap_handler)   /* Software Trap                 */
-	TRAP_ENTRY(0xe6, my_trap_handler)   /* Software Trap                 */
-	TRAP_ENTRY(0xe7, my_trap_handler)   /* Software Trap                 */
-	TRAP_ENTRY(0xe8, my_trap_handler)   /* Software Trap                 */
-	TRAP_ENTRY(0xe9, my_trap_handler)   /* Software Trap                 */
-	TRAP_ENTRY(0xea, my_trap_handler)   /* Software Trap                 */
-	TRAP_ENTRY(0xeb, my_trap_handler)   /* Software Trap                 */
-	TRAP_ENTRY(0xec, my_trap_handler)   /* Software Trap                 */
-	TRAP_ENTRY(0xed, my_trap_handler)   /* Software Trap                 */
-	TRAP_ENTRY(0xee, my_trap_handler)   /* Software Trap                 */
-	TRAP_ENTRY(0xef, my_trap_handler)   /* Software Trap                 */
-	TRAP_ENTRY(0xf0, my_trap_handler)   /* Software Trap                 */
-	TRAP_ENTRY(0xf1, my_trap_handler)   /* Software Trap                 */
-	TRAP_ENTRY(0xf2, my_trap_handler)   /* Software Trap                 */
-	TRAP_ENTRY(0xf3, my_trap_handler)   /* Software Trap                 */
-	TRAP_ENTRY(0xf4, my_trap_handler)   /* Software Trap                 */
-	TRAP_ENTRY(0xf5, my_trap_handler)   /* Software Trap                 */
-	TRAP_ENTRY(0xf6, my_trap_handler)   /* Software Trap                 */
-	TRAP_ENTRY(0xf7, my_trap_handler)   /* Software Trap                 */
-	TRAP_ENTRY(0xf8, my_trap_handler)   /* Software Trap                 */
-	TRAP_ENTRY(0xf9, my_trap_handler)   /* Software Trap                 */
-	TRAP_ENTRY(0xfa, my_trap_handler)   /* Software Trap                 */
-	TRAP_ENTRY(0xfb, my_trap_handler)   /* Software Trap                 */
-	TRAP_ENTRY(0xfc, my_trap_handler)   /* Software Trap                 */
-	TRAP_ENTRY(0xfd, my_trap_handler)   /* Software Trap                 */
-	TRAP_ENTRY(0xfe, my_trap_handler)   /* Software Trap                 */
-	TRAP_ENTRY(0xff, my_trap_handler)   /* Software Trap                 */	
+	.globl	C_LABEL(end_traptable)
+C_LABEL(end_traptable):
 
 	.skip 4096
 
-C_LABEL(msgbufmapped):
-        .word   1
+/* This was the only reasonable way I could think of to properly align
+ * these page-table data structures.
+ *
+ * XXX swapper_pg_dir is going to have to be 'per-CPU' for SMP support
+ */
 
+	.globl C_LABEL(auxio_reg_addr)
+C_LABEL(auxio_reg_addr):	.skip	(PAGE_SIZE)
+
+	.globl C_LABEL(clock_reg_addr)
+C_LABEL(clock_reg_addr):	.skip	(PAGE_SIZE*5)
+
+	.globl C_LABEL(int_reg_addr)
+C_LABEL(int_reg_addr):		.skip	(PAGE_SIZE*5)
+
+	.globl C_LABEL(pg0)
+	.globl C_LABEL(empty_bad_page)
+	.globl C_LABEL(empty_bad_page_table)
+	.globl C_LABEL(empty_zero_page)
+	.globl C_LABEL(swapper_pg_dir)
+C_LABEL(swapper_pg_dir):		.skip 0x1000
+C_LABEL(pg0):				.skip 0x1000
+C_LABEL(empty_bad_page):		.skip 0x1000
+C_LABEL(empty_bad_page_table):		.skip 0x1000
+C_LABEL(empty_zero_page):		.skip 0x1000
 
 
 /* Cool, here we go. Pick up the romvec pointer in %o0 and stash it in
-   %g7 and at _prom_vector_p. And also quickly check whether we are on
-   a v0 or v2 prom.
-*/
-
-gokernel:	or	%g0, %o0, %g7
-		sethi	%hi( C_LABEL(prom_vector_p) ), %g1
-		st	%o0, [%g1 + %lo( C_LABEL(prom_vector_p) )]   ! we will need it later
-		rd	%psr, %l2
-		rd	%wim, %l3
-		rd	%tbr, %l4
-		or	%g0, %o2, %l5		! could be prom magic value...
-	
-#if 0 /* You think I'm nutz? */
-		subcc	%l5, 0x0, %g0		! check for magic SMP pointer
-		bne	nosmp	
-		nop
-		call    %o2			! call smp prom setup 
-		nop
-#endif /* I will be soon... */
-
-/* Acquire boot time privileged register values, this will help debugging.
- * I figure out and store nwindows later on.
+ * %g7 and at prom_vector_p. And also quickly check whether we are on
+ * a v0, v2, or v3 prom.  We also get a debug structure of some sort from
+ * the boot loader (or is it the prom?) in %o1.  Finally a call back vector
+ * is passed in %o2.  I think this is how you register yourself with a
+ * debugger.  I do know that it wants my %o7 (return PC - 8) as it's
+ * first argument.  I will poke around and figure out what the debug
+ * vector is, it could contain useful stuff.
  */
 
-nosmp:		sethi	%hi( C_LABEL(boot_psr) ), %l1
-		st	%l2, [%l1 + %lo( C_LABEL(boot_psr) )]
-		sethi	%hi( C_LABEL(boot_wim) ), %l1
-		st	%l3, [%l1 + %lo( C_LABEL(boot_wim) )]
-		sethi	%hi( C_LABEL(boot_tbr) ), %l1
-		st	%l4, [%l1 + %lo( C_LABEL(boot_tbr) )]
-		sethi	%hi( C_LABEL(boot_smp_ptr) ), %l1
-		st	%l5, [%l1 + %lo( C_LABEL(boot_smp_ptr) )]
+/* Grrr, in order to be Sparc ABI complient, the kernel has to live in
+ * an address space above 0xe0000000  ;(  Must remain position independant
+ * until we 'remap' ourselves from low to high addresses.  We only map the
+ * first 3MB of addresses into upper ram as that is how much the PROM
+ * promises to set up for us.
+ */
+gokernel:
+		/* Ok, it's nice to know, as early as possible, if we
+		 * are already mapped where we expect to be in virtual
+		 * memory.  The Solaris /boot elf format bootloader
+		 * will peek into our elf header and load us where
+		 * we want to be, otherwise we have to re-map.
+		 *
+		 * Some boot loaders don't place the jmp'rs address
+		 * in %o7, so we do a pc-relative call to a local
+		 * label, then see what %o7 has.
+		 */
 
-		or	%g0, %o0, %g7
-		sethi	%hi( C_LABEL(prom_vector_p) ), %g5
-		st	%o0, [%g5 + %lo( C_LABEL(prom_vector_p) )]   ! we will need it later
+		/* XXX Sparc V9 detection goes here XXX */
 
-		ld	[%g7 + 0x4], %o3
+		or	%g0, %o7, %g4		! Save %o7
+
+		/* Jump to it, and pray... */
+current_pc:
+		call	1f
+		nop
+
+1:
+		or	%g0, %o7, %g3
+
+got_pc:
+		or	%g0, %g4, %o7	/* Previous %o7. */
+	
+		or	%g0, %o0, %l0		! stash away romvec
+		or	%g0, %o0, %g7		! put it here too
+		or	%g0, %o1, %l1		! stash away debug_vec too
+		rd	%psr, %l2		! Save psr
+		rd	%wim, %l3		! wim
+		rd	%tbr, %l4		! tbr
+		or	%g0, %o2, %l5		! and the possible magic func
+
+		/* Ok, let's check out our run time program counter. */
+		set	current_pc, %g5
+		cmp	%g3, %g5
+		be	already_mapped
+
+		/* %l6 will hold the offset we have to subtract
+		 * from absolute symbols in order to access areas
+		 * in our own image.  If already mapped this is
+		 * just plain zero, else it is PAGE_OFFSET which is
+		 * also KERNBASE.
+		 */
+		set	PAGE_OFFSET, %l6
+		b	copy_prom_lvl14
+		nop
+
+already_mapped:
+		or	%g0, %g0, %l6
+
+		/* Copy over the Prom's level 14 clock handler. */
+copy_prom_lvl14:
+		rd	%tbr, %g1
+		andn	%g1, 0xfff, %g1		! proms trap table base
+		or	%g0, (0x1e<<4), %g2	! offset to lvl14 intr
+		or	%g1, %g2, %g2
+		set	t_irq14, %g3
+		sub	%g3, %l6, %g3
+		ldd	[%g2], %g4
+		std	%g4, [%g3]
+		ldd	[%g2 + 0x8], %g4
+		std	%g4, [%g3 + 0x8]	! Copy proms handler
+
+		/* Copy over the Prom/debugger's trap entry points. */
+copy_prom_bpoint:
+		or	%g0, (0xfe<<4), %g2
+		or	%g1, %g2, %g2
+		set	dbtrap, %g3
+		sub	%g3, %l6, %g3
+		ldd	[%g2], %g4
+		std	%g4, [%g3]
+		ldd	[%g2 + 0x8], %g4
+		std	%g4, [%g3 + 0x8]
+		ldd	[%g2 + 0x10], %g4
+		std	%g4, [%g3 + 0x10]
+		ldd	[%g2 + 0x18], %g4
+		std	%g4, [%g3 + 0x18]
+
+copy_prom_done:
+		ld	[%o0 + 0x4], %g1
+		and	%g1, 0x3, %g1
+		subcc	%g1, 0x0, %g0
+		be	set_sane_psr		! Not on v0 proms
+		nop
+
+		subcc	%o2, 0x0, %g0		! check for boot routine pointer
+		bz	set_sane_psr
+		nop
+		jmpl    %o2, %o7		! call boot setup func
+		add	%o7, 0x8, %o0
+
+set_sane_psr:
+		/* Traps are on, kadb can be tracing through here.  But
+		 * we have no clue what the PIL is. So we set up a sane
+		 * %psr, but preserve CWP or our locals could disappear!
+		 */
+		rd	%psr, %g2
+		and	%g2, 0x1f, %g2			! %g2 has CWP now
+		set	(PSR_S|PSR_PIL), %g1		! Supervisor + PIL high
+		or	%g1, %g2, %g1			! mix mix mix
+		wr	%g1, 0x0, %psr			! let PIL set in
+		wr	%g1, PSR_ET, %psr		! now turn on traps
+
+		/* A note about the last two instructions...
+		 * If you are going to increase PIL and turn on
+		 * traps at the same time you are asking for trouble.
+		 * You MUST set a %psr with traps off containing
+		 * your new PIL, then turn on the ET bit with the
+		 * next write.  On certain buggy Sparc chips if you
+		 * set both at the same time you can get a Watchdog
+		 * Reset under certain conditions.  This is no fun.
+		 * Basically the PIL bits get there before the
+		 * EnableTrap bit does or something like that.
+		 */
+
+		/* Insane asylum... */
+		WRITE_PAUSE
+
+/* Must determine whether we are on a sun4c MMU, SRMMU, or SUN4/400 MUTANT
+ * MMU so we can remap ourselves properly.  DONT TOUCH %l0 thru %l5 in these
+ * remapping routines, we need their values afterwards!
+ *
+ * XXX UGH, need to write some sun4u SpitFire remapping V9 code RSN... XXX
+ */
+		/* Now check whether we are already mapped, if we
+		 * are we can skip all this garbage coming up.
+		 */
+		subcc	%l6, 0x0, %g0
+		bz	go_to_highmem		! this will be a nop then
+		nop
+
+		sethi	%hi(LOAD_ADDR), %g6
+		subcc	%g7, %g6, %g0
+		bne	remap_not_a_sun4	! This is not a Sun4
+		nop
+
+		or	%g0, 0x1, %g1
+		lduba	[%g1] ASI_CONTROL, %g1	! Only safe to try on Sun4.
+		subcc	%g1, 0x24, %g0		! Is this a mutant Sun4/400???
+		be	sun4_mutant_remap	! Ugh, it is...
+		nop
+
+remap_not_a_sun4:
+		lda	[%g0] ASI_M_MMUREGS, %g1 ! same as ASI_PTE on sun4c
+		and	%g1, 0x1, %g1		! Test SRMMU Enable bit ;-)
+		subcc	%g1, 0x0, %g0
+		bz	sun4c_remap		! A sun4c MMU or normal Sun4
+		nop
+srmmu_remap:
+		/* First, check for a viking (TI) module. */
+		set	0x40000000, %g2
+		rd	%psr, %g3
+		and	%g2, %g3, %g3
+		subcc	%g3, 0x0, %g0
+		bz	srmmu_nviking
+		nop
+
+		/* Figure out what kind of viking we are on.
+		 * We need to know if we have to play with the
+		 * AC bit and disable traps or not.
+		 */
+
+		/* I've only seen MicroSparc's on SparcClassics with this
+		 * bit set.
+		 */
+		set	0x800, %g2
+		lda	[%g0] ASI_M_MMUREGS, %g3	! peek in the control reg
+		and	%g2, %g3, %g3
+		subcc	%g3, 0x0, %g0
+		bnz	srmmu_nviking			! is in mbus mode
+		nop
+		
+		rd	%psr, %g3			! DONT TOUCH %g3
+		andn	%g3, PSR_ET, %g2
+		wr	%g2, 0x0, %psr
+		WRITE_PAUSE
+		
+		/* Get context table pointer, then convert to
+		 * a physical address, which is 36 bits.
+		 */
+		set	AC_M_CTPR, %g4
+		lda	[%g4] ASI_M_MMUREGS, %g4
+		sll	%g4, 0x4, %g4			! We use this below
+							! DONT TOUCH %g4
+
+		/* Set the AC bit in the Viking's MMU control reg. */
+		lda	[%g0] ASI_M_MMUREGS, %g5	! DONT TOUCH %g5
+		set	0x8000, %g6			! AC bit mask
+		or	%g5, %g6, %g6			! Or it in...
+		sta	%g6, [%g0] ASI_M_MMUREGS	! Close your eyes...
+
+		/* Grrr, why does it seem like every other load/store
+		 * on the sun4m is in some ASI space...
+		 * Fine with me, let's get the pointer to the level 1
+		 * page table directory and fetch it's entry.
+		 */
+		lda	[%g4] ASI_M_BYPASS, %o1		! This is a level 1 ptr
+		srl	%o1, 0x4, %o1			! Clear low 4 bits
+		sll	%o1, 0x8, %o1			! Make physical
+		
+		/* Ok, pull in the PTD. */
+		lda	[%o1] ASI_M_BYPASS, %o2		! This is the 0x0 16MB pgd
+
+		/* Calculate to KERNBASE entry.
+		 *
+		 * XXX Should not use imperical constant, but Gas gets an  XXX
+		 * XXX upset stomach with the bitshift I would have to use XXX
+		 */
+		add	%o1, 0x3c0, %o3		
+
+		/* Poke the entry into the calculated address. */
+		sta	%o2, [%o3] ASI_M_BYPASS
+
+		/* I don't get it Sun, if you engineered all these
+		 * boot loaders and the PROM (thank you for the debugging
+		 * features btw) why did you not have them load kernel
+		 * images up in high address space, since this is necessary
+		 * for ABI compliance anyways?  Does this low-mapping provide
+		 * enhanced interoperability?
+		 *
+		 * "The PROM is the computer."
+		 */
+
+		/* Ok, restore the MMU control register we saved in %g5 */
+		sta	%g5, [%g0] ASI_M_MMUREGS	! POW... ouch
+
+		/* Turn traps back on.  We saved it in %g3 earlier. */
+		wr	%g3, 0x0, %psr			! tick tock, tick tock
+
+		/* Now we burn precious CPU cycles due to bad engineering. */
+		WRITE_PAUSE
+
+		/* Wow, all that just to move a 32-bit value from one
+		 * place to another...  Jump to high memory.
+		 */
+		b	go_to_highmem
+		nop
+
+		/* This works on viking's in Mbus mode and all
+		 * other MBUS modules.  It is virtually the same as
+		 * the above madness sans turning traps off and flipping
+		 * the AC bit.
+		 */
+srmmu_nviking:
+		set	AC_M_CTPR, %g1
+		lda	[%g1] ASI_M_MMUREGS, %g1	! get ctx table ptr
+		sll	%g1, 0x4, %g1			! make physical addr
+		lda	[%g1] ASI_M_BYPASS, %g1		! ptr to level 1 pg_table
+		srl	%g1, 0x4, %g1
+		sll	%g1, 0x8, %g1			! make phys addr for l1 tbl
+
+		lda	[%g1] ASI_M_BYPASS, %g2		! get level1 entry for 0x0
+		add	%g1, 0x3c0, %g3			! XXX AWAY WITH IMPERICALS
+		sta	%g2, [%g3] ASI_M_BYPASS		! place at KERNBASE entry
+		b	go_to_highmem
+		nop					! wheee....
+
+		/* This remaps the kernel on Sun4/4xx machines
+		 * that have the Sun Mutant Three Level MMU.
+		 * It's like a platypus, Sun didn't have the
+		 * SRMMU in conception so they kludged the three
+		 * level logic in the regular Sun4 MMU probably.
+		 *
+		 * Basically, you take each entry in the top level
+		 * directory that maps the low 3MB starting at
+		 * address zero and put the mapping in the KERNBASE
+		 * slots.  These top level pgd's are called regmaps.
+		 */
+sun4_mutant_remap:
+		or	%g0, %g0, %g3		! source base
+		sethi	%hi(KERNBASE), %g4	! destination base
+		or	%g4, %lo(KERNBASE), %g4
+		sethi	%hi(0x300000), %g5
+		or	%g5, %lo(0x300000), %g5	! upper bound 3MB
+		or	%g0, 0x1, %l6
+		sll	%l6, 24, %l6		! Regmap mapping size
+		add	%g3, 0x2, %g3		! Base magic
+		add	%g4, 0x2, %g4		! Base magic
+
+		/* Main remapping loop on Sun4-Mutant-MMU.
+		 * "I am not an animal..." -Famous Mutant Person
+		 */
+sun4_mutant_loop:
+		lduha	[%g3] ASI_REGMAP, %g2	! Get lower entry
+		stha	%g2, [%g4] ASI_REGMAP	! Store in high entry
+		add	%g4, %l6, %g4		! Move up high memory ptr
+		subcc	%g3, %g5, %g0		! Reached our limit?
+		blu	sun4_mutant_loop	! Nope, loop again
+		add	%g3, %l6, %g3		! delay, Move up low ptr
+		b	go_to_highmem		! Jump to high memory.
+		nop
+
+/* The following works for normal (ie. non Sun4/400) Sun4 MMU's */
+sun4c_remap:
+		or	%g0, %g0, %g3		! source base
+		sethi	%hi(KERNBASE), %g4	! destination base
+		or	%g4, %lo(KERNBASE), %g4
+		sethi	%hi(0x300000), %g5
+		or	%g5, %lo(0x300000), %g5	! upper bound 3MB
+		or	%g0, 0x1, %l6
+		sll	%l6, 18, %l6		! sun4c mmu segmap size
+sun4c_remap_loop:
+		lda	[%g3] ASI_SEGMAP, %g6	! load phys_seg
+		sta	%g6, [%g4] ASI_SEGMAP   ! store new virt mapping
+		add	%g3, %l6, %g3		! Increment source ptr
+		subcc	%g3, %g5, %g0		! Reached limit?
+		bl	sun4c_remap_loop	! Nope, loop again
+		add	%g4, %l6, %g4		! delay, Increment dest ptr
+
+/* Now do a non-relative jump so that PC is in high-memory */
+go_to_highmem:
+		set	execute_in_high_mem, %g1
+		jmp	%g1
+		nop
+
+/* Acquire boot time privileged register values, this will help debugging.
+ * I figure out and store nwindows and nwindowsm1 later on.
+ */
+execute_in_high_mem:
+		or	%g0, %l0, %o0		! put back romvec
+		or	%g0, %l1, %o1		! and debug_vec
+
+		sethi	%hi( C_LABEL(prom_vector_p) ), %g1
+		st	%o0, [%g1 + %lo( C_LABEL(prom_vector_p) )]
+
+		sethi	%hi( C_LABEL(linux_dbvec) ), %g1
+		st	%o1, [%g1 + %lo( C_LABEL(linux_dbvec) )]
+
+		ld	[%o0 + 0x4], %o3
+		and	%o3, 0x3, %o5			! get the version
+
 		subcc	%o3, 0x2, %g0			! a v2 prom?
-		be	found_v2
+		be	found_version
 		nop
 
 		/* paul@sfe.com.au */
 		subcc	%o3, 0x3, %g0			! a v3 prom?
-		or	%g0, 0x3, %o5
-		sethi	%hi(C_LABEL(prom_iface_vers) ), %g1
-		st	%o5, [%g1 + %lo( C_LABEL(prom_iface_vers) )]
-		be	not_v2
+		be	found_version
 		nop
 
-
 /* Old sun4's pass our load address into %o0 instead of the prom
-   pointer. On sun4's you have to hard code the romvec pointer into
-   your code. Sun probably still does that because they don't even
-   trust their own "OpenBoot" specifications.
-*/
+ * pointer. On sun4's you have to hard code the romvec pointer into
+ * your code. Sun probably still does that because they don't even
+ * trust their own "OpenBoot" specifications.
+ */
 
 		sethi	%hi(LOAD_ADDR), %g6
 		subcc	%o0, %g6, %g0		! an old sun4?
 		be	no_sun4_here
 		nop
 
-		sethi	%hi( C_LABEL(prom_iface_vers) ), %g1
-		st	%g0, [%g1 + %lo( C_LABEL(prom_iface_vers) )]
-		b	not_v2
-		nop
-
-found_v2:
-		or	%g0, 0x2, %o5
-		sethi	%hi( C_LABEL(prom_iface_vers) ), %g1
-		st	%o5, [%g1 + %lo( C_LABEL(prom_iface_vers) )]
-
-not_v2:
+found_version:
 
 /* Get the machine type via the mysterious romvec node operations.
- * Here we can find out whether we are on a sun4 sun4c, sun4m, or
- * a sun4m. The "nodes" are set up as a bunch of n-ary trees which
- * you can traverse to get information about devices and such. The
- * information acquisition happens via the node-ops which are defined
- * in the linux_openprom.h header file. Of particular interest is the
- * 'nextnode(int node)' function as it does the smart thing when
- * presented with a value of '0', it gives you the first node in the
+ * Here we can find out whether we are on a sun4, sun4c, sun4m, 
+ * sun4d, or a sun4e. The "nodes" are set up as a bunch of n-ary trees 
+ * which you can traverse to get information about devices and such.
+ * The information acquisition happens via the node-ops which are
+ * defined in the openprom.h header file. Of particular interest
+ * is the 'nextnode(int node)' function as it does the smart thing when
+ * presented with a value of '0', it gives you the root node in the
  * tree. These node integers probably offset into some internal prom
  * pointer table the openboot has. It's completely undocumented, so
  * I'm not about to go sifting through the prom address space, but may
@@ -593,8 +839,9 @@ not_v2:
 		ld	[%l0], %l0
 		call 	%l0
 		or	%g0, %g0, %o0		! next_node(0) = first_node
+		or	%o0, %g0, %g6
 
-		sethi	%hi( C_LABEL(cputypvar) ), %o1	! first node has cpu-arch
+		sethi	%hi( C_LABEL(cputypvar) ), %o1	! First node has cpu-arch
 		or	%o1, %lo( C_LABEL(cputypvar) ), %o1
 		sethi	%hi( C_LABEL(cputypval) ), %o2	! information, the string
 		or	%o2, %lo( C_LABEL(cputypval) ), %o2
@@ -605,235 +852,128 @@ not_v2:
 						! to a buf where above string
 						! will get stored by the prom.
 
-		sethi	%hi( C_LABEL(cputypval) ), %o2	! better safe than sorry
+		subcc	%o0, %g0, %g0
+		bpos	got_prop		! Got the property
+		nop
+
+		or	%g6, %g0, %o0
+		sethi	%hi( C_LABEL(cputypvar_sun4m) ), %o1
+		or	%o1, %lo( C_LABEL(cputypvar_sun4m) ), %o1
+		sethi	%hi( C_LABEL(cputypval) ), %o2
 		or	%o2, %lo( C_LABEL(cputypval) ), %o2
-		ldub	[%o2 + 0x4], %o0
-		subcc	%o0, 'c', %g0		! we already know we are not
-		be	is_sun4c		! on a plain sun4 because of
+		ld	[%l1], %l0
+		ld	[%l0 + 0xc], %l0
+		call	%l0
+		nop
+
+got_prop:
+		sethi	%hi( C_LABEL(cputypval) ), %o2
+		or	%o2, %lo( C_LABEL(cputypval) ), %o2
+
+		ldub	[%o2 + 0x4], %l1
+		subcc	%l1, 'c', %g0		! We already know we are not
+		be	1f			! on a plain sun4 because of
 		nop				! the check for 0x4000 in %o0
-		subcc	%o0, 'm', %g0		! at start:
-		be	is_sun4m
-		nop
-		b	no_sun4d_here		! god bless the person who
-		nop				! tried to run this on sun4d
-
-is_sun4m:
-is_sun4c:					! OK, this is a sun4c, yippie
-		or 	%g0, %g7, %g6		! load up the promvec offsets
-		sethi	%hi(prom_magic), %g5   	! magic mushroom :>
-		st	%g6, [%g5 + %lo(prom_magic)]
-		add	%g7, 0x4, %g6
-		sethi	%hi(prom_rom_vers), %g5
-		st	%g6, [%g5 + %lo(prom_rom_vers)]
-		add	%g7, 0x8, %g6
-		sethi	%hi(prom_pluginvers), %g5
-		st	%g6, [%g5 + %lo(prom_pluginvers)]
-		add	%g7, 0xc, %g6
-		sethi	%hi(prom_revision), %g5
-		st	%g6, [%g5 + %lo(prom_revision)]
-		add	%g7, 0x10, %g6
-		sethi	%hi(prom_v0mem_desc), %g5
-		st	%g6, [%g5 + %lo(prom_v0mem_desc)]
-		add	%g7, 0x1c, %g6
-		sethi	%hi(prom_nodefuncs), %g5
-		st	%g6, [%g5 + %lo(prom_nodefuncs)]
-		add	%g7, 0x68, %g6
-		sethi	%hi(prom_printf), %g5
-		st	%g6, [%g5 + %lo(prom_printf)]
-		add	%g7, 0x6c, %g6
-		sethi	%hi(prom_abort), %g5
-		st	%g6, [%g5 + %lo(prom_abort)]
-		add	%g7, 0x74, %g6
-		sethi	%hi(prom_halt), %g5
-		st	%g6, [%g5 + %lo(prom_halt)]
-		add	%g7, 0x78, %g6
-		sethi	%hi(prom_sync), %g5
-		st	%g6, [%g5 + %lo(prom_sync)]
-		add	%g7, 0x7c, %g6
-		sethi	%hi(prom_eval), %g5
-		st	%g6, [%g5 + %lo(prom_eval)]
-		add	%g7, 0x80, %g6
-		sethi	%hi(prom_v0bootline), %g6
-		st	%g6, [%g5 + %lo(prom_v0bootline)]
-
-
-/* That was easy, now lets try to print some message on the screen.
- * We don't have to worry about bad address translations when the prom
- * addresses our pointers because our pointers are at 0x0-kern_size
- * as the prom expects.
- */
-
-/* paul@sfe.com.au */
-/* V3 doesn't have printf.. And I don't really feel like doing the formatting
- * myself.. So we miss out on some messages (for now).
- */
-		ld	[%g7 + 0x4], %o0
-		subcc	%o3, 0x3, %g0
-		be	v3_bootmsg
+		subcc	%l1, 'm', %g0		! at start
+		be	1f
 		nop
 
-		sethi	%hi(boot_msg), %o0	
-		or	%o0, %lo(boot_msg), %o0
-		sethi	%hi(prom_printf), %o1
-		ld	[%o1 + %lo(prom_printf)], %o1
-		ld	[%o1], %o1
-		call	%o1  			! print boot message #1
+		subcc	%l1, 'd', %g0
+		be	no_sun4d_here		! God bless the person who
+		nop				! tried to run this on sun4d.
+	
+		subcc	%l1, 'e', %g0
+		be	no_sun4e_here		! Could be a sun4e.
 		nop
 
-		sethi	%hi(pstring1), %o0
-		or	%o0, %lo(pstring1), %o0
-		sethi	%hi(prom_printf), %o2
-		ld	[%o2 + %lo(prom_printf)], %o2
-		ld	[%o2], %o2
-		sethi	%hi(prom_magic), %o1
-		ld	[%o1 + %lo(prom_magic)], %o1
-		ld	[%o1], %o1
-		call	%o2
-		nop
-
-		sethi	%hi(pstring2), %o0
-		or	%o0, %lo(pstring2), %o0
-		sethi	%hi(prom_printf), %o2
-		ld	[%o2 + %lo(prom_printf)], %o2
-		ld	[%o2], %o2
-		sethi	%hi( C_LABEL(prom_iface_vers) ), %o1
-		ld	[%o1 + %lo( C_LABEL(prom_iface_vers) )], %o1
-		ld	[%o1], %o1
-		call 	%o2
-		nop
-
-		b	rest_of_boot
-		nop
-
-v3_bootmsg:
-		ld	[%g7 + 0x94], %o0
-		ld	[%o0], %o0
-		sethi	%hi(boot_msg), %o1
-		or	%o1, %lo(boot_msg), %o1
-		mov	BOOT_MSG_LEN, %o2
-		ld	[%g7 + 0xb8], %o4
-		call	%o4
-		nop
- 
-		ld	[%g7 + 0x94], %o0
-		ld	[%o0], %o0
-		sethi	%hi(boot_msg2), %o1
-		or	%o1, %lo(boot_msg2), %o1
-		mov	BOOT_MSG2_LEN, %o2
-		ld	[%g7 + 0xb8], %o4
-		call	%o4
-		nop
-		b	rest_of_boot
+		b	no_sun4u_here		! AIEEE, a V9 sun4u...
 		nop
 
 
-no_sun4_here:
-		ld	[%g7 + 0x68], %o1
-		set	sun4_notsup, %o0
-		call	%o1
-		nop
-
-rest_of_boot:
+1:
 		or	%g0, PAGE_SHIFT, %g5
+
+		sethi	%hi( C_LABEL(cputypval) ), %l1
+		or	%l1, %lo( C_LABEL(cputypval) ), %l1
+		ldub	[%l1 + 0x4], %l1
+		subcc	%l1, 'm', %g0           ! Test for sun4d, sun4e ?
+		be	sun4m_init
+		nop
 
 		sethi	%hi(AC_CONTEXT), %g1	! kernel context, safe now
 						! the only valid context
 						! until we call paging_init()
 		stba	%g0, [%g1] ASI_CONTROL
 
+		b	sun4c_continue_boot
+		nop
 
-/* I make the kernel image sit in memory relative to 0x0 with the text 
- * starting at 0x4000. Now it looks like the way memory is set in Linux
- * on an ix86.
+sun4m_init:
+/* P3: I just do not know what to do here. But I do know that ASI_CONTROL
+ * will not serve on sun4m. Also I do not want to smash the current MMU
+ * setup until we call paging_init().
  */
 
-/* Uh, oh, interrupt time. This crap is real confusing. What I want to do is
- * clear all interrupts, map the interrupt enable register which in effect
- * enables non-maskable interrupts (or NMI's). Actually we take no interrupts
- * until we frob with the %tbr (trap base register) which the prom has set 
- * to all its routines which allows some sanity during bootup.
+/* Ok, the PROM could have done funny things and apple cider could still
+ * be sitting in the fault status/address registers.  Read them all to
+ * clear them so we don't get magic faults later on.
  */
+/* This sucks, aparently this makes Vikings call prom panic, will fix later */
 
-		sethi	%hi(IE_reg_addr), %l0
-		or	%l0, %lo(IE_reg_addr), %l0
+		set	(0x40000000), %o1
+		rd	%psr, %o0
+		andcc	%o0, %o1, %g0
+		bne	sun4c_continue_boot	! quick hack
+		nop
 
-		set	0xf4000000, %l3
-		sethi	%hi(INT_ENABLE_REG_PHYSADR), %l2
-		or	%l2, %lo(INT_ENABLE_REG_PHYSADR), %l2
-		srl	%l2, %g5, %l2
-		or	%l2, %l3, %l1		
+clr_srmmu_fregs:
+		set	AC_M_SFSR, %o0
+		lda	[%o0] ASI_M_MMUREGS, %g0
+		set	AC_M_SFAR, %o0
+		lda	[%o0] ASI_M_MMUREGS, %g0
+		set	AC_M_AFSR, %o0
+		lda	[%o0] ASI_M_MMUREGS, %g0
+		set	AC_M_AFAR, %o0
+		lda	[%o0] ASI_M_MMUREGS, %g0
+		nop
 
-#ifndef CONFIG_SRMMU
-		sta	%l1, [%l0] ASI_PTE
-#endif
-	
-		or	%g0, 0x1, %l1
-		stb	%l1, [%l0]
-	
+
+sun4c_continue_boot:
+
 
 /* Aieee, now set PC and nPC, enable traps, give ourselves a stack and it's
  * show-time!
  */
 
-		sethi	%hi(1f), %g1
-		or	%g1, %lo(1f), %g1
-		jmp	%g1
-		nop
-
-		.align 4
-1:		sethi	%hi( C_LABEL(cputyp) ), %o0
+		sethi	%hi( C_LABEL(cputyp) ), %o0
 		st	%g4, [%o0 + %lo( C_LABEL(cputyp) )]
 
-		sethi	%hi( C_LABEL(pgshift) ), %o0
-		st	%g5, [%o0 + %lo( C_LABEL(pgshift) )]
-
-		mov	1, %o0
-		sll	%o0, %g5, %g5
-		sethi	%hi( C_LABEL(nbpg) ), %o0
-		st	%g5, [%o0 + %lo( C_LABEL(nbpg) )]
-
-		sub	%g5, 1, %g5
-		sethi	%hi( C_LABEL(pgofset) ), %o0
-		st	%g5, [%o0 + %lo( C_LABEL(pgofset) )]
-
-
-		rd	%psr, %g3
-		andn	%g3, PSR_ET, %g3
-		wr	%g3, 0x0, %psr		! make sure traps are off
-						! before we play around
-		WRITE_PAUSE			! no guarantees until 3 insns
-
-
-		wr	%g0, 0x0, %wim		! magical invalid window reg
-		WRITE_PAUSE			! see above
-
-/* I keep the timer interrupt on so that BogoMIPS works and the prom
- * keeps updating its "jiffies" counter. 100HZ clock on sparcstations.
- */	
-
-/* If gas wasn't so dumb, I could use or'd macros in this next
- * write. ;-( like this (PSR_PS | PSR_S | PSR_PIL)...
- */
-
+		/* Turn on PreviousSupervisor, Supervisor, EnableFloating,
+		 * and all the PIL bits.  Also puts us in register window
+		 * zero.
+		 */
 		sethi	%hi(PSR_PS | PSR_S | PSR_PIL | PSR_EF), %g2
 		or	%g2, %lo(PSR_PS | PSR_S | PSR_PIL | PSR_EF), %g2
 		wr	%g2, 0x0, %psr
 		WRITE_PAUSE
 
-		wr	%g0, 0x2, %wim		! window 1 invalid
+		wr	%g0, 0x2, %wim		! Make window 1 invalid.
 		WRITE_PAUSE
 
+		/* Initialize the WIM value for init_task. */
 		or	%g0, 0x1, %g1
 		sethi	%hi( C_LABEL(current) + THREAD_WIM), %g2
 		st	%g1, [%g2 + %lo( C_LABEL(current) + THREAD_WIM)]
 
 /* I want a kernel stack NOW! */
+/* Grrr, gotta be real careful about alignment here */
 
-		set	( C_LABEL(init_user_stack) + 4092 - 96 - 80), %fp	
-		set	( C_LABEL(init_user_stack) + 4092), %sp
+		set	( C_LABEL(init_user_stack) + PAGE_SIZE - 96 - 96 - 80), %g1
+		andn	%g1, 0x7, %g1
+		or	%g1, 0x0, %fp
+		add	%fp, (96+80), %sp
 
-/* now out stack is set up similarly to the way it is on the i386 */
-
+		/* Enable traps. */
 		rd	%psr, %l0
 		wr	%l0, PSR_ET, %psr
 		WRITE_PAUSE
@@ -843,26 +983,14 @@ rest_of_boot:
  * don't know, do you?
  */
 
-		set	C_LABEL(edata) , %o0
-		set	C_LABEL(end) , %o1
-		sub	%o1, %o0, %g2
-		sethi	%hi( C_LABEL(kernel_bss_len) ), %g3
-		st	%g2, [%g3 + %lo( C_LABEL(kernel_bss_len) )]
-		sethi	%hi( C_LABEL(trapbase) ), %g3
-		or	%g3, %lo( C_LABEL(trapbase) ), %g3
-		sethi	%hi( C_LABEL(etext) ), %g4
-		or	%g4, %lo( C_LABEL(etext) ), %g4			
-		sub	%g4, %g3, %g2
-		sethi	%hi( C_LABEL(kernel_text_len) ), %g3
-		st	%g2, [%g3 + %lo( C_LABEL(kernel_text_len) )]
-		sethi	%hi( C_LABEL(etext) ), %g4
-		or	%g4, %lo( C_LABEL(etext) ), %g4
-		sethi	%hi( C_LABEL(edata) ), %g3
-		or	%g3, %lo( C_LABEL(edata) ), %g3
-		sub	%g3, %g4, %g2
-		sethi	%hi( C_LABEL(kernel_data_len) ), %g3
-		st	%g2, [%g3 + %lo( C_LABEL(kernel_data_len) )]
-		or	%g0, %g0, %g1
+		set	C_LABEL(edata) , %o0	! First address of BSS
+		set	C_LABEL(end) , %o1	! Last address of BSS
+
+		/* Argh, ELF gets me again... */
+		andn	%o0, 0x3, %o0
+		andn	%o1, 0x3, %o1
+
+/* Friggin' bzero() kludge. */
 
 1:	
 		st	%g0, [%o0]
@@ -872,55 +1000,102 @@ rest_of_boot:
 		nop
 
 /* Compute NWINDOWS and stash it away. Now uses %wim trick explained
- * in the V8 manual. Ok, this method seems to work, sparc is cool...
+ * in the V8 manual. Ok, this method seems to work, Sparc is cool...
+ * No, it doesn't work, have to play the save/readCWP/restore trick.
  */
 
-		sethi	%hi(0xffffffff), %g1
-		rd	%wim, %g2			! save current value
-		or	%g1, %lo(0xffffffff), %g1
-		wr	%g1, 0x0, %wim
-		rd	%wim, %g1			! get remaining mask
-		wr	%g2, 0x0, %wim			! restore old value
+		rd	%wim, %g1
+		rd	%psr, %g2
+		wr	%g0, 0x0, %wim			! so we dont get a trap
+		andn	%g2, 0x1f, %g3
+		wr	%g3, 0x0, %psr
 		WRITE_PAUSE
-
-		or	%g0, 0x0, %g3
-
-1:		srl	%g1, 0x1, %g1			! shift until highest
-		subcc	%g1, 0x0, %g0			! bit set
-		bne	1b
+		save
+		rd	%psr, %g3
+		restore
+		and	%g3, 0x1f, %g3
 		add	%g3, 0x1, %g3
+		wr	%g2, 0x0, %psr
+		wr	%g1, 0x0, %wim
+
+		cmp	%g3, 0x7
+		bne,a	2f
 		sethi	%hi( C_LABEL(nwindows) ), %g4
+
+
+		/* Nop out one save and one restore in the save state code
+		 * and system call entry if this is a seven window Sparc.
+		 */
+		sethi	%hi(nop7), %g5
+		or	%g5, %lo(nop7), %g5
+		sethi	%hi(NOP_INSN), %g6
+		or	%g6, %lo(NOP_INSN), %g6
+		/* patch 1 */
+		st	%g6, [%g5]
+		st	%g6, [%g5 + 0x4]
+		sethi	%hi(rnop7), %g5
+		or	%g5, %lo(rnop7), %g5
+		/* patch 2 */
+		st	%g6, [%g5]
+		st	%g6, [%g5 + 0x4]
+
+		sethi	%hi( C_LABEL(nwindows) ), %g4
+
+2:		
 		st	%g3, [%g4 + %lo( C_LABEL(nwindows) )]	! store final value
 		sub	%g3, 0x1, %g3
 		sethi	%hi( C_LABEL(nwindowsm1) ), %g4
 		st	%g3, [%g4 + %lo( C_LABEL(nwindowsm1) )]
 
+		/* Initialize lnx_winmask. */
+		set	lnx_winmask, %g4
+		or	%g0, 0x2, %g5
+		or	%g0, 0x0, %g6
+msk_loop:
+		stb	%g5, [%g4 + %g6]
+		add	%g6, 0x1, %g6
+		cmp	%g6, %g3
+		bl,a	msk_loop
+		sll	%g5, 0x1, %g5
+		or	%g0, 0x1, %g5
+		stb	%g5, [%g4 + %g3]
 
-/* Here we go */
-
-#ifndef CONFIG_SUN4M
-		/* paul@sfe.com.au */
-		/* Look into traps later :( */
+		/* Here we go */
 		set	C_LABEL(trapbase), %g3
 		wr	%g3, 0x0, %tbr
 		WRITE_PAUSE
-#endif
 
 
-/* First we call init_prom() to set up romvec, then off to start_kernel() */
-/* XXX put this in arch_init() */
+/* First we call prom_init() to set up PROMLIB, then off to start_kernel() */
+/* XXX put this in setup_arch() */
 
 		sethi	%hi( C_LABEL(prom_vector_p) ), %g5
-		call	C_LABEL(init_prom)
-		ld	[%g5 + %lo( C_LABEL(prom_vector_p) )], %o0   /* delay slot */
+		call	C_LABEL(prom_init)
+		ld	[%g5 + %lo( C_LABEL(prom_vector_p) )], %o0
+
+		subcc	%o0, 0x1, %g0
+		be	halt_me			! promlib init failed
+		nop
 
 		call 	C_LABEL(start_kernel)
 		nop
 	
+		/* We should not get here. */
 		call	halt_me
 		nop
 
-/* There, happy now adrian? */
+/* There, happy now Adrian? */
+
+		/* XXX Fix this... XXX */
+no_sun4_here:
+		sethi	%hi(SUN4_PROM_VECTOR+SUN4_PRINTF), %o1
+		ld	[%o1 + %lo(SUN4_PROM_VECTOR+SUN4_PRINTF)], %o1
+		set	sun4_notsup, %o0
+		call	%o1
+		nop
+1:
+		ba	1b			! Cannot exit into KMON
+		nop
 
 no_sun4d_here:
 		ld	[%g7 + 0x68], %o1
@@ -930,10 +1105,26 @@ no_sun4d_here:
 		b	halt_me
 		nop
 
+no_sun4e_here:
+		ld	[%g7 + 0x68], %o1
+		set	sun4e_notsup, %o0
+		call	%o1
+		nop
+		b	halt_me
+		nop
+
+no_sun4u_here:
+		ld	[%g7 + 0x68], %o1
+		set	sun4u_notsup, %o0
+		call	%o1
+		nop
+		b	halt_me
+		nop
+
 halt_me:
 		ld	[%g7 + 0x74], %o0
-		call	%o0			! get us out of here...
-		nop				! apparently solaris is better
+		call	%o0			! Get us out of here...
+		nop				! Apparently Solaris is better.
 
 	.data
 	.align 4
@@ -945,35 +1136,7 @@ halt_me:
  */
 
 			.globl C_LABEL(prom_vector_p)
-
 C_LABEL(prom_vector_p):	.skip 4
-prom_magic:  		.skip 4			! magic mushroom, beware...
-prom_rom_vers: 		.skip 4			! interface version (v0 or v2)
-prom_pluginvers:	.skip 4			! XXX help help help ???
-prom_revision:		.skip 4			! PROM revision (ie. 1.4)
-prom_halt:		.skip 4			! void halt(void)  solaris friend
-prom_eval:		.skip 4			! void eval(int len, char* string)
-prom_v0bootline:	.skip 4			! boot command line
-prom_v0mem_desc:	.skip 4			! V0 memory descriptor list ptr.
-prom_nodefuncs:		.skip 4			! Magical Node functions
-prom_printf:		.skip 4			! minimal printf()
-
-/* The prom_abort pointer MUST be mapped in all contexts, because if you
- * don't then if a user process is running when you press the abort key
- * sequence, all sorts of bad things can happen
- */
-
-prom_abort:		.skip 4		! L1-A magic cookie
-					! must be mapped in ALL contexts
-
-/* prom_sync is a place where the kernel should place a pointer to a kernel
- * function that when called will sync all pending information to the drives
- * and then promptly return. If the kernel gets aborted with 'L1-A' one can
- * give the 'sync' command to the boot prompt and this magic cookie gets
- * executed. Nice feature eh?
- */
-
-prom_sync:		.skip 4			! hook in prom for sync func
 
 	.align 4
 
@@ -987,59 +1150,15 @@ C_LABEL(nwindows):	.skip 4
 C_LABEL(nwindowsm1):	.skip 4
 
 	.align 4
-/* Boot time privileged register values, plus magic %o2 value */
 
-	.globl C_LABEL(boot_wim)
-	.globl C_LABEL(boot_psr)
-	.globl C_LABEL(boot_tbr)
-	.globl C_LABEL(boot_smp_ptr)
-C_LABEL(boot_wim):		.skip 4
-C_LABEL(boot_psr):		.skip 4
-C_LABEL(boot_tbr):		.skip 4
-C_LABEL(boot_smp_ptr):		.skip 4
+/* Boot time debugger vector value.  We need this later on. */
 
+	.globl C_LABEL(linux_dbvec)
+C_LABEL(linux_dbvec):		.skip 4
 
 	.align 4
-/* Miscellaneous pieces of information saved at kernel startup. */
-	.globl C_LABEL(kernel_text_len)
-	.globl C_LABEL(kernel_data_len)
-	.globl C_LABEL(kernel_bss_len)
-C_LABEL(kernel_text_len):	.word 0
-C_LABEL(kernel_data_len):	.word 0
-C_LABEL(kernel_bss_len):	.word 0
-
-/* These are for page alignment/offset information as they change from
-   machine to machine.
-*/
-
-        .globl  C_LABEL(pgshift)
-	.globl 	C_LABEL(nbpg)
-	.globl	C_LABEL(pgofset)
-
-	.align 4
-C_LABEL(pgshift):
-        .word   1
-C_LABEL(nbpg):
-        .word   1
-C_LABEL(pgofset):
-        .word   1
 
 /* Just to get the kernel through the compiler for now */
-	.globl C_LABEL(swapper_pg_dir), C_LABEL(pg0)
-	.globl C_LABEL(empty_bad_page)
-	.globl C_LABEL(empty_bad_page_table)
-	.globl C_LABEL(empty_zero_page)
 	.globl C_LABEL(floppy_track_buffer)
 C_LABEL(floppy_track_buffer):
 	.fill 512*2*36,1,0
-
-	.align 4
-C_LABEL(swapper_pg_dir):		.skip 0x1000
-C_LABEL(pg0):				.skip 0x1000
-C_LABEL(empty_bad_page):		.skip 0x1000
-C_LABEL(empty_bad_page_table):		.skip 0x1000
-C_LABEL(empty_zero_page):		.skip 0x1000
-
-		.align 4
-diagstr:	.asciz	"DIAG\n"
-		.align 4

@@ -65,7 +65,7 @@ int getname(const char * filename, char **result)
 		error = -ENAMETOOLONG;
 		i = PAGE_SIZE;
 	}
-	c = get_fs_byte(filename++);
+	c = get_user(filename++);
 	if (!c)
 		return -ENOENT;
 	if(!(page = __get_free_page(GFP_KERNEL)))
@@ -73,7 +73,7 @@ int getname(const char * filename, char **result)
 	*result = tmp = (char *) page;
 	while (--i) {
 		*(tmp++) = c;
-		c = get_fs_byte(filename++);
+		c = get_user(filename++);
 		if (!c) {
 			*tmp = '\0';
 			return 0;

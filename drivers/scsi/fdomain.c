@@ -1,10 +1,10 @@
 /* fdomain.c -- Future Domain TMC-16x0 SCSI driver
  * Created: Sun May  3 18:53:19 1992 by faith@cs.unc.edu
- * Revised: Mon Jun  5 09:21:54 1995 by faith@cs.unc.edu
+ * Revised: Fri Jun 23 17:07:09 1995 by r.faith@ieee.org
  * Author: Rickard E. Faith, faith@cs.unc.edu
  * Copyright 1992, 1993, 1994, 1995 Rickard E. Faith
  *
- * $Id: fdomain.c,v 5.28 1995/06/05 13:21:57 faith Exp $
+ * $Id: fdomain.c,v 5.31 1995/06/23 21:07:16 faith Exp $
 
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -145,6 +145,11 @@
  (rsimpson@ewrcsdra.demon.co.uk) for more Quantum signatures and detective
  work on the Quantum RAM layout.
 
+ Special thanks to James T. McKinley (mckinley@msupa.pa.msu.edu) for
+ providing patches for proper PCI BIOS32-mediated detection of the TMC-3260
+ card (a PCI bus card with the 36C70 chip).  Please send James PCI-related
+ bug reports.
+ 
  All of the alpha testers deserve much thanks.
 
 
@@ -193,8 +198,10 @@
 #include <linux/errno.h>
 #include <linux/string.h>
 #include <linux/ioport.h>
+#include <linux/bios32.h>
+#include <linux/pci.h>
 
-#define VERSION          "$Revision: 5.28 $"
+#define VERSION          "$Revision: 5.31 $"
 
 /* START OF USER DEFINABLE OPTIONS */
 
@@ -411,17 +418,22 @@ static void print_banner( struct Scsi_Host *shpnt )
    printk( " at 0x%x using scsi id %d\n",
 	   (unsigned)bios_base, shpnt->this_id );
 
+				/* If this driver works for later FD PCI
+                                   boards, we will have to modify banner
+                                   for additional PCI cards, but for now if
+                                   it's PCI it's a TMC-3260 - JTM */
    printk( "scsi%d <fdomain>: %s chip at 0x%x irq ",
 	   shpnt->host_no,
 	   chip == tmc1800 ? "TMC-1800"
 	   : (chip == tmc18c50 ? "TMC-18C50"
-	      : (chip == tmc18c30 ? "TMC-18C30" : "Unknown")),
+	      : (chip == tmc18c30 ?
+		 (PCI_bus ? "TMC-36C70 (PCI bus)" : "TMC-18C30")
+		 : "Unknown")),
 	   port_base );
 
    if (interrupt_level) printk( "%d", interrupt_level );
    else                 printk( "<none>" );
 
-   if (PCI_bus)         printk( " (PCI bus)" );
    printk( "\n" );
 }
 
@@ -444,8 +456,6 @@ inline static void fdomain_make_bus_idle( void )
 
 static int fdomain_is_valid_port( int port )
 {
-   int options;
-
 #if DEBUG_DETECT 
    printk( " (%x%x),",
 	   inb( port + MSB_ID_Code ), inb( port + LSB_ID_Code ) );
@@ -473,9 +483,9 @@ static int fdomain_is_valid_port( int port )
 				   we'll use the other method.) */
 
       outb( 0x80, port + IO_Control );
-      if (inb( port + Configuration2 ) & 0x80 == 0x80) {
+      if ((inb( port + Configuration2 ) & 0x80) == 0x80) {
 	 outb( 0x00, port + IO_Control );
-	 if (inb( port + Configuration2 ) & 0x80 == 0x00) {
+	 if ((inb( port + Configuration2 ) & 0x80) == 0x00) {
 	    chip = tmc18c30;
 	    FIFO_Size = 0x800;	/* 2k FIFO */
 	 }
@@ -494,31 +504,6 @@ static int fdomain_is_valid_port( int port )
 				/* If that failed, we are an 18c50. */
    }
 
-   /* We have a valid MCA ID for a TMC-1660/TMC-1680 Future Domain board.
-      Now, check to be sure the bios_base matches these ports.  If someone
-      was unlucky enough to have purchased more than one Future Domain
-      board, then they will have to modify this code, as we only detect one
-      board here.  [The one with the lowest bios_base.]  */
-
-   options = inb( port + Configuration1 );
-
-#if DEBUG_DETECT
-   printk( " Options = %x\n", options );
-#endif
-
-				/* Check for board with lowest bios_base --
-				   this isn't valid for the 18c30 or for
-				   boards on the PCI bus, so just assume we
-				   have the right board. */
-
-   if (chip != tmc18c30
-       && !PCI_bus
-       && addresses[ (options & 0xc0) >> 6 ] != bios_base) return 0;
-
-				/* Get the IRQ from the options. */
-
-   interrupt_level = ints[ (options & 0x0e) >> 1 ];
-
    return 1;
 }
 
@@ -535,6 +520,291 @@ static int fdomain_test_loopback( void )
    }
    return 0;
 }
+
+/* fdomain_get_irq assumes that we have a valid MCA ID for a
+   TMC-1660/TMC-1680 Future Domain board.  Now, check to be sure the
+   bios_base matches these ports.  If someone was unlucky enough to have
+   purchased more than one Future Domain board, then they will have to
+   modify this code, as we only detect one board here.  [The one with the
+   lowest bios_base.]
+
+   Note that this routine is only used for systems without a PCI BIOS32
+   (e.g., ISA bus).  For PCI bus systems, this routine will likely fail
+   unless one of the IRQs listed in the ints array is used by the board.
+   Sometimes it is possible to use the computer's BIOS setup screen to
+   configure a PCI system so that one of these IRQs will be used by the
+   Future Domain card. */
+
+static int fdomain_get_irq( int base )
+{
+   int options = inb( base + Configuration1 );
+
+#if DEBUG_DETECT
+   printk( " Options = %x\n", options );
+#endif
+   
+				/* Check for board with lowest bios_base --
+				   this isn't valid for the 18c30 or for
+				   boards on the PCI bus, so just assume we
+				   have the right board. */
+
+   if (chip != tmc18c30
+       && !PCI_bus
+       && addresses[ (options & 0xc0) >> 6 ] != bios_base) return 0;
+
+   return ints[ (options & 0x0e) >> 1 ];
+}
+
+static int fdomain_isa_detect( int *irq, int *iobase )
+{
+   int i;
+   int base;
+   int flag = 0;
+
+   if (bios_major == 2) {
+      /* The TMC-1660/TMC-1680 has a RAM area just after the BIOS ROM.
+	 Assuming the ROM is enabled (otherwise we wouldn't have been
+	 able to read the ROM signature :-), then the ROM sets up the
+	 RAM area with some magic numbers, such as a list of port
+	 base addresses and a list of the disk "geometry" reported to
+	 DOS (this geometry has nothing to do with physical geometry).
+       */
+
+      switch (Quantum) {
+      case 2:			/* ISA_200S */
+      case 3:			/* ISA_250MG */
+	 base = *((char *)bios_base + 0x1fa2)
+	       + (*((char *)bios_base + 0x1fa3) << 8);
+	 break;
+      case 4:			/* ISA_200S (another one) */
+	 base = *((char *)bios_base + 0x1fa3)
+	       + (*((char *)bios_base + 0x1fa4) << 8);
+	 break;
+      default:
+	 base = *((char *)bios_base + 0x1fcc)
+	       + (*((char *)bios_base + 0x1fcd) << 8);
+	 break;
+      }
+   
+#if DEBUG_DETECT
+      printk( " %x,", base );
+#endif
+
+      for (flag = 0, i = 0; !flag && i < PORT_COUNT; i++) {
+	 if (base == ports[i])
+	       ++flag;
+      }
+
+      if (flag && fdomain_is_valid_port( base )) {
+	 *irq    = fdomain_get_irq( base );
+	 *iobase = base;
+	 return 1;
+      }
+      
+      /* This is a bad sign.  It usually means that someone patched the
+	 BIOS signature list (the signatures variable) to contain a BIOS
+	 signature for a board *OTHER THAN* the TMC-1660/TMC-1680. */
+      
+#if DEBUG_DETECT
+      printk( " RAM FAILED, " );
+#endif
+   }
+
+   /* Anyway, the alternative to finding the address in the RAM is to just
+      search through every possible port address for one that is attached
+      to the Future Domain card.  Don't panic, though, about reading all
+      these random port addresses -- there are rumors that the Future
+      Domain BIOS does something very similar.
+
+      Do not, however, check ports which the kernel knows are being used by
+      another driver. */
+
+   for (i = 0; i < PORT_COUNT; i++) {
+      base = ports[i];
+      if (check_region( base, 0x10 )) {
+#if DEBUG_DETECT
+	 printk( " (%x inuse),", base );
+#endif
+	 continue;
+      }
+#if DEBUG_DETECT
+      printk( " %x,", base );
+#endif
+      if ((flag = fdomain_is_valid_port( base ))) break;
+   }
+
+   if (!flag) return 0;		/* iobase not found */
+
+   *irq    = fdomain_get_irq( base );
+   *iobase = base;
+
+   return 1;			/* success */
+}
+
+static int fdomain_pci_nobios_detect( int *irq, int *iobase )
+{
+   int i;
+   int flag = 0;
+
+   /* The proper way of doing this is to use ask the PCI bus for the device
+      IRQ and interrupt level.  But we can't do that if PCI BIOS32 support
+      isn't compiled into the kernel, or if a PCI BIOS32 isn't present.
+
+      Instead, we scan down a bunch of addresses (Future Domain tech
+      support says we will probably find the address before we get to
+      0xf800).  This works fine on some systems -- other systems may have
+      to scan more addresses.  If you have to modify this section for your
+      installation, please send mail to faith@cs.unc.edu. */
+
+   for (i = 0xfff8; i > 0xe000; i -= 8) {
+      if (check_region( i, 0x10 )) {
+#if DEBUG_DETECT
+	 printk( " (%x inuse)," , i );
+#endif
+	 continue;
+      }
+      if ((flag = fdomain_is_valid_port( i ))) break;
+   }
+
+   if (!flag) return 0;		/* iobase not found */
+
+   *irq    = fdomain_get_irq( i );
+   *iobase = i;
+
+   return 1;			/* success */
+}
+
+/* PCI detection function: int fdomain_36c70_detect(int* irq, int* iobase)
+   This function gets the Interrupt Level and I/O base address from the PCI
+   configuration registers.  The I/O base address is masked with 0xfff8
+   since on my card the address read from the PCI config registers is off
+   by one from the actual I/O base address necessary for accessing the
+   status and control registers on the card (PCI config register gives
+   0xf801, actual address is 0xf800).  This is likely a bug in the FD
+   config code that writes to the PCI registers, however using a mask
+   should be safe since I think the scan done by the card to determine the
+   I/O base is done in increments of 8 (i.e., 0xf800, 0xf808, ...), at
+   least the old scan code we used to use to get the I/O base did...  Also,
+   the device ID from the PCI config registers is 0x0 and should be 0x60e9
+   as it is in the status registers (offset 5 from I/O base).  If this is
+   changed in future hardware/BIOS changes it will need to be fixed in this
+   detection function.  Comments, bug reports, etc... on this function
+   should be sent to mckinley@msupa.pa.msu.edu - James T. McKinley.  */
+
+#ifdef PCI_CONFIG
+static int fdomain_36c70_detect( int *irq, int *iobase )
+{
+   int              error;
+   unsigned char    pci_bus, pci_dev_fn;    /* PCI bus & device function */
+   unsigned char    pci_irq;                /* PCI interrupt line */
+   unsigned long    pci_base;               /* PCI I/O base address */
+   unsigned short   pci_vendor, pci_device; /* PCI vendor & device IDs */
+
+   /* If the PCI BIOS doesn't exist, use the old-style detection routines.
+      Otherwise, get the I/O base address and interrupt from the PCI config
+      registers. */
+   
+   if (!pcibios_present()) return fdomain_pci_detect( irq, iobase );
+
+#if DEBUG_DETECT
+   /* Tell how to print a list of the known PCI devices from bios32 and
+      list vendor and device IDs being used if in debug mode.  */
+      
+   printk( "\nINFO: cat /proc/pci to see list of PCI devices from bios32\n" );
+   printk( "\nTMC-3260 detect:"
+	   " Using PCI Vendor ID: 0x%x, PCI Device ID: 0x%x\n",
+	   PCI_VENDOR_ID_FD, 
+	   PCI_DEVICE_ID_FD_36C70 );
+#endif 
+
+   /* We will have to change this if more than 1 PCI bus is present and the
+      FD scsi host is not on the first bus (i.e., a PCI to PCI bridge,
+      which is not supported by bios32 right now anyway).  This should
+      probably be done by a call to pcibios_find_device but I can't get it
+      to work...  Also the device ID reported from the PCI config registers
+      does not match the device ID quoted in the tech manual or available
+      from offset 5 from the I/O base address.  It should be 0x60E9, but it
+      is 0x0 if read from the PCI config registers.  I guess the FD folks
+      neglected to write it to the PCI registers...  This loop is necessary
+      to get the device function (at least until someone can get
+      pcibios_find_device to work, I cannot but 53c7,8xx.c uses it...). */
+    
+   pci_bus = 0;
+
+   for (pci_dev_fn = 0x0; pci_dev_fn < 0xff; pci_dev_fn++) {
+      pcibios_read_config_word( pci_bus,
+				pci_dev_fn,
+				PCI_VENDOR_ID,
+				&pci_vendor );
+
+      if (pci_vendor == PCI_VENDOR_ID_FD) {
+	 pcibios_read_config_word( pci_bus,
+				   pci_dev_fn,
+				   PCI_DEVICE_ID,
+				   &pci_device );
+
+	 if (pci_device == PCI_DEVICE_ID_FD_36C70) {
+	    /* Break out once we have the correct device.  If other FD
+	       PCI devices are added to this driver we will need to add
+	       an or of the other PCI_DEVICE_ID_FD_XXXXX's here. */
+	    break;
+	 } else {
+	    /* If we can't find an FD scsi card we give up. */
+	    return 0;
+	 }
+      }
+   }
+       
+#if DEBUG_DETECT
+   printk( "Future Domain 36C70 : at PCI bus %u, device %u, function %u\n",
+	   pci_bus,
+	   (pci_dev_fn & 0xf8) >> 3, 
+	   pci_dev_fn & 7 );
+#endif
+
+   /* We now have the appropriate device function for the FD board so we
+      just read the PCI config info from the registers.  */
+
+   if ((error = pcibios_read_config_dword( pci_bus,
+					   pci_dev_fn, 
+					   PCI_BASE_ADDRESS_0,
+					   &pci_base ))
+       || (error = pcibios_read_config_byte( pci_bus,
+					     pci_dev_fn, 
+					     PCI_INTERRUPT_LINE,
+					     &pci_irq ))) {
+      printk ( "PCI ERROR: Future Domain 36C70 not initializing"
+	       " due to error reading configuration space\n" );
+      return 0;
+   } else {
+#if DEBUG_DETECT
+      printk( "TMC-3260 PCI: IRQ = %u, I/O base = 0x%lx\n", 
+	      pci_irq, pci_base );
+#endif
+
+      /* Now we have the I/O base address and interrupt from the PCI
+	 configuration registers.  Unfortunately it seems that the I/O base
+	 address is off by one on my card so I mask it with 0xfff8.  This
+	 must be some kind of goof in the FD code that does the autoconfig
+	 and writes to the PCI registers (or maybe I just don't understand
+	 something).  If they fix it in later versions of the card or BIOS
+	 we may have to adjust the address based on the signature or
+	 something...  */
+
+      *irq    = pci_irq;
+      *iobase = (pci_base & 0xfff8);
+
+#if DEBUG_DETECT
+      printk( "TMC-3260 fix: Masking I/O base address with 0xff00.\n" ); 
+      printk( "TMC-3260: IRQ = %d, I/O base = 0x%x\n", *irq, *iobase );
+#endif
+
+      if (!fdomain_is_valid_port( *iobase )) return 0;
+      return 1;
+   }
+   return 0;
+}
+#endif
 
 int fdomain_16x0_detect( Scsi_Host_Template *tpnt )
 {
@@ -579,107 +849,23 @@ int fdomain_16x0_detect( Scsi_Host_Template *tpnt )
       return 0;
    }
 
-   if (bios_major == 2) {
-      /* The TMC-1660/TMC-1680 has a RAM area just after the BIOS ROM.
-	 Assuming the ROM is enabled (otherwise we wouldn't have been
-	 able to read the ROM signature :-), then the ROM sets up the
-	 RAM area with some magic numbers, such as a list of port
-	 base addresses and a list of the disk "geometry" reported to
-	 DOS (this geometry has nothing to do with physical geometry).
-       */
-
-      switch (Quantum) {
-      case 2:			/* ISA_200S */
-      case 3:			/* ISA_250MG */
-	 port_base = *((char *)bios_base + 0x1fa2)
-	       + (*((char *)bios_base + 0x1fa3) << 8);
-	 break;
-      case 4:			/* ISA_200S (another one) */
-	 port_base = *((char *)bios_base + 0x1fa3)
-	       + (*((char *)bios_base + 0x1fa4) << 8);
-	 break;
-      default:
-	 port_base = *((char *)bios_base + 0x1fcc)
-	       + (*((char *)bios_base + 0x1fcd) << 8);
-	 break;
-      }
-   
-#if DEBUG_DETECT
-      printk( " %x,", port_base );
+   if (!PCI_bus) {
+      flag = fdomain_isa_detect( &interrupt_level, &port_base );
+   } else {
+#ifdef PCI_CONFIG
+      flag = fdomain_pci_bios_detect( &interrupt_level, &port_base );
+#else
+      flag = fdomain_pci_nobios_detect( &interrupt_level, &port_base );
 #endif
-
-      for (flag = 0, i = 0; !flag && i < PORT_COUNT; i++) {
-	 if (port_base == ports[i])
-	       ++flag;
-      }
-
-      if (flag)
-	    flag = fdomain_is_valid_port( port_base );
    }
-
-   if (!flag) {			/* Cannot get port base from BIOS RAM */
-      
-      /* This is a bad sign.  It usually means that someone patched the
-	 BIOS signature list (the signatures variable) to contain a BIOS
-	 signature for a board *OTHER THAN* the TMC-1660/TMC-1680.  It
-	 also means that we don't have a Version 2.0 BIOS :-)
-       */
-      
-#if DEBUG_DETECT
-      if (bios_major != 2) printk( " RAM FAILED, " );
-#endif
-
-      /* Anyway, the alternative to finding the address in the RAM is to
-	 just search through every possible port address for one that is
-	 attached to the Future Domain card.  Don't panic, though, about
-	 reading all these random port addresses -- there are rumors that
-	 the Future Domain BIOS does something very similar.
-
-	 Do not, however, check ports which the kernel knows are being used
-	 by another driver. */
-
-      if (!PCI_bus) {
-	 for (i = 0; !flag && i < PORT_COUNT; i++) {
-	    port_base = ports[i];
-	    if (check_region( port_base, 0x10 )) {
-#if DEBUG_DETECT
-	       printk( " (%x inuse),", port_base );
-#endif
-	       continue;
-	    }
-#if DEBUG_DETECT
-	    printk( " %x,", port_base );
-#endif
-	    flag = fdomain_is_valid_port( port_base );
-	 }
-      } else {
-
-	 /* The proper way of doing this is to use ask the PCI bus for the
-            device IRQ and interrupt level.
-
-	    Until the Linux kernel supports this sort of PCI bus query, we
-	    scan down a bunch of addresses (Future Domain tech support says
-	    we will probably find the address before we get to 0xf800).
-	    This works fine on some systems -- other systems may have to
-	    scan more addresses.  If you have to modify this section for
-	    your installation, please send mail to faith@cs.unc.edu. */
-
-	 for (i = 0xfff8; !flag && i > 0xe000; i -= 8) {
-	    port_base = i;
-	    if (check_region( port_base, 0x10 )) {
-#if DEBUG_DETECT
-	       printk( " (%x inuse)," , port_base );
-#endif
-	       continue;
-	    }
-	    flag = fdomain_is_valid_port( port_base );
-	 }
-      }
-   }
-
+	 
    if (!flag) {
 #if DEBUG_DETECT
       printk( " FAILED: NO PORT\n" );
+#endif
+#ifdef PCI_CONFIG
+      printk( "\nTMC-3260 36C70 PCI scsi chip detection failed.\n" );
+      printk( "Send mail to mckinley@msupa.pa.msu.edu.\n" );
 #endif
       return 0;		/* Cannot find valid set of ports */
    }

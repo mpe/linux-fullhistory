@@ -85,19 +85,19 @@
  * and worry about wraparound (automatic with unsigned arithmetic).
  */
 
-extern __inline int before(unsigned long seq1, unsigned long seq2)
+extern __inline int before(__u32 seq1, __u32 seq2)
 {
-        return (long)(seq1-seq2) < 0;
+        return (__s32)(seq1-seq2) < 0;
 }
 
-extern __inline int after(unsigned long seq1, unsigned long seq2)
+extern __inline int after(__u32 seq1, __u32 seq2)
 {
-	return (long)(seq1-seq2) > 0;
+	return (__s32)(seq1-seq2) > 0;
 }
 
 
 /* is s2<=s1<=s3 ? */
-extern __inline int between(unsigned long seq1, unsigned long seq2, unsigned long seq3)
+extern __inline int between(__u32 seq1, __u32 seq2, __u32 seq3)
 {
 	return (after(seq1+1, seq2) && before(seq1, seq3+1));
 }

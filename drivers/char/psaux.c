@@ -140,7 +140,7 @@ static int aux_write_ack(int val)
 	while ((inb(AUX_STATUS) & AUX_OBUF_FULL) != AUX_OBUF_FULL
 	            && retries < MAX_RETRIES) {          /* wait for ack */
        		current->state = TASK_INTERRUPTIBLE;
-		current->timeout = jiffies + 5;
+		current->timeout = jiffies + (5*HZ + 99) / 100;
 		schedule();
 		retries++;
         }
@@ -232,7 +232,9 @@ static void qp_interrupt(int cpl, struct pt_regs * regs)
 
 static void release_aux(struct inode * inode, struct file * file)
 {
+#ifndef __alpha__
 	aux_write_dev(AUX_DISABLE_DEV);		/* disable aux device */
+#endif
 	aux_write_cmd(AUX_INTS_OFF);		/* disable controller ints */
 	poll_aux_status();
 	outb_p(AUX_DISABLE,AUX_COMMAND);      	/* Disable Aux device */
@@ -342,7 +344,7 @@ static int write_aux(struct inode * inode, struct file * file, char * buffer, in
 		outb_p(AUX_MAGIC_WRITE,AUX_COMMAND);
 		if (!poll_aux_status())
 			return -EIO;
-		outb_p(get_fs_byte(buffer++),AUX_OUTPUT_PORT);
+		outb_p(get_user(buffer++),AUX_OUTPUT_PORT);
 	}
 	inode->i_mtime = CURRENT_TIME;
 	return count;
@@ -361,7 +363,7 @@ static int write_qp(struct inode * inode, struct file * file, char * buffer, int
 	while (i--) {
 		if (!poll_qp_status())
 			return -EIO;
-		outb_p(get_fs_byte(buffer++), qp_data);
+		outb_p(get_user(buffer++), qp_data);
 	}
 	inode->i_mtime = CURRENT_TIME;
 	return count;
@@ -394,7 +396,7 @@ repeat:
 	}		
 	while (i > 0 && !queue_empty()) {
 		c = get_from_queue();
-		put_fs_byte(c, buffer++);
+		put_user(c, buffer++);
 		i--;
 	}
 	aux_ready = !queue_empty();
@@ -489,7 +491,7 @@ static int poll_aux_status(void)
  		if (inb_p(AUX_STATUS) & AUX_OBUF_FULL == AUX_OBUF_FULL)
 			inb_p(AUX_INPUT_PORT);
 		current->state = TASK_INTERRUPTIBLE;
-		current->timeout = jiffies + 5;
+		current->timeout = jiffies + (5*HZ + 99) / 100;
 		schedule();
 		retries++;
 	}
@@ -512,7 +514,7 @@ static int poll_qp_status(void)
 	        if (inb_p(qp_status)&(QP_RX_FULL))
 		        inb_p(qp_data);
 		current->state = TASK_INTERRUPTIBLE;
-		current->timeout = jiffies + 5;
+		current->timeout = jiffies + (5*HZ + 99) / 100;
 		schedule();
 		retries++;
 	}

@@ -46,6 +46,42 @@ bits| 31-28 | 27-24 | 23-20 | 19-14 | 13 | 12 | 11-8 | 7 | 6  | 5  |  4-0  |
 #define PSR_VERS    0x0f000000         /* cpu-version field          */
 #define PSR_IMPL    0xf0000000         /* cpu-implementation field   */
 
+#ifndef __ASSEMBLY__
+/* Get the %psr register. */
+extern inline unsigned int get_psr(void)
+{
+	unsigned int psr;
+	__asm__ __volatile__("rd %%psr, %0\n\t" :
+			     "=r" (psr));
+	return psr;
+}
+
+extern inline void put_psr(unsigned int new_psr)
+{
+  __asm__("wr %0, 0x0, %%psr\n\t" : :
+	  "r" (new_psr));
+}
+
+/* Get the %fsr register.  Be careful, make sure the floating point
+ * enable bit is set in the %psr when you execute this or you will
+ * incur a trap.
+ */
+
+extern unsigned int fsr_storage;
+
+extern inline unsigned int get_fsr(void)
+{
+	unsigned int fsr = 0;
+
+	__asm__ __volatile__("st %%fsr, %1\n\t"
+			     "ld %1, %0\n\t" :
+			     "=r" (fsr) :
+			     "m" (fsr_storage));
+	return fsr;
+}
+
+#endif /* !(__ASSEMBLY__) */
+
 #endif /* !(__LINUX_SPARC_V8) */
 
 #ifdef __LINUX_SPARC_V9
@@ -80,6 +116,21 @@ bits |   9   |  8  |  7-6 |  5  |  4  |  3 |   2  |  1 |  0 |
 #define PSTATE_CLE   0x200   /* Current Little Endian         */
 
 
+extern inline unsigned int get_v9_pstate(void)
+{
+	unsigned int pstate;
+	__asm__ __volatile__("rdpr %pstate, %0\n\t" :
+			     "=r" (pstate));
+	return pstate;
+}
+
+extern inline void put_v9_pstate(unsigned int pstate)
+{
+	__asm__ __volatile__("wrpr %0, 0x0, %pstate\n\t" : :
+			     "r" (pstate));
+	return;
+}
+
 /* The Version Register holds vendor information for the chip:
 
     ---------------------------------------------------------------------------
@@ -93,6 +144,38 @@ bits|  63-48       |   47-32        | 31-24|   23-16  | 15-8  | 7-5  |  4-0   |
 #define VERS_MAXTL   0x00000000000ff000     /* Maximum Trap-level supported  */
 #define VERS_MASK    0x0000000ff0000000     /* impl. dep. chip mask revision */
 #define VERS_MANUF   0xffff000000000000     /* Manufacturer ID code          */
+
+extern inline unsigned int get_v9_version(void)
+{
+	unsigned int vers;
+	__asm__ __volatile__("rdpr %ver, %0\n\t" :
+			     "=r" (vers));
+	return vers;
+}
+
+extern inline unsigned int get_v9_tstate(void)
+{
+	unsigned int tstate;
+	__asm__ __volatile__("rdpr %tstate, %0\n\t" :
+			     "=r" (pstate));
+	return tstate;
+}
+
+extern inline unsigned int get_v9_pil(void)
+{
+	unsigned int pil;
+	__asm__ __volatile__("rdpr %pil, %0\n\t" :
+			     "=r" (pstate));
+	return pil;
+}
+
+extern inline void put_v9_pil(unsigned int pil)
+{
+	__asm__ __volatile__("wrpr %0, 0x0, %pil\n\t" : :
+			     "r" (pil));
+	return;
+}
+
 
 #endif /* !(__LINUX_SPARC_V9) */
 

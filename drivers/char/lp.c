@@ -248,7 +248,7 @@ static int lp_write_polled(struct inode * inode, struct file * file,
 
 	temp = buf;
 	while (count > 0) {
-		c = get_fs_byte(temp);
+		c = get_user(temp);
 		retval = lp_char_polled(c, minor);
 		/* only update counting vars if character was printed */
 		if (retval) { count--; temp++;
@@ -527,17 +527,25 @@ static struct file_operations lp_fops = {
 	lp_release
 };
 
-#ifndef MODULE
+#ifdef MODULE
+char kernel_version[]=UTS_RELEASE;
 
+int init_module(void)
+#else
 long lp_init(long kmem_start)
+#endif
 {
 	int offset = 0;
 	unsigned int testvalue = 0;
 	int count = 0;
 
 	if (register_chrdev(LP_MAJOR,"lp",&lp_fops)) {
-		printk("unable to get major %d for line printer\n", LP_MAJOR);
+		printk("lp: unable to get major %d\n", LP_MAJOR);
+#ifdef MODULE
+		return -EIO;
+#else		
 		return kmem_start;
+#endif
 	}
 	/* take on all known port values */
 	for (offset = 0; offset < LP_NO; offset++) {
@@ -554,65 +562,35 @@ long lp_init(long kmem_start)
 			printk("lp%d at 0x%04x, ", offset,LP_B(offset));
 			request_region(LP_B(offset), 3, "lp");
 			if (LP_IRQ(offset))
-				printk("using IRQ%d\n", LP_IRQ(offset));
+				printk("(irq = %d)\n", LP_IRQ(offset));
 			else
-				printk("using polling driver\n");
+				printk("(polling)\n");
 			count++;
 		}
 	}
 	if (count == 0)
-		printk("lp_init: no lp devices found\n");
-	return kmem_start;
-}
+		printk("lp: Driver configured but no interfaces found.\n");
 
-#else
 
-char kernel_version[]= UTS_RELEASE;
-
-int init_module(void)
-{
-	int offset = 0;
-	unsigned int testvalue = 0;
-	int count = 0;
-
-	if (register_chrdev(LP_MAJOR,"lp",&lp_fops)) {
-		printk("unable to get major %d for line printer\n", LP_MAJOR);
-		return -EIO;
-	}
-	/* take on all known port values */
-	for (offset = 0; offset < LP_NO; offset++) {
-		/* write to port & read back to check */
-		outb_p( LP_DUMMY, LP_B(offset));
-		for (testvalue = 0 ; testvalue < LP_DELAY ; testvalue++)
-			;
-		testvalue = inb_p(LP_B(offset));
-		if (testvalue == LP_DUMMY) {
-			LP_F(offset) |= LP_EXIST;
-			lp_reset(offset);
-			printk("lp%d at 0x%04x, ", offset,LP_B(offset));
-			request_region(LP_B(offset),3,"lp");
-			if (LP_IRQ(offset))
-				printk("using IRQ%d\n", LP_IRQ(offset));
-			else
-				printk("using polling driver\n");
-			count++;
-		}
-	}
-	if (count == 0)
-		printk("lp_init: no lp devices found\n");
+#ifdef MODULE
 	return 0;
+#else	
+	return kmem_start;
+#endif
 }
 
+#ifdef MODULE
 void cleanup_module(void)
 {
         int offset;
 	if(MOD_IN_USE)
                printk("lp: busy - remove delayed\n");
-        else
+        else {
                unregister_chrdev(LP_MAJOR,"lp");
 	       for (offset = 0; offset < LP_NO; offset++) 
 			if(LP_F(offset) && LP_EXIST) 
 		 		release_region(LP_B(offset),3);
+	}
 }
 
 #endif

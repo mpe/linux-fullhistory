@@ -28,42 +28,55 @@
 
 extern struct inode *pseudo_root;
 
+struct RDIR_FILLDIR {
+	void *dirbuf;
+	filldir_t filldir;
+	int real_root;
+};
+
+static int rdir_filldir(
+	void * buf,
+	char * name,
+	int name_len,
+	off_t offset,
+	ino_t ino)
+{
+	int ret = 0;
+	struct RDIR_FILLDIR *d = (struct RDIR_FILLDIR*) buf;
+	if (d->real_root){
+		/* real root of a pseudo_rooted partition */
+		if (name_len != UMSDOS_PSDROOT_LEN
+			|| memcmp(name,UMSDOS_PSDROOT_NAME,UMSDOS_PSDROOT_LEN)!=0){
+			/* So it is not the /linux directory */
+			if (name_len == 2
+				&& name[0] == '.'
+				&& name[1] == '.'){
+				/* Make sure the .. entry points back to the pseudo_root */
+				ino = pseudo_root->i_ino;
+			}
+			ret = d->filldir (d->dirbuf,name,name_len,offset,ino);
+		}
+	}else{
+		/* Any DOS directory */
+		ret = d->filldir (d->dirbuf,name,name_len,offset,ino);
+	}
+	return ret;
+}
+
+
 static int UMSDOS_rreaddir (
 	struct inode *dir,
 	struct file *filp,
-    struct dirent *dirent,
-	int count)
+    void *dirbuf,
+	filldir_t filldir)
 {
-	int ret = 0;
-	while (1){
-		int len = -1;
-		ret = msdos_readdir(dir,filp,dirent,count);
-		if (ret > 0) len = get_fs_word(&dirent->d_reclen);
-		if (len == 5
-			&& pseudo_root != NULL
-			&& dir->i_sb->s_mounted == pseudo_root->i_sb->s_mounted){
-			/*
-				In pseudo root mode, we must eliminate logically
-				the directory linux from the real root.
-			*/
-			char name[5];
-			memcpy_fromfs (name,dirent->d_name,5);
-			if (memcmp(name,UMSDOS_PSDROOT_NAME,UMSDOS_PSDROOT_LEN)!=0) break;
-		}else{
-			if (pseudo_root != NULL
-				&& len == 2
-				&& dir == dir->i_sb->s_mounted
-				&& dir == pseudo_root->i_sb->s_mounted){
-				char name[2];
-				memcpy_fromfs (name,dirent->d_name,2);
-				if (name[0] == '.' && name[1] == '.'){
-					put_fs_long (pseudo_root->i_ino,&dirent->d_ino);
-				}
-			}
-			break;
-		}
-	}
-	return ret;
+	struct RDIR_FILLDIR bufk;
+	bufk.filldir = filldir;
+	bufk.dirbuf = dirbuf;
+	bufk.real_root = pseudo_root != NULL
+		&& dir == dir->i_sb->s_mounted
+		&& dir == pseudo_root->i_sb->s_mounted;
+	return msdos_readdir(dir,filp,&bufk,rdir_filldir);
 }
 
 /*

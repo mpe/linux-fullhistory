@@ -121,7 +121,7 @@
 #define _LINUX_SBPCD_H
 /*==========================================================================*/
 /*==========================================================================*/
-#define LONG_TIMING 0 /* test against timeouts with "gold" CDs on CR-521 */
+#define LONG_TIMING 1 /* test against timeouts with "gold" CDs on CR-521 */
 #undef  FUTURE
 
 #define TEST_UPC 0

@@ -14,7 +14,7 @@
 .c.s:
 	$(CC) $(CFLAGS) -S $<
 
-OBJS	= fault.o vac-flush.o init.o
+OBJS	= fault.o vac-flush.o init.o sun4c.o srmmu.o loadmmu.o
 
 mm.o: $(OBJS)
 	$(LD) -r -o mm.o $(OBJS)

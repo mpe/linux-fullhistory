@@ -44,8 +44,8 @@
 #include "aha1740.h"
 #endif
 
-#ifdef CONFIG_SCSI_AHA274X
-#include "aha274x.h"
+#ifdef CONFIG_SCSI_AIC7XXX
+#include "aic7xxx.h"
 #endif
 
 #ifdef CONFIG_SCSI_BUSLOGIC
@@ -160,8 +160,8 @@ static Scsi_Host_Template builtin_scsi_hosts[] =
 #ifdef CONFIG_SCSI_AHA1740
 	AHA1740,
 #endif
-#ifdef CONFIG_SCSI_AHA274X
-	AHA274X,
+#ifdef CONFIG_SCSI_AIC7XXX
+	AIC7XXX,
 #endif
 #ifdef CONFIG_SCSI_FUTURE_DOMAIN
 	FDOMAIN_16X0,

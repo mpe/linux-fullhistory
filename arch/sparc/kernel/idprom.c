@@ -1,31 +1,86 @@
 /* idprom.c: Routines to load the idprom into kernel addresses and
  *           interpret the data contained within.
  *
+ * Because they use the IDPROM's machine type field, some of the
+ * virtual address cache probings on the sun4c are done here.
+ *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
  */
 
 #include <linux/kernel.h>
 
 #include <asm/types.h>
-#include <asm/openprom.h>
+#include <asm/oplib.h>
 #include <asm/idprom.h>
+#include <asm/machines.h>  /* Fun with Sun released architectures. */
+#include <asm/system.h>    /* For halt() macro */
 
-struct idp_struct idprom;
-extern int num_segmaps, num_contexts;
+struct idp_struct *idprom;
+static struct idp_struct idprom_buff;
 
-void get_idprom(void)
+/* Here is the master table of Sun machines which use some implementation
+ * of the Sparc CPU and have a meaningful IDPROM machtype value that we
+ * know about.  See asm-sparc/machines.h for imperical constants.
+ */
+struct Sun_Machine_Models Sun_Machines[NUM_SUN_MACHINES] = {
+/* First, Sun4's */
+{ "Sun 4/100 Series", (SM_SUN4 | SM_4_110) },
+{ "Sun 4/200 Series", (SM_SUN4 | SM_4_260) },
+{ "Sun 4/300 Series", (SM_SUN4 | SM_4_330) },
+{ "Sun 4/400 Series", (SM_SUN4 | SM_4_470) },
+/* Now, Sun4c's */
+{ "Sun4c SparcStation 1", (SM_SUN4C | SM_4C_SS1) },
+{ "Sun4c SparcStation IPC", (SM_SUN4C | SM_4C_IPC) },
+{ "Sun4c SparcStation 1+", (SM_SUN4C | SM_4C_SS1PLUS) },
+{ "Sun4c SparcStation SLC", (SM_SUN4C | SM_4C_SLC) },
+{ "Sun4c SparcStation 2", (SM_SUN4C | SM_4C_SS2) },
+{ "Sun4c SparcStation ELC", (SM_SUN4C | SM_4C_ELC) },
+{ "Sun4c SparcStation IPX", (SM_SUN4C | SM_4C_IPX) },
+/* Finally, early Sun4m's */
+{ "Sun4m SparcSystem600", (SM_SUN4M | SM_4M_SS60) },
+{ "Sun4m SparcStation10", (SM_SUN4M | SM_4M_SS50) },
+{ "Sun4m SparcStation5", (SM_SUN4M | SM_4M_SS40) },
+/* One entry for the OBP arch's which are sun4d, sun4e, and newer sun4m's */
+{ "Sun4M OBP based system", (SM_SUN4M_OBP | 0x0) } };
+
+void
+sparc_display_systype(unsigned char machtyp)
 {
-  char* idp_addr;
-  char* knl_idp_addr;
-  int i;
+	char system_name[128];
+	int i;
 
-  idp_addr = (char *)IDPROM_ADDR;
-  knl_idp_addr = (char *) &idprom;
+	for(i = 0; i<NUM_SUN_MACHINES; i++) {
+		if(Sun_Machines[i].id_machtype == machtyp) {
+			if(machtyp!=(SM_SUN4M_OBP | 0x0)) {
+				printk("TYPE: %s\n", Sun_Machines[i].name);
+				break;
+			} else {
+				prom_getproperty(prom_root_node, "banner-name",
+						 system_name, sizeof(system_name));
+				printk("TYPE: %s\n", system_name);
+				break;
+			}
+		}
+	}
+	if(i == NUM_SUN_MACHINES)
+		printk("Uh oh, IDPROM had bogus id_machtype value <%x>\n", machtyp);
+	return;
+}
 
-  for(i = 0; i<IDPROM_SIZE; i++)
-      *knl_idp_addr++ = *idp_addr++;
+void
+get_idprom(void)
+{
+	prom_getidp((char *) &idprom_buff, sizeof(idprom_buff));
 
-  return;
+	idprom = &idprom_buff;
+
+	sparc_display_systype(idprom->id_machtype);
+
+	printk("Ethernet address: %x:%x:%x:%x:%x:%x\n",
+	       idprom->id_eaddr[0], idprom->id_eaddr[1], idprom->id_eaddr[2],
+	       idprom->id_eaddr[3], idprom->id_eaddr[4], idprom->id_eaddr[5]);
+
+	return;
 }
 
 /* find_vac_size() returns the number of bytes in the VAC (virtual
@@ -35,37 +90,30 @@ void get_idprom(void)
 int
 find_vac_size(void)
 {
-  int vac_prop_len;
-  int vacsize = 0;
-  int node_root;
+	int vac_prop_len;
+	int vacsize = 0;
 
-  node_root = (*(romvec->pv_nodeops->no_nextnode))(0);
-
-  vac_prop_len = (*(romvec->pv_nodeops->no_proplen))(node_root, "vac-size");
-
-  if(vac_prop_len != -1)
-    {
-      (*(romvec->pv_nodeops->no_getprop))(node_root, "vac-size", (char *) &vacsize);
-      return vacsize;
-    }
-  else
-    {
-
-  /* The prom node functions can't help, do it via idprom struct */
-      switch(idprom.id_machtype)
-	{
-	case 0x51:
-	case 0x52:
-	case 0x53:
-	case 0x54:
-	case 0x55:
-	case 0x56:
-	case 0x57:
-	  return 65536;
-	default:
-	  return -1;
-	}
-    };
+	vac_prop_len = prom_getproplen(prom_root_node, "vac-size");
+	if(vac_prop_len != -1) {
+		vacsize = prom_getint(prom_root_node, "vac-size");
+		return vacsize;
+	} else {
+		switch(idprom->id_machtype) {
+		case (SM_SUN4C | SM_4C_SS1):     /* SparcStation1 */
+		case (SM_SUN4C | SM_4C_IPC):     /* SparcStation IPX */
+		case (SM_SUN4C | SM_4C_SS1PLUS): /* SparcStation1+ */
+		case (SM_SUN4C | SM_4C_SLC):     /* SparcStation SLC */
+		case (SM_SUN4C | SM_4C_SS2):     /* SparcStation2 Cache-Chip BUG! */
+		case (SM_SUN4C | SM_4C_ELC):     /* SparcStation ELC */
+		case (SM_SUN4C | SM_4C_IPX):     /* SparcStation IPX */
+			return 65536;
+		default:
+			printk("find_vac_size: Can't determine size of VAC, bailing out...\n");
+			halt();
+			break;
+		};
+	};
+	return -1;
 }
 
 /* find_vac_linesize() returns the size in bytes of the VAC linesize */ 
@@ -73,111 +121,49 @@ find_vac_size(void)
 int
 find_vac_linesize(void)
 {
-  int vac_prop_len;
-  int vaclinesize = 0;
-  int node_root;
+	int vac_prop_len;
 
-  node_root = (*(romvec->pv_nodeops->no_nextnode))(0);
+	vac_prop_len = prom_getproplen(prom_root_node, "vac-linesize");
 
-  vac_prop_len = (*(romvec->pv_nodeops->no_proplen))(node_root, "vac-linesize");
-
-  if(vac_prop_len != -1)
-    {
-      (*(romvec->pv_nodeops->no_getprop))(node_root, "vac-linesize",
-				      (char *) &vaclinesize);
-      return vaclinesize;
-    }
-  else
-    {
-
-  /* The prom node functions can't help, do it via idprom struct */
-      switch(idprom.id_machtype)
-	{
-	case 0x51:
-	case 0x52:
-	case 0x53:
-	case 0x54:
-	  return 16;
-	case 0x55:
-	case 0x56:
-	case 0x57:
-	  return 32;
-	default:
-	  return -1;
-	}
-    };
+	if(vac_prop_len != -1)
+		return prom_getint(prom_root_node, "vac-linesize");
+	else {
+		switch(idprom->id_machtype) {
+		case (SM_SUN4C | SM_4C_SS1):     /* SparcStation1 */
+		case (SM_SUN4C | SM_4C_IPC):     /* SparcStation IPC */
+		case (SM_SUN4C | SM_4C_SS1PLUS): /* SparcStation1+ */
+		case (SM_SUN4C | SM_4C_SLC):     /* SparcStation SLC */
+			return 16;
+		case (SM_SUN4C | SM_4C_SS2):     /* SparcStation2 Cache-Chip BUG! */
+		case (SM_SUN4C | SM_4C_ELC):     /* SparcStation ELC */
+		case (SM_SUN4C | SM_4C_IPX):     /* SparcStation IPX */
+			return 32;
+		default:
+			printk("find_vac_linesize: Can't determine VAC linesize, bailing out...\n");
+			halt();
+			break;
+		};
+	};
+	return -1;
 }
 
 int
 find_vac_hwflushes(void)
 {
-  register int len, node_root;
-  int tmp1, tmp2;
+	register int len;
+	int tmp1, tmp2;
 
-  node_root = (*(romvec->pv_nodeops->no_nextnode))(0);
+	/* Sun 4/75 has typo in prom_node, it's a dash instead of an underscore
+	 * in the property name. :-(
+	 */
+	len = prom_getproperty(prom_root_node, "vac_hwflush",
+			       (char *) &tmp1, sizeof(int));
+	if(len != 4) tmp1=0;
 
-  len = (*(romvec->pv_nodeops->no_proplen))(node_root, "vac_hwflush");
+	len = prom_getproperty(prom_root_node, "vac-hwflush",
+			       (char *) &tmp2, sizeof(int));
+	if(len != 4) tmp2=0;
 
-#ifdef DEBUG_IDPROM
-  printf("DEBUG: find_vac_hwflushes: proplen vac_hwflush=0x%x\n", len);
-#endif
-
-  /* Sun 4/75 has typo in prom_node, it's a dash instead of an underscore
-   * in the property name. :-(
-   */
-  len |= (*(romvec->pv_nodeops->no_proplen))(node_root, "vac-hwflush");
-
-#ifdef DEBUG_IDPROM
-  printf("DEBUG: find_vac_hwflushes: proplen vac-hwflush=0x%x\n", len);
-#endif
-
-  len = (*(romvec->pv_nodeops->no_getprop))(node_root,"vac_hwflush", 
-					    (char *) &tmp1);
-  if(len != 4) tmp1=0;
-
-  len = (*(romvec->pv_nodeops->no_getprop))(node_root, "vac-hwflush",
-					    (char *) &tmp2);
-  if(len != 4) tmp2=0;
-
-
-  return (tmp1|tmp2);
-}
-
-void
-find_mmu_num_segmaps(void)
-{
-  register int root_node, len;
-
-  root_node = (*(romvec->pv_nodeops->no_nextnode))(0);
-
-  len = (*(romvec->pv_nodeops->no_getprop))(root_node, "mmu-npmg", 
-					    (char *) &num_segmaps);
-
-#ifdef DEBUG_MMU
-  printf("find_mmu_num_segmaps: property length = %d\n", len);
-#endif
-
-  if(len != 4) num_segmaps = 128;
-
-  return;
-}
-
-void
-find_mmu_num_contexts(void)
-{
-  register int root_node, len;
-
-  root_node = (*(romvec->pv_nodeops->no_nextnode))(0);
-
-  len = (*(romvec->pv_nodeops->no_getprop))(root_node, "mmu-nctx", 
-					    (char *) &num_contexts);
-
-#ifdef DEBUG_MMU
-  printf("find_mmu_num_contexts: property length = %d\n", len);
-#endif
-
-  if(len != 4) num_contexts = 8;
-
-  return;
+	return (tmp1|tmp2);
 }
 

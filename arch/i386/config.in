@@ -92,7 +92,9 @@ comment 'SCSI low-level drivers'
 bool 'Adaptec AHA152X support' CONFIG_SCSI_AHA152X y
 bool 'Adaptec AHA1542 support' CONFIG_SCSI_AHA1542 n
 bool 'Adaptec AHA1740 support' CONFIG_SCSI_AHA1740 y
-bool 'Adaptec AHA274X/284X support' CONFIG_SCSI_AHA274X n
+if [ "$CONFIG_PCI" = "y" ]; then
+  bool 'Adaptec AHA274X/284X/294X support' CONFIG_SCSI_AIC7XXX n
+fi
 bool 'BusLogic SCSI support' CONFIG_SCSI_BUSLOGIC n
 bool 'EATA-DMA (DPT,NEC&ATT for ISA,EISA,PCI) support' CONFIG_SCSI_EATA_DMA n
 bool 'UltraStor 14F/34F support' CONFIG_SCSI_U14_34F n
@@ -163,7 +165,7 @@ if [ "$CONFIG_NET_ISA" = "y" ]; then
 	bool 'EtherWorks 3 support' CONFIG_EWRK3 n
 	if [ "$CONFIG_NET_ALPHA" = "y" ]; then
 		bool 'AT1700 support' CONFIG_AT1700 n
-#		bool 'EtherExpressPro support' CONFIG_EEXPRESS_PRO n
+		bool 'EtherExpressPro support' CONFIG_EEXPRESS_PRO n
 		bool 'EtherExpress support' CONFIG_EEXPRESS n
 		bool 'NI5210 support' CONFIG_NI52 n
 		bool 'NI6510 support' CONFIG_NI65 n
@@ -230,8 +232,7 @@ bool 'Second extended fs support' CONFIG_EXT2_FS y
 bool 'xiafs filesystem support' CONFIG_XIA_FS n
 bool 'msdos fs support' CONFIG_MSDOS_FS y
 if [ "$CONFIG_MSDOS_FS" = "y" ]; then
-#bool 'umsdos: Unix like fs on top of std MSDOS FAT fs' CONFIG_UMSDOS_FS n
-comment 'Umsdos is not supported in 1.3.0: wait for 1.3.1'
+bool 'umsdos: Unix like fs on top of std MSDOS FAT fs' CONFIG_UMSDOS_FS n
 fi
 bool '/proc filesystem support' CONFIG_PROC_FS y
 if [ "$CONFIG_INET" = "y" ]; then

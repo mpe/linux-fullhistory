@@ -65,15 +65,16 @@ struct linux_binfmt elf_format = {
 
 static void padzero(unsigned long elf_bss)
 {
-	unsigned long fpnt, nbyte;
+	unsigned long nbyte;
+	char * fpnt;
   
 	nbyte = elf_bss & (PAGE_SIZE-1);
 	if (nbyte) {
 		nbyte = PAGE_SIZE - nbyte;
 		verify_area(VERIFY_WRITE, (void *) elf_bss, nbyte);
-		fpnt = elf_bss;
+		fpnt = (char *) elf_bss;
 		do {
-			put_fs_byte(0, fpnt++);
+			put_user(0, fpnt++);
 		} while (--nbyte);
 	}
 }
@@ -115,8 +116,8 @@ unsigned long * create_elf_tables(char * p,int argc,int envc,struct elfhdr * exe
 	sp -= argc+1;
 	argv = sp;
 	if (!ibcs) {
-		put_fs_long((unsigned long)envp,--sp);
-		put_fs_long((unsigned long)argv,--sp);
+		put_user(envp,--sp);
+		put_user(argv,--sp);
 	}
 
 	/* The constant numbers (0-9) that we are writing here are
@@ -125,29 +126,29 @@ unsigned long * create_elf_tables(char * p,int argc,int envc,struct elfhdr * exe
 	if(exec) { /* Put this here for an ELF program interpreter */
 	  struct elf_phdr * eppnt;
 	  eppnt = (struct elf_phdr *) exec->e_phoff;
-	  put_fs_long(3,dlinfo++); put_fs_long(load_addr + exec->e_phoff,dlinfo++);
-	  put_fs_long(4,dlinfo++); put_fs_long(sizeof(struct elf_phdr),dlinfo++);
-	  put_fs_long(5,dlinfo++); put_fs_long(exec->e_phnum,dlinfo++);
-	  put_fs_long(9,dlinfo++); put_fs_long((unsigned long) exec->e_entry,dlinfo++);
-	  put_fs_long(7,dlinfo++); put_fs_long(interp_load_addr,dlinfo++);
-	  put_fs_long(8,dlinfo++); put_fs_long(0,dlinfo++);
-	  put_fs_long(6,dlinfo++); put_fs_long(PAGE_SIZE,dlinfo++);
-	  put_fs_long(0,dlinfo++); put_fs_long(0,dlinfo++);
+	  put_user(3,dlinfo++); put_user(load_addr + exec->e_phoff,dlinfo++);
+	  put_user(4,dlinfo++); put_user(sizeof(struct elf_phdr),dlinfo++);
+	  put_user(5,dlinfo++); put_user(exec->e_phnum,dlinfo++);
+	  put_user(9,dlinfo++); put_user((unsigned long) exec->e_entry,dlinfo++);
+	  put_user(7,dlinfo++); put_user(interp_load_addr,dlinfo++);
+	  put_user(8,dlinfo++); put_user(0,dlinfo++);
+	  put_user(6,dlinfo++); put_user(PAGE_SIZE,dlinfo++);
+	  put_user(0,dlinfo++); put_user(0,dlinfo++);
 	}
 
-	put_fs_long((unsigned long)argc,--sp);
+	put_user((unsigned long)argc,--sp);
 	current->mm->arg_start = (unsigned long) p;
 	while (argc-->0) {
-		put_fs_long((unsigned long) p,argv++);
-		while (get_fs_byte(p++)) /* nothing */ ;
+		put_user(p,argv++);
+		while (get_user(p++)) /* nothing */ ;
 	}
-	put_fs_long(0,argv);
+	put_user(0,argv);
 	current->mm->arg_end = current->mm->env_start = (unsigned long) p;
 	while (envc-->0) {
-		put_fs_long((unsigned long) p,envp++);
-		while (get_fs_byte(p++)) /* nothing */ ;
+		put_user(p,envp++);
+		while (get_user(p++)) /* nothing */ ;
 	}
-	put_fs_long(0,envp);
+	put_user(0,envp);
 	current->mm->env_end = (unsigned long) p;
 	return sp;
 }
@@ -739,7 +740,7 @@ load_elf_library(int fd){
 	if(k > elf_bss) elf_bss = k;
 	
 	SYS(close)(fd);
-	if (error != elf_phdata->p_vaddr & 0xfffff000) {
+	if (error != (elf_phdata->p_vaddr & 0xfffff000)) {
 	        kfree(elf_phdata);
 		MOD_DEC_USE_COUNT;
 		return error;

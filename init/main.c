@@ -64,7 +64,7 @@ extern void pas16_setup(char *str, int *ints);
 extern void generic_NCR5380_setup(char *str, int *intr);
 extern void aha152x_setup(char *str, int *ints);
 extern void aha1542_setup(char *str, int *ints);
-extern void aha274x_setup(char *str, int *ints);
+extern void aic7xxx_setup(char *str, int *ints);
 extern void buslogic_setup(char *str, int *ints);
 extern void scsi_luns_setup(char *str, int *ints);
 extern void sound_setup(char *str, int *ints);
@@ -175,8 +175,8 @@ struct {
 #ifdef CONFIG_SCSI_AHA1542
 	{ "aha1542=", aha1542_setup},
 #endif
-#ifdef CONFIG_SCSI_AHA274X
-	{ "aha274x=", aha274x_setup},
+#ifdef CONFIG_SCSI_AIC7XXX
+	{ "aic7xxx=", aic7xxx_setup},
 #endif
 #ifdef CONFIG_SCSI_BUSLOGIC
 	{ "buslogic=", buslogic_setup},

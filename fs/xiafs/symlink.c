@@ -69,9 +69,9 @@ static int xiafs_readlink(struct inode * inode, char * buffer, int buflen)
     if (!bh)
         return 0;
     for (i=0; i < buflen && (c=bh->b_data[i]); i++)
-      put_fs_byte(c, buffer++);
+      put_user(c, buffer++);
     if (i < buflen-1)
-      put_fs_byte((char)0, buffer);
+      put_user('\0', buffer);
     brelse(bh);
     return i;
 }

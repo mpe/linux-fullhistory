@@ -674,7 +674,7 @@ done:	/* pte_val(pte) == shp->shm_pages[idx] */
 static unsigned long swap_id = 0; /* currently being swapped */
 static unsigned long swap_idx = 0; /* next to swap */
 
-int shm_swap (int prio)
+int shm_swap (int prio, unsigned long limit)
 {
 	pte_t page;
 	struct shmid_ds *shp;
@@ -711,6 +711,8 @@ int shm_swap (int prio)
 	pte_val(page) = shp->shm_pages[idx];
 	if (!pte_present(page))
 		goto check_table;
+	if (pte_page(page) >= limit)
+		goto check_table;
 	swap_attempts++;
 
 	if (--counter < 0) { /* failed */
@@ -728,7 +730,7 @@ int shm_swap (int prio)
 		pte_t *page_table, pte;
 		unsigned long tmp;
 
-		if (SWP_OFFSET(shmd->vm_pte) & SHM_ID_MASK != id) {
+		if ((SWP_OFFSET(shmd->vm_pte) & SHM_ID_MASK) != id) {
 			printk ("shm_swap: id=%ld does not match shmd->vm_pte.id=%ld\n",
 				id, SWP_OFFSET(shmd->vm_pte) & SHM_ID_MASK);
 			continue;

@@ -170,6 +170,12 @@ else
 MODULES := $(MODULES) eexpress.o
 endif
 
+ifdef CONFIG_EEXPRESS_PRO
+NETDRV_OBJS := $(NETDRV_OBJS) eepro.o
+else
+MODULES := $(MODULES) eepro.o
+endif
+
 ifdef CONFIG_WAVELAN
 NETDRV_OBJS := $(NETDRV_OBJS) wavelan.o
 else

@@ -1,6 +1,6 @@
-/* check.c 30/01/95 22.05.32 */
+/* check.c 23/01/95 03.38.30 */
 void check_page_tables (void);
-/* dir.c 18/03/95 00.30.50 */
+/* dir.c 22/06/95 00.22.12 */
 int UMSDOS_dir_read (struct inode *inode,
 	 struct file *filp,
 	 char *buf,
@@ -19,11 +19,7 @@ int UMSDOS_lookup (struct inode *dir,
 	 int len,
 	 struct inode **result);
 int umsdos_hlink2inode (struct inode *hlink, struct inode **result);
-/* emd.c 30/01/95 22.05.32 */
-int umsdos_readdir_kmem (struct inode *inode,
-	 struct file *filp,
-	 struct dirent *dirent,
-	 int count);
+/* emd.c 22/06/95 00.22.04 */
 int umsdos_file_read_kmem (struct inode *inode,
 	 struct file *filp,
 	 char *buf,
@@ -57,11 +53,13 @@ int umsdos_isempty (struct inode *dir);
 int umsdos_findentry (struct inode *dir,
 	 struct umsdos_info *info,
 	 int expect);
-/* file.c 30/01/95 22.05.56 */
-/* inode.c 25/02/95 09.21.46 */
+/* file.c 25/01/95 02.25.38 */
+/* inode.c 12/06/95 09.49.40 */
 void UMSDOS_put_inode (struct inode *inode);
 void UMSDOS_put_super (struct super_block *sb);
-void UMSDOS_statfs (struct super_block *sb, struct statfs *buf, int);
+void UMSDOS_statfs (struct super_block *sb,
+	 struct statfs *buf,
+	 int bufsiz);
 int umsdos_real_lookup (struct inode *dir,
 	 const char *name,
 	 int len,
@@ -81,16 +79,16 @@ int UMSDOS_notify_change (struct inode *inode, struct iattr *attr);
 struct super_block *UMSDOS_read_super (struct super_block *s,
 	 void *data,
 	 int silent);
-/* ioctl.c 21/02/95 20.58.22 */
+/* ioctl.c 22/06/95 00.22.08 */
 int UMSDOS_ioctl_dir (struct inode *dir,
 	 struct file *filp,
 	 unsigned int cmd,
 	 unsigned long data);
-/* mangle.c 30/01/95 22.05.56 */
+/* mangle.c 25/01/95 02.25.38 */
 void umsdos_manglename (struct umsdos_info *info);
 int umsdos_evalrecsize (int len);
 int umsdos_parse (const char *fname, int len, struct umsdos_info *info);
-/* namei.c 30/01/95 22.05.56 */
+/* namei.c 25/01/95 02.25.38 */
 void umsdos_lockcreate (struct inode *dir);
 void umsdos_startlookup (struct inode *dir);
 void umsdos_unlockcreate (struct inode *dir);
@@ -125,7 +123,7 @@ int UMSDOS_rename (struct inode *old_dir,
 	 struct inode *new_dir,
 	 const char *new_name,
 	 int new_len);
-/* rdir.c 18/03/95 00.30.18 */
+/* rdir.c 22/03/95 03.31.42 */
 int umsdos_rlookup_x (struct inode *dir,
 	 const char *name,
 	 int len,
@@ -135,4 +133,4 @@ int UMSDOS_rlookup (struct inode *dir,
 	 const char *name,
 	 int len,
 	 struct inode **result);
-/* symlink.c 30/01/95 22.05.32 */
+/* symlink.c 23/01/95 03.38.30 */

@@ -189,26 +189,6 @@ unsigned long get_unmapped_area(unsigned long addr, unsigned long len)
 	}
 }
 
-asmlinkage int sys_mmap(unsigned long *buffer)
-{
-	int error;
-	unsigned long flags;
-	struct file * file = NULL;
-
-	error = verify_area(VERIFY_READ, buffer, 6*sizeof(long));
-	if (error)
-		return error;
-	flags = get_fs_long(buffer+3);
-	if (!(flags & MAP_ANONYMOUS)) {
-		unsigned long fd = get_fs_long(buffer+4);
-		if (fd >= NR_OPEN || !(file = current->files->fd[fd]))
-			return -EBADF;
-	}
-	return do_mmap(file, get_fs_long(buffer), get_fs_long(buffer+1),
-		get_fs_long(buffer+2), flags, get_fs_long(buffer+5));
-}
-
-
 /*
  * Searching a VMA in the linear list task->mm->mmap is horribly slow.
  * Use an AVL (Adelson-Velskii and Landis) tree to speed up this search

@@ -101,7 +101,7 @@ static int ext_readlink(struct inode * inode, char * buffer, int buflen)
 	i = 0;
 	while (i<buflen && (c = bh->b_data[i])) {
 		i++;
-		put_fs_byte(c,buffer++);
+		put_user(c,buffer++);
 	}
 	brelse(bh);
 	return i;

@@ -60,6 +60,8 @@ struct ltchars {
 
 #define TIOCSWINSZ	_IOW('t', 103, struct winsize)
 #define TIOCGWINSZ	_IOR('t', 104, struct winsize)
+#define	TIOCSTART	_IO('t', 110)		/* start output, like ^Q */
+#define	TIOCSTOP	_IO('t', 111)		/* stop output, like ^S */
 #define TIOCOUTQ        _IOR('t', 115, int)     /* output queue size */
 
 #define TIOCGLTC	_IOR('t', 116, struct ltchars)
@@ -154,8 +156,8 @@ struct termios {
 #define VSTOP 13
 #define VLNEXT 14
 #define VDISCARD 15
-#define VTIME 17
 #define VMIN 16
+#define VTIME 17
 
 /*
  * ..and the same for c_cc in the termio structure.. 
@@ -173,13 +175,13 @@ struct termios {
 #define _VSWTC	7
 
 #ifdef __KERNEL__
-/*	intr=^C		quit=^|		erase=del	kill=^U
-	eof=^D		vtime=\0	vmin=\1		sxtc=\0
-	start=^Q	stop=^S		susp=^Z		eol=\0
-	reprint=^R	discard=^U	werase=^W	lnext=^V
-	eol2=\0
+/*	eof=^D		eol=\0		eol2=\0		erase=del
+	werase=^W	kill=^U		reprint=^R	sxtc=\0
+	intr=^C		quit=^\		susp=^Z		<OSF/1 VDSUSP>
+	start=^Q	stop=^S		lnext=^V	discard=^U
+	vmin=\1		vtime=\0
 */
-#define INIT_C_CC "\004\000\000\177\027\025\022\000\003\034\032\000\021\023\026\025\000\001"
+#define INIT_C_CC "\004\000\000\177\027\025\022\000\003\034\032\000\021\023\026\025\001\000"
 #endif
 
 /* c_iflag bits */

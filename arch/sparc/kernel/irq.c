@@ -3,8 +3,9 @@
  *                            and you are supposed to probe the prom's device
  *                            node trees to find out who's got which IRQ.
  *
- *  Copyright (C) 1994 David S. Miller (davem@caip.rutgers.edu)
- *
+ *  Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
+ *  Copyright (C) 1995 Miguel de Icaza (miguel@nuclecu.unam.mx)
+ *  Copyright (C) 1995 Pete A. Zaitcev (zaitcev@jamica.lab.ipmce.su)
  */
 
 /*
@@ -27,116 +28,126 @@
 #include <linux/signal.h>
 #include <linux/sched.h>
 #include <linux/interrupt.h>
+
 #include <asm/ptrace.h>
+#include <asm/processor.h>
 #include <asm/system.h>
 #include <asm/psr.h>
 #include <asm/vaddrs.h>
-#include <asm/clock.h>
+#include <asm/timer.h>
 #include <asm/openprom.h>
+#include <asm/oplib.h>
+#include <asm/irq.h>
+#include <asm/io.h>
 
-#define DEBUG_IRQ
+/* Pointer to the interrupt enable byte */
+/* XXX Ugh, this is so sun4c specific it's driving me nuts. XXX */
+unsigned char *interrupt_enable = 0;
+struct sun4m_intregs *sun4m_interrupts;
 
-void disable_irq(unsigned int irq_nr)
+/* XXX Needs to handle Sun4m semantics XXX */
+void
+disable_irq(unsigned int irq_nr)
 {
-  unsigned long flags;
-  unsigned char *int_reg;
+	unsigned long flags;
+	unsigned char current_mask, new_mask;
+
+	if(sparc_cpu_model != sun4c) return;
+
+	save_flags(flags);
+	cli();
+
+	current_mask = *interrupt_enable;
+
+	switch(irq_nr) {
+	case 1:
+		new_mask = ((current_mask) & (~(SUN4C_INT_E1)));
+		break;
+	case 4:
+		new_mask = ((current_mask) & (~(SUN4C_INT_E4)));
+		break;
+	case 6:
+		new_mask = ((current_mask) & (~(SUN4C_INT_E6)));
+		break;
+	case 8:
+		new_mask = ((current_mask) & (~(SUN4C_INT_E8)));
+		break;
+	case 10:
+		new_mask = ((current_mask) & (~(SUN4C_INT_E10)));
+		break;
+	case 14:
+		new_mask = ((current_mask) & (~(SUN4C_INT_E14)));
+		break;
+	default:
+#if 0 /* Actually this is safe, as the floppy driver needs this */
+		printk("AIEEE, Illegal interrupt disable requested irq=%d\n", 
+		       (int) irq_nr);
+		prom_halt();
+#endif
+		break;
+	};
   
-  save_flags(flags);
-  cli();
-
-  /* We have mapped the irq enable register in head.S and all we
-   * have to do here is frob the bits.
-   */
-
-  int_reg = (unsigned char *) IRQ_ENA_ADR;
-
-  switch(irq_nr)
-    {
-    case 1:
-      *int_reg = ((*int_reg) & (~(0x02)));
-      break;
-    case 4:
-      *int_reg = ((*int_reg) & (~(0x04)));
-      break;
-    case 6:
-      *int_reg = ((*int_reg) & (~(0x08)));
-      break;      
-    case 8:
-      *int_reg = ((*int_reg) & (~(0x10)));
-      break;      
-    case 10:
-      *int_reg = ((*int_reg) & (~(0x20)));
-      break;      
-    case 14:
-      *int_reg = ((*int_reg) & (~(0x80)));
-      break;      
-    default:
-      printk("AIEEE, Illegal interrupt disable requested irq=%d\n", 
-	     (int) irq_nr);
-      break;
-    };
-  
-  restore_flags(flags);
-  return;
+	restore_flags(flags);
+	return;
 }
 
-void enable_irq(unsigned int irq_nr)
+/* XXX Needs to handle sun4m semantics XXX */
+void
+enable_irq(unsigned int irq_nr)
 {
-  unsigned long flags;
-  unsigned char *int_reg;
-  
-  save_flags(flags);
-  cli();
+	unsigned long flags;
+	unsigned char current_mask, new_mask;
 
-  /* We have mapped the irq enable register in head.S and all we
-   * have to do here is frob the bits.
-   */
+	if(sparc_cpu_model != sun4c) return;
 
-  int_reg = (unsigned char *) IRQ_ENA_ADR;
-  
-#ifdef DEBUG_IRQ
-  printk(" --- Enabling IRQ level %d ---\n", irq_nr);
+	save_flags(flags);
+	cli();
+
+	current_mask = *interrupt_enable;
+
+	switch(irq_nr) {
+	case 1:
+		new_mask = ((current_mask) | SUN4C_INT_E1);
+		break;
+	case 4:
+		new_mask = ((current_mask) | SUN4C_INT_E4);
+		break;
+	case 6:
+		new_mask = ((current_mask) | SUN4C_INT_E6);
+		break;
+	case 8:
+		new_mask = ((current_mask) | SUN4C_INT_E8);
+		break;
+	case 10:
+		new_mask = ((current_mask) | SUN4C_INT_E10);
+		break;
+	case 14:
+		new_mask = ((current_mask) | SUN4C_INT_E14);
+		break;
+	default:
+#if 0  /* Floppy driver does this on sun4c's anyhow */
+		printk ("Interrupt does not need to enable IE\n");
+		return;
 #endif
+		restore_flags(flags);
+		return;
+	};
 
-  switch(irq_nr)
-    {
-    case 1:
-      *int_reg = ((*int_reg) | 0x02);
-      break;
-    case 4:
-      *int_reg = ((*int_reg) | 0x04);
-      break;
-    case 6:
-      *int_reg = ((*int_reg) | 0x08);
-      break;      
-    case 8:
-      *int_reg = ((*int_reg) | 0x10);
-      break;      
-    case 10:
-      *int_reg = ((*int_reg) | 0x20);
-      break;      
-    case 14:
-      *int_reg = ((*int_reg) | 0x80);
-      break;      
-    default:
-      printk("AIEEE, Illegal interrupt enable requested irq=%d\n", 
-	     (int) irq_nr);
-      break;
-    };
+	*interrupt_enable = new_mask;
 
-  restore_flags(flags);
+	restore_flags(flags);
 
-  return;
+	return;
 }
 
 /*
  * Initial irq handlers.
  */
 struct irqaction {
-  void (*handler)(int, struct pt_regs *);
-  unsigned long flags;
-  unsigned long mask;
-  const char *name;
+	void (*handler)(int, struct pt_regs *);
+	unsigned long flags;
+	unsigned long mask;
+	const char *name;
 };
 
 static struct irqaction irq_action[16] = {
@@ -151,29 +162,31 @@ static struct irqaction irq_action[16] = {
 };
 
 
-int get_irq_list(char *buf)
+int
+get_irq_list(char *buf)
 {
-  int i, len = 0;
-  struct irqaction * action = irq_action;
-  
-  for (i = 0 ; i < 16 ; i++, action++) {
-    if (!action->handler)
-      continue;
-    len += sprintf(buf+len, "%2d: %8d %c %s\n",
-		   i, kstat.interrupts[i],
-		   (action->flags & SA_INTERRUPT) ? '+' : ' ',
-		   action->name);
-  }
-  return len;
+	int i, len = 0;
+	struct irqaction * action = irq_action;
+
+	for (i = 0 ; i < 16 ; i++, action++) {
+		if (!action->handler)
+			continue;
+		len += sprintf(buf+len, "%2d: %8d %c %s\n",
+			       i, kstat.interrupts[i],
+			       (action->flags & SA_INTERRUPT) ? '+' : ' ',
+			       action->name);
+	}
+	return len;
 }
 
-void free_irq(unsigned int irq)
+void
+free_irq(unsigned int irq)
 {
         struct irqaction * action = irq + irq_action;
         unsigned long flags;
 
         if (irq > 14) {  /* 14 irq levels on the sparc */
-                printk("Trying to free IRQ %d\n", irq);
+                printk("Trying to free bogus IRQ %d\n", irq);
                 return;
         }
         if (!action->handler) {
@@ -190,37 +203,33 @@ void free_irq(unsigned int irq)
         restore_flags(flags);
 }
 
-#if 0
-static void handle_nmi(struct pt_regs * regs)
-{
-  printk("NMI, probably due to bus-parity error.\n");
-  printk("PC=%08lx, SP=%08lx\n", regs->pc, regs->sp);
-}
-#endif
-
-void unexpected_irq(int irq, struct pt_regs * regs)
+void
+unexpected_irq(int irq, struct pt_regs * regs)
 {
         int i;
 
         printk("IO device interrupt, irq = %d\n", irq);
-        printk("PC = %08lx NPC = %08lx SP=%08lx\n", regs->pc, 
-	       regs->npc, regs->sp);
+        printk("PC = %08lx NPC = %08lx FP=%08lx\n", regs->pc, 
+	       regs->npc, regs->u_regs[14]);
         printk("Expecting: ");
         for (i = 0; i < 16; i++)
                 if (irq_action[i].handler)
-                        printk("[%s:%d] ", irq_action[i].name, i);
+                        printk("[%s:%d:0x%x] ", irq_action[i].name, (int) i,
+			       (unsigned int) irq_action[i].handler);
         printk("AIEEE\n");
+	prom_halt();
 }
 
-static inline void handler_irq(int irq, struct pt_regs * regs)
+void
+handler_irq(int irq, struct pt_regs * regs)
 {
-  struct irqaction * action = irq + irq_action;
+	struct irqaction * action = irq_action + irq;
 
-  if (!action->handler) {
-    unexpected_irq(irq, regs);
-    return;
-  }
-  action->handler(irq, regs);
+	if (!action->handler) {
+		unexpected_irq(irq, regs);
+		return;
+	}
+	action->handler(irq, regs);
 }
 
 /*
@@ -230,35 +239,14 @@ static inline void handler_irq(int irq, struct pt_regs * regs)
  * IRQ's should use this format: notably the keyboard/timer
  * routines.
  */
-asmlinkage void do_IRQ(int irq, struct pt_regs * regs)
+asmlinkage void
+do_IRQ(int irq, struct pt_regs * regs)
 {
-  struct irqaction *action = irq + irq_action;
+	struct irqaction *action = irq + irq_action;
 
-  kstat.interrupts[irq]++;
-  action->handler(irq, regs);
-  return;
-}
-
-/*
- * Since we need to special things to clear up the clock chip around
- * the do_timer() call we have a special version of do_IRQ for the
- * level 14 interrupt which does these things.
- */
-
-asmlinkage void do_sparc_timer(int irq, struct pt_regs * regs)
-{
-  struct irqaction *action = irq + irq_action;
-  register volatile int clear;
-
-  kstat.interrupts[irq]++;
-
-  /* I do the following already in the entry code, better safe than
-   * sorry for now. Reading the limit register clears the interrupt.
-   */
-  clear = TIMER_STRUCT->timer_limit14;
-
-  action->handler(irq, regs);
-  return;
+	kstat.interrupts[irq]++;
+	action->handler(irq, regs);
+	return;
 }
 
 /*
@@ -266,70 +254,162 @@ asmlinkage void do_sparc_timer(int irq, struct pt_regs * regs)
  * stuff - the handler is also running with interrupts disabled unless
  * it explicitly enables them later.
  */
-asmlinkage void do_fast_IRQ(int irq)
+asmlinkage void
+do_fast_IRQ(int irq)
 {
-  kstat.interrupts[irq]++;
-  printk("Got FAST_IRQ number %04lx\n", (long unsigned int) irq);
-  return;
+	kstat.interrupts[irq]++;
+	printk("Got FAST_IRQ number %04lx\n", (long unsigned int) irq);
+	return;
 }
 
-extern int first_descent;
-extern void probe_clock(int);
+extern void probe_clock(void);
 		
-int request_irq(unsigned int irq, void (*handler)(int, struct pt_regs *),
-	unsigned long irqflags, const char * devname)
+int
+request_irq(unsigned int irq, void (*handler)(int, struct pt_regs *),
+	    unsigned long irqflags, const char * devname)
 {
-  struct irqaction *action;
-  unsigned long flags;
+	struct irqaction *action;
+	unsigned long flags;
 
-  if(irq > 14)  /* Only levels 1-14 are valid on the Sparc. */
-    return -EINVAL;
+	if(irq > 14)  /* Only levels 1-14 are valid on the Sparc. */
+		return -EINVAL;
 
-  if(irq == 0)  /* sched_init() requesting the timer IRQ */
-    {
-      irq = 14;
-      probe_clock(first_descent);
-    }
+	/* i386 keyboard interrupt request, just return */
+	if(irq == 1) return 0;
 
-  action = irq + irq_action;
+	/* sched_init() requesting the timer IRQ */
+	if(irq == 0) {
+		irq = 10;
+	}
 
-  if(action->handler)
-    return -EBUSY;
+	action = irq + irq_action;
 
-  if(!handler)
-    return -EINVAL;
+	if(action->handler)
+		return -EBUSY;
 
-  save_flags(flags);
+	if(!handler)
+		return -EINVAL;
 
-  cli();
+	save_flags(flags);
 
-  action->handler = handler;
-  action->flags = irqflags;
-  action->mask = 0;
-  action->name = devname;
+	cli();
 
-  enable_irq(irq);
+	action->handler = handler;
+	action->flags = irqflags;
+	action->mask = 0;
+	action->name = devname;
 
-  restore_flags(flags);
+	enable_irq(irq);
 
-  return 0;
+	/* Init the timer/clocks if necessary. */
+	if(irq == 10) probe_clock();
+
+	restore_flags(flags);
+
+	return 0;
 }
 
-unsigned int probe_irq_on (void)
+void
+sun4c_init_IRQ(void)
 {
-  unsigned int irqs = 0;
+	struct linux_prom_registers int_regs[2];
+	int ie_node;
 
-  return irqs;
+	ie_node = prom_searchsiblings (prom_getchild(prom_root_node),
+				       "interrupt-enable");
+	if(ie_node == 0) {
+		printk("Cannot find /interrupt-enable node\n");
+		prom_halt();
+	}
+	/* Depending on the "address" property is bad news... */
+	prom_getproperty(ie_node, "reg", (char *) int_regs, sizeof(int_regs));
+	sparc_alloc_io(int_regs[0].phys_addr, (void *) INTREG_VADDR,
+		       int_regs[0].reg_size, "sun4c_interrupts",
+		       int_regs[0].which_io, 0x0);
+
+	interrupt_enable = (char *) INTREG_VADDR;
+
+	/* Default value, accept interrupts, but no one is actually active */
+	/* We also turn on level14 interrupts so PROM can run the console. */
+	*interrupt_enable = (SUN4C_INT_ENABLE | SUN4C_INT_E14);
+	sti(); /* As of NOW, L1-A works.  Turn irq's on full-blast. */
+	return;
 }
 
-int probe_irq_off (unsigned int irqs)
+void
+sun4m_init_IRQ(void)
 {
-  unsigned int i = 0;
+	int ie_node, i;
 
-  return i;
+	struct linux_prom_registers int_regs[PROMREG_MAX];
+	int num_regs;
+
+	cli();
+
+	if((ie_node = prom_searchsiblings(prom_getchild(prom_root_node), "obio")) == 0 ||
+	   (ie_node = prom_getchild (ie_node)) == 0 ||
+	   (ie_node = prom_searchsiblings (ie_node, "interrupt")) == 0)
+	{
+		printk("Cannot find /obio/interrupt node\n");
+		prom_halt();
+	}
+	num_regs = prom_getproperty(ie_node, "reg", (char *) int_regs,
+				    sizeof(int_regs));
+	num_regs = (num_regs/sizeof(struct linux_prom_registers));
+
+	/* Apply the obio ranges to these registers. */
+	prom_apply_obio_ranges(int_regs, num_regs);
+
+	/* Map the interrupt registers for all possible cpus. */
+	sparc_alloc_io(int_regs[0].phys_addr, (void *) INTREG_VADDR,
+		       PAGE_SIZE*NCPUS, "interrupts_percpu",
+		       int_regs[0].which_io, 0x0);
+
+	/* Map the system interrupt control registers. */
+	sparc_alloc_io(int_regs[num_regs-1].phys_addr,
+		       (void *) INTREG_VADDR+(NCPUS*PAGE_SIZE),
+		       int_regs[num_regs-1].reg_size, "interrupts_system",
+		       int_regs[num_regs-1].which_io, 0x0);
+
+	sun4m_interrupts = (struct sun4m_intregs *) INTREG_VADDR;
+
+#if 0
+	printk("Interrupt register dump...\n");
+
+	for(i=0; i<NCPUS; i++)
+		printk("cpu%d: tbt %08x\n", i,
+		       sun4m_interrupts->cpu_intregs[i].tbt);
+
+	printk("Master tbt %08x\n", sun4m_interrupts->tbt);
+	printk("Master irqs %08x\n", sun4m_interrupts->irqs);
+	printk("Master set %08x\n", sun4m_interrupts->set);
+	printk("Master clear %08x\n", sun4m_interrupts->clear);
+	printk("Undirected ints taken by: %08x\n",
+	       sun4m_interrupts->undirected_target);
+
+	prom_halt();
+#endif
+
+	sti();
+
+	return;
 }
 
-void init_IRQ(void)
+void
+init_IRQ(void)
 {
-  return;
+	switch(sparc_cpu_model) {
+	case sun4c:
+		sun4c_init_IRQ();
+		break;
+	case sun4m:
+		sun4m_init_IRQ();
+		break;
+	default:
+		printk("Cannot initialize IRQ's on this Sun machine...\n");
+		halt();
+		break;
+	};
+
+	return;
 }

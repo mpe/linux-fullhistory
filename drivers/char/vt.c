@@ -234,7 +234,7 @@ int vt_ioctl(struct tty_struct *tty, struct file * file,
 		 */
 		i = verify_area(VERIFY_WRITE, (void *) arg, sizeof(unsigned char));
 		if (!i)
-			put_fs_byte(KB_101, (char *) arg);
+			put_user(KB_101, (char *) arg);
 		return i;
 
 	case KDADDIO:
@@ -286,9 +286,9 @@ int vt_ioctl(struct tty_struct *tty, struct file * file,
 		return 0;
 
 	case KDGETMODE:
-		i = verify_area(VERIFY_WRITE, (void *) arg, sizeof(unsigned long));
+		i = verify_area(VERIFY_WRITE, (void *) arg, sizeof(int));
 		if (!i)
-			put_fs_long(vt_cons[console]->vc_mode, (unsigned long *) arg);
+			put_user(vt_cons[console]->vc_mode, (int *) arg);
 		return i;
 
 	case KDMAPDISP:
@@ -325,13 +325,13 @@ int vt_ioctl(struct tty_struct *tty, struct file * file,
 		return 0;
 
 	case KDGKBMODE:
-		i = verify_area(VERIFY_WRITE, (void *) arg, sizeof(unsigned long));
+		i = verify_area(VERIFY_WRITE, (void *) arg, sizeof(int));
 		if (!i) {
 			ucval = ((kbd->kbdmode == VC_RAW) ? K_RAW :
 				 (kbd->kbdmode == VC_MEDIUMRAW) ? K_MEDIUMRAW :
 				 (kbd->kbdmode == VC_UNICODE) ? K_UNICODE :
 				 K_XLATE);
-			put_fs_long(ucval, (unsigned long *) arg);
+			put_user(ucval, (int *) arg);
 		}
 		return i;
 
@@ -351,11 +351,11 @@ int vt_ioctl(struct tty_struct *tty, struct file * file,
 		return 0;
 
 	case KDGKBMETA:
-		i = verify_area(VERIFY_WRITE, (void *) arg, sizeof(unsigned long));
+		i = verify_area(VERIFY_WRITE, (void *) arg, sizeof(int));
 		if (!i) {
 			ucval = (vc_kbd_mode(kbd, VC_META) ? K_ESCPREFIX :
 				 K_METABIT);
-			put_fs_long(ucval, (unsigned long *) arg);
+			put_user(ucval, (int *) arg);
 		}
 		return i;
 
@@ -368,11 +368,11 @@ int vt_ioctl(struct tty_struct *tty, struct file * file,
 		i = verify_area(VERIFY_WRITE, (void *)a, sizeof(struct kbkeycode));
 		if (i)
 			return i;
-		sc = get_fs_long((int *) &a->scancode);
+		sc = get_user(&a->scancode);
 		kc = getkeycode(sc);
 		if (kc < 0)
 			return kc;
-		put_fs_long(kc, (int *) &a->keycode);
+		put_user(kc, &a->keycode);
 		return 0;
 	}
 
@@ -386,8 +386,8 @@ int vt_ioctl(struct tty_struct *tty, struct file * file,
 		i = verify_area(VERIFY_READ, (void *)a, sizeof(struct kbkeycode));
 		if (i)
 			return i;
-		sc = get_fs_long((int *) &a->scancode);
-		kc = get_fs_long((int *) &a->keycode);
+		sc = get_user(&a->scancode);
+		kc = get_user(&a->keycode);
 		return setkeycode(sc, kc);
 	}
 
@@ -400,9 +400,9 @@ int vt_ioctl(struct tty_struct *tty, struct file * file,
 		i = verify_area(VERIFY_WRITE, (void *)a, sizeof(struct kbentry));
 		if (i)
 			return i;
-		if ((i = get_fs_byte((char *) &a->kb_index)) >= NR_KEYS)
+		if ((i = get_user(&a->kb_index)) >= NR_KEYS)
 			return -EINVAL;
-		if ((s = get_fs_byte((char *) &a->kb_table)) >= MAX_NR_KEYMAPS)
+		if ((s = get_user(&a->kb_table)) >= MAX_NR_KEYMAPS)
 			return -EINVAL;
 		key_map = key_maps[s];
 		if (key_map) {
@@ -411,7 +411,7 @@ int vt_ioctl(struct tty_struct *tty, struct file * file,
 			val = K_HOLE;
 		} else
 		    val = (i ? K_HOLE : K_NOSUCHMAP);
-		put_fs_word(val, (short *) &a->kb_value);
+		put_user(val, &a->kb_value);
 		return 0;
 	}
 
@@ -427,11 +427,11 @@ int vt_ioctl(struct tty_struct *tty, struct file * file,
 		i = verify_area(VERIFY_READ, (void *)a, sizeof(struct kbentry));
 		if (i)
 			return i;
-		if ((i = get_fs_byte((char *) &a->kb_index)) >= NR_KEYS)
+		if ((i = get_user(&a->kb_index)) >= NR_KEYS)
 			return -EINVAL;
-		if ((s = get_fs_byte((char *) &a->kb_table)) >= MAX_NR_KEYMAPS)
+		if ((s = get_user(&a->kb_table)) >= MAX_NR_KEYMAPS)
 			return -EINVAL;
-		v = get_fs_word(&a->kb_value);
+		v = get_user(&a->kb_value);
 		if (!i && v == K_NOSUCHMAP) {
 			/* disallocate map */
 			key_map = key_maps[s];
@@ -497,7 +497,7 @@ int vt_ioctl(struct tty_struct *tty, struct file * file,
 		i = verify_area(VERIFY_WRITE, (void *)a, sizeof(struct kbsentry));
 		if (i)
 			return i;
-		if ((i = get_fs_byte(&a->kb_func)) >= MAX_NR_FUNC || i < 0)
+		if ((i = get_user(&a->kb_func)) >= MAX_NR_FUNC || i < 0)
 			return -EINVAL;
 		sz = sizeof(a->kb_string) - 1; /* sz should have been
 						  a struct member */
@@ -505,8 +505,8 @@ int vt_ioctl(struct tty_struct *tty, struct file * file,
 		p = func_table[i];
 		if(p)
 			for ( ; *p && sz; p++, sz--)
-				put_fs_byte(*p, q++);
-		put_fs_byte(0, q);
+				put_user(*p, q++);
+		put_user('\0', q);
 		return ((p && *p) ? -EOVERFLOW : 0);
 	}
 
@@ -524,7 +524,7 @@ int vt_ioctl(struct tty_struct *tty, struct file * file,
 		i = verify_area(VERIFY_READ, (void *)a, sizeof(struct kbsentry));
 		if (i)
 			return i;
-		if ((i = get_fs_byte(&a->kb_func)) >= MAX_NR_FUNC)
+		if ((i = get_user(&a->kb_func)) >= MAX_NR_FUNC)
 			return -EINVAL;
 		q = func_table[i];
 
@@ -538,7 +538,7 @@ int vt_ioctl(struct tty_struct *tty, struct file * file,
 		delta = (q ? -strlen(q) : 1);
 		sz = sizeof(a->kb_string); 	/* sz should have been
 						   a struct member */
-		for (p = a->kb_string; get_fs_byte(p) && sz; p++,sz--)
+		for (p = a->kb_string; get_user(p) && sz; p++,sz--)
 			delta++;
 		if (!sz)
 			return -EOVERFLOW;
@@ -581,7 +581,7 @@ int vt_ioctl(struct tty_struct *tty, struct file * file,
 		    funcbufsize = sz;
 		}
 		for (p = a->kb_string, q = func_table[i]; ; p++, q++)
-			if (!(*q = get_fs_byte(p)))
+			if (!(*q = get_user(p)))
 				break;
 		return 0;
 	}
@@ -593,7 +593,7 @@ int vt_ioctl(struct tty_struct *tty, struct file * file,
 		i = verify_area(VERIFY_WRITE, (void *) a, sizeof(struct kbdiacrs));
 		if (i)
 			return i;
-		put_fs_long(accent_table_size, &a->kb_cnt);
+		put_user(accent_table_size, &a->kb_cnt);
 		memcpy_tofs(a->kbdiacr, accent_table,
 			    accent_table_size*sizeof(struct kbdiacr));
 		return 0;
@@ -609,7 +609,7 @@ int vt_ioctl(struct tty_struct *tty, struct file * file,
 		i = verify_area(VERIFY_READ, (void *) a, sizeof(struct kbdiacrs));
 		if (i)
 			return i;
-		ct = get_fs_long(&a->kb_cnt);
+		ct = get_user(&a->kb_cnt);
 		if (ct >= MAX_DIACR)
 			return -EINVAL;
 		accent_table_size = ct;
@@ -623,8 +623,8 @@ int vt_ioctl(struct tty_struct *tty, struct file * file,
 		i = verify_area(VERIFY_WRITE, (void *) arg, sizeof(unsigned char));
 		if (i)
 			return i;
-		put_fs_byte(kbd->ledflagstate |
-			    (kbd->default_ledflagstate << 4), (char *) arg);
+		put_user(kbd->ledflagstate |
+			 (kbd->default_ledflagstate << 4), (char *) arg);
 		return 0;
 
 	case KDSKBLED:
@@ -643,7 +643,7 @@ int vt_ioctl(struct tty_struct *tty, struct file * file,
 		i = verify_area(VERIFY_WRITE, (void *) arg, sizeof(unsigned char));
 		if (i)
 			return i;
-		put_fs_byte(getledstate(), (char *) arg);
+		put_user(getledstate(), (char *) arg);
 		return 0;
 
 	case KDSETLED:
@@ -684,13 +684,13 @@ int vt_ioctl(struct tty_struct *tty, struct file * file,
 		i = verify_area(VERIFY_WRITE, (void *)vtmode, sizeof(struct vt_mode));
 		if (i)
 			return i;
-		mode = get_fs_byte(&vtmode->mode);
+		mode = get_user(&vtmode->mode);
 		if (mode != VT_AUTO && mode != VT_PROCESS)
 			return -EINVAL;
 		vt_cons[console]->vt_mode.mode = mode;
-		vt_cons[console]->vt_mode.waitv = get_fs_byte(&vtmode->waitv);
-		vt_cons[console]->vt_mode.relsig = get_fs_word(&vtmode->relsig);
-		vt_cons[console]->vt_mode.acqsig = get_fs_word(&vtmode->acqsig);
+		vt_cons[console]->vt_mode.waitv = get_user(&vtmode->waitv);
+		vt_cons[console]->vt_mode.relsig = get_user(&vtmode->relsig);
+		vt_cons[console]->vt_mode.acqsig = get_user(&vtmode->acqsig);
 		/* the frsig is ignored, so we set it to 0 */
 		vt_cons[console]->vt_mode.frsig = 0;
 		vt_cons[console]->vt_pid = current->pid;
@@ -705,11 +705,11 @@ int vt_ioctl(struct tty_struct *tty, struct file * file,
 		i = verify_area(VERIFY_WRITE, (void *)arg, sizeof(struct vt_mode));
 		if (i)
 			return i;
-		put_fs_byte(vt_cons[console]->vt_mode.mode, &vtmode->mode);
-		put_fs_byte(vt_cons[console]->vt_mode.waitv, &vtmode->waitv);
-		put_fs_word(vt_cons[console]->vt_mode.relsig, &vtmode->relsig);
-		put_fs_word(vt_cons[console]->vt_mode.acqsig, &vtmode->acqsig);
-		put_fs_word(vt_cons[console]->vt_mode.frsig, &vtmode->frsig);
+		put_user(vt_cons[console]->vt_mode.mode, &vtmode->mode);
+		put_user(vt_cons[console]->vt_mode.waitv, &vtmode->waitv);
+		put_user(vt_cons[console]->vt_mode.relsig, &vtmode->relsig);
+		put_user(vt_cons[console]->vt_mode.acqsig, &vtmode->acqsig);
+		put_user(vt_cons[console]->vt_mode.frsig, &vtmode->frsig);
 		return 0;
 	}
 
@@ -726,12 +726,12 @@ int vt_ioctl(struct tty_struct *tty, struct file * file,
 		i = verify_area(VERIFY_WRITE,(void *)vtstat, sizeof(struct vt_stat));
 		if (i)
 			return i;
-		put_fs_word(fg_console + 1, &vtstat->v_active);
+		put_user(fg_console + 1, &vtstat->v_active);
 		state = 1;	/* /dev/tty0 is always open */
 		for (i = 0, mask = 2; i < MAX_NR_CONSOLES && mask; ++i, mask <<= 1)
 			if (VT_IS_IN_USE(i))
 				state |= mask;
-		put_fs_word(state, &vtstat->v_state);
+		put_user(state, &vtstat->v_state);
 		return 0;
 	}
 
@@ -739,14 +739,13 @@ int vt_ioctl(struct tty_struct *tty, struct file * file,
 	 * Returns the first available (non-opened) console.
 	 */
 	case VT_OPENQRY:
-		i = verify_area(VERIFY_WRITE, (void *) arg, sizeof(long));
+		i = verify_area(VERIFY_WRITE, (void *) arg, sizeof(int));
 		if (i)
 			return i;
 		for (i = 0; i < MAX_NR_CONSOLES; ++i)
 			if (! VT_IS_IN_USE(i))
 				break;
-		put_fs_long(i < MAX_NR_CONSOLES ? (i+1) : -1,
-			    (unsigned long *)arg);
+		put_user(i < MAX_NR_CONSOLES ? (i+1) : -1, (int *) arg);
 		return 0;
 
 	/*
@@ -869,8 +868,8 @@ int vt_ioctl(struct tty_struct *tty, struct file * file,
 		i = verify_area(VERIFY_READ, (void *)vtsizes, sizeof(struct vt_sizes));
 		if (i)
 			return i;
-		ll = get_fs_word(&vtsizes->v_rows);
-		cc = get_fs_word(&vtsizes->v_cols);
+		ll = get_user(&vtsizes->v_rows);
+		cc = get_user(&vtsizes->v_cols);
 		i = vc_resize(ll, cc);
 		return i ? i : 	kd_size_changed(ll, cc);
 	}
@@ -884,12 +883,12 @@ int vt_ioctl(struct tty_struct *tty, struct file * file,
 		i = verify_area(VERIFY_READ, (void *)vtconsize, sizeof(struct vt_consize));
 		if (i)
 			return i;
-		ll = get_fs_word(&vtconsize->v_rows);
-		cc = get_fs_word(&vtconsize->v_cols);
-		vlin = get_fs_word(&vtconsize->v_vlin);
-		clin = get_fs_word(&vtconsize->v_clin);
-		vcol = get_fs_word(&vtconsize->v_vcol);
-		ccol = get_fs_word(&vtconsize->v_ccol);
+		ll = get_user(&vtconsize->v_rows);
+		cc = get_user(&vtconsize->v_cols);
+		vlin = get_user(&vtconsize->v_vlin);
+		clin = get_user(&vtconsize->v_clin);
+		vcol = get_user(&vtconsize->v_vcol);
+		ccol = get_user(&vtconsize->v_ccol);
 		vlin = vlin ? vlin : video_scan_lines;
 		if ( clin )
 		  {
@@ -926,7 +925,7 @@ int vt_ioctl(struct tty_struct *tty, struct file * file,
 
 		kd_size_changed(ll, cc);
 		return 0;
-	}
+  	}
 
 	case PIO_FONT:
 		if (!perm)
@@ -1043,8 +1042,8 @@ int vt_ioctl(struct tty_struct *tty, struct file * file,
 		i = verify_area(VERIFY_READ, (void *)arg, sizeof(struct unimapdesc));
 		if (i == 0) {
 		    ud = (struct unimapdesc *) arg;
-		    ct = get_fs_word(&ud->entry_ct);
-		    list = (struct unipair *) get_fs_long(&ud->entries);
+		    ct = get_user(&ud->entry_ct);
+		    list = get_user(&ud->entries);
 		    i = verify_area(VERIFY_READ, (void *) list,
 				    ct*sizeof(struct unipair));
 		}
@@ -1061,8 +1060,8 @@ int vt_ioctl(struct tty_struct *tty, struct file * file,
 		i = verify_area(VERIFY_WRITE, (void *)arg, sizeof(struct unimapdesc));
 		if (i == 0) {
 		    ud = (struct unimapdesc *) arg;
-		    ct = get_fs_word(&ud->entry_ct);
-		    list = (struct unipair *) get_fs_long(&ud->entries);
+		    ct = get_user(&ud->entry_ct);
+		    list = get_user(&ud->entries);
 		    if (ct)
 		      i = verify_area(VERIFY_WRITE, (void *) list,
 				      ct*sizeof(struct unipair));

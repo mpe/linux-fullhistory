@@ -1,7 +1,10 @@
 #ifndef __SPARC_IO_H
 #define __SPARC_IO_H
 
+#include <linux/kernel.h>
+
 #include <asm/page.h>      /* IO address mapping routines need this */
+#include <asm/system.h>
 
 /*
  * Defines for io operations on the Sparc. Whether a memory access is going
@@ -86,15 +89,31 @@ extern inline void writel(unsigned int b, unsigned long addr)
 #define inb_p inb
 #define outb_p outb
 
-extern inline void mapioaddr(unsigned long physaddr, unsigned long virt_addr)
+extern void sun4c_mapioaddr(unsigned long, unsigned long, int bus_type, int rdonly);
+extern void srmmu_mapioaddr(unsigned long, unsigned long, int bus_type, int rdonly);
+
+extern inline void mapioaddr(unsigned long physaddr, unsigned long virt_addr,
+			     int bus, int rdonly)
 {
-  unsigned long page_entry;
-
-  page_entry = physaddr >> PAGE_SHIFT;
-  page_entry |= (PTE_V | PTE_ACC | PTE_NC | PTE_IO);  /* kernel io addr */
-
-  put_pte(virt_addr, page_entry);
-  return;
+	switch(sparc_cpu_model) {
+	case sun4c:
+		sun4c_mapioaddr(physaddr, virt_addr, bus, rdonly);
+		break;
+	case sun4m:
+	case sun4d:
+	case sun4e:
+		srmmu_mapioaddr(physaddr, virt_addr, bus, rdonly);
+		break;
+	default:
+		printk("mapioaddr: Trying to map IO space for unsupported machine.\n");
+		printk("mapioaddr: sparc_cpu_model = %d\n", sparc_cpu_model);
+		printk("mapioaddr: Halting...\n");
+		halt();
+	};
+	return;
 }
+
+extern void *sparc_alloc_io (void *, void *, int, char *, int, int);
+extern void *sparc_dvma_malloc (int, char *);
 
 #endif /* !(__SPARC_IO_H) */

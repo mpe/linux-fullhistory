@@ -14,7 +14,6 @@
 .globl _empty_bad_page
 .globl _empty_bad_page_table
 .globl _empty_zero_page
-.globl _floppy_track_buffer
 
 #define __ASSEMBLY__
 #include <linux/tasks.h>
@@ -288,15 +287,7 @@ _empty_bad_page_table:
 _empty_zero_page:
 
 .org 0x6000
-/*
- * floppy_track_buffer is used to buffer one track of floppy data: it
- * has to be separate from the tmp_floppy area, as otherwise a single-
- * sector read/write can mess it up. It can contain one full cylinder (sic) of
- * data (36*2*512 bytes).
- */
-_floppy_track_buffer:
-	.fill 512*2*MAX_BUFFER_SECTORS,1,0
-	
+
 stack_start:
 	.long _init_user_stack+4096
 	.long KERNEL_DS

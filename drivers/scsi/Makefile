@@ -76,9 +76,9 @@ SCSI_OBJS := $(SCSI_OBJS) aha1740.o
 SCSI_SRCS := $(SCSI_SRCS) aha1740.c
 endif
 
-ifdef CONFIG_SCSI_AHA274X
-SCSI_OBJS := $(SCSI_OBJS) aha274x.o
-SCSI_SRCS := $(SCSI_SRCS) aha274x.c
+ifdef CONFIG_SCSI_AIC7XXX
+SCSI_OBJS := $(SCSI_OBJS) aic7xxx.o
+SCSI_SRCS := $(SCSI_SRCS) aic7xxx.c
 endif
 
 ifdef CONFIG_SCSI_BUSLOGIC
@@ -180,8 +180,8 @@ aha152x.o: aha152x.c
 aic7770:	aic7770.c
 		$(CC) $(CFLAGS) -o $@ aic7770.c
 
-aha274x_seq.h:	aic7770 aha274x.seq
-		./aic7770 -o $@ aha274x.seq
+aic7xxx_seq.h:	aic7770 aic7xxx.seq
+		./aic7770 -o $@ aic7xxx.seq
 
 seagate.o: seagate.c
 	$(CC) $(CFLAGS) -DARBITRATE -DSLOW_HANDSHAKE -DFAST32 -c seagate.c 

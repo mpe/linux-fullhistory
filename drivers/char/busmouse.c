@@ -151,7 +151,7 @@ static int read_mouse(struct inode * inode, struct file * file, char * buffer, i
 	 * Obtain the current mouse parameters and limit as appropriate for
 	 * the return data format.  Interrupts are only disabled while 
 	 * obtaining the parameters, NOT during the puts_fs_byte() calls,
-	 * so paging in put_fs_byte() does not effect mouse tracking.
+	 * so paging in put_user() does not effect mouse tracking.
 	 */
 
 	MSE_INT_OFF();
@@ -171,11 +171,11 @@ static int read_mouse(struct inode * inode, struct file * file, char * buffer, i
 	mouse.ready = 0;
 	MSE_INT_ON();
 
-	put_fs_byte(buttons | 0x80, buffer);
-	put_fs_byte((char)dx, buffer + 1);
-	put_fs_byte((char)dy, buffer + 2);
+	put_user(buttons | 0x80, buffer);
+	put_user((char)dx, buffer + 1);
+	put_user((char)dy, buffer + 2);
 	for (r = 3; r < count; r++)
-	    put_fs_byte(0x00, buffer + r);
+	    put_user(0x00, buffer + r);
 	return r;
 }
 

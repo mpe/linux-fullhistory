@@ -9,7 +9,7 @@
  * pointer type..
  */
 #define put_user(x,ptr) __put_user((unsigned long)(x),(ptr),sizeof(*(ptr)))
-#define get_user(ptr) __get_user((ptr),sizeof(*(ptr)))
+#define get_user(ptr) ((__typeof__(*(ptr)))__get_user((ptr),sizeof(*(ptr))))
 
 /*
  * This is a silly but good way to make sure that
@@ -40,7 +40,7 @@ static inline void __put_user(unsigned long x, void * y, int size)
 }
 
 /* I should make this use unaligned transfers etc.. */
-static inline unsigned long __get_user(void * y, int size)
+static inline unsigned long __get_user(const void * y, int size)
 {
 	switch (size) {
 		case 1:

@@ -246,10 +246,10 @@ static int xd_ioctl (struct inode *inode,struct file *file,u_int cmd,u_long arg)
 				if (arg) {
 					if ((err = verify_area(VERIFY_WRITE,geometry,sizeof(*geometry))))
 						return (err);
-					put_fs_byte(xd_info[dev].heads,(char *) &geometry->heads);
-					put_fs_byte(xd_info[dev].sectors,(char *) &geometry->sectors);
-					put_fs_word(xd_info[dev].cylinders,(short *) &geometry->cylinders);
-					put_fs_long(xd[MINOR(inode->i_rdev)].start_sect,(long *) &geometry->start);
+					put_user(xd_info[dev].heads, &geometry->heads);
+					put_user(xd_info[dev].sectors, &geometry->sectors);
+					put_user(xd_info[dev].cylinders, &geometry->cylinders);
+					put_user(xd[MINOR(inode->i_rdev)].start_sect,&geometry->start);
 
 					return (0);
 				}
@@ -264,7 +264,7 @@ static int xd_ioctl (struct inode *inode,struct file *file,u_int cmd,u_long arg)
 				if (arg) {
 					if ((err = verify_area(VERIFY_WRITE,(long *) arg,sizeof(long))))
 						return (err);
-					put_fs_long(xd[MINOR(inode->i_rdev)].nr_sects,(long *) arg);
+					put_user(xd[MINOR(inode->i_rdev)].nr_sects,(long *) arg);
 
 					return (0);
 				}
@@ -398,7 +398,7 @@ static void xd_interrupt_handler(int irq, struct pt_regs * regs)
 static u_char xd_setup_dma (u_char mode,u_char *buffer,u_int count)
 {
 	if (buffer < ((u_char *) 0x1000000 - count)) {		/* transfer to address < 16M? */
-		if (((u_int) buffer & 0xFFFF0000) != ((u_int) buffer + count) & 0xFFFF0000) {
+		if (((u_int) buffer & 0xFFFF0000) != (((u_int) buffer + count) & 0xFFFF0000)) {
 #ifdef DEBUG_OTHER
 			printk("xd_setup_dma: using PIO, transfer overlaps 64k boundary\n");
 #endif /* DEBUG_OTHER */

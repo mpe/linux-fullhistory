@@ -103,7 +103,7 @@ static int isofs_readlink(struct inode * inode, char * buffer, int buflen)
 
 	while (i<buflen && (c = pnt[i])) {
 		i++;
-		put_fs_byte(c,buffer++);
+		put_user(c,buffer++);
 	}
 	kfree(pnt);
 	return i;

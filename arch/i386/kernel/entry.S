@@ -490,7 +490,7 @@ _sys_call_table:
 	.long _sys_swapon
 	.long _sys_reboot
 	.long _old_readdir
-	.long _sys_mmap			/* 90 */
+	.long _old_mmap			/* 90 */
 	.long _sys_munmap
 	.long _sys_truncate
 	.long _sys_ftruncate
@@ -544,4 +544,4 @@ _sys_call_table:
 	.long _sys_getdents
 	.long _sys_select
 	.long _sys_flock
-	.space (NR_syscalls-140)*4
+	.space (NR_syscalls-143)*4

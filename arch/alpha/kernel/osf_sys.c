@@ -68,7 +68,7 @@ struct osf_dirent_callback {
 	int error;
 };
 
-static int osf_filldir(void * __buf, char * name, int namlen, off_t offset, ino_t ino)
+static int osf_filldir(void * __buf, const char * name, int namlen, off_t offset, ino_t ino)
 {
 	struct osf_dirent * dirent;
 	struct osf_dirent_callback * buf = (struct osf_dirent_callback *) __buf;
@@ -508,4 +508,125 @@ asmlinkage long osf_shmat(int shmid, void *shmaddr, int shmflg)
 	 * non-negative longs!
 	 */
 	return raddr;
+}
+
+
+/*
+ * The following stuff should move into a header file should it ever
+ * be labeled "officially supported."  Right now, there is just enough
+ * support to avoid applications (such as tar) printing error
+ * messages.  The attributes are not really implemented.
+ */
+
+/*
+ * Values for Property list entry flag
+ */
+#define PLE_PROPAGATE_ON_COPY		0x1	/* cp(1) will copy entry
+						   by default */
+#define PLE_FLAG_MASK			0x1	/* Valid flag values */
+#define PLE_FLAG_ALL			-1	/* All flag value */
+
+struct proplistname_args {
+	unsigned int	pl_mask;
+	unsigned int	pl_numnames;
+	char		**pl_names;
+};
+
+union pl_args {
+	struct setargs {
+		char *path;
+		long follow;
+		long nbytes;
+		char *buf;
+	} set;
+	struct fsetargs {
+		long fd;
+		long nbytes;
+		char *buf;
+	} fset;
+	struct getargs {
+		char *path;
+		long follow;
+		struct proplistname_args *name_args;
+		long nbytes;
+		char *buf;
+		int *min_buf_size;
+	} get;
+	struct fgetargs {
+		long fd;
+		struct proplistname_args *name_args;
+		long nbytes;
+		char *buf;
+		int *min_buf_size;
+	} fget;
+	struct delargs {
+		char *path;
+		long follow;
+		struct proplistname_args *name_args;
+	} del;
+	struct fdelargs {
+		long fd;
+		struct proplistname_args *name_args;
+	} fdel;
+};
+
+enum pl_code {
+	PL_SET	= 1,	PL_FSET	= 2,
+	PL_GET	= 3,	PL_FGET	= 4,
+	PL_DEL	= 5,	PL_FDEL	= 6
+};
+
+asmlinkage long osf_proplist_syscall (enum pl_code code, union pl_args *args)
+{
+	long error;
+	int *min_buf_size_ptr;
+
+	switch (code) {
+	      case PL_SET:
+		error = verify_area(VERIFY_READ, &args->set.nbytes,
+				    sizeof(args->set.nbytes));
+		if (error)
+		  return error;
+		return args->set.nbytes;
+
+	      case PL_FSET:
+		error = verify_area(VERIFY_READ, &args->fset.nbytes,
+				    sizeof(args->fset.nbytes));
+		if (error)
+		  return error;
+		return args->fset.nbytes;
+
+	      case PL_GET:
+		error = verify_area(VERIFY_READ, &args->get.min_buf_size,
+				    sizeof(args->get.min_buf_size));
+		if (error)
+		  return error;
+		min_buf_size_ptr = get_user(&args->get.min_buf_size);
+		error = verify_area(VERIFY_WRITE, min_buf_size_ptr,
+				    sizeof(*min_buf_size_ptr));
+		if (error)
+		  return error;
+		put_user(0, min_buf_size_ptr);
+		return 0;
+
+	      case PL_FGET:
+		error = verify_area(VERIFY_READ, &args->fget.min_buf_size,
+				    sizeof(args->fget.min_buf_size));
+		if (error)
+		  return error;
+		min_buf_size_ptr = get_user(&args->fget.min_buf_size);
+		error = verify_area(VERIFY_WRITE, min_buf_size_ptr,
+				    sizeof(*min_buf_size_ptr));
+		if (error)
+		  return error;
+		put_user(0, min_buf_size_ptr);
+		return 0;
+
+	      case PL_DEL:
+	      case PL_FDEL:
+		return 0;
+
+	      default:
+		return -EOPNOTSUPP;
+	}
 }

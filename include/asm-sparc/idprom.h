@@ -3,10 +3,17 @@
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
  */
 
+#ifndef _SPARC_IDPROM_H
+#define _SPARC_IDPROM_H
+
 extern struct linux_romvec *romvec;
 
-#define IDPROM_ADDR  (0xffd04000 + 0x7d8)
-#define IDPROM_SIZE  36
+/* Offset into the EEPROM where the id PROM is located on the 4c */
+#define IDPROM_OFFSET  0x7d8
+
+/* On sun4m; physical. */
+/* MicroSPARC(-II) does not decode 31rd bit, but it works. */
+#define IDPROM_OFFSET_M  0xfd8
 
 struct idp_struct
 {
@@ -19,3 +26,8 @@ struct idp_struct
   unsigned char dummy[16];    /* XXX */
 };
 
+extern struct idp_struct *idprom;
+
+#define IDPROM_SIZE  (sizeof(struct idp_struct))
+
+#endif /* !(_SPARC_IDPROM_H) */

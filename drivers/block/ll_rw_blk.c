@@ -520,9 +520,9 @@ void ll_rw_block(int rw, int nr, struct buffer_head * bh[])
 
 void ll_rw_swap_file(int rw, int dev, unsigned int *b, int nb, char *buf)
 {
-	int i;
+	int i, j;
 	int buffersize;
-	struct request * req;
+	struct request * req[8];
 	unsigned int major = MAJOR(dev);
 	struct semaphore sem = MUTEX_LOCKED;
 
@@ -542,20 +542,34 @@ void ll_rw_swap_file(int rw, int dev, unsigned int *b, int nb, char *buf)
 	
 	buffersize = PAGE_SIZE / nb;
 
-	for (i=0; i<nb; i++, buf += buffersize)
+	for (j=0, i=0; i<nb;)
 	{
-		req = get_request_wait(NR_REQUEST, dev);
-		req->cmd = rw;
-		req->errors = 0;
-		req->sector = (b[i] * buffersize) >> 9;
-		req->nr_sectors = buffersize >> 9;
-		req->current_nr_sectors = buffersize >> 9;
-		req->buffer = buf;
-		req->sem = &sem;
-		req->bh = NULL;
-		req->next = NULL;
-		add_request(major+blk_dev,req);
-		down(&sem);
+		for (; j < 8 && i < nb; j++, i++, buf += buffersize)
+		{
+			if (j == 0) {
+				req[j] = get_request_wait(NR_REQUEST, dev);
+			} else {
+				cli();
+				req[j] = get_request(NR_REQUEST, dev);
+				sti();
+				if (req[j] == NULL)
+					break;
+			}
+			req[j]->cmd = rw;
+			req[j]->errors = 0;
+			req[j]->sector = (b[i] * buffersize) >> 9;
+			req[j]->nr_sectors = buffersize >> 9;
+			req[j]->current_nr_sectors = buffersize >> 9;
+			req[j]->buffer = buf;
+			req[j]->sem = &sem;
+			req[j]->bh = NULL;
+			req[j]->next = NULL;
+			add_request(major+blk_dev,req[j]);
+		}
+		while (j > 0) {
+			j--;
+			down(&sem);
+		}
 	}
 }
 

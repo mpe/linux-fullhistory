@@ -300,14 +300,14 @@ int n_tty_ioctl(struct tty_struct * tty, struct file * file,
 			return 0;
 		case TIOCOUTQ:
 			retval = verify_area(VERIFY_WRITE, (void *) arg,
-					     sizeof (unsigned long));
+					     sizeof (int));
 			if (retval)
 				return retval;
 			if (tty->driver.chars_in_buffer)
-				put_fs_long(tty->driver.chars_in_buffer(tty),
-					    (unsigned long *) arg);
+				put_user(tty->driver.chars_in_buffer(tty),
+					 (int *) arg);
 			else
-				put_fs_long(0, (unsigned long *) arg);
+				put_user(0, (int *) arg);
 			return 0;
 		case TIOCINQ:
 			retval = verify_area(VERIFY_WRITE, (void *) arg,
@@ -346,10 +346,10 @@ int n_tty_ioctl(struct tty_struct * tty, struct file * file,
 			    tty->driver.subtype != PTY_TYPE_MASTER)
 				return -ENOTTY;
 			retval = verify_area(VERIFY_READ, (void *) arg,
-					     sizeof (unsigned long));
+					     sizeof (int));
 			if (retval)
 				return retval;
-			if (get_fs_long(arg)) {
+			if (get_user((int*)arg)) {
 				if (!tty->packet) {
 					tty->packet = 1;
 					tty->link->ctrl_status = 0;

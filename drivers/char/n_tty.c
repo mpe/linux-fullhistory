@@ -803,7 +803,7 @@ do_it_again:
 		if (tty->packet && tty->link->ctrl_status) {
 			if (b != buf)
 				break;
-			put_fs_byte(tty->link->ctrl_status, b++);
+			put_user(tty->link->ctrl_status, b++);
 			tty->link->ctrl_status = 0;
 			break;
 		}
@@ -840,7 +840,7 @@ do_it_again:
 
 		/* Deal with packet mode. */
 		if (tty->packet && b == buf) {
-			put_fs_byte(TIOCPKT_DATA, b++);
+			put_user(TIOCPKT_DATA, b++);
 			nr--;
 		}
 
@@ -861,7 +861,7 @@ do_it_again:
 				tty->read_cnt--;
 				enable_bh(TQUEUE_BH);
 				if (!eol) {
-					put_fs_byte(c, b++);
+					put_user(c, b++);
 					if (--nr)
 						continue;
 					break;
@@ -870,7 +870,7 @@ do_it_again:
 					tty->canon_data = 0;
 				}
 				if (c != __DISABLED_CHAR) {
-					put_fs_byte(c, b++);
+					put_user(c, b++);
 					nr--;
 				}
 				break;
@@ -939,7 +939,7 @@ static int write_chan(struct tty_struct * tty, struct file * file,
 		}
 		if (O_OPOST(tty)) {
 			while (nr > 0) {
-				c = get_fs_byte(b);
+				c = get_user(b);
 				if (opost(c, tty) < 0)
 					break;
 				b++; nr--;

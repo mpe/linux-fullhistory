@@ -90,7 +90,7 @@ vcs_read(struct inode *inode, struct file *file, char *buf, int count)
 	if (!attr) {
 		org = screen_pos(cons, p, viewed);
 		while (count-- > 0)
-			put_fs_byte(scr_readw(org++) & 0xff, buf++);
+			put_user(scr_readw(org++) & 0xff, buf++);
 	} else {
 		if (p < HEADER_SIZE) {
 			char header[HEADER_SIZE];
@@ -98,19 +98,19 @@ vcs_read(struct inode *inode, struct file *file, char *buf, int count)
 			header[1] = (char) video_num_columns;
 			getconsxy(cons, header+2);
 			while (p < HEADER_SIZE && count-- > 0)
-			    put_fs_byte(header[p++], buf++);
+			    put_user(header[p++], buf++);
 		}
 		p -= HEADER_SIZE;
 		org = screen_pos(cons, p/2, viewed);
 		if ((p & 1) && count-- > 0)
-			put_fs_byte(scr_readw(org++) >> 8, buf++);
+			put_user(scr_readw(org++) >> 8, buf++);
 		while (count > 1) {
-			put_fs_word(scr_readw(org++), buf);
+			put_user(scr_readw(org++), (unsigned short *) buf);
 			buf += 2;
 			count -= 2;
 		}
 		if (count > 0)
-			put_fs_byte(scr_readw(org) & 0xff, buf++);
+			put_user(scr_readw(org) & 0xff, buf++);
 	}
 	read = buf - buf0;
 	file->f_pos += read;
@@ -149,7 +149,7 @@ vcs_write(struct inode *inode, struct file *file, char *buf, int count)
 		org = screen_pos(cons, p, viewed);
 		while (count-- > 0) {
 			scr_writew((scr_readw(org) & 0xff00) |
-				get_fs_byte(buf++), org);
+				   get_user(buf++), org);
 			org++;
 		}
 	} else {
@@ -157,25 +157,25 @@ vcs_write(struct inode *inode, struct file *file, char *buf, int count)
 			char header[HEADER_SIZE];
 			getconsxy(cons, header+2);
 			while (p < HEADER_SIZE && count-- > 0)
-				header[p++] = get_fs_byte(buf++);
+				header[p++] = get_user(buf++);
 			if (!viewed)
 				putconsxy(cons, header+2);
 		}
 		p -= HEADER_SIZE;
 		org = screen_pos(cons, p/2, viewed);
 		if ((p & 1) && count-- > 0) {
-			scr_writew((get_fs_byte(buf++) << 8) |
+			scr_writew((get_user(buf++) << 8) |
 				   (scr_readw(org) & 0xff), org);
 			org++;
 		}
 		while (count > 1) {
-			scr_writew(get_fs_word(buf), org++);
+			scr_writew(get_user((unsigned short *) buf), org++);
 			buf += 2;
 			count -= 2;
 		}
 		if (count > 0)
 			scr_writew((scr_readw(org) & 0xff00) |
-				   get_fs_byte(buf++), org);
+				   get_user(buf++), org);
 	}
 	written = buf - buf0;
 	file->f_pos += written;

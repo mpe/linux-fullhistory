@@ -240,7 +240,7 @@ void vesa_unblank(void)
 
 void set_vesa_blanking(const unsigned long arg)
 {
-	char *argp = (char *)(arg + 1);
-	unsigned int mode = get_fs_byte(argp);
+	unsigned char *argp = (unsigned char *)(arg + 1);
+	unsigned int mode = get_user(argp);
 	vesa_blanking_mode = ((mode < 3) ? mode : 0);
 }

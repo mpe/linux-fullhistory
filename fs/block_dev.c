@@ -289,8 +289,8 @@ int block_read(struct inode * inode, struct file * filp, char * buf, int count)
 				brelse(*bhe);
 				buf += chars;
 			} else {
-				while (chars-->0)
-					put_fs_byte(0,buf++);
+				while (chars-- > 0)
+					put_user(0,buf++);
 			}
 			offset = 0;
 			if (++bhe == &buflist[NBUF])

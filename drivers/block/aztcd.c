@@ -134,10 +134,8 @@
 
 #define MAJOR_NR AZTECH_CDROM_MAJOR 
 
-#ifdef MODULE
-# include "/usr/src/linux/drivers/block/blk.h"
-#else
-# include "blk.h"
+#include "blk.h"
+#ifndef MODULE
 # define MOD_INC_USE_COUNT
 # define MOD_DEC_USE_COUNT
 #endif

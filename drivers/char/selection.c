@@ -121,11 +121,11 @@ int set_selection(const unsigned long arg, struct tty_struct *tty)
 	{ unsigned short *args, xs, ys, xe, ye;
 
 	  args = (unsigned short *)(arg + 1);
-	  xs = get_fs_word(args++) - 1;
-	  ys = get_fs_word(args++) - 1;
-	  xe = get_fs_word(args++) - 1;
-	  ye = get_fs_word(args++) - 1;
-	  sel_mode = get_fs_word(args);
+	  xs = get_user(args++) - 1;
+	  ys = get_user(args++) - 1;
+	  xe = get_user(args++) - 1;
+	  ye = get_user(args++) - 1;
+	  sel_mode = get_user(args);
 
 	  xs = limit(xs, video_num_columns - 1);
 	  ys = limit(ys, video_num_lines - 1);

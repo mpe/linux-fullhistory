@@ -1571,7 +1571,7 @@ static int get_lsr_info(struct async_struct * info, unsigned int *value)
 	status = serial_in(info, UART_LSR);
 	sti();
 	result = ((status & UART_LSR_TEMT) ? TIOCSER_TEMT : 0);
-	put_fs_long(result,(unsigned long *) value);
+	put_user(result,value);
 	return 0;
 }
 
@@ -1591,7 +1591,7 @@ static int get_modem_info(struct async_struct * info, unsigned int *value)
 		| ((status  & UART_MSR_RI) ? TIOCM_RNG : 0)
 		| ((status  & UART_MSR_DSR) ? TIOCM_DSR : 0)
 		| ((status  & UART_MSR_CTS) ? TIOCM_CTS : 0);
-	put_fs_long(result,(unsigned long *) value);
+	put_user(result,value);
 	return 0;
 }
 
@@ -1604,7 +1604,7 @@ static int set_modem_info(struct async_struct * info, unsigned int cmd,
 	error = verify_area(VERIFY_READ, value, sizeof(int));
 	if (error)
 		return error;
-	arg = get_fs_long((unsigned long *) value);
+	arg = get_user(value);
 	switch (cmd) {
 	case TIOCMBIS: 
 		if (arg & TIOCM_RTS) {

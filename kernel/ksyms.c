@@ -57,7 +57,7 @@
 #endif
 
 #include <asm/irq.h>
-extern char floppy_track_buffer[];
+extern char *get_options(char *str, int *ints);
 extern void set_device_ro(int dev,int flag);
 extern struct file_operations * get_blkfops(unsigned int);
   
@@ -88,6 +88,7 @@ struct symbol_table symbol_table = {
 	/* stackable module support */
 	X(rename_module_symbol),
 	X(register_symtab),
+	X(get_options),
 
 	/* system info variables */
 	/* These check that they aren't defines (0/1) */
@@ -298,7 +299,6 @@ struct symbol_table symbol_table = {
 	/* The next labels are needed for ftape driver.  */
 	X(ftape_big_buffer),
 #endif
-	X(floppy_track_buffer),
 #ifdef CONFIG_INET
 	/* support for loadable net drivers */
 	X(register_netdev),

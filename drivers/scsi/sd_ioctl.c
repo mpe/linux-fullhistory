@@ -37,22 +37,18 @@ int sd_ioctl(struct inode * inode, struct file * file, unsigned int cmd, unsigne
 			      host->hostt->bios_param(&rscsi_disks[MINOR(dev) >> 4],
 							  dev,
 							  &diskinfo[0]);
-			put_fs_byte(diskinfo[0],
-				(char *) &loc->heads);
-			put_fs_byte(diskinfo[1],
-				(char *) &loc->sectors);
-			put_fs_word(diskinfo[2],
-				(short *) &loc->cylinders);
-			put_fs_long(sd[MINOR(inode->i_rdev)].start_sect,
-				(long *) &loc->start);
+			put_user(diskinfo[0], &loc->heads);
+			put_user(diskinfo[1], &loc->sectors);
+			put_user(diskinfo[2], &loc->cylinders);
+			put_user(sd[MINOR(inode->i_rdev)].start_sect, &loc->start);
 			return 0;
          	case BLKGETSIZE:   /* Return device size */
 			if (!arg)  return -EINVAL;
 			error = verify_area(VERIFY_WRITE, (long *) arg, sizeof(long));
 			if (error)
 				return error;
-			put_fs_long(sd[MINOR(inode->i_rdev)].nr_sects,
-				(long *) arg);
+			put_user(sd[MINOR(inode->i_rdev)].nr_sects,
+				 (long *) arg);
 			return 0;
 		case BLKRASET:
 			if(!suser())  return -EACCES;

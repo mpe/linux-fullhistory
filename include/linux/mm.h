@@ -149,9 +149,10 @@ extern unsigned char * free_area_map[NR_MEM_LISTS];
  * goes to clearing the page. If you want a page without the clearing
  * overhead, just use __get_free_page() directly..
  */
-#define __get_free_page(priority) __get_free_pages((priority),0)
-extern unsigned long __get_free_pages(int priority, unsigned long gfporder);
-extern unsigned long __get_dma_pages(int priority, unsigned long gfporder);
+#define __get_free_page(priority) __get_free_pages((priority),0,~0UL)
+#define __get_dma_pages(priority, order) __get_free_pages((priority),(order),MAX_DMA_ADDRESS)
+extern unsigned long __get_free_pages(int priority, unsigned long gfporder, unsigned long max_addr);
+
 extern inline unsigned long get_free_page(int priority)
 {
 	unsigned long page;

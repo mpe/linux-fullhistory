@@ -13,8 +13,9 @@
  */
 
 #include <linux/mm.h>
-#include <asm/system.h>
 #include <linux/delay.h>
+#include <asm/system.h>
+#include <asm/dma.h>
 
 #define GFP_LEVEL_MASK 0xf
 
@@ -251,10 +252,13 @@ while (tries --)
     sz = BLOCKSIZE(order); /* sz is the size of the blocks we're dealing with */
 
     /* This can be done with ints on: This is private to this invocation */
-    if (dma_flag)
-      page = (struct page_descriptor *) __get_dma_pages (priority & GFP_LEVEL_MASK, sizes[order].gfporder);
-    else
-      page = (struct page_descriptor *) __get_free_pages (priority & GFP_LEVEL_MASK, sizes[order].gfporder);
+    {
+    	unsigned long max_addr = ~0UL;
+    	if (dma_flag)
+    		max_addr = MAX_DMA_ADDRESS;
+	page = (struct page_descriptor *) __get_free_pages (priority & GFP_LEVEL_MASK,
+		sizes[order].gfporder, max_addr);
+    }
 
     if (!page) {
         static unsigned long last = 0;

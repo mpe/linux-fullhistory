@@ -82,7 +82,7 @@ void die_if_kernel(char * str, struct pt_regs * regs, long err)
 	unsigned long *stack, addr, module_start, module_end;
 	extern char start_kernel, etext;
 
-	if (regs->cp0_status & (ST0_ERL|ST0_EXL) == 0)
+	if ((regs->cp0_status & (ST0_ERL|ST0_EXL)) == 0)
 		return;
 
 	sp = (unsigned long *)regs->reg29;

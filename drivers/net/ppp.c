@@ -1292,12 +1292,12 @@ ppp_read(struct tty_struct *tty, struct file *file, unsigned char *buf, unsigned
 	return -EOVERFLOW;		/* ZZZ; HACK! */
       } else {
 	/* have the space: copy the packet, faking the first two bytes */
-	put_fs_byte (PPP_ADDRESS, buf++);
-	put_fs_byte (PPP_CONTROL, buf++);
+	put_user (PPP_ADDRESS, buf++);
+	put_user (PPP_CONTROL, buf++);
 	i = len;
 	while (i-- > 0) {
 	  GETC (c);
-	  put_fs_byte (c, buf++);
+	  put_user (c, buf++);
 	}
       }
 
@@ -1392,7 +1392,7 @@ ppp_write(struct tty_struct *tty, struct file *file, unsigned char *buf, unsigne
   ppp->fcs = PPP_FCS_INIT;
   i = nr;
   while (i-- > 0)
-    ppp_stuff_char(ppp,get_fs_byte(buf++));
+    ppp_stuff_char(ppp,get_user(buf++));
 
   ppp_add_fcs(ppp);		/* concatenate FCS at end */
 
@@ -1438,7 +1438,7 @@ ppp_ioctl(struct tty_struct *tty, struct file *file, unsigned int i,
   case PPPIOCSMRU:
     error = verify_area (VERIFY_READ, (void *) l, sizeof (temp_i));
     if (error == 0) {
-      temp_i = (int) get_fs_long (l);
+      temp_i = get_user ((int *) l);
       PRINTKN (3,(KERN_INFO "ppp_ioctl: set mru to %d\n", temp_i));
       if (ppp->mru != temp_i)
 	ppp_changedmtu (ppp, ppp->dev->mtu, temp_i);
@@ -1452,7 +1452,7 @@ ppp_ioctl(struct tty_struct *tty, struct file *file, unsigned int i,
 #ifndef CHECK_CHARACTERS /* Don't generate errors if we don't check chars. */
       temp_i |= SC_RCV_B7_1 | SC_RCV_B7_0 | SC_RCV_ODDP | SC_RCV_EVNP;
 #endif
-      put_fs_long ((long) temp_i, l);
+      put_user (temp_i, (int *) l);
       PRINTKN (3,(KERN_DEBUG "ppp_ioctl: get flags: addr %lx flags %x\n",
 		  l,
 		  temp_i));
@@ -1462,7 +1462,7 @@ ppp_ioctl(struct tty_struct *tty, struct file *file, unsigned int i,
   case PPPIOCSFLAGS:
     error = verify_area (VERIFY_READ, (void *) l, sizeof (temp_i));
     if (error == 0) {
-      temp_i      = (int) get_fs_long (l);
+      temp_i      = get_user ((int *) l);
       ppp->flags ^= ((ppp->flags ^ temp_i) & SC_MASK);
       PRINTKN (3,(KERN_INFO "ppp_ioctl: set flags to %x\n", temp_i));
     }
@@ -1471,7 +1471,7 @@ ppp_ioctl(struct tty_struct *tty, struct file *file, unsigned int i,
   case PPPIOCGASYNCMAP:
     error = verify_area (VERIFY_WRITE, (void *) l, sizeof (temp_i));
     if (error == 0) {
-      put_fs_long (ppp->xmit_async_map[0], l);
+      put_user (ppp->xmit_async_map[0], (int *) l);
       PRINTKN (3,(KERN_INFO "ppp_ioctl: get asyncmap: addr %lx asyncmap %lx\n",
 		  l, ppp->xmit_async_map[0]));
     }
@@ -1480,7 +1480,7 @@ ppp_ioctl(struct tty_struct *tty, struct file *file, unsigned int i,
   case PPPIOCSASYNCMAP:
     error = verify_area (VERIFY_READ, (void *) l, sizeof (temp_i));
     if (error == 0) {
-      ppp->xmit_async_map[0] = get_fs_long (l);
+      ppp->xmit_async_map[0] = get_user ((int *) l);
       bset (ppp->xmit_async_map, PPP_FLAG);
       bset (ppp->xmit_async_map, PPP_ESC);
       PRINTKN (3,(KERN_INFO "ppp_ioctl: set xmit asyncmap %lx\n",
@@ -1491,7 +1491,7 @@ ppp_ioctl(struct tty_struct *tty, struct file *file, unsigned int i,
   case PPPIOCRASYNCMAP:
     error = verify_area (VERIFY_READ, (void *) l, sizeof (temp_i));
     if (error == 0) {
-      ppp->recv_async_map = get_fs_long (l);
+      ppp->recv_async_map = get_user ((int *) l);
       PRINTKN (3,(KERN_INFO "ppp_ioctl: set recv asyncmap %lx\n",
 		  ppp->recv_async_map));
     }
@@ -1500,7 +1500,7 @@ ppp_ioctl(struct tty_struct *tty, struct file *file, unsigned int i,
   case PPPIOCGUNIT:
     error = verify_area (VERIFY_WRITE, (void *) l, sizeof (temp_i));
     if (error == 0) {
-      put_fs_long (ppp->dev->base_addr, l);
+      put_user (ppp->dev->base_addr, (int *) l);
       PRINTKN (3,(KERN_INFO "ppp_ioctl: get unit: %ld", ppp->dev->base_addr));
     }
     break;
@@ -1508,7 +1508,7 @@ ppp_ioctl(struct tty_struct *tty, struct file *file, unsigned int i,
   case PPPIOCSINPSIG:
     error = verify_area (VERIFY_READ, (void *) l, sizeof (temp_i));
     if (error == 0) {
-      ppp->inp_sig     = (int) get_fs_long (l);
+      ppp->inp_sig     = get_user ((int *) l);
       ppp->inp_sig_pid = current->pid;
       PRINTKN (3,(KERN_INFO "ppp_ioctl: set input signal %d\n", ppp->inp_sig));
     }
@@ -1517,7 +1517,7 @@ ppp_ioctl(struct tty_struct *tty, struct file *file, unsigned int i,
   case PPPIOCSDEBUG:
     error = verify_area (VERIFY_READ, (void *) l, sizeof (temp_i));
     if (error == 0) {
-      ppp_debug = (int) get_fs_long (l);
+      ppp_debug = get_int ((int *) l);
       ppp_debug_netpackets = (ppp_debug & 0xff00) >> 8;
       ppp_debug &= 0xff;
       PRINTKN (1, (KERN_INFO "ppp_ioctl: set debug level %d, netpacket %d\n", 
@@ -1528,7 +1528,7 @@ ppp_ioctl(struct tty_struct *tty, struct file *file, unsigned int i,
   case PPPIOCGDEBUG:
     error = verify_area (VERIFY_WRITE, (void *) l, sizeof (temp_i));
     if (error == 0) {
-      put_fs_long ((long) (ppp_debug | (ppp_debug_netpackets << 8)), l);
+      put_user ((long) (ppp_debug | (ppp_debug_netpackets << 8)), (int *) l);
       PRINTKN (3,(KERN_INFO "ppp_ioctl: get debug level %d\n", 
 		  ppp_debug | (ppp_debug_netpackets << 8)));
     }
@@ -1596,7 +1596,7 @@ ppp_ioctl(struct tty_struct *tty, struct file *file, unsigned int i,
   case PPPIOCSMAXCID:
     error = verify_area (VERIFY_READ, (void *) l, sizeof (temp_i));
     if (error == 0) {
-      temp_i = (int) get_fs_long (l) + 1;
+      temp_i = get_user ((int *) l) + 1;
       PRINTKN (3,(KERN_INFO "ppp_ioctl: set maxcid to %d\n", temp_i));
       if (ppp->slcomp != NULL)
 	slhc_free (ppp->slcomp);
@@ -2007,7 +2007,7 @@ static inline void ppp_print_hex (register char *out, char *in, int count)
   register unsigned char next_ch;
 
   while (count-- > 0) {
-    next_ch = (unsigned char) get_fs_byte (in);
+    next_ch = (unsigned char) get_user (in);
 
     *out++  = hex[(next_ch >> 4) & 0x0F];
     *out++  = hex[next_ch        & 0x0F];
@@ -2021,7 +2021,7 @@ static inline void ppp_print_char (register char *out, char *in, int count)
   register unsigned char next_ch;
 
   while (count-- > 0) {
-    next_ch = (unsigned char) get_fs_byte (in);
+    next_ch = (unsigned char) get_user (in);
 
     if (next_ch < 0x20 || next_ch > 0x7e)
       *out++ = '.';

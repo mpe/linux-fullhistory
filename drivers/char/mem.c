@@ -48,7 +48,7 @@ static int read_mem(struct inode * inode, struct file * file,char * buf, int cou
 		count = high_memory - p;
 	read = 0;
 	while (p < PAGE_SIZE && count > 0) {
-		put_fs_byte(0,buf);
+		put_user(0,buf);
 		buf++;
 		p++;
 		count--;
@@ -126,7 +126,7 @@ static int read_port(struct inode * inode,struct file * file,char * buf, int cou
 	char * tmp = buf;
 
 	while (count-- > 0 && i < 65536) {
-		put_fs_byte(inb(i),tmp);
+		put_user(inb(i),tmp);
 		i++;
 		tmp++;
 	}
@@ -140,7 +140,7 @@ static int write_port(struct inode * inode,struct file * file,char * buf, int co
 	char * tmp = buf;
 
 	while (count-- > 0 && i < 65536) {
-		outb(get_fs_byte(tmp),i);
+		outb(get_user(tmp),i);
 		i++;
 		tmp++;
 	}
@@ -163,7 +163,7 @@ static int read_zero(struct inode * node,struct file * file,char * buf,int count
 	int left;
 
 	for (left = count; left > 0; left--) {
-		put_fs_byte(0,buf);
+		put_user(0,buf);
 		buf++;
 	}
 	return count;

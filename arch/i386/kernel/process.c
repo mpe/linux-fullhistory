@@ -39,22 +39,6 @@ void enable_hlt(void)
 	hlt_counter--;
 }
 
-asmlinkage int sys_pipe(unsigned long * fildes)
-{
-	int fd[2];
-	int error;
-
-	error = verify_area(VERIFY_WRITE,fildes,8);
-	if (error)
-		return error;
-	error = do_pipe(fd);
-	if (error)
-		return error;
-	put_fs_long(fd[0],0+fildes);
-	put_fs_long(fd[1],1+fildes);
-	return 0;
-}
-
 /*
  * The idle loop on a i386..
  */

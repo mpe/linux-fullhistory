@@ -23,10 +23,8 @@ extern __inline__ void udelay(unsigned int usecs)
 {
   usecs *= 0x000010c6;         /* Sparc is 32-bit just like ix86 */
 
-  __asm__("sethi %hi(_loops_per_sec), %o1\n\t"
-	  "ld [%o1 + %lo(_loops_per_sec)], %o1\n\t"
-	  "call ___delay\n\t"
-	  "umul %o1, %o0, %o0\n\t");
+  __delay(loops_per_sec*usecs);
+
 }
 
 /* calibrate_delay() wants this... */

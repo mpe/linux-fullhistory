@@ -142,7 +142,7 @@ void udp_err(int err, unsigned char *header, unsigned long daddr,
 	if (sk == NULL) 
 	  	return;	/* No socket for error */
   	
-	if (err & 0xff00 ==(ICMP_SOURCE_QUENCH << 8)) 
+	if ((err & 0xff00) == (ICMP_SOURCE_QUENCH << 8)) 
 	{	/* Slow down! */
 		if (sk->cong_window > 1) 
 			sk->cong_window = sk->cong_window/2;

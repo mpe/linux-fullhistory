@@ -261,9 +261,10 @@ int sr_ioctl(struct inode * inode, struct file * file, unsigned int cmd, unsigne
 			return result;
 
 		case CDROMEJECT:
-			if (scsi_CDs[target].device -> access_count == 1)
-			  sr_ioctl (inode, NULL, SCSI_IOCTL_DOORUNLOCK, 0);
+			if (scsi_CDs[target].device -> access_count != 1)
+				return -EBUSY;
 
+			sr_ioctl (inode, NULL, SCSI_IOCTL_DOORUNLOCK, 0);
 		        sr_cmd[0] = START_STOP;
 			sr_cmd[1] = ((scsi_CDs[target].device -> lun) << 5) | 1;
 			sr_cmd[2] = sr_cmd[3] = sr_cmd[5] = 0;

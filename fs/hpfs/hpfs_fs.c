@@ -981,7 +981,7 @@ static unsigned convcpy_tofs(unsigned char *out, unsigned char *in,
 		unsigned c = *in++;
 		if (c == '\r' && (len == 0 || *in == '\n'));
 		else
-			put_fs_byte(c, out++);
+			put_user(c, out++);
 	}
 
 	return out - start;

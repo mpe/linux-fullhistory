@@ -1,0 +1,17 @@
+The 274x/284x support is basically the same as in the kernel, with
+some minor structural changes.  The 294x support is preliminary, with
+a few things still hardwired (like the SCSI ID and FIFO threshold).
+You have been warned.
+
+To function properly, you must use this with a kernel version 1.1.68
+or above - these have the SCSI changes in the kernel which support
+varying numbers of outstanding SCSI commands per driver instance (they
+also contain the Adaptec PCI definitions).
+
+You can find instructions in the SCSI-HOWTO on how to install SCSI
+drivers into the kernel.  In a nutshell, find all the aha274x stuff
+and change it to aic7xxx.
+
+Please direct all problems to the AIC7770 mailing list - see the README
+for details.
+:ja

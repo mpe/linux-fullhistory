@@ -122,31 +122,30 @@ void time_init(void)
  */
 struct timezone sys_tz = { 0, 0};
 
-asmlinkage int sys_time(long * tloc)
+asmlinkage int sys_time(int * tloc)
 {
 	int i, error;
 
 	i = CURRENT_TIME;
 	if (tloc) {
-		error = verify_area(VERIFY_WRITE, tloc, 4);
+		error = verify_area(VERIFY_WRITE, tloc, sizeof(*tloc));
 		if (error)
 			return error;
-		put_fs_long(i,(unsigned long *)tloc);
+		put_user(i,tloc);
 	}
 	return i;
 }
 
-asmlinkage int sys_stime(unsigned long * tptr)
+asmlinkage int sys_stime(int * tptr)
 {
-	int error;
-	unsigned long value;
+	int error, value;
 
 	if (!suser())
 		return -EPERM;
 	error = verify_area(VERIFY_READ, tptr, sizeof(*tptr));
 	if (error)
 		return error;
-	value = get_fs_long(tptr);
+	value = get_user(tptr);
 	cli();
 	xtime.tv_sec = value;
 	xtime.tv_usec = 0;

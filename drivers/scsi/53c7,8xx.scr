@@ -115,7 +115,7 @@ wrong_dsa:
 	JUMP reselected_check_next
 
 ABSOLUTE dsa_check_reselect = 0
-; dsa_check_reselect determines weather or not the current target and
+; dsa_check_reselect determines whether or not the current target and
 ; lun match the current DSA
 ENTRY dsa_code_check_reselect
 dsa_code_check_reselect:
@@ -402,7 +402,7 @@ select_msgout:
 issue_remove:
 ;	The actual UPDATE of the issue_dsa_head variable is 
 ; 	atomic, with all of the setup code being irrelevant to
-;	weather the updated value being the old or new contents of 
+;	whether the updated value being the old or new contents of 
 ;	dsa_next field.
 ;
 ; 	To insure synchronization, the host system merely needs to 

@@ -19,15 +19,25 @@ SHELL  =/bin/bash
 # I ignore it and eliminate those mappings during vm initialization and
 # just leave the low mapping.
 #
-LINKFLAGS = -N -Ttext 0x00004000
+LINKFLAGS = -N -Ttext 0xf0004000
 CFLAGS := $(CFLAGS) -pipe
 
 HEAD := arch/sparc/kernel/head.o
 
-SUBDIRS := $(SUBDIRS) arch/sparc/kernel arch/sparc/lib arch/sparc/mm
+SUBDIRS := $(SUBDIRS) arch/sparc/kernel arch/sparc/lib arch/sparc/mm \
+	arch/sparc/prom
+
 ARCHIVES := arch/sparc/kernel/kernel.o arch/sparc/mm/mm.o $(ARCHIVES)
-LIBS := $(TOPDIR)/lib/lib.a $(LIBS) $(TOPDIR)/arch/sparc/lib/lib.a
+
+aoutimage: vmlinux
+	elftoaout -o aoutimage vmlinux
+
+
+LIBS := $(TOPDIR)/lib/lib.a $(LIBS) $(TOPDIR)/arch/sparc/lib/lib.a \
+	$(TOPDIR)/arch/sparc/prom/promlib.a
+
 
 archclean:
+	rm -f $(TOPDIR)/arch/sparc/boot/boot
 
 archdep:

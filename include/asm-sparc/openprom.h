@@ -2,33 +2,37 @@
 #define __SPARC_OPENPROM_H
 
 /* openprom.h:  Prom structures and defines for access to the OPENBOOT
-                prom routines and data areas.
-
-   Copyright (C) 1994 David S. Miller (davem@caip.rutgers.edu)
-*/
+ *              prom routines and data areas.
+ *
+ * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
+ */
 
 /* In the v0 interface of the openboot prom we could traverse a nice
-   little list structure to figure out where in vm-space the prom had
-   mapped itself and how much space it was taking up. In the v2 prom
-   interface we have to rely on 'magic' values. :-( Most of the machines
-   I have checked on have the prom mapped here all the time though.
-*/
+ * little list structure to figure out where in vm-space the prom had
+ * mapped itself and how much space it was taking up. In the v2 prom
+ * interface we have to rely on 'magic' values. :-( Most of the machines
+ * I have checked on have the prom mapped here all the time though.
+ */
+
+#define KADB_DEBUGGER_BEGVM     0xffc00000    /* Where kern debugger is in virt-mem */
+
 #define	LINUX_OPPROM_BEGVM	0xffd00000
 #define	LINUX_OPPROM_ENDVM	0xfff00000
 
 #define	LINUX_OPPROM_MAGIC      0x10010407
 
+#ifndef __ASSEMBLY__
 /* The device functions structure for the v0 prom. Nice and neat, open,
-   close, read & write divvied up between net + block + char devices. We
-   also have a seek routine only usable for block devices. The divide
-   and conquer strategy of this struct becomes unnecessary for v2.
-
-   V0 device names are limited to two characters, 'sd' for scsi-disk,
-   'le' for local-ethernet, etc. Note that it is technically possible
-   to boot a kernel off of a tape drive and use the tape as the root
-   partition! In order to do this you have to have 'magic' formatted
-   tapes from Sun supposedly :-)
-*/
+ * close, read & write divvied up between net + block + char devices. We
+ * also have a seek routine only usable for block devices. The divide
+ * and conquer strategy of this struct becomes unnecessary for v2.
+ *
+ * V0 device names are limited to two characters, 'sd' for scsi-disk,
+ * 'le' for local-ethernet, etc. Note that it is technically possible
+ * to boot a kernel off of a tape drive and use the tape as the root
+ * partition! In order to do this you have to have 'magic' formatted
+ * tapes from Sun supposedly :-)
+ */
 
 struct linux_dev_v0_funcs {
 	int	(*v0_devopen)(char *device_str);
@@ -43,32 +47,32 @@ struct linux_dev_v0_funcs {
 };
 
 /* The OpenBoot Prom device operations for version-2 interfaces are both
-   good and bad. They now allow you to address ANY device whatsoever
-   that is in the machine via these funny "device paths". They look like
-   this:
-
-     "/sbus/esp@0,0xf004002c/sd@3,1"
-
-   You can basically reference any device on the machine this way, and
-   you pass this string to the v2 dev_ops. Producing these strings all
-   the time can be a pain in the rear after a while. Why v2 has memory
-   allocations in here are beyond me. Perhaps they figure that if you
-   are going to use only the prom's device drivers then your memory
-   management is either non-existent or pretty sad. :-)
-*/
+ * good and bad. They now allow you to address ANY device whatsoever
+ * that is in the machine via these funny "device paths". They look like
+ * this:
+ *
+ *   "/sbus/esp@0,0xf004002c/sd@3,1"
+ *
+ * You can basically reference any device on the machine this way, and
+ * you pass this string to the v2 dev_ops. Producing these strings all
+ * the time can be a pain in the rear after a while. Why v2 has memory
+ * allocations in here are beyond me. Perhaps they figure that if you
+ * are going to use only the prom's device drivers then your memory
+ * management is either non-existent or pretty sad. :-)
+ */
 
 struct linux_dev_v2_funcs {
-	int	(*v2_aieee)(int d);	/* figure this out later... */
+	int	(*v2_inst2pkg)(int d);	/* Convert ihandle to phandle */
 
 	/* "dumb" prom memory management routines, probably
-	    only safe to use for mapping device address spaces...
-        */
+	 *  only safe to use for mapping device address spaces...
+         */
 
 	char* 	(*v2_dumb_mem_alloc)(char*  va, unsigned sz);
 	void	(*v2_dumb_mem_free)(char*  va, unsigned sz);
 
 	/* "dumb" mmap() munmap(), copy on write? what's that? */
-	char* 	(*v2_dumb_mmap)(char*  virta, int asi, unsigned prot, unsigned sz);
+	char* 	(*v2_dumb_mmap)(char*  virta, int which_io, unsigned paddr, unsigned sz);
 	void	(*v2_dumb_munmap)(char*  virta, unsigned size);
 
 	/* Basic Operations, self-explanatory */
@@ -78,16 +82,16 @@ struct linux_dev_v2_funcs {
 	int	(*v2_dev_write)(int d, char*  buf, int nbytes);
 	void	(*v2_dev_seek)(int d, int hi, int lo);
 
-        /* huh? */
+	/* Never issued (multistage load support) */
 	void	(*v2_wheee2)(void);
 	void	(*v2_wheee3)(void);
 };
 
 /* Just like the device ops, they slightly screwed up the mem-list
-   from v0 to v2. Probably easier on the prom-writer dude, sucks for
-   us though. See above comment about prom-vm mapped address space
-   magic numbers. :-(
-*/
+ * from v0 to v2. Probably easier on the prom-writer dude, sucks for
+ * us though. See above comment about prom-vm mapped address space
+ * magic numbers. :-(
+ */
 
 struct linux_mlist_v0 {
 	struct	linux_mlist_v0 *theres_more;
@@ -95,11 +99,12 @@ struct linux_mlist_v0 {
 	unsigned num_bytes;
 };
 
-/* The linux_mlist_v0's are pointer by this structure. One list
-   per description. This means one list for total physical memory,
-   one for prom's address mapping, and one for physical mem left after
-   the kernel is loaded.
+/* The linux_mlist_v0's are pointed to by this structure. One list
+ * per description. This means one list for total physical memory,
+ * one for prom's address mapping, and one for physical mem left after
+ * the kernel is loaded.
  */
+
 struct linux_mem_v0 {
 	struct	linux_mlist_v0 **v0_totphys;	/* all of physical */
 	struct	linux_mlist_v0 **v0_prommap;	/* addresses map'd by prom */
@@ -120,9 +125,9 @@ struct linux_arguments_v0 {
 };
 
 /* Prom version-2 gives us the raw strings for boot arguments and
-   boot device path. We also get the stdin and stdout file pseudo
-   descriptors for use with the mungy v2 device functions.
-*/
+ * boot device path. We also get the stdin and stdout file pseudo
+ * descriptors for use with the mungy v2 device functions.
+ */
 struct linux_bootargs_v2 {
 	char	**bootpath;		/* V2: Path to boot device */
 	char	**bootargs;		/* V2: Boot args */
@@ -131,11 +136,12 @@ struct linux_bootargs_v2 {
 };
 
 /* This is the actual Prom Vector from which everything else is accessed
-   via struct and function pointers, etc. The prom when it loads us into
-   memory plops a pointer to this master structure in register %o0 before
-   it jumps to the kernel start address. I will update this soon to cover
-   the v3 semantics (cpu_start, cpu_stop and other SMP fun things). :-)
-*/
+ * via struct and function pointers, etc. The prom when it loads us into
+ * memory plops a pointer to this master structure in register %o0 before
+ * it jumps to the kernel start address. I will update this soon to cover
+ * the v3 semantics (cpu_start, cpu_stop and other SMP fun things). :-)
+ */
+
 struct linux_romvec {
 	/* Version numbers. */
 	unsigned int	pv_magic_cookie;      /* Magic Mushroom... */
@@ -200,7 +206,7 @@ struct linux_romvec {
 	struct	linux_bootargs_v2 pv_v2bootargs;    /* V2: Boot args+std-in/out */
 	struct	linux_dev_v2_funcs pv_v2devops;	    /* V2: device operations */
 
-	int	whatzthis[15];       /* huh? */
+	int	filler[15];
 
 	/*
 	 * The following is machine-dependent.
@@ -222,11 +228,9 @@ struct linux_romvec {
 
 	/* v3_cpustart() will start the cpu 'whichcpu' in mmu-context
 	 * 'thiscontext' executing at address 'prog_counter'
-	 *
-	 * XXX Have to figure out what 'cancontext' means.
          */
 
-	int (*v3_cpustart)(unsigned int whichcpu, int cancontext,
+	int (*v3_cpustart)(unsigned int whichcpu, int ctxtbl_ptr,
 			   int thiscontext, char* prog_counter);
 
 	/* v3_cpustop() will cause cpu 'whichcpu' to stop executing
@@ -277,11 +281,6 @@ struct linux_romvec {
  * are not in the openprom vectors but rather found by indirection from
  * there.  So the taste balances out.
  */
-struct linux_prom_addr {
-	int	oa_space;		/* address space (may be relative) */
-	unsigned int	oa_base;		/* address within space */
-	unsigned int	oa_size;		/* extent (number of bytes) */
-};
 
 struct linux_nodeops {
 	/*
@@ -300,5 +299,32 @@ struct linux_nodeops {
 	int	(*no_setprop)(int node, char*  name, char*  val, int len);
 	char* 	(*no_nextprop)(int node, char*  name);
 };
+
+/* More fun PROM structures for device probing. */
+#define PROMREG_MAX     16
+#define PROMVADDR_MAX   16
+#define PROMINTR_MAX    15
+
+struct linux_prom_registers {
+  int which_io;         /* is this in OBIO space? */
+  char *phys_addr;      /* The physical address of this register */
+  int reg_size;         /* How many bytes does this register take up? */
+};
+
+struct linux_prom_irqs {
+  int pri;    /* IRQ priority */
+  int vector; /* This is foobar, what does it do? */
+};
+
+/* Element of the "ranges" vector */
+struct linux_prom_ranges {
+	unsigned int	ot_child_space;
+	unsigned int	ot_child_base;		/* Bus feels this */
+	unsigned int	ot_parent_space;
+	unsigned int	ot_parent_base;		/* CPU looks from here */
+	unsigned int	or_size;
+};
+
+#endif /* !(__ASSEMBLY__) */
 
 #endif /* !(__SPARC_OPENPROM_H) */

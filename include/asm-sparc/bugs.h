@@ -13,9 +13,9 @@
 #define CONFIG_BUGSPARC
 
 #include <asm/openprom.h>
+#include <asm/page.h>
 
-extern struct linux_romvec *romvec;
-extern int tbase_needs_unmapping;   /* We do the bug workaround in pagetables.c */
+extern pgd_t swapper_pg_dir[16384];
 
 static void check_mmu(void)
 {
@@ -26,15 +26,16 @@ static void check_mmu(void)
   lvec = romvec;
 
   root_node = (*(romvec->pv_nodeops->no_nextnode))(0);
-  tbase_needs_unmapping=0;
 
   present = 0;
   (*(romvec->pv_nodeops->no_getprop))(root_node, "buserr-type", 
 				      (char *) &present);
   if(present == 1)
     {
-      tbase_needs_unmapping=1;
-      printk("MMU bug found: not allowing trapbase to be cached\n");
+      printk("MMU bug found: uncaching trap table\n");
+      for(present = (unsigned long) &trapbase; present < (unsigned long)
+	  &swapper_pg_dir; present+=PAGE_SIZE)
+	      put_pte(present, (get_pte(present) | PTE_NC));
     }
 
   return;

@@ -8,7 +8,7 @@
  * think of right now to force the arguments into fixed registers
  * before the trap into the system call with gcc 'asm' statements.
  *
- * Copyright (C) 1994 David S. Miller (davem@caip.rutgers.edu)
+ * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
  */
 
 /* XXX - _foo needs to be __foo, while __NR_bar could be _NR_bar. */
@@ -17,7 +17,9 @@ type name(void) \
 { \
 long __res; \
 __asm__ volatile ("or %%g0, %0, %%o0\n\t" \
-		  "t 0xa\n\t" \
+		  "t 0x10\n\t" \
+		  "nop\n\t" \
+		  "or %%g0, %%o0, %0\n\t" \
 		  : "=r" (__res) \
 		  : "0" (__NR_##name) \
 		  : "o0"); \
@@ -33,7 +35,9 @@ type name(type1 arg1) \
 long __res; \
 __asm__ volatile ("or %%g0, %0, %%o0\n\t" \
 		  "or %%g0, %1, %%o1\n\t" \
-		  "t 0xa\n\t" \
+		  "t 0x10\n\t" \
+		  "nop\n\t" \
+		  "or %%g0, %%o0, %0\n\t" \
 		  : "=r" (__res), "=r" ((long)(arg1)) \
 		  : "0" (__NR_##name),"1" ((long)(arg1)) \
 		  : "o0", "o1"); \
@@ -50,7 +54,9 @@ long __res; \
 __asm__ volatile ("or %%g0, %0, %%o0\n\t" \
 		  "or %%g0, %1, %%o1\n\t" \
 		  "or %%g0, %2, %%o2\n\t" \
-		  "t 0xa\n\t" \
+		  "t 0x10\n\t" \
+		  "nop\n\t" \
+		  "or %%g0, %%o0, %0\n\t" \
 		  : "=r" (__res), "=r" ((long)(arg1)), "=r" ((long)(args)) \
 		  : "0" (__NR_##name),"1" ((long)(arg1)),"2" ((long)(arg2)) \
 		  : "o0", "o1", "o2"); \
@@ -68,7 +74,9 @@ __asm__ volatile ("or %%g0, %0, %%o0\n\t" \
 		  "or %%g0, %1, %%o1\n\t" \
 		  "or %%g0, %2, %%o2\n\t" \
 		  "or %%g0, %3, %%o3\n\t" \
-		  "t 0xa\n\t" \
+		  "t 0x10\n\t" \
+		  "nop\n\t" \
+		  "or %%g0, %%o0, %0\n\t" \
 		  : "=r" (__res), "=r" ((long)(arg1)), "=r" ((long)(arg2)), \
 		    "=r" ((long)(arg3)) \
 		  : "0" (__NR_##name), "1" ((long)(arg1)), "2" ((long)(arg2)), \
@@ -89,7 +97,9 @@ __asm__ volatile ("or %%g0, %0, %%o0\n\t" \
 		  "or %%g0, %2, %%o2\n\t" \
 		  "or %%g0, %3, %%o3\n\t" \
 		  "or %%g0, %4, %%o4\n\t" \
-		  "t 0xa\n\t" \
+		  "t 0x10\n\t" \
+		  "nop\n\t" \
+		  "or %%g0, %%o0, %0\n\t" \
 		  : "=r" (__res), "=r" ((long)(arg1)), "=r" ((long)(arg2)), \
 		    "=r" ((long)(arg3)), "=r" ((long)(arg4)) \
 		  : "0" (__NR_##name),"1" ((long)(arg1)),"2" ((long)(arg2)), \
@@ -112,7 +122,9 @@ __asm__ volatile ("or %%g0, %0, %%o0\n\t" \
 		  "or %%g0, %3, %%o3\n\t" \
 		  "or %%g0, %4, %%o4\n\t" \
 		  "or %%g0, %5, %%o5\n\t" \
-		  "t 0xa\n\t" \
+		  "t 0x10\n\t" \
+		  "nop\n\t" \
+		  "or %%g0, %%o0, %0\n\t" \
 		  : "=r" (__res), "=r" ((long)(arg1)), "=r" ((long)(arg2)), \
 		    "=r" ((long)(arg3)), "=r" ((long)(arg4)), "=r" ((long)(arg5)) \
 		  : "0" (__NR_##name),"1" ((long)(arg1)),"2" ((long)(arg2)), \
@@ -139,10 +151,10 @@ return -1; \
  * some others too.
  */
 #define __NR__exit __NR_exit
-static inline _syscall0(int,idle)
+/* static inline _syscall0(int,idle) */
 static inline _syscall0(int,fork)
 static inline _syscall0(int,pause)
-static inline _syscall0(int,setup)
+/* static inline _syscall0(int,setup) */
 static inline _syscall0(int,sync)
 static inline _syscall0(pid_t,setsid)
 static inline _syscall3(int,write,int,fd,const char *,buf,off_t,count)
@@ -153,9 +165,33 @@ static inline _syscall1(int,close,int,fd)
 static inline _syscall1(int,_exit,int,exitcode)
 static inline _syscall3(pid_t,waitpid,pid_t,pid,int *,wait_stat,int,options)
 
+extern void sys_idle(void);
+static inline void idle(void)
+{
+	printk("[%d]idle()\n",current->pid);
+	sys_idle();
+	for(;;);
+}
+
+extern int sys_setup(void);
+static inline int setup(void)
+{
+	int retval;
+
+	printk("[%d]setup()\n",current->pid);
+	retval = sys_setup();
+	printk("[%d]setup() returned %d\n",current->pid, retval);
+}
+
+extern int sys_waitpid(int, int *, int);
 static inline pid_t wait(int * wait_stat)
 {
-	return waitpid(-1,wait_stat,0);
+	long retval, i;
+	printk("[%d]wait(%p)\n", current->pid, wait_stat);
+	retval = waitpid(-1,wait_stat,0);
+	printk("[%d]wait(%p) returned %ld\n", current->pid, wait_stat, retval);
+	for (i = 0; i < 1000000000; i++);
+	return retval;
 }
 
 #endif

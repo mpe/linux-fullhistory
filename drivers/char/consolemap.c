@@ -221,7 +221,7 @@ int con_set_trans_old(char * arg)
 		return i;
 
 	for (i=0; i<E_TABSZ ; i++)
-		p[i] = UNI_DIRECT_BASE | get_fs_byte(arg+i);
+		p[i] = UNI_DIRECT_BASE | get_user(arg+i);
 
 	set_inverse_transl(USER_MAP);
 	return 0;
@@ -239,7 +239,7 @@ int con_get_trans_old(char * arg)
 	for (i=0; i<E_TABSZ ; i++)
 	  {
 	    ch = conv_uni_to_pc(p[i]);
-	    put_fs_byte((ch & ~0xff) ? 0 : ch, arg+i);
+	    put_user((ch & ~0xff) ? 0 : ch, arg+i);
 	  }
 	return 0;
 }
@@ -254,7 +254,7 @@ int con_set_trans_new(ushort * arg)
 		return i;
 
 	for (i=0; i<E_TABSZ ; i++)
-	  p[i] = get_fs_word(arg+i);
+	  p[i] = get_user(arg+i);
 
 	set_inverse_transl(USER_MAP);
 	return 0;
@@ -271,7 +271,7 @@ int con_get_trans_new(ushort * arg)
 		return i;
 
 	for (i=0; i<E_TABSZ ; i++)
-	  put_fs_word(p[i], arg+i);
+	  put_user(p[i], arg+i);
 	
 	return 0;
 }
@@ -331,7 +331,7 @@ con_set_unimap(ushort ct, struct unipair *list){
 	if (!hashtable_contents_valid)
 	  con_clear_unimap(&hashdefaults);
 	while(ct) {
-	    u = get_fs_word(&list->unicode);
+	    u = get_user(&list->unicode);
 	    i = u % hashsize;
 	    lct = 1;
 	    while ((hu = hashtable[i].unicode) != 0xffff && hu != u) {
@@ -344,7 +344,7 @@ con_set_unimap(ushort ct, struct unipair *list){
 	    if (lct > hashlevel)
 	      hashlevel = lct;
 	    hashtable[i].unicode = u;
-	    hashtable[i].fontpos = get_fs_word(&list->fontpos);
+	    hashtable[i].fontpos = get_user(&list->fontpos);
 	    list++;
 	    ct--;
 	}
@@ -364,12 +364,12 @@ con_get_unimap(ushort ct, ushort *uct, struct unipair *list){
 	  for (i = 0; i<hashsize; i++)
 	    if (hashtable[i].unicode != 0xffff) {
 		if (ect++ < ct) {
-		    put_fs_word(hashtable[i].unicode, &list->unicode);
-		    put_fs_word(hashtable[i].fontpos, &list->fontpos);
+		    put_user(hashtable[i].unicode, &list->unicode);
+		    put_user(hashtable[i].fontpos, &list->fontpos);
 		    list++;
 		}
 	    }
-	put_fs_word(ect, uct);
+	put_user(ect, uct);
 	return ((ect <= ct) ? 0 : -ENOMEM);
 }
 

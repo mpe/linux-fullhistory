@@ -51,7 +51,7 @@ asmlinkage int sys_msgsnd (int msqid, struct msgbuf *msgp, size_t msgsz, int msg
 	err = verify_area (VERIFY_READ, msgp->mtext, msgsz);
 	if (err) 
 		return err;
-	if ((mtype = get_fs_long (&msgp->mtype)) < 1)
+	if ((mtype = get_user (&msgp->mtype)) < 1)
 		return -EINVAL;
 	id = (unsigned int) msqid % MSGMNI;
 	msq = msgque [id];
@@ -192,7 +192,7 @@ asmlinkage int sys_msgrcv (int msqid, struct msgbuf *msgp, size_t msgsz, long ms
 			msq->msg_cbytes -= nmsg->msg_ts;
 			if (msq->wwait)
 				wake_up (&msq->wwait);
-			put_fs_long (nmsg->msg_type, &msgp->mtype);
+			put_user (nmsg->msg_type, &msgp->mtype);
 			memcpy_tofs (msgp->mtext, nmsg->msg_spot, msgsz);
 			kfree(nmsg);
 			return msgsz;

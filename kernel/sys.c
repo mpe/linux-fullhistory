@@ -368,10 +368,10 @@ asmlinkage int sys_times(struct tms * tbuf)
 		int error = verify_area(VERIFY_WRITE,tbuf,sizeof *tbuf);
 		if (error)
 			return error;
-		put_fs_long(current->utime,(unsigned long *)&tbuf->tms_utime);
-		put_fs_long(current->stime,(unsigned long *)&tbuf->tms_stime);
-		put_fs_long(current->cutime,(unsigned long *)&tbuf->tms_cutime);
-		put_fs_long(current->cstime,(unsigned long *)&tbuf->tms_cstime);
+		put_user(current->utime,&tbuf->tms_utime);
+		put_user(current->stime,&tbuf->tms_stime);
+		put_user(current->cutime,&tbuf->tms_cutime);
+		put_user(current->cstime,&tbuf->tms_cstime);
 	}
 	return jiffies;
 }
@@ -554,7 +554,7 @@ asmlinkage int sys_setgroups(int gidsetsize, gid_t *grouplist)
 	if (gidsetsize > NGROUPS)
 		return -EINVAL;
 	for (i = 0; i < gidsetsize; i++, grouplist++) {
-		current->groups[i] = get_fs_word((unsigned short *) grouplist);
+		current->groups[i] = get_user(grouplist);
 	}
 	if (i < NGROUPS)
 		current->groups[i] = NOGROUP;
@@ -619,15 +619,15 @@ asmlinkage int sys_olduname(struct oldold_utsname * name)
 	if (error)
 		return error;
 	memcpy_tofs(&name->sysname,&system_utsname.sysname,__OLD_UTS_LEN);
-	put_fs_byte(0,name->sysname+__OLD_UTS_LEN);
+	put_user(0,name->sysname+__OLD_UTS_LEN);
 	memcpy_tofs(&name->nodename,&system_utsname.nodename,__OLD_UTS_LEN);
-	put_fs_byte(0,name->nodename+__OLD_UTS_LEN);
+	put_user(0,name->nodename+__OLD_UTS_LEN);
 	memcpy_tofs(&name->release,&system_utsname.release,__OLD_UTS_LEN);
-	put_fs_byte(0,name->release+__OLD_UTS_LEN);
+	put_user(0,name->release+__OLD_UTS_LEN);
 	memcpy_tofs(&name->version,&system_utsname.version,__OLD_UTS_LEN);
-	put_fs_byte(0,name->version+__OLD_UTS_LEN);
+	put_user(0,name->version+__OLD_UTS_LEN);
 	memcpy_tofs(&name->machine,&system_utsname.machine,__OLD_UTS_LEN);
-	put_fs_byte(0,name->machine+__OLD_UTS_LEN);
+	put_user(0,name->machine+__OLD_UTS_LEN);
 	return 0;
 }
 
@@ -676,7 +676,7 @@ asmlinkage int sys_setdomainname(char *name, int len)
 	if (len > __NEW_UTS_LEN)
 		return -EINVAL;
 	for (i=0; i < len; i++) {
-		if ((system_utsname.domainname[i] = get_fs_byte(name+i)) == 0)
+		if ((system_utsname.domainname[i] = get_user(name+i)) == 0)
 			return 0;
 	}
 	system_utsname.domainname[i] = 0;

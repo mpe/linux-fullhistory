@@ -154,8 +154,8 @@ sys_create_module(char *module_name, unsigned long size)
 	}
 	strcpy((char *)(mp + 1), name); /* why not? */
 
-	npages = (size + sizeof (int) + 4095) / 4096;
-	if ((addr = vmalloc(npages * 4096)) == 0) {
+	npages = (size + sizeof (long) + PAGE_SIZE - 1) / PAGE_SIZE;
+	if ((addr = vmalloc(npages * PAGE_SIZE)) == 0) {
 		kfree_s(mp, sspace);
 		return -ENOMEM;
 	}
@@ -169,7 +169,7 @@ sys_create_module(char *module_name, unsigned long size)
 	mp->state = MOD_UNINITIALIZED;
 	mp->cleanup = NULL;
 
-	* (int *) addr = 0;	/* set use count to zero */
+	* (long *) addr = 0;	/* set use count to zero */
 	module_list = mp;	/* link it in */
 
 	PRINTK(("module `%s' (%lu pages @ 0x%08lx) created\n",
@@ -194,11 +194,14 @@ sys_init_module(char *module_name, char *code, unsigned codesize,
 	if (!suser())
 		return -EPERM;
 
+#ifdef __i386__
 	/* A little bit of protection... we "know" where the user stack is... */
+
 	if (symtab && ((unsigned long)symtab > 0xb0000000)) {
 		printk("warning: you are using an old insmod, no symbols will be inserted!\n");
 		symtab = NULL;
 	}
+#endif
 
 	/*
 	 * First reclaim any memory from dead modules that where not
@@ -214,11 +217,11 @@ sys_init_module(char *module_name, char *code, unsigned codesize,
 	memcpy_fromfs(&rt, routines, sizeof rt);
 	if ((mp = find_module(name)) == NULL)
 		return -ENOENT;
-	if ((codesize + sizeof (int) + 4095) / 4096 > mp->size)
+	if ((codesize + sizeof (long) + PAGE_SIZE - 1) / PAGE_SIZE > mp->size)
 		return -EINVAL;
-	memcpy_fromfs((char *)mp->addr + sizeof (int), code, codesize);
-	memset((char *)mp->addr + sizeof (int) + codesize, 0,
-		mp->size * 4096 - (codesize + sizeof (int)));
+	memcpy_fromfs((char *)mp->addr + sizeof (long), code, codesize);
+	memset((char *)mp->addr + sizeof (long) + codesize, 0,
+		mp->size * PAGE_SIZE - (codesize + sizeof (long)));
 	PRINTK(( "module init entry = 0x%08lx, cleanup entry = 0x%08lx\n",
 		(unsigned long) rt.init, (unsigned long) rt.cleanup));
 	mp->cleanup = rt.cleanup;
@@ -231,9 +234,9 @@ sys_init_module(char *module_name, char *code, unsigned codesize,
 		int i;
 		int legal_start;
 
-		if ((error = verify_area(VERIFY_READ, symtab, sizeof(int))))
+		if ((error = verify_area(VERIFY_READ, &symtab->size, sizeof(symtab->size))))
 			return error;
-		memcpy_fromfs((char *)(&(size)), symtab, sizeof(int));
+		size = get_user(&symtab->size);
 
 		if ((newtab = (struct symbol_table*) kmalloc(size, GFP_KERNEL)) == NULL) {
 			return -ENOMEM;
@@ -417,7 +420,7 @@ get_mod_name(char *user_name, char *buf)
 	int i;
 
 	i = 0;
-	for (i = 0 ; (buf[i] = get_fs_byte(user_name + i)) != '\0' ; ) {
+	for (i = 0 ; (buf[i] = get_user(user_name + i)) != '\0' ; ) {
 		if (++i >= MOD_MAX_NAME)
 			return -E2BIG;
 	}
@@ -613,7 +616,7 @@ int get_ksyms_list(char *buf)
  * - For a loadable module, the function should only be called in the
  *   context of init_module
  *
- * Those are the only restrictions! (apart from not being reenterable...)
+ * Those are the only restrictions! (apart from not being reentrant...)
  *
  * If you want to remove a symbol table for a loadable module,
  * the call looks like: "register_symtab(0)".

@@ -1252,7 +1252,7 @@ void tcp_enqueue_partial(struct sk_buff * skb, struct sock * sk)
  *	This routine sends an ack and also updates the window. 
  */
  
-static void tcp_send_ack(unsigned long sequence, unsigned long ack,
+static void tcp_send_ack(u32 sequence, u32 ack,
 	     struct sock *sk,
 	     struct tcphdr *th, unsigned long daddr)
 {
@@ -1361,7 +1361,7 @@ static void tcp_send_ack(unsigned long sequence, unsigned long ack,
   	t1->doff = sizeof(*t1)/4;
   	tcp_send_check(t1, sk->saddr, daddr, sizeof(*t1), sk);
   	if (sk->debug)
-  		 printk("\rtcp_ack: seq %lx ack %lx\n", sequence, ack);
+  		 printk("\rtcp_ack: seq %x ack %x\n", sequence, ack);
   	tcp_statistics.TcpOutSegs++;
   	sk->prot->queue_xmit(sk, dev, buff, 1);
 }
@@ -1976,8 +1976,8 @@ static int tcp_read(struct sock *sk, unsigned char *to,
 {
 	struct wait_queue wait = { current, NULL };
 	int copied = 0;
-	unsigned long peek_seq;
-	volatile unsigned long *seq;	/* So gcc doesn't overoptimise */
+	u32 peek_seq;
+	volatile u32 *seq;	/* So gcc doesn't overoptimise */
 	unsigned long used;
 
 	/* 
@@ -2614,7 +2614,7 @@ static inline unsigned long default_mask(unsigned long dst)
  *	That's funny, Linux has one built in!  Use it!
  */
 
-extern inline unsigned long tcp_init_seq(void)
+extern inline u32 tcp_init_seq(void)
 {
 	struct timeval tv;
 	do_gettimeofday(&tv);
@@ -2631,7 +2631,7 @@ extern inline unsigned long tcp_init_seq(void)
  
 static void tcp_conn_request(struct sock *sk, struct sk_buff *skb,
 		 unsigned long daddr, unsigned long saddr,
-		 struct options *opt, struct device *dev, unsigned long seq)
+		 struct options *opt, struct device *dev, u32 seq)
 {
 	struct sk_buff *buff;
 	struct tcphdr *t1;
@@ -3069,7 +3069,7 @@ static void tcp_write_xmit(struct sock *sk)
 
 extern __inline__ int tcp_ack(struct sock *sk, struct tcphdr *th, unsigned long saddr, int len)
 {
-	unsigned long ack;
+	u32 ack;
 	int flag = 0;
 
 	/* 
@@ -3116,7 +3116,7 @@ extern __inline__ int tcp_ack(struct sock *sk, struct tcphdr *th, unsigned long 
 	if (after(ack, sk->sent_seq) || before(ack, sk->rcv_ack_seq)) 
 	{
 		if(sk->debug)
-			printk("Ack ignored %lu %lu\n",ack,sk->sent_seq);
+			printk("Ack ignored %u %u\n",ack,sk->sent_seq);
 			
 		/*
 		 *	Keepalive processing.
@@ -3541,7 +3541,7 @@ extern __inline__ int tcp_ack(struct sock *sk, struct tcphdr *th, unsigned long 
 		if (!sk->dead)
 			sk->state_change(sk);
 		if(sk->debug)
-			printk("rcv_ack_seq: %lX==%lX, acked_seq: %lX==%lX\n",
+			printk("rcv_ack_seq: %X==%X, acked_seq: %X==%X\n",
 				sk->rcv_ack_seq,sk->write_seq,sk->acked_seq,sk->fin_seq);
 		if (sk->rcv_ack_seq == sk->write_seq /*&& sk->acked_seq == sk->fin_seq*/) 
 		{
@@ -3763,8 +3763,7 @@ extern __inline__ int tcp_data(struct sk_buff *skb, struct sock *sk,
 	struct sk_buff *skb1, *skb2;
 	struct tcphdr *th;
 	int dup_dumped=0;
-	unsigned long new_seq;
-	unsigned long shut_seq;
+	u32 new_seq, shut_seq;
 
 	th = skb->h.th;
 	skb->len = len -(th->doff*4);
@@ -3824,7 +3823,7 @@ extern __inline__ int tcp_data(struct sk_buff *skb, struct sock *sk,
 			if(after(new_seq,shut_seq))
 			{
 				if(sk->debug)
-					printk("Data arrived on %p after close [Data right edge %lX, Socket shut on %lX] %d\n",
+					printk("Data arrived on %p after close [Data right edge %X, Socket shut on %X] %d\n",
 						sk, new_seq, shut_seq, sk->blog);
 				if(sk->dead)
 				{
@@ -3868,9 +3867,9 @@ extern __inline__ int tcp_data(struct sk_buff *skb, struct sock *sk,
 			if(sk->debug)
 			{
 				printk("skb1=%p :", skb1);
-				printk("skb1->h.th->seq = %ld: ", skb1->h.th->seq);
-				printk("skb->h.th->seq = %ld\n",skb->h.th->seq);
-				printk("copied_seq = %ld acked_seq = %ld\n", sk->copied_seq,
+				printk("skb1->h.th->seq = %d: ", skb1->h.th->seq);
+				printk("skb->h.th->seq = %d\n",skb->h.th->seq);
+				printk("copied_seq = %d acked_seq = %d\n", sk->copied_seq,
 						sk->acked_seq);
 			}
 			
@@ -4382,7 +4381,7 @@ static int tcp_connect(struct sock *sk, struct sockaddr_in *usin, int addr_len)
 extern __inline__ int tcp_sequence(struct sock *sk, struct tcphdr *th, short len,
 	     struct options *opt, unsigned long saddr, struct device *dev)
 {
-	unsigned long next_seq;
+	u32 next_seq;
 
 	next_seq = len - 4*th->doff;
 	if (th->fin)
@@ -4751,7 +4750,7 @@ int tcp_rcv(struct sk_buff *skb, struct device *dev, struct options *opt,
 		if (sk->state == TCP_TIME_WAIT && th->syn && sk->dead && 
 			after(th->seq, sk->acked_seq) && !th->rst)
 		{
-			long seq=sk->write_seq;
+			u32 seq = sk->write_seq;
 			if(sk->debug)
 				printk("Doing a BSD time wait\n");
 			tcp_statistics.TcpEstabResets++;	   

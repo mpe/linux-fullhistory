@@ -1,7 +1,7 @@
-/* @(#)aha274x.h 1.11 94/09/06 jda */
+/* @(#)aic7xxx.h 1.14 94/11/30 jda */
 
 /*
- * Adaptec 274x device driver for Linux.
+ * Adaptec 274x/284x/294x device driver for Linux.
  * Copyright (c) 1994 The University of Calgary Department of Computer Science.
  * 
  * This program is free software; you can redistribute it and/or modify
@@ -19,31 +19,30 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  */
 
-#ifndef aha274x_h
-#define aha274x_h
+#ifndef aic7xxx_h
+#define aic7xxx_h
 
-#define	AHA274X_MAXSCB		4
-#define AHA274X_H_VERSION	"1.11"
+#define AIC7XXX_H_VERSION	"1.14"
 
 /*
  *  Scsi_Host_Template (see hosts.h) for 274x - some fields
  *  to do with card config are filled in after the card is
  *  detected.
  */
-#define AHA274X	{						\
+#define AIC7XXX	{						\
 	NULL,							\
 	NULL,							\
 	NULL,							\
-	aha274x_detect,						\
+	aic7xxx_detect,						\
 	NULL,							\
-	aha274x_info,						\
-	aha274x_command,					\
-	aha274x_queue,						\
-	aha274x_abort,						\
-	aha274x_reset,						\
+	aic7xxx_info,						\
 	NULL,							\
-	aha274x_biosparam,					\
-	AHA274X_MAXSCB,		/* max simultaneous cmds      */\
+	aic7xxx_queue,						\
+	aic7xxx_abort,						\
+	aic7xxx_reset,						\
+	NULL,							\
+	aic7xxx_biosparam,					\
+	-1,			/* max simultaneous cmds      */\
 	-1,			/* scsi id of host adapter    */\
 	SG_ALL,			/* max scatter-gather cmds    */\
 	1,			/* cmds per lun (linked cmds) */\
@@ -52,12 +51,13 @@
 	DISABLE_CLUSTERING					\
 }
 
-extern int aha274x_queue(Scsi_Cmnd *, void (*)(Scsi_Cmnd *));
-extern int aha274x_biosparam(Disk *, int, int[]);
-extern int aha274x_detect(Scsi_Host_Template *);
-extern int aha274x_command(Scsi_Cmnd *);
-extern int aha274x_abort(Scsi_Cmnd *);
-extern int aha274x_reset(Scsi_Cmnd *);
-extern const char *aha274x_info(struct Scsi_Host *);
+extern int aic7xxx_queue(Scsi_Cmnd *, void (*)(Scsi_Cmnd *));
+extern int aic7xxx_biosparam(Disk *, int, int[]);
+extern int aic7xxx_detect(Scsi_Host_Template *);
+extern int aic7xxx_command(Scsi_Cmnd *);
+extern int aic7xxx_abort(Scsi_Cmnd *);
+extern int aic7xxx_reset(Scsi_Cmnd *);
+
+extern const char *aic7xxx_info(struct Scsi_Host *);
 
 #endif

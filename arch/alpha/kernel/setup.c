@@ -35,7 +35,7 @@ struct hae hae = {
 
 struct hwrpb_struct *hwrpb;
 
-unsigned char aux_device_present;
+unsigned char aux_device_present = 0xaa;
 
 /*
  * This is setup by the secondary bootstrap loader.  Because
@@ -52,7 +52,7 @@ static char command_line[COMMAND_LINE_SIZE] = { 0, };
 /*
  * The format of "screen_info" is strange, and due to early
  * i386-setup code. This is just enough to make the console
- * code think we're on a EGA+ colour display.
+ * code think we're on a VGA color display.
  */
 struct screen_info screen_info = {
 	0, 0,			/* orig-x, orig-y */
@@ -62,6 +62,7 @@ struct screen_info screen_info = {
 	80,			/* orig-video-cols */
 	0,0,0,			/* ega_ax, ega_bx, ega_cx */
 	25,			/* orig-video-lines */
+	1,			/* orig-video-isVGA */
 	16			/* orig-video-points */
 };
 
@@ -95,7 +96,6 @@ void setup_arch(char **cmdline_p,
 	set_hae(hae.cache);		/* sync HAE register w/hae_cache */
 
 	ROOT_DEV = 0x0802;		/* sda2 */
-	aux_device_present = 0xaa;
 	command_line[COMMAND_LINE_SIZE - 1] = '\0';
 	strcpy(command_line, COMMAND_LINE);
 

@@ -2,7 +2,7 @@
 	Written 1994-95 by Avery Pennarun, derived from skeleton.c by
         Donald Becker.
 
-	Contact Avery at: apenwarr@tourism.807-city.on.ca or
+	Contact Avery at: apenwarr@foxnet.net or
 	RR #5 Pole Line Road, Thunder Bay, ON, Canada P7C 5M9
 	
 	**********************
@@ -15,6 +15,13 @@
          
 	**********************
 
+	v1.02 (95/06/21)
+	  - A fix to make "exception" packets sent from Linux receivable
+	    on other systems.  (The protocol_id byte was sometimes being set
+	    incorrectly, and Linux wasn't checking it on receive so it
+	    didn't show up)
+	  - Updated my email address.  Please use apenwarr@foxnet.net
+	    from now on.
 	v1.01 (95/03/24)
 	  - Fixed some IPX-related bugs. (Thanks to Tomasz Motylewski
             <motyl@tichy.ch.uj.edu.pl> for the patches to make arcnet work
@@ -79,7 +86,7 @@
  * 8 times every second.
  *
  * This should no longer be necessary.  if you experience "stuck" ARCnet
- * drivers, please email apenwarr@tourism.807-city.on.ca or I will remove
+ * drivers, please email apenwarr@foxnet.net or I will remove
  * this feature in a future release.
  */
 #undef USE_TIMER_HANDLER
@@ -87,7 +94,7 @@
 /**************************************************************************/
  
 static char *version =
- "arcnet.c:v1.01 95/03/24 Avery Pennarun <apenwarr@tourism.807-city.on.ca>\n";
+ "arcnet.c:v1.02 95/06/21 Avery Pennarun <apenwarr@foxnet.net>\n";
 
 /*
   Sources:
@@ -1249,7 +1256,7 @@ arcnet_prepare_tx(struct device *dev,struct ClientData *hdr,short length,
 		 * make the packet long enough to fit in a 512-byte
 		 * frame.
 		 */
-		arcpacket->raw[offset+0]=arcsoft->protocol_id;
+		arcpacket->raw[offset+0]=hdr->protocol_id;
 		arcpacket->raw[offset+1]=0xFF; /* FF flag */
 			arcpacket->raw[offset+2]=0xFF; /* FF padding */
 			arcpacket->raw[offset+3]=0xFF; /* FF padding */

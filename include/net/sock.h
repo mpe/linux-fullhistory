@@ -65,15 +65,15 @@ struct sock {
   struct options		*opt;
   volatile unsigned long	wmem_alloc;
   volatile unsigned long	rmem_alloc;
-  unsigned long			write_seq;
-  unsigned long			sent_seq;
-  unsigned long			acked_seq;
-  unsigned long			copied_seq;
-  unsigned long			rcv_ack_seq;
-  unsigned long			window_seq;
-  unsigned long			fin_seq;
-  unsigned long			urg_seq;
-  unsigned long			urg_data;
+  __u32				write_seq;
+  __u32				sent_seq;
+  __u32				acked_seq;
+  __u32				copied_seq;
+  __u32				rcv_ack_seq;
+  __u32				window_seq;
+  __u32				fin_seq;
+  __u32				urg_seq;
+  __u32				urg_data;
 
   /*
    * Not all are volatile, but some are, so we

@@ -89,7 +89,8 @@ int msdos_readdir(
 		return -ENOENT;
 	bh = NULL;
 	while ((ino = msdos_get_entry(inode,&filp->f_pos,&bh,&de)) > -1) {
-		if (!IS_FREE(de->name) && !(de->attr & ATTR_VOLUME)) {
+		if (!IS_FREE(de->name)
+			&& !(de->attr & (ATTR_VOLUME|ATTR_SYS|ATTR_HIDDEN))) {
 			char bufname[12];
 			char *ptname = bufname;
 			for (i = last = 0; i < 8; i++) {

@@ -87,7 +87,7 @@ static int read_core(struct inode * inode, struct file * file,char * buf, int co
 	}
 
 	while (p < 2*PAGE_SIZE && count > 0) {
-		put_fs_byte(0,buf);
+		put_user(0,buf);
 		buf++;
 		p++;
 		count--;
@@ -135,7 +135,7 @@ static int read_profile(struct inode *inode, struct file *file, char *buf, int c
     read = 0;
 
     while (p < sizeof(unsigned long) && count > 0) {
-        put_fs_byte(*((char *)(&sample_step)+p),buf);
+        put_user(*((char *)(&sample_step)+p),buf);
 		buf++; p++; count--; read++;
     }
     pnt = (char *)prof_buffer + p - sizeof(unsigned long);

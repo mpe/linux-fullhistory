@@ -107,7 +107,7 @@ static int sysv_readlink(struct inode * inode, char * buffer, int buflen)
 	i = 0;
 	while (i<buflen && (c = bh_data[i])) {
 		i++;
-		put_fs_byte(c,buffer++);
+		put_user(c,buffer++);
 	}
 	brelse(bh);
 	return i;

@@ -8,7 +8,7 @@
 */
 
 extern unsigned long *trapbase;
-extern char end, etext, msgbuf;
+extern char end, etext, edata;
 
 extern void flush_vac_context(void);
 extern void flush_vac_segment(unsigned int foo_segment);

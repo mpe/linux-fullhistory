@@ -331,7 +331,7 @@ struct super_block {
  * This allows the kernel to read directories into kernel space or
  * to have different dirent layouts depending on the binary type.
  */
-typedef int (*filldir_t)(void *, char *, int, off_t, ino_t);
+typedef int (*filldir_t)(void *, const char *, int, off_t, ino_t);
 	
 struct file_operations {
 	int (*lseek) (struct inode *, struct file *, off_t, int);
@@ -429,7 +429,7 @@ extern struct file *first_file;
 extern int nr_files;
 extern struct super_block super_blocks[NR_SUPER];
 
-extern int shrink_buffers(unsigned int priority);
+extern int shrink_buffers(unsigned int priority, unsigned long limit);
 extern void refile_buffer(struct buffer_head * buf);
 extern void set_writetime(struct buffer_head * buf, int flag);
 extern void refill_freelist(int size);

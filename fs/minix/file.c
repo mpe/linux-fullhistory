@@ -168,7 +168,7 @@ static int minix_file_read(struct inode * inode, struct file * filp, char * buf,
 				buf += chars;
 			} else {
 				while (chars-->0)
-					put_fs_byte(0,buf++);
+					put_user(0,buf++);
 			}
 			offset = 0;
 			if (++bhe == &buflist[NBUF])

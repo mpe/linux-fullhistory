@@ -1851,7 +1851,7 @@ get_modem_info(struct cyclades_port * info, unsigned int *value)
             | ((status  & CyRI) ? TIOCM_RNG : 0)
             | ((status  & CyDSR) ? TIOCM_DSR : 0)
             | ((status  & CyCTS) ? TIOCM_CTS : 0);
-    put_fs_long(result,(unsigned long *) value);
+    put_user(result,value);
     return 0;
 } /* get_modem_info */
 
@@ -1862,7 +1862,7 @@ set_modem_info(struct cyclades_port * info, unsigned int cmd,
   int card,chip,channel;
   unsigned char *base_addr;
   unsigned long flags;
-  unsigned int arg = get_fs_long((unsigned long *) value);
+  unsigned int arg = get_user(value);
 
     card = info->card;
     channel = (info->line) - (cy_card[card].first_line);
@@ -2175,8 +2175,8 @@ cy_ioctl(struct tty_struct *tty, struct file * file,
                 ret_val = error;
                 break;
             }
-            put_fs_long(C_CLOCAL(tty) ? 1 : 0,
-                        (unsigned long *) arg);
+            put_user(C_CLOCAL(tty) ? 1 : 0,
+                        (unsigned int *) arg);
             break;
         case TIOCSSOFTCAR:
             arg = get_fs_long((unsigned long *) arg);

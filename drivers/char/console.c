@@ -2441,10 +2441,10 @@ static int set_get_font(char * arg, int set, int ch512)
 	    arg += cmapsz;
 	    if (set)
 	      for (i=0; i<cmapsz ; i++)
-		*(charmap+i) = get_fs_byte(arg+i);
+		*(charmap+i) = get_user(arg+i);
 	    else
 	      for (i=0; i<cmapsz ; i++)
-		put_fs_byte(*(charmap+i), arg+i);
+		put_user(*(charmap+i), arg+i);
 	  };
 
 	cli();

@@ -4,7 +4,7 @@
  *  Copyright (C) 1991, 1992  Linus Torvalds
  */
 
-#define DEBUG_PROC_TREE
+#undef DEBUG_PROC_TREE
 
 #include <linux/wait.h>
 #include <linux/errno.h>
@@ -515,7 +515,7 @@ repeat:
 				if (!(options & WUNTRACED) && !(p->flags & PF_PTRACED))
 					continue;
 				if (stat_addr)
-					put_fs_long((p->exit_code << 8) | 0x7f,
+					put_user((p->exit_code << 8) | 0x7f,
 						stat_addr);
 				p->exit_code = 0;
 				if (ru != NULL)
@@ -531,7 +531,7 @@ repeat:
 					getrusage(p, RUSAGE_BOTH, ru);
 				flag = p->pid;
 				if (stat_addr)
-					put_fs_long(p->exit_code, stat_addr);
+					put_user(p->exit_code, stat_addr);
 				if (p->p_opptr != p->p_pptr) {
 					REMOVE_LINKS(p);
 					p->p_pptr = p->p_opptr;

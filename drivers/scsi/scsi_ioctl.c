@@ -33,7 +33,7 @@ static int ioctl_probe(struct Scsi_Host * host, void *buffer)
 	const char * string;
 	
 	if ((temp = host->hostt->present) && buffer) {
-		len = get_fs_long ((unsigned long *) buffer);
+		len = get_user ((unsigned int *) buffer);
 		if(host->hostt->info)
 		  string = host->hostt->info(host);
 		else 
@@ -157,11 +157,11 @@ static int ioctl_command(Scsi_Device *dev, void *buffer)
 	if (!buffer)
 		return -EINVAL;
 	
-	inlen = get_fs_long((unsigned long *) buffer);
-	outlen = get_fs_long( ((unsigned long *) buffer) + 1);
+	inlen = get_user((unsigned int *) buffer);
+	outlen = get_user( ((unsigned int *) buffer) + 1);
 
 	cmd_in = (char *) ( ((int *)buffer) + 2);
-	opcode = get_fs_byte(cmd_in); 
+	opcode = get_user(cmd_in); 
 
 	needed = buf_needed = (inlen > outlen ? inlen : outlen);
 	if(buf_needed){
@@ -249,8 +249,8 @@ int scsi_ioctl (Scsi_Device *dev, int cmd, void *arg)
 	switch (cmd) {
 	        case SCSI_IOCTL_GET_IDLUN:
 	                verify_area(VERIFY_WRITE, (void *) arg, sizeof(int));
-			put_fs_long(dev->id + (dev->lun << 8) + 
-				    (dev->host->host_no << 16), (unsigned long *) arg);
+			put_user(dev->id + (dev->lun << 8) + 
+				 (dev->host->host_no << 16), (unsigned int *) arg);
 			return 0;
 		case SCSI_IOCTL_TAGGED_ENABLE:
 			if(!suser())  return -EACCES;

@@ -82,6 +82,10 @@ static inline unsigned long get_ds(void)
 
 static inline void set_fs(unsigned long val)
 {
+  unsigned long foo;
+  foo = val;
+
+  return;
 }
 
 #endif /* _ASM_SEGMENT_H */

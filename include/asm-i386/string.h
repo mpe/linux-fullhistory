@@ -342,15 +342,15 @@ extern inline void * __memcpy(void * to, const void * from, size_t n)
 __asm__ __volatile__(
 	"cld\n\t"
 	"rep ; movsl\n\t"
-	"testb $2,%%dl\n\t"
+	"testb $2,%b1\n\t"
 	"je 1f\n\t"
 	"movsw\n"
-	"1:\ttestb $1,%%dl\n\t"
+	"1:\ttestb $1,%b1\n\t"
 	"je 2f\n\t"
 	"movsb\n"
 	"2:"
 	: /* no output */
-	:"c" (n/4), "d" (n),"D" ((long) to),"S" ((long) from)
+	:"c" (n/4), "q" (n),"D" ((long) to),"S" ((long) from)
 	: "cx","di","si","memory");
 return (to);
 }
@@ -424,21 +424,7 @@ __asm__ __volatile__(
 return dest;
 }
 
-extern inline int memcmp(const void * cs,const void * ct,size_t count)
-{
-register int __res;
-__asm__ __volatile__(
-	"cld\n\t"
-	"repe\n\t"
-	"cmpsb\n\t"
-	"je 1f\n\t"
-	"sbbl %%eax,%%eax\n\t"
-	"orb $1,%%al\n"
-	"1:"
-	:"=a" (__res):"0" (0),"S" (cs),"D" (ct),"c" (count)
-	:"si","di","cx");
-return __res;
-}
+#define memcmp __builtin_memcmp
 
 extern inline void * memchr(const void * cs,int c,size_t count)
 {
@@ -482,15 +468,15 @@ extern inline void * __constant_c_memset(void * s, unsigned long c, size_t count
 __asm__ __volatile__(
 	"cld\n\t"
 	"rep ; stosl\n\t"
-	"testb $2,%%dl\n\t"
+	"testb $2,%b1\n\t"
 	"je 1f\n\t"
 	"stosw\n"
-	"1:\ttestb $1,%%dl\n\t"
+	"1:\ttestb $1,%b1\n\t"
 	"je 2f\n\t"
 	"stosb\n"
 	"2:"
 	: /* no output */
-	:"a" (c), "d" (count), "c" (count/4), "D" ((long) s)
+	:"a" (c), "q" (count), "c" (count/4), "D" ((long) s)
 	:"cx","di","memory");
 return (s);	
 }

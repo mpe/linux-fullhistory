@@ -65,7 +65,15 @@ asmlinkage int sys_llseek(unsigned int fd, unsigned long offset_high,
 	if ((err = verify_area(VERIFY_WRITE, result, sizeof(loff_t))))
 		return err;
 	offset = (loff_t) (((unsigned long long) offset_high << 32) | offset_low);
-/* there is no fs specific llseek handler */
+
+	/* if there is a fs-specific handler, we can't just ignore it.. */
+	/* accept llseek() only for the signed long subset of long long */
+	if (file->f_op && file->f_op->lseek) {
+		if (offset != (long) offset)
+			return -EINVAL;
+		return file->f_op->lseek(file->f_inode,file,offset,origin);
+	}
+
 	switch (origin) {
 		case 0:
 			tmp = offset;
@@ -81,9 +89,11 @@ asmlinkage int sys_llseek(unsigned int fd, unsigned long offset_high,
 	}
 	if (tmp < 0)
 		return -EINVAL;
-	file->f_pos = tmp;
-	file->f_reada = 0;
-	file->f_version = ++event;
+	if (tmp != file->f_pos) {
+		file->f_pos = tmp;
+		file->f_reada = 0;
+		file->f_version = ++event;
+	}
 	memcpy_tofs(result, &file->f_pos, sizeof(loff_t));
 	return 0;
 }

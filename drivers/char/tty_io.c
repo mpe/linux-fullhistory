@@ -1289,11 +1289,11 @@ static int do_get_ps_info(unsigned long arg)
 			c = (char *)(*p);
 			d = (char *)(ts->tasks+n);
 			for (i=0 ; i<sizeof(struct task_struct) ; i++)
-				put_fs_byte(*c++, d++);
-			put_fs_long(1, (unsigned long *)(ts->present+n));
+				put_user(*c++, d++);
+			put_user(1, ts->present+n);
 		}
 		else	
-			put_fs_long(0, (unsigned long *)(ts->present+n));
+			put_user(0, ts->present+n);
 	return(0);			
 }
 #endif
@@ -1326,7 +1326,7 @@ static int tty_ioctl(struct inode * inode, struct file * file,
 			retval = verify_area(VERIFY_READ, (void *) arg, 1);
 			if (retval)
 				return retval;
-			ch = get_fs_byte((char *) arg);
+			ch = get_user((char *) arg);
 			tty->ldisc.receive_buf(tty, &ch, &mbz, 1);
 			return 0;
 		case TIOCGWINSZ:
@@ -1367,10 +1367,10 @@ static int tty_ioctl(struct inode * inode, struct file * file,
 			redirect = real_tty;
 			return 0;
 		case FIONBIO:
-			retval = verify_area(VERIFY_READ, (void *) arg, sizeof(long));
+			retval = verify_area(VERIFY_READ, (void *) arg, sizeof(int));
 			if (retval)
 				return retval;
-			arg = get_fs_long((unsigned long *) arg);
+			arg = get_user((unsigned int *) arg);
 			if (arg)
 				file->f_flags |= O_NONBLOCK;
 			else
@@ -1432,7 +1432,7 @@ static int tty_ioctl(struct inode * inode, struct file * file,
 					     sizeof (pid_t));
 			if (retval)
 				return retval;
-			put_fs_long(real_tty->pgrp, (pid_t *) arg);
+			put_user(real_tty->pgrp, (pid_t *) arg);
 			return 0;
 		case TIOCSPGRP:
 			retval = tty_check_change(real_tty);
@@ -1442,7 +1442,7 @@ static int tty_ioctl(struct inode * inode, struct file * file,
 			    (current->tty != real_tty) ||
 			    (real_tty->session != current->session))
 				return -ENOTTY;
-			pgrp = get_fs_long((pid_t *) arg);
+			pgrp = get_user((pid_t *) arg);
 			if (pgrp < 0)
 				return -EINVAL;
 			if (session_of_pgrp(pgrp) != current->session)
@@ -1451,16 +1451,16 @@ static int tty_ioctl(struct inode * inode, struct file * file,
 			return 0;
 		case TIOCGETD:
 			retval = verify_area(VERIFY_WRITE, (void *) arg,
-					     sizeof (unsigned long));
+					     sizeof (int));
 			if (retval)
 				return retval;
-			put_fs_long(tty->ldisc.num, (unsigned long *) arg);
+			put_user(tty->ldisc.num, (int *) arg);
 			return 0;
 		case TIOCSETD:
 			retval = tty_check_change(tty);
 			if (retval)
 				return retval;
-			arg = get_fs_long((unsigned long *) arg);
+			arg = get_user((int *) arg);
 			return tty_set_ldisc(tty, arg);
 		case TIOCLINUX:
 			if (tty->driver.type != TTY_DRIVER_TYPE_CONSOLE)
@@ -1470,7 +1470,7 @@ static int tty_ioctl(struct inode * inode, struct file * file,
 			retval = verify_area(VERIFY_READ, (void *) arg, 1);
 			if (retval)
 				return retval;
-			switch (retval = get_fs_byte((char *)arg))
+			switch (retval = get_user((char *)arg))
 			{
 				case 0:
 				case 8:
@@ -1498,10 +1498,10 @@ static int tty_ioctl(struct inode * inode, struct file * file,
 			 * kernel-internal variable; programs not closely
 			 * related to the kernel should not use this.
 			 */
-					put_fs_byte(shift_state,arg);
+					put_user(shift_state,(char *) arg);
 					return 0;
 				case 7:
-					put_fs_byte(mouse_reporting(),arg);
+					put_user(mouse_reporting(),(char *) arg);
 					return 0;
 				case 10:
 					set_vesa_blanking(arg);

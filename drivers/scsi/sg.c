@@ -71,7 +71,7 @@ static int sg_ioctl(struct inode * inode,struct file * file,
   switch(cmd_in)
    {
     case SG_SET_TIMEOUT:
-     scsi_generics[dev].timeout=get_fs_long((int *) arg);
+     scsi_generics[dev].timeout=get_user((int *) arg);
      return 0;
     case SG_GET_TIMEOUT:
      return scsi_generics[dev].timeout;
@@ -289,7 +289,7 @@ static int sg_write(struct inode *inode,struct file *filp,char *buf,int count)
   /* now issue command */
   SCpnt->request.dev=dev;
   SCpnt->sense_buffer[0]=0;
-  opcode = get_fs_byte(buf);
+  opcode = get_user(buf);
   size=COMMAND_SIZE(opcode);
   if (opcode >= 0xc0 && device->header.twelve_byte) size = 12;
   SCpnt->cmd_len = size;

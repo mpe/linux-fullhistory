@@ -998,9 +998,9 @@ static int atalk_getsockopt(struct socket *sock, int level, int optname,
 	err=verify_area(VERIFY_WRITE,optlen,sizeof(int));
 	if(err)
 		return err;
-	put_fs_long(sizeof(int),(unsigned long *)optlen);
+	put_user(sizeof(int),optlen);
 	err=verify_area(VERIFY_WRITE,optval,sizeof(int));
-	put_fs_long(val,(unsigned long *)optval);
+	put_user(val,optval);
 	return(0);
 }
 

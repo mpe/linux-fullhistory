@@ -157,8 +157,8 @@ asmlinkage int sys_utime(char * filename, struct utimbuf * times)
 			iput(inode);
 			return error;
 		}
-		actime = get_fs_long((unsigned long *) &times->actime);
-		modtime = get_fs_long((unsigned long *) &times->modtime);
+		actime = get_user(&times->actime);
+		modtime = get_user(&times->modtime);
 		newattrs.ia_ctime = CURRENT_TIME;
 		flags = ATTR_ATIME_SET | ATTR_MTIME_SET;
 	} else {

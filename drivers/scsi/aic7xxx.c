@@ -1,7 +1,7 @@
 /*
- *  @(#)aha274x.c 1.29 94/10/29 jda
+ *  @(#)aic7xxx.c 1.34 94/11/30 jda
  *
- *  Adaptec 274x device driver for Linux.
+ *  Adaptec 274x/284x/294x device driver for Linux.
  *  Copyright (c) 1994 The University of Calgary Department of Computer Science.
  *  
  *  This program is free software; you can redistribute it and/or modify
@@ -45,13 +45,15 @@
 #include <linux/string.h>
 #include <linux/kernel.h>
 #include <linux/ioport.h>
+#include <linux/bios32.h>
 #include <linux/delay.h>
+#include <linux/pci.h>
 
 #include "../block/blk.h"
 #include "sd.h"
 #include "scsi.h"
 #include "hosts.h"
-#include "aha274x.h"
+#include "aic7xxx.h"
 
 /*
  *  There should be a specific return value for this in scsi.h, but
@@ -59,10 +61,10 @@
  */
 #define DID_UNDERFLOW	DID_ERROR
 
-/* EISA stuff */
+/* EISA/VL-bus stuff */
 
-#define MINEISA		1
-#define MAXEISA		15
+#define MINSLOT		1
+#define MAXSLOT		15
 #define SLOTBASE(x)	((x) << 12)
 
 #define MAXIRQ		15
@@ -98,6 +100,10 @@
 #define O_QOUTCNT(x)	((x) + 0xc9e)		/* queue out count */
 #define O_SCBARRAY(x)	((x) + 0xca0)		/* scb array start */
 
+/* AIC-7870-only definitions */
+
+#define O_DSPCISTATUS(x) ((x) + 0xc86)		/* ??? */
+
 /* host adapter offset definitions */
 
 #define HA_REJBYTE(x)	((x) + 0xc31)		/* 1st message in byte */
@@ -110,6 +116,7 @@
 #define HA_RETURN_2(x)	((x) + 0xc4d)
 #define HA_SIGSTATE(x)	((x) + 0xc4e)		/* value in SCSISIGO */
 #define HA_NEEDSDTR(x)	((x) + 0xc4f)		/* synchronous negotiation? */
+#define HA_SCBCOUNT(x)	((x) + 0xc56)		/* number of hardware SCBs */
 
 #define HA_SCSICONF(x)	((x) + 0xc5a)		/* SCSI config register */
 #define HA_INTDEF(x)	((x) + 0xc5c)		/* interrupt def'n register */
@@ -117,7 +124,9 @@
 
 /* debugging code */
 
-#define AHA274X_DEBUG
+/*
+#define AIC7XXX_DEBUG
+*/
 
 /*
  *  If a parity error occurs during a data transfer phase, run the
@@ -126,7 +135,7 @@
  *  a DID_OK status into a DID_PARITY one for the higher-level SCSI
  *  code.
  */
-#define aha274x_parity(cmd)	((cmd)->SCp.Status)
+#define aic7xxx_parity(cmd)	((cmd)->SCp.Status)
 
 /*
  *  Since the sequencer code DMAs the scatter-gather structures
@@ -147,18 +156,36 @@
  *
  *  We support a maximum of one adapter card per IRQ level (see the
  *  rationale for this above).  On an interrupt, use the IRQ as an
- *  index into aha274x_boards[] to locate the card information.
+ *  index into aic7xxx_boards[] to locate the card information.
  */
-static struct Scsi_Host *aha274x_boards[MAXIRQ + 1];
+static struct Scsi_Host *aic7xxx_boards[MAXIRQ + 1];
 
-struct aha274x_host {
+/*
+ *  The maximum number of SCBs we could have for ANY type
+ *  of card.  DON'T FORGET TO CHANGE THE SCB MASK IN THE
+ *  SEQUENCER CODE IF THIS IS MODIFIED!
+ */
+#define AIC7XXX_MAXSCB	16
+
+struct aic7xxx_host {
 	int base;					/* card base address */
+	int maxscb;					/* hardware SCBs */
 	int startup;					/* intr type check */
+	int extended;					/* extended xlate? */
 	volatile int unpause;				/* value for HCNTRL */
-	volatile Scsi_Cmnd *SCB_array[AHA274X_MAXSCB];	/* active commands */
+	volatile Scsi_Cmnd *SCB_array[AIC7XXX_MAXSCB];	/* active commands */
 };
 
-struct aha274x_scb {
+struct aic7xxx_host_config {
+	int irq;					/* IRQ number */
+	int base;					/* I/O base */
+	int maxscb;					/* hardware SCBs */
+	int unpause;					/* value for HCNTRL */
+	int scsi_id;					/* host SCSI id */
+	int extended;					/* extended xlate? */
+};
+
+struct aic7xxx_scb {
 	unsigned char control;
 	unsigned char target_channel_lun;		/* 4/1/3 bits */
 	unsigned char SG_segment_count;
@@ -187,28 +214,29 @@ static struct {
 	short period;
 	short rate;
 	char *english;
-} aha274x_synctab[] = {
-	{100,	0,	"10.0"},
-	{125,	1,	"8.0"},
-	{150,	2,	"6.67"},
-	{175,	3,	"5.7"},
-	{200,	4,	"5.0"},
-	{225,	5,	"4.4"},
-	{250,	6,	"4.0"},
-	{275,	7,	"3.6"}
+} aic7xxx_synctab[] = {
+	100,	0,	"10.0",
+	125,	1,	"8.0",
+	150,	2,	"6.67",
+	175,	3,	"5.7",
+	200,	4,	"5.0",
+	225,	5,	"4.4",
+	250,	6,	"4.0",
+	275,	7,	"3.6"
 };
 
-static int aha274x_synctab_max =
-	sizeof(aha274x_synctab) / sizeof(aha274x_synctab[0]);
+static int aic7xxx_synctab_max =
+	sizeof(aic7xxx_synctab) / sizeof(aic7xxx_synctab[0]);
 
 enum aha_type {
 	T_NONE,
 	T_274X,
 	T_284X,
+	T_294X,
 	T_MAX
 };
 
-#ifdef AHA274X_DEBUG
+#ifdef AIC7XXX_DEBUG
 
 	extern int vsprintf(char *, const char *, va_list);
 
@@ -225,9 +253,9 @@ enum aha_type {
 	}
 
 	static
-	void debug_config(enum aha_type type, int base)
+	void debug_config(enum aha_type type, struct aic7xxx_host_config *p)
 	{
-		int ioport2, ioport3, ioport4;
+		int ioport2, ioport3;
 
 		static char *BRT[T_MAX][16] = {
 			{ },					/* T_NONE */
@@ -242,6 +270,12 @@ enum aha_type {
 				"16", "20", "24", "28",
 				"32", "36", "40", "44",
 				"48", "52", "56", "60"
+			},
+			{
+				"???", "???", "???", "???",	/* T_294X */
+				"???", "???", "???", "???",
+				"???", "???", "???", "???",
+				"???", "???", "???", "???"
 			}
 		};
 		static int DFT[4] = {
@@ -251,19 +285,27 @@ enum aha_type {
 			256, 128, 64, 32
 		};
 
-		ioport2 = inb(HA_HOSTCONF(base));
-		ioport3 = inb(HA_SCSICONF(base));
-		ioport4 = inb(HA_INTDEF(base));
+		ioport2 = inb(HA_HOSTCONF(p->base));
+		ioport3 = inb(HA_SCSICONF(p->base));
 
-		if (type == T_284X)
-			printk("AHA284X AT SLOT %d:\n", base >> 12);
-		else
-			printk("AHA274X AT EISA SLOT %d:\n", base >> 12);
+		switch (type) {
+		    case T_274X:
+			printk("AHA274X AT EISA SLOT %d:\n", p->base >> 12);
+			break;
+		    case T_284X:
+			printk("AHA284X AT SLOT %d:\n", p->base >> 12);
+			break;
+		    case T_294X:
+			printk("AHA294X (PCI-bus):\n");
+			break;
+		    default:
+			panic("aic7xxx debug_config: internal error\n");
+		}
 
 		printk("    irq %d\n"
 		       "    bus release time %s bclks\n"
 		       "    data fifo threshold %d%%\n",
-		       ioport4 & 0xf,
+		       p->irq,
 		       BRT[type][(ioport2 >> 2) & 0xf],
 		       DFT[(ioport2 >> 6) & 0x3]);
 
@@ -289,11 +331,11 @@ enum aha_type {
 		int target = inb(O_SCSIID(base)) >> 4;
 
 		if (rate) {
-			printk("aha274x: target %d now synchronous at %sMb/s\n",
+			printk("aic7xxx: target %d now synchronous at %sMb/s\n",
 			       target,
-			       aha274x_synctab[(rate >> 4) & 0x7].english);
+			       aic7xxx_synctab[(rate >> 4) & 0x7].english);
 		} else {
-			printk("aha274x: target %d using asynchronous mode\n",
+			printk("aic7xxx: target %d using asynchronous mode\n",
 			       target);
 		}
 	}
@@ -304,16 +346,16 @@ enum aha_type {
 #	define debug_config(x)
 #	define debug_rate(x,y)
 
-#endif AHA274X_DEBUG
+#endif AIC7XXX_DEBUG
 
 /*
- *  XXX - these options apply unilaterally to _all_ 274x/284x
+ *  XXX - these options apply unilaterally to _all_ 274x/284x/294x
  *	  cards in the system.  This should be fixed, but then,
  *	  does anyone really have more than one in a machine?
  */
-static int aha274x_extended = 0;		/* extended translation on? */
+static int aic7xxx_extended = 0;		/* extended translation on? */
 
-void aha274x_setup(char *s, int *dummy)
+void aic7xxx_setup(char *s, int *dummy)
 {
 	int i;
 	char *p;
@@ -322,8 +364,8 @@ void aha274x_setup(char *s, int *dummy)
 		char *name;
 		int *flag;
 	} options[] = {
-		{"extended",	&aha274x_extended},
-		{NULL, NULL }
+		"extended",	&aic7xxx_extended,
+		NULL
 	};
 
 	for (p = strtok(s, ","); p; p = strtok(NULL, ",")) {
@@ -334,10 +376,10 @@ void aha274x_setup(char *s, int *dummy)
 }
 
 static
-void aha274x_getscb(int base, struct aha274x_scb *scb)
+void aic7xxx_getscb(int base, struct aic7xxx_scb *scb)
 {
 	/*
-	 *  This is almost identical to aha274x_putscb().
+	 *  This is almost identical to aic7xxx_putscb().
 	 */
 	outb(0x80, O_SCBCNT(base));	/* SCBAUTO */
 
@@ -357,7 +399,7 @@ void aha274x_getscb(int base, struct aha274x_scb *scb)
  *  compute underflow easily.
  */
 static
-unsigned aha274x_length(Scsi_Cmnd *cmd, int sg_last)
+unsigned aic7xxx_length(Scsi_Cmnd *cmd, int sg_last)
 {
 	int i, segments;
 	unsigned length;
@@ -380,7 +422,7 @@ unsigned aha274x_length(Scsi_Cmnd *cmd, int sg_last)
 }
 
 static
-void aha274x_sg_check(Scsi_Cmnd *cmd)
+void aic7xxx_sg_check(Scsi_Cmnd *cmd)
 {
 	int i;
 	struct scatterlist *sg = (struct scatterlist *)cmd->buffer;
@@ -388,12 +430,12 @@ void aha274x_sg_check(Scsi_Cmnd *cmd)
 	if (cmd->use_sg) {
 		for (i = 0; i < cmd->use_sg; i++)
 			if ((unsigned)sg[i].length > 0xffff)
-				panic("aha274x_sg_check: s/g segment > 64k\n");
+				panic("aic7xxx_sg_check: s/g segment > 64k\n");
 	}
 }
 
 static
-void aha274x_to_scsirate(unsigned char *rate,
+void aic7xxx_to_scsirate(unsigned char *rate,
 			 unsigned char transfer,
 			 unsigned char offset)
 {
@@ -401,17 +443,17 @@ void aha274x_to_scsirate(unsigned char *rate,
 
 	transfer *= 4;
 
-	for (i = 0; i < aha274x_synctab_max-1; i++) {
+	for (i = 0; i < aic7xxx_synctab_max-1; i++) {
 
-		if (transfer == aha274x_synctab[i].period) {
-			*rate = (aha274x_synctab[i].rate << 4) | (offset & 0xf);
+		if (transfer == aic7xxx_synctab[i].period) {
+			*rate = (aic7xxx_synctab[i].rate << 4) | (offset & 0xf);
 			return;
 		}
 
-		if (transfer > aha274x_synctab[i].period &&
-		    transfer < aha274x_synctab[i+1].period)
+		if (transfer > aic7xxx_synctab[i].period &&
+		    transfer < aic7xxx_synctab[i+1].period)
 		{
-			*rate = (aha274x_synctab[i+1].rate << 4) |
+			*rate = (aic7xxx_synctab[i+1].rate << 4) |
 				(offset & 0xf);
 			return;
 		}
@@ -440,15 +482,17 @@ void aha274x_to_scsirate(unsigned char *rate,
 	outb(p->unpause, O_HCNTRL(p->base))	/* IRQMS|INTEN */
 
 /*
- *  See comments in aha274x_loadram() wrt this.
+ *  See comments in aic7xxx_loadram() wrt this.
  */
 #define RESTART_SEQUENCER(p)	\
-	do {						\
-		do {					\
-			outb(0x2, O_SEQCTL(p->base));	\
-		} while (inw(O_SEQADDR(p->base)) != 0);	\
-							\
-		UNPAUSE_SEQUENCER(p);			\
+	do {							\
+		do {						\
+			outb(0x2, O_SEQCTL(p->base));		\
+								\
+		} while (inb(O_SEQADDR(p->base)) != 0 &&	\
+			 inb(O_SEQADDR(p->base) + 1) != 0);	\
+								\
+		UNPAUSE_SEQUENCER(p);				\
 	} while (0)
 
 /*
@@ -456,12 +500,12 @@ void aha274x_to_scsirate(unsigned char *rate,
  *  be disabled all through this function unless we say otherwise.
  */
 static
-void aha274x_isr(int irq, struct pt_regs * regs)
+void aic7xxx_isr(int irq)
 {
 	int base, intstat;
-	struct aha274x_host *p;
+	struct aic7xxx_host *p;
 	
-	p = (struct aha274x_host *)aha274x_boards[irq]->hostdata;
+	p = (struct aic7xxx_host *)aic7xxx_boards[irq]->hostdata;
 	base = p->base;
 
 	/*
@@ -484,7 +528,7 @@ void aha274x_isr(int irq, struct pt_regs * regs)
 
 	if (intstat & 0x8) {				/* BRKADRINT */
 
-		panic("aha274x_isr: brkadrint, error = 0x%x, seqaddr = 0x%x\n",
+		panic("aic7xxx_isr: brkadrint, error = 0x%x, seqaddr = 0x%x\n",
 		      inb(O_ERROR(base)), inw(O_SEQADDR(base)));
 	}
 
@@ -496,7 +540,7 @@ void aha274x_isr(int irq, struct pt_regs * regs)
 
 		cmd = (Scsi_Cmnd *)p->SCB_array[scbptr];
 		if (!cmd) {
-			printk("aha274x_isr: no command for scb (scsiint)\n");
+			printk("aic7xxx_isr: no command for scb (scsiint)\n");
 			/*
 			 *  Turn off the interrupt and set status
 			 *  to zero, so that it falls through the
@@ -557,10 +601,10 @@ void aha274x_isr(int irq, struct pt_regs * regs)
 			 *  A parity error has occurred during a data
 			 *  transfer phase.  Flag it and continue.
 			 */
-			printk("aha274x: parity error on target %d, lun %d\n",
+			printk("aic7xxx: parity error on target %d, lun %d\n",
 			       cmd->target,
 			       cmd->lun);
-			aha274x_parity(cmd) = DID_PARITY;
+			aic7xxx_parity(cmd) = DID_PARITY;
 
 			/*
 			 *  Clear interrupt and resume as above.
@@ -576,7 +620,7 @@ void aha274x_isr(int irq, struct pt_regs * regs)
 			 *  We don't know what's going on.  Turn off the
 			 *  interrupt source and try to continue.
 			 */
-			printk("aha274x_isr: sstat1 = 0x%x\n", status);
+			printk("aic7xxx_isr: sstat1 = 0x%x\n", status);
 			outb(status, O_CLRSINT1(base));
 			UNPAUSE_SEQUENCER(p);
 			outb(0x4, O_CLRINT(base));	/* undocumented */
@@ -586,7 +630,7 @@ void aha274x_isr(int irq, struct pt_regs * regs)
 	if (intstat & 0x2) {				/* CMDCMPLT */
 
 		int complete, old_scbptr;
-		struct aha274x_scb scb;
+		struct aic7xxx_scb scb;
 		unsigned actual;
 		Scsi_Cmnd *cmd;
 
@@ -600,7 +644,7 @@ void aha274x_isr(int irq, struct pt_regs * regs)
 
 			cmd = (Scsi_Cmnd *)p->SCB_array[complete];
 			if (!cmd) {
-				printk("aha274x warning: "
+				printk("aic7xxx warning: "
 				       "no command for scb (cmdcmplt)\n");
 				continue;
 			}
@@ -621,13 +665,13 @@ void aha274x_isr(int irq, struct pt_regs * regs)
 			old_scbptr = inb(O_SCBPTR(base));
 			outb(complete, O_SCBPTR(base));
 
-			aha274x_getscb(base, &scb);
+			aic7xxx_getscb(base, &scb);
 			outb(old_scbptr, O_SCBPTR(base));
 
 			UNPAUSE_SEQUENCER(p);
 
 			cmd->result = scb.target_status |
-				     (aha274x_parity(cmd) << 16);
+				     (aic7xxx_parity(cmd) << 16);
 
 			/*
 			 *  Did we underflow?  At this time, there's only
@@ -635,7 +679,7 @@ void aha274x_isr(int irq, struct pt_regs * regs)
 			 *  and cmd->underflow seems to be set rather half-
 			 *  heartedly in the higher-level SCSI code.
 			 */
-			actual = aha274x_length(cmd,
+			actual = aic7xxx_length(cmd,
 						scb.residual_SG_segment_count);
 
 			actual -= ((scb.residual_data_count[2] << 16) |
@@ -643,7 +687,7 @@ void aha274x_isr(int irq, struct pt_regs * regs)
 				   (scb.residual_data_count[0]));
 
 			if (actual < cmd->underflow) {
-				printk("aha274x: target %d underflow - "
+				printk("aic7xxx: target %d underflow - "
 				       "wanted (at least) %u, got %u\n",
 				       cmd->target, cmd->underflow, actual);
 
@@ -681,30 +725,30 @@ void aha274x_isr(int irq, struct pt_regs * regs)
 
 		switch (intstat & 0xf0) {
 		    case 0x00:
-			panic("aha274x_isr: unknown scsi bus phase\n");
+			panic("aic7xxx_isr: unknown scsi bus phase\n");
 		    case 0x10:
-			debug("aha274x_isr warning: "
+			debug("aic7xxx_isr warning: "
 			      "issuing message reject, 1st byte 0x%x\n",
 			      inb(HA_REJBYTE(base)));
 			break;
 		    case 0x20:
-			panic("aha274x_isr: reconnecting target %d "
+			panic("aic7xxx_isr: reconnecting target %d "
 			      "didn't issue IDENTIFY message\n",
 			      (inb(O_SELID(base)) >> 4) & 0xf);
 		    case 0x30:
-			debug("aha274x_isr: sequencer couldn't find match "
+			debug("aic7xxx_isr: sequencer couldn't find match "
 			      "for reconnecting target %d - issuing ABORT\n",
 			      (inb(O_SELID(base)) >> 4) & 0xf);
 			break;
 		    case 0x40:
 			transfer = inb(HA_ARG_1(base));
 			offset = inb(HA_ARG_2(base));
-			aha274x_to_scsirate(&rate, transfer, offset);
+			aic7xxx_to_scsirate(&rate, transfer, offset);
 			outb(rate, HA_RETURN_1(base));
 			debug_rate(base, rate);
 			break;
 		    default:
-			debug("aha274x_isr: seqint, "
+			debug("aic7xxx_isr: seqint, "
 			      "intstat = 0x%x, scsisigi = 0x%x\n",
 			      intstat, inb(O_SCSISIGI(base)));
 			break;
@@ -735,7 +779,7 @@ void aha274x_isr(int irq, struct pt_regs * regs)
  */
 
 static
-enum aha_type aha274x_probe(int slot, int s_base)
+enum aha_type aic7xxx_probe(int slot, int s_base)
 {
 	int i;
 	unsigned char buf[4];
@@ -745,9 +789,9 @@ enum aha_type aha274x_probe(int slot, int s_base)
 		unsigned char signature[sizeof(buf)];
 		enum aha_type type;
 	} S[] = {
-		{4, { 0x04, 0x90, 0x77, 0x71 }, T_274X},	/* host adapter 274x */
-		{4, { 0x04, 0x90, 0x77, 0x70 }, T_274X},	/* motherboard 274x  */
-		{4, { 0x04, 0x90, 0x77, 0x56 }, T_284X},	/* 284x, BIOS enabled */
+		4, { 0x04, 0x90, 0x77, 0x71 }, T_274X,	/* host adapter 274x */
+		4, { 0x04, 0x90, 0x77, 0x70 }, T_274X,	/* motherboard 274x  */
+		4, { 0x04, 0x90, 0x77, 0x56 }, T_284X,	/* 284x, BIOS enabled */
 	};
 
 	for (i = 0; i < sizeof(buf); i++) {
@@ -766,7 +810,7 @@ enum aha_type aha274x_probe(int slot, int s_base)
 			 */
 			if (inb(s_base + 4) & 1)
 				return(S[i].type);
-			printk("aha274x disabled at slot %d, ignored\n", slot);
+			printk("aic7xxx disabled at slot %d, ignored\n", slot);
 		}
 	}
 	return(T_NONE);
@@ -778,28 +822,31 @@ enum aha_type aha274x_probe(int slot, int s_base)
  */
 
 static
-char aha274x_type(int base)
+char aic7xxx_type(int base)
 {
 	/*
-	 *  The AIC-7770 can be wired so that, on chip reset,
+	 *  AIC-7770/7870s can be wired so that, on chip reset,
 	 *  the SCSI Block Control register indicates how many
-	 *  busses the chip is configured for.
+	 *  busses the chip is configured for.  The two high bits
+	 *  set indicate a 294x.
 	 */
 	switch (inb(O_SBLKCTL(base))) {
 	    case 0:
+	    case 0xc0:
 		return(' ');
 	    case 2:
+	    case 0xc2:
 		return('W');
 	    case 8:
 		return('T');
 	    default:
-		printk("aha274x has unknown bus configuration\n");
+		printk("aic7xxx has unknown bus configuration\n");
 		return('?');
 	}
 }
 
 static
-void aha274x_loadram(int base)
+void aic7xxx_loadram(int base)
 {
 	static unsigned char seqprog[] = {
 		/*
@@ -809,7 +856,7 @@ void aha274x_loadram(int base)
 		 *  significant byte, so this table has the
 		 *  byte ordering reversed.
 		 */
-#		include "aha274x_seq.h"
+#		include "aic7xxx_seq.h"
 	};
 
 	/*
@@ -851,17 +898,13 @@ void aha274x_loadram(int base)
 		 */
 		outb(0x2, O_SEQCTL(base));	/* SEQRESET */
 
-	} while (inw(O_SEQADDR(base)) != 0);
+	} while (inb(O_SEQADDR(base)) != 0 && inb(O_SEQADDR(base) + 1) != 0);
 }
 
 static
-int aha274x_register(Scsi_Host_Template *template,
-		     enum aha_type type,
-		     int base)
+void aha274x_config(struct aic7xxx_host_config *p, va_list ap)
 {
-	int i, irq, scsi_id;
-	struct Scsi_Host *host;
-	struct aha274x_host *p;
+	int base = va_arg(ap, int);
 
 	/*
 	 *  Give the AIC-7770 a reset - reading the 274x's registers
@@ -869,6 +912,165 @@ int aha274x_register(Scsi_Host_Template *template,
 	 *  Sequencer.
 	 */
 	outb(1, O_HCNTRL(base));	/* CHIPRST */
+
+	p->base = base;
+	p->irq = inb(HA_INTDEF(base)) & 0xf;
+	p->scsi_id = inb(HA_SCSICONF(base)) & 0x7;
+
+	/*
+	 *  This value for HCNTRL may be changed in the ISR if we
+	 *  catch a spurious interrupt right away.
+	 */
+	p->unpause = 0xa;
+
+	/*
+	 *  XXX - these are values that I don't know how to query
+	 *	  the hardware for.  Apparently some revision E
+	 *	  '7770s can have more SCBs, and I don't know how
+	 *	  to get the "extended translation" flag from the
+	 *	  EISA data area.
+	 */
+	p->maxscb = 4;
+	p->extended = aic7xxx_extended;
+
+	/*
+	 *  A reminder until this can be detected automatically.
+	 */
+	printk("aha274x: extended translation %sabled\n",
+		p->extended ? "en" : "dis");
+}
+
+static
+void aha284x_config(struct aic7xxx_host_config *p, va_list ap)
+{
+	int base = va_arg(ap, int);
+
+	/*
+	 *  Give the AIC-7770 a reset - this forces a pause of the
+	 *  Sequencer and returns everything to default values.
+	 */
+	outb(1, O_HCNTRL(base));	/* CHIPRST */
+
+	p->base = base;
+	p->unpause = 0x2;
+	p->irq = inb(HA_INTDEF(base)) & 0xf;
+	p->scsi_id = inb(HA_SCSICONF(base)) & 0x7;
+
+	/*
+	 *  XXX - these are values that I don't know how to query
+	 *	  the hardware for.  Apparently some revision E
+	 *	  '7770s can have more SCBs, and I don't know how
+	 *	  to get the "extended translation" flag from the
+	 *	  onboard memory.
+	 */
+	p->maxscb = 4;
+	p->extended = aic7xxx_extended;
+
+	/*
+	 *  A reminder until this can be detected automatically.
+	 */
+	printk("aha284x: extended translation %sabled\n",
+		p->extended ? "en" : "dis");
+}
+
+static
+void aha294x_config(struct aic7xxx_host_config *p, va_list ap)
+{
+	int error;
+	unsigned long io_port;
+	unsigned char bus, device_fn, irq;
+
+	bus = va_arg(ap, unsigned char);
+	device_fn = va_arg(ap, unsigned char);
+
+	/*
+	 *  Read esundry information from PCI BIOS.
+	 */
+	error = pcibios_read_config_dword(bus,
+					  device_fn,
+					  PCI_BASE_ADDRESS_0,
+					  &io_port);
+	if (error) {
+		panic("aha294x_config: error %s reading i/o port\n",
+		      pcibios_strerror(error));
+	}
+
+	error = pcibios_read_config_byte(bus,
+					 device_fn,
+					 PCI_INTERRUPT_LINE,
+					 &irq);
+	if (error) {
+		panic("aha294x_config: error %s reading irq\n",
+		      pcibios_strerror(error));
+	}
+
+	/*
+	 *  Make the base I/O register look like EISA and VL-bus.
+	 */
+	p->base = io_port - 0xc01;
+
+	/*
+	 *  Give the AIC-7870 a reset - this forces a pause of the
+	 *  Sequencer and returns everything to default values.
+	 */
+	outb(1, O_HCNTRL(p->base));	/* CHIPRST */
+
+	p->irq = irq;
+	p->maxscb = 16;
+	p->unpause = 0xa;
+
+	/*
+	 *  XXX - these are values that I don't know how to query
+	 *	  the hardware for, so for now the SCSI host ID is
+	 *	  hardwired to 7, and the "extended translation"
+	 *	  flag is taken from boot-time flags.
+	 */
+	p->scsi_id = 7;
+	p->extended = aic7xxx_extended;
+
+	/*
+	 *  XXX - force data fifo threshold to 100%.  Why does this
+	 *	  need to be done?
+	 */
+#	define	DFTHRESH	3
+
+	outb(DFTHRESH << 6, O_DSPCISTATUS(p->base));
+	outb(p->scsi_id | (DFTHRESH << 6), HA_SCSICONF(p->base));
+
+	/*
+	 *  A reminder until this can be detected automatically.
+	 */
+	printk("aha294x: extended translation %sabled\n",
+		p->extended ? "en" : "dis");
+}
+
+static
+int aic7xxx_register(Scsi_Host_Template *template, enum aha_type type, ...)
+{
+	va_list ap;
+	int i, base;
+	struct Scsi_Host *host;
+	struct aic7xxx_host *p;
+	struct aic7xxx_host_config config;
+
+	va_start(ap, type);
+	
+	switch (type) {
+	    case T_274X:
+		aha274x_config(&config, ap);
+		break;
+	    case T_284X:
+		aha284x_config(&config, ap);
+		break;
+	    case T_294X:
+		aha294x_config(&config, ap);
+		break;
+	    default:
+		panic("aic7xxx_register: internal error\n");
+	}
+	va_end(ap);
+
+	base = config.base;
 
 	/*
 	 *  The IRQ level in i/o port 4 maps directly onto the real
@@ -878,32 +1080,28 @@ int aha274x_register(Scsi_Host_Template *template,
 	 *	in the lower four bits; the ECU information shows the
 	 *	high bit being used as well.  Which is correct?
 	 */
-	irq = inb(HA_INTDEF(base)) & 0xf;
-	if (irq < 9 || irq > 15) {
-		printk("aha274x uses unsupported IRQ level, ignoring\n");
+	if (config.irq < 9 || config.irq > 15) {
+		printk("aic7xxx uses unsupported IRQ level, ignoring\n");
 		return(0);
 	}
 	
 	/*
 	 *  Lock out other contenders for our i/o space.
 	 */
-	request_region(O_MINREG(base), O_MAXREG(base)-O_MINREG(base), "aha27x");
+	snarf_region(O_MINREG(base), O_MAXREG(base)-O_MINREG(base));
 
 	/*
 	 *  Any card-type-specific adjustments before we register
 	 *  the scsi host(s).
 	 */
-
-	scsi_id = inb(HA_SCSICONF(base)) & 0x7;
-
-	switch (aha274x_type(base)) {
+	switch (aic7xxx_type(base)) {
 	    case 'T':
-		printk("aha274x warning: ignoring channel B of 274x-twin\n");
+		printk("aic7xxx warning: ignoring channel B of 274x-twin\n");
 		break;
 	    case ' ':
 		break;
 	    default:
-		printk("aha274x is an unsupported type, ignoring\n");
+		printk("aic7xxx is an unsupported type, ignoring\n");
 		return(0);
 	}
 
@@ -918,7 +1116,7 @@ int aha274x_register(Scsi_Host_Template *template,
 		struct scatterlist sg;
 
 		if (SG_STRUCT_CHECK(sg)) {
-			printk("aha274x warning: kernel scatter-gather "
+			printk("aic7xxx warning: kernel scatter-gather "
 			       "structures changed, disabling it\n");
 			template->sg_tablesize = SG_NONE;
 		}
@@ -927,21 +1125,25 @@ int aha274x_register(Scsi_Host_Template *template,
 	/*
 	 *  Register each "host" and fill in the returned Scsi_Host
 	 *  structure as best we can.  Some of the parameters aren't
-	 *  really relevant for EISA, and none of the high-level SCSI
-	 *  code looks at it anyway.. why are the fields there?  Also
-	 *  save the pointer so that we can find the information when
-	 *  an IRQ is triggered.
+	 *  really relevant for bus types beyond ISA, and none of the
+	 *  high-level SCSI code looks at it anyway.. why are the fields
+	 *  there?  Also save the pointer so that we can find the
+	 *  information when an IRQ is triggered.
 	 */
-	host = scsi_register(template, sizeof(struct aha274x_host));
-	host->this_id = scsi_id;
-	host->irq = irq;
+	host = scsi_register(template, sizeof(struct aic7xxx_host));
+	host->can_queue = config.maxscb;
+	host->this_id = config.scsi_id;
+	host->irq = config.irq;
 
-	aha274x_boards[irq] = host;
+	aic7xxx_boards[config.irq] = host;
 	
-	p = (struct aha274x_host *)host->hostdata;
-	for (i = 0; i < AHA274X_MAXSCB; i++)
+	p = (struct aic7xxx_host *)host->hostdata;
+	for (i = 0; i < AIC7XXX_MAXSCB; i++)
 		p->SCB_array[i] = NULL;
-	p->base = base;
+
+	p->base = config.base;
+	p->maxscb = config.maxscb;
+	p->extended = config.extended;
 
 	/*
 	 *  The interrupt trigger is different depending
@@ -950,8 +1152,9 @@ int aha274x_register(Scsi_Host_Template *template,
 	 *  command is queued, and is checked in the isr to
 	 *  try and detect when the interrupt type is set
 	 *  incorrectly, triggering an interrupt immediately.
+	 *  This is now just set on a per-card-type basis.
 	 */
-	p->unpause = (type != T_274X ? 0x2 : 0xa);
+	p->unpause = config.unpause;
 	p->startup = !0;
 
 	/*
@@ -959,31 +1162,31 @@ int aha274x_register(Scsi_Host_Template *template,
 	 *  is set up, in case we take an interrupt right away, due to
 	 *  the interrupt type being set wrong.
 	 */
-	if (request_irq(irq, aha274x_isr, SA_INTERRUPT, "AHA274x/284x")) {
-		printk("aha274x couldn't register irq %d, ignoring\n", irq);
+	if (request_irq(config.irq, aic7xxx_isr, SA_INTERRUPT, "aic7xxx")) {
+		printk("aic7xxx couldn't register irq %d, ignoring\n",
+		       config.irq);
 		return(0);
 	}
-
-	/*
-	 *  A reminder until this can be detected automatically.
-	 */
-	printk("aha274x: extended translation %sabled\n",
-	       aha274x_extended ? "en" : "dis");
 
 	/*
 	 *  Print out debugging information before re-enabling
 	 *  the card - a lot of registers on it can't be read
 	 *  when the sequencer is active.
 	 */
-	debug_config(type, base);
+#ifdef AIC7XXX_DEBUG
+	debug_config(type, &config);
+#endif
 
 	/*
 	 *  Load the sequencer program, then re-enable the board -
 	 *  resetting the AIC-7770 disables it, leaving the lights
-	 *  on with nobody home.
+	 *  on with nobody home.  On the PCI bus you *may* be home,
+	 *  but then your mailing address is dynamically assigned
+	 *  so no one can find you anyway :-)
 	 */
-	aha274x_loadram(base);
-	outb(1, O_BCTL(base));		/* ENABLE */
+	aic7xxx_loadram(base);
+	if (type != T_294X)
+		outb(1, O_BCTL(base));	/* ENABLE */
 
 	/*
 	 *  Set the host adapter registers to indicate that synchronous
@@ -995,6 +1198,12 @@ int aha274x_register(Scsi_Host_Template *template,
 	outb(0, HA_MSG_FLAGS(base));
 
 	/*
+	 *  For reconnecting targets, the sequencer code needs to
+	 *  know how many SCBs it has to search through.
+	 */
+	outb(config.maxscb, HA_SCBCOUNT(base));
+
+	/*
 	 *  Unpause the sequencer before returning and enable
 	 *  interrupts - we shouldn't get any until the first
 	 *  command is sent to us by the high-level SCSI code.
@@ -1003,12 +1212,15 @@ int aha274x_register(Scsi_Host_Template *template,
 	return(1);
 }
 
-int aha274x_detect(Scsi_Host_Template *template)
+int aic7xxx_detect(Scsi_Host_Template *template)
 {
 	enum aha_type type;
 	int found = 0, slot, base;
 
-	for (slot = MINEISA; slot <= MAXEISA; slot++) {
+	/*
+	 *  EISA/VL-bus card signature probe.
+	 */
+	for (slot = MINSLOT; slot <= MAXSLOT; slot++) {
 
 		base = SLOTBASE(slot);
 		
@@ -1022,7 +1234,7 @@ int aha274x_detect(Scsi_Host_Template *template)
 			continue;
 		}
 
-		type = aha274x_probe(slot, O_BIDx(base));
+		type = aic7xxx_probe(slot, O_BIDx(base));
 
 		if (type != T_NONE) {
 			/*
@@ -1030,35 +1242,45 @@ int aha274x_detect(Scsi_Host_Template *template)
 			 *  signature and we can set it up and register
 			 *  it with the kernel without incident.
 			 */
-			found += aha274x_register(template, type, base);
+			found += aic7xxx_register(template, type, base);
 		}
 	}
-	template->name = (char *)aha274x_info(NULL);
+
+	/*
+	 *  PCI-bus probe.
+	 */
+	if (pcibios_present()) {
+		int index = 0;
+		unsigned char bus, device_fn;
+
+		while (!pcibios_find_device(PCI_VENDOR_ID_ADAPTEC,
+					    PCI_DEVICE_ID_ADAPTEC_2940,
+					    index,
+					    &bus,
+					    &device_fn))
+		{
+			found += aic7xxx_register(template, T_294X,
+						  bus, device_fn);
+			index += 1;
+		}
+	}
+
+	template->name = (char *)aic7xxx_info(NULL);
 	return(found);
 }
 
-const char *aha274x_info(struct Scsi_Host * shost)
+const char *aic7xxx_info(struct Scsi_Host *notused)
 {
-	return("Adaptec AHA274x/284x (EISA/VL-bus -> Fast SCSI) "
-	       AHA274X_SEQ_VERSION "/"
-	       AHA274X_H_VERSION "/"
-	       "1.29");
-}
-
-int aha274x_command(Scsi_Cmnd *cmd)
-{
-	/*
-	 *  This is a relic of non-interrupt-driven SCSI
-	 *  drivers.  With the can_queue variable set, this
-	 *  should never be called.
-	 */
-	panic("aha274x_command was called\n");
+	return("Adaptec AHA274x/284x/294x (EISA/VL-bus/PCI -> Fast SCSI) "
+	       AIC7XXX_SEQ_VERSION "/"
+	       AIC7XXX_H_VERSION "/"
+	       "1.34");
 }
 
 static
-void aha274x_buildscb(struct aha274x_host *p,
+void aic7xxx_buildscb(struct aic7xxx_host *p,
 		      Scsi_Cmnd *cmd,
-		      struct aha274x_scb *scb)
+		      struct aic7xxx_scb *scb)
 {
 	void *addr;
 	unsigned length;
@@ -1081,7 +1303,7 @@ void aha274x_buildscb(struct aha274x_host *p,
 	 *  than 2^24 (three-byte count) without backflips.  For what
 	 *  the kernel is doing, this shouldn't occur.  I hope.
 	 */
-	length = aha274x_length(cmd, 0);
+	length = aic7xxx_length(cmd, 0);
 
 	/*
 	 *  The sequencer code cannot yet handle scatter-gather segments
@@ -1089,10 +1311,10 @@ void aha274x_buildscb(struct aha274x_host *p,
 	 *  have a four-byte length field in the struct scatterlist, so
 	 *  make sure we don't exceed 64k on these kernels for now.
 	 */
-	aha274x_sg_check(cmd);
+	aic7xxx_sg_check(cmd);
 
 	if (length > 0xffffff) {
-		panic("aha274x_buildscb: can't transfer > 2^24 - 1 bytes\n");
+		panic("aic7xxx_buildscb: can't transfer > 2^24 - 1 bytes\n");
 	}
 
 	/*
@@ -1105,7 +1327,7 @@ void aha274x_buildscb(struct aha274x_host *p,
 
 	if (cmd->use_sg) {
 #if 0
-		debug("aha274x_buildscb: SG used, %d segments, length %u\n",
+		debug("aic7xxx_buildscb: SG used, %d segments, length %u\n",
 		      cmd->use_sg,
 		      length);
 #endif
@@ -1125,7 +1347,7 @@ void aha274x_buildscb(struct aha274x_host *p,
 }
 
 static
-void aha274x_putscb(int base, struct aha274x_scb *scb)
+void aic7xxx_putscb(int base, struct aic7xxx_scb *scb)
 {
 	/*
 	 *  By turning on the SCB auto increment, any reference
@@ -1145,28 +1367,28 @@ void aha274x_putscb(int base, struct aha274x_scb *scb)
 	outb(0, O_SCBCNT(base));
 }
 
-int aha274x_queue(Scsi_Cmnd *cmd, void (*fn)(Scsi_Cmnd *))
+int aic7xxx_queue(Scsi_Cmnd *cmd, void (*fn)(Scsi_Cmnd *))
 {
 	long flags;
 	int empty, old_scbptr;
-	struct aha274x_host *p;
-	struct aha274x_scb scb;
+	struct aic7xxx_host *p;
+	struct aic7xxx_scb scb;
 
 #if 0
-	debug("aha274x_queue: cmd 0x%x (size %u), target %d, lun %d\n",
+	debug("aic7xxx_queue: cmd 0x%x (size %u), target %d, lun %d\n",
 	      cmd->cmnd[0],
 	      cmd->cmd_len,
 	      cmd->target,
 	      cmd->lun);
 #endif
 
-	p = (struct aha274x_host *)cmd->host->hostdata;
+	p = (struct aic7xxx_host *)cmd->host->hostdata;
 
 	/*
 	 *  Construct the SCB beforehand, so the sequencer is
 	 *  paused a minimal amount of time.
 	 */
-	aha274x_buildscb(p, cmd, &scb);
+	aic7xxx_buildscb(p, cmd, &scb);
 
 	/*
 	 *  Clear the startup flag - we can now legitimately
@@ -1186,14 +1408,14 @@ int aha274x_queue(Scsi_Cmnd *cmd, void (*fn)(Scsi_Cmnd *))
 
 	/*
 	 *  Find a free slot in the SCB array to load this command
-	 *  into.  Since can_queue is set to AHA274X_MAXSCB, we
-	 *  should always find one.
+	 *  into.  Since can_queue is set to the maximum number of
+	 *  SCBs for the card, we should always find one.
 	 */
-	for (empty = 0; empty < AHA274X_MAXSCB; empty++)
+	for (empty = 0; empty < p->maxscb; empty++)
 		if (!p->SCB_array[empty])
 			break;
-	if (empty == AHA274X_MAXSCB)
-		panic("aha274x_queue: couldn't find a free scb\n");
+	if (empty == p->maxscb)
+		panic("aic7xxx_queue: couldn't find a free scb\n");
 
 	/*
 	 *  Pause the sequencer so we can play with its registers -
@@ -1212,7 +1434,7 @@ int aha274x_queue(Scsi_Cmnd *cmd, void (*fn)(Scsi_Cmnd *))
 	old_scbptr = inb(O_SCBPTR(p->base));
 	outb(empty, O_SCBPTR(p->base));
 	
-	aha274x_putscb(p->base, &scb);
+	aic7xxx_putscb(p->base, &scb);
 
 	outb(empty, O_QINFIFO(p->base));
 	outb(old_scbptr, O_SCBPTR(p->base));
@@ -1225,7 +1447,7 @@ int aha274x_queue(Scsi_Cmnd *cmd, void (*fn)(Scsi_Cmnd *))
 	 */
 	cmd->scsi_done = fn;
 	p->SCB_array[empty] = cmd;
-	aha274x_parity(cmd) = DID_OK;
+	aic7xxx_parity(cmd) = DID_OK;
 
 	UNPAUSE_SEQUENCER(p);
 
@@ -1233,7 +1455,7 @@ int aha274x_queue(Scsi_Cmnd *cmd, void (*fn)(Scsi_Cmnd *))
 	return(0);
 }
 
-/* return values from aha274x_kill */
+/* return values from aic7xxx_kill */
 
 enum k_state {
 	k_ok,				/* scb found and message sent */
@@ -1260,24 +1482,24 @@ enum k_state {
  */
 
 static
-enum k_state aha274x_kill(Scsi_Cmnd *cmd, unsigned char message,
+enum k_state aic7xxx_kill(Scsi_Cmnd *cmd, unsigned char message,
 			  unsigned int result, int unpause)
 {
-	struct aha274x_host *p;
+	struct aic7xxx_host *p;
 	int i, scb, found, queued;
-	unsigned char scbsave[AHA274X_MAXSCB];
+	unsigned char scbsave[AIC7XXX_MAXSCB];
 
-	p = (struct aha274x_host *)cmd->host->hostdata;
+	p = (struct aic7xxx_host *)cmd->host->hostdata;
 
 	/*
 	 *  If we can't find the command, assume it just completed
 	 *  and shrug it away.
 	 */
-	for (scb = 0; scb < AHA274X_MAXSCB; scb++)
+	for (scb = 0; scb < p->maxscb; scb++)
 		if (p->SCB_array[scb] == cmd)
 			break;
 
-	if (scb == AHA274X_MAXSCB)
+	if (scb == p->maxscb)
 		return(k_absent);
 
 	PAUSE_SEQUENCER(p);
@@ -1355,7 +1577,7 @@ complete:
 	return(k_ok);
 }
 
-int aha274x_abort(Scsi_Cmnd *cmd)
+int aic7xxx_abort(Scsi_Cmnd *cmd)
 {
 	int rv;
 	long flags;
@@ -1363,13 +1585,13 @@ int aha274x_abort(Scsi_Cmnd *cmd)
 	save_flags(flags);
 	cli();
 
-	switch (aha274x_kill(cmd, ABORT, DID_ABORT, !0)) {
+	switch (aic7xxx_kill(cmd, ABORT, DID_ABORT, !0)) {
 	    case k_ok:		rv = SCSI_ABORT_SUCCESS;	break;
 	    case k_busy:	rv = SCSI_ABORT_BUSY;		break;
 	    case k_absent:	rv = SCSI_ABORT_NOT_RUNNING;	break;
 	    case k_disconnect:	rv = SCSI_ABORT_SNOOZE;		break;
 	    default:
-		panic("aha274x_do_abort: internal error\n");
+		panic("aic7xxx_do_abort: internal error\n");
 	}
 
 	restore_flags(flags);
@@ -1383,18 +1605,18 @@ int aha274x_abort(Scsi_Cmnd *cmd)
  *  the SCSI bus reset line.
  */
 
-int aha274x_reset(Scsi_Cmnd *cmd)
+int aic7xxx_reset(Scsi_Cmnd *cmd)
 {
 	int i;
 	long flags;
 	Scsi_Cmnd *reset;
-	struct aha274x_host *p;
+	struct aic7xxx_host *p;
 
-	p = (struct aha274x_host *)cmd->host->hostdata;
+	p = (struct aic7xxx_host *)cmd->host->hostdata;
 	save_flags(flags);
 	cli();
 
-	switch (aha274x_kill(cmd, BUS_DEVICE_RESET, DID_RESET, 0)) {
+	switch (aic7xxx_kill(cmd, BUS_DEVICE_RESET, DID_RESET, 0)) {
 
 	    case k_ok:
 		/*
@@ -1409,7 +1631,7 @@ int aha274x_reset(Scsi_Cmnd *cmd)
 
 	    case k_absent:
 		/*
-		 *  The sequencer will not be paused if aha274x_kill()
+		 *  The sequencer will not be paused if aic7xxx_kill()
 		 *  couldn't find the command.
 		 */
 		PAUSE_SEQUENCER(p);
@@ -1429,7 +1651,7 @@ int aha274x_reset(Scsi_Cmnd *cmd)
 		 *	  bus to revert to asynchronous transfer, and it
 		 *	  never seemed to work.
 		 */
-		debug("aha274x: attempting to reset scsi bus and card\n");
+		debug("aic7xxx: attempting to reset scsi bus and card\n");
 
 		outb(1, O_SCSISEQ(p->base));		/* SCSIRSTO */
 		udelay(30);
@@ -1443,7 +1665,7 @@ int aha274x_reset(Scsi_Cmnd *cmd)
 		 *  for it.  This is not completely correct and will
 		 *  probably return to haunt me later.
 		 */
-		for (i = 0; i < AHA274X_MAXSCB; i++) {
+		for (i = 0; i < p->maxscb; i++) {
 			if (cmd == p->SCB_array[i]) {
 				reset = (Scsi_Cmnd *)p->SCB_array[i];
 				p->SCB_array[i] = NULL;
@@ -1455,16 +1677,19 @@ int aha274x_reset(Scsi_Cmnd *cmd)
 		break;
 
 	    default:
-		panic("aha274x_reset: internal error\n");
+		panic("aic7xxx_reset: internal error\n");
 	}
 
 	restore_flags(flags);
 	return(SCSI_RESET_SUCCESS);
 }
 
-int aha274x_biosparam(Disk *disk, int devno, int geom[])
+int aic7xxx_biosparam(Disk *disk, int devno, int geom[])
 {
 	int heads, sectors, cylinders;
+	struct aic7xxx_host *p;
+	
+	p = (struct aic7xxx_host *)disk->device->host->hostdata;
 
 	/*
 	 *  XXX - if I could portably find the card's configuration
@@ -1475,7 +1700,7 @@ int aha274x_biosparam(Disk *disk, int devno, int geom[])
 	sectors = 32;
 	cylinders = disk->capacity / (heads * sectors);
 
-	if (aha274x_extended && cylinders > 1024) {
+	if (p->extended && cylinders > 1024) {
 		heads = 255;
 		sectors = 63;
 		cylinders = disk->capacity / (255 * 63);

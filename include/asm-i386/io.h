@@ -60,6 +60,34 @@ extern inline void * phys_to_virt(unsigned long address)
 #define bus_to_virt phys_to_virt
 
 /*
+ * readX/writeX() are used to access memory mapped devices. On some
+ * architectures the memory mapped IO stuff needs to be accessed
+ * differently. On the x86 architecture, we just read/write the
+ * memory location directly.
+ */
+extern inline unsigned long readb(unsigned long addr)
+{ return *(unsigned char *) addr; }
+
+extern inline unsigned long readw(unsigned long addr)
+{ return *(unsigned short *) addr; }
+
+extern inline unsigned long readl(unsigned long addr)
+{ return *(unsigned int *) addr; }
+
+extern inline void writeb(unsigned char b, unsigned long addr)
+{ *(unsigned char *) addr = b; }
+
+extern inline void writew(unsigned short b, unsigned long addr)
+{ *(unsigned short *) addr = b; }
+
+extern inline void writel(unsigned int b, unsigned long addr)
+{ *(unsigned int *) addr = b; }
+
+#define memset_io(a,b,c)	memset((void *)(a),(b),(c))
+#define memcpy_fromio(a,b,c)	memcpy((a),(void *)(b),(c))
+#define memcpy_toio(a,b,c)	memcpy((void *)(a),(b),(c))
+
+/*
  * Talk about misusing macros..
  */
 
